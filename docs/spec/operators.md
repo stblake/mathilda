@@ -30,7 +30,8 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 | `==`, `<`, `<=`, `;;` | `Equal`, `Less`, `LessEqual`, `Span` | 3200 | None |
 | `===`    | `SameQ` | 3200 | None |
 | `!` (prefix) | `Not` | 3000 | Right |
-| `&&`, `\|\|` | `And`, `Or` | 2800 | Left |
+| `&&`     | `And` | 2800 | Left |
+| `\|\|`   | `Or` | 2700 | Left |
 | `..`, `...` | `Repeated`, `RepeatedNull` | 2500 | None |
 | `\|`     | `Alternatives` | 2300 | Left |
 | `~~`     | `StringExpression` | 2100 | Left |

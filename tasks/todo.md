@@ -1,76 +1,64 @@
-# Reduce: multivariate Max/Min, unbounded polynomial-in-Floor, and general piecewise functions
+# Reduce: radical∘Abs composition + univariate domain-gate soundness
 
-## Goal (approved)
-1. Solve multivariate `Max`/`Min`: `Reduce[Max[x,y]>2,{x,y}] -> x>2 || y>2`.
-2. Solve unbounded polynomial-in-`Floor`: `Reduce[Floor[x]^2>5,x,Reals] -> x<-2 || x>=3`.
-3. Same treatment for other piecewise functions: `Piecewise`, `Sign`, `UnitStep`,
-   `Ramp`, `Clip`, `HeavisideTheta`, `Boole`, `UnitBox`, `IntegerPart`,
-   `FractionalPart`.
+Plan: `~/.claude/plans/golden-herding-unicorn.md`
 
-## Validated design (manual splits all reduce correctly; CAD/FM soundly decline
-   on residual non-polynomial heads)
+## Design B — univariate domain-gate per-conjunct scoping (fixes `Sqrt[Abs[x]]<1 → x==0`) ✅
+- [x] Rework `reduce_univar_general` domain collection to per-conjunct arrays
+- [x] Move gate inside `form_truth_general` per-conjunct loop; drop global gate
+- [x] Keep breakpoints as a union; keep scanning past undecidable domain (nested-radical fix)
+- [x] Free per-conjunct arrays at all exits (success + decline)
+- [x] Verified: `Sqrt[Abs[x]]<1 → -1<x<1`, `Log[Abs[x]]<0` correct; nested radicals restored; corpus+units green
 
-### Phase 1 — unified piecewise case-split + multivariate dispatch
-- `reduce_realfn.c`: one `eliminate_piecewise` driven by a `piecewise_clauses`
-  table that maps each head to `{(guard_i, value_i)}` + optional default:
-  - Piecewise[{{v,c}..},def]: clauses (c_i,v_i), default def(or 0)
-  - Sign[u]: (u<0,-1),(u>0,1), default 0
-  - UnitStep[u]: (u<0,0), default 1     Ramp[u]: (u<0,0), default u
-  - Boole[c]: (c,1), default 0          UnitBox[u]: (u<-1/2,0),(u>1/2,0), default 1
-  - HeavisideTheta[u]: (u<0,0),(u>0,1), NO default (u==0 excluded)
-  - Clip[u]/Clip[u,{a,b}]/Clip[u,{a,b},{va,vb}]: below/above clauses, default u
-  - IntegerPart[u]: (u<0,Ceiling[u]), default Floor[u]
-  - FractionalPart[u]: (u<0,u-Ceiling[u]), default u-Floor[u]
-  Split: `Or_i[ And[ !g_0..!g_{i-1}, g_i, stmt|_{node->v_i} ] ]` (+ default branch);
-  no-default heads exclude the uncovered region. Recurses; folded into the
-  fixpoint driver alongside Abs/Max-Min/Mod/IP.
-- Factor `apply_selector_splits` (Abs, Max/Min, piecewise) — nv/domain-agnostic —
-  used by both the univariate `reduce_realfn_preprocess` and a new
-  `reduce_piecewise_preprocess` (any nv).
-- `reduce.c`: for nv>=2 with a selector head, run `reduce_piecewise_preprocess`,
-  force Reals, then FM/CAD.
-- Add `SYM_Ramp`, `SYM_UnitBox`.
+## Design A — radical rationalization pass (fixes multivariate silence) ✅
+- [x] Add `reduce_stmt_has_radical` detector (+ prototype in `reduce_realfn.h`)
+- [x] Implement `rationalize_tree`/`rationalize_relation` (NNF walk, isolation, 6-row table, decline policy)
+- [x] Add `rationalize_radical_leaves` step to `reduce_piecewise_preprocess` fixpoint (threaded vars/nv)
+- [x] OR the detector into the multivariate dispatch gate (`reduce.c`)
+- [x] Verified flagship = correct region; per-relation rows; declines sound; sampled-equivalent; no regressions
 
-### Phase 2 — unbounded integers (fixes unbounded Floor, generalizes Reduce/Integers)
-- `reduce_univar.c` `reduce_univar_integers`: keep bounded-run enumeration
-  (`k==n`, preserves all pinned tests) but add UNBOUNDED-TAIL rays: sample the
-  left/right tail integer beyond the extreme root; emit `x<=b1` / `x>=a2`.
-- `reduce_realfn.c` `translate_ksol`: accept all six `k REL int` + Inequality, map
-  via `ip_defining`. Extend `ip_defining` for Ceiling (all six); Floor already
-  full; Round stays Equal-only (round-half-even -> inequalities decline, sound).
-- Corpus: `dec-int-unbounded`(x>0)/`dec-int-unbounded2`(x<5) become solved
-  (`x>=1`/`x<=4`).
+## Tests ✅
+- [x] Added 8 `"solved"` (mm-sqrt-*) + 2 univariate `"solved"` + 3 `"decline"` rows to `tests/reduce_corpus.m`
+- [x] Pinned `Sqrt[Abs[x]]<1` and `Log[Abs[x]]<0` in `tests/test_reduce.c`
+- [x] `reduce_corpus_tests`, `reduce_tests`, `solve_corpus_tests`, `solve_radicals_reals_tests` all green
+- [x] valgrind: leak profile byte-identical to main; no leak allocated by new code (all pre-existing)
 
-## Verify
-- [ ] Targets 1-3 return expected answers; existing reduce_tests + corpus green.
-- [ ] New corpus cases (multivar max/min, unbounded floor, each piecewise head).
-- [ ] check-c99, valgrind, docs + changelog + memory.
+## Docs ✅
+- [x] Updated `docs/spec/builtins/solutions-of-equations.md` (multivariate radical bullet + per-conjunct gate)
+- [x] Added changelog section to `docs/spec/changelog/2026-08-24.md`
+- [x] Added QE/Phase-6b note to `REDUCE_PLAN.md`
+- [x] Rebuilt code-review graph
+- [x] Recorded memory: radical-rationalization+domain-gate (project) + scan-past-undecidable (feedback)
+
+## Follow-up — And/Or precedence bug (chased down the "pre-existing CAD bug")
+- [x] Diagnosed: NOT a CAD bug — the tree was correct (sampling matched). A **parser+printer**
+      precedence bug: `And` and `Or` both had precedence 2800, so `And[a,Or[b,c]]` printed as
+      `a && b || c` (re-parses to `Or[And[a,b],c]`) and `a || b && c` parsed to `And[Or[a,b],c]`.
+- [x] Fixed: lowered `Or` to 2700 (< `And` 2800) in `src/parse.c`, `src/print.c`, `docs/spec/operators.md`.
+- [x] Verified roundtrip `ToExpression[ToString[e]] === e`; `x^2-y^2<1` now prints guards correctly.
+- [x] Full test suite: 225/228 pass. The 3 failures (moebiusmu, primenu, interp) are PRE-EXISTING
+      (fail identically on main; big-number factoring env-dependence + known interp issue) — zero new
+      failures. `parse_tests` (incl. `test_unparenthesised_chains_still_chain`) and `boolean_tests` green.
+- [x] Docs: `operators.md` split And/Or row; changelog entry added. Memory + graph updated.
 
 ## Review
-All three goals delivered. Implemented in two phases, both green.
+**Outcome:** both original examples solve. `Reduce[Sqrt[Abs[x]]+Abs[y]<1,{x,y},Reals]` now
+returns the correct region (was unevaluated); the newly-found univariate wrong answer
+`Sqrt[Abs[x]]<1 -> x==0` is fixed to `-1<x<1`, and `Log[Abs[x]]<0 -> False` to the correct set.
 
-Phase 1 — general piecewise case-split + multivariate dispatch
-- `reduce_realfn.c`: `piecewise_clauses` table + `eliminate_piecewise` (Piecewise/
-  Sign/UnitStep/Ramp/Clip/HeavisideTheta/Boole/UnitBox/IntegerPart/FractionalPart);
-  `apply_selector_splits` factored; `reduce_piecewise_preprocess` (nv>=2);
-  `reduce_stmt_has_piecewise`; piecewise heads added to `node_is_realfn`.
-- `reduce.c`: nv>=2 selector dispatch (force Reals -> FM/CAD).
-- `sym_names.{c,h}`: `SYM_Ramp`, `SYM_UnitBox`.
+**Files changed (engine):** `src/solve/reduce_realfn.{c,h}` (radical rationalization pass +
+`reduce_stmt_has_radical` + `reduce_piecewise_preprocess` now takes vars/nv), `src/solve/reduce.c`
+(dispatch gate), `src/solve/reduce_realdiag.c` (per-conjunct domain gate). Tests:
+`tests/reduce_corpus.m` (+13 rows), `tests/test_reduce.c` (+2 pins).
 
-Phase 2 — unbounded integers
-- `reduce_univar.c` `reduce_univar_integers`: one-sided rays for satisfied tails
-  (kept bounded enumeration -> all pinned tests preserved).
-- `reduce_realfn.c`: `translate_ksol` accepts all six `k REL int` + `flip_rel`;
-  `ip_defining` full Ceiling relations (Round stays Equal-only, half-even).
+**Verification:** reduce_corpus / reduce_tests / solve_corpus / solve_radicals_reals /
+linearsolve all green; sampled-equivalence 0 mismatches; `make check-c99` clean; valgrind leak
+profile byte-identical to main (no leak from new code).
 
-Verification
-- reduce_tests: all pass (added `test_piecewise_functions`, moved 3 integer
-  inequalities decline->solved). reduce_corpus: 141/141 (+23 cases).
-- solve_tests, piecewise_tests: pass. check-c99: clean. valgrind: 0 additional
-  errors vs baseline; no leak frames in new code.
-- Docs (`solutions-of-equations.md`), changelog (`2026-08-24.md`), memory updated.
+**Key decision:** rationalize-by-square (keeps original dimension, reuses CAD) over aux-variable
+purification (blocked on unbuilt Phase 7 QE + Phase 6b algebraic-coeff CAD fibres).
 
-Known sound limitations (decline, never wrong): `FractionalPart[x]<1/2` and a
-`Floor` whose inner value also appears outside it (periodic/mixed sets a finite
-interval list can't express); unbounded `Round` inequalities (round-half-even);
-multivariate integer-part (`Floor[x]+y>2`).
+**Self-correction caught:** first per-conjunct gate broke nested radicals by breaking on the first
+undecidable domain sign; fixed to keep scanning for a decidable failure (see feedback memory).
+
+**Not done (out of scope / not requested):** git commit; book/ example addition; a pre-existing CAD
+emission mis-association on `x^2-y^2<1` (noted, unrelated to radicals/Abs); MEMORY.md compaction.

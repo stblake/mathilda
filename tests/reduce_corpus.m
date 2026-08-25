@@ -198,5 +198,29 @@
   {"dec-nl-eq-complex",  x^2 + y^2 == 1,                   {x, y},  Automatic, "decline"},
   {"dec-complexes-neq",  x != 0,                           x,       Automatic, "decline"},
   {"dec-complexes-conj", x^2 == 4 && x^3 == 8,             x,       Automatic, "decline"},
-  {"dec-nl-system",      x y == 1 && x + y == 3,           {x, y},  Automatic, "decline"}
+  {"dec-nl-system",      x y == 1 && x + y == 3,           {x, y},  Automatic, "decline"},
+
+  (* ---- radical rationalization: multivariate Sqrt[u] REL c over the Reals is
+   *      squared into polynomial constraints in the same variables, then solved
+   *      by FM/CAD (was unevaluated before the rationalization pass) ---- *)
+  {"mm-sqrt-abs",        Sqrt[Abs[x]] + Abs[y] < 1,        {x, y},  Reals,     "solved"},
+  {"mm-sqrt-disk",       Sqrt[x^2 + y^2] < 1,              {x, y},  Reals,     "solved"},
+  {"mm-sqrt-lin",        Sqrt[x] + y < 1,                  {x, y},  Reals,     "solved"},
+  {"mm-sqrt-lt",         Sqrt[x] < y,                      {x, y},  Reals,     "solved"},
+  {"mm-sqrt-le",         Sqrt[x] <= y,                     {x, y},  Reals,     "solved"},
+  {"mm-sqrt-gt",         Sqrt[x] > y,                      {x, y},  Reals,     "solved"},
+  {"mm-sqrt-ne",         Sqrt[x] != y,                     {x, y},  Reals,     "solved"},
+  {"mm-sqrt-shift",      Sqrt[x - 1] < y,                  {x, y},  Reals,     "solved"},
+
+  (* ---- per-conjunct domain gate: a radical/Log domain born in one Abs branch
+   *      must not exclude the mutually-exclusive other branch (was a WRONG
+   *      x==0 / False before the fix) ---- *)
+  {"rf-sqrt-abs-lt",     Sqrt[Abs[x]] < 1,                 x,       Reals,     "solved"},
+  {"rf-log-abs",         Log[Abs[x]] < 0,                  x,       Reals,     "solved"},
+
+  (* ---- soundness: radicals the pass cannot rationalize EXACTLY must decline,
+   *      never a guessed rewrite ---- *)
+  {"dec-mm-sqrt-coeff",  x Sqrt[y] < 1,                    {x, y},  Reals,     "decline"},
+  {"dec-mm-sqrt-transc", Sqrt[Sin[y]] < x,                 {x, y},  Reals,     "decline"},
+  {"dec-mm-oddroot",     y^(1/3) < x,                      {x, y},  Reals,     "decline"}
 }

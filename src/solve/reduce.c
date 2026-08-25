@@ -123,12 +123,15 @@ Expr* builtin_reduce(Expr* res) {
         bool changed = false;
         Expr* pre = reduce_realfn_preprocess(expr, vlist[0], &changed);
         if (pre) { owned_pre = pre; expr = pre; }
-    } else if (nv >= 2 && reals_dom && reduce_stmt_has_piecewise(expr, vlist, nv)) {
-        /* Multivariate piecewise (Max/Min/Abs/Piecewise/...): case-split into
-         * polynomial branches, then let Fourier-Motzkin / CAD solve over Reals. */
+    } else if (nv >= 2 && reals_dom && (reduce_stmt_has_piecewise(expr, vlist, nv)
+                                        || reduce_stmt_has_radical(expr, vlist, nv))) {
+        /* Multivariate piecewise (Max/Min/Abs/Piecewise/...) and/or real radicals
+         * (Sqrt[u]): case-split the selectors into polynomial branches and
+         * rationalize the radicals into polynomial constraints, then let
+         * Fourier-Motzkin / CAD solve over the Reals. */
         force_reals = true;
         bool changed = false;
-        Expr* pre = reduce_piecewise_preprocess(expr, &changed);
+        Expr* pre = reduce_piecewise_preprocess(expr, vlist, nv, &changed);
         if (pre) { owned_pre = pre; expr = pre; }
     }
 

@@ -912,7 +912,8 @@ static OperatorDef get_operator(const char* pos) {
          * StringExpression head is Flat, so nested nodes flatten at eval. */
         def.type = OP_STRINGEXPRESSION; def.prec = 2100; def.head_name = "StringExpression"; def.len = 2;
     } else if (strncmp(pos, "||", 2) == 0) {
-        def.type = OP_OR; def.prec = 2800; def.head_name = "Or"; def.len = 2;
+        /* Or binds LOOSER than And (2800): `a || b && c` is `a || (b && c)`. */
+        def.type = OP_OR; def.prec = 2700; def.head_name = "Or"; def.len = 2;
     } else if (*pos == '|') {
         def.type = OP_ALTERNATIVES; def.prec = 2300; def.head_name = "Alternatives"; def.len = 1;
     } else if (strncmp(pos, "==", 2) == 0) {

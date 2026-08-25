@@ -717,6 +717,13 @@ static void test_real_functions(void) {
     run_test("Reduce[Sqrt[x - 1] == 2, x, Reals]", "Equal[x, 5]");
     run_test("Reduce[Sqrt[x - 1] < 5, x, Reals]", "Inequality[1, LessEqual, x, Less, 26]");
 
+    /* Per-conjunct domain gate: a radical/Log domain from one Abs sign-branch must
+     * not exclude the mutually-exclusive other branch.  Both were WRONG before the
+     * fix (x==0, and False, respectively). */
+    run_test("Reduce[Sqrt[Abs[x]] < 1, x, Reals]", "Inequality[-1, Less, x, Less, 1]");
+    run_test("Reduce[Log[Abs[x]] < 0, x, Reals]",
+             "Or[Inequality[-1, Less, x, Less, 0], Inequality[0, Less, x, Less, 1]]");
+
     /* Soundness: an out-of-domain point where the identity holds in C must be
      * EXCLUDED (ArcSin[2]+ArcCos[2]==Pi/2 is True in C but x=2 is not real). */
     run_test("Reduce[ArcSin[x] + ArcCos[x] == Pi/2 && x > 3/2, x, Reals]", "False");

@@ -323,30 +323,50 @@ static int atom_truth_general(const RAtom* a, const Expr* x, const Expr* sample)
     return s <= 0;   /* R_LE */
 }
 
-/* Truth of the whole DNF at the sample under the domain gate: 1 / 0 / -1. */
+/* Truth of the whole DNF at the sample: 1 / 0 / -1.  Each conjunct's real-domain
+ * constraints (`ccons[i]`, from that conjunct's radical/Log/inverse-trig atoms) gate
+ * ONLY that conjunct -- a domain condition born in one Abs sign-branch must never
+ * exclude the mutually-exclusive other branch (the bug that made `Sqrt[Abs[x]]<1`
+ * collapse `x>=0 && x<=0` to `x==0`).  A conjunct is true only where its own domain
+ * holds AND its atoms hold; the DNF is true iff some conjunct is. */
 static int form_truth_general(const RForm* F, const Expr* x, const Expr* sample,
-                              const RDomCon* cons, int ncon) {
-    /* Domain gate: any decidably-failed constraint excludes the point. */
-    bool any_undec = false;
-    for (int i = 0; i < ncon; i++) {
-        int s = gen_sign_at(cons[i].poly, x, sample);
-        if (s == -2) { any_undec = true; continue; }
-        bool okdom = cons[i].strict ? (s > 0) : (s >= 0);
-        if (!okdom) return 0;                  /* out of domain -> excluded */
-    }
-    if (any_undec) return -1;
-
+                              RDomCon* const* ccons, const int* cncon) {
+    int any_undec = 0;
     for (int i = 0; i < F->n; i++) {
         RConj* c = F->c[i];
-        int conj = 1;
-        for (int k = 0; k < c->n; k++) {
-            int t = atom_truth_general(&c->a[k], x, sample);
-            if (t == -1) return -1;
-            if (t == 0) { conj = 0; break; }
+        int conj = 1;                          /* 1 true / 0 false / -1 undetermined */
+        /* Domain gate for THIS conjunct.  A decidably-failed constraint excludes
+         * the point soundly, so keep scanning past an undecidable one (a later
+         * constraint may still fail decidably -- e.g. the inner x-1>=0 of a nested
+         * radical fails where the outer radical's sign is non-real/undecidable). */
+        bool dom_undec = false;
+        for (int t = 0; t < cncon[i]; t++) {
+            int s = gen_sign_at(ccons[i][t].poly, x, sample);
+            if (s == -2) { dom_undec = true; continue; }
+            bool okdom = ccons[i][t].strict ? (s > 0) : (s >= 0);
+            if (!okdom) { conj = 0; break; }   /* out of this conjunct's domain */
         }
-        if (conj) return 1;
+        if (conj == 1 && dom_undec) conj = -1; /* in-domain where decidable, else undetermined */
+        if (conj == 1)
+            for (int k = 0; k < c->n; k++) {
+                int t = atom_truth_general(&c->a[k], x, sample);
+                if (t == -1) { conj = -1; break; }
+                if (t == 0)  { conj = 0;  break; }
+            }
+        if (conj == 1)  return 1;              /* a fully-true conjunct decides the DNF */
+        if (conj == -1) any_undec = 1;
     }
-    return 0;
+    return any_undec ? -1 : 0;                 /* else: all false, or decline if any undetermined */
+}
+
+/* Free the per-conjunct domain-constraint arrays (polys + the row arrays). */
+static void free_per_conj_cons(RDomCon** ccons, const int* cncon, int n) {
+    if (!ccons) return;
+    for (int i = 0; i < n; i++) {
+        for (int t = 0; t < cncon[i]; t++) expr_free(ccons[i][t].poly);
+        free(ccons[i]);
+    }
+    free(ccons);
 }
 
 /* ------------------------------------------------------------------ *
@@ -370,17 +390,27 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv) 
             if (a->denom && expr_has_opaque_piecewise(a->denom, x)) return NULL;
         }
 
-    /* Domain constraints from every atom numerator and denominator. */
-    RDomCon* cons = NULL; int ncon = 0, ccap = 0;
+    /* Domain constraints, collected PER CONJUNCT (ccons[i] holds the real-domain
+     * constraints of conjunct i's atoms), so the gate in form_truth_general scopes
+     * each to its own conjunct instead of ANDing them all globally. */
+    size_t nc = (F->n > 0) ? (size_t)F->n : 1;   /* bounded count keeps -Walloc-size quiet */
+    RDomCon** ccons = calloc(nc, sizeof(RDomCon*));
+    int* cncon = calloc(nc, sizeof(int));
+    int* cccap = calloc(nc, sizeof(int));
     for (int i = 0; i < F->n; i++)
         for (int k = 0; k < F->c[i]->n; k++) {
             const RAtom* a = &F->c[i]->a[k];
-            if (a->rel == R_ELEM) { for (int t = 0; t < ncon; t++) expr_free(cons[t].poly); free(cons); return NULL; }
-            reduce_real_domain_collect(a->poly, x, &cons, &ncon, &ccap);
-            if (a->denom) reduce_real_domain_collect(a->denom, x, &cons, &ncon, &ccap);
+            if (a->rel == R_ELEM) {
+                free_per_conj_cons(ccons, cncon, F->n); free(cncon); free(cccap);
+                return NULL;
+            }
+            reduce_real_domain_collect(a->poly, x, &ccons[i], &cncon[i], &cccap[i]);
+            if (a->denom) reduce_real_domain_collect(a->denom, x, &ccons[i], &cncon[i], &cccap[i]);
         }
 
-    /* Breakpoints: equation roots, poles, and domain boundaries. */
+    /* Breakpoints: equation roots, poles, and domain boundaries.  The domain
+     * boundaries stay a UNION across all conjuncts -- extra breakpoints only refine
+     * the cell decomposition and are always sound. */
     Expr** bp = NULL; int m = 0, cap = 0;
     for (int i = 0; i < F->n; i++)
         for (int k = 0; k < F->c[i]->n; k++) {
@@ -388,7 +418,8 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv) 
             collect_factor_roots(a->poly, x, &bp, &m, &cap);
             if (a->denom) soft_roots(a->denom, x, &bp, &m, &cap);
         }
-    for (int i = 0; i < ncon; i++) soft_roots(cons[i].poly, x, &bp, &m, &cap);
+    for (int i = 0; i < F->n; i++)
+        for (int t = 0; t < cncon[i]; t++) soft_roots(ccons[i][t].poly, x, &bp, &m, &cap);
 
     bool ok = sort_dedup_bp(bp, &m);
     if (!ok) goto decline;
@@ -407,7 +438,7 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv) 
                 sample = gen_sample_between(lo, hi);
                 if (!sample) { ok = false; break; }
             }
-            int t = form_truth_general(F, x, sample, cons, ncon);
+            int t = form_truth_general(F, x, sample, ccons, cncon);
             expr_free(sample);
             if (t == -1) { ok = false; break; }
             truth[idx] = t;
@@ -418,15 +449,13 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv) 
         free(truth);
         for (int i = 0; i < m; i++) expr_free(bp[i]);
         free(bp);
-        for (int i = 0; i < ncon; i++) expr_free(cons[i].poly);
-        free(cons);
+        free_per_conj_cons(ccons, cncon, F->n); free(cncon); free(cccap);
         return result;
     }
 
 decline:
     for (int i = 0; i < m; i++) expr_free(bp[i]);
     free(bp);
-    for (int i = 0; i < ncon; i++) expr_free(cons[i].poly);
-    free(cons);
+    free_per_conj_cons(ccons, cncon, F->n); free(cncon); free(cccap);
     return NULL;
 }

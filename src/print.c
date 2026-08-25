@@ -92,7 +92,7 @@ static int get_expr_prec(Expr* e) {
     if (head == SYM_Alternatives) return 2300;
     if (head == SYM_Repeated || head == SYM_RepeatedNull) return 2500;
     if (head == SYM_And) return 2800;
-    if (head == SYM_Or) return 2800;
+    if (head == SYM_Or) return 2700;   /* looser than And, so Or nested in And parenthesises */
     if (head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Inequality) return 3200;
     if (head == SYM_Plus) return 3500;
 

@@ -38,6 +38,12 @@ bool reduce_stmt_has_realfn(const Expr* e, const Expr* x);
  * heads (reduce_piecewise_preprocess) into polynomial branches before FM/CAD. */
 bool reduce_stmt_has_piecewise(const Expr* e, Expr** vars, int nv);
 
+/* True iff `e` contains a square-root radical (Power[u, 1/2]) whose radicand
+ * mentions one of the `nv` reduce `vars`.  Drives the multivariate dispatch to
+ * rationalize radicals into polynomial constraints (reduce_piecewise_preprocess)
+ * before the FM/CAD engines, which accept only polynomial atoms. */
+bool reduce_stmt_has_radical(const Expr* e, Expr** vars, int nv);
+
 /* Rewrite the statement so the general real sign diagram can consume it:
  *   1. substitute every Mod[u,m] (m a positive constant) by u - m*Floor[u/m];
  *   2. expand a relational leaf that is linear in a single Floor/Ceiling/Round
@@ -49,13 +55,15 @@ bool reduce_stmt_has_piecewise(const Expr* e, Expr** vars, int nv);
  * rewrite fired. */
 Expr* reduce_realfn_preprocess(const Expr* e, const Expr* x, bool* changed);
 
-/* Multivariate (any variable count) piecewise preprocessing: the domain-agnostic
- * selector splits only (Abs, Min/Max, Piecewise/Sign/UnitStep/Ramp/Clip/
- * HeavisideTheta/Boole/UnitBox), iterated to a fixpoint.  Returns a freshly-owned
- * rewritten Expr, or NULL when nothing fired.  *changed reports whether a rewrite
- * fired.  The integer-part machinery is univariate and lives in
- * reduce_realfn_preprocess instead. */
-Expr* reduce_piecewise_preprocess(const Expr* e, bool* changed);
+/* Multivariate (any variable count) preprocessing for the FM/CAD engines: the
+ * domain-agnostic selector splits (Abs, Min/Max, Piecewise/Sign/UnitStep/Ramp/
+ * Clip/HeavisideTheta/Boole/UnitBox) AND square-root radical rationalization
+ * (Sqrt[u] REL c -> polynomial constraints in the `nv` reduce `vars`), iterated to
+ * a fixpoint so an Abs exposed under a radical -- and a radical exposed by a split
+ * -- both clear.  Returns a freshly-owned rewritten Expr, or NULL when nothing
+ * fired.  *changed reports whether a rewrite fired.  The integer-part machinery is
+ * univariate and lives in reduce_realfn_preprocess instead. */
+Expr* reduce_piecewise_preprocess(const Expr* e, Expr** vars, int nv, bool* changed);
 
 /* Append the real-domain constraints of every partial-domain node in `e` whose
  * argument contains `x` to the growable array (*cons,*n,*cap).  Each RDomCon

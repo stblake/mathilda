@@ -938,7 +938,13 @@ degenerate branch, and it handles inequalities over the reals.
   radical/`Log`/inverse-trig atoms are placed on a
   sign diagram whose breakpoints include the domain boundaries (radicand `==0`,
   `Log` arg `==0`, `ArcSin` arg `==±1`), and each cell is tested under a
-  **real-domain gate** so a point where the identity holds only in ℂ is excluded.
+  **per-conjunct real-domain gate** so a point where the identity holds only in ℂ
+  is excluded. The gate is scoped to the conjunct that produced each domain
+  condition, not applied globally: after `Abs` splitting, `Sqrt[x]` (needing
+  `x>=0`) and `Sqrt[-x]` (needing `x<=0`) live in mutually-exclusive branches, so a
+  global `And` of their domains would collapse `Sqrt[Abs[x]]<1` to the single point
+  `x==0` and `Log[Abs[x]]<0` to `False`; per-conjunct gating instead gives
+  `-1<x<1` and `-1<x<0 || 0<x<1`.
   Transcendental breakpoints (multiples of `Pi`) are ordered by a numeric-sign
   fallback. Examples:
   `Reduce[Sqrt[x+3-4Sqrt[x-1]]+Sqrt[x+8-6Sqrt[x-1]]==1, x] -> 5 <= x <= 10`;
@@ -972,16 +978,31 @@ degenerate branch, and it handles inequalities over the reals.
   periodic union no finite interval list can express), the sign diagram cannot
   locate its transition points, so `Reduce` declines rather than emit a
   single-cell verdict from an arbitrary sample.
-- **Multivariate piecewise over Reals**: the selector case-splits (`Abs`,
-  `Max`/`Min`, and the piecewise heads above — but not the univariate integer-part
-  machinery) run for any number of variables, so a multivariate piecewise
-  statement is turned into a polynomial `And`/`Or` combination and handed to the
-  Fourier-Motzkin / CAD engines. Examples:
+- **Multivariate piecewise and radicals over Reals**: the selector case-splits
+  (`Abs`, `Max`/`Min`, and the piecewise heads above — but not the univariate
+  integer-part machinery) and **square-root radical rationalization** run for any
+  number of variables, so a multivariate piecewise/radical statement is turned into
+  a polynomial `And`/`Or` combination and handed to the Fourier-Motzkin / CAD
+  engines. A relation carrying `Sqrt[u]` (internally `u^(1/2)`) is rewritten to an
+  exact radical-free equivalent by isolating one radical and squaring under sign
+  guards — `Sqrt[u]<c -> u>=0 && c>0 && u<c^2`, `Sqrt[u]>c -> u>=0 && (c<0 || u>c^2)`,
+  `Sqrt[u]==c -> u>=0 && c>=0 && u==c^2`, and correspondingly for `<=`, `>=`, `!=`
+  (the `!=` case derived directly, not as `Not[==]`, since both are false where
+  `u<0`). Isolation succeeds only when the radical's coefficient is a nonzero
+  numeric constant; multiple radicals are cleared by iterating (each squaring
+  removes one), and a radical the pass cannot isolate exactly (a non-constant
+  coefficient, or a radicand that is not a polynomial) is left in place so the
+  engine declines soundly rather than guess. The rewrite runs after `Abs`
+  splitting, so a radicand that is itself an `Abs` is polynomial by the time it is
+  squared. Examples:
   `Reduce[Max[x,y]>2, {x,y}, Reals] -> x > 2 && y <= x || y >= x && y > 2`;
   `Reduce[Min[x,y]<1, {x,y}, Reals] -> x < 1 && y >= x || y <= x && y < 1`;
-  `Reduce[Abs[x]+Abs[y]<1, {x,y}, Reals]` -> the four sectors of the L¹ ball. A
-  residual integer-part atom (e.g. `Floor[x]+y>2`) is left for the CAD engine to
-  decline soundly.
+  `Reduce[Abs[x]+Abs[y]<1, {x,y}, Reals]` -> the four sectors of the L¹ ball;
+  `Reduce[Sqrt[x]+y<1, {x,y}, Reals] -> x >= 0 && y < 1 - Sqrt[x]`;
+  `Reduce[Sqrt[x^2+y^2]<1, {x,y}, Reals]` -> the open unit disk;
+  `Reduce[Sqrt[Abs[x]]+Abs[y]<1, {x,y}, Reals]` -> the region
+  `|y| < 1 - Sqrt[|x|]`. A residual integer-part atom (e.g. `Floor[x]+y>2`) is left
+  for the CAD engine to decline soundly.
 
 Rational-function relations whose canonicalisation would clear a variable
 denominator (e.g. `1/x < 1`) are declined (left unevaluated) rather than answered

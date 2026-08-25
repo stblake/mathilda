@@ -232,6 +232,19 @@ bool reduce_stmt_has_piecewise(const Expr* e, Expr** vars, int nv) {
     return false;
 }
 
+static bool is_sqrt_radical(const Expr* e);   /* defined with the rationalizer below */
+
+/* A square-root radical Power[u, 1/2] with a reduce variable in its radicand --
+ * the multivariate dispatch's cue to rationalize radicals into polynomial
+ * constraints before FM/CAD. */
+bool reduce_stmt_has_radical(const Expr* e, Expr** vars, int nv) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_sqrt_radical(e) && contains_any_var(e->data.function.args[0], vars, nv)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (reduce_stmt_has_radical(e->data.function.args[i], vars, nv)) return true;
+    return false;
+}
+
 /* ------------------------------------------------------------------ *
  *  Preprocessing 1: Mod -> Floor                                      *
  * ------------------------------------------------------------------ */
@@ -902,6 +915,239 @@ static Expr* apply_selector_splits(const Expr* e, bool* changed) {
     return c;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Preprocessing 5: radical rationalization                          *
+ *                                                                    *
+ *  Rewrite a relation carrying a real square root Sqrt[u] (internally *
+ *  Power[u, 1/2]) into an EQUIVALENT radical-free boolean combination *
+ *  in the SAME variables, by isolating one radical and squaring under *
+ *  exact sign guards.  Runs AFTER Abs/selector splitting (so radicands *
+ *  are polynomial) and BEFORE atom canonicalisation (Together/Numerator *
+ *  would mangle a surviving Sqrt), letting FM/CAD -- which accept only *
+ *  polynomial atoms -- solve statements like Sqrt[Abs[x]]+Abs[y]<1.    *
+ *                                                                    *
+ *  Soundness over coverage: a relation whose radical cannot be        *
+ *  isolated with a constant coefficient (or that has too many coupled  *
+ *  radicals) is emitted UNCHANGED, so the downstream engine declines   *
+ *  rather than risk a wrong answer.                                    */
+
+#define RAT_RADICAL_DEPTH_CAP 12
+
+/* Square-root radical node Power[u, 1/2]? */
+static bool is_sqrt_radical(const Expr* e) {
+    if (!is_head(e, SYM_Power) || e->data.function.arg_count != 2) return false;
+    const Expr* ex = e->data.function.args[1];
+    if (!is_head(ex, SYM_Rational) || ex->data.function.arg_count != 2) return false;
+    const Expr* pn = ex->data.function.args[0];
+    const Expr* pd = ex->data.function.args[1];
+    return pn->type == EXPR_INTEGER && pn->data.integer == 1
+        && pd->type == EXPR_INTEGER && pd->data.integer == 2;
+}
+
+/* Gather distinct (by structural equality) Sqrt-radical subterms of `e` whose
+ * radicand mentions a reduce variable. */
+static void collect_sqrt_radicals(const Expr* e, Expr** vars, int nv,
+                                  const Expr*** arr, int* n, int* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (is_sqrt_radical(e) && contains_any_var(e->data.function.args[0], vars, nv)) {
+        bool seen = false;
+        for (int i = 0; i < *n && !seen; i++) if (expr_eq((Expr*)(*arr)[i], (Expr*)e)) seen = true;
+        if (!seen) {
+            if (*n == *cap) { *cap = *cap ? *cap * 2 : 4; *arr = realloc(*arr, (size_t)*cap * sizeof(Expr*)); }
+            (*arr)[(*n)++] = e;
+        }
+        /* still recurse: the radicand may hold nested radicals */
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        collect_sqrt_radicals(e->data.function.args[i], vars, nv, arr, n, cap);
+}
+
+/* The relation as seen after logical negation (De Morgan at a leaf). */
+static const char* negate_rel(const char* h) {
+    if (h == SYM_Less)         return SYM_GreaterEqual;
+    if (h == SYM_LessEqual)    return SYM_Greater;
+    if (h == SYM_Greater)      return SYM_LessEqual;
+    if (h == SYM_GreaterEqual) return SYM_Less;
+    if (h == SYM_Equal)        return SYM_Unequal;
+    if (h == SYM_Unequal)      return SYM_Equal;
+    return h;
+}
+
+static bool is_rel_head(const char* h) {
+    return h == SYM_Less || h == SYM_LessEqual || h == SYM_Greater
+        || h == SYM_GreaterEqual || h == SYM_Equal || h == SYM_Unequal;
+}
+
+/* a - b, evaluated. */
+static Expr* mk_sub(const Expr* a, const Expr* b) {
+    return enorm(expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy((Expr*)a),
+                   expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)b) }, 2) }, 2));
+}
+/* An (unevaluated) relation  a REL b, on fresh copies. */
+static Expr* rel_copy(const char* h, const Expr* a, const Expr* b) {
+    return rel2(h, expr_copy((Expr*)a), expr_copy((Expr*)b));
+}
+/* An (unevaluated) relation  a REL 0. */
+static Expr* rel0(const char* h, const Expr* a) {
+    return rel2(h, expr_copy((Expr*)a), expr_new_integer(0));
+}
+/* c^2, unevaluated (Power[c,2]). */
+static Expr* mk_sq(const Expr* c) {
+    return expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ expr_copy((Expr*)c), expr_new_integer(2) }, 2);
+}
+static Expr* mk_and2(Expr* a, Expr* b) {
+    return expr_new_function(expr_new_symbol(SYM_And), (Expr*[]){ a, b }, 2);
+}
+static Expr* mk_and3(Expr* a, Expr* b, Expr* c) {
+    return expr_new_function(expr_new_symbol(SYM_And), (Expr*[]){ a, b, c }, 3);
+}
+static Expr* mk_or2(Expr* a, Expr* b) {
+    return expr_new_function(expr_new_symbol(SYM_Or), (Expr*[]){ a, b }, 2);
+}
+
+/* Exact radical-free equivalent of  Sqrt[u] REL c  over the Reals (u the
+ * radicand, c the isolated other side).  Every row anchors u>=0; the != row is
+ * derived directly (NOT as Not[==]): both == and != are False where u<0. */
+static Expr* apply_radical_table(const char* rel, const Expr* u, const Expr* c) {
+    Expr* dom = rel0(SYM_GreaterEqual, u);                 /* u >= 0 */
+    if (rel == SYM_Less)                                   /* u>=0 && c>0  && u<c^2  */
+        return mk_and3(dom, rel0(SYM_Greater, c),      rel_copy(SYM_Less, u, mk_sq(c)));
+    if (rel == SYM_LessEqual)                             /* u>=0 && c>=0 && u<=c^2 */
+        return mk_and3(dom, rel0(SYM_GreaterEqual, c), rel_copy(SYM_LessEqual, u, mk_sq(c)));
+    if (rel == SYM_Greater)                              /* u>=0 && (c<0 || u>c^2) */
+        return mk_and2(dom, mk_or2(rel0(SYM_Less, c), rel_copy(SYM_Greater, u, mk_sq(c))));
+    if (rel == SYM_GreaterEqual)                         /* u>=0 && (c<0 || u>=c^2) */
+        return mk_and2(dom, mk_or2(rel0(SYM_Less, c), rel_copy(SYM_GreaterEqual, u, mk_sq(c))));
+    if (rel == SYM_Equal)                                /* u>=0 && c>=0 && u==c^2 */
+        return mk_and3(dom, rel0(SYM_GreaterEqual, c), rel_copy(SYM_Equal, u, mk_sq(c)));
+    /* SYM_Unequal:  u>=0 && (c<0 || u!=c^2)  */
+    return mk_and2(dom, mk_or2(rel0(SYM_Less, c), rel_copy(SYM_Unequal, u, mk_sq(c))));
+}
+
+/* N[e] to a real; true iff e is a numeric constant (free of variables). */
+static bool numeric_const(const Expr* e, double* out) {
+    Expr* v = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+        (Expr*[]){ expr_copy((Expr*)e) }, 1));
+    bool ok = false;
+    if (v->type == EXPR_REAL)         { *out = v->data.real;          ok = true; }
+    else if (v->type == EXPR_INTEGER) { *out = (double)v->data.integer; ok = true; }
+    expr_free(v);
+    return ok;
+}
+
+static Expr* rationalize_tree(const Expr* e, bool neg, Expr** vars, int nv,
+                              int depth, bool* changed);
+
+/* Rationalize a single relational leaf  L rel R  (rel already Not-folded). */
+static Expr* rationalize_relation(const Expr* L, const Expr* R, const char* rel,
+                                  Expr** vars, int nv, int depth, bool* changed) {
+    Expr* diff = mk_sub(L, R);
+    const Expr** rads = NULL; int nr = 0, rcap = 0;
+    collect_sqrt_radicals(diff, vars, nv, &rads, &nr, &rcap);
+    if (nr == 0 || depth >= RAT_RADICAL_DEPTH_CAP) {
+        expr_free(diff); free(rads);
+        return rel_copy(rel, L, R);                       /* nothing to do / cap: decline */
+    }
+    for (int i = 0; i < nr; i++) {
+        const Expr* rho = rads[i];
+        const Expr* u   = rho->data.function.args[0];     /* radicand */
+        Expr* zero = expr_new_integer(0), *one = expr_new_integer(1), *two = expr_new_integer(2);
+        Expr* B  = enorm(subst_expr(diff, rho, zero));    /* diff|_{rho=0}         */
+        Expr* d1 = enorm(subst_expr(diff, rho, one));
+        Expr* d2 = enorm(subst_expr(diff, rho, two));
+        expr_free(zero); expr_free(one); expr_free(two);
+        Expr* A = mk_sub(d1, B);                           /* diff|_{rho=1} - B      */
+        /* linearity in rho: diff|_{rho=2} == 2A + B */
+        Expr* twoAB = enorm(expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(2), expr_copy(A) }, 2),
+                       expr_copy(B) }, 2));
+        bool lin = expr_eq(d2, twoAB);
+        expr_free(twoAB); expr_free(d1); expr_free(d2);
+        double av = 0.0;
+        bool acon = numeric_const(A, &av);                 /* A a nonzero constant?  */
+        if (!lin || !acon || av == 0.0) { expr_free(A); expr_free(B); continue; }
+        /* c = -B/A ; flip the relation when A < 0. */
+        Expr* c = enorm(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(B),
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ expr_copy(A), expr_new_integer(-1) }, 2) }, 3));
+        const char* r2 = (av < 0.0) ? flip_rel(rel) : rel;
+        Expr* table = apply_radical_table(r2, u, c);
+        expr_free(A); expr_free(B); expr_free(c);
+        expr_free(diff); free(rads);
+        *changed = true;
+        Expr* out = rationalize_tree(table, false, vars, nv, depth + 1, changed);
+        expr_free(table);
+        return out;
+    }
+    expr_free(diff); free(rads);
+    return rel_copy(rel, L, R);                            /* no constant-coeff radical */
+}
+
+/* NNF walk carrying polarity `neg`, so no Not ever survives around a rationalized
+ * u>=0 guard (which De Morgan would wrongly re-open onto the u<0 region). */
+static Expr* rationalize_tree(const Expr* e, bool neg, Expr** vars, int nv,
+                              int depth, bool* changed) {
+    if (!e) return NULL;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        size_t n = e->data.function.arg_count;
+        if (is_rel_head(h) && n == 2) {
+            const char* rel = neg ? negate_rel(h) : h;
+            return rationalize_relation(e->data.function.args[0], e->data.function.args[1],
+                                        rel, vars, nv, depth, changed);
+        }
+        if ((h == SYM_And || h == SYM_Or) && n >= 1) {
+            const char* out = (h == SYM_And) == !neg ? SYM_And : SYM_Or;  /* De Morgan */
+            Expr** parts = malloc(n * sizeof(Expr*));
+            for (size_t i = 0; i < n; i++)
+                parts[i] = rationalize_tree(e->data.function.args[i], neg, vars, nv, depth, changed);
+            Expr* r = expr_new_function(expr_new_symbol(out), parts, n);
+            free(parts);
+            return r;
+        }
+        if (h == SYM_Not && n == 1)
+            return rationalize_tree(e->data.function.args[0], !neg, vars, nv, depth, changed);
+        if (h == SYM_Implies && n == 2) {                  /* a => b  ==  !a || b */
+            Expr* na = expr_new_function(expr_new_symbol(SYM_Not),
+                (Expr*[]){ expr_copy(e->data.function.args[0]) }, 1);
+            Expr* orx = mk_or2(na, expr_copy(e->data.function.args[1]));
+            Expr* r = rationalize_tree(orx, neg, vars, nv, depth, changed);
+            expr_free(orx);
+            return r;
+        }
+        if (h == SYM_Inequality && n >= 3 && (n % 2) == 1) { /* chained a op b op c ... */
+            size_t nrel = (n - 1) / 2;
+            Expr** parts = malloc(nrel * sizeof(Expr*));
+            for (size_t j = 0; j < nrel; j++) {
+                const Expr* a  = e->data.function.args[2 * j];
+                const Expr* op = e->data.function.args[2 * j + 1];
+                const Expr* b  = e->data.function.args[2 * j + 2];
+                const char* oh = op->type == EXPR_SYMBOL ? op->data.symbol.name : SYM_Less;
+                Expr* leaf = rel_copy(oh, a, b);
+                parts[j] = rationalize_tree(leaf, neg, vars, nv, depth, changed);
+                expr_free(leaf);
+            }
+            Expr* r = expr_new_function(expr_new_symbol(neg ? SYM_Or : SYM_And), parts, nrel);
+            free(parts);
+            return r;
+        }
+    }
+    /* Non-boolean / unhandled node: it carries no radical relation we rewrite, so
+     * copying it (Not-wrapped under negation) is sound. */
+    if (neg) return expr_new_function(expr_new_symbol(SYM_Not), (Expr*[]){ expr_copy((Expr*)e) }, 1);
+    return expr_copy((Expr*)e);
+}
+
+/* One pass: rationalize every square-root-bearing relational leaf. */
+static Expr* rationalize_radical_leaves(const Expr* e, Expr** vars, int nv, bool* changed) {
+    return rationalize_tree(e, false, vars, nv, 0, changed);
+}
+
 /* Rewrite Mod->Floor, Abs sign-splits, Min/Max case-splits and integer-part
  * relations away, so the sign-diagram engines see only polynomial atoms.  The
  * four transforms are cyclically dependent -- an Abs or Min/Max split can EXPOSE
@@ -934,14 +1180,16 @@ Expr* reduce_realfn_preprocess(const Expr* e, const Expr* x, bool* changed) {
  * splits only (Abs, Min/Max, Piecewise/Sign/UnitStep/...).  The integer-part
  * machinery (Mod->Floor and Floor/Ceiling/Round isolation) is univariate, so a
  * residual integer-part atom is left for the CAD engine to decline soundly. */
-Expr* reduce_piecewise_preprocess(const Expr* e, bool* changed) {
+Expr* reduce_piecewise_preprocess(const Expr* e, Expr** vars, int nv, bool* changed) {
     bool any = false;
     Expr* cur = expr_copy((Expr*)e);
     for (int iter = 0; iter < 8; iter++) {
         bool ch = false;
-        Expr* nxt = apply_selector_splits(cur, &ch);
+        Expr* nxt = apply_selector_splits(cur, &ch);       /* Abs / Min-Max / Piecew. */
+        Expr* rad = rationalize_radical_leaves(nxt, vars, nv, &ch);  /* Sqrt[u] -> u<c^2 */
+        expr_free(nxt);
         expr_free(cur);
-        cur = nxt;
+        cur = rad;
         if (!ch) break;
         any = true;
     }

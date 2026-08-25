@@ -30,7 +30,28 @@ Implementation order followed was
 | 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var done (6d Stage A + Stage B n-D boundary merge, rational-fibre regime); 6b (algebraic-coeff fibres) + 6e (well-orientedness) pending |
 | 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ☐ pending |
 | 8 | Companion builtins + polish | ☐ pending |
-| 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done |
+| 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done (+ multivariate `Sqrt` rationalization, 2026-08-24) |
+
+> **2026-08-24 — radicals compose with `Abs`; univariate domain-gate soundness fix.**
+> A Phase-9 preprocessing extension rationalizes square-root radicals for the
+> **multivariate** path too: `Sqrt[u] REL c` is squared under sign guards into a
+> polynomial `And`/`Or` in the same variables, so `Sqrt[Abs[x]]+Abs[y]<1` and
+> `Sqrt[x^2+y^2]<1` (previously unevaluated for any radical in ≥2 variables) now
+> solve on the existing FM/CAD. Separately, the univariate general sign diagram's
+> domain gate is now **per-conjunct** (was global), fixing a wrong `Sqrt[Abs[x]]<1
+> -> x==0` / `Log[Abs[x]]<0 -> False`. See `docs/spec/builtins/solutions-of-equations.md`.
+>
+> This rationalize-by-square approach was chosen over the general **aux-variable
+> purification** method (rewrite each non-polynomial atom to a fresh variable with a
+> defining relation, then project it out) because that method needs **two features
+> still pending here**: **Phase 7** quantifier elimination (`reduce_qe.c` — the
+> existential fold over CAD cells, unbuilt) to drop the auxiliary variable from the
+> answer, **and** **Phase 6b** algebraic-coefficient CAD fibres (lifting the
+> rational-breakpoint restriction) so the *real* variables — pushed to non-innermost
+> CAD levels once the auxiliary variable is innermost — may carry irrational
+> boundaries. Both remain on the roadmap; purification becomes viable only once they
+> land. Rationalize-by-square keeps the problem at its original dimension and needs
+> neither.
 
 The **[Deviations from this plan](#deviations-discovered-during-implementation)**
 section at the end records where the built code differs from the original design
