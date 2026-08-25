@@ -1,0 +1,436 @@
+\chapter{Compiling and Running Mathilda}
+\label{ch:building}
+
+Before you can compute anything, you have to get Mathilda onto your machine and
+build it. For most newcomers this is the single largest hurdle---not the
+mathematics, but the toolchain\index{building!prerequisites}---so this chapter treats it carefully and
+completely. By the end you will have obtained the source, installed the handful of
+libraries it needs, compiled the program, started an interactive session, and
+learned your way around the read--eval--print loop. If you have built open-source C
+programs before, much of this will be familiar and you can skim; if you have not,
+follow it line by line and you will be fine.
+
+Mathilda is distributed as \emph{source code}, not as a pre-built binary. That is a
+deliberate consequence of the mission of Chapter~\ref{ch:about}: a system meant to
+be read, checked, and carried forward is one you compile yourself, on your own
+hardware, from source you can inspect. The good news is that the build is ordinary
+and undramatic---a C project with a plain \texttt{makefile}, a few well-known
+libraries, and no exotic build system to learn.
+
+\section{Obtaining the source}
+\label{sec:obtaining}
+\index{building!obtaining the source}
+
+Mathilda lives in a public Git repository. To get a copy, clone it and step
+inside:
+
+\begin{shell}
+$ git clone https://github.com/stblake/Mathilda.git
+$ cd Mathilda
+\end{shell}
+
+\noindent
+Everything the rest of this chapter does happens from inside that top-level
+\texttt{Mathilda/} directory. Two files there are worth knowing about from the
+start: \texttt{README.md} is the quick-start and the authoritative list of
+dependencies, and \texttt{SPEC.md} describes the system's architecture. You do not
+need to read either to build the program, but they are where to turn when something
+is unusual about your platform.
+
+\section{The toolchain and its dependencies}
+\label{sec:prerequisites}
+
+Mathilda is written in C99 and leans on a small set of best-in-class numerical
+libraries (introduced in \S\ref{sec:libraries}). Building it therefore needs a C
+compiler and those libraries' development headers. Only three of the libraries are
+required; the rest are optional and the build \emph{degrades gracefully}\index{graceful degradation} without
+them---it detects what is present, switches on the corresponding features, and
+switches off the ones whose libraries are missing, always producing a working
+binary.
+
+\subsection{A real GCC, not clang}
+\label{sec:gcc-not-clang}
+\index{GCC!required, not clang}
+
+The one platform rule that trips people up: Mathilda must be built with a genuine
+\textbf{GCC}, never Apple's or LLVM's \texttt{clang}. The build enforces this for
+you. Its makefile auto-detects a real GCC---trying \texttt{gcc-16}, \texttt{gcc-15},
+\ldots\ down to a plain \texttt{gcc}---and if the compiler it is about to use reports
+itself as clang, it stops immediately with a message telling you how to fix it,
+rather than silently producing an unsupported binary.%
+\calloutnote{Under the hood}{The rule is not arbitrary. On macOS the plain
+\texttt{gcc} command is a symlink to Apple's clang, which both miscompiles a few of
+Mathilda's constructs and---more importantly---hides the strict-C99 portability
+warnings that the project's Linux continuous-integration build treats as errors.
+Building with real GCC on every platform keeps one standard of correctness. The fix
+is always the same: install GCC from Homebrew.}
+On Linux the plain \texttt{gcc} is already real GCC, so there is nothing to do. On
+macOS, install one from Homebrew (see below); the makefile will then find and prefer
+it automatically. If you ever need to point it at a specific compiler, pass it
+explicitly, for example \texttt{make CC=gcc-16}.
+
+\subsection{The libraries}
+\label{sec:libraries-list}
+
+\paragraph{Required.} These three must be present or the build cannot proceed:
+\begin{itemize}
+  \item \textbf{GMP}\index{GMP}, the GNU Multiple Precision Arithmetic Library---arbitrary-precision
+        integers, the foundation of all of Mathilda's exact arithmetic.
+  \item \textbf{MPFR}\index{MPFR}---correctly rounded arbitrary-precision reals, so that \B{N}
+        can give you a hundred trustworthy digits. It is on by default; you can build
+        without it, but almost no one should.
+  \item \textbf{GNU~Readline}\index{GNU Readline}---the line editing, history, and command recall of the
+        interactive session.
+\end{itemize}
+
+\paragraph{Optional.} Each of these unlocks a family of features when present and is
+simply omitted when absent:
+\begin{itemize}
+  \item \textbf{FLINT}\index{FLINT} (version~3.0 or newer)---fast, rigorous polynomial arithmetic
+        over algebraic number fields and rigorous numerics for many special
+        functions. Distributions that ship only FLINT~2.x are detected as too old
+        and the accelerated paths are switched off automatically.
+  \item \textbf{GMP-ECM}\index{GMP-ECM}---the Elliptic Curve Method for the harder cases of integer
+        factorization.
+  \item \textbf{LAPACK}\index{LAPACK} and \textbf{BLAS}---fast machine-precision linear algebra. On
+        macOS the build finds Apple's \textbf{Accelerate} framework and you need
+        install nothing.
+  \item \textbf{FFTW}---fast Fourier transforms; without it \B{Fourier} falls back to
+        a slower $O(n^2)$ transform.
+  \item \textbf{Raylib}\index{Raylib}---the interactive window that \B{Plot}, \B{Plot3D}, and \B{Show}
+        draw into. Without it those functions print a text placeholder and return
+        normally (see Chapter~\ref{ch:graphics}).
+\end{itemize}
+
+\noindent
+POSIX threads, used to spread the packed-array kernels across your cores, are on by
+default on macOS and Linux and need no extra package. \textbf{CMake} is needed only
+to build the test suite (\S\ref{sec:tests}).
+
+Every optional backend is governed by a build-time flag you can force on or off. The
+defaults auto-detect, so you rarely need to touch them, but they are worth knowing:
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabular}{@{}llp{0.52\linewidth}@{}}
+    \toprule
+    \textbf{Flag} & \textbf{Default} & \textbf{What it enables} \\
+    \midrule
+    \mcode{USE\_MPFR}     & \mcode{1} & Arbitrary-precision reals: \mcode{N[expr, prec]}, precision tracking. \\
+    \mcode{USE\_FLINT}    & \mcode{1} & Fast FLINT ($\geq 3.0$) kernels for number fields and rigorous numerics. \\
+    \mcode{USE\_LAPACK}   & \mcode{1} & Fast machine-precision linear algebra (Accelerate on macOS). \\
+    \mcode{USE\_ECM}      & \mcode{1} & Elliptic Curve Method factorization via GMP-ECM. \\
+    \mcode{USE\_FFTW}     & \mcode{1} & FFTW-backed \mcode{Fourier}; naive $O(n^2)$ transform when off. \\
+    \mcode{USE\_THREADS}  & \mcode{1} & POSIX-thread parallelism for the packed-array kernels. \\
+    \mcode{USE\_GRAPHICS} & \mcode{1} & Interactive 2D/3D plot windows via Raylib. \\
+    \bottomrule
+  \end{tabular}
+  \caption{Optional-backend flags. Each auto-detects; append e.g.\ \mcode{USE\_LAPACK=0}
+  to a \mcode{make} command to force one off.}
+  \label{tab:use-flags}
+\end{table}
+
+\subsection{Installing the dependencies}
+\label{sec:installing-deps}
+\index{building!installing dependencies}
+
+On \textbf{Debian or Ubuntu}, install the three required libraries and as many of the
+optional ones as you want:
+
+\begin{shell}
+# Required
+$ sudo apt install libgmp-dev libmpfr-dev libreadline-dev
+
+# Optional, each auto-detected by the build
+$ sudo apt install libflint-dev          # FLINT >= 3.0 (Ubuntu 24.04+/Debian 12+)
+$ sudo apt install libecm-dev            # GMP-ECM factorization
+$ sudo apt install liblapacke-dev libopenblas-dev   # LAPACK/BLAS
+$ sudo apt install libfftw3-dev          # FFTW
+$ sudo apt install libraylib-dev         # interactive graphics
+$ sudo apt install cmake                 # only for the test suite
+\end{shell}
+
+\noindent
+On \textbf{Fedora or RHEL} the package names are \texttt{gmp-devel},
+\texttt{mpfr-devel}, \texttt{readline-devel}, and then \texttt{flint-devel},
+\texttt{gmp-ecm-devel}, \texttt{lapack-devel}/\texttt{openblas-devel},
+\texttt{fftw-devel}, and \texttt{cmake}.
+
+On \textbf{macOS} with Homebrew, install a real GCC (\S\ref{sec:gcc-not-clang}) and
+the libraries; Accelerate is already part of the system, so you do not install
+LAPACK:
+
+\begin{shell}
+$ brew install gcc gmp mpfr readline cmake
+# Optional
+$ brew install flint fftw raylib gmp-ecm
+\end{shell}
+
+\section{Building}
+\label{sec:building}
+\index{building!compiling}
+
+With the dependencies in place, build the program with a single command. The
+makefile auto-discovers every source file, configures the internal dependencies, and
+links the executable with \texttt{-std=c99 -O3}:
+
+\begin{shell}
+$ make -j
+\end{shell}
+
+\noindent
+The \texttt{-j} flag builds in parallel across your cores; on Linux you can be
+explicit with \texttt{make -j\$(nproc)}. The first build compiles several hundred
+source files and takes a little while; afterwards, \texttt{make} rebuilds only what
+changed. When it finishes you will have an executable called \texttt{Mathilda} in the
+current directory.
+
+Want a leaner binary, or missing a library you do not care about? Turn any optional
+backend off explicitly (Table~\ref{tab:use-flags}). For instance, to build without
+MPFR and without the LAPACK acceleration:
+
+\begin{shell}
+$ make -j USE_MPFR=0 USE_LAPACK=0
+\end{shell}
+
+\paragraph{If the build stops.} The three failures new users hit, and their fixes:
+\begin{itemize}
+  \item \emph{``\,'gcc' is clang, not GCC\,''}---you are on macOS with only Apple's
+        compiler. Run \texttt{brew install gcc} and build again; the makefile will
+        find the real GCC on its own (\S\ref{sec:gcc-not-clang}).
+  \item \emph{A missing header such as \texttt{gmp.h} or \texttt{readline/readline.h}}---%
+        a required library's development package is not installed. Install it from
+        \S\ref{sec:installing-deps} and rebuild.
+  \item \emph{FLINT features quietly absent}---your distribution ships FLINT~2.x.
+        The build detects this, falls back to \texttt{USE\_FLINT=0}, and still
+        succeeds; install FLINT~$\geq 3.0$ from source or a backport if you want the
+        accelerated paths.
+\end{itemize}
+
+\section{Your first session}
+\label{sec:first-session}
+\index{REPL!starting}
+
+Start the interactive session by running the binary with no arguments:
+
+\begin{shell}
+$ ./Mathilda
+
+Mathilda <version> - A small, open source computer algebra system.
+
+This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.
+
+End a line with '\' to enter a multiline expression. Press Return to evaluate.
+Exit by evaluating Quit[] or CONTROL-C.
+
+In[1]:=
+\end{shell}
+
+\noindent
+The banner's first line names the version you just built and the libraries it was
+compiled against; the same information is available at any time from
+\B{\$Version}\index{version!\$Version}, and the version number alone from \B{\$VersionNumber}:
+
+\begin{codepairs}
+\pair{02-building/version/1}{The full banner: Mathilda's version and every library
+it was built against---exactly the build you are running.}
+\pair{02-building/version/2}{Just the number, as a machine-readable value you can
+compare against in a script.}
+\end{codepairs}
+
+The \texttt{In[1]:=} is the \emph{prompt}\index{REPL!In[] and Out[]}: Mathilda is waiting for you to type an
+expression. Type one, press Return, and it prints the result on an
+\texttt{Out[1]=} line and prompts again. Here is the whole of a first session---exact
+arithmetic, an exact symbolic value, and a machine-precision number on demand:
+
+\begin{codepairs}
+\pair{02-building/first-session/1}{Ordinary arithmetic. The answer is the exact
+integer~$4$.}
+\pair{02-building/first-session/2}{\B{Sin} of $\pi/6$ is returned \emph{exactly}, as
+the rational $1/2$---not a decimal.}
+\pair{02-building/first-session/3}{Ask for a number with \B{N} and you get one: here
+a quick machine-precision value of $\pi$.}
+\end{codepairs}
+
+\noindent
+That is the entire rhythm of the system: you type an expression, Mathilda evaluates
+it to a fixed point, and it shows you the result. Everything else in this book is
+variations on that loop.
+
+\section{How the REPL works}
+\label{sec:repl}
+\index{REPL}
+
+The interactive loop---read an expression, evaluate it, print it, repeat---is where
+you will spend most of your time, so it is worth knowing its conveniences.
+
+\subsection{Results persist, and you can name them}
+\label{sec:session-state}
+
+A session has \emph{memory}. Everything you define stays in force until you leave, so
+you can name a result on one line and use it on the next:
+
+\begin{codepairs}
+\pair{02-building/session-state/1}{Assign with \mcode{=}. The assignment returns the
+value, so you see it echoed.}
+\pair{02-building/session-state/2}{\mcode{x} now stands for $1024$ everywhere.}
+\pair{02-building/session-state/3}{And keeps standing for it until you reassign or
+clear it.}
+\end{codepairs}
+
+Beyond your own names, the session numbers everything for you.
+Each result is stored as \mcode{Out[n]}, matching the \texttt{Out[n]=} label beside
+it, and each input as \mcode{In[n]}. The special symbol \mcode{\%} is shorthand for
+the most recent result and \mcode{\%\%} for the one before it, so in an interactive
+session \mcode{\% + 1} adds one to whatever was just printed, and \mcode{Out[3]}
+recalls the third result exactly.%
+\calloutnote{Under the hood}{\mcode{In[n]}, \mcode{Out[n]}, and \mcode{\%} are a
+feature of the \emph{interactive} loop---the REPL records each result as it prints
+it. A script run with \mcode{-file} (\S\ref{sec:scripts}) and the machine pipe used
+by front-ends do not keep this history, so reach for a named variable, as above, for
+anything you want to reuse in a script.}
+
+A trailing semicolon suppresses the printed output. The expression is still
+evaluated and its value still stored---you just do not see it, which is exactly what
+you want for setup lines and large intermediate results:
+
+\begin{codepairs}
+\pair{02-building/suppression/1}{The semicolon suppresses the \texttt{Out[]} line;
+the assignment still happens.}
+\pair{02-building/suppression/2}{Proof that it did: \mcode{a} is $3$, so \mcode{a\^{}2}
+is $9$.}
+\end{codepairs}
+
+\subsection{Editing, history, and multiline input}
+\label{sec:editing}
+\index{REPL!line editing and history}
+
+Because the session is built on GNU~Readline, it behaves like a modern shell prompt.
+You can move along the line with the arrow keys, edit in place, and---most
+usefully---press the up arrow to recall previous inputs and re-run or tweak them. The
+Emacs-style key bindings work too: \texttt{Ctrl-A} to the start of the line,
+\texttt{Ctrl-E} to the end, \texttt{Ctrl-R} to search backwards through history.
+
+For an expression too long or too structured to sit comfortably on one line, end a
+line with a backslash (\texttt{\textbackslash}) and Mathilda waits for more before
+evaluating, letting you spread a definition across several lines and press Return on
+the last to run the whole thing.
+
+\subsection{Getting help}
+\label{sec:help}
+\index{REPL!getting help}
+
+To see what a function does, type a question mark before its name---\mcode{?Sin},
+say---and Mathilda prints its usage message: a one-line signature and a short
+description, drawn from the function's own built-in documentation. Every builtin
+carries one. This is the same text that titles the function's reference card; for
+\B{Sin} it reads:
+
+\usagebox{Sin}
+
+To \emph{discover} functions rather than look one up, \B{Names} lists every symbol
+matching a string pattern---a quick way to see what a fresh session already knows:
+
+\begin{codepairs}
+\pair{02-building/help/1}{Every built-in name beginning with \mcode{Bessel}. The
+\mcode{*} is a wildcard.}
+\end{codepairs}
+
+\noindent
+For the fuller machine-readable story about a symbol---its attributes and
+definitions as well as its usage---there is also \B{Information}, of which
+\mcode{?name} is the everyday shorthand.
+
+\subsection{Leaving the session}
+\label{sec:leaving}
+
+To quit, evaluate \mcode{Quit[]} or press \texttt{Ctrl-D} (end-of-input) at the
+prompt. \texttt{Ctrl-C} interrupts as well. Any of them returns you to your shell.
+
+\section{Running scripts and other modes}
+\label{sec:scripts}
+\index{building!running scripts}
+
+The REPL is one of three ways Mathilda can run. It is chosen automatically: if you
+name a file, Mathilda runs it as a script; otherwise, if its input is an interactive
+terminal, it starts the REPL you have just met; and if its input is a pipe, it speaks
+a machine protocol instead (below).
+
+\paragraph{Scripts.} Point Mathilda at a file of expressions with \texttt{-file} (a
+bare filename means the same thing) and it evaluates each one in order and exits.
+Crucially, \emph{nothing is echoed}: there are no \texttt{In[]}/\texttt{Out[]} lines,
+so the output is exactly and only what the script chooses to \B{Print}. Given a file
+\texttt{area.m}:
+
+\begin{shell}
+$ cat area.m
+(* area.m -- a tiny script. Nothing is echoed; only what we Print appears. *)
+r = 3;
+Print["Area of a disk of radius ", r, " is ", N[Pi r^2]]
+
+$ ./Mathilda -file area.m
+Area of a disk of radius 3 is 28.2743
+\end{shell}
+
+\noindent
+This is the mode to use for batch work, for reproducible computations kept under
+version control, and for anything you want to pipe into another program. (It is also
+how this very book is built: every transcript you see was produced by feeding its
+inputs to the real binary.)
+
+\paragraph{The command line.} A few options round out the picture; \texttt{--help}
+lists them all:
+
+\begin{shell}
+$ ./Mathilda --help
+Mathilda <version> - a small, open source computer algebra system.
+
+Usage: ./Mathilda [options] [file]
+
+  -file <path>    evaluate every expression in <path>, then exit
+  -h, --help      show this message and exit
+  -v, --version   print version information and exit
+
+A bare <file> argument is equivalent to -file <file>. With no file,
+Mathilda starts the interactive REPL when stdin is a terminal, and
+otherwise speaks the NDJSON pipe protocol on stdio.
+\end{shell}
+
+\paragraph{The pipe protocol.} That last sentence describes the third mode. When
+Mathilda's input is not a terminal and no script was named, it speaks a line-oriented
+JSON protocol on its standard input and output, designed for a front-end---a
+notebook, an editor plugin, a web interface---to drive it programmatically.%
+\calloutnote{Under the hood}{The protocol is \emph{NDJSON}: one JSON request per
+line in, one or more JSON responses per line out, each result carrying both a text
+form and a \LaTeX{} form so a graphical front-end can render it. You will not use
+this mode by hand, but it is what lets Mathilda sit behind a richer interface than a
+terminal.}
+
+\section{Building and running the tests}
+\label{sec:tests}
+\index{building!test suite}
+
+Mathilda ships a large suite of C-based unit tests. You do not need them to use the
+system, but running them is the surest way to confirm your build is sound---and if
+you go on to modify Mathilda (Chapter~\ref{ch:contributing}), they are how you check
+you have not broken anything. The suite is built with CMake, which auto-detects the
+same optional backends as the main build:
+
+\begin{shell}
+$ cd tests
+$ mkdir -p build && cd build
+$ cmake ..
+$ make -j
+
+# Run every test binary
+$ for t in *_tests; do ./$t; done
+\end{shell}
+
+\bigskip
+\noindent
+That is everything you need to obtain, build, and run Mathilda, and to find your way
+around a session. With a working binary in front of you and the prompt waiting, we
+can turn to the mathematics. The next chapter is a whirlwind tour of what the system
+can do---arithmetic, number theory, algebra, calculus, and more---so that the
+detailed chapters afterwards feel like a return to places you have already seen.

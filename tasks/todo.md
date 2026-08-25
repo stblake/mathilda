@@ -1,64 +1,58 @@
-# Reduce: radical∘Abs composition + univariate domain-gate soundness
+# Book: insert Chapter 2 "Compiling and Running Mathilda"
 
-Plan: `~/.claude/plans/golden-herding-unicorn.md`
+Insert a new chapter between Ch.1 (About) and the Introduction, renumbering the rest
+so filename number = chapter position (the book's convention; cross-refs are all
+label-based so they auto-update).
 
-## Design B — univariate domain-gate per-conjunct scoping (fixes `Sqrt[Abs[x]]<1 → x==0`) ✅
-- [x] Rework `reduce_univar_general` domain collection to per-conjunct arrays
-- [x] Move gate inside `form_truth_general` per-conjunct loop; drop global gate
-- [x] Keep breakpoints as a union; keep scanning past undecidable domain (nested-radical fix)
-- [x] Free per-conjunct arrays at all exits (success + decline)
-- [x] Verified: `Sqrt[Abs[x]]<1 → -1<x<1`, `Log[Abs[x]]<0` correct; nested radicals restored; corpus+units green
+## Plan
 
-## Design A — radical rationalization pass (fixes multivariate silence) ✅
-- [x] Add `reduce_stmt_has_radical` detector (+ prototype in `reduce_realfn.h`)
-- [x] Implement `rationalize_tree`/`rationalize_relation` (NNF walk, isolation, 6-row table, decline policy)
-- [x] Add `rationalize_radical_leaves` step to `reduce_piecewise_preprocess` fixpoint (threaded vars/nv)
-- [x] OR the detector into the multivariate dispatch gate (`reduce.c`)
-- [x] Verified flagship = correct region; per-relation rows; declines sound; sampled-equivalent; no regressions
-
-## Tests ✅
-- [x] Added 8 `"solved"` (mm-sqrt-*) + 2 univariate `"solved"` + 3 `"decline"` rows to `tests/reduce_corpus.m`
-- [x] Pinned `Sqrt[Abs[x]]<1` and `Log[Abs[x]]<0` in `tests/test_reduce.c`
-- [x] `reduce_corpus_tests`, `reduce_tests`, `solve_corpus_tests`, `solve_radicals_reals_tests` all green
-- [x] valgrind: leak profile byte-identical to main; no leak allocated by new code (all pre-existing)
-
-## Docs ✅
-- [x] Updated `docs/spec/builtins/solutions-of-equations.md` (multivariate radical bullet + per-conjunct gate)
-- [x] Added changelog section to `docs/spec/changelog/2026-08-24.md`
-- [x] Added QE/Phase-6b note to `REDUCE_PLAN.md`
-- [x] Rebuilt code-review graph
-- [x] Recorded memory: radical-rationalization+domain-gate (project) + scan-past-undecidable (feedback)
-
-## Follow-up — And/Or precedence bug (chased down the "pre-existing CAD bug")
-- [x] Diagnosed: NOT a CAD bug — the tree was correct (sampling matched). A **parser+printer**
-      precedence bug: `And` and `Or` both had precedence 2800, so `And[a,Or[b,c]]` printed as
-      `a && b || c` (re-parses to `Or[And[a,b],c]`) and `a || b && c` parsed to `And[Or[a,b],c]`.
-- [x] Fixed: lowered `Or` to 2700 (< `And` 2800) in `src/parse.c`, `src/print.c`, `docs/spec/operators.md`.
-- [x] Verified roundtrip `ToExpression[ToString[e]] === e`; `x^2-y^2<1` now prints guards correctly.
-- [x] Full test suite: 225/228 pass. The 3 failures (moebiusmu, primenu, interp) are PRE-EXISTING
-      (fail identically on main; big-number factoring env-dependence + known interp issue) — zero new
-      failures. `parse_tests` (incl. `test_unparenthesised_chains_still_chain`) and `boolean_tests` green.
-- [x] Docs: `operators.md` split And/Or row; changelog entry added. Memory + graph updated.
+- [ ] Renumber chapters 12→13 … 2→3 with `git mv` (descending to avoid collisions).
+- [ ] `git mv` `examples/02-introduction` → `examples/03-introduction` and
+      `figures/02-introduction` → `figures/03-introduction`; sed the intro file's
+      `02-introduction/` paths → `03-introduction/` (\pair/\mtranscript/\plotcell).
+- [ ] Fix the "next chapter" forward-reference in `01-about.tex`.
+- [ ] Update the `\include` list in `TheMathildaBook.tex` (insert 02-building at pos 2).
+- [ ] Add a reusable `shell` listing style + environment to `mathilda.sty`.
+- [ ] Write `chapters/02-building.tex` (label `ch:building`). Sections:
+      obtain the source; prerequisites & toolchain (GCC-not-clang, required vs
+      optional libs, per-OS install, USE_* graceful-degradation table);
+      building (make, leaner builds, common failures); first session & banner;
+      how the REPL works (In/Out/%, ; suppression, multiline `\`, readline
+      history, ?help/Names, Quit/Ctrl-D); scripts & run modes (-file, bare file,
+      --help/--version, NDJSON pipe); building & running the tests; forward ptr.
+- [ ] Add verified examples `examples/02-building/{version,first-session,back-reference,help}.m`
+      (only pipe-round-trippable expressions; shell commands as non-verified listings).
+- [ ] Concept `\index{}` entries; update `ROADMAP.md` + current-week changelog.
+- [ ] Verify: `make examples`, `make check-links` (0 unlinked), `make pdf` (clean log);
+      confirm Ch.2 = building, Ch.3 = introduction in the ToC.
 
 ## Review
-**Outcome:** both original examples solve. `Reduce[Sqrt[Abs[x]]+Abs[y]<1,{x,y},Reals]` now
-returns the correct region (was unevaluated); the newly-found univariate wrong answer
-`Sqrt[Abs[x]]<1 -> x==0` is fixed to `-1<x<1`, and `Log[Abs[x]]<0 -> False` to the correct set.
 
-**Files changed (engine):** `src/solve/reduce_realfn.{c,h}` (radical rationalization pass +
-`reduce_stmt_has_radical` + `reduce_piecewise_preprocess` now takes vars/nv), `src/solve/reduce.c`
-(dispatch gate), `src/solve/reduce_realdiag.c` (per-conjunct domain gate). Tests:
-`tests/reduce_corpus.m` (+13 rows), `tests/test_reduce.c` (+2 pins).
+Done and verified.
 
-**Verification:** reduce_corpus / reduce_tests / solve_corpus / solve_radicals_reals /
-linearsolve all green; sampled-equivalence 0 mismatches; `make check-c99` clean; valgrind leak
-profile byte-identical to main (no leak from new code).
+- New **Chapter 2 "Compiling and Running Mathilda"** written to
+  `chapters/02-building.tex` (label `ch:building`); ToC confirms it sits at
+  position 2 (About = 1, Introduction = 3, …, About the Author = 13, Appendix A).
+- Renumbered chapters 2→3 … 12→13 with `git mv`; renamed the introduction's
+  `examples/` and `figures/` dirs to `03-introduction/` and repointed its 151
+  in-file paths. All cross-refs are label-based, so they auto-resolved.
+- Fixed Chapter 1's forward-reference; it now points to Chapter 3 (verified in PDF).
+- 6 build-verified transcripts in `examples/02-building/`
+  (version, first-session, session-state ×, suppression, help). Discovered the
+  build-time pipe does NOT populate `In[n]`/`Out[n]`/`%` history — those are
+  interactive-REPL-only — so `%`/`Out[n]` are taught in prose, not faked in a
+  transcript (saved as a memory).
+- Added a reusable `shell` listing environment to `mathilda.sty` for the
+  hand-authored terminal commands (git/apt/brew/make/`--help`); the `-file`
+  demo output was captured from the real binary.
+- `ROADMAP.md` renumbered; changelog entry added under
+  `docs/spec/changelog/2026-08-24.md`.
+- **Verification:** `make examples` clean; PDF builds (63 pp) with no undefined
+  refs, no LaTeX errors, no multiply-defined labels, and no new overfull boxes
+  from this chapter.
 
-**Key decision:** rationalize-by-square (keeps original dimension, reuses CAD) over aux-variable
-purification (blocked on unbuilt Phase 7 QE + Phase 6b algebraic-coeff CAD fibres).
-
-**Self-correction caught:** first per-conjunct gate broke nested radicals by breaking on the first
-undecidable domain sign; fixed to keep scanning for a decidable failure (see feedback memory).
-
-**Not done (out of scope / not requested):** git commit; book/ example addition; a pre-existing CAD
-emission mis-association on `x^2-y^2<1` (noted, unrelated to radicals/Abs); MEMORY.md compaction.
+**Pre-existing issues (NOT introduced here), left as-is:**
+- `make check-links` fails on `\B{Reduce}` (7 uses in the introduction chapter,
+  from an earlier commit) — `Reduce` has no page in `builtins.json` yet.
+- `make figures` needs a GUI session to render the introduction's plots; it
+  fails headlessly. The book PDF still builds (plots degrade to placeholders).

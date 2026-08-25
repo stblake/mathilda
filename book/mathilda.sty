@@ -62,6 +62,34 @@
     {5}{{5}}1 {6}{{6}}1 {7}{{7}}1 {8}{{8}}1 {9}{{9}}1
 }
 
+% ------------------------------------------------------ shell / terminal ---
+% Commands you type at your OS shell (git, make, ./Mathilda ...) and their plain
+% terminal output. This is deliberately NOT a Mathilda REPL transcript: these are
+% shell commands, not Mathilda expressions, so build_examples.py cannot and does
+% not verify them -- they are written by hand and must be kept faithful to the
+% real toolchain. Use \begin{shell}...\end{shell}; use \mtranscript for anything
+% that is an In[]/Out[] session.
+\lstdefinestyle{mathildashell}{%
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  breakatwhitespace=false,
+  breakindent=0pt,
+  breakautoindent=false,
+  postbreak=\mbox{\textcolor{mReplRule}{$\hookrightarrow$}\space},
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=single,
+  rulecolor=\color{mReplRule},
+  backgroundcolor=\color{mReplBg},
+  framesep=6pt,
+  xleftmargin=10pt,
+  xrightmargin=6pt,
+  aboveskip=\medskipamount,
+  belowskip=\medskipamount,
+}
+\lstnewenvironment{shell}{\lstset{style=mathildashell}}{}
+
 % \mtranscript{path}: include generated/<path>.tex verbatim, or a visible
 % placeholder if it has not been generated yet (so the doc still compiles).
 \newcommand{\mtranscript}[1]{%

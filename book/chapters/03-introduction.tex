@@ -24,19 +24,19 @@ ones, and it knows how they combine. Watch what happens as we add numbers of dif
 kinds:
 
 \begin{codepairs}
-\pair{02-introduction/numbers/1}{Two integers add to an integer.}
-\pair{02-introduction/numbers/2}{An integer plus a rational\index{number!rational} stays \emph{exact}: the
+\pair{03-introduction/numbers/1}{Two integers add to an integer.}
+\pair{03-introduction/numbers/2}{An integer plus a rational\index{number!rational} stays \emph{exact}: the
 fraction $7/3$, not a decimal.}
-\pair{02-introduction/numbers/3}{A rational plus a \emph{real} gives a real\index{number!real}. One
+\pair{03-introduction/numbers/3}{A rational plus a \emph{real} gives a real\index{number!real}. One
 approximate number makes the whole result approximate---a rule called
 \emph{contagion}\index{numeric contagion}.}
-\pair{02-introduction/numbers/4}{Integers grow without bound; $2^{64}$ is kept
+\pair{03-introduction/numbers/4}{Integers grow without bound; $2^{64}$ is kept
 exactly, far beyond what a single machine word can hold.}
-\pair{02-introduction/numbers/5}{To get a decimal you ask, with \B{N}: here a quick
+\pair{03-introduction/numbers/5}{To get a decimal you ask, with \B{N}: here a quick
 machine-precision value of $\sqrt2$, six figures by default.}
-\pair{02-introduction/numbers/6}{Ask \B{N} for more digits and it obliges: here is
+\pair{03-introduction/numbers/6}{Ask \B{N} for more digits and it obliges: here is
 $\sqrt2$ to thirty places.}
-\pair{02-introduction/numbers/7}{And here is $\pi$ to fifty digits, computed to
+\pair{03-introduction/numbers/7}{And here is $\pi$ to fifty digits, computed to
 arbitrary precision.}
 \end{codepairs}
 
@@ -53,16 +53,16 @@ numerically when you ask. At arguments where a simple closed form exists, it ret
 that exact value:
 
 \begin{codepairs}
-\pair{02-introduction/elementary-exact/1}{A perfect square gives an integer.}
-\pair{02-introduction/elementary-exact/2}{\B{Sin} of $\pi/6$ is the rational $1/2$.}
-\pair{02-introduction/elementary-exact/3}{\B{Cos} of $\pi/4$ comes back as an exact
+\pair{03-introduction/elementary-exact/1}{A perfect square gives an integer.}
+\pair{03-introduction/elementary-exact/2}{\B{Sin} of $\pi/6$ is the rational $1/2$.}
+\pair{03-introduction/elementary-exact/3}{\B{Cos} of $\pi/4$ comes back as an exact
 surd.}
-\pair{02-introduction/elementary-exact/4}{So does \B{Tan} of $\pi/3$.}
-\pair{02-introduction/elementary-exact/5}{\B{Log} and \B{Exp} undo each other, so
+\pair{03-introduction/elementary-exact/4}{So does \B{Tan} of $\pi/3$.}
+\pair{03-introduction/elementary-exact/5}{\B{Log} and \B{Exp} undo each other, so
 $\log e^{5}=5$.}
-\pair{02-introduction/elementary-exact/6}{\B{ArcTan} of $1$ is the exact angle
+\pair{03-introduction/elementary-exact/6}{\B{ArcTan} of $1$ is the exact angle
 $\pi/4$.}
-\pair{02-introduction/elementary-exact/7}{At an exact argument with \emph{no} closed\index{closed form}
+\pair{03-introduction/elementary-exact/7}{At an exact argument with \emph{no} closed\index{closed form}
 form, \B{Sin}$[1]$ is held as \texttt{Sin[1]}---not silently turned into a decimal.}
 \end{codepairs}
 
@@ -72,14 +72,14 @@ fixed-size floating point of the hardware---but \B{N} will also work to
 \emph{arbitrary} precision\index{precision!arbitrary}:
 
 \begin{codepairs}
-\pair{02-introduction/elementary-numeric/1}{An approximate argument \texttt{1.0}
+\pair{03-introduction/elementary-numeric/1}{An approximate argument \texttt{1.0}
 forces a machine-precision result.}
-\pair{02-introduction/elementary-numeric/2}{Applying \B{N} to the exact
+\pair{03-introduction/elementary-numeric/2}{Applying \B{N} to the exact
 \texttt{Sin[1]} gives the same value.}
-\pair{02-introduction/elementary-numeric/3}{Ask for forty digits and you get $\sin 1$
+\pair{03-introduction/elementary-numeric/3}{Ask for forty digits and you get $\sin 1$
 to that precision.}
-\pair{02-introduction/elementary-numeric/4}{Here is the constant $e$ to forty digits.}
-\pair{02-introduction/elementary-numeric/5}{And here is $\ln 2$ to forty digits. The
+\pair{03-introduction/elementary-numeric/4}{Here is the constant $e$ to forty digits.}
+\pair{03-introduction/elementary-numeric/5}{And here is $\ln 2$ to forty digits. The
 elementary functions return in Section~\ref{sec:calculus}.}
 \end{codepairs}
 
@@ -92,17 +92,17 @@ the Bessel and Airy functions, and many more. Mathilda handles them with exactly
 same discipline, returning exact values wherever they exist:
 
 \begin{codepairs}
-\pair{02-introduction/special-exact/1}{\B{Gamma} extends the factorial: $\Gamma(5)=4!
+\pair{03-introduction/special-exact/1}{\B{Gamma} extends the factorial: $\Gamma(5)=4!
 =24$.}
-\pair{02-introduction/special-exact/2}{At the half-integers it takes the celebrated
+\pair{03-introduction/special-exact/2}{At the half-integers it takes the celebrated
 value $\Gamma(1/2)=\sqrt\pi$.}
-\pair{02-introduction/special-exact/3}{\B{Zeta} gives Euler's $\zeta(2)=\pi^{2}/6$.}
-\pair{02-introduction/special-exact/4}{By analytic continuation\index{analytic continuation}, the notorious
+\pair{03-introduction/special-exact/3}{\B{Zeta} gives Euler's $\zeta(2)=\pi^{2}/6$.}
+\pair{03-introduction/special-exact/4}{By analytic continuation\index{analytic continuation}, the notorious
 $\zeta(-1)=-\tfrac{1}{12}$.}
-\pair{02-introduction/special-exact/5}{\B{Beta} reduces to a rational.}
-\pair{02-introduction/special-exact/6}{\B{PolyGamma}, the digamma at $1$, is exactly
+\pair{03-introduction/special-exact/5}{\B{Beta} reduces to a rational.}
+\pair{03-introduction/special-exact/6}{\B{PolyGamma}, the digamma at $1$, is exactly
 $-\gamma$, the negative Euler--Mascheroni constant\index{Euler--Mascheroni constant} \B{EulerGamma}.}
-\pair{02-introduction/special-exact/7}{Even \B{AiryAi} at the origin has a closed
+\pair{03-introduction/special-exact/7}{Even \B{AiryAi} at the origin has a closed
 form, in terms of \B{Gamma}.}
 \end{codepairs}
 
@@ -110,12 +110,12 @@ Where no closed form exists, these functions are computed numerically, to machin
 arbitrary precision just like the elementary ones:
 
 \begin{codepairs}
-\pair{02-introduction/special-numeric/1}{$\zeta(3)$, Ap\'ery's constant, to machine
+\pair{03-introduction/special-numeric/1}{$\zeta(3)$, Ap\'ery's constant, to machine
 precision.}
-\pair{02-introduction/special-numeric/2}{The same constant to forty digits.}
-\pair{02-introduction/special-numeric/3}{\B{Erf} at an approximate argument.}
-\pair{02-introduction/special-numeric/4}{\B{BesselJ} likewise.}
-\pair{02-introduction/special-numeric/5}{$\Gamma(1/2)$ to thirty digits, agreeing with
+\pair{03-introduction/special-numeric/2}{The same constant to forty digits.}
+\pair{03-introduction/special-numeric/3}{\B{Erf} at an approximate argument.}
+\pair{03-introduction/special-numeric/4}{\B{BesselJ} likewise.}
+\pair{03-introduction/special-numeric/5}{$\Gamma(1/2)$ to thirty digits, agreeing with
 $\sqrt\pi$. Section~\ref{sec:specialfns} is devoted to these functions.}
 \end{codepairs}
 
@@ -127,25 +127,25 @@ factorizations, divisors, greatest common divisors\index{greatest common divisor
 single call away.
 
 \begin{codepairs}
-\pair{02-introduction/number-theory/1}{\B{Prime} gives the hundredth prime.}
-\pair{02-introduction/number-theory/2}{\B{FactorInteger} breaks $360$ into prime
+\pair{03-introduction/number-theory/1}{\B{Prime} gives the hundredth prime.}
+\pair{03-introduction/number-theory/2}{\B{FactorInteger} breaks $360$ into prime
 powers $2^{3}\cdot 3^{2}\cdot 5$.}
-\pair{02-introduction/number-theory/3}{\B{Divisors} lists every divisor of $36$.}
-\pair{02-introduction/number-theory/4}{\B{GCD} is the greatest common divisor.}
-\pair{02-introduction/number-theory/5}{\B{ExtendedGCD} adds B\'ezout's coefficients\index{Bezout's coefficients@B\'ezout's coefficients}:
+\pair{03-introduction/number-theory/3}{\B{Divisors} lists every divisor of $36$.}
+\pair{03-introduction/number-theory/4}{\B{GCD} is the greatest common divisor.}
+\pair{03-introduction/number-theory/5}{\B{ExtendedGCD} adds B\'ezout's coefficients\index{Bezout's coefficients@B\'ezout's coefficients}:
 $12 = 1\cdot 48 + (-1)\cdot 36$.}
-\pair{02-introduction/number-theory/6}{\B{PowerMod} finds $7^{100}\bmod 13$ without
+\pair{03-introduction/number-theory/6}{\B{PowerMod} finds $7^{100}\bmod 13$ without
 ever forming $7^{100}$.}
-\pair{02-introduction/number-theory/7}{\B{LCM} is the least common multiple;
+\pair{03-introduction/number-theory/7}{\B{LCM} is the least common multiple;
 $\mathrm{lcm}(12,18,20)=180$.}
-\pair{02-introduction/number-theory/8}{\B{EulerPhi} counts the integers from $1$ to $36$
+\pair{03-introduction/number-theory/8}{\B{EulerPhi} counts the integers from $1$ to $36$
 that are coprime to it: $\varphi(36)=12$.}
-\pair{02-introduction/number-theory/9}{\B{MultiplicativeOrder} gives the least $k$ with
+\pair{03-introduction/number-theory/9}{\B{MultiplicativeOrder} gives the least $k$ with
 $2^{k}\equiv 1\pmod{11}$: here that order is $10$.}
-\pair{02-introduction/number-theory/10}{\B{PrimitiveRoot} returns a generator of the
+\pair{03-introduction/number-theory/10}{\B{PrimitiveRoot} returns a generator of the
 units modulo~$11$; the least is $2$, which is exactly why its order above is the full
 $\varphi(11)=10$.}
-\pair{02-introduction/number-theory/11}{\B{Fibonacci} returns the fiftieth Fibonacci
+\pair{03-introduction/number-theory/11}{\B{Fibonacci} returns the fiftieth Fibonacci
 number exactly. Section~\ref{sec:numbertheory} takes up this material.}
 \end{codepairs}
 
@@ -157,9 +157,9 @@ expressions containing symbols\index{expression!symbolic}, not just numbers. Two
 multiplying out and its partial inverse, collecting like terms\index{collecting like terms}.
 
 \begin{codepairs}
-\pair{02-introduction/algebra-expand/1}{\B{Expand} multiplies out a power.}
-\pair{02-introduction/algebra-expand/2}{It works in several variables too.}
-\pair{02-introduction/algebra-expand/3}{\B{Collect} gathers terms by the powers of a
+\pair{03-introduction/algebra-expand/1}{\B{Expand} multiplies out a power.}
+\pair{03-introduction/algebra-expand/2}{It works in several variables too.}
+\pair{03-introduction/algebra-expand/3}{\B{Collect} gathers terms by the powers of a
 chosen variable---here $x$, pulling the common factor out of the linear term.}
 \end{codepairs}
 
@@ -168,13 +168,13 @@ irreducible pieces. What counts as irreducible\index{polynomial!irreducible} dep
 and Mathilda lets you choose:
 
 \begin{codepairs}
-\pair{02-introduction/algebra-factor/1}{Over the rationals, $x^{6}-1$ splits into four
+\pair{03-introduction/algebra-factor/1}{Over the rationals, $x^{6}-1$ splits into four
 factors.}
-\pair{02-introduction/algebra-factor/2}{But $x^{2}+1$ will not factor at all---it is
+\pair{03-introduction/algebra-factor/2}{But $x^{2}+1$ will not factor at all---it is
 irreducible over~$\mathbb{Q}$.}
-\pair{02-introduction/algebra-factor/3}{Allow the imaginary unit, with
+\pair{03-introduction/algebra-factor/3}{Allow the imaginary unit, with
 \texttt{Extension}, and it becomes\index{field extension} $(x-i)(x+i)$.}
-\pair{02-introduction/algebra-factor/4}{Allow $\sqrt2$ and $x^{4}+1$ splits into two
+\pair{03-introduction/algebra-factor/4}{Allow $\sqrt2$ and $x^{4}+1$ splits into two
 real quadratics. Extensions return in Section~\ref{sec:algebra}.}
 \end{codepairs}
 
@@ -183,8 +183,8 @@ finds the largest integer dividing two whole numbers, \B{PolynomialGCD} finds th
 highest-degree polynomial dividing two polynomials---their shared factor:
 
 \begin{codepairs}
-\pair{02-introduction/algebra-gcd/1}{These two polynomials share the factor $x-1$.}
-\pair{02-introduction/algebra-gcd/2}{These share $x^{2}-1$, found directly, without
+\pair{03-introduction/algebra-gcd/1}{These two polynomials share the factor $x-1$.}
+\pair{03-introduction/algebra-gcd/2}{These share $x^{2}-1$, found directly, without
 factoring either polynomial.}
 \end{codepairs}
 
@@ -192,11 +192,11 @@ That common factor is exactly what simplifies a \emph{rational function}\index{r
 polynomials. Mathilda provides the three everyday operations:
 
 \begin{codepairs}
-\pair{02-introduction/algebra-rational/1}{\B{Cancel} divides out the common factor
+\pair{03-introduction/algebra-rational/1}{\B{Cancel} divides out the common factor
 (the $x-1$ above), reducing the fraction to lowest terms.}
-\pair{02-introduction/algebra-rational/2}{\B{Together} combines a sum of fractions
+\pair{03-introduction/algebra-rational/2}{\B{Together} combines a sum of fractions
 over one common denominator.}
-\pair{02-introduction/algebra-rational/3}{\B{Apart} does the reverse---the partial-%
+\pair{03-introduction/algebra-rational/3}{\B{Apart} does the reverse---the partial-%
 fraction decomposition you reach for\index{partial fraction decomposition} before integrating. More in
 Section~\ref{sec:algebra}.}
 \end{codepairs}
@@ -208,10 +208,10 @@ into an equivalent triangular one that is far easier to solve, and it can elimin
 chosen variables outright.
 
 \begin{codepairs}
-\pair{02-introduction/algebra-groebner/1}{The unit circle meets the parabola $y=x^{2}$.
+\pair{03-introduction/algebra-groebner/1}{The unit circle meets the parabola $y=x^{2}$.
 \B{GroebnerBasis} triangulates the system: the first polynomial involves only $y$---a
 quadratic to solve---and the second then recovers $x$ from $y$.}
-\pair{02-introduction/algebra-groebner/2}{Naming a variable to eliminate---here the
+\pair{03-introduction/algebra-groebner/2}{Naming a variable to eliminate---here the
 parameter $t$ of the curve $(t^{2},t^{3})$---collapses the system to the curve's implicit
 equation $x^{3}=y^{2}$, the cuspidal cubic. Section~\ref{sec:algebra} returns to
 Gr\"obner bases.}
@@ -229,16 +229,16 @@ exactly and numerically.
 forms---for a single equation or a whole system:
 
 \begin{codepairs}
-\pair{02-introduction/solve-exact/1}{A quadratic with two integer roots. Note
+\pair{03-introduction/solve-exact/1}{A quadratic with two integer roots. Note
 \texttt{==}, which builds an equation\index{equation vs assignment}, versus \texttt{=}, which assigns.}
-\pair{02-introduction/solve-exact/2}{$x^{2}=2$: the two exact surds $\pm\sqrt2$.}
-\pair{02-introduction/solve-exact/3}{A linear system in two unknowns\index{system of equations!linear}, uniquely solved.}
-\pair{02-introduction/solve-exact/4}{A \emph{nonlinear} system---a circle meeting the
+\pair{03-introduction/solve-exact/2}{$x^{2}=2$: the two exact surds $\pm\sqrt2$.}
+\pair{03-introduction/solve-exact/3}{A linear system in two unknowns\index{system of equations!linear}, uniquely solved.}
+\pair{03-introduction/solve-exact/4}{A \emph{nonlinear} system---a circle meeting the
 line $y=x$---with both intersection points, exactly.}
-\pair{02-introduction/solve-exact/5}{A cubic with no rational roots: the exact solutions
+\pair{03-introduction/solve-exact/5}{A cubic with no rational roots: the exact solutions
 come back as \B{Root} objects, each an implicit algebraic number\index{algebraic number}---the $k$th root of the
 given polynomial---rather than an unwieldy nest of radicals.}
-\pair{02-introduction/solve-exact/6}{A \B{Root} object is still an exact number, so \B{N}
+\pair{03-introduction/solve-exact/6}{A \B{Root} object is still an exact number, so \B{N}
 evaluates it to as many digits as you ask---here to machine precision.}
 \end{codepairs}
 
@@ -251,15 +251,15 @@ while \B{FindRoot} follows Newton's method\index{Newton's method} from a startin
 transcendental problems too:
 
 \begin{codepairs}
-\pair{02-introduction/solve-numerical/1}{\B{NRoots} finds all five roots of $x^{5}-x-1$:
+\pair{03-introduction/solve-numerical/1}{\B{NRoots} finds all five roots of $x^{5}-x-1$:
 one real and two complex-conjugate pairs, none expressible in radicals.}
-\pair{02-introduction/solve-numerical/2}{\B{NSolve} handles systems. Eliminating $y$ here
+\pair{03-introduction/solve-numerical/2}{\B{NSolve} handles systems. Eliminating $y$ here
 leaves that very same quintic, so the five solutions carry its unsolvable roots in their
 $x$-coordinate.}
-\pair{02-introduction/solve-numerical/3}{\B{FindRoot}, started near $x=1$, converges to
+\pair{03-introduction/solve-numerical/3}{\B{FindRoot}, started near $x=1$, converges to
 the root of $\cos x = x$, the ``Dottie number''\index{Dottie number}---a transcendental equation with no
 closed form.}
-\pair{02-introduction/solve-numerical/4}{\B{FindRoot} takes systems as well: a
+\pair{03-introduction/solve-numerical/4}{\B{FindRoot} takes systems as well: a
 transcendental pair in $x$ and $y$, solved from the starting point $(1,1)$.}
 \end{codepairs}
 
@@ -274,14 +274,14 @@ section---provides it, solving over the reals and returning the exact region on
 which the equation holds:
 
 \begin{codepairs}
-\pair{02-introduction/solve-region/1}{Each nested radical\index{radical!nested} is a
+\pair{03-introduction/solve-region/1}{Each nested radical\index{radical!nested} is a
 perfect square in disguise---$x+1-2\sqrt x=(\sqrt x-1)^{2}$ and
 $x+16-8\sqrt x=(\sqrt x-4)^{2}$---so the left side is $|\sqrt x-1|+|\sqrt x-4|$,
 which equals~$3$ across the entire interval $1\le x\le16$.}
-\pair{02-introduction/solve-region/2}{A sum of absolute values\index{absolute value}
+\pair{03-introduction/solve-region/2}{A sum of absolute values\index{absolute value}
 over~$x$: the equation is satisfied not at isolated points but along the whole ray
 $x\ge3$.}
-\pair{02-introduction/solve-region/3}{Nested absolute values, even in~$x$: the
+\pair{03-introduction/solve-region/3}{Nested absolute values, even in~$x$: the
 solution set is a \emph{union} of two intervals, one mirrored across the origin from
 the other.}
 \end{codepairs}
@@ -303,18 +303,18 @@ procedure\index{decision procedure} for systems of polynomial equations and ineq
 over the reals.
 
 \begin{codepairs}
-\pair{02-introduction/inequalities/1}{A quadratic inequality: the solution set is the
+\pair{03-introduction/inequalities/1}{A quadratic inequality: the solution set is the
 closed interval where the parabola lies on or below the axis.}
-\pair{02-introduction/inequalities/2}{A quartic can cut the line into several
+\pair{03-introduction/inequalities/2}{A quartic can cut the line into several
 pieces---here a union of two open intervals.}
-\pair{02-introduction/inequalities/3}{A rational inequality. The pole at $x=-2$ is
+\pair{03-introduction/inequalities/3}{A rational inequality. The pole at $x=-2$ is
 excluded automatically---\B{Reduce} keeps track of where the expression is undefined.}
-\pair{02-introduction/inequalities/4}{The endpoints need not be rational: here they are
+\pair{03-introduction/inequalities/4}{The endpoints need not be rational: here they are
 the exact surds $\pm\sqrt2$.}
-\pair{02-introduction/inequalities/5}{A rational inequality whose numerator carries the
+\pair{03-introduction/inequalities/5}{A rational inequality whose numerator carries the
 denominator's factors---$x^{3}-x=x(x^{2}-1)$---so after cancellation it collapses to the
 plain linear condition $x\le2$.}
-\pair{02-introduction/inequalities/6}{A \emph{radical}
+\pair{03-introduction/inequalities/6}{A \emph{radical}
 inequality\index{inequality!radical}, not polynomial at all. The square root's domain
 $x\ge-4$ meets the single crossing at $x=5$, where $\sqrt{x+4}=x-2$, to give
 $-4\le x<5$.}
@@ -329,17 +329,17 @@ algebraic decomposition is the algorithm that makes it practical, and it is what
 set turns out to be everything, or nothing:
 
 \begin{codepairs}
-\pair{02-introduction/inequalities/7}{$x^{2}+1>0$ holds for every real $x$---a one-line
+\pair{03-introduction/inequalities/7}{$x^{2}+1>0$ holds for every real $x$---a one-line
 proof that the expression is positive-definite.}
-\pair{02-introduction/inequalities/8}{No real number makes $x^{2}+x+1$ negative (its
+\pair{03-introduction/inequalities/8}{No real number makes $x^{2}+x+1$ negative (its
 discriminant is negative), so the answer is \texttt{False}.}
-\pair{02-introduction/inequalities/9}{The arithmetic--geometric-mean
+\pair{03-introduction/inequalities/9}{The arithmetic--geometric-mean
 inequality\index{AM--GM inequality} $x+1/x\ge2$: \B{Reduce} confirms it across the
 \emph{whole} positive ray, the constraint collapsing to just $x>0$.}
-\pair{02-introduction/inequalities/10}{With two variables the solution set becomes a
+\pair{03-introduction/inequalities/10}{With two variables the solution set becomes a
 region of the plane---the open unit disk, described as $x$ ranging over $(-1,1)$ with $y$
 between the two branches of its bounding circle.}
-\pair{02-introduction/inequalities/11}{Absolute values\index{absolute value} in two
+\pair{03-introduction/inequalities/11}{Absolute values\index{absolute value} in two
 variables: the open \emph{diamond} $|x|+|y|<1$, the unit ball of the $\ell^{1}$
 norm\index{norm!$\ell^1$}. \B{Reduce} case-splits each \B{Abs} on the sign of its
 argument, so the region falls out as its four quadrant sectors.}
@@ -354,11 +354,11 @@ to be. \B{Simplify} searches for it\index{simplification}, trying a battery of a
 transformations and keeping the smallest result:
 
 \begin{codepairs}
-\pair{02-introduction/simplification/1}{The Pythagorean identity\index{Pythagorean identity} collapses to~$1$.}
-\pair{02-introduction/simplification/2}{A rational function reduces.}
-\pair{02-introduction/simplification/3}{A double-angle identity is recognised:
+\pair{03-introduction/simplification/1}{The Pythagorean identity\index{Pythagorean identity} collapses to~$1$.}
+\pair{03-introduction/simplification/2}{A rational function reduces.}
+\pair{03-introduction/simplification/3}{A double-angle identity is recognised:
 $\cos^{2}x-\sin^{2}x=\cos 2x$.}
-\pair{02-introduction/simplification/4}{And a nested radical
+\pair{03-introduction/simplification/4}{And a nested radical
 \emph{denests}\index{radical!denesting}: $\sqrt{3+2\sqrt2}=1+\sqrt2$.}
 \end{codepairs}
 
@@ -366,9 +366,9 @@ Some simplifications hold only under conditions, and Mathilda will not assume wh
 have not told it. Because $\sqrt{x^{2}}$ equals $|x|$, not $x$:
 
 \begin{codepairs}
-\pair{02-introduction/simplification-assumptions/1}{With nothing known about $x$,
+\pair{03-introduction/simplification-assumptions/1}{With nothing known about $x$,
 $\sqrt{x^{2}}$ is left exactly as written.}
-\pair{02-introduction/simplification-assumptions/2}{Told that $x>0$, it simplifies to
+\pair{03-introduction/simplification-assumptions/2}{Told that $x>0$, it simplifies to
 $x$.}
 \end{codepairs}
 
@@ -376,9 +376,9 @@ An assumption can be more interesting\index{assumptions} than a sign condition--
 the \emph{kind} of number involved:
 
 \begin{codepairs}
-\pair{02-introduction/simplification-integer/1}{For a general~$n$, $\sin(n\pi)$ is left
+\pair{03-introduction/simplification-integer/1}{For a general~$n$, $\sin(n\pi)$ is left
 untouched.}
-\pair{02-introduction/simplification-integer/2}{Told that $n$ is an integer, with
+\pair{03-introduction/simplification-integer/2}{Told that $n$ is an integer, with
 \B{Element}, Mathilda proves it must vanish. More in Section~\ref{sec:algebra}.}
 \end{codepairs}
 
@@ -390,12 +390,12 @@ expressions, returning exact results. Differentiation with \B{D} applies the rul
 calculus recursively, and by naming a second variable it takes partial derivatives\index{partial derivative}:
 
 \begin{codepairs}
-\pair{02-introduction/calculus-diff/1}{The power rule, applied term by term.}
-\pair{02-introduction/calculus-diff/2}{The product and chain rules, automatically.}
-\pair{02-introduction/calculus-diff/3}{Symbolic exponents are fine too.}
-\pair{02-introduction/calculus-diff/4}{A \emph{partial} derivative in $x$, treating
+\pair{03-introduction/calculus-diff/1}{The power rule, applied term by term.}
+\pair{03-introduction/calculus-diff/2}{The product and chain rules, automatically.}
+\pair{03-introduction/calculus-diff/3}{Symbolic exponents are fine too.}
+\pair{03-introduction/calculus-diff/4}{A \emph{partial} derivative in $x$, treating
 $y$ as a constant.}
-\pair{02-introduction/calculus-diff/5}{The same expression, now differentiated in
+\pair{03-introduction/calculus-diff/5}{The same expression, now differentiated in
 $y$.}
 \end{codepairs}
 
@@ -403,10 +403,10 @@ Limits are computed with\index{limit} \B{Limit}, including the classic ones that
 derivative and the number~$e$:
 
 \begin{codepairs}
-\pair{02-introduction/calculus-limits/1}{The limit at the heart of the derivative of
+\pair{03-introduction/calculus-limits/1}{The limit at the heart of the derivative of
 sine.}
-\pair{02-introduction/calculus-limits/2}{One of the definitions of~$e$.}
-\pair{02-introduction/calculus-limits/3}{The leading behaviour of $1-\cos x$ near the
+\pair{03-introduction/calculus-limits/2}{One of the definitions of~$e$.}
+\pair{03-introduction/calculus-limits/3}{The leading behaviour of $1-\cos x$ near the
 origin.}
 \end{codepairs}
 
@@ -415,14 +415,14 @@ order, returning the polynomial part together with an $O[x]^{n}$ term that recor
 the expansion was truncated:
 
 \begin{codepairs}
-\pair{02-introduction/calculus-series/1}{The exponential series, to sixth order.}
-\pair{02-introduction/calculus-series/2}{$\arctan$: the alternating odd reciprocals whose
+\pair{03-introduction/calculus-series/1}{The exponential series, to sixth order.}
+\pair{03-introduction/calculus-series/2}{$\arctan$: the alternating odd reciprocals whose
 value at $x=1$ gives Leibniz's series for $\pi/4$.}
-\pair{02-introduction/calculus-series/3}{At a pole the expansion is a \emph{Laurent}\index{Laurent series}
+\pair{03-introduction/calculus-series/3}{At a pole the expansion is a \emph{Laurent}\index{Laurent series}
 series---here $\cot x$ begins with a $1/x$ term.}
-\pair{02-introduction/calculus-series/4}{With a \emph{symbolic} exponent the coefficients
+\pair{03-introduction/calculus-series/4}{With a \emph{symbolic} exponent the coefficients
 come out as the generalized binomial coefficients.}
-\pair{02-introduction/calculus-series/5}{\B{Normal} drops the $O[\,]$ term, turning the
+\pair{03-introduction/calculus-series/5}{\B{Normal} drops the $O[\,]$ term, turning the
 \texttt{SeriesData} object\index{SeriesData} a series is into an ordinary polynomial.}
 \end{codepairs}
 
@@ -431,10 +431,10 @@ indefinite integrals as symbolic antiderivatives, and definite integrals\index{d
 improper ones:
 
 \begin{codepairs}
-\pair{02-introduction/calculus-integrate/1}{An indefinite integral by parts.}
-\pair{02-introduction/calculus-integrate/2}{Another, giving an inverse tangent.}
-\pair{02-introduction/calculus-integrate/3}{A definite integral over $[0,1]$.}
-\pair{02-introduction/calculus-integrate/4}{The Gaussian integral over the whole real\index{Gaussian integral}
+\pair{03-introduction/calculus-integrate/1}{An indefinite integral by parts.}
+\pair{03-introduction/calculus-integrate/2}{Another, giving an inverse tangent.}
+\pair{03-introduction/calculus-integrate/3}{A definite integral over $[0,1]$.}
+\pair{03-introduction/calculus-integrate/4}{The Gaussian integral over the whole real\index{Gaussian integral}
 line: $\int_{-\infty}^{\infty} e^{-x^{2}}\,dx=\sqrt\pi$.}
 \end{codepairs}
 
@@ -443,9 +443,9 @@ computes a \emph{multiple} integral\index{multiple integral}, from the inside ou
 depend on an outer variable:
 
 \begin{codepairs}
-\pair{02-introduction/calculus-integrate-multi/1}{$x y$ integrated over the unit
+\pair{03-introduction/calculus-integrate-multi/1}{$x y$ integrated over the unit
 square.}
-\pair{02-introduction/calculus-integrate-multi/2}{Over the triangle $0\le y\le x\le 1$,
+\pair{03-introduction/calculus-integrate-multi/2}{Over the triangle $0\le y\le x\le 1$,
 whose inner bound is $x$ itself.}
 \end{codepairs}
 
@@ -453,9 +453,9 @@ And when the limits are \emph{complex}, \B{Integrate} evaluates a \emph{contour\
 integral} along the straight segments joining the points you list:
 
 \begin{codepairs}
-\pair{02-introduction/calculus-integrate-contour/1}{A line integral of $z^{2}$ along
+\pair{03-introduction/calculus-integrate-contour/1}{A line integral of $z^{2}$ along
 the segment from $0$ to $1+i$.}
-\pair{02-introduction/calculus-integrate-contour/2}{A closed loop around the origin:
+\pair{03-introduction/calculus-integrate-contour/2}{A closed loop around the origin:
 $\oint \frac{dz}{z}=2\pi i$, the cornerstone of the residue calculus\index{residue calculus}.
 Section~\ref{sec:calculus} has the full story.}
 \end{codepairs}
@@ -469,11 +469,11 @@ adaptively---to machine precision by default, or to any arbitrary precision you 
 with the \texttt{WorkingPrecision} option\index{WorkingPrecision option}:
 
 \begin{codepairs}
-\pair{02-introduction/numerical-calculus/1}{\B{ND} takes a numerical derivative---here
+\pair{03-introduction/numerical-calculus/1}{\B{ND} takes a numerical derivative---here
 of $\sin$ at $1$, giving $\cos 1$.}
-\pair{02-introduction/numerical-calculus/2}{\B{NIntegrate} evaluates the Gaussian
+\pair{03-introduction/numerical-calculus/2}{\B{NIntegrate} evaluates the Gaussian
 integral numerically ($\approx\sqrt\pi$).}
-\pair{02-introduction/numerical-calculus/3}{\B{NSum} sums a series numerically.}
+\pair{03-introduction/numerical-calculus/3}{\B{NSum} sums a series numerically.}
 \end{codepairs}
 
 Differential equations are solved numerically\index{differential equation} by \B{NDSolve}. Take a damped harmonic
@@ -485,18 +485,18 @@ or JPEG (\texttt{Export["decay.pdf", plot]})---indeed every figure in this book 
 produced exactly this way.} so the motion---a decaying oscillation settling to rest---is
 one further command away:
 
-\plotcell{02-introduction/ndsolve-solution}
+\plotcell{03-introduction/ndsolve-solution}
 
 Finally, \B{NLimit} evaluates a limit numerically, invaluable when a symbolic limit is
 hard to obtain:
 
 \begin{codepairs}
-\pair{02-introduction/numerical-calculus-nlimit/1}{The familiar limit that
+\pair{03-introduction/numerical-calculus-nlimit/1}{The familiar limit that
 defines~$e$.}
-\pair{02-introduction/numerical-calculus-nlimit/2}{More striking: $\zeta(s)$ (the
+\pair{03-introduction/numerical-calculus-nlimit/2}{More striking: $\zeta(s)$ (the
 \B{Zeta} function) and $1/(s-1)$ both diverge at $s=1$, yet their difference tends to
 the Euler--Mascheroni constant $\gamma$.}
-\pair{02-introduction/numerical-calculus-nlimit/3}{A slower, non-obvious limit,
+\pair{03-introduction/numerical-calculus-nlimit/3}{A slower, non-obvious limit,
 recovered numerically.}
 \end{codepairs}
 
@@ -519,20 +519,20 @@ and \texttt{?Positive} adds a test\index{pattern matching!test} the match must p
 applies whenever its pattern fits:
 
 \begin{codepairs}
-\pair{02-introduction/pattern-matching/1}{Define \texttt{f} only on positive
+\pair{03-introduction/pattern-matching/1}{Define \texttt{f} only on positive
 integers.}
-\pair{02-introduction/pattern-matching/2}{A positive integer matches: $7^{2}=49$.}
-\pair{02-introduction/pattern-matching/3}{A negative integer does not match.}
-\pair{02-introduction/pattern-matching/4}{A real does not match either.}
-\pair{02-introduction/pattern-matching/5}{Nor does a complex number; each call is
+\pair{03-introduction/pattern-matching/2}{A positive integer matches: $7^{2}=49$.}
+\pair{03-introduction/pattern-matching/3}{A negative integer does not match.}
+\pair{03-introduction/pattern-matching/4}{A real does not match either.}
+\pair{03-introduction/pattern-matching/5}{Nor does a complex number; each call is
 returned unevaluated.}
-\pair{02-introduction/pattern-matching/6}{\B{Cases} keeps the elements matching a
+\pair{03-introduction/pattern-matching/6}{\B{Cases} keeps the elements matching a
 pattern---the even ones.}
-\pair{02-introduction/pattern-matching/7}{The rule \texttt{/.}\ (\B{ReplaceAll})
+\pair{03-introduction/pattern-matching/7}{The rule \texttt{/.}\ (\B{ReplaceAll})
 substitutes into an expression.}
-\pair{02-introduction/pattern-matching/8}{A pattern can destructure a two-element
+\pair{03-introduction/pattern-matching/8}{A pattern can destructure a two-element
 list.}
-\pair{02-introduction/pattern-matching/9}{It binds both parts at once. More in
+\pair{03-introduction/pattern-matching/9}{It binds both parts at once. More in
 Chapter~\ref{ch:programming}.}
 \end{codepairs}
 
@@ -542,9 +542,9 @@ When an ordinary loop is the clearest thing, Mathilda has loops. \B{Module} intr
 local variables\index{local variable (Module)}, and \B{Do}, \B{For}, and \B{While} iterate:
 
 \begin{codepairs}
-\pair{02-introduction/procedural/1}{A \B{Do} loop sums $1$ through $100$.}
-\pair{02-introduction/procedural/2}{A \B{For} loop computes $5! = 120$.}
-\pair{02-introduction/procedural/3}{A \B{While} loop counts the steps of the Collatz
+\pair{03-introduction/procedural/1}{A \B{Do} loop sums $1$ through $100$.}
+\pair{03-introduction/procedural/2}{A \B{For} loop computes $5! = 120$.}
+\pair{03-introduction/procedural/3}{A \B{While} loop counts the steps of the Collatz
 iteration from $27$.}
 \end{codepairs}
 
@@ -555,18 +555,18 @@ functions rather than by mutating variables. The \texttt{\&} notation makes an
 anonymous function, with \texttt{\#} as its argument\index{anonymous function}:
 
 \begin{codepairs}
-\pair{02-introduction/functional/1}{\B{Map} applies a function to every element.}
-\pair{02-introduction/functional/2}{\B{Select} keeps those passing a test---the
+\pair{03-introduction/functional/1}{\B{Map} applies a function to every element.}
+\pair{03-introduction/functional/2}{\B{Select} keeps those passing a test---the
 primes.}
-\pair{02-introduction/functional/3}{\B{Fold} chains a function across a list.}
-\pair{02-introduction/functional/4}{\B{Nest} applies one repeatedly: $\sqrt{\cdot}$ of
+\pair{03-introduction/functional/3}{\B{Fold} chains a function across a list.}
+\pair{03-introduction/functional/4}{\B{Nest} applies one repeatedly: $\sqrt{\cdot}$ of
 $2$, three times.}
-\pair{02-introduction/functional/5}{\B{Table} builds a list from a formula.}
-\pair{02-introduction/functional/6}{\B{Apply}, written \texttt{@@}, replaces the head:
+\pair{03-introduction/functional/5}{\B{Table} builds a list from a formula.}
+\pair{03-introduction/functional/6}{\B{Apply}, written \texttt{@@}, replaces the head:
 \texttt{Times @@ list} is the product.}
-\pair{02-introduction/functional/7}{\texttt{@@@} applies at level one, to each
+\pair{03-introduction/functional/7}{\texttt{@@@} applies at level one, to each
 sublist.}
-\pair{02-introduction/functional/8}{\B{Cases} picks out the elements matching a
+\pair{03-introduction/functional/8}{\B{Cases} picks out the elements matching a
 pattern---the integers.}
 \end{codepairs}
 
@@ -585,27 +585,27 @@ shown, produced by the running system.
 \B{Plot} draws one or more functions of a real variable---here the first odd harmonics of
 a square wave:
 
-\plotcell{02-introduction/graphics/plot}
+\plotcell{03-introduction/graphics/plot}
 
 \noindent \B{ListPlot} draws discrete data as points:
 
-\plotcell{02-introduction/graphics/listplot}
+\plotcell{03-introduction/graphics/listplot}
 
 \noindent \B{ParametricPlot} traces a curve $(x(t), y(t))$---a Lissajous figure---and
 \B{PolarPlot} draws $r(\theta)$, here a five-petal rose:
 
-\plotcell{02-introduction/graphics/parametricplot}
+\plotcell{03-introduction/graphics/parametricplot}
 
-\plotcell{02-introduction/graphics/polarplot}
+\plotcell{03-introduction/graphics/polarplot}
 
 \subsection{Vector fields}
 
 \B{VectorPlot} shows a field as a grid of arrows\index{vector field}, \B{StreamPlot} as flow lines. Here is the
 phase field of a pendulum, then a pure rotation:
 
-\plotcell{02-introduction/graphics/vectorplot}
+\plotcell{03-introduction/graphics/vectorplot}
 
-\plotcell{02-introduction/graphics/streamplot}
+\plotcell{03-introduction/graphics/streamplot}
 
 \subsection{Scalar fields and arrays}
 
@@ -613,26 +613,26 @@ phase field of a pendulum, then a pure rotation:
 and \B{ArrayPlot} renders a matrix as a grid of cells---here the greatest-common-divisor
 table, whose diagonals of bright cells expose its number-theoretic structure:
 
-\plotcell{02-introduction/graphics/contourplot}
+\plotcell{03-introduction/graphics/contourplot}
 
-\plotcell{02-introduction/graphics/densityplot}
+\plotcell{03-introduction/graphics/densityplot}
 
-\plotcell{02-introduction/graphics/arrayplot}
+\plotcell{03-introduction/graphics/arrayplot}
 
 \subsection{Charts and graphs}
 
 \B{BarChart} draws labelled bars; \B{GraphPlot} lays out a graph automatically:
 
-\plotcell{02-introduction/graphics/barchart}
+\plotcell{03-introduction/graphics/barchart}
 
-\plotcell{02-introduction/graphics/graphplot}
+\plotcell{03-introduction/graphics/graphplot}
 
 \subsection{Complex functions}
 
 \B{ComplexPlot} colours the plane by the value of a complex function\index{domain coloring}---hue for the phase,
 brightness for the magnitude---so its zeros and poles stand out at a glance:
 
-\plotcell{02-introduction/graphics/complexplot}
+\plotcell{03-introduction/graphics/complexplot}
 
 \subsection{Three dimensions}
 
@@ -641,11 +641,11 @@ and \B{ComplexPlot3D} the modulus of a complex function as a surface coloured by
 These return \texttt{Graphics3D}, which the engine renders with lighting and a movable camera,
 and which \B{Export} writes as PNG or JPEG:
 
-\plotcell{02-introduction/graphics/plot3d}
+\plotcell{03-introduction/graphics/plot3d}
 
-\plotcell{02-introduction/graphics/parametricplot3d}
+\plotcell{03-introduction/graphics/parametricplot3d}
 
-\plotcell{02-introduction/graphics/complexplot3d}
+\plotcell{03-introduction/graphics/complexplot3d}
 
 \bigskip
 \noindent
