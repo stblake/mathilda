@@ -5,7 +5,7 @@ This chapter is a whirlwind tour. Rather than explain any one thing thoroughly--
 that is the job of Chapter~\ref{ch:mathematics} and beyond---it moves quickly across
 the landscape, showing a small, concrete example of each of the things Mathilda can
 do: arithmetic and numerics, number theory, algebra, calculus, numerical calculus,
-and programming. The aim is to give you a feel for the system and a sense of how much
+linear algebra, and programming. The aim is to give you a feel for the system and a sense of how much
 ground it covers, so that the detailed chapters later feel like a return to places
 you have already visited.
 
@@ -502,6 +502,142 @@ recovered numerically.}
 
 Section~\ref{sec:numcalc} covers numerical differentiation, integration, summation,
 differential equations, and limits.
+
+\section{Linear algebra}
+\label{sec:intro-linalg}
+
+Vectors and matrices are not a new kind of object in Mathilda---a
+vector\index{vector} is just a list, and a matrix\index{matrix} a list of its
+rows---so everything you already know about lists carries over unchanged. What
+linear algebra adds is a vocabulary of operations on them, beginning with the
+\emph{dot product}\index{dot product}, written with an ordinary period. The single
+operator \texttt{.}\ (\B{Dot}) serves throughout: it contracts two vectors to a
+scalar, applies a matrix to a vector, and multiplies two matrices.
+
+\begin{codepairs}
+\pair{03-introduction/linear-algebra-vectors/1}{The dot product of two vectors is a
+single number.}
+\pair{03-introduction/linear-algebra-vectors/2}{\B{Norm} is the Euclidean
+length\index{norm!Euclidean} $\sqrt{v\cdot v}$, kept exact---here the surd
+$\sqrt{14}$.}
+\pair{03-introduction/linear-algebra-vectors/3}{\B{Cross} is the three-dimensional
+cross product\index{cross product}: $\hat\imath\times\hat\jmath=\hat k$.}
+\pair{03-introduction/linear-algebra-vectors/4}{The same \texttt{.}\ applies a matrix
+to a vector\index{matrix!times vector}.}
+\pair{03-introduction/linear-algebra-vectors/5}{And multiplies two
+matrices\index{matrix!product}---here by the swap matrix, which exchanges the
+columns.}
+\end{codepairs}
+
+The staple operations on a square matrix are each a single call away, and---this is
+the point---they return \emph{exact} answers. Working over the rationals rather than
+in floating point, \B{Inverse} produces an exact rational matrix, and multiplying it
+back recovers the identity with no rounding error at all:
+
+\begin{codepairs}
+\pair{03-introduction/linear-algebra-matrices/1}{A matrix is a list of its rows; \texttt{A}
+is defined once and reused below.}
+\pair{03-introduction/linear-algebra-matrices/2}{\B{Det} is the
+determinant\index{determinant}.}
+\pair{03-introduction/linear-algebra-matrices/3}{\B{Tr} is the trace\index{trace}, the
+sum of the diagonal entries.}
+\pair{03-introduction/linear-algebra-matrices/4}{\B{Inverse} gives the exact inverse,
+with rational entries.}
+\pair{03-introduction/linear-algebra-matrices/5}{Multiplying a matrix by its inverse
+returns the identity\index{identity matrix}, exactly.}
+\pair{03-introduction/linear-algebra-matrices/6}{\B{Transpose} reflects a matrix across
+its diagonal, turning rows into columns.}
+\pair{03-introduction/linear-algebra-matrices/7}{\B{IdentityMatrix} builds the
+$n\times n$ identity.}
+\pair{03-introduction/linear-algebra-matrices/8}{\B{DiagonalMatrix} places a list along
+the diagonal, zeros elsewhere.}
+\end{codepairs}
+
+Nothing here requires the entries to be numbers. Given symbols, the same functions
+return the general formula\index{matrix!symbolic}---the textbook determinant and inverse
+of a $2\times2$ matrix:
+
+\begin{codepairs}
+\pair{03-introduction/linear-algebra-symbolic/1}{The determinant $ad-bc$.}
+\pair{03-introduction/linear-algebra-symbolic/2}{And the inverse, each entry divided by
+that determinant.}
+\end{codepairs}
+
+\subsection{Linear systems}
+
+Solving $A\mathbf{x}=\mathbf{b}$ is the oldest task in the subject. \B{LinearSolve}
+does it directly; \B{RowReduce} performs the Gaussian elimination\index{Gaussian
+elimination} behind it, returning the reduced row echelon form\index{row echelon form};
+and \B{MatrixRank} and \B{NullSpace} report the structure of the solution set---the
+rank\index{rank (of a matrix)} of the coefficient matrix and a basis for the vectors it
+sends to zero.
+
+\begin{codepairs}
+\pair{03-introduction/linear-algebra-solve/1}{\B{LinearSolve} solves a $2\times2$ system
+exactly.}
+\pair{03-introduction/linear-algebra-solve/2}{\B{RowReduce} drives a matrix to reduced row
+echelon form; this one is invertible, so the result is the identity.}
+\pair{03-introduction/linear-algebra-solve/3}{\B{MatrixRank}: these two rows are
+proportional, so the rank is~$1$.}
+\pair{03-introduction/linear-algebra-solve/4}{\B{NullSpace} returns a basis for the
+vectors the matrix annihilates.}
+\end{codepairs}
+
+\subsection{Eigenvalues and eigenvectors}
+
+The deepest invariants of a matrix are its \emph{eigenvalues}\index{eigenvalue} and
+\emph{eigenvectors}\index{eigenvector}---the scalars $\lambda$ and directions
+$\mathbf{v}$ for which $A\mathbf{v}=\lambda\mathbf{v}$. \B{Eigenvalues} and
+\B{Eigenvectors} compute them exactly\calloutnote{Under the hood}{The eigenvalues are
+exactly the roots of the \emph{characteristic polynomial} $\det(A-\lambda I)$, a
+polynomial of degree $n$ in $\lambda$. Mathilda solves it with the very machinery of
+\S\ref{sec:intro-solve}, which is why an eigenvalue may be an integer, a surd, or---for
+an irreducible cubic or higher with no radical form---a \B{Root} object.}:
+
+\begin{codepairs}
+\pair{03-introduction/linear-algebra-eigen/1}{A symmetric matrix with integer
+eigenvalues.}
+\pair{03-introduction/linear-algebra-eigen/2}{Its eigenvectors, orthogonal as symmetry
+demands.}
+\pair{03-introduction/linear-algebra-eigen/3}{Here the eigenvalues are the golden
+ratio\index{golden ratio} $\varphi=(1+\sqrt5)/2$ and its conjugate---the growth rates
+concealed in the Fibonacci recurrence.}
+\pair{03-introduction/linear-algebra-eigen/4}{Indeed the powers of that same matrix
+\emph{are} the Fibonacci numbers\index{Fibonacci numbers}: the tenth power displays
+$F_{11}=89$ and $F_{10}=55$.}
+\pair{03-introduction/linear-algebra-eigen/5}{When the eigenvalues have no radical form
+they come back as \B{Root} objects\index{Root object}---the roots of $x^{3}-x-1$, exact
+algebraic numbers, exactly as \B{Solve} returned a cubic in \S\ref{sec:intro-solve}.}
+\pair{03-introduction/linear-algebra-eigen/6}{Numericalising those exact eigenvalues
+with \texttt{N} resolves the real root to $\approx1.32472$ and the complex-conjugate
+pair to $-0.662359\pm0.56228\,i$.}
+\pair{03-introduction/linear-algebra-eigen/7}{Asking instead for the eigenvalues of the
+floating-point matrix lands on the identical list---by a numerical algorithm that never
+forms the characteristic polynomial at all.}
+\end{codepairs}
+
+Those last two lines reach the \emph{same} three numbers by opposite roads. The first
+takes the exact \Bnoidx{Root} eigenvalues and rounds them to machine precision; the second
+hands the floating-point matrix straight to a numerical eigenvalue algorithm, which
+never builds a characteristic polynomial to factor. That the two agree is a reassuring
+cross-check---and a first sight of a choice that runs through all of computational
+linear algebra\index{linear algebra!exact versus numerical}: exact or numerical, and
+what each costs.\calloutnote{Exact versus numerical}{Exactness is not free. The symbolic
+path must factor the characteristic polynomial and then carry its roots as exact
+algebraic numbers---\Bnoidx{Root} objects over the rationals---so its cost climbs steeply
+with the size of the matrix. The numerical path runs a dense floating-point
+algorithm---Hessenberg reduction followed by Francis double-shift \textsc{qr}
+iteration, the textbook method---whose work is a fixed $O(n^{3})$ no matter how ugly
+the exact answer would be. Even on a matrix this small the numerical route is already
+dozens of times faster, and the gap widens fast with $n$. By $n=40$ the exact eigenvalues take
+\emph{seconds} where the numerical ones finish in well under a millisecond---a ratio in
+the tens of thousands---and beyond that the exact form becomes impractical while the
+numerical one barely notices. Reach for exact eigenvalues when you need the algebraic
+form or perfect reproducibility; reach for numerical ones whenever the matrix is large
+or its entries are already approximate.}
+
+Section~\ref{sec:linalg} takes up linear algebra---exact and numerical alike---in
+depth.
 
 \section{Programming}
 \label{sec:intro-programming}
