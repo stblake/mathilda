@@ -6,6 +6,11 @@
 **Features**:
 - `Listable`, `NumericFunction`.
 - Exact values for rational multiples of `Pi` with denominators `1, 2, 3, 4, 5, 6, 10, 12`.
+- `Degree` (= `Pi/180`) is interpreted inside the argument, so `Sin[30 Degree]`
+  folds to `1/2` exactly the way `Sin[Pi/6]` does. Both spellings funnel through
+  one detector (`extract_pi_multiplier` in `src/trig.c`); a `c Degree` argument
+  contributes an extra factor of `1/180`. `Degree` remains an opaque numeric
+  constant everywhere else (`30 Degree` does not auto-expand to `Pi/6`).
 - `ArcTan[x, y]` computes the quadrant-aware inverse tangent.
 - Numeric evaluation on `Complex[MPFR, MPFR]` (and out-of-real-domain
   MPFR arguments like `ArcSin[N[2, 50]]`) is carried at MPFR precision
@@ -30,8 +35,14 @@ ArcTan[1,2,3]  -> ArcTan::argt: ArcTan called with 3 arguments; 1 or 2 arguments
 In[1]:= Sin[Pi/6]
 Out[1]= 1/2
 
-In[2]:= ArcTan[1, 1]
-Out[1]= 1/4*Pi
+In[2]:= Sin[30 Degree]
+Out[2]= 1/2
+
+In[3]:= Tan[60 Degree]
+Out[3]= Sqrt[3]
+
+In[4]:= ArcTan[1, 1]
+Out[4]= 1/4*Pi
 ```
 
 ## Hyperbolic Functions

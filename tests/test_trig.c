@@ -332,6 +332,47 @@ void test_elementary_argx(void) {
     }
 }
 
+/* Degree (= Pi/180) must fold inside the trig heads exactly like the
+ * corresponding rational multiple of Pi. See extract_pi_multiplier in
+ * src/trig.c. */
+void test_trig_degree() {
+    struct {
+        const char* input;
+        const char* expected;
+    } cases[] = {
+        {"Sin[30 Degree]", "Rational[1, 2]"},               /* = Sin[Pi/6]  */
+        {"Cos[45 Degree]", "Power[2, Rational[-1, 2]]"},     /* = Cos[Pi/4]  */
+        {"Tan[60 Degree]", "Power[3, Rational[1, 2]]"},      /* = Tan[Pi/3]  */
+        {"Cot[45 Degree]", "1"},
+        {"Sec[60 Degree]", "2"},
+        {"Csc[30 Degree]", "2"},
+        {"Sin[90 Degree]", "1"},
+        {"Cos[180 Degree]", "-1"},
+        {"Sin[360 Degree]", "0"},
+        {"Sin[-30 Degree]", "Rational[-1, 2]"},              /* odd fold      */
+        {"Cos[120 Degree]", "Rational[-1, 2]"},
+        {"Sin[210 Degree]", "Rational[-1, 2]"},              /* n >= d branch */
+        {"Sin[15 Degree]",                                   /* d=12 case     */
+         "Times[Rational[1, 4], Plus[Power[6, Rational[1, 2]], Times[-1, Power[2, Rational[1, 2]]]]]"},
+        /* No closed form: 3/2 Degree = Pi/120 stays symbolic (not folded). */
+        {"Sin[3/2 Degree]", "Sin[Times[Rational[3, 2], Degree]]"},
+        /* Degree alone (= Pi/180) has no nice value: stays symbolic. */
+        {"Sin[Degree]", "Sin[Degree]"},
+        {NULL, NULL}
+    };
+
+    for (int i = 0; cases[i].input != NULL; i++) {
+        printf("Testing degree: %s\n", cases[i].input);
+        Expr* e = parse_expression(cases[i].input);
+        Expr* res = evaluate(e);
+        char* s = expr_to_string_fullform(res);
+        ASSERT_MSG(strcmp(s, cases[i].expected) == 0, "Degree %s: expected %s, got %s", cases[i].input, cases[i].expected, s);
+        free(s);
+        expr_free(res);
+        expr_free(e);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -342,6 +383,7 @@ int main() {
     TEST(test_trig_mpfr_complex);
     TEST(test_arc_trig_mpfr_complex);
     TEST(test_elementary_argx);
+    TEST(test_trig_degree);
 
     return 0;
 }

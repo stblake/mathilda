@@ -63,10 +63,25 @@ static Expr* make_sqrt_expr(Expr* e) {
     return res;
 }
 
-/* 
+/*
  * extract_pi_multiplier:
- * Checks if the expression is of the form n/d * Pi or simply Pi (1/1 * Pi).
- * Returns true if match found, and sets n and d.
+ * Recognises a rational multiple of Pi and returns n, d with the argument
+ * equal to (n/d) * Pi. Two spellings fold to the same normal form:
+ *   - directly against Pi:      Pi -> 1/1 * Pi,   c * Pi -> c * Pi
+ *   - against Degree (= Pi/180): Degree -> Pi/180, c * Degree -> c/180 * Pi
+ *
+ * The Degree case is what makes Sin[30 Degree] fold to 1/2. Every exact-value
+ * trig head (Sin/Cos/Tan/Cot/Sec/Csc) funnels its argument through this one
+ * detector, so Degree is interpreted in a single place and costs only a symbol
+ * pointer comparison on the common Pi path -- no evaluator-wide substitution.
+ * Degree remains an opaque numeric constant everywhere else (30 Degree does
+ * not auto-expand to Pi/6), matching Mathematica.
+ *
+ * The (n, d) returned for a Degree argument need not be in lowest terms; the
+ * exact_* callees reduce via gcd. Denominators are bounded before scaling by
+ * 180 so the 2*d periodicity reduction downstream cannot overflow int64 -- a
+ * pathological coefficient falls through to the numeric path rather than
+ * folding a wrapped value into a wrong exact answer.
  */
 static bool extract_pi_multiplier(Expr* e, int64_t* n, int64_t* d) {
     // Case 1: Pi
@@ -74,14 +89,34 @@ static bool extract_pi_multiplier(Expr* e, int64_t* n, int64_t* d) {
         *n = 1; *d = 1;
         return true;
     }
-    
-    // Case 2: n/d * Pi (Times[Rational[n, d], Pi])
-    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol.name == SYM_Times && e->data.function.arg_count == 2) {
-        Expr* first = e->data.function.args[0];
+    // Case 2: Degree = Pi/180
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Degree) {
+        *n = 1; *d = 180;
+        return true;
+    }
+
+    // Case 3/4: c * Pi or c * Degree with c a rational literal.
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Times &&
+        e->data.function.arg_count == 2) {
+        Expr* first  = e->data.function.args[0];
         Expr* second = e->data.function.args[1];
-        
-        if (second->type == EXPR_SYMBOL && second->data.symbol.name == SYM_Pi) {
-            if (is_rational(first, n, d)) return true;
+
+        if (second->type == EXPR_SYMBOL) {
+            const char* s = second->data.symbol.name;
+            int64_t rn, rd;
+            if (s == SYM_Pi && is_rational(first, &rn, &rd)) {
+                *n = rn; *d = rd;
+                return true;
+            }
+            if (s == SYM_Degree && is_rational(first, &rn, &rd)) {
+                // c * Degree = c/180 * Pi. Bound rd so that neither rd*180 nor
+                // the downstream 2*d (in exact_*) overflows int64.
+                if (rd > INT64_MAX / 360 || rd < INT64_MIN / 360) return false;
+                *n = rn; *d = rd * 180;
+                return true;
+            }
         }
     }
     return false;
