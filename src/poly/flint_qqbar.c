@@ -588,11 +588,21 @@ int flint_qqbar_compare(const Expr* a, const Expr* b) {
     return r;
 }
 
+int flint_qqbar_is_real(const Expr* e) {
+    if (!flint_qqbar_is_constant_algebraic(e)) return -1;
+    qqbar_t q; qqbar_init(q);
+    int r = -1;
+    if (to_qqbar(e, q)) r = qqbar_is_real(q) ? 1 : 0;
+    qqbar_clear(q);
+    return r;
+}
+
 #else /* !USE_FLINT */
 
 int   flint_qqbar_is_constant_algebraic(const Expr* e) { (void)e; return 0; }
 Expr* flint_qqbar_canonical(const Expr* e, QQBarMethod m) { (void)e; (void)m; return NULL; }
 int   flint_qqbar_equal(const Expr* a, const Expr* b) { (void)a; (void)b; return -1; }
 int   flint_qqbar_compare(const Expr* a, const Expr* b) { (void)a; (void)b; return -2; }
+int   flint_qqbar_is_real(const Expr* e) { (void)e; return -1; }
 
 #endif /* USE_FLINT */

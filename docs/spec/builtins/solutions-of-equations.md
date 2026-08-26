@@ -59,6 +59,16 @@ Attempts to solve an equation or system of equations for one or more variables.
     triangular back-substitution.  Positive-dimensional systems (infinitely
     many solutions) emit `Solve::nsdim` and leave `Solve` unevaluated;
     non-polynomial systems also stay unevaluated.
+  - **Equations with inequality / disequation constraints** (`Solve[eqns &&
+    ineqs, vars]`): the ordinary system specialists refuse an `And` that mixes
+    `==` with `<`/`>`/`!=`, so — like the `Integers` pre-pass — the two are
+    separated and the shared zero-dimensional engine (`reduce_zerodim`, see
+    `Reduce` below) solves the equations and keeps only the branches that
+    satisfy the side relations (and, over the `Reals`, are real), decided
+    exactly with the algebraic-number oracle.  Example:
+    `Solve[u^2+v^2==9 && u^2+(a+v)^2==36 && (a+u)^2+v^2==25 && u>0 && v>0 && a>0,
+    {u,v,a}]` -> the single all-positive branch.  Declines (falls through to the
+    ordinary dispatch) for a positive-dimensional or non-polynomial system.
   - **Polynomial in a single transcendental kernel** `g(x)` (single equation,
     single variable, the peel/trig/radical passes all declined): if
     substituting `u = g(x)` makes the equation a polynomial in `u` free of
@@ -817,8 +827,10 @@ degenerate branch, and it handles inequalities over the reals.
   `Reduce[a x + y == 1 && x + y == 0, {x, y}] -> a != 1 && x == 1/(a-1) && y == 1/(1-a)`;
   `Reduce[a x == 1 && x == 2, {x}] -> a == 1/2 && x == 2`;
   `Reduce[x + y == 1, {x, y}] -> x == 1 - y` (an underdetermined system leaves a
-  variable free). A non-linear system over Complexes is declined (the CAD engine
-  covers the `Reals` case; the Complexes nonlinear route is a later phase).
+  variable free). A **zero-dimensional** nonlinear system over Complexes (enough
+  equations to pin the variety to finitely many points) is solved by the
+  zero-dimensional engine below; a genuinely positive-dimensional one still
+  declines.
 - **Univariate polynomial equations and inequalities over Reals** (sign diagram):
   any logical combination of `==`/`!=`/`<`/`<=`/`>`/`>=` in one real variable is
   solved as a union of intervals and points. Examples:
@@ -903,6 +915,29 @@ degenerate branch, and it handles inequalities over the reals.
   the **outermost** variable (`x^2+y^2+z^2 <= 1 && x <= 0` shifts the base sample
   off the origin, so the fibre becomes irrational). An interval nullification also
   declines (McCallum well-orientedness augmentation is deferred).
+- **Zero-dimensional nonlinear systems** (`reduce_zerodim`, over Complexes *and*
+  Reals): when the polynomial **equations** of a conjunction pin the variety to a
+  finite set of points, the system is solved exactly rather than decomposed —
+  this is the case the CAD engine declines whenever a fibre is irrational (its
+  rational-sample regime). The equations are solved over the complexes with the
+  existing polynomial-system solver; each solution branch is then kept only if
+  every inequality / disequation side relation holds there and — over the Reals —
+  every coordinate is real, each decided **exactly** by the FLINT `qqbar`
+  algebraic-number oracle (sign, equality, realness). The surviving branches are
+  emitted as an `Or` of `And(var == value)`. This is complete for
+  zero-dimensional systems (the finite solution set is enumerated and filtered
+  exactly) and sound (a positive-dimensional / unsolvable system, or any
+  undecidable test, declines). Examples:
+  `Reduce[x^2 == 1 && y^2 == 4, {x, y}] -> ` the four points;
+  `Reduce[x y == 1 && x + y == 3, {x, y}] -> ` the two roots `(3 ± Sqrt[5])/2`;
+  `Reduce[x^2 == 1 && y^2 == 4 && x > 0 && y > 0, {x, y}] -> x == 1 && y == 2`;
+  and the three-circle system
+  `Reduce[u^2 + v^2 == 9 && u^2 + (a + v)^2 == 36 && (a + u)^2 + v^2 == 25 &&
+  u > 0 && v > 0 && a > 0, {u, v, a}]` -> the single all-positive branch
+  (`u ≈ 1.038, v ≈ 2.815, a ≈ 3.095` as nested radicals). A complex-only branch
+  over the Reals is dropped, so `Reduce[x^2 + y^2 == 1 && x == 2, {x, y}] ->
+  False`. `Solve` reuses the same engine for `Solve[eqns && ineqs, vars]`,
+  returning the surviving branches as solution rule-lists.
 - **Integers / Rationals domain**: reuses the `Solve[..., dom]` Diophantine engine
   and reformats its solution list into logical form -- an `Or` of `And`s of
   `var == value` atoms, with `Element[C[k], dom]` for a generated parameter.

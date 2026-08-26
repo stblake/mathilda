@@ -107,7 +107,17 @@ static void skip_whitespace(ParserState* s) {
      * parsing a sub-expression's right operand, so the infix loop can still see
      * that a newline separated two juxtaposed statements. */
     while (1) {
-        if (isspace(*s->pos)) {
+        if (s->pos[0] == '\\' && (s->pos[1] == '\n' || s->pos[1] == '\r')) {
+            /* Line continuation: a backslash immediately before a newline
+             * joins the two physical lines into one logical line
+             * (Mathematica syntax). Consume the backslash and the newline
+             * WITHOUT setting saw_newline — the continued line is a
+             * continuation of the current statement, not a new one. Handle
+             * LF, CR, and CRLF endings. */
+            s->pos++;                              /* skip '\\' */
+            if (s->pos[0] == '\r') s->pos++;       /* CR (or CR of CRLF) */
+            if (s->pos[0] == '\n') s->pos++;       /* LF (or LF of CRLF) */
+        } else if (isspace(*s->pos)) {
             if (*s->pos == '\n') s->saw_newline = 1;
             s->pos++;
         } else if (s->pos[0] == '(' && s->pos[1] == '*') {

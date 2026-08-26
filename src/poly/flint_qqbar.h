@@ -51,4 +51,11 @@ int flint_qqbar_equal(const Expr* a, const Expr* b);
  * returns -2 when undecided (non-real, non-algebraic, or FLINT off). */
 int flint_qqbar_compare(const Expr* a, const Expr* b);
 
+/* Realness of a constant algebraic number: 1 (a real algebraic number),
+ * 0 (a genuinely non-real algebraic number), or -1 (undecided: `e` is not a
+ * constant algebraic number, exceeds the degree cap, or FLINT is off).  Lets a
+ * Reals-domain filter distinguish "drop this non-real branch" (0) from "cannot
+ * decide -- leave the whole statement unevaluated" (-1). */
+int flint_qqbar_is_real(const Expr* e);
+
 #endif /* FLINT_QQBAR_H */

@@ -23,6 +23,7 @@
 #include "reduce_realfn.h"
 #include "reduce_realdiag.h"
 #include "reduce_qe.h"
+#include "reduce_zerodim.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -294,26 +295,31 @@ Expr* builtin_reduce(Expr* res) {
             for (int i = 0; i < f->n && all_eq; i++)
                 for (int k = 0; k < f->c[i]->n; k++)
                     if (f->c[i]->a[k].rel != R_EQ) { all_eq = false; break; }
-            if (all_eq) {
-                if (nv == 1 && f->n == 1 && f->c[0]->n == 1) {
-                    /* Phase 1: single univariate polynomial equation. */
-                    bool ok2 = true;
-                    RForm* sol = reduce_eq_univariate(f->c[0]->a[0].poly, vlist[0],
-                                                      vlist, nv, &ok2, &opts);
-                    if (ok2) {
-                        rform_simplify(sol, vlist, nv);
-                        out = rform_to_expr(sol, vlist, nv);
-                    }
-                    rform_free(sol);
-                } else {
-                    /* Phase 4: parametric linear system (declines if non-linear).
-                     * Backsubstitution is accepted/echoed at the front-end; the
-                     * current linear engine always emits the fully-solved
-                     * (grafted) form, which is Reduce's Backsubstitution -> False
-                     * default and also what -> True requests, so there is no
-                     * behavioural fork to thread here. */
-                    out = reduce_eq_system(f, vlist, nv);
+            if (nv == 1 && f->n == 1 && f->c[0]->n == 1 && all_eq) {
+                /* Phase 1: single univariate polynomial equation. */
+                bool ok2 = true;
+                RForm* sol = reduce_eq_univariate(f->c[0]->a[0].poly, vlist[0],
+                                                  vlist, nv, &ok2, &opts);
+                if (ok2) {
+                    rform_simplify(sol, vlist, nv);
+                    out = rform_to_expr(sol, vlist, nv);
                 }
+                rform_free(sol);
+            } else if (all_eq) {
+                /* Phase 4: parametric linear system (declines if non-linear).
+                 * Backsubstitution is accepted/echoed at the front-end; the
+                 * current linear engine always emits the fully-solved
+                 * (grafted) form, which is Reduce's Backsubstitution -> False
+                 * default and also what -> True requests, so there is no
+                 * behavioural fork to thread here.  A nonlinear (but
+                 * zero-dimensional) system falls through to reduce_zerodim. */
+                out = reduce_eq_system(f, vlist, nv);
+                if (!out) out = reduce_zerodim(f, vlist, nv, false, &opts);
+            } else {
+                /* Equations plus disequations (!=) over the complexes: the
+                 * zero-dimensional engine solves the equations and filters the
+                 * != side relations exactly. */
+                out = reduce_zerodim(f, vlist, nv, false, &opts);
             }
         } else if (reals && nv == 1) {
             /* Phase 2: any univariate combination of polynomial equations and
@@ -326,9 +332,13 @@ Expr* builtin_reduce(Expr* res) {
         } else if (reals && nv >= 2) {
             /* Phase 3: a multivariate LINEAR system over the reals ->
              * Fourier-Motzkin (declines to NULL if it is not linear).  Phase 6:
-             * anything nonlinear falls through to the CAD engine. */
+             * anything nonlinear falls through to the CAD engine.  A
+             * zero-dimensional nonlinear system whose fibres are irrational
+             * (which CAD declines) is finally caught by reduce_zerodim: solve
+             * the equations exactly and filter the inequalities. */
             out = reduce_fm(f, vlist, nv);
             if (!out) out = reduce_cad(f, vlist, nv);
+            if (!out) out = reduce_zerodim(f, vlist, nv, true, &opts);
         }
     }
 
@@ -370,8 +380,9 @@ void reduce_init(void) {
         "Handled so far:\n"
         "  - Complexes: univariate polynomial equations carrying the full\n"
         "    leading-coefficient case tree -- Reduce[a x == b, x] ->\n"
-        "    (a != 0 && x == b/a) || (a == 0 && b == 0) -- and parametric\n"
-        "    linear systems by symbolic Gaussian elimination.\n"
+        "    (a != 0 && x == b/a) || (a == 0 && b == 0) -- parametric linear\n"
+        "    systems by symbolic Gaussian elimination, and zero-dimensional\n"
+        "    nonlinear systems solved exactly (finitely many points).\n"
         "  - Reals, one variable: any Boolean combination of polynomial and\n"
         "    rational-function equations and inequalities, solved as a union\n"
         "    of intervals and points on an exact real-algebraic sign diagram\n"
@@ -384,7 +395,10 @@ void reduce_init(void) {
         "    elimination and nonlinear systems (conics and beyond) by\n"
         "    Cylindrical Algebraic Decomposition (McCallum projection),\n"
         "    including multivariate Abs/Min/Max/piecewise selectors and\n"
-        "    square-root radical rationalization.\n"
+        "    square-root radical rationalization.  A zero-dimensional system\n"
+        "    (equations pinning finitely many points, e.g. three circles with\n"
+        "    sign constraints) is solved exactly and its branches filtered by\n"
+        "    the inequalities via the algebraic-number oracle.\n"
         "  - Integers / Rationals: the Solve Diophantine engine, reformatted\n"
         "    as an Or of Ands with Element[C[k], dom] for a free parameter.\n"
         "\n"
@@ -407,9 +421,9 @@ void reduce_init(void) {
         "                                Infinity keeps the exact-first path.\n"
         "\n"
         "Reduce is sound over complete: an undecidable sign, an unsupported\n"
-        "construct, or a not-yet-wired engine (nonlinear equations over\n"
-        "Complexes, and quantifier elimination) leaves the input unevaluated\n"
-        "rather than risk a wrong formula.");
+        "construct, or a positive-dimensional nonlinear system over Complexes\n"
+        "(no CAD there yet) leaves the input unevaluated rather than risk a\n"
+        "wrong formula.");
 
     reduce_qe_init();
 }

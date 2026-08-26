@@ -36,6 +36,7 @@
 #include "solveint.h"
 #include "solvenlsys.h"
 #include "solvepoly.h"
+#include "reduce_zerodim.h"
 #include "solverad.h"
 #include "solvetrig.h"
 #include "sym_intern.h"
@@ -991,6 +992,21 @@ Expr* builtin_solve(Expr* res) {
          * by the Complexes-oriented parametric dispatch (see the guard at
          * solve_finish). */
         lone_multivar_int_eq = is_single_multivar_equation(expr, vars);
+    }
+
+    /* Equations-with-constraints pre-pass (Complexes / Reals): Solve[eqns &&
+     * ineqs, vars] where the equational subsystem is zero-dimensional.  Like
+     * the Integers pre-pass above, the ordinary system specialists refuse an
+     * And that mixes Equal with Less/Greater/Unequal, so separate the two:
+     * solve the zero-dimensional equations and keep only the branches that
+     * satisfy the side relations (and, over the Reals, are real), decided
+     * exactly with the algebraic-number oracle.  Declines (NULL) for a
+     * positive-dimensional or non-polynomial system, or when there is no side
+     * constraint at all, in which case we fall through to the ordinary
+     * dispatch. */
+    {
+        Expr* cout = reduce_zerodim_solve(expr, vars, dom, &opts.poly);
+        if (cout) { expr_free(expr); out = cout; goto solve_finish; }
     }
 
     /* VerifySolutions -> True: snapshot the (substituted / rationalised)

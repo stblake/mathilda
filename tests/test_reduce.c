@@ -193,15 +193,15 @@ static void test_equations(void) {
  * anything else (!=, conjunction/disjunction of equations, transcendental,
  * the a x==0 asymmetry, no-variable form) must NOT invent an answer. */
 static void test_equations_decline(void) {
-    /* !=  over Complexes has no ordering to reason about -> declines. */
+    /* !=  over Complexes with no equation to pin the variety -> declines. */
     run_test("Reduce[x != 0, x]", "Reduce[Unequal[x, 0], x]");
     run_test("Reduce[x^2 != 4, x]", "Reduce[Unequal[Power[x, 2], 4], x]");
-    /* Conjunction / disjunction of equations routes to the linear-only system
-     * engine, which declines on the nonlinear polynomials. */
-    run_test("Reduce[x^2 == 4 && x^3 == 8, x]",
-             "Reduce[And[Equal[Power[x, 2], 4], Equal[Power[x, 3], 8]], x]");
+    /* A nonlinear conjunction / disjunction of equations is a zero-dimensional
+     * system: the linear engine declines and reduce_zerodim solves it exactly.
+     * (x^2==4 && x^3==8 has the single common root 2; the Or unions its cases.) */
+    run_test("Reduce[x^2 == 4 && x^3 == 8, x]", "Equal[x, 2]");
     run_test("Reduce[x^2 == 4 || x == 5, x]",
-             "Reduce[Or[Equal[Power[x, 2], 4], Equal[x, 5]], x]");
+             "Or[Equal[x, -2], Equal[x, 2], Equal[x, 5]]");
     /* No variable argument. */
     run_test("Reduce[x^2 == 4]", "Reduce[Equal[Power[x, 2], 4]]");
     /* Transcendental equation: Solve returns a bare relation, Reduce passes it
@@ -363,14 +363,19 @@ static void test_parametric_systems(void) {
              "And[Equal[z, 2], Equal[y, 2], Equal[x, 2]]");
 }
 
-/* Phase-4 boundary: nonlinear systems are not handled (linear-only engine). */
+/* Phase-4 boundary and beyond: a linear system is grafted by the linear engine;
+ * a ZERO-DIMENSIONAL nonlinear system is solved exactly by reduce_zerodim; only
+ * a genuinely POSITIVE-dimensional system (fewer independent equations than
+ * variables) still declines. */
 static void test_parametric_systems_decline(void) {
-    run_test("Reduce[x y == 1 && x + y == 3, {x, y}]",
-             "Reduce[And[Equal[Times[x, y], 1], Equal[Plus[x, y], 3]], List[x, y]]");
+    /* Zero-dimensional: x+y==3, xy==1 -> the two roots (3 +- Sqrt[5])/2. */
+    run_contains("Reduce[x y == 1 && x + y == 3, {x, y}]", "Power[5, Rational[1, 2]]");
+    /* Zero-dimensional: x==0 then y^2==1 -> the two points (0, -+1). */
     run_test("Reduce[x^2 + y^2 == 1 && x == 0, {x, y}]",
-             "Reduce[And[Equal[Plus[Power[x, 2], Power[y, 2]], 1], Equal[x, 0]], "
-             "List[x, y]]");
-    /* A non-linear multivariate equation over Complexes needs CAD (phase 6). */
+             "Or[And[Equal[x, 0], Equal[y, -1]], And[Equal[x, 0], Equal[y, 1]]]");
+    /* A single non-linear equation in two variables is positive-dimensional
+     * (a curve): zero-dim declines (parametric), CAD over Complexes is unwired,
+     * so Reduce stays unevaluated. */
     run_test("Reduce[x^2 + y^2 == 1, {x, y}]",
              "Reduce[Equal[Plus[Power[x, 2], Power[y, 2]], 1], List[x, y]]");
 }

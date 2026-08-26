@@ -178,5 +178,11 @@
   {"O-sextic-auto",     x^6 - x - 1 == 0,          x, Automatic, 6, "twin: all 6 roots over Complexes"},
   (* Nonlinear system over Reals: complex Root-tuples dropped by the funnel. *)
   {"O-system-2real",    {x^2 + y^2 == 1, x^3 + y == 1/2},       {x, y}, Reals,     2, "2 real tuples; 4 complex dropped"},
-  {"O-system-auto",     {x^2 + y^2 == 1, x^3 + y == 1/2},       {x, y}, Automatic, 6, "M-root-system twin: 6 over Complexes"}
+  {"O-system-auto",     {x^2 + y^2 == 1, x^3 + y == 1/2},       {x, y}, Automatic, 6, "M-root-system twin: 6 over Complexes"},
+  (* Zero-dimensional systems with inequality constraints: solve the equations,
+   * keep only branches that satisfy the side relations (reduce_zerodim). *)
+  {"Z-decoupled-ineq",  x^2 == 1 && y^2 == 4 && x > 0 && y > 0,  {x, y}, Automatic, 1, "only (1,2) of the 4 points is all-positive"},
+  {"Z-three-circle",    u^2 + v^2 == 9 && u^2 + (a + v)^2 == 36 &&
+                        (a + u)^2 + v^2 == 25 && u > 0 && v > 0 && a > 0,
+                                                                {u, v, a}, Automatic, 1, "issue #69: 1 all-positive branch"}
 }

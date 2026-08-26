@@ -1,44 +1,79 @@
-# Implement CharacteristicPolynomial
+# Issue #69 — Get line continuation + Reduce/Solve nonlinear systems
 
-## Plan
-Reuse eigen module internals. Ordinary case: Faddeev-LeVerrier (O(n^4)) + (-1)^n
-sign fix. Generalized {m,a}: build (m - λa) + Laplace det. Substitute user var,
-Expand. Returns symbolic polynomial (exempt from packed/Compile surfaces).
+## Problem
+1. **Line continuation `\` in `.m` files / `Get`** — a backslash immediately
+   before a newline should join lines (Mathematica syntax). The lexer rejected
+   it with "Unexpected character: '\'". **REGRESSION-class bug (real).**
+2. **Reduce/Solve on a zero-dimensional nonlinear polynomial system with
+   inequality constraints** returns unevaluated, e.g. the 3-circle system
+   `u^2+v^2==9 && u^2+(a+v)^2==36 && (a+u)^2+v^2==25 && u>0 && v>0 && a>0`.
+   Confirmed via a 0.089 rebuild that this is **NOT a regression** — it was never
+   handled. The user wants a *general algorithmic* fix, for both Solve and Reduce.
+
+## Root cause (part 2)
+- `reduce.c` complexes branch: nonlinear equation systems fall to
+  `reduce_eq_system`, which is LINEAR-only → declines.
+- `reduce.c` reals branch: nonlinear systems fall to `reduce_cad`, which
+  DECLINES on irrational fibre samples (`is_rational_number` gate). A
+  zero-dimensional system with irrational algebraic solutions is exactly that.
+- Solve's front-end does not handle a mix of equations + inequalities for
+  nonlinear systems.
+
+## Algorithm (general, not a hack)
+Zero-dimensional decomposition + exact algebraic filtering:
+1. Split a conjunct into equations E and side relations O (`<,<=,!=`).
+2. Solve E over Complexes (reuse the existing polynomial-system solver) → a
+   FINITE, fully-determined solution set (else decline: positive-dimensional).
+3. For each solution branch, decide EXACTLY (FLINT qqbar oracle):
+   - Reals domain: each coordinate is real (`flint_qqbar_is_real`), else drop.
+   - Each side relation holds at the branch (`rru_sign_of` / `flint_qqbar_equal`),
+     else drop; undecidable → decline (sound-over-complete).
+4. Emit surviving branches: Reduce → Or of And(var==val); Solve → List of rules.
+
+This is complete for zero-dimensional systems (finite solution set, enumerated
+and filtered exactly) and sound (declines on anything undecidable).
 
 ## Tasks
-- [x] `src/linalg/charpoly.c` — new builtin `builtin_characteristicpolynomial`
-- [x] `src/linalg/eigen.h` — declare builtin
-- [x] `src/linalg/eigen.c` — register in `mateigen_init()` with ATTR_PROTECTED
-- [x] `src/sym_names.h` / `src/sym_names.c` — add SYM_CharacteristicPolynomial (3 sites)
-- [x] `src/info.c` — docstring in `info_init()`
-- [x] `src/pack.c` — add to AWARE list (mirrors Eigenvalues; audit requires it)
-- [x] `tests/CMakeLists.txt` — add source to COMMON_SRC + test executable block
-- [x] `tests/test_characteristicpolynomial.c` — 19 test groups + leak loop
-- [x] `docs/spec/builtins/linear-algebra.md` — entry
-- [x] `docs/spec/changelog/2026-08-24.md` — changelog note
-- [x] Build main binary clean, REPL smoke test (all reference cases match)
-- [x] Build + run test suite (all pass), valgrind (no leak vs baseline)
-- [x] `make check-c99`, `make check-packed-aware` — both clean
+- [x] Fix line continuation in `skip_whitespace` (src/parse.c).
+- [x] Confirm part 2 is not a regression (0.089 worktree build).
+- [ ] Add `flint_qqbar_is_real()` realness oracle (src/poly/flint_qqbar.{c,h}).
+- [ ] New engine `src/solve/reduce_zerodim.{c,h}`: core branch solver + Reduce
+      formatter + Solve list formatter.
+- [ ] Wire `reduce_zerodim` into `reduce.c` (complexes + reals fallbacks).
+- [ ] Wire Solve delegation for the mixed eqn+ineq nonlinear case.
+- [ ] Tests: unit tests + the issue's exact system; regression sweep vs 0.089.
+- [ ] Docs: docstring, docs/spec, changelog; book Index if needed.
 
-## Review
+## Verification
+- Line continuation: `Get`/`-file` on the issue's reduce.m.
+- `Reduce[3-circle system] → u==r && v==r && a==r` (branch 3, all positive).
+- `Solve[3-circle system with ineqs] → {{u->..., v->..., a->...}}`.
+- No regression on the reduce sweep (identical to 0.089 on prior-passing cases).
 
-Implemented `CharacteristicPolynomial[m, x]` (`Det[m - x I]`) and the generalized
-`CharacteristicPolynomial[{m, a}, x]` (`Det[m - x a]`) as a thin builtin over the
-eigen module's existing char-poly machinery:
+## Review (done)
+All tasks complete. Summary of changes:
+- `src/parse.c` `skip_whitespace`: `\`+newline (LF/CR/CRLF) is a line
+  continuation (no statement break); a stray `\` still errors. Fixes the issue.
+- `src/poly/flint_qqbar.{c,h}`: new `flint_qqbar_is_real()` realness oracle
+  (1 real / 0 non-real / -1 undecidable).
+- `src/solve/reduce_zerodim.{c,h}`: NEW shared engine. Solves zero-dimensional
+  polynomial equation systems exactly and filters branches by side relations +
+  realness using the qqbar oracle. `reduce_zerodim` (Reduce → Or/And) and
+  `reduce_zerodim_solve` (Solve → rule-lists).
+- `src/solve/reduce.c`: wired into Complexes (after linear) and Reals (after
+  Fourier-Motzkin + CAD) branches; docstring refreshed.
+- `src/solve/solve.c`: equations-with-constraints pre-pass (mirrors the
+  Integers pre-pass); only fires when a side constraint is present.
+- Tests: reduce_corpus 158/158, solve_corpus 99/99, reduce_tests/solve_tests
+  green; new corpus + unit cases (incl. issue's system, complex-rejection→False).
+  Two previously-"decline" corpus/unit cases promoted to solved (correct
+  improvements). CMake COMMON_SRC updated.
+- Docs: docs/spec/builtins/solutions-of-equations.md (Reduce + Solve),
+  changelog 2026-08-24.md (both fixes).
+- Verified: no regression vs 0.089 (byte-identical on prior-passing cases),
+  `make check-c99` clean, valgrind no new Mathilda-frame leaks.
 
-- **Ordinary case** → `eigen_char_poly_faddeev` (O(n^4)), negated by `(-1)^n`
-  since it returns `det(λI - m)` but we want `Det[m - x I]`. This is what makes
-  the 100×100 machine case fast (0.063s measured, ref ~0.09s) — the naive
-  `Expand[Det[m - x I]]` would hit an O(n!) Laplace expansion of a symbolic-in-x
-  matrix.
-- **Generalized case** → `eigen_build_lambda_matrix` (m - λa) + `eigen_compute_det`
-  (Laplace), correct sign directly. Shared null space → degree deficit (infinite
-  generalized eigenvalue), verified (`-1 - x + x^2`, no x^3 term).
-- Built in a private internal lambda, then the user's variable (symbol / number /
-  expression) is substituted and the result Expand-ed.
-
-All reference cases match (integer, symbolic, identity, zero, rational, machine,
-complex, generalized, degree-drop, numeric-var, arity error). Returns a symbolic
-`Plus` → exempt from packed/Compile surfaces but AWARE for NDArray *input*.
-
-No corrections from the user during implementation → no new lessons.
+## Not in scope (pre-existing, not regressions)
+- Positive-dimensional nonlinear systems over Reals with irrational fibres (e.g.
+  `x^2+y^2+z^2==1 && x>0 && y>0 && z>0`) still decline — the n-var CAD's
+  rational-sample limitation, unchanged by this work.

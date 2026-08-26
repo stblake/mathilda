@@ -121,6 +121,17 @@
   {"cad4-ball-open",     x^2 + y^2 + z^2 + w^2 < 1,        {x, y, z, w}, Reals, "solved"},
   {"cad4-ball-closed",   x^2 + y^2 + z^2 + w^2 <= 1,       {x, y, z, w}, Reals, "solved"},
 
+  (* ---- zero-dimensional nonlinear systems over the Reals: the equations pin
+   *      the variety to finitely many points (which CAD declines when the fibre
+   *      is irrational); reduce_zerodim solves them exactly and filters each
+   *      branch by realness and the inequality side relations. ---- *)
+  {"zdim-r-decoupled",   x^2 == 1 && y^2 == 4 && x > 0 && y > 0,   {x, y},    Reals, "solved"},
+  {"zdim-r-circle-line", x^2 + y^2 == 25 && x + y == 7 && x > y,   {x, y},    Reals, "solved"},
+  {"zdim-r-drop-complex",x^2 + y^2 == 1 && x == 2,                 {x, y},    Reals, False},
+  {"zdim-r-three-circle",u^2 + v^2 == 9 && u^2 + (a + v)^2 == 36 &&
+                         (a + u)^2 + v^2 == 25 && u > 0 && v > 0 && a > 0,
+                                                            {u, v, a}, Reals, "solved"},
+
   (* ---- rational-function inequalities over the Reals: poles are added as
    *      breakpoints and p/q is signed as sign(p)*sign(q); poles are excluded ---- *)
   {"rat-recip-lt",       1/x < 1,                          x,       Reals,     "solved"},
@@ -197,8 +208,14 @@
   {"dec-bad-domain",     x^2 == 4,                         x,       Booleans,  "decline"},
   {"dec-nl-eq-complex",  x^2 + y^2 == 1,                   {x, y},  Automatic, "decline"},
   {"dec-complexes-neq",  x != 0,                           x,       Automatic, "decline"},
-  {"dec-complexes-conj", x^2 == 4 && x^3 == 8,             x,       Automatic, "decline"},
-  {"dec-nl-system",      x y == 1 && x + y == 3,           {x, y},  Automatic, "decline"},
+
+  (* ---- zero-dimensional nonlinear equation systems over Complexes: the
+   *      equations pin the variety to finitely many points, solved exactly by
+   *      the zero-dimensional engine (reduce_zerodim) and returned as an Or of
+   *      And(var == value).  (x^2==4 && x^3==8 has the single common root 2;
+   *      the symmetric system's roots are (3 +/- Sqrt[5])/2.) ---- *)
+  {"zdim-conj-1var",     x^2 == 4 && x^3 == 8,             x,       Automatic, "solved"},
+  {"zdim-sym-2var",      x y == 1 && x + y == 3,           {x, y},  Automatic, "solved"},
 
   (* ---- radical rationalization: multivariate Sqrt[u] REL c over the Reals is
    *      squared into polynomial constraints in the same variables, then solved
