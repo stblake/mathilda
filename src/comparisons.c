@@ -260,6 +260,23 @@ Expr* builtin_unsameq(Expr* res) {
     return expr_new_symbol(SYM_True);
 }
 
+/* Exact zero-test on (a - b) for two numeric-quantity operands.  Mirrors the
+ * cancellation guard already used inside builtin_equal: build a - b, evaluate,
+ * and consult the exact zero-test procedure.  Returns ZERO_TEST_TRUE (the two
+ * are equal), ZERO_TEST_FALSE (provably unequal) or ZERO_TEST_UNKNOWN.
+ *
+ * This is what lets the comparison heads decide constants that carry no real
+ * ordering — I == 0, 2 I Pi != 0, ½(-1-I Sqrt[3]) != 1 — which compare_numeric
+ * leaves undecided.  Callers gate it on expr_is_numeric_quantity for BOTH
+ * operands, so a free symbol (x == 0) never reaches here and stays symbolic. */
+static ZeroTestResult numeric_pair_zero_test(Expr* a, Expr* b) {
+    Expr* diff = eval_and_free(
+        internal_subtract((Expr*[]){ expr_copy(a), expr_copy(b) }, 2));
+    ZeroTestResult zt = diff ? zero_test_decide(diff) : ZERO_TEST_UNKNOWN;
+    if (diff) expr_free(diff);
+    return zt;
+}
+
 /*
  * builtin_equal: Implements Equal[lhs, rhs, ...].
  * Equal returns True if its arguments are identical (SameQ) or numerically equal (2 == 2.0).
@@ -321,6 +338,14 @@ Expr* builtin_equal(Expr* res) {
                 }
             } else if (is_raw_data(a) && is_raw_data(b)) {
                 return expr_new_symbol(SYM_False);
+            } else if (expr_is_numeric_quantity(a) && expr_is_numeric_quantity(b)) {
+                /* compare_numeric could not order the pair, yet both are
+                 * closed-form numeric constants (e.g. I, 2 I Pi, a complex
+                 * radical).  The exact zero-test decides equality soundly. */
+                ZeroTestResult zt = numeric_pair_zero_test(a, b);
+                if (zt == ZERO_TEST_TRUE) equal = true;
+                else if (zt == ZERO_TEST_FALSE) return expr_new_symbol(SYM_False);
+                /* ZERO_TEST_UNKNOWN: leave undecided (falls through to NULL). */
             }
             if (!equal) all_equal = false;
         }
@@ -376,6 +401,12 @@ Expr* builtin_unequal(Expr* res) {
                 } else if (is_raw_data(a) && is_raw_data(b)) {
                     // Different raw data types or values (and not equal numerically)
                     definitely_unequal = true;
+                } else if (expr_is_numeric_quantity(a) && expr_is_numeric_quantity(b)) {
+                    /* Unorderable but closed-form numeric constants (I, 2 I Pi,
+                     * a complex radical): the exact zero-test decides. */
+                    ZeroTestResult zt = numeric_pair_zero_test(a, b);
+                    if (zt == ZERO_TEST_TRUE) equal = true;
+                    else if (zt == ZERO_TEST_FALSE) definitely_unequal = true;
                 }
             }
             

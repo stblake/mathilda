@@ -259,6 +259,7 @@ const char* SYM_Identity = NULL;
 const char* SYM_If = NULL;
 const char* SYM_Im = NULL;
 const char* SYM_Implies = NULL;
+const char* SYM_Equivalent = NULL;
 const char* SYM_Indeterminate = NULL;
 const char* SYM_InexactNumbers = NULL;
 const char* SYM_Inequality = NULL;
@@ -1138,6 +1139,7 @@ void sym_names_init(void) {
     SYM_If                         = intern_symbol("If");
     SYM_Im                         = intern_symbol("Im");
     SYM_Implies                    = intern_symbol("Implies");
+    SYM_Equivalent                 = intern_symbol("Equivalent");
     SYM_Indeterminate              = intern_symbol("Indeterminate");
     SYM_InexactNumbers             = intern_symbol("InexactNumbers");
     SYM_Inequality                 = intern_symbol("Inequality");

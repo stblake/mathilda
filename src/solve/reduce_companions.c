@@ -284,6 +284,23 @@ static Dnf xor_slice(Expr* const* args, int i, int n, bool neg) {
     return dnf_or(t1, t2);
 }
 
+/* Equivalent[a1, ..., an] -- every argument shares one truth value.  Rewritten to
+ * the cyclic conjunction And[Implies[a1,a2], ..., Implies[an,a1]] and recursed. */
+static Dnf equivalent_dnf(const Expr* e, bool neg) {
+    size_t n = nargs(e);
+    if (n <= 1) return neg ? dnf_false() : dnf_true();   /* trivially equivalent */
+    Expr** imps = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* ia[2] = { xcopy(argn(e, i)), xcopy(argn(e, (i + 1) % n)) };
+        imps[i] = expr_new_function(expr_new_symbol(SYM_Implies), ia, 2);
+    }
+    Expr* conj = expr_new_function(expr_new_symbol(SYM_And), imps, n);
+    free(imps);
+    Dnf d = neg ? to_dnf_neg(conj) : to_dnf(conj);
+    expr_free(conj);
+    return d;
+}
+
 static Dnf to_dnf(const Expr* e) {
     if (e->type == EXPR_SYMBOL) {
         if (e->data.symbol.name == SYM_True)  return dnf_true();
@@ -296,6 +313,7 @@ static Dnf to_dnf(const Expr* e) {
     if (is_head_sym(e, SYM_Not) && nargs(e) == 1)     return to_dnf_neg(argn(e, 0));
     if (is_head_sym(e, SYM_Implies) && nargs(e) >= 2) return implies_dnf(e, false);
     if (is_head_sym(e, SYM_Xor))                      return xor_slice(e->data.function.args, 0, (int)nargs(e), false);
+    if (is_head_sym(e, SYM_Equivalent))               return equivalent_dnf(e, false);
     if ((is_head_sym(e, SYM_Element) || is_head_sym(e, SYM_NotElement)) && nargs(e) == 2 && is_container(argn(e, 0)))
         return element_multi_dnf(e, is_head_sym(e, SYM_NotElement));
     return leaf_dnf(e, false);
@@ -313,6 +331,7 @@ static Dnf to_dnf_neg(const Expr* e) {
     if (is_head_sym(e, SYM_Not) && nargs(e) == 1)     return to_dnf(argn(e, 0));                 /* !!a = a */
     if (is_head_sym(e, SYM_Implies) && nargs(e) >= 2) return implies_dnf(e, true);
     if (is_head_sym(e, SYM_Xor))                      return xor_slice(e->data.function.args, 0, (int)nargs(e), true);
+    if (is_head_sym(e, SYM_Equivalent))               return equivalent_dnf(e, true);
     if ((is_head_sym(e, SYM_Element) || is_head_sym(e, SYM_NotElement)) && nargs(e) == 2 && is_container(argn(e, 0)))
         return element_multi_dnf(e, !is_head_sym(e, SYM_NotElement));
     return leaf_dnf(e, true);
@@ -434,20 +453,22 @@ static Expr* fi_empty_list(void) {
     return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 }
 
+/* A "variable" may be a plain symbol (x) or an indexed form (c[1]); both are
+ * matched structurally with expr_eq so FindInstance accepts either. */
 static bool fi_is_var(const Expr* e, const Expr* v) {
-    return e && e->type == EXPR_SYMBOL && v && v->type == EXPR_SYMBOL
-        && e->data.symbol.name == v->data.symbol.name;
+    return e && v && expr_eq((Expr*)e, (Expr*)v);
 }
 static int fi_var_index(const Expr* e, Expr** V, int nv) {
-    if (!e || e->type != EXPR_SYMBOL) return -1;
+    if (!e) return -1;
     for (int i = 0; i < nv; i++)
-        if (e->data.symbol.name == V[i]->data.symbol.name) return i;
+        if (expr_eq((Expr*)e, V[i])) return i;
     return -1;
 }
-/* Does any listed variable appear anywhere in e? */
+/* Does any listed variable appear anywhere in e?  A listed var is tested as a
+ * whole subtree (so `c[1]` matches, while the bare head `c` does not). */
 static bool fi_contains_var(const Expr* e, Expr** V, int nv) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return fi_var_index(e, V, nv) >= 0;
+    if (fi_var_index(e, V, nv) >= 0) return true;
     if (e->type == EXPR_FUNCTION) {
         if (fi_contains_var(e->data.function.head, V, nv)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -833,6 +854,1014 @@ static Expr* fi_solve_point(const Expr* rulelist, Expr** V, int nv, long g) {
     return p;
 }
 
+/* ---- generated-parameter instantiation (parametric Diophantine / periodic) --- *
+ *                                                                                *
+ *  Reduce/Solve return parametric families carrying a generated parameter C[k]:  *
+ *      x -> ConditionalExpression[value(C[1]), Element[C[1], Integers]]          *
+ *  A witness needs a CONCRETE parameter.  We (1) try a small integer grid        *
+ *  (fundamental solutions usually sit at C=1 -- e.g. Pell x^2-61 y^2==1), then   *
+ *  (2) for a single parameter, solve the residual constraint for it over the     *
+ *  Reals and pick an integer -- which reaches C[1]=15916 for the periodic        *
+ *  Sin[1/x]==0 && 0<x<10^-5.  Every candidate is still verified.                 */
+
+/* small expression builders (each consumes its Expr* arguments) */
+static Expr* fi_bin(const char* head, Expr* a, Expr* b) {
+    Expr* x[2] = { a, b };
+    return expr_new_function(expr_new_symbol(head), x, 2);
+}
+static Expr* fi_neg(Expr* a)                 { return fi_bin(SYM_Times, expr_new_integer(-1), a); }
+static Expr* fi_sub_eval(Expr* a, Expr* b)   { return fi_eval_take(fi_bin(SYM_Plus, a, fi_neg(b))); }
+static Expr* fi_add_eval(Expr* a, Expr* b)   { return fi_eval_take(fi_bin(SYM_Plus, a, b)); }
+static Expr* fi_mul_eval(Expr* a, Expr* b)   { return fi_eval_take(fi_bin(SYM_Times, a, b)); }
+
+/* ConditionalExpression[v, _] -> v, recursively (owned copy). */
+static Expr* fi_strip_ce(const Expr* e) {
+    if (!e) return NULL;
+    if (is_head_sym(e, SYM_ConditionalExpression) && nargs(e) == 2)
+        return fi_strip_ce(argn(e, 0));
+    if (e->type != EXPR_FUNCTION) return xcopy(e);
+    size_t n = e->data.function.arg_count;
+    Expr* h = fi_strip_ce(e->data.function.head);
+    Expr** a = n ? malloc(sizeof(Expr*) * n) : NULL;
+    for (size_t i = 0; i < n; i++) a[i] = fi_strip_ce(e->data.function.args[i]);
+    Expr* r = expr_new_function(h, a, n);
+    free(a);
+    return r;
+}
+
+static void fi_param_push(Expr*** ps, int* np, int* cp, const Expr* p) {
+    for (int i = 0; i < *np; i++) if (expr_eq((*ps)[i], (Expr*)p)) return;
+    if (*np == *cp) { *cp = *cp ? *cp * 2 : 4; *ps = realloc(*ps, sizeof(Expr*) * (size_t)*cp); }
+    (*ps)[(*np)++] = xcopy(p);
+}
+/* A plausible generated parameter: a bare symbol (not a listed var, domain or Pi/
+ * True/False), or an indexed form C[1] (symbol head, all-integer args). */
+static bool fi_is_param_atom(const Expr* e, Expr** V, int nv) {
+    if (fi_var_index(e, V, nv) >= 0) return false;
+    if (e->type == EXPR_SYMBOL) {
+        const char* n = e->data.symbol.name;
+        return !(n == SYM_Integers || n == SYM_Reals || n == SYM_Rationals
+                 || n == SYM_Complexes || n == SYM_Booleans || n == SYM_Pi
+                 || n == SYM_True || n == SYM_False);
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        if (e->data.function.arg_count == 0) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (e->data.function.args[i]->type != EXPR_INTEGER) return false;
+        return true;
+    }
+    return false;
+}
+/* Collect parameter atoms from a ConditionalExpression condition / Element atom. */
+static void fi_params_from_pred(const Expr* pred, Expr** V, int nv,
+                                Expr*** ps, int* np, int* cp) {
+    if (!pred || pred->type != EXPR_FUNCTION) return;
+    const Expr* h = pred->data.function.head;
+    if (h->type != EXPR_SYMBOL) return;
+    const char* hn = h->data.symbol.name;
+    if (hn == SYM_And || hn == SYM_Or || hn == SYM_Not) {
+        for (size_t i = 0; i < nargs(pred); i++)
+            fi_params_from_pred(argn(pred, i), V, nv, ps, np, cp);
+        return;
+    }
+    if (hn == SYM_Element && nargs(pred) == 2) {
+        if (fi_is_param_atom(argn(pred, 0), V, nv)) fi_param_push(ps, np, cp, argn(pred, 0));
+        return;
+    }
+    if (hn == SYM_Less || hn == SYM_LessEqual || hn == SYM_Greater || hn == SYM_GreaterEqual
+        || hn == SYM_Equal || hn == SYM_Unequal || hn == SYM_Inequality) {
+        for (size_t i = 0; i < nargs(pred); i++)
+            if (fi_is_param_atom(argn(pred, i), V, nv)) fi_param_push(ps, np, cp, argn(pred, i));
+    }
+}
+/* Collect generated parameters referenced anywhere in `node` (via its
+ * ConditionalExpression conditions and bare Element atoms). */
+static void fi_gather_params(const Expr* node, Expr** V, int nv,
+                             Expr*** ps, int* np, int* cp) {
+    if (!node || node->type != EXPR_FUNCTION) return;
+    if (is_head_sym(node, SYM_ConditionalExpression) && nargs(node) == 2)
+        fi_params_from_pred(argn(node, 1), V, nv, ps, np, cp);
+    if (is_head_sym(node, SYM_Element) && nargs(node) == 2
+        && fi_is_param_atom(argn(node, 0), V, nv))
+        fi_param_push(ps, np, cp, argn(node, 0));
+    for (size_t i = 0; i < node->data.function.arg_count; i++)
+        fi_gather_params(node->data.function.args[i], V, nv, ps, np, cp);
+}
+
+static const long FI_PGRID[] = { 1, -1, 2, -2, 3, -3, 0 };
+
+/* Substitute params[i] -> vals[i] into rl and evaluate (collapses the
+ * ConditionalExpression once its condition holds). */
+static Expr* fi_subst_params(const Expr* rl, Expr** params, const long* vals, int np) {
+    Expr** rr = malloc(sizeof(Expr*) * (size_t)np);
+    for (int i = 0; i < np; i++) rr[i] = fi_rule(params[i], expr_new_integer(vals[i]));
+    Expr* rules = expr_new_function(expr_new_symbol(SYM_List), rr, (size_t)np);
+    free(rr);
+    Expr* out = fi_replace(rl, rules);
+    expr_free(rules);
+    return out;
+}
+/* Recurse over a small integer grid for each parameter; for every assignment,
+ * materialise concrete points from the substituted rule-list and verify. */
+static void fi_param_combos(const Expr* rl, Expr** V, int nv, const Expr* origExpr,
+                            Expr** params, int np, int gsz, long* chosen, int idx,
+                            FiWit* ws, long want) {
+    if (ws->n >= want) return;
+    if (idx == np) {
+        Expr* rl2 = fi_subst_params(rl, params, chosen, np);
+        static const long g[] = { 0, 1, -1, 2, -2 };
+        for (size_t gi = 0; gi < sizeof g / sizeof g[0] && ws->n < want; gi++) {
+            Expr* p = fi_solve_point(rl2, V, nv, g[gi]);
+            if (p) { if (fi_verify(origExpr, p)) fi_wit_add(ws, p); else expr_free(p); }
+        }
+        expr_free(rl2);
+        return;
+    }
+    for (int k = 0; k < gsz && ws->n < want; k++) {
+        chosen[idx] = FI_PGRID[k];
+        fi_param_combos(rl, V, nv, origExpr, params, np, gsz, chosen, idx + 1, ws, want);
+    }
+}
+/* Ceiling/Floor of a (possibly symbolic, e.g. 50000/Pi) real bound -> the
+ * boundary integer, nudged one step in when the bound is a strict integer. */
+static bool fi_bound_int(const Expr* b, bool strict, bool lower, long* out) {
+    Expr* a[1] = { xcopy(b) };
+    Expr* v = fi_eval_take(expr_new_function(
+        expr_new_symbol(lower ? SYM_Ceiling : SYM_Floor), a, 1));
+    bool ok = false;
+    if (v->type == EXPR_INTEGER) {
+        long g = v->data.integer;
+        if (strict && rru_sign_compare(v, b) == 0) g += lower ? 1 : -1;
+        *out = g; ok = true;
+    }
+    expr_free(v);
+    return ok;
+}
+/* Single-parameter case that the grid missed: solve the residual constraint for
+ * the parameter over the Reals, pick an integer, materialise and verify. */
+static void fi_solve_param(const Expr* rl, Expr** V, int nv, const Expr* origExpr,
+                           const Expr* Rconstr, const Expr* param, FiWit* ws, long want) {
+    /* value-map: each key var -> strip_ce(RHS) (parameter retained); others -> 0 */
+    Expr** rr = malloc(sizeof(Expr*) * (size_t)nv);
+    for (int vi = 0; vi < nv; vi++) {
+        Expr* val = NULL;
+        for (size_t i = 0; i < nargs(rl); i++) {
+            const Expr* rule = argn(rl, i);
+            if (is_head_sym(rule, SYM_Rule) && nargs(rule) == 2
+                && fi_var_index(argn(rule, 0), V, nv) == vi) { val = fi_strip_ce(argn(rule, 1)); break; }
+        }
+        rr[vi] = fi_rule(V[vi], val ? val : expr_new_integer(0));
+    }
+    Expr* vmap = expr_new_function(expr_new_symbol(SYM_List), rr, (size_t)nv);
+    free(rr);
+
+    const Expr* base = Rconstr ? Rconstr : origExpr;
+    /* rename the (possibly indexed) parameter to a fresh plain symbol Reduce accepts */
+    Expr* q = expr_new_symbol("FindInstance$param");
+    Expr* qr[1] = { fi_rule(param, xcopy(q)) };
+    Expr* qrules = expr_new_function(expr_new_symbol(SYM_List), qr, 1);
+    Expr* pred0 = fi_replace(base, vmap);
+    Expr* pred = fi_replace(pred0, qrules);
+    expr_free(pred0); expr_free(qrules);
+
+    Expr* reals = expr_new_symbol(SYM_Reals);
+    Expr* redp = fi_call(SYM_Reduce, pred, q, reals, NULL);
+    expr_free(reals); expr_free(pred);
+
+    Expr* lo = NULL, *hi = NULL; bool los = false, his = false;
+    Expr** forb = NULL; int nforb = 0, cforb = 0;
+    Expr* qv[1] = { q };
+    fi_scan_bounds(redp, q, qv, 1, &lo, &los, &hi, &his, &forb, &nforb, &cforb);
+    /* Ceiling/Floor of the (possibly symbolic, e.g. 50000/Pi) bound gives the
+     * boundary integer; walk inward from there. */
+    long base_i = 0; int dir = 0;
+    if (lo && fi_bound_int(lo, los, true, &base_i)) dir = +1;
+    else if (hi && fi_bound_int(hi, his, false, &base_i)) dir = -1;
+    if (dir != 0)
+        for (long k = 0; k < want + 4 && ws->n < want; k++) {
+            long vals[1] = { base_i + dir * k };
+            Expr* one[1] = { (Expr*)param };
+            Expr* rl2 = fi_subst_params(rl, one, vals, 1);
+            Expr* p = fi_solve_point(rl2, V, nv, 0);
+            expr_free(rl2);
+            if (p) { if (fi_verify(origExpr, p)) fi_wit_add(ws, p); else expr_free(p); }
+        }
+    free(forb);
+    expr_free(redp); expr_free(vmap); expr_free(q);
+}
+/* Produce verified points from a Solve rule-list that may carry parameters. */
+static void fi_materialize_rulelist(const Expr* rl, Expr** V, int nv, const Expr* origExpr,
+                                    const Expr* Rconstr, FiWit* ws, long want) {
+    Expr** ps = NULL; int np = 0, cp = 0;
+    fi_gather_params(rl, V, nv, &ps, &np, &cp);
+    if (np == 0) {
+        static const long grid[] = { 0, 1, -1, 2, -2, 3, -3 };
+        for (size_t gi = 0; gi < sizeof grid / sizeof grid[0] && ws->n < want; gi++) {
+            Expr* p = fi_solve_point(rl, V, nv, grid[gi]);
+            if (p) { if (fi_verify(origExpr, p)) fi_wit_add(ws, p); else expr_free(p); }
+        }
+        free(ps);
+        return;
+    }
+    int gsz = 7;
+    while (gsz > 1) { double t = 1; for (int i = 0; i < np; i++) t *= gsz; if (t <= 64) break; gsz--; }
+    long* chosen = malloc(sizeof(long) * (size_t)np);
+    fi_param_combos(rl, V, nv, origExpr, ps, np, gsz, chosen, 0, ws, want);
+    free(chosen);
+    if (ws->n < want && np == 1)
+        fi_solve_param(rl, V, nv, origExpr, Rconstr, ps[0], ws, want);
+    for (int i = 0; i < np; i++) expr_free(ps[i]);
+    free(ps);
+}
+
+/* Split expr's top-level conjunction into the Equal conjuncts and the rest. */
+static Expr* fi_conj(Expr** parts, int n) {
+    if (n == 0) { free(parts); return NULL; }
+    if (n == 1) { Expr* r = parts[0]; free(parts); return r; }
+    Expr* r = expr_new_function(expr_new_symbol(SYM_And), parts, (size_t)n);
+    free(parts);
+    return r;
+}
+static void fi_split_eqs(const Expr* expr, Expr** Eout, Expr** Rout) {
+    int cap = is_head_sym(expr, SYM_And) ? (int)nargs(expr) : 1;
+    Expr** es = malloc(sizeof(Expr*) * (size_t)cap);
+    Expr** rs = malloc(sizeof(Expr*) * (size_t)cap);
+    int ne = 0, nr = 0;
+    if (is_head_sym(expr, SYM_And)) {
+        for (size_t i = 0; i < nargs(expr); i++) {
+            const Expr* c = argn(expr, i);
+            if (is_head_sym(c, SYM_Equal)) es[ne++] = xcopy(c); else rs[nr++] = xcopy(c);
+        }
+    } else if (is_head_sym(expr, SYM_Equal)) es[ne++] = xcopy(expr);
+    else rs[nr++] = xcopy(expr);
+    *Eout = fi_conj(es, ne);
+    *Rout = fi_conj(rs, nr);
+}
+
+/* ---- bounded integer search (Diophantine witness / finite-domain emptiness) --- *
+ *                                                                                *
+ *  When Reduce and Solve decline over the Integers, enumerate an integer box.    *
+ *  Bounds come from the constraints (fi_scan_bounds).  A finite box is decidable *
+ *  (witness, or {} on exhaustion); an open box is best-effort within a budget    *
+ *  (witness, or decline -- never {}).  A linear-equality reach-range check gives *
+ *  an instant {} for the common knapsack shape.  Every point is verified.        */
+
+typedef struct { long lo, hi; bool has_lo, has_hi; } FiRange;
+
+static bool fi_is_number(const Expr* e) {
+    return e && (e->type == EXPR_INTEGER || e->type == EXPR_REAL
+                 || e->type == EXPR_BIGINT || is_head_sym(e, SYM_Rational));
+}
+/* Tightest integer satisfying `strict/non-strict` bound b on the given side. */
+static bool fi_tight_int(const Expr* b, bool strict, bool lower, long* out) {
+    bool ok = false; double d = rru_approx_double(b, &ok); if (!ok) return false;
+    long g = (long)d;
+    for (int it = 0; it < 200; it++) {
+        Expr* ge = expr_new_integer(g);
+        int sc = rru_sign_compare(ge, b); expr_free(ge);   /* sign of (g - b) */
+        bool sat = lower ? (strict ? sc > 0 : sc >= 0) : (strict ? sc < 0 : sc <= 0);
+        if (lower) {
+            if (!sat) { g++; continue; }
+            Expr* g1 = expr_new_integer(g - 1); int sc1 = rru_sign_compare(g1, b); expr_free(g1);
+            if (strict ? sc1 > 0 : sc1 >= 0) { g--; continue; }
+        } else {
+            if (!sat) { g--; continue; }
+            Expr* g1 = expr_new_integer(g + 1); int sc1 = rru_sign_compare(g1, b); expr_free(g1);
+            if (strict ? sc1 < 0 : sc1 <= 0) { g++; continue; }
+        }
+        *out = g; return true;
+    }
+    *out = g; return true;
+}
+/* base^exp evaluated (exp a small nonneg integer). */
+static Expr* fi_pow_eval(Expr* base, long exp) {
+    Expr* e[2] = { base, expr_new_integer(exp) };
+    return fi_eval_take(expr_new_function(expr_new_symbol(SYM_Power), e, 2));
+}
+
+/* ---- sum-of-even-powers bound (a positive-definite diagonal equality) ------- *
+ *                                                                                *
+ *  An equality that rearranges to  c1 v1^(2k1) + ... + cm vm^(2km) == B  with     *
+ *  every c_i > 0 and B >= 0 bounds each of its variables: since every term is     *
+ *  nonnegative, c_j v_j^(2k_j) <= B, so |v_j| <= (B/c_j)^(1/(2k_j)).  This is a    *
+ *  strictly necessary condition, hence a SOUND box for the integer search --      *
+ *  the a^2+b^2+c^2+d^2+e^2==5 conjunct pins every variable to [-2,2].  Cross      *
+ *  terms (a b, ...) and odd powers make an equality non-conforming; it is then    *
+ *  skipped (other conjuncts may still bound).                                     */
+
+/* Largest nonnegative integer m with coeff * m^(2k) <= B (all exact).  Returns
+ * false if no finite bound is found within a sane cap. */
+static bool fi_sos_solve_m(const Expr* coeff, long two_k, const Expr* B, long* out_m) {
+    /* estimate via doubles, then adjust exactly so rounding never under-counts */
+    bool okc = false, okb = false;
+    double dc = rru_approx_double(coeff, &okc);
+    double db = rru_approx_double(B, &okb);
+    if (!okc || !okb || dc <= 0.0 || db < 0.0) return false;
+    long m = (long)floor(pow(db / dc, 1.0 / (double)two_k)) + 2;
+    if (m < 0) m = 0;
+    if (m > 200000) return false;                 /* too large -> leave unbounded */
+    /* shrink while coeff*m^(2k) > B */
+    for (; m > 0; m--) {
+        Expr* t = fi_mul_eval(xcopy(coeff), fi_pow_eval(expr_new_integer(m), two_k));
+        int sc = rru_sign_compare(t, B); expr_free(t);      /* sign of (t - B) */
+        if (sc <= 0) break;
+    }
+    /* grow while coeff*(m+1)^(2k) <= B (repairs an under-estimate) */
+    for (;;) {
+        Expr* t = fi_mul_eval(xcopy(coeff), fi_pow_eval(expr_new_integer(m + 1), two_k));
+        int sc = rru_sign_compare(t, B); expr_free(t);
+        if (sc > 0) break;
+        m++;
+        if (m > 200000) return false;
+    }
+    *out_m = m;
+    return true;
+}
+
+/* If the top-level statement is an And of atoms (or a single atom) with no Or,
+ * derive a symmetric bound |v| <= m from any conforming even-power equality.
+ * Returns true and sets *out_m when a bound is found. */
+static bool fi_sos_upper_bound(const Expr* expr, const Expr* v, Expr** V, int nv, long* out_m) {
+    if (is_head_sym(expr, SYM_Or)) return false;      /* per-clause bound only */
+    int nc = is_head_sym(expr, SYM_And) ? (int)nargs(expr) : 1;
+    bool found = false; long best = 0;
+    for (int c = 0; c < nc; c++) {
+        const Expr* conj = is_head_sym(expr, SYM_And) ? argn(expr, c) : expr;
+        if (!(is_head_sym(conj, SYM_Equal) && nargs(conj) == 2)) continue;
+        /* poly == 0  where poly = L - R */
+        Expr* poly = fi_sub_eval(xcopy(argn(conj, 0)), xcopy(argn(conj, 1)));
+        int nt = is_head_sym(poly, SYM_Plus) ? (int)nargs(poly) : 1;
+        Expr* offset = expr_new_integer(0);           /* sum of constant terms  */
+        Expr* coeff_v = NULL; long exp_v = 0;         /* this var's term, if any */
+        bool conforming = true;
+        for (int i = 0; i < nt && conforming; i++) {
+            const Expr* term = is_head_sym(poly, SYM_Plus) ? argn(poly, i) : poly;
+            if (fi_is_number(term)) { offset = fi_add_eval(offset, xcopy(term)); continue; }
+            /* term must be  coeff * base^(2k)  with base a single listed var */
+            Expr* coeff = expr_new_integer(1);
+            const Expr* powpart = NULL;
+            if (is_head_sym(term, SYM_Power)) {
+                powpart = term;
+            } else if (is_head_sym(term, SYM_Times)) {
+                for (size_t j = 0; j < nargs(term); j++) {
+                    const Expr* f = argn(term, j);
+                    if (fi_is_number(f)) coeff = fi_mul_eval(coeff, xcopy(f));
+                    else if (!powpart && is_head_sym(f, SYM_Power)) powpart = f;
+                    else { conforming = false; break; }
+                }
+            } else { conforming = false; }
+            long ex = 0; int vi = -1;
+            if (conforming && powpart && nargs(powpart) == 2
+                && argn(powpart, 1)->type == EXPR_INTEGER) {
+                ex = argn(powpart, 1)->data.integer;
+                vi = fi_var_index(argn(powpart, 0), V, nv);
+            }
+            /* need: a listed var, an even positive exponent, a positive coeff */
+            Expr* zero = expr_new_integer(0);
+            bool cpos = rru_sign_compare(coeff, zero) > 0; expr_free(zero);
+            if (!conforming || !powpart || vi < 0 || ex < 2 || (ex & 1) || !cpos) {
+                conforming = false; expr_free(coeff);
+            } else {
+                if (fi_is_var(argn(powpart, 0), v)) {   /* it is OUR variable */
+                    if (coeff_v) expr_free(coeff);       /* v twice -> keep first */
+                    else { coeff_v = coeff; exp_v = ex; }
+                } else {
+                    expr_free(coeff);                    /* another var's term */
+                }
+            }
+        }
+        if (conforming && coeff_v) {
+            Expr* B = fi_neg(xcopy(offset)); B = fi_eval_take(B);  /* B = -offset */
+            Expr* zero = expr_new_integer(0);
+            long m;
+            if (rru_sign_compare(B, zero) >= 0 && fi_sos_solve_m(coeff_v, exp_v, B, &m)) {
+                if (!found || m < best) { best = m; found = true; }
+            }
+            expr_free(zero); expr_free(B);
+        }
+        if (coeff_v) expr_free(coeff_v);
+        expr_free(offset); expr_free(poly);
+    }
+    if (found) *out_m = best;
+    return found;
+}
+
+static void fi_int_range(const Expr* expr, const Expr* v, Expr** V, int nv, FiRange* out) {
+    Expr* lo = NULL, *hi = NULL; bool los = false, his = false;
+    Expr** forb = NULL; int nf = 0, cf = 0;
+    fi_scan_bounds(expr, v, V, nv, &lo, &los, &hi, &his, &forb, &nf, &cf);
+    out->has_lo = out->has_hi = false; out->lo = out->hi = 0;
+    if (lo) out->has_lo = fi_tight_int(lo, los, true, &out->lo);
+    if (hi) out->has_hi = fi_tight_int(hi, his, false, &out->hi);
+    free(forb);
+    /* Intersect a sum-of-even-powers bound |v| <= m (a sound necessary box). */
+    long m;
+    if (fi_sos_upper_bound(expr, v, V, nv, &m)) {
+        if (!out->has_lo || out->lo < -m) out->lo = -m;
+        if (!out->has_hi || out->hi >  m) out->hi =  m;
+        out->has_lo = out->has_hi = true;
+    }
+}
+/* Substitute the single variable var -> val into e and evaluate (owned). */
+static Expr* fi_subst_one(const Expr* e, const Expr* var, long val) {
+    Expr* r1[1] = { fi_rule(var, expr_new_integer(val)) };
+    Expr* rules = expr_new_function(expr_new_symbol(SYM_List), r1, 1);
+    Expr* out = fi_replace(e, rules);
+    expr_free(rules);
+    return out;
+}
+/* If a top-level linear equality's reachable range over the finite box excludes
+ * its target, the whole system is unsatisfiable -> proven empty. */
+static bool fi_linear_reject(const Expr* expr, Expr** V, int nv, FiRange* rg) {
+    int nc = is_head_sym(expr, SYM_And) ? (int)nargs(expr) : 1;
+    for (int c = 0; c < nc; c++) {
+        const Expr* conj = is_head_sym(expr, SYM_And) ? argn(expr, c) : expr;
+        if (!(is_head_sym(conj, SYM_Equal) && nargs(conj) == 2)) continue;
+        Expr* poly = fi_sub_eval(xcopy(argn(conj, 0)), xcopy(argn(conj, 1)));
+        /* constant term = poly with every var -> 0 */
+        Expr** zr = malloc(sizeof(Expr*) * (size_t)nv);
+        for (int i = 0; i < nv; i++) zr[i] = fi_rule(V[i], expr_new_integer(0));
+        Expr* zrules = expr_new_function(expr_new_symbol(SYM_List), zr, (size_t)nv); free(zr);
+        Expr* c0 = fi_replace(poly, zrules); expr_free(zrules);
+        bool ok = fi_is_number(c0);
+        Expr* mn = ok ? xcopy(c0) : NULL, *mx = ok ? xcopy(c0) : NULL;
+        Expr* recon = ok ? xcopy(c0) : NULL;   /* c0 + sum a_i V_i, to confirm linearity */
+        for (int i = 0; i < nv && ok; i++) {
+            Expr* p1 = fi_subst_one(poly, V[i], 1);
+            Expr* p0 = fi_subst_one(poly, V[i], 0);
+            Expr* ai = fi_sub_eval(p1, p0);           /* coefficient of V[i] if linear */
+            if (!fi_is_number(ai)) { expr_free(ai); ok = false; break; }
+            recon = fi_add_eval(recon, fi_mul_eval(xcopy(ai), xcopy(V[i])));
+            Expr* zero = expr_new_integer(0);
+            int za = rru_sign_compare(ai, zero); expr_free(zero);
+            if (za != 0 && !(rg[i].has_lo && rg[i].has_hi)) { expr_free(ai); ok = false; break; }
+            Expr* tlo = fi_mul_eval(xcopy(ai), expr_new_integer(rg[i].lo));
+            Expr* thi = fi_mul_eval(ai, expr_new_integer(rg[i].hi));
+            int sc = rru_sign_compare(tlo, thi);
+            Expr* tmin = sc <= 0 ? tlo : thi, *tmax = sc <= 0 ? thi : tlo;
+            mn = fi_add_eval(mn, xcopy(tmin));
+            mx = fi_add_eval(mx, xcopy(tmax));
+            expr_free(tlo); expr_free(thi);
+        }
+        bool reject = false;
+        if (ok) {
+            Expr* resid = fi_sub_eval(xcopy(poly), recon); recon = NULL;
+            bool linear = fi_is_number(resid) && resid->type == EXPR_INTEGER
+                          && resid->data.integer == 0;
+            expr_free(resid);
+            if (linear) {
+                Expr* z1 = expr_new_integer(0), *z2 = expr_new_integer(0);
+                if (rru_sign_compare(mn, z1) > 0 || rru_sign_compare(mx, z2) < 0) reject = true;
+                expr_free(z1); expr_free(z2);
+            }
+        }
+        if (recon) expr_free(recon);
+        if (mn) expr_free(mn);
+        if (mx) expr_free(mx);
+        expr_free(c0); expr_free(poly);
+        if (reject) return true;
+    }
+    return false;
+}
+/* Returns 1 = added witness(es), 0 = proven empty, -1 = decline. */
+static int fi_integer_search(const Expr* expr, Expr** V, int nv, long want, FiWit* ws) {
+    if (nv <= 0 || nv > 24) return -1;
+    FiRange* rg = malloc(sizeof(FiRange) * (size_t)nv);
+    for (int i = 0; i < nv; i++) fi_int_range(expr, V[i], V, nv, &rg[i]);
+    bool all_finite = true;
+    for (int i = 0; i < nv; i++) if (!(rg[i].has_lo && rg[i].has_hi)) all_finite = false;
+    if (all_finite && fi_linear_reject(expr, V, nv, rg)) { free(rg); return 0; }
+
+    /* Candidate-evaluation budget: bounds the best-effort (open-domain) search and
+     * the exhaustive proof of a finite box.  Small solutions surface early; an
+     * out-of-reach system (e.g. a^4+b^4+c^4==d^4) declines once it is spent. */
+    const long BUDGET = 120000;
+    double finite_prod = 1.0; int n_open = 0;
+    for (int i = 0; i < nv; i++) {
+        if (rg[i].has_lo && rg[i].has_hi) {
+            if (rg[i].hi < rg[i].lo) { free(rg); return 0; }   /* empty range */
+            finite_prod *= (double)(rg[i].hi - rg[i].lo + 1);
+        } else n_open++;
+    }
+    long span = 1;
+    if (n_open > 0)
+        while (span < 200000) {
+            double t = finite_prod; bool of = false;
+            for (int k = 0; k < n_open; k++) { t *= (double)(span + 1); if (t > (double)BUDGET) { of = true; break; } }
+            if (of) break;
+            span++;
+        }
+    long* elo = malloc(sizeof(long) * (size_t)nv), *ehi = malloc(sizeof(long) * (size_t)nv);
+    for (int i = 0; i < nv; i++) {
+        if (rg[i].has_lo && rg[i].has_hi) { elo[i] = rg[i].lo; ehi[i] = rg[i].hi; }
+        else if (rg[i].has_lo)            { elo[i] = rg[i].lo; ehi[i] = rg[i].lo + span; }
+        else if (rg[i].has_hi)            { ehi[i] = rg[i].hi; elo[i] = rg[i].hi - span; }
+        else                              { elo[i] = -span; ehi[i] = span; }
+    }
+    bool can_prove_empty = all_finite && (finite_prod <= (double)BUDGET);
+    long* cur = malloc(sizeof(long) * (size_t)nv);
+    for (int i = 0; i < nv; i++) cur[i] = elo[i];
+    long evals = 0; bool budget_hit = false, exhausted = false; int start_n = ws->n;
+    for (;;) {
+        if (evals >= BUDGET) { budget_hit = true; break; }
+        evals++;
+        Expr** outr = malloc(sizeof(Expr*) * (size_t)nv);
+        for (int i = 0; i < nv; i++) outr[i] = fi_rule(V[i], expr_new_integer(cur[i]));
+        Expr* p = expr_new_function(expr_new_symbol(SYM_List), outr, (size_t)nv);
+        free(outr);
+        if (fi_verify(expr, p)) { fi_wit_add(ws, p); if (ws->n >= want) break; }
+        else expr_free(p);
+        int i = 0;
+        for (; i < nv; i++) { cur[i]++; if (cur[i] <= ehi[i]) break; cur[i] = elo[i]; }
+        if (i == nv) { exhausted = true; break; }
+    }
+    free(cur); free(elo); free(ehi); free(rg);
+    if (ws->n > start_n) return 1;
+    if (exhausted && can_prove_empty && !budget_hit) return 0;
+    return -1;
+}
+
+/* ---- numerical witness (transcendental / inexact Real systems) -------------- *
+ *                                                                                *
+ *  Reduce is not a sound decision procedure over transcendental functions or     *
+ *  inexact numbers -- e.g. it wrongly returns False for                          *
+ *  `0<x<0.001 && Sin[1/x]>0.999`.  For such systems we neither trust its False    *
+ *  nor read its cells; we pose the statement as a numerical feasibility problem   *
+ *  `NMinimize[{0, expr}, vars]` and VERIFY the returned point.                    */
+
+/* Does e contain an inexact real or a transcendental function head?  Such systems
+ * are outside Reduce's sound algebraic reach; a numerical witness is appropriate. */
+static bool fi_is_transc_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* n = h->data.symbol.name;
+        if (n == SYM_Sin || n == SYM_Cos || n == SYM_Tan || n == SYM_Cot
+            || n == SYM_Sec || n == SYM_Csc || n == SYM_Exp || n == SYM_Log
+            || n == SYM_ArcSin || n == SYM_ArcCos || n == SYM_ArcTan || n == SYM_ArcTanh
+            || n == SYM_Sinh || n == SYM_Cosh || n == SYM_Tanh
+            || n == SYM_Gamma || n == SYM_Erf
+            || n == SYM_PolyGamma || n == SYM_LogGamma || n == SYM_Zeta)
+            return true;
+        /* Exp[x] canonicalises to Power[E, x]; treat a base-E power as
+         * exponential (transcendental) so Reduce's False is not trusted. */
+        if (n == SYM_Power && e->data.function.arg_count == 2
+            && fi_is_sym(e->data.function.args[0], SYM_E))
+            return true;
+    }
+    if (fi_is_transc_inexact(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (fi_is_transc_inexact(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* NMinimize[{0, expr}, vars] -- a feasibility solve; verify the returned point.
+ * Returns an owned List[Rule..] witness, or NULL. */
+static Expr* fi_numeric_search(const Expr* expr, const Expr* vars) {
+    Expr* obj[2] = { expr_new_integer(0), xcopy(expr) };
+    Expr* objl = expr_new_function(expr_new_symbol(SYM_List), obj, 2);
+    Expr* nm[2] = { objl, xcopy(vars) };
+    Expr* res = fi_eval_take(expr_new_function(expr_new_symbol(SYM_NMinimize), nm, 2));
+    Expr* witness = NULL;
+    if (is_head_sym(res, SYM_List) && nargs(res) == 2) {
+        const Expr* rl = argn(res, 1);   /* {var -> val, ...} */
+        if (is_head_sym(rl, SYM_List) && fi_verify(expr, rl)) witness = xcopy(rl);
+    }
+    expr_free(res);
+    return witness;
+}
+
+/* ---- Groebner emptiness (declined polynomial systems) ----------------------- *
+ *                                                                                *
+ *  A positive-dimensional polynomial system with a disequation (e.g. the 2x2     *
+ *  nilpotent M^2==0 && det!=0, which is empty since nilpotent => det==0) is       *
+ *  declined by Solve (`nsdim`).  Rabinowitsch: the equalities together with       *
+ *  t*(prod of disequation LHSs) - 1 have Groebner basis {1} exactly when the      *
+ *  variety (minus the disequation hypersurfaces) is empty over C -- hence over    *
+ *  R and Z.  A one-way, sound emptiness certificate.                             */
+static bool fi_groebner_empty(const Expr* expr, const Expr* vars, int nv) {
+    if (nv < 1 || nv > 8) return false;
+    if (fi_is_transc_inexact(expr)) return false;   /* algebraic systems only */
+    int nc = is_head_sym(expr, SYM_And) ? (int)nargs(expr) : 1;
+    Expr** polys = malloc(sizeof(Expr*) * (size_t)(nc + 1));
+    Expr** dis   = malloc(sizeof(Expr*) * (size_t)(nc + 1));
+    int npoly = 0, ndis = 0;
+    bool ok = true;
+    for (int c = 0; c < nc && ok; c++) {
+        const Expr* a = is_head_sym(expr, SYM_And) ? argn(expr, c) : expr;
+        if (is_head_sym(a, SYM_Equal) && nargs(a) == 2)
+            polys[npoly++] = fi_sub_eval(xcopy(argn(a, 0)), xcopy(argn(a, 1)));
+        else if (is_head_sym(a, SYM_Unequal) && nargs(a) == 2)
+            dis[ndis++] = fi_sub_eval(xcopy(argn(a, 0)), xcopy(argn(a, 1)));
+        else if (is_head_sym(a, SYM_Less) || is_head_sym(a, SYM_LessEqual)
+                 || is_head_sym(a, SYM_Greater) || is_head_sym(a, SYM_GreaterEqual)
+                 || is_head_sym(a, SYM_Inequality))
+            continue;                                /* inequalities only shrink the set */
+        else ok = false;                             /* unrecognised atom -> give up */
+    }
+    bool empty = false;
+    if (ok && npoly >= 1) {
+        int ng = npoly + (ndis > 0 ? 1 : 0);
+        Expr** gens = malloc(sizeof(Expr*) * (size_t)ng);
+        for (int i = 0; i < npoly; i++) gens[i] = polys[i];   /* transfer ownership */
+        Expr* tsym = NULL;
+        if (ndis > 0) {
+            Expr* prod = dis[0];
+            for (int i = 1; i < ndis; i++) prod = fi_mul_eval(prod, dis[i]);
+            tsym = expr_new_symbol("FindInstance$t");
+            Expr* rab = fi_sub_eval(fi_mul_eval(xcopy(tsym), prod), expr_new_integer(1));
+            gens[npoly] = rab;
+        }
+        Expr* genlist = expr_new_function(expr_new_symbol(SYM_List), gens, (size_t)ng);
+        free(gens);
+        /* variable list: the listed vars, plus t when Rabinowitsch is used */
+        int nvl = nv + (tsym ? 1 : 0);
+        Expr** vl = malloc(sizeof(Expr*) * (size_t)nvl);
+        if (is_head_sym(vars, SYM_List))
+            for (int i = 0; i < nv; i++) vl[i] = xcopy(argn(vars, i));
+        else vl[0] = xcopy(vars);
+        if (tsym) vl[nv] = xcopy(tsym);
+        Expr* varlist = expr_new_function(expr_new_symbol(SYM_List), vl, (size_t)nvl);
+        free(vl);
+        if (tsym) expr_free(tsym);
+        Expr* gb[2] = { genlist, varlist };
+        Expr* res = fi_eval_take(expr_new_function(expr_new_symbol(SYM_GroebnerBasis), gb, 2));
+        if (is_head_sym(res, SYM_List) && nargs(res) == 1) {
+            const Expr* g0 = argn(res, 0);
+            if (g0->type == EXPR_INTEGER && g0->data.integer != 0) empty = true;   /* {c} = {1} */
+        }
+        expr_free(res);
+    } else {
+        for (int i = 0; i < npoly; i++) expr_free(polys[i]);
+        for (int i = 0; i < ndis; i++) expr_free(dis[i]);
+    }
+    free(polys); free(dis);
+    return empty;
+}
+
+/* ---- structured candidate sampling (ℂ / ℝ disequations & inequalities) ------ *
+ *                                                                                *
+ *  Reduce/Solve decline many statements that a concrete point trivially          *
+ *  satisfies -- branch-cut disequations (Sqrt[z^2] != z at z=-1;                  *
+ *  Log[x y] != Log[x]+Log[y] at x=y=-1), open regions, and the like.  As a LAST  *
+ *  resort over Complexes/Reals we evaluate the statement at a small, ordered      *
+ *  grid of interesting values and keep any point that VERIFIES.  Purely additive  *
+ *  (it never claims {}), so it cannot corrupt a sound empty/decline; and the      *
+ *  fi_verify gate keeps every returned point correct.                            */
+
+/* Build the ordered candidate value list (owned).  -1 and the small magnitudes
+ * come first so the common witnesses (e.g. all-vars = -1) are hit immediately. */
+static Expr** fi_make_candidates(bool allow_complex, int* n_out) {
+    /* integer / rational reals, small first */
+    static const long ints[] = { -1, 1, 2, -2, 0, 3, -3, 5, -5 };
+    struct { long num, den; } rats[] = { {1,2}, {-1,2}, {3,2} };
+    int cap = 32;
+    Expr** c = malloc(sizeof(Expr*) * (size_t)cap);
+    int n = 0;
+    for (size_t i = 0; i < sizeof ints / sizeof ints[0]; i++)
+        c[n++] = expr_new_integer(ints[i]);
+    for (size_t i = 0; i < sizeof rats / sizeof rats[0]; i++)
+        c[n++] = fi_eval_take(fi_bin(SYM_Times, expr_new_integer(rats[i].num),
+                                     fi_pow_eval(expr_new_integer(rats[i].den), -1)));
+    if (allow_complex) {
+        /* I, -I, 2 I, and the four unit diagonals */
+        long re[] = { 0,  0,  0,  1,  1, -1, -1 };
+        long im[] = { 1, -1,  2,  1, -1,  1, -1 };
+        for (size_t i = 0; i < sizeof re / sizeof re[0]; i++) {
+            Expr* bI = fi_bin(SYM_Times, expr_new_integer(im[i]), expr_new_symbol(SYM_I));
+            c[n++] = fi_eval_take(fi_bin(SYM_Plus, expr_new_integer(re[i]), bI));
+        }
+    }
+    *n_out = n;
+    return c;
+}
+
+/* Odometer over the candidate grid, capped at BUDGET evaluations.  Adds every
+ * point that verifies until `want` are collected. */
+static void fi_sample_search(const Expr* expr, Expr** V, int nv, bool allow_complex,
+                             long want, FiWit* ws) {
+    if (nv < 1 || nv > 6) return;
+    int nc = 0;
+    Expr** cand = fi_make_candidates(allow_complex, &nc);
+    const long BUDGET = 8000;
+    int* idx = calloc((size_t)nv, sizeof(int));
+    for (long step = 0; step < BUDGET && ws->n < want; step++) {
+        Expr** outr = malloc(sizeof(Expr*) * (size_t)nv);
+        for (int i = 0; i < nv; i++) outr[i] = fi_rule(V[i], expr_copy(cand[idx[i]]));
+        Expr* pt = expr_new_function(expr_new_symbol(SYM_List), outr, (size_t)nv);
+        free(outr);
+        if (fi_verify(expr, pt)) fi_wit_add(ws, pt); else expr_free(pt);
+        int i = 0;                                    /* advance the odometer */
+        for (; i < nv; i++) { if (++idx[i] < nc) break; idx[i] = 0; }
+        if (i == nv) break;                           /* full grid exhausted */
+    }
+    free(idx);
+    for (int i = 0; i < nc; i++) expr_free(cand[i]);
+    free(cand);
+}
+
+/* ---- 1-variable real transcendental root search ---------------------------- *
+ *                                                                                *
+ *  A single real variable and one equation lhs == rhs (plus any bounding          *
+ *  inequalities) that Reduce/Solve decline -- Tan[x]==x && x>10^6.  We scan a      *
+ *  POLE-FREE refactoring of lhs-rhs for a sign change, refine the bracket by       *
+ *  high-precision bisection, and VERIFY against the original statement.           *
+ *                                                                                 *
+ *  The refactoring multiplies lhs-rhs by the denominators of any tangent/         *
+ *  secant/... so the whole oscillating-but-smooth numerator is bracketable:        *
+ *  Tan[x]-x has a pole ~10^-6 from its root, but (Tan[x]-x)Cos[x] = Sin[x]-x Cos[x] *
+ *  does not, so a coarse grid can straddle it.  Machine trig at 10^6 is            *
+ *  meaningless (argument reduction), so the refinement runs at high precision;     *
+ *  the coarse scan only needs the sign, which stays reliable while |h| is large.  */
+
+/* Denominator head that clears the pole of a tangent-like head, else NULL. */
+static const char* fi_pole_factor_head(const char* h) {
+    if (h == SYM_Tan  || h == SYM_Sec)  return SYM_Cos;
+    if (h == SYM_Cot  || h == SYM_Csc)  return SYM_Sin;
+    if (h == SYM_Tanh || h == SYM_Sech) return SYM_Cosh;
+    if (h == SYM_Coth || h == SYM_Csch) return SYM_Sinh;
+    return NULL;
+}
+static bool fi_has_transc_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* n = h->data.symbol.name;
+        if (n == SYM_Sin || n == SYM_Cos || n == SYM_Tan || n == SYM_Cot
+            || n == SYM_Sec || n == SYM_Csc || n == SYM_Exp || n == SYM_Log
+            || n == SYM_Sinh || n == SYM_Cosh || n == SYM_Tanh || n == SYM_Coth
+            || n == SYM_Sech || n == SYM_Csch || n == SYM_ArcTan || n == SYM_ArcSin
+            || n == SYM_ArcCos || n == SYM_ArcTanh)
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (fi_has_transc_head(e->data.function.args[i])) return true;
+    return false;
+}
+static void fi_collect_poles(const Expr* node, Expr*** fs, int* nf, int* cf) {
+    if (!node || node->type != EXPR_FUNCTION) return;
+    const Expr* h = node->data.function.head;
+    if (h->type == EXPR_SYMBOL && node->data.function.arg_count == 1) {
+        const char* fh = fi_pole_factor_head(h->data.symbol.name);
+        if (fh) {
+            Expr* a[1] = { xcopy(node->data.function.args[0]) };
+            Expr* fac = expr_new_function(expr_new_symbol(fh), a, 1);
+            bool dup = false;
+            for (int i = 0; i < *nf; i++) if (expr_eq((*fs)[i], fac)) { dup = true; break; }
+            if (dup) expr_free(fac);
+            else {
+                if (*nf == *cf) { *cf = *cf ? *cf * 2 : 4; *fs = realloc(*fs, sizeof(Expr*) * (size_t)*cf); }
+                (*fs)[(*nf)++] = fac;
+            }
+        }
+    }
+    for (size_t i = 0; i < node->data.function.arg_count; i++)
+        fi_collect_poles(node->data.function.args[i], fs, nf, cf);
+}
+/* h = Expand[(lhs - rhs) * (product of pole denominators)] -- pole-free. */
+static Expr* fi_smooth_residual(const Expr* L, const Expr* R) {
+    Expr* h = fi_sub_eval(xcopy(L), xcopy(R));
+    Expr** fs = NULL; int nf = 0, cf = 0;
+    fi_collect_poles(h, &fs, &nf, &cf);
+    if (nf == 0) { free(fs); return h; }
+    Expr* prod = fs[0];
+    for (int i = 1; i < nf; i++) prod = fi_mul_eval(prod, fs[i]);
+    free(fs);
+    Expr* hp = fi_mul_eval(h, prod);
+    Expr* a[1] = { hp };
+    return fi_eval_take(expr_new_function(expr_new_symbol(SYM_Expand), a, 1));
+}
+/* Machine-precision value of hs at v = x (finite iff a real machine number). */
+static double fi_eval_real_at(const Expr* hs, const Expr* v, double x, bool* finite) {
+    Expr* r1[1] = { fi_rule(v, expr_new_real(x)) };
+    Expr* rules = expr_new_function(expr_new_symbol(SYM_List), r1, 1);
+    Expr* sub = fi_replace(hs, rules); expr_free(rules);
+    bool ok = false; double d = rru_approx_double(sub, &ok);
+    expr_free(sub);
+    *finite = ok && isfinite(d);
+    return d;
+}
+/* Sign of hs at the exact rational point, evaluated to `prec` digits. */
+static int fi_hp_sign_at(const Expr* hs, const Expr* v, const Expr* rat, long prec) {
+    Expr* r1[1] = { fi_rule(v, xcopy(rat)) };
+    Expr* rules = expr_new_function(expr_new_symbol(SYM_List), r1, 1);
+    Expr* sub = fi_replace(hs, rules); expr_free(rules);
+    Expr* na[2] = { sub, expr_new_integer(prec) };
+    Expr* nx = fi_eval_take(expr_new_function(expr_new_symbol(SYM_N), na, 2));
+    Expr* sa[1] = { nx };
+    Expr* sg = fi_eval_take(expr_new_function(expr_new_symbol(SYM_Sign), sa, 1));
+    int r = (sg && sg->type == EXPR_INTEGER) ? (int)sg->data.integer : 0;
+    if (sg) expr_free(sg);
+    return r;
+}
+static Expr* fi_rationalize(double x) {
+    Expr* a[2] = { expr_new_real(x), expr_new_integer(0) };
+    return fi_eval_take(expr_new_function(expr_new_symbol("Rationalize"), a, 2));
+}
+static Expr* fi_rat_mid(const Expr* a, const Expr* b) {
+    return fi_mul_eval(fi_add_eval(xcopy(a), xcopy(b)),
+                       fi_pow_eval(expr_new_integer(2), -1));
+}
+/* Refine a machine bracket [xa,xb] to a high-precision root, verify, add. */
+static void fi_refine_and_verify(const Expr* hs, const Expr* origExpr, const Expr* v,
+                                 double xa, double xb, long prec, FiWit* ws) {
+    Expr* a = fi_rationalize(xa);
+    Expr* b = fi_rationalize(xb);
+    int sa = fi_hp_sign_at(hs, v, a, prec);
+    int sb = fi_hp_sign_at(hs, v, b, prec);
+    if (sa != 0 && sb != 0 && sa != sb) {
+        for (int it = 0; it < 170; it++) {
+            Expr* m = fi_rat_mid(a, b);
+            int sm = fi_hp_sign_at(hs, v, m, prec);
+            if (sm == 0) { expr_free(a); expr_free(b); a = m; b = xcopy(m); break; }
+            if (sm == sa) { expr_free(a); a = m; } else { expr_free(b); b = m; }
+        }
+        Expr* mid = fi_rat_mid(a, b);
+        Expr* na[2] = { mid, expr_new_integer(prec) };
+        Expr* xstar = fi_eval_take(expr_new_function(expr_new_symbol(SYM_N), na, 2));
+        Expr* rr[1] = { fi_rule(v, xstar) };
+        Expr* pt = expr_new_function(expr_new_symbol(SYM_List), rr, 1);
+        if (fi_verify(origExpr, pt)) fi_wit_add(ws, pt); else expr_free(pt);
+    }
+    expr_free(a); expr_free(b);
+}
+static void fi_scan_dir(const Expr* hs, const Expr* origExpr, const Expr* v,
+                        double start, int dir, bool has_far, double far,
+                        double step, long maxsteps, long prec, long want, FiWit* ws) {
+    bool fprev; double hprev = fi_eval_real_at(hs, v, start, &fprev);
+    for (long k = 1; k <= maxsteps && ws->n < want; k++) {
+        double xcur = start + (double)dir * step * (double)k;
+        if (has_far && ((dir > 0 && xcur > far) || (dir < 0 && xcur < far))) break;
+        bool fcur; double hcur = fi_eval_real_at(hs, v, xcur, &fcur);
+        if (fprev && fcur && hprev != 0.0 && hcur != 0.0
+            && ((hprev < 0.0) != (hcur < 0.0)))
+            fi_refine_and_verify(hs, origExpr, v, start + (double)dir * step * (double)(k - 1),
+                                 xcur, prec, ws);
+        hprev = hcur; fprev = fcur;
+    }
+}
+static void fi_real_root_search(const Expr* expr, Expr** V, int nv, const Expr* dom,
+                                long want, FiWit* ws) {
+    if (nv != 1 || !fi_is_sym(dom, SYM_Reals) || !fi_has_transc_head(expr)) return;
+    Expr* E = NULL, *Rp = NULL;
+    fi_split_eqs(expr, &E, &Rp);
+    if (!E || !(is_head_sym(E, SYM_Equal) && nargs(E) == 2)) {
+        if (E) expr_free(E);
+        if (Rp) expr_free(Rp);
+        return;
+    }
+    Expr* hs = fi_smooth_residual(argn(E, 0), argn(E, 1));
+    Expr* lo = NULL, *hi = NULL; bool los = false, his = false;
+    Expr** forb = NULL; int nf = 0, cf = 0;
+    fi_scan_bounds(expr, V[0], V, 1, &lo, &los, &hi, &his, &forb, &nf, &cf);
+    free(forb);
+    bool okl = false, okh = false; double dl = 0, dh = 0;
+    if (lo) dl = rru_approx_double(lo, &okl);
+    if (hi) dh = rru_approx_double(hi, &okh);
+    const double STEP = 0.5; const long MAXS = 4000; const long PREC = 50;
+    if (okl && !okh)      fi_scan_dir(hs, expr, V[0], dl, +1, false, 0, STEP, MAXS, PREC, want, ws);
+    else if (okh && !okl) fi_scan_dir(hs, expr, V[0], dh, -1, false, 0, STEP, MAXS, PREC, want, ws);
+    else if (okl && okh)  fi_scan_dir(hs, expr, V[0], dl, +1, true, dh, STEP, MAXS, PREC, want, ws);
+    else {
+        fi_scan_dir(hs, expr, V[0], 0.0, +1, false, 0, STEP, MAXS, PREC, want, ws);
+        if (ws->n < want) fi_scan_dir(hs, expr, V[0], 0.0, -1, false, 0, STEP, MAXS, PREC, want, ws);
+    }
+    expr_free(hs); expr_free(E); if (Rp) expr_free(Rp);
+}
+
+/* ---- numeric feasibility with tolerance verify (inexact Real systems) ------- *
+ *                                                                                *
+ *  A system that carries an inexact number (e.g. == 0.1) is not meant to be       *
+ *  satisfied EXACTLY -- a machine-precision witness is the expected answer, so     *
+ *  the exact `=== True` gate is wrong for it.  We minimise the sum of squared      *
+ *  equation residuals with FindMinimum from several seeds (seeds spread the        *
+ *  variables so paired unknowns like x and y land on distinct roots), then         *
+ *  VERIFY the point NUMERICALLY: equalities to a tolerance, strict inequalities    *
+ *  and disequations with a margin.  Reaches the damped-oscillation system          *
+ *  Exp[-a x]Cos[b x]==0.1 && Exp[-a y]Cos[b y]==0.1 && x!=y && a>0.               */
+
+#define FI_EQ_TOL   1e-6
+#define FI_MARGIN   1e-9
+
+/* Machine value of e at the point (owned point = List[Rule..]); finite iff real. */
+static bool fi_point_val(const Expr* e, const Expr* point, double* out) {
+    Expr* sub = fi_replace(e, point);
+    bool ok = false; double d = rru_approx_double(sub, &ok);
+    expr_free(sub);
+    *out = d;
+    return ok && isfinite(d);
+}
+/* Numeric three-valued truth of a (possibly compound) statement at a point:
+ * 1 = holds within tolerance, 0 = fails, -1 = cannot decide numerically. */
+static int fi_num_true(const Expr* node, const Expr* point);
+static int fi_num_rel(const char* op, const Expr* L, const Expr* R, const Expr* point) {
+    double a, b;
+    if (!fi_point_val(L, point, &a) || !fi_point_val(R, point, &b)) return -1;
+    double d = a - b;
+    if (op == SYM_Equal)        return fabs(d) <= FI_EQ_TOL ? 1 : 0;
+    if (op == SYM_Unequal)      return fabs(d) >  FI_EQ_TOL ? 1 : 0;
+    if (op == SYM_Less)         return d < -FI_MARGIN ? 1 : (d >  FI_MARGIN ? 0 : -1);
+    if (op == SYM_Greater)      return d >  FI_MARGIN ? 1 : (d < -FI_MARGIN ? 0 : -1);
+    if (op == SYM_LessEqual)    return d <=  FI_EQ_TOL ? 1 : 0;
+    if (op == SYM_GreaterEqual) return d >= -FI_EQ_TOL ? 1 : 0;
+    return -1;
+}
+static int fi_num_true(const Expr* node, const Expr* point) {
+    if (fi_is_sym(node, SYM_True))  return 1;
+    if (fi_is_sym(node, SYM_False)) return 0;
+    if (is_head_sym(node, SYM_And)) {
+        int r = 1;
+        for (size_t i = 0; i < nargs(node); i++) {
+            int t = fi_num_true(argn(node, i), point);
+            if (t == 0) return 0;
+            if (t < 0) r = -1;
+        }
+        return r;
+    }
+    if (is_head_sym(node, SYM_Or)) {
+        int r = 0;
+        for (size_t i = 0; i < nargs(node); i++) {
+            int t = fi_num_true(argn(node, i), point);
+            if (t == 1) return 1;
+            if (t < 0) r = -1;
+        }
+        return r;
+    }
+    if (is_head_sym(node, SYM_Not) && nargs(node) == 1) {
+        int t = fi_num_true(argn(node, 0), point); return t < 0 ? -1 : !t;
+    }
+    if (node->type == EXPR_FUNCTION && node->data.function.head->type == EXPR_SYMBOL
+        && nargs(node) == 2) {
+        const char* h = node->data.function.head->data.symbol.name;
+        if (h == SYM_Equal || h == SYM_Unequal || h == SYM_Less || h == SYM_Greater
+            || h == SYM_LessEqual || h == SYM_GreaterEqual)
+            return fi_num_rel(h, argn(node, 0), argn(node, 1), point);
+    }
+    if (is_head_sym(node, SYM_Inequality) && (nargs(node) & 1)) {
+        int r = 1;
+        for (size_t i = 0; i + 2 < nargs(node); i += 2) {
+            const Expr* opE = argn(node, i + 1);
+            if (opE->type != EXPR_SYMBOL) return -1;
+            int t = fi_num_rel(opE->data.symbol.name, argn(node, i), argn(node, i + 2), point);
+            if (t == 0) return 0;
+            if (t < 0) r = -1;
+        }
+        return r;
+    }
+    return -1;
+}
+
+/* Squared equation residuals of the statement, collected for the objective. */
+static void fi_collect_sq(const Expr* node, Expr*** ts, int* nt, int* ct) {
+    if (is_head_sym(node, SYM_And)) {
+        for (size_t i = 0; i < nargs(node); i++) fi_collect_sq(argn(node, i), ts, nt, ct);
+        return;
+    }
+    if (is_head_sym(node, SYM_Equal) && nargs(node) == 2) {
+        Expr* d = fi_sub_eval(xcopy(argn(node, 0)), xcopy(argn(node, 1)));
+        Expr* sq = fi_pow_eval(d, 2);
+        if (*nt == *ct) { *ct = *ct ? *ct * 2 : 4; *ts = realloc(*ts, sizeof(Expr*) * (size_t)*ct); }
+        (*ts)[(*nt)++] = sq;
+    }
+}
+static Expr* fi_numeric_feasibility(const Expr* expr, Expr** V, int nv) {
+    if (nv < 1 || nv > 8) return NULL;
+    Expr** ts = NULL; int nt = 0, ct = 0;
+    fi_collect_sq(expr, &ts, &nt, &ct);
+    if (nt == 0) { free(ts); return NULL; }
+    Expr* obj = (nt == 1) ? ts[0]
+              : expr_new_function(expr_new_symbol(SYM_Plus), ts, (size_t)nt);
+    free(ts);
+    /* seed patterns: base + i*spread, spreading paired variables onto distinct
+     * roots and keeping a > 0 style unknowns positive. */
+    static const double base[]   = { 0.5, 1.0, 0.3, 2.0, 1.5, 0.7 };
+    static const double spread[] = { 1.0, 1.5, 2.0, 0.9, 0.6, 2.5 };
+    Expr* witness = NULL;
+    for (int p = 0; p < 6 && !witness; p++) {
+        Expr** specs = malloc(sizeof(Expr*) * (size_t)nv);
+        for (int i = 0; i < nv; i++) {
+            Expr* s2[2] = { xcopy(V[i]), expr_new_real(base[p] + (double)i * spread[p]) };
+            specs[i] = expr_new_function(expr_new_symbol(SYM_List), s2, 2);
+        }
+        Expr* varspec = expr_new_function(expr_new_symbol(SYM_List), specs, (size_t)nv);
+        free(specs);
+        Expr* fm2[2] = { xcopy(obj), varspec };
+        Expr* fm = fi_eval_take(expr_new_function(expr_new_symbol(SYM_FindMinimum), fm2, 2));
+        if (is_head_sym(fm, SYM_List) && nargs(fm) == 2) {
+            bool okv = false; double mv = rru_approx_double(argn(fm, 0), &okv);
+            const Expr* rl = argn(fm, 1);
+            if (okv && mv < 1e-8 && is_head_sym(rl, SYM_List)
+                && fi_num_true(expr, rl) == 1)
+                witness = xcopy(rl);
+        }
+        expr_free(fm);
+    }
+    expr_free(obj);
+    return witness;
+}
+
 /* ---- Booleans: SAT via the DNF engine above -------------------------------- */
 
 static Expr* fi_boolean(const Expr* expr, Expr** V, int nv, long want) {
@@ -879,19 +1908,27 @@ static bool fi_is_option_name(const char* s) {
     return s == SYM_Modulus || s == SYM_Method
         || s == SYM_WorkingPrecision || s == SYM_RandomSeeding;
 }
+/* A single variable is a symbol (x) or an indexed form (c[1] = c[_]): a function
+ * whose head is a symbol.  Numbers, rules and bare List heads are not variables. */
+static bool fi_is_varlike(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return true;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name != SYM_List) return true;
+    return false;
+}
 static bool fi_valid_vars(const Expr* vars) {
     if (!vars) return false;
-    if (vars->type == EXPR_SYMBOL) return true;
     if (is_head_sym(vars, SYM_List)) {
         if (nargs(vars) == 0) return false;
         for (size_t i = 0; i < nargs(vars); i++)
-            if (argn(vars, i)->type != EXPR_SYMBOL) return false;
+            if (!fi_is_varlike(argn(vars, i))) return false;
         return true;
     }
-    return false;
+    return fi_is_varlike(vars);
 }
 static Expr** fi_collect_vars(Expr* vars, int* nv_out) {
-    if (vars->type == EXPR_SYMBOL) {
+    if (!is_head_sym(vars, SYM_List)) {
         Expr** v = malloc(sizeof(Expr*)); v[0] = vars; *nv_out = 1; return v;
     }
     int nv = (int)nargs(vars);
@@ -963,8 +2000,20 @@ Expr* builtin_find_instance(Expr* res) {
 
     FiWit ws = { NULL, 0, 0 };
 
+    /* Reduce is NOT a sound decision procedure over transcendental functions or
+     * inexact numbers (it wrongly returns False for 0<x<0.001 && Sin[1/x]>0.999),
+     * so for such systems its False is not trusted as {} -- a numerical witness
+     * search decides instead. */
+    bool transc = fi_is_transc_inexact(expr);
+
+    /* Reduce rejects indexed variables (c[1]); Solve and the integer search
+     * accept them, so skip the Reduce oracle when any listed var is not a
+     * plain symbol (avoids a spurious Reduce::ivar message). */
+    bool vars_indexed = false;
+    for (int i = 0; i < nv; i++) if (V[i]->type != EXPR_SYMBOL) vars_indexed = true;
+
     /* Step 1: Reduce is the satisfiability + solution-set oracle. */
-    Expr* red = fi_call(SYM_Reduce, expr, vars, dom, modulus);
+    Expr* red = vars_indexed ? NULL : fi_call(SYM_Reduce, expr, vars, dom, modulus);
     bool provably_false = fi_is_sym(red, SYM_False);
     if (!provably_false && red && !is_head_sym(red, SYM_Reduce)) {
         if (fi_is_sym(red, SYM_True)) {
@@ -1002,23 +2051,89 @@ Expr* builtin_find_instance(Expr* res) {
     }
     expr_free(red);
 
-    if (provably_false) { fi_wit_free(&ws); free(V); return fi_empty_list(); }
+    /* Reduce's False is a proof of emptiness only for exactly-decidable systems;
+     * for transcendental/inexact ones it is unsound, so fall through to the
+     * numerical search instead of claiming {}. */
+    if (provably_false && !transc) { fi_wit_free(&ws); free(V); return fi_empty_list(); }
 
-    /* Step 2: Solve fallback (covers cases Reduce declines). */
+    /* Non-equation constraints, used to pin generated parameters. */
+    Expr* Epart = NULL, *Rpart = NULL;
+    fi_split_eqs(expr, &Epart, &Rpart);
+
+    /* Step 2: Solve fallback (covers cases Reduce declines), with generated-
+     * parameter instantiation -- reaches parametric Diophantine families such as
+     * the Pell equation x^2 - 61 y^2 == 1 (fundamental solution at C[1] == 1). */
     if (ws.n < nWanted) {
         Expr* sols = fi_call(SYM_Solve, expr, vars, dom, modulus);
-        if (is_head_sym(sols, SYM_List)) {
-            for (size_t si = 0; si < nargs(sols) && ws.n < nWanted; si++) {
-                const Expr* rl = argn(sols, si);
-                static const long grid[] = { 0, 1, -1, 2, -2, 3, -3 };
-                for (size_t gi = 0; gi < sizeof(grid) / sizeof(grid[0]) && ws.n < nWanted; gi++) {
-                    Expr* p = fi_solve_point(rl, V, nv, grid[gi]);
-                    if (!p) continue;
-                    if (fi_verify(expr, p)) fi_wit_add(&ws, p); else expr_free(p);
-                }
-            }
-        }
+        if (is_head_sym(sols, SYM_List))
+            for (size_t si = 0; si < nargs(sols) && ws.n < nWanted; si++)
+                fi_materialize_rulelist(argn(sols, si), V, nv, expr, Rpart, &ws, nWanted);
         expr_free(sols);
+    }
+
+    /* Step 3: bounded integer search over the Integers -- a Diophantine witness,
+     * or a finite-domain emptiness proof ({} when the box is exhausted). */
+    if (ws.n < nWanted && fi_is_sym(dom, SYM_Integers)) {
+        int r = fi_integer_search(expr, V, nv, nWanted, &ws);
+        if (r == 0 && ws.n == 0) {
+            if (Epart) expr_free(Epart);
+            if (Rpart) expr_free(Rpart);
+            free(V); return fi_empty_list();
+        }
+    }
+
+    /* Step 4: equations-only retry -- solve the equation part to obtain a
+     * parametric family, then pin the generated parameter with the remaining
+     * constraints.  Reaches periodic transcendental instances such as
+     * Sin[1/x] == 0 && 0 < x < 10^-5 (parameter C[1] == 15916). */
+    if (ws.n < nWanted && Epart && Rpart) {
+        Expr* sols = fi_call(SYM_Solve, Epart, vars, dom, NULL);
+        if (is_head_sym(sols, SYM_List))
+            for (size_t si = 0; si < nargs(sols) && ws.n < nWanted; si++)
+                fi_materialize_rulelist(argn(sols, si), V, nv, expr, Rpart, &ws, nWanted);
+        expr_free(sols);
+    }
+    if (Epart) expr_free(Epart);
+    if (Rpart) expr_free(Rpart);
+
+    /* Step 4b: 1-variable real transcendental root search -- bracket a pole-free
+     * refactoring of a declined equation and refine at high precision.  Reaches
+     * Tan[x] == x && x > 10^6 (root just below (n+1/2) Pi, n ~ 318310). */
+    if (ws.n < nWanted && fi_is_sym(dom, SYM_Reals))
+        fi_real_root_search(expr, V, nv, dom, nWanted, &ws);
+
+    /* Step 5: numerical feasibility search for transcendental / inexact Real
+     * systems, which Reduce cannot soundly decide (0<x<0.001 && Sin[1/x]>0.999). */
+    if (ws.n < nWanted && transc && !fi_is_sym(dom, SYM_Integers)
+        && !fi_is_sym(dom, SYM_Complexes)) {
+        Expr* w = fi_numeric_search(expr, vars);
+        if (w) fi_wit_add(&ws, w);
+    }
+
+    /* Step 5b: residual-minimising feasibility with a numeric-tolerance verify,
+     * for inexact-input Real systems whose equalities hold only approximately
+     * (NMinimize above cannot take their conjunctive constraint shape).  Reaches
+     * Exp[-a x]Cos[b x]==0.1 && Exp[-a y]Cos[b y]==0.1 && x!=y && a>0. */
+    if (ws.n < nWanted && transc && !fi_is_sym(dom, SYM_Integers)
+        && !fi_is_sym(dom, SYM_Complexes)) {
+        Expr* w = fi_numeric_feasibility(expr, V, nv);
+        if (w) fi_wit_add(&ws, w);
+    }
+
+    /* Step 6: Groebner emptiness certificate for a declined polynomial system
+     * (e.g. the 2x2 nilpotent M^2==0 && det!=0, which is empty). */
+    if (ws.n == 0 && fi_groebner_empty(expr, vars, nv)) {
+        free(V); return fi_empty_list();
+    }
+
+    /* Step 7: structured candidate sampling over Complexes/Reals -- a last-resort
+     * verify-gated witness for statements Reduce/Solve decline but a concrete
+     * point satisfies (branch-cut disequations Sqrt[z^2]!=z, Log[x y]!=Log[x]+Log[y],
+     * open regions).  Skipped for Integers (its own search) and Booleans (handled
+     * above).  Complex candidates only when the domain admits them. */
+    if (ws.n < nWanted && !fi_is_sym(dom, SYM_Integers)) {
+        bool allow_complex = !fi_is_sym(dom, SYM_Reals) && !fi_is_sym(dom, SYM_Rationals);
+        fi_sample_search(expr, V, nv, allow_complex, nWanted, &ws);
     }
 
     free(V);
@@ -1064,8 +2179,12 @@ void reduce_companions_init(void) {
         "\tFinds up to n instances (fewer if fewer exist).\n"
         "\n"
         "Every instance returned is verified against expr, so it is always a\n"
-        "true solution.  FindInstance may find an instance even where Reduce\n"
-        "cannot give a complete reduction; it returns {} only when the set is\n"
-        "provably empty, and stays unevaluated when it can neither exhibit an\n"
-        "instance nor prove emptiness.  Option Modulus -> p solves over Z/pZ.");
+        "true solution.  Variables may be symbols or indexed forms c[i].\n"
+        "FindInstance may find an instance even where Reduce cannot give a\n"
+        "complete reduction -- instantiating parametric Diophantine families,\n"
+        "searching a bounded integer box over the Integers, and (for\n"
+        "transcendental or inexact Real systems) a numerical feasibility search.\n"
+        "It returns {} only when the set is provably empty -- including a\n"
+        "Groebner certificate for declined polynomial systems -- and stays\n"
+        "unevaluated otherwise.  Modulus -> p over Z/pZ.");
 }

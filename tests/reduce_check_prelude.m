@@ -63,6 +63,28 @@ rdSamples[dom_, nsyms_] := Which[
  *   zero produced ComplexInfinity, a Root inequality did not resolve, ...). *)
 rdTruth[b_] := Which[TrueQ[b], 1, b === False, 0, True, -1];
 
+(* A relation operand is OUT OF DOMAIN at pt when it evaluates to an infinite /
+ * indeterminate value (a pole -- 1/x at x==0), or, over an ordered domain, to a
+ * genuinely non-real number (Sqrt[x] at x<0).  Reduce's domain-restricted output
+ * legitimately excludes such points, so the raw input must not be JUDGED there --
+ * this is what keeps `1/x != 0 -> x != 0` and `Sqrt[x] != y -> x >= 0 && ...`
+ * from spuriously "disagreeing" with their own inputs at the excluded points. *)
+rdBadOperand[o_, pt_, dom_] := Module[{v, nv},
+  v = o /. pt;
+  If[! FreeQ[v, ComplexInfinity | Indeterminate | DirectedInfinity], Return[True]];
+  If[! MemberQ[{Reals, Integers, Rationals}, dom], Return[False]];
+  nv = N[v];
+  NumericQ[nv] && TrueQ[Im[nv] != 0]];
+
+(* Truth of the INPUT at pt, but -1 (skip) at any point where a relation operand
+ * leaves the domain (see rdBadOperand). *)
+rdInputTruth[e_, pt_, dom_] := Module[{ops},
+  ops = Join[
+    Cases[e, (Equal | Unequal | Less | Greater | LessEqual | GreaterEqual)[a_, b_]
+            :> Sequence[a, b], {0, Infinity}],
+    Cases[e, Inequality[a__] :> a, {0, Infinity}]];
+  If[AnyTrue[ops, rdBadOperand[#, pt, dom] &], -1, rdTruth[e /. pt]]];
+
 (* Build the full assignment lists (rule lists) for a Tuples grid over `syms`. *)
 rdGridPoints[syms_, samp_] := Module[{n = Length[syms]},
   If[n == 0, {{}},
@@ -109,7 +131,7 @@ rdCheckPoints[exprE_, red_, varsL_, dom_] := Module[
   (* (a) grid: agree wherever both sides decide. *)
   Do[
      pt = gridPts[[i]];
-     lb = rdTruth[exprE /. pt];
+     lb = rdInputTruth[exprE, pt, dom];
      rb = rdTruth[red   /. pt];
      If[lb =!= -1 && rb =!= -1,
         judged++;

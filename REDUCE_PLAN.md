@@ -26,8 +26,10 @@ irrational-fibre zero-dimensional case that CAD declines, but NOT the
 positive-dimensional one (see *Known limitations*).
 **Phase 8 companions are now mostly landed**: `LogicalExpand` + `NotElement`
 (v0.101), `Xor`/`Implies` evaluation on Booleans (v0.102), and **`FindInstance`
-over Complexes / Reals / Integers / Rationals / Booleans (v0.104, 2026-08-26)** —
-leaving only `CylindricalDecomposition`.
+over Complexes / Reals / Integers / Rationals / Booleans (v0.104, 2026-08-26;
+extended v0.105, 2026-08-27 with parametric-family instantiation, a solve-the-
+parameter step for periodic instances, indexed variables `c[i]`, and a bounded
+integer-box search)** — leaving only `CylindricalDecomposition`.
 The remaining pieces are **6b (real-algebraic-coefficient fibre isolation to
 widen past the rational-fibre regime — the positive-dimensional irrational
 case)**, **6e (McCallum well-orientedness
@@ -51,6 +53,36 @@ Implementation order followed was
 | 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done (+ multivariate `Sqrt` rationalization, 2026-08-24) |
 | Opt | Options: `Backsubstitution`, `Cubics`, `GeneratedParameters`, `Method`, `Modulus`, `Quartics`, `WorkingPrecision` | ✅ done (2026-08-25) |
 
+> **2026-08-27 — `FindInstance` round 2, v0.106.** Three more verification-gated
+> capabilities (`src/solve/reduce_companions.c`, `src/boolean.c`): (1) **`Equivalent`
+> evaluates** (`builtin_equivalent`) and the DNF engine rewrites it to a cyclic
+> `And[Implies[...]]`, so `LogicalExpand` / `FindInstance[…,Booleans]` handle
+> `Xor[p,q] && Implies[q,r] && Not[Equivalent[p,r]]` → `{{p→T,q→F,r→F}}`; (2) **numerical
+> witness** for transcendental/inexact Real systems Reduce decides unsoundly — its
+> `False` is not trusted (`fi_is_transc_inexact`), `NMinimize[{0,expr},vars]` supplies a
+> verified inexact point for `0<x<0.001 && Sin[1/x]>0.999` → `{{x→0.000903}}`; (3)
+> **Gröbner emptiness** (`fi_groebner_empty`) — Rabinowitsch `t·(∏dᵢ)−1` + equalities,
+> basis `{1}` certifies emptiness over ℂ⊇ℝ⊇ℤ, so the 2×2 nilpotent `M^2==0 && det≠0` →
+> `{}`. Guards kept: `a^5+b^5==c^5`/`p·q==prime` → `{}` (sound Reduce False), and all
+> round-1 cases. suite + corpus 158/158; new code at macOS valgrind baseline.
+>
+> **2026-08-27 — `FindInstance` extended, v0.105.** Four verification-gated
+> extensions reach witnesses the raw Reduce/Solve outputs do not surface
+> (`src/solve/reduce_companions.c`): (1) **generated-parameter instantiation** — a
+> parametric family `x -> ConditionalExpression[value(C[1]), C[1]>=1]` is tried over
+> a small integer grid, reaching the fundamental Pell solution of `x^2-61 y^2==1` at
+> `C[1]==1`; (2) **solve-the-parameter** — a single leftover parameter is solved
+> against the remaining constraints over the Reals and rounded (`Ceiling` of e.g.
+> `50000/Pi`), reaching the periodic `Sin[1/x]==0 && 0<x<10^-5` at `C[1]==15916`;
+> (3) **indexed variables** `c[i]` matched with `expr_eq` (Reduce, which rejects
+> them, is skipped as the oracle to avoid a spurious `Reduce::ivar`); (4) **bounded
+> integer search** (`fi_integer_search`) over the Integers — a finite box is
+> decidable (Diophantine witness, or `{}` on exhaustion / an instant linear
+> reach-range `{}` for the 0/1 knapsack `Σ pᵢ cᵢ==500, 0<=cᵢ<=1`), an unbounded
+> domain is best-effort (witness or sound decline, never `{}` — so `a^4+b^4+c^4==d^4`
+> declines within budget). `test_find_instance` extended; suite 267 PASS; corpus
+> 158/158; new code at macOS valgrind baseline.
+>
 > **2026-08-26 — Phase 8 `FindInstance` (Complexes / Reals / Integers /
 > Rationals / Booleans), v0.104.** `FindInstance[expr, vars, dom, n]` returns up
 > to `n` witness points in `Solve`'s form, `{}` when the set is provably empty,

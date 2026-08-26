@@ -451,6 +451,42 @@ void test_unequal_unevaluated() {
     expr_free(unequal); expr_free(res);
 }
 
+/* Parse src, evaluate, assert the result is the bare symbol `want`. */
+static void expect_sym(const char* src, const char* want) {
+    Expr* e = parse_expression(src);
+    Expr* r = evaluate(e);
+    ASSERT(r && r->type == EXPR_SYMBOL);
+    ASSERT_STR_EQ(r->data.symbol.name, want);
+    expr_free(e); expr_free(r);
+}
+/* Parse src, evaluate, assert the result stays a call with head `head`. */
+static void expect_head(const char* src, const char* head) {
+    Expr* e = parse_expression(src);
+    Expr* r = evaluate(e);
+    ASSERT(r && r->type == EXPR_FUNCTION);
+    ASSERT_STR_EQ(r->data.function.head->data.symbol.name, head);
+    expr_free(e); expr_free(r);
+}
+
+/* Equal/Unequal decide closed-form numeric constants that carry no real
+ * ordering (I, 2 I Pi, complex radicals) via the exact zero-test -- matching
+ * Mathematica -- while free symbols stay unevaluated. */
+void test_equal_unequal_numeric_constants() {
+    expect_sym("I == 0", "False");
+    expect_sym("I != 0", "True");
+    expect_sym("2 I Pi != 0", "True");
+    expect_sym("0 != 2 I Pi", "True");
+    expect_sym("(1 + I) == (1 - I)", "False");
+    expect_sym("1/2 (-1 - I Sqrt[3]) != 1", "True");
+    expect_sym("(-1 + 1/8 (-1 - I Sqrt[3])^3)/(-1 + 1/2 (-1 - I Sqrt[3])) == 0", "True");
+    /* free symbols must NOT be decided */
+    expect_head("x == 0", "Equal");
+    expect_head("x != 0", "Unequal");
+    /* existing exact identities and machine reals unaffected */
+    expect_sym("Sqrt[5 + 2 Sqrt[6]] - Sqrt[3] - Sqrt[2] == 0", "True");
+    expect_sym("3 != 5", "True");
+}
+
 void test_not_basic() {
     Expr* t = expr_new_symbol("True");
     Expr* args_t[] = {t};
@@ -546,6 +582,7 @@ int main() {
     TEST(test_unequal_false);
     TEST(test_unequal_multiple);
     TEST(test_unequal_unevaluated);
+    TEST(test_equal_unequal_numeric_constants);
     TEST(test_less_basic);
     TEST(test_less_false);
     TEST(test_less_rational_real);

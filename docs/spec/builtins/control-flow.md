@@ -246,6 +246,20 @@ Booleans and cancels duplicate arguments (`a` Xor `a` is `False`): `Xor[]` is
 `False`, `Xor[True, a]` is `!a`, and `Xor[a, b, a]` is `b`. A `Xor` with only
 symbolic, distinct arguments stays unevaluated (`Xor[p, q, r]`).
 
+## Equivalent
+Logical equivalence.
+- `Equivalent[e1, e2, ...]`: Yields `True` when **all** of the `ei` share one
+  truth value (all `True` or all `False`).
+
+**Attributes**: `Flat`, `Orderless`, `OneIdentity`, `Protected`. Evaluation folds
+literal Booleans and cancels duplicate arguments: `Equivalent[]` and
+`Equivalent[e]` are `True`; a `True` and a `False` together give `False`
+(`Equivalent[True, False]`); a single literal forces the remaining atoms
+(`Equivalent[True, a, b]` is `a && b`, `Equivalent[False, a]` is `!a`);
+`Equivalent[a, a]` is `True`; and `Equivalent[a, b]` (distinct symbolic atoms)
+stays unevaluated. `LogicalExpand`, `Reduce`, and `FindInstance` expand
+`Equivalent` to the cyclic conjunction `Implies[a1,a2] && … && Implies[an,a1]`.
+
 ## Implies
 Material implication.
 - `Implies[p, q]`: The statement `p ⟹ q`, equivalent to `!p || q`.

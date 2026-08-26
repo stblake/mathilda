@@ -251,6 +251,14 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out);
  * for it (e.g. Plus's fused special-case guard). */
 bool arg_is_inexact(const Expr* e);
 
+/* True iff `e` is a numeric quantity in the NumericQ sense: a number, a named
+ * numeric constant (Pi, E, I, EulerGamma, ...), or a numeric function (a head
+ * with the NumericFunction attribute) applied to numeric-quantity arguments.
+ * This is the C predicate behind the NumericQ builtin, exported so comparison
+ * heads can gate an exact zero-test on closed-form constant operands (where a
+ * free symbol like `x` must NOT be treated as numeric). Read-only. */
+bool expr_is_numeric_quantity(const Expr* e);
+
 /* Builtin entry points */
 Expr* builtin_n(Expr* res);
 

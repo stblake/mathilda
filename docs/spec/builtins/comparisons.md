@@ -52,6 +52,11 @@ Tests whether two (or more) expressions are mathematically equal.
 
 **Features**:
 - Numeric arguments are compared by value, so `2 == 2.0` is `True`.
+- Closed-form numeric constants that carry no real ordering are decided by the
+  exact zero-test: `I == 0` is `False`, `(1 + I) == (1 - I)` is `False`, and a
+  complex radical such as `(-1 + (1/8)(-1 - I Sqrt[3])^3)/(-1 + (1/2)(-1 - I Sqrt[3]))
+  == 0` is `True`. The test only fires when **both** sides are numeric
+  (`NumericQ`), so a free symbol still stays symbolic (`x == 0`).
 - For symbolic arguments that cannot be decided, the expression is returned
   unevaluated (`x == y`).
 - `Equal` is `Orderless` for the equality test but preserves Mathematica's
@@ -69,6 +74,9 @@ Tests whether expressions are unequal.
 - A pair containing `Indeterminate` counts as unequal, so
   `Indeterminate != Indeterminate` is `True`. An equal non-`Indeterminate` pair
   still decides the whole call `False`.
+- Like `Equal`, an undecided pair of numeric constants is settled by the exact
+  zero-test, so `I != 0` and `2 I Pi != 0` are `True`, while a free symbol stays
+  symbolic (`x != 0`).
 
 ## Less
 Tests strict ascending order.

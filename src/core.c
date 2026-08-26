@@ -2351,9 +2351,16 @@ static bool is_numeric_quantity(Expr* e) {
     return false;
 }
 
+/* Public wrapper (declared in numeric.h) so comparison heads and other modules
+ * can reuse the NumericQ predicate without duplicating it.  The const is
+ * dropped internally: is_numeric_quantity only reads its argument. */
+bool expr_is_numeric_quantity(const Expr* e) {
+    return e && is_numeric_quantity((Expr*)e);
+}
+
 Expr* builtin_numericq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
-        return NULL; 
+        return NULL;
     }
 
     Expr* arg = res->data.function.args[0];

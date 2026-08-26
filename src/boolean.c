@@ -249,6 +249,59 @@ Expr* builtin_xor(Expr* res) {
     return core;
 }
 
+/* Equivalent[e1, e2, ...] -- True when every ei shares one truth value.  Folds
+ * literal Booleans (a True and a False together -> False; otherwise the literals
+ * force the remaining atoms) and cancels duplicate arguments.  Equivalent[] and
+ * Equivalent[e] are True.  Returns NULL (stays symbolic) when nothing simplifies. */
+Expr* builtin_equivalent(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc <= 1) return expr_new_symbol(SYM_True);   /* trivially equivalent */
+    Expr** args = res->data.function.args;
+
+    bool has_true = false, has_false = false, changed = false;
+    Expr** keep = malloc(sizeof(Expr*) * argc);        /* distinct non-literal atoms */
+    int nk = 0;
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = args[i];
+        if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_True)  { has_true  = true; changed = true; continue; }
+        if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_False) { has_false = true; changed = true; continue; }
+        bool dup = false;
+        for (int j = 0; j < nk; j++) if (expr_eq(keep[j], a)) { dup = true; changed = true; break; }
+        if (!dup) keep[nk++] = a;
+    }
+
+    if (has_true && has_false) { free(keep); return expr_new_symbol(SYM_False); }
+    /* all-literal (or dup-collapsed to nothing) with a single truth value -> True */
+    if (nk == 0) { free(keep); return expr_new_symbol(SYM_True); }
+    if (nk == 1 && !has_true && !has_false) {   /* Equivalent[a] / Equivalent[a,a] -> True */
+        free(keep);
+        return expr_new_symbol(SYM_True);
+    }
+    if (!changed) { free(keep); return NULL; }  /* distinct symbolic atoms, no literals */
+
+    /* A literal forces each remaining atom: True -> a, False -> Not[a]; And them. */
+    if (has_true || has_false) {
+        Expr** ca = malloc(sizeof(Expr*) * (size_t)nk);
+        for (int j = 0; j < nk; j++) {
+            if (has_true) ca[j] = expr_copy(keep[j]);
+            else { Expr* na[1] = { expr_copy(keep[j]) }; ca[j] = expr_new_function(expr_new_symbol(SYM_Not), na, 1); }
+        }
+        free(keep);
+        if (nk == 1) { Expr* r = ca[0]; free(ca); return r; }
+        Expr* r = expr_new_function(expr_new_symbol(SYM_And), ca, (size_t)nk);
+        free(ca);
+        return r;
+    }
+    /* no literals but duplicates were removed -> a smaller Equivalent */
+    Expr** ca = malloc(sizeof(Expr*) * (size_t)nk);
+    for (int j = 0; j < nk; j++) ca[j] = expr_copy(keep[j]);
+    free(keep);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Equivalent), ca, (size_t)nk);
+    free(ca);
+    return r;
+}
+
 /* Implies[p, q] -- material implication (!p || q). */
 Expr* builtin_implies(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
@@ -270,6 +323,7 @@ void boolean_init(void) {
     symtab_add_builtin("Or", builtin_or);
     symtab_add_builtin("Not", builtin_not);
     symtab_add_builtin("Xor", builtin_xor);
+    symtab_add_builtin("Equivalent", builtin_equivalent);
     symtab_add_builtin("Implies", builtin_implies);
     symtab_add_builtin("Boole", builtin_boole);
     symtab_add_builtin("ConditionalExpression", builtin_conditional_expression);
@@ -279,6 +333,11 @@ void boolean_init(void) {
         "\tThe logical exclusive OR of the ei: True when an odd number of the\n"
         "\targuments are True.  Folds literal Booleans and cancels duplicate\n"
         "\targuments (a Xor a is False); Xor[] is False and Xor[e] is e.");
+    symtab_set_docstring("Equivalent",
+        "Equivalent[e1, e2, ...]\n"
+        "\tThe logical equivalence e1 \\[Equivalent] e2 \\[Equivalent] ...: True\n"
+        "\twhen all of the ei have the same truth value.  Folds literal Booleans\n"
+        "\tand cancels duplicate arguments; Equivalent[] and Equivalent[e] are True.");
     symtab_set_docstring("Implies",
         "Implies[p, q]\n"
         "\tThe material implication p \\[Implies] q, equivalent to !p || q.\n"

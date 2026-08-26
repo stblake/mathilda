@@ -1043,14 +1043,82 @@ static void test_find_instance(void) {
     run_test("FindInstance[x^2 == 2, x, Rationals]", "List[]");
     run_test("FindInstance[x^2 == 2, x, 0]", "List[]");
 
+    /* Structured sampling: branch-cut disequations Reduce/Solve decline. */
+    run_test("FindInstance[Sqrt[z^2] != z, z, Complexes]", "List[List[Rule[z, -1]]]");
+    run_test("FindInstance[Log[x y] != Log[x] + Log[y], {x, y}, Complexes]",
+             "List[List[Rule[x, -1], Rule[y, -1]]]");
+    /* Rational equation with an excluded pole: Reduce yields the roots; the exact
+     * zero-test verifier confirms frac==0 and root!=1 at the complex radical. */
+    run_contains("FindInstance[(x^3 - 1)/(x - 1) == 0 && x != 1, x, Complexes]", "Complex[0, 1]");
+    /* Sum-of-squares bounds the integer box; the bilinear equation is then checked. */
+    run_contains("FindInstance[a b + b c + c d + d e == 0 && a^2 + b^2 + c^2 + d^2 + e^2 == 5, "
+                 "{a, b, c, d, e}, Integers]", "Rule[a");
+    /* 1-variable real transcendental root far out: Tan[x]==x above 10^6. */
+    run_contains("FindInstance[Tan[x] == x && x > 10^6, x, Reals]", "1000001.9");
+    /* Inexact-input feasibility (damped oscillation), two distinct points + a>0. */
+    run_contains("FindInstance[E^(-a x) Cos[b x] == 0.1 && E^(-a y) Cos[b y] == 0.1 "
+                 "&& x != y && a > 0, {a, b, x, y}, Reals]", "Rule[a");
+
+    /* Structured sampling finds a witness Reduce/Solve decline (x != 0 over the
+     * default Complexes: -1 is the first verified candidate). */
+    run_test("FindInstance[x != 0, x]", "List[List[Rule[x, -1]]]");
+
     /* Sound declines (stay unevaluated -- never {} unless provably empty) */
-    run_contains("FindInstance[x != 0, x]", "FindInstance");
     run_contains("FindInstance[x^2 + y z == 1 && x + 2 y <= 3 z + 1 && x y z > 7, {x, y, z}, Reals]",
                  "FindInstance");
     /* unknown option -> unevaluated */
     run_contains("FindInstance[x^2 == 2, x, Foo -> 1]", "FindInstance");
     /* bad variable spec -> unevaluated */
     run_contains("FindInstance[x^2 == 2, 3]", "FindInstance");
+
+    /* Parametric Diophantine family: the generated parameter C[1] is instantiated
+     * to the fundamental Pell solution (grid hits C[1] == 1). */
+    run_test("FindInstance[x^2 - 61 y^2 == 1 && x > 0 && y > 0, {x, y}, Integers]",
+             "List[List[Rule[x, 1766319049], Rule[y, 226153980]]]");
+
+    /* Periodic transcendental instance over the Reals: Solve gives x == 1/(k Pi);
+     * the parameter is solved against the window (k == 15916 -> 31831 = 2 k - 1). */
+    run_test("FindInstance[Sin[1/x] == 0 && 0 < x < 10^-5, x, Reals]",
+             "List[List[Rule[x, Times[Rational[1, 31831], Power[Pi, -1]]]]]");
+
+    /* Bounded integer search: a reachable sum of cubes (3^3+4^3+5^3 == 6^3). */
+    run_test("FindInstance[a^3 + b^3 + c^3 == d^3 && a > 0 && b > 0 && c > 0 && d > 0, {a, b, c, d}, Integers]",
+             "List[List[Rule[a, 5], Rule[b, 4], Rule[c, 3], Rule[d, 6]]]");
+
+    /* Indexed variables c[i] are accepted; finite box gives multiple witnesses. */
+    run_test("FindInstance[c[1] + 2 c[2] == 3 && 0 <= c[1] <= 1 && 0 <= c[2] <= 1, {c[1], c[2]}, Integers]",
+             "List[List[Rule[c[1], 1], Rule[c[2], 1]]]");
+    run_test("FindInstance[c[1]^2 + c[2]^2 == 25 && c[1] > 0 && c[2] > 0, {c[1], c[2]}, Integers, 2]",
+             "List[List[Rule[c[1], 3], Rule[c[2], 4]], List[Rule[c[1], 4], Rule[c[2], 3]]]");
+
+    /* Finite-domain emptiness: 0/1 knapsack whose target (500) exceeds the sum of
+     * all 15 primes (328) -> provably {} via the linear reach-range check. */
+    run_test("FindInstance[Total[Array[c, 15]*Prime[Range[15]]] == 500 "
+             "&& And @@ Thread[0 <= Array[c, 15] <= 1], Array[c, 15], Integers]", "List[]");
+
+    /* Best-effort search declines out-of-reach systems (a^4+b^4+c^4==d^4, smallest
+     * solution ~ 4*10^5) and transcendental emptiness (no real Exp==PolyGamma). */
+    run_contains("FindInstance[a^4 + b^4 + c^4 == d^4 && a > 0 && b > 0 && c > 0 && d > 0, {a, b, c, d}, Integers]",
+                 "FindInstance");
+    run_contains("FindInstance[Exp[x] == PolyGamma[0, x] && x > 0, x, Reals]", "FindInstance");
+
+    /* Booleans: Equivalent is now expanded by the DNF engine (was left opaque). */
+    run_test("FindInstance[Xor[p, q] && Implies[q, r] && Not[Equivalent[p, r]], {p, q, r}, Booleans]",
+             "List[List[Rule[p, True], Rule[q, False], Rule[r, False]]]");
+
+    /* Numerical witness for a transcendental+inexact Real system Reduce declares
+     * False unsoundly; assert the returned instance actually satisfies it. */
+    run_test("(0 < x < 0.001 && Sin[1/x] > 0.999) /. "
+             "First[FindInstance[0 < x < 0.001 && Sin[1/x] > 0.999, x, Reals]]", "True");
+
+    /* Groebner emptiness: 2x2 nilpotent M^2==0 forces det==0, so det!=0 is empty. */
+    run_test("FindInstance[a^2 + b c == 0 && a b + b d == 0 && a c + c d == 0 "
+             "&& b c + d^2 == 0 && a d - b c != 0, {a, b, c, d}, Reals]", "List[]");
+
+    /* Guards (must stay correct): Fermat n>=5 empty (FLT), and p*q with a prime
+     * target empty -- both sound {} from Reduce, not the new mechanisms. */
+    run_test("FindInstance[a^5 + b^5 == c^5 && a > 0 && b > 0 && c > 0, {a, b, c}, Integers]", "List[]");
+    run_test("FindInstance[p q == 4172535013 && p > 1 && q > 1, {p, q}, Integers]", "List[]");
 }
 
 int main(void) {

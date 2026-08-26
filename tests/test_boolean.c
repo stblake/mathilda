@@ -218,6 +218,20 @@ void test_xor_evaluation() {
     assert_eval_eq("Xor[p, q, r]", "Xor[p, q, r]", 0);        /* stays symbolic */
 }
 
+/* Equivalent evaluation on Booleans (all arguments share one truth value). */
+void test_equivalent_evaluation() {
+    assert_eval_eq("Equivalent[]", "True", 0);
+    assert_eval_eq("Equivalent[a]", "True", 0);
+    assert_eval_eq("Equivalent[True, False]", "False", 0);
+    assert_eval_eq("Equivalent[True, True]", "True", 0);
+    assert_eval_eq("Equivalent[False, False]", "True", 0);
+    assert_eval_eq("Equivalent[True, a]", "a", 0);            /* True forces a */
+    assert_eval_eq("Equivalent[False, a]", "Not[a]", 0);      /* False forces !a */
+    assert_eval_eq("Equivalent[a, a]", "True", 0);            /* duplicate collapse */
+    assert_eval_eq("Equivalent[True, a, b]", "a && b", 0);
+    assert_eval_eq("Equivalent[a, b]", "Equivalent[a, b]", 0);/* stays symbolic */
+}
+
 /* Implies evaluation on Booleans (material implication !p || q). */
 void test_implies_evaluation() {
     assert_eval_eq("Implies[False, q]", "True", 0);
@@ -234,6 +248,7 @@ int main() {
     core_init();
 
     TEST(test_xor_evaluation);
+    TEST(test_equivalent_evaluation);
     TEST(test_implies_evaluation);
 
     TEST(test_boole_true_false);

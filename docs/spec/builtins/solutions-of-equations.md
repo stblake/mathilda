@@ -1208,12 +1208,62 @@ exhibit an instance nor prove emptiness.
 solution. Witnesses are read off the public, already-cylindrical output of
 `Reduce` (the satisfiability oracle: `False` → `{}`, a formula → walk its clauses,
 sampling free-variable intervals with the same exact real-algebraic machinery the
-`Reduce` engines use) and, as a fallback, off `Solve`'s rule-lists with free
-parameters instantiated — so `FindInstance` can succeed on some systems where
-`Reduce` declines a complete reduction. The `Booleans` domain solves satisfiability
-through the shared `LogicalExpand` DNF engine. Soundness is absolute: `{}` is
-returned **only** when `Reduce` proves the set empty; anything unwitnessed and
-unrefuted is left unevaluated, never guessed.
+`Reduce` engines use) and, as a fallback, off `Solve`'s rule-lists. The `Booleans`
+domain solves satisfiability through the shared `LogicalExpand` DNF engine.
+Soundness is absolute: `{}` is returned **only** when the set is proven empty;
+anything unwitnessed and unrefuted is left unevaluated, never guessed.
+
+Four extensions reach witnesses the raw `Reduce`/`Solve` outputs do not surface,
+each still gated by the same verification:
+
+- **Generated-parameter instantiation.** A parametric family
+  `x -> ConditionalExpression[value(C[1]), C[1] >= 1]` is materialised by trying
+  the parameter over a small integer grid — reaching the fundamental Pell solution
+  of `x^2 - 61 y^2 == 1` at `C[1] == 1`.
+- **Solving the parameter against the window.** When the grid misses and a single
+  generated parameter remains, the remaining constraints are solved for it over the
+  `Reals` and rounded to an integer — reaching the periodic instance of
+  `Sin[1/x] == 0 && 0 < x < 10^-5` (which needs `C[1] == 15916`).
+- **Indexed variables.** `c[1], …, c[n]` are matched structurally, so systems in
+  indexed unknowns (0/1 knapsacks, indexed families) are accepted.
+- **Bounded integer search.** Over the `Integers`, when `Reduce` and `Solve` decline,
+  an integer box derived from the constraints is enumerated within a budget: a
+  finite box is decidable (a Diophantine witness, or `{}` on exhaustion — with a
+  linear reach-range check giving an instant `{}` when a linear target is out of
+  range); an unbounded domain is best-effort (a witness if small enough, otherwise a
+  sound decline — never `{}`). Bounds also come from a **sum-of-even-powers equality**
+  `Σ cᵢ vᵢ^(2k) == C` (`cᵢ > 0`), which pins every one of its variables to
+  `|vᵢ| ≤ (C/cᵢ)^{1/2k}` — so `a b + b c + c d + d e == 0 && a² + b² + c² + d² + e² == 5`
+  is solved by enumerating the `[-2, 2]^5` box the second equation forces.
+- **1-variable real transcendental root scan.** A single real variable with one
+  equation `lhs == rhs` (plus any bounds) that `Reduce`/`Solve` decline is solved by
+  bracketing a **pole-free refactoring** of `lhs - rhs` — its numerator once the
+  denominators of any `Tan`/`Sec`/`Cot`/`Csc`/`Tanh`/… are cleared, so the whole
+  oscillating-but-smooth function is bracketable where the raw residual's poles are
+  not — then refining the bracket by high-precision bisection and verifying. This
+  reaches `Tan[x] == x && x > 10^6` (a root just below `(n+½)π`, `n ≈ 318310`).
+- **Numerical witness for transcendental / inexact Real systems.** `Reduce` is not a
+  sound decision procedure over transcendental functions or machine-precision reals
+  (it wrongly reports `False` for `0 < x < 0.001 && Sin[1/x] > 0.999`). When the
+  statement contains an inexact real or a transcendental head (including `Exp`,
+  `PolyGamma`, …), its `False` is **not** trusted as `{}`. Two feasibility searches
+  follow: `NMinimize[{0, statement}, vars]`, and — for an inexact-input system whose
+  equalities hold only approximately — a residual-minimising solve
+  (`FindMinimum[Σ(lhsᵢ − rhsᵢ)², seeds]` over several seeds) whose point is verified to
+  a **numeric tolerance** (equalities to `10⁻⁶`, strict inequalities and disequations
+  with a margin). This reaches the damped-oscillation system
+  `E^(−a x) Cos[b x] == 0.1 && E^(−a y) Cos[b y] == 0.1 && x ≠ y && a > 0`.
+- **Structured candidate sampling (Complexes / Reals).** As a last resort, the
+  statement is evaluated at a small ordered grid of interesting values
+  (`-1, 1, ±2, 0, ±½, I, ±I, 1 ± I, …`) and any point that verifies is kept — a
+  branch-cut disequation such as `Sqrt[z²] != z` (at `z = -1`) or
+  `Log[x y] != Log[x] + Log[y]` (at `x = y = -1`) is witnessed this way. Purely
+  additive: it never claims `{}`.
+- **Gröbner emptiness certificate.** When a polynomial system is declined as
+  positive-dimensional (`Solve::nsdim`), the equalities together with the Rabinowitsch
+  polynomial `t·(∏ dᵢ) − 1` for the disequations `dᵢ ≠ 0` are handed to `GroebnerBasis`;
+  a basis of `{1}` proves the system inconsistent over ℂ (hence ℝ and ℤ) → `{}`. This
+  is how the 2×2 nilpotent system below is proven empty (nilpotent ⟹ `det = 0`).
 
 **Options**:
 - `Modulus -> p` — a nonzero `p` solves over `Z/pZ`.
@@ -1244,13 +1294,41 @@ Out[5]= {{a -> True, b -> False, c -> False, d -> False}}
 
 In[6]:= FindInstance[x^2 + y^3 == 3 && x + 2 y >= 4 && x y == 5, {x, y}, Reals]
 Out[6]= {}
+
+In[7]:= FindInstance[x^2 - 61 y^2 == 1 && x > 0 && y > 0, {x, y}, Integers]
+Out[7]= {{x -> 1766319049, y -> 226153980}}
+
+In[8]:= FindInstance[Sin[1/x] == 0 && 0 < x < 10^-5, x, Reals]
+Out[8]= {{x -> 1/(31831 Pi)}}
+
+In[9]:= FindInstance[a^3 + b^3 + c^3 == d^3 && a > 0 && b > 0 && c > 0 && d > 0,
+          {a, b, c, d}, Integers]
+Out[9]= {{a -> 5, b -> 4, c -> 3, d -> 6}}
+
+In[10]:= FindInstance[Total[Array[c, 15]*Prime[Range[15]]] == 500 &&
+           And @@ Thread[0 <= Array[c, 15] <= 1], Array[c, 15], Integers]
+Out[10]= {}   (* sum of the first 15 primes is 328 < 500 -> provably empty *)
+
+In[11]:= FindInstance[0 < x < 0.001 && Sin[1/x] > 0.999, x, Reals]
+Out[11]= {{x -> 0.000903027}}          (* numerical witness; Reduce wrongly says False *)
+
+In[12]:= FindInstance[a^2 + b c == 0 && a b + b d == 0 && a c + c d == 0 &&
+           b c + d^2 == 0 && a d - b c != 0, {a, b, c, d}, Reals]
+Out[12]= {}                            (* M^2==0 forces det==0; Gröbner {1} certificate *)
+
+In[13]:= FindInstance[Xor[p, q] && Implies[q, r] && Not[Equivalent[p, r]], {p, q, r}, Booleans]
+Out[13]= {{p -> True, q -> False, r -> False}}
 ```
 
-**Not covered (sound declines — left unevaluated)**: transcendental/numeric
-instances Mathematica finds numerically; positive-dimensional nonlinear real
-systems with irrational fibres (which `Reduce` also declines, e.g.
-`x^2 + y z == 1 && x + 2 y <= 3 z + 1 && x y z > 7`); region (`x ∈ reg`)
-constraints; and bare-disequation statements `Reduce` itself declines (`x != 0`).
+**Not covered (sound declines — left unevaluated)**: exact-symbolic transcendental
+instances with no periodic closed form and no inexact/transcendental trigger for the
+numerical search; positive-dimensional nonlinear real systems with irrational fibres
+that are *non-empty* (which `Reduce` also declines, e.g.
+`x^2 + y z == 1 && x + 2 y <= 3 z + 1 && x y z > 7` — the Gröbner check only certifies
+emptiness); region (`x ∈ reg`) constraints; bare-disequation statements `Reduce` itself
+declines (`x != 0`); and integer systems whose only witnesses lie beyond the bounded
+search budget (e.g. `a^4 + b^4 + c^4 == d^4`, whose smallest positive solution is near
+`4·10^5`).
 
 ## SolveAlways
 

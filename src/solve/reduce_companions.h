@@ -27,6 +27,28 @@
  * provably empty, and it stays unevaluated when it can neither exhibit an
  * instance nor prove emptiness.  The Booleans domain reuses the DNF engine here.
  *
+ * Four extensions reach witnesses the raw Reduce/Solve outputs do not surface:
+ *   - generated parameters (`x -> ConditionalExpression[.., C[1]>=1]`) are
+ *     instantiated over a small integer grid -- reaching the fundamental Pell
+ *     solution x^2 - 61 y^2 == 1 at C[1] == 1;
+ *   - a single generated parameter the grid misses is solved against the
+ *     remaining constraints over the Reals and rounded to an integer -- reaching
+ *     the periodic Sin[1/x] == 0 && 0 < x < 10^-5 at C[1] == 15916;
+ *   - indexed variables c[i] are matched structurally, so systems in c[1..n]
+ *     (e.g. 0/1 knapsacks) are accepted;
+ *   - over the Integers, a bounded integer-box search gives a Diophantine
+ *     witness, or a finite-domain emptiness proof ({} when the box is exhausted
+ *     or a linear reach-range excludes the target);
+ *   - for transcendental / inexact Real systems (which Reduce cannot soundly
+ *     decide -- it wrongly reports False for 0<x<0.001 && Sin[1/x]>0.999) a
+ *     numerical feasibility search (NMinimize[{0, expr}, vars]) supplies a
+ *     verified inexact witness, and Reduce's False is not trusted as {};
+ *   - a declined positive-dimensional polynomial system is proven empty via a
+ *     Rabinowitsch Groebner certificate (basis {1} over C ⊇ R ⊇ Z).
+ *
+ * The Booleans domain also expands `Equivalent` (via the DNF engine here), which
+ * additionally now evaluates as a builtin (src/boolean.c).
+ *
  * CylindricalDecomposition (the last Phase-8 companion) is not implemented yet.
  */
 #ifndef REDUCE_COMPANIONS_H

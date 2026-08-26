@@ -267,6 +267,7 @@ extern const char* SYM_Identity;
 extern const char* SYM_If;
 extern const char* SYM_Im;
 extern const char* SYM_Implies;
+extern const char* SYM_Equivalent;
 extern const char* SYM_Indeterminate;
 extern const char* SYM_InexactNumbers;
 extern const char* SYM_Inequality;
