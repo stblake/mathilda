@@ -615,7 +615,9 @@ forms the characteristic polynomial at all.}
 Those last two lines reach the \emph{same} three numbers by opposite roads. The first
 takes the exact \Bnoidx{Root} eigenvalues and rounds them to machine precision; the second
 hands the floating-point matrix straight to a numerical eigenvalue algorithm, which
-never builds a characteristic polynomial to factor. That the two agree is a reassuring
+never builds a characteristic polynomial\index{characteristic polynomial} to
+factor---though \B{CharacteristicPolynomial} forms that polynomial, $\det(m-xI)$
+(or $\det(m-xa)$ for a pencil $\{m,a\}$), on demand. That the two agree is a reassuring
 cross-check---and a first sight of a choice that runs through all of computational
 linear algebra\index{linear algebra!exact versus numerical}: exact or numerical, and
 what each costs.

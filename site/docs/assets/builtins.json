@@ -752,6 +752,14 @@
     "url": "documentation/statistics/CentralMoment/"
   },
   {
+    "name": "CharacteristicPolynomial",
+    "category": "Linear Algebra",
+    "slug": "linear-algebra",
+    "status": "Stable",
+    "summary": "CharacteristicPolynomial[m, x]",
+    "url": "documentation/linear-algebra/CharacteristicPolynomial/"
+  },
+  {
     "name": "Characters",
     "category": "String Operations",
     "slug": "string-operations",
