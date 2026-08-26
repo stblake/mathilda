@@ -287,6 +287,30 @@ static void test_qqbar_threading(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Threading over a Rule (Solve result entries u -> value)             */
+/* ------------------------------------------------------------------ */
+
+static void test_rootreduce_rule(void) {
+    /* A lone rule must not be mistaken for a Method option (was: argx error).
+     * The RHS reduces; the free-variable LHS is left intact. */
+    check("RootReduce[u -> Sqrt[8]]", "u -> 2 Sqrt[2]");
+    check("RootReduce[u -> 1/(1 + Sqrt[2])]", "u -> -1 + Sqrt[2]");
+    check("RootReduce[u -> Sqrt[8] - 2 Sqrt[2]]", "u -> 0");
+    /* A list of rules — the shape of a Solve result — threads elementwise. */
+    check("RootReduce[{u -> Sqrt[8], v -> 1/(1 + Sqrt[2])}]",
+          "{u -> 2 Sqrt[2], v -> -1 + Sqrt[2]}");
+    /* Nested list-of-lists (Solve returns one solution set per branch). */
+    check("RootReduce[{{a -> Sqrt[2] + Sqrt[3]}}]",
+          "{{a -> Root[1 - 10 #1^2 + #1^4 &, 4]}}");
+    /* A genuine rule and a trailing Method option coexist: the rule is
+     * positional, Method is the option, no argx. */
+    check("RootReduce[u -> Sqrt[8], Method -> \"Recursive\"]", "u -> 2 Sqrt[2]");
+    /* Value-preservation end to end: the reduced RHS equals the original. */
+    check("RootReduce[(u /. RootReduce[u -> (Sqrt[18] + Sqrt[27])/Sqrt[5 + 2 Sqrt[6]]]) - 3]",
+          "0");
+}
+
+/* ------------------------------------------------------------------ */
 /*  G3: argument-count / Method diagnostics leave the call unevaluated  */
 /* ------------------------------------------------------------------ */
 
@@ -334,6 +358,7 @@ int main(void) {
     test_stress();
     test_qqbar_canonical();
     test_qqbar_threading();
+    test_rootreduce_rule();
     test_qqbar_argx();
     test_qqbar_methods();
 

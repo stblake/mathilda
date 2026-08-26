@@ -168,10 +168,15 @@ are preserved — `RootReduce` does no plain polynomial cancellation (that is
 `Cancel`'s job).
 
 **Features**:
-- `Protected`, `Listable`. Threads over lists, and over equations, inequalities
-  and logic functions (`Equal`, `Unequal`, `Less`, `And`, ...); for
+- `Protected`, `Listable`. Threads over lists, over equations, inequalities and
+  logic functions (`Equal`, `Unequal`, `Less`, `And`, ...), and over an
+  (immediate) `Rule` — so `Solve[...] // RootReduce` reduces the right-hand side
+  of each `u -> value` entry the same way `Reduce[...] // RootReduce` reduces
+  each `u == value`, leaving the free-variable left-hand side intact. For
   (in)equalities of constant algebraic numbers it decides the relation exactly
-  via `qqbar`.
+  via `qqbar`. A `Rule` whose left-hand side is the option name `Method` is a
+  trailing option; any other symbol left-hand side (e.g. `u -> value`) is a
+  positional argument threaded over, not an option.
 - `Method`: `"Recursive"`/`"Automatic"` fold `qqbar` arithmetic bottom-up;
   `"NumberField"` re-expresses the value through a single primitive element of a
   common number field (`qqbar_express_in_field`). All three yield the identical
@@ -205,6 +210,9 @@ Out[7]= 1 + x                              (* vanishing coefficient dropped *)
 
 In[8]:= RootReduce[a x^2 + Sqrt[8] x]      (* thread over coefficients *)
 Out[8]= 2 Sqrt[2] x + a x^2
+
+In[9]:= RootReduce[{u -> Sqrt[8], v -> 1/(1 + Sqrt[2])}]   (* thread over Solve rules *)
+Out[9]= {u -> 2 Sqrt[2], v -> -1 + Sqrt[2]}
 ```
 
 ## Apart

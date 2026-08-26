@@ -25,8 +25,10 @@
  *
  * RootReduce also threads over equations, inequalities and logic functions
  * (Equal, Less, And, ...), and for equations/inequalities of constant algebraic
- * numbers it decides the (in)equality exactly via `qqbar`. It is Listable, so
- * it threads over lists elementwise.
+ * numbers it decides the (in)equality exactly via `qqbar`. It threads over an
+ * (immediate) Rule too, so a Solve result {u -> value, ...} reduces the same way
+ * the corresponding Reduce result does. It is Listable, so it threads over lists
+ * elementwise.
  *
  * Options: Method -> "Automatic" | "Recursive" | "NumberField" (see flint_qqbar).
  *
@@ -61,12 +63,34 @@ static const char* head_name(const Expr* e) {
            ? e->data.function.head->data.symbol.name : NULL;
 }
 
-/* An option rule Method -> value (Rule or RuleDelayed with lhs symbol Method). */
+/* True if `name` is a registered option name of RootReduce (currently only
+ * Method). Consulted so that a Solve/Reduce result rule like (u -> value) — a
+ * positional argument whose LHS merely happens to be a symbol — is NOT mistaken
+ * for a trailing option. Reads Options[RootReduce] = {Method -> ...}. */
+static int is_rootreduce_option_name(const char* name) {
+    Expr* opts = symtab_get_options("RootReduce");   /* borrowed List of rules */
+    if (!opts || opts->type != EXPR_FUNCTION) return 0;
+    for (size_t i = 0; i < opts->data.function.arg_count; i++) {
+        const Expr* r = opts->data.function.args[i];
+        if ((head_is(r, "Rule") || head_is(r, "RuleDelayed")) &&
+            r->data.function.arg_count == 2) {
+            const Expr* lhs = r->data.function.args[0];
+            if (lhs->type == EXPR_SYMBOL &&
+                strcmp(lhs->data.symbol.name, name) == 0) return 1;
+        }
+    }
+    return 0;
+}
+
+/* An option rule Method -> value: a Rule/RuleDelayed whose LHS is a symbol that
+ * names one of RootReduce's registered options. A rule with any other symbol
+ * LHS (e.g. u -> value from Solve) is a positional argument, not an option. */
 static int is_option_rule(const Expr* e) {
     if ((head_is(e, "Rule") || head_is(e, "RuleDelayed")) &&
         e->data.function.arg_count == 2) {
         const Expr* lhs = e->data.function.args[0];
-        return lhs->type == EXPR_SYMBOL;   /* any symbolic-lhs rule = an option */
+        return lhs->type == EXPR_SYMBOL &&
+               is_rootreduce_option_name(lhs->data.symbol.name);
     }
     return 0;
 }
@@ -104,6 +128,21 @@ static int is_relational(const Expr* e) {
 }
 
 static Expr* bool_expr(int v) { return expr_new_symbol(v ? "True" : "False"); }
+
+/* Map RootReduce over each part of a compound head, rebuild with the same head,
+ * and evaluate once. Used both for the relational fallthrough and to thread over
+ * a Rule (a Solve result entry u -> value): RootReduce of the free variable on
+ * the LHS is the identity, so only the value on the RHS is reduced. */
+static Expr* thread_parts(const Expr* arg) {
+    size_t n = arg->data.function.arg_count;
+    Expr** parts = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        parts[i] = expr_new_function(expr_new_symbol("RootReduce"),
+                       (Expr*[]){ expr_copy(arg->data.function.args[i]) }, 1);
+    Expr* out = expr_new_function(expr_copy(arg->data.function.head), parts, n);
+    free(parts);
+    return eval_and_free(out);
+}
 
 /* Recursively thread RootReduce over the structure of `e`: canonicalise every
  * maximal constant-algebraic subexpression (a polynomial/rational-function
@@ -154,13 +193,7 @@ static Expr* thread_relational(const Expr* arg) {
     }
 
     /* Generic threading: head[ RootReduce[part_i], ... ], then evaluate. */
-    Expr** parts = malloc(sizeof(Expr*) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++)
-        parts[i] = expr_new_function(expr_new_symbol("RootReduce"),
-                       (Expr*[]){ expr_copy(arg->data.function.args[i]) }, 1);
-    Expr* out = expr_new_function(expr_copy(arg->data.function.head), parts, n);
-    free(parts);
-    return eval_and_free(out);
+    return thread_parts(arg);
 }
 
 /* RootReduce[expr, opts] — see file header. Not HoldAll: args are evaluated. */
@@ -190,6 +223,15 @@ Expr* builtin_rootreduce(Expr* res) {
 
     /* G4: thread over equations / inequalities / logic. */
     if (is_relational(arg)) return thread_relational(arg);
+
+    /* Thread over a rule — each (u -> value) entry of a Solve result — the same
+     * way relational heads are threaded from a Reduce result. The LHS variable
+     * is left intact (RootReduce of a free symbol is the identity). Only the
+     * immediate Rule is threaded, not RuleDelayed: the latter holds its RHS, so
+     * threading would leave an un-fired RootReduce there. Solve/Reduce results
+     * are always immediate rules anyway. */
+    if (head_is(arg, "Rule"))
+        return thread_parts(arg);
 
     /* G1/G2: constant algebraic number -> Root / quadratic radical / rational. */
     Expr* q = flint_qqbar_canonical(arg, method);
@@ -229,6 +271,6 @@ void rootreduce_init(void) {
         "object; a rational function over a radical tower has its denominator "
         "rationalised; a polynomial/rational function in a free variable has its "
         "constant-algebraic coefficients canonicalised. Threads over lists, "
-        "equations, inequalities and logic. "
+        "rules (Solve results), equations, inequalities and logic. "
         "Option: Method -> \"Automatic\" | \"Recursive\" | \"NumberField\".");
 }
