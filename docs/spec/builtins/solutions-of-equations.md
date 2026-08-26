@@ -1189,6 +1189,69 @@ here may differ cosmetically (`Table[in == out, ...]` over the atoms is still al
 (`NotElement[x, Reals]`). It is the head `LogicalExpand` emits for a negated
 membership.
 
+## FindInstance
+
+`FindInstance[expr, vars]` finds a single instance of `vars` making the statement
+`expr` — any logical combination of equations and inequalities in the same form as
+`Reduce` — `True`, returned in `Solve`'s form: `{{x -> v1, ...}}` if an instance
+exists, `{}` if the set is **provably empty**, and unevaluated when it can neither
+exhibit an instance nor prove emptiness.
+
+- `FindInstance[expr, vars]` — default domain `Complexes`, or `Reals` when `expr`
+  carries an ordering inequality (as in `Reduce`).
+- `FindInstance[expr, vars, dom]` — over `dom`: `Complexes`, `Reals`, `Integers`,
+  `Rationals`, or `Booleans` (Boolean satisfiability).
+- `FindInstance[expr, vars, dom, n]` — up to `n` instances (fewer if fewer exist).
+
+**How it works.** Every returned instance is **verified** against `expr`
+(`expr /. instance` must evaluate to `True`), so a reported point is always a true
+solution. Witnesses are read off the public, already-cylindrical output of
+`Reduce` (the satisfiability oracle: `False` → `{}`, a formula → walk its clauses,
+sampling free-variable intervals with the same exact real-algebraic machinery the
+`Reduce` engines use) and, as a fallback, off `Solve`'s rule-lists with free
+parameters instantiated — so `FindInstance` can succeed on some systems where
+`Reduce` declines a complete reduction. The `Booleans` domain solves satisfiability
+through the shared `LogicalExpand` DNF engine. Soundness is absolute: `{}` is
+returned **only** when `Reduce` proves the set empty; anything unwitnessed and
+unrefuted is left unevaluated, never guessed.
+
+**Options**:
+- `Modulus -> p` — a nonzero `p` solves over `Z/pZ`.
+- `Method`, `WorkingPrecision`, `RandomSeeding` — accepted and ignored (the engine
+  is exact and deterministic).
+
+**Diagnostics**:
+- `FindInstance::optx` — an unrecognised trailing option (leaves the call
+  unevaluated).
+
+**Examples**:
+
+```
+In[1]:= FindInstance[x^2 == 2, x]
+Out[1]= {{x -> -Sqrt[2]}}
+
+In[2]:= FindInstance[x^2 + y^2 <= 1, {x, y}, Reals]
+Out[2]= {{x -> 0, y -> 0}}
+
+In[3]:= FindInstance[x^2 - 3 y^2 == 1 && 10 < x < 100, {x, y}, Integers]
+Out[3]= {{x -> 26, y -> -15}}
+
+In[4]:= FindInstance[x^2 < 10 && x > 0, x, Integers, 3]
+Out[4]= {{x -> 1}, {x -> 2}, {x -> 3}}
+
+In[5]:= FindInstance[Xor[a, b, c, d] && (a || b) && ! (c || d), {a, b, c, d}, Booleans]
+Out[5]= {{a -> True, b -> False, c -> False, d -> False}}
+
+In[6]:= FindInstance[x^2 + y^3 == 3 && x + 2 y >= 4 && x y == 5, {x, y}, Reals]
+Out[6]= {}
+```
+
+**Not covered (sound declines — left unevaluated)**: transcendental/numeric
+instances Mathematica finds numerically; positive-dimensional nonlinear real
+systems with irrational fibres (which `Reduce` also declines, e.g.
+`x^2 + y z == 1 && x + 2 y <= 3 z + 1 && x y z > 7`); region (`x ∈ reg`)
+constraints; and bare-disequation statements `Reduce` itself declines (`x != 0`).
+
 ## SolveAlways
 
 Finds values of parameters (the symbols appearing in `eqns` but **not** in

@@ -24,12 +24,16 @@ many points, both `Reduce` and `Solve` solve them exactly and filter each branch
 by the inequalities and realness via the `qqbar` oracle — covering the
 irrational-fibre zero-dimensional case that CAD declines, but NOT the
 positive-dimensional one (see *Known limitations*).
+**Phase 8 companions are now mostly landed**: `LogicalExpand` + `NotElement`
+(v0.101), `Xor`/`Implies` evaluation on Booleans (v0.102), and **`FindInstance`
+over Complexes / Reals / Integers / Rationals / Booleans (v0.104, 2026-08-26)** —
+leaving only `CylindricalDecomposition`.
 The remaining pieces are **6b (real-algebraic-coefficient fibre isolation to
 widen past the rational-fibre regime — the positive-dimensional irrational
 case)**, **6e (McCallum well-orientedness
 augmentation)**, **7-extended (≥2 free vars / alternating quantifiers / algebraic
-free-variable boundaries — blocked on 6b)** and **8 (companion builtins —
-`LogicalExpand`, `FindInstance`, `CylindricalDecomposition`)**.
+free-variable boundaries — blocked on 6b)** and **8 (the last companion builtin,
+`CylindricalDecomposition`)**.
 Implementation order followed was
 `0 → 1 → 2 → 3 → 5 → 4 → 6(2-var) → 6d(n-var A) → 6d(n-var B) → 8-opts → 7(v1)`.
 
@@ -43,10 +47,34 @@ Implementation order followed was
 | 5 | Integers / Rationals | ✅ done |
 | 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var done (6d Stage A + Stage B n-D boundary merge, rational-fibre regime); 6b (algebraic-coeff fibres) + 6e (well-orientedness) pending |
 | 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ◧ v1 done (fully-quantified decision procedure + single-free-var parametric QE, rational-fibre regime); ≥2 free vars / alternating / algebraic-boundary parametric deferred (blocked on 6b) |
-| 8 | Companion builtins + polish | ☐ pending |
+| 8 | Companion builtins + polish | ◧ LogicalExpand + NotElement + FindInstance (C/R/Z/Q/Booleans) done; CylindricalDecomposition pending |
 | 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done (+ multivariate `Sqrt` rationalization, 2026-08-24) |
 | Opt | Options: `Backsubstitution`, `Cubics`, `GeneratedParameters`, `Method`, `Modulus`, `Quartics`, `WorkingPrecision` | ✅ done (2026-08-25) |
 
+> **2026-08-26 — Phase 8 `FindInstance` (Complexes / Reals / Integers /
+> Rationals / Booleans), v0.104.** `FindInstance[expr, vars, dom, n]` returns up
+> to `n` witness points in `Solve`'s form, `{}` when the set is provably empty,
+> and unevaluated otherwise (`src/solve/reduce_companions.c`, `builtin_find_instance`;
+> `SYM_FindInstance`). **Design: witness-by-verification, not CAD surgery.** The
+> three CAD engines are `static` across separate `nu==1`/`nu==2`/`nu>=3` paths with
+> no witness extractor; instead witnesses are read off the **public**
+> already-cylindrical output of `Reduce` (satisfiability oracle: `False` → `{}`,
+> formula → walk `Or` clauses, sample free-var intervals via `rru_rational_between`,
+> resolve `Equal` pins via internal `Solve`) and off `Solve`'s rule-lists (free
+> listed vars instantiated to 0, grid for extra instances — so it succeeds on
+> `x^2 - y z == 1` where `Reduce` declines). **Every** candidate is verified
+> (`expr /. point === True`), so a returned instance is always true, `{}` only when
+> `Reduce` proves emptiness, and unwitnessed/unrefuted ⇒ decline. `Booleans` reuses
+> the `LogicalExpand` DNF engine (clause → partial assignment, unconstrained ⇒
+> `False`, verified with the now-evaluating `Xor`/`Implies`). Options: `Modulus -> p`
+> honored; `Method`/`WorkingPrecision`/`RandomSeeding` accepted-and-ignored; unknown
+> ⇒ `FindInstance::optx` + unevaluated. Sound declines (documented): transcendental
+> numeric instances, positive-dim irrational-fibre real systems (Reduce declines),
+> region constraints, bare-`!=` statements. Tests: `test_find_instance` (21 asserts);
+> reduce corpus 158/158; `check-c99` clean; valgrind at macOS baseline (no
+> attributable leak); module also cleared of its pre-existing compiler warnings.
+> `CylindricalDecomposition` remains the last unshipped Phase-8 companion.
+>
 > **2026-08-26 — zero-dimensional nonlinear systems (`reduce_zerodim`), v0.097
 > (issue #69).** `Reduce` and `Solve` now solve a conjunction whose polynomial
 > **equations** pin the variety to finitely many points (a zero-dimensional
@@ -260,8 +288,10 @@ reduce_zerodim.{c,h}       [done] zero-dimensional nonlinear systems (Complexes 
                            (issue #69). Covers the irrational-fibre ZERO-dim case CAD
                            declines; positive-dim stays with 6b.
 reduce_qe.{c,h}            [pending] Phase 7: Exists / ForAll / Resolve via CAD cells
-reduce_companions.{c,h}    [pending] Phase 8: LogicalExpand, FindInstance,
-                           CylindricalDecomposition
+reduce_companions.{c,h}    [done] Phase 8: LogicalExpand, NotElement, and
+                           FindInstance (witness-by-verification off Reduce/Solve
+                           outputs; C/R/Z/Q/Booleans). CylindricalDecomposition
+                           still pending
 reduce_realfn.{c,h}        [done] Phase 9: preprocessing (Abs sign-split, Mod->Floor,
                            integer-part isolation) + the head->real-domain table
 reduce_realdiag.{c,h}      [done] Phase 9: general univariate real sign diagram over

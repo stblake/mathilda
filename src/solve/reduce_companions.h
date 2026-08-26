@@ -18,8 +18,16 @@
  * A minimal `NotElement` head ships alongside so negated membership prints as
  * `x` \[NotElement] `dom` (Mathematica-faithful) rather than Not[Element[..]].
  *
- * FindInstance / CylindricalDecomposition (the remaining Phase-8 companions)
- * are not implemented here yet.
+ * `FindInstance[expr, vars, dom, n]` finds up to n witness points satisfying
+ * expr over Complexes / Reals / Integers / Rationals / Booleans, returned in
+ * Solve's form.  Rather than reaching into the three static CAD paths, it reads
+ * witnesses off the PUBLIC cylindrical outputs of Reduce and Solve, samples
+ * intervals with rru_rational_between, and VERIFIES every candidate against the
+ * original expr -- so a returned instance is always a true solution, {} means
+ * provably empty, and it stays unevaluated when it can neither exhibit an
+ * instance nor prove emptiness.  The Booleans domain reuses the DNF engine here.
+ *
+ * CylindricalDecomposition (the last Phase-8 companion) is not implemented yet.
  */
 #ifndef REDUCE_COMPANIONS_H
 #define REDUCE_COMPANIONS_H
@@ -35,6 +43,11 @@ Expr* builtin_logical_expand(Expr* res);
 /* NotElement[x, dom] -- the negation of Element.  Decides to True / False when
  * Element[x, dom] decides, else stays symbolic (NULL). */
 Expr* builtin_not_element(Expr* res);
+
+/* FindInstance[expr, vars, dom, n] -- up to n verified witness points as a List
+ * of Solve-style rule-lists; {} if provably empty; NULL (unevaluated) when it
+ * can neither exhibit an instance nor prove emptiness. */
+Expr* builtin_find_instance(Expr* res);
 
 /* Register LogicalExpand and NotElement.  Called from reduce_init. */
 void reduce_companions_init(void);

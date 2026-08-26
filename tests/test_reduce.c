@@ -998,6 +998,61 @@ static void test_option_peeling(void) {
              "Reduce[Equal[Power[x, 2], 4], x, Rule[Bogus, 1]]");
 }
 
+/* ------------------------------------------------------------------ *
+ *  FindInstance (Phase 8 companion)                                   *
+ *                                                                     *
+ *  Every returned instance is verified against the input by the       *
+ *  builtin itself, so these pin the deterministic witness chosen for  *
+ *  each shape.  {} is returned ONLY when the set is provably empty;    *
+ *  a shape it can neither witness nor refute stays unevaluated.        *
+ * ------------------------------------------------------------------ */
+static void test_find_instance(void) {
+    /* Complexes (default): univariate equation -> one root */
+    run_test("FindInstance[x^2 == 2, x]",
+             "List[List[Rule[x, Times[-1, Power[2, Rational[1, 2]]]]]]");
+    run_test("FindInstance[x^3 - 2 x + 1 == 0, x]", "List[List[Rule[x, 1]]]");
+    /* Complexes system Reduce declines on -> Solve fallback, free vars -> 0 */
+    run_test("FindInstance[x^2 - y z == 1, {x, y, z}]",
+             "List[List[Rule[x, -1], Rule[y, 0], Rule[z, 0]]]");
+
+    /* Reals: inequality sign diagram, disk interior, linear system */
+    run_test("FindInstance[x^5 - 2 x + 1 < 0, x, Reals]", "List[List[Rule[x, -3]]]");
+    run_test("FindInstance[x^2 + y^2 <= 1, {x, y}, Reals]",
+             "List[List[Rule[x, 0], Rule[y, 0]]]");
+    run_test("FindInstance[2 x + 3 y - 5 z == 1 && 3 x - 4 y + 7 z == 3, {x, y, z}, Reals]",
+             "List[List[Rule[x, 0], Rule[y, 22], Rule[z, 13]]]");
+    run_test("FindInstance[x^2 >= 0, x, Reals]", "List[List[Rule[x, 0]]]");   /* tautology */
+
+    /* Integers / Rationals */
+    run_test("FindInstance[x^2 == 4, x, Integers]", "List[List[Rule[x, -2]]]");
+    run_test("FindInstance[x^2 < 10 && x > 0, x, Integers, 3]",
+             "List[List[Rule[x, 1]], List[Rule[x, 2]], List[Rule[x, 3]]]");
+    run_test("FindInstance[x^2 - 3 y^2 == 1 && 10 < x < 100, {x, y}, Integers]",
+             "List[List[Rule[x, 26], Rule[y, -15]]]");
+    run_test("FindInstance[3 x == 2, x, Rationals]", "List[List[Rule[x, Rational[2, 3]]]]");
+
+    /* Booleans: SAT via DNF; the assignment satisfies the formula */
+    run_test("FindInstance[Xor[a, b, c, d] && (a || b) && ! (c || d), {a, b, c, d}, Booleans]",
+             "List[List[Rule[a, True], Rule[b, False], Rule[c, False], Rule[d, False]]]");
+
+    /* Modulus option routes over Z/pZ */
+    run_test("FindInstance[x^3 - 2 x + 1 == 0, x, Modulus -> 5]", "List[List[Rule[x, 1]]]");
+
+    /* {} ONLY when provably empty: unsatisfiable system, no rational sqrt, n=0 */
+    run_test("FindInstance[x^2 + y^3 == 3 && x + 2 y >= 4 && x y == 5, {x, y}, Reals]", "List[]");
+    run_test("FindInstance[x^2 == 2, x, Rationals]", "List[]");
+    run_test("FindInstance[x^2 == 2, x, 0]", "List[]");
+
+    /* Sound declines (stay unevaluated -- never {} unless provably empty) */
+    run_contains("FindInstance[x != 0, x]", "FindInstance");
+    run_contains("FindInstance[x^2 + y z == 1 && x + 2 y <= 3 z + 1 && x y z > 7, {x, y, z}, Reals]",
+                 "FindInstance");
+    /* unknown option -> unevaluated */
+    run_contains("FindInstance[x^2 == 2, x, Foo -> 1]", "FindInstance");
+    /* bad variable spec -> unevaluated */
+    run_contains("FindInstance[x^2 == 2, 3]", "FindInstance");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1023,6 +1078,7 @@ int main(void) {
     TEST(test_quantifiers_parametric);
     TEST(test_quantifiers_decline);
     TEST(test_logical_expand);
+    TEST(test_find_instance);
     TEST(test_wb_constant_atoms);
     TEST(test_wb_logic_fold);
     TEST(test_wb_atom_emit);
