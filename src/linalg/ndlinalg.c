@@ -26,6 +26,9 @@
 #include "print.h"
 #include "sym_names.h"
 #include <math.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -218,6 +221,88 @@ static void nd_lu_solve_col(const double* LU, int n, const int* piv, double* b)
 /*  Det                                                                */
 /* ------------------------------------------------------------------ */
 
+/* Build a REAL determinant from the LU U-diagonal.
+ *
+ * det = sign * prod(U[k,k]).  Accumulating that product in a raw double
+ * overflows to +/-inf when the true |det| exceeds DBL_MAX (a 200x200
+ * RandomReal[{-10,10}] matrix has |det| ~ 1e340), and underflows to 0.0
+ * mid-product even when the final value is representable.  So:
+ *   - an exact-zero pivot  -> the matrix is singular          -> Real 0.0
+ *   - a finite nonzero product -> the common case             -> Real
+ *   - otherwise (overflow / underflow of a non-singular product) -> re-multiply
+ *     the SAME diagonal in a 53-bit-mantissa mpfr_t, whose exponent range is
+ *     effectively unbounded, and return an arbitrary-precision real.  The
+ *     mantissa stays 53 bits because the input is machine precision; only the
+ *     exponent is widened, so the answer is exactly what the double product
+ *     would be if doubles had no exponent limit.
+ * Without USE_MPFR the (possibly inf) double result is returned unchanged.
+ *
+ * LU is the column-major factored buffer; the U diagonal is LU[k + k*n]. */
+static Expr* nd_real_det_result(const double* LU, int n, int sign)
+{
+    double det = (double)sign;
+    bool zero_pivot = false;
+    for (int k = 0; k < n; k++) {
+        double u = LU[k + (size_t)k * n];
+        if (u == 0.0) zero_pivot = true;
+        det *= u;
+    }
+    if (zero_pivot) return expr_new_real(0.0);          /* singular */
+    if (isfinite(det) && det != 0.0) return expr_new_real(det);
+#ifdef USE_MPFR
+    mpfr_t acc;
+    mpfr_init2(acc, 53);
+    mpfr_set_si(acc, sign, MPFR_RNDN);
+    for (int k = 0; k < n; k++)
+        mpfr_mul_d(acc, acc, LU[k + (size_t)k * n], MPFR_RNDN);
+    return expr_new_mpfr_move(acc);                      /* moves acc */
+#else
+    return expr_new_real(det);
+#endif
+}
+
+/* Complex analogue.  The U diagonal is stored interleaved: A[2*(k + k*n)]
+ * (real) and A[2*(k + k*n)+1] (imag).  A finite running product is returned as
+ * a machine complex; on overflow/underflow of either component the product is
+ * recomputed in mpfr and returned as Complex[mpfr, mpfr] (evaluated, so a zero
+ * imaginary part collapses to a real). */
+static Expr* nd_complex_det_result(const double* A, int n, int sign)
+{
+    double dr = (double)sign, di = 0.0;
+    for (int k = 0; k < n; k++) {
+        double ur = A[2 * ((size_t)k + (size_t)k * n)];
+        double ui = A[2 * ((size_t)k + (size_t)k * n) + 1];
+        double nr = dr * ur - di * ui;
+        double ni = dr * ui + di * ur;
+        dr = nr; di = ni;
+    }
+    if (isfinite(dr) && isfinite(di)) return na_scalar(dr, di);
+#ifdef USE_MPFR
+    mpfr_t ar, ai, ur, ui, nr, ni, t;
+    mpfr_inits2(53, ar, ai, ur, ui, nr, ni, t, (mpfr_ptr)0);
+    mpfr_set_si(ar, sign, MPFR_RNDN);
+    mpfr_set_zero(ai, 1);
+    for (int k = 0; k < n; k++) {
+        mpfr_set_d(ur, A[2 * ((size_t)k + (size_t)k * n)], MPFR_RNDN);
+        mpfr_set_d(ui, A[2 * ((size_t)k + (size_t)k * n) + 1], MPFR_RNDN);
+        /* (ar + I ai)(ur + I ui) = (ar*ur - ai*ui) + I (ar*ui + ai*ur) */
+        mpfr_mul(nr, ar, ur, MPFR_RNDN); mpfr_mul(t, ai, ui, MPFR_RNDN);
+        mpfr_sub(nr, nr, t, MPFR_RNDN);
+        mpfr_mul(ni, ar, ui, MPFR_RNDN); mpfr_mul(t, ai, ur, MPFR_RNDN);
+        mpfr_add(ni, ni, t, MPFR_RNDN);
+        mpfr_set(ar, nr, MPFR_RNDN); mpfr_set(ai, ni, MPFR_RNDN);
+    }
+    Expr* re = expr_new_mpfr_copy(ar);
+    Expr* im = expr_new_mpfr_copy(ai);
+    mpfr_clears(ar, ai, ur, ui, nr, ni, t, (mpfr_ptr)0);
+    Expr* c = expr_new_function(expr_new_symbol(SYM_Complex),
+                                (Expr*[]){ re, im }, 2);
+    return eval_and_free(c);
+#else
+    return na_scalar(dr, di);
+#endif
+}
+
 Expr* ndla_det(Expr* res)
 {
     if (res->data.function.arg_count != 1) return linalg_delist_and_reeval(res);
@@ -228,6 +313,16 @@ Expr* ndla_det(Expr* res)
         /* non-square / wrong rank: let the real builtin emit Det::matsq */
         return linalg_delist_and_reeval(res);
     }
+
+    /* Exact-integer buffer: the determinant of an integer matrix is an exact
+     * integer that routinely exceeds int64 and the 53-bit double mantissa (a
+     * 2x2 with 1e9 entries already has det = 999999999999999999, which a double
+     * rounds to 1e18).  Delist to the exact FLINT path, which promotes to a GMP
+     * bignum -- rather than computing a lossy float LU. */
+    if (arg->data.ndarray.dtype == NDT_INT64) {
+        return linalg_delist_and_reeval(res);
+    }
+
     bool cplx = nd_arg_is_complex(arg);
 
     if (!cplx) {
@@ -235,25 +330,21 @@ Expr* ndla_det(Expr* res)
         if (!na_load_matrix(arg, false, true, &n, &cc, &A))
             return linalg_delist_and_reeval(res);
         int* piv = (int*)malloc(sizeof(int) * (size_t)n);
-        double det;
+        int sign = 1;
         if (mathilda_lapack_probe()) {
-            /* LAPACK dgetrf (blocked, vectorized) — det = sign * prod(diag U). */
+            /* LAPACK dgetrf (blocked, vectorized) — det = sign * prod(diag U).
+             * The product itself is formed by nd_real_det_result, which keeps a
+             * finite answer when the raw double product would over/underflow. */
             int info = mat_lapack_dgetrf(n, n, A, n, piv);
             if (info < 0) { free(piv); free(A); return linalg_delist_and_reeval(res); }
-            det = 1.0;
-            for (int k = 0; k < n; k++) {
-                det *= A[k + (size_t)k * n];
-                if (piv[k] != k + 1) det = -det;      /* ipiv is 1-indexed */
-            }
+            for (int k = 0; k < n; k++)
+                if (piv[k] != k + 1) sign = -sign;    /* ipiv is 1-indexed */
         } else {
-            int sign;
             nd_lu_real(A, n, piv, &sign);
-            det = (double)sign;
-            for (int k = 0; k < n; k++) det *= A[k + (size_t)k * n];
         }
-        if (det == 0.0) det = 0.0;               /* normalise -0.0 to +0.0 */
+        Expr* out = nd_real_det_result(A, n, sign);
         free(piv); free(A);
-        return expr_new_real(det);
+        return out;
     }
 
     /* Complex: use LAPACK zgetrf when available, else defer. */
@@ -264,17 +355,12 @@ Expr* ndla_det(Expr* res)
     int* piv = (int*)malloc(sizeof(int) * (size_t)n);
     int info = mat_lapack_zgetrf(n, n, A, n, piv);
     if (info < 0) { free(piv); free(A); return linalg_delist_and_reeval(res); }
-    double dr = 1.0, di = 0.0;                      /* running complex product */
-    for (int k = 0; k < n; k++) {
-        double ur = A[2 * ((size_t)k + (size_t)k * n)];
-        double ui = A[2 * ((size_t)k + (size_t)k * n) + 1];
-        double nr = dr * ur - di * ui;
-        double ni = dr * ui + di * ur;
-        dr = nr; di = ni;
-        if (piv[k] != k + 1) { dr = -dr; di = -di; }  /* ipiv is 1-indexed */
-    }
+    int sign = 1;
+    for (int k = 0; k < n; k++)
+        if (piv[k] != k + 1) sign = -sign;            /* ipiv is 1-indexed */
+    Expr* out = nd_complex_det_result(A, n, sign);
     free(piv); free(A);
-    return na_scalar(dr, di);
+    return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -569,6 +655,35 @@ Expr* ndla_matrix_norm_direct(Expr* v, Expr* pe)
     return expr_new_real(out);
 }
 
+/* Euclidean 2-norm of a rank-1 buffer without spurious overflow/underflow.
+ * The naive sqrt(sum x^2) overflows once any |x_i| exceeds sqrt(DBL_MAX)
+ * (~1.3e154), and underflows every term to 0 for tiny inputs, even when the
+ * true norm is representable -- so Norm[{1e200, 1e200}] returned inf and
+ * Normalize of the same vector returned the zero vector.  This is LAPACK
+ * dnrm2's running-scale recurrence: track the largest |component| as the scale
+ * and accumulate the sum of squares relative to it.  For a complex buffer the
+ * interleaved (re, im) reals are summed as two reals, which is exactly
+ * sum |z_i|^2 = sum (re^2 + im^2). */
+static double nd_vec_2norm(const double* buf, int n, bool cplx)
+{
+    int comps = cplx ? 2 * n : n;
+    double scale = 0.0, ssq = 1.0;
+    for (int i = 0; i < comps; i++) {
+        double a = fabs(buf[i]);
+        if (a != 0.0) {
+            if (scale < a) {
+                double r = scale / a;
+                ssq = 1.0 + ssq * r * r;
+                scale = a;
+            } else {
+                double r = a / scale;
+                ssq += r * r;
+            }
+        }
+    }
+    return scale * sqrt(ssq);
+}
+
 Expr* ndla_norm(Expr* res)
 {
     size_t argc = res->data.function.arg_count;
@@ -606,19 +721,26 @@ Expr* ndla_norm(Expr* res)
             if (mag > out) out = mag;
         }
     } else if (p == 2.0) {
-        double s = 0.0;
-        for (int i = 0; i < n; i++) {
-            double mag = cplx ? hypot(buf[2 * i], buf[2 * i + 1]) : fabs(buf[i]);
-            s += mag * mag;
-        }
-        out = sqrt(s);
+        out = nd_vec_2norm(buf, n, cplx);
     } else {
-        double s = 0.0;
+        /* General p-norm, scaled by the max |component| so the running sum
+         * neither overflows (large components) nor underflows to 0 (tiny
+         * components) when the true norm is representable. */
+        double mx = 0.0;
         for (int i = 0; i < n; i++) {
             double mag = cplx ? hypot(buf[2 * i], buf[2 * i + 1]) : fabs(buf[i]);
-            s += pow(mag, p);
+            if (mag > mx) mx = mag;
         }
-        out = pow(s, 1.0 / p);
+        if (mx == 0.0) {
+            out = 0.0;
+        } else {
+            double s = 0.0;
+            for (int i = 0; i < n; i++) {
+                double mag = cplx ? hypot(buf[2 * i], buf[2 * i + 1]) : fabs(buf[i]);
+                s += pow(mag / mx, p);
+            }
+            out = mx * pow(s, 1.0 / p);
+        }
     }
     free(buf);
     return expr_new_real(out);
@@ -639,12 +761,7 @@ Expr* ndla_normalize(Expr* res)
     if (!na_load_vector(v, cplx, &n, &buf))
         return linalg_delist_and_reeval(res);
 
-    double s = 0.0;
-    for (int i = 0; i < n; i++) {
-        double mag = cplx ? hypot(buf[2 * i], buf[2 * i + 1]) : fabs(buf[i]);
-        s += mag * mag;
-    }
-    double nrm = sqrt(s);
+    double nrm = nd_vec_2norm(buf, n, cplx);
     if (nrm > 0.0) {
         int comps = cplx ? 2 * n : n;
         for (int i = 0; i < comps; i++) buf[i] /= nrm;

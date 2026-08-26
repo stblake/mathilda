@@ -57,6 +57,12 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
     return NULL;
 }
 
+Expr* mpfr_det_dispatch(Expr* m, int n)
+{
+    (void)m; (void)n;
+    return NULL;
+}
+
 #else /* USE_MPFR */
 
 /* ------------------------------------------------------------------ *
@@ -867,6 +873,103 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
     return result;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Arbitrary-precision determinant.                                    *
+ *                                                                       *
+ *  Det[m] for a genuine MPFR (or otherwise inexact-numeric) n x n       *
+ *  matrix.  builtin_det reaches this only after the exact FLINT path    *
+ *  declines, and it exists to replace the O(n!) Laplace fallback that   *
+ *  otherwise hangs at n >= ~12 for inexact input.                       *
+ *                                                                       *
+ *  det(A) = sign(P) * prod(U[k,k]), where PA = LU and sign(P) is the    *
+ *  parity of the pivoting permutation.  Reuses lum_load_matrix /        *
+ *  lum_factor.  Returns an EXPR_MPFR (real) or Complex[mpfr, mpfr]      *
+ *  (complex), NULL on a non-numeric leaf / USE_MPFR off.  The wide MPFR *
+ *  exponent means the product never spuriously overflows.               *
+ * ------------------------------------------------------------------ */
+static int lum_perm_parity(const int* perm, int n)
+{
+    /* perm holds a permutation of 1..n (1-indexed).  Parity = (-1)^(number
+     * of transpositions) computed by cycle decomposition. */
+    char* seen = (char*)calloc((size_t)n, 1);
+    int transpositions = 0;
+    for (int i = 0; i < n; i++) {
+        if (seen[i]) continue;
+        int j = i, len = 0;
+        while (!seen[j]) { seen[j] = 1; j = perm[j] - 1; len++; }
+        transpositions += len - 1;
+    }
+    free(seen);
+    return (transpositions & 1) ? -1 : 1;
+}
+
+Expr* mpfr_det_dispatch(Expr* m, int n)
+{
+    if (n <= 0) return NULL;
+
+    CommonInexactInfo info = common_scan_inexact(m);
+    if (!info.has_inexact) return NULL;         /* exact input: not our job */
+    mpfr_prec_t bits = (mpfr_prec_t)info.min_bits;
+    if (bits < 53) bits = 53;
+
+    size_t total = (size_t)n * (size_t)n;
+    mpfr_t* A_re = NULL;
+    mpfr_t* A_im = NULL;
+    bool is_complex = false;
+    if (!lum_load_matrix(m, n, n, bits, &A_re, &A_im, &is_complex))
+        return NULL;                            /* symbolic leaf: caller falls back */
+
+    int* perm = (int*)malloc((size_t)n * sizeof(int));
+    for (int i = 0; i < n; i++) perm[i] = i + 1;
+
+    bool singular = false;
+    if (!lum_factor(A_re, A_im, n, n, bits, is_complex, perm, &singular)) {
+        lum_array_free(A_re, total);
+        lum_array_free(A_im, is_complex ? total : 0);
+        free(perm);
+        return NULL;
+    }
+
+    int sign = lum_perm_parity(perm, n);
+    free(perm);
+
+    /* det = sign * prod(diag).  A zero pivot leaves a zero on the diagonal,
+     * so a singular matrix yields det = 0 for free. */
+    Expr* out;
+    if (is_complex) {
+        mpfr_t pr, pi, tr, ti, t;
+        mpfr_inits2(bits, pr, pi, tr, ti, t, (mpfr_ptr)0);
+        mpfr_set_si(pr, sign, MPFR_RNDN);
+        mpfr_set_zero(pi, 1);
+        for (int k = 0; k < n; k++) {
+            size_t kk = (size_t)k * n + k;
+            /* (pr + I pi)(A_re + I A_im) */
+            mpfr_mul(tr, pr, A_re[kk], MPFR_RNDN); mpfr_mul(t, pi, A_im[kk], MPFR_RNDN);
+            mpfr_sub(tr, tr, t, MPFR_RNDN);
+            mpfr_mul(ti, pr, A_im[kk], MPFR_RNDN); mpfr_mul(t, pi, A_re[kk], MPFR_RNDN);
+            mpfr_add(ti, ti, t, MPFR_RNDN);
+            mpfr_set(pr, tr, MPFR_RNDN); mpfr_set(pi, ti, MPFR_RNDN);
+        }
+        /* Normalise signed zeros so a singular matrix reads 0, not -0. */
+        if (mpfr_zero_p(pr)) mpfr_setsign(pr, pr, 0, MPFR_RNDN);
+        if (mpfr_zero_p(pi)) mpfr_setsign(pi, pi, 0, MPFR_RNDN);
+        out = lum_make_scalar(pr, pi, true);
+        mpfr_clears(pr, pi, tr, ti, t, (mpfr_ptr)0);
+    } else {
+        mpfr_t prod;
+        mpfr_init2(prod, bits);
+        mpfr_set_si(prod, sign, MPFR_RNDN);
+        for (int k = 0; k < n; k++)
+            mpfr_mul(prod, prod, A_re[(size_t)k * n + k], MPFR_RNDN);
+        if (mpfr_zero_p(prod)) mpfr_setsign(prod, prod, 0, MPFR_RNDN);
+        out = expr_new_mpfr_move(prod);
+    }
+
+    lum_array_free(A_re, total);
+    lum_array_free(A_im, is_complex ? total : 0);
+    return out;
 }
 
 #endif /* USE_MPFR */

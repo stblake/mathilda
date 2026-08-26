@@ -36,6 +36,34 @@ static void test_det_edge(void) {
     assert_eval_eq("Det[NDArray[{{1., 2.}, {2., 4.}}]]", "0.0", 0);
 }
 
+/* Machine-real determinants that leave the IEEE-double range must defer to an
+ * arbitrary-precision (wide-exponent) result rather than return inf / 0.  See
+ * nd_real_det_result and mpfr_det_dispatch. */
+static void test_det_overflow(void) {
+    /* Product of pivots ~ 1e400 -- overflows a double, so the naive product
+     * used to give inf.0.  Now a finite wide-exponent real. */
+    assert_eval_eq("NumberQ[Det[DiagonalMatrix[Table[10.^10, {40}]]]] && "
+                   "Det[DiagonalMatrix[Table[10.^10, {40}]]] > 10.^307", "True", 0);
+    /* Mid-product underflow: true det = 1e200 is representable; the naive
+     * left-to-right product used to collapse to 0.0. */
+    assert_eval_eq("Det[DiagonalMatrix[{1.*10^-200, 1.*10^-200, "
+                   "1.*10^300, 1.*10^300}]] == 1.*10^200", "True", 0);
+    /* Genuinely singular still returns exactly 0 (not a spurious tiny/inf). */
+    assert_eval_eq("Det[DiagonalMatrix[{1.*10^200, 0., 1.*10^200}]]", "0.0", 0);
+    /* Arbitrary-precision (MPFR) matrix: an O(n^3) LU determinant, not the
+     * O(n!) Laplace expansion that used to hang for n >= ~12.  HilbertMatrix[16]
+     * has a tiny but strictly positive determinant. */
+    assert_eval_eq("NumberQ[Det[N[HilbertMatrix[16], 40]]] && "
+                   "Det[N[HilbertMatrix[16], 40]] > 0", "True", 0);
+    /* An exact-integer (int64) buffer stays exact and promotes to a bignum,
+     * rather than taking a lossy float LU: det = 1e18 - 1 must NOT round to
+     * 1e18. */
+    assert_eval_eq("Det[NDArray[{{1000000000, 1}, {1, 1000000000}}, "
+                   "DataType -> \"int64\"]]", "999999999999999999", 0);
+    assert_eval_eq("Head[Det[NDArray[{{5, 2}, {2, 9}}, DataType -> \"int64\"]]]",
+                   "Integer", 0);
+}
+
 /* ---------------- Inverse ---------------- */
 static void test_inverse_real(void) {
     assert_eval_eq("Inverse[NDArray[{{4., 3.}, {6., 3.}}]]",
@@ -103,6 +131,15 @@ static void test_norm(void) {
     assert_eval_eq("Norm[NDArray[{1., -2., 2.}], Infinity]", "2.0", 0);
     /* Complex vector 2-norm uses the modulus. */
     assert_eval_eq("Norm[NDArray[{Complex[3, 4], 0}, DataType -> \"complex64\"]]", "5.0", 0);
+    /* Overflow-safe 2-norm (scaled dnrm2 recurrence): the true norm 1.414e200
+     * is representable, so this must not return inf.  Both the packed NDArray
+     * and a small unpacked List (routed to the same fast path) are covered. */
+    assert_eval_eq("Norm[NDArray[{1.*10^200, 1.*10^200}]] == Sqrt[2.]*10.^200", "True", 0);
+    assert_eval_eq("Norm[{1.*10^200, 1.*10^200}] == Sqrt[2.]*10.^200", "True", 0);
+    /* p-norm is scaled too. */
+    assert_eval_eq("Norm[{1.*10^-200, 1.*10^-200}, 3] > 0", "True", 0);
+    /* Exact vectors keep their exact symbolic answer. */
+    assert_eval_eq("Norm[{1, 2}]", "Sqrt[5]", 0);
 }
 
 static void test_normalize(void) {
@@ -110,6 +147,10 @@ static void test_normalize(void) {
     assert_eval_eq("Head[Normalize[NDArray[{3., 4.}]]]", "NDArray", 0);
     /* Zero vector normalises to itself. */
     assert_eval_eq("Normalize[NDArray[{0., 0.}]]", "NDArray[{0.0, 0.0}]", 0);
+    /* Overflow-safe: a well-scaled huge vector normalises to the unit vector,
+     * not the zero vector (which the naive Sqrt[Sum[x^2]] produced). */
+    assert_eval_eq("Chop[Normalize[{1.*10^200, 1.*10^200}] - {1., 1.}/Sqrt[2.]]",
+                   "{0.0, 0.0}", 0);
 }
 
 /* ---------------- Cross ---------------- */
@@ -174,6 +215,7 @@ int main(void) {
 
     TEST(test_det_real);
     TEST(test_det_edge);
+    TEST(test_det_overflow);
     TEST(test_inverse_real);
     TEST(test_inverse_edge);
     TEST(test_inverse_complex);

@@ -607,6 +607,9 @@ Gives the determinant of a square matrix.
 - Evaluates the determinant of a square matrix symbolically or numerically using Laplace expansion.
 - Returns a warning `Det::matsq` if `m` is not a non-empty square matrix.
 - **FLINT acceleration** (when built with FLINT): a matrix whose entries are all integer or rational is computed exactly via `fmpq_mat_det` in polynomial time, avoiding the `O(n!)` Laplace expansion (e.g. a 12×12 Hilbert determinant is instant and exact). Symbolic matrices fall through to Laplace. The same kernel is exposed directly as `` FLINT`Det `` (see the FLINT` context section in *Structural Manipulation*).
+- **Packed/NDArray fast path** (machine reals): the LU factorisation runs through LAPACK `dgetrf` / `zgetrf` (in-house partial-pivot `double` LU as fallback).
+- **Overflow/underflow → arbitrary precision**: the determinant is the product of the LU pivots, which can exceed the IEEE-double range even when the matrix is ordinary — a 200×200 `RandomReal[{-10,10}]` matrix has `|Det| ≈ 10^340`. Rather than return `inf` (or `0` from a mid-product underflow), the pivot product is re-accumulated in a 53-bit-mantissa MPFR value whose exponent range is effectively unbounded, so the answer is finite and correct to machine precision (`Det[RandomReal[{-10,10},{200,200}]]` returns a `≈ -1.08×10^340` real). A genuinely singular matrix still returns `0`.
+- **Arbitrary-precision matrices**: a genuine MPFR matrix (precision > machine) uses an `O(n^3)` MPFR LU determinant (`mpfr_det_dispatch`) rather than the `O(n!)` Laplace expansion, which previously hung for `n ≳ 12`.
 
 ```mathematica
 In[1]:= Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
@@ -661,7 +664,16 @@ Gives the norm of a number, vector, or matrix.
 - `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
 - **Packed/NDArray fast path**: an inexact vector or matrix routes through the
   LAPACK-backed `ndla_norm` (`dlange`/`zlange`, and an SVD for the induced
-  matrix 2-norm); `Norm` is on the packed-array `AWARE` list.
+  matrix 2-norm); `Norm` is on the packed-array `AWARE` list. A machine-precision
+  vector (even a small unpacked `List`) is routed here too, so it does not hit
+  the overflow described next; exact vectors keep their exact symbolic answer
+  (`Norm[{1,2}] == Sqrt[5]`) and MPFR vectors stay on the symbolic path.
+- **Overflow-safe 2-/p-norm**: the vector 2-norm uses LAPACK `dnrm2`'s
+  running-scale recurrence (and the `p`-norm scales by the max component), so a
+  well-scaled vector whose true norm is representable does not overflow to `inf`
+  or underflow to `0` — `Norm[{1e200, 1e200}]` gives `1.414×10^200` (was `inf`),
+  and `Normalize` of the same vector gives `{0.707…, 0.707…}` (was the zero
+  vector).
 - **`Compile[]`**: both `Norm[v]`/`Norm[m]` and the two-argument forms lower to a
   machine `Real`. Over a declared array argument the compiled body delegates to
   `ndla_norm` (the `V_NORM` opcode carries the literal `p`), covering

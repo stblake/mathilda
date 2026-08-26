@@ -235,6 +235,7 @@ EXEMPT = {
     "SingularValueDecomposition": "returns a triple of matrices",
     "Eigenvectors": "result shape is data-dependent (defective matrices)",
     "Eigenvalues": "may be complex for a real matrix; result type not static",
+    "CharacteristicPolynomial": "returns a symbolic Plus in x, not a machine array",
     "PositiveDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",
     "NegativeDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",
     "HypergeometricPFQ": "parameter LISTS, not machine arrays",

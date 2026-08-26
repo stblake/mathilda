@@ -10,6 +10,7 @@
 #include "print.h"
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
+#include "ludecomp_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -80,6 +81,19 @@ Expr* builtin_det(Expr* res) {
         for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
         free(flat);
         return fdet;
+    }
+
+    /* Inexact-numeric fast path: an MPFR matrix (or a machine-real matrix that
+     * did not pack) gets its determinant from an O(n^3) LU factorisation rather
+     * than the O(n!) Laplace expansion below, which hangs for n >= ~12.  The
+     * wide MPFR exponent also means the pivot product never spuriously
+     * overflows.  Declines (NULL) for exact or symbolic input, which keep their
+     * existing FLINT / Laplace paths. */
+    Expr* mdet = mpfr_det_dispatch(arg, n);
+    if (mdet) {
+        for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
+        free(flat);
+        return mdet;
     }
 
     int* cols = malloc(sizeof(int) * n);

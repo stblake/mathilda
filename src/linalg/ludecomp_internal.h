@@ -123,4 +123,19 @@ Expr* ndla_ludecomposition(Expr* res);
  * ------------------------------------------------------------------ */
 Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols);
 
+/* ---------------------------------------------------------------------
+ * Arbitrary-precision determinant.
+ *
+ * det(A) = sign(P) * prod(U[k,k]) for an n x n inexact-numeric matrix,
+ * computed via the same MPFR Doolittle factorisation as lu_mpfr_dispatch.
+ * Used by builtin_det to replace the O(n!) Laplace fallback for inexact
+ * input (which hangs at n >= ~12) with an O(n^3) kernel whose wide MPFR
+ * exponent never spuriously overflows.
+ *
+ * Returns an EXPR_MPFR (real) or Complex[mpfr, mpfr] (complex), or NULL
+ * (without consuming `m`) when USE_MPFR is undefined, the input is exact,
+ * or a matrix cell can't be reduced to an MPFR value.
+ * ------------------------------------------------------------------ */
+Expr* mpfr_det_dispatch(Expr* m, int n);
+
 #endif /* LUDECOMP_INTERNAL_H */

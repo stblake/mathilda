@@ -13,10 +13,22 @@
 #include "ndlinalg.h"
 #include "linsolve.h"  /* matsol_is_inexact — the exact/inexact gate below */
 #include "ndarray.h"   /* ndarray_from_nested_list, NDT_* */
+#include "common.h"    /* common_scan_inexact — machine vs MPFR gate below */
 #include "eval.h"
 #include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
+
+/* True iff p is a norm order the ND vector fast path (ndla_norm) handles:
+ * absent (default 2), a positive Integer/Real, or Infinity.  The "Frobenius"
+ * string and everything else keep the symbolic path. */
+static bool norm_p_is_nd_compatible(const Expr* p) {
+    if (!p) return true;
+    if (p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Infinity) return true;
+    if (p->type == EXPR_INTEGER && p->data.integer > 0) return true;
+    if (p->type == EXPR_REAL && p->data.real > 0.0) return true;
+    return false;
+}
 
 Expr* builtin_norm(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
@@ -39,6 +51,32 @@ Expr* builtin_norm(Expr* res) {
             return eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), args, 1));
         }
         return NULL;
+    }
+
+    /* Machine-precision vector fast path.  The element-wise Power[Abs[x], p]
+     * pipeline below overflows (Abs[1e200]^2 -> inf) for well-scaled inputs
+     * whose true norm is representable, so Norm[{1e200, 1e200}] returned inf.
+     * Route a machine-numeric vector through ndla_norm, whose scaled 2-norm /
+     * p-norm are overflow-safe.  Restricted to machine precision (min_bits <=
+     * 53): an EXACT vector must keep its exact symbolic answer (Norm[{1,2}] ==
+     * Sqrt[5]), and an MPFR vector is already safe on the symbolic path (its
+     * wide exponent keeps the sum finite) and must not be narrowed to float64. */
+    if (rank == 1 && norm_p_is_nd_compatible(p)) {
+        CommonInexactInfo ii = common_scan_inexact(expr);
+        if (ii.has_inexact && ii.min_bits <= 53) {
+            Expr* packed = ndarray_from_nested_list(expr, NDT_FLOAT64);
+            if (!packed) packed = ndarray_from_nested_list(expr, NDT_COMPLEX64);
+            if (packed) {
+                Expr* call = p
+                    ? expr_new_function(expr_new_symbol(SYM_Norm),
+                          (Expr*[]){ packed, expr_copy(p) }, 2)
+                    : expr_new_function(expr_new_symbol(SYM_Norm),
+                          (Expr*[]){ packed }, 1);
+                Expr* out = ndla_norm(call);
+                expr_free(call);
+                if (out) return out;
+            }
+        }
     }
 
     if (rank == 1 || (rank >= 2 && p && p->type == EXPR_STRING && strcmp(p->data.string, "Frobenius") == 0)) {
