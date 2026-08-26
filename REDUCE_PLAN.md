@@ -6,7 +6,7 @@ reusing the `Solve` infrastructure and adding a CAD-based real-inequality engine
 
 ---
 
-## Status (as of 2026-08-25)
+## Status (as of 2026-08-26)
 
 Phases **0–5 are implemented, tested (`tests/test_reduce.c`), and leak-clean**;
 **Phase 6a–6c (two-variable CAD over the Reals) has landed** (`reduce_cad.{c,h}`,
@@ -18,8 +18,15 @@ and honored, `reduce_opts.{c,h}`, 2026-08-25). **Phase 7 (quantifier elimination
 has landed in v1** (`Exists`/`ForAll`/`Resolve`, `reduce_qe.{c,h}` +
 `reduce_cad_qe` seam, v0.095, 2026-08-26): the fully-quantified decision procedure
 and single-free-variable parametric elimination over the rational-fibre regime.
+**A zero-dimensional nonlinear-system engine (`reduce_zerodim`) has landed**
+(v0.097, 2026-08-26, issue #69): when the equations pin the variety to finitely
+many points, both `Reduce` and `Solve` solve them exactly and filter each branch
+by the inequalities and realness via the `qqbar` oracle — covering the
+irrational-fibre zero-dimensional case that CAD declines, but NOT the
+positive-dimensional one (see *Known limitations*).
 The remaining pieces are **6b (real-algebraic-coefficient fibre isolation to
-widen past the rational-fibre regime)**, **6e (McCallum well-orientedness
+widen past the rational-fibre regime — the positive-dimensional irrational
+case)**, **6e (McCallum well-orientedness
 augmentation)**, **7-extended (≥2 free vars / alternating quantifiers / algebraic
 free-variable boundaries — blocked on 6b)** and **8 (companion builtins —
 `LogicalExpand`, `FindInstance`, `CylindricalDecomposition`)**.
@@ -40,6 +47,36 @@ Implementation order followed was
 | 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done (+ multivariate `Sqrt` rationalization, 2026-08-24) |
 | Opt | Options: `Backsubstitution`, `Cubics`, `GeneratedParameters`, `Method`, `Modulus`, `Quartics`, `WorkingPrecision` | ✅ done (2026-08-25) |
 
+> **2026-08-26 — zero-dimensional nonlinear systems (`reduce_zerodim`), v0.097
+> (issue #69).** `Reduce` and `Solve` now solve a conjunction whose polynomial
+> **equations** pin the variety to finitely many points (a zero-dimensional
+> ideal), optionally carrying inequality / disequation side relations — the
+> three-circle system `u^2+v^2==9 && u^2+(a+v)^2==36 && (a+u)^2+v^2==25 && u>0 &&
+> v>0 && a>0` and simpler cases like `x^2==1 && y^2==4`. New shared engine
+> `src/solve/reduce_zerodim.{c,h}`: split each conjunct into equations `E` and
+> side relations `O` (`<`,`<=`,`!=`); solve `E` over the complexes with the
+> existing polynomial-system solver (a parametric / underdetermined answer ⇒
+> positive-dimensional ⇒ **decline**); keep each solution branch only if every
+> side relation holds there and — over the Reals — every coordinate is real,
+> decided **exactly** by the FLINT `qqbar` oracle (`rru_sign_of`,
+> `flint_qqbar_equal`, and the new `flint_qqbar_is_real`), an undecidable test
+> ⇒ decline. Complete for zero-dimensional systems (the finite solution set is
+> enumerated and filtered exactly), sound everywhere. Wired into `reduce.c`
+> (Complexes after `reduce_eq_system`; Reals `nu>=2` after `reduce_fm` +
+> `reduce_cad` — CAD declines on exactly the irrational fibres this covers) and
+> `solve.c` (an equations-with-constraints pre-pass mirroring the Integers
+> pre-pass, gated on the presence of a side constraint so pure-equation `Solve`
+> is untouched). This is the **zero-dimensional** complement to Phase 6b — it
+> lifts the rational-fibre restriction *only* when the equations already reduce
+> the variety to points, so no CAD algebraic-fibre isolation is needed. The
+> **positive-dimensional** case is unchanged and still declines: a nonlinear
+> system over the Reals with irrational fibres and a *free* dimension — e.g.
+> `x^2+y^2+z^2==1 && x>0 && y>0 && z>0`, whose solution set is a 2-D surface
+> region — is the n-variable CAD's rational-sample limitation (Phase 6b), a
+> separate enhancement (see *Known limitations* below). Tests:
+> `zdim-*` corpus rows + `test_reduce.c` updates; reduce corpus 158/158, solve
+> corpus 99/99; `check-c99` clean; no new leaks.
+>
 > **2026-08-26 — Phase 7 quantifier elimination (v1), v0.095.** `Exists`, `ForAll`
 > and `Resolve` landed. `Exists`/`ForAll` are inert (`HoldAll`) quantifier wrappers;
 > `Resolve[expr, dom]` and a top-level `Exists`/`ForAll` inside `Reduce[...]` both
@@ -217,6 +254,11 @@ reduce_real_util.{c,h}     [done] shared real-algebraic primitives (qqbar sign o
 reduce_cad.{c,h}           [done] Phase 6: McCallum projection + partial-CAD lifting;
                            2-var driver (reduce_cad) + n-var recursive engine
                            (reduce_cad_nvar) with the n-D boundary merge (Stage A+B)
+reduce_zerodim.{c,h}       [done] zero-dimensional nonlinear systems (Complexes & Reals),
+                           shared by Reduce and Solve: solve the equations exactly, filter
+                           branches by side relations + realness via the qqbar oracle
+                           (issue #69). Covers the irrational-fibre ZERO-dim case CAD
+                           declines; positive-dim stays with 6b.
 reduce_qe.{c,h}            [pending] Phase 7: Exists / ForAll / Resolve via CAD cells
 reduce_companions.{c,h}    [pending] Phase 8: LogicalExpand, FindInstance,
                            CylindricalDecomposition
@@ -672,3 +714,12 @@ original sketch. Phases 0–5 are otherwise as designed.
   minimal; a normalisation pass would tidy them.
 - **Comprehensive Gröbner case analysis** for *non-linear* parametric systems remains
   deferred (declines today); Phase 6 CAD covers the Reals case.
+- **Positive-dimensional nonlinear systems over the Reals with irrational fibres.**
+  A conjunction whose nonlinear constraints leave a *free* dimension and whose fibre
+  boundaries are irrational algebraic numbers — e.g.
+  `Reduce[x^2+y^2+z^2==1 && x>0 && y>0 && z>0, {x,y,z}, Reals]`, a 2-D surface region —
+  still declines. This is the n-variable CAD's **rational-sample limitation** (Phase 6b:
+  real-algebraic-coefficient fibre isolation), *not* a regression and *not* covered by the
+  zero-dimensional engine above (which fires only when the equations pin the variety to
+  finitely many points). Closing it is the Phase 6b enhancement: lift the rational-fibre
+  restriction by isolating univariate roots at a real-algebraic sample point.
