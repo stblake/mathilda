@@ -31,6 +31,12 @@
 Expr* builtin_eigenvalues(Expr* res);
 Expr* builtin_eigenvectors(Expr* res);
 
+/* CharacteristicPolynomial[m, x] == Det[m - x I], and the generalized
+ * CharacteristicPolynomial[{m, a}, x] == Det[m - x a].  Reuses the char-poly
+ * machinery above (Faddeev-Leverrier for the ordinary case, Laplace of
+ * m - lambda a for the generalized case).  Defined in charpoly.c. */
+Expr* builtin_characteristicpolynomial(Expr* res);
+
 /* Registers Eigenvalues and Eigenvectors builtins and their attributes.
  * Must be called from core_init() (after symtab_init()). */
 void  mateigen_init(void);

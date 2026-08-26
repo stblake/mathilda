@@ -133,6 +133,7 @@ const char* SYM_DollarMinMachineNumber = NULL;
 const char* SYM_DollarMinNumber = NULL;
 const char* SYM_Drop = NULL;
 const char* SYM_E = NULL;
+const char* SYM_CharacteristicPolynomial = NULL;
 const char* SYM_Eigenvalues = NULL;
 const char* SYM_Eigenvectors = NULL;
 const char* SYM_ECM = NULL;
@@ -1005,6 +1006,7 @@ void sym_names_init(void) {
     SYM_DollarMinNumber            = intern_symbol("$MinNumber");
     SYM_Drop                       = intern_symbol("Drop");
     SYM_E                          = intern_symbol("E");
+    SYM_CharacteristicPolynomial   = intern_symbol("CharacteristicPolynomial");
     SYM_Eigenvalues                = intern_symbol("Eigenvalues");
     SYM_Eigenvectors               = intern_symbol("Eigenvectors");
     SYM_ECM                        = intern_symbol("ECM");

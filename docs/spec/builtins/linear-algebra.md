@@ -2163,6 +2163,45 @@ In[2]:= DesignMatrix[{{0,0,0},{1,0,1},{0,1,2}}, {1, x, y}, {x, y}]
 Out[2]= {{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}
 ```
 
+## CharacteristicPolynomial
+Gives the characteristic polynomial of a square matrix.
+- `CharacteristicPolynomial[m, x]`: the polynomial `Det[m - x I]` in `x`.
+- `CharacteristicPolynomial[{m, a}, x]`: the generalised characteristic
+  polynomial `Det[m - x a]`.
+
+**Features**:
+- `Protected`.
+- Entries may be integer, rational, machine- or arbitrary-precision real,
+  complex, or symbolic. The result is an expanded polynomial in `x`.
+- The ordinary case reuses the eigen module's Faddeev–LeVerrier–Souriau fast
+  path (`O(n^4)` matrix multiplications), so the characteristic polynomial of a
+  large numeric matrix is computed in polynomial time — the naïve
+  `Det[m - x I]` would face an `O(n!)` Laplace expansion of a symbolic-in-`x`
+  matrix. The leading `(-1)^n` sign of `Det[m - x I]` is applied so odd-`n`
+  polynomials are monic-negative (`CharacteristicPolynomial[IdentityMatrix[3],
+  x]` → `1 - 3 x + 3 x^2 - x^3`).
+- The generalised case is `Det[m - x a]` via Laplace expansion. A shared null
+  space of `m, a` drops the leading term(s): an infinite generalised eigenvalue
+  shows as a degree deficit (`CharacteristicPolynomial[{a, b}, x]` of degree
+  `< n`).
+- The second argument may be a symbol, a number, or any expression (the value
+  is substituted for the polynomial variable).
+- Called with other than two arguments, emits `CharacteristicPolynomial::argrx`
+  and stays unevaluated; a non-square matrix stays unevaluated.
+
+```mathematica
+In[1]:= CharacteristicPolynomial[{{1, 2}, {3, 4}}, x]
+Out[1]= -2 - 5 x + x^2
+
+In[2]:= CharacteristicPolynomial[{{a, b}, {c, d}}, x]
+Out[2]= -b c + a d - a x - d x + x^2
+
+(* Generalised: Det[m - x a]; a shared null space drops the leading term. *)
+In[3]:= CharacteristicPolynomial[{{{1, 1, 1}, {1, 0, 1}, {0, 0, 1}},
+          {{0, 1, 1}, {0, 1, 1}, {1, 0, 0}}}, x]
+Out[3]= -1 - x + x^2
+```
+
 ## Eigenvalues
 Gives a list of the eigenvalues of a square matrix.
 - `Eigenvalues[m]`: eigenvalues of the n×n matrix `m`.

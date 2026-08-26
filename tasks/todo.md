@@ -1,47 +1,44 @@
-# Reduce — Phase 7: Quantifier Elimination (Exists / ForAll / Resolve)
+# Implement CharacteristicPolynomial
 
-Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-temporal-cook.md`
-Status: **v1 landed, v0.094 (2026-08-26).**
+## Plan
+Reuse eigen module internals. Ordinary case: Faddeev-LeVerrier (O(n^4)) + (-1)^n
+sign fix. Generalized {m,a}: build (m - λa) + Laplace det. Substitute user var,
+Expand. Returns symbolic polynomial (exempt from packed/Compile surfaces).
 
 ## Tasks
-
-- [x] Add `SYM_Exists`, `SYM_ForAll`, `SYM_Resolve` (sym_names.{h,c}, 3 sites each)
-- [x] Add `reduce_cad_qe` public seam in reduce_cad.c + declare in reduce_cad.h
-- [x] Create `src/solve/reduce_qe.{c,h}` — front-end, builtins, Case A/B/C dispatch
-- [x] Wire `reduce_qe_init()` into `reduce_init`; add Exists/ForAll peel in `builtin_reduce`
-- [x] Add `reduce_qe.c` to tests/CMakeLists.txt COMMON_SRC
-- [x] Tests: `test_quantifiers_{decision,parametric,decline}` — all pass
-- [x] Build clean (make, 0 errors/warnings); reduce_tests green (exit 0)
-- [x] `make check-c99` clean; `make check-packed-aware` clean (heads exempt)
-- [x] valgrind: no QE-attributable leak (residual = macOS libobjc/dyld init noise)
-- [x] Docs (solutions-of-equations.md: Exists/ForAll/Resolve sections + intro)
-- [x] Changelog (2026-08-24.md) + version bump 0.093→0.094 + REDUCE_PLAN.md status
-- [x] Rebuild code-review graph
+- [x] `src/linalg/charpoly.c` — new builtin `builtin_characteristicpolynomial`
+- [x] `src/linalg/eigen.h` — declare builtin
+- [x] `src/linalg/eigen.c` — register in `mateigen_init()` with ATTR_PROTECTED
+- [x] `src/sym_names.h` / `src/sym_names.c` — add SYM_CharacteristicPolynomial (3 sites)
+- [x] `src/info.c` — docstring in `info_init()`
+- [x] `src/pack.c` — add to AWARE list (mirrors Eigenvalues; audit requires it)
+- [x] `tests/CMakeLists.txt` — add source to COMMON_SRC + test executable block
+- [x] `tests/test_characteristicpolynomial.c` — 19 test groups + leak loop
+- [x] `docs/spec/builtins/linear-algebra.md` — entry
+- [x] `docs/spec/changelog/2026-08-24.md` — changelog note
+- [x] Build main binary clean, REPL smoke test (all reference cases match)
+- [x] Build + run test suite (all pass), valgrind (no leak vs baseline)
+- [x] `make check-c99`, `make check-packed-aware` — both clean
 
 ## Review
 
-Implemented quantifier elimination for `Reduce` in three regimes:
+Implemented `CharacteristicPolynomial[m, x]` (`Det[m - x I]`) and the generalized
+`CharacteristicPolynomial[{m, a}, x]` (`Det[m - x a]`) as a thin builtin over the
+eigen module's existing char-poly machinery:
 
-- **Case A (fully quantified)** — a real-closed-field decision procedure that reuses
-  the whole engine: `Exists[{v},φ] = Reduce[φ,v,Reals] =!= False`,
-  `ForAll[{v},φ] = ... === True`. No new CAD code.
-- **Case B (one free variable)** — new public seam `reduce_cad_qe` in reduce_cad.c:
-  build CAD with the free var outermost, read each cell's `Exists`/`ForAll` verdict
-  (`!empty` / `all_true` — already computed by `cad_build`), emit via
-  `rru_emit_sign_diagram`.
-- **Case C (≥2 free vars / alternating / non-Reals / algebraic boundary)** — declines
-  (NULL), sound.
+- **Ordinary case** → `eigen_char_poly_faddeev` (O(n^4)), negated by `(-1)^n`
+  since it returns `det(λI - m)` but we want `Det[m - x I]`. This is what makes
+  the 100×100 machine case fast (0.063s measured, ref ~0.09s) — the naive
+  `Expand[Det[m - x I]]` would hit an O(n!) Laplace expansion of a symbolic-in-x
+  matrix.
+- **Generalized case** → `eigen_build_lambda_matrix` (m - λa) + `eigen_compute_det`
+  (Laplace), correct sign directly. Shared null space → degree deficit (infinite
+  generalized eigenvalue), verified (`-1 - x + x^2`, no x^3 term).
+- Built in a private internal lambda, then the user's variable (symbol / number /
+  expression) is substituted and the result Expand-ed.
 
-Key design wins vs. the original sketch: the fold was already computed by `cad_build`
-(no new projection machinery); `ForAll` done directly via `all_true` (no
-`Not[Exists[Not]]`, no `rform_not_*`); the fully-quantified case reuses `builtin_reduce`
-wholesale. Soundness invariant preserved everywhere: undecidable/out-of-scope → NULL.
+All reference cases match (integer, symbolic, identity, zero, rational, machine,
+complex, generalized, degree-drop, numeric-var, arity error). Returns a symbolic
+`Plus` → exempt from packed/Compile surfaces but AWARE for NDArray *input*.
 
-## Deferred (future work)
-
-- Phase 6b (real-algebraic-coefficient fibres) unblocks: ≥2-free-var parametric QE and
-  the algebraic-boundary `Resolve[Exists[x, x^2+bx+c==0]]→b^2-4c>=0` example.
-- Alternating quantifier prefixes (`ForAll[x, Exists[y, ...]]`) in the parametric case.
-- R6 completeness: `cad_leaf` sometimes over-declines a verdict-decidable fibre
-  (e.g. `Exists[y, 0<y<x]`) — sound decline, could add a verdict-only leaf later.
-- Phase 8 companions: `LogicalExpand`, `FindInstance`, `CylindricalDecomposition`.
+No corrections from the user during implementation → no new lessons.

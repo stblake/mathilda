@@ -1474,6 +1474,17 @@ void info_init(void) {
         "When m is the zero matrix the pseudoinverse is the corresponding\n"
         "zero matrix of transposed shape.");
     symtab_set_docstring("MatrixPower", "MatrixPower[m, n]\n\tgives the n-th matrix power of the square matrix m.\n\tMatrixPower[m, n, v] gives the n-th matrix power of the matrix m applied to the vector v.\n\tWhen n is negative, MatrixPower finds powers of the inverse of the matrix m.\n\tMatrixPower[m, 0] gives IdentityMatrix[Length[m]].\n\tFractional matrix powers are not currently supported.");
+    symtab_set_docstring("CharacteristicPolynomial",
+        "CharacteristicPolynomial[m, x]\n"
+        "\tgives the characteristic polynomial Det[m - x I] of the square\n"
+        "\tmatrix m, as a polynomial in x.\n"
+        "CharacteristicPolynomial[{m, a}, x]\n"
+        "\tgives the generalized characteristic polynomial Det[m - x a].\n"
+        "\n"
+        "m may have integer, rational, machine- or arbitrary-precision real,\n"
+        "complex, or symbolic entries.  The ordinary case is computed by the\n"
+        "Faddeev-LeVerrier method (O(n^4)); the generalized case by Laplace\n"
+        "expansion of m - x a.");
     symtab_set_docstring("Eigenvalues",
         "Eigenvalues[m]\n"
         "\tgives a list of the eigenvalues of the square matrix m.\n"

@@ -551,6 +551,7 @@ set(COMMON_SRC
     ../src/linalg/negdef_q.c
     ../src/linalg/eigen.c
     ../src/linalg/eigen_common.c
+    ../src/linalg/charpoly.c
     ../src/linalg/eigen_direct.c
     ../src/linalg/eigen_arnoldi.c
     ../src/linalg/eigen_banded.c
@@ -1974,6 +1975,16 @@ else()
     target_link_libraries(minimalpolynomial_tests gmp m)
 endif()
 add_test(NAME minimalpolynomial_tests COMMAND minimalpolynomial_tests)
+
+add_executable(characteristicpolynomial_tests test_characteristicpolynomial.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(characteristicpolynomial_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(characteristicpolynomial_tests gmp m ${ECM_LIB})
+    add_dependencies(characteristicpolynomial_tests build_ecm)
+else()
+    target_link_libraries(characteristicpolynomial_tests gmp m)
+endif()
+add_test(NAME characteristicpolynomial_tests COMMAND characteristicpolynomial_tests)
 
 add_executable(interp_tests test_interp.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(interp_tests PRIVATE ../src)

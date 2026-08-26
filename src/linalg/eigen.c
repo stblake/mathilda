@@ -503,4 +503,7 @@ void mateigen_init(void) {
     symtab_get_def("Eigenvalues")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Eigenvectors", builtin_eigenvectors);
     symtab_get_def("Eigenvectors")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("CharacteristicPolynomial",
+                       builtin_characteristicpolynomial);
+    symtab_get_def("CharacteristicPolynomial")->attributes |= ATTR_PROTECTED;
 }

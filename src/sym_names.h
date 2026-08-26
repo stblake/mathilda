@@ -141,6 +141,7 @@ extern const char* SYM_BesselK;
 extern const char* SYM_BesselI;
 extern const char* SYM_BesselY;
 extern const char* SYM_E;
+extern const char* SYM_CharacteristicPolynomial;
 extern const char* SYM_Eigenvalues;
 extern const char* SYM_Erf;
 extern const char* SYM_Erfc;
