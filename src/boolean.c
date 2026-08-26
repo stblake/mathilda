@@ -200,10 +200,88 @@ Expr* builtin_conditional_expression(Expr* res) {
     return NULL;
 }
 
+/* Xor[e1, e2, ...] -- exclusive or.  Flat/Orderless/OneIdentity, so the
+ * evaluator has already flattened nested Xor and sorted the arguments; this
+ * builtin folds the literal Booleans and cancels duplicate pairs (a Xor a =
+ * False).  Xor[] -> False, Xor[a] -> a.  An odd number of consumed True
+ * arguments negates the surviving core (Xor[True, a] -> Not[a]).  Returns NULL
+ * (stays symbolic) when nothing simplifies. */
+Expr* builtin_xor(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return expr_new_symbol(SYM_False);
+    Expr** args = res->data.function.args;
+    if (argc == 1) return expr_copy(args[0]);      /* OneIdentity collapse */
+
+    int  parity  = 0;                              /* count of True, mod 2 */
+    bool changed = false;
+    Expr** keep = malloc(sizeof(Expr*) * argc);    /* borrowed pointers */
+    int nk = 0;
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = args[i];
+        if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_True)  { parity ^= 1; changed = true; continue; }
+        if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_False) { changed = true; continue; }
+        bool cancelled = false;                    /* a Xor a = False */
+        for (int j = 0; j < nk; j++)
+            if (keep[j] && expr_eq(keep[j], a)) { keep[j] = NULL; cancelled = true; changed = true; break; }
+        if (!cancelled) keep[nk++] = a;
+    }
+    int m = 0;                                     /* compact out cancelled */
+    for (int j = 0; j < nk; j++) if (keep[j]) keep[m++] = keep[j];
+
+    if (m == 0) { free(keep); return expr_new_symbol(parity ? SYM_True : SYM_False); }
+    if (!changed) { free(keep); return NULL; }     /* nothing simplified */
+
+    Expr* core;
+    if (m == 1) {
+        core = expr_copy(keep[0]);
+    } else {
+        Expr** ca = malloc(sizeof(Expr*) * m);
+        for (int j = 0; j < m; j++) ca[j] = expr_copy(keep[j]);
+        core = expr_new_function(expr_new_symbol(SYM_Xor), ca, (size_t)m);
+        free(ca);
+    }
+    free(keep);
+    if (parity) {                                  /* odd Trues -> negate core */
+        Expr* na[1] = { core };
+        return expr_new_function(expr_new_symbol(SYM_Not), na, 1);
+    }
+    return core;
+}
+
+/* Implies[p, q] -- material implication (!p || q). */
+Expr* builtin_implies(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* p = res->data.function.args[0];
+    Expr* q = res->data.function.args[1];
+    if (p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_False) return expr_new_symbol(SYM_True);  /* False => _ */
+    if (p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_True)  return expr_copy(q);               /* True  => q */
+    if (q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True)  return expr_new_symbol(SYM_True);  /* _ => True  */
+    if (q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_False) {                                  /* p => False = !p */
+        Expr* na[1] = { expr_copy(p) };
+        return expr_new_function(expr_new_symbol(SYM_Not), na, 1);
+    }
+    if (expr_eq(p, q)) return expr_new_symbol(SYM_True);                                                /* p => p */
+    return NULL;
+}
+
 void boolean_init(void) {
     symtab_add_builtin("And", builtin_and);
     symtab_add_builtin("Or", builtin_or);
     symtab_add_builtin("Not", builtin_not);
+    symtab_add_builtin("Xor", builtin_xor);
+    symtab_add_builtin("Implies", builtin_implies);
     symtab_add_builtin("Boole", builtin_boole);
     symtab_add_builtin("ConditionalExpression", builtin_conditional_expression);
+
+    symtab_set_docstring("Xor",
+        "Xor[e1, e2, ...]\n"
+        "\tThe logical exclusive OR of the ei: True when an odd number of the\n"
+        "\targuments are True.  Folds literal Booleans and cancels duplicate\n"
+        "\targuments (a Xor a is False); Xor[] is False and Xor[e] is e.");
+    symtab_set_docstring("Implies",
+        "Implies[p, q]\n"
+        "\tThe material implication p \\[Implies] q, equivalent to !p || q.\n"
+        "\tImplies[False, q] and Implies[p, True] are True, Implies[True, q]\n"
+        "\tis q, and Implies[p, False] is !p.");
 }

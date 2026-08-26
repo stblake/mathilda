@@ -202,9 +202,39 @@ void test_conditional_expression_idempotent() {
     assert_eval_eq("ConditionalExpression[a, True] + 1", "1 + a", 0);
 }
 
+/* Xor evaluation: fold literal Booleans, cancel duplicate arguments, negate on
+ * an odd number of consumed Trues; a fully-symbolic distinct Xor stays put. */
+void test_xor_evaluation() {
+    assert_eval_eq("Xor[]", "False", 0);
+    assert_eval_eq("Xor[a]", "a", 0);
+    assert_eval_eq("Xor[True, False]", "True", 0);
+    assert_eval_eq("Xor[True, True]", "False", 0);
+    assert_eval_eq("Xor[True, True, True]", "True", 0);
+    assert_eval_eq("Xor[False, a]", "a", 0);
+    assert_eval_eq("Xor[True, a]", "Not[a]", 0);
+    assert_eval_eq("Xor[a, a]", "False", 0);
+    assert_eval_eq("Xor[a, b, a]", "b", 0);
+    assert_eval_eq("Xor[Xor[a, b], c]", "Xor[a, b, c]", 0);   /* Flat */
+    assert_eval_eq("Xor[p, q, r]", "Xor[p, q, r]", 0);        /* stays symbolic */
+}
+
+/* Implies evaluation on Booleans (material implication !p || q). */
+void test_implies_evaluation() {
+    assert_eval_eq("Implies[False, q]", "True", 0);
+    assert_eval_eq("Implies[True, q]", "q", 0);
+    assert_eval_eq("Implies[p, True]", "True", 0);
+    assert_eval_eq("Implies[p, False]", "Not[p]", 0);
+    assert_eval_eq("Implies[p, p]", "True", 0);
+    assert_eval_eq("Implies[True, 1 < 2]", "True", 0);
+    assert_eval_eq("Implies[p, q]", "Implies[p, q]", 0);      /* stays symbolic */
+}
+
 int main() {
     symtab_init();
     core_init();
+
+    TEST(test_xor_evaluation);
+    TEST(test_implies_evaluation);
 
     TEST(test_boole_true_false);
     TEST(test_boole_in_list);

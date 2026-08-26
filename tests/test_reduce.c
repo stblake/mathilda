@@ -847,6 +847,64 @@ static void test_quantifiers_decline(void) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Phase 8: LogicalExpand (+ the NotElement head)                     *
+ *                                                                     *
+ * LogicalExpand distributes to disjunctive normal form over OPAQUE    *
+ * Boolean atoms with idempotence/complementation/absorption           *
+ * contractions, collapsing to True/False when the statement decides.  *
+ * FullForm strings are pinned from the built binary; the True/False   *
+ * collapses are certified by the fact that a DNF is unsatisfiable iff  *
+ * it distributes to zero clauses.                                     *
+ * ------------------------------------------------------------------ */
+static void test_logical_expand(void) {
+    /* De Morgan + distribution. */
+    run_test("LogicalExpand[p && !(q || r)]", "And[p, Not[q], Not[r]]");
+    run_test("LogicalExpand[!(a || b)]", "And[Not[a], Not[b]]");
+    run_test("LogicalExpand[!(a && b)]", "Or[Not[a], Not[b]]");
+    run_test("LogicalExpand[a && (b || c)]", "Or[And[a, b], And[a, c]]");
+    run_test("LogicalExpand[(a || b) && !(c || d || e)]",
+             "Or[And[a, Not[c], Not[d], Not[e]], And[b, Not[c], Not[d], Not[e]]]");
+
+    /* Tautology / contradiction collapse. */
+    run_test("LogicalExpand[a || !a]", "True");
+    run_test("LogicalExpand[a && !a]", "False");
+    run_test("LogicalExpand[(a || b) && !a && !b]", "False");
+    run_test("LogicalExpand[Implies[a && b, a]]", "True");
+    /* Multi-variable tautology proved by the Not[phi]-empty test. */
+    run_test("LogicalExpand[Implies[(p || !r) && s, Implies[r && s, p && q || p]]]",
+             "True");
+
+    /* Xor expands to its odd-parity minterms. */
+    run_test("LogicalExpand[Xor[p, q, r]]",
+             "Or[And[p, q, r], And[p, Not[q], Not[r]], "
+             "And[Not[p], q, Not[r]], And[Not[p], Not[q], r]]");
+
+    /* Absorption over relational atoms (treated as opaque Booleans). */
+    run_test("LogicalExpand[x == a && y == b || x == a || y == b]",
+             "Or[Equal[x, a], Equal[y, b]]");
+
+    /* Negation folds into the complementary relation head (no stray Not). */
+    run_test("LogicalExpand[!(x == a)]", "Unequal[x, a]");
+    run_test("LogicalExpand[!(x < 1)]", "GreaterEqual[x, 1]");
+
+    /* Element over Alternatives distributes; its negation uses NotElement. */
+    run_test("LogicalExpand[Element[x | y, Reals]]",
+             "And[Element[x, Reals], Element[y, Reals]]");
+    run_test("LogicalExpand[!Element[x | y | z, Reals]]",
+             "Or[NotElement[x, Reals], NotElement[y, Reals], NotElement[z, Reals]]");
+
+    /* A bare atom expands to itself (strips the wrapper, never declines). */
+    run_test("LogicalExpand[x == a]", "Equal[x, a]");
+    run_test("LogicalExpand[5]", "5");
+    run_test("LogicalExpand[a && a]", "a");
+
+    /* NotElement decides when membership decides, else stays symbolic. */
+    run_test("NotElement[3, Reals]", "False");
+    run_test("NotElement[I, Reals]", "True");
+    run_contains("NotElement[x, Reals]", "NotElement[x, Reals]");
+}
+
+/* ------------------------------------------------------------------ *
  *  Options: Backsubstitution, Cubics, GeneratedParameters, Method,    *
  *  Modulus, Quartics, WorkingPrecision                                *
  * ------------------------------------------------------------------ */
@@ -964,6 +1022,7 @@ int main(void) {
     TEST(test_quantifiers_decision);
     TEST(test_quantifiers_parametric);
     TEST(test_quantifiers_decline);
+    TEST(test_logical_expand);
     TEST(test_wb_constant_atoms);
     TEST(test_wb_logic_fold);
     TEST(test_wb_atom_emit);

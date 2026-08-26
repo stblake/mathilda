@@ -235,6 +235,26 @@ In[5]:= Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, -x^2/100 + 1] /. x -> 5
 Out[5]= 3/4
 ```
 
+## Xor
+Logical exclusive OR.
+- `Xor[e1, e2, ...]`: Yields `True` when an **odd** number of the `ei` are `True`.
+
+**Attributes**: `Flat`, `Orderless`, `OneIdentity`, `Protected`. Nested `Xor`
+flattens and the arguments are canonically ordered. Evaluation folds the literal
+Booleans and cancels duplicate arguments (`a` Xor `a` is `False`): `Xor[]` is
+`False`, `Xor[e]` is `e`, `Xor[True, False]` is `True`, `Xor[True, True]` is
+`False`, `Xor[True, a]` is `!a`, and `Xor[a, b, a]` is `b`. A `Xor` with only
+symbolic, distinct arguments stays unevaluated (`Xor[p, q, r]`).
+
+## Implies
+Material implication.
+- `Implies[p, q]`: The statement `p ⟹ q`, equivalent to `!p || q`.
+
+**Attributes**: `Protected`. `Implies[False, q]` and `Implies[p, True]` are
+`True`, `Implies[True, q]` is `q`, `Implies[p, False]` is `!p`, and
+`Implies[p, p]` is `True`; otherwise it stays unevaluated. (`LogicalExpand` and
+`Reduce` expand `Implies[p, q]` to `!p || q`.)
+
 ## TrueQ
 Tests whether an expression evaluates explicitly to `True`.
 - `TrueQ[expr]`: Yields `True` if `expr` is `True`, and `False` otherwise.

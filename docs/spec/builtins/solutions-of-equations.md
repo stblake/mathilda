@@ -1144,6 +1144,51 @@ fibre case), or any undecidable sign — so `Resolve[Exists[x, x^2 + b x + c == 
 Reals]` (an algebraic boundary in two parameters) is left unevaluated rather than
 guessed.
 
+## LogicalExpand
+
+`LogicalExpand[expr]` expands a logical combination of equations, inequalities and
+Boolean atoms into **disjunctive normal form** — an `Or` of `And`s — applying the
+distributive, De Morgan, idempotence, complementation and absorption laws, and
+expanding `Implies` and `Xor`. It returns `True` for a tautology and `False` for a
+contradiction.
+
+Unlike `Reduce`, `LogicalExpand` does **no domain reasoning**: every non-connective
+subexpression is treated as an **opaque Boolean atom** (a symbol `p`, a relation
+`x == a`, a membership `Element[...]`), exactly as in Mathematica. Two relational
+atoms are complementary iff one is the head-flipped logical negation of the other
+(`x == a` / `x != a`, `x < 1` / `x >= 1`, `Element` / `NotElement`, `a` / `!a`), so
+a negation folds into the complementary relation head rather than leaving a stray
+`Not` — `LogicalExpand[!(x == a)] -> x != a`, `LogicalExpand[!(x < 1)] -> x >= 1`.
+
+Examples:
+
+- `LogicalExpand[p && !(q || r)] -> p && !q && !r` (De Morgan).
+- `LogicalExpand[(a || b) && !(c || d || e)] -> (a && !c && !d && !e) || (b && !c && !d && !e)`.
+- `LogicalExpand[a || !a] -> True`; `LogicalExpand[a && !a] -> False`.
+- `LogicalExpand[Xor[p, q, r]] -> (p && q && r) || (p && !q && !r) || (!p && q && !r) || (!p && !q && r)`.
+- `LogicalExpand[x == a && y == b || x == a || y == b] -> x == a || y == b` (absorption over relational atoms).
+- `LogicalExpand[!Element[x | y | z, Reals]] -> x ∉ Reals || y ∉ Reals || z ∉ Reals` (`Element` over `Alternatives` distributes; its negation uses `NotElement`).
+- `LogicalExpand[Implies[(p || !r) && s, Implies[r && s, p && q || p]]] -> True` (a tautology).
+
+The `True`/`False` collapse is **sound and complete** (no truth-table enumeration):
+over independent opaque atoms a DNF is unsatisfiable iff every clause holds a
+complementary pair — i.e. it distributes to zero surviving clauses — so `expr`
+collapses to `False` when its DNF is empty and to `True` when the DNF of `!expr` is
+empty (its negation is unsatisfiable). The result is a **sound, equivalent** DNF but,
+like the rest of the `Reduce` family, not guaranteed minimal — where Mathematica's
+consensus contractions produce a shorter but logically identical cover, the output
+here may differ cosmetically (`Table[in == out, ...]` over the atoms is still all
+`True`).
+
+## NotElement
+
+`NotElement[x, dom]` is the statement that `x` is **not** an element of the domain
+`dom` — the negation of `Element[x, dom]`. It decides to `True` or `False` whenever
+`Element[x, dom]` decides (`NotElement[3, Reals] -> False`,
+`NotElement[I, Reals] -> True`) and stays symbolic otherwise
+(`NotElement[x, Reals]`). It is the head `LogicalExpand` emits for a negated
+membership.
+
 ## SolveAlways
 
 Finds values of parameters (the symbols appearing in `eqns` but **not** in

@@ -24,6 +24,7 @@
 #include "reduce_realdiag.h"
 #include "reduce_qe.h"
 #include "reduce_zerodim.h"
+#include "reduce_companions.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -426,4 +427,5 @@ void reduce_init(void) {
         "wrong formula.");
 
     reduce_qe_init();
+    reduce_companions_init();
 }
