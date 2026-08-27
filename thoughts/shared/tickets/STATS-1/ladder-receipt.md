@@ -18,7 +18,7 @@ did not finish, it is recorded as NOT COMPLETE — never as a pass.
 | static | `python3 tools/check_c99_portability.py` | **PASS** (exit 0) |
 | typecheck (= build) | `make -j8` (gcc-16, -Werror set) | **PASS** (exit 0, binary relinked) |
 | unit (focused) | `ctest -R "quantile_family_tests|stats_tests"` | **PASS** — 2/2, 21 test functions |
-| unit (full suite) | `ctest --test-dir tests/build` | **NOT COMPLETE** — 151/231 executed when this receipt was written; 3 failures, all classified below |
+| unit (full suite) | `ctest --test-dir tests/build` | **NOT COMPLETE** — 177/231 executed when this receipt was written (suite still running at session end); 3 failures, all classified below |
 | integration | not-configured | **GAP** (honest: repo has no integration tier) |
 | judge | adversarial-reviewer (agent), human (absent) | **PARTIAL** — agent pass ran and its findings were fixed; no human judge available (beta run) |
 
