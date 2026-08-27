@@ -1,5 +1,513 @@
 \section{Numerical Calculus}
 \label{sec:numcalc}
 
-\emph{This section is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+Every operation in the previous sections was \emph{exact}: \B{Integrate} returns an
+antiderivative, \B{Solve} returns the roots as algebraic numbers, \B{Sum} returns a closed
+form. That is the ideal, and when it is attainable it is unbeatable. But most of the
+integrals, equations, sums, and differential equations that arise in practice have no closed
+form at all---not because Mathilda is not clever enough, but because, as theorems of Liouville,
+Abel, and others tell us, none exists. For those problems the honest answer is a
+\emph{number}, computed to whatever precision you ask for, and computing it well is a
+subject in its own right.
+
+This section is about Mathilda's \emph{numerical} calculus: the family of functions whose
+names begin with \texttt{N}. We start with the question of when to reach for them at all, and
+with the one contract they all share---how they decide they are ``done.'' Then we take them in
+turn: numerical integration (\B{NIntegrate}), summation and products (\B{NSum}, \B{NProduct}),
+differentiation (\B{ND}), series and limits (\B{NSeries}, \B{NLimit}), residues (\B{NResidue}),
+differential equations (\B{NDSolve}), the roots of polynomials and the solutions of general
+equations (\B{NRoots}, \B{NSolve}, \B{FindRoot}), and finally optimization, both local
+(\B{FindMinimum}, \B{FindMaximum}) and global (\B{NMinimize}, \B{NMaximize}). For each we show
+not just the syntax but the algorithm underneath---because choosing the right method for the
+shape of your problem is most of the craft of numerical work.
+
+\subsection{Why and when to go numeric}
+\label{ssec:whynumeric}
+
+The clearest way to see the need is to watch a symbolic function stop short and a numerical one
+carry on. The Gaussian \(\int_0^1 e^{-x^2}\,dx\) has no elementary antiderivative; \B{Integrate}
+does the best exact thing it can, expressing the answer through the error function, while
+\B{NIntegrate} simply returns the number:
+
+\begin{codepairs}
+\pair{numerical-calculus/motivation/1}{No elementary antiderivative exists, so the exact answer
+is written through a special function, \(\tfrac12\sqrt{\pi}\,\operatorname{erf}(1)\).}
+\pair{numerical-calculus/motivation/2}{\B{NIntegrate} gives the value you usually wanted in the
+first place.}
+\pair{numerical-calculus/motivation/3}{The sine integral is worse: it has no antiderivative
+elementary in \(x\) at all, so \B{Integrate} names it \(\operatorname{Si}(1)\).}
+\pair{numerical-calculus/motivation/4}{Again the number is one step away.}
+\end{codepairs}
+
+Roots tell the same story. Abel proved that the general quintic has no solution in radicals, so
+\B{Solve} can only name the five roots of \(x^5-x-1\) as abstract \texttt{Root} objects---correct,
+but not a number you can plot---whereas \B{NRoots} and \B{FindRoot} deliver digits:
+
+\begin{codepairs}
+\pair{numerical-calculus/motivation/5}{There is no radical formula, so each root is returned as
+an indexed \texttt{Root} object standing for ``the \(k\)th root of this polynomial.''}
+\pair{numerical-calculus/motivation/6}{\B{NRoots} approximates all five at once: one real, two
+conjugate pairs.}
+\pair{numerical-calculus/motivation/7}{\B{FindRoot} chases a single root of a transcendental
+equation---\(\cos x = x\), whose solution (the ``Dottie number'') is provably not expressible in
+closed form.}
+\end{codepairs}
+
+The rule of thumb: reach for a numerical function when the exact machinery returns something
+unevaluated, something written through a special function or \texttt{Root} object you would only
+numericalize anyway, or something correct but too large to be useful---and whenever the input is
+itself inexact, since there is then no exact answer to find.
+
+\subsection{Precision, and the three goals}
+\label{ssec:numgoals}
+
+Every numerical function in this section shares one control panel, so it is worth learning once.
+Three options govern how hard the function works and how it judges success:
+\texttt{WorkingPrecision}, \B{AccuracyGoal}, and \B{PrecisionGoal}\index{numerical calculus!accuracy
+and precision goals}.
+
+\texttt{WorkingPrecision} sets how many digits the internal arithmetic carries. Its default is
+\texttt{MachinePrecision}---the roughly \(15.95\) decimal digits of an IEEE double
+(\S\ref{ssec:machine-precision})---and a larger value transparently switches the computation onto
+Mathilda's MPFR path, so you can ask for forty digits or five hundred:
+
+\begin{codepairs}
+\pair{numerical-calculus/goals/1}{At machine precision the answer is a plain double.}
+\pair{numerical-calculus/goals/2}{Raising \texttt{WorkingPrecision} to \(40\) recomputes the same
+integral in extended precision.}
+\pair{numerical-calculus/goals/3}{The same lever works for a sum: forty digits of \(\pi^2/6\).}
+\end{codepairs}
+
+The other two options set the \emph{target}, not the arithmetic. \B{AccuracyGoal}~\(a\) asks for a
+result whose \emph{absolute} error is below \(10^{-a}\); \B{PrecisionGoal}~\(p\) asks for a
+\emph{relative} error below that fraction of the answer's size. A function stops when it has met the
+combined tolerance
+\[
+  \text{error} \;\le\; 10^{-a} \;+\; |x|\,10^{-p},
+\]
+where \(x\) is the current estimate.\calloutnote{Under the hood}{One small module,
+\texttt{src/nc\_accuracy.c}, implements this contract for every routine here, so the semantics never
+drift between them. \texttt{Automatic} resolves to two digits below \texttt{WorkingPrecision}; the symbol
+\texttt{MachinePrecision} tracks the machine-double budget; and \texttt{Infinity} switches a
+criterion off, so \texttt{PrecisionGoal -> Infinity} judges by absolute error alone. The near-universal
+defaults are \texttt{AccuracyGoal -> MachinePrecision} and \texttt{PrecisionGoal -> Automatic}.}
+The absolute term keeps the relative term from demanding the impossible near a zero answer, and the
+relative term keeps the absolute term honest for very large or very small ones.
+
+One behavior is worth internalizing now, because you will meet it throughout the section:
+\textbf{these functions never fail with an error.} If a routine cannot reach its goal within its
+resource budget, it refines as far as it can, keeps the best estimate it found, prints a
+\texttt{Head::accgl} message to the terminal, and returns that estimate
+anyway.\calloutnote{Pitfall}{The \texttt{::accgl} message is advisory, not fatal, and it is printed
+to standard error---so it appears at your prompt but not inside a captured result. When a numerical
+answer looks a digit or two short, it is often because the goal was quietly not met; raise
+\texttt{WorkingPrecision}, loosen the goal, or (as we will see) pick a method better suited to the
+problem.} We rely on this deliberately below, where forcing the wrong summation method leaves a
+visibly wrong last digit.
+
+\subsection{Numerical integration}
+\label{ssec:nintegrate}
+
+\B{NIntegrate}\index{NIntegrate@\mcode{NIntegrate}!methods} is the workhorse, and its default
+\texttt{Automatic} method is really a small polyalgorithm that inspects the integrand and the
+interval and dispatches to a specialist. On a smooth, finite integrand it uses globally-adaptive
+Gauss--Kronrod quadrature; on a singular or infinite one it switches to a double-exponential rule;
+on an oscillatory one it uses a Levin collocation scheme; and in high dimensions it falls back to
+Monte-Carlo sampling. The everyday cases just work:
+
+\begin{codepairs}
+\pair{numerical-calculus/nintegrate-basic/1}{An infinite interval: \(\int_0^\infty e^{-x^2}\,dx =
+\tfrac12\sqrt{\pi}\).}
+\pair{numerical-calculus/nintegrate-basic/2}{An oscillatory tail: the Dirichlet integral
+\(\int_0^\infty \tfrac{\sin x}{x}\,dx = \tfrac{\pi}{2}\).}
+\pair{numerical-calculus/nintegrate-basic/3}{An integrable endpoint singularity at \(x=0\); the
+adaptive rule clusters its samples there.}
+\pair{numerical-calculus/nintegrate-basic/4}{Two dimensions: adaptive cubature over the plane gives
+\(\int_{\mathbb{R}^2} e^{-x^2-y^2} = \pi\).}
+\end{codepairs}
+
+\usagebox{NIntegrate}
+
+When you know the shape of your integrand, naming the \texttt{Method} is both faster and more
+accurate. The most useful members of the family are \texttt{"GlobalAdaptive"} (the Gauss--Kronrod
+default)\index{Gauss--Kronrod quadrature}, \texttt{"DoubleExponential"} (the tanh-sinh / sinh-sinh /
+exp-sinh rules, superb for endpoint singularities and infinite ranges)\index{double-exponential
+quadrature}, \texttt{"LevinRule"} (for products with an oscillatory kernel like \(\cos g\), \(\sin
+g\), or \(e^{ig}\))\index{Levin collocation}, \texttt{"MonteCarlo"} and its quasi-random variant (for
+many dimensions and for region indicators), and \texttt{"PrincipalValue"} (for a Cauchy principal
+value around a pole named in \texttt{Exclusions}):
+
+\begin{codepairs}
+\pair{numerical-calculus/nintegrate-methods/1}{The double-exponential rule reproduces the Gaussian on
+the half-line to machine precision.}
+\pair{numerical-calculus/nintegrate-methods/2}{A rapidly oscillating kernel: Levin collocation returns
+\(\int_0^\infty \cos(100x)\,e^{-x}\,dx = 1/10001\) without resolving every wiggle.}
+\pair{numerical-calculus/nintegrate-methods/3}{A Cauchy principal value straddling the pole at the
+origin: the divergent halves cancel to \(\ln 2\).}
+\pair{numerical-calculus/nintegrate-methods/4}{Monte-Carlo sampling of a two-dimensional Gaussian; the
+seed is fixed, so the estimate is reproducible.}
+\end{codepairs}
+
+\calloutnote{Theory}{Gauss--Kronrod quadrature\index{Gauss--Kronrod quadrature} is the engine behind
+the default. A Gauss rule of \(n\) points integrates polynomials up to degree \(2n-1\) exactly; the
+Kronrod extension adds \(n+1\) points so that the \(15\)-point rule reuses every node of the embedded
+\(7\)-point rule. The difference between the two estimates is a cheap, reliable error bar, and the
+adaptive driver bisects whichever subinterval carries the largest one until the total error meets the
+goal---the classic QUADPACK strategy~\cite{quadpack}.}
+
+\calloutnote{Theory}{The double-exponential (tanh-sinh) rule~\cite{takahasimori} is a change of variable
+\(x = \tanh\!\big(\tfrac{\pi}{2}\sinh t\big)\) that makes the integrand decay doubly exponentially at
+the ends. A plain trapezoidal rule in \(t\) then converges with astonishing speed, and---crucially---it
+places no sample exactly at the endpoints, so an integrable singularity there costs nothing. This is why
+it is Mathilda's method of choice for singular and infinite integrals and for high precision.}
+
+Two honesty notes. Several rule names the reference documentation lists---\texttt{"ClenshawCurtisRule"},
+\texttt{"LobattoKronrodRule"}, and a few others---are recognized but not yet implemented, and asking for
+one yields an \texttt{NIntegrate::method} message rather than a silent substitution. And
+\texttt{"AdaptiveMonteCarlo"} currently runs the same sampler as \texttt{"MonteCarlo"} without the
+adaptive stratification its name promises. The book prefers to say so plainly.
+
+\subsection{Numerical summation and products}
+\label{ssec:nsum}
+
+An infinite sum is an integral's discrete cousin, and \B{NSum}\index{NSum@\mcode{NSum}!methods} carries
+the same idea: add the first several terms explicitly, then \emph{extrapolate} the tail rather than
+plod through millions of terms. Its \texttt{Automatic} method reads the series and chooses---the
+Euler--Maclaurin formula for a smooth monotone tail\index{Euler--Maclaurin summation}, the
+Cohen--Villegas--Zagier algorithm for an alternating one\index{alternating series!acceleration}, and
+Wynn's epsilon algorithm otherwise\index{Wynn epsilon algorithm}:
+
+\begin{codepairs}
+\pair{numerical-calculus/nsum/1}{The Basel sum \(\sum 1/n^2 = \pi^2/6\); Euler--Maclaurin nails it from
+a handful of terms.}
+\pair{numerical-calculus/nsum/2}{An alternating series for \(\pi/4\); the \texttt{"AlternatingSigns"}
+method converges geometrically where naive addition crawls.}
+\pair{numerical-calculus/nsum/3}{A slowly converging \(p\)-series at forty digits---compare
+\(\zeta(11/10)\). Adding terms directly, you would need more than \(10^{400}\) of them.}
+\end{codepairs}
+
+\usagebox{NSum}
+
+Extrapolation is powerful but not free, and the wrong accelerator can hurt. Forcing Wynn's epsilon
+onto the Basel sum---whose tail is monotone, not oscillatory---leaves the last digits wrong:
+
+\begin{codepairs}
+\pair{numerical-calculus/nsum/4}{Compare with pair~1 above: \(1.62533\) instead of \(1.64493\). Wynn's
+epsilon is the wrong tool for a monotone tail, and (because it cannot reach the goal) an
+\texttt{NSum::accgl} message accompanies this at the terminal.}
+\end{codepairs}
+
+\calloutnote{Theory}{Wynn's epsilon algorithm\index{Wynn epsilon algorithm} is a recursive
+implementation of the Shanks transformation, which models a sequence's tail as a sum of decaying
+geometric terms and cancels them. It is spectacular on alternating and geometric-like sequences and
+weak on the slow algebraic decay of a monotone \(p\)-series---exactly the failure the pair above shows.
+The Euler--Maclaurin formula, by contrast, replaces the monotone tail with an integral plus a
+correction series in the Bernoulli numbers, which is why \texttt{Automatic} prefers it there.}
+
+\B{NProduct}\index{NProduct@\mcode{NProduct}} handles infinite products by the obvious device---it sums
+the logarithms and exponentiates, so \(\prod f = \exp\!\sum \log f\)---and therefore inherits \B{NSum}'s
+methods and convergence test wholesale:
+
+\begin{codepairs}
+\pair{numerical-calculus/nproduct/1}{\(\prod_{n\ge 2}\!\big(1-\tfrac1{n^2}\big) = \tfrac12\), a
+telescoping classic.}
+\pair{numerical-calculus/nproduct/2}{\(\prod_{n\ge 2}\tfrac{n^2}{n^2-1} = 2\), its reciprocal.}
+\end{codepairs}
+
+\usagebox{NProduct}
+
+\subsection{Numerical differentiation}
+\label{ssec:nd}
+
+Differentiation is exact and easy when you have a formula, but a numerical derivative is what you need
+when the function is only known through a black box, or is not analytic, or when a symbolic derivative
+would be enormous. \B{ND}\index{ND@\mcode{ND}!methods} estimates the derivative of \texttt{expr} at a
+point. Its default \texttt{EulerSum} method samples finite differences on a shrinking step and
+Richardson-extrapolates them to the limit\index{Richardson extrapolation}:
+
+\begin{codepairs}
+\pair{numerical-calculus/nd/1}{\(\tfrac{d}{dx}e^x\) at \(x=1\) is \(e\).}
+\pair{numerical-calculus/nd/2}{A high-order, high-precision derivative: the first derivative of
+\(\sin(x^2)\) at \(x=3\) to forty digits.}
+\pair{numerical-calculus/nd/3}{The integrand \(\operatorname{Re}\,\cos(iy) = \cosh y\) is not
+analytic in the complex sense, so only the finite-difference method applies; its derivative at
+\(1\) is \(\sinh 1 = 1.1752\).}
+\end{codepairs}
+
+\usagebox{ND}
+
+\calloutnote{Under the hood}{\B{ND}'s second method, \texttt{Method -> NIntegrate}, evaluates the
+derivative through Cauchy's integral formula, \(f^{(n)}(x_0) = \tfrac{n!}{2\pi i}\oint
+\tfrac{f(z)}{(z-x_0)^{n+1}}\,dz\), by calling \B{NResidue} on a small circle. That route needs the
+function to be analytic near \(x_0\)---but in return it delivers derivatives of \emph{fractional} and
+even complex order, which finite differences cannot. The finite-difference \texttt{EulerSum} method is
+the default precisely because it makes no analyticity demand, as pair~3 requires.}
+
+\subsection{Numerical series}
+\label{ssec:nseries}
+
+\B{NSeries}\index{NSeries@\mcode{NSeries}} produces a whole Taylor or Laurent expansion numerically:
+it samples the function on a circle in the complex plane and recovers the coefficients by a
+discrete Fourier transform---Cauchy's integral formula, one contour, all coefficients at once. It is
+the natural extension of the contour derivative behind \B{ND}, from a single coefficient to the whole
+expansion. Its single algorithm has no \texttt{Method} to choose; you control only the sampling
+\texttt{Radius}. Because the DFT carries a little round-off into the coefficients it does not use, it is
+idiomatic to \B{Chop} the result:
+
+\begin{codepairs}
+\pair{numerical-calculus/nseries/1}{The Taylor series of \(e^x\) about \(0\); the coefficients
+\(1,1,\tfrac12,\tfrac16,\tfrac1{24}\) are read straight off.}
+\pair{numerical-calculus/nseries/2}{A genuine Laurent series: \(\cot x = \tfrac1x - \tfrac{x}{3} -
+\tfrac{x^3}{45} - \cdots\), pole and all.}
+\end{codepairs}
+
+\usagebox{NSeries}
+
+\subsection{Numerical limits}
+\label{ssec:nlimit}
+
+\B{NLimit}\index{NLimit@\mcode{NLimit}!methods} evaluates a limit by sampling the function along a
+sequence of points approaching the target and accelerating that sequence to its limit---the same
+extrapolation family as \B{NSum}, since a limit is what a sequence of partial results is converging to.
+It is the numerical companion to the symbolic \B{Limit} of \S\ref{sec:calculus}, and it shines when a
+limit is delicate or defined only through a hard special function:
+
+\begin{codepairs}
+\pair{numerical-calculus/nlimit/1}{A \(0/0\) form: \(\lim_{x\to 0}(1-\cos x)/x^2 = \tfrac12\). Here
+\texttt{AccuracyGoal -> 10} simply asks for ten clean digits.}
+\pair{numerical-calculus/nlimit/2}{Two diverging pieces whose difference is finite:
+\(\lim_{s\to1}\big(\zeta(s)-\tfrac1{s-1}\big) = \gamma\), the Euler--Mascheroni constant.}
+\pair{numerical-calculus/nlimit/3}{An \(\infty\)-point limit computed with Wynn's epsilon
+(\texttt{"SequenceLimit"}): \(\lim_{n\to\infty} n\,(2^{1/n}-1) = \ln 2\).}
+\end{codepairs}
+
+\usagebox{NLimit}
+
+\subsection{Numerical residues}
+\label{ssec:nresidue}
+
+The contour trick that powers \B{NSeries} is a tool in its own right. \B{NResidue}\index{NResidue@%
+\mcode{NResidue}} computes the residue of a function at a point---the coefficient of \((z-z_0)^{-1}\) in
+its Laurent expansion---by integrating around a small circle with the periodic trapezoidal rule, which
+is exponentially accurate on a smooth closed contour. Its reach is exactly the symbolic \B{Residue}'s
+blind spot: essential singularities, where no Laurent series terminates.
+
+\begin{codepairs}
+\pair{numerical-calculus/nresidue/1}{The simplest pole: \(\operatorname{Res}_{z=0}\tfrac1z = 1\).}
+\pair{numerical-calculus/nresidue/2}{A pole of \(\tan z\) at \(\pi/2\) has residue \(-1\).}
+\pair{numerical-calculus/nresidue/3}{An \emph{essential} singularity: \(\operatorname{Res}_{z=0}
+e^{1/z} = 1\). Here the contour \texttt{Radius} is widened to \(1\)---see the pitfall below.}
+\pair{numerical-calculus/nresidue/4}{Cauchy coefficient extraction: the residue of \(e^x/x^4\) at
+\(0\) is the \(x^3\) Taylor coefficient of \(e^x\), namely \(1/3! = 0.166667\).}
+\end{codepairs}
+
+\usagebox{NResidue}
+
+\calloutnote{Pitfall}{The default contour radius is \(1/100\), which is ideal for an ordinary pole but
+dangerous for an essential singularity: \(e^{1/z}\) reaches \(e^{100}\) on a circle of radius \(1/100\),
+overwhelming the arithmetic. Widening \texttt{Radius} to \(1\), as pair~3 does, keeps the integrand in range.
+The lesson generalizes---when a residue near an essential singularity comes back as noise, enlarge the
+contour.}
+
+\subsection{Differential equations}
+\label{ssec:ndsolve}
+
+Most differential equations have no closed-form solution, which makes \B{NDSolve}\index{NDSolve@%
+\mcode{NDSolve}!methods} one of the most important functions in the system. It integrates an initial-value
+problem---a single ODE, a coupled system, a higher-order equation reduced automatically to first order,
+or a partial differential equation over a rectangle---and returns the solution not as a formula but as an
+\B{InterpolatingFunction}\index{InterpolatingFunction@\mcode{InterpolatingFunction}}: a callable object
+you can evaluate, differentiate, or plot anywhere in the solved interval.
+
+\begin{codepairs}
+\pair{numerical-calculus/ndsolve-numeric/1}{A \emph{stiff} problem, solved with the implicit
+\texttt{"BackwardEuler"} method; the answer is an \texttt{InterpolatingFunction} over \([0,3]\).}
+\pair{numerical-calculus/ndsolve-numeric/2}{The harmonic oscillator \(y''+y=0\), \(y(0)=1\),
+\(y'(0)=0\); assign the solution to reuse it.}
+\pair{numerical-calculus/ndsolve-numeric/3}{Evaluating the solution at \(x=2\)\dots}
+\pair{numerical-calculus/ndsolve-numeric/4}{\dots reproduces \(\cos 2\) to full machine precision.}
+\pair{numerical-calculus/ndsolve-numeric/5}{A coupled first-order system returns one
+\texttt{InterpolatingFunction} per dependent variable.}
+\end{codepairs}
+
+\usagebox{NDSolve}
+
+The \texttt{Method} option chooses the integrator. The default, \texttt{"DOPRI5"}, is the adaptive
+Dormand--Prince \(5(4)\) Runge--Kutta pair\index{Runge--Kutta method!Dormand--Prince}; for a
+\emph{stiff} problem---one where the explicit step size is throttled not by accuracy but by stability---you
+want an implicit method such as \texttt{"BackwardEuler"} or the variable-order \texttt{"BDF"}. A nonlinear
+oscillator makes the interpolating solution vivid. The van der Pol equation \(y'' - \mu(1-y^2)y' + y = 0\)
+relaxes onto a \emph{limit cycle}, a closed orbit no linear equation can produce; plotting \(y'\) against
+\(y\) draws it directly:
+
+\plotcell{numerical-calculus/vanderpol}
+
+The trajectory starts near \((1,0)\), spirals outward, and locks onto the sharp-cornered limit cycle
+characteristic of a relaxation oscillator.
+
+\calloutnote{Theory}{An explicit Runge--Kutta method advances the solution by sampling the slope at
+several trial points inside the step and combining them; the Dormand--Prince pair computes two estimates
+of different orders from the \emph{same} seven slope evaluations, and their difference drives the adaptive
+step size---large where the solution is placid, small where it turns sharply. A \emph{stiff} equation
+defeats this: stability, not accuracy, forces a tiny step, and an \emph{implicit} method---one that solves
+an algebraic equation for the next value---removes that ceiling. This explicit/implicit split is the
+central fact of practical ODE solving~\cite{hairer}.}
+
+For a partial differential equation, \B{NDSolve} uses the \emph{method of lines}: it discretizes the
+spatial derivatives on a grid, turning the PDE into a large system of ODEs in time, and integrates that.
+The heat equation \(u_t = u_{xx}\) started from a half-sine profile shows the fundamental mode decaying
+exponentially:
+
+\plotcell{numerical-calculus/heat-profile}
+
+\calloutnote{Under the hood}{The spatial grid, its resolution (\texttt{"MinPoints"}), and the finite-%
+difference accuracy order (\texttt{"DifferenceOrder"}) are sub-options of \texttt{Method -> \{"MethodOfLines",
+...\}}. Mathilda builds the spatial derivative stencils by Fornberg's algorithm, compiles the resulting
+right-hand side for speed, and---because diffusion is stiff---integrates the semi-discrete system with the
+BDF method by default. The returned object is then a two-dimensional \texttt{InterpolatingFunction} in
+\(t\) and \(x\).}
+
+\subsection{Roots of polynomials}
+\label{ssec:nroots}
+
+For the special case of a single polynomial equation, \B{NRoots}\index{NRoots@\mcode{NRoots}!methods}
+finds \emph{all} the roots at once and returns them as a disjunction. This is where Abel's theorem bites
+hardest and numerics earn their keep:
+
+\begin{codepairs}
+\pair{numerical-calculus/nroots/1}{A cubic: one real root and a conjugate pair.}
+\pair{numerical-calculus/nroots/2}{The quintic \(x^5-x-1\)---no radical form---resolved to five roots.}
+\pair{numerical-calculus/nroots/3}{Complex coefficients are fine: the two square roots of \(3+4i\) are
+\(\pm(2+i)\).}
+\pair{numerical-calculus/nroots/4}{A triple root is returned with its multiplicity, three copies of
+\(1\).}
+\pair{numerical-calculus/nroots/5}{Wilkinson's notoriously ill-conditioned polynomial \(\prod_{k=1}^{15}
+(x-k)\): Mathilda recovers all fifteen integer roots cleanly.}
+\pair{numerical-calculus/nroots/6}{Precision is set by \B{PrecisionGoal}: thirty digits of \(\sqrt2\).}
+\end{codepairs}
+
+\usagebox{NRoots}
+
+\calloutnote{Under the hood}{At machine precision \B{NRoots}'s \texttt{Automatic} method forms the
+companion matrix and finds its eigenvalues with LAPACK---exactly what \texttt{numpy.roots} does---then
+polishes each root with one Newton step, which is what keeps Wilkinson's polynomial (pair~5) honest. At
+higher precision it switches to the Aberth--Ehrlich method\index{Aberth--Ehrlich method}, which refines
+\emph{all} the roots simultaneously, each Newton correction repelled from the others so they cannot
+collide~\cite{aberth}. A note on options: unlike its siblings, \B{NRoots} takes no \texttt{WorkingPrecision}---%
+you steer its precision with \B{PrecisionGoal} alone.}
+
+\subsection{Equations and systems}
+\label{ssec:nsolve}
+
+\B{NSolve}\index{NSolve@\mcode{NSolve}!methods} is the general numerical equation solver. For a single
+polynomial it defers to \B{NRoots}; for a polynomial \emph{system} it runs a Gröbner-basis elimination and
+reads the solutions off an eigenvalue problem; and for a transcendental equation it seeds \B{FindRoot} from
+a grid of starting points. A domain argument restricts the answers:
+
+\begin{codepairs}
+\pair{numerical-calculus/nsolve/1}{Over the default complexes, \(x^4=1\) has four roots.}
+\pair{numerical-calculus/nsolve/2}{Restricting to \texttt{Reals} keeps only \(\pm1\).}
+\pair{numerical-calculus/nsolve/3}{A genuine system: \(x^2+y^2=1\), \(x^3-y^3=2\) has six complex
+solutions, found by the Gröbner/eigenvalue engine.}
+\pair{numerical-calculus/nsolve/4}{A transcendental equation, \(e^x-x=7\), solved over the reals by
+grid-seeded \B{FindRoot}: two roots.}
+\end{codepairs}
+
+\usagebox{NSolve}
+
+\calloutnote{Theory}{For a zero-dimensional polynomial system Mathilda computes a Gröbner basis
+(\S\ref{sec:algebra}), which makes the quotient ring \(\mathbb{Q}[x]/I\) a finite-dimensional vector space.
+Multiplication by each variable is then a linear map on that space, and the solutions are read from the
+eigenvalues and eigenvectors of those multiplication matrices---the Möller--Stetter method~\cite{clo}. It
+is a beautiful bridge: the algebra of \S\ref{sec:algebra} reduces the geometry of a solution set to the
+linear algebra of \S\ref{sec:linalg}.}
+
+When you want \emph{one} root and can supply a starting point, \B{FindRoot}\index{FindRoot@%
+\mcode{FindRoot}!methods} is the direct tool. Its behavior follows the starting specification: a single
+start uses Newton's method, two starts use the secant method, and a bracket \(\{x, x_0, x_{\min},
+x_{\max}\}\) uses Brent's method. It also solves systems, with a symbolic Jacobian:
+
+\begin{codepairs}
+\pair{numerical-calculus/findroot/1}{Newton's method from \(x=1\) on \(\cos x = x\).}
+\pair{numerical-calculus/findroot/2}{The same, to fifty digits---Newton's quadratic convergence makes
+extra precision cheap.}
+\pair{numerical-calculus/findroot/3}{A bracket \([0,1]\) selects Brent's method, which cannot leave the
+bracket.}
+\pair{numerical-calculus/findroot/4}{Two starting values select the derivative-free secant method.}
+\pair{numerical-calculus/findroot/5}{A \(2\times2\) system solved by Newton with an exact Jacobian.}
+\end{codepairs}
+
+\usagebox{FindRoot}
+
+\subsection{Optimization}
+\label{ssec:optimization}
+
+The last family finds minima and maxima. The distinction that organizes it is \emph{local} versus
+\emph{global}. \B{FindMinimum}\index{FindMinimum@\mcode{FindMinimum}!methods} and \B{FindMaximum} start
+from a point and descend to the nearest optimum; they are fast and precise but see only their own valley.
+\B{NMinimize}\index{NMinimize@\mcode{NMinimize}!methods} and \B{NMaximize} search the whole region for the
+\emph{global} optimum; they are slower but not fooled by local traps.
+
+Start local. \B{FindMinimum}'s default is a quasi-Newton (BFGS) method in more than one variable, Brent's
+method in one; it handles box and general constraints, and honors \texttt{WorkingPrecision}:
+
+\begin{codepairs}
+\pair{numerical-calculus/findminimum/1}{The Rosenbrock ``banana'' function, a standard hard case: the
+minimum sits at \((1,1)\) in a curved valley, and BFGS threads it.}
+\pair{numerical-calculus/findminimum/2}{A constrained problem: minimize \(x\cos x\) on \([1,15]\).}
+\pair{numerical-calculus/findminimum/3}{Fifty digits of the minimizer of \((x-\pi)^2\)---it is \(\pi\).}
+\pair{numerical-calculus/findminimum/4}{\B{FindMaximum} is the mirror image: the first peak of
+\(\sin(x)\,e^{-x/10}\).}
+\end{codepairs}
+
+\usagebox{FindMinimum}
+
+Beyond the default, \B{FindMinimum} offers a large menu of local methods---\texttt{"Newton"},
+\texttt{"ConjugateGradient"}, \texttt{"LBFGSB"}, \texttt{"NelderMead"}, and the constrained solvers
+\texttt{"COBYLA"}, \texttt{"COBYQA"}, and \texttt{"SLSQP"}, among others. A few names it recognizes
+(\texttt{"LevenbergMarquardt"}, \texttt{"InteriorPoint"}) are not yet implemented and say so.
+
+Now global. A function like Rastrigin's, whose graph is an egg-carton of local minima over a single global
+one, would trap any purely local method; \B{NMinimize}'s default differential-evolution search is built to
+escape:
+
+\begin{codepairs}
+\pair{numerical-calculus/nminimize/1}{The Rastrigin function in two variables has its global minimum
+\(0\) at the origin, buried among hundreds of local minima; differential evolution finds it.}
+\pair{numerical-calculus/nminimize/2}{A smooth constrained problem: minimize \(x+y\) on the unit disk,
+answer \(-\sqrt2\) at \((-\tfrac1{\sqrt2},-\tfrac1{\sqrt2})\).}
+\pair{numerical-calculus/nminimize/3}{Integer programming: the same objective restricted to the integer
+lattice by \texttt{Element[\{x,y\}, Integers]}.}
+\pair{numerical-calculus/nminimize/4}{The deterministic \texttt{"DIRECT"} method solves Rastrigin on a
+box exactly, with no randomness at all.}
+\end{codepairs}
+
+\usagebox{NMinimize}
+
+\B{NMinimize}'s global methods---\texttt{"DifferentialEvolution"}, \texttt{"SimulatedAnnealing"},
+\texttt{"DualAnnealing"}, \texttt{"BasinHopping"}, \texttt{"SHGO"}, \texttt{"DIRECT"}, and others---each
+take a bag of sub-options through \texttt{Method -> \{"Name", "SearchPoints" -> \dots\}}; the usage card
+above and the reference page enumerate them.
+
+\calloutnote{Theory}{Differential evolution\index{differential evolution} keeps a population of candidate
+points and breeds new ones by adding the scaled difference of two random members to a third---a
+gradient-free move that adapts its own step size to the population's spread~\cite{stornprice}. Simulated
+annealing~\cite{kirkpatrick} instead walks one point randomly, accepting uphill moves with a probability
+that cools over time, so it can climb out of a local basin early and settle late. And DIRECT~\cite{direct}
+is deterministic: it repeatedly bisects the most promising rectangles of the domain, balancing global reach
+against local refinement---which is why pair~4 lands exactly on the origin every time.}
+
+\calloutnote{Performance}{Global optimizers evaluate the objective thousands of times, so Mathilda compiles
+it to bytecode (Chapter~\ref{ch:compilation}) before the search begins. Supplying an \texttt{EvaluationMonitor}
+forces every evaluation back through the interpreter and disables that fast path---useful for debugging a
+search, costly in a production run.}
+
+\subsection*{Where this connects}
+
+Numerical calculus is the pragmatic mirror of the exact mathematics in the rest of this chapter. Each
+function here has an exact sibling in \S\ref{sec:calculus}---\B{ND} to \B{D}, \B{NIntegrate} to
+\B{Integrate}, \B{NLimit} to \B{Limit}, \B{NResidue} to \B{Residue}---and reaches for a number precisely
+where the exact route runs out. Underneath, the numerical solvers lean on the machinery of the neighboring
+sections: \B{NSolve} on the Gröbner bases of \S\ref{sec:algebra}, and \B{NRoots} and \B{NSolve} on the
+eigenvalue kernels of \S\ref{sec:linalg}. For the exhaustive options and corner cases of any function named
+here, its reference page is one \texttt{?Name} away at the prompt.

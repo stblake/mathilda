@@ -58,7 +58,7 @@ mathematical domains, each its own file under `chapters/math/` and its own campa
 | 4.2 | Algebra | `chapters/math/algebra.tex` | **Verified** |
 | 4.3 | Calculus | `chapters/math/calculus.tex` | Planned |
 | 4.4 | Linear Algebra | `chapters/math/linear-algebra.tex` | Planned |
-| 4.5 | Numerical Calculus | `chapters/math/numerical-calculus.tex` | Planned |
+| 4.5 | Numerical Calculus | `chapters/math/numerical-calculus.tex` | **Verified** |
 | 4.6 | Number Theory | `chapters/math/number-theory.tex` | Planned |
 | 4.7 | Special Functions | `chapters/math/special-functions.tex` | Planned |
 
