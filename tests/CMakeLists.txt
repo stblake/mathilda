@@ -478,6 +478,10 @@ set(COMMON_SRC
     ../src/stats/rootmeansquare.c
     ../src/stats/median.c
     ../src/stats/quartiles.c
+    ../src/stats/quantile.c
+    ../src/stats/interquartilerange.c
+    ../src/stats/meandeviation.c
+    ../src/stats/mediandeviation.c
     ../src/stats/variance.c
     ../src/stats/moment.c
     ../src/stats/central_moment.c
@@ -1653,6 +1657,14 @@ target_include_directories(expandfrac_tests PRIVATE ../src)
 
 add_executable(stats_tests test_stats.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(stats_tests PRIVATE ../src)
+# Pre-existing gap closed by STATS-1: stats_tests was built but never registered,
+# so ctest silently skipped the whole statistics suite (README's shell loop was
+# the only thing running it).
+add_test(NAME stats_tests COMMAND stats_tests)
+
+add_executable(quantile_family_tests test_quantile_family.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(quantile_family_tests PRIVATE ../src)
+add_test(NAME quantile_family_tests COMMAND quantile_family_tests)
 
 add_executable(datetime_tests test_datetime.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(datetime_tests PRIVATE ../src)

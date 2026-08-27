@@ -16,6 +16,14 @@ void stats_init(void) {
     symtab_get_def("Median")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Quartiles", builtin_quartiles);
     symtab_get_def("Quartiles")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Quantile", builtin_quantile);
+    symtab_get_def("Quantile")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("InterquartileRange", builtin_interquartilerange);
+    symtab_get_def("InterquartileRange")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("MeanDeviation", builtin_meandeviation);
+    symtab_get_def("MeanDeviation")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("MedianDeviation", builtin_mediandeviation);
+    symtab_get_def("MedianDeviation")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Variance", builtin_variance);
     symtab_add_builtin("Moment", builtin_moment);
     symtab_add_builtin("CentralMoment", builtin_central_moment);

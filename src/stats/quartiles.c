@@ -126,54 +126,11 @@ Expr* builtin_quartiles(Expr* res) {
     q_vals[2] = make_rational(3, 4);
 
     Expr* results[3];
+    /* Shared engine (stats_common.c) -- extracted from the loop that lived here;
+     * see stats_quantile_point's header comment for the one semantic difference
+     * (integer h), which Quartiles' c=0 default cannot observe. */
     for (int k = 0; k < 3; k++) {
-        Expr* q = q_vals[k];
-        Expr* n_expr = expr_new_integer(n);
-        Expr* n_plus_b = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){n_expr, expr_copy(b)}, 2));
-        Expr* times_q = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){n_plus_b, expr_copy(q)}, 2));
-        Expr* h = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(a), times_q}, 2));
-
-        double h_val = 0;
-        if (!stats_is_numeric(h, &h_val, NULL)) {
-            results[k] = expr_new_symbol(SYM_Indeterminate);
-            expr_free(h);
-            continue;
-        }
-
-        if (h_val <= 1.0) {
-            results[k] = expr_copy(sorted_A[0]);
-            expr_free(h);
-            continue;
-        }
-        if (h_val >= (double)n) {
-            results[k] = expr_copy(sorted_A[n - 1]);
-            expr_free(h);
-            continue;
-        }
-
-        Expr* j_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Floor), (Expr*[]){expr_copy(h)}, 1));
-        int64_t j_idx = 0;
-        if (j_expr->type == EXPR_INTEGER) j_idx = j_expr->data.integer;
-        else j_idx = (int64_t)floor(h_val);
-        expr_free(j_expr);
-
-        if (j_idx < 1) j_idx = 1;
-        if (j_idx >= (int64_t)n) j_idx = n - 1;
-
-        Expr* j_expr2 = expr_new_integer(j_idx);
-        Expr* neg_j = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), j_expr2}, 2));
-        Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(h), neg_j}, 2));
-        expr_free(h);
-
-        Expr* d_times_g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(d), expr_copy(g)}, 2));
-        Expr* g_weight = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(c), d_times_g}, 2));
-        expr_free(g);
-
-        Expr* neg_Aj1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(sorted_A[j_idx-1])}, 2));
-        Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_A[j_idx]), neg_Aj1}, 2));
-
-        Expr* weight_diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){g_weight, diff}, 2));
-        results[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_A[j_idx-1]), weight_diff}, 2));
+        results[k] = stats_quantile_point(sorted_A, n, q_vals[k], a, b, c, d);
     }
 
     expr_free(q_vals[0]);

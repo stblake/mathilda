@@ -8,6 +8,7 @@
 #include "sym_names.h"    /* SYM_* */
 #include "assoc.h"        /* is_association, assoc_apply_over_values */
 #include "ndreduce.h"     /* ndred_call_has_ndarray, ndred_skewness, ndred_kurtosis */
+#include <math.h>         /* floor -- stats_quantile_point index fallback */
 
 bool stats_is_numeric(Expr* e, double* val, bool* out_complex) {
     if (e->type == EXPR_INTEGER) {
@@ -112,4 +113,60 @@ bool stats_is_real_numeric(Expr* e) {
     expr_free(freeq_eval);
 
     return true;
+}
+
+Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
+                           Expr* a, Expr* b, Expr* c, Expr* d) {
+    Expr* n_expr = expr_new_integer((int64_t)n);
+    Expr* n_plus_b = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){n_expr, expr_copy(b)}, 2));
+    Expr* times_q = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){n_plus_b, expr_copy(q)}, 2));
+    Expr* h = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(a), times_q}, 2));
+
+    double h_val = 0;
+    if (!stats_is_numeric(h, &h_val, NULL)) {
+        expr_free(h);
+        return expr_new_symbol(SYM_Indeterminate);
+    }
+
+    if (h_val <= 1.0) {
+        expr_free(h);
+        return expr_copy(sorted_args[0]);
+    }
+    if (h_val >= (double)n) {
+        expr_free(h);
+        return expr_copy(sorted_args[n - 1]);
+    }
+
+    Expr* j_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Floor), (Expr*[]){expr_copy(h)}, 1));
+    int64_t j_idx = 0;
+    if (j_expr->type == EXPR_INTEGER) j_idx = j_expr->data.integer;
+    else j_idx = (int64_t)floor(h_val);
+    expr_free(j_expr);
+
+    if (j_idx < 1) j_idx = 1;
+    if (j_idx >= (int64_t)n) j_idx = n - 1;
+
+    Expr* j_expr2 = expr_new_integer(j_idx);
+    Expr* neg_j = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), j_expr2}, 2));
+    Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(h), neg_j}, 2));
+    expr_free(h);
+
+    /* Integer h: Wolfram's Floor/Ceiling neighbors coincide -- the answer is
+     * sorted_args[h-1] (== [j_idx-1], since g == 0 means h == j) for ANY c,d. */
+    bool g_is_zero = (g->type == EXPR_INTEGER && g->data.integer == 0) ||
+                     (g->type == EXPR_REAL && g->data.real == 0.0);
+    if (g_is_zero) {
+        expr_free(g);
+        return expr_copy(sorted_args[j_idx - 1]);
+    }
+
+    Expr* d_times_g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(d), expr_copy(g)}, 2));
+    Expr* g_weight = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(c), d_times_g}, 2));
+    expr_free(g);
+
+    Expr* neg_Aj1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(sorted_args[j_idx-1])}, 2));
+    Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_args[j_idx]), neg_Aj1}, 2));
+
+    Expr* weight_diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){g_weight, diff}, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_args[j_idx-1]), weight_diff}, 2));
 }
