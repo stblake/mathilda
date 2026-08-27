@@ -36,6 +36,7 @@
 #include "attr.h"
 #include "eval.h"
 #include "expr.h"
+#include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
 #include "poly/solvepoly.h"
 #include "solverad.h"
 #include "sym_intern.h"
@@ -144,6 +145,7 @@ static void branches_free(Branch* arr, size_t n) {
 
 static void emit_ifun(SolveInvCtx* ctx) {
     if (!ctx || ctx->ifun_warned) return;
+    if (mth_msg_suppressed()) return;   /* quiet internal probe (e.g. FindInstance) */
     fprintf(stderr,
         "Solve::ifun: Inverse functions are being used by Solve, "
         "so some solutions may not be found; "

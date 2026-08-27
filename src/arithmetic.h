@@ -2,6 +2,7 @@
 #define ARITHMETIC_H
 
 #include "expr.h"
+#include "message.h"   /* mth_msg_suppressed(): general quiet-region flag */
 #include <gmp.h>
 
 // GCD helper
@@ -61,7 +62,10 @@ bool expr_is_superficially_negative(Expr* e);
 extern int g_arith_warnings_muted;
 static inline void arith_warnings_mute_push(void)   { g_arith_warnings_muted++; }
 static inline void arith_warnings_mute_pop(void)    { if (g_arith_warnings_muted > 0) g_arith_warnings_muted--; }
-static inline int  arith_warnings_muted(void)       { return g_arith_warnings_muted; }
+/* Muted by the arithmetic-local counter OR the general message-suppression
+ * depth (mth_msg_suppress_push/pop), so a quiet internal probe silences the
+ * arithmetic diagnostics too. */
+static inline int  arith_warnings_muted(void)       { return g_arith_warnings_muted || mth_msg_suppressed(); }
 
 Expr* builtin_divide(Expr* res);
 Expr* builtin_subtract(Expr* res);

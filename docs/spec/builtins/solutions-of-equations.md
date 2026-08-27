@@ -1204,8 +1204,13 @@ exhibit an instance nor prove emptiness.
 - `FindInstance[expr, vars, dom, n]` — up to `n` instances (fewer if fewer exist).
 
 **How it works.** Every returned instance is **verified** against `expr`
-(`expr /. instance` must evaluate to `True`), so a reported point is always a true
-solution. Witnesses are read off the public, already-cylindrical output of
+(`expr /. instance` must evaluate to `True`) *and* checked to be **defined** there:
+a point where any relation operand evaluates to an infinity or indeterminate
+sentinel (`Log[0] = -Infinity`, `1/0 = ComplexInfinity`, `Indeterminate`) is
+rejected, so a spurious fold such as `-Infinity == -Infinity` cannot admit a point
+where the statement is undefined (this is why `Log[z²] == 2 Log[z] + 2 π I` yields
+`z -> -I`, never `z -> 0`). A reported point is always a true, defined solution.
+Witnesses are read off the public, already-cylindrical output of
 `Reduce` (the satisfiability oracle: `False` → `{}`, a formula → walk its clauses,
 sampling free-variable intervals with the same exact real-algebraic machinery the
 `Reduce` engines use) and, as a fallback, off `Solve`'s rule-lists. The `Booleans`
@@ -1213,8 +1218,8 @@ domain solves satisfiability through the shared `LogicalExpand` DNF engine.
 Soundness is absolute: `{}` is returned **only** when the set is proven empty;
 anything unwitnessed and unrefuted is left unevaluated, never guessed.
 
-Four extensions reach witnesses the raw `Reduce`/`Solve` outputs do not surface,
-each still gated by the same verification:
+Several extensions reach witnesses the raw `Reduce`/`Solve` outputs do not
+surface, each still gated by the same verification:
 
 - **Generated-parameter instantiation.** A parametric family
   `x -> ConditionalExpression[value(C[1]), C[1] >= 1]` is materialised by trying
@@ -1235,6 +1240,23 @@ each still gated by the same verification:
   `Σ cᵢ vᵢ^(2k) == C` (`cᵢ > 0`), which pins every one of its variables to
   `|vᵢ| ≤ (C/cᵢ)^{1/2k}` — so `a b + b c + c d + d e == 0 && a² + b² + c² + d² + e² == 5`
   is solved by enumerating the `[-2, 2]^5` box the second equation forces.
+- **Solve one equation for one variable, sample the rest.** A system `Reduce`/`Solve`
+  decline as a whole is often univariate once the other variables are pinned. For an
+  equality `E` and a variable `xₖ` in it, `Solve[E, xₖ]` is combined with a
+  **constraint-aware candidate grid** over the remaining variables (each variable's
+  values pre-filtered by the univariate sign/interval constraints on it, and the grid
+  extended with small and large magnitudes so tight coupled bounds are reachable);
+  `xₖ` is computed from the solved form and the full point verified. This reaches
+  `c1 e^{-L1 t} + c2 e^{-L2 t} == 0 && c1 > 0 && c2 < 0 && L1 > L2 > 0 && t > 0`
+  (solve `c1`; `{c2 -> -1, L1 -> 2, L2 -> 1, t -> 1, c1 -> E}`) and the tiny-region
+  `(x²-y²)/(x²+y²) == 1/2 && x²+y² < 10⁻¹⁰ && x > 0 && y > 0` (solve `x`; `y -> 10⁻⁶`).
+- **Ideal saturation for declined polynomial systems.** When `Solve` declines a
+  polynomial system as positive-dimensional (`Solve::nsdim`) because an excluded
+  component (`x = 0` / `y = 0`) makes it so, a Rabinowitsch slack `w·∏dᵢ == 1` for the
+  disequations `dᵢ ≠ 0` saturates the ideal; the remaining variety is
+  zero-dimensional, so `Solve` of the augmented system returns finitely many roots,
+  from which `w` is dropped and each root verified. This reaches
+  `x⁴y³ - 3x²y + y⁴ == 0 && 4x³y³ - 6xy == 0 && x ≠ 0 && y ≠ 0`.
 - **1-variable real transcendental root scan.** A single real variable with one
   equation `lhs == rhs` (plus any bounds) that `Reduce`/`Solve` decline is solved by
   bracketing a **pole-free refactoring** of `lhs - rhs` — its numerator once the
@@ -1246,13 +1268,19 @@ each still gated by the same verification:
   sound decision procedure over transcendental functions or machine-precision reals
   (it wrongly reports `False` for `0 < x < 0.001 && Sin[1/x] > 0.999`). When the
   statement contains an inexact real or a transcendental head (including `Exp`,
-  `PolyGamma`, …), its `False` is **not** trusted as `{}`. Two feasibility searches
-  follow: `NMinimize[{0, statement}, vars]`, and — for an inexact-input system whose
-  equalities hold only approximately — a residual-minimising solve
-  (`FindMinimum[Σ(lhsᵢ − rhsᵢ)², seeds]` over several seeds) whose point is verified to
-  a **numeric tolerance** (equalities to `10⁻⁶`, strict inequalities and disequations
-  with a margin). This reaches the damped-oscillation system
-  `E^(−a x) Cos[b x] == 0.1 && E^(−a y) Cos[b y] == 0.1 && x ≠ y && a > 0`.
+  `PolyGamma`, …), its `False` is **not** trusted as `{}`. As the last resort (after
+  the exact methods and the grid sampler, so an exact witness is always preferred), a
+  **least-infeasibility** search minimises a penalty built from *every* constraint —
+  squared residuals for equalities and one-sided hinges `max(0, ·)²` for inequalities
+  (disequations skipped, satisfied almost everywhere) — over several seeds, and
+  verifies the point to a **numeric tolerance**. Because the whole constraint set
+  shapes the objective (not equalities alone), the optimiser stays inside the feasible
+  box and halts on an open feasible region rather than at an excluded minimiser:
+  `E^(−a x) Cos[b x] == 0.1 && … && x ≠ y && a > 0`, the Rastrigin sub-level set
+  `x² − 10 Cos[2π x] + y² − 10 Cos[2π y] + 20 < 0.1 && x ≠ 0 && y ≠ 0`, and — after
+  **folding auxiliary definitions** (an equality `s == c` on a symbol `s` that is not a
+  listed variable pins `s -> c` and drops out) — the pinned-constant system
+  `d1 == v²/(2 g (μ − Sin t)) && … && d1 == 3.2 && g == 9.8 && 0 < t < 0.1`.
 - **Structured candidate sampling (Complexes / Reals).** As a last resort, the
   statement is evaluated at a small ordered grid of interesting values
   (`-1, 1, ±2, 0, ±½, I, ±I, 1 ± I, …`) and any point that verifies is kept — a

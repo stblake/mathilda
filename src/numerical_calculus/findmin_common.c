@@ -3,6 +3,7 @@
  * findmin_internal.h. Do not add cross-file helpers here without a
  * prototype in that header. */
 #include "findmin_internal.h"
+#include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
 
 
 /* ------------------------------------------------------------------ *
@@ -33,7 +34,7 @@ const double* g_fm_al_lambda = NULL;
 const FmGenCon* g_fm_al_gens = NULL;
 
 void fm_warn(const char* fn, const char* tag, const char* fmt, ...) {
-    if (g_fm_quiet) return;
+    if (g_fm_quiet || mth_msg_suppressed()) return;
     va_list ap;
     fprintf(stderr, "%s::%s: ", fn, tag);
     va_start(ap, fmt);

@@ -1063,9 +1063,11 @@ static void test_find_instance(void) {
      * default Complexes: -1 is the first verified candidate). */
     run_test("FindInstance[x != 0, x]", "List[List[Rule[x, -1]]]");
 
-    /* Sound declines (stay unevaluated -- never {} unless provably empty) */
+    /* Solve-one-variable sampler: solve x^2 + y z == 1 for x, sample y, z --
+     * y=-5, z=1 gives x=-Sqrt[6], with -Sqrt[6]-10 <= 4 and 5 Sqrt[6] > 7 both
+     * holding.  (Previously a decline; now a verified witness.) */
     run_contains("FindInstance[x^2 + y z == 1 && x + 2 y <= 3 z + 1 && x y z > 7, {x, y, z}, Reals]",
-                 "FindInstance");
+                 "Rule[x");
     /* unknown option -> unevaluated */
     run_contains("FindInstance[x^2 == 2, x, Foo -> 1]", "FindInstance");
     /* bad variable spec -> unevaluated */

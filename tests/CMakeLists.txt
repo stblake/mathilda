@@ -283,6 +283,7 @@ set(COMMON_SRC
     ../src/parse.c
     ../src/eval.c
     ../src/trace.c
+    ../src/message.c
     ../src/internal.c
     ../src/attr.c
     ../src/core.c

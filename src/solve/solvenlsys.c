@@ -58,6 +58,7 @@
 #include "expr.h"
 #include "groebner.h"
 #include "internal.h"
+#include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
 #include "poly.h"
 #include "solvepoly.h"
 #include "sym_names.h"
@@ -135,6 +136,7 @@ static int gbpoly_total_degree(const GBPoly* p) {
  * ------------------------------------------------------------------ */
 static void warn_nsdim(uint64_t input_hash) {
     static uint64_t last_warned_hash = 0;
+    if (mth_msg_suppressed()) return;   /* quiet internal probe (e.g. FindInstance) */
     if (input_hash == last_warned_hash) return;
     last_warned_hash = input_hash;
     fprintf(stderr,
