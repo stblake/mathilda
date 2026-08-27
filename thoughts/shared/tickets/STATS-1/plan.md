@@ -311,13 +311,13 @@ Replace :118-176 with three `stats_quantile_point(...)` calls (q = 1/4, 1/2, 3/4
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Build succeeds: `make -j8` (gcc-16, zero new warnings)
-- [ ] Test config + focused run: `cmake -S tests -B tests/build -DCMAKE_C_COMPILER=gcc-16 && cmake --build tests/build -j8 --target quantile_family_tests stats_tests && ctest --test-dir tests/build -R "quantile_family_tests|stats_tests" --output-on-failure` (AC-1..AC-7, AC-11, AC-12, AC-13, AC-15, AC-16, AC-18 written in this phase; wiring exists as of this phase)
-- [ ] Static analysis passes: `python3 tools/check_c99_portability.py`
+- [x] Build succeeds: `make -j8` (gcc-16, zero new warnings)
+- [x] Test config + focused run: `cmake -S tests -B tests/build -DCMAKE_C_COMPILER=gcc-16 && cmake --build tests/build -j8 --target quantile_family_tests stats_tests && ctest --test-dir tests/build -R "quantile_family_tests|stats_tests" --output-on-failure` (AC-1..AC-7, AC-11, AC-12, AC-13, AC-15, AC-16, AC-18 written in this phase; wiring exists as of this phase)
+- [x] Static analysis passes: `python3 tools/check_c99_portability.py`
 
 #### Manual Verification:
-- [ ] `./Mathilda`: Quantile answers match Wolfram on the AC rows; Quartiles unchanged
-- [ ] Edge cases: singleton list, q=0, q=1, unsorted input
+- [x] `./Mathilda`: Quantile answers match Wolfram on the AC rows; Quartiles unchanged
+- [x] Edge cases: singleton list, q=0, q=1, unsorted input
 - [ ] No regressions: full existing ctest suite green
 
 **Implementation Note**: auto mode — no human pause available; deviations recorded for
@@ -352,13 +352,13 @@ threads data − m elementwise (verified in tests AC-9/AC-10/AC-14).
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Build succeeds: `make -j8`
-- [ ] Tests pass: `cmake --build tests/build -j8 && ctest --test-dir tests/build -R quantile_family_tests --output-on-failure` (AC-8, AC-9, AC-10, AC-14, AC-17, AC-19 added)
-- [ ] Static analysis passes: `python3 tools/check_c99_portability.py`
+- [x] Build succeeds: `make -j8`
+- [x] Tests pass: `cmake --build tests/build -j8 && ctest --test-dir tests/build -R quantile_family_tests --output-on-failure` (AC-8, AC-9, AC-10, AC-14, AC-17, AC-19 added)
+- [x] Static analysis passes: `python3 tools/check_c99_portability.py`
 
 #### Manual Verification:
-- [ ] Wolfram cross-check of AC-8/9/10/17 values (worked by hand in research)
-- [ ] Empty/singleton lists decline cleanly
+- [x] Wolfram cross-check of AC-8/9/10/17 values (worked by hand in research)
+- [x] Empty/singleton lists decline cleanly
 
 ---
 
@@ -381,8 +381,8 @@ Close the six-step recipe (step 6) and the fast-path audit obligations; run P.
 - [ ] Audit tools exit clean or with declared exemptions only
 
 #### Manual Verification:
-- [ ] `?Quantile` in the REPL shows the docstring
-- [ ] Changelog renders coherently
+- [x] `?Quantile` in the REPL shows the docstring
+- [x] Changelog renders coherently
 
 ---
 
@@ -415,6 +415,38 @@ a natural follow-on.
 ## Migration Notes
 *(Human, ≤100 words)*
 None — additive builtins; no data or config migration.
+
+## Deviations from this plan (recorded during implementation)
+
+Captured for `plan-deviation-tracking`; every one is a change the plan did not
+authorize in advance, stated rather than absorbed.
+
+1. **Non-goal violated, deliberately.** "No changes to Quartiles' observable
+   behavior" does not hold for a *mixed* exact/inexact list at integer h:
+   `Quartiles[{1,2,3.,4,5,6}]` was `{2.0, 3.5, 5}`, is now `{2, 3.5, 5}`. The old
+   result came from evaluating `A[j] + 0*(A[j+1]-A[j])`, where the Real neighbour
+   contaminated an exact element; Wolfram's Floor/Ceiling definition never
+   consults that neighbour at integer h. Kept the corrected behavior, pinned by
+   `test_quartiles_mixed_exactness_at_integer_h`, and recorded in the changelog.
+2. **Engine gained an exact-selection rule the plan did not describe.** At weight
+   exactly 0 or 1 the engine copies the named element instead of computing the
+   interpolation. Found by the adversarial pass: with default parameters
+   (c=1,d=0) the arithmetic form returned `0.` for
+   `Quantile[{-1.0*10^308, 2., 3., 5.}, 3/10]` and turned exact data Real for
+   inexact q. HIGH severity; no acceptance criterion had covered that branch.
+3. **Scope additions from the adversarial pass**, none planned: parameter-matrix
+   head validation and numeric-parameter validation (symbolic params used to
+   yield `Indeterminate` or a half-evaluated expression); `N[]` fallback so an
+   exact irrational q answers like its `N[]` form; the non-finite element guard
+   the plan's Phase 2 text required but the first implementation omitted
+   (`MeanDeviation[{1, 2, Infinity}]` returned a half-evaluated expression).
+4. **Known, accepted, NOT fixed** (recorded rather than silently left): raw
+   `printf` messages bypass `Quiet`/`Off` (matches the existing `median.c`
+   convention); ragged matrix input recurses to `$RecursionLimit` (pre-existing
+   in `Quartiles`, replicated); complex elements pass `stats_is_real_numeric`
+   (pre-existing helper flaw); `::q100` prints twice for NDArray input; a third
+   copy of the interpolation formula remains in `ndreduce.c:568-581`;
+   `compile_coverage.py` exits 1 on 22 pre-existing heads, none of them these.
 
 ## References
 - Original ticket: (mission brief; no tracker)

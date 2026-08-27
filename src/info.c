@@ -4150,6 +4150,10 @@ void info_init(void) {
     symtab_set_docstring("Median", "Median[data]\n\tgives the median estimate of the elements in data.\nMedian[dist]\n\tgives the median of the distribution dist.");
 
     symtab_set_docstring("Quartiles", "Quartiles[data]\n\tgives the {q_1/4, q_2/4, q_3/4} quantile estimates of the elements in data.\nQuartiles[data,{{a,b},{c,d}}]\n\tuses the quantile definition specified by parameters a, b, c, d.\nQuartiles[dist]\n\tgives the {q_1/4, q_2/4, q_3/4} quantiles of the distribution dist.");
+    symtab_set_docstring("Quantile", "Quantile[data,q]\n\tgives the q-th quantile estimate of the elements in data.\nQuantile[data,{q1,q2,...}]\n\tgives a list of quantile estimates.\nQuantile[data,q,{{a,b},{c,d}}]\n\tuses the quantile definition specified by parameters a, b, c, d.");
+    symtab_set_docstring("InterquartileRange", "InterquartileRange[data]\n\tgives the difference between the upper and lower quartiles of the elements in data.");
+    symtab_set_docstring("MeanDeviation", "MeanDeviation[data]\n\tgives the mean absolute deviation from the mean of the elements in data.");
+    symtab_set_docstring("MedianDeviation", "MedianDeviation[data]\n\tgives the median absolute deviation from the median of the elements in data.");
 
     // Random
     symtab_set_docstring("RandomInteger",

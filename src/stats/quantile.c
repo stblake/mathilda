@@ -28,12 +28,26 @@
 /* Parse an optional {{a,b},{c,d}} parameter matrix (same shape Quartiles
  * accepts). On success fills the four out-slots with fresh copies and returns
  * true; on a malformed spec returns false with nothing allocated. */
+static bool is_list_of(Expr* e, size_t count) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List &&
+           e->data.function.arg_count == count;
+}
+
 static bool parse_param_matrix(Expr* param_expr, Expr** a, Expr** b, Expr** c, Expr** d) {
-    if (param_expr->type != EXPR_FUNCTION || param_expr->data.function.arg_count != 2) return false;
+    /* The head is checked, not just the shape: f[{0,0},{1,0}] is not a
+     * parameter matrix, and silently accepting it would answer a question the
+     * user did not ask. */
+    if (!is_list_of(param_expr, 2)) return false;
     Expr* row1 = param_expr->data.function.args[0];
     Expr* row2 = param_expr->data.function.args[1];
-    if (row1->type != EXPR_FUNCTION || row1->data.function.arg_count != 2 ||
-        row2->type != EXPR_FUNCTION || row2->data.function.arg_count != 2) return false;
+    if (!is_list_of(row1, 2) || !is_list_of(row2, 2)) return false;
+    /* Symbolic parameters would yield Indeterminate or a half-evaluated
+     * expression; decline instead (plan STATS-1: never partially evaluate). */
+    for (int i = 0; i < 2; i++) {
+        if (!stats_is_real_numeric(row1->data.function.args[i])) return false;
+        if (!stats_is_real_numeric(row2->data.function.args[i])) return false;
+    }
     *a = expr_copy(row1->data.function.args[0]);
     *b = expr_copy(row1->data.function.args[1]);
     *c = expr_copy(row2->data.function.args[0]);
@@ -49,7 +63,15 @@ static Expr* quantile_one(Expr** sorted_A, size_t n, Expr* q,
     *out_of_range = false;
     if (!stats_is_real_numeric(q)) return NULL;
     double qv = 0;
-    if (!stats_is_numeric(q, &qv, NULL)) return NULL;
+    if (!stats_is_numeric(q, &qv, NULL)) {
+        /* NumericQ but not machine-representable (Pi/4, 1/Sqrt[2], ...): take
+         * the value through N[] so an exact irrational q answers the same way
+         * its N[] form does, instead of silently declining. */
+        Expr* nq = eval_and_free(expr_new_function(expr_new_symbol(SYM_N), (Expr*[]){expr_copy(q)}, 1));
+        bool ok = stats_is_numeric(nq, &qv, NULL);
+        expr_free(nq);
+        if (!ok) return NULL;
+    }
     if (qv < 0.0 || qv > 1.0) { *out_of_range = true; return NULL; }
     return stats_quantile_point(sorted_A, n, q, a, b, c, d);
 }

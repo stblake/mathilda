@@ -124,8 +124,16 @@ Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
 
     double h_val = 0;
     if (!stats_is_numeric(h, &h_val, NULL)) {
-        expr_free(h);
-        return expr_new_symbol(SYM_Indeterminate);
+        /* h is NumericQ but not machine-representable (an exact irrational such
+         * as Pi/4 * n): take its numeric value via N[h] for the clamp and index
+         * decisions only. The result itself is still built from exact h. */
+        Expr* nh = eval_and_free(expr_new_function(expr_new_symbol(SYM_N), (Expr*[]){expr_copy(h)}, 1));
+        bool ok = stats_is_numeric(nh, &h_val, NULL);
+        expr_free(nh);
+        if (!ok) {
+            expr_free(h);
+            return expr_new_symbol(SYM_Indeterminate);
+        }
     }
 
     if (h_val <= 1.0) {
@@ -151,21 +159,37 @@ Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
     Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(h), neg_j}, 2));
     expr_free(h);
 
-    /* Integer h: Wolfram's Floor/Ceiling neighbors coincide -- the answer is
-     * sorted_args[h-1] (== [j_idx-1], since g == 0 means h == j) for ANY c,d. */
+    /* Wolfram's definition interpolates between x_(Floor[h]) and x_(Ceiling[h]).
+     * At integer h the two neighbours COINCIDE, so the upper index is j, not
+     * j+1 -- consulting j+1 there is what let a Real neighbour leak into an
+     * otherwise exact result. */
     bool g_is_zero = (g->type == EXPR_INTEGER && g->data.integer == 0) ||
                      (g->type == EXPR_REAL && g->data.real == 0.0);
-    if (g_is_zero) {
-        expr_free(g);
-        return expr_copy(sorted_args[j_idx - 1]);
-    }
+    int64_t upper_idx = g_is_zero ? j_idx : j_idx + 1;
 
     Expr* d_times_g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(d), expr_copy(g)}, 2));
     Expr* g_weight = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(c), d_times_g}, 2));
     expr_free(g);
 
+    /* SELECT rather than recompute at the two weights that name an element
+     * outright. weight == 1 is Quantile's own default (c=1, d=0): computing
+     * A[j] + 1*(A[j+1] - A[j]) is an identity in exact arithmetic but NOT in
+     * floating point -- with a huge negative first element the subtraction
+     * rounds and the sum returns 0. rather than the element. It also drags an
+     * exact list to Real whenever q is inexact. weight == 0 is the same
+     * argument for the lower neighbour (Quartiles' c=0 at integer h). */
+    bool w_is_zero = (g_weight->type == EXPR_INTEGER && g_weight->data.integer == 0) ||
+                     (g_weight->type == EXPR_REAL && g_weight->data.real == 0.0);
+    bool w_is_one = (g_weight->type == EXPR_INTEGER && g_weight->data.integer == 1) ||
+                    (g_weight->type == EXPR_REAL && g_weight->data.real == 1.0);
+    if (w_is_zero || w_is_one) {
+        int64_t pick = w_is_zero ? j_idx : upper_idx;
+        expr_free(g_weight);
+        return expr_copy(sorted_args[pick - 1]);
+    }
+
     Expr* neg_Aj1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(sorted_args[j_idx-1])}, 2));
-    Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_args[j_idx]), neg_Aj1}, 2));
+    Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_args[upper_idx-1]), neg_Aj1}, 2));
 
     Expr* weight_diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){g_weight, diff}, 2));
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_args[j_idx-1]), weight_diff}, 2));

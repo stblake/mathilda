@@ -117,12 +117,58 @@ void test_deviation_declines(void) {
     assert_eval_eq("MedianDeviation[x]", "MedianDeviation[x]", 0);
 }
 
+/* --- Regressions pinned by the STATS-1 adversarial review --- */
+
+void test_quantile_selects_not_recomputes(void) {
+    /* The default parameters (c=1, d=0) must SELECT x_(Ceiling[nq]), not evaluate
+     * A[j] + 1*(A[j+1]-A[j]): that identity does not hold in floating point.
+     * With a huge negative first element the subtraction rounds and the sum
+     * returned 0. instead of the element. */
+    assert_eval_eq("Quantile[{-1.0*10^308, 2.0, 3.0, 5.0}, 3/10]", "2.0", 0);
+    /* ... and it must not drag exact data to Real when q is inexact. */
+    assert_eval_eq("Quantile[{1, 2, 3, 4}, 0.3]", "2", 0);
+    assert_eval_eq("Quantile[{11, 21, 31}, 0.5]", "21", 0);
+}
+
+void test_quantile_exact_irrational_q(void) {
+    /* An exact irrational q is NumericQ: it must answer as its N[] form does,
+     * not silently decline. n=4, h = 4 Pi/4 = Pi -> Ceiling = 4. */
+    assert_eval_eq("Quantile[{1, 2, 3, 4}, Pi/4]", "4", 0);
+}
+
+void test_quantile_bad_params_decline(void) {
+    /* Symbolic parameters must decline, never yield Indeterminate or a
+     * half-evaluated expression; a non-List head is not a parameter matrix. */
+    assert_eval_eq("Quantile[{1, 2, 3}, 1/2, {{a, 0}, {1, 0}}]",
+                   "Quantile[{1, 2, 3}, 1/2, {{a, 0}, {1, 0}}]", 0);
+    assert_eval_eq("Quantile[{1, 2, 3}, 1/2, f[{0, 0}, {1, 0}]]",
+                   "Quantile[{1, 2, 3}, 1/2, f[{0, 0}, {1, 0}]]", 0);
+}
+
+void test_deviation_nonfinite_declines(void) {
+    /* Infinity is NumericQ and free of I, so it passes the element gate; the
+     * composed tree cannot reduce, so these must decline rather than hand back
+     * a half-evaluated expression. */
+    assert_eval_eq("MeanDeviation[{1, 2, Infinity}]", "MeanDeviation[{1, 2, Infinity}]", 0);
+    assert_eval_eq("MedianDeviation[{1, 2, ComplexInfinity}]",
+                   "MedianDeviation[{1, 2, ComplexInfinity}]", 0);
+}
+
 /* --- Quartiles regression + the integer-h correction --- */
 
 void test_quartiles_regression(void) {
     /* AC-12: default Quartiles unchanged after the engine extraction */
     assert_eval_eq("Quartiles[{1, 2, 3, 4}]", "{3/2, 5/2, 7/2}", 0);
     assert_eval_eq("Quartiles[{1, 2, 3, 4, 5, 6, 7, 8}]", "{5/2, 9/2, 13/2}", 0);
+}
+
+void test_quartiles_mixed_exactness_at_integer_h(void) {
+    /* DELIBERATE, RECORDED deviation from the pre-STATS-1 behavior: at integer h
+     * the Floor/Ceiling neighbours coincide, so the upper element is never
+     * consulted. Before, A[j] + 0*(A[j+1]-A[j]) let a Real neighbour turn an
+     * exact element into a Real ({2.0, 3.5, 5} here). The documented definition
+     * gives the element itself. */
+    assert_eval_eq("Quartiles[{1, 2, 3., 4, 5, 6}]", "{2, 3.5, 5}", 0);
 }
 
 void test_quartiles_param_integer_h(void) {
@@ -155,6 +201,11 @@ int main(void) {
     TEST(test_median_deviation);
     TEST(test_meandeviation_ndarray);
     TEST(test_deviation_declines);
+    TEST(test_quantile_selects_not_recomputes);
+    TEST(test_quantile_exact_irrational_q);
+    TEST(test_quantile_bad_params_decline);
+    TEST(test_deviation_nonfinite_declines);
+    TEST(test_quartiles_mixed_exactness_at_integer_h);
     TEST(test_quartiles_regression);
     TEST(test_quartiles_param_integer_h);
     printf("All quantile family tests passed (phase 1 set).\n");

@@ -16,6 +16,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
+/* Infinity / ComplexInfinity / Indeterminate are NumericQ and free of I, so
+ * they pass the real-numeric element gate above -- and then the composed
+ * Mean/Median tree cannot reduce, handing back a half-evaluated expression.
+ * The plan's "center failed to reduce -> decline" rule, enforced. */
+static bool has_nonfinite(Expr* e) {
+    if (e->type == EXPR_SYMBOL) {
+        const char* n = e->data.symbol.name;
+        return n == SYM_Infinity || n == SYM_ComplexInfinity || n == SYM_Indeterminate;
+    }
+    if (e->type == EXPR_FUNCTION) {
+        if (has_nonfinite(e->data.function.head)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (has_nonfinite(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
 Expr* builtin_mediandeviation(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* data = res->data.function.args[0];
@@ -39,7 +57,8 @@ Expr* builtin_mediandeviation(Expr* res) {
     }
 
     for (size_t i = 0; i < n; i++) {
-        if (!stats_is_real_numeric(data->data.function.args[i])) {
+        if (!stats_is_real_numeric(data->data.function.args[i]) ||
+            has_nonfinite(data->data.function.args[i])) {
             char* str = expr_to_string(res);
             printf("MedianDeviation::rectn: Rectangular array of real numbers is expected at position 1 in %s.\n", str);
             free(str);
