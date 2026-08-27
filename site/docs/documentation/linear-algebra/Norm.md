@@ -88,7 +88,16 @@ Other matrix norms (SVD-based 2-norm, etc.) are not yet implemented and fall thr
 - `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
 - **Packed/NDArray fast path**: an inexact vector or matrix routes through the
   LAPACK-backed `ndla_norm` (`dlange`/`zlange`, and an SVD for the induced
-  matrix 2-norm); `Norm` is on the packed-array `AWARE` list.
+  matrix 2-norm); `Norm` is on the packed-array `AWARE` list. A machine-precision
+  vector (even a small unpacked `List`) is routed here too, so it does not hit
+  the overflow described next; exact vectors keep their exact symbolic answer
+  (`Norm[{1,2}] == Sqrt[5]`) and MPFR vectors stay on the symbolic path.
+- **Overflow-safe 2-/p-norm**: the vector 2-norm uses LAPACK `dnrm2`'s
+  running-scale recurrence (and the `p`-norm scales by the max component), so a
+  well-scaled vector whose true norm is representable does not overflow to `inf`
+  or underflow to `0` — `Norm[{1e200, 1e200}]` gives `1.414×10^200` (was `inf`),
+  and `Normalize` of the same vector gives `{0.707…, 0.707…}` (was the zero
+  vector).
 - **`Compile[]`**: both `Norm[v]`/`Norm[m]` and the two-argument forms lower to a
   machine `Real`. Over a declared array argument the compiled body delegates to
   `ndla_norm` (the `V_NORM` opcode carries the literal `p`), covering
@@ -104,7 +113,7 @@ Other matrix norms (SVD-based 2-norm, etc.) are not yet implemented and fall thr
 
 ## References
 
-**See also:** [List](../../other-advanced/List/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/), [FindRoot](../../calculus/FindRoot/)
+**See also:** [List](../../other-advanced/List/), [Normalize](../../linear-algebra/Normalize/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/), [FindRoot](../../calculus/FindRoot/)
 
 - Source: [`src/linalg/norm.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/norm.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

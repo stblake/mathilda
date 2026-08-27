@@ -319,6 +319,12 @@ solutions.}
 gives a different, more balanced basis---cheaper to compute, but no longer triangular.}
 \pair{algebra/groebner/4}{Over the finite field $\mathrm{GF}(7)$, with
 \texttt{Modulus -> 7}, the whole computation runs in modular arithmetic.}
+\pair{algebra/groebner/5}{Elimination in action. For the parametric curve
+$x=t^2,\;y=t^3$, ordering $t$ ahead of $x,y$ pushes a $t$-free generator---$x^3-y^2$---to
+the front of the basis.}
+\pair{algebra/groebner/6}{Naming $t$ as the variable to \emph{eliminate} (the third
+argument) returns exactly that generator: $x^3-y^2=0$ is the implicit equation the
+parametric points obey---the cuspidal cubic.}
 \end{codepairs}
 
 The choice of order is the whole story. The lexicographic order (pair~1) forces the
@@ -337,6 +343,30 @@ degree-order basis and \emph{walks} it across the Gr\"obner fan to the target or
 cone wall at a time. The core is \texttt{src/poly/groebner.c}, with the walk in
 \texttt{groebnerwalk.c} and a dedicated finite-field engine in \texttt{gbmod.c}; the
 standard text is Cox--Little--O'Shea~\cite{clo}.}
+
+That triangular shape pays off directly in \emph{variable
+elimination}\index{elimination!via Gr\"obner basis}. Order the variables you want gone
+ahead of the ones you want to keep, and the basis elements that come out free of them
+generate the \emph{elimination ideal}\index{elimination ideal}: every polynomial
+consequence of the system that mentions the kept variables alone. Pairs~5 and~6 put this
+to work on \emph{implicitization}\index{implicitization}. A curve traced parametrically
+as $x=t^2,\;y=t^3$ is a set of points in the plane; eliminating the parameter $t$
+recovers the single polynomial equation those points satisfy, $x^3=y^2$---the cuspidal
+cubic. \B{GroebnerBasis} does it two ways: with $t$ ordered first, the whole basis
+carries a $t$-free member (pair~5); naming $t$ in the third argument returns just the
+elimination ideal (pair~6). This is the same projection \B{Eliminate}
+performs (\S\ref{ssec:alg-gcd}), now as a by-product of the basis
+itself.\calloutnote{Theory}{The \emph{Elimination Theorem}\index{Elimination Theorem} is
+what guarantees this. If $G$ is a Gr\"obner basis of an ideal $I$ under a
+\emph{lexicographic} order with $x_1>\cdots>x_n$, then, for each $k$,
+$G\cap\mathbb{Q}[x_{k+1},\ldots,x_n]$ is a Gr\"obner basis of the elimination ideal
+$I\cap\mathbb{Q}[x_{k+1},\ldots,x_n]$---the consequences that mention none of the first
+$k$ variables. Geometrically that intersection cuts out the (Zariski closure of the)
+\emph{projection} of the solution variety onto the remaining coordinates, so eliminating
+the parameters of a parametrisation yields the implicit equations of its image. This one
+theorem underwrites both \B{Eliminate} and the triangular back-substitution the system
+solver of \S\ref{ssec:alg-solve-systems} walks down; Cox--Little--O'Shea~\cite{clo} give
+it with the implicitization algorithm.}
 
 \subsection{Solving a polynomial equation}
 \label{ssec:alg-solve-poly}
@@ -451,14 +481,164 @@ and it holds itself to a hard soundness rule: if any step is undecidable---an al
 sign it cannot resolve, a fibre it cannot isolate---it declines rather than emit a
 formula that might be wrong.} The third positional argument chooses the \texttt{Domain}:
 \texttt{Reals}, \texttt{Complexes} (the default), or \texttt{Rationals}. Solving over the
-\emph{integers}---Diophantine equations---is a different world of methods, and we take it
-up in \S\ref{sec:numbertheory}.
+\emph{integers}---Diophantine equations---is a different world of methods again, and it is
+where we turn next.
+
+\subsection{Diophantine equations: solving over the integers}
+\label{ssec:alg-diophantine}
+
+Restrict the unknowns to whole numbers and the ground shifts beneath you. An equation
+with a one-line real solution can become a deep problem in number theory, an open one,
+or---provably---one that no algorithm can settle. \B{Solve} takes the restriction as its
+third argument, \texttt{Integers}, and answers a \emph{Diophantine}\index{Diophantine
+equation} question: which integer tuples satisfy the system. Two promises govern every
+answer it gives. It is \emph{complete}---the whole solution set, never a sample: a finite
+list when the solutions are finite, a parametrised family when they are infinite, and an
+empty list \emph{only} as a proof that none exist. And it is \emph{sound}---when the shape
+at hand is beyond its methods it returns the input unevaluated rather than guess, so an
+answer it does give can be trusted.
+
+Behind that single interface is not one algorithm but a toolbox, because there cannot be
+one algorithm.\calloutnote{Theory}{\emph{Hilbert's tenth problem}\index{Hilbert's tenth
+problem} asked for a procedure deciding whether a given polynomial Diophantine equation
+has an integer solution. Matiyasevich, completing work of Davis, Putnam, and Robinson,
+proved in 1970 that \emph{none exists}: the solvable equations coincide with the
+recursively enumerable sets, so solvability is undecidable. There is thus no prospect of a
+universal solver, and a system like Mathilda's is of necessity a collection of specialised
+engines---each recognising a family it can settle completely, with a principled decline
+everywhere else.} \B{Solve}\texttt{[\ldots, Integers]} reads the shape of the input and
+dispatches to the matching engine. What follows is a tour of the classical ones.
+
+The simplest case, a single \emph{linear} equation, is completely understood.
+
+\begin{codepairs}
+\pair{algebra/diophantine/1}{$5x+3y=1$: the extended Euclidean algorithm finds one
+solution, and the whole family follows---a line of integer points stepped out by the
+parameter $C[1]$.}
+\pair{algebra/diophantine/2}{$6x+9y=5$ has \emph{no} solution: the left side is always a
+multiple of $\gcd(6,9)=3$, which does not divide $5$. The empty list says exactly that.}
+\pair{algebra/diophantine/3}{A linear \emph{system} is solved the same way through the
+Hermite normal form---a particular solution plus an integer basis for the kernel lattice.}
+\end{codepairs}
+
+A linear Diophantine equation $a_1x_1+\cdots+a_nx_n=c$ is solvable precisely when
+$\gcd(a_1,\ldots,a_n)\mid c$, and its solutions then form a lattice: one particular point
+translated by the integer combinations of $n-1$ basis vectors. Mathilda reads that lattice
+off the gcd staircase, and a system off its \B{HermiteDecomposition}, so an unsolvable
+equation is rejected instantly and with certainty by the divisibility test alone.
+
+Degree two opens onto the classical theory of quadratic forms, and two shapes stand
+out---sums of squares, and Pell's equation. The integer right triangles are the solutions
+of $x^2+y^2=z^2$:
+
+\mtranscript{algebra/diophantine-pythagorean}
+
+Ask for the triples below thirty and the familiar $(3,4,5)$ and $(5,12,13)$ appear beside
+their multiples. Drop the bound and \B{Solve} returns instead the complete two-parameter
+family---$x=2C_1C_2C_3$, $y=C_3(C_1^2-C_2^2)$, $z=C_3(C_1^2+C_2^2)$---Euclid's
+parametrisation, every triple and nothing but triples. Pell's equation $x^2-Dy^2=1$ is
+subtler:
+
+\mtranscript{algebra/diophantine-pell}
+
+For $D=61$ the smallest positive solution is already the ten-digit
+$(1766319049,\,226153980)$---the very case Fermat posed as a challenge in 1657, knowing
+how brutally large the answer is. Bound $x$ and \B{Solve} reports that fundamental
+solution; remove the bound and it hands back the entire infinite orbit as a
+\B{ConditionalExpression} family in $C[1]$; ask \B{FindInstance} instead and you get
+a single witness. All three come from one classical construction.\calloutnote{Theory}{The
+solutions of Pell's equation $x^2-Dy^2=1$, for $D$ a positive non-square, are governed by
+the \emph{continued fraction}\index{continued fraction!Pell's equation} of $\sqrt D$. Its
+expansion is eventually periodic, and the convergent at the end of the first period gives
+the \emph{fundamental solution} $(x_1,y_1)$; every other solution is then
+$x_k+y_k\sqrt D=(x_1+y_1\sqrt D)^k$, so one continued fraction generates the whole infinite
+family. The size of $(x_1,y_1)$ is governed by the period length, which for $D=61$ is
+long---hence the ten-digit fundamental solution from so small a $D$. Mathilda computes it
+with \B{ContinuedFraction} and returns the orbit in closed form; the same machinery, with
+Nagell's bound on the class representatives, handles the general $x^2-Dy^2=N$ and the
+negative Pell $x^2-Dy^2=-1$ (which exists only when the period is odd).} Not every
+quadratic form has solutions at all, and the system will \emph{prove} it when they are
+absent:
+
+\begin{codepairs}
+\pair{algebra/diophantine/4}{$x^2+y^2=3z^2$ returns only the origin. That is Mathilda's
+way of certifying that no \emph{nontrivial} integer point exists---a proof, not a failure
+to find one.}
+\end{codepairs}
+
+\noindent The verdict is \emph{Legendre's theorem}\index{Legendre's theorem}: a
+homogeneous ternary quadratic $ax^2+by^2+cz^2=0$ has a nonzero integer solution iff the
+obvious sign condition holds and $-bc$, $-ca$, $-ab$ are quadratic residues modulo $a$,
+$b$, $c$ respectively---conditions Mathilda checks directly with the Legendre symbol.
+When they pass, the form is a genus-zero curve and its \emph{complete} solution is a
+rational parametrisation swept out by the chord construction; when they fail, the lone
+origin is returned as the certificate of impossibility.
+
+Past degree two, each classical equation demands its own deep theorem, and \B{Solve}
+reaches for the right one.
+
+\begin{codepairs}
+\pair{algebra/diophantine/5}{Ramanujan's taxicab: $1729$ is the least number expressible
+as a sum of two positive cubes in two ways, $1^3+12^3=9^3+10^3$.}
+\pair{algebra/diophantine/6}{$x^3+y^3+z^3=4$ is impossible, and proved so with no search
+at all: every cube is $0$ or $\pm1$ modulo $9$, so a sum of three can never be $\equiv4$.}
+\pair{algebra/diophantine/7}{The Mordell curve $y^2=x^3-2$ has only the integer points
+$(3,\pm5)$---a fact first claimed by Fermat---found by descent in $\mathbb{Z}[\sqrt{-2}]$.}
+\pair{algebra/diophantine/8}{The Ramanujan--Nagell equation $2^n-7=x^2$ has exactly five
+solutions, the largest the striking $181^2+7=2^{15}$.}
+\pair{algebra/diophantine/9}{Brocard's problem $n!+1=m^2$ is still open in general;
+Mathilda finds the three known \emph{Brown numbers} $n=4,5,7$ within the search window.}
+\pair{algebra/diophantine/10}{Catalan's conjecture: the only consecutive perfect powers
+are $8$ and $9$, so $3^2-2^3=1$ is the unique solution of $x^a-y^b=1$.}
+\pair{algebra/diophantine/11}{Fermat's Last Theorem, returned in an instant: $x^3+y^3=z^3$
+has no positive solution, and \B{Solve} answers \texttt{\{\}} before searching at all.}
+\pair{algebra/diophantine/12}{A Thue equation, $x^3-2y^3=1$: an irreducible binary cubic
+set equal to a constant has only finitely many integer points, here just two.}
+\end{codepairs}
+
+Several of these answers are theorems standing in for a search.\calloutnote{Under the
+hood}{The dispatcher recognises each shape and calls a dedicated engine. \emph{Fermat's
+Last Theorem} (Wiles, 1995) and the mod-$9$ obstruction let $x^n+y^n=z^n$ and the
+unsolvable sums of three cubes return \texttt{\{\}} with no search. \emph{Catalan's
+equation} is settled by \emph{Mihailescu's theorem} (2002). The \emph{Mordell} curve
+$y^2=x^3+k$ is solved by factoring $x^3=(y-\sqrt k)(y+\sqrt k)$ in the ring
+$\mathbb{Z}[\sqrt k]$ and reading off the cubes. \emph{Ramanujan--Nagell} reduces to a
+Lucas sequence bounded by the Bilu--Hanrot--Voutier primitive-divisor theorem. The
+\emph{Thue} solver (Tzanakis--de Weger) is the deepest: it builds the number field
+$\mathbb{Q}(\theta)$ of a root of $F(t,1)$, turns the equation into one about units, bounds
+the unit exponents by \emph{Baker's linear forms in logarithms}, shrinks that astronomical
+bound to something enumerable with \emph{LLL} lattice reduction, and verifies each
+candidate exactly. And the celebrated sums of three cubes---$33$, $42$---use A.~R.~Booker's
+cube-root-mod-$d$ method. The engines live under \texttt{src/solve/solveint*.c} and
+\texttt{solvethue.c}.} What unites them is the completeness promise: a finite list is
+\emph{every} solution, and an empty one is a proof.
+
+That promise is also where honesty is required, and the two ways it can bite are worth
+seeing plainly. First, the toolbox is deliberately incomplete---by Hilbert's tenth problem
+it must be---so an unrecognised equation is declined, not guessed:
+
+\begin{codepairs}
+\pair{algebra/diophantine/13}{Strip Pell of its constraints and Mathilda declines. The
+solution orbit is unbounded, and rather than fabricate or silently truncate a family it
+cannot name, it returns the input unevaluated.}
+\end{codepairs}
+
+\noindent Second, an empty result is a proof only over the range you actually
+asked about.\calloutnote{Pitfall}{When you supply an explicit bound, \texttt{\{\}} means
+``no solutions in that box,'' not ``no solutions anywhere.'' Sums of three cubes are the
+cautionary tale: $x^3+y^3+z^3=42$ looks hopeless under any modest search, yet it \emph{is}
+solvable---the smallest solution, found only in 2019, is a sum of three sixteen-digit
+cubes. A bounded search that returns \texttt{\{\}} has proved something true and useful
+(nothing small works), but not the global statement. The proofs that \emph{do} hold
+unconditionally are the ones resting on an obstruction or a theorem---the mod-$9$ argument
+for $4$, Wiles for $x^n+y^n=z^n$---not on an exhausted box.}
 
 That is the arc of algebra in Mathilda: from reading a polynomial's structure, through
 expanding and factoring it---over the rationals and over the number fields you choose to
 work in---through the GCDs, resultants, and Gr\"obner bases that eliminate variables, to
-solving single equations, systems, and finally the complete real solution sets that
-\B{Reduce} describes. The rational-function normal forms established here feed directly
+solving single equations, systems, the complete real solution sets that \B{Reduce}
+describes, and the integer solutions that the Diophantine engines find or prove absent.
+The rational-function normal forms established here feed directly
 into the integration of \S\ref{sec:calculus}, and the more general art of coaxing an
 expression into its simplest form---\texttt{Simplify} and its relatives---builds on all
 of it, and is taken up later. As always, the exhaustive options for any function named

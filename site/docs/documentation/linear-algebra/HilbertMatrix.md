@@ -127,6 +127,7 @@ Diagnostics mirror Wolfram's surface text:
 - Tests: [`tests/test_fit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fit.c)
 - Tests: [`tests/test_hilbertmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hilbertmatrix.c)
 - Tests: [`tests/test_ludecomposition_mpfr.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ludecomposition_mpfr.c)
+- Tests: [`tests/test_ndarray_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_linalg.c)
 
 ## Notes & additional examples
 

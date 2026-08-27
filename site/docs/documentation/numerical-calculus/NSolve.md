@@ -106,7 +106,7 @@ Memory contract (builtin): takes ownership of `res`; returns a fresh Expr* on su
 
 ## References
 
-**See also:** [NRoots](../../numerical-calculus/NRoots/), [Solve](../../solutions-of-equations/Solve/), [VerifySolutions](../../solutions-of-equations/VerifySolutions/), [ConditionalExpression](../../control-flow/ConditionalExpression/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [FindRoot](../../calculus/FindRoot/)
+**See also:** [NRoots](../../numerical-calculus/NRoots/), [Solve](../../solutions-of-equations/Solve/), [VerifySolutions](../../solutions-of-equations/VerifySolutions/), [ConditionalExpression](../../control-flow/ConditionalExpression/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [FindRoot](../../calculus/FindRoot/), [Exists](../../solutions-of-equations/Exists/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

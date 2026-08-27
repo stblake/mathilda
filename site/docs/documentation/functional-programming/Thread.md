@@ -136,6 +136,7 @@ of `expr`.
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
 - Tests: [`tests/test_mapthread.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapthread.c)
+- Tests: [`tests/test_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_reduce.c)
 - Tests: [`tests/test_thread.c`](https://github.com/stblake/mathilda/blob/main/tests/test_thread.c)
 
 ## Notes & additional examples

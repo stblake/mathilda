@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_853 functions across 35 categories. Use the search box (press `/`) to jump to any function._
+_862 functions across 35 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -28,7 +28,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 
 ### [Control Flow](control-flow/index.md)
 
-[`$Epilog`](control-flow/$Epilog.md)  [`$Post`](control-flow/$Post.md)  [`$Pre`](control-flow/$Pre.md)  [`$PrePrint`](control-flow/$PrePrint.md)  [`$PreRead`](control-flow/$PreRead.md)  [`$RecursionLimit`](control-flow/$RecursionLimit.md)  [`Boole`](control-flow/Boole.md)  [`Break`](control-flow/Break.md)  [`Catch`](control-flow/Catch.md)  [`Compile`](control-flow/Compile.md)  [`CompileDiagnostics`](control-flow/CompileDiagnostics.md)  [`CompilePrint`](control-flow/CompilePrint.md)  [`ConditionalExpression`](control-flow/ConditionalExpression.md)  [`Continue`](control-flow/Continue.md)  [`Do`](control-flow/Do.md)  [`For`](control-flow/For.md)  [`Goto`](control-flow/Goto.md)  [`If`](control-flow/If.md)  [`Label`](control-flow/Label.md)  [`Piecewise`](control-flow/Piecewise.md)  [`Return`](control-flow/Return.md)  [`Switch`](control-flow/Switch.md)  [`Throw`](control-flow/Throw.md)  [`TrueQ`](control-flow/TrueQ.md)  [`Which`](control-flow/Which.md)  [`While`](control-flow/While.md)
+[`$Epilog`](control-flow/$Epilog.md)  [`$Post`](control-flow/$Post.md)  [`$Pre`](control-flow/$Pre.md)  [`$PrePrint`](control-flow/$PrePrint.md)  [`$PreRead`](control-flow/$PreRead.md)  [`$RecursionLimit`](control-flow/$RecursionLimit.md)  [`Boole`](control-flow/Boole.md)  [`Break`](control-flow/Break.md)  [`Catch`](control-flow/Catch.md)  [`Compile`](control-flow/Compile.md)  [`CompileDiagnostics`](control-flow/CompileDiagnostics.md)  [`CompilePrint`](control-flow/CompilePrint.md)  [`ConditionalExpression`](control-flow/ConditionalExpression.md)  [`Continue`](control-flow/Continue.md)  [`Do`](control-flow/Do.md)  [`Equivalent`](control-flow/Equivalent.md)  [`For`](control-flow/For.md)  [`Goto`](control-flow/Goto.md)  [`If`](control-flow/If.md)  [`Implies`](control-flow/Implies.md)  [`Label`](control-flow/Label.md)  [`Piecewise`](control-flow/Piecewise.md)  [`Return`](control-flow/Return.md)  [`Switch`](control-flow/Switch.md)  [`Throw`](control-flow/Throw.md)  [`TrueQ`](control-flow/TrueQ.md)  [`Which`](control-flow/Which.md)  [`While`](control-flow/While.md)  [`Xor`](control-flow/Xor.md)
 
 ### [Data Structures](data-structures/index.md)
 
@@ -116,7 +116,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 
 ### [Solutions of Equations](solutions-of-equations/index.md)
 
-[`Cubics`](solutions-of-equations/Cubics.md)  [`Eliminate`](solutions-of-equations/Eliminate.md)  [`GeneratedParameters`](solutions-of-equations/GeneratedParameters.md)  [`InverseFunctions`](solutions-of-equations/InverseFunctions.md)  [`Quartics`](solutions-of-equations/Quartics.md)  [`Reduce`](solutions-of-equations/Reduce.md)  [`Root`](solutions-of-equations/Root.md)  [`RootSum`](solutions-of-equations/RootSum.md)  [`Solve`](solutions-of-equations/Solve.md)  [`SolveAlways`](solutions-of-equations/SolveAlways.md)  [`ToRadicals`](solutions-of-equations/ToRadicals.md)  [`VerifySolutions`](solutions-of-equations/VerifySolutions.md)
+[`Cubics`](solutions-of-equations/Cubics.md)  [`Eliminate`](solutions-of-equations/Eliminate.md)  [`Exists`](solutions-of-equations/Exists.md)  [`FindInstance`](solutions-of-equations/FindInstance.md)  [`ForAll`](solutions-of-equations/ForAll.md)  [`GeneratedParameters`](solutions-of-equations/GeneratedParameters.md)  [`InverseFunctions`](solutions-of-equations/InverseFunctions.md)  [`LogicalExpand`](solutions-of-equations/LogicalExpand.md)  [`NotElement`](solutions-of-equations/NotElement.md)  [`Quartics`](solutions-of-equations/Quartics.md)  [`Reduce`](solutions-of-equations/Reduce.md)  [`Resolve`](solutions-of-equations/Resolve.md)  [`Root`](solutions-of-equations/Root.md)  [`RootSum`](solutions-of-equations/RootSum.md)  [`Solve`](solutions-of-equations/Solve.md)  [`SolveAlways`](solutions-of-equations/SolveAlways.md)  [`ToRadicals`](solutions-of-equations/ToRadicals.md)  [`VerifySolutions`](solutions-of-equations/VerifySolutions.md)
 
 ### [Special Functions](special-functions/index.md)
 
@@ -363,6 +363,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`End`](scoping-constructs/End.md)
 - [`EndPackage`](scoping-constructs/EndPackage.md)
 - [`Equal`](comparisons/Equal.md)
+- [`Equivalent`](control-flow/Equivalent.md)
 - [`Erf`](special-functions/Erf.md)
 - [`Erfc`](special-functions/Erfc.md)
 - [`Erfi`](special-functions/Erfi.md)
@@ -374,6 +375,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`Evaluate`](expression-information/Evaluate.md)
 - [`EvenQ`](expression-information/EvenQ.md)
 - [`ExactNumberQ`](other-advanced/ExactNumberQ.md)
+- [`Exists`](solutions-of-equations/Exists.md)
 - [`Exp`](elementary-functions/Exp.md)
 - [`ExpIntegralEi`](special-functions/ExpIntegralEi.md)
 - [`ExpToTrig`](elementary-functions/ExpToTrig.md)
@@ -416,6 +418,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`FileNameSplit`](file-io/FileNameSplit.md)
 - [`FilePrint`](file-io/FilePrint.md)
 - [`FindClusters`](lists-and-iteration/FindClusters.md)
+- [`FindInstance`](solutions-of-equations/FindInstance.md)
 - [`FindIntegerNullVector`](linear-algebra/FindIntegerNullVector.md)
 - [`FindMaximum`](numerical-calculus/FindMaximum.md)
 - [`FindMinimum`](numerical-calculus/FindMinimum.md)
@@ -435,6 +438,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`Fold`](functional-programming/Fold.md)
 - [`FoldList`](data-structures/FoldList.md)
 - [`For`](control-flow/For.md)
+- [`ForAll`](solutions-of-equations/ForAll.md)
 - [`Fourier`](fourier-transforms/Fourier.md)
 - [`FourierDCT`](fourier-transforms/FourierDCT.md)
 - [`FourierDST`](fourier-transforms/FourierDST.md)
@@ -526,6 +530,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`ImageRotate`](image-processing/ImageRotate.md)
 - [`ImageSize`](other-advanced/ImageSize.md)
 - [`ImageType`](image-processing/ImageType.md)
+- [`Implies`](control-flow/Implies.md)
 - [`Import`](file-io/Import.md)
 - [`IncidenceMatrix`](other-advanced/IncidenceMatrix.md)
 - [`Increment`](assignment-and-rules/Increment.md)
@@ -617,6 +622,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`Log`](elementary-functions/Log.md)
 - [`LogGamma`](special-functions/LogGamma.md)
 - [`LogIntegral`](special-functions/LogIntegral.md)
+- [`LogicalExpand`](solutions-of-equations/LogicalExpand.md)
 - [`Longest`](pattern-matching/Longest.md)
 - [`Lookup`](data-structures/Lookup.md)
 - [`LucasL`](arithmetic/LucasL.md)
@@ -690,6 +696,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`Normal`](power-series/Normal.md)
 - [`NormalDistribution`](other-advanced/NormalDistribution.md)
 - [`Normalize`](linear-algebra/Normalize.md)
+- [`NotElement`](solutions-of-equations/NotElement.md)
 - [`Nothing`](lists-and-iteration/Nothing.md)
 - [`NullSpace`](linear-algebra/NullSpace.md)
 - [`NumberForm`](expression-information/NumberForm.md)
@@ -819,6 +826,7 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`ReplaceRepeated`](assignment-and-rules/ReplaceRepeated.md)
 - [`Rescale`](lists-and-iteration/Rescale.md)
 - [`Residue`](calculus/Residue.md)
+- [`Resolve`](solutions-of-equations/Resolve.md)
 - [`Rest`](data-structures/Rest.md)
 - [`Resultant`](algebra/Resultant.md)
 - [`Return`](control-flow/Return.md)
@@ -999,5 +1007,6 @@ _853 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`While`](control-flow/While.md)
 - [`White`](other-advanced/White.md)
 - [`With`](scoping-constructs/With.md)
+- [`Xor`](control-flow/Xor.md)
 - [`Yellow`](other-advanced/Yellow.md)
 - [`Zeta`](special-functions/Zeta.md)

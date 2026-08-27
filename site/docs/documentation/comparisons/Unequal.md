@@ -31,10 +31,15 @@ Out[3]= a != b
 - A pair containing `Indeterminate` counts as unequal, so
   `Indeterminate != Indeterminate` is `True`. An equal non-`Indeterminate` pair
   still decides the whole call `False`.
+- Like `Equal`, an undecided pair of numeric constants is settled by the exact
+  zero-test, so `I != 0` and `2 I Pi != 0` are `True`, while a free symbol stays
+  symbolic (`x != 0`).
 
 **Attributes:** `Protected`.
 
 ## References
+
+**See also:** [Equal](../../comparisons/Equal/)
 
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification: [`docs/spec/builtins/comparisons.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/comparisons.md)

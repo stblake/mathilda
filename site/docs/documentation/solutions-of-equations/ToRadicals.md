@@ -151,7 +151,7 @@ Per `Root` node: (1) extract the polynomial body, accepting both the `Slot[1]` f
 
 ## References
 
-**See also:** [Sqrt](../../arithmetic/Sqrt/), [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Less](../../comparisons/Less/), [Greater](../../comparisons/Greater/), [Root](../../solutions-of-equations/Root/)
+**See also:** [Sqrt](../../arithmetic/Sqrt/), [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Less](../../comparisons/Less/), [Greater](../../comparisons/Greater/), [Implies](../../control-flow/Implies/)
 
 - G. Cardano, *Ars Magna*, 1545 (cubic); L. Ferrari (quartic resolvent, via Cardano).
 - Source: [`src/radicals.c`](https://github.com/stblake/mathilda/blob/main/src/radicals.c)

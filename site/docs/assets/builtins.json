@@ -1720,6 +1720,14 @@
     "url": "documentation/comparisons/Equal/"
   },
   {
+    "name": "Equivalent",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Equivalent[e1, e2, ...]",
+    "url": "documentation/control-flow/Equivalent/"
+  },
+  {
     "name": "Erf",
     "category": "Special Functions",
     "slug": "special-functions",
@@ -1806,6 +1814,14 @@
     "status": "Experimental",
     "summary": "ExactNumberQ[expr]",
     "url": "documentation/other-advanced/ExactNumberQ/"
+  },
+  {
+    "name": "Exists",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
+    "status": "Stable",
+    "summary": "Exists[x, expr]",
+    "url": "documentation/solutions-of-equations/Exists/"
   },
   {
     "name": "Exp",
@@ -2144,6 +2160,14 @@
     "url": "documentation/lists-and-iteration/FindClusters/"
   },
   {
+    "name": "FindInstance",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
+    "status": "Stable",
+    "summary": "FindInstance[expr, vars]",
+    "url": "documentation/solutions-of-equations/FindInstance/"
+  },
+  {
     "name": "FindIntegerNullVector",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -2294,6 +2318,14 @@
     "status": "Stable",
     "summary": "For[start, test, incr, body] executes start, then repeatedly evaluates body and incr until test fails to give True.",
     "url": "documentation/control-flow/For/"
+  },
+  {
+    "name": "ForAll",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
+    "status": "Stable",
+    "summary": "ForAll[x, expr]",
+    "url": "documentation/solutions-of-equations/ForAll/"
   },
   {
     "name": "Fourier",
@@ -3024,6 +3056,14 @@
     "url": "documentation/image-processing/ImageType/"
   },
   {
+    "name": "Implies",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Implies[p, q]",
+    "url": "documentation/control-flow/Implies/"
+  },
+  {
     "name": "Import",
     "category": "File I/O",
     "slug": "file-io",
@@ -3752,6 +3792,14 @@
     "url": "documentation/special-functions/LogIntegral/"
   },
   {
+    "name": "LogicalExpand",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
+    "status": "Stable",
+    "summary": "LogicalExpand[expr]",
+    "url": "documentation/solutions-of-equations/LogicalExpand/"
+  },
+  {
     "name": "Longest",
     "category": "Pattern Matching",
     "slug": "pattern-matching",
@@ -4334,6 +4382,14 @@
     "status": "Stable",
     "summary": "Normalize[v]",
     "url": "documentation/linear-algebra/Normalize/"
+  },
+  {
+    "name": "NotElement",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
+    "status": "Stable",
+    "summary": "NotElement[x, dom]",
+    "url": "documentation/solutions-of-equations/NotElement/"
   },
   {
     "name": "Nothing",
@@ -5368,6 +5424,14 @@
     "url": "documentation/calculus/Residue/"
   },
   {
+    "name": "Resolve",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
+    "status": "Stable",
+    "summary": "Resolve[expr]",
+    "url": "documentation/solutions-of-equations/Resolve/"
+  },
+  {
     "name": "Rest",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -5444,7 +5508,7 @@
     "category": "Algebra",
     "slug": "algebra",
     "status": "Stable",
-    "summary": "RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised; a polynomial/rational function in a free variable has its constant-algebraic coefficients canonicalised. Threads over lists, equations, inequalities and logic. Option: Method -> \"Automatic\" | \"Recursive\" | \"NumberField\".",
+    "summary": "RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised; a polynomial/rational function in a free variable has its constant-algebraic coefficients canonicalised. Threads over lists, rules (Solve results), equations, inequalities and logic. Option: Method -> \"Automatic\" | \"Recursive\" | \"NumberField\".",
     "url": "documentation/algebra/RootReduce/"
   },
   {
@@ -6806,6 +6870,14 @@
     "status": "Stable",
     "summary": "With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.",
     "url": "documentation/scoping-constructs/With/"
+  },
+  {
+    "name": "Xor",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Xor[e1, e2, ...]",
+    "url": "documentation/control-flow/Xor/"
   },
   {
     "name": "Yellow",

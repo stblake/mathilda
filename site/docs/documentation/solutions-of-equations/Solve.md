@@ -291,6 +291,16 @@ The `dom` third argument selects the solution domain: default `Complexes`; `Real
     triangular back-substitution.  Positive-dimensional systems (infinitely
     many solutions) emit `Solve::nsdim` and leave `Solve` unevaluated;
     non-polynomial systems also stay unevaluated.
+  - **Equations with inequality / disequation constraints** (`Solve[eqns &&
+    ineqs, vars]`): the ordinary system specialists refuse an `And` that mixes
+    `==` with `<`/`>`/`!=`, so — like the `Integers` pre-pass — the two are
+    separated and the shared zero-dimensional engine (`reduce_zerodim`, see
+    `Reduce` below) solves the equations and keeps only the branches that
+    satisfy the side relations (and, over the `Reals`, are real), decided
+    exactly with the algebraic-number oracle.  Example:
+    `Solve[u^2+v^2==9 && u^2+(a+v)^2==36 && (a+u)^2+v^2==25 && u>0 && v>0 && a>0,
+    {u,v,a}]` -> the single all-positive branch.  Declines (falls through to the
+    ordinary dispatch) for a positive-dimensional or non-polynomial system.
   - **Polynomial in a single transcendental kernel** `g(x)` (single equation,
     single variable, the peel/trig/radical passes all declined): if
     substituting `u = g(x)` makes the equation a polynomial in `u` free of

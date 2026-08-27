@@ -70,6 +70,9 @@ Out[10]= 7.5397342226735670654635508695465744950351
 - Evaluates the determinant of a square matrix symbolically or numerically using Laplace expansion.
 - Returns a warning `Det::matsq` if `m` is not a non-empty square matrix.
 - **FLINT acceleration** (when built with FLINT): a matrix whose entries are all integer or rational is computed exactly via `fmpq_mat_det` in polynomial time, avoiding the `O(n!)` Laplace expansion (e.g. a 12×12 Hilbert determinant is instant and exact). Symbolic matrices fall through to Laplace. The same kernel is exposed directly as `` FLINT`Det `` (see the FLINT` context section in *Structural Manipulation*).
+- **Packed/NDArray fast path** (machine reals): the LU factorisation runs through LAPACK `dgetrf` / `zgetrf` (in-house partial-pivot `double` LU as fallback).
+- **Overflow/underflow → arbitrary precision**: the determinant is the product of the LU pivots, which can exceed the IEEE-double range even when the matrix is ordinary — a 200×200 `RandomReal[{-10,10}]` matrix has `|Det| ≈ 10^340`. Rather than return `inf` (or `0` from a mid-product underflow), the pivot product is re-accumulated in a 53-bit-mantissa MPFR value whose exponent range is effectively unbounded, so the answer is finite and correct to machine precision (`Det[RandomReal[{-10,10},{200,200}]]` returns a `≈ -1.08×10^340` real). A genuinely singular matrix still returns `0`.
+- **Arbitrary-precision matrices**: a genuine MPFR matrix (precision > machine) uses an `O(n^3)` MPFR LU determinant (`mpfr_det_dispatch`) rather than the `O(n!)` Laplace expansion, which previously hung for `n ≳ 12`.
 
 **Attributes:** `Protected`.
 
@@ -78,10 +81,10 @@ Out[10]= 7.5397342226735670654635508695465744950351
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — Gaussian elimination and the LU view of the determinant.
 - Source: [`src/linalg/det.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/det.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_characteristicpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_characteristicpolynomial.c)
 - Tests: [`tests/test_diagonal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal.c)
 - Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
 - Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
-- Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
 
 ## Notes & additional examples
 

@@ -144,9 +144,9 @@ A two-argument `Expand[expr, patt]` only expands subexpressions that *contain* `
 - Source: [`src/expand.c`](https://github.com/stblake/mathilda/blob/main/src/expand.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_bernoullib.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bernoullib.c)
+- Tests: [`tests/test_characteristicpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_characteristicpolynomial.c)
 - Tests: [`tests/test_collect_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_collect_corpus.c)
 - Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
-- Tests: [`tests/test_deriv_array.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv_array.c)
 
 ## Notes & additional examples
 

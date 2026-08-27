@@ -1,6 +1,6 @@
 # Control Flow
 
-26 built-in function(s) in this category.
+29 built-in function(s) in this category.
 
 - [`$Epilog`]($Epilog.md) — $Epilog  _(Stable)_
 - [`$Post`]($Post.md) — $Post  _(Stable)_
@@ -17,9 +17,11 @@
 - [`ConditionalExpression`](ConditionalExpression.md) — ConditionalExpression[expr, cond]  _(Stable)_
 - [`Continue`](Continue.md) — Continue[] proceeds to the next iteration of the nearest enclosing Do, For, or While loop.  _(Stable)_
 - [`Do`](Do.md) — Do[expr, n] evaluates expr n times.  _(Stable)_
+- [`Equivalent`](Equivalent.md) — Equivalent[e1, e2, ...]  _(Stable)_
 - [`For`](For.md) — For[start, test, incr, body] executes start, then repeatedly evaluates body and incr until test fails to give True.  _(Stable)_
 - [`Goto`](Goto.md) — Goto[tag]  _(Stable)_
 - [`If`](If.md) — If[cond, t]  _(Stable)_
+- [`Implies`](Implies.md) — Implies[p, q]  _(Stable)_
 - [`Label`](Label.md) — Label[tag]  _(Stable)_
 - [`Piecewise`](Piecewise.md) — Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]  _(Stable)_
 - [`Return`](Return.md) — Return[expr]  _(Stable)_
@@ -28,3 +30,4 @@
 - [`TrueQ`](TrueQ.md) — TrueQ[expr] yields True if expr is True, and False otherwise.  _(Stable)_
 - [`Which`](Which.md) — Which[test1, value1, test2, value2, ...]  _(Stable)_
 - [`While`](While.md) — While[test, body] evaluates test, then body, repeatedly, until test first fails to give True.  _(Stable)_
+- [`Xor`](Xor.md) — Xor[e1, e2, ...]  _(Stable)_

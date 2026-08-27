@@ -106,7 +106,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_characteristicpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_characteristicpolynomial.c)
 - Tests: [`tests/test_expand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expand.c)
 - Tests: [`tests/test_exponent.c`](https://github.com/stblake/mathilda/blob/main/tests/test_exponent.c)
 - Tests: [`tests/test_subresultantpolynomials.c`](https://github.com/stblake/mathilda/blob/main/tests/test_subresultantpolynomials.c)
-- Tests: [`tests/test_subresultants.c`](https://github.com/stblake/mathilda/blob/main/tests/test_subresultants.c)

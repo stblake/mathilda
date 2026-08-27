@@ -31,6 +31,11 @@ Out[3]= a == b
 **Data structures.** Operates directly on the `Expr` argument array; numeric extraction goes through `get_numeric_value` (double + exact rational num/den + exactness flag) and GMP `mpz_t` for big integers.
 
 - Numeric arguments are compared by value, so `2 == 2.0` is `True`.
+- Closed-form numeric constants that carry no real ordering are decided by the
+  exact zero-test: `I == 0` is `False`, `(1 + I) == (1 - I)` is `False`, and a
+  complex radical such as `(-1 + (1/8)(-1 - I Sqrt[3])^3)/(-1 + (1/2)(-1 - I Sqrt[3]))
+  == 0` is `True`. The test only fires when **both** sides are numeric
+  (`NumericQ`), so a free symbol still stays symbolic (`x == 0`).
 - For symbolic arguments that cannot be decided, the expression is returned
   unevaluated (`x == y`).
 - `Equal` is `Orderless` for the equality test but preserves Mathematica's
@@ -42,7 +47,7 @@ Out[3]= a == b
 
 ## References
 
-**See also:** [Orderless](../../expression-information/Orderless/)
+**See also:** [NumericQ](../../expression-information/NumericQ/), [Orderless](../../expression-information/Orderless/)
 
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification: [`docs/spec/builtins/comparisons.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/comparisons.md)

@@ -15,10 +15,10 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= MemoryInUse[]
-Out[1]= 7208960
+Out[1]= 7249920
 
 In[2]:= N[MemoryInUse[]/1024^2, 4]
-Out[2]= 6.8906
+Out[2]= 6.9297
 ```
 
 ## Algorithm

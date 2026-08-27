@@ -5,13 +5,13 @@
 
 ## Description
 
-**`RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised; a polynomial/rational function in a free variable has its constant-algebraic coefficients canonicalised. Threads over lists, equations, inequalities and logic. Option: Method -> "Automatic" | "Recursive" | "NumberField".`**
+**`RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised; a polynomial/rational function in a free variable has its constant-algebraic coefficients canonicalised. Threads over lists, rules (Solve results), equations, inequalities and logic. Option: Method -> "Automatic" | "Recursive" | "NumberField".`**
 
-## Examples (8)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (9)
 
 ```mathematica
 In[1]:= RootReduce[Sqrt[2] + Sqrt[3]]
@@ -49,6 +49,13 @@ In[8]:= RootReduce[a x^2 + Sqrt[8] x]
 Out[8]= 2 Sqrt[2] x + a x^2
 ```
 
+Thread over Solve rules
+
+```mathematica
+In[9]:= RootReduce[{u -> Sqrt[8], v -> 1/(1 + Sqrt[2])}]
+Out[9]= {u -> 2 Sqrt[2], v -> -1 + Sqrt[2]}
+```
+
 ## Algorithm
 
 Mathilda — RootReduce implementation.
@@ -77,7 +84,7 @@ RootReduce[expr] canonicalises an algebraic expression. It dispatches between tw
       out. Plain polynomial cancellation is NOT performed (that is Cancel).
 ```
 
-RootReduce also threads over equations, inequalities and logic functions (Equal, Less, And, ...), and for equations/inequalities of constant algebraic numbers it decides the (in)equality exactly via `qqbar`. It is Listable, so it threads over lists elementwise.
+RootReduce also threads over equations, inequalities and logic functions (Equal, Less, And, ...), and for equations/inequalities of constant algebraic numbers it decides the (in)equality exactly via `qqbar`. It threads over an (immediate) Rule too, so a Solve result {u -> value, ...} reduces the same way the corresponding Reduce result does. It is Listable, so it threads over lists elementwise.
 
 Options: Method -> "Automatic" | "Recursive" | "NumberField" (see flint_qqbar).
 
@@ -85,10 +92,15 @@ When `expr` carries no algebraic content (or the case is out of scope) it is ret
 
 ## Implementation notes
 
-- `Protected`, `Listable`. Threads over lists, and over equations, inequalities
-  and logic functions (`Equal`, `Unequal`, `Less`, `And`, ...); for
+- `Protected`, `Listable`. Threads over lists, over equations, inequalities and
+  logic functions (`Equal`, `Unequal`, `Less`, `And`, ...), and over an
+  (immediate) `Rule` — so `Solve[...] // RootReduce` reduces the right-hand side
+  of each `u -> value` entry the same way `Reduce[...] // RootReduce` reduces
+  each `u == value`, leaving the free-variable left-hand side intact. For
   (in)equalities of constant algebraic numbers it decides the relation exactly
-  via `qqbar`.
+  via `qqbar`. A `Rule` whose left-hand side is the option name `Method` is a
+  trailing option; any other symbol left-hand side (e.g. `u -> value`) is a
+  positional argument threaded over, not an option.
 - `Method`: `"Recursive"`/`"Automatic"` fold `qqbar` arithmetic bottom-up;
   `"NumberField"` re-expresses the value through a single primitive element of a
   common number field (`qqbar_express_in_field`). All three yield the identical
