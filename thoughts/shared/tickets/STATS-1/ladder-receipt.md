@@ -18,7 +18,7 @@ did not finish, it is recorded as NOT COMPLETE — never as a pass.
 | static | `python3 tools/check_c99_portability.py` | **PASS** (exit 0) |
 | typecheck (= build) | `make -j8` (gcc-16, -Werror set) | **PASS** (exit 0, binary relinked) |
 | unit (focused) | `ctest -R "quantile_family_tests|stats_tests"` | **PASS** — 2/2, 21 test functions |
-| unit (full suite) | `ctest --test-dir tests/build` | **NOT COMPLETE** — 216/231 executed when this receipt was written (suite still running at session end); 4 failures, all classified below |
+| unit (full suite) | `ctest --test-dir tests/build` | **COMPLETE — 227/231 passed (98%), 4 failed, exit 8.** All four classified INHERITED below. `stats_tests` and `quantile_family_tests` both PASSED in the full run |
 | integration | not-configured | **GAP** (honest: repo has no integration tier) |
 | judge | adversarial-reviewer (agent), human (absent) | **PARTIAL** — agent pass ran and its findings were fixed; no human judge available (beta run) |
 
@@ -36,14 +36,22 @@ pass) to run the exact failing expression — the `--baseline` idea applied by h
 3. **plot3d_tests** — `Length[Plot3D[x+y, ..., PlotPoints->4, MaxRecursion->0,
    Mesh->None][[1]]]` expects `9`, gets `18`. Base binary returns the identical `18`.
    → **INHERITED**, not introduced.
-4. **bench_pack** — a *performance* gate (fails above 2.5x recorded baseline). Three
-   workloads flagged: Total int64 (9.25x), Differences int64 (4.76x), Jacobi stencil
-   (3.17x). The tool's own hint points at `src/pack.c`'s AWARE / INT64_OK lists, which
-   this change does not touch (no packed fast path was added or removed; the four new
-   heads are deliberately non-AWARE and materialise NDArray input themselves).
-   Measured while 6 test binaries ran in parallel plus a stalled audit process.
-   → **UNRESOLVED — most likely load-induced.** An unloaded re-run is the discriminator
-   and did not happen inside this session. Recorded as unresolved rather than dismissed.
+4. **bench_pack** — a *performance* gate (fails above 2.5x its recorded baseline).
+   RESOLVED after the suite finished and the machine went idle. The load hypothesis was
+   WRONG: unloaded it fails harder (6 workloads, incl. Total int64 11.40x, Sort 2.87x,
+   Jacobi 3.12x), so contention was not the cause. The discriminator that settles it is
+   a direct base-vs-head timing of the flagged workloads, 3 trials each:
+
+   | workload | HEAD | BASE (15b088da) |
+   |---|---|---|
+   | `Total[Range[10^5]]` | 0.000167 / 0.000104 / 0.0001 | 0.000105 / 0.000116 / 0.0001 |
+   | `Sort[Table[Mod[k*7919,10^5],{k,10^5}]]` | 0.021417 / 0.021323 / 0.021685 | 0.021974 / 0.020890 / 0.021197 |
+   | `Differences[Range[10^5]]` | 0.000167 / 0.000187 / 0.000148 | 0.000173 / 0.000200 / 0.000146 |
+
+   Identical within noise on every one. This change touches no packed fast path
+   (`src/pack.c` untouched; the four new heads are deliberately non-AWARE), and the
+   evidence agrees. → **INHERITED** — the gate's baseline constants do not match this
+   machine, and it fails the same way without this change.
 
 ## Repo fast-path audits
 
@@ -56,8 +64,15 @@ pass) to run the exact failing expression — the `--baseline` idea applied by h
 
 ## RECOMMENDATION (ceiling)
 
-The strongest claim these rungs support: **the change builds clean, passes static
-portability checks, and passes its own and the pre-existing statistics suites; the full
-suite is unfinished and its four observed failures are three proven-inherited and one
-unresolved performance gate.** Not "review-ready" — that verdict belongs to the judge
-rung, which no human ran here.
+The strongest claim these rungs support: **the change builds clean, passes the static
+portability gate, and the full 231-test suite runs at 227 passed / 4 failed — where all
+four failures are demonstrated INHERITED, three by identical wrong output at the base
+commit and one by identical base-vs-head timings. Both statistics suites pass, one of
+which had never executed under ctest before this change.**
+
+Not "review-ready" — that verdict belongs to the judge rung. An agent adversarial pass
+ran and its findings were fixed; no human judge reviewed this work.
+
+Outstanding coverage gaps, stated rather than smoothed over: no integration tier exists
+in this repo; `nd_surface_audit.py` never completed (stalled, then killed);
+`check_array_exactness.py` and `nd_fastpath_sweep.py` were not run.
