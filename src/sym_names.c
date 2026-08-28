@@ -50,6 +50,8 @@ const char* SYM_Arg = NULL;
 const char* SYM_Arnoldi = NULL;
 const char* SYM_Array = NULL;
 const char* SYM_ArrayFlatten = NULL;
+const char* SYM_ArrayReshape = NULL;
+const char* SYM_ArrayPad = NULL;
 const char* SYM_AssumptionRules = NULL;
 const char* SYM_Assumptions = NULL;
 const char* SYM_Automatic = NULL;
@@ -932,6 +934,8 @@ void sym_names_init(void) {
     SYM_Arnoldi                    = intern_symbol("Arnoldi");
     SYM_Array                      = intern_symbol("Array");
     SYM_ArrayFlatten               = intern_symbol("ArrayFlatten");
+    SYM_ArrayReshape               = intern_symbol("ArrayReshape");
+    SYM_ArrayPad                   = intern_symbol("ArrayPad");
     SYM_AssumptionRules            = intern_symbol("AssumptionRules");
     SYM_Assumptions                = intern_symbol("Assumptions");
     SYM_Automatic                  = intern_symbol("Automatic");

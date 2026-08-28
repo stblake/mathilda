@@ -282,6 +282,10 @@ BASELINE = {
     "Riffle", "Partition", "PadLeft", "PadRight", "Append", "Prepend",
     "Catenate", "Extract", "Rescale",
     "ExponentialMovingAverage",
+    # ArrayPad amounts are a scalar/list spec and the fill a value/scheme; the
+    # ArrayReshape dims argument is a List spec — neither is a CT_INT operand the
+    # A_NDFN table can carry.
+    "ArrayPad", "ArrayReshape",
     # A callback lowering, as Map / Select / Fold already have.
     "Scan", "MapAll", "MapAt", "MapIndexed", "MapThread", "SelectFirst",
     "NestWhile", "NestWhileList",

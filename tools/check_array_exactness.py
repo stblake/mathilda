@@ -158,6 +158,12 @@ EXEMPT = {
                 "0. fill produces a uniform Real result and packs.",
     "x_padright_dflt": "see padright",
     "x_padleft_dflt":  "see padright -- PadLeft[{1., 2.}, 4] is {0, 0, 1., 2.}",
+    "arraypad": "ArrayPad with the DEFAULT fill pads with the exact Integer 0, "
+                "and Mathematica does the same: ArrayPad[{1., 2., 3.}, 2] is "
+                "{0, 0, 1., 2., 3., 0, 0}. An explicit real fill (ArrayPad[v, 2, "
+                "0.]) gives a uniform Real result and packs. Same rule as padright.",
+    "x_arraypad": "see arraypad -- ArrayPad[Range[1., 400.], 10] borders the "
+                  "Real vector with exact Integer 0s, matching Mathematica.",
     "x_clip_exact": "Clip[x, {lo, hi}] returns the BOUND itself where it "
                     "clips, so an exact bound gives an exact element: "
                     "Mathematica's Clip[{-2., 0., 2.}, {-1, 1}] is "

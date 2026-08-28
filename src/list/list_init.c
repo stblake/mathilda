@@ -7,6 +7,8 @@ void list_init(void) {
     symtab_add_builtin("Array", builtin_array);
     symtab_add_builtin("ConstantArray", builtin_constant_array);
     symtab_add_builtin("ArrayFlatten", builtin_array_flatten);
+    symtab_add_builtin("ArrayReshape", builtin_array_reshape);
+    symtab_add_builtin("ArrayPad", builtin_array_pad);
     symtab_add_builtin("Take", builtin_take);
     symtab_add_builtin("Drop", builtin_drop);
     symtab_add_builtin("Flatten", builtin_flatten);
@@ -230,6 +232,14 @@ void list_init(void) {
     symtab_get_def("Array")->attributes |= ATTR_PROTECTED;
     symtab_get_def("ConstantArray")->attributes |= ATTR_PROTECTED;
     symtab_get_def("ArrayFlatten")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ArrayReshape")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ArrayPad")->attributes |= ATTR_PROTECTED;
+    /* ArrayPad[..., "Extrapolated", InterpolationOrder -> o]; default is linear. */
+    symtab_set_options("ArrayPad",
+        expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Rule),
+                (Expr*[]){ expr_new_symbol(SYM_InterpolationOrder),
+                           expr_new_integer(1) }, 2) }, 1));
     symtab_get_def("Take")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Drop")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Flatten")->attributes |= ATTR_PROTECTED;

@@ -391,6 +391,9 @@ set(COMMON_SRC
     ../src/list/array.c
     ../src/list/constant_array.c
     ../src/list/array_flatten.c
+    ../src/list/array_reshape.c
+    ../src/list/array_pad.c
+    ../src/list/pad_schemes.c
     ../src/list/take_drop.c
     ../src/list/flatten.c
     ../src/list/flatten_at.c
@@ -1033,6 +1036,14 @@ add_test(NAME complement_tests COMMAND complement_tests)
 add_executable(constant_array_tests test_constant_array.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(constant_array_tests PRIVATE ../src)
 add_test(NAME constant_array_tests COMMAND constant_array_tests)
+
+add_executable(array_reshape_tests test_array_reshape.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(array_reshape_tests PRIVATE ../src)
+add_test(NAME array_reshape_tests COMMAND array_reshape_tests)
+
+add_executable(array_pad_tests test_array_pad.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(array_pad_tests PRIVATE ../src)
+add_test(NAME array_pad_tests COMMAND array_pad_tests)
 
 add_executable(unit_vector_tests test_unit_vector.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(unit_vector_tests PRIVATE ../src)

@@ -2192,6 +2192,24 @@ void info_init(void) {
         "\tgenerates a list of n copies of the element c.\n"
         "ConstantArray[c, {n1, n2, ...}]\n"
         "\tgenerates an n1 x n2 x ... nested array of copies of c.");
+    symtab_set_docstring("ArrayReshape",
+        "ArrayReshape[list, dims]\n"
+        "\tarranges the flattened elements of list into a rectangular array of\n"
+        "\tdimensions dims, dropping extra elements or padding with 0 as needed.\n"
+        "ArrayReshape[list, dims, padding]\n"
+        "\tuses the given padding scheme (as in ArrayPad) when list is too short.");
+    symtab_set_docstring("ArrayPad",
+        "ArrayPad[array, m]\n"
+        "\tpads array with m elements of 0 on every side of every level.\n"
+        "ArrayPad[array, {m, n}]\n"
+        "\tpads with m elements at the start and n at the end of each dimension.\n"
+        "ArrayPad[array, {{m1, n1}, {m2, n2}, ...}]\n"
+        "\tpads with mi, ni elements at level i; a negative amount removes elements.\n"
+        "ArrayPad[array, amounts, padding]\n"
+        "\tuses the given padding: a constant c, a cyclic list {c1, c2, ...}, or one\n"
+        "\tof \"Fixed\", \"Periodic\", \"Reflected\", \"Reversed\", \"ReversedNegation\",\n"
+        "\t\"ReflectedDifferences\", \"ReversedDifferences\", \"Extrapolated\" (which\n"
+        "\ttakes the option InterpolationOrder).");
     symtab_set_docstring("UnitVector",
         "UnitVector[k]\n"
         "\tgives the 2-D unit vector in the k-th direction.\n"
