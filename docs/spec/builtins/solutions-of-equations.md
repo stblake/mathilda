@@ -1361,6 +1361,46 @@ declines (`x != 0`); and integer systems whose only witnesses lie beyond the bou
 search budget (e.g. `a^4 + b^4 + c^4 == d^4`, whose smallest positive solution is near
 `4·10^5`).
 
+## CylindricalDecomposition
+
+`CylindricalDecomposition[expr, vars]` gives a **cylindrical algebraic decomposition of the
+real solution set** of `expr` — a quantifier-free `And`/`Or` formula in which each variable
+is bounded cylindrically in terms of the earlier ones. `expr` is a logical combination of
+polynomial equations and inequalities; a `List` in the statement slot is read as the
+conjunction of its elements (`CylindricalDecomposition[{e1, e2}, vars]`), and `vars` is a
+symbol or a `List` of symbols.
+
+```
+CylindricalDecomposition[x^2 > 1, {x}]           x < -1 || x > 1
+CylindricalDecomposition[x^2 == 4, {x}]          x == -2 || x == 2
+CylindricalDecomposition[x y > 1, {x, y}]        (x < 0 && y < 1/x) || (x > 0 && y > 1/x)
+CylindricalDecomposition[x^2 + y^2 <= 1, {x, y}] -1 <= x <= 1 && -Sqrt[1-x^2] <= y <= Sqrt[1-x^2]
+```
+
+**Domain.** The decomposition is always over the **Reals** — that is the sole semantic
+difference from `Reduce`, which defaults to the Complexes for equations. So an equation with
+no real solution reduces to `False` (`CylindricalDecomposition[x^2 == -1, {x}]` → `False`),
+and an inequality is a real sign statement even without an explicit domain. An explicit
+`Reals` third argument is accepted (redundant); any other third positional (another domain,
+an operation-direction argument) is not supported and stays unevaluated.
+
+**How it works.** `CylindricalDecomposition` is a thin front-end that forces the Reals domain
+and delegates to `Reduce`, whose Reals engine already emits the merged cylindrical formula:
+Fourier–Motzkin for the linear case, the sign diagram for one variable, and the McCallum
+projection + partial-CAD lifting engine (`reduce_cad`) for the multivariate nonlinear case.
+The closed unit-disk example above shows the boundary merge closing the outer range
+(`-1 <= x <= 1`) for a closed region, while a strict region stays open. `Reduce`'s options
+(`Modulus`, `Cubics`, `Quartics`, `WorkingPrecision`, …) may be given and are forwarded.
+
+**Diagnostics / declines (sound — stays unevaluated).** As with `Reduce`, an undecidable sign
+or ordering (the real-algebraic oracle returning "unknown", or FLINT absent) makes
+`CylindricalDecomposition` return unevaluated rather than a wrong formula. It therefore
+declines on the cases the CAD engine declines — in particular a **positive-dimensional
+nonlinear system with irrational fibres**, e.g.
+`CylindricalDecomposition[x^2 + y^2 + z^2 == 1 && x > 0 && y > 0 && z > 0, {x, y, z}]` (the
+rational-fibre limitation of the multivariate CAD). An invalid variable specification or an
+unsupported third positional also leaves the expression unevaluated.
+
 ## SolveAlways
 
 Finds values of parameters (the symbols appearing in `eqns` but **not** in

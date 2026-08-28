@@ -1,60 +1,48 @@
-# Todo: Book additions + Reduce list-form fix
+# Todo: Reduce Phase 8 — CylindricalDecomposition
 
-Plan: `/Users/user/.claude/plans/immutable-knitting-puddle.md`
+Plan: `/Users/user/.claude/plans/let-s-continue-the-implementation-robust-acorn.md`
 
-## Task D — Fix `Reduce[{eqns...}, vars]` (list = conjunction)  [do first]
-- [ ] `src/solve/reduce.c`: List→And conversion in `builtin_reduce`, free `owned_list` on all return paths
-- [ ] Docstring line for the list form
-- [ ] `docs/spec/builtins/solutions-of-equations.md` note
-- [ ] `tests/reduce_corpus.m` case
-- [ ] Rebuild; verify list form + 1-elem list; valgrind
+## Implementation
+- [ ] `SYM_CylindricalDecomposition` at 3 sites (`sym_names.h`, `sym_names.c` decl+intern)
+- [ ] `builtin_cylindrical_decomposition` in `reduce_companions.c` (Reals-forcing delegate to Reduce)
+- [ ] Register in `reduce_companions_init`: builtin + ATTR_PROTECTED + docstring
+- [ ] Prototype + header-comment update in `reduce_companions.h`
+- [ ] Bump `src/version.h` 0.110 → 0.111
 
-## Task A — CRT example (§4.6.5)
-- [ ] Rewrite `book/examples/number-theory/crt.m` (lead with ChineseRemainder)
-- [ ] Rewrite prose in `book/chapters/math/number-theory.tex`; add `\usagebox{ChineseRemainder}`
+## Tests / verify
+- [ ] `test_cylindrical_decomposition` in `tests/test_reduce.c` + TEST() registration
+- [ ] Build; probe behaviour via NDJSON pipe; capture FullForm
+- [ ] Run reduce_tests + reduce corpus (expect 160/160)
+- [ ] `make check-c99` clean; valgrind at macOS baseline
+- [ ] Audits: check-packed-aware / nd-surfaces / fastpath-sweep / compile-coverage (EXEMPT only if flagged)
 
-## Task B — New §3.6.2 "Systems of equations"
-- [ ] New `book/examples/03-introduction/solve-systems.m`
-- [ ] New subsection in `book/chapters/03-introduction.tex`
+## Docs
+- [ ] `docs/spec/builtins/solutions-of-equations.md` — new `## CylindricalDecomposition`
+- [ ] `docs/spec/changelog/2026-08-24.md` — dated section
+- [ ] `REDUCE_PLAN.md` — Phase-8 status flip
 
-## Task C — EliminationOrder explicit
-- [ ] §3.5 prose (`03-introduction.tex`, pair algebra-groebner/2)
-- [ ] §4.2.7 clause (`chapters/math/algebra.tex`)
+## Review — complete & verified
 
-## Finalize
-- [ ] `docs/spec/changelog/2026-08-24.md` entry
-- [ ] `cd book && make examples && make usage && make pdf`
-- [ ] Spot-check rendered PDF
+**`CylindricalDecomposition` (Phase 8, v0.111) shipped.** A Reals-only front-end
+(`src/solve/reduce_companions.c`, `builtin_cylindrical_decomposition`) that validates
+arity (`[expr,vars]`, or redundant `[expr,vars,Reals]`; other 3rd positional declines) and
+`vars` (symbol or List of symbols), then builds+evaluates `Reduce[expr, vars, Reals,
+<trailing option Rules…>]` under message suppression and declines iff the result is still
+headed by `Reduce`. Zero engine duplication — the whole `Reduce` pipeline (preprocessing,
+DNF build, per-arity Reals dispatch: FM / sign diagram / CAD) is reused. Merged cylindrical
+output, Mathematica-faithful.
 
-## Review — all tasks complete & verified
+- **Registration:** `SYM_CylindricalDecomposition` (3 sites), `symtab_add_builtin` +
+  `ATTR_PROTECTED` + docstring in `reduce_companions_init`. Version 0.110 → 0.111.
+- **Tests:** `test_cylindrical_decomposition` (14 asserts) — cylindrical forms, True/False,
+  list-as-conjunction, bare-symbol var, and 3 sound declines. `reduce_tests` all pass;
+  reduce corpus 160/160; Reduce/FindInstance unchanged (regression probe).
+- **Portability/memory:** `make check-c99` clean; valgrind 13,440/420 = macOS baseline,
+  **no new leak**. `check-packed-aware` OK (CD not flagged — symbolic head).
+- **Docs:** spec section `## CylindricalDecomposition`; changelog `2026-08-24.md`;
+  `REDUCE_PLAN.md` Phase-8 status flipped to ✅ + dated deviation note.
 
-**Task D — `Reduce` list form (bug fix).** `src/solve/reduce.c`: a `List` in the
-statement slot is rewritten to `And` (mirrors `reduce_int.c`), owned temp freed
-on all 6 return paths. Valgrind: list-form and `&&`-form leak totals identical
-(13,440/420) → zero new leaks. Docstring + `solutions-of-equations.md` note.
-`reduce_corpus.m` +2 cases; verifier `reduce_check_prelude.m` normalizes List→And
-for back-sampling. Tests: reduce_tests + reduce_corpus (160/160) + 5 others all
-pass; `make check-c99` clean.
-
-**Task A — CRT example (§4.6.5).** Rewrote `crt.m` + prose: leads with the
-builtin, keeps Sun Zi by-hand recipe as "under the hood", adds offset form (128)
-and inconsistent decline; `\usagebox{ChineseRemainder}` card renders (PDF p.98).
-
-**Task B — new §3.6.2 "Systems of equations".** `solve-systems.m` + subsection:
-circle∩line attacked by LinearSolve/RowReduce/Solve/GroebnerBasis/Resultant/
-Reduce(list form)/ChineseRemainder, threaded by elimination. Renders PDF p.24-25;
-cross-refs (§4.4, §4.6, §4.2.9-10) resolve; Numerical/Continuum renumbered 3.6.3/4.
-
-**Task C — EliminationOrder explicit.** §3.5 caption + §4.2.7 clause name
-`MonomialOrder -> EliminationOrder`. (Finding: the 3-arg form already forces it;
-a bare `EliminationOrder` without naming the elim var does NOT eliminate — so the
-example was correct, only the prose needed it.)
-
-**Finalize.** Changelog `2026-08-24.md` (2 new sections, newest-first). Book PDF
-rebuilt (128 pp), index regenerated with new entries (Chinese Remainder Theorem,
-congruence!system of, monomial order!elimination, system of equations!linear/
-polynomial, Sun Zi). No LaTeX errors.
-
-**Flagged, out of scope:** `ChineseRemainder` absent from
-`site/docs/assets/builtins.json`/site docs (so `\B{ChineseRemainder}` has no
-hyperlink) — separate site-generation subsystem; left for a follow-up.
+**Flagged (pre-existing, out of scope):** `make check-compile-coverage` fails on 22 NEW
+heads (`Image*`, `Interpolation`, `Fit`, `GaussianFilter`, …) that gained numeric fast paths
+without a BASELINE/lowering entry — unrelated to this change (none in the diff; CD is a
+symbolic head and is not flagged). Belongs to whoever added those fast paths.

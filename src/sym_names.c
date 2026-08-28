@@ -473,6 +473,7 @@ const char* SYM_Remove = NULL;
 const char* SYM_Real = NULL;
 const char* SYM_RealDigits = NULL;
 const char* SYM_FindInstance = NULL;
+const char* SYM_CylindricalDecomposition = NULL;
 const char* SYM_Reals = NULL;
 const char* SYM_Reduce = NULL;
 const char* SYM_Resolve = NULL;
@@ -1357,6 +1358,7 @@ void sym_names_init(void) {
     SYM_Real                       = intern_symbol("Real");
     SYM_RealDigits                 = intern_symbol("RealDigits");
     SYM_FindInstance               = intern_symbol("FindInstance");
+    SYM_CylindricalDecomposition   = intern_symbol("CylindricalDecomposition");
     SYM_Reals                      = intern_symbol("Reals");
     SYM_Reduce                     = intern_symbol("Reduce");
     SYM_Resolve                    = intern_symbol("Resolve");

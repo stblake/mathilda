@@ -2572,15 +2572,104 @@ static Expr* fi_run_search(Expr* expr, Expr* vars, Expr* dom, long nWanted,
     return fi_wit_take(&ws, nWanted);
 }
 
+/* ================================================================== *
+ *  CylindricalDecomposition (REDUCE_PLAN.md, Phase 8)                  *
+ *                                                                     *
+ *  CylindricalDecomposition[expr, vars] gives a cylindrical algebraic *
+ *  decomposition of the REAL solution set of `expr` -- a              *
+ *  quantifier-free And/Or formula in which each variable is bounded   *
+ *  cylindrically in terms of the earlier ones.  Its only semantic     *
+ *  difference from Reduce is that it is Reals-only (Reduce defaults to *
+ *  Complexes for equations), so it is a thin front-end: validate,     *
+ *  force the Reals domain, and delegate to the Reduce builtin, whose   *
+ *  Reals engine (Fourier-Motzkin / CAD / sign diagram) already emits   *
+ *  the merged cylindrical formula.  If Reduce declines (leaves itself  *
+ *  unevaluated), so does this -- soundness over completeness.          *
+ * ================================================================== */
+
+/* A single symbol, or a non-empty List of symbols (mirrors Reduce's
+ * reduce_valid_vars; compound / indexed variables are not accepted). */
+static bool cad_valid_vars(const Expr* vars) {
+    if (!vars) return false;
+    if (vars->type == EXPR_SYMBOL) return true;
+    if (is_head_sym(vars, SYM_List)) {
+        if (nargs(vars) == 0) return false;
+        for (size_t i = 0; i < nargs(vars); i++)
+            if (argn(vars, i)->type != EXPR_SYMBOL) return false;
+        return true;
+    }
+    return false;
+}
+
+Expr* builtin_cylindrical_decomposition(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** args = res->data.function.args;
+
+    /* Peel trailing option Rules (Rule/RuleDelayed with a symbol LHS).  The
+     * option NAMES are validated by the delegate Reduce, so we do not check
+     * them here -- an unknown one makes Reduce decline and we decline with it. */
+    size_t pos_end = argc;
+    while (pos_end > 0) {
+        Expr* a = args[pos_end - 1];
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)
+            && a->data.function.arg_count == 2
+            && a->data.function.args[0]->type == EXPR_SYMBOL) {
+            pos_end--; continue;
+        }
+        break;
+    }
+
+    /* Positional forms: [expr, vars] or [expr, vars, Reals].  The domain is
+     * always the Reals, so an explicit Reals is redundant-and-accepted; any
+     * other third positional (another domain, an operation-direction arg) is
+     * not supported and declines soundly (stays unevaluated). */
+    if (pos_end < 2 || pos_end > 3) return NULL;
+    if (pos_end == 3 && !fi_is_sym(args[2], SYM_Reals)) return NULL;
+
+    Expr* expr = args[0];
+    Expr* vars = args[1];
+    if (!cad_valid_vars(vars)) return NULL;
+
+    /* Build Reduce[expr, vars, Reals, <trailing option Rules...>] and evaluate.
+     * Forwarding the option Rules verbatim reuses all of Reduce's options
+     * (Modulus, Cubics, Quartics, WorkingPrecision, ...) with no per-option
+     * logic here.  expr_new_function adopts the args array elements. */
+    size_t nopt = argc - pos_end;
+    size_t total = 3 + nopt;
+    Expr** a = malloc(sizeof(Expr*) * total);
+    a[0] = xcopy(expr);
+    a[1] = xcopy(vars);
+    a[2] = expr_new_symbol(SYM_Reals);
+    for (size_t i = 0; i < nopt; i++) a[3 + i] = xcopy(args[pos_end + i]);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Reduce), a, total);
+    free(a);
+
+    /* Evaluate quietly: a declining Reduce may probe internally, and those
+     * diagnostics must not be attributed to CylindricalDecomposition. */
+    mth_msg_suppress_push();
+    Expr* out = fi_eval_take(call);
+    mth_msg_suppress_pop();
+
+    /* Reduce declined (left itself unevaluated) -> so do we: return NULL rather
+     * than echo an inner Reduce[...] under the CylindricalDecomposition head. */
+    if (is_head_sym(out, SYM_Reduce)) { expr_free(out); return NULL; }
+    return out;
+}
+
 void reduce_companions_init(void) {
     symtab_add_builtin("LogicalExpand", builtin_logical_expand);
     symtab_add_builtin("NotElement",    builtin_not_element);
     symtab_add_builtin("FindInstance",  builtin_find_instance);
+    symtab_add_builtin("CylindricalDecomposition", builtin_cylindrical_decomposition);
 
     SymbolDef* d;
     d = symtab_get_def("LogicalExpand"); if (d) d->attributes |= ATTR_PROTECTED;
     d = symtab_get_def("NotElement");    if (d) d->attributes |= ATTR_PROTECTED;
     d = symtab_get_def("FindInstance");  if (d) d->attributes |= ATTR_PROTECTED;
+    d = symtab_get_def("CylindricalDecomposition"); if (d) d->attributes |= ATTR_PROTECTED;
 
     symtab_set_docstring("LogicalExpand",
         "LogicalExpand[expr]\n"
@@ -2618,4 +2707,17 @@ void reduce_companions_init(void) {
         "It returns {} only when the set is provably empty -- including a\n"
         "Groebner certificate for declined polynomial systems -- and stays\n"
         "unevaluated otherwise.  Modulus -> p over Z/pZ.");
+    symtab_set_docstring("CylindricalDecomposition",
+        "CylindricalDecomposition[expr, vars]\n"
+        "\tGives a cylindrical algebraic decomposition of the real solution set\n"
+        "\tof expr -- a logical combination of polynomial equations and\n"
+        "\tinequalities -- as a quantifier-free And/Or formula in which each\n"
+        "\tvariable is bounded cylindrically in terms of the earlier ones, e.g.\n"
+        "\tCylindricalDecomposition[x^2 + y^2 <= 1, {x, y}] gives\n"
+        "\t-1 <= x <= 1 && -Sqrt[1 - x^2] <= y <= Sqrt[1 - x^2].  The domain is\n"
+        "\talways the Reals.  Returns True / False when the statement decides,\n"
+        "\tand stays unevaluated when the decomposition cannot be computed\n"
+        "\texactly (an undecidable sign, or a positive-dimensional system with\n"
+        "\tirrational fibres).  Reduce's options (Modulus, Cubics, Quartics,\n"
+        "\tWorkingPrecision, ...) may be given and are forwarded.");
 }
