@@ -94,6 +94,56 @@ Expr* stats_standardized_moment(Expr* res, int p) {
 }
 
 bool stats_is_real_numeric(Expr* e) {
+    /* Leaf fast path. Every head in this subsystem calls this ONCE PER LIST
+     * ELEMENT to gate its input, and the general path below costs two full
+     * evaluator round-trips (NumericQ, then FreeQ) per call -- 400,000 of them
+     * for a 200,000-element list. A machine integer, a machine real, a bignum,
+     * an MPFR real and an exact Rational are all NumericQ and all free of I by
+     * construction, so they need no evaluator at all. Anything else (symbols,
+     * Pi, Sqrt[2], I, unevaluated heads) still goes the long way, so the
+     * accepted set is unchanged. */
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (is_rational_like(e)) return true;   /* Integer, BigInt, Rational[p, q] */
+
+    /* An ALREADY-EVALUATED complex number is a hole in the FreeQ[e, I] test
+     * below: 2 + I evaluates to the structural node Complex[2, 1], which is
+     * NumericQ and contains no literal symbol I, so FreeQ answered True and
+     * this gate passed it. Every head in this subsystem then produced a silent
+     * answer for data it had just promised was a rectangular array of REAL
+     * numbers -- Median[{1, 2 + I, 3}] returned 3 with no message, and
+     * Quartiles[{1, 2 + I, 3, 4}] returned {2, 7/2, 3 + I/2}, a complex
+     * quartile.
+     *
+     * Decide it on the imaginary part rather than on the head: Complex[x, 0] is
+     * a real number wearing a Complex head, and it DOES reach here. The
+     * evaluator normalises an int64 or double zero away (builtin_complex), but
+     * not an MPFR one, so N[2+I, 30] + N[Conjugate[2+I], 30] arrives as
+     * Complex[4.0, 0.0] at 30 digits and is real. N[] is taken for exactly the
+     * types stats_is_numeric cannot read directly, the same fallback the
+     * quantile engine uses for h and q.
+     *
+     * KNOWN REMAINING GAP, stated rather than smoothed over: this closes the
+     * bare-Complex case only. A complex value nested under a numeric head --
+     * Sqrt[2 + I] is Power[Complex[2,1], 1/2] -- is still NumericQ, still free
+     * of literal I, and still passes. Closing that needs a real-valuedness test
+     * (Im[e] == 0) rather than a structural one, which is a larger change than
+     * this one. */
+    Expr* im_part = NULL;
+    if (is_complex(e, NULL, &im_part)) {
+        double imv = 0.0;
+        bool known = stats_is_numeric(im_part, &imv, NULL);
+        if (!known) {
+            Expr* nim = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+                            (Expr*[]){expr_copy(im_part)}, 1));
+            known = stats_is_numeric(nim, &imv, NULL);
+            expr_free(nim);
+        }
+        return known && imv == 0.0;
+    }
+
     Expr* numq = expr_new_function(expr_new_symbol(SYM_NumericQ), (Expr*[]){expr_copy(e)}, 1);
     Expr* numq_eval = evaluate(numq);
     expr_free(numq);
@@ -186,6 +236,48 @@ Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
         int64_t pick = w_is_zero ? j_idx : upper_idx;
         expr_free(g_weight);
         return expr_copy(sorted_args[pick - 1]);
+    }
+
+    /* Two algebraically identical forms, each with a floating-point failure the
+     * other does not have. INSIDE the unit interval use the convex combination
+     * (1-w) A[j] + w A[j+1]: it never forms a quantity larger in magnitude than
+     * the two neighbours, whereas A[j] + w (A[j+1] - A[j]) makes the difference
+     * first, and that difference overflows to Infinity for two neighbours of
+     * opposite sign near the double range -- Infinity then survives the multiply
+     * and the add, so Quantile[{-1.0*10^308, 1.0*10^308}, 1/2, {{1/2,0},{0,1}}]
+     * returned Infinity where the answer is 0. Same class as the w == 1 case
+     * handled just above: an identity in the reals, not in floating point.
+     *
+     * OUTSIDE it, keep the difference form. w = c + d g is user-controlled
+     * through {{a,b},{c,d}} and nothing constrains it to [0,1]; every standard
+     * Hyndman-Fan type lands inside, but for w outside, (1-w) and w have
+     * opposite signs and the two products can overflow independently, giving
+     * inf + -inf = NaN on input the difference form handles exactly (equal huge
+     * neighbours, where A + w*0 is simply A). Neither form is safe everywhere;
+     * each is used where it is safe. A weight that does not reduce to a machine
+     * number keeps the historical form. */
+    double w_val = 0.0;
+    bool w_known = stats_is_numeric(g_weight, &w_val, NULL);
+    if (!w_known) {
+        Expr* nw = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+                       (Expr*[]){expr_copy(g_weight)}, 1));
+        w_known = stats_is_numeric(nw, &w_val, NULL);
+        expr_free(nw);
+    }
+
+    if (w_known && w_val >= 0.0 && w_val <= 1.0) {
+        Expr* one_minus_w = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_new_integer(1),
+                       eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){expr_new_integer(-1), expr_copy(g_weight)}, 2)) }, 2));
+
+        Expr* lo_term = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){one_minus_w, expr_copy(sorted_args[j_idx-1])}, 2));
+        Expr* hi_term = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){g_weight, expr_copy(sorted_args[upper_idx-1])}, 2));
+
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){lo_term, hi_term}, 2));
     }
 
     Expr* neg_Aj1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(sorted_args[j_idx-1])}, 2));

@@ -442,11 +442,43 @@ authorize in advance, stated rather than absorbed.
    (`MeanDeviation[{1, 2, Infinity}]` returned a half-evaluated expression).
 4. **Known, accepted, NOT fixed** (recorded rather than silently left): raw
    `printf` messages bypass `Quiet`/`Off` (matches the existing `median.c`
-   convention); ragged matrix input recurses to `$RecursionLimit` (pre-existing
-   in `Quartiles`, replicated); complex elements pass `stats_is_real_numeric`
-   (pre-existing helper flaw); `::q100` prints twice for NDArray input; a third
-   copy of the interpolation formula remains in `ndreduce.c:568-581`;
+   convention), and are emitted twice per declining call (evaluator re-entry);
+   ragged matrix input recurses to `$RecursionLimit` (pre-existing in
+   `Quartiles`, replicated); `::q100` prints twice for NDArray input;
    `compile_coverage.py` exits 1 on 22 pre-existing heads, none of them these.
+   Two entries that were on this list have since been CLOSED — see deviation 5.
+
+5. **Follow-up session (same branch, after the ladder receipt at `0bd00b64`).**
+   Three of this list's own entries turned out to be reachable wrong answers
+   rather than acceptable debt, so they were fixed and the non-goal below was
+   violated a second time:
+   - *"Complex elements pass `stats_is_real_numeric` (pre-existing helper
+     flaw)"* — this is a silent wrong answer, not a cosmetic gap:
+     `Median[{1, 2 + I, 3}]` returned `3` and `Quartiles[{1, 2 + I, 3, 4}]`
+     returned `{2, 7/2, 3 + I/2}`, a complex quartile, from heads that had just
+     printed nothing. Now decided on the imaginary part. **This violates the
+     plan's "No changes to Quartiles' observable behavior" non-goal a second
+     time**, deliberately, for the same reason as deviation 1: the old output
+     was wrong. A `Complex[x, 0]` element, which really occurs at MPFR precision,
+     is still accepted. The nested case (`Sqrt[2 + I]`) is NOT closed and stays
+     on the known-gap list, in the code comment and in the shipped spec.
+   - *"A third copy of the interpolation formula remains in
+     `ndreduce.c:568-581`"* — accepted as duplication, but the duplicate was
+     carrying a live overflow of its own, so the two surfaces disagreed:
+     `Quartiles[NDArray[{-1.0*10^308, 1.0*10^308}, DataType -> "float64"]]` gave
+     `inf.0` where the boxed path gave `0.0`. Both now use the convex form and
+     both are pinned on the same data. The duplication itself is still there.
+   - The interpolation branch of `stats_quantile_point` had the same overflow:
+     `Quantile[{-1.0*10^308, 1.0*10^308}, 1/2, {{1/2,0},{0,1}}]` was `Infinity`.
+     Fixed for `w` in `[0,1]` only — the adversarial pass on the fix showed that
+     applying it unconditionally introduced a NEW wrong answer (`NaN`) for the
+     extrapolating weights `{{a,b},{c,d}}` permits, so the historical form is
+     kept outside the unit interval and both cases are pinned.
+   Also in this session, and NOT in the plan: a leaf fast path in
+   `stats_is_real_numeric` (1.15x-2.85x on 200k-element input, measured
+   base-vs-head over three interleaved rounds; table in the changelog), and
+   seven new test functions covering the above plus three coverage gaps the
+   phase-1 set did not reach.
 
 ## References
 - Original ticket: (mission brief; no tracker)
