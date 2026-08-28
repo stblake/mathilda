@@ -236,8 +236,7 @@ Expr* builtin_multiplicativeorder(Expr* res) {
     for (size_t i = 0; i < lcount; i++) {
         Expr* r = list->data.function.args[i];
         if (!expr_is_integer_like(r)) { list_ok = false; break; }
-        mpz_init(residues[nres]);
-        expr_to_mpz(r, residues[nres]);
+        expr_to_mpz(r, residues[nres]);   /* inits residues[nres] */
         mpz_mod(residues[nres], residues[nres], abs_n);
         nres++;
     }

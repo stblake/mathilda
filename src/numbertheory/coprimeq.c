@@ -25,15 +25,26 @@
  * on success (re/im are set); false for anything else (rationals, reals,
  * symbols, ...).  re and im must already be mpz_init'd by the caller. */
 static bool coprimeq_to_gaussian(Expr* e, mpz_t re, mpz_t im) {
+    /* re/im are already init'd by the caller (see the contract above); the
+     * integer branch's mpz_set_ui(im, 0) relies on that.  expr_to_mpz re-inits
+     * its output, so calling it directly on re/im would leak their existing
+     * limbs -- extract through a temporary and mpz_set into the targets. */
+    mpz_t tmp;
     if (expr_is_integer_like(e)) {
-        expr_to_mpz(e, re);
+        expr_to_mpz(e, tmp);          /* inits tmp */
+        mpz_set(re, tmp);
+        mpz_clear(tmp);
         mpz_set_ui(im, 0);
         return true;
     }
     Expr *r, *i;
     if (is_complex(e, &r, &i) && expr_is_integer_like(r) && expr_is_integer_like(i)) {
-        expr_to_mpz(r, re);
-        expr_to_mpz(i, im);
+        expr_to_mpz(r, tmp);
+        mpz_set(re, tmp);
+        mpz_clear(tmp);
+        expr_to_mpz(i, tmp);
+        mpz_set(im, tmp);
+        mpz_clear(tmp);
         return true;
     }
     return false;
@@ -201,8 +212,7 @@ Expr* builtin_coprimeq(Expr* res) {
         if (result) {
             mpz_t* v = (mpz_t*)malloc(nnums * sizeof(mpz_t));
             for (size_t i = 0; i < nnums; i++) {
-                mpz_init(v[i]);
-                expr_to_mpz(nums[i], v[i]);
+                expr_to_mpz(nums[i], v[i]);   /* inits v[i] */
             }
             mpz_t g;
             mpz_init(g);
