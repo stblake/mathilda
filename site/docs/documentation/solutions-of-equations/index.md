@@ -1,8 +1,9 @@
 # Solutions of Equations
 
-18 built-in function(s) in this category.
+19 built-in function(s) in this category.
 
 - [`Cubics`](Cubics.md) — Cubics is an option for Solve that controls whether cubic  _(Experimental)_
+- [`CylindricalDecomposition`](CylindricalDecomposition.md) — CylindricalDecomposition[expr, vars]  _(Partial)_
 - [`Eliminate`](Eliminate.md) — Eliminate[eqns, vars]  _(Stable)_
 - [`Exists`](Exists.md) — Exists[x, expr]  _(Stable)_
 - [`FindInstance`](FindInstance.md) — FindInstance[expr, vars]  _(Stable)_

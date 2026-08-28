@@ -1,7 +1,8 @@
 # Number Theory
 
-28 built-in function(s) in this category.
+29 built-in function(s) in this category.
 
+- [`ChineseRemainder`](ChineseRemainder.md) — ChineseRemainder[{r1, r2, ...}, {m1, m2, ...}] gives the smallest x >= 0 satisfying the integer congruences x mod mi == ri mod mi for all i, lying in 0 <= x < LCM[m1, m2, ...].  _(Stable)_
 - [`ContinuedFraction`](ContinuedFraction.md) — ContinuedFraction[x, n] gives the first n terms of the continued-fraction expansion of x, the list {a1, a2, ...} standing for a1 + 1/(a2 + 1/(a3 + ...)); truncating it gives the convergents, the best rational approximations to x.  _(Stable)_
 - [`CoprimeQ`](CoprimeQ.md) — CoprimeQ[n1, n2, ...] yields True if the arguments are pairwise relatively prime -- pairwise GCD equal to 1 -- and False otherwise; two random integers are coprime with probability 6/Pi^2.  _(Stable)_
 - [`Divisible`](Divisible.md) — Divisible[n, m] yields True if n is an integer multiple of m -- the divisibility relation m | n, effectively Mod[n, m] == 0 -- and False otherwise.  _(Stable)_

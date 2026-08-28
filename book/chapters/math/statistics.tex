@@ -1,0 +1,353 @@
+\section{Statistics}
+\label{sec:statistics}
+
+Every section so far has computed with objects given exactly: an integer, a
+polynomial, a function with a known derivative. Statistics begins at the other
+end, with \emph{data}---a list of measured numbers, each carrying error, none of
+them the answer on its own---and asks what can be said about the whole. The
+questions are the classical ones. Where is the data centered? How far does it
+spread? What is the shape of its tail? Do two quantities rise and fall together?
+And how does a sample, once in hand, speak for the population it was drawn
+from?\index{statistics!descriptive}
+
+Mathilda answers these with the same principle that governs the rest of the
+system: \emph{stay exact while the data is exact}. Hand \B{Variance} a list of
+integers and it returns a rational number, not a rounded decimal; hand it a list
+of measured reals and it returns a machine number, because that is all the data
+supports. The estimators are the textbook ones---the sample variance carries the
+unbiased \(n-1\) in its denominator, kurtosis is Pearson's (not the excess
+form)---and every one threads columnwise over a matrix, so a table of several
+variables is summarized in a single call. Underneath, when the data is a packed
+array of machine reals, these reductions run on the buffer at the speed of C, and
+each lowers inside \B{Compile}; the mathematics you type at the prompt is the
+mathematics that runs in a tight numerical loop.
+
+We take the subject in the order a data analyst would. First \emph{location}---the
+mean and the median, and why the choice between them matters (\B{Mean},
+\B{Median}, \B{Commonest}); then \emph{spread} (\B{Variance},
+\B{StandardDeviation}, \B{RootMeanSquare}); the \emph{five-number summary} that
+sketches a distribution with five order statistics (\B{Min}, \B{Quartiles},
+\B{Max}); the \emph{shape} of the distribution through its moments (\B{Moment},
+\B{CentralMoment}, \B{Skewness}, \B{Kurtosis}); the relationship between two
+variables (\B{Covariance}, \B{Correlation}); the smoothing of a time series
+(\B{MovingAverage}, \B{MovingMedian}, \B{ExponentialMovingAverage}); the tallying
+of a sample into an empirical distribution (\B{Tally}, \B{Counts}); and we close
+by crossing from description to \emph{probability}, drawing samples from a
+distribution and measuring them back (\B{RandomVariate}, \B{PDF},
+\B{LearnDistribution}).
+
+\subsection{Location: the mean and the median}
+\label{ssec:stat-location}
+
+The oldest question in statistics is where a batch of numbers sits. The
+\emph{mean} \(\bar x = \tfrac1n\sum x_i\) is the balance point; the \emph{median}
+is the middle value once the data is sorted. On clean data they nearly agree, and
+the choice between them looks like a matter of taste. It is not. Consider Simon
+Newcomb's 1882 measurements of the time light takes to traverse a fixed
+baseline\index{Newcomb, Simon}, recorded as deviations from \(24800\)
+nanoseconds---and note the two readings, \(-44\) and \(-2\), that any modern eye
+flags as blunders:
+
+\begin{codepairs}
+\pair{statistics/location/1}{Newcomb's first twenty timings, two of them wild.}
+\pair{statistics/location/2}{\B{Mean} of integer data is exact: the rational
+\(87/4\).}
+\pair{statistics/location/3}{As a decimal, \(21.75\)---dragged down by the two
+outliers.}
+\pair{statistics/location/4}{\B{Median} sorts and takes the center: \(51/2 = 25.5\),
+a full three units higher and untouched by the blunders.}
+\pair{statistics/location/5}{\B{Commonest} reports the most frequent value---here a
+tie between \(24\) and \(29\).}
+\end{codepairs}
+
+The gap between \(21.75\) and \(25.5\) is the whole lesson. The mean feels every
+value in proportion to its size, so a single gross outlier moves it without limit;
+the median feels only \emph{rank}, so up to half the data can be corrupted before
+it budges. When a distribution is symmetric and clean the two coincide and the
+mean is the more efficient estimate; when it is skewed or contaminated, the median
+is the honest one.\index{median!robustness}
+
+\calloutnote{Pitfall}{The mean is not robust. One fat-fingered data-entry error---a
+misplaced decimal, a sign flip like Newcomb's \(-44\)---can shift a mean
+arbitrarily far, while leaving the median essentially fixed. Report both when the
+data might be dirty, and worry when they disagree.}
+
+\subsection{Spread: variance, standard deviation, and RMS}
+\label{ssec:stat-spread}
+
+Location is half the story; the other half is how widely the data scatters about
+it. The \emph{sample variance} averages the squared deviations from the mean, and
+the \emph{standard deviation} is its square root, back in the original units.
+Albert Michelson's 1879 speed-of-light experiment\index{Michelson, Albert} gives a
+clean integer batch to work with---measurements in km/s above \(299000\):
+
+\begin{codepairs}
+\pair{statistics/spread/1}{Michelson's first twenty runs.}
+\pair{statistics/spread/2}{Their mean, exact at \(909\) km/s above the baseline.}
+\pair{statistics/spread/3}{\B{Variance} stays exact too: the rational
+\(209180/19\).}
+\pair{statistics/spread/4}{\B{StandardDeviation} is its exact square root, the surd
+\(2\sqrt{52295/19}\).}
+\pair{statistics/spread/5}{A decimal is one \B{N} away: about \(105\) km/s.}
+\pair{statistics/spread/6}{\B{RootMeanSquare} is the quadratic mean
+\(\sqrt{\tfrac1n\sum x_i^2}\)---magnitude about the origin, not about the mean.}
+\end{codepairs}
+
+Two details of the exact output repay attention. The variance is
+\(209180/\mathbf{19}\), not over \(20\): the sample variance divides by \(n-1\),
+not \(n\). And the standard deviation is returned as a genuine surd, carried
+symbolically until you ask for digits---the same refusal to round prematurely that
+runs through all of Mathilda.
+
+\calloutnote{Theory}{Dividing by \(n-1\) rather than \(n\) is \emph{Bessel's
+correction}\index{Bessel's correction}. The deviations are taken about the
+\emph{sample} mean, which is itself pulled toward the data, so squared deviations
+about it underestimate the true spread; the sample mean costs one degree of
+freedom, and dividing by \(n-1\) restores an unbiased estimate of the population
+variance.}
+
+\usagebox{Variance}
+
+\subsection{The five-number summary}
+\label{ssec:stat-fivenum}
+
+Before any model is fitted, a distribution can be sketched by five order
+statistics: the minimum, the three quartiles, and the maximum. Together they
+locate the center, bound the range, and measure the spread of the middle
+half---the raw material of a box plot. Henry Cavendish's 1798 determination of the
+mean density of the Earth\index{Cavendish, Henry} (relative to water), twenty-nine
+measured values, is a natural specimen:
+
+\begin{codepairs}
+\pair{statistics/fivenum/1}{Cavendish's twenty-nine density measurements.}
+\pair{statistics/fivenum/2}{\B{Min}: the lightest reading, \(4.88\).}
+\pair{statistics/fivenum/3}{\B{Quartiles} returns \(\{Q_1, Q_2, Q_3\}\)---the
+lower quartile, the median, and the upper quartile.}
+\pair{statistics/fivenum/4}{\B{Max}: the heaviest, \(5.85\).}
+\pair{statistics/fivenum/5}{The median again, \(5.46\), matching the middle
+quartile.}
+\pair{statistics/fivenum/6}{And the mean, \(5.448\)---almost equal to the median,
+the signature of a roughly symmetric batch.}
+\end{codepairs}
+
+The interquartile range \(Q_3 - Q_1 = 5.6125 - 5.2975 = 0.315\) captures the
+spread of the central half while ignoring the tails entirely, which is why it,
+like the median, is a robust measure. That the mean and median nearly coincide
+here---\(5.448\) against \(5.46\)---is the numerical fingerprint of symmetry;
+where they part company, the data is skewed, and measuring that skew is the next
+step.
+
+\subsection{Shape: moments, skewness, and kurtosis}
+\label{ssec:stat-shape}
+
+Location and spread are the first two \emph{moments} of a distribution. The higher
+moments describe its shape. The \(r\)-th raw moment is \(\tfrac1n\sum x_i^r\); the
+\(r\)-th \emph{central} moment takes the deviations about the mean,
+\(\tfrac1n\sum (x_i-\bar x)^r\). From these, two standardized quantities read off
+the shape directly. Take a small, deliberately lopsided batch---the citation
+counts of ten papers, nine ordinary and one runaway hit:
+
+\begin{codepairs}
+\pair{statistics/shape/1}{Ten citation counts, with one paper at \(20\).}
+\pair{statistics/shape/2}{\B{Moment} gives the raw second moment
+\(\tfrac1n\sum x_i^2 = 493/10\).}
+\pair{statistics/shape/3}{\B{CentralMoment} of order \(2\)---the variance about the
+mean, dividing by \(n\).}
+\pair{statistics/shape/4}{The third central moment, \(43452/125\); its sign is the
+sign of the skew.}
+\end{codepairs}
+
+\emph{Skewness} is the third central moment standardized by the cube of the
+standard deviation; \emph{kurtosis} is the fourth, standardized by the square of
+the variance. Both are pure numbers, free of units:
+
+\begin{codepairs}
+\pair{statistics/shape/5}{\B{Skewness}, exact---a positive surd, so the tail runs
+to the right.}
+\pair{statistics/shape/6}{About \(2.45\): strongly right-skewed, as the lone hit
+demands.}
+\pair{statistics/shape/7}{\B{Kurtosis}, the fourth standardized moment.}
+\pair{statistics/shape/8}{About \(7.44\)---far above the \(3\) of a normal
+distribution, the mark of a heavy tail.}
+\end{codepairs}
+
+A symmetric distribution has zero skewness; a positive value means a long right
+tail, a negative value a long left one. Kurtosis measures how much of the variance
+comes from rare, extreme deviations: Mathilda reports the \emph{Pearson} kurtosis,
+for which the normal distribution sits at exactly \(3\), so the value \(7.44\) here
+says the single outlier dominates the fourth moment.
+
+\calloutnote{Theory}{Skewness and kurtosis are \emph{standardized} moments,
+\(\mu_3/\sigma^3\) and \(\mu_4/\sigma^4\), built to be dimensionless and
+invariant under shifting and rescaling the data. The ``excess kurtosis''
+reported by some packages is simply Mathilda's kurtosis minus \(3\), centering
+the normal distribution at zero.\index{kurtosis}\index{skewness}}
+
+\subsection{Two variables: covariance and correlation}
+\label{ssec:stat-correlation}
+
+With two measurements on each subject, the question becomes whether they move
+together. \B{Covariance} averages the product of paired deviations; \B{Correlation}
+normalizes it by the two standard deviations to a pure number in \([-1, 1]\), so
+that \(+1\) is perfect increasing linear agreement, \(-1\) perfect decreasing, and
+\(0\) no linear relation at all.
+
+No example makes the point---and its limits---better than \emph{Anscombe's
+quartet}\index{Anscombe's quartet}, four data sets that Frank Anscombe constructed
+in 1973 to be statistically indistinguishable by every summary yet obviously
+different to the eye~\cite{anscombe1973}:
+
+\begin{codepairs}
+\pair{statistics/anscombe/1}{The common predictor \(x\) shared by the first three
+sets.}
+\pair{statistics/anscombe/2}{Set~I's response.}
+\pair{statistics/anscombe/5}{Set~IV instead holds \(x\) nearly constant, with one
+point far out.}
+\pair{statistics/anscombe/6}{Set~IV's response.}
+\end{codepairs}
+
+Now compute the summaries of all four at once. They agree to the digits that
+matter:
+
+\begin{codepairs}
+\pair{statistics/anscombe/7}{All four means of \(y\) sit at \(7.5\).}
+\pair{statistics/anscombe/8}{All four variances of \(y\) sit at \(4.13\).}
+\pair{statistics/anscombe/9}{And all four correlations equal \(0.816\).}
+\pair{statistics/anscombe/10}{The covariance of set~I, \(5.501\)---unnormalized, in
+the product of the units.}
+\pair{statistics/anscombe/11}{Given the two columns as a matrix, \B{Correlation}
+returns the correlation matrix: unit diagonal, \(0.816\) off it.}
+\end{codepairs}
+
+Yet the four data sets could hardly be more different: one is a clean line, one a
+smooth curve, one a perfect line derailed by a single outlier, and one a vertical
+stack whose slope is decided by one lone point. Identical means, identical
+variances, identical correlations---and four unrelated stories. The moral, as old
+as it is ignored, is that summary statistics never substitute for looking at the
+data.
+
+\calloutnote{Pitfall}{A correlation coefficient compresses a whole scatter of
+points into one number, and much is lost in the compression. Anscombe's quartet is
+the standing proof: equal correlations can hide a line, a curve, and an outlier.
+Before trusting a coefficient, plot the points---\S\ref{sec:intro-stats} and the
+graphics chapter show how.}
+
+\usagebox{Correlation}
+
+\subsection{Time series: moving statistics}
+\label{ssec:stat-moving}
+
+When the data is a sequence in time, its raw values jitter and the trend hides
+underneath. A \emph{moving statistic} smooths the jitter by summarizing a sliding
+window rather than the whole series at once. Take a short, noisy monthly series:
+
+\begin{codepairs}
+\pair{statistics/moving/1}{Twelve monthly readings, trending up through the noise.}
+\pair{statistics/moving/2}{\B{MovingAverage} over a window of three---each output is
+the mean of three neighbors, so the run is two shorter than the input.}
+\pair{statistics/moving/3}{A \emph{weighted} moving average: weights \(\{1,2,1\}\)
+lean on the center of each window.}
+\pair{statistics/moving/4}{\B{MovingMedian} smooths the same way but resists a lone
+spike, exactly as the median did in \S\ref{ssec:stat-location}.}
+\pair{statistics/moving/5}{\B{ExponentialMovingAverage} weights every past value,
+decaying geometrically; with \(\alpha=1/3\) the result stays exact.}
+\pair{statistics/moving/6}{The same recurrence numerically, with \(\alpha=0.2\):
+each output is \(0.2\) of the new value plus \(0.8\) of the running average.}
+\end{codepairs}
+
+The three smoothers trade off differently. The plain moving average is simplest
+but lags the trend and reacts sharply as a window enters or leaves an outlier. The
+moving median inherits the median's robustness, flattening isolated spikes
+outright. The exponential moving average never forgets---every past point
+contributes, weighted by \((1-\alpha)^k\)---so it responds smoothly and needs only
+the previous output to advance, which is why it is the workhorse of streaming and
+financial data.
+
+\calloutnote{Performance}{These reductions are exactly the kind of numerical
+loop Mathilda accelerates. On a packed array of machine reals the moving
+statistics run on the raw buffer without boxing a single element, and the same
+kernels lower inside \B{Compile}, so a smoothing pass over a million-point series
+costs a single sweep of memory rather than a million interpreter steps.}
+
+\subsection{Frequencies and the empirical distribution}
+\label{ssec:stat-frequencies}
+
+For discrete or categorical data the natural summary is not a mean but a
+\emph{count}: how often each distinct value occurs. This tabulation is the
+\emph{empirical distribution}, the sample's own stand-in for a probability
+distribution. Fifteen rolls of a die will serve:
+
+\begin{codepairs}
+\pair{statistics/frequencies/1}{Fifteen die rolls.}
+\pair{statistics/frequencies/2}{\B{Tally} pairs each distinct value with its count,
+in order of first appearance.}
+\pair{statistics/frequencies/3}{\B{Counts} returns the same tabulation as an
+association, keyed by value---ready for \(O(1)\) lookup.}
+\pair{statistics/frequencies/4}{\B{Commonest} extracts the mode, the most frequent
+value.}
+\pair{statistics/frequencies/5}{Asked for two, it returns the top two by
+frequency.}
+\end{codepairs}
+
+Normalizing the counts by the sample size turns the tally into an empirical
+probability mass function, and its running sum into an empirical cumulative
+distribution---the discrete companions of the density and distribution functions
+of the next subsection. For continuous data the same idea, applied to bins rather
+than exact values, is a histogram, which the graphics chapter draws directly with
+\B{Histogram}.
+
+\subsection{From data to distributions}
+\label{ssec:stat-distributions}
+
+Descriptive statistics run in one direction, from a sample to its summaries.
+Probability runs in the other, from a model to the samples it generates---and the
+two meet in the estimators of this section, which are exactly the quantities that
+converge to a distribution's parameters as the sample grows. Mathilda lets you
+watch that convergence. Draw a thousand values from a normal population with mean
+\(100\) and standard deviation \(15\)---the scale of an IQ test---and measure the
+sample back:
+
+\begin{codepairs}
+\pair{statistics/distributions/1}{\B{SeedRandom} fixes the stream, so the draw is
+reproducible from run to run.}
+\pair{statistics/distributions/2}{A thousand draws from \B{NormalDistribution};
+the semicolon holds back the long list.}
+\pair{statistics/distributions/3}{The sample mean, \(100.20\)---within a fifth of a
+unit of the true \(100\).}
+\pair{statistics/distributions/4}{The sample standard deviation, \(15.03\), all but
+recovering the true \(15\).}
+\pair{statistics/distributions/5}{\B{PDF} evaluates the density; it is symmetric
+about the mean, so \(85\) and \(115\) share a value and \(100\) peaks.}
+\pair{statistics/distributions/6}{\B{LearnDistribution} runs the inference the
+other way, fitting a distribution object back to the data.}
+\end{codepairs}
+
+That the sample mean and standard deviation land so near \(100\) and \(15\) is the
+\emph{law of large numbers}\index{law of large numbers} in miniature: the sample
+estimators converge to the population parameters as \(n\) grows, and a thousand
+draws already pin them to a fraction of a unit. \B{RandomVariate} draws from a
+distribution, \B{PDF} evaluates its density, and \B{LearnDistribution} inverts the
+arrow---inferring a distribution from data---closing the loop between the
+descriptive statistics of this section and the probability that underwrites them.
+
+\calloutnote{Under the hood}{\B{RandomVariate} shares its stream with
+\B{RandomReal}, so a single \B{SeedRandom} makes an entire session's simulation
+reproducible---indispensable when a result must be regenerated exactly, as every
+example in this book is. The normal draws come from a standard transform of that
+uniform stream.}
+
+\subsection*{Where this connects}
+
+Statistics is where Mathilda's numerical substrate meets its data. Its estimators
+lean directly on the reductions of the array engine---a \B{Mean} or \B{Variance}
+of a packed column is a single buffer sweep, and each lowers inside \B{Compile} so
+it runs at full speed inside a numerical loop (Chapter~\ref{ch:compilation}). The
+correlation matrix of \S\ref{ssec:stat-correlation} is a Gram matrix, computed
+through the same \B{Dot} and \B{Transpose} that drive the linear algebra of
+\S\ref{sec:linalg}, and it is the first step of principal component analysis. The
+sampling of \S\ref{ssec:stat-distributions} rests on the random-number generators,
+and the fit performed by \B{LearnDistribution} opens into the machine-learning
+family---classifiers, clustering, and density estimation---that treats a data set
+not as something to summarize but as something to learn from. For the exhaustive
+options of any function named here, its reference page is one \texttt{?Name} away
+at the prompt.

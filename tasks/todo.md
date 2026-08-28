@@ -1,48 +1,50 @@
-# Todo: Reduce Phase 8 — CylindricalDecomposition
+# TODO — Statistics in the Mathilda book
 
-Plan: `/Users/user/.claude/plans/let-s-continue-the-implementation-robust-acorn.md`
+## Phase 0 — Review (done)
+- [x] Build binary; confirm all stats builtins work
+- [x] Confirm all candidate builtins are `\B{}`-linkable
+- [x] Write `tasks/stats-book-review.md`
 
-## Implementation
-- [ ] `SYM_CylindricalDecomposition` at 3 sites (`sym_names.h`, `sym_names.c` decl+intern)
-- [ ] `builtin_cylindrical_decomposition` in `reduce_companions.c` (Reals-forcing delegate to Reduce)
-- [ ] Register in `reduce_companions_init`: builtin + ATTR_PROTECTED + docstring
-- [ ] Prototype + header-comment update in `reduce_companions.h`
-- [ ] Bump `src/version.h` 0.110 → 0.111
+## Phase 1 — Ch 3 tour section (done)
+- [x] `book/examples/03-introduction/statistics.m`
+- [x] Insert `\section{Statistics}` → §3.11 (Linear algebra correctly renumbers to 3.12)
 
-## Tests / verify
-- [ ] `test_cylindrical_decomposition` in `tests/test_reduce.c` + TEST() registration
-- [ ] Build; probe behaviour via NDJSON pipe; capture FullForm
-- [ ] Run reduce_tests + reduce corpus (expect 160/160)
-- [ ] `make check-c99` clean; valgrind at macOS baseline
-- [ ] Audits: check-packed-aware / nd-surfaces / fastpath-sweep / compile-coverage (EXEMPT only if flagged)
+## Phase 2 — Ch 4 deep-dive section (§4.8) (done)
+- [x] 8 example files under `book/examples/statistics/`
+- [x] `book/chapters/math/statistics.tex` (§4.8, 8 subsections + Where this connects)
+- [x] `\input{chapters/math/statistics}` in `book/chapters/04-mathematics.tex`
 
-## Docs
-- [ ] `docs/spec/builtins/solutions-of-equations.md` — new `## CylindricalDecomposition`
-- [ ] `docs/spec/changelog/2026-08-24.md` — dated section
-- [ ] `REDUCE_PLAN.md` — Phase-8 status flip
+## Phase 3 — Build, verify, index, changelog (done)
+- [x] `make examples` — all transcripts verified; prose cites printed outputs
+- [x] `make check-links` — 0 unlinked *from my content* (2 pre-existing misses noted)
+- [x] hand `\index{}` concept entries (Anscombe, Bessel's correction, kurtosis, …)
+- [x] `make pdf` — clean build, 139 pp, no errors/undefined refs; visually spot-checked
+- [x] `book/references.bib` — Anscombe (1973) added + `\cite`d (biber resolves)
+- [x] changelog `docs/spec/changelog/2026-08-24.md`; ROADMAP §4.8 row + scope note
 
-## Review — complete & verified
+## Review / Results
 
-**`CylindricalDecomposition` (Phase 8, v0.111) shipped.** A Reals-only front-end
-(`src/solve/reduce_companions.c`, `builtin_cylindrical_decomposition`) that validates
-arity (`[expr,vars]`, or redundant `[expr,vars,Reals]`; other 3rd positional declines) and
-`vars` (symbol or List of symbols), then builds+evaluates `Reduce[expr, vars, Reals,
-<trailing option Rules…>]` under message suppression and declines iff the result is still
-headed by `Reduce`. Zero engine duplication — the whole `Reduce` pipeline (preprocessing,
-DNF build, per-arity Reals dispatch: FM / sign diagram / CAD) is reused. Merged cylindrical
-output, Mathematica-faithful.
+**Done, document-only as agreed.** Two verified sections added:
+- **§3.11 Statistics** (Ch 3 tour): exam-scores dataset — Mean/Median/StandardDeviation/
+  Quartiles/Correlation/MovingAverage; forward-refs §4.8.
+- **§4.8 Statistics** (Ch 4 deep dive, `chapters/math/statistics.tex`): 8 subsections on
+  classical datasets — Newcomb (median robustness), Michelson (exact variance/Bessel),
+  Cavendish (five-number), moments/skewness/kurtosis, **Anscombe's quartet**, moving
+  statistics, frequencies, and the distribution bridge (LLN). Reference cards for
+  Variance & Correlation; Theory/Pitfall/Performance/Under-the-hood callouts.
 
-- **Registration:** `SYM_CylindricalDecomposition` (3 sites), `symtab_add_builtin` +
-  `ATTR_PROTECTED` + docstring in `reduce_companions_init`. Version 0.110 → 0.111.
-- **Tests:** `test_cylindrical_decomposition` (14 asserts) — cylindrical forms, True/False,
-  list-as-conjunction, bare-symbol var, and 3 sound declines. `reduce_tests` all pass;
-  reduce corpus 160/160; Reduce/FindInstance unchanged (regression probe).
-- **Portability/memory:** `make check-c99` clean; valgrind 13,440/420 = macOS baseline,
-  **no new leak**. `check-packed-aware` OK (CD not flagged — symbolic head).
-- **Docs:** spec section `## CylindricalDecomposition`; changelog `2026-08-24.md`;
-  `REDUCE_PLAN.md` Phase-8 status flipped to ✅ + dated deviation note.
+**Phase-0 review** (`tasks/stats-book-review.md`): all 15 `src/stats/` builtins + adjacent
+surface exercised against the binary — nothing broken; all 37 candidates `\B{}`-linkable.
 
-**Flagged (pre-existing, out of scope):** `make check-compile-coverage` fails on 22 NEW
-heads (`Image*`, `Interpolation`, `Fit`, `GaussianFilter`, …) that gained numeric fast paths
-without a BASELINE/lowering entry — unrelated to this change (none in the diff; CD is a
-symbolic head and is not flagged). Belongs to whoever added those fast paths.
+**Follow-up done — reference pages added.** `make check-links` had failed on
+`ChineseRemainder` and `CylindricalDecomposition` (referenced by book prose §3.6/§4.2
+but absent from `site/docs/assets/builtins.json`). Fixed by authoring
+`site/overlays/<Name>.md` + `site/impl/<Name>.md` for both and regenerating via
+`site/generate.py`. Reverted the regen's unrelated drift (nondeterministic
+`MemoryInUse`/`Histogram`/plot-json churn, a version bump, a stale-source `Reduce`
+update, and a `Prime.md` test-link mis-association) to keep a focused diff: only
+`builtins.json` + 3 `index.md` (clean additions) + the 6 new files. `mkdocs build
+--strict` passes (exit 0); `check-links` now green; book PDF has 0 "No reference link"
+warnings.
+
+**Build artifacts** (`book/generated/`, PDF) are git-ignored — no tracked build output.

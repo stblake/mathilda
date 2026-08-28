@@ -784,6 +784,14 @@
     "url": "documentation/other-advanced/ChartStyle/"
   },
   {
+    "name": "ChineseRemainder",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "ChineseRemainder[{r1, r2, ...}, {m1, m2, ...}] gives the smallest x >= 0 satisfying the integer congruences x mod mi == ri mod mi for all i, lying in 0 <= x < LCM[m1, m2, ...].",
+    "url": "documentation/number-theory/ChineseRemainder/"
+  },
+  {
     "name": "Chop",
     "category": "Elementary Functions",
     "slug": "elementary-functions",
@@ -1270,6 +1278,14 @@
     "status": "Stable",
     "summary": "CycleGraph[n] gives the cycle graph on n vertices.",
     "url": "documentation/other-advanced/CycleGraph/"
+  },
+  {
+    "name": "CylindricalDecomposition",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
+    "status": "Partial",
+    "summary": "CylindricalDecomposition[expr, vars]",
+    "url": "documentation/solutions-of-equations/CylindricalDecomposition/"
   },
   {
     "name": "D",

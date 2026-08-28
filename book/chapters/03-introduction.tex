@@ -563,6 +563,39 @@ recovered numerically.}
 Section~\ref{sec:numcalc} covers numerical differentiation, integration, summation,
 differential equations, and limits.
 
+\section{Statistics}
+\label{sec:intro-stats}
+
+Give Mathilda a list of numbers and it will describe them. The descriptive
+statistics\index{statistics!descriptive} are ordinary functions of a list, and---like everything else---they
+stay exact while the data is exact. Here are ten exam scores:
+
+\begin{codepairs}
+\pair{03-introduction/statistics/1}{Ten scores out of a hundred.}
+\pair{03-introduction/statistics/2}{\B{Mean} is exact on integer data---the
+rational $153/2$, not a rounded $76.5$.}
+\pair{03-introduction/statistics/3}{\B{Median}, the middle value once sorted.}
+\pair{03-introduction/statistics/4}{\B{StandardDeviation} measures the spread; \B{N}
+turns the exact surd into a decimal.}
+\pair{03-introduction/statistics/5}{\B{Quartiles} returns the lower quartile,
+median, and upper quartile at once.}
+\end{codepairs}
+
+With a second measurement on each student---the hours they studied---\B{Correlation}
+asks whether the two rise together, on a scale from $-1$ to $1$:
+
+\begin{codepairs}
+\pair{03-introduction/statistics/6}{Hours studied, same ten students.}
+\pair{03-introduction/statistics/7}{A correlation of $0.98$: study time and score
+move almost in lockstep.}
+\pair{03-introduction/statistics/8}{And \B{MovingAverage} smooths a series by
+averaging a sliding window---here of three.}
+\end{codepairs}
+
+Section~\ref{sec:statistics} treats location and spread, the five-number summary,
+moments, correlation, moving statistics for time series, and the bridge from
+data to probability distributions in full.
+
 \section{Linear algebra}
 \label{sec:intro-linalg}
 
