@@ -288,18 +288,41 @@ static Expr* geom_list2(Expr* a, Expr* b) {
     return out;
 }
 
-/* sign of (b - a) x (c - a), exact. */
-static int geom_cross_sign_q(const mpq_t ax, const mpq_t ay,
+/* Scratch temporaries for the exact cross-product predicate, owned by the
+ * caller and reused across a whole builtin call.
+ *
+ * The predicate sits inside two O(n) inner loops -- the monotone-chain hull
+ * and RegionMember's edge walk -- so initialising six mpq_t locals inside it
+ * means six malloc/free pairs per single sign test. A `sample` profile of
+ * ConvexHullRegion over 2000 exact-integer points put the majority of both
+ * chain loops inside mpq_inits/mpq_clears and the allocator beneath them,
+ * not inside the arithmetic they bracket. Hoisting the temporaries to one
+ * block per call leaves the arithmetic byte-for-byte identical and removes
+ * the churn; GMP keeps each limb buffer at its high-water mark, so later
+ * iterations reuse it. Same trick geom_signed_area2_q already uses for its
+ * two temporaries -- applied to the hot path rather than the cold one. */
+typedef struct {
+    mpq_t ux, uy, vx, vy, t1, t2;
+} GeomCrossTmp;
+
+static void geom_cross_tmp_init(GeomCrossTmp* s) {
+    mpq_inits(s->ux, s->uy, s->vx, s->vy, s->t1, s->t2, (mpq_ptr)NULL);
+}
+
+static void geom_cross_tmp_clear(GeomCrossTmp* s) {
+    mpq_clears(s->ux, s->uy, s->vx, s->vy, s->t1, s->t2, (mpq_ptr)NULL);
+}
+
+/* sign of (b - a) x (c - a), exact. `s` must be initialized. */
+static int geom_cross_sign_q(GeomCrossTmp* s,
+                             const mpq_t ax, const mpq_t ay,
                              const mpq_t bx, const mpq_t by,
                              const mpq_t cx, const mpq_t cy) {
-    mpq_t ux, uy, vx, vy, t1, t2;
-    mpq_inits(ux, uy, vx, vy, t1, t2, (mpq_ptr)NULL);
-    mpq_sub(ux, bx, ax); mpq_sub(uy, by, ay);
-    mpq_sub(vx, cx, ax); mpq_sub(vy, cy, ay);
-    mpq_mul(t1, ux, vy); mpq_mul(t2, uy, vx);
-    int s = mpq_cmp(t1, t2);
-    mpq_clears(ux, uy, vx, vy, t1, t2, (mpq_ptr)NULL);
-    return (s > 0) - (s < 0);
+    mpq_sub(s->ux, bx, ax); mpq_sub(s->uy, by, ay);
+    mpq_sub(s->vx, cx, ax); mpq_sub(s->vy, cy, ay);
+    mpq_mul(s->t1, s->ux, s->vy); mpq_mul(s->t2, s->uy, s->vx);
+    int c = mpq_cmp(s->t1, s->t2);
+    return (c > 0) - (c < 0);
 }
 
 static int geom_cross_sign_d(double ax, double ay, double bx, double by,
@@ -531,9 +554,11 @@ static int geom_read_query(const Expr* q, int* exact,
 /* Boundary-inclusive point-in-polygon, exact path. */
 static int geom_member_q(const GeomPoints* p, const mpq_t px, const mpq_t py) {
     int inside = 0;
+    GeomCrossTmp tmp;
+    geom_cross_tmp_init(&tmp);
     for (size_t i = 0; i < p->n; i++) {
         size_t j = (i + 1) % p->n;
-        int cs = geom_cross_sign_q(p->qx[i], p->qy[i], p->qx[j], p->qy[j], px, py);
+        int cs = geom_cross_sign_q(&tmp, p->qx[i], p->qy[i], p->qx[j], p->qy[j], px, py);
         if (cs == 0) {
             /* Collinear: on the segment iff within its bounding box. Written as
              * direct comparisons rather than `const mpq_t *lo = c ? &a : &b`:
@@ -544,7 +569,7 @@ static int geom_member_q(const GeomPoints* p, const mpq_t px, const mpq_t py) {
                        (mpq_cmp(p->qx[j], px) <= 0 && mpq_cmp(px, p->qx[i]) <= 0);
             int in_y = (mpq_cmp(p->qy[i], py) <= 0 && mpq_cmp(py, p->qy[j]) <= 0) ||
                        (mpq_cmp(p->qy[j], py) <= 0 && mpq_cmp(py, p->qy[i]) <= 0);
-            if (in_x && in_y) return 1;
+            if (in_x && in_y) { geom_cross_tmp_clear(&tmp); return 1; }
         }
         int ai = mpq_cmp(p->qy[i], py) > 0;
         int bj = mpq_cmp(p->qy[j], py) > 0;
@@ -554,6 +579,7 @@ static int geom_member_q(const GeomPoints* p, const mpq_t px, const mpq_t py) {
             if (cs == s) inside = !inside;
         }
     }
+    geom_cross_tmp_clear(&tmp);
     return inside;
 }
 
@@ -652,9 +678,10 @@ static int geom_pt_equal(const GeomPoints* p, size_t i, size_t j) {
     return p->dx[i] == p->dx[j] && p->dy[i] == p->dy[j];
 }
 
-static int geom_turn(const GeomPoints* p, size_t a, size_t b, size_t c) {
+static int geom_turn(const GeomPoints* p, GeomCrossTmp* s,
+                     size_t a, size_t b, size_t c) {
     if (p->exact)
-        return geom_cross_sign_q(p->qx[a], p->qy[a], p->qx[b], p->qy[b],
+        return geom_cross_sign_q(s, p->qx[a], p->qy[a], p->qx[b], p->qy[b],
                                  p->qx[c], p->qy[c]);
     return geom_cross_sign_d(p->dx[a], p->dy[a], p->dx[b], p->dy[b],
                              p->dx[c], p->dy[c]);
@@ -685,15 +712,22 @@ Expr* builtin_convex_hull_region(Expr* res) {
     if (m == 1) {
         hull[k++] = idx[0];
     } else {
+        /* One scratch block for both chains: the predicate runs O(m) times
+         * here, and its per-call mpq_inits dominated the loop before this.
+         * Only the exact path reads it; initialising it unconditionally keeps
+         * the lifetime obvious and costs six empty mpq_t on the machine path. */
+        GeomCrossTmp tmp;
+        geom_cross_tmp_init(&tmp);
         for (size_t i = 0; i < m; i++) {            /* lower chain */
-            while (k >= 2 && geom_turn(&p, hull[k - 2], hull[k - 1], idx[i]) <= 0) k--;
+            while (k >= 2 && geom_turn(&p, &tmp, hull[k - 2], hull[k - 1], idx[i]) <= 0) k--;
             hull[k++] = idx[i];
         }
         size_t lower = k + 1;
         for (size_t ii = m - 1; ii-- > 0; ) {       /* upper chain */
-            while (k >= lower && geom_turn(&p, hull[k - 2], hull[k - 1], idx[ii]) <= 0) k--;
+            while (k >= lower && geom_turn(&p, &tmp, hull[k - 2], hull[k - 1], idx[ii]) <= 0) k--;
             hull[k++] = idx[ii];
         }
+        geom_cross_tmp_clear(&tmp);
         k--;  /* last point repeats the first */
     }
 

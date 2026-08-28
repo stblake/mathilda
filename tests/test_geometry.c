@@ -186,6 +186,97 @@ static void test_repeated_evaluation(void) {
     }
 }
 
+/* ---- Scale and scratch reuse (invariants, not oracle rows) ----
+ *
+ * The exact cross-product predicate keeps its mpq_t temporaries for the whole
+ * builtin call and reuses them for every evaluation inside it, so GMP grows
+ * each limb buffer to that call's high-water mark and later, narrower
+ * evaluations run on a buffer an earlier, wider one sized. Nothing above can
+ * see a fault in that: every AC row is at most five vertices with small
+ * coordinates, and a stale or aliased temporary needs one call that mixes
+ * widths and runs the predicate many times.
+ *
+ * These cases build such a call and assert properties that hold for any
+ * correct implementation -- containment, idempotence, hull-of-hull stability,
+ * and exact/machine agreement -- so no Wolfram oracle is needed and the
+ * assertions stay true if the vertex order convention is ever revisited. */
+
+/* Deterministic LCG (Numerical Recipes constants); no rand(), so a failure
+ * reproduces byte-for-byte on any machine. */
+static unsigned long geo_lcg(unsigned long* st) {
+    *st = *st * 1664525UL + 1013904223UL;
+    return (*st >> 8) & 0xFFFFFFUL;
+}
+
+/* {{x,y},...} with `n` points whose coordinates span six orders of magnitude,
+ * so one hull call runs the predicate over operands of very different widths.
+ * Caller frees. */
+static char* geo_wide_point_set(size_t n) {
+    size_t cap = n * 64 + 8;
+    char* buf = (char*)malloc(cap);
+    ASSERT_MSG(buf != NULL, "out of memory building point set");
+    size_t at = 0;
+    unsigned long st = 20260827UL;
+    at += (size_t)snprintf(buf + at, cap - at, "{");
+    for (size_t i = 0; i < n; i++) {
+        unsigned long a = geo_lcg(&st), b = geo_lcg(&st);
+        /* Every fourth point is pushed out to ~10^12 so the set is not
+         * uniformly narrow; the rest stay small. */
+        long x = (long)(a % 1000), y = (long)(b % 1000);
+        if (i % 4 == 0) { x *= 1000000000L; y *= 1000000L; }
+        at += (size_t)snprintf(buf + at, cap - at, "%s{%ld,%ld}",
+                               i ? "," : "", x, y);
+    }
+    snprintf(buf + at, cap - at, "}");
+    return buf;
+}
+
+static void test_scale_and_scratch_reuse(void) {
+    char* pts = geo_wide_point_set(240);
+    size_t need = strlen(pts) * 2 + 256;
+    char* expr = (char*)malloc(need);
+    ASSERT_MSG(expr != NULL, "out of memory building expression");
+
+    /* 1. Containment: every input point lies in or on its own hull. A predicate
+     *    that returns a wrong sign for some operand width drops a point off the
+     *    chain, and that point then reads as outside. */
+    snprintf(expr, need,
+             "Apply[And, Map[RegionMember[ConvexHullRegion[%s], #]&, %s]]",
+             pts, pts);
+    geo_check(expr, "True");
+
+    /* 2. Idempotence: hulling the hull's own vertices reproduces it exactly. */
+    snprintf(expr, need,
+             "ConvexHullRegion[First[ConvexHullRegion[%s]]] === ConvexHullRegion[%s]",
+             pts, pts);
+    geo_check(expr, "True");
+
+    /* 3. Repeat in the same process: the scratch block is per call, so a
+     *    second call must not inherit anything from the first. */
+    snprintf(expr, need,
+             "ConvexHullRegion[%s] === ConvexHullRegion[%s]", pts, pts);
+    geo_check(expr, "True");
+
+    free(expr);
+    free(pts);
+
+    /* 4. Exact/machine agreement on one polygon written both ways -- the two
+     *    paths share no code below geom_read_points, so this pins them to each
+     *    other rather than to a printed constant. */
+    geo_check("Area[Polygon[{{0,0},{1000000,0},{1000000,1000000},{0,1000000}}]]",
+              "1000000000000");
+    geo_check("Area[Polygon[{{0.,0.},{1000000.,0.},{1000000.,1000000.},{0.,1000000.}}]]",
+              "1e+12");
+
+    /* 5. Narrow evaluation after a wide one inside a SINGLE call: the small
+     *    triangle's vertices are visited after the 10^18 vertex, on temporaries
+     *    the wide vertex already grew. */
+    geo_check("RegionMember[Polygon[{{0,0},{1000000000000000000,0},"
+              "{1000000000000000000,1},{0,1}}], {1,1}]", "True");
+    geo_check("RegionMember[Polygon[{{0,0},{1000000000000000000,0},"
+              "{1000000000000000000,1},{0,1}}], {1,2}]", "False");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -199,6 +290,7 @@ int main(void) {
     TEST(test_declines);
     TEST(test_review_findings);
     TEST(test_repeated_evaluation);
+    TEST(test_scale_and_scratch_reuse);
 
     printf("All geometry tests passed!\n");
     return 0;
