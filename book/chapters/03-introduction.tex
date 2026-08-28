@@ -76,7 +76,7 @@ fixed-size floating point of the hardware---but \B{N} will also work to
 forces a machine-precision result.}
 \pair{03-introduction/elementary-numeric/2}{Applying \B{N} to the exact
 \texttt{Sin[1]} gives the same value.}
-\pair{03-introduction/elementary-numeric/3}{Ask for forty digits and you get $\sin 1$
+\pair{03-introduction/elementary-numeric/3}{Ask for forty digits and you get \texttt{Sin[1]}
 to that precision.}
 \pair{03-introduction/elementary-numeric/4}{Here is the constant $e$ to forty digits.}
 \pair{03-introduction/elementary-numeric/5}{And here is $\ln 2$ to forty digits. The
@@ -211,9 +211,11 @@ chosen variables outright.
 \pair{03-introduction/algebra-groebner/1}{The unit circle meets the parabola $y=x^{2}$.
 \B{GroebnerBasis} triangulates the system: the first polynomial involves only $y$---a
 quadratic to solve---and the second then recovers $x$ from $y$.}
-\pair{03-introduction/algebra-groebner/2}{Naming a variable to eliminate---here the
-parameter $t$ of the curve $(t^{2},t^{3})$---collapses the system to the curve's implicit
-equation $x^{3}=y^{2}$, the cuspidal cubic. Section~\ref{sec:algebra} returns to
+\pair{03-introduction/algebra-groebner/2}{Naming a variable to eliminate in the third
+argument switches \B{GroebnerBasis} to an \emph{elimination
+order}\index{monomial order!elimination} (equivalently
+\texttt{MonomialOrder\,->\,EliminationOrder}) and collapses the system to the curve's
+implicit equation $x^{3}=y^{2}$, the cuspidal cubic. Section~\ref{sec:algebra} returns to
 Gr\"obner bases.}
 \end{codepairs}
 
@@ -241,6 +243,64 @@ given polynomial---rather than an unwieldy nest of radicals.}
 \pair{03-introduction/solve-exact/6}{A \B{Root} object is still an exact number, so \B{N}
 evaluates it to as many digits as you ask---here to machine precision.}
 \end{codepairs}
+
+\subsection{Systems of equations}
+\label{ssec:intro-systems}
+
+A single equation has one unknown to pin down; a \emph{system}\index{system of equations}
+couples several. The idea behind every method for solving one is \emph{elimination}: reduce
+the system, a variable at a time, until a single equation in a single unknown remains, then
+back-substitute. Mathilda offers a tool suited to each shape a system takes.
+
+For a \emph{linear} system\index{system of equations!linear} the matrix tools do it
+directly. \B{LinearSolve} returns the solution vector; \B{RowReduce} performs the Gaussian
+elimination\index{Gaussian elimination} behind it, reducing the augmented matrix until the
+answer can be read straight off the last column:
+
+\begin{codepairs}
+\pair{03-introduction/solve-systems/1}{The system $x+y=3,\ x-y=1$, solved as a matrix
+equation: \B{LinearSolve} gives $(x,y)=(2,1)$.}
+\pair{03-introduction/solve-systems/2}{The same system's augmented matrix, reduced to
+row-echelon form\index{row echelon form}: the identity on the left leaves $x=2,\ y=1$ in
+the last column. Section~\ref{sec:linalg} takes this further.}
+\end{codepairs}
+
+For a \emph{polynomial} system\index{system of equations!polynomial} \B{Solve} is the front
+door, but the elimination machinery beneath it is worth seeing. \B{GroebnerBasis} rewrites
+the system into a triangular one---a quadratic in $y$ alone, then $x$ in terms of
+$y$---while \B{Resultant} eliminates a variable from a \emph{pair} of polynomials outright:
+
+\begin{codepairs}
+\pair{03-introduction/solve-systems/3}{The unit circle meets the line $y=x$ in two points,
+returned exactly by \B{Solve}.}
+\pair{03-introduction/solve-systems/4}{The same system's \B{GroebnerBasis} is triangular:
+$2y^{2}-1$ involves $y$ alone, and $x-y$ then recovers $x$.}
+\pair{03-introduction/solve-systems/5}{\B{Resultant} eliminates $y$ from the two
+polynomials, leaving $2x^{2}-1=0$ in $x$ alone---the other half of the same triangulation.}
+\end{codepairs}
+
+When the answer is not a short list of points but a whole region, or you want every
+degenerate branch kept, \B{Reduce} returns the complete solution set as a logical statement
+rather than a list of rules---and, like \B{Solve}, it reads a list of equations as their
+conjunction:
+
+\begin{codepairs}
+\pair{03-introduction/solve-systems/6}{The same intersection as a logical
+description---a disjunction naming both points.}
+\end{codepairs}
+
+Systems come in kinds beyond the algebraic. A system of simultaneous
+\emph{congruences}\index{congruence!system of}---$x\equiv2\ (3)$, $x\equiv3\ (5)$,
+$x\equiv2\ (7)$---is solved by \B{ChineseRemainder}, which reconstructs the unique residue
+modulo the moduli's product (\S\ref{sec:numbertheory}):
+
+\begin{codepairs}
+\pair{03-introduction/solve-systems/7}{The unique residue $23$ in $[0,105)$.}
+\end{codepairs}
+
+The exact algebra of systems---Gr\"obner bases, elimination, and \B{Reduce} over the
+reals---is taken up in \S\ref{ssec:alg-solve-systems} and~\S\ref{ssec:alg-reduce}, where
+\B{Eliminate} and the numerical \B{NSolve} join the toolkit.
 
 \subsection{Numerical solutions of equations}
 
@@ -423,7 +483,7 @@ series---here $\cot x$ begins with a $1/x$ term.}
 \pair{03-introduction/calculus-series/4}{With a \emph{symbolic} exponent the coefficients
 come out as the generalized binomial coefficients.}
 \pair{03-introduction/calculus-series/5}{\B{Normal} drops the $O[\,]$ term, turning the
-\texttt{SeriesData} object\index{SeriesData} a series is into an ordinary polynomial.}
+\texttt{SeriesData} object\index{SeriesData} into an ordinary polynomial.}
 \end{codepairs}
 
 Integration, the harder inverse of differentiation\index{integration}, is done with \B{Integrate}---%
@@ -502,6 +562,39 @@ recovered numerically.}
 
 Section~\ref{sec:numcalc} covers numerical differentiation, integration, summation,
 differential equations, and limits.
+
+\section{Statistics}
+\label{sec:intro-stats}
+
+Give Mathilda a list of numbers and it will describe them. The descriptive
+statistics\index{statistics!descriptive} are ordinary functions of a list, and---like everything else---they
+stay exact while the data is exact. Here are ten exam scores:
+
+\begin{codepairs}
+\pair{03-introduction/statistics/1}{Ten scores out of a hundred.}
+\pair{03-introduction/statistics/2}{\B{Mean} is exact on integer data---the
+rational $153/2$, not a rounded $76.5$.}
+\pair{03-introduction/statistics/3}{\B{Median}, the middle value once sorted.}
+\pair{03-introduction/statistics/4}{\B{StandardDeviation} measures the spread; \B{N}
+turns the exact surd into a decimal.}
+\pair{03-introduction/statistics/5}{\B{Quartiles} returns the lower quartile,
+median, and upper quartile at once.}
+\end{codepairs}
+
+With a second measurement on each student---the hours they studied---\B{Correlation}
+asks whether the two rise together, on a scale from $-1$ to $1$:
+
+\begin{codepairs}
+\pair{03-introduction/statistics/6}{Hours studied, same ten students.}
+\pair{03-introduction/statistics/7}{A correlation of $0.98$: study time and score
+move almost in lockstep.}
+\pair{03-introduction/statistics/8}{And \B{MovingAverage} smooths a series by
+averaging a sliding window---here of three.}
+\end{codepairs}
+
+Section~\ref{sec:statistics} treats location and spread, the five-number summary,
+moments, correlation, moving statistics for time series, and the bridge from
+data to probability distributions in full.
 
 \section{Linear algebra}
 \label{sec:intro-linalg}

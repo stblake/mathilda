@@ -43,14 +43,25 @@ Expr* single_arg_abs_or_copy(Expr* arg) {
  * Used by GCD/LCM to support Rational[BigInt, _] without overflowing the
  * int64 rational fold. */
 void rational_like_to_mpz_pair(const Expr* e, mpz_t num, mpz_t den) {
+    /* num/den are already init'd by the caller (see the contract above), but
+     * expr_to_mpz re-inits its output -- calling it directly on num/den would
+     * leak their existing limb allocations (once per invocation across a fold).
+     * Extract through a temporary and mpz_set into the caller's targets. */
+    mpz_t tmp;
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) {
-        expr_to_mpz(e, num);
+        expr_to_mpz(e, tmp);          /* inits tmp */
+        mpz_set(num, tmp);
+        mpz_clear(tmp);
         mpz_set_ui(den, 1);
         return;
     }
     /* is_rational_like guaranteed: Rational[Integer|BigInt, Integer|BigInt]. */
-    expr_to_mpz(e->data.function.args[0], num);
-    expr_to_mpz(e->data.function.args[1], den);
+    expr_to_mpz(e->data.function.args[0], tmp);
+    mpz_set(num, tmp);
+    mpz_clear(tmp);
+    expr_to_mpz(e->data.function.args[1], tmp);
+    mpz_set(den, tmp);
+    mpz_clear(tmp);
 }
 
 /* Returns true when at least one component of a rational-like arg is a

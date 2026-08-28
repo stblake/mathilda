@@ -1,3 +1,16 @@
+---
+references:
+  - "K. Ireland and M. Rosen, *A Classical Introduction to Modern Number Theory*, 2nd ed., Springer, 1990 — primitive roots and the structure of `(Z/nZ)*` (Chapter 4)."
+  - "G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008."
+---
+
+### Generators of the units
+
+A primitive root of `n` is a generator of the multiplicative group `(Z/nZ)*`: its powers run
+through every residue coprime to `n`, so its `MultiplicativeOrder` equals `EulerPhi[n]`. Such
+a generator exists exactly when the group is cyclic — for `n = 2, 4, p^k, 2p^k` — and how
+often a *small* number is a primitive root is the subject of Artin's still-open conjecture.
+
 ### Worked examples
 
 ```mathematica

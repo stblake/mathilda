@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_862 functions across 35 categories. Use the search box (press `/`) to jump to any function._
+_864 functions across 35 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -84,7 +84,7 @@ _862 functions across 35 categories. Use the search box (press `/`) to jump to a
 
 ### [Number Theory](number-theory/index.md)
 
-[`ContinuedFraction`](number-theory/ContinuedFraction.md)  [`CoprimeQ`](number-theory/CoprimeQ.md)  [`Divisible`](number-theory/Divisible.md)  [`DivisorSigma`](number-theory/DivisorSigma.md)  [`Divisors`](number-theory/Divisors.md)  [`EulerPhi`](number-theory/EulerPhi.md)  [`ExtendedGCD`](number-theory/ExtendedGCD.md)  [`FactorInteger`](number-theory/FactorInteger.md)  [`FromContinuedFraction`](number-theory/FromContinuedFraction.md)  [`GCD`](number-theory/GCD.md)  [`IntegerPartitions`](number-theory/IntegerPartitions.md)  [`JacobiSymbol`](number-theory/JacobiSymbol.md)  [`LCM`](number-theory/LCM.md)  [`LiouvilleLambda`](number-theory/LiouvilleLambda.md)  [`MoebiusMu`](number-theory/MoebiusMu.md)  [`MultiplicativeOrder`](number-theory/MultiplicativeOrder.md)  [`NextPrime`](number-theory/NextPrime.md)  [`PartitionsP`](number-theory/PartitionsP.md)  [`PartitionsQ`](number-theory/PartitionsQ.md)  [`PowerMod`](number-theory/PowerMod.md)  [`Prime`](number-theory/Prime.md)  [`PrimeNu`](number-theory/PrimeNu.md)  [`PrimeOmega`](number-theory/PrimeOmega.md)  [`PrimePi`](number-theory/PrimePi.md)  [`PrimeQ`](number-theory/PrimeQ.md)  [`PrimitiveRoot`](number-theory/PrimitiveRoot.md)  [`PrimitiveRootList`](number-theory/PrimitiveRootList.md)  [`SquareFreeQ`](number-theory/SquareFreeQ.md)
+[`ChineseRemainder`](number-theory/ChineseRemainder.md)  [`ContinuedFraction`](number-theory/ContinuedFraction.md)  [`CoprimeQ`](number-theory/CoprimeQ.md)  [`Divisible`](number-theory/Divisible.md)  [`DivisorSigma`](number-theory/DivisorSigma.md)  [`Divisors`](number-theory/Divisors.md)  [`EulerPhi`](number-theory/EulerPhi.md)  [`ExtendedGCD`](number-theory/ExtendedGCD.md)  [`FactorInteger`](number-theory/FactorInteger.md)  [`FromContinuedFraction`](number-theory/FromContinuedFraction.md)  [`GCD`](number-theory/GCD.md)  [`IntegerPartitions`](number-theory/IntegerPartitions.md)  [`JacobiSymbol`](number-theory/JacobiSymbol.md)  [`LCM`](number-theory/LCM.md)  [`LiouvilleLambda`](number-theory/LiouvilleLambda.md)  [`MoebiusMu`](number-theory/MoebiusMu.md)  [`MultiplicativeOrder`](number-theory/MultiplicativeOrder.md)  [`NextPrime`](number-theory/NextPrime.md)  [`PartitionsP`](number-theory/PartitionsP.md)  [`PartitionsQ`](number-theory/PartitionsQ.md)  [`PowerMod`](number-theory/PowerMod.md)  [`Prime`](number-theory/Prime.md)  [`PrimeNu`](number-theory/PrimeNu.md)  [`PrimeOmega`](number-theory/PrimeOmega.md)  [`PrimePi`](number-theory/PrimePi.md)  [`PrimeQ`](number-theory/PrimeQ.md)  [`PrimitiveRoot`](number-theory/PrimitiveRoot.md)  [`PrimitiveRootList`](number-theory/PrimitiveRootList.md)  [`SquareFreeQ`](number-theory/SquareFreeQ.md)
 
 ### [Numerical Calculus](numerical-calculus/index.md)
 
@@ -116,7 +116,7 @@ _862 functions across 35 categories. Use the search box (press `/`) to jump to a
 
 ### [Solutions of Equations](solutions-of-equations/index.md)
 
-[`Cubics`](solutions-of-equations/Cubics.md)  [`Eliminate`](solutions-of-equations/Eliminate.md)  [`Exists`](solutions-of-equations/Exists.md)  [`FindInstance`](solutions-of-equations/FindInstance.md)  [`ForAll`](solutions-of-equations/ForAll.md)  [`GeneratedParameters`](solutions-of-equations/GeneratedParameters.md)  [`InverseFunctions`](solutions-of-equations/InverseFunctions.md)  [`LogicalExpand`](solutions-of-equations/LogicalExpand.md)  [`NotElement`](solutions-of-equations/NotElement.md)  [`Quartics`](solutions-of-equations/Quartics.md)  [`Reduce`](solutions-of-equations/Reduce.md)  [`Resolve`](solutions-of-equations/Resolve.md)  [`Root`](solutions-of-equations/Root.md)  [`RootSum`](solutions-of-equations/RootSum.md)  [`Solve`](solutions-of-equations/Solve.md)  [`SolveAlways`](solutions-of-equations/SolveAlways.md)  [`ToRadicals`](solutions-of-equations/ToRadicals.md)  [`VerifySolutions`](solutions-of-equations/VerifySolutions.md)
+[`Cubics`](solutions-of-equations/Cubics.md)  [`CylindricalDecomposition`](solutions-of-equations/CylindricalDecomposition.md)  [`Eliminate`](solutions-of-equations/Eliminate.md)  [`Exists`](solutions-of-equations/Exists.md)  [`FindInstance`](solutions-of-equations/FindInstance.md)  [`ForAll`](solutions-of-equations/ForAll.md)  [`GeneratedParameters`](solutions-of-equations/GeneratedParameters.md)  [`InverseFunctions`](solutions-of-equations/InverseFunctions.md)  [`LogicalExpand`](solutions-of-equations/LogicalExpand.md)  [`NotElement`](solutions-of-equations/NotElement.md)  [`Quartics`](solutions-of-equations/Quartics.md)  [`Reduce`](solutions-of-equations/Reduce.md)  [`Resolve`](solutions-of-equations/Resolve.md)  [`Root`](solutions-of-equations/Root.md)  [`RootSum`](solutions-of-equations/RootSum.md)  [`Solve`](solutions-of-equations/Solve.md)  [`SolveAlways`](solutions-of-equations/SolveAlways.md)  [`ToRadicals`](solutions-of-equations/ToRadicals.md)  [`VerifySolutions`](solutions-of-equations/VerifySolutions.md)
 
 ### [Special Functions](special-functions/index.md)
 
@@ -246,6 +246,7 @@ _862 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`Characters`](string-operations/Characters.md)
 - [`ChartLabels`](other-advanced/ChartLabels.md)
 - [`ChartStyle`](other-advanced/ChartStyle.md)
+- [`ChineseRemainder`](number-theory/ChineseRemainder.md)
 - [`Chop`](elementary-functions/Chop.md)
 - [`ClassifierFunction`](other-advanced/ClassifierFunction.md)
 - [`Classify`](machine-learning/Classify.md)
@@ -307,6 +308,7 @@ _862 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`Curl`](calculus/Curl.md)
 - [`Cyan`](other-advanced/Cyan.md)
 - [`CycleGraph`](other-advanced/CycleGraph.md)
+- [`CylindricalDecomposition`](solutions-of-equations/CylindricalDecomposition.md)
 - [`D`](calculus/D.md)
 - [`DataType`](other-advanced/DataType.md)
 - [`Decompose`](algebra/Decompose.md)

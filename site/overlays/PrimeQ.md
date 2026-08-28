@@ -1,3 +1,17 @@
+---
+references:
+  - "R. Crandall and C. Pomerance, *Prime Numbers: A Computational Perspective*, 2nd ed., Springer, 2005 — Miller–Rabin (§3.5) and the Baillie–PSW test."
+  - "R. Baillie and S. S. Wagstaff Jr., \"Lucas pseudoprimes\", *Math. Comp.* 35 (1980), 1391–1417."
+---
+
+### Primality testing
+
+`PrimeQ` does not trial-divide. It runs a strong probabilistic test — a Baillie–PSW
+pre-screen (a strong Fermat test composed with a Lucas test) backed by Miller–Rabin rounds
+— for which no composite counterexample is known, and which is deterministic below `2^64`.
+Deciding that a large number is *composite* is thus fast; *factoring* it (see
+[`FactorInteger`](FactorInteger.md)) is the hard problem behind RSA.
+
 ### Worked examples
 
 ```mathematica

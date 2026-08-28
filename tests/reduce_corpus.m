@@ -70,6 +70,10 @@
 
   (* ---- parametric linear systems over Complexes ---- *)
   {"sys-determined",     x + y == 3 && x - y == 1,         {x, y},  Automatic, "solved"},
+  (* a List in the expr slot is the conjunction of its elements, as in
+   * Mathematica: this must solve identically to sys-determined above. *)
+  {"sys-list-and",       {x + y == 3, x - y == 1},         {x, y},  Automatic, "solved"},
+  {"sys-list-singleton", {x^2 - 5 x + 6 == 0},             x,       Automatic, "solved"},
   {"sys-underdet",       x + y == 1,                       {x, y},  Automatic, "solved"},
   {"sys-param-cramer",   a x + y == 1 && x + y == 0,       {x, y},  Automatic, "solved"},
   {"sys-overdet",        a x == 1 && x == 2,               x,       Automatic, "solved"},

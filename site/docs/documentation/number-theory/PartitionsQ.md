@@ -5,20 +5,16 @@
 
 ## Description
 
-**`PartitionsQ[n]`**
-
-gives the number q(n) of partitions of the integer n into distinct
-
-**`IntegerPartitions[n, All, Range[n]] with distinct parts.`**
+**`PartitionsQ[n] gives the number q(n) of partitions of the integer n into distinct parts -- equal, by Euler's theorem, to the number of partitions into odd parts.`**
 
 <details>
 <summary>Notes</summary>
 
-parts (equivalently, into odd parts). n must be an integer; q(n) = 0 for n \< 0. Threads over lists. For the partitions themselves use
+n must be an integer; q(n) = 0 for n \< 0. Threads over lists. For the partitions themselves use IntegerPartitions.
 
 </details>
 
-## Examples (4)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -40,6 +36,16 @@ Out[3]= {1, 2, 4}
 ```mathematica
 In[4]:= PartitionsQ[{2, 4, 6}]
 Out[4]= {1, 2, 4}
+```
+
+### Applications (2)
+
+```mathematica
+In[5]:= PartitionsQ[10]
+Out[5]= 10
+
+In[6]:= PartitionsQ[6]
+Out[6]= 4
 ```
 
 ## Algorithm
@@ -102,6 +108,16 @@ Ownership: this builtin only *reads* `res`. On every NULL return (bad arguments,
 
 **See also:** [IntegerPartitions](../../number-theory/IntegerPartitions/), [PartitionsP](../../number-theory/PartitionsP/)
 
+- G. E. Andrews, *The Theory of Partitions*, Cambridge University Press, 1998 — distinct-parts partitions and Euler's identity.
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_partitionsq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_partitionsq.c)
+
+## Notes & additional examples
+
+### Distinct parts equal odd parts
+
+`PartitionsQ[n]` counts the partitions of `n` into **distinct** parts. Euler's celebrated
+identity says this equals the number of partitions of `n` into **odd** parts — the
+generating-function identity `∏ (1 + x^k) = ∏ 1/(1 - x^(2k-1))`. Contrast
+[`PartitionsP`](PartitionsP.md), which counts *all* partitions.

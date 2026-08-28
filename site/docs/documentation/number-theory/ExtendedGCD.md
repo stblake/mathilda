@@ -5,9 +5,7 @@
 
 ## Description
 
-**`ExtendedGCD[n1, n2, ...]`**
-
-gives the extended GCD {g, {r1, r2, ...}} of the integers ni, where g == GCD\[n1, ...\] and g == r1 n1 + r2 n2 + ....
+**`ExtendedGCD[n1, n2, ...] gives the extended GCD {g, {r1, r2, ...}}, where g == GCD[n1, ...] and g == r1 n1 + r2 n2 + ... -- Bezout's identity, the certificate that also yields modular inverses.`**
 
 <details>
 <summary>Notes</summary>
@@ -66,12 +64,21 @@ Out[6]= {1, {3997565229372176830, -6065478849745282079}}
 
 **See also:** [Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [OneIdentity](../../expression-information/OneIdentity/), [GCD](../../number-theory/GCD/)
 
+- D. E. Knuth, *The Art of Computer Programming, Vol. 2: Seminumerical Algorithms*, 3rd ed., Addison-Wesley, 1997 — the extended Euclidean algorithm and Bézout's identity (§4.5.2).
+- H. Cohen, *A Course in Computational Algebraic Number Theory*, Springer, 1993 — extended GCD and modular inversion.
 - D. E. Knuth, *The Art of Computer Programming, Vol. 2: Seminumerical Algorithms*, 3rd ed. (Addison-Wesley, 1997), §4.5.2.
 - Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_extended_gcd.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extended_gcd.c)
 
 ## Notes & additional examples
+
+### Bézout's identity
+
+`ExtendedGCD[a, b]` returns `{g, {s, t}}` with `s a + t b = g = GCD[a, b]` — a *Bézout
+certificate*. The coefficients `s, t` are exactly what invert one integer modulo another
+(`s` is `a`'s inverse mod `b` when `g = 1`), which is why the extended Euclidean algorithm
+sits underneath `PowerMod[a, -1, m]` and the Chinese Remainder Theorem.
 
 ### Notes
 

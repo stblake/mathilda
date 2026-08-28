@@ -266,6 +266,63 @@ Out[2]= {{0, 0, 0}, {0, 0, 0}}
   dense buffer, distinguishable only by `NDArrayQ`. A machine-number `c` over a rectangular shape is
 written straight into the buffer.
 
+## ArrayReshape
+Arranges the flattened elements of a list into a rectangular array of given
+dimensions. Attributes: `Protected`.
+- `ArrayReshape[list, dims]`: fill an array of shape `dims` (a non-negative
+  integer or a list of them) from the elements of `list` in row-major order.
+- `ArrayReshape[list, dims, padding]`: use the given padding scheme when `list`
+  has too few elements.
+
+`list` is fully flattened first (only `List` levels are descended), so up to the
+shared length `Flatten[ArrayReshape[list, dims]]` equals `Flatten[list]`. Extra
+elements are dropped; a shortfall is filled with the padding — by default the
+exact integer `0`, or any scheme accepted by [`ArrayPad`](#arraypad) applied to
+the flat element sequence (a constant, a cyclic list, or a named scheme). A
+packed / `NDArray` first argument reshapes the buffer in place (a single
+`memcpy`) when the result is exact.
+
+```
+In[1]:= ArrayReshape[{a, b, c, d, e, f}, {2, 3}]
+Out[1]= {{a, b, c}, {d, e, f}}
+In[2]:= ArrayReshape[{1, 2, 3, 4, 5, 6, 7}, {5, 3}, x]
+Out[2]= {{1, 2, 3}, {4, 5, 6}, {7, x, x}, {x, x, x}, {x, x, x}}
+In[3]:= ArrayReshape[Range[100], {2, 3, 4}]
+Out[3]= {{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}},
+         {{13, 14, 15, 16}, {17, 18, 19, 20}, {21, 22, 23, 24}}}
+```
+
+## ArrayPad
+Pads (or, with negative amounts, trims) an array on every side or per level.
+Attributes: `Protected`. Options: `InterpolationOrder -> 1`.
+- `ArrayPad[array, m]`: pad `m` elements on every side of every level.
+- `ArrayPad[array, {m, n}]`: pad `m` at the start and `n` at the end of each
+  dimension.
+- `ArrayPad[array, {{m1, n1}, {m2, n2}, ...}]`: per-level amounts; `{mi}` means
+  `{mi, mi}`, and a negative amount removes elements from that side.
+- `ArrayPad[array, amounts, padding]`: fill with the given padding.
+
+The padding is a constant `c` (default `0`), a cyclic list `{c1, c2, ...}`, or
+one of the named schemes `"Fixed"`, `"Periodic"`, `"Reflected"`, `"Reversed"`,
+`"ReversedNegation"`, `"ReflectedDifferences"`, `"ReversedDifferences"`,
+`"Extrapolated"`. `"Extrapolated"` fits a polynomial of degree
+`InterpolationOrder` (default `1`; `Infinity` uses degree `n-1`). A
+value-difference scheme asked for positive padding on an axis of length `< 2`
+raises `ArrayPad::mindimsize` and leaves the call unevaluated; value-dependent
+schemes skip empty dimensions. A rank-1 packed / `NDArray` argument with a
+constant exact fill pads the buffer directly.
+
+```
+In[1]:= ArrayPad[{1, 2, 3}, 1]
+Out[1]= {0, 1, 2, 3, 0}
+In[2]:= ArrayPad[{1, 2, 3}, 2, "Fixed"]
+Out[2]= {1, 1, 1, 2, 3, 3, 3}
+In[3]:= ArrayPad[{a, b, c}, 3, "Extrapolated"]
+Out[3]= {4 a - 3 b, 3 a - 2 b, 2 a - b, a, b, c, -b + 2 c, -2 b + 3 c, -3 b + 4 c}
+In[4]:= ArrayPad[Range[10], -2]
+Out[4]= {3, 4, 5, 6, 7, 8}
+```
+
 ## UnitVector
 Generates a coordinate unit vector. Attributes: `Protected`.
 - `UnitVector[k]`: the two-dimensional unit vector in the `k`-th direction

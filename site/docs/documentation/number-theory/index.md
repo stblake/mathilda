@@ -1,32 +1,33 @@
 # Number Theory
 
-28 built-in function(s) in this category.
+29 built-in function(s) in this category.
 
-- [`ContinuedFraction`](ContinuedFraction.md) — ContinuedFraction[x, n]  _(Stable)_
-- [`CoprimeQ`](CoprimeQ.md) — CoprimeQ[n1, n2, ...]  _(Stable)_
-- [`Divisible`](Divisible.md) — Divisible[n, m]  _(Stable)_
+- [`ChineseRemainder`](ChineseRemainder.md) — ChineseRemainder[{r1, r2, ...}, {m1, m2, ...}] gives the smallest x >= 0 satisfying the integer congruences x mod mi == ri mod mi for all i, lying in 0 <= x < LCM[m1, m2, ...].  _(Stable)_
+- [`ContinuedFraction`](ContinuedFraction.md) — ContinuedFraction[x, n] gives the first n terms of the continued-fraction expansion of x, the list {a1, a2, ...} standing for a1 + 1/(a2 + 1/(a3 + ...)); truncating it gives the convergents, the best rational approximations to x.  _(Stable)_
+- [`CoprimeQ`](CoprimeQ.md) — CoprimeQ[n1, n2, ...] yields True if the arguments are pairwise relatively prime -- pairwise GCD equal to 1 -- and False otherwise; two random integers are coprime with probability 6/Pi^2.  _(Stable)_
+- [`Divisible`](Divisible.md) — Divisible[n, m] yields True if n is an integer multiple of m -- the divisibility relation m | n, effectively Mod[n, m] == 0 -- and False otherwise.  _(Stable)_
 - [`DivisorSigma`](DivisorSigma.md) — DivisorSigma[k, n] gives the divisor function sigma_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma[k, n, GaussianIntegers -> True] sums over Gaussian-integer divisors.  _(Stable)_
 - [`Divisors`](Divisors.md) — Divisors[n] gives a list of the integers that divide n. Divisors[n, GaussianIntegers -> True] includes Gaussian-integer divisors.  _(Stable)_
-- [`EulerPhi`](EulerPhi.md) — EulerPhi[n] gives the Euler totient function phi(n).  _(Stable)_
-- [`ExtendedGCD`](ExtendedGCD.md) — ExtendedGCD[n1, n2, ...]  _(Stable)_
+- [`EulerPhi`](EulerPhi.md) — EulerPhi[n] gives the Euler totient phi(n), the number of integers from 1 to n coprime to n -- equivalently the order of the group (Z/nZ)* of units, so a^phi(n) == 1 (mod n) whenever gcd(a, n) == 1 (Euler's theorem).  _(Stable)_
+- [`ExtendedGCD`](ExtendedGCD.md) — ExtendedGCD[n1, n2, ...] gives the extended GCD {g, {r1, r2, ...}}, where g == GCD[n1, ...] and g == r1 n1 + r2 n2 + ... -- Bezout's identity, the certificate that also yields modular inverses.  _(Stable)_
 - [`FactorInteger`](FactorInteger.md) — FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.  _(Stable)_
-- [`FromContinuedFraction`](FromContinuedFraction.md) — FromContinuedFraction[{a1, a2, ..., an}]  _(Stable)_
-- [`GCD`](GCD.md) — GCD[n1, n2, ...]  _(Stable)_
-- [`IntegerPartitions`](IntegerPartitions.md) — IntegerPartitions[n]  _(Stable)_
-- [`JacobiSymbol`](JacobiSymbol.md) — JacobiSymbol[n, m]  _(Stable)_
-- [`LCM`](LCM.md) — LCM[n1, n2, ...]  _(Stable)_
+- [`FromContinuedFraction`](FromContinuedFraction.md) — FromContinuedFraction[{a1, a2, ..., an}] reconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)), the convergent of a continued fraction, in nested (un-expanded) form; the inverse of ContinuedFraction.  _(Stable)_
+- [`GCD`](GCD.md) — GCD[n1, n2, ...] gives the greatest common divisor of the integers ni, the largest integer dividing them all -- the quantity the Euclidean algorithm computes.  _(Stable)_
+- [`IntegerPartitions`](IntegerPartitions.md) — IntegerPartitions[n] gives the partitions of the integer n -- the ways to write n as a sum of positive parts (equivalently, its Young diagrams) -- in reverse-lexicographic order.  _(Stable)_
+- [`JacobiSymbol`](JacobiSymbol.md) — JacobiSymbol[n, m] gives the Jacobi symbol (n/m); for prime m it is the Legendre symbol, +-1 according to whether n is a quadratic residue modulo m (Euler's criterion) and 0 when m divides n, and it satisfies the law of quadratic reciprocity.  _(Stable)_
+- [`LCM`](LCM.md) — LCM[n1, n2, ...] gives the least common multiple of the integers ni, the smallest positive integer they all divide; with the gcd it satisfies GCD[a, b] LCM[a, b] == a b.  _(Stable)_
 - [`LiouvilleLambda`](LiouvilleLambda.md) — LiouvilleLambda[n] gives the Liouville function lambda(n) = (-1)^Omega(n), where Omega(n) counts the prime factors of n with multiplicity. Completely multiplicative. A non-real Gaussian-integer argument, or GaussianIntegers -> True, is handled over Z[i].  _(Stable)_
 - [`MoebiusMu`](MoebiusMu.md) — MoebiusMu[n] gives the Moebius function mu(n): 0 if n has a squared prime factor, otherwise (-1)^k where k is the number of distinct primes. A non-real Gaussian-integer argument is handled over Z[i].  _(Stable)_
-- [`MultiplicativeOrder`](MultiplicativeOrder.md) — MultiplicativeOrder[k, n]  _(Stable)_
+- [`MultiplicativeOrder`](MultiplicativeOrder.md) — MultiplicativeOrder[k, n] gives the multiplicative order of k modulo n, the smallest positive integer m such that k^m is congruent to 1 modulo n; reversing it -- recovering the exponent x with k^x congruent to a given target -- is the discrete logarithm problem, whose presumed hardness underlies Diffie-Hellman key exchange and the ElGamal and DSA schemes.  _(Stable)_
 - [`NextPrime`](NextPrime.md) — NextPrime[x] gives the next prime after x.  _(Stable)_
-- [`PartitionsP`](PartitionsP.md) — PartitionsP[n]  _(Stable)_
-- [`PartitionsQ`](PartitionsQ.md) — PartitionsQ[n]  _(Stable)_
-- [`PowerMod`](PowerMod.md) — PowerMod[a, b, m] gives a^b mod m.  _(Stable)_
+- [`PartitionsP`](PartitionsP.md) — PartitionsP[n] gives the number p(n) of unrestricted partitions of the integer n, evaluated exactly through the Hardy-Ramanujan-Rademacher series (p(n) grows like exp(Pi Sqrt[2n/3])).  _(Stable)_
+- [`PartitionsQ`](PartitionsQ.md) — PartitionsQ[n] gives the number q(n) of partitions of the integer n into distinct parts -- equal, by Euler's theorem, to the number of partitions into odd parts.  _(Stable)_
+- [`PowerMod`](PowerMod.md) — PowerMod[a, b, m] gives a^b mod m by square-and-multiply, reducing modulo m at every step so the full power is never formed.  _(Stable)_
 - [`Prime`](Prime.md) — Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.  _(Stable)_
 - [`PrimeNu`](PrimeNu.md) — PrimeNu[n] gives the number of distinct prime factors of n, nu(n). PrimeNu[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts distinct Gaussian prime factors over Z[i]. PrimeNu[1] is 0; PrimeNu[0] is left unevaluated.  _(Stable)_
 - [`PrimeOmega`](PrimeOmega.md) — PrimeOmega[n] gives the number of prime factors of n counted with multiplicity, Omega(n). PrimeOmega[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts Gaussian prime factors over Z[i]. PrimeOmega[1] is 0; PrimeOmega[0] is left unevaluated.  _(Stable)_
 - [`PrimePi`](PrimePi.md) — PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), "Sieve", "Legendre", "Meissel", "Lehmer", "LMO" (Lagarias-Miller-Odlyzko), "DelegliseRivat", or "LucyHedgehog".  _(Stable)_
-- [`PrimeQ`](PrimeQ.md) — PrimeQ[n]  _(Stable)_
-- [`PrimitiveRoot`](PrimitiveRoot.md) — PrimitiveRoot[n]  _(Stable)_
-- [`PrimitiveRootList`](PrimitiveRootList.md) — PrimitiveRootList[n]  _(Stable)_
-- [`SquareFreeQ`](SquareFreeQ.md) — SquareFreeQ[expr]  _(Stable)_
+- [`PrimeQ`](PrimeQ.md) — PrimeQ[n] gives True if n is a prime integer and False otherwise, using a Baillie-PSW and Miller-Rabin probabilistic primality test (no known counterexample, and definite below 2^64).  _(Stable)_
+- [`PrimitiveRoot`](PrimitiveRoot.md) — PrimitiveRoot[n] gives the smallest primitive root of n -- a generator of the multiplicative group (Z/nZ)* of units modulo n.  _(Stable)_
+- [`PrimitiveRootList`](PrimitiveRootList.md) — PrimitiveRootList[n] gives the sorted list of all primitive roots of n in the canonical residues {1, ..., n-1}; when n admits any, there are exactly EulerPhi[EulerPhi[n]] of them.  _(Stable)_
+- [`SquareFreeQ`](SquareFreeQ.md) — SquareFreeQ[expr] gives True if expr is a square-free number or polynomial -- no prime (or irreducible factor) occurs more than once, equivalently MoebiusMu[n] != 0 for an integer -- and False otherwise; the squarefree integers have density 6/Pi^2.  _(Stable)_

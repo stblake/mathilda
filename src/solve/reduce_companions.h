@@ -49,7 +49,12 @@
  * The Booleans domain also expands `Equivalent` (via the DNF engine here), which
  * additionally now evaluates as a builtin (src/boolean.c).
  *
- * CylindricalDecomposition (the last Phase-8 companion) is not implemented yet.
+ * CylindricalDecomposition[expr, vars] gives a cylindrical algebraic
+ * decomposition of the real solution set of `expr`.  It is Reals-only (the sole
+ * semantic difference from Reduce over an ordered field) and is implemented as a
+ * thin front-end that forces the Reals domain and delegates to Reduce, whose
+ * Reals engine (Fourier-Motzkin / CAD / sign diagram) already emits the merged
+ * cylindrical formula.
  */
 #ifndef REDUCE_COMPANIONS_H
 #define REDUCE_COMPANIONS_H
@@ -71,7 +76,17 @@ Expr* builtin_not_element(Expr* res);
  * can neither exhibit an instance nor prove emptiness. */
 Expr* builtin_find_instance(Expr* res);
 
-/* Register LogicalExpand and NotElement.  Called from reduce_init. */
+/* CylindricalDecomposition[expr, vars] -- the cylindrical algebraic
+ * decomposition of the real solution set of `expr`, a quantifier-free And/Or
+ * formula in which each variable is bounded cylindrically in terms of the
+ * earlier ones.  Reals-only; forces the Reals domain and delegates to Reduce.
+ * Returns True / False / the formula, or NULL (unevaluated) when the engine
+ * cannot decide.  A trailing Reals domain arg is accepted and ignored; option
+ * Rules are forwarded to Reduce. */
+Expr* builtin_cylindrical_decomposition(Expr* res);
+
+/* Register LogicalExpand, NotElement, FindInstance and
+ * CylindricalDecomposition.  Called from reduce_init. */
 void reduce_companions_init(void);
 
 #endif /* REDUCE_COMPANIONS_H */

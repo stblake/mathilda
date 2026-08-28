@@ -535,6 +535,10 @@ static void pack_mark_aware_heads(void) {
         "RotateLeft", "RotateRight", "Partition", "Riffle", "Join",
         "Differences", "First", "Last", "Most", "Rest",
         "PadLeft", "PadRight",
+        /* ArrayReshape (memcpy into a new dims header) and ArrayPad (two-sided
+         * rank-1 pad by memcpy + nd_fill_run) — src/ndstruct.c. Both decline any
+         * shape or fill the buffer cannot hold and materialise there. */
+        "ArrayReshape", "ArrayPad",
         /* ListConvolve / ListCorrelate (src/convolutions.c). Both engines --
          * the direct O(L*m) loop and the FFT -- already worked on flat double
          * arrays; what they lacked was a way to GET one without boxing every
@@ -976,6 +980,9 @@ static void pack_mark_aware_heads(void) {
          * GMP answers exactly -- never a wrapped difference. */
         "RotateLeft", "RotateRight", "Join", "Partition", "Riffle",
         "PadLeft", "PadRight", "Differences",
+        /* ArrayReshape/ArrayPad move whole elements by memcpy and refuse any fill
+         * not exact at int64 (nd_fill_value), so no element's head can change. */
+        "ArrayReshape", "ArrayPad",
         /* The iteration family reads no element at all -- it copies the value and
          * applies a function, so exactness is entirely the function's business. */
         "Nest", "NestList", "NestWhile", "NestWhileList",

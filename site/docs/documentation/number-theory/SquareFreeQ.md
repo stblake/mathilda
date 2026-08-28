@@ -5,9 +5,7 @@
 
 ## Description
 
-**`SquareFreeQ[expr]`**
-
-gives True if expr is a square-free polynomial or number, and False otherwise.
+**`SquareFreeQ[expr] gives True if expr is a square-free number or polynomial -- no prime (or irreducible factor) occurs more than once, equivalently MoebiusMu[n] != 0 for an integer -- and False otherwise; the squarefree integers have density 6/Pi^2.`**
 
 **`SquareFreeQ[expr, vars]`**
 
@@ -165,12 +163,21 @@ The Modulus option is parsed but only Modulus -> 0 is honoured; non-zero values 
 
 **See also:** [Symbol](../../expression-information/Symbol/), [List](../../other-advanced/List/), [Complex](../../arithmetic/Complex/), [Pi](../../mathematical-constants/Pi/), [D](../../calculus/D/), [PolynomialGCD](../../algebra/PolynomialGCD/), [Rule](../../assignment-and-rules/Rule/)
 
+- G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008 — squarefree numbers and their density `6/π²`.
 - Source: [`src/poly/squarefreeq.c`](https://github.com/stblake/mathilda/blob/main/src/poly/squarefreeq.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_primenu.c`](https://github.com/stblake/mathilda/blob/main/tests/test_primenu.c)
 - Tests: [`tests/test_squarefreeq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_squarefreeq.c)
 
 ## Notes & additional examples
+
+### Squarefree numbers
+
+An integer is *squarefree* when no prime divides it more than once — equivalently when
+`MoebiusMu[n] ≠ 0`, since `μ(n) = 0` is defined precisely by a repeated prime factor. The
+squarefree integers have natural density `6/π² = 1/ζ(2) ≈ 0.6079`. For a polynomial,
+squarefreeness means no repeated irreducible factor, detected through `PolynomialGCD` of the
+polynomial and its derivative.
 
 ### Notes
 

@@ -1123,6 +1123,53 @@ static void test_find_instance(void) {
     run_test("FindInstance[p q == 4172535013 && p > 1 && q > 1, {p, q}, Integers]", "List[]");
 }
 
+/* ------------------------------------------------------------------ *
+ *  CylindricalDecomposition (Phase 8 companion)                       *
+ *                                                                     *
+ *  A Reals-only front-end that forces the Reals domain and delegates  *
+ *  to Reduce, whose CAD / Fourier-Motzkin / sign-diagram engine emits *
+ *  the merged cylindrical formula.  These pin the cylindrical output  *
+ *  and the sound declines (unsupported positional, invalid vars, the  *
+ *  positive-dimensional irrational-fibre case).                        *
+ * ------------------------------------------------------------------ */
+static void test_cylindrical_decomposition(void) {
+    /* Univariate inequality -> sign diagram; forced Reals for an equation. */
+    run_test("CylindricalDecomposition[x^2 > 1, {x}]", "Or[Less[x, -1], Greater[x, 1]]");
+    run_test("CylindricalDecomposition[x^2 == 4, {x}]", "Or[Equal[x, -2], Equal[x, 2]]");
+    /* A bare symbol (not a List) is a valid variable form. */
+    run_test("CylindricalDecomposition[x^2 > 1, x]", "Or[Less[x, -1], Greater[x, 1]]");
+    /* A List statement is its conjunction (inherited from Reduce). */
+    run_test("CylindricalDecomposition[{x > 0, x < 2}, {x}]", "Inequality[0, Less, x, Less, 2]");
+
+    /* Two-variable CAD: hyperbola branches and the closed unit disk (merged,
+     * radical bound checked structurally). */
+    run_test("CylindricalDecomposition[x y > 1, {x, y}]",
+             "Or[And[Less[x, 0], Less[y, Power[x, -1]]], "
+             "And[Greater[x, 0], Greater[y, Power[x, -1]]]]");
+    run_contains("CylindricalDecomposition[x^2 + y^2 <= 1, {x, y}]",
+                 "Inequality[-1, LessEqual, x, LessEqual, 1]");
+
+    /* Decides True / False. */
+    run_test("CylindricalDecomposition[True, {x}]", "True");
+    run_test("CylindricalDecomposition[x^2 == -1, {x}]", "False");       /* no real root */
+    run_test("CylindricalDecomposition[x^2 + y^2 < 0, {x, y}]", "False");
+
+    /* An explicit (redundant) Reals domain is accepted. */
+    run_test("CylindricalDecomposition[x^2 > 1, {x}, Reals]", "Or[Less[x, -1], Greater[x, 1]]");
+
+    /* Sound declines -> stay unevaluated (FullForm echoes the head):
+     *  - a positive-dimensional system with irrational fibres (Phase 6b limit);
+     *  - an unsupported positional (a non-Reals domain);
+     *  - an invalid variable. */
+    run_test("CylindricalDecomposition[x^2 + y^2 + z^2 == 1 && x > 0 && y > 0 && z > 0, {x, y, z}]",
+             "CylindricalDecomposition[And[Equal[Plus[Power[x, 2], Power[y, 2], Power[z, 2]], 1], "
+             "Greater[x, 0], Greater[y, 0], Greater[z, 0]], List[x, y, z]]");
+    run_test("CylindricalDecomposition[x^2 > 1, {x}, Integers]",
+             "CylindricalDecomposition[Greater[Power[x, 2], 1], List[x], Integers]");
+    run_test("CylindricalDecomposition[x^2 > 1, 3.5]",
+             "CylindricalDecomposition[Greater[Power[x, 2], 1], 3.5]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1149,6 +1196,7 @@ int main(void) {
     TEST(test_quantifiers_decline);
     TEST(test_logical_expand);
     TEST(test_find_instance);
+    TEST(test_cylindrical_decomposition);
     TEST(test_wb_constant_atoms);
     TEST(test_wb_logic_fold);
     TEST(test_wb_atom_emit);

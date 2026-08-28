@@ -353,8 +353,13 @@ to work on \emph{implicitization}\index{implicitization}. A curve traced paramet
 as $x=t^2,\;y=t^3$ is a set of points in the plane; eliminating the parameter $t$
 recovers the single polynomial equation those points satisfy, $x^3=y^2$---the cuspidal
 cubic. \B{GroebnerBasis} does it two ways: with $t$ ordered first, the whole basis
-carries a $t$-free member (pair~5); naming $t$ in the third argument returns just the
-elimination ideal (pair~6). This is the same projection \B{Eliminate}
+carries a $t$-free member (pair~5); naming $t$ in the third argument switches to an
+\emph{elimination order}\index{monomial order!elimination}
+(\texttt{MonomialOrder -> EliminationOrder}) and returns just the elimination ideal
+(pair~6). That block order is purpose-built for the job---it need only push the
+eliminated variables ahead of the kept ones, not fully order the kept block among
+itself, so it reaches the elimination ideal more cheaply than a full lexicographic basis.
+This is the same projection \B{Eliminate}
 performs (\S\ref{ssec:alg-gcd}), now as a by-product of the basis
 itself.\calloutnote{Theory}{The \emph{Elimination Theorem}\index{Elimination Theorem} is
 what guarantees this. If $G$ is a Gr\"obner basis of an ideal $I$ under a
@@ -480,9 +485,23 @@ constant sign. Mathilda uses McCallum's projection (\texttt{src/solve/reduce\_ca
 and it holds itself to a hard soundness rule: if any step is undecidable---an algebraic
 sign it cannot resolve, a fibre it cannot isolate---it declines rather than emit a
 formula that might be wrong.} The third positional argument chooses the \texttt{Domain}:
-\texttt{Reals}, \texttt{Complexes} (the default), or \texttt{Rationals}. Solving over the
-\emph{integers}---Diophantine equations---is a different world of methods again, and it is
-where we turn next.
+\texttt{Reals}, \texttt{Complexes} (the default), or \texttt{Rationals}.
+
+That decomposition can be asked for on its own. \B{CylindricalDecomposition}$[\mathit{expr},
+\mathit{vars}]$ returns the CAD cells directly---always over the reals, since the cylindrical
+ordering is exactly what the decomposition delivers---as the same quantifier-free formula, each
+variable bounded in terms of the ones before it. It is the engine underneath \B{Reduce}'s real
+solutions, surfaced by name.
+
+\begin{codepairs}
+\pair{algebra/reduce/6}{The closed unit disk $x^2+y^2\le1$ laid out as a single cylindrical
+cell: $x$ sweeps the interval $[-1,1]$, and for each such $x$ the fibre in $y$ is the segment
+between the two arcs $\pm\sqrt{1-x^2}$ (printed here in the equivalent form
+$\pm\frac12\sqrt{4-4x^2}$).}
+\end{codepairs}
+
+Solving over the \emph{integers}---Diophantine equations---is a different world of methods
+again, and it is where we turn next.
 
 \subsection{Diophantine equations: solving over the integers}
 \label{ssec:alg-diophantine}

@@ -28,6 +28,8 @@ Expr* ndstruct_reverse(Expr* res);    /* Reverse[a] */
 Expr* ndstruct_transpose(Expr* res);  /* Transpose[a] (rank 2) */
 Expr* ndstruct_diagonal(Expr* res);   /* Diagonal[a] / Diagonal[a, k] (rank 2 -> rank 1) */
 Expr* ndstruct_flatten(Expr* res);    /* Flatten[a] */
+Expr* ndstruct_arrayreshape(Expr* res); /* ArrayReshape[a, dims] / [a, dims, pad] */
+Expr* ndstruct_arraypad(Expr* res);   /* ArrayPad[a, m] / [a, {l,r}, c] (rank 1) */
 Expr* ndstruct_take(Expr* res);       /* Take[a, spec] */
 Expr* ndstruct_drop(Expr* res);       /* Drop[a, spec] */
 Expr* ndstruct_clip(Expr* res);       /* Clip[a] / Clip[a, {min,max}] */

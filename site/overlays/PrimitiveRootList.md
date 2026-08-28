@@ -1,3 +1,15 @@
+---
+references:
+  - "K. Ireland and M. Rosen, *A Classical Introduction to Modern Number Theory*, 2nd ed., Springer, 1990 — primitive roots and the structure of `(Z/nZ)*` (Chapter 4)."
+---
+
+### How many primitive roots?
+
+When `n` admits a primitive root at all (`n = 2, 4, p^k, 2p^k`), the group `(Z/nZ)*` is
+cyclic of order `EulerPhi[n]`, and a cyclic group of order `m` has exactly `EulerPhi[m]`
+generators. So the number of primitive roots is `EulerPhi[EulerPhi[n]]` — e.g. two for
+`n = 7`, since `EulerPhi[EulerPhi[7]] = EulerPhi[6] = 2`.
+
 ### Worked examples
 
 ```mathematica

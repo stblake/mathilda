@@ -5,9 +5,7 @@
 
 ## Description
 
-**`ContinuedFraction[x, n]`**
-
-gives a list of the first n terms in the continued-fraction representation of x.
+**`ContinuedFraction[x, n] gives the first n terms of the continued-fraction expansion of x, the list {a1, a2, ...} standing for a1 + 1/(a2 + 1/(a3 + ...)); truncating it gives the convergents, the best rational approximations to x.`**
 
 **`ContinuedFraction[x]`**
 
@@ -16,7 +14,7 @@ gives all terms determinable from the precision of x.
 <details>
 <summary>Notes</summary>
 
-The list {a1, a2, a3, ...} corresponds to a1 + 1/(a2 + 1/(a3 + ...)). Exact rationals give a finite (canonical, last term \>= 2) expansion. For Sqrt\[d\] with d a non-square integer the no-count form returns {a1, ..., {b1, ...}}, the bracketed block repeating cyclically. Inexact Real / MPFR inputs yield terms only as far as the precision determines them. ContinuedFraction is Listable.
+Exact rationals give a finite (canonical, last term \>= 2) expansion.  For Sqrt\[d\] with d a non-square integer the no-count form returns {a1, ..., {b1, ...}}, the bracketed block repeating cyclically -- every quadratic irrational is eventually periodic (Lagrange).  Inexact Real / MPFR inputs yield terms only as far as the precision determines them.  ContinuedFraction is Listable.
 
 </details>
 
@@ -152,11 +150,22 @@ Attributes: Listable, Protected.
 
 **See also:** [Pi](../../mathematical-constants/Pi/)
 
+- A. Ya. Khinchin, *Continued Fractions*, Dover, 1997 — the classical theory of convergents and best approximations.
+- G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008 — Chapter X, continued fractions.
 - Source: [`src/contfrac.c`](https://github.com/stblake/mathilda/blob/main/src/contfrac.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_contfrac.c`](https://github.com/stblake/mathilda/blob/main/tests/test_contfrac.c)
 
 ## Notes & additional examples
+
+### Convergents and periodicity
+
+The partial quotients of `ContinuedFraction[p/q]` are exactly the quotients of the Euclidean
+algorithm on `p` and `q`, so a rational has a *finite* expansion. Truncating the expansion
+and folding it back (`FromContinuedFraction`) gives the *convergents* — the best rational
+approximations to `x` for their size, which is why `{3, 7, 15, 1}` recovers `355/113 ≈ π`. A
+quadratic irrational such as `Sqrt[7]` has an *eventually periodic* expansion (Lagrange's
+theorem), returned in the no-count form as a bracketed repeating block.
 
 ### Notes
 

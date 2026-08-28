@@ -29,13 +29,13 @@ positive-dimensional one (see *Known limitations*).
 over Complexes / Reals / Integers / Rationals / Booleans (v0.104, 2026-08-26;
 extended v0.105, 2026-08-27 with parametric-family instantiation, a solve-the-
 parameter step for periodic instances, indexed variables `c[i]`, and a bounded
-integer-box search)** — leaving only `CylindricalDecomposition`.
+integer-box search)**, and **`CylindricalDecomposition` (v0.111, 2026-08-28)** —
+completing the Phase-8 companion family.
 The remaining pieces are **6b (real-algebraic-coefficient fibre isolation to
 widen past the rational-fibre regime — the positive-dimensional irrational
-case)**, **6e (McCallum well-orientedness
-augmentation)**, **7-extended (≥2 free vars / alternating quantifiers / algebraic
-free-variable boundaries — blocked on 6b)** and **8 (the last companion builtin,
-`CylindricalDecomposition`)**.
+case)**, **6e (McCallum well-orientedness augmentation)** and **7-extended
+(≥2 free vars / alternating quantifiers / algebraic free-variable boundaries —
+blocked on 6b)**.
 Implementation order followed was
 `0 → 1 → 2 → 3 → 5 → 4 → 6(2-var) → 6d(n-var A) → 6d(n-var B) → 8-opts → 7(v1)`.
 
@@ -49,10 +49,33 @@ Implementation order followed was
 | 5 | Integers / Rationals | ✅ done |
 | 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var done (6d Stage A + Stage B n-D boundary merge, rational-fibre regime); 6b (algebraic-coeff fibres) + 6e (well-orientedness) pending |
 | 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ◧ v1 done (fully-quantified decision procedure + single-free-var parametric QE, rational-fibre regime); ≥2 free vars / alternating / algebraic-boundary parametric deferred (blocked on 6b) |
-| 8 | Companion builtins + polish | ◧ LogicalExpand + NotElement + FindInstance (C/R/Z/Q/Booleans) done; CylindricalDecomposition pending |
+| 8 | Companion builtins + polish | ✅ LogicalExpand + NotElement + FindInstance (C/R/Z/Q/Booleans) + CylindricalDecomposition done |
 | 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done (+ multivariate `Sqrt` rationalization, 2026-08-24) |
 | Opt | Options: `Backsubstitution`, `Cubics`, `GeneratedParameters`, `Method`, `Modulus`, `Quartics`, `WorkingPrecision` | ✅ done (2026-08-25) |
 
+> **2026-08-28 — Phase 8 `CylindricalDecomposition` (last companion), v0.111.**
+> `CylindricalDecomposition[expr, vars]` returns the **merged cylindrical formula** of the
+> real solution set — a quantifier-free `And`/`Or` in which each variable is bounded
+> cylindrically in terms of the earlier ones (`x^2+y^2<=1, {x,y}` →
+> `-1<=x<=1 && -Sqrt[1-x^2]<=y<=Sqrt[1-x^2]`; `x y>1` → `(x<0&&y<1/x)||(x>0&&y>1/x)`;
+> `x^2==-1` → `False`). **Deviation from this sketch:** it did NOT need a `cad_extract`
+> cell-list exposure "before DNF merging". Mathematica's `CylindricalDecomposition` returns
+> the *merged* cylindrical formula (verified against 14.0), which is exactly what our Reals
+> engine (`reduce_fm`/`reduce_univar`/`reduce_cad`) already emits — the only semantic
+> difference from `Reduce` is that CD is **Reals-only**. So it shipped as a thin front-end
+> (`src/solve/reduce_companions.c`, `builtin_cylindrical_decomposition`): validate arity
+> (`[expr,vars]`, or a redundant `[expr,vars,Reals]`; any other 3rd positional declines) and
+> `vars` (symbol or `List` of symbols), then build+evaluate `Reduce[expr, vars, Reals,
+> <trailing option Rules…>]` under message suppression, forwarding all of `Reduce`'s options,
+> and decline (return NULL) iff the result is still headed by `Reduce`. Zero engine
+> duplication; the whole `Reduce` front-end preprocessing (Abs sign-split, real radicals,
+> `Mod`→`Floor`), DNF build and per-arity Reals dispatch are reused. Sound declines carry over
+> from `Reduce` — notably the positive-dimensional irrational-fibre case (Phase 6b limit).
+> New `SYM_CylindricalDecomposition`; `ATTR_PROTECTED`; docstring. Tests:
+> `test_cylindrical_decomposition` (14 asserts); reduce suite + corpus 160/160; `check-c99`
+> clean; valgrind at macOS baseline (13,440/420, no new leak). This completes the Phase-8
+> companion family; 6b / 6e / 7-extended remain.
+>
 > **2026-08-27 — `FindInstance` round 2, v0.106.** Three more verification-gated
 > capabilities (`src/solve/reduce_companions.c`, `src/boolean.c`): (1) **`Equivalent`
 > evaluates** (`builtin_equivalent`) and the DNF engine rewrites it to a cyclic
@@ -320,10 +343,10 @@ reduce_zerodim.{c,h}       [done] zero-dimensional nonlinear systems (Complexes 
                            (issue #69). Covers the irrational-fibre ZERO-dim case CAD
                            declines; positive-dim stays with 6b.
 reduce_qe.{c,h}            [pending] Phase 7: Exists / ForAll / Resolve via CAD cells
-reduce_companions.{c,h}    [done] Phase 8: LogicalExpand, NotElement, and
+reduce_companions.{c,h}    [done] Phase 8: LogicalExpand, NotElement,
                            FindInstance (witness-by-verification off Reduce/Solve
-                           outputs; C/R/Z/Q/Booleans). CylindricalDecomposition
-                           still pending
+                           outputs; C/R/Z/Q/Booleans), and CylindricalDecomposition
+                           (Reals-only front-end delegating to Reduce)
 reduce_realfn.{c,h}        [done] Phase 9: preprocessing (Abs sign-split, Mod->Floor,
                            integer-part isolation) + the head->real-domain table
 reduce_realdiag.{c,h}      [done] Phase 9: general univariate real sign diagram over
@@ -529,8 +552,10 @@ extra projection machinery.
   `rform_simplify`) as a builtin; needed internally anyway.
 - **`FindInstance[expr, vars, dom]`** — one witness: return the sample point of any true
   CAD cell (or one Solve solution for the equational case); `{}` when unsatisfiable.
-- **`CylindricalDecomposition[expr, vars]`** — expose the CAD cell list directly (the
-  `cad_extract` output before DNF merging).
+- **`CylindricalDecomposition[expr, vars]`** — *(shipped v0.111 as a Reals-only front-end
+  delegating to `Reduce`, NOT as a raw `cad_extract` cell dump — see the Deviations note.)*
+  The merged cylindrical formula is what our Reals engine already emits and what Mathematica
+  returns, so it forces the Reals domain and reuses the whole `Reduce` pipeline.
 
 ### 9. Elementary real functions over the Reals (`reduce_realfn.c`, `reduce_realdiag.c`)
 

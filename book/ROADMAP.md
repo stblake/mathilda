@@ -59,8 +59,9 @@ mathematical domains, each its own file under `chapters/math/` and its own campa
 | 4.3 | Calculus | `chapters/math/calculus.tex` | Planned |
 | 4.4 | Linear Algebra | `chapters/math/linear-algebra.tex` | Planned |
 | 4.5 | Numerical Calculus | `chapters/math/numerical-calculus.tex` | **Verified** |
-| 4.6 | Number Theory | `chapters/math/number-theory.tex` | Planned |
+| 4.6 | Number Theory | `chapters/math/number-theory.tex` | **Verified** |
 | 4.7 | Special Functions | `chapters/math/special-functions.tex` | Planned |
+| 4.8 | Statistics | `chapters/math/statistics.tex` | **Verified** |
 
 **§4.1 Arithmetic scope** (broadened beyond the original three-subsection outline):
 - **Types & operators** — the numeric heads (`Head`), and how `+ - * / ^` reduce to
@@ -101,6 +102,18 @@ fractions.
 **§4.7 Special Functions scope.** Gamma/Zeta/PolyGamma families, Bessel/Airy,
 error functions, hypergeometric functions; exact values, symbolic identities, and
 rigorous `acb` numerics via FLINT.
+
+**§4.8 Statistics scope** (Verified). Descriptive statistics on classical applied
+datasets: location (`Mean`/`Median`/`Commonest`, median robustness on Newcomb's
+1882 light-timing data); spread (`Variance`/`StandardDeviation`/`RootMeanSquare`,
+Bessel's correction, on Michelson's 1879 speed-of-light data); the five-number
+summary (`Min`/`Quartiles`/`Max` on Cavendish's 1798 density data); shape
+(`Moment`/`CentralMoment`/`Skewness`/`Kurtosis`); covariance and correlation
+(Anscombe's quartet as the cautionary headline); moving statistics
+(`MovingAverage`/`MovingMedian`/`ExponentialMovingAverage`); frequencies
+(`Tally`/`Counts`); and the bridge to probability (`RandomVariate`/`PDF`/
+`LearnDistribution`, the law of large numbers). Ch. 3 gets a short tour section
+(§3.11). Exact-while-exact throughout, with packed-array/`Compile` notes.
 
 ## The System (Chapters 5–9)
 

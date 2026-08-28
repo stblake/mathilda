@@ -754,6 +754,145 @@ Expr* ndstruct_flatten(Expr* res) {
     return expr_new_ndarray_like(a, 1, odims, out, dt);
 }
 
+/* --------------------------------------------------------- ArrayReshape */
+
+/* Parse a dims spec (non-negative Integer, or List of them) into d[]/count/
+ * total. Returns false on a bad spec or an int64 overflow. */
+static bool nd_reshape_dims(const Expr* spec, int64_t* d, int* count, int64_t* total) {
+    int k;
+    if (spec->type == EXPR_INTEGER) {
+        if (spec->data.integer < 0) return false;
+        d[0] = spec->data.integer; k = 1;
+    } else if (spec->type == EXPR_FUNCTION
+               && spec->data.function.head->type == EXPR_SYMBOL
+               && spec->data.function.head->data.symbol.name == SYM_List) {
+        size_t kk = spec->data.function.arg_count;
+        if (kk == 0 || kk > NDARRAY_MAX_RANK) return false;
+        k = (int)kk;
+        for (int i = 0; i < k; i++) {
+            const Expr* di = spec->data.function.args[i];
+            if (di->type != EXPR_INTEGER || di->data.integer < 0) return false;
+            d[i] = di->data.integer;
+        }
+    } else {
+        return false;
+    }
+    int64_t t = 1;
+    for (int i = 0; i < k; i++) {
+        if (d[i] != 0 && t > INT64_MAX / d[i]) return false;
+        t *= d[i];
+    }
+    *count = k; *total = t;
+    return true;
+}
+
+/* ArrayReshape[a, dims] / [a, dims, padding] on a packed buffer: a straight
+ * memcpy of the first `total` elements into a new dims header. When `total`
+ * exceeds the buffer size it pads with an exact-dtype fill; anything the buffer
+ * cannot represent exactly (a float default 0, a symbolic/list/named padding, an
+ * empty result) degrades to the List path. */
+Expr* ndstruct_arrayreshape(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return NULL;
+    Expr* a = res->data.function.args[0];
+    if (!is_ndarray(a)) return NULL;
+
+    int64_t d[NDARRAY_MAX_RANK];
+    int count;
+    int64_t total;
+    if (!nd_reshape_dims(res->data.function.args[1], d, &count, &total))
+        return NULL;                 /* bad dims: leave unevaluated */
+    if (total <= 0) return ndarray_delist_and_reeval(res);   /* {} etc. */
+
+    NDType dt = a->data.ndarray.dtype;
+    size_t esz = ndt_elem_size(dt);
+    size_t sz = ndarray_size(a);
+    const char* s = (const char*)a->data.ndarray.data;
+
+    char* out = malloc((size_t)total * esz);
+    if (!out) return ndarray_delist_and_reeval(res);
+
+    if ((size_t)total <= sz) {
+        memcpy(out, s, (size_t)total * esz);
+    } else {
+        /* need to pad the tail */
+        double re = 0.0; int64_t iv = 0;
+        const Expr* fill = (argc == 3) ? res->data.function.args[2] : NULL;
+        if (argc == 3) {
+            if (!nd_fill_value(fill, dt, &re, &iv)) { free(out); return ndarray_delist_and_reeval(res); }
+        } else if (dt != NDT_INT64) {
+            free(out); return ndarray_delist_and_reeval(res);
+        }
+        memcpy(out, s, sz * esz);
+        nd_fill_run(out, dt, sz, (size_t)total - sz, re, iv);
+    }
+    return expr_new_ndarray_like(a, count, d, out, dt);
+}
+
+/* ------------------------------------------------------------ ArrayPad */
+
+/* ArrayPad on a rank-1 packed buffer with a scalar amount `m` or a flat {l,r}
+ * amounts pair and a constant exact-dtype fill (default 0). Two-sided pad and/or
+ * truncation by memcpy + nd_fill_run. Everything else (rank >= 2, per-level or
+ * list amounts, a named/list/non-exact fill, an empty result) returns NULL so
+ * builtin_array_pad materialises and runs the List path. */
+Expr* ndstruct_arraypad(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return NULL;
+    Expr* a = res->data.function.args[0];
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+
+    /* amounts: scalar m, or a flat {l,r} / {m} of integers */
+    const Expr* am = res->data.function.args[1];
+    int64_t l, r;
+    if (am->type == EXPR_INTEGER) {
+        l = r = am->data.integer;
+    } else if (am->type == EXPR_FUNCTION && am->data.function.head->type == EXPR_SYMBOL
+               && am->data.function.head->data.symbol.name == SYM_List) {
+        size_t na = am->data.function.arg_count;
+        if (na < 1 || na > 2) return NULL;
+        const Expr* e0 = am->data.function.args[0];
+        const Expr* e1 = (na == 2) ? am->data.function.args[1] : e0;
+        if (e0->type != EXPR_INTEGER || e1->type != EXPR_INTEGER) return NULL;
+        l = e0->data.integer; r = e1->data.integer;
+    } else {
+        return NULL;
+    }
+
+    int64_t n = a->data.ndarray.dims[0];
+    int64_t drop_front = l < 0 ? -l : 0;
+    int64_t drop_back = r < 0 ? -r : 0;
+    int64_t keep = n - drop_front - drop_back;
+    if (keep < 0) keep = 0;
+    int64_t pad_front = l > 0 ? l : 0;
+    int64_t pad_back = r > 0 ? r : 0;
+    int64_t new_n = pad_front + keep + pad_back;
+    if (new_n <= 0) return NULL;          /* {} -> let the List path answer */
+
+    NDType dt = a->data.ndarray.dtype;
+    size_t esz = ndt_elem_size(dt);
+
+    double re = 0.0; int64_t iv = 0;
+    if (pad_front > 0 || pad_back > 0) {
+        const Expr* fill = (argc == 3) ? res->data.function.args[2] : NULL;
+        if (argc == 3) {
+            if (!nd_fill_value(fill, dt, &re, &iv)) return NULL;
+        } else if (dt != NDT_INT64) {
+            return NULL;                  /* default 0 into float would be mixed */
+        }
+    }
+
+    char* out = malloc((size_t)new_n * esz);
+    if (!out) return NULL;
+    const char* s = (const char*)a->data.ndarray.data;
+    nd_fill_run(out, dt, 0, (size_t)pad_front, re, iv);
+    memcpy(out + (size_t)pad_front * esz, s + (size_t)drop_front * esz, (size_t)keep * esz);
+    nd_fill_run(out, dt, (size_t)(pad_front + keep), (size_t)pad_back, re, iv);
+
+    int64_t odims[1] = { new_n };
+    return expr_new_ndarray_like(a, 1, odims, out, dt);
+}
+
 /* ------------------------------------------------------------- Take / Drop */
 
 /* Build a new NDArray of `count` leading rows starting at row `start`, copied

@@ -1,5 +1,580 @@
 \section{Number Theory}
 \label{sec:numbertheory}
 
-\emph{This section is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+The previous section computed \emph{numbers}: quantities carried to whatever precision
+you asked for, where the last digit is always an approximation and the question is only
+how good an approximation. This section returns to the opposite pole---the exact
+arithmetic of the whole numbers, where nothing rounds and nothing overflows. An integer
+in Mathilda is not a 64-bit machine word straining against its limits but, the moment it
+outgrows one, a GMP\index{GMP} big integer that grows without bound, so
+\(\B{Fibonacci}[200]\) and \(2^{1000}\) are computed to the last digit as readily as
+\(2+2\). Number theory is the mathematics of exactly these objects, and it is where a
+computer algebra system shows a face very unlike a calculator's: not \emph{how much} but
+\emph{how}---how an integer factors, which integers are prime, how they behave under a
+modulus, how a rational unfolds into a continued fraction.
+
+We take the subject in the classical order. First the greatest common divisor and the
+Euclidean algorithm that computes it (\B{GCD}, \B{LCM}, \B{ExtendedGCD}, \B{CoprimeQ},
+\B{Divisible}); then primes and how Mathilda tests, counts, and finds them (\B{PrimeQ},
+\B{Prime}, \B{PrimePi}, \B{NextPrime}); then the factorization pipeline that breaks a
+composite into primes (\B{FactorInteger}, \B{IntegerExponent}, \B{SquareFreeQ}); the
+classical arithmetic functions built on that factorization (\B{Divisors},
+\B{DivisorSigma}, \B{EulerPhi}, \B{MoebiusMu}, \B{LiouvilleLambda}, \B{PrimeOmega},
+\B{PrimeNu}); modular arithmetic and the structure of the residues (\B{PowerMod},
+\B{MultiplicativeOrder}, \B{PrimitiveRoot}, \B{JacobiSymbol}); continued fractions
+(\B{ContinuedFraction}, \B{FromContinuedFraction}); the digit and combinatorial functions
+(\B{IntegerDigits}, \B{Binomial}, \B{PartitionsP}); and we close by assembling almost all
+of it into a working RSA cryptosystem.
+
+\subsection{The Euclidean algorithm and B\'ezout}
+\label{ssec:nt-euclid}
+
+The greatest common divisor is the foundation stone. \B{GCD} returns the largest integer
+dividing all of its arguments and \B{LCM}\index{least common multiple} the smallest they all divide; both take any
+number of arguments and both were met in passing in \S\ref{sec:arithmetic}. What makes
+them a starting point rather than a footnote is the algorithm underneath---Euclid's, the
+oldest nontrivial algorithm still in daily use\index{Euclidean algorithm}---and the
+identity that ties the two functions together:
+
+\begin{codepairs}
+\pair{number-theory/euclid/1}{The largest integer dividing both \(24\) and \(36\).}
+\pair{number-theory/euclid/2}{And the smallest that \(4\) and \(6\) both divide.}
+\pair{number-theory/euclid/3}{Their product, \(\gcd\cdot\operatorname{lcm}\), \dots}
+\pair{number-theory/euclid/4}{\dots equals the product of the numbers themselves---a
+classic identity, true for any pair.}
+\end{codepairs}
+
+\B{ExtendedGCD} does more than report the gcd: it returns a \emph{B\'ezout
+certificate}\index{Bezout's identity@B\'ezout's identity}, integers expressing the gcd as
+a linear combination of the inputs. For \(\B{ExtendedGCD}[a,b]=\{g,\{s,t\}\}\) you always
+have \(sa+tb=g\):
+
+\begin{codepairs}
+\pair{number-theory/euclid/5}{Here \(\gcd(240,46)=2\), with the certificate coefficients
+\(s=-9\), \(t=47\).}
+\pair{number-theory/euclid/6}{Read in the right order they check out: \((-9)\cdot240 +
+47\cdot46 = 2\). These coefficients are exactly what inverts one number modulo another---
+the engine behind the modular division of \S\ref{ssec:nt-modular}.}
+\pair{number-theory/euclid/7}{\B{CoprimeQ}\index{coprime} asks the yes/no question directly: \(14\) and
+\(15\) share no factor.}
+\pair{number-theory/euclid/8}{\(14\) and \(21\) share a \(7\), so they are not coprime.}
+\pair{number-theory/euclid/9}{\B{Divisible} tests one-way divisibility: \(4\mid100\).}
+\pair{number-theory/euclid/10}{\(7\) does not divide \(100\).}
+\end{codepairs}
+
+\usagebox{ExtendedGCD}
+
+\calloutnote{Under the hood}{Euclid's algorithm replaces the pair \((a,b)\) with
+\((b,\,a\bmod b)\) until the second entry is zero; the extended form carries the two
+B\'ezout coefficients along the same recurrence. Mathilda does not run this in
+interpreted code---it hands the integers to GMP's \texttt{mpz\_gcd} and
+\texttt{mpz\_gcdext}, whose subquadratic ``half-GCD'' handles thousand-digit inputs in
+microseconds. The partial quotients Euclid discards on the way are, as
+\S\ref{ssec:nt-contfrac} will show, precisely a continued fraction~\cite{knuth-taocp2}.}
+
+\subsection{Primes and primality}
+\label{ssec:nt-primes}
+
+A prime is an integer greater than \(1\) with no divisors but \(1\) and itself, and the
+primes are the multiplicative atoms from which every integer is built. \B{PrimeQ} is the
+test:
+
+\begin{codepairs}
+\pair{number-theory/primes/1}{\(97\) is prime.}
+\pair{number-theory/primes/2}{\(91=7\cdot13\) is not---a number that looks prime until you
+try to factor it.}
+\pair{number-theory/primes/3}{\B{Prime} indexes the primes directly: the hundredth prime
+is \(541\).}
+\pair{number-theory/primes/4}{\B{PrimePi} counts them: there are \(25\) primes up to
+\(100\).}
+\end{codepairs}
+
+The counting function \(\pi(x)\) is where number theory meets analysis. The Prime Number
+Theorem\index{Prime Number Theorem} says \(\pi(x)\sim x/\ln x\), and Mathilda lets you
+watch the approximation at \(x=10^{6}\):
+
+\begin{codepairs}
+\pair{number-theory/primes/5}{The exact count below a million.}
+\pair{number-theory/primes/6}{The theorem's estimate \(x/\ln x\)---low by about eight
+percent here, an error the theorem promises shrinks (slowly) to zero.}
+\pair{number-theory/primes/7}{\B{NextPrime} finds the next prime above its argument,
+instantly even past a million.}
+\pair{number-theory/primes/8}{A negative second argument walks the other way, so this is
+the largest prime \emph{below} \(100\)---there is no separate \texttt{PreviousPrime}.}
+\end{codepairs}
+
+\usagebox{PrimeQ}
+\usagebox{PrimePi}
+
+\B{PrimePi} is not one algorithm but a family, selectable through \texttt{Method}. Below a
+threshold Mathilda simply sieves; above it, counting every prime is hopeless and it uses
+a combinatorial method that never enumerates them---all agreeing, of course, on the
+answer:
+
+\begin{codepairs}
+\pair{number-theory/primes/9}{Legendre's sieve-free recurrence.}
+\pair{number-theory/primes/10}{The modern Del\'eglise--Rivat method---same count,
+reachable to far larger \(x\).}
+\end{codepairs}
+
+A last twist: the notion of ``prime'' depends on the ring. In the Gaussian
+integers\index{Gaussian integers} \(\mathbb{Z}[i]\) a rational prime may split, and
+\B{PrimeQ} tests this too under \texttt{GaussianIntegers -> True}:
+
+\begin{codepairs}
+\pair{number-theory/primes/11}{\(5=(2+i)(2-i)\) is \emph{not} a Gaussian prime---it splits.}
+\pair{number-theory/primes/12}{\(3\) stays prime in \(\mathbb{Z}[i]\); it is inert.}
+\pair{number-theory/primes/13}{And \(2+3i\) is a Gaussian prime, its norm \(13\) being a
+rational prime.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\B{PrimeQ} is not trial division. For machine-sized integers
+it runs a deterministic Miller--Rabin test over a fixed witness set; for larger integers
+it uses the Baillie--PSW test (a strong Fermat test composed with a Lucas test), for which
+no counterexample is known below the ranges Mathilda will ever see. Both are
+probabilistic in theory and, at these sizes, certain in practice~\cite{crandallpomerance}.}
+
+\subsection{Integer factorization}
+\label{ssec:nt-factor}
+
+Testing primality is easy; \emph{factoring} a composite is the hard problem on which much
+of modern cryptography rests. \B{FactorInteger} returns the prime factorization as a list
+of \(\{\text{prime},\text{exponent}\}\) pairs:
+
+\begin{codepairs}
+\pair{number-theory/factorization/1}{\(360=2^{3}\cdot3^{2}\cdot5\).}
+\pair{number-theory/factorization/2}{The fifth Fermat number \(2^{32}+1\). Fermat
+conjectured all such numbers prime; Euler found this factor \(641\) in
+\(1732\)\index{Fermat number}, and Mathilda recovers his result at once.}
+\pair{number-theory/factorization/3}{A pandigital composite peeled apart into eight primes.}
+\pair{number-theory/factorization/4}{A \(19\)-digit semiprime---two ten-digit primes---
+factored in milliseconds. Its size is trivial for Mathilda but hints at the wall that RSA
+hides behind: multiply the primes to hundreds of digits and no known method finishes.}
+\end{codepairs}
+
+\usagebox{FactorInteger}
+
+The single call above is a whole cascade of algorithms, and \texttt{Method} lets you
+name one explicitly:
+
+\begin{codepairs}
+\pair{number-theory/factorization/5}{The same semiprime, factored by Pollard's rho method
+on demand\index{Pollard rho method}.}
+\pair{number-theory/factorization/6}{\B{IntegerExponent} reads off the multiplicity of a
+base directly: \(10^{6}\parallel10^{6}\).}
+\pair{number-theory/factorization/7}{The power of \(2\) dividing \(360\).}
+\pair{number-theory/factorization/8}{\B{SquareFreeQ}\index{squarefree}: \(30=2\cdot3\cdot5\) has no repeated
+prime.}
+\pair{number-theory/factorization/9}{\(12=2^{2}\cdot3\) does, so it is not square-free.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\B{FactorInteger} runs a pipeline, each stage suited to a
+different size of factor. It strips small primes by trial division, then hunts medium
+factors with Pollard's rho (Brent's variant) and the \(p\pm1\) methods, which succeed when
+\(p-1\) or \(p+1\) is smooth. For the genuinely hard factors it turns to Lenstra's
+elliptic-curve method (ECM)\index{elliptic curve method}, whose running time depends on
+the size of the factor found rather than the number
+factored~\cite{lenstraecm,crandallpomerance}, with continued-fraction and quadratic-sieve
+routines behind that. The default chooses among them by size; \texttt{Method} overrides
+the choice.}
+
+\calloutnote{Performance}{The asymmetry between \S\ref{ssec:nt-primes} and this section is
+the whole point. Deciding that a \(300\)-digit number is composite takes milliseconds;
+producing its factors is, as far as anyone knows, infeasible. RSA
+(\S\ref{ssec:nt-rsa}) is exactly this gap, weaponised.}
+
+\subsection{Arithmetic functions}
+\label{ssec:nt-arith}
+
+Once an integer is factored, a whole family of \emph{arithmetic
+functions}\index{arithmetic function}---functions of a single integer, defined through its
+factorization---becomes computable~\cite{hardywright}. Most are \emph{multiplicative}\index{multiplicative
+function}: their value on \(mn\) is the product of their values on \(m\) and \(n\) when
+\(m,n\) are coprime. The most basic list or count the divisors:
+
+\begin{codepairs}
+\pair{number-theory/arithmetic-functions/1}{\B{Divisors} lists every positive divisor of
+\(36\), in order.}
+\pair{number-theory/arithmetic-functions/2}{\B{DivisorSigma} with first argument \(0\)
+counts them: \(36\) has nine divisors.}
+\pair{number-theory/arithmetic-functions/3}{With first argument \(1\) it sums them;
+\(\sigma_1(28)=56\), a fact we return to below.}
+\end{codepairs}
+
+Euler's totient \(\varphi(n)\) counts the integers in \(1,\dots,n\) coprime to \(n\)---
+equivalently, the size of the group of units modulo \(n\):
+
+\begin{codepairs}
+\pair{number-theory/arithmetic-functions/4}{\(\varphi(36)=12\).}
+\pair{number-theory/arithmetic-functions/5}{The same number from the product formula
+\(n\prod_{p\mid n}(1-1/p)\)---this is what ``multiplicative'' buys you.}
+\end{codepairs}
+
+The remaining functions read off the shape of the factorization. The M\"obius function
+\(\mu(n)\)\index{Mobius function@M\"obius function} is \(0\) when a square divides \(n\)
+and \(\pm1\) otherwise; Liouville's \(\lambda(n)\), \(\Omega(n)\), and \(\nu(n)\) count
+prime factors with and without multiplicity:
+
+\begin{codepairs}
+\pair{number-theory/arithmetic-functions/6}{\(\mu(30)=(-1)^{3}\): three distinct primes,
+none repeated.}
+\pair{number-theory/arithmetic-functions/7}{\(\mu(12)=0\): the square \(4\) divides it.}
+\pair{number-theory/arithmetic-functions/8}{\(\lambda(12)=(-1)^{\Omega(12)}=(-1)^{3}=-1\).}
+\pair{number-theory/arithmetic-functions/9}{\B{PrimeOmega} counts primes \emph{with}
+multiplicity: \(360=2^3\cdot3^2\cdot5\) has \(\Omega=6\).}
+\pair{number-theory/arithmetic-functions/10}{\B{PrimeNu} counts \emph{distinct} primes:
+\(\nu(360)=3\).}
+\pair{number-theory/arithmetic-functions/11}{Like the divisor functions, these extend to
+\(\mathbb{Z}[i]\): the Gaussian divisors of \(5\) exhibit its splitting \(5=(2+i)(2-i)\).}
+\end{codepairs}
+
+\usagebox{DivisorSigma}
+\usagebox{EulerPhi}
+\usagebox{MoebiusMu}
+
+These functions are not curiosities; the divisor sum is the gateway to one of the oldest
+questions in mathematics. A \emph{perfect number}\index{perfect number} equals the sum of
+its proper divisors---equivalently, \(\sigma_1(n)=2n\)---and Mathilda finds the first four
+by brute force in an instant:
+
+\begin{codepairs}
+\pair{number-theory/perfect/1}{Every perfect number below \(10^{4}\): \(6,28,496,8128\).}
+\pair{number-theory/perfect/2}{Euclid's formula \(2^{p-1}(2^{p}-1)\) for \(p=2,3,5,7\)
+reproduces exactly that list\index{Euclid--Euler theorem}.}
+\end{codepairs}
+
+The match is the Euclid--Euler theorem: \(2^{p-1}(2^{p}-1)\) is perfect precisely when
+\(2^{p}-1\) is a \emph{Mersenne prime}\index{Mersenne prime}. So the even perfect numbers
+are in exact correspondence with the Mersenne primes, and testing one is testing the
+other:
+
+\begin{codepairs}
+\pair{number-theory/perfect/3}{\(2^{13}-1=8191\) is a Mersenne prime, giving the fifth
+perfect number.}
+\pair{number-theory/perfect/4}{But \(2^{11}-1\) is \emph{not} prime---the exponent being
+prime is necessary, not sufficient.}
+\pair{number-theory/perfect/5}{Indeed \(2^{11}-1=2047=23\cdot89\).}
+\end{codepairs}
+
+\subsection{Modular arithmetic and congruences}
+\label{ssec:nt-modular}
+
+To work modulo \(n\) is to care only about remainders. \B{Mod} (met in
+\S\ref{sec:arithmetic}, and always returning a residue with the sign of the modulus) is
+the entry point; the number-theoretic weight sits in what you can do inside a modulus. The
+first essential is fast modular exponentiation, because forming a huge power and
+\emph{then} reducing it is wasteful when you can reduce at every step:
+
+\begin{codepairs}
+\pair{number-theory/modular/1}{Forming \(7^{100}\) in full and reducing---correct, but it
+builds an \(85\)-digit integer first.}
+\pair{number-theory/modular/2}{\B{PowerMod} gives the same residue without ever forming
+the giant power.}
+\pair{number-theory/modular/3}{A far larger exponent, still immediate.}
+\end{codepairs}
+
+\B{PowerMod} carries two overloads that pack a surprising amount of number theory. A
+negative exponent asks for the modular \emph{inverse}, and a fractional one for a modular
+\emph{root}:
+
+\begin{codepairs}
+\pair{number-theory/modular/4}{The inverse of \(3\) modulo \(7\) is \(5\), since
+\(3\cdot5=15\equiv1\).}
+\pair{number-theory/modular/5}{A modular square root: \(3^{2}=9\equiv2\pmod 7\), computed
+by the Tonelli--Shanks algorithm\index{Tonelli--Shanks algorithm}.}
+\end{codepairs}
+
+The \emph{multiplicative order} of \(a\) modulo \(n\) is the least power returning \(a\) to
+\(1\); when it reaches the full \(\varphi(n)\), \(a\) is a \emph{primitive root}\index{primitive
+root}, a generator of the units:
+
+\begin{codepairs}
+\pair{number-theory/modular/6}{\(2\) has order \(3\) modulo \(7\) (\(2^{3}=8\equiv1\)).}
+\pair{number-theory/modular/7}{\(3\) has order \(6\)---the full group---so it is a
+primitive root.}
+\pair{number-theory/modular/8}{\B{PrimitiveRoot} returns the least one, \(3\).}
+\pair{number-theory/modular/9}{\B{PrimitiveRootList} gives all of them; there are
+\(\varphi(\varphi(7))=\varphi(6)=2\).}
+\pair{number-theory/modular/10}{Euler's theorem in one line: \(3^{\varphi(10)}\equiv1\),
+because \(3\) is coprime to \(10\).}
+\end{codepairs}
+
+The order also frames the hardest question in this circle of ideas. Reversing it---given a
+base \(a\) and a target \(b\), find the exponent \(x\) with \(a^{x}\equiv b\pmod n\)---is the
+\emph{discrete logarithm problem}\index{discrete logarithm problem}, and the three-argument
+form of \B{MultiplicativeOrder} solves exactly that, returning the least exponent whose power
+lands in a given residue set:
+
+\begin{codepairs}
+\pair{number-theory/modular/13}{The discrete logarithm of \(5\) to base \(3\) modulo \(7\):
+the least \(x\) with \(3^{x}\equiv5\), namely \(x=5\) (indeed \(3^{5}=243\equiv5\)).}
+\end{codepairs}
+
+\calloutnote{Theory}{Computing the order of \(a\) is easy---it divides \(\varphi(n)\) and is
+found by stripping prime factors from it. The discrete logarithm is the \emph{reverse}
+question, and it is believed \emph{hard}: no polynomial-time algorithm is known over a
+general prime field, and that presumed hardness is the foundation of Diffie--Hellman key
+exchange and the ElGamal and DSA signature schemes\index{discrete logarithm problem!in
+cryptography}. The best general methods---baby-step giant-step, Pollard's rho for logarithms,
+Pohlig--Hellman (which reduces the problem to the prime-power factors of the group order),
+and index calculus---are surveyed in~\cite{hac}. Mathilda's three-argument form simply walks
+the orbit \(a^{1},a^{2},\dots\), so it is a teaching tool for small moduli, not a break of
+the problem at cryptographic sizes.}
+
+Finally, the \B{JacobiSymbol}\index{Jacobi symbol} \(\left(\tfrac{a}{n}\right)\) encodes quadratic
+residues\index{quadratic reciprocity}---whether \(a\) is a square modulo \(n\):
+
+\begin{codepairs}
+\pair{number-theory/modular/11}{\(\left(\tfrac{2}{7}\right)=+1\): \(2\) is a square mod
+\(7\) (indeed \(3^{2}\equiv2\), as above).}
+\pair{number-theory/modular/12}{\(\left(\tfrac{3}{7}\right)=-1\): \(3\) is a non-residue.}
+\end{codepairs}
+
+\usagebox{PowerMod}
+\usagebox{MultiplicativeOrder}
+\usagebox{PrimitiveRoot}
+\usagebox{JacobiSymbol}
+
+\calloutnote{Theory}{Two theorems govern this section. Fermat's little
+theorem\index{Fermat's little theorem}---\(a^{p-1}\equiv1\pmod p\) for a prime \(p\nmid
+a\)---is the special case \(n=p\) of \emph{Euler's theorem}\index{Euler's theorem},
+\(a^{\varphi(n)}\equiv1\pmod n\) whenever \(\gcd(a,n)=1\). Together with the fact that the
+units modulo a prime form a \emph{cyclic} group---generated by a primitive root---they are
+the whole basis of what follows, and of RSA in \S\ref{ssec:nt-rsa}~\cite{irelandrosen}.}
+
+The \B{ChineseRemainder} builtin solves a system of simultaneous
+congruences\index{Chinese Remainder Theorem}\index{congruence!system of} in a
+single step. Given residues \(r_i\) and moduli \(n_i\), it returns the smallest
+non-negative \(x\) with \(x\equiv r_i\pmod{n_i}\) for every \(i\)---unique modulo
+the moduli's least common multiple:
+
+\begin{codepairs}
+\pair{number-theory/crt/1}{The three moduli\ldots}
+\pair{number-theory/crt/2}{\ldots and the residues to match.}
+\pair{number-theory/crt/3}{The unique \(x\) in \([0,105)\) that is \(\equiv2,3,2\)
+modulo \(3,5,7\)---the residue \(23\).}
+\pair{number-theory/crt/4}{And it checks: \(23\) leaves exactly those remainders.}
+\end{codepairs}
+
+It is instructive to see the classical recipe the builtin implements---the
+Chinese Remainder Theorem\index{Chinese Remainder Theorem!construction} is a
+short composition of the tools above. With the combined modulus \(N=\prod n_i\),
+each cofactor \(N/n_i\) is invertible modulo its own \(n_i\) (the \(n_i\) being
+coprime), and the \B{PowerMod} inverses assemble a weighted sum that reproduces
+every residue at once---the recipe of Sun Zi\index{Sun Zi}:
+
+\begin{codepairs}
+\pair{number-theory/crt/5}{The combined modulus \(3\cdot5\cdot7=105\).}
+\pair{number-theory/crt/6}{Each cofactor \(N/n_i\).}
+\pair{number-theory/crt/7}{Each cofactor's inverse modulo its own \(n_i\).}
+\pair{number-theory/crt/8}{The weighted sum, reduced---the same residue \(23\).}
+\end{codepairs}
+
+Two conveniences round out the builtin. A third argument shifts the search
+window, returning the smallest solution at least that large; and the moduli need
+not be coprime---\B{ChineseRemainder} returns unevaluated when the congruences
+are inconsistent (here \(\gcd(6,10)=2\), yet \(1\not\equiv2\pmod2\)):
+
+\begin{codepairs}
+\pair{number-theory/crt/9}{The smallest solution \(\ge100\): namely \(23+105=128\).}
+\pair{number-theory/crt/10}{No \(x\) satisfies both congruences, so the call
+stands unevaluated.}
+\end{codepairs}
+
+\usagebox{ChineseRemainder}
+
+\subsection{Continued fractions}
+\label{ssec:nt-contfrac}
+
+A continued fraction\index{continued fraction} writes a number as
+\(a_0+\cfrac{1}{a_1+\cfrac{1}{a_2+\cdots}}\), a form that captures rational approximation
+better than any decimal. \B{ContinuedFraction} produces the list of partial quotients and
+\B{FromContinuedFraction} folds it back:
+
+\begin{codepairs}
+\pair{number-theory/continued-fractions/1}{\(415/93=[4;2,6,7]\). These quotients are
+exactly Euclid's from \S\ref{ssec:nt-euclid}, run on \(415\) and \(93\).}
+\pair{number-theory/continued-fractions/2}{Folding the list back recovers the rational
+exactly---the two operations are inverse.}
+\end{codepairs}
+
+Irrationals have \emph{infinite} expansions, so you ask for a fixed number of terms---and
+the classical patterns appear at once:
+
+\begin{codepairs}
+\pair{number-theory/continued-fractions/3}{\(\sqrt2=[1;\overline{2}]\), purely periodic.}
+\pair{number-theory/continued-fractions/4}{\(\sqrt7\) has period \(1,1,1,4\).}
+\pair{number-theory/continued-fractions/5}{Asked without a length, Mathilda returns the
+period in a nested list---every quadratic irrational is \emph{eventually periodic}, which
+is Lagrange's theorem\index{quadratic irrational}.}
+\pair{number-theory/continued-fractions/6}{\(\pi\) shows no pattern, but its early terms
+are the key to good approximations.}
+\end{codepairs}
+
+Truncating \(\pi\)'s expansion just after the large term \(15\) and folding it back gives
+the approximation known since antiquity:
+
+\begin{codepairs}
+\pair{number-theory/continued-fractions/7}{\(355/113\), from only four terms.}
+\pair{number-theory/continued-fractions/8}{It agrees with \(\pi\) to better than
+\(3\times10^{-7}\)---the best rational approximation with any denominator under a thousand.}
+\end{codepairs}
+
+\usagebox{ContinuedFraction}
+\usagebox{FromContinuedFraction}
+
+\calloutnote{Theory}{A large partial quotient signals an unusually good rational
+approximation just before it: truncating there makes the discarded tail
+\(1/(a_{k+1}+\cdots)\) tiny. \(\pi\)'s term \(292\) is why \(355/113\) is so
+extraordinarily accurate. The convergents obtained by truncation are, in a precise sense,
+the \emph{best} rational approximations to a number\index{continued fraction!convergent}~\cite{khinchin}---the theory that also governs Pell's
+equation, which \S\ref{ssec:alg-diophantine} solves through the continued fraction of
+\(\sqrt D\).}
+
+\subsection{Digits and bases}
+\label{ssec:nt-digits}
+
+The written form of an integer---its digits in a given base---is itself a number-theoretic
+object, and Mathilda exposes it directly. \B{IntegerDigits} and \B{FromDigits} convert both
+ways, in any base:
+
+\begin{codepairs}
+\pair{number-theory/digits/1}{The base-ten digits of \(123456\).}
+\pair{number-theory/digits/2}{In base two, \(255\) is eight ones.}
+\pair{number-theory/digits/3}{In base sixteen it is two ``fifteens''.}
+\pair{number-theory/digits/4}{\B{FromDigits} rebuilds the integer from its base-two digits.}
+\pair{number-theory/digits/5}{\B{IntegerString} renders the digits as text, here the
+familiar hexadecimal \texttt{ff}.}
+\pair{number-theory/digits/6}{\B{IntegerLength} counts the digits without listing them.}
+\end{codepairs}
+
+The digit sum is the basis of the schoolroom rule of \emph{casting out nines}---a number
+is congruent to its digit sum modulo \(9\), because \(10\equiv1\):
+
+\begin{codepairs}
+\pair{number-theory/digits/7}{\B{DigitSum} adds the base-ten digits: \(1+2+3+4+5+6=21\).}
+\pair{number-theory/digits/8}{Its residue modulo \(9\) \dots}
+\pair{number-theory/digits/9}{\dots equals the number's own residue modulo \(9\). That is
+casting out nines.}
+\pair{number-theory/digits/10}{\B{DigitCount} tallies how often each digit occurs---one
+\(1\), two \(2\)s, three \(3\)s, four \(4\)s (the final slot counts the zeros).}
+\end{codepairs}
+
+\usagebox{IntegerDigits}
+
+\subsection{Combinatorial number theory}
+\label{ssec:nt-combinatorial}
+
+Number theory shades into combinatorics through the factorials, binomial coefficients, and
+partition functions---all computed exactly, all growing explosively. The factorial family
+comes first:
+
+\begin{codepairs}
+\pair{number-theory/combinatorial/1}{\(20!\), exact to the last of its nineteen digits.}
+\pair{number-theory/combinatorial/2}{The double factorial \(9!!=9\cdot7\cdot5\cdot3\cdot1\).}
+\pair{number-theory/combinatorial/3}{The falling factorial \(10\cdot9\cdot8\), via
+\B{FactorialPower}.}
+\pair{number-theory/combinatorial/4}{\B{Binomial}: the number of \(3\)-subsets of a
+\(10\)-set.}
+\pair{number-theory/combinatorial/5}{Reduced modulo \(7\) it is \(1\)---as Lucas's theorem
+predicts from the base-\(7\) digits of \(10\) and \(3\)\index{Lucas's theorem}.}
+\end{codepairs}
+
+The partition functions count the ways to write \(n\) as a sum of positive integers.
+\B{IntegerPartitions} lists them and \B{PartitionsP} counts them, and the count grows so
+fast that its exact evaluation is a small miracle of analysis:
+
+\begin{codepairs}
+\pair{number-theory/combinatorial/6}{The seven partitions of \(5\).}
+\pair{number-theory/combinatorial/7}{Their count, \(p(10)=42\).}
+\pair{number-theory/combinatorial/8}{\(p(100)=190569292\)---already far past listing.}
+\pair{number-theory/combinatorial/9}{\(p(1000)\), a \(32\)-digit integer computed exactly.}
+\pair{number-theory/combinatorial/10}{\B{PartitionsQ} counts partitions into
+\emph{distinct} parts.}
+\end{codepairs}
+
+Finally the Fibonacci and Lucas numbers, the archetypal integer sequences:
+
+\begin{codepairs}
+\pair{number-theory/combinatorial/11}{\(F_{50}\).}
+\pair{number-theory/combinatorial/12}{\(F_{200}\), a \(42\)-digit number, still instant.}
+\pair{number-theory/combinatorial/13}{The tenth Lucas number.}
+\pair{number-theory/combinatorial/14}{A jewel of an identity: \(\gcd(F_m,F_n)=F_{\gcd(m,n)}\),
+here \(\gcd(F_{12},F_{18})=F_{6}\).}
+\end{codepairs}
+
+\usagebox{Binomial}
+\usagebox{PartitionsP}
+\usagebox{Fibonacci}
+
+\calloutnote{Under the hood}{\B{PartitionsP} does not count partitions one by one---that
+would be hopeless at \(n=1000\). It evaluates the Hardy--Ramanujan--Rademacher
+series\index{Hardy--Ramanujan formula}~\cite{andrews}, a convergent sum of the analytic terms that gives
+\(p(n)\) exactly after enough of them, rounded to the nearest integer. \B{Fibonacci} uses
+fast doubling---computing \(F_{2k}\) and \(F_{2k+1}\) from \(F_k\) and \(F_{k+1}\)---so
+\(F_n\) costs \(O(\log n)\) big-integer multiplications rather than \(n\) additions. The
+close relatives \B{BernoulliB}, \B{EulerE}, and \B{Zeta}, whose values encode still deeper
+number theory, belong to the special functions of \S\ref{sec:specialfns}.}
+
+\subsection{Putting it together: textbook RSA}
+\label{ssec:nt-rsa}
+
+Almost every tool of this section meets in one place: the RSA cryptosystem\index{RSA},
+whose security is exactly the factoring gap of \S\ref{ssec:nt-factor}. We use the historic
+textbook primes \(p=61\), \(q=53\) so every step is legible; the session is continuous,
+each line building on the last. First the public modulus and its secret totient:
+
+\begin{codepairs}
+\pair{number-theory/rsa/1}{Pick the first prime, \(p=61\)\dots}
+\pair{number-theory/rsa/2}{\dots and the second, \(q=53\).}
+\pair{number-theory/rsa/3}{The modulus \(n=pq=3233\) is public; its factors are the secret.}
+\pair{number-theory/rsa/4}{The totient \(\varphi(n)=3120\)\dots}
+\pair{number-theory/rsa/5}{\dots which for a product of two primes is \((p-1)(q-1)\), as
+knowing the factorization lets us confirm.}
+\end{codepairs}
+
+Next a public exponent coprime to \(\varphi(n)\), and the private exponent that inverts it:
+
+\begin{codepairs}
+\pair{number-theory/rsa/6}{The conventional public exponent \(e=17\)\dots}
+\pair{number-theory/rsa/7}{\dots coprime to \(\varphi(n)\), so it is invertible.}
+\pair{number-theory/rsa/8}{\B{ExtendedGCD} already exposes the inverse in its B\'ezout
+coefficient: \((-367)\cdot17+2\cdot3120=1\).}
+\pair{number-theory/rsa/9}{The private key \(d\) is that inverse as a positive residue,
+\(2753\) (indeed \(-367+3120\)).}
+\pair{number-theory/rsa/10}{Confirming the defining relation \(ed\equiv1\pmod{\varphi(n)}\).}
+\end{codepairs}
+
+Now encryption raises the message to \(e\) modulo \(n\), and decryption raises the
+ciphertext to \(d\):
+
+\begin{codepairs}
+\pair{number-theory/rsa/11}{The plaintext number \(42\).}
+\pair{number-theory/rsa/12}{Encrypted, it becomes \(2557\)---bearing no visible relation
+to the original.}
+\pair{number-theory/rsa/13}{Decryption with the private exponent returns \(42\) exactly.}
+\pair{number-theory/rsa/14}{The round trip closes.}
+\end{codepairs}
+
+Why it works is Euler's theorem from \S\ref{ssec:nt-modular}: because \(ed\equiv1\pmod{\varphi(n)}\),
+raising the message to \(e\) and then to \(d\) raises it to a power \(\equiv1\), which
+leaves it unchanged modulo \(n\). Anyone holding \((n,e)\) can encrypt; only the holder of
+\(d\)---recoverable only by factoring \(n\)---can decrypt. Every step ran on integers no
+larger than a few thousand, but nothing about the method changes when the primes have a
+hundred digits each; only the factoring stays out of reach.
+
+\subsection*{Where this connects}
+
+Number theory is the exact spine of Mathilda's arithmetic. Its foundation is the integer
+model of \S\ref{sec:arithmetic}---the same floored \B{Mod} and GMP big integers, here put
+to work. Its natural sequel is the arithmetic of \emph{solutions}: the classical Diophantine
+questions---Pell's equation, Pythagorean triples, sums of squares, and the rest---are
+answered by \B{Solve} and \B{Reduce} over the integers, treated in
+\S\ref{ssec:alg-diophantine}, where the continued fractions of \S\ref{ssec:nt-contfrac}
+reappear as the engine behind Pell. The polynomial \B{Factor} of \S\ref{sec:algebra} is the
+algebraic mirror of \B{FactorInteger}, square-free decomposition and Hensel lifting
+standing in for trial division and rho. And the integer-valued special functions that shade
+number theory into analysis---\B{BernoulliB}, \B{Zeta}, and their kin---await in
+\S\ref{sec:specialfns}. Underneath every result here is GMP, and the same exact integers
+feed the compiler of Chapter~\ref{ch:compilation} when a number-theoretic loop needs to run
+at machine speed.

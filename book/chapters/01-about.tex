@@ -6,8 +6,8 @@ Mathilda is a computer algebra system---a program\index{computer algebra system}
 \emph{symbolically}\index{symbolic computation}, computing with $x$ and $\pi$ and $\sqrt{2}$ as exact objects
 rather than as approximate decimals, while remaining fast enough to crunch a
 million floating-point numbers when that is what you need. It is modelled closely
-on the core architecture and evaluation semantics of the Wolfram Language\index{Wolfram Language}, and it
-is written in C and in its own language.
+on the core architecture and evaluation semantics of the Mathematica\index{Mathematica}, and it
+is written in C, and in its own language.
 
 This chapter is about \emph{why} Mathilda exists, what it is built on, and why it
 is written the way it is. The next chapter is practical---how to obtain, build, and
@@ -92,7 +92,7 @@ Behind that one line stands an enormous amount of work by other people:
         trusted to a hundred digits.
   \item \textbf{FLINT}~\cite{flint}\index{FLINT} accelerates polynomial arithmetic, factoring, and the
         rigorous numerics behind many special functions.
-  \item \textbf{LAPACK}\index{LAPACK} and \textbf{BLAS}\index{BLAS} (here, Apple's Accelerate framework)
+  \item \textbf{LAPACK}\index{LAPACK} and \textbf{BLAS}\index{BLAS}
         power dense machine-precision linear algebra---the decompositions behind
         \B{Det}, \B{Inverse}, \B{Eigenvalues}, and
         \B{SingularValueDecomposition}.

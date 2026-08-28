@@ -5,7 +5,7 @@
 
 ## Description
 
-**`EulerPhi[n] gives the Euler totient function phi(n).`**
+**`EulerPhi[n] gives the Euler totient phi(n), the number of integers from 1 to n coprime to n -- equivalently the order of the group (Z/nZ)* of units, so a^phi(n) == 1 (mod n) whenever gcd(a, n) == 1 (Euler's theorem).`**
 
 ## Examples (6)
 
@@ -63,6 +63,7 @@ Out[6]= 30
 
 **See also:** [FactorInteger](../../number-theory/FactorInteger/)
 
+- G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008 — the totient function and Euler's theorem.
 - Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
@@ -71,6 +72,13 @@ Out[6]= 30
 - Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)
 
 ## Notes & additional examples
+
+### The totient and Euler's theorem
+
+`EulerPhi[n]` counts the integers in `1, …, n` coprime to `n`, which is the *order* of the
+group of units `(Z/nZ)*`. It is multiplicative, with `EulerPhi[n] = n ∏_{p|n} (1 - 1/p)`.
+Its central role is *Euler's theorem*: `a^EulerPhi[n] ≡ 1 (mod n)` whenever `gcd(a, n) = 1` —
+the identity that makes `PowerMod[a, -1, m]` and RSA decryption work.
 
 ### Notes
 

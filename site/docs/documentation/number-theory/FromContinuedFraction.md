@@ -5,13 +5,11 @@
 
 ## Description
 
-**`FromContinuedFraction[{a1, a2, ..., an}]`**
-
-reconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)). The terms may be symbolic; the result is the convergent in nested (un-expanded) form.
+**`FromContinuedFraction[{a1, a2, ..., an}] reconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)), the convergent of a continued fraction, in nested (un-expanded) form; the inverse of ContinuedFraction.`**
 
 **`FromContinuedFraction[{a1, ..., am, {b1, ..., bk}}]`**
 
-gives the exact quadratic irrational whose continued-fraction terms begin with the ai then cycle through the bi forever; all ai and bi must be integers. FromContinuedFraction\[{}\] is 0. It is the inverse of ContinuedFraction.
+gives the exact quadratic irrational whose continued-fraction terms begin with the ai then cycle through the bi forever; all ai and bi must be integers. FromContinuedFraction\[{}\] is 0.  The terms may be symbolic.
 
 ## Examples (9)
 
@@ -137,11 +135,20 @@ Attributes: Listable, Protected.
 
 **See also:** [ContinuedFraction](../../number-theory/ContinuedFraction/), [Together](../../algebra/Together/)
 
+- A. Ya. Khinchin, *Continued Fractions*, Dover, 1997 — convergents and their approximation properties.
 - Source: [`src/contfrac.c`](https://github.com/stblake/mathilda/blob/main/src/contfrac.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_contfrac.c`](https://github.com/stblake/mathilda/blob/main/tests/test_contfrac.c)
 
 ## Notes & additional examples
+
+### Folding a continued fraction back
+
+`FromContinuedFraction` is the inverse of [`ContinuedFraction`](ContinuedFraction.md): it
+folds a list of partial quotients into the rational (or, from a periodic block, the exact
+quadratic irrational) it represents. Truncating an expansion and folding it back yields a
+*convergent* — the best rational approximation of its size — as with `{3, 7, 15, 1, 292}`
+giving `103993/33102 ≈ π`.
 
 ### Notes
 
