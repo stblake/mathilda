@@ -24,18 +24,22 @@
  * boundary-merge that closes a non-strict outer range, e.g. -1<=x<=1) and the
  * n-variable recursive driver (`reduce_cad_nvar`, Phase 6d) for nu>=3.  The
  * recursive engine emits a correct DNF of cells; STRICT inequalities read as a
- * clean nested form, while CLOSED regions currently emit a correct but verbose
- * union of cells (the n-D boundary merge that would close an outer range is a
- * later cosmetic pass).  v1 scope is the rational-fibre regime: a breakpoint at
- * any non-innermost level, given the rational assignment above it, must be
- * rational, else the engine declines (irrational real-algebraic-coefficient
- * fibre isolation is Phase 6b).
+ * clean nested form, while CLOSED regions merge (Stage B) to a non-strict nested
+ * conjunction where the sampling comparison can prove it.
+ *
+ * Phase 6b (landed): a breakpoint at a non-innermost level may be an irrational
+ * algebraic number.  Such a section pins the outer variable to an algebraic
+ * value, so the deeper fibre has real-algebraic-number coefficients; it is
+ * isolated by rru_algebraic_fiber_roots (reduce_algfiber.c) via iterated-
+ * resultant tower projection back to Q + an exact qqbar filter of the conjugate-
+ * spurious roots.  The all-rational assignment keeps its unchanged fast path.
  *
  * Hard invariant: any undecidable sign/ordering (the qqbar oracle returning
- * "unknown", FLINT absent, a nullification risking McCallum unsoundness, an
- * irrational non-innermost breakpoint, or a fibre whose roots cannot be cleanly
- * isolated/ordered/emitted) makes the engine return NULL, leaving Reduce
- * unevaluated rather than emitting a wrong formula.
+ * "unknown", FLINT absent, a nullification risking McCallum unsoundness, a
+ * fibre whose roots cannot be cleanly isolated/ordered/emitted, a transcendental
+ * (non-algebraic) breakpoint, or the algebraic-fibre resource budget overrun)
+ * makes the engine return NULL, leaving Reduce unevaluated rather than emitting
+ * a wrong formula.
  */
 #ifndef REDUCE_CAD_H
 #define REDUCE_CAD_H

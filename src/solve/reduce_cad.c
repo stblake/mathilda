@@ -27,12 +27,21 @@
 #include "reduce_cad.h"
 #include "reduce_real_util.h"
 #include "reduce_univar.h"
+#include "reduce_algfiber.h"
 
 #include "eval.h"
 #include "sym_names.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+/* Forward declarations for the shared fibre-isolation helper (defined once, used
+ * by the 2-var lift_fiber and the n-var cad_leaf / cad_build). */
+static Expr* subst_n(const Expr* p, Expr** vv, Expr** asg, int k);
+static bool isolate_fiber_at(const Expr* factor, const Expr* var,
+                             Expr** vv, Expr** asg, Expr** asgdef, int k,
+                             Expr*** roots, int* nr, int* cap, int** fac, int fid,
+                             bool* nullified);
 
 /* ------------------------------------------------------------------ *
  *  Small node builders (each CONSUMES its Expr* arguments)            *
@@ -475,24 +484,28 @@ static bool breakpoint_absorbable(const YRegion* T, const Expr* vx, const Expr* 
  * interval nullification), in which case *out is left empty.  An empty *out
  * (yregion_empty) means the fibre is entirely false. */
 static bool lift_fiber(const RForm* F, const Expr* vx, const Expr* sx, bool is_point,
-                       const Expr* vy, Expr** B, int nb,
+                       const Expr* sx_def, const Expr* vy, Expr** B, int nb,
                        Expr** cache, char* cache_bad, YRegion* out) {
     yregion_init(out);
     bool fail = false;
 
+    /* One outer level (vx=sx): rational on the fast path, or algebraic (a section
+     * at an irrational base breakpoint, sx_def its defining factor over Q -- Phase
+     * 6b) routed through the iterated-resultant fibre isolation. */
+    Expr* vvv[1]    = { (Expr*)vx };
+    Expr* aasg[1]   = { (Expr*)sx };
+    Expr* adef[1]   = { (Expr*)sx_def };
+
     /* Isolate the fibre's real roots (with provenance) from the basis. */
     Expr** roots = NULL; int* fac = NULL; int nr = 0, cap = 0;
     for (int i = 0; i < nb; i++) {
-        Expr* fs = subst1(B[i], vx, sx);
-        if (is_zero(fs)) {                   /* nullification */
-            expr_free(fs);
+        bool nullified;
+        if (!isolate_fiber_at(B[i], vy, vvv, aasg, adef, 1,
+                              &roots, &nr, &cap, &fac, i, &nullified)) { fail = true; break; }
+        if (nullified) {                     /* nullification */
             if (is_point) continue;          /* 0-dim section: sound to skip */
             fail = true; break;              /* positive-dim interval: bail */
         }
-        int dy = degree_in(fs, vy);
-        if (dy <= 0) { expr_free(fs); continue; }      /* constant in vy */
-        if (!rru_collect_roots(fs, vy, &roots, &nr, &cap, &fac, i, NULL)) { expr_free(fs); fail = true; break; }
-        expr_free(fs);
     }
     if (fail) { for (int i = 0; i < nr; i++) { expr_free(roots[i]); } free(roots); free(fac); return false; }
 
@@ -621,6 +634,41 @@ static Expr* subst_n(const Expr* p, Expr** vv, Expr** asg, int k) {
     Expr* rlist = expr_new_function(expr_new_symbol(SYM_List), rules, (size_t)k);
     free(rules);
     return eval_and_free(mkfun2(SYM_ReplaceAll, expr_copy((Expr*)p), rlist));
+}
+
+/* Isolate the fibre roots of `factor` in `var` at the outer assignment
+ * asg[0..k-1] (each coordinate rational, or algebraic with defining factor
+ * asgdef[t]), appending to (roots,nr,cap) with provenance (fac,fid).
+ *
+ * When every outer coordinate is rational (the whole pre-6b regime) this is the
+ * unchanged fast path: substitute numerically and isolate over Q.  When any outer
+ * coordinate is an irrational algebraic number (a non-innermost section, Phase
+ * 6b) the fibre has algebraic-number coefficients, so isolation routes through
+ * rru_algebraic_fiber_roots (iterated-resultant tower projection + exact qqbar
+ * filter).  *nullified is set when the fibre vanishes identically at the
+ * assignment (the caller decides skip-vs-bail by cell dimension); a constant-in-
+ * var fibre contributes no roots.  Returns false to bail. */
+static bool isolate_fiber_at(const Expr* factor, const Expr* var,
+                             Expr** vv, Expr** asg, Expr** asgdef, int k,
+                             Expr*** roots, int* nr, int* cap, int** fac, int fid,
+                             bool* nullified) {
+    *nullified = false;
+    bool has_alg = false;
+    for (int t = 0; t < k; t++) if (asgdef && asgdef[t]) { has_alg = true; break; }
+
+    Expr* fs = subst_n(factor, vv, asg, k);      /* full numeric substitution */
+    if (is_zero(fs)) { expr_free(fs); *nullified = true; return true; }
+    int dv = degree_in(fs, var);
+    if (dv <= 0) { expr_free(fs); return true; } /* constant in var: no roots */
+
+    bool ok;
+    if (has_alg)
+        ok = rru_algebraic_fiber_roots(factor, var, vv, asg, asgdef, k,
+                                       roots, nr, cap, fac, fid, NULL);
+    else
+        ok = rru_collect_roots(fs, var, roots, nr, cap, fac, fid, NULL);
+    expr_free(fs);
+    return ok;
 }
 
 /* PolynomialQ[p, {vv[0..nu-1]}]. */
@@ -771,7 +819,8 @@ static Expr* bound_expr_lvl(bool no_outer_sector, PolySet* polys, int fac,
  * assignment vector; `no_outer_sector` is the generalized `is_point` (true iff
  * every outer variable is a section, so fibre bounds are numeric).  Returns
  * false to bail; *out is left empty then.  asg[d-1] is used as scratch. */
-static bool cad_leaf(const RForm* F, Expr** vv, int d, Expr** asg, bool no_outer_sector,
+static bool cad_leaf(const RForm* F, Expr** vv, int d, Expr** asg, Expr** asgdef,
+                     bool no_outer_sector,
                      PolySet* basis, Expr** cache, char* cache_bad, YRegion* out) {
     yregion_init(out);
     bool fail = false;
@@ -783,16 +832,13 @@ static bool cad_leaf(const RForm* F, Expr** vv, int d, Expr** asg, bool no_outer
          * (it may vanish at an outer section without that being a McCallum
          * nullification -- only a fibre factor collapsing is). */
         if (!contains_symbol(basis->p[i], vy->data.symbol.name)) continue;
-        Expr* fs = subst_n(basis->p[i], vv, asg, d - 1);
-        if (is_zero(fs)) {                   /* fibre factor nullified */
-            expr_free(fs);
+        bool nullified;
+        if (!isolate_fiber_at(basis->p[i], vy, vv, asg, asgdef, d - 1,
+                              &roots, &nr, &cap, &fac, i, &nullified)) { fail = true; break; }
+        if (nullified) {                     /* fibre factor nullified */
             if (no_outer_sector) continue;   /* 0-dim outer cell: sound to skip */
             fail = true; break;              /* positive-dim: bail (6e) */
         }
-        int dy = degree_in(fs, vy);
-        if (dy <= 0) { expr_free(fs); continue; }
-        if (!rru_collect_roots(fs, vy, &roots, &nr, &cap, &fac, i, NULL)) { expr_free(fs); fail = true; break; }
-        expr_free(fs);
     }
     if (fail) { for (int i = 0; i < nr; i++) { expr_free(roots[i]); } free(roots); free(fac); return false; }
 
@@ -937,19 +983,18 @@ static void cad_region_free(CADRegion* R) {
 /* Build the cell tree for vv[level..d-1] at the (rational) outer assignment
  * asg[0..level-1].  Returns NULL to bail (any of the Stage-A soundness declines).
  * asg[level] is used as scratch by the recursion. */
-static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level, Expr** asg,
+static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level,
+                            Expr** asg, Expr** asgdef,
                             bool no_outer_sector, PolySet* pstack,
                             Expr** caches[], char* caches_bad[]) {
     PolySet* polys = &pstack[level];
     Expr** roots = NULL; int* fac = NULL; int nr = 0, cap = 0; bool fail = false;
     for (int j = 0; j < polys->n && !fail; j++) {
         if (!contains_symbol(polys->p[j], vv[level]->data.symbol.name)) continue;
-        Expr* fs = subst_n(polys->p[j], vv, asg, level);
-        if (is_zero(fs)) { expr_free(fs); if (no_outer_sector) continue; fail = true; break; }
-        int dv = degree_in(fs, vv[level]);
-        if (dv <= 0) { expr_free(fs); continue; }
-        if (!rru_collect_roots(fs, vv[level], &roots, &nr, &cap, &fac, j, NULL)) { expr_free(fs); fail = true; break; }
-        expr_free(fs);
+        bool nullified;
+        if (!isolate_fiber_at(polys->p[j], vv[level], vv, asg, asgdef, level,
+                              &roots, &nr, &cap, &fac, j, &nullified)) { fail = true; break; }
+        if (nullified) { if (no_outer_sector) continue; fail = true; break; }
     }
     if (fail) { for (int q = 0; q < nr; q++) { expr_free(roots[q]); } free(roots); free(fac); return NULL; }
 
@@ -957,9 +1002,11 @@ static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level, Expr** 
     if (nr > 0 && !order_dedup(roots, fac, nr, &m)) {
         for (int q = 0; q < nr; q++) { expr_free(roots[q]); } free(roots); free(fac); return NULL;
     }
-    if (level < d - 1)
-        for (int q = 0; q < m; q++)
-            if (!is_rational_number(roots[q])) { for (int r = 0; r < m; r++) { expr_free(roots[r]); } free(roots); free(fac); return NULL; }
+    /* Phase 6b: a non-innermost breakpoint may be irrational algebraic -- the
+     * deeper fibre it induces is isolated by rru_algebraic_fiber_roots (its
+     * defining factor is carried in asgdef, set below).  The former
+     * rational-only gate here is gone; an assignment the algebraic path cannot
+     * handle still declines, via that path's own bail. */
 
     size_t mz = (m > 0) ? (size_t)m : 0;
     CADRegion* R = calloc(1, sizeof(CADRegion));
@@ -978,8 +1025,14 @@ static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level, Expr** 
     bool all_true = true, any = false;
     for (int idx = 0; idx <= 2 * m && !fail; idx++) {
         bool is_section = (idx % 2 == 1);
-        CADCell* cell; Expr* s;
-        if (is_section) { int k = (idx - 1) / 2; cell = &R->sec[k]; s = expr_copy(roots[k]); }
+        CADCell* cell; Expr* s; Expr* sdef = NULL;
+        if (is_section) {
+            int k = (idx - 1) / 2; cell = &R->sec[k]; s = expr_copy(roots[k]);
+            /* An irrational section pins vv[level] to an algebraic number; carry
+             * its defining factor so the deeper fibre can be isolated over it.
+             * A rational section (or any interval sample) stays on the fast path. */
+            if (!is_rational_number(roots[k])) sdef = polys->p[fac[k]];   /* borrowed */
+        }
         else {
             int j = idx / 2;
             const Expr* lo = (j == 0) ? NULL : roots[j - 1];
@@ -989,20 +1042,21 @@ static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level, Expr** 
         }
         cell->sample = s;
         asg[level] = s;                       /* borrow (cell owns s) */
-        if (cell_dead_n(F, vv, asg, level, d)) { cell->empty = true; all_true = false; asg[level] = NULL; continue; }
+        asgdef[level] = sdef;                 /* borrowed defining factor or NULL */
+        if (cell_dead_n(F, vv, asg, level, d)) { cell->empty = true; all_true = false; asg[level] = NULL; asgdef[level] = NULL; continue; }
         bool child_nos = no_outer_sector && is_section;
         if (level == d - 2) {
             cell->leaf = true;
-            if (!cad_leaf(F, vv, d, asg, child_nos, &pstack[d - 1], caches[d - 1], caches_bad[d - 1], &cell->yr)) { fail = true; asg[level] = NULL; break; }
+            if (!cad_leaf(F, vv, d, asg, asgdef, child_nos, &pstack[d - 1], caches[d - 1], caches_bad[d - 1], &cell->yr)) { fail = true; asg[level] = NULL; asgdef[level] = NULL; break; }
             if (yregion_empty(&cell->yr)) { cell->empty = true; all_true = false; }
             else { any = true; if (!cell->yr.all_true) all_true = false; }
         } else {
-            cell->sub = cad_build(F, vv, d, level + 1, asg, child_nos, pstack, caches, caches_bad);
-            if (!cell->sub) { fail = true; asg[level] = NULL; break; }
+            cell->sub = cad_build(F, vv, d, level + 1, asg, asgdef, child_nos, pstack, caches, caches_bad);
+            if (!cell->sub) { fail = true; asg[level] = NULL; asgdef[level] = NULL; break; }
             if (cell->sub->all_false) { cell->empty = true; all_true = false; }
             else { any = true; if (!cell->sub->all_true) all_true = false; }
         }
-        asg[level] = NULL;
+        asg[level] = NULL; asgdef[level] = NULL;
     }
 
     for (int q = 0; q < m; q++) { expr_free(roots[q]); }
@@ -1211,6 +1265,7 @@ static Expr* cad_region_expr(CADRegion* R, Expr** vv, int d, bool merge,
 static Expr* reduce_cad_nvar(const RForm* F, Expr** vv, int d) {
     PolySet* pstack = calloc((size_t)d, sizeof(PolySet));
     Expr** asg = calloc((size_t)d, sizeof(Expr*));
+    Expr** asgdef = calloc((size_t)d, sizeof(Expr*));   /* borrowed defining factors */
     Expr*** caches = calloc((size_t)d, sizeof(Expr**));
     char** caches_bad = calloc((size_t)d, sizeof(char*));
     CADRegion* root = NULL;
@@ -1238,7 +1293,7 @@ static Expr* reduce_cad_nvar(const RForm* F, Expr** vv, int d) {
         caches_bad[i] = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(char)) : NULL;
     }
 
-    root = cad_build(F, vv, d, 0, asg, true, pstack, caches, caches_bad);
+    root = cad_build(F, vv, d, 0, asg, asgdef, true, pstack, caches, caches_bad);
     if (!root) goto done;
     out = cad_region_expr(root, vv, d, true, NULL, NULL, 0);
     out = eval_and_free(out);
@@ -1251,7 +1306,7 @@ done:
         polyset_free(&pstack[i]);
     }
     free(caches); free(caches_bad);
-    free(pstack); free(asg);
+    free(pstack); free(asg); free(asgdef);
     return out;
 }
 
@@ -1296,6 +1351,7 @@ Expr* reduce_cad_qe(const RForm* F, Expr* freevar,
 
     PolySet* pstack = calloc((size_t)d, sizeof(PolySet));
     Expr** asg = calloc((size_t)d, sizeof(Expr*));
+    Expr** asgdef = calloc((size_t)d, sizeof(Expr*));   /* borrowed defining factors */
     Expr*** caches = calloc((size_t)d, sizeof(Expr**));
     char** caches_bad = calloc((size_t)d, sizeof(char*));
     CADRegion* root = NULL;
@@ -1324,7 +1380,7 @@ Expr* reduce_cad_qe(const RForm* F, Expr* freevar,
         caches_bad[i] = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(char)) : NULL;
     }
 
-    root = cad_build(F, vv, d, 0, asg, true, pstack, caches, caches_bad);
+    root = cad_build(F, vv, d, 0, asg, asgdef, true, pstack, caches, caches_bad);
     if (!root) goto done;
 
     /* The free variable is level 0: its interval/section cells (2m+1, alternating)
@@ -1347,7 +1403,7 @@ done:
         polyset_free(&pstack[i]);
     }
     free(caches); free(caches_bad);
-    free(pstack); free(asg); free(vv);
+    free(pstack); free(asg); free(asgdef); free(vv);
     return out;
 }
 
@@ -1394,6 +1450,7 @@ Expr* reduce_cad(const RForm* F, Expr** vars, int nv) {
     Expr** B = NULL;   int nb = 0,  bcap = 0;
     Expr** px = NULL;  int npx = 0, pcap = 0;
     Expr** bxr = NULL; int nbx = 0, bxcap = 0; int mx = 0;
+    int* bxfac = NULL;   /* provenance: px factor each base breakpoint came from */
     Expr** cache = NULL; char* cache_bad = NULL;
     Expr** xparts = NULL; int nxp = 0, xcap = 0;
     YRegion* R = NULL;    /* interval-cell regions R[0..mx] */
@@ -1432,20 +1489,23 @@ Expr* reduce_cad(const RForm* F, Expr** vars, int nv) {
         }
     }
 
-    /* Base decomposition: real breakpoints of the projection in vx. */
+    /* Base decomposition: real breakpoints of the projection in vx (with
+     * provenance -- which px factor each came from -- so an irrational section
+     * carries a defining factor over Q for the Phase-6b fibre isolation). */
     for (int i = 0; i < npx; i++)
-        if (!rru_collect_roots(px[i], vx, &bxr, &nbx, &bxcap, NULL, 0, NULL)) {
+        if (!rru_collect_roots(px[i], vx, &bxr, &nbx, &bxcap, &bxfac, i, NULL)) {
             for (int q = 0; q < nbx; q++) { expr_free(bxr[q]); } free(bxr); bxr = NULL; nbx = 0;
             goto done;
         }
-    if (!order_dedup(bxr, NULL, nbx, &mx)) {
+    if (!order_dedup(bxr, bxfac, nbx, &mx)) {
         for (int q = 0; q < nbx; q++) expr_free(bxr[q]);
         free(bxr); bxr = NULL;
         goto done;
     }
-    /* v1: every section sample must be rational (irrational-coefficient fibre
-     * isolation is deferred).  Interval samples are rational by construction. */
-    for (int i = 0; i < mx; i++) if (!is_rational_number(bxr[i])) goto done;
+    /* Phase 6b: an irrational base breakpoint is a section that pins vx to an
+     * algebraic number; lift_fiber isolates the algebraic-coefficient fibre over
+     * it (px[bxfac[k]] is the defining factor).  The former rational-only gate is
+     * gone; a case the algebraic path cannot handle still declines via its bail. */
 
     cache = nb ? calloc((size_t)nb, sizeof(Expr*)) : NULL;
     cache_bad = nb ? calloc((size_t)nb, sizeof(char)) : NULL;
@@ -1459,13 +1519,15 @@ Expr* reduce_cad(const RForm* F, Expr** vars, int nv) {
     for (int j = 0; j <= mx; j++) {
         const Expr* xlo = (j == 0) ? NULL : bxr[j - 1];
         const Expr* xhi = (j == mx) ? NULL : bxr[j];
-        Expr* sx = rru_rational_between(xlo, xhi);
+        Expr* sx = rru_rational_between(xlo, xhi);   /* interval sample is rational */
         if (!sx) goto done;
-        if (!xcell_dead(F, vx, sx, vy) && !lift_fiber(F, vx, sx, false, vy, B, nb, cache, cache_bad, &R[j])) { expr_free(sx); goto done; }
+        if (!xcell_dead(F, vx, sx, vy) && !lift_fiber(F, vx, sx, false, NULL, vy, B, nb, cache, cache_bad, &R[j])) { expr_free(sx); goto done; }
         expr_free(sx);
     }
-    for (int k = 0; k < mx; k++)
-        if (!xcell_dead(F, vx, bxr[k], vy) && !lift_fiber(F, vx, bxr[k], true, vy, B, nb, cache, cache_bad, &S[k])) goto done;
+    for (int k = 0; k < mx; k++) {
+        const Expr* sx_def = is_rational_number(bxr[k]) ? NULL : px[bxfac[k]];   /* algebraic section */
+        if (!xcell_dead(F, vx, bxr[k], vy) && !lift_fiber(F, vx, bxr[k], true, sx_def, vy, B, nb, cache, cache_bad, &S[k])) goto done;
+    }
 
     /* Every interval AND section fibre fully satisfied => the whole plane. */
     {
@@ -1520,7 +1582,7 @@ done:
     free(absorbed);
     if (cache) { for (int i = 0; i < nb; i++) { if (cache[i]) expr_free(cache[i]); } free(cache); }
     free(cache_bad);
-    for (int i = 0; i < mx; i++) { expr_free(bxr[i]); } free(bxr);
+    for (int i = 0; i < mx; i++) { expr_free(bxr[i]); } free(bxr); free(bxfac);
     for (int i = 0; i < npx; i++) { expr_free(px[i]); } free(px);
     for (int i = 0; i < nb; i++) { expr_free(B[i]); } free(B);
     return out;

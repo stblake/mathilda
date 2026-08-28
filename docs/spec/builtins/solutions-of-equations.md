@@ -886,9 +886,11 @@ degenerate branch, and it handles inequalities over the reals.
   (`x^2 + y^2 <= 1 && x != 0` splits at `x == 0`). The merge is a purely cosmetic
   post-pass: any undecidable comparison leaves the (already-correct) unmerged form.
   **Soundness over completeness**: an undecidable sign/ordering (the
-  real-algebraic oracle returning "unknown", or FLINT absent), an irrational base
-  breakpoint, or an un-emittable fibre all make `Reduce` decline (stay
-  unevaluated) rather than risk a wrong formula.
+  real-algebraic oracle returning "unknown", or FLINT absent), a transcendental
+  (non-algebraic) breakpoint, or an un-emittable fibre all make `Reduce` decline
+  (stay unevaluated) rather than risk a wrong formula. An **irrational algebraic**
+  base breakpoint is now handled (Phase 6b, below), so `Reduce[x^2 == 2 && y < x,
+  {x, y}, Reals] -> x == -Sqrt[2] && y < -Sqrt[2] || x == Sqrt[2] && y < Sqrt[2]`.
 - **Multivariate nonlinear over Reals, three or more variables** (recursive
   CAD, Phase 6d): the projection/lift core is generalized to any number of
   effective variables. An iterated McCallum projection builds the projection
@@ -909,15 +911,32 @@ degenerate branch, and it handles inequalities over the reals.
   non-strict region's outer ranges by absorbing the boundary sections into the
   adjacent interval; it is a cosmetic post-pass decided by sampling, so any
   undecidable comparison leaves the already-correct unmerged form, and strict
-  regions stay open. **v1 scope** (rational-fibre regime): a breakpoint at any
-  non-innermost level, given the rational assignment above it, must be rational,
-  so origin-centred balls/spheres, sign-octants and axis-aligned boxes are solved
-  while a problem whose interior sample yields an irrational fibre declines
-  (real-algebraic-coefficient fibre isolation is a later phase) -- this includes
-  `x^2+y^2+z^2 <= 2` (base `+/-Sqrt[2]`) and, notably, an inequality constraining
-  the **outermost** variable (`x^2+y^2+z^2 <= 1 && x <= 0` shifts the base sample
-  off the origin, so the fibre becomes irrational). An interval nullification also
-  declines (McCallum well-orientedness augmentation is deferred).
+  regions stay open. An interval nullification declines (McCallum
+  well-orientedness augmentation is deferred).
+- **Real-algebraic-coefficient fibre isolation** (Phase 6b): a breakpoint at a
+  non-innermost CAD level may be an **irrational algebraic** number. Such a
+  section pins an outer variable to an algebraic value, so the deeper fibre is a
+  univariate polynomial with real-algebraic-number coefficients — which
+  `Solve[...,Reals]` (factoring over ℚ) cannot isolate. Phase 6b closes this by
+  **iterated-resultant tower projection**: the outer assignment forms a tower
+  ℚ ⊆ ℚ(α₀) ⊆ ℚ(α₀,α₁) ⊆ … in which each irrational αᵢ is a root of a known
+  factor over ℚ; substituting the rational levels and eliminating each algebraic
+  level by resultant leaves a univariate over ℚ whose real roots **contain** the
+  fibre's, and an exact `qqbar` zero-test (`factor(vals…, β) == 0`) keeps exactly
+  the true roots (discarding the conjugate-spurious ones the resultant
+  introduces). This lifts the earlier rational-fibre restriction, so a
+  positive-dimensional real system with irrational algebraic fibres now solves —
+  the radius-`Sqrt[2]` ball `Reduce[x^2 + y^2 + z^2 <= 2, {x, y, z}, Reals]` (base
+  `+/-Sqrt[2]`), the sphere positive octant
+  `Reduce[x^2 + y^2 + z^2 == 1 && x > 0 && y > 0 && z > 0, {x, y, z}, Reals] ->
+  0 < x < 1 && 0 < y < Sqrt[1-x^2] && z == Sqrt[1-x^2-y^2]`, the cubic curve
+  `Reduce[x^3 + y^3 == 1 && x > 0 && y > 0, {x, y}, Reals] ->
+  0 < x < 1 && y == (1-x^3)^(1/3)`, and hyperbola branches. The all-rational
+  assignment keeps its unchanged fast path. Everything else in the soundness
+  contract is preserved: a **transcendental** (non-algebraic) breakpoint — e.g.
+  `x^2 + y^2 + z^2 == Pi && x > 0 && ...` (boundary `Sqrt[Pi]`) — an undecidable
+  `qqbar` test, or the algebraic-fibre resource budget being exceeded all make
+  `Reduce` decline rather than emit a wrong formula.
 - **Zero-dimensional nonlinear systems** (`reduce_zerodim`, over Complexes *and*
   Reals): when the polynomial **equations** of a conjunction pin the variety to a
   finite set of points, the system is solved exactly rather than decomposed —

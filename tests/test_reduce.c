@@ -699,11 +699,55 @@ static void test_cad_nvar(void) {
     run_test("Reduce[(x - y) (y - z) > 0, {x, y, z}, Reals]",
              "Or[And[Less[y, x], Less[z, y]], And[Greater[y, x], Greater[z, y]]]");
 
-    /* Irrational base breakpoint (+/-Sqrt[2]) is outside the v1 rational-fibre
-     * regime: declines (Phase 6b), never a wrong answer. */
-    run_test("Reduce[x^2 + y^2 + z^2 <= 2, {x, y, z}, Reals]",
-             "Reduce[LessEqual[Plus[Power[x, 2], Power[y, 2], Power[z, 2]], 2], "
-             "List[x, y, z], Reals]");
+    /* Phase 6b: an irrational base breakpoint (+/-Sqrt[2]) is now isolated by the
+     * algebraic-coefficient fibre engine -- the radius-Sqrt[2] closed ball solves
+     * with the outer range closed to -Sqrt[2] <= x <= Sqrt[2] (form verbose but
+     * exact; the sample-point oracle in reduce_corpus.m certifies equivalence). */
+    run_contains("Reduce[x^2 + y^2 + z^2 <= 2, {x, y, z}, Reals]",
+                 "Inequality[Times[-1, Power[2, Rational[1, 2]]], LessEqual, x, "
+                 "LessEqual, Power[2, Rational[1, 2]]]");
+}
+
+/* ------------------------------------------------------------------ *
+ *  Phase 6b: real-algebraic-coefficient fibre isolation.  A section   *
+ *  at an IRRATIONAL non-innermost breakpoint pins an outer variable   *
+ *  to an algebraic number, so the deeper fibre has algebraic-number   *
+ *  coefficients; rru_algebraic_fiber_roots isolates it by iterated-   *
+ *  resultant tower projection + exact qqbar filtering.  These used to  *
+ *  decline (rational-fibre regime).                                   *
+ * ------------------------------------------------------------------ */
+static void test_cad_algebraic_fibre(void) {
+    /* 2-var, irrational base section x = +/-Sqrt[2] (an equation pins x). */
+    run_test("Reduce[x^2 == 2 && y < x, {x, y}, Reals]",
+             "Or[And[Equal[x, Times[-1, Power[2, Rational[1, 2]]]], "
+             "Less[y, Times[-1, Power[2, Rational[1, 2]]]]], "
+             "And[Equal[x, Power[2, Rational[1, 2]]], Less[y, Power[2, Rational[1, 2]]]]]");
+
+    /* 3-var sphere, positive octant: the y-sections at +/-Sqrt[1-x^2] are
+     * irrational (single algebraic extension over the rational x-sample); the
+     * z-fibre is pinned by the sphere equation. */
+    run_test("Reduce[x^2 + y^2 + z^2 == 1 && x > 0 && y > 0 && z > 0, {x, y, z}, Reals]",
+             "And[Inequality[0, Less, x, Less, 1], "
+             "Inequality[0, Less, y, Less, "
+             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]], "
+             "Equal[z, Power[Plus[1, Times[-1, Power[x, 2]], Times[-1, Power[y, 2]]], Rational[1, 2]]]]");
+
+    /* Non-quadratic irrational fibre: a cubic curve. */
+    run_test("Reduce[x^3 + y^3 == 1 && x > 0 && y > 0, {x, y}, Reals]",
+             "And[Inequality[0, Less, x, Less, 1], "
+             "Equal[y, Power[Plus[1, Times[-1, Power[x, 3]]], Rational[1, 3]]]]");
+
+    /* Hyperbola branch: two irrational fibre roots per x. */
+    run_test("Reduce[x^2 - y^2 == 1 && x > 0, {x, y}, Reals]",
+             "And[GreaterEqual[x, 1], "
+             "Or[Equal[y, Times[-1, Power[Plus[-1, Power[x, 2]], Rational[1, 2]]]], "
+             "Equal[y, Power[Plus[-1, Power[x, 2]], Rational[1, 2]]]]]");
+
+    /* Soundness: a TRANSCENDENTAL breakpoint (Sqrt[Pi]) is not algebraic, so the
+     * qqbar oracle cannot decide -- the engine declines rather than guess. */
+    run_test("Reduce[x^2 + y^2 + z^2 == Pi && x > 0 && y > 0 && z > 0, {x, y, z}, Reals]",
+             "Reduce[And[Equal[Plus[Power[x, 2], Power[y, 2], Power[z, 2]], Pi], "
+             "Greater[x, 0], Greater[y, 0], Greater[z, 0]], List[x, y, z], Reals]");
 }
 
 /* ------------------------------------------------------------------ *
@@ -1149,6 +1193,11 @@ static void test_cylindrical_decomposition(void) {
     run_contains("CylindricalDecomposition[x^2 + y^2 <= 1, {x, y}]",
                  "Inequality[-1, LessEqual, x, LessEqual, 1]");
 
+    /* Phase 6b flows through to CD: the 3-var sphere octant (irrational y-sections)
+     * now decomposes instead of declining. */
+    run_contains("CylindricalDecomposition[x^2 + y^2 + z^2 == 1 && x > 0 && y > 0 && z > 0, {x, y, z}]",
+                 "Equal[z, Power[Plus[1, Times[-1, Power[x, 2]], Times[-1, Power[y, 2]]], Rational[1, 2]]]");
+
     /* Decides True / False. */
     run_test("CylindricalDecomposition[True, {x}]", "True");
     run_test("CylindricalDecomposition[x^2 == -1, {x}]", "False");       /* no real root */
@@ -1158,11 +1207,12 @@ static void test_cylindrical_decomposition(void) {
     run_test("CylindricalDecomposition[x^2 > 1, {x}, Reals]", "Or[Less[x, -1], Greater[x, 1]]");
 
     /* Sound declines -> stay unevaluated (FullForm echoes the head):
-     *  - a positive-dimensional system with irrational fibres (Phase 6b limit);
+     *  - a system with a TRANSCENDENTAL (non-algebraic) fibre boundary Sqrt[Pi],
+     *    which the qqbar oracle cannot decide (6b handles algebraic fibres only);
      *  - an unsupported positional (a non-Reals domain);
      *  - an invalid variable. */
-    run_test("CylindricalDecomposition[x^2 + y^2 + z^2 == 1 && x > 0 && y > 0 && z > 0, {x, y, z}]",
-             "CylindricalDecomposition[And[Equal[Plus[Power[x, 2], Power[y, 2], Power[z, 2]], 1], "
+    run_test("CylindricalDecomposition[x^2 + y^2 + z^2 == Pi && x > 0 && y > 0 && z > 0, {x, y, z}]",
+             "CylindricalDecomposition[And[Equal[Plus[Power[x, 2], Power[y, 2], Power[z, 2]], Pi], "
              "Greater[x, 0], Greater[y, 0], Greater[z, 0]], List[x, y, z]]");
     run_test("CylindricalDecomposition[x^2 > 1, {x}, Integers]",
              "CylindricalDecomposition[Greater[Power[x, 2], 1], List[x], Integers]");
@@ -1191,6 +1241,7 @@ int main(void) {
     TEST(test_piecewise_functions);
     TEST(test_cad_real);
     TEST(test_cad_nvar);
+    TEST(test_cad_algebraic_fibre);
     TEST(test_quantifiers_decision);
     TEST(test_quantifiers_parametric);
     TEST(test_quantifiers_decline);

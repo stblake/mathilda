@@ -31,11 +31,15 @@ extended v0.105, 2026-08-27 with parametric-family instantiation, a solve-the-
 parameter step for periodic instances, indexed variables `c[i]`, and a bounded
 integer-box search)**, and **`CylindricalDecomposition` (v0.111, 2026-08-28)** —
 completing the Phase-8 companion family.
-The remaining pieces are **6b (real-algebraic-coefficient fibre isolation to
-widen past the rational-fibre regime — the positive-dimensional irrational
-case)**, **6e (McCallum well-orientedness augmentation)** and **7-extended
-(≥2 free vars / alternating quantifiers / algebraic free-variable boundaries —
-blocked on 6b)**.
+**Phase 6b (real-algebraic-coefficient fibre isolation) has landed** (v0.113,
+2026-08-28, `reduce_algfiber.{c,h}` + `reduce_cad.c`): the positive-dimensional
+irrational case is now solved by iterated-resultant tower projection + exact
+`qqbar` filtering, so `x^2==2 && y<x`, the radius-√2 ball, the sphere positive
+octant and cubic/hyperbola fibres all decompose.
+The remaining pieces are **6e (McCallum well-orientedness augmentation)** and
+**7-extended (≥2 free vars / alternating quantifiers / algebraic free-variable
+boundaries — the algebraic discriminant-variety case still needs a nested-QE
+emitter beyond 6b fibres)**.
 Implementation order followed was
 `0 → 1 → 2 → 3 → 5 → 4 → 6(2-var) → 6d(n-var A) → 6d(n-var B) → 8-opts → 7(v1)`.
 
@@ -47,12 +51,45 @@ Implementation order followed was
 | 3 | Linear real systems (Fourier–Motzkin) | ✅ done |
 | 4 | Parametric linear systems (Complexes) | ✅ done |
 | 5 | Integers / Rationals | ✅ done |
-| 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var done (6d Stage A + Stage B n-D boundary merge, rational-fibre regime); 6b (algebraic-coeff fibres) + 6e (well-orientedness) pending |
+| 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var done (6d Stage A + Stage B n-D boundary merge); 6b (algebraic-coeff fibres, tower) ✅ done (v0.113); 6e (well-orientedness) pending |
 | 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ◧ v1 done (fully-quantified decision procedure + single-free-var parametric QE, rational-fibre regime); ≥2 free vars / alternating / algebraic-boundary parametric deferred (blocked on 6b) |
 | 8 | Companion builtins + polish | ✅ LogicalExpand + NotElement + FindInstance (C/R/Z/Q/Booleans) + CylindricalDecomposition done |
 | 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done (+ multivariate `Sqrt` rationalization, 2026-08-24) |
 | Opt | Options: `Backsubstitution`, `Cubics`, `GeneratedParameters`, `Method`, `Modulus`, `Quartics`, `WorkingPrecision` | ✅ done (2026-08-25) |
 
+> **2026-08-28 — Phase 6b real-algebraic-coefficient fibre isolation (tower), v0.113.**
+> The CAD Reals engine no longer requires a non-innermost breakpoint to be rational.
+> A new primitive `rru_algebraic_fiber_roots` (`src/solve/reduce_algfiber.{c,h}`)
+> isolates the real roots of a fibre polynomial with real-algebraic-number
+> coefficients by **iterated-resultant tower projection** — the outer assignment is
+> a tower ℚ⊆ℚ(α₀)⊆ℚ(α₀,α₁)⊆…, each irrational αᵢ a root of a known factor over ℚ
+> (carried by the CAD's root provenance); substitute the rational levels, eliminate
+> each algebraic level by `Resultant`, isolate the resulting rational-coefficient
+> univariate's real roots, then keep exactly the candidates β with
+> `factor(vals…,β)==0` decided by the exact `qqbar` oracle (discarding the
+> conjugate-spurious roots the resultant introduces). Wired into both drivers
+> (`reduce_cad.c`): the rational-fibre gates (former `reduce_cad.c:960-962` / `:1448`)
+> are removed and a section's defining factor is threaded through
+> `cad_build`/`cad_leaf`/`lift_fiber`/`reduce_cad_qe` via a new borrowed `asgdef[]`;
+> the all-rational assignment keeps its unchanged `rru_collect_roots` fast path.
+> **Deviation from the §4 sketch:** no primitive-element / number-field construction
+> is built — the tower is projected by successive **public** `Resultant` calls
+> (reusing exactly what the projection code already uses), and the conjugate-spurious
+> roots are removed by an exact `qqbar` zero-test rather than by primitive-element
+> re-expression. Full tower height is supported (single- and multi-extension alike);
+> a generous var-degree / node-count budget declines rather than blows up. **Now
+> solved** (all declined before): `x^2==2 && y<x`, `x^2+y^2+z^2<=2`, the sphere
+> positive octant, `x^3+y^3==1 && x>0 && y>0`, hyperbola branches, closed 3-/4-balls
+> — flowing through `CylindricalDecomposition` too. **Soundness preserved:** a
+> transcendental breakpoint (`Sqrt[Pi]`), an undecidable `qqbar`, an identically-zero
+> resultant, a budget overrun, or FLINT absent all decline. Tests:
+> `test_cad_algebraic_fibre`; seven `alg-*` corpus rows (166/166); stale
+> rational-fibre decline assertions updated. `check-c99` clean; reduce+solve
+> suites/corpora green; valgrind at macOS baseline (13,440/420, zero per-call leak).
+> **Still pending: 6e (well-orientedness) and 7-extended (≥2 free vars /
+> alternating / algebraic discriminant-variety boundaries — needs a nested-QE
+> emitter, not just 6b fibres).**
+>
 > **2026-08-28 — Phase 8 `CylindricalDecomposition` (last companion), v0.111.**
 > `CylindricalDecomposition[expr, vars]` returns the **merged cylindrical formula** of the
 > real solution set — a quantifier-free `And`/`Or` in which each variable is bounded

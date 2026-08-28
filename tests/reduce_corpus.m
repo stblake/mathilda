@@ -121,9 +121,21 @@
   {"cad3-planes",        (x - y) (y - z) > 0,              {x, y, z},    Reals, "solved"},
   {"cad3-half-ball",     x^2 + y^2 + z^2 <= 1 && z >= 0,   {x, y, z},    Reals, "solved"},
   {"cad3-sphere",        x^2+y^2+z^2 <= 1 && x^2+y^2+z^2 >= 1, {x,y,z},  Reals, "solved"},
-  {"cad3-decline-surd",  x^2 + y^2 + z^2 <= 2,             {x, y, z},    Reals, "decline"},
   {"cad4-ball-open",     x^2 + y^2 + z^2 + w^2 < 1,        {x, y, z, w}, Reals, "solved"},
   {"cad4-ball-closed",   x^2 + y^2 + z^2 + w^2 <= 1,       {x, y, z, w}, Reals, "solved"},
+
+  (* ---- phase 6b: real-algebraic-coefficient fibre isolation.  A section at an
+   *      IRRATIONAL non-innermost breakpoint pins an outer variable to an
+   *      algebraic number; the deeper fibre (algebraic-number coefficients) is
+   *      isolated by iterated-resultant tower projection + qqbar filtering.
+   *      These all declined in the earlier rational-fibre regime. ---- *)
+  {"alg-x2eq2-lt",       x^2 == 2 && y < x,                {x, y},       Reals, "solved"},
+  {"alg-surd-ball",      x^2 + y^2 + z^2 <= 2,             {x, y, z},    Reals, "solved"},
+  {"alg-octant-eq",      x^2+y^2+z^2==1 && x>0 && y>0 && z>0, {x,y,z},   Reals, "solved"},
+  {"alg-cubic-curve",    x^3 + y^3 == 1 && x > 0 && y > 0, {x, y},       Reals, "solved"},
+  {"alg-hyperbola-br",   x^2 - y^2 == 1 && x > 0,          {x, y},       Reals, "solved"},
+  {"alg-ellipse-surd",   2 x^2 + 3 y^2 <= 5 && x > 1,      {x, y},       Reals, "solved"},
+  {"alg-pi-decline",     x^2+y^2+z^2==Pi && x>0 && y>0 && z>0, {x,y,z},  Reals, "decline"},
 
   (* ---- zero-dimensional nonlinear systems over the Reals: the equations pin
    *      the variety to finitely many points (which CAD declines when the fibre
