@@ -5,9 +5,7 @@
 
 ## Description
 
-**`PrimitiveRoot[n]`**
-
-gives a primitive root of n.
+**`PrimitiveRoot[n] gives the smallest primitive root of n -- a generator of the multiplicative group (Z/nZ)* of units modulo n.`**
 
 **`PrimitiveRoot[n, k]`**
 
@@ -16,7 +14,7 @@ gives the smallest primitive root of n greater than or equal to k.
 <details>
 <summary>Notes</summary>
 
-A primitive root of n is a generator of the multiplicative group of integers modulo n relatively prime to n.  PrimitiveRoot returns unevaluated unless n is 2, 4, an odd prime power p^k, or twice an odd prime power 2 p^k.
+A primitive root exists (and PrimitiveRoot returns a value) only when the group is cyclic, that is when n is 2, 4, an odd prime power p^k, or twice an odd prime power 2 p^k; otherwise the result is unevaluated.
 
 </details>
 
@@ -97,12 +95,21 @@ Out[11]= PrimitiveRoot[8]
 
 ## References
 
+- K. Ireland and M. Rosen, *A Classical Introduction to Modern Number Theory*, 2nd ed., Springer, 1990 — primitive roots and the structure of `(Z/nZ)*` (Chapter 4).
+- G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008.
 - Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)
 - Tests: [`tests/test_primitive_root.c`](https://github.com/stblake/mathilda/blob/main/tests/test_primitive_root.c)
 
 ## Notes & additional examples
+
+### Generators of the units
+
+A primitive root of `n` is a generator of the multiplicative group `(Z/nZ)*`: its powers run
+through every residue coprime to `n`, so its `MultiplicativeOrder` equals `EulerPhi[n]`. Such
+a generator exists exactly when the group is cyclic — for `n = 2, 4, p^k, 2p^k` — and how
+often a *small* number is a primitive root is the subject of Artin's still-open conjecture.
 
 ### Notes
 

@@ -1076,7 +1076,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "ContinuedFraction[x, n]",
+    "summary": "ContinuedFraction[x, n] gives the first n terms of the continued-fraction expansion of x, the list {a1, a2, ...} standing for a1 + 1/(a2 + 1/(a3 + ...)); truncating it gives the convergents, the best rational approximations to x.",
     "url": "documentation/number-theory/ContinuedFraction/"
   },
   {
@@ -1124,7 +1124,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "CoprimeQ[n1, n2, ...]",
+    "summary": "CoprimeQ[n1, n2, ...] yields True if the arguments are pairwise relatively prime -- pairwise GCD equal to 1 -- and False otherwise; two random integers are coprime with probability 6/Pi^2.",
     "url": "documentation/number-theory/CoprimeQ/"
   },
   {
@@ -1564,7 +1564,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "Divisible[n, m]",
+    "summary": "Divisible[n, m] yields True if n is an integer multiple of m -- the divisibility relation m | n, effectively Mod[n, m] == 0 -- and False otherwise.",
     "url": "documentation/number-theory/Divisible/"
   },
   {
@@ -1788,7 +1788,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "EulerPhi[n] gives the Euler totient function phi(n).",
+    "summary": "EulerPhi[n] gives the Euler totient phi(n), the number of integers from 1 to n coprime to n -- equivalently the order of the group (Z/nZ)* of units, so a^phi(n) == 1 (mod n) whenever gcd(a, n) == 1 (Euler's theorem).",
     "url": "documentation/number-theory/EulerPhi/"
   },
   {
@@ -1908,7 +1908,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "ExtendedGCD[n1, n2, ...]",
+    "summary": "ExtendedGCD[n1, n2, ...] gives the extended GCD {g, {r1, r2, ...}}, where g == GCD[n1, ...] and g == r1 n1 + r2 n2 + ... -- Bezout's identity, the certificate that also yields modular inverses.",
     "url": "documentation/number-theory/ExtendedGCD/"
   },
   {
@@ -2420,7 +2420,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "FromContinuedFraction[{a1, a2, ..., an}]",
+    "summary": "FromContinuedFraction[{a1, a2, ..., an}] reconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)), the convergent of a continued fraction, in nested (un-expanded) form; the inverse of ContinuedFraction.",
     "url": "documentation/number-theory/FromContinuedFraction/"
   },
   {
@@ -2468,7 +2468,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "GCD[n1, n2, ...]",
+    "summary": "GCD[n1, n2, ...] gives the greatest common divisor of the integers ni, the largest integer dividing them all -- the quantity the Euclidean algorithm computes.",
     "url": "documentation/number-theory/GCD/"
   },
   {
@@ -3172,7 +3172,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "IntegerPartitions[n]",
+    "summary": "IntegerPartitions[n] gives the partitions of the integer n -- the ways to write n as a sum of positive parts (equivalently, its Young diagrams) -- in reverse-lexicographic order.",
     "url": "documentation/number-theory/IntegerPartitions/"
   },
   {
@@ -3316,7 +3316,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "JacobiSymbol[n, m]",
+    "summary": "JacobiSymbol[n, m] gives the Jacobi symbol (n/m); for prime m it is the Legendre symbol, +-1 according to whether n is a quadratic residue modulo m (Euler's criterion) and 0 when m divides n, and it satisfies the law of quadratic reciprocity.",
     "url": "documentation/number-theory/JacobiSymbol/"
   },
   {
@@ -3452,7 +3452,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "LCM[n1, n2, ...]",
+    "summary": "LCM[n1, n2, ...] gives the least common multiple of the integers ni, the smallest positive integer they all divide; with the gcd it satisfies GCD[a, b] LCM[a, b] == a b.",
     "url": "documentation/number-theory/LCM/"
   },
   {
@@ -4132,7 +4132,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "MultiplicativeOrder[k, n]",
+    "summary": "MultiplicativeOrder[k, n] gives the multiplicative order of k modulo n, the smallest positive integer m such that k^m is congruent to 1 modulo n; reversing it -- recovering the exponent x with k^x congruent to a given target -- is the discrete logarithm problem, whose presumed hardness underlies Diffie-Hellman key exchange and the ElGamal and DSA schemes.",
     "url": "documentation/number-theory/MultiplicativeOrder/"
   },
   {
@@ -4612,7 +4612,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "PartitionsP[n]",
+    "summary": "PartitionsP[n] gives the number p(n) of unrestricted partitions of the integer n, evaluated exactly through the Hardy-Ramanujan-Rademacher series (p(n) grows like exp(Pi Sqrt[2n/3])).",
     "url": "documentation/number-theory/PartitionsP/"
   },
   {
@@ -4620,7 +4620,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "PartitionsQ[n]",
+    "summary": "PartitionsQ[n] gives the number q(n) of partitions of the integer n into distinct parts -- equal, by Euler's theorem, to the number of partitions into odd parts.",
     "url": "documentation/number-theory/PartitionsQ/"
   },
   {
@@ -4876,7 +4876,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "PowerMod[a, b, m] gives a^b mod m.",
+    "summary": "PowerMod[a, b, m] gives a^b mod m by square-and-multiply, reducing modulo m at every step so the full power is never formed.",
     "url": "documentation/number-theory/PowerMod/"
   },
   {
@@ -4972,7 +4972,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "PrimeQ[n]",
+    "summary": "PrimeQ[n] gives True if n is a prime integer and False otherwise, using a Baillie-PSW and Miller-Rabin probabilistic primality test (no known counterexample, and definite below 2^64).",
     "url": "documentation/number-theory/PrimeQ/"
   },
   {
@@ -4980,7 +4980,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "PrimitiveRoot[n]",
+    "summary": "PrimitiveRoot[n] gives the smallest primitive root of n -- a generator of the multiplicative group (Z/nZ)* of units modulo n.",
     "url": "documentation/number-theory/PrimitiveRoot/"
   },
   {
@@ -4988,7 +4988,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "PrimitiveRootList[n]",
+    "summary": "PrimitiveRootList[n] gives the sorted list of all primitive roots of n in the canonical residues {1, ..., n-1}; when n admits any, there are exactly EulerPhi[EulerPhi[n]] of them.",
     "url": "documentation/number-theory/PrimitiveRootList/"
   },
   {
@@ -5924,7 +5924,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "SquareFreeQ[expr]",
+    "summary": "SquareFreeQ[expr] gives True if expr is a square-free number or polynomial -- no prime (or irreducible factor) occurs more than once, equivalently MoebiusMu[n] != 0 for an integer -- and False otherwise; the squarefree integers have density 6/Pi^2.",
     "url": "documentation/number-theory/SquareFreeQ/"
   },
   {

@@ -5,9 +5,7 @@
 
 ## Description
 
-**`PrimeQ[n]`**
-
-gives True if n is a prime integer, False otherwise.
+**`PrimeQ[n] gives True if n is a prime integer and False otherwise, using a Baillie-PSW and Miller-Rabin probabilistic primality test (no known counterexample, and definite below 2^64).`**
 
 **`PrimeQ[z]`**
 
@@ -104,6 +102,8 @@ Out[16]= True
 
 ## References
 
+- R. Crandall and C. Pomerance, *Prime Numbers: A Computational Perspective*, 2nd ed., Springer, 2005 — Miller–Rabin (§3.5) and the Baillie–PSW test.
+- R. Baillie and S. S. Wagstaff Jr., "Lucas pseudoprimes", *Math. Comp.* 35 (1980), 1391–1417.
 - Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
@@ -112,6 +112,14 @@ Out[16]= True
 - Tests: [`tests/test_pred_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_pred_compile.c)
 
 ## Notes & additional examples
+
+### Primality testing
+
+`PrimeQ` does not trial-divide. It runs a strong probabilistic test — a Baillie–PSW
+pre-screen (a strong Fermat test composed with a Lucas test) backed by Miller–Rabin rounds
+— for which no composite counterexample is known, and which is deterministic below `2^64`.
+Deciding that a large number is *composite* is thus fast; *factoring* it (see
+[`FactorInteger`](FactorInteger.md)) is the hard problem behind RSA.
 
 ### Notes
 

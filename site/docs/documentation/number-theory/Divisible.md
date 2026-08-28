@@ -5,18 +5,16 @@
 
 ## Description
 
-**`Divisible[n, m]`**
-
-yields True if n is divisible by m, and False otherwise.
+**`Divisible[n, m] yields True if n is an integer multiple of m -- the divisibility relation m | n, effectively Mod[n, m] == 0 -- and False otherwise.`**
 
 <details>
 <summary>Notes</summary>
 
-n is divisible by m when n is an integer multiple of m; this is effectively Mod\[n, m\] == 0.  Works for machine and BigInt integers, Gaussian integers, rationals, and exact numeric quantities (the quotient n/m must reduce to an integer or Gaussian integer).  Returns False unless n and m are manifestly divisible; symbolic, non-numeric arguments are left unevaluated.  Listable.
+Works for machine and BigInt integers, Gaussian integers, rationals, and exact numeric quantities (the quotient n/m must reduce to an integer or Gaussian integer).  Returns False unless n and m are manifestly divisible; symbolic, non-numeric arguments are left unevaluated.  Listable.
 
 </details>
 
-## Examples (15)
+## Examples (18)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -73,6 +71,19 @@ In[15]:= Divisible[{1, 2, 3, 4, 5, 6}, 2]
 Out[15]= {False, True, False, True, False, True}
 ```
 
+### Applications (3)
+
+```mathematica
+In[16]:= Divisible[100, 4]
+Out[16]= True
+
+In[17]:= Divisible[100, 7]
+Out[17]= False
+
+In[18]:= Divisible[10 + 5 I, 1 + 2 I]
+Out[18]= True
+```
+
 ## Implementation notes
 
 - Machine integers and GMP bigints: tested directly with `mpz_divisible_p`, so large cases such as `Divisible[10^3000 + 1, 16001]` → `True` are exact. By the GMP convention, divisibility by `0` holds iff `n == 0` (`Divisible[0, 0]` → `True`, `Divisible[6, 0]` → `False`); sign is ignored (`Divisible[10, -2]` → `True`).
@@ -85,9 +96,18 @@ Out[15]= {False, True, False, True, False, True}
 
 ## References
 
+- G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008 — divisibility (Chapter I).
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_divisible.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisible.c)
 - Tests: [`tests/test_divisors.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisors.c)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
+
+### The divisibility relation
+
+`Divisible[n, m]` tests the relation `m ∣ n` — whether `n` is an integer multiple of `m`,
+equivalently whether `Mod[n, m] == 0`. It extends beyond the ordinary integers: over the
+Gaussian integers `Z[i]`, `m ∣ n` when the quotient `n/m` is itself a Gaussian integer.

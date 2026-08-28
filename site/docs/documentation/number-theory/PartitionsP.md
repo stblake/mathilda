@@ -5,9 +5,7 @@
 
 ## Description
 
-**`PartitionsP[n]`**
-
-gives the number p(n) of unrestricted partitions of the integer n.
+**`PartitionsP[n] gives the number p(n) of unrestricted partitions of the integer n, evaluated exactly through the Hardy-Ramanujan-Rademacher series (p(n) grows like exp(Pi Sqrt[2n/3])).`**
 
 <details>
 <summary>Notes</summary>
@@ -16,7 +14,7 @@ n must be an integer; p(n) = 0 for n \< 0. Threads over lists. For the partition
 
 </details>
 
-## Examples (5)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -41,6 +39,19 @@ Out[4]= {1, 1, 1, 2, 1, 1, 1, 3, 2, 1, 1, 2}
 ```mathematica
 In[5]:= PartitionsP[{2, 4, 6}]
 Out[5]= {2, 5, 11}
+```
+
+### Applications (3)
+
+```mathematica
+In[6]:= PartitionsP[10]
+Out[6]= 42
+
+In[7]:= PartitionsP[100]
+Out[7]= 190569292
+
+In[8]:= Table[Mod[PartitionsP[5 k + 4], 5], {k, 0, 5}]
+Out[8]= {0, 0, 0, 0, 0, 0}
 ```
 
 ## Algorithm
@@ -96,7 +107,20 @@ Ownership: this builtin only *reads* `res`. On every NULL return (bad arguments,
 
 **See also:** [N](../../arithmetic/N/)
 
+- G. E. Andrews, *The Theory of Partitions*, Cambridge University Press, 1998.
+- H. Rademacher, "On the partition function p(n)", *Proc. London Math. Soc.* 43 (1937), 241–254 — the exact convergent series.
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_nsum.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nsum.c)
 - Tests: [`tests/test_partitionsp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_partitionsp.c)
+
+## Notes & additional examples
+
+### The partition function
+
+`PartitionsP[n]` counts the partitions of `n`. It grows super-polynomially — Hardy and
+Ramanujan showed `p(n) ~ exp(π√(2n/3)) / (4n√3)` — so it cannot be found by enumeration at
+large `n`. Mathilda evaluates the **Hardy–Ramanujan–Rademacher** convergent series, an exact
+sum of analytic terms rounded to the nearest integer, giving `p(1000)` in an instant.
+Ramanujan's congruences hold: `p(5k+4) ≡ 0 (mod 5)`, `p(7k+5) ≡ 0 (mod 7)`, `p(11k+6) ≡ 0
+(mod 11)`.

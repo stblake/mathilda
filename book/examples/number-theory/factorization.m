@@ -1,0 +1,10 @@
+# Section 4.6.3: Integer factorization.
+FactorInteger[360]
+FactorInteger[2^32 + 1]
+FactorInteger[12345678901234567890]
+FactorInteger[3000000040000000133]
+FactorInteger[3000000040000000133, Method -> "PollardRho"]
+IntegerExponent[1000000, 10]
+IntegerExponent[360, 2]
+SquareFreeQ[30]
+SquareFreeQ[12]

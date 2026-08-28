@@ -5,11 +5,18 @@
 
 ## Description
 
-**`PowerMod[a, b, m] gives a^b mod m.`**
+**`PowerMod[a, b, m] gives a^b mod m by square-and-multiply, reducing modulo m at every step so the full power is never formed.`**
 
-**`PowerMod[a, -1, m] finds the modular inverse of a modulo m.`**
+**`PowerMod[a, -1, m] finds the modular inverse of a modulo m (a consequence of Euler's theorem).`**
 
-**`PowerMod[a, 1/r, m] finds a modular r-th root of a.`**
+**`PowerMod[a, 1/r, m] finds a modular r-th root of a (Tonelli-Shanks / Hensel lifting / CRT).`**
+
+<details>
+<summary>Notes</summary>
+
+Exact via GMP for arbitrary-precision integers; Listable.
+
+</details>
 
 ## Examples (12)
 

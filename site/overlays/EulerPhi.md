@@ -1,3 +1,15 @@
+---
+references:
+  - "G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008 — the totient function and Euler's theorem."
+---
+
+### The totient and Euler's theorem
+
+`EulerPhi[n]` counts the integers in `1, …, n` coprime to `n`, which is the *order* of the
+group of units `(Z/nZ)*`. It is multiplicative, with `EulerPhi[n] = n ∏_{p|n} (1 - 1/p)`.
+Its central role is *Euler's theorem*: `a^EulerPhi[n] ≡ 1 (mod n)` whenever `gcd(a, n) = 1` —
+the identity that makes `PowerMod[a, -1, m]` and RSA decryption work.
+
 ### Worked examples
 
 ```mathematica

@@ -1,0 +1,11 @@
+# Section 4.6.7: Digits and bases.
+IntegerDigits[123456]
+IntegerDigits[255, 2]
+IntegerDigits[255, 16]
+FromDigits[{1, 1, 1, 1, 1, 1, 1, 1}, 2]
+IntegerString[255, 16]
+IntegerLength[123456]
+DigitSum[123456]
+Mod[DigitSum[123456], 9]
+Mod[123456, 9]
+DigitCount[1223334444, 10]

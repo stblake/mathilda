@@ -5,9 +5,7 @@
 
 ## Description
 
-**`LCM[n1, n2, ...]`**
-
-gives the least common multiple of the integers ni.
+**`LCM[n1, n2, ...] gives the least common multiple of the integers ni, the smallest positive integer they all divide; with the gcd it satisfies GCD[a, b] LCM[a, b] == a b.`**
 
 <details>
 <summary>Notes</summary>

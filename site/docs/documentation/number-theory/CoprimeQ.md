@@ -5,18 +5,16 @@
 
 ## Description
 
-**`CoprimeQ[n1, n2, ...]`**
-
-yields True if the arguments are pairwise relatively prime, and False otherwise.
+**`CoprimeQ[n1, n2, ...] yields True if the arguments are pairwise relatively prime -- pairwise GCD equal to 1 -- and False otherwise; two random integers are coprime with probability 6/Pi^2.`**
 
 <details>
 <summary>Notes</summary>
 
-Integers are relatively prime when their GCD is 1.  Works for machine and BigInt integers.  With GaussianIntegers -\> True, or when any argument is an exact Gaussian integer, coprimality is tested over the Gaussian integers Z\[i\].  Returns False unless the arguments are manifestly coprime; CoprimeQ\[\] is False and CoprimeQ\[n\] is True. Listable and Orderless.
+Works for machine and BigInt integers.  With GaussianIntegers -\> True, or when any argument is an exact Gaussian integer, coprimality is tested over the Gaussian integers Z\[i\].  Returns False unless the arguments are manifestly coprime; CoprimeQ\[\] is False and CoprimeQ\[n\] is True.  Listable and Orderless.
 
 </details>
 
-## Examples (15)
+## Examples (18)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -73,6 +71,19 @@ In[15]:= CoprimeQ[{1, 2, 3, 4, 5}, 6]
 Out[15]= {True, False, False, False, True}
 ```
 
+### Applications (3)
+
+```mathematica
+In[16]:= CoprimeQ[14, 15]
+Out[16]= True
+
+In[17]:= CoprimeQ[14, 21]
+Out[17]= False
+
+In[18]:= CoprimeQ[6, 35, 143]
+Out[18]= True
+```
+
 ## Implementation notes
 
 - Machine integers and GMP bigints, handled uniformly through `mpz_gcd`, so large cases are exact: `CoprimeQ[2^100 - 1, 3^100 - 1]` → `False` (both even), `CoprimeQ[2^127 - 1, 2^61 - 1]` → `True`. Sign is ignored; `GCD(0, n) = |n|`, so `CoprimeQ[0, 1]` → `True` but `CoprimeQ[0, 5]` → `False`.
@@ -88,7 +99,17 @@ Out[15]= {True, False, False, False, True}
 
 **See also:** [Orderless](../../expression-information/Orderless/)
 
+- G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008 — coprimality and the density `6/π²` of coprime pairs.
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_coprimeq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coprimeq.c)
 - Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)
+
+## Notes & additional examples
+
+### Relatively prime integers
+
+Two integers are *coprime* (relatively prime) when their greatest common divisor is `1` —
+they share no prime factor. `CoprimeQ` tests this **pairwise**, so `CoprimeQ[n1, n2, ...]` is
+`True` only when every pair is coprime. A classical density result: two integers drawn at
+random are coprime with probability `6/π² = 1/ζ(2) ≈ 0.6079`.

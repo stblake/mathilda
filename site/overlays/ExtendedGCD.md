@@ -1,3 +1,16 @@
+---
+references:
+  - "D. E. Knuth, *The Art of Computer Programming, Vol. 2: Seminumerical Algorithms*, 3rd ed., Addison-Wesley, 1997 — the extended Euclidean algorithm and Bézout's identity (§4.5.2)."
+  - "H. Cohen, *A Course in Computational Algebraic Number Theory*, Springer, 1993 — extended GCD and modular inversion."
+---
+
+### Bézout's identity
+
+`ExtendedGCD[a, b]` returns `{g, {s, t}}` with `s a + t b = g = GCD[a, b]` — a *Bézout
+certificate*. The coefficients `s, t` are exactly what invert one integer modulo another
+(`s` is `a`'s inverse mod `b` when `g = 1`), which is why the extended Euclidean algorithm
+sits underneath `PowerMod[a, -1, m]` and the Chinese Remainder Theorem.
+
 ### Worked examples
 
 ```mathematica

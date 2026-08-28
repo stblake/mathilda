@@ -5,14 +5,12 @@
 
 ## Description
 
-**`GCD[n1, n2, ...]`**
-
-gives the greatest common divisor of the integers ni.
+**`GCD[n1, n2, ...] gives the greatest common divisor of the integers ni, the largest integer dividing them all -- the quantity the Euclidean algorithm computes.`**
 
 <details>
 <summary>Notes</summary>
 
-Computed via GMP's binary-GCD (mpz\_gcd) folded across the arguments. Accepts BigInt and Rational inputs (gcd(p1/q1, p2/q2) = gcd(p1,p2) / lcm(q1,q2)); non-integer Real or symbolic inputs leave GCD unevaluated.
+Computed via GMP's binary/half-GCD (mpz\_gcd) folded across the arguments; paired with LCM it obeys GCD\[a, b\] LCM\[a, b\] == a b.  Accepts BigInt and Rational inputs (gcd(p1/q1, p2/q2) = gcd(p1, p2) / lcm(q1, q2)); non-integer Real or symbolic inputs leave GCD unevaluated.
 
 </details>
 

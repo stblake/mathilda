@@ -1,36 +1,73 @@
-# Task: Book §4.5 "Numerical Calculus" — DONE
+# Task: Write §4.6 "Number Theory" for The Mathilda Book
 
-Plan: `~/.claude/plans/let-s-plan-writing-4-5-fizzy-lollipop.md`
-Scope: Everything (all N-functions + optimization family), NDSolve figures via `\plotcell`.
+Plan: `/Users/user/.claude/plans/let-s-plan-the-writing-tranquil-swing.md`
 
-## What shipped
-- **Prose**: `book/chapters/math/numerical-calculus.tex` — 12 subsections (printed pp. 63–82):
-  why-numeric, the shared goals contract, NIntegrate, NSum/NProduct, ND, NLimit/NSeries,
-  NResidue, NDSolve, NRoots, NSolve/FindRoot, optimization (FindMinimum/FindMaximum +
-  NMinimize/NMaximize), closing. Every function's Method sub-methods + options documented
-  in detail (verbatim `\usagebox` card each) with classical examples and algorithm callouts.
-- **Examples**: 16 `.m` files in `book/examples/numerical-calculus/` → 60 verified transcripts.
-- **Figures**: `vanderpol.m` (phase-plane limit cycle) + `heat-profile.m` (diffusion), both
-  headless PDF via `\plotcell`.
-- **Bib**: 7 entries added to `references.bib` (QUADPACK, Takahasi–Mori, Hairer, Aberth,
-  Storn–Price, Kirkpatrick, Jones/DIRECT).
-- **Housekeeping**: ROADMAP §4.5 → Verified; changelog note (2026-08-24 week).
+## Checklist
 
-## Verification (all green)
-- [x] `make examples` — 60 transcripts, every value confirmed correct
-- [x] `make figures` — both figures render (viewed PDFs: limit cycle + decaying profiles)
-- [x] `make usage` — 14 usage cards generated
-- [x] `make check-links` — 0 unlinked `\B{}`
-- [x] `make pdf` — clean log: no undefined refs/citations, no missing placeholders (110 pp.)
-- [x] Concept `\index{}` entries captured by makeindex
-- [x] All 11 numbered subsections in TOC; content confirmed via PDF render + pdftotext
+- [x] Explore book conventions, NT builtin inventory, existing coverage
+- [x] Confirm scope with user (exhaustive; Diophantine = pointer only)
+- [x] Verify all example outputs against the real binary (probes 1–4 all pass)
+- [x] Write example inputs `book/examples/number-theory/*.m` (11 files)
+- [x] `make examples` — 113 transcripts generated + read
+- [x] Write prose `book/chapters/math/number-theory.tex` (9 subsections + RSA + closing)
+- [x] Add references to `book/references.bib` (crandallpomerance, lenstraecm)
+- [x] `make check-links` (0 unlinked: 509 uses OK) + `make pdf` (clean, 0 undefined)
+- [x] Update `book/ROADMAP.md` status → Verified
+- [x] Add changelog note `docs/spec/changelog/2026-08-24.md`
 
-## Review notes / decisions
-- Pipeline captures results only (stderr `::accgl` messages don't appear) → transcripts clean;
-  the Wynn-on-Basel *pitfall* shows as a visibly wrong value (1.62533 vs 1.64493).
-- `NSeries` needs `Chop` (spec includes negative-power noise terms); `NResidue` on an essential
-  singularity needs `Radius -> 1` (default 1/100 overflows). Both taught explicitly.
-- Wilkinson roots come out clean at machine precision (Newton-polished) → framed as a strength.
-- No `src/` changes (book-only). Doc/source discrepancies (NDSolve MaxSteps, NMinimize not
-  HoldAll, FindMinimum auto-start 0) reflected code-true in prose; a separate docs-sync fix
-  remains optional/out-of-scope.
+## DONE — §4.6 renders on pp. 83–98 (17 usage cards, footnote callouts, code-pairs);
+## visually spot-checked pp. 83–85; index + TOC pick up the section.
+
+---
+
+# Follow-up: "missing NT reference pages" + MultiplicativeOrder discrete-log
+
+## Finding on "missing pages"
+Every EXISTING number-theory function already has a reference page (28 in the NT
+category; NT-flavored ones like Factorial/Binomial/Fibonacci/digits/Mod under
+Arithmetic/Special Functions). The only NT names lacking pages are UNIMPLEMENTED
+functions (verified they echo unevaluated): ChineseRemainder, CarmichaelLambda,
+KroneckerSymbol, PerfectNumberQ, PrimePowerQ, CompositeQ, PreviousPrime,
+RandomPrime, DivisorSum, Convergents, StirlingS1/S2, BellB, CatalanNumber,
+Multinomial, Subfactorial, MersennePrimeExponent, SquaresR, PowersRepresentations.
+→ User chose: ENRICH thin NT pages (math context + reference + index), site + book.
+  Plan: /Users/user/.claude/plans/let-s-plan-the-writing-tranquil-swing.md
+  Batch: 17 docstrings (info.c) + overlays + spec + book cites; one rebuild + one regen.
+
+### DONE
+- [x] 18 docstrings enriched (info.c) → index summary + builtins.json carry the concept
+- [x] overlays: 8 existing got `references:` + concept note; 6 new created
+      (CoprimeQ, Divisible, JacobiSymbol, IntegerPartitions, PartitionsP, PartitionsQ)
+      — all worked examples re-verified through the binary (0 failures)
+- [x] book §4.6: 4 new \cite (hardywright/irelandrosen/andrews/khinchin) + bib entries
+      + new \index terms; check-links/pdf clean
+- [x] binary rebuilt, site regenerated, 6 non-deterministic churn files reverted
+      → diff limited to NT pages + index.md + builtins.json; changelog noted
+- Note: skipped bulk per-function spec prose (docstrings+overlays are the generation
+  sources; spec sections remain behaviorally accurate) to avoid page duplication.
+
+## MultiplicativeOrder → discrete logarithm (DONE, both surfaces)
+Pages are GENERATED by site/generate.py (edit sources, not the .md). Edits:
+- [x] src/info.c docstring (summary now names the DLP; → ?Name, site index, builtins.json)
+- [x] site/overlays/MultiplicativeOrder.md (DLP note + example + 2 refs) → regenerated page
+- [x] docs/spec/builtins/number-theory.md (DLP note + reference)
+- [x] Book §4.6: DLP paragraph + Theory callout + MultiplicativeOrder[3,7,{5}] (modular/13)
+      + Index entry "discrete logarithm problem" + hac ref; usage card refreshed
+- [x] rebuilt binary, regenerated site (reverted 6 non-deterministic churn files),
+      make check-links/make pdf clean; changelog noted
+
+## Verified example facts (from real binary)
+- ExtendedGCD[240,46]={2,{-9,47}}; GCD·LCM identity holds
+- Prime[100]=541; PrimePi[10^6]=78498 vs N[10^6/Log[10^6]]=72382.4 (PNT)
+- FactorInteger[2^32+1]={{641,1},{6700417,1}} (Euler's F5)
+- Perfect numbers Select up to 10^4 = {6,28,496,8128} = Euclid–Euler Table
+- PowerMod[2,1/2,7]=3 (modular sqrt); PowerMod[3,-1,7]=5 (inverse)
+- ContinuedFraction[Sqrt[7]]={2,{1,1,1,4}}; FromContinuedFraction[{3,7,15,1}]=355/113
+- CRT (2,3,5,7 mod 3,5,7) via PowerMod/Total → 23
+- GCD[Fib[12],Fib[18]]==Fib[GCD[12,18]] → True; Binomial[10,3] mod 7 = 1 (Lucas)
+- PartitionsP[1000]=24061467864032622473692149727991
+- RSA p=61,q=53 → d=2753, 42→2557→42
+
+## Cross-ref labels
+sec:arithmetic (4.1), sec:algebra + ssec:alg-diophantine (4.2), sec:numcalc (4.5),
+sec:numbertheory (4.6, mine), sec:specialfns (4.7)

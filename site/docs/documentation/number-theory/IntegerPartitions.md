@@ -5,9 +5,7 @@
 
 ## Description
 
-**`IntegerPartitions[n]`**
-
-gives the partitions of n in reverse-lexicographic order.
+**`IntegerPartitions[n] gives the partitions of the integer n -- the ways to write n as a sum of positive parts (equivalently, its Young diagrams) -- in reverse-lexicographic order.`**
 
 **`IntegerPartitions[n, k] gives partitions into at most k parts;`**
 
@@ -20,7 +18,7 @@ gives the partitions of n in reverse-lexicographic order.
 
 </details>
 
-## Examples (5)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -45,6 +43,16 @@ Out[4]= {}
 
 In[5]:= IntegerPartitions[1/2, All, {1/6, 1/3}]
 Out[5]= {{1/3, 1/6}, {1/6, 1/6, 1/6}}
+```
+
+### Applications (2)
+
+```mathematica
+In[6]:= IntegerPartitions[4]
+Out[6]= {{4}, {3, 1}, {2, 2}, {2, 1, 1}, {1, 1, 1, 1}}
+
+In[7]:= Length[IntegerPartitions[10]]
+Out[7]= 42
 ```
 
 ## Algorithm
@@ -75,6 +83,17 @@ Ownership: this builtin only *reads* `res`. On every NULL return (bad arguments,
 
 ## References
 
+- G. E. Andrews, *The Theory of Partitions*, Cambridge University Press, 1998 — the standard reference on partitions and their generating functions.
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_integer_partitions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integer_partitions.c)
+
+## Notes & additional examples
+
+### Partitions of an integer
+
+A *partition* of `n` is a way of writing it as a sum of positive integers, order disregarded
+— pictured as a *Young diagram* of left-justified rows. `IntegerPartitions[n]` lists them in
+reverse-lexicographic order; the second and later arguments restrict the number of parts and
+the allowed parts. The count of unrestricted partitions is [`PartitionsP`](PartitionsP.md),
+so `Length[IntegerPartitions[n]] == PartitionsP[n]`.

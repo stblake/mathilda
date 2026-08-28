@@ -55,8 +55,8 @@ void info_init(void) {
         "the sign onto the numerator, and collapses to an Integer when d == 1.\n"
         "Rationals propagate through Plus / Times exactly via GMP.");
     symtab_set_docstring("IntegerPartitions",
-        "IntegerPartitions[n]\n"
-        "\tgives the partitions of n in reverse-lexicographic order.\n"
+        "IntegerPartitions[n] gives the partitions of the integer n -- the ways to write n as a "
+        "sum of positive parts (equivalently, its Young diagrams) -- in reverse-lexicographic order.\n"
         "IntegerPartitions[n, k] gives partitions into at most k parts;\n"
         "{k} exactly k; {kmin, kmax} between; {kmin, kmax, dk} stepped.\n"
         "A third argument restricts the parts (sspec; All = Range[n]); a\n"
@@ -64,16 +64,15 @@ void info_init(void) {
         "n and the parts may be rational and negative; Length equals\n"
         "PartitionsP[n] for the plain form.");
     symtab_set_docstring("PartitionsP",
-        "PartitionsP[n]\n"
-        "\tgives the number p(n) of unrestricted partitions of the integer n.\n"
+        "PartitionsP[n] gives the number p(n) of unrestricted partitions of the integer n, evaluated "
+        "exactly through the Hardy-Ramanujan-Rademacher series (p(n) grows like exp(Pi Sqrt[2n/3])).\n\n"
         "n must be an integer; p(n) = 0 for n < 0. Threads over lists.\n"
         "For the partitions themselves use IntegerPartitions[n].");
     symtab_set_docstring("PartitionsQ",
-        "PartitionsQ[n]\n"
-        "\tgives the number q(n) of partitions of the integer n into distinct\n"
-        "parts (equivalently, into odd parts). n must be an integer; q(n) = 0\n"
-        "for n < 0. Threads over lists. For the partitions themselves use\n"
-        "IntegerPartitions[n, All, Range[n]] with distinct parts.");
+        "PartitionsQ[n] gives the number q(n) of partitions of the integer n into distinct parts -- "
+        "equal, by Euler's theorem, to the number of partitions into odd parts.\n\n"
+        "n must be an integer; q(n) = 0 for n < 0. Threads over lists. For the partitions themselves "
+        "use IntegerPartitions.");
     symtab_set_docstring("Mod",
         "Mod[m, n]\n"
         "\tgives the remainder of m on division by n, carrying the sign of the\n"
@@ -100,73 +99,78 @@ void info_init(void) {
         "QuotientRemainder is Listable; non-numeric arguments are left\n"
         "unevaluated.");
     symtab_set_docstring("GCD",
-        "GCD[n1, n2, ...]\n"
-        "\tgives the greatest common divisor of the integers ni.\n"
-        "Computed via GMP's binary-GCD (mpz_gcd) folded across the arguments.\n"
-        "Accepts BigInt and Rational inputs (gcd(p1/q1, p2/q2) = gcd(p1,p2) /\n"
-        "lcm(q1,q2)); non-integer Real or symbolic inputs leave GCD unevaluated.");
+        "GCD[n1, n2, ...] gives the greatest common divisor of the integers ni, the largest integer "
+        "dividing them all -- the quantity the Euclidean algorithm computes.\n\n"
+        "Computed via GMP's binary/half-GCD (mpz_gcd) folded across the arguments; paired with LCM it "
+        "obeys GCD[a, b] LCM[a, b] == a b.  Accepts BigInt and Rational inputs "
+        "(gcd(p1/q1, p2/q2) = gcd(p1, p2) / lcm(q1, q2)); non-integer Real or symbolic inputs leave "
+        "GCD unevaluated.");
     symtab_set_docstring("LCM",
-        "LCM[n1, n2, ...]\n"
-        "\tgives the least common multiple of the integers ni.\n"
-        "Computed via GMP's mpz_lcm folded across the arguments; sign is\n"
-        "normalised non-negative. Accepts BigInt and Rational inputs.");
+        "LCM[n1, n2, ...] gives the least common multiple of the integers ni, the smallest positive "
+        "integer they all divide; with the gcd it satisfies GCD[a, b] LCM[a, b] == a b.\n\n"
+        "Computed via GMP's mpz_lcm folded across the arguments; sign is normalised non-negative. "
+        "Accepts BigInt and Rational inputs.");
     symtab_set_docstring("ExtendedGCD",
-        "ExtendedGCD[n1, n2, ...]\n"
-        "\tgives the extended GCD {g, {r1, r2, ...}} of the integers ni,\n"
-        "\twhere g == GCD[n1, ...] and g == r1 n1 + r2 n2 + ....\n"
-        "Computed by folding GMP's mpz_gcdext pairwise; accepts machine and\n"
-        "BigInt integers and threads over lists. Non-integer or inexact\n"
-        "arguments leave ExtendedGCD unevaluated.");
+        "ExtendedGCD[n1, n2, ...] gives the extended GCD {g, {r1, r2, ...}}, where g == GCD[n1, ...] "
+        "and g == r1 n1 + r2 n2 + ... -- Bezout's identity, the certificate that also yields modular "
+        "inverses.\n\n"
+        "Computed by folding GMP's mpz_gcdext pairwise; accepts machine and BigInt integers and "
+        "threads over lists. Non-integer or inexact arguments leave ExtendedGCD unevaluated.");
     symtab_set_docstring("Divisible",
-        "Divisible[n, m]\n"
-        "\tyields True if n is divisible by m, and False otherwise.\n"
-        "n is divisible by m when n is an integer multiple of m; this is\n"
-        "effectively Mod[n, m] == 0.  Works for machine and BigInt integers,\n"
-        "Gaussian integers, rationals, and exact numeric quantities (the\n"
-        "quotient n/m must reduce to an integer or Gaussian integer).  Returns\n"
-        "False unless n and m are manifestly divisible; symbolic, non-numeric\n"
-        "arguments are left unevaluated.  Listable.");
+        "Divisible[n, m] yields True if n is an integer multiple of m -- the divisibility relation "
+        "m | n, effectively Mod[n, m] == 0 -- and False otherwise.\n\n"
+        "Works for machine and BigInt integers, Gaussian integers, rationals, and exact numeric "
+        "quantities (the quotient n/m must reduce to an integer or Gaussian integer).  Returns "
+        "False unless n and m are manifestly divisible; symbolic, non-numeric arguments are left "
+        "unevaluated.  Listable.");
     symtab_set_docstring("CoprimeQ",
-        "CoprimeQ[n1, n2, ...]\n"
-        "\tyields True if the arguments are pairwise relatively prime, and\n"
-        "\tFalse otherwise.\n"
-        "Integers are relatively prime when their GCD is 1.  Works for machine\n"
-        "and BigInt integers.  With GaussianIntegers -> True, or when any\n"
-        "argument is an exact Gaussian integer, coprimality is tested over the\n"
-        "Gaussian integers Z[i].  Returns False unless the arguments are\n"
-        "manifestly coprime; CoprimeQ[] is False and CoprimeQ[n] is True.\n"
-        "Listable and Orderless.");
-    symtab_set_docstring("PowerMod", "PowerMod[a, b, m] gives a^b mod m.\nPowerMod[a, -1, m] finds the modular inverse of a modulo m.\nPowerMod[a, 1/r, m] finds a modular r-th root of a.");
+        "CoprimeQ[n1, n2, ...] yields True if the arguments are pairwise relatively prime -- pairwise "
+        "GCD equal to 1 -- and False otherwise; two random integers are coprime with probability "
+        "6/Pi^2.\n\n"
+        "Works for machine and BigInt integers.  With GaussianIntegers -> True, or when any argument "
+        "is an exact Gaussian integer, coprimality is tested over the Gaussian integers Z[i].  "
+        "Returns False unless the arguments are manifestly coprime; CoprimeQ[] is False and "
+        "CoprimeQ[n] is True.  Listable and Orderless.");
+    symtab_set_docstring("PowerMod",
+        "PowerMod[a, b, m] gives a^b mod m by square-and-multiply, reducing modulo m at every step so "
+        "the full power is never formed.\n"
+        "PowerMod[a, -1, m] finds the modular inverse of a modulo m (a consequence of Euler's theorem).\n"
+        "PowerMod[a, 1/r, m] finds a modular r-th root of a (Tonelli-Shanks / Hensel lifting / CRT).\n\n"
+        "Exact via GMP for arbitrary-precision integers; Listable.");
     symtab_set_docstring("PrimitiveRoot",
-        "PrimitiveRoot[n]\n"
-        "\tgives a primitive root of n.\n"
+        "PrimitiveRoot[n] gives the smallest primitive root of n -- a generator of the multiplicative "
+        "group (Z/nZ)* of units modulo n.\n"
         "PrimitiveRoot[n, k]\n"
         "\tgives the smallest primitive root of n greater than or equal to k.\n\n"
-        "A primitive root of n is a generator of the multiplicative group of integers modulo n "
-        "relatively prime to n.  PrimitiveRoot returns unevaluated unless n is 2, 4, an odd prime "
-        "power p^k, or twice an odd prime power 2 p^k.");
+        "A primitive root exists (and PrimitiveRoot returns a value) only when the group is cyclic, "
+        "that is when n is 2, 4, an odd prime power p^k, or twice an odd prime power 2 p^k; otherwise "
+        "the result is unevaluated.");
     symtab_set_docstring("PrimitiveRootList",
-        "PrimitiveRootList[n]\n"
-        "\tgives the sorted list of all primitive roots of n in the canonical residues {1, ..., n-1}.\n\n"
+        "PrimitiveRootList[n] gives the sorted list of all primitive roots of n in the canonical "
+        "residues {1, ..., n-1}; when n admits any, there are exactly EulerPhi[EulerPhi[n]] of them.\n\n"
         "Returns an empty list unless n is 2, 4, an odd prime power p^k, or twice an odd prime "
         "power 2 p^k.");
     symtab_set_docstring("MultiplicativeOrder",
-        "MultiplicativeOrder[k, n]\n"
-        "\tgives the multiplicative order of k modulo n, the smallest positive integer m "
-        "such that k^m is congruent to 1 modulo n.\n"
+        "MultiplicativeOrder[k, n] gives the multiplicative order of k modulo n, the smallest "
+        "positive integer m such that k^m is congruent to 1 modulo n; reversing it -- recovering "
+        "the exponent x with k^x congruent to a given target -- is the discrete logarithm problem, "
+        "whose presumed hardness underlies Diffie-Hellman key exchange and the ElGamal and DSA "
+        "schemes.\n"
         "MultiplicativeOrder[k, n, {r1, r2, ...}]\n"
-        "\tgives the smallest positive integer m such that k^m is congruent to one of the ri modulo n.\n\n"
-        "Returns unevaluated when gcd(k, n) is not 1, when no power of k lands in the residue set, "
-        "or when n is zero.  All arithmetic is exact via GMP, so k and n may be arbitrary-precision "
-        "integers.");
+        "\tgives the smallest positive integer m such that k^m is congruent to one of the ri "
+        "modulo n -- a multi-target discrete logarithm.\n\n"
+        "Computing the order is easy (it divides EulerPhi[n]); the discrete logarithm it inverts "
+        "is not, so the three-argument form is a teaching tool for small moduli rather than a "
+        "practical logarithm at cryptographic sizes.  Returns unevaluated when gcd(k, n) is not 1, "
+        "when no power of k lands in the residue set, or when n is zero.  All arithmetic is exact "
+        "via GMP, so k and n may be arbitrary-precision integers.");
     symtab_set_docstring("JacobiSymbol",
-        "JacobiSymbol[n, m]\n"
-        "\tgives the Jacobi symbol (n/m).\n\n"
-        "For prime m the Jacobi symbol reduces to the Legendre symbol, equal to +-1 according "
-        "to whether n is a quadratic residue modulo m, and 0 when m divides n.  This is the full "
-        "Kronecker generalisation: the second argument may be even or non-positive and the first "
-        "may be negative.  Returns -1, 0, or 1.  Listable, and exact via GMP for arbitrary-precision "
-        "integers.");
+        "JacobiSymbol[n, m] gives the Jacobi symbol (n/m); for prime m it is the Legendre symbol, "
+        "+-1 according to whether n is a quadratic residue modulo m (Euler's criterion) and 0 when "
+        "m divides n, and it satisfies the law of quadratic reciprocity.\n\n"
+        "This is the full Kronecker generalisation: the second argument may be even or non-positive "
+        "and the first may be negative.  Returns -1, 0, or 1.  Listable, and exact via GMP for "
+        "arbitrary-precision integers.");
     symtab_set_docstring("FindMinimum",
         "FindMinimum[f, {x, x0}]\n"
         "\tsearches for a local minimum of f starting from x = x0.\n"
@@ -2536,8 +2540,9 @@ void info_init(void) {
     symtab_set_docstring("EvenQ", "EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.");
     symtab_set_docstring("OddQ", "OddQ[n] gives True if n is an odd integer (Integer or BigInt), False otherwise.");
     symtab_set_docstring("PrimeQ",
-        "PrimeQ[n]\n"
-        "\tgives True if n is a prime integer, False otherwise.\n"
+        "PrimeQ[n] gives True if n is a prime integer and False otherwise, using a Baillie-PSW and "
+        "Miller-Rabin probabilistic primality test (no known counterexample, and definite below "
+        "2^64).\n"
         "PrimeQ[z]\n"
         "\tfor a Gaussian integer z = a + b I, gives True if z is a Gaussian prime.\n"
         "PrimeQ[n, GaussianIntegers -> True]\n"
@@ -2546,8 +2551,9 @@ void info_init(void) {
         "rounds on top of a Baillie-PSW pre-screen, so composite false positives "
         "have probability below 4^-25 (definite for n < 2^64).");
     symtab_set_docstring("SquareFreeQ",
-        "SquareFreeQ[expr]\n"
-        "\tgives True if expr is a square-free polynomial or number, and False otherwise.\n"
+        "SquareFreeQ[expr] gives True if expr is a square-free number or polynomial -- no prime (or "
+        "irreducible factor) occurs more than once, equivalently MoebiusMu[n] != 0 for an integer -- "
+        "and False otherwise; the squarefree integers have density 6/Pi^2.\n"
         "SquareFreeQ[expr, vars]\n"
         "\tgives True if expr is square-free with respect to the variables vars.\n"
         "Option GaussianIntegers -> True | False | Automatic switches to Gaussian integers.");
@@ -2826,26 +2832,25 @@ void info_init(void) {
         "Ceiling is Listable. Exact inputs return exact integers; Real / MPFR\n"
         "inputs are rounded toward +Infinity at the input precision.");
     symtab_set_docstring("ContinuedFraction",
-        "ContinuedFraction[x, n]\n"
-        "\tgives a list of the first n terms in the continued-fraction\n"
-        "\trepresentation of x.\n"
+        "ContinuedFraction[x, n] gives the first n terms of the continued-fraction expansion of x, "
+        "the list {a1, a2, ...} standing for a1 + 1/(a2 + 1/(a3 + ...)); truncating it gives the "
+        "convergents, the best rational approximations to x.\n"
         "ContinuedFraction[x]\n"
         "\tgives all terms determinable from the precision of x.\n"
-        "The list {a1, a2, a3, ...} corresponds to a1 + 1/(a2 + 1/(a3 + ...)).\n"
-        "Exact rationals give a finite (canonical, last term >= 2) expansion.\n"
-        "For Sqrt[d] with d a non-square integer the no-count form returns\n"
-        "{a1, ..., {b1, ...}}, the bracketed block repeating cyclically. Inexact\n"
-        "Real / MPFR inputs yield terms only as far as the precision determines\n"
-        "them. ContinuedFraction is Listable.");
+        "Exact rationals give a finite (canonical, last term >= 2) expansion.  For Sqrt[d] with d a "
+        "non-square integer the no-count form returns {a1, ..., {b1, ...}}, the bracketed block "
+        "repeating cyclically -- every quadratic irrational is eventually periodic (Lagrange).  "
+        "Inexact Real / MPFR inputs yield terms only as far as the precision determines them.  "
+        "ContinuedFraction is Listable.");
     symtab_set_docstring("FromContinuedFraction",
-        "FromContinuedFraction[{a1, a2, ..., an}]\n"
-        "\treconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)). The terms may be\n"
-        "\tsymbolic; the result is the convergent in nested (un-expanded) form.\n"
+        "FromContinuedFraction[{a1, a2, ..., an}] reconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)), the "
+        "convergent of a continued fraction, in nested (un-expanded) form; the inverse of "
+        "ContinuedFraction.\n"
         "FromContinuedFraction[{a1, ..., am, {b1, ..., bk}}]\n"
         "\tgives the exact quadratic irrational whose continued-fraction terms\n"
         "\tbegin with the ai then cycle through the bi forever; all ai and bi\n"
-        "\tmust be integers. FromContinuedFraction[{}] is 0. It is the inverse\n"
-        "\tof ContinuedFraction.");
+        "\tmust be integers. FromContinuedFraction[{}] is 0.  The terms may be\n"
+        "\tsymbolic.");
     symtab_set_docstring("Round",
         "Round[x]\n"
         "\trounds x to the nearest integer, breaking ties to the nearest even\n"
@@ -4125,7 +4130,10 @@ void info_init(void) {
     symtab_set_docstring("PrimeOmega", "PrimeOmega[n] gives the number of prime factors of n counted with multiplicity, Omega(n). PrimeOmega[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts Gaussian prime factors over Z[i]. PrimeOmega[1] is 0; PrimeOmega[0] is left unevaluated.");
     symtab_set_docstring("PrimeNu", "PrimeNu[n] gives the number of distinct prime factors of n, nu(n). PrimeNu[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts distinct Gaussian prime factors over Z[i]. PrimeNu[1] is 0; PrimeNu[0] is left unevaluated.");
     symtab_set_docstring("FactorInteger", "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.");
-    symtab_set_docstring("EulerPhi", "EulerPhi[n] gives the Euler totient function phi(n).");
+    symtab_set_docstring("EulerPhi",
+        "EulerPhi[n] gives the Euler totient phi(n), the number of integers from 1 to n coprime to n "
+        "-- equivalently the order of the group (Z/nZ)* of units, so a^phi(n) == 1 (mod n) whenever "
+        "gcd(a, n) == 1 (Euler's theorem).");
     symtab_set_docstring("PrimePi", "PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), \"Sieve\", \"Legendre\", \"Meissel\", \"Lehmer\", \"LMO\" (Lagarias-Miller-Odlyzko), \"DelegliseRivat\", or \"LucyHedgehog\".");
     symtab_set_docstring("Prime", "Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.");
     symtab_set_docstring("NextPrime", "NextPrime[x] gives the next prime after x.");

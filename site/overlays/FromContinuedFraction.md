@@ -1,3 +1,16 @@
+---
+references:
+  - "A. Ya. Khinchin, *Continued Fractions*, Dover, 1997 — convergents and their approximation properties."
+---
+
+### Folding a continued fraction back
+
+`FromContinuedFraction` is the inverse of [`ContinuedFraction`](ContinuedFraction.md): it
+folds a list of partial quotients into the rational (or, from a periodic block, the exact
+quadratic irrational) it represents. Truncating an expansion and folding it back yields a
+*convergent* — the best rational approximation of its size — as with `{3, 7, 15, 1, 292}`
+giving `103993/33102 ≈ π`.
+
 ### Worked examples
 
 ```mathematica
