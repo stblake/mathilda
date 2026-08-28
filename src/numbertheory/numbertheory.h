@@ -21,6 +21,7 @@ void numbertheory_init(void);
 Expr* builtin_gcd(Expr* res);
 Expr* builtin_lcm(Expr* res);
 Expr* builtin_extendedgcd(Expr* res);
+Expr* builtin_chineseremainder(Expr* res);
 Expr* builtin_powermod(Expr* res);
 Expr* builtin_primitiveroot(Expr* res);
 Expr* builtin_primitiverootlist(Expr* res);

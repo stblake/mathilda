@@ -316,6 +316,7 @@ set(COMMON_SRC
     ../src/numbertheory/gcd.c
     ../src/numbertheory/lcm.c
     ../src/numbertheory/extendedgcd.c
+    ../src/numbertheory/chineseremainder.c
     ../src/numbertheory/powermod.c
     ../src/numbertheory/factorial.c
     ../src/numbertheory/factorialpower.c
@@ -2380,6 +2381,16 @@ else()
     target_link_libraries(extended_gcd_tests gmp m)
 endif()
 add_test(NAME extended_gcd_tests COMMAND extended_gcd_tests)
+
+add_executable(chinese_remainder_tests test_chinese_remainder.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(chinese_remainder_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(chinese_remainder_tests gmp m ${ECM_LIB})
+    add_dependencies(chinese_remainder_tests build_ecm)
+else()
+    target_link_libraries(chinese_remainder_tests gmp m)
+endif()
+add_test(NAME chinese_remainder_tests COMMAND chinese_remainder_tests)
 
 add_executable(jacobisymbol_tests test_jacobisymbol.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(jacobisymbol_tests PRIVATE ../src)

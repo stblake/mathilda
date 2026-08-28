@@ -116,6 +116,16 @@ void info_init(void) {
         "inverses.\n\n"
         "Computed by folding GMP's mpz_gcdext pairwise; accepts machine and BigInt integers and "
         "threads over lists. Non-integer or inexact arguments leave ExtendedGCD unevaluated.");
+    symtab_set_docstring("ChineseRemainder",
+        "ChineseRemainder[{r1, r2, ...}, {m1, m2, ...}] gives the smallest x >= 0 satisfying the "
+        "integer congruences x mod mi == ri mod mi for all i, lying in 0 <= x < LCM[m1, m2, ...].\n"
+        "ChineseRemainder[{r1, r2, ...}, {m1, m2, ...}, d]\n"
+        "\tgives the smallest such x >= d, lying in d <= x < d + LCM[m1, m2, ...].\n\n"
+        "The moduli need not be pairwise coprime; a solution exists iff every pair of congruences "
+        "agrees modulo the gcd of their moduli, and ChineseRemainder returns unevaluated when the "
+        "system is inconsistent (e.g. ChineseRemainder[{1, 2}, {6, 10}]).  Solved by a streaming "
+        "extended-Euclidean CRT fold, exact via GMP, so residues and moduli may be "
+        "arbitrary-precision integers -- the recovery step of a residue number system.  Protected.");
     symtab_set_docstring("Divisible",
         "Divisible[n, m] yields True if n is an integer multiple of m -- the divisibility relation "
         "m | n, effectively Mod[n, m] == 0 -- and False otherwise.\n\n"
