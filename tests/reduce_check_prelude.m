@@ -159,8 +159,12 @@ rdCheckPoints[exprE_, red_, varsL_, dom_] := Module[
 (* Core verdict: {code, why}. *)
 SetAttributes[reduceVerdict, HoldAll];
 reduceVerdict[expr_, vars_, dom_, expected_] := Module[
-  {varsL, red, declined},
+  {varsL, red, declined, exprN},
   varsL = If[Head[vars] === List, vars, {vars}];
+  (* A List in the expr slot is the conjunction of its elements (Reduce accepts
+   * it directly); normalise it for the back-sampler, whose truth oracle judges
+   * a single relational/logical expression, not a raw List. *)
+  exprN = If[Head[expr] === List, And @@ expr, expr];
   red   = If[dom === Automatic, Reduce[expr, vars], Reduce[expr, vars, dom]];
   declined = MatchQ[red, _Reduce] || ! FreeQ[red, _Reduce];
 
@@ -178,7 +182,7 @@ reduceVerdict[expr_, vars_, dom_, expected_] := Module[
   If[! MemberQ[{True, False, "solved"}, expected],
      Return[{1, "bad expected tag: " <> ToString[expected]}]];
 
-  rdCheckPoints[expr, red, varsL, dom]];
+  rdCheckPoints[exprN, red, varsL, dom]];
 
 (* Integer-returning entry used by the C runner; prints a diagnostic on any
  * non-PASS so the CTest log names the failing case. *)

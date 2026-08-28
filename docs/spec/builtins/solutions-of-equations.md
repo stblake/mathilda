@@ -796,6 +796,9 @@ logical description of its solution set.
 
 `expr` is a logical combination (`&&`, `||`, `!`, `Implies`, `Xor`, chained
 `Inequality`) of equations (`==`, `!=`) and inequalities (`<`, `<=`, `>`, `>=`).
+A **list** `{e1, e2, …}` in the `expr` slot is taken as the conjunction
+`e1 && e2 && …`, so `Reduce[{x + y == 3, x - y == 1}, {x, y}]` is the same as
+`Reduce[x + y == 3 && x - y == 1, {x, y}]` (matching `Solve`'s list form).
 Unlike `Solve` — which returns the generic solution of equations as a list of
 rules and drops the degenerate cases — `Reduce` returns an `And`/`Or` tree of
 relations describing the **whole** solution set, including every parametric and

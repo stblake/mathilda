@@ -205,22 +205,48 @@ Expr* builtin_reduce(Expr* res) {
 
     if (!reduce_valid_vars(vars)) { warn_reduce_ivar(vars); return NULL; }
 
+    /* A list of statements in the `expr` slot is their conjunction, exactly as
+     * in Mathematica: Reduce[{e1, e2, ...}, vars] == Reduce[e1 && e2 && ..., vars].
+     * Rewrite the List into an And of (copies of) its elements so the rest of
+     * the pipeline sees a single logical statement.  `owned_list` is a new owned
+     * temporary (like `owned_pre` below) and must be freed on every return path
+     * reachable from here; expr_copy is a refcount bump, so freeing it only
+     * drops this reference.  Mirrors reduce_int.c's (n==1 ? parts[0] : And) idiom. */
+    Expr* owned_list = NULL;
+    if (is_head(expr, SYM_List) && expr->data.function.arg_count >= 1) {
+        size_t nl = expr->data.function.arg_count;
+        Expr** parts = malloc(nl * sizeof(Expr*));
+        for (size_t i = 0; i < nl; i++)
+            parts[i] = expr_copy(expr->data.function.args[i]);
+        owned_list = (nl == 1) ? parts[0]
+                   : expr_new_function(expr_new_symbol(SYM_And), parts, nl);
+        free(parts);   /* expr_new_function memcpy's the array and adopts the elements */
+        expr = owned_list;
+    }
+
     /* Reduce does not hold its args: `expr` arrives already evaluated, so a
      * decidable statement is frequently already True/False here. */
-    if (is_sym(expr, SYM_True))  return expr_new_symbol(SYM_True);
-    if (is_sym(expr, SYM_False)) return expr_new_symbol(SYM_False);
+    if (is_sym(expr, SYM_True))  { expr_free(owned_list); return expr_new_symbol(SYM_True); }
+    if (is_sym(expr, SYM_False)) { expr_free(owned_list); return expr_new_symbol(SYM_False); }
 
     /* Phase 7: a top-level Exists / ForAll makes this a quantifier-elimination
      * problem -- eliminate the bound variables and reduce over the remaining
      * free ones.  A NULL / Reals domain proceeds; another explicit domain
      * declines (leaving the input unevaluated). */
-    if (is_head(expr, SYM_Exists) || is_head(expr, SYM_ForAll))
-        return reduce_qe_dispatch(expr, dom);
+    if (is_head(expr, SYM_Exists) || is_head(expr, SYM_ForAll)) {
+        Expr* r = reduce_qe_dispatch(expr, dom);   /* borrows expr */
+        expr_free(owned_list);
+        return r;
+    }
 
     /* Modulus -> p (p != 0): residue enumeration over Z/pZ overrides the
      * domain.  Reuses Solve's modular engine and reformats the result; a
      * symbolic / out-of-range modulus makes it decline (unevaluated). */
-    if (opts.modulus) return reduce_modular(expr, vars, &opts);
+    if (opts.modulus) {
+        Expr* r = reduce_modular(expr, vars, &opts);   /* borrows expr */
+        expr_free(owned_list);
+        return r;
+    }
 
     int nv = 0;
     Expr** vlist = collect_vars(vars, &nv);
@@ -254,7 +280,7 @@ Expr* builtin_reduce(Expr* res) {
      * constant-atom simplifier. */
     bool ok = true;
     RForm* f = reduce_form_from_expr(expr, vlist, nv, &ok);
-    if (!ok) { rform_free(f); free(vlist); expr_free(owned_pre); return NULL; }
+    if (!ok) { rform_free(f); free(vlist); expr_free(owned_pre); expr_free(owned_list); return NULL; }
 
     rform_simplify(f, vlist, nv);
 
@@ -346,6 +372,7 @@ Expr* builtin_reduce(Expr* res) {
     rform_free(f);
     free(vlist);
     expr_free(owned_pre);
+    expr_free(owned_list);
     return out;
 }
 
@@ -369,6 +396,9 @@ void reduce_init(void) {
         "Reduce[expr, vars, dom]\n"
         "\tReduces over the domain dom: Complexes, Reals, Integers, or\n"
         "\tRationals.\n"
+        "A list {e1, e2, ...} in the expr slot is taken as the conjunction\n"
+        "e1 && e2 && ... , so Reduce[{x + y == 3, x - y == 1}, {x, y}] is the\n"
+        "same as Reduce[x + y == 3 && x - y == 1, {x, y}].\n"
         "\n"
         "Where Solve returns the generic solution of a set of equations as a\n"
         "list of replacement rules and silently drops the degenerate cases,\n"
