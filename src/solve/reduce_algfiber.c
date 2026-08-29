@@ -31,7 +31,12 @@
 
 /* ------------------------------------------------------------------ *
  *  Small node builders (each CONSUMES its Expr* arguments)            *
- * ------------------------------------------------------------------ */
+ * ------------------------------------------------------------------ *
+ * These helpers exist solely for the FLINT-backed fibre projection below;
+ * without FLINT the routine declines up front and none are referenced, so
+ * they are compiled only when the qqbar oracle is present (keeps
+ * -Werror=unused-function green in the no-FLINT build). */
+#ifdef USE_FLINT
 
 static Expr* mkfun2(const char* h, Expr* a, Expr* b) {
     return expr_new_function(expr_new_symbol(h), (Expr*[]){ a, b }, 2);
@@ -88,6 +93,8 @@ static void prov_push(Expr*** arr, int* n, int* cap, int** prov, int factor_id, 
     if (prov) (*prov)[*n] = factor_id;
     (*arr)[(*n)++] = v;
 }
+
+#endif /* USE_FLINT */
 
 bool rru_algebraic_fiber_roots(const Expr* factor, const Expr* var,
                                Expr** vv, Expr** vals, Expr** defs, int nlev,
