@@ -95,6 +95,18 @@ static void test_rnb_examples(void) {
     assert_rnb("1/((x^2-2) Sqrt[x^2+1])");
 }
 
+/* Complex affine places: the pole factor has complex roots, so the residue
+ * logands carry I.  The imaginary unit is linearised to an opaque symbol before
+ * the parallel solve (Cancel/Together otherwise hang on I + a symbolic unknown);
+ * the antiderivative comes out as a pair of conjugate complex logs. */
+static void test_rnb_complex_places(void) {
+    /* pole x^2-1 (real) over Sqrt[x^4+1] -- real logs. */
+    assert_rnb("(x^2 + 1)/((x^2 - 1) Sqrt[x^4 + 1])");
+    /* pole x^2+1 (complex) over Sqrt[x^4+1] -- conjugate complex logs; this used
+     * to hang the whole Integrate cascade before the I-linearisation fix. */
+    assert_rnb("(x^2 - 1)/((x^2 + 1) Sqrt[x^4 + 1])");
+}
+
 /* Non-elementary / out-of-scope integrands decline cleanly (never wrong). */
 static void test_rnb_declines(void) {
     assert_declines("1/Sqrt[x^4+1]");   /* lemniscatic elliptic (non-elementary) */
@@ -108,6 +120,7 @@ int main(void) {
     TEST(test_rnb_algebraic);
     TEST(test_rnb_units);
     TEST(test_rnb_examples);
+    TEST(test_rnb_complex_places);
     TEST(test_rnb_declines);
     printf("All RischNormanBlake tests passed.\n");
     return 0;

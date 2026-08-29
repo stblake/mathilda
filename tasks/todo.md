@@ -90,3 +90,27 @@ Key implementation notes / gotchas encountered:
 Follow-ups (out of scope here): towers (n>1); complex-place m≥3 logands;
 the per-call `Solve::svars` stderr line (Mathilda's Quiet is broken; the Cherry
 engines emit it too); prettier (RootReduced) output coefficients.
+
+## v0.122 — never hangs; complex-place integrands solve (2026-08-30)
+
+Diagnosed the reported "struggles/slow/slow-to-fail" (all `Method ->
+"RischNormanBlake"`): the hang was `Cancel`/`Together` on `I` + a symbolic
+unknown in the parallel-solve accumulation (NOT the residue tier, which was
+<0.2 s). Fixes in `src/calculus/int_rnb.c`:
+- Linearise `Complex -> RNB$I0` before the solve, restore at equation extraction
+  (sound: `I^2=-1`). Radicals are NOT abstracted pre-accumulation (`Sqrt[6]` vs
+  `Sqrt[2]Sqrt[3]` would break the system) — only post-accumulation, as before.
+  `(x^2-1)/((x^2+1)Sqrt[x^4+1])` now solves (conjugate complex logs).
+- Hard wall-clock bounds: `TimeConstrained` caps on the heavy number-field calls
+  (Series/NullSpace/Cancel/Together/Factor/LinearSolve/Coefficient) + deadline
+  polls between the per-logand accumulation sub-ops; budget 4 s. No run hangs.
+- `tests/test_int_rnb.c`: + `test_rnb_complex_places`; all groups pass.
+- Acceptance (Method path, all 10 reported examples): 2 INTEGRATE (the working
+  `Sqrt[x^4+1]` case + its complex-pole conjugate), 8 DECLINE-FAST (<5 s), 0 hang.
+
+B3 follow-up (deferred deeper exact-tier rework — all deemed elementary, now
+decline fast instead of hang): `(x-1)/((x+2)√(x^3-1))`,
+`x/((x^3+8)√(x^3-1))`, `(x+1)/((x-1)√(x^4+x^2+1))`, `x/((2x^3-1)√(x^4-x))`,
+`1/((x+1)(3x^2+1)^(1/3))`, `1/(x(x^2-3x+2)^(1/3))`,
+`(1+2x^2)/((1+x^2)(1+3x^2)(2x^3-x)^(1/3))`, `1/(1+x^3)^(1/3)`. (Pre-existing,
+non-RNB: the default cascade still hangs on some of these via a later engine.)

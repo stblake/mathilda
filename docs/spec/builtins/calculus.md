@@ -931,8 +931,14 @@ monotonically down.
      genus-1 curves and the `m=3` cube-root example close).  Exact per-coordinate
      degree bounds keep the linear system small.  Correct by construction, then
      numerically diff-back verified before returning; a mis-built system or a
-     non-elementary integrand declines (never a wrong answer).  Scope: `n = 1`,
-     `K = Q(x)`; the residue tier is real-place only for `m ≥ 3`.  Debug surfaces:
+     non-elementary integrand declines (never a wrong answer).  Complex affine
+     places are handled: the imaginary unit in their residue logands is linearised
+     to an opaque symbol before the parallel solve (`Cancel`/`Together` otherwise
+     hang on `I` + a symbolic unknown), so e.g. `(x²-1)/((x²+1)√(x⁴+1))` closes
+     with a conjugate pair of complex logs.  The engine never hangs: a 4 s
+     wall-clock budget plus `TimeConstrained` caps on the heavy number-field calls
+     make any harder case decline within a few seconds.  Scope: `n = 1`,
+     `K = Q(x)`.  Debug surfaces:
      `Integrate\`RNB\`Info`, `Integrate\`RNB\`Residues`, `Integrate\`RNB\`Logands`.
   12. `Integrate\`RischTranscendental[f, x]` — the **recursive** transcendental
      Risch algorithm; runs after RischNorman and only adds

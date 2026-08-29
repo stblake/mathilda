@@ -2796,3 +2796,38 @@ evaluator rather than a dedicated DomainMatrix:
    series for m>=3 — a root of a complex number) can run unbounded, and a between-call
    wall-clock budget cannot interrupt it. Guard structurally: skip non-real places for
    m>=3 (documented scope limit; case declines) AND keep the coarse budget as backstop.
+
+## RischNormanBlake — the hangs were `Cancel` on `I` + a symbol, not the residue tier (2026-08-30, v0.122)
+
+The reported "struggles / exceedingly slow / slow to fail" for `Method ->
+"RischNormanBlake"` was diagnosed by measuring, not guessing, and the culprit was
+NOT where it looked:
+
+1. **`Cancel`/`Together` hang on `I = Complex[0,1]` when a symbolic unknown is also
+   present.** `Cancel[g (I√2 x + x^3)/((x^2+1)^2(x^4+1)) + ...]` runs unbounded;
+   the same without `I`, or `I` without the symbolic `g`, is instant. This — inside
+   the parallel-solve accumulation of `int_rnb.c`, NOT the residue/logand tier
+   (those were <0.2 s) — was the whole hang on every complex-pole integrand. Fix:
+   linearise `Complex[a,b] -> a + b RNB$I0` (opaque symbol) before the accumulation,
+   restore `RNB$I0 -> I` at equation extraction. Sound because `I` carries only
+   `I^2 = -1`. Now `(x^2-1)/((x^2+1)√(x^4+1))` solves (conjugate complex logs).
+
+2. **Do NOT abstract radical constants before the accumulation.** `Sqrt[6]` and
+   `Sqrt[2] Sqrt[3]` are equal; mapping them to unrelated opaque symbols makes the
+   linear system inconsistent (`sol -> {}`) — it silently broke the genus-0 paper
+   example (√2,√3,√6). Abstract radicals only at equation extraction (post-
+   accumulation), where the evaluator has already combined equal products. `I` is
+   the exception (single relation, no composites).
+
+3. **`TimeConstrained` interrupts an over-budget `Series`/`NullSpace`/`Cancel` where
+   the cooperative `clock()` poll can't** (a poll before a call cannot stop a call
+   already in flight). Cap each heavy number-field call with `TimeConstrained[e, t,
+   sentinel]`, latch an abort flag on timeout, and poll it in the tier's loops. But
+   a single 12 s hang made of many sub-cap calls needs a deadline poll BETWEEN the
+   per-logand sub-operations too — capping each call is not enough on its own.
+
+4. **Measure the phase before fixing.** The debug builtins (`RNB`Residues`,
+   `RNB`Logands`) time the exact tier in isolation; env-gated `fprintf` markers +
+   `fflush` (stderr is lost on SIGKILL otherwise) localise the hang to the exact
+   `eval_*` call. Every fix above followed a measurement that contradicted the prior
+   hypothesis.

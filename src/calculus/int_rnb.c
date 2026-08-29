@@ -31,6 +31,7 @@
 #include "risch_canonical.h"
 #include "flint_bridge.h"
 #include "print.h"
+#include "parse.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -43,10 +44,19 @@
  * drive the residue/nullspace/solve work arbitrarily deep.  Since this engine
  * runs inside the Integrate cascade, an unbounded run would hang the whole
  * dispatcher, so we cap it and decline (always a safe result) when exceeded. */
-#define RNB_BUDGET_SEC 12.0
+#define RNB_BUDGET_SEC 4.0
+/* Per-call wall-clock cap for the exact tier's individual heavy CAS calls
+ * (branch Series, NullSpace, Simplify over a nested-radical number field): a
+ * single one of these can run for tens of seconds and the cooperative clock()
+ * poll cannot interrupt a call already in flight, so we bound each with
+ * TimeConstrained.  A timeout latches g_rnb_aborted, and the exact-tier loops
+ * (which poll rnb_over_budget) then unwind fast and the integrator declines. */
+#define RNB_TC_PERCALL_SEC 2.0
+#define RNB_TC_SENTINEL "RNB$TC$Failed"
 static clock_t g_rnb_deadline = 0;
+static bool g_rnb_aborted = false;
 static bool rnb_over_budget(void) {
-    return g_rnb_deadline != 0 && clock() > g_rnb_deadline;
+    return g_rnb_aborted || (g_rnb_deadline != 0 && clock() > g_rnb_deadline);
 }
 
 /* ------------------------------------------------------------------ */
@@ -89,13 +99,43 @@ static Expr* mk_binary(const char* head, Expr* a1, Expr* a2) {
 /* CAS-evaluator wrappers (each consumes its Expr* arguments).         */
 /* ------------------------------------------------------------------ */
 
-static Expr* eval_together(Expr* f) { return eval_and_free(mk_unary("Together", f)); }
+/* Evaluate `e` (consumed) under a per-call wall-clock cap via
+ * TimeConstrained[e, RNB_TC_PERCALL_SEC, RNB$TC$Failed].  On timeout the result
+ * is the sentinel symbol RNB$TC$Failed; we latch g_rnb_aborted so the exact
+ * tier's rnb_over_budget polls unwind it.  Used for the heavy algebraic calls
+ * (Series / NullSpace / Simplify / GCD-Cancel over a nested-radical number
+ * field) that can each run far past the cooperative budget. */
+static Expr* eval_timed(Expr* e) {
+    Expr* args[3];
+    args[0] = e;
+    args[1] = expr_new_real(RNB_TC_PERCALL_SEC);
+    args[2] = expr_new_symbol(intern_symbol(RNB_TC_SENTINEL));
+    Expr* tc = expr_new_function(expr_new_symbol(SYM_TimeConstrained), args, 3);
+    Expr* r = eval_and_free(tc);
+    if (r && r->type == EXPR_SYMBOL
+        && r->data.symbol.name == intern_symbol(RNB_TC_SENTINEL))
+        g_rnb_aborted = true;
+    return r;
+}
+
+/* When set, the GCD-heavy wrappers below cap themselves with eval_timed.  It is
+ * on only during exact-tier logand generation (residues, divisor search, S-unit
+ * certification), where a single Cancel/Together/Factor over a nested-radical
+ * field can hang; the fast parallel-solve phase runs with it off. */
+static bool g_rnb_exact_tier = false;
+static Expr* eval_together(Expr* f) {
+    return g_rnb_exact_tier ? eval_timed(mk_unary("Together", f))
+                            : eval_and_free(mk_unary("Together", f)); }
 
 static Expr* eval_expand(Expr* f)   { return eval_and_free(mk_unary("Expand", f)); }
-static Expr* eval_cancel(Expr* f)   { return eval_and_free(mk_unary("Cancel", f)); }
+static Expr* eval_cancel(Expr* f)   {
+    return g_rnb_exact_tier ? eval_timed(mk_unary("Cancel", f))
+                            : eval_and_free(mk_unary("Cancel", f)); }
 static Expr* eval_numer(Expr* f)    { return eval_and_free(mk_unary("Numerator", f)); }
 static Expr* eval_denom(Expr* f)    { return eval_and_free(mk_unary("Denominator", f)); }
-MATHILDA_MAYBE_UNUSED static Expr* eval_factor(Expr* f)   { return eval_and_free(mk_unary("Factor", f)); }
+MATHILDA_MAYBE_UNUSED static Expr* eval_factor(Expr* f)   {
+    return g_rnb_exact_tier ? eval_timed(mk_unary("Factor", f))
+                            : eval_and_free(mk_unary("Factor", f)); }
 
 /* D[f, x] via the evaluator.  Consumes f; x is copied. */
 static Expr* eval_diff(Expr* f, Expr* x) {
@@ -457,7 +497,10 @@ static Expr** rf_inv(const RadicalField* F, Expr* const* a) {
     for (int i = 1; i < m; i++) e0e[i] = mk_int(0);
     Expr* e0 = expr_new_function(expr_new_symbol(SYM_List), e0e, (size_t)m);
     free(e0e);
-    Expr* sol = eval_and_free(mk_binary("LinearSolve", M, e0));
+    /* LinearSolve over a real cube-root field can hang; cap it in the exact/
+     * accumulation phase (uncapped for the fast f-to-element setup). */
+    Expr* sol = g_rnb_exact_tier ? eval_timed(mk_binary("LinearSolve", M, e0))
+                                 : eval_and_free(mk_binary("LinearSolve", M, e0));
     Expr** r = (Expr**)calloc((size_t)m, sizeof(Expr*));
     if (sol && sol->type == EXPR_FUNCTION
         && sol->data.function.head->type == EXPR_SYMBOL
@@ -670,6 +713,28 @@ static void rnb_collect_alg(const Expr* e, Expr*** ks, size_t* nk) {
     }
 }
 
+/* --- imaginary-unit linearisation -----------------------------------------
+ * Mathilda's Cancel/Together take a slow complex-GCD path when both the
+ * imaginary unit (Complex[0,1]) AND a symbolic unknown (the mu/gamma ansatz
+ * coefficients) are present in a rational function -- it hangs even on small
+ * inputs.  So before the parallel-integrate algebra we rewrite every complex
+ * number Complex[a,b] -> a + b*RNB$I0, treating the imaginary unit as an opaque
+ * symbol RNB$I0; then all Cancel/Together run over Q and stay fast.  RNB$I0 is
+ * substituted back to I (whereupon RNB$I0^2 -> -1 auto-reduces) right before the
+ * linear system is formed, exactly as the radical constants Power[num,Rational]
+ * are abstracted and restored. */
+#define RNB_I0 "RNB$I0"
+static Expr* rnb_linearize_complex(Expr* e /* owned */) {
+    Expr* rule = parse_expression("Complex[rnbRe_, rnbIm_] :> rnbRe + rnbIm*RNB$I0");
+    if (!rule) return e;
+    return eval_and_free(mk_binary("ReplaceAll", e, rule));
+}
+static Expr** rnb_elem_linearize_complex(const RadicalField* F, Expr* const* a) {
+    Expr** r = (Expr**)calloc((size_t)(F->m < 1 ? 1 : F->m), sizeof(Expr*));
+    for (int i = 0; i < F->m; i++) r[i] = rnb_linearize_complex(expr_copy(a[i]));
+    return r;
+}
+
 /* Exact per-coordinate degree bounds for the numerator b_i (Cor. 4.7 /
  * bounds.py): B[i] = floor((k + e*Delta + nu_i)/e), computed from valuations
  * at the places at infinity.  Returns an owned int64_t[m]; d_in is den(f). */
@@ -792,38 +857,70 @@ static Expr* rnb_parallel_integrate(const RadicalField* F, Expr* const* f_elem,
         unknowns[nunk++] = expr_copy(gamma[j]);
     }
 
-    /* Dg = D(v) + sum_j gamma_j D(u_j) u_j^{-1} */
+    /* Linearise the imaginary unit up front (Complex -> the opaque symbol
+     * RNB$I0).  Mathilda's Cancel/Together take a pathological slow path (a hang)
+     * when I meets a symbolic mu/gamma coefficient in the accumulation; treating
+     * I as opaque avoids that, and it is SOUND because I carries only the single
+     * relation I^2 = -1, which the RNB$I0 -> I back-substitution restores.
+     * Radical constants are deliberately NOT abstracted here: doing so before the
+     * accumulation would map Sqrt[6] and Sqrt[2] Sqrt[3] (equal!) to unrelated
+     * symbols and break the linear system.  They are abstracted only at equation
+     * extraction below, after the accumulation has combined radical products.
+     * G (the returned antiderivative) keeps the ORIGINAL logs. */
+    Expr** af_elem = rnb_elem_linearize_complex(F, f_elem);
+    Expr*** alog = (Expr***)calloc(nlog ? nlog : 1, sizeof(Expr**));
+    for (size_t j = 0; j < nlog; j++) alog[j] = rnb_elem_linearize_complex(F, logs[j]);
+
+    /* Dg = D(v) + sum_j gamma_j D(u_j) u_j^{-1}.  Over a large real radical field
+     * the accumulation's Cancel can still hang; cap those calls (g_rnb_exact_tier)
+     * so such a case declines fast rather than hanging.  With I opaque the common
+     * rational / imaginary cases stay well under the cap and solve. */
+    g_rnb_exact_tier = true;
     Expr** Dg = rf_D(F, vel);
-    for (size_t j = 0; j < nlog; j++) {
-        Expr** Du   = rf_D(F, logs[j]);
-        Expr** uinv = rf_inv(F, logs[j]);
-        Expr** dlog = rf_mult(F, Du, uinv);
+    for (size_t j = 0; j < nlog && !rnb_over_budget(); j++) {
+        /* Each rf_* below is a handful of capped Cancels over the logand's
+         * number field; for m>=3 cube-root logands that is a few seconds each,
+         * so poll the deadline between them and stop building Dg once past it
+         * (the run then declines rather than grinding on). */
+        Expr** Du   = rf_D(F, alog[j]);
+        Expr** uinv = rnb_over_budget() ? elem_zero(m) : rf_inv(F, alog[j]);
+        Expr** dlog = rnb_over_budget() ? elem_zero(m) : rf_mult(F, Du, uinv);
         Expr** sc   = rf_scal(F, gamma[j], dlog);
         Expr** ndg  = rf_add(F, Dg, sc);
         elem_free(Dg, m); Dg = ndg;
         elem_free(Du, m); elem_free(uinv, m); elem_free(dlog, m); elem_free(sc, m);
     }
 
-    /* residual f - Dg, then one equation per x-power per coordinate */
+    /* residual f - Dg */
     Expr* negone = mk_int(-1);
     Expr** nDg = rf_scal(F, negone, Dg);
     expr_free(negone);
-    Expr** resid = rf_add(F, f_elem, nDg);
+    Expr** resid = rf_add(F, af_elem, nDg);
     elem_free(nDg, m); elem_free(Dg, m);
 
-    /* abstract algebraic constants -> fresh symbols so Cancel clears them */
+    /* Abstract the radical constants (Power[num,Rational]) that survive in the
+     * residual so Cancel clears them, then substitute all of them back
+     * (RNB$a$t -> radical, RNB$I0 -> I; RNB$a$t^2 / I^2 then auto-reduce) before
+     * forming the linear system.  Abstracting post-accumulation is sound: the
+     * evaluator has already combined equal radical products, so no two abstracted
+     * symbols denote the same constant.  bwd always carries RNB$I0 -> I. */
     Expr** ks = NULL; size_t nk = 0;
     for (int i = 0; i < m; i++) rnb_collect_alg(resid[i], &ks, &nk);
     Expr** fwd = (Expr**)malloc((nk ? nk : 1) * sizeof(Expr*));
-    Expr** bwd = (Expr**)malloc((nk ? nk : 1) * sizeof(Expr*));
+    Expr** bwd = (Expr**)malloc((nk + 1) * sizeof(Expr*));
     for (size_t t = 0; t < nk; t++) {
         char buf[32]; snprintf(buf, sizeof(buf), "RNB$a$%zu", t);
         Expr* s = expr_new_symbol(intern_symbol(buf));
         fwd[t] = mk_binary("Rule", expr_copy(ks[t]), expr_copy(s));
         bwd[t] = mk_binary("Rule", s, expr_copy(ks[t]));
     }
+    /* RNB$I0 -> I  (I built as Sqrt[-1] = Complex[0,1]); always present. */
+    bwd[nk] = mk_binary("Rule", expr_new_symbol(intern_symbol(RNB_I0)),
+                        eval_and_free(mk_pow(mk_int(-1), mk_rat(1, 2))));
     Expr* fwd_rules = expr_new_function(expr_new_symbol(SYM_List), fwd, nk); free(fwd);
-    Expr* bwd_rules = expr_new_function(expr_new_symbol(SYM_List), bwd, nk); free(bwd);
+    Expr* bwd_rules = expr_new_function(expr_new_symbol(SYM_List), bwd, nk + 1); free(bwd);
+    for (size_t t = 0; t < nk; t++) expr_free(ks[t]);
+    free(ks);
 
     size_t neq = 0, capeq = 0;
     Expr** eqs = NULL;
@@ -839,11 +936,14 @@ static Expr* rnb_parallel_integrate(const RadicalField* F, Expr* const* f_elem,
             for (size_t c = 0; c < nc; c++) {
                 Expr* coef = clist->data.function.args[c];
                 if (coef->type == EXPR_INTEGER && coef->data.integer == 0) continue;
-                /* substitute the algebraic constants back */
-                Expr* ec = (nk > 0)
-                    ? eval_and_free(mk_binary("ReplaceAll", expr_copy(coef),
-                                              expr_copy(bwd_rules)))
-                    : expr_copy(coef);
+                /* substitute the algebraic constants + imaginary unit back */
+                Expr* ec = eval_and_free(mk_binary("ReplaceAll", expr_copy(coef),
+                                                   expr_copy(bwd_rules)));
+                /* a coefficient that is only zero via I^2=-1 / radical^2=n now
+                 * reduces to 0 and carries no information -- drop it. */
+                if (ec->type == EXPR_INTEGER && ec->data.integer == 0) {
+                    expr_free(ec); continue;
+                }
                 if (neq == capeq) {
                     capeq = capeq ? capeq * 2 : 16;
                     eqs = (Expr**)realloc(eqs, capeq * sizeof(Expr*));
@@ -854,8 +954,7 @@ static Expr* rnb_parallel_integrate(const RadicalField* F, Expr* const* f_elem,
         if (clist) expr_free(clist);
     }
     expr_free(fwd_rules); expr_free(bwd_rules);
-    for (size_t t = 0; t < nk; t++) expr_free(ks[t]);
-    free(ks);
+    g_rnb_exact_tier = false;  /* end capped phase; Solve is deadline-gated below */
 
     if (getenv("RNB_DEBUG")) {
         fprintf(stderr, "[rnb] nlog=%zu nunk=%zu neq=%zu\n", nlog, nunk, neq);
@@ -917,6 +1016,10 @@ static Expr* rnb_parallel_integrate(const RadicalField* F, Expr* const* f_elem,
     elem_free(resid, m);
     for (size_t t = 0; t < neq; t++) expr_free(eqs[t]);
     free(eqs);
+
+    elem_free(af_elem, m);
+    for (size_t j = 0; j < nlog; j++) elem_free(alog[j], m);
+    free(alog);
 
     for (size_t t = 0; t < nunk; t++) expr_free(unknowns[t]);
     free(unknowns);
@@ -1151,7 +1254,9 @@ static Expr* rnb_branch_series(const RadicalField* F, const Expr* xi,
     Expr* base = mk_times2(expr_copy((Expr*)eta), mk_pow(ratio, mk_rat(1, F->m)));
     Expr* spec_args[3] = { expr_new_symbol(RNB_T), mk_int(0), mk_int(order) };
     Expr* spec = expr_new_function(expr_new_symbol(SYM_List), spec_args, 3);
-    Expr* ser = eval_and_free(mk_binary("Series", base, spec));
+    /* Series over a nested-radical number field can run unbounded; cap it. */
+    Expr* ser = eval_timed(mk_binary("Series", base, spec));
+    if (g_rnb_aborted) return ser;   /* sentinel; caller unwinds via budget */
     return eval_and_free(mk_unary("Normal", ser));
 }
 
@@ -1160,6 +1265,7 @@ static Expr* rnb_residue_unram(const RadicalField* F, Expr* const* f_elem,
                                const Expr* xi, const Expr* eta, const Expr* q,
                                int64_t ordr) {
     Expr* ys  = rnb_branch_series(F, xi, eta, ordr + 3, q);
+    if (g_rnb_aborted) return ys;   /* Series capped out; sentinel propagates */
     Expr* xit = mk_plus2(expr_copy((Expr*)xi), expr_new_symbol(RNB_T));
     Expr* tot = mk_int(0);
     for (int i = 0; i < F->m; i++) {
@@ -1174,7 +1280,7 @@ static Expr* rnb_residue_unram(const RadicalField* F, Expr* const* f_elem,
     Expr* zero = mk_int(0);
     Expr* res = rnb_residue2(tot, RNB_T, zero);
     expr_free(zero);
-    return eval_and_free(mk_unary("Simplify", res));
+    return eval_timed(mk_unary("Simplify", res));
 }
 
 /* Residue of f dx at the single ramified place over x=xi: residue of the
@@ -1186,7 +1292,7 @@ static Expr* rnb_residue_ram(const RadicalField* F, Expr* const* f_elem,
     /* Residue[0, ...] does not auto-simplify; short-circuit a zero trace. */
     if (tr && tr->type == EXPR_INTEGER && tr->data.integer == 0) return tr;
     Expr* res = rnb_residue2(tr, F->xname, xi);
-    return eval_and_free(mk_unary("Simplify", res));
+    return eval_timed(mk_unary("Simplify", res));
 }
 
 static Expr* rnb_residue_at(const RadicalField* F, Expr* const* f_elem,
@@ -1206,7 +1312,7 @@ static Expr* rnb_residue_at(const RadicalField* F, Expr* const* f_elem,
 static bool rnb_is_zero(const Expr* e) {
     if (!e) return true;
     if (e->type == EXPR_INTEGER && e->data.integer == 0) return true;
-    Expr* z = eval_and_free(mk_unary("Simplify", expr_copy((Expr*)e)));
+    Expr* z = eval_timed(mk_unary("Simplify", expr_copy((Expr*)e)));
     bool zero = (z && z->type == EXPR_INTEGER && z->data.integer == 0);
     if (z) expr_free(z);
     return zero;
@@ -1229,8 +1335,9 @@ static Expr* rnb_valcond_unram(const RadicalField* F, Expr* const* alpha,
     expr_free(xit); expr_free(ys);
     Expr* spec_args[3] = { expr_new_symbol(RNB_T), mk_int(0), mk_int(r) };
     Expr* spec = expr_new_function(expr_new_symbol(SYM_List), spec_args, 3);
-    Expr* ser  = eval_and_free(mk_unary("Normal",
-                     eval_and_free(mk_binary("Series", tot, spec))));
+    /* Series over the branch's number field can run unbounded; cap it. */
+    Expr* ser  = eval_timed(mk_binary("Series", tot, spec));
+    if (!g_rnb_aborted) ser = eval_and_free(mk_unary("Normal", ser));
     Expr** cells = (Expr**)calloc((size_t)(r > 0 ? r : 1), sizeof(Expr*));
     for (int k = 0; k < r; k++) {
         Expr* a3[3] = { expr_copy(ser), expr_new_symbol(RNB_T), mk_int(k) };
@@ -1301,7 +1408,7 @@ static Expr*** rnb_find_element(const RadicalField* F, const RnbPlace* pls,
 
     /* gather conditions */
     Expr** conds = NULL; size_t nc = 0, ccap = 0;
-    for (size_t p = 0; p < npl; p++) {
+    for (size_t p = 0; p < npl && !rnb_over_budget(); p++) {
         Expr* cl = pls[p].ram
             ? rnb_valcond_ram(F, alpha, pls[p].xi, pls[p].j, N)
             : rnb_valcond_unram(F, alpha, pls[p].xi, pls[p].eta, N, q);
@@ -1316,11 +1423,11 @@ static Expr*** rnb_find_element(const RadicalField* F, const RnbPlace* pls,
 
     /* matrix rows: coefficient of each cvar in each nonzero condition */
     Expr** rows = NULL; size_t nrow = 0;
-    for (size_t r = 0; r < nc; r++) {
+    for (size_t r = 0; r < nc && !rnb_over_budget(); r++) {
         Expr** entry = (Expr**)calloc((size_t)ncols, sizeof(Expr*));
         bool allzero = true;
         for (int col = 0; col < ncols; col++) {
-            Expr* co = eval_and_free(mk_binary("Coefficient",
+            Expr* co = eval_timed(mk_binary("Coefficient",
                            expr_copy(conds[r]), expr_copy(cvar[col])));
             entry[col] = co;
             if (!(co->type == EXPR_INTEGER && co->data.integer == 0)) allzero = false;
@@ -1338,7 +1445,8 @@ static Expr*** rnb_find_element(const RadicalField* F, const RnbPlace* pls,
         for (size_t r = 0; r < nrow; r++) rc[r] = rows[r];
         Expr* M = expr_new_function(expr_new_symbol(SYM_List), rc, nrow);
         free(rc);
-        Expr* ns = eval_and_free(mk_unary("NullSpace", M));
+        /* NullSpace over a complex algebraic field can run unbounded; cap it. */
+        Expr* ns = eval_timed(mk_unary("NullSpace", M));
         if (ns && head_is(ns, SYM_List)) {
             for (size_t v = 0; v < ns->data.function.arg_count; v++) {
                 Expr* vec = ns->data.function.args[v];
@@ -1385,7 +1493,10 @@ static bool rnb_affine_divisor_ok(const RadicalField* F, Expr* const* a,
                              mk_times2(mk_int(-1), expr_copy(pls[p].xi)));
         want = mk_times2(want, mk_pow(lin, mk_int(N)));
     }
-    Expr* r  = eval_cancel(mk_div(Na, want));
+    /* Cancel over the affine places' (nested-radical) field can run unbounded;
+     * cap it.  A timeout latches the abort flag -- fail the certification. */
+    Expr* r  = eval_timed(mk_unary("Cancel", mk_div(Na, want)));
+    if (g_rnb_aborted) { expr_free(r); return false; }
     Expr* rn = eval_numer(eval_together(expr_copy(r)));
     Expr* rd = eval_denom(eval_together(r));
     bool ok = (eval_degree(rn, F->x) == 0) && (eval_degree(rd, F->x) == 0);
@@ -1582,6 +1693,7 @@ static bool rnb_verify_numeric(const Expr* cand, const Expr* f, Expr* x) {
 
 static Expr* rnb_integrate(Expr* f, Expr* x) {
     g_rnb_deadline = clock() + (clock_t)(RNB_BUDGET_SEC * CLOCKS_PER_SEC);
+    g_rnb_aborted = false;
     Expr* q = NULL; int64_t m = 0;
     if (!rnb_find_radical(f, x->data.symbol.name, &q, &m)) return NULL;
 
@@ -1594,11 +1706,23 @@ static Expr* rnb_integrate(Expr* f, Expr* x) {
     /* Collect candidate logands (S-units of O). */
     Expr*** logs = NULL; size_t nlog = 0, caplog = 0;
 
+    /* The exact tier's algebra runs over the (possibly nested-radical, complex)
+     * number field of the affine places, where a single Cancel/Together/Factor/
+     * Simplify/NullSpace/Series can hang; cap each with TimeConstrained while
+     * this flag is on. */
+    g_rnb_exact_tier = true;
+
     /* Units at infinity (m=2 continued fraction / Pell). */
     if (F.m == 2) rnb_logs_push(&logs, &nlog, &caplog, rnb_cf_unit(&F, q), F.m);
 
     /* Residue-driven S-units (branch-place / Jacobian divisor logands). */
     rnb_exact_logands(&F, f_elem, q, &logs, &nlog, &caplog);
+
+    /* Leave the exact tier: clear the abort latch so the (now fast, over-Q)
+     * parallel solve still runs with whatever logands were found; the wall-clock
+     * deadline continues to bound it. */
+    g_rnb_exact_tier = false;
+    g_rnb_aborted = false;
 
     /* parallel_integrate returns element-verified candidates; a numerical
      * diff-back is the final guard against a mis-built system. */
