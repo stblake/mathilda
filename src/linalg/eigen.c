@@ -140,7 +140,7 @@ static Expr** eigen_compute_eigenvalues_full(Expr* m, Expr* a,
 }
 
 Expr* builtin_eigenvalues(Expr* res) {
-    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
+    if (linalg_call_has_ndarray(res)) return ndla_eigenvalues(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;
 
@@ -301,7 +301,7 @@ static Expr* eigen_normalize_vector(Expr* v) {
 }
 
 Expr* builtin_eigenvectors(Expr* res) {
-    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
+    if (linalg_call_has_ndarray(res)) return ndla_eigenvectors(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;
 

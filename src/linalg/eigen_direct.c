@@ -2,6 +2,9 @@
 #include "eigen_internal.h"
 #include "linalg.h"
 #include "lapack.h"
+#include "ndarray.h"
+#include "ndlinalg.h"
+#include "numarray.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -4404,3 +4407,160 @@ int eigen_all_eigenvectors_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
     return 0;
 }
 #endif
+
+/* ======================================================================
+ * Packed / NDArray fast paths for Eigenvalues / Eigenvectors.
+ *
+ * Read the float64 buffer straight off the NDArray (no delist to boxed
+ * Exprs), run LAPACK dgeev once, and return a PACKED result inheriting the
+ * input's presentation when the spectrum is real (na_build_vector /
+ * na_build_matrix); a complex spectrum keeps the boxed Complex[...] list the
+ * boxed path produces.  Options, the generalized {m, a} form, non-square /
+ * complex / boxed-List input, or no LAPACK all fall back to the boxed
+ * dispatcher via linalg_delist_and_reeval.
+ * ==================================================================== */
+
+static bool ndla_eigen_arg_ok(Expr* res, Expr** arg_out, int* n_out) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return false;
+    Expr* arg = res->data.function.args[0];
+    if (!is_ndarray(arg) || arg->data.ndarray.rank != 2
+        || arg->data.ndarray.dims[0] == 0
+        || arg->data.ndarray.dims[0] != arg->data.ndarray.dims[1]
+        || arg->data.ndarray.dtype != NDT_FLOAT64)
+        return false;
+    *arg_out = arg;
+    *n_out = (int)arg->data.ndarray.dims[0];
+    return true;
+}
+
+/* True iff the column-major buffer A (n x n) is numerically symmetric. */
+static bool ndla_eigen_symmetric(const double* A, int n) {
+    double maxa = 0.0;
+    for (int k = 0; k < n * n; k++) { double v = fabs(A[k]); if (v > maxa) maxa = v; }
+    double tol = 1e-12 * (maxa > 0.0 ? maxa : 1.0);
+    for (int j = 0; j < n; j++)
+        for (int i = j + 1; i < n; i++)
+            if (fabs(A[i + j*n] - A[j + i*n]) > tol) return false;
+    return true;
+}
+
+Expr* ndla_eigenvalues(Expr* res) {
+#ifdef USE_LAPACK
+    Expr* arg; int n;
+    if (ndla_eigen_arg_ok(res, &arg, &n) && mathilda_lapack_probe()) {
+        int rr, cc; double* A = NULL;
+        if (na_load_matrix(arg, false, /*colmajor=*/true, &rr, &cc, &A)) {
+            Expr* out = NULL;
+            NDPresentation pres = arg->data.ndarray.present_as;
+            if (ndla_eigen_symmetric(A, n)) {
+                /* Symmetric: dsyev (real spectrum) -- as the boxed path does. */
+                double* w = (double*)malloc((size_t)n * sizeof(double));
+                size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+                if (w && perm && mat_lapack_dsyev_values(n, A, n, w) == 0) {
+                    direct_sort_perm_desc_abs(w, n, perm);
+                    double* ev = (double*)malloc((size_t)n * sizeof(double));
+                    for (int i = 0; i < n; i++) ev[i] = w[perm[i]];
+                    out = na_build_vector(ev, n, false);
+                    if (out && is_ndarray(out)) out->data.ndarray.present_as = pres;
+                    free(ev);
+                }
+                free(w); free(perm);
+            } else {
+                double* wr = (double*)malloc((size_t)n * sizeof(double));
+                double* wi = (double*)malloc((size_t)n * sizeof(double));
+                size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+                if (wr && wi && perm && mat_lapack_dgeev_values(n, A, n, wr, wi) == 0) {
+                    direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
+                    bool allreal = true;
+                    for (int i = 0; i < n; i++) if (wi[perm[i]] != 0.0) { allreal = false; break; }
+                    if (allreal) {
+                        double* ev = (double*)malloc((size_t)n * sizeof(double));
+                        for (int i = 0; i < n; i++) ev[i] = wr[perm[i]];
+                        out = na_build_vector(ev, n, false);
+                        if (out && is_ndarray(out)) out->data.ndarray.present_as = pres;
+                        free(ev);
+                    } else {
+                        out = direct_build_complex_eigenvalue_list(wr, wi, n, perm);
+                    }
+                }
+                free(wr); free(wi); free(perm);
+            }
+            free(A);
+            if (out) return out;
+        } else {
+            free(A);
+        }
+    }
+#endif
+    return linalg_delist_and_reeval(res);
+}
+
+Expr* ndla_eigenvectors(Expr* res) {
+#ifdef USE_LAPACK
+    Expr* arg; int n;
+    if (ndla_eigen_arg_ok(res, &arg, &n) && mathilda_lapack_probe()) {
+        int rr, cc; double* A = NULL;
+        if (na_load_matrix(arg, false, /*colmajor=*/true, &rr, &cc, &A)) {
+            Expr* out = NULL;
+            NDPresentation pres = arg->data.ndarray.present_as;
+            if (ndla_eigen_symmetric(A, n)) {
+                /* Symmetric: dsyev writes orthonormal eigenvectors into A's
+                 * columns (ascending eigenvalues); emit rows in desc-|lambda|. */
+                double* w = (double*)malloc((size_t)n * sizeof(double));
+                size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+                double* vb = (double*)malloc((size_t)n * (size_t)n * sizeof(double));
+                if (w && perm && vb && mat_lapack_dsyev(n, A, n, w) == 0) {
+                    direct_sort_perm_desc_abs(w, n, perm);
+                    for (int s = 0; s < n; s++)
+                        for (int i = 0; i < n; i++)
+                            vb[(size_t)s*n + i] = A[i + (size_t)perm[s]*n];
+                    out = na_build_matrix(vb, n, n, false, /*colmajor=*/false);
+                    if (out && is_ndarray(out)) out->data.ndarray.present_as = pres;
+                }
+                free(w); free(perm); free(vb);
+            } else {
+                double* wr = (double*)malloc((size_t)n * sizeof(double));
+                double* wi = (double*)malloc((size_t)n * sizeof(double));
+                double* VR = (double*)malloc((size_t)n * (size_t)n * sizeof(double));
+                size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+                if (wr && wi && VR && perm && mat_lapack_dgeev(n, A, n, wr, wi, VR, n) == 0) {
+                    direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
+                    double* Vr = (double*)malloc((size_t)n * (size_t)n * sizeof(double));
+                    double* Vi = (double*)malloc((size_t)n * (size_t)n * sizeof(double));
+                    bool allreal = true;
+                    if (Vr && Vi) {
+                        for (int s = 0; s < n; s++) {
+                            size_t jj = perm[s];
+                            double norm2 = 0.0;
+                            for (int i = 0; i < n; i++) {
+                                double re, im;
+                                if (wi[jj] == 0.0)     { re = VR[i + jj*n];       im = 0.0; }
+                                else if (wi[jj] > 0.0) { re = VR[i + jj*n];       im = VR[i + (jj+1)*n]; }
+                                else                   { re = VR[i + (jj-1)*n];   im = -VR[i + jj*n]; }
+                                Vr[s*n + i] = re; Vi[s*n + i] = im;
+                                norm2 += re*re + im*im;
+                                if (im != 0.0) allreal = false;
+                            }
+                            double inv = (norm2 > 0.0) ? 1.0/sqrt(norm2) : 1.0;
+                            for (int i = 0; i < n; i++) { Vr[s*n+i] *= inv; Vi[s*n+i] *= inv; }
+                        }
+                        if (allreal) {
+                            out = na_build_matrix(Vr, n, n, false, /*colmajor=*/false);
+                            if (out && is_ndarray(out)) out->data.ndarray.present_as = pres;
+                        } else {
+                            out = direct_build_complex_eigenvector_list(Vr, Vi, n);
+                        }
+                    }
+                    free(Vr); free(Vi);
+                }
+                free(wr); free(wi); free(VR); free(perm);
+            }
+            free(A);
+            if (out) return out;
+        } else {
+            free(A);
+        }
+    }
+#endif
+    return linalg_delist_and_reeval(res);
+}

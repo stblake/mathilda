@@ -31,6 +31,13 @@
 Expr* builtin_eigenvalues(Expr* res);
 Expr* builtin_eigenvectors(Expr* res);
 
+/* Packed / NDArray fast paths (defined in eigen_direct.c): read the NDArray
+ * buffer directly and return a packed result for a real spectrum, inheriting
+ * the input's presentation; complex spectra and everything else fall back to
+ * linalg_delist_and_reeval. */
+Expr* ndla_eigenvalues(Expr* res);
+Expr* ndla_eigenvectors(Expr* res);
+
 /* CharacteristicPolynomial[m, x] == Det[m - x I], and the generalized
  * CharacteristicPolynomial[{m, a}, x] == Det[m - x a].  Reuses the char-poly
  * machinery above (Faddeev-Leverrier for the ordinary case, Laplace of

@@ -147,6 +147,12 @@ bool svd_symbolic_core(Expr** A_flat, int n, int p, bool use_conj,
  * ------------------------------------------------------------------ */
 Expr* svd_machine_dispatch(const SvdArgs* args, int n, int p, int n_a);
 
+/* Packed / NDArray fast path for the plain SingularValueDecomposition[m]:
+ * reads the NDArray buffer directly and returns packed {u, w, v} inheriting the
+ * input's presentation.  Falls back to linalg_delist_and_reeval for anything it
+ * does not handle (options, generalized form, complex, boxed-List input). */
+Expr* ndla_singularvaluedecomposition(Expr* res);
+
 /* ---------------------------------------------------------------------
  * Arbitrary-precision MPFR kernel dispatcher.
  *

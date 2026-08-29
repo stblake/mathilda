@@ -1338,9 +1338,15 @@ Gives the Jordan decomposition of a square matrix.
     valid Jordan basis, not a canonical one.
   - **Numeric.** A matrix with a distinct spectrum is diagonalizable, so
     `s` is the numeric eigenvectors as columns and `j = DiagonalMatrix`
-    of the (paired) eigenvalues — no inverse or matrix product is formed,
-    so a large diagonalizable matrix stays fast (a 100×100 in ~15 ms). A
-    matrix with a repeated numeric eigenvalue (defective, or ambiguous at
+    of the eigenvalues. A **machine-real** matrix (a packed / `NDArray`
+    argument is read straight off its float64 buffer, no delist) uses a
+    LAPACK-`dgeev` kernel that solves once and builds `s`/`j` directly
+    from the raw buffers — no intermediate boxed eigenvector list, no
+    second solve (a 100×100 in ~9.6 ms). A complex-entry matrix (or
+    `USE_LAPACK=0`) instead runs one `Eigenvectors` solve and recovers
+    each eigenvalue from its eigenvector by an `O(n)` component ratio;
+    arbitrary-precision input keeps the full-precision solves. A matrix
+    with a repeated numeric eigenvalue (defective, or ambiguous at
     machine precision) is rationalised, decomposed by the exact core, and
     numericalised back, which recovers the genuine block structure.
 - Result-fidelity notes: the exact printed `s` is not canonical (any

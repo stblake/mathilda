@@ -33,6 +33,9 @@
 #include "lapack.h"
 #include "sym_names.h"
 #include "common.h"
+#include "ndarray.h"
+#include "ndlinalg.h"
+#include "numarray.h"
 
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -634,5 +637,78 @@ Expr* svd_machine_dispatch(const SvdArgs* args, int n, int p, int n_a)
     /* Hand the result to the shared post-processing for truncation,
      * tolerance, and TargetStructure. */
     return svd_apply_postprocess(result, args, n, p, mn);
+#endif /* USE_LAPACK */
+}
+
+/* Packed / NDArray fast path for the plain SingularValueDecomposition[m].
+ *
+ * Reads the float64 buffer straight off the NDArray (no delist to boxed Exprs),
+ * runs LAPACK dgesdd, and rebuilds {u, w, v} as PACKED arrays inheriting the
+ * input's presentation (a packed List stays a transparent List; a visible
+ * NDArray[...] stays visible) -- the LUDecomposition contract.  Only the plain
+ * one-argument real case is handled here; options, truncation, the generalized
+ * {m, a} form, complex input, or a boxed-List argument fall back to the boxed
+ * dispatcher via linalg_delist_and_reeval. */
+Expr* ndla_singularvaluedecomposition(Expr* res)
+{
+#ifndef USE_LAPACK
+    return linalg_delist_and_reeval(res);
+#else
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
+        return linalg_delist_and_reeval(res);
+    Expr* arg = res->data.function.args[0];
+    if (!is_ndarray(arg) || arg->data.ndarray.rank != 2
+        || arg->data.ndarray.dims[0] == 0 || arg->data.ndarray.dims[1] == 0
+        || arg->data.ndarray.dtype != NDT_FLOAT64
+        || !mathilda_lapack_probe())
+        return linalg_delist_and_reeval(res);
+
+    int n, p; double* A = NULL;
+    if (!na_load_matrix(arg, false, /*colmajor=*/true, &n, &p, &A))
+        return linalg_delist_and_reeval(res);
+
+    int mn = (n < p) ? n : p;
+    double* S  = (double*)malloc((size_t)mn * sizeof(double));
+    double* U  = (double*)malloc((size_t)n * (size_t)n * sizeof(double));
+    double* VT = (double*)malloc((size_t)p * (size_t)p * sizeof(double));
+    if (!S || !U || !VT) {
+        free(S); free(U); free(VT); free(A);
+        return linalg_delist_and_reeval(res);
+    }
+    int info = mat_lapack_dgesdd('A', n, p, A, n, S, U, n, VT, p);
+    free(A);
+    if (info != 0) {
+        free(S); free(U); free(VT);
+        return linalg_delist_and_reeval(res);
+    }
+    svdm_default_tolerance(S, mn, n, p);
+
+    /* u = U (n x n, column-major). */
+    Expr* u = na_build_matrix(U, n, n, false, /*colmajor=*/true);
+    /* w = the n x p rectangular Sigma with S on the leading diagonal. */
+    double* sig = (double*)calloc((size_t)n * (size_t)p, sizeof(double));
+    for (int i = 0; i < mn; i++) sig[(size_t)i * p + i] = S[i];
+    Expr* w = na_build_matrix(sig, n, p, false, /*colmajor=*/false);
+    free(sig);
+    /* v = Transpose[VT] (p x p): v[i][j] = VT_colmajor[j + i*p]. */
+    double* vb = (double*)malloc((size_t)p * (size_t)p * sizeof(double));
+    for (int i = 0; i < p; i++)
+        for (int j = 0; j < p; j++) vb[(size_t)i * p + j] = VT[(size_t)j + (size_t)i * p];
+    Expr* v = na_build_matrix(vb, p, p, false, /*colmajor=*/false);
+    free(vb);
+    free(S); free(U); free(VT);
+
+    if (!u || !w || !v) { if (u) expr_free(u); if (w) expr_free(w); if (v) expr_free(v);
+        return linalg_delist_and_reeval(res); }
+    NDPresentation pres = arg->data.ndarray.present_as;   /* inherit surface */
+    if (is_ndarray(u)) u->data.ndarray.present_as = pres;
+    if (is_ndarray(w)) w->data.ndarray.present_as = pres;
+    if (is_ndarray(v)) v->data.ndarray.present_as = pres;
+
+    Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
+    items[0] = u; items[1] = w; items[2] = v;
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
+    free(items);
+    return result;
 #endif /* USE_LAPACK */
 }

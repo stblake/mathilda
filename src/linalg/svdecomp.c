@@ -1526,7 +1526,7 @@ Expr* svd_dispatch(const SvdArgs* args, int n, int p, int n_a) {
  *  Public entry.                                                      *
  * ------------------------------------------------------------------ */
 Expr* builtin_singularvaluedecomposition(Expr* res) {
-    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
+    if (linalg_call_has_ndarray(res)) return ndla_singularvaluedecomposition(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;

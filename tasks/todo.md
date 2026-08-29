@@ -1,66 +1,50 @@
-# JordanDecomposition[m]
+# Packed/NDArray fast paths + packed output for all matrix decompositions
 
-Return `{s, j}` with `m == s . j . Inverse[s]`; `j` = Jordan canonical form.
+Bring every decomposition to the **LUDecomposition standard**: read the packed
+buffer directly (`na_load_matrix`, no delist), and return packed output
+(`na_build_matrix`/`na_build_vector`) inheriting the input's presentation
+(`out->present_as = arg->present_as`). Real results only (na_build declines
+complex → nested List, which is correct). Boxed-List input → boxed output.
 
-## Plan
-- [ ] `src/linalg/jordandecomp.{c,h}` — builtin + exact/symbolic chain engine + numeric fast path
-- [ ] Register in `core.c` (`jordandecomp_init`), attribute `Protected`
-- [ ] Docstring in `src/info.c` (no examples)
-- [ ] `src/pack.c` AWARE list += "JordanDecomposition" (not INT64_OK)
-- [ ] `tools/compile_coverage.py` EXEMPT += "JordanDecomposition" ("returns a pair of matrices")
-- [ ] `docs/spec/builtins/linear-algebra.md` — `## JordanDecomposition`
-- [ ] `docs/spec/changelog/2026-08-24.md` — changelog entry
-- [ ] `tests/test_jordandecomp.c` + `tests/CMakeLists.txt` (COMMON_SRC + test target)
-- [ ] Build, run tests, valgrind, `make check-*`
+## Heads
+- [ ] **SingularValueDecomposition** — no fast path today (delists). Add
+      pre-delist na_load + dgesdd kernel; packed {u, w, v} (all real). Biggest win.
+- [ ] **QRDecomposition** — reads packed already, but `mat_qr_mathilda`
+      *unpacks* the output (ndarray_to_nested_list). Make it inherit present_as → packed q, r.
+- [ ] **Eigenvalues** — delists + re-buffers. Direct na_load read; packed
+      eigenvalue vector for a real spectrum (complex → boxed).
+- [ ] **Eigenvectors** — same; packed eigenvector matrix for a real spectrum.
+- [ ] **JordanDecomposition** — reads packed (done); make s,j packed for a
+      real spectrum (inherit present_as); complex spectrum stays boxed.
 
-## Algorithm
-- Exact/symbolic: charpoly (`eigen_char_poly_faddeev`) → `eigen_solve_poly` → distinct
-  eigenvalues with multiplicity. Per λ: nullity sequence of (m−λI)^k via
-  `eigen_null_space`; top-down chain-top selection (extend-to-basis via MatrixRank),
-  bottom-up chains. Assemble S (chains as columns), J (blocks). Gate: total cols == n
-  else NULL (irrational-defective limitation).
-- Numeric (inexact): fast path = numeric `Eigenvectors` as columns of S + diagonal J
-  from component-ratio eigenvalues, when MatrixRank[evecs]==n (diagonalizable).
-  Else rationalize → exact core → numericalize.
+Not applicable: HermiteDecomposition (integer-only), CharacteristicPolynomial
+(returns a polynomial).
 
-## Plan (done)
-- [x] `src/linalg/jordandecomp.{c,h}` — builtin + exact/symbolic chain engine + numeric fast path
-- [x] Register in `core.c` (`jordandecomp_init`), attribute `Protected`
-- [x] Docstring in `src/info.c` (no examples)
-- [x] `src/pack.c` AWARE list += "JordanDecomposition"
-- [x] `tools/compile_coverage.py` EXEMPT += "JordanDecomposition"
-- [x] `docs/spec/builtins/linear-algebra.md` — `## JordanDecomposition`
-- [x] `docs/spec/changelog/2026-08-24.md` — entry
-- [x] `tests/test_jordandecomp.c` (20 checks) + CMake target
-- [x] Build clean, tests pass, valgrind clean, audits
+## Per-head checklist
+Build clean · jordandecomp/eigen/linalg/svd/qr/lu tests pass · packed==unpacked
+agreement · valgrind clean · check-packed-aware / nd-surfaces / array-exactness /
+c99 green.
 
-## Review
+## Review — DONE
 
-**Result.** `JordanDecomposition[m]` → `{s, j}`, `m == s.j.Inverse[s]`. All spec
-examples reproduced: exact `j` for the two 3×3s (`{{6,0,0},{0,12,1},{0,0,12}}`,
-`{{24,0,0},{0,48,1},{0,0,48}}`), the size-3 chain 4×4, the 2×2 symbolic
-(`m.s==s.j`), machine real/complex, MPFR (20-digit), the defective-`N` block,
-and 1×1. 20/20 unit tests pass; eigen/linalg/matinv/nullspace suites unregressed.
+All heads brought to the LU standard (read packed buffer directly; packed
+output inheriting present_as; boxed-List input keeps boxed path):
 
-**Design.** One field-agnostic exact chain engine (charpoly → distinct
-eigenvalues with multiplicity → per-λ nullity sequence of `(m−λI)^k` via
-`eigen_null_space` → top-down chain-top selection with a `MatrixRank`-based
-extend-to-basis → bottom-up chains). Numeric fast path: distinct spectrum ⇒
-diagonalizable ⇒ eigenvectors-as-columns + `DiagonalMatrix[eigenvalues]` (paired
-positionally — verified reliable to ~1e-14), no inverse/product formed, so
-100×100 runs in ~15 ms. Repeated numeric eigenvalue ⇒ rationalize → exact core →
-numericalize.
+- **SVD** — `ndla_singularvaluedecomposition` (dgesdd). Packed {u,w,v}. 24.8→16.3ms (200².
+- **QR** — `mat_qr_mathilda` no longer unpacks; inherits present_as.
+- **Eigenvalues/Eigenvectors** — `ndla_*` with structure dispatch: dsyev
+  (symmetric→packed real) / dgeev (general→packed real, boxed complex). Fixed a
+  would-be regression (dgeev on symmetric was 5× slower than dsyev).
+- **JordanDecomposition** — packed s,j for a real spectrum.
 
-**Perf note.** The numeric path deliberately avoids `Inverse`/`Dot` on the
-(generally complex) eigenvector matrix: Mathilda has no packed complex linear
-algebra, so boxed complex `Inverse[100×100]` is ~15 s. The distinctness gate
-sidesteps it entirely.
+Verified: 18 linalg suites pass; packed==NO_PACK agreement; valgrind-clean
+(byte-identical to baseline across sym/general/SVD/QR/Jordan); c99, packed-aware,
+nd-surfaces (EXIT 0), array-exactness (0 MIXED) all green; 0 build warnings.
 
-**Surfaces.** AWARE (not INT64_OK); `Compile[]` exemption documented. c99 +
-packed-aware audits green; `JordanDecomposition` not flagged by
-compile-coverage (its pre-existing 22-head Image*/Interpolation backlog is
-unrelated and not a CI gate). Valgrind: 160 calls add 0 lost bytes over baseline.
+Perf (200×200 packed vs boxed): SVD 16.3 vs 24.8ms, Eigenvalues(sym) 2.2 vs
+2.7ms, Eigenvectors(sym) 14.3 vs 16.3ms — packed now faster everywhere, no
+regressions.
 
-**Limitation (documented).** Exact matrix with an *irrational, defective*
-eigenvalue is left unevaluated (the `is_zero_poly` pivot test can't span the
-generalized eigenspace) rather than returned wrong.
+Limits: packed OUTPUT only for real spectra (na_build has no complex machine
+array); complex-spectrum results stay boxed, as before. Generalized forms,
+truncation, options, and complex-entry matrices fall back to the boxed path.

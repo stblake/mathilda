@@ -315,10 +315,23 @@ Expr* mat_qr_mathilda(const Expr* mat, int cplx)
                     Expr* q = na_build_matrix(A, k, m, cplx, 0);
                     Expr* r = na_build_matrix(R, k, n, cplx, 1);
                     if (q && r) {
-                        Expr* ql = is_ndarray(q) ? ndarray_to_nested_list(q) : expr_copy(q);
-                        Expr* rl = is_ndarray(r) ? ndarray_to_nested_list(r) : expr_copy(r);
-                        Expr* el[2] = { ql, rl };
-                        out = make_list(el, 2);
+                        if (is_ndarray(mat)) {
+                            /* NDArray input -> keep the packed q, r, inheriting
+                             * the input's presentation (the LUDecomposition
+                             * contract: no round-trip through boxed Exprs). */
+                            NDPresentation pres = mat->data.ndarray.present_as;
+                            if (is_ndarray(q)) q->data.ndarray.present_as = pres;
+                            if (is_ndarray(r)) r->data.ndarray.present_as = pres;
+                            Expr* el[2] = { q, r };
+                            out = make_list(el, 2);
+                            q = NULL; r = NULL;   /* ownership moved into out */
+                        } else {
+                            /* Boxed-List input -> boxed List output, unchanged. */
+                            Expr* ql = is_ndarray(q) ? ndarray_to_nested_list(q) : expr_copy(q);
+                            Expr* rl = is_ndarray(r) ? ndarray_to_nested_list(r) : expr_copy(r);
+                            Expr* el[2] = { ql, rl };
+                            out = make_list(el, 2);
+                        }
                     }
                     if (q) expr_free(q);
                     if (r) expr_free(r);

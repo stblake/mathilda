@@ -57,6 +57,11 @@
 #include "sym_names.h"
 #include "print.h"
 #include "pack.h"
+#include "ndarray.h"
+#include "numarray.h"
+#ifdef USE_LAPACK
+#include "lapack.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -468,7 +473,8 @@ static bool jd_real_double(const Expr* e, double* out) {
     return false;
 }
 
-/* (re, im) of a numeric leaf, including Complex[a, b]; false if not numeric. */
+/* (re, im) of a numeric leaf, including Complex[a, b] and the bare imaginary
+ * unit `I`; false if not a concrete number. */
 static bool jd_entry_complex(const Expr* e, double* re, double* im) {
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
@@ -477,55 +483,95 @@ static bool jd_entry_complex(const Expr* e, double* re, double* im) {
         return jd_real_double(e->data.function.args[0], re)
             && jd_real_double(e->data.function.args[1], im);
     }
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_I) {
+        *re = 0.0; *im = 1.0; return true;
+    }
     *im = 0.0;
     return jd_real_double(e, re);
 }
 
-/* True iff the n eigenvalues in `evals` (a List) are pairwise distinct to a
- * relative tolerance.  Distinct eigenvalues  <=>  the matrix is diagonalizable,
- * which is what makes the fast path valid without any inverse check. */
-static bool jd_all_distinct(Expr* evals, int n) {
-    double* re = (double*)malloc(sizeof(double) * (size_t)n);
-    double* im = (double*)malloc(sizeof(double) * (size_t)n);
-    bool ok = true;
-    for (int i = 0; i < n && ok; i++)
-        if (!jd_entry_complex(evals->data.function.args[i], &re[i], &im[i])) ok = false;
-    if (ok) {
-        for (int i = 0; i < n && ok; i++)
-            for (int j = i + 1; j < n && ok; j++) {
-                double dr = re[i] - re[j], di = im[i] - im[j];
-                double gap = sqrt(dr * dr + di * di);
-                double sc = 1.0 + sqrt(re[i]*re[i] + im[i]*im[i]);
-                if (gap <= 1e-10 * sc) ok = false;   /* a repeated eigenvalue */
-            }
+/* True iff the eigenvalue (re, im) arrays are pairwise distinct to a relative
+ * tolerance.  Distinct spectrum <=> diagonalizable, which validates the fast
+ * path with no inverse check. */
+static bool jd_distinct(const double* re, const double* im, int n) {
+    for (int i = 0; i < n; i++)
+        for (int j = i + 1; j < n; j++) {
+            double dr = re[i] - re[j], di = im[i] - im[j];
+            double gap = sqrt(dr * dr + di * di);
+            double sc = 1.0 + sqrt(re[i]*re[i] + im[i]*im[i]);
+            if (gap <= 1e-10 * sc) return false;   /* a repeated eigenvalue */
+        }
+    return true;
+}
+
+/* Read an n×n numeric matrix into row-major (re, im) double buffers; false if
+ * any entry is not a concrete number. */
+static bool jd_read_matrix(Expr* m, int n, double* re, double* im) {
+    for (int i = 0; i < n; i++) {
+        Expr* row = m->data.function.args[i];
+        if (row->type != EXPR_FUNCTION || (int)row->data.function.arg_count != n)
+            return false;
+        for (int j = 0; j < n; j++)
+            if (!jd_entry_complex(row->data.function.args[j],
+                                  &re[i*n + j], &im[i*n + j])) return false;
     }
-    free(re); free(im);
-    return ok;
+    return true;
+}
+
+/* Eigenvalue of eigenvector `v` recovered from `m` (given as re/im buffers) as
+ * the component ratio (m.v)_p / v_p at v's largest-magnitude component p.  This
+ * is O(n) — it replaces a whole second eigensolve, since v already came from
+ * one.  Writes (*lr, *li) and returns the value as an owned Expr (chopped so a
+ * real eigenvalue stays Real), or NULL on failure. */
+static Expr* jd_recover_lambda(const double* mre, const double* mim, int n,
+                               Expr* v, double* lr, double* li) {
+    if (v->type != EXPR_FUNCTION || (int)v->data.function.arg_count != n) return NULL;
+    double* vre = (double*)malloc(sizeof(double) * (size_t)n);
+    double* vim = (double*)malloc(sizeof(double) * (size_t)n);
+    bool ok = true;
+    for (int j = 0; j < n; j++)
+        if (!jd_entry_complex(v->data.function.args[j], &vre[j], &vim[j])) { ok = false; break; }
+    int p = 0; double best = -1.0;
+    if (ok) for (int j = 0; j < n; j++) {
+        double a = vre[j]*vre[j] + vim[j]*vim[j];
+        if (a > best) { best = a; p = j; }
+    }
+    if (!ok || best <= 0.0) { free(vre); free(vim); return NULL; }
+    double wr = 0.0, wi = 0.0;                       /* (m.v)_p */
+    for (int j = 0; j < n; j++) {
+        double ar = mre[p*n + j], ai = mim[p*n + j], br = vre[j], bi = vim[j];
+        wr += ar*br - ai*bi;
+        wi += ar*bi + ai*br;
+    }
+    double dr = vre[p], di = vim[p], den = dr*dr + di*di;
+    double xr = (wr*dr + wi*di) / den, xi = (wi*dr - wr*di) / den;   /* w / v_p */
+    free(vre); free(vim);
+    double th = 1e-12 * (fabs(xr) + fabs(xi)) + 1e-14;
+    if (fabs(xi) < th) xi = 0.0;
+    if (fabs(xr) < th) xr = 0.0;
+    *lr = xr; *li = xi;
+    if (xi == 0.0) return expr_new_real(xr);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_real(xr),
+                   expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_real(xi), expr_new_symbol(SYM_I) }, 2) }, 2));
 }
 
 /* Numeric fast path: when the spectrum is distinct the matrix is
  * diagonalizable, so s = the numeric eigenvectors as columns and
- * j = DiagonalMatrix[eigenvalues] (paired positionally -- Eigenvalues and
- * Eigenvectors share the numeric kernel's deterministic order).  A repeated
- * numeric eigenvalue (defective, or diagonalizable-with-multiplicity) is
- * ambiguous at machine precision, so we decline (return NULL) and let the
- * caller rationalize and take the exact core, which resolves it correctly.
- * No inverse / product is needed here, so this stays fast even for a matrix
- * with complex eigenvalues (which Mathilda has no packed inverse for). */
+ * j = DiagonalMatrix[eigenvalues].  A repeated numeric eigenvalue (defective,
+ * or ambiguous at machine precision) makes us decline (return NULL) so the
+ * caller rationalizes and takes the exact core.  No inverse / product is
+ * formed, so this stays fast even with complex eigenvalues (Mathilda has no
+ * packed inverse for those).
+ *
+ * Eigensolve fusion: at machine precision the one `Eigenvectors` solve is
+ * enough — each eigenvalue is recovered from its eigenvector by an O(n)
+ * component ratio, so the second (`Eigenvalues`) solve is dropped (~24% of the
+ * numeric cost at n=200).  Arbitrary-precision input keeps the MPFR
+ * `Eigenvalues` solve so the eigenvalues carry full precision (those matrices
+ * are small, so the second solve is cheap). */
 static Expr* jd_numeric_fast(Expr* m, int n) {
-    Expr* evals_e = eval_and_free(expr_new_function(expr_new_symbol("Eigenvalues"),
-                     (Expr*[]){ expr_copy(m) }, 1));
-    Expr* evals = jd_as_boxed(evals_e);
-    expr_free(evals_e);
-    if (!evals || evals->type != EXPR_FUNCTION
-        || evals->data.function.head->type != EXPR_SYMBOL
-        || evals->data.function.head->data.symbol.name != SYM_List
-        || (int)evals->data.function.arg_count != n
-        || !jd_all_distinct(evals, n)) {
-        if (evals) expr_free(evals);
-        return NULL;
-    }
-
     Expr* evecs_e = eval_and_free(expr_new_function(expr_new_symbol("Eigenvectors"),
                      (Expr*[]){ expr_copy(m) }, 1));
     Expr* evecs = jd_as_boxed(evecs_e);
@@ -535,20 +581,72 @@ static Expr* jd_numeric_fast(Expr* m, int n) {
         || evecs->data.function.head->data.symbol.name != SYM_List
         || (int)evecs->data.function.arg_count != n) {
         if (evecs) expr_free(evecs);
-        expr_free(evals);
         return NULL;
     }
 
-    /* s: eigenvectors as columns; j: diagonal of the matching eigenvalues. */
-    Expr** cols = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
-    Expr** lam  = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
-    int* bs = (int*)calloc((size_t)n, sizeof(int));
-    for (int k = 0; k < n; k++) {
-        cols[k] = expr_copy(evecs->data.function.args[k]);
-        lam[k]  = expr_copy(evals->data.function.args[k]);
-        bs[k] = 1;
+    Expr** lam = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+    double* lre = (double*)malloc(sizeof(double) * (size_t)n);
+    double* lim = (double*)malloc(sizeof(double) * (size_t)n);
+    for (int k = 0; k < n; k++) lam[k] = NULL;
+    bool ok = true;
+
+    CommonInexactInfo info = common_scan_inexact(m);
+    if (info.min_bits <= 53) {
+        double* mre = (double*)malloc(sizeof(double) * (size_t)n * (size_t)n);
+        double* mim = (double*)malloc(sizeof(double) * (size_t)n * (size_t)n);
+        Expr* m_num = NULL;
+        /* Direct read for a concrete-numeric matrix; a symbolic-but-numeric
+         * entry (Pi, E, ...) needs one N[] pass, matching what the eigensolver
+         * did internally to produce the eigenvectors. */
+        if (!jd_read_matrix(m, n, mre, mim)) {
+            Expr* nn = eval_and_free(expr_new_function(expr_new_symbol("N"),
+                        (Expr*[]){ expr_copy(m) }, 1));
+            m_num = jd_as_boxed(nn);
+            expr_free(nn);
+            if (!m_num || m_num->type != EXPR_FUNCTION
+                || (int)m_num->data.function.arg_count != n
+                || !jd_read_matrix(m_num, n, mre, mim)) ok = false;
+        }
+        for (int k = 0; k < n && ok; k++) {
+            lam[k] = jd_recover_lambda(mre, mim, n, evecs->data.function.args[k],
+                                       &lre[k], &lim[k]);
+            if (!lam[k]) ok = false;
+        }
+        if (m_num) expr_free(m_num);
+        free(mre); free(mim);
+    } else {
+        Expr* evals_e = eval_and_free(expr_new_function(expr_new_symbol("Eigenvalues"),
+                         (Expr*[]){ expr_copy(m) }, 1));
+        Expr* evals = jd_as_boxed(evals_e);
+        expr_free(evals_e);
+        if (!evals || evals->type != EXPR_FUNCTION
+            || evals->data.function.head->type != EXPR_SYMBOL
+            || evals->data.function.head->data.symbol.name != SYM_List
+            || (int)evals->data.function.arg_count != n) {
+            ok = false;
+        } else {
+            for (int k = 0; k < n && ok; k++) {
+                lam[k] = expr_copy(evals->data.function.args[k]);
+                if (!jd_entry_complex(evals->data.function.args[k], &lre[k], &lim[k]))
+                    ok = false;
+            }
+        }
+        if (evals) expr_free(evals);
     }
-    expr_free(evecs); expr_free(evals);
+
+    if (ok) ok = jd_distinct(lre, lim, n);
+    free(lre); free(lim);
+
+    if (!ok) {
+        for (int k = 0; k < n; k++) if (lam[k]) expr_free(lam[k]);
+        free(lam); expr_free(evecs);
+        return NULL;
+    }
+
+    Expr** cols = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+    int* bs = (int*)calloc((size_t)n, sizeof(int));
+    for (int k = 0; k < n; k++) { cols[k] = expr_copy(evecs->data.function.args[k]); bs[k] = 1; }
+    expr_free(evecs);
     Expr* S = jd_build_S(cols, n);
     Expr* J = jd_build_J(bs, lam, n, n);
     for (int k = 0; k < n; k++) { expr_free(cols[k]); expr_free(lam[k]); }
@@ -558,11 +656,199 @@ static Expr* jd_numeric_fast(Expr* m, int n) {
 }
 
 /* ------------------------------------------------------------------------ *
+ *  LAPACK buffer fast path (the packed / NDArray numeric kernel).           *
+ *                                                                           *
+ *  Reads the matrix into a column-major double buffer -- straight off the   *
+ *  NDArray's float64 payload when the argument is packed, with no delist to  *
+ *  boxed Exprs -- calls LAPACK dgeev ONCE (eigenvalues + right eigenvectors),*
+ *  and builds s (eigenvectors as columns) and j directly from the raw       *
+ *  buffers.  This skips the whole chain the boxed path pays: the delist, the *
+ *  intermediate boxed eigenvector list that Eigenvectors materialises, and a *
+ *  second (Eigenvalues) solve.  Real matrices only (dgeev); a complex-entry  *
+ *  matrix, a repeated spectrum, or a build without LAPACK returns NULL and   *
+ *  the caller falls back to the boxed numeric / exact paths.                 *
+ * ------------------------------------------------------------------------ */
+
+/* Load an n×n REAL numeric matrix (packed NDArray or boxed List) into a
+ * column-major double buffer Ac (Ac[i + j*n] = m[i][j]).  Returns false for a
+ * complex, non-concrete, or wrong-shaped matrix. */
+static bool jd_load_real_colmajor(Expr* m, int n, double* Ac) {
+    if (is_ndarray(m)) {
+        const NDArrayData* nd = &m->data.ndarray;
+        if (nd->rank != 2 || nd->dims[0] != n || nd->dims[1] != n) return false;
+        if (ndt_is_complex(nd->dtype)) return false;
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++) {
+                double re, im;
+                ndt_get(nd->data, (size_t)i * (size_t)n + (size_t)j, nd->dtype, &re, &im);
+                Ac[i + j * n] = re;
+            }
+        return true;
+    }
+    if (m->type != EXPR_FUNCTION || (int)m->data.function.arg_count != n) return false;
+    for (int i = 0; i < n; i++) {
+        Expr* row = m->data.function.args[i];
+        if (row->type != EXPR_FUNCTION || (int)row->data.function.arg_count != n) return false;
+        for (int j = 0; j < n; j++) {
+            double re, im;
+            if (!jd_entry_complex(row->data.function.args[j], &re, &im) || im != 0.0)
+                return false;
+            Ac[i + j * n] = re;
+        }
+    }
+    return true;
+}
+
+/* Build s (n×n) from column buffers: column c is the eigenvector
+ * (Vr[c*n+i], Vi[c*n+i]); entries with zero imaginary part stay Real. */
+static Expr* jd_matrix_from_columns(const double* Vr, const double* Vi, int n) {
+    Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+    for (int i = 0; i < n; i++) {
+        Expr** cells = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+        for (int c = 0; c < n; c++) {
+            double r = Vr[c * n + i], im = Vi[c * n + i];
+            if (im == 0.0) cells[c] = expr_new_real(r);
+            else {
+                Expr* a[2] = { expr_new_real(r), expr_new_real(im) };
+                cells[c] = expr_new_function(expr_new_symbol(SYM_Complex), a, 2);
+            }
+        }
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)n);
+        free(cells);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
+    free(rows);
+    return out;
+}
+
+/* Build the diagonal j (n×n) from eigenvalue buffers (er, ei), chopping tiny
+ * noise so a real eigenvalue stays Real; off-diagonal is exact 0. */
+static Expr* jd_diag_from_buffers(const double* er, const double* ei, int n) {
+    Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+    for (int i = 0; i < n; i++) {
+        Expr** cells = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+        for (int j = 0; j < n; j++) {
+            if (i != j) { cells[j] = expr_new_integer(0); continue; }
+            double r = er[i], im = ei[i];
+            double th = 1e-12 * (fabs(r) + fabs(im)) + 1e-14;
+            if (fabs(im) < th) im = 0.0;
+            if (fabs(r) < th) r = 0.0;
+            if (im == 0.0) cells[j] = expr_new_real(r);
+            else {
+                Expr* a[2] = { expr_new_real(r), expr_new_real(im) };
+                cells[j] = expr_new_function(expr_new_symbol(SYM_Complex), a, 2);
+            }
+        }
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)n);
+        free(cells);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
+    free(rows);
+    return out;
+}
+
+static Expr* jd_numeric_lapack(Expr* m, int n) {
+#ifdef USE_LAPACK
+    if (!mathilda_lapack_probe()) return NULL;
+    double* Ac = (double*)malloc(sizeof(double) * (size_t)n * (size_t)n);
+    if (!Ac) return NULL;
+    if (!jd_load_real_colmajor(m, n, Ac)) { free(Ac); return NULL; }
+
+    double* wr = (double*)malloc(sizeof(double) * (size_t)n);
+    double* wi = (double*)malloc(sizeof(double) * (size_t)n);
+    double* VR = (double*)malloc(sizeof(double) * (size_t)n * (size_t)n);
+    Expr* result = NULL;
+    if (wr && wi && VR
+        && mat_lapack_dgeev(n, Ac, n, wr, wi, VR, n) == 0) {
+        size_t* perm = (size_t*)malloc(sizeof(size_t) * (size_t)n);
+        double* er = (double*)malloc(sizeof(double) * (size_t)n);
+        double* ei = (double*)malloc(sizeof(double) * (size_t)n);
+        direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
+        for (int s = 0; s < n; s++) { er[s] = wr[perm[s]]; ei[s] = wi[perm[s]]; }
+        /* Distinct spectrum <=> diagonalizable; else hand back to the exact core. */
+        if (jd_distinct(er, ei, n)) {
+            double* Vr = (double*)malloc(sizeof(double) * (size_t)n * (size_t)n);
+            double* Vi = (double*)malloc(sizeof(double) * (size_t)n * (size_t)n);
+            for (int s = 0; s < n; s++) {
+                size_t jj = perm[s];
+                double norm2 = 0.0;
+                for (int i = 0; i < n; i++) {
+                    double re, im;               /* dgeev packs conjugate pairs */
+                    if (wi[jj] == 0.0)     { re = VR[i + jj * n];       im = 0.0; }
+                    else if (wi[jj] > 0.0) { re = VR[i + jj * n];       im = VR[i + (jj + 1) * n]; }
+                    else                   { re = VR[i + (jj - 1) * n]; im = -VR[i + jj * n]; }
+                    Vr[s * n + i] = re; Vi[s * n + i] = im;
+                    norm2 += re * re + im * im;
+                }
+                double inv = (norm2 > 0.0) ? 1.0 / sqrt(norm2) : 1.0;
+                for (int i = 0; i < n; i++) { Vr[s * n + i] *= inv; Vi[s * n + i] *= inv; }
+            }
+            bool real_spec = true;
+            for (int s = 0; s < n; s++) if (ei[s] != 0.0) { real_spec = false; break; }
+            Expr* S = NULL; Expr* J = NULL;
+            if (real_spec && is_ndarray(m)) {
+                /* Real spectrum + packed input -> packed s, j inheriting the
+                 * input presentation (na_build_matrix; complex stays boxed). */
+                double* sb = (double*)malloc((size_t)n * (size_t)n * sizeof(double));
+                double* jb = (double*)calloc((size_t)n * (size_t)n, sizeof(double));
+                if (sb && jb) {
+                    for (int i = 0; i < n; i++)
+                        for (int c = 0; c < n; c++) sb[(size_t)i*n + c] = Vr[(size_t)c*n + i];
+                    for (int i = 0; i < n; i++) jb[(size_t)i*n + i] = er[i];
+                    S = na_build_matrix(sb, n, n, false, /*colmajor=*/false);
+                    J = na_build_matrix(jb, n, n, false, /*colmajor=*/false);
+                    NDPresentation pres = m->data.ndarray.present_as;
+                    if (S && is_ndarray(S)) S->data.ndarray.present_as = pres;
+                    if (J && is_ndarray(J)) J->data.ndarray.present_as = pres;
+                }
+                free(sb); free(jb);
+            }
+            if (!S) S = jd_matrix_from_columns(Vr, Vi, n);
+            if (!J) J = jd_diag_from_buffers(er, ei, n);
+            result = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ S, J }, 2);
+            free(Vr); free(Vi);
+        }
+        free(perm); free(er); free(ei);
+    }
+    free(Ac); free(wr); free(wi); free(VR);
+    return result;
+#else
+    (void)m; (void)n;
+    return NULL;
+#endif
+}
+
+/* Square-matrix order of `arg` (packed NDArray or boxed List); -1 otherwise. */
+static int jd_matrix_order(Expr* arg) {
+    if (is_ndarray(arg)) {
+        const NDArrayData* nd = &arg->data.ndarray;
+        if (nd->rank == 2 && nd->dims[0] > 0 && nd->dims[0] == nd->dims[1])
+            return (int)nd->dims[0];
+        return -1;
+    }
+    int64_t dims[64];
+    int rank = get_tensor_dims(arg, dims);
+    if (rank == 2 && dims[0] > 0 && dims[1] > 0 && dims[0] == dims[1])
+        return (int)dims[0];
+    return -1;
+}
+
+/* Inexact iff a machine/arbitrary-precision matrix (float / complex NDArray, or
+ * a boxed matrix carrying a Real / MPFR leaf). */
+static bool jd_matrix_is_inexact(Expr* arg) {
+    if (is_ndarray(arg)) {
+        NDType dt = arg->data.ndarray.dtype;
+        return dt == NDT_FLOAT64 || dt == NDT_FLOAT32
+            || dt == NDT_COMPLEX64 || dt == NDT_COMPLEX32;
+    }
+    return eigen_matrix_is_inexact(arg);
+}
+
+/* ------------------------------------------------------------------------ *
  *  Builtin entry point.                                                     *
  * ------------------------------------------------------------------------ */
 
 Expr* builtin_jordandecomposition(Expr* res) {
-    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
 
     size_t argc = res->data.function.arg_count;
@@ -574,35 +860,56 @@ Expr* builtin_jordandecomposition(Expr* res) {
         return NULL;
     }
 
-    Expr* mexpr = res->data.function.args[0];
-    int64_t dims[64];
-    int rank = get_tensor_dims(mexpr, dims);
-    if (rank != 2 || dims[0] == 0 || dims[1] == 0 || dims[0] != dims[1]) {
-        char* s = expr_to_string_fullform(mexpr);
+    Expr* arg = res->data.function.args[0];
+    int n = jd_matrix_order(arg);
+    if (n < 0) {
+        char* s = expr_to_string_fullform(arg);
         fprintf(stderr,
                 "JordanDecomposition::matsq: Argument %s at position 1 is not "
                 "a non-empty square matrix.\n", s);
         free(s);
         return NULL;
     }
-    int n = (int)dims[0];
 
-    if (!eigen_matrix_is_inexact(mexpr))
-        return jd_exact_core(mexpr, n);
+    bool inexact = jd_matrix_is_inexact(arg);
 
-    /* Inexact: diagonalizable fast path, else rationalize -> exact -> numericalize. */
-    Expr* fast = jd_numeric_fast(mexpr, n);
-    if (fast) return fast;
+    /* Packed / NDArray numeric kernel: read the buffer directly, one dgeev.
+     * Machine precision only -- dgeev is double, so an arbitrary-precision
+     * (MPFR) matrix must keep the full-precision path below. A float / complex
+     * NDArray is machine by dtype; a boxed matrix is machine iff every inexact
+     * leaf is <= 53 bits. */
+    if (inexact) {
+        bool machine = is_ndarray(arg) || common_scan_inexact(arg).min_bits <= 53;
+        if (machine) {
+            Expr* fast = jd_numeric_lapack(arg, n);
+            if (fast) return fast;
+        }
+    }
 
-    CommonInexactInfo info = common_scan_inexact(mexpr);
-    long bits = info.min_bits ? info.min_bits : 53;
-    Expr* m_rat = common_rationalize_input(mexpr, bits);
-    Expr* exact = jd_exact_core(m_rat, n);
-    expr_free(m_rat);
-    if (!exact) return NULL;
-    Expr* num = common_numericalize_result(exact, bits);
-    expr_free(exact);
-    return num;
+    /* Everything else needs a boxed matrix: materialise a packed NDArray once. */
+    Expr* mb = is_ndarray(arg) ? pack_unpack(arg) : NULL;
+    Expr* m = mb ? mb : arg;
+    Expr* result = NULL;
+
+    if (!inexact) {
+        result = jd_exact_core(m, n);
+    } else {
+        result = jd_numeric_fast(m, n);
+        if (!result) {
+            CommonInexactInfo info = common_scan_inexact(m);
+            long bits = info.min_bits ? info.min_bits : 53;
+            Expr* m_rat = common_rationalize_input(m, bits);
+            Expr* exact = jd_exact_core(m_rat, n);
+            expr_free(m_rat);
+            if (exact) {
+                result = common_numericalize_result(exact, bits);
+                expr_free(exact);
+            }
+        }
+    }
+
+    if (mb) expr_free(mb);
+    return result;
 }
 
 void jordandecomp_init(void) {
