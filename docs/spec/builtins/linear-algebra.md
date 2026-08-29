@@ -1307,6 +1307,71 @@ Out[5]= FindIntegerNullVector[{E, Pi}, 1000000]
 > `LatticeReduce`, reusing its exact Gaussian-rational LLL kernel
 > (`lll_reduce`, extended to report `minᵢ |b*ᵢ|²`).
 
+## JordanDecomposition
+Gives the Jordan decomposition of a square matrix.
+- `JordanDecomposition[m]` — returns `{s, j}` where `j` is the Jordan
+  canonical form of `m` and `s` is the similarity matrix, so that
+  `m == s . j . Inverse[s]`. `j` is block-diagonal in Jordan blocks (an
+  eigenvalue on the diagonal, `1`s on the superdiagonal); the columns of
+  `s` are the generalized eigenvectors grouped into Jordan chains that
+  match `j`'s blocks. A `1` on `j`'s superdiagonal marks a deficient
+  eigenspace.
+
+**Features**:
+- `Protected`.
+- Works on every input family:
+  - exact integer / rational matrices (exact `s` and `j`);
+  - free-symbolic matrices with closed-form eigenvalues (e.g. any
+    2×2, or small matrices with a factorable characteristic
+    polynomial);
+  - complex matrices;
+  - machine-precision Real matrices (the numeric eigensolver; a generic
+    distinct spectrum is diagonalizable, so `j` is diagonal);
+  - arbitrary-precision MPFR matrices (output at the input precision).
+- Algorithm:
+  - **Exact / symbolic.** The eigenvalues come from the characteristic
+    polynomial (`eigen_char_poly_faddeev` → `Solve`); for each eigenvalue
+    `λ` the Jordan block structure is read from the nullity sequence
+    `dim ker (m - λ I)^k`, and a top-down chain-top selection (via a
+    `MatrixRank`-based "extend a spanning set to a basis") builds the
+    Jordan chains bottom-up. The generalized eigenvectors of `s` are any
+    valid Jordan basis, not a canonical one.
+  - **Numeric.** A matrix with a distinct spectrum is diagonalizable, so
+    `s` is the numeric eigenvectors as columns and `j = DiagonalMatrix`
+    of the (paired) eigenvalues — no inverse or matrix product is formed,
+    so a large diagonalizable matrix stays fast (a 100×100 in ~15 ms). A
+    matrix with a repeated numeric eigenvalue (defective, or ambiguous at
+    machine precision) is rationalised, decomposed by the exact core, and
+    numericalised back, which recovers the genuine block structure.
+- Result-fidelity notes: the exact printed `s` is not canonical (any
+  Jordan basis satisfying `m == s . j . Inverse[s]` is valid); numeric
+  block-splitting is not bit-reproducible from Mathematica (an ill-posed
+  problem), so the numeric contract is the residual `m ≈ s . j . Inverse[s]`
+  plus a block structure matching the numeric nullities.
+- Limitation: an exact matrix with an *irrational, defective* eigenvalue
+  whose generalized eigenspace cannot be spanned exactly (the
+  `is_zero_poly` pivot test cannot decide the row reduction) is left
+  unevaluated rather than returned wrong.
+- Issues `JordanDecomposition::argx` for the wrong argument count, and
+  `JordanDecomposition::matsq` for a non-square or empty matrix; both
+  leave the call unevaluated.
+- Not lowered by `Compile[]` (the result is a heterogeneous pair of
+  matrices, like `QRDecomposition` / `SingularValueDecomposition`); a
+  packed / `NDArray[…]` argument is accepted (delisted and re-evaluated).
+
+```mathematica
+In[1]:= JordanDecomposition[{{27, 48, 81}, {-6, 0, 0}, {1, 0, 3}}][[2]]
+Out[1]= {{6, 0, 0}, {0, 12, 1}, {0, 0, 12}}
+
+In[2]:= {s, j} = JordanDecomposition[{{-103, -191, -255}, {110, 190, 222}, {9, 9, 33}}];
+        j
+Out[2]= {{24, 0, 0}, {0, 48, 1}, {0, 0, 48}}
+
+In[3]:= {s, j} = JordanDecomposition[{{-1.2, 2.7, 3.8}, {4.2, 4.4, 5.3}, {3.5, 7.6, 6.8}}];
+        Diagonal[j]
+Out[3]= {13.7715, -2.12527, -1.6462}
+```
+
 ## QRDecomposition
 Gives the QR decomposition of a matrix.
 - `QRDecomposition[m]` — returns `{q, r}` such that

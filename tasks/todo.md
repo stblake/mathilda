@@ -1,59 +1,66 @@
-# Task: Exponential-tower dilogarithm engine (`rt_cherry_dilog_exp`)
+# JordanDecomposition[m]
 
-Close `Integrate[x/(-1+E^x), x]` and the exp-tower dilog family via a native
-Cherry engine (mirror of `cherry_dilog.c` transported to θ=E^(cx)).
+Return `{s, j}` with `m == s . j . Inverse[s]`; `j` = Jordan canonical form.
 
 ## Plan
-`/Users/user/.claude/plans/mathilda-s-implementation-of-cherry-s-temporal-stearns.md`
+- [ ] `src/linalg/jordandecomp.{c,h}` — builtin + exact/symbolic chain engine + numeric fast path
+- [ ] Register in `core.c` (`jordandecomp_init`), attribute `Protected`
+- [ ] Docstring in `src/info.c` (no examples)
+- [ ] `src/pack.c` AWARE list += "JordanDecomposition" (not INT64_OK)
+- [ ] `tools/compile_coverage.py` EXEMPT += "JordanDecomposition" ("returns a pair of matrices")
+- [ ] `docs/spec/builtins/linear-algebra.md` — `## JordanDecomposition`
+- [ ] `docs/spec/changelog/2026-08-24.md` — changelog entry
+- [ ] `tests/test_jordandecomp.c` + `tests/CMakeLists.txt` (COMMON_SRC + test target)
+- [ ] Build, run tests, valgrind, `make check-*`
 
-## Steps
-- [x] 1. Prototype the full algorithm as a Mathilda `.m` script; validate on the
-      whole corpus (rational×x, outer-log, mixtures, reducible den, declines).
-      DONE — `tasks/dilog_exp_prototype.m`. Flagship + family + outer-log +
-      mixtures all diff-back 0. `Log[1-E^x]` (negative-arg outer log) declines
-      cleanly (reversed-pair/iπ; out of scope, sound).
-- [ ] 2. Write `src/calculus/cherry_dilog_exp.{c,h}` transcribing the validated
-      prototype (mirror cherry_dilog.c structure + memory discipline).
-- [ ] 3. Register in `risch_special.c` (`#include` + `RT_SPECIAL_FORMS[]` row).
-- [ ] 4. Build (`make -j`); fix any C99/portability issues (`make check-c99`).
-- [ ] 5. Verify the flagship + family via `-file` scripts (diff-back = 0).
-- [ ] 6. Write `tests/test_cherry_dilog_exp.c`; wire into `tests/CMakeLists.txt`
-      (COMMON_SRC + target); build & run.
-- [ ] 7. Regression: cherry_dilog/li/ei + risch/integrate test targets.
-- [ ] 8. Docs: builtin page + changelog `docs/spec/changelog/2026-08-25.md`.
-- [ ] 9. Update memory / lessons.
-- [ ] SIDE TASK (user-requested): benchmark the `.m` prototype vs the C engine
-      on the corpus; report the speedup.
+## Algorithm
+- Exact/symbolic: charpoly (`eigen_char_poly_faddeev`) → `eigen_solve_poly` → distinct
+  eigenvalues with multiplicity. Per λ: nullity sequence of (m−λI)^k via
+  `eigen_null_space`; top-down chain-top selection (extend-to-basis via MatrixRank),
+  bottom-up chains. Assemble S (chains as columns), J (blocks). Gate: total cols == n
+  else NULL (irrational-defective limitation).
+- Numeric (inexact): fast path = numeric `Eigenvectors` as columns of S + diagonal J
+  from component-ratio eigenvalues, when MatrixRank[evecs]==n (diagonalizable).
+  Else rationalize → exact core → numericalize.
+
+## Plan (done)
+- [x] `src/linalg/jordandecomp.{c,h}` — builtin + exact/symbolic chain engine + numeric fast path
+- [x] Register in `core.c` (`jordandecomp_init`), attribute `Protected`
+- [x] Docstring in `src/info.c` (no examples)
+- [x] `src/pack.c` AWARE list += "JordanDecomposition"
+- [x] `tools/compile_coverage.py` EXEMPT += "JordanDecomposition"
+- [x] `docs/spec/builtins/linear-algebra.md` — `## JordanDecomposition`
+- [x] `docs/spec/changelog/2026-08-24.md` — entry
+- [x] `tests/test_jordandecomp.c` (20 checks) + CMake target
+- [x] Build clean, tests pass, valgrind clean, audits
 
 ## Review
 
-**Done (2026-08-29).** New engine `rt_cherry_dilog_exp` (`src/calculus/cherry_dilog_exp.c`),
-the exp-tower mirror of `rt_cherry_dilog`, closes `Integrate[x/(-1+E^x),x] =
-x Log[1-E^-x] - PolyLog[2,E^-x]` and the family (`x/(1±E^x)`, `x E^x/(E^x-1)`,
-`x/(E^(2x)-1)`, `Log[1±E^x]`, `Log[1+E^-x]`, mixtures). Native Cherry tower matching
-(no substitution): ansatz + linear solve over `{θ,x,u_k}` + PowerExpand diff-back.
-Registered as a `PolyLog`/`RT_SF_TOP_EXP` form (`risch_special.c`).
+**Result.** `JordanDecomposition[m]` → `{s, j}`, `m == s.j.Inverse[s]`. All spec
+examples reproduced: exact `j` for the two 3×3s (`{{6,0,0},{0,12,1},{0,0,12}}`,
+`{{24,0,0},{0,48,1},{0,0,48}}`), the size-3 chain 4×4, the 2×2 symbolic
+(`m.s==s.j`), machine real/complex, MPFR (20-digit), the defective-`N` block,
+and 1×1. 20/20 unit tests pass; eigen/linalg/matinv/nullspace suites unregressed.
 
-- Steps 1–9 complete. Extras done at user request: (a) all five Cherry engines exposed as
-  `Integrate`Cherry`{Ei,ExpMultiterm,Li,Dilog,DilogExp}` debug surfaces (hub
-  `cherry_builtins_init` in `cherry_driver.c`), each with docstring + PROTECTED;
-  (b) speed comparison — C engine ~8% faster than the `.m` prototype for raw matching
-  (16.6 vs 18.0 ms/integral), because both share the same C symbolic kernels.
-- Key fix: top-level depth gate (`g_integrate_depth > 1 → NULL`) so a DerivativeDivides
-  `u=Log[x]` substitution doesn't reroute `Log[x]/(1-x)` through the exp engine and change
-  its clean form. See `tasks/lessons.md` (2026-08-29).
-- Tests: `cherry_dilog_exp_tests` (new) + all cherry/risch/integrate suites green (39+).
-  `make check-c99` clean.
-- Docs: `docs/spec/builtins/calculus.md` + `docs/spec/changelog/2026-08-24.md`. Memory:
-  `project_cherry_dilog_exp_engine.md`.
+**Design.** One field-agnostic exact chain engine (charpoly → distinct
+eigenvalues with multiplicity → per-λ nullity sequence of `(m−λI)^k` via
+`eigen_null_space` → top-down chain-top selection with a `MatrixRank`-based
+extend-to-basis → bottom-up chains). Numeric fast path: distinct spectrum ⇒
+diagonalizable ⇒ eigenvectors-as-columns + `DiagonalMatrix[eigenvalues]` (paired
+positionally — verified reliable to ~1e-14), no inverse/product formed, so
+100×100 runs in ~15 ms. Repeated numeric eigenvalue ⇒ rationalize → exact core →
+numericalize.
 
-**Follow-on (2026-08-29) — general polylogarithm ladder.** `rt_cherry_polylog_exp`
-(`src/calculus/cherry_polylog_exp.c`) generalises the exp-tower dilog to ARBITRARY
-WEIGHT and ALGEBRAIC ROOTS: `P(x)/Q(E^(cx))` → partial-fraction over roots of Q
-(rational/algebraic) + exact Cherry ladder `∫x^n/(θ-ρ) = Σ -(1/ρ)(n!/(n-k)!)/c^{k+1}
-x^{n-k} PolyLog[k+1,ρ/θ]`, polylogs up to weight n+1. Closes `x^2/(E^x-1)`,
-`x^4/(E^(5x)-1)`, `x/(E^(2x)+E^x-1)`, `x^2/(E^(2x)+E^x-1)` (Q(√5)) — all diff-back 0.
-Registered ahead of dilog_exp (cleaner rational forms). Debug surface
-`Integrate\`Cherry\`PolyLogExp`. Tests `cherry_polylog_exp_tests`. Updated a stale
-dilog_exp decline assertion (x^2/(E^x-1) now integrates). All cherry + risch +
-integrate suites (26) green; `make check-c99` clean. NOT yet committed.
+**Perf note.** The numeric path deliberately avoids `Inverse`/`Dot` on the
+(generally complex) eigenvector matrix: Mathilda has no packed complex linear
+algebra, so boxed complex `Inverse[100×100]` is ~15 s. The distinctness gate
+sidesteps it entirely.
+
+**Surfaces.** AWARE (not INT64_OK); `Compile[]` exemption documented. c99 +
+packed-aware audits green; `JordanDecomposition` not flagged by
+compile-coverage (its pre-existing 22-head Image*/Interpolation backlog is
+unrelated and not a CI gate). Valgrind: 160 calls add 0 lost bytes over baseline.
+
+**Limitation (documented).** Exact matrix with an *irrational, defective*
+eigenvalue is left unevaluated (the `is_zero_poly` pivot test can't span the
+generalized eigenspace) rather than returned wrong.

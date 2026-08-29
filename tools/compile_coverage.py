@@ -232,6 +232,7 @@ EXEMPT = {
     "Quartiles": "returns a triple",
     "LUDecomposition": "returns a heterogeneous triple",
     "QRDecomposition": "returns a pair of matrices",
+    "JordanDecomposition": "returns a pair of matrices",
     "SingularValueDecomposition": "returns a triple of matrices",
     "Eigenvectors": "result shape is data-dependent (defective matrices)",
     "Eigenvalues": "may be complex for a real matrix; result type not static",

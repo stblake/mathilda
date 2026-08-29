@@ -893,6 +893,8 @@ void core_init(void) {
     ludecomp_init();
     void svdecomp_init(void);
     svdecomp_init();
+    void jordandecomp_init(void);
+    jordandecomp_init();
     fit_init();
     readwrite_init();
     loadmodule_init();
