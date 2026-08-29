@@ -47,6 +47,12 @@ SRC = os.path.join(ROOT, "src")
 EXEMPT = {
     "List": "enforces the no-nesting invariant -- a buffer must never sit inside "
     "a plain List, which is what keeps the gate an O(argc) top-level scan",
+    "NDArray": "the packing constructor itself: its is_ndarray(arg) branch makes "
+    "NDArray[array] idempotent (re-presenting a visible NDArray as visible, "
+    "re-casting the dtype), which is a materialise/identity guard, NOT a buffer "
+    "fast path. It must NOT go on AWARE -- a packed-list argument is correctly "
+    "materialised to a List by the gate and re-packed here, exactly the behaviour "
+    "AWARE would suppress.",
     # Floor / Ceiling / Round / IntegerPart / Sign were exempt here until
     # 2026-07-30 for want of a narrowing float64->int64 kernel category. They
     # have one now (NDUnaryKernel.to_int), are off NOT_AWARE, and answer with the

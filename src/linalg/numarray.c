@@ -12,6 +12,7 @@
 
 #include "numarray.h"
 #include "ndarray.h"
+#include "pack.h"     /* pack_g_any_created: arm the gate for packed-list results */
 #include <stdlib.h>
 #include <string.h>
 
@@ -373,4 +374,55 @@ Expr* na_build_matrix(const double* buf, int rows, int cols, bool is_complex,
     na_fix_negative_zero(data, (size_t)rows * (size_t)cols * 2);
     int64_t dims[2] = { rows, cols };
     return expr_new_ndarray_raw(2, dims, data, NDT_COMPLEX64);     /* moves `data` */
+}
+
+NDPresentation na_result_presentation(const Expr* input)
+{
+    if (input && is_ndarray(input)) return input->data.ndarray.present_as;
+    return NDA_HEAD_LIST;
+}
+
+/* na_build_* return a freshly-allocated (refcount==1) NDArray, so stamping
+ * present_as in place is safe -- no expr_unshare needed. */
+/* Stamp the presentation on a freshly-built factor.
+ *
+ * REAL result: a transparent packed-list (NDA_HEAD_LIST) reads as a plain List
+ * but keeps its data in a buffer.  For the evaluator's transparency gate to
+ * normalize it against a List operand (materialize it down, or lift the List up)
+ * in Listable arithmetic like `m - q.t.ConjugateTranspose[q]`, the "some packing
+ * happened" flag must be armed -- expr_new_ndarray_raw does not set it, so we do,
+ * exactly as ndbuild_open_like (src/pack.c) does.
+ *
+ * COMPLEX result: a complex packed-list is NOT a supported representation -- the
+ * auto-packer only ever creates real (float64/int64) packed lists, and the
+ * transparency gate corrupts a complex one (drops the imaginary part on
+ * materialize).  So a complex result destined for a boxed-List caller
+ * (NDA_HEAD_LIST) is boxed into a nested List of Complex[...]; a complex result
+ * for an NDArray caller stays a visible complex64 NDArray (NDA_HEAD_NDARRAY),
+ * which the gate leaves intact and which threads correctly against a visible
+ * input in reconstruction. */
+static Expr* na_finish(Expr* nd, bool is_complex, NDPresentation pres)
+{
+    if (!nd || !is_ndarray(nd)) return nd;
+    if (is_complex && pres == NDA_HEAD_LIST) {
+        Expr* boxed = ndarray_to_nested_list(nd);
+        expr_free(nd);
+        return boxed;
+    }
+    nd->data.ndarray.present_as = pres;
+    if (pres == NDA_HEAD_LIST) pack_g_any_created = true;
+    return nd;
+}
+
+Expr* na_build_vector_as(const double* buf, int n, bool is_complex,
+                         NDPresentation pres)
+{
+    return na_finish(na_build_vector(buf, n, is_complex), is_complex, pres);
+}
+
+Expr* na_build_matrix_as(const double* buf, int rows, int cols, bool is_complex,
+                         bool colmajor, NDPresentation pres)
+{
+    return na_finish(na_build_matrix(buf, rows, cols, is_complex, colmajor),
+                     is_complex, pres);
 }

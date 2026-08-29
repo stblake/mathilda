@@ -267,10 +267,11 @@ static Expr* lp_geqrf(Expr* res, int cplx)
  * For full-rank input the two agree BIT-FOR-BIT: checked on 240 pseudo-random
  * matrices across eight shapes, maximum disagreement 0.0.
  *
- * Both outputs are materialised to plain Lists. An NDArray must never sit inside
- * a plain List (the no-nesting invariant that keeps the transparency gate an
- * O(argc) top-level scan), and a visible NDArray here would change the printed
- * form of an ordinary QRDecomposition result.
+ * Both outputs stay PACKED with no per-element Expr boxing: an NDArray input
+ * inherits its presentation (a visible NDArray stays visible, a transparent
+ * packed-list stays transparent), and a boxed-List input yields transparent
+ * packed-lists (na_result_presentation -> NDA_HEAD_LIST) -- which read and print
+ * as ordinary Lists and thread correctly in reconstruction arithmetic.
  */
 Expr* mat_qr_mathilda(const Expr* mat, int cplx)
 {
@@ -311,27 +312,18 @@ Expr* mat_qr_mathilda(const Expr* mat, int cplx)
                 int info2 = cplx ? mat_lapack_zungqr(m, k, k, A, m, tau)
                                  : mat_lapack_dorgqr(m, k, k, A, m, tau);
                 if (info2 == 0) {
-                    /* k x m, row-major over the same bytes == Transpose[Q]. */
-                    Expr* q = na_build_matrix(A, k, m, cplx, 0);
-                    Expr* r = na_build_matrix(R, k, n, cplx, 1);
+                    /* k x m, row-major over the same bytes == Transpose[Q].
+                     * Keep q, r packed with no per-element Expr boxing: an
+                     * NDArray input inherits its presentation, a boxed-List input
+                     * yields transparent packed-lists (na_result_presentation ->
+                     * NDA_HEAD_LIST) that thread correctly in reconstruction. */
+                    NDPresentation pres = na_result_presentation(mat);
+                    Expr* q = na_build_matrix_as(A, k, m, cplx, 0, pres);
+                    Expr* r = na_build_matrix_as(R, k, n, cplx, 1, pres);
                     if (q && r) {
-                        if (is_ndarray(mat)) {
-                            /* NDArray input -> keep the packed q, r, inheriting
-                             * the input's presentation (the LUDecomposition
-                             * contract: no round-trip through boxed Exprs). */
-                            NDPresentation pres = mat->data.ndarray.present_as;
-                            if (is_ndarray(q)) q->data.ndarray.present_as = pres;
-                            if (is_ndarray(r)) r->data.ndarray.present_as = pres;
-                            Expr* el[2] = { q, r };
-                            out = make_list(el, 2);
-                            q = NULL; r = NULL;   /* ownership moved into out */
-                        } else {
-                            /* Boxed-List input -> boxed List output, unchanged. */
-                            Expr* ql = is_ndarray(q) ? ndarray_to_nested_list(q) : expr_copy(q);
-                            Expr* rl = is_ndarray(r) ? ndarray_to_nested_list(r) : expr_copy(r);
-                            Expr* el[2] = { ql, rl };
-                            out = make_list(el, 2);
-                        }
+                        Expr* el[2] = { q, r };
+                        out = make_list(el, 2);
+                        q = NULL; r = NULL;   /* ownership moved into out */
                     }
                     if (q) expr_free(q);
                     if (r) expr_free(r);

@@ -1,86 +1,59 @@
-# Task: Implement SchurDecomposition
+# Task: Matrix decompositions stay on packed/NDArray buffers (no Expr boxing)
 
 Plan: `/Users/user/.claude/plans/following-on-from-our-tingly-plum.md`
 
-## Checklist
+## Phase 0 — NDArray[] idempotency (prerequisite)
+- [ ] `src/ndarray.c` `builtin_ndarray`: idempotent `is_ndarray(arg)` branch (mirror `builtin_tondarray`)
+- [ ] verify `NDArray[NDArray[m]] === NDArray[m]`, dtype re-cast works
 
-### 1. LAPACK Schur drivers
-- [ ] `lapack.h`: prototypes `dgees_`/`zgees_`/`dgges_`/`zgges_`/`dgebal_`/`zgebal_` (non-Accelerate block)
-- [ ] `lapack.h`: `mat_lapack_*` wrapper decls (+ stub-safe)
-- [ ] `lapack.c`: wrapper impls (query→alloc→call→free) + no-LAPACK stubs
+## Phase 1 — shared helpers
+- [ ] `numarray.{c,h}`: `na_result_presentation(input)` + `na_build_matrix_as(...)`
+- [ ] refresh stale "NDArray real-only" header prose
 
-### 2. Expose MPFR Schur Q
-- [ ] `eigen.h`: decl `eigen_schur_real_mpfr` (USE_MPFR)
-- [ ] `eigen_direct.c`: impl reusing Hessenberg + Francis QR, return Q + T
+## Phase 2 — SchurDecomposition
+- [ ] `schur_load_cm`: real load first (fast path), complex fallback
+- [ ] `schur_build`: drop pack_unpack; `na_build_matrix_as` + presentation
 
-### 3. Schur module
-- [ ] `schurdecomp_internal.h` (opts struct, dispatch decls)
-- [ ] `schurdecomp.h` (builtin + init decls)
-- [ ] `schurdecomp.c` (entry, options parse, std/gen detection, precision dispatch, result build, ndla)
-- [ ] `schurdecomp_machine.c` (dgees/zgees/dgges/zgges + dgebal pivoting + RBDF->False complexify)
-- [ ] `schurdecomp_mpfr.c` (standard real via eigen_schur_real_mpfr)
+## Phase 3 — pack complex RESULTS (Eigen/Jordan)
+- [ ] `eigen_direct.c`: complex eigenvalue/vector builders → COMPLEX64 packed
+- [ ] `jordandecomp.c`: complex spectrum on packed input → COMPLEX64 packed
 
-### 4. Registration
-- [ ] `sym_names.{h,c}`: `SYM_RealBlockDiagonalForm`
-- [ ] `core.c`: `schurdecomp_init()` call
-- [ ] `info.c`: docstring
-- [ ] `schurdecomp_init`: builtin + ATTR_PROTECTED
+## Phase 4 — complex NDArray INPUT on buffer (reduce delist)
+- [ ] LU → zgetrf; SVD → zgesdd; Eigen → zgeev; QR → cplx=1
+- [ ] scope: complex-dtype decline only (options/generalized may keep delisting)
 
-### 5. Surfaces
-- [ ] `pack.c`: AWARE entry (not INT64_OK)
-- [ ] `tools/compile_coverage.py`: EXEMPT entry
+## Phase 5 — presentation consistency (boxed → packed-list)
+- [ ] QR boxed-input branch → packed-list stamp
+- [ ] audit all heads: boxed input → transparent packed-list, no boxing
 
-### 6. Tests
-- [ ] `tests/test_schurdecomp.c`
-- [ ] `tests/CMakeLists.txt`: COMMON_SRC + executable stanza
-
-### 7. Docs / version
-- [ ] `docs/spec/builtins/linear-algebra.md`
-- [ ] `docs/spec/changelog/2026-08-24.md`
-- [ ] `src/version.h`: 0.117 → 0.118
-
-### 8. Verify
-- [x] build + check-c99 (both clean)
-- [ ] unit tests (schur + regression: jordan/eigen/svd) — building
-- [x] golden examples (piped transcript) — all pass, 100x100 recon 4.5e-14
-- [x] packed audits: packed-aware OK, nd-surfaces OK, array-exactness OK (0 MIXED);
-      compile-coverage: Schur correctly EXEMPT (22 pre-existing unrelated failures)
-- [ ] valgrind
-- [ ] rebuild graph + self-review
-
-## Notes
-- All sections 1-7 complete. LAPACK dgees/zgees/dgges/zgges + dgebal/dgebak added.
-- check-compile-coverage has 22 PRE-EXISTING failures (image/fit/interp/Hermite),
-  none from this change; Schur is exempt and not flagged.
+## Phase 6 — docs, tests, benchmark
+- [ ] docstrings/spec + fix stale "complex boxed" comments
+- [ ] tests: packed real+complex I/O, 3 input forms, idempotency
+- [ ] regression + audits + valgrind
+- [ ] scipy baseline on packed inputs (≈1.0x); formalize benchmarks/30-schur-decomposition/
+- [ ] changelog + version bump
 
 ## Review
 
-**Done (v0.118).** `SchurDecomposition[m]` (standard) and `SchurDecomposition[{m,a}]`
-(generalized/QZ) implemented across `src/linalg/schurdecomp{,_internal}.h`,
-`schurdecomp.c` (dispatch), `schurdecomp_machine.c` (LAPACK), `schurdecomp_mpfr.c`
-(arbitrary-precision standard real).
+### Milestone committed (v0.119): mechanism + Schur + QR + NDArray[] fix
+- **Phase 0 ✓** `NDArray[]` idempotent on an NDArray arg (was malformed `{1}`);
+  EXEMPT in check_packed_aware (idempotency guard, not a fast path).
+- **Phase 1 ✓** `na_result_presentation` + `na_build_matrix_as`/`_vector_as` in
+  numarray. Two subtle correctness fixes discovered here: (a) arm
+  `pack_g_any_created` for NDA_HEAD_LIST results so the gate normalizes them in
+  reconstruction arithmetic (else `m - q.t.q^H` mis-threads); (b) a complex
+  result for a boxed-List caller must be boxed to a Complex[] List, NOT a
+  complex packed-list (the gate corrupts complex packed-lists → float64).
+- **Phase 2 ✓** Schur: real-first load (fast memcpy path) + packed factors.
+  Packed 400×400 ~65ms, on par with / faster than scipy ~87ms.
+- **Phase 5 (partial) ✓** QR boxed-input → transparent packed-list (was boxed).
+- Verified: all input forms reconstruct ~1e-14; packed-aware/array-exactness
+  audits pass; schur/jordan/eigen/packed_list/ndarray_linalg tests pass;
+  valgrind clean (Accelerate baseline only).
 
-- **LAPACK layer**: new `mat_lapack_dgees/zgees/dgges/zgges` + `dgebal/zgebal/dgebak/zgebak`
-  wrappers in `lapack.{c,h}` (Fortran prototypes guarded out under Accelerate; no-LAPACK stubs).
-- **MPFR**: new `eigen_schur_real_mpfr` in `eigen_direct.c` surfaces the orthogonal Q the
-  Francis QR already accumulates.
-- **Options**: `Pivoting` ({q,t,d}, m.d==d.q.t.q^H via dgebal/dgebak), `RealBlockDiagonalForm`
-  (real blocks vs complex triangular), `TargetStructure->"Structured"` (returns dense).
-- **Surfaces**: NDArray/packed handled via na_load_matrix (on pack.c AWARE); result matches
-  input representation (List→List, NDArray→NDArray) to avoid Plus mis-threading; symbolic
-  constants (Pi) numericalised on load miss; Compile-exempt.
-- **Registration**: `schurdecomp_init` in core.c, ATTR_PROTECTED, docstring, `SYM_RealBlockDiagonalForm`.
-- **Docs**: linear-algebra.md section, changelog 2026-08-24.md, version 0.117→0.118.
-
-**Verification**: 24/24 unit tests pass; golden transcript reconstructs to ~1e-14 (100×100 in
-a few ms); check-c99 / check-packed-aware / check-nd-surfaces / check-array-exactness pass;
-Schur correctly EXEMPT in check-compile-coverage (22 pre-existing unrelated failures untouched);
-valgrind clean (only Accelerate's own LAPACK baseline leak, identical to Eigenvalues/SVD);
-JordanDecomposition + eigen regression suites pass.
-
-**Independent code review**: no blockers/leaks/ABI errors. Two warnings applied as fixes —
-(1) check `dgebak`/`zgebak` return and gate `ok=0` (was discarded, inconsistent with `dgebal`);
-(2) docstring caveat that MPFR is native only for the standard-real default-options case.
-
-**Known limitations (documented)**: complex/generalized/RBDF-False/Pivoting at arbitrary
-precision fall back to machine precision (would need a complex MPFR QR / an MPFR QZ).
+### Remaining (Phases 3, 4, and 5 for LU/SVD/Eigen/Jordan)
+- **Phase 3** pack the COMPLEX spectra still boxed by Eigenvalues/Eigenvectors
+  (`direct_build_complex_*_list`) and JordanDecomposition (`jd_matrix_from_columns`).
+- **Phase 4** complex-NDArray-INPUT buffer paths (zgetrf/zgesdd/zgeev) so a
+  complex NDArray to LU/SVD/Eigen computes on the buffer instead of delisting.
+- **Phase 6** benchmark folder `benchmarks/30-schur-decomposition/`.

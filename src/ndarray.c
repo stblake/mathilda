@@ -2281,6 +2281,27 @@ Expr* builtin_ndarray(Expr* res) {
     }
     if (argc != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    /* Idempotent on an NDArray argument: NDArray[array] is the array itself,
+     * presented visibly (a transparent packed-list becomes a visible
+     * NDArray[...]).  Without this branch ndarray_from_nested_list below returns
+     * NULL for an EXPR_NDARRAY (head_is requires a List), so NDArray[NDArray[m]]
+     * stayed unevaluated as a malformed rank-1 value.  Mirrors builtin_tondarray
+     * (src/pack.c).  A round-trip through the List form is used only for an
+     * explicit DataType re-cast. */
+    if (is_ndarray(arg)) {
+        bool same_dtype = !explicit_dt || arg->data.ndarray.dtype == dtype;
+        if (same_dtype) {
+            res->data.function.args[0] = NULL;   /* steal arg; evaluator frees res */
+            arg = expr_unshare(arg);             /* private (refcount==1) before mutating */
+            arg->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+            return arg;
+        }
+        Expr* list = ndarray_to_nested_list(arg);
+        Expr* recast = ndarray_from_nested_list(list, dtype);
+        expr_free(list);
+        if (recast) recast->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+        return recast;   /* NULL leaves the call unevaluated */
+    }
     /* No explicit DataType: infer complex64 when the data carries complex
      * leaves, else keep the float64 default. float32/complex32 require an
      * explicit option. */

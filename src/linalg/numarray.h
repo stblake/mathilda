@@ -17,11 +17,13 @@
  * CBLAS `void`-pointer ABIs. A real-typed load of data that carries a nonzero
  * imaginary part fails (returns false) so the call is left unevaluated.
  *
- * Results come back as `NDArray[...]` for real data (consistent with the rest
- * of the numeric linear-algebra surface) and as a nested `List` of
- * `Complex[re,im]` for complex data, since NDArray is real-only. A complex
- * entry whose imaginary part is exactly zero is collapsed to a bare real,
- * matching the numericalize / machine-kernel convention.
+ * Results come back PACKED for both real and complex data: a real result is a
+ * float64 NDArray and a complex result is a complex64 NDArray (interleaved
+ * re,im) -- NDArray is NOT real-only. `na_build_matrix` / `na_build_vector`
+ * never box a per-element `Expr`; `na_scalar` still returns a bare
+ * `Complex[re,im]` (im == 0 collapsed to real) for a rank-0 result.  Callers
+ * that must match an input's representation stamp the result via
+ * `na_build_*_as(..., na_result_presentation(input))`.
  *
  * All loaders allocate the returned buffer with malloc; the caller owns it and
  * must free() it. On failure nothing is allocated and nothing leaks.
@@ -66,10 +68,26 @@ Expr* na_scalar(double re, double im);
 Expr* na_build_vector(const double* buf, int n, bool is_complex);
 
 /* Build a rows x cols matrix Expr from a flat buffer laid out per `colmajor`
- * (as in na_load_matrix). Real -> NDArray of rank 2; complex -> nested List of
- * Complex[...] (im == 0 collapsed to Real). */
+ * (as in na_load_matrix). Real -> float64 NDArray; complex -> complex64 NDArray
+ * (both packed; NDArray is NOT real-only). im == 0 is NOT collapsed here. */
 Expr* na_build_matrix(const double* buf, int rows, int cols, bool is_complex,
                       bool colmajor);
+
+/* The presentation a result factor should carry so it stays packed (no
+ * per-element Expr boxing) yet behaves correctly downstream: an NDArray input's
+ * own present_as (a visible NDArray[...] input yields a visible result; a
+ * transparent packed-list input stays transparent), else NDA_HEAD_LIST for a
+ * boxed-List input -- a transparent packed-list that reads as a List and threads
+ * correctly against any operand in reconstruction arithmetic. */
+NDPresentation na_result_presentation(const Expr* input);
+
+/* na_build_vector / na_build_matrix, then stamp present_as. Pass
+ * na_result_presentation(input) so machine-numeric factors match the input's
+ * representation without ever round-tripping through boxed Exprs. */
+Expr* na_build_vector_as(const double* buf, int n, bool is_complex,
+                         NDPresentation pres);
+Expr* na_build_matrix_as(const double* buf, int rows, int cols, bool is_complex,
+                         bool colmajor, NDPresentation pres);
 
 #ifdef __cplusplus
 }

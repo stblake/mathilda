@@ -4,7 +4,7 @@
  *   standard, real     -> dgees   (real quasi-triangular Schur form)
  *   standard, complex  -> zgees   (complex upper-triangular Schur form; also the
  *                                   RealBlockDiagonalForm -> False path for a
- *                                   real matrix, whose input is loaded complex)
+ *                                   real matrix, whose real buffer is widened)
  *   generalized, real  -> dgges   (QZ, real quasi-triangular S / T)
  *   generalized, cplx  -> zgges   (QZ, complex upper-triangular S / T)
  *   Pivoting -> True   -> dgebal balances the matrix, dgebak reconstructs the
@@ -12,13 +12,14 @@
  *                         identity, and the Schur form is computed on the
  *                         balanced matrix, so m . d == d . q . t . q^H.
  *
- * Every matrix argument (NDArray or boxed List-of-Lists) is marshalled through
- * numarray.c's na_load_matrix into a Fortran column-major double buffer;
- * schur_load_cm additionally numericalises symbolic constants (Pi, E, ...) via
- * N[] so a numeric-but-not-yet-evaluated matrix still loads.  Every factor is
- * rebuilt with schur_build, which matches the result representation to the
- * input: a boxed-List input yields boxed nested Lists (so List arithmetic in a
- * reconstruction threads element-wise), an NDArray input yields an NDArray.
+ * The matrix is loaded REAL-FIRST (schur_load_cm with want_complex=false), which
+ * hits na_load_matrix's float64 memcpy/transpose fast path for a packed/NDArray
+ * real input; a genuinely complex matrix fails the real load and is re-loaded
+ * complex.  Factors are built with na_build_matrix_as, which keeps them packed
+ * (float64 / complex64 NDArray, no per-element Expr boxing) and stamps the
+ * presentation from na_result_presentation(m): a visible NDArray input yields
+ * visible factors, a transparent packed-list or boxed-List input yields
+ * transparent packed-list factors that thread correctly in reconstruction.
  *
  * Memory contract: standard builtin ownership (SPEC.md §4).  Never frees the
  * input; every malloc'd buffer is released on every exit path.
@@ -30,8 +31,6 @@
 #include "lapack.h"
 #include "sym_names.h"
 #include "eval.h"
-#include "pack.h"
-#include "ndarray.h"
 #include "expr.h"
 
 #include <stdlib.h>
@@ -61,24 +60,40 @@ static bool schur_load_cm(const Expr* m, bool want_complex, int n, double** buf)
     return ok;
 }
 
-/* Rebuild an n x n factor.  na_build_matrix hands back an NDArray for real data;
- * when the input was a plain boxed List we unpack it so the whole result stays
- * boxed and threads correctly against the user's boxed matrix in a
- * reconstruction (a plain List minus an atomic NDArray mis-threads). */
+/* Widen a real column-major buffer to interleaved complex (im = 0). */
+static double* schur_widen(const double* re, size_t nn) {
+    double* z = (double*)malloc(2 * nn * sizeof(double));
+    if (!z) return NULL;
+    for (size_t k = 0; k < nn; k++) { z[2 * k] = re[k]; z[2 * k + 1] = 0.0; }
+    return z;
+}
+
+/* Build a factor: a packed float64/complex64 NDArray carrying `pres`. */
 static Expr* schur_build(const double* buf, int n, bool is_complex,
-                         bool colmajor, bool packed) {
-    Expr* mm = na_build_matrix(buf, n, n, is_complex, colmajor);
-    if (!packed && mm && is_ndarray(mm)) {
-        Expr* boxed = pack_unpack(mm);
-        expr_free(mm);
-        return boxed;
-    }
-    return mm;
+                         bool colmajor, NDPresentation pres) {
+    return na_build_matrix_as(buf, n, n, is_complex, colmajor, pres);
 }
 
 /* Assemble a List result from an already-owned array of factor Exprs. */
 static Expr* schur_list(Expr** items, size_t k) {
     return expr_new_function(expr_new_symbol(SYM_List), items, k);
+}
+
+/* Build the balancing d = P*D by back-transforming the identity (Pivoting). */
+static double* schur_pivot_matrix(int n, int ilo, int ihi, const double* scale,
+                                  bool is_complex) {
+    size_t nn = (size_t)n * (size_t)n;
+    size_t comps = is_complex ? 2 : 1;
+    double* D = (double*)malloc(comps * nn * sizeof(double));
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++) {
+            size_t off = comps * ((size_t)i + (size_t)j * (size_t)n);
+            D[off] = (i == j) ? 1.0 : 0.0;
+            if (is_complex) D[off + 1] = 0.0;
+        }
+    if (is_complex) mat_lapack_zgebak('B', 'R', n, ilo, ihi, scale, n, D, n);
+    else            mat_lapack_dgebak('B', 'R', n, ilo, ihi, scale, n, D, n);
+    return D;
 }
 
 /* ------------------------------------------------------------------------ *
@@ -88,51 +103,41 @@ static Expr* schur_list(Expr** items, size_t k) {
 Expr* schur_machine_standard(const Expr* m, int n, const SchurOpts* opts) {
     if (!mathilda_lapack_probe()) return NULL;
 
-    double* Az = NULL;   /* complex column-major, 2*n*n interleaved */
-    if (!schur_load_cm(m, /*want_complex=*/true, n, &Az))
-        return NULL;     /* non-numeric leaf -> leave the call unevaluated */
-
-    bool packed = is_ndarray(m);
+    NDPresentation pres = na_result_presentation(m);
     size_t nn = (size_t)n * (size_t)n;
 
-    /* Real iff every imaginary component is exactly zero. */
-    bool all_imag_zero = true;
-    for (size_t k = 0; k < nn; k++)
-        if (Az[2 * k + 1] != 0.0) { all_imag_zero = false; break; }
+    /* Real-first load (fast path); fall back to complex for a complex matrix. */
+    double* Ar = NULL;  /* real col-major (dgees overwrites it with T)        */
+    double* Az = NULL;  /* complex col-major (zgees overwrites it with T)     */
+    bool is_real = schur_load_cm(m, /*want_complex=*/false, n, &Ar);
+    if (!is_real && !schur_load_cm(m, /*want_complex=*/true, n, &Az))
+        return NULL;    /* non-numeric leaf -> leave the call unevaluated */
 
-    bool use_real = all_imag_zero && opts->real_block_diagonal_form;
+    bool use_real = is_real && opts->real_block_diagonal_form;
     Expr* result = NULL;
 
     if (use_real) {
-        double* A  = (double*)malloc(sizeof(double) * nn);        /* -> Schur T */
         double* wr = (double*)malloc(sizeof(double) * (size_t)n);
         double* wi = (double*)malloc(sizeof(double) * (size_t)n);
-        double* VS = (double*)malloc(sizeof(double) * nn);        /* Schur q    */
-        double* D  = NULL;                                        /* pivoting d */
-        for (size_t k = 0; k < nn; k++) A[k] = Az[2 * k];
+        double* VS = (double*)malloc(sizeof(double) * nn);
+        double* D  = NULL;
 
         int ok = 1;
         if (opts->pivoting) {
             int ilo = 1, ihi = n;
             double* scale = (double*)malloc(sizeof(double) * (size_t)n);
-            if (mat_lapack_dgebal('B', n, A, n, &ilo, &ihi, scale) == 0) {
-                D = (double*)malloc(sizeof(double) * nn);
-                for (int i = 0; i < n; i++)
-                    for (int j = 0; j < n; j++)
-                        D[(size_t)i + (size_t)j * (size_t)n] = (i == j) ? 1.0 : 0.0;
-                if (mat_lapack_dgebak('B', 'R', n, ilo, ihi, scale, n, D, n) != 0)
-                    ok = 0;
-            } else {
+            if (mat_lapack_dgebal('B', n, Ar, n, &ilo, &ihi, scale) == 0)
+                D = schur_pivot_matrix(n, ilo, ihi, scale, false);
+            else
                 ok = 0;
-            }
             free(scale);
         }
 
-        if (ok && mat_lapack_dgees(n, A, n, wr, wi, VS, n) == 0) {
-            Expr* q = schur_build(VS, n, false, true, packed);
-            Expr* t = schur_build(A,  n, false, true, packed);
+        if (ok && mat_lapack_dgees(n, Ar, n, wr, wi, VS, n) == 0) {
+            Expr* q = schur_build(VS, n, false, true, pres);
+            Expr* t = schur_build(Ar, n, false, true, pres);
             if (opts->pivoting && D) {
-                Expr* d = schur_build(D, n, false, true, packed);
+                Expr* d = schur_build(D, n, false, true, pres);
                 Expr* items[3] = { q, t, d };
                 result = schur_list(items, 3);
             } else {
@@ -141,40 +146,32 @@ Expr* schur_machine_standard(const Expr* m, int n, const SchurOpts* opts) {
             }
         }
 
-        free(A); free(wr); free(wi); free(VS);
+        free(wr); free(wi); free(VS);
         if (D) free(D);
     } else {
-        /* Complex path (genuinely complex input, or RealBlockDiagonalForm ->
-         * False on a real matrix, which asks for complex upper-triangular t). */
+        /* Complex driver: genuinely complex, or RealBlockDiagonalForm -> False
+         * on a real matrix (widen the real buffer to interleaved complex). */
+        if (!Az) Az = schur_widen(Ar, nn);
         double* w  = (double*)malloc(sizeof(double) * 2 * (size_t)n);
         double* VS = (double*)malloc(sizeof(double) * 2 * nn);
         double* D  = NULL;
 
-        int ok = 1;
-        if (opts->pivoting) {
+        int ok = (Az != NULL);
+        if (ok && opts->pivoting) {
             int ilo = 1, ihi = n;
             double* scale = (double*)malloc(sizeof(double) * (size_t)n);
-            if (mat_lapack_zgebal('B', n, Az, n, &ilo, &ihi, scale) == 0) {
-                D = (double*)malloc(sizeof(double) * 2 * nn);
-                for (int i = 0; i < n; i++)
-                    for (int j = 0; j < n; j++) {
-                        size_t off = (size_t)i + (size_t)j * (size_t)n;
-                        D[2 * off]     = (i == j) ? 1.0 : 0.0;
-                        D[2 * off + 1] = 0.0;
-                    }
-                if (mat_lapack_zgebak('B', 'R', n, ilo, ihi, scale, n, D, n) != 0)
-                    ok = 0;
-            } else {
+            if (mat_lapack_zgebal('B', n, Az, n, &ilo, &ihi, scale) == 0)
+                D = schur_pivot_matrix(n, ilo, ihi, scale, true);
+            else
                 ok = 0;
-            }
             free(scale);
         }
 
         if (ok && mat_lapack_zgees(n, Az, n, w, VS, n) == 0) {
-            Expr* q = schur_build(VS, n, true, true, packed);
-            Expr* t = schur_build(Az, n, true, true, packed);
+            Expr* q = schur_build(VS, n, true, true, pres);
+            Expr* t = schur_build(Az, n, true, true, pres);
             if (opts->pivoting && D) {
-                Expr* d = schur_build(D, n, true, true, packed);
+                Expr* d = schur_build(D, n, true, true, pres);
                 Expr* items[3] = { q, t, d };
                 result = schur_list(items, 3);
             } else {
@@ -187,7 +184,7 @@ Expr* schur_machine_standard(const Expr* m, int n, const SchurOpts* opts) {
         if (D) free(D);
     }
 
-    free(Az);
+    free(Ar); free(Az);
     return result;
 }
 
@@ -199,54 +196,51 @@ Expr* schur_machine_generalized(const Expr* m, const Expr* a, int n,
                                 const SchurOpts* opts) {
     if (!mathilda_lapack_probe()) return NULL;
 
-    double* Az = NULL;   /* m, complex column-major */
-    double* Bz = NULL;   /* a, complex column-major */
-    if (!schur_load_cm(m, true, n, &Az)) return NULL;
-    if (!schur_load_cm(a, true, n, &Bz)) { free(Az); return NULL; }
-
-    bool packed = is_ndarray(m) || is_ndarray(a);
+    NDPresentation pres = na_result_presentation(m);
     size_t nn = (size_t)n * (size_t)n;
 
-    bool all_imag_zero = true;
-    for (size_t k = 0; k < nn; k++)
-        if (Az[2 * k + 1] != 0.0 || Bz[2 * k + 1] != 0.0) { all_imag_zero = false; break; }
+    double *Ar = NULL, *Br = NULL;   /* real col-major (dgges overwrites)   */
+    double *Az = NULL, *Bz = NULL;   /* complex col-major (zgges overwrites) */
+    bool m_real = schur_load_cm(m, false, n, &Ar);
+    if (!m_real && !schur_load_cm(m, true, n, &Az)) return NULL;
+    bool a_real = schur_load_cm(a, false, n, &Br);
+    if (!a_real && !schur_load_cm(a, true, n, &Bz)) { free(Ar); free(Az); return NULL; }
 
-    bool use_real = all_imag_zero && opts->real_block_diagonal_form;
+    bool use_real = m_real && a_real && opts->real_block_diagonal_form;
     Expr* result = NULL;
 
     if (use_real) {
-        double* A = (double*)malloc(sizeof(double) * nn);  /* -> S */
-        double* B = (double*)malloc(sizeof(double) * nn);  /* -> T */
         double* alphar = (double*)malloc(sizeof(double) * (size_t)n);
         double* alphai = (double*)malloc(sizeof(double) * (size_t)n);
         double* beta   = (double*)malloc(sizeof(double) * (size_t)n);
-        double* VSL = (double*)malloc(sizeof(double) * nn);  /* q */
-        double* VSR = (double*)malloc(sizeof(double) * nn);  /* p */
-        for (size_t k = 0; k < nn; k++) { A[k] = Az[2 * k]; B[k] = Bz[2 * k]; }
+        double* VSL = (double*)malloc(sizeof(double) * nn);
+        double* VSR = (double*)malloc(sizeof(double) * nn);
 
-        if (mat_lapack_dgges(n, A, n, B, n, alphar, alphai, beta,
+        if (mat_lapack_dgges(n, Ar, n, Br, n, alphar, alphai, beta,
                              VSL, n, VSR, n) == 0) {
-            Expr* q = schur_build(VSL, n, false, true, packed);
-            Expr* s = schur_build(A,   n, false, true, packed);
-            Expr* p = schur_build(VSR, n, false, true, packed);
-            Expr* t = schur_build(B,   n, false, true, packed);
+            Expr* q = schur_build(VSL, n, false, true, pres);
+            Expr* s = schur_build(Ar,  n, false, true, pres);
+            Expr* p = schur_build(VSR, n, false, true, pres);
+            Expr* t = schur_build(Br,  n, false, true, pres);
             Expr* items[4] = { q, s, p, t };
             result = schur_list(items, 4);
         }
 
-        free(A); free(B); free(alphar); free(alphai); free(beta);
-        free(VSL); free(VSR);
+        free(alphar); free(alphai); free(beta); free(VSL); free(VSR);
     } else {
+        if (!Az) Az = schur_widen(Ar, nn);
+        if (!Bz) Bz = schur_widen(Br, nn);
         double* alpha = (double*)malloc(sizeof(double) * 2 * (size_t)n);
         double* beta  = (double*)malloc(sizeof(double) * 2 * (size_t)n);
         double* VSL = (double*)malloc(sizeof(double) * 2 * nn);
         double* VSR = (double*)malloc(sizeof(double) * 2 * nn);
 
-        if (mat_lapack_zgges(n, Az, n, Bz, n, alpha, beta, VSL, n, VSR, n) == 0) {
-            Expr* q = schur_build(VSL, n, true, true, packed);
-            Expr* s = schur_build(Az,  n, true, true, packed);
-            Expr* p = schur_build(VSR, n, true, true, packed);
-            Expr* t = schur_build(Bz,  n, true, true, packed);
+        if (Az && Bz &&
+            mat_lapack_zgges(n, Az, n, Bz, n, alpha, beta, VSL, n, VSR, n) == 0) {
+            Expr* q = schur_build(VSL, n, true, true, pres);
+            Expr* s = schur_build(Az,  n, true, true, pres);
+            Expr* p = schur_build(VSR, n, true, true, pres);
+            Expr* t = schur_build(Bz,  n, true, true, pres);
             Expr* items[4] = { q, s, p, t };
             result = schur_list(items, 4);
         }
@@ -254,6 +248,6 @@ Expr* schur_machine_generalized(const Expr* m, const Expr* a, int n,
         free(alpha); free(beta); free(VSL); free(VSR);
     }
 
-    free(Az); free(Bz);
+    free(Ar); free(Br); free(Az); free(Bz);
     return result;
 }
