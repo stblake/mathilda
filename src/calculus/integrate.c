@@ -1061,6 +1061,11 @@ void integrate_init(void) {
     void cherry_sigma_init(void);
     cherry_sigma_init();
 
+    /* Direct debuggable surfaces for every Cherry engine: Integrate`Cherry`Ei /
+     * ExpMultiterm / Li / Dilog / DilogExp. */
+    void cherry_builtins_init(void);
+    cherry_builtins_init();
+
     /* Undefined-function integrator (Roach §1.7): Integrate`Undefined. */
     integrate_unknown_init();
 

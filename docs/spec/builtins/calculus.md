@@ -1222,6 +1222,22 @@ monotonically down.
         `Integrate[Log[2+x]/x,x] = Log[2] Log[x] - PolyLog[2,-x/2]`,
         `Log[2x+3]/(x-1)`. Non-monic linear kernels (`Log[3+2x]/x`) and products
         of logs still decline;
+      - **exponential-tower dilogarithm** (Cherry, the exp-tower mirror of the
+        `R(x) Log[w]` case above): an integrand that is a rational-in-`E^(c x)`
+        combination of the weight-1 logs `{x} ∪ {Log[E^(cx)-ρ_k]}` → `PolyLog[2,
+        exp]`. With `θ=E^(cx)` and `x=Log[θ]/c` the "root at 0" tower-log, the
+        answer is matched natively in the tower (an ansatz of `PolyLog[2, Möbius(θ)]`,
+        `x Log[θ-ρ_k]`, `Log-Log`, and `x^2` terms; coefficients from a linear solve
+        over `{θ, x, Log[θ-ρ_k]}`; PowerExpand diff-back verified). Covers both the
+        rational-times-`x` forms and the outer-log forms:
+        `Integrate[x/(E^x-1),x] = x Log[1-E^-x] - PolyLog[2, E^-x]`,
+        `Integrate[x/(1+E^x),x]`, `Integrate[x E^x/(E^x-1),x]`,
+        `Integrate[x/(E^(2x)-1),x]` (rate `c=2`), `Integrate[Log[1+E^x],x] =
+        -PolyLog[2,-E^x]`, `Integrate[Log[1+E^-x],x]`, and mixtures. Weight-`≥2`
+        integrands (`x Log[1+E^x]`, `x^2/(E^x-1)` → `PolyLog[3]`), incommensurate
+        exponentials, and algebraic roots decline cleanly. The engine is reached
+        automatically from `Integrate` and directly via the debug surface
+        `Integrate\`CherryDilogExp[f, x]`;
       - fractional (Rothstein–Trager) log-part: a proper rational function of
         `theta` with squarefree denominator `prod g_i` gives `sum_i c_i Log(g_i)`,
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`

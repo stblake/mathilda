@@ -2734,3 +2734,30 @@ correct all of them in the same change; a half-corrected belief resurfaces. Here
 that meant `src/numeric.{c,h}` + ~15 call sites, `test_numeric.c`,
 `test_numeric_largearg.c`, `docs/spec/builtins/arithmetic.md`, the weekly
 changelog, `book/chapters/math/arithmetic.tex`, and the memory note.
+
+## 2026-08-29 — A new integration engine can silently change OTHER integrals' forms via DerivativeDivides
+
+**Context:** added the exponential-tower dilogarithm engine `rt_cherry_dilog_exp`
+(closes `Integrate[x/(-1+E^x),x]`). After registering it, `Integrate[Log[x]/(1-x),x]`
+changed from the clean `PolyLog[2,1-x]` to an uglier (but still correct) equivalent
+`-Log[x]Log[-1+x]+PolyLog[2,1/x]+Log[x]^2/2`.
+
+**Root cause:** the cascade's DerivativeDivides stage runs BEFORE RischTranscendental
+and substitutes `u=Log[x]`, turning the LOG-tower integrand `Log[x]/(1-x)` into the
+exp-tower shape `-(u E^u)/(E^u-1)`. The new engine solved that at recursion depth 2, so
+DerivativeDivides succeeded (it previously failed there and fell through to the direct
+`rt_cherry_dilog` at depth 1, which gives the clean form). The new engine "stole" the
+case through a substitution it was never meant to handle.
+
+**Pattern:** a new engine placed anywhere in the cascade can be reached by EARLIER
+methods' internal substitutions (DerivativeDivides `u=Log[x]`/`u=E^x`), changing the
+answer FORM for integrals it was not designed for. The change is invisible to tests that
+assert only "right head + diff-back 0" — both forms pass those.
+
+**How to apply:** (1) gate a new special-function engine to the top-level integrand with
+`g_integrate_depth > 1 → return NULL` (include `integrate.h`) unless it is specifically
+meant to help nested recursion — mirrors the depth-≤1 `nonelem` gate. (2) When adding an
+engine, diff a batch of ADJACENT integrals (same special function, the sibling tower)
+against a stashed baseline binary, not just the target family. (3) Add at least one
+EXACT-FORM regression assertion for the neighbours (`test_log_tower_unregressed`), since
+head+diff-back checks cannot catch a form regression.

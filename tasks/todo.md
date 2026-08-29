@@ -1,55 +1,48 @@
-# Reduce Phase 6b — Real-Algebraic-Coefficient Fibre Isolation (core + tower)
+# Task: Exponential-tower dilogarithm engine (`rt_cherry_dilog_exp`)
 
-## Goal
-Lift the CAD "rational-fibre" restriction so non-innermost breakpoints may be
-irrational algebraic. Unlocks 3-var sphere octant, closed ball, `x^2==2 && y<x`.
+Close `Integrate[x/(-1+E^x), x]` and the exp-tower dilog family via a native
+Cherry engine (mirror of `cherry_dilog.c` transported to θ=E^(cx)).
 
-## Tasks
-- [x] Read the key reduce_cad.c regions + reduce_real_util + flint_qqbar signatures
-- [x] New file `src/solve/reduce_algfiber.{c,h}` — `rru_algebraic_fiber_roots`
-      (iterated-resultant tower projection + integer-isolate + qqbar exact filter
-      + order + resource guard). USE_FLINT-guarded.
-- [x] Thread `asgdef[]` (defining pstack factor per irrational level) through
-      cad_build / cad_leaf / lift_fiber / reduce_cad_qe; populate from
-      rru_collect_roots provenance.
-- [x] Relax rational gates (reduce_cad.c:960-962 and :1448); route fibre isolation
-      through the new primitive when asg has ≥1 irrational coord; keep all-rational
-      fast path unchanged.
-- [x] Verify emission at algebraic samples: octant, closed 3-/4-ball, cubic,
-      hyperbola, x^2==2&&y<x all correct; Pi declines soundly.
-- [x] Tests: test_cad_algebraic_fibre in tests/test_reduce.c (added, passing);
-      stale decline assertions updated (cad_nvar, cylindrical_decomposition).
-- [x] cad-alg-* corpus rows (7 added; corpus 166/166 pass).
-- [x] check-c99 clean; reduce suite + corpus no-regression; valgrind macOS
-      baseline 13,440/420 (identical at 1x and 25x — zero per-call leak).
-- [x] Update reduce_cad.h scope doc.
-- [x] Docs: solutions-of-equations.md, changelog 2026-08-24.md, version 0.113,
-      REDUCE_PLAN.md status, memory notes.
-- [x] Rebuild code-review-graph.
+## Plan
+`/Users/user/.claude/plans/mathilda-s-implementation-of-cherry-s-temporal-stearns.md`
 
-## Review — Phase 6b landed (v0.113), all verification green
+## Steps
+- [x] 1. Prototype the full algorithm as a Mathilda `.m` script; validate on the
+      whole corpus (rational×x, outer-log, mixtures, reducible den, declines).
+      DONE — `tasks/dilog_exp_prototype.m`. Flagship + family + outer-log +
+      mixtures all diff-back 0. `Log[1-E^x]` (negative-arg outer log) declines
+      cleanly (reversed-pair/iπ; out of scope, sound).
+- [ ] 2. Write `src/calculus/cherry_dilog_exp.{c,h}` transcribing the validated
+      prototype (mirror cherry_dilog.c structure + memory discipline).
+- [ ] 3. Register in `risch_special.c` (`#include` + `RT_SPECIAL_FORMS[]` row).
+- [ ] 4. Build (`make -j`); fix any C99/portability issues (`make check-c99`).
+- [ ] 5. Verify the flagship + family via `-file` scripts (diff-back = 0).
+- [ ] 6. Write `tests/test_cherry_dilog_exp.c`; wire into `tests/CMakeLists.txt`
+      (COMMON_SRC + target); build & run.
+- [ ] 7. Regression: cherry_dilog/li/ei + risch/integrate test targets.
+- [ ] 8. Docs: builtin page + changelog `docs/spec/changelog/2026-08-25.md`.
+- [ ] 9. Update memory / lessons.
+- [ ] SIDE TASK (user-requested): benchmark the `.m` prototype vs the C engine
+      on the corpus; report the speedup.
 
-- New `src/solve/reduce_algfiber.{c,h}` — `rru_algebraic_fiber_roots`:
-  iterated-resultant tower projection to ℚ + integer-coeff isolation + exact qqbar
-  spurious-root filter + order + resource ceiling. USE_FLINT-guarded (off→decline).
-- `reduce_cad.c` — removed both rational-fibre gates; shared `isolate_fiber_at`
-  dispatch (all-rational fast path unchanged, ≥1 algebraic → new primitive);
-  borrowed `asgdef[]` (section defining factor via provenance) threaded through
-  cad_build/cad_leaf/lift_fiber/reduce_cad_qe; 2-var driver gained base-root
-  provenance (`bxfac`). `reduce_cad.h` scope doc updated.
+## Review
 
-Verification: reduce_tests PASS (new test_cad_algebraic_fibre; stale decline
-assertions updated); reduce corpus 166/166 (7 new alg-* rows); solve_tests PASS +
-solve corpus 99/99 (no regression); check-c99 clean; valgrind macOS baseline
-13,440/420 — IDENTICAL at 1× and 25× octant, zero per-call leak, no leak stack
-references the new code.
+**Done (2026-08-29).** New engine `rt_cherry_dilog_exp` (`src/calculus/cherry_dilog_exp.c`),
+the exp-tower mirror of `rt_cherry_dilog`, closes `Integrate[x/(-1+E^x),x] =
+x Log[1-E^-x] - PolyLog[2,E^-x]` and the family (`x/(1±E^x)`, `x E^x/(E^x-1)`,
+`x/(E^(2x)-1)`, `Log[1±E^x]`, `Log[1+E^-x]`, mixtures). Native Cherry tower matching
+(no substitution): ansatz + linear solve over `{θ,x,u_k}` + PowerExpand diff-back.
+Registered as a `PolyLog`/`RT_SF_TOP_EXP` form (`risch_special.c`).
 
-Newly solved (declined before): x^2==2 && y<x; x^2+y^2+z^2<=2; sphere positive
-octant; x^3+y^3==1 && x>0 && y>0; hyperbola branches; closed 3-/4-balls; CD too.
-Transcendental (Sqrt[Pi]) still declines soundly.
-
-Deferred (documented): 6e (well-orientedness); 7-extended (≥2-free-var / algebraic
-discriminant-variety QE — needs a nested-QE emitter). Closed-region bound cosmetic
-asymmetry is pre-existing (pinned in the shipped x^2+y^2+z^2<=1 test), not new.
-
-Not committed — awaiting user review.
+- Steps 1–9 complete. Extras done at user request: (a) all five Cherry engines exposed as
+  `Integrate`Cherry`{Ei,ExpMultiterm,Li,Dilog,DilogExp}` debug surfaces (hub
+  `cherry_builtins_init` in `cherry_driver.c`), each with docstring + PROTECTED;
+  (b) speed comparison — C engine ~8% faster than the `.m` prototype for raw matching
+  (16.6 vs 18.0 ms/integral), because both share the same C symbolic kernels.
+- Key fix: top-level depth gate (`g_integrate_depth > 1 → NULL`) so a DerivativeDivides
+  `u=Log[x]` substitution doesn't reroute `Log[x]/(1-x)` through the exp engine and change
+  its clean form. See `tasks/lessons.md` (2026-08-29).
+- Tests: `cherry_dilog_exp_tests` (new) + all cherry/risch/integrate suites green (39+).
+  `make check-c99` clean.
+- Docs: `docs/spec/builtins/calculus.md` + `docs/spec/changelog/2026-08-24.md`. Memory:
+  `project_cherry_dilog_exp_engine.md`.

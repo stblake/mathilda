@@ -24,4 +24,10 @@
  * antiderivative in kernel form, or NULL when no form applies.  `f`, `x` borrowed. */
 Expr* extended_liouville_solve(Expr* f, Expr* x, unsigned top_mask);
 
+/* Register the direct debuggable surfaces for every Cherry engine under the
+ * Integrate`Cherry` context (Integrate`Cherry`Ei / ExpMultiterm / Li / Dilog /
+ * DilogExp), each applying its engine to [f, x] bypassing the cascade.  Called
+ * from integrate_init. */
+void cherry_builtins_init(void);
+
 #endif /* MATHILDA_CHERRY_DRIVER_H */

@@ -666,6 +666,7 @@ set(COMMON_SRC
     ../src/calculus/cherry_ei.c
     ../src/calculus/cherry_li.c
     ../src/calculus/cherry_dilog.c
+    ../src/calculus/cherry_dilog_exp.c
     ../src/calculus/knowles_erf.c
     ../src/calculus/cherry_sigma_decomp.c
     ../src/calculus/risch_field.c
@@ -1703,6 +1704,10 @@ add_test(NAME cherry_sigma_tests COMMAND cherry_sigma_tests)
 add_executable(cherry_dilog_tests test_cherry_dilog.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cherry_dilog_tests PRIVATE ../src ../src/calculus)
 add_test(NAME cherry_dilog_tests COMMAND cherry_dilog_tests)
+
+add_executable(cherry_dilog_exp_tests test_cherry_dilog_exp.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(cherry_dilog_exp_tests PRIVATE ../src ../src/calculus)
+add_test(NAME cherry_dilog_exp_tests COMMAND cherry_dilog_exp_tests)
 
 add_executable(integrate_fresnel_tests test_integrate_fresnel.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(integrate_fresnel_tests PRIVATE ../src ../src/calculus)
