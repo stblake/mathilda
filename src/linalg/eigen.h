@@ -96,6 +96,15 @@ typedef enum {
 int eigen_all_eigenvalues_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
                                     mpfr_t* eval_re, mpfr_t* eval_im);
 
+/* Real Schur decomposition of a square n*n real matrix at MPFR precision, for
+ * SchurDecomposition[m].  `A` is row-major, length n*n, each cell mpfr_init2'd
+ * to `bits`; it is MUTATED in place, left holding the real (block upper-
+ * triangular) Schur form T.  `Q` must be an already-mpfr_init2'd array of n*n
+ * cells at `bits`; on return it holds the orthogonal Schur vectors (initialised
+ * to the identity internally, so no pre-fill is needed), with A_in = Q*T*Q^T.
+ * Returns 0 on success, non-zero on QR non-convergence. */
+int eigen_schur_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits, mpfr_t* Q);
+
 /* Compute all eigenvalues AND right eigenvectors of a square n*n real
  * matrix at MPFR precision.  The eigenvector twin of the eigenvalue
  * wrapper above, exposed for callers (e.g. the NSolve polynomial-system

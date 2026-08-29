@@ -4337,6 +4337,48 @@ int eigen_all_eigenvalues_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
     return status;
 }
 
+/* Public wrapper exposed in eigen.h.  Real Schur decomposition at MPFR
+ * precision, for SchurDecomposition[m] on an arbitrary-precision real matrix.
+ *
+ * Runs the same Hessenberg + Francis QR pipeline as the eigenvalue wrapper
+ * above, but keeps the orthogonal back-transformation Q instead of discarding
+ * it.  On return:
+ *   - A (row-major, n*n, mutated in place) holds the real Schur form T --
+ *     block upper-triangular, 1x1 diagonal blocks for real eigenvalues and
+ *     2x2 blocks for complex-conjugate pairs, and
+ *   - Q (row-major, n*n, caller-allocated at `bits`) holds the Schur vectors,
+ * with A_in = Q * T * Q^T (Q orthogonal).  Q is initialised to the identity
+ * here, so the caller need not pre-fill it.  Returns 0 on success, non-zero on
+ * QR non-convergence (the caller then falls back to the machine kernel). */
+int eigen_schur_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits, mpfr_t* Q) {
+    if (n == 0) return 0;
+
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++)
+            mpfr_set_si(Q[i * n + j], (i == j) ? 1 : 0, MPFR_RNDN);
+
+    if (n == 1) return 0;  /* A already holds the 1x1 Schur form. */
+
+    mpfr_t* u       = mpfr_array_alloc(n, bits);
+    mpfr_t* tmp     = mpfr_array_alloc(14, bits);
+    mpfr_t* eval_re = mpfr_array_alloc(n, bits);
+    mpfr_t* eval_im = mpfr_array_alloc(n, bits);
+
+    if (n >= 3) direct_hessenberg_real_M(A, n, bits, u, Q, tmp);
+
+    for (size_t i = 0; i < n; i++) {
+        mpfr_set_zero(eval_re[i], 1);
+        mpfr_set_zero(eval_im[i], 1);
+    }
+    int status = direct_qr_real_general_M(A, n, bits, eval_re, eval_im, Q, tmp);
+
+    mpfr_array_free(u,       n);
+    mpfr_array_free(tmp,     14);
+    mpfr_array_free(eval_re, n);
+    mpfr_array_free(eval_im, n);
+    return status;
+}
+
 /* Public wrapper exposed in eigen.h.  Eigenvalues + right eigenvectors of
  * a real matrix at MPFR precision: Hessenberg + Francis QR leaves the real
  * Schur form in A and the Schur vectors in Q, then schur_compute_eigvecs_M

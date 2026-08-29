@@ -308,6 +308,60 @@ void ztrtrs_(const char* uplo, const char* trans, const char* diag,
              const int* n, const int* nrhs, const double* a, const int* lda,
              double* b, const int* ldb, int* info);
 
+/* dgees / zgees -- Schur factorization of a general matrix.  jobvs='V'
+ * returns the Schur vectors in VS; sort='N' leaves the eigenvalues in their
+ * natural (unordered) positions, so SELECT / BWORK are unreferenced -- pass
+ * a null SELECT (the integer constant 0, a null pointer constant valid for a
+ * function-pointer parameter -- NOT the NULL macro, which may be (void*)0 and
+ * would violate -Werror=incompatible-pointer-types) and a NULL BWORK.  On
+ * exit A holds the real quasi-triangular / complex triangular Schur form T
+ * with A_in = VS * T * VS^H. */
+typedef int (*mathilda_dgees_select_t)(const double*, const double*);
+typedef int (*mathilda_zgees_select_t)(const double*);
+void dgees_(const char* jobvs, const char* sort, mathilda_dgees_select_t select,
+            const int* n, double* a, const int* lda, int* sdim,
+            double* wr, double* wi, double* vs, const int* ldvs,
+            double* work, const int* lwork, int* bwork, int* info);
+void zgees_(const char* jobvs, const char* sort, mathilda_zgees_select_t select,
+            const int* n, double* a, const int* lda, int* sdim,
+            double* w, double* vs, const int* ldvs,
+            double* work, const int* lwork, double* rwork, int* bwork, int* info);
+
+/* dgges / zgges -- generalized Schur (QZ) factorization of a matrix pencil
+ * (A, B).  jobvsl='V', jobvsr='V' return the left/right Schur vectors
+ * VSL/VSR; sort='N' (SELCTG / BWORK unreferenced -- pass null SELCTG / NULL
+ * BWORK as above).  On exit A holds S, B holds T with A_in = VSL*S*VSR^H and
+ * B_in = VSL*T*VSR^H.  Real eigenvalues are (alphar + i*alphai)/beta. */
+typedef int (*mathilda_dgges_select_t)(const double*, const double*, const double*);
+typedef int (*mathilda_zgges_select_t)(const double*, const double*);
+void dgges_(const char* jobvsl, const char* jobvsr, const char* sort,
+            mathilda_dgges_select_t selctg, const int* n,
+            double* a, const int* lda, double* b, const int* ldb, int* sdim,
+            double* alphar, double* alphai, double* beta,
+            double* vsl, const int* ldvsl, double* vsr, const int* ldvsr,
+            double* work, const int* lwork, int* bwork, int* info);
+void zgges_(const char* jobvsl, const char* jobvsr, const char* sort,
+            mathilda_zgges_select_t selctg, const int* n,
+            double* a, const int* lda, double* b, const int* ldb, int* sdim,
+            double* alpha, double* beta,
+            double* vsl, const int* ldvsl, double* vsr, const int* ldvsr,
+            double* work, const int* lwork, double* rwork, int* bwork, int* info);
+
+/* dgebal / zgebal -- balance a general matrix (permute + scale, job='B') to
+ * improve eigenvalue conditioning; dgebak / zgebak (side='R') apply the same
+ * accumulated similarity to a set of columns.  Used to build the scaling /
+ * permutation matrix d for SchurDecomposition[m, Pivoting -> True]. */
+void dgebal_(const char* job, const int* n, double* a, const int* lda,
+             int* ilo, int* ihi, double* scale, int* info);
+void zgebal_(const char* job, const int* n, double* a, const int* lda,
+             int* ilo, int* ihi, double* scale, int* info);
+void dgebak_(const char* job, const char* side, const int* n,
+             const int* ilo, const int* ihi, const double* scale,
+             const int* m, double* v, const int* ldv, int* info);
+void zgebak_(const char* job, const char* side, const int* n,
+             const int* ilo, const int* ihi, const double* scale,
+             const int* m, double* v, const int* ldv, int* info);
+
 #endif /* !MATHILDA_USE_ACCELERATE */
 
 #endif /* USE_LAPACK */
@@ -522,6 +576,40 @@ int mat_lapack_dtrtrs(int n, int nrhs, const double* A, int lda,
                       double* B, int ldb);
 int mat_lapack_ztrtrs(int n, int nrhs, const double* A, int lda,
                       double* B, int ldb);
+
+/* Schur factorization (jobvs='V', sort='N'): on exit A holds the Schur form T
+ * and VS holds the Schur vectors, with A_in = VS * T * VS^H.  Real: eigenvalues
+ * split as (wr, wi), T real quasi-triangular.  Complex: eigenvalues in w (2n
+ * interleaved), T complex upper-triangular.  A is destroyed (becomes T). */
+int mat_lapack_dgees(int n, double* A, int lda,
+                     double* wr, double* wi, double* VS, int ldvs);
+int mat_lapack_zgees(int n, double* A, int lda, double* w, double* VS, int ldvs);
+
+/* Generalized Schur / QZ (jobvsl=jobvsr='V', sort='N'): on exit A holds S, B
+ * holds T, VSL / VSR hold the left / right Schur vectors, with
+ * A_in = VSL*S*VSR^H and B_in = VSL*T*VSR^H.  Real: (alphar, alphai, beta)
+ * split; S real quasi-triangular, T upper-triangular.  Complex: (alpha, beta)
+ * each 2n interleaved; S, T upper-triangular.  A and B are destroyed. */
+int mat_lapack_dgges(int n, double* A, int lda, double* B, int ldb,
+                     double* alphar, double* alphai, double* beta,
+                     double* VSL, int ldvsl, double* VSR, int ldvsr);
+int mat_lapack_zgges(int n, double* A, int lda, double* B, int ldb,
+                     double* alpha, double* beta,
+                     double* VSL, int ldvsl, double* VSR, int ldvsr);
+
+/* Balancing (permute + scale) and its back-transform, for Pivoting -> True.
+ * mat_lapack_dgebal balances A in place and returns ilo/ihi/scale; feeding an
+ * identity V (m == n) to mat_lapack_dgebak with side='R' reconstructs the
+ * scaling/permutation matrix d = P*D (so A_in * d == d * balanced).  Complex
+ * (z) variants take interleaved (re, im) doubles in A / V; scale is real. */
+int mat_lapack_dgebal(char job, int n, double* A, int lda,
+                      int* ilo, int* ihi, double* scale);
+int mat_lapack_zgebal(char job, int n, double* A, int lda,
+                      int* ilo, int* ihi, double* scale);
+int mat_lapack_dgebak(char job, char side, int n, int ilo, int ihi,
+                      const double* scale, int m, double* V, int ldv);
+int mat_lapack_zgebak(char job, char side, int n, int ilo, int ihi,
+                      const double* scale, int m, double* V, int ldv);
 
 #ifdef __cplusplus
 }

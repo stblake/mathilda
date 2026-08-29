@@ -562,6 +562,9 @@ set(COMMON_SRC
     ../src/linalg/eigen_banded.c
     ../src/linalg/eigen_feast.c
     ../src/linalg/jordandecomp.c
+    ../src/linalg/schurdecomp.c
+    ../src/linalg/schurdecomp_machine.c
+    ../src/linalg/schurdecomp_mpfr.c
     ../src/readwrite.c
     ../src/loadmodule.c
     ../src/files.c
@@ -2494,6 +2497,16 @@ else()
     target_link_libraries(jordandecomp_tests gmp m)
 endif()
 add_test(NAME jordandecomp_tests COMMAND jordandecomp_tests)
+
+add_executable(schurdecomp_tests test_schurdecomp.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(schurdecomp_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(schurdecomp_tests gmp m ${ECM_LIB})
+    add_dependencies(schurdecomp_tests build_ecm)
+else()
+    target_link_libraries(schurdecomp_tests gmp m)
+endif()
+add_test(NAME schurdecomp_tests COMMAND schurdecomp_tests)
 
 add_executable(mateigen_direct_tests test_mateigen_direct.c eigen_corpus.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(mateigen_direct_tests PRIVATE ../src)

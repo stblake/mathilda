@@ -844,6 +844,134 @@ int mat_lapack_ztrtrs(int n, int nrhs, const double* A, int lda,
     return info;
 }
 
+/* The literal 0 passed for the SELECT / SELCTG function-pointer arguments is a
+ * null pointer constant (C11 6.3.2.3p3) that converts to any function-pointer
+ * type; the NULL macro must NOT be used there because it may expand to
+ * (void*)0, which does not implicitly convert to a function pointer and would
+ * trip -Werror=incompatible-pointer-types.  SORT='N' means LAPACK never
+ * references SELECT or BWORK, so a null for both is safe. */
+int mat_lapack_dgees(int n, double* A, int lda,
+                     double* wr, double* wi, double* VS, int ldvs)
+{
+    int info = 0, lwork = -1, sdim = 0;
+    double query = 0.0;
+    char jvs[2] = { 'V', 0 }, srt[2] = { 'N', 0 };
+    dgees_(jvs, srt, 0, &n, A, &lda, &sdim, wr, wi, VS, &ldvs,
+           &query, &lwork, NULL, &info);
+    if (info != 0) return info;
+    lwork = lapack_lwork(query, 3 * n > 1 ? 3 * n : 1);
+    double* work = (double*)malloc((size_t)lwork * sizeof(double));
+    if (!work) return -999;
+    dgees_(jvs, srt, 0, &n, A, &lda, &sdim, wr, wi, VS, &ldvs,
+           work, &lwork, NULL, &info);
+    free(work);
+    return info;
+}
+
+int mat_lapack_zgees(int n, double* A, int lda, double* w, double* VS, int ldvs)
+{
+    int info = 0, lwork = -1, sdim = 0;
+    double query[2] = { 0.0, 0.0 };
+    char jvs[2] = { 'V', 0 }, srt[2] = { 'N', 0 };
+    double* rwork = (double*)malloc((size_t)(n > 1 ? n : 1) * sizeof(double));
+    if (!rwork) return -999;
+    zgees_(jvs, srt, 0, &n, lapack_zptr(A), &lda, &sdim, lapack_zptr(w),
+           lapack_zptr(VS), &ldvs, lapack_zptr(query), &lwork, rwork, NULL, &info);
+    if (info != 0) { free(rwork); return info; }
+    lwork = lapack_lwork(query[0], 2 * n > 1 ? 2 * n : 1);
+    double* work = (double*)malloc((size_t)lwork * 2 * sizeof(double));
+    if (!work) { free(rwork); return -999; }
+    zgees_(jvs, srt, 0, &n, lapack_zptr(A), &lda, &sdim, lapack_zptr(w),
+           lapack_zptr(VS), &ldvs, lapack_zptr(work), &lwork, rwork, NULL, &info);
+    free(work);
+    free(rwork);
+    return info;
+}
+
+int mat_lapack_dgges(int n, double* A, int lda, double* B, int ldb,
+                     double* alphar, double* alphai, double* beta,
+                     double* VSL, int ldvsl, double* VSR, int ldvsr)
+{
+    int info = 0, lwork = -1, sdim = 0;
+    double query = 0.0;
+    char jl[2] = { 'V', 0 }, jr[2] = { 'V', 0 }, srt[2] = { 'N', 0 };
+    dgges_(jl, jr, srt, 0, &n, A, &lda, B, &ldb, &sdim,
+           alphar, alphai, beta, VSL, &ldvsl, VSR, &ldvsr,
+           &query, &lwork, NULL, &info);
+    if (info != 0) return info;
+    int fl = 8 * n + 16;
+    lwork = lapack_lwork(query, fl > 1 ? fl : 1);
+    double* work = (double*)malloc((size_t)lwork * sizeof(double));
+    if (!work) return -999;
+    dgges_(jl, jr, srt, 0, &n, A, &lda, B, &ldb, &sdim,
+           alphar, alphai, beta, VSL, &ldvsl, VSR, &ldvsr,
+           work, &lwork, NULL, &info);
+    free(work);
+    return info;
+}
+
+int mat_lapack_zgges(int n, double* A, int lda, double* B, int ldb,
+                     double* alpha, double* beta,
+                     double* VSL, int ldvsl, double* VSR, int ldvsr)
+{
+    int info = 0, lwork = -1, sdim = 0;
+    double query[2] = { 0.0, 0.0 };
+    char jl[2] = { 'V', 0 }, jr[2] = { 'V', 0 }, srt[2] = { 'N', 0 };
+    double* rwork = (double*)malloc((size_t)(8 * n > 1 ? 8 * n : 1) * sizeof(double));
+    if (!rwork) return -999;
+    zgges_(jl, jr, srt, 0, &n, lapack_zptr(A), &lda, lapack_zptr(B), &ldb, &sdim,
+           lapack_zptr(alpha), lapack_zptr(beta),
+           lapack_zptr(VSL), &ldvsl, lapack_zptr(VSR), &ldvsr,
+           lapack_zptr(query), &lwork, rwork, NULL, &info);
+    if (info != 0) { free(rwork); return info; }
+    lwork = lapack_lwork(query[0], 2 * n > 1 ? 2 * n : 1);
+    double* work = (double*)malloc((size_t)lwork * 2 * sizeof(double));
+    if (!work) { free(rwork); return -999; }
+    zgges_(jl, jr, srt, 0, &n, lapack_zptr(A), &lda, lapack_zptr(B), &ldb, &sdim,
+           lapack_zptr(alpha), lapack_zptr(beta),
+           lapack_zptr(VSL), &ldvsl, lapack_zptr(VSR), &ldvsr,
+           lapack_zptr(work), &lwork, rwork, NULL, &info);
+    free(work);
+    free(rwork);
+    return info;
+}
+
+int mat_lapack_dgebal(char job, int n, double* A, int lda,
+                      int* ilo, int* ihi, double* scale)
+{
+    int info = 0;
+    char jb[2] = { job, 0 };
+    dgebal_(jb, &n, A, &lda, ilo, ihi, scale, &info);
+    return info;
+}
+
+int mat_lapack_zgebal(char job, int n, double* A, int lda,
+                      int* ilo, int* ihi, double* scale)
+{
+    int info = 0;
+    char jb[2] = { job, 0 };
+    zgebal_(jb, &n, lapack_zptr(A), &lda, ilo, ihi, scale, &info);
+    return info;
+}
+
+int mat_lapack_dgebak(char job, char side, int n, int ilo, int ihi,
+                      const double* scale, int m, double* V, int ldv)
+{
+    int info = 0;
+    char jb[2] = { job, 0 }, sd[2] = { side, 0 };
+    dgebak_(jb, sd, &n, &ilo, &ihi, scale, &m, V, &ldv, &info);
+    return info;
+}
+
+int mat_lapack_zgebak(char job, char side, int n, int ilo, int ihi,
+                      const double* scale, int m, double* V, int ldv)
+{
+    int info = 0;
+    char jb[2] = { job, 0 }, sd[2] = { side, 0 };
+    zgebak_(jb, sd, &n, &ilo, &ihi, scale, &m, lapack_zptr(V), &ldv, &info);
+    return info;
+}
+
 #else  /* !USE_LAPACK */
 
 /* Stubs so call sites link cleanly when LAPACK isn't available.  Each
@@ -980,5 +1108,34 @@ int mat_lapack_dtrtrs(int n, int nrhs, const double* A, int lda,
 int mat_lapack_ztrtrs(int n, int nrhs, const double* A, int lda,
                       double* B, int ldb)
 { (void)n; (void)nrhs; (void)A; (void)lda; (void)B; (void)ldb; return -1; }
+int mat_lapack_dgees(int n, double* A, int lda,
+                     double* wr, double* wi, double* VS, int ldvs)
+{ (void)n; (void)A; (void)lda; (void)wr; (void)wi; (void)VS; (void)ldvs; return -1; }
+int mat_lapack_zgees(int n, double* A, int lda, double* w, double* VS, int ldvs)
+{ (void)n; (void)A; (void)lda; (void)w; (void)VS; (void)ldvs; return -1; }
+int mat_lapack_dgges(int n, double* A, int lda, double* B, int ldb,
+                     double* alphar, double* alphai, double* beta,
+                     double* VSL, int ldvsl, double* VSR, int ldvsr)
+{ (void)n; (void)A; (void)lda; (void)B; (void)ldb; (void)alphar; (void)alphai;
+  (void)beta; (void)VSL; (void)ldvsl; (void)VSR; (void)ldvsr; return -1; }
+int mat_lapack_zgges(int n, double* A, int lda, double* B, int ldb,
+                     double* alpha, double* beta,
+                     double* VSL, int ldvsl, double* VSR, int ldvsr)
+{ (void)n; (void)A; (void)lda; (void)B; (void)ldb; (void)alpha; (void)beta;
+  (void)VSL; (void)ldvsl; (void)VSR; (void)ldvsr; return -1; }
+int mat_lapack_dgebal(char job, int n, double* A, int lda,
+                      int* ilo, int* ihi, double* scale)
+{ (void)job; (void)n; (void)A; (void)lda; (void)ilo; (void)ihi; (void)scale; return -1; }
+int mat_lapack_zgebal(char job, int n, double* A, int lda,
+                      int* ilo, int* ihi, double* scale)
+{ (void)job; (void)n; (void)A; (void)lda; (void)ilo; (void)ihi; (void)scale; return -1; }
+int mat_lapack_dgebak(char job, char side, int n, int ilo, int ihi,
+                      const double* scale, int m, double* V, int ldv)
+{ (void)job; (void)side; (void)n; (void)ilo; (void)ihi; (void)scale;
+  (void)m; (void)V; (void)ldv; return -1; }
+int mat_lapack_zgebak(char job, char side, int n, int ilo, int ihi,
+                      const double* scale, int m, double* V, int ldv)
+{ (void)job; (void)side; (void)n; (void)ilo; (void)ihi; (void)scale;
+  (void)m; (void)V; (void)ldv; return -1; }
 
 #endif /* USE_LAPACK */

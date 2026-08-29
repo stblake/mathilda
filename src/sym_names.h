@@ -477,6 +477,7 @@ extern const char* SYM_ReadProtected;
 extern const char* SYM_Remove;
 extern const char* SYM_Real;
 extern const char* SYM_RealDigits;
+extern const char* SYM_RealBlockDiagonalForm;
 extern const char* SYM_FindInstance;
 extern const char* SYM_CylindricalDecomposition;
 extern const char* SYM_Reals;

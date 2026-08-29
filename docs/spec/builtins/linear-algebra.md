@@ -1378,6 +1378,76 @@ In[3]:= {s, j} = JordanDecomposition[{{-1.2, 2.7, 3.8}, {4.2, 4.4, 5.3}, {3.5, 7
 Out[3]= {13.7715, -2.12527, -1.6462}
 ```
 
+## SchurDecomposition
+Gives the Schur decomposition of a numerical square matrix.
+- `SchurDecomposition[m]` — returns `{q, t}` where `q` is orthonormal
+  (unitary) and `t` is block upper-triangular (the Schur form), so that
+  `m == q . t . ConjugateTranspose[q]`.
+- `SchurDecomposition[{m, a}]` — the generalized (QZ) decomposition,
+  `{q, s, p, t}` with `q, p` orthonormal and `s, t` upper-triangular, so that
+  `m == q . s . ConjugateTranspose[p]` and `a == q . t . ConjugateTranspose[p]`.
+
+**Features**:
+- `Protected`.
+- **Numerical only** — a generic matrix has no closed-form symbolic Schur
+  form, so a non-numeric (symbolic) matrix is left unevaluated. Input families:
+  - machine-precision Real / complex matrices, and `NDArray` / packed arrays
+    (read straight off the buffer);
+  - exact integer / rational matrices (computed at machine precision, since
+    there is no exact Schur form);
+  - arbitrary-precision MPFR matrices — supported for the **standard real**
+    form (output at the input precision).
+- Options:
+  - `Pivoting -> True` returns `{q, t, d}` with an extra scaling / permutation
+    matrix `d`, such that `m . d == d . q . t . ConjugateTranspose[q]` (the
+    balancing transform, applies to the single-matrix form).
+  - `RealBlockDiagonalForm -> True` (default) keeps `t` real with 2×2 blocks
+    for complex-conjugate eigenvalue pairs (so `t` is block — not strictly —
+    upper-triangular); `-> False` makes `t` complex upper-triangular.
+  - `TargetStructure -> "Dense"` (default) `| "Structured"` — both return
+    dense matrices (Mathilda has no distinct structured-matrix type; `t` is
+    already triangular and `q` orthonormal, so nothing is lost).
+- Algorithm:
+  - **Machine.** LAPACK `dgees` (real) / `zgees` (complex) for the standard
+    form and `dgges` / `zgges` (the QZ algorithm) for the generalized form.
+    `RealBlockDiagonalForm -> False` on a real matrix loads it complex and
+    uses the `z` driver. `Pivoting -> True` balances with `dgebal` and
+    reconstructs `d` by back-transforming the identity with `dgebak`. A
+    100×100 real matrix takes a few milliseconds.
+  - **Arbitrary precision.** The standard real form reuses the in-house
+    Hessenberg + Francis QR (`eigen_schur_real_mpfr`), which accumulates the
+    orthogonal Schur vectors alongside the quasi-triangular Schur form.
+- Result-fidelity notes: the Schur form is not unique (`q`, `t` are fixed only
+  up to the eigenvalue ordering and unitary freedom within degenerate blocks),
+  so the contract is the residual `m ≈ q . t . ConjugateTranspose[q]` with
+  `q` orthonormal and `t` (quasi-)triangular, not bit-reproducible factors.
+- Limitations: at arbitrary precision only the standard real form is native;
+  a complex or generalized arbitrary-precision matrix falls back to machine
+  precision (a complex MPFR QR / an MPFR QZ would be needed for full
+  precision).
+- Issues `SchurDecomposition::argx` for zero arguments and
+  `SchurDecomposition::sqma` for an argument that is neither a non-empty
+  square matrix nor a pair of square matrices; both leave the call
+  unevaluated.
+- Not lowered by `Compile[]` (the result is a heterogeneous tuple of
+  matrices, like `QRDecomposition` / `JordanDecomposition`); a packed /
+  `NDArray[…]` argument is accepted (on `pack.c`'s AWARE list).
+
+```mathematica
+In[1]:= {q, t} = SchurDecomposition[{{2.7, 4.8, 8.1}, {-.6, 0, 0}, {.1, 0, .3}}];
+        Chop[{{2.7, 4.8, 8.1}, {-.6, 0, 0}, {.1, 0, .3}} - q . t . ConjugateTranspose[q]]
+Out[1]= {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+
+In[2]:= {q, t} = SchurDecomposition[{{1.81066, 0.31066, 1.5}, {-0.53033, 2.03033, 0.43934},
+          {-0.96967, -0.53033, 2.56066}}];
+        {UpperTriangularMatrixQ[t, -1], UpperTriangularMatrixQ[t]}
+Out[2]= {True, False}
+
+In[3]:= {q, s, p, t} = SchurDecomposition[{{{.5, 1}, {1.5, 2}}, {{2.5, 3}, {3.5, 4}}}];
+        Chop[{{.5, 1}, {1.5, 2}} - q . s . ConjugateTranspose[p]]
+Out[3]= {{0, 0}, {0, 0}}
+```
+
 ## QRDecomposition
 Gives the QR decomposition of a matrix.
 - `QRDecomposition[m]` — returns `{q, r}` such that

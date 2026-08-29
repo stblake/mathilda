@@ -895,6 +895,8 @@ void core_init(void) {
     svdecomp_init();
     void jordandecomp_init(void);
     jordandecomp_init();
+    void schurdecomp_init(void);
+    schurdecomp_init();
     fit_init();
     readwrite_init();
     loadmodule_init();

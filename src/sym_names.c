@@ -474,6 +474,7 @@ const char* SYM_ReadProtected = NULL;
 const char* SYM_Remove = NULL;
 const char* SYM_Real = NULL;
 const char* SYM_RealDigits = NULL;
+const char* SYM_RealBlockDiagonalForm = NULL;
 const char* SYM_FindInstance = NULL;
 const char* SYM_CylindricalDecomposition = NULL;
 const char* SYM_Reals = NULL;
@@ -1361,6 +1362,7 @@ void sym_names_init(void) {
     SYM_Remove                     = intern_symbol("Remove");
     SYM_Real                       = intern_symbol("Real");
     SYM_RealDigits                 = intern_symbol("RealDigits");
+    SYM_RealBlockDiagonalForm      = intern_symbol("RealBlockDiagonalForm");
     SYM_FindInstance               = intern_symbol("FindInstance");
     SYM_CylindricalDecomposition   = intern_symbol("CylindricalDecomposition");
     SYM_Reals                      = intern_symbol("Reals");
