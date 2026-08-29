@@ -63,5 +63,12 @@ Plan: `/Users/user/.claude/plans/following-on-from-our-tingly-plum.md`
   never unpacked (na_load reads the buffer); only the inherently-mixed result is
   boxed. Complex INPUT (uniformly complex result) is handled by Phase 4.
 
-### Remaining
-- **Phase 6** benchmark folder `benchmarks/30-schur-decomposition/`.
+### Phase 6 ✓: benchmark folder `benchmarks/91-schur-decomposition/`
+- (30 was taken by 30-string-ops → used 91). .m/.py pair vs scipy.linalg
+  schur/qz; 3 cases (real 300, complex 200, generalized 200); checks agree
+  (reconstruction residual 0); runs under make bench-gap.
+
+## ALL PHASES COMPLETE. Commits (on main):
+- fc024979 v0.119 — mechanism + Schur + QR + NDArray[] idempotency
+- 51896567 v0.120 — complex NDArray input on the buffer (LU/SVD/Eigen)
+- 769fe740 — benchmark 91-schur-decomposition
