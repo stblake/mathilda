@@ -1237,7 +1237,26 @@ monotonically down.
         integrands (`x Log[1+E^x]`, `x^2/(E^x-1)` → `PolyLog[3]`), incommensurate
         exponentials, and algebraic roots decline cleanly. The engine is reached
         automatically from `Integrate` and directly via the debug surface
-        `Integrate\`CherryDilogExp[f, x]`;
+        `Integrate\`Cherry\`DilogExp[f, x]`;
+      - **exponential-tower polylogarithm ladder** (the general-weight,
+        algebraic-root generalisation of the exp-tower dilogarithm): an integrand
+        `P(x)/Q(E^(c x))` — rational in `θ=E^(c x)`, polynomial in `x` — is
+        partial-fractioned over the (rational OR algebraic) roots `ρ` of `Q`, and
+        each simple pole `x^n/(θ-ρ)` is closed by the exact Cherry ladder
+        `INT x^n/(θ-ρ) = Σ_{k=0}^{n} -(1/ρ)(n!/(n-k)!)/c^{k+1} x^{n-k}
+        PolyLog[k+1, ρ/θ]` (from `d/dx PolyLog[k, ρ/θ] = -c PolyLog[k-1, ρ/θ]`,
+        `PolyLog[1,z] = -Log[1-z]`), so an `x^n` numerator yields polylogarithms up
+        to weight `n+1`: `Integrate[x^2/(E^x-1),x] = x^2 Log[1-E^-x] -
+        2 x PolyLog[2,E^-x] - 2 PolyLog[3,E^-x]`,
+        `Integrate[x^4/(E^(5x)-1),x] = ... - (24/3125) PolyLog[5, E^-5x]`
+        (rate `c=5`), and the **algebraic-root** family
+        `Integrate[x/(E^(2x)+E^x-1),x]`, `Integrate[x^2/(E^(2x)+E^x-1),x]` over
+        `Q(Sqrt[5])`. Correct by construction (telescoping IBP), PowerExpand-diff-
+        back verified over the constant field. Scope: single commensurable kernel,
+        `Q` a proper fraction in `θ` with simple nonzero roots; improper fractions,
+        `θ=0` (Laurent) poles, and repeated roots decline. Reached automatically
+        from `Integrate` (ahead of the weight-2 dilog form) and directly via
+        `Integrate\`Cherry\`PolyLogExp[f, x]`;
       - fractional (Rothstein–Trager) log-part: a proper rational function of
         `theta` with squarefree denominator `prod g_i` gives `sum_i c_i Log(g_i)`,
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`

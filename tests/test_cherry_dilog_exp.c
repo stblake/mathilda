@@ -72,13 +72,15 @@ static void test_dilog_exp(void) {
 /* Decline-safety.  Weight-2 integrands (-> PolyLog[3]) and elementary exp
  * integrands must NOT be turned into a spurious dilog. */
 static void test_dilog_exp_declines(void) {
-    /* weight-2: x Log[1+E^x] and x^2/(E^x-1) -> trilog, out of scope. */
+    /* weight-2 OUTER-log x Log[1+E^x] -> trilog is out of scope for both the
+     * dilog and the polylog engines (the latter is rational-in-theta only). */
     ASSERT_MSG(eval_is("Head[Integrate`RischTranscendental[x Log[1 + E^x], x]]"
                        " === Integrate`RischTranscendental", "True"),
-        "x Log[1+E^x] should decline (weight 2)");
-    ASSERT_MSG(eval_is("Head[Integrate`RischTranscendental[x^2/(-1 + E^x), x]]"
-                       " === Integrate`RischTranscendental", "True"),
-        "x^2/(E^x-1) should decline (weight 2)");
+        "x Log[1+E^x] should decline (weight-2 outer log)");
+    /* x^2/(E^x-1) is NOT out of scope any more — the general polylog-ladder
+     * engine (cherry_polylog_exp) closes it to a PolyLog[3] form. */
+    ASSERT_MSG(eval_is("!FreeQ[Integrate[x^2/(-1 + E^x), x], PolyLog[3, _]]", "True"),
+        "x^2/(E^x-1) now closes via the polylog ladder");
     /* elementary exp integrands stay elementary (handled before the Cherry stage). */
     ASSERT_MSG(eval_is("FreeQ[Integrate[1/(-1 + E^x), x], PolyLog]", "True"),
         "1/(E^x-1) should stay elementary");

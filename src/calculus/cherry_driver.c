@@ -23,6 +23,7 @@
 #include "cherry_li.h"
 #include "cherry_dilog.h"
 #include "cherry_dilog_exp.h"
+#include "cherry_polylog_exp.h"
 
 #include "expr.h"
 #include "symtab.h"
@@ -95,4 +96,11 @@ void cherry_builtins_init(void) {
         "engine (the exp-tower mirror of Integrate`Cherry`Dilog) to f: a rational-"
         "in-E^(c x) x-weighted form (x/(E^x-1)) or an outer-log form (Log[1+E^x]) "
         "-> PolyLog[2, ...], else the call is left unevaluated.");
+    reg_cherry("Integrate`Cherry`PolyLogExp", builtin_cherry_polylog_exp,
+        "Integrate`Cherry`PolyLogExp[f, x] applies the general exponential-tower "
+        "polylogarithm-ladder engine to f = P(x)/Q(E^(c x)): partial-fractioning "
+        "over the (rational or algebraic) roots of Q, each simple pole "
+        "x^n/(E^(c x)-rho) is closed by the Cherry ladder into polylogarithms up to "
+        "weight n+1 (e.g. x^2/(E^x-1) -> ... - 2 PolyLog[3, E^-x]; "
+        "x/(E^(2x)+E^x-1) over Q(Sqrt[5])), else the call is left unevaluated.");
 }

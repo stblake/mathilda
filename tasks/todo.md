@@ -46,3 +46,14 @@ Registered as a `PolyLog`/`RT_SF_TOP_EXP` form (`risch_special.c`).
   `make check-c99` clean.
 - Docs: `docs/spec/builtins/calculus.md` + `docs/spec/changelog/2026-08-24.md`. Memory:
   `project_cherry_dilog_exp_engine.md`.
+
+**Follow-on (2026-08-29) — general polylogarithm ladder.** `rt_cherry_polylog_exp`
+(`src/calculus/cherry_polylog_exp.c`) generalises the exp-tower dilog to ARBITRARY
+WEIGHT and ALGEBRAIC ROOTS: `P(x)/Q(E^(cx))` → partial-fraction over roots of Q
+(rational/algebraic) + exact Cherry ladder `∫x^n/(θ-ρ) = Σ -(1/ρ)(n!/(n-k)!)/c^{k+1}
+x^{n-k} PolyLog[k+1,ρ/θ]`, polylogs up to weight n+1. Closes `x^2/(E^x-1)`,
+`x^4/(E^(5x)-1)`, `x/(E^(2x)+E^x-1)`, `x^2/(E^(2x)+E^x-1)` (Q(√5)) — all diff-back 0.
+Registered ahead of dilog_exp (cleaner rational forms). Debug surface
+`Integrate\`Cherry\`PolyLogExp`. Tests `cherry_polylog_exp_tests`. Updated a stale
+dilog_exp decline assertion (x^2/(E^x-1) now integrates). All cherry + risch +
+integrate suites (26) green; `make check-c99` clean. NOT yet committed.
