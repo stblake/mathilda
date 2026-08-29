@@ -4468,12 +4468,88 @@ static bool ndla_eigen_arg_ok(Expr* res, Expr** arg_out, int* n_out) {
     if (!is_ndarray(arg) || arg->data.ndarray.rank != 2
         || arg->data.ndarray.dims[0] == 0
         || arg->data.ndarray.dims[0] != arg->data.ndarray.dims[1]
-        || arg->data.ndarray.dtype != NDT_FLOAT64)
+        || (arg->data.ndarray.dtype != NDT_FLOAT64
+            && arg->data.ndarray.dtype != NDT_COMPLEX64))
         return false;
     *arg_out = arg;
     *n_out = (int)arg->data.ndarray.dims[0];
     return true;
 }
+
+#ifdef USE_LAPACK
+/* Complex NDArray Eigenvalues via zgeev: a complex matrix has a (generally)
+ * complex spectrum, packed as a complex64 vector in descending |lambda| order.
+ * Returns NULL to fall back to the delist path. */
+static Expr* ndla_eigenvalues_complex(Expr* arg, int n) {
+    int rr, cc; double* A = NULL;   /* interleaved complex, column-major */
+    if (!na_load_matrix(arg, /*want_complex=*/true, /*colmajor=*/true, &rr, &cc, &A)) {
+        free(A);
+        return NULL;
+    }
+    double* w = (double*)malloc(2 * (size_t)n * sizeof(double));   /* interleaved */
+    Expr* out = NULL;
+    if (w && mat_lapack_zgeev_values(n, A, n, w) == 0) {
+        /* calloc (not malloc): the loop below fills wr/wi from the interleaved
+         * w, but GCC -O3 cannot track that through the external direct_sort call
+         * and false-warns -Wmaybe-uninitialized; zero-init settles it. */
+        double* wr = (double*)calloc((size_t)n, sizeof(double));
+        double* wi = (double*)calloc((size_t)n, sizeof(double));
+        size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+        double* ev = (double*)malloc(2 * (size_t)n * sizeof(double));
+        if (wr && wi && perm && ev) {
+            for (int i = 0; i < n; i++) { wr[i] = w[2 * i]; wi[i] = w[2 * i + 1]; }
+            direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
+            for (int i = 0; i < n; i++) {
+                ev[2 * i]     = wr[perm[i]];
+                ev[2 * i + 1] = wi[perm[i]];
+            }
+            out = na_build_vector_as(ev, n, true, na_result_presentation(arg));
+        }
+        free(wr); free(wi); free(perm); free(ev);
+    }
+    free(w); free(A);
+    return out;
+}
+
+/* Complex NDArray Eigenvectors via zgeev (jobvr='V'): rows are the unit-norm
+ * eigenvectors in descending |lambda| order, packed as a complex64 matrix. */
+static Expr* ndla_eigenvectors_complex(Expr* arg, int n) {
+    int rr, cc; double* A = NULL;
+    if (!na_load_matrix(arg, /*want_complex=*/true, /*colmajor=*/true, &rr, &cc, &A)) {
+        free(A);
+        return NULL;
+    }
+    double* w  = (double*)malloc(2 * (size_t)n * sizeof(double));
+    double* VR = (double*)malloc(2 * (size_t)n * (size_t)n * sizeof(double));
+    Expr* out = NULL;
+    if (w && VR && mat_lapack_zgeev(n, A, n, w, VR, n) == 0) {
+        /* calloc (not malloc): the loop below fills wr/wi from the interleaved
+         * w, but GCC -O3 cannot track that through the external direct_sort call
+         * and false-warns -Wmaybe-uninitialized; zero-init settles it. */
+        double* wr = (double*)calloc((size_t)n, sizeof(double));
+        double* wi = (double*)calloc((size_t)n, sizeof(double));
+        size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+        double* vb = (double*)malloc(2 * (size_t)n * (size_t)n * sizeof(double));
+        if (wr && wi && perm && vb) {
+            for (int i = 0; i < n; i++) { wr[i] = w[2 * i]; wi[i] = w[2 * i + 1]; }
+            direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
+            /* Row i = column perm[i] of VR (VR column-major interleaved). */
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++) {
+                    size_t src = 2 * ((size_t)j + perm[i] * (size_t)n);
+                    size_t dst = 2 * ((size_t)i * (size_t)n + (size_t)j);
+                    vb[dst]     = VR[src];
+                    vb[dst + 1] = VR[src + 1];
+                }
+            out = na_build_matrix_as(vb, n, n, true, /*colmajor=*/false,
+                                     na_result_presentation(arg));
+        }
+        free(wr); free(wi); free(perm); free(vb);
+    }
+    free(w); free(VR); free(A);
+    return out;
+}
+#endif /* USE_LAPACK */
 
 /* True iff the column-major buffer A (n x n) is numerically symmetric. */
 static bool ndla_eigen_symmetric(const double* A, int n) {
@@ -4490,6 +4566,11 @@ Expr* ndla_eigenvalues(Expr* res) {
 #ifdef USE_LAPACK
     Expr* arg; int n;
     if (ndla_eigen_arg_ok(res, &arg, &n) && mathilda_lapack_probe()) {
+        if (arg->data.ndarray.dtype == NDT_COMPLEX64) {
+            Expr* out = ndla_eigenvalues_complex(arg, n);
+            if (out) return out;
+            return linalg_delist_and_reeval(res);
+        }
         int rr, cc; double* A = NULL;
         if (na_load_matrix(arg, false, /*colmajor=*/true, &rr, &cc, &A)) {
             Expr* out = NULL;
@@ -4541,6 +4622,11 @@ Expr* ndla_eigenvectors(Expr* res) {
 #ifdef USE_LAPACK
     Expr* arg; int n;
     if (ndla_eigen_arg_ok(res, &arg, &n) && mathilda_lapack_probe()) {
+        if (arg->data.ndarray.dtype == NDT_COMPLEX64) {
+            Expr* out = ndla_eigenvectors_complex(arg, n);
+            if (out) return out;
+            return linalg_delist_and_reeval(res);
+        }
         int rr, cc; double* A = NULL;
         if (na_load_matrix(arg, false, /*colmajor=*/true, &rr, &cc, &A)) {
             Expr* out = NULL;

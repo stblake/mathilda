@@ -649,6 +649,59 @@ Expr* svd_machine_dispatch(const SvdArgs* args, int n, int p, int n_a)
  * one-argument real case is handled here; options, truncation, the generalized
  * {m, a} form, complex input, or a boxed-List argument fall back to the boxed
  * dispatcher via linalg_delist_and_reeval. */
+#ifdef USE_LAPACK
+/* Complex NDArray SVD via zgesdd: m == u . sigma . ConjugateTranspose[v], with
+ * u, v complex64 and sigma real float64 (singular values are real).  zgesdd
+ * returns VT = V^H, so Mathematica's v = ConjugateTranspose[VT].  Factors carry
+ * the input's presentation (a complex NDArray is visible), so no Expr boxing. */
+static Expr* ndla_svd_complex(Expr* arg, Expr* res)
+{
+    int n, p; double* A = NULL;   /* interleaved complex, column-major (2*n*p) */
+    if (!na_load_matrix(arg, /*want_complex=*/true, /*colmajor=*/true, &n, &p, &A))
+        return linalg_delist_and_reeval(res);
+
+    int mn = (n < p) ? n : p;
+    double* S  = (double*)malloc((size_t)mn * sizeof(double));               /* real */
+    double* U  = (double*)malloc((size_t)2 * (size_t)n * (size_t)n * sizeof(double));
+    double* VT = (double*)malloc((size_t)2 * (size_t)p * (size_t)p * sizeof(double));
+    if (!S || !U || !VT) { free(S); free(U); free(VT); free(A);
+        return linalg_delist_and_reeval(res); }
+    int info = mat_lapack_zgesdd('A', n, p, A, n, S, U, n, VT, p);
+    free(A);
+    if (info != 0) { free(S); free(U); free(VT);
+        return linalg_delist_and_reeval(res); }
+    svdm_default_tolerance(S, mn, n, p);
+
+    NDPresentation pres = na_result_presentation(arg);
+    Expr* u = na_build_matrix_as(U, n, n, true, /*colmajor=*/true, pres);
+    double* sig = (double*)calloc((size_t)n * (size_t)p, sizeof(double));
+    for (int i = 0; i < mn; i++) sig[(size_t)i * p + i] = S[i];
+    Expr* w = na_build_matrix_as(sig, n, p, false, /*colmajor=*/false, pres);
+    free(sig);
+    /* v = ConjugateTranspose[VT]: v[i][j] = conj(VT[j][i]); VT is column-major
+     * interleaved (element (r,c) at 2*(r + c*p)). */
+    double* vb = (double*)malloc((size_t)2 * (size_t)p * (size_t)p * sizeof(double));
+    for (int i = 0; i < p; i++)
+        for (int j = 0; j < p; j++) {
+            size_t src = 2 * ((size_t)j + (size_t)i * (size_t)p);
+            size_t dst = 2 * ((size_t)i * (size_t)p + (size_t)j);
+            vb[dst]     =  VT[src];
+            vb[dst + 1] = -VT[src + 1];
+        }
+    Expr* v = na_build_matrix_as(vb, p, p, true, /*colmajor=*/false, pres);
+    free(vb);
+    free(S); free(U); free(VT);
+
+    if (!u || !w || !v) { if (u) expr_free(u); if (w) expr_free(w); if (v) expr_free(v);
+        return linalg_delist_and_reeval(res); }
+    Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
+    items[0] = u; items[1] = w; items[2] = v;
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
+    free(items);
+    return result;
+}
+#endif /* USE_LAPACK */
+
 Expr* ndla_singularvaluedecomposition(Expr* res)
 {
 #ifndef USE_LAPACK
@@ -657,11 +710,15 @@ Expr* ndla_singularvaluedecomposition(Expr* res)
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
         return linalg_delist_and_reeval(res);
     Expr* arg = res->data.function.args[0];
+    NDType dt = is_ndarray(arg) ? arg->data.ndarray.dtype : NDT_FLOAT64;
     if (!is_ndarray(arg) || arg->data.ndarray.rank != 2
         || arg->data.ndarray.dims[0] == 0 || arg->data.ndarray.dims[1] == 0
-        || arg->data.ndarray.dtype != NDT_FLOAT64
+        || (dt != NDT_FLOAT64 && dt != NDT_COMPLEX64)
         || !mathilda_lapack_probe())
         return linalg_delist_and_reeval(res);
+
+    if (dt == NDT_COMPLEX64)
+        return ndla_svd_complex(arg, res);
 
     int n, p; double* A = NULL;
     if (!na_load_matrix(arg, false, /*colmajor=*/true, &n, &p, &A))

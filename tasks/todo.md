@@ -51,9 +51,17 @@ Plan: `/Users/user/.claude/plans/following-on-from-our-tingly-plum.md`
   audits pass; schur/jordan/eigen/packed_list/ndarray_linalg tests pass;
   valgrind clean (Accelerate baseline only).
 
-### Remaining (Phases 3, 4, and 5 for LU/SVD/Eigen/Jordan)
-- **Phase 3** pack the COMPLEX spectra still boxed by Eigenvalues/Eigenvectors
-  (`direct_build_complex_*_list`) and JordanDecomposition (`jd_matrix_from_columns`).
-- **Phase 4** complex-NDArray-INPUT buffer paths (zgetrf/zgesdd/zgeev) so a
-  complex NDArray to LU/SVD/Eigen computes on the buffer instead of delisting.
+### Phase 4 ✓ (v0.120): complex NDArray input on the buffer
+- LU → zgetrf (+ zlange/zgecon); SVD → zgesdd (u,v complex64, sigma real,
+  v=ConjugateTranspose[VT]); Eigenvalues/Eigenvectors → zgeev. All return packed
+  complex64; verified vs numpy (evals/svals match, recon ~1e-15); valgrind clean.
+
+### Phase 3 — DECIDED NOT TO DO
+- A real matrix's mixed real+complex spectrum stays a boxed List: force-packing
+  it to complex64 would turn real eigenvalues into Complex[re,0], diverging from
+  Mathematica, and the boxed result already agrees across surfaces. The input is
+  never unpacked (na_load reads the buffer); only the inherently-mixed result is
+  boxed. Complex INPUT (uniformly complex result) is handled by Phase 4.
+
+### Remaining
 - **Phase 6** benchmark folder `benchmarks/30-schur-decomposition/`.

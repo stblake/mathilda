@@ -416,23 +416,27 @@ Expr* ndla_ludecomposition(Expr* res)
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
         return linalg_delist_and_reeval(res);
     Expr* arg = res->data.function.args[0];
+    NDType dt = is_ndarray(arg) ? arg->data.ndarray.dtype : NDT_FLOAT64;
+    bool cplx = (dt == NDT_COMPLEX64);
     if (!is_ndarray(arg) || arg->data.ndarray.rank != 2
         || arg->data.ndarray.dims[0] != arg->data.ndarray.dims[1]
         || arg->data.ndarray.dims[0] == 0
-        || arg->data.ndarray.dtype != NDT_FLOAT64
+        || (dt != NDT_FLOAT64 && dt != NDT_COMPLEX64)
         || !mathilda_lapack_probe())
         return linalg_delist_and_reeval(res);
 
     int n, cc; double* A = NULL;
-    if (!na_load_matrix(arg, false, /*colmajor=*/true, &n, &cc, &A))
+    if (!na_load_matrix(arg, cplx, /*colmajor=*/true, &n, &cc, &A))
         return linalg_delist_and_reeval(res);
 
-    /* L-infinity norm of the ORIGINAL matrix, before dgetrf overwrites A. */
-    double anorm = mat_lapack_dlange('I', n, n, A, n);
+    /* L-infinity norm of the ORIGINAL matrix, before ?getrf overwrites A. */
+    double anorm = cplx ? mat_lapack_zlange('I', n, n, A, n)
+                        : mat_lapack_dlange('I', n, n, A, n);
     int* ipiv = (int*)malloc(sizeof(int) * (size_t)n);
     if (anorm < 0.0 || !ipiv) { free(A); free(ipiv); return linalg_delist_and_reeval(res); }
 
-    int info = mat_lapack_dgetrf(n, n, A, n, ipiv);
+    int info = cplx ? mat_lapack_zgetrf(n, n, A, n, ipiv)
+                    : mat_lapack_dgetrf(n, n, A, n, ipiv);
     if (info < 0) { free(A); free(ipiv); return linalg_delist_and_reeval(res); }
 
     static uint64_t sing_warn = 0, luc_warn = 0;
@@ -445,7 +449,8 @@ Expr* ndla_ludecomposition(Expr* res)
 
     double rcond = 0.0, cond_est;
     if (info == 0) {
-        int cinfo = mat_lapack_dgecon('I', n, A, n, anorm, &rcond);
+        int cinfo = cplx ? mat_lapack_zgecon('I', n, A, n, anorm, &rcond)
+                         : mat_lapack_dgecon('I', n, A, n, anorm, &rcond);
         cond_est = (cinfo != 0 || rcond <= 0.0) ? HUGE_VAL : 1.0 / rcond;
         if (cond_est > 1.0 / DBL_EPSILON && !luc_warn) {
             luc_warn = 1;
@@ -460,9 +465,8 @@ Expr* ndla_ludecomposition(Expr* res)
         cond_est = HUGE_VAL;
     }
 
-    Expr* lu = na_build_matrix(A, n, n, false, /*colmajor=*/true);
-    if (lu && is_ndarray(lu))                        /* inherit presentation */
-        lu->data.ndarray.present_as = arg->data.ndarray.present_as;
+    Expr* lu = na_build_matrix_as(A, n, n, cplx, /*colmajor=*/true,
+                                  na_result_presentation(arg));
     Expr* p = lu_mach_build_perm(ipiv, n, n);
     Expr* c = expr_new_real(cond_est);
     free(A); free(ipiv);
