@@ -1,74 +1,92 @@
-# Task: Matrix decompositions stay on packed/NDArray buffers (no Expr boxing)
+# RischNormanBlake — task tracker
 
-Plan: `/Users/user/.claude/plans/following-on-from-our-tingly-plum.md`
+Engine: `src/calculus/int_rnb.c` (+ `int_rnb.h`), `Integrate`RischNormanBlake[f,x]`.
+Scope: full algorithm incl. exact S-unit tier, n=1, K=Q(x). Reproduce §8 examples 1–4.
 
-## Phase 0 — NDArray[] idempotency (prerequisite)
-- [ ] `src/ndarray.c` `builtin_ndarray`: idempotent `is_ndarray(arg)` branch (mirror `builtin_tondarray`)
-- [ ] verify `NDArray[NDArray[m]] === NDArray[m]`, dtype re-cast works
+## Phase 0 — foundations / API study
+- [ ] Read Expr construction/inspection API (expr.h), eval helpers, sym_names, internal_* calls
+- [ ] Read intrischnorman.c helper region (mk_*, eval_* wrappers, driver, install idiom)
+- [ ] Confirm how to call internal_factor / risch_squarefree_t / series / residue_compute / solve
 
-## Phase 1 — shared helpers
-- [ ] `numarray.{c,h}`: `na_result_presentation(input)` + `na_build_matrix_as(...)`
-- [ ] refresh stale "NDArray real-only" header prose
+## Phase 1 — scaffold + wiring (compile-green skeleton)
+- [ ] int_rnb.h + int_rnb.c skeleton: builtin_rischnormanblake, int_rnb_init, install
+- [ ] eval_* wrapper helpers (together/expand/numer/denom/cancel/gcd/coeff/degree/D)
+- [ ] integrate.c wiring: include, init call, try_rischnormanblake, cascade insert, method enum/string/case, diagnostic+docstring lists
+- [ ] Build clean (make -j), engine returns NULL for now (stub) — no regressions
 
-## Phase 2 — SchurDecomposition
-- [ ] `schur_load_cm`: real load first (fast path), complex fallback
-- [ ] `schur_build`: drop pack_unpack; `na_build_matrix_as` + presentation
+## Phase 2 — RadicalField + element arithmetic
+- [ ] radical detection in f -> (q, m); squarefree Qj; N1/N2 checks
+- [ ] Ei, mul table, Lam; struct RadicalField
+- [ ] rf_add/scal/mult/D/one/zero/mult_matrix/norm/inv/from_y_expr/to_y_expr/denominator
+- [ ] micro-test element ops (mult table associativity, D(w_i)=Lam_i w_i)
 
-## Phase 3 — pack complex RESULTS (Eigen/Jordan)
-- [ ] `eigen_direct.c`: complex eigenvalue/vector builders → COMPLEX64 packed
-- [ ] `jordandecomp.c`: complex spectrum on packed input → COMPLEX64 packed
+## Phase 3 — heuristic parallel_integrate + exact degree bounds
+- [ ] rnb_exact_degree_bounds (val_inf_w/val_inf_f, nu_i, e, g, Delta, k)
+- [ ] rnb_parallel_integrate: ansatz, Dg, residual, coeff eqs, layered solve (mpq fast / symbolic)
+- [ ] diff-back verify helper (flint_algebraic_field_normalize)
+- [ ] Example 1 (1/Sqrt[x^2+1]) with cf-unit logand -> Log[x+y]
 
-## Phase 4 — complex NDArray INPUT on buffer (reduce delist)
-- [ ] LU → zgetrf; SVD → zgesdd; Eigen → zgeev; QR → cplx=1
-- [ ] scope: complex-dtype decline only (options/generalized may keep delisting)
+## Phase 3 — DONE: heuristic core works
+- [x] f->element, denominator, ansatz, symbolic solve, diff-back verify
+- [x] cases 1-4 (algebraic part only) verify to 0; non-elem/log cases decline cleanly
 
-## Phase 5 — presentation consistency (boxed → packed-list)
-- [ ] QR boxed-input branch → packed-list stamp
-- [ ] audit all heads: boxed input → transparent packed-list, no boxing
+## Phase 4 — exact S-unit tier
+- [x] cf_units (m=2 continued fraction) -> Example 1 = Log[x+Sqrt[1+x^2]] (check 0); c5 works
+- [ ] places_over_denominator (ramified/unramified classification) + residues (debug surface)
+- [ ] residue_at: ramified (trace) + unramified (branch series) — validate vs paper values
+- [x] find_element_with_divisor (val conditions -> nullspace) + affine_divisor_ok (norm)
+- [x] exact_logands driver (group residues -> divisors -> logands, torsion N search)
+- [x] exact per-coordinate degree bounds (bounds.py) — tractable systems
+- [x] KEY FIX: algebraic-constant abstraction (Sqrt->symbol) so Cancel/CoefficientList
+      extract clean equations over Q(radicals); RootReduce eqs-satisfied verification
+- [x] ALL FOUR paper examples verify (numerical diff-back = 0): 8.1 sqrt2/3, 8.2 torsion,
+      8.3 omega, flagship dx/sqrt(x^2+1); + nested min case; 0.87s total
 
-## Phase 6 — docs, tests, benchmark
-- [ ] docstrings/spec + fix stale "complex boxed" comments
-- [ ] tests: packed real+complex I/O, 3 input forms, idempotency
-- [ ] regression + audits + valgrind
-- [ ] scipy baseline on packed inputs (≈1.0x); formalize benchmarks/30-schur-decomposition/
-- [ ] changelog + version bump
+## Phase 5 — cascade, cleanup, tests, docs
+- [ ] confirm Integrate[f,x] cascade routes radical integrands to RischNormanBlake
+- [ ] clean output coefficients (RootReduce final gammas); silence Solve::svars/Power::infy
+- [ ] remove RNB_DEBUG or keep getenv-guarded; fix misleading-indentation warning
+- [ ] C unit test tests/test_int_rnb.c + stress corpus (.m) w/ numerical diff-back
+- [ ] docstring done; docs/spec/builtins + changelog; make check-c99; regressions; valgrind
 
-## Review
+## Phase 5 — docs, tests, audits
+- [ ] docstring; docs/spec/builtins + changelog
+- [ ] tests/test_int_rnb.c (+ COMMON_SRC); .m REPL script
+- [ ] make check-c99; regression suites; valgrind the 4 examples; graph refresh
 
-### Milestone committed (v0.119): mechanism + Schur + QR + NDArray[] fix
-- **Phase 0 ✓** `NDArray[]` idempotent on an NDArray arg (was malformed `{1}`);
-  EXEMPT in check_packed_aware (idempotency guard, not a fast path).
-- **Phase 1 ✓** `na_result_presentation` + `na_build_matrix_as`/`_vector_as` in
-  numarray. Two subtle correctness fixes discovered here: (a) arm
-  `pack_g_any_created` for NDA_HEAD_LIST results so the gate normalizes them in
-  reconstruction arithmetic (else `m - q.t.q^H` mis-threads); (b) a complex
-  result for a boxed-List caller must be boxed to a Complex[] List, NOT a
-  complex packed-list (the gate corrupts complex packed-lists → float64).
-- **Phase 2 ✓** Schur: real-first load (fast memcpy path) + packed factors.
-  Packed 400×400 ~65ms, on par with / faster than scipy ~87ms.
-- **Phase 5 (partial) ✓** QR boxed-input → transparent packed-list (was boxed).
-- Verified: all input forms reconstruct ~1e-14; packed-aware/array-exactness
-  audits pass; schur/jordan/eigen/packed_list/ndarray_linalg tests pass;
-  valgrind clean (Accelerate baseline only).
+## Review — COMPLETE
 
-### Phase 4 ✓ (v0.120): complex NDArray input on the buffer
-- LU → zgetrf (+ zlange/zgecon); SVD → zgesdd (u,v complex64, sigma real,
-  v=ConjugateTranspose[VT]); Eigenvalues/Eigenvectors → zgeev. All return packed
-  complex64; verified vs numpy (evals/svals match, recon ~1e-15); valgrind clean.
+`Integrate`RischNormanBlake[f, x]` landed in `src/calculus/int_rnb.c` (+ `.h`),
+wired into the Integrate cascade after `try_risch` and selectable via
+`Method -> "RischNormanBlake"`. All four paper examples + a broad stress corpus
+verify (numerical diff-back = 0); non-elementary/out-of-scope cases decline
+cleanly (never wrong). C unit test `tests/test_int_rnb.c` passes; pmint,
+integrals, and dispatch regressions unaffected; `make check-c99` clean.
 
-### Phase 3 — DECIDED NOT TO DO
-- A real matrix's mixed real+complex spectrum stays a boxed List: force-packing
-  it to complex64 would turn real eigenvalues into Complex[re,0], diverging from
-  Mathematica, and the boxed result already agrees across surfaces. The input is
-  never unpacked (na_load reads the buffer); only the inherently-mixed result is
-  boxed. Complex INPUT (uniformly complex result) is handled by Phase 4.
+Key implementation notes / gotchas encountered:
+- **Style**: Expr*-orchestration over CAS wrappers, mirroring intrischnorman.c.
+  Element = coordinate vector over the Trager basis w_i = y^i/E_i.
+- **Leading-coefficient bug**: risch_squarefree_t returns MONIC Q_j, so the
+  radicand's leading constant c = q/∏Q_j^j must ride the multiplication table on
+  each m-th-power wraparound — without it `q = 1-x²` (c=-1) gave a sign-flipped
+  (wrong) answer. Caught only by numerical diff-back, not by the algebraic
+  eqs-satisfied check (which trusts the system it was handed).
+- **Number-field linear algebra**: Mathilda's Cancel/Together/RootReduce do NOT
+  cancel algebraic-constant common factors (Sqrt[3/2]/(Sqrt[3/2](x²-2)) stays;
+  only the hang-prone FullSimplify reduces it). Fix: abstract each algebraic
+  constant to a fresh SYMBOL before Cancel/CoefficientList (Cancel clears s/s),
+  substitute back for Solve, verify equations with RootReduce.
+- **Verification**: FullSimplify hangs on mixed poly+constant radical fields;
+  use the extracted-equations RootReduce check + a high-precision numerical
+  diff-back gate. The numerical gate is essential — it's the only check that
+  catches a mis-built linear system (field-setup bug).
+- **Robustness**: m≥3 residue tier is real-place only (complex-place branch
+  series is a root-of-a-complex-number Puiseux expansion that hangs); plus a
+  12s wall-clock budget. Pathological cases decline, never hang or mislead.
+- **Leak**: fixed an unfreed `rows` buffer in rnb_find_element. Two residual
+  one-time leaks are inside called library fns (risch_squarefree_t,
+  builtin_linearsolve), not this engine.
 
-### Phase 6 ✓: benchmark folder `benchmarks/91-schur-decomposition/`
-- (30 was taken by 30-string-ops → used 91). .m/.py pair vs scipy.linalg
-  schur/qz; 3 cases (real 300, complex 200, generalized 200); checks agree
-  (reconstruction residual 0); runs under make bench-gap.
-
-## ALL PHASES COMPLETE. Commits (on main):
-- fc024979 v0.119 — mechanism + Schur + QR + NDArray[] idempotency
-- 51896567 v0.120 — complex NDArray input on the buffer (LU/SVD/Eigen)
-- 769fe740 — benchmark 91-schur-decomposition
+Follow-ups (out of scope here): towers (n>1); complex-place m≥3 logands;
+the per-call `Solve::svars` stderr line (Mathilda's Quiet is broken; the Cherry
+engines emit it too); prettier (RootReduced) output coefficients.

@@ -2761,3 +2761,38 @@ engine, diff a batch of ADJACENT integrals (same special function, the sibling t
 against a stashed baseline binary, not just the target family. (3) Add at least one
 EXACT-FORM regression assertion for the neighbours (`test_log_tower_unregressed`), since
 head+diff-back checks cannot catch a form regression.
+
+## RischNormanBlake — integrating over a radical field with Mathilda's own kernels (2026-08-30)
+
+Building `Integrate`RischNormanBlake` (int_rnb.c, parallel Risch-Norman over y^m=q(x))
+surfaced several traps when doing exact number-field linear algebra through the CAS
+evaluator rather than a dedicated DomainMatrix:
+
+1. **Cancel/Together/RootReduce do NOT cancel algebraic-constant common factors.**
+   `Sqrt[3/2]/(Sqrt[3/2](x^2-2))` stays uncancelled; only the (nested-radical-slow,
+   hang-prone) FullSimplify reduces it. So `Numerator[Together[resid]]` is NOT a
+   polynomial when coefficients carry radicals, and CoefficientList mis-extracts.
+   FIX: abstract every algebraic constant (Power[number, non-integer p/q]) to a fresh
+   SYMBOL before Cancel/CoefficientList (Cancel happily cancels `s/s`), then substitute
+   the constants back into the extracted coefficients before Solve.
+
+2. **Solve DOES solve algebraic-coefficient linear systems** (over the field, unknowns
+   may be algebraic) once the equations are clean. But Mathilda's `Quiet` is BROKEN
+   (holds its arg, does not unwrap or suppress) — do not wrap Solve in Quiet; the
+   per-call `Solve::svars` line is unavoidable and consistent with the Cherry engines.
+
+3. **A monic squarefree routine drops the leading coefficient.** risch_squarefree_t
+   returns monic Q_j; the radicand's constant c = q/∏Q_j^j (e.g. -1 for q=1-x^2) must
+   be folded into the multiplication table on each m-th-power wraparound, or element
+   arithmetic silently flips sign → a WRONG (not declined) integral.
+
+4. **Verify numerically, not just algebraically.** The internal "equations satisfied"
+   (RootReduce) check only certifies the linear system it was HANDED; it cannot catch a
+   mis-built system (a field-setup bug). A high-precision numerical diff-back at a few
+   rational points is the essential final gate — it caught the c=-1 sign bug that the
+   algebraic check passed. FullSimplify diff-back is unusable (hangs on nested radicals).
+
+5. **A cascade engine must not hang.** A single evaluate() (here a complex-place branch
+   series for m>=3 — a root of a complex number) can run unbounded, and a between-call
+   wall-clock budget cannot interrupt it. Guard structurally: skip non-real places for
+   m>=3 (documented scope limit; case declines) AND keep the coarse budget as backstop.

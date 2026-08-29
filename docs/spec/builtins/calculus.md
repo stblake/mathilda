@@ -917,8 +917,24 @@ monotonically down.
   9. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
   10. `Integrate\`RischNorman[f, x]` — Bronstein pmint (parallel Risch), all
-     integrands.
-  11. `Integrate\`RischTranscendental[f, x]` — the **recursive** transcendental
+     transcendental integrands (declines any algebraic function of `x`).
+  11. `Integrate\`RischNormanBlake[f, x]` — the parallel Risch-Norman method
+     generalised to a **simple radical extension** `L = K(y)`, `y^m = q(x)`
+     (`K = Q(x)`), after S. Blake, *Parallel Integration over Simple Radical
+     Extensions*.  Picks up exactly the single-radical-of-`x` integrands the
+     transcendental pmint declines.  The antiderivative numerator ranges over
+     the integral closure `O = ⨁ R w_i` with the Trager basis `w_i = y^i/E_i`;
+     the logands are the `S`-units of `O` — irreducible denominator factors, the
+     **units at infinity** (m=2 continued fraction / polynomial Pell, so
+     `∫dx/√(x²+1) = Log[x+√(x²+1)]`), and the **branch-place / Jacobian-torsion
+     divisor** elements from a residue analysis (so genus-0 and 2-torsion
+     genus-1 curves and the `m=3` cube-root example close).  Exact per-coordinate
+     degree bounds keep the linear system small.  Correct by construction, then
+     numerically diff-back verified before returning; a mis-built system or a
+     non-elementary integrand declines (never a wrong answer).  Scope: `n = 1`,
+     `K = Q(x)`; the residue tier is real-place only for `m ≥ 3`.  Debug surfaces:
+     `Integrate\`RNB\`Info`, `Integrate\`RNB\`Residues`, `Integrate\`RNB\`Logands`.
+  12. `Integrate\`RischTranscendental[f, x]` — the **recursive** transcendental
      Risch algorithm; runs after RischNorman and only adds
      closed forms the earlier stages missed.  Correct by construction (no
      differentiation check).  Handles logarithmic polynomials and the
@@ -978,6 +994,9 @@ monotonically down.
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]` (parallel Risch / pmint).
+  - `"RischNormanBlake"` — `Integrate\`RischNormanBlake[f, x]`, parallel
+    Risch-Norman over a simple radical extension `y^m = q(x)`
+    (`src/calculus/int_rnb.c`); see cascade stage 11 above.
   - `"RischTranscendental"` — `Integrate\`RischTranscendental[f, x]`, the recursive
     transcendental Risch algorithm (`src/calculus/integrate_risch_transcendental.c`).
     A decision procedure over a differential transcendental tower, distinct

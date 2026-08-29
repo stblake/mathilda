@@ -35,6 +35,7 @@
 #include "integrate_ramanujan.h"
 #include "intrat.h"
 #include "intrischnorman.h"
+#include "int_rnb.h"
 #include "integrate_risch_transcendental.h"
 #include "risch_canonical.h"
 #include "risch_structure.h"
@@ -281,6 +282,20 @@ static Expr* try_risch(Expr* f, Expr* x) {
     return result;
 }
 
+/* Stage 2a: RischNormanBlake — parallel Risch-Norman over a simple radical
+ * extension L = K(y), y^m = q(x).  Additive: handles exactly the single-radical
+ * integrands the transcendental pmint (try_risch) declines, so it runs right
+ * after it and neither stage can shadow the other. */
+static Expr* try_rischnormanblake(Expr* f, Expr* x) {
+    Expr* result = call_stage("Integrate`RischNormanBlake", f, x);
+    if (!result) return NULL;
+    if (result_is_unresolved(result, "Integrate`RischNormanBlake")) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
 /* Stage 2b: recursive transcendental Risch integrator.
  * A decision procedure over a differential transcendental tower, with
  * rational / logarithmic / exponential / special-function cases, each
@@ -374,6 +389,7 @@ typedef enum {
     METHOD_GOURSAT,
     METHOD_WEIERSTRASS,
     METHOD_RISCH,
+    METHOD_RISCH_NORMAN_BLAKE,
     METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
     METHOD_UNDEFINED,
@@ -403,6 +419,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "GoursatAlgebraic") == 0) return METHOD_GOURSAT;
     if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
     if (strcmp(s, "RischNorman") == 0) return METHOD_RISCH;
+    if (strcmp(s, "RischNormanBlake") == 0) return METHOD_RISCH_NORMAN_BLAKE;
     if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
@@ -812,7 +829,8 @@ Expr* builtin_integrate(Expr* res) {
                     "\"LinearRadicals\", \"QuadraticRadicals\", "
                     "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
                     "\"GoursatAlgebraic\", "
-                    "\"Weierstrass\", \"RischNorman\", \"RischTranscendental\", "
+                    "\"Weierstrass\", \"RischNorman\", \"RischNormanBlake\", "
+                    "\"RischTranscendental\", "
                     "\"CRCTable\", \"NewtonLeibniz\", \"LineIntegral\".\n");
                 last_warned_hash = h;
             }
@@ -897,6 +915,10 @@ Expr* builtin_integrate(Expr* res) {
             if (!result) result = try_weierstrass(effective_f, x);
             if (!result) result = try_derivdivides(effective_f, x);
             if (!result) result = try_risch(effective_f, x);
+            /* RischNormanBlake: the radical-extension generalisation of the
+             * parallel method, picking up the y^m = q(x) integrands the
+             * transcendental pmint just declined. */
+            if (!result) result = try_rischnormanblake(effective_f, x);
             /* Recursive transcendental Risch: runs after the pmint heuristic
              * and is correct by construction, so it only adds closed forms
              * the earlier stages missed (logarithmic polynomials, Gaussians
@@ -937,6 +959,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_RISCH:
             result = try_risch(effective_f, x);
+            break;
+        case METHOD_RISCH_NORMAN_BLAKE:
+            result = try_rischnormanblake(effective_f, x);
             break;
         case METHOD_RISCH_TRANSCENDENTAL:
             result = try_rischtranscendental(effective_f, x);
@@ -1024,6 +1049,7 @@ void integrate_init(void) {
         "  \"GoursatAlgebraic\"   — Integrate`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent)\n"
         "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
+        "  \"RischNormanBlake\"    — Integrate`RischNormanBlake (parallel Risch-Norman over a radical y^m = q(x); Blake)\n"
         "  \"RischTranscendental\"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
@@ -1121,6 +1147,11 @@ void integrate_init(void) {
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,
      * the fall-through for transcendental integrands. */
     intrischnorman_init();
+
+    /* RischNormanBlake: parallel Risch-Norman generalised to a simple radical
+     * extension L = K(y), y^m = q(x).  Provides Integrate`RischNormanBlake[f,x],
+     * the radical-integrand fall-through after the transcendental pmint. */
+    int_rnb_init();
 
     /* Recursive transcendental Risch integrator:
      * Integrate`RischTranscendental.  Correct by construction; inserted into the

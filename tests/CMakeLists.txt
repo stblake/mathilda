@@ -658,6 +658,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_ramanujan.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
+    ../src/calculus/int_rnb.c
     ../src/calculus/integrate_risch_transcendental.c
     ../src/calculus/risch_util.c
     ../src/calculus/integrate_risch_rde.c
@@ -1709,6 +1710,10 @@ add_test(NAME cherry_sigma_tests COMMAND cherry_sigma_tests)
 add_executable(cherry_dilog_tests test_cherry_dilog.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cherry_dilog_tests PRIVATE ../src ../src/calculus)
 add_test(NAME cherry_dilog_tests COMMAND cherry_dilog_tests)
+
+add_executable(int_rnb_tests test_int_rnb.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(int_rnb_tests PRIVATE ../src ../src/calculus)
+add_test(NAME int_rnb_tests COMMAND int_rnb_tests)
 
 add_executable(cherry_dilog_exp_tests test_cherry_dilog_exp.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cherry_dilog_exp_tests PRIVATE ../src ../src/calculus)
