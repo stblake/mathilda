@@ -46,7 +46,8 @@
  * dispatcher, so we cap it and decline (always a safe result) when exceeded. */
 #define RNB_BUDGET_SEC 4.0
 /* Per-call wall-clock cap for the exact tier's individual heavy CAS calls
- * (branch Series, NullSpace, Simplify over a nested-radical number field): a
+ * (branch Series, NullSpace, extension-aware Cancel/Together over a
+ * nested-radical number field): a
  * single one of these can run for tens of seconds and the cooperative clock()
  * poll cannot interrupt a call already in flight, so we bound each with
  * TimeConstrained.  A timeout latches g_rnb_aborted, and the exact-tier loops
@@ -103,8 +104,8 @@ static Expr* mk_binary(const char* head, Expr* a1, Expr* a2) {
  * TimeConstrained[e, RNB_TC_PERCALL_SEC, RNB$TC$Failed].  On timeout the result
  * is the sentinel symbol RNB$TC$Failed; we latch g_rnb_aborted so the exact
  * tier's rnb_over_budget polls unwind it.  Used for the heavy algebraic calls
- * (Series / NullSpace / Simplify / GCD-Cancel over a nested-radical number
- * field) that can each run far past the cooperative budget. */
+ * (Series / NullSpace / extension-aware Cancel/Together over a nested-radical
+ * number field) that can each run far past the cooperative budget. */
 static Expr* eval_timed(Expr* e) {
     Expr* args[3];
     args[0] = e;
@@ -131,6 +132,25 @@ static Expr* eval_expand(Expr* f)   { return eval_and_free(mk_unary("Expand", f)
 static Expr* eval_cancel(Expr* f)   {
     return g_rnb_exact_tier ? eval_timed(mk_unary("Cancel", f))
                             : eval_and_free(mk_unary("Cancel", f)); }
+
+/* Rule[Extension, Automatic], freshly allocated each call. */
+static Expr* rnb_extension_automatic(void) {
+    return mk_binary("Rule", expr_new_symbol(SYM_Extension),
+                     expr_new_symbol(SYM_Automatic));
+}
+/* Cancel[Together[e, Extension -> Automatic], Extension -> Automatic]; consumes
+ * e.  This is the rational-normal form over an auto-detected algebraic
+ * extension, used in the exact tier in place of Simplify.  The expressions it
+ * reduces (and zero-tests) are rational functions over the place's radical
+ * number field, so this targeted normalisation is both sufficient and far
+ * cheaper than Simplify, which was pathologically slow (often hanging) over a
+ * nested-radical field.  Capped with eval_timed exactly like the Simplify it
+ * replaces, so a genuinely hard case still declines within the budget. */
+static Expr* eval_cancel_together_ext(Expr* e) {
+    Expr* tog = mk_binary("Together", e, rnb_extension_automatic());
+    Expr* can = mk_binary("Cancel", tog, rnb_extension_automatic());
+    return eval_timed(can);
+}
 static Expr* eval_numer(Expr* f)    { return eval_and_free(mk_unary("Numerator", f)); }
 static Expr* eval_denom(Expr* f)    { return eval_and_free(mk_unary("Denominator", f)); }
 MATHILDA_MAYBE_UNUSED static Expr* eval_factor(Expr* f)   {
@@ -1280,7 +1300,7 @@ static Expr* rnb_residue_unram(const RadicalField* F, Expr* const* f_elem,
     Expr* zero = mk_int(0);
     Expr* res = rnb_residue2(tot, RNB_T, zero);
     expr_free(zero);
-    return eval_timed(mk_unary("Simplify", res));
+    return eval_cancel_together_ext(res);
 }
 
 /* Residue of f dx at the single ramified place over x=xi: residue of the
@@ -1292,7 +1312,7 @@ static Expr* rnb_residue_ram(const RadicalField* F, Expr* const* f_elem,
     /* Residue[0, ...] does not auto-simplify; short-circuit a zero trace. */
     if (tr && tr->type == EXPR_INTEGER && tr->data.integer == 0) return tr;
     Expr* res = rnb_residue2(tr, F->xname, xi);
-    return eval_timed(mk_unary("Simplify", res));
+    return eval_cancel_together_ext(res);
 }
 
 static Expr* rnb_residue_at(const RadicalField* F, Expr* const* f_elem,
@@ -1312,7 +1332,7 @@ static Expr* rnb_residue_at(const RadicalField* F, Expr* const* f_elem,
 static bool rnb_is_zero(const Expr* e) {
     if (!e) return true;
     if (e->type == EXPR_INTEGER && e->data.integer == 0) return true;
-    Expr* z = eval_timed(mk_unary("Simplify", expr_copy((Expr*)e)));
+    Expr* z = eval_cancel_together_ext(expr_copy((Expr*)e));
     bool zero = (z && z->type == EXPR_INTEGER && z->data.integer == 0);
     if (z) expr_free(z);
     return zero;
@@ -1708,7 +1728,7 @@ static Expr* rnb_integrate(Expr* f, Expr* x) {
 
     /* The exact tier's algebra runs over the (possibly nested-radical, complex)
      * number field of the affine places, where a single Cancel/Together/Factor/
-     * Simplify/NullSpace/Series can hang; cap each with TimeConstrained while
+     * NullSpace/Series can hang; cap each with TimeConstrained while
      * this flag is on. */
     g_rnb_exact_tier = true;
 
