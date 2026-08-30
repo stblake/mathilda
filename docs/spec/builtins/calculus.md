@@ -702,6 +702,17 @@ one function — solve each scalar and renumber the constants) and
 eigen-decomposition of A with real `Cos/Sin` forms for complex eigenvalues and a
 `-A^{-1}b` particular for constant forcing).
 
+First-order linear PDEs (`DSolve[eqn, u, {x, y}]`) are solved by the method of
+characteristics; the general solution carries an arbitrary function `C[1][ξ]`:
+
+```
+In[12]:= DSolve[D[u[t,x],t] + c D[u[t,x],x] == 0, u, {t,x}]  (* transport *)
+Out[12]= {{u -> Function[{t, x}, C[1][-c t + x]]}}
+
+In[13]:= DSolve[D[u[x,y],x] + 3 D[u[x,y],y] + u[x,y] == 1, u, {x,y}]
+Out[13]= {{u -> Function[{x, y}, E^-x (E^x + C[1][-3 x + y])]}}
+```
+
 ```
 In[1]:= DSolve[y'[x] + y[x] == a Sin[x], y[x], x]
 Out[1]= {{y[x] -> E^(-x) (C[1] + 1/2 (-a Cos[x] E^x + a E^x Sin[x]))}}

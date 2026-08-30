@@ -81,6 +81,8 @@ extern void dsolve_constcoeff_init(void);
 extern void dsolve_euler_init(void);
 extern void dsolve_specialform_init(void);
 extern void dsolve_reduce_order_init(void);
+extern Expr** dsolve_pde1_solve(DSolveProblem* P);
+extern void dsolve_pde1_init(void);
 extern Expr** dsolve_decouple_solve(DSolveProblem* P);
 extern Expr** dsolve_linsys_solve(DSolveProblem* P);
 extern void dsolve_decouple_init(void);
@@ -132,11 +134,12 @@ Expr* builtin_dsolve(Expr* res) {
     DSolveMethod method = P.method ? ds_method_from_string(P.method) : DS_AUTOMATIC;
     if (method == DS_INVALID)              { dsolve_problem_free(&P); return NULL; }
     if (ds_fail_seen(heq, hv, (int)method)) { dsolve_problem_free(&P); return NULL; }
-    if (P.is_pde)                          { dsolve_problem_free(&P); return NULL; } /* Phase 2 */
 
     g_dsolve_depth++;
     Expr* result = NULL;
-    if (P.nfun > 1) {
+    if (P.is_pde) {
+        result = dsolve_run_pde(&P, dsolve_pde1_solve);
+    } else if (P.nfun > 1) {
         if (!result) result = dsolve_run_system(&P, dsolve_decouple_solve);
         if (!result) result = dsolve_run_system(&P, dsolve_linsys_solve);
     } else
@@ -207,6 +210,7 @@ void dsolve_init(void) {
     dsolve_euler_init();
     dsolve_specialform_init();
     dsolve_reduce_order_init();
+    dsolve_pde1_init();
     dsolve_decouple_init();
     dsolve_linsys_init();
 }

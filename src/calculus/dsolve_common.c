@@ -741,6 +741,87 @@ bool dsolve_verify_system(const DSolveProblem* P, Expr** bodies) {
     return ok;
 }
 
+/* ---- PDE (single function of nind variables) ---- */
+static Expr* pde_varlist(const DSolveProblem* P) {
+    Expr** vs = malloc(P->nind * sizeof(Expr*));
+    for (size_t i = 0; i < P->nind; i++) vs[i] = expr_new_symbol(P->ind_names[i]);
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), vs, P->nind);
+    free(vs);
+    return l;
+}
+
+/* Derivative[o1,o2][u][v1,v2] (first-order PDE terms). */
+static Expr* pde_deriv_lit(const char* u, int o1, int o2, const char* v1, const char* v2) {
+    Expr* d = expr_new_function(expr_new_symbol(SYM_Derivative),
+                  (Expr*[]){ expr_new_integer(o1), expr_new_integer(o2) }, 2);
+    Expr* du = expr_new_function(d, (Expr*[]){ expr_new_symbol(u) }, 1);
+    return expr_new_function(du, (Expr*[]){ expr_new_symbol(v1), expr_new_symbol(v2) }, 2);
+}
+
+/* Verify a 2-variable first-order PDE.  Two obstacles: the evaluator does not
+ * reduce Derivative[i,j][Function[...]][...] (so we substitute the derivative
+ * TERMS with D[body, v], which does reduce), and zero_test cannot sample an
+ * arbitrary function C[1][...] (so we first replace it with a concrete test
+ * function C[1][z_] :> Sin[z] — a correct general solution stays a solution for
+ * any choice, and Sin makes the residual concrete). */
+static bool dsolve_verify_pde(const DSolveProblem* P, const Expr* body) {
+    const char* u = P->fun_names[0];
+    const char* v1 = P->ind_names[0];
+    const char* v2 = P->ind_names[1];
+    const char* z = intern_symbol("DSolve`pdez");
+    Expr* blank = expr_new_function(expr_new_symbol("Blank"), NULL, 0);
+    Expr* patt = expr_new_function(expr_new_symbol("Pattern"),
+                     (Expr*[]){ expr_new_symbol(z), blank }, 2);
+    Expr* lhs = expr_new_function(ds_const(1), (Expr*[]){ patt }, 1);          /* C[1][z_] */
+    Expr* rhs = ds_call1("Sin", expr_new_symbol(z));                           /* Sin[z]   */
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_RuleDelayed), (Expr*[]){ lhs, rhs }, 2);
+    Expr* bodyC = eval_and_free(internal_replace_all((Expr*[]){ expr_copy((Expr*)body), rule }, 2));
+
+    bool ok = true;
+    for (size_t e = 0; e < P->neq && ok; e++) {
+        Expr* r = expr_copy(P->eq_residuals[e]);
+        r = ds_subst(r, pde_deriv_lit(u, 1, 0, v1, v2), ds_d(expr_copy(bodyC), expr_new_symbol(v1)));
+        r = ds_subst(r, pde_deriv_lit(u, 0, 1, v1, v2), ds_d(expr_copy(bodyC), expr_new_symbol(v2)));
+        r = ds_subst(r, expr_new_function(expr_new_symbol(u),
+                        (Expr*[]){ expr_new_symbol(v1), expr_new_symbol(v2) }, 2), expr_copy(bodyC));
+        if (zero_test_decide(r) == ZERO_TEST_FALSE) ok = false;
+        expr_free(r);
+    }
+    expr_free(bodyC);
+    return ok;
+}
+
+static Expr* dsolve_assemble_pde(const DSolveProblem* P, Expr* body) {
+    const char* uname = P->fun_names[0];
+    Expr* b = ds_rename_param(body, P->param_head);
+    Expr* lhs; Expr* rhs;
+    if (P->applied) {
+        Expr** vs = malloc(P->nind * sizeof(Expr*));
+        for (size_t i = 0; i < P->nind; i++) vs[i] = expr_new_symbol(P->ind_names[i]);
+        lhs = expr_new_function(expr_new_symbol(uname), vs, P->nind);
+        free(vs);
+        rhs = b;
+    } else {
+        lhs = expr_new_symbol(uname);
+        rhs = expr_new_function(expr_new_symbol(SYM_Function),
+                  (Expr*[]){ pde_varlist(P), b }, 2);
+    }
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){ lhs, rhs }, 2);
+    Expr* inner = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ rule }, 1);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ inner }, 1);
+}
+
+Expr* dsolve_run_pde(DSolveProblem* P, DSolveSysFn fn) {
+    Expr** bodies = fn(P);
+    if (!bodies) return NULL;
+    Expr* result = NULL;
+    if (bodies[0] && dsolve_verify_pde(P, bodies[0]))
+        result = dsolve_assemble_pde(P, bodies[0]);
+    if (bodies[0]) expr_free(bodies[0]);
+    free(bodies);
+    return result;
+}
+
 Expr* dsolve_run_system(DSolveProblem* P, DSolveSysFn fn) {
     Expr** bodies = fn(P);
     if (!bodies) return NULL;

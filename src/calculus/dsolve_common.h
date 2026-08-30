@@ -102,6 +102,11 @@ bool  dsolve_verify_system(const DSolveProblem* P, Expr** bodies);
  * verify, fit conditions, assemble.  NULL if declined or verification fails. */
 Expr* dsolve_run_system(DSolveProblem* P, DSolveSysFn fn);
 
+/* Run one PDE method (single function of the nind independent variables): call
+ * `fn` for the body (bodies[0]), verify it against the equation, and assemble
+ * {{u -> Function[{v1,...,vk}, body]}} (or the applied u[...] -> body form). */
+Expr* dsolve_run_pde(DSolveProblem* P, DSolveSysFn fn);
+
 /* Shared REPL entry for a `DSolve`Method[...]` builtin: parse `res`, run `fn`
  * once (strict, no cascade), free the problem.  Returns the result or NULL. */
 Expr* dsolve_method_builtin(Expr* res, DSolveTryFn fn);

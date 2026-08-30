@@ -2895,3 +2895,26 @@ wrong-but-verifiable solution. Guard the sub-result directly: ReductionOfOrder n
 requires `D[Integrate[p,x], x] == p` and declines otherwise (honest "unevaluated"
 instead of a wrong trivial solution). The underlying Integrate bug is pre-existing
 and out of scope for the DSolve work.
+
+## DSolve M6 — arbitrary functions break zero_test sampling AND crash D-of-Function
+
+First-order linear PDEs (method of characteristics) produce a general solution
+with an *arbitrary function* C[1][xi] (xi the characteristic). Two evaluator
+limitations surfaced:
+
+1. **zero_test hangs/crashes on C[1][...].** The Schwartz-Zippel sampler tries to
+   substitute a random rational for the symbol `C`, building a malformed
+   `Derivative[1][C[1]][...]` term. PDE verify therefore first substitutes a
+   *concrete* test function (`C[1][z_] :> Sin[z]`) so the residual is concrete.
+2. **D[Function[{x,y}, ...C[1][...]...]][x,y] segfaults.** The evaluator does not
+   reduce a 2-variable pure-function derivative and crashes when an arbitrary
+   function is inside. So PDE verify substitutes the derivative TERMS with
+   D[body, v] directly (which reduces) rather than substituting u -> Function; and
+   the user-facing verify pattern must reduce the Function application first
+   (`u[x,y] /. sol`) and differentiate the resulting body, never
+   `D[u[x,y],x] /. u->Function`. `D[Function[{x,y},x^2+y][x,y],x]` (no arbitrary
+   fn) is fine — the crash is specific to the arbitrary function inside.
+
+Both are pre-existing evaluator/zero_test bugs, out of scope for DSolve; DSolve
+works around them and produces correct, stable results (transport, `3u_x+5u_y==x`,
+`u_x+3u_y+u==1` all match Wolfram).

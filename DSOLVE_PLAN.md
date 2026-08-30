@@ -70,7 +70,10 @@ Eigenvectors/JordanDecomposition` (systems), `Series`/`SeriesData` (Frobenius),
   substrate; the `nfun>1` dispatch route added. Nonlinear higher-order (1d) still
   open.
 - **M5** — Kovacic / Frobenius / operator factoring / eigenvalue problems.
-- **M6** — Phase 2 PDEs.
+- **M6 — Phase 2 PDEs.** STARTED. First-order linear constant-coefficient PDE
+  (method of characteristics) done — transport, `3u_x+5u_y==x`, `u_x+3u_y+u==1`.
+  The `is_pde` dispatch route + PDE verify/assemble (2-variable `Function`) added.
+  Quasilinear/nonlinear first-order and 2nd-order (wave/heat) still to do.
 
 ## Phase 1 — ODE method catalog
 
@@ -148,8 +151,16 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 ## Phase 2 — PDE method catalog
 
 ### 2a. First order
-- `[ ] PDELinearFirstOrder` (transport / characteristics), `[ ] PDEQuasilinear`
-  (Lagrange), `[ ] PDECharpit` (nonlinear complete integral), `[ ] PDEClairaut`.
+- `[✓] PDELinearFirstOrder` — constant-coefficient `a u_{v1}+b u_{v2}+c u==f`
+  (a,b constant; c,f functions) by the method of characteristics: invariant
+  `ξ = a v2 - b v1`, then the linear ODE `u_{v1}+(c/a)u=f/a` along the
+  characteristic gives `u = Exp[-∫c/a]( C[1][ξ] + ∫Exp[·]f/a )`. Solves the
+  transport equation, `3u_x+5u_y==x`, `u_x+3u_y+u==1`. PDE verify substitutes a
+  concrete test function (`C[1][z_]:>Sin[z]`) — zero_test cannot sample an
+  arbitrary function, and D-of-a-2-var-Function-with-arbitrary-function crashes
+  the evaluator (both pre-existing).
+- `[ ] PDEQuasilinear` (Lagrange), `[ ] PDECharpit` (nonlinear complete
+  integral), `[ ] PDEClairaut`.
 
 ### 2b. Second order
 - `[ ] PDEHyperbolicGeneral` (operator factoring → arbitrary functions),

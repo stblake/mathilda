@@ -253,6 +253,23 @@ static void t_reduce_order(void) {
     check_true("Not[FreeQ[DSolve[y''[x] == y'[x]^2, y, x][[1]], C[2]]]");
 }
 
+/* ---- M6: first-order linear PDEs (method of characteristics) ----
+ * Verified with a concrete arbitrary function (C[1][z_] :> Sin[z]) after
+ * reducing the Function application, to avoid a pre-existing evaluator crash on
+ * D[Function[{x,y}, ...C[1]...]][x,y]. */
+static void t_pde_transport(void) {
+    check_true("With[{uc = (u[t,x] /. DSolve[D[u[t,x],t] + c D[u[t,x],x] == 0, u, {t,x}][[1]]) "
+               "/. C[1][z_] :> Sin[z]}, PossibleZeroQ[D[uc,t] + c D[uc,x]]]");
+}
+static void t_pde_forcing(void) {
+    check_true("With[{uc = (u[x,y] /. DSolve[3 D[u[x,y],x] + 5 D[u[x,y],y] == x, u, {x,y}][[1]]) "
+               "/. C[1][z_] :> Sin[z]}, PossibleZeroQ[3 D[uc,x] + 5 D[uc,y] - x]]");
+}
+static void t_pde_zeroth_order(void) {
+    check_true("With[{uc = (u[x,y] /. DSolve[D[u[x,y],x] + 3 D[u[x,y],y] + u[x,y] == 1, u, {x,y}][[1]]) "
+               "/. C[1][z_] :> Sin[z]}, PossibleZeroQ[D[uc,x] + 3 D[uc,y] + uc - 1]]");
+}
+
 /* ---- unsupported equations stay symbolic (declined, not wrong) ---- */
 static void t_declines_unsupported(void) {
     /* a genuinely unrecognised variable-coefficient 2nd-order ODE stays symbolic */
@@ -308,6 +325,9 @@ int main(void) {
     TEST(t_sys_complex_ivp);
     TEST(t_sys_constant_forcing);
     TEST(t_reduce_order);
+    TEST(t_pde_transport);
+    TEST(t_pde_forcing);
+    TEST(t_pde_zeroth_order);
     TEST(t_declines_unsupported);
 
     printf("\nAll DSolve tests passed.\n");
