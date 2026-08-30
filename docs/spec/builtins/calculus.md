@@ -636,6 +636,89 @@ Consistency with Cauchy's theorem: for a contour enclosing only the pole,
 `Residue[1/Sin[z]^7, {z, 0}]` is `5/16`, matching `NResidue[1/Sin[z]^7, {z, 0}]`
 ≈ `0.3125`.
 
+## DSolve (symbolic differential equations)
+
+`DSolve[eqn, y, x]` solves an ordinary differential equation for the function
+`y` with independent variable `x`, returning a rule list
+`{{y -> Function[{x}, ...]}}`. Writing the dependent function applied,
+`DSolve[eqn, y[x], x]`, returns the solution as an expression:
+`{{y[x] -> ...}}`. Initial/boundary conditions are given as equations at points
+(`y[0] == a`, `y'[x0] == b`); the generated constants `C[k]` are then fitted to
+them. `GeneratedParameters -> f` renames the constants to `f[k]`.
+
+Like `Integrate`, `DSolve` is a **cascade polyalgorithm**: it tries a sequence
+of methods, and `DSolve[eqn, y, x, Method -> "<name>"]` dispatches directly to a
+single one (strict, no fallback). Each method is also callable as
+`DSolve`<Method>[...]`. It is `HoldAll` (so equations and conditions stay
+formal); every returned branch is verified by back-substitution before it is
+returned.
+
+Methods implemented so far (first-order family; see `DSOLVE_PLAN.md` for the full
+roadmap):
+
+| Method | Solves |
+|---|---|
+| `DSolve`Quadrature` | `y^(n)[x] == f(x)` with `f` free of `y` (integrate n times) |
+| `DSolve`LinearFirstOrder` | `y'[x] + p(x) y[x] == q(x)` (integrating factor) |
+| `DSolve`Bernoulli` | `y'[x] == A(x) y + B(x) y^n`, n≠0,1 (substitution `v=y^(1-n)`) |
+| `DSolve`Homogeneous` | `y'[x] == F(y/x)` (substitution `y=v x` → separable) |
+| `DSolve`Separable` | `y'[x] == g(x) h(y)` (`∫dy/h == ∫g dx + C[1]`) |
+| `DSolve`Exact` | `M + N y' == 0`, exact or via integrating factor `μ(x)`/`μ(y)` |
+| `DSolve`Clairaut` | `y == x y' + f(y')` (general lines + singular envelope) |
+| `DSolve`LinearConstantCoefficients` | `a_n y^(n)+…+a_0 y == g(x)` (char. polynomial + variation of parameters) |
+| `DSolve`EulerCauchy` | `a_n x^n y^(n)+…+a_0 y == g(x)` (indicial polynomial, trial `x^r`) |
+| `DSolve`SpecialFunctionForm` | 2nd-order forms → Airy (`y''==(Ax+B)y`) and Bessel / modified Bessel |
+
+```
+In[5]:= DSolve[y''[x] + 4 y'[x] + 5 y[x] == 0, y[x], x]
+Out[5]= {{y[x] -> C[1] Cos[x] E^(-2 x) - C[2] Sin[x] E^(-2 x)}}
+
+In[6]:= DSolve[y'''[x] + 4 y'[x] == 5 y[x], y[x], x]
+Out[6]= {{y[x] -> C[1] E^x + C[2] E^(-x/2) Cos[Sqrt[19] x/2]
+              - C[3] E^(-x/2) Sin[Sqrt[19] x/2]}}
+
+In[7]:= DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi/2] == 1}, y[x], x]  (* BVP *)
+Out[7]= {{y[x] -> Sin[x]}}
+
+In[8]:= DSolve[x^2 y''[x] + 4 x y'[x] + 7 y[x] == 0, y[x], x]  (* Euler-Cauchy *)
+Out[8]= {{y[x] -> (C[1] Cos[Sqrt[19]/2 Log[x]])/x^(3/2)
+              - (C[2] Sin[Sqrt[19]/2 Log[x]])/x^(3/2)}}
+
+In[9]:= DSolve[y''[x] - x y[x] == 0, y[x], x]  (* Airy *)
+Out[9]= {{y[x] -> C[1] AiryAi[x] + C[2] AiryBi[x]}}
+
+In[10]:= DSolve[x^2 y''[x] + x y'[x] + (x^2 - 4) y[x] == 0, y[x], x]  (* Bessel *)
+Out[10]= {{y[x] -> C[1] BesselJ[2, x] + C[2] BesselY[2, x]}}
+
+In[11]:= DSolve[{y'[x] == y[x] - 2 z[x], z'[x] == y[x] - z[x],
+                 y[0] == 1, z[0] == 4}, {y[x], z[x]}, x]  (* system, complex eigenvalues *)
+Out[11]= {{y[x] -> -3 (Cos[x] + Sin[x]) + 4 (Cos[x] - Sin[x]),
+           z[x] -> 4 Cos[x] - 3 Sin[x]}}
+```
+
+Systems (`nfun > 1`) are dispatched to `DecoupleSystem` (each equation involves
+one function — solve each scalar and renumber the constants) and
+`LinearFirstOrderSystem` (constant-coefficient `Y' == A Y + b`, solved by the
+eigen-decomposition of A with real `Cos/Sin` forms for complex eigenvalues and a
+`-A^{-1}b` particular for constant forcing).
+
+```
+In[1]:= DSolve[y'[x] + y[x] == a Sin[x], y[x], x]
+Out[1]= {{y[x] -> E^(-x) (C[1] + 1/2 (-a Cos[x] E^x + a E^x Sin[x]))}}
+
+In[2]:= DSolve[{y'[x] == 3 y[x], y[0] == 5}, y[x], x]
+Out[2]= {{y[x] -> 5 E^(3 x)}}
+
+In[3]:= DSolve[{y'[x] == -3 y[x]^2, y[1] == 2}, y[x], x]
+Out[3]= {{y[x] -> 4/(-10 + 12 x)}}
+
+In[4]:= DSolve[y''[x] == 7, y, x]
+Out[4]= {{y -> Function[{x}, C[1] + C[2] x + 7/2 x^2]}}
+```
+
+Options: `GeneratedParameters` (constant head, default `C`), `Assumptions`,
+`Method`, `IncludeSingularSolutions`.
+
 ## Integrate (rational-function integration, Phase 1-8d)
 
 `Integrate[f, x]` is the public entry point for the rational-function

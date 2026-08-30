@@ -687,6 +687,20 @@ set(COMMON_SRC
     ../src/calculus/risch_coupled.c
     ../src/calculus/risch_hermite.c
     ../src/calculus/intsimp.c
+    ../src/calculus/dsolve.c
+    ../src/calculus/dsolve_common.c
+    ../src/calculus/dsolve_quadrature.c
+    ../src/calculus/dsolve_linear1.c
+    ../src/calculus/dsolve_bernoulli.c
+    ../src/calculus/dsolve_homogeneous.c
+    ../src/calculus/dsolve_separable.c
+    ../src/calculus/dsolve_exact.c
+    ../src/calculus/dsolve_clairaut.c
+    ../src/calculus/dsolve_constcoeff.c
+    ../src/calculus/dsolve_euler.c
+    ../src/calculus/dsolve_specialform.c
+    ../src/calculus/dsolve_decouple.c
+    ../src/calculus/dsolve_linsys.c
     ../src/sum/sum.c
     ../src/sum/sum_util.c
     ../src/sum/sum_polynomial.c
@@ -3000,6 +3014,10 @@ target_include_directories(series_assumptions_tests PRIVATE ../src)
 
 add_executable(deriv_tests test_deriv.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_tests PRIVATE ../src)
+
+add_executable(dsolve_tests test_dsolve.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_tests COMMAND dsolve_tests)
 
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)

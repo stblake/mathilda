@@ -116,6 +116,7 @@ const char* SYM_DegreeReverseLexicographic = NULL;
 const char* SYM_DeleteCases = NULL;
 const char* SYM_DeleteDuplicates = NULL;
 const char* SYM_Derivative = NULL;
+const char* SYM_DSolve = NULL;
 const char* SYM_DiagonalMatrixQ = NULL;
 const char* SYM_Differences = NULL;
 const char* SYM_Direct = NULL;
@@ -998,6 +999,7 @@ void sym_names_init(void) {
     SYM_DeleteCases                = intern_symbol("DeleteCases");
     SYM_DeleteDuplicates           = intern_symbol("DeleteDuplicates");
     SYM_Derivative                 = intern_symbol("Derivative");
+    SYM_DSolve                     = intern_symbol("DSolve");
     SYM_DiagonalMatrixQ            = intern_symbol("DiagonalMatrixQ");
     SYM_Differences                = intern_symbol("Differences");
     SYM_Direct                     = intern_symbol("Direct");

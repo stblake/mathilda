@@ -1,0 +1,205 @@
+/*
+ * dsolve.c — DSolve dispatcher (cascade polyalgorithm).
+ *
+ * Mirrors src/calculus/integrate.c: a Method-option enum selects either the
+ * automatic cascade (try each method until one returns a non-NULL result) or a
+ * single pinned method (strict, no fallback).  A per-command fail-memo keyed on
+ * eval_toplevel_id() suppresses the fixed-point loop's redundant re-entry on a
+ * problem the deterministic cascade already declined, and g_dsolve_depth
+ * distinguishes the outermost user call from internal recursions.
+ *
+ * The shared problem substrate (parse / verify / fit / assemble) is in
+ * dsolve_common.c; each method is one file src/calculus/dsolve_<method>.c.
+ */
+#include "dsolve.h"
+#include "dsolve_common.h"
+
+#include "../sym_names.h"
+#include "../sym_intern.h"
+#include "../eval.h"
+#include "../symtab.h"
+#include "../attr.h"
+#include "../expr.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+/* ---- method table (extended per milestone) ---- */
+typedef enum {
+    DS_AUTOMATIC = 0,
+    DS_QUADRATURE,
+    DS_LINEAR1,
+    DS_BERNOULLI,
+    DS_HOMOGENEOUS,
+    DS_SEPARABLE,
+    DS_EXACT,
+    DS_CLAIRAUT,
+    DS_CONSTCOEFF,
+    DS_EULER,
+    DS_SPECIALFORM,
+    DS_INVALID
+} DSolveMethod;
+
+static DSolveMethod ds_method_from_string(const char* s) {
+    if (strcmp(s, "Automatic")        == 0) return DS_AUTOMATIC;
+    if (strcmp(s, "Quadrature")       == 0) return DS_QUADRATURE;
+    if (strcmp(s, "LinearFirstOrder") == 0) return DS_LINEAR1;
+    if (strcmp(s, "Bernoulli")        == 0) return DS_BERNOULLI;
+    if (strcmp(s, "Homogeneous")      == 0) return DS_HOMOGENEOUS;
+    if (strcmp(s, "Separable")        == 0) return DS_SEPARABLE;
+    if (strcmp(s, "Exact")            == 0) return DS_EXACT;
+    if (strcmp(s, "Clairaut")         == 0) return DS_CLAIRAUT;
+    if (strcmp(s, "LinearConstantCoefficients") == 0) return DS_CONSTCOEFF;
+    if (strcmp(s, "EulerCauchy")      == 0) return DS_EULER;
+    if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
+    return DS_INVALID;
+}
+
+/* method try-functions + registrars (one file each) */
+extern Expr** dsolve_quadrature_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
+extern void dsolve_quadrature_init(void);
+extern void dsolve_linear1_init(void);
+extern void dsolve_bernoulli_init(void);
+extern void dsolve_homogeneous_init(void);
+extern void dsolve_separable_init(void);
+extern void dsolve_exact_init(void);
+extern void dsolve_clairaut_init(void);
+extern void dsolve_constcoeff_init(void);
+extern void dsolve_euler_init(void);
+extern void dsolve_specialform_init(void);
+extern Expr** dsolve_decouple_solve(DSolveProblem* P);
+extern Expr** dsolve_linsys_solve(DSolveProblem* P);
+extern void dsolve_decouple_init(void);
+extern void dsolve_linsys_init(void);
+
+/* ------------------------------------------------------------------ *
+ *  Per-command fail-memo (mirror of integrate.c:720-743)              *
+ * ------------------------------------------------------------------ */
+int g_dsolve_depth = 0;
+
+#define DSOLVE_FAIL_SLOTS 32
+static uint64_t ds_fail_epoch = 0;
+static int      ds_fail_count = 0;
+static struct { uint64_t heq, hv; int method; } ds_fail_tab[DSOLVE_FAIL_SLOTS];
+
+static void ds_fail_sync_epoch(uint64_t tid) {
+    if (tid != ds_fail_epoch) { ds_fail_epoch = tid; ds_fail_count = 0; }
+}
+static bool ds_fail_seen(uint64_t heq, uint64_t hv, int method) {
+    for (int i = 0; i < ds_fail_count; i++)
+        if (ds_fail_tab[i].heq == heq && ds_fail_tab[i].hv == hv
+            && ds_fail_tab[i].method == method)
+            return true;
+    return false;
+}
+static void ds_fail_record(uint64_t heq, uint64_t hv, int method) {
+    if (ds_fail_seen(heq, hv, method)) return;
+    if (ds_fail_count >= DSOLVE_FAIL_SLOTS) return;
+    ds_fail_tab[ds_fail_count].heq = heq;
+    ds_fail_tab[ds_fail_count].hv = hv;
+    ds_fail_tab[ds_fail_count].method = method;
+    ds_fail_count++;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Dispatcher                                                         *
+ * ------------------------------------------------------------------ */
+Expr* builtin_dsolve(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count < 3) return NULL;
+
+    uint64_t heq = expr_hash(res->data.function.args[0]);
+    uint64_t hv  = expr_hash(res->data.function.args[1]);
+    ds_fail_sync_epoch(eval_toplevel_id());
+
+    DSolveProblem P;
+    if (!dsolve_parse(res, &P)) { dsolve_problem_free(&P); return NULL; }
+
+    DSolveMethod method = P.method ? ds_method_from_string(P.method) : DS_AUTOMATIC;
+    if (method == DS_INVALID)              { dsolve_problem_free(&P); return NULL; }
+    if (ds_fail_seen(heq, hv, (int)method)) { dsolve_problem_free(&P); return NULL; }
+    if (P.is_pde)                          { dsolve_problem_free(&P); return NULL; } /* Phase 2 */
+
+    g_dsolve_depth++;
+    Expr* result = NULL;
+    if (P.nfun > 1) {
+        if (!result) result = dsolve_run_system(&P, dsolve_decouple_solve);
+        if (!result) result = dsolve_run_system(&P, dsolve_linsys_solve);
+    } else
+    switch (method) {
+        case DS_AUTOMATIC:
+            if (!result) result = dsolve_run(&P, dsolve_quadrature_try);
+            if (!result) result = dsolve_run(&P, dsolve_linear1_try);
+            if (!result) result = dsolve_run(&P, dsolve_bernoulli_try);
+            if (!result) result = dsolve_run(&P, dsolve_homogeneous_try);
+            if (!result) result = dsolve_run(&P, dsolve_separable_try);
+            if (!result) result = dsolve_run(&P, dsolve_exact_try);
+            if (!result) result = dsolve_run(&P, dsolve_clairaut_try);
+            if (!result) result = dsolve_run(&P, dsolve_constcoeff_try);
+            if (!result) result = dsolve_run(&P, dsolve_euler_try);
+            if (!result) result = dsolve_run(&P, dsolve_specialform_try);
+            break;
+        case DS_QUADRATURE:   result = dsolve_run(&P, dsolve_quadrature_try);  break;
+        case DS_LINEAR1:      result = dsolve_run(&P, dsolve_linear1_try);     break;
+        case DS_BERNOULLI:    result = dsolve_run(&P, dsolve_bernoulli_try);   break;
+        case DS_HOMOGENEOUS:  result = dsolve_run(&P, dsolve_homogeneous_try); break;
+        case DS_SEPARABLE:    result = dsolve_run(&P, dsolve_separable_try);   break;
+        case DS_EXACT:        result = dsolve_run(&P, dsolve_exact_try);       break;
+        case DS_CLAIRAUT:     result = dsolve_run(&P, dsolve_clairaut_try);    break;
+        case DS_CONSTCOEFF:   result = dsolve_run(&P, dsolve_constcoeff_try);  break;
+        case DS_EULER:        result = dsolve_run(&P, dsolve_euler_try);       break;
+        case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
+        default: break;
+    }
+    g_dsolve_depth--;
+
+    if (!result && g_dsolve_depth == 0) ds_fail_record(heq, hv, (int)method);
+    dsolve_problem_free(&P);
+    return result;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Init                                                               *
+ * ------------------------------------------------------------------ */
+static Expr* mk_opt(const char* name, Expr* val) {
+    return expr_new_function(expr_new_symbol(SYM_Rule),
+                             (Expr*[]){ expr_new_symbol(name), val }, 2);
+}
+
+void dsolve_init(void) {
+    intern_symbol("IncludeSingularSolutions");
+    symtab_add_builtin("DSolve", builtin_dsolve);
+    symtab_get_def("DSolve")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+
+    Expr* opts = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
+        mk_opt("GeneratedParameters",      expr_new_symbol("C")),
+        mk_opt("Assumptions",              expr_new_symbol("True")),
+        mk_opt("Method",                   expr_new_symbol("Automatic")),
+        mk_opt("IncludeSingularSolutions", expr_new_symbol("False"))
+    }, 4);
+    symtab_set_options("DSolve", opts);
+
+    /* method registrars */
+    dsolve_quadrature_init();
+    dsolve_linear1_init();
+    dsolve_bernoulli_init();
+    dsolve_homogeneous_init();
+    dsolve_separable_init();
+    dsolve_exact_init();
+    dsolve_clairaut_init();
+    dsolve_constcoeff_init();
+    dsolve_euler_init();
+    dsolve_specialform_init();
+    dsolve_decouple_init();
+    dsolve_linsys_init();
+}

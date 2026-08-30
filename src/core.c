@@ -929,6 +929,8 @@ void core_init(void) {
     solvealways_init();
     void integrate_init(void);
     integrate_init();
+    void dsolve_init(void);
+    dsolve_init();
     void sum_init(void);
     sum_init();
     void product_init(void);

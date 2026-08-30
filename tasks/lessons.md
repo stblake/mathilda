@@ -2831,3 +2831,51 @@ NOT where it looked:
    `fflush` (stderr is lost on SIGKILL otherwise) localise the hang to the exact
    `eval_*` call. Every fix above followed a measurement that contradicted the prior
    hypothesis.
+
+## DSolve (M0) — valgrind leak signature is pre-existing Integrate noise (2026-08-30)
+
+When leak-checking `DSolve`, most of what valgrind attributes to a `dsolve_*`
+frame is a **pre-existing interpreter leak**, not a DSolve ownership bug. How the
+investigation converged:
+
+1. **Baseline-subtract, don't read raw totals.** macOS valgrind reports a fixed
+   `definitely lost: 13,608 bytes / 423 blocks` at shutdown regardless of
+   workload (symbol table / interned names never freed at exit). A DSolve-free
+   script (`Integrate[Sin,x]; Solve[...]; D[...]`) reports the identical number,
+   so only the *delta* over baseline is real.
+2. **Per-method isolation localises it.** Running each method 100× separately:
+   `Separable`, `Quadrature`, and the decline path are byte-identical to baseline
+   (clean). Only `LinearFirstOrder` leaks — and only because in the other tests it
+   *declines early* (order != 1 or non-affine RHS) and never runs its success path.
+3. **-O0 -fno-inline to get real stacks.** At `-O3`, every `ds_*` helper inlines
+   into `eval.h:137` (`eval_and_free`), hiding the source line. Recompiling just
+   `dsolve_linear1.o` / `dsolve_common.o` at `-O0 -fno-inline` and relinking made
+   valgrind point at `dsolve_linear1.c:57` = `ds_integrate(...)` on
+   `∫ E^x a Sin[x] dx`.
+4. **Reproduce without the caller.** `Integrate[E^x a Sin[x], x]` run 20× with
+   **no DSolve at all** leaks the *identical* 16,800 bytes / 480 blocks. So the
+   leak lives in the `Integrate` engine on that integrand, surfaced through DSolve.
+
+DSolve's own allocations are balanced (the sub-method files follow the res-ownership
+contract; parse/verify/fit/assemble free every intermediate). Lesson: for a new
+builtin that composes existing engines, valgrind a *baseline that runs the same
+sub-engines without the new head* before blaming the new code — and use
+`-O0 -fno-inline` on just the suspect object to defeat inlining that erases the
+call site.
+
+### DSolve M2 addendum — pre-existing leaks are per-*call*, so composition amplifies them
+
+The M2 const-coeff **inhomogeneous** path (variation of parameters) leaked far
+more under valgrind than M0/M1 (35 KB direct / 176 KB indirect over 30 calls vs
+~baseline). Same investigation shape confirmed it is all pre-existing: the leak
+stacks (via `-O0 -fno-inline` on `dsolve_constcoeff.o`) point *inside*
+`ds_solve` / `ds_simplify` / `ds_is_zero`, never at my `var_params` / `build_matrix`
+/ `dv` allocations. A standalone `Solve+Simplify+Det+Integrate+PossibleZeroQ` ×30
+(no DSolve) already leaks +10 KB direct / +48 KB indirect over baseline. The
+reason DSolve's delta is *bigger* than that one-each standalone: a single
+const-coeff solve calls Solve once, Det ×3, Integrate ×2, and ~30 zero_test calls
+(coefficient `ds_free_of`, multiplicity, dedup, verify) — each leaks a little,
+internally. Lesson: `Solve`, `Simplify`, `Det`, `Integrate`, and `zero_test` all
+leak per call; a head that composes many of them inherits the sum. Not the new
+code's bug — but keep the zero_test/Simplify call count down where free (e.g.
+`ds_free_of` already short-circuits on a syntactic absence before D+zero_test).

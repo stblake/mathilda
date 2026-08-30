@@ -3033,6 +3033,19 @@ void info_init(void) {
     // Calculus
     symtab_set_docstring("D", "D[f, x] gives the partial derivative of f with respect to x.\nD[f, {x, n}] gives the nth partial derivative.\nD[f, x, y, ...] gives the mixed derivative.\nD[f, x, NonConstants -> {y, ...}] treats the listed symbols as implicit functions of x.\nDistributes over Equal: D[a == b, x] gives D[a, x] == D[b, x].");
     symtab_set_docstring("Dt", "Dt[f] gives the total derivative of f.\nDt[f, x] gives the total derivative of f with respect to x.\nDt[f, {x, n}] gives the nth total derivative.");
+    symtab_set_docstring("DSolve",
+        "DSolve[eqn, y, x] solves a differential equation for the function y with\n"
+        "independent variable x, returning {{y -> Function[{x}, ...]}}.\n"
+        "DSolve[eqn, y[x], x] returns {{y[x] -> expr}} with the solution as an\n"
+        "expression in x.\n"
+        "DSolve[{eqn1, ...}, {y1, ...}, x] solves a system; DSolve[eqn, u, {x, y}]\n"
+        "solves a partial differential equation.\n"
+        "Initial/boundary conditions are given as equations at points, e.g.\n"
+        "y[0] == a, y'[x0] == b; DSolve fits the generated constants C[k] to them.\n"
+        "It is a cascade polyalgorithm: DSolve[eqn, y, x, Method -> \"<name>\"]\n"
+        "dispatches directly to a single method (strict, no fallback).  Methods\n"
+        "are also callable as DSolve`<Name>[...].  Options: GeneratedParameters\n"
+        "(constant head, default C), Assumptions, Method, IncludeSingularSolutions.");
     symtab_set_docstring("Derivative",
         "f' represents the derivative of a function f of one argument.\n"
         "Derivative[n1, n2, ...][f] is the general form, representing a function\n"
