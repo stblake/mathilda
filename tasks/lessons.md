@@ -2879,3 +2879,19 @@ internally. Lesson: `Solve`, `Simplify`, `Det`, `Integrate`, and `zero_test` all
 leak per call; a head that composes many of them inherits the sum. Not the new
 code's bug — but keep the zero_test/Simplify call count down where free (e.g.
 `ds_free_of` already short-circuits on a syntactic absence before D+zero_test).
+
+## DSolve M4 — a wrong Integrate result can pass verify (guard the sub-result)
+
+`DSolve`ReductionOfOrder` reduces `y''==x(y')^2` to `p'==x p^2`, correctly solves
+`p = 1/(C[1]-x^2/2)`, then needs `y = Integrate[p, x]`. But
+`Integrate[1/(C[1]-x^2/2), x]` returns **0** (a pre-existing Integrate bug on a
+rational integrand with a symbolic parameter — `Integrate[1/(C[1]-x), x]` is fine,
+the quadratic-denominator-with-symbol case is not). The degenerate `y=C[2]` that
+results then **passes back-substitution verify**, because a constant trivially
+satisfies `y''==x(y')^2`. Lesson: when a method composes a sub-result from another
+engine (here `Integrate`), verifying the *final* residual is not enough — a
+sub-engine that returns a wrong-but-plausible answer can produce a
+wrong-but-verifiable solution. Guard the sub-result directly: ReductionOfOrder now
+requires `D[Integrate[p,x], x] == p` and declines otherwise (honest "unevaluated"
+instead of a wrong trivial solution). The underlying Integrate bug is pre-existing
+and out of scope for the DSolve work.

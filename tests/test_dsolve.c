@@ -246,6 +246,13 @@ static void t_sys_constant_forcing(void) {
                "DSolve[{y'[x] == z[x], z'[x] == -y[x] + 1}, {y, z}, x][[1]]))");
 }
 
+/* ---- M4: reduction of order (2nd-order missing y) ---- */
+static void t_reduce_order(void) {
+    check_true("PossibleZeroQ[(y''[x] - y'[x]^2) /. DSolve[y''[x] == y'[x]^2, y, x][[1]]]");
+    /* two independent constants (order preserved) */
+    check_true("Not[FreeQ[DSolve[y''[x] == y'[x]^2, y, x][[1]], C[2]]]");
+}
+
 /* ---- unsupported equations stay symbolic (declined, not wrong) ---- */
 static void t_declines_unsupported(void) {
     /* a genuinely unrecognised variable-coefficient 2nd-order ODE stays symbolic */
@@ -300,6 +307,7 @@ int main(void) {
     TEST(t_sys_real_eigenvalues);
     TEST(t_sys_complex_ivp);
     TEST(t_sys_constant_forcing);
+    TEST(t_reduce_order);
     TEST(t_declines_unsupported);
 
     printf("\nAll DSolve tests passed.\n");

@@ -38,6 +38,7 @@ typedef enum {
     DS_CONSTCOEFF,
     DS_EULER,
     DS_SPECIALFORM,
+    DS_REDUCEORDER,
     DS_INVALID
 } DSolveMethod;
 
@@ -53,6 +54,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "LinearConstantCoefficients") == 0) return DS_CONSTCOEFF;
     if (strcmp(s, "EulerCauchy")      == 0) return DS_EULER;
     if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
+    if (strcmp(s, "ReductionOfOrder") == 0) return DS_REDUCEORDER;
     return DS_INVALID;
 }
 
@@ -67,6 +69,7 @@ extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch);
 extern void dsolve_quadrature_init(void);
 extern void dsolve_linear1_init(void);
 extern void dsolve_bernoulli_init(void);
@@ -77,6 +80,7 @@ extern void dsolve_clairaut_init(void);
 extern void dsolve_constcoeff_init(void);
 extern void dsolve_euler_init(void);
 extern void dsolve_specialform_init(void);
+extern void dsolve_reduce_order_init(void);
 extern Expr** dsolve_decouple_solve(DSolveProblem* P);
 extern Expr** dsolve_linsys_solve(DSolveProblem* P);
 extern void dsolve_decouple_init(void);
@@ -148,6 +152,7 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_constcoeff_try);
             if (!result) result = dsolve_run(&P, dsolve_euler_try);
             if (!result) result = dsolve_run(&P, dsolve_specialform_try);
+            if (!result) result = dsolve_run(&P, dsolve_reduce_order_try);
             break;
         case DS_QUADRATURE:   result = dsolve_run(&P, dsolve_quadrature_try);  break;
         case DS_LINEAR1:      result = dsolve_run(&P, dsolve_linear1_try);     break;
@@ -159,6 +164,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_CONSTCOEFF:   result = dsolve_run(&P, dsolve_constcoeff_try);  break;
         case DS_EULER:        result = dsolve_run(&P, dsolve_euler_try);       break;
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
+        case DS_REDUCEORDER:  result = dsolve_run(&P, dsolve_reduce_order_try); break;
         default: break;
     }
     g_dsolve_depth--;
@@ -200,6 +206,7 @@ void dsolve_init(void) {
     dsolve_constcoeff_init();
     dsolve_euler_init();
     dsolve_specialform_init();
+    dsolve_reduce_order_init();
     dsolve_decouple_init();
     dsolve_linsys_init();
 }

@@ -122,8 +122,11 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 - `[ ] OperatorFactor` (DFactor) — factor higher-order linear operators.
 
 ### 1d. Nonlinear higher-order
+- `[✓] ReductionOfOrder` — `y''==F(x,y')` missing y: reduce to first order in
+  p=y' (recurse into the scalar engine), then `y=∫p dx + C[2]`. Guards against a
+  wrong `Integrate` antiderivative (requires `D[∫p]==p`) so it declines instead of
+  shipping a degenerate `y=const`. Solves `y''==(y')^2 → C[2]-Log[C[1]-x]`.
 - `[ ] AutonomousReduction` — `y''==f(y,y')` missing `x`: `p=y'(y)`.
-- `[ ] MissingY` — `y''==f(x,y')`: order reduction.
 - `[ ] EnergyIntegral` — `y''==f(y)`: `(y')^2=2∫f dy`; elliptic / `WeierstrassP` (inert).
 
 ### 1e. Systems
