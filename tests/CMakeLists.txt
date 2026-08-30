@@ -383,6 +383,7 @@ set(COMMON_SRC
     ../src/special_functions/besseljzero.c
     ../src/power.c
     ../src/funcprog.c
+    ../src/geometry.c
     ../src/numloop.c
     ../src/boolean.c
     ../src/names.c
@@ -950,6 +951,11 @@ add_executable(zero_test_tests test_zero_test.c $<TARGET_OBJECTS:mathilda_common
 target_link_libraries(zero_test_tests m)
 target_include_directories(zero_test_tests PRIVATE ../src)
 add_test(NAME zero_test_tests COMMAND zero_test_tests)
+
+add_executable(geometry_tests test_geometry.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(geometry_tests m)
+target_include_directories(geometry_tests PRIVATE ../src)
+add_test(NAME geometry_tests COMMAND geometry_tests)
 
 add_executable(trigexp_zero_tests test_trigexp_zero.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(trigexp_zero_tests m)

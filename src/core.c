@@ -125,6 +125,7 @@
 #include "rat.h"
 #include "parfrac.h"
 #include "contfrac.h"
+#include "geometry.h"
 #include "random.h"
 #include "picostrings.h"
 #include "series.h"
@@ -244,6 +245,7 @@ void core_init(void) {
     parfrac_init();
     contfrac_init();
     modular_init();
+    geometry_init();
     symtab_add_builtin("AtomQ", builtin_atomq);
     symtab_add_builtin("Identity", builtin_identity);
     symtab_get_def("Identity")->attributes |= ATTR_PROTECTED;

@@ -76,6 +76,44 @@ EXEMPT = {
     # {0,1,1,2} on the List. NDBinaryKernel now carries the same to_int trio as
     # NDUnaryKernel and Quotient supplies both arms, so it is no longer an
     # exception -- and neither is Mod, which supplies the int64 arm.
+    # GEO-1 geometry heads (2026-08-27). The is_ndarray() hits in
+    # src/geometry.c are the VISIBLE-NDArray argument path (Polygon[NDArray[...]],
+    # ConvexHullRegion[NDArray[...]]), which these heads read directly so such an
+    # argument is never left unevaluated.
+    #
+    # They must stay OFF the AWARE list, and the reason is about the PACKED-list
+    # form, not the visible one -- the two behave differently and it is worth
+    # being exact, because an earlier version of this note ran them together:
+    #   * PACKED list (NDT_INT64, present_as LIST): materialising it into boxed
+    #     Exprs is what keeps the answer EXACT. Verified: Area of a packed
+    #     integer point list gives 20, identical to the same points as a literal
+    #     nested List. Opting into AWARE would hand the head a float64-shaped
+    #     buffer and silently downgrade that to 20.0.
+    #   * VISIBLE NDArray[...]: float64 BY CONSTRUCTION -- NDArray[{{0,0},...}]
+    #     stores and prints 0.0, so there is no exactness left to preserve and a
+    #     machine answer is correct. This matches the established behaviour of
+    #     existing heads (Total[NDArray[{1,2,3}]] is 6.0 while Total[{1,2,3}] is
+    #     6); it is not a geometry-specific divergence.
+    # geometry.c additionally reads a genuinely NDT_INT64 buffer exactly, so an
+    # int64 buffer that ever reaches these heads un-materialised still agrees.
+    #
+    # These heads are also outside check-compile-coverage's scope by
+    # construction, so no Compile EXEMPT/BASELINE entry is needed: that audit
+    # builds its probe list from src/ndkernels.c kernels and pack.c's AWARE
+    # list, and these have neither. They are structural heads (a Polygon in, a
+    # scalar or a region out), not element-wise numeric maps.
+    #
+    # NOTE on attribution: this script maps a fast-path hit to a head by scanning
+    # forward from each `Expr* NAME(` definition, so an is_ndarray() call inside a
+    # SHARED static helper is attributed to whichever builtin happens to follow
+    # it. All five heads are listed because the real answer is "all five share
+    # one reader", not because five separate hits were found.
+    "Area": "geometry head; packed args must materialise to stay exact, and the "
+    "visible NDArray form is float64 by construction (GEO-1)",
+    "Perimeter": "as Area (GEO-1)",
+    "RegionCentroid": "as Area (GEO-1)",
+    "RegionMember": "as Area (GEO-1)",
+    "ConvexHullRegion": "as Area (GEO-1)",
     "LeafCount": "counts a packed list as ONE node (1 against 5 for a "
     "4-element vector), which would perturb Simplify's complexity "
     "metric -- the reason it was excluded by design",
