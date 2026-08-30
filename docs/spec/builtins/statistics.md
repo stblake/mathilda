@@ -23,7 +23,7 @@ Gives the median estimate of the elements in data.
 - Median is a robust location estimator, which means it not very sensitive to outliers.
 - For `VectorQ` data $\{x_1, \dots, x_n\}$, the median can be thought of as the "middle value". Formally, when data is sorted as $\{x_{(1)}, \dots, x_{(n)}\}$, the median is given by the center element $x_{((n+1)/2)}$ if $n$ is odd and the mean of the two center elements $(x_{(n/2)} + x_{(n/2+1)})/2$ if $n$ is even.
 - For `MatrixQ` data, the median is computed for each column vector. `Median` for a tensor gives columnwise medians at the first level.
-- `Median` requires numeric values.
+- `Median` requires REAL numeric values; a complex element (including an evaluated `Complex[re, im]` such as `2 + I`, whose imaginary part is nonzero) is rejected with `Median::rectn`. The same real-only gate is shared by `Quartiles`, `Quantile`, `InterquartileRange`, `MeanDeviation`, `MedianDeviation` and `MovingMedian`; it does not yet see through a numeric head, so `Sqrt[2 + I]` still passes.
 
 ```mathematica
 In[1]:= Median[{1, 2, 3, 4, 5, 6, 7}]
@@ -367,3 +367,94 @@ In[6]:= ExponentialMovingAverage[{2^100, 2^200}, 1/2]
 Out[6]= {1267650600228229401496703205376, 803469022129495137770981046171215126561215611592144769253376}
 ```
 
+
+## Quantile
+Gives the q-th quantile estimate of the elements in data.
+- `Quantile[data, q]`: the q-th quantile of `data` (left-continuous: for sorted data $\{x_{(1)},\dots,x_{(n)}\}$, $x_{(\lceil nq \rceil)}$, edge-clamped).
+- `Quantile[data, {q1, q2, ...}]`: a list of quantiles, one per $q_i$.
+- `Quantile[data, q, {{a, b}, {c, d}}]`: the general parameterized quantile: with $h = a + (n+b)q$ and $w = c + d\,(h - \lfloor h\rfloor)$, the result is the convex combination $(1-w)\,x_{(\lfloor h\rfloor)} + w\,x_{(\lceil h\rceil)}$, edge-clamped; at integer $h$ this is $x_{(h)}$ for any $c, d$.
+
+**Features**:
+- `Protected`.
+- Default parameters are `{{0, 0}, {1, 0}}` (Wolfram's Type-1 / left-continuous inverse CDF), so `Quantile[{1, 2, 3, 4}, 1/2]` is `2` while `Median[{1, 2, 3, 4}]` is `5/2` — the two deliberately differ on even-length data.
+- `Quartiles[data]` is `Quantile[data, {1/4, 1/2, 3/4}, {{1/2, 0}, {0, 1}}]`.
+- Exact input gives exact output; sorting uses the canonical `Sort` order.
+- For $w \in [0, 1]$ the interpolation is evaluated as the convex combination $(1-w)x_{(j)} + w\,x_{(j+1)}$, not as $x_{(j)} + w\,(x_{(j+1)} - x_{(j)})$. The two are equal in exact arithmetic, but the difference form overflows on `Real` data whose neighbours straddle zero near the machine range: `Quantile[{-1.0*10^308, 1.0*10^308}, 1/2, {{1/2, 0}, {0, 1}}]` is `0.0`, not `Infinity`. Outside $[0, 1]$ — which `{{a,b},{c,d}}` permits, though no standard quantile type uses it — the difference form is used instead, because there the convex form is the one that can produce `NaN`. At $w = 0$ or $w = 1$ the element is selected outright rather than computed.
+- For `MatrixQ` data the quantile is computed per column.
+- `Quantile` requires REAL numeric data and numeric $q \in [0, 1]$ (`Quantile::q100` otherwise); symbolic arguments stay unevaluated. A `Complex[re, im]` element is rejected with `Quantile::rectn` when `im` is nonzero — including an already-evaluated complex such as `2 + I` (`Complex[2, 1]`), which carries no literal `I` to search for — and accepted when `im` is zero, since `Complex[x, 0]` at MPFR precision is a real number. Not yet caught: a complex value nested under a numeric head, such as `Sqrt[2 + I]`.
+- An `NDArray` argument is materialised to the exact `List` path (no buffer fast path yet).
+
+```mathematica
+In[1]:= Quantile[{1, 2, 3, 4}, 1/2]
+Out[1]= 2
+
+In[2]:= Quantile[{1, 2, 3, 4}, {1/4, 3/4}]
+Out[2]= {1, 3}
+
+In[3]:= Quantile[{1, 2, 3, 4}, 1/2, {{1/2, 0}, {0, 1}}]
+Out[3]= 5/2
+
+In[4]:= Quantile[{3, 1, 4, 2}, 1/2]
+Out[4]= 2
+
+In[5]:= Quantile[{{1, 2}, {3, 4}}, 1/2]
+Out[5]= {1, 2}
+
+In[6]:= Quantile[{1, 2, 3}, 2]
+Quantile::q100: The quantile q is expected to be a number between 0 and 1 in Quantile[{1, 2, 3}, 2].
+Out[6]= Quantile[{1, 2, 3}, 2]
+```
+
+## InterquartileRange
+Gives the difference between the upper and lower quartiles of data.
+- `InterquartileRange[data]`: $\hat{q}_{3/4} - \hat{q}_{1/4}$, using the `Quartiles` parameterization `{{1/2, 0}, {0, 1}}`.
+
+**Features**:
+- `Protected`.
+- A robust scale estimator: insensitive to outliers beyond the quartiles.
+- For `MatrixQ` data the IQR is computed per column.
+- Requires numeric data (`InterquartileRange::rectn` otherwise).
+
+```mathematica
+In[1]:= InterquartileRange[{1, 2, 3, 4, 5, 6, 7, 8}]
+Out[1]= 4
+
+In[2]:= InterquartileRange[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}}]
+Out[2]= {6, 6, 6}
+```
+
+## MeanDeviation
+Gives the mean absolute deviation from the mean of the elements in data.
+- `MeanDeviation[data]`: `Mean[Abs[data - Mean[data]]]`.
+
+**Features**:
+- `Protected`.
+- Exact input gives exact output: `MeanDeviation[{1, 2, 3, 4}]` is `1`.
+- For `MatrixQ` data the deviation is computed per column.
+- Requires numeric data (`MeanDeviation::rectn` otherwise).
+
+```mathematica
+In[1]:= MeanDeviation[{1, 2, 3, 4}]
+Out[1]= 1
+
+In[2]:= MeanDeviation[{1/2, 3/2}]
+Out[2]= 1/2
+```
+
+## MedianDeviation
+Gives the median absolute deviation from the median of the elements in data.
+- `MedianDeviation[data]`: `Median[Abs[data - Median[data]]]` (the MAD, a robust scale estimator).
+
+**Features**:
+- `Protected`.
+- Exact input gives exact output: `MedianDeviation[{1, 2, 3, 4}]` is `1`.
+- For `MatrixQ` data the deviation is computed per column.
+- Requires numeric data (`MedianDeviation::rectn` otherwise).
+
+```mathematica
+In[1]:= MedianDeviation[{1, 2, 3, 4}]
+Out[1]= 1
+
+In[2]:= MedianDeviation[{1, 2, 3, 10}]
+Out[2]= 1
+```

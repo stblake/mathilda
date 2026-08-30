@@ -574,8 +574,14 @@ Expr* ndred_quartiles(Expr* res) {
             int64_t j = (int64_t)floor(h);
             if (j < 1) j = 1;
             if (j >= (int64_t)n) j = (int64_t)n - 1;
-            double g = h - (double)j;                    /* fractional part */
-            val = s[j - 1] + g * (s[j] - s[j - 1]);       /* 1-based order stats */
+            double g = h - (double)j;                    /* fractional part, in [0,1) */
+            /* Convex combination, not s[j-1] + g*(s[j] - s[j-1]): the two agree
+             * in exact arithmetic, but the difference overflows to infinity for
+             * neighbours of opposite sign near the double range, and infinity
+             * then survives the multiply and the add. This kernel must give the
+             * same answer as the boxed path in stats_common.c, which uses the
+             * same form. 1-based order stats. */
+            val = (1.0 - g) * s[j - 1] + g * s[j];
         }
         ndt_set(out, (size_t)k, odt, val, 0.0);
     }
