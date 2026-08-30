@@ -36,12 +36,22 @@ completing the Phase-8 companion family.
 irrational case is now solved by iterated-resultant tower projection + exact
 `qqbar` filtering, so `x^2==2 && y<x`, the radius-√2 ball, the sphere positive
 octant and cubic/hyperbola fibres all decompose.
-The remaining pieces are **6e (McCallum well-orientedness augmentation)** and
-**7-extended (≥2 free vars / alternating quantifiers / algebraic free-variable
-boundaries — the algebraic discriminant-variety case still needs a nested-QE
-emitter beyond 6b fibres)**.
+**Phase 7-extended has now landed** (v0.124, 2026-08-30): **≥2-free-variable QE**
+(the headline `Resolve[Exists[x, x^2+bx+c==0], Reals] -> b^2-4c>=0`, via a
+multi-free-variable CAD emission `qe_region_expr` in `reduce_cad.c` that reuses the
+1-D sign diagram at the innermost free level) and **alternating quantifiers**
+(`Resolve[ForAll[x, Exists[y, x+y==0]], Reals] -> True`, by recursive
+inner-block-first composition in `reduce_qe.c`).
+**Phase 6e (McCallum well-orientedness augmentation) has now landed** (v0.125,
+2026-08-30): a positive-dimensional fibre nullification is repaired by adding the
+offending factor's coefficients to the projection level below and rebuilding
+(`reduce_cad.c`, `NullReport` + augment-restart loop in `reduce_cad_nvar`), so
+`Reduce[x^2 - y^2 z == 0, {x,y,z}, Reals]` solves. **This closes the CAD roadmap
+(§6).** The only remaining Reduce item is the residual QE case needing an
+**algebraic free-variable boundary** the 1-D emitter cannot yet spell (a free
+*leading* coefficient, e.g. `Exists[x, a x^2+b x+c==0]`, still sound-declines).
 Implementation order followed was
-`0 → 1 → 2 → 3 → 5 → 4 → 6(2-var) → 6d(n-var A) → 6d(n-var B) → 8-opts → 7(v1)`.
+`0 → 1 → 2 → 3 → 5 → 4 → 6(2-var) → 6d(n-var A) → 6d(n-var B) → 8-opts → 7(v1) → 7-ext → 6e`.
 
 | Phase | What | Status |
 |---|---|---|
@@ -51,12 +61,65 @@ Implementation order followed was
 | 3 | Linear real systems (Fourier–Motzkin) | ✅ done |
 | 4 | Parametric linear systems (Complexes) | ✅ done |
 | 5 | Integers / Rationals | ✅ done |
-| 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var done (6d Stage A + Stage B n-D boundary merge); 6b (algebraic-coeff fibres, tower) ✅ done (v0.113); 6e (well-orientedness) pending |
-| 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ◧ v1 done (fully-quantified decision procedure + single-free-var parametric QE, rational-fibre regime); ≥2 free vars / alternating / algebraic-boundary parametric deferred (blocked on 6b) |
+| 6 | Multivariate nonlinear CAD (Reals) | ✅ done — 2-var (6a–6c); n-var (6d Stage A + Stage B n-D boundary merge); 6b algebraic-coeff fibres/tower (v0.113); 6e McCallum well-orientedness augmentation (v0.125) |
+| 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ✅ done (fully-quantified decision; single- AND multi-free-var parametric QE via `qe_region_expr`; alternating quantifiers via recursive composition, v0.124). Residual: an algebraic free-variable boundary the 1-D emitter cannot spell (free leading coefficient) still sound-declines |
 | 8 | Companion builtins + polish | ✅ LogicalExpand + NotElement + FindInstance (C/R/Z/Q/Booleans) + CylindricalDecomposition done |
 | 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done (+ multivariate `Sqrt` rationalization, 2026-08-24) |
 | Opt | Options: `Backsubstitution`, `Cubics`, `GeneratedParameters`, `Method`, `Modulus`, `Quartics`, `WorkingPrecision` | ✅ done (2026-08-25) |
 
+> **2026-08-30 — Phase 6e: McCallum well-orientedness augmentation, v0.125.**
+> Closes the CAD roadmap (§6). The n-var Reals CAD (`reduce_cad.c`) previously
+> declined when a fibre polynomial *nullified* (vanished identically in the fibre
+> variable) at the interior sample of a positive-dimensional cell — sound but
+> incomplete: `Reduce[x^2 - y^2 z == 0, {x,y,z}, Reals]` bailed even though it is
+> solvable. Cause: `x^2 - y^2 z` in `z` is `-y² z + x²`; McCallum adds the leading
+> coeff `-y²` (breakpoint `y=0`) and the discriminant but **not the constant term
+> `x²`**, so `x=0` is never a breakpoint and an `x`-interval straddles the
+> nullification locus. **Fix:** on a positive-dim nullification, the build reports the
+> offending factor + fibre level (new `NullReport`, threaded through
+> `cad_build`/`cad_leaf`); the driver `reduce_cad_nvar` adds **all** its coefficients
+> (in the fibre var) to the projection level below (via `add_proj`, dedup-ing the
+> leading one), re-derives the lower stack, and rebuilds — so the locus becomes a
+> cell boundary. Bounded to 4 rounds; a persistent nullification still declines.
+> **Resampling to a generic point was rejected as unsound** (it drops the `x=0`
+> solution slice). Cost: the common case never nullifies → the augmentation path is
+> not entered, so every non-nullifying CAD runs identical code/timing (4 common
+> 3-/4-var cases in 0.14 s). The 2-var driver is provably well-oriented and untouched;
+> `reduce_cad_qe` (Phase 7) passes NULL. Tests: `test_cad_well_oriented` + three `6e-*`
+> corpus rows (sample-oracle certifies input≡output; corpus 170/170) + a grid
+> equivalence check (0 mismatches). Reduce+Solve suites/corpora green; `check-c99`
+> clean; valgrind at the macOS baseline (13,440/420, none attributable — the restart
+> frees each superseded projection/cache generation). **Only 7-extended's algebraic
+> free-variable-boundary sub-case remains open.**
+>
+> **2026-08-30 — Phase 7-extended: multi-variable & alternating QE, v0.124.**
+> The QE engine now handles the two regimes it previously declined. **Multi-free-variable
+> emission** (`reduce_cad.c`): `reduce_cad_qe` is generalized from one free variable to
+> `nfree >= 1` — the free vars occupy the outermost CAD levels (canonical order), the bound
+> vars are projected out first, and the innermost-free level's cells carry the per-cell
+> `qe_cell_verdict`. A new self-contained emitter `qe_region_expr` walks the free-variable
+> subspace: at the collapse level (`nfree-1`) it reuses the shared 1-D sign-diagram merger
+> `rru_emit_sign_diagram` (so a closed true run reads `c <= b^2/4`, not an open union),
+> and above it wraps each non-empty cell as a `seg(v) && …` cylinder. Eliminating `x` from
+> a single polynomial projects to its discriminant, which is exactly why
+> `Resolve[Exists[x, x^2+bx+c==0], Reals] -> b^2-4c>=0`. The shipped `nfree==1` path and
+> the n-var driver `cad_region_expr` are byte-for-byte untouched. **Alternating quantifiers**
+> (`reduce_qe.c`): a different-kind inner block is eliminated inner-block-first by recursive
+> composition (the inner quantifier reduces to a QF body, the peeled outer block is rebuilt
+> over it and re-dispatched), to arbitrary depth — `Resolve[ForAll[x, Exists[y, x+y==0]],
+> Reals] -> True`. Case C (`nfree>=2`) routes to the generalized seam with free vars
+> canonicalized (`qe_sort_names`). **Fold-in:** a single-parameter-linear leading-coefficient
+> condition now prints in solved form via a `RAtom.display` override (`reduce_eq.c`
+> `cond_solved_display`) — `Reduce[a x == x+1, x] -> a != 1 && …` (was `-1 + a != 0 && …`),
+> mirroring `reduce_sys.c`'s `sys_norm_condition`. **Soundness preserved:** a free *leading*
+> coefficient, a transcendental body, a non-Reals domain, or any CAD decline stays
+> unevaluated. Tests: `test_quantifiers_multivar` (five headline forms + a form-agnostic
+> equivalence guard against the engine's own inner-existence decision) and an updated
+> `test_quantifiers_decline`; `eq-param-lincoeff` corpus row (167/167). Reduce+Solve suites
+> and corpora green; `check-c99` clean; valgrind at the macOS baseline (13,440/420, none
+> attributable). **Still pending: 6e (well-orientedness) and the algebraic free-variable
+> boundary sub-case.**
+>
 > **2026-08-28 — Phase 6b real-algebraic-coefficient fibre isolation (tower), v0.113.**
 > The CAD Reals engine no longer requires a non-innermost breakpoint to be rational.
 > A new primitive `rru_algebraic_fiber_roots` (`src/solve/reduce_algfiber.{c,h}`)
@@ -379,7 +442,10 @@ reduce_zerodim.{c,h}       [done] zero-dimensional nonlinear systems (Complexes 
                            branches by side relations + realness via the qqbar oracle
                            (issue #69). Covers the irrational-fibre ZERO-dim case CAD
                            declines; positive-dim stays with 6b.
-reduce_qe.{c,h}            [pending] Phase 7: Exists / ForAll / Resolve via CAD cells
+reduce_qe.{c,h}            [done] Phase 7: Exists / ForAll / Resolve via CAD cells;
+                           fully-quantified decision, multi-free-var parametric QE
+                           (reduce_cad_qe + qe_region_expr), alternating quantifiers
+                           by recursive composition (v0.124)
 reduce_companions.{c,h}    [done] Phase 8: LogicalExpand, NotElement,
                            FindInstance (witness-by-verification off Reduce/Solve
                            outputs; C/R/Z/Q/Booleans), and CylindricalDecomposition

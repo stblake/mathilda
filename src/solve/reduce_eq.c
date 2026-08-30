@@ -74,13 +74,63 @@ static bool is_nonzero_numeric(const Expr* e) {
     }
 }
 
-/* Build a bare relational atom  poly REL 0  (rel is Equal or Unequal). */
+/* Collect the distinct parameter symbols of `e` -- leaves that are NOT one of the
+ * reduce vars (a condition is a relation among the free parameters).  Owned. */
+static void collect_params(const Expr* e, Expr** vars, int nv, Expr*** out, int* n) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        for (int i = 0; i < nv; i++) if (expr_eq(e, vars[i])) return;    /* a reduce var */
+        for (int i = 0; i < *n; i++) if (expr_eq((*out)[i], e)) return;  /* dup */
+        *out = realloc(*out, (size_t)(*n + 1) * sizeof(Expr*));
+        (*out)[(*n)++] = expr_copy((Expr*)e);
+        return;
+    }
+    if (e->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            collect_params(e->data.function.args[i], vars, nv, out, n);
+}
+
+/* When `poly` is linear in a single parameter `a` with a nonzero numeric
+ * coefficient, return the solved display  a REL (-const/coeff)  (owned); else
+ * NULL.  Mirrors reduce_sys.c's sys_norm_condition so a leading-coefficient
+ * condition prints minimally: `-1 + a != 0` becomes `a != 1`, `-1 + 2 a == 0`
+ * becomes `a == 1/2`.  A nonlinear or multi-parameter condition is left verbatim. */
+static Expr* cond_solved_display(const char* rel_head, const Expr* poly,
+                                 Expr** vars, int nv) {
+    Expr** params = NULL; int nparams = 0;
+    collect_params(poly, vars, nv, &params, &nparams);
+    Expr* result = NULL;
+    if (nparams == 1 && poly_degree(poly, params[0]) == 1) {
+        Expr* a = params[0];
+        Expr* coeff = poly_coeff(poly, a, 1);
+        if (is_nonzero_numeric(coeff)) {
+            Expr* c0 = poly_coeff(poly, a, 0);              /* constant term */
+            Expr* val = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_integer(-1), c0,
+                           expr_new_function(expr_new_symbol(SYM_Power),
+                               (Expr*[]){ expr_copy(coeff), expr_new_integer(-1) }, 2) }, 3));
+            result = expr_new_function(expr_new_symbol(rel_head),
+                (Expr*[]){ expr_copy(a), val }, 2);
+        }
+        expr_free(coeff);
+    }
+    for (int i = 0; i < nparams; i++) expr_free(params[i]);
+    free(params);
+    return result;
+}
+
+/* Build a bare relational atom  poly REL 0  (rel is Equal or Unequal).  When the
+ * condition is single-parameter-linear, attach a minimal solved-form display. */
 static RForm* condition_form(const char* rel_head, const Expr* poly,
                              Expr** vars, int nv, bool* ok) {
     Expr* rel = expr_new_function(expr_new_symbol(rel_head),
         (Expr*[]){ expr_copy((Expr*)poly), expr_new_integer(0) }, 2);
     RAtom a = reduce_atom_canonicalize(rel, vars, nv, ok);
     expr_free(rel);
+    if (*ok) {
+        Expr* disp = cond_solved_display(rel_head, poly, vars, nv);
+        if (disp) { if (a.display) expr_free(a.display); a.display = disp; }
+    }
     return rform_single_atom(a);
 }
 

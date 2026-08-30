@@ -26,6 +26,9 @@
   {"eq-param-axb",       a x == b,                         x,       Automatic, "solved"},
   {"eq-param-axplusb",   a x + b == 0,                     x,       Automatic, "solved"},
   {"eq-param-ax0",       a x == 0,                         x,       Automatic, "solved"},
+  (* linear-polynomial leading coefficient: the a==1 degeneracy is kept, and the
+   * condition prints minimally as a != 1 (not -1 + a != 0) -- see reduce_eq.c *)
+  {"eq-param-lincoeff",  a x == x + 1,                     x,       Automatic, "solved"},
 
   (* ---- default-domain inequalities: an ordering relation with no explicit
    *      domain defaults to the Reals (ordering is undefined over Complexes) ---- *)
@@ -123,6 +126,15 @@
   {"cad3-sphere",        x^2+y^2+z^2 <= 1 && x^2+y^2+z^2 >= 1, {x,y,z},  Reals, "solved"},
   {"cad4-ball-open",     x^2 + y^2 + z^2 + w^2 < 1,        {x, y, z, w}, Reals, "solved"},
   {"cad4-ball-closed",   x^2 + y^2 + z^2 + w^2 <= 1,       {x, y, z, w}, Reals, "solved"},
+
+  (* ---- phase 6e: McCallum well-orientedness augmentation.  A fibre factor
+   *      nullifies on a positive-dimensional cell because a non-leading
+   *      coefficient (here the constant term x^2 of x^2 - y^2 z in z) is not in
+   *      the projection; 6e adds the missing coefficients and rebuilds.  The
+   *      sample-oracle certifies the emitted formula equivalent to the input. ---- *)
+  {"6e-nullify-basic",   x^2 - y^2 z == 0,                 {x, y, z},    Reals, "solved"},
+  {"6e-nullify-const",   x^2 z - y^2 == 0,                 {x, y, z},    Reals, "solved"},
+  {"6e-nullify-sum",     x^2 z + y^2 z + x y == 0,         {x, y, z},    Reals, "solved"},
 
   (* ---- phase 6b: real-algebraic-coefficient fibre isolation.  A section at an
    *      IRRATIONAL non-innermost breakpoint pins an outer variable to an

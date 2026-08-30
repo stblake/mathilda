@@ -55,16 +55,19 @@
  * stays unevaluated. */
 Expr* reduce_cad(const RForm* F, Expr** vars, int nv);
 
-/* Phase 7, Case B -- single-free-variable quantifier elimination.  Eliminate the
- * bound variables boundvars[0..nbound-1] from the DNF `F` (a statement in freevar
- * and the bound vars) under the quantifier `quant` (0 = Exists, 1 = ForAll),
- * returning the quantifier-free description in `freevar`, or NULL to decline
- * (a non-polynomial atom, a non-rational free-variable breakpoint, an undecidable
- * sign, or any CAD decline).  freevar is the outermost CAD level so the bound
- * vars are projected out first; the free variable's cells then carry the per-cell
- * Exists/ForAll verdict, emitted by the shared 1-D sign diagram.  F and every
- * Expr* argument are BORROWED; the caller must have stripped nbound==0 already. */
-Expr* reduce_cad_qe(const RForm* F, Expr* freevar,
+/* Phase 7, Cases B & C -- multi-free-variable quantifier elimination.  Eliminate
+ * the bound variables boundvars[0..nbound-1] from the DNF `F` (a statement in the
+ * free vars freevars[0..nfree-1] and the bound vars) under the quantifier `quant`
+ * (0 = Exists, 1 = ForAll), returning the quantifier-free description in the free
+ * vars, or NULL to decline (a non-polynomial atom, a non-rational free-variable
+ * breakpoint, an undecidable sign, or any CAD decline).  The free vars occupy the
+ * OUTERMOST CAD levels (0..nfree-1) so the bound vars are projected out first; the
+ * cells of the innermost free level (nfree-1) then carry the per-cell Exists/ForAll
+ * verdict, emitted by the shared 1-D sign diagram, with the outer free levels wrapped
+ * as `seg && ...` cylinders (nfree==1 is the single-free-variable sign diagram
+ * unchanged).  F and every Expr* argument are BORROWED; the caller must have stripped
+ * nbound==0 already and must pass nfree >= 1. */
+Expr* reduce_cad_qe(const RForm* F, Expr** freevars, int nfree,
                     Expr** boundvars, int nbound, int quant);
 
 #endif /* REDUCE_CAD_H */

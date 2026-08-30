@@ -7,15 +7,18 @@
  * True / False when none remain), by Cylindrical Algebraic Decomposition with
  * the quantified variables projected out first.
  *
- * Three cases by the number of free variables (nfree):
+ * By the number of free variables (nfree) and the quantifier structure:
  *   - nfree == 0 (fully quantified): a real-closed-field DECISION procedure --
  *     Exists is `Reduce[phi, bound, Reals] =!= False`, ForAll is `... === True`
  *     -- reusing the whole existing engine.
- *   - nfree == 1 (parametric, single quantifier block): reduce_cad_qe, the CAD
- *     seam that folds each free-variable cell's bound subtree to an
- *     Exists/ForAll verdict and emits the 1-D sign diagram.
- *   - nfree >= 2, alternating quantifiers, or an explicit non-Reals domain:
- *     decline (NULL) in v1 (needs nested QE emission / Phase 6b fibres).
+ *   - nfree >= 1 (parametric): reduce_cad_qe builds the CAD with the free vars
+ *     outermost, folds each innermost-free cell's bound subtree to an Exists/ForAll
+ *     verdict, and emits the merged quantifier-free formula over the free-variable
+ *     subspace (a 1-D sign diagram when nfree == 1; nested seg-cylinders above).
+ *   - alternating quantifier prefix: eliminated inner-block-first by recursive
+ *     composition (the inner block reduces to a quantifier-free body, then the
+ *     outer block is eliminated over it) -- to arbitrary alternation depth.
+ * An explicit non-Reals domain declines.
  *
  * Soundness invariant (shared with the rest of Reduce): an undecidable sign, a
  * non-rational fibre, an unsupported construct, or an out-of-scope case makes the

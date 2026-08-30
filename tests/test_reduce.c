@@ -709,6 +709,29 @@ static void test_cad_nvar(void) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Phase 6e: McCallum well-orientedness augmentation.  A fibre factor  *
+ *  nullifies (vanishes identically in the fibre variable) on a         *
+ *  positive-dimensional cell because a non-leading coefficient is not  *
+ *  in the McCallum projection; the driver adds the offending factor's  *
+ *  coefficients to the level below and rebuilds.  These used to        *
+ *  decline (positive-dim nullification bail).  Equivalence of each     *
+ *  emitted formula to its input is certified by the reduce corpus      *
+ *  sample-oracle (6e-* rows); here we assert only that they no longer  *
+ *  bail (the output is not a re-echoed Reduce[...]).                   *
+ * ------------------------------------------------------------------ */
+static void test_cad_well_oriented(void) {
+    /* x^2 - y^2 z, as a poly in z, has leading coeff -y^2 (projected) but a
+     * constant term x^2 that is NOT -- so x=0 was never a breakpoint. */
+    run_not_contains("Reduce[x^2 - y^2 z == 0, {x, y, z}, Reals]", "Reduce");
+    run_not_contains("Reduce[x^2 z - y^2 == 0, {x, y, z}, Reals]", "Reduce");
+    run_not_contains("Reduce[x^2 z + y^2 z + x y == 0, {x, y, z}, Reals]", "Reduce");
+    /* A harder 4-variable system whose nullification is not resolved within the
+     * augmentation budget stays UNEVALUATED (sound decline, never guessed). */
+    run_contains("Reduce[w x + y z == 0 && w z - x y == 0, {w, x, y, z}, Reals]",
+                 "Reduce[");
+}
+
+/* ------------------------------------------------------------------ *
  *  Phase 6b: real-algebraic-coefficient fibre isolation.  A section   *
  *  at an IRRATIONAL non-innermost breakpoint pins an outer variable   *
  *  to an algebraic number, so the deeper fibre has algebraic-number   *
@@ -872,18 +895,53 @@ static void test_quantifiers_parametric(void) {
              "Inequality[-1, Less, x, Less, 1]");
 }
 
-/* Soundness net: cases the v1 engine does not cover must stay UNEVALUATED. */
+/* Case C -- >= 2 free variables, and alternating quantifier prefixes: the QE
+ * engine builds the CAD with the free vars outermost (canonical order) and emits
+ * the merged verdict over the free-variable subspace; an alternating prefix is
+ * eliminated inner-block-first by recursive composition.  FullForm is pinned from
+ * the built binary and independently certified by the reduce corpus (qe-* rows). */
+static void test_quantifiers_multivar(void) {
+    /* The headline: existence of a real root of x^2 + b x + c is the discriminant
+     * condition b^2 - 4 c >= 0, emitted here as c <= b^2/4. */
+    run_test("Resolve[Exists[x, x^2 + b*x + c == 0], Reals]",
+             "LessEqual[c, Times[Rational[1, 4], Power[b, 2]]]");
+    /* Two free variables under ForAll: min over y of x^2 + y^2 is x^2. */
+    run_test("Reduce[ForAll[y, x^2 + y^2 >= z], {x, z}, Reals]",
+             "LessEqual[z, Power[x, 2]]");
+    /* Alternating ForAll . Exists: for every x there is a y with x + y == 0. */
+    run_test("Resolve[ForAll[x, Exists[y, x + y == 0]], Reals]", "True");
+    /* Alternating Exists . ForAll with a free-free-of-decision body. */
+    run_test("Resolve[Exists[y, ForAll[x, x^2 + y >= 0]], Reals]", "True");
+    /* A single-block ForAll leaving one free parameter. */
+    run_test("Resolve[ForAll[x, x^2 + a >= 0], Reals]", "GreaterEqual[a, 0]");
+
+    /* Form-agnostic equivalence guard: the emitted parametric formula, evaluated
+     * at a (b,c) point, must agree with the engine's own decision of the inner
+     * existence there -- checked on both sides of the discriminant boundary and
+     * exactly on it.  This certifies the answer regardless of its spelling. */
+    run_test("(Resolve[Exists[x, x^2 + b*x + c == 0], Reals] /. {b -> 3, c -> 1}) "
+             "=== (Reduce[x^2 + 3 x + 1 == 0, x, Reals] =!= False)", "True");  /* disc>0 */
+    run_test("(Resolve[Exists[x, x^2 + b*x + c == 0], Reals] /. {b -> 0, c -> 1}) "
+             "=== (Reduce[x^2 + 1 == 0, x, Reals] =!= False)", "True");        /* disc<0 */
+    run_test("(Resolve[Exists[x, x^2 + b*x + c == 0], Reals] /. {b -> 2, c -> 1}) "
+             "=== (Reduce[x^2 + 2 x + 1 == 0, x, Reals] =!= False)", "True");  /* disc==0 */
+    run_test("(Resolve[Exists[x, x^2 + b*x + c == 0], Reals] /. {b -> 2, c -> 2}) "
+             "=== (Reduce[x^2 + 2 x + 2 == 0, x, Reals] =!= False)", "True");  /* disc<0 */
+}
+
+/* Soundness net: cases the engine does not cover must stay UNEVALUATED. */
 static void test_quantifiers_decline(void) {
-    /* >=2 genuine free variables (algebraic boundary, needs Phase 6b). */
-    run_contains("Resolve[Exists[x, x^2 + b*x + c == 0], Reals]",
+    /* A free leading coefficient (3 free vars, the a==0 degenerate branch mixes a
+     * degree drop with an irrational boundary) is declined, not mis-answered. */
+    run_contains("Resolve[Exists[x, a*x^2 + b*x + c == 0], Reals]",
                  "Resolve[Exists[x,");
-    /* Alternating quantifier prefix. */
-    run_contains("Resolve[ForAll[x, Exists[y, x + y == 0]], Reals]",
-                 "Resolve[ForAll[x,");
+    /* A transcendental body has no polynomial CAD -- decline. */
+    run_contains("Resolve[Exists[x, Sin[x] == a], Reals]",
+                 "Resolve[Exists[x,");
     /* Explicit non-Reals domain with a quantifier. */
     run_contains("Reduce[Exists[y, x^2 + y^2 < 1], {x}, Complexes]",
                  "Reduce[Exists[y,");
-    /* Resolve on a non-quantified statement is left alone in v1. */
+    /* Resolve on a non-quantified statement is left alone. */
     run_contains("Resolve[x^2 > 0, Reals]", "Resolve[");
     /* Bare Exists / ForAll are inert (stay symbolic). */
     run_contains("Exists[x, x > 0]", "Exists[x,");
@@ -1241,9 +1299,11 @@ int main(void) {
     TEST(test_piecewise_functions);
     TEST(test_cad_real);
     TEST(test_cad_nvar);
+    TEST(test_cad_well_oriented);
     TEST(test_cad_algebraic_fibre);
     TEST(test_quantifiers_decision);
     TEST(test_quantifiers_parametric);
+    TEST(test_quantifiers_multivar);
     TEST(test_quantifiers_decline);
     TEST(test_logical_expand);
     TEST(test_find_instance);

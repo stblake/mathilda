@@ -8,13 +8,15 @@
  * This file owns the front-end only -- quantifier normalisation (flatten a
  * same-kind chain, fold a 3-argument condition), free-variable collection, the
  * fully-quantified DECISION path (Case A, which reuses the whole Reduce engine),
- * and the routing to reduce_cad_qe for the parametric single-free-variable path
- * (Case B).  The CAD projection/lifting/fold machinery lives in reduce_cad.c.
+ * the routing to reduce_cad_qe for the parametric (>=1 free variable) path, and
+ * the recursive composition that eliminates an alternating quantifier prefix
+ * inner-block-first.  The CAD projection/lifting/fold and the multi-free-variable
+ * emission live in reduce_cad.c.
  *
- * Hard invariant: any decline (a malformed node, an alternating quantifier
- * prefix, >=2 free variables, a non-Reals domain, or an undecidable/unsolvable
- * sub-problem) returns NULL, leaving the input unevaluated -- never a wrong
- * formula.
+ * Hard invariant: any decline (a malformed node, a non-Reals domain, or an
+ * undecidable/unsolvable sub-problem -- including an alternating sub-block whose
+ * inner elimination declines) returns NULL, leaving the input unevaluated --
+ * never a wrong formula.
  */
 #include "reduce_qe.h"
 #include "reduce_form.h"
@@ -22,6 +24,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "attr.h"
 #include "expr.h"
@@ -191,24 +194,46 @@ static Expr* qe_decide(const Expr* body, int quant, const char** B, int nb) {
  *  Case B -- parametric single-free-variable QE (via reduce_cad_qe)    *
  * ------------------------------------------------------------------ */
 
-static Expr* qe_parametric(const Expr* body, int quant, const char* freevar,
+static Expr* qe_parametric(const Expr* body, int quant, const char** FREE, int nfree,
                            const char** B, int nb) {
-    int nvall = 1 + nb;
+    int nvall = nfree + nb;
     Expr** vall = malloc((size_t)nvall * sizeof(Expr*));
-    vall[0] = expr_new_symbol(freevar);
-    for (int i = 0; i < nb; i++) vall[1 + i] = expr_new_symbol(B[i]);
+    for (int i = 0; i < nfree; i++) vall[i]         = expr_new_symbol(FREE[i]);
+    for (int i = 0; i < nb; i++)    vall[nfree + i] = expr_new_symbol(B[i]);
 
     bool ok = true;
     RForm* F = reduce_form_from_expr(body, vall, nvall, &ok);
     Expr* out = NULL;
     if (ok) {
         rform_simplify(F, vall, nvall);
-        out = reduce_cad_qe(F, vall[0], &vall[1], nb, quant);
+        out = reduce_cad_qe(F, vall, nfree, &vall[nfree], nb, quant);
     }
     rform_free(F);
     for (int i = 0; i < nvall; i++) expr_free(vall[i]);
     free(vall);
     return out;
+}
+
+/* Rebuild a single quantifier node `quant[{B...}, body]` (0 = Exists, 1 = ForAll).
+ * CONSUMES `body`; the bound spec is a List of the names B[0..nb-1]. */
+static Expr* qe_rebuild_quant(int quant, const char** B, int nb, Expr* body) {
+    Expr** vs = malloc((size_t)(nb > 0 ? nb : 1) * sizeof(Expr*));
+    for (int i = 0; i < nb; i++) vs[i] = expr_new_symbol(B[i]);
+    Expr* spec = expr_new_function(expr_new_symbol(SYM_List), vs, (size_t)nb);
+    free(vs);
+    return mkfun2(quant == 0 ? SYM_Exists : SYM_ForAll, spec, body);
+}
+
+/* strcmp-order a free-variable name array in place, so the outermost CAD level is
+ * canonical (alphabetical) regardless of the order the names were discovered in
+ * the body.  A no-op for nfree <= 1.  Interned names compare by their string. */
+static void qe_sort_names(const char** a, int n) {
+    for (int i = 1; i < n; i++) {
+        const char* key = a[i];
+        int j = i - 1;
+        while (j >= 0 && strcmp(a[j], key) > 0) { a[j + 1] = a[j]; j--; }
+        a[j + 1] = key;
+    }
 }
 
 /* ------------------------------------------------------------------ *
@@ -223,7 +248,28 @@ Expr* reduce_qe_dispatch(const Expr* qexpr, const Expr* dom) {
     int quant = -1; const char** B = NULL; int nb = 0, bcap = 0;
     bool alternating = false, ok = true;
     Expr* body = qe_normalize(qexpr, &quant, &B, &nb, &bcap, &alternating, &ok);
-    if (!ok || !body || alternating) { expr_free(body); free(B); return NULL; }
+    if (!ok || !body) { expr_free(body); free(B); return NULL; }
+
+    /* Alternating prefix: `body` is the inner different-kind quantifier.  Eliminate
+     * it first to a quantifier-free formula psi, then re-eliminate the peeled outer
+     * block over psi (now non-alternating).  This composes to arbitrary alternation
+     * depth.  Any inner decline -- or an inner result still carrying a quantifier /
+     * unevaluated Reduce/Resolve -- declines the whole thing. */
+    if (alternating) {
+        Expr* psi = reduce_qe_dispatch(body, dom);
+        expr_free(body);
+        if (!psi || is_head(psi, SYM_Exists) || is_head(psi, SYM_ForAll)
+                 || is_head(psi, SYM_Reduce) || is_head(psi, SYM_Resolve)) {
+            if (psi) expr_free(psi);
+            free(B);
+            return NULL;
+        }
+        Expr* q2 = qe_rebuild_quant(quant, B, nb, psi);   /* consumes psi */
+        Expr* r = reduce_qe_dispatch(q2, dom);            /* borrows q2 */
+        expr_free(q2);
+        free(B);
+        return r;
+    }
 
     /* nbound==0: Exists[{},g] == ForAll[{},g] == g -- reduce g over its own
      * variables (or evaluate it when it is a constant statement). */
@@ -251,9 +297,14 @@ Expr* reduce_qe_dispatch(const Expr* qexpr, const Expr* dom) {
     free(allsyms);
 
     Expr* out;
-    if (nfree == 0)      out = qe_decide(body, quant, B, nb);            /* Case A */
-    else if (nfree == 1) out = qe_parametric(body, quant, FREE[0], B, nb);/* Case B */
-    else                 out = NULL;                                     /* Case C */
+    if (nfree == 0) {
+        out = qe_decide(body, quant, B, nb);                 /* Case A: decision */
+    } else {
+        /* Cases B (nfree==1) & C (nfree>=2): parametric QE over the free vars,
+         * outermost in canonical (alphabetical) order so the answer is stable. */
+        qe_sort_names(FREE, nfree);
+        out = qe_parametric(body, quant, FREE, nfree, B, nb);
+    }
 
     free(FREE); free(B); expr_free(body);
     return out;
@@ -313,8 +364,8 @@ void reduce_qe_init(void) {
         "\tEliminates the quantifiers (Exists, ForAll) from expr over the\n"
         "\tdomain dom (Reals; the default and only supported domain), returning\n"
         "\tan equivalent quantifier-free statement -- True or False for a fully\n"
-        "\tquantified sentence, or a condition on the remaining free variables.\n"
-        "\tParametric elimination is supported for a single free variable; an\n"
-        "\tundecidable, alternating, or higher-dimensional case is left\n"
-        "\tunevaluated rather than guessed.");
+        "\tquantified sentence, or a condition on the remaining free variables\n"
+        "\t(one or more). Alternating quantifier prefixes are eliminated\n"
+        "\tinner-block-first. An undecidable sign, a non-Reals domain, or an\n"
+        "\tunsupported case is left unevaluated rather than guessed.");
 }

@@ -911,8 +911,18 @@ degenerate branch, and it handles inequalities over the reals.
   non-strict region's outer ranges by absorbing the boundary sections into the
   adjacent interval; it is a cosmetic post-pass decided by sampling, so any
   undecidable comparison leaves the already-correct unmerged form, and strict
-  regions stay open. An interval nullification declines (McCallum
-  well-orientedness augmentation is deferred).
+  regions stay open.
+- **McCallum well-orientedness augmentation** (Phase 6e): when a fibre polynomial
+  *nullifies* (vanishes identically in the fibre variable) at the interior sample of
+  a positive-dimensional cell, the McCallum projection was not well-oriented — a
+  non-leading coefficient whose vanishing is not a breakpoint lets the cell straddle
+  the nullification locus. The engine now **adds that factor's coefficients** (w.r.t.
+  its fibre variable) to the projection level below and rebuilds, so the locus
+  becomes a cell boundary; bounded to a few augmentation rounds, and a nullification
+  that persists still declines (never guessed — resampling to a generic point would
+  unsoundly drop a solution slice). So `Reduce[x^2 - y^2 z == 0, {x, y, z}, Reals] ->
+  (y != 0 && z == x^2/y^2) || (x == 0 && y == 0)` (previously declined). The common
+  case never nullifies, so it is untouched.
 - **Real-algebraic-coefficient fibre isolation** (Phase 6b): a breakpoint at a
   non-innermost CAD level may be an **irrational algebraic** number. Such a
   section pins an outer variable to an algebraic value, so the deeper fibre is a
@@ -1133,7 +1143,7 @@ is routed through the same engine (`Reduce[Exists[y, φ], {x}, Reals]`).
 
 The engine is a Cylindrical Algebraic Decomposition with the **quantified
 variables projected out first** (McCallum projection), then a per-cell fold over
-the free variable's decomposition. Three regimes:
+the free variables' decomposition:
 
 - **Fully quantified (no free variables)** — a real-closed-field **decision
   procedure**. `Exists[{v}, φ]` is `True` unless the real solution set of `φ` is
@@ -1144,12 +1154,17 @@ the free variable's decomposition. Three regimes:
   `Resolve[ForAll[x, x^2 > 0], Reals] -> False`;
   `Resolve[Exists[{x, y}, x^2 + y^2 < 1], Reals] -> True`.
 
-- **One free variable (parametric)** — the free variable's sign-diagram cells are
+- **Parametric (one or more free variables)** — the free variables occupy the
+  outermost CAD levels (in canonical order); the innermost free level's cells are
   each labelled by the `Exists`/`ForAll` verdict over the bound-variable fibre and
-  merged into a 1-D formula. Examples:
+  the free-variable subspace is emitted as a merged quantifier-free formula.
+  Eliminating a variable from a single polynomial projects to its **discriminant**,
+  so the existence of a real root is the classic discriminant condition. Examples:
   `Reduce[Exists[y, x^2 + y^2 < 1], {x}, Reals] -> -1 < x < 1`;
   `Reduce[ForAll[y, x^2 + y^2 >= 1], {x}, Reals] -> x <= -1 || x >= 1`;
   `Resolve[Exists[x, x^2 == a], Reals] -> a >= 0`;
+  `Resolve[Exists[x, x^2 + b x + c == 0], Reals] -> c <= b^2/4` (i.e. `b^2 - 4 c >= 0`);
+  `Reduce[ForAll[y, x^2 + y^2 >= z], {x, z}, Reals] -> z <= x^2`;
   `Reduce[ForAll[y, x^2 (1 + y^2) > 0], {x}, Reals] -> x != 0`.
   A bound variable absent from `φ` (`Exists[y, x != 0] -> x != 0`), a free
   variable absent from `φ` (`Exists[y, y^2 == 2] -> True`), and an empty bound
@@ -1157,14 +1172,20 @@ the free variable's decomposition. Three regimes:
   not appear in the body is left unconstrained rather than making the call
   decline.
 
+- **Alternating quantifiers** — a different-kind inner block is eliminated
+  **inner-block-first** by recursive composition (the inner quantifier reduces to a
+  quantifier-free body, then the outer block is eliminated over it), to arbitrary
+  alternation depth. Examples:
+  `Resolve[ForAll[x, Exists[y, x + y == 0]], Reals] -> True`;
+  `Resolve[Exists[y, ForAll[x, x^2 + y >= 0]], Reals] -> True`.
+
 Same-kind nested quantifiers flatten (`Exists[{y1}, Exists[{y2}, φ]]` ≡
 `Exists[{y1, y2}, φ]`). Preserving the soundness invariant, the engine **declines
-(stays unevaluated)** for: two or more genuine free variables, an alternating
-quantifier prefix (`ForAll[x, Exists[y, ...]]`), an explicit non-`Reals` domain, a
-non-rational free-variable breakpoint (the deferred real-algebraic-coefficient
-fibre case), or any undecidable sign — so `Resolve[Exists[x, x^2 + b x + c == 0],
-Reals]` (an algebraic boundary in two parameters) is left unevaluated rather than
-guessed.
+(stays unevaluated)** for: an explicit non-`Reals` domain, a free *leading*
+coefficient (`Exists[x, a x^2 + b x + c == 0]`, mixing a degree drop with an
+irrational boundary), a transcendental body (`Exists[x, Sin[x] == a]`), a
+non-rational free-variable breakpoint the 1-D emitter cannot spell, or any
+undecidable sign — left unevaluated rather than guessed.
 
 ## LogicalExpand
 

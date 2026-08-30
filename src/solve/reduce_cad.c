@@ -814,6 +814,16 @@ static Expr* bound_expr_lvl(bool no_outer_sector, PolySet* polys, int fac,
     return eval_and_free(mkfun1(SYM_Simplify, expr_copy(br)));
 }
 
+/* Phase 6e (McCallum well-orientedness augmentation).  When a fibre factor
+ * nullifies (vanishes identically in the fibre variable) at the interior sample
+ * of a POSITIVE-dimensional cell, the McCallum projection was not well-oriented:
+ * the factor's zero-locus straddles the cell rather than bounding it.  The build
+ * records the offending factor + its fibre level here (owned copy); the driver
+ * (reduce_cad_nvar) then adds the factor's coefficients to the projection level
+ * below and rebuilds, so the locus becomes a cell boundary.  `nz` is NULL for
+ * callers that keep the plain sound-decline behaviour (e.g. reduce_cad_qe). */
+typedef struct { Expr* poly; int level; bool hit; } NullReport;
+
 /* Lift the innermost fibre (level d-1) at outer assignment asg[0..d-2] to its
  * satisfying y-region in vv[d-1].  This is lift_fiber generalized to an outer
  * assignment vector; `no_outer_sector` is the generalized `is_point` (true iff
@@ -821,7 +831,8 @@ static Expr* bound_expr_lvl(bool no_outer_sector, PolySet* polys, int fac,
  * false to bail; *out is left empty then.  asg[d-1] is used as scratch. */
 static bool cad_leaf(const RForm* F, Expr** vv, int d, Expr** asg, Expr** asgdef,
                      bool no_outer_sector,
-                     PolySet* basis, Expr** cache, char* cache_bad, YRegion* out) {
+                     PolySet* basis, Expr** cache, char* cache_bad, YRegion* out,
+                     NullReport* nz) {
     yregion_init(out);
     bool fail = false;
     const Expr* vy = vv[d - 1];
@@ -837,6 +848,9 @@ static bool cad_leaf(const RForm* F, Expr** vv, int d, Expr** asg, Expr** asgdef
                               &roots, &nr, &cap, &fac, i, &nullified)) { fail = true; break; }
         if (nullified) {                     /* fibre factor nullified */
             if (no_outer_sector) continue;   /* 0-dim outer cell: sound to skip */
+            if (nz && !nz->hit) {            /* 6e: report for augment-and-restart */
+                nz->poly = expr_copy(basis->p[i]); nz->level = d - 1; nz->hit = true;
+            }
             fail = true; break;              /* positive-dim: bail (6e) */
         }
     }
@@ -986,7 +1000,7 @@ static void cad_region_free(CADRegion* R) {
 static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level,
                             Expr** asg, Expr** asgdef,
                             bool no_outer_sector, PolySet* pstack,
-                            Expr** caches[], char* caches_bad[]) {
+                            Expr** caches[], char* caches_bad[], NullReport* nz) {
     PolySet* polys = &pstack[level];
     Expr** roots = NULL; int* fac = NULL; int nr = 0, cap = 0; bool fail = false;
     for (int j = 0; j < polys->n && !fail; j++) {
@@ -994,7 +1008,13 @@ static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level,
         bool nullified;
         if (!isolate_fiber_at(polys->p[j], vv[level], vv, asg, asgdef, level,
                               &roots, &nr, &cap, &fac, j, &nullified)) { fail = true; break; }
-        if (nullified) { if (no_outer_sector) continue; fail = true; break; }
+        if (nullified) {
+            if (no_outer_sector) continue;
+            if (nz && !nz->hit) {            /* 6e: report for augment-and-restart */
+                nz->poly = expr_copy(polys->p[j]); nz->level = level; nz->hit = true;
+            }
+            fail = true; break;
+        }
     }
     if (fail) { for (int q = 0; q < nr; q++) { expr_free(roots[q]); } free(roots); free(fac); return NULL; }
 
@@ -1047,11 +1067,11 @@ static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level,
         bool child_nos = no_outer_sector && is_section;
         if (level == d - 2) {
             cell->leaf = true;
-            if (!cad_leaf(F, vv, d, asg, asgdef, child_nos, &pstack[d - 1], caches[d - 1], caches_bad[d - 1], &cell->yr)) { fail = true; asg[level] = NULL; asgdef[level] = NULL; break; }
+            if (!cad_leaf(F, vv, d, asg, asgdef, child_nos, &pstack[d - 1], caches[d - 1], caches_bad[d - 1], &cell->yr, nz)) { fail = true; asg[level] = NULL; asgdef[level] = NULL; break; }
             if (yregion_empty(&cell->yr)) { cell->empty = true; all_true = false; }
             else { any = true; if (!cell->yr.all_true) all_true = false; }
         } else {
-            cell->sub = cad_build(F, vv, d, level + 1, asg, asgdef, child_nos, pstack, caches, caches_bad);
+            cell->sub = cad_build(F, vv, d, level + 1, asg, asgdef, child_nos, pstack, caches, caches_bad, nz);
             if (!cell->sub) { fail = true; asg[level] = NULL; asgdef[level] = NULL; break; }
             if (cell->sub->all_false) { cell->empty = true; all_true = false; }
             else { any = true; if (!cell->sub->all_true) all_true = false; }
@@ -1270,6 +1290,7 @@ static Expr* reduce_cad_nvar(const RForm* F, Expr** vv, int d) {
     char** caches_bad = calloc((size_t)d, sizeof(char*));
     CADRegion* root = NULL;
     Expr* out = NULL;
+    NullReport nz = { NULL, 0, false };
 
     /* Gate + basis (pstack[d-1]): every atom a d-variate polynomial relation,
      * factored into the distinct-irreducible squarefree basis. */
@@ -1288,17 +1309,53 @@ static Expr* reduce_cad_nvar(const RForm* F, Expr** vv, int d) {
     for (int k = d - 1; k >= 1; k--)
         if (!cad_project_out(&pstack[k], vv[k], &pstack[k - 1])) goto done;
 
-    for (int i = 0; i < d; i++) {
-        caches[i]     = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(Expr*)) : NULL;
-        caches_bad[i] = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(char)) : NULL;
+    /* Phase 6e: build, and on a positive-dimensional fibre nullification augment
+     * the projection (add the offending factor's coefficients w.r.t. its fibre
+     * variable to the level below, re-derive the lower stack) and retry.  The
+     * common case never nullifies, so it runs exactly one round.  Bounded by
+     * MAX_AUG; a nullification that persists declines soundly. */
+    for (int round = 0; ; round++) {
+        for (int i = 0; i < d; i++) {
+            caches[i]     = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(Expr*)) : NULL;
+            caches_bad[i] = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(char)) : NULL;
+        }
+        nz.hit = false;
+        root = cad_build(F, vv, d, 0, asg, asgdef, true, pstack, caches, caches_bad, &nz);
+        if (root) break;                                  /* success */
+
+        /* free this generation's caches (sized to the current pstack) */
+        for (int i = 0; i < d; i++) {
+            if (caches[i]) { for (int j = 0; j < pstack[i].n; j++) if (caches[i][j]) expr_free(caches[i][j]); free(caches[i]); caches[i] = NULL; }
+            free(caches_bad[i]); caches_bad[i] = NULL;
+        }
+        if (!nz.hit || round >= 4) goto done;             /* hard decline / budget */
+        int tgt = nz.level - 1;                            /* level to refine */
+        if (tgt < 0) { expr_free(nz.poly); nz.poly = NULL; goto done; }
+        /* add every coefficient of the nullified factor in vv[nz.level] to
+         * pstack[tgt] (the leading one already there dedups away). */
+        int dc = degree_in(nz.poly, vv[nz.level]);
+        bool aug_ok = true;
+        for (int k = 0; k <= dc && aug_ok; k++) {
+            Expr* co = eval_and_free(mkfun3(SYM_Coefficient, expr_copy(nz.poly),
+                                            expr_copy(vv[nz.level]), expr_new_integer(k)));
+            aug_ok = add_proj(co, &pstack[tgt].p, &pstack[tgt].n, &pstack[tgt].cap);
+            expr_free(co);
+        }
+        expr_free(nz.poly); nz.poly = NULL;
+        if (!aug_ok) goto done;
+        /* re-derive pstack[tgt-1 .. 0] from the augmented level */
+        for (int k = tgt; k >= 1; k--) {
+            polyset_free(&pstack[k - 1]);
+            pstack[k - 1].p = NULL; pstack[k - 1].n = 0; pstack[k - 1].cap = 0;
+            if (!cad_project_out(&pstack[k], vv[k], &pstack[k - 1])) goto done;
+        }
     }
 
-    root = cad_build(F, vv, d, 0, asg, asgdef, true, pstack, caches, caches_bad);
-    if (!root) goto done;
     out = cad_region_expr(root, vv, d, true, NULL, NULL, 0);
     out = eval_and_free(out);
 
 done:
+    if (nz.poly) expr_free(nz.poly);
     cad_region_free(root);
     for (int i = 0; i < d; i++) {
         if (caches[i]) { for (int j = 0; j < pstack[i].n; j++) if (caches[i][j]) expr_free(caches[i][j]); free(caches[i]); }
@@ -1327,27 +1384,85 @@ static int qe_cell_verdict(const CADCell* c, int quant) {
                    : (c->sub->all_true ? 1 : 0);
 }
 
-/* Single-free-variable quantifier elimination.  Eliminate boundvars[0..nbound-1]
- * from the DNF `F` (a statement in freevar and the bound vars) under `quant`
- * (0 = Exists, 1 = ForAll), returning the quantifier-free description in freevar,
- * or NULL to decline.  freevar is the OUTERMOST CAD level (level 0) and the bound
- * vars are inner, so McCallum projection eliminates the bound vars first; the
- * free variable's 2m+1 cells then carry the per-cell quantifier verdict, which
- * the shared 1-D sign diagram merges into the answer.  F and every Expr* are
+/* Emit the quantifier-free description over the free variables vv[0..nfree-1] from
+ * the CAD region tree `R` (a decomposition of vv[R->level]), whose innermost free
+ * level (nfree-1) carries the per-cell Exists/ForAll verdict of `quant` over the
+ * bound-variable subtree.
+ *   - At the collapse level (R->level == nfree-1): the cells' verdicts form a 1-D
+ *     truth vector, emitted by the SHARED sign-diagram merger -- exactly the
+ *     single-free-variable path -- so a closed true run reads `v <= b` etc.
+ *   - Above it (R->level < nfree-1): each non-empty interval / section cell is a
+ *     cylinder `seg(vv[level]) && <deeper free description>`, joined by Or.  The
+ *     segment is emitted OPEN (no cross-breakpoint merge on the outer free vars);
+ *     the caller's final evaluate() tidies, and any residual is correct if
+ *     cosmetically unmerged.  A true child collapses to the bare segment.
+ * The CAD invariant makes each cell's verdict / deeper description constant across
+ * its interval, so the symbolic-bound cylinder is exact.  Every bpsym / sample is
+ * BORROWED (copied here); returns a freshly-owned Expr, or NULL on an internal
+ * decline (a cell shape that cannot occur above the collapse level). */
+static Expr* qe_region_expr(CADRegion* R, Expr** vv, int nfree, int quant) {
+    int L = R->level, m = R->m;
+    if (L == nfree - 1) {
+        int* truth = malloc((size_t)(2 * m + 1) * sizeof(int));
+        for (int j = 0; j <= m; j++) truth[2 * j]     = qe_cell_verdict(&R->iv[j], quant);
+        for (int k = 0; k < m; k++)  truth[2 * k + 1] = qe_cell_verdict(&R->sec[k], quant);
+        Expr* out = rru_emit_sign_diagram(R->bpsym, m, truth, vv[L]);
+        free(truth);
+        return out;
+    }
+    Expr** parts = NULL; int np = 0, cap = 0; bool fail = false;
+    for (int idx = 0; idx <= 2 * m && !fail; idx++) {
+        bool is_section = (idx % 2 == 1);
+        CADCell* cell = is_section ? &R->sec[(idx - 1) / 2] : &R->iv[idx / 2];
+        if (cell->empty) continue;
+        if (cell->leaf) { fail = true; break; }          /* cannot happen above collapse */
+        Expr* child = qe_region_expr(cell->sub, vv, nfree, quant);
+        if (!child) { fail = true; break; }
+        if (is_sym(child, SYM_False)) { expr_free(child); continue; }
+        Expr* seg;
+        if (is_section) {
+            int k = (idx - 1) / 2;
+            seg = mkfun2(SYM_Equal, expr_copy(vv[L]), expr_copy(R->bpsym[k]));
+        } else {
+            int j = idx / 2;
+            const Expr* lo = (j == 0) ? NULL : R->bpsym[j - 1];
+            const Expr* hi = (j == m) ? NULL : R->bpsym[j];
+            seg = cad_seg(lo, true, hi, true, vv[L]);    /* open interval */
+        }
+        if (is_sym(child, SYM_True)) { expr_free(child); arr_push(&parts, &np, &cap, seg); }
+        else arr_push(&parts, &np, &cap, mkfun2(SYM_And, seg, child));
+    }
+    if (fail) { for (int i = 0; i < np; i++) expr_free(parts[i]); free(parts); return NULL; }
+    Expr* out;
+    if (np == 0) out = expr_new_symbol(SYM_False);
+    else if (np == 1) out = parts[0];
+    else out = expr_new_function(expr_new_symbol(SYM_Or), parts, (size_t)np);
+    free(parts);
+    return out;
+}
+
+/* Multi-free-variable quantifier elimination.  Eliminate boundvars[0..nbound-1]
+ * from the DNF `F` (a statement in the free vars freevars[0..nfree-1] and the
+ * bound vars) under `quant` (0 = Exists, 1 = ForAll), returning the quantifier-free
+ * description in the free vars, or NULL to decline.  The free vars are the
+ * OUTERMOST CAD levels (0..nfree-1) and the bound vars inner, so McCallum projection
+ * eliminates the bound vars first; the innermost free level's cells then carry the
+ * per-cell quantifier verdict, which qe_region_expr merges into the answer (the
+ * nfree==1 case is the shared 1-D sign diagram, unchanged).  F and every Expr* are
  * BORROWED; the returned Expr is freshly owned.  Mirrors reduce_cad_nvar's setup,
  * projection and single-exit teardown for leak-freedom. */
-Expr* reduce_cad_qe(const RForm* F, Expr* freevar,
+Expr* reduce_cad_qe(const RForm* F, Expr** freevars, int nfree,
                     Expr** boundvars, int nbound, int quant) {
     /* Step 0: a constant statement decides directly (a literal-True/False fibre
      * is the same answer under either quantifier). */
     if (F->is_true) return expr_new_symbol(SYM_True);
     if (F->n == 0)  return expr_new_symbol(SYM_False);
-    if (nbound < 1) return NULL;                          /* front-end must strip */
+    if (nbound < 1 || nfree < 1) return NULL;             /* front-end must strip */
 
-    int d = 1 + nbound;
+    int d = nfree + nbound;
     Expr** vv = malloc((size_t)d * sizeof(Expr*));
-    vv[0] = freevar;
-    for (int i = 0; i < nbound; i++) vv[1 + i] = boundvars[i];
+    for (int i = 0; i < nfree; i++)  vv[i]         = freevars[i];
+    for (int i = 0; i < nbound; i++) vv[nfree + i] = boundvars[i];
 
     PolySet* pstack = calloc((size_t)d, sizeof(PolySet));
     Expr** asg = calloc((size_t)d, sizeof(Expr*));
@@ -1355,7 +1470,6 @@ Expr* reduce_cad_qe(const RForm* F, Expr* freevar,
     Expr*** caches = calloc((size_t)d, sizeof(Expr**));
     char** caches_bad = calloc((size_t)d, sizeof(char*));
     CADRegion* root = NULL;
-    int* truth = NULL;
     Expr* out = NULL;
 
     /* Gate + basis (pstack[d-1]): every atom a d-variate polynomial relation,
@@ -1380,23 +1494,18 @@ Expr* reduce_cad_qe(const RForm* F, Expr* freevar,
         caches_bad[i] = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(char)) : NULL;
     }
 
-    root = cad_build(F, vv, d, 0, asg, asgdef, true, pstack, caches, caches_bad);
+    root = cad_build(F, vv, d, 0, asg, asgdef, true, pstack, caches, caches_bad, NULL);  /* QE: no 6e augmentation */
     if (!root) goto done;
 
-    /* The free variable is level 0: its interval/section cells (2m+1, alternating)
-     * carry the quantifier verdict over the bound subtree.  rru_emit_sign_diagram
-     * COPIES the breakpoints, so it is called while `root` is still alive. */
-    {
-        int m = root->m;
-        truth = malloc((size_t)(2 * m + 1) * sizeof(int));
-        for (int j = 0; j <= m; j++) truth[2 * j]     = qe_cell_verdict(&root->iv[j], quant);
-        for (int k = 0; k < m; k++)  truth[2 * k + 1] = qe_cell_verdict(&root->sec[k], quant);
-        out = rru_emit_sign_diagram(root->bpsym, m, truth, freevar);
-    }
+    /* Emit over the free-variable subspace; qe_region_expr COPIES the breakpoints,
+     * so it runs while `root` is still alive.  The outer-level cylinders need a
+     * final evaluate() to flatten `And[True, ...]`; the nfree==1 sign diagram is
+     * already fully reduced, so leave it untouched (matching the shipped output). */
+    out = qe_region_expr(root, vv, nfree, quant);
+    if (out && nfree >= 2) out = eval_and_free(out);
 
 done:
     cad_region_free(root);
-    free(truth);
     for (int i = 0; i < d; i++) {
         if (caches[i]) { for (int j = 0; j < pstack[i].n; j++) if (caches[i][j]) expr_free(caches[i][j]); free(caches[i]); }
         free(caches_bad[i]);
