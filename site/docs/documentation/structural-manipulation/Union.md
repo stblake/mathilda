@@ -71,11 +71,11 @@ share a common head), sorts the combined `Expr**` array with `qsort` under the c
 list. (`DeleteDuplicates` in the same file does the order-preserving variant using a hash table
 keyed on `expr_hash`/`expr_eq`.)
 
-- `Flat`, `OneIdentity`, `Protected`, `ReadProtected`.
+- `Flat`, `OneIdentity`, `Protected`.
 - All expressions must have the same head.
 - Result has the same head as the inputs.
 
-**Attributes:** `Flat`, `OneIdentity`, `Protected`, `ReadProtected`.
+**Attributes:** `Flat`, `OneIdentity`, `Protected`.
 
 ## References
 

@@ -2918,3 +2918,36 @@ limitations surfaced:
 Both are pre-existing evaluator/zero_test bugs, out of scope for DSolve; DSolve
 works around them and produces correct, stable results (transport, `3u_x+5u_y==x`,
 `u_x+3u_y+u==1` all match Wolfram).
+
+## DSolve — was HoldAll, now just Protected (RESOLVED 2026-08-31)
+
+DSolve was originally `ATTR_HOLDALL` (the plan's "equations/conditions must stay
+formal"). Consequence, surfaced while writing stress tests: `eq = y'[x]==...;
+DSolve[eq, y, x]` **declined** — HoldAll held the first argument, so DSolve
+received the *symbol* `eq`, not its value, and `dsolve_parse` saw a bare symbol.
+A `Do[Module[{eq}, eq=...; DSolve[eq,...]], ...]` loop that mass-declined looked
+like a solver bug for ten minutes — it was the harness. **Fix:** HoldAll was
+removed from DSolve *and* every `DSolve`<Method>`. (Attributes are now just
+`Protected` — `ReadProtected` was removed system-wide the same day, since Mathilda
+is fully open source and never hides a symbol's definition.) HoldAll was never
+needed: with the dependent
+function undefined, `y'[x] == a Sin[x]` and `y[0] == 5` evaluate to unevaluated
+`Equal[...]` on their own, so equations reach the solver formal without holding —
+and the D→Derivative fold that `dsolve_parse` needs happens under normal
+evaluation anyway. Guarded by `t_not_holdall` (`FreeQ[Attributes[DSolve],
+HoldAll]` + a `Module`-held equation that must solve). Lessons that still hold:
+(1) when a stress loop over a *genuinely* HoldAll head (Table, With, …) declines
+or mishandles *everything*, suspect the harness (held variable), not the method —
+reproduce one case inlined first; (2) don't reach for HoldAll on a head that
+consumes equations/rules unless a value would actually be lost — symbolic
+equations survive evaluation on their own.
+
+## DSolve 1a/1d — verify residual AND Head (a declined DSolve gives a vacuous PossibleZeroQ True)
+
+A stress helper that only checks `PossibleZeroQ[(residual) /. DSolve[eqn,...][[1]]]`
+is unsound: if DSolve *declines*, `DSolve[...][[1]]` is `Part` of an unevaluated
+`DSolve[...]`, the `/.` matches nothing, the residual stays symbolic, and
+`PossibleZeroQ` of a free-symbol expression returns `True`. So "verified" can mean
+"never solved". `check_solves` therefore asserts `Head[DSolve[eqn,y,x]] === List`
+*first*, then the residual. (Same trap made a declined `(x+2y)^3` print
+`verify: True` during probing.)

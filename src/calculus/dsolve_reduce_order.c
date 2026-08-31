@@ -93,7 +93,7 @@ static Expr* builtin_dsolve_reduce_order(Expr* res) {
 
 void dsolve_reduce_order_init(void) {
     symtab_add_builtin("DSolve`ReductionOfOrder", builtin_dsolve_reduce_order);
-    symtab_get_def("DSolve`ReductionOfOrder")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`ReductionOfOrder")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`ReductionOfOrder",
         "DSolve`ReductionOfOrder[eqn, y, x] reduces a second-order ODE missing y "
         "(y'' == F(x, y')) to first order in p = y', solves it, and integrates.");

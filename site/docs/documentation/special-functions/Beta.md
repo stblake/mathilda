@@ -85,7 +85,7 @@ Memory: builtin_beta takes ownership of res. It returns a freshly built tree (th
 
 ## Implementation notes
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 

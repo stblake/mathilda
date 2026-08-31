@@ -20,7 +20,8 @@
 #define ATTR_NHOLDFIRST     (1 << 15)
 #define ATTR_NHOLDALL       (ATTR_NHOLDFIRST | ATTR_NHOLDREST)
 #define ATTR_LOCKED          (1 << 10)
-#define ATTR_READPROTECTED   (1 << 11)
+/* bit 11 was ATTR_READPROTECTED; removed — Mathilda is fully open source and
+ * never hides a symbol's definition. */
 #define ATTR_TEMPORARY       (1 << 12)
 #define ATTR_SEQUENCEHOLD    (1 << 13)
 #define ATTR_CONSTANT        (1 << 14)

@@ -174,7 +174,7 @@ differentiation pass (with constant-subtree pruning); `D[f, x, n]` costs n
 passes. `NonConstants` is honoured for ordinary specs but not threaded through
 the closed-form symbolic-order path.
 
-- `Protected`, `ReadProtected`.
+- `Protected`.
 - Recognises the elementary heads `Plus`, `Times`, `Power`, `Sqrt`,
   `Exp`, `Log`, `Log[b, f]`, all six trig heads and their inverses,
   all six hyperbolic heads and their inverses, and threads
@@ -214,7 +214,7 @@ the closed-form symbolic-order path.
   `D[Indeterminate, x] = Indeterminate`) instead of degrading into a
   `Derivative[1, 0][Piecewise][...]` chain-rule form.
 
-**Attributes:** `Protected`, `ReadProtected`.
+**Attributes:** `Protected`.
 
 ## References
 

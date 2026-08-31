@@ -1479,7 +1479,7 @@ Expr* builtin_integrate_diffunderint(Expr* res) {
 void integrate_diffunderint_init(void) {
     symtab_add_builtin("Integrate`DiffUnderInt", builtin_integrate_diffunderint);
     symtab_get_def("Integrate`DiffUnderInt")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`DiffUnderInt",
         "Integrate`DiffUnderInt[f, {x, a, b}] evaluates a parameter-dependent "
         "definite integral by differentiation under the integral sign (the "

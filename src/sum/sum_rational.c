@@ -503,7 +503,7 @@ Expr* builtin_sum_rational(Expr* res) {
 
 void sum_rational_init(void) {
     symtab_add_builtin("Sum`Rational", builtin_sum_rational);
-    symtab_get_def("Sum`Rational")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`Rational")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`Rational",
         "Sum`Rational[f, i, imin, Infinity] gives the closed form of an infinite "
         "sum of a rational function f of i (deg of denominator >= deg of "

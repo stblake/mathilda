@@ -295,7 +295,7 @@ Expr* builtin_integrate_linrad(Expr* res) {
 void integrate_linrad_init(void) {
     symtab_add_builtin("Integrate`LinearRadicals", builtin_integrate_linrad);
     symtab_get_def("Integrate`LinearRadicals")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`LinearRadicals",
         "Integrate`LinearRadicals[f, x] integrates a rational function of x and\n"
         "radicals (a x + b)^(m/n) sharing one linear argument. It substitutes\n"

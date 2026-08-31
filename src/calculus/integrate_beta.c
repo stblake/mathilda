@@ -419,7 +419,7 @@ Expr* builtin_integrate_trigpower(Expr* res) {
 
 void integrate_beta_init(void) {
     symtab_add_builtin("Integrate`Beta", builtin_integrate_beta);
-    symtab_get_def("Integrate`Beta")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Integrate`Beta")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Integrate`Beta",
         "Integrate`Beta[f, {x, 0, 1}] evaluates a definite integral of the form "
         "x^(k-1) (1-x)^(l-1) over [0,1] as the Euler Beta function Beta[k, l], "
@@ -430,7 +430,7 @@ void integrate_beta_init(void) {
         "of this form or the interval is not [0,1].");
 
     symtab_add_builtin("Integrate`TrigPower", builtin_integrate_trigpower);
-    symtab_get_def("Integrate`TrigPower")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Integrate`TrigPower")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Integrate`TrigPower",
         "Integrate`TrigPower[f, {x, 0, c}] evaluates Sin[x]^m Cos[x]^n over a "
         "canonical interval: over [0, Pi/2] it is Beta[(m+1)/2, (n+1)/2]/2; over "

@@ -777,13 +777,13 @@ void geometry_init(void) {
     symtab_add_builtin("RegionMember", builtin_region_member);
     symtab_add_builtin("ConvexHullRegion", builtin_convex_hull_region);
 
-    /* WL: Attributes[Area] == {Protected, ReadProtected}, same for all five.
+    /* WL: Attributes[Area] == {Protected}, same for all five.
      * Deliberately NOT Listable (these are structural, not element-wise). */
     static const char* heads[] = {
         "Area", "Perimeter", "RegionCentroid", "RegionMember", "ConvexHullRegion"
     };
     for (size_t i = 0; i < sizeof heads / sizeof heads[0]; i++)
-        symtab_get_def(heads[i])->attributes |= (ATTR_PROTECTED | ATTR_READPROTECTED);
+        symtab_get_def(heads[i])->attributes |= (ATTR_PROTECTED);
 
     symtab_set_docstring("Area",
         "Area[Polygon[{{x1, y1}, ...}]] gives the area of a simple 2D polygon. "

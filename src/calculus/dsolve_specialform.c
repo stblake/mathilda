@@ -128,7 +128,7 @@ static Expr* builtin_dsolve_specialform(Expr* res) {
 
 void dsolve_specialform_init(void) {
     symtab_add_builtin("DSolve`SpecialFunctionForm", builtin_dsolve_specialform);
-    symtab_get_def("DSolve`SpecialFunctionForm")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`SpecialFunctionForm")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`SpecialFunctionForm",
         "DSolve`SpecialFunctionForm[eqn, y, x] recognises second-order linear ODEs "
         "whose solutions are Airy (y'' == (A x + B) y) or Bessel / modified Bessel "

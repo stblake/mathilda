@@ -629,7 +629,7 @@ Expr* builtin_integrate_jeffrey(Expr* res) {
 void integrate_jeffrey_init(void) {
     symtab_add_builtin("Integrate`Weierstrass", builtin_integrate_jeffrey);
     symtab_get_def("Integrate`Weierstrass")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`Weierstrass",
         "Integrate`Weierstrass[f, x] integrates a rational function of the\n"
         "trigonometric kernels Sin/Cos/Tan/Cot/Sec/Csc[x] (or the hyperbolic\n"

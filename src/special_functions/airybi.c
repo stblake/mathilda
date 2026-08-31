@@ -61,7 +61,7 @@
  * at -Infinity Bi' has no limit (oscillation with growing ~|z|^(1/4) amplitude)
  * and is left unevaluated.
  *
- * Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
+ * Attributes (both heads): Listable, NumericFunction, Protected.
  */
 #include "airybi.h"
 #include "sym_names.h"
@@ -940,10 +940,10 @@ Expr* builtin_airybiprime(Expr* res) {
 void airybi_init(void) {
     symtab_add_builtin("AiryBi", builtin_airybi);
     symtab_get_def("AiryBi")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
 
     symtab_add_builtin("AiryBiPrime", builtin_airybiprime);
     symtab_get_def("AiryBiPrime")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     /* Docstrings live in info.c (info_init). */
 }

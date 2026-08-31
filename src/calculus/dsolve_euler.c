@@ -154,7 +154,7 @@ static Expr* builtin_dsolve_euler(Expr* res) {
 
 void dsolve_euler_init(void) {
     symtab_add_builtin("DSolve`EulerCauchy", builtin_dsolve_euler);
-    symtab_get_def("DSolve`EulerCauchy")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`EulerCauchy")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`EulerCauchy",
         "DSolve`EulerCauchy[eqn, y, x] solves the equidimensional equation "
         "a_n x^n y^(n) + ... + a_0 y == g(x) via the indicial polynomial (trial "

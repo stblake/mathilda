@@ -54,7 +54,7 @@ static Expr* builtin_dsolve_quadrature(Expr* res) {
 
 void dsolve_quadrature_init(void) {
     symtab_add_builtin("DSolve`Quadrature", builtin_dsolve_quadrature);
-    symtab_get_def("DSolve`Quadrature")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`Quadrature")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`Quadrature",
         "DSolve`Quadrature[eqn, y, x] solves y^(n)[x] == f(x) with f free of y "
         "by integrating n times and adding the general constant polynomial.");

@@ -223,7 +223,7 @@ Selected flags:
 | `ATTR_NUMERICFUNCTION` | Numeric operation |
 | `ATTR_ONEIDENTITY` | `f[x]` ≡ `x` for pattern matching |
 | `ATTR_PROTECTED` | Cannot be redefined |
-| `ATTR_LOCKED / READPROTECTED / TEMPORARY / SEQUENCEHOLD / NHOLDREST` | Specialized |
+| `ATTR_LOCKED / TEMPORARY / SEQUENCEHOLD / NHOLDREST` | Specialized |
 
 Typical bundles: `Plus`/`Times` are `FLAT | LISTABLE | NUMERICFUNCTION |
 ONEIDENTITY | ORDERLESS`; `Sin` is `LISTABLE | NUMERICFUNCTION | PROTECTED`;

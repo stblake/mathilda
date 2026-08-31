@@ -253,6 +253,96 @@ static void t_reduce_order(void) {
     check_true("Not[FreeQ[DSolve[y''[x] == y'[x]^2, y, x][[1]], C[2]]]");
 }
 
+/* stress helper: assert DSolve[eqn, y, x] actually solves (does not decline) and
+ * that its solution back-substitutes the residual to zero.  Checking Head is
+ * essential: a declined DSolve leaves [[1]] symbolic, so the residual would not
+ * substitute and PossibleZeroQ would return True vacuously. */
+static void check_solves(const char* eqn, const char* residual) {
+    char buf[640];
+    snprintf(buf, sizeof(buf), "Head[DSolve[%s, y, x]]", eqn);
+    check_form(buf, "List");
+    snprintf(buf, sizeof(buf),
+             "PossibleZeroQ[(%s) /. DSolve[%s, y, x][[1]]]", residual, eqn);
+    check_true(buf);
+}
+
+/* ---- 1a: FirstOrderSubstitution — y'==F(a x + b y + c) ---- */
+static void t_fos_quadratic(void) {
+    check_true("PossibleZeroQ[(y'[x] - (x + y[x])^2) /. "
+               "DSolve[y'[x] == (x + y[x])^2, y, x][[1]]]");
+    check_form("Head[DSolve[y'[x] == (x + y[x])^2, y, x]]", "List");
+}
+static void t_fos_shifted(void) {
+    check_true("PossibleZeroQ[(y'[x] - (x + y[x] + 1)^2) /. "
+               "DSolve[y'[x] == (x + y[x] + 1)^2, y, x][[1]]]");
+}
+static void t_fos_distinct_coeff(void) {
+    /* combination 2y - x: ratio r = -1/2 recovered after a common factor cancels */
+    check_true("PossibleZeroQ[(y'[x] - (2 y[x] - x)^2) /. "
+               "DSolve[y'[x] == (2 y[x] - x)^2, y, x][[1]]]");
+}
+static void t_fos_method(void) {
+    check_true("PossibleZeroQ[(y'[x] - (x + y[x])^2) /. "
+               "DSolve`FirstOrderSubstitution[y'[x] == (x + y[x])^2, y, x][[1]]]");
+}
+static void t_fos_declines_implicit(void) {
+    /* Sqrt[x+y] separates but Solve cannot invert the antiderivative: stays
+     * symbolic rather than shipping a wrong/degenerate answer. */
+    check_form("Head[DSolve[y'[x] == Sqrt[x + y[x]], y[x], x]]", "DSolve");
+}
+static void t_fos_stress(void) {
+    char eqn[256], res[256];
+    int ks[] = {1, 2}, as[] = {1, 2}, cs[] = {-1, 0, 1, 2};
+    for (size_t ki = 0; ki < 2; ki++)
+        for (size_t ai = 0; ai < 2; ai++)
+            for (size_t ci = 0; ci < 4; ci++) {
+                int k = ks[ki], a = as[ai], c = cs[ci];
+                snprintf(eqn, sizeof(eqn), "y'[x] == %d (%d x + %d y[x] + %d)^2", k, a, a, c);
+                snprintf(res, sizeof(res), "y'[x] - %d (%d x + %d y[x] + %d)^2", k, a, a, c);
+                check_solves(eqn, res);
+            }
+    int ms[] = {2, 3, 4};                       /* distinct x/y coefficients, r=m */
+    for (size_t mi = 0; mi < 3; mi++) {
+        snprintf(eqn, sizeof(eqn), "y'[x] == (%d x + y[x])^2", ms[mi]);
+        snprintf(res, sizeof(res), "y'[x] - (%d x + y[x])^2", ms[mi]);
+        check_solves(eqn, res);
+    }
+}
+
+/* ---- 1d: AutonomousReduction — y''==f(y, y') missing x ---- */
+static void t_auto_exp(void) {
+    check_true("PossibleZeroQ[(y[x] y''[x] - y'[x]^2) /. "
+               "DSolve[y[x] y''[x] == y'[x]^2, y, x][[1]]]");
+    /* order preserved: a second independent constant is present */
+    check_true("Not[FreeQ[DSolve[y[x] y''[x] == y'[x]^2, y, x][[1]], C[2]]]");
+}
+static void t_auto_power(void) {
+    check_true("PossibleZeroQ[(2 y[x] y''[x] - y'[x]^2) /. "
+               "DSolve[2 y[x] y''[x] == y'[x]^2, y, x][[1]]]");
+}
+static void t_auto_reciprocal(void) {
+    check_true("PossibleZeroQ[(y[x] y''[x] - 2 y'[x]^2) /. "
+               "DSolve[y[x] y''[x] == 2 y'[x]^2, y, x][[1]]]");
+}
+static void t_auto_method(void) {
+    check_true("PossibleZeroQ[(y[x] y''[x] - y'[x]^2) /. "
+               "DSolve`AutonomousReduction[y[x] y''[x] == y'[x]^2, y, x][[1]]]");
+}
+static void t_auto_declines_elliptic(void) {
+    /* y''==2y^3 reduces to an elliptic integral: stays symbolic (not wrong) */
+    check_form("Head[DSolve[y''[x] == 2 y[x]^3, y[x], x]]", "DSolve");
+}
+static void t_auto_stress(void) {
+    char eqn[256], res[256];
+    int ab[][2] = {{1, 1}, {1, 2}, {2, 1}, {1, 3}, {3, 1}};
+    for (size_t i = 0; i < 5; i++) {
+        int a = ab[i][0], b = ab[i][1];
+        snprintf(eqn, sizeof(eqn), "%d y[x] y''[x] == %d y'[x]^2", a, b);
+        snprintf(res, sizeof(res), "%d y[x] y''[x] - %d y'[x]^2", a, b);
+        check_solves(eqn, res);
+    }
+}
+
 /* ---- M6: first-order linear PDEs (method of characteristics) ----
  * Verified with a concrete arbitrary function (C[1][z_] :> Sin[z]) after
  * reducing the Function application, to avoid a pre-existing evaluator crash on
@@ -268,6 +358,15 @@ static void t_pde_forcing(void) {
 static void t_pde_zeroth_order(void) {
     check_true("With[{uc = (u[x,y] /. DSolve[D[u[x,y],x] + 3 D[u[x,y],y] + u[x,y] == 1, u, {x,y}][[1]]) "
                "/. C[1][z_] :> Sin[z]}, PossibleZeroQ[D[uc,x] + 3 D[uc,y] + uc - 1]]");
+}
+
+/* ---- DSolve is NOT HoldAll: an equation stored in a variable must solve ---- */
+static void t_not_holdall(void) {
+    check_true("FreeQ[Attributes[DSolve], HoldAll]");
+    check_true("Module[{dseq = y'[x] + y[x] == a Sin[x]}, "
+               "Head[DSolve[dseq, y, x]] === List]");
+    check_true("Module[{dseq = y'[x] + y[x] == a Sin[x]}, "
+               "PossibleZeroQ[(y'[x] + y[x] - a Sin[x]) /. DSolve[dseq, y, x][[1]]]]");
 }
 
 /* ---- unsupported equations stay symbolic (declined, not wrong) ---- */
@@ -325,6 +424,19 @@ int main(void) {
     TEST(t_sys_complex_ivp);
     TEST(t_sys_constant_forcing);
     TEST(t_reduce_order);
+    TEST(t_fos_quadratic);
+    TEST(t_fos_shifted);
+    TEST(t_fos_distinct_coeff);
+    TEST(t_fos_method);
+    TEST(t_fos_declines_implicit);
+    TEST(t_fos_stress);
+    TEST(t_auto_exp);
+    TEST(t_auto_power);
+    TEST(t_auto_reciprocal);
+    TEST(t_auto_method);
+    TEST(t_auto_declines_elliptic);
+    TEST(t_auto_stress);
+    TEST(t_not_holdall);
     TEST(t_pde_transport);
     TEST(t_pde_forcing);
     TEST(t_pde_zeroth_order);

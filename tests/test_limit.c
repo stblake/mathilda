@@ -996,7 +996,7 @@ static void test_method_heads(void) {
     check("Limit`Series[{Sin[x]/x, (1 - Cos[x])/x^2}, x -> 0]", "{1, 1/2}");
 
     /* Attributes match Limit's own. */
-    check("Attributes[Limit`Series]", "{Protected, ReadProtected}");
+    check("Attributes[Limit`Series]", "{Protected}");
 
     /* Every head is documented. */
     check("StringLength[Information[\"Limit`Oscillatory\"]] > 80", "True");

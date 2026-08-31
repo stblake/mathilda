@@ -783,7 +783,7 @@ Expr* builtin_integrate_quadrad(Expr* res) {
 void integrate_quadrad_init(void) {
     symtab_add_builtin("Integrate`QuadraticRadicals", builtin_integrate_quadrad);
     symtab_get_def("Integrate`QuadraticRadicals")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`QuadraticRadicals",
         "Integrate`QuadraticRadicals[f, x] integrates a rational function of x and\n"
         "square roots (a x^2 + b x + c)^(m/2) sharing one quadratic argument. It\n"

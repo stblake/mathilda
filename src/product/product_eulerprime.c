@@ -148,7 +148,7 @@ Expr* builtin_product_eulerprime(Expr* res) {
 
 void product_eulerprime_init(void) {
     symtab_add_builtin("Product`EulerPrime", builtin_product_eulerprime);
-    symtab_get_def("Product`EulerPrime")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`EulerPrime")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`EulerPrime",
         "Product`EulerPrime[f, i, imin, Infinity] evaluates Euler products over "
         "the primes: prod 1/(1-Prime[i]^-s) = Zeta[s], and the chi_4 product "

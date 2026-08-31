@@ -59,7 +59,7 @@ Higher transcendental functions: the gamma function `Gamma`, the error function 
 - `Beta[z0, z1, a, b]` — the generalized incomplete beta
   B(z0, z1; a, b) = Beta[z1, a, b] − Beta[z0, a, b].
 
-Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+Attributes: `Listable`, `NumericFunction`, `Protected`.
 Note that, unlike `Gamma`'s incomplete form, the integration variable `z`
 comes **first** in `Beta[z, a, b]`.
 
@@ -1215,8 +1215,7 @@ derivative component:
   + …)`.
 - **Listable.** `AiryAiPrime[{1.2, 1.5, 1.8}] = {-0.132785, -0.097382, -0.0685248}`.
 
-Attributes (both heads): `Listable`, `NumericFunction`, `Protected`,
-`ReadProtected`.
+Attributes (both heads): `Listable`, `NumericFunction`, `Protected`.
 
 ```mathematica
 In[1]:= AiryAi[0]
@@ -1291,8 +1290,7 @@ derivative component:
   expansion `E^(2/3 x^(3/2)) (x^(1/4)/Sqrt[Pi] - 7 (1/x)^(5/4)/(48 Sqrt[Pi]) + …)`.
 - **Listable.** `AiryBiPrime[{1.2, 1.5, 1.8}] = {1.22123, 1.88621, 2.98554}`.
 
-Attributes (both heads): `Listable`, `NumericFunction`, `Protected`,
-`ReadProtected`.
+Attributes (both heads): `Listable`, `NumericFunction`, `Protected`.
 
 ```mathematica
 In[1]:= AiryBi[0]
@@ -1362,7 +1360,7 @@ successor to the file-local `acx`/`ecx`/`gcx` toolkits, so future
   Sin[(2n+1)π/4 - x] (…)`, valid for symbolic order too.
 - **Listable.** `BesselJ[1, {0.5, 1.0, 1.5}] = {0.242268, 0.440051, 0.557937}`.
 
-Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 Not yet implemented: `Limit[BesselJ[n, x], x -> Infinity]` is left unevaluated
 (the limit engine does not yet consume the oscillatory asymptotic leading term);
@@ -1431,7 +1429,7 @@ routine for the modified Bessel functions, so every value is summed from scratch
   valid for symbolic order too. `Limit[BesselK[n, x], x -> Infinity] = 0`.
 - **Listable.** `BesselK[{1, 2, 3}, 1.0] = {0.601907, 1.62484, 7.10126}`.
 
-Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 On the branch cut (negative real axis) the principal-branch value is returned
 consistently at all precisions; this convention can differ from other systems'
@@ -1513,7 +1511,7 @@ the small-|z| power series is the same `I_μ(z)` series `BesselK` already uses.
   `∫ I₁(x) dx = I₀(x)`.
 - **Listable.** `BesselI[{0, 1, 2}, 1.] = {1.26607, 0.565159, 0.135748}`.
 
-Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 Not yet implemented: `Limit[BesselI[n, x], x -> Infinity]` (= ∞) and at
 `I Infinity` (= 0) are left unevaluated — the Limit engine does not distribute
@@ -1579,7 +1577,7 @@ alongside `BesselJ`/`BesselK`/`BesselI`), reusing the `ncpx` complex-MPFR toolki
   too.
 - **Listable.** `BesselY[0, {1.0, 2.0, 3.0}] = {0.088257, 0.510376, 0.37685}`.
 
-Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 ```mathematica
 In[1]:= BesselY[0, 2.5]
@@ -1715,7 +1713,7 @@ through a single complex-MPFR Halley core built on the shared `ncpx` toolkit
 - **Listable.** `ProductLog[{1.5, 3.75, 5.5, 7.25}] = {0.725861, 1.16717,
   1.38155, 1.54559}`.
 
-Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 ```mathematica
 In[1]:= ProductLog[1.0]

@@ -29,7 +29,7 @@ Expr* builtin_besseljzero(Expr* res) {
 void besseljzero_init(void) {
     symtab_add_builtin("BesselJZero", builtin_besseljzero);
     symtab_get_def("BesselJZero")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     symtab_set_docstring("BesselJZero",
         "BesselJZero[n, k] gives the k-th positive zero of BesselJ[n, x]. "
         "Stays symbolic for symbolic arguments.");

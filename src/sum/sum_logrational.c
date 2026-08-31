@@ -304,7 +304,7 @@ Expr* builtin_sum_logrational(Expr* res) {
 
 void sum_logrational_init(void) {
     symtab_add_builtin("Sum`LogRational", builtin_sum_logrational);
-    symtab_get_def("Sum`LogRational")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`LogRational")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`LogRational",
         "Sum`LogRational[f, i, imin, Infinity] evaluates convergent sums of a "
         "rational function plus a log of a rational function (e.g. "

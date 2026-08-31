@@ -211,8 +211,6 @@ void test_beta_attributes() {
     ASSERT_MSG((d->attributes & ATTR_NUMERICFUNCTION) != 0,
                "Beta must be NumericFunction");
     ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "Beta must be Protected");
-    ASSERT_MSG((d->attributes & ATTR_READPROTECTED) != 0,
-               "Beta must be ReadProtected");
 }
 
 /* ---- arity diagnostics (stays unevaluated) -------------------------- */

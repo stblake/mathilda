@@ -175,7 +175,7 @@ static Expr* builtin_risch_hermite_reduce(Expr* res) {
 
 void integrate_risch_hermite_init(void) {
     symtab_add_builtin("Risch`HermiteReduce", builtin_risch_hermite_reduce);
-    symtab_get_def("Risch`HermiteReduce")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Risch`HermiteReduce")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Risch`HermiteReduce",
         "Risch`HermiteReduce[f, t, deriv] is the Hermite reduction of f in k(t)\n"
         "over the monomial derivation deriv (Bronstein 5.3): returns {g, h, r}\n"

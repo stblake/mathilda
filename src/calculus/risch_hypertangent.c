@@ -568,7 +568,7 @@ static Expr* builtin_risch_integrate_hypertanh(Expr* res) {
 
 static void rh_install(const char* name, Expr* (*fn)(Expr*), const char* doc) {
     symtab_add_builtin(name, fn);
-    symtab_get_def(name)->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def(name)->attributes |= ATTR_PROTECTED;
     if (doc) symtab_set_docstring(name, doc);
 }
 

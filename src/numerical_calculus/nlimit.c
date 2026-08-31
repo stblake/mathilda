@@ -1272,7 +1272,7 @@ NLIMIT_METHOD_ENTRY(builtin_nlimit_levinv,        "LevinV")
 static void nl_register_method(const char* sym, Expr* (*fn)(Expr*),
                                const char* doc) {
     symtab_add_builtin(sym, fn);
-    symtab_get_def(sym)->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def(sym)->attributes |= ATTR_PROTECTED;
     symtab_set_docstring(sym, doc);
 }
 

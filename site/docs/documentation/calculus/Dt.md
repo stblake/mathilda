@@ -106,12 +106,12 @@ mode distinguishes itself from `D` solely by the NULL variable that disables the
 constant short-circuit; everything else (rules, ownership, fixed-point folding)
 is shared with `D`.
 
-- `Protected`, `ReadProtected`.
+- `Protected`.
 - Shares the elementary-function derivative table with `D`; the
   only dispatch difference is the base-case handling of symbols
   (free symbols become `Dt[s, x]` factors instead of `0`).
 
-**Attributes:** `Protected`, `ReadProtected`.
+**Attributes:** `Protected`.
 
 ## References
 

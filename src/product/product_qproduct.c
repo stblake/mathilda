@@ -350,7 +350,7 @@ Expr* builtin_product_qproduct(Expr* res) {
 
 void product_qproduct_init(void) {
     symtab_add_builtin("Product`QProduct", builtin_product_qproduct);
-    symtab_get_def("Product`QProduct")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`QProduct")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`QProduct",
         "Product`QProduct[f, i, imin, imax] evaluates products of factors linear "
         "in q^i (q free of i) in terms of QPochhammer: "

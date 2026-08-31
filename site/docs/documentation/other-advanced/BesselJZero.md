@@ -27,7 +27,7 @@ Memory contract: takes ownership of res but must not free it; returns NULL (leav
 
 ## Implementation notes
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 

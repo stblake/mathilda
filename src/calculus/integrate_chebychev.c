@@ -512,7 +512,7 @@ Expr* builtin_integrate_chebychev(Expr* res) {
 void integrate_chebychev_init(void) {
     symtab_add_builtin("Integrate`ChebychevAlgebraic", builtin_integrate_chebychev);
     symtab_get_def("Integrate`ChebychevAlgebraic")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`ChebychevAlgebraic",
         "Integrate`ChebychevAlgebraic[f, x] integrates a Chebychev binomial\n"
         "differential x^p (a x^r + b)^q (p, q, r rational, a, b free of x). By\n"

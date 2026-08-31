@@ -142,7 +142,7 @@ typedef struct { PMSubEntry* items; size_t n; } PMSubMap;
 demand as `List[Rule[lhs, rhs], ...]` for `ReplaceAll` calls.
 
 **Acceptance.** Unit tests for each helper via temporary
-`Integrate\`Helpers\`PM*` testable surfaces (gated `ATTR_READPROTECTED`):
+`Integrate\`Helpers\`PM*` testable surfaces:
 `PMConvertToTan[Sin[x]+Cos[x], x]` returns the expected `2T/(1+T²) + (1-T²)/(1+T²)`
 form; cardinality of indets is 4 for `Exp[Sin[x]]`; subst maps round-trip
 (`subs[lout, subs[lin, ff]] == ff` for several test inputs).

@@ -164,7 +164,7 @@ Before invoking `HermiteReduce`, check whether the integrand has the form `c · 
 - `ExtendedEuclidean[a, b, c, x]` (Diophantine) — exactly mirrors the Mathematica function in `IntegrateRational.m:1203-1210`, using `PolynomialExtendedGCD` then `PolynomialQuotientRemainder` of `q*t` mod `b`.
 - `HermiteReduce[f, x]` — direct port of `IntegrateRational.m:1303-1323`.
 
-**Attributes:** All new builtins get `ATTR_PROTECTED | ATTR_READPROTECTED`. Set docstrings via `symtab_set_docstring`.
+**Attributes:** All new builtins get `ATTR_PROTECTED`. Set docstrings via `symtab_set_docstring`.
 
 **Tests:** ~12 cases — pure polynomial, simple `1/(x-a)`, `1/(x-a)^2`, the four `HermiteReduce` cases lifted from `IntegrateRational.m:1331-1358`. Verification: `D[Integrate[f,x], x] - f // Together // Cancel === 0`.
 

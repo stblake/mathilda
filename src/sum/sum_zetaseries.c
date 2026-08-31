@@ -227,7 +227,7 @@ Expr* builtin_sum_zetaseries(Expr* res) {
 
 void sum_zetaseries_init(void) {
     symtab_add_builtin("Sum`ZetaSeries", builtin_sum_zetaseries);
-    symtab_get_def("Sum`ZetaSeries")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`ZetaSeries")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`ZetaSeries",
         "Sum`ZetaSeries[f, i, k0, Infinity] evaluates sums of c[i](Zeta[a i+b]-1) "
         "by interchanging the order of summation into a rational sum over the "

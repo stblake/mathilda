@@ -2250,10 +2250,10 @@ IntegrateTable[x_^(-p_ + 1) BesselI[p_, x_], x_] /; FreeQ[p, x] := x^(-p + 1) Be
 IntegrateTable[BesselI[1, x_], x_] := BesselI[0, x];
 IntegrateTable[x_ BesselI[0, x_], x_] := x BesselI[1, x];
 
-SetAttributes[IntegrateTable, {Protected, ReadProtected}];
+SetAttributes[IntegrateTable, {Protected}];
 
 (* Public wrapper.  The C dispatcher treats either head
    (Integrate`CRCTable or IntegrateTable) as a "no rule matched" signal. *)
 Integrate`CRCTable[f_, x_] := IntegrateTable[f, x];
-SetAttributes[Integrate`CRCTable, {Protected, ReadProtected}];
+SetAttributes[Integrate`CRCTable, {Protected}];
 

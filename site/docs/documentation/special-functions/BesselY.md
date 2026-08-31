@@ -51,7 +51,7 @@ Out[7]= 0.127323954473516268615107010698
 
 ## Implementation notes
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 

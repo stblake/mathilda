@@ -1794,7 +1794,7 @@ Expr* builtin_integrate_ratlogpow(Expr* res) {
 void integrate_ramanujan_init(void) {
     symtab_add_builtin("Integrate`SinPowerMonomial", builtin_integrate_sinpowmono);
     symtab_get_def("Integrate`SinPowerMonomial")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`SinPowerMonomial",
         "Integrate`SinPowerMonomial[f, {x, 0, Infinity}] evaluates Sin[r x]^k / "
         "x^m over the half line (the ssp family): TrigReduce lowers the power to "
@@ -1805,7 +1805,7 @@ void integrate_ramanujan_init(void) {
 
     symtab_add_builtin("Integrate`RationalLog", builtin_integrate_ratlogpow);
     symtab_get_def("Integrate`RationalLog")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`RationalLog",
         "Integrate`RationalLog[f, {x, 0, Infinity}] evaluates R(x) Log[x]^n over "
         "the half line for a proper rational R whose poles all lie on the "
@@ -1817,7 +1817,7 @@ void integrate_ramanujan_init(void) {
 
     symtab_add_builtin("Integrate`OscillatoryPower", builtin_integrate_oscpower);
     symtab_get_def("Integrate`OscillatoryPower")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`OscillatoryPower",
         "Integrate`OscillatoryPower[f, {x, 0, Infinity}] evaluates the Fresnel-"
         "type oscillatory integrals Cos[b x^n] and Sin[b x^n] over the half line "
@@ -1829,7 +1829,7 @@ void integrate_ramanujan_init(void) {
     symtab_add_builtin("Integrate`RamanujanMasterTheorem",
                        builtin_integrate_ramanujan);
     symtab_get_def("Integrate`RamanujanMasterTheorem")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`RamanujanMasterTheorem",
         "Integrate`RamanujanMasterTheorem[f, {x, 0, Infinity}] evaluates a "
         "half-line definite integral by the Mellin-transform / Ramanujan Master "

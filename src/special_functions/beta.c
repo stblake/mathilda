@@ -294,6 +294,6 @@ Expr* builtin_beta(Expr* res) {
 void beta_init(void) {
     symtab_add_builtin("Beta", builtin_beta);
     symtab_get_def("Beta")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     /* Docstring lives in info.c (info_init). */
 }

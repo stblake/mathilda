@@ -113,7 +113,7 @@ Expr* builtin_product_cantor(Expr* res) {
 
 void product_cantor_init(void) {
     symtab_add_builtin("Product`Cantor", builtin_product_cantor);
-    symtab_get_def("Product`Cantor")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`Cantor")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`Cantor",
         "Product`Cantor[f, i, imin, Infinity] evaluates double-exponential "
         "(Cantor) products prod (1 + x^(2^i)) with |x|<1 via 1/(1 - x^(2^i(imin))). "

@@ -101,7 +101,7 @@ static Expr* builtin_dsolve_bernoulli(Expr* res) {
 
 void dsolve_bernoulli_init(void) {
     symtab_add_builtin("DSolve`Bernoulli", builtin_dsolve_bernoulli);
-    symtab_get_def("DSolve`Bernoulli")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`Bernoulli")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`Bernoulli",
         "DSolve`Bernoulli[eqn, y, x] solves y'[x] == A(x) y + B(x) y^n (n != 0, 1) "
         "via the substitution v = y^(1-n), which linearises the equation.");

@@ -2763,9 +2763,8 @@ static bool pm_walk_into_qmb(const Expr* big, QMatBuild* M,
  *
  * Generation uses an LCG seeded with the user `seed`, so failures
  * reproduce with the same arguments.  Returns True on success,
- * False on any check failure or allocation failure.  Hidden under
- * ATTR_READPROTECTED, registered in intrischnorman_init for use by
- * tests/test_intrischnorman.c. */
+ * False on any check failure or allocation failure.  Registered in
+ * intrischnorman_init for use by tests/test_intrischnorman.c. */
 static Expr* builtin_pm_qmb_stress(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION
         || res->data.function.arg_count != 5) return NULL;
@@ -4402,7 +4401,7 @@ Expr* builtin_rischnorman(Expr* res) {
 
 static void install(const char* name, Expr* (*fn)(Expr*), const char* docstring) {
     symtab_add_builtin(name, fn);
-    symtab_get_def(name)->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def(name)->attributes |= ATTR_PROTECTED;
     if (docstring) symtab_set_docstring(name, docstring);
 }
 

@@ -391,7 +391,7 @@ Expr* builtin_integrate_linratiorad(Expr* res) {
 void integrate_linratiorad_init(void) {
     symtab_add_builtin("Integrate`LinearRatioRadicals", builtin_integrate_linratiorad);
     symtab_get_def("Integrate`LinearRatioRadicals")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`LinearRatioRadicals",
         "Integrate`LinearRatioRadicals[f, x] integrates a rational function of x\n"
         "and radicals ((a x + b)/(c x + d))^(m/n) sharing one linear-fractional\n"

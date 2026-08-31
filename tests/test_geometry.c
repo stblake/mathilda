@@ -105,8 +105,8 @@ static void test_convex_hull(void) {
 /* ---- Composition + attributes (AC-22, AC-23) ---- */
 static void test_composition_and_attributes(void) {
     geo_check("Area[ConvexHullRegion[{{0,0},{2,0},{1,0},{2,2},{0,2},{1,1}}]]", "4"); /* AC-22 */
-    geo_check("Attributes[Area]", "{Protected, ReadProtected}");                     /* AC-23 */
-    geo_check("Attributes[ConvexHullRegion]", "{Protected, ReadProtected}");
+    geo_check("Attributes[Area]", "{Protected}");                     /* AC-23 */
+    geo_check("Attributes[ConvexHullRegion]", "{Protected}");
 }
 
 /* ---- Decline paths: out-of-scope input stays unevaluated (AC-21 shape) ---- */

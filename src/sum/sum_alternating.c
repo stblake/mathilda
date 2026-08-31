@@ -231,7 +231,7 @@ Expr* builtin_sum_alternating(Expr* res) {
 
 void sum_alternating_init(void) {
     symtab_add_builtin("Sum`Alternating", builtin_sum_alternating);
-    symtab_get_def("Sum`Alternating")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`Alternating")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`Alternating",
         "Sum`Alternating[f, k, imin, Infinity] gives the closed form of an "
         "infinite alternating rational sum sigma (-1)^k R(k) with R rational, via "

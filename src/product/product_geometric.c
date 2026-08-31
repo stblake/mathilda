@@ -162,7 +162,7 @@ Expr* builtin_product_geometric(Expr* res) {
 
 void product_geometric_init(void) {
     symtab_add_builtin("Product`Geometric", builtin_product_geometric);
-    symtab_get_def("Product`Geometric")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`Geometric")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`Geometric",
         "Product`Geometric[f, i, imin, imax] evaluates products containing "
         "base^(p(i)) factors (base free of i) by routing the exponent through "

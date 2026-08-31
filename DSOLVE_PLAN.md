@@ -28,10 +28,15 @@ family.
 Each method file exposes the three-function contract:
 `dsolve_<m>_try(P, &nbranch)` (cascade routine, returns branch bodies or NULL),
 `builtin_dsolve_<m>(res)` (REPL entry, via `dsolve_method_builtin`), and
-`dsolve_<m>_init()` (registers `DSolve`<Name>` with `ATTR_HOLDALL |
-ATTR_PROTECTED | ATTR_READPROTECTED` + docstring; chained from `dsolve_init`).
+`dsolve_<m>_init()` (registers `DSolve`<Name>` with
+`ATTR_PROTECTED` + docstring; chained from `dsolve_init`).
 
-`DSolve` is **HoldAll** (equations and conditions must stay formal); the parser
+`DSolve` is **not** `HoldAll` (attributes `Protected`, matching
+Mathematica): with the dependent function undefined, a symbolic equation
+(`y'[x] == a Sin[x]`) and its point conditions (`y[0] == 5`) evaluate to
+unevaluated `Equal[...]` on their own, so they reach the solver formal without
+holding — and an equation stored in a variable (`eq = …; DSolve[eq, y, x]`) is
+solved rather than declined. The parser
 folds any `D[...]` into `Derivative[...]`, splits equations from point
 conditions, detects the output form (`u` → `Function`, `u[x]` → expression), and
 parses the options `GeneratedParameters` (default `C`), `Assumptions`, `Method`,
@@ -64,16 +69,25 @@ Eigenvectors/JordanDecomposition` (systems), `Series`/`SeriesData` (Frobenius),
   substrate into shared helpers `dsolve_linear_coeffs`, `dsolve_analyze_roots`,
   `dsolve_variation_of_parameters` (used by both const-coeff and Euler). Still to
   do: reduction of order, normal form, special-function recognizer table.
-- **M4 — systems (1e).** ✅ DONE (systems half). `LinearFirstOrderSystem`
+- **M4 — systems (1e) + nonlinear higher-order (1d).** ✅ DONE. `LinearFirstOrderSystem`
   (constant-coefficient, eigen-based, real + complex eigenvalues, constant
   forcing) and `DecoupleSystem`; multi-function verify/fit/assemble added to the
-  substrate; the `nfun>1` dispatch route added. Nonlinear higher-order (1d) still
-  open.
+  substrate; the `nfun>1` dispatch route added. Nonlinear higher-order (1d):
+  `ReductionOfOrder` (2nd-order missing y) and `AutonomousReduction` (2nd-order
+  missing x, two-stage recursion) both done; `EnergyIntegral` subsumed by the
+  latter for elementary cases.
 - **M5** — Kovacic / Frobenius / operator factoring / eigenvalue problems.
 - **M6 — Phase 2 PDEs.** STARTED. First-order linear constant-coefficient PDE
   (method of characteristics) done — transport, `3u_x+5u_y==x`, `u_x+3u_y+u==1`.
   The `is_pde` dispatch route + PDE verify/assemble (2-variable `Function`) added.
   Quasilinear/nonlinear first-order and 2nd-order (wave/heat) still to do.
+- **M7 — first-order substitution + attribute cleanup.** ✅ DONE.
+  `DSolve`FirstOrderSubstitution` (`y'==F(a x + b y + c)`, completing the 1a
+  first-order family bar Riccati/Lagrange/Abel/Chini) and `AutonomousReduction`
+  (1d, above). `DSolve` and every `DSolve`<Method>` are now `Protected` only:
+  `HoldAll` was dropped (equations survive evaluation as formal `Equal[...]`, so an
+  equation held in a variable now solves), and `ReadProtected` was removed
+  system-wide (Mathilda is fully open source).
 
 ## Phase 1 — ODE method catalog
 
@@ -91,7 +105,9 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 - `[ ] Riccati` — `y'==q0+q1 y+q2 y^2`: reduce to 2nd-order linear (needs the M2/M3 linear engine; may branch).
 - `[ ] Lagrange` (d'Alembert) — `y==x f(y')+g(y')`.
 - `[ ] Abel` / `[ ] Chini` — implicit solutions via `Solve`.
-- `[ ] FirstOrderSubstitution` — `y'==F(ax+by+c)` and related heuristic substitutions.
+- `[✓] FirstOrderSubstitution` — `y'==F(a x + b y + c)`: detect the constant ratio
+  `r = F_x/F_y`, substitute `v = y + r x` → autonomous separable `v'==r+H(v)`,
+  solved inline; declines (stays symbolic) when the antiderivative does not invert.
 
 ### 1b. Linear constant-coefficient
 - `[✓] LinearConstantCoefficients` — one method for homogeneous + inhomogeneous.
@@ -129,8 +145,13 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   p=y' (recurse into the scalar engine), then `y=∫p dx + C[2]`. Guards against a
   wrong `Integrate` antiderivative (requires `D[∫p]==p`) so it declines instead of
   shipping a degenerate `y=const`. Solves `y''==(y')^2 → C[2]-Log[C[1]-x]`.
-- `[ ] AutonomousReduction` — `y''==f(y,y')` missing `x`: `p=y'(y)`.
-- `[ ] EnergyIntegral` — `y''==f(y)`: `(y')^2=2∫f dy`; elliptic / `WeierstrassP` (inert).
+- `[✓] AutonomousReduction` — `y''==f(y,y')` missing `x`: `p=y'(y)`, `p p'(y)==f`
+  (recurse), then `y'==p(y)` separable (recurse), constants renumbered across the
+  two stages; final body required to depend on `x` (rejects the degenerate
+  `y=const` that trivially back-substitutes). Solves `y y''==(y')^2 → C[2] E^(C[1] x)`.
+- `[~] EnergyIntegral` — `y''==f(y)`: subsumed by AutonomousReduction for the
+  elementary cases (`f` free of `y'` is a special case); genuinely elliptic ones
+  (`y''==2y^3`, `y''==-Sin[y]`) still decline (`WeierstrassP` inert head: future).
 
 ### 1e. Systems
 - `[✓] LinearFirstOrderSystem` — `Y' == A Y + b`, constant A: eigen-decomposition

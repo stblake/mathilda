@@ -158,7 +158,7 @@ static Expr* builtin_dsolve_constcoeff(Expr* res) {
 void dsolve_constcoeff_init(void) {
     symtab_add_builtin("DSolve`LinearConstantCoefficients", builtin_dsolve_constcoeff);
     symtab_get_def("DSolve`LinearConstantCoefficients")->attributes
-        |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+        |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`LinearConstantCoefficients",
         "DSolve`LinearConstantCoefficients[eqn, y, x] solves a_n y^(n) + ... + a_0 y "
         "== g(x) with constant a_k via the characteristic polynomial (complex roots "

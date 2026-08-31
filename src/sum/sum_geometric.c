@@ -328,7 +328,7 @@ Expr* builtin_sum_geometric(Expr* res) {
 
 void sum_geometric_init(void) {
     symtab_add_builtin("Sum`Geometric", builtin_sum_geometric);
-    symtab_get_def("Sum`Geometric")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`Geometric")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`Geometric",
         "Sum`Geometric[f, i] gives the indefinite sum of f = p(i) r^i where p is "
         "a polynomial in i and r is free of i; Sum`Geometric[f, i, imin, imax] "

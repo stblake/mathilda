@@ -1417,5 +1417,5 @@ void facint_init(void) {
     /* PrimePi is registered in numbertheory_init() (src/numbertheory/prime.c). */
     symtab_get_def("FactorInteger")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("EulerPhi")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
-    symtab_get_def("NextPrime")->attributes |= (ATTR_PROTECTED | ATTR_READPROTECTED | ATTR_LISTABLE);
+    symtab_get_def("NextPrime")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
 }

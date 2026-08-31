@@ -5,7 +5,7 @@ Wolfram Language 12 semantics (every example below is locked to a live Wolfram
 kernel reference output, 2026-08-27; ticket GEO-1). Implemented in
 `src/geometry.c`; registered by `geometry_init()`.
 
-All five heads have attributes `{Protected, ReadProtected}` (WL-faithful) and
+All five heads have attributes `{Protected}` (WL-faithful) and
 are deliberately **not** `Listable` — they are structural, not element-wise.
 
 Two computation paths, chosen per call:

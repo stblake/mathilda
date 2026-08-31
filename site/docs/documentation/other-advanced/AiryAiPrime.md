@@ -91,11 +91,11 @@ AiryAiPrime[z] = Ai'(z) is a full numeric evaluator in its own right: because
 
 same Maclaurin / asymptotic / connection machinery and simply selects the derivative component. Its exact values are AiryAiPrime[0] = -1/(3^(1/3) Gamma[1/3]) and AiryAiPrime[+Infinity] = 0; at -Infinity Ai' has no limit (oscillation with growing ~|z|^(1/4) amplitude) and is left unevaluated.
 
-Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
+Attributes (both heads): Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 

@@ -2759,10 +2759,10 @@ void deriv_init(void) {
     symtab_add_builtin("Derivative", builtin_derivative);
 
     /* Match the original deriv.m attribute set:
-     *     SetAttributes[D, {Protected, ReadProtected}]
-     *     SetAttributes[Dt, {Protected, ReadProtected}]
-     *     SetAttributes[Derivative, {Protected, ReadProtected}] */
-    symtab_get_def("D")->attributes          |= ATTR_PROTECTED | ATTR_READPROTECTED;
-    symtab_get_def("Dt")->attributes         |= ATTR_PROTECTED | ATTR_READPROTECTED;
-    symtab_get_def("Derivative")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+     *     SetAttributes[D, {Protected}]
+     *     SetAttributes[Dt, {Protected}]
+     *     SetAttributes[Derivative, {Protected}] */
+    symtab_get_def("D")->attributes          |= ATTR_PROTECTED;
+    symtab_get_def("Dt")->attributes         |= ATTR_PROTECTED;
+    symtab_get_def("Derivative")->attributes |= ATTR_PROTECTED;
 }

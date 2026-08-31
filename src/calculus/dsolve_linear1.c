@@ -63,7 +63,7 @@ static Expr* builtin_dsolve_linear1(Expr* res) {
 
 void dsolve_linear1_init(void) {
     symtab_add_builtin("DSolve`LinearFirstOrder", builtin_dsolve_linear1);
-    symtab_get_def("DSolve`LinearFirstOrder")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`LinearFirstOrder")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`LinearFirstOrder",
         "DSolve`LinearFirstOrder[eqn, y, x] solves y'[x] + p(x) y[x] == q(x) via "
         "the integrating factor Exp[Integrate[p, x]].");

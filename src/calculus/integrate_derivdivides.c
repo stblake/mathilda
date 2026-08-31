@@ -587,7 +587,7 @@ Expr* builtin_integrate_derivdivides(Expr* res) {
 void integrate_derivdivides_init(void) {
     symtab_add_builtin("Integrate`DerivativeDivides", builtin_integrate_derivdivides);
     symtab_get_def("Integrate`DerivativeDivides")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`DerivativeDivides",
         "Integrate`DerivativeDivides[f, x] integrates by substitution: it finds a\n"
         "kernel u(x) whose derivative divides f, reduces to Integrate[h[u], u],\n"

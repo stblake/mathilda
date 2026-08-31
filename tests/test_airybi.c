@@ -364,14 +364,12 @@ void test_airybi_attributes() {
     ASSERT_MSG((d->attributes & ATTR_LISTABLE) != 0, "AiryBi not Listable");
     ASSERT_MSG((d->attributes & ATTR_NUMERICFUNCTION) != 0, "AiryBi not NumericFunction");
     ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "AiryBi not Protected");
-    ASSERT_MSG((d->attributes & ATTR_READPROTECTED) != 0, "AiryBi not ReadProtected");
 
     SymbolDef* p = symtab_get_def("AiryBiPrime");
     ASSERT_MSG(p != NULL, "AiryBiPrime not registered");
     ASSERT_MSG((p->attributes & ATTR_LISTABLE) != 0, "AiryBiPrime not Listable");
     ASSERT_MSG((p->attributes & ATTR_NUMERICFUNCTION) != 0, "AiryBiPrime not NumericFunction");
     ASSERT_MSG((p->attributes & ATTR_PROTECTED) != 0, "AiryBiPrime not Protected");
-    ASSERT_MSG((p->attributes & ATTR_READPROTECTED) != 0, "AiryBiPrime not ReadProtected");
 }
 
 int main() {

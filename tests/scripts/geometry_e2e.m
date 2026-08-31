@@ -41,7 +41,7 @@ check[ConvexHullRegion[{{0,0},{1,1},{2,2},{3,3}}], "Line[{{0, 0}, {3, 3}}]"];
 check[ConvexHullRegion[{{1,2}}], "Point[{1, 2}]"];
 check[Area[Polygon[{{0,0},{a,0},{0,1}}]], "Area[Polygon[{{0, 0}, {a, 0}, {0, 1}}]]"];
 check[Area[ConvexHullRegion[{{0,0},{2,0},{1,0},{2,2},{0,2},{1,1}}]], "4"];
-check[Attributes[Area], "{Protected, ReadProtected}"];
+check[Attributes[Area], "{Protected}"];
 check[ConvexHullRegion[NDArray[{{0.,0.},{2.,0.},{2.,2.},{0.,2.},{1.,1.}}]], "Polygon[{{0.0, 0.0}, {2.0, 0.0}, {2.0, 2.0}, {0.0, 2.0}}]"];
 check[Area[Polygon[NDArray[{{0.,0.},{2.,0.},{2.,2.},{0.,2.}}]]], "4.0"];
 

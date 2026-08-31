@@ -87,7 +87,7 @@ static Expr* builtin_dsolve_clairaut(Expr* res) {
 
 void dsolve_clairaut_init(void) {
     symtab_add_builtin("DSolve`Clairaut", builtin_dsolve_clairaut);
-    symtab_get_def("DSolve`Clairaut")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`Clairaut")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`Clairaut",
         "DSolve`Clairaut[eqn, y, x] solves y == x y' + f(y'); the general solution "
         "is y = C[1] x + f(C[1]).  With IncludeSingularSolutions -> True the singular "

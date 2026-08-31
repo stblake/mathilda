@@ -116,11 +116,11 @@ AiryBiPrime[z] = Bi'(z) is a full numeric evaluator in its own right: because
 
 same Maclaurin / asymptotic / connection machinery and simply selects the derivative component. Its exact values are AiryBiPrime[0] = 3^(1/6)/Gamma[1/3] and AiryBiPrime[+Infinity] = Infinity (Bi' is the dominant, growing solution); at -Infinity Bi' has no limit (oscillation with growing ~|z|^(1/4) amplitude) and is left unevaluated.
 
-Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
+Attributes (both heads): Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 

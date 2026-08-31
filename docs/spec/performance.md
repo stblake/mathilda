@@ -127,7 +127,7 @@ value.
 
 **Integration:**
 * Registered under `Limit` with attributes
-  `Protected | ReadProtected | HoldAll`. `HoldAll` prevents the
+  `Protected | HoldAll`. `HoldAll` prevents the
   second-argument rule from being evaluated prematurely against any
   OwnValue of the limit variable.
 * Documented via `symtab_set_docstring` for `?Limit` in the REPL.

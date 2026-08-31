@@ -91,7 +91,7 @@ Expr* builtin_product_viete(Expr* res) {
 
 void product_viete_init(void) {
     symtab_add_builtin("Product`Viete", builtin_product_viete);
-    symtab_get_def("Product`Viete")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`Viete")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`Viete",
         "Product`Viete[f, i, imin, Infinity] evaluates Viete-type cosine "
         "products prod Cos[a(i)] whose angle halves each step "

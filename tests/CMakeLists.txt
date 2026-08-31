@@ -700,6 +700,8 @@ set(COMMON_SRC
     ../src/calculus/dsolve_euler.c
     ../src/calculus/dsolve_specialform.c
     ../src/calculus/dsolve_reduce_order.c
+    ../src/calculus/dsolve_fos.c
+    ../src/calculus/dsolve_autonomous.c
     ../src/calculus/dsolve_pde1.c
     ../src/calculus/dsolve_decouple.c
     ../src/calculus/dsolve_linsys.c

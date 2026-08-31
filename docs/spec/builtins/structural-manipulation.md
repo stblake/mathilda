@@ -506,7 +506,7 @@ Gives a sorted list of all distinct elements from one or more expressions.
 - `Union[..., SameTest -> test]`
 
 **Features**:
-- `Flat`, `OneIdentity`, `Protected`, `ReadProtected`.
+- `Flat`, `OneIdentity`, `Protected`.
 - All expressions must have the same head.
 - Result has the same head as the inputs.
 

@@ -43,7 +43,7 @@ Partial derivative.
   preserve their own NonConstants list).
 
 **Features**:
-- `Protected`, `ReadProtected`.
+- `Protected`.
 - Recognises the elementary heads `Plus`, `Times`, `Power`, `Sqrt`,
   `Exp`, `Log`, `Log[b, f]`, all six trig heads and their inverses,
   all six hyperbolic heads and their inverses, and threads
@@ -141,7 +141,7 @@ Total derivative.
   form and stays unevaluated.
 
 **Features**:
-- `Protected`, `ReadProtected`.
+- `Protected`.
 - Shares the elementary-function derivative table with `D`; the
   only dispatch difference is the base-case handling of symbols
   (free symbols become `Dt[s, x]` factors instead of `0`).
@@ -171,7 +171,7 @@ Higher-order derivative operator; represents the symbolic object
 of a `k`-argument function `f`).
 
 **Features**:
-- `Protected`, `ReadProtected`.
+- `Protected`.
 - Acts primarily as a tag carried through the differentiation
   pipeline: `D` and `Dt` produce `Derivative[...]` heads for
   unknown functions and advance their indices when differentiating
@@ -296,7 +296,7 @@ Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
 `Limit[f, {x1, ...} -> {a1, ...}]` the joint multivariate limit.
 
 **Features**:
-- `Protected`, `ReadProtected` (matches Mathematica; `Limit` does *not*
+- `Protected` (matches Mathematica; `Limit` does *not*
   hold its arguments, so `Limit[%, x -> Infinity]` sees the evaluated `f`).
 - Options: `Direction -> Automatic`, `Assumptions -> Automatic`,
   `Method -> Automatic`.
@@ -476,7 +476,7 @@ Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
   `Limit`RationalFunction`, `Limit`Asymptotic`, `Limit`Bounded`,
   `Limit`Series`, `Limit`LHospital`, `Limit`Gruntz` and `Limit`Oscillatory`,
   each with its own `Information` string and the attributes
-  `{Protected, ReadProtected}`.  The two positional arguments and every other
+  `{Protected}`.  The two positional arguments and every other
   option (`Direction`, `Assumptions`) are forwarded untouched; a `Method`
   option is dropped, since the head already names the method.  An abstention
   echoes the head the user asked for
@@ -649,9 +649,11 @@ them. `GeneratedParameters -> f` renames the constants to `f[k]`.
 Like `Integrate`, `DSolve` is a **cascade polyalgorithm**: it tries a sequence
 of methods, and `DSolve[eqn, y, x, Method -> "<name>"]` dispatches directly to a
 single one (strict, no fallback). Each method is also callable as
-`DSolve`<Method>[...]`. It is `HoldAll` (so equations and conditions stay
-formal); every returned branch is verified by back-substitution before it is
-returned.
+`DSolve`<Method>[...]`. Its attributes are `Protected` (not
+`HoldAll`): with the dependent function undefined the equation and its point
+conditions evaluate to formal `Equal[...]` on their own, so an equation held in a
+variable is solved rather than declined. Every returned branch is verified by
+back-substitution before it is returned.
 
 Methods implemented so far (first-order family; see `DSOLVE_PLAN.md` for the full
 roadmap):
@@ -668,6 +670,9 @@ roadmap):
 | `DSolve`LinearConstantCoefficients` | `a_n y^(n)+…+a_0 y == g(x)` (char. polynomial + variation of parameters) |
 | `DSolve`EulerCauchy` | `a_n x^n y^(n)+…+a_0 y == g(x)` (indicial polynomial, trial `x^r`) |
 | `DSolve`SpecialFunctionForm` | 2nd-order forms → Airy (`y''==(Ax+B)y`) and Bessel / modified Bessel |
+| `DSolve`FirstOrderSubstitution` | `y'[x] == F(a x + b y + c)` (substitution `v = y + (F_x/F_y) x` → autonomous separable) |
+| `DSolve`ReductionOfOrder` | 2nd-order missing `y`, `y'' == F(x, y')` (reduce to 1st order in `p = y'`, then integrate) |
+| `DSolve`AutonomousReduction` | 2nd-order missing `x`, `y'' == f(y, y')` (`p = y'(y)`, `p p'(y) == f`, then `y' == p(y)`) |
 
 ```
 In[5]:= DSolve[y''[x] + 4 y'[x] + 5 y[x] == 0, y[x], x]
@@ -689,6 +694,12 @@ Out[9]= {{y[x] -> C[1] AiryAi[x] + C[2] AiryBi[x]}}
 
 In[10]:= DSolve[x^2 y''[x] + x y'[x] + (x^2 - 4) y[x] == 0, y[x], x]  (* Bessel *)
 Out[10]= {{y[x] -> C[1] BesselJ[2, x] + C[2] BesselY[2, x]}}
+
+In[11]:= DSolve[y'[x] == (x + y[x])^2, y[x], x]   (* first-order substitution *)
+Out[11]= {{y[x] -> -x - Tan[-C[1] - x]}}
+
+In[12]:= DSolve[y[x] y''[x] == y'[x]^2, y[x], x]  (* 2nd-order autonomous, nonlinear *)
+Out[12]= {{y[x] -> C[1] E^(C[2] x)}}
 
 In[11]:= DSolve[{y'[x] == y[x] - 2 z[x], z'[x] == y[x] - z[x],
                  y[0] == 1, z[0] == 4}, {y[x], z[x]}, x]  (* system, complex eigenvalues *)
@@ -1908,8 +1919,7 @@ The `Integrate`` package also exposes the lower-level helpers
 Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
 `...`SquareFree`, `...`ExtractConstants`, `...`ApartList`.  All are
-`Protected`; the BronsteinRational helpers additionally have
-`ReadProtected`.
+`Protected`.
 
 ### Integrate`CRCTable
 
@@ -1961,7 +1971,7 @@ for perfect powers (`Integrate[Log[f] f'/f, x] = Log[f]^2/2`).  The stage
 is gated to only run when `f` contains an undefined-function derivative or
 such a logarithm; genuinely non-elementary integrands (e.g. `f'[x] g'[x]`,
 `f'[x]^2`) are left unevaluated, with a cycle guard preventing the by-parts
-recursion from looping.  `Protected`, `ReadProtected`.
+recursion from looping.  `Protected`.
 
 Known limitations: transcendental generators other than `Log` (e.g.
 `ArcTan[eta]`, `Exp[eta]` with `eta` containing an unknown function) are
@@ -2038,8 +2048,7 @@ breaks circular substitution chains and collapses overlapping subproblems that
 would otherwise fan out exponentially (e.g. `Integrate[x Sin[x^2], x]`); the
 **outermost-only** restriction on the Eliminate/Solve search above; and a hard
 depth backstop (8) with per-call fresh substitution symbols.  Strict: returns
-unevaluated when no substitution closes the integral.  `Protected`,
-`ReadProtected`.
+unevaluated when no substitution closes the integral.  `Protected`.
 
 Known limitations: kernels must appear **literally** in `f` (so `Tan[x]`,
 which Mathilda keeps atomic rather than `Sin[x]/Cos[x]`, exposes no `Cos[x]`
@@ -2101,7 +2110,7 @@ symbolic parameters, non-terminating — `PossibleZeroQ`/`Simplify` over the
 symbolic-radical residue.)  A depth guard (8) and per-call fresh substitution
 symbols keep the recursion finite and collision-free.  Strict: returns
 unevaluated when `f` is not of this form or the reduced integral does not close.
-`Protected`, `ReadProtected`.
+`Protected`.
 
 ```mathematica
 In[1]:= Integrate[1/Sqrt[x + 1], x]
@@ -2153,7 +2162,7 @@ is **not** put through a `Simplify[D[result, x] - f] === 0` gate — it is corre
 by construction once the rational sub-integral closes.  A depth guard (8) and
 fresh per-call substitution symbols keep the recursion finite.  Strict: returns
 unevaluated when `f` is not of this form or the reduced integral does not close.
-`Protected`, `ReadProtected`.
+`Protected`.
 
 ```mathematica
 In[1]:= Integrate[1/Sqrt[x^2 + 1], x]
@@ -2206,7 +2215,7 @@ the result is **not** put through a `Simplify[D[result, x] - f] === 0` gate — 
 is correct by construction once the rational sub-integral closes.  A depth guard
 (8) and fresh per-call substitution symbols keep the recursion finite.  Strict:
 returns unevaluated when `f` is not of this form or the reduced integral does
-not close.  `Protected`, `ReadProtected`.
+not close.  `Protected`.
 
 ```mathematica
 In[1]:= Integrate[1/Sqrt[(x + 1)/(x - 1)], x]
@@ -2252,7 +2261,7 @@ polynomial trig such as `Integrate[Sin[x], x]` keeps its cleaner table form; the
 explicit `Method -> "Weierstrass"` has no such gate.  Strict: returns unevaluated
 when `f` is not a rational function of the trig/hyperbolic kernels of `x` (e.g.
 `x` outside a kernel, a kernel of a nonlinear argument, mixed trig + hyperbolic,
-or a radical of a kernel).  `Protected`, `ReadProtected`.
+or a radical of a kernel).  `Protected`.
 
 ```mathematica
 In[1]:= Integrate[3/(5 - 4 Cos[x]), x]               (* paper eq. (10) *)

@@ -239,7 +239,7 @@ Expr* builtin_sum_dirichlet(Expr* res) {
 
 void sum_dirichlet_init(void) {
     symtab_add_builtin("Sum`Dirichlet", builtin_sum_dirichlet);
-    symtab_get_def("Sum`Dirichlet")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`Dirichlet")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`Dirichlet",
         "Sum`Dirichlet[f, i, 1, Infinity] evaluates Dirichlet series Sum[g[i]/i^s] "
         "for arithmetic functions g (MoebiusMu, LiouvilleLambda, EulerPhi, "

@@ -245,7 +245,7 @@ Expr* builtin_integrate_symmetry(Expr* res) {
 void integrate_symmetry_init(void) {
     symtab_add_builtin("Integrate`Symmetry", builtin_integrate_symmetry);
     symtab_get_def("Integrate`Symmetry")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`Symmetry",
         "Integrate`Symmetry[f, {x, a, b}] evaluates a definite integral over an "
         "interval symmetric about the origin by parity: an odd integrand "

@@ -3982,7 +3982,7 @@ static Expr* builtin_intrat_ei_resultant(Expr* res) {
 
 static void install(const char* name, Expr* (*fn)(Expr*), const char* docstring) {
     symtab_add_builtin(name, fn);
-    symtab_get_def(name)->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def(name)->attributes |= ATTR_PROTECTED;
     if (docstring) symtab_set_docstring(name, docstring);
 }
 

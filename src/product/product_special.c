@@ -71,7 +71,7 @@ Expr* builtin_product_special(Expr* res) {
 
 void product_special_init(void) {
     symtab_add_builtin("Product`Special", builtin_product_special);
-    symtab_get_def("Product`Special")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`Special")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`Special",
         "Product`Special[f, i, imin, imax] recognises named special-function "
         "products: prod i^i = Hyperfactorial, prod Gamma[i] = BarnesG. Returns "

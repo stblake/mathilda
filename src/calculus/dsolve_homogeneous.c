@@ -67,7 +67,7 @@ static Expr* builtin_dsolve_homogeneous(Expr* res) {
 
 void dsolve_homogeneous_init(void) {
     symtab_add_builtin("DSolve`Homogeneous", builtin_dsolve_homogeneous);
-    symtab_get_def("DSolve`Homogeneous")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`Homogeneous")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`Homogeneous",
         "DSolve`Homogeneous[eqn, y, x] solves y'[x] == F(y/x) via the substitution "
         "y = v x, which separates variables in v and x.");

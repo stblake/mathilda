@@ -31,7 +31,7 @@
  * D[ProductLog[z], z] = ProductLog[z] / (z (1 + ProductLog[z]))  (calculus/deriv.c).
  * Series at 0, at the branch point -1/E, and at Infinity live in calculus/series.c.
  *
- * Attributes: Listable, NumericFunction, Protected, ReadProtected.
+ * Attributes: Listable, NumericFunction, Protected.
  */
 #include "productlog.h"
 #include "sym_names.h"
@@ -457,6 +457,6 @@ Expr* builtin_productlog(Expr* res) {
 void productlog_init(void) {
     symtab_add_builtin("ProductLog", builtin_productlog);
     symtab_get_def("ProductLog")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     /* Docstring lives in info.c (info_init). */
 }

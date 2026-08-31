@@ -469,7 +469,7 @@ Out[3]= {4, 25}
 - `NextPrime[x, k]`: $k$-th next prime above `x` (or previous if $k$ is negative).
 
 **Features**:
-- `Protected`, `ReadProtected`.
+- `Protected`.
 - Supports negative $k$ for finding previous primes.
 - Remains unevaluated if no such prime exists (e.g., `NextPrime[2, -1]`).
 

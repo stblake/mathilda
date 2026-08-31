@@ -664,8 +664,7 @@ The `Integrate`` package also exposes the lower-level helpers
 Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
 `...`SquareFree`, `...`ExtractConstants`, `...`ApartList`.  All are
-`Protected`; the BronsteinRational helpers additionally have
-`ReadProtected`.
+`Protected`.
 
 ### Integrate`CRCTable
 
@@ -717,7 +716,7 @@ for perfect powers (`Integrate[Log[f] f'/f, x] = Log[f]^2/2`).  The stage
 is gated to only run when `f` contains an undefined-function derivative or
 such a logarithm; genuinely non-elementary integrands (e.g. `f'[x] g'[x]`,
 `f'[x]^2`) are left unevaluated, with a cycle guard preventing the by-parts
-recursion from looping.  `Protected`, `ReadProtected`.
+recursion from looping.  `Protected`.
 
 Known limitations: transcendental generators other than `Log` (e.g.
 `ArcTan[eta]`, `Exp[eta]` with `eta` containing an unknown function) are
@@ -771,8 +770,7 @@ breaks circular substitution chains and collapses overlapping subproblems that
 would otherwise fan out exponentially (e.g. `Integrate[x Sin[x^2], x]`); the
 **outermost-only** restriction on the Eliminate/Solve search above; and a hard
 depth backstop (8) with per-call fresh substitution symbols.  Strict: returns
-unevaluated when no substitution closes the integral.  `Protected`,
-`ReadProtected`.
+unevaluated when no substitution closes the integral.  `Protected`.
 
 Known limitations: kernels must appear **literally** in `f` (so `Tan[x]`,
 which Mathilda keeps atomic rather than `Sin[x]/Cos[x]`, exposes no `Cos[x]`
@@ -805,7 +803,7 @@ symbolic parameters, non-terminating — `PossibleZeroQ`/`Simplify` over the
 symbolic-radical residue.)  A depth guard (8) and per-call fresh substitution
 symbols keep the recursion finite and collision-free.  Strict: returns
 unevaluated when `f` is not of this form or the reduced integral does not close.
-`Protected`, `ReadProtected`.
+`Protected`.
 
 ### Integrate`QuadraticRadicals
 
@@ -843,7 +841,7 @@ is **not** put through a `Simplify[D[result, x] - f] === 0` gate — it is corre
 by construction once the rational sub-integral closes.  A depth guard (8) and
 fresh per-call substitution symbols keep the recursion finite.  Strict: returns
 unevaluated when `f` is not of this form or the reduced integral does not close.
-`Protected`, `ReadProtected`.
+`Protected`.
 
 ### Integrate`LinearRatioRadicals
 
@@ -877,7 +875,7 @@ the result is **not** put through a `Simplify[D[result, x] - f] === 0` gate — 
 is correct by construction once the rational sub-integral closes.  A depth guard
 (8) and fresh per-call substitution symbols keep the recursion finite.  Strict:
 returns unevaluated when `f` is not of this form or the reduced integral does
-not close.  `Protected`, `ReadProtected`.
+not close.  `Protected`.
 
 ### Integrate`Weierstrass
 
@@ -915,7 +913,7 @@ polynomial trig such as `Integrate[Sin[x], x]` keeps its cleaner table form; the
 explicit `Method -> "Weierstrass"` has no such gate.  Strict: returns unevaluated
 when `f` is not a rational function of the trig/hyperbolic kernels of `x` (e.g.
 `x` outside a kernel, a kernel of a nonlinear argument, mixed trig + hyperbolic,
-or a radical of a kernel).  `Protected`, `ReadProtected`.
+or a radical of a kernel).  `Protected`.
 
 ### InterpolatingFunction integrands
 

@@ -82,7 +82,7 @@ Expr* builtin_product_logsum(Expr* res) {
 
 void product_logsum_init(void) {
     symtab_add_builtin("Product`LogSum", builtin_product_logsum);
-    symtab_get_def("Product`LogSum")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`LogSum")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`LogSum",
         "Product`LogSum[f, i, imin, Infinity] evaluates prod f(i) via "
         "Exp[Sum[PowerExpand[Log[f(i)]], {i,imin,Infinity}]] when the log-sum "

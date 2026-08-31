@@ -734,7 +734,7 @@ Expr* builtin_integrate_singular_points(Expr* res) {
 void integrate_newton_leibniz_init(void) {
     symtab_add_builtin("Integrate`NewtonLeibniz", builtin_integrate_newton_leibniz);
     symtab_get_def("Integrate`NewtonLeibniz")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`NewtonLeibniz",
         "Integrate`NewtonLeibniz[f, {x, a, b}] evaluates the definite integral "
         "of f over x from a to b by the fundamental theorem of calculus: it "
@@ -746,7 +746,7 @@ void integrate_newton_leibniz_init(void) {
 
     symtab_add_builtin("Integrate`SingularPoints", builtin_integrate_singular_points);
     symtab_get_def("Integrate`SingularPoints")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`SingularPoints",
         "Integrate`SingularPoints[expr, {x, a, b}] returns the sorted list of "
         "real poles of expr (roots of Denominator[Together[expr]]) lying "

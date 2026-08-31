@@ -270,7 +270,7 @@ Expr* builtin_sum_euler(Expr* res) {
 
 void sum_euler_init(void) {
     symtab_add_builtin("Sum`Euler", builtin_sum_euler);
-    symtab_get_def("Sum`Euler")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`Euler")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`Euler",
         "Sum`Euler[f, k, 1, Infinity] gives the closed form of an infinite Euler "
         "sum: a constant times HarmonicNumber[k], HarmonicNumber[k, p], or "

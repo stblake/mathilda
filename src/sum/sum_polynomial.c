@@ -142,7 +142,7 @@ Expr* builtin_sum_polynomial(Expr* res) {
 
 void sum_polynomial_init(void) {
     symtab_add_builtin("Sum`Polynomial", builtin_sum_polynomial);
-    symtab_get_def("Sum`Polynomial")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`Polynomial")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`Polynomial",
         "Sum`Polynomial[f, i] gives the indefinite sum of a polynomial f in i "
         "(its antidifference). Sum`Polynomial[f, i, imin, imax] gives the "

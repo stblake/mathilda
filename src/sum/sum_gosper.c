@@ -318,7 +318,7 @@ Expr* builtin_differencedelta(Expr* res) {
 
 void sum_gosper_init(void) {
     symtab_add_builtin("Sum`Gosper", builtin_sum_gosper);
-    symtab_get_def("Sum`Gosper")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`Gosper")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`Gosper",
         "Sum`Gosper[f, i] gives the indefinite sum of a hypergeometric term f "
         "in i via Gosper's algorithm; Sum`Gosper[f, i, imin, imax] gives the "

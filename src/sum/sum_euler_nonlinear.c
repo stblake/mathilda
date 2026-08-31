@@ -397,7 +397,7 @@ Expr* builtin_sum_euler_nonlinear(Expr* res) {
 
 void sum_euler_nonlinear_init(void) {
     symtab_add_builtin("Sum`EulerNonlinear", builtin_sum_euler_nonlinear);
-    symtab_get_def("Sum`EulerNonlinear")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`EulerNonlinear")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`EulerNonlinear",
         "Sum`EulerNonlinear[f, k, 1, Infinity] evaluates nonlinear Euler sums -- "
         "products of HarmonicNumber[k, p] (or PolyGamma[m, k]) over k^q -- as "

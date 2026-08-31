@@ -175,7 +175,7 @@ Expr* builtin_product_rational(Expr* res) {
 
 void product_rational_init(void) {
     symtab_add_builtin("Product`Rational", builtin_product_rational);
-    symtab_get_def("Product`Rational")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`Rational")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`Rational",
         "Product`Rational[f, i, imin, imax] gives the closed form of a product "
         "of a rational function f of i whose numerator and denominator factor "

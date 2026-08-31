@@ -825,7 +825,7 @@ Expr* builtin_integrate_path_singular_points(Expr* res) {
 void integrate_line_init(void) {
     symtab_add_builtin("Integrate`LineIntegral", builtin_integrate_line);
     symtab_get_def("Integrate`LineIntegral")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`LineIntegral",
         "Integrate`LineIntegral[f, {x, z0, z1, ..., zn}] evaluates the contour "
         "integral of f along the straight segments z0->z1->...->zn in the "
@@ -838,7 +838,7 @@ void integrate_line_init(void) {
     symtab_add_builtin("Integrate`PathSingularPoints",
                        builtin_integrate_path_singular_points);
     symtab_get_def("Integrate`PathSingularPoints")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`PathSingularPoints",
         "Integrate`PathSingularPoints[f, {x, z0, ..., zn}] returns the sorted "
         "list of singular points of f lying strictly on the interior of the "

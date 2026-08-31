@@ -2657,7 +2657,7 @@ Expr* builtin_integrate_goursat(Expr* res) {
 void integrate_goursat_init(void) {
     symtab_add_builtin(GS_RUN_HEAD, builtin_gs_run);
     symtab_get_def(GS_RUN_HEAD)->attributes |=
-        ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_HOLDALL | ATTR_PROTECTED;
 
     /* User-settable trace switch.  Default False; when set True the descent
      * narrates its progress (form recognition, criterion tests, reductions) to
@@ -2675,7 +2675,7 @@ void integrate_goursat_init(void) {
 
     symtab_add_builtin("Integrate`GoursatAlgebraic", builtin_integrate_goursat);
     symtab_get_def("Integrate`GoursatAlgebraic")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`GoursatAlgebraic",
         "Integrate`GoursatAlgebraic[f, x] integrates pseudo-elliptic integrands\n"
         "F(x) R(x)^(n/d) (F rational, R a polynomial, n/d any rational of reduced\n"

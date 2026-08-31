@@ -251,7 +251,7 @@ Expr* builtin_product_telescoping(Expr* res) {
 
 void product_telescoping_init(void) {
     symtab_add_builtin("Product`Telescoping", builtin_product_telescoping);
-    symtab_get_def("Product`Telescoping")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`Telescoping")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`Telescoping",
         "Product`Telescoping[f, i, imin, imax] gives the closed form of a "
         "rational product whose anti-quotient is itself rational (Gamma-free), "

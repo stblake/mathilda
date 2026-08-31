@@ -137,7 +137,7 @@ since `Apart` can't decompose with symbolic `a,b`. Tracked as a follow-up.
 
 ### Phase F — docs, attributes, changelog, valgrind  ✅ DONE 2026-06-19
 - [x] Docstring for `Sum`Rational` via `symtab_set_docstring` (terse). Stage
-      symbol `Protected | ReadProtected` like its siblings.
+      symbol `Protected` like its siblings.
 - [x] `docs/spec/builtins/calculus.md` Sum`Rational` section + Method list +
       this week's `docs/spec/changelog/2026-06-15.md` feature entry.
 - [x] `SUM_DEVEL_PLAN.md`: Stage 5 infinite path marked shipped (finite/Phase E

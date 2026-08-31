@@ -10,7 +10,7 @@
 <details>
 <summary>Notes</summary>
 
-f' represents the derivative of a function f of one argument. obtained from f by differentiating n1 times with respect to the first argument, n2 times with respect to the second argument, and so on. f' is equivalent to Derivative\[1\]\[f\]; f'' evaluates to Derivative\[2\]\[f\]. Derivative is a functional operator acting on functions to give derivative functions. Derivative is generated when D is applied to functions whose derivatives the system does not know. Mathilda attempts to convert Derivative\[n1,...,nm\]\[f\] to a pure function. When f is a symbol carrying DownValues, the evaluator rewrites the head as Function\[{t1,...,tm}, f\[t1,...,tm\]\] with the rule expanded into the body, then differentiates that pure function. If no DownValue matches, the original Derivative form is returned. Attributes: Protected, ReadProtected.
+f' represents the derivative of a function f of one argument. obtained from f by differentiating n1 times with respect to the first argument, n2 times with respect to the second argument, and so on. f' is equivalent to Derivative\[1\]\[f\]; f'' evaluates to Derivative\[2\]\[f\]. Derivative is a functional operator acting on functions to give derivative functions. Derivative is generated when D is applied to functions whose derivatives the system does not know. Mathilda attempts to convert Derivative\[n1,...,nm\]\[f\] to a pure function. When f is a symbol carrying DownValues, the evaluator rewrites the head as Function\[{t1,...,tm}, f\[t1,...,tm\]\] with the rule expanded into the body, then differentiates that pure function. If no DownValue matches, the original Derivative form is returned. Attributes: Protected.
 
 </details>
 
@@ -122,7 +122,7 @@ registering them in the symbol table.
 **Complexity / limits.** Only nonnegative integer derivative orders are
 reduced; symbolic or negative orders stay unevaluated.
 
-- `Protected`, `ReadProtected`.
+- `Protected`.
 - Acts primarily as a tag carried through the differentiation
   pipeline: `D` and `Dt` produce `Derivative[...]` heads for
   unknown functions and advance their indices when differentiating
@@ -136,7 +136,7 @@ reduced; symbolic or negative orders stay unevaluated.
   user-defined `f`. When `f` has no matching DownValue the form is
   left unevaluated, matching Mathematica.
 
-**Attributes:** `Protected`, `ReadProtected`.
+**Attributes:** `Protected`.
 
 ## References
 

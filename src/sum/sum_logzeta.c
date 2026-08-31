@@ -125,7 +125,7 @@ Expr* builtin_sum_logzeta(Expr* res) {
 
 void sum_logzeta_init(void) {
     symtab_add_builtin("Sum`LogZeta", builtin_sum_logzeta);
-    symtab_get_def("Sum`LogZeta")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`LogZeta")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`LogZeta",
         "Sum`LogZeta[f, i, 1, Infinity] evaluates Sum[c Log[i]/i^s] = -c Zeta'[s] "
         "for integer s>=2. s==2 yields an elementary Glaisher-constant closed form; "

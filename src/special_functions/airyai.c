@@ -49,7 +49,7 @@
  * and AiryAiPrime[+Infinity] = 0; at -Infinity Ai' has no limit (oscillation with
  * growing ~|z|^(1/4) amplitude) and is left unevaluated.
  *
- * Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
+ * Attributes (both heads): Listable, NumericFunction, Protected.
  */
 #include "airyai.h"
 #include "sym_names.h"
@@ -749,10 +749,10 @@ Expr* builtin_airyaiprime(Expr* res) {
 void airyai_init(void) {
     symtab_add_builtin("AiryAi", builtin_airyai);
     symtab_get_def("AiryAi")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
 
     symtab_add_builtin("AiryAiPrime", builtin_airyaiprime);
     symtab_get_def("AiryAiPrime")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     /* Docstrings live in info.c (info_init). */
 }

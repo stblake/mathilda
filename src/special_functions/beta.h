@@ -7,7 +7,7 @@
  * Beta[z, a, b]         -- incomplete beta      B_z(a, b) = Int_0^z t^(a-1)(1-t)^(b-1) dt
  * Beta[z0, z1, a, b]    -- generalized incomplete = B_{z1}(a, b) - B_{z0}(a, b)
  *
- * Attributes: Listable, NumericFunction, Protected, ReadProtected.
+ * Attributes: Listable, NumericFunction, Protected.
  *
  * Evaluation strategy (see beta.c for detail):
  *   - Beta[a, b] reduces through the existing Gamma builtin, so exact integer /

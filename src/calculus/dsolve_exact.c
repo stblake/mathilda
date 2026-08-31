@@ -106,7 +106,7 @@ static Expr* builtin_dsolve_exact(Expr* res) {
 
 void dsolve_exact_init(void) {
     symtab_add_builtin("DSolve`Exact", builtin_dsolve_exact);
-    symtab_get_def("DSolve`Exact")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`Exact")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`Exact",
         "DSolve`Exact[eqn, y, x] solves M(x,y) + N(x,y) y' == 0 when exact "
         "(M_y == N_x), or made exact by an integrating factor mu(x) or mu(y).");

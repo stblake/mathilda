@@ -178,7 +178,7 @@ Expr* builtin_product_infinite(Expr* res) {
 
 void product_infinite_init(void) {
     symtab_add_builtin("Product`Infinite", builtin_product_infinite);
-    symtab_get_def("Product`Infinite")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`Infinite")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`Infinite",
         "Product`Infinite[f, i, imin, Infinity] evaluates a convergent infinite "
         "product as the limit of its finite closed form, after a rational "

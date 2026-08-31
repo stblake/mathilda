@@ -31,11 +31,11 @@ Out[4]= 2147483777
 
 `builtin_nextprime` computes `NextPrime[x]` / `NextPrime[x, k]`. The start point is taken as `⌊x⌋` for Real/Rational and exactly for Integer/BigInt, into a GMP `mpz_t`. `k = 0` returns x unchanged. For `k > 0` it iterates GMP's `mpz_nextprime` k times (the next probable prime strictly greater than the current value). For `k < 0` it iterates `mpz_prevprime` |k| times, returning unevaluated (NULL) if it would step at or below 2 or no previous prime exists. The result is normalised via `expr_bigint_normalize`.
 
-- `Protected`, `ReadProtected`.
+- `Protected`.
 - Supports negative $k$ for finding previous primes.
 - Remains unevaluated if no such prime exists (e.g., `NextPrime[2, -1]`).
 
-**Attributes:** `Listable`, `Protected`, `ReadProtected`.
+**Attributes:** `Listable`, `Protected`.
 
 ## References
 

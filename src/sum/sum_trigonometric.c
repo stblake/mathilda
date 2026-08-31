@@ -268,7 +268,7 @@ Expr* builtin_sum_trigonometric(Expr* res) {
 
 void sum_trigonometric_init(void) {
     symtab_add_builtin("Sum`Trigonometric", builtin_sum_trigonometric);
-    symtab_get_def("Sum`Trigonometric")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Sum`Trigonometric")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`Trigonometric",
         "Sum`Trigonometric[f, k, imin, Infinity] gives the closed form of an "
         "infinite Fourier-type sum T(k)/k^s with T a trigonometric polynomial in "

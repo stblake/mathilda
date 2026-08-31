@@ -45,7 +45,7 @@
  * calculus/deriv.c; Series at 0 / Infinity and the half-integer -> elementary
  * rewrites live in calculus/series.c and src/internal/bessel.m.
  *
- * Attributes: Listable, NumericFunction, Protected, ReadProtected.
+ * Attributes: Listable, NumericFunction, Protected.
  */
 #include "bessel.h"
 #include "sym_names.h"
@@ -1776,18 +1776,18 @@ Expr* builtin_bessely(Expr* res) {
 void bessel_init(void) {
     symtab_add_builtin("BesselJ", builtin_besselj);
     symtab_get_def("BesselJ")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
 
     symtab_add_builtin("BesselK", builtin_besselk);
     symtab_get_def("BesselK")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
 
     symtab_add_builtin("BesselI", builtin_besseli);
     symtab_get_def("BesselI")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
 
     symtab_add_builtin("BesselY", builtin_bessely);
     symtab_get_def("BesselY")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED | ATTR_READPROTECTED);
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     /* Docstrings live in info.c (info_init). */
 }

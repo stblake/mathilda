@@ -81,11 +81,11 @@ D[ProductLog[z], z] = ProductLog[z] / (z (1 + ProductLog[z]))  (calculus/deriv.c
 
 Series at 0, at the branch point -1/E, and at Infinity live in calculus/series.c.
 
-Attributes: Listable, NumericFunction, Protected, ReadProtected.
+Attributes: Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 

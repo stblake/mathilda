@@ -737,7 +737,7 @@ Expr* builtin_integrate_unknown(Expr* res) {
 void integrate_unknown_init(void) {
     symtab_add_builtin("Integrate`Undefined", builtin_integrate_unknown);
     symtab_get_def("Integrate`Undefined")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`Undefined",
         "Integrate`Undefined[f, x] integrates expressions that are rational\n"
         "in undefined functions u[x] and their derivatives (Roach 1992, §1.7)\n"

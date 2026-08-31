@@ -394,7 +394,7 @@ Each head has its own `Information` string.  The two positional arguments and
 every other option (`Direction`, `Scale`, `Terms`, `WynnDegree`,
 `WorkingPrecision`) are forwarded untouched; a `Method` option is dropped,
 since the head already names the method.  Attributes are
-`{Protected, ReadProtected}`.
+`{Protected}`.
 
 ### Options
 

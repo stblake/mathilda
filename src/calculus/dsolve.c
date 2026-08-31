@@ -39,6 +39,8 @@ typedef enum {
     DS_EULER,
     DS_SPECIALFORM,
     DS_REDUCEORDER,
+    DS_FOS,
+    DS_AUTONOMOUS,
     DS_INVALID
 } DSolveMethod;
 
@@ -55,6 +57,8 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "EulerCauchy")      == 0) return DS_EULER;
     if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
     if (strcmp(s, "ReductionOfOrder") == 0) return DS_REDUCEORDER;
+    if (strcmp(s, "FirstOrderSubstitution") == 0) return DS_FOS;
+    if (strcmp(s, "AutonomousReduction") == 0) return DS_AUTONOMOUS;
     return DS_INVALID;
 }
 
@@ -70,6 +74,8 @@ extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_fos_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern void dsolve_quadrature_init(void);
 extern void dsolve_linear1_init(void);
 extern void dsolve_bernoulli_init(void);
@@ -81,6 +87,8 @@ extern void dsolve_constcoeff_init(void);
 extern void dsolve_euler_init(void);
 extern void dsolve_specialform_init(void);
 extern void dsolve_reduce_order_init(void);
+extern void dsolve_fos_init(void);
+extern void dsolve_autonomous_init(void);
 extern Expr** dsolve_pde1_solve(DSolveProblem* P);
 extern void dsolve_pde1_init(void);
 extern Expr** dsolve_decouple_solve(DSolveProblem* P);
@@ -156,6 +164,8 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_euler_try);
             if (!result) result = dsolve_run(&P, dsolve_specialform_try);
             if (!result) result = dsolve_run(&P, dsolve_reduce_order_try);
+            if (!result) result = dsolve_run(&P, dsolve_fos_try);
+            if (!result) result = dsolve_run(&P, dsolve_autonomous_try);
             break;
         case DS_QUADRATURE:   result = dsolve_run(&P, dsolve_quadrature_try);  break;
         case DS_LINEAR1:      result = dsolve_run(&P, dsolve_linear1_try);     break;
@@ -168,6 +178,8 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_EULER:        result = dsolve_run(&P, dsolve_euler_try);       break;
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
         case DS_REDUCEORDER:  result = dsolve_run(&P, dsolve_reduce_order_try); break;
+        case DS_FOS:          result = dsolve_run(&P, dsolve_fos_try);          break;
+        case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);   break;
         default: break;
     }
     g_dsolve_depth--;
@@ -188,7 +200,7 @@ static Expr* mk_opt(const char* name, Expr* val) {
 void dsolve_init(void) {
     intern_symbol("IncludeSingularSolutions");
     symtab_add_builtin("DSolve", builtin_dsolve);
-    symtab_get_def("DSolve")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve")->attributes |= ATTR_PROTECTED;
 
     Expr* opts = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
         mk_opt("GeneratedParameters",      expr_new_symbol("C")),
@@ -210,6 +222,8 @@ void dsolve_init(void) {
     dsolve_euler_init();
     dsolve_specialform_init();
     dsolve_reduce_order_init();
+    dsolve_fos_init();
+    dsolve_autonomous_init();
     dsolve_pde1_init();
     dsolve_decouple_init();
     dsolve_linsys_init();

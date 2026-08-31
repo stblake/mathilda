@@ -69,7 +69,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 

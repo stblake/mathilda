@@ -108,7 +108,7 @@ static SymbolAttr builtin_attrs[] = {
     {"PossibleZeroQ", ATTR_PROTECTED},
     {"PrimePi", ATTR_PROTECTED | ATTR_LISTABLE},
     {"FactorInteger", ATTR_PROTECTED | ATTR_LISTABLE},
-    {"NextPrime", ATTR_LISTABLE | ATTR_PROTECTED | ATTR_READPROTECTED},
+    {"NextPrime", ATTR_LISTABLE | ATTR_PROTECTED},
     {"Fibonacci", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"LucasL", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"Re", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
@@ -222,7 +222,6 @@ static uint32_t string_to_attribute(const char* name) {
     if (strcmp(name, "NHoldFirst") == 0) return ATTR_NHOLDFIRST;
     if (strcmp(name, "NHoldRest") == 0) return ATTR_NHOLDREST;
     if (strcmp(name, "Locked") == 0) return ATTR_LOCKED;
-    if (strcmp(name, "ReadProtected") == 0) return ATTR_READPROTECTED;
     if (strcmp(name, "Temporary") == 0) return ATTR_TEMPORARY;
     if (strcmp(name, "SequenceHold") == 0) return ATTR_SEQUENCEHOLD;
     if (strcmp(name, "Constant") == 0) return ATTR_CONSTANT;
@@ -375,7 +374,6 @@ Expr* builtin_attributes(Expr* res) {
         if (attrs & ATTR_NHOLDREST) count++;
     }
     if (attrs & ATTR_LOCKED) count++;
-    if (attrs & ATTR_READPROTECTED) count++;
     if (attrs & ATTR_TEMPORARY) count++;
     if (attrs & ATTR_SEQUENCEHOLD) count++;
 
@@ -402,7 +400,6 @@ Expr* builtin_attributes(Expr* res) {
     }
     if (attrs & ATTR_ORDERLESS) attr_list[i++] = expr_new_symbol(SYM_Orderless);
     if (attrs & ATTR_PROTECTED) attr_list[i++] = expr_new_symbol(SYM_Protected);
-    if (attrs & ATTR_READPROTECTED) attr_list[i++] = expr_new_symbol(SYM_ReadProtected);
     if (attrs & ATTR_SEQUENCEHOLD) attr_list[i++] = expr_new_symbol(SYM_SequenceHold);
     if (attrs & ATTR_TEMPORARY) attr_list[i++] = expr_new_symbol(SYM_Temporary);
     

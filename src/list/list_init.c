@@ -254,7 +254,7 @@ void list_init(void) {
     symtab_get_def("Transpose")->attributes |= ATTR_PROTECTED;
     symtab_get_def("ConjugateTranspose")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Tally")->attributes |= ATTR_PROTECTED;
-    symtab_get_def("Union")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Union")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED;
     symtab_get_def("Intersection")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED;
     symtab_get_def("Complement")->attributes |= ATTR_PROTECTED;
     symtab_get_def("DeleteDuplicates")->attributes |= ATTR_PROTECTED;

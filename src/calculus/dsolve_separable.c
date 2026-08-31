@@ -88,7 +88,7 @@ static Expr* builtin_dsolve_separable(Expr* res) {
 
 void dsolve_separable_init(void) {
     symtab_add_builtin("DSolve`Separable", builtin_dsolve_separable);
-    symtab_get_def("DSolve`Separable")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("DSolve`Separable")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`Separable",
         "DSolve`Separable[eqn, y, x] solves y'[x] == g(x) h(y) by separating "
         "variables: Integrate[1/h, y] == Integrate[g, x] + C[1], solved for y.");

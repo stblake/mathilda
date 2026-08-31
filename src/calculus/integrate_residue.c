@@ -1416,7 +1416,7 @@ Expr* builtin_integrate_contour_residue(Expr* res) {
 void integrate_residue_init(void) {
     symtab_add_builtin("Integrate`ContourResidue", builtin_integrate_contour_residue);
     symtab_get_def("Integrate`ContourResidue")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
     symtab_set_docstring("Integrate`ContourResidue",
         "Integrate`ContourResidue[f, {x, a, b}] evaluates a definite real "
         "integral by the residue theorem, for rational integrands on "

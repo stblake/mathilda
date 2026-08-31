@@ -197,7 +197,7 @@ The core `compute_limit` runs (in order): reciprocal-trig rewrite; at ±∞ a hy
 
 **Complexity / limits.** `Series` subsumes most classical cases; L'Hospital is reserved for shapes `Series` can't expand and is guarded against complexity blow-up. Discontinuous-head and undefined-head inputs are deliberately refused rather than evaluated at a single side.
 
-- `Protected`, `ReadProtected` (matches Mathematica; `Limit` does *not*
+- `Protected` (matches Mathematica; `Limit` does *not*
   hold its arguments, so `Limit[%, x -> Infinity]` sees the evaluated `f`).
 - Options: `Direction -> Automatic`, `Assumptions -> Automatic`,
   `Method -> Automatic`.
@@ -377,7 +377,7 @@ The core `compute_limit` runs (in order): reciprocal-trig rewrite; at ±∞ a hy
   `Limit`RationalFunction`, `Limit`Asymptotic`, `Limit`Bounded`,
   `Limit`Series`, `Limit`LHospital`, `Limit`Gruntz` and `Limit`Oscillatory`,
   each with its own `Information` string and the attributes
-  `{Protected, ReadProtected}`.  The two positional arguments and every other
+  `{Protected}`.  The two positional arguments and every other
   option (`Direction`, `Assumptions`) are forwarded untouched; a `Method`
   option is dropped, since the head already names the method.  An abstention
   echoes the head the user asked for
@@ -395,7 +395,7 @@ The core `compute_limit` runs (in order): reciprocal-trig rewrite; at ±∞ a hy
   `Indeterminate`, an `Interval[{lo, hi}]`, or the original expression
   unevaluated when the limit cannot be determined.
 
-**Attributes:** `Protected`, `ReadProtected`.
+**Attributes:** `Protected`.
 
 ## References
 

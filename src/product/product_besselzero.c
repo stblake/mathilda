@@ -139,7 +139,7 @@ Expr* builtin_product_besselzero(Expr* res) {
 
 void product_besselzero_init(void) {
     symtab_add_builtin("Product`BesselZero", builtin_product_besselzero);
-    symtab_get_def("Product`BesselZero")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`BesselZero")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`BesselZero",
         "Product`BesselZero[f, i, 1, Infinity] evaluates the Bessel Hadamard "
         "product Product[1 - x^2/BesselJZero[n,i]^2] = "

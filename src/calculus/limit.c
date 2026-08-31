@@ -4275,7 +4275,7 @@ static void register_limit_method(const char* sym, Expr* (*fn)(Expr*),
     /* Same attributes as Limit itself: arguments are evaluated (the spec
      * rule x -> a must fold to Rule[x, a]), and the definition is not
      * user-redefinable. */
-    symtab_get_def(sym)->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def(sym)->attributes |= ATTR_PROTECTED;
     symtab_set_docstring(sym, doc);
 }
 
@@ -4286,13 +4286,13 @@ void limit_init(void) {
     symtab_add_builtin("Limit", builtin_limit);
 
     /* Limit does not hold its arguments in Mathematica -- Attributes[Limit]
-     * is {Protected, ReadProtected}. The first argument f must be evaluated
+     * is {Protected}. The first argument f must be evaluated
      * so forms like Limit[%, x -> Infinity] (where % is Out[-1]) see the
      * actual expression, and the spec rule x -> a evaluates to Rule[x, a]
      * for a free symbol x. The internal layers evaluate/substitute as
      * needed, so they remain correct with pre-evaluated arguments. */
     symtab_get_def("Limit")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED;
+        ATTR_PROTECTED;
 
     symtab_set_docstring("Limit",
         "Limit[f, x -> a]\n"

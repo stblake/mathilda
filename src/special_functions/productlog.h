@@ -11,7 +11,7 @@
  *
  * Numeric evaluation (real/complex, machine and arbitrary MPFR precision) runs
  * through a single complex-MPFR Halley core; exact special values short-circuit
- * it. Attributes: Listable, NumericFunction, Protected, ReadProtected.
+ * it. Attributes: Listable, NumericFunction, Protected.
  * D[ProductLog[z], z] = ProductLog[z] / (z (1 + ProductLog[z])). */
 Expr* builtin_productlog(Expr* res);
 void  productlog_init(void);

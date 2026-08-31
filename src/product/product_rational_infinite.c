@@ -373,7 +373,7 @@ Expr* builtin_product_rational_infinite(Expr* res) {
 
 void product_rational_infinite_init(void) {
     symtab_add_builtin("Product`RationalInfinite", builtin_product_rational_infinite);
-    symtab_get_def("Product`RationalInfinite")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Product`RationalInfinite")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`RationalInfinite",
         "Product`RationalInfinite[f, i, imin, Infinity] evaluates convergent "
         "infinite rational products with complex-conjugate roots via the Gamma "

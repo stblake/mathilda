@@ -360,14 +360,12 @@ void test_airyai_attributes() {
     ASSERT_MSG((d->attributes & ATTR_LISTABLE) != 0, "AiryAi not Listable");
     ASSERT_MSG((d->attributes & ATTR_NUMERICFUNCTION) != 0, "AiryAi not NumericFunction");
     ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "AiryAi not Protected");
-    ASSERT_MSG((d->attributes & ATTR_READPROTECTED) != 0, "AiryAi not ReadProtected");
 
     SymbolDef* p = symtab_get_def("AiryAiPrime");
     ASSERT_MSG(p != NULL, "AiryAiPrime not registered");
     ASSERT_MSG((p->attributes & ATTR_LISTABLE) != 0, "AiryAiPrime not Listable");
     ASSERT_MSG((p->attributes & ATTR_NUMERICFUNCTION) != 0, "AiryAiPrime not NumericFunction");
     ASSERT_MSG((p->attributes & ATTR_PROTECTED) != 0, "AiryAiPrime not Protected");
-    ASSERT_MSG((p->attributes & ATTR_READPROTECTED) != 0, "AiryAiPrime not ReadProtected");
 }
 
 int main() {
