@@ -663,6 +663,7 @@ roadmap):
 | `DSolve`Quadrature` | `y^(n)[x] == f(x)` with `f` free of `y` (integrate n times) |
 | `DSolve`LinearFirstOrder` | `y'[x] + p(x) y[x] == q(x)` (integrating factor) |
 | `DSolve`Bernoulli` | `y'[x] == A(x) y + B(x) y^n`, n≠0,1 (substitution `v=y^(1-n)`) |
+| `DSolve`Riccati` | `y'[x] == q0(x) + q1(x) y + q2(x) y^2`, q2≠0 (substitution `y=-u'/(q2 u)` → 2nd-order linear `u'' - (q1+q2'/q2) u' + q0 q2 u == 0`, solved by the scalar cascade) |
 | `DSolve`Homogeneous` | `y'[x] == F(y/x)` (substitution `y=v x` → separable) |
 | `DSolve`Separable` | `y'[x] == g(x) h(y)` (`∫dy/h == ∫g dx + C[1]`) |
 | `DSolve`Exact` | `M + N y' == 0`, exact or via integrating factor `μ(x)`/`μ(y)` |

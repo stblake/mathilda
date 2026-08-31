@@ -41,6 +41,7 @@ typedef enum {
     DS_KOVACIC,
     DS_REDUCEORDER,
     DS_FOS,
+    DS_RICCATI,
     DS_AUTONOMOUS,
     DS_FROBENIUS,
     DS_INVALID
@@ -61,6 +62,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Kovacic")            == 0) return DS_KOVACIC;
     if (strcmp(s, "ReductionOfOrder") == 0) return DS_REDUCEORDER;
     if (strcmp(s, "FirstOrderSubstitution") == 0) return DS_FOS;
+    if (strcmp(s, "Riccati")              == 0) return DS_RICCATI;
     if (strcmp(s, "AutonomousReduction") == 0) return DS_AUTONOMOUS;
     if (strcmp(s, "FrobeniusSeries")     == 0) return DS_FROBENIUS;
     if (strcmp(s, "PowerSeries")         == 0) return DS_FROBENIUS;
@@ -82,6 +84,7 @@ extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_fos_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
 extern void dsolve_quadrature_init(void);
@@ -97,6 +100,7 @@ extern void dsolve_specialform_init(void);
 extern void dsolve_kovacic_init(void);
 extern void dsolve_reduce_order_init(void);
 extern void dsolve_fos_init(void);
+extern void dsolve_riccati_init(void);
 extern void dsolve_autonomous_init(void);
 extern void dsolve_frobenius_init(void);
 extern void dsolve_normalform_init(void);
@@ -180,6 +184,9 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_kovacic_try);
             if (!result) result = dsolve_run(&P, dsolve_reduce_order_try);
             if (!result) result = dsolve_run(&P, dsolve_fos_try);
+            /* Riccati after fos: fos owns y'==(a x+b y+c)^2 with the cleaner
+             * closed form; genuine Riccati (y'==y^2+x, ...) linearises here. */
+            if (!result) result = dsolve_run(&P, dsolve_riccati_try);
             if (!result) result = dsolve_run(&P, dsolve_autonomous_try);
             /* implicit first-integral fallback: a homogeneous ODE with no explicit
              * inverse (transcendental log-spiral) is returned as G(x,y[x]) == C[1] */
@@ -203,6 +210,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_KOVACIC:      result = dsolve_run(&P, dsolve_kovacic_try);     break;
         case DS_REDUCEORDER:  result = dsolve_run(&P, dsolve_reduce_order_try); break;
         case DS_FOS:          result = dsolve_run(&P, dsolve_fos_try);          break;
+        case DS_RICCATI:      result = dsolve_run(&P, dsolve_riccati_try);      break;
         case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);   break;
         case DS_FROBENIUS:    result = dsolve_run(&P, dsolve_frobenius_try);    break;
         default: break;
@@ -249,6 +257,7 @@ void dsolve_init(void) {
     dsolve_kovacic_init();
     dsolve_reduce_order_init();
     dsolve_fos_init();
+    dsolve_riccati_init();
     dsolve_autonomous_init();
     dsolve_frobenius_init();
     dsolve_normalform_init();

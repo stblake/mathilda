@@ -166,6 +166,18 @@ static void ro_full_ok(const char* F) {
     method_ok("DSolve`ReductionOfOrder", eqn, res);
 }
 
+/* Riccati from a chosen spectrum r1,r2 (q2==1): the linearisation
+ * u'' - (r1+r2) u' + r1 r2 u == 0 has roots r1,r2, so the Riccati equation
+ * y' == r1 r2 + (r1+r2) y + y^2 has an ELEMENTARY (exp-ratio) solution — the
+ * back-substituted residual is decidable. */
+static void riccati_ok(int r1, int r2) {
+    int q1 = r1 + r2, q0 = r1 * r2;
+    char eqn[256], res[256];
+    snprintf(eqn, sizeof(eqn), "y'[x] == (%d) + (%d) y[x] + y[x]^2", q0, q1);
+    snprintf(res, sizeof(res), "y'[x] - ((%d) + (%d) y[x] + y[x]^2)", q0, q1);
+    method_ok("DSolve`Riccati", eqn, res);
+}
+
 /* 2x2 constant-coefficient system y'=A y (auto dispatch — no backtick builtin). */
 static void sys2_ok(int a, int b, int c, int d) {
     char sys[256], buf[1024];
@@ -309,6 +321,15 @@ static void t_stress_reduce_order_riccati(void) {
     for (size_t i = 0; i < 7; i++) ro_full_ok(fs[i]);
 }
 
+static void t_stress_riccati(void) {
+    /* spectra r1,r2: distinct signs/magnitudes + a repeated root, all giving an
+     * elementary exp-ratio solution the residual PossibleZeroQ can decide. */
+    int rr[][2] = {
+        {1, 2}, {-1, -2}, {2, 3}, {1, -1}, {-1, 3}, {1, -3}, {2, 2}
+    };
+    for (size_t i = 0; i < 7; i++) riccati_ok(rr[i][0], rr[i][1]);
+}
+
 static void t_stress_systems(void) {
     /* (a,b,c,d): distinct-real, complex, defective, defective+singular. */
     int m[][4] = {
@@ -347,6 +368,7 @@ int main(void) {
     TEST(t_stress_euler);
     TEST(t_stress_reduce_order);
     TEST(t_stress_reduce_order_riccati);
+    TEST(t_stress_riccati);
     TEST(t_stress_systems);
     TEST(t_stress_triangular);
     TEST(t_stress_pde);

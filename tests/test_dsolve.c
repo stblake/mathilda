@@ -437,6 +437,35 @@ static void t_fos_stress(void) {
     }
 }
 
+/* ---- 1a: Riccati — y'==q0(x)+q1(x) y+q2(x) y^2 (linearise y=-u'/(q2 u)) ---- */
+static void t_method_riccati(void) {
+    /* from-spectrum r=-1,-2: q1=r1+r2=-3, q0=r1 r2=2 -> elementary (Tanh) */
+    check_method("DSolve`Riccati", "y'[x] == 2 - 3 y[x] + y[x]^2",
+                 "y'[x] - (2 - 3 y[x] + y[x]^2)");
+}
+static void t_riccati_more(void) {
+    /* r=2,3 (elementary) */
+    check_method("DSolve`Riccati", "y'[x] == 6 + 5 y[x] + y[x]^2",
+                 "y'[x] - (6 + 5 y[x] + y[x]^2)");
+    /* genuine Riccati whose linearisation is the Airy equation u''==-x u: the
+     * body is an AiryAi/AiryBi ratio, verified by numeric PossibleZeroQ sampling */
+    check_solves("y'[x] == y[x]^2 + x", "y'[x] - (y[x]^2 + x)");
+    /* variable-coefficient q2=x: u'' - (1/x) u' + x^2 u == 0 */
+    check_form("Head[DSolve[y'[x] == x + x y[x]^2, y, x]]", "List");
+    /* q2==0 is linear, not Riccati: the pinned method declines (stays symbolic) */
+    check_form("Head[DSolve`Riccati[y'[x] == x + y[x], y[x], x]]", "DSolve`Riccati");
+}
+static void t_ivp_riccati(void) {
+    /* logistic-type IVP: y'==y^2-y, y[0]==1/2 -> y == 1/(1+E^x) */
+    check_form("Head[DSolve[{y'[x] == y[x]^2 - y[x], y[0] == 1/2}, y, x]]", "List");
+    /* value at x=0 is 1/2 (constant fitted) */
+    check_true("PossibleZeroQ[((y[x] /. DSolve[{y'[x] == y[x]^2 - y[x], y[0] == 1/2}, y, x][[1]]) "
+               "/. x -> 0) - 1/2]");
+    /* residual back-substitutes to zero */
+    check_true("PossibleZeroQ[(y'[x] - (y[x]^2 - y[x])) /. "
+               "DSolve[{y'[x] == y[x]^2 - y[x], y[0] == 1/2}, y, x][[1]]]");
+}
+
 /* ---- 1d: AutonomousReduction — y''==f(y, y') missing x ---- */
 static void t_auto_exp(void) {
     check_true("PossibleZeroQ[(y[x] y''[x] - y'[x]^2) /. "
@@ -676,6 +705,9 @@ int main(void) {
     TEST(t_fos_method);
     TEST(t_fos_declines_implicit);
     TEST(t_fos_stress);
+    TEST(t_method_riccati);
+    TEST(t_riccati_more);
+    TEST(t_ivp_riccati);
     TEST(t_auto_exp);
     TEST(t_auto_power);
     TEST(t_auto_reciprocal);

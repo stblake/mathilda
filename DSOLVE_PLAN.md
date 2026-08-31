@@ -238,7 +238,13 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   by implicit differentiation (`y' == -G_x/G_y` satisfies the ODE).
 - `[✓] Exact` — `M+N y'==0`, `M_y==N_x`; + integrating-factor search `μ(x)`, `μ(y)`.
 - `[✓] Clairaut` — `y==x y'+f(y')`: general line `y=C[1]x+f(C[1])` + singular envelope (`IncludeSingularSolutions`).
-- `[ ] Riccati` — `y'==q0+q1 y+q2 y^2`: reduce to 2nd-order linear (needs the M2/M3 linear engine; may branch).
+- `[✓] Riccati` — `y'==q0+q1 y+q2 y^2` (`q2≠0`): linearise `y=-u'/(q2 u)` →
+  2nd-order linear `u'' - (q1+q2'/q2) u' + q0 q2 u == 0`, solved by recursing into
+  the scalar cascade (const-coeff / Euler / Airy-Bessel / Kovacic / Frobenius);
+  the redundant constant is collapsed (`C[2]->1`) to the single Riccati parameter.
+  Runs after `FirstOrderSubstitution` so `fos` keeps its cleaner `-x-Tan[…]` for
+  `y'==(a x+b y+c)^2`. Solves the Airy-linearised `y'==y^2+x` that previously
+  declined; declines (no wrong answer) when the linearisation has no closed form.
 - `[ ] Lagrange` (d'Alembert) — `y==x f(y')+g(y')`.
 - `[ ] Abel` / `[ ] Chini` — implicit solutions via `Solve`.
 - `[✓] FirstOrderSubstitution` — `y'==F(a x + b y + c)`: detect the constant ratio
