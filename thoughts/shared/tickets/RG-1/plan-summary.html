@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RG-1</title>
+<link rel="stylesheet" href="../../../../../kit-delivered/skills/render-artifact/assets/style.css">
+</head>
+<body>
+
+
+
+<div class="page">
+  <div class="layout">
+    <nav class="sidebar"><details class="outline-group page-toc" open><summary>On this page</summary><ul><li style="padding-left:0px"><a href="#rg-1-randomgraph-n-m-k-one-page-view">RG-1 — RandomGraph[{n, m}, k]: one-page view</a></li>
+<li style="padding-left:0px"><a href="#recommendation">Recommendation</a></li>
+<li style="padding-left:0px"><a href="#options-considered">Options considered</a></li>
+<li style="padding-left:0px"><a href="#decision-criteria">Decision criteria</a></li>
+<li style="padding-left:0px"><a href="#decisions">Decisions</a></li>
+<li style="padding-left:0px"><a href="#non-goals">Non-goals</a></li>
+<li style="padding-left:0px"><a href="#open-questions">Open Questions</a></li>
+<li style="padding-left:12px"><a href="#unresolved">Unresolved</a></li>
+<li style="padding-left:12px"><a href="#resolved">Resolved</a></li>
+<li style="padding-left:0px"><a href="#requires-approval">Requires Approval</a></li>
+<li style="padding-left:0px"><a href="#architecture-impact">Architecture Impact</a></li>
+<li style="padding-left:0px"><a href="#subsystems-dependencies">Subsystems &amp; Dependencies</a></li>
+<li style="padding-left:0px"><a href="#how-we-ll-know-it-worked">How we&#x27;ll know it worked</a></li>
+<li style="padding-left:0px"><a href="#review-status">Review status</a></li>
+<li style="padding-left:0px"><a href="#appendix">Appendix</a></li></ul></details></nav>
+    <main class="content">
+      <header class="page-header">
+        <h1 id="rg-1">RG-1</h1>
+        <div class="meta"><span class="meta-item"><b>ticket:</b> RG-1</span> <span class="meta-item"><b>type:</b> plan</span> <span class="meta-item"><b>lifecycle:</b> active</span> <span class="meta-item"><b>status:</b> draft</span> <span class="meta-item"><b>created:</b> 2026-08-30</span></div>
+      </header>
+      
+      
+      <section class="open-questions" id="oq-section"><h2 id="open-questions">Open Questions</h2>
+<h3 id="unresolved">Unresolved</h3>
+<p><em>None.</em></p>
+<h3 id="resolved">Resolved</h3>
+<ul>
+<li class="checkbox-item checked"><span class="checkbox">&#9745;</span> Should the <code>n &lt;= 1</code> / <code>maxe == 0</code> case be fixed incidentally? — Yes. Confirmed with the human, 2026-08-30: the helper early-returns an edgeless graph, which the <code>k</code> form needs anyway and which removes a wrong answer rather than replicating it <code>k</code> times.</li>
+<li class="checkbox-item checked"><span class="checkbox">&#9745;</span> Cap <code>k</code> to bound the per-call leak, fix the leak, or document it? — Document only. Confirmed with the human, 2026-08-30. No sibling <code>Random*</code> head caps its count, and fixing the candidate-tree leak was already scoped out by the research.</li>
+</ul></section>
+      
+      <h2 id="recommendation">Recommendation</h2>
+<p>Extract the single-graph body of <code>builtin_random_graph</code> (<code>src/graph/generators.c:103-134</code>) into a static helper, make the builtin a thin dispatcher on <code>arg_count</code>, and loop the helper <code>k</code> times into a <code>List</code>. <code>k</code> is validated with the file's existing <code>as_count</code> (<code>:25-28</code>), which already gives the exact count semantics the five sibling heads in <code>src/random.c</code> agree on: <code>k = 0</code> → <code>{}</code>, and negative, non-integer, or symbolic <code>k</code> → unevaluated, silently.</p>
+<p>Two phases: <strong>(1)</strong> the generator change, <strong>(2)</strong> tests, docstring, spec, changelog. One source file of real change; the rest is docs and tests.</p>
+<h2 id="options-considered">Options considered</h2>
+<table>
+<thead><tr>
+<th>Option</th>
+<th>Verdict</th>
+</tr></thead><tbody>
+<tr>
+<td>Extract a helper, loop it <code>k</code> times (chosen)</td>
+<td>Smallest diff that shares one code path between both arities. Keeps the current inline assembly — <code>make_graph</code> frees none of the arrays it is handed and takes an edge array, not a built <code>List</code>.</td>
+</tr>
+<tr>
+<td>Generalize count-spec parsing into a shared helper</td>
+<td>Rejected — no such helper exists; seven heads across three subsystems hand-roll their own. Would touch <code>src/random.c</code>, <code>src/ml/dist.c</code>, <code>src/list/constant_array.c</code>.</td>
+</tr>
+<tr>
+<td>Replace the <code>evaluate(RandomSample[...])</code> round-trip with a C-level RNG call</td>
+<td>Rejected — the round-trip is what makes <code>SeedRandom</code> work for free. Research resolved the O(n²) rework as out of scope.</td>
+</tr>
+<tr>
+<td>Also fix the measured candidate-tree leak (Finding 4B)</td>
+<td>Rejected — nearest call of the three. Research scoped it out; the human confirmed documenting over fixing.</td>
+</tr>
+</tbody></table>
+<h2 id="decision-criteria">Decision criteria</h2>
+<ul>
+<li>Match the established convention rather than invent one: silent <code>NULL</code> for a bad count (zero <code>Message(</code> calls in <code>src/random.c</code>), <code>{Graph[...]}</code> for <code>k = 1</code>.</li>
+<li>Preserve <code>SeedRandom</code> reproducibility — non-negotiable, and free if the sampler call stays as-is.</li>
+<li>Do not let the refactor change the existing 1-arg form.</li>
+</ul>
+<h2 id="decisions">Decisions</h2>
+<ul>
+<li><strong>Flat <code>k</code> only.</strong> The nested <code>RandomGraph[{n, m}, {k1, k2}]</code> form is out of scope, per the research's resolved question.</li>
+<li><strong>Extract a static helper, don't generalize.</strong> There is no shared count-spec parser anywhere in the tree — <code>src/random.c</code> holds five hand-written copies. A sixth local check is the idiomatic choice here; a generalizing refactor would be scope creep.</li>
+<li><strong>Keep the <code>evaluate(RandomSample[...])</code> round-trip.</strong> It is why <code>SeedRandom</code> works.</li>
+<li><strong>Fix the <code>n &lt;= 1</code> case incidentally</strong> (chosen by the human, 2026-08-30). The helper early-returns an edgeless graph when <code>maxe == 0</code> — and <strong>only</strong> then, not when <code>m == 0</code>, which works today and must keep consuming the RNG stream identically.</li>
+<li><strong>Document the leak, don't cap <code>k</code></strong> (chosen by the human, 2026-08-30). No sibling <code>Random*</code> head restricts its count, and a cap would be a non-Mathematica restriction.</li>
+<li><strong>Free the C arrays this diff allocates</strong>, keeping the assembly inline rather than calling <code>make_graph</code>, which frees nothing. <code>expr_new_function</code> memcpys (<code>src/expr.c:257</code>), so the caller owns the array. Leak (A), fixed only where the diff lands.</li>
+<li><strong>Fail unevaluated instead of crashing on an absurd <code>n</code> or <code>k</code>.</strong> Compute <code>maxe</code> in <code>unsigned long long</code>, bound it against <code>SIZE_MAX</code>, and check both <code>calloc</code>s — no arbitrary cap, just the head's existing <code>NULL</code> error channel.</li>
+</ul>
+<h2 id="non-goals">Non-goals</h2>
+<ul>
+<li><strong>The candidate-tree leak, Finding 4B</strong> (~364 KB/call at n=50). Scoped out by research; documented rather than fixed. It multiplies by <code>k</code>.</li>
+<li><strong>Leak (A) in the other four generators</strong> (<code>CompleteGraph</code>, <code>CycleGraph</code>, both <code>PathGraph</code> branches). Same one-line shape, but out of this diff.</li>
+<li><strong>The nested <code>{k1, k2}</code> dimension form.</strong></li>
+<li><strong>Reworking the O(n²) candidate materialization.</strong> Explicitly resolved as out of scope.</li>
+<li><strong>Any packed/NDArray/<code>Compile[]</code> surface.</strong> <code>RandomGraph</code> returns a <code>Graph</code> object, not a machine array — the "non-machine object" exemption CLAUDE.md names. Verified absent from <code>src/pack.c</code>'s <code>AWARE</code> list, <code>src/ndkernels.c</code>, <code>src/ndinteger.c</code>, and <code>src/compile/</code>.</li>
+</ul>
+<h2 id="requires-approval">Requires Approval</h2>
+<p>The <code>n &lt;= 1</code> fix (AC-14, AC-15) changes the observable behavior of the <strong>existing</strong> 1-arg form: <code>RandomGraph[{0, 0}]</code> and <code>RandomGraph[{1, 0}]</code> go from unevaluated to returning an edgeless graph. That is a bug fix, not a regression, but it is a behavior change outside the ticket's literal scope and was approved in conversation on 2026-08-30.</p>
+<h2 id="architecture-impact">Architecture Impact</h2>
+<ul>
+<li>New services introduced: none</li>
+<li>APIs changed: <code>RandomGraph</code> gains a second, optional argument — backward compatible yes (the 1-arg form is unchanged; the previously-unevaluated 2-arg form now evaluates)</li>
+<li>Data crossing a service boundary: none</li>
+<li>New external dependency: none</li>
+<li>Deployment topology change: none</li>
+</ul>
+<h2 id="subsystems-dependencies">Subsystems &amp; Dependencies</h2>
+<ul>
+<li>Subsystems touched: graph (invocation: inline — no doc exists; <code>thoughts/shared/subsystems/</code> is absent from the tree)</li>
+<li>Interdependencies surfaced: graph ↔ random — <code>builtin_random_graph</code> reaches <code>RandomSample</code> through <code>evaluate()</code> rather than a C-level RNG call. This is load-bearing for <code>SeedRandom</code> and is also the cause of the <code>n &lt;= 1</code> bug being fixed here.</li>
+</ul>
+<h2 id="how-we-ll-know-it-worked">How we'll know it worked</h2>
+<p>19 acceptance criteria in the full plan, all REPL-observable, covering the <code>k</code> form, the <code>k = 0</code> / <code>k = 1</code> boundary, invalid <code>k</code>, out-of-range <code>m</code> at both arities, seeded determinism, draw independence, the unchanged 1-arg form, and the <code>n &lt;= 1</code> fix. Plus a build under <code>SDKROOT=$(xcrun --show-sdk-path) make -j8</code>, <code>make check-c99</code>, the graph unit suite, and a <code>leaks --atExit</code> run.</p>
+<h2 id="review-status">Review status</h2>
+<p><code>plan-reviewer</code> ran on 2026-08-30 (scope-boundary + testability lenses): 2 BLOCKING, 2 WORTH FLAGGING, all four addressed in the full plan. The blocking pair were a <code>make_graph</code>-vs-inline contradiction that would have reintroduced the leak the plan commits to fixing, and an unapproved RNG-stream change to the existing 1-arg form at <code>m == 0</code> — that early return is now <code>maxe == 0</code> only. Findings are transcribed verbatim in the full plan's <code>## Plan Review</code>; <code>### Blocking</code> is clear.</p>
+<h2 id="appendix">Appendix</h2>
+<p>Full detail, phase breakdown, code sketches, and the reviewer findings: <a href="plan.md"><code>thoughts/shared/tickets/RG-1/plan.md</code></a>. Source research: <a href="research.md"><code>thoughts/shared/tickets/RG-1/research.md</code></a>.</p>
+    </main>
+  </div>
+</div>
+<script src="../../../../../kit-delivered/skills/render-artifact/assets/mermaid.min.js"></script>
+<script src="../../../../../kit-delivered/skills/render-artifact/assets/site-nav.js" defer></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, securityLevel: "strict" });
+</script>
+</body>
+</html>
