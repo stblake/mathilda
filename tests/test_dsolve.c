@@ -246,6 +246,39 @@ static void t_sys_constant_forcing(void) {
                "DSolve[{y'[x] == z[x], z'[x] == -y[x] + 1}, {y, z}, x][[1]]))");
 }
 
+/* ---- M8: general linear systems (defective / singular / triangular) ---- */
+static void t_sys_defective_singular(void) {
+    /* the reported case: coupled, A={{0,0},{-1,0}} is defective (one Jordan
+     * block, eigenvalue 0 doubled) AND singular.  Old eigen-only linsys and
+     * DecoupleSystem both declined; matrix exponential / triangular solve it. */
+    check_form("Head[DSolve[{y'[t] + 1 == 1, x'[t] + y[t] == 0}, {y[t], x[t]}, t]]", "List");
+    check_true("And @@ (PossibleZeroQ /@ ({y'[x], x'[x] + y[x]} /. "
+               "DSolve[{y'[x] == 0, x'[x] + y[x] == 0}, {y, x}, x][[1]]))");
+}
+static void t_sys_defective_nontriangular(void) {
+    /* eigenvalue 2 doubled, defective, NOT triangular -> x^k e^{2x} via Jordan */
+    check_true("And @@ (PossibleZeroQ /@ ({u'[x] - (u[x] - v[x]), v'[x] - (u[x] + 3 v[x])} /. "
+               "DSolve[{u'[x] == u[x] - v[x], v'[x] == u[x] + 3 v[x]}, {u, v}, x][[1]]))");
+}
+static void t_sys_triangular_varcoeff(void) {
+    /* coupled-but-triangular at variable coefficient (matrix exponential cannot
+     * reach this; TriangularSystem forward-substitution does). */
+    check_form("Head[DSolve[{y'[x] == y[x]/x, z'[x] == y[x]}, {y, z}, x]]", "List");
+    check_true("And @@ (PossibleZeroQ /@ ({y'[x] - y[x]/x, z'[x] - y[x]} /. "
+               "DSolve[{y'[x] == y[x]/x, z'[x] == y[x]}, {y, z}, x][[1]]))");
+}
+static void t_sys_singular_forcing(void) {
+    /* singular A with forcing -> variation of parameters (subsumes -A^{-1}b,
+     * which does not exist for singular A). */
+    check_true("And @@ (PossibleZeroQ /@ ({y'[x] - 1, x'[x] + y[x]} /. "
+               "DSolve[{y'[x] == 1, x'[x] + y[x] == 0}, {y, x}, x][[1]]))");
+}
+static void t_sys_triangular_ivp(void) {
+    /* triangular variable-coefficient IVP: y=2x, z=x^2-1 at x=1 */
+    check_true("PossibleZeroQ[(z[x] /. DSolve[{y'[x] == y[x]/x, z'[x] == y[x], "
+               "y[1] == 2, z[1] == 0}, {y[x], z[x]}, x][[1]]) - (x^2 - 1)]");
+}
+
 /* ---- M4: reduction of order (2nd-order missing y) ---- */
 static void t_reduce_order(void) {
     check_true("PossibleZeroQ[(y''[x] - y'[x]^2) /. DSolve[y''[x] == y'[x]^2, y, x][[1]]]");
@@ -423,6 +456,11 @@ int main(void) {
     TEST(t_sys_real_eigenvalues);
     TEST(t_sys_complex_ivp);
     TEST(t_sys_constant_forcing);
+    TEST(t_sys_defective_singular);
+    TEST(t_sys_defective_nontriangular);
+    TEST(t_sys_triangular_varcoeff);
+    TEST(t_sys_singular_forcing);
+    TEST(t_sys_triangular_ivp);
     TEST(t_reduce_order);
     TEST(t_fos_quadratic);
     TEST(t_fos_shifted);

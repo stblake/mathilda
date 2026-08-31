@@ -704,6 +704,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_autonomous.c
     ../src/calculus/dsolve_pde1.c
     ../src/calculus/dsolve_decouple.c
+    ../src/calculus/dsolve_triangular.c
     ../src/calculus/dsolve_linsys.c
     ../src/sum/sum.c
     ../src/sum/sum_util.c

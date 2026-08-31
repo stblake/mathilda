@@ -16,38 +16,9 @@
 #include "../internal.h"
 #include <stdlib.h>
 
-/* Renumber C[1..m] in `body` to C[offset+1..offset+m]; body consumed. */
-static Expr* renumber(Expr* body, int m, int* offset) {
-    if (m <= 0) return body;
-    Expr** rules = malloc((size_t)m * sizeof(Expr*));
-    for (int j = 1; j <= m; j++)
-        rules[j - 1] = expr_new_function(expr_new_symbol(SYM_Rule),
-                           (Expr*[]){ ds_const(j), ds_const(*offset + j) }, 2);
-    Expr* rl = expr_new_function(expr_new_symbol(SYM_List), rules, (size_t)m);
-    free(rules);
-    *offset += m;
-    return eval_and_free(internal_replace_all((Expr*[]){ body, rl }, 2));
-}
-
-/* Extract the body from a DSolve result {{fname -> Function[{x}, body]}}. */
-static Expr* extract_body(Expr* r, const char* fname) {
-    if (!head_is(r, SYM_List) || r->data.function.arg_count < 1) return NULL;
-    Expr* inner = r->data.function.args[0];
-    if (!head_is(inner, SYM_List)) return NULL;
-    for (size_t k = 0; k < inner->data.function.arg_count; k++) {
-        Expr* rule = inner->data.function.args[k];
-        if (head_is(rule, SYM_Rule) && rule->data.function.arg_count == 2) {
-            Expr* lhs = rule->data.function.args[0];
-            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == fname) {
-                Expr* rhs = rule->data.function.args[1];
-                if (head_is(rhs, SYM_Function) && rhs->data.function.arg_count == 2)
-                    return expr_copy(rhs->data.function.args[1]);
-                return expr_copy(rhs);
-            }
-        }
-    }
-    return NULL;
-}
+/* The per-function solve/renumber helpers (extract body, renumber constants)
+ * are shared with DSolve`TriangularSystem; they live in dsolve_common.c as
+ * dsolve_extract_system_body / dsolve_renumber_constants. */
 
 Expr** dsolve_decouple_solve(DSolveProblem* P) {
     size_t n = P->nfun;
@@ -86,10 +57,10 @@ Expr** dsolve_decouple_solve(DSolveProblem* P) {
         Expr* call = expr_new_function(expr_new_symbol(SYM_DSolve),
                          (Expr*[]){ eqarg, expr_new_symbol(P->fun_names[i]), expr_new_symbol(xvar) }, 3);
         Expr* r = eval_and_free(call);
-        Expr* body = extract_body(r, P->fun_names[i]);
+        Expr* body = dsolve_extract_system_body(r, P->fun_names[i]);
         expr_free(r);
         if (!body) { ok = false; break; }
-        bodies[i] = renumber(body, P->max_order[i], &offset);
+        bodies[i] = dsolve_renumber_constants(body, P->max_order[i], &offset);
     }
 
     for (size_t i = 0; i < n; i++) free(groups[i]);

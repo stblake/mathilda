@@ -102,6 +102,16 @@ bool  dsolve_verify_system(const DSolveProblem* P, Expr** bodies);
  * verify, fit conditions, assemble.  NULL if declined or verification fails. */
 Expr* dsolve_run_system(DSolveProblem* P, DSolveSysFn fn);
 
+/* Renumber the generated constants C[1..m] in `body` to C[*offset+1..*offset+m]
+ * and advance *offset by m, so per-function solutions in a system do not
+ * collide.  `body` is consumed; result owned.  (m <= 0 is a no-op.) */
+Expr* dsolve_renumber_constants(Expr* body, int m, int* offset);
+
+/* Extract the solution body for the interned name `fname` from a scalar DSolve
+ * result {{fname -> Function[{x}, body]}}.  NULL if absent; `r` borrowed,
+ * result owned. */
+Expr* dsolve_extract_system_body(Expr* r, const char* fname);
+
 /* Run one PDE method (single function of the nind independent variables): call
  * `fn` for the body (bodies[0]), verify it against the equation, and assemble
  * {{u -> Function[{v1,...,vk}, body]}} (or the applied u[...] -> body form). */

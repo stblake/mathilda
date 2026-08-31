@@ -92,8 +92,10 @@ extern void dsolve_autonomous_init(void);
 extern Expr** dsolve_pde1_solve(DSolveProblem* P);
 extern void dsolve_pde1_init(void);
 extern Expr** dsolve_decouple_solve(DSolveProblem* P);
+extern Expr** dsolve_triangular_solve(DSolveProblem* P);
 extern Expr** dsolve_linsys_solve(DSolveProblem* P);
 extern void dsolve_decouple_init(void);
+extern void dsolve_triangular_init(void);
 extern void dsolve_linsys_init(void);
 
 /* ------------------------------------------------------------------ *
@@ -149,6 +151,7 @@ Expr* builtin_dsolve(Expr* res) {
         result = dsolve_run_pde(&P, dsolve_pde1_solve);
     } else if (P.nfun > 1) {
         if (!result) result = dsolve_run_system(&P, dsolve_decouple_solve);
+        if (!result) result = dsolve_run_system(&P, dsolve_triangular_solve);
         if (!result) result = dsolve_run_system(&P, dsolve_linsys_solve);
     } else
     switch (method) {
@@ -226,5 +229,6 @@ void dsolve_init(void) {
     dsolve_autonomous_init();
     dsolve_pde1_init();
     dsolve_decouple_init();
+    dsolve_triangular_init();
     dsolve_linsys_init();
 }

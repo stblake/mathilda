@@ -46,7 +46,9 @@ a *decidable* non-zero (undecidable is kept, matching Solve); constants are then
 fitted to conditions via `Solve`, and `C[k]` renamed to the requested head last.
 
 Reuse: `solvepoly_solve_polynomial_equality` (characteristic roots), `Eigenvalues/
-Eigenvectors/JordanDecomposition` (systems), `Series`/`SeriesData` (Frobenius),
+Eigenvectors/JordanDecomposition` + `MatrixPower`/`DiagonalMatrix` (systems — the
+fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
+`MatrixExp` is currently inert), `Series`/`SeriesData` (Frobenius),
 `Eliminate` (PDE characteristics), `Piecewise`/`UnitStep` (BVP/wave/heat),
 `zero_test_decide` (verify), `Integrate`/`D`/`Solve` (throughout).
 
@@ -71,8 +73,10 @@ Eigenvectors/JordanDecomposition` (systems), `Series`/`SeriesData` (Frobenius),
   do: reduction of order, normal form, special-function recognizer table.
 - **M4 — systems (1e) + nonlinear higher-order (1d).** ✅ DONE. `LinearFirstOrderSystem`
   (constant-coefficient, eigen-based, real + complex eigenvalues, constant
-  forcing) and `DecoupleSystem`; multi-function verify/fit/assemble added to the
-  substrate; the `nfun>1` dispatch route added. Nonlinear higher-order (1d):
+  forcing — *diagonalizable only*; the defective / singular-`A` / general-forcing
+  cases are lifted in **M8**) and `DecoupleSystem`; multi-function
+  verify/fit/assemble added to the substrate; the `nfun>1` dispatch route added.
+  Nonlinear higher-order (1d):
   `ReductionOfOrder` (2nd-order missing y) and `AutonomousReduction` (2nd-order
   missing x, two-stage recursion) both done; `EnergyIntegral` subsumed by the
   latter for elementary cases.
@@ -88,6 +92,65 @@ Eigenvectors/JordanDecomposition` (systems), `Series`/`SeriesData` (Frobenius),
   `HoldAll` was dropped (equations survive evaluation as formal `Equal[...]`, so an
   equation held in a variable now solves), and `ReadProtected` was removed
   system-wide (Mathilda is fully open source).
+- **M8 — general linear systems (defective, singular, arbitrary forcing) +
+  triangular systems.** ✅ DONE. Two principled generalizations that together
+  retire the M4 "diagonalizable only" restriction and the `DecoupleSystem`
+  "one function per equation" restriction, closing the `{y'==0, x'+y==0}` class —
+  a coupled constant-coefficient system whose matrix `A = {{0,0},{-1,0}}` is
+  *defective* (one Jordan block, eigenvalue 0 doubled) **and** singular — in full
+  generality rather than via a triangular special-case hack.
+  - **Fundamental-matrix rework of `LinearFirstOrderSystem`.** Solve
+    `Y' == A Y + b(x)` for **any** constant `A` (diagonalizable *or* defective)
+    via `Φ(x) = e^{Ax}` built from the Jordan form: `{S,J} = JordanDecomposition[A]`;
+    split `J = D + N` (diagonal eigenvalues `D` + strictly-upper nilpotent `N`);
+    `e^{Jx} = e^{Dx} · e^{Nx}` with `e^{Dx} = DiagonalMatrix[Exp[λ_i x]]` and
+    `e^{Nx} = Σ_{m<n} N^m x^m / m!` (a **finite** sum — `N` is nilpotent, so
+    `N^n == 0`, verified via `MatrixPower`); then `Φ = S · e^{Jx} · S^{-1}`.
+    Homogeneous solution `Y = Φ · {C[1],…,C[n]}`; forcing `b(x)` by variation of
+    parameters `Y = Φ·(C + ∫ Φ^{-1} b dx)`, which **subsumes** the old `-A^{-1}b`
+    particular and — crucially — stays valid when `A` is singular (exactly the
+    failing example). `D` and `N` commute (each Jordan block is scalar on its
+    diagonal), so the split is exact. Complex eigenvalues make `J`/`S` complex;
+    the resulting complex-exponential body is reduced to real `e^{αx}Cos/Sin[βx]`
+    form via `ComplexExpand`/`Simplify` (kept in complex form if it does not
+    reduce, matching the "structurally exact" policy). The zero-eigenvector guard
+    and the defective decline in `dsolve_linsys.c` are deleted; the diagonalizable
+    case is now just `N == 0`. Symbolic `MatrixExp` is inert, so `Φ` is built from
+    Jordan directly — factor the `Φ`-builder (`dsolve_fundamental_matrix`) so a
+    future symbolic `MatrixExp[m]` can reuse it.
+  - **`TriangularSystem`** (new method; generalizes `DecoupleSystem`). When the
+    inter-function dependency graph is a DAG, topologically sort it, solve the
+    functions in order, substitute each solved function forward into the
+    still-unsolved equations, recurse into the scalar engine per function, and
+    renumber constants (reusing `renumber`/`extract_body` from
+    `dsolve_decouple.c`). This covers coupled-but-triangular systems at **any**
+    coefficient — constant *or* variable (`{y'==x^2 y, x'==y}`) — the class that
+    neither `DecoupleSystem` (needs zero edges) nor the constant-`A` matrix
+    exponential (needs constant coefficients) can reach. Cascade order for
+    `nfun>1`: `DecoupleSystem` → `TriangularSystem` → `LinearFirstOrderSystem`
+    (cheapest / cleanest constants first; the matrix exponential is the general
+    backstop for irreducibly-coupled constant systems).
+  - **Higher-order linear systems** reduce to first order by state augmentation
+    (introduce `y_i == u^(i)` auxiliary functions) in the substrate, then feed
+    the reworked core — lands with, or immediately after, the above.
+
+  Union of the two methods leaves exactly one honest gap: genuinely coupled,
+  *non-triangular*, *variable*-coefficient systems (`LinearSystemVarCoeff`,
+  Floquet/Magnus — still future).
+
+  *Landed:* `dsolve_linsys.c` reworked around `mat_exp` (Jordan + finite
+  nilpotent series) with the `Simplify[ComplexExpand[·]] //. Cosh[a]+Sinh[a]->E^a`
+  realifier; new `dsolve_triangular.c`; shared `dsolve_renumber_constants` /
+  `dsolve_extract_system_body` factored out of `dsolve_decouple.c`; cascade is
+  `DecoupleSystem → TriangularSystem → LinearFirstOrderSystem`. **Constant-
+  namespace hazard** (fixed): forward-substituting a solved function's `C[k]`
+  into a later equation collides with the fresh `C[k]` the scalar engine emits
+  for that equation (`GeneratedParameters` does not help — DSolve renames *all*
+  `C[k]`, merging them); `TriangularSystem` parks solved constants in the private
+  head `DSolve\`sysK` during the peel and remaps `sysK[k] -> C[k]` only at the
+  end. Verified: `{y'==0, x'+y==0}` → `{y->C[1], x->C[2]-C[1] t}`; defective
+  non-triangular, complex, forced-singular, and variable-coefficient triangular
+  IVPs all back-substitute to zero (`tests/test_dsolve.c` t_sys_*).
 
 ## Phase 1 — ODE method catalog
 
@@ -154,15 +217,30 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   (`y''==2y^3`, `y''==-Sin[y]`) still decline (`WeierstrassP` inert head: future).
 
 ### 1e. Systems
-- `[✓] LinearFirstOrderSystem` — `Y' == A Y + b`, constant A: eigen-decomposition
-  (real λ → `C e^{λx} v`; complex pairs → real `e^{αx}Cos/Sin[βx]` combinations of
-  Re/Im of the eigenvector); constant forcing → particular `-A^{-1}b`. Diagonalizable
-  case; defective/non-constant-forcing decline. Multi-function verify + IVP fit in the
-  substrate (`dsolve_verify_system`/`dsolve_fit_system`/`dsolve_assemble_system`).
+
+Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
+`LinearFirstOrderSystem`.
+
 - `[✓] DecoupleSystem` — each equation involves one function: recurse into the scalar
   engine per function, renumber the generated constants. Handles variable-coefficient
   components (`y' == x^2 y`).
-- `[ ] LinearSystemVarCoeff` (coupled, variable A) — limited/future.
+- `[✓] TriangularSystem` — inter-function dependency graph is a DAG: topologically
+  sort, solve in order substituting each solved function forward, recurse into the
+  scalar engine + renumber constants (reuses `dsolve_renumber_constants` /
+  `dsolve_extract_system_body`, with solved constants parked in `DSolve\`sysK` to
+  avoid colliding with the scalar engine's fresh `C[k]`). Coupled-but-triangular at
+  **any** coefficient — constant or variable
+  (`{y'==0, x'+y==0}` → `y=C[1], x=C[2]-C[1]x`;  `{y'==y/x, z'==y}`).
+- `[✓] LinearFirstOrderSystem` — `Y' == A Y + b(x)`, constant `A`, **any** spectrum.
+  Fundamental matrix `Φ = e^{Ax} = S · e^{Jx} · S^{-1}` from `JordanDecomposition`
+  (diagonalizable → `C e^{λx} v`; **defective → `x^k e^{λx}`** generalized-eigenvector
+  terms; complex pairs → real `e^{αx}Cos/Sin[βx]` via `ComplexExpand`). Forcing `b(x)`
+  by variation of parameters `Φ·(C + ∫ Φ^{-1} b dx)` — subsumes `-A^{-1}b` and stays
+  valid for singular `A`. Multi-function verify + IVP/BVP fit in the substrate
+  (`dsolve_verify_system`/`dsolve_fit_system`/`dsolve_assemble_system`).
+  *Was (M4): eigen-only, diagonalizable, `-A^{-1}b` forcing, defective decline.*
+- `[ ] LinearSystemVarCoeff` — genuinely coupled, *non-triangular*, *variable* `A`
+  (Floquet/Magnus); future.
 
 ### 1f. Conditions
 - `[✓]` IVP (fit constants at one point) — in the substrate.

@@ -2951,3 +2951,33 @@ is unsound: if DSolve *declines*, `DSolve[...][[1]]` is `Part` of an unevaluated
 "never solved". `check_solves` therefore asserts `Head[DSolve[eqn,y,x]] === List`
 *first*, then the residual. (Same trap made a declined `(x+2y)^3` print
 `verify: True` during probing.)
+
+## DSolve M8 — system forward-substitution collides constants unless parked in a private head
+
+`TriangularSystem` solves a coupled-triangular system by solving one function,
+substituting its solution *forward* into the remaining equations, then solving the
+next. The trap: the solved function's arbitrary constant is `C[1]`, and the scalar
+engine that solves the *next* equation *also* emits its integration constant as
+`C[1]` — so `{y'==0, x'+y==0}` came out `x -> C[2] - C[2] t` (both `C[1]`s merged)
+instead of `C[2] - C[1] t`. Back-substitution catches it (`x'+y = C[1]-C[2] ≠ 0`),
+which is exactly why the M8 tests verify residuals, not just `Head === List`.
+`GeneratedParameters -> KK` does **not** fix it: DSolve renames *every* `C[k]` in
+the result to `KK[k]` at the end, including the forcing constant, preserving the
+merge (`DSolve[x'==-C[1], x, t, GeneratedParameters->KK]` → `KK[1] - KK[1] t`). The
+fix: park each solved body's constants in a private head (`DSolve`sysK`) disjoint
+from `C[]` *before* substituting forward, so the next scalar solve's fresh `C[k]`
+can never alias them; remap `sysK[k] -> C[k]` contiguously only at the very end.
+General rule: whenever a solved sub-result is fed back into an engine that
+regenerates same-named symbols, isolate the two namespaces during the overlap.
+
+## DSolve — realify a Jordan-built solution with a targeted Cosh+Sinh rule, not spectrum branching
+
+Building `e^{Ax}` from `JordanDecomposition` yields complex exponentials for complex
+spectra (need realifying) and, for a *real repeated* eigenvalue, a body that
+`Simplify` rewrites as `(Cosh[x]+Sinh[x])^2 · poly` rather than `E^{2x} · poly`
+(Simplify prefers the hyperbolic form once a polynomial factor is present, though
+it folds the bare `(Cosh+Sinh)^2` to `E^{2x}` fine). One universal normalizer
+handles both without detecting the spectrum: `Simplify[ComplexExpand[·]] //.
+{Cosh[a_]+Sinh[a_] :> E^a}` — `ComplexExpand` leaves real exponentials alone and
+turns `E^{i β x}` into Cos/Sin, and the rewrite folds any Simplify-introduced
+hyperbolic exponential back to `E`.

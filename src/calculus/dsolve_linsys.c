@@ -3,13 +3,25 @@
  *
  * Solves a first-order linear system with constant coefficients
  *     Y' == A Y + b(x),   A an n x n constant matrix,
- * by the eigen-decomposition of A.  Each real eigenvalue lambda (eigenvector v)
- * contributes C e^{lambda x} v; each complex-conjugate pair alpha +- beta i
- * (eigenvector p +- q i) contributes the two real solutions
- *     e^{alpha x}(cos(beta x) p - sin(beta x) q),
- *     e^{alpha x}(sin(beta x) p + cos(beta x) q).
- * A constant forcing b adds the particular solution -A^{-1} b.  Defective
- * (non-diagonalizable) matrices and non-constant forcing are left for later.
+ * for ANY constant A (diagonalizable OR defective) via the fundamental matrix
+ * Phi(x) = e^{Ax}, assembled from the Jordan decomposition A = S J S^{-1}:
+ *
+ *     e^{Jx} = e^{Dx} e^{Nx},   J = D + N  (D diagonal eigenvalues,
+ *                                           N strictly-upper nilpotent),
+ *     e^{Dx} = DiagonalMatrix[Exp[lambda_i x]],
+ *     e^{Nx} = sum_{m<n} N^m x^m / m!      (finite: N is nilpotent, N^n == 0),
+ *     Phi    = S e^{Jx} S^{-1}.
+ *
+ * D and N commute (each Jordan block is scalar on its diagonal), so the split is
+ * exact.  The homogeneous solution is Y = Phi . {C[1],...,C[n]}; a forcing b(x)
+ * is added by variation of parameters, Y = Phi . (C + Integrate[Phi^{-1} b, x]),
+ * which subsumes the older -A^{-1} b particular and stays valid when A is
+ * singular.  Each body is realified/tidied by
+ * Simplify[ComplexExpand[.]] //. (Cosh[a]+Sinh[a] -> E^a): complex eigenvalues
+ * collapse to e^{alpha x} Cos/Sin[beta x], and the Cosh/Sinh form Simplify
+ * introduces for a repeated real eigenvalue is folded back to E^{lambda x}.
+ *
+ * Symbolic MatrixExp is currently inert, so Phi is built from Jordan directly.
  */
 #include "dsolve_common.h"
 #include "../sym_names.h"
@@ -18,13 +30,88 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include "../common.h"
+#include "../internal.h"
 #include <stdlib.h>
 #include <stdio.h>
 
 static Expr* ev(const char* head, Expr* a) { return eval_and_free(ds_call1(head, a)); }
 static Expr* mul(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Times, a, b)); }
 static Expr* add(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Plus, a, b)); }
-static Expr* sub(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Subtract, a, b)); }
+
+/* The rewrite rule  Cosh[a_] + Sinh[a_] :> E^a  (RuleDelayed), used to fold the
+ * hyperbolic form Simplify prefers for a real repeated eigenvalue back to a
+ * plain exponential without disturbing genuine Cos/Sin from complex spectra. */
+static Expr* cosh_sinh_rule(void) {
+    Expr* blank1 = expr_new_function(expr_new_symbol("Blank"), NULL, 0);
+    Expr* blank2 = expr_new_function(expr_new_symbol("Blank"), NULL, 0);
+    Expr* pa1 = expr_new_function(expr_new_symbol("Pattern"),
+                    (Expr*[]){ expr_new_symbol("a"), blank1 }, 2);
+    Expr* pa2 = expr_new_function(expr_new_symbol("Pattern"),
+                    (Expr*[]){ expr_new_symbol("a"), blank2 }, 2);
+    Expr* lhs = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                    expr_new_function(expr_new_symbol("Cosh"), (Expr*[]){ pa1 }, 1),
+                    expr_new_function(expr_new_symbol("Sinh"), (Expr*[]){ pa2 }, 1) }, 2);
+    Expr* rhs = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_symbol("E"), expr_new_symbol("a") }, 2);
+    return expr_new_function(expr_new_symbol(SYM_RuleDelayed), (Expr*[]){ lhs, rhs }, 2);
+}
+
+/* Realify + tidy a solution body; consumes `body`, returns owned. */
+static Expr* tidy(Expr* body) {
+    Expr* ce   = eval_and_free(ds_call1("ComplexExpand", body));
+    Expr* si   = eval_and_free(ds_call1("Simplify", ce));
+    Expr* rule = cosh_sinh_rule();
+    return eval_and_free(internal_replace_repeated((Expr*[]){ si, rule }, 2));
+}
+
+/* e^{A t} for A = S J S^{-1}, given the Jordan factors S (change of basis) and
+ * J (Jordan form, upper-triangular with the eigenvalues on the diagonal).
+ * S, J, t are borrowed; the returned n x n matrix (List of Lists) is owned. */
+static Expr* mat_exp(Expr* S, Expr* J, Expr* t, size_t n) {
+    /* e^{Dt} (diagonal Exp[J_ii t]) and N = J with the diagonal zeroed */
+    Expr** drows = malloc(n * sizeof(Expr*));
+    Expr** nrows = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        Expr** dcol = malloc(n * sizeof(Expr*));
+        Expr** ncol = malloc(n * sizeof(Expr*));
+        Expr* Ji = J->data.function.args[i];
+        for (size_t j = 0; j < n; j++) {
+            Expr* Jij = Ji->data.function.args[j];
+            if (i == j) {
+                dcol[j] = ev("Exp", mul(expr_copy(Jij), expr_copy(t)));
+                ncol[j] = expr_new_integer(0);
+            } else {
+                dcol[j] = expr_new_integer(0);
+                ncol[j] = expr_copy(Jij);
+            }
+        }
+        drows[i] = expr_new_function(expr_new_symbol(SYM_List), dcol, n); free(dcol);
+        nrows[i] = expr_new_function(expr_new_symbol(SYM_List), ncol, n); free(ncol);
+    }
+    Expr* eD   = expr_new_function(expr_new_symbol(SYM_List), drows, n); free(drows);
+    Expr* Nmat = expr_new_function(expr_new_symbol(SYM_List), nrows, n); free(nrows);
+
+    /* e^{Nt} = sum_{m=0}^{n-1} MatrixPower[N,m] t^m / m!  (finite, N nilpotent) */
+    Expr* eN = NULL;
+    long fact = 1;                                /* fact == m! at loop head */
+    for (size_t m = 0; m < n; m++) {
+        if (m >= 2) fact *= (long)m;
+        Expr* Npow = eval_and_free(ds_call2("MatrixPower",
+                         expr_copy(Nmat), expr_new_integer((long)m)));
+        Expr* scal = mul(expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ expr_copy(t), expr_new_integer((long)m) }, 2),
+                         expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ expr_new_integer(fact), expr_new_integer(-1) }, 2));
+        Expr* term = mul(scal, Npow);
+        eN = eN ? add(eN, term) : term;
+    }
+    expr_free(Nmat);
+
+    Expr* eJt  = eval_and_free(ds_call2(SYM_Dot, eD, eN));
+    Expr* SeJt = eval_and_free(ds_call2(SYM_Dot, expr_copy(S), eJt));
+    return eval_and_free(ds_call2(SYM_Dot, SeJt,
+                             eval_and_free(ds_call1("Inverse", expr_copy(S)))));
+}
 
 Expr** dsolve_linsys_solve(DSolveProblem* P) {
     size_t n = P->nfun;
@@ -106,82 +193,62 @@ Expr** dsolve_linsys_solve(DSolveProblem* P) {
     /* forcing must be constant (or zero) */
     if (ok && !b_zero && !ds_free_of(bvec, xvar)) ok = false;
 
+    /* ---- fundamental-matrix solution: Phi = e^{Ax} via Jordan ---- */
     Expr** Y = NULL;
     if (ok) {
-        Expr* lam = ds_delist(eval_and_free(ds_call1("Eigenvalues", expr_copy(Amat))));
-        Expr* vec = ds_delist(eval_and_free(ds_call1("Eigenvectors", expr_copy(Amat))));
-        if (head_is(lam, SYM_List) && head_is(vec, SYM_List)
-            && lam->data.function.arg_count == n && vec->data.function.arg_count == n) {
-            Y = malloc(n * sizeof(Expr*));
-            for (size_t i = 0; i < n; i++) Y[i] = expr_new_integer(0);
-            bool* used = calloc(n, sizeof(bool));
-            int cnum = 0;
-            bool built = true;
-            for (size_t k = 0; k < n && built; k++) {
-                if (used[k]) continue;
-                Expr* lk = lam->data.function.args[k];
-                Expr* vk = vec->data.function.args[k];
-                if (!head_is(vk, SYM_List) || vk->data.function.arg_count != n) { built = false; break; }
-                /* reject a zero eigenvector (defective) */
-                bool zero_vec = true;
-                for (size_t i = 0; i < n; i++) if (!ds_is_zero(vk->data.function.args[i])) zero_vec = false;
-                if (zero_vec) { built = false; break; }
+        Expr* jd = ds_delist(eval_and_free(ds_call1("JordanDecomposition", expr_copy(Amat))));
+        if (head_is(jd, SYM_List) && jd->data.function.arg_count == 2) {
+            Expr* S = jd->data.function.args[0];
+            Expr* J = jd->data.function.args[1];
+            bool shape = head_is(S, SYM_List) && head_is(J, SYM_List)
+                && S->data.function.arg_count == n && J->data.function.arg_count == n;
+            for (size_t i = 0; shape && i < n; i++)
+                if (!head_is(J->data.function.args[i], SYM_List)
+                    || J->data.function.args[i]->data.function.arg_count != n) shape = false;
+            if (shape) {
+                Expr* xt  = expr_new_symbol(xvar);
+                Expr* Phi = mat_exp(S, J, xt, n);
+                expr_free(xt);
 
-                Expr* imk = ev("Im", expr_copy(lk));
-                bool real = ds_is_zero(imk); expr_free(imk);
-                if (real) {
-                    cnum++;
-                    Expr* elx = ev("Exp", mul(expr_copy(lk), expr_new_symbol(xvar)));
-                    for (size_t i = 0; i < n; i++)
-                        Y[i] = add(Y[i], mul(ds_const(cnum),
-                                    mul(expr_copy(elx), expr_copy(vk->data.function.args[i]))));
-                    expr_free(elx);
-                    used[k] = true;
-                } else {
-                    Expr* conj = ev("Conjugate", expr_copy(lk));
-                    long cc = -1;
-                    for (size_t m = 0; m < n && cc < 0; m++) {
-                        if (m == k || used[m]) continue;
-                        Expr* diff = sub(expr_copy(lam->data.function.args[m]), expr_copy(conj));
-                        if (ds_is_zero(diff)) cc = (long)m;
-                        expr_free(diff);
-                    }
-                    expr_free(conj);
-                    if (cc < 0) { built = false; break; }
-                    used[k] = used[(size_t)cc] = true;
-                    Expr* al = ev("Re", expr_copy(lk));
-                    Expr* be = ev("Im", expr_copy(lk));
-                    Expr* eax = ev("Exp", mul(expr_copy(al), expr_new_symbol(xvar)));
-                    Expr* cosbx = ev("Cos", mul(expr_copy(be), expr_new_symbol(xvar)));
-                    Expr* sinbx = ev("Sin", mul(expr_copy(be), expr_new_symbol(xvar)));
-                    int ca = ++cnum, cb = ++cnum;
-                    for (size_t i = 0; i < n; i++) {
-                        Expr* wi = vk->data.function.args[i];
-                        Expr* p = ev("Re", expr_copy(wi));
-                        Expr* q = ev("Im", expr_copy(wi));
-                        Expr* s1 = mul(expr_copy(eax),
-                                       sub(mul(expr_copy(cosbx), expr_copy(p)), mul(expr_copy(sinbx), expr_copy(q))));
-                        Expr* s2 = mul(expr_copy(eax),
-                                       add(mul(expr_copy(sinbx), expr_copy(p)), mul(expr_copy(cosbx), expr_copy(q))));
-                        Y[i] = add(Y[i], add(mul(ds_const(ca), s1), mul(ds_const(cb), s2)));
-                        expr_free(p); expr_free(q);
-                    }
-                    expr_free(al); expr_free(be); expr_free(eax); expr_free(cosbx); expr_free(sinbx);
+                /* rhs = {C[1..n]} (+ variation of parameters if forced) */
+                Expr** rc = malloc(n * sizeof(Expr*));
+                for (size_t i = 0; i < n; i++) rc[i] = ds_const((int)i + 1);
+                bool force_ok = true;
+                if (!b_zero) {
+                    Expr* negx   = mul(expr_new_integer(-1), expr_new_symbol(xvar));
+                    Expr* PhiInv = mat_exp(S, J, negx, n);
+                    expr_free(negx);
+                    Expr* integ  = ds_delist(eval_and_free(
+                                       ds_call2(SYM_Dot, PhiInv, expr_copy(bvec))));
+                    if (head_is(integ, SYM_List) && integ->data.function.arg_count == n) {
+                        for (size_t i = 0; i < n && force_ok; i++) {
+                            Expr* anti = ds_integrate(expr_copy(integ->data.function.args[i]),
+                                                      expr_new_symbol(xvar));
+                            if (ds_has_head(anti, SYM_Integrate)) { expr_free(anti); force_ok = false; }
+                            else rc[i] = add(rc[i], anti);
+                        }
+                    } else force_ok = false;
+                    expr_free(integ);
                 }
-            }
-            free(used);
-            if (!built || cnum != (int)n) { for (size_t i = 0; i < n; i++) expr_free(Y[i]); free(Y); Y = NULL; }
-        }
-        expr_free(lam); expr_free(vec);
 
-        /* particular solution for constant forcing: Y_p = -A^{-1} b */
-        if (Y && !b_zero) {
-            Expr* yp = ds_delist(eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
-                           ds_call2(SYM_Dot, ev("Inverse", expr_copy(Amat)), expr_copy(bvec)))));
-            if (head_is(yp, SYM_List) && yp->data.function.arg_count == n)
-                for (size_t i = 0; i < n; i++) Y[i] = add(Y[i], expr_copy(yp->data.function.args[i]));
-            expr_free(yp);
+                if (force_ok) {
+                    Expr* rhs = expr_new_function(expr_new_symbol(SYM_List), rc, n);
+                    free(rc);
+                    Expr* Yvec = ds_delist(eval_and_free(ds_call2(SYM_Dot, expr_copy(Phi), rhs)));
+                    if (head_is(Yvec, SYM_List) && Yvec->data.function.arg_count == n) {
+                        Y = malloc(n * sizeof(Expr*));
+                        for (size_t i = 0; i < n; i++)
+                            Y[i] = tidy(expr_copy(Yvec->data.function.args[i]));
+                    }
+                    expr_free(Yvec);
+                } else {
+                    for (size_t i = 0; i < n; i++) expr_free(rc[i]);
+                    free(rc);
+                }
+                expr_free(Phi);
+            }
         }
+        expr_free(jd);
     }
 
     if (Amat) expr_free(Amat);

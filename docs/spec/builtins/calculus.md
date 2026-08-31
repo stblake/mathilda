@@ -674,6 +674,15 @@ roadmap):
 | `DSolve`ReductionOfOrder` | 2nd-order missing `y`, `y'' == F(x, y')` (reduce to 1st order in `p = y'`, then integrate) |
 | `DSolve`AutonomousReduction` | 2nd-order missing `x`, `y'' == f(y, y')` (`p = y'(y)`, `p p'(y) == f`, then `y' == p(y)`) |
 
+Systems (`nfun > 1`) are dispatched to their own cascade,
+`DecoupleSystem → TriangularSystem → LinearFirstOrderSystem`:
+
+| Method | Solves |
+|---|---|
+| `DecoupleSystem` | each equation mentions one function (recurse per function) |
+| `TriangularSystem` | DAG dependency graph — solve in order, substitute forward, at any coefficient (constant or variable, e.g. `{y'==y/x, z'==y}`) |
+| `LinearFirstOrderSystem` | `Y' == A Y + b(x)`, constant `A`, **any** spectrum — fundamental matrix `e^{Ax}` from `JordanDecomposition` (diagonalizable, **defective**, or complex); forcing by variation of parameters |
+
 ```
 In[5]:= DSolve[y''[x] + 4 y'[x] + 5 y[x] == 0, y[x], x]
 Out[5]= {{y[x] -> C[1] Cos[x] E^(-2 x) - C[2] Sin[x] E^(-2 x)}}
@@ -705,6 +714,13 @@ In[11]:= DSolve[{y'[x] == y[x] - 2 z[x], z'[x] == y[x] - z[x],
                  y[0] == 1, z[0] == 4}, {y[x], z[x]}, x]  (* system, complex eigenvalues *)
 Out[11]= {{y[x] -> -3 (Cos[x] + Sin[x]) + 4 (Cos[x] - Sin[x]),
            z[x] -> 4 Cos[x] - 3 Sin[x]}}
+
+In[12]:= DSolve[{y'[t] == 0, x'[t] + y[t] == 0}, {y[t], x[t]}, t]  (* defective + singular *)
+Out[12]= {{y[t] -> C[1], x[t] -> C[2] - C[1] t}}
+
+In[13]:= DSolve[{u'[t] == u[t] - v[t], v'[t] == u[t] + 3 v[t]}, {u[t], v[t]}, t]  (* defective, x e^{2t} *)
+Out[13]= {{u[t] -> E^(2 t) (C[1] - C[1] t - C[2] t),
+           v[t] -> E^(2 t) (C[2] + C[1] t + C[2] t)}}
 ```
 
 Systems (`nfun > 1`) are dispatched to `DecoupleSystem` (each equation involves
