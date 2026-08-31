@@ -382,18 +382,26 @@ void dsolve_problem_free(DSolveProblem* P) {
 /* ------------------------------------------------------------------ *
  *  Verify / fit / assemble                                            *
  * ------------------------------------------------------------------ */
-/* Substitute the function-valued rule y -> Function[{x}, body] into each
- * equation residual and require none to be decidably non-zero. */
+/* Substitute the candidate body into each equation residual and require none to
+ * be decidably non-zero.  Rather than substitute y -> Function[{x}, body] and
+ * let the evaluator reduce Derivative[k][y][x], we replace each derivative term
+ * Derivative[k][y][x] -> D[body, {x,k}] and y[x] -> body directly.  This is
+ * equivalent for elementary bodies but essential for a SeriesData body, whose
+ * pure-function derivative Derivative[k][Function[{x}, SeriesData]][x] the
+ * evaluator does not reduce (it returns 0) — matching the PDE-verify workaround. */
 static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
-    if (P->nfun != 1) return true;    /* systems: not verified yet */
+    if (P->nfun != 1) return true;    /* systems: verified separately */
     const char* yname = P->fun_names[0];
     const char* xvar = P->ind_names[0];
+    int maxord = P->max_order[0];
     for (size_t e = 0; e < P->neq; e++) {
-        Expr* plist = expr_new_function(expr_new_symbol(SYM_List),
-                                        (Expr*[]){ expr_new_symbol(xvar) }, 1);
-        Expr* fn = expr_new_function(expr_new_symbol(SYM_Function),
-                                     (Expr*[]){ plist, expr_copy((Expr*)body) }, 2);
-        Expr* sub = ds_subst(expr_copy(P->eq_residuals[e]), expr_new_symbol(yname), fn);
+        Expr* sub = expr_copy(P->eq_residuals[e]);
+        for (int k = maxord; k >= 1; k--) {
+            Expr* dk = expr_copy((Expr*)body);
+            for (int i = 0; i < k; i++) dk = ds_d(dk, expr_new_symbol(xvar));
+            sub = ds_subst(sub, ds_make_funcapp(yname, k, xvar), dk);
+        }
+        sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
         ZeroTestResult zt = zero_test_decide(sub);
         expr_free(sub);
         if (zt == ZERO_TEST_FALSE) return false;
@@ -564,6 +572,61 @@ bool dsolve_linear_coeffs(DSolveProblem* P, Expr*** coeffs, Expr** forcing, int*
     if (!ok) { for (int k = 0; k <= n; k++) expr_free(c[k]); free(c); if (g) expr_free(g); return false; }
     *coeffs = c; *forcing = g; *order = n;
     return true;
+}
+
+bool dsolve_second_order_PQ(DSolveProblem* P, Expr** Pc, Expr** Qc) {
+    if (P->nfun != 1 || P->neq != 1) return false;
+    if (P->max_order[0] != 2) return false;
+    Expr** c; Expr* g; int n;
+    if (!dsolve_linear_coeffs(P, &c, &g, &n)) return false;
+    bool homog = ds_is_zero(g);
+    expr_free(g);
+    if (n != 2 || !homog) { for (int k = 0; k <= n; k++) expr_free(c[k]); free(c); return false; }
+    /* normalized P = c1/c2, Q = c0/c2 */
+    *Pc = ds_simplify(ds_call2(SYM_Times, expr_copy(c[1]),
+              expr_new_function(expr_new_symbol(SYM_Power),
+                  (Expr*[]){ expr_copy(c[2]), expr_new_integer(-1) }, 2)));
+    *Qc = ds_simplify(ds_call2(SYM_Times, expr_copy(c[0]),
+              expr_new_function(expr_new_symbol(SYM_Power),
+                  (Expr*[]){ expr_copy(c[2]), expr_new_integer(-1) }, 2)));
+    for (int k = 0; k <= 2; k++) expr_free(c[k]);
+    free(c);
+    return true;
+}
+
+Expr* dsolve_normal_form(const Expr* Pc, const Expr* Qc, const char* xvar,
+                         Expr** recovery_out) {
+    /* r = P^2/4 + P'/2 - Q = (P^2 + 2 P' - 4 Q) / 4 */
+    Expr* Psq = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_copy((Expr*)Pc), expr_new_integer(2) }, 2));
+    Expr* dP  = ds_d(expr_copy((Expr*)Pc), expr_new_symbol(xvar));
+    Expr* num = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                    Psq,
+                    ds_call2(SYM_Times, expr_new_integer(2), dP),
+                    ds_call2(SYM_Times, expr_new_integer(-4), expr_copy((Expr*)Qc))
+                }, 3));
+    Expr* r = ds_simplify(ds_call2(SYM_Times, num,
+                  expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ expr_new_integer(4), expr_new_integer(-1) }, 2)));
+
+    if (recovery_out) {
+        *recovery_out = NULL;
+        /* recovery w = Exp[-Integrate[P/2, x]]; guard D[Integrate[P/2]] == P/2. */
+        Expr* half = eval_and_free(ds_call2(SYM_Times, expr_copy((Expr*)Pc),
+                         expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ expr_new_integer(2), expr_new_integer(-1) }, 2)));
+        Expr* integ = ds_integrate(expr_copy(half), expr_new_symbol(xvar));
+        if (!ds_has_head(integ, SYM_Integrate)) {
+            Expr* back = ds_d(expr_copy(integ), expr_new_symbol(xvar));
+            Expr* diff = eval_and_free(ds_call2(SYM_Subtract, back, expr_copy(half)));
+            if (ds_is_zero(diff))
+                *recovery_out = eval_and_free(ds_call1("Exp",
+                    eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(integ)))));
+            expr_free(diff);
+        }
+        expr_free(half); expr_free(integ);
+    }
+    return r;
 }
 
 void dsolve_roots_free(DSolveRoots* r) {

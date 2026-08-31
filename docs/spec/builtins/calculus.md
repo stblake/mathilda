@@ -670,9 +670,17 @@ roadmap):
 | `DSolve`LinearConstantCoefficients` | `a_n y^(n)+…+a_0 y == g(x)` (char. polynomial + variation of parameters) |
 | `DSolve`EulerCauchy` | `a_n x^n y^(n)+…+a_0 y == g(x)` (indicial polynomial, trial `x^r`) |
 | `DSolve`SpecialFunctionForm` | 2nd-order forms → Airy (`y''==(Ax+B)y`) and Bessel / modified Bessel |
+| `DSolve`Kovacic` | 2nd-order linear `y'' + P y' + Q y == 0` → Liouvillian solutions via the reduced form `z'' == r z`: Case 1 (rational `ω`, `z == Exp[∫ω]`, incl. apparent singularities `z == P Exp[∫ω]`) and Case 2 (degree-2 algebraic, numeric-verified); declines otherwise |
 | `DSolve`FirstOrderSubstitution` | `y'[x] == F(a x + b y + c)` (substitution `v = y + (F_x/F_y) x` → autonomous separable) |
 | `DSolve`ReductionOfOrder` | 2nd-order missing `y`, `y'' == F(x, y')` (reduce to 1st order in `p = y'`, then integrate) |
 | `DSolve`AutonomousReduction` | 2nd-order missing `x`, `y'' == f(y, y')` (`p = y'(y)`, `p p'(y) == f`, then `y' == p(y)`) |
+| `DSolve`FrobeniusSeries` / `DSolve`PowerSeries` | truncated series about `x == 0` (the always-available fallback, tried last): ordinary point → two power series; regular singular → Frobenius `x^s Σ a_n x^n` (indicial quadratic `s(s-1)+p₀ s+q₀`, with a `Log` term for equal roots) |
+
+Utility (not a solver — returns the reduced equation, not a solution):
+
+| Method | Returns |
+|---|---|
+| `DSolve`NormalForm` | for `y'' + P y' + Q y == 0`, the pair `{r, w}`: `y == w z` with `w == Exp[-∫P/2]` reduces to `z'' == r z`, `r == P²/4 + P'/2 − Q` (the form Kovacic and the special-function recognizers operate on) |
 
 Systems (`nfun > 1`) are dispatched to their own cascade,
 `DecoupleSystem → TriangularSystem → LinearFirstOrderSystem`:
@@ -693,6 +701,12 @@ Out[6]= {{y[x] -> C[1] E^x + C[2] E^(-x/2) Cos[Sqrt[19] x/2]
 
 In[7]:= DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi/2] == 1}, y[x], x]  (* BVP *)
 Out[7]= {{y[x] -> Sin[x]}}
+
+In[8]:= DSolve[y''[x] - (x^2 + 3) y[x] == 0, y[x], x]   (* Kovacic Case 1 *)
+Out[8]= {{y[x] -> E^(-x^2/2) (C[1] x E^(x^2) + ...)}}    (* Liouvillian, not a series *)
+
+In[9]:= DSolve[y''[x] + Sin[x] y[x] == 0, y[x], x]       (* no closed form → series *)
+Out[9]= {{y[x] -> C[1] (1 - x^3/6 + ...) + C[2] (x - x^4/12 + ...) + O[x]^7}}
 
 In[8]:= DSolve[x^2 y''[x] + 4 x y'[x] + 7 y[x] == 0, y[x], x]  (* Euler-Cauchy *)
 Out[8]= {{y[x] -> (C[1] Cos[Sqrt[19]/2 Log[x]])/x^(3/2)

@@ -80,7 +80,73 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   `ReductionOfOrder` (2nd-order missing y) and `AutonomousReduction` (2nd-order
   missing x, two-stage recursion) both done; `EnergyIntegral` subsumed by the
   latter for elementary cases.
-- **M5** — Kovacic / Frobenius / operator factoring / eigenvalue problems.
+- **M5 — 2nd-order linear variable-coefficient: Kovacic + Frobenius.** ✅ DONE.
+  The target is the rational-coefficient equation `y'' + P(x) y' + Q(x) y == 0`,
+  which previously only `SpecialFunctionForm` skimmed (Airy / Bessel patterns).
+  *Landed:* `DSolve`NormalForm` (substrate `dsolve_second_order_PQ` /
+  `dsolve_normal_form`, reused by `SpecialFunctionForm`), `DSolve`Kovacic`
+  (Cases 1 & 2; Case 3 declines), and `DSolve`FrobeniusSeries`/`DSolve`PowerSeries`
+  (auto last-resort fallback). Kovacic uses a **Riccati/undetermined-coefficient**
+  construction (transparent, back-substitution-verifiable) rather than the
+  classical exponent tables; Case 1b adds the polynomial-`P` step for apparent
+  singularities (`z''=(x²+3)z → x Exp[x²/2]`); Case 2 numerically verifies its
+  algebraic candidates. The `dsolve_verify_body` substrate now substitutes
+  derivative terms as `D[body,{x,k}]` directly so `SeriesData` bodies verify
+  (the pure-function derivative of a SeriesData evaluates to 0). The later-M5
+  items (`ExactODE`, `OperatorFactor`/`DFactor`, Sturm–Liouville
+  `EigenvalueProblem`) remain future work. The two flagship methods slot into the
+  scalar cascade **after** the recognizers and **before** a generic decline
+  (closed form preferred over series):
+
+  - **`NormalForm`** — shared prerequisite, land first. Substitute
+    `y = z·Exp[-∫P/2]` to kill the `y'` term, giving the reduced form
+    `z'' == r z` with `r = P²/4 + P'/2 − Q` (rational). Kovacic *and* the
+    Airy/Bessel recognizers want this form; expose it as
+    `dsolve_normal_form(P, Q, x) → r` in the substrate and route the recovered
+    `z`-solution back through the `Exp[-∫P/2]` factor.
+
+  - **`Kovacic`** — Liouvillian solutions of `z'' == r z`, `r ∈ C(x)`, by the
+    classical three-case algorithm driven by the poles of `r` (located + ordered
+    via `Apart` / `FactorList`) and its order at infinity. Staged by rising cost:
+      1. **Case 1** — a solution `Exp[∫ω]` with `ω ∈ C(x)`: assemble the
+         candidate `ω` from the per-pole and at-∞ local data, fix its polynomial
+         part by a degree bound `d`, and solve the resulting linear system
+         (`Solve`); the second solution follows by `ReductionOfOrder`. Covers the
+         common `Exp[rational]` / `Exp[polynomial]` / rational-power Liouvillian
+         solutions.
+      2. **Case 2** — a solution algebraic of degree 2 over `C(x)` (`ω` a root of
+         a quadratic over `C(x)`): the same pole-exponent + `d`-bound search over
+         the sign choices, same solver.
+      3. **Case 3** — algebraic of degree 4/6/12 (tetrahedral / octahedral /
+         icosahedral): recognized but **gated/optional** — return the structural
+         `Root`-form or decline with a message rather than run the heavy search by
+         default.
+    Local exponents are algebraic numbers → reuse `RootReduce` / qqbar.
+    Elementary answers verify by back-substitution; the algebraic cases rest on
+    recognizer structure + the stress corpus (as with the inert special-function
+    heads).
+
+  - **`FrobeniusSeries` / `PowerSeries`** — series solutions about `x0`, the
+    always-available fallback when no closed form is found. Classify `x0`:
+    **ordinary** → two `PowerSeries`; **regular singular** → Frobenius
+    `y = (x−x0)^s Σ aₙ (x−x0)ⁿ` with indicial quadratic `s(s−1) + p₀ s + q₀ == 0`
+    (`p₀ = lim (x−x0)P`, `q₀ = lim (x−x0)²Q`; solved by `Solve`, reusing
+    `dsolve_analyze_roots` as `EulerCauchy` does); **irregular** → decline. The
+    root-difference `s₁−s₂` picks the sub-case: non-integer → two independent
+    series; equal → second solution carries a `Log`; positive integer → a
+    coefficient-obstruction test decides whether a `Log` appears. Output is a
+    truncated `SeriesData` to the requested order, verified by requiring the
+    truncated residual to be `O[(x−x0)^N]`. Reuse `Series`/`SeriesData` arithmetic
+    throughout.
+
+  Later within M5 (after the above): `ExactODE` (higher-order exact equations),
+  `OperatorFactor`/`DFactor` (factor a higher-order linear operator into
+  lower-order factors and compose their solution sets), and the Sturm–Liouville
+  `EigenvalueProblem` (1f). Reuse hooks across M5: `dsolve_linear_coeffs`
+  (extract P, Q), `Apart`/`Together`/`FactorList` (pole structure),
+  `Solve`/`solvepoly` (indicial + coefficient systems), `Series`/`SeriesData`
+  (Frobenius), `RootReduce`/qqbar (algebraic exponents), `ReductionOfOrder`
+  (second solution).
 - **M6 — Phase 2 PDEs.** STARTED. First-order linear constant-coefficient PDE
   (method of characteristics) done — transport, `3u_x+5u_y==x`, `u_x+3u_y+u==1`.
   The `is_pde` dispatch route + PDE verify/assemble (2-variable `Function`) added.
@@ -188,9 +254,12 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   complex pairs → `x^a Cos/Sin[b Log x]`, repeated → `Log x` powers; forcing via
   variation of parameters (real-root forcing works; complex-root forcing with a
   hard Wronskian integral declines gracefully).
-- `[ ] ReductionOfOrder` — second solution from one known.
+- `[→M5] ReductionOfOrder` — second solution from one known (also the second-
+  solution engine reused by Kovacic Case 1).
 - `[ ] ExactODE` — higher-order exact equations.
-- `[ ] NormalForm` — remove the `y'` term (2nd order).
+- `[✓] NormalForm` — reduce `y''+P y'+Q y` to `z''==r z` via `y=z Exp[-∫P/2]`,
+  `r=P²/4+P'/2−Q`; prerequisite for Kovacic and the special-function recognizers
+  (`dsolve_normal_form` substrate helper).
 - `[~] SpecialFunctionForm` — matches the normalised 2nd-order form
   `y''+P y'+Q y==0`: **Airy** (`P=0`, `Q` linear → AiryAi/AiryBi, verifies) and
   **Bessel / modified Bessel** (`P=1/x`, `Q=±1−ν²/x²` → BesselJ/Y, BesselI/K —
@@ -199,8 +268,15 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   (real heads); inert heads for LegendreQ, HermiteH, Chebyshev, Laguerre,
   Gegenbauer, Jacobi, Whittaker, Mathieu, Spheroidal, Kelvin, ParabolicCylinder,
   Struve, Weierstrass.
-- `[ ] Kovacic` — Liouvillian solutions of 2nd-order rational-coefficient ODEs.
-- `[ ] FrobeniusSeries` / `[ ] PowerSeries` — series solutions (reuse `Series`).
+- `[✓] Kovacic` — Liouvillian solutions of the reduced form `z''==r z`
+  (`r∈C(x)`); three-case algorithm on the poles of `r` (`Apart`/`FactorList`) +
+  order at ∞. Staged: Case 1 (`Exp[∫ω]`, `ω` rational) → Case 2 (degree-2
+  algebraic) → Case 3 (degree 4/6/12, gated). Algebraic exponents via
+  `RootReduce`/qqbar; second solution via `ReductionOfOrder`.
+- `[✓] FrobeniusSeries` / `[✓] PowerSeries` — series about `x0`: ordinary →
+  power series, regular-singular → Frobenius (indicial quadratic + `Log`-term
+  sub-cases by root difference), irregular → decline; truncated `SeriesData`
+  verified as `O[(x−x0)^N]`. Reuse `Series`/`SeriesData`.
 - `[ ] OperatorFactor` (DFactor) — factor higher-order linear operators.
 
 ### 1d. Nonlinear higher-order

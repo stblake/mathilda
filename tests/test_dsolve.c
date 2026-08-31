@@ -299,6 +299,101 @@ static void check_solves(const char* eqn, const char* residual) {
     check_true(buf);
 }
 
+/* Pinned-method solve check for an elementary method (Kovacic): Head===List then
+ * the residual back-substitutes to zero.  `residual` is the ODE lhs (== 0). */
+static void check_method(const char* method, const char* eqn, const char* residual) {
+    char buf[900];
+    snprintf(buf, sizeof(buf), "Head[%s[%s, y, x]]", method, eqn);
+    check_form(buf, "List");
+    snprintf(buf, sizeof(buf), "PossibleZeroQ[(%s) /. %s[%s, y, x][[1]]]", residual, method, eqn);
+    check_true(buf);
+}
+
+/* Series-solution check: extract the SeriesData body (b = y[x] /. sol) and verify
+ * the ODE `ode_of_b` (written with b, D[b,x], D[b,{x,2}]) is O[x]^k.  Going through
+ * the body directly is required because Derivative[k][Function[{x}, SeriesData]] is
+ * not reduced by the evaluator. */
+static void check_series(const char* method, const char* eqn, const char* ode_of_b) {
+    char buf[900];
+    snprintf(buf, sizeof(buf), "Head[%s[%s, y, x]]", method, eqn);
+    check_form(buf, "List");
+    snprintf(buf, sizeof(buf),
+             "PossibleZeroQ[Module[{b = y[x] /. %s[%s, y, x][[1]]}, %s]]", method, eqn, ode_of_b);
+    check_true(buf);
+}
+
+/* ---- M5: NormalForm ---- */
+static void t_normalform_bessel(void) {
+    /* Bessel nu=2: y'' + (1/x) y' + (1 - 4/x^2) y == 0 -> r = -1 + 15/(4 x^2), w = 1/Sqrt[x] */
+    check_true("PossibleZeroQ[DSolve`NormalForm[x^2 y''[x] + x y'[x] + (x^2 - 4) y[x] == 0, y, x][[1]] "
+               "- (-1 + 15/(4 x^2))]");
+    check_true("PossibleZeroQ[DSolve`NormalForm[x^2 y''[x] + x y'[x] + (x^2 - 4) y[x] == 0, y, x][[2]] "
+               "- 1/Sqrt[x]]");
+}
+static void t_normalform_const(void) {
+    /* y'' + 2 y' + y == 0 -> r == 0, w == E^(-x) */
+    check_true("PossibleZeroQ[DSolve`NormalForm[y''[x] + 2 y'[x] + y[x] == 0, y, x][[1]]]");
+    check_true("PossibleZeroQ[DSolve`NormalForm[y''[x] + 2 y'[x] + y[x] == 0, y, x][[2]] - E^(-x)]");
+}
+static void t_normalform_declines(void) {
+    /* not a homogeneous 2nd-order linear ODE: stays symbolic */
+    check_form("Head[DSolve`NormalForm[y'[x] + y[x] == 0, y, x]]", "DSolve`NormalForm");
+    check_form("Head[DSolve`NormalForm[y''[x] + y[x]^2 == 0, y, x]]", "DSolve`NormalForm");
+}
+
+/* ---- M5: Kovacic (Cases 1 & 2) ---- */
+static void t_kovacic_case1_exp(void) {
+    /* z'' = (1 + x^2) z -> Exp[x^2/2] family (Case 1, polynomial omega) */
+    check_method("DSolve`Kovacic", "y''[x] - (1 + x^2) y[x] == 0", "D[y[x],{x,2}] - (1 + x^2) y[x]");
+}
+static void t_kovacic_apparent_singularity(void) {
+    /* z'' = (x^2 + 3) z -> x Exp[x^2/2]: an apparent singularity (polynomial P factor) */
+    check_method("DSolve`Kovacic", "y''[x] - (x^2 + 3) y[x] == 0", "D[y[x],{x,2}] - (x^2 + 3) y[x]");
+}
+static void t_kovacic_case1_pole(void) {
+    /* z'' = (2/x^2) z -> x^2, 1/x (Case 1, order-2 pole) */
+    check_method("DSolve`Kovacic", "y''[x] - (2/x^2) y[x] == 0", "D[y[x],{x,2}] - (2/x^2) y[x]");
+}
+static void t_kovacic_case2(void) {
+    /* z'' = (x/4 + 5/(16 x^2)) z -> x^(-1/4) Exp[+-x^(3/2)/3] (Case 2, degree-2 algebraic) */
+    check_method("DSolve`Kovacic", "y''[x] - (x/4 + 5/(16 x^2)) y[x] == 0",
+                 "D[y[x],{x,2}] - (x/4 + 5/(16 x^2)) y[x]");
+}
+static void t_kovacic_auto_closed_form(void) {
+    /* the automatic cascade prefers Kovacic's closed form over a series */
+    check_form("FreeQ[DSolve[y''[x] - (x^2 + 3) y[x] == 0, y, x], SeriesData]", "True");
+    check_form("Head[DSolve[y''[x] - (x^2 + 3) y[x] == 0, y, x]]", "List");
+}
+static void t_kovacic_declines(void) {
+    /* Bessel is not Liouvillian: Kovacic declines (Case 2 must not false-positive) */
+    check_form("Head[DSolve`Kovacic[x^2 y''[x] + x y'[x] + (x^2 - 4) y[x] == 0, y, x]]", "DSolve`Kovacic");
+}
+
+/* ---- M5: Frobenius / PowerSeries ---- */
+static void t_powerseries_ordinary(void) {
+    /* pinned power series about the ordinary point 0 for y'' + y == 0 (cos/sin) */
+    check_series("DSolve`PowerSeries", "y''[x] + y[x] == 0", "D[b,{x,2}] + b");
+}
+static void t_powerseries_auto(void) {
+    /* auto cascade falls through to a series for an analytic-but-non-closed-form coeff */
+    check_form("Head[DSolve[y''[x] + Sin[x] y[x] == 0, y, x]]", "List");
+    check_series("DSolve", "y''[x] + Sin[x] y[x] == 0", "D[b,{x,2}] + Sin[x] b");
+}
+static void t_frobenius_regsing_distinct(void) {
+    /* 4 x y'' + 2 y' + y == 0: regular singular, roots 0 & 1/2 (cos/sin of Sqrt[x]) */
+    check_series("DSolve`FrobeniusSeries", "4 x y''[x] + 2 y'[x] + y[x] == 0",
+                 "4 x D[b,{x,2}] + 2 D[b,x] + b");
+}
+static void t_frobenius_regsing_log(void) {
+    /* x y'' + y' == 0: regular singular, double root 0 -> {1, Log[x]} (Log solution) */
+    check_series("DSolve`FrobeniusSeries", "x y''[x] + y'[x] == 0", "x D[b,{x,2}] + D[b,x]");
+    check_true("Not[FreeQ[DSolve`FrobeniusSeries[x y''[x] + y'[x] == 0, y, x], Log]]");
+}
+static void t_frobenius_declines_irregular(void) {
+    /* essential singularity at 0: series fallback declines */
+    check_form("Head[DSolve`FrobeniusSeries[y''[x] + Exp[1/x] y[x] == 0, y, x]]", "DSolve`FrobeniusSeries");
+}
+
 /* ---- 1a: FirstOrderSubstitution — y'==F(a x + b y + c) ---- */
 static void t_fos_quadratic(void) {
     check_true("PossibleZeroQ[(y'[x] - (x + y[x])^2) /. "
@@ -404,8 +499,10 @@ static void t_not_holdall(void) {
 
 /* ---- unsupported equations stay symbolic (declined, not wrong) ---- */
 static void t_declines_unsupported(void) {
-    /* a genuinely unrecognised variable-coefficient 2nd-order ODE stays symbolic */
-    check_form("Head[DSolve[y''[x] + Sin[x] y[x] == 0, y[x], x]]", "DSolve");
+    /* an irregular singular point (essential singularity at 0) is beyond the
+     * series fallback and has no Liouvillian solution: DSolve stays symbolic.
+     * (y'' + Sin[x] y == 0 now returns a power series — see t_powerseries_auto.) */
+    check_form("Head[DSolve[y''[x] + Exp[1/x] y[x] == 0, y[x], x]]", "DSolve");
 }
 
 int main(void) {
@@ -452,6 +549,21 @@ int main(void) {
     TEST(t_bessel);
     TEST(t_bessel_modified);
     TEST(t_method_specialform);
+    /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
+    TEST(t_normalform_bessel);
+    TEST(t_normalform_const);
+    TEST(t_normalform_declines);
+    TEST(t_kovacic_case1_exp);
+    TEST(t_kovacic_apparent_singularity);
+    TEST(t_kovacic_case1_pole);
+    TEST(t_kovacic_case2);
+    TEST(t_kovacic_auto_closed_form);
+    TEST(t_kovacic_declines);
+    TEST(t_powerseries_ordinary);
+    TEST(t_powerseries_auto);
+    TEST(t_frobenius_regsing_distinct);
+    TEST(t_frobenius_regsing_log);
+    TEST(t_frobenius_declines_irregular);
     TEST(t_sys_decoupled);
     TEST(t_sys_real_eigenvalues);
     TEST(t_sys_complex_ivp);

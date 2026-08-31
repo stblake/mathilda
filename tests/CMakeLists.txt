@@ -706,6 +706,9 @@ set(COMMON_SRC
     ../src/calculus/dsolve_decouple.c
     ../src/calculus/dsolve_triangular.c
     ../src/calculus/dsolve_linsys.c
+    ../src/calculus/dsolve_normalform.c
+    ../src/calculus/dsolve_frobenius.c
+    ../src/calculus/dsolve_kovacic.c
     ../src/sum/sum.c
     ../src/sum/sum_util.c
     ../src/sum/sum_polynomial.c
@@ -3023,6 +3026,10 @@ target_include_directories(deriv_tests PRIVATE ../src)
 add_executable(dsolve_tests test_dsolve.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(dsolve_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_tests COMMAND dsolve_tests)
+
+add_executable(dsolve_m5_stress_tests test_dsolve_m5_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m5_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m5_stress_tests COMMAND dsolve_m5_stress_tests)
 
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)

@@ -2981,3 +2981,55 @@ handles both without detecting the spectrum: `Simplify[ComplexExpand[·]] //.
 {Cosh[a_]+Sinh[a_] :> E^a}` — `ComplexExpand` leaves real exponentials alone and
 turns `E^{i β x}` into Cos/Sin, and the rewrite folds any Simplify-introduced
 hyperbolic exponential back to `E`.
+
+## DSolve M5 — Derivative[k][Function[{x}, SeriesData]][x] evaluates to 0 (verify must use D[body] directly)
+
+The evaluator does **not** reduce the pure-function derivative of a SeriesData
+body: `Derivative[2][Function[{x}, SeriesData[...]]][x]` returns `0` (not the
+term-by-term `D[SeriesData,{x,2}]`, which *does* work when applied to the
+SeriesData directly). Consequence: the substrate `dsolve_verify_body`, which used
+to substitute `y -> Function[{x}, body]` and let the evaluator reduce
+`Derivative[k][y][x]`, computed a wrong residual for a series body (the y'' term
+vanished), so `zero_test` saw a nonzero residual and **dropped every valid
+Frobenius/PowerSeries solution**. Fix: verify by substituting each derivative term
+`Derivative[k][y][x] -> D[body,{x,k}]` and `y[x] -> body` directly — equivalent
+for elementary bodies, correct for SeriesData. Same trap on the *test* side: a
+series solution cannot be checked with `(resid) /. DSolve[...][[1]]` (that routes
+through `y->Function`); instead extract `b = y[x] /. sol` (application works) and
+check `PossibleZeroQ[D[b,{x,2}] + ... ]`. This mirrors the M6 PDE-verify workaround
+(D of a Function with an arbitrary function inside also misbehaves).
+
+## DSolve M5 — zero_test hangs on Erfi[I·(irrational)·x]; fold to I Erf[z] before returning
+
+Kovacic's second solution `z2 = z1 ∫ 1/z1²` for an `Exp[poly]` solution produces
+`Erfi[I ...]` (e.g. `∫Exp[-2x²]/x² = -E^(-2x²)/x + I√2√π Erfi[I√2 x]`). Leaving that
+in the returned body makes the substrate verify hang: `zero_test`'s Schwartz-Zippel
+sampler substitutes a rational for `x` and cannot cheaply evaluate
+`Erfi[I·√2·(rational)]` (a complex irrational argument) — it spins to
+`$IterationLimit`. Curiously `Erfi[I x]` (rational scaling, the `x²+3` case)
+sampled fine, so the bug only surfaced at `a≥2`. Fix: in `realify`, rewrite
+`Erfi[I z_] :> I Erf[z]` (and `Erf[I z_] :> I Erfi[z]`) so `I·Erfi[I z]` collapses
+to a real `Erf[z]` (no `I`, real argument), which `zero_test` decides instantly.
+General rule: a symbolic result that must pass `zero_test` should be pushed to a
+real, sampler-friendly form (no `SpecialFn[I·irrational·x]`) before it is returned.
+
+## DSolve M5 — Kovacic via Riccati-ansatz (not exponent tables); apparent singularities + Case-2 numeric verify
+
+The classical Kovacic exponent-table algorithm is error-prone to reproduce, and a
+subtly-wrong version silently finds *nothing* (candidates all fail verify) — useless,
+not wrong. A **Riccati/undetermined-coefficient** construction is transparent and,
+because Case-1 answers are elementary and back-substitution-verified, safe: posit
+`ω` = polynomial part (degree from order at ∞) + principal part over the irreducible
+factors of `denom(r)`, `Solve` the coefficients of `ω'+ω²-r == 0` (Numerator of the
+Together, `CoefficientList`, drop the `0==0`/`True` rows or Solve chokes). Two gaps
+the naive ansatz misses: (1) **apparent singularities** — `ω` can have a simple pole
+with residue 1 at a point where `r` is regular (the pole cancels in `r`), e.g.
+`z''=(x²+3)z → x Exp[x²/2]`; capture them for polynomial `r` via `z = P Exp[∫ω_base]`,
+`ω_base` = polynomial part of `±√r`, `P` a polynomial of the *determined* degree
+`d = −[R₂]_{m−1}/(2c_m)` solving `P''+2ω_base P'+R₂P == 0`. (2) **Case 2** answers are
+degree-2 algebraic, so `zero_test` can't decide the residual — verify **numerically**,
+and remember the residual is linear in `C[1],C[2]`: substitute the constants
+(`(1,0)` and `(0,1)`) before `N[Abs[...]]`, otherwise it stays symbolic in `C[k]` and
+never reduces to a number (the candidate is correct but wrongly rejected). Gate the
+whole method on `PolynomialQ` (r ∈ C(x)) so transcendental `r` declines fast to
+Frobenius instead of feeding `CoefficientList` a non-polynomial.

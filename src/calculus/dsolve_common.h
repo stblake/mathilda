@@ -168,6 +168,25 @@ void  dsolve_roots_free(DSolveRoots* r);
  * *order is the highest derivative order. */
 bool  dsolve_linear_coeffs(DSolveProblem* P, Expr*** coeffs, Expr** forcing, int* order);
 
+/* ---- second-order linear normal form (shared by SpecialFunctionForm,
+ *      Kovacic, and Frobenius/PowerSeries) ---- */
+
+/* For a homogeneous second-order linear ODE, extract the normalized
+ * coefficients P(x) of y' and Q(x) of y, so the equation reads
+ * y'' + P y' + Q y == 0.  Returns false unless nfun==1, neq==1, the highest
+ * order is 2, the equation is linear, and the forcing is zero.  On true, *Pc
+ * and *Qc are owned (Simplify-reduced). */
+bool  dsolve_second_order_PQ(DSolveProblem* P, Expr** Pc, Expr** Qc);
+
+/* The Liouville normal-form potential of y'' + P y' + Q y == 0.  Substituting
+ * y = z * Exp[-Integrate[P/2, x]] kills the first-derivative term, leaving the
+ * reduced equation z'' == r z with r = P^2/4 + P'/2 - Q.  Returns r (owned,
+ * Simplify-reduced).  When `recovery_out` is non-NULL it receives the recovery
+ * factor Exp[-Integrate[P/2, x]] (owned) — or NULL if that integral is not
+ * elementary (r is still returned).  `Pc`, `Qc` borrowed. */
+Expr* dsolve_normal_form(const Expr* Pc, const Expr* Qc, const char* xvar,
+                         Expr** recovery_out);
+
 /* Particular solution of a linear ODE by variation of parameters over the
  * fundamental set `basis` (length n), forcing `g`, leading coefficient
  * `leadcoef` (the coefficient of y^(n); constant or x-dependent).  Returns the

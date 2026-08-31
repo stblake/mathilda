@@ -37,25 +37,10 @@ static Expr* powrat(const Expr* a, int p, int q) {
 }
 
 Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
-    if (P->nfun != 1 || P->neq != 1) return NULL;
-    if (P->max_order[0] != 2) return NULL;
+    /* normalised second-order form y'' + Pc y' + Qc y == 0 (homogeneous only) */
+    Expr* Pc; Expr* Qc;
+    if (!dsolve_second_order_PQ(P, &Pc, &Qc)) return NULL;
     const char* xvar = P->ind_names[0];
-
-    Expr** c; Expr* g; int n;
-    if (!dsolve_linear_coeffs(P, &c, &g, &n)) return NULL;
-    bool homog = ds_is_zero(g);
-    expr_free(g);
-    if (n != 2 || !homog) { for (int k = 0; k <= n; k++) expr_free(c[k]); free(c); return NULL; }
-
-    /* normalised P = c1/c2, Q = c0/c2 */
-    Expr* Pc = ds_simplify(ds_call2(SYM_Times, expr_copy(c[1]),
-                   expr_new_function(expr_new_symbol(SYM_Power),
-                       (Expr*[]){ expr_copy(c[2]), expr_new_integer(-1) }, 2)));
-    Expr* Qc = ds_simplify(ds_call2(SYM_Times, expr_copy(c[0]),
-                   expr_new_function(expr_new_symbol(SYM_Power),
-                       (Expr*[]){ expr_copy(c[2]), expr_new_integer(-1) }, 2)));
-    for (int k = 0; k <= 2; k++) expr_free(c[k]);
-    free(c);
 
     Expr* general = NULL;
 
