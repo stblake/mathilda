@@ -38,6 +38,7 @@ typedef enum {
     DS_LAGRANGE,
     DS_CONSTCOEFF,
     DS_EULER,
+    DS_EXACTODE,
     DS_SPECIALFORM,
     DS_KOVACIC,
     DS_REDUCEORDER,
@@ -62,6 +63,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Lagrange")         == 0) return DS_LAGRANGE;
     if (strcmp(s, "LinearConstantCoefficients") == 0) return DS_CONSTCOEFF;
     if (strcmp(s, "EulerCauchy")      == 0) return DS_EULER;
+    if (strcmp(s, "ExactODE")         == 0) return DS_EXACTODE;
     if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
     if (strcmp(s, "Kovacic")            == 0) return DS_KOVACIC;
     if (strcmp(s, "ReductionOfOrder") == 0) return DS_REDUCEORDER;
@@ -87,6 +89,7 @@ extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lagrange_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch);
@@ -106,6 +109,7 @@ extern void dsolve_clairaut_init(void);
 extern void dsolve_lagrange_init(void);
 extern void dsolve_constcoeff_init(void);
 extern void dsolve_euler_init(void);
+extern void dsolve_exactode_init(void);
 extern void dsolve_specialform_init(void);
 extern void dsolve_kovacic_init(void);
 extern void dsolve_reduce_order_init(void);
@@ -195,6 +199,10 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run_parametric(&P, dsolve_lagrange_try);
             if (!result) result = dsolve_run(&P, dsolve_constcoeff_try);
             if (!result) result = dsolve_run(&P, dsolve_euler_try);
+            /* Exact higher-order linear: total derivative d/dx(M[y]) — reduce
+             * order once and recurse.  After Euler (cleaner constants there),
+             * before the heavier special-function / Kovacic / series machinery. */
+            if (!result) result = dsolve_run(&P, dsolve_exactode_try);
             if (!result) result = dsolve_run(&P, dsolve_specialform_try);
             if (!result) result = dsolve_run(&P, dsolve_kovacic_try);
             if (!result) result = dsolve_run(&P, dsolve_reduce_order_try);
@@ -226,6 +234,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_LAGRANGE:     result = dsolve_run_parametric(&P, dsolve_lagrange_try); break;
         case DS_CONSTCOEFF:   result = dsolve_run(&P, dsolve_constcoeff_try);  break;
         case DS_EULER:        result = dsolve_run(&P, dsolve_euler_try);       break;
+        case DS_EXACTODE:     result = dsolve_run(&P, dsolve_exactode_try);    break;
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
         case DS_KOVACIC:      result = dsolve_run(&P, dsolve_kovacic_try);     break;
         case DS_REDUCEORDER:  result = dsolve_run(&P, dsolve_reduce_order_try); break;
@@ -276,6 +285,7 @@ void dsolve_init(void) {
     dsolve_lagrange_init();
     dsolve_constcoeff_init();
     dsolve_euler_init();
+    dsolve_exactode_init();
     dsolve_specialform_init();
     dsolve_kovacic_init();
     dsolve_reduce_order_init();

@@ -699,6 +699,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_lagrange.c
     ../src/calculus/dsolve_constcoeff.c
     ../src/calculus/dsolve_euler.c
+    ../src/calculus/dsolve_exactode.c
     ../src/calculus/dsolve_specialform.c
     ../src/calculus/dsolve_reduce_order.c
     ../src/calculus/dsolve_fos.c

@@ -139,10 +139,10 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     truncated residual to be `O[(x−x0)^N]`. Reuse `Series`/`SeriesData` arithmetic
     throughout.
 
-  Later within M5 (after the above): `ExactODE` (higher-order exact equations),
-  `OperatorFactor`/`DFactor` (factor a higher-order linear operator into
-  lower-order factors and compose their solution sets), and the Sturm–Liouville
-  `EigenvalueProblem` (1f). Reuse hooks across M5: `dsolve_linear_coeffs`
+  Later within M5: `ExactODE` (higher-order exact equations) **done** — see §1c.
+  Still future: `OperatorFactor`/`DFactor` (factor a higher-order linear operator
+  into lower-order factors and compose their solution sets) and the
+  Sturm–Liouville `EigenvalueProblem` (1f). Reuse hooks across M5: `dsolve_linear_coeffs`
   (extract P, Q), `Apart`/`Together`/`FactorList` (pole structure),
   `Solve`/`solvepoly` (indicial + coefficient systems), `Series`/`SeriesData`
   (Frobenius), `RootReduce`/qqbar (algebraic exponents), `ReductionOfOrder`
@@ -285,7 +285,15 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   hard Wronskian integral declines gracefully).
 - `[→M5] ReductionOfOrder` — second solution from one known (also the second-
   solution engine reused by Kovacic Case 1).
-- `[ ] ExactODE` — higher-order exact equations.
+- `[✓] ExactODE` — higher-order exact linear equations: `L[y] == d/dx(M[y])`
+  (exactness `Σ(-1)^k a_k^(k) == 0`, tested as `a_0 == b_0'` via the first-integral
+  recurrence `b_{n-1}=a_n`, `b_{k-1}=a_k-b_k'`). Integrate once to the first
+  integral `M[y] == ∫g + C[n]` and recurse into the scalar cascade on the
+  order-(n-1) equation (constant `C[n]` contiguous with the sub-solve's
+  `C[1..n-1]`, no renumbering; iterated exactness free via the recursion). Runs
+  after `EulerCauchy`, before `SpecialFunctionForm`. First cut linear/order≥2/
+  genuinely exact; integrating-factor (adjoint) exactness and nonlinear
+  total-derivative detection are future. `dsolve_exactode.c`.
 - `[✓] NormalForm` — reduce `y''+P y'+Q y` to `z''==r z` via `y=z Exp[-∫P/2]`,
   `r=P²/4+P'/2−Q`; prerequisite for Kovacic and the special-function recognizers
   (`dsolve_normal_form` substrate helper).

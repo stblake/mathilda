@@ -150,6 +150,17 @@ static void euler_ok(int r1, int r2) {
     method_ok("DSolve`EulerCauchy", eqn, res);
 }
 
+/* Higher-order exact linear, built as the total derivative L[y] = d/dx(b1 y'+b0 y):
+ * exact by construction.  (b1,b0) are chosen so the reduced first-order solve
+ * b1 y' + b0 y == C[2] is elementary; pin DSolve`ExactODE (in AUTO some of these
+ * are also Euler-Cauchy and would be claimed there). */
+static void exact_ode_ok(const char* b1, const char* b0) {
+    char eqn[512], res[512];
+    snprintf(eqn, sizeof(eqn), "D[(%s) y'[x] + (%s) y[x], x] == 0", b1, b0);
+    snprintf(res, sizeof(res), "D[(%s) y'[x] + (%s) y[x], x]", b1, b0);
+    method_ok("DSolve`ExactODE", eqn, res);
+}
+
 /* reduction of order, 2nd-order missing y: y'' == f(x) y'. */
 static void ro_ok(const char* f) {
     char eqn[256], res[256];
@@ -347,6 +358,16 @@ static void t_stress_euler(void) {
     for (size_t i = 0; i < 4; i++) euler_ok(rr[i][0], rr[i][1]);
 }
 
+static void t_stress_exactode(void) {
+    const char* pairs[][2] = {
+        {"x", "2"}, {"x", "3"}, {"x", "0"},
+        {"x^2", "x"}, {"x^2", "2 x"}, {"1", "1"},
+    };
+    for (size_t i = 0; i < 6; i++) exact_ode_ok(pairs[i][0], pairs[i][1]);
+    /* inhomogeneous: the forcing is folded into the first integral */
+    method_ok("DSolve`ExactODE", "x y''[x] + 3 y'[x] == x", "x y''[x] + 3 y'[x] - x");
+}
+
 static void t_stress_reduce_order(void) {
     const char* fs[] = {"1/x", "2", "-1", "3", "2/x"};
     for (size_t i = 0; i < 5; i++) ro_ok(fs[i]);
@@ -427,6 +448,7 @@ int main(void) {
     TEST(t_stress_exact);
     TEST(t_stress_constcoeff);
     TEST(t_stress_euler);
+    TEST(t_stress_exactode);
     TEST(t_stress_reduce_order);
     TEST(t_stress_reduce_order_riccati);
     TEST(t_stress_riccati);

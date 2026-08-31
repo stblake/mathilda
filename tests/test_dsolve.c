@@ -205,6 +205,37 @@ static void t_method_euler(void) {
                "DSolve`EulerCauchy[x^2 y''[x] - 2 y[x] == 0, y, x][[1]]]");
 }
 
+/* ---- ExactODE: higher-order exact linear equations (total derivative) ---- */
+static void t_method_exactode(void) {
+    check_form("Head[DSolve`ExactODE[x y''[x] + y'[x] == 0, y, x]]", "List");
+    check_true("PossibleZeroQ[(x y''[x] + y'[x]) /. "
+               "DSolve`ExactODE[x y''[x] + y'[x] == 0, y, x][[1]]]");
+}
+static void t_exactode_more(void) {
+    /* another exact 2nd-order homogeneous form */
+    check_true("PossibleZeroQ[(x y''[x] + 3 y'[x]) /. "
+               "DSolve[x y''[x] + 3 y'[x] == 0, y, x][[1]]]");
+    /* inhomogeneous: the forcing is integrated into the first integral */
+    check_true("PossibleZeroQ[(x y''[x] + y'[x] - x) /. "
+               "DSolve[x y''[x] + y'[x] == x, y, x][[1]]]");
+    /* 3rd-order doubly-exact: the recursion reduces order twice (three constants) */
+    check_true("PossibleZeroQ[(x y'''[x] + y''[x]) /. "
+               "DSolve[x y'''[x] + y''[x] == 0, y, x][[1]]]");
+    check_true("Not[FreeQ[DSolve[x y'''[x] + y''[x] == 0, y, x][[1]], C[3]]]");
+}
+static void t_exactode_declines(void) {
+    /* non-exact (Airy): the pinned method stays symbolic */
+    check_form("Head[DSolve`ExactODE[y''[x] - x y[x] == 0, y[x], x]]", "DSolve`ExactODE");
+    /* first-order is DSolve`Exact — out of scope (the order >= 2 guard) */
+    check_form("Head[DSolve`ExactODE[y'[x] + y[x] == 0, y[x], x]]", "DSolve`ExactODE");
+}
+static void t_exactode_auto(void) {
+    /* automatic cascade solves it (via ExactODE, after Euler declines) */
+    check_form("Head[DSolve[x y''[x] + y'[x] == 0, y, x]]", "List");
+    check_true("PossibleZeroQ[(x y''[x] + y'[x]) /. "
+               "DSolve[x y''[x] + y'[x] == 0, y, x][[1]]]");
+}
+
 /* ---- M3: special-function recognizers (Airy / Bessel) ---- */
 static void t_airy(void) {
     check_true("PossibleZeroQ[(y''[x] - x y[x]) /. DSolve[y''[x] - x y[x] == 0, y, x][[1]]]");
@@ -781,6 +812,10 @@ int main(void) {
     TEST(t_euler_repeated);
     TEST(t_euler_inhomogeneous);
     TEST(t_method_euler);
+    TEST(t_method_exactode);
+    TEST(t_exactode_more);
+    TEST(t_exactode_declines);
+    TEST(t_exactode_auto);
     TEST(t_airy);
     TEST(t_bessel);
     TEST(t_bessel_modified);

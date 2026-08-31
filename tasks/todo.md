@@ -1,60 +1,60 @@
-# DSolve — Hypergeometric/Kummer recognizer (§1c SpecialFunctionForm)
+# DSolve — ExactODE (§1c higher-order exact linear equations)
 
-Add Kummer (₁F₁) and Gauss (₂F₁) recognizers to `DSolve`SpecialFunctionForm`.
-Verifies for free via the existing HypergeometricPFQ derivative rule
-(numerically confirmed: all three back-substitutions → 0.0).
+Implement `DSolve`ExactODE` for linear ODEs of order ≥ 2 whose left side is a
+total derivative `L[y] == d/dx(M[y])`: integrate once to the first integral
+`M[y] == ∫g + C[n]` and recurse into the scalar cascade. Mirrors
+`dsolve_reduce_order.c` (recurse + reuse `extract_applied`); constant `C[n]` is
+contiguous with the sub-solve's `C[1..n-1]`, so no renumbering.
 
 ## Implementation
-- [ ] src/calculus/dsolve_specialform.c: Kummer block (P=b/x−1, Q=−a/x)
-      → C[1] ₁F₁[a,b,x] + C[2] x^(1−b) ₁F₁[a−b+1,2−b,x]; decline if IntegerQ[b]
-- [ ] src/calculus/dsolve_specialform.c: Gauss block (W=x(1−x), Q=−ab/W, P=(c−(a+b+1)x)/W)
-      → C[1] ₂F₁[a,b,c,x] + C[2] x^(1−c) ₂F₁[a−c+1,b−c+1,2−c,x]; solve t²−St+Pr for a,b;
-      decline if IntegerQ[c]
-- [ ] Expand header comment + docstring (add verification "keep-on-undecidable" note)
+- [x] src/calculus/dsolve_exactode.c — three-function contract; b[j] recurrence,
+      exactness test `a0 == b0'`, forcing ∫g guard, reduced-eqn recursion
+- [x] src/calculus/dsolve.c — extern decls, DS_EXACTODE enum, "ExactODE" map,
+      cascade slot after euler / before specialform, pinned case, init chain
+- [x] tests/CMakeLists.txt — add dsolve_exactode.c to dsolve source block
 
 ## Tests
-- [ ] tests/test_dsolve.c: t_method_hypergeometric_kummer, t_method_hypergeometric_gauss
-      (pin method, Head===List, PossibleZeroQ residual); + integer-b decline test
-- [ ] tests/test_dsolve_m5_stress.c: forward-generator family over non-integer a,b (,c)
+- [x] tests/test_dsolve.c — t_method_exactode, t_exactode_more (2nd + inhomog +
+      3rd-order), t_exactode_declines (non-exact + first-order), auto-dispatch
+- [x] tests/test_dsolve_stress.c — exact_ode_ok forward generator (total-deriv
+      construction over 6 (b1,b0) pairs + inhomogeneous)
 
 ## Docs
-- [ ] docs/spec/builtins/calculus.md: extend SpecialFunctionForm row (~L676)
-- [ ] docs/spec/changelog/2026-08-31.md: DSolve entry
-- [ ] DSOLVE_PLAN.md: §1c SpecialFunctionForm note → Kummer/Gauss done
+- [x] docs/spec/builtins/calculus.md — DSolve`ExactODE row after EulerCauchy
+- [x] docs/spec/changelog/2026-08-31.md — ## DSolve — ExactODE entry
+- [x] DSOLVE_PLAN.md — §1c [✓] ExactODE; update M5 future-work note
 
 ## Gates
-- [ ] make -j build clean
-- [ ] REPL spot-checks (Kummer, Gauss, pinned, ?docstring, integer-b decline)
-- [ ] ctest -R dsolve
-- [ ] valgrind leak-check (engine allocations balanced)
-- [ ] make check-c99
+- [x] make -j build clean
+- [x] REPL spot-checks (2nd/3rd-order, inhomogeneous, pinned, non-exact decline,
+      ?docstring, Airy/Euler regressions) — all pass
+- [x] ctest -R dsolve (all 3 targets green, 34.9s)
+- [x] make check-c99 (exit 0)
+- [x] valgrind leak-check (1× and same-eqn 6× both 13,440 + 6,312 B — no per-call leak)
 - [ ] commit + push
 
 ## Review — DONE
 
-All items complete. `DSolve\`SpecialFunctionForm` now recognises Kummer (₁F₁) and
-Gauss (₂F₁) second-order linear equations (`src/calculus/dsolve_specialform.c`),
-appended as two `if (!general)` blocks after Bessel; shared quadratic-root helper
-`specialform_quad_roots` (FactorList linear factors → radical-free `a,b`, radical
-`Solve` fallback) and `specialform_is_number` (the numeric-exponent gate).
+`DSolve`ExactODE` (§1c) solves linear ODEs of order ≥ 2 whose left side is a total
+derivative `L[y] == d/dx(M[y])`: the first-integral coefficients come from the
+recurrence `b_{n-1}=a_n`, `b_{k-1}=a_k−b_k'`, the exactness test is the leftover
+`a_0 == b_0'`, and it integrates once to `M[y] == ∫g + C[n]` then recurses into
+the scalar cascade on the order-(n−1) equation. New file
+`src/calculus/dsolve_exactode.c` (mirrors `dsolve_reduce_order.c`: recurse into
+`DSolve`, reuse `extract_applied`); constant `C[n]` is contiguous with the
+sub-solve's `C[1..n-1]` (no renumbering); iterated exactness is free via the
+recursion (3rd-order doubly-exact reduces twice).
 
-**Verified:**
-- Numeric Kummer/Gauss → closed form; symbolic-`a` Kummer & symbolic-`a,b` Gauss
-  (numeric exponent) → clean closed form; Airy/Bessel regressions intact.
-- `ctest -R dsolve` → 3/3 pass (unit + both stress suites); 6 new unit tests +
-  2 forward-generator stress families (24 solves, all back-substitute to 0).
-- `make check-c99` PASS.
-- valgrind: recognizer + `quad_roots` add **zero** leaks (0 direct-alloc blocks,
-  0 `quad_roots` frames); only pre-existing Simplify/engine baseline remains.
+**Verified:** `x y''+y'==0 → C[1]+C[2]Log[x]`; inhomogeneous `x y''+y'==x`;
+3rd-order `x y'''+y''==0` (3 constants); pinned `DSolve`ExactODE`; non-exact
+(Airy) + first-order both decline; Airy/Euler-Cauchy regressions intact.
+3/3 dsolve ctest green; check-c99 exit 0; no per-call valgrind leak.
 
-**Key finding — verification hang (worked around, not a regression):**
-The second solution carries `x^(1−b)`/`x^(1−c)`. With a **symbolic** exponent the
-verify residual is a symbolic-power + pFq sum on which `zero_test`/PossibleZeroQ
-**hangs** (pre-existing). Gate: emit only when the exponent parameter (`b`/`c`) is
-a `NumberQ` non-integer; symbolic/integer exponents decline to Frobenius. Confirmed
-via `git stash` that fully-symbolic Gauss also hangs on the **pre-change** binary
-(the hang is in Kovacic on symbolic coefficients — unrelated to this change).
+**Placement:** after EulerCauchy, before SpecialFunctionForm (elementary
+order-reduction preferred over special-function/Kovacic/series). Reference
+Airy/Bessel/Euler/Kovacic equations are all non-exact, so their pinned tests are
+untouched.
 
-**Follow-ups (out of scope):** affine/Möbius normalisation for non-canonical
-singular points; a `zero_test` improvement (or verify time-box) to lift the
-symbolic-exponent gate; LegendreP recognizer (needs LegendreP/Q derivative rules).
+**Follow-ups (out of scope):** OperatorFactor/DFactor (differential-operator
+factoring); integrating-factor (adjoint) exactness `L*[μ]==0`; nonlinear
+total-derivative detection; Sturm–Liouville EigenvalueProblem (§1f).
