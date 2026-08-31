@@ -79,6 +79,16 @@ typedef Expr** (*DSolveTryFn)(DSolveProblem* P, size_t* nbranch);
  * branch survived verification. */
 Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn);
 
+/* ---- implicit (first-integral) solutions of a first-order ODE ----
+ * The try-fn returns the left-hand side G of the general integral G == C[1]
+ * (one per branch); `dsolve_run_implicit` verifies each by implicit
+ * differentiation (y' == -G_x/G_y satisfies the ODE), fits the constant to an
+ * initial condition when present, and assembles {{ G(x, y[x]) == C[1] }}.  Used
+ * when no explicit y[x] -> body inversion exists (e.g. homogeneous log-spirals).
+ * `dsolve_method_builtin_implicit` is the strict pinned-method entry. */
+Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn);
+Expr* dsolve_method_builtin_implicit(Expr* res, DSolveTryFn fn);
+
 /* ---- systems (nfun > 1): a solution is one body per dependent function ---- */
 /* A system method: given the parsed problem, produce `bodies[i]` for each
  * dependent function (in x and the generated constants), or NULL to decline. */

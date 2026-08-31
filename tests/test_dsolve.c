@@ -564,8 +564,8 @@ static void t_homogeneous_algebraic(void) {
                  "y'[x] - (x + 2 y[x])/(2 x + y[x])");
     check_method("DSolve`Homogeneous", "y'[x] == (2 x + y[x])/(x + 2 y[x])",
                  "y'[x] - (2 x + y[x])/(x + 2 y[x])");
-    /* the transcendental case has no explicit inverse -> stays symbolic */
-    check_form("Head[DSolve[y'[x] == (x + y[x])/(x - y[x]), y, x]]", "DSolve");
+    /* the transcendental case (x+y)/(x-y) has no explicit inverse; it is returned
+     * as an implicit first integral instead of declining — see t_homogeneous_implicit. */
 }
 
 /* ReductionOfOrder now accepts a correct-but-unsimplified antiderivative (its
@@ -574,6 +574,31 @@ static void t_homogeneous_algebraic(void) {
 static void t_reduce_order_riccati(void) {
     check_method("DSolve`ReductionOfOrder", "y''[x] == 1 + y'[x]^2", "y''[x] - 1 - y'[x]^2");
     check_method("DSolve`ReductionOfOrder", "y''[x] == -2 x y'[x]^2", "y''[x] + 2 x y'[x]^2");
+}
+
+/* The transcendental (ArcTan log-spiral) homogeneous family has no explicit
+ * inverse and is returned as the implicit first integral G(x,y[x]) == C[1] (an
+ * Equal, not a y[x] -> rule).  Verify by implicit differentiation: from
+ * d/dx[G == C] the ODE forces G_x + G_y y'[x] == 0, so substituting the ODE RHS
+ * for y'[x] must vanish. */
+static void check_implicit(const char* rhs) {
+    char buf[768];
+    snprintf(buf, sizeof(buf), "Head[DSolve[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    check_true(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{eq = DSolve[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]] - eq[[2]], x] /. y'[x] -> (%s)]]", rhs, rhs);
+    check_true(buf);
+}
+static void t_homogeneous_implicit(void) {
+    check_implicit("(x + y[x])/(x - y[x])");
+    check_implicit("(x + y[x])/(2 x + y[x])");
+    check_implicit("(3 x + y[x])/(x + 2 y[x])");
+    /* IVP fits the constant: the relation passes through (1, 0) */
+    check_true("PossibleZeroQ[Module[{eq = DSolve[{y'[x] == (x + y[x])/(x - y[x]), y[1] == 0}, "
+               "y, x][[1,1]]}, (eq[[1]] - eq[[2]]) /. {x -> 1, y[x] -> 0}]]");
+    /* the pinned method also returns the implicit form when no explicit inverse exists */
+    check_true("Head[DSolve`Homogeneous[y'[x] == (x + y[x])/(x - y[x]), y, x][[1,1]]] === Equal");
 }
 
 int main(void) {
@@ -673,6 +698,7 @@ int main(void) {
     TEST(t_powerseries_more);
     TEST(t_homogeneous_algebraic);
     TEST(t_reduce_order_riccati);
+    TEST(t_homogeneous_implicit);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

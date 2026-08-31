@@ -721,6 +721,91 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Implicit (first-integral) solutions of a first-order ODE           *
+ *                                                                     *
+ *  When the general integral G(x, y) == C[1] cannot be solved         *
+ *  explicitly for y (e.g. the homogeneous log-spiral                  *
+ *  y' == (x+y)/(x-y), whose integral is ArcTan[y/x] - Log[x^2+y^2]/2),*
+ *  DSolve returns that equation as the solution branch.  A try-fn on  *
+ *  this path returns the left-hand side G (the relation is G == C[1]).*
+ *  Verification differentiates the relation implicitly — from         *
+ *  d/dx[G == C] = 0 the ODE forces y' == -G_x/G_y — and substitutes   *
+ *  that y' into the residual; an IVP y[x0]==y0 fits the constant as   *
+ *  G(x0, y0).  Output is {{ G(x, y[x]) == C[1] }}, not a y[x] -> rule.*/
+static bool dsolve_verify_implicit(const DSolveProblem* P, const Expr* G) {
+    if (P->nfun != 1) return false;
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    const char* Yn = intern_symbol("DSolve`impY");
+    /* partials via G(x, Y):  y' = -D[G,x] / D[G,Y] */
+    Expr* GY = ds_subst(expr_copy((Expr*)G), ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Yn));
+    Expr* Gx = ds_d(expr_copy(GY), expr_new_symbol(xvar));
+    Expr* Gy = ds_d(GY, expr_new_symbol(Yn));                  /* consumes GY */
+    Expr* yp = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+                   ds_call2(SYM_Times, Gx,
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ Gy, expr_new_integer(-1) }, 2))));
+    yp = ds_subst(yp, expr_new_symbol(Yn), ds_make_funcapp(yname, 0, xvar));
+    bool ok = true;
+    for (size_t e = 0; e < P->neq && ok; e++) {
+        Expr* sub = ds_subst(expr_copy(P->eq_residuals[e]),
+                             ds_make_funcapp(yname, 1, xvar), expr_copy(yp));
+        if (zero_test_decide(sub) == ZERO_TEST_FALSE) ok = false;
+        expr_free(sub);
+    }
+    expr_free(yp);
+    return ok;
+}
+
+/* The constant for the relation G == C: fitted to a first-order initial
+ * condition y[x0]==y0 when one is present (C = G(x0, y0)), else C[1]. */
+static Expr* dsolve_implicit_rhs(const DSolveProblem* P, const Expr* G) {
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    for (size_t c = 0; c < P->ncond; c++) {
+        if (P->conds[c].fi != 0 || P->conds[c].order != 0) continue;
+        Expr* v = expr_copy((Expr*)G);
+        v = ds_subst(v, ds_make_funcapp(yname, 0, xvar), expr_copy(P->conds[c].value));
+        v = ds_subst(v, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        return eval_and_free(v);
+    }
+    return ds_const(1);
+}
+
+Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn) {
+    size_t nb = 0;
+    Expr** gs = fn(P, &nb);
+    if (!gs) return NULL;
+    if (nb == 0) { free(gs); return NULL; }
+    Expr** branches = malloc(nb * sizeof(Expr*));
+    size_t nf = 0;
+    for (size_t b = 0; b < nb; b++) {
+        if (!gs[b]) continue;
+        if (!dsolve_verify_implicit(P, gs[b])) { expr_free(gs[b]); continue; }
+        Expr* rhs = dsolve_implicit_rhs(P, gs[b]);
+        Expr* rhs2 = ds_rename_param(rhs, P->param_head);      /* renames the C[1] */
+        expr_free(rhs);
+        Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
+                       (Expr*[]){ gs[b], rhs2 }, 2);           /* consumes gs[b], rhs2 */
+        branches[nf++] = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ eq }, 1);
+    }
+    free(gs);
+    if (nf == 0) { free(branches); return NULL; }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), branches, nf);
+    free(branches);
+    return out;
+}
+
+Expr* dsolve_method_builtin_implicit(Expr* res, DSolveTryFn fn) {
+    DSolveProblem P;
+    if (!dsolve_parse(res, &P)) return NULL;
+    if (P.is_pde || P.nfun != 1) { dsolve_problem_free(&P); return NULL; }
+    Expr* r = dsolve_run_implicit(&P, fn);
+    dsolve_problem_free(&P);
+    return r;
+}
+
+/* ------------------------------------------------------------------ *
  *  Systems (nfun > 1)                                                 *
  * ------------------------------------------------------------------ */
 

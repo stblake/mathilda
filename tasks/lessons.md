@@ -3096,3 +3096,30 @@ C helper has no per-call leak, run the SAME solve 1× and N× under
 `valgrind --leak-check=summary` — identical `definitely lost` (here 13,440 bytes
 for both 1× and 6×) means zero per-call growth. See
 [[project_dsolve_valgrind_engine_baseline]].
+
+## DSolve implicit solutions: a parallel run path, verified by implicit differentiation
+
+When a first-order ODE's general integral G(x,y)==C cannot be inverted for y (a
+transcendental relation — the ArcTan log-spiral homogeneous family, e.g.
+y'==(x+y)/(x-y)), don't overload the explicit `y[x] -> body` pipeline (verify /
+fit / assemble all assume an explicit body to substitute and differentiate). Add
+a PARALLEL path (`dsolve_run_implicit` + `dsolve_method_builtin_implicit` in
+dsolve_common.c): the try-fn returns the LHS G (meaning G == C[1]); verify by
+IMPLICIT DIFFERENTIATION — from d/dx[G==C]=0 the ODE forces y' == -G_x/G_y (get
+the partials by substituting y[x]->Y, then D w.r.t x and Y), substitute that y'
+into the residual, keep unless decidably non-zero (same permissive policy as
+dsolve_verify_body). Fit an IC y[x0]==y0 as C = G(x0,y0). Assemble
+`{{ G(x,y[x]) == C[1] }}` — an Equal branch, NOT a y[x]->rule. Run it AFTER the
+explicit method (explicit is preferred whenever the inverse exists), both in the
+auto cascade (before the series fallback) and as the pinned-method fallback
+(builtin_dsolve_homogeneous tries explicit then implicit; dsolve_parse borrows
+`res`, so calling two method-builtins on the same res is safe).
+
+Testing an implicit (Equal) branch: the standard `residual /. sol[[1]]` idiom does
+NOT work (the branch is an Equal, not a Rule). Verify by implicit differentiation
+in the test language: `PossibleZeroQ[D[eq[[1]]-eq[[2]], x] /. y'[x] -> rhs]` where
+`eq = DSolve[...][[1,1]]`. And watch for OWN earlier decline assertions that a
+new solver capability makes obsolete: t_homogeneous_algebraic asserted the
+transcendental case stays `Head==DSolve`, which broke once it solved implicitly —
+update the assertion, don't just make the feature avoid the test.
+See [[project_dsolve_decline_gap_verify_gated_fixes]].

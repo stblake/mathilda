@@ -232,8 +232,10 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   log-form inversion, with an exponentiate-and-clear-radicals fallback
   (`homog_exp_log_invert`: `Prod g_i^{c_i} == C[1] x` raised to power `d` → `Solve`
   Root branches) for the pure-log (real-root) rational family, e.g.
-  `(x+2y)/(2x+y)`; the transcendental (ArcTan log-spiral) subset has no explicit
-  inverse and declines.
+  `(x+2y)/(2x+y)`. The transcendental (ArcTan log-spiral) subset has no explicit
+  inverse and is returned as the **implicit first integral** `G(x,y[x]) == C[1]`
+  via the `dsolve_run_implicit` path (`dsolve_homogeneous_implicit_try`), verified
+  by implicit differentiation (`y' == -G_x/G_y` satisfies the ODE).
 - `[✓] Exact` — `M+N y'==0`, `M_y==N_x`; + integrating-factor search `μ(x)`, `μ(y)`.
 - `[✓] Clairaut` — `y==x y'+f(y')`: general line `y=C[1]x+f(C[1])` + singular envelope (`IncludeSingularSolutions`).
 - `[ ] Riccati` — `y'==q0+q1 y+q2 y^2`: reduce to 2nd-order linear (needs the M2/M3 linear engine; may branch).

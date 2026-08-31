@@ -72,6 +72,7 @@ extern Expr** dsolve_quadrature_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_homogeneous_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
@@ -180,13 +181,19 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_reduce_order_try);
             if (!result) result = dsolve_run(&P, dsolve_fos_try);
             if (!result) result = dsolve_run(&P, dsolve_autonomous_try);
+            /* implicit first-integral fallback: a homogeneous ODE with no explicit
+             * inverse (transcendental log-spiral) is returned as G(x,y[x]) == C[1] */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
             /* series fallback: always-available, so it runs last */
             if (!result) result = dsolve_run(&P, dsolve_frobenius_try);
             break;
         case DS_QUADRATURE:   result = dsolve_run(&P, dsolve_quadrature_try);  break;
         case DS_LINEAR1:      result = dsolve_run(&P, dsolve_linear1_try);     break;
         case DS_BERNOULLI:    result = dsolve_run(&P, dsolve_bernoulli_try);   break;
-        case DS_HOMOGENEOUS:  result = dsolve_run(&P, dsolve_homogeneous_try); break;
+        case DS_HOMOGENEOUS:
+            result = dsolve_run(&P, dsolve_homogeneous_try);
+            if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
+            break;
         case DS_SEPARABLE:    result = dsolve_run(&P, dsolve_separable_try);   break;
         case DS_EXACT:        result = dsolve_run(&P, dsolve_exact_try);       break;
         case DS_CLAIRAUT:     result = dsolve_run(&P, dsolve_clairaut_try);    break;

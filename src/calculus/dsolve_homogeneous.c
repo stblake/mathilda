@@ -117,8 +117,54 @@ Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch) {
     return vs;
 }
 
+/*
+ * Implicit-solution path.  When the substitution v = y/x gives an antiderivative
+ * that cannot be inverted for y (a transcendental relation — the ArcTan
+ * log-spiral family, e.g. y'==(x+y)/(x-y)), return the general integral
+ *     G = (Integrate[1/(F(v)-v), v] /. v -> y[x]/x) - Log[x],
+ * meaning the solution G == C[1].  dsolve_run_implicit verifies it by implicit
+ * differentiation and assembles {{ G == C[1] }}.
+ */
+Expr** dsolve_homogeneous_implicit_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1) return NULL;
+    if (P->max_order[0] != 1) return NULL;
+    const char* yname = P->fun_names[0];
+    const char* xvar = P->ind_names[0];
+
+    Expr* F = dsolve_solve_top_derivative(P, 1);
+    if (!F) return NULL;
+    const char* Yn = intern_symbol("DSolve`Y");
+    const char* vn = intern_symbol("DSolve`v");
+    Expr* FY = ds_subst(F, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Yn));
+    Expr* vx = ds_call2(SYM_Times, expr_new_symbol(vn), expr_new_symbol(xvar));
+    Expr* Fvx = ds_subst(expr_copy(FY), expr_new_symbol(Yn), vx);
+    expr_free(FY);
+    if (!ds_free_of(Fvx, xvar)) { expr_free(Fvx); return NULL; }
+    Expr* denom = eval_and_free(ds_call2(SYM_Subtract, Fvx, expr_new_symbol(vn)));
+    if (ds_is_zero(denom)) { expr_free(denom); return NULL; }
+    Expr* intV = ds_integrate(
+        expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ denom, expr_new_integer(-1) }, 2),
+        expr_new_symbol(vn));
+    if (ds_has_head(intV, SYM_Integrate)) { expr_free(intV); return NULL; }
+
+    /* G = (intV /. v -> y[x]/x) - Log[x] */
+    Expr* yx = ds_call2(SYM_Times, ds_make_funcapp(yname, 0, xvar),
+                   expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ expr_new_symbol(xvar), expr_new_integer(-1) }, 2));
+    Expr* G = ds_subst(intV, expr_new_symbol(vn), yx);
+    G = eval_and_free(ds_call2(SYM_Subtract, G, ds_call1("Log", expr_new_symbol(xvar))));
+
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = G;
+    *nbranch = 1;
+    return out;
+}
+
 static Expr* builtin_dsolve_homogeneous(Expr* res) {
-    return dsolve_method_builtin(res, dsolve_homogeneous_try);
+    /* explicit inversion first; fall back to the implicit first-integral form */
+    Expr* r = dsolve_method_builtin(res, dsolve_homogeneous_try);
+    if (!r) r = dsolve_method_builtin_implicit(res, dsolve_homogeneous_implicit_try);
+    return r;
 }
 
 void dsolve_homogeneous_init(void) {

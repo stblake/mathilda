@@ -90,3 +90,28 @@ green, no regressions; `check-c99` clean; valgrind shows **no per-call leak**
 
 Remaining (reported, not done): the transcendental-implicit Homogeneous subset
 (`(x+y)/(x-y)`) needs implicit-solution output — a larger substrate change.
+
+---
+
+# Follow-up 2: implicit first-integral solutions (transcendental homogeneous)  ✅ DONE
+
+User asked to take on the implicit-solution subset. Added a parallel substrate
+path rather than overloading the explicit `y[x] -> body` pipeline.
+
+- **Substrate** (`dsolve_common.{c,h}`): `dsolve_run_implicit` +
+  `dsolve_method_builtin_implicit`; a try-fn returns the LHS `G` of `G == C[1]`.
+  `dsolve_verify_implicit` verifies by implicit differentiation (from
+  `d/dx[G==C]=0`, `y' == -G_x/G_y` must satisfy the residual — same permissive
+  not-decidably-nonzero policy as `dsolve_verify_body`). `dsolve_implicit_rhs`
+  fits an IC as `G(x0,y0)`. Output `{{ G(x,y[x]) == C[1] }}` (an `Equal` branch).
+- **`dsolve_homogeneous_implicit_try`** (`dsolve_homogeneous.c`): `G =
+  (∫1/(F(v)-v) dv /. v->y[x]/x) - Log[x]`. Runs after explicit Homogeneous (both
+  auto cascade — before series — and as the pinned-method fallback).
+- Tests verify by implicit differentiation (the `Equal` branch can't use `/.`):
+  `t_homogeneous_implicit` (unit, incl. IVP + pinned) + `t_stress_homogeneous_implicit`
+  (5 transcendental forms). Updated the now-obsolete decline assertion in
+  `t_homogeneous_algebraic` (the transcendental case solves implicitly now).
+
+Gates: 3/3 dsolve ctest green, no regressions; `check-c99` clean; valgrind no
+per-call leak on the implicit path (1×==6× == 13,440 + 6,312 bytes baseline).
+Closes the last honest Homogeneous gap.

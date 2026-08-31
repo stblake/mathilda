@@ -98,6 +98,18 @@ static void hom_ok(const char* rhs) {
     method_ok("DSolve`Homogeneous", eqn, res);
 }
 
+/* transcendental homogeneous -> implicit first integral G(x,y[x]) == C[1] (an
+ * Equal branch, so it is verified by implicit differentiation, not /. rule). */
+static void hom_implicit_ok(const char* rhs) {
+    char buf[768];
+    snprintf(buf, sizeof(buf), "Head[DSolve[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{eq = DSolve[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]] - eq[[2]], x] /. y'[x] -> (%s)]]", rhs, rhs);
+    ASSERT_TRUE(buf);
+}
+
 /* Exact forward generator: pick a potential phi(x,y); M = phi_x, N = phi_y are an
  * exact pair by construction; the equation is M + N y' == 0 with y -> y[x]. */
 static void exact_ok(const char* phi) {
@@ -238,6 +250,19 @@ static void t_stress_homogeneous(void) {
     for (size_t i = 0; i < 8; i++) hom_ok(fs[i]);
 }
 
+static void t_stress_homogeneous_implicit(void) {
+    /* transcendental (ArcTan) rational-homogeneous family: no explicit inverse,
+     * returned as the implicit first integral and verified by implicit diff. */
+    const char* fs[] = {
+        "(x + y[x])/(x - y[x])",
+        "(x + y[x])/(2 x + y[x])",
+        "(3 x + y[x])/(x + 2 y[x])",
+        "(x + y[x])/(x - 2 y[x])",
+        "x/(2 x + y[x])"
+    };
+    for (size_t i = 0; i < 5; i++) hom_implicit_ok(fs[i]);
+}
+
 static void t_stress_exact(void) {
     const char* phis[] = {
         "x^2 y", "x^2 + x y + y^2", "x y^2", "x^3 + x y", "x^2 - y^2", "x^3 y"
@@ -316,6 +341,7 @@ int main(void) {
     TEST(t_stress_separable);
     TEST(t_stress_bernoulli);
     TEST(t_stress_homogeneous);
+    TEST(t_stress_homogeneous_implicit);
     TEST(t_stress_exact);
     TEST(t_stress_constcoeff);
     TEST(t_stress_euler);
