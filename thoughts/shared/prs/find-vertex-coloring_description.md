@@ -1,9 +1,16 @@
-**Risk triage: 15/100 — LOW.** Recommended review: one reviewer; eligible for fast-track if
-CI is green. 8 files, 816 reviewable lines. Drivers: diff size (+10, past the 600-line
-review-quality threshold) and blast radius (+5, two top-level modules: `src`, `tests`).
-Scored deterministically by `pr-risk-triage` against the **working tree**, not a commit
-range — at scoring time nothing was committed, so `origin/main...HEAD` was empty. Routing
-signal only; it never approves.
+**Risk triage: 30/100 — MEDIUM.** Recommended review: one reviewer with domain familiarity
+in the touched area. 24 files, 4925 reviewable lines across `origin/main...HEAD`. Drivers:
+blast radius (+15, five top-level modules — `.claude`, `docs`, `src`, `tests`, `thoughts`)
+and diff size (+15, past the 600-line review-quality threshold). Scored deterministically by
+`pr-risk-triage`; routing signal only, it never approves.
+
+**Read that number with one correction.** It was scored twice. Against the **shipping code
+alone** — the eight files of commit 1 — it is **15/100, LOW**, 816 lines, two modules. The
+jump to MEDIUM comes entirely from the three companion commits: kit configuration, a
+decision record, a generated repo map, and ~3,200 lines of markdown ticket artifacts. None
+of that is executable. A reviewer should size their attention to the LOW score and read the
+rest as supporting material; the triage counts directories and lines and cannot tell prose
+from C.
 
 ## Summary
 
