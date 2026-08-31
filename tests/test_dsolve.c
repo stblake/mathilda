@@ -615,6 +615,18 @@ static void t_lagrange_declines(void) {
     /* a parametric IVP is deferred: declines rather than ignoring the condition */
     check_form("Head[DSolve[{y[x] == 2 x y'[x] + (y'[x])^2, y[1] == 0}, y, x]]", "DSolve");
 }
+static void t_lagrange_singular(void) {
+    /* y == x (y')^2 + (y')^3: phi(p)=p^2, roots of phi(p)=p are p=0,1 -> singular
+     * lines y=0 and y=x+1, emitted alongside the parametric general branch. */
+    check_true("Length[DSolve[y[x] == x (y'[x])^2 + (y'[x])^3, y, x, "
+               "IncludeSingularSolutions -> True]] == 3");
+    check_true("Module[{sing = Select[DSolve[y[x] == x (y'[x])^2 + (y'[x])^3, y, x, "
+               "IncludeSingularSolutions -> True], Length[#] == 1 &]}, "
+               "Length[sing] == 2 && And @@ (PossibleZeroQ /@ "
+               "((y[x] - (x (y'[x])^2 + (y'[x])^3)) /. sing))]");
+    /* default (no option): general parametric branch only */
+    check_true("Length[DSolve[y[x] == x (y'[x])^2 + (y'[x])^3, y, x]] == 1");
+}
 
 /* PowerSeries: was ordinary + auto; add two more ordinary-point forms. */
 static void t_powerseries_more(void) {
@@ -796,6 +808,7 @@ int main(void) {
     TEST(t_method_lagrange);
     TEST(t_lagrange_more);
     TEST(t_lagrange_declines);
+    TEST(t_lagrange_singular);
     TEST(t_powerseries_more);
     TEST(t_homogeneous_algebraic);
     TEST(t_reduce_order_riccati);

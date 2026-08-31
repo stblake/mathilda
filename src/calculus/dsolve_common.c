@@ -863,27 +863,52 @@ static Expr* dsolve_assemble_parametric(const DSolveProblem* P, Expr* X, Expr* Y
     return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ xrule, yrule }, 2);
 }
 
+/* Assemble one explicit scalar branch {y -> Function[{x}, body]} (or the applied
+ * y[x] -> body form), renaming C[k].  body is borrowed. */
+static Expr* dsolve_assemble_scalar_branch(const DSolveProblem* P, const Expr* body) {
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    Expr* b2 = ds_rename_param(body, P->param_head);
+    Expr* lhs; Expr* rhs;
+    if (P->applied) {
+        lhs = expr_new_function(expr_new_symbol(yname), (Expr*[]){ expr_new_symbol(xvar) }, 1);
+        rhs = b2;
+    } else {
+        lhs = expr_new_symbol(yname);
+        rhs = expr_new_function(expr_new_symbol(SYM_Function), (Expr*[]){
+            expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_new_symbol(xvar) }, 1), b2 }, 2);
+    }
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){ lhs, rhs }, 2);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ rule }, 1);
+}
+
 Expr* dsolve_run_parametric(DSolveProblem* P, DSolveTryFn fn) {
     if (P->ncond > 0) return NULL;             /* parametric IVP-fitting is future */
     size_t nb = 0;
     Expr** pairs = fn(P, &nb);
     if (!pairs) return NULL;
     if (nb == 0) { free(pairs); return NULL; }
-    const char* wrap = intern_symbol("DSolve`Param");
+    const char* wrapP = intern_symbol("DSolve`Param");
+    const char* wrapE = intern_symbol("DSolve`Explicit");
     Expr** branches = malloc(nb * sizeof(Expr*));
     size_t nf = 0;
     for (size_t b = 0; b < nb; b++) {
         Expr* pr = pairs[b];
         if (!pr) continue;
-        if (!head_is(pr, wrap) || pr->data.function.arg_count != 3
-            || pr->data.function.args[2]->type != EXPR_SYMBOL) { expr_free(pr); continue; }
-        Expr* X = expr_copy(pr->data.function.args[0]);
-        Expr* Y = expr_copy(pr->data.function.args[1]);
-        const char* tname = pr->data.function.args[2]->data.symbol.name;
-        if (!dsolve_verify_parametric(P, X, Y, tname)) {
-            expr_free(X); expr_free(Y); expr_free(pr); continue;
+        if (head_is(pr, wrapP) && pr->data.function.arg_count == 3
+            && pr->data.function.args[2]->type == EXPR_SYMBOL) {
+            Expr* X = expr_copy(pr->data.function.args[0]);
+            Expr* Y = expr_copy(pr->data.function.args[1]);
+            const char* tname = pr->data.function.args[2]->data.symbol.name;
+            if (dsolve_verify_parametric(P, X, Y, tname))
+                branches[nf++] = dsolve_assemble_parametric(P, X, Y, tname);  /* consumes X, Y */
+            else { expr_free(X); expr_free(Y); }
+        } else if (head_is(pr, wrapE) && pr->data.function.arg_count == 1) {
+            /* explicit scalar branch (singular line): verify as y(x), assemble */
+            const Expr* body = pr->data.function.args[0];
+            if (dsolve_verify_body(P, body))
+                branches[nf++] = dsolve_assemble_scalar_branch(P, body);
         }
-        branches[nf++] = dsolve_assemble_parametric(P, X, Y, tname);  /* consumes X, Y */
         expr_free(pr);
     }
     free(pairs);

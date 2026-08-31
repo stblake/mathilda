@@ -683,9 +683,10 @@ roadmap):
 `DSolve`Lagrange` returns a **parametric** solution — a branch is the pair of
 rules `{x -> Function[{t}, X(t)], y -> Function[{t}, Y(t)]}` with the slope `y'`
 as the parameter `t` — because a d'Alembert equation generally has no explicit
-`y(x)`. (This v1 returns the general solution only; singular-line solutions and
-IVP constant-fitting are future work, and an initial condition currently
-declines rather than being ignored.)
+`y(x)`. The singular-line solutions `y = p₀ x + ψ(p₀)` (for each root `p₀` of
+`φ(y') = y'`) are returned as additional explicit branches under
+`IncludeSingularSolutions -> True`. Parametric IVP constant-fitting is future
+work; an initial condition currently declines rather than being ignored.
 
 Utility (not a solver — returns the reduced equation, not a solution):
 
