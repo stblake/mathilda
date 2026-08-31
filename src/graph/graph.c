@@ -169,6 +169,28 @@ void graph_init(void) {
         "VertexConnectivity[g] gives the minimum number of vertices whose "
         "removal disconnects g.");
 
+    symtab_add_builtin("FindVertexColoring", builtin_find_vertex_coloring);
+    symtab_get_def("FindVertexColoring")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("FindVertexColoring",
+        "FindVertexColoring[g] gives a MINIMAL vertex colouring of g as a list "
+        "of integers in VertexList order: the number of distinct colours equals "
+        "the chromatic number, and no edge joins two vertices of equal colour. "
+        "Minimality is proven by exact search (Wolfram's \"BacktrackingDS\" "
+        "method) seeded by DSATUR upper and clique lower bounds. Exact colouring "
+        "is NP-hard, so there are two guards, and exceeding EITHER returns the "
+        "expression UNEVALUATED -- never a valid-but-larger colouring. (1) Graphs "
+        "of more than 128 vertices are refused outright. (2) The search gives up "
+        "after 8 million nodes, on the order of 100 seconds; a node count rather "
+        "than a clock, so the answer does not depend on how fast the host is. To "
+        "bound how long a call may take, wrap it in TimeConstrained -- that is "
+        "the intended lever, and the search polls for the deadline so it is "
+        "honoured; the 8-million-node ceiling is a last-resort backstop for an "
+        "unattended run, not the responsiveness mechanism. Cost is driven by "
+        "DENSITY, not by vertex count: a sparse 128-vertex graph answers "
+        "instantly, while a dense one may exhaust the budget and refuse. "
+        "FindVertexColoring[g, {c1, ...}] and FindVertexColoring[g, l] are not "
+        "implemented.");
+
     /* ---- Phase 6: visualization ------------------------------------------ */
     symtab_add_builtin("GraphPlot", builtin_graph_plot);
     symtab_get_def("GraphPlot")->attributes |= ATTR_PROTECTED;

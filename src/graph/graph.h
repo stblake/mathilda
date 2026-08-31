@@ -134,6 +134,37 @@ Expr* builtin_find_spanning_tree(Expr* res);            /* FindSpanningTree     
 Expr* builtin_connected_graph_q(Expr* res);             /* ConnectedGraphQ      */
 Expr* builtin_vertex_connectivity(Expr* res);           /* VertexConnectivity   */
 
+/* ---- Phase 5: vertex colouring internals (src/graph/vertexcoloring.c) -----
+ * Non-static so they can be unit-tested directly: an exact chromatic-number
+ * search has to be proven minimal before the head that answers with it is
+ * registered, and a static function is not reachable from another translation
+ * unit. All three are read-only over `a` and write only their out-parameters.
+ *
+ * `colour` buffers are caller-allocated, length a->n, and hold 1-based colour
+ * numbers indexed by GraphAdj vertex index (i.e. VertexList position). */
+
+/* DSATUR: fills colour[] with a valid -- not necessarily minimal -- colouring
+ * and returns the number of colours it used, an UPPER bound on chi(g).
+ * Returns 0 for the empty graph, and 0 on allocation failure. */
+int fvc_dsatur_bound(const GraphAdj* a, int* colour);
+
+/* Multi-start greedy clique: returns the size of the largest clique found, a
+ * LOWER bound on chi(g). 0 for the empty graph, otherwise at least 1. */
+int fvc_clique_bound(const GraphAdj* a);
+
+/* Exact: returns chi(g) and fills colour[] with a colouring achieving it.
+ * Seeds bounds from the two functions above and short-circuits when they meet,
+ * otherwise refutes each smaller k by exhaustive backtracking. Writes the
+ * number of backtracking nodes visited to *steps_out when non-NULL -- zero
+ * exactly when the bounds met and no search was needed. */
+int fvc_search(const GraphAdj* a, int* colour, long* steps_out);
+
+/* FindVertexColoring[g]: a MINIMAL colouring, as 1-based integers in
+ * VertexList order. Returns NULL (unevaluated) rather than a valid-but-larger
+ * colouring whenever minimality cannot be proven -- above FVC_MAX_VERTICES, or
+ * when the search exceeds FVC_MAX_STEPS. */
+Expr* builtin_find_vertex_coloring(Expr* res);   /* FindVertexColoring[g]      */
+
 /* ---- Phase 6: visualization ----------------------------------------------- */
 Expr* builtin_graph_plot(Expr* res);        /* GraphPlot[g] -> Graphics[...]   */
 

@@ -914,6 +914,7 @@ set(COMMON_SRC
     ../src/graph/spanningtree.c
     ../src/graph/connectivity.c
     ../src/graph/graphplot.c
+    ../src/graph/vertexcoloring.c
 )
 
 # render.c / render3d.c / label_font.c need a live Raylib + display; only
@@ -973,6 +974,15 @@ add_executable(graph_tests test_graph.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(graph_tests m)
 target_include_directories(graph_tests PRIVATE ../src ../src/graph)
 add_test(NAME graph_tests COMMAND graph_tests)
+
+# RG-2: the vertex-colouring guard rows take 1-2 minutes by design (they have to
+# actually spend FVC_MAX_STEPS to prove the head refuses instead of guessing).
+# EXCLUDE_FROM_ALL and no add_test(): `make` skips it, ctest skips it, and it is
+# run deliberately with `make graph_slow_tests && ./graph_slow_tests`.
+add_executable(graph_slow_tests EXCLUDE_FROM_ALL
+               test_graph_slow.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(graph_slow_tests m)
+target_include_directories(graph_slow_tests PRIVATE ../src ../src/graph)
 
 add_executable(zero_test_tests test_zero_test.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(zero_test_tests m)

@@ -887,6 +887,7 @@ const char* SYM_StronglyConnectedComponents = NULL;
 const char* SYM_FindSpanningTree = NULL;
 const char* SYM_VertexConnectivity = NULL;
 const char* SYM_GraphPlot = NULL;
+const char* SYM_FindVertexColoring = NULL;
 
 /* NumberForm + Row (numeric-display formatting) and NumberForm's options. */
 const char* SYM_NumberForm = NULL;
@@ -1771,6 +1772,7 @@ void sym_names_init(void) {
     SYM_FindSpanningTree           = intern_symbol("FindSpanningTree");
     SYM_VertexConnectivity         = intern_symbol("VertexConnectivity");
     SYM_GraphPlot                  = intern_symbol("GraphPlot");
+    SYM_FindVertexColoring         = intern_symbol("FindVertexColoring");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a
