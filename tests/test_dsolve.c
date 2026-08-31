@@ -577,6 +577,45 @@ static void t_clairaut_more(void) {
     check_method("DSolve`Clairaut", "y[x] == x y'[x] - Log[y'[x]]", "y[x] - x y'[x] + Log[y'[x]]");
 }
 
+/* ---- 1a: Lagrange / d'Alembert (parametric general solution) ---- */
+/* Verify a parametric solution sol = {x->Function[{t},X], y->Function[{t},Y]}:
+ * substitute x->X(t), y[x]->Y(t), y'[x]->Y'(t)/X'(t) into `resid` (the ODE lhs,
+ * written in x, y[x], y'[x]) and require PossibleZeroQ. */
+static void check_lagrange(const char* method, const char* eqn, const char* resid) {
+    char buf[1200];
+    snprintf(buf, sizeof(buf), "Head[%s[%s, y, x]]", method, eqn);
+    check_form(buf, "List");
+    snprintf(buf, sizeof(buf),
+        "Module[{s = %s[%s, y, x][[1]], X, Y, yp}, "
+        "X = (x /. s)[t]; Y = (y /. s)[t]; yp = D[Y,t]/D[X,t]; "
+        "PossibleZeroQ[(%s) /. {Derivative[1][y][x] -> yp, y[x] -> Y, x -> X}]]",
+        method, eqn, resid);
+    check_true(buf);
+}
+static void t_method_lagrange(void) {
+    /* y == 2 x y' + (y')^2 : phi=2p, psi=p^2 -> rational parametric (decidable) */
+    check_lagrange("DSolve`Lagrange", "y[x] == 2 x y'[x] + (y'[x])^2",
+                   "y[x] - (2 x y'[x] + (y'[x])^2)");
+}
+static void t_lagrange_more(void) {
+    /* phi=2p, psi=p^3 */
+    check_lagrange("DSolve`Lagrange", "y[x] == 2 x y'[x] + (y'[x])^3",
+                   "y[x] - (2 x y'[x] + (y'[x])^3)");
+    /* phi constant (=1), psi nonlinear (p^2): still Lagrange, transcendental (Log) */
+    check_lagrange("DSolve`Lagrange", "y[x] == x + (y'[x])^2",
+                   "y[x] - (x + (y'[x])^2)");
+    /* automatic dispatch reaches it too */
+    check_form("Head[DSolve[y[x] == 2 x y'[x] + (y'[x])^2, y, x]]", "List");
+}
+static void t_lagrange_declines(void) {
+    /* Clairaut (phi==p) is owned by DSolve`Clairaut, not Lagrange */
+    check_form("Head[DSolve`Lagrange[y[x] == x y'[x] + (y'[x])^2, y, x]]", "DSolve`Lagrange");
+    /* genuinely linear in y' (phi const, psi affine): owned by LinearFirstOrder */
+    check_form("Head[DSolve`Lagrange[y'[x] + y[x] == x, y, x]]", "DSolve`Lagrange");
+    /* a parametric IVP is deferred: declines rather than ignoring the condition */
+    check_form("Head[DSolve[{y[x] == 2 x y'[x] + (y'[x])^2, y[1] == 0}, y, x]]", "DSolve");
+}
+
 /* PowerSeries: was ordinary + auto; add two more ordinary-point forms. */
 static void t_powerseries_more(void) {
     check_series("DSolve`PowerSeries", "y''[x] + x y'[x] + y[x] == 0",
@@ -727,6 +766,9 @@ int main(void) {
     TEST(t_reduce_order_more);
     TEST(t_method_clairaut);
     TEST(t_clairaut_more);
+    TEST(t_method_lagrange);
+    TEST(t_lagrange_more);
+    TEST(t_lagrange_declines);
     TEST(t_powerseries_more);
     TEST(t_homogeneous_algebraic);
     TEST(t_reduce_order_riccati);

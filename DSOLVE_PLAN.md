@@ -245,7 +245,15 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   Runs after `FirstOrderSubstitution` so `fos` keeps its cleaner `-x-Tan[…]` for
   `y'==(a x+b y+c)^2`. Solves the Airy-linearised `y'==y^2+x` that previously
   declined; declines (no wrong answer) when the linearisation has no closed form.
-- `[ ] Lagrange` (d'Alembert) — `y==x f(y')+g(y')`.
+- `[✓] Lagrange` (d'Alembert) — `y==x φ(y')+ψ(y')` (`φ(y')≠y'`): the general
+  solution is **parametric** `{x=X(t,C), y=X φ+ψ}`, `t=y'`, where `X(t)` solves the
+  linear ODE `dx/dt − [φ'/(t−φ)]x = ψ'/(t−φ)` (via `dsolve_linear_factor_solve`).
+  New parametric substrate path (`dsolve_run_parametric` / `_verify_parametric` /
+  `_assemble_parametric` / `_method_builtin_parametric`, mirroring the implicit
+  path); output `{{x->Function[{t},X], y->Function[{t},Y]}}`, verified by
+  `y'=Y'(t)/X'(t)`. Declines Clairaut (`φ≡p`) and genuinely-linear equations. Runs
+  after `Clairaut` in the cascade. *Deferred (future):* singular-line solutions
+  (roots of `φ(p)=p`) and parametric IVP constant-fitting (an IVP declines).
 - `[ ] Abel` / `[ ] Chini` — implicit solutions via `Solve`.
 - `[✓] FirstOrderSubstitution` — `y'==F(a x + b y + c)`: detect the constant ratio
   `r = F_x/F_y`, substitute `v = y + r x` → autonomous separable `v'==r+H(v)`,

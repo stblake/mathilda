@@ -178,6 +178,25 @@ static void riccati_ok(int r1, int r2) {
     method_ok("DSolve`Riccati", eqn, res);
 }
 
+/* Lagrange/d'Alembert forward generator: y == x phi(y') + psi(y') built from
+ * phi(p), psi(p) (in the marker symbol p). Auto dispatch → parametric output
+ * {x->Function[{t},X], y->Function[{t},Y]}; verify by substituting x->X(t),
+ * y->Y(t), y'->Y'(t)/X'(t) into the original equation residual. phi=2p (and
+ * 3p/2) with polynomial psi keep the integrating-factor integral elementary. */
+static void lagrange_ok(const char* phi, const char* psi) {
+    char eqn[512], buf[1500];
+    snprintf(eqn, sizeof(eqn),
+        "y[x] == x (%s /. p -> y'[x]) + (%s /. p -> y'[x])", phi, psi);
+    snprintf(buf, sizeof(buf), "Head[DSolve[%s, y, x]] === List", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "Module[{s = DSolve[%s, y, x][[1]], X, Y, yp}, "
+        "X = (x /. s)[t]; Y = (y /. s)[t]; yp = D[Y,t]/D[X,t]; "
+        "PossibleZeroQ[Y - (X (%s /. p -> yp) + (%s /. p -> yp))]]",
+        eqn, phi, psi);
+    ASSERT_TRUE(buf);
+}
+
 /* 2x2 constant-coefficient system y'=A y (auto dispatch — no backtick builtin). */
 static void sys2_ok(int a, int b, int c, int d) {
     char sys[256], buf[1024];
@@ -330,6 +349,15 @@ static void t_stress_riccati(void) {
     for (size_t i = 0; i < 7; i++) riccati_ok(rr[i][0], rr[i][1]);
 }
 
+static void t_stress_lagrange(void) {
+    /* phi=2p (mu=t^2, rational parametric — fully decidable residual) */
+    const char* psis[] = { "p^2", "p^3", "p^4", "p^2 + p", "p^3 - p^2", "2 p^2 - p" };
+    for (size_t i = 0; i < 6; i++) lagrange_ok("2 p", psis[i]);
+    /* phi=3p/2 (mu=t^3, rational) */
+    lagrange_ok("3 p/2", "p^2");
+    lagrange_ok("3 p/2", "p^3");
+}
+
 static void t_stress_systems(void) {
     /* (a,b,c,d): distinct-real, complex, defective, defective+singular. */
     int m[][4] = {
@@ -369,6 +397,7 @@ int main(void) {
     TEST(t_stress_reduce_order);
     TEST(t_stress_reduce_order_riccati);
     TEST(t_stress_riccati);
+    TEST(t_stress_lagrange);
     TEST(t_stress_systems);
     TEST(t_stress_triangular);
     TEST(t_stress_pde);

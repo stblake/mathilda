@@ -1,53 +1,60 @@
-# DSolve — Riccati (1a)
+# DSolve — Lagrange/d'Alembert (1a), parametric general solution
 
-`y'[x] == q0(x) + q1(x) y + q2(x) y^2` (q2 != 0), linearised by `y = -u'/(q2 u)`
-to the 2nd-order linear ODE `u'' - (q1 + q2'/q2) u' + (q0 q2) u == 0`, solved by
-recursing into the scalar cascade (M5 engine), then mapped back. One constant
-(collapse `C[2] -> 1`).
+`y == x·φ(y') + ψ(y')` → parametric `{x=X(t,C), y=X·φ+ψ}`, t=slope. New parametric
+substrate path (mirror the implicit path). General solution only; singular +
+IVP-fitting deferred.
 
-## Implementation
-- [ ] New `src/calculus/dsolve_riccati.c` (try + builtin + init), mirroring
-      dsolve_bernoulli.c (coeff extraction) + dsolve_reduce_order.c (recursion)
-- [ ] Wire into `src/calculus/dsolve.c`: enum `DS_RICCATI`, string map, externs,
-      cascade line after `dsolve_fos_try`, pinned case, `dsolve_riccati_init()`
-- [ ] Add `../src/calculus/dsolve_riccati.c` to `mathilda_common` in tests/CMakeLists.txt
+## Substrate (dsolve_common.{c,h}) — mirror implicit quartet
+- [ ] dsolve_verify_parametric(P, X, Y, tname): sub y'->D[Y,t]/D[X,t], y[x]->Y, x->X; permissive + PossibleZeroQ fallback
+- [ ] dsolve_assemble_parametric: {{x->Function[{t},X], y->Function[{t},Y]}}, ds_rename_param
+- [ ] dsolve_run_parametric(P, fn): unpack DSolve`Param[X,Y], verify, assemble; decline if ncond>0
+- [ ] dsolve_method_builtin_parametric(res, fn)
+- [ ] parameter symbol: first of {t,s,u} not in equation (ds_contains guard)
+- [ ] declarations in dsolve_common.h
+
+## New file src/calculus/dsolve_lagrange.c
+- [ ] dsolve_lagrange_try: recognize (Clairaut-style), extract φ=D[Yexpr,x], ψ=Yexpr-x·φ (free of x; ψ free of Y); decline φ≡p; solve linear ODE for X(t) via dsolve_linear_factor_solve; Y=X·φ+ψ; return DSolve`Param[X,Y]
+- [ ] builtin_dsolve_lagrange via dsolve_method_builtin_parametric; dsolve_lagrange_init
+
+## Wiring src/calculus/dsolve.c
+- [ ] enum DS_LAGRANGE; "Lagrange" map; externs; cascade line (run_parametric after clairaut); pinned case; init
+- [ ] tests/CMakeLists.txt: add dsolve_lagrange.c to mathilda_common
 
 ## Tests
-- [ ] tests/test_dsolve.c: t_method_riccati, t_riccati_more (incl. y'==y^2+x Airy),
-      t_ivp_riccati; register in main()
-- [ ] tests/test_dsolve_stress.c: riccati_ok forward generator (from-spectrum) +
-      t_stress_riccati; register in main()
+- [ ] test_dsolve.c: t_method_lagrange, t_lagrange_more, t_lagrange_declines; register
+- [ ] test_dsolve_stress.c: lagrange_ok generator + t_stress_lagrange; register
 
 ## Docs
-- [ ] docs/spec/builtins/calculus.md: DSolve`Riccati methods-table row
-- [ ] docs/spec/changelog/2026-08-31.md: "DSolve — Riccati (1a)" section
-- [ ] DSOLVE_PLAN.md §1a: flip [ ] Riccati -> [✓]
+- [ ] calculus.md row; changelog section; DSOLVE_PLAN.md §1a flip
 
 ## Gates
-- [ ] make -j (main binary) clean
-- [ ] REPL spot-checks (y'==y^2+x; from-spectrum; IVP; fos unchanged; ?DSolve`Riccati)
-- [ ] ctest -R dsolve (3/3 green)
-- [ ] make check-c99 (exit 0)
-- [ ] valgrind: one-time engine baseline, no per-call delta
-- [ ] rebuild code-review graph
+- [ ] make -j clean; REPL spot-checks (parametric output, residual, Clairaut unchanged, decline)
+- [ ] ctest -R dsolve 3/3; make check-c99; valgrind baseline; graph rebuild
 
 ## Review
 
-Done. Riccati (§1a) implemented as one new file + wiring + docs + tests, reusing
-the M5 2nd-order linear engine via the classical `y = -u'/(q2 u)` linearisation.
+Done. Lagrange/d'Alembert (§1a) implemented with a new **parametric substrate
+path** mirroring the implicit path, plus one new method file.
 
-- `src/calculus/dsolve_riccati.c` — coeff extraction (Bernoulli pattern) +
-  recurse-into-scalar-engine (ReductionOfOrder pattern); `C[2]->1` collapse to the
-  single Riccati parameter. Cascade slot after `fos`, before `autonomous`.
-- Solves the Airy-linearised `y'==y^2+x` (previously declined), the elementary
-  from-spectrum family, variable-coefficient `y'==x+x y^2`, and IVPs; the pinned
-  method declines on a linear equation (`q2==0`). `fos` still owns `(x+y)^2`.
-- Tests: 3 unit (`t_method_riccati`, `t_riccati_more`, `t_ivp_riccati`) + a
-  from-spectrum stress family (`t_stress_riccati`, 7 spectra).
+- Substrate (`dsolve_common.{c,h}`): `dsolve_run_parametric` /
+  `_verify_parametric` / `_assemble_parametric` / `_method_builtin_parametric`.
+  Try-fn returns `DSolve\`Param[X, Y, t]`; verify substitutes `y'=Y'(t)/X'(t)` into
+  the residual (permissive + PossibleZeroQ fallback); output
+  `{{x->Function[{t},X], y->Function[{t},Y]}}`; IVP declines (`ncond>0`).
+- `src/calculus/dsolve_lagrange.c`: Clairaut-style recognition; extract
+  `φ=D[Yexpr,x]`, `ψ=Yexpr−xφ`; decline `φ≡p` (Clairaut) and genuinely-linear
+  (`φ` const ∧ `ψ` affine → LinearFirstOrder); linear ODE for `X(t)` via
+  `dsolve_linear_factor_solve`; `Y=Xφ+ψ`. Cascade slot after Clairaut.
+- Parameter symbol: collision-safe bare symbol (first of {t,s,u,w,r,q} not in eqn).
+- Tests: `t_method_lagrange` / `t_lagrange_more` / `t_lagrange_declines` (unit,
+  parametric verify) + `t_stress_lagrange` (8-case forward generator).
 
-Gates: `ctest -R dsolve` 3/3 green (18.0 + 6.1 + 8.5 s); `make check-c99` exit 0;
-valgrind 1× == 6× = 13,440 def + 6,312 indir (one-time engine baseline, no
-per-call leak); code-review graph rebuilt.
+Verified: `y==2xy'+(y')^2 → {x->(C[1]-2/3 t^3)/t^2, y->(2C[1]-1/3 t^3)/t}` (residual
+PossibleZeroQ True); transcendental (Log) forms verify via PossibleZeroQ; Clairaut
+still explicit lines (unchanged); pinned Lagrange declines Clairaut/linear/IVP.
 
-No user correction occurred; no lesson added. LSP (clangd) noise about
-`ATTR_READPROTECTED` / missing includes is stale — the GCC/CMake build is clean.
+Gates: `ctest -R dsolve` 3/3 green (19.5+6.5+10.1 s); `make check-c99` exit 0;
+valgrind 1×==6× = 13,440 def + 6,312 indir (one-time engine baseline, no per-call
+leak); graph rebuilt. No user correction; no lesson added (the linear-decline guard
+was found via my own spot-check, not a correction). LSP `ATTR_READPROTECTED` /
+missing-include noise is stale — GCC/CMake build is clean.

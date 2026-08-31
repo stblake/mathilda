@@ -89,6 +89,19 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn);
 Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn);
 Expr* dsolve_method_builtin_implicit(Expr* res, DSolveTryFn fn);
 
+/* ---- parametric solutions of a first-order ODE ----
+ * The try-fn returns, per branch, the wrapper DSolve`Param[X, Y, t] giving the
+ * parametric solution { x == X(t), y == Y(t) } in the parameter symbol `t`
+ * (which is the slope y').  `dsolve_run_parametric` verifies each by substituting
+ * y'[x] == D[Y,t]/D[X,t], y[x] == Y, x == X into the residual, and assembles
+ * {{ x -> Function[{t}, X], y -> Function[{t}, Y] }}.  Used for Lagrange /
+ * d'Alembert equations whose general solution has no explicit y[x] form.  An IVP
+ * (ncond > 0) is declined — parametric constant-fitting is future work, and
+ * declining never silently ignores a condition.  `dsolve_method_builtin_parametric`
+ * is the strict pinned-method entry. */
+Expr* dsolve_run_parametric(DSolveProblem* P, DSolveTryFn fn);
+Expr* dsolve_method_builtin_parametric(Expr* res, DSolveTryFn fn);
+
 /* ---- systems (nfun > 1): a solution is one body per dependent function ---- */
 /* A system method: given the parsed problem, produce `bodies[i]` for each
  * dependent function (in x and the generated constants), or NULL to decline. */

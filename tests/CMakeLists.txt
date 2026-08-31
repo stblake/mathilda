@@ -696,6 +696,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_separable.c
     ../src/calculus/dsolve_exact.c
     ../src/calculus/dsolve_clairaut.c
+    ../src/calculus/dsolve_lagrange.c
     ../src/calculus/dsolve_constcoeff.c
     ../src/calculus/dsolve_euler.c
     ../src/calculus/dsolve_specialform.c

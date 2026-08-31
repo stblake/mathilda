@@ -806,6 +806,103 @@ Expr* dsolve_method_builtin_implicit(Expr* res, DSolveTryFn fn) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Parametric solutions { x == X(t), y == Y(t) } (Lagrange/d'Alembert)*
+ * ------------------------------------------------------------------ */
+
+/* Verify a parametric branch: substitute x -> X, y[x] -> Y, and
+ * y'[x] -> D[Y,t]/D[X,t] into each residual and require it not to be a decidably
+ * non-zero value.  Elementary X,Y reduce via zero_test; for a transcendental pair
+ * (where zero_test cannot prove D[Y,t]/D[X,t] == t) a PossibleZeroQ numeric
+ * sampling of the parameter is the fallback before rejecting — the same permissive
+ * policy as the implicit path. */
+static bool dsolve_verify_parametric(const DSolveProblem* P, const Expr* X,
+                                     const Expr* Y, const char* tname) {
+    if (P->nfun != 1) return false;
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    Expr* Yp = ds_d(expr_copy((Expr*)Y), expr_new_symbol(tname));   /* dY/dt */
+    Expr* Xp = ds_d(expr_copy((Expr*)X), expr_new_symbol(tname));   /* dX/dt */
+    Expr* yprime = eval_and_free(ds_call2(SYM_Times, Yp,
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ Xp, expr_new_integer(-1) }, 2)));  /* dY/dX */
+    bool ok = true;
+    for (size_t e = 0; e < P->neq && ok; e++) {
+        Expr* sub = expr_copy(P->eq_residuals[e]);
+        sub = ds_subst(sub, ds_make_funcapp(yname, 1, xvar), expr_copy(yprime));
+        sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)Y));
+        sub = ds_subst(sub, expr_new_symbol(xvar), expr_copy((Expr*)X));
+        if (zero_test_decide(sub) == ZERO_TEST_FALSE) {
+            /* transcendental fallback: numeric sampling of the parameter */
+            Expr* pz = eval_and_free(ds_call1("PossibleZeroQ", expr_copy(sub)));
+            if (!(pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True)) ok = false;
+            expr_free(pz);
+        }
+        expr_free(sub);
+    }
+    expr_free(yprime);
+    return ok;
+}
+
+/* Assemble one parametric branch { x -> Function[{t}, X], y -> Function[{t}, Y] },
+ * renaming C[k] to the GeneratedParameters head.  X, Y are consumed. */
+static Expr* dsolve_assemble_parametric(const DSolveProblem* P, Expr* X, Expr* Y,
+                                        const char* tname) {
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    Expr* Xr = ds_rename_param(X, P->param_head);
+    Expr* Yr = ds_rename_param(Y, P->param_head);
+    expr_free(X); expr_free(Y);
+    Expr* fx = expr_new_function(expr_new_symbol(SYM_Function), (Expr*[]){
+        expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_new_symbol(tname) }, 1), Xr }, 2);
+    Expr* fy = expr_new_function(expr_new_symbol(SYM_Function), (Expr*[]){
+        expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_new_symbol(tname) }, 1), Yr }, 2);
+    Expr* xrule = expr_new_function(expr_new_symbol(SYM_Rule),
+                      (Expr*[]){ expr_new_symbol(xvar), fx }, 2);
+    Expr* yrule = expr_new_function(expr_new_symbol(SYM_Rule),
+                      (Expr*[]){ expr_new_symbol(yname), fy }, 2);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ xrule, yrule }, 2);
+}
+
+Expr* dsolve_run_parametric(DSolveProblem* P, DSolveTryFn fn) {
+    if (P->ncond > 0) return NULL;             /* parametric IVP-fitting is future */
+    size_t nb = 0;
+    Expr** pairs = fn(P, &nb);
+    if (!pairs) return NULL;
+    if (nb == 0) { free(pairs); return NULL; }
+    const char* wrap = intern_symbol("DSolve`Param");
+    Expr** branches = malloc(nb * sizeof(Expr*));
+    size_t nf = 0;
+    for (size_t b = 0; b < nb; b++) {
+        Expr* pr = pairs[b];
+        if (!pr) continue;
+        if (!head_is(pr, wrap) || pr->data.function.arg_count != 3
+            || pr->data.function.args[2]->type != EXPR_SYMBOL) { expr_free(pr); continue; }
+        Expr* X = expr_copy(pr->data.function.args[0]);
+        Expr* Y = expr_copy(pr->data.function.args[1]);
+        const char* tname = pr->data.function.args[2]->data.symbol.name;
+        if (!dsolve_verify_parametric(P, X, Y, tname)) {
+            expr_free(X); expr_free(Y); expr_free(pr); continue;
+        }
+        branches[nf++] = dsolve_assemble_parametric(P, X, Y, tname);  /* consumes X, Y */
+        expr_free(pr);
+    }
+    free(pairs);
+    if (nf == 0) { free(branches); return NULL; }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), branches, nf);
+    free(branches);
+    return out;
+}
+
+Expr* dsolve_method_builtin_parametric(Expr* res, DSolveTryFn fn) {
+    DSolveProblem P;
+    if (!dsolve_parse(res, &P)) return NULL;
+    if (P.is_pde || P.nfun != 1) { dsolve_problem_free(&P); return NULL; }
+    Expr* r = dsolve_run_parametric(&P, fn);
+    dsolve_problem_free(&P);
+    return r;
+}
+
+/* ------------------------------------------------------------------ *
  *  Systems (nfun > 1)                                                 *
  * ------------------------------------------------------------------ */
 

@@ -35,6 +35,7 @@ typedef enum {
     DS_SEPARABLE,
     DS_EXACT,
     DS_CLAIRAUT,
+    DS_LAGRANGE,
     DS_CONSTCOEFF,
     DS_EULER,
     DS_SPECIALFORM,
@@ -56,6 +57,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Separable")        == 0) return DS_SEPARABLE;
     if (strcmp(s, "Exact")            == 0) return DS_EXACT;
     if (strcmp(s, "Clairaut")         == 0) return DS_CLAIRAUT;
+    if (strcmp(s, "Lagrange")         == 0) return DS_LAGRANGE;
     if (strcmp(s, "LinearConstantCoefficients") == 0) return DS_CONSTCOEFF;
     if (strcmp(s, "EulerCauchy")      == 0) return DS_EULER;
     if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
@@ -78,6 +80,7 @@ extern Expr** dsolve_homogeneous_implicit_try(DSolveProblem* P, size_t* nbranch)
 extern Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_lagrange_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
@@ -94,6 +97,7 @@ extern void dsolve_homogeneous_init(void);
 extern void dsolve_separable_init(void);
 extern void dsolve_exact_init(void);
 extern void dsolve_clairaut_init(void);
+extern void dsolve_lagrange_init(void);
 extern void dsolve_constcoeff_init(void);
 extern void dsolve_euler_init(void);
 extern void dsolve_specialform_init(void);
@@ -178,6 +182,9 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_separable_try);
             if (!result) result = dsolve_run(&P, dsolve_exact_try);
             if (!result) result = dsolve_run(&P, dsolve_clairaut_try);
+            /* Lagrange/d'Alembert (parametric general solution) — Clairaut, its
+             * phi(p)==p special case, runs first. */
+            if (!result) result = dsolve_run_parametric(&P, dsolve_lagrange_try);
             if (!result) result = dsolve_run(&P, dsolve_constcoeff_try);
             if (!result) result = dsolve_run(&P, dsolve_euler_try);
             if (!result) result = dsolve_run(&P, dsolve_specialform_try);
@@ -204,6 +211,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_SEPARABLE:    result = dsolve_run(&P, dsolve_separable_try);   break;
         case DS_EXACT:        result = dsolve_run(&P, dsolve_exact_try);       break;
         case DS_CLAIRAUT:     result = dsolve_run(&P, dsolve_clairaut_try);    break;
+        case DS_LAGRANGE:     result = dsolve_run_parametric(&P, dsolve_lagrange_try); break;
         case DS_CONSTCOEFF:   result = dsolve_run(&P, dsolve_constcoeff_try);  break;
         case DS_EULER:        result = dsolve_run(&P, dsolve_euler_try);       break;
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
@@ -251,6 +259,7 @@ void dsolve_init(void) {
     dsolve_separable_init();
     dsolve_exact_init();
     dsolve_clairaut_init();
+    dsolve_lagrange_init();
     dsolve_constcoeff_init();
     dsolve_euler_init();
     dsolve_specialform_init();

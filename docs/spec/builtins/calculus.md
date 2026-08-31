@@ -668,6 +668,7 @@ roadmap):
 | `DSolve`Separable` | `y'[x] == g(x) h(y)` (`∫dy/h == ∫g dx + C[1]`) |
 | `DSolve`Exact` | `M + N y' == 0`, exact or via integrating factor `μ(x)`/`μ(y)` |
 | `DSolve`Clairaut` | `y == x y' + f(y')` (general lines + singular envelope) |
+| `DSolve`Lagrange` | `y == x φ(y') + ψ(y')`, φ(y')≠y' (d'Alembert) — **parametric** general solution `{{x->Function[{t},X(t)], y->Function[{t},Y(t)]}}`, `t=y'`, `X` from the associated linear ODE |
 | `DSolve`LinearConstantCoefficients` | `a_n y^(n)+…+a_0 y == g(x)` (char. polynomial + variation of parameters) |
 | `DSolve`EulerCauchy` | `a_n x^n y^(n)+…+a_0 y == g(x)` (indicial polynomial, trial `x^r`) |
 | `DSolve`SpecialFunctionForm` | 2nd-order forms → Airy (`y''==(Ax+B)y`) and Bessel / modified Bessel |
@@ -676,6 +677,13 @@ roadmap):
 | `DSolve`ReductionOfOrder` | 2nd-order missing `y`, `y'' == F(x, y')` (reduce to 1st order in `p = y'`, then integrate) |
 | `DSolve`AutonomousReduction` | 2nd-order missing `x`, `y'' == f(y, y')` (`p = y'(y)`, `p p'(y) == f`, then `y' == p(y)`) |
 | `DSolve`FrobeniusSeries` / `DSolve`PowerSeries` | truncated series about `x == 0` (the always-available fallback, tried last): ordinary point → two power series; regular singular → Frobenius `x^s Σ a_n x^n` (indicial quadratic `s(s-1)+p₀ s+q₀`, with a `Log` term for equal roots) |
+
+`DSolve`Lagrange` returns a **parametric** solution — a branch is the pair of
+rules `{x -> Function[{t}, X(t)], y -> Function[{t}, Y(t)]}` with the slope `y'`
+as the parameter `t` — because a d'Alembert equation generally has no explicit
+`y(x)`. (This v1 returns the general solution only; singular-line solutions and
+IVP constant-fitting are future work, and an initial condition currently
+declines rather than being ignored.)
 
 Utility (not a solver — returns the reduced equation, not a solution):
 
