@@ -197,6 +197,29 @@ static void lagrange_ok(const char* phi, const char* psi) {
     ASSERT_TRUE(buf);
 }
 
+/* implicit first-integral verify (auto dispatch): DSolve returns {{G==C[1]}} and
+ * D[G,x] with y' -> rhs vanishes (Chini/Abel, homogeneous log-spirals). */
+static void impl_ok(const char* rhs) {
+    char buf[1500];
+    snprintf(buf, sizeof(buf), "Head[DSolve[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{eq = DSolve[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]]-eq[[2]], x] /. y'[x] -> (%s)]]", rhs, rhs);
+    ASSERT_TRUE(buf);
+}
+
+/* Chini reducible by construction: from (f, n, B, C) set g = B - f'/((n-1)f),
+ * h = C f^(-1/(n-1)) so the scaling y = f^(-1/(n-1)) u gives u' = u^n + B u + C —
+ * B, C are the chosen constants, so the autonomous reduction always succeeds. */
+static void chini_ok(const char* f, const char* n, const char* B, const char* C) {
+    char rhs[700];
+    snprintf(rhs, sizeof(rhs),
+        "(%s) y[x]^(%s) + ((%s) - D[%s,x]/(((%s)-1) (%s))) y[x] + ((%s) (%s)^(-1/((%s)-1)))",
+        f, n, B, f, n, f, C, f, n);
+    impl_ok(rhs);
+}
+
 /* 2x2 constant-coefficient system y'=A y (auto dispatch — no backtick builtin). */
 static void sys2_ok(int a, int b, int c, int d) {
     char sys[256], buf[1024];
@@ -358,6 +381,16 @@ static void t_stress_lagrange(void) {
     lagrange_ok("3 p/2", "p^3");
 }
 
+static void t_stress_chini(void) {
+    /* (f, n, B, C) reducible by construction -> implicit first integral */
+    chini_ok("x^2", "3", "0", "1");
+    chini_ok("x^2", "3", "1", "-2");
+    chini_ok("x^3", "4", "0", "1");
+    chini_ok("x^4", "3", "0", "1");
+    /* Abel: the f=x^2 Chini shifted by z = y + 1 (introduces the y^2 term) */
+    impl_ok("x^2 y[x]^3 + 3 x^2 y[x]^2 + (3 x^2 - 1/x) y[x] + x^2");
+}
+
 static void t_stress_systems(void) {
     /* (a,b,c,d): distinct-real, complex, defective, defective+singular. */
     int m[][4] = {
@@ -398,6 +431,7 @@ int main(void) {
     TEST(t_stress_reduce_order_riccati);
     TEST(t_stress_riccati);
     TEST(t_stress_lagrange);
+    TEST(t_stress_chini);
     TEST(t_stress_systems);
     TEST(t_stress_triangular);
     TEST(t_stress_pde);

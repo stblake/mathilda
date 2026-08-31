@@ -254,7 +254,15 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   `y'=Y'(t)/X'(t)`. Declines Clairaut (`φ≡p`) and genuinely-linear equations. Runs
   after `Clairaut` in the cascade. *Deferred (future):* singular-line solutions
   (roots of `φ(p)=p`) and parametric IVP constant-fitting (an IVP declines).
-- `[ ] Abel` / `[ ] Chini` — implicit solutions via `Solve`.
+- `[✓] Chini` — `y'==f(x) y^n+g(x) y+h(x)` (n≠0,1,2): the reducible-to-autonomous
+  sub-class, via `y=f^(-1/(n-1)) u` → `u'==u^n+B u+C` (B,C constant); implicit first
+  integral `∫du/(u^n+Bu+C)−x==C[1]` (rational integrand, always elementary) returned
+  through `dsolve_run_implicit`. Non-reducible cases decline. `dsolve_chini.c`
+  (shared `dsolve_chini_first_integral`).
+- `[✓] Abel` — `y'==f3 y^3+f2 y^2+f1 y+f0` (f3,f2≠0): remove the y² term
+  (`z=y+f2/(3 f3)`) → Chini n=3 → same implicit first integral. `dsolve_abel.c`
+  (thin front-end over the shared Chini helper). The fuller constant-invariant
+  class (with an x-rescaling) is future.
 - `[✓] FirstOrderSubstitution` — `y'==F(a x + b y + c)`: detect the constant ratio
   `r = F_x/F_y`, substitute `v = y + r x` → autonomous separable `v'==r+H(v)`,
   solved inline; declines (stays symbolic) when the antiderivative does not invert.

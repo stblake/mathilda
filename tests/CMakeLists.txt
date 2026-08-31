@@ -703,6 +703,8 @@ set(COMMON_SRC
     ../src/calculus/dsolve_reduce_order.c
     ../src/calculus/dsolve_fos.c
     ../src/calculus/dsolve_riccati.c
+    ../src/calculus/dsolve_chini.c
+    ../src/calculus/dsolve_abel.c
     ../src/calculus/dsolve_autonomous.c
     ../src/calculus/dsolve_pde1.c
     ../src/calculus/dsolve_decouple.c

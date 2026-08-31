@@ -669,6 +669,30 @@ static void t_homogeneous_implicit(void) {
     check_true("Head[DSolve`Homogeneous[y'[x] == (x + y[x])/(x - y[x]), y, x][[1,1]]] === Equal");
 }
 
+/* ---- 1a: Chini / Abel (implicit first integral, reducible-to-autonomous) ---- */
+static void t_method_chini(void) {
+    /* f=x^2, n=3, B=0, C=1 -> u'=u^3+1, u = x y ; implicit first integral */
+    check_implicit("x^2 y[x]^3 - y[x]/x + 1/x");
+    check_true("Head[DSolve`Chini[y'[x] == x^2 y[x]^3 - y[x]/x + 1/x, y, x][[1,1]]] === Equal");
+}
+static void t_chini_more(void) {
+    /* n=4: f=x^3 -> f^(1/3)=x, u'=u^4+1 */
+    check_implicit("x^3 y[x]^4 - y[x]/x + 1/x");
+    /* radical reduction (f=x, n=3 -> Sqrt[x]) still verifies */
+    check_implicit("x y[x]^3 - (1/(2 x)) y[x] + 1/Sqrt[x]");
+    /* declines: non-reducible (h not matched), and Riccati n=2 */
+    check_form("Head[DSolve`Chini[y'[x] == x y[x]^3 + y[x] + x, y, x]]", "DSolve`Chini");
+    check_form("Head[DSolve`Chini[y'[x] == y[x]^2 + x, y, x]]", "DSolve`Chini");
+}
+static void t_method_abel(void) {
+    /* the f=x^2 Chini above, shifted by z = y + 1, introduces the y^2 term */
+    check_implicit("x^2 y[x]^3 + 3 x^2 y[x]^2 + (3 x^2 - 1/x) y[x] + x^2");
+    check_true("Head[DSolve`Abel[y'[x] == x^2 y[x]^3 + 3 x^2 y[x]^2 + (3 x^2 - 1/x) y[x] + x^2, "
+               "y, x][[1,1]]] === Equal");
+    /* Abel declines a Chini (f2 == 0) — DSolve`Chini owns that */
+    check_form("Head[DSolve`Abel[y'[x] == x^2 y[x]^3 - y[x]/x + 1/x, y, x]]", "DSolve`Abel");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -747,6 +771,9 @@ int main(void) {
     TEST(t_method_riccati);
     TEST(t_riccati_more);
     TEST(t_ivp_riccati);
+    TEST(t_method_chini);
+    TEST(t_chini_more);
+    TEST(t_method_abel);
     TEST(t_auto_exp);
     TEST(t_auto_power);
     TEST(t_auto_reciprocal);

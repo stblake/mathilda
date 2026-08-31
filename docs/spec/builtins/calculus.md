@@ -664,6 +664,8 @@ roadmap):
 | `DSolve`LinearFirstOrder` | `y'[x] + p(x) y[x] == q(x)` (integrating factor) |
 | `DSolve`Bernoulli` | `y'[x] == A(x) y + B(x) y^n`, n≠0,1 (substitution `v=y^(1-n)`) |
 | `DSolve`Riccati` | `y'[x] == q0(x) + q1(x) y + q2(x) y^2`, q2≠0 (substitution `y=-u'/(q2 u)` → 2nd-order linear `u'' - (q1+q2'/q2) u' + q0 q2 u == 0`, solved by the scalar cascade) |
+| `DSolve`Chini` | `y'[x] == f(x) y^n + g(x) y + h(x)`, n≠0,1,2 — reducible-to-autonomous sub-class (`y = f^(-1/(n-1)) u` → `u' == u^n + B u + C` with B,C constant); **implicit** first integral `{{∫du/(u^n+Bu+C) − x == C[1]}}`, `u = y f^(1/(n-1))` |
+| `DSolve`Abel` | `y'[x] == f3 y^3 + f2 y^2 + f1 y + f0` (first kind, f3≠0, f2≠0) — removes the y² term (`z = y + f2/(3 f3)`) to a Chini n=3 equation; same implicit first integral |
 | `DSolve`Homogeneous` | `y'[x] == F(y/x)` (substitution `y=v x` → separable) |
 | `DSolve`Separable` | `y'[x] == g(x) h(y)` (`∫dy/h == ∫g dx + C[1]`) |
 | `DSolve`Exact` | `M + N y' == 0`, exact or via integrating factor `μ(x)`/`μ(y)` |
