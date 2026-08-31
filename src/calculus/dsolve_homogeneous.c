@@ -15,7 +15,58 @@
 #include "../sym_intern.h"
 #include "../symtab.h"
 #include "../attr.h"
+#include "../parse.h"
 #include <stdlib.h>
+
+/*
+ * Fallback inversion for the separable relation Integrate[1/(F(v)-v), v] ==
+ * Log[x] + C[1] when Solve cannot invert the log form directly.  For a rational
+ * F the antiderivative is a sum of logarithms (rational coefficients), so
+ * exponentiating turns the relation into an algebraic one,
+ *     Product g_i(v)^{c_i} == C[1] x,
+ * whose fractional exponents are cleared by raising both sides to a small power
+ * d.  Solve then returns explicit (possibly Root) branches; the per-branch
+ * back-substitution verify in dsolve_run keeps the genuine ones and drops any
+ * spurious root from the exponentiation.  The transcendental family (an ArcTan
+ * term -> an E^ArcTan factor that no d clears, e.g. y'==(x+y)/(x-y)) leaves the
+ * exponentiated form non-algebraic, so every d fails and this declines.
+ */
+static Expr** homog_exp_log_invert(const Expr* intV, const char* vn,
+                                   const char* xvar, size_t* nv_out) {
+    Expr* r1 = parse_expression("E^(a_ + b_) :> E^a E^b");
+    Expr* r2 = parse_expression("E^(c_. Log[g_]) :> g^c");
+    if (!r1 || !r2) { if (r1) expr_free(r1); if (r2) expr_free(r2); return NULL; }
+    Expr* rules = expr_new_function(expr_new_symbol(SYM_List),
+                      (Expr*[]){ r1, r2 }, 2);
+    Expr* expForm = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_new_symbol(intern_symbol("E")),
+                                   expr_copy((Expr*)intV) }, 2);
+    Expr* form = eval_and_free(ds_call2("ReplaceRepeated", expForm, rules));
+
+    static const int dtry[] = { 1, 2, 3, 4, 6 };
+    Expr** vs = NULL; size_t nv = 0;
+    for (size_t i = 0; i < sizeof(dtry) / sizeof(dtry[0]) && !vs; i++) {
+        int d = dtry[i];
+        /* lhs = PowerExpand[form^d] (integer exponents); rhs = (C[1] x)^d */
+        Expr* lhs = eval_and_free(ds_call1("PowerExpand",
+                        expr_new_function(expr_new_symbol(SYM_Power),
+                            (Expr*[]){ expr_copy(form), expr_new_integer(d) }, 2)));
+        Expr* cx = ds_call2(SYM_Times, ds_const(1), expr_new_symbol(xvar));
+        Expr* rhs = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ cx, expr_new_integer(d) }, 2);
+        Expr* eqn = expr_new_function(expr_new_symbol(SYM_Equal),
+                        (Expr*[]){ lhs, rhs }, 2);
+        Expr* sol = ds_solve(eqn, expr_new_symbol(vn));
+        size_t n = 0;
+        Expr** got = dsolve_extract_solutions(sol, vn, &n);
+        if (sol) expr_free(sol);
+        if (got && n > 0) { vs = got; nv = n; }
+        else if (got) free(got);
+    }
+    expr_free(form);
+    *nv_out = nv;
+    return vs;
+}
 
 Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
@@ -45,6 +96,9 @@ Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch) {
         expr_new_symbol(vn));
     if (ds_has_head(intV, SYM_Integrate)) { expr_free(intV); return NULL; }
 
+    /* Try the direct log-form inversion first; keep a copy of the antiderivative
+     * for the algebraic (exponentiated) fallback below. */
+    Expr* intVcopy = expr_copy(intV);
     Expr* rhs = eval_and_free(ds_call2(SYM_Plus,
                     ds_call1("Log", expr_new_symbol(xvar)), ds_const(1)));
     Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ intV, rhs }, 2);
@@ -52,6 +106,8 @@ Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch) {
     size_t nv = 0;
     Expr** vs = dsolve_extract_solutions(solres, vn, &nv);
     if (solres) expr_free(solres);
+    if (!vs) vs = homog_exp_log_invert(intVcopy, vn, xvar, &nv);
+    expr_free(intVcopy);
     if (!vs) return NULL;
 
     /* y = x v */

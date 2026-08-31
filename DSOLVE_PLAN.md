@@ -228,7 +228,12 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 - `[✓] LinearFirstOrder` — `y'+p(x)y==q(x)`: integrating factor `Exp[∫p]`.
 - `[✓] Separable` — `y'==g(x)h(y)`: `∫dy/h==∫g dx + C[1]`, solved for `y`.
 - `[✓] Bernoulli` — `y'==A y + B y^n` (n≠0,1): substitution `v=y^(1-n)` (exponent recovered robustly, incl. fractional/negative n).
-- `[✓] Homogeneous` — `y'==F(y/x)`: substitution `y=v x` → separable.
+- `[✓] Homogeneous` — `y'==F(y/x)`: substitution `y=v x` → separable. Direct
+  log-form inversion, with an exponentiate-and-clear-radicals fallback
+  (`homog_exp_log_invert`: `Prod g_i^{c_i} == C[1] x` raised to power `d` → `Solve`
+  Root branches) for the pure-log (real-root) rational family, e.g.
+  `(x+2y)/(2x+y)`; the transcendental (ArcTan log-spiral) subset has no explicit
+  inverse and declines.
 - `[✓] Exact` — `M+N y'==0`, `M_y==N_x`; + integrating-factor search `μ(x)`, `μ(y)`.
 - `[✓] Clairaut` — `y==x y'+f(y')`: general line `y=C[1]x+f(C[1])` + singular envelope (`IncludeSingularSolutions`).
 - `[ ] Riccati` — `y'==q0+q1 y+q2 y^2`: reduce to 2nd-order linear (needs the M2/M3 linear engine; may branch).
@@ -282,8 +287,12 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 ### 1d. Nonlinear higher-order
 - `[✓] ReductionOfOrder` — `y''==F(x,y')` missing y: reduce to first order in
   p=y' (recurse into the scalar engine), then `y=∫p dx + C[2]`. Guards against a
-  wrong `Integrate` antiderivative (requires `D[∫p]==p`) so it declines instead of
-  shipping a degenerate `y=const`. Solves `y''==(y')^2 → C[2]-Log[C[1]-x]`.
+  wrong `Integrate` antiderivative (requires `D[∫p]==p`, decided by `zero_test`
+  then `PossibleZeroQ` sampling so a correct-but-unsimplified antiderivative — a
+  multi-`Log` `∫Tan`, an `ArcTan[x/Sqrt[C]]` — is accepted while a degenerate
+  `y=const` is still rejected) so it declines instead of shipping a degenerate
+  solution. Solves `y''==(y')^2`, the autonomous `a+b(y')^2` (→ Tan/Tanh), and the
+  Riccati-in-p `c x (y')^2` families.
 - `[✓] AutonomousReduction` — `y''==f(y,y')` missing `x`: `p=y'(y)`, `p p'(y)==f`
   (recurse), then `y'==p(y)` separable (recurse), constants renumbered across the
   two stages; final body required to depend on `x` (rejects the degenerate
@@ -349,8 +358,19 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   residual that is not decidably non-zero (`dsolve_run` → `zero_test_decide`).
 - **Unit tests** (`tests/test_dsolve.c`): the Wolfram reference examples, checked
   by `PossibleZeroQ` of the residual / of the difference from the known form.
-- **Stress tests:** randomized families per method group, back-substitution
-  verified (added alongside each method group as it lands).
+  Every scalar method with a backtick builtin has a pinned-method test
+  (`DSolve`<Method>[...]`); systems/PDE (no backtick builtin) are covered through
+  the automatic dispatch.
+- **Stress tests:** parametrized forward-generator families per method group,
+  back-substitution verified, each guarding `Head === List` first so a declined
+  solve cannot pass vacuously. `tests/test_dsolve_m5_stress.c` covers Kovacic and
+  Frobenius/PowerSeries; `tests/test_dsolve_stress.c` covers the rest of the
+  cascade (LinearFirstOrder, Separable, Bernoulli, Homogeneous, Exact,
+  LinearConstantCoefficients, EulerCauchy, ReductionOfOrder, 2×2 + triangular
+  systems, first-order PDE). A generator builds the equation from parameters whose
+  closed form is guaranteed — a chosen spectrum (ConstCoeff/Euler), a potential
+  (Exact), or a target solution `yt` with `q = yt' + p·yt` (LinearFirstOrder, so
+  the integrating-factor integral is elementary by construction).
 - **Gates:** `dsolve_tests` (ctest), `valgrind --leak-check=full`, `make
   check-c99`, and REPL spot-checks (`DSolve[...]`, `?DSolve`, `?DSolve`Separable`).
 

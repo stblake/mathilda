@@ -1,69 +1,92 @@
-# DSolve M5 — NormalForm + Kovacic (Cases 1 & 2) + Frobenius/PowerSeries
+# DSolve M9 — Test Hardening (tests + docs only; no src changes)
 
-Milestone M5: second-order linear variable-coefficient ODEs `y'' + P(x)y' + Q(x)y == 0`.
-Confirmed scope: full slice + Kovacic Case 2 (Case 3 gated); Frobenius auto-fallback.
+Make DSolve's test suite extensive and uniform: backfill thin unit coverage,
+add pinned-method tests where a builtin exists, and add forward-generator stress
+families for every method group that lacks one. Verify every case against the
+current binary before committing (no vacuous or declining tests).
 
-## Phase 1 — NormalForm (substrate + inspection builtin)  ✅ DONE
-- [x] Add `dsolve_second_order_PQ(P, &Pc, &Qc)` to dsolve_common.{c,h} (shared P/Q extractor)
-- [x] Add `dsolve_normal_form(Pc, Qc, xvar, &recovery)` → r = Pc^2/4 + Pc'/2 − Qc (guard ∫Pc/2)
-- [x] New `dsolve_normalform.c`: `DSolve\`NormalForm[eqn,y,x]` → {r, recovery}
-- [x] Refactor dsolve_specialform.c to use dsolve_second_order_PQ
-- [x] Wire: dsolve_normalform_init in dsolve.c init; append .c to tests/CMakeLists COMMON_SRC
-- [x] Build main + smoke-test NormalForm at REPL (Bessel/const/Airy all correct)
+## Phase 0 — Validate case corpus against ./Mathilda
+- [x] Confirmed backfill unit cases (Homogeneous, ReductionOfOrder, Clairaut, PowerSeries)
+- [x] Confirmed every stress-family generator stays in-domain across its grid
 
-## Phase 2 — Frobenius / PowerSeries (auto last-resort fallback)  ✅ DONE
-- [x] New `dsolve_frobenius.c`: classify x0 (ordinary/regular-singular/irregular)
-- [x] Ordinary → two PowerSeries; regular-singular → Frobenius (indicial quadratic via analyze_roots)
-- [x] Log solution for equal roots (d/ds derivative method); Puiseux x^(p/q) via x^r*SeriesData
-- [x] FIXED substrate dsolve_verify_body: substitute D[body,{x,k}] directly (Derivative[Function[SeriesData]]=0 bug)
-- [x] Register DSolve`PowerSeries + DSolve`FrobeniusSeries; cascade LAST (after autonomous)
-- [x] Wire dsolve.c + CMakeLists; build + test (ordinary/regsing distinct+log/decline all verify O[x^k])
-- [x] Repointed t_declines_unsupported to irregular Exp[1/x] (Sin[x]y now solves by design)
+## Phase A — Backfill unit tests in tests/test_dsolve.c
+- [x] Homogeneous: t_method_homogeneous + t_homogeneous_more + t_ivp_homogeneous
+- [x] ReductionOfOrder: t_method_reduce_order + t_reduce_order_more
+- [x] Clairaut: t_method_clairaut + t_clairaut_more
+- [x] PowerSeries: t_powerseries_more (2 ordinary forms)
+- [x] Registered all 8 new t_* in main()
 
-## Phase 3 — Kovacic (Cases 1 & 2)  ✅ DONE
-- [x] New `dsolve_kovacic.c`: reduced form r via NormalForm; rationality gate (PolynomialQ)
-- [x] Case 1a: Riccati ansatz ω'+ω²=r over pole structure (poles + ∞ poly), Solve coeff system
-- [x] Case 1b: polynomial r via √r-poly-part + degree-bounded P (apparent singularities, e.g. x^2+3)
-- [x] Case 2 (degree-2 algebraic): σ-ansatz D'+2σD=0, ω=(σ±√D)/2, NUMERIC back-sub verify
-- [x] z1=Exp[∫ω] (guarded), z2=z1∫1/z1² ; recovery y=w·z; realify complex (Cosh+Sinh->E)
-- [x] Register DSolve`Kovacic; cascade after specialform/before reduce_order; wire + CMakeLists
-- [x] Fixed double-free (Denominator consumes rt) + numeric_verify (substitute C[1],C[2] basis)
-- [x] Verified: 1+x^2→exp(x^2/2), x^2+3→x exp(x^2/2), Case2 x^(-1/4)exp(x^(3/2)/3), Bessel/Exp[1/x] decline
+## Phase B — New stress file tests/test_dsolve_stress.c
+- [x] Forward generators: LinearFirstOrder (target-solution), Separable, Bernoulli,
+      Homogeneous (curated), Exact (from potential), ConstCoeff (from spectrum),
+      Euler (from indicial), ReductionOfOrder
+- [x] Systems 2x2 (distinct/complex/defective/singular) + triangular varcoeff
+- [x] PDE first-order (transport/forcing) with C[1][z_]:>Sin[z]
+- [x] Runs in ~3s (well under 60s alarm) — no split needed
 
-## Phase 4 — Tests, docs, gates
-- [x] Unit tests in test_dsolve.c (14 new: NormalForm×3, Kovacic×6, Frobenius×5) — all pass
-- [x] Stress: tests/test_dsolve_m5_stress.c (Kovacic fwd-generator 4 families + Frobenius) + add_test — passes in 6s
-- [x] FIXED realify hang: Erfi[I z]->I Erf[z] rewrite (zero_test can't sample Erfi at complex irrational arg)
-- [x] docs/spec/builtins/calculus.md + changelog/2026-08-31.md; flipped M5 in DSOLVE_PLAN.md
-- [x] make check-c99 (exit 0); valgrind (no invalid access; leak == engine baseline); rebuilt graph
-- [x] Updated tasks/lessons.md (3 lessons) + 3 durable memories + MEMORY.md index
+## Phase C — Wiring
+- [x] add_executable/add_test for dsolve_stress_tests in tests/CMakeLists.txt
+
+## Phase D — Build, run, gates
+- [x] cmake + make dsolve_tests dsolve_m5_stress_tests dsolve_stress_tests
+- [x] ctest -R dsolve --output-on-failure (3/3 green)
+- [x] make check-c99 (exit 0)
+- [x] valgrind: definitely lost == 13,608 bytes == engine baseline (not per-call)
+- [x] rebuild code-review graph
+
+## Phase E — Docs
+- [x] docs/spec/changelog/2026-08-31.md: "DSolve — test hardening (M9)" section
+- [x] DSOLVE_PLAN.md Testing section updated
+- [x] tasks/lessons.md: target-solution generator + engine-baseline lessons
 
 ## Review
 
-M5 delivered three DSolve methods for 2nd-order linear variable-coefficient ODEs:
+Delivered tests-only DSolve hardening (no `src/` changes):
 
-1. **NormalForm** (`dsolve_normalform.c` + substrate `dsolve_second_order_PQ` /
-   `dsolve_normal_form`) — `{r, w}` reduction `z''==r z`; refactored
-   `SpecialFunctionForm` onto the shared extractor.
-2. **Kovacic** (`dsolve_kovacic.c`) — Riccati/undetermined-coefficient search
-   (transparent + verifiable, unlike the exponent tables). Case 1 (rational ω),
-   Case 1b (polynomial r apparent singularities, `x²+3 → x·exp(x²/2)`), Case 2
-   (degree-2 algebraic, numeric-verified). Case 3 declines. `PolynomialQ` gate.
-3. **Frobenius/PowerSeries** (`dsolve_frobenius.c`) — auto last-resort fallback;
-   ordinary + regular-singular (incl. Log for equal roots) truncated SeriesData.
+- **Part A** — 8 new unit tests in `tests/test_dsolve.c`: pinned-method coverage
+  for the three scalar methods that lacked it (Homogeneous, Clairaut,
+  ReductionOfOrder) + more in-domain forms and an IVP for the four thin methods.
+- **Part B** — new `tests/test_dsolve_stress.c` (`dsolve_stress_tests`, ~75
+  generated cases, ~3s): 11 forward-generator families spanning the rest of the
+  cascade. Every case guards `Head === List` before the residual check.
+- Gates: 3/3 dsolve ctest targets green; `check-c99` clean; valgrind leak equals
+  the pre-existing 13.6KB one-time engine baseline.
 
-Substrate: `dsolve_verify_body` now substitutes `D[body,{x,k}]` directly (fixes
-SeriesData verify). Three bugs found & fixed en route: double-free (Denominator
-consumes rt), numeric_verify symbolic-in-C, zero_test hang on Erfi[I·irrational].
+**Solver gaps surfaced (not fixed — out of scope, reported):**
+1. `DSolve`Homogeneous` needs the separated integral to invert explicitly and
+   declines otherwise (e.g. `y'==(x+y)/(x-y)`, `y'==(x+2y)/(2x+y)`) — only a
+   subset of rational-homogeneous RHS solve, hence the curated Homogeneous family.
+2. `DSolve`ReductionOfOrder` declines `y''==1+(y')^2` and `y''==-2x(y')^2` (first-
+   order-in-p sub-solve / inversion) — the `f(x)·y'` family stays in-domain.
+3. `y'+x·y==Sin[x]` declines (integrating factor `Exp[x²/2]`, non-elementary
+   `∫Sin·Exp[x²/2]`) — a genuine elementary-integrability boundary, handled by the
+   target-solution generator rather than a fix.
 
-Verification: `dsolve_tests` (14 new unit tests) + `dsolve_m5_stress_tests` (50
-generator cases) both green via ctest; `make check-c99` clean; valgrind shows no
-invalid access and leak == Integrate/Solve/Simplify engine baseline (13.6KB, ≈
-the DSolve-free baseline of 13.8KB).
+---
 
-Deferred (future M5b): Kovacic Case 3, ExactODE, OperatorFactor/DFactor,
-Sturm–Liouville EigenvalueProblem; rational-r apparent singularities in Kovacic
-(only polynomial-r apparent singularities handled); IVP-fitting of series
-solutions. Known limitation: a very-messy raw coefficient (e.g. unexpanded
-`(x+1/x)^2`) can make the substrate verify slow via zero_test on Erf/Erfi — clean
-inputs and the internal r-simplification avoid it.
+# Follow-up: fix Homogeneous (gap 1) + ReductionOfOrder (gap 2)  ✅ DONE
+
+User asked to address gaps 1 and 2 above. Root-caused each, then a minimal
+`src/` fix per gap (correctness gated by the existing back-substitution verify).
+
+- **Gap 2 — `dsolve_reduce_order.c`.** Root cause: the `D[∫p]==p` guard used
+  `zero_test_decide`, too weak for a correct-but-unsimplified antiderivative
+  (multi-`Log` `∫Tan`, `1/(C(1+x²/C))` from `∫1/(C+x²)`). Fix: escalate the guard
+  to `PossibleZeroQ` (matches `integrate_derivdivides.c`); a wrong `Integrate->0`
+  still fails as `-p`, and the final verify is the backstop. Opens `1+(y')^2`,
+  `-2x(y')^2`, the autonomous `a+b(y')^2` and Riccati-in-p `c x (y')^2` families.
+- **Gap 1 — `dsolve_homogeneous.c`.** Root cause: `Solve` cannot invert a
+  sum-of-logs relation. Fix: new `homog_exp_log_invert` fallback — exponentiate to
+  `Prod g_i^{c_i} == C[1] x`, clear fractional exponents by raising to power
+  `d ∈ {1,2,3,4,6}` (`PowerExpand`), `Solve` → `Root` branches; `dsolve_run`
+  filters spurious sheets. Opens the real-root rational-homogeneous family
+  (`(x+2y)/(2x+y)`, …); the transcendental ArcTan subset still declines (no
+  explicit inverse — would need implicit-solution support).
+
+Tests: `t_homogeneous_algebraic`, `t_reduce_order_riccati` (unit) + broadened
+Homogeneous stress + new `t_stress_reduce_order_riccati`. Gates: 3/3 dsolve ctest
+green, no regressions; `check-c99` clean; valgrind shows **no per-call leak**
+(1×==6× the algebraic solve == 13,440 bytes, the one-time engine baseline).
+
+Remaining (reported, not done): the transcendental-implicit Homogeneous subset
+(`(x+y)/(x-y)`) needs implicit-solution output — a larger substrate change.

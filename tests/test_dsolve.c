@@ -505,6 +505,77 @@ static void t_declines_unsupported(void) {
     check_form("Head[DSolve[y''[x] + Exp[1/x] y[x] == 0, y[x], x]]", "DSolve");
 }
 
+/* ---- M9: backfill unit + pinned-method coverage for thin methods ---- */
+
+/* Homogeneous: was one auto-DSolve case; add a pinned-method test, two more
+ * in-domain forms (y=v x separates and inverts), and an IVP. */
+static void t_method_homogeneous(void) {
+    check_true("PossibleZeroQ[(y'[x] - (x - y[x])/(x + y[x])) /. "
+               "DSolve`Homogeneous[y'[x] == (x - y[x])/(x + y[x]), y, x][[1]]]");
+}
+static void t_homogeneous_more(void) {
+    check_solves("y'[x] == (2 x - y[x])/(x + y[x])", "y'[x] - (2 x - y[x])/(x + y[x])");
+    check_solves("y'[x] == y[x]/x + (y[x]/x)^2", "y'[x] - (y[x]/x + (y[x]/x)^2)");
+}
+static void t_ivp_homogeneous(void) {
+    check_form("Head[DSolve[{y'[x] == (x - y[x])/(x + y[x]), y[1] == 1}, y, x]]", "List");
+    check_true("PossibleZeroQ[(y'[x] - (x - y[x])/(x + y[x])) /. "
+               "DSolve[{y'[x] == (x - y[x])/(x + y[x]), y[1] == 1}, y, x][[1]]]");
+}
+
+/* ReductionOfOrder: was one auto case; add a pinned-method test + two more
+ * missing-y forms of the shape y'' == f(x) y'. */
+static void t_method_reduce_order(void) {
+    check_true("PossibleZeroQ[(y''[x] - y'[x]^2) /. "
+               "DSolve`ReductionOfOrder[y''[x] == y'[x]^2, y, x][[1]]]");
+    check_true("Not[FreeQ[DSolve`ReductionOfOrder[y''[x] == y'[x]^2, y, x][[1]], C[2]]]");
+}
+static void t_reduce_order_more(void) {
+    check_method("DSolve`ReductionOfOrder", "y''[x] == y'[x]/x", "y''[x] - y'[x]/x");
+    check_method("DSolve`ReductionOfOrder", "y''[x] == 2 y'[x]", "y''[x] - 2 y'[x]");
+}
+
+/* Clairaut: was general + singular; add a pinned-method test and three more
+ * f(y') forms. */
+static void t_method_clairaut(void) {
+    check_true("PossibleZeroQ[(y[x] - x y'[x] - y'[x]^2) /. "
+               "DSolve`Clairaut[y[x] == x y'[x] + y'[x]^2, y, x][[1]]]");
+}
+static void t_clairaut_more(void) {
+    check_method("DSolve`Clairaut", "y[x] == x y'[x] + 1/y'[x]", "y[x] - x y'[x] - 1/y'[x]");
+    check_method("DSolve`Clairaut", "y[x] == x y'[x] + Sqrt[1 + y'[x]^2]",
+                 "y[x] - x y'[x] - Sqrt[1 + y'[x]^2]");
+    check_method("DSolve`Clairaut", "y[x] == x y'[x] - Log[y'[x]]", "y[x] - x y'[x] + Log[y'[x]]");
+}
+
+/* PowerSeries: was ordinary + auto; add two more ordinary-point forms. */
+static void t_powerseries_more(void) {
+    check_series("DSolve`PowerSeries", "y''[x] + x y'[x] + y[x] == 0",
+                 "D[b,{x,2}] + x D[b,x] + b");
+    check_series("DSolve`PowerSeries", "y''[x] - x y[x] == 0", "D[b,{x,2}] - x b");
+}
+
+/* Homogeneous now inverts the pure-log (algebraic) family via exponentiation:
+ * the exponentiated relation is algebraic and Solve returns Root branches (see
+ * dsolve_homogeneous.c homog_exp_log_invert).  The transcendental (ArcTan) family
+ * still declines — it has no explicit inverse. */
+static void t_homogeneous_algebraic(void) {
+    check_method("DSolve`Homogeneous", "y'[x] == (x + 2 y[x])/(2 x + y[x])",
+                 "y'[x] - (x + 2 y[x])/(2 x + y[x])");
+    check_method("DSolve`Homogeneous", "y'[x] == (2 x + y[x])/(x + 2 y[x])",
+                 "y'[x] - (2 x + y[x])/(x + 2 y[x])");
+    /* the transcendental case has no explicit inverse -> stays symbolic */
+    check_form("Head[DSolve[y'[x] == (x + y[x])/(x - y[x]), y, x]]", "DSolve");
+}
+
+/* ReductionOfOrder now accepts a correct-but-unsimplified antiderivative (its
+ * D[yint]-p guard falls back to PossibleZeroQ), so the autonomous a+b(y')^2 and
+ * the Riccati-in-p c x (y')^2 families solve. */
+static void t_reduce_order_riccati(void) {
+    check_method("DSolve`ReductionOfOrder", "y''[x] == 1 + y'[x]^2", "y''[x] - 1 - y'[x]^2");
+    check_method("DSolve`ReductionOfOrder", "y''[x] == -2 x y'[x]^2", "y''[x] + 2 x y'[x]^2");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -591,6 +662,17 @@ int main(void) {
     TEST(t_pde_forcing);
     TEST(t_pde_zeroth_order);
     TEST(t_declines_unsupported);
+    /* M9: backfill for thin methods */
+    TEST(t_method_homogeneous);
+    TEST(t_homogeneous_more);
+    TEST(t_ivp_homogeneous);
+    TEST(t_method_reduce_order);
+    TEST(t_reduce_order_more);
+    TEST(t_method_clairaut);
+    TEST(t_clairaut_more);
+    TEST(t_powerseries_more);
+    TEST(t_homogeneous_algebraic);
+    TEST(t_reduce_order_riccati);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

@@ -3031,6 +3031,10 @@ add_executable(dsolve_m5_stress_tests test_dsolve_m5_stress.c $<TARGET_OBJECTS:m
 target_include_directories(dsolve_m5_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m5_stress_tests COMMAND dsolve_m5_stress_tests)
 
+add_executable(dsolve_stress_tests test_dsolve_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_stress_tests COMMAND dsolve_stress_tests)
+
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)
 

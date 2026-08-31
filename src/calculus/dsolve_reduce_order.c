@@ -73,10 +73,23 @@ Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch) {
     if (ds_has_head(yint, SYM_Integrate)) { expr_free(yint); expr_free(pbody); return NULL; }
     /* Guard against a wrong antiderivative (the Integrate engine returns 0 for
      * some rational integrands with symbolic parameters, which would silently
-     * yield the degenerate y = const): require D[yint, x] == p. */
+     * yield the degenerate y = const): require D[yint, x] == p.  The correct
+     * antiderivative is routinely left in a form zero_test / Simplify cannot
+     * reduce — e.g. the first-order solve returns p = -Tan[1/5(-C[1]-5x)] and
+     * Integrate gives a multi-Log form whose derivative differs from p only by a
+     * trig identity Simplify does not crack.  Fall back to PossibleZeroQ's
+     * numeric sampling, exactly as the derivative-divides integrator gates its
+     * own antiderivatives.  A genuinely wrong antiderivative (Integrate -> 0)
+     * leaves D[yint,x]-p == -p, which PossibleZeroQ rejects, and the final
+     * back-substitution verify in dsolve_run is the authoritative backstop. */
     Expr* chk = eval_and_free(ds_call2(SYM_Subtract,
                     ds_d(expr_copy(yint), expr_new_symbol(xvar)), expr_copy(pbody)));
     bool intok = ds_is_zero(chk);
+    if (!intok) {
+        Expr* pz = eval_and_free(ds_call1("PossibleZeroQ", expr_copy(chk)));
+        intok = (pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True);
+        expr_free(pz);
+    }
     expr_free(chk); expr_free(pbody);
     if (!intok) { expr_free(yint); return NULL; }
     Expr* body = eval_and_free(ds_call2(SYM_Plus, yint, ds_const(2)));

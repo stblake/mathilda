@@ -3033,3 +3033,66 @@ and remember the residual is linear in `C[1],C[2]`: substitute the constants
 never reduces to a number (the candidate is correct but wrongly rejected). Gate the
 whole method on `PolynomialQ` (r ∈ C(x)) so transcendental `r` declines fast to
 Frobenius instead of feeding `CoefficientList` a non-polynomial.
+
+## DSolve stress tests — target-solution forward generator + Head===List guard; engine leak is a one-time 13.6KB baseline
+
+Building DSolve stress families by enumerating a raw coefficient grid (e.g.
+`y' + p y == q` over p,q lists) silently produces out-of-domain cases: `y' + x y ==
+Sin[x]` needs `∫Sin[x] Exp[x²/2]`, which is non-elementary, so LinearFirstOrder
+correctly declines — and the test fails, not because DSolve is broken but because the
+generator wandered outside the method's proven domain. Two robust techniques instead:
+(1) **forward-generate from the answer** — pick the spectrum (ConstCoeff char poly /
+Euler indicial poly), a potential (Exact: `M=Φ_x, N=Φ_y`), or a **target solution**
+(`LinearFirstOrder`: choose `yt`, set `q = yt' + p·yt`, so the integrating-factor
+integral `∫μq = μ·yt` is elementary *by construction* — this even makes `p=x, yt=Sin[x]`
+solve, because Integrate recovers the constructed antiderivative). (2) Where a family
+is genuinely invertibility-picky (`Homogeneous` needs the separated integral to invert
+explicitly — only a subset of rational-homogeneous RHS solve), curate a confirmed
+in-domain list rather than a dense grid. **Always guard `Head[...] === List` before the
+residual `PossibleZeroQ`**: a declined DSolve leaves `[[1]]` symbolic, the residual
+doesn't substitute, and `PossibleZeroQ` returns True *vacuously* — so a decline would
+masquerade as a pass. Validate every generated case against the built `./Mathilda`
+(`-file` script printing `Head===List` and the residual) *before* writing the C test.
+
+DSolve's valgrind "definitely lost" is a **one-time engine baseline of ~13.6KB**
+(`13,608 bytes in 423 blocks`) from Integrate/Solve/Simplify internal caches, **not**
+per-call growth: a stock `./Mathilda` running only *three* DSolve calls already reaches
+that exact total, so it does not scale with the number of stress cases. macOS valgrind
+is far too slow (~30–50×) to run a 200-call stress binary to completion; verify the
+baseline with a tiny 3-call `-file` script instead of timing out on the full binary.
+
+## DSolve decline gaps: escalate a too-weak decision procedure, let the back-substitution verify be the gate
+
+Two DSolve methods declined on families they should solve, and both root causes
+were a decision procedure applied too strictly, not a missing algorithm:
+
+- **ReductionOfOrder** guarded `∫p` with `D[∫p]==p` via `zero_test_decide`, which
+  cannot reduce a correct-but-unsimplified antiderivative (`Integrate[Tan[x+C]]`'s
+  multi-`Log` form; `1/(C(1+x²/C))` from `Integrate[1/(C+x²)]`). Fix: escalate the
+  guard to `PossibleZeroQ` (numeric sampling) — the same way `integrate_derivdivides.c`
+  gates its antiderivatives. Safe because a genuinely wrong antiderivative
+  (`Integrate->0`) still fails as `-p`, and `dsolve_run`'s per-branch
+  back-substitution verify (`dsolve_verify_body`) is the authoritative backstop.
+- **Homogeneous** built `∫1/(F(v)-v) == Log[x]+C` and `Solve`d, which fails on a
+  sum-of-logs. Fix: exponentiate to the algebraic relation `Prod g_i(v)^{c_i} ==
+  C[1] x` (`E^intV //. {E^(a+b):>E^a E^b, E^(c Log[g]):>g^c}`), then **clear
+  fractional exponents by raising both sides to a small power `d ∈ {1,2,3,4,6}`**
+  (`PowerExpand[form^d] == (C[1] x)^d`) and `Solve` — Solve cracks the integer-
+  exponent rational equation (`Root` branches) but chokes on the `^(3/2)` radical.
+  Spurious roots from the exponentiation are the `d`-th-roots-of-unity sheets,
+  i.e. the SAME solution family (absorb into `C`), so they verify too; any that
+  don't are dropped by the per-branch verify. The transcendental (ArcTan) subset
+  leaves an `E^ArcTan` factor no `d` clears → declines (would need implicit output).
+
+General pattern: when a symbolic gate blocks a correct answer, prefer *escalating
+to a permissive test + relying on the final verify* over tightening the algebra.
+`dsolve_run` filters branches (keeps each unless its residual is decidably
+non-zero), so a method may return extra candidates safely.
+
+**Valgrind per-call-leak test:** DSolve's `definitely lost` is a one-time engine
+baseline that varies with *which* sub-engines a run touches, so a single
+before/after byte count is not apples-to-apples. To prove a new allocation-heavy
+C helper has no per-call leak, run the SAME solve 1× and N× under
+`valgrind --leak-check=summary` — identical `definitely lost` (here 13,440 bytes
+for both 1× and 6×) means zero per-call growth. See
+[[project_dsolve_valgrind_engine_baseline]].
