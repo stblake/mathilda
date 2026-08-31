@@ -290,13 +290,26 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   `r=P²/4+P'/2−Q`; prerequisite for Kovacic and the special-function recognizers
   (`dsolve_normal_form` substrate helper).
 - `[~] SpecialFunctionForm` — matches the normalised 2nd-order form
-  `y''+P y'+Q y==0`: **Airy** (`P=0`, `Q` linear → AiryAi/AiryBi, verifies) and
+  `y''+P y'+Q y==0`: **Airy** (`P=0`, `Q` linear → AiryAi/AiryBi, verifies),
   **Bessel / modified Bessel** (`P=1/x`, `Q=±1−ν²/x²` → BesselJ/Y, BesselI/K —
   correct heads; residual reduces only via Bessel recurrences zero_test can't
-  decide, so kept as structurally exact). TODO: LegendreP, Hypergeometric/Kummer
-  (real heads); inert heads for LegendreQ, HermiteH, Chebyshev, Laguerre,
-  Gegenbauer, Jacobi, Whittaker, Mathieu, Spheroidal, Kelvin, ParabolicCylinder,
-  Struve, Weierstrass.
+  decide, so kept as structurally exact), **Kummer** confluent hypergeometric
+  (`x y''+(b−x)y'−a y==0` → `Hypergeometric1F1[a,b,x]` + `x^(1−b) 1F1[a−b+1,2−b,x]`)
+  and **Gauss** (`x(1−x)y''+(c−(a+b+1)x)y'−ab y==0` → `Hypergeometric2F1[a,b,c,x]` +
+  `x^(1−c) 2F1[a−c+1,b−c+1,2−c,x]`; `a,b` recovered from `a+b`, `ab` via a
+  quadratic whose linear factors give radical-free roots). The hypergeometric
+  heads auto-rewrite to `HypergeometricPFQ`, which has a `deriv.c` z-derivative
+  rule, so the branches verify. The second solution carries `x^(1−b)`/`x^(1−c)`
+  and is emitted only when that exponent parameter is a **non-integer number**
+  (an integer makes the pair dependent / the pFq lower parameter singular; a
+  symbolic exponent makes the verify residual a symbolic-power+pFq sum on which
+  zero_test currently hangs). Both degenerate cases decline to the Frobenius
+  series fallback; the other parameters (`a`; `a,b`) may stay symbolic.
+  TODO: canonical-singular-point restriction lifted by an affine/Möbius change of
+  variable; LegendreP recognizer (needs a LegendreP/Q derivative rule + LegendreQ
+  head); inert heads for LegendreQ, HermiteH, Chebyshev, Laguerre, Gegenbauer,
+  Jacobi, Whittaker, Mathieu, Spheroidal, Kelvin, ParabolicCylinder, Struve,
+  Weierstrass.
 - `[✓] Kovacic` — Liouvillian solutions of the reduced form `z''==r z`
   (`r∈C(x)`); three-case algorithm on the poles of `r` (`Apart`/`FactorList`) +
   order at ∞. Staged: Case 1 (`Exp[∫ω]`, `ω` rational) → Case 2 (degree-2

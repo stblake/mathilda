@@ -225,6 +225,42 @@ static void t_method_specialform(void) {
                "DSolve`SpecialFunctionForm[y''[x] - x y[x] == 0, y, x][[1]]]");
 }
 
+/* ---- hypergeometric recognizers: Kummer (1F1) / Gauss (2F1) ---- */
+static void t_hypergeometric_kummer(void) {
+    /* x y'' + (3/2 - x) y' - 2 y == 0 -> Hypergeometric1F1[2, 3/2, x] basis */
+    check_true("PossibleZeroQ[(x y''[x] + (3/2 - x) y'[x] - 2 y[x]) /. "
+               "DSolve[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y[x], x][[1]]]");
+    check_true("Not[FreeQ[DSolve[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y[x], x], "
+               "HypergeometricPFQ]]");
+}
+static void t_hypergeometric_gauss(void) {
+    /* x(1-x) y'' + (1/2 - 6 x) y' - 6 y == 0 -> Hypergeometric2F1[2, 3, 1/2, x] basis */
+    check_true("PossibleZeroQ[(x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x]) /. "
+               "DSolve[x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x] == 0, y[x], x][[1]]]");
+    check_true("Not[FreeQ[DSolve[x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x] == 0, y[x], x], "
+               "HypergeometricPFQ]]");
+}
+static void t_method_hypergeometric_kummer(void) {
+    check_true("PossibleZeroQ[(x y''[x] + (3/2 - x) y'[x] - 2 y[x]) /. "
+               "DSolve`SpecialFunctionForm[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y, x][[1]]]");
+}
+static void t_hypergeometric_symbolic_a(void) {
+    /* symbolic a is permitted because the exponent parameter b = 3/2 is numeric */
+    check_true("Not[FreeQ[DSolve[x y''[x] + (3/2 - x) y'[x] - a y[x] == 0, y[x], x], "
+               "HypergeometricPFQ]]");
+}
+static void t_hypergeometric_gauss_symbolic_ab(void) {
+    /* symbolic a, b permitted; exponent parameter c = 1/2 is numeric */
+    check_true("Not[FreeQ[DSolve[x (1 - x) y''[x] + (1/2 - (a + b + 1) x) y'[x] - a b y[x] == 0, "
+               "y[x], x], HypergeometricPFQ]]");
+}
+static void t_hypergeometric_integer_declines(void) {
+    /* integer exponent b = 2 -> SpecialFunctionForm declines (head left unevaluated),
+     * so no singular pFq lower-parameter branch is emitted */
+    check_true("Head[DSolve`SpecialFunctionForm[x y''[x] + (2 - x) y'[x] - 3 y[x] == 0, y, x]] "
+               "=== DSolve`SpecialFunctionForm");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -749,6 +785,12 @@ int main(void) {
     TEST(t_bessel);
     TEST(t_bessel_modified);
     TEST(t_method_specialform);
+    TEST(t_hypergeometric_kummer);
+    TEST(t_hypergeometric_gauss);
+    TEST(t_method_hypergeometric_kummer);
+    TEST(t_hypergeometric_symbolic_a);
+    TEST(t_hypergeometric_gauss_symbolic_ab);
+    TEST(t_hypergeometric_integer_declines);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

@@ -145,6 +145,56 @@ static void t_frob_stress_ordinary(void) {
             frob_ordinary_ok(ps[i], qs[j]);
 }
 
+/* ---- Hypergeometric recognizers: Kummer (1F1) / Gauss (2F1) forward generator ----
+ * Build the canonical equation from numeric parameters (the second-solution
+ * exponent b resp. c kept a half-integer, so it is a NUMBER and not an integer:
+ * the recognizer emits the two-term basis), pin SpecialFunctionForm, and require
+ * the returned basis to back-substitute to zero.  The Head===List guard defeats a
+ * vacuous PossibleZeroQ on a declined solve. */
+static void hyper_ok(const char* eqn, const char* resid) {
+    char buf[768];
+    snprintf(buf, sizeof(buf), "Head[DSolve`SpecialFunctionForm[%s, y, x]] === List", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+             "PossibleZeroQ[(%s) /. DSolve`SpecialFunctionForm[%s, y, x][[1]]]", resid, eqn);
+    ASSERT_TRUE(buf);
+}
+
+/* Kummer: x y'' + (b - x) y' - a y == 0, b = bn/2 (half-integer). */
+static void t_hyper_stress_kummer(void) {
+    int as[]  = {1, 2, -1};
+    int bns[] = {1, 3, -1, -3};      /* b = bn/2, non-integer */
+    for (size_t ai = 0; ai < 3; ai++)
+        for (size_t bi = 0; bi < 4; bi++) {
+            int a = as[ai], bn = bns[bi];
+            char eqn[256], res[256];
+            snprintf(eqn, sizeof(eqn),
+                     "x y''[x] + (%d/2 - x) y'[x] - (%d) y[x] == 0", bn, a);
+            snprintf(res, sizeof(res),
+                     "x D[y[x],{x,2}] + (%d/2 - x) D[y[x],x] - (%d) y[x]", bn, a);
+            hyper_ok(eqn, res);
+        }
+}
+
+/* Gauss: x(1-x) y'' + (c - (a+b+1) x) y' - a b y == 0, c = cn/2 (half-integer). */
+static void t_hyper_stress_gauss(void) {
+    int as[]  = {1, 2};
+    int bs[]  = {2, 3};
+    int cns[] = {1, 3, -1};          /* c = cn/2, non-integer */
+    for (size_t ai = 0; ai < 2; ai++)
+        for (size_t bi = 0; bi < 2; bi++)
+            for (size_t ci = 0; ci < 3; ci++) {
+                int a = as[ai], b = bs[bi], cn = cns[ci];
+                int s1 = a + b + 1, pr = a * b;
+                char eqn[320], res[320];
+                snprintf(eqn, sizeof(eqn),
+                         "x (1 - x) y''[x] + (%d/2 - (%d) x) y'[x] - (%d) y[x] == 0", cn, s1, pr);
+                snprintf(res, sizeof(res),
+                         "x (1 - x) D[y[x],{x,2}] + (%d/2 - (%d) x) D[y[x],x] - (%d) y[x]", cn, s1, pr);
+                hyper_ok(eqn, res);
+            }
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -154,6 +204,8 @@ int main(void) {
     TEST(t_kov_stress_pole);
     TEST(t_kov_stress_euler);
     TEST(t_frob_stress_ordinary);
+    TEST(t_hyper_stress_kummer);
+    TEST(t_hyper_stress_gauss);
 
     printf("\nAll DSolve M5 stress tests passed.\n");
     return 0;

@@ -1,60 +1,60 @@
-# DSolve — Lagrange/d'Alembert (1a), parametric general solution
+# DSolve — Hypergeometric/Kummer recognizer (§1c SpecialFunctionForm)
 
-`y == x·φ(y') + ψ(y')` → parametric `{x=X(t,C), y=X·φ+ψ}`, t=slope. New parametric
-substrate path (mirror the implicit path). General solution only; singular +
-IVP-fitting deferred.
+Add Kummer (₁F₁) and Gauss (₂F₁) recognizers to `DSolve`SpecialFunctionForm`.
+Verifies for free via the existing HypergeometricPFQ derivative rule
+(numerically confirmed: all three back-substitutions → 0.0).
 
-## Substrate (dsolve_common.{c,h}) — mirror implicit quartet
-- [ ] dsolve_verify_parametric(P, X, Y, tname): sub y'->D[Y,t]/D[X,t], y[x]->Y, x->X; permissive + PossibleZeroQ fallback
-- [ ] dsolve_assemble_parametric: {{x->Function[{t},X], y->Function[{t},Y]}}, ds_rename_param
-- [ ] dsolve_run_parametric(P, fn): unpack DSolve`Param[X,Y], verify, assemble; decline if ncond>0
-- [ ] dsolve_method_builtin_parametric(res, fn)
-- [ ] parameter symbol: first of {t,s,u} not in equation (ds_contains guard)
-- [ ] declarations in dsolve_common.h
-
-## New file src/calculus/dsolve_lagrange.c
-- [ ] dsolve_lagrange_try: recognize (Clairaut-style), extract φ=D[Yexpr,x], ψ=Yexpr-x·φ (free of x; ψ free of Y); decline φ≡p; solve linear ODE for X(t) via dsolve_linear_factor_solve; Y=X·φ+ψ; return DSolve`Param[X,Y]
-- [ ] builtin_dsolve_lagrange via dsolve_method_builtin_parametric; dsolve_lagrange_init
-
-## Wiring src/calculus/dsolve.c
-- [ ] enum DS_LAGRANGE; "Lagrange" map; externs; cascade line (run_parametric after clairaut); pinned case; init
-- [ ] tests/CMakeLists.txt: add dsolve_lagrange.c to mathilda_common
+## Implementation
+- [ ] src/calculus/dsolve_specialform.c: Kummer block (P=b/x−1, Q=−a/x)
+      → C[1] ₁F₁[a,b,x] + C[2] x^(1−b) ₁F₁[a−b+1,2−b,x]; decline if IntegerQ[b]
+- [ ] src/calculus/dsolve_specialform.c: Gauss block (W=x(1−x), Q=−ab/W, P=(c−(a+b+1)x)/W)
+      → C[1] ₂F₁[a,b,c,x] + C[2] x^(1−c) ₂F₁[a−c+1,b−c+1,2−c,x]; solve t²−St+Pr for a,b;
+      decline if IntegerQ[c]
+- [ ] Expand header comment + docstring (add verification "keep-on-undecidable" note)
 
 ## Tests
-- [ ] test_dsolve.c: t_method_lagrange, t_lagrange_more, t_lagrange_declines; register
-- [ ] test_dsolve_stress.c: lagrange_ok generator + t_stress_lagrange; register
+- [ ] tests/test_dsolve.c: t_method_hypergeometric_kummer, t_method_hypergeometric_gauss
+      (pin method, Head===List, PossibleZeroQ residual); + integer-b decline test
+- [ ] tests/test_dsolve_m5_stress.c: forward-generator family over non-integer a,b (,c)
 
 ## Docs
-- [ ] calculus.md row; changelog section; DSOLVE_PLAN.md §1a flip
+- [ ] docs/spec/builtins/calculus.md: extend SpecialFunctionForm row (~L676)
+- [ ] docs/spec/changelog/2026-08-31.md: DSolve entry
+- [ ] DSOLVE_PLAN.md: §1c SpecialFunctionForm note → Kummer/Gauss done
 
 ## Gates
-- [ ] make -j clean; REPL spot-checks (parametric output, residual, Clairaut unchanged, decline)
-- [ ] ctest -R dsolve 3/3; make check-c99; valgrind baseline; graph rebuild
+- [ ] make -j build clean
+- [ ] REPL spot-checks (Kummer, Gauss, pinned, ?docstring, integer-b decline)
+- [ ] ctest -R dsolve
+- [ ] valgrind leak-check (engine allocations balanced)
+- [ ] make check-c99
+- [ ] commit + push
 
-## Review
+## Review — DONE
 
-Done. Lagrange/d'Alembert (§1a) implemented with a new **parametric substrate
-path** mirroring the implicit path, plus one new method file.
+All items complete. `DSolve\`SpecialFunctionForm` now recognises Kummer (₁F₁) and
+Gauss (₂F₁) second-order linear equations (`src/calculus/dsolve_specialform.c`),
+appended as two `if (!general)` blocks after Bessel; shared quadratic-root helper
+`specialform_quad_roots` (FactorList linear factors → radical-free `a,b`, radical
+`Solve` fallback) and `specialform_is_number` (the numeric-exponent gate).
 
-- Substrate (`dsolve_common.{c,h}`): `dsolve_run_parametric` /
-  `_verify_parametric` / `_assemble_parametric` / `_method_builtin_parametric`.
-  Try-fn returns `DSolve\`Param[X, Y, t]`; verify substitutes `y'=Y'(t)/X'(t)` into
-  the residual (permissive + PossibleZeroQ fallback); output
-  `{{x->Function[{t},X], y->Function[{t},Y]}}`; IVP declines (`ncond>0`).
-- `src/calculus/dsolve_lagrange.c`: Clairaut-style recognition; extract
-  `φ=D[Yexpr,x]`, `ψ=Yexpr−xφ`; decline `φ≡p` (Clairaut) and genuinely-linear
-  (`φ` const ∧ `ψ` affine → LinearFirstOrder); linear ODE for `X(t)` via
-  `dsolve_linear_factor_solve`; `Y=Xφ+ψ`. Cascade slot after Clairaut.
-- Parameter symbol: collision-safe bare symbol (first of {t,s,u,w,r,q} not in eqn).
-- Tests: `t_method_lagrange` / `t_lagrange_more` / `t_lagrange_declines` (unit,
-  parametric verify) + `t_stress_lagrange` (8-case forward generator).
+**Verified:**
+- Numeric Kummer/Gauss → closed form; symbolic-`a` Kummer & symbolic-`a,b` Gauss
+  (numeric exponent) → clean closed form; Airy/Bessel regressions intact.
+- `ctest -R dsolve` → 3/3 pass (unit + both stress suites); 6 new unit tests +
+  2 forward-generator stress families (24 solves, all back-substitute to 0).
+- `make check-c99` PASS.
+- valgrind: recognizer + `quad_roots` add **zero** leaks (0 direct-alloc blocks,
+  0 `quad_roots` frames); only pre-existing Simplify/engine baseline remains.
 
-Verified: `y==2xy'+(y')^2 → {x->(C[1]-2/3 t^3)/t^2, y->(2C[1]-1/3 t^3)/t}` (residual
-PossibleZeroQ True); transcendental (Log) forms verify via PossibleZeroQ; Clairaut
-still explicit lines (unchanged); pinned Lagrange declines Clairaut/linear/IVP.
+**Key finding — verification hang (worked around, not a regression):**
+The second solution carries `x^(1−b)`/`x^(1−c)`. With a **symbolic** exponent the
+verify residual is a symbolic-power + pFq sum on which `zero_test`/PossibleZeroQ
+**hangs** (pre-existing). Gate: emit only when the exponent parameter (`b`/`c`) is
+a `NumberQ` non-integer; symbolic/integer exponents decline to Frobenius. Confirmed
+via `git stash` that fully-symbolic Gauss also hangs on the **pre-change** binary
+(the hang is in Kovacic on symbolic coefficients — unrelated to this change).
 
-Gates: `ctest -R dsolve` 3/3 green (19.5+6.5+10.1 s); `make check-c99` exit 0;
-valgrind 1×==6× = 13,440 def + 6,312 indir (one-time engine baseline, no per-call
-leak); graph rebuilt. No user correction; no lesson added (the linear-decline guard
-was found via my own spot-check, not a correction). LSP `ATTR_READPROTECTED` /
-missing-include noise is stale — GCC/CMake build is clean.
+**Follow-ups (out of scope):** affine/Möbius normalisation for non-canonical
+singular points; a `zero_test` improvement (or verify time-box) to lift the
+symbolic-exponent gate; LegendreP recognizer (needs LegendreP/Q derivative rules).

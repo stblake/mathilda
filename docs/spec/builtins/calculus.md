@@ -673,7 +673,7 @@ roadmap):
 | `DSolve`Lagrange` | `y == x φ(y') + ψ(y')`, φ(y')≠y' (d'Alembert) — **parametric** general solution `{{x->Function[{t},X(t)], y->Function[{t},Y(t)]}}`, `t=y'`, `X` from the associated linear ODE |
 | `DSolve`LinearConstantCoefficients` | `a_n y^(n)+…+a_0 y == g(x)` (char. polynomial + variation of parameters) |
 | `DSolve`EulerCauchy` | `a_n x^n y^(n)+…+a_0 y == g(x)` (indicial polynomial, trial `x^r`) |
-| `DSolve`SpecialFunctionForm` | 2nd-order forms → Airy (`y''==(Ax+B)y`) and Bessel / modified Bessel |
+| `DSolve`SpecialFunctionForm` | 2nd-order forms → Airy (`y''==(Ax+B)y`), Bessel / modified Bessel, Kummer confluent hypergeometric (`x y''+(b-x)y'-a y==0` → `Hypergeometric1F1`) and Gauss hypergeometric (`x(1-x) y''+(c-(a+b+1)x)y'-a b y==0` → `Hypergeometric2F1`); the hypergeometric second solution is emitted only when the exponent parameter (`b` resp. `c`) is a non-integer number |
 | `DSolve`Kovacic` | 2nd-order linear `y'' + P y' + Q y == 0` → Liouvillian solutions via the reduced form `z'' == r z`: Case 1 (rational `ω`, `z == Exp[∫ω]`, incl. apparent singularities `z == P Exp[∫ω]`) and Case 2 (degree-2 algebraic, numeric-verified); declines otherwise |
 | `DSolve`FirstOrderSubstitution` | `y'[x] == F(a x + b y + c)` (substitution `v = y + (F_x/F_y) x` → autonomous separable) |
 | `DSolve`ReductionOfOrder` | 2nd-order missing `y`, `y'' == F(x, y')` (reduce to 1st order in `p = y'`, then integrate) |
