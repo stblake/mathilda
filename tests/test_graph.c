@@ -208,6 +208,23 @@ static void test_generators(void) {
     assert_eval_eq("VertexDegree[PathGraph[5]]", "{1, 2, 2, 2, 1}", 0);
     /* Explicit-vertex path. */
     assert_eval_eq("EdgeList[PathGraph[{a,b,c}]]", "{a <-> b, b <-> c}", 0);
+
+    /* StarGraph[n]: n vertices, n-1 edges; hub 1 has degree n-1, leaves 1. */
+    assert_eval_eq("VertexCount[StarGraph[5]]", "5", 0);
+    assert_eval_eq("EdgeCount[StarGraph[5]]", "4", 0);
+    assert_eval_eq("DirectedGraphQ[StarGraph[5]]", "False", 0);
+    assert_eval_eq("VertexDegree[StarGraph[5]]", "{4, 1, 1, 1, 1}", 0);
+    assert_eval_eq("EdgeList[StarGraph[4]]", "{1 <-> 2, 1 <-> 3, 1 <-> 4}", 0);
+    /* Degenerate sizes: a lone vertex, and the empty graph. */
+    assert_eval_eq("{VertexCount[StarGraph[1]], EdgeCount[StarGraph[1]]}",
+                   "{1, 0}", 0);
+    assert_eval_eq("{VertexCount[StarGraph[0]], EdgeCount[StarGraph[0]]}",
+                   "{0, 0}", 0);
+    /* A star is connected and is its own spanning tree. */
+    assert_eval_eq("ConnectedGraphQ[StarGraph[6]]", "True", 0);
+    assert_eval_eq("EdgeCount[FindSpanningTree[StarGraph[6]]]", "5", 0);
+    /* Symbolic argument stays unevaluated. */
+    assert_eval_eq("Head[StarGraph[x]]", "StarGraph", 0);
 }
 
 static void test_random_graph(void) {

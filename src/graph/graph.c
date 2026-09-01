@@ -124,6 +124,12 @@ void graph_init(void) {
     symtab_set_docstring("CycleGraph",
         "CycleGraph[n] gives the cycle graph on n vertices.");
 
+    symtab_add_builtin("StarGraph", builtin_star_graph);
+    symtab_get_def("StarGraph")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("StarGraph",
+        "StarGraph[n] gives the star on n vertices: the hub 1 joined to each of "
+        "the n-1 leaves 2..n.");
+
     symtab_add_builtin("PathGraph", builtin_path_graph);
     symtab_get_def("PathGraph")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("PathGraph",

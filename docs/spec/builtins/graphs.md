@@ -136,6 +136,8 @@ constructor path:
 - `CycleGraph[n]` — the cycle on `1..n`.
 - `PathGraph[n]` — the path `1-2-...-n`; `PathGraph[{v1,...}]` uses the given
   vertices.
+- `StarGraph[n]` — the star on `1..n`: the hub `1` joined to each of the `n-1`
+  leaves `2..n`.
 - `RandomGraph[{n, m}]` — a random undirected graph with `n` vertices and `m`
   distinct edges (uses the seeded system RNG, so `SeedRandom` makes it
   reproducible). Returns unevaluated if `m` exceeds `n(n-1)/2`.
@@ -144,6 +146,8 @@ constructor path:
 EdgeCount[CompleteGraph[5]]      (* 10                        *)
 EdgeList[CycleGraph[4]]          (* {1<->2, 2<->3, 3<->4, 4<->1} *)
 VertexDegree[PathGraph[5]]       (* {1, 2, 2, 2, 1}           *)
+EdgeList[StarGraph[4]]           (* {1<->2, 1<->3, 1<->4}     *)
+VertexDegree[StarGraph[5]]       (* {4, 1, 1, 1, 1}           *)
 ```
 
 ## Search & computation

@@ -915,6 +915,7 @@ extern const char* SYM_AdjacencyGraph;
 extern const char* SYM_CompleteGraph;
 extern const char* SYM_CycleGraph;
 extern const char* SYM_PathGraph;
+extern const char* SYM_StarGraph;
 extern const char* SYM_RandomGraph;
 extern const char* SYM_FindShortestPath;
 extern const char* SYM_GraphDistance;

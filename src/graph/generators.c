@@ -4,6 +4,7 @@
  *   CycleGraph[n]             - undirected cycle on 1..n
  *   PathGraph[n]              - undirected path 1-2-...-n
  *   PathGraph[{v1,...,vk}]    - undirected path over the given vertices
+ *   StarGraph[n]              - undirected star: hub 1 joined to leaves 2..n
  *   RandomGraph[{n, m}]       - undirected graph with n vertices, m random edges
  *
  * Each assembles a Graph[List verts, List edges] expression and returns it; the
@@ -32,11 +33,19 @@ static Expr* undirected_edge(long a, long b) {
     return expr_new_function(expr_new_symbol(SYM_UndirectedEdge), ea, 2);
 }
 
-/* Wrap vertex/edge C-arrays into a Graph[...] (moves ownership). */
+/* Wrap a calloc'd Expr* array into a List[...]: the elements move into the new
+ * node (expr_new_function copies the pointers, not the array), so the array
+ * itself is ours to free. */
+static Expr* make_list_owning(Expr** items, size_t n) {
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), items, n);
+    free(items);
+    return list;
+}
+
+/* Wrap vertex/edge C-arrays into a Graph[...] (moves ownership, frees both
+ * arrays). */
 static Expr* make_graph(Expr** verts, size_t nv, Expr** edges, size_t ne) {
-    Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), verts, nv);
-    Expr* elist = expr_new_function(expr_new_symbol(SYM_List), edges, ne);
-    Expr* gargs[2] = { vlist, elist };
+    Expr* gargs[2] = { make_list_owning(verts, nv), make_list_owning(edges, ne) };
     return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
 }
 
@@ -100,6 +109,18 @@ Expr* builtin_path_graph(Expr* res) {
     return make_graph(int_vertices(n), (size_t)n, edges, ne);
 }
 
+Expr* builtin_star_graph(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    long n = as_count(res->data.function.args[0]);
+    if (n < 0) return NULL;
+    /* Hub is vertex 1, joined to each of 2..n: exactly n-1 edges, with no
+     * duplicate possible at any size (unlike CycleGraph's wrap edge). */
+    size_t ne = (n > 0) ? (size_t)n - 1 : 0;
+    Expr** edges = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
+    for (long i = 2; i <= n; i++) edges[i - 2] = undirected_edge(1, i);
+    return make_graph(int_vertices(n), (size_t)n, edges, ne);
+}
+
 Expr* builtin_random_graph(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     const Expr* spec = res->data.function.args[0];
@@ -127,8 +148,6 @@ Expr* builtin_random_graph(Expr* res) {
     Expr* sampled = evaluate(sample_call);   /* consumes sample_call */
     if (!graph_is_list(sampled)) { expr_free(sampled); return NULL; }
 
-    Expr* gargs[2] = { expr_new_function(expr_new_symbol(SYM_List),
-                                         int_vertices(n), (size_t)n),
-                       sampled };
+    Expr* gargs[2] = { make_list_owning(int_vertices(n), (size_t)n), sampled };
     return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
 }

@@ -858,6 +858,7 @@ const char* SYM_AdjacencyGraph = NULL;
 const char* SYM_CompleteGraph = NULL;
 const char* SYM_CycleGraph = NULL;
 const char* SYM_PathGraph = NULL;
+const char* SYM_StarGraph = NULL;
 const char* SYM_RandomGraph = NULL;
 const char* SYM_FindShortestPath = NULL;
 const char* SYM_GraphDistance = NULL;
@@ -1724,6 +1725,7 @@ void sym_names_init(void) {
     SYM_CompleteGraph              = intern_symbol("CompleteGraph");
     SYM_CycleGraph                 = intern_symbol("CycleGraph");
     SYM_PathGraph                  = intern_symbol("PathGraph");
+    SYM_StarGraph                  = intern_symbol("StarGraph");
     SYM_RandomGraph                = intern_symbol("RandomGraph");
     SYM_FindShortestPath           = intern_symbol("FindShortestPath");
     SYM_GraphDistance              = intern_symbol("GraphDistance");
