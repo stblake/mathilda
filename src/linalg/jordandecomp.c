@@ -672,7 +672,7 @@ static Expr* jd_numeric_fast(Expr* m, int n) {
 /* Load an n×n REAL numeric matrix (packed NDArray or boxed List) into a
  * column-major double buffer Ac (Ac[i + j*n] = m[i][j]).  Returns false for a
  * complex, non-concrete, or wrong-shaped matrix. */
-static bool jd_load_real_colmajor(Expr* m, int n, double* Ac) {
+MATHILDA_MAYBE_UNUSED static bool jd_load_real_colmajor(Expr* m, int n, double* Ac) {
     if (is_ndarray(m)) {
         const NDArrayData* nd = &m->data.ndarray;
         if (nd->rank != 2 || nd->dims[0] != n || nd->dims[1] != n) return false;
@@ -701,7 +701,7 @@ static bool jd_load_real_colmajor(Expr* m, int n, double* Ac) {
 
 /* Build s (n×n) from column buffers: column c is the eigenvector
  * (Vr[c*n+i], Vi[c*n+i]); entries with zero imaginary part stay Real. */
-static Expr* jd_matrix_from_columns(const double* Vr, const double* Vi, int n) {
+MATHILDA_MAYBE_UNUSED static Expr* jd_matrix_from_columns(const double* Vr, const double* Vi, int n) {
     Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
     for (int i = 0; i < n; i++) {
         Expr** cells = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
@@ -723,7 +723,7 @@ static Expr* jd_matrix_from_columns(const double* Vr, const double* Vi, int n) {
 
 /* Build the diagonal j (n×n) from eigenvalue buffers (er, ei), chopping tiny
  * noise so a real eigenvalue stays Real; off-diagonal is exact 0. */
-static Expr* jd_diag_from_buffers(const double* er, const double* ei, int n) {
+MATHILDA_MAYBE_UNUSED static Expr* jd_diag_from_buffers(const double* er, const double* ei, int n) {
     Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
     for (int i = 0; i < n; i++) {
         Expr** cells = (Expr**)malloc(sizeof(Expr*) * (size_t)n);

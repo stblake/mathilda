@@ -4462,7 +4462,7 @@ int eigen_all_eigenvectors_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
  * dispatcher via linalg_delist_and_reeval.
  * ==================================================================== */
 
-static bool ndla_eigen_arg_ok(Expr* res, Expr** arg_out, int* n_out) {
+MATHILDA_MAYBE_UNUSED static bool ndla_eigen_arg_ok(Expr* res, Expr** arg_out, int* n_out) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return false;
     Expr* arg = res->data.function.args[0];
     if (!is_ndarray(arg) || arg->data.ndarray.rank != 2
@@ -4552,7 +4552,7 @@ static Expr* ndla_eigenvectors_complex(Expr* arg, int n) {
 #endif /* USE_LAPACK */
 
 /* True iff the column-major buffer A (n x n) is numerically symmetric. */
-static bool ndla_eigen_symmetric(const double* A, int n) {
+MATHILDA_MAYBE_UNUSED static bool ndla_eigen_symmetric(const double* A, int n) {
     double maxa = 0.0;
     for (int k = 0; k < n * n; k++) { double v = fabs(A[k]); if (v > maxa) maxa = v; }
     double tol = 1e-12 * (maxa > 0.0 ? maxa : 1.0);

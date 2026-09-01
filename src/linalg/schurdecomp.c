@@ -141,7 +141,7 @@ static bool schur_is_pair(const Expr* arg0, const Expr** out_m,
  * A non-numeric leaf reports "not complex" here; the numeric load downstream is
  * what ultimately rejects it (returning NULL), so the final behaviour on a
  * symbolic matrix is an unevaluated call either way. */
-static bool schur_all_real(const Expr* m, int n) {
+MATHILDA_MAYBE_UNUSED static bool schur_all_real(const Expr* m, int n) {
     if (is_ndarray(m)) return !ndt_is_complex(m->data.ndarray.dtype);
     if (m->type != EXPR_FUNCTION) return false;
     for (int i = 0; i < n; i++) {
