@@ -20,6 +20,7 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include "../expr.h"
+#include "../arithmetic.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -182,6 +183,12 @@ Expr* builtin_dsolve(Expr* res) {
     if (ds_fail_seen(heq, hv, (int)method)) { dsolve_problem_free(&P); return NULL; }
 
     g_dsolve_depth++;
+    /* Every method attempt is speculative: probes and reductions legitimately
+     * form 1/0 while classifying an equation that is not of their form.  Mute the
+     * cosmetic Power::infy / Infinity::indet family for the whole cascade (the
+     * verifier is the real gate) so a decline never leaks arithmetic warnings —
+     * mirroring the per-region mute Frobenius/Kovacic already use. */
+    arith_warnings_mute_push();
     Expr* result = NULL;
     if (P.is_pde) {
         result = dsolve_run_pde(&P, dsolve_pde1_solve);
@@ -260,6 +267,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_FROBENIUS:    result = dsolve_run(&P, dsolve_frobenius_try);    break;
         default: break;
     }
+    arith_warnings_mute_pop();
     g_dsolve_depth--;
 
     if (!result && g_dsolve_depth == 0) ds_fail_record(heq, hv, (int)method);

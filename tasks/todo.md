@@ -1,49 +1,45 @@
-# DSolve / Kovacic stress-test hardening (Tiers A+B+C) — DONE
+# DSolve: fix noisy failures on Chini / integrating-factor first-order ODEs
 
-Plan: `/Users/user/.claude/plans/the-following-set-of-moonlit-wirth.md`
-
-## Tier A — Robustness & correctness
-- [x] A1. Early complexity gate in `dsolve_kovacic_try` (denom degree / pole count) — In[12] hang FIXED (fast series)
-- [x] A2. Silence `Integrate::nonelem` on speculative Kovacic integrals — In[5] message GONE
-- [x] A3. Frobenius expansion at a shifted ordinary point — In[7]→O[x-2]^7, session-2 In[1]→O[x-1]^7 (was bare-uneval); warnings muted
-- [x] A4. Absorb cosmetic constant factor from `second_solution` into C[2] — In[2] now clean Euler form
-
-## Tier B — Kovacic Case-1 completion (full classical algorithm)
-- [x] B1. `[√r]_c` for even-order poles ≥ 4 (`kovacic_pole_data`, lifted `mult>2` cap)
-- [x] B2. Non-constant `[√r]_∞` for r growing at ∞ (`kovacic_inf_data`, x→1/y; b uses `([√r])²`)
-- [x] B3. (s∞, mask) enumeration + degree bound + `solve_monic_P`; **two independent families first**, then reduction of order
-- [x] B4. Hang guard: decline reduction-of-order integral in Erf/Erfi/… (`has_hang_special`)
-  - NOTE: In[1] (Kovacic's example) finds y1 but y2 is genuinely non-elementary → graceful series
-  - NOTE: session-2 In[1] has irrational pole exponents (√2) → not Case-1 → graceful series
-  - PROVEN on `y''−(x²+3/(4x²))y==0` (growth at ∞, old δ≥2 rejected it)
-
-## Tier C — Bessel/Airy change-of-variable recognizer (In[11])
-- [x] C1. Recognize `P==0, Q == A x^m` → `√x Z_{1/(m+2)}(...)`; J/Y for A>0, I/K for A<0. In[11] FIXED
-  - NOTE: pipe protocol needs INTEGER ids; `"id":"11"` (string) is silently dropped (test-harness gotcha, cost a detour)
-  - NOTE: permissive verify accepted a WRONG (sign-flipped) Bessel form — always numerically spot-check special-fn recognizers
-
-## Verification
-- [x] Regression tests: `test_dsolve.c` (Bessel-reducible, high-degree no-hang), `test_dsolve_m5_stress.c` (growth closed-forms, growth no-hang) — all pass
-- [x] Manual NDJSON checks on all 14 corpus cases — closed form where elementary, graceful series otherwise, no hangs, clean stderr
-- [x] `make check-c99` passes (rc=0); valgrind is Linux-CI (macOS baseline noise); new paths run 1.1s clean
-- [x] Docs: `docs/spec/builtins/calculus.md` (Kovacic / SpecialFunctionForm / PowerSeries rows) + `docs/spec/changelog/2026-08-31.md`
-- [x] Existing suites (`dsolve_tests`, `dsolve_m5_stress_tests`) still pass; stress back to 7s
+## Tasks
+- [x] 1. Guard ordering: reduce `nexp` (Cancel) before free-of guard (dsolve_bernoulli.c, dsolve_chini.c)
+- [x] 2. Chini second reduction (linear-term removal → separable) in dsolve_chini_first_integral
+- [x] 3. Exact via x^a y^b integrating factor in dsolve_exact.c (gated to PolynomialQ M,N)
+- [x] 4. Message hygiene: mute speculative arithmetic across builtin_dsolve
+- [x] 5. Build + verify both examples solve cleanly (no Power::infy)
+- [x] 6. Regression: pure Bernoulli, autonomous Chini, bare exact, elliptic decline stay clean
+- [x] 7. DSolve unit + stress tests + check-c99 + valgrind
+- [x] 8. Docs: spec/builtins DSolve entry, changelog 2026-08-31, lessons.md, memory
 
 ## Review
-- **Root causes were shared, not per-case.** Buckets: hang (missing degree gate),
-  bare-unevaluated (Frobenius only expanded at x=0), fell-to-series (Case-1
-  incompleteness OR genuinely non-Liouvillian), cosmetic (unabsorbed constant),
-  leaked warning (speculative integral).
-- **Reality check on the corpus:** In[1] and session-2 In[1] — the two "crown
-  jewel" targets — turned out NOT to have elementary general solutions (In[1]'s 2nd
-  solution is non-elementary; session-2 In[1] has irrational pole exponents, not
-  Case-1). Tier B is still a correct, verified generalization (proven on a
-  constructed growth-at-∞ case), but its corpus impact is the guard behaviour
-  (fast, clean declines) rather than new closed forms for those two.
-- **Two soundness lessons captured to memory:** (1) the permissive verify accepts a
-  wrong special-function candidate whose residual zero_test can't disprove — always
-  numerically spot-check a recognizer; (2) the NDJSON pipe silently drops string
-  `id`s (test-harness gotcha).
-- **Elegance:** kept the pinned-method contracts intact (shifted-point fallback is
-  cascade-only; growth reduction-of-order declines special functions instead of
-  hanging), so no existing behaviour regressed.
+
+**Outcome.** Both reported ODEs now solve; DSolve no longer leaks
+`Power::infy`/`Infinity::indet`.
+- Ex1 `y'==-x E^-x - y + x E^(2x) y^3` → implicit `∫du/(u^3-1) - x^2/2 == C[1]`,
+  `u = y[x] E^x` (Chini reduction b). Verified: numeric residual ~4e-16.
+- Ex2 `(x y-2x)y'==y-y^2+3x^2 y^3` → two explicit branches of
+  `3x + 1/(xy) - 1/(xy^2) == C[1]` (exact via `μ=x^-2 y^-3`). Verified: ~4e-16.
+
+**Root causes (three defects).**
+1. Bernoulli/Chini tested the exponent `nexp` for FreeQ before reducing it; the
+   unexpanded `Q` sent `ds_free_of` to the numeric sampler, which hit `0^(-1)` and
+   misread the resulting ComplexInfinity as "non-zero" → valid equation rejected +
+   leaked message. Fixed by reducing with **Cancel** before the guard.
+2. Chini only did the reduce-to-autonomous reduction (a). Added reduction (b),
+   linear-term removal → separable.
+3. Exact only searched `μ(x)`/`μ(y)`. Added `μ=x^a y^b`, gated to polynomial M,N.
+Plus: muted speculative arithmetic warnings across the whole DSolve cascade.
+
+**Regression caught and fixed during work.** First attempt used `Simplify` (not
+Cancel) to reduce `nexp`, and ran the `x^a y^b` `Solve` ungated. Both blew up on
+the radical systems from `AutonomousReduction` (`y''==2y^3` → `y'==Sqrt[y^4+K]`),
+turning a 27.9s suite into a >60s `alarm()` timeout. Fixed with `Cancel` +
+`PolynomialQ` gate; suite back to 28.4s, all pass.
+
+**Gates.** `dsolve_tests` / `dsolve_stress_tests` / `dsolve_m5_stress_tests` all
+green (2 new cases: `t_chini_linremoval`, `t_exact_xayb`); `make check-c99` clean;
+valgrind — no new definitely/possibly-lost over the ~13.6KB one-time engine
+baseline.
+
+**Files.** `dsolve_bernoulli.c`, `dsolve_chini.c`, `dsolve_exact.c`, `dsolve.c`,
+`tests/test_dsolve.c`; docs `docs/spec/builtins/calculus.md` +
+`docs/spec/changelog/2026-08-31.md`.

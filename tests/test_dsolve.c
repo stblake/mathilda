@@ -878,6 +878,28 @@ static void t_method_abel(void) {
     /* Abel declines a Chini (f2 == 0) — DSolve`Chini owns that */
     check_form("Head[DSolve`Abel[y'[x] == x^2 y[x]^3 - y[x]/x + 1/x, y, x]]", "DSolve`Abel");
 }
+/* Chini reduction (b): linear-term removal y = e^(int g) w -> separable, for the
+ * sub-class where reduction (a) (B,C constant) fails.  y' == x E^(2x) y^3 - y -
+ * x E^-x -> w' == x(w^3 - 1) via y = E^-x w; implicit first integral. */
+static void t_chini_linremoval(void) {
+    check_implicit("-x Exp[-x] - y[x] + x Exp[2 x] y[x]^3");
+    check_true("Head[DSolve`Chini[y'[x] == -x Exp[-x] - y[x] + x Exp[2 x] y[x]^3, "
+               "y, x][[1,1]]] === Equal");
+    /* the pure-Bernoulli variant with the E^(2x) coefficient (previously mis-
+     * classified by the pre-simplify guard) now solves */
+    check_form("Head[DSolve[y'[x] == x Exp[2 x] y[x]^3 - y[x], y, x]]", "List");
+}
+/* Exact via mu = x^a y^b integrating factor (constant exponents): the equation
+ * (x y - 2 x) y' == y - y^2 + 3 x^2 y^3 is exact under mu = x^-2 y^-3. */
+static void t_exact_xayb(void) {
+    check_form("Head[DSolve[(x y[x] - 2 x) y'[x] == y[x] - y[x]^2 + 3 x^2 y[x]^3, y, x]]", "List");
+    /* Function-form solve so y'[x] is rewritten; residual back-substitutes to 0 */
+    check_true("PossibleZeroQ[((x y[x] - 2 x) y'[x] - (y[x] - y[x]^2 + 3 x^2 y[x]^3)) /. "
+               "DSolve[(x y[x] - 2 x) y'[x] == y[x] - y[x]^2 + 3 x^2 y[x]^3, y, x][[1]]]");
+    check_form("Head[DSolve`Exact[(x y[x] - 2 x) y'[x] == y[x] - y[x]^2 + 3 x^2 y[x]^3, y, x]]", "List");
+    /* a non-x^a y^b equation still declines the exact method (no wrong answer) */
+    check_form("Head[DSolve`Exact[y'[x] == Sqrt[y[x]^4 + 1], y, x]]", "DSolve`Exact");
+}
 
 int main(void) {
     symtab_init();
@@ -983,7 +1005,9 @@ int main(void) {
     TEST(t_ivp_riccati);
     TEST(t_method_chini);
     TEST(t_chini_more);
+    TEST(t_chini_linremoval);
     TEST(t_method_abel);
+    TEST(t_exact_xayb);
     TEST(t_auto_exp);
     TEST(t_auto_power);
     TEST(t_auto_reciprocal);

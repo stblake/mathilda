@@ -664,11 +664,11 @@ roadmap):
 | `DSolve`LinearFirstOrder` | `y'[x] + p(x) y[x] == q(x)` (integrating factor) |
 | `DSolve`Bernoulli` | `y'[x] == A(x) y + B(x) y^n`, n≠0,1 (substitution `v=y^(1-n)`) |
 | `DSolve`Riccati` | `y'[x] == q0(x) + q1(x) y + q2(x) y^2`, q2≠0 (substitution `y=-u'/(q2 u)` → 2nd-order linear `u'' - (q1+q2'/q2) u' + q0 q2 u == 0`, solved by the scalar cascade) |
-| `DSolve`Chini` | `y'[x] == f(x) y^n + g(x) y + h(x)`, n≠0,1,2 — reducible-to-autonomous sub-class (`y = f^(-1/(n-1)) u` → `u' == u^n + B u + C` with B,C constant); **implicit** first integral `{{∫du/(u^n+Bu+C) − x == C[1]}}`, `u = y f^(1/(n-1))` |
+| `DSolve`Chini` | `y'[x] == f(x) y^n + g(x) y + h(x)`, n≠0,1,2 — two reductions, tried in order. (a) reducible-to-autonomous (`y = f^(-1/(n-1)) u` → `u' == u^n + B u + C` with B,C constant); **implicit** first integral `{{∫du/(u^n+Bu+C) − x == C[1]}}`, `u = y f^(1/(n-1))`. (b) linear-term removal (`y = e^(∫g) w` → `w' == P w^n + R`); when `R/P == c` is constant this is separable, giving `{{∫dw/(w^n+c) − ∫P dx == C[1]}}`, `w = y e^(-∫g)` — solves e.g. `y' == x E^(2x) y^3 − y − x E^-x` |
 | `DSolve`Abel` | `y'[x] == f3 y^3 + f2 y^2 + f1 y + f0` (first kind, f3≠0, f2≠0) — removes the y² term (`z = y + f2/(3 f3)`) to a Chini n=3 equation; same implicit first integral |
 | `DSolve`Homogeneous` | `y'[x] == F(y/x)` (substitution `y=v x` → separable) |
 | `DSolve`Separable` | `y'[x] == g(x) h(y)` (`∫dy/h == ∫g dx + C[1]`) |
-| `DSolve`Exact` | `M + N y' == 0`, exact or via integrating factor `μ(x)`/`μ(y)` |
+| `DSolve`Exact` | `M + N y' == 0`, exact or via integrating factor `μ(x)`, `μ(y)`, or `μ = x^a y^b` (constant exponents `a,b` from the linear exactness condition `b(M/y) − a(N/x) + (M_y − N_x) == 0`, gated to polynomial `M,N` and accepted only after a symbolic exactness re-check) — solves e.g. `(x y − 2 x) y' == y − y^2 + 3 x^2 y^3` (`μ = x^-2 y^-3`) |
 | `DSolve`Clairaut` | `y == x y' + f(y')` (general lines + singular envelope) |
 | `DSolve`Lagrange` | `y == x φ(y') + ψ(y')`, φ(y')≠y' (d'Alembert) — **parametric** general solution `{{x->Function[{t},X(t)], y->Function[{t},Y(t)]}}`, `t=y'`, `X` from the associated linear ODE |
 | `DSolve`LinearConstantCoefficients` | `a_n y^(n)+…+a_0 y == g(x)` (char. polynomial + variation of parameters) |

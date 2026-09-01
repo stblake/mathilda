@@ -45,15 +45,22 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
                                         ds_d(expr_copy(FY), expr_new_symbol(Yn))))));
     if (ds_is_zero(Q)) { expr_free(Q); expr_free(FY); return NULL; }   /* purely linear */
 
-    /* n = Y Q_Y / Q, a constant != 0 */
-    Expr* nexp = eval_and_free(ds_call2(SYM_Times,
+    /* n = Y Q_Y / Q, a constant != 0.  Reduce (Cancel) BEFORE the free-of guard:
+     * Q is stored unexpanded (e.g. -2 x E^(2x) Y^3 hidden inside a sum), so the
+     * raw ratio still contains x/Y textually and ds_free_of would fall to a
+     * numeric probe that floating-point-cancels Q to 0 and reads 0^(-1) as
+     * "non-zero", wrongly rejecting a valid equation (and leaking Power::infy).
+     * Cancel — not Simplify — because this runs on the DECLINE path of every
+     * equation reaching Bernoulli: full Simplify hangs on a symbolic radical
+     * ratio (e.g. y' == Sqrt[y^4 + K] from AutonomousReduction), while Cancel is
+     * a cheap rational-GCD that still reduces the genuine constant exponent. */
+    Expr* nexp = eval_and_free(ds_call1("Cancel", eval_and_free(ds_call2(SYM_Times,
                     eval_and_free(ds_call2(SYM_Times, expr_new_symbol(Yn),
                                            ds_d(expr_copy(Q), expr_new_symbol(Yn)))),
-                    powneg1(expr_copy(Q))));
+                    powneg1(expr_copy(Q))))));
     if (!ds_free_of(nexp, Yn) || !ds_free_of(nexp, xvar) || ds_is_zero(nexp)) {
         expr_free(nexp); expr_free(Q); expr_free(FY); return NULL;
     }
-    nexp = ds_simplify(nexp);   /* reduce the (now known constant) exponent */
     Expr* omn = eval_and_free(ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(nexp))); /* 1-n */
     if (ds_is_zero(omn)) { expr_free(omn); expr_free(nexp); expr_free(Q); expr_free(FY); return NULL; }
 

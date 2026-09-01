@@ -3164,3 +3164,46 @@ gate, quiet speculative integrals, shifted-ordinary-point Frobenius). Key traps 
 
 See [[project_dsolve_kovacic_stress_hardening]],
 [[project_dsolve_recognizer_sign_error_passes_permissive_verify]].
+
+## DSolve — Chini reduction (b), x^a y^b exact, and the leaked-`1/0` triage (2026-09-01)
+
+Triaging two DSolve failures that printed `Power::infy: 1/0` then returned
+unevaluated (`y'==-x E^-x - y + x E^(2x) y^3`; `(x y-2x)y'==y-y^2+3x^2 y^3`).
+
+1. **A leaked `Power::infy` from a classifier is usually a *wrong* answer, not
+   just noise.** The Bernoulli/Chini exponent guard tested `nexp = Y Q_Y/Q` with
+   `FreeQ[·,x]` BEFORE reducing it. `Q` is stored unexpanded, so `nexp≡3` still
+   contained `x` textually → `ds_free_of` fell to the numeric sampler → a sample
+   point FP-cancelled `Q` to `0.0` → `0^(-1)` (the leaked message) → the resulting
+   `ComplexInfinity` was read as "definitely non-zero" → the constant exponent
+   looked x-dependent → the valid equation was rejected. Reduce candidate
+   expressions BEFORE a free-of/zero-test guard, never after.
+
+2. **Reduce with `Cancel`, not `Simplify`, on a hot decline path.** The guard runs
+   on EVERY equation reaching Bernoulli/Chini classification. `Simplify` there
+   hangs on a symbolic radical ratio (`y'==Sqrt[y^4+K]`, fed in by
+   `AutonomousReduction`'s recursion) — a 27.9s test suite blew past its 60s
+   `alarm()`. `Cancel` (rational-GCD) still collapses the genuine constant
+   exponent and is cheap on the radical case (it treats `Sqrt[…]` as a generator).
+
+3. **A new speculative `Solve`/`Integrate` in a cascade method is a cumulative
+   cost across the whole suite, not just its target.** The `x^a y^b` exact factor
+   called `ds_solve` on a sampled system for every equation reaching Exact without
+   `μ(x)`/`μ(y)` — including the radical systems from the autonomous recursion,
+   where `Solve` is slow. Gate it to `PolynomialQ[M]`/`PolynomialQ[N]` (the method
+   is a polynomial-ODE tool anyway). Verify suite *timing* against pre-change
+   (stash+rebuild), not just pass/fail — a global `alarm(60)` turns a slowdown
+   into a spurious "hang".
+
+4. **Bisecting a self-inflicted regression:** stash → rebuild → confirm the test
+   passed pre-change; restore → disable one suspect (here `if (0) …` on the new
+   call) → re-time. Isolated the entire overhead to one function in one build.
+
+5. **Two reductions for one method.** Chini has (a) reduce-to-autonomous
+   (`y=f^(-1/(n-1))u`, needs B,C const) and (b) linear-term removal
+   (`y=e^(∫g)w` → separable when `R/P` const) — different solvable sub-classes.
+   Add (b) as a fallback after (a) in the shared `dsolve_chini_first_integral`
+   (Abel benefits too); every branch is implicit-verify gated, so it is safe.
+
+See [[project_dsolve_chini_linremoval_and_xayb_exact]],
+[[project_dsolve_cancel_not_simplify_on_classifier_guard]].
