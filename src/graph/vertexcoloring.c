@@ -317,7 +317,11 @@ static void fvc_bb(FvcBB* s, int ncoloured, int used) {
 int fvc_search(const GraphAdj* a, int* colour, long* steps_out) {
     int n = a->n;
     if (steps_out) *steps_out = 0;
-    if (n <= 0) return 0;
+    /* Self-protect: fvc_bb's seen[]/forbid[] are stack arrays sized to the cap
+     * (FVC_MAX_VERTICES + 2). The head enforces the cap before calling in, but
+     * this symbol is exported (graph.h) and FVC_MAX_VERTICES is not, so a
+     * cross-TU caller cannot see the precondition -- enforce it here too. */
+    if (n <= 0 || n > FVC_MAX_VERTICES) return 0;
 
     int ub = fvc_dsatur_bound(a, colour);
     if (ub <= 0) return 0;                  /* allocation failure inside DSATUR */
