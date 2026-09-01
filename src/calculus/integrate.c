@@ -695,6 +695,9 @@ static Expr* integrate_definite(Expr* res) {
 /* Nesting depth of the method cascade (see integrate.h). */
 int g_integrate_depth = 0;
 
+/* Speculative-integration suppression counter (see integrate.h). */
+int g_integrate_quiet = 0;
+
 /* Fail-memo: the indefinite integrands the method cascade has FAILED on
  * (returned NULL for) so far in the CURRENT top-level evaluation.
  *

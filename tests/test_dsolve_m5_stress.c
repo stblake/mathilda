@@ -111,6 +111,32 @@ static void t_kov_stress_pole(void) {
         }
 }
 
+/* Kovacic Case-1 GROWTH at infinity (order at infinity = -2), completely
+ * reducible: r = a^2 x^2 + 3/(4 x^2) has the two elementary solutions
+ * x^(-1/2) Exp[+- a x^2/2].  This is the higher regime (r grows at infinity, so
+ * [sqrt r]_infinity is a non-constant polynomial) that the old delta>=2 slice did
+ * not reach; the full Case-1 closes it via two independent P Exp families (no
+ * reduction-of-order integral). */
+static void t_kov_stress_growth(void) {
+    int as[] = {1, 2, 3};
+    for (size_t ai = 0; ai < 3; ai++) {
+        int A = as[ai] * as[ai];
+        char eqn[256], res[256];
+        snprintf(eqn, sizeof(eqn), "y''[x] - (%d x^2 + 3/(4 x^2)) y[x] == 0", A);
+        snprintf(res, sizeof(res), "D[y[x],{x,2}] - (%d x^2 + 3/(4 x^2)) y[x]", A);
+        kovacic_ok(eqn, res);
+    }
+}
+
+/* Growth at infinity but with only ONE exponential solution: the reduction-of-
+ * order second solution is a non-elementary Erf form, whose Simplify (and downstream
+ * zero_test) hangs on the complex argument.  Case-1c must DECLINE that candidate
+ * cleanly so a solution still comes back (via Case 2) rather than looping.  This is
+ * a no-hang / progress guard, not a form assertion. */
+static void t_kov_growth_no_hang(void) {
+    ASSERT_TRUE("Head[DSolve[y''[x] - (x^2 + 5 + 2/x^2) y[x] == 0, y[x], x]] === List");
+}
+
 /* omega = b/x only (Euler, roots 0 and 1-b) -> r = (b^2 - b)/x^2. */
 static void t_kov_stress_euler(void) {
     int bs[] = {2, 3, -1, -2};
@@ -202,6 +228,8 @@ int main(void) {
     TEST(t_kov_stress_poly);
     TEST(t_kov_stress_apparent);
     TEST(t_kov_stress_pole);
+    TEST(t_kov_stress_growth);
+    TEST(t_kov_growth_no_hang);
     TEST(t_kov_stress_euler);
     TEST(t_frob_stress_ordinary);
     TEST(t_hyper_stress_kummer);

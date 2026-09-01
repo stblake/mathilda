@@ -255,6 +255,26 @@ static void t_method_specialform(void) {
     check_true("PossibleZeroQ[(y''[x] - x y[x]) /. "
                "DSolve`SpecialFunctionForm[y''[x] - x y[x] == 0, y, x][[1]]]");
 }
+/* Bessel-reducible pure-power potential y'' + A x^m y == 0 -> Sqrt[x] Z(...).
+ * y'' - x^4 y == 0 maps to the modified Bessel of order 1/6, argument x^3/3.
+ * Verified numerically (the BesselI/BesselK residual is a recurrence identity that
+ * zero_test cannot symbolically decide, so we check the emitted heads + a point). */
+static void t_bessel_reducible(void) {
+    check_form("Head[DSolve[y''[x] - x^4 y[x] == 0, y[x], x]]", "List");
+    check_true("Not[FreeQ[DSolve[y''[x] - x^4 y[x] == 0, y[x], x], BesselI[1/6, 1/3 x^3]]]");
+    check_true("Not[FreeQ[DSolve[y''[x] - x^4 y[x] == 0, y[x], x], BesselK[1/6, 1/3 x^3]]]");
+    /* the oscillatory sign branch (A > 0) uses J/Y */
+    check_true("Not[FreeQ[DSolve[y''[x] + x^6 y[x] == 0, y[x], x], BesselJ[1/8, 1/4 x^4]]]");
+    check_true("Abs[N[(D[Sqrt[x] BesselI[1/6, x^3/3], {x,2}] - x^4 Sqrt[x] BesselI[1/6, x^3/3]) "
+               "/. x -> 13/10]] < 1/1000000");
+}
+/* Hang guard: a high-degree rational potential must not drive Kovacic into an
+ * unbounded Factor/Solve/Integrate; it declines fast to the series fallback.  If
+ * the degree gate regresses this loops forever, so reaching the assertion at all
+ * is the real test. */
+static void t_kovacic_highdegree_no_hang(void) {
+    check_form("Head[DSolve[y''[x] + ((x^10 - 1)/(x^12 + 1)) y[x] == 0, y[x], x]]", "List");
+}
 
 /* ---- hypergeometric recognizers: Kummer (1F1) / Gauss (2F1) ---- */
 static void t_hypergeometric_kummer(void) {
@@ -907,6 +927,8 @@ int main(void) {
     TEST(t_bessel);
     TEST(t_bessel_modified);
     TEST(t_method_specialform);
+    TEST(t_bessel_reducible);
+    TEST(t_kovacic_highdegree_no_hang);
     TEST(t_hypergeometric_kummer);
     TEST(t_hypergeometric_gauss);
     TEST(t_method_hypergeometric_kummer);

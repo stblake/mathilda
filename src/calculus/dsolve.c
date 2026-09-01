@@ -102,6 +102,7 @@ extern Expr** dsolve_chini_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_abel_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_frobenius_shifted_try(DSolveProblem* P, size_t* nbranch);
 extern void dsolve_quadrature_init(void);
 extern void dsolve_linear1_init(void);
 extern void dsolve_bernoulli_init(void);
@@ -228,6 +229,10 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
             /* series fallback: always-available, so it runs last */
             if (!result) result = dsolve_run(&P, dsolve_frobenius_try);
+            /* very last resort: if x=0 was an irregular/obstructed singular point,
+             * expand the series about a nearby ordinary point so a linear ODE with
+             * any ordinary point never returns unevaluated (auto-dispatch only). */
+            if (!result) result = dsolve_run(&P, dsolve_frobenius_shifted_try);
             break;
         case DS_QUADRATURE:   result = dsolve_run(&P, dsolve_quadrature_try);  break;
         case DS_LINEAR1:      result = dsolve_run(&P, dsolve_linear1_try);     break;

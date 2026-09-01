@@ -1,57 +1,49 @@
-# Task: Complete Kovacic Case 1 (apparent singularities) — closed form over series
+# DSolve / Kovacic stress-test hardening (Tiers A+B+C) — DONE
 
-Goal: `DSolve` returns the elementary closed form for Legendre/Chebyshev/Gegenbauer/Jacobi
-(currently a truncated series, and Chebyshev hangs). Fully algorithmic via a complete classical
-Kovacic Case 1 for arbitrary rational `r` (apparent singularities, higher-order + complex poles).
-All engine work in `src/calculus/dsolve_kovacic.c`.
+Plan: `/Users/user/.claude/plans/the-following-set-of-moonlit-wirth.md`
 
-## Steps
+## Tier A — Robustness & correctness
+- [x] A1. Early complexity gate in `dsolve_kovacic_try` (denom degree / pole count) — In[12] hang FIXED (fast series)
+- [x] A2. Silence `Integrate::nonelem` on speculative Kovacic integrals — In[5] message GONE
+- [x] A3. Frobenius expansion at a shifted ordinary point — In[7]→O[x-2]^7, session-2 In[1]→O[x-1]^7 (was bare-uneval); warnings muted
+- [x] A4. Absorb cosmetic constant factor from `second_solution` into C[2] — In[2] now clean Euler form
 
-- [x] 1. Read `dsolve_common.h` helper API (dsolve_analyze_roots enumerates poles incl. complex).
-- [x] 2. Factor out `solve_monic_P(theta, R2, d, x, counter)` (R2 precomputed per θ).
-- [x] 3. Pole locals via Limit[(x-c)^2 r] (order ≤2 + complex); [√r]_∞=0 for δ≥2.
-- [x] 4. Add `kovacic_case1_general`: enumerate poles+signs, dedup degenerate, search d,
-        collect y1 candidates, pick cleanest by LeafCount, y-level reduction of order.
-- [x] 5. Wire into `dsolve_kovacic_try` after pure-Riccati Case 1, for all rational r (degd≥1).
-- [x] 5b. Fixes: nu==0 guard in solve_ansatz (no more Solve::ivar); drop numeric_verify (exact
-         by construction); y-level assembly (avoid √·ArcTanh Simplify blow-up); skip final
-         realify (avoid Gegenbauer 7s). All class members now <0.5s.
-- [x] 6. Case-2 hang: root-caused to the σ-solve (ds_solve) on complex-pole (degree-≥2
-        factor) systems; guarded by "all irreducible factors linear" gate → declines to series.
-        Also made Case 1c decline fast via numeric degree test (complex α).
-- [x] 7. REPL-verified: Legendre n=1..5, Chebyshev n=2/3, Gegenbauer, complex poles — fast+correct.
-- [x] 8. Regression: single-pole, poly-r, Hermite series, non-Liouvillian declines — all intact.
-- [x] 9. Tests: 6 new cases in `tests/test_dsolve.c` (Legendre 1/2, Chebyshev, complex poles,
-        auto-closed-form, no-hang). All 3 DSolve suites (incl. m5 Case-2) pass.
-- [x] 10. Gates: `make check-c99` clean; valgrind — no new leak (only pre-existing
-         solve_ansatz→Together baseline ≈13.6KB); broad 9-ODE hang sweep clean.
-- [ ] 11. Docs: calculus.md, changelog 2026-08-31, DSOLVE_PLAN.md §1c, docstring; memory note.
+## Tier B — Kovacic Case-1 completion (full classical algorithm)
+- [x] B1. `[√r]_c` for even-order poles ≥ 4 (`kovacic_pole_data`, lifted `mult>2` cap)
+- [x] B2. Non-constant `[√r]_∞` for r growing at ∞ (`kovacic_inf_data`, x→1/y; b uses `([√r])²`)
+- [x] B3. (s∞, mask) enumeration + degree bound + `solve_monic_P`; **two independent families first**, then reduction of order
+- [x] B4. Hang guard: decline reduction-of-order integral in Erf/Erfi/… (`has_hang_special`)
+  - NOTE: In[1] (Kovacic's example) finds y1 but y2 is genuinely non-elementary → graceful series
+  - NOTE: session-2 In[1] has irrational pole exponents (√2) → not Case-1 → graceful series
+  - PROVEN on `y''−(x²+3/(4x²))y==0` (growth at ∞, old δ≥2 rejected it)
+
+## Tier C — Bessel/Airy change-of-variable recognizer (In[11])
+- [x] C1. Recognize `P==0, Q == A x^m` → `√x Z_{1/(m+2)}(...)`; J/Y for A>0, I/K for A<0. In[11] FIXED
+  - NOTE: pipe protocol needs INTEGER ids; `"id":"11"` (string) is silently dropped (test-harness gotcha, cost a detour)
+  - NOTE: permissive verify accepted a WRONG (sign-flipped) Bessel form — always numerically spot-check special-fn recognizers
+
+## Verification
+- [x] Regression tests: `test_dsolve.c` (Bessel-reducible, high-degree no-hang), `test_dsolve_m5_stress.c` (growth closed-forms, growth no-hang) — all pass
+- [x] Manual NDJSON checks on all 14 corpus cases — closed form where elementary, graceful series otherwise, no hangs, clean stderr
+- [x] `make check-c99` passes (rc=0); valgrind is Linux-CI (macOS baseline noise); new paths run 1.1s clean
+- [x] Docs: `docs/spec/builtins/calculus.md` (Kovacic / SpecialFunctionForm / PowerSeries rows) + `docs/spec/changelog/2026-08-31.md`
+- [x] Existing suites (`dsolve_tests`, `dsolve_m5_stress_tests`) still pass; stress back to 7s
 
 ## Review
-
-**Outcome:** `DSolve[(1-x^2)y''-2x y'+2y==0, y, x]` now returns the elementary closed
-form `C[1] x + C[2](1 - x ArcTanh[x])` (Legendre P₁/Q₁) instead of a truncated series —
-matching Maple/Mathematica. Fully algorithmic via the completed Kovacic Case 1, not a
-Legendre pattern.
-
-**What changed** (all in `src/calculus/dsolve_kovacic.c`):
-- `kovacic_case1_general` — classical Case 1 apparent-singularity construction for any
-  rational `r`: poles (incl. complex) via `dsolve_analyze_roots`, local exponents
-  `α_c=(1±√(1+4b_c))/2`, monic `P` of the classical degree `d=α_∞−Σα_c`, `z1=P Exp[∫θ]`.
-- `solve_monic_P`, `numeric_nonneg_int` helpers; `solve_ansatz` nu==0 short-circuit.
-- Case-2 guard: skip when a denominator factor has degree ≥ 2 (avoids the σ-solve hang).
-- Wired as Case 1c after pure Case 1, before Case 2.
-
-**Key engineering lessons** (saved to memory
-`project_dsolve_kovacic_case1_apparent_singularity`): y-level reduction of order (not
-z-level — avoids a 50 s √·ArcTanh Simplify blow-up); numeric degree test (complex α
-symbolic Simplify hangs); skip final realify (Gegenbauer 17 s → 0.1 s); cleanest-y1 by
-LeafCount; Case-2 complex-pole guard (never TimeConstrained in-engine).
-
-**Results:** Legendre n=1..5, Chebyshev n=2/3, Gegenbauer, complex poles — all closed
-form, all < 0.5 s, residuals ~1e-14. Hermite/Laguerre correctly stay series (2nd sol
-non-elementary). `(x³+1)y''+xy'+y` no longer hangs (1.1 s → series).
-
-**Verification:** all 3 DSolve suites pass (6 new tests added); `make check-c99` clean;
-valgrind — no new leak (only the pre-existing ~13.6 KB `solve_ansatz→Together`
-baseline); broad 9-ODE hang sweep clean.
+- **Root causes were shared, not per-case.** Buckets: hang (missing degree gate),
+  bare-unevaluated (Frobenius only expanded at x=0), fell-to-series (Case-1
+  incompleteness OR genuinely non-Liouvillian), cosmetic (unabsorbed constant),
+  leaked warning (speculative integral).
+- **Reality check on the corpus:** In[1] and session-2 In[1] — the two "crown
+  jewel" targets — turned out NOT to have elementary general solutions (In[1]'s 2nd
+  solution is non-elementary; session-2 In[1] has irrational pole exponents, not
+  Case-1). Tier B is still a correct, verified generalization (proven on a
+  constructed growth-at-∞ case), but its corpus impact is the guard behaviour
+  (fast, clean declines) rather than new closed forms for those two.
+- **Two soundness lessons captured to memory:** (1) the permissive verify accepts a
+  wrong special-function candidate whose residual zero_test can't disprove — always
+  numerically spot-check a recognizer; (2) the NDJSON pipe silently drops string
+  `id`s (test-harness gotcha).
+- **Elegance:** kept the pinned-method contracts intact (shifted-point fallback is
+  cascade-only; growth reduction-of-order declines special functions instead of
+  hanging), so no existing behaviour regressed.

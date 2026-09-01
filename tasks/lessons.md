@@ -3123,3 +3123,44 @@ new solver capability makes obsolete: t_homogeneous_algebraic asserted the
 transcendental case stays `Head==DSolve`, which broke once it solved implicitly —
 update the assertion, don't just make the feature avoid the test.
 See [[project_dsolve_decline_gap_verify_gated_fixes]].
+
+## DSolve Kovacic stress hardening — generalize the algorithm, but check the corpus is actually elementary
+
+Triaged a Kovacic stress corpus and built general fixes (full Case-1 with
+higher-order poles + growth-at-∞, Bessel-reducible recognizer, denom-degree hang
+gate, quiet speculative integrals, shifted-ordinary-point Frobenius). Key traps hit:
+
+1. **The motivating examples weren't elementary.** In[1] (Kovacic's OWN paper
+   example) and the `x^4 y''+…` example were framed as the crown-jewel closed-form
+   targets. After implementing full Case-1: In[1] finds y1 but its 2nd solution is
+   genuinely non-elementary (Risch-decided nonelem), and the x^4 example has
+   irrational pole exponents (√2) → not Case-1 at all. Both correctly stay graceful
+   series. Lesson: before claiming "this should be a closed form," verify the 2nd
+   solution's reduction-of-order integral is elementary AND the local exponents are
+   rational — don't assume from surface structure. Prove a new solver capability on
+   a CONSTRUCTED case (`y''−(x²+3/(4x²))y==0` completely reducible) rather than the
+   ambiguous corpus example.
+
+2. **`b` uses `([√r])²`, not the raw √r Laurent series.** They agree at a pole for
+   ν=2 but DIVERGE at ∞ for ν′=1 (raw → wrong d=3, `([√r]_∞)²` → right d=2). This
+   single constant is the difference between finding and missing the solution.
+
+3. **Lifting a decline gate can re-expose a downstream hang.** The old Case-1c
+   δ≥2 restriction happened to exclude growth-at-∞ equations, which route through
+   reduction-of-order integrals that produce Erf/Erfi with complex args →
+   Simplify/zero_test hang. Lifting δ≥2 without a `has_hang_special` guard turned a
+   Case-2-solvable equation into an infinite loop (m5 stress went 7s → 60s timeout).
+   Guard the NEW path's failure modes, don't just widen the entrance.
+
+4. **Numeric independence, not Simplify.** Checking two candidates independent via
+   `ds_simplify(ya/yb)` is the exact radical/exp Simplify blow-up the code already
+   avoids elsewhere; use `ds_d(ya/yb)` sampled numerically instead.
+
+5. **Pinned-method contracts.** The shifted-ordinary-point series must be
+   cascade-only (auto DSolve), NOT in `dsolve_frobenius_try` — the pinned
+   `DSolve`FrobeniusSeries` builtin shares that fn and has `P->method==NULL` too, so
+   gating on method doesn't distinguish it. A separate `_shifted_try` in the auto
+   branch keeps the pinned "series about origin, else decline" test green.
+
+See [[project_dsolve_kovacic_stress_hardening]],
+[[project_dsolve_recognizer_sign_error_passes_permissive_verify]].

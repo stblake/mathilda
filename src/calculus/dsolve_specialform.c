@@ -192,6 +192,83 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
         expr_free(Pdiff);
     }
 
+    /* ---- Bessel-reducible pure-power potential: P == 0, Q == A x^m with m a
+     *      number != 0, -2.  The reduced equation y'' + A x^m y == 0 has
+     *      y = Sqrt[x] Z_{1/(m+2)}(kappa x^((m+2)/2)), kappa = 2 Sqrt[|A|]/(m+2),
+     *      with Z = J/Y for A > 0 and the modified I/K for A < 0.  Fixes
+     *      y'' - x^4 y == 0 -> Sqrt[x](C[1] BesselI[1/6, x^3/3] + C[2] BesselK[1/6, x^3/3]).
+     *      Airy (Q linear => m==1) and literal Bessel (P==1/x) run first, so the
+     *      !general guard keeps this from colliding with them.  Verified, like the
+     *      other rows, by the substrate's back-substitution. */
+    if (!general && ds_is_zero(Pc)) {
+        Expr* reff = ds_simplify(expr_copy(Qc));   /* Q == A x^m (P==0, so this is the potential) */
+        Expr* m = NULL; Expr* mp2 = NULL; Expr* A = NULL;
+        if (!ds_is_zero(reff)) {
+            /* m = x reff'/reff : the exponent when reff = A x^m */
+            Expr* dr = ds_d(expr_copy(reff), expr_new_symbol(xvar));
+            Expr* invr = expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ expr_copy(reff), expr_new_integer(-1) }, 2);
+            m = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar),
+                    ds_call2(SYM_Times, dr, invr)));
+            Expr* nqm = eval_and_free(ds_call1("NumberQ", expr_copy(m)));
+            bool mok = (nqm->type == EXPR_SYMBOL && nqm->data.symbol.name == SYM_True)
+                     && ds_free_of(m, xvar);
+            expr_free(nqm);
+            if (mok) mp2 = ds_simplify(ds_call2(SYM_Plus, expr_copy(m), expr_new_integer(2)));
+            if (mok && !ds_is_zero(m) && mp2 && !ds_is_zero(mp2)) {
+                /* A = reff / x^m (free of x for a pure power) */
+                Expr* xm = expr_new_function(expr_new_symbol(SYM_Power),
+                               (Expr*[]){ expr_new_symbol(xvar), expr_copy(m) }, 2);
+                A = ds_simplify(ds_call2(SYM_Times, expr_copy(reff),
+                        expr_new_function(expr_new_symbol(SYM_Power),
+                            (Expr*[]){ xm, expr_new_integer(-1) }, 2)));
+                Expr* nqA = eval_and_free(ds_call1("NumberQ", expr_copy(A)));
+                bool Aok = (nqA->type == EXPR_SYMBOL && nqA->data.symbol.name == SYM_True)
+                         && ds_free_of(A, xvar);
+                expr_free(nqA);
+                Expr* nA = eval_and_free(ds_call1("N", expr_copy(A)));   /* numeric sign of A */
+                double av = (nA->type == EXPR_REAL) ? nA->data.real
+                          : (nA->type == EXPR_INTEGER) ? (double)nA->data.integer : 0.0;
+                expr_free(nA);
+                if (Aok && av != 0.0) {
+                    bool pos = av > 0.0;
+                    Expr* beta = pos ? expr_copy(A)
+                                     : ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(A)));
+                    Expr* n = ds_simplify(expr_new_function(expr_new_symbol(SYM_Power),  /* 1/(m+2) */
+                                  (Expr*[]){ expr_copy(mp2), expr_new_integer(-1) }, 2));
+                    Expr* kappa = ds_simplify(ds_call2(SYM_Times,          /* 2 Sqrt[beta]/(m+2) */
+                                      ds_call2(SYM_Times, expr_new_integer(2), ds_call1("Sqrt", beta)),
+                                      expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ expr_copy(mp2), expr_new_integer(-1) }, 2)));
+                    Expr* half = ds_simplify(ds_call2(SYM_Times, expr_copy(mp2),  /* (m+2)/2 */
+                                     expr_new_function(expr_new_symbol(SYM_Power),
+                                         (Expr*[]){ expr_new_integer(2), expr_new_integer(-1) }, 2)));
+                    Expr* arg = ds_simplify(ds_call2(SYM_Times, expr_copy(kappa),  /* kappa x^half */
+                                    expr_new_function(expr_new_symbol(SYM_Power),
+                                        (Expr*[]){ expr_new_symbol(xvar), expr_copy(half) }, 2)));
+                    Expr* xsym = expr_new_symbol(xvar);
+                    Expr* sqrtx = powrat(xsym, 1, 2);   /* Sqrt[x]; powrat borrows */
+                    expr_free(xsym);
+                    const char* f0 = pos ? "BesselJ" : "BesselI";
+                    const char* f1 = pos ? "BesselY" : "BesselK";
+                    Expr* b0 = ds_call2(SYM_Times, expr_copy(sqrtx),
+                                   expr_new_function(expr_new_symbol(f0),
+                                       (Expr*[]){ expr_copy(n), expr_copy(arg) }, 2));
+                    Expr* b1 = ds_call2(SYM_Times, expr_copy(sqrtx),
+                                   expr_new_function(expr_new_symbol(f1),
+                                       (Expr*[]){ expr_copy(n), expr_copy(arg) }, 2));
+                    general = combo(b0, b1);
+                    expr_free(sqrtx); expr_free(n); expr_free(kappa);
+                    expr_free(half); expr_free(arg);
+                }
+            }
+        }
+        expr_free(reff);
+        if (m) expr_free(m);
+        if (mp2) expr_free(mp2);
+        if (A) expr_free(A);
+    }
+
     /* ---- Kummer (confluent hypergeometric 1F1): P == b/x - 1, Q == -a/x ----
      * y = C[1] 1F1[a,b,x] + C[2] x^(1-b) 1F1[a-b+1, 2-b, x].  Read a,b directly:
      * x(P+1) free of x is b, -x Q free of x is a.  The second basis needs b not

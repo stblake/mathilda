@@ -16,6 +16,7 @@
 #include "../internal.h"
 #include "../zero_test.h"
 #include "../ndarray.h"
+#include "integrate.h"          /* g_integrate_quiet: silence speculative nonelem */
 
 #include <stdlib.h>
 #include <string.h>
@@ -615,7 +616,9 @@ Expr* dsolve_normal_form(const Expr* Pc, const Expr* Qc, const char* xvar,
         Expr* half = eval_and_free(ds_call2(SYM_Times, expr_copy((Expr*)Pc),
                          expr_new_function(expr_new_symbol(SYM_Power),
                              (Expr*[]){ expr_new_integer(2), expr_new_integer(-1) }, 2)));
+        g_integrate_quiet++;   /* speculative recovery ∫P/2; non-elementary => decline */
         Expr* integ = ds_integrate(expr_copy(half), expr_new_symbol(xvar));
+        g_integrate_quiet--;
         if (!ds_has_head(integ, SYM_Integrate)) {
             Expr* back = ds_d(expr_copy(integ), expr_new_symbol(xvar));
             Expr* diff = eval_and_free(ds_call2(SYM_Subtract, back, expr_copy(half)));

@@ -30,6 +30,16 @@ Expr* builtin_integrate(Expr* res);
  * (depth <= 1), never for an internal recursion variable. */
 extern int g_integrate_depth;
 
+/* Suppression counter for the user-facing Integrate::nonelem diagnostic.  When
+ * > 0, the diagnostic is not printed even at the outermost frame.  A caller that
+ * integrates *speculatively* — where a non-elementary result means "this method
+ * declines", not "warn the user about their input" — brackets its ds_integrate
+ * calls with g_integrate_quiet++/-- so those declines stay silent.  The Kovacic
+ * solver (recovery weight, second solution, apparent-singularity integrals) is
+ * the first such caller: a RootSum-valued log part there is a decline, not a
+ * report about the ODE the user actually typed. */
+extern int g_integrate_quiet;
+
 /* Registers `Integrate` in the symbol table along with its docstring
  * and attributes.  Also calls `intrat_init()` to register every
  * `Integrate`...` package builtin so they are available before the

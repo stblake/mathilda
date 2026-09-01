@@ -26,6 +26,7 @@
 #include "../sym_intern.h"
 #include "../symtab.h"
 #include "../attr.h"
+#include "../arithmetic.h"      /* arith_warnings_mute_push/pop for the ordinary-point probe */
 #include <stdlib.h>
 
 #define FROB_ORDER 6   /* number of series terms past the leading one (a_0..a_N) */
@@ -85,6 +86,24 @@ static Expr* mk_seriesdata(const char* x, Expr** coeffs, size_t ncoef,
     return expr_new_function(expr_new_symbol("SeriesData"), args, 6);
 }
 
+/* SeriesData centered at an arbitrary expansion point x0 (x0 borrowed). */
+static Expr* mk_seriesdata_at(const char* x, const Expr* x0, Expr** coeffs, size_t ncoef,
+                              int nmin, int nmax, int den) {
+    Expr* clist = expr_new_function(expr_new_symbol(SYM_List), coeffs, ncoef);
+    Expr* args[6] = { expr_new_symbol(x), expr_copy((Expr*)x0), clist,
+                      expr_new_integer(nmin), expr_new_integer(nmax), expr_new_integer(den) };
+    return expr_new_function(expr_new_symbol("SeriesData"), args, 6);
+}
+
+/* Taylor coefficient [ (x-x0)^k ] e about x=x0 = (1/k!) (D[e,{x,k}] /. x->x0). */
+static Expr* taylor_coeff_at(const Expr* e, const char* x, const Expr* x0, int k) {
+    Expr* d = expr_copy((Expr*)e);
+    for (int i = 0; i < k; i++) d = ds_d(d, expr_new_symbol(x));
+    Expr* at = ds_subst(d, expr_new_symbol(x), expr_copy((Expr*)x0));
+    Expr* kfac = eval_and_free(ds_call1("Factorial", expr_new_integer(k)));
+    return ds_simplify(T2(at, Inv(kfac)));
+}
+
 /* x^r * Sum_{i=0}^N a[i] x^i, as Power[x,r] * SeriesData (a borrowed). */
 static Expr* xr_series(const char* x, const Expr* r, Expr** a, int N) {
     Expr** cc = malloc((size_t)(N + 1) * sizeof(Expr*));
@@ -105,10 +124,11 @@ static Expr* indicial_poly(const Expr* P0, const Expr* Q0, Expr* m) {
 /* ------------------------------------------------------------------ *
  *  Ordinary point: two power series folded into one SeriesData        *
  * ------------------------------------------------------------------ */
-static Expr* frobenius_ordinary(const Expr* Pc, const Expr* Qc, const char* x, int N) {
+static Expr* frobenius_ordinary_at(const Expr* Pc, const Expr* Qc, const char* x,
+                                   const Expr* x0, int N) {
     Expr** p = malloc((size_t)(N + 1) * sizeof(Expr*));
     Expr** q = malloc((size_t)(N + 1) * sizeof(Expr*));
-    for (int k = 0; k <= N; k++) { p[k] = taylor_coeff(Pc, x, k); q[k] = taylor_coeff(Qc, x, k); }
+    for (int k = 0; k <= N; k++) { p[k] = taylor_coeff_at(Pc, x, x0, k); q[k] = taylor_coeff_at(Qc, x, x0, k); }
 
     Expr** a = malloc((size_t)(N + 1) * sizeof(Expr*));
     a[0] = ds_const(1);   /* a_0 = C[1] */
@@ -126,11 +146,18 @@ static Expr* frobenius_ordinary(const Expr* Pc, const Expr* Qc, const char* x, i
 
     Expr** cc = malloc((size_t)(N + 1) * sizeof(Expr*));
     for (int i = 0; i <= N; i++) cc[i] = expr_copy(a[i]);
-    Expr* body = mk_seriesdata(x, cc, (size_t)(N + 1), 0, N + 1, 1);
+    Expr* body = mk_seriesdata_at(x, x0, cc, (size_t)(N + 1), 0, N + 1, 1);
     free(cc);
 
     for (int k = 0; k <= N; k++) { expr_free(p[k]); expr_free(q[k]); expr_free(a[k]); }
     free(p); free(q); free(a);
+    return body;
+}
+
+static Expr* frobenius_ordinary(const Expr* Pc, const Expr* Qc, const char* x, int N) {
+    Expr* zero = expr_new_integer(0);
+    Expr* body = frobenius_ordinary_at(Pc, Qc, x, zero, N);
+    expr_free(zero);
     return body;
 }
 
@@ -243,6 +270,30 @@ static Expr* frobenius_regsing(const Expr* Pc, const Expr* Qc, const char* x, in
     return body;
 }
 
+/* Find a small ordinary expansion point x0 (P and Q both analytic there) for when
+ * x=0 is not usable.  Returns an owned Expr* or NULL.  A rational P,Q is analytic
+ * wherever it is finite, so we substitute each candidate and reject poles. */
+static Expr* find_ordinary_point(const Expr* Pc, const Expr* Qc, const char* x) {
+    static const int cand[][2] = { {1,1},{-1,1},{2,1},{-2,1},{3,1},{-3,1},
+                                   {5,1},{-5,1},{1,2},{-1,2},{3,2},{7,1} };
+    for (size_t i = 0; i < sizeof(cand)/sizeof(cand[0]); i++) {
+        Expr* x0 = (cand[i][1] == 1)
+            ? expr_new_integer(cand[i][0])
+            : eval_and_free(ds_call2(SYM_Times, expr_new_integer(cand[i][0]),
+                  PowE(expr_new_integer(cand[i][1]), expr_new_integer(-1))));
+        /* probing a singular candidate legitimately forms 1/0; mute Power::infy */
+        arith_warnings_mute_push();
+        Expr* pv = ds_simplify(ds_subst(expr_copy((Expr*)Pc), expr_new_symbol(x), expr_copy(x0)));
+        Expr* qv = ds_simplify(ds_subst(expr_copy((Expr*)Qc), expr_new_symbol(x), expr_copy(x0)));
+        arith_warnings_mute_pop();
+        bool ok = is_finite_value(pv) && is_finite_value(qv);
+        expr_free(pv); expr_free(qv);
+        if (ok) return x0;
+        expr_free(x0);
+    }
+    return NULL;
+}
+
 /* ------------------------------------------------------------------ *
  *  Cascade entry                                                      *
  * ------------------------------------------------------------------ */
@@ -261,6 +312,49 @@ Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch) {
     else if (pord >= 0 && pord <= 1 && qord >= 0 && qord <= 2)
         body = frobenius_regsing(Pc, Qc, x, N);   /* else irregular -> decline */
 
+    expr_free(Pc); expr_free(Qc);
+    if (!body) return NULL;
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = body;
+    *nbranch = 1;
+    return out;
+}
+
+/* True iff e is a rational function of x (Numerator and Denominator of Together[e]
+ * are both polynomials in x). */
+static bool is_rational_in(const Expr* e, const char* x) {
+    Expr* tg  = eval_and_free(ds_call1("Together", expr_copy((Expr*)e)));
+    Expr* num = eval_and_free(ds_call1("Numerator", expr_copy(tg)));
+    Expr* den = eval_and_free(ds_call1("Denominator", tg));      /* consumes tg */
+    Expr* q1  = eval_and_free(ds_call2("PolynomialQ", num, expr_new_symbol(x)));
+    Expr* q2  = eval_and_free(ds_call2("PolynomialQ", den, expr_new_symbol(x)));
+    const char* T = intern_symbol("True");
+    bool ok = (q1->type == EXPR_SYMBOL && q1->data.symbol.name == T)
+           && (q2->type == EXPR_SYMBOL && q2->data.symbol.name == T);
+    expr_free(q1); expr_free(q2);
+    return ok;
+}
+
+/* Cascade-only last resort: expand about a small ordinary point when x=0 is not
+ * usable, so an AUTOMATIC DSolve of a linear ODE never returns unevaluated.  Kept
+ * separate from dsolve_frobenius_try (and unregistered as a pinned method) so the
+ * pinned DSolve`PowerSeries / `FrobeniusSeries keeps its "series about the origin,
+ * else decline" contract.  Reached only after dsolve_frobenius_try has declined
+ * (x=0 irregular, or regular-singular but obstructed), i.e. x=0 is not ordinary.
+ * Restricted to RATIONAL P,Q: for a rational-coefficient linear ODE the series
+ * about any ordinary point converges and is the natural answer (In[7], the
+ * x^4 y''+... example).  A transcendental coefficient (e.g. Exp[1/x]) is left
+ * unevaluated, matching Mathematica, rather than expanded about an arbitrary point. */
+Expr** dsolve_frobenius_shifted_try(DSolveProblem* P, size_t* nbranch) {
+    Expr* Pc; Expr* Qc;
+    if (!dsolve_second_order_PQ(P, &Pc, &Qc)) return NULL;
+    const char* x = P->ind_names[0];
+    if (!is_rational_in(Pc, x) || !is_rational_in(Qc, x)) {
+        expr_free(Pc); expr_free(Qc); return NULL;
+    }
+    Expr* body = NULL;
+    Expr* x0 = find_ordinary_point(Pc, Qc, x);
+    if (x0) { body = frobenius_ordinary_at(Pc, Qc, x, x0, FROB_ORDER); expr_free(x0); }
     expr_free(Pc); expr_free(Qc);
     if (!body) return NULL;
     Expr** out = malloc(sizeof(Expr*));

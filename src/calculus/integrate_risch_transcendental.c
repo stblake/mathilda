@@ -685,7 +685,7 @@ Expr* builtin_rischtranscendental(Expr* res) {
      * at depth >= 2 — is not the user's integrand: naming its gensym variable
      * (Integrate`DerivativeDivides`u$N) in a message would be meaningless, so we
      * stay silent there and let the outermost frame speak. */
-    if (!result && g_integrate_depth <= 1
+    if (!result && g_integrate_depth <= 1 && g_integrate_quiet == 0
         && rt_decide_field(f, x) == RT_DEC_NONELEMENTARY) {
         char* fs = expr_to_string(f);
         char* xs = expr_to_string(x);
