@@ -161,6 +161,33 @@ static void exact_ode_ok(const char* b1, const char* b0) {
     method_ok("DSolve`ExactODE", eqn, res);
 }
 
+/* OperatorFactor: compose first-order factors (D - r_i) into a monic operator L,
+ * pin DSolve`OperatorFactor, verify Head===List then back-substitution.  Factors
+ * are given as a Mathilda list string; choose them (shifted-Euler / all-constant)
+ * so every reduction integral is elementary by construction. */
+static void operfactor_ok(const char* rs) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+        "Module[{rs=%s, w=y[x], op, s}, Do[w=D[w,x]-rs[[k]] w,{k,Length[rs]}]; op=Expand[w]; "
+        "s=DSolve`OperatorFactor[op==0, y, x]; "
+        "Head[s]===List && PossibleZeroQ[op /. s[[1]]]]", rs);
+    ASSERT_TRUE(buf);
+}
+
+/* DFactor: factor the composed operator and reconstruct it from the returned
+ * factors (apply the Dx-factors, rightmost first, to a concrete test function). */
+static void dfactor_ok(const char* rs) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+        "Module[{rs=%s, w, op, optf, fs, recon, tf=Exp[x]+x^2+x^5}, "
+        "w=y[x]; Do[w=D[w,x]-rs[[k]] w,{k,Length[rs]}]; op=Expand[w]; "
+        "w=tf; Do[w=D[w,x]-rs[[k]] w,{k,Length[rs]}]; optf=w; "     /* reference: L[tf] */
+        "fs = DSolve`DFactor[op==0, y[x], x]; "
+        "recon = Fold[Function[{u,f}, D[u,x] + (f /. Dx->0) u], tf, fs]; "
+        "Head[fs]===List && Length[fs]==Length[rs] && PossibleZeroQ[recon - optf]]", rs);
+    ASSERT_TRUE(buf);
+}
+
 /* reduction of order, 2nd-order missing y: y'' == f(x) y'. */
 static void ro_ok(const char* f) {
     char eqn[256], res[256];
@@ -368,6 +395,28 @@ static void t_stress_exactode(void) {
     method_ok("DSolve`ExactODE", "x y''[x] + 3 y'[x] == x", "x y''[x] + 3 y'[x] - x");
 }
 
+static void t_stress_operfactor(void) {
+    /* all-constant spectra (order 3 & 4) */
+    operfactor_ok("{1, 2, 3}");
+    operfactor_ok("{-1, 1, 2}");
+    operfactor_ok("{1, 2, 3, 4}");
+    /* shifted-Euler (shared pole x-b, b != 0 — EulerCauchy declines these) */
+    operfactor_ok("{1/(x-1), 2/(x-1), 4/(x-1)}");
+    operfactor_ok("{1/(x-2), 3/(x-2), 5/(x-2)}");
+    operfactor_ok("{2/(x+1), 3/(x+1), 4/(x+1), 6/(x+1)}");
+    /* resonant repeated factor (secular Log in the basis) */
+    operfactor_ok("{1/(x-1), 1/(x-1), 3/(x-1)}");
+    /* Euler at 0 (claimed by EulerCauchy in AUTO, still solved when pinned) */
+    operfactor_ok("{1/x, 2/x, 4/x}");
+}
+
+static void t_stress_dfactor(void) {
+    dfactor_ok("{1, 2, 3}");
+    dfactor_ok("{1, 2, 3, 4}");
+    dfactor_ok("{1/(x-1), 2/(x-1), 4/(x-1)}");
+    dfactor_ok("{2/(x+1), 3/(x+1), 5/(x+1)}");
+}
+
 static void t_stress_reduce_order(void) {
     const char* fs[] = {"1/x", "2", "-1", "3", "2/x"};
     for (size_t i = 0; i < 5; i++) ro_ok(fs[i]);
@@ -449,6 +498,8 @@ int main(void) {
     TEST(t_stress_constcoeff);
     TEST(t_stress_euler);
     TEST(t_stress_exactode);
+    TEST(t_stress_operfactor);
+    TEST(t_stress_dfactor);
     TEST(t_stress_reduce_order);
     TEST(t_stress_reduce_order_riccati);
     TEST(t_stress_riccati);

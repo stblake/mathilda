@@ -436,6 +436,58 @@ static void t_kovacic_declines(void) {
     check_form("Head[DSolve`Kovacic[x^2 y''[x] + x y'[x] + (x^2 - 4) y[x] == 0, y, x]]", "DSolve`Kovacic");
 }
 
+/* ---- OperatorFactor: higher-order linear-operator factoring + DFactor ---- */
+static void t_method_operfactor(void) {
+    /* shifted-Euler at x=1 (pole != 0, so EulerCauchy declines): OperatorFactor's
+       unique niche.  L = (D-1/(x-1))(D-2/(x-1))(D-4/(x-1)), cleared of (x-1)^3. */
+    check_method("DSolve`OperatorFactor",
+        "(x-1)^3 y'''[x] - 7 (x-1)^2 y''[x] + 18 (x-1) y'[x] - 18 y[x] == 0",
+        "(x-1)^3 y'''[x] - 7 (x-1)^2 y''[x] + 18 (x-1) y'[x] - 18 y[x]");
+    /* three arbitrary constants present (a full order-3 general solution) */
+    check_true("Not[FreeQ[DSolve`OperatorFactor["
+        "(x-1)^3 y'''[x] - 7 (x-1)^2 y''[x] + 18 (x-1) y'[x] - 18 y[x] == 0, y, x], C[3]]]");
+}
+static void t_operfactor_more(void) {
+    /* constant-coefficient order 3: (D-1)(D-2)(D-3) */
+    check_method("DSolve`OperatorFactor",
+        "y'''[x] - 6 y''[x] + 11 y'[x] - 6 y[x] == 0",
+        "y'''[x] - 6 y''[x] + 11 y'[x] - 6 y[x]");
+    /* order 4: (D-1)(D-2)(D-3)(D-4) */
+    check_method("DSolve`OperatorFactor",
+        "y''''[x] - 10 y'''[x] + 35 y''[x] - 50 y'[x] + 24 y[x] == 0",
+        "y''''[x] - 10 y'''[x] + 35 y''[x] - 50 y'[x] + 24 y[x]");
+    /* resonant repeated shifted-Euler factor (secular Log term in the basis) */
+    check_method("DSolve`OperatorFactor",
+        "(x-1)^3 y'''[x] - 5 (x-1)^2 y''[x] + 10 (x-1) y'[x] - 10 y[x] == 0",
+        "(x-1)^3 y'''[x] - 5 (x-1)^2 y''[x] + 10 (x-1) y'[x] - 10 y[x]");
+}
+static void t_operfactor_ivp(void) {
+    check_form("Head[DSolve[{y'''[x] - 6 y''[x] + 11 y'[x] - 6 y[x] == 0, "
+               "y[0]==0, y'[0]==0, y''[0]==2}, y[x], x]]", "List");
+}
+static void t_operfactor_declines(void) {
+    /* order-3 with no rational first-order factor (Airy-type) stays symbolic */
+    check_form("Head[DSolve`OperatorFactor[y'''[x] - x y[x] == 0, y[x], x]]", "DSolve`OperatorFactor");
+    /* order 2 belongs to Kovacic; the n>=3 guard declines */
+    check_form("Head[DSolve`OperatorFactor[y''[x] - x y[x] == 0, y[x], x]]", "DSolve`OperatorFactor");
+}
+static void t_dfactor(void) {
+    /* factor the constant operator into three first-order factors {Dx-1,Dx-2,Dx-3} */
+    check_form("Length[DSolve`DFactor[y'''[x] - 6 y''[x] + 11 y'[x] - 6 y[x] == 0, y[x], x]]", "3");
+    /* reconstruct: applying the Dx-factors (innermost first, i.e. in list order) to
+       a concrete test function must reproduce the operator applied to it. */
+    check_true("Module[{fs = DSolve`DFactor[y'''[x] - 6 y''[x] + 11 y'[x] - 6 y[x] == 0, y[x], x], "
+               "tf = Exp[x] + x^4, recon, opv}, "
+               "recon = Fold[Function[{w, f}, D[w, x] + (f /. Dx -> 0) w], tf, fs]; "
+               "opv = D[tf,{x,3}] - 6 D[tf,{x,2}] + 11 D[tf,x] - 6 tf; "
+               "PossibleZeroQ[recon - opv]]");
+}
+static void t_operfactor_auto(void) {
+    /* the shifted-Euler flagship solves through the automatic cascade slot */
+    check_solves("(x-1)^3 y'''[x] - 7 (x-1)^2 y''[x] + 18 (x-1) y'[x] - 18 y[x] == 0",
+                 "(x-1)^3 y'''[x] - 7 (x-1)^2 y''[x] + 18 (x-1) y'[x] - 18 y[x]");
+}
+
 /* ---- M5: Frobenius / PowerSeries ---- */
 static void t_powerseries_ordinary(void) {
     /* pinned power series about the ordinary point 0 for y'' + y == 0 (cos/sin) */
@@ -836,6 +888,12 @@ int main(void) {
     TEST(t_kovacic_case2);
     TEST(t_kovacic_auto_closed_form);
     TEST(t_kovacic_declines);
+    TEST(t_method_operfactor);
+    TEST(t_operfactor_more);
+    TEST(t_operfactor_ivp);
+    TEST(t_operfactor_declines);
+    TEST(t_dfactor);
+    TEST(t_operfactor_auto);
     TEST(t_powerseries_ordinary);
     TEST(t_powerseries_auto);
     TEST(t_frobenius_regsing_distinct);

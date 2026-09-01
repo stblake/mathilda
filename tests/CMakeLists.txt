@@ -714,6 +714,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_normalform.c
     ../src/calculus/dsolve_frobenius.c
     ../src/calculus/dsolve_kovacic.c
+    ../src/calculus/dsolve_operator_factor.c
     ../src/sum/sum.c
     ../src/sum/sum_util.c
     ../src/sum/sum_polynomial.c

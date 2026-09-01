@@ -1,60 +1,67 @@
-# DSolve — ExactODE (§1c higher-order exact linear equations)
+# DSolve — OperatorFactor / DSolve`DFactor (§1c linear-operator factoring)
 
-Implement `DSolve`ExactODE` for linear ODEs of order ≥ 2 whose left side is a
-total derivative `L[y] == d/dx(M[y])`: integrate once to the first integral
-`M[y] == ∫g + C[n]` and recurse into the scalar cascade. Mirrors
-`dsolve_reduce_order.c` (recurse + reuse `extract_applied`); constant `C[n]` is
-contiguous with the sub-solve's `C[1..n-1]`, so no renumbering.
+Factor a linear operator L by finding a first-order right factor (D-r), r∈C(x)
+(hyperexponential solution Exp[∫r]); peel via operator right-division, recurse
+DSolve on the order-(n-1) quotient, close with a trailing first-order solve.
+- DSolve`OperatorFactor: cascade method, homogeneous, order ≥ 3 (Kovacic owns 2).
+- DSolve`DFactor[eqn,y,x]: returns {Dx - r1, Dx - r2, ...} (inert Dx = d/dx).
+
+Self-contained new file (NO changes to dsolve_kovacic.c → zero regression risk).
+
+Note (learned in design): distinct-pole factors → dilog in reductions (decline);
+shifted-Euler (shared pole x-b, b≠0) is elementary AND unique to OperatorFactor
+(EulerCauchy only detects pole at 0). Use shifted-Euler + all-constant in tests.
 
 ## Implementation
-- [x] src/calculus/dsolve_exactode.c — three-function contract; b[j] recurrence,
-      exactness test `a0 == b0'`, forcing ∫g guard, reduced-eqn recursion
-- [x] src/calculus/dsolve.c — extern decls, DS_EXACTODE enum, "ExactODE" map,
-      cascade slot after euler / before specialform, pinned case, init chain
-- [x] tests/CMakeLists.txt — add dsolve_exactode.c to dsolve source block
+- [x] src/calculus/dsolve_operator_factor.c — of_build_ansatz, of_riccati_residual
+      (Bell polys), of_find_factor (branch-iterate + remainder guard), of_divide
+      (binomial recurrence), trailing solve (measured C[kk]); dsolve_operfactor_try
+      + builtin + init; builtin_dsolve_dfactor + recursive collector
+- [x] src/calculus/dsolve.c — extern, DS_OPERFACTOR enum, "OperatorFactor" map,
+      cascade after kovacic, pinned case, init (also registers DSolve`DFactor)
+- [x] tests/CMakeLists.txt — add dsolve_operator_factor.c
 
 ## Tests
-- [x] tests/test_dsolve.c — t_method_exactode, t_exactode_more (2nd + inhomog +
-      3rd-order), t_exactode_declines (non-exact + first-order), auto-dispatch
-- [x] tests/test_dsolve_stress.c — exact_ode_ok forward generator (total-deriv
-      construction over 6 (b1,b0) pairs + inhomogeneous)
+- [x] tests/test_dsolve.c — 6 unit tests (method/more/ivp/declines/dfactor/auto)
+- [x] tests/test_dsolve_stress.c — operfactor_ok + dfactor_ok generators
 
 ## Docs
-- [x] docs/spec/builtins/calculus.md — DSolve`ExactODE row after EulerCauchy
-- [x] docs/spec/changelog/2026-08-31.md — ## DSolve — ExactODE entry
-- [x] DSOLVE_PLAN.md — §1c [✓] ExactODE; update M5 future-work note
+- [x] docs/spec/builtins/calculus.md — OperatorFactor + DFactor
+- [x] docs/spec/changelog/2026-08-31.md — ## DSolve — OperatorFactor / DFactor
+- [x] DSOLVE_PLAN.md — §1c [✓] OperatorFactor; M5 note
 
 ## Gates
-- [x] make -j build clean
-- [x] REPL spot-checks (2nd/3rd-order, inhomogeneous, pinned, non-exact decline,
-      ?docstring, Airy/Euler regressions) — all pass
-- [x] ctest -R dsolve (all 3 targets green, 34.9s)
-- [x] make check-c99 (exit 0)
-- [x] valgrind leak-check (1× and same-eqn 6× both 13,440 + 6,312 B — no per-call leak)
-- [ ] commit + push
+- [x] make -j clean (no warnings; fixed a gcc-16 -Warray-bounds false positive
+      by pre-sizing the ansatz arrays instead of realloc)
+- [x] REPL spot-checks — shifted-Euler/constant/resonant/order-4 solve; distinct-pole
+      /Airy-3/order-2 decline cleanly; DFactor correct; AUTO dispatch fires; regressions ok
+- [x] ctest -R dsolve — 3/3 green (Kovacic/M5 intact = zero regression)
+- [x] make check-c99 — exit 0
+- [x] valgrind — OperatorFactor AND DFactor paths: 1x==6x==13,440+6,312 B (no per-call leak)
+- [ ] commit + push (awaiting user go)
 
 ## Review — DONE
 
-`DSolve`ExactODE` (§1c) solves linear ODEs of order ≥ 2 whose left side is a total
-derivative `L[y] == d/dx(M[y])`: the first-integral coefficients come from the
-recurrence `b_{n-1}=a_n`, `b_{k-1}=a_k−b_k'`, the exactness test is the leftover
-`a_0 == b_0'`, and it integrates once to `M[y] == ∫g + C[n]` then recurses into
-the scalar cascade on the order-(n−1) equation. New file
-`src/calculus/dsolve_exactode.c` (mirrors `dsolve_reduce_order.c`: recurse into
-`DSolve`, reuse `extract_applied`); constant `C[n]` is contiguous with the
-sub-solve's `C[1..n-1]` (no renumbering); iterated exactness is free via the
-recursion (3rd-order doubly-exact reduces twice).
+`DSolve`OperatorFactor` (§1c) solves homogeneous linear ODEs of order ≥ 3 by
+factoring the operator: find a first-order right factor `(D-r)`, `r∈C(x)` (Bell-
+polynomial Riccati `Σ a_k P_k(r)==0`, undetermined-coefficient search with per-branch
+remainder guard), peel via operator right-division (binomial recurrence), recurse
+`DSolve` on the order-(n-1) quotient, close with the trailing first-order solve
+(constant `C[kk]` measured contiguous). `DSolve`DFactor` returns `{Dx-r1,...}`.
+New self-contained file `src/calculus/dsolve_operator_factor.c` (no Kovacic changes).
 
-**Verified:** `x y''+y'==0 → C[1]+C[2]Log[x]`; inhomogeneous `x y''+y'==x`;
-3rd-order `x y'''+y''==0` (3 constants); pinned `DSolve`ExactODE`; non-exact
-(Airy) + first-order both decline; Airy/Euler-Cauchy regressions intact.
-3/3 dsolve ctest green; check-c99 exit 0; no per-call valgrind leak.
+**Verified:** shifted-Euler flagship (unique niche — EulerCauchy only detects pole 0),
+constant order 3/4, resonant repeated, order-4 all solve + back-substitute; distinct-
+pole (dilog), Airy-3, order-2 all decline cleanly; DFactor reconstructs the operator;
+AUTO dispatch fires; Kovacic/Euler/Airy/constcoeff regressions intact.
 
-**Placement:** after EulerCauchy, before SpecialFunctionForm (elementary
-order-reduction preferred over special-function/Kovacic/series). Reference
-Airy/Bessel/Euler/Kovacic equations are all non-exact, so their pinned tests are
-untouched.
+**Two bugs caught during testing (both fixed):** (1) gcc-16 -Warray-bounds false
+positive on the realloc+macro ansatz builder → rewrote to pre-size exactly; (2) the
+DFactor reconstruct test used `Reverse[fs]` which only passed for commuting (constant)
+factors — the correct order folds over `fs` directly (innermost factor applied first),
+and the reference operator-on-tf must be built by the same composition, not by
+`op /. y->Function[tf]` (which mis-evaluates the derivative terms).
 
-**Follow-ups (out of scope):** OperatorFactor/DFactor (differential-operator
-factoring); integrating-factor (adjoint) exactness `L*[μ]==0`; nonlinear
-total-derivative detection; Sturm–Liouville EigenvalueProblem (§1f).
+**Follow-ups (out of scope):** inhomogeneous forcing; irregular-singular (double-pole)
+r; 2nd-order right factors (Beke); distinct-pole compositions (dilog reductions);
+Sturm–Liouville EigenvalueProblem (§1f, the last open §1c/1f item).

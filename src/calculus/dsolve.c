@@ -41,6 +41,7 @@ typedef enum {
     DS_EXACTODE,
     DS_SPECIALFORM,
     DS_KOVACIC,
+    DS_OPERFACTOR,
     DS_REDUCEORDER,
     DS_FOS,
     DS_RICCATI,
@@ -66,6 +67,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "ExactODE")         == 0) return DS_EXACTODE;
     if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
     if (strcmp(s, "Kovacic")            == 0) return DS_KOVACIC;
+    if (strcmp(s, "OperatorFactor")     == 0) return DS_OPERFACTOR;
     if (strcmp(s, "ReductionOfOrder") == 0) return DS_REDUCEORDER;
     if (strcmp(s, "FirstOrderSubstitution") == 0) return DS_FOS;
     if (strcmp(s, "Riccati")              == 0) return DS_RICCATI;
@@ -92,6 +94,7 @@ extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_operfactor_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_fos_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch);
@@ -112,6 +115,7 @@ extern void dsolve_euler_init(void);
 extern void dsolve_exactode_init(void);
 extern void dsolve_specialform_init(void);
 extern void dsolve_kovacic_init(void);
+extern void dsolve_operfactor_init(void);
 extern void dsolve_reduce_order_init(void);
 extern void dsolve_fos_init(void);
 extern void dsolve_riccati_init(void);
@@ -205,6 +209,10 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_exactode_try);
             if (!result) result = dsolve_run(&P, dsolve_specialform_try);
             if (!result) result = dsolve_run(&P, dsolve_kovacic_try);
+            /* Higher-order (>=3) reducible linear operators: factor out a first-order
+             * right factor (D-r) and recurse.  After Kovacic (owns order 2), before
+             * the reduction/series methods. */
+            if (!result) result = dsolve_run(&P, dsolve_operfactor_try);
             if (!result) result = dsolve_run(&P, dsolve_reduce_order_try);
             if (!result) result = dsolve_run(&P, dsolve_fos_try);
             /* Riccati after fos: fos owns y'==(a x+b y+c)^2 with the cleaner
@@ -237,6 +245,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_EXACTODE:     result = dsolve_run(&P, dsolve_exactode_try);    break;
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
         case DS_KOVACIC:      result = dsolve_run(&P, dsolve_kovacic_try);     break;
+        case DS_OPERFACTOR:   result = dsolve_run(&P, dsolve_operfactor_try);  break;
         case DS_REDUCEORDER:  result = dsolve_run(&P, dsolve_reduce_order_try); break;
         case DS_FOS:          result = dsolve_run(&P, dsolve_fos_try);          break;
         case DS_RICCATI:      result = dsolve_run(&P, dsolve_riccati_try);      break;
@@ -288,6 +297,7 @@ void dsolve_init(void) {
     dsolve_exactode_init();
     dsolve_specialform_init();
     dsolve_kovacic_init();
+    dsolve_operfactor_init();
     dsolve_reduce_order_init();
     dsolve_fos_init();
     dsolve_riccati_init();

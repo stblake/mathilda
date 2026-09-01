@@ -139,10 +139,10 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     truncated residual to be `O[(x−x0)^N]`. Reuse `Series`/`SeriesData` arithmetic
     throughout.
 
-  Later within M5: `ExactODE` (higher-order exact equations) **done** — see §1c.
-  Still future: `OperatorFactor`/`DFactor` (factor a higher-order linear operator
-  into lower-order factors and compose their solution sets) and the
-  Sturm–Liouville `EigenvalueProblem` (1f). Reuse hooks across M5: `dsolve_linear_coeffs`
+  Later within M5: `ExactODE` (higher-order exact equations) and
+  `OperatorFactor`/`DFactor` (factor a higher-order linear operator into
+  lower-order factors and compose their solution sets) are both **done** — see §1c.
+  Still future: the Sturm–Liouville `EigenvalueProblem` (1f). Reuse hooks across M5: `dsolve_linear_coeffs`
   (extract P, Q), `Apart`/`Together`/`FactorList` (pole structure),
   `Solve`/`solvepoly` (indicial + coefficient systems), `Series`/`SeriesData`
   (Frobenius), `RootReduce`/qqbar (algebraic exponents), `ReductionOfOrder`
@@ -327,7 +327,17 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   power series, regular-singular → Frobenius (indicial quadratic + `Log`-term
   sub-cases by root difference), irregular → decline; truncated `SeriesData`
   verified as `O[(x−x0)^N]`. Reuse `Series`/`SeriesData`.
-- `[ ] OperatorFactor` (DFactor) — factor higher-order linear operators.
+- `[✓] OperatorFactor` (`DSolve`DFactor`) — factor a homogeneous linear operator
+  (order ≥ 3) by finding a first-order right factor `(D − r)`, `r ∈ C(x)` (a
+  hyperexponential solution `Exp[∫r]`, via a rational Riccati `Σ a_k P_k(r) == 0`
+  undetermined-coefficient search); peel via operator right-division, recurse `DSolve`
+  on the order-(n−1) quotient, close with the trailing first-order solve. Reaches
+  reducible variable-coefficient operators the earlier methods miss (shifted-Euler at
+  a pole ≠ 0). `DSolve`DFactor[eqn,y,x]` returns `{Dx − r1, Dx − r2, …}`. Runs after
+  Kovacic (order 2), before the reduction/series methods. First cut: first-order
+  **right** factors, homogeneous, rational coefficients; irregular-singular / 2nd-order
+  right factors (Beke) are future. `dsolve_operator_factor.c` (self-contained; no
+  changes to the Kovacic engine).
 
 ### 1d. Nonlinear higher-order
 - `[✓] ReductionOfOrder` — `y''==F(x,y')` missing y: reduce to first order in
