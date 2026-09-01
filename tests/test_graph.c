@@ -418,6 +418,23 @@ static void test_vertex_coloring_internals(void) {
         ASSERT_MSG(ub >= 3, "DSATUR on C5 cannot beat chi = 3");
         free(c); graph_adj_free(a); expr_free(g);
     }
+
+    /* Exported-symbol precondition (RG-2 adversarial finding #2). fvc_bb's
+     * seen[]/forbid[] are stack arrays sized to FVC_MAX_VERTICES, and the cap is
+     * enforced in the head -- not in fvc_search, which graph.h exports. A direct
+     * caller passing n > cap must be refused (0), never overflow the buffers.
+     * CompleteGraph[129] is one vertex over the cap and drives exactly that. */
+    {
+        Expr* g = evaluate(parse_expression("CompleteGraph[129]"));
+        GraphAdj* a = graph_build_adj(g);
+        ASSERT(a != NULL && a->n == 129);
+        int* c = calloc((size_t)a->n, sizeof(int));
+        steps = 999;
+        ASSERT_MSG(fvc_search(a, c, &steps) == 0,
+                    "fvc_search must refuse n > FVC_MAX_VERTICES, not overflow");
+        ASSERT_MSG(steps == 0, "a cap-refused search reports zero steps");
+        free(c); graph_adj_free(a); expr_free(g);
+    }
 }
 
 /* ---- FindVertexColoring: the registered head (AC-1 .. AC-18) --------------
