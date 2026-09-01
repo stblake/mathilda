@@ -12,6 +12,7 @@
 #include "symtab.h"
 #include "parse.h"
 #include "print.h"
+#include "graph.h"
 #include "test_utils.h"
 #include <stdlib.h>
 
@@ -332,6 +333,175 @@ static void test_graphplot(void) {
     assert_eval_eq("Head[GraphPlot[5]]", "GraphPlot", 0);
 }
 
+/* ---- Vertex colouring internals (direct C, head not yet registered) -------
+ * FindVertexColoring is deliberately unregistered until the search is proven
+ * exact, so these cannot go through assert_eval_eq like every other test here.
+ * Inputs are built the long way -- evaluate a generator expression, then
+ * graph_build_adj -- which works because core_init() has run in main(). */
+
+/* chi(expr) via the exact search, plus the backtracking-node count. */
+static int coloured_chi(const char* src, long* steps_out, int** colour_out, int* n_out) {
+    Expr* g = evaluate(parse_expression(src));
+    GraphAdj* a = graph_build_adj(g);
+    if (!a) { expr_free(g); return -1; }
+    int* colour = calloc((size_t)(a->n > 0 ? a->n : 1), sizeof(int));
+    int chi = fvc_search(a, colour, steps_out);
+    int n = a->n;
+    /* Verify properness here rather than in each caller: an exact search that
+     * returns the right COUNT but an invalid assignment would otherwise pass. */
+    for (int u = 0; u < n; u++) {
+        for (int j = 0; j < a->outdeg[u]; j++)
+            ASSERT_MSG(colour[u] != colour[a->out[u][j]], "adjacent vertices share a colour");
+        ASSERT_MSG(colour[u] >= 1 && colour[u] <= chi, "colour outside 1..chi");
+    }
+    graph_adj_free(a);
+    expr_free(g);
+    if (colour_out) *colour_out = colour; else free(colour);
+    if (n_out) *n_out = n;
+    return chi;
+}
+
+static void test_vertex_coloring_internals(void) {
+    long steps = 0;
+
+    /* A complete graph needs one colour per vertex. */
+    ASSERT_MSG(coloured_chi("CompleteGraph[5]", &steps, NULL, NULL) == 5,
+                "chi(K5) should be 5");
+
+    /* Even cycle is bipartite, odd cycle is not. */
+    ASSERT_MSG(coloured_chi("CycleGraph[6]", &steps, NULL, NULL) == 2,
+                "chi(C6) should be 2");
+    ASSERT_MSG(coloured_chi("CycleGraph[5]", &steps, NULL, NULL) == 3,
+                "chi(C5) should be 3");
+
+    /* K_{2,2}: the discriminating case. A greedy pass on an unlucky vertex
+     * order returns 3; only a minimal search returns 2. If minimality
+     * regresses, this is the row that fails first. */
+    ASSERT_MSG(coloured_chi("Graph[{1,2,3,4},{1<->3,1<->4,2<->3,2<->4}]",
+                             &steps, NULL, NULL) == 2,
+                "chi(K_{2,2}) should be 2, not a greedy 3");
+
+    /* CompleteGraph[128] is UNDER the cap and therefore accepted. The clique
+     * lower bound equals the DSATUR upper bound, so it must answer with ZERO
+     * backtracking nodes -- asserting the counter, not merely that it is fast.
+     * Without the lower bound this would refute k = 1..127 first, i.e. hang. */
+    steps = 12345;
+    ASSERT_MSG(coloured_chi("CompleteGraph[128]", &steps, NULL, NULL) == 128,
+                "chi(K128) should be 128");
+    ASSERT_MSG(steps == 0, "K128 must take zero search steps (lb == ub)");
+
+    /* A sparse graph at the cap: bipartite, so also a bounds short-circuit. */
+    ASSERT_MSG(coloured_chi("CycleGraph[128]", &steps, NULL, NULL) == 2,
+                "chi(C128) should be 2");
+
+    /* Degenerate shapes the builtin will hand straight to the search. */
+    ASSERT_MSG(coloured_chi("Graph[{1},{}]", &steps, NULL, NULL) == 1,
+                "chi(single vertex) should be 1");
+    ASSERT_MSG(coloured_chi("Graph[{1,2,3,4},{}]", &steps, NULL, NULL) == 1,
+                "chi(edgeless) should be 1");
+
+    /* Direction is ignored for adjacency, and disconnected components are
+     * minimised over the whole graph rather than per component. */
+    ASSERT_MSG(coloured_chi("Graph[{1,2},{1->2}]", &steps, NULL, NULL) == 2,
+                "a directed edge still constrains both endpoints");
+    ASSERT_MSG(coloured_chi("Graph[{1,2,3,4},{1<->2,3<->4}]", &steps, NULL, NULL) == 2,
+                "chi(two disjoint edges) should be 2");
+
+    /* The bounds must bracket the true value on a case where they differ. */
+    {
+        Expr* g = evaluate(parse_expression("CycleGraph[5]"));
+        GraphAdj* a = graph_build_adj(g);
+        int* c = calloc(5, sizeof(int));
+        int ub = fvc_dsatur_bound(a, c);
+        int lb = fvc_clique_bound(a);
+        ASSERT_MSG(lb == 2, "greedy clique in C5 should be an edge, size 2");
+        ASSERT_MSG(ub >= 3, "DSATUR on C5 cannot beat chi = 3");
+        free(c); graph_adj_free(a); expr_free(g);
+    }
+}
+
+/* ---- FindVertexColoring: the registered head (AC-1 .. AC-18) --------------
+ * Sits alongside test_vertex_coloring_internals rather than replacing it: that
+ * one reaches the search directly and can assert the node counter, which is not
+ * observable from the language; this one pins the head's language-level
+ * contract. The three long-running rows (AC-10b/10d/10f) are in
+ * tests/test_graph_slow.c, which is excluded from this suite. */
+static void test_vertex_coloring(void) {
+    /* AC-1 .. AC-4: chromatic numbers of the classic shapes. */
+    assert_eval_eq("Max[FindVertexColoring[CompleteGraph[5]]]", "5", 0);
+    assert_eval_eq("Max[FindVertexColoring[CycleGraph[6]]]", "2", 0);
+    assert_eval_eq("Max[FindVertexColoring[CycleGraph[5]]]", "3", 0);
+    assert_eval_eq("Max[FindVertexColoring[PathGraph[4]]]", "2", 0);
+
+    /* AC-5: no edges, so every vertex takes colour 1. */
+    assert_eval_eq("Union[FindVertexColoring[Graph[{1,2,3,4},{}]]]", "{1}", 0);
+
+    /* AC-6: exactly one colour per vertex. */
+    assert_eval_eq("Length[FindVertexColoring[CycleGraph[7]]]", "7", 0);
+
+    /* AC-7: properness, checked through the language. Indexes the colour vector
+     * by vertex LABEL, so it is valid only for a graph labelled 1..n in order --
+     * which CycleGraph is. */
+    assert_eval_eq("Module[{g=CycleGraph[5],c},c=FindVertexColoring[g];"
+                   "And@@(c[[#[[1]]]]=!=c[[#[[2]]]]&/@(List@@@EdgeList[g]))]",
+                   "True", 0);
+
+    /* AC-8: the VertexList-order contract, on the path c-a-b with non-integer
+     * vertices. Position-sensitive by construction: in {c,a,b} order a minimal
+     * colouring is {1,2,1}; under a sorted {a,b,c} order `a` is the degree-2
+     * middle vertex and the colouring is {1,2,2}. So col[[1]] === col[[3]] is
+     * True only for the VertexList order -- a mere "first two differ" check
+     * holds under both and catches nothing. */
+    assert_eval_eq("Module[{g=Graph[{c,a,b},{c<->a,a<->b}],col},"
+                   "col=FindVertexColoring[g];"
+                   "{Length[col],col[[1]]===col[[3]]&&col[[1]]=!=col[[2]]}]",
+                   "{3, True}", 0);
+
+    /* AC-9: above FVC_MAX_VERTICES the head refuses rather than answering. */
+    assert_eval_eq("Head[FindVertexColoring[CompleteGraph[129]]]",
+                   "FindVertexColoring", 0);
+
+    /* AC-10: exactly at the cap. An even cycle gives ub=2 = lb, so this
+     * exercises the cap BOUNDARY only -- it searches nothing. The genuinely
+     * searched instance at the cap is AC-10b, in the slow target. */
+    assert_eval_eq("Length[FindVertexColoring[CycleGraph[128]]]", "128", 0);
+
+    /* AC-11, AC-12: the degenerate shapes. */
+    assert_eval_eq("FindVertexColoring[Graph[{1},{}]]", "{1}", 0);
+    assert_eval_eq("FindVertexColoring[Graph[{},{}]]", "{}", 0);
+
+    /* AC-13: not a graph. AC-14: a graph that BUILDS but has an edge endpoint
+     * absent from the vertex list, so it actually reaches the head (a
+     * self-loop would be rejected by Graph itself and prove nothing). */
+    assert_eval_eq("Head[FindVertexColoring[5]]", "FindVertexColoring", 0);
+    assert_eval_eq("Head[FindVertexColoring[Graph[{1,2},{1<->3}]]]",
+                   "FindVertexColoring", 0);
+
+    /* AC-15: an edge constrains both endpoints whichever way it points. */
+    assert_eval_eq("Max[FindVertexColoring[Graph[{1,2},{1->2}]]]", "2", 0);
+
+    /* AC-16: minimal over the whole graph, not per component. */
+    assert_eval_eq("Max[FindVertexColoring[Graph[{1,2,3,4},{1<->2,3<->4}]]]", "2", 0);
+
+    /* AC-17: form 3 is a Non-goal, so a second argument must leave the
+     * expression unevaluated rather than be silently ignored. */
+    assert_eval_eq("Head[FindVertexColoring[CycleGraph[4], 3]]",
+                   "FindVertexColoring", 0);
+
+    /* AC-18: K_{2,2}. Greedy on an unlucky order says 3; minimal says 2. */
+    assert_eval_eq("Max[FindVertexColoring[Graph[{1,2,3,4},{1<->3,1<->4,2<->3,2<->4}]]]",
+                   "2", 0);
+
+    /* No options are registered, deliberately -- Method would be an option
+     * surface built to express a choice that does not yet exist. */
+    assert_eval_eq("Options[FindVertexColoring]", "{}", 0);
+
+    /* The search is deterministic, so repeated calls agree exactly. */
+    assert_eval_eq("FindVertexColoring[CycleGraph[5]] === FindVertexColoring[CycleGraph[5]]",
+                   "True", 0);
+}
+
+
 int main(void) {
     symtab_init();
     core_init();
@@ -351,6 +521,8 @@ int main(void) {
     TEST(test_components);
     TEST(test_spanning_and_connectivity);
     TEST(test_graphplot);
+    TEST(test_vertex_coloring_internals);
+    TEST(test_vertex_coloring);
 
     printf("All graph tests passed!\n");
     return 0;
