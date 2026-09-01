@@ -48,6 +48,7 @@ typedef enum {
     DS_RICCATI,
     DS_CHINI,
     DS_ABEL,
+    DS_LIE,
     DS_AUTONOMOUS,
     DS_FROBENIUS,
     DS_INVALID
@@ -74,6 +75,8 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Riccati")              == 0) return DS_RICCATI;
     if (strcmp(s, "Chini")                == 0) return DS_CHINI;
     if (strcmp(s, "Abel")                 == 0) return DS_ABEL;
+    if (strcmp(s, "LieSymmetry")          == 0) return DS_LIE;
+    if (strcmp(s, "LieGroup")             == 0) return DS_LIE;
     if (strcmp(s, "AutonomousReduction") == 0) return DS_AUTONOMOUS;
     if (strcmp(s, "FrobeniusSeries")     == 0) return DS_FROBENIUS;
     if (strcmp(s, "PowerSeries")         == 0) return DS_FROBENIUS;
@@ -101,6 +104,7 @@ extern Expr** dsolve_fos_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_chini_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_abel_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_shifted_try(DSolveProblem* P, size_t* nbranch);
@@ -123,6 +127,7 @@ extern void dsolve_fos_init(void);
 extern void dsolve_riccati_init(void);
 extern void dsolve_chini_init(void);
 extern void dsolve_abel_init(void);
+extern void dsolve_lie_init(void);
 extern void dsolve_autonomous_init(void);
 extern void dsolve_frobenius_init(void);
 extern void dsolve_normalform_init(void);
@@ -234,6 +239,12 @@ Expr* builtin_dsolve(Expr* res) {
             /* implicit first-integral fallback: a homogeneous ODE with no explicit
              * inverse (transcendental log-spiral) is returned as G(x,y[x]) == C[1] */
             if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
+            /* Lie point-symmetry: the general first-order backstop.  Heuristic
+             * (underdetermined determining PDE), so it runs after EVERY
+             * deterministic specialist — including the homogeneous implicit
+             * fallback, which keeps its cleaner form for its own equations — and
+             * immediately before the series fallback. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_lie_try);
             /* series fallback: always-available, so it runs last */
             if (!result) result = dsolve_run(&P, dsolve_frobenius_try);
             /* very last resort: if x=0 was an irregular/obstructed singular point,
@@ -263,6 +274,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_RICCATI:      result = dsolve_run(&P, dsolve_riccati_try);      break;
         case DS_CHINI:        result = dsolve_run_implicit(&P, dsolve_chini_try); break;
         case DS_ABEL:         result = dsolve_run_implicit(&P, dsolve_abel_try);  break;
+        case DS_LIE:          result = dsolve_run_implicit(&P, dsolve_lie_try);   break;
         case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);   break;
         case DS_FROBENIUS:    result = dsolve_run(&P, dsolve_frobenius_try);    break;
         default: break;
@@ -316,6 +328,7 @@ void dsolve_init(void) {
     dsolve_riccati_init();
     dsolve_chini_init();
     dsolve_abel_init();
+    dsolve_lie_init();
     dsolve_autonomous_init();
     dsolve_frobenius_init();
     dsolve_normalform_init();

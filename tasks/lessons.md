@@ -3244,3 +3244,13 @@ See [[project_dsolve_chini_linremoval_and_xayb_exact]],
    and `both >> sum-of-per-axis`). Net: 1-D 10⁶ went 9.7→0.88 ms, from 3.4×
    slower to **4.3× faster** than numpy; every 1-D/2-D/3-D shape now 1.6–4.3×
    faster. The Fornberg weights were never touched.
+
+## Alias builtins need their own docstring (2026-09-01)
+
+When registering an alias builtin that shares a C function with a canonical one
+(e.g. `DSolve`LieGroup` → `DSolve`LieSymmetry`), do NOT `symtab_set_docstring`
+the alias with the canonical method's verbatim text — `?alias` then prints a
+docstring whose first token names the *other* symbol, which reads as a bug.
+Give the alias a one-line docstring that identifies it as an alias and points to
+the canonical name (`"X is an alias for Y — see Y."`). Caught by the user on
+`?DSolve`LieGroup`.

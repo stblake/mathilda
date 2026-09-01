@@ -878,6 +878,47 @@ static void t_method_abel(void) {
     /* Abel declines a Chini (f2 == 0) — DSolve`Chini owns that */
     check_form("Head[DSolve`Abel[y'[x] == x^2 y[x]^3 - y[x]/x + 1/x, y, x]]", "DSolve`Abel");
 }
+
+/* ---- 1a: Lie point-symmetry (heuristic; M10 L1: abaco1_simple) ---- */
+/* Like check_implicit but pins DSolve`LieSymmetry: the abaco1_simple ansatze
+ * overlap linear/separable, which the automatic cascade claims first, so the
+ * method must be exercised through its own builtin. */
+static void check_lie_implicit(const char* rhs) {
+    char buf[768];
+    snprintf(buf, sizeof(buf),
+             "Head[DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    check_true(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{eq = DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]] - eq[[2]], x] /. y'[x] -> (%s)]]", rhs, rhs);
+    check_true(buf);
+}
+static void t_method_lie(void) {
+    /* case A (linear): xi=0, eta=Exp[Integrate[omega_y, x]] */
+    check_lie_implicit("y[x]/x + x");
+    /* case B/C (separable): omega_x/omega or omega_y/omega free of the other var */
+    check_lie_implicit("x y[x]^2");
+    /* another linear, non-elementary-looking integrating factor Exp[-x^2] */
+    check_lie_implicit("2 x y[x] + x");
+    /* alias resolves to the same method */
+    check_true("Head[DSolve`LieGroup[y'[x] == y[x]/x + x, y, x][[1,1]]] === Equal");
+}
+static void t_lie_declines(void) {
+    /* Riccati y' == y^2 + x has no abaco1_simple / affine symmetry: the method
+     * declines (no wrong answer, head stays symbolic). */
+    check_form("Head[DSolve`LieSymmetry[y'[x] == y[x]^2 + x, y, x]]", "DSolve`LieSymmetry");
+}
+/* L2 `linear` heuristic (affine symmetry): the linear-coefficients class
+ * y' == (a1 x + b1 y + c1)/(a2 x + b2 y + c2), which no earlier method solves,
+ * now solves through the AUTOMATIC cascade (Lie is the backstop). Verified by
+ * implicit differentiation. */
+static void t_lie_linear_coefficients(void) {
+    check_implicit("(x + 2 y[x] - 4)/(2 x + y[x] - 5)");
+    check_implicit("(2 x + 3 y[x] - 1)/(3 x + 2 y[x] + 2)");
+    /* pinned method reaches it too */
+    check_true("Head[DSolve`LieSymmetry[y'[x] == (x + 2 y[x] - 4)/(2 x + y[x] - 5), "
+               "y, x][[1,1]]] === Equal");
+}
 /* Chini reduction (b): linear-term removal y = e^(int g) w -> separable, for the
  * sub-class where reduction (a) (B,C constant) fails.  y' == x E^(2x) y^3 - y -
  * x E^-x -> w' == x(w^3 - 1) via y = E^-x w; implicit first integral. */
@@ -1007,6 +1048,9 @@ int main(void) {
     TEST(t_chini_more);
     TEST(t_chini_linremoval);
     TEST(t_method_abel);
+    TEST(t_method_lie);
+    TEST(t_lie_declines);
+    TEST(t_lie_linear_coefficients);
     TEST(t_exact_xayb);
     TEST(t_auto_exp);
     TEST(t_auto_power);

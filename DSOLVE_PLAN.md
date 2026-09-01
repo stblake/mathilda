@@ -16,6 +16,11 @@ family.
   correctness rests on recognizer structure + the stress corpus.
 - **Scope:** Phase 1 = ODEs, Phase 2 = PDEs. DAEs, delay DEs, integral /
   integro-differential, and hybrid (`WhenEvent`) equations are future work.
+- **Determinism:** every method is a deterministic decision procedure *except*
+  `LieSymmetry` (M10), which is heuristic by necessity — for a first-order ODE the
+  linearized symmetry condition is one PDE in two unknowns (`ξ`, `η`), i.e.
+  underdetermined, so no decision procedure exists and a fixed table of ansätze
+  (Cheb-Terrab et al., as in SymPy/Maple) is the state of the art.
 
 ## Architecture
 
@@ -217,6 +222,32 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   end. Verified: `{y'==0, x'+y==0}` → `{y->C[1], x->C[2]-C[1] t}`; defective
   non-triangular, complex, forced-singular, and variable-coefficient triangular
   IVPs all back-substitute to zero (`tests/test_dsolve.c` t_sys_*).
+- **M9 — SymPy parity gaps (deterministic).** `Factorable`, `NthAlgebraic`,
+  `AlmostLinear`, `LinearCoefficients`, `SeparableReduced`, `Liouville`,
+  `UndeterminedCoefficients`, `FirstOrderPowerSeries`. All reduce to existing
+  methods; no new substrate. Cascade: `Factorable` + `NthAlgebraic` run EARLY
+  (front of the first-order group, matching SymPy — a product/power-in-`y'` form is
+  cheaply split before the specialists try to match it); the substitution
+  reductions run after the named first-order specialists; `Liouville` in the
+  2nd-order group.
+- **M10 — heuristic Lie point-symmetry (`lie_group`).** The one deliberately
+  heuristic method in the cascade (first-order symmetry finding is an
+  underdetermined PDE — no decision procedure exists). Nine ansatz heuristics from
+  Cheb-Terrab et al.; a general first-order backstop inserted after `Abel` and
+  before the implicit / series fallbacks. Substrate: the linearized symmetry
+  residual `S(ξ,η) = η_x + (η_y − ξ_x)ω − ξ_y ω² − ξ ω_x − η ω_y` and a
+  `checkinfsol` gate; integration by the Lie integrating factor `μ = 1/(η − ω ξ)`
+  → first integral → `dsolve_run_implicit` (+ explicit `Solve` inversion), so every
+  branch verifies with no inert heads. Staged **L1** ✅ (substrate +
+  `abaco1_simple` end-to-end), **L2** (`linear` ✅ — affine ansatz →
+  linear-coefficients class via determining-system `NullSpace`; `abaco1_product`,
+  `function_sum`, `abaco2_similar` remain), **L3** (`bivariate`, `chi`,
+  `abaco2_unique_unknown`,
+  `abaco2_unique_general`). Reuses `D`, `Coefficient`/`Collect`, `Solve`,
+  `Integrate`, `Together`, `dsolve_run_implicit`, `zero_test_decide`.
+  `dsolve_lie.c`. References: Cheb-Terrab & Roche (CPC 113, 1998); Cheb-Terrab,
+  Duarte & da Mota (CPC 101, 1997); Cheb-Terrab & Kolokolnikov (math-ph/0007023);
+  see `docs/design/dsolve_lie_symmetry.md`.
 
 ## Phase 1 — ODE method catalog
 
@@ -266,6 +297,30 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 - `[✓] FirstOrderSubstitution` — `y'==F(a x + b y + c)`: detect the constant ratio
   `r = F_x/F_y`, substitute `v = y + r x` → autonomous separable `v'==r+H(v)`,
   solved inline; declines (stays symbolic) when the antiderivative does not invert.
+- `[ ] Factorable` — factor the equation as a polynomial in the highest derivative
+  (`F1·F2·…==0`); recurse the cascade on each factor, union the branch bodies.
+  (SymPy `factorable`.) Reuse `Factor`/`FactorList` + `dsolve_run`. `dsolve_factorable.c`.
+- `[ ] NthAlgebraic` — algebraic in the top derivative `y^(n)`: `Solve` for `y^(n)`,
+  integrate each root branch (reuse `Quadrature`); also the degenerate no-derivative
+  case. (SymPy `nth_algebraic`.) `dsolve_nth_algebraic.c`.
+- `[ ] AlmostLinear` — `f(x)g(y)y' + k(x)l(y) + m(x)==0`: change of variable →
+  `LinearFirstOrder`. (SymPy `almost_linear`.) `dsolve_almostlinear.c`.
+- `[ ] LinearCoefficients` — `y'==(a1 x+b1 y+c1)/(a2 x+b2 y+c2)`: det≠0 → shift to the
+  lines' intersection → `Homogeneous`; det=0 (parallel) → substitute `v=a1 x+b1 y` →
+  `Separable`. (SymPy `linear_coefficients`.) `dsolve_lincoeff.c`.
+- `[ ] SeparableReduced` — `x^n y^m`-type substitution reducing to `Separable`.
+  (SymPy `separable_reduced`.) `dsolve_sepreduced.c`.
+- `[~] LieSymmetry` (`DSolve`LieGroup`/`LieSymmetry`) — heuristic infinitesimal
+  point-symmetry method; the general first-order backstop, run after the specialists
+  and before the series fallback. *Implemented:* `abaco1_simple` (L1) + `linear`
+  (L2, affine ansatz → linear-coefficients class via determining-system `NullSpace`).
+  Nine ansatz heuristics (`abaco1_simple`,
+  `abaco1_product`, `function_sum`, `abaco2_similar`, `linear`, `bivariate`, `chi`,
+  `abaco2_unique_unknown`, `abaco2_unique_general`); each candidate `(ξ,η)` is gated
+  through the symmetry condition, then integrated by the Lie integrating factor
+  `μ = 1/(η − ω ξ)` → first integral (reuses the exact-equation quadrature) →
+  `dsolve_run_implicit` + explicit `Solve` inversion. (SymPy `lie_group`.) See M10.
+  `dsolve_lie.c`.
 
 ### 1b. Linear constant-coefficient
 - `[✓] LinearConstantCoefficients` — one method for homogeneous + inhomogeneous.
@@ -276,6 +331,13 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   *Cosmetic gap:* for simple forcing the var-params particular can carry a
   homogeneous component (`7/2 Cos^2 x` for `7/4`) — correct and verified, less
   tidy than undetermined coefficients (a future refinement).
+- `[ ] UndeterminedCoefficients` — tidy particular for polynomial / exponential /
+  sinusoid forcing (incl. resonance) for constant-coefficient + Euler; replaces the
+  var-params particular of `LinearConstantCoefficients` / `EulerCauchy` where the
+  forcing is of that class. Cosmetic upgrade (closes the gap above), not new
+  coverage. Particular-solution path inside `dsolve_constcoeff.c`, exposed as
+  `DSolve`UndeterminedCoefficients`. (SymPy
+  `nth_linear_constant_coeff_undetermined_coefficients` + Euler variant.)
 
 ### 1c. Linear variable-coefficient
 - `[✓] EulerCauchy` — `a_n x^n y^(n)+…+a_0 y == g`: indicial polynomial
@@ -341,6 +403,8 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   power series, regular-singular → Frobenius (indicial quadratic + `Log`-term
   sub-cases by root difference), irregular → decline; truncated `SeriesData`
   verified as `O[(x−x0)^N]`. Reuse `Series`/`SeriesData`.
+- `[ ] FirstOrderPowerSeries` — order-1 power series about an ordinary point;
+  extend `dsolve_frobenius.c` to the first-order case. (SymPy `1st_power_series`.)
 - `[✓] OperatorFactor` (`DSolve`DFactor`) — factor a homogeneous linear operator
   (order ≥ 3) by finding a first-order right factor `(D − r)`, `r ∈ C(x)` (a
   hyperexponential solution `Exp[∫r]`, via a rational Riccati `Σ a_k P_k(r) == 0`
@@ -369,6 +433,9 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 - `[~] EnergyIntegral` — `y''==f(y)`: subsumed by AutonomousReduction for the
   elementary cases (`f` free of `y'` is a special case); genuinely elliptic ones
   (`y''==2y^3`, `y''==-Sin[y]`) still decline (`WeierstrassP` inert head: future).
+- `[ ] Liouville` — `y'' + g(y)(y')^2 + h(x)y' == 0`: Liouville's transformation →
+  two quadratures. Distinct from `AutonomousReduction` (which requires missing-`x`);
+  here the `h(x)y'` term is `x`-dependent. (SymPy `Liouville`.) `dsolve_liouville.c`.
 
 ### 1e. Systems
 
@@ -394,7 +461,9 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   (`dsolve_verify_system`/`dsolve_fit_system`/`dsolve_assemble_system`).
   *Was (M4): eigen-only, diagonalizable, `-A^{-1}b` forcing, defective decline.*
 - `[ ] LinearSystemVarCoeff` — genuinely coupled, *non-triangular*, *variable* `A`
-  (Floquet/Magnus); future.
+  (Floquet/Magnus); future. This is SymPy's non-constant-coefficient
+  `linear_neq_order1` (types with a commutative antiderivative of the coefficient
+  matrix) and is the systems parity target.
 
 ### 1f. Conditions
 - `[✓]` IVP (fit constants at one point) — in the substrate.

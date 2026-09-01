@@ -1,0 +1,4 @@
+# Working copies of reference papers for the Lie point-symmetry method (M10).
+# Author-hosted preprints, downloaded for implementation reference — not
+# redistributed with the source. See ../dsolve_lie_symmetry.md for citations.
+*.pdf
