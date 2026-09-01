@@ -436,6 +436,41 @@ static void t_kovacic_declines(void) {
     check_form("Head[DSolve`Kovacic[x^2 y''[x] + x y'[x] + (x^2 - 4) y[x] == 0, y, x]]", "DSolve`Kovacic");
 }
 
+/* ---- Case 1c: apparent singularities for rational r (Legendre / Chebyshev /
+ *      Gegenbauer): the classical monic-P completion over the pole exponents ---- */
+static void t_kovacic_legendre1(void) {
+    /* Legendre n=1: (1-x^2)y'' - 2x y' + 2y == 0 -> C[1] x + C[2](1 - x ArcTanh[x]) */
+    check_method("DSolve`Kovacic", "(1 - x^2) y''[x] - 2 x y'[x] + 2 y[x] == 0",
+                 "(1 - x^2) D[y[x],{x,2}] - 2 x D[y[x],x] + 2 y[x]");
+}
+static void t_kovacic_legendre2(void) {
+    /* Legendre n=2: (1-x^2)y'' - 2x y' + 6y == 0 (first solution ∝ P_2) */
+    check_method("DSolve`Kovacic", "(1 - x^2) y''[x] - 2 x y'[x] + 6 y[x] == 0",
+                 "(1 - x^2) D[y[x],{x,2}] - 2 x D[y[x],x] + 6 y[x]");
+}
+static void t_kovacic_chebyshev2(void) {
+    /* Chebyshev n=2: (1-x^2)y'' - x y' + 4y == 0 (first solution ∝ T_2) */
+    check_method("DSolve`Kovacic", "(1 - x^2) y''[x] - x y'[x] + 4 y[x] == 0",
+                 "(1 - x^2) D[y[x],{x,2}] - x D[y[x],x] + 4 y[x]");
+}
+static void t_kovacic_complex_poles(void) {
+    /* poles at ±i: z'' == ((3 + 2 x^2)/(1 + x^2)^2) z -> x Sqrt[1+x^2] & Sqrt[1+x^2](1 + x ArcTan[x]) */
+    check_method("DSolve`Kovacic", "y''[x] - ((3 + 2 x^2)/(1 + x^2)^2) y[x] == 0",
+                 "D[y[x],{x,2}] - ((3 + 2 x^2)/(1 + x^2)^2) y[x]");
+}
+static void t_kovacic_legendre_auto_closed_form(void) {
+    /* the automatic cascade returns Legendre's closed form, not a truncated series */
+    check_form("FreeQ[DSolve[(1 - x^2) y''[x] - 2 x y'[x] + 2 y[x] == 0, y, x], SeriesData]", "True");
+    check_form("Head[DSolve[(1 - x^2) y''[x] - 2 x y'[x] + 2 y[x] == 0, y, x]]", "List");
+}
+static void t_kovacic_case2_complex_pole_no_hang(void) {
+    /* (x^3+1)y'' + x y' + y == 0: r has a complex-conjugate pole pair; no Liouvillian
+     * solution.  Case 1c declines fast and the Case-2 guard skips the σ-solve that
+     * used to hang, so DSolve returns (a series) rather than spinning.  The test
+     * passing at all is the no-hang assertion. */
+    check_form("Head[DSolve[(x^3 + 1) y''[x] + x y'[x] + y[x] == 0, y, x]]", "List");
+}
+
 /* ---- OperatorFactor: higher-order linear-operator factoring + DFactor ---- */
 static void t_method_operfactor(void) {
     /* shifted-Euler at x=1 (pole != 0, so EulerCauchy declines): OperatorFactor's
@@ -888,6 +923,12 @@ int main(void) {
     TEST(t_kovacic_case2);
     TEST(t_kovacic_auto_closed_form);
     TEST(t_kovacic_declines);
+    TEST(t_kovacic_legendre1);
+    TEST(t_kovacic_legendre2);
+    TEST(t_kovacic_chebyshev2);
+    TEST(t_kovacic_complex_poles);
+    TEST(t_kovacic_legendre_auto_closed_form);
+    TEST(t_kovacic_case2_complex_pole_no_hang);
     TEST(t_method_operfactor);
     TEST(t_operfactor_more);
     TEST(t_operfactor_ivp);

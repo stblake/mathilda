@@ -37,6 +37,7 @@
 #include "../parse.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 /* ---- small evaluated builders (args consumed, result owned) ---- */
 static Expr* T2(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Times, a, b)); }
@@ -89,6 +90,17 @@ static Expr* solve_ansatz(Expr* eqexpr, const char* x, Expr** unk, size_t nu, Ex
     expr_free(clist);
     Expr* eqlist = expr_new_function(expr_new_symbol(SYM_List), eqs, ne);
     free(eqs);
+
+    /* No unknowns: the ansatz is fully fixed, so it is a solution iff every
+     * coefficient equation was trivially satisfied (none survived).  Handle this
+     * directly rather than calling Solve[eqs, {}] (which errors "ivar: {} is not
+     * a valid variable"). */
+    if (nu == 0) {
+        bool consistent = (ne == 0);
+        expr_free(eqlist);
+        if (consistent) return ds_simplify(w);
+        expr_free(w); return NULL;
+    }
 
     Expr** vs = malloc(nu * sizeof(Expr*));
     for (size_t i = 0; i < nu; i++) vs[i] = expr_copy(unk[i]);
@@ -393,6 +405,260 @@ static Expr* kovacic_case1_poly_r(const Expr* r, const Expr* recovery,
     return body;
 }
 
+/* True iff N[e] is (numerically) a nonnegative integer ≤ cap, in which case *out
+ * receives it.  Used to test the Kovacic degree bound d = α_∞ - Σα_c cheaply:
+ * the α at complex poles are complex algebraic numbers (e.g. built on (-1)^(1/3))
+ * whose symbolic Simplify/IntegerQ is minutes-slow across every sign mask, but a
+ * numeric evaluation is instant — a wrong candidate is caught later when
+ * solve_monic_P finds no polynomial. */
+static bool numeric_nonneg_int(const Expr* e, int cap, int* out) {
+    Expr* v = fn1("N", expr_copy((Expr*)e));
+    double re = 0.0, im = 0.0; bool okr = false;
+    if (v->type == EXPR_REAL) { re = v->data.real; okr = true; }
+    else if (v->type == EXPR_INTEGER) { re = (double)v->data.integer; okr = true; }
+    else if (head_is(v, SYM_Complex) && v->data.function.arg_count == 2) {
+        Expr* a = v->data.function.args[0]; Expr* b = v->data.function.args[1];
+        if ((a->type == EXPR_REAL || a->type == EXPR_INTEGER) &&
+            (b->type == EXPR_REAL || b->type == EXPR_INTEGER)) {
+            re = (a->type == EXPR_REAL) ? a->data.real : (double)a->data.integer;
+            im = (b->type == EXPR_REAL) ? b->data.real : (double)b->data.integer;
+            okr = true;
+        }
+    }
+    expr_free(v);
+    if (!okr || fabs(im) > 1e-7) return false;
+    long n = (long)(re + (re < 0 ? -0.5 : 0.5));
+    if (n < 0 || n > cap || fabs(re - (double)n) > 1e-7) return false;
+    *out = (int)n;
+    return true;
+}
+
+/* Solve for a monic polynomial P of degree dd satisfying the Kovacic Case-1
+ * P-equation  P'' + 2 θ P' + R2 P == 0,  R2 = θ' + θ² - r  (undetermined
+ * coefficients on P = x^dd + Σ b_i x^i).  R2 is precomputed by the caller (it
+ * does not depend on dd).  Returns P (owned, fully determined) or NULL if no such
+ * P exists.  `theta`, `R2` borrowed.  The roots of P are the apparent
+ * singularities of the solution z1 = P Exp[∫θ] — the zeros the pole-only Riccati
+ * ansatz cannot represent. */
+static Expr* solve_monic_P(const Expr* theta, const Expr* R2, int dd,
+                           const char* x, int* counter) {
+    if (dd < 0) return NULL;
+    /* P = x^dd + Σ_{i=0}^{dd-1} b_i x^i (monic) */
+    Expr** B = malloc((size_t)(dd ? dd : 1) * sizeof(Expr*));
+    Expr** pterms = malloc((size_t)(dd + 1) * sizeof(Expr*));
+    pterms[0] = xpow(x, dd);
+    for (int i = 0; i < dd; i++) {
+        char buf[32]; snprintf(buf, sizeof(buf), "DSolve`kv%d", (*counter)++);
+        const char* sn = intern_symbol(buf);
+        B[i] = expr_new_symbol(sn);
+        pterms[i + 1] = ds_call2(SYM_Times, expr_new_symbol(sn), xpow(x, i));
+    }
+    Expr* Pp = expr_new_function(expr_new_symbol(SYM_Plus), pterms, (size_t)(dd + 1));
+    free(pterms);
+    /* P'' + 2 θ P' + R2 P */
+    Expr* Pode = A2(A2(ds_d(ds_d(expr_copy(Pp), expr_new_symbol(x)), expr_new_symbol(x)),
+                       T2(T2(expr_new_integer(2), expr_copy((Expr*)theta)),
+                          ds_d(expr_copy(Pp), expr_new_symbol(x)))),
+                    T2(expr_copy((Expr*)R2), expr_copy(Pp)));
+    Expr* Psol = solve_ansatz(Pode, x, B, (size_t)dd, Pp);   /* consumes Pode, Pp */
+    for (int i = 0; i < dd; i++) expr_free(B[i]);
+    free(B);
+    return Psol;
+}
+
+/* General classical Kovacic Case 1 for a rational r = rn/rd with genuine poles
+ * (degd >= 1).  The pole-only Riccati ansatz (Case 1 above) misses solutions
+ * whose z1 has zeros away from the poles of r — an *apparent singularity*, the
+ * P'/P term of ω.  Here we build ω = θ + P'/P with:
+ *   θ  = Σ_c α_c^{±}/(x - c)     over the poles c of r (order ≤ 2), where
+ *        b_c = lim_{x→c}(x-c)² r  and  α_c^{±} = (1 ± √(1+4 b_c))/2, and
+ *   P  = a monic polynomial of degree d (its roots are the apparent
+ *        singularities), found by solve_monic_P.
+ * We enumerate the ± sign per pole (complex poles included — the denominator
+ * roots come from dsolve_analyze_roots) and search the degree d.  The first (θ,d)
+ * that yields a monic P gives z1 = P Exp[∫θ]: the algebraic identity
+ * P'' + 2θ P' + (θ'+θ²-r)P == 0 makes z1'' == r z1 hold *exactly*, so the
+ * candidate needs no numeric back-substitution here — dsolve_run verifies the
+ * assembled body symbolically as the backstop.  Restricted to r that vanishes to
+ * order ≥ 2 at ∞ (δ = degd - degn ≥ 2, so [√r]_∞ = 0), which covers the classical
+ * orthogonal-polynomial family (Legendre, Chebyshev, Gegenbauer, Jacobi, ...). */
+#define KOV_C1G_DMAX 10     /* max apparent-singularity polynomial degree searched */
+#define KOV_C1G_MAXPOLES 6  /* bound the 2^k sign enumeration                      */
+static Expr* kovacic_case1_general(const Expr* r, const Expr* rd,
+                                   int degn, int degd,
+                                   const Expr* recovery, const char* x, int* counter) {
+    if (degd < 1) return NULL;              /* polynomial r: kovacic_case1_poly_r */
+    if (degd - degn < 2) return NULL;       /* need [√r]_∞ = 0 (order ≥ 2 at ∞)   */
+
+    DSolveRoots pr;
+    if (!dsolve_analyze_roots(rd, x, degd, &pr)) return NULL;
+    size_t k = pr.ndist;
+    if (k == 0 || k > KOV_C1G_MAXPOLES) { dsolve_roots_free(&pr); return NULL; }
+
+    /* per-pole α^{+} / α^{-} = (1 ± √(1+4 b))/2, b = lim_{x→c}(x-c)² r; require
+     * pole order ≤ 2.  `degen[i]` marks √(1+4b)==0 (α^+ == α^-), so that pole's
+     * sign bit is redundant and the enumeration fixes it to 0. */
+    Expr** ap = malloc(k * sizeof(Expr*));
+    Expr** am = malloc(k * sizeof(Expr*));
+    bool*  degen = malloc(k * sizeof(bool));
+    for (size_t i = 0; i < k; i++) { ap[i] = NULL; am[i] = NULL; degen[i] = false; }
+    bool ok = true;
+    for (size_t i = 0; i < k && ok; i++) {
+        if (pr.mult[i] > 2) { ok = false; break; }   /* higher-order poles: future */
+        Expr* c = pr.roots[i];
+        /* b = Limit[(x-c)² r, x -> c]  (0 for an order-1 pole).  Limit — not
+         * Cancel — because a complex pole c is not a rational factor of r. */
+        Expr* lim = expr_new_function(expr_new_symbol(SYM_Rule),
+                        (Expr*[]){ expr_new_symbol(x), expr_copy(c) }, 2);
+        Expr* b = ds_simplify(fn2("Limit",
+                      T2(Powi(Sub(expr_new_symbol(x), expr_copy(c)), 2), expr_copy((Expr*)r)),
+                      lim));
+        /* α^{±} = (1 ± √(1+4b))/2.  Kept unsimplified: at a complex pole b is a
+         * complex algebraic number and Simplify of √(1+4b) is very slow; the only
+         * uses (the numeric degree test and, for a surviving mask, θ) tolerate the
+         * raw form.  `degen` (√(1+4b)==0) is tested numerically for the same
+         * reason. */
+        Expr* disc = fn1("Sqrt", A2(expr_new_integer(1), T2(expr_new_integer(4), b)));
+        { int dummy; degen[i] = numeric_nonneg_int(disc, 0, &dummy); }  /* disc≈0 */
+        ap[i] = T2(A2(expr_new_integer(1), expr_copy(disc)), Powi(expr_new_integer(2), -1));
+        am[i] = T2(Sub(expr_new_integer(1), disc), Powi(expr_new_integer(2), -1));
+    }
+
+    /* w² = Exp[-∫P] = recovery², the reduction-of-order weight (independent of θ). */
+    Expr* w2 = ds_simplify(Powi(expr_copy((Expr*)recovery), 2));
+
+    /* α_∞^{±}: the exponents at infinity.  δ = degd-degn > 2 gives {0,1}; δ == 2
+     * gives (1 ± √(1+4 b_∞))/2 with b_∞ = lim_{x→∞} x² r.  Their only use is the
+     * classical Kovacic degree bound d = α_∞^{±} - Σ_c α_c^{s_c}: we attempt
+     * solve_monic_P only at a d that is a nonnegative integer, rather than scanning
+     * 0..DMAX.  This is decisive for speed — a no-Liouvillian input (e.g. an r with
+     * complex poles and no integer d, like the normal form of (x³+1)y''+xy'+y)
+     * then declines at once instead of running exp_integral over every sign mask. */
+    Expr* ainf_p; Expr* ainf_m;
+    if (degd - degn > 2) {
+        ainf_p = expr_new_integer(0);
+        ainf_m = expr_new_integer(1);
+    } else {                                        /* δ == 2 */
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                        (Expr*[]){ expr_new_symbol(x),
+                                   expr_new_symbol(intern_symbol("Infinity")) }, 2);
+        Expr* binf = ds_simplify(fn2("Limit",
+                         T2(Powi(expr_new_symbol(x), 2), expr_copy((Expr*)r)), rule));
+        Expr* di = ds_simplify(fn1("Sqrt",
+                       A2(expr_new_integer(1), T2(expr_new_integer(4), binf))));
+        ainf_p = ds_simplify(T2(A2(expr_new_integer(1), expr_copy(di)),
+                                Powi(expr_new_integer(2), -1)));
+        ainf_m = ds_simplify(T2(Sub(expr_new_integer(1), di),
+                                Powi(expr_new_integer(2), -1)));
+    }
+
+    Expr* body = NULL;
+    if (ok) {
+        size_t ncomb = (size_t)1 << k;
+        /* Pass 1: collect a first-solution candidate y1 = w·P·Exp[∫θ] for each
+         * sign mask.  Different masks give different (but equally valid) members of
+         * the solution space; the second-solution integral below is the expensive
+         * step, done only for the *cleanest* y1 (smallest LeafCount — the
+         * orthogonal-polynomial member, vs a fractional-power sibling). */
+        Expr** cand = malloc((ncomb ? ncomb : 1) * sizeof(Expr*));
+        long*  score = malloc((ncomb ? ncomb : 1) * sizeof(long));
+        size_t ncand = 0;
+        for (size_t mask = 0; mask < ncomb; mask++) {
+            bool redundant = false;                 /* skip fixed bits of degenerate poles */
+            for (size_t i = 0; i < k; i++)
+                if (degen[i] && ((mask >> i) & 1)) { redundant = true; break; }
+            if (redundant) continue;
+            /* Σ_c α_c^{s_c} for this mask, then the candidate degrees
+             * d = α_∞^{±} - Σα_c — tested *numerically* for nonnegative-integrality
+             * (see numeric_nonneg_int) before the expensive θ/exp_integral, so a
+             * mask with no integer degree bound (e.g. every mask of a complex-pole
+             * r with no Liouvillian solution) is skipped instantly. */
+            Expr* suma = expr_new_integer(0);
+            for (size_t i = 0; i < k; i++)
+                suma = A2(suma, expr_copy(((mask >> i) & 1) ? ap[i] : am[i]));
+            int dcand[2]; int ndc = 0;
+            for (int si = 0; si < 2; si++) {
+                Expr* de = Sub(expr_copy(si ? ainf_p : ainf_m), expr_copy(suma));
+                int dv;
+                if (numeric_nonneg_int(de, KOV_C1G_DMAX, &dv)) dcand[ndc++] = dv;
+                expr_free(de);
+            }
+            expr_free(suma);
+            if (ndc == 0) continue;                 /* no valid degree: skip this mask */
+
+            /* θ = Σ_i α_i^{sign}/(x - c_i) */
+            Expr* theta = expr_new_integer(0);
+            for (size_t i = 0; i < k; i++) {
+                Expr* a = ((mask >> i) & 1) ? ap[i] : am[i];
+                theta = A2(theta, T2(expr_copy(a),
+                             Powi(Sub(expr_new_symbol(x), expr_copy(pr.roots[i])), -1)));
+            }
+            theta = ds_simplify(theta);
+            Expr* e = exp_integral(theta, x);       /* Exp[∫θ]; borrows theta */
+            if (!e) { expr_free(theta); continue; }
+            /* R2 = θ' + θ² - r  (independent of the degree d) */
+            Expr* R2 = ds_simplify(Sub(A2(ds_d(expr_copy(theta), expr_new_symbol(x)),
+                                          Powi(expr_copy(theta), 2)),
+                                       expr_copy((Expr*)r)));
+            for (int di = 0; di < ndc; di++) {
+                Expr* Psol = solve_monic_P(theta, R2, dcand[di], x, counter);
+                if (!Psol) continue;
+                Expr* y1 = ds_simplify(T2(T2(expr_copy((Expr*)recovery), expr_copy(Psol)),
+                                          expr_copy(e)));
+                expr_free(Psol);
+                Expr* lc = fn1("LeafCount", expr_copy(y1));
+                cand[ncand] = y1;
+                score[ncand] = (lc->type == EXPR_INTEGER) ? lc->data.integer : 1L << 30;
+                expr_free(lc);
+                ncand++;
+                break;                              /* one candidate per mask */
+            }
+            expr_free(R2);
+            expr_free(e);
+            expr_free(theta);
+        }
+
+        /* Pass 2: assemble at the y-level (reduction of order on the *original*
+         * ODE) from the cleanest candidate first — y2 = y1 ∫ w²/y1² dx.  Doing it
+         * y-level (not z-level z1∫1/z1²) keeps the recovery radical cancelled up
+         * front, so the integrand and product stay radical-free.  First candidate
+         * whose ∫ is elementary wins. */
+        for (size_t pick = 0; pick < ncand && !body; pick++) {
+            size_t best = pick;                     /* selection-sort by LeafCount */
+            for (size_t j = pick + 1; j < ncand; j++)
+                if (score[j] < score[best]) best = j;
+            if (best != pick) {
+                Expr* te = cand[pick]; cand[pick] = cand[best]; cand[best] = te;
+                long ts = score[pick]; score[pick] = score[best]; score[best] = ts;
+            }
+            Expr* y1 = cand[pick];
+            Expr* integrand = ds_simplify(T2(expr_copy(w2), Powi(expr_copy(y1), -2)));
+            Expr* integ = ds_integrate(integrand, expr_new_symbol(x));  /* consumes integrand */
+            if (!ds_has_head(integ, SYM_Integrate)) {          /* ∫ elementary */
+                Expr* y2 = ds_simplify(T2(expr_copy(y1), integ));       /* consumes integ */
+                /* Assemble C[1] y1 + C[2] y2 with y1, y2 already individually
+                 * Simplify'd.  Deliberately NOT realify()'d: a final Simplify of
+                 * the whole sum tries to cross-factor over a radical second
+                 * solution (e.g. the (√(x²-1)-x)^6 form the integrator emits for
+                 * Gegenbauer), which is a multi-second blow-up for no gain — and
+                 * this δ≥2 rational-recovery path never produces the Erf/complex
+                 * forms realify is there to fold. */
+                body = A2(T2(ds_const(1), expr_copy(y1)), T2(ds_const(2), y2));
+            } else {
+                expr_free(integ);
+            }
+        }
+        for (size_t i = 0; i < ncand; i++) expr_free(cand[i]);
+        free(cand); free(score);
+    }
+    expr_free(w2); expr_free(ainf_p); expr_free(ainf_m);
+
+    for (size_t i = 0; i < k; i++) { if (ap[i]) expr_free(ap[i]); if (am[i]) expr_free(am[i]); }
+    free(ap); free(am); free(degen);
+    dsolve_roots_free(&pr);
+    return body;
+}
+
 Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
     Expr* Pc; Expr* Qc;
     if (!dsolve_second_order_PQ(P, &Pc, &Qc)) return NULL;
@@ -421,7 +687,7 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
     int degn = degree_in(rn, x);
     int degd = degree_in(rd, x);
     Expr* factors = fn1("FactorList", expr_copy(rd));
-    expr_free(rn); expr_free(rd);
+    expr_free(rn);   /* rd kept alive for the general Case-1 pole enumeration */
 
     int ddiff = degn - degd;
     int poly_deg = (ddiff > 0) ? (ddiff + 1) / 2 : 0;
@@ -457,8 +723,33 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
         body = kovacic_case1_poly_r(r, recovery, x, &counter);
     }
 
+    /* ---- Case 1c: rational r with genuine poles, apparent singularities via a
+     *      monic polynomial P over the local pole exponents (the classical Case-1
+     *      completion the pole-only Riccati ansatz misses — e.g. Legendre,
+     *      Chebyshev, Gegenbauer, Jacobi).  Runs before the heavier Case 2. ---- */
+    if (!body && degd >= 1) {
+        int counter = 1;
+        body = kovacic_case1_general(r, rd, degn, degd, recovery, x, &counter);
+    }
+
+    /* Guard: Case 2's rational-σ search builds an undetermined-coefficient system
+     * over the irreducible factors of the denominator and hands it to Solve.  When
+     * a factor has degree ≥ 2 (a complex-conjugate pole pair), that system is
+     * large and coupled and Solve can run for minutes — while the complex-pole
+     * Liouvillian solutions it might find are already covered by Case 1c.  So only
+     * attempt Case 2 when every pole is simple (all factors linear); otherwise
+     * decline to the series fallback rather than hang. */
+    bool case2_ok = true;
+    if (!body && factors && head_is(factors, SYM_List)) {
+        for (size_t fi = 0; fi < factors->data.function.arg_count; fi++) {
+            Expr* pair = factors->data.function.args[fi];
+            if (head_is(pair, SYM_List) && pair->data.function.arg_count == 2 &&
+                degree_in(pair->data.function.args[0], x) >= 2) { case2_ok = false; break; }
+        }
+    }
+
     /* ---- Case 2: σ ∈ C(x), D' + 2σD == 0, D = 4r - 2σ' - σ² ---- */
-    if (!body) {
+    if (!body && case2_ok) {
         int counter = 1;
         Expr** unk; size_t nu;
         Expr* sig = build_riccati_ansatz(x, poly_deg, factors, &counter, &unk, &nu);
@@ -495,7 +786,7 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
         }
     }
 
-    expr_free(r); expr_free(factors); expr_free(recovery);   /* rt was consumed by Denominator */
+    expr_free(r); expr_free(rd); expr_free(factors); expr_free(recovery);   /* rt was consumed by Denominator */
     if (!body) return NULL;
     Expr** out = malloc(sizeof(Expr*));
     out[0] = body;
@@ -513,6 +804,8 @@ void dsolve_kovacic_init(void) {
     symtab_set_docstring("DSolve`Kovacic",
         "DSolve`Kovacic[eqn, y, x] finds Liouvillian solutions of a second-order "
         "linear ODE y'' + P y' + Q y == 0 by reducing to z'' == r z and searching "
-        "for the logarithmic derivative of a solution: Case 1 (rational, z = "
-        "Exp[Integrate[omega]]) and Case 2 (degree-2 algebraic). Declines otherwise.");
+        "for the logarithmic derivative of a solution: Case 1 (rational omega, z = "
+        "P Exp[Integrate[theta]], including the apparent-singularity monic P over the "
+        "local pole exponents that yields the elementary Legendre/Chebyshev/Gegenbauer "
+        "family) and Case 2 (degree-2 algebraic). Declines otherwise.");
 }

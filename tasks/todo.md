@@ -1,67 +1,57 @@
-# DSolve — OperatorFactor / DSolve`DFactor (§1c linear-operator factoring)
+# Task: Complete Kovacic Case 1 (apparent singularities) — closed form over series
 
-Factor a linear operator L by finding a first-order right factor (D-r), r∈C(x)
-(hyperexponential solution Exp[∫r]); peel via operator right-division, recurse
-DSolve on the order-(n-1) quotient, close with a trailing first-order solve.
-- DSolve`OperatorFactor: cascade method, homogeneous, order ≥ 3 (Kovacic owns 2).
-- DSolve`DFactor[eqn,y,x]: returns {Dx - r1, Dx - r2, ...} (inert Dx = d/dx).
+Goal: `DSolve` returns the elementary closed form for Legendre/Chebyshev/Gegenbauer/Jacobi
+(currently a truncated series, and Chebyshev hangs). Fully algorithmic via a complete classical
+Kovacic Case 1 for arbitrary rational `r` (apparent singularities, higher-order + complex poles).
+All engine work in `src/calculus/dsolve_kovacic.c`.
 
-Self-contained new file (NO changes to dsolve_kovacic.c → zero regression risk).
+## Steps
 
-Note (learned in design): distinct-pole factors → dilog in reductions (decline);
-shifted-Euler (shared pole x-b, b≠0) is elementary AND unique to OperatorFactor
-(EulerCauchy only detects pole at 0). Use shifted-Euler + all-constant in tests.
+- [x] 1. Read `dsolve_common.h` helper API (dsolve_analyze_roots enumerates poles incl. complex).
+- [x] 2. Factor out `solve_monic_P(theta, R2, d, x, counter)` (R2 precomputed per θ).
+- [x] 3. Pole locals via Limit[(x-c)^2 r] (order ≤2 + complex); [√r]_∞=0 for δ≥2.
+- [x] 4. Add `kovacic_case1_general`: enumerate poles+signs, dedup degenerate, search d,
+        collect y1 candidates, pick cleanest by LeafCount, y-level reduction of order.
+- [x] 5. Wire into `dsolve_kovacic_try` after pure-Riccati Case 1, for all rational r (degd≥1).
+- [x] 5b. Fixes: nu==0 guard in solve_ansatz (no more Solve::ivar); drop numeric_verify (exact
+         by construction); y-level assembly (avoid √·ArcTanh Simplify blow-up); skip final
+         realify (avoid Gegenbauer 7s). All class members now <0.5s.
+- [x] 6. Case-2 hang: root-caused to the σ-solve (ds_solve) on complex-pole (degree-≥2
+        factor) systems; guarded by "all irreducible factors linear" gate → declines to series.
+        Also made Case 1c decline fast via numeric degree test (complex α).
+- [x] 7. REPL-verified: Legendre n=1..5, Chebyshev n=2/3, Gegenbauer, complex poles — fast+correct.
+- [x] 8. Regression: single-pole, poly-r, Hermite series, non-Liouvillian declines — all intact.
+- [x] 9. Tests: 6 new cases in `tests/test_dsolve.c` (Legendre 1/2, Chebyshev, complex poles,
+        auto-closed-form, no-hang). All 3 DSolve suites (incl. m5 Case-2) pass.
+- [x] 10. Gates: `make check-c99` clean; valgrind — no new leak (only pre-existing
+         solve_ansatz→Together baseline ≈13.6KB); broad 9-ODE hang sweep clean.
+- [ ] 11. Docs: calculus.md, changelog 2026-08-31, DSOLVE_PLAN.md §1c, docstring; memory note.
 
-## Implementation
-- [x] src/calculus/dsolve_operator_factor.c — of_build_ansatz, of_riccati_residual
-      (Bell polys), of_find_factor (branch-iterate + remainder guard), of_divide
-      (binomial recurrence), trailing solve (measured C[kk]); dsolve_operfactor_try
-      + builtin + init; builtin_dsolve_dfactor + recursive collector
-- [x] src/calculus/dsolve.c — extern, DS_OPERFACTOR enum, "OperatorFactor" map,
-      cascade after kovacic, pinned case, init (also registers DSolve`DFactor)
-- [x] tests/CMakeLists.txt — add dsolve_operator_factor.c
+## Review
 
-## Tests
-- [x] tests/test_dsolve.c — 6 unit tests (method/more/ivp/declines/dfactor/auto)
-- [x] tests/test_dsolve_stress.c — operfactor_ok + dfactor_ok generators
+**Outcome:** `DSolve[(1-x^2)y''-2x y'+2y==0, y, x]` now returns the elementary closed
+form `C[1] x + C[2](1 - x ArcTanh[x])` (Legendre P₁/Q₁) instead of a truncated series —
+matching Maple/Mathematica. Fully algorithmic via the completed Kovacic Case 1, not a
+Legendre pattern.
 
-## Docs
-- [x] docs/spec/builtins/calculus.md — OperatorFactor + DFactor
-- [x] docs/spec/changelog/2026-08-31.md — ## DSolve — OperatorFactor / DFactor
-- [x] DSOLVE_PLAN.md — §1c [✓] OperatorFactor; M5 note
+**What changed** (all in `src/calculus/dsolve_kovacic.c`):
+- `kovacic_case1_general` — classical Case 1 apparent-singularity construction for any
+  rational `r`: poles (incl. complex) via `dsolve_analyze_roots`, local exponents
+  `α_c=(1±√(1+4b_c))/2`, monic `P` of the classical degree `d=α_∞−Σα_c`, `z1=P Exp[∫θ]`.
+- `solve_monic_P`, `numeric_nonneg_int` helpers; `solve_ansatz` nu==0 short-circuit.
+- Case-2 guard: skip when a denominator factor has degree ≥ 2 (avoids the σ-solve hang).
+- Wired as Case 1c after pure Case 1, before Case 2.
 
-## Gates
-- [x] make -j clean (no warnings; fixed a gcc-16 -Warray-bounds false positive
-      by pre-sizing the ansatz arrays instead of realloc)
-- [x] REPL spot-checks — shifted-Euler/constant/resonant/order-4 solve; distinct-pole
-      /Airy-3/order-2 decline cleanly; DFactor correct; AUTO dispatch fires; regressions ok
-- [x] ctest -R dsolve — 3/3 green (Kovacic/M5 intact = zero regression)
-- [x] make check-c99 — exit 0
-- [x] valgrind — OperatorFactor AND DFactor paths: 1x==6x==13,440+6,312 B (no per-call leak)
-- [ ] commit + push (awaiting user go)
+**Key engineering lessons** (saved to memory
+`project_dsolve_kovacic_case1_apparent_singularity`): y-level reduction of order (not
+z-level — avoids a 50 s √·ArcTanh Simplify blow-up); numeric degree test (complex α
+symbolic Simplify hangs); skip final realify (Gegenbauer 17 s → 0.1 s); cleanest-y1 by
+LeafCount; Case-2 complex-pole guard (never TimeConstrained in-engine).
 
-## Review — DONE
+**Results:** Legendre n=1..5, Chebyshev n=2/3, Gegenbauer, complex poles — all closed
+form, all < 0.5 s, residuals ~1e-14. Hermite/Laguerre correctly stay series (2nd sol
+non-elementary). `(x³+1)y''+xy'+y` no longer hangs (1.1 s → series).
 
-`DSolve`OperatorFactor` (§1c) solves homogeneous linear ODEs of order ≥ 3 by
-factoring the operator: find a first-order right factor `(D-r)`, `r∈C(x)` (Bell-
-polynomial Riccati `Σ a_k P_k(r)==0`, undetermined-coefficient search with per-branch
-remainder guard), peel via operator right-division (binomial recurrence), recurse
-`DSolve` on the order-(n-1) quotient, close with the trailing first-order solve
-(constant `C[kk]` measured contiguous). `DSolve`DFactor` returns `{Dx-r1,...}`.
-New self-contained file `src/calculus/dsolve_operator_factor.c` (no Kovacic changes).
-
-**Verified:** shifted-Euler flagship (unique niche — EulerCauchy only detects pole 0),
-constant order 3/4, resonant repeated, order-4 all solve + back-substitute; distinct-
-pole (dilog), Airy-3, order-2 all decline cleanly; DFactor reconstructs the operator;
-AUTO dispatch fires; Kovacic/Euler/Airy/constcoeff regressions intact.
-
-**Two bugs caught during testing (both fixed):** (1) gcc-16 -Warray-bounds false
-positive on the realloc+macro ansatz builder → rewrote to pre-size exactly; (2) the
-DFactor reconstruct test used `Reverse[fs]` which only passed for commuting (constant)
-factors — the correct order folds over `fs` directly (innermost factor applied first),
-and the reference operator-on-tf must be built by the same composition, not by
-`op /. y->Function[tf]` (which mis-evaluates the derivative terms).
-
-**Follow-ups (out of scope):** inhomogeneous forcing; irregular-singular (double-pole)
-r; 2nd-order right factors (Beke); distinct-pole compositions (dilog reductions);
-Sturm–Liouville EigenvalueProblem (§1f, the last open §1c/1f item).
+**Verification:** all 3 DSolve suites pass (6 new tests added); `make check-c99` clean;
+valgrind — no new leak (only the pre-existing ~13.6 KB `solve_ansatz→Together`
+baseline); broad 9-ODE hang sweep clean.

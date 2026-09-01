@@ -314,15 +314,29 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   zero_test currently hangs). Both degenerate cases decline to the Frobenius
   series fallback; the other parameters (`a`; `a,b`) may stay symbolic.
   TODO: canonical-singular-point restriction lifted by an affine/Möbius change of
-  variable; LegendreP recognizer (needs a LegendreP/Q derivative rule + LegendreQ
-  head); inert heads for LegendreQ, HermiteH, Chebyshev, Laguerre, Gegenbauer,
-  Jacobi, Whittaker, Mathieu, Spheroidal, Kelvin, ParabolicCylinder, Struve,
-  Weierstrass.
+  variable. NOTE: the integer-degree **Legendre / Chebyshev / Gegenbauer / Jacobi**
+  family (both solutions elementary) is now solved *algorithmically* by Kovacic
+  Case 1 (below), not by a recognizer — no LegendreP/Q head needed. A recognizer is
+  only wanted for the **non-integer** degree (genuinely hypergeometric) cases and
+  for inert heads: LegendreQ, HermiteH, Laguerre, Whittaker, Mathieu, Spheroidal,
+  Kelvin, ParabolicCylinder, Struve, Weierstrass.
 - `[✓] Kovacic` — Liouvillian solutions of the reduced form `z''==r z`
   (`r∈C(x)`); three-case algorithm on the poles of `r` (`Apart`/`FactorList`) +
-  order at ∞. Staged: Case 1 (`Exp[∫ω]`, `ω` rational) → Case 2 (degree-2
-  algebraic) → Case 3 (degree 4/6/12, gated). Algebraic exponents via
-  `RootReduce`/qqbar; second solution via `ReductionOfOrder`.
+  order at ∞. Staged: Case 1 (`z==P Exp[∫θ]`, `θ,P` rational) → Case 2 (degree-2
+  algebraic) → Case 3 (degree 4/6/12, gated). **Case 1 apparent-singularity
+  completion (`kovacic_case1_general`):** the pole-only Riccati ansatz misses a
+  solution whose `z1` has zeros off the poles of `r`; the classical fix builds
+  `θ = Σ_c α_c^{s}/(x−c)` from the local pole exponents `α_c=(1±√(1+4 b_c))/2`
+  (`b_c = lim(x−c)²r`; poles located incl. complex via `dsolve_analyze_roots`) and
+  a monic `P` of degree `d = α_∞ − Σα_c` (classical degree bound, tested
+  *numerically* so complex-α combinations reject instantly), then `z1 = P Exp[∫θ]`.
+  The second solution is taken at the **y-level** (`y2 = y1 ∫ w²/y1²`, reduction of
+  order on the original ODE) so the recovery radical cancels up front — the z-level
+  `z1∫1/z1²` instead sends Simplify into a minutes-long blow-up. Solves integer-degree
+  Legendre/Chebyshev/Gegenbauer/Jacobi in elementary form. Case 2 is **skipped when a
+  denominator factor has degree ≥ 2** (complex poles): its σ-`Solve` blows up there and
+  Case 1c already covers those poles. Algebraic exponents via `RootReduce`/qqbar;
+  second solution via `ReductionOfOrder`.
 - `[✓] FrobeniusSeries` / `[✓] PowerSeries` — series about `x0`: ordinary →
   power series, regular-singular → Frobenius (indicial quadratic + `Log`-term
   sub-cases by root difference), irregular → decline; truncated `SeriesData`
