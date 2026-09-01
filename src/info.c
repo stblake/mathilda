@@ -2546,6 +2546,24 @@ void info_init(void) {
         "Differences[m, {n, 0}]) differences successive rows.\n"
         "FoldList[Plus, x, Differences[list]] inverts Differences.\n"
         "Differences has the attribute Protected.");
+    symtab_set_docstring("ListGradient",
+        "ListGradient[f]\n"
+        "\tgives the numerical gradient of the sampled array f by finite\n"
+        "\tdifferences: second-order central differences in the interior and\n"
+        "\tone-sided differences at the edges, one array per axis. For a vector\n"
+        "\tit returns a vector; for a rank-k array it returns {g1, ..., gk}.\n"
+        "ListGradient[f, h] uses spacing h on every axis; ListGradient[f, {s1,\n"
+        "..., sk}] gives one spacing per axis, each a scalar spacing or a\n"
+        "coordinate vector for non-uniform sampling. For a vector, a coordinate\n"
+        "list of the same length as f is used directly.\n"
+        "Options: Method -> \"Centered\" (default), \"Forward\", or \"Backward\";\n"
+        "DifferenceOrder -> p (accuracy order, default 2); WindowLength -> m\n"
+        "(stencil size, default p+1); Axis -> All | a | {a1, ...} to restrict to\n"
+        "particular axes. Integer input yields exact Rationals and symbolic input\n"
+        "a symbolic result; arbitrary-precision (MPFR) input keeps its precision.\n"
+        "Real and complex machine arrays use the packed/NDArray buffer fast path,\n"
+        "and ListGradient[v] compiles.\n"
+        "ListGradient has the attribute Protected.");
     symtab_set_docstring("Ratios",
         "Ratios[list]\n"
         "\tgives the successive ratios list[[k+1]]/list[[k]] of the elements\n"

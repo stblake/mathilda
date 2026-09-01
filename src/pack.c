@@ -534,6 +534,12 @@ static void pack_mark_aware_heads(void) {
         "Ordering",
         "RotateLeft", "RotateRight", "Partition", "Riffle", "Join",
         "Differences", "First", "Last", "Most", "Rest",
+        /* ListGradient (src/list/list_gradient.c) computes finite-difference
+         * gradients straight on a float64/float32 buffer. Deliberately NOT on
+         * INT64_OK below: the central difference of exact integers is a Rational
+         * (e.g. (f[i+1]-f[i-1])/2), which no int64 buffer holds, so an int64
+         * argument materialises and the exact List path answers. */
+        "ListGradient",
         "PadLeft", "PadRight",
         /* ArrayReshape (memcpy into a new dims header) and ArrayPad (two-sided
          * rank-1 pad by memcpy + nd_fill_run) — src/ndstruct.c. Both decline any

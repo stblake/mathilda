@@ -428,6 +428,14 @@ void options_register_defaults(void) {
         ob_commit(&b, "InverseFourier");
     }
 
+    /* ---- ListGradient (finite-difference numerical gradient) ---- */
+    ob_init(&b);
+    ob_add(&b, r_str("Method", "Centered"));
+    ob_add(&b, r_int("DifferenceOrder", 2));
+    ob_add(&b, r_sym("WindowLength", "Automatic"));
+    ob_add(&b, r_sym("Axis", "All"));
+    ob_commit(&b, "ListGradient");
+
     /* ---- Number theory ---- */
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));

@@ -16,6 +16,7 @@
 #include "../ndarray.h"            /* EXPR_NDARRAY, builtin matrix producers */
 #include "../ndreduce.h"           /* ndred_* reductions */
 #include "../ndstruct.h"           /* ndstruct_* structural heads, ND_MOST/ND_REST */
+#include "../list/list_gradient.h" /* list_gradient_ndarray — numerical gradient */
 #include "../linalg/ndlinalg.h"    /* ndla_* single/rank-2 linalg */
 #include "../linalg/linalg.h"      /* builtin_matrixpower, nd_dot_machine */
 #include "../list/transpose.h"     /* builtin_conjugate_transpose */
@@ -152,6 +153,11 @@ static const NdFnSpec ND_FNS[] = {
      * "not an NDArray" and aborts to the interpreter — the same faithful
      * degrade the existing seven rely on. */
     { "Differences",   ndstruct_differences, 0, 0, false, 0, false },
+    /* ListGradient[v] (default centered, unit spacing) on a rank-1 real array
+     * gives a same-shape real array; NDF_REAL keeps integer/complex bodies out
+     * (the answer there is Rational/exact and declines to the interpreter). The
+     * spacing/option forms and rank>=2 return a List and bail safely. */
+    { "ListGradient",  list_gradient_ndarray, 0, 0, false, NDF_REAL, false },
     { "Ratios",        ndstruct_ratios,      0, 0, false, 0, false },
     { "Most",          nd_most,              0, 0, false, 0, false },
     { "Rest",          nd_rest,              0, 0, false, 0, false },

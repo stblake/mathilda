@@ -3207,3 +3207,40 @@ unevaluated (`y'==-x E^-x - y + x E^(2x) y^3`; `(x y-2x)y'==y-y^2+3x^2 y^3`).
 
 See [[project_dsolve_chini_linremoval_and_xayb_exact]],
 [[project_dsolve_cancel_not_simplify_on_classifier_guard]].
+
+## Benchmarking ListGradient vs numpy (2026-09-01)
+
+1. **A corrupted head silently measures the pack gate, not your op.** The perf
+   driver built calls with `"ListGradient[d]".replace("d","data")`, which also
+   hit the `d` in "ListGra**d**ient" → `ListGradataient[data]`. That undefined
+   head is not on `pack.c`'s AWARE list, so the transparency gate MATERIALISED
+   the 10^6-element packed array into boxed Exprs — I was timing 117 ms of
+   materialisation, not the ~6 ms gradient. Lesson: never substring-replace an
+   identifier that can occur inside another token; and a "numeric op" that clocks
+   ~100+ ns/element on a packed array is usually the gate materialising, not the
+   kernel. Cross-check any suspicious number against a direct single-expression
+   `AbsoluteTiming` before trusting a harness.
+2. **Don't run `make -j8` (or any heavy job) during a timing sweep.** A
+   concurrent rebuild inflated every Mathilda time ~6× on this 8-core box. Timing
+   runs must have the machine to themselves; take `Min` over several blocks.
+3. **Full-precision round-trip Mathilda→Python.** `NumberForm[x, 20]` emits ≥17
+   sig digits; Python parses after turning Mathematica scientific `a*10^(b)` into
+   `a e b`. Have Mathilda print BOTH the input and its output at full precision so
+   numpy consumes the *identical* input — no fragile Python→Mathilda transfer.
+4. **To BEAT numpy on a buffer kernel it is loop structure, not the numerics.**
+   numpy.gradient's Python is a thin wrapper; its hot loop is vectorised C, so
+   "we're in C" is not enough — you must actually emit SIMD. The gap was entirely
+   the `inner=1` shapes (1-D, strided axis) failing to vectorise. The fix, in
+   order of impact: (a) `restrict` on the src/dst params so the compiler knows
+   they don't alias (without it the axpy won't vectorise); (b) restructure the
+   interior from element-outer/tap-inner (scalar, per-element `lg_stencil()`
+   call) to **tap-outer contiguous axpy** over the interior block — one straight
+   `dst[i] (+)= w*src[i+off]` pass per tap, which the compiler turns into SIMD
+   FMA exactly like numpy's `a*f[:-2]+b*f[1:-1]+c*f[2:]`; (c) **fuse** the common
+   small windows (m=2,3) into a single unrolled pass to cut memory-write traffic;
+   (d) for multi-axis, build the stacked rank-(k+1) output **directly** rather
+   than making N arrays and letting the pack gate copy them together (that copy
+   was ~3× the kernel on a 1000². Diagnose it with `NDArrayQ[wholeResult]==True`
+   and `both >> sum-of-per-axis`). Net: 1-D 10⁶ went 9.7→0.88 ms, from 3.4×
+   slower to **4.3× faster** than numpy; every 1-D/2-D/3-D shape now 1.6–4.3×
+   faster. The Fornberg weights were never touched.

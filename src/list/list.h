@@ -34,6 +34,7 @@
 #include "accumulate.h"
 #include "differences.h"
 #include "ratios.h"
+#include "list_gradient.h"
 #include "listpredicates.h"
 #include "matrixq.h"
 #include "minmax.h"

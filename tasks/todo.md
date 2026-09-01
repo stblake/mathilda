@@ -1,45 +1,50 @@
-# DSolve: fix noisy failures on Chini / integrating-factor first-order ODEs
+# ListGradient — implementation todo
 
-## Tasks
-- [x] 1. Guard ordering: reduce `nexp` (Cancel) before free-of guard (dsolve_bernoulli.c, dsolve_chini.c)
-- [x] 2. Chini second reduction (linear-term removal → separable) in dsolve_chini_first_integral
-- [x] 3. Exact via x^a y^b integrating factor in dsolve_exact.c (gated to PolynomialQ M,N)
-- [x] 4. Message hygiene: mute speculative arithmetic across builtin_dsolve
-- [x] 5. Build + verify both examples solve cleanly (no Power::infy)
-- [x] 6. Regression: pure Bernoulli, autonomous Chini, bare exact, elliptic decline stay clean
-- [x] 7. DSolve unit + stress tests + check-c99 + valgrind
-- [x] 8. Docs: spec/builtins DSolve entry, changelog 2026-08-31, lessons.md, memory
+## Core module
+- [x] `src/list/list_gradient.h` — header + `list_gradient_ndarray` proto
+- [x] `src/list/list_gradient.c`
+  - [x] Fornberg weights: `fd_weights_double`, `fd_weights_expr` (+ uniform 1/h optimisation)
+  - [x] `lg_stencil` with endpoint reduction (numpy edge_order=1 default)
+  - [x] option/spacing parse `lg_parse` (Method, DifferenceOrder, WindowLength, Axis, spacing)
+  - [x] buffer kernel `list_gradient_ndarray` (float64/float32, per-axis strided axpy)
+  - [x] List/symbolic path `lg_grad_axis_list` / `lg_grad_along_top`
+  - [x] `builtin_list_gradient` entry + dispatch
+  - [x] multi-axis assembly + Axis selection + numpy return-shape rules
+
+## Registration
+- [x] `src/list/list.h` — include list_gradient.h
+- [x] `src/list/list_init.c` — add_builtin + ATTR_PROTECTED
+- [x] `src/sym_names.{h,c}` — SYM_ListGradient declare/define/intern
+- [x] `src/info.c` — docstring
+- [x] `src/options_builtin.c` — Options[ListGradient] defaults
+
+## Fast-path surfaces
+- [x] `src/pack.c` — AWARE[] entry (NOT int64_ok)
+- [x] `src/compile/compile_ndtables.c` — ND_FNS row + include
+
+## Tests / docs
+- [x] `tests/test_list_gradient.c` (24 cases) + `tests/CMakeLists.txt` (2 edits)
+- [x] `docs/spec/builtins/arithmetic.md` (ListGradient section) + weekly changelog
+
+## Verification
+- [x] build clean; `list_gradient_tests` all pass; `differences_tests` regression pass
+- [x] CompileDiagnostics array=True / scalar=False; compiled call + auto-compile Table
+- [x] numpy parity spot-checked (1-D, non-uniform 17/6, 2-D, forward/backward, order4)
+- [x] check-c99, check-packed-aware, check-nd-surfaces, check-array-exactness — clean
+- [x] check-fastpath-sweep — ListGradient NOT flagged (float path fires). The
+  audit's Error 1 is a PRE-EXISTING backlog of 25 unrelated heads (ChineseRemainder,
+  Grad, Laplacian, EuclideanDistance, Xor, ...) not in OFF_BUFFER.
+- [x] valgrind: byte-identical leak totals vs trivial script → zero ListGradient leaks
+- note: check-compile-coverage and check-fastpath-sweep both have PRE-EXISTING
+  backlogs of unrelated heads and are NOT CI gates (CI runs only check-c99,
+  check-packed-aware, and the full glibc build — all green). ListGradient is not
+  flagged by either.
 
 ## Review
-
-**Outcome.** Both reported ODEs now solve; DSolve no longer leaks
-`Power::infy`/`Infinity::indet`.
-- Ex1 `y'==-x E^-x - y + x E^(2x) y^3` → implicit `∫du/(u^3-1) - x^2/2 == C[1]`,
-  `u = y[x] E^x` (Chini reduction b). Verified: numeric residual ~4e-16.
-- Ex2 `(x y-2x)y'==y-y^2+3x^2 y^3` → two explicit branches of
-  `3x + 1/(xy) - 1/(xy^2) == C[1]` (exact via `μ=x^-2 y^-3`). Verified: ~4e-16.
-
-**Root causes (three defects).**
-1. Bernoulli/Chini tested the exponent `nexp` for FreeQ before reducing it; the
-   unexpanded `Q` sent `ds_free_of` to the numeric sampler, which hit `0^(-1)` and
-   misread the resulting ComplexInfinity as "non-zero" → valid equation rejected +
-   leaked message. Fixed by reducing with **Cancel** before the guard.
-2. Chini only did the reduce-to-autonomous reduction (a). Added reduction (b),
-   linear-term removal → separable.
-3. Exact only searched `μ(x)`/`μ(y)`. Added `μ=x^a y^b`, gated to polynomial M,N.
-Plus: muted speculative arithmetic warnings across the whole DSolve cascade.
-
-**Regression caught and fixed during work.** First attempt used `Simplify` (not
-Cancel) to reduce `nexp`, and ran the `x^a y^b` `Solve` ungated. Both blew up on
-the radical systems from `AutonomousReduction` (`y''==2y^3` → `y'==Sqrt[y^4+K]`),
-turning a 27.9s suite into a >60s `alarm()` timeout. Fixed with `Cancel` +
-`PolynomialQ` gate; suite back to 28.4s, all pass.
-
-**Gates.** `dsolve_tests` / `dsolve_stress_tests` / `dsolve_m5_stress_tests` all
-green (2 new cases: `t_chini_linremoval`, `t_exact_xayb`); `make check-c99` clean;
-valgrind — no new definitely/possibly-lost over the ~13.6KB one-time engine
-baseline.
-
-**Files.** `dsolve_bernoulli.c`, `dsolve_chini.c`, `dsolve_exact.c`, `dsolve.c`,
-`tests/test_dsolve.c`; docs `docs/spec/builtins/calculus.md` +
-`docs/spec/changelog/2026-08-31.md`.
+- Added `ListGradient`, a numpy.gradient port, as one self-contained module.
+  Reuses: `options_extract`/`OptEntry` (options), `nd_rotate_axes`/`ndred_accumulate`
+  stride patterns (buffer walk), `expr_new_ndarray_like` (representation-preserving
+  result), `ndstruct_delist_repack` (declined-NDArray → exact/symbolic bridge), and
+  the `ND_FNS` table (Compile). Single Fornberg kernel underlies every
+  scheme/order/window/grid; two instantiations (double + Expr) serve the machine
+  and exact/symbolic paths.

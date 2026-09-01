@@ -411,6 +411,7 @@ set(COMMON_SRC
     ../src/list/total.c
     ../src/list/accumulate.c
     ../src/list/differences.c
+    ../src/list/list_gradient.c
     ../src/list/ratios.c
     ../src/list/listpredicates.c
     ../src/list/matrixq.c
@@ -1639,6 +1640,10 @@ target_include_directories(split_tests PRIVATE ../src)
 
 add_executable(differences_tests test_differences.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(differences_tests PRIVATE ../src)
+
+add_executable(list_gradient_tests test_list_gradient.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(list_gradient_tests PRIVATE ../src)
+add_test(NAME list_gradient_tests COMMAND list_gradient_tests)
 
 add_executable(ratios_tests test_ratios.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(ratios_tests PRIVATE ../src)

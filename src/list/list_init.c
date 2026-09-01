@@ -80,6 +80,7 @@ void list_init(void) {
     symtab_add_builtin("Total", builtin_total);
     symtab_add_builtin("Accumulate", builtin_accumulate);
     symtab_add_builtin("Differences", builtin_differences);
+    symtab_add_builtin("ListGradient", builtin_list_gradient);
     symtab_add_builtin("Ratios", builtin_ratios);
     symtab_add_builtin("Commonest", builtin_commonest);
     symtab_add_builtin("Min", builtin_min);
@@ -263,6 +264,7 @@ void list_init(void) {
     symtab_get_def("Total")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Accumulate")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Differences")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ListGradient")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Ratios")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Commonest")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Min")->attributes |= ATTR_FLAT | ATTR_NUMERICFUNCTION | ATTR_ONEIDENTITY | ATTR_ORDERLESS | ATTR_PROTECTED;

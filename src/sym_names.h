@@ -192,6 +192,7 @@ extern const char* SYM_FourierDCT;
 extern const char* SYM_FourierDST;
 extern const char* SYM_ListConvolve;
 extern const char* SYM_ListCorrelate;
+extern const char* SYM_ListGradient;
 extern const char* SYM_FileBaseName;
 extern const char* SYM_FileExistsQ;
 extern const char* SYM_FileExtension;
