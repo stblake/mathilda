@@ -225,6 +225,44 @@ static void test_random_graph(void) {
     ASSERT(strcmp(s, "True") == 0);
     free(s);
     expr_free(e1);
+
+    /* --- RandomGraph[{n,m},k]: k independent graphs (RG-1) --- */
+    assert_eval_eq("Length[RandomGraph[{6, 5}, 3]]", "3", 0);
+    assert_eval_eq("And @@ (GraphQ /@ RandomGraph[{6, 5}, 3])", "True", 0);
+    assert_eval_eq("Union[VertexCount /@ RandomGraph[{6, 5}, 3]]", "{6}", 0);
+    assert_eval_eq("Union[EdgeCount /@ RandomGraph[{6, 5}, 3]]", "{5}", 0);
+    /* k = 1 is a one-element list, not a bare graph. */
+    assert_eval_eq("Length[RandomGraph[{6, 5}, 1]]", "1", 0);
+    assert_eval_eq("RandomGraph[{6, 5}, 0]", "{}", 0);
+    /* Bad k: silently unevaluated, per the src/random.c convention. */
+    assert_eval_eq("Head[RandomGraph[{6, 5}, -1]]", "RandomGraph", 0);
+    assert_eval_eq("Head[RandomGraph[{6, 5}, 2.5]]", "RandomGraph", 0);
+    assert_eval_eq("Head[RandomGraph[{6, 5}, q]]", "RandomGraph", 0);
+    /* m out of range fails identically at either arity. */
+    assert_eval_eq("Head[RandomGraph[{3, 10}, 2]]", "RandomGraph", 0);
+    /* Independence: 5 draws from C(28,4) are not all the same edge set. */
+    assert_eval_eq("Length[Union[EdgeList /@ RandomGraph[{8, 4}, 5]]] > 1", "True", 0);
+    /* n <= 1 and m = 0: edgeless graphs, no longer unevaluated. */
+    assert_eval_eq("VertexCount[RandomGraph[{0, 0}]]", "0", 0);
+    assert_eval_eq("EdgeCount[RandomGraph[{1, 0}]]", "0", 0);
+    assert_eval_eq("Union[EdgeCount /@ RandomGraph[{5, 0}, 2]]", "{0}", 0);
+    /* An absurd n or k is unevaluated, not a crash. n = 2^32 + 1 is the witness
+     * that matters: n(n-1) wraps to 2^32 in 64 bits, so a guard applied to the
+     * product instead of to n admits a small maxe and then overruns the
+     * candidate buffer. n = 2^62 happens to wrap above the bound and so passes
+     * either way. */
+    assert_eval_eq("Head[RandomGraph[{4294967297, 1}, 1]]", "RandomGraph", 0);
+    assert_eval_eq("Head[RandomGraph[{4294967297, 1}]]", "RandomGraph", 0);
+    assert_eval_eq("Head[RandomGraph[{5, 2}, 4611686018427387904]]", "RandomGraph", 0);
+
+    /* Determinism under a fixed seed, k form. */
+    Expr* e2 = evaluate(parse_expression(
+        "(SeedRandom[42]; EdgeList /@ RandomGraph[{6,5},3]) === "
+        "(SeedRandom[42]; EdgeList /@ RandomGraph[{6,5},3])"));
+    char* s2 = expr_to_string(e2);
+    ASSERT(strcmp(s2, "True") == 0);
+    free(s2);
+    expr_free(e2);
 }
 
 /* ---- Phase 5: algorithms -------------------------------------------------- */

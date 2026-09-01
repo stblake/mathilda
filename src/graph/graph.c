@@ -121,7 +121,8 @@ void graph_init(void) {
     symtab_get_def("RandomGraph")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("RandomGraph",
         "RandomGraph[{n, m}] gives a random undirected graph with n vertices "
-        "and m edges.");
+        "and m edges. RandomGraph[{n, m}, k] gives a list of k such graphs; "
+        "memory use grows with k.");
 
     /* ---- Phase 5: search & computation algorithms ------------------------ */
     symtab_add_builtin("FindShortestPath", builtin_find_shortest_path);

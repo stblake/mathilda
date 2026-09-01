@@ -114,12 +114,22 @@ constructor path:
   vertices.
 - `RandomGraph[{n, m}]` — a random undirected graph with `n` vertices and `m`
   distinct edges (uses the seeded system RNG, so `SeedRandom` makes it
-  reproducible). Returns unevaluated if `m` exceeds `n(n-1)/2`.
+  reproducible). Returns unevaluated if `m` exceeds `n(n-1)/2`. For `n <= 1`
+  the only possible graph is the edgeless one, which is what is returned.
+- `RandomGraph[{n, m}, k]` — a list of `k` independently sampled such graphs.
+  `k = 0` gives `{}`; `k = 1` gives a one-element list, **not** a bare `Graph`.
+  A negative, non-integer, or symbolic `k` leaves the expression unevaluated,
+  silently — the convention the count-taking `Random*` heads share. Each
+  element costs a full `O(n^2)` candidate materialisation and its own
+  `RandomSample`, so both time and memory scale as `O(k n^2)`; at `n = 50` a
+  call retains roughly 364 KB per element (a known limitation of the shared
+  single-graph path, not specific to the `k` form).
 
 ```
 EdgeCount[CompleteGraph[5]]      (* 10                        *)
 EdgeList[CycleGraph[4]]          (* {1<->2, 2<->3, 3<->4, 4<->1} *)
 VertexDegree[PathGraph[5]]       (* {1, 2, 2, 2, 1}           *)
+Length[RandomGraph[{6, 5}, 3]]   (* 3                         *)
 ```
 
 ## Search & computation
