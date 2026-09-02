@@ -2549,7 +2549,11 @@ static Expr* gs_core(Expr* f, Expr* x) {
          * integrand's domain, numeric global-sign fixed); adopt only if the
          * differentiate-back guard still passes. */
         gs_log("combine_radicals: START");
-        Expr* flat = evaluate(expr_copy(result));
+        /* evaluate() BORROWS its argument, so the copy must be held in a named
+         * local and freed here — evaluate(expr_copy(result)) would orphan it. */
+        Expr* rcopy = expr_copy(result);
+        Expr* flat = evaluate(rcopy);
+        expr_free(rcopy);
         Expr* merged = flat ? combine_radicals(flat, R, x) : NULL;
         gs_log("combine_radicals: DONE (%s)",
                (merged && flat && !expr_eq(merged, flat)) ? "rewrote" : "no change");

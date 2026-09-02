@@ -3917,9 +3917,13 @@ void tc_check_deadline(void) {
  *   2. Keeping the setjmp out of the caller stops GCC's conservative
  *      -Wclobbered from flagging every non-volatile local (and inlined helper
  *      temporary) in builtin_time_constrained.
- * On the timeout path evaluate() never returns, so the partially-built tree
- * rooted at `body` is leaked — an unavoidable consequence of unwinding with
- * siglongjmp, identical to the behaviour before this refactor.  Marked
+ * Ownership: `body` is BORROWED.  evaluate() borrows its argument (returns a
+ * fresh tree, never frees the input), so on the success path `body` is still a
+ * live, independent reference that the CALLER frees once the timer is disarmed
+ * (see builtin_time_constrained).  On the timeout path evaluate() never returns
+ * — control unwinds via siglongjmp back to the sigsetjmp below — so the caller
+ * cannot know whether `body` is intact and leaves it abandoned; that bounded,
+ * rare leak is the unavoidable consequence of siglongjmp unwinding.  Marked
  * TC_NOINLINE so the isolation cannot be undone by the optimiser. */
 static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
     Expr* volatile result = NULL;
@@ -3995,7 +3999,7 @@ Expr* builtin_time_constrained(Expr* res) {
      * with a globally-set x.  The body and failexpr stay unevaluated
      * until they are actually needed -- failexpr in particular MUST NOT
      * be evaluated unless the timeout fires (Mathematica semantic). */
-    Expr* time_eval = evaluate(expr_copy(time_arg));
+    Expr* time_eval = eval_and_free(expr_copy(time_arg));
     double seconds = 0.0;
     int kind = tc_parse_time(time_eval, &seconds);
     expr_free(time_eval);
@@ -4080,7 +4084,8 @@ Expr* builtin_time_constrained(Expr* res) {
         tc_deadline_active = 0;
     }
 
-    Expr* result = tc_run_guarded(expr_copy(expr_arg));
+    Expr* body = expr_copy(expr_arg);
+    Expr* result = tc_run_guarded(body);
 
     /* Restore the cooperative-deadline state first, so that any
      * tc_check_deadline call racing during the teardown below sees the
@@ -4123,10 +4128,18 @@ Expr* builtin_time_constrained(Expr* res) {
         return expr_new_symbol(SYM_DollarAborted);
     }
 
-    /* `res` is owned by the caller (evaluate_step) and will be freed
-     * after we return.  Returning the evaluated body directly does not
-     * double-free anything because `result` is a fresh tree built from
-     * expr_copy(expr_arg). */
+    /* Success path: evaluate() BORROWS its argument (returns a fresh tree and
+     * never frees the input), so the `body` copy we handed tc_run_guarded is
+     * still ours to release.  Free it now — the timer is disarmed and tc_jmp_env
+     * restored above, so no in-flight SIGPROF can longjmp through this free.
+     * (On the abort path handled just above we deliberately do NOT free `body`:
+     * evaluate() unwound via siglongjmp mid-rewrite, leaving it abandoned in an
+     * indeterminate state; that bounded, rare leak is documented on tc_run_guarded.)
+     *
+     * `res` is owned by the caller (evaluate_step) and will be freed after we
+     * return.  Returning `result` does not double-free anything because it is a
+     * fresh tree, distinct from `body`. */
+    expr_free(body);
     return result;
 }
 

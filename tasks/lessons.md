@@ -3286,3 +3286,36 @@ docstring whose first token names the *other* symbol, which reads as a bug.
 Give the alias a one-line docstring that identifies it as an alias and points to
 the canonical name (`"X is an alias for Y — see Y."`). Caught by the user on
 `?DSolve`LieGroup`.
+
+## A leak's reported file:line names where the block was BORN, not where it was dropped (2026-09-02)
+
+The "Integrate engine per-call leak (integrate.c ~920/256)" from the prior
+session turned out to live entirely in **`TimeConstrained`** (`builtin_time_constrained`,
+`src/core.c`), not `integrate.c`. The valgrind allocation stacks pointed at
+`integrate.c:920` (try_risch) and `:256` (try_weierstrass) because those are
+where the leaked `Expr` nodes were *allocated* during sub-evaluation — but the
+lost reference was dropped in the `TimeConstrained[...]` wrapper that the
+`Integrate` Automatic cascade's Goursat stage puts around every attempt.
+
+Method that localized it (reusable for any cascade/interpreter leak):
+1. Reproduce with a **1×-vs-6× valgrind `-file` diff** of the LEAK SUMMARY; the
+   per-call delta is the signal, the fixed one-time dyld/objc noise cancels.
+   Distinguish the ONE big leaked *tree* (`N (D direct, I indirect) bytes`) from
+   bare nodes — the indirect children hang off one root, so it's fewer distinct
+   bugs than the raw block count suggests.
+2. Per-call stacks VARY (eval-clock/recursion-depth dependent), so exact-stack
+   diffing misses them — bucket by subsystem instead.
+3. **Bisect the cascade with an env-gated stage limiter** (`MTH_INT_STAGES=N`
+   wrapping each `try_*` in the `METHOD_AUTOMATIC` switch): clean at N, leaks at
+   N+1 ⇒ stage N is the culprit. This beats reading stacks.
+4. Test the isolated `Method -> "..."` entry: if it's clean but Automatic leaks,
+   the leak is cascade-interaction-specific (here: Goursat's `_try` entry wraps
+   in `TimeConstrained`; the `Method` entry uses `_full`, a different path).
+5. Confirm the shared-utility root by an env bypass (`MTH_GS_NOTC` skipped the
+   `TimeConstrained` wrapper → leak vanished).
+
+Root bug: `evaluate(expr_copy(X))` — evaluate BORROWS its arg and returns a fresh
+tree, so the anonymous copy always leaks. `grep -rn "evaluate(expr_copy" src/`
+finds ~85 latent sites. Fix idiom: `eval_and_free(expr_copy(X))` or a named copy
+freed after the call. The timeout (siglongjmp) path is a deliberate, documented
+exception — free the body only on the SUCCESS branch, after the timer is disarmed.
