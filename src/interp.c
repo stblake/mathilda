@@ -2554,6 +2554,18 @@ void interp_init(void) {
     symtab_add_builtin("Interpolation", builtin_interpolation);
     SymbolDef* idef = symtab_get_def("Interpolation");
     idef->attributes |= ATTR_PROTECTED;
+    /* Options[Interpolation] = {InterpolationOrder -> 3, Method -> Automatic,
+     *                            PeriodicInterpolation -> False} — mirrors the
+     * runtime option parser in builtin_interpolation_impl. */
+    Expr* iopts = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_InterpolationOrder), expr_new_integer(3) }, 2),
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_Method), expr_new_symbol(SYM_Automatic) }, 2),
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_PeriodicInterpolation), expr_new_symbol(SYM_False) }, 2),
+    }, 3);
+    symtab_set_options("Interpolation", iopts);   /* takes ownership */
 
     symtab_add_builtin("InterpolatingPolynomial", builtin_interpolatingpolynomial);
     SymbolDef* pdef = symtab_get_def("InterpolatingPolynomial");

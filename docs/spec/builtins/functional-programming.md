@@ -189,6 +189,9 @@ point `x` (a number, or an `{x, y, ...}` coordinate list in m-D).
   methods and a **cyclic** cubic spline for `Method -> "Spline"`. A per-dimension
   list `{True, False, …}` selects periodicity per axis.
 
+Attributes: `Protected`. Options: `InterpolationOrder -> 3`, `Method -> Automatic`,
+`PeriodicInterpolation -> False`.
+
 **Vector/array-valued data.** A sample `f_i` may itself be a list or array (with
 explicit coordinates, e.g. `{{x}, {v1, v2}}`). Each component is interpolated
 independently and the result is an array of the same shape. This composes with

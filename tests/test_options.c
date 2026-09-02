@@ -65,6 +65,8 @@ int main(void) {
     /* Heads default differs across the structural family. */
     chk("Options[Cases]", "{Heads -> False}");
     chk("Options[Position]", "{Heads -> True}");
+    chk("Options[Interpolation]",
+        "{InterpolationOrder -> 3, Method -> Automatic, PeriodicInterpolation -> False}");
     /* OptionValue resolves a registered default with no explicit options. */
     chk("OptionValue[Cases, Heads]", "False");
     chk("OptionValue[Eigenvalues, Cubics]", "False");
