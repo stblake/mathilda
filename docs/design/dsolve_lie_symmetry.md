@@ -97,10 +97,43 @@ which catch equations the specialists miss (e.g. the linear-coefficients family
   `lie_first_integral`), the integrating-factor → first-integral →
   `dsolve_run_implicit` (+ explicit `Solve`) pipeline, and `abaco1_simple`. Proves
   the pipeline end-to-end via the pinned `DSolve`LieSymmetry[eqn, y, x]` builtin.
-- **L2** — `abaco1_product`, `function_sum`, `abaco2_similar`, `linear` (the
-  coefficient-splitting determining-system machinery).
-- **L3** — `bivariate` (degree-bounded), `chi`, `abaco2_unique_unknown`,
-  `abaco2_unique_general`.
+- **L2** — `linear` ✅ (the coefficient-splitting determining-system machinery);
+  `abaco1_product` ✅; `function_sum`, `abaco2_similar` remain.
+- **L3** — `bivariate` ✅ (degree-bounded: `lie_poly_symmetry` tries degree 2 then
+  3, the exact generalization of `linear`'s degree-1 NullSpace determining system —
+  builds `ξ, η` as general bivariate polynomials over interned `DSolve\`lieB*`
+  coefficients, then `Numerator[Together[S]]` → `CoefficientList[·,{x,y}]` →
+  `Outer[Coefficient, forms, coeffs]` → `NullSpace`; catches quadratic/projective
+  symmetries such as `ξ=x², η=x y` that the affine ansatz misses); `chi`,
+  `abaco2_unique_unknown`, `abaco2_unique_general` remain.
+
+### 4.1 `abaco1_product` (CT–Roche §4.1) — the first quadrature ansatz
+
+Symmetry `[ξ = F(x) G(y), η = 0]` and its inverse `[0, F(x) G(y)]`. Necessary
+condition (their Eq 19): `L = (ω_xy ω − ω_x ω_y)/ω⁴` is product-separable in `x, y`;
+then `F(x)` is its x-factor and `g(y) = F · ∂_x(1/(F ω))` (Eq 20) must be free of
+`x`, giving `G = Exp[∫ g dy]`. The inverse pattern is found by running the same
+extractor on the inverse ODE `y' = 1/ω(y, x)` and mapping the symmetry back
+(`[swap(η), swap(ξ)]`), so one routine covers both. Reaches rational-but-non-
+polynomial infinitesimals (`ξ = y/x`, …) that `linear`/`bivariate` cannot.
+
+Shared substrate introduced here and reused by the later quadrature heuristics:
+- `lie_sep_xfactor(L)` — the product-separable x-factor `Exp[∫ (L_x/L) dx]`, gated by
+  a **fast rational free-of test** `lie_free_of_var` (for `P/Q`, free of a variable
+  ⇔ the polynomial `P_v Q − P Q_v` expands to 0 — a polynomial zero-test, ~2 ms,
+  vs ~12 ms for the general `zero_test` on the rational derivative).
+- `lie_ratsimp` — `Cancel[Together[·]]`, used in place of the far costlier `Simplify`
+  on the hot path (all these forms are rational).
+- `lie_swap_xy` / `lie_inverse_omega` — the `x↔y` swap and the inverse ODE.
+
+The Lie sub-cascade is ordered **cheapest-first**: `abaco1_simple` → `linear` →
+`abaco1_product` → `bivariate`, so the degree-2/3 NullSpace is a last resort. Every
+returned first integral back-substitutes to zero (`dsolve_run_implicit`), so a
+mis-derived candidate can only decline, never mislead. **Validation:** SymPy 1.14's
+`lie_group` (`infinitesimals`) *times out* (>25 s) on the pure product family
+`2xy/(x²+2y⁴+c)` that this solves in ~30 ms; it agrees with SymPy on the ODEs SymPy
+can handle. Per-solve valgrind is leak-flat (identical `definitely lost` for `1+1`,
+1×, and 8×).
 
 ## 5. References
 

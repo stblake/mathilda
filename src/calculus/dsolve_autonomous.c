@@ -86,9 +86,14 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
     Expr* pbody = run_dsolve_applied(eq1, pfun, Ysym);
     if (!pbody) return NULL;
 
-    /* Freeze the first constant so the second solve's C[1] cannot collide. */
-    const char* Kmark = intern_symbol("DSolve`arK");
-    pbody = ds_subst(pbody, ds_const(1), expr_new_symbol(Kmark));
+    /* Freeze the first constant as the GENERATED constant C[2] (distinct from the
+     * second solve's fresh C[1], so they cannot collide).  It must NOT be frozen to
+     * a plain symbol: a plain symbolic parameter inside the stage-2 integrand sends
+     * the first-order cascade down a ~27x slower path (DSolve[y'==Sqrt[a+y^4]] ~ 11s
+     * vs DSolve[y'==Sqrt[C[2]+y^4]] ~ 0.4s), and stage 2 is exactly the elliptic /
+     * quadrature form autonomous reduction produces.  C[2] is recognised as a
+     * constant, taking the fast decline, and is already the final name (no rename). */
+    pbody = ds_subst(pbody, ds_const(1), ds_const(2));
 
     /* Stage 2: y'[x] == P(y[x]) (autonomous, separable). */
     Expr* pOfY = ds_subst(pbody, expr_new_symbol(Ysym), ds_make_funcapp(yname, 0, xvar));
@@ -97,8 +102,7 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
     Expr* ybody = run_dsolve_applied(eq2, yname, xvar);
     if (!ybody) return NULL;
 
-    /* Rename the frozen constant to C[2]; reject a degenerate x-independent body. */
-    ybody = ds_subst(ybody, expr_new_symbol(Kmark), ds_const(2));
+    /* Reject a degenerate x-independent body. */
     if (ds_free_of(ybody, xvar)) { expr_free(ybody); return NULL; }
 
     Expr** out = malloc(sizeof(Expr*));

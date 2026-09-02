@@ -928,6 +928,43 @@ static void t_lie_linear_coefficients(void) {
     check_pinned_implicit("DSolve`LieSymmetry", "(x + 2 y[x] - 4)/(2 x + y[x] - 5)");
     check_pinned_implicit("DSolve`LieSymmetry", "(2 x + 3 y[x] - 1)/(3 x + 2 y[x] + 2)");
 }
+/* L3 `bivariate` heuristic: a genuinely degree-2 polynomial symmetry
+ * (xi = x^2, eta = x y) where NO affine (`linear`) or one-variable
+ * (`abaco1_simple`) symmetry exists, so `bivariate` is the ONLY heuristic that
+ * can solve these — not a vacuous pass through an earlier one.  (Verified in the
+ * REPL: the degree-1 determining NullSpace is trivial and every abaco1_simple
+ * ratio depends on both x and y.)  Both ODEs are members of the family
+ * omega = y/x + A(y/x)/x, whose symmetry is (x^2, x y). */
+static void t_lie_bivariate(void) {
+    check_pinned_implicit("DSolve`LieSymmetry", "-1/x + y[x]/x + y[x]^2/x^3");
+    check_pinned_implicit("DSolve`LieSymmetry", "y[x]/x^2 + y[x]/x + y[x]^2/x^3");
+    /* alias resolves to the same method on a bivariate-only ODE */
+    check_true("Head[DSolve`LieGroup[y'[x] == -1/x + y[x]/x + y[x]^2/x^3, y, x]"
+               "[[1,1]]] === Equal");
+}
+/* `abaco1_product` (Cheb-Terrab & Roche 1998, §4.1): the symmetry [F(x) G(y), 0]
+ * (and its inverse [0, F(x) G(y)]) — a rational-but-non-polynomial infinitesimal
+ * (here xi = y/x) that the polynomial `linear`/`bivariate` ansatze miss.  These are
+ * members of the invariant family omega = f_x/(g(y) f(x) + J(y)); the inhomogeneous
+ * J(y) breaks the scaling symmetry so `abaco1_simple`/`linear`/`bivariate` all
+ * decline (verified in the REPL: the full cascade returns unevaluated on each), and
+ * abaco1_product — last in the chain — is the only heuristic that solves them. */
+static void t_lie_abaco1_product(void) {
+    /* direct [F(x) G(y), 0]: xi = y/x, omega = 2 x y/(x^2 + P(y)) from f = x^2/2,
+     * g = 1/y (symmetry is independent of the invariant family's J(y)).  The chosen
+     * y^4 forms of P admit NO polynomial symmetry of degree <= 3 and no one-variable
+     * symmetry (verified in the REPL: deg-1/2/3 determining NullSpace empty, every
+     * abaco1_simple ratio depends on both x and y), so `linear`/`bivariate`/
+     * `abaco1_simple` all decline and abaco1_product is the only heuristic that
+     * solves them. */
+    check_pinned_implicit("DSolve`LieSymmetry", "2 x y[x]/(x^2 + 2 y[x]^4 + 2)");
+    check_pinned_implicit("DSolve`LieSymmetry", "2 x y[x]/(x^2 + 2 y[x]^4 - 3)");
+    /* inverse pattern [0, F(x) G(y)] via the inverse ODE (also fully isolating) */
+    check_pinned_implicit("DSolve`LieSymmetry", "(y[x]^2 + 2 x^4 + 2)/(2 x y[x])");
+    /* alias resolves to the same method */
+    check_true("Head[DSolve`LieGroup[y'[x] == 2 x y[x]/(x^2 + 2 y[x]^4 + 2), y, x]"
+               "[[1,1]]] === Equal");
+}
 /* Chini reduction (b): linear-term removal y = e^(int g) w -> separable, for the
  * sub-class where reduction (a) (B,C constant) fails.  y' == x E^(2x) y^3 - y -
  * x E^-x -> w' == x(w^3 - 1) via y = E^-x w; implicit first integral. */
@@ -1249,6 +1286,8 @@ int main(void) {
     TEST(t_method_lie);
     TEST(t_lie_declines);
     TEST(t_lie_linear_coefficients);
+    TEST(t_lie_bivariate);
+    TEST(t_lie_abaco1_product);
     TEST(t_exact_xayb);
     TEST(t_auto_exp);
     TEST(t_auto_power);

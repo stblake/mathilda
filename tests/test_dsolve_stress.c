@@ -247,6 +247,49 @@ static void impl_ok(const char* rhs) {
     ASSERT_TRUE(buf);
 }
 
+/* Lie `bivariate` forward generator: every omega = y/x + A(y/x)/x has the
+ * genuinely-degree-2 point symmetry (xi = x^2, eta = x y).  For the A(u) fed
+ * below the degree-1 (affine `linear`) and one-variable (`abaco1_simple`)
+ * determining systems are BOTH trivial (verified in the REPL: deg-1 NullSpace
+ * empty, every abaco1_simple ratio depends on both variables), so `bivariate` is
+ * the only heuristic that can solve them — a declined solve leaves [[1,1]]
+ * non-Equal and fails, so the pass is never vacuous.  The pinned builtin returns
+ * the implicit first integral, verified by implicit differentiation. */
+static void lie_bivariate_ok(const char* A_of_u) {
+    char rhs[512], buf[1400];
+    snprintf(rhs, sizeof(rhs), "y[x]/x + (%s /. u -> y[x]/x)/x", A_of_u);
+    snprintf(buf, sizeof(buf),
+             "Head[DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{r = %s, eq = DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]]-eq[[2]], x] /. y'[x] -> r]]", rhs, rhs);
+    ASSERT_TRUE(buf);
+}
+
+/* Lie `abaco1_product` forward generator (Cheb-Terrab & Roche 1998, §4.1): every
+ * omega = 2 x y/(x^2 + P(y)) has the rational-but-non-polynomial point symmetry
+ * (xi = y/x, eta = 0) — from the invariant family f_x/(g f + J) with f = x^2/2,
+ * g = 1/y, so the symmetry is the same for any P (= 2 y J(y)).  The y^4 forms of P
+ * below break the scaling symmetry AND admit no polynomial symmetry of degree <= 3
+ * (verified in the REPL: the deg-1/2/3 determining NullSpace is empty and every
+ * abaco1_simple ratio depends on both variables), so `linear`/`bivariate`/
+ * `abaco1_simple` all decline — abaco1_product is the only heuristic that can
+ * solve them, and a declined solve leaves [[1,1]] non-Equal and fails, so the pass
+ * is never vacuous.  The pinned builtin returns the implicit first integral,
+ * verified by implicit differentiation. */
+static void lie_product_ok(const char* P_of_y) {
+    char rhs[512], buf[1400];
+    snprintf(rhs, sizeof(rhs), "2 x y[x]/(x^2 + (%s))", P_of_y);
+    snprintf(buf, sizeof(buf),
+             "Head[DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{r = %s, eq = DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]]-eq[[2]], x] /. y'[x] -> r]]", rhs, rhs);
+    ASSERT_TRUE(buf);
+}
+
 /* Chini reducible by construction: from (f, n, B, C) set g = B - f'/((n-1)f),
  * h = C f^(-1/(n-1)) so the scaling y = f^(-1/(n-1)) u gives u' = u^n + B u + C —
  * B, C are the chosen constants, so the autonomous reduction always succeeds. */
@@ -638,6 +681,17 @@ static void t_stress_fops(void) {
                            "Sin[x] + y[x]", "x y[x] + 1", "y[x]^2 - x" };
     for (size_t i = 0; i < sizeof(rhss)/sizeof(rhss[0]); i++) fops_ok(rhss[i]);
 }
+static void t_stress_lie_bivariate(void) {
+    const char* As[] = { "u^2 + u", "u^2 - 1", "u^2 + 2", "u^2 - u",
+                         "u^2 + u + 1", "2 u^2 - 3", "u^3 + u", "u^2 + 3 u" };
+    for (size_t i = 0; i < sizeof(As)/sizeof(As[0]); i++) lie_bivariate_ok(As[i]);
+}
+static void t_stress_lie_product(void) {
+    const char* Ps[] = { "2 y[x]^4 + 2", "2 y[x]^4 + 2 y[x]", "2 y[x]^4 - 3",
+                         "2 y[x]^4 + y[x] + 1", "2 y[x]^4 - 2 y[x]", "3 y[x]^4 + 1",
+                         "2 y[x]^4 + 3 y[x] - 1" };
+    for (size_t i = 0; i < sizeof(Ps)/sizeof(Ps[0]); i++) lie_product_ok(Ps[i]);
+}
 
 int main(void) {
     symtab_init();
@@ -651,6 +705,8 @@ int main(void) {
     TEST(t_stress_liouville);
     TEST(t_stress_undetcoeff);
     TEST(t_stress_fops);
+    TEST(t_stress_lie_bivariate);
+    TEST(t_stress_lie_product);
     TEST(t_stress_linear1);
     TEST(t_stress_separable);
     TEST(t_stress_bernoulli);

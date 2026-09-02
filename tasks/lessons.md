@@ -3319,3 +3319,39 @@ tree, so the anonymous copy always leaks. `grep -rn "evaluate(expr_copy" src/`
 finds ~85 latent sites. Fix idiom: `eval_and_free(expr_copy(X))` or a named copy
 freed after the call. The timeout (siglongjmp) path is a deliberate, documented
 exception — free the body only on the SUCCESS branch, after the timer is disarmed.
+
+---
+
+## Lie `bivariate` isolation ODEs must have a trivial degree-1 NullSpace (2026-09-02)
+
+A "forward-generated" test ODE for the `bivariate` heuristic is VACUOUS if the ODE
+also admits an affine (degree-1) or one-variable symmetry — `linear` / `abaco1_simple`
+run first and solve it, so the pinned `DSolve`LieSymmetry` test passes without ever
+exercising `bivariate`. The math-validation agent's proposed `y'=y/x+y²/x³` and
+`y'=x²y/(x³+y²)` BOTH turned out to have affine symmetries (ξ=x,η=2y and ξ=2x,η=3y) —
+caught by `linear`. **Before claiming an ODE isolates a higher-degree heuristic, verify
+in the REPL that the lower-degree determining `NullSpace` is trivial** (build the
+degree-`d−1` ansatz, `NullSpace[Outer[Coefficient, Flatten[CoefficientList[
+Numerator[Together[S]],{x,y}]], coeffs]]` must be empty) AND that the one-variable
+`abaco1_simple` ratios (`ω_y`, `ω_x/ω`, `ω_y/ω`) all depend on both variables. The
+family `ω = y/x + A(y/x)/x` has symmetry (x², x y); choose `A` (e.g. `u²+u`, `u²−1`) so
+the degree-1 system is trivial. **How to apply:** for any "heuristic N is exercised"
+test, prove heuristics < N decline on that input, don't just assert the head is `Equal`.
+
+---
+
+## Localizing a per-call leak with no standalone reproducer (2026-09-02)
+
+The `bivariate` FLINT-bridge leak (`tasks/flint_ratcanon_leak.md`) only reproduced
+through internally-C-built expression trees — the same expression re-parsed from its
+FullForm did NOT leak, so `Together[<FullForm>]`-in-a-loop was useless. Technique that
+worked: (1) measure per-call growth as `definitely lost` at N=1 vs N=8 (baseline/OS
+noise cancels in the delta; exactly-K×56 bytes ⇒ K nodes/call); (2) `#pragma GCC
+optimize ("O0")` on the suspect `.c` files (`-O3` inlining had collapsed the true call
+site into a misleading `dsolve_lie.c:196`) to get accurate stack lines; (3) **stash the
+feature and re-measure on `main`** to decide introduced-vs-exposed — here the ODE
+*declines* on `main` and leaks zero, proving the leak lives in the shared
+integration/`Simplify` path, not the new code. **Why:** a per-call leak whose stack
+points into your new file may be `-O3` inlining noise; the delta + `-O0` + stash-test
+triangulation attributes it correctly. **How to apply:** don't trust a single `-O3`
+leak frame; confirm with `-O0` and a stash-baseline before blaming (or editing) code.

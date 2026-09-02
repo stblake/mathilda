@@ -250,14 +250,26 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   → first integral → `dsolve_run_implicit` (+ explicit `Solve` inversion), so every
   branch verifies with no inert heads. Staged **L1** ✅ (substrate +
   `abaco1_simple` end-to-end), **L2** (`linear` ✅ — affine ansatz →
-  linear-coefficients class via determining-system `NullSpace`; `abaco1_product`,
-  `function_sum`, `abaco2_similar` remain), **L3** (`bivariate`, `chi`,
-  `abaco2_unique_unknown`,
-  `abaco2_unique_general`). Reuses `D`, `Coefficient`/`Collect`, `Solve`,
-  `Integrate`, `Together`, `dsolve_run_implicit`, `zero_test_decide`.
-  `dsolve_lie.c`. References: Cheb-Terrab & Roche (CPC 113, 1998); Cheb-Terrab,
-  Duarte & da Mota (CPC 101, 1997); Cheb-Terrab & Kolokolnikov (math-ph/0007023);
-  see `docs/design/dsolve_lie_symmetry.md`.
+  linear-coefficients class via determining-system `NullSpace`; `abaco1_product` ✅;
+  `function_sum`, `abaco2_similar` remain), **L3** (`bivariate` ✅ — general
+  degree-2/3 bivariate-polynomial ansatz, the exact generalization of `linear`'s
+  NullSpace determining system, catching genuinely quadratic/projective symmetries
+  the affine ansatz misses; `chi`, `abaco2_unique_unknown`,
+  `abaco2_unique_general` remain). The quadrature ansätze are transcribed directly
+  from the Cheb-Terrab & Roche (1998) invariant-family necessary conditions (the
+  paper is in the repo root). `abaco1_product` (§4.1) uses the Eq-19 separability of
+  `L = (ω_xy ω − ω_x ω_y)/ω⁴`; its shared substrate — `lie_sep_xfactor` (the
+  product-separable x-factor via a fast rational free-of test), `lie_ratsimp`
+  (`Cancel[Together]` in place of the far costlier `Simplify` on the hot path),
+  `lie_inverse_omega`/`lie_swap_xy` (the inverse-ODE, so one extractor covers a
+  pattern and its inverse) — is reused by the remaining quadrature heuristics. Lie
+  sub-cascade is ordered **cheapest-first** (`abaco1_simple` → `linear` →
+  `abaco1_product` → `bivariate`), so the degree-2/3 NullSpace runs only as a last
+  resort. Reuses `D`, `Coefficient`/`Collect`, `Solve`, `Integrate`, `Together`,
+  `dsolve_run_implicit`, `zero_test_decide`. `dsolve_lie.c`. References:
+  Cheb-Terrab & Roche (CPC 113, 1998); Cheb-Terrab, Duarte & da Mota (CPC 101,
+  1997); Cheb-Terrab & Kolokolnikov (math-ph/0007023); see
+  `docs/design/dsolve_lie_symmetry.md`.
 
 ## Phase 1 — ODE method catalog
 
@@ -329,7 +341,17 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 - `[~] LieSymmetry` (`DSolve`LieGroup`/`LieSymmetry`) — heuristic infinitesimal
   point-symmetry method; the general first-order backstop, run after the specialists
   and before the series fallback. *Implemented:* `abaco1_simple` (L1) + `linear`
-  (L2, affine ansatz → linear-coefficients class via determining-system `NullSpace`).
+  (L2, affine ansatz → linear-coefficients class via determining-system `NullSpace`)
+  + `bivariate` (L3, general degree-2/3 polynomial ansatz — same NullSpace machinery
+  at higher degree, `lie_poly_symmetry`; catches quadratic/projective symmetries the
+  affine case misses, e.g. ξ=x², η=xy for ω = y/x + A(y/x)/x)
+  + `abaco1_product` (§4.1, the symmetry [F(x)G(y), 0] and its inverse [0, F(x)G(y)]
+  — a rational-but-non-polynomial infinitesimal, e.g. ξ=y/x, that the polynomial
+  ansätze miss; found by the Cheb-Terrab & Roche Eq-19 product-separability of
+  L = (ω_xy ω − ω_x ω_y)/ω⁴, then Eq-20 for G(y); the inverse pattern via the
+  inverse ODE 1/ω(y,x)). SymPy's `lie_group` times out (>25 s) on the pure product
+  family 2xy/(x²+2y⁴+c), which this solves in ~30 ms. Remaining: `chi`,
+  `abaco2_unique_unknown`, `abaco2_unique_general`, `function_sum`, `abaco2_similar`.
   Nine ansatz heuristics (`abaco1_simple`,
   `abaco1_product`, `function_sum`, `abaco2_similar`, `linear`, `bivariate`, `chi`,
   `abaco2_unique_unknown`, `abaco2_unique_general`); each candidate `(ξ,η)` is gated
