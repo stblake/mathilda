@@ -711,6 +711,16 @@ static void test_listinterp_ndarray(void) {
             (double[]){2.4375, 3.875}, 2, 1e-9);
     run_close("ListInterpolation[NDArray[{{1,2},{3,4}}]][1.5,1.5]", 2.5, 1e-9);
     run_close("ListInterpolation[{1,2,3,5,8,5}][2.5]", 2.4375, 1e-9);   /* plain List */
+    /* Buffer-direct construction reads the NDArray buffer without an intermediate
+     * nested List; an int64 buffer keeps exact-Integer node values (matching the
+     * Interpolation delist path). */
+    run_close("ListInterpolation[NDArray[{1,2,3,5,8,5}, DataType->\"int64\"]][2.5]",
+              2.4375, 1e-9);
+    run_fullform("ListInterpolation[NDArray[{1,2,3,5,8,5}, DataType->\"int64\"]][3]", "3");
+    run_fullform("ListInterpolation[NDArray[{{1,2},{3,4}}, DataType->\"int64\"]][1,1]", "1");
+    /* Array-valued NDArray (grid rank < array rank) takes the delist fallback. */
+    run_vec("Normal[ListInterpolation[NDArray[{{1,2},{3,4},{5,6}}], {{0,1}}][0.5]]",
+            (double[]){3.0, 4.0}, 2, 1e-9);
 }
 
 /* Malformed / unsupported inputs stay unevaluated (0 args prints ::argt). */

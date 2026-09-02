@@ -1006,7 +1006,20 @@ static Expr* assemble_array(const double* comps, const size_t* vshape,
 }
 
 /* Evaluate a single scalar component (selected by `cpath`) of the interpolant
- * at `p`.  Returns false (no value) on malformed data. */
+ * at `p`.  Returns false (no value) on malformed data.
+ *
+ * GCC 16.1.0 miscompiles this function under interprocedural constant
+ * propagation (IPA-CP): it specialises a clone on a constant `Ksupplied` and
+ * then routes a *runtime* Ksupplied == 2 (supplied second-derivative Hermite)
+ * call to a clone that has const-folded the derived order `k` to 1, so
+ * `build_basis(k)` below is handed 1 while `build_T(..., k, ...)` on the next
+ * line still receives 2.  The k == 1 (16-double) basis is then read as if k == 2
+ * (36 doubles) — an out-of-bounds read that returns garbage (the quintic
+ * supplied-Hermite regression).  `-fno-ipa-cp-clone` fixes the whole suite; the
+ * localised, portable equivalent is to exclude this one function from IPA. */
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((noipa))
+#endif
 static bool eval_component_double(IFun* f, const int* cpath, int vrank, size_t m,
                                   const double* p, const int* ders,
                                   const int* orders, int method, int Ksupplied,
@@ -1924,13 +1937,25 @@ static bool listinterp_axis(const Expr* spec, size_t n, Expr** xs) {
     return false;                                      /* length neither n nor 2 */
 }
 
+/* Coordinate for grid point idx[0..m-1]: a scalar abscissa for m == 1, else the
+ * List {xs[0][i0], ..., xs[m-1][i_{m-1}]}.  Returns NULL on allocation failure. */
+static Expr* listinterp_coord(size_t m, Expr*** xs, const size_t* idx) {
+    if (m == 1) return expr_copy(xs[0][idx[0]]);
+    Expr** cs = malloc(sizeof(Expr*) * m);
+    if (!cs) return NULL;
+    for (size_t k = 0; k < m; k++) cs[k] = expr_copy(xs[k][idx[k]]);
+    Expr* c = make_list(cs, m);
+    free(cs);
+    return c;
+}
+
 /*
  * listinterp_emit:
- *   Row-major walk of the value tensor, emitting one {coord, value} entry per
- *   grid point into out[] (advancing *count).  Validates that every node at
- *   depth < m is a List of the expected length shape[depth] and that every leaf
- *   value is real or array-valued -- so a jagged or non-numeric array is
- *   rejected here.  idx[] is scratch of length m.  Returns false on the first
+ *   Row-major walk of a nested-List value tensor, emitting one {coord, value}
+ *   entry per grid point into out[] (advancing *count).  Validates that every
+ *   node at depth < m is a List of the expected length shape[depth] and that
+ *   every leaf value is real or array-valued -- so a jagged or non-numeric array
+ *   is rejected here.  idx[] is scratch of length m.  Returns false on the first
  *   violation; the caller frees the entries emitted so far.
  */
 static bool listinterp_emit(Expr* node, size_t depth, size_t m,
@@ -1949,28 +1974,58 @@ static bool listinterp_emit(Expr* node, size_t depth, size_t m,
     }
     /* depth == m: `node` is the per-grid-point value. */
     if (!is_real_or_array(node)) return false;
-    Expr* coord;
-    if (m == 1) {
-        coord = expr_copy(xs[0][idx[0]]);
-    } else {
-        Expr** cs = malloc(sizeof(Expr*) * m);
-        if (!cs) return false;
-        for (size_t k = 0; k < m; k++) cs[k] = expr_copy(xs[k][idx[k]]);
-        coord = make_list(cs, m);
-        free(cs);
-    }
+    Expr* coord = listinterp_coord(m, xs, idx);
+    if (!coord) return false;
     out[*count] = make_pair(coord, expr_copy(node));
     (*count)++;
     return true;
 }
 
-static Expr* builtin_listinterpolation_impl(Expr* res) {
+/*
+ * listinterp_entries_from_buffer:
+ *   Build the {coord, value} entries directly from a real NDArray's flat,
+ *   row-major buffer -- the scalar-valued case, where the grid has m == rank
+ *   dimensions and each value is one buffer element.  This skips materialising
+ *   the intermediate nested List that ndarray_to_nested_list would build (its
+ *   per-row/sub-array List wrappers and one extra O(N) traversal); the value
+ *   leaves are created once here, exactly as they would be by a delist.  Returns
+ *   a malloc'd array of npts entries (caller frees each entry and the array), or
+ *   NULL on allocation failure.  Rectangularity and realness are guaranteed by
+ *   the dense-tensor representation, so no per-node validation is needed.
+ */
+static Expr** listinterp_entries_from_buffer(const Expr* nd, size_t m,
+                                             const size_t* shape, Expr*** xs,
+                                             size_t npts) {
+    Expr** entries = malloc(sizeof(Expr*) * npts);
+    if (!entries) return NULL;
+    const void* buf = nd->data.ndarray.data;
+    NDType dt = nd->data.ndarray.dtype;
+    size_t idx[LISTINTERP_MAXDIM];
+    for (size_t k = 0; k < m; k++) idx[k] = 0;
+    for (size_t lin = 0; lin < npts; lin++) {
+        Expr* coord = listinterp_coord(m, xs, idx);
+        Expr* val = coord ? ndarray_buffer_element_to_expr(buf, lin, dt) : NULL;
+        if (!coord || !val) {
+            if (coord) expr_free(coord);
+            for (size_t j = 0; j < lin; j++) expr_free(entries[j]);
+            free(entries);
+            return NULL;
+        }
+        entries[lin] = make_pair(coord, val);
+        /* advance the row-major multi-index (last axis fastest == buffer order) */
+        for (size_t k = m; k-- > 0; ) { if (++idx[k] < shape[k]) break; idx[k] = 0; }
+    }
+    return entries;
+}
+
+static Expr* builtin_listinterpolation(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return builtin_arg_error("ListInterpolation", argc, 1, 2);
 
     Expr* array = res->data.function.args[0];
-    if (!interp_is_list(array)) return NULL;
+    bool arr_is_nd = is_ndarray(array);
+    if (!arr_is_nd && !interp_is_list(array)) return NULL;
 
     /* Split the trailing arguments: every Rule/RuleDelayed is an option passed
      * through to Interpolation verbatim; at most one non-rule positional is the
@@ -1992,16 +2047,40 @@ static Expr* builtin_listinterpolation_impl(Expr* res) {
         domain = a;
     }
 
-    /* Dimensionality and shape. */
     size_t want_m = 0;
     if (domain) {
         if (!interp_is_list(domain)) return NULL;
         want_m = domain->data.function.arg_count;
         if (want_m == 0 || want_m > LISTINTERP_MAXDIM) return NULL;
     }
+
+    /* Determine the dimensionality m and per-axis extents.  For a visible/packed
+     * NDArray whose value tensor is scalar-valued (grid dims m == its rank) and
+     * real, read the shape from its dims and later build the table straight from
+     * the buffer -- no intermediate nested List.  An array-valued (m < rank) or
+     * complex NDArray, or a plain List, is walked as a nested List (delisting the
+     * NDArray once here). */
     size_t shape[LISTINTERP_MAXDIM];
     size_t m = 0;
-    if (!listinterp_shape(array, want_m, shape, &m)) return NULL;
+    Expr* delisted = NULL;        /* owned temporary if we delist an NDArray */
+    const Expr* nd_src = NULL;    /* NDArray to read buffer-direct from, else NULL */
+    if (arr_is_nd) {
+        size_t rank = (size_t)array->data.ndarray.rank;
+        size_t wm = domain ? want_m : rank;   /* no domain: full depth = rank */
+        if (wm == 0 || wm > rank || wm > LISTINTERP_MAXDIM) return NULL;
+        if (wm == rank && !ndt_is_complex(array->data.ndarray.dtype)) {
+            m = rank;
+            for (size_t k = 0; k < m; k++) shape[k] = (size_t)array->data.ndarray.dims[k];
+            nd_src = array;
+        } else {                              /* array-valued or complex: delist */
+            delisted = ndarray_to_nested_list(array);
+            if (!delisted) return NULL;
+            array = delisted;
+            if (!listinterp_shape(array, want_m, shape, &m)) { expr_free(delisted); return NULL; }
+        }
+    } else if (!listinterp_shape(array, want_m, shape, &m)) {
+        return NULL;
+    }
 
     /* Synthesise per-axis abscissae. */
     Expr** xs[LISTINTERP_MAXDIM];
@@ -2017,16 +2096,22 @@ static Expr* builtin_listinterpolation_impl(Expr* res) {
         npts *= shape[k];
     }
 
-    /* Row-major walk -> {coord, val} entries. */
+    /* Build the {coord, val} entries: buffer-direct for a scalar-valued NDArray,
+     * otherwise the validating nested-List walk. */
     Expr** entries = NULL;
     size_t count = 0;
     if (ok) {
-        entries = malloc(sizeof(Expr*) * npts);
-        if (!entries) ok = false;
-    }
-    if (ok) {
-        size_t idx[LISTINTERP_MAXDIM];
-        ok = listinterp_emit(array, 0, m, shape, xs, idx, entries, &count);
+        if (nd_src) {
+            entries = listinterp_entries_from_buffer(nd_src, m, shape, xs, npts);
+            if (entries) count = npts; else ok = false;
+        } else {
+            entries = malloc(sizeof(Expr*) * npts);
+            if (!entries) ok = false;
+            else {
+                size_t idx[LISTINTERP_MAXDIM];
+                ok = listinterp_emit(array, 0, m, shape, xs, idx, entries, &count);
+            }
+        }
     }
 
     /* The abscissa buffers are transient: entries hold their own copies. */
@@ -2043,11 +2128,13 @@ static Expr* builtin_listinterpolation_impl(Expr* res) {
             for (size_t i = 0; i < count; i++) expr_free(entries[i]);
             free(entries);
         }
+        if (delisted) expr_free(delisted);
         return NULL;
     }
 
     Expr* table = make_list(entries, count);
     free(entries);
+    if (delisted) expr_free(delisted);         /* leaves already copied into table */
 
     /* Delegate to the Interpolation engine: Interpolation[table, opts...]. */
     size_t nargs = 1 + n_opts;
@@ -2061,25 +2148,6 @@ static Expr* builtin_listinterpolation_impl(Expr* res) {
     Expr* out = builtin_interpolation_impl(synthetic);
     expr_free(synthetic);                      /* frees table + the rule copies */
     return out;
-}
-
-/* Accept a packed / visible NDArray value tensor by delisting it once (as the
- * Interpolation builder does for its data table), then process it as a nested
- * List.  With ListInterpolation on pack.c's AWARE list the transparency gate
- * does not also materialise the argument, so the buffer is delisted exactly
- * once here. */
-static Expr* builtin_listinterpolation(Expr* res) {
-    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1 &&
-        is_ndarray(res->data.function.args[0])) {
-        Expr* orig = res->data.function.args[0];
-        Expr* lst = ndarray_to_nested_list(orig);
-        res->data.function.args[0] = lst;
-        Expr* r = builtin_listinterpolation_impl(res);
-        res->data.function.args[0] = orig;
-        expr_free(lst);
-        return r;
-    }
-    return builtin_listinterpolation_impl(res);
 }
 
 /* ===================================================================== *

@@ -268,9 +268,13 @@ Attributes: `Protected`. Options: `InterpolationOrder -> 3`, `Method -> Automati
 `PeriodicInterpolation -> False` — passed straight through to the `Interpolation`
 engine, so `"Spline"`/`"Hermite"`, per-axis periodicity, and arbitrary order all
 behave identically. `ListInterpolation` is packed-array aware (on `pack.c`'s
-`AWARE` list), so a packed or `NDArray` value tensor is delisted once rather than
-materialised by the transparency gate, and the resulting `InterpolatingFunction`
-applied to a packed array of query points takes the vectorised buffer path.
+`AWARE` list), so the transparency gate does not materialise a packed / `NDArray`
+value tensor. For a scalar-valued real `NDArray` (grid dimensions equal to the
+array rank) the `{coord, val}` table is built **straight from the packed buffer**,
+skipping the intermediate nested `List` (int64 buffers keep exact-`Integer`
+nodes); array-valued or complex `NDArray`s take a single delist. The resulting
+`InterpolatingFunction` applied to a packed array of query points takes the
+vectorised zero-copy buffer path.
 
 A malformed call stays unevaluated: a jagged array, a `domain` whose length
 differs from the array depth, a position list whose length does not match its

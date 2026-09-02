@@ -43,9 +43,21 @@ synthesises abscissae from a raw value array and delegates to the proven
 - Symbol interned, `ATTR_PROTECTED` + Options registered, docstring, spec doc,
   changelog all updated.
 
-**Pre-existing bug flagged (NOT mine, NOT in scope):** `test_supplied_1d`'s
-quintic (order-2 supplied-derivative Hermite) assertion fails on the clean tree
-(`1.5^5 = 7.59375` expected, engine gives `-8.84375`). It aborts the suite before
-my tests run in normal order. Recorded in memory
-`project_interp_supplied_quintic_hermite_bug`. My tests pass when the blocker is
-removed. Awaiting user decision on whether to fix separately.
+## Follow-ups (user-requested)
+
+**1. Buffer-direct NDArray construction — DONE.** `builtin_listinterpolation`
+merged with its impl and made NDArray-aware: a scalar-valued real `NDArray` (grid
+dims == rank) builds the `{coord,val}` table straight from the packed buffer
+(`listinterp_entries_from_buffer` + shared `listinterp_coord`), skipping the
+intermediate nested `List`; array-valued / complex `NDArray`s still delist. int64
+exactness preserved (matches `Interpolation`). Identical results across List /
+packed / NDArray. 0 leaks; 42 ListInterp assertions pass; audits green.
+
+**2. Supplied-2nd-derivative Hermite bug — FIXED (root-caused).** It was a
+**gcc-16.1.0 IPA-CP miscompile** of `eval_component_double` (clones on constant
+`Ksupplied`, const-folds `k` to 1, routes the runtime `k=2` call there →
+`build_basis(1)` OOB read). A heisenbug (any print/volatile/sanitizer hid it;
+non-deterministic across builds). Bisected with `-fno-ipa-cp-clone`; fixed with a
+guarded `__attribute__((noipa))`. The full interp suite (incl. the quintic
+`test_supplied_1d`) now passes. Memory:
+`project_interp_supplied_quintic_hermite_bug`.
