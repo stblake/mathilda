@@ -318,6 +318,7 @@ extern const char* SYM_ListQ;
 /* NDArray (dense machine-precision ndarray) data-structure family, and the
  * packed-List surface over the same storage (see pack.h). */
 extern const char* SYM_NDArray;
+extern const char* SYM_PackedArrayQ;
 extern const char* SYM_ToNDArray;
 extern const char* SYM_FromNDArray;
 /* Association (Wolfram-Language <| ... |>) data-structure family. */

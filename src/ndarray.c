@@ -2331,12 +2331,30 @@ Expr* builtin_ndarrayq(Expr* res) {
     return expr_new_symbol(is_ndarray(res->data.function.args[0]) ? SYM_True : SYM_False);
 }
 
+/* PackedArrayQ tests the packed-List surface only (is_packed_list), so a visible
+ * NDArray[...] gives False -- unlike NDArrayQ, which is True for both surfaces.
+ * The head must be packed-aware (AWARE + INT64_OK in src/pack.c) or the gate
+ * would materialise a packed argument into a plain List before this runs, making
+ * it wrongly answer False. */
+Expr* builtin_packedarrayq(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    return expr_new_symbol(is_packed_list(res->data.function.args[0]) ? SYM_True : SYM_False);
+}
+
 void ndarray_init(void) {
     symtab_add_builtin("NDArrayQ", builtin_ndarrayq);
     symtab_get_def("NDArrayQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("NDArrayQ",
         "NDArrayQ[expr]\n"
         "\tGives True if expr is an NDArray object, else False.");
+
+    symtab_add_builtin("PackedArrayQ", builtin_packedarrayq);
+    symtab_get_def("PackedArrayQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("PackedArrayQ",
+        "PackedArrayQ[expr]\n"
+        "\tGives True if expr is a packed array -- a List stored as a dense\n"
+        "\tmachine-precision buffer -- else False. Provided under Mathematica's\n"
+        "\tname; unlike NDArrayQ, a visible NDArray[...] object gives False.");
 
     symtab_add_builtin("NDArray", builtin_ndarray);
     symtab_get_def("NDArray")->attributes |= ATTR_PROTECTED;

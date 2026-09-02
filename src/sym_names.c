@@ -314,6 +314,7 @@ const char* SYM_PrimeOmega = NULL;
 const char* SYM_PrimeNu = NULL;
 const char* SYM_List = NULL;
 const char* SYM_NDArray = NULL;
+const char* SYM_PackedArrayQ = NULL;
 const char* SYM_ToNDArray = NULL;
 const char* SYM_FromNDArray = NULL;
 const char* SYM_Association = NULL;
@@ -1202,6 +1203,7 @@ void sym_names_init(void) {
     SYM_PrimeNu                    = intern_symbol("PrimeNu");
     SYM_List                       = intern_symbol("List");
     SYM_NDArray                     = intern_symbol("NDArray");
+    SYM_PackedArrayQ                = intern_symbol("PackedArrayQ");
     SYM_ToNDArray                  = intern_symbol("ToNDArray");
     SYM_FromNDArray                = intern_symbol("FromNDArray");
     SYM_Association                = intern_symbol("Association");

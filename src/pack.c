@@ -90,11 +90,30 @@ static PackClass leaf_class(const Expr* e) {
     return PK_NONE;
 }
 
+/* Fold a newly-seen element class `c` into the accumulator `*cls`. Returns false
+ * on an incompatible mix, so the caller bails to -1.
+ *
+ * With `coerce` -- set only on the explicit ToNDArray/ToPackedArray path -- a
+ * machine Integer and a machine Real unify to Real: the user asked to pack, so
+ * widening the integers to doubles is the intended, documented behaviour.
+ * Automatic packing passes coerce=false, because turning a typed 1 into 1. is an
+ * OBSERVABLE head change (1 === 1. is False) that a representation choice must
+ * never make on its own. Bool never unifies with a number in either mode. */
+static bool pack_fold_class(PackClass* cls, PackClass c, bool coerce) {
+    if (c == PK_NONE) return false;                  /* not a machine leaf */
+    if (*cls == PK_NONE) { *cls = c; return true; }  /* first element sets it */
+    if (*cls == c) return true;
+    if (coerce && *cls != PK_BOOL && c != PK_BOOL) { *cls = PK_REAL; return true; }
+    return false;                                    /* incompatible mix */
+}
+
 /* Returns rank (>= 1) on success, -1 when not packable. `*cls` accumulates the
- * element class and must start at PK_NONE. Mixed Integer/Real declines: a
- * uniform buffer cannot hold an exact head on one element and an inexact head
- * on another (src/numloop.h states the same rule for compiled loops). */
-static int pack_sniff(const Expr* e, int64_t* dims, int maxrank, PackClass* cls) {
+ * element class and must start at PK_NONE. Mixed Integer/Real declines unless
+ * `coerce` is set (see pack_fold_class): the explicit ToNDArray path widens the
+ * mix to Real, automatic packing does not (src/numloop.h states the same rule
+ * for compiled loops). */
+static int pack_sniff(const Expr* e, int64_t* dims, int maxrank, PackClass* cls,
+                      bool coerce) {
     if (!e) return -1;
     /* An already-packed row. Reached when a producer assembles a List of results
      * that each packed on their own -- Table[i j, {i,300}, {j,300}] evaluates the
@@ -106,28 +125,24 @@ static int pack_sniff(const Expr* e, int64_t* dims, int maxrank, PackClass* cls)
         if (rank > maxrank) return -1;
         PackClass c = (e->data.ndarray.dtype == NDT_BOOL)  ? PK_BOOL
                     : (e->data.ndarray.dtype == NDT_INT64) ? PK_INT : PK_REAL;
-        if (*cls == PK_NONE) *cls = c;
-        else if (*cls != c) return -1;          /* mixed exact/inexact */
+        if (!pack_fold_class(cls, c, coerce)) return -1;  /* incompatible mix */
         for (int i = 0; i < rank; i++) dims[i] = e->data.ndarray.dims[i];
         return rank;
     }
     if (e->type != EXPR_FUNCTION ||
         e->data.function.head->type != EXPR_SYMBOL ||
         e->data.function.head->data.symbol.name != SYM_List) {
-        PackClass c = leaf_class(e);
-        if (c == PK_NONE) return -1;
-        if (*cls == PK_NONE) *cls = c;
-        else if (*cls != c) return -1;      /* mixed exact/inexact */
+        if (!pack_fold_class(cls, leaf_class(e), coerce)) return -1;
         return 0;                            /* a leaf: rank 0 below this axis */
     }
     size_t len = e->data.function.arg_count;
     if (len == 0 || maxrank <= 0) return -1;         /* {} never packs */
     int64_t sub[NDARRAY_MAX_RANK];
-    int sub_rank = pack_sniff(e->data.function.args[0], sub, maxrank - 1, cls);
+    int sub_rank = pack_sniff(e->data.function.args[0], sub, maxrank - 1, cls, coerce);
     if (sub_rank < 0) return -1;
     for (size_t i = 1; i < len; i++) {
         int64_t other[NDARRAY_MAX_RANK];
-        int r = pack_sniff(e->data.function.args[i], other, maxrank - 1, cls);
+        int r = pack_sniff(e->data.function.args[i], other, maxrank - 1, cls, coerce);
         if (r != sub_rank) return -1;                /* ragged */
         for (int j = 0; j < r; j++)
             if (other[j] != sub[j]) return -1;       /* ragged */
@@ -182,10 +197,10 @@ static void pack_flatten(const Expr* e, void* buf, NDType dt, size_t* k) {
  * `want` overrides the inferred dtype when `have_want` is set. Borrows `list`;
  * returns a new packed list or NULL. */
 static Expr* pack_build(const Expr* list, size_t min_elems,
-                        bool have_want, NDType want) {
+                        bool have_want, NDType want, bool coerce) {
     int64_t dims[NDARRAY_MAX_RANK];
     PackClass cls = PK_NONE;
-    int rank = pack_sniff(list, dims, NDARRAY_MAX_RANK, &cls);
+    int rank = pack_sniff(list, dims, NDARRAY_MAX_RANK, &cls, coerce);
     if (rank < 1 || cls == PK_NONE) return NULL;
 
     size_t n = 1;
@@ -235,7 +250,7 @@ Expr* pack_offer(Expr* list) {
         if (!first || (first->type != EXPR_FUNCTION && !is_packed_list(first)))
             return list;
     }
-    Expr* packed = pack_build(list, min, false, NDT_FLOAT64);
+    Expr* packed = pack_build(list, min, false, NDT_FLOAT64, false);
     if (!packed) return list;
     expr_free(list);
     return packed;
@@ -243,7 +258,19 @@ Expr* pack_offer(Expr* list) {
 
 Expr* pack_force(Expr* list, bool have_dtype, NDType dtype) {
     if (!list) return list;
-    Expr* packed = pack_build(list, 0, have_dtype, dtype);
+    Expr* packed = pack_build(list, 0, have_dtype, dtype, false);
+    if (!packed) return list;
+    expr_free(list);
+    return packed;
+}
+
+/* Like pack_force, but coerces a mixed machine Integer/Real list to a float64
+ * buffer (widening the integers to doubles) instead of declining it. Used only
+ * on the explicit ToNDArray/ToPackedArray path, where the user asked to pack --
+ * automatic packing must stay lossless, so it goes through pack_force. */
+static Expr* pack_force_coerce(Expr* list, bool have_dtype, NDType dtype) {
+    if (!list) return list;
+    Expr* packed = pack_build(list, 0, have_dtype, dtype, true);
     if (!packed) return list;
     expr_free(list);
     return packed;
@@ -253,7 +280,7 @@ Expr* pack_repack_like(const Expr* src, Expr* list) {
     if (!list || !is_packed_list(src)) return list;
     /* No threshold: the input was already a buffer, so staying one costs nothing
      * and materialising it would be a silent downgrade. */
-    Expr* packed = pack_build(list, 0, false, NDT_FLOAT64);
+    Expr* packed = pack_build(list, 0, false, NDT_FLOAT64, false);
     if (!packed) return list;
     expr_free(list);
     return packed;
@@ -447,7 +474,11 @@ static Expr* builtin_tondarray(Expr* res) {
     /* A visible NDArray[...] repacks through its List form, so ToNDArray is a
      * way to say "same values, but as a List". */
     Expr* list = is_ndarray(arg) ? ndarray_to_nested_list(arg) : expr_copy(arg);
-    return pack_force(list, have, dt);
+    /* Coerce a mixed Integer/Real list to Real: the user explicitly asked to
+     * pack, so widening {1, 2, 3.} to a float64 buffer is intended (unlike the
+     * lossless automatic path). An explicit int64 DataType still refuses to
+     * round Reals -- pack_build enforces that. */
+    return pack_force_coerce(list, have, dt);
 }
 
 static Expr* builtin_fromndarray(Expr* res) {
@@ -651,7 +682,7 @@ static void pack_mark_aware_heads(void) {
         /* Metadata: read rank/dims/dtype straight off the node, so
          * materialising for them would be pure waste. */
         "Length", "Dimensions", "Depth", "Part", "Head", "ByteCount",
-        "NDArrayQ", "DataType", "Normal", "ToNDArray", "FromNDArray",
+        "NDArrayQ", "PackedArrayQ", "DataType", "Normal", "ToNDArray", "FromNDArray",
         "ToPackedArray", "FromPackedArray",
         /* Spectral transforms. fourier.c has had a complete NDArray fast path
          * all along (`data->type == EXPR_NDARRAY` -> machine_path_ndarray,
@@ -890,7 +921,7 @@ static void pack_mark_aware_heads(void) {
     static const char* const INT64_OK[] = {
         /* Read rank/dims/dtype only, never an element. */
         "Length", "Dimensions", "Depth", "Head", "ByteCount",
-        "NDArrayQ", "DataType",
+        "NDArrayQ", "PackedArrayQ", "DataType",
         /* N reads every element, but its answer on an int64 buffer IS a real
          * array -- the machine reals the interpreter's N gives element by
          * element -- so nothing truncates and no element's head changes. Its
@@ -1195,9 +1226,11 @@ void pack_init(void) {
         "buffer. The result is still a List -- same Head, same printed form, "
         "same elements -- but NDArrayQ gives True for it. "
         "ToNDArray[list, DataType -> \"float64\"] forces the element type. "
+        "A mix of Integer and Real machine values is widened to a Real buffer "
+        "(the integers become doubles); an all-Integer list stays Integer. "
         "Returns list unchanged when it is not rectangular, is empty, or holds "
-        "anything other than uniformly Integer or uniformly Real machine "
-        "values. Unlike automatic packing it ignores the size threshold.");
+        "any non-machine value. Unlike automatic packing it ignores the size "
+        "threshold.");
 
     /* Mathematica's spellings for the same two operations, so code written
      * against Developer`ToPackedArray / Developer`FromPackedArray reads across.

@@ -184,6 +184,11 @@ Expr* builtin_ndarray(Expr* res);
 /* NDArrayQ[expr] builtin: True iff expr is an NDArray value, else False. */
 Expr* builtin_ndarrayq(Expr* res);
 
+/* PackedArrayQ[expr] builtin: True iff expr is a packed List (present_as ==
+ * NDA_HEAD_LIST), else False. Unlike NDArrayQ, a visible NDArray[...] gives
+ * False -- Mathematica's Developer`PackedArrayQ semantics. */
+Expr* builtin_packedarrayq(Expr* res);
+
 /* DataType[ndarray] builtin: the dtype option string ("float64" etc.) of an
  * NDArray; returns NULL (stays symbolic) for any non-NDArray argument. */
 Expr* builtin_datatype(Expr* res);

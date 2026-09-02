@@ -188,19 +188,37 @@ Returns `list` unchanged — not an error — when it cannot be packed:
 |---|---|
 | not rectangular | a buffer has one shape |
 | empty | rank-0 has no buffer form |
-| mixed exact and inexact (`{1, 2.5}`) | one dtype cannot give element 1 an `Integer` head and element 2 a `Real` head |
 | any `Rational`, `BigInt`, arbitrary-precision, `Complex`, or symbolic element | no machine representation, or (for `Complex`) no faithful round trip yet |
 
-Inferred dtypes: all-`Integer` → `"int64"`, all-`Real` → `"float64"`. An
-explicit `DataType` may widen an exact list to a float buffer, but never rounds
-an inexact one into an integer buffer:
+Inferred dtypes: all-`Integer` → `"int64"`, all-`Real` → `"float64"`. A list that
+**mixes** machine `Integer` and `Real` is widened to a `"float64"` buffer — the
+integers become doubles — because asking to pack is asking for a single machine
+type, and Real is the one that holds both:
 
 ```mathematica
-In[10]:= DataType[ToNDArray[{1, 2, 3}, DataType -> "float64"]]
-Out[10]= "float64"
+In[10]:= a = ToPackedArray[{1, 2, 3.}]
+Out[10]= {1., 2., 3.}
 
-In[11]:= NDArrayQ[ToNDArray[{1., 2.5}, DataType -> "int64"]]
-Out[11]= False
+In[11]:= {PackedArrayQ[a], DataType[a]}
+Out[11]= {True, "float64"}
+```
+
+This is the one point where the explicit request diverges from automatic packing,
+which leaves `{1, 2, 3.}` an ordinary list. Silently turning the exact `1` into
+`1.` would be an observable head change (`1 === 1.` is `False`), and a
+representation choice the system makes on its own must never be observable —
+`ToPackedArray` is not that choice, the user asked for the buffer.
+
+An explicit `DataType` may widen an exact list to a float buffer, but never rounds
+an inexact one into an integer buffer — so `DataType -> "int64"` over a list that
+holds (or coerces to) a `Real` declines and returns the list unchanged:
+
+```mathematica
+In[12]:= DataType[ToNDArray[{1, 2, 3}, DataType -> "float64"]]
+Out[12]= "float64"
+
+In[13]:= NDArrayQ[ToNDArray[{1., 2.5}, DataType -> "int64"]]
+Out[13]= False
 ```
 
 An all-`True`/`False` list infers — and packs to — the `"bool"` dtype, one byte
@@ -208,17 +226,18 @@ per element. It behaves exactly like the `List` of `True`/`False` it packs:
 logical and predicate heads run on the buffer, while anything numeric delists to
 the symbolic `List` (Mathematica leaves `Sin[True]` and `True + True`
 unevaluated, and so does a bool array). `"Boolean"` is accepted as a spelling of
-`"bool"` and canonicalises to it.
+`"bool"` and canonicalises to it. A bool value never unifies with a number, so a
+mix like `{True, 1, 2.}` declines rather than coercing.
 
 ```mathematica
-In[12]:= DataType[ToNDArray[{True, False, True}]]
-Out[12]= "bool"
+In[14]:= DataType[ToNDArray[{True, False, True}]]
+Out[14]= "bool"
 
-In[13]:= Positive[ToNDArray[{-1, 0, 2}]]      (* a numeric buffer -> a bool one *)
-Out[13]= {False, False, True}
+In[15]:= Positive[ToNDArray[{-1, 0, 2}]]      (* a numeric buffer -> a bool one *)
+Out[15]= {False, False, True}
 
-In[14]:= Sin[ToNDArray[{True, False}]]        (* not numeric: delists to symbolic *)
-Out[14]= {Sin[True], Sin[False]}
+In[16]:= Sin[ToNDArray[{True, False}]]        (* not numeric: delists to symbolic *)
+Out[16]= {Sin[True], Sin[False]}
 ```
 
 `ToNDArray` on an already-packed list is a no-op; on an `NDArray[...]` it
@@ -257,6 +276,40 @@ Out[13]= {1., 2.}
 `FromPackedArray` is `FromNDArray` under Mathematica's name, on the same terms as
 `ToPackedArray` above. It undoes both forms of buffer storage — a packed `List`
 and an explicit `NDArray[...]`.
+
+## `PackedArrayQ`
+
+`PackedArrayQ[expr]` gives `True` when `expr` is a packed array — a `List` stored
+as a dense machine-precision buffer — and `False` otherwise. It is Mathematica's
+name (`Developer`​`PackedArrayQ`) for that test.
+
+It is deliberately **narrower** than `NDArrayQ`. `NDArrayQ` is `True` for either
+surface of an `EXPR_NDARRAY` — a packed `List` *or* a visible `NDArray[...]`
+object. `PackedArrayQ` is `True` only for the packed-`List` surface: a visible
+`NDArray[...]` is a distinct atom (`AtomQ` is `True`, `ListQ` is `False`), not a
+`List` that happens to be packed, so it gives `False` — matching Mathematica,
+which has no visible `NDArray` head at all. The two predicates therefore differ
+only on that one input.
+
+```mathematica
+In[14]:= PackedArrayQ[ToPackedArray[{1., 2., 3.}]]
+Out[14]= True
+
+In[15]:= PackedArrayQ[NDArray[{1., 2., 3.}]]
+Out[15]= False
+
+In[16]:= NDArrayQ[NDArray[{1., 2., 3.}]]
+Out[16]= True
+
+In[17]:= PackedArrayQ[{a, b, c}]
+Out[17]= False
+```
+
+Like `NDArrayQ`, `PackedArrayQ` is packed-aware (it is on both the `AWARE` and
+`INT64_OK` lists in `src/pack.c`): the transparency gate hands it a packed
+argument intact instead of materialising it first, for `int64` buffers as well
+as `float64`. Without that it could only ever observe an already-unpacked `List`
+and would answer `False` for every packed input.
 
 ## What stays packed
 
