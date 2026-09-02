@@ -485,10 +485,172 @@ static void t_stress_pde(void) {
     pde_ok(3, 5, "x");
 }
 
+/* Factorable: (y' - r1 y)(y' - r2 y) == 0 factors into two linear ODEs; EVERY
+ * branch must back-substitute (not just [[1]]), so verify with And @@ Map. */
+static void factorable_ok(const char* r1, const char* r2) {
+    char eqn[512], buf[1024];
+    snprintf(eqn, sizeof(eqn),
+             "(y'[x] - (%s) y[x]) (y'[x] - (%s) y[x])", r1, r2);
+    snprintf(buf, sizeof(buf), "Head[DSolve[%s == 0, y, x]] === List", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+             "And @@ Map[PossibleZeroQ[(%s) /. #] &, DSolve[%s == 0, y, x]]", eqn, eqn);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_factorable(void) {
+    const char* rs[][2] = { {"1","-1"}, {"2","3"}, {"1","0"}, {"-2","5"}, {"1/2","-3"} };
+    for (size_t i = 0; i < sizeof(rs)/sizeof(rs[0]); i++) factorable_ok(rs[i][0], rs[i][1]);
+}
+
+/* NthAlgebraic: (y')^2 == c (c > 0 constant) -> y' == +/- Sqrt[c], both branches
+ * free of y (Quadrature).  Every branch back-substitutes. */
+static void nthalg_ok(const char* c) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+             "Head[DSolve`NthAlgebraic[(y'[x])^2 == %s, y, x]] === List", c);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+             "And @@ Map[PossibleZeroQ[((y'[x])^2 - (%s)) /. #] &, "
+             "DSolve`NthAlgebraic[(y'[x])^2 == %s, y, x]]", c, c);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_nth_algebraic(void) {
+    const char* cs[] = { "2", "9", "5", "1/4" };
+    for (size_t i = 0; i < sizeof(cs)/sizeof(cs[0]); i++) nthalg_ok(cs[i]);
+    /* the flagship y-dependent case: (y')^2 == 4 y -> (x + C)^2 */
+    char buf[512];
+    snprintf(buf, sizeof(buf),
+             "And @@ Map[PossibleZeroQ[((y'[x])^2 - 4 y[x]) /. #] &, "
+             "DSolve`NthAlgebraic[(y'[x])^2 == 4 y[x], y, x]]");
+    ASSERT_TRUE(buf);
+}
+
+/* LinearCoefficients: y' == (a1 x+b1 y+c1)/(a2 x+b2 y+c2), det != 0, real-root
+ * (explicit) cases -> every branch back-substitutes to the cleared equation.
+ * (Real roots require (a2-b1)^2 + 4 a1 b2 >= 0; the curated tuples all satisfy it.) */
+static void lincoeff_ok(int a1,int b1,int c1,int a2,int b2,int c2) {
+    char eqn[512], resid[512], buf[1200];
+    snprintf(eqn, sizeof(eqn),
+             "y'[x] == (%d x + %d y[x] + %d)/(%d x + %d y[x] + %d)", a1,b1,c1,a2,b2,c2);
+    snprintf(resid, sizeof(resid),
+             "y'[x] (%d x + %d y[x] + %d) - (%d x + %d y[x] + %d)", a2,b2,c2,a1,b1,c1);
+    snprintf(buf, sizeof(buf), "Head[DSolve`LinearCoefficients[%s, y, x]] === List", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+             "And @@ Map[PossibleZeroQ[(%s) /. #] &, DSolve`LinearCoefficients[%s, y, x]]",
+             resid, eqn);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_lincoeff(void) {
+    lincoeff_ok(1,2,-4, 2,1,-5);   /* lines meet at (2,1) */
+    lincoeff_ok(2,3,-1, 3,2, 2);
+    lincoeff_ok(1,4,-1, 4,1,-1);
+}
+
+/* AlmostLinear: build 2 y y' + P(x) y^2 - Q(x) == 0 (u = y^2, u' + P u == Q);
+ * every explicit branch back-substitutes. */
+static void almostlinear_ok(const char* p, const char* q) {
+    char eqn[512], resid[512], buf[1200];
+    snprintf(eqn, sizeof(eqn), "2 y[x] y'[x] + (%s) y[x]^2 - (%s) == 0", p, q);
+    snprintf(resid, sizeof(resid), "2 y[x] y'[x] + (%s) y[x]^2 - (%s)", p, q);
+    snprintf(buf, sizeof(buf), "Head[DSolve`AlmostLinear[%s, y, x]] === List", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+             "And @@ Map[PossibleZeroQ[(%s) /. #] &, DSolve`AlmostLinear[%s, y, x]]", resid, eqn);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_almostlinear(void) {
+    const char* ps[] = { "1", "2" };
+    const char* qs[] = { "x", "1", "Exp[x]" };
+    for (size_t i = 0; i < 2; i++) for (size_t j = 0; j < 3; j++) almostlinear_ok(ps[i], qs[j]);
+}
+
+/* SeparableReduced: y' == y^2/(1 + c x y) has r = x y/(1 + c x y) = w/(1+c w),
+ * w = x y (n=1); returns the implicit first integral, verified by implicit diff. */
+static void sepreduced_ok(const char* c) {
+    char rhs[256], buf[1200];
+    snprintf(rhs, sizeof(rhs), "y[x]^2/(1 + (%s) x y[x])", c);
+    snprintf(buf, sizeof(buf),
+             "Head[DSolve`SeparableReduced[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+             "PossibleZeroQ[Module[{eq = DSolve`SeparableReduced[y'[x] == %s, y, x][[1,1]]}, "
+             "D[eq[[1]] - eq[[2]], x] /. y'[x] -> (%s)]]", rhs, rhs);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_sepreduced(void) {
+    const char* cs[] = { "1", "2", "3" };
+    for (size_t i = 0; i < 3; i++) sepreduced_ok(cs[i]);
+}
+
+/* Liouville: y'' + g(y)(y')^2 + h(x) y' == 0 for chosen g(y), h(x) with elementary
+ * EG = Integrate[Exp[Integrate[g,y]],y] and EH; every explicit branch verifies. */
+static void liouville_ok(const char* g, const char* h) {
+    char eqn[512], resid[512], buf[1200];
+    snprintf(eqn, sizeof(eqn), "y''[x] + (%s)(y'[x])^2 + (%s) y'[x] == 0", g, h);
+    snprintf(resid, sizeof(resid), "y''[x] + (%s)(y'[x])^2 + (%s) y'[x]", g, h);
+    snprintf(buf, sizeof(buf), "Head[DSolve`Liouville[%s, y, x]] === List", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+             "And @@ Map[PossibleZeroQ[(%s) /. #] &, DSolve`Liouville[%s, y, x]]", resid, eqn);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_liouville(void) {
+    liouville_ok("1/y[x]", "1/x");
+    liouville_ok("1/y[x]", "1");
+    liouville_ok("2/y[x]", "1/x");
+}
+
+/* UndeterminedCoefficients: y'' + c1 y' + c0 y == f for UC forcing f (some cases
+ * resonant); the single-branch solution back-substitutes. */
+static void undetcoeff_ok(const char* c1, const char* c0, const char* f) {
+    char eqn[512], resid[512], buf[1200];
+    snprintf(eqn, sizeof(eqn), "y''[x] + (%s) y'[x] + (%s) y[x] == %s", c1, c0, f);
+    snprintf(resid, sizeof(resid), "y''[x] + (%s) y'[x] + (%s) y[x] - (%s)", c1, c0, f);
+    snprintf(buf, sizeof(buf), "Head[DSolve`UndeterminedCoefficients[%s, y, x]] === List", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+             "PossibleZeroQ[(%s) /. DSolve`UndeterminedCoefficients[%s, y, x][[1]]]", resid, eqn);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_undetcoeff(void) {
+    const char* ops[][2] = { {"0","1"}, {"0","-1"}, {"3","2"}, {"-2","1"} };
+    const char* fs[] = { "x", "x^2", "Exp[x]", "Sin[x]", "Cos[2 x]", "x Exp[x]" };
+    for (size_t i = 0; i < 4; i++)
+        for (size_t j = 0; j < 6; j++)
+            undetcoeff_ok(ops[i][0], ops[i][1], fs[j]);
+}
+
+/* FirstOrderPowerSeries: y' == F for F analytic at 0; the truncated residual is
+ * O[x]^N, so Normal[residual] == 0. */
+static void fops_ok(const char* rhs) {
+    char buf[1200];
+    snprintf(buf, sizeof(buf),
+             "Head[DSolve`FirstOrderPowerSeries[y'[x] == %s, y, x]] === List", rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+             "PossibleZeroQ[Normal[(y'[x] - (%s)) /. "
+             "DSolve`FirstOrderPowerSeries[y'[x] == %s, y, x][[1]]]]", rhs, rhs);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_fops(void) {
+    const char* rhss[] = { "x + y[x]", "x + y[x]^2", "x^2 + y[x]^3",
+                           "Sin[x] + y[x]", "x y[x] + 1", "y[x]^2 - x" };
+    for (size_t i = 0; i < sizeof(rhss)/sizeof(rhss[0]); i++) fops_ok(rhss[i]);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
+    TEST(t_stress_factorable);
+    TEST(t_stress_nth_algebraic);
+    TEST(t_stress_lincoeff);
+    TEST(t_stress_almostlinear);
+    TEST(t_stress_sepreduced);
+    TEST(t_stress_liouville);
+    TEST(t_stress_undetcoeff);
+    TEST(t_stress_fops);
     TEST(t_stress_linear1);
     TEST(t_stress_separable);
     TEST(t_stress_bernoulli);

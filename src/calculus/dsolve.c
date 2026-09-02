@@ -29,6 +29,8 @@
 /* ---- method table (extended per milestone) ---- */
 typedef enum {
     DS_AUTOMATIC = 0,
+    DS_FACTORABLE,
+    DS_NTHALGEBRAIC,
     DS_QUADRATURE,
     DS_LINEAR1,
     DS_BERNOULLI,
@@ -37,6 +39,7 @@ typedef enum {
     DS_EXACT,
     DS_CLAIRAUT,
     DS_LAGRANGE,
+    DS_UNDETCOEFF,
     DS_CONSTCOEFF,
     DS_EULER,
     DS_EXACTODE,
@@ -48,14 +51,21 @@ typedef enum {
     DS_RICCATI,
     DS_CHINI,
     DS_ABEL,
+    DS_LINCOEFF,
+    DS_ALMOSTLINEAR,
+    DS_SEPREDUCED,
     DS_LIE,
     DS_AUTONOMOUS,
+    DS_LIOUVILLE,
+    DS_FOPOWERSERIES,
     DS_FROBENIUS,
     DS_INVALID
 } DSolveMethod;
 
 static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Automatic")        == 0) return DS_AUTOMATIC;
+    if (strcmp(s, "Factorable")       == 0) return DS_FACTORABLE;
+    if (strcmp(s, "NthAlgebraic")     == 0) return DS_NTHALGEBRAIC;
     if (strcmp(s, "Quadrature")       == 0) return DS_QUADRATURE;
     if (strcmp(s, "LinearFirstOrder") == 0) return DS_LINEAR1;
     if (strcmp(s, "Bernoulli")        == 0) return DS_BERNOULLI;
@@ -64,6 +74,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Exact")            == 0) return DS_EXACT;
     if (strcmp(s, "Clairaut")         == 0) return DS_CLAIRAUT;
     if (strcmp(s, "Lagrange")         == 0) return DS_LAGRANGE;
+    if (strcmp(s, "UndeterminedCoefficients") == 0) return DS_UNDETCOEFF;
     if (strcmp(s, "LinearConstantCoefficients") == 0) return DS_CONSTCOEFF;
     if (strcmp(s, "EulerCauchy")      == 0) return DS_EULER;
     if (strcmp(s, "ExactODE")         == 0) return DS_EXACTODE;
@@ -75,15 +86,22 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Riccati")              == 0) return DS_RICCATI;
     if (strcmp(s, "Chini")                == 0) return DS_CHINI;
     if (strcmp(s, "Abel")                 == 0) return DS_ABEL;
+    if (strcmp(s, "LinearCoefficients")   == 0) return DS_LINCOEFF;
+    if (strcmp(s, "AlmostLinear")         == 0) return DS_ALMOSTLINEAR;
+    if (strcmp(s, "SeparableReduced")     == 0) return DS_SEPREDUCED;
     if (strcmp(s, "LieSymmetry")          == 0) return DS_LIE;
     if (strcmp(s, "LieGroup")             == 0) return DS_LIE;
     if (strcmp(s, "AutonomousReduction") == 0) return DS_AUTONOMOUS;
+    if (strcmp(s, "Liouville")            == 0) return DS_LIOUVILLE;
+    if (strcmp(s, "FirstOrderPowerSeries") == 0) return DS_FOPOWERSERIES;
     if (strcmp(s, "FrobeniusSeries")     == 0) return DS_FROBENIUS;
     if (strcmp(s, "PowerSeries")         == 0) return DS_FROBENIUS;
     return DS_INVALID;
 }
 
 /* method try-functions + registrars (one file each) */
+extern Expr** dsolve_factorable_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_quadrature_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch);
@@ -93,6 +111,7 @@ extern Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lagrange_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_undetcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch);
@@ -104,10 +123,18 @@ extern Expr** dsolve_fos_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_chini_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_abel_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_lincoeff_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_lincoeff_implicit_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_almostlinear_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_sepreduced_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_first_order_series_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_shifted_try(DSolveProblem* P, size_t* nbranch);
+extern void dsolve_factorable_init(void);
+extern void dsolve_nth_algebraic_init(void);
 extern void dsolve_quadrature_init(void);
 extern void dsolve_linear1_init(void);
 extern void dsolve_bernoulli_init(void);
@@ -116,6 +143,7 @@ extern void dsolve_separable_init(void);
 extern void dsolve_exact_init(void);
 extern void dsolve_clairaut_init(void);
 extern void dsolve_lagrange_init(void);
+extern void dsolve_undetcoeff_init(void);
 extern void dsolve_constcoeff_init(void);
 extern void dsolve_euler_init(void);
 extern void dsolve_exactode_init(void);
@@ -127,8 +155,12 @@ extern void dsolve_fos_init(void);
 extern void dsolve_riccati_init(void);
 extern void dsolve_chini_init(void);
 extern void dsolve_abel_init(void);
+extern void dsolve_lincoeff_init(void);
+extern void dsolve_almostlinear_init(void);
+extern void dsolve_sepreduced_init(void);
 extern void dsolve_lie_init(void);
 extern void dsolve_autonomous_init(void);
+extern void dsolve_liouville_init(void);
 extern void dsolve_frobenius_init(void);
 extern void dsolve_normalform_init(void);
 extern Expr** dsolve_pde1_solve(DSolveProblem* P);
@@ -204,6 +236,13 @@ Expr* builtin_dsolve(Expr* res) {
     } else
     switch (method) {
         case DS_AUTOMATIC:
+            /* Factorable / NthAlgebraic run FIRST (matching SymPy): a product- or
+             * power-in-the-derivative form is split before the specialists try to
+             * match the whole equation.  Both decline cheaply on the common form
+             * (irreducible / linear-in-top-derivative), so the linear specialists
+             * below still claim their equations. */
+            if (!result) result = dsolve_run(&P, dsolve_factorable_try);
+            if (!result) result = dsolve_run(&P, dsolve_nth_algebraic_try);
             if (!result) result = dsolve_run(&P, dsolve_quadrature_try);
             if (!result) result = dsolve_run(&P, dsolve_linear1_try);
             if (!result) result = dsolve_run(&P, dsolve_bernoulli_try);
@@ -214,6 +253,10 @@ Expr* builtin_dsolve(Expr* res) {
             /* Lagrange/d'Alembert (parametric general solution) — Clairaut, its
              * phi(p)==p special case, runs first. */
             if (!result) result = dsolve_run_parametric(&P, dsolve_lagrange_try);
+            /* Undetermined coefficients: a tidy particular for UC forcing of a
+             * constant-coefficient linear ODE; runs before constcoeff (which is the
+             * general variation-of-parameters fallback for any other forcing). */
+            if (!result) result = dsolve_run(&P, dsolve_undetcoeff_try);
             if (!result) result = dsolve_run(&P, dsolve_constcoeff_try);
             if (!result) result = dsolve_run(&P, dsolve_euler_try);
             /* Exact higher-order linear: total derivative d/dx(M[y]) — reduce
@@ -235,16 +278,32 @@ Expr* builtin_dsolve(Expr* res) {
              * sub-class); n=2 Chini is Riccati, already claimed above. */
             if (!result) result = dsolve_run_implicit(&P, dsolve_chini_try);
             if (!result) result = dsolve_run_implicit(&P, dsolve_abel_try);
+            /* First-order substitution reductions (after the named specialists):
+             * LinearCoefficients (shift/homogeneous or separable), AlmostLinear
+             * (u=Integrate[g,y] -> linear), SeparableReduced (w=x^n y -> separable). */
+            if (!result) result = dsolve_run(&P, dsolve_lincoeff_try);
+            if (!result) result = dsolve_run(&P, dsolve_almostlinear_try);
+            if (!result) result = dsolve_run_implicit(&P, dsolve_sepreduced_try);
             if (!result) result = dsolve_run(&P, dsolve_autonomous_try);
+            /* Liouville: y'' + g(y)(y')^2 + h(x)y' == 0 (has both y and x, so
+             * missing-y/missing-x reductions above decline).  Two quadratures. */
+            if (!result) result = dsolve_run(&P, dsolve_liouville_try);
             /* implicit first-integral fallback: a homogeneous ODE with no explicit
              * inverse (transcendental log-spiral) is returned as G(x,y[x]) == C[1] */
             if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
+            /* deterministic linear-coefficients implicit first integral (log-spiral
+             * subset): claimed before the Lie `linear` heuristic that also reaches it */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_lincoeff_implicit_try);
             /* Lie point-symmetry: the general first-order backstop.  Heuristic
              * (underdetermined determining PDE), so it runs after EVERY
              * deterministic specialist — including the homogeneous implicit
              * fallback, which keeps its cleaner form for its own equations — and
              * immediately before the series fallback. */
             if (!result) result = dsolve_run_implicit(&P, dsolve_lie_try);
+            /* NB: DSolve`FirstOrderPowerSeries is pinned-only (not in this automatic
+             * cascade): a first-order ODE with no closed form stays unevaluated by
+             * default (matching SymPy's opt-in 1st_power_series and Mathematica), so
+             * a truncated series is offered only on explicit request. */
             /* series fallback: always-available, so it runs last */
             if (!result) result = dsolve_run(&P, dsolve_frobenius_try);
             /* very last resort: if x=0 was an irregular/obstructed singular point,
@@ -252,6 +311,8 @@ Expr* builtin_dsolve(Expr* res) {
              * any ordinary point never returns unevaluated (auto-dispatch only). */
             if (!result) result = dsolve_run(&P, dsolve_frobenius_shifted_try);
             break;
+        case DS_FACTORABLE:   result = dsolve_run(&P, dsolve_factorable_try);  break;
+        case DS_NTHALGEBRAIC: result = dsolve_run(&P, dsolve_nth_algebraic_try); break;
         case DS_QUADRATURE:   result = dsolve_run(&P, dsolve_quadrature_try);  break;
         case DS_LINEAR1:      result = dsolve_run(&P, dsolve_linear1_try);     break;
         case DS_BERNOULLI:    result = dsolve_run(&P, dsolve_bernoulli_try);   break;
@@ -263,6 +324,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_EXACT:        result = dsolve_run(&P, dsolve_exact_try);       break;
         case DS_CLAIRAUT:     result = dsolve_run(&P, dsolve_clairaut_try);    break;
         case DS_LAGRANGE:     result = dsolve_run_parametric(&P, dsolve_lagrange_try); break;
+        case DS_UNDETCOEFF:   result = dsolve_run(&P, dsolve_undetcoeff_try);  break;
         case DS_CONSTCOEFF:   result = dsolve_run(&P, dsolve_constcoeff_try);  break;
         case DS_EULER:        result = dsolve_run(&P, dsolve_euler_try);       break;
         case DS_EXACTODE:     result = dsolve_run(&P, dsolve_exactode_try);    break;
@@ -274,8 +336,16 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_RICCATI:      result = dsolve_run(&P, dsolve_riccati_try);      break;
         case DS_CHINI:        result = dsolve_run_implicit(&P, dsolve_chini_try); break;
         case DS_ABEL:         result = dsolve_run_implicit(&P, dsolve_abel_try);  break;
+        case DS_LINCOEFF:
+            result = dsolve_run(&P, dsolve_lincoeff_try);
+            if (!result) result = dsolve_run_implicit(&P, dsolve_lincoeff_implicit_try);
+            break;
+        case DS_ALMOSTLINEAR: result = dsolve_run(&P, dsolve_almostlinear_try);  break;
+        case DS_SEPREDUCED:   result = dsolve_run_implicit(&P, dsolve_sepreduced_try); break;
         case DS_LIE:          result = dsolve_run_implicit(&P, dsolve_lie_try);   break;
         case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);   break;
+        case DS_LIOUVILLE:    result = dsolve_run(&P, dsolve_liouville_try);    break;
+        case DS_FOPOWERSERIES: result = dsolve_run(&P, dsolve_first_order_series_try); break;
         case DS_FROBENIUS:    result = dsolve_run(&P, dsolve_frobenius_try);    break;
         default: break;
     }
@@ -309,6 +379,8 @@ void dsolve_init(void) {
     symtab_set_options("DSolve", opts);
 
     /* method registrars */
+    dsolve_factorable_init();
+    dsolve_nth_algebraic_init();
     dsolve_quadrature_init();
     dsolve_linear1_init();
     dsolve_bernoulli_init();
@@ -317,6 +389,7 @@ void dsolve_init(void) {
     dsolve_exact_init();
     dsolve_clairaut_init();
     dsolve_lagrange_init();
+    dsolve_undetcoeff_init();
     dsolve_constcoeff_init();
     dsolve_euler_init();
     dsolve_exactode_init();
@@ -328,8 +401,12 @@ void dsolve_init(void) {
     dsolve_riccati_init();
     dsolve_chini_init();
     dsolve_abel_init();
+    dsolve_lincoeff_init();
+    dsolve_almostlinear_init();
+    dsolve_sepreduced_init();
     dsolve_lie_init();
     dsolve_autonomous_init();
+    dsolve_liouville_init();
     dsolve_frobenius_init();
     dsolve_normalform_init();
     dsolve_pde1_init();

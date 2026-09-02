@@ -144,6 +144,13 @@ Expr* dsolve_run_pde(DSolveProblem* P, DSolveSysFn fn);
  * once (strict, no cascade), free the problem.  Returns the result or NULL. */
 Expr* dsolve_method_builtin(Expr* res, DSolveTryFn fn);
 
+/* Extract every solution body from an applied-form DSolve result
+ * {{f[x] -> b1}, {f[x] -> b2}, ...}: the RHS of each order-0 rule f[x] -> body
+ * across all branches (the form produced by recursing DSolve[..., f[x], x]).
+ * `fname` interned; `r` borrowed.  Returns a malloc'd array of *n owned bodies,
+ * or NULL if none.  Used by Factorable / NthAlgebraic to union sub-solutions. */
+Expr** dsolve_extract_applied_bodies(Expr* r, const char* fname, size_t* n);
+
 /* For a single ODE, return F such that (the order-n derivative) == F, where F
  * is an expression in the independent-variable symbol and the dependent
  * funcapps of order < n.  NULL if the equation is not (uniquely) solvable for
@@ -183,6 +190,16 @@ typedef struct {
  * + Im parts.  Returns false (leaving *out zeroed) if no roots are found. */
 bool  dsolve_analyze_roots(const Expr* poly, const char* var, int degree, DSolveRoots* out);
 void  dsolve_roots_free(DSolveRoots* r);
+
+/* Build the fundamental set of a constant-coefficient linear ODE from the
+ * characteristic polynomial `charpoly` (in the symbol `lam`, degree `n`): each
+ * real root of multiplicity m gives x^j E^(r x) (j=0..m-1); a complex-conjugate
+ * pair a±bi gives the real forms x^j E^(a x) Cos[b x], x^j E^(a x) Sin[b x].
+ * Returns a malloc'd array of *count owned basis functions in `xvar`, or NULL if
+ * the roots do not account for degree n.  Shared by LinearConstantCoefficients
+ * and UndeterminedCoefficients. */
+Expr** dsolve_homog_basis(const Expr* charpoly, const char* lam, const char* xvar,
+                          int n, size_t* count);
 
 /* For a single ODE linear in y and its derivatives, extract the coefficient
  * c_k(x) of y^(k)[x] (k = 0..order) and the forcing g(x), so the equation reads

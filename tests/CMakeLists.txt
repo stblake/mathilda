@@ -690,6 +690,8 @@ set(COMMON_SRC
     ../src/calculus/intsimp.c
     ../src/calculus/dsolve.c
     ../src/calculus/dsolve_common.c
+    ../src/calculus/dsolve_factorable.c
+    ../src/calculus/dsolve_nth_algebraic.c
     ../src/calculus/dsolve_quadrature.c
     ../src/calculus/dsolve_linear1.c
     ../src/calculus/dsolve_bernoulli.c
@@ -698,6 +700,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_exact.c
     ../src/calculus/dsolve_clairaut.c
     ../src/calculus/dsolve_lagrange.c
+    ../src/calculus/dsolve_undetcoeff.c
     ../src/calculus/dsolve_constcoeff.c
     ../src/calculus/dsolve_euler.c
     ../src/calculus/dsolve_exactode.c
@@ -707,8 +710,12 @@ set(COMMON_SRC
     ../src/calculus/dsolve_riccati.c
     ../src/calculus/dsolve_chini.c
     ../src/calculus/dsolve_abel.c
+    ../src/calculus/dsolve_lincoeff.c
+    ../src/calculus/dsolve_almostlinear.c
+    ../src/calculus/dsolve_sepreduced.c
     ../src/calculus/dsolve_lie.c
     ../src/calculus/dsolve_autonomous.c
+    ../src/calculus/dsolve_liouville.c
     ../src/calculus/dsolve_pde1.c
     ../src/calculus/dsolve_decouple.c
     ../src/calculus/dsolve_triangular.c

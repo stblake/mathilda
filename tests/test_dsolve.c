@@ -844,6 +844,17 @@ static void check_implicit(const char* rhs) {
         "D[eq[[1]] - eq[[2]], x] /. y'[x] -> (%s)]]", rhs, rhs);
     check_true(buf);
 }
+/* Like check_implicit but for a PINNED method: method[y'==rhs,y,x] returns the
+ * implicit first integral {{G==C[1]}}; verify by implicit differentiation. */
+static void check_pinned_implicit(const char* method, const char* rhs) {
+    char buf[900];
+    snprintf(buf, sizeof(buf), "Head[%s[y'[x] == %s, y, x][[1,1]]] === Equal", method, rhs);
+    check_true(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{eq = %s[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]] - eq[[2]], x] /. y'[x] -> (%s)]]", method, rhs, rhs);
+    check_true(buf);
+}
 static void t_homogeneous_implicit(void) {
     check_implicit("(x + y[x])/(x - y[x])");
     check_implicit("(x + y[x])/(2 x + y[x])");
@@ -909,15 +920,13 @@ static void t_lie_declines(void) {
     check_form("Head[DSolve`LieSymmetry[y'[x] == y[x]^2 + x, y, x]]", "DSolve`LieSymmetry");
 }
 /* L2 `linear` heuristic (affine symmetry): the linear-coefficients class
- * y' == (a1 x + b1 y + c1)/(a2 x + b2 y + c2), which no earlier method solves,
- * now solves through the AUTOMATIC cascade (Lie is the backstop). Verified by
- * implicit differentiation. */
+ * y' == (a1 x + b1 y + c1)/(a2 x + b2 y + c2).  The deterministic
+ * DSolve`LinearCoefficients (M9) now claims this class in the AUTOMATIC cascade
+ * with an explicit (Root-form) solution, so exercise Lie's `linear` heuristic
+ * through its pinned builtin, which returns the implicit first integral. */
 static void t_lie_linear_coefficients(void) {
-    check_implicit("(x + 2 y[x] - 4)/(2 x + y[x] - 5)");
-    check_implicit("(2 x + 3 y[x] - 1)/(3 x + 2 y[x] + 2)");
-    /* pinned method reaches it too */
-    check_true("Head[DSolve`LieSymmetry[y'[x] == (x + 2 y[x] - 4)/(2 x + y[x] - 5), "
-               "y, x][[1,1]]] === Equal");
+    check_pinned_implicit("DSolve`LieSymmetry", "(x + 2 y[x] - 4)/(2 x + y[x] - 5)");
+    check_pinned_implicit("DSolve`LieSymmetry", "(2 x + 3 y[x] - 1)/(3 x + 2 y[x] + 2)");
 }
 /* Chini reduction (b): linear-term removal y = e^(int g) w -> separable, for the
  * sub-class where reduction (a) (B,C constant) fails.  y' == x E^(2x) y^3 - y -
@@ -940,6 +949,195 @@ static void t_exact_xayb(void) {
     check_form("Head[DSolve`Exact[(x y[x] - 2 x) y'[x] == y[x] - y[x]^2 + 3 x^2 y[x]^3, y, x]]", "List");
     /* a non-x^a y^b equation still declines the exact method (no wrong answer) */
     check_form("Head[DSolve`Exact[y'[x] == Sqrt[y[x]^4 + 1], y, x]]", "DSolve`Exact");
+}
+
+/* ---- M9: SymPy deterministic parity gaps ---- */
+
+/* Every branch of a (possibly multi-branch) result back-substitutes to zero.
+ * The second DSolve argument is `y` (Function form) so y'[x] substitutes too. */
+static void check_all_branches(const char* call, const char* resid) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "Head[%s] === List", call);
+    check_true(buf);                                /* non-vacuous: it actually solved */
+    snprintf(buf, sizeof(buf),
+             "And @@ Map[PossibleZeroQ[(%s) /. #] &, %s]", resid, call);
+    check_true(buf);
+}
+
+/* Factorable: (y'-y)(y'+y)==0 splits into y'==y and y'==-y. */
+static void t_method_factorable(void) {
+    check_all_branches(
+        "DSolve`Factorable[(y'[x] - y[x]) (y'[x] + y[x]) == 0, y, x]",
+        "(y'[x] - y[x]) (y'[x] + y[x])");
+    /* automatic cascade claims it too (Factorable runs at the front) */
+    check_all_branches(
+        "DSolve[(y'[x] - y[x]) (y'[x] + y[x]) == 0, y, x]",
+        "(y'[x] - y[x]) (y'[x] + y[x])");
+}
+static void t_factorable_more(void) {
+    /* three linear factors, distinct spectra */
+    check_all_branches(
+        "DSolve`Factorable[(y'[x] - y[x]) (y'[x] - 2 y[x]) (y'[x] + y[x]) == 0, y, x]",
+        "(y'[x] - y[x]) (y'[x] - 2 y[x]) (y'[x] + y[x])");
+    /* a product mixing a linear-inhomogeneous factor */
+    check_all_branches(
+        "DSolve`Factorable[(y'[x] - x) (y'[x] + y[x]) == 0, y, x]",
+        "(y'[x] - x) (y'[x] + y[x])");
+}
+static void t_factorable_declines(void) {
+    /* irreducible (a single differential factor) — Factorable declines */
+    check_form("Head[DSolve`Factorable[y'[x] + y[x] == 0, y, x]]", "DSolve`Factorable");
+    /* a Sqrt[y] coefficient is non-polynomial in the funcapps: declines, no hang */
+    check_form("Head[DSolve`Factorable[y'[x] == 2 Sqrt[y[x]], y, x]]", "DSolve`Factorable");
+    /* a pure-function factor (y itself) is not a differential factor: p p' == p^2/y
+     * has one genuine factor, so Factorable declines (AutonomousReduction owns it) */
+    check_form("Head[DSolve`Factorable[p[y] p'[y] == p[y]^2/y, p, y]]", "DSolve`Factorable");
+}
+
+/* NthAlgebraic: algebraic of degree >= 2 in the top derivative. */
+static void t_method_nth_algebraic(void) {
+    /* (y')^2 == 4 y  ->  y == (x + C)^2 (two sign branches) */
+    check_all_branches(
+        "DSolve`NthAlgebraic[(y'[x])^2 == 4 y[x], y, x]",
+        "(y'[x])^2 - 4 y[x]");
+}
+static void t_nth_algebraic_more(void) {
+    /* branches free of y integrate directly (Quadrature): (y')^2 == 2
+     * -> y' == +/- Sqrt[2] -> y == +/- Sqrt[2] x + C[1] (irreducible over Q, so
+     * this is NthAlgebraic's alone, not Factorable's) */
+    check_all_branches(
+        "DSolve`NthAlgebraic[(y'[x])^2 == 2, y, x]",
+        "(y'[x])^2 - 2");
+    /* automatic cascade: (y')^2 == 4 y is claimed by NthAlgebraic at the front */
+    check_all_branches(
+        "DSolve[(y'[x])^2 == 4 y[x], y, x]",
+        "(y'[x])^2 - 4 y[x]");
+}
+static void t_nth_algebraic_declines(void) {
+    /* linear in the top derivative (the normal case) -> the specialists own it */
+    check_form("Head[DSolve`NthAlgebraic[y''[x] + y[x] == 0, y, x]]", "DSolve`NthAlgebraic");
+    check_form("Head[DSolve`NthAlgebraic[y'[x] + y[x] == 0, y, x]]", "DSolve`NthAlgebraic");
+}
+
+/* LinearCoefficients: y' == (a1 x+b1 y+c1)/(a2 x+b2 y+c2). */
+static void t_method_lincoeff(void) {
+    /* det != 0 -> explicit (Root-form) branches; verify against the cleared eqn */
+    check_all_branches(
+        "DSolve`LinearCoefficients[y'[x] == (x + 2 y[x] - 4)/(2 x + y[x] - 5), y, x]",
+        "y'[x] (2 x + y[x] - 5) - (x + 2 y[x] - 4)");
+    /* det == 0 (parallel) -> separable, implicit first integral */
+    check_pinned_implicit("DSolve`LinearCoefficients",
+                          "(x + y[x] + 1)/(2 x + 2 y[x] - 1)");
+}
+static void t_lincoeff_more(void) {
+    /* a second det != 0 example (previously unsolved by any deterministic method) */
+    check_all_branches(
+        "DSolve`LinearCoefficients[y'[x] == (2 x + 3 y[x] - 1)/(3 x + 2 y[x] + 2), y, x]",
+        "y'[x] (3 x + 2 y[x] + 2) - (2 x + 3 y[x] - 1)");
+    /* det != 0 log-spiral (no explicit inverse) -> implicit first integral */
+    check_pinned_implicit("DSolve`LinearCoefficients",
+                          "(x + y[x] + 1)/(x - y[x] + 3)");
+    /* the automatic cascade also solves it */
+    check_form("Head[DSolve[y'[x] == (x + 2 y[x] - 4)/(2 x + y[x] - 5), y, x]]", "List");
+}
+static void t_lincoeff_declines(void) {
+    /* nonlinear (y^2) -> not a ratio of affine forms */
+    check_form("Head[DSolve`LinearCoefficients[y'[x] == y[x]^2 + x, y, x]]",
+               "DSolve`LinearCoefficients");
+    /* no y-coupling (a pure quadrature) */
+    check_form("Head[DSolve`LinearCoefficients[y'[x] == x, y, x]]",
+               "DSolve`LinearCoefficients");
+}
+
+/* AlmostLinear: f(x)g(y) y' + k(x)l(y) + m(x) == 0.  2 y y' + y^2 - x == 0
+ * (u = y^2 -> u' + u == x) is the flagship. */
+static void t_method_almostlinear(void) {
+    check_all_branches("DSolve`AlmostLinear[2 y[x] y'[x] + y[x]^2 - x == 0, y, x]",
+                       "2 y[x] y'[x] + y[x]^2 - x");
+    /* automatic cascade also solves it */
+    check_all_branches("DSolve[2 y[x] y'[x] + y[x]^2 - x == 0, y, x]",
+                       "2 y[x] y'[x] + y[x]^2 - x");
+}
+static void t_almostlinear_declines(void) {
+    /* nonlinear in y' -> not almost-linear */
+    check_form("Head[DSolve`AlmostLinear[y'[x]^2 == y[x], y, x]]", "DSolve`AlmostLinear");
+}
+
+/* SeparableReduced: x y'/y == G(x^n y).  y' == y^2/(1 + x y) -> w = x y,
+ * implicit first integral (verified by implicit differentiation). */
+static void t_method_sepreduced(void) {
+    check_pinned_implicit("DSolve`SeparableReduced", "y[x]^2/(1 + x y[x])");
+}
+static void t_sepreduced_declines(void) {
+    /* x r_x/(y r_y) is not constant -> not the x^n y form */
+    check_form("Head[DSolve`SeparableReduced[y'[x] == x^2 + y[x], y, x]]",
+               "DSolve`SeparableReduced");
+}
+
+/* Liouville: y'' + g(y)(y')^2 + h(x)y' == 0 (both y and x present). */
+static void t_method_liouville(void) {
+    /* g = 1/y, h = 1/x  ->  Exp[G]=y, EG=y^2/2; EH=Log[x]; y^2/2 == C[1]Log[x]+C[2] */
+    check_all_branches(
+        "DSolve`Liouville[y''[x] + (y'[x])^2/y[x] + y'[x]/x == 0, y, x]",
+        "y''[x] + (y'[x])^2/y[x] + y'[x]/x");
+    /* automatic cascade also solves it (missing-y/missing-x reductions decline) */
+    check_all_branches(
+        "DSolve[y''[x] + (y'[x])^2/y[x] + y'[x]/x == 0, y, x]",
+        "y''[x] + (y'[x])^2/y[x] + y'[x]/x");
+}
+static void t_liouville_declines(void) {
+    /* linear -> not a Liouville nonlinearity */
+    check_form("Head[DSolve`Liouville[y''[x] + y[x] == 0, y, x]]", "DSolve`Liouville");
+    /* g == 0 (no (y')^2 term) is ReductionOfOrder's, not Liouville's */
+    check_form("Head[DSolve`Liouville[y''[x] + y'[x]/x == 0, y, x]]", "DSolve`Liouville");
+}
+
+/* UndeterminedCoefficients: tidy particular for UC forcing of a const-coeff ODE. */
+static void t_method_undetcoeff(void) {
+    check_all_branches("DSolve`UndeterminedCoefficients[y''[x] + y[x] == x^2, y, x]",
+                       "y''[x] + y[x] - x^2");
+    check_all_branches("DSolve`UndeterminedCoefficients[y''[x] + y[x] == Sin[2 x], y, x]",
+                       "y''[x] + y[x] - Sin[2 x]");
+    /* resonance: forcing coincides with a homogeneous mode -> x-multiplied trial */
+    check_all_branches("DSolve`UndeterminedCoefficients[y''[x] - y[x] == Exp[x], y, x]",
+                       "y''[x] - y[x] - Exp[x]");
+    check_all_branches("DSolve`UndeterminedCoefficients[y''[x] + y[x] == Cos[x], y, x]",
+                       "y''[x] + y[x] - Cos[x]");
+    /* sum of terms (superposition) */
+    check_all_branches("DSolve`UndeterminedCoefficients[y''[x] + y[x] == x + Exp[2 x], y, x]",
+                       "y''[x] + y[x] - x - Exp[2 x]");
+    /* automatic cascade claims it too (before constcoeff) */
+    check_all_branches("DSolve[y''[x] + y[x] == x^2, y, x]", "y''[x] + y[x] - x^2");
+}
+static void t_undetcoeff_declines(void) {
+    /* variable coefficients -> not this method (Euler/other own it) */
+    check_form("Head[DSolve`UndeterminedCoefficients[x y''[x] + y[x] == x, y, x]]",
+               "DSolve`UndeterminedCoefficients");
+    /* non-UC forcing (Log) -> declines; constcoeff's var-params handles it */
+    check_form("Head[DSolve`UndeterminedCoefficients[y''[x] + y[x] == Log[x], y, x]]",
+               "DSolve`UndeterminedCoefficients");
+    /* homogeneous (g == 0) is left to LinearConstantCoefficients */
+    check_form("Head[DSolve`UndeterminedCoefficients[y''[x] + y[x] == 0, y, x]]",
+               "DSolve`UndeterminedCoefficients");
+}
+
+/* FirstOrderPowerSeries: y' == F(x, y) about x0 = 0, truncated SeriesData.
+ * The truncated residual is O[x]^N, so Normal[residual] == 0. */
+static void t_method_first_order_series(void) {
+    check_true("Head[DSolve`FirstOrderPowerSeries[y'[x] == x + y[x], y, x]] === List");
+    check_true("PossibleZeroQ[Normal[(y'[x] - x - y[x]) /. "
+               "DSolve`FirstOrderPowerSeries[y'[x] == x + y[x], y, x][[1]]]]");
+    /* nonlinear -> genuinely new coverage (no closed form) */
+    check_true("PossibleZeroQ[Normal[(y'[x] - x - y[x]^2) /. "
+               "DSolve`FirstOrderPowerSeries[y'[x] == x + y[x]^2, y, x][[1]]]]");
+    /* pinned-only: the automatic cascade does NOT auto-apply it, so a first-order
+     * ODE with no closed form stays unevaluated (matching Mathematica / SymPy) */
+    check_form("Head[DSolve[y'[x] == Sqrt[x + y[x]], y[x], x]]", "DSolve");
+}
+static void t_first_order_series_declines(void) {
+    /* x0 = 0 is a pole of F (not ordinary) -> declines */
+    check_form("Head[DSolve`FirstOrderPowerSeries[y'[x] == y[x]/x, y, x]]",
+               "DSolve`FirstOrderPowerSeries");
 }
 
 int main(void) {
@@ -1079,6 +1277,26 @@ int main(void) {
     TEST(t_homogeneous_algebraic);
     TEST(t_reduce_order_riccati);
     TEST(t_homogeneous_implicit);
+    /* M9: SymPy deterministic parity gaps */
+    TEST(t_method_factorable);
+    TEST(t_factorable_more);
+    TEST(t_factorable_declines);
+    TEST(t_method_nth_algebraic);
+    TEST(t_nth_algebraic_more);
+    TEST(t_nth_algebraic_declines);
+    TEST(t_method_lincoeff);
+    TEST(t_lincoeff_more);
+    TEST(t_lincoeff_declines);
+    TEST(t_method_almostlinear);
+    TEST(t_almostlinear_declines);
+    TEST(t_method_sepreduced);
+    TEST(t_sepreduced_declines);
+    TEST(t_method_liouville);
+    TEST(t_liouville_declines);
+    TEST(t_method_undetcoeff);
+    TEST(t_undetcoeff_declines);
+    TEST(t_method_first_order_series);
+    TEST(t_first_order_series_declines);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

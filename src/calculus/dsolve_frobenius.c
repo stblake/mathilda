@@ -363,8 +363,66 @@ Expr** dsolve_frobenius_shifted_try(DSolveProblem* P, size_t* nbranch) {
     return out;
 }
 
+/* ------------------------------------------------------------------ *
+ *  First-order power series about the ordinary point x0 = 0            *
+ * ------------------------------------------------------------------ */
+/* For y' == F(x, y), expand y = Sum a_n x^n with a_0 = C[1]: since y' == F,
+ * [x^n] F(x, y(x)) == (n+1) a_{n+1}, and [x^n] F depends only on a_0..a_n, so the
+ * coefficients follow by one Taylor read per order (substituting the partial sum
+ * back into F).  Declines when x0 = 0 is not ordinary (F(0, C[1]) not finite).
+ * SymPy's `1st_power_series`. */
+Expr** dsolve_first_order_series_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1 || P->max_order[0] != 1) return NULL;
+    const char* yname = P->fun_names[0];
+    const char* x = P->ind_names[0];
+    Expr* F = dsolve_solve_top_derivative(P, 1);          /* y' == F(x, y[x]) */
+    if (!F) return NULL;
+    int N = FROB_ORDER;
+
+    Expr** a = malloc((size_t)(N + 1) * sizeof(Expr*));
+    a[0] = ds_const(1);                                    /* a_0 = C[1] */
+    bool ok = true;
+    /* a pole at x0=0 (F not analytic there) legitimately forms 1/0 while probing;
+     * mute Power::infy so the pinned decline is silent (auto already mutes) */
+    arith_warnings_mute_push();
+    for (int n = 0; n <= N - 1 && ok; n++) {
+        /* Ypart = Sum_{k=0}^{n} a_k x^k */
+        Expr** cc = malloc((size_t)(n + 1) * sizeof(Expr*));
+        for (int k = 0; k <= n; k++)
+            cc[k] = (k == 0) ? expr_copy(a[0])
+                             : T2(expr_copy(a[k]), PowE(expr_new_symbol(x), expr_new_integer(k)));
+        Expr* Ypart = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), cc, (size_t)(n + 1)));
+        free(cc);
+        /* [x^n] of F with y[x] -> Ypart, divided by (n+1) */
+        Expr* Fsub = ds_subst(expr_copy(F), ds_make_funcapp(yname, 0, x), Ypart);
+        Expr* cn = taylor_coeff(Fsub, x, n);
+        expr_free(Fsub);
+        a[n + 1] = ds_simplify(T2(cn, Inv(expr_new_integer(n + 1))));
+        if (!is_finite_value(a[n + 1])) ok = false;
+    }
+    arith_warnings_mute_pop();
+    expr_free(F);
+    if (!ok) { for (int k = 0; k <= N; k++) if (a[k]) expr_free(a[k]); free(a); return NULL; }
+
+    Expr** cc = malloc((size_t)(N + 1) * sizeof(Expr*));
+    for (int i = 0; i <= N; i++) cc[i] = expr_copy(a[i]);
+    Expr* body = mk_seriesdata(x, cc, (size_t)(N + 1), 0, N + 1, 1);
+    free(cc);
+    for (int k = 0; k <= N; k++) expr_free(a[k]);
+    free(a);
+
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = body;
+    *nbranch = 1;
+    return out;
+}
+
 static Expr* builtin_dsolve_frobenius(Expr* res) {
     return dsolve_method_builtin(res, dsolve_frobenius_try);
+}
+
+static Expr* builtin_dsolve_first_order_series(Expr* res) {
+    return dsolve_method_builtin(res, dsolve_first_order_series_try);
 }
 
 void dsolve_frobenius_init(void) {
@@ -381,4 +439,11 @@ void dsolve_frobenius_init(void) {
         "y == x^s Sum a_n x^n of a second-order linear ODE about a regular singular "
         "point x == 0 (indicial quadratic s(s-1)+P0 s+Q0 == 0; equal or "
         "non-integer-difference roots handled, with a Log term for equal roots).");
+
+    symtab_add_builtin("DSolve`FirstOrderPowerSeries", builtin_dsolve_first_order_series);
+    symtab_get_def("DSolve`FirstOrderPowerSeries")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`FirstOrderPowerSeries",
+        "DSolve`FirstOrderPowerSeries[eqn, y, x] gives a truncated power-series solution "
+        "of a first-order ODE y' == F(x, y) about the ordinary point x == 0 (a_0 == C[1]), "
+        "as a SeriesData.");
 }

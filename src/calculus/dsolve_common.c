@@ -1205,6 +1205,98 @@ Expr** dsolve_extract_solutions(Expr* solres, const char* varname, size_t* n) {
     return out;
 }
 
+Expr** dsolve_extract_applied_bodies(Expr* r, const char* fname, size_t* n) {
+    *n = 0;
+    if (!r || !head_is(r, SYM_List)) return NULL;
+    size_t m = r->data.function.arg_count;
+    Expr** out = malloc((m ? m : 1) * sizeof(Expr*));
+    size_t c = 0;
+    for (size_t i = 0; i < m; i++) {
+        Expr* inner = r->data.function.args[i];
+        if (!head_is(inner, SYM_List)) continue;
+        for (size_t k = 0; k < inner->data.function.arg_count; k++) {
+            Expr* rule = inner->data.function.args[k];
+            if (head_is(rule, SYM_Rule) && rule->data.function.arg_count == 2) {
+                Expr* lhs = rule->data.function.args[0];
+                if (lhs->type == EXPR_FUNCTION
+                    && lhs->data.function.head->type == EXPR_SYMBOL
+                    && lhs->data.function.head->data.symbol.name == fname)
+                    out[c++] = expr_copy(rule->data.function.args[1]);
+            }
+        }
+    }
+    *n = c;
+    if (c == 0) { free(out); return NULL; }
+    return out;
+}
+
+/* ---- shared fundamental-set builder (LinearConstantCoefficients + UC) ---- */
+static Expr* hb_xpow(const char* xvar, int j) {
+    return expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ expr_new_symbol(xvar), expr_new_integer(j) }, 2);
+}
+static Expr* hb_exp_lin(Expr* coef, const char* xvar) {
+    return eval_and_free(ds_call1("Exp", ds_call2(SYM_Times, coef, expr_new_symbol(xvar))));
+}
+static Expr* hb_basis_exp(const char* xvar, int j, const Expr* r) {
+    Expr* e = hb_exp_lin(expr_copy((Expr*)r), xvar);
+    if (j == 0) return e;
+    return eval_and_free(ds_call2(SYM_Times, hb_xpow(xvar, j), e));
+}
+static Expr* hb_basis_trig(const char* xvar, int j, const Expr* a, const Expr* b, const char* trig) {
+    Expr* e = hb_exp_lin(expr_copy((Expr*)a), xvar);
+    Expr* t = ds_call1(trig, ds_call2(SYM_Times, expr_copy((Expr*)b), expr_new_symbol(xvar)));
+    Expr* prod = eval_and_free(ds_call2(SYM_Times, e, t));
+    if (j == 0) return prod;
+    return eval_and_free(ds_call2(SYM_Times, hb_xpow(xvar, j), prod));
+}
+
+Expr** dsolve_homog_basis(const Expr* charpoly, const char* lam, const char* xvar,
+                          int n, size_t* count) {
+    *count = 0;
+    DSolveRoots R;
+    if (!dsolve_analyze_roots(charpoly, lam, n, &R)) return NULL;
+    Expr** basis = NULL;
+    if (R.total == n) {
+        bool* used = calloc(R.ndist, sizeof(bool));
+        basis = malloc((size_t)n * sizeof(Expr*));
+        size_t bc = 0;
+        for (size_t i = 0; i < R.ndist; i++) {
+            if (used[i]) continue;
+            if (R.isreal[i]) {
+                for (int j = 0; j < R.mult[i]; j++) basis[bc++] = hb_basis_exp(xvar, j, R.roots[i]);
+                used[i] = true;
+            } else {
+                Expr* conj = eval_and_free(ds_call1("Conjugate", expr_copy(R.roots[i])));
+                long c = -1;
+                for (size_t k = 0; k < R.ndist && c < 0; k++) {
+                    if (k == i || used[k]) continue;
+                    Expr* diff = eval_and_free(ds_call2(SYM_Subtract, expr_copy(R.roots[k]), expr_copy(conj)));
+                    if (ds_is_zero(diff)) c = (long)k;
+                    expr_free(diff);
+                }
+                expr_free(conj);
+                if (c >= 0) {
+                    used[i] = used[(size_t)c] = true;
+                    Expr* a = eval_and_free(ds_call1("Re", expr_copy(R.roots[i])));
+                    for (int j = 0; j < R.mult[i]; j++) {
+                        basis[bc++] = hb_basis_trig(xvar, j, a, R.im[i], "Cos");
+                        basis[bc++] = hb_basis_trig(xvar, j, a, R.im[i], "Sin");
+                    }
+                    expr_free(a);
+                } else {
+                    for (int j = 0; j < R.mult[i]; j++) basis[bc++] = hb_basis_exp(xvar, j, R.roots[i]);
+                    used[i] = true;
+                }
+            }
+        }
+        *count = bc;
+        free(used);
+    }
+    dsolve_roots_free(&R);
+    return basis;
+}
+
 Expr* dsolve_solve_top_derivative(DSolveProblem* P, int n) {
     if (P->neq < 1 || P->nfun < 1 || P->nind < 1 || n < 1) return NULL;
     const char* yname = P->fun_names[0];

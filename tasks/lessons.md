@@ -1,5 +1,37 @@
 # Lessons learned
 
+## A cascade method that recurses `DSolve` can leak/hang through the shared engine, and can hijack callers (2026-09-02)
+
+Landing DSolve M9 (the 8 SymPy parity methods) surfaced three traps worth keeping:
+
+- **`Factor`/`FactorList` on raw funcapps is a hang AND a wrong answer.**
+  `FactorList[y'[x] - 2 Sqrt[y[x]]]` never returns; `FactorList[(y'[x])^2 - 4 y[x]]`
+  returns `(y'-2)(y'+2)` (drops the `y[x]`). Putting `Factorable` at the FRONT of the
+  cascade meant it ran `FactorList` on every equation (incl. recursive sub-equations),
+  wedging `DSolve[y'==2Sqrt[y]]` — which was fine on clean `main`, so *my code caused it*.
+  Always substitute funcapps → plain symbols and gate `PolynomialQ` before Factor. See
+  [[project_dsolve_factorlist_funcapp_hangs]].
+
+- **A front-of-cascade method that recurses can hijack recursive callers.** Factoring
+  `p·p' == p²/y` (stage-1 of `AutonomousReduction`) as `p·(p'−p/y)` and returning the
+  trivial `p==0` branch FIRST broke `AutonomousReduction` (it takes the first
+  sub-solution). Fix: only recurse on genuine DIFFERENTIAL factors (containing a
+  derivative), never the bare-function factor. The lesson: adding an EARLY cascade method
+  perturbs every *internal* `DSolve` recursion, not just the user's top call — re-run the
+  full suite, and expect existing "declines" tests to change (they did:
+  `FirstOrderPowerSeries` in auto turned `y'==Sqrt[x+y]` from unevaluated into a series →
+  made it pinned-only).
+
+- **Diff an existing sibling before blaming your new method for a valgrind leak.**
+  `AlmostLinear` grew per-call; so did the long-shipped `LinearFirstOrder` and a bare
+  `Integrate[Exp[x] Sin[x], x]` — a pre-existing `Integrate`-engine leak
+  (`integrate.c` ~920/256), not mine. `constcoeff` (variation-of-parameters) is exactly
+  flat, which is what proved the engine baseline. See
+  [[project_dsolve_integrate_engine_percall_leak]].
+
+Also: use `Expand`, not `Simplify`, before `Coefficient[·, Cos[b x]]` — Simplify rewrites
+`Cos[2x]` and the extraction silently returns 0.
+
 ## `PossibleZeroQ` is a self-contained numeric/structural test — never call `Simplify` (2026-08-07)
 
 Adding `Assumptions` support to `PossibleZeroQ`, my first design used an
