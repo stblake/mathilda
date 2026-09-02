@@ -41,3 +41,22 @@ bivariate on — confirmed (its deg-2 candidate is tangent / non-elementary).
 - Safety-net: `lie_check` (†) gate + `dsolve_verify_implicit` back-sub ⇒ a mis-derived
   ansatz declines, never wrong. Bivariate reuses `lie_linear`'s exact pipeline.
 - Reference: `benchmarks/.venv/.../sympy/solvers/ode/lie_group.py:478` (lie_heuristic_bivariate).
+
+## Review — abaco2_similar increment (2026-09-02, committed 574d92a4, pushed to main)
+- [x] `abaco2_similar` (§4.3) landed: [F(x),H(x)]+inverse; first heuristic to reach
+      IRRATIONAL ω — solves y'=Sqrt[a x+b y+c], (a x+b y+c)^p. Cascade: after
+      abaco1_product, before bivariate.
+- [x] Unit `t_lie_abaco2_similar` + stress `t_stress_lie_similar` (8 radical ODEs, isolating).
+- [x] **NthAlgebraic Root-guard** (dsolve_nth_algebraic.c): declines implicit-Root[] branches
+      → fixes production hang on `y==x(y')²+(y')³` (Lagrange now claims it); explicit-root
+      cases still solve.
+- [x] **init.m loaded in all 3 DSolve test mains** (test_load_init_m in test_utils.h) — the
+      env divergence that hid the hang. Watchdog 60s→120s. See memory
+      project_dsolve_tests_load_init_m.
+- [x] **Simplify power-distribution leak fixed** (simp_power.c, 3 branches) — pre-existing,
+      surfaced by the Lie ds_simplify finalize; expr_new_function copies the args array so the
+      heap holder must be freed.
+- [x] Verified: 3 DSolve suites + 10 simplify/power suites + check-c99 green; per-solve valgrind
+      leak-flat (1× vs 6× distinct calls identical after the simp_power fix).
+- Remaining Lie heuristics: `function_sum` (L2); `chi`, `abaco2_unique_unknown`,
+  `abaco2_unique_general` (L3).
