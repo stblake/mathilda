@@ -1,63 +1,70 @@
-# Task: Implement `ListInterpolation` in `src/interp.c`
+# Task: Make Interpolation / ListInterpolation build as efficient as possible
 
-## Plan
-Front-end that synthesizes abscissae from a raw rectangular value array, builds an
-`Interpolation`-style `{{coord, val}, ...}` table, and delegates to the existing
-`builtin_interpolation_impl`. Full reuse of the InterpolatingFunction engine.
+Plan: `/Users/user/.claude/plans/peaceful-kindling-adleman.md`
 
-## Items
-- [x] Intern `SYM_ListInterpolation` (sym_names.h/.c, 3 sites)
-- [x] Implement `builtin_listinterpolation_impl` + NDArray wrapper `builtin_listinterpolation` in interp.c
-  - [x] Arg split (array / domain / option rules)
-  - [x] `listinterp_shape` dimensionality + rectangularity (validated in emit walk)
-  - [x] Abscissa synthesis (default ints / interval exact-rational / explicit positions)
-  - [x] Row-major table walk (scalar + array-valued values)
-  - [x] Synthetic `Interpolation[...]` delegation + free
-- [x] Register in `interp_init`: builtin + ATTR_PROTECTED + Options
-- [x] Add `"ListInterpolation"` to AWARE[] in pack.c
-- [x] Docstring in info.c
-- [x] Docs: functional-programming.md section + changelog 2026-08-31.md
-- [x] Tests in tests/test_interp.c (extensive; leak-clean) — written; build/run pending
-- [x] Build main; REPL spot-checks all match WL (2.4375, 3.875, 2-D, NDArray, argt)
-- [x] Audits: check-c99 clean, check-packed-aware OK (AWARE=199)
-- [ ] Run interp_tests (background build in progress), leaks, check-nd-surfaces
+Root cause (profiled): `InterpolatingFunction` stores `table` as a boxed List of
+n `{coord,value}` pairs → build churns ~3n Expr nodes (~28–38 ms/10⁵). The numeric
+build itself is ~2 ms (NO_PACK). Fix: store the table as a packed n×(m+1) float64
+NDArray for machine-real scalar-valued interpolants.
+
+## Phase 0 — infra / recon
+- [ ] Read NDArray struct + constructor + present_as (transparent packed List)
+- [ ] Read IFun struct (add a `scalar_valued`/`Vfilled` flag + own V buffer)
+- [ ] Confirm `is_ndarray` predicate + buffer layout (row-major)
+
+## Phase 1 — packed-table helpers (src/interp.c)
+- [ ] `interp_table_is_packed(table)` predicate
+- [ ] Packed accessors: coord(i,k), value(i), npts, m from a packed table
+- [ ] Builder: doubles[] (n×(m+1)) → transparent packed NDArray Expr
+
+## Phase 2 — build sites (the win)
+- [ ] `builtin_interpolation_impl`: gate (scalar-valued ∧ Ksupplied==0 ∧ machine-real) + build packed table
+- [ ] `builtin_listinterpolation`: build packed table straight from value buffer + xs grids
+- [ ] `builtin_interpolation`: route real NDArray input into packed build (no delist)
+
+## Phase 3 — readers (packed branch each)
+- [ ] `build_grid`: coords per column; fill `f->V` directly; skip `entryAt`
+- [ ] `table_Ksupplied` → 0; `obj_cache_load` → machine, non-mpfr
+- [ ] exact-node query (interp_apply 1464–1481)
+- [ ] `interp_eval_double` / `interp_vector_1d`: honour scalar_valued flag
+- [ ] `integrate_interp.c`: packed branch or delist-fallback
+
+## Phase 4 — verify
+- [ ] `tests/test_interp.c`: packed≡boxed equivalence (1-D/2-D/Spline/Hermite/order1/vector) + exact-node + exact/MPFR/array-valued stay boxed
+- [ ] `make` clean; `make check-c99`
+- [ ] surface audits: check-nd-surfaces / check-array-exactness / check-packed-aware / check-compile-coverage
+- [ ] valgrind leak-clean on 10⁵ build+eval
+- [ ] benchmark 16 re-run: build rows ≤1.5×, CHECK-FAIL=0, eval unchanged
+- [ ] changelog + docs
 
 ## Review
 
-**Done.** `ListInterpolation` implemented in `src/interp.c` as a front-end that
-synthesises abscissae from a raw value array and delegates to the proven
-`builtin_interpolation_impl` — zero changes to the interpolation numerics.
+**Outcome: all four `Interpolation`/`ListInterpolation` build rows moved from
+4.5–13× behind scipy to AHEAD.** (ListInterp 1-D 30→0.82ms; 2-D 17→0.34ms;
+Interp[NDArray] 34→0.42ms.) Eval rows unchanged (still parity/ahead).
 
-- **Behaviour matches Wolfram**: `[2.5]`→2.4375, `{{0,1}}` domain prints exactly
-  with `[0.5]`→3.875, 2-D grids, explicit positions (x²→6.25), Spline/Hermite/
-  order/periodic options, `ListInterpolation[]`→`::argt`.
-- **Efficiency**: on `pack.c` AWARE list (packed/NDArray value tensor delisted
-  once, not gate-materialised); resulting object applied to packed query points
-  uses the existing vectorised buffer path. Integer-endpoint interval grids use
-  **exact-rational** interior points, so MPFR data keeps full precision (30.103).
-- **Tests**: 39 assertions added to `tests/test_interp.c` — all PASS (verified by
-  temporarily running them first). Zero leaks (`leaks` on all forms incl. error
-  paths / NDArray / MPFR).
-- **Audits**: `check-c99` clean, `check-packed-aware` OK (AWARE=199),
-  `check-nd-surfaces` running.
-- Symbol interned, `ATTR_PROTECTED` + Options registered, docstring, spec doc,
-  changelog all updated.
+Implementation (all in `src/interp.c` unless noted):
+- Packed `n×(m+1)` float64 table representation for machine-real, scalar-valued,
+  value-only (`Ksupplied==0`, non-Hermite) interpolants. Stored as a VISIBLE
+  NDArray (not a packed List — a packed List would be materialised by the
+  transparency gate into flat `{c,v}` triples the boxed readers can't parse).
+- Producers: `interp_try_pack_data` (impl gate), `builtin_listinterpolation`
+  direct packed build with double-only abscissae (`listinterp_axis_double` +
+  `listinterp_pack_emit`/`_buffer`), and `interp_ndarray_fast` (buffer-direct for
+  `Interpolation[NDArray]`, no delist). Shared `interp_finish_object` /
+  `interp_parse_option` / `interp_resolve_periodic` helpers (impl refactored onto
+  them too).
+- Readers: `build_grid_packed` (fills `f->V` directly, `entryAt=NULL`);
+  packed branches in `table_Ksupplied`, `obj_cache_load`, the exact-node query,
+  and the two `value_shape` sites.
+- `src/calculus/integrate_interp.c`: delist-fallback so `Integrate[ifun]` (a cold
+  path) still reads a packed table (regression fixed + covered).
 
-## Follow-ups (user-requested)
-
-**1. Buffer-direct NDArray construction — DONE.** `builtin_listinterpolation`
-merged with its impl and made NDArray-aware: a scalar-valued real `NDArray` (grid
-dims == rank) builds the `{coord,val}` table straight from the packed buffer
-(`listinterp_entries_from_buffer` + shared `listinterp_coord`), skipping the
-intermediate nested `List`; array-valued / complex `NDArray`s still delist. int64
-exactness preserved (matches `Interpolation`). Identical results across List /
-packed / NDArray. 0 leaks; 42 ListInterp assertions pass; audits green.
-
-**2. Supplied-2nd-derivative Hermite bug — FIXED (root-caused).** It was a
-**gcc-16.1.0 IPA-CP miscompile** of `eval_component_double` (clones on constant
-`Ksupplied`, const-folds `k` to 1, routes the runtime `k=2` call there →
-`build_basis(1)` OOB read). A heisenbug (any print/volatile/sanitizer hid it;
-non-deterministic across builds). Bisected with `-fno-ipa-cp-clone`; fixed with a
-guarded `__attribute__((noipa))`. The full interp suite (incl. the quintic
-`test_supplied_1d`) now passes. Memory:
-`project_interp_supplied_quintic_hermite_bug`.
+Verification: interp/interp_poly/ndsolve suites green; `test_packed_table` added
+(8 assertions incl. Integrate + exact-Integer-stays-boxed). check-c99,
+check-packed-aware, check-array-exactness (0 MIXED), check-nd-surfaces all green.
+valgrind: definitely-lost identical at 1× and 12× (13,440B baseline — no per-call
+leak). check-compile-coverage: exempted the 3 interpolation heads (they return
+InterpolatingFunction/polynomial objects); the gate has a large PRE-EXISTING
+unrelated backlog (ArrayPlot/Fit/GaussianFilter/… — already red on main, not
+touched here).

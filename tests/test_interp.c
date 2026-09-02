@@ -742,6 +742,34 @@ static void test_listinterp_mpfr(void) {
     run_mpfr("ListInterpolation[N[{1,2,3,5,8,5}, 30], {{0,1}}][N[1/2, 30]]", 3.875, 1e-12);
 }
 
+/* The packed n x (m+1) float64 table representation (machine-real, scalar-valued
+ * interpolants).  Cubic interpolation is exact on quadratic data, so an i^2 grid
+ * gives x^2 exactly at any point -- a hand-checkable reference for the packed
+ * build + eval, across every producer (ListInterpolation list, Interpolation
+ * rank-1 / rank-2 NDArray) and the readers (scalar eval, domain grid, Integrate).
+ * Exact-Integer data must still take the boxed path (exact Integer at a node). */
+static void test_packed_table(void) {
+    /* Interpolation NDArray fast paths (no delisting). */
+    run_close("Interpolation[NDArray[N[{1,4,9,16,25}]]][2.5]", 6.25, 1e-9);      /* rank-1 */
+    run_close("Interpolation[NDArray[N[{{1,1},{2,4},{3,9},{4,16},{5,25}}]]][2.5]",
+              6.25, 1e-9);                                                        /* rank-2 {x,y} */
+    /* Large 1-D packed build + scalar eval between nodes. */
+    run_close("ListInterpolation[N[Range[100]^2]][50.5]", 2550.25, 1e-6);
+    /* 2-D packed build with a domain grid. */
+    run_close("ListInterpolation[N[{{1,2},{3,4}}],{{0,1},{0,1}}][0.5,0.5]", 2.5, 1e-9);
+    /* Packed "Spline" method still routes through the packed grid (V-buffer).
+     * A natural cubic spline is NOT exact on quadratic data; this value matches
+     * the boxed spline (test_method_spline pins the same kernel on machine data). */
+    run_close("Interpolation[N[Table[{i,i^2},{i,1,6}]],Method->\"Spline\"][2.5]",
+              6.2236842105, 1e-8);
+    /* Integrate an applied packed interpolant: F(6) = Integrate[x^2, {x,1,6}]. */
+    run_close("(Integrate[Interpolation[N[Table[{i,i^2},{i,1,6}]]][x],x] /. x->6.)",
+              215.0 / 3.0, 1e-6);
+    /* Exact-Integer data is NOT packed: a node query returns an exact Integer. */
+    run_fullform("Interpolation[{{1,1},{2,4},{3,9}}][2]", "4");
+    run_fullform("ListInterpolation[{1,4,9,16}][3]", "9");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -791,6 +819,7 @@ int main(void) {
     test_listinterp_ndarray();
     test_listinterp_unevaluated();
     test_listinterp_mpfr();
+    test_packed_table();
 
     symtab_clear();
     printf("\nAll InterpolatingFunction and Interpolation tests passed.\n");

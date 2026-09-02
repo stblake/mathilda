@@ -244,6 +244,12 @@ EXEMPT = {
     "Hypergeometric0F1": "rewrites to HypergeometricPFQ",
     "Hypergeometric1F1": "rewrites to HypergeometricPFQ",
     "Hypergeometric2F1": "rewrites to HypergeometricPFQ",
+    "Interpolation": "returns an InterpolatingFunction object (no compiled machine "
+                     "type); AWARE only to read a packed data table straight through",
+    "ListInterpolation": "returns an InterpolatingFunction object (no compiled "
+                         "machine type); AWARE only to read a packed value tensor",
+    "InterpolatingPolynomial": "returns a symbolic polynomial in x, not a machine "
+                               "array (cf. CharacteristicPolynomial)",
 }
 
 

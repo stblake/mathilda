@@ -517,6 +517,101 @@ static size_t parse_domain_dim(Expr* domain) {
 }
 
 /*
+ * build_grid_packed:
+ *   The packed-table twin of build_grid.  `table` is an n x (m+1) float64
+ *   NDArray whose row i is [c_{i,1}, ..., c_{i,m}, v_i] (the m coordinates then
+ *   the scalar value) -- the representation Interpolation/ListInterpolation build
+ *   for machine-real, scalar-valued data.  Reads coordinates and the value column
+ *   straight from the buffer, so it needs no per-entry Expr and never delists.
+ *   Unlike the boxed path it fills the value tensor `V` DIRECTLY (there are no
+ *   boxed entries to point `entryAt` at) and leaves `entryAt == NULL`, which is
+ *   the signal every downstream reader uses to mean "packed, scalar-valued, V
+ *   already filled".  Returns true on success (no leaks on failure).
+ */
+static bool build_grid_packed(Expr* domain, Expr* table, size_t m,
+                              const bool* periodic, IFun* out) {
+    memset(out, 0, sizeof(*out));
+    if (!is_ndarray(table) || table->data.ndarray.rank != 2
+        || table->data.ndarray.dtype != NDT_FLOAT64) return false;
+    size_t npts = (size_t)table->data.ndarray.dims[0];
+    size_t ncol = (size_t)table->data.ndarray.dims[1];
+    if (ncol != m + 1 || npts < 2) return false;
+    const double* buf = (const double*)table->data.ndarray.data;
+
+    size_t*  nk     = calloc(m, sizeof(size_t));
+    double** grid   = calloc(m, sizeof(double*));
+    size_t*  stride = calloc(m, sizeof(size_t));
+    double*  dmin   = calloc(m, sizeof(double));
+    double*  dmax   = calloc(m, sizeof(double));
+    bool*    hasr   = calloc(m, sizeof(bool));
+    double*  V      = NULL;
+    bool*    filled = NULL;
+    bool*    per    = NULL;
+    double*  perd   = NULL;
+    if (!nk || !grid || !stride || !dmin || !dmax || !hasr) goto fail;
+
+    /* Distinct ascending abscissae per axis, exactly as build_grid does. */
+    for (size_t k = 0; k < m; k++) {
+        grid[k] = malloc(sizeof(double) * npts);
+        if (!grid[k]) goto fail;
+        for (size_t i = 0; i < npts; i++) grid[k][i] = buf[i * ncol + k];
+        qsort(grid[k], npts, sizeof(double), cmp_double);
+        size_t len = 0;
+        for (size_t i = 0; i < npts; i++)
+            if (len == 0 || grid[k][i] != grid[k][len - 1]) grid[k][len++] = grid[k][i];
+        nk[k] = len;
+        if (len < 2) goto fail;
+    }
+
+    size_t total = 1;
+    for (size_t k = 0; k < m; k++) total *= nk[k];
+    stride[m - 1] = 1;
+    for (size_t k = m - 1; k-- > 0; ) stride[k] = stride[k + 1] * nk[k + 1];
+
+    V = malloc(sizeof(double) * total);
+    filled = calloc(total, sizeof(bool));
+    if (!V || !filled) goto fail;
+    for (size_t i = 0; i < npts; i++) {
+        size_t flat = 0;
+        for (size_t k = 0; k < m; k++)
+            flat += grid_index(grid[k], nk[k], buf[i * ncol + k]) * stride[k];
+        V[flat] = buf[i * ncol + m];              /* value column */
+        filled[flat] = true;
+    }
+    for (size_t i = 0; i < total; i++) if (!filled[i]) goto fail;  /* incomplete grid */
+    free(filled); filled = NULL;
+
+    for (size_t k = 0; k < m; k++) {
+        Expr* iv = domain->data.function.args[k];
+        if (interp_is_list(iv) && iv->data.function.arg_count == 2
+            && node_to_double(iv->data.function.args[0], &dmin[k])
+            && node_to_double(iv->data.function.args[1], &dmax[k]))
+            hasr[k] = true;
+    }
+
+    per  = calloc(m, sizeof(bool));
+    perd = calloc(m, sizeof(double));
+    if (!per || !perd) goto fail;
+    for (size_t k = 0; k < m; k++) {
+        per[k] = periodic && periodic[k];
+        perd[k] = per[k] ? (grid[k][nk[k] - 1] - grid[k][0]) : 0.0;
+    }
+
+    out->m = m; out->nk = nk; out->grid = grid; out->stride = stride;
+    out->total = total; out->dmin = dmin; out->dmax = dmax; out->has_range = hasr;
+    out->entryAt = NULL;                 /* packed: no boxed entries */
+    out->V = V; out->v_valid = true; out->v_rank = 0;
+    out->periodic = per; out->period = perd;
+    return true;
+
+fail:
+    if (grid) { for (size_t k = 0; k < m; k++) free(grid[k]); free(grid); }
+    free(nk); free(stride); free(dmin); free(dmax); free(hasr);
+    free(V); free(filled); free(per); free(perd);
+    return false;
+}
+
+/*
  * build_grid:
  *   Parse `domain` and `table` into the tensor grid (abscissae, strides, node
  *   -> entry map, domain bounds).  Validates that coordinates are numeric and
@@ -525,6 +620,7 @@ static size_t parse_domain_dim(Expr* domain) {
  */
 static bool build_grid(Expr* domain, Expr* table, size_t m,
                        const bool* periodic, IFun* out) {
+    if (is_ndarray(table)) return build_grid_packed(domain, table, m, periodic, out);
     memset(out, 0, sizeof(*out));
     if (!interp_is_list(table)) return false;
     size_t npts = table->data.function.arg_count;
@@ -1101,7 +1197,8 @@ static Expr* interp_eval_double(Expr* domain, Expr* table, size_t m,
 
     size_t vshape[16];
     int vrank;
-    value_shape(entry_value(f->entryAt[0]), vshape, &vrank);
+    if (f->entryAt) value_shape(entry_value(f->entryAt[0]), vshape, &vrank);
+    else vrank = 0;                       /* packed table: scalar-valued */
     size_t vtotal = 1;
     for (int d = 0; d < vrank; d++) vtotal *= vshape[d];
 
@@ -1165,14 +1262,25 @@ static void obj_cache_load(Expr* table) {
     g_obj_cache.table     = expr_copy(table);
     g_obj_cache.Ksupplied = table_Ksupplied(table);
 #ifdef USE_MPFR
-    g_obj_cache.is_mpfr   = numeric_expr_is_mpfr(table);
-    g_obj_cache.inexact   = common_scan_inexact(table);
+    /* A packed float64 table is machine-precision by construction: skip the
+     * O(n) generic scanners (which would materialise a packed List anyway). */
+    if (is_ndarray(table)) {
+        g_obj_cache.is_mpfr = false;
+        g_obj_cache.inexact = (CommonInexactInfo){0};
+        g_obj_cache.inexact.has_inexact = true;
+        g_obj_cache.inexact.min_bits = 53;
+    } else {
+        g_obj_cache.is_mpfr   = numeric_expr_is_mpfr(table);
+        g_obj_cache.inexact   = common_scan_inexact(table);
+    }
 #endif
 }
 
 /* Number of supplied derivative tensors per node (0 = value-only).  Returns -1
  * if entries are malformed or non-uniform in length. */
 static int table_Ksupplied(Expr* table) {
+    /* A packed n x (m+1) table is scalar-valued and value-only by construction. */
+    if (is_ndarray(table)) return 0;
     if (!interp_is_list(table) || table->data.function.arg_count < 1) return -1;
     size_t npts = table->data.function.arg_count;
     Expr* e0 = table->data.function.args[0];
@@ -1292,9 +1400,11 @@ static Expr* interp_vector_1d(Expr* domain, Expr* table, const Expr* arg, size_t
     IFun* f = grid_cache_get(domain, table, 1, periodic);
     if (!f) return NULL;
 
-    size_t vshape[16]; int vrank;
-    value_shape(entry_value(f->entryAt[0]), vshape, &vrank);
-    if (vrank != 0) return NULL;                 /* scalar-valued only */
+    if (f->entryAt) {                            /* boxed: verify scalar-valued */
+        size_t vshape[16]; int vrank;
+        value_shape(entry_value(f->entryAt[0]), vshape, &vrank);
+        if (vrank != 0) return NULL;             /* scalar-valued only */
+    }
     if (!fill_values(f, NULL, 0)) return NULL;   /* populate f->V (memoised) */
 
     bool per = f->periodic && f->periodic[0];
@@ -1460,8 +1570,13 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
     int Ksupplied = g_obj_cache.Ksupplied;
     if (Ksupplied < 0) { free(ders); free(orders); free(periodic); return NULL; }
 
-    /* Exact node-coincident value query -> exact stored value. */
-    if (!any_der) {
+    /* Exact node-coincident value query -> exact stored value.  Skipped for a
+     * packed (machine) table: its stored values are float64, and evaluating the
+     * interpolant AT a node returns that same double bit-for-bit (the local
+     * polynomial's constant term is the node value), so the shortcut would only
+     * duplicate the numeric path -- and it iterates boxed entries a packed table
+     * does not have. */
+    if (!any_der && !is_ndarray(table)) {
         bool all_exact = true;
         for (size_t k = 0; k < m; k++)
             if (!is_exact_real(call_args[k])) { all_exact = false; break; }
@@ -1599,6 +1714,194 @@ static void free_exprs(Expr** xs, size_t n) {
     free(xs);
 }
 
+/* Parse one Rule[lhs, rhs] interpolation option into (order, method,
+ * periodic_spec).  Returns false for an unknown option or a malformed value.
+ * Shared by builtin_interpolation_impl and builtin_listinterpolation. */
+static bool interp_parse_option(Expr* lhs, Expr* rhs, int* order, int* method,
+                                Expr** periodic_spec) {
+    if (lhs->type != EXPR_SYMBOL) return false;
+    if (lhs->data.symbol.name == SYM_InterpolationOrder) {
+        return node_to_order(rhs, order);
+    } else if (lhs->data.symbol.name == SYM_Method) {
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) return true;
+        if (rhs->type == EXPR_STRING && rhs->data.string
+            && strcmp(rhs->data.string, "Spline") == 0) { *method = METHOD_SPLINE; return true; }
+        if (rhs->type == EXPR_STRING && rhs->data.string
+            && strcmp(rhs->data.string, "Hermite") == 0) { *method = METHOD_HERMITE; return true; }
+        return false;
+    } else if (lhs->data.symbol.name == SYM_PeriodicInterpolation) {
+        *periodic_spec = rhs;
+        return true;
+    }
+    return false;
+}
+
+/* Resolve a PeriodicInterpolation rhs (True / False / list of True|False) against
+ * the dimensionality m into a bool[m] (NULL if none periodic).  Returns false on
+ * a malformed spec; on success *periodic_out is a malloc'd array or NULL. */
+static bool interp_resolve_periodic(Expr* periodic_spec, size_t m,
+                                    bool** periodic_out, bool* any_out) {
+    *periodic_out = NULL;
+    *any_out = false;
+    if (!periodic_spec) return true;
+    bool all_true  = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol.name == SYM_True);
+    bool all_false = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol.name == SYM_False);
+    if (all_false) return true;
+    bool* periodic = calloc(m, sizeof(bool));
+    if (!periodic) return false;
+    bool any = false;
+    if (all_true) { for (size_t k = 0; k < m; k++) periodic[k] = true; any = true; }
+    else if (interp_is_list(periodic_spec) && periodic_spec->data.function.arg_count == m) {
+        for (size_t k = 0; k < m; k++) {
+            Expr* b = periodic_spec->data.function.args[k];
+            periodic[k] = (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_True);
+            if (periodic[k]) any = true;
+        }
+    } else { free(periodic); return false; }   /* malformed */
+    if (!any) { free(periodic); periodic = NULL; }
+    *periodic_out = periodic;
+    *any_out = any;
+    return true;
+}
+
+/* Wrap a filled row-major n x (m+1) float64 buffer as the packed table NDArray
+ * (row i = [c_{i,1}, ..., c_{i,m}, v_i]).  Takes ownership of `buf` (moved into
+ * the NDArray).  Presents as a VISIBLE NDArray, deliberately: it lives inside the
+ * HoldAll InterpolatingFunction object as private data, and a visible NDArray is
+ * never touched by the transparency gate -- whereas a packed List would be
+ * materialised into a nested List of flat {c...,v} triples the boxed readers
+ * cannot parse.  The object still prints as InterpolatingFunction[domain, <>];
+ * only FullForm reveals the table, now as NDArray[...] rather than List[...]. */
+static Expr* interp_packed_table(double* buf, size_t npts, size_t m) {
+    int64_t dims[2] = { (int64_t)npts, (int64_t)(m + 1) };
+    return expr_new_ndarray_raw(2, dims, buf, NDT_FLOAT64);   /* moves buf */
+}
+
+/* Try to build a packed n x (m+1) table + domain from value-only data
+ * (Ksupplied == 0).  Succeeds only when every entry is SCALAR-valued, every
+ * coordinate and value coerces to double, AND the data is machine-inexact (at
+ * least one Real leaf) -- fully-exact data stays boxed to preserve exact node
+ * values and exact arithmetic.  Returns the packed table and sets *domain_out on
+ * success, or NULL (leaving *domain_out untouched) so the caller falls back to
+ * the boxed path.  Does not consume `data`. */
+static Expr* interp_try_pack_data(Expr* data, size_t npts, size_t m,
+                                  bool synth_x, Expr** domain_out) {
+    if (m == 0 || m > 64 || npts < 2) return NULL;
+    double* buf   = malloc(sizeof(double) * npts * (m + 1));
+    double* dmin  = malloc(sizeof(double) * m);
+    double* dmax  = malloc(sizeof(double) * m);
+    Expr**  dminE = malloc(sizeof(Expr*) * m);   /* coord Expr at the min (type-preserving) */
+    Expr**  dmaxE = malloc(sizeof(Expr*) * m);
+    if (!buf || !dmin || !dmax || !dminE || !dmaxE) {
+        free(buf); free(dmin); free(dmax); free(dminE); free(dmaxE); return NULL;
+    }
+
+    bool has_inexact = false, ok = true;
+    for (size_t i = 0; i < npts && ok; i++) {
+        Expr* e = data->data.function.args[i];
+        double* row = buf + i * (m + 1);
+        Expr* coordE[64];
+        if (synth_x) {
+            if (!is_scalar_real(e) || !node_to_double(e, &row[1])) { ok = false; break; }
+            row[0] = (double)(i + 1);
+            coordE[0] = NULL;                         /* synthesized -> Integer domain */
+            if (e->type == EXPR_REAL) has_inexact = true;
+        } else {
+            if (!interp_is_list(e) || e->data.function.arg_count != 2) { ok = false; break; }
+            Expr* val = entry_value(e);
+            if (!is_scalar_real(val)) { ok = false; break; }   /* array-valued -> boxed */
+            for (size_t k = 0; k < m; k++) {
+                Expr* ck = entry_coord(e, m, k);
+                if (!ck || !node_to_double(ck, &row[k])) { ok = false; break; }
+                coordE[k] = ck;
+                if (ck->type == EXPR_REAL) has_inexact = true;
+            }
+            if (!ok) break;
+            if (!node_to_double(val, &row[m])) { ok = false; break; }
+            if (val->type == EXPR_REAL) has_inexact = true;
+        }
+        for (size_t k = 0; k < m; k++) {
+            if (i == 0) { dmin[k] = dmax[k] = row[k]; dminE[k] = dmaxE[k] = coordE[k]; }
+            else {
+                if (row[k] < dmin[k]) { dmin[k] = row[k]; dminE[k] = coordE[k]; }
+                if (row[k] > dmax[k]) { dmax[k] = row[k]; dmaxE[k] = coordE[k]; }
+            }
+        }
+    }
+    if (!ok || !has_inexact) { free(buf); free(dmin); free(dmax); free(dminE); free(dmaxE); return NULL; }
+
+    Expr** dom_items = malloc(sizeof(Expr*) * m);
+    if (!dom_items) { free(buf); free(dmin); free(dmax); free(dminE); free(dmaxE); return NULL; }
+    for (size_t k = 0; k < m; k++) {
+        Expr* lo = dminE[k] ? expr_copy(dminE[k]) : expr_new_integer((int64_t)(dmin[k] + 0.5));
+        Expr* hi = dmaxE[k] ? expr_copy(dmaxE[k]) : expr_new_integer((int64_t)(dmax[k] + 0.5));
+        dom_items[k] = make_pair(lo, hi);
+    }
+    *domain_out = make_list(dom_items, m);
+    free(dom_items); free(dmin); free(dmax); free(dminE); free(dmaxE);
+    return interp_packed_table(buf, npts, m);   /* moves buf */
+}
+
+/* Assemble the InterpolatingFunction[...] object from a built (domain, table)
+ * pair and, if an immediate evaluation point was given, evaluate it there.
+ * Takes ownership of `domain`, `table`, and `periodic` (all freed / consumed
+ * here); `eval_point` is borrowed. Shared by the boxed and packed build paths. */
+static Expr* interp_finish_object(Expr* domain, Expr* table, size_t m,
+                                  int explicit_order, int method,
+                                  bool* periodic, bool any_periodic,
+                                  Expr* eval_point) {
+    Expr* object;
+    bool need_full = (explicit_order >= 0) || (method != METHOD_DEFAULT) || any_periodic;
+    if (!need_full) {
+        Expr* oargs[2] = { domain, table };
+        object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 2);
+    } else {
+        int ov = (explicit_order >= 0) ? explicit_order : 3;
+        Expr** zeros = malloc(sizeof(Expr*) * m);
+        Expr** ords  = malloc(sizeof(Expr*) * m);
+        for (size_t k = 0; k < m; k++) { zeros[k] = expr_new_integer(0); ords[k] = expr_new_integer(ov); }
+        Expr* ders_list  = make_list(zeros, m);
+        Expr* order_list = make_list(ords, m);
+        free(zeros); free(ords);
+        if (!any_periodic && method == METHOD_DEFAULT) {
+            Expr* oargs[4] = { domain, table, ders_list, order_list };
+            object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 4);
+        } else {
+            Expr* mslot = (method == METHOD_DEFAULT)
+                ? expr_new_symbol(SYM_Automatic)
+                : expr_new_string(method == METHOD_SPLINE ? "Spline" : "Hermite");
+            if (!any_periodic) {
+                Expr* oargs[5] = { domain, table, ders_list, order_list, mslot };
+                object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 5);
+            } else {
+                Expr** pf = malloc(sizeof(Expr*) * m);
+                for (size_t k = 0; k < m; k++) pf[k] = expr_new_symbol(periodic[k] ? "True" : "False");
+                Expr* per_list = make_list(pf, m);
+                free(pf);
+                Expr* oargs[6] = { domain, table, ders_list, order_list, mslot, per_list };
+                object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 6);
+            }
+        }
+    }
+    free(periodic);
+
+    if (eval_point) {
+        Expr* value;
+        if (m == 1) {
+            if (!is_scalar_real(eval_point)) { expr_free(object); return NULL; }
+            value = interp_apply(object, &eval_point, 1);
+        } else {
+            if (!interp_is_list(eval_point) || eval_point->data.function.arg_count != m) {
+                expr_free(object); return NULL;
+            }
+            value = interp_apply(object, eval_point->data.function.args, m);
+        }
+        expr_free(object);
+        return value;
+    }
+    return object;
+}
+
 static Expr* builtin_interpolation_impl(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1619,21 +1922,9 @@ static Expr* builtin_interpolation_impl(Expr* res) {
             && a->data.function.head->type == EXPR_SYMBOL
             && (a->data.function.head->data.symbol.name == SYM_Rule
                 || a->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
-            Expr* lhs = a->data.function.args[0];
-            Expr* rhs = a->data.function.args[1];
-            if (lhs->type != EXPR_SYMBOL) return NULL;
-            if (lhs->data.symbol.name == SYM_InterpolationOrder) {
-                if (!node_to_order(rhs, &explicit_order)) return NULL;
-            } else if (lhs->data.symbol.name == SYM_Method) {
-                if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) { /* default */ }
-                else if (rhs->type == EXPR_STRING && rhs->data.string
-                         && strcmp(rhs->data.string, "Spline") == 0) method = METHOD_SPLINE;
-                else if (rhs->type == EXPR_STRING && rhs->data.string
-                         && strcmp(rhs->data.string, "Hermite") == 0) method = METHOD_HERMITE;
-                else return NULL;
-            } else if (lhs->data.symbol.name == SYM_PeriodicInterpolation) {
-                periodic_spec = rhs;   /* validated against m below */
-            } else return NULL;
+            if (!interp_parse_option(a->data.function.args[0], a->data.function.args[1],
+                                     &explicit_order, &method, &periodic_spec))
+                return NULL;
             continue;
         }
         if (eval_point) return NULL;
@@ -1662,21 +1953,21 @@ static Expr* builtin_interpolation_impl(Expr* res) {
     /* Resolve PeriodicInterpolation against the dimensionality. */
     bool* periodic = NULL;
     bool any_periodic = false;
-    if (periodic_spec) {
-        bool all_true = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol.name == SYM_True);
-        bool all_false = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol.name == SYM_False);
-        if (!all_false) {
-            periodic = calloc(m, sizeof(bool));
-            if (all_true) { for (size_t k = 0; k < m; k++) periodic[k] = true; any_periodic = true; }
-            else if (interp_is_list(periodic_spec) && periodic_spec->data.function.arg_count == m) {
-                for (size_t k = 0; k < m; k++) {
-                    Expr* b = periodic_spec->data.function.args[k];
-                    periodic[k] = (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_True);
-                    if (periodic[k]) any_periodic = true;
-                }
-            } else { free(periodic); return NULL; }   /* malformed periodic spec */
-            if (!any_periodic) { free(periodic); periodic = NULL; }
-        }
+    if (!interp_resolve_periodic(periodic_spec, m, &periodic, &any_periodic))
+        return NULL;   /* malformed periodic spec */
+
+    /* Fast path: machine-real, scalar-valued, value-only data becomes a packed
+     * n x (m+1) float64 table, skipping the ~3n boxed {coord,value} Expr nodes
+     * the loop below would allocate (the build's dominant cost).  Excludes the
+     * "Hermite" method, whose evaluator estimates derivatives from the boxed
+     * entries (build_T reads entryAt, NULL for a packed grid).  On decline it
+     * leaves `periodic` untouched for the boxed path, which frees it. */
+    if (Ksupplied == 0 && method != METHOD_HERMITE) {
+        Expr* pdomain = NULL;
+        Expr* ptable = interp_try_pack_data(data, npts, m, synth_x, &pdomain);
+        if (ptable)
+            return interp_finish_object(pdomain, ptable, m, explicit_order, method,
+                                        periodic, any_periodic, eval_point);
     }
 
     /* build the {coord,...} table and the per-dimension domain bounds */
@@ -1743,57 +2034,8 @@ static Expr* builtin_interpolation_impl(Expr* res) {
     free(entries);
     free(dmin); free(dmax); free(dminE); free(dmaxE);
 
-    /* assemble the object */
-    Expr* object;
-    bool need_full = (explicit_order >= 0) || (method != METHOD_DEFAULT) || any_periodic;
-    if (!need_full) {
-        Expr* oargs[2] = { domain, table };
-        object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 2);
-    } else {
-        int ov = (explicit_order >= 0) ? explicit_order : 3;
-        Expr** zeros = malloc(sizeof(Expr*) * m);
-        Expr** ords  = malloc(sizeof(Expr*) * m);
-        for (size_t k = 0; k < m; k++) { zeros[k] = expr_new_integer(0); ords[k] = expr_new_integer(ov); }
-        Expr* ders_list  = make_list(zeros, m);
-        Expr* order_list = make_list(ords, m);
-        free(zeros); free(ords);
-        if (!any_periodic && method == METHOD_DEFAULT) {
-            Expr* oargs[4] = { domain, table, ders_list, order_list };
-            object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 4);
-        } else {
-            Expr* mslot = (method == METHOD_DEFAULT)
-                ? expr_new_symbol(SYM_Automatic)
-                : expr_new_string(method == METHOD_SPLINE ? "Spline" : "Hermite");
-            if (!any_periodic) {
-                Expr* oargs[5] = { domain, table, ders_list, order_list, mslot };
-                object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 5);
-            } else {
-                Expr** pf = malloc(sizeof(Expr*) * m);
-                for (size_t k = 0; k < m; k++) pf[k] = expr_new_symbol(periodic[k] ? "True" : "False");
-                Expr* per_list = make_list(pf, m);
-                free(pf);
-                Expr* oargs[6] = { domain, table, ders_list, order_list, mslot, per_list };
-                object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 6);
-            }
-        }
-    }
-    free(periodic);
-
-    if (eval_point) {
-        Expr* value;
-        if (m == 1) {
-            if (!is_scalar_real(eval_point)) { expr_free(object); return NULL; }
-            value = interp_apply(object, &eval_point, 1);
-        } else {
-            if (!interp_is_list(eval_point) || eval_point->data.function.arg_count != m) {
-                expr_free(object); return NULL;
-            }
-            value = interp_apply(object, eval_point->data.function.args, m);
-        }
-        expr_free(object);
-        return value;
-    }
-    return object;
+    return interp_finish_object(domain, table, m, explicit_order, method,
+                                periodic, any_periodic, eval_point);
 }
 
 /* Accept a packed / visible NDArray data table (a rank-2 {{x,v},...} matrix or a
@@ -1802,10 +2044,77 @@ static Expr* builtin_interpolation_impl(Expr* res) {
  * unevaluated, and (with Interpolation packed-aware) the gate does not
  * materialise it twice.  The object stores copies, so the temporary List is
  * freed here. */
+/* Buffer-direct packed build for Interpolation[NDArray[...]]: a real, machine
+ * (float64/float32) NDArray that is rank-1 (value-only, synthesised integer grid)
+ * or rank-2 n x 2 (1-D {x, y} points) becomes a packed n x 2 table straight from
+ * the buffer -- no ndarray_to_nested_list, which would allocate ~3n boxed nodes.
+ * Returns the object (or its value at an immediate point), or NULL to fall back
+ * to the generic delist+impl path (any other shape/dtype, unknown option, or a
+ * malformed periodic spec, all of which the generic path reports correctly). */
+static Expr* interp_ndarray_fast(Expr* res, Expr* nd) {
+    NDType dt = nd->data.ndarray.dtype;
+    if (dt != NDT_FLOAT64 && dt != NDT_FLOAT32) return NULL;  /* int64/exact -> generic */
+    int rank = nd->data.ndarray.rank;
+    bool synth_x;
+    size_t npts;
+    if (rank == 1) { synth_x = true;  npts = (size_t)nd->data.ndarray.dims[0]; }
+    else if (rank == 2 && nd->data.ndarray.dims[1] == 2) {
+        synth_x = false; npts = (size_t)nd->data.ndarray.dims[0];
+    } else return NULL;                                       /* other shapes -> generic */
+    if (npts < 2) return NULL;
+
+    int explicit_order = -1, method = METHOD_DEFAULT;
+    Expr* periodic_spec = NULL;
+    Expr* eval_point = NULL;
+    for (size_t i = 1; i < res->data.function.arg_count; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2
+            && a->data.function.head->type == EXPR_SYMBOL
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
+            if (!interp_parse_option(a->data.function.args[0], a->data.function.args[1],
+                                     &explicit_order, &method, &periodic_spec))
+                return NULL;
+        } else if (!eval_point) eval_point = a;
+        else return NULL;
+    }
+    if (method == METHOD_HERMITE) return NULL;               /* needs boxed entries */
+
+    const void* nb = nd->data.ndarray.data;
+    double* buf = malloc(sizeof(double) * npts * 2);
+    if (!buf) return NULL;
+    double dmin = 0.0, dmax = 0.0, im;
+    for (size_t i = 0; i < npts; i++) {
+        double c, v;
+        if (synth_x) { c = (double)(i + 1); ndt_get(nb, i, dt, &v, &im); }
+        else { ndt_get(nb, 2 * i, dt, &c, &im); ndt_get(nb, 2 * i + 1, dt, &v, &im); }
+        buf[2 * i] = c; buf[2 * i + 1] = v;
+        if (i == 0) { dmin = dmax = c; }
+        else { if (c < dmin) dmin = c; if (c > dmax) dmax = c; }
+    }
+
+    /* synth_x has an integer grid (Integer domain); rank-2 x-coords are the
+     * NDArray's machine reals (Real domain), matching the boxed path's types. */
+    Expr* lo = synth_x ? expr_new_integer((int64_t)dmin) : expr_new_real(dmin);
+    Expr* hi = synth_x ? expr_new_integer((int64_t)dmax) : expr_new_real(dmax);
+    Expr* dom_item = make_pair(lo, hi);
+    Expr* domain = make_list(&dom_item, 1);
+    Expr* table = interp_packed_table(buf, npts, 1);          /* moves buf */
+
+    bool* periodic = NULL; bool any_periodic = false;
+    if (!interp_resolve_periodic(periodic_spec, 1, &periodic, &any_periodic)) {
+        expr_free(domain); expr_free(table); return NULL;    /* generic reports it */
+    }
+    return interp_finish_object(domain, table, 1, explicit_order, method,
+                                periodic, any_periodic, eval_point);
+}
+
 static Expr* builtin_interpolation(Expr* res) {
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1 &&
         is_ndarray(res->data.function.args[0])) {
         Expr* orig = res->data.function.args[0];
+        Expr* fast = interp_ndarray_fast(res, orig);          /* buffer-direct pack */
+        if (fast) return fast;
         Expr* lst = ndarray_to_nested_list(orig);
         res->data.function.args[0] = lst;         /* borrow the delisted table */
         Expr* r = builtin_interpolation_impl(res);
@@ -1937,6 +2246,48 @@ static bool listinterp_axis(const Expr* spec, size_t n, Expr** xs) {
     return false;                                      /* length neither n nor 2 */
 }
 
+/* Double-only abscissa synthesis for the packed path: fills xd[0..n-1] with the
+ * axis coordinates as doubles and returns the type-preserving endpoint Exprs
+ * lo/hi for the domain -- WITHOUT boxing the n interior coordinates that
+ * listinterp_axis allocates (the dominant cost of a large 1-D packed build).
+ * Machine data only, so the interval interior is plain double arithmetic rather
+ * than the exact rationals the boxed path uses for MPFR precision.  Returns false
+ * on a malformed / non-increasing spec (caller falls back to the boxed path);
+ * lo/hi receive new references on success, untouched on failure. */
+static bool listinterp_axis_double(const Expr* spec, size_t n, double* xd,
+                                   Expr** lo, Expr** hi) {
+    if (!spec) {                                       /* default integer grid 1..n */
+        for (size_t i = 0; i < n; i++) xd[i] = (double)(i + 1);
+        *lo = expr_new_integer(1);
+        *hi = expr_new_integer((int64_t)n);
+        return true;
+    }
+    if (!interp_is_list(spec)) return false;
+    size_t L = spec->data.function.arg_count;
+    if (L == n && n != 2) {                             /* explicit positions */
+        for (size_t i = 0; i < n; i++)
+            if (!node_to_double(spec->data.function.args[i], &xd[i])) return false;
+        *lo = expr_copy(spec->data.function.args[0]);
+        *hi = expr_copy(spec->data.function.args[n - 1]);
+        return true;
+    }
+    if (L == 2) {                                       /* interval {lo, hi} */
+        if (n < 2) return false;
+        Expr* elo = spec->data.function.args[0];
+        Expr* ehi = spec->data.function.args[1];
+        double lod, hid;
+        if (!node_to_double(elo, &lod) || !node_to_double(ehi, &hid)) return false;
+        if (!(lod < hid)) return false;
+        double h = (hid - lod) / (double)(n - 1);
+        xd[0] = lod; xd[n - 1] = hid;
+        for (size_t i = 1; i + 1 < n; i++) xd[i] = lod + (double)i * h;
+        *lo = expr_copy(elo);
+        *hi = expr_copy(ehi);
+        return true;
+    }
+    return false;
+}
+
 /* Coordinate for grid point idx[0..m-1]: a scalar abscissa for m == 1, else the
  * List {xs[0][i0], ..., xs[m-1][i_{m-1}]}.  Returns NULL on allocation failure. */
 static Expr* listinterp_coord(size_t m, Expr*** xs, const size_t* idx) {
@@ -2018,6 +2369,59 @@ static Expr** listinterp_entries_from_buffer(const Expr* nd, size_t m,
     return entries;
 }
 
+/* listinterp_pack_emit / _buffer: the packed-table twins of listinterp_emit /
+ * listinterp_entries_from_buffer.  They write [c_1, ..., c_m, value] doubles into
+ * the row-major buffer `buf` (ncol == m+1) instead of boxed {coord,value} pairs,
+ * so a machine-real, scalar-valued value tensor builds the packed table with no
+ * intermediate Expr nodes.  Both require every value leaf to be a SCALAR real and
+ * report whether any value/coord is inexact-machine (*has_inexact) -- a fully
+ * exact tensor declines so the boxed path can keep it exact.  Return false on a
+ * shape violation, a non-scalar-real leaf, or an uncoercible coordinate. */
+static bool listinterp_pack_emit(Expr* node, size_t depth, size_t m,
+                                 const size_t* shape, const double* const* xd,
+                                 size_t* idx, double* buf, size_t ncol,
+                                 size_t* lin, bool* has_inexact) {
+    if (depth < m) {
+        if (!interp_is_list(node) || node->data.function.arg_count != shape[depth])
+            return false;
+        for (size_t i = 0; i < shape[depth]; i++) {
+            idx[depth] = i;
+            if (!listinterp_pack_emit(node->data.function.args[i], depth + 1, m,
+                                      shape, xd, idx, buf, ncol, lin, has_inexact))
+                return false;
+        }
+        return true;
+    }
+    if (!is_scalar_real(node)) return false;              /* array-valued -> boxed */
+    double* row = buf + (*lin) * ncol;
+    for (size_t k = 0; k < m; k++) row[k] = xd[k][idx[k]];
+    if (!node_to_double(node, &row[m])) return false;
+    if (node->type == EXPR_REAL) *has_inexact = true;
+    (*lin)++;
+    return true;
+}
+
+static bool listinterp_pack_buffer(const Expr* nd, size_t m, const size_t* shape,
+                                   const double* const* xd, size_t npts,
+                                   double* buf, size_t ncol, bool* has_inexact) {
+    NDType dt = nd->data.ndarray.dtype;
+    /* Only genuine machine floats pack; an int64 value buffer stays boxed so its
+     * exact-Integer node values are preserved (matching the buffer-direct path). */
+    if (dt != NDT_FLOAT64 && dt != NDT_FLOAT32) return false;
+    const void* nbuf = nd->data.ndarray.data;
+    size_t idx[LISTINTERP_MAXDIM];
+    for (size_t k = 0; k < m; k++) idx[k] = 0;
+    for (size_t lin = 0; lin < npts; lin++) {
+        double* row = buf + lin * ncol;
+        for (size_t k = 0; k < m; k++) row[k] = xd[k][idx[k]];
+        double re, im; ndt_get(nbuf, lin, dt, &re, &im);
+        row[m] = re;
+        for (size_t k = m; k-- > 0; ) { if (++idx[k] < shape[k]) break; idx[k] = 0; }
+    }
+    *has_inexact = true;                                  /* float buffer is machine */
+    return true;
+}
+
 static Expr* builtin_listinterpolation(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -2082,10 +2486,80 @@ static Expr* builtin_listinterpolation(Expr* res) {
         return NULL;
     }
 
-    /* Synthesise per-axis abscissae. */
+    size_t npts = 1;
+    for (size_t k = 0; k < m; k++) npts *= shape[k];
+
+    /* --- Fast packed build: a machine-real, scalar-valued value tensor becomes a
+     * packed n x (m+1) table with NO boxed {coord,value} pairs AND no boxed
+     * abscissae (double-only axes) -- together the front-end's dominant cost.
+     * Any decline -- exact data, array-valued, "Hermite", an unknown option, or a
+     * malformed grid -- falls through to the boxed path below (which handles all
+     * of those, including the diagnostics). */
+    {
+        int p_order = -1, p_method = METHOD_DEFAULT;
+        Expr* p_perspec = NULL;
+        bool opts_ok = true;
+        for (size_t i = 0; i < n_opts && opts_ok; i++)
+            opts_ok = interp_parse_option(opt_rules[i]->data.function.args[0],
+                                          opt_rules[i]->data.function.args[1],
+                                          &p_order, &p_method, &p_perspec);
+        if (opts_ok && p_method != METHOD_HERMITE) {
+            double* xd[LISTINTERP_MAXDIM];
+            Expr*   dlo[LISTINTERP_MAXDIM];
+            Expr*   dhi[LISTINTERP_MAXDIM];
+            for (size_t k = 0; k < m; k++) { xd[k] = NULL; dlo[k] = dhi[k] = NULL; }
+            bool axes_ok = true;
+            for (size_t k = 0; k < m && axes_ok; k++) {
+                xd[k] = malloc(sizeof(double) * shape[k]);
+                const Expr* spec = domain ? domain->data.function.args[k] : NULL;
+                if (!xd[k] || !listinterp_axis_double(spec, shape[k], xd[k], &dlo[k], &dhi[k]))
+                    axes_ok = false;
+            }
+            double* pbuf = axes_ok ? malloc(sizeof(double) * npts * (m + 1)) : NULL;
+            bool hasx = false, pack_ok = false;
+            if (pbuf) {
+                if (nd_src) {
+                    pack_ok = listinterp_pack_buffer(nd_src, m, shape,
+                                                     (const double* const*)xd, npts,
+                                                     pbuf, m + 1, &hasx);
+                } else {
+                    size_t pidx[LISTINTERP_MAXDIM], plin = 0;
+                    pack_ok = listinterp_pack_emit(array, 0, m, shape,
+                                                   (const double* const*)xd, pidx,
+                                                   pbuf, m + 1, &plin, &hasx)
+                              && plin == npts;
+                }
+            }
+            bool* p_periodic = NULL; bool p_anyper = false;
+            if (pack_ok && hasx
+                && interp_resolve_periodic(p_perspec, m, &p_periodic, &p_anyper)) {
+                Expr** dom_items = malloc(sizeof(Expr*) * m);
+                for (size_t k = 0; k < m; k++) {
+                    dom_items[k] = make_pair(dlo[k], dhi[k]);   /* ownership moves */
+                    dlo[k] = dhi[k] = NULL;
+                }
+                Expr* pdomain = make_list(dom_items, m);
+                free(dom_items);
+                Expr* ptable = interp_packed_table(pbuf, npts, m);   /* moves pbuf */
+                for (size_t k = 0; k < m; k++) free(xd[k]);
+                if (delisted) expr_free(delisted);
+                return interp_finish_object(pdomain, ptable, m, p_order, p_method,
+                                            p_periodic, p_anyper, NULL);
+            }
+            /* decline: release everything the attempt allocated */
+            free(p_periodic);
+            free(pbuf);
+            for (size_t k = 0; k < m; k++) {
+                free(xd[k]);
+                if (dlo[k]) expr_free(dlo[k]);
+                if (dhi[k]) expr_free(dhi[k]);
+            }
+        }
+    }
+
+    /* Synthesise per-axis abscissae (boxed path: exact/symbolic/array-valued). */
     Expr** xs[LISTINTERP_MAXDIM];
     for (size_t k = 0; k < m; k++) xs[k] = NULL;
-    size_t npts = 1;
     bool ok = true;
     for (size_t k = 0; k < m && ok; k++) {
         xs[k] = malloc(sizeof(Expr*) * shape[k]);
@@ -2093,7 +2567,6 @@ static Expr* builtin_listinterpolation(Expr* res) {
         for (size_t i = 0; i < shape[k]; i++) xs[k][i] = NULL;
         const Expr* spec = domain ? domain->data.function.args[k] : NULL;
         if (!listinterp_axis(spec, shape[k], xs[k])) { ok = false; break; }
-        npts *= shape[k];
     }
 
     /* Build the {coord, val} entries: buffer-direct for a scalar-valued NDArray,

@@ -35,6 +35,7 @@
  */
 #include "integrate_interp.h"
 #include "../interp.h"
+#include "../ndarray.h"
 #include "../eval.h"
 #include "../sym_names.h"
 
@@ -153,18 +154,29 @@ Expr* integrate_interp(Expr* f, Expr* x) {
     Expr* domain = obj->data.function.args[0];
     Expr* table  = obj->data.function.args[1];
 
+    /* A machine interpolant stores its table as a packed n x (m+1) NDArray; this
+     * cold path (integrating an interpolant) reads coordinates structurally, so
+     * delist it once into the equivalent {{x, y}, ...} List and free it below. */
+    Expr* table_delisted = NULL;
+    if (is_ndarray(table)) {
+        table_delisted = ndarray_to_nested_list(table);
+        if (!table_delisted) return NULL;
+        table = table_delisted;
+    }
+
     /* 1-D objects only: domain = {{a, b}}. */
-    if (!is_list(domain) || domain->data.function.arg_count != 1) return NULL;
-    if (!is_list(table)) return NULL;
+    if (!is_list(domain) || domain->data.function.arg_count != 1
+        || !is_list(table) || table->data.function.arg_count < 2) {
+        expr_free(table_delisted); return NULL;
+    }
     size_t n = table->data.function.arg_count;
-    if (n < 2) return NULL;
 
     double* xs = malloc(n * sizeof(double));
     double* ys = malloc(n * sizeof(double));
     double* Fs = malloc(n * sizeof(double));
     Expr** xe = malloc(n * sizeof(Expr*));   /* borrowed exact coordinates */
     if (!xs || !ys || !Fs || !xe) {
-        free(xs); free(ys); free(Fs); free(xe); return NULL;
+        free(xs); free(ys); free(Fs); free(xe); expr_free(table_delisted); return NULL;
     }
 
     bool ok = true;
@@ -199,6 +211,7 @@ Expr* integrate_interp(Expr* f, Expr* x) {
         }
     }
     free(xs); free(ys); free(Fs); free(xe);
+    expr_free(table_delisted);                 /* borrowed coords now copied out */
     if (!entries) return NULL;
 
     Expr* data = expr_new_function(expr_new_symbol(SYM_List), entries, n);
