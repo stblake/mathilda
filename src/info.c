@@ -3197,6 +3197,23 @@ void info_init(void) {
         "Vector- or array-valued samples (f_i a list) are interpolated\n"
         "component-wise and return an array of the same shape.\n"
         "Works at machine or arbitrary (MPFR) precision, matching the data.");
+    symtab_set_docstring("ListInterpolation",
+        "ListInterpolation[array]\n"
+        "\tconstructs an InterpolatingFunction interpolating the values in\n"
+        "\tarray, taken to lie on a regular grid at integer positions 1, 2, ...\n"
+        "\tin each direction. array may be nested to any depth; the nesting\n"
+        "\tdepth is the number of dimensions.\n"
+        "ListInterpolation[array, {{xmin, xmax}, {ymin, ymax}, ...}]\n"
+        "\tplaces the grid lines equally spaced across the given interval in\n"
+        "\teach direction (one {min, max} pair per dimension).\n"
+        "ListInterpolation[array, {{x1, x2, ...}, ...}]\n"
+        "\tuses explicit lists of grid-line positions in each direction.\n"
+        "ListInterpolation[array, ..., InterpolationOrder -> n]\n"
+        "\tsets the piecewise-polynomial degree (default 3; 0 constant, 1\n"
+        "\tlinear); Method -> \"Spline\" | \"Hermite\" selects the method and\n"
+        "\tPeriodicInterpolation -> True builds a periodic interpolant.\n"
+        "A fast path for List, packed, and NDArray value tensors; works at\n"
+        "machine or arbitrary (MPFR) precision, matching the data.");
     symtab_set_docstring("InterpolatingPolynomial",
         "InterpolatingPolynomial[{f1, f2, ...}, x]\n"
         "\tgives the single polynomial in x reproducing the values fi at\n"

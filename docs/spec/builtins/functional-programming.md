@@ -248,6 +248,49 @@ In[8]:= (* periodic: f[x] wraps with period = data span (5) *)
 Out[8]= {0.557674, 0.557674, 0.557674}
 ```
 
+## ListInterpolation
+`ListInterpolation[array]` constructs an [`InterpolatingFunction`](#interpolatingfunction)
+from a raw rectangular **array of values** taken to lie on a regular grid. It is
+the value-only companion to [`Interpolation`](#interpolation): instead of
+`{x, f}` pairs it takes just the `f` values and synthesises the abscissae. The
+nesting depth of `array` is the number of dimensions.
+
+- `ListInterpolation[array]` — grid lines at integer positions `1, 2, …` in each
+  direction (so `Domain -> {{1, d1}, {1, d2}, …}`).
+- `ListInterpolation[array, {{xmin, xmax}, {ymin, ymax}, …}]` — grid lines
+  equally spaced across the given interval in each direction. Exact integer
+  endpoints produce an **exact** grid (interior lines are the rationals
+  `xmin + i (xmax - xmin)/(d-1)`), so an MPFR data table keeps full precision.
+- `ListInterpolation[array, {{x1, x2, …}, …}]` — explicit grid-line positions in
+  each direction (one list per dimension, length = the extent along that axis).
+
+Attributes: `Protected`. Options: `InterpolationOrder -> 3`, `Method -> Automatic`,
+`PeriodicInterpolation -> False` — passed straight through to the `Interpolation`
+engine, so `"Spline"`/`"Hermite"`, per-axis periodicity, and arbitrary order all
+behave identically. `ListInterpolation` is packed-array aware (on `pack.c`'s
+`AWARE` list), so a packed or `NDArray` value tensor is delisted once rather than
+materialised by the transparency gate, and the resulting `InterpolatingFunction`
+applied to a packed array of query points takes the vectorised buffer path.
+
+A malformed call stays unevaluated: a jagged array, a `domain` whose length
+differs from the array depth, a position list whose length does not match its
+axis, a non-numeric value, or an unknown `Method`. `ListInterpolation[]` prints
+`ListInterpolation::argt` (1 or 2 arguments expected).
+
+```
+In[1]:= f = ListInterpolation[{1, 2, 3, 5, 8, 5}]
+Out[1]= InterpolatingFunction[{{1, 6}}, <>]
+
+In[2]:= f[2.5]
+Out[2]= 2.4375
+
+In[3]:= ListInterpolation[{1, 2, 3, 5, 8, 5}, {{0, 1}}][0.5]
+Out[3]= 3.875
+
+In[4]:= ListInterpolation[{{1, 2}, {3, 4}}][1.5, 1.5]
+Out[4]= 2.5
+```
+
 ## InterpolatingPolynomial
 - `InterpolatingPolynomial[{f1, f2, …}, x]` gives the single polynomial in `x`
   that reproduces the values `fi` at `x = 1, 2, …`, in nested (Horner) form.

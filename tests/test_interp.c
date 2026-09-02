@@ -635,6 +635,103 @@ static void test_vectorized_apply(void) {
     run_close("Interpolation[NDArray[N[Range[10]^2]]][3.5]", 12.25, 1e-9);
 }
 
+/* ===================================================================== *
+ *  ListInterpolation --- values on a regular grid.  A front-end that
+ *  synthesises the abscissae (integer positions, an equally-spaced domain,
+ *  or explicit position lists) and delegates to the Interpolation engine.
+ * ===================================================================== */
+
+/* 1-D, default integer grid: identical to Interpolation[{...}]. */
+static void test_listinterp_default(void) {
+    run_print("ListInterpolation[{1,2,3,5,8,5}]",
+              "InterpolatingFunction[{{1, 6}}, <>]");
+    run_close("ListInterpolation[{1,2,3,5,8,5}][2.5]", 2.4375, 1e-9);
+    run_fullform("ListInterpolation[{1,2,3,5,8,5}][3]", "3");   /* exact node */
+    run_fullform("ListInterpolation[{1,2,3,5,8,5}][1]", "1");
+}
+
+/* 1-D with an equally-spaced domain: exact endpoints AND exact interior grid. */
+static void test_listinterp_domain(void) {
+    run_print("ListInterpolation[{1,2,3,5,8,5},{{0,1}}]",
+              "InterpolatingFunction[{{0, 1}}, <>]");
+    run_close("ListInterpolation[{1,2,3,5,8,5},{{0,1}}][0.5]", 3.875, 1e-9);
+    /* interior grid line is the exact rational 1/5 -> exact node value 2. */
+    run_fullform("ListInterpolation[{1,2,3,5,8,5},{{0,1}}][1/5]", "2");
+    /* real endpoints keep a real domain. */
+    run_print("ListInterpolation[{1,2,3,5,8,5},{{0.,1.}}]",
+              "InterpolatingFunction[{{0.0, 1.0}}, <>]");
+}
+
+/* 1-D with explicit grid-line positions. */
+static void test_listinterp_positions(void) {
+    /* x = {1,2,3,4}, f = x^2 -> quadratic reproduces 2.5^2 = 6.25. */
+    run_print("ListInterpolation[{1,4,9,16},{{1,2,3,4}}]",
+              "InterpolatingFunction[{{1, 4}}, <>]");
+    run_close("ListInterpolation[{1,4,9,16},{{1,2,3,4}}][2.5]", 6.25, 1e-9);
+    /* non-uniform positions. */
+    run_close("ListInterpolation[{0,1,4},{{0,1,2}}][0.5]", 0.25, 1e-9);
+}
+
+/* 2-D grids, default and with a domain. */
+static void test_listinterp_2d(void) {
+    run_print("ListInterpolation[{{1,2},{3,4}}]",
+              "InterpolatingFunction[{{1, 2}, {1, 2}}, <>]");
+    run_fullform("ListInterpolation[{{1,2},{3,4}}][1,1]", "1");   /* corner nodes */
+    run_fullform("ListInterpolation[{{1,2},{3,4}}][2,2]", "4");
+    run_close("ListInterpolation[{{1,2},{3,4}}][1.5,1.5]", 2.5, 1e-9);
+    run_print("ListInterpolation[{{1,2},{3,4}},{{0,1},{0,1}}]",
+              "InterpolatingFunction[{{0, 1}, {0, 1}}, <>]");
+    run_close("ListInterpolation[{{1,2},{3,4}},{{0,1},{0,1}}][0.5,0.5]", 2.5, 1e-9);
+    /* bilinear plane f = 10(x-1) + (y-1) reproduced exactly (order-1 per axis). */
+    run_close("ListInterpolation[{{0,1},{10,11}}][1.5,1.5]", 5.5, 1e-9);
+}
+
+/* Options pass through to the Interpolation engine. */
+static void test_listinterp_options(void) {
+    run_close("ListInterpolation[{1,2,3,5,8,5},InterpolationOrder->1][2.5]", 2.5, 1e-9);
+    run_close("ListInterpolation[{1,2,3,5,8,5},Method->\"Spline\"][2.5]",
+              2.473086124401914, 1e-9);
+    run_close("ListInterpolation[{1,4,9,16,25},Method->\"Hermite\"][2.5]", 6.25, 1e-9);
+    run_close("ListInterpolation[{1,2,3,1},PeriodicInterpolation->True][2.5]", 2.875, 1e-9);
+    /* a domain and an option together. */
+    run_close("ListInterpolation[{1,2,3,5,8,5},{{0,1}},InterpolationOrder->1][0.5]",
+              4.0, 1e-9);
+    /* the registered defaults are introspectable. */
+    run_print("Options[ListInterpolation]",
+              "{InterpolationOrder -> 3, Method -> Automatic, "
+              "PeriodicInterpolation -> False}");
+}
+
+/* Packed / NDArray value tensors and vectorised application (all three
+ * surfaces --- List, packed, visible NDArray --- must agree). */
+static void test_listinterp_ndarray(void) {
+    run_close("ListInterpolation[NDArray[{1,2,3,5,8,5}]][2.5]", 2.4375, 1e-9);
+    run_close("ListInterpolation[NDArray[N[Range[6]^2]]][3.5]", 12.25, 1e-9);
+    run_vec("Normal[ListInterpolation[{1,2,3,5,8,5}][NDArray[{2.5, 3.5}]]]",
+            (double[]){2.4375, 3.875}, 2, 1e-9);
+    run_close("ListInterpolation[NDArray[{{1,2},{3,4}}]][1.5,1.5]", 2.5, 1e-9);
+    run_close("ListInterpolation[{1,2,3,5,8,5}][2.5]", 2.4375, 1e-9);   /* plain List */
+}
+
+/* Malformed / unsupported inputs stay unevaluated (0 args prints ::argt). */
+static void test_listinterp_unevaluated(void) {
+    run_unevaluated("ListInterpolation[]");
+    run_unevaluated("ListInterpolation[5]");                     /* not a list */
+    run_unevaluated("ListInterpolation[{1}]");                   /* too few points */
+    run_unevaluated("ListInterpolation[{{1,2},{3}}]");           /* jagged */
+    run_unevaluated("ListInterpolation[{1,2,3},{{0,1},{0,1}}]"); /* rank mismatch */
+    run_unevaluated("ListInterpolation[{1,2,a}]");               /* non-numeric value */
+    run_unevaluated("ListInterpolation[{1,2,3},Method->\"Nonesuch\"]");
+    run_unevaluated("ListInterpolation[{1,2,3},{{0,1,2,3}}]");   /* positions != length */
+}
+
+/* Arbitrary precision: an exact-integer domain keeps the interior grid exact,
+ * so an MPFR data table yields a full-precision MPFR result. */
+static void test_listinterp_mpfr(void) {
+    run_mpfr("ListInterpolation[N[{1,2,3,5,8,5}, 30]][N[5/2, 30]]", 2.4375, 1e-12);
+    run_mpfr("ListInterpolation[N[{1,2,3,5,8,5}, 30], {{0,1}}][N[1/2, 30]]", 3.875, 1e-12);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -675,6 +772,15 @@ int main(void) {
     test_periodic();
     test_periodic_mpfr();
     test_vectorized_apply();
+
+    test_listinterp_default();
+    test_listinterp_domain();
+    test_listinterp_positions();
+    test_listinterp_2d();
+    test_listinterp_options();
+    test_listinterp_ndarray();
+    test_listinterp_unevaluated();
+    test_listinterp_mpfr();
 
     symtab_clear();
     printf("\nAll InterpolatingFunction and Interpolation tests passed.\n");

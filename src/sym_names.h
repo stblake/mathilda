@@ -230,6 +230,7 @@ extern const char* SYM_LearnedDistribution;
 extern const char* SYM_ClassifierFunction;
 extern const char* SYM_DimensionReducerFunction;
 extern const char* SYM_Interpolation;
+extern const char* SYM_ListInterpolation;
 extern const char* SYM_InterpolationOrder;
 extern const char* SYM_PeriodicInterpolation;
 extern const char* SYM_GaussianIntegers;

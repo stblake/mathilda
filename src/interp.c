@@ -1804,6 +1804,285 @@ static Expr* builtin_interpolation(Expr* res) {
 }
 
 /* ===================================================================== *
+ *  ListInterpolation
+ *
+ *  The value-only companion to Interpolation[]: it interpolates a raw
+ *  rectangular array of VALUES on a regular grid, synthesising the abscissae
+ *  itself (integer positions by default, an equally-spaced grid from a
+ *  {{xmin,xmax},...} domain spec, or explicit position lists) and then handing
+ *  the resulting {{coord, val}, ...} table to builtin_interpolation_impl.  All
+ *  of the numerics, MPFR handling, options, and the vectorised
+ *  InterpolatingFunction[...] object are therefore shared verbatim -- this is
+ *  purely a front-end that turns "values on a grid" into "value at abscissa".
+ *
+ *    ListInterpolation[array]
+ *    ListInterpolation[array, {{x1min,x1max}, ...}]   -- equally-spaced grid
+ *    ListInterpolation[array, {{p1,p2,...}, ...}]     -- explicit positions
+ *      (+ trailing InterpolationOrder / Method / PeriodicInterpolation options)
+ * ===================================================================== */
+
+#define LISTINTERP_MAXDIM 16
+
+/*
+ * listinterp_shape:
+ *   Read the rectangular shape of `array` along its representative spine.  When
+ *   want_m > 0 the array is descended exactly want_m List levels (the node
+ *   below is the per-grid-point value, scalar or array-valued); when want_m ==
+ *   0 it is descended until a non-List, so the nesting depth becomes the
+ *   dimensionality.  shape[k] receives the extent of axis k and *m_out the
+ *   dimensionality.  Returns false if the array is not at least want_m levels
+ *   deep, has an empty axis, or exceeds LISTINTERP_MAXDIM.  Per-node
+ *   rectangularity (every sibling the same length) is enforced later by
+ *   listinterp_emit, which visits every node.
+ */
+static bool listinterp_shape(const Expr* array, size_t want_m,
+                             size_t* shape, size_t* m_out) {
+    const Expr* node = array;
+    size_t m = 0;
+    for (;;) {
+        if (!interp_is_list(node)) break;              /* reached the value level */
+        if (want_m != 0 && m == want_m) break;         /* reached requested depth */
+        if (m >= LISTINTERP_MAXDIM) return false;
+        size_t n = node->data.function.arg_count;
+        if (n == 0) return false;                      /* empty axis */
+        shape[m] = n;
+        m++;
+        node = node->data.function.args[0];            /* descend representative */
+    }
+    if (want_m != 0 && m != want_m) return false;      /* array shallower than domain */
+    if (m == 0) return false;                          /* array must be a list */
+    *m_out = m;
+    return true;
+}
+
+/*
+ * listinterp_axis:
+ *   Fill xs[0..n-1] with the abscissa Exprs for one axis of length n.  `spec`
+ *   is NULL (integer positions 1..n), a 2-element interval {lo, hi} (n
+ *   equally-spaced points; the exact endpoint Exprs are copied so the object's
+ *   domain prints exactly, interior points are machine reals), or an explicit
+ *   list of exactly n positions.  Returns false on a malformed spec; xs entries
+ *   past the failure point are left NULL for the caller to free.
+ */
+static bool listinterp_axis(const Expr* spec, size_t n, Expr** xs) {
+    if (!spec) {
+        for (size_t i = 0; i < n; i++) xs[i] = expr_new_integer((int64_t)(i + 1));
+        return true;
+    }
+    if (!interp_is_list(spec)) return false;
+    size_t L = spec->data.function.arg_count;
+
+    /* explicit positions: a full list of n grid coordinates (n != 2, since a
+     * 2-element spec is read as an interval -- which for n == 2 is the same two
+     * points anyway). */
+    if (L == n && n != 2) {
+        for (size_t i = 0; i < n; i++) {
+            Expr* p = spec->data.function.args[i];
+            if (!is_scalar_real(p)) return false;
+            xs[i] = expr_copy(p);
+        }
+        return true;
+    }
+
+    /* interval {lo, hi}: n equally-spaced points, lo < hi.  Endpoints are copied
+     * verbatim so the object's domain prints exactly as given. */
+    if (L == 2) {
+        if (n < 2) return false;
+        Expr* lo = spec->data.function.args[0];
+        Expr* hi = spec->data.function.args[1];
+        double lod, hid;
+        if (!node_to_double(lo, &lod) || !node_to_double(hi, &hid)) return false;
+        if (!(lod < hid)) return false;                /* need a strictly increasing grid */
+        xs[0] = expr_copy(lo);
+        xs[n - 1] = expr_copy(hi);
+        if (expr_is_integer_like(lo) && expr_is_integer_like(hi)) {
+            /* Exact integer endpoints: interior points are the exact rationals
+             * lo + i*(hi-lo)/(n-1), so the grid stays exact and an MPFR data
+             * table keeps full precision (a machine-real grid would cap the
+             * result at double precision). */
+            mpz_t lz, hz;
+            expr_to_mpz(lo, lz);                        /* inits lz */
+            expr_to_mpz(hi, hz);                        /* inits hz */
+            mpz_t dz, num, prod;
+            mpz_init(dz); mpz_init(num); mpz_init(prod);
+            mpz_sub(dz, hz, lz);                        /* dz = hi - lo */
+            for (size_t i = 1; i + 1 < n; i++) {
+                mpz_mul_ui(prod, dz, (unsigned long)i);        /* (hi-lo)*i        */
+                mpz_mul_ui(num, lz, (unsigned long)(n - 1));   /* lo*(n-1)         */
+                mpz_add(num, num, prod);                       /* lo*(n-1)+(hi-lo)i*/
+                mpz_set_ui(prod, (unsigned long)(n - 1));       /* denominator      */
+                xs[i] = make_rational_mpz(num, prod);          /* canonicalised    */
+            }
+            mpz_clears(lz, hz, dz, num, prod, NULL);
+        } else {
+            double h = (hid - lod) / (double)(n - 1);
+            for (size_t i = 1; i + 1 < n; i++) xs[i] = expr_new_real(lod + (double)i * h);
+        }
+        return true;
+    }
+
+    return false;                                      /* length neither n nor 2 */
+}
+
+/*
+ * listinterp_emit:
+ *   Row-major walk of the value tensor, emitting one {coord, value} entry per
+ *   grid point into out[] (advancing *count).  Validates that every node at
+ *   depth < m is a List of the expected length shape[depth] and that every leaf
+ *   value is real or array-valued -- so a jagged or non-numeric array is
+ *   rejected here.  idx[] is scratch of length m.  Returns false on the first
+ *   violation; the caller frees the entries emitted so far.
+ */
+static bool listinterp_emit(Expr* node, size_t depth, size_t m,
+                            const size_t* shape, Expr*** xs,
+                            size_t* idx, Expr** out, size_t* count) {
+    if (depth < m) {
+        if (!interp_is_list(node) || node->data.function.arg_count != shape[depth])
+            return false;
+        for (size_t i = 0; i < shape[depth]; i++) {
+            idx[depth] = i;
+            if (!listinterp_emit(node->data.function.args[i], depth + 1, m,
+                                 shape, xs, idx, out, count))
+                return false;
+        }
+        return true;
+    }
+    /* depth == m: `node` is the per-grid-point value. */
+    if (!is_real_or_array(node)) return false;
+    Expr* coord;
+    if (m == 1) {
+        coord = expr_copy(xs[0][idx[0]]);
+    } else {
+        Expr** cs = malloc(sizeof(Expr*) * m);
+        if (!cs) return false;
+        for (size_t k = 0; k < m; k++) cs[k] = expr_copy(xs[k][idx[k]]);
+        coord = make_list(cs, m);
+        free(cs);
+    }
+    out[*count] = make_pair(coord, expr_copy(node));
+    (*count)++;
+    return true;
+}
+
+static Expr* builtin_listinterpolation_impl(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1) return builtin_arg_error("ListInterpolation", argc, 1, 2);
+
+    Expr* array = res->data.function.args[0];
+    if (!interp_is_list(array)) return NULL;
+
+    /* Split the trailing arguments: every Rule/RuleDelayed is an option passed
+     * through to Interpolation verbatim; at most one non-rule positional is the
+     * domain / grid spec. */
+    Expr* domain = NULL;
+    Expr* opt_rules[8];
+    size_t n_opts = 0;
+    for (size_t i = 1; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2
+            && a->data.function.head->type == EXPR_SYMBOL
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
+            if (n_opts >= 8) return NULL;
+            opt_rules[n_opts++] = a;
+            continue;
+        }
+        if (domain) return NULL;               /* two positional specs */
+        domain = a;
+    }
+
+    /* Dimensionality and shape. */
+    size_t want_m = 0;
+    if (domain) {
+        if (!interp_is_list(domain)) return NULL;
+        want_m = domain->data.function.arg_count;
+        if (want_m == 0 || want_m > LISTINTERP_MAXDIM) return NULL;
+    }
+    size_t shape[LISTINTERP_MAXDIM];
+    size_t m = 0;
+    if (!listinterp_shape(array, want_m, shape, &m)) return NULL;
+
+    /* Synthesise per-axis abscissae. */
+    Expr** xs[LISTINTERP_MAXDIM];
+    for (size_t k = 0; k < m; k++) xs[k] = NULL;
+    size_t npts = 1;
+    bool ok = true;
+    for (size_t k = 0; k < m && ok; k++) {
+        xs[k] = malloc(sizeof(Expr*) * shape[k]);
+        if (!xs[k]) { ok = false; break; }
+        for (size_t i = 0; i < shape[k]; i++) xs[k][i] = NULL;
+        const Expr* spec = domain ? domain->data.function.args[k] : NULL;
+        if (!listinterp_axis(spec, shape[k], xs[k])) { ok = false; break; }
+        npts *= shape[k];
+    }
+
+    /* Row-major walk -> {coord, val} entries. */
+    Expr** entries = NULL;
+    size_t count = 0;
+    if (ok) {
+        entries = malloc(sizeof(Expr*) * npts);
+        if (!entries) ok = false;
+    }
+    if (ok) {
+        size_t idx[LISTINTERP_MAXDIM];
+        ok = listinterp_emit(array, 0, m, shape, xs, idx, entries, &count);
+    }
+
+    /* The abscissa buffers are transient: entries hold their own copies. */
+    for (size_t k = 0; k < m; k++) {
+        if (xs[k]) {
+            for (size_t i = 0; i < shape[k]; i++)
+                if (xs[k][i]) expr_free(xs[k][i]);
+            free(xs[k]);
+        }
+    }
+
+    if (!ok) {
+        if (entries) {
+            for (size_t i = 0; i < count; i++) expr_free(entries[i]);
+            free(entries);
+        }
+        return NULL;
+    }
+
+    Expr* table = make_list(entries, count);
+    free(entries);
+
+    /* Delegate to the Interpolation engine: Interpolation[table, opts...]. */
+    size_t nargs = 1 + n_opts;
+    Expr** oargs = malloc(sizeof(Expr*) * nargs);
+    if (!oargs) { expr_free(table); return NULL; }
+    oargs[0] = table;
+    for (size_t i = 0; i < n_opts; i++) oargs[1 + i] = expr_copy(opt_rules[i]);
+    Expr* synthetic = expr_new_function(expr_new_symbol(SYM_Interpolation), oargs, nargs);
+    free(oargs);
+
+    Expr* out = builtin_interpolation_impl(synthetic);
+    expr_free(synthetic);                      /* frees table + the rule copies */
+    return out;
+}
+
+/* Accept a packed / visible NDArray value tensor by delisting it once (as the
+ * Interpolation builder does for its data table), then process it as a nested
+ * List.  With ListInterpolation on pack.c's AWARE list the transparency gate
+ * does not also materialise the argument, so the buffer is delisted exactly
+ * once here. */
+static Expr* builtin_listinterpolation(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1 &&
+        is_ndarray(res->data.function.args[0])) {
+        Expr* orig = res->data.function.args[0];
+        Expr* lst = ndarray_to_nested_list(orig);
+        res->data.function.args[0] = lst;
+        Expr* r = builtin_listinterpolation_impl(res);
+        res->data.function.args[0] = orig;
+        expr_free(lst);
+        return r;
+    }
+    return builtin_listinterpolation_impl(res);
+}
+
+/* ===================================================================== *
  *  InterpolatingPolynomial
  *
  *  Exact single-polynomial interpolant (unlike InterpolatingFunction, which
@@ -2566,6 +2845,22 @@ void interp_init(void) {
             (Expr*[]){ expr_new_symbol(SYM_PeriodicInterpolation), expr_new_symbol(SYM_False) }, 2),
     }, 3);
     symtab_set_options("Interpolation", iopts);   /* takes ownership */
+
+    symtab_add_builtin("ListInterpolation", builtin_listinterpolation);
+    SymbolDef* lidef = symtab_get_def("ListInterpolation");
+    lidef->attributes |= ATTR_PROTECTED;
+    /* Options[ListInterpolation] = {InterpolationOrder -> 3, Method -> Automatic,
+     *                                PeriodicInterpolation -> False} — the options
+     * pass straight through to the Interpolation engine. */
+    Expr* liopts = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_InterpolationOrder), expr_new_integer(3) }, 2),
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_Method), expr_new_symbol(SYM_Automatic) }, 2),
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_PeriodicInterpolation), expr_new_symbol(SYM_False) }, 2),
+    }, 3);
+    symtab_set_options("ListInterpolation", liopts);   /* takes ownership */
 
     symtab_add_builtin("InterpolatingPolynomial", builtin_interpolatingpolynomial);
     SymbolDef* pdef = symtab_get_def("InterpolatingPolynomial");

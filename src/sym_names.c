@@ -288,6 +288,7 @@ const char* SYM_LearnedDistribution = NULL;
 const char* SYM_ClassifierFunction = NULL;
 const char* SYM_DimensionReducerFunction = NULL;
 const char* SYM_Interpolation = NULL;
+const char* SYM_ListInterpolation = NULL;
 const char* SYM_InterpolationOrder = NULL;
 const char* SYM_PeriodicInterpolation = NULL;
 const char* SYM_Integrate = NULL;
@@ -1176,6 +1177,7 @@ void sym_names_init(void) {
     SYM_ClassifierFunction         = intern_symbol("ClassifierFunction");
     SYM_DimensionReducerFunction   = intern_symbol("DimensionReducerFunction");
     SYM_Interpolation              = intern_symbol("Interpolation");
+    SYM_ListInterpolation          = intern_symbol("ListInterpolation");
     SYM_InterpolationOrder         = intern_symbol("InterpolationOrder");
     SYM_PeriodicInterpolation      = intern_symbol("PeriodicInterpolation");
     SYM_Inverse                    = intern_symbol("Inverse");

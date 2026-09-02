@@ -728,6 +728,12 @@ static void pack_mark_aware_heads(void) {
          * not a symbol), where the vectorised evaluator reads the point buffer
          * directly. */
         "Interpolation",
+        /* ListInterpolation reads a packed/NDArray value tensor straight through
+         * ndarray_to_nested_list (src/interp.c) exactly as Interpolation does,
+         * so the gate must not pre-materialise it; the resulting
+         * InterpolatingFunction applied to packed query points is likewise
+         * handled by the interp_head branch in eval.c. */
+        "ListInterpolation",
         /* InterpolatingPolynomial reads a packed/NDArray data table straight
          * through ndarray_to_nested_list (src/interp.c) as well, so the gate
          * must not pre-materialise it. */
