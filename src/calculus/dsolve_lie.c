@@ -192,6 +192,18 @@ static bool lie_free_of_var(Expr* e, const char* var) {
     return z;
 }
 
+/* Fast zero-test, e consumed.  For a rational e, e == 0 iff Expand[Numerator[
+ * Together[e]]] == 0 — a polynomial zero-test that sidesteps the general zero_test's
+ * sampling/Simplify on the big symbolic derivatives the recursive callers feed the
+ * quadrature heuristics. */
+static bool lie_is_zero(Expr* e) {
+    Expr* n = eval_and_free(ds_call1(SYM_Numerator, eval_and_free(ds_call1(SYM_Together, e))));
+    Expr* ex = eval_and_free(ds_call1("Expand", n));
+    bool z = ds_is_zero(ex);
+    expr_free(ex);
+    return z;
+}
+
 /* The product-separable x-factor of L: Exp[Integrate[L_x/L, x]].  Returns NULL when
  * L == 0, when L_x/L is not free of y (so L does not separate as X(x) Y(y): note
  * L_x/L free of y  <=>  d^2/dx dy log L = 0  <=>  L separable), or when the integral
@@ -564,6 +576,53 @@ static Expr* lie_abaco1_product(const Expr* omega, const char* xv, const char* Y
     return lie_run_with_inverse(lie_abaco1_product_cand, omega, xv, Yn, yname);
 }
 
+/* abaco2_similar candidate [xi = F(x), eta = H(x)] (both single-variable functions
+ * of x) — Cheb-Terrab & Roche §4.3.  Q = omega_y / omega_yy (Eq 39); in the Q_y != 0
+ * branch T = Q_x / Q_y = -H/F (Eq 40, free of y), then F = Exp[Integrate[(T omega_y
+ * - T_x - omega_x)/(omega + T), x]] (Eq 43) provided the integrand is free of y (Eq
+ * 44) and H = -T F.  omega borrowed. */
+static bool lie_abaco2_similar_cand(const Expr* omega, const char* xv, const char* Yn,
+                                    Expr** xi, Expr** eta) {
+    *xi = NULL; *eta = NULL;
+    Expr* omy  = ds_d(expr_copy((Expr*)omega), expr_new_symbol(Yn));
+    Expr* omyy = ds_d(expr_copy(omy), expr_new_symbol(Yn));
+    if (lie_is_zero(expr_copy(omyy))) { expr_free(omy); expr_free(omyy); return false; }  /* linear in y */
+    Expr* Q  = eval_and_free(ds_call2(SYM_Times, omy, powi(omyy, -1)));
+    Expr* Qy = ds_d(expr_copy(Q), expr_new_symbol(Yn));
+    if (lie_is_zero(expr_copy(Qy))) { expr_free(Qy); expr_free(Q); return false; }  /* Q_y == 0: future */
+    Expr* Qx = ds_d(expr_copy(Q), expr_new_symbol(xv));
+    expr_free(Q);
+    Expr* T = eval_and_free(ds_call2(SYM_Times, Qx, powi(Qy, -1)));           /* Q_x/Q_y */
+    if (!lie_free_of_var(expr_copy(T), Yn)) { expr_free(T); return false; }
+    /* T == 0 is the autonomous [F(x), 0] case abaco1_simple / Separable own; declining
+     * it avoids re-attempting their (possibly elliptic) quadrature. */
+    if (lie_is_zero(expr_copy(T))) { expr_free(T); return false; }
+    T = lie_ratsimp(T);
+
+    Expr* omx  = ds_d(expr_copy((Expr*)omega), expr_new_symbol(xv));
+    Expr* omy2 = ds_d(expr_copy((Expr*)omega), expr_new_symbol(Yn));
+    Expr* Tx   = ds_d(expr_copy(T), expr_new_symbol(xv));
+    Expr* numi = eval_and_free(ds_call2(SYM_Subtract,
+                     ds_call2(SYM_Subtract, ds_call2(SYM_Times, expr_copy(T), omy2), Tx),
+                     omx));
+    Expr* deni = eval_and_free(ds_call2(SYM_Plus, expr_copy((Expr*)omega), expr_copy(T)));
+    Expr* integ = lie_ratsimp(eval_and_free(ds_call2(SYM_Times, numi, powi(deni, -1))));
+    if (!lie_free_of_var(expr_copy(integ), Yn)) { expr_free(integ); expr_free(T); return false; }
+    Expr* Ff = lie_exp_integral(integ, xv);
+    if (!Ff) { expr_free(T); return false; }
+
+    *xi  = Ff;
+    *eta = lie_ratsimp(eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+               ds_call2(SYM_Times, T, expr_copy(Ff)))));
+    return true;
+}
+
+/* Heuristic `abaco2_similar` (§4.3): [F(x), H(x)] and its inverse [F(y), H(y)]. */
+static Expr* lie_abaco2_similar(const Expr* omega, const char* xv, const char* Yn,
+                                const char* yname) {
+    return lie_run_with_inverse(lie_abaco2_similar_cand, omega, xv, Yn, yname);
+}
+
 Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     if (P->max_order[0] != 1) return NULL;
@@ -585,11 +644,14 @@ Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch) {
      *   linear          affine ansatz, a 6-unknown determining NullSpace
      *   abaco1_product  rational-product ansatz + its inverse (two separability
      *                   free-of tests) — the quadrature ansatze chain in here
+     *   abaco2_similar  similarity ansatz [F(x), H(x)] + inverse (§4.3) — the first
+     *                   to reach irrational omega (Sqrt/root forms)
      *   bivariate       degree-2 THEN degree-3 polynomial NullSpace (up to a
      *                   20-unknown system) — the most expensive, tried last. */
     Expr* G = lie_abaco1_simple(omega, wx, wy, xv, Yn, yname);
     if (!G) G = lie_linear(omega, xv, Yn, yname);
     if (!G) G = lie_abaco1_product(omega, xv, Yn, yname);
+    if (!G) G = lie_abaco2_similar(omega, xv, Yn, yname);
     if (!G) G = lie_bivariate(omega, xv, Yn, yname);
 
     expr_free(wx); expr_free(wy); expr_free(omega);
@@ -612,7 +674,8 @@ void dsolve_lie_init(void) {
         "heuristics, then reducing to a quadrature through the integrating factor "
         "mu == 1/(eta - xi omega); returns the implicit first integral "
         "{{G(x,y[x]) == C[1]}}. The general first-order backstop of the cascade "
-        "(heuristics: abaco1_simple, linear, abaco1_product, bivariate).";
+        "(heuristics: abaco1_simple, linear, abaco1_product, abaco2_similar, "
+        "bivariate).";
     symtab_add_builtin("DSolve`LieSymmetry", builtin_dsolve_lie);
     symtab_get_def("DSolve`LieSymmetry")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`LieSymmetry", doc);

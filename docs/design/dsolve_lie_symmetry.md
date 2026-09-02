@@ -98,7 +98,7 @@ which catch equations the specialists miss (e.g. the linear-coefficients family
   `dsolve_run_implicit` (+ explicit `Solve`) pipeline, and `abaco1_simple`. Proves
   the pipeline end-to-end via the pinned `DSolve`LieSymmetry[eqn, y, x]` builtin.
 - **L2** — `linear` ✅ (the coefficient-splitting determining-system machinery);
-  `abaco1_product` ✅; `function_sum`, `abaco2_similar` remain.
+  `abaco1_product` ✅; `abaco2_similar` ✅ (§4.3, below); `function_sum` remains.
 - **L3** — `bivariate` ✅ (degree-bounded: `lie_poly_symmetry` tries degree 2 then
   3, the exact generalization of `linear`'s degree-1 NullSpace determining system —
   builds `ξ, η` as general bivariate polynomials over interned `DSolve\`lieB*`
@@ -134,6 +134,29 @@ mis-derived candidate can only decline, never mislead. **Validation:** SymPy 1.1
 `2xy/(x²+2y⁴+c)` that this solves in ~30 ms; it agrees with SymPy on the ODEs SymPy
 can handle. Per-solve valgrind is leak-flat (identical `definitely lost` for `1+1`,
 1×, and 8×).
+
+### 4.3 `abaco2_similar` (CT–Roche §4.3) — both components single-variable
+
+Symmetry `[ξ = F(x), η = H(x)]` and its inverse `[F(y), H(y)]` — the first ansatz
+where *both* infinitesimals are one-variable functions. From `Q = ω_y/ω_yy` (Eq 39),
+`T = Q_x/Q_y` must be free of `y` (Eq 44a) and the integrand
+`(T·ω_y − T_x − ω_x)/(ω + T)` must be free of `y` (Eq 44b); then
+`F = Exp[∫(integrand) dx]` (Eq 43) and `H = −T·F` (Eq 40). The rarer `Q_y = 0`
+sub-case (Eqs 47/51) is deferred (declined). The inverse pattern reuses the
+inverse-ODE driver.
+
+The point of this heuristic is **reach**, not a new mechanism: it is the first to
+solve ODEs with an **irrational** `ω`, where every rational ansatz
+(`abaco1_simple`/`linear`/`abaco1_product`) structurally declines. It handles the
+substitution family `y' = (a x + b y + c)^p` for non-integer `p` — e.g.
+`y' = Sqrt[x + y]` returns the verified first integral
+`x − 2 Sqrt[x+y] + 2 Log[1 + Sqrt[x+y]] == C[1]` (the antiderivative uses a CRC
+integral-table rule, so this path needs `init.m` loaded — which the DSolve test
+suites now do, matching production). Sits after `abaco1_product` and before
+`bivariate` in the cheapest-first sub-cascade. **Validation:** `t_lie_abaco2_similar`
++ the `t_stress_lie_similar` radical family; per-solve valgrind leak-flat (the
+`ds_simplify` finalize step exposed — and this work fixed — a pre-existing
+`simp_power.c` power-distribution leak, unrelated to DSolve).
 
 ## 5. References
 

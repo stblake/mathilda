@@ -15,6 +15,22 @@ extern char* expr_to_string(struct Expr*);
 extern char* expr_to_string_fullform(struct Expr*);
 extern void expr_free(struct Expr*);
 
+/* Load the src/internal/init.m bootstrap (deriv.m rules, CRC integral tables) the
+ * way the REPL / -file mode does, so DSolve / Integrate tests exercise the same
+ * environment as production.  Without it the suite tests a non-production DSolve
+ * (which, e.g., took a different, working path where init.m makes it hang — the
+ * Lagrange/NthAlgebraic case).  chdir's to the repo root so Get[] resolves. */
+static inline void test_load_init_m(void) {
+    const char* ups[] = { ".", "..", "../..", "../../..", "../../../..", NULL };
+    for (int i = 0; ups[i]; i++) {
+        char path[256];
+        snprintf(path, sizeof(path), "%s/src/internal/init.m", ups[i]);
+        if (access(path, F_OK) == 0) { (void)!chdir(ups[i]); break; }
+    }
+    struct Expr* c = parse_expression("Get[\"src/internal/init.m\"]");
+    if (c) { struct Expr* r = evaluate(c); expr_free(c); if (r) expr_free(r); }
+}
+
 static inline void assert_eval_eq(const char* input, const char* expected, int is_fullform) {
     struct Expr* parsed = parse_expression(input);
     assert(parsed != NULL);
@@ -101,7 +117,7 @@ static inline Expr* test_delist(Expr* r) {
 #ifdef __GNUC__
 __attribute__((constructor))
 static void set_timeout() {
-    alarm(60);
+    alarm(120);
 }
 #endif
 

@@ -84,15 +84,28 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
             size_t ng = 0;
             Expr** gs = dsolve_extract_solutions(sol, Dn, &ng);
             if (sol) expr_free(sol);
-            if (gs) {
+            /* A branch given as an implicit Root[...] object means Solve found no
+             * explicit closed form for the top derivative (e.g. a general cubic in
+             * y' with symbolic coefficients).  Recursing DSolve on y^(n) == Root[...]
+             * is futile and can HANG (the implicit-derivative ODE has no method that
+             * closes it, and some rewrite loops), so decline the whole method and let
+             * a later specialist (Lagrange for a Lagrange/d'Alembert form, ...) take
+             * the original equation. */
+            bool has_root = false;
+            const char* rootn = intern_symbol("Root");
+            if (gs) for (size_t i = 0; i < ng; i++)
+                if (ds_has_head(gs[i], rootn)) { has_root = true; break; }
+            if (gs && !has_root) {
                 for (size_t i = 0; i < ng; i++) {
                     /* y^(n)[x] == g_i */
                     Expr* subeqn = expr_new_function(expr_new_symbol(SYM_Equal),
                                        (Expr*[]){ expr_copy(topLit), gs[i] }, 2);
                     recurse_collect(subeqn, yname, xvar, &acc, &nacc);
                 }
-                free(gs);
+            } else if (gs) {
+                for (size_t i = 0; i < ng; i++) expr_free(gs[i]);   /* declined */
             }
+            if (gs) free(gs);
         } else {
             expr_free(Rsub);
         }

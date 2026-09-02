@@ -587,10 +587,17 @@ static void t_fos_method(void) {
     check_true("PossibleZeroQ[(y'[x] - (x + y[x])^2) /. "
                "DSolve`FirstOrderSubstitution[y'[x] == (x + y[x])^2, y, x][[1]]]");
 }
-static void t_fos_declines_implicit(void) {
-    /* Sqrt[x+y] separates but Solve cannot invert the antiderivative: stays
-     * symbolic rather than shipping a wrong/degenerate answer. */
-    check_form("Head[DSolve[y'[x] == Sqrt[x + y[x]], y[x], x]]", "DSolve");
+static void t_lie_abaco2_similar(void) {
+    /* Sqrt[x+y]: FirstOrderSubstitution/Separable cannot invert the antiderivative,
+     * and the rational Lie heuristics (abaco1_simple/linear/abaco1_product) decline,
+     * but abaco2_similar (Cheb-Terrab & Roche §4.3) finds the symmetry
+     * [F(x), H(x)] = [1, -1] and returns the verified implicit first integral
+     * x - 2 Sqrt[x+y] + 2 Log[1 + Sqrt[x+y]] == C[1] — coverage the rational-only
+     * heuristics lack.  Needs init.m (the antiderivative uses a CRC table rule). */
+    check_true("Head[DSolve`LieSymmetry[y'[x] == Sqrt[x + y[x]], y, x][[1,1]]] === Equal");
+    check_true("Head[DSolve[y'[x] == Sqrt[x + y[x]], y[x], x][[1,1]]] === Equal");
+    check_true("PossibleZeroQ[Module[{eq = DSolve[y'[x] == Sqrt[x + y[x]], y[x], x][[1,1]]}, "
+               "D[eq[[1]] - eq[[2]], x] /. y'[x] -> Sqrt[x + y[x]]]]");
 }
 static void t_fos_stress(void) {
     char eqn[256], res[256];
@@ -1168,8 +1175,12 @@ static void t_method_first_order_series(void) {
     check_true("PossibleZeroQ[Normal[(y'[x] - x - y[x]^2) /. "
                "DSolve`FirstOrderPowerSeries[y'[x] == x + y[x]^2, y, x][[1]]]]");
     /* pinned-only: the automatic cascade does NOT auto-apply it, so a first-order
-     * ODE with no closed form stays unevaluated (matching Mathematica / SymPy) */
-    check_form("Head[DSolve[y'[x] == Sqrt[x + y[x]], y[x], x]]", "DSolve");
+     * ODE with no closed form stays unevaluated (matching Mathematica / SymPy).
+     * y' == x^2 + y^3 has no elementary/Lie closed form (the whole cascade declines)
+     * yet has an ordinary point at 0, so FirstOrderPowerSeries alone closes it.
+     * (Sqrt[x+y] used to serve here but now solves via Lie/abaco2_similar.) */
+    check_true("Head[DSolve`FirstOrderPowerSeries[y'[x] == x^2 + y[x]^3, y, x]] === List");
+    check_form("Head[DSolve[y'[x] == x^2 + y[x]^3, y[x], x]]", "DSolve");
 }
 static void t_first_order_series_declines(void) {
     /* x0 = 0 is a pole of F (not ordinary) -> declines */
@@ -1180,6 +1191,7 @@ static void t_first_order_series_declines(void) {
 int main(void) {
     symtab_init();
     core_init();
+    test_load_init_m();   /* match production: deriv.m rules + CRC integral tables */
 
     TEST(t_linear_first_order_general);
     TEST(t_linear_homogeneous_general);
@@ -1274,7 +1286,6 @@ int main(void) {
     TEST(t_fos_shifted);
     TEST(t_fos_distinct_coeff);
     TEST(t_fos_method);
-    TEST(t_fos_declines_implicit);
     TEST(t_fos_stress);
     TEST(t_method_riccati);
     TEST(t_riccati_more);
@@ -1288,6 +1299,7 @@ int main(void) {
     TEST(t_lie_linear_coefficients);
     TEST(t_lie_bivariate);
     TEST(t_lie_abaco1_product);
+    TEST(t_lie_abaco2_similar);
     TEST(t_exact_xayb);
     TEST(t_auto_exp);
     TEST(t_auto_power);

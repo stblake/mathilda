@@ -224,6 +224,7 @@ static void t_hyper_stress_gauss(void) {
 int main(void) {
     symtab_init();
     core_init();
+    test_load_init_m();   /* match production: deriv.m rules + CRC integral tables */
 
     TEST(t_kov_stress_poly);
     TEST(t_kov_stress_apparent);

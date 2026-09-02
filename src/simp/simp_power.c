@@ -433,6 +433,7 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
             }
             Expr* tm = expr_new_function(
                 expr_new_symbol(SYM_Times), powers, bn);
+            free(powers);   /* expr_new_function copies the array; free the heap holder */
             expr_free(base);
             expr_free(exp_);
             free(new_args);
@@ -474,6 +475,7 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
                 expr_new_symbol(SYM_Power), pa, 2);
             Expr* tm = expr_new_function(
                 expr_new_symbol(SYM_Times), out, pos_count + 1);
+            free(out);   /* expr_new_function copies the array; free the heap holder */
             expr_free(base);
             expr_free(exp_);
             free(new_args);
@@ -490,6 +492,7 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
             }
             Expr* tm = expr_new_function(
                 expr_new_symbol(SYM_Times), powers, bn);
+            free(powers);   /* expr_new_function copies the array; free the heap holder */
             expr_free(base);
             expr_free(exp_);
             free(new_args);

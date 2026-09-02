@@ -692,10 +692,31 @@ static void t_stress_lie_product(void) {
                          "2 y[x]^4 + 3 y[x] - 1" };
     for (size_t i = 0; i < sizeof(Ps)/sizeof(Ps[0]); i++) lie_product_ok(Ps[i]);
 }
+/* abaco2_similar (§4.3): [F(x), H(x)] symmetry.  y' == (a x + b y + c)^p with p a
+ * non-integer power is the clean isolating family — omega is irrational, so all the
+ * rational heuristics (abaco1_simple/linear/abaco1_product) decline and abaco2_similar
+ * fires (Q = omega_y/omega_yy, T = Q_x/Q_y free of y).  Verified implicit-diff residual. */
+static void lie_similar_ok(const char* rhs) {
+    char buf[1200];
+    snprintf(buf, sizeof(buf),
+             "Head[DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{r = %s, eq = DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]]-eq[[2]], x] /. y'[x] -> r]]", rhs, rhs);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_lie_similar(void) {
+    const char* rhss[] = { "Sqrt[x + y[x]]", "Sqrt[2 x + y[x]]", "Sqrt[x + 2 y[x]]",
+                           "Sqrt[x + y[x] + 1]", "Sqrt[3 x - y[x]]", "Sqrt[x - y[x] + 2]",
+                           "(x + y[x])^(1/3)", "Sqrt[4 x + 3 y[x] + 2]" };
+    for (size_t i = 0; i < sizeof(rhss)/sizeof(rhss[0]); i++) lie_similar_ok(rhss[i]);
+}
 
 int main(void) {
     symtab_init();
     core_init();
+    test_load_init_m();   /* match production: deriv.m rules + CRC integral tables */
 
     TEST(t_stress_factorable);
     TEST(t_stress_nth_algebraic);
@@ -707,6 +728,7 @@ int main(void) {
     TEST(t_stress_fops);
     TEST(t_stress_lie_bivariate);
     TEST(t_stress_lie_product);
+    TEST(t_stress_lie_similar);
     TEST(t_stress_linear1);
     TEST(t_stress_separable);
     TEST(t_stress_bernoulli);

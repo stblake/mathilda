@@ -251,7 +251,9 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   branch verifies with no inert heads. Staged **L1** ✅ (substrate +
   `abaco1_simple` end-to-end), **L2** (`linear` ✅ — affine ansatz →
   linear-coefficients class via determining-system `NullSpace`; `abaco1_product` ✅;
-  `function_sum`, `abaco2_similar` remain), **L3** (`bivariate` ✅ — general
+  `abaco2_similar` ✅ — §4.3 similarity ansatz `[F(x), H(x)]`, the first to reach
+  **irrational** ODEs (`y' == Sqrt[a x + b y + c]`, `(a x + b y + c)^p`);
+  `function_sum` remains), **L3** (`bivariate` ✅ — general
   degree-2/3 bivariate-polynomial ansatz, the exact generalization of `linear`'s
   NullSpace determining system, catching genuinely quadratic/projective symmetries
   the affine ansatz misses; `chi`, `abaco2_unique_unknown`,
@@ -262,10 +264,12 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   product-separable x-factor via a fast rational free-of test), `lie_ratsimp`
   (`Cancel[Together]` in place of the far costlier `Simplify` on the hot path),
   `lie_inverse_omega`/`lie_swap_xy` (the inverse-ODE, so one extractor covers a
-  pattern and its inverse) — is reused by the remaining quadrature heuristics. Lie
+  pattern and its inverse) — is reused by the remaining quadrature heuristics. `abaco2_similar` (§4.3) finds `[ξ = F(x), η = H(x)]` from `Q = ω_y/ω_yy`,
+  `T = Q_x/Q_y` (free of `y`), `F = Exp[∫((T ω_y − T_x − ω_x)/(ω+T)) dx]`, `H = −T F`
+  — an irrational-`ω` reach the rational ansätze structurally lack. Lie
   sub-cascade is ordered **cheapest-first** (`abaco1_simple` → `linear` →
-  `abaco1_product` → `bivariate`), so the degree-2/3 NullSpace runs only as a last
-  resort. Reuses `D`, `Coefficient`/`Collect`, `Solve`, `Integrate`, `Together`,
+  `abaco1_product` → `abaco2_similar` → `bivariate`), so the degree-2/3 NullSpace runs
+  only as a last resort. Reuses `D`, `Coefficient`/`Collect`, `Solve`, `Integrate`, `Together`,
   `dsolve_run_implicit`, `zero_test_decide`. `dsolve_lie.c`. References:
   Cheb-Terrab & Roche (CPC 113, 1998); Cheb-Terrab, Duarte & da Mota (CPC 101,
   1997); Cheb-Terrab & Kolokolnikov (math-ph/0007023); see
@@ -350,8 +354,12 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   ansätze miss; found by the Cheb-Terrab & Roche Eq-19 product-separability of
   L = (ω_xy ω − ω_x ω_y)/ω⁴, then Eq-20 for G(y); the inverse pattern via the
   inverse ODE 1/ω(y,x)). SymPy's `lie_group` times out (>25 s) on the pure product
-  family 2xy/(x²+2y⁴+c), which this solves in ~30 ms. Remaining: `chi`,
-  `abaco2_unique_unknown`, `abaco2_unique_general`, `function_sum`, `abaco2_similar`.
+  family 2xy/(x²+2y⁴+c), which this solves in ~30 ms.
+  + `abaco2_similar` (§4.3, the symmetry [F(x), H(x)] and its inverse [F(y), H(y)] —
+  both components single-variable functions; from Q = ω_y/ω_yy, T = Q_x/Q_y free of y,
+  F = Exp[∫((T ω_y − T_x − ω_x)/(ω+T)) dx], H = −T F. First heuristic to reach
+  irrational ω: solves y' = Sqrt[a x + b y + c] and (a x + b y + c)^p, p non-integer).
+  Remaining: `chi`, `abaco2_unique_unknown`, `abaco2_unique_general`, `function_sum`.
   Nine ansatz heuristics (`abaco1_simple`,
   `abaco1_product`, `function_sum`, `abaco2_similar`, `linear`, `bivariate`, `chi`,
   `abaco2_unique_unknown`, `abaco2_unique_general`); each candidate `(ξ,η)` is gated
