@@ -35,4 +35,20 @@ RForm* reduce_eq_univariate(const Expr* poly, const Expr* var,
                             Expr** vars, int nv, bool* ok,
                             const ReduceOpts* opts);
 
+/* Complete solution set of a single univariate TRANSCENDENTAL equation
+ * `poly == 0` in `var` (Log/Exp/inverse-trig over `var`), rendered directly as
+ * a logical-formula Expr* by re-entering `Solve` (which now combines multi-log
+ * residuals and inverts Exp kernels). The rule-list `{{var -> v}, ...}` becomes
+ * an Or of  `var == v`  disjuncts; a `ConditionalExpression[v, cond]` solution
+ * (periodic `Element[C,Integers]` or the log/inverse-trig strip
+ * `-Pi < Im[C] <= Pi`) becomes `cond && var == v`.
+ *
+ * Unlike reduce_eq_univariate this returns a raw Expr* rather than an RForm,
+ * because those branch conditions are not polynomial atoms. Returns NULL when
+ * Solve declines or hands back an unexpected shape, so the caller falls back to
+ * the polynomial / echo path. An empty solution set yields False; a `{{}}`
+ * (all-values) row yields True. */
+Expr* reduce_eq_transcendental(const Expr* poly, const Expr* var,
+                               const Expr* dom, const ReduceOpts* opts);
+
 #endif /* REDUCE_EQ_H */

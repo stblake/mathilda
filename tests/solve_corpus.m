@@ -184,5 +184,43 @@
   {"Z-decoupled-ineq",  x^2 == 1 && y^2 == 4 && x > 0 && y > 0,  {x, y}, Automatic, 1, "only (1,2) of the 4 points is all-positive"},
   {"Z-three-circle",    u^2 + v^2 == 9 && u^2 + (a + v)^2 == 36 &&
                         (a + u)^2 + v^2 == 25 && u > 0 && v > 0 && a > 0,
-                                                                {u, v, a}, Automatic, 1, "issue #69: 1 all-positive branch"}
+                                                                {u, v, a}, Automatic, 1, "issue #69: 1 all-positive branch"},
+
+  (* ===== T. Transcendental log/exp: combine-then-invert (solve for t) ===== *)
+  (* Logarithmic: fuse Sum c_i Log[u_i(t)] -> Log[Prod u_i^c_i] (simp_log_fuse_all,
+   * wired into solveinv_drive), exponentiate, solve the rational/algebraic core. *)
+  {"T-log-lin1",       Log[2 t] - Log[x + t] == C[1],                t, Automatic, 1, "linear post-combine"},
+  {"T-log-lin-cancel", Log[t] - Log[x] + Log[x - t] == C[1],         t, Automatic, 2, "quadratic; var-free Log[x]"},
+  {"T-log-abcd",       Log[a t] + Log[b t] - Log[c t + d] == C[1],   t, Automatic, 2, "symbolic-coeff quadratic"},
+  {"T-log-inv-t",      Log[1/t] + Log[x^2 t^2 - x t] == C[1],        t, Automatic, 1, "internal t-cancel -> linear"},
+  {"T-log-quad1",      Log[t] + Log[x - t] == C[1],                  t, Automatic, 2, "quadratic inversion"},
+  {"T-log-quad2",      Log[t + x] + Log[t - x] - Log[t] == C[1],     t, Automatic, 2, "quadratic"},
+  {"T-log-quad3",      Log[t^2 + x] - Log[t] == C[1],                t, Automatic, 2, "quadratic"},
+  {"T-log-quad4",      Log[t] + Log[x t] - Log[x^2 + t] == C[1],     t, Automatic, 2, "quadratic"},
+  {"T-log-quad5",      Log[t] + Log[t + x] - Log[t - x] == C[1],     t, Automatic, 2, "quadratic"},
+  {"T-log-quad6",      Log[x] + Log[x - t] - Log[t^2 + x^2] == C[1], t, Automatic, 2, "quadratic"},
+  {"T-log-coeff2",     2 Log[t] - Log[x - t^2] == C[1],              t, Automatic, 2, "coeff/exponent equiv; quad in t^2"},
+  {"T-log-arg2",       Log[t^2] - 2 Log[x - t] == C[1],              t, Automatic, 2, "quadratic (branches preserved)"},
+  {"T-log-coeff3",     3 Log[t] - Log[t^3 - x] == C[1],              t, Automatic, 3, "cubic"},
+  {"T-log-diffsq",     Log[t^2 - x^2] - Log[t - x] == C[1],          t, Automatic, 1, "Cancel -> linear t->E^C1-x"},
+  {"T-log-sumcube",    Log[x + t] + Log[x^2 - x t + t^2] == C[1],    t, Automatic, 3, "cubic (sum of cubes)"},
+  {"T-log-expconst",   Log[Exp[x] t] - Log[t + 1] == C[1],           t, Automatic, 1, "E^x constant in t; linear"},
+  {"T-log-mixed",      Log[t] + 2 Log[x] - Log[x t + 1] == C[1],     t, Automatic, 1, "linear"},
+  (* Exponential: exponent-gather is free in the evaluator (E^a E^b/E^c ->
+   * E^(a+b-c)); solveinv peels the single Exp and try_exp_kernel handles a
+   * polynomial/rational in u = Exp[t]. *)
+  {"T-exp-gather1",    Exp[t] Exp[x]/Exp[x^2 - t] == C[1],           t, Automatic, 1, "gather+Log; linear"},
+  {"T-exp-gather2",    Exp[2 t]/Exp[x + t] == C[1],                  t, Automatic, 1, "gather; linear"},
+  {"T-exp-gather4",    Exp[x] Exp[t - x] == C[1],                    t, Automatic, 1, "gather; linear"},
+  {"T-exp-quad",       Exp[2 t] - x Exp[t] + C[1] == 0,              t, Automatic, 2, "u=Exp[t] quadratic"},
+  {"T-exp-xyz",        x Exp[2 t] + y Exp[t] + z == C[1],            t, Automatic, 2, "quadratic in u"},
+  {"T-exp-rat1",       Exp[t]/(x - Exp[t]) == C[1],                  t, Automatic, 1, "rational in u; linear"},
+  {"T-exp-rat2",       (Exp[t] + x)/(Exp[t] - x) == C[1],            t, Automatic, 1, "rational in u"},
+  {"T-exp-logistic",   1/(1 + Exp[-t]) == C[1],                      t, Automatic, 1, "logistic inverse"},
+  {"T-exp-rat-diff",   (Exp[2 t] - x^2)/(Exp[t] - x) == C[1],        t, Automatic, 1, "simplifies u+x=C1; linear"},
+  {"T-exp-rat-cube",   (Exp[3 t] + x^3)/(Exp[t] + x) == C[1],        t, Automatic, 2, "u^2-xu+x^2=C1; quadratic"},
+  {"T-exp-tt",         Exp[t^2 - x^2]/Exp[t - x] == C[1],            t, Automatic, 2, "gather; quadratic in t"},
+  {"T-exp-t2",         Exp[t^2] Exp[-t] == C[1],                     t, Automatic, 2, "nonlinear exponent; quad in t"},
+  {"T-exp-abc",        Exp[a t^2 + b t + c] == C[1],                 t, Automatic, 2, "quadratic exponent"},
+  {"T-exp-plog",       Exp[t + Log[x]] == C[1],                      t, Automatic, 1, "E^(t+Log x)=x E^t; linear"}
 }

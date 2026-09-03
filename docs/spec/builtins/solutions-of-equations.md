@@ -36,7 +36,16 @@ Attempts to solve an equation or system of equations for one or more variables.
     inverse trig/hyperbolic forms, and `Power[g, n]` for integer `n >= 2`.
     Multi-branch heads introduce a fresh integer parameter `C[k]` and wrap
     each solution in `ConditionalExpression[..., Element[C[k], Integers]]`.
-    Emits `Solve::ifun` on first use per call.
+    Emits `Solve::ifun` on first use per call.  Before peeling, a residual with
+    two or more `Log` terms in the variable is fused into a single
+    `Log[∏ uᵢ^{cᵢ}]` (`simp_log_fuse_all`, with a `Cancel` on the argument), so
+    combined-logarithm equations such as `Log[2 t] - Log[x + t] == C[1]`,
+    `Log[t] + Log[x - t] == C[1]`, and `3 Log[t] - Log[t^3 - x] == C[1]` reduce
+    to a single invertible `Log` and then to a rational/algebraic core.  The
+    exponential analogue needs no special step — the evaluator already gathers
+    `Exp[a] Exp[b]/Exp[c] → E^{a+b-c}`, and a polynomial/rational in `Exp[t]`
+    (e.g. `Exp[2 t] - x Exp[t] + C[1] == 0`, `Exp[t]/(x - Exp[t]) == C[1]`) is
+    handled by the `u = Exp[t]` kernel substitution.
   - Single equality, single variable, both specialists above decline (because
     the equation carries `Sqrt[...]` / `x^(p/q)` / nested radicals) ->
     `Solve`SolveRadicalsEquality` (also below).
@@ -821,6 +830,19 @@ degenerate branch, and it handles inequalities over the reals.
   `Reduce[x^2 == 4, x] -> x == -2 || x == 2`;
   `Reduce[x^2 == -1, x] -> x == -I || x == I`;
   `Reduce[a x^2 + b x + c == 0, x]` yields the full three-level split.
+- **Univariate transcendental Log/Exp equations** (`reduce_eq_transcendental`):
+  a single invertible logarithmic/exponential equation is routed back through
+  `Solve` (which combines the logs and inverts the `Exp` kernel) and its
+  rule-list rendered as an `Or` of `cond && var == value` conjuncts, where
+  `cond` is the periodic `Element[C[1], Integers]` family or the principal-`Log`
+  strip `-Pi < Im[C[1]] <= Pi`. Examples:
+  `Reduce[Log[2 t] - Log[x + t] == C[1], t] -> -Pi < Im[C[1]] <= Pi && t == E^{C[1]} x/(2 - E^{C[1]})`;
+  `Reduce[Exp[2 t] - 3 Exp[t] + 2 == 0, t] -> (C[1] ∈ Integers && t == 2 I C[1] Pi) || (C[1] ∈ Integers && t == Log[2] + 2 I C[1] Pi)`.
+  The route also runs as a fallback in the reals branch after the sign-diagram
+  engines decline, so real-domain log identities such as
+  `Reduce[Log[x^2] == 2 Log[-x], x, Reals] -> x < 0` are unaffected; forward-trig
+  equations are deliberately not rerouted (`Reduce[Sin[x] == 0, x]` is
+  unevaluated), and ordinary polynomials keep their leading-coefficient split.
 - **Multivariate linear equation systems over Complexes**, with complete case
   analysis on the parameters (symbolic Gaussian elimination): a nonzero-constant
   pivot is used directly, a symbolic pivot `p` splits into `p != 0` and `p == 0`

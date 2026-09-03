@@ -268,15 +268,44 @@ typedef enum {
     VERIFY_UNKNOWN    /* indeterminate (symbolic parameters) */
 } VerifyResult;
 
+/* Indeterminate / infinity markers that can survive N[] without being a
+ * genuine free parameter. */
+static bool sym_is_indeterminate_marker(const char* n) {
+    return n == SYM_Indeterminate || n == SYM_ComplexInfinity
+        || n == SYM_Infinity || n == SYM_Undefined
+        || n == SYM_DirectedInfinity;
+}
+
+/* True if `e` contains a free parameter -- any symbol other than the
+ * indeterminate / infinity markers above (C[k] counts: its head `C` is a plain
+ * parameter symbol).  A residual that N[] could not numericise is
+ * parameter-DEPENDENT when this holds, and parameter-FREE (a removable
+ * singularity) otherwise. */
+static bool has_free_parameter(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return !sym_is_indeterminate_marker(e->data.symbol.name);
+    if (e->type == EXPR_FUNCTION) {
+        if (has_free_parameter(e->data.function.head)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (has_free_parameter(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
 /* Decide whether `cand` is a valid root of the *original* equation.
  *
- * Verification order is N[]-first, Simplify-fallback.  Simplify on an
- * algebraic-coefficient substitution (e.g. cand involving Sqrt[2] or
- * the imaginary part of a non-real quadratic root) can run for seconds
- * per candidate, while N[] on the same residual evaluates in
- * microseconds.  We only pay the Simplify cost when the numerical
- * pass cannot decide -- typically because the candidate carries free
- * parameters that survive substitution. */
+ * Verification order is N[]-first, then a guarded Simplify only for a
+ * parameter-free residual.  N[] on the residual evaluates in microseconds;
+ * Simplify on a nested-radical substitution with symbolic parameters can run
+ * for seconds -- or unboundedly (denesting `Sqrt[q^4 x^2/(1+q^2)^2]` hung
+ * `Solve[Sqrt[t]/(x - Sqrt[t]) == q^2, t]`).  Crucially, when a free parameter
+ * survives, rejection is *unsound* anyway: a squared-radical candidate can hold
+ * on one parameter regime and fail on another (both branches survive with
+ * Solve::nongen), so the only correct verdict is UNKNOWN -- which we return
+ * WITHOUT ever calling Simplify.  Simplify is reserved for the parameter-free
+ * removable-singularity case, where it terminates and can genuinely accept or
+ * reject. */
 static VerifyResult verify_candidate(Expr* e_orig, Expr* var, Expr* cand) {
     /* Root[] candidates are NOT exempt from verification.  They are roots
      * of the *cleared resultant polynomial in x* (the substitution
@@ -317,14 +346,23 @@ static VerifyResult verify_candidate(Expr* e_orig, Expr* var, Expr* cand) {
         expr_free(sub);
         return (mag < 1.0e-9) ? VERIFY_ACCEPT : VERIFY_REJECT;
     }
+    /* N[] left the residual non-numeric.  If a free parameter survives, we
+     * cannot soundly accept or reject (see the header comment): keep the
+     * candidate as UNKNOWN and skip Simplify entirely -- this is both correct
+     * (matches the Solve::nongen convention for parametric radicals) and the
+     * fix for the Simplify hang on symbolic nested-radical residuals. */
+    if (has_free_parameter(nval)) {
+        expr_free(nval);
+        expr_free(sub);
+        return VERIFY_UNKNOWN;
+    }
     expr_free(nval);
 
-    /* Slow path: numerical evaluation could not decide (free parameters,
-     * Indeterminate from a removable singularity, etc.).  A symbolic
-     * Simplify pass catches structural cancellations like
-     * Sqrt[(Sqrt[3]-1)^2] -> Sqrt[3]-1 that the bare evaluator leaves
-     * alone, then a final N[] retry handles parameter-free residuals
-     * that only Simplify could unwrap. */
+    /* Parameter-free but N[] indeterminate (a removable singularity, e.g. the
+     * candidate lands on a denominator zero of the original form): a symbolic
+     * Simplify catches structural cancellations like Sqrt[(Sqrt[3]-1)^2] ->
+     * Sqrt[3]-1, then a final N[] retry handles residuals that only Simplify
+     * could unwrap.  Without free parameters this terminates. */
     Expr* simp = eval_and_free(mk_fn1("Simplify", sub));
     if (is_definite_zero(simp)) {
         expr_free(simp);

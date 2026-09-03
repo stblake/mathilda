@@ -231,3 +231,84 @@ RForm* reduce_eq_univariate(const Expr* poly, const Expr* var,
     *ok = true;
     return solve_case(poly, var, vars, nv, ok, opts);
 }
+
+/* ------------------------------------------------------------------ *
+ *  Transcendental single equation -> logical formula                  *
+ * ------------------------------------------------------------------ */
+
+Expr* reduce_eq_transcendental(const Expr* poly, const Expr* var,
+                               const Expr* dom, const ReduceOpts* opts) {
+    /* Re-enter Solve[poly == 0, var (, dom)]; base args are adopted by the
+     * Solve call.  An explicit `dom` (Reals/Complexes) is forwarded so the
+     * inverse-function solver produces domain-appropriate solutions and
+     * conditions; a NULL dom leaves Solve at its Complexes default. */
+    Expr* eqn = expr_new_function(expr_new_symbol(SYM_Equal),
+        (Expr*[]){ expr_copy((Expr*)poly), expr_new_integer(0) }, 2);
+    Expr* base[3];
+    int nb = 0;
+    base[nb++] = eqn;
+    base[nb++] = expr_copy((Expr*)var);
+    if (dom) base[nb++] = expr_copy((Expr*)dom);
+    Expr* sols = eval_and_free(reduce_opts_build_solve(base, nb, opts));
+
+    /* Solve declined (unevaluated / non-list): let the caller fall back. */
+    if (!is_head(sols, SYM_List)) { expr_free(sols); return NULL; }
+
+    size_t nsol = sols->data.function.arg_count;
+    Expr** terms = (Expr**)malloc((nsol ? nsol : 1) * sizeof(Expr*));
+    size_t nt = 0;
+    bool ok = true;
+    Expr* all_values = NULL;   /* set to True when a {{}} row means "any var" */
+
+    for (size_t i = 0; i < nsol; i++) {
+        Expr* row = sols->data.function.args[i];
+        if (!is_head(row, SYM_List)) { ok = false; break; }
+        if (row->data.function.arg_count == 0) {           /* {{}} -> True */
+            all_values = expr_new_symbol(SYM_True);
+            break;
+        }
+        if (row->data.function.arg_count != 1) { ok = false; break; }
+        Expr* rule = row->data.function.args[0];
+        if (!(is_head(rule, SYM_Rule) || is_head(rule, SYM_RuleDelayed))
+            || rule->data.function.arg_count != 2) { ok = false; break; }
+        Expr* lhs = rule->data.function.args[0];
+        Expr* val = rule->data.function.args[1];
+        if (!expr_eq(lhs, var)) { ok = false; break; }
+
+        Expr* term;
+        if (is_head(val, SYM_ConditionalExpression)
+            && val->data.function.arg_count == 2) {
+            /* ConditionalExpression[value, cond] -> cond && (var == value). */
+            Expr* value = val->data.function.args[0];
+            Expr* cond  = val->data.function.args[1];
+            Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
+                (Expr*[]){ expr_copy((Expr*)var), expr_copy(value) }, 2);
+            term = expr_new_function(expr_new_symbol(SYM_And),
+                (Expr*[]){ expr_copy(cond), eq }, 2);
+        } else {
+            term = expr_new_function(expr_new_symbol(SYM_Equal),
+                (Expr*[]){ expr_copy((Expr*)var), expr_copy(val) }, 2);
+        }
+        terms[nt++] = term;
+    }
+    expr_free(sols);
+
+    if (!ok) {
+        for (size_t i = 0; i < nt; i++) expr_free(terms[i]);
+        free(terms);
+        if (all_values) expr_free(all_values);
+        return NULL;
+    }
+    if (all_values) {
+        for (size_t i = 0; i < nt; i++) expr_free(terms[i]);
+        free(terms);
+        return all_values;
+    }
+    if (nt == 0) { free(terms); return expr_new_symbol(SYM_False); }  /* {} */
+
+    Expr* out;
+    if (nt == 1) { out = terms[0]; free(terms); }
+    else { out = expr_new_function(expr_new_symbol(SYM_Or), terms, nt); free(terms); }
+    /* Let the evaluator flatten / tidy the And/Or combination. */
+    return eval_and_free(out);
+}

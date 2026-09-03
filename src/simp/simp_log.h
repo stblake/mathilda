@@ -40,4 +40,27 @@
  */
 Expr* simp_log_apply(const Expr* e, const AssumeCtx* ctx);
 
+/*
+ * simp_log_fuse_all -- unconditional linear-combination-of-logs fuser, for
+ * equation solving (not Simplify).
+ *
+ * Given a top-level Plus e = Sum_i c_i Log[a_i] + rest, fuse the Log terms
+ * whose argument contains `var` (or ALL Log terms when `var` is NULL) into a
+ * single Log[ Product a_i ^ c_i ], applying Together+Cancel to the fused
+ * argument so algebraic cancellations surface (e.g.
+ * Log[t^2-x^2] - Log[t-x] -> Log[t+x]). Returns Plus[fused_log, rest...],
+ * freshly owned; returns NULL when fewer than two matching Log terms are
+ * present (nothing to fuse).
+ *
+ * Unlike Pass B (try_fuse_plus / simp_log_apply), this takes the fusion
+ * UNCONDITIONALLY -- no positivity gate and no leaf-count improvement test --
+ * because collapsing a multi-log equation to one invertible Log head is what
+ * lets the inverse-function solver peel it, even when the fused form is not
+ * smaller by leaf count. The fusion is principal-branch (as is Log[a]+Log[b]
+ * -> Log[a b]); callers that surface it to the user emit Solve::ifun.
+ *
+ * `var`, when non-NULL, must be an EXPR_SYMBOL.
+ */
+Expr* simp_log_fuse_all(const Expr* e, const Expr* var);
+
 #endif /* MATHILDA_SIMP_LOG_H */

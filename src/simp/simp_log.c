@@ -625,3 +625,103 @@ Expr* simp_log_apply(const Expr* e, const AssumeCtx* ctx) {
     }
     return cur;
 }
+
+/* ----------------------------------------------------------------------- */
+/* Unconditional fuser for equation solving (see simp_log.h).              */
+/* ----------------------------------------------------------------------- */
+
+/* True iff the interned symbol `var` occurs anywhere in `e`. Symbol names
+ * are interned pointers, so identity is a pointer compare (the idiom used
+ * throughout solve/). */
+static bool subtree_contains_sym(const Expr* e, const Expr* var) {
+    if (!e || !var || var->type != EXPR_SYMBOL) return false;
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == var->data.symbol.name;
+    if (e->type == EXPR_FUNCTION) {
+        if (subtree_contains_sym(e->data.function.head, var)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (subtree_contains_sym(e->data.function.args[i], var)) return true;
+    }
+    return false;
+}
+
+Expr* simp_log_fuse_all(const Expr* e, const Expr* var) {
+    if (!e || e->type != EXPR_FUNCTION ||
+        !e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Plus) {
+        return NULL;
+    }
+    size_t n = e->data.function.arg_count;
+    if (n < 2) return NULL;
+
+    Expr** coeffs = (Expr**)calloc(n, sizeof(Expr*));
+    Expr** args   = (Expr**)calloc(n, sizeof(Expr*));
+    Expr** rest   = (Expr**)calloc(n, sizeof(Expr*));
+    size_t n_log = 0, n_rest = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = e->data.function.args[i];
+        Expr* c = NULL; Expr* a = NULL;
+        bool fusable = false;
+        if (extract_log_term(t, &c, &a)) {
+            /* Fuse only Log terms that involve the solve variable; var-free
+             * logs stay in `rest` as additive constants the isolator shifts
+             * to the RHS. With var == NULL every Log term is fused. */
+            fusable = (var == NULL) || subtree_contains_sym(a, var);
+        }
+        if (fusable) {
+            coeffs[n_log] = c;
+            args[n_log]   = a;
+            n_log++;
+        } else {
+            if (c) expr_free(c);
+            if (a) expr_free(a);
+            rest[n_rest++] = expr_copy(t);
+        }
+    }
+
+    if (n_log < 2) {
+        for (size_t i = 0; i < n_log; i++) { expr_free(coeffs[i]); expr_free(args[i]); }
+        for (size_t i = 0; i < n_rest; i++) expr_free(rest[i]);
+        free(coeffs); free(args); free(rest);
+        return NULL;
+    }
+
+    /* Build the product Product[args[i] ^ coeffs[i]]; the Power factors adopt
+     * args[]/coeffs[]. */
+    Expr** factors = (Expr**)calloc(n_log, sizeof(Expr*));
+    for (size_t i = 0; i < n_log; i++)
+        factors[i] = make_call2("Power", args[i], coeffs[i]);
+    free(coeffs); free(args);
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), factors, n_log);
+    free(factors);
+    Expr* prod_eval = eval_take(prod);
+
+    /* Together folds to a single fraction; Cancel removes common factors so
+     * e.g. (t^2 - x^2)/(t - x) -> t + x, yielding a clean linear inner
+     * equation instead of a quadratic with an extraneous root. Both return a
+     * valid (never NULL) evaluated tree. */
+    Expr* tg = eval_take(make_call1("Together", expr_copy(prod_eval)));
+    if (tg) { expr_free(prod_eval); prod_eval = tg; }
+    Expr* cn = eval_take(make_call1("Cancel", expr_copy(prod_eval)));
+    if (cn) { expr_free(prod_eval); prod_eval = cn; }
+
+    Expr* fused_log = eval_take(make_call1("Log", prod_eval));
+
+    Expr** all = (Expr**)calloc(n_rest + 1, sizeof(Expr*));
+    all[0] = fused_log;
+    for (size_t i = 0; i < n_rest; i++) all[i + 1] = rest[i];
+    free(rest);
+
+    Expr* new_plus;
+    if (n_rest + 1 == 1) {
+        new_plus = all[0];
+        free(all);
+    } else {
+        new_plus = eval_take(expr_new_function(expr_new_symbol(SYM_Plus),
+                                               all, n_rest + 1));
+        free(all);
+    }
+    return new_plus;
+}

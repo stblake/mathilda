@@ -1278,6 +1278,42 @@ static void test_cylindrical_decomposition(void) {
              "CylindricalDecomposition[Greater[Power[x, 2], 1], 3.5]");
 }
 
+/* General log/exp transcendental equations over the default (Complexes)
+ * domain.  A single invertible Log/Exp equation is routed back through Solve
+ * (reduce_eq_transcendental) and its rule-list rendered as an Or of
+ * `cond && var == value` conjuncts.  Log fuses (simp_log_fuse_all in
+ * solveinv), Exp gathers / substitutes u = Exp[t]. */
+static void test_transcendental_log_exp(void) {
+    /* Linear log: single solution with the principal-Log strip condition. */
+    run_test("Reduce[Log[2 t] - Log[x + t] == C[1], t]",
+             "And[Inequality[Times[-1, Pi], Less, Im[C[1]], LessEqual, Pi], "
+             "Equal[t, Times[Power[E, C[1]], "
+                          "Power[Plus[2, Times[-1, Power[E, C[1]]]], -1], x]]]");
+
+    /* Polynomial in Exp[t]: two 2 Pi I C[1] periodic families. */
+    run_test("Reduce[Exp[2 t] - 3 Exp[t] + 2 == 0, t]",
+             "Or[And[Element[C[1], Integers], "
+                    "Equal[t, Times[Complex[0, 2], C[1], Pi]]], "
+                "And[Element[C[1], Integers], "
+                    "Equal[t, Plus[Log[2], Times[Complex[0, 2], Times[C[1], Pi]]]]]]");
+
+    /* A forward-trig equation is NOT rerouted (kept for the Reals sign-diagram
+     * engines): Sin[x] == 0 still bubbles back unevaluated. */
+    run_test("Reduce[Sin[x] == 0, x]", "Equal[Sin[x], 0]");
+
+    /* An ordinary polynomial equation keeps its full leading-coefficient case
+     * split (not misrouted to the transcendental solver). */
+    run_test("Reduce[a x^2 + b x + c == 0, x]",
+             "Or[And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
+                 "Plus[Times[-1, b], Power[Plus[Power[b, 2], Times[-4, Times[a, c]]], "
+                 "Rational[1, 2]]]]]], "
+                 "And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
+                 "Plus[Times[-1, b], Times[-1, Power[Plus[Power[b, 2], Times[-4, "
+                 "Times[a, c]]], Rational[1, 2]]]]]]], "
+                 "And[Equal[a, 0], Unequal[b, 0], Equal[x, Times[-1, Power[b, -1], c]]], "
+                 "And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1286,6 +1322,7 @@ int main(void) {
     TEST(test_decides_false);
     TEST(test_equations);
     TEST(test_equations_decline);
+    TEST(test_transcendental_log_exp);
     TEST(test_real_inequalities);
     TEST(test_rational_inequalities);
     TEST(test_linear_systems);

@@ -3355,3 +3355,78 @@ integration/`Simplify` path, not the new code. **Why:** a per-call leak whose st
 points into your new file may be `-O3` inlining noise; the delta + `-O0` + stash-test
 triangulation attributes it correctly. **How to apply:** don't trust a single `-O3`
 leak frame; confirm with `-O0` and a stash-baseline before blaming (or editing) code.
+
+## Solve/Reduce log/exp transcendental solving — gate & test gotchas (2026-09-03)
+
+Made `Solve`/`Reduce` invert `Σ cᵢ Log[uᵢ(t)] == rhs` and exp equations. The exp
+family already worked (the evaluator gathers `Exp[a]Exp[b]/Exp[c]→E^(a+b−c)`; a
+poly/rational in `Exp[t]` goes through the `u=Exp[t]` kernel); the missing piece
+was combining logs. Four traps worth remembering:
+
+1. **`solveinv_looks_invertible` is NOT a transcendental gate.** It returns
+   `true` for any `x^n` (integer `n`) because `Power[g, n]` is "peelable", so
+   using it to route `Reduce` equations misrouted plain polynomials like
+   `a x^2+b x+c` and dropped their leading-coefficient case split. **Fix:** gate
+   on an explicit Log/Exp-head detector (`reduce_has_log_or_exp`) AND
+   `Exponent[resid, var]` not a positive integer. **How to apply:** "has an
+   invertible head" ≠ "is transcendental"; add a degree/head restriction.
+
+2. **Reduce force-routes any `Log` equation to the Reals sign-diagram path**
+   (`reduce_stmt_has_realfn`), so a Complexes-branch hook never sees it. The
+   transcendental route had to be added as a *fallback in the reals branch*
+   after `reduce_univar`/`reduce_univar_general` decline — which also preserves
+   real identities like `Log[x^2]==2Log[-x]→x<0` (handled first). **How to
+   apply:** for a new single-equation Reduce capability, check BOTH the
+   complexes branch and the realfn-forced reals branch.
+
+3. **Do NOT power-pull `Log[t^n]→n Log[t]` during fusion** — it is PowerExpand
+   and drops solution branches. `Log[t^2]-2Log[x-t]==C1` correctly has 2
+   solutions (quadratic `t^2/(x-t)^2=E^C1`); pulling the exponent would collapse
+   it to 1. So the symbolic-exponent case `Log[t^n]-n Log[x-t]` is left
+   unevaluated (a symbolic-degree equation with no finite closed form), which is
+   *more correct* than a lossy principal-branch answer.
+
+4. **The back-substitution corpus (`solve_corpus.m`, `SOLVE_FAIL_BASELINE=0`)
+   cannot certify Root-object or `Sqrt[t²]`-branch solutions with symbolic
+   parameters** — its `PossibleZeroQ→Simplify→|N|` ladder numericizes and hits
+   branch cuts, so `Exp[3t]-x Exp[t]==C1` (3 `Root[]` solutions) fails there even
+   though it is correct. **Fix:** keep such cases OUT of the zero-baseline corpus
+   and assert them deterministically in `test_solve.c` via `Length[Solve[...]]`
+   plus a lenient `AllTrue[..., PossibleZeroQ[...]&]` residual test (the top gate
+   of the ladder, which does pass). **How to apply:** the corpus is for cleanly
+   numericizable residuals; branch/Root-heavy correct answers need count-based
+   unit tests instead.
+
+Also: `solverad`'s rational-radical path can *hang* on some `Power`-valued
+constant RHS (e.g. `Solve[Sqrt[t]/(x-Sqrt[t])==q^2,t]`); the log-radical case
+`1/2 Log[t]-Log[x-Sqrt[t]]==C1` declines fast (safe) but is left as a documented
+`solverad` limitation, not fixed, to avoid that fragility.
+
+## solverad: declining is load-bearing; verify Simplify can hang (2026-09-03)
+
+Two lessons from strengthening `src/solve/solverad.c`:
+
+1. **`verify_candidate`'s Simplify fallback hangs on free-parameter nested-radical
+   residuals.** `Solve[Sqrt[t]/(x-Sqrt[t]) == q^2, t]` hung: N[] can't numericise
+   a residual with free params (q,x), so it fell to `Simplify[Sqrt[q^4 x^2/
+   (1+q^2)^2]/...]`, which denests unboundedly. **Fix:** when a free parameter
+   survives N[], return VERIFY_UNKNOWN (keep + Solve::nongen) WITHOUT Simplify —
+   rejection is unsound on free params anyway (both squared-radical branches can
+   be valid on different regimes; cf. `Solve[Sqrt[a x+c]+3x==5,x]` keeps both).
+   **How to apply:** never run an unbounded Simplify to "decide" a residual that
+   still has free parameters; the sound verdict is already UNKNOWN.
+
+2. **In solverad, DECLINING is load-bearing — do not make it "try harder"
+   blindly.** `Together` won't clear a `Sqrt[t]` fraction against a Power RHS
+   (`E^C[1]`, `Sqrt[5]`, `2^q`), so those decline. Abstracting the opaque constant
+   to a fresh symbol makes Together clear it and solves the whole class (incl.
+   `1/2 Log[t]-Log[x-Sqrt[t]]==C[1]`). BUT this re-hung `dsolve_tests`:
+   `DSolve`Homogeneous` inverts `1/((v-1)^(3/4)(v+1)^(1/4))==E^(...)` and RELIES on
+   solverad declining it (two quarter-power radicals → degree-16 solve over a
+   transcendental extension → hang) so it can fall back to an implicit/Root first
+   integral. Even a degree cap didn't restore parity (DSolve then returned a Root
+   whose verification was pathologically slow). **Reverted** the abstraction;
+   kept only the verify fix. **How to apply:** several DSolve inversions are built
+   on solverad's decline SET; widening what solverad attempts silently reroutes
+   them — gate any such change and re-run `dsolve_tests` (t_homogeneous_algebraic)
+   as the tripwire. Full write-up: `SOLVERAD_IMPROVEMENTS.md`.

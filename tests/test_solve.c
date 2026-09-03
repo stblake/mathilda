@@ -404,6 +404,43 @@ static void test_inverse_exp(void) {
                  "Element[C[1], Integers]]]]]");
 }
 
+/* General log/exp transcendental solving.  Logarithmic equations combine
+ * Sum c_i Log[u_i(t)] -> single Log[Prod u_i^c_i] (simp_log_fuse_all, wired
+ * into solveinv_drive) then peel + solve the rational/algebraic core;
+ * exponential equations gather E^a E^b/E^c -> E^(a+b-c) (free in the
+ * evaluator) and substitute u = Exp[t] (try_exp_kernel).  The full residual
+ * back-substitution of 31 equations lives in tests/solve_corpus.m; here we
+ * pin one exact form and check solution counts (plus a lenient residual test
+ * for the Root/branch-heavy cases the corpus ladder cannot certify). */
+static void test_transcendental_log_exp(void) {
+    /* Linear log: Log[2t] - Log[t+x] fuses to Log[2t/(t+x)], peels, solves
+     * linear -> t = E^C1 x / (2 - E^C1), on the principal Log strip. */
+    run_test("Solve[Log[2 t] - Log[x + t] == C[1], t]",
+             "List[List[Rule[t, ConditionalExpression["
+               "Times[Power[E, C[1]], "
+                     "Power[Plus[2, Times[-1, Power[E, C[1]]]], -1], x], "
+               "Inequality[Times[-1, Pi], Less, Im[C[1]], LessEqual, Pi]]]]]");
+
+    /* Counts across the technique groups (deterministic). */
+    run_test("Length[Solve[Log[t] + Log[x - t] == C[1], t]]", "2");         /* quadratic */
+    run_test("Length[Solve[3 Log[t] - Log[t^3 - x] == C[1], t]]", "3");     /* cubic */
+    run_test("Length[Solve[Log[t^2 - x^2] - Log[t - x] == C[1], t]]", "1"); /* Cancel->linear */
+    run_test("Length[Solve[Exp[2 t] - x Exp[t] + C[1] == 0, t]]", "2");     /* u=Exp[t] quad */
+    run_test("Length[Solve[Exp[t]/(x - Exp[t]) == C[1], t]]", "1");         /* rational in u */
+
+    /* Root[]- / branch-heavy closed forms: count + lenient residual test. */
+    run_test("Length[Solve[Exp[3 t] - x Exp[t] == C[1], t]]", "3");
+    run_test("AllTrue[Solve[Exp[3 t] - x Exp[t] == C[1], t] /. "
+             "ConditionalExpression[a_, b_] :> a, "
+             "PossibleZeroQ[(Exp[3 t] - x Exp[t] - C[1]) /. #] &]", "True");
+    run_test("Length[Solve[Exp[t] + C[1] Exp[-t] == x, t]]", "2");
+    run_test("AllTrue[Solve[Exp[t] + C[1] Exp[-t] == x, t] /. "
+             "ConditionalExpression[a_, b_] :> a, "
+             "PossibleZeroQ[(Exp[t] + C[1] Exp[-t] - x) /. #] &]", "True");
+    run_test("Length[Solve[Exp[Sqrt[t]] Exp[x] == C[1], t]]", "1");
+    run_test("Length[Solve[Exp[a t] Exp[b t]/Exp[c t + d] == C[1], t]]", "1");
+}
+
 /* b^x == a for a var-free constant base b != E -- reduced through
  * Power[b, g] -> Exp[g * Log[b]] inside try_isolate_payload so we
  * reuse peel_exp's principal + 2 Pi I C[k] family.  Mirrors
@@ -1368,6 +1405,7 @@ int main(void) {
     TEST(test_non_polynomial);
     TEST(test_inverse_log);
     TEST(test_inverse_exp);
+    TEST(test_transcendental_log_exp);
     TEST(test_inverse_power_const_base);
     TEST(test_inverse_sin);
     TEST(test_inverse_sin_concrete);

@@ -145,6 +145,19 @@ static void test_parametric_nongen(void) {
                                         "Rational[1, 2]]]]]]]]");
 }
 
+/* Regression: a rational-in-radical equation with a Power-valued, parametric
+ * RHS used to HANG in verify_candidate -- N[] could not numericise the
+ * free-parameter residual, and the Simplify fallback denested
+ * Sqrt[q^4 x^2/(1+q^2)^2] unboundedly.  verify_candidate now returns
+ * VERIFY_UNKNOWN (keep + Solve::nongen) for a free-parameter residual without
+ * calling Simplify.  If this ever regresses it will hang, not misreport. */
+static void test_hang_parametric_rational_radical(void) {
+    run_test("Solve[Sqrt[t]/(x - Sqrt[t]) == q^2, t]",
+             "List[List[Rule[t, Times[-1, Power[q, 4], "
+             "Power[Plus[-1, Times[-2, Power[q, 2]], Times[-1, Power[q, 4]]], -1], "
+             "Power[x, 2]]]]]");
+}
+
 /* The qualified builtin is directly callable: a quick smoke test
  * verifies the dispatch wiring registered the right entry. */
 static void test_qualified_builtin(void) {
@@ -167,6 +180,7 @@ int main(void) {
     TEST(test_two_distinct_bases);
     TEST(test_no_real_solution);
     TEST(test_parametric_nongen);
+    TEST(test_hang_parametric_rational_radical);
     TEST(test_qualified_builtin);
 
     printf("All solveradicals tests passed!\n");

@@ -38,6 +38,7 @@
 #include "expr.h"
 #include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
 #include "poly/solvepoly.h"
+#include "simp/simp_log.h"   /* simp_log_fuse_all(): combine multi-log residuals */
 #include "solverad.h"
 #include "sym_intern.h"
 #include "sym_names.h"
@@ -1165,6 +1166,14 @@ static Expr* solveinv_drive(Expr* equation, Expr* var,
     Expr* rhs = equation->data.function.args[1];
     Expr* residual = eval_and_free(mk_fn2("Plus",
         expr_copy(lhs), mk_neg(expr_copy(rhs))));
+
+    /* Combine any multi-term log block over `var` into a single Log[R(var)].
+     * A residual like Log[2t] - Log[t+x] - C[1] has two var-containing terms,
+     * which isolate_residual refuses to peel; fusing them to Log[2t/(t+x)]
+     * leaves exactly one invertible head so the Log peel below can fire.
+     * NULL (fewer than two fusable logs) leaves the residual unchanged. */
+    Expr* fused = simp_log_fuse_all(residual, var);
+    if (fused) { expr_free(residual); residual = fused; }
 
     Isolation iso = {0};
     if (!isolate_residual(residual, var, &iso)) {
