@@ -712,6 +712,50 @@ static void t_stress_lie_similar(void) {
                            "(x + y[x])^(1/3)", "Sqrt[4 x + 3 y[x] + 2]" };
     for (size_t i = 0; i < sizeof(rhss)/sizeof(rhss[0]); i++) lie_similar_ok(rhss[i]);
 }
+/* function_sum (§4.2): the additive symmetry [F(x)+G(y), 0].  Each omega is a
+ * pre-constructed member of the invariant family (F=1/x/2/x, G=y/2y with J=0/1/y..),
+ * whose 1/omega is transcendental (Log) so the rational heuristics decline and
+ * function_sum solves it (attribution-verified).  Implicit-diff residual == 0. */
+static void lie_fsum_ok(const char* rhs) {
+    char buf[1400];
+    snprintf(buf, sizeof(buf),
+             "Head[DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{r = %s, eq = DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]]-eq[[2]], x] /. y'[x] -> r]]", rhs, rhs);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_lie_function_sum(void) {
+    const char* rhss[] = {
+        "(x y[x]^3)/(-1 + x y[x] + x^2 y[x]^2 - 2 Log[1 + x y[x]] - 2 x y[x] Log[1 + x y[x]])",
+        "(x y[x]^3)/(-1 + y[x]^2 + x y[x]^3 + x y[x] + x^2 y[x]^2 - 2 Log[1 + x y[x]] - 2 x y[x] Log[1 + x y[x]])",
+        "(x y[x]^3)/(-1 + x y[x]^2 + x y[x] + x^2 y[x]^2 + y[x] - 2 Log[1 + x y[x]] - 2 x y[x] Log[1 + x y[x]])",
+        "(x y[x]^3)/(-4 + 2 x y[x] + x^2 y[x]^2 - 8 Log[2 + x y[x]] - 4 x y[x] Log[2 + x y[x]])",
+        "(4 x y[x]^3)/(-1 + 2 x y[x] + 4 x^2 y[x]^2 - 4 x y[x] Log[1 + 2 x y[x]] - 2 Log[1 + 2 x y[x]])" };
+    for (size_t i = 0; i < sizeof(rhss)/sizeof(rhss[0]); i++) lie_fsum_ok(rhss[i]);
+}
+/* abaco2_unique_unknown (§4.4.1): [F(x),G(y)]/[G(y),F(x)] from a non-integer power of
+ * both variables.  omega = (c x/y)(a x^2 + b y^2 + d)^p has symmetry [1/x, -1/y]; the
+ * irrational power makes the rational heuristics and abaco2_similar decline
+ * (attribution-verified).  Implicit-diff residual == 0. */
+static void lie_unique_ok(const char* rhs) {
+    char buf[1200];
+    snprintf(buf, sizeof(buf),
+             "Head[DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]] === Equal", rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "PossibleZeroQ[Module[{r = %s, eq = DSolve`LieSymmetry[y'[x] == %s, y, x][[1,1]]}, "
+        "D[eq[[1]]-eq[[2]], x] /. y'[x] -> r]]", rhs, rhs);
+    ASSERT_TRUE(buf);
+}
+static void t_stress_lie_unique_unknown(void) {
+    const char* rhss[] = {
+        "(x/y[x]) (x^2 + y[x]^2)^(1/3)",   "(x/y[x]) Sqrt[x^2 + y[x]^2]",
+        "(x/y[x]) (2 x^2 + y[x]^2)^(1/3)", "(x/y[x]) (x^2 + 3 y[x]^2)^(1/3)",
+        "(2 x/y[x]) (x^2 + y[x]^2)^(1/3)", "(x/y[x]) (x^2 + y[x]^2 + 1)^(1/3)" };
+    for (size_t i = 0; i < sizeof(rhss)/sizeof(rhss[0]); i++) lie_unique_ok(rhss[i]);
+}
 
 int main(void) {
     symtab_init();
@@ -729,6 +773,8 @@ int main(void) {
     TEST(t_stress_lie_bivariate);
     TEST(t_stress_lie_product);
     TEST(t_stress_lie_similar);
+    TEST(t_stress_lie_function_sum);
+    TEST(t_stress_lie_unique_unknown);
     TEST(t_stress_linear1);
     TEST(t_stress_separable);
     TEST(t_stress_bernoulli);

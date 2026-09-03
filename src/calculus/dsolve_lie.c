@@ -25,11 +25,13 @@
  *
  * Staging (see docs/design/dsolve_lie_symmetry.md): L1 ships the substrate and the
  * `abaco1_simple` heuristic (one-variable ansatze); L2 adds `linear` (affine
- * ansatz — the linear-coefficients class, via the determining-system NullSpace);
- * L3 adds `bivariate` (general degree-2/3 polynomial ansatz — the same NullSpace
- * determining system at higher degree, catching quadratic / projective symmetries);
- * the remaining heuristics chain in through the same lie_check + lie_first_integral
- * pipeline.
+ * ansatz — the linear-coefficients class, via the determining-system NullSpace),
+ * `abaco1_product` (product ansatz [F(x)G(y),0]), `abaco2_similar` ([F(x),H(x)]), and
+ * `function_sum` (additive ansatz [F(x)+G(y),0]); L3 adds `bivariate` (general
+ * degree-2/3 polynomial ansatz — the same NullSpace determining system at higher
+ * degree) and `abaco2_unique_unknown` ([F(x),G(y)]/[G(y),F(x)] from functions or
+ * non-integer powers of both variables).  `chi` and `abaco2_unique_general` remain;
+ * all chain in through the same lie_check + lie_first_integral pipeline.
  *
  * References: Cheb-Terrab & Roche, CPC 113 (1998) 239; Cheb-Terrab, Duarte & da
  * Mota, CPC 101 (1997) 254; Cheb-Terrab & Kolokolnikov, math-ph/0007023.
@@ -576,6 +578,48 @@ static Expr* lie_abaco1_product(const Expr* omega, const char* xv, const char* Y
     return lie_run_with_inverse(lie_abaco1_product_cand, omega, xv, Yn, yname);
 }
 
+/* function_sum candidate [xi = F(x) + G(y), eta = 0] (Cheb-Terrab & Roche §4.2).
+ * The sum-analogue of abaco1_product.  With the "factor" F = omega . d^2/dx^2(1/omega),
+ * Eq (27) gives the *rational* identity
+ *   F = F''(x) / (F(x) + G(y))                          (the leading omega cancels the
+ *                                                        transcendental part of 1/omega),
+ * so d/dy(1/F) = G'(y)/F''(x) is product-separable in x, y (Eq 28); its x-factor is
+ * 1/F''(x), and then xi = F(x)+G(y) = F''/F = 1/(xfactor . F).  When F == 0 the ODE is
+ * invert-linear (Eq 27, footnote 5) and this pattern declines.  Fills *xi, *eta (owned)
+ * and returns true, else sets both NULL and returns false.  omega borrowed. */
+static bool lie_function_sum_cand(const Expr* omega, const char* xv, const char* Yn,
+                                  Expr** xi, Expr** eta) {
+    *xi = NULL; *eta = NULL;
+    if (ds_is_zero(omega)) return false;
+
+    /* factor = omega . d^2/dx^2(1/omega) = F''/(F+G), rational (Eq 27) */
+    Expr* d2 = ds_d(ds_d(powi(expr_copy((Expr*)omega), -1), expr_new_symbol(xv)),
+                    expr_new_symbol(xv));
+    Expr* factor = lie_ratsimp(eval_and_free(
+                       ds_call2(SYM_Times, expr_copy((Expr*)omega), d2)));
+    if (lie_is_zero(expr_copy(factor))) { expr_free(factor); return false; } /* invert-linear */
+
+    /* x-factor of d/dy(1/factor) is 1/F''(x) (up to a constant) */
+    Expr* dyM  = ds_d(powi(expr_copy(factor), -1), expr_new_symbol(Yn));
+    Expr* xfac = lie_sep_xfactor(dyM, xv, Yn);
+    expr_free(dyM);
+    if (!xfac) { expr_free(factor); return false; }
+
+    /* xi = F + G = F''/factor = 1/(xfac . factor) — the constant scale is irrelevant
+     * (lie_check and lie_first_integral are homogeneous in the generator). */
+    *xi  = lie_ratsimp(powi(eval_and_free(ds_call2(SYM_Times, xfac, factor)), -1));
+    *eta = expr_new_integer(0);
+    return true;
+}
+
+/* Heuristic `function_sum` (§4.2): the symmetry [F(x) + G(y), 0], or its inverse
+ * [0, F(x) + G(y)] (via the inverse ODE).  The additive counterpart of
+ * `abaco1_product`.  omega borrowed. */
+static Expr* lie_function_sum(const Expr* omega, const char* xv, const char* Yn,
+                              const char* yname) {
+    return lie_run_with_inverse(lie_function_sum_cand, omega, xv, Yn, yname);
+}
+
 /* abaco2_similar candidate [xi = F(x), eta = H(x)] (both single-variable functions
  * of x) — Cheb-Terrab & Roche §4.3.  Q = omega_y / omega_yy (Eq 39); in the Q_y != 0
  * branch T = Q_x / Q_y = -H/F (Eq 40, free of y), then F = Exp[Integrate[(T omega_y
@@ -623,6 +667,95 @@ static Expr* lie_abaco2_similar(const Expr* omega, const char* xv, const char* Y
     return lie_run_with_inverse(lie_abaco2_similar_cand, omega, xv, Yn, yname);
 }
 
+/* e depends on BOTH xv and Yn. */
+static bool lie_has_both(const Expr* e, const char* xv, const char* Yn) {
+    return ds_contains((Expr*)e, xv) && ds_contains((Expr*)e, Yn);
+}
+
+/* Recursively collect into *out the distinct subexpressions of e that are
+ * "functions of both variables": a non-arithmetic function application (Sin, Log,
+ * ArcTan, an undefined head, ...), or a power with a non-integer / variable
+ * exponent (u^(1/2), a^(x+y), Exp[x+y]), each containing both xv and Yn.  These are
+ * the mappings M of Cheb-Terrab & Roche §4.4.1 (Prop 7): any such M of an ODE with
+ * a [F(x),G(y)] / [G(y),F(x)] symmetry must be a function of f(x)+g(y).  Rational
+ * omega yields none → instant decline.  Deduplicated by expr_eq; *out grown by
+ * realloc, elements are owned copies (caller frees). */
+static void lie_collect_kernels(const Expr* e, const char* xv, const char* Yn,
+                                Expr*** out, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const Expr* head = e->data.function.head;
+    bool sym_head = head->type == EXPR_SYMBOL;
+    const char* hn = sym_head ? head->data.symbol.name : NULL;
+    bool arith = sym_head && (hn == SYM_Plus || hn == SYM_Times);
+    bool ispow = sym_head && hn == SYM_Power;
+
+    bool kernel = false;
+    if (sym_head && !arith && !ispow) {
+        kernel = lie_has_both(e, xv, Yn);                 /* function application */
+    } else if (ispow && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type != EXPR_INTEGER && lie_has_both(e, xv, Yn)) kernel = true;
+    }
+    if (kernel)
+        for (size_t i = 0; i < *n; i++)
+            if (expr_eq((*out)[i], (Expr*)e)) { kernel = false; break; }
+    if (kernel) {
+        if (*n == *cap) { *cap = *cap ? *cap * 2 : 4;
+                          *out = realloc(*out, *cap * sizeof(Expr*)); }
+        (*out)[(*n)++] = expr_copy((Expr*)e);
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        lie_collect_kernels(e->data.function.args[i], xv, Yn, out, n, cap);
+}
+
+/* Heuristic `abaco2_unique_unknown` (§4.4.1): symmetries [F(x), G(y)] and
+ * [G(y), F(x)], found from the functions / non-integer powers of both variables
+ * present in omega.  For each such mapping M, R = M_y/M_x (Eq 63); when R separates
+ * by product with x-factor X (= 1/f_x), the two candidates of scheme (iib) are
+ *   [xi = X,     eta = -X/R]   → type [F(x), G(y)],
+ *   [xi = -R/X,  eta = 1/X]    → type [G(y), F(x)];
+ * each gated by lie_check and integrated by lie_first_integral, first success wins.
+ * Reaches ODEs carrying an arbitrary function or non-integer power of a combined
+ * argument, which every rational ansatz structurally declines.  omega borrowed. */
+static Expr* lie_abaco2_unique_unknown(const Expr* omega, const char* xv,
+                                       const char* Yn, const char* yname) {
+    Expr** ker = NULL; size_t nk = 0, cap = 0;
+    lie_collect_kernels(omega, xv, Yn, &ker, &nk, &cap);
+    Expr* G = NULL;
+    for (size_t i = 0; i < nk && !G; i++) {
+        Expr* Mx = ds_d(expr_copy(ker[i]), expr_new_symbol(xv));
+        Expr* My = ds_d(expr_copy(ker[i]), expr_new_symbol(Yn));
+        if (lie_is_zero(expr_copy(Mx)) || lie_is_zero(expr_copy(My))) {
+            expr_free(Mx); expr_free(My); continue;       /* M free of x or of y */
+        }
+        Expr* R = lie_ratsimp(eval_and_free(ds_call2(SYM_Times, My, powi(Mx, -1))));
+        Expr* X = lie_sep_xfactor(R, xv, Yn);             /* x-factor if separable */
+        if (X) {
+            /* cand1: [X, -X/R] */
+            Expr* xi1  = expr_copy(X);
+            Expr* eta1 = lie_ratsimp(eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+                             ds_call2(SYM_Times, expr_copy(X), powi(expr_copy(R), -1)))));
+            if (lie_check(xi1, eta1, omega, xv, Yn))
+                G = lie_first_integral(xi1, eta1, omega, xv, Yn, yname);
+            expr_free(xi1); expr_free(eta1);
+            /* cand2: [-R/X, 1/X] */
+            if (!G) {
+                Expr* xi2  = lie_ratsimp(eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+                                 ds_call2(SYM_Times, expr_copy(R), powi(expr_copy(X), -1)))));
+                Expr* eta2 = lie_ratsimp(powi(expr_copy(X), -1));
+                if (lie_check(xi2, eta2, omega, xv, Yn))
+                    G = lie_first_integral(xi2, eta2, omega, xv, Yn, yname);
+                expr_free(xi2); expr_free(eta2);
+            }
+            expr_free(X);
+        }
+        expr_free(R);
+    }
+    for (size_t i = 0; i < nk; i++) expr_free(ker[i]);
+    free(ker);
+    return G;
+}
+
 Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     if (P->max_order[0] != 1) return NULL;
@@ -644,14 +777,19 @@ Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch) {
      *   linear          affine ansatz, a 6-unknown determining NullSpace
      *   abaco1_product  rational-product ansatz + its inverse (two separability
      *                   free-of tests) — the quadrature ansatze chain in here
+     *   function_sum    additive ansatz [F(x)+G(y), 0] + inverse (§4.2)
      *   abaco2_similar  similarity ansatz [F(x), H(x)] + inverse (§4.3) — the first
      *                   to reach irrational omega (Sqrt/root forms)
+     *   abaco2_unique_unknown  [F(x),G(y)] / [G(y),F(x)] from the functions /
+     *                   non-integer powers of both variables in omega (§4.4.1)
      *   bivariate       degree-2 THEN degree-3 polynomial NullSpace (up to a
      *                   20-unknown system) — the most expensive, tried last. */
     Expr* G = lie_abaco1_simple(omega, wx, wy, xv, Yn, yname);
     if (!G) G = lie_linear(omega, xv, Yn, yname);
     if (!G) G = lie_abaco1_product(omega, xv, Yn, yname);
+    if (!G) G = lie_function_sum(omega, xv, Yn, yname);
     if (!G) G = lie_abaco2_similar(omega, xv, Yn, yname);
+    if (!G) G = lie_abaco2_unique_unknown(omega, xv, Yn, yname);
     if (!G) G = lie_bivariate(omega, xv, Yn, yname);
 
     expr_free(wx); expr_free(wy); expr_free(omega);
@@ -674,8 +812,8 @@ void dsolve_lie_init(void) {
         "heuristics, then reducing to a quadrature through the integrating factor "
         "mu == 1/(eta - xi omega); returns the implicit first integral "
         "{{G(x,y[x]) == C[1]}}. The general first-order backstop of the cascade "
-        "(heuristics: abaco1_simple, linear, abaco1_product, abaco2_similar, "
-        "bivariate).";
+        "(heuristics: abaco1_simple, linear, abaco1_product, function_sum, "
+        "abaco2_similar, abaco2_unique_unknown, bivariate).";
     symtab_add_builtin("DSolve`LieSymmetry", builtin_dsolve_lie);
     symtab_get_def("DSolve`LieSymmetry")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`LieSymmetry", doc);

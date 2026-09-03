@@ -98,14 +98,14 @@ which catch equations the specialists miss (e.g. the linear-coefficients family
   `dsolve_run_implicit` (+ explicit `Solve`) pipeline, and `abaco1_simple`. Proves
   the pipeline end-to-end via the pinned `DSolve`LieSymmetry[eqn, y, x]` builtin.
 - **L2** — `linear` ✅ (the coefficient-splitting determining-system machinery);
-  `abaco1_product` ✅; `abaco2_similar` ✅ (§4.3, below); `function_sum` remains.
+  `abaco1_product` ✅; `abaco2_similar` ✅ (§4.3, below); `function_sum` ✅ (§4.2, below).
 - **L3** — `bivariate` ✅ (degree-bounded: `lie_poly_symmetry` tries degree 2 then
   3, the exact generalization of `linear`'s degree-1 NullSpace determining system —
   builds `ξ, η` as general bivariate polynomials over interned `DSolve\`lieB*`
   coefficients, then `Numerator[Together[S]]` → `CoefficientList[·,{x,y}]` →
   `Outer[Coefficient, forms, coeffs]` → `NullSpace`; catches quadratic/projective
-  symmetries such as `ξ=x², η=x y` that the affine ansatz misses); `chi`,
-  `abaco2_unique_unknown`, `abaco2_unique_general` remain.
+  symmetries such as `ξ=x², η=x y` that the affine ansatz misses);
+  `abaco2_unique_unknown` ✅ (§4.4.1, below); `chi` and `abaco2_unique_general` remain.
 
 ### 4.1 `abaco1_product` (CT–Roche §4.1) — the first quadrature ansatz
 
@@ -135,6 +135,22 @@ mis-derived candidate can only decline, never mislead. **Validation:** SymPy 1.1
 can handle. Per-solve valgrind is leak-flat (identical `definitely lost` for `1+1`,
 1×, and 8×).
 
+### 4.2 `function_sum` (CT–Roche §4.2) — the additive quadrature ansatz
+
+Symmetry `[ξ = F(x) + G(y), η = 0]` and its inverse `[0, F(x) + G(y)]` — the additive
+counterpart of `abaco1_product`. The classifying quantity is the **rational** factor
+`ω · ∂²ₓ(1/ω) = F''(x)/(F(x)+G(y))` (their Eq 27; the leading `ω` is essential — it
+cancels the transcendental part of `1/ω`, which for a genuine member is Log/ArcTan, so
+`∂²ₓ(1/ω)` alone still carries it). `∂_y` of its reciprocal is product-separable
+(Eq 28) with x-factor `1/F''(x)` (via `lie_sep_xfactor`), from which
+`ξ = F+G = 1/(xfactor · factor)`; `factor ≡ 0` marks the invert-linear case (Eq 27
+footnote) and declines. The inverse pattern reuses the inverse-ODE driver
+(`lie_run_with_inverse`). Note the paper (§3) remarks these patterns rarely help
+Kamke-book ODEs — the value is completeness of the L2 ansatz table, not new coverage of
+named equations. **Validation:** `t_lie_function_sum` and the `t_stress_lie_function_sum`
+Log-form family, each a member of the §4.2 invariant family built with `F=1/x`, `G=y`;
+per-solve valgrind leak-flat.
+
 ### 4.3 `abaco2_similar` (CT–Roche §4.3) — both components single-variable
 
 Symmetry `[ξ = F(x), η = H(x)]` and its inverse `[F(y), H(y)]` — the first ansatz
@@ -157,6 +173,27 @@ suites now do, matching production). Sits after `abaco1_product` and before
 + the `t_stress_lie_similar` radical family; per-solve valgrind leak-flat (the
 `ds_simplify` finalize step exposed — and this work fixed — a pre-existing
 `simp_power.c` power-distribution leak, unrelated to DSolve).
+
+### 4.4.1 `abaco2_unique_unknown` (CT–Roche §4.4.1) — from functions/non-integer powers
+
+Symmetries `[ξ=F(x), η=G(y)]` and `[ξ=G(y), η=F(x)]` (not inverses of each other; one
+scheme finds both). Prop 7: if `ω` has such a symmetry and contains a function `M` of
+both `x` and `y`, that `M` must be a function of `f(x)+g(y)`, so `R = M_y/M_x = g_y/f_x`
+(Eq 63; the outer function's derivative cancels) **separates by product**. A recursive
+tree-walk `lie_collect_kernels` gathers each candidate mapping `M` — a non-arithmetic
+function application, or a power with a non-integer / variable exponent, that holds both
+variables. For each, with `X` the x-factor of `R` (via `lie_sep_xfactor`), scheme (iib)
+tries the two candidates `[X, −X/R]` (type `[F(x),G(y)]`) and `[−R/X, 1/X]` (type
+`[G(y),F(x)]`), each gated by `lie_check`. A purely rational `ω` has no kernels → instant
+decline. **Reach vs. limit:** it solves ODEs with a non-integer power of both variables —
+`y' = (x/y)(x²+y²)^p` → symmetry `[1/x, −1/y]`, first integral elementary. For a genuinely
+*arbitrary* function `F` (Kamke-85 form `y'=(x/y)F[(x²+y²)/2]`) the symmetry is still
+found but the Lie integrating-factor quadrature `∫F/(1+F)` is non-elementary, so the
+branch declines at integration (correctly — no inert head). **Validation:**
+`t_lie_abaco2_unique_unknown` and the `t_stress_lie_unique_unknown` non-integer-power
+family; per-solve valgrind adds only the pre-existing FLINT `rat_canon` leak
+(`tasks/flint_ratcanon_leak.md`), its own allocations balanced. The general case §4.4.2
+(no assumption on `ω`, Cases I/II) and `chi` remain.
 
 ## 5. References
 

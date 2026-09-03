@@ -972,6 +972,41 @@ static void t_lie_abaco1_product(void) {
     check_true("Head[DSolve`LieGroup[y'[x] == 2 x y[x]/(x^2 + 2 y[x]^4 + 2), y, x]"
                "[[1,1]]] === Equal");
 }
+/* `function_sum` (Cheb-Terrab & Roche §4.2): the additive symmetry [F(x)+G(y), 0].
+ * These omega are members of the §4.2 invariant family (F=1/x, G=y with J=0 and J=1/y),
+ * whose 1/omega is transcendental (Log) so every rational Lie heuristic
+ * (abaco1_simple/linear/abaco1_product) declines and function_sum is the first (and
+ * only) to solve them — verified in the REPL via per-heuristic attribution, so the pass
+ * is not vacuous.  The classifying quantity is the *rational* factor
+ * omega.d^2/dx^2(1/omega) = F''/(F+G); the leading omega cancels the transcendental
+ * part.  Verified by implicit differentiation.  (The F=1/x^2 ArcTan member also solves
+ * and verifies in the REPL but its verify is ~7 s, so it is omitted from the suites.) */
+static void t_lie_function_sum(void) {
+    check_pinned_implicit("DSolve`LieSymmetry",
+        "(x y[x]^3)/(-1 + x y[x] + x^2 y[x]^2 - 2 Log[1 + x y[x]] "
+        "- 2 x y[x] Log[1 + x y[x]])");
+    check_pinned_implicit("DSolve`LieSymmetry",
+        "(x y[x]^3)/(-1 + y[x]^2 + x y[x]^3 + x y[x] + x^2 y[x]^2 "
+        "- 2 Log[1 + x y[x]] - 2 x y[x] Log[1 + x y[x]])");
+    /* alias resolves to the same method */
+    check_true("Head[DSolve`LieGroup[y'[x] == (x y[x]^3)/(-1 + x y[x] + x^2 y[x]^2 "
+               "- 2 Log[1 + x y[x]] - 2 x y[x] Log[1 + x y[x]]), y, x][[1,1]]] === Equal");
+}
+/* `abaco2_unique_unknown` (Cheb-Terrab & Roche §4.4.1): the symmetries [F(x),G(y)] /
+ * [G(y),F(x)], found from a non-integer power (here (x^2+y^2)^p) of both variables in
+ * omega.  For omega = (x/y)(x^2+y^2)^p the mapping M = (x^2+y^2)^p gives R = M_y/M_x =
+ * y/x (the p and the power cancel), x-factor 1/x, and the symmetry [1/x, -1/y].  The
+ * irrational omega makes every rational heuristic decline; abaco2_similar declines too
+ * (verified via attribution: abaco2_unique_unknown fires), so the pass is not vacuous.
+ * Verified by implicit differentiation. */
+static void t_lie_abaco2_unique_unknown(void) {
+    check_pinned_implicit("DSolve`LieSymmetry", "(x/y[x]) (x^2 + y[x]^2)^(1/3)");
+    check_pinned_implicit("DSolve`LieSymmetry", "(x/y[x]) Sqrt[x^2 + y[x]^2]");
+    check_pinned_implicit("DSolve`LieSymmetry", "(x/y[x]) (2 x^2 + y[x]^2)^(1/3)");
+    /* alias resolves to the same method */
+    check_true("Head[DSolve`LieGroup[y'[x] == (x/y[x]) (x^2 + y[x]^2)^(1/3), y, x]"
+               "[[1,1]]] === Equal");
+}
 /* Chini reduction (b): linear-term removal y = e^(int g) w -> separable, for the
  * sub-class where reduction (a) (B,C constant) fails.  y' == x E^(2x) y^3 - y -
  * x E^-x -> w' == x(w^3 - 1) via y = E^-x w; implicit first integral. */
@@ -1300,6 +1335,8 @@ int main(void) {
     TEST(t_lie_bivariate);
     TEST(t_lie_abaco1_product);
     TEST(t_lie_abaco2_similar);
+    TEST(t_lie_function_sum);
+    TEST(t_lie_abaco2_unique_unknown);
     TEST(t_exact_xayb);
     TEST(t_auto_exp);
     TEST(t_auto_power);

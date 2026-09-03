@@ -253,11 +253,14 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   linear-coefficients class via determining-system `NullSpace`; `abaco1_product` ✅;
   `abaco2_similar` ✅ — §4.3 similarity ansatz `[F(x), H(x)]`, the first to reach
   **irrational** ODEs (`y' == Sqrt[a x + b y + c]`, `(a x + b y + c)^p`);
-  `function_sum` remains), **L3** (`bivariate` ✅ — general
+  `function_sum` ✅ — §4.2 additive ansatz `[F(x)+G(y), 0]`, classified by the
+  rational factor `ω·∂²ₓ(1/ω) = F''/(F+G)`), **L3** (`bivariate` ✅ — general
   degree-2/3 bivariate-polynomial ansatz, the exact generalization of `linear`'s
   NullSpace determining system, catching genuinely quadratic/projective symmetries
-  the affine ansatz misses; `chi`, `abaco2_unique_unknown`,
-  `abaco2_unique_general` remain). The quadrature ansätze are transcribed directly
+  the affine ansatz misses; `abaco2_unique_unknown` ✅ — §4.4.1, the `[F(x),G(y)]`/
+  `[G(y),F(x)]` ansätze from a function/non-integer-power of both variables in `ω`
+  (`y' == (x/y)(x²+y²)^(1/3)`); `chi`, `abaco2_unique_general`
+  remain). The quadrature ansätze are transcribed directly
   from the Cheb-Terrab & Roche (1998) invariant-family necessary conditions (the
   paper is in the repo root). `abaco1_product` (§4.1) uses the Eq-19 separability of
   `L = (ω_xy ω − ω_x ω_y)/ω⁴`; its shared substrate — `lie_sep_xfactor` (the
@@ -359,7 +362,13 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   both components single-variable functions; from Q = ω_y/ω_yy, T = Q_x/Q_y free of y,
   F = Exp[∫((T ω_y − T_x − ω_x)/(ω+T)) dx], H = −T F. First heuristic to reach
   irrational ω: solves y' = Sqrt[a x + b y + c] and (a x + b y + c)^p, p non-integer).
-  Remaining: `chi`, `abaco2_unique_unknown`, `abaco2_unique_general`, `function_sum`.
+  + `function_sum` (§4.2, the additive symmetry [F(x)+G(y), 0] and its inverse
+  [0, F(x)+G(y)]; classified by the rational factor ω·∂²ₓ(1/ω) = F''/(F+G) whose
+  reciprocal's ∂_y separates by product, x-factor 1/F'').
+  + `abaco2_unique_unknown` (§4.4.1, the symmetries [F(x),G(y)] and [G(y),F(x)] from a
+  function/non-integer-power M of both variables in ω: R = M_y/M_x separates by product
+  with x-factor X, candidates [X,−X/R] and [−R/X,1/X]; solves y' = (x/y)(x²+y²)^(1/3)).
+  Remaining: `chi`, `abaco2_unique_general`.
   Nine ansatz heuristics (`abaco1_simple`,
   `abaco1_product`, `function_sum`, `abaco2_similar`, `linear`, `bivariate`, `chi`,
   `abaco2_unique_unknown`, `abaco2_unique_general`); each candidate `(ξ,η)` is gated
