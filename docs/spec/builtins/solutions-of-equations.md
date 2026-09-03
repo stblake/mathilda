@@ -838,6 +838,13 @@ degenerate branch, and it handles inequalities over the reals.
 
 **Attributes**: `Protected`. Arguments are evaluated (not held).
 
+**Messages**: `Reduce` internally re-enters `Solve` for inverse-function
+equations (trig/hyperbolic/exponential/log). Because `Reduce` *is* the
+complete-solution path, it suppresses the `Solve::ifun` advisory ("use Reduce
+for complete solution information") that a bare `Solve` would emit — the advice
+is moot from inside `Reduce`. Genuine `Solve` diagnostics (`Solve::svars`,
+`Solve::nsdim`, …) are not suppressed.
+
 **Status**: implemented incrementally per `REDUCE_PLAN.md`. Landed so far:
 
 - **Front-end + normal-form layer**: argument parsing, a `Reduce::ivar`
@@ -863,27 +870,70 @@ degenerate branch, and it handles inequalities over the reals.
   `Reduce[Exp[2 t] - 3 Exp[t] + 2 == 0, t] -> (C[1] ∈ Integers && t == 2 I C[1] Pi) || (C[1] ∈ Integers && t == Log[2] + 2 I C[1] Pi)`.
   The route also runs as a fallback in the reals branch after the sign-diagram
   engines decline, so real-domain log identities such as
-  `Reduce[Log[x^2] == 2 Log[-x], x, Reals] -> x < 0` are unaffected;
-  single-argument forward-trig equations stay with the sign-diagram engines
-  (`Reduce[Sin[x] == 0, x]`), and ordinary polynomials keep their
-  leading-coefficient split.
+  `Reduce[Log[x^2] == 2 Log[-x], x, Reals] -> x < 0` are unaffected, and
+  ordinary polynomials keep their leading-coefficient split.
 - **Univariate transcendental trigonometric / hyperbolic equations** (same
-  `reduce_eq_transcendental` renderer). A two-argument trig/hyperbolic residual
-  (`reduce_has_trig_pair`) is routed back through `Solve` — which now solves
-  `f[A(y)] ± g[B(y)] == c` (see `Solve` above) — on both the Complexes and
-  Reals branches, rendered as the same `Or` of `Element[C[k], Integers] && y
-  == …` conjuncts, or `True`/`False` for a parity identity / contradiction:
-  `Reduce[Tan[x+y]-Tan[x-2y]==0, y] -> (C[1] ∈ Integers && y == Pi/3 + 2 C[1]
-  Pi/3) || (C[1] ∈ Integers && y == 2 C[1] Pi/3)`;
-  `Reduce[Sec[x+y]-Tan[x+y]==0, y] -> False`;
-  `Reduce[Tan[x+y]+Tan[-x-y]==0, y] -> True`.
+  `reduce_eq_transcendental` renderer), on both the Complexes and Reals branches,
+  rendered as an `Or` of `Element[C[k], Integers] && y == …` conjuncts (or
+  `True`/`False` for a parity identity / contradiction). Two residual shapes are
+  routed back through `Solve`:
+  - a **single** forward circular-trig equation `f[A(x)] == c`, `f ∈
+    {Sin, Cos, Tan, Cot, Sec, Csc}` (`reduce_is_circular_trig_resid`), or a
+    single hyperbolic / pure-exponential one (`reduce_is_hyp_resid`,
+    `reduce_is_pure_exp_resid`). Previously the Complexes engine echoed the
+    polynomial residual and the Reals sign diagram was unsound
+    (`Reduce[Sin[x]==1/2, x, Reals]` wrongly `False`, `Reduce[Sin[x]==0, x,
+    Reals]` wrongly `True`). Now `Reduce[Sin[x] == 1/2, x] -> (C[1] ∈ Integers
+    && x == 2 C[1] Pi + 5/6 Pi) || (C[1] ∈ Integers && x == 2 C[1] Pi + 1/6
+    Pi)`;
+  - a **two-argument** trig/hyperbolic residual (`reduce_has_trig_pair`), which
+    `Solve` reduces as `f[A(y)] ± g[B(y)] == c` (see `Solve` above):
+    `Reduce[Tan[x+y]-Tan[x-2y]==0, y] -> (C[1] ∈ Integers && y == Pi/3 + 2 C[1]
+    Pi/3) || (C[1] ∈ Integers && y == 2 C[1] Pi/3)`;
+    `Reduce[Sec[x+y]-Tan[x+y]==0, y] -> False`;
+    `Reduce[Tan[x+y]+Tan[-x-y]==0, y] -> True`.
 - **Reals-domain periodic-family collapse.** Over `Reals`,
   `reduce_eq_transcendental` keeps only the real members of each periodic
-  family — a **real** period keeps the whole family, an **imaginary** period
-  keeps its single real member at `C[k] = 0`. This corrects two prior bugs:
-  `Reduce[Exp[y] == 3, y, Reals] -> y == Log[3]` (was `False`) and
-  `Reduce[Sinh[y] == 0, y, Reals] -> y == 0` (was `True`), while
-  `Reduce[Sin[y] == 1/2, y, Reals]` keeps its full `2 Pi C[1]` family.
+  family `a + b·C[k]`: a **real** period `b` keeps the whole family **iff the
+  offset `a` is also real** (a real period cannot cancel a complex offset, so a
+  real period with a non-real offset is dropped entirely); an **imaginary**
+  period keeps its single real member at `C[k] = 0`. This corrects three prior
+  bugs: `Reduce[Exp[y] == 3, y, Reals] -> y == Log[3]` (was `False`),
+  `Reduce[Sinh[y] == 0, y, Reals] -> y == 0` (was `True`), and
+  `Reduce[Sin[x] == 2, x, Reals] -> False` (was the complex `ArcSin[2]` family),
+  while `Reduce[Sin[y] == 1/2, y, Reals]` keeps its full `2 Pi C[1]` family.
+- **Periodic equation with a bounding region** (`src/solve/reduce_trigregion.c`):
+  a conjunction `And[<one circular-trig/hyperbolic equation over the variable>,
+  <inequalities>…]` over the Reals selects the finitely many family members
+  inside the region.  The equation is solved into its families `a + p C[k]`;
+  each family (real period) is substituted into the constraints and reduced over
+  the *real* parameter to a bounded interval, and the integers in it are
+  enumerated and kept only when the FULL statement re-evaluates to `True` (a
+  non-real period contributes only its `C[k]=0` member).  Previously the sign
+  diagram returned a wrong `False`.  Examples:
+  `Reduce[Sin[x] == 1/2 && 0 < x < 2 Pi, x] -> x == Pi/6 || x == 5 Pi/6`;
+  `Reduce[Sin[x] == 0 && 0 <= x <= 2 Pi, x] -> x == 0 || x == Pi || x == 2 Pi`
+  (boundary members kept on a closed interval);
+  `Reduce[Sinh[x] == 2 && 0 < x < 10, x] -> x == ArcSinh[2]`;
+  `Reduce[Sin[x] == 2 && 0 < x < 2 Pi, x] -> False`.  On this shape the sign
+  diagram is not run, so an **unbounded** region (`Sin[x] == 1/2 && x > 0`) is
+  left unevaluated rather than answered wrongly.
+- **Trig/hyperbolic inequality with a bounding region** (same file,
+  `reduce_trig_ineq_region`): a conjunction `And[<trig/hyperbolic inequality
+  over the variable>, <inequalities>…]` over the Reals is sign-decomposed over
+  the bounded window.  The zeros of the trig atoms (found by Solve + family
+  enumeration) cut the interval into sign-constant cells; the FULL statement is
+  evaluated at a sample point of each cell (numerically in the interior,
+  exactly at each boundary) and the true cells are merged into a union of
+  intervals / points, with open/closed endpoints chosen by the exact boundary
+  re-check.  Only pole-free heads (`Sin`, `Cos`, `Sinh`, `Cosh`, `Tanh`,
+  `Sech`) are handled; a pole-bearing head or an unbounded region declines
+  (left unevaluated).  Previously the sign diagram returned a wrong `False`.
+  Examples:
+  `Reduce[Sin[x] > 1/2 && 0 < x < 2 Pi, x] -> Pi/6 < x < 5 Pi/6`;
+  `Reduce[Cos[x] > 0 && 0 < x < 2 Pi, x] -> 0 < x < Pi/2 || 3 Pi/2 < x < 2 Pi`;
+  `Reduce[Sin[x] != 1/2 && 0 < x < 2 Pi, x]` gives the three intervals excluding
+  `Pi/6` and `5 Pi/6`.
 - **Multivariate linear equation systems over Complexes**, with complete case
   analysis on the parameters (symbolic Gaussian elimination): a nonzero-constant
   pivot is used directly, a symbolic pivot `p` splits into `p != 0` and `p == 0`

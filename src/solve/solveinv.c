@@ -147,6 +147,7 @@ static void branches_free(Branch* arr, size_t n) {
 static void emit_ifun(SolveInvCtx* ctx) {
     if (!ctx || ctx->ifun_warned) return;
     if (mth_msg_suppressed()) return;   /* quiet internal probe (e.g. FindInstance) */
+    if (mth_msg_ifun_suppressed()) return;  /* caller is Reduce -- "use Reduce" is moot */
     fprintf(stderr,
         "Solve::ifun: Inverse functions are being used by Solve, "
         "so some solutions may not be found; "

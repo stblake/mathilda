@@ -776,6 +776,7 @@ set(COMMON_SRC
     ../src/solve/reduce_qe.c
     ../src/solve/reduce_zerodim.c
     ../src/solve/reduce_companions.c
+    ../src/solve/reduce_trigregion.c
     ../src/numerical_roots/findroot.c
     ../src/numerical_calculus/findmin.c
     ../src/numerical_calculus/findmin_common.c

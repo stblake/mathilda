@@ -27,4 +27,19 @@ void mth_msg_suppress_pop(void);
 /* Non-zero iff messages are currently suppressed. */
 int  mth_msg_suppressed(void);
 
+/*
+ * Narrow scope for the `Solve::ifun` advisory ("Inverse functions are being
+ * used by Solve, ... use Reduce for complete solution information").  Distinct
+ * from the general suppression above: Reduce IS the complete-solution path, so
+ * that one message is self-contradictory when a Solve running *inside* a Reduce
+ * emits it -- yet Reduce must still surface genuine Solve diagnostics
+ * (Solve::svars / ::nsdim / ::nongen).  builtin_reduce brackets its whole
+ * evaluation with a push/pop; only the ifun emission site consults it.
+ * Depth-counted and single-threaded, exactly like the general flag above; pair
+ * every push with a pop.
+ */
+void mth_msg_ifun_suppress_push(void);
+void mth_msg_ifun_suppress_pop(void);
+int  mth_msg_ifun_suppressed(void);
+
 #endif /* MATHILDA_MESSAGE_H */

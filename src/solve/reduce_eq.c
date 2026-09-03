@@ -247,12 +247,14 @@ static bool im_is_zero(const Expr* e) {
 }
 
 /* Over Reals, collapse each periodic solution family to its real members.
- * A ConditionalExpression value a + b*C[k] whose period b is real keeps the
- * whole family (e.g. a trig ArcSin[c] + 2 Pi C[k]); one whose period is
- * non-real (imaginary, e.g. Sinh/Exp's 2 I Pi C[k]) has a single real member
- * at C[k]=0 (kept unconditionally if real, else the family is dropped).  This
- * turns Reduce[Sinh[y]==0,y,Reals] -> y==0 and Reduce[Exp[y]==3,y,Reals] ->
- * y==Log[3] instead of echoing the complex family.  Consumes `sols`. */
+ * A ConditionalExpression value a + b*C[k] whose period b AND offset a are both
+ * real keeps the whole family (e.g. a trig ArcSin[c] + 2 Pi C[k] with real c);
+ * a real period with a NON-real offset (e.g. ArcSin[2] + 2 Pi C[k], where
+ * ArcSin[2] is complex) has every member non-real and is dropped, so
+ * Reduce[Sin[x]==2,x,Reals] -> False.  A non-real period (imaginary, e.g.
+ * Sinh/Exp's 2 I Pi C[k]) has a single candidate real member at C[k]=0 (kept if
+ * real, else dropped): Reduce[Sinh[y]==0,y,Reals] -> y==0 and
+ * Reduce[Exp[y]==3,y,Reals] -> y==Log[3].  Consumes `sols`. */
 static Expr* collapse_reals_families(Expr* sols) {
     if (!is_head(sols, SYM_List)) return sols;
     size_t n = sols->data.function.arg_count;
@@ -286,15 +288,20 @@ static Expr* collapse_reals_families(Expr* sols) {
             Expr* coeff = eval_and_free(expr_new_function(
                 expr_new_symbol("Coefficient"),
                 (Expr*[]){ expr_copy((Expr*)value), expr_copy((Expr*)param) }, 2));
+            /* The family's offset: its member at param = 0. */
+            Expr* v0 = eval_and_free(expr_new_function(
+                expr_new_symbol("ReplaceAll"),
+                (Expr*[]){ expr_copy((Expr*)value),
+                           expr_new_function(expr_new_symbol(SYM_Rule),
+                               (Expr*[]){ expr_copy((Expr*)param),
+                                          expr_new_integer(0) }, 2) }, 2));
             if (im_is_zero(coeff)) {
-                keep_family = true;                       /* real period */
-            } else {                                      /* isolated member */
-                Expr* v0 = eval_and_free(expr_new_function(
-                    expr_new_symbol("ReplaceAll"),
-                    (Expr*[]){ expr_copy((Expr*)value),
-                               expr_new_function(expr_new_symbol(SYM_Rule),
-                                   (Expr*[]){ expr_copy((Expr*)param),
-                                              expr_new_integer(0) }, 2) }, 2));
+                /* Real period: keep the whole family only if the offset is also
+                 * real -- else every member a + b*C[k] is non-real (a real
+                 * period cannot cancel a complex offset). */
+                if (im_is_zero(v0)) keep_family = true;
+                expr_free(v0);
+            } else {                                      /* non-real period */
                 if (im_is_zero(v0)) single_val = v0; else expr_free(v0);
             }
             expr_free(coeff);

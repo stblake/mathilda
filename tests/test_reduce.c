@@ -34,6 +34,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <unistd.h>   /* dup, dup2, close, fileno: stderr capture in test_no_ifun_message */
 
 #include "expr.h"
 #include "parse.h"
@@ -204,9 +205,10 @@ static void test_equations_decline(void) {
              "Or[Equal[x, -2], Equal[x, 2], Equal[x, 5]]");
     /* No variable argument. */
     run_test("Reduce[x^2 == 4]", "Reduce[Equal[Power[x, 2], 4]]");
-    /* Transcendental equation: Solve returns a bare relation, Reduce passes it
-     * through unchanged (a distinct outcome from both solved and Reduce[...]). */
-    run_test("Reduce[Sin[x] == 0, x]", "Equal[Sin[x], 0]");
+    /* A single forward-trig equation is now solved (routed to Solve and rendered
+     * as its complete periodic family), not echoed unevaluated. */
+    run_contains("Reduce[Sin[x] == 0, x]", "Element[C[1], Integers]");
+    run_not_contains("Reduce[Sin[x] == 0, x]", "Sin[x]");
 }
 
 /* ------------------------------------------------------------------ *
@@ -1297,9 +1299,9 @@ static void test_transcendental_log_exp(void) {
                 "And[Element[C[1], Integers], "
                     "Equal[t, Plus[Log[2], Times[Complex[0, 2], Times[C[1], Pi]]]]]]");
 
-    /* A forward-trig equation is NOT rerouted (kept for the Reals sign-diagram
-     * engines): Sin[x] == 0 still bubbles back unevaluated. */
-    run_test("Reduce[Sin[x] == 0, x]", "Equal[Sin[x], 0]");
+    /* A single forward-trig equation is solved (its complete periodic family),
+     * not echoed. */
+    run_contains("Reduce[Sin[x] == 0, x]", "Element[C[1], Integers]");
 
     /* An ordinary polynomial equation keeps its full leading-coefficient case
      * split (not misrouted to the transcendental solver). */
@@ -1314,9 +1316,11 @@ static void test_transcendental_log_exp(void) {
                  "And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
 }
 
-/* Two-argument trig/hyperbolic pairs (solvetrigpair.c) route through Reduce;
- * single forward circular trig stays with the sign diagram; and the two prior
- * Reals-domain bugs are fixed by the periodic-family collapse. */
+/* Two-argument trig/hyperbolic pairs (solvetrigpair.c) and SINGLE forward
+ * circular-trig equations both route through Reduce to Solve and render as
+ * periodic families; the prior Reals-domain bugs (unsound True/False, and a
+ * real-period/complex-offset family kept when it should be dropped) are fixed by
+ * the periodic-family collapse. */
 static void test_trig_pair(void) {
     /* Spurious-pole trap -> False; parity identity -> True; contradiction. */
     run_test("Reduce[Sec[x + y] - Tan[x + y] == 0, y]", "False");
@@ -1328,8 +1332,28 @@ static void test_trig_pair(void) {
     run_contains("Reduce[Tan[x + y] - Tan[x - 2 y] == 0, y]", "Element[C[1], Integers]");
     run_contains("Reduce[Sinh[a x + b y] - Sinh[c x + d y] == 0, y]", "Element[C[1], Integers]");
 
-    /* Single forward circular trig is NOT rerouted (sign-diagram territory). */
-    run_test("Reduce[Sin[x] == 0, x]", "Equal[Sin[x], 0]");
+    /* A SINGLE forward circular-trig equation f[A(x)]==c is solved over every
+     * domain: the Complexes polynomial engine used to echo `poly == 0` and the
+     * Reals sign diagram was unsound.  It now routes to Solve and renders the
+     * complete periodic family. */
+    run_contains("Reduce[Sin[x] == 1/2, x]", "Element[C[1], Integers]");
+    run_not_contains("Reduce[Sin[x] == 1/2, x]", "Sin[x]");
+    run_contains("Reduce[Cos[x] == 1/2, x]", "Element[C[1], Integers]");
+    run_contains("Reduce[Tan[x] == 1, x]", "Element[C[1], Integers]");
+    run_contains("Reduce[Sec[x] == 2, x]", "Element[C[1], Integers]");
+    run_contains("Reduce[Cos[2 x] == 0, x]", "Element[C[1], Integers]");
+    /* Explicit Complexes and default agree; Reals keeps the real periodic
+     * family (offset and period both real). */
+    run_contains("Reduce[Sin[x] == 1/2, x, Complexes]", "Element[C[1], Integers]");
+    run_contains("Reduce[Sin[x] == 1/2, x, Reals]", "Element[C[1], Integers]");
+
+    /* Reals soundness: a real-valued equation with NO real solution is False,
+     * not the (complex) ArcSin[2] family.  Previously the sign diagram wrongly
+     * returned False for Sin==1/2 and True for Sin==0; both are now correct. */
+    run_test("Reduce[Sin[x] == 2, x, Reals]", "False");
+    run_test("Reduce[Cos[x] == 3, x, Reals]", "False");
+    /* Over the Complexes the same equation keeps its full (complex) family. */
+    run_contains("Reduce[Sin[x] == 2, x, Complexes]", "ArcSin[2]");
 
     /* Reals-domain fixes: periodic families collapse to their real members. */
     run_test("Reduce[Exp[y] == 3, y, Reals]", "Equal[y, Log[3]]");
@@ -1337,6 +1361,134 @@ static void test_trig_pair(void) {
     /* A real-period trig pair keeps its full periodic family over Reals. */
     run_contains("Reduce[Sin[x + y] - Sin[x - 2 y] == 0, y, Reals]",
                  "Element[C[1], Integers]");
+}
+
+/* A periodic (circular-trig / hyperbolic) equation conjoined with inequalities
+ * that bound the variable selects the finitely many family members inside the
+ * region (reduce_trigregion.c).  Before this the sign diagram returned a WRONG
+ * `False`; the enumerate-then-exactly-verify method makes each answer sound. */
+static void test_periodic_conj_region(void) {
+    /* The reported case: two members of the 2 Pi C[1] family land in (0, 2 Pi). */
+    run_test("Reduce[Sin[x] == 1/2 && 0 < x < 2 Pi, x]",
+             "Or[Equal[x, Times[Rational[1, 6], Pi]], "
+                "Equal[x, Times[Rational[5, 6], Pi]]]");
+    run_contains("Reduce[Cos[x] == 1/2 && 0 < x < 2 Pi, x]",
+                 "Times[Rational[1, 3], Pi]");
+    run_contains("Reduce[Tan[x] == 1 && 0 < x < 2 Pi, x]",
+                 "Times[Rational[1, 4], Pi]");
+
+    /* A CLOSED interval keeps the boundary members (0, Pi, 2 Pi) -- the exact
+     * re-check honours `<=`, and the +/-1 slack on the integer range reaches
+     * them. */
+    run_test("Reduce[Sin[x] == 0 && 0 <= x <= 2 Pi, x]",
+             "Or[Equal[x, 0], Equal[x, Pi], Equal[x, Times[2, Pi]]]");
+
+    /* No family member in the window -> False (not a wrong non-empty set). */
+    run_test("Reduce[Sin[x] == 2 && 0 < x < 2 Pi, x]", "False");
+    run_test("Reduce[Cos[x] == 3 && 0 < x < 2 Pi, x]", "False");
+
+    /* Hyperbolic: an imaginary period contributes only its single real member,
+     * kept iff it lies in the region. */
+    run_test("Reduce[Sinh[x] == 2 && 0 < x < 10, x]", "Equal[x, ArcSinh[2]]");
+    run_test("Reduce[Sinh[x] == 2 && x < 0, x]", "False");
+
+    /* A wider window enumerates all four members, numerically sorted. */
+    run_test("Reduce[Sin[x] == 1/2 && -2 Pi < x < 2 Pi, x]",
+             "Or[Equal[x, Times[Rational[-11, 6], Pi]], "
+                "Equal[x, Times[Rational[-7, 6], Pi]], "
+                "Equal[x, Times[Rational[1, 6], Pi]], "
+                "Equal[x, Times[Rational[5, 6], Pi]]]");
+
+    /* An UNBOUNDED feasible region is left unevaluated (sound decline): the
+     * engine returns NULL and the sign diagram -- which would answer a wrong
+     * `False` -- is deliberately NOT run for this shape. */
+    run_contains("Reduce[Sin[x] == 1/2 && x > 0, x]", "Reduce[");
+    run_not_contains("Reduce[Sin[x] == 1/2 && x > 0, x]", "False");
+}
+
+/* A trig/hyperbolic INEQUALITY conjoined with bounding inequalities is
+ * sign-decomposed over the bounded window (reduce_trig_ineq_region): the zeros
+ * of the trig atoms cut it into sign-constant cells, each cell is tested at a
+ * sample point, and the true cells merge into a union of intervals.  Before
+ * this the sign diagram returned a wrong `False`. */
+static void test_trig_ineq_region(void) {
+    /* The reported case: Sin[x] > 1/2 holds on the open middle third. */
+    run_test("Reduce[Sin[x] > 1/2 && 0 < x < 2 Pi, x]",
+             "Inequality[Times[Rational[1, 6], Pi], Less, x, "
+                        "Less, Times[Rational[5, 6], Pi]]");
+    /* `>=` keeps the endpoints (exact boundary re-check). */
+    run_test("Reduce[Sin[x] >= 1/2 && 0 < x < 2 Pi, x]",
+             "Inequality[Times[Rational[1, 6], Pi], LessEqual, x, "
+                        "LessEqual, Times[Rational[5, 6], Pi]]");
+    /* Complement -> a UNION of two intervals reaching the region boundary. */
+    run_test("Reduce[Sin[x] < 1/2 && 0 < x < 2 Pi, x]",
+             "Or[Inequality[0, Less, x, Less, Times[Rational[1, 6], Pi]], "
+                "Inequality[Times[Rational[5, 6], Pi], Less, x, Less, Times[2, Pi]]]");
+    run_test("Reduce[Cos[x] > 0 && 0 < x < 2 Pi, x]",
+             "Or[Inequality[0, Less, x, Less, Times[Rational[1, 2], Pi]], "
+                "Inequality[Times[Rational[3, 2], Pi], Less, x, Less, Times[2, Pi]]]");
+    /* `!=` excludes the two zeros -> three intervals. */
+    run_contains("Reduce[Sin[x] != 1/2 && 0 < x < 2 Pi, x]",
+                 "Times[Rational[5, 6], Pi]");
+
+    /* Range-trivial cases: never / always true over the window. */
+    run_test("Reduce[Sin[x] > 2 && 0 < x < 2 Pi, x]", "False");
+    run_test("Reduce[Sin[x] > -2 && 0 < x < 2 Pi, x]",
+             "Inequality[0, Less, x, Less, Times[2, Pi]]");
+
+    /* Pole-bearing head (Tan) is declined -> left unevaluated (sound), not the
+     * sign diagram's wrong answer. */
+    run_contains("Reduce[Tan[x] > 1 && 0 < x < 2 Pi, x]", "Reduce[");
+    /* A partially-bounded (still unbounded) region is left unevaluated. */
+    run_contains("Reduce[Sin[x] > 1/2 && x > 0, x]", "Reduce[");
+}
+
+/* Evaluate `input`, capturing the real stderr fd into a temp file, and report
+ * whether the `Solve::ifun` advisory was emitted.  Restores stderr before
+ * returning so a later assertion failure still prints.  Uses POSIX dup/dup2
+ * (test binaries build with the compiler default dialect, not -std=c99). */
+static bool emits_solve_ifun(const char* input) {
+    fflush(stderr);
+    int   saved = dup(fileno(stderr));
+    FILE* cap   = tmpfile();
+    ASSERT(saved >= 0 && cap != NULL);
+    dup2(fileno(cap), fileno(stderr));
+
+    Expr* e   = parse_expression(input);
+    Expr* res = evaluate(e);
+    expr_free(res);
+    expr_free(e);
+
+    fflush(stderr);
+    dup2(saved, fileno(stderr));   /* restore the original stderr */
+    close(saved);
+
+    rewind(cap);
+    char   buf[8192];
+    size_t n = fread(buf, 1, sizeof(buf) - 1, cap);
+    buf[n] = '\0';
+    fclose(cap);
+    return strstr(buf, "Solve::ifun") != NULL;
+}
+
+/* Regression (reported 2026-09-03): Reduce is by definition the
+ * complete-solution path, so an internal Solve invoked by Reduce must NOT emit
+ * "Solve::ifun ... use Reduce for complete solution information" -- advice that
+ * is self-contradictory when the caller already is Reduce.  The guard is
+ * message-specific and scoped to Reduce: a bare Solve over the same kernel must
+ * still emit it, and genuine Solve diagnostics (svars/nsdim/...) are untouched. */
+static void test_no_ifun_message(void) {
+    /* The reported case, and the general inverse-function trig/exp surface. */
+    ASSERT(!emits_solve_ifun("Reduce[Sin[x + y] - Sin[x - 2 y] == 0, y]"));
+    ASSERT(!emits_solve_ifun("Reduce[Sin[x] == 1/2, x]"));
+    ASSERT(!emits_solve_ifun("Reduce[Cos[x] == 1/2, x]"));
+    ASSERT(!emits_solve_ifun("Reduce[Exp[t] == 3, t]"));
+
+    /* Scoping: a bare Solve over the same kernel STILL emits the advisory, and
+     * the scope is popped so a Solve *after* a Reduce is unaffected. */
+    ASSERT(emits_solve_ifun("Solve[Sin[x] == 1/2, x]"));
+    ASSERT(emits_solve_ifun("Solve[Cos[x] == 1/2, x]"));
+    printf("PASS: Reduce suppresses Solve::ifun; bare Solve retains it\n");
 }
 
 int main(void) {
@@ -1349,6 +1501,9 @@ int main(void) {
     TEST(test_equations_decline);
     TEST(test_transcendental_log_exp);
     TEST(test_trig_pair);
+    TEST(test_periodic_conj_region);
+    TEST(test_trig_ineq_region);
+    TEST(test_no_ifun_message);
     TEST(test_real_inequalities);
     TEST(test_rational_inequalities);
     TEST(test_linear_systems);

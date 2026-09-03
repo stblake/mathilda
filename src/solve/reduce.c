@@ -25,6 +25,7 @@
 #include "reduce_qe.h"
 #include "reduce_zerodim.h"
 #include "reduce_companions.h"
+#include "reduce_trigregion.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +34,7 @@
 #include "attr.h"
 #include "expr.h"
 #include "eval.h"
+#include "message.h"   /* mth_msg_ifun_suppress_push/pop: silence Solve::ifun inside Reduce */
 #include "print.h"
 #include "symtab.h"
 #include "sym_names.h"
@@ -107,9 +109,12 @@ static bool is_hyp_head(const char* hn) {
     return hn == SYM_Sinh || hn == SYM_Cosh || hn == SYM_Tanh
         || hn == SYM_Coth || hn == SYM_Sech || hn == SYM_Csch;
 }
+static bool is_circular_trig_head(const char* hn) {
+    return hn == SYM_Sin || hn == SYM_Cos || hn == SYM_Tan
+        || hn == SYM_Cot || hn == SYM_Sec || hn == SYM_Csc;
+}
 static bool is_trighyp_head(const char* hn) {
-    return hn == SYM_Sin || hn == SYM_Cos || hn == SYM_Tan || hn == SYM_Cot
-        || hn == SYM_Sec || hn == SYM_Csc || is_hyp_head(hn);
+    return is_circular_trig_head(hn) || is_hyp_head(hn);
 }
 
 /* Count trig/hyperbolic heads applied to a var-bearing argument. */
@@ -137,11 +142,22 @@ static bool reduce_has_hyp_over_var(const Expr* e, const Expr* var) {
     return false;
 }
 
+/* True iff `e` carries a circular-trig head (Sin/Cos/Tan/Cot/Sec/Csc) over
+ * `var` anywhere.  Mirrors reduce_has_hyp_over_var. */
+static bool reduce_has_circular_trig_over_var(const Expr* e, const Expr* var) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && e->data.function.arg_count == 1
+        && is_circular_trig_head(h->data.symbol.name)
+        && reduce_contains_var(e->data.function.args[0], var)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (reduce_has_circular_trig_over_var(e->data.function.args[i], var)) return true;
+    return false;
+}
+
 /* True iff `e` is a genuine TWO-argument trig/hyperbolic pair over `var`:
  * at least two trig/hyperbolic heads over the variable, which the argument-pair
- * reducer (solvetrigpair.c) targets and the single-peel isolator declines.
- * A single forward-trig head (Sin[x]==0) is intentionally excluded -- those
- * stay with the Reals sign-diagram engines. */
+ * reducer (solvetrigpair.c) targets and the single-peel isolator declines. */
 static bool reduce_has_trig_pair(const Expr* e, const Expr* var) {
     return reduce_count_trig_over_var(e, var) >= 2;
 }
@@ -167,6 +183,19 @@ static bool reduce_is_hyp_resid(const Expr* resid, const Expr* var) {
     return reduce_has_hyp_over_var(resid, var) && reduce_resid_degree_zero(resid, var);
 }
 
+/* True iff the residual is a single circular-trig equation in `var` (e.g.
+ * Sin[x]==1/2, Cos[2x]==0, Tan[x]==1): a circular-trig head over the variable
+ * and NOT a positive-degree polynomial.  Like the hyperbolics, every domain
+ * mishandled these before routing to Solve: the Complexes polynomial engine
+ * merely echoes `poly == 0`, and the Reals sign diagram is unsound
+ * (Reduce[Sin[x]==1/2,x,Reals] wrongly -> False; Reduce[Sin[x]==0,x,Reals]
+ * wrongly -> True).  Solve inverts the kernel into its complete periodic
+ * family, which reduce_eq_transcendental renders as a logical formula. */
+static bool reduce_is_circular_trig_resid(const Expr* resid, const Expr* var) {
+    return reduce_has_circular_trig_over_var(resid, var)
+        && reduce_resid_degree_zero(resid, var);
+}
+
 /* True iff `e` carries a Log[g(var)] somewhere. */
 static bool reduce_has_log(const Expr* e, const Expr* var) {
     if (!e || e->type != EXPR_FUNCTION) return false;
@@ -186,6 +215,91 @@ static bool reduce_has_log(const Expr* e, const Expr* var) {
  * real identities such as Log[x^2]==2 Log[-x] -> x < 0. */
 static bool reduce_is_pure_exp_resid(const Expr* resid, const Expr* var) {
     return reduce_is_transcendental_resid(resid, var) && !reduce_has_log(resid, var);
+}
+
+/* Residual lhs - rhs of an Equal[lhs, rhs] atom (owned, evaluated). */
+static Expr* reduce_eq_atom_resid(const Expr* eqatom) {
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy(eqatom->data.function.args[0]),
+                   expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer(-1),
+                           expr_copy(eqatom->data.function.args[1]) }, 2) }, 2));
+}
+
+/* True iff `atom` is Equal[l, r] whose residual is a single circular-trig or
+ * hyperbolic equation over `var` -- the periodic kernels the sign diagram
+ * cannot represent inside a bounding region. */
+static bool reduce_is_periodic_eq(const Expr* atom, const Expr* var) {
+    if (!is_head(atom, SYM_Equal) || atom->data.function.arg_count != 2) return false;
+    Expr* resid = reduce_eq_atom_resid(atom);
+    bool ok = reduce_is_circular_trig_resid(resid, var)
+           || reduce_is_hyp_resid(resid, var);
+    expr_free(resid);
+    return ok;
+}
+
+/* True iff `atom` is an inequality relation (`<`, `<=`, `>`, `>=`, Inequality)
+ * that mentions `var`. */
+static bool reduce_is_ineq_over_var(const Expr* atom, const Expr* var) {
+    if (!atom || atom->type != EXPR_FUNCTION
+        || atom->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* hn = atom->data.function.head->data.symbol.name;
+    bool is_ineq = (hn == SYM_Less || hn == SYM_LessEqual
+                 || hn == SYM_Greater || hn == SYM_GreaterEqual
+                 || hn == SYM_Inequality);
+    return is_ineq && reduce_contains_var(atom, var);
+}
+
+/* Recognise `And[<one periodic equation over var>, <inequalities over var>…]`.
+ * On success sets *peq_out to the (borrowed) periodic-equation atom and returns
+ * a NEW `And` of the remaining constraint atoms (owned; a lone atom is returned
+ * bare).  Returns NULL when the shape does not match. */
+static Expr* reduce_periodic_conj_split(const Expr* conj, const Expr* var,
+                                        const Expr** peq_out) {
+    if (!is_head(conj, SYM_And) || conj->data.function.arg_count < 2) return NULL;
+    size_t n = conj->data.function.arg_count;
+    const Expr* peq = NULL;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = conj->data.function.args[i];
+        if (reduce_is_periodic_eq(a, var)) {
+            if (peq) return NULL;               /* more than one periodic eq */
+            peq = a;
+        } else if (!reduce_is_ineq_over_var(a, var)) {
+            return NULL;                        /* an atom we do not handle */
+        }
+    }
+    if (!peq) return NULL;
+    Expr** rest = (Expr**)malloc(n * sizeof(Expr*));
+    size_t nr = 0;
+    for (size_t i = 0; i < n; i++)
+        if (conj->data.function.args[i] != peq)
+            rest[nr++] = expr_copy(conj->data.function.args[i]);
+    Expr* region = (nr == 1) ? rest[0]
+                 : expr_new_function(expr_new_symbol(SYM_And), rest, nr);
+    free(rest);
+    *peq_out = peq;
+    return region;
+}
+
+/* True iff `atom` is an inequality (`<`, `<=`, `>`, `>=`, `!=`, Inequality) with
+ * a trig/hyperbolic head over `var`. */
+static bool reduce_atom_is_trig_ineq(const Expr* atom, const Expr* var) {
+    if (!atom || atom->type != EXPR_FUNCTION
+        || atom->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* hn = atom->data.function.head->data.symbol.name;
+    bool is_ineq = (hn == SYM_Less || hn == SYM_LessEqual || hn == SYM_Greater
+                 || hn == SYM_GreaterEqual || hn == SYM_Unequal
+                 || hn == SYM_Inequality);
+    return is_ineq && reduce_count_trig_over_var(atom, var) >= 1;
+}
+
+/* True iff `conj` is an `And` with at least one trig/hyperbolic inequality atom
+ * over `var` -- the shape the bounded-region cell engine targets. */
+static bool reduce_has_trig_ineq_conj(const Expr* conj, const Expr* var) {
+    if (!is_head(conj, SYM_And)) return false;
+    for (size_t i = 0; i < conj->data.function.arg_count; i++)
+        if (reduce_atom_is_trig_ineq(conj->data.function.args[i], var)) return true;
+    return false;
 }
 
 /* ------------------------------------------------------------------ *
@@ -303,7 +417,23 @@ static Expr** collect_vars(Expr* vars, int* nv_out) {
  *  builtin                                                            *
  * ------------------------------------------------------------------ */
 
+static Expr* reduce_impl(Expr* res);
+
+/* Reduce is, by definition, the complete-solution path.  Bracket the whole
+ * evaluation in the ifun-suppression scope so that no internal Solve emits
+ * `Solve::ifun` ("use Reduce for complete solution information") -- advice that
+ * is self-contradictory when the caller already is Reduce.  There are ~13
+ * distinct Solve re-entry points across the reduce_* engines; guarding here (one
+ * push, one guaranteed pop) covers them all, and leaves genuine Solve
+ * diagnostics (svars/nsdim/nongen) untouched.  See message.h. */
 Expr* builtin_reduce(Expr* res) {
+    mth_msg_ifun_suppress_push();
+    Expr* out = reduce_impl(res);
+    mth_msg_ifun_suppress_pop();
+    return out;
+}
+
+static Expr* reduce_impl(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;
@@ -478,7 +608,8 @@ Expr* builtin_reduce(Expr* res) {
                  * and inverts Exp kernels -- and render the rule-list as a
                  * logical formula.  Falls through when Solve declines. */
                 if (reduce_is_transcendental_resid(apoly, vlist[0])
-                    || reduce_is_trig_resid(apoly, vlist[0])) {
+                    || reduce_is_trig_resid(apoly, vlist[0])
+                    || reduce_is_circular_trig_resid(apoly, vlist[0])) {
                     out = reduce_eq_transcendental(apoly, vlist[0], dom, &opts);
                 }
                 if (!out) {
@@ -526,6 +657,7 @@ Expr* builtin_reduce(Expr* res) {
                                        expr_copy(orig_eq->data.function.args[1]) },
                                    2) }, 2));
                 if (reduce_is_trig_resid(resid0, vlist[0])
+                    || reduce_is_circular_trig_resid(resid0, vlist[0])
                     || reduce_is_hyp_resid(resid0, vlist[0])
                     || reduce_is_pure_exp_resid(resid0, vlist[0])) {
                     const Expr* solve_dom =
@@ -535,13 +667,38 @@ Expr* builtin_reduce(Expr* res) {
                 }
                 expr_free(resid0);
             }
+            /* Pre-empt over Reals: a conjunction of a periodic (circular-trig /
+             * hyperbolic) equation with bounding inequalities selects the
+             * finitely many family members inside the region.  The sign diagram
+             * cannot represent a periodic family (it returns a WRONG result --
+             * e.g. Reduce[Sin[x]==1/2 && 0<x<2Pi, x] -> False), so on this shape
+             * we run ONLY the family enumerator and, if it declines (unbounded /
+             * unrecognised region), leave the statement unevaluated rather than
+             * fall through to the (unsound) sign diagram. */
+            bool trig_region_shape = false;
+            if (!out) {
+                const Expr* peq = NULL;
+                Expr* region_stmt = reduce_periodic_conj_split(orig_eq, vlist[0], &peq);
+                if (region_stmt) {
+                    /* One periodic EQUATION + bounds: enumerate family members. */
+                    trig_region_shape = true;
+                    out = reduce_periodic_region(peq, region_stmt, vlist[0], &opts);
+                    expr_free(region_stmt);
+                } else if (reduce_has_trig_ineq_conj(orig_eq, vlist[0])) {
+                    /* A trig/hyperbolic INEQUALITY + bounds: sign-decompose the
+                     * bounded region into cells (reduce_trigregion.c). */
+                    trig_region_shape = true;
+                    out = reduce_trig_ineq_region(orig_eq, vlist[0], &opts);
+                }
+            }
             /* Phase 2: any univariate combination of polynomial equations and
              * inequalities over the reals -> sign diagram.  Phase 9: when an atom
              * is a real radical / pole / bounded-domain transcendental (so the
              * exact polynomial engine declines), the general sign diagram takes
-             * over. */
-            if (!out) out = reduce_univar(f, vlist[0], vlist, nv, &opts);
-            if (!out) out = reduce_univar_general(f, vlist[0], vlist, nv, &opts);
+             * over.  Skipped on the periodic-region shapes above (the sign
+             * diagram cannot represent a periodic family and is unsound there). */
+            if (!out && !trig_region_shape) out = reduce_univar(f, vlist[0], vlist, nv, &opts);
+            if (!out && !trig_region_shape) out = reduce_univar_general(f, vlist[0], vlist, nv, &opts);
             if (!out && is_head(orig_eq, SYM_Equal)
                 && orig_eq->data.function.arg_count == 2) {
                 /* The sign-diagram engines declined this univariate equation.
