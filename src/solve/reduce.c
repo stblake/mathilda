@@ -103,6 +103,91 @@ static bool reduce_is_transcendental_resid(const Expr* resid, const Expr* var) {
     return !poly_pos_deg;
 }
 
+static bool is_hyp_head(const char* hn) {
+    return hn == SYM_Sinh || hn == SYM_Cosh || hn == SYM_Tanh
+        || hn == SYM_Coth || hn == SYM_Sech || hn == SYM_Csch;
+}
+static bool is_trighyp_head(const char* hn) {
+    return hn == SYM_Sin || hn == SYM_Cos || hn == SYM_Tan || hn == SYM_Cot
+        || hn == SYM_Sec || hn == SYM_Csc || is_hyp_head(hn);
+}
+
+/* Count trig/hyperbolic heads applied to a var-bearing argument. */
+static int reduce_count_trig_over_var(const Expr* e, const Expr* var) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    int n = 0;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && e->data.function.arg_count == 1
+        && is_trighyp_head(h->data.symbol.name)
+        && reduce_contains_var(e->data.function.args[0], var)) n = 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        n += reduce_count_trig_over_var(e->data.function.args[i], var);
+    return n;
+}
+
+/* True iff `e` carries a hyperbolic head over `var` anywhere. */
+static bool reduce_has_hyp_over_var(const Expr* e, const Expr* var) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && e->data.function.arg_count == 1
+        && is_hyp_head(h->data.symbol.name)
+        && reduce_contains_var(e->data.function.args[0], var)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (reduce_has_hyp_over_var(e->data.function.args[i], var)) return true;
+    return false;
+}
+
+/* True iff `e` is a genuine TWO-argument trig/hyperbolic pair over `var`:
+ * at least two trig/hyperbolic heads over the variable, which the argument-pair
+ * reducer (solvetrigpair.c) targets and the single-peel isolator declines.
+ * A single forward-trig head (Sin[x]==0) is intentionally excluded -- those
+ * stay with the Reals sign-diagram engines. */
+static bool reduce_has_trig_pair(const Expr* e, const Expr* var) {
+    return reduce_count_trig_over_var(e, var) >= 2;
+}
+
+static bool reduce_resid_degree_zero(const Expr* resid, const Expr* var) {
+    Expr* e = eval_and_free(expr_new_function(expr_new_symbol(SYM_Exponent),
+        (Expr*[]){ expr_copy((Expr*)resid), expr_copy((Expr*)var) }, 2));
+    bool poly_pos_deg = (e->type == EXPR_INTEGER && e->data.integer >= 1);
+    expr_free(e);
+    return !poly_pos_deg;
+}
+
+/* True iff the residual is a genuine two-argument trig/hyperbolic pair in `var`
+ * (not a positive-degree polynomial).  Mirrors reduce_is_transcendental_resid. */
+static bool reduce_is_trig_resid(const Expr* resid, const Expr* var) {
+    return reduce_has_trig_pair(resid, var) && reduce_resid_degree_zero(resid, var);
+}
+
+/* True iff the residual is a single hyperbolic equation in `var` (the Reals
+ * sign-diagram mishandles these, e.g. Reduce[Sinh[y]==0,y,Reals] wrongly
+ * returns True), so it is pre-empted to Solve over Reals only. */
+static bool reduce_is_hyp_resid(const Expr* resid, const Expr* var) {
+    return reduce_has_hyp_over_var(resid, var) && reduce_resid_degree_zero(resid, var);
+}
+
+/* True iff `e` carries a Log[g(var)] somewhere. */
+static bool reduce_has_log(const Expr* e, const Expr* var) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Log
+        && e->data.function.arg_count == 1
+        && reduce_contains_var(e->data.function.args[0], var)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (reduce_has_log(e->data.function.args[i], var)) return true;
+    return false;
+}
+
+/* True iff `resid` is a pure exponential equation over `var` (an exponential
+ * b^g(var) but NO Log over var).  The Reals sign-diagram mishandles these
+ * (Reduce[Exp[y]==3,y,Reals] wrongly returns False), so they are pre-empted to
+ * Solve.  Log is excluded because it keeps its sign-diagram-first handling for
+ * real identities such as Log[x^2]==2 Log[-x] -> x < 0. */
+static bool reduce_is_pure_exp_resid(const Expr* resid, const Expr* var) {
+    return reduce_is_transcendental_resid(resid, var) && !reduce_has_log(resid, var);
+}
+
 /* ------------------------------------------------------------------ *
  *  Option parsing (mirrors solve.c's peeler)                          *
  * ------------------------------------------------------------------ */
@@ -392,7 +477,8 @@ Expr* builtin_reduce(Expr* res) {
                  * it back through Solve -- which combines multi-log residuals
                  * and inverts Exp kernels -- and render the rule-list as a
                  * logical formula.  Falls through when Solve declines. */
-                if (reduce_is_transcendental_resid(apoly, vlist[0])) {
+                if (reduce_is_transcendental_resid(apoly, vlist[0])
+                    || reduce_is_trig_resid(apoly, vlist[0])) {
                     out = reduce_eq_transcendental(apoly, vlist[0], dom, &opts);
                 }
                 if (!out) {
@@ -423,12 +509,38 @@ Expr* builtin_reduce(Expr* res) {
                 out = reduce_zerodim(f, vlist, nv, false, &opts);
             }
         } else if (reals && nv == 1) {
+            /* Pre-empt over Reals: trig/hyperbolic and pure-exponential single
+             * equations are NOT handled correctly by the sign-diagram engines
+             * (Reduce[Sinh[y]==0,y,Reals] wrongly -> True; Reduce[Exp[y]==3,y,
+             * Reals] wrongly -> False), and those engines return a (wrong)
+             * non-NULL result that would otherwise block the transcendental
+             * fallback below.  Route such equations through Solve first; Log
+             * keeps its sign-diagram-first handling (real identities). */
+            if (is_head(orig_eq, SYM_Equal)
+                && orig_eq->data.function.arg_count == 2) {
+                Expr* resid0 = eval_and_free(expr_new_function(
+                    expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_copy(orig_eq->data.function.args[0]),
+                               expr_new_function(expr_new_symbol(SYM_Times),
+                                   (Expr*[]){ expr_new_integer(-1),
+                                       expr_copy(orig_eq->data.function.args[1]) },
+                                   2) }, 2));
+                if (reduce_is_trig_resid(resid0, vlist[0])
+                    || reduce_is_hyp_resid(resid0, vlist[0])
+                    || reduce_is_pure_exp_resid(resid0, vlist[0])) {
+                    const Expr* solve_dom =
+                        (dom && dom->type == EXPR_SYMBOL
+                         && dom->data.symbol.name == SYM_Reals) ? dom : NULL;
+                    out = reduce_eq_transcendental(resid0, vlist[0], solve_dom, &opts);
+                }
+                expr_free(resid0);
+            }
             /* Phase 2: any univariate combination of polynomial equations and
              * inequalities over the reals -> sign diagram.  Phase 9: when an atom
              * is a real radical / pole / bounded-domain transcendental (so the
              * exact polynomial engine declines), the general sign diagram takes
              * over. */
-            out = reduce_univar(f, vlist[0], vlist, nv, &opts);
+            if (!out) out = reduce_univar(f, vlist[0], vlist, nv, &opts);
             if (!out) out = reduce_univar_general(f, vlist[0], vlist, nv, &opts);
             if (!out && is_head(orig_eq, SYM_Equal)
                 && orig_eq->data.function.arg_count == 2) {

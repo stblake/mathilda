@@ -1314,6 +1314,31 @@ static void test_transcendental_log_exp(void) {
                  "And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
 }
 
+/* Two-argument trig/hyperbolic pairs (solvetrigpair.c) route through Reduce;
+ * single forward circular trig stays with the sign diagram; and the two prior
+ * Reals-domain bugs are fixed by the periodic-family collapse. */
+static void test_trig_pair(void) {
+    /* Spurious-pole trap -> False; parity identity -> True; contradiction. */
+    run_test("Reduce[Sec[x + y] - Tan[x + y] == 0, y]", "False");
+    run_test("Reduce[Coth[x + y] - Tanh[x + y] == 0, y]", "False");
+    run_test("Reduce[Tan[x + y] + Tan[-x - y] == 0, y]", "True");
+    run_test("Reduce[Cosh[x + y] - Cosh[-x - y] == 0, y]", "True");
+
+    /* A solved pair renders as an Or of Element[C[k],Integers] && y == ...  */
+    run_contains("Reduce[Tan[x + y] - Tan[x - 2 y] == 0, y]", "Element[C[1], Integers]");
+    run_contains("Reduce[Sinh[a x + b y] - Sinh[c x + d y] == 0, y]", "Element[C[1], Integers]");
+
+    /* Single forward circular trig is NOT rerouted (sign-diagram territory). */
+    run_test("Reduce[Sin[x] == 0, x]", "Equal[Sin[x], 0]");
+
+    /* Reals-domain fixes: periodic families collapse to their real members. */
+    run_test("Reduce[Exp[y] == 3, y, Reals]", "Equal[y, Log[3]]");
+    run_test("Reduce[Sinh[y] == 0, y, Reals]", "Equal[y, 0]");
+    /* A real-period trig pair keeps its full periodic family over Reals. */
+    run_contains("Reduce[Sin[x + y] - Sin[x - 2 y] == 0, y, Reals]",
+                 "Element[C[1], Integers]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1323,6 +1348,7 @@ int main(void) {
     TEST(test_equations);
     TEST(test_equations_decline);
     TEST(test_transcendental_log_exp);
+    TEST(test_trig_pair);
     TEST(test_real_inequalities);
     TEST(test_rational_inequalities);
     TEST(test_linear_systems);

@@ -88,6 +88,29 @@ Attempts to solve an equation or system of equations for one or more variables.
     `{{x -> E}, {x -> E^2}}`).  Implemented in `src/solvetrig.c`
     (`solvetrig_solve_poly_in_kernel`), reusing the polynomial and
     inverse-function specialists.
+  - **Generalized two-argument trigonometric / hyperbolic** `f[A(y)] ± g[B(y)]
+    == c` (single variable, more than one trig/hyperbolic head over `y`, so the
+    single-peel isolator declines), `src/solve/solvetrigpair.c`. Reciprocal-
+    normalizes Tan/Cot/Sec/Csc → Sin/Cos and Tanh/… → Sinh/Cosh (under
+    `trig_canon` suppression), combines over a common denominator, and factors
+    the numerator into single-argument atoms via sum-to-product / reverse-angle-
+    addition identities; each atom is solved through the inverse-function
+    specialist and the branches are unioned. A **pole gate** drops any solution
+    family on which a denominator factor vanishes identically (so
+    `Solve[Sec[x+y]-Tan[x+y]==0, y]` -> `{}`), and factoring to `0`/nonzero-
+    constant handles parity identities (`Tan[x+y]+Tan[-x-y]==0` -> `{{}}`, i.e.
+    all `y`) and contradictions (`Coth[x+y]-Tanh[x+y]==0` -> `{}`). Handles
+    symbolic coefficients (`Solve[Sinh[a x+b y]-Sinh[c x+d y]==0, y]`),
+    higher-multiplicity arguments (`Tan[x^2+y]-Tan[x^2-2y]==0`), and
+    constant-RHS cases that collapse via product-to-sum
+    (`Cosh[x+y]+Cosh[x-y]==2`). Non-collapsing constant-RHS
+    (`Tan[x+y]-Tan[x-2y]==1`) and numeric mixed Sinh/Cosh
+    (`Sinh[x+y]-Cosh[x-2y]==0`) fall to a **single rational exponential
+    generator** `u = E^(σ y)` (σ = I/q circular, 1/q hyperbolic; q the rational
+    gcd of the var-coefficients) that reduces to a Laurent polynomial in `u`,
+    solved and unwound through the `Exp` peel (`Log[Root[…]]` output).
+    Symbolic-coefficient **mixed** Sinh/Cosh (`Sinh[a x+b y]+Cosh[c x+d y]==0`)
+    has no generator and declines (documented non-goal).
 - **Modular solving.** `Solve[poly == 0, x, Modulus -> p]` solves a
   single-variable polynomial equation over the finite ring `Z/pZ` by residue
   enumeration (`src/solvemod.c`), returning `{{x -> r}, ...}` with `r`
@@ -840,9 +863,27 @@ degenerate branch, and it handles inequalities over the reals.
   `Reduce[Exp[2 t] - 3 Exp[t] + 2 == 0, t] -> (C[1] ∈ Integers && t == 2 I C[1] Pi) || (C[1] ∈ Integers && t == Log[2] + 2 I C[1] Pi)`.
   The route also runs as a fallback in the reals branch after the sign-diagram
   engines decline, so real-domain log identities such as
-  `Reduce[Log[x^2] == 2 Log[-x], x, Reals] -> x < 0` are unaffected; forward-trig
-  equations are deliberately not rerouted (`Reduce[Sin[x] == 0, x]` is
-  unevaluated), and ordinary polynomials keep their leading-coefficient split.
+  `Reduce[Log[x^2] == 2 Log[-x], x, Reals] -> x < 0` are unaffected;
+  single-argument forward-trig equations stay with the sign-diagram engines
+  (`Reduce[Sin[x] == 0, x]`), and ordinary polynomials keep their
+  leading-coefficient split.
+- **Univariate transcendental trigonometric / hyperbolic equations** (same
+  `reduce_eq_transcendental` renderer). A two-argument trig/hyperbolic residual
+  (`reduce_has_trig_pair`) is routed back through `Solve` — which now solves
+  `f[A(y)] ± g[B(y)] == c` (see `Solve` above) — on both the Complexes and
+  Reals branches, rendered as the same `Or` of `Element[C[k], Integers] && y
+  == …` conjuncts, or `True`/`False` for a parity identity / contradiction:
+  `Reduce[Tan[x+y]-Tan[x-2y]==0, y] -> (C[1] ∈ Integers && y == Pi/3 + 2 C[1]
+  Pi/3) || (C[1] ∈ Integers && y == 2 C[1] Pi/3)`;
+  `Reduce[Sec[x+y]-Tan[x+y]==0, y] -> False`;
+  `Reduce[Tan[x+y]+Tan[-x-y]==0, y] -> True`.
+- **Reals-domain periodic-family collapse.** Over `Reals`,
+  `reduce_eq_transcendental` keeps only the real members of each periodic
+  family — a **real** period keeps the whole family, an **imaginary** period
+  keeps its single real member at `C[k] = 0`. This corrects two prior bugs:
+  `Reduce[Exp[y] == 3, y, Reals] -> y == Log[3]` (was `False`) and
+  `Reduce[Sinh[y] == 0, y, Reals] -> y == 0` (was `True`), while
+  `Reduce[Sin[y] == 1/2, y, Reals]` keeps its full `2 Pi C[1]` family.
 - **Multivariate linear equation systems over Complexes**, with complete case
   analysis on the parameters (symbolic Gaussian elimination): a nonzero-constant
   pivot is used directly, a symbolic pivot `p` splits into `p != 0` and `p == 0`

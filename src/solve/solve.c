@@ -39,6 +39,7 @@
 #include "reduce_zerodim.h"
 #include "solverad.h"
 #include "solvetrig.h"
+#include "solvetrigpair.h"
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -1081,9 +1082,19 @@ Expr* builtin_solve(Expr* res) {
                 out = solveinv_solve_inverse_equality(
                     expr, var, dom, &opts.inv);
             }
-            /* Trig canonicalisation pre-pass: handles multi-trig
-             * equations that the inverse-function isolator can't peel
-             * because more than one trig head over var is present. */
+            /* Argument-pair reducer (primary trig path): generalized
+             * two-argument equations f[A(y)] +/- g[B(y)] == c that the
+             * single-peel isolator declines (>1 var term).  Sum-to-product
+             * / reciprocal reduction with a pole gate; handles symbolic
+             * coefficients and yields clean periodic output. */
+            if (!out && opts.inv.enabled
+                && solvetrigpair_looks_applicable(expr, var)) {
+                out = solvetrigpair_solve(expr, var, dom, &opts.inv);
+            }
+            /* Trig canonicalisation fallback: TrigToExp polynomial-in-u
+             * for equations whose arguments are integer multiples of a
+             * single variable (Sin[3x]-Sin[x]==0), and the generalized
+             * exponential-generator cases the pair reducer declines. */
             if (!out && opts.inv.enabled
                 && solvetrig_has_trig(expr, var)) {
                 out = solvetrig_solve_trig_equality(
@@ -1299,5 +1310,6 @@ void solve_init(void) {
     solverad_init();
     solveinv_init();
     solvetrig_init();
+    solvetrigpair_init();
     solvemod_init();
 }

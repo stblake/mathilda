@@ -441,6 +441,41 @@ static void test_transcendental_log_exp(void) {
     run_test("Length[Solve[Exp[a t] Exp[b t]/Exp[c t + d] == C[1], t]]", "1");
 }
 
+/* Generalized two-argument trig/hyperbolic equations (solvetrigpair.c).
+ * Structural / count / residual assertions -- the ConditionalExpression
+ * families with symbolic parameters are not string-stable. */
+static void test_trig_pair(void) {
+    /* Spurious-pole traps -> no solution (pole gate). */
+    run_test("Solve[Sec[x + y] - Tan[x + y] == 0, y]", "List[]");
+    run_test("Solve[Csc[x + y] - Cot[x + y] == 0, y]", "List[]");
+    run_test("Solve[Csch[x + y] - Coth[x + y] == 0, y]", "List[]");
+    /* Contradiction -> no solution. */
+    run_test("Solve[Coth[x + y] - Tanh[x + y] == 0, y]", "List[]");
+    /* Parity identities -> all y ({{}}). */
+    run_test("Solve[Tan[x + y] + Tan[-x - y] == 0, y]", "List[List[]]");
+    run_test("Solve[Sinh[x + y] + Sinh[-x - y] == 0, y]", "List[List[]]");
+    run_test("Solve[Cosh[x + y] - Cosh[-x - y] == 0, y]", "List[List[]]");
+
+    /* Solved families: deterministic counts. */
+    run_test("Length[Solve[Tan[x + y] - Tan[x - 2 y] == 0, y]]", "2");
+    run_test("Length[Solve[Sin[x + y] - Sin[x - 2 y] == 0, y]]", "4");
+    run_test("Length[Solve[Sec[x + y] - Sec[x - 2 y] == 0, y]]", "4");
+    run_test("Length[Solve[Sinh[a x + b y] - Sinh[c x + d y] == 0, y]]", "4"); /* symbolic */
+    run_test("Length[Solve[Tanh[x + y] - Tanh[x - 2 y] == 0, y]]", "2");
+    run_test("Length[Solve[Tan[x^2 + y] - Tan[x^2 - 2 y] == 0, y]]", "2");     /* higher mult */
+    run_test("Length[Solve[Cosh[x + y] + Cosh[x - y] == 2, y]]", "2");         /* collapse */
+    run_test("Length[Solve[Tan[x + y] - Tan[x - 2 y] == 1, y]]", "8");         /* Engine 2 */
+
+    /* Residuals verify (lenient, back-substitute one family at C[1]->1). */
+    run_test("PossibleZeroQ[(Sin[x + y] - Sin[x - 2 y]) /. "
+             "(Solve[Sin[x + y] - Sin[x - 2 y] == 0, y][[1]] /. C[1] -> 1)]", "True");
+    run_test("PossibleZeroQ[(Tan[x + y] - Cot[x - 2 y]) /. "
+             "(Solve[Tan[x + y] - Cot[x - 2 y] == 0, y][[1]] /. C[1] -> 1)]", "True");
+
+    /* Symbolic-coefficient mixed Sinh/Cosh has no generator -> declines. */
+    run_test("Head[Solve[Sinh[a x + b y] + Cosh[c x + d y] == 0, y]]", "Solve");
+}
+
 /* b^x == a for a var-free constant base b != E -- reduced through
  * Power[b, g] -> Exp[g * Log[b]] inside try_isolate_payload so we
  * reuse peel_exp's principal + 2 Pi I C[k] family.  Mirrors
@@ -1406,6 +1441,7 @@ int main(void) {
     TEST(test_inverse_log);
     TEST(test_inverse_exp);
     TEST(test_transcendental_log_exp);
+    TEST(test_trig_pair);
     TEST(test_inverse_power_const_base);
     TEST(test_inverse_sin);
     TEST(test_inverse_sin_concrete);

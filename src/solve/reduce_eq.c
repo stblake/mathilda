@@ -10,6 +10,7 @@
 
 #include "eval.h"
 #include "sym_names.h"
+#include "zero_test.h"
 
 #include <stdlib.h>
 
@@ -236,6 +237,86 @@ RForm* reduce_eq_univariate(const Expr* poly, const Expr* var,
  *  Transcendental single equation -> logical formula                  *
  * ------------------------------------------------------------------ */
 
+/* True iff Im[e] is provably zero (e is real). */
+static bool im_is_zero(const Expr* e) {
+    Expr* im = eval_and_free(expr_new_function(expr_new_symbol("Im"),
+        (Expr*[]){ expr_copy((Expr*)e) }, 1));
+    bool z = (zero_test_decide(im) == ZERO_TEST_TRUE);
+    expr_free(im);
+    return z;
+}
+
+/* Over Reals, collapse each periodic solution family to its real members.
+ * A ConditionalExpression value a + b*C[k] whose period b is real keeps the
+ * whole family (e.g. a trig ArcSin[c] + 2 Pi C[k]); one whose period is
+ * non-real (imaginary, e.g. Sinh/Exp's 2 I Pi C[k]) has a single real member
+ * at C[k]=0 (kept unconditionally if real, else the family is dropped).  This
+ * turns Reduce[Sinh[y]==0,y,Reals] -> y==0 and Reduce[Exp[y]==3,y,Reals] ->
+ * y==Log[3] instead of echoing the complex family.  Consumes `sols`. */
+static Expr* collapse_reals_families(Expr* sols) {
+    if (!is_head(sols, SYM_List)) return sols;
+    size_t n = sols->data.function.arg_count;
+    Expr** kept = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
+    size_t nk = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* row = sols->data.function.args[i];
+        if (!is_head(row, SYM_List) || row->data.function.arg_count != 1) {
+            kept[nk++] = expr_copy(row);   /* {{}} (all reals) or unusual: keep */
+            continue;
+        }
+        Expr* rule = row->data.function.args[0];
+        if (!is_head(rule, SYM_Rule) || rule->data.function.arg_count != 2) {
+            kept[nk++] = expr_copy(row);
+            continue;
+        }
+        Expr* lhs = rule->data.function.args[0];
+        Expr* val = rule->data.function.args[1];
+        const Expr* value = val;
+        const Expr* param = NULL;
+        if (is_head(val, SYM_ConditionalExpression)
+            && val->data.function.arg_count == 2) {
+            value = val->data.function.args[0];
+            Expr* cond = val->data.function.args[1];
+            if (is_head(cond, SYM_Element) && cond->data.function.arg_count == 2)
+                param = cond->data.function.args[0];
+        }
+        bool keep_family = false;
+        Expr* single_val = NULL;
+        if (param) {
+            Expr* coeff = eval_and_free(expr_new_function(
+                expr_new_symbol("Coefficient"),
+                (Expr*[]){ expr_copy((Expr*)value), expr_copy((Expr*)param) }, 2));
+            if (im_is_zero(coeff)) {
+                keep_family = true;                       /* real period */
+            } else {                                      /* isolated member */
+                Expr* v0 = eval_and_free(expr_new_function(
+                    expr_new_symbol("ReplaceAll"),
+                    (Expr*[]){ expr_copy((Expr*)value),
+                               expr_new_function(expr_new_symbol(SYM_Rule),
+                                   (Expr*[]){ expr_copy((Expr*)param),
+                                              expr_new_integer(0) }, 2) }, 2));
+                if (im_is_zero(v0)) single_val = v0; else expr_free(v0);
+            }
+            expr_free(coeff);
+        } else if (im_is_zero(value)) {
+            single_val = expr_copy((Expr*)value);
+        }
+        if (keep_family) {
+            kept[nk++] = expr_copy(row);
+        } else if (single_val) {
+            Expr* r = expr_new_function(expr_new_symbol(SYM_Rule),
+                (Expr*[]){ expr_copy(lhs), single_val }, 2);
+            kept[nk++] = expr_new_function(expr_new_symbol(SYM_List),
+                (Expr*[]){ r }, 1);
+        }
+        /* else: no real member -> drop */
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), kept, nk);
+    free(kept);
+    expr_free(sols);
+    return out;
+}
+
 Expr* reduce_eq_transcendental(const Expr* poly, const Expr* var,
                                const Expr* dom, const ReduceOpts* opts) {
     /* Re-enter Solve[poly == 0, var (, dom)]; base args are adopted by the
@@ -253,6 +334,10 @@ Expr* reduce_eq_transcendental(const Expr* poly, const Expr* var,
 
     /* Solve declined (unevaluated / non-list): let the caller fall back. */
     if (!is_head(sols, SYM_List)) { expr_free(sols); return NULL; }
+
+    /* Over Reals, keep only the real members of each periodic family. */
+    if (dom && dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals)
+        sols = collapse_reals_families(sols);
 
     size_t nsol = sols->data.function.arg_count;
     Expr** terms = (Expr**)malloc((nsol ? nsol : 1) * sizeof(Expr*));

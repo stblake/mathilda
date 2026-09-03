@@ -808,6 +808,7 @@ set(COMMON_SRC
     ../src/solve/solverad.c
     ../src/solve/solveinv.c
     ../src/solve/solvetrig.c
+    ../src/solve/solvetrigpair.c
     ../src/solve/solvemod.c
     ../src/solve/solveint.c
     ../src/solve/solve_common.c
