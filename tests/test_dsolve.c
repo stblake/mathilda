@@ -918,6 +918,31 @@ static void t_wave_dalembert(void) {
                "DSolve`WaveDAlembert");
 }
 
+/* ---- M6 (Phase 2): heat-equation Cauchy problem by the heat kernel (DSolve auto
+ * + pinned DSolve`HeatKernel).  The Gaussian convolution is nonelementary, so the
+ * solution is the unevaluated heat-kernel integral; the kernel itself is verified
+ * to solve the PDE (which the method checks internally). ---- */
+static void t_heat_kernel(void) {
+    /* auto-dispatch: solved (List), heat-kernel convolution present, no decline */
+    check_true("With[{r = DSolve[{D[u[x,t],t] == k D[u[x,t],{x,2}], u[x,0] == f[x]}, u, {x,t}]}, "
+               "Head[r] === List && r =!= {} && FreeQ[r, DSolve] && !FreeQ[r, Integrate]]");
+    /* pinned method, same */
+    check_true("With[{r = DSolve`HeatKernel[{D[u[x,t],t] == D[u[x,t],{x,2}], u[x,0] == f[x]}, u, {x,t}]}, "
+               "Head[r] === List && FreeQ[r, DSolve] && !FreeQ[r, Integrate]]");
+    /* the heat kernel (verified internally) solves the PDE */
+    check_true("With[{g = 1/(2 Sqrt[Pi k t]) Exp[-(x-y)^2/(4 k t)]}, "
+               "PossibleZeroQ[D[g,t] - k D[g,{x,2}]]]");
+    /* declines the backward heat equation (k < 0, ill-posed) */
+    check_form("Head[DSolve`HeatKernel[{D[u[x,t],t] == -D[u[x,t],{x,2}], u[x,0] == f[x]}, u, {x,t}]]",
+               "DSolve`HeatKernel");
+    /* declines a second-order-in-time (wave) equation with one condition */
+    check_form("Head[DSolve`HeatKernel[{D[u[x,t],{t,2}] == D[u[x,t],{x,2}], u[x,0] == f[x]}, u, {x,t}]]",
+               "DSolve`HeatKernel");
+    /* declines advection-diffusion (a u_x term is present) */
+    check_form("Head[DSolve`HeatKernel[{D[u[x,t],t] == D[u[x,t],{x,2}] + D[u[x,t],x], u[x,0] == f[x]}, u, {x,t}]]",
+               "DSolve`HeatKernel");
+}
+
 /* Pinned system + PDE method builtins: each is REPL-callable as DSolve`<Name>[...]
  * (M8 systems, M6 PDE), verified by back-substitution, and declines a wrong-shape
  * input (no silent wrong answer). */
@@ -1660,6 +1685,7 @@ int main(void) {
     TEST(t_pdesep);
     TEST(t_pdeclassify);
     TEST(t_wave_dalembert);
+    TEST(t_heat_kernel);
     TEST(t_sys_pde_pinned_methods);
     TEST(t_declines_unsupported);
     /* M9: backfill for thin methods */

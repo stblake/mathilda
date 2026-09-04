@@ -152,3 +152,31 @@ sort them itself. Verifying a d'Alembert solution with undefined `f,g` is imposs
 
 Still open in §2b: heat kernel / `Erf`; inhomogeneous / half-line / `Piecewise` wave;
 lower-order/inhomogeneous 2nd-order (telegraph); quasilinear/nonlinear first-order (§2a).
+
+---
+
+# DSolve M6 (Phase 2) — heat-kernel Cauchy problem  ✅ DONE (2026-09-04)
+
+`DSolve`HeatKernel` (`src/calculus/dsolve_heat.c`) — the whole-line heat Cauchy
+problem `u_t==k u_xx`, `u(x,t0)==f(x)` → the heat-kernel convolution
+`1/Sqrt[4πkτ] ∫_{-∞}^{∞} f(K) Exp[-(x−K)²/(4kτ)] dK`, `τ=t−t0`. Auto (new `is_pde`
+route, `neq==2`) + pinned.
+
+- [x] sort PDE vs 1 IC (reuse wave's approach); fixed var=time, free=space; sign-robust f rhs
+- [x] pure-heat gate: require u_t + u_xx only (no u_tt/u_x/u_xy/u/forcing), k>0
+- [x] build convolution with Integrate node RAW (no integration attempt → no hang, no engine leak)
+- [x] verify at KERNEL level (`G_t − k G_xx == 0`; confirms k); IC by delta-convergence (theory)
+- [x] auto route + pinned builtin `DSolve`HeatKernel`
+- [x] tests `t_heat_kernel` (auto+pinned solve & carry the convolution; kernel solves PDE; declines)
+- [x] `make check-c99` PASS; all 3 DSolve ctest suites green
+- [x] valgrind EXACTLY at baseline 13,440/6,312 — dsolve_heat fully leak-clean (raw-Integrate
+      avoids the per-call Integrate-engine leak that wave inherits)
+
+Key decisions → memory: the Gaussian convolution is nonelementary (Mathilda can't do
+the improper integral; Simplify on it HANGS), so build the Integrate node raw
+(unevaluated) and verify the KERNEL not the convolution; the IC (delta-convergence)
+rests on theory, not back-substitution. First bug found+fixed: time-derivative
+multi-index was swapped (space=v1 → time=v2 → u_t is Derivative[0,1], not [1,0]).
+
+Still open in §2b: Erf-producing step/box heat data; finite-interval Fourier series;
+inhomogeneous / half-line / `Piecewise` wave; telegraph; quasilinear/nonlinear 1st-order (§2a).

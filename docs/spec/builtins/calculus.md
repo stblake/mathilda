@@ -718,7 +718,8 @@ each is also callable as a pinned `DSolve`<Name>[...]` builtin (with its own doc
 | `DSolve`LinearSystemVarCoeff` | genuinely-coupled, non-triangular, **variable-coefficient** `Y' == A(x) Y + b(x)` of the scalar-factor class `A(x) == f(x) B` (`B` constant): `t = ∫f dx` reduces it to `dY/dt == B Y`, so `Φ == e^{B t}` reuses the constant-matrix builder; forcing by variation of parameters. Solves `{y'==(2y+z)/x, z'==(y+2z)/x}` (→ `x`, `x³`) and `{y'==x z, z'==-x y}` (→ `Cos/Sin[x²/2]`). Declines a constant `A` (that is `LinearFirstOrderSystem`'s) and any non-scalar-factor `A(x)`; the wider commutative-antiderivative / Floquet-Magnus class is future |
 
 The PDE methods (first- and second-order, separation of variables, the wave
-d'Alembert IVP) and the Sturm-Liouville eigenvalue method are likewise pinned:
+d'Alembert IVP, the heat-kernel Cauchy problem) and the Sturm-Liouville eigenvalue
+method are likewise pinned:
 
 | Method | Solves |
 |---|---|
@@ -726,6 +727,7 @@ d'Alembert IVP) and the Sturm-Liouville eigenvalue method are likewise pinned:
 | `DSolve`PDELinearSecondOrder` | homogeneous, principal-part-only, constant-coefficient 2nd-order linear PDE `A u_{v1 v1} + B u_{v1 v2} + C u_{v2 v2} == 0` by operator factoring: the trial `u == f(v2 + λ v1)` gives the characteristic quadratic `A λ² + B λ + C == 0`, so one method covers all three discriminant signs — distinct real roots (hyperbolic) → `C[1][v2+λ1 v1] + C[2][v2+λ2 v1]` (the wave equation `u_tt == c² u_xx → C[1][x-c t] + C[2][x+c t]`, d'Alembert); complex roots (elliptic) → the complex-characteristic form (Laplace `u_xx + u_yy == 0 → C[1][y-I x] + C[2][y+I x]`); a repeated root (parabolic) → `C[1][w] + v1 C[2][w]`, `w == v2 + λ v1`. Generated arbitrary functions `C[1][·]`, `C[2][·]`. Declines lower-order terms, forcing, and non-constant coefficients |
 | `DSolve`SeparationOfVariables` | separated product solution `u == X(v1) Y(v2)` of a homogeneous, constant-coefficient linear PDE with **no mixed derivative term**. Dividing by `X Y` splits it into two constant-coefficient ODEs in a separation constant λ — `Σ a_i X^(i) − λ X == 0` and `Σ b_j Y^(j) + (e + λ) Y == 0` — each solved by recursing into the scalar cascade; λ becomes a generated constant, and the one redundant overall scale is absorbed. The heat equation `u_t == u_xx` gives `E^(λ t)(C[1] E^(−√λ x) + C[2] E^(√λ x))`; also Helmholtz `u_xx + u_yy + u == 0`. Returns the *representative product mode* (the general solution is a superposition over λ), so **pinned-only** — not in the automatic cascade. Declines mixed-derivative, inhomogeneous, and non-constant-coefficient equations |
 | `DSolve`WaveDAlembert` | the initial-value problem for the 1-D wave equation on the whole line — `u_tt == c² u_xx` with `u(x,t0) == f(x)`, `u_t(x,t0) == g(x)` — by d'Alembert's formula `u = (f(x−cτ) + f(x+cτ))/2 + 1/(2c) Integrate[g(K), {K, x−cτ, x+cτ}]`, `τ = t−t0`. The two initial conditions are two-argument point conditions the shared parser does not split off, so they arrive as ordinary equations; the method identifies the PDE and the two conditions itself (the fixed variable is time, the free one space), and verifies by rebuilding the solution with `f == Cos, g == Sin`. Also solved automatically by `DSolve`. Declines non-hyperbolic equations and problems without the two conditions |
+| `DSolve`HeatKernel` | the Cauchy problem for the 1-D heat equation on the whole line — `u_t == k u_xx` with `u(x,t0) == f(x)` — by the heat kernel: `u = 1/Sqrt[4 π k τ] Integrate[f(K) Exp[-(x−K)²/(4 k τ)], {K, -∞, ∞}]`, `τ = t−t0`. The Gaussian convolution is nonelementary, so the integral is kept unevaluated (matching Mathematica for a general `f`); the solution is verified at the kernel level (the heat kernel `G` solves `G_t == k G_xx`, so the convolution does), the initial condition holding by the kernel's convergence to a delta as `τ → 0+`. Also solved automatically by `DSolve`. Requires `k > 0`; declines backward-heat, second-order-in-time, advection, and reaction equations |
 | `DSolve`EigenvalueProblem` | Sturm-Liouville `y'' + λ y == 0` on `[a,b]` with two homogeneous BCs (Dirichlet `y==0`, Neumann `y'==0`, or mixed) at two distinct points → the eigenvalue family + eigenfunctions: `{{λ -> ConditionalExpression[w_n², Element[C[1],Integers] && C[1]>=1], y -> Function[{x}, C[2] Sin/Cos[w_n(x-a)]]}}`, `w_n == n Pi/(b-a)` (same-type BCs) or `(2n-1)Pi/(2(b-a))` (mixed), `C[1]` the integer index, `C[2]` the amplitude. Every eigenpair is back-substitution verified under `C[1]` integer. **Pinned-only** (never misfires on an ordinary IVP/BVP). Constant weight only; Robin/periodic BCs and the `λ==0` Neumann mode are future |
 
 A **boundary-value problem** with multiple point conditions is fitted through the same
@@ -861,6 +863,17 @@ Out[19]= {{u -> Function[{x, t}, (f[x - c t] + f[x + c t])/2
 In[20]:= DSolve[{D[u[x,t],{t,2}] == 4 D[u[x,t],{x,2}], u[x,0] == Sin[x],
                  Derivative[0,1][u][x,0] == 0}, u, {x,t}]
 Out[20]= {{u -> Function[{x, t}, (Sin[x - 2 t] + Sin[x + 2 t])/2]}}
+```
+
+The **Cauchy problem** for the heat equation on the whole line is solved by the
+heat kernel (the Gaussian convolution is nonelementary, so it is kept as an
+integral — matching Mathematica for a general `f`):
+
+```
+In[21]:= DSolve[{D[u[x,t],t] == k D[u[x,t],{x,2}], u[x,0] == f[x]}, u, {x,t}]
+Out[21]= {{u -> Function[{x, t},
+             Integrate[f[K] E^(-(x - K)^2/(4 k t)), {K, -Infinity, Infinity}]
+               / (2 Sqrt[k π t])]}}
 ```
 
 ```

@@ -179,9 +179,12 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   equation on the whole line (`u_tt==c² u_xx` with `u(x,t0)==f(x)`,
   `u_t(x,t0)==g(x)`), auto-dispatched and pinned; the method sorts the PDE from its
   two initial conditions (which arrive as ordinary equations, `neq==3`) and carries
-  its own multi-equation verify. Still to do: quasilinear/nonlinear first-order;
-  inhomogeneous / lower-order-term 2nd-order (telegraph/damped wave); inhomogeneous
-  / half-line / `Piecewise` wave data; heat kernel / `Erf`.
+  its own multi-equation verify. **`HeatKernel`** (`dsolve_heat.c`) done — the
+  Cauchy problem for the 1-D heat equation by the heat-kernel convolution (auto +
+  pinned; `neq==2`, verified at the kernel level). Still to do:
+  quasilinear/nonlinear first-order; inhomogeneous / lower-order-term 2nd-order
+  (telegraph/damped wave); inhomogeneous / half-line / `Piecewise` wave data; the
+  Erf-producing heat data; finite-interval Fourier-series problems.
 - **M7 — first-order substitution + attribute cleanup.** ✅ DONE.
   `DSolve`FirstOrderSubstitution` (`y'==F(a x + b y + c)`, completing the 1a
   first-order family bar Riccati/Lagrange/Abel/Chini) and `AutonomousReduction`
@@ -676,7 +679,23 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   `g` cannot be differentiated). Solved automatically by `DSolve` and via the
   pinned `DSolve`WaveDAlembert`. `dsolve_wave.c`. *Future:* inhomogeneous forcing,
   half-line / boundary problems, `Piecewise` data.
-- `[ ] HeatEquation` (heat kernel / `Erf`).
+- `[✓] HeatKernel` — the Cauchy (initial-value) problem for the 1-D heat equation
+  on the whole line: `u_t == k u_xx`, `u(x,t0) == f(x)` → the heat-kernel
+  convolution `u = 1/Sqrt[4πkτ] ∫_{-∞}^{∞} f(K) Exp[-(x−K)²/(4kτ)] dK`, `τ = t−t0`.
+  The single initial condition arrives as an ordinary equation (`neq==2`); the
+  method sorts PDE-vs-IC itself (shared with the wave IVP's approach). The Gaussian
+  convolution is nonelementary, so the integral is returned unevaluated (matching
+  Mathematica for general `f`) and built WITHOUT attempting integration (the
+  `Function` body holds it, avoiding a hang on the improper integral). Verified at
+  the KERNEL level — the heat kernel `G` is a decidable Gaussian solving
+  `G_t == k G_xx` (so the convolution does, by differentiation under the integral),
+  which also checks `k` was read correctly; the initial condition holds by the
+  kernel's convergence to `δ(x−K)` as `τ→0+` (a distributional limit, not a
+  back-substitution). Solved automatically and via pinned `DSolve`HeatKernel`.
+  Requires `k>0` (forward diffusion); declines backward-heat, second-order-in-time,
+  advection (`u_x`), and reaction (`u`) terms. `dsolve_heat.c`. *Future:* the
+  Erf-producing step/box data (where the integral evaluates), advection–diffusion,
+  reaction, and finite-interval Fourier-series problems.
 
 ## Testing
 

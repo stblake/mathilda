@@ -172,6 +172,8 @@ extern void dsolve_pdesep_init(void);  /* DSolve`SeparationOfVariables (pinned-o
 extern void dsolve_pdeclassify_init(void);  /* PDEClassify (standalone classifier) */
 extern Expr* dsolve_wave_ivp_run(DSolveProblem* P);  /* wave d'Alembert IVP (own runner) */
 extern void dsolve_wave_init(void);
+extern Expr* dsolve_heat_run(DSolveProblem* P);      /* heat-kernel Cauchy IVP (own runner) */
+extern void dsolve_heat_init(void);
 extern Expr** dsolve_decouple_solve(DSolveProblem* P);
 extern Expr** dsolve_triangular_solve(DSolveProblem* P);
 /* dsolve_linsys_solve / dsolve_linsys_varcoeff_solve declared in dsolve_linsys.h */
@@ -243,6 +245,8 @@ Expr* builtin_dsolve(Expr* res) {
          * runner (multi-equation verify/assemble, not the single-equation
          * dsolve_run_pde).  Declines anything that is not a 1-D wave IVP. */
         if (!result) result = dsolve_wave_ivp_run(&P);
+        /* heat-kernel Cauchy IVP: PDE + one initial condition (neq==2). */
+        if (!result) result = dsolve_heat_run(&P);
     } else if (P.nfun > 1) {
         if (!result) result = dsolve_run_system(&P, dsolve_decouple_solve);
         if (!result) result = dsolve_run_system(&P, dsolve_triangular_solve);
@@ -429,6 +433,7 @@ void dsolve_init(void) {
     dsolve_pdesep_init();
     dsolve_pdeclassify_init();
     dsolve_wave_init();
+    dsolve_heat_init();
     dsolve_decouple_init();
     dsolve_triangular_init();
     dsolve_linsys_init();

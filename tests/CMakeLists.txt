@@ -721,6 +721,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_pdesep.c
     ../src/calculus/dsolve_pdeclassify.c
     ../src/calculus/dsolve_wave.c
+    ../src/calculus/dsolve_heat.c
     ../src/calculus/dsolve_decouple.c
     ../src/calculus/dsolve_triangular.c
     ../src/calculus/dsolve_linsys.c
