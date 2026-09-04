@@ -833,6 +833,21 @@ In[16]:= DSolve`SeparationOfVariables[D[u[x,t],t] == D[u[x,t],{x,2}], u, {x,t}]
 Out[16]= {{u -> Function[{x, t}, E^(-C[3] t) (C[1] E^(-1/2 Sqrt[-4 C[3]] x) + C[2] E^(1/2 Sqrt[-4 C[3]] x))]}}
 ```
 
+`PDEClassify[eqn, u, {v1, v2}]` classifies a second-order linear PDE by the
+discriminant `Δ = B² − 4 A C` of its principal part `A u_{v1 v1} + B u_{v1 v2} +
+C u_{v2 v2}` (only the highest-order terms matter): `"Hyperbolic"` (Δ>0),
+`"Parabolic"` (Δ=0), `"Elliptic"` (Δ<0). A mixed-type / parameter-dependent
+discriminant whose sign is not a decidable constant leaves the call unevaluated.
+
+```
+In[17]:= PDEClassify[D[u[t,x],{t,2}] == c^2 D[u[t,x],{x,2}] /. c -> 2, u, {t,x}]
+Out[17]= "Hyperbolic"
+
+In[18]:= {PDEClassify[D[u[x,t],t] == D[u[x,t],{x,2}], u, {x,t}],
+          PDEClassify[D[u[x,y],{x,2}] + D[u[x,y],{y,2}] == 0, u, {x,y}]}
+Out[18]= {"Parabolic", "Elliptic"}
+```
+
 ```
 In[1]:= DSolve[y'[x] + y[x] == a Sin[x], y[x], x]
 Out[1]= {{y[x] -> E^(-x) (C[1] + 1/2 (-a Cos[x] E^x + a E^x Sin[x]))}}

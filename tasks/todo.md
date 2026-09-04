@@ -97,3 +97,29 @@ a free-constant relabeling — the family is identical and back-sub verified.
 
 Still open in §2b: wave-IVP d'Alembert formula; heat kernel / `Erf`; `PDEClassify`;
 lower-order/inhomogeneous 2nd-order; quasilinear/nonlinear first-order (§2a).
+
+---
+
+# DSolve M6 (Phase 2) — PDEClassify  ✅ DONE (2026-09-04)
+
+`PDEClassify[eqn, u, {v1, v2}]` (`src/calculus/dsolve_pdeclassify.c`) — a standalone
+top-level classifier: the discriminant `Δ = B² − 4 A C` of the principal part
+(`A u_{v1 v1} + B u_{v1 v2} + C u_{v2 v2}`) → `"Hyperbolic"` (Δ>0) / `"Parabolic"`
+(Δ=0) / `"Elliptic"` (Δ<0). Reuses `dsolve_parse` for the residual + the same
+2nd-order coefficient extraction as pde2. Sign decided via a small ladder
+(`ds_is_zero` → numeric type → `Sign[]`); an undecidable-sign / parameter-dependent
+Δ (Tricomi `y u_xx + u_yy`) leaves the call unevaluated (honest decline).
+
+- [x] `builtin_pdeclassify`: parse, extract A,B,C (2nd-order terms), Δ, sign ladder → String
+- [x] only principal part matters (lower-order terms ignored); declines 1st-order / undecidable
+- [x] register top-level `PDEClassify` (Protected, docstring); init from dsolve_init
+- [x] tests `t_pdeclassify` (wave/heat/Laplace/mixed/lower-order/Tricomi-decline/1st-order-decline)
+- [x] `make check-c99` PASS; dsolve_tests green; valgrind baseline 13,440/6,312, **0** pdeclassify frames
+- [x] docs: DSOLVE_PLAN.md §2b + M6, calculus.md prose, changelog
+
+Design note: standalone builtin (not a solver → outside the `DSolve\`` namespace),
+matching the plan's bare `PDEClassify` naming. First cut: linear in the 2nd-order
+terms, two independent variables, constant-signed discriminant.
+
+Still open in §2b: wave-IVP d'Alembert formula; heat kernel / `Erf`; lower-order/
+inhomogeneous 2nd-order (telegraph); quasilinear/nonlinear first-order (§2a).

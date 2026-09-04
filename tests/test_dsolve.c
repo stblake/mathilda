@@ -870,6 +870,22 @@ static void t_pdesep(void) {
                "DSolve`SeparationOfVariables");
 }
 
+/* ---- M6 (Phase 2): PDEClassify — discriminant B^2 - 4 A C of the principal part. */
+static void t_pdeclassify(void) {
+    check_form("PDEClassify[D[u[t,x],{t,2}] == 4 D[u[t,x],{x,2}], u, {t,x}]", "\"Hyperbolic\"");
+    check_form("PDEClassify[D[u[x,y],{x,2}] + D[u[x,y],{y,2}] == 0, u, {x,y}]", "\"Elliptic\"");
+    check_form("PDEClassify[D[u[x,t],t] == D[u[x,t],{x,2}], u, {x,t}]", "\"Parabolic\"");
+    /* mixed term u_xy: Δ = 1 > 0 -> Hyperbolic */
+    check_form("PDEClassify[D[u[x,y],x,y] == 0, u, {x,y}]", "\"Hyperbolic\"");
+    /* only the principal part matters: lower-order terms do not change the type */
+    check_form("PDEClassify[D[u[x,y],{x,2}] + D[u[x,y],{y,2}] + D[u[x,y],x] + u[x,y] == 0, u, {x,y}]",
+               "\"Elliptic\"");
+    /* mixed-type / parameter-dependent discriminant (Tricomi) stays unevaluated */
+    check_form("Head[PDEClassify[y D[u[x,y],{x,2}] + D[u[x,y],{y,2}] == 0, u, {x,y}]]", "PDEClassify");
+    /* a first-order PDE has no principal 2nd-order part -> unevaluated */
+    check_form("Head[PDEClassify[D[u[x,y],x] + D[u[x,y],y] == 0, u, {x,y}]]", "PDEClassify");
+}
+
 /* Pinned system + PDE method builtins: each is REPL-callable as DSolve`<Name>[...]
  * (M8 systems, M6 PDE), verified by back-substitution, and declines a wrong-shape
  * input (no silent wrong answer). */
@@ -1610,6 +1626,7 @@ int main(void) {
     TEST(t_pde2_distinct_asymmetric);
     TEST(t_pde2_pinned_and_declines);
     TEST(t_pdesep);
+    TEST(t_pdeclassify);
     TEST(t_sys_pde_pinned_methods);
     TEST(t_declines_unsupported);
     /* M9: backfill for thin methods */

@@ -172,10 +172,12 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   the separated product mode `u == X(v1) Y(v2)` for a homogeneous, constant-
   coefficient, no-mixed-term linear PDE (heat, Helmholtz), splitting into two
   constant-coefficient ODEs in a separation constant λ and recursing into the
-  scalar cascade; back-substitution verified. Still to do: quasilinear/nonlinear
-  first-order; inhomogeneous / lower-order-term 2nd-order (telegraph/damped wave);
-  the wave-IVP d'Alembert formula (initial data, half-line, `Piecewise`); heat
-  kernel / `Erf`; `PDEClassify` (discriminant).
+  scalar cascade; back-substitution verified. **`PDEClassify`**
+  (`dsolve_pdeclassify.c`) done — the discriminant classifier (Hyperbolic /
+  Parabolic / Elliptic) over the principal part. Still to do:
+  quasilinear/nonlinear first-order; inhomogeneous / lower-order-term 2nd-order
+  (telegraph/damped wave); the wave-IVP d'Alembert formula (initial data,
+  half-line, `Piecewise`); heat kernel / `Erf`.
 - **M7 — first-order substitution + attribute cleanup.** ✅ DONE.
   `DSolve`FirstOrderSubstitution` (`y'==F(a x + b y + c)`, completing the 1a
   first-order family bar Riccati/Lagrange/Abel/Chini) and `AutonomousReduction`
@@ -650,9 +652,16 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   so **pinned-only** (not in the automatic cascade — matching `FirstOrderPowerSeries`
   / `EigenvalueProblem`). Back-substitution verified. `dsolve_pdesep.c`. *Future:*
   variable (product-separable) coefficients, BC-driven eigenfunction expansions.
+- `[✓] PDEClassify` — `PDEClassify[eqn, u, {v1, v2}]` classifies a 2nd-order
+  linear PDE by the discriminant `Δ = B² − 4 A C` of its principal part
+  (`A u_{v1 v1} + B u_{v1 v2} + C u_{v2 v2}`; only the highest-order terms count):
+  `"Hyperbolic"` (Δ>0, wave), `"Parabolic"` (Δ=0, heat), `"Elliptic"` (Δ<0,
+  Laplace). A standalone builtin (not a solver). A discriminant whose sign is not
+  a decidable constant — a mixed-type / parameter-dependent equation such as
+  Tricomi's `y u_xx + u_yy == 0` (Δ = −4y) — leaves the call unevaluated (an
+  honest decline, not a region-blind label). `dsolve_pdeclassify.c`.
 - `[ ] WaveEquation` (d'Alembert IVP formula; inhomogeneous; half-line;
-  `Piecewise`), `[ ] HeatEquation` (heat kernel / `Erf`),
-  `[ ] PDEClassify` (discriminant).
+  `Piecewise`), `[ ] HeatEquation` (heat kernel / `Erf`).
 
 ## Testing
 
