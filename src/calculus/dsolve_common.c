@@ -1151,6 +1151,24 @@ Expr* dsolve_method_builtin(Expr* res, DSolveTryFn fn) {
     return r;
 }
 
+Expr* dsolve_method_builtin_system(Expr* res, DSolveSysFn fn) {
+    DSolveProblem P;
+    if (!dsolve_parse(res, &P)) return NULL;
+    if (P.is_pde) { dsolve_problem_free(&P); return NULL; }  /* PDE is a different method */
+    Expr* r = dsolve_run_system(&P, fn);
+    dsolve_problem_free(&P);
+    return r;
+}
+
+Expr* dsolve_method_builtin_pde(Expr* res, DSolveSysFn fn) {
+    DSolveProblem P;
+    if (!dsolve_parse(res, &P)) return NULL;
+    if (!P.is_pde) { dsolve_problem_free(&P); return NULL; }  /* ODE is a different method */
+    Expr* r = dsolve_run_pde(&P, fn);
+    dsolve_problem_free(&P);
+    return r;
+}
+
 Expr* dsolve_algebraic_residual(DSolveProblem* P, const char* Yname, const char* Pname) {
     if (P->neq < 1 || P->nfun < 1 || P->nind < 1) return NULL;
     const char* yname = P->fun_names[0];

@@ -105,7 +105,12 @@ which catch equations the specialists miss (e.g. the linear-coefficients family
   coefficients, then `Numerator[Together[S]]` → `CoefficientList[·,{x,y}]` →
   `Outer[Coefficient, forms, coeffs]` → `NullSpace`; catches quadratic/projective
   symmetries such as `ξ=x², η=x y` that the affine ansatz misses);
-  `abaco2_unique_unknown` ✅ (§4.4.1, below); `chi` and `abaco2_unique_general` remain.
+  `abaco2_unique_unknown` ✅ (§4.4.1, below, incl. the order-zero extension Eqs 73–81);
+  `chi` ✅ (CPC 101, 5th algorithm; §4.5, below). The formal §4.4.2 Case I/II
+  (`abaco2_unique_general`) is a **documented exemption** — the authors call the
+  closed-form route "very inefficient, if not just impractical", and every
+  `[F(x),G(y)]`-symmetric ODE it targets is already caught by Riccati/Bernoulli/kernel
+  methods, so it cannot be tested non-vacuously.
 
 ### 4.1 `abaco1_product` (CT–Roche §4.1) — the first quadrature ansatz
 
@@ -192,8 +197,108 @@ found but the Lie integrating-factor quadrature `∫F/(1+F)` is non-elementary, 
 branch declines at integration (correctly — no inert head). **Validation:**
 `t_lie_abaco2_unique_unknown` and the `t_stress_lie_unique_unknown` non-integer-power
 family; per-solve valgrind adds only the pre-existing FLINT `rat_canon` leak
-(`tasks/flint_ratcanon_leak.md`), its own allocations balanced. The general case §4.4.2
-(no assumption on `ω`, Cases I/II) and `chi` remain.
+(`tasks/flint_ratcanon_leak.md`), its own allocations balanced. `chi` is now implemented
+(§4.5); the general case §4.4.2 (Cases I/II) is a documented exemption (see §4).
+
+### 4.4.1-general `abaco2_unique_unknown` — differential invariant of order zero (Eqs 73–81)
+
+Beyond the two separable candidates, for each mapping `M` with `R = M_y/M_x` the same
+scheme admits — *without* a separability test — the "order-zero" candidates
+`[-R, 1]` (Eq 75, pattern `[f(x)g(y), 1]`) and `[1, -R]` / `[1, -1/R]` (the family-77
+patterns). These reach ODEs whose `R` does **not** separate by product, e.g. Kamke's
+first-order ODE 433, `(x y' + y + 2x)² = 4(x y + x² + a)`: the mapping
+`M = Sqrt[x y + x² + a]` gives `R = x/(2x+y)` (not separable), and the order-zero
+candidate `[1, -R]` yields the first integral `x − Sqrt[x² + x y + a] == C[1]`. Each
+candidate is gated by `lie_check` and integrated by `lie_first_integral` exactly as the
+separable ones, so a mis-derived candidate can only decline. This is the practically
+useful part of the `[F(x),G(y)]`-general territory; the *formal* §4.4.2 Case I/II route
+(closed-form `η`/`ξ` from derivatives of `φ = Log ω`) is, in the authors' own words,
+"very inefficient, if not just impractical" and rarely helps a named ODE, so it is not
+implemented (documented exemption).
+
+### 4.5 `chi` (CPC 101 1997, 5th algorithm) — the `η = ξω + χ` reformulation
+
+The last and richest heuristic. Because the determining residual is linear and its
+tangent solution `η = ξω` is trivial, `S(ξ, ξω + χ) = S(0, χ)`, so a `χ(x,y)` solving
+the **linear PDE**
+
+```
+χ_x + ω χ_y − ω_y χ = 0                                                    (Eq 10)
+```
+
+gives the symmetry `[0, χ]` for *any* `ξ`. `χ` is sought by a **rich-basis** ansatz:
+
+```
+χ = ( Σ_k c_k m_k(x,y) ) / Dtrans
+```
+
+where the `m_k` are monomials (up to total degree 2 then 3, each times a `{1, x, y}`
+factor) in the **transcendental atoms** of `ω` — the `Sin/Cos` and `Sinh/Cosh` base
+pairs, `Log`, the inverse-trig functions — and `Dtrans` is the product of those atoms
+(supplying the reciprocal / denominator structure a plain polynomial cannot reach). The
+`c_k` are undetermined constants. Substituting into Eq 10 and:
+
+1. **clearing** — multiplying by `x^(d+3) ∏ atom^(d+3)`, which both clears every
+   denominator *and* folds the reciprocal trig `D` produces (`Csc·Sin → 1`,
+   `Cot·Sin → Cos`, …) back to `Sin/Cos`, so the subsequent substitution never needs a
+   reciprocal (which would send `Together` into a blow-up — the naive route measured a
+   timeout);
+2. **substituting** each atom by an independent generator, then `Numerator[Together[·]]`
+   and a `PolynomialQ` gate (a leftover `Exp` / special-function makes it non-polynomial
+   → decline);
+3. **reducing** modulo the Pythagorean relation of each pair (`gc² → 1 − gs²`,
+   `gch² → 1 + gsh²`) so identity-based cancellations are found;
+4. `CoefficientList` over `{x, y, generators}` → `Outer[Coefficient, ·, {c_k}]` →
+   `NullSpace`
+
+gives a homogeneous linear determining system whose null space is a basis of `χ`'s.
+Each nonzero `χ` is integrated by `lie_first_integral`, **simplest-first** (a smaller
+`χ` has a simpler, faster, more-likely-elementary quadrature; a messy sibling can send
+`Integrate` into a long trig search). `lie_check` is skipped here — the null vectors are
+exact Eq-10 solutions by construction, and the returned first integral is still verified
+by `dsolve_run_implicit`'s back-substitution.
+
+This is the one heuristic whose `χ` may be a **genuine transcendental** beyond the
+polynomial reach of `bivariate` — e.g. Kamke's first-order ODE 357,
+`x y' ln(x) sin(y) + cos(y)(1 − x cos(y)) = 0`, has the symmetry
+`[0, cos²(y)/(ln(x) sin(y))]`, from which `chi` returns the verified first integral
+`−x + Log[x] Sec[y[x]] == C[1]`. First cut: elementary-transcendental atoms only (an
+undefined function → decline, the `abaco2_unique_*` domain; `Exp` and special functions
+are not folded, so the `PolynomialQ` gate declines them); atom degree ≤ 3, `m ≤ 5`
+atoms, ≤ 90 monomials (cost caps). Since `chi` is built for the trig case, the
+cascade **skips the rational/algebraic classifiers** (`abaco1_product`, `function_sum`,
+`abaco2_similar`) when `ω` contains trig — they cannot solve it and their construction
+is slow on trig — and `abaco1_simple` uses the bounded `lie_ratsimp` in place of the
+full `Simplify`. Runs **last** (richest, biggest system). Source: Cheb-Terrab, Duarte &
+da Mota, CPC 101 (1997), Eqs 9–10 and the 5th algorithm.
+
+### 4.6 Robustness on transcendental / undefined-function `ω`
+
+The quadrature heuristics build their classifiers by repeated symbolic differentiation
+of `ω`; on an `ω` carrying an **undefined function** of both variables — e.g.
+`y' = Tan[ArcTan[y] + F[x²+y²]]` — those intermediates balloon (a measured pre-`Expand`
+numerator hit 217 k nodes, blowing past a million after `Expand`) and the general
+`zero_test` / `Integrate` engine hangs on the arbitrary-function atoms. This used to
+hang `function_sum` before `abaco2_unique_*` could run. The method is now bounded:
+
+- **Node budget.** `lie_ratsimp`, `lie_free_of_var`, `lie_is_zero`, `lie_sep_xfactor`
+  bail the instant an input crosses `LIE_EXPR_BUDGET` (6000 nodes) — a genuine
+  rational/algebraic target keeps every intermediate to a few hundred nodes, so the
+  budget only ever fires on a blow-up. A deterministic node budget is the
+  machine-independent analogue of the wall-clock timeout SymPy/Maple use here.
+- **Polynomial zero-test.** The fast helpers decide "is this zero" by `Expand` +
+  a structural literal-`0` test (`lie_lit_zero`), never the general `zero_test`
+  (which hangs on undefined-function atoms). `lie_check` keeps the full `zero_test`
+  as a fallback for identity-based zeros, but only when the residual is free of
+  undefined functions.
+- **Undefined-function gate.** `abaco1_product` / `function_sum` / `abaco2_similar`
+  (rational/algebraic ansätze that structurally cannot solve an arbitrary-function
+  ODE) are skipped when `ω` has an undefined function; `lie_first_integral` declines
+  such `ω` up front (its Lie quadrature is non-elementary anyway).
+
+Effect: `y' = Tan[ArcTan[y] + F[x²+y²]]` and the CT–Roche Eq-70 example
+`y' = -Tan[ArcTan[x/y] + H[x²+y²]]` decline in ~1 s instead of hanging, with no inert
+head and no wrong answer (verified by `t_lie_undefined_function_declines`).
 
 ## 5. References
 

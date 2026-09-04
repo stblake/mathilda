@@ -121,6 +121,19 @@ Expr** dsolve_pde1_solve(DSolveProblem* P) {
     return bodies;
 }
 
+static Expr* builtin_dsolve_pde1(Expr* res) {
+    return dsolve_method_builtin_pde(res, dsolve_pde1_solve);
+}
+
 void dsolve_pde1_init(void) {
-    /* dispatched directly for PDEs; no backtick builtin yet */
+    symtab_add_builtin("DSolve`PDELinearFirstOrder", builtin_dsolve_pde1);
+    symtab_get_def("DSolve`PDELinearFirstOrder")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`PDELinearFirstOrder",
+        "DSolve`PDELinearFirstOrder[eqn, u, {v1, v2}] solves a first-order linear "
+        "constant-coefficient PDE a u_{v1} + b u_{v2} + c u == f (a, b constant; c, f "
+        "functions) by the method of characteristics: the invariant xi = a v2 - b v1, "
+        "then the linear ODE u_{v1} + (c/a) u == f/a along the characteristic gives "
+        "u == Exp[-Integral c/a](C[1][xi] + Integral[Exp[.] f/a]). Solves the transport "
+        "equation, 3 u_x + 5 u_y == x, u_x + 3 u_y + u == 1. The generated arbitrary "
+        "function is C[1][.]. Declines non-constant leading coefficients / higher order.");
 }

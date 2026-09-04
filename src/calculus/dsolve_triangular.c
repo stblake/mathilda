@@ -23,6 +23,8 @@
 #include "dsolve_common.h"
 #include "../sym_names.h"
 #include "../eval.h"
+#include "../symtab.h"
+#include "../attr.h"
 #include "../internal.h"
 #include <stdlib.h>
 
@@ -131,6 +133,21 @@ Expr** dsolve_triangular_solve(DSolveProblem* P) {
     return bodies;
 }
 
+static Expr* builtin_dsolve_triangular(Expr* res) {
+    return dsolve_method_builtin_system(res, dsolve_triangular_solve);
+}
+
 void dsolve_triangular_init(void) {
-    /* dispatched directly for nfun>1; no backtick builtin */
+    symtab_add_builtin("DSolve`TriangularSystem", builtin_dsolve_triangular);
+    symtab_get_def("DSolve`TriangularSystem")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`TriangularSystem",
+        "DSolve`TriangularSystem[{eqns}, {y1, y2, ...}, x] solves a first-order system "
+        "whose inter-function dependency graph is a DAG: it topologically sorts the "
+        "functions, solves them in order, substitutes each solved function forward into "
+        "the remaining equations, recurses into the scalar cascade per function, and "
+        "renumbers the constants (solved constants are parked in a private head during "
+        "the peel to avoid colliding with the scalar engine's fresh C[k]). Coupled-but-"
+        "triangular at ANY coefficient, constant or variable (e.g. {y'==0, x'+y==0} -> "
+        "{y->C[1], x->C[2]-C[1] t}). Declines a genuinely cyclic (non-triangular) system. "
+        "Tried after DecoupleSystem, before LinearFirstOrderSystem.");
 }

@@ -144,6 +144,12 @@ Expr* dsolve_run_pde(DSolveProblem* P, DSolveSysFn fn);
  * once (strict, no cascade), free the problem.  Returns the result or NULL. */
 Expr* dsolve_method_builtin(Expr* res, DSolveTryFn fn);
 
+/* Pinned REPL entries for the system (`nfun>1`) and PDE method builtins: parse `res`,
+ * run the single system/PDE solver `fn` (strict, no cascade), free the problem.  The
+ * system entry declines a PDE input; the PDE entry declines a non-PDE input. */
+Expr* dsolve_method_builtin_system(Expr* res, DSolveSysFn fn);
+Expr* dsolve_method_builtin_pde(Expr* res, DSolveSysFn fn);
+
 /* Extract every solution body from an applied-form DSolve result
  * {{f[x] -> b1}, {f[x] -> b2}, ...}: the RHS of each order-0 rule f[x] -> body
  * across all branches (the form produced by recursing DSolve[..., f[x], x]).

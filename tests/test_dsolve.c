@@ -698,6 +698,27 @@ static void t_pde_zeroth_order(void) {
                "/. C[1][z_] :> Sin[z]}, PossibleZeroQ[D[uc,x] + 3 D[uc,y] + uc - 1]]");
 }
 
+/* Pinned system + PDE method builtins: each is REPL-callable as DSolve`<Name>[...]
+ * (M8 systems, M6 PDE), verified by back-substitution, and declines a wrong-shape
+ * input (no silent wrong answer). */
+static void t_sys_pde_pinned_methods(void) {
+    /* DecoupleSystem: independent equations */
+    check_true("And @@ (PossibleZeroQ /@ ({y'[x] - y[x], z'[x] - 2 z[x]} /. "
+               "DSolve`DecoupleSystem[{y'[x] == y[x], z'[x] == 2 z[x]}, {y, z}, x][[1]]))");
+    /* TriangularSystem: DAG (z depends on y, y independent) */
+    check_true("And @@ (PossibleZeroQ /@ ({y'[x], z'[x] + y[x]} /. "
+               "DSolve`TriangularSystem[{y'[x] == 0, z'[x] + y[x] == 0}, {y, z}, x][[1]]))");
+    /* LinearFirstOrderSystem: coupled constant matrix -> real Cos/Sin */
+    check_true("And @@ (PossibleZeroQ /@ ({y'[x] - z[x], z'[x] + y[x]} /. "
+               "DSolve`LinearFirstOrderSystem[{y'[x] == z[x], z'[x] == -y[x]}, {y, z}, x][[1]]))");
+    /* PDELinearFirstOrder pinned, verified via a concrete C[1] */
+    check_true("With[{uc = (u[x,y] /. DSolve`PDELinearFirstOrder[D[u[x,y],x] + 3 D[u[x,y],y] "
+               "+ u[x,y] == 1, u, {x,y}][[1]]) /. C[1][z_] :> Sin[z]}, "
+               "PossibleZeroQ[D[uc,x] + 3 D[uc,y] + uc - 1]]");
+    /* the PDE method declines a scalar ODE (head stays symbolic) */
+    check_form("Head[DSolve`PDELinearFirstOrder[y'[x] == y[x], y, x]]", "DSolve`PDELinearFirstOrder");
+}
+
 /* ---- DSolve is NOT HoldAll: an equation stored in a variable must solve ---- */
 static void t_not_holdall(void) {
     check_true("FreeQ[Attributes[DSolve], HoldAll]");
@@ -926,6 +947,25 @@ static void t_lie_declines(void) {
      * declines (no wrong answer, head stays symbolic). */
     check_form("Head[DSolve`LieSymmetry[y'[x] == y[x]^2 + x, y, x]]", "DSolve`LieSymmetry");
 }
+/* Regression: an omega carrying an UNDEFINED function of both variables used to hang
+ * the quadrature heuristics (the classifier / free-of / zero-test ops balloon on the
+ * transcendental derivatives of an arbitrary function).  It must now decline promptly:
+ * the rational/algebraic ansatze are skipped, abaco2_unique_* reads the symmetry off
+ * R = M_y/M_x but the Lie quadrature is non-elementary, so the whole method declines
+ * with no inert head.  (If this regresses it HANGS — a ctest timeout catches it.) */
+static void t_lie_undefined_function_declines(void) {
+    /* user-reported form: no elementary [G(y),F(x)] symmetry -> declines */
+    check_form("Head[DSolve`LieSymmetry[y'[x] == Tan[ArcTan[y[x]] + F[x^2 + y[x]^2]], "
+               "y, x]]", "DSolve`LieSymmetry");
+    /* Cheb-Terrab & Roche Eq 70: symmetry [y,-x] exists but its quadrature
+     * int 1/(a^2 - sin a) da is non-elementary, so the method declines (no inert
+     * integral head), matching the documented arbitrary-function policy */
+    check_form("Head[DSolve`LieSymmetry[y'[x] == -Tan[ArcTan[x/y[x]] + H[x^2 + y[x]^2]], "
+               "y, x]]", "DSolve`LieSymmetry");
+    /* full cascade also declines cleanly (head stays DSolve) */
+    check_form("Head[DSolve[y'[x] == Tan[ArcTan[y[x]] + F[x^2 + y[x]^2]], y[x], x]]",
+               "DSolve");
+}
 /* L2 `linear` heuristic (affine symmetry): the linear-coefficients class
  * y' == (a1 x + b1 y + c1)/(a2 x + b2 y + c2).  The deterministic
  * DSolve`LinearCoefficients (M9) now claims this class in the AUTOMATIC cascade
@@ -1006,6 +1046,34 @@ static void t_lie_abaco2_unique_unknown(void) {
     /* alias resolves to the same method */
     check_true("Head[DSolve`LieGroup[y'[x] == (x/y[x]) (x^2 + y[x]^2)^(1/3), y, x]"
                "[[1,1]]] === Equal");
+}
+/* `abaco2_unique_unknown` §4.4.1 "differential invariant of order zero" extension
+ * (Cheb-Terrab & Roche Eqs 73-81): the order-zero candidates [-R,1] / [1,-R] / [1,-1/R]
+ * built directly from R = M_y/M_x without a separability test.  Kamke's first order
+ * ODE 433, (x y' + y + 2x)^2 == 4(x y + x^2 + a), has the mapping M = Sqrt[x y + x^2 + a]
+ * whose ratio R = x/(2x+y) does NOT separate by product, so only the order-zero
+ * candidate [1, -R] finds the symmetry -> first integral x - Sqrt[x^2 + x y + a] == C[1]
+ * (verified by implicit differentiation on the isolated y'-branch). */
+static void t_lie_abaco2_order_zero(void) {
+    check_pinned_implicit("DSolve`LieSymmetry",
+        "(-y[x] - 2 x + 2 Sqrt[x y[x] + x^2 + 1])/x");
+    check_pinned_implicit("DSolve`LieSymmetry",
+        "(-y[x] - 2 x - 2 Sqrt[x y[x] + x^2 + 1])/x");   /* the other branch */
+}
+/* `chi` (Cheb-Terrab, Duarte & da Mota, CPC 101 1997, 5th algorithm): the
+ * eta = xi omega + chi reformulation, with chi from a rich-basis (transcendental atoms
+ * of omega) determining system — the one heuristic whose chi may be a genuine
+ * transcendental beyond `bivariate`'s polynomial reach.  Kamke's first order ODE 357,
+ * x y' ln(x) sin(y) + cos(y)(1 - x cos(y)) == 0, has the symmetry
+ * [0, cos(y)^2/(ln(x) sin(y))] -> first integral -x + Log[x] Sec[y[x]] == C[1] (which
+ * no earlier heuristic finds: omega is trig, so the rational/algebraic ansatze are
+ * skipped and there is no [F(x),G(y)] kernel).  Verified by implicit differentiation. */
+static void t_lie_chi(void) {
+    check_pinned_implicit("DSolve`LieSymmetry",
+        "-Cos[y[x]] (1 - x Cos[y[x]])/(x Log[x] Sin[y[x]])");
+    /* alias resolves to the same method */
+    check_true("Head[DSolve`LieGroup[y'[x] == -Cos[y[x]] (1 - x Cos[y[x]])/"
+               "(x Log[x] Sin[y[x]]), y, x][[1,1]]] === Equal");
 }
 /* Chini reduction (b): linear-term removal y = e^(int g) w -> separable, for the
  * sub-class where reduction (a) (B,C constant) fails.  y' == x E^(2x) y^3 - y -
@@ -1331,12 +1399,15 @@ int main(void) {
     TEST(t_method_abel);
     TEST(t_method_lie);
     TEST(t_lie_declines);
+    TEST(t_lie_undefined_function_declines);
     TEST(t_lie_linear_coefficients);
     TEST(t_lie_bivariate);
     TEST(t_lie_abaco1_product);
     TEST(t_lie_abaco2_similar);
     TEST(t_lie_function_sum);
     TEST(t_lie_abaco2_unique_unknown);
+    TEST(t_lie_abaco2_order_zero);
+    TEST(t_lie_chi);
     TEST(t_exact_xayb);
     TEST(t_auto_exp);
     TEST(t_auto_power);
@@ -1348,6 +1419,7 @@ int main(void) {
     TEST(t_pde_transport);
     TEST(t_pde_forcing);
     TEST(t_pde_zeroth_order);
+    TEST(t_sys_pde_pinned_methods);
     TEST(t_declines_unsupported);
     /* M9: backfill for thin methods */
     TEST(t_method_homogeneous);

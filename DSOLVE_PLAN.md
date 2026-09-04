@@ -259,8 +259,21 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   NullSpace determining system, catching genuinely quadratic/projective symmetries
   the affine ansatz misses; `abaco2_unique_unknown` ✅ — §4.4.1, the `[F(x),G(y)]`/
   `[G(y),F(x)]` ansätze from a function/non-integer-power of both variables in `ω`
-  (`y' == (x/y)(x²+y²)^(1/3)`); `chi`, `abaco2_unique_general`
-  remain). The quadrature ansätze are transcribed directly
+  (`y' == (x/y)(x²+y²)^(1/3)`); `abaco2_unique_unknown` also carries the §4.4.1
+  "differential invariant of order zero" extension (Eqs 73–81: the non-separable
+  candidates `[-R,1]`/`[1,-R]`/`[1,-1/R]`, catching Kamke 433 `(x y'+y+2x)²=4(xy+x²+a)`
+  → `x−Sqrt[x²+xy+a]==C[1]`). `chi` ✅ (CPC 101 1997, 5th algorithm: the `η=ξω+χ`
+  reformulation with a rich transcendental-atom basis for `χ`, solving Kamke 357
+  `x y' ln(x)sin(y)+cos(y)(1−x cos(y))=0` → `−x+Log[x]Sec[y[x]]==C[1]`, the first
+  genuinely-transcendental `χ` beyond `bivariate`). The formal §4.4.2 Case I/II
+  (`abaco2_unique_general`) is a **documented exemption** — the authors call it "very
+  inefficient, if not just impractical" and every `[F(x),G(y)]`-symmetric target is
+  already caught by Riccati/Bernoulli/kernel methods, so it cannot be tested
+  non-vacuously). **Robustness:** an `ω` carrying an undefined function of both
+  variables (`Tan[ArcTan[y]+F[x²+y²]]`) used to hang the quadrature heuristics; a node
+  budget on the hot-path helpers, a structural polynomial zero-test in place of the
+  hanging general `zero_test`, and an undefined-function gate now make it a ~1 s clean
+  decline. The quadrature ansätze are transcribed directly
   from the Cheb-Terrab & Roche (1998) invariant-family necessary conditions (the
   paper is in the repo root). `abaco1_product` (§4.1) uses the Eq-19 separability of
   `L = (ω_xy ω − ω_x ω_y)/ω⁴`; its shared substrate — `lie_sep_xfactor` (the
@@ -345,9 +358,11 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 - `[✓] SeparableReduced` — `x y'/y == G(x^n y)`: `n = x r_x/(y r_y)`, substitution
   `w=x^n y` → `Separable`; implicit first integral. (SymPy `separable_reduced`.)
   `dsolve_sepreduced.c`.
-- `[~] LieSymmetry` (`DSolve`LieGroup`/`LieSymmetry`) — heuristic infinitesimal
+- `[✓] LieSymmetry` (`DSolve`LieGroup`/`LieSymmetry`) — heuristic infinitesimal
   point-symmetry method; the general first-order backstop, run after the specialists
-  and before the series fallback. *Implemented:* `abaco1_simple` (L1) + `linear`
+  and before the series fallback. All ansatz heuristics implemented except the
+  documented-exempt formal §4.4.2 Case I/II (`abaco2_unique_general`).
+  *Implemented:* `abaco1_simple` (L1) + `linear`
   (L2, affine ansatz → linear-coefficients class via determining-system `NullSpace`)
   + `bivariate` (L3, general degree-2/3 polynomial ansatz — same NullSpace machinery
   at higher degree, `lie_poly_symmetry`; catches quadratic/projective symmetries the
@@ -367,8 +382,14 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   reciprocal's ∂_y separates by product, x-factor 1/F'').
   + `abaco2_unique_unknown` (§4.4.1, the symmetries [F(x),G(y)] and [G(y),F(x)] from a
   function/non-integer-power M of both variables in ω: R = M_y/M_x separates by product
-  with x-factor X, candidates [X,−X/R] and [−R/X,1/X]; solves y' = (x/y)(x²+y²)^(1/3)).
-  Remaining: `chi`, `abaco2_unique_general`.
+  with x-factor X, candidates [X,−X/R] and [−R/X,1/X]; solves y' = (x/y)(x²+y²)^(1/3));
+  plus the §4.4.1 order-zero extension (Eqs 73–81: non-separable [−R,1]/[1,−R]/[1,−1/R],
+  catching Kamke 433). `chi` ✅ (CPC 101 1997, 5th algorithm: `η=ξω+χ`, rich
+  transcendental-atom basis for `χ`; solves Kamke 357). The formal §4.4.2 Case I/II
+  (`abaco2_unique_general`) is a documented exemption (impractical per the paper;
+  untestable non-vacuously).  Undefined-function `ω` no longer hangs the heuristics
+  (node budget + polynomial zero-test + undefined-function gate); a trig `ω` skips the
+  rational/algebraic classifiers and goes straight to `chi`.
   Nine ansatz heuristics (`abaco1_simple`,
   `abaco1_product`, `function_sum`, `abaco2_similar`, `linear`, `bivariate`, `chi`,
   `abaco2_unique_unknown`, `abaco2_unique_general`); each candidate `(ξ,η)` is gated
@@ -554,9 +575,9 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   residual that is not decidably non-zero (`dsolve_run` → `zero_test_decide`).
 - **Unit tests** (`tests/test_dsolve.c`): the Wolfram reference examples, checked
   by `PossibleZeroQ` of the residual / of the difference from the known form.
-  Every scalar method with a backtick builtin has a pinned-method test
-  (`DSolve`<Method>[...]`); systems/PDE (no backtick builtin) are covered through
-  the automatic dispatch.
+  Every method — scalar, system, and PDE — is now a pinned backtick builtin
+  (`DSolve`<Method>[...]`) with a docstring and a pinned-method test (systems/PDE via
+  `dsolve_method_builtin_system` / `_pde`); the automatic dispatch is exercised too.
 - **Stress tests:** parametrized forward-generator families per method group,
   back-substitution verified, each guarding `Head === List` first so a declined
   solve cannot pass vacuously. `tests/test_dsolve_m5_stress.c` covers Kovacic and

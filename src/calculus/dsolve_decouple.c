@@ -73,6 +73,18 @@ Expr** dsolve_decouple_solve(DSolveProblem* P) {
     return bodies;
 }
 
+static Expr* builtin_dsolve_decouple(Expr* res) {
+    return dsolve_method_builtin_system(res, dsolve_decouple_solve);
+}
+
 void dsolve_decouple_init(void) {
-    /* system methods are dispatched directly for nfun>1; no backtick builtin */
+    symtab_add_builtin("DSolve`DecoupleSystem", builtin_dsolve_decouple);
+    symtab_get_def("DSolve`DecoupleSystem")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`DecoupleSystem",
+        "DSolve`DecoupleSystem[{eqns}, {y1, y2, ...}, x] solves a first-order system in "
+        "which each equation involves only ONE dependent function (the dependency graph "
+        "has no cross-edges): it solves each function independently by recursing into the "
+        "scalar cascade and renumbers the generated constants. Handles variable "
+        "coefficients (e.g. y'[x] == x^2 y[x]). Declines a genuinely coupled system. The "
+        "cheapest system method, tried first for nfun>1.");
 }

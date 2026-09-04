@@ -257,6 +257,21 @@ Expr** dsolve_linsys_solve(DSolveProblem* P) {
     return Y;   /* NULL on decline */
 }
 
+static Expr* builtin_dsolve_linsys(Expr* res) {
+    return dsolve_method_builtin_system(res, dsolve_linsys_solve);
+}
+
 void dsolve_linsys_init(void) {
-    /* dispatched directly for nfun>1; no backtick builtin */
+    symtab_add_builtin("DSolve`LinearFirstOrderSystem", builtin_dsolve_linsys);
+    symtab_get_def("DSolve`LinearFirstOrderSystem")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`LinearFirstOrderSystem",
+        "DSolve`LinearFirstOrderSystem[{eqns}, {y1, y2, ...}, x] solves a "
+        "constant-coefficient linear system Y' == A Y + b(x) for ANY constant matrix A "
+        "(diagonalizable OR defective). The fundamental matrix Phi = e^{Ax} = S.e^{Jx}.S^{-1} "
+        "is built from JordanDecomposition (diagonalizable -> C e^{lambda x} v; defective -> "
+        "x^k e^{lambda x} generalized-eigenvector terms; complex pairs -> real "
+        "e^{a x}Cos/Sin[b x] via ComplexExpand). Forcing b(x) by variation of parameters "
+        "Phi.(C + Integral[Phi^{-1} b]), which stays valid for singular A. The general "
+        "backstop for irreducibly-coupled constant systems; tried after DecoupleSystem "
+        "and TriangularSystem.");
 }
