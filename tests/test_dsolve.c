@@ -800,6 +800,52 @@ static void t_pde_zeroth_order(void) {
                "/. C[1][z_] :> Sin[z]}, PossibleZeroQ[D[uc,x] + 3 D[uc,y] + uc - 1]]");
 }
 
+/* ---- M6 (Phase 2): second-order constant-coefficient linear PDE (operator
+ * factoring).  Verified with two distinct concrete arbitrary functions
+ * (C[1] -> Sin, C[2] -> Cos/Exp) reducing the Function application. ---- */
+static void t_pde2_wave(void) {
+    /* wave / d'Alembert: u_tt == c^2 u_xx -> C[1][x - c t] + C[2][x + c t] */
+    check_true("With[{uc = (u[t,x] /. DSolve[D[u[t,x],{t,2}] == c^2 D[u[t,x],{x,2}], u, {t,x}][[1]]) "
+               "/. {C[1] -> Sin, C[2] -> Cos}}, PossibleZeroQ[D[uc,{t,2}] - c^2 D[uc,{x,2}]]]");
+}
+static void t_pde2_laplace(void) {
+    /* elliptic: complex-characteristic form C[1][y - I x] + C[2][y + I x] */
+    check_true("With[{uc = (u[x,y] /. DSolve[D[u[x,y],{x,2}] + D[u[x,y],{y,2}] == 0, u, {x,y}][[1]]) "
+               "/. {C[1] -> Sin, C[2] -> Cosh}}, PossibleZeroQ[D[uc,{x,2}] + D[uc,{y,2}]]]");
+}
+static void t_pde2_mixed(void) {
+    /* pure mixed u_xy == 0 -> C[1][x] + C[2][y] */
+    check_true("With[{uc = (u[x,y] /. DSolve[D[u[x,y],x,y] == 0, u, {x,y}][[1]]) "
+               "/. {C[1] -> Exp, C[2] -> Sin}}, PossibleZeroQ[D[uc,x,y]]]");
+}
+static void t_pde2_repeated(void) {
+    /* repeated root (parabolic): (D_x - D_y)^2 u == 0 -> C[1][w] + x C[2][w] */
+    check_true("With[{uc = (u[x,y] /. DSolve[D[u[x,y],{x,2}] - 2 D[u[x,y],x,y] + D[u[x,y],{y,2}] == 0, "
+               "u, {x,y}][[1]]) /. {C[1] -> Exp, C[2] -> Sin}}, "
+               "PossibleZeroQ[D[uc,{x,2}] - 2 D[uc,x,y] + D[uc,{y,2}]]]");
+}
+static void t_pde2_distinct_asymmetric(void) {
+    /* distinct rational roots (-2, -1/2): 2 u_xx + 5 u_xy + 2 u_yy == 0 */
+    check_true("With[{uc = (u[x,y] /. DSolve[2 D[u[x,y],{x,2}] + 5 D[u[x,y],x,y] + 2 D[u[x,y],{y,2}] == 0, "
+               "u, {x,y}][[1]]) /. {C[1] -> Sin, C[2] -> Exp}}, "
+               "PossibleZeroQ[2 D[uc,{x,2}] + 5 D[uc,x,y] + 2 D[uc,{y,2}]]]");
+}
+static void t_pde2_pinned_and_declines(void) {
+    /* pinned method solves the wave equation */
+    check_true("With[{uc = (u[t,x] /. DSolve`PDELinearSecondOrder[D[u[t,x],{t,2}] == 4 D[u[t,x],{x,2}], "
+               "u, {t,x}][[1]]) /. {C[1] -> Sin, C[2] -> Cos}}, "
+               "PossibleZeroQ[D[uc,{t,2}] - 4 D[uc,{x,2}]]]");
+    /* the 2nd-order method declines a first-order PDE (head stays symbolic) */
+    check_form("Head[DSolve`PDELinearSecondOrder[D[u[x,y],x] + D[u[x,y],y] == 0, u, {x,y}]]",
+               "DSolve`PDELinearSecondOrder");
+    /* it declines a scalar ODE too */
+    check_form("Head[DSolve`PDELinearSecondOrder[y''[x] == y[x], y, x]]",
+               "DSolve`PDELinearSecondOrder");
+    /* a first-order PDE still solves via the auto cascade (pde1) */
+    check_true("With[{uc = (u[x,y] /. DSolve[D[u[x,y],x] + 3 D[u[x,y],y] == 0, u, {x,y}][[1]]) "
+               "/. C[1][z_] :> Sin[z]}, PossibleZeroQ[D[uc,x] + 3 D[uc,y]]]");
+}
+
 /* Pinned system + PDE method builtins: each is REPL-callable as DSolve`<Name>[...]
  * (M8 systems, M6 PDE), verified by back-substitution, and declines a wrong-shape
  * input (no silent wrong answer). */
@@ -1533,6 +1579,12 @@ int main(void) {
     TEST(t_pde_transport);
     TEST(t_pde_forcing);
     TEST(t_pde_zeroth_order);
+    TEST(t_pde2_wave);
+    TEST(t_pde2_laplace);
+    TEST(t_pde2_mixed);
+    TEST(t_pde2_repeated);
+    TEST(t_pde2_distinct_asymmetric);
+    TEST(t_pde2_pinned_and_declines);
     TEST(t_sys_pde_pinned_methods);
     TEST(t_declines_unsupported);
     /* M9: backfill for thin methods */

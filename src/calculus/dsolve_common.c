@@ -1084,7 +1084,7 @@ static Expr* pde_varlist(const DSolveProblem* P) {
     return l;
 }
 
-/* Derivative[o1,o2][u][v1,v2] (first-order PDE terms). */
+/* Derivative[o1,o2][u][v1,v2] (a PDE derivative term of any order). */
 static Expr* pde_deriv_lit(const char* u, int o1, int o2, const char* v1, const char* v2) {
     Expr* d = expr_new_function(expr_new_symbol(SYM_Derivative),
                   (Expr*[]){ expr_new_integer(o1), expr_new_integer(o2) }, 2);
@@ -1092,30 +1092,90 @@ static Expr* pde_deriv_lit(const char* u, int o1, int o2, const char* v1, const 
     return expr_new_function(du, (Expr*[]){ expr_new_symbol(v1), expr_new_symbol(v2) }, 2);
 }
 
-/* Verify a 2-variable first-order PDE.  Two obstacles: the evaluator does not
+/* If `e` is the term Derivative[i,j][u][v1,v2] for function `u`, return i+j;
+ * else -1.  Used to discover the PDE's order (max_order is not populated for
+ * PDEs — ds_scan only recognises single-index Derivative[m][u][x]). */
+static int pde_term_order(const Expr* e, const char* u) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return -1;
+    const Expr* h = e->data.function.head;               /* Derivative[i,j][u] */
+    if (h->type != EXPR_FUNCTION || h->data.function.arg_count != 1
+        || h->data.function.args[0]->type != EXPR_SYMBOL
+        || h->data.function.args[0]->data.symbol.name != u) return -1;
+    const Expr* d = h->data.function.head;               /* Derivative[i,j]    */
+    if (d->type != EXPR_FUNCTION || d->data.function.arg_count != 2
+        || d->data.function.head->type != EXPR_SYMBOL
+        || d->data.function.head->data.symbol.name != SYM_Derivative
+        || d->data.function.args[0]->type != EXPR_INTEGER
+        || d->data.function.args[1]->type != EXPR_INTEGER) return -1;
+    return (int)(d->data.function.args[0]->data.integer
+               + d->data.function.args[1]->data.integer);
+}
+
+/* Max i+j over all Derivative[i,j][u] terms in `e` (0 if none). */
+static int pde_scan_order(const Expr* e, const char* u) {
+    int best = pde_term_order(e, u);
+    if (best < 0) best = 0;
+    if (e && e->type == EXPR_FUNCTION) {
+        int ho = pde_scan_order(e->data.function.head, u);
+        if (ho > best) best = ho;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            int a = pde_scan_order(e->data.function.args[i], u);
+            if (a > best) best = a;
+        }
+    }
+    return best;
+}
+
+/* C[k][z_] :> rhs — a test-function rule replacing the arbitrary function C[k]. */
+static Expr* pde_arb_rule(int k, const char* z, Expr* rhs) {
+    Expr* blank = expr_new_function(expr_new_symbol("Blank"), NULL, 0);
+    Expr* patt = expr_new_function(expr_new_symbol("Pattern"),
+                     (Expr*[]){ expr_new_symbol(z), blank }, 2);
+    Expr* lhs = expr_new_function(ds_const(k), (Expr*[]){ patt }, 1);
+    return expr_new_function(expr_new_symbol(SYM_RuleDelayed), (Expr*[]){ lhs, rhs }, 2);
+}
+
+/* Verify a 2-variable PDE of any order.  Two obstacles: the evaluator does not
  * reduce Derivative[i,j][Function[...]][...] (so we substitute the derivative
- * TERMS with D[body, v], which does reduce), and zero_test cannot sample an
- * arbitrary function C[1][...] (so we first replace it with a concrete test
- * function C[1][z_] :> Sin[z] — a correct general solution stays a solution for
- * any choice, and Sin makes the residual concrete). */
+ * TERMS with D[body, {v1,i}, {v2,j}], which does reduce), and zero_test cannot
+ * sample an arbitrary function C[k][...] (so we first replace each with a
+ * distinct concrete test function — Sin, Cos, Exp, #^2 — a correct general
+ * solution stays a solution for any choice, and distinct functions keep an
+ * error in one branch from cancelling against another).  The order is scanned
+ * from the residual (max_order is 0 for PDEs), so this serves first- and
+ * second-order methods alike. */
 static bool dsolve_verify_pde(const DSolveProblem* P, const Expr* body) {
     const char* u = P->fun_names[0];
     const char* v1 = P->ind_names[0];
     const char* v2 = P->ind_names[1];
     const char* z = intern_symbol("DSolve`pdez");
-    Expr* blank = expr_new_function(expr_new_symbol("Blank"), NULL, 0);
-    Expr* patt = expr_new_function(expr_new_symbol("Pattern"),
-                     (Expr*[]){ expr_new_symbol(z), blank }, 2);
-    Expr* lhs = expr_new_function(ds_const(1), (Expr*[]){ patt }, 1);          /* C[1][z_] */
-    Expr* rhs = ds_call1("Sin", expr_new_symbol(z));                           /* Sin[z]   */
-    Expr* rule = expr_new_function(expr_new_symbol(SYM_RuleDelayed), (Expr*[]){ lhs, rhs }, 2);
-    Expr* bodyC = eval_and_free(internal_replace_all((Expr*[]){ expr_copy((Expr*)body), rule }, 2));
+
+    Expr* r1 = pde_arb_rule(1, z, ds_call1("Sin", expr_new_symbol(z)));
+    Expr* r2 = pde_arb_rule(2, z, ds_call1("Cos", expr_new_symbol(z)));
+    Expr* r3 = pde_arb_rule(3, z, ds_call1("Exp", expr_new_symbol(z)));
+    Expr* r4 = pde_arb_rule(4, z, expr_new_function(expr_new_symbol(SYM_Power),
+                   (Expr*[]){ expr_new_symbol(z), expr_new_integer(2) }, 2));
+    Expr* rl = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ r1, r2, r3, r4 }, 4);
+    Expr* bodyC = eval_and_free(internal_replace_all((Expr*[]){ expr_copy((Expr*)body), rl }, 2));
+
+    int maxord = 0;
+    for (size_t e = 0; e < P->neq; e++) {
+        int o = pde_scan_order(P->eq_residuals[e], u);
+        if (o > maxord) maxord = o;
+    }
+    if (maxord < 1) maxord = 1;
 
     bool ok = true;
     for (size_t e = 0; e < P->neq && ok; e++) {
         Expr* r = expr_copy(P->eq_residuals[e]);
-        r = ds_subst(r, pde_deriv_lit(u, 1, 0, v1, v2), ds_d(expr_copy(bodyC), expr_new_symbol(v1)));
-        r = ds_subst(r, pde_deriv_lit(u, 0, 1, v1, v2), ds_d(expr_copy(bodyC), expr_new_symbol(v2)));
+        for (int s = maxord; s >= 1; s--)
+            for (int i = s; i >= 0; i--) {
+                int j = s - i;
+                Expr* dk = expr_copy(bodyC);
+                for (int t = 0; t < i; t++) dk = ds_d(dk, expr_new_symbol(v1));
+                for (int t = 0; t < j; t++) dk = ds_d(dk, expr_new_symbol(v2));
+                r = ds_subst(r, pde_deriv_lit(u, i, j, v1, v2), dk);
+            }
         r = ds_subst(r, expr_new_function(expr_new_symbol(u),
                         (Expr*[]){ expr_new_symbol(v1), expr_new_symbol(v2) }, 2), expr_copy(bodyC));
         if (zero_test_decide(r) == ZERO_TEST_FALSE) ok = false;

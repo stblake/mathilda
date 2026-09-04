@@ -1,48 +1,68 @@
-# DSolve M11 — Finish Phase 1 ODE gaps
+# DSolve M6 (Phase 2) — second-order constant-coefficient linear PDE
 
-Plan: `/Users/user/.claude/plans/let-s-continue-the-dsolve-parsed-heron.md`
+Plan: `/Users/user/.claude/plans/mossy-gliding-blum.md`
 
-## Phase 1 — Refactor dsolve_linsys.c ✅ DONE
-- [x] New `src/calculus/dsolve_linsys.h` (tidy / matexp / extract_Ab / assemble + fwd decls)
-- [x] `mat_exp` → `dsolve_linsys_matexp`; `tidy` → `dsolve_linsys_tidy` (skips ComplexExpand on real bodies)
-- [x] `dsolve_linsys_extract_Ab` (x-guards moved to caller); `dsolve_linsys_assemble(M,t,xvar,b,b_zero,n)`
-- [x] Rewrite `dsolve_linsys_solve`; `dsolve.c` `#include "dsolve_linsys.h"`
-- [x] Gate: constant systems (diag/defective/complex/forced/singular/IVP/pinned) verified identical
+Delivers `DSolve`PDELinearSecondOrder` — homogeneous, principal-part-only,
+constant-coefficient 2nd-order linear PDE via operator factoring (trial
+`u=f(v2+λ v1)`, λ-quadratic `A λ²+B λ+C=0`). One method covers hyperbolic
+(wave/d'Alembert), elliptic (Laplace, complex chars), parabolic (repeated root).
 
-## Phase 2 — LinearSystemVarCoeff ✅ DONE
-- [x] `dsolve_linsys_varcoeff.c` (scalar-factor A=f(x)·B, τ=∫f, reuse assemble); COMMON_SRC; cascade; pinned; init
+## Phase 1 — Generalize shared PDE verify (`dsolve_common.c`) ✅ DONE
+- [x] `pde_term_order`/`pde_scan_order(e,u)` — max i+j over `Derivative[i,j][u][v1,v2]` nodes
+- [x] verify: enumerate all (i,j), i+j=maxord..1 → `D[bodyC,{v1,i},{v2,j}]`, then u→bodyC
+- [x] verify: bodyC via ReplaceAll with a *list* {C[1]:>Sin, C[2]:>Cos, C[3]:>Exp, C[4]:>#^2}
+- [x] backward compatible: first-order PDE tests unchanged
 
-## Phase 3 — Linear BVP hardening ✅ DONE
-- [x] `dsolve_fit_constants`/`dsolve_fit_system` no_solution out-param on empty Solve
-- [x] `dsolve_run`/`dsolve_run_system` thread → empty List{}; header sig update
-- [x] over-det→{}, under-det→free C kept, IVP/undecided unaffected (verified)
+## Phase 2 — New method `dsolve_pde2.c` ✅ DONE
+- [x] `dsolve_pde2_solve`: guard, extract A,B,C,Dc,Ec,Fc,f; gate (homogeneous/principal/const)
+- [x] factor via `dsolve_analyze_roots` (A≠0); swap v1↔v2 (A=0,C≠0); `C[1][v1]+C[2][v2]` (mixed)
+- [x] distinct roots → F+G; repeated → F(w)+v1 G(w)
+- [x] `builtin_dsolve_pde2` + `dsolve_pde2_init` (PDELinearSecondOrder, ATTR_PROTECTED, docstring)
 
-## Phase 4 — DSolve`EigenvalueProblem ✅ DONE
-- [x] `dsolve_eigenvalue.c`: detect eigenparameter+homogeneous BCs, analytic family, verify under n∈Integers
-- [x] TrigReduce+Simplify verifier (C[1]→bare symbol); pinned; COMMON_SRC; init; DD/NN/mixed all solve
+## Phase 3 — Wire-up ✅ DONE
+- [x] `dsolve.c`: externs, cascade line after pde1, `dsolve_pde2_init()`
+- [x] `tests/CMakeLists.txt`: add `../src/calculus/dsolve_pde2.c` to COMMON_SRC
 
-## Phase 5 — Tests ✅ DONE
-- [x] varcoeff unit (t_sys_varcoeff_*) + stress (t_stress_linsys_varcoeff)
-- [x] BVP unit (t_bvp_overdetermined/underdetermined/system/undecided)
-- [x] Eigenvalue unit (t_eig_dirichlet/neumann/mixed/no_misfire)
+## Phase 4 — Tests (`test_dsolve.c`) ✅ DONE
+- [x] wave/d'Alembert, Laplace (elliptic), u_xy==0, repeated-root, asymmetric-distinct
+- [x] pinned `DSolve`PDELinearSecondOrder`; decline a 1st-order PDE + ODE
+- [x] existing PDE tests still green (t_pde_transport/forcing/zeroth_order, t_stress_pde)
 
-## Gates
-- [x] ctest: dsolve_tests (170), dsolve_stress_tests (33), dsolve_m5_stress_tests (9) all green
-- [x] `make check-c99` clean; main build clean; valgrind leak-clean (no new leaks; total at baseline 13,440/6,312)
-- [x] SymPy cross-validate (python3.11): c1 spans {x,x³}, c2 oscillatory — agree
-- [x] Docs: DSOLVE_PLAN.md (§1e/§1f + M11), docs/spec/builtins/calculus.md, changelog 2026-08-31.md; memory
+## Phase 5 — Gates + docs ✅ DONE
+- [x] `make -j` clean; `make check-c99` clean; dsolve ctest suites green (all pass)
+- [x] valgrind: total at documented baseline 13,440/6,312; pde2 frames only in pre-existing
+      zero_test/numericalize uninitialised-value contexts (no new leaks)
+- [x] REPL spot-checks (wave/Laplace/mixed/repeated/asymmetric, independent residual=0)
+- [x] DSOLVE_PLAN.md §2b + M6; docs/spec/builtins/calculus.md; changelog 2026-08-31.md; memory
 
 ## Review — DONE (2026-09-04)
 
-Delivered all three Phase-1 ODE gaps, each verified + tested:
-1. **Refactor** `dsolve_linsys.{c,h}` — shared `matexp`/`tidy`/`extract_Ab`/`assemble`;
-   `tidy` now skips ComplexExpand on real bodies (avoids Log→Abs/Arg leak). LinearFirstOrderSystem unchanged.
-2. **LinearSystemVarCoeff** — scalar-factor A=f(x)B via τ=∫f; solves the coupled var-coeff class that declined before.
-3. **BVP soundness** — inconsistent BVP → {} (was: silent unfitted general). Empty-Solve signal threaded via no_solution.
-4. **EigenvalueProblem** — pinned Sturm-Liouville first cut (DD/NN/mixed), analytic family + back-sub verify under n∈Integers.
+Delivered `DSolve`PDELinearSecondOrder` — the first Phase-2 second-order PDE
+method — as a clean, fully back-substitution-verifiable increment.
 
-Key gotchas (→ memory): Simplify integer assumption needs a bare symbol not C[k];
-TrigReduce before Simplify for factored Cos[Pi(n-1/2)]; ComplexExpand splits Log[x] on real vars.
+- **One method, three discriminant types.** Operator factoring via the
+  characteristic quadratic `A λ²+B λ+C==0` (trial `f(v2+λ v1)`) covers hyperbolic
+  (wave/d'Alembert `C[1][x-c t]+C[2][x+c t]`), elliptic (Laplace, complex chars
+  `C[1][y-I x]+C[2][y+I x]` — matches Mathematica), and parabolic (repeated root
+  `C[1][w]+v1 C[2][w]`). Reuses `dsolve_analyze_roots`, so complex/repeated λ are
+  free. This realizes §2b `PDEHyperbolicGeneral` in full generality.
+- **Substrate reuse + one generalization.** Reused `dsolve_run_pde` /
+  `dsolve_assemble_pde` / `dsolve_method_builtin_pde` unchanged. Generalized only
+  the shared `dsolve_verify_pde` to arbitrary derivative order (scanned from the
+  residual — `max_order` is 0 for PDEs) and up to 4 arbitrary functions with
+  distinct test functions; backward compatible with the first-order PDE tests.
+- **Independently validated:** all residuals (wave, Laplace, repeated, and the
+  asymmetric distinct-root `2u_xx+5u_xy+2u_yy`) `PossibleZeroQ`-zero under concrete
+  substituted arbitrary functions — not vacuous.
 
-Deferred (documented future): commutative-antiderivative/Floquet systems; non-constant-weight
-Sturm-Liouville, Robin/periodic BCs, λ==0 Neumann mode, DEigensystem/DEigenvalues surface.
+**Gotcha → memory:** `max_order` is never populated for PDEs (`ds_scan` /
+`ds_match_funcapp` only recognise single-index `Derivative[m][u][x]`, arg_count 1;
+a PDE term `Derivative[i,j][u][v1,v2]` has arg_count 2 and is skipped). Any PDE
+method / verifier must scan the residual for its order rather than read
+`P->max_order`.
+
+Deferred (documented future in §2b): inhomogeneous forcing + lower-order terms
+(telegraph/damped wave — the full symbol must factor into first-order operators);
+the wave-IVP d'Alembert formula (initial data, half-line, `Piecewise`); heat
+kernel; separation of variables; `PDEClassify` (discriminant); quasilinear /
+nonlinear first-order (§2a).

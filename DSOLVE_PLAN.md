@@ -152,10 +152,26 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   `Solve`/`solvepoly` (indicial + coefficient systems), `Series`/`SeriesData`
   (Frobenius), `RootReduce`/qqbar (algebraic exponents), `ReductionOfOrder`
   (second solution).
-- **M6 — Phase 2 PDEs.** STARTED. First-order linear constant-coefficient PDE
+- **M6 — Phase 2 PDEs.** IN PROGRESS. First-order linear constant-coefficient PDE
   (method of characteristics) done — transport, `3u_x+5u_y==x`, `u_x+3u_y+u==1`.
   The `is_pde` dispatch route + PDE verify/assemble (2-variable `Function`) added.
-  Quasilinear/nonlinear first-order and 2nd-order (wave/heat) still to do.
+  **`PDELinearSecondOrder`** (`dsolve_pde2.c`) done — the homogeneous, principal-
+  part-only, constant-coefficient 2nd-order linear PDE `A u_{v1 v1}+B u_{v1 v2}+
+  C u_{v2 v2}==0` via operator factoring (trial `f(v2+λ v1)`, characteristic
+  quadratic `A λ²+B λ+C==0`). One method covers all three discriminant signs —
+  hyperbolic/distinct roots (the **wave equation** `u_tt==c² u_xx →
+  C[1][x-c t]+C[2][x+c t]`, d'Alembert), elliptic/complex roots (Laplace
+  `u_xx+u_yy==0 → C[1][y-I x]+C[2][y+I x]`, matching Mathematica's complex-
+  characteristic form), parabolic/repeated root (`C[1][w]+v1 C[2][w]`) — reusing
+  `dsolve_analyze_roots` (distinct/complex/repeated λ uniformly). This realizes
+  the §2b `PDEHyperbolicGeneral` item in full generality, so no separate elliptic/
+  parabolic method is needed. The shared `dsolve_verify_pde` was generalized to
+  arbitrary derivative order (scanned from the residual — `max_order` is 0 for
+  PDEs) and multiple arbitrary functions (`C[1..4]` → distinct concrete test
+  functions). Still to do: quasilinear/nonlinear first-order; inhomogeneous /
+  lower-order-term 2nd-order (telegraph/damped wave); the wave-IVP d'Alembert
+  formula (initial data, half-line, `Piecewise`); heat; separation of variables;
+  `PDEClassify` (discriminant).
 - **M7 — first-order substitution + attribute cleanup.** ✅ DONE.
   `DSolve`FirstOrderSubstitution` (`y'==F(a x + b y + c)`, completing the 1a
   first-order family bar Riccati/Lagrange/Abel/Chini) and `AutonomousReduction`
@@ -601,10 +617,26 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   integral), `[ ] PDEClairaut`.
 
 ### 2b. Second order
-- `[ ] PDEHyperbolicGeneral` (operator factoring → arbitrary functions),
-  `[ ] WaveEquation` (d'Alembert; inhomogeneous; half-line; `Piecewise`),
-  `[ ] HeatEquation` (heat kernel / `Erf`), `[ ] SeparationOfVariables`,
-  `[ ] PDEClassify` (discriminant).
+- `[✓] PDELinearSecondOrder` (the `PDEHyperbolicGeneral` item, generalized) —
+  homogeneous, principal-part-only, constant-coefficient 2nd-order linear PDE
+  `A u_{v1 v1}+B u_{v1 v2}+C u_{v2 v2}==0` by operator factoring: the trial
+  `u==f(v2+λ v1)` gives the characteristic quadratic `A λ²+B λ+C==0`, so the
+  principal operator factors over ℂ and one method covers all three discriminant
+  signs — distinct real roots (hyperbolic) → `C[1][v2+λ1 v1]+C[2][v2+λ2 v1]` (the
+  wave equation `u_tt==c² u_xx → C[1][x-c t]+C[2][x+c t]`, d'Alembert); complex
+  roots (elliptic) → the complex-characteristic form (Laplace `u_xx+u_yy==0 →
+  C[1][y-I x]+C[2][y+I x]`, matching Mathematica — no realification needed); a
+  repeated root (parabolic) → `C[1][w]+v1 C[2][w]`, `w=v2+λ v1`. Reuses
+  `dsolve_analyze_roots` (distinct/complex/repeated λ uniformly); back-substitution
+  verified. `A==0` handled by swapping `v1↔v2`; pure mixed `B u_{v1 v2}==0 →
+  C[1][v1]+C[2][v2]`. The shared `dsolve_verify_pde` was generalized to arbitrary
+  order (scanned from the residual — `max_order` is 0 for PDEs) and multiple
+  arbitrary functions (`C[1..4]` → distinct test functions). `dsolve_pde2.c`.
+  *Future:* inhomogeneous forcing, lower-order terms (telegraph/damped wave — the
+  full symbol must factor into first-order operators).
+- `[ ] WaveEquation` (d'Alembert IVP formula; inhomogeneous; half-line;
+  `Piecewise`), `[ ] HeatEquation` (heat kernel / `Erf`),
+  `[ ] SeparationOfVariables`, `[ ] PDEClassify` (discriminant).
 
 ## Testing
 

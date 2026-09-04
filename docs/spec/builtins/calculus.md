@@ -722,6 +722,7 @@ The first-order PDE method and the Sturm-Liouville eigenvalue method are likewis
 | Method | Solves |
 |---|---|
 | `DSolve`PDELinearFirstOrder` | constant-coefficient `a u_{v1} + b u_{v2} + c u == f` (method of characteristics; the generated arbitrary function is `C[1][·]`) |
+| `DSolve`PDELinearSecondOrder` | homogeneous, principal-part-only, constant-coefficient 2nd-order linear PDE `A u_{v1 v1} + B u_{v1 v2} + C u_{v2 v2} == 0` by operator factoring: the trial `u == f(v2 + λ v1)` gives the characteristic quadratic `A λ² + B λ + C == 0`, so one method covers all three discriminant signs — distinct real roots (hyperbolic) → `C[1][v2+λ1 v1] + C[2][v2+λ2 v1]` (the wave equation `u_tt == c² u_xx → C[1][x-c t] + C[2][x+c t]`, d'Alembert); complex roots (elliptic) → the complex-characteristic form (Laplace `u_xx + u_yy == 0 → C[1][y-I x] + C[2][y+I x]`); a repeated root (parabolic) → `C[1][w] + v1 C[2][w]`, `w == v2 + λ v1`. Generated arbitrary functions `C[1][·]`, `C[2][·]`. Declines lower-order terms, forcing, and non-constant coefficients |
 | `DSolve`EigenvalueProblem` | Sturm-Liouville `y'' + λ y == 0` on `[a,b]` with two homogeneous BCs (Dirichlet `y==0`, Neumann `y'==0`, or mixed) at two distinct points → the eigenvalue family + eigenfunctions: `{{λ -> ConditionalExpression[w_n², Element[C[1],Integers] && C[1]>=1], y -> Function[{x}, C[2] Sin/Cos[w_n(x-a)]]}}`, `w_n == n Pi/(b-a)` (same-type BCs) or `(2n-1)Pi/(2(b-a))` (mixed), `C[1]` the integer index, `C[2]` the amplitude. Every eigenpair is back-substitution verified under `C[1]` integer. **Pinned-only** (never misfires on an ordinary IVP/BVP). Constant weight only; Robin/periodic BCs and the `λ==0` Neumann mode are future |
 
 A **boundary-value problem** with multiple point conditions is fitted through the same
@@ -804,6 +805,19 @@ Out[12]= {{u -> Function[{t, x}, C[1][-c t + x]]}}
 
 In[13]:= DSolve[D[u[x,y],x] + 3 D[u[x,y],y] + u[x,y] == 1, u, {x,y}]
 Out[13]= {{u -> Function[{x, y}, E^-x (E^x + C[1][-3 x + y])]}}
+```
+
+Homogeneous, constant-coefficient, principal-part-only **second-order** linear
+PDEs are solved by operator factoring — the characteristic quadratic
+`A λ² + B λ + C == 0` from the trial `u == f(v2 + λ v1)` — which yields two
+arbitrary functions and covers all three discriminant types uniformly:
+
+```
+In[14]:= DSolve[D[u[t,x],{t,2}] == c^2 D[u[t,x],{x,2}], u, {t,x}]  (* wave/d'Alembert *)
+Out[14]= {{u -> Function[{t, x}, C[1][x - Sqrt[c^2] t] + C[2][x + Sqrt[c^2] t]]}}
+
+In[15]:= DSolve[D[u[x,y],{x,2}] + D[u[x,y],{y,2}] == 0, u, {x,y}]  (* Laplace/elliptic *)
+Out[15]= {{u -> Function[{x, y}, C[1][-I x + y] + C[2][I x + y]]}}
 ```
 
 ```
