@@ -188,10 +188,17 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   `dsolve_run_pde_implicit` substrate (implicit relation verified by the
   implicit-function rule). **`PDEClairaut`** (`dsolve_pdeclairaut.c`) done — the
   Clairaut form `u==v1 u_{v1}+v2 u_{v2}+f(u_{v1},u_{v2})` → complete integral +
-  singular envelope. Still to do: PDE Charpit (general nonlinear complete integral);
-  inhomogeneous / lower-order-term 2nd-order (telegraph/damped wave); inhomogeneous
-  / half-line / `Piecewise` wave data; the Erf-producing heat data; finite-interval
-  Fourier-series problems.
+  singular envelope. **`PDECharpit`** (`dsolve_pdecharpit.c`) done — first-order
+  fully nonlinear `F(v1,v2,u,p,q)==0` by Charpit's method (the three standard forms
+  `F(p,q)` / `F(u,p,q)` / separable `f(v1,p)==g(v2,q)`), via the new `PDERelation`
+  implicit-constant verify path. **`PDELinearSecondOrder` lower-order terms** done —
+  constant-coefficient 2nd-order with `D u_{v1}+E u_{v2}+F u` when the symbol factors
+  into two first-order operators → exponential-damped `Σ e^{−m_i v1} C[i][ξ_i]`
+  (distortionless telegraph, damped/convection). Still to do: inhomogeneous
+  2nd-order forcing; the non-factorable general telegraph (Bessel); Charpit's general
+  integrable-combination + singular solutions; genuinely-quasilinear non-conservation
+  (P/Q depends on u with R≠0); inhomogeneous / half-line / `Piecewise` wave data; the
+  Erf-producing heat data; finite-interval Fourier-series problems.
 - **M7 — first-order substitution + attribute cleanup.** ✅ DONE.
   `DSolve`FirstOrderSubstitution` (`y'==F(a x + b y + c)`, completing the 1a
   first-order family bar Riccati/Lagrange/Abel/Chini) and `AutonomousReduction`
@@ -648,7 +655,16 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   characteristic integrals. New substrate `dsolve_run_pde_implicit`
   (`PDEImplicit`/`PDEExplicit`/`PDEBranches` wrappers; implicit relation verified by
   the implicit-function rule with concrete test functions). `dsolve_pdequasi.c`.
-- `[ ] PDECharpit` (nonlinear complete integral) — future.
+- `[✓] PDECharpit` (nonlinear complete integral) — `F(v1,v2,u,p,q)==0` (p=u_{v1},
+  q=u_{v2}) by Charpit's method, the three classic **standard forms**: `F(p,q)`
+  (explicit `u=C[1] v1 + q v2 + C[2]`, q from `F(C[1],q)==0`); `F(u,p,q)` (implicit
+  `∫du/P == v1 + C[1] v2 + C[2]`, P from `q==C[1] p`); separable `f(v1,p)==g(v2,q)`
+  (explicit `u=∫P dv1 + ∫Q dv2 + C[2]`). Explicit forms verify through the ordinary
+  explicit PDE path (bare constants survive); the implicit `F(u,p,q)` form via the
+  new `PDERelation` wrapper (implicit-function-rule verify). Runs after
+  quasilinear/Clairaut (nonlinear-in-derivatives gate). Declines equations in all
+  of v1,v2,u (the general integrable-combination search + singular solutions are
+  future) and non-elementary integrals. `dsolve_pdecharpit.c`.
 - `[✓] PDEClairaut` — `u==v1 u_{v1}+v2 u_{v2}+f(u_{v1},u_{v2})`; complete integral
   `u==C[1] v1+C[2] v2+f(C[1],C[2])`, plus the singular envelope (eliminate the
   constants from `{v1+f_{C1}==0, v2+f_{C2}==0}`) under `IncludeSingularSolutions`.
@@ -671,9 +687,17 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   verified. `A==0` handled by swapping `v1↔v2`; pure mixed `B u_{v1 v2}==0 →
   C[1][v1]+C[2][v2]`. The shared `dsolve_verify_pde` was generalized to arbitrary
   order (scanned from the residual — `max_order` is 0 for PDEs) and multiple
-  arbitrary functions (`C[1..4]` → distinct test functions). `dsolve_pde2.c`.
-  *Future:* inhomogeneous forcing, lower-order terms (telegraph/damped wave — the
-  full symbol must factor into first-order operators).
+  arbitrary functions (`C[1..4]` → distinct test functions). **Lower-order terms**
+  `D u_{v1}+E u_{v2}+F u` are now handled when the FULL symbol
+  `A ξ²+B ξη+C η²+D ξ+E η+F` factors into two first-order operators
+  `(∂_v1−λ_i ∂_v2+m_i)` — the shifts `m_i` solve `m1+m2=D/A`, `λ2 m1+λ1 m2=−E/A`
+  with the factorability check `m1 m2==F/A` (repeated λ: `E+λD==0`, then the
+  `m²−(D/A)m+F/A` quadratic) — giving the exponential-damped form
+  `Σ e^{−m_i v1} C[i][v2+λ_i v1]`. Covers the **distortionless telegraph**
+  `u_tt−c² u_xx+a u_t+(a²/4)u==0 → e^{−a t/2}(C[1][x+c t]+C[2][x−c t])` and
+  damped/convection factorable cases; `D=E=F=0` reproduces the principal-part form.
+  `dsolve_pde2.c`. *Future:* inhomogeneous forcing, the non-factorable general
+  telegraph (`b≠a²/4` → Bessel functions).
 - `[✓] SeparationOfVariables` — separated product solution `u == X(v1) Y(v2)` of a
   homogeneous, constant-coefficient linear PDE with **no mixed derivative term**.
   Dividing by `X Y` separates into two constant-coefficient ODEs in a separation

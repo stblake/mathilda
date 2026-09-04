@@ -1011,6 +1011,52 @@ static void t_pde_clairaut(void) {
     check_form("Head[DSolve`PDEClairaut[y'[x] == y[x], y, x]]", "DSolve`PDEClairaut");
 }
 
+/* ---- M6: 2nd-order constant-coeff PDE with lower-order terms (operator
+ * factoring → exponential-damped arbitrary functions) ---- */
+static void t_pde2_lower_order(void) {
+    /* distortionless telegraph u_tt − c² u_xx + a u_t + (a²/4) u == 0
+     * → e^{−a t/2}(C[1][x+c t] + C[2][x−c t]) */
+    check_true("With[{uc = (u[t,x] /. DSolve[D[u[t,x],{t,2}] == c^2 D[u[t,x],{x,2}] "
+               "- a D[u[t,x],t] - (a^2/4) u[t,x], u, {t,x}][[1]]) /. {C[1] -> Sin, C[2] -> Cos}}, "
+               "PossibleZeroQ[D[uc,{t,2}] - (c^2 D[uc,{x,2}] - a D[uc,t] - (a^2/4) uc)]]");
+    /* pure-mixed with a lower-order term: u_xy + u_x == 0 → C[1][y] + e^{−y} C[2][x] */
+    check_true("With[{uc = (u[x,y] /. DSolve[D[u[x,y],x,y] + D[u[x,y],x] == 0, u, {x,y}][[1]]) "
+               "/. {C[1] -> Sin, C[2] -> Cos}}, PossibleZeroQ[D[uc,x,y] + D[uc,x]]]");
+    /* a damped convection case (distinct λ, equal m): u_tt − u_xx + 2 u_t + u == 0 */
+    check_true("With[{uc = (u[t,x] /. DSolve[D[u[t,x],{t,2}] - D[u[t,x],{x,2}] + 2 D[u[t,x],t] "
+               "+ u[t,x] == 0, u, {t,x}][[1]]) /. {C[1] -> Sin, C[2] -> Cos}}, "
+               "PossibleZeroQ[D[uc,{t,2}] - D[uc,{x,2}] + 2 D[uc,t] + uc]]");
+    /* pinned builtin; regression: a principal-part-only equation is unchanged;
+     * a non-factorable general telegraph declines (stays symbolic) */
+    check_true("MatchQ[DSolve`PDELinearSecondOrder[D[u[t,x],{t,2}] == c^2 D[u[t,x],{x,2}] "
+               "- a D[u[t,x],t] - (a^2/4) u[t,x], u, {t,x}], {{u -> _Function}}]");
+    check_form("Head[DSolve[D[u[t,x],{t,2}] == D[u[t,x],{x,2}] - 3 D[u[t,x],t] - u[t,x], u, {t,x}]]",
+               "DSolve");
+}
+
+/* ---- M6: Charpit's method — first-order fully nonlinear PDE, standard forms ---- */
+static void t_pde_charpit(void) {
+    /* Type I  F(p,q):  p^2 + q^2 == 1  (explicit, two branches, each verified) */
+    check_true("And @@ Map[Function[br, With[{uc = u[x,y] /. br}, "
+               "PossibleZeroQ[D[uc,x]^2 + D[uc,y]^2 - 1]]], "
+               "DSolve[D[u[x,y],x]^2 + D[u[x,y],y]^2 == 1, u, {x,y}]]");
+    /* Type III separable  p^2 - q^2 == x - y  (explicit) */
+    check_true("With[{uc = u[x,y] /. DSolve[D[u[x,y],x]^2 - D[u[x,y],y]^2 == x - y, u, {x,y}][[1]]}, "
+               "PossibleZeroQ[D[uc,x]^2 - D[uc,y]^2 - (x - y)]]");
+    /* Type II  F(u,p,q):  p q == u  (implicit relation, verified by implicit diff) */
+    check_true("Head[DSolve[D[u[x,y],x] D[u[x,y],y] == u[x,y], u, {x,y}][[1,1]]] === Equal");
+    check_true("Module[{rel, Psi}, "
+               "rel = DSolve[D[u[x,y],x] D[u[x,y],y] == u[x,y], u, {x,y}][[1,1]]; "
+               "Psi = (rel[[1]] - rel[[2]]) /. u[x,y] -> U; "
+               "PossibleZeroQ[((-D[Psi,x]/D[Psi,U]) (-D[Psi,y]/D[Psi,U]) - U) /. U -> u[x,y]]]");
+    /* pinned builtin; declines a scalar ODE and a linear (non-Charpit) PDE */
+    check_true("With[{uc = u[x,y] /. DSolve`PDECharpit[D[u[x,y],x]^2 + D[u[x,y],y]^2 == 4, u, {x,y}][[1]]}, "
+               "PossibleZeroQ[D[uc,x]^2 + D[uc,y]^2 - 4]]");
+    check_form("Head[DSolve`PDECharpit[y'[x] == y[x], y, x]]", "DSolve`PDECharpit");
+    check_form("Head[DSolve`PDECharpit[D[u[x,y],x] + D[u[x,y],y] == 0, u, {x,y}]]",
+               "DSolve`PDECharpit");
+}
+
 /* ---- DSolve is NOT HoldAll: an equation stored in a variable must solve ---- */
 static void t_not_holdall(void) {
     check_true("FreeQ[Attributes[DSolve], HoldAll]");
@@ -1736,6 +1782,8 @@ int main(void) {
     TEST(t_sys_pde_pinned_methods);
     TEST(t_pde_quasilinear);
     TEST(t_pde_clairaut);
+    TEST(t_pde2_lower_order);
+    TEST(t_pde_charpit);
     TEST(t_declines_unsupported);
     /* M9: backfill for thin methods */
     TEST(t_method_homogeneous);

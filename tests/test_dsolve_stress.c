@@ -414,6 +414,55 @@ static void pdeclairaut_ok(const char* f) {
     ASSERT_TRUE(buf);
 }
 
+/* PDELinearSecondOrder with lower-order terms: build the operator from a chosen
+ * factorization (∂_t − l1 ∂_x + m1)(∂_t − l2 ∂_x + m2) u == 0, solve, and verify
+ * by applying the SAME operator to the solution (C[1]/C[2] pinned to Sin/Cos). */
+static void pde2_factorable_ok(int l1, int m1, int l2, int m2) {
+    char eqn[320], buf[1300];
+    /* the zeroth-order term is + m # (m times the argument), not a bare + m */
+    snprintf(eqn, sizeof(eqn),
+        "(D[#,t] - (%d) D[#,x] + (%d) # &)[(D[#,t] - (%d) D[#,x] + (%d) # &)[u[t,x]]] == 0",
+        l1, m1, l2, m2);
+    snprintf(buf, sizeof(buf), "Head[DSolve[%s, u, {t,x}]] === List", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "With[{uc = (u[t,x] /. DSolve[%s, u, {t,x}][[1]]) /. {C[1] -> Sin, C[2] -> Cos}}, "
+        "PossibleZeroQ[(D[#,t] - (%d) D[#,x] + (%d) # &)[(D[#,t] - (%d) D[#,x] + (%d) # &)[uc]]]]",
+        eqn, l1, m1, l2, m2);
+    ASSERT_TRUE(buf);
+}
+
+/* Charpit Type I  F(p,q):  equation (lhs) == (rhs) with p = u_x, q = u_y
+ * placeholders; every complete-integral branch back-substitutes. */
+static void charpit_type1_ok(const char* lhs, const char* rhs) {
+    char buf[1400];
+    snprintf(buf, sizeof(buf),
+        "Head[DSolve[((%s) /. {p -> D[u[x,y],x], q -> D[u[x,y],y]}) == (%s), u, {x,y}]] === List",
+        lhs, rhs);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "And @@ Map[Function[br, With[{uc = u[x,y] /. br}, "
+        "PossibleZeroQ[((%s) /. {p -> D[uc,x], q -> D[uc,y]}) - (%s)]]], "
+        "DSolve[((%s) /. {p -> D[u[x,y],x], q -> D[u[x,y],y]}) == (%s), u, {x,y}]]",
+        lhs, rhs, lhs, rhs);
+    ASSERT_TRUE(buf);
+}
+
+/* Charpit Type III separable  f(x,p) == g(y,q)  (p,q placeholders); explicit
+ * complete integral back-substitutes. */
+static void charpit_sep_ok(const char* fx, const char* gy) {
+    char buf[1400];
+    snprintf(buf, sizeof(buf),
+        "Head[DSolve[((%s) /. p -> D[u[x,y],x]) == ((%s) /. q -> D[u[x,y],y]), u, {x,y}]] === List",
+        fx, gy);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "With[{uc = u[x,y] /. DSolve[((%s) /. p -> D[u[x,y],x]) == ((%s) /. q -> D[u[x,y],y]), "
+        "u, {x,y}][[1]]}, PossibleZeroQ[((%s) /. p -> D[uc,x]) - ((%s) /. q -> D[uc,y])]]",
+        fx, gy, fx, gy);
+    ASSERT_TRUE(buf);
+}
+
 /* ---------------------- families ---------------------- */
 
 static void t_stress_linear1(void) {
@@ -638,6 +687,25 @@ static void t_stress_pde_clairaut(void) {
     pdeclairaut_ok("p^2");          /* u_x^2               */
     pdeclairaut_ok("p q + p");      /* mixed nonlinear     */
     pdeclairaut_ok("p^2 + q");      /* nonlinear + linear  */
+}
+
+/* M6: factorable 2nd-order (lower-order terms) + Charpit standard forms. */
+static void t_stress_pde2_factorable(void) {
+    pde2_factorable_ok(1, 1, -1, 1);   /* distortionless telegraph (l=±1, m=1)  */
+    pde2_factorable_ok(2, 0, -2, 0);   /* wave-like, m = 0                       */
+    pde2_factorable_ok(1, 1, 1, 2);    /* repeated λ = 1, distinct m             */
+    pde2_factorable_ok(0, 1, 0, 2);    /* repeated λ = 0 (ODE-in-t family)       */
+    pde2_factorable_ok(1, 2, 3, 1);    /* distinct λ and distinct m              */
+}
+
+static void t_stress_pde_charpit(void) {
+    charpit_type1_ok("p^2 + q^2", "1");   /* F(p,q): circle              */
+    charpit_type1_ok("p^2 + q^2", "4");
+    charpit_type1_ok("p q", "1");
+    charpit_type1_ok("p^2 - q", "0");     /* q = p^2                     */
+    charpit_sep_ok("p^2 - x", "q^2 - y"); /* separable: p^2 - q^2 = x - y */
+    charpit_sep_ok("p^2", "q^2 - y");     /* p^2 = q^2 - y               */
+    charpit_sep_ok("p^2 + 2 x", "q^2 + y");
 }
 
 /* Factorable: (y' - r1 y)(y' - r2 y) == 0 factors into two linear ODEs; EVERY
@@ -909,6 +977,8 @@ int main(void) {
     TEST(t_stress_pde);
     TEST(t_stress_pde_quasilinear);
     TEST(t_stress_pde_clairaut);
+    TEST(t_stress_pde2_factorable);
+    TEST(t_stress_pde_charpit);
 
     printf("\nAll DSolve stress tests passed.\n");
     return 0;

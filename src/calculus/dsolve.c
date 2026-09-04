@@ -172,6 +172,8 @@ extern Expr** dsolve_pdequasi_solve(DSolveProblem* P);   /* PDEQuasilinear (Lagr
 extern void dsolve_pdequasi_init(void);
 extern Expr** dsolve_pdeclairaut_solve(DSolveProblem* P);/* PDEClairaut (complete integral) */
 extern void dsolve_pdeclairaut_init(void);
+extern Expr** dsolve_pdecharpit_solve(DSolveProblem* P); /* PDECharpit (nonlinear complete integral) */
+extern void dsolve_pdecharpit_init(void);
 extern void dsolve_pdesep_init(void);  /* DSolve`SeparationOfVariables (pinned-only) */
 extern void dsolve_pdeclassify_init(void);  /* PDEClassify (standalone classifier) */
 extern Expr* dsolve_wave_ivp_run(DSolveProblem* P);  /* wave d'Alembert IVP (own runner) */
@@ -253,6 +255,9 @@ Expr* builtin_dsolve(Expr* res) {
          * derivatives, which quasilinear declines, so Clairaut still claims it. */
         if (!result) result = dsolve_run_pde_implicit(&P, dsolve_pdequasi_solve);
         if (!result) result = dsolve_run_pde_implicit(&P, dsolve_pdeclairaut_solve);
+        /* Charpit (fully nonlinear first order, standard forms): after the
+         * quasilinear/Clairaut methods, before the second-order factoring. */
+        if (!result) result = dsolve_run_pde_implicit(&P, dsolve_pdecharpit_solve);
         if (!result) result = dsolve_run_pde(&P, dsolve_pde2_solve);
         /* wave d'Alembert IVP: PDE + two initial conditions (neq==3); its own
          * runner (multi-equation verify/assemble, not the single-equation
@@ -445,6 +450,7 @@ void dsolve_init(void) {
     dsolve_pde2_init();
     dsolve_pdequasi_init();
     dsolve_pdeclairaut_init();
+    dsolve_pdecharpit_init();
     dsolve_pdesep_init();
     dsolve_pdeclassify_init();
     dsolve_wave_init();

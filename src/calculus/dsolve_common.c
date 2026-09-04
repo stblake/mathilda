@@ -1233,13 +1233,47 @@ Expr* dsolve_run_pde(DSolveProblem* P, DSolveSysFn fn) {
  * u(v1,v2) with u_vi = -Psi_vi / Psi_u; substituting into the residual must not
  * be a decidable non-zero (a PossibleZeroQ sampling is the transcendental
  * fallback, as in dsolve_verify_parametric). */
-static bool dsolve_verify_pde_implicit(const DSolveProblem* P,
-                                       const Expr* phi1, const Expr* phi2) {
-    if (P->neq < 1) return false;
+/* Shared implicit-diff core: with Psi(v1,v2,u) == const defining u(v1,v2)
+ * implicitly, the implicit-function rule gives u_vi = -Psi_vi/Psi_u; substitute
+ * into the single PDE residual and return false only if it is a DECIDABLE
+ * non-zero (a PossibleZeroQ sampling is the transcendental fallback, as in
+ * dsolve_verify_parametric).  Psi is in the bare u-symbol DSolve`pdeU and is
+ * CONSUMED. */
+static bool pde_implicit_residual_ok(const DSolveProblem* P, Expr* Psi) {
     const char* u  = P->fun_names[0];
     const char* v1 = P->ind_names[0];
     const char* v2 = P->ind_names[1];
     const char* sU = intern_symbol("DSolve`pdeU");
+    Expr* Px = ds_d(expr_copy(Psi), expr_new_symbol(v1));
+    Expr* Py = ds_d(expr_copy(Psi), expr_new_symbol(v2));
+    Expr* Pu = ds_d(Psi, expr_new_symbol(sU));               /* consumes Psi */
+    Expr* Puinv = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ Pu, expr_new_integer(-1) }, 2);
+    Expr* ux = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+                   ds_call2(SYM_Times, Px, expr_copy(Puinv))));
+    Expr* uy = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+                   ds_call2(SYM_Times, Py, expr_copy(Puinv))));
+    expr_free(Puinv);
+
+    Expr* r = expr_copy(P->eq_residuals[0]);
+    r = ds_subst(r, pde_deriv_lit(u, 1, 0, v1, v2), ux);
+    r = ds_subst(r, pde_deriv_lit(u, 0, 1, v1, v2), uy);
+    r = ds_subst(r, expr_new_function(expr_new_symbol(u),
+                    (Expr*[]){ expr_new_symbol(v1), expr_new_symbol(v2) }, 2),
+                 expr_new_symbol(sU));
+    bool ok = true;
+    if (zero_test_decide(r) == ZERO_TEST_FALSE) {
+        Expr* pz = eval_and_free(ds_call1("PossibleZeroQ", expr_copy(r)));
+        if (!(pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True)) ok = false;
+        expr_free(pz);
+    }
+    expr_free(r);
+    return ok;
+}
+
+static bool dsolve_verify_pde_implicit(const DSolveProblem* P,
+                                       const Expr* phi1, const Expr* phi2) {
+    if (P->neq < 1) return false;
     const char* z  = intern_symbol("DSolve`pdez");
 
     /* distinct concrete test functions for the arbitrary C[1]: Sin, Cos, #^2 */
@@ -1255,32 +1289,36 @@ static bool dsolve_verify_pde_implicit(const DSolveProblem* P,
                                expr_copy((Expr*)phi2));
         Expr* Psi = eval_and_free(ds_call2(SYM_Subtract,
                         expr_copy((Expr*)phi1), Fphi2));     /* Psi = phi1 - F(phi2) */
-        Expr* Px = ds_d(expr_copy(Psi), expr_new_symbol(v1));
-        Expr* Py = ds_d(expr_copy(Psi), expr_new_symbol(v2));
-        Expr* Pu = ds_d(Psi, expr_new_symbol(sU));           /* consumes Psi */
-        Expr* Puinv = expr_new_function(expr_new_symbol(SYM_Power),
-                          (Expr*[]){ Pu, expr_new_integer(-1) }, 2);
-        Expr* ux = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
-                       ds_call2(SYM_Times, Px, expr_copy(Puinv))));
-        Expr* uy = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
-                       ds_call2(SYM_Times, Py, expr_copy(Puinv))));
-        expr_free(Puinv);
-
-        Expr* r = expr_copy(P->eq_residuals[0]);
-        r = ds_subst(r, pde_deriv_lit(u, 1, 0, v1, v2), ux);
-        r = ds_subst(r, pde_deriv_lit(u, 0, 1, v1, v2), uy);
-        r = ds_subst(r, expr_new_function(expr_new_symbol(u),
-                        (Expr*[]){ expr_new_symbol(v1), expr_new_symbol(v2) }, 2),
-                     expr_new_symbol(sU));
-        if (zero_test_decide(r) == ZERO_TEST_FALSE) {
-            Expr* pz = eval_and_free(ds_call1("PossibleZeroQ", expr_copy(r)));
-            if (!(pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True)) ok = false;
-            expr_free(pz);
-        }
-        expr_free(r);
+        ok = pde_implicit_residual_ok(P, Psi);               /* consumes Psi */
         expr_free(tests[t]);
     }
     return ok;
+}
+
+/* Verify a Charpit complete integral given as the implicit relation Psi == C[k]
+ * (Psi in the bare u-symbol, with arbitrary CONSTANTS — no arbitrary function to
+ * pin).  Just the implicit-diff core once. */
+static bool dsolve_verify_pde_relation(const DSolveProblem* P, const Expr* Psi) {
+    if (P->neq < 1) return false;
+    return pde_implicit_residual_ok(P, expr_copy((Expr*)Psi));
+}
+
+/* Assemble {{ Psi(v1,v2,u[v1,v2]) == C[2] }} (Psi carries the first constant C[1]),
+ * renaming C[k] to the GeneratedParameters head.  Psi borrowed. */
+static Expr* dsolve_assemble_pde_relation(const DSolveProblem* P, const Expr* Psi) {
+    const char* uname = P->fun_names[0];
+    const char* v1 = P->ind_names[0];
+    const char* v2 = P->ind_names[1];
+    const char* sU = intern_symbol("DSolve`pdeU");
+    Expr* uapp = expr_new_function(expr_new_symbol(uname),
+                     (Expr*[]){ expr_new_symbol(v1), expr_new_symbol(v2) }, 2);
+    Expr* psi_app = ds_subst(expr_copy((Expr*)Psi), expr_new_symbol(sU), uapp);
+    Expr* rel = expr_new_function(expr_new_symbol(SYM_Equal),
+                    (Expr*[]){ psi_app, ds_const(2) }, 2);
+    Expr* rel2 = ds_rename_param(rel, P->param_head);
+    expr_free(rel);
+    Expr* inner = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ rel2 }, 1);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ inner }, 1);
 }
 
 /* Assemble {{ phi1(v1,v2,u[v1,v2]) == C[1][phi2(...)] }} from the bare-u first
@@ -1320,11 +1358,18 @@ Expr* dsolve_run_pde_implicit(DSolveProblem* P, DSolveSysFn fn) {
     const char* wImpl = intern_symbol("DSolve`PDEImplicit");
     const char* wExpl = intern_symbol("DSolve`PDEExplicit");
     const char* wBran = intern_symbol("DSolve`PDEBranches");
+    const char* wRel  = intern_symbol("DSolve`PDERelation");
     if (body && head_is(body, wImpl) && body->data.function.arg_count == 2) {
         Expr* phi1 = body->data.function.args[0];
         Expr* phi2 = body->data.function.args[1];
         if (dsolve_verify_pde_implicit(P, phi1, phi2))
             result = dsolve_assemble_pde_implicit(P, phi1, phi2);
+    } else if (body && head_is(body, wRel) && body->data.function.arg_count == 1) {
+        /* Charpit implicit complete integral: relation Psi == C[2] (arbitrary
+         * constants, no arbitrary function). */
+        Expr* Psi = body->data.function.args[0];
+        if (dsolve_verify_pde_relation(P, Psi))
+            result = dsolve_assemble_pde_relation(P, Psi);
     } else if (body && head_is(body, wExpl) && body->data.function.arg_count == 1) {
         Expr* b = body->data.function.args[0];
         if (dsolve_verify_pde(P, b))
