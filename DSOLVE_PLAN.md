@@ -291,6 +291,30 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   1997); Cheb-Terrab & Kolokolnikov (math-ph/0007023); see
   `docs/design/dsolve_lie_symmetry.md`.
 
+- **M11 — finish Phase-1 ODE gaps.** ✅ DONE. Three principled additions closing the
+  remaining §1e/§1f gaps, each back-substitution verified with unit + forward-generator
+  stress tests.
+  - **Refactor:** the constant-coefficient system core is factored out of
+    `dsolve_linsys.c` into `dsolve_linsys.h` — `dsolve_linsys_matexp` (`e^{Mt}` Jordan
+    builder), `dsolve_linsys_tidy` (realifier, now applying `ComplexExpand` only when
+    the body carries the imaginary unit, avoiding a gratuitous `Log[x]→Log[Abs]+I Arg`
+    split), `dsolve_linsys_extract_Ab` (constant-`A` guard moved to callers), and
+    `dsolve_linsys_assemble(M,t,xvar,b,b_zero,n)`. `LinearFirstOrderSystem` output
+    unchanged.
+  - **`LinearSystemVarCoeff`** (§1e, `dsolve_linsys_varcoeff.c`) — coupled variable-
+    coefficient systems of the scalar-factor class `A(x)=f(x)B`, via `t=∫f dx` and the
+    reused assembler. Cascade after `LinearFirstOrderSystem`.
+  - **Formal Linear BVP soundness** (§1f, `dsolve_common.c`) — an inconsistent /
+    over-determined BVP returns `{}` (no solution) instead of the silent unfitted
+    general solution: the constant-fitters gained a `no_solution` out-param (set on an
+    empty-`Solve` result) threaded through `dsolve_run` / `dsolve_run_system` as the
+    concrete empty list.
+  - **`EigenvalueProblem`** (§1f, `dsolve_eigenvalue.c`) — pinned-only Sturm-Liouville
+    `y''+λy==0` on `[a,b]` with two homogeneous BCs, eigenvalue family + eigenfunctions
+    verified under the integer index.
+  All three DSolve ctest suites + `make check-c99` green; valgrind leak-clean; SymPy
+  cross-validated the coupled variable-coefficient systems.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -539,15 +563,28 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   valid for singular `A`. Multi-function verify + IVP/BVP fit in the substrate
   (`dsolve_verify_system`/`dsolve_fit_system`/`dsolve_assemble_system`).
   *Was (M4): eigen-only, diagonalizable, `-A^{-1}b` forcing, defective decline.*
-- `[ ] LinearSystemVarCoeff` — genuinely coupled, *non-triangular*, *variable* `A`
-  (Floquet/Magnus); future. This is SymPy's non-constant-coefficient
-  `linear_neq_order1` (types with a commutative antiderivative of the coefficient
-  matrix) and is the systems parity target.
+- `[✓] LinearSystemVarCoeff` — genuinely coupled, *non-triangular*, *variable* `A`,
+  the **scalar-factor class** `A(x) == f(x) B` (`B` constant): `t = ∫f dx` reduces
+  `Y' == f(x) B Y + b(x)` to `dY/dt == B Y`, so `Φ == e^{B t}` reuses the constant
+  fundamental-matrix builder (`dsolve_linsys_assemble`); forcing by variation of
+  parameters. Cascade slot after `LinearFirstOrderSystem` (declines a constant `A`).
+  `dsolve_linsys_varcoeff.c`. *Future (still `[ ]`):* the wider commutative-
+  antiderivative class (`[A,∫A]==0` but not scalar×constant) and the genuinely
+  non-commuting Floquet/Magnus case — both need a symbolic `MatrixExp` of a variable
+  matrix. (SymPy's non-constant `linear_neq_order1`.)
 
 ### 1f. Conditions
 - `[✓]` IVP (fit constants at one point) — in the substrate.
-- `[ ]` Linear BVP (multiple points) — in the substrate + `Solve`.
-- `[ ] EigenvalueProblem` — Sturm–Liouville: `Piecewise` with parameter conditions.
+- `[✓]` Linear BVP (multiple points) — in the substrate + `Solve`; **sound**: an
+  inconsistent / over-determined BVP now returns `{}` (no solution) rather than the
+  silent unfitted general solution (the constant-fitters signal an empty-`Solve`
+  result up through `dsolve_run` / `dsolve_run_system` as the concrete empty list,
+  distinct from a decline). Under-determined BVPs keep the free constant.
+- `[✓] EigenvalueProblem` — Sturm–Liouville `y'' + λ y == 0` on `[a,b]` with two
+  homogeneous BCs (Dirichlet/Neumann/mixed), first cut: eigenvalue family + eigen-
+  functions, verified under `C[1] ∈ Integers`; pinned-only `DSolve`EigenvalueProblem`
+  (`dsolve_eigenvalue.c`). *Future:* non-constant weight, Robin/periodic BCs, the
+  `λ==0` Neumann mode, and the `DEigensystem`/`DEigenvalues` surfaces.
 
 ## Phase 2 — PDE method catalog
 

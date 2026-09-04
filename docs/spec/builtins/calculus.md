@@ -707,20 +707,28 @@ Utility (not a solver — returns the reduced equation, not a solution):
 | `DSolve`NormalForm` | for `y'' + P y' + Q y == 0`, the pair `{r, w}`: `y == w z` with `w == Exp[-∫P/2]` reduces to `z'' == r z`, `r == P²/4 + P'/2 − Q` (the form Kovacic and the special-function recognizers operate on) |
 
 Systems (`nfun > 1`) are dispatched to their own cascade,
-`DecoupleSystem → TriangularSystem → LinearFirstOrderSystem`; each is also callable as a
-pinned `DSolve`<Name>[...]` builtin (with its own docstring):
+`DecoupleSystem → TriangularSystem → LinearFirstOrderSystem → LinearSystemVarCoeff`;
+each is also callable as a pinned `DSolve`<Name>[...]` builtin (with its own docstring):
 
 | Method | Solves |
 |---|---|
 | `DSolve`DecoupleSystem` | each equation mentions one function (recurse per function) |
 | `DSolve`TriangularSystem` | DAG dependency graph — solve in order, substitute forward, at any coefficient (constant or variable, e.g. `{y'==y/x, z'==y}`) |
 | `DSolve`LinearFirstOrderSystem` | `Y' == A Y + b(x)`, constant `A`, **any** spectrum — fundamental matrix `e^{Ax}` from `JordanDecomposition` (diagonalizable, **defective**, or complex); forcing by variation of parameters |
+| `DSolve`LinearSystemVarCoeff` | genuinely-coupled, non-triangular, **variable-coefficient** `Y' == A(x) Y + b(x)` of the scalar-factor class `A(x) == f(x) B` (`B` constant): `t = ∫f dx` reduces it to `dY/dt == B Y`, so `Φ == e^{B t}` reuses the constant-matrix builder; forcing by variation of parameters. Solves `{y'==(2y+z)/x, z'==(y+2z)/x}` (→ `x`, `x³`) and `{y'==x z, z'==-x y}` (→ `Cos/Sin[x²/2]`). Declines a constant `A` (that is `LinearFirstOrderSystem`'s) and any non-scalar-factor `A(x)`; the wider commutative-antiderivative / Floquet-Magnus class is future |
 
-The first-order PDE method is likewise pinned:
+The first-order PDE method and the Sturm-Liouville eigenvalue method are likewise pinned:
 
 | Method | Solves |
 |---|---|
 | `DSolve`PDELinearFirstOrder` | constant-coefficient `a u_{v1} + b u_{v2} + c u == f` (method of characteristics; the generated arbitrary function is `C[1][·]`) |
+| `DSolve`EigenvalueProblem` | Sturm-Liouville `y'' + λ y == 0` on `[a,b]` with two homogeneous BCs (Dirichlet `y==0`, Neumann `y'==0`, or mixed) at two distinct points → the eigenvalue family + eigenfunctions: `{{λ -> ConditionalExpression[w_n², Element[C[1],Integers] && C[1]>=1], y -> Function[{x}, C[2] Sin/Cos[w_n(x-a)]]}}`, `w_n == n Pi/(b-a)` (same-type BCs) or `(2n-1)Pi/(2(b-a))` (mixed), `C[1]` the integer index, `C[2]` the amplitude. Every eigenpair is back-substitution verified under `C[1]` integer. **Pinned-only** (never misfires on an ordinary IVP/BVP). Constant weight only; Robin/periodic BCs and the `λ==0` Neumann mode are future |
+
+A **boundary-value problem** with multiple point conditions is fitted through the same
+substrate as an IVP (each condition's `Solve` constraint on the generated constants). An
+inconsistent / over-determined BVP (e.g. `y''+y==0, y[0]==1, y[Pi]==1`) returns `{}` (no
+solution), matching Mathematica — distinct from an unhandled equation, which stays
+symbolic. An under-determined BVP returns the family with its remaining free constant.
 
 ```
 In[5]:= DSolve[y''[x] + 4 y'[x] + 5 y[x] == 0, y[x], x]
@@ -766,13 +774,26 @@ Out[12]= {{y[t] -> C[1], x[t] -> C[2] - C[1] t}}
 In[13]:= DSolve[{u'[t] == u[t] - v[t], v'[t] == u[t] + 3 v[t]}, {u[t], v[t]}, t]  (* defective, x e^{2t} *)
 Out[13]= {{u[t] -> E^(2 t) (C[1] - C[1] t - C[2] t),
            v[t] -> E^(2 t) (C[2] + C[1] t + C[2] t)}}
+
+In[14]:= DSolve[{y'[x] == (2 y[x] + z[x])/x, z'[x] == (y[x] + 2 z[x])/x}, {y, z}, x]  (* coupled variable-coeff *)
+Out[14]= {{y[x] -> 1/2 x (C[1] - C[2] + C[1] x^2 + C[2] x^2),
+           z[x] -> 1/2 x (C[2] - C[1] + C[1] x^2 + C[2] x^2)}}
+
+In[15]:= DSolve[{y''[x] + y[x] == 0, y[0] == 1, y[Pi] == 1}, y, x]   (* inconsistent BVP *)
+Out[15]= {}
+
+In[16]:= DSolve`EigenvalueProblem[{y''[x] + w y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x]
+Out[16]= {{w -> ConditionalExpression[C[1]^2, Element[C[1], Integers] && C[1] >= 1],
+           y -> Function[{x}, C[2] Sin[C[1] x]]}}
 ```
 
-Systems (`nfun > 1`) are dispatched to `DecoupleSystem` (each equation involves
-one function — solve each scalar and renumber the constants) and
-`LinearFirstOrderSystem` (constant-coefficient `Y' == A Y + b`, solved by the
-eigen-decomposition of A with real `Cos/Sin` forms for complex eigenvalues and a
-`-A^{-1}b` particular for constant forcing).
+Systems (`nfun > 1`) are dispatched through the cascade `DecoupleSystem`
+(each equation involves one function — solve each scalar and renumber the
+constants) → `TriangularSystem` (DAG dependency graph, forward substitution, at any
+coefficient) → `LinearFirstOrderSystem` (constant-coefficient `Y' == A Y + b`, the
+fundamental matrix `e^{Ax}` from `JordanDecomposition` — diagonalizable, defective, or
+complex — with forcing by variation of parameters) → `LinearSystemVarCoeff`
+(genuinely-coupled variable-coefficient `Y' == f(x) B Y + b(x)` via `t = ∫f dx`).
 
 First-order linear PDEs (`DSolve[eqn, u, {x, y}]`) are solved by the method of
 characteristics; the general solution carries an arbitrary function `C[1][ξ]`:

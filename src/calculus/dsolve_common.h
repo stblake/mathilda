@@ -114,8 +114,10 @@ Expr* dsolve_assemble_system(const DSolveProblem* P, Expr** bodies);
 
 /* Fit the system's initial/boundary conditions in place: collect the constants
  * across all bodies, solve the conditions for them, and back-substitute into
- * every body.  No-op when there are no conditions. */
-void  dsolve_fit_system(const DSolveProblem* P, Expr** bodies);
+ * every body.  No-op when there are no conditions.  Sets *no_solution (when
+ * non-NULL) true iff Solve proves the conditions inconsistent (empty {} result),
+ * i.e. an over-determined system BVP with no solution. */
+void  dsolve_fit_system(const DSolveProblem* P, Expr** bodies, bool* no_solution);
 
 /* True unless some equation, under y_j -> Function[{x}, bodies[j]] for all j,
  * back-substitutes to a decidably non-zero residual. */
@@ -260,6 +262,10 @@ Expr* ds_make_funcapp(const char* fname, int order, const char* xvar);
 
 /* The generated constant C[k]. */
 Expr* ds_const(int k);
+
+/* Rewrite every generated constant C[k] in `e` to head[k] (the GeneratedParameters
+ * head).  `e` borrowed, result owned (a no-op deep copy when head == "C"). */
+Expr* ds_rename_param(const Expr* e, const char* head);
 
 /* True iff the interned symbol `name` occurs anywhere in `e` (head or arg). */
 bool  ds_contains(const Expr* e, const char* name);

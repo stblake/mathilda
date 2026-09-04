@@ -1,5 +1,6 @@
 /*
- * dsolve_linsys.c — DSolve`LinearFirstOrderSystem.
+ * dsolve_linsys.c — DSolve`LinearFirstOrderSystem + shared fundamental-matrix
+ *                   machinery (declared in dsolve_linsys.h).
  *
  * Solves a first-order linear system with constant coefficients
  *     Y' == A Y + b(x),   A an n x n constant matrix,
@@ -22,7 +23,15 @@
  * introduces for a repeated real eigenvalue is folded back to E^{lambda x}.
  *
  * Symbolic MatrixExp is currently inert, so Phi is built from Jordan directly.
+ *
+ * The extraction (Y' == A Y + b), the matrix exponential e^{Mt}, the realifier,
+ * and the "Phi . (C + VoP)" assembler are exposed via dsolve_linsys.h so the
+ * variable-coefficient sibling (dsolve_linsys_varcoeff.c) reuses them: for a
+ * scalar-factor system Y' == f(x) B Y the change of variable t = Integrate[f, x]
+ * turns it into dY/dt == B Y, so Phi = e^{B Integrate[f,x]} is exactly this same
+ * assembler with `t` = the antiderivative instead of the bare symbol x.
  */
+#include "dsolve_linsys.h"
 #include "dsolve_common.h"
 #include "../sym_names.h"
 #include "../eval.h"
@@ -56,18 +65,34 @@ static Expr* cosh_sinh_rule(void) {
     return expr_new_function(expr_new_symbol(SYM_RuleDelayed), (Expr*[]){ lhs, rhs }, 2);
 }
 
-/* Realify + tidy a solution body; consumes `body`, returns owned. */
-static Expr* tidy(Expr* body) {
-    Expr* ce   = eval_and_free(ds_call1("ComplexExpand", body));
+/* True iff `e` contains the imaginary unit (a Complex[...] node) anywhere. */
+static bool expr_contains_complex(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Complex)) return true;
+    if (expr_contains_complex(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_contains_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Realify + tidy a solution body; consumes `body`, returns owned.
+ * ComplexExpand is applied ONLY when the body actually carries the imaginary unit
+ * (a complex spectrum needing e^{a+ib x} -> e^{ax}Cos/Sin[bx]).  On an already-real
+ * body it is skipped: ComplexExpand assumes real-but-possibly-negative variables and
+ * would gratuitously split Log[x] -> Log[Abs[x]] + I Arg[x] (which arises in the
+ * variable-coefficient forcing integral, e.g. Integrate[x^{-1}, x] = Log[x]). */
+Expr* dsolve_linsys_tidy(Expr* body) {
+    Expr* ce   = expr_contains_complex(body)
+                     ? eval_and_free(ds_call1("ComplexExpand", body)) : body;
     Expr* si   = eval_and_free(ds_call1("Simplify", ce));
     Expr* rule = cosh_sinh_rule();
     return eval_and_free(internal_replace_repeated((Expr*[]){ si, rule }, 2));
 }
 
-/* e^{A t} for A = S J S^{-1}, given the Jordan factors S (change of basis) and
+/* e^{M t} for M = S J S^{-1}, given the Jordan factors S (change of basis) and
  * J (Jordan form, upper-triangular with the eigenvalues on the diagonal).
  * S, J, t are borrowed; the returned n x n matrix (List of Lists) is owned. */
-static Expr* mat_exp(Expr* S, Expr* J, Expr* t, size_t n) {
+Expr* dsolve_linsys_matexp(Expr* S, Expr* J, Expr* t, size_t n) {
     /* e^{Dt} (diagonal Exp[J_ii t]) and N = J with the diagonal zeroed */
     Expr** drows = malloc(n * sizeof(Expr*));
     Expr** nrows = malloc(n * sizeof(Expr*));
@@ -113,11 +138,12 @@ static Expr* mat_exp(Expr* S, Expr* J, Expr* t, size_t n) {
                              eval_and_free(ds_call1("Inverse", expr_copy(S)))));
 }
 
-Expr** dsolve_linsys_solve(DSolveProblem* P) {
+/* Extract Y' == A Y + b from the parsed square system.  See dsolve_linsys.h. */
+bool dsolve_linsys_extract_Ab(DSolveProblem* P, Expr** Aout, Expr** bout, bool* b_zero_out) {
     size_t n = P->nfun;
     const char* xvar = P->ind_names[0];
-    if (P->neq != n) return NULL;
-    for (size_t i = 0; i < n; i++) if (P->max_order[i] != 1) return NULL;
+    if (P->neq != n) return false;
+    for (size_t i = 0; i < n; i++) if (P->max_order[i] != 1) return false;
 
     /* algebraic residuals: y_j'[x] -> Dsym[j], y_j[x] -> Ysym[j] */
     const char** Dn = malloc(n * sizeof(char*));
@@ -166,17 +192,16 @@ Expr** dsolve_linsys_solve(DSolveProblem* P) {
     free(ralg);
     for (size_t k = 0; k < n && ok; k++) if (!RHS[k]) ok = false;
 
-    /* A[i][j] = dRHS_i/dY_j (constant), b[i] = RHS_i|_{Y=0} */
+    /* A[i][j] = dRHS_i/dY_j, b[i] = RHS_i|_{Y=0}.  NB: no x-dependence guard here —
+     * A/b may depend on x; the constant-A decision is the caller's. */
     Expr* Amat = NULL; Expr* bvec = NULL; bool b_zero = true;
     if (ok) {
         Expr** rows = malloc(n * sizeof(Expr*));
         Expr** bs = malloc(n * sizeof(Expr*));
         for (size_t i = 0; i < n; i++) {
             Expr** cols = malloc(n * sizeof(Expr*));
-            for (size_t j = 0; j < n; j++) {
+            for (size_t j = 0; j < n; j++)
                 cols[j] = ds_d(expr_copy(RHS[i]), expr_new_symbol(Yn[j]));
-                if (!ds_free_of(cols[j], xvar)) ok = false;
-            }
             rows[i] = expr_new_function(expr_new_symbol(SYM_List), cols, n);
             free(cols);
             Expr* bi = expr_copy(RHS[i]);
@@ -188,72 +213,87 @@ Expr** dsolve_linsys_solve(DSolveProblem* P) {
         bvec = expr_new_function(expr_new_symbol(SYM_List), bs, n); free(bs);
     }
     for (size_t k = 0; k < n; k++) if (RHS[k]) expr_free(RHS[k]);
-    free(RHS); free(Dn);
+    free(RHS); free(Dn); free(Yn);
 
-    /* forcing must be constant (or zero) */
-    if (ok && !b_zero && !ds_free_of(bvec, xvar)) ok = false;
+    if (!ok) { if (Amat) expr_free(Amat); if (bvec) expr_free(bvec); return false; }
+    *Aout = Amat; *bout = bvec; *b_zero_out = b_zero;
+    return true;
+}
 
-    /* ---- fundamental-matrix solution: Phi = e^{Ax} via Jordan ---- */
+/* Y = tidy( e^{M t} . (C + Integrate[e^{-M t} b, x]) ).  See dsolve_linsys.h. */
+Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
+                              Expr* b, bool b_zero, size_t n) {
     Expr** Y = NULL;
-    if (ok) {
-        Expr* jd = ds_delist(eval_and_free(ds_call1("JordanDecomposition", expr_copy(Amat))));
-        if (head_is(jd, SYM_List) && jd->data.function.arg_count == 2) {
-            Expr* S = jd->data.function.args[0];
-            Expr* J = jd->data.function.args[1];
-            bool shape = head_is(S, SYM_List) && head_is(J, SYM_List)
-                && S->data.function.arg_count == n && J->data.function.arg_count == n;
-            for (size_t i = 0; shape && i < n; i++)
-                if (!head_is(J->data.function.args[i], SYM_List)
-                    || J->data.function.args[i]->data.function.arg_count != n) shape = false;
-            if (shape) {
-                Expr* xt  = expr_new_symbol(xvar);
-                Expr* Phi = mat_exp(S, J, xt, n);
-                expr_free(xt);
+    Expr* jd = ds_delist(eval_and_free(ds_call1("JordanDecomposition", expr_copy(M))));
+    if (head_is(jd, SYM_List) && jd->data.function.arg_count == 2) {
+        Expr* S = jd->data.function.args[0];
+        Expr* J = jd->data.function.args[1];
+        bool shape = head_is(S, SYM_List) && head_is(J, SYM_List)
+            && S->data.function.arg_count == n && J->data.function.arg_count == n;
+        for (size_t i = 0; shape && i < n; i++)
+            if (!head_is(J->data.function.args[i], SYM_List)
+                || J->data.function.args[i]->data.function.arg_count != n) shape = false;
+        if (shape) {
+            Expr* Phi = dsolve_linsys_matexp(S, J, t, n);
 
-                /* rhs = {C[1..n]} (+ variation of parameters if forced) */
-                Expr** rc = malloc(n * sizeof(Expr*));
-                for (size_t i = 0; i < n; i++) rc[i] = ds_const((int)i + 1);
-                bool force_ok = true;
-                if (!b_zero) {
-                    Expr* negx   = mul(expr_new_integer(-1), expr_new_symbol(xvar));
-                    Expr* PhiInv = mat_exp(S, J, negx, n);
-                    expr_free(negx);
-                    Expr* integ  = ds_delist(eval_and_free(
-                                       ds_call2(SYM_Dot, PhiInv, expr_copy(bvec))));
-                    if (head_is(integ, SYM_List) && integ->data.function.arg_count == n) {
-                        for (size_t i = 0; i < n && force_ok; i++) {
-                            Expr* anti = ds_integrate(expr_copy(integ->data.function.args[i]),
-                                                      expr_new_symbol(xvar));
-                            if (ds_has_head(anti, SYM_Integrate)) { expr_free(anti); force_ok = false; }
-                            else rc[i] = add(rc[i], anti);
-                        }
-                    } else force_ok = false;
-                    expr_free(integ);
-                }
-
-                if (force_ok) {
-                    Expr* rhs = expr_new_function(expr_new_symbol(SYM_List), rc, n);
-                    free(rc);
-                    Expr* Yvec = ds_delist(eval_and_free(ds_call2(SYM_Dot, expr_copy(Phi), rhs)));
-                    if (head_is(Yvec, SYM_List) && Yvec->data.function.arg_count == n) {
-                        Y = malloc(n * sizeof(Expr*));
-                        for (size_t i = 0; i < n; i++)
-                            Y[i] = tidy(expr_copy(Yvec->data.function.args[i]));
+            /* rhs = {C[1..n]} (+ variation of parameters if forced) */
+            Expr** rc = malloc(n * sizeof(Expr*));
+            for (size_t i = 0; i < n; i++) rc[i] = ds_const((int)i + 1);
+            bool force_ok = true;
+            if (!b_zero) {
+                Expr* negt   = mul(expr_new_integer(-1), expr_copy(t));
+                Expr* PhiInv = dsolve_linsys_matexp(S, J, negt, n);
+                expr_free(negt);
+                Expr* integ  = ds_delist(eval_and_free(
+                                   ds_call2(SYM_Dot, PhiInv, expr_copy(b))));
+                if (head_is(integ, SYM_List) && integ->data.function.arg_count == n) {
+                    for (size_t i = 0; i < n && force_ok; i++) {
+                        Expr* anti = ds_integrate(expr_copy(integ->data.function.args[i]),
+                                                  expr_new_symbol(xvar));
+                        if (ds_has_head(anti, SYM_Integrate)) { expr_free(anti); force_ok = false; }
+                        else rc[i] = add(rc[i], anti);
                     }
-                    expr_free(Yvec);
-                } else {
-                    for (size_t i = 0; i < n; i++) expr_free(rc[i]);
-                    free(rc);
-                }
-                expr_free(Phi);
+                } else force_ok = false;
+                expr_free(integ);
             }
+
+            if (force_ok) {
+                Expr* rhs = expr_new_function(expr_new_symbol(SYM_List), rc, n);
+                free(rc);
+                Expr* Yvec = ds_delist(eval_and_free(ds_call2(SYM_Dot, expr_copy(Phi), rhs)));
+                if (head_is(Yvec, SYM_List) && Yvec->data.function.arg_count == n) {
+                    Y = malloc(n * sizeof(Expr*));
+                    for (size_t i = 0; i < n; i++)
+                        Y[i] = dsolve_linsys_tidy(expr_copy(Yvec->data.function.args[i]));
+                }
+                expr_free(Yvec);
+            } else {
+                for (size_t i = 0; i < n; i++) expr_free(rc[i]);
+                free(rc);
+            }
+            expr_free(Phi);
         }
-        expr_free(jd);
+    }
+    expr_free(jd);
+    return Y;
+}
+
+Expr** dsolve_linsys_solve(DSolveProblem* P) {
+    Expr* A = NULL; Expr* b = NULL; bool b_zero = true;
+    if (!dsolve_linsys_extract_Ab(P, &A, &b, &b_zero)) return NULL;
+    size_t n = P->nfun;
+    const char* xvar = P->ind_names[0];
+
+    /* This method claims only CONSTANT A with constant (or zero) forcing; a
+     * variable-coefficient A(x) is DSolve`LinearSystemVarCoeff's job. */
+    if (!ds_free_of(A, xvar) || (!b_zero && !ds_free_of(b, xvar))) {
+        expr_free(A); expr_free(b); return NULL;
     }
 
-    if (Amat) expr_free(Amat);
-    if (bvec) expr_free(bvec);
-    free(Yn);
+    Expr* t = expr_new_symbol(xvar);
+    Expr** Y = dsolve_linsys_assemble(A, t, xvar, b, b_zero, n);
+    expr_free(t);
+    expr_free(A); expr_free(b);
     return Y;   /* NULL on decline */
 }
 

@@ -176,7 +176,7 @@ static void ds_collect_consts(const Expr* e, Expr*** list, size_t* n) {
 
 /* Rewrite every generated constant C[k] to head[k]; fresh tree (no-op copy for
  * head == "C"). */
-static Expr* ds_rename_param(const Expr* e, const char* head) {
+Expr* ds_rename_param(const Expr* e, const char* head) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const Expr* h = e->data.function.head;
@@ -411,8 +411,13 @@ static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
 }
 
 /* Fit generated constants to the initial/boundary conditions; returns a fresh
- * body (the general body copied when there is nothing to fit). */
-static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body) {
+ * body (the general body copied when there is nothing to fit).  Sets *no_solution
+ * (when non-NULL) true only when Solve PROVES the conditions inconsistent, i.e. it
+ * returns an empty solution list {} — a well-posed but over-determined BVP with no
+ * solution.  An undecided fit (Solve stays unevaluated) leaves *no_solution false
+ * and keeps the general solution, matching Solve's own keep-the-undecidable policy. */
+static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body, bool* no_solution) {
+    if (no_solution) *no_solution = false;
     if (P->ncond == 0) return expr_copy((Expr*)body);
     Expr** params = NULL; size_t npar = 0;
     ds_collect_consts(body, &params, &npar);
@@ -437,14 +442,19 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body) {
 
     Expr* solres = ds_solve(eqlist, varlist);
     Expr* fitted = NULL;
-    if (solres && head_is(solres, SYM_List) && solres->data.function.arg_count >= 1) {
-        Expr* branch = solres->data.function.args[0];   /* List[Rule[C[k],val],...] */
-        if (head_is(branch, SYM_List))
-            fitted = eval_and_free(internal_replace_all(
-                (Expr*[]){ expr_copy((Expr*)body), expr_copy(branch) }, 2));
+    if (solres && head_is(solres, SYM_List)) {
+        if (solres->data.function.arg_count == 0) {
+            /* Solve proved the conditions inconsistent: no solution. */
+            if (no_solution) *no_solution = true;
+        } else {
+            Expr* branch = solres->data.function.args[0];   /* List[Rule[C[k],val],...] */
+            if (head_is(branch, SYM_List))
+                fitted = eval_and_free(internal_replace_all(
+                    (Expr*[]){ expr_copy((Expr*)body), expr_copy(branch) }, 2));
+        }
     }
     if (solres) expr_free(solres);
-    if (!fitted) fitted = expr_copy((Expr*)body);   /* could not fit: keep general */
+    if (!fitted) fitted = expr_copy((Expr*)body);   /* could not fit / no-sol: keep general */
     return fitted;
 }
 
@@ -707,15 +717,27 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
     if (nb == 0) { free(bodies); return NULL; }
 
     Expr** finals = malloc(nb * sizeof(Expr*));
-    size_t nf = 0;
+    size_t nf = 0, n_verified = 0, n_nosol = 0;
     for (size_t b = 0; b < nb; b++) {
         if (!bodies[b]) continue;
         if (!dsolve_verify_body(P, bodies[b])) { expr_free(bodies[b]); continue; }
-        finals[nf++] = dsolve_fit_constants(P, bodies[b]);
+        n_verified++;
+        bool nosol = false;
+        Expr* fitted = dsolve_fit_constants(P, bodies[b], &nosol);
         expr_free(bodies[b]);
+        if (nosol) { n_nosol++; expr_free(fitted); continue; }
+        finals[nf++] = fitted;
     }
     free(bodies);
-    if (nf == 0) { free(finals); return NULL; }
+    if (nf == 0) {
+        free(finals);
+        /* A verified general solution whose (boundary) conditions Solve proves
+         * inconsistent is a well-posed problem with NO solution: return {} — the
+         * concrete empty solution list, distinct from NULL ("decline / unevaluated"). */
+        if (n_verified > 0 && n_nosol > 0)
+            return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        return NULL;
+    }
 
     Expr* result = dsolve_assemble(P, finals, nf);
     for (size_t b = 0; b < nf; b++) expr_free(finals[b]);
@@ -990,7 +1012,8 @@ Expr* dsolve_assemble_system(const DSolveProblem* P, Expr** bodies) {
     return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ inner }, 1);
 }
 
-void dsolve_fit_system(const DSolveProblem* P, Expr** bodies) {
+void dsolve_fit_system(const DSolveProblem* P, Expr** bodies, bool* no_solution) {
+    if (no_solution) *no_solution = false;
     if (P->ncond == 0) return;
     const char* xvar = P->ind_names[0];
     Expr** params = NULL; size_t npar = 0;
@@ -1011,13 +1034,17 @@ void dsolve_fit_system(const DSolveProblem* P, Expr** bodies) {
     Expr* eqlist = expr_new_function(expr_new_symbol(SYM_List), eqs, neq); free(eqs);
     Expr* varlist = expr_new_function(expr_new_symbol(SYM_List), params, npar); free(params);
     Expr* solres = ds_solve(eqlist, varlist);
-    if (solres && head_is(solres, SYM_List) && solres->data.function.arg_count >= 1) {
-        Expr* branch = solres->data.function.args[0];
-        if (head_is(branch, SYM_List)) {
-            for (size_t i = 0; i < P->nfun; i++) {
-                Expr* fitted = eval_and_free(internal_replace_all(
-                    (Expr*[]){ expr_copy(bodies[i]), expr_copy(branch) }, 2));
-                expr_free(bodies[i]); bodies[i] = fitted;
+    if (solres && head_is(solres, SYM_List)) {
+        if (solres->data.function.arg_count == 0) {
+            if (no_solution) *no_solution = true;   /* over-determined: no solution */
+        } else {
+            Expr* branch = solres->data.function.args[0];
+            if (head_is(branch, SYM_List)) {
+                for (size_t i = 0; i < P->nfun; i++) {
+                    Expr* fitted = eval_and_free(internal_replace_all(
+                        (Expr*[]){ expr_copy(bodies[i]), expr_copy(branch) }, 2));
+                    expr_free(bodies[i]); bodies[i] = fitted;
+                }
             }
         }
     }
@@ -1134,8 +1161,10 @@ Expr* dsolve_run_system(DSolveProblem* P, DSolveSysFn fn) {
     if (!bodies) return NULL;
     Expr* result = NULL;
     if (dsolve_verify_system(P, bodies)) {
-        dsolve_fit_system(P, bodies);
-        result = dsolve_assemble_system(P, bodies);
+        bool nosol = false;
+        dsolve_fit_system(P, bodies, &nosol);
+        result = nosol ? expr_new_function(expr_new_symbol(SYM_List), NULL, 0)
+                       : dsolve_assemble_system(P, bodies);
     }
     for (size_t i = 0; i < P->nfun; i++) if (bodies[i]) expr_free(bodies[i]);
     free(bodies);

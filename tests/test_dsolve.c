@@ -176,6 +176,36 @@ static void t_cc_bvp(void) {
     check_true("PossibleZeroQ[(y[x] /. DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi/2] == 1}, y[x], x][[1]]) "
                "- Sin[x]]");
 }
+
+/* ---- M11: formal Linear BVP soundness (inconsistent -> {}, not general) ---- */
+static void t_bvp_overdetermined(void) {
+    /* y[0]==1 forces C1==1; y[Pi]==1 forces -C1==1: inconsistent -> {} (no solution),
+     * NOT the silent unfitted general solution it used to return. */
+    check_form("DSolve[{y''[x] + y[x] == 0, y[0] == 1, y[Pi] == 1}, y, x]", "List[]");
+    check_form("Length[DSolve[{y''[x] + y[x] == 0, y[0] == 1, y[Pi] == 1}, y, x]]", "0");
+    /* and the unfitted constants must be gone (would be present in the old behavior) */
+    check_true("FreeQ[DSolve[{y''[x] + y[x] == 0, y[0] == 1, y[Pi] == 1}, y, x], C]");
+}
+static void t_bvp_underdetermined(void) {
+    /* y[0]==0 and y[Pi]==0 both give C1==0; C2 stays free -> one branch with a free
+     * amplitude constant (not {}, not a decline). */
+    check_form("Head[DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x]]", "List");
+    check_form("Length[DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x]]", "1");
+    check_true("Not[FreeQ[DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x], C[2]]]");
+}
+static void t_bvp_system_overdetermined(void) {
+    /* coupled harmonic system with 3 conditions on a 2-constant general solution,
+     * inconsistent (y[0]==1 & y[Pi]==1 clash) -> {}. */
+    check_form("DSolve[{y'[x] == z[x], z'[x] == -y[x], y[0] == 1, y[Pi] == 1, z[0] == 0}, {y, z}, x]",
+               "List[]");
+}
+static void t_bvp_undecided_keeps_general(void) {
+    /* an IVP whose fit Solve can decide stays fitted; a *no-condition* solve stays
+     * general (constants retained) -- guards against an over-eager {} on any solve
+     * the fitter cannot decide.  IVP still fits, general solve keeps constants. */
+    check_true("Not[FreeQ[DSolve[y''[x] + y[x] == 0, y, x], C[1]]]");
+    check_true("PossibleZeroQ[(y[x] /. DSolve[{y'[x] + y[x] == 0, y[0] == 5}, y[x], x][[1]]) - 5 Exp[-x]]");
+}
 static void t_method_constcoeff(void) {
     check_true("PossibleZeroQ[(y''[x] - 4 y[x]) /. "
                "DSolve`LinearConstantCoefficients[y''[x] - 4 y[x] == 0, y, x][[1]]]");
@@ -364,6 +394,78 @@ static void t_sys_triangular_ivp(void) {
     /* triangular variable-coefficient IVP: y=2x, z=x^2-1 at x=1 */
     check_true("PossibleZeroQ[(z[x] /. DSolve[{y'[x] == y[x]/x, z'[x] == y[x], "
                "y[1] == 2, z[1] == 0}, {y[x], z[x]}, x][[1]]) - (x^2 - 1)]");
+}
+
+/* ---- M11: LinearSystemVarCoeff (scalar-factor A(x)=f(x)B, genuinely coupled) ---- */
+static void t_sys_varcoeff_coupled(void) {
+    /* A = (1/x){{2,1},{1,2}}, eigenvalues 1,3 -> x^1, x^3 modes.  Genuinely coupled,
+     * non-triangular, variable-coefficient: neither DecoupleSystem, TriangularSystem,
+     * nor the constant-A LinearFirstOrderSystem reaches it. */
+    check_form("Head[DSolve[{y'[x] == (2 y[x] + z[x])/x, z'[x] == (y[x] + 2 z[x])/x}, {y, z}, x]]", "List");
+    check_true("And @@ (PossibleZeroQ /@ ({y'[x] - (2 y[x] + z[x])/x, z'[x] - (y[x] + 2 z[x])/x} /. "
+               "DSolve[{y'[x] == (2 y[x] + z[x])/x, z'[x] == (y[x] + 2 z[x])/x}, {y, z}, x][[1]]))");
+}
+static void t_sys_varcoeff_complex(void) {
+    /* f = x, A = x{{0,1},{-1,0}}, complex spectrum -> real Cos/Sin of tau = x^2/2 */
+    check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x z[x], z'[x] + x y[x]} /. "
+               "DSolve[{y'[x] == x z[x], z'[x] == -x y[x]}, {y, z}, x][[1]]))");
+    /* the realified body is genuinely Cos[x^2/2]/Sin[x^2/2] (no Arg/Abs leak) */
+    check_true("FreeQ[DSolve[{y'[x] == x z[x], z'[x] == -x y[x]}, {y, z}, x], Arg | Abs]");
+}
+static void t_sys_varcoeff_forced(void) {
+    /* forced: A=(1/x){{2,1},{1,2}}, b={1,0}; VoP integral produces Log[x] terms,
+     * which must NOT get split into Log[Abs[x]]+I Arg[x] by the realifier. */
+    check_form("Head[DSolve[{y'[x] == (2 y[x] + z[x])/x + 1, z'[x] == (y[x] + 2 z[x])/x}, {y, z}, x]]", "List");
+    check_true("And @@ (PossibleZeroQ /@ ({y'[x] - ((2 y[x] + z[x])/x + 1), z'[x] - (y[x] + 2 z[x])/x} /. "
+               "DSolve[{y'[x] == (2 y[x] + z[x])/x + 1, z'[x] == (y[x] + 2 z[x])/x}, {y, z}, x][[1]]))");
+}
+static void t_sys_varcoeff_pinned_decline(void) {
+    /* pinned method entry solves the coupled varcoeff system */
+    check_form("Head[DSolve`LinearSystemVarCoeff[{y'[x] == (2 y[x] + z[x])/x, "
+               "z'[x] == (y[x] + 2 z[x])/x}, {y, z}, x]]", "List");
+    /* declines a CONSTANT-A system (that is LinearFirstOrderSystem's job) */
+    check_form("Head[DSolve`LinearSystemVarCoeff[{y'[x] == 2 y[x] + z[x], "
+               "z'[x] == y[x] + 2 z[x]}, {y, z}, x]]", "DSolve`LinearSystemVarCoeff");
+    /* declines a non-scalar-factor A = {{1/x, 1}, {0, 1/x}} (not f(x)*constant) */
+    check_form("Head[DSolve`LinearSystemVarCoeff[{y'[x] == y[x]/x + z[x], "
+               "z'[x] == z[x]/x}, {y, z}, x]]", "DSolve`LinearSystemVarCoeff");
+}
+
+/* ---- M11: Sturm-Liouville DSolve`EigenvalueProblem (pinned first cut) ---- */
+/* Verify by extracting the eigenvalue and eigenfunction, substituting the family
+ * index C[1]->3 and amplitude C[2]->1, and checking the ODE + both BC residuals
+ * vanish (PossibleZeroQ of exact Sin/Cos at integer multiples of Pi). */
+static void t_eig_dirichlet(void) {
+    check_form("Head[DSolve`EigenvalueProblem[{y''[x] + w y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x]]", "List");
+    check_true("Module[{s = DSolve`EigenvalueProblem[{y''[x] + w y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x][[1]], lam, yf}, "
+        "lam = First[w /. s[[1]]] /. C[1] -> 3; yf = (y /. s[[2]]) /. {C[1] -> 3, C[2] -> 1}; "
+        "PossibleZeroQ[yf''[x] + lam yf[x]] && PossibleZeroQ[yf[0]] && PossibleZeroQ[yf[Pi]]]");
+    /* eigenvalue family is n^2 on [0,Pi] */
+    check_true("(First[w /. DSolve`EigenvalueProblem[{y''[x] + w y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x][[1,1]]] "
+        "/. C[1] -> 4) === 16");
+}
+static void t_eig_neumann(void) {
+    check_true("Module[{s = DSolve`EigenvalueProblem[{y''[x] + w y[x] == 0, y'[0] == 0, y'[Pi] == 0}, y, x][[1]], lam, yf}, "
+        "lam = First[w /. s[[1]]] /. C[1] -> 3; yf = (y /. s[[2]]) /. {C[1] -> 3, C[2] -> 1}; "
+        "PossibleZeroQ[yf''[x] + lam yf[x]] && PossibleZeroQ[yf'[0]] && PossibleZeroQ[yf'[Pi]]]");
+}
+static void t_eig_mixed(void) {
+    /* Dirichlet at 0, Neumann at 1: half-integer family, eigenfunction Sin */
+    check_true("Module[{s = DSolve`EigenvalueProblem[{y''[x] + w y[x] == 0, y[0] == 0, y'[1] == 0}, y, x][[1]], lam, yf}, "
+        "lam = First[w /. s[[1]]] /. C[1] -> 3; yf = (y /. s[[2]]) /. {C[1] -> 3, C[2] -> 1}; "
+        "PossibleZeroQ[yf''[x] + lam yf[x]] && PossibleZeroQ[yf[0]] && PossibleZeroQ[yf'[1]]]");
+    /* Neumann at 0, Dirichlet at Pi: eigenfunction Cos */
+    check_true("Module[{s = DSolve`EigenvalueProblem[{y''[x] + w y[x] == 0, y'[0] == 0, y[Pi] == 0}, y, x][[1]], lam, yf}, "
+        "lam = First[w /. s[[1]]] /. C[1] -> 3; yf = (y /. s[[2]]) /. {C[1] -> 3, C[2] -> 1}; "
+        "PossibleZeroQ[yf''[x] + lam yf[x]] && PossibleZeroQ[yf'[0]] && PossibleZeroQ[yf[Pi]]]");
+}
+static void t_eig_no_misfire(void) {
+    /* an ordinary IVP (inhomogeneous conditions) is NOT an eigenvalue problem */
+    check_form("Head[DSolve`EigenvalueProblem[{y''[x] + w y[x] == 0, y[0] == 1, y'[0] == 0}, y, x]]",
+               "DSolve`EigenvalueProblem");
+    /* no free eigenparameter (coefficient is the number 1, not a symbol) */
+    check_form("Head[DSolve`EigenvalueProblem[{y''[x] + y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x]]",
+               "DSolve`EigenvalueProblem");
 }
 
 /* ---- M4: reduction of order (2nd-order missing y) ---- */
@@ -1326,6 +1428,10 @@ int main(void) {
     TEST(t_cc_repeated_root);
     TEST(t_cc_ivp);
     TEST(t_cc_bvp);
+    TEST(t_bvp_overdetermined);
+    TEST(t_bvp_underdetermined);
+    TEST(t_bvp_system_overdetermined);
+    TEST(t_bvp_undecided_keeps_general);
     TEST(t_method_constcoeff);
     TEST(t_euler_complex);
     TEST(t_euler_real);
@@ -1384,6 +1490,14 @@ int main(void) {
     TEST(t_sys_triangular_varcoeff);
     TEST(t_sys_singular_forcing);
     TEST(t_sys_triangular_ivp);
+    TEST(t_sys_varcoeff_coupled);
+    TEST(t_sys_varcoeff_complex);
+    TEST(t_sys_varcoeff_forced);
+    TEST(t_sys_varcoeff_pinned_decline);
+    TEST(t_eig_dirichlet);
+    TEST(t_eig_neumann);
+    TEST(t_eig_mixed);
+    TEST(t_eig_no_misfire);
     TEST(t_reduce_order);
     TEST(t_fos_quadratic);
     TEST(t_fos_shifted);

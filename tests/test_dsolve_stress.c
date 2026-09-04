@@ -327,6 +327,23 @@ static void tri_ok(const char* ry, const char* rz) {
     ASSERT_TRUE(buf);
 }
 
+/* scalar-factor variable-coefficient coupled system  Y' == f(x) B Y,
+ * B = {{a,b},{c,d}} constant (b,c != 0 so it is genuinely non-triangular).
+ * DSolve`LinearSystemVarCoeff: tau = Integrate[f,x], Phi = e^{B tau}. */
+static void sys2_varcoeff_ok(const char* f, int a, int b, int c, int d) {
+    char sys[320], buf[1024];
+    snprintf(sys, sizeof(sys),
+        "{y'[x] == (%s)((%d) y[x] + (%d) z[x]), z'[x] == (%s)((%d) y[x] + (%d) z[x])}",
+        f, a, b, f, c, d);
+    snprintf(buf, sizeof(buf), "Head[DSolve[%s, {y, z}, x]] === List", sys);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "And @@ (PossibleZeroQ /@ ({y'[x] - (%s)((%d) y[x] + (%d) z[x]), "
+        "z'[x] - (%s)((%d) y[x] + (%d) z[x])} /. DSolve[%s, {y, z}, x][[1]]))",
+        f, a, b, f, c, d, sys);
+    ASSERT_TRUE(buf);
+}
+
 /* first-order linear PDE a u_x + b u_y == f (auto dispatch); verify against a
  * concrete arbitrary function C[1][z_] :> Sin[z] (see the ODE-file PDE tests). */
 static void pde_ok(int a, int b, const char* f) {
@@ -519,6 +536,21 @@ static void t_stress_triangular(void) {
     tri_ok("2 y[x]", "y[x] + z[x]");        /* constant, triangular */
     tri_ok("y[x]/x", "z[x]/x + y[x]");      /* variable coefficient */
     tri_ok("y[x]/x", "y[x]");               /* variable, z decoupled from own value */
+}
+
+static void t_stress_linsys_varcoeff(void) {
+    /* scalar factors f(x) with elementary antiderivative (Log[x], x^2/2, ...) x
+     * genuinely-coupled constant matrices B (b,c != 0): distinct-real, complex,
+     * distinct-real spectra.  Each is A(x)=f(x)B, non-triangular, variable-coeff. */
+    const char* fs[] = { "1/x", "x", "2/x" };
+    int m[][4] = {
+        {2, 1, 1, 2},   /* eigenvalues 1, 3 */
+        {0, 1, -1, 0},  /* eigenvalues +- i (complex spectrum -> Cos/Sin[tau]) */
+        {1, 2, 2, 1}    /* eigenvalues 3, -1 */
+    };
+    for (size_t k = 0; k < 3; k++)
+        for (size_t i = 0; i < 3; i++)
+            sys2_varcoeff_ok(fs[k], m[i][0], m[i][1], m[i][2], m[i][3]);
 }
 
 static void t_stress_pde(void) {
@@ -793,6 +825,7 @@ int main(void) {
     TEST(t_stress_chini);
     TEST(t_stress_systems);
     TEST(t_stress_triangular);
+    TEST(t_stress_linsys_varcoeff);
     TEST(t_stress_pde);
 
     printf("\nAll DSolve stress tests passed.\n");

@@ -720,6 +720,8 @@ set(COMMON_SRC
     ../src/calculus/dsolve_decouple.c
     ../src/calculus/dsolve_triangular.c
     ../src/calculus/dsolve_linsys.c
+    ../src/calculus/dsolve_linsys_varcoeff.c
+    ../src/calculus/dsolve_eigenvalue.c
     ../src/calculus/dsolve_normalform.c
     ../src/calculus/dsolve_frobenius.c
     ../src/calculus/dsolve_kovacic.c

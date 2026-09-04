@@ -13,6 +13,7 @@
  */
 #include "dsolve.h"
 #include "dsolve_common.h"
+#include "dsolve_linsys.h"
 
 #include "../sym_names.h"
 #include "../sym_intern.h"
@@ -167,10 +168,12 @@ extern Expr** dsolve_pde1_solve(DSolveProblem* P);
 extern void dsolve_pde1_init(void);
 extern Expr** dsolve_decouple_solve(DSolveProblem* P);
 extern Expr** dsolve_triangular_solve(DSolveProblem* P);
-extern Expr** dsolve_linsys_solve(DSolveProblem* P);
+/* dsolve_linsys_solve / dsolve_linsys_varcoeff_solve declared in dsolve_linsys.h */
 extern void dsolve_decouple_init(void);
 extern void dsolve_triangular_init(void);
 extern void dsolve_linsys_init(void);
+extern void dsolve_linsys_varcoeff_init(void);
+extern void dsolve_eigenvalue_init(void);
 
 /* ------------------------------------------------------------------ *
  *  Per-command fail-memo (mirror of integrate.c:720-743)              *
@@ -233,6 +236,7 @@ Expr* builtin_dsolve(Expr* res) {
         if (!result) result = dsolve_run_system(&P, dsolve_decouple_solve);
         if (!result) result = dsolve_run_system(&P, dsolve_triangular_solve);
         if (!result) result = dsolve_run_system(&P, dsolve_linsys_solve);
+        if (!result) result = dsolve_run_system(&P, dsolve_linsys_varcoeff_solve);
     } else
     switch (method) {
         case DS_AUTOMATIC:
@@ -413,4 +417,6 @@ void dsolve_init(void) {
     dsolve_decouple_init();
     dsolve_triangular_init();
     dsolve_linsys_init();
+    dsolve_linsys_varcoeff_init();
+    dsolve_eigenvalue_init();
 }
