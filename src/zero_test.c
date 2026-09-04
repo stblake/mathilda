@@ -266,6 +266,35 @@ static bool expr_has_algebraic_constant(const Expr* e) {
     return false;
 }
 
+/* True if `e` contains a Power with a NON-CONSTANT (free-symbol) exponent, e.g.
+ * x^(1-c).  decide_rational's Stage-1 Together ∘ Cancel does not terminate on
+ * such symbolic-exponent powers — the pFq second solution x^(1-c) 2F1[...] of the
+ * hypergeometric equation is the motivating case.  Like the algebraic-constant
+ * guard, we then skip straight to numeric Schwartz–Zippel sampling, which
+ * evaluates a symbolic exponent at a numeric sample without any symbolic
+ * combination.  No decision power is lost: Stage 1's only trusted verdict is
+ * TRUE, which the sampler reaches too (and it additionally decides FALSE). */
+static bool expr_has_symbolic_exponent(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* head = e->data.function.head;
+    size_t argc = e->data.function.arg_count;
+    /* A VARIABLE base with a symbolic exponent — base and exponent both carry a
+     * free symbol.  This is the x^(1-c) case that blows up Together ∘ Cancel.  A
+     * constant base like E^(x^2/2) or 2^x is NOT matched (E/2 have no free
+     * symbol): decide_rational treats those as opaque exp atoms and does not
+     * choke, and routing every exp to the sampler would be both slow and, in the
+     * variable-coefficient linear-system solver, verdict-changing. */
+    if (head && head->type == EXPR_SYMBOL
+        && head->data.symbol.name == SYM_Power && argc == 2
+        && has_free_symbols(e->data.function.args[0])
+        && has_free_symbols(e->data.function.args[1]))
+        return true;
+    if (expr_has_symbolic_exponent(head)) return true;
+    for (size_t i = 0; i < argc; i++)
+        if (expr_has_symbolic_exponent(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* True when `e` is a PURE RATIONAL FUNCTION of its free symbols over Q: every
  * node is an exact rational coefficient (Integer / BigInt / Rational[int,int]),
  * a free symbol (NOT a named constant — GoldenRatio etc. satisfy algebraic
@@ -1367,6 +1396,10 @@ ZeroTestResult zero_test_decide(const Expr* e) {
      * the non-terminating symbolic path is avoided. */
     if (has_free_symbols(e) && expr_has_algebraic_constant(e))
         return decide_schwartz_zippel(e);
+    /* Symbolic-exponent guard (mirrors the algebraic-constant one): a x^(1-c)
+     * power sends Stage-1 Together ∘ Cancel non-terminating; sample instead. */
+    if (has_free_symbols(e) && expr_has_symbolic_exponent(e))
+        return decide_schwartz_zippel(e);
 
     r = decide_rational(e);
     /* Trust TRUE always; trust FALSE only for the rigorous pure-rational path
@@ -1410,6 +1443,8 @@ ZeroTestResult zero_test_decide_assuming(const Expr* e, const struct AssumeCtx* 
      * power over free symbols must skip Together ∘ Cancel and go straight to
      * constrained sampling. */
     if (has_free_symbols(e) && expr_has_algebraic_constant(e))
+        return decide_schwartz_zippel_assuming(e, ctx);
+    if (has_free_symbols(e) && expr_has_symbolic_exponent(e))
         return decide_schwartz_zippel_assuming(e, ctx);
 
     /* Trust ONLY the TRUE verdict from the unconditional exact stages. An

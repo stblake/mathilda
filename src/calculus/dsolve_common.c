@@ -16,6 +16,7 @@
 #include "../internal.h"
 #include "../zero_test.h"
 #include "../ndarray.h"
+#include "../parse.h"           /* parse_expression: verify-residual normalisation rule */
 #include "integrate.h"          /* g_integrate_quiet: silence speculative nonelem */
 
 #include <stdlib.h>
@@ -404,8 +405,23 @@ static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
         }
         sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
         ZeroTestResult zt = zero_test_decide(sub);
+        if (zt == ZERO_TEST_FALSE) {
+            /* Guard against a zero_test FALSE-negative on a value-zero residual it
+             * cannot syntactically normalise — notably E^a - E^b with a, b equal
+             * algebraically but not syntactically, which is exactly the residual
+             * of the Erf integrating-factor solution of y'+x y==Exp[3 x] (the
+             * unexpanded Gaussian exponent, amplified by E^large, defeats the
+             * numeric sampler).  Expand the E^() exponents and ONLY override the
+             * rejection when the normalised residual is PROVABLY zero; a genuinely
+             * nonzero residual survives normalisation and is still rejected. */
+            Expr* rule = parse_expression("Power[E, ztexp_] :> Power[E, Expand[ztexp]]");
+            Expr* subn = rule ? eval_and_free(ds_call2("ReplaceAll", expr_copy(sub), rule))
+                              : expr_copy(sub);
+            ZeroTestResult zt2 = zero_test_decide(subn);
+            expr_free(subn);
+            if (zt2 != ZERO_TEST_TRUE) { expr_free(sub); return false; }
+        }
         expr_free(sub);
-        if (zt == ZERO_TEST_FALSE) return false;
     }
     return true;
 }
@@ -1455,12 +1471,22 @@ Expr* dsolve_algebraic_residual(DSolveProblem* P, const char* Yname, const char*
 }
 
 Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
+    g_integrate_quiet++;   /* a non-elementary integrating-factor integral is kept
+                            * unevaluated below, not surfaced as a speculative message */
     Expr* Pint = ds_integrate(Pcoef, expr_new_symbol(xvar));       /* consumes Pcoef */
-    if (ds_has_head(Pint, SYM_Integrate)) { expr_free(Pint); expr_free(Qcoef); return NULL; }
+    if (ds_has_head(Pint, SYM_Integrate)) { g_integrate_quiet--; expr_free(Pint); expr_free(Qcoef); return NULL; }
     Expr* mu = eval_and_free(ds_call1("Exp", Pint));
     Expr* integrand = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), Qcoef)); /* consumes Qcoef */
     Expr* Qint = ds_integrate(integrand, expr_new_symbol(xvar));
-    if (ds_has_head(Qint, SYM_Integrate)) { expr_free(Qint); expr_free(mu); return NULL; }
+    g_integrate_quiet--;
+    /* When ∫mu q dx is NON-elementary, Qint is a still-unevaluated Integrate[...].
+     * Do NOT decline: the integrating-factor solution y = mu^-1 (∫mu q dx + C[1])
+     * is exact regardless, and the unevaluated-integral form is exactly what
+     * Mathematica/Maple return (and upgrades to a closed form automatically once
+     * Integrate learns the case, e.g. Erfi).  Declining here previously dropped
+     * y' + x y == Exp[3 x] through the whole cascade and spun the evaluator to
+     * $IterationLimit, and let y' + y == Q[x] be fabricated wrong downstream by
+     * UndeterminedCoefficients.  We keep Qint as-is. */
     Expr* num = eval_and_free(ds_call2(SYM_Plus, Qint, ds_const(1)));
     Expr* body = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
         num,

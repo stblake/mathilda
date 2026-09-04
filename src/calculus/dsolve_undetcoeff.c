@@ -167,10 +167,29 @@ static Expr* uc_particular(const Expr* T, Expr** a, int n, const char* xvar) {
                 && head_is(sol->data.function.args[0], SYM_List)) {
                 Expr* cand = eval_and_free(ds_call2("ReplaceAll", expr_copy(trial),
                                  expr_copy(sol->data.function.args[0])));
-                /* accept only if every undetermined coefficient was determined */
-                if (!ds_contains(cand, uca) && !ds_contains(cand, ucb))
-                    yp = ds_simplify(cand);
-                else expr_free(cand);
+                /* accept only if every undetermined coefficient was determined AND
+                 * L[cand] == T is a DECIDABLE zero.  The undetermined-coefficient
+                 * linear solve only proves the ansatz template matched; a forcing
+                 * term that is NOT a UC function (Q[x], Log[x], Exp[x^2], Cos[x^2],
+                 * ...) collapses to degree 0 and is "solved" as y_p = T itself,
+                 * whose residual (e.g. T'(x)) the permissive substrate verify
+                 * cannot reject.  Requiring a decidable zero here makes those
+                 * decline, so linear1's integral form / constcoeff variation of
+                 * parameters handles the equation instead of a wrong y_p. */
+                if (!ds_contains(cand, uca) && !ds_contains(cand, ucb)) {
+                    Expr* cand_s = ds_simplify(cand);
+                    Expr* Lc = expr_new_integer(0);
+                    for (int j = 0; j <= n; j++) {
+                        Expr* dj = expr_copy(cand_s);
+                        for (int i = 0; i < j; i++) dj = ds_d(dj, expr_new_symbol(xvar));
+                        Lc = eval_and_free(ds_call2(SYM_Plus, Lc,
+                                 ds_call2(SYM_Times, expr_copy(a[j]), dj)));
+                    }
+                    Expr* resid = ds_call2(SYM_Subtract, Lc, expr_copy((Expr*)T));
+                    bool solves = ds_is_zero(resid);
+                    expr_free(resid);
+                    if (solves) yp = cand_s; else expr_free(cand_s);
+                } else expr_free(cand);
             }
             expr_free(sol);
         }

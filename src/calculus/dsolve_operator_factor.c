@@ -217,10 +217,30 @@ static Expr** of_divide(Expr** a, int n, const Expr* r, const char* x, Expr** rh
 /* Search for a first-order right factor (D - r), r in C(x), of the monic operator
  * a[0..n].  Returns r (owned) or NULL.  Iterates cheapest-first over polynomial
  * degree and pole order; for each Solve branch tests the exact division remainder. */
+#define OF_MAX_POLES 3   /* bound the cubic determining system before any ds_solve */
+
 static Expr* of_find_factor(Expr** a, int n, const char* x) {
     Expr* sum = expr_copy(a[0]);
     for (int k = 1; k <= n; k++) sum = A2(sum, expr_copy(a[k]));
     Expr* factors = fn1("FactorList", fn1("Denominator", fn1("Together", sum)));
+
+    /* Complexity gate: the determining system is CUBIC (Bell polynomials
+     * P_0..P_3), so a many-pole ansatz sends ds_solve into unbounded parametric
+     * elimination — e.g. the rational-coefficient E18-class ODE with four
+     * distinct poles.  Bound the distinct pole count up front from the
+     * (polynomial-time) FactorList and decline to the series fallback rather than
+     * hang.  (The rational/polynomial-solution route that would close those is a
+     * later, linear-system method.) */
+    {
+        int npoles = 0;
+        if (factors && head_is(factors, SYM_List))
+            for (size_t fi = 0; fi < factors->data.function.arg_count; fi++) {
+                Expr* pair = factors->data.function.args[fi];
+                if (head_is(pair, SYM_List) && pair->data.function.arg_count == 2
+                    && !ds_free_of(pair->data.function.args[0], x)) npoles++;
+            }
+        if (npoles > OF_MAX_POLES) { expr_free(factors); return NULL; }
+    }
 
     Expr* found = NULL;
     for (int pd = 0; pd <= 2 && !found; pd++) {

@@ -34,6 +34,21 @@ static Expr* powneg1(Expr* base) {
                              (Expr*[]){ base, expr_new_integer(-1) }, 2);
 }
 
+/* True if e mentions a named special function.  Full Simplify can HANG on these
+ * (e.g. LegendreP/Q of half-integer order from a Legendre-type u-ODE), and it
+ * would not tidy them anyway — the evaluator already folds the -u'/(q2 u) sign
+ * and reciprocal.  So the back-mapped body skips Simplify when this holds. */
+static bool riccati_has_special(const Expr* e) {
+    static const char* names[] = {
+        "LegendreP", "LegendreQ", "AiryAi", "AiryBi",
+        "BesselJ", "BesselY", "BesselI", "BesselK",
+        "Hypergeometric1F1", "Hypergeometric2F1", "HypergeometricPFQ",
+        "HypergeometricU", "WhittakerM", "WhittakerW", "MathieuC", "MathieuS", NULL };
+    for (int i = 0; names[i]; i++)
+        if (ds_has_head(e, intern_symbol(names[i]))) return true;
+    return false;
+}
+
 /* Extract the RHS of {{u[x] -> expr}} (applied form). */
 static Expr* extract_applied(Expr* r, const char* ufun) {
     if (!head_is(r, SYM_List) || r->data.function.arg_count < 1) return NULL;
@@ -121,7 +136,8 @@ Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch) {
     Expr* up   = ds_d(expr_copy(ubody), expr_new_symbol(xvar));
     Expr* num  = ds_call2(SYM_Times, expr_new_integer(-1), up);
     Expr* den  = eval_and_free(ds_call2(SYM_Times, expr_copy(q2), ubody));   /* consumes ubody */
-    Expr* body = ds_simplify(eval_and_free(ds_call2(SYM_Times, num, powneg1(den))));
+    Expr* raw  = eval_and_free(ds_call2(SYM_Times, num, powneg1(den)));
+    Expr* body = riccati_has_special(raw) ? raw : ds_simplify(raw);
 
     expr_free(q0); expr_free(q1); expr_free(q2);
 

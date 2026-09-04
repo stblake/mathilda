@@ -860,6 +860,23 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
         expr_free(q1); expr_free(q2);
     }
     if (!rational) { expr_free(rn); expr_free(rd); expr_free(r); expr_free(recovery); return NULL; }
+    /* Numeric-coefficient gate: Case-1 solve_ansatz and the Case-1c pole
+     * enumeration presume r has NUMERIC coefficients in x.  A normal form that
+     * carries free symbolic PARAMETERS — e.g. (a x+b) y'' - a y' - (a(a x+b))^2 y
+     * == 0, whose r = 3 a^2/(4(a x+b)^2) + a^2(a x+b) — passes PolynomialQ yet
+     * drives ds_solve into unbounded parametric elimination (a hang).  Probe x
+     * with a rational and require a pure number; otherwise decline to Frobenius. */
+    {
+        const char* T = intern_symbol("True");
+        Expr* probe = eval_and_free(ds_call2(SYM_Times, expr_new_integer(17),
+                          expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ expr_new_integer(13), expr_new_integer(-1) }, 2)));  /* 17/13 */
+        Expr* rv = ds_subst(expr_copy(r), expr_new_symbol(x), probe);
+        Expr* nq = fn1("NumberQ", rv);
+        bool numeric = (nq->type == EXPR_SYMBOL && nq->data.symbol.name == T);
+        expr_free(nq);
+        if (!numeric) { expr_free(rn); expr_free(rd); expr_free(r); expr_free(recovery); return NULL; }
+    }
     int degn = degree_in(rn, x);
     int degd = degree_in(rd, x);
     Expr* factors = fn1("FactorList", expr_copy(rd));

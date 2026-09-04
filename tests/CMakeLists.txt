@@ -706,6 +706,8 @@ set(COMMON_SRC
     ../src/calculus/dsolve_exactode.c
     ../src/calculus/dsolve_specialform.c
     ../src/calculus/dsolve_reduce_order.c
+    ../src/calculus/dsolve_lower_reduce.c
+    ../src/calculus/dsolve_symsquare.c
     ../src/calculus/dsolve_fos.c
     ../src/calculus/dsolve_riccati.c
     ../src/calculus/dsolve_chini.c

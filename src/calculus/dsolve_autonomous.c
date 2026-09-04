@@ -64,12 +64,28 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
     const char* xvar  = P->ind_names[0];
     const char* yname = P->fun_names[0];
 
+    /* Cheap missing-x pre-gate, BEFORE the potentially expensive solve-for-y''.
+     * A genuine autonomous y''=f(y,y') has no explicit x once the funcapps
+     * y^(k)[x] are masked; if a bare x survives, the coefficients depend on x and
+     * this is not autonomous.  Without this, solving an x-dependent linear ODE
+     * with nested rational coefficients (an exact-ODE order reduction) for y''
+     * blows up the rational arithmetic and hangs. */
+    const char* Ysym = intern_symbol("DSolve`arY");
+    const char* Psym = intern_symbol("DSolve`arP");
+    {
+        Expr* Rm = expr_copy(P->eq_residuals[0]);
+        Rm = ds_subst(Rm, ds_make_funcapp(yname, 2, xvar), expr_new_symbol(intern_symbol("DSolve`arPP")));
+        Rm = ds_subst(Rm, ds_make_funcapp(yname, 1, xvar), expr_new_symbol(Psym));
+        Rm = ds_subst(Rm, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Ysym));
+        bool has_x = ds_contains(Rm, xvar);
+        expr_free(Rm);
+        if (has_x) return NULL;
+    }
+
     Expr* F = dsolve_solve_top_derivative(P, 2);          /* y'' == F(x, y, y') */
     if (!F) return NULL;
 
     /* Replace the funcapps by plain markers to test for explicit x and for y. */
-    const char* Ysym = intern_symbol("DSolve`arY");
-    const char* Psym = intern_symbol("DSolve`arP");
     Expr* Ftmp = ds_subst(expr_copy(F), ds_make_funcapp(yname, 1, xvar), expr_new_symbol(Psym));
     Ftmp = ds_subst(Ftmp, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Ysym));
     expr_free(F);

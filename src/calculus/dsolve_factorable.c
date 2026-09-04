@@ -67,6 +67,25 @@ Expr** dsolve_factorable_try(DSolveProblem* P, size_t* nbranch) {
     for (int k = 0; k <= n; k++)
         Rsub = ds_subst(Rsub, ds_make_funcapp(yname, k, xvar), expr_new_symbol(dsym[k]));
 
+    /* Derivative-degree gate (cheap, before the expensive FactorList).  A split
+     * into >= 2 differential factors needs total degree >= 2 in the derivative
+     * symbols d_1..d_n (each factor carries a derivative).  A LINEAR ODE is
+     * degree 1 and can never factor, yet FactorList on its high-degree rational
+     * numerator can run effectively unbounded — this is the true E18 hang, where
+     * the order-reduced 2nd-order equation b0 y + b1 y' + b2 y'' == C[3] reaches
+     * Factorable.  Measure the total d-degree via d_k -> t d_k, Exponent[.,t]. */
+    {
+        const char* tsym = intern_symbol("DSolve`fT");
+        Expr* Rt = expr_copy(Rsub);
+        for (int k = 1; k <= n; k++)
+            Rt = ds_subst(Rt, expr_new_symbol(dsym[k]),
+                          ds_call2(SYM_Times, expr_new_symbol(tsym), expr_new_symbol(dsym[k])));
+        Expr* degE = eval_and_free(ds_call2("Exponent", Rt, expr_new_symbol(tsym)));
+        long ddeg = (degE->type == EXPR_INTEGER) ? (long)degE->data.integer : 0;
+        expr_free(degE);
+        if (ddeg < 2) { expr_free(Rsub); free(dsym); return NULL; }
+    }
+
     /* PolynomialQ[Rsub, {d0..dn}] — anti-hang / anti-misfactor gate */
     Expr** sl = malloc((size_t)(n + 1) * sizeof(Expr*));
     for (int k = 0; k <= n; k++) sl[k] = expr_new_symbol(dsym[k]);

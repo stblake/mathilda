@@ -137,6 +137,61 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
 
     Expr* general = NULL;
 
+    /* ---- Legendre / associated Legendre ----
+     *   (1-x^2) y'' - 2x y' + (nu(nu+1) - mu^2/(1-x^2)) y = 0
+     * normalised: P = -2x/(1-x^2),  Q = nu(nu+1)/(1-x^2) - mu^2/(1-x^2)^2.
+     * Signature P*(1-x^2)+2x == 0 pins the y'-term; then qq = Q*(1-x^2)^2 must be
+     * the quadratic (nu(nu+1)-mu^2) - nu(nu+1) x^2.  Emit LegendreP[nu,(mu,)x],
+     * LegendreQ[nu,(mu,)x] (mu dropped for the ordinary equation).  Placed first:
+     * its P is neither 0 (Airy) nor 1/x (Bessel), so no row below collides. */
+    if (!general) {
+        Expr* omx2 = eval_and_free(ds_call2(SYM_Subtract, expr_new_integer(1),
+                         ds_call2(SYM_Power, expr_new_symbol(xvar), expr_new_integer(2)))); /* 1 - x^2 */
+        Expr* pchk = ds_simplify(ds_call2(SYM_Plus,
+                         ds_call2(SYM_Times, expr_copy(Pc), expr_copy(omx2)),
+                         ds_call2(SYM_Times, expr_new_integer(2), expr_new_symbol(xvar))));
+        if (ds_is_zero(pchk)) {
+            Expr* qq = ds_simplify(ds_call2(SYM_Times, expr_copy(Qc),
+                           ds_call2(SYM_Power, expr_copy(omx2), expr_new_integer(2))));   /* Q (1-x^2)^2 */
+            Expr* c0 = ds_subst(expr_copy(qq), expr_new_symbol(xvar), expr_new_integer(0));   /* nu(nu+1)-mu^2 */
+            Expr* c2 = eval_and_free(expr_new_function(expr_new_symbol("Coefficient"),
+                           (Expr*[]){ expr_copy(qq), expr_new_symbol(xvar), expr_new_integer(2) }, 3));
+            /* require qq == c0 + c2 x^2 exactly (no x^1 or higher terms) and c0,c2 free of x */
+            Expr* recon = ds_simplify(ds_call2(SYM_Subtract, expr_copy(qq),
+                              ds_call2(SYM_Plus, expr_copy(c0),
+                                  ds_call2(SYM_Times, expr_copy(c2),
+                                      ds_call2(SYM_Power, expr_new_symbol(xvar), expr_new_integer(2))))));
+            if (ds_is_zero(recon) && ds_free_of(c0, xvar) && ds_free_of(c2, xvar)) {
+                Expr* B = ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(c2))); /* nu(nu+1) */
+                /* nu = (-1 + Sqrt[1+4B]) / 2 */
+                Expr* disc = ds_call2(SYM_Plus, expr_new_integer(1),
+                                 ds_call2(SYM_Times, expr_new_integer(4), expr_copy(B)));
+                Expr* nu = ds_simplify(ds_call2(SYM_Times,
+                               ds_call2(SYM_Plus, expr_new_integer(-1), ds_call1("Sqrt", disc)),
+                               ds_call2(SYM_Power, expr_new_integer(2), expr_new_integer(-1))));
+                Expr* musq = ds_simplify(ds_call2(SYM_Subtract, expr_copy(B), expr_copy(c0)));
+                Expr* b0; Expr* b1;
+                if (ds_is_zero(musq)) {
+                    b0 = expr_new_function(expr_new_symbol(SYM_LegendreP),
+                             (Expr*[]){ expr_copy(nu), expr_new_symbol(xvar) }, 2);
+                    b1 = expr_new_function(expr_new_symbol(SYM_LegendreQ),
+                             (Expr*[]){ expr_copy(nu), expr_new_symbol(xvar) }, 2);
+                } else {
+                    Expr* mu = ds_call1("Sqrt", expr_copy(musq));
+                    b0 = expr_new_function(expr_new_symbol(SYM_LegendreP),
+                             (Expr*[]){ expr_copy(nu), expr_copy(mu), expr_new_symbol(xvar) }, 3);
+                    b1 = expr_new_function(expr_new_symbol(SYM_LegendreQ),
+                             (Expr*[]){ expr_copy(nu), expr_copy(mu), expr_new_symbol(xvar) }, 3);
+                    expr_free(mu);
+                }
+                general = combo(b0, b1);
+                expr_free(B); expr_free(nu); expr_free(musq);
+            }
+            expr_free(qq); expr_free(c0); expr_free(c2); expr_free(recon);
+        }
+        expr_free(omx2); expr_free(pchk);
+    }
+
     /* ---- Airy: P == 0, Q = -(A x + B), A = -dQ/dx constant, B = -Q(0) ---- */
     if (!general && ds_is_zero(Pc)) {
         Expr* dQ = ds_d(expr_copy(Qc), expr_new_symbol(xvar));    /* Q' = -A */
@@ -269,6 +324,112 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
         if (A) expr_free(A);
     }
 
+    /* ---- Bessel-reducible exponential potential: P == 0, Q == A e^(lambda x),
+     *      lambda a nonzero constant.  y'' + A e^(lambda x) y == 0 maps under
+     *      t = (2 Sqrt[|A|]/lambda) e^(lambda x/2) to order-0 Bessel:
+     *      J_0/Y_0 for A > 0, modified I_0/K_0 for A < 0.  Fixes
+     *      y'' - e^(5x) y == 0 -> BesselI[0,(2/5)e^(5x/2)], BesselK[0,...].
+     *      Placed after the pure-power row (whose m = x Q'/Q is not a number for
+     *      an exponential Q, so it declines first). */
+    if (!general && ds_is_zero(Pc)) {
+        Expr* Q = ds_simplify(expr_copy(Qc));
+        if (!ds_is_zero(Q)) {
+            Expr* dQ = ds_d(expr_copy(Q), expr_new_symbol(xvar));
+            Expr* lam = ds_simplify(ds_call2(SYM_Times, dQ,          /* lambda = Q'/Q */
+                            expr_new_function(expr_new_symbol(SYM_Power),
+                                (Expr*[]){ expr_copy(Q), expr_new_integer(-1) }, 2)));
+            if (ds_free_of(lam, xvar) && !ds_is_zero(lam)) {
+                Expr* elx = eval_and_free(ds_call1("Exp",
+                                ds_call2(SYM_Times, expr_copy(lam), expr_new_symbol(xvar))));
+                Expr* A = ds_simplify(ds_call2(SYM_Times, expr_copy(Q),   /* A = Q / e^(lambda x) */
+                              expr_new_function(expr_new_symbol(SYM_Power),
+                                  (Expr*[]){ elx, expr_new_integer(-1) }, 2)));
+                Expr* nA = eval_and_free(ds_call1("N", expr_copy(A)));
+                double av = (nA->type == EXPR_REAL) ? nA->data.real
+                          : (nA->type == EXPR_INTEGER) ? (double)nA->data.integer : 0.0;
+                expr_free(nA);
+                if (ds_free_of(A, xvar) && av != 0.0) {
+                    bool pos = av > 0.0;
+                    Expr* beta = pos ? expr_copy(A)
+                                     : ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(A)));
+                    /* kappa = 2 Sqrt[beta] / lambda */
+                    Expr* kappa = ds_simplify(ds_call2(SYM_Times,
+                                      ds_call2(SYM_Times, expr_new_integer(2), ds_call1("Sqrt", beta)),
+                                      expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ expr_copy(lam), expr_new_integer(-1) }, 2)));
+                    /* arg = kappa e^(lambda x / 2) */
+                    Expr* halfexp = eval_and_free(ds_call1("Exp",
+                                        ds_call2(SYM_Times,
+                                            ds_call2(SYM_Times, expr_copy(lam),
+                                                expr_new_function(expr_new_symbol(SYM_Power),
+                                                    (Expr*[]){ expr_new_integer(2), expr_new_integer(-1) }, 2)),
+                                            expr_new_symbol(xvar))));
+                    Expr* arg = ds_simplify(ds_call2(SYM_Times, kappa, halfexp));
+                    const char* f0 = pos ? "BesselJ" : "BesselI";
+                    const char* f1 = pos ? "BesselY" : "BesselK";
+                    Expr* b0 = expr_new_function(expr_new_symbol(f0),
+                                   (Expr*[]){ expr_new_integer(0), expr_copy(arg) }, 2);
+                    Expr* b1 = expr_new_function(expr_new_symbol(f1),
+                                   (Expr*[]){ expr_new_integer(0), expr_copy(arg) }, 2);
+                    general = combo(b0, b1);
+                    expr_free(arg);
+                }
+                expr_free(A);
+            }
+            expr_free(lam);
+        }
+        expr_free(Q);
+    }
+
+    /* ---- normal-form Bessel: P == 0, Q == A + B/x^2 (A const != 0, B const) ----
+     *   u'' + (A + B/x^2) u == 0  ->  u = Sqrt[x] Z_nu(Sqrt[|A|] x),
+     *   nu = Sqrt[1/4 - B], Z = J/Y for A > 0 and modified I/K for A < 0.
+     *   This is the normal (u'-free) form the plain Bessel row (P == 1/x) and the
+     *   pure-power row (Q a single power) both miss; it is the second-order factor
+     *   of Bessel-type third-order symmetric squares (e.g. E17). */
+    if (!general && ds_is_zero(Pc)) {
+        Expr* q2 = ds_simplify(ds_call2(SYM_Times, expr_copy(Qc),         /* x^2 Q */
+                       ds_call2(SYM_Power, expr_new_symbol(xvar), expr_new_integer(2))));
+        Expr* Ac = eval_and_free(expr_new_function(expr_new_symbol("Coefficient"),
+                       (Expr*[]){ expr_copy(q2), expr_new_symbol(xvar), expr_new_integer(2) }, 3)); /* A */
+        Expr* Bc = ds_subst(expr_copy(q2), expr_new_symbol(xvar), expr_new_integer(0));            /* B */
+        Expr* recon = ds_simplify(ds_call2(SYM_Subtract, expr_copy(q2),
+                          ds_call2(SYM_Plus,
+                              ds_call2(SYM_Times, expr_copy(Ac),
+                                  ds_call2(SYM_Power, expr_new_symbol(xvar), expr_new_integer(2))),
+                              expr_copy(Bc))));
+        if (ds_is_zero(recon) && ds_free_of(Ac, xvar) && ds_free_of(Bc, xvar) && !ds_is_zero(Ac)) {
+            Expr* nA = eval_and_free(ds_call1("N", expr_copy(Ac)));
+            double av = (nA->type == EXPR_REAL) ? nA->data.real
+                      : (nA->type == EXPR_INTEGER) ? (double)nA->data.integer : 0.0;
+            expr_free(nA);
+            if (av != 0.0) {
+                bool pos = av > 0.0;
+                Expr* beta = pos ? expr_copy(Ac)
+                                 : ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(Ac)));
+                Expr* nu = ds_simplify(ds_call1("Sqrt", ds_call2(SYM_Subtract,   /* Sqrt[1/4 - B] */
+                               expr_new_function(expr_new_symbol(SYM_Power),
+                                   (Expr*[]){ expr_new_integer(4), expr_new_integer(-1) }, 2),
+                               expr_copy(Bc))));
+                Expr* arg = ds_simplify(ds_call2(SYM_Times, ds_call1("Sqrt", beta), expr_new_symbol(xvar)));
+                Expr* xsym = expr_new_symbol(xvar);
+                Expr* sqrtx = powrat(xsym, 1, 2);   /* Sqrt[x]; powrat borrows */
+                expr_free(xsym);
+                const char* f0 = pos ? "BesselJ" : "BesselI";
+                const char* f1 = pos ? "BesselY" : "BesselK";
+                Expr* b0 = ds_call2(SYM_Times, expr_copy(sqrtx),
+                               expr_new_function(expr_new_symbol(f0),
+                                   (Expr*[]){ expr_copy(nu), expr_copy(arg) }, 2));
+                Expr* b1 = ds_call2(SYM_Times, expr_copy(sqrtx),
+                               expr_new_function(expr_new_symbol(f1),
+                                   (Expr*[]){ expr_copy(nu), expr_copy(arg) }, 2));
+                general = combo(b0, b1);
+                expr_free(sqrtx); expr_free(nu); expr_free(arg);
+            }
+        }
+        expr_free(q2); expr_free(Ac); expr_free(Bc); expr_free(recon);
+    }
+
     /* ---- Kummer (confluent hypergeometric 1F1): P == b/x - 1, Q == -a/x ----
      * y = C[1] 1F1[a,b,x] + C[2] x^(1-b) 1F1[a-b+1, 2-b, x].  Read a,b directly:
      * x(P+1) free of x is b, -x Q free of x is a.  The second basis needs b not
@@ -322,7 +483,13 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
                 Expr* iq = eval_and_free(ds_call1("IntegerQ", expr_copy(gc)));
                 bool cint = (iq->type == EXPR_SYMBOL && iq->data.symbol.name == SYM_True);
                 expr_free(iq);
-                if (specialform_is_number(gc) && !cint) {
+                /* Emit whenever c is not a PROVABLE integer — this now includes a
+                 * SYMBOLIC c (generically non-integer), giving Hypergeometric2F1
+                 * closed forms for e.g. (x^2-x)y''+((a+b+1)x-c)y'+ab y==0.  The
+                 * symbolic-power second solution x^(1-c) 2F1[...] is kept safe from
+                 * a zero_test hang by the special-function early-decline in
+                 * zero_test.c; an integer c still declines (dependent solutions). */
+                if (!cint) {
                     Expr* S = eval_and_free(ds_call2(SYM_Subtract,
                                   ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(dL)),
                                   expr_new_integer(1)));                            /* a+b = -dL - 1 */

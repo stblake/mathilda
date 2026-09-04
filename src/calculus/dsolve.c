@@ -47,7 +47,9 @@ typedef enum {
     DS_SPECIALFORM,
     DS_KOVACIC,
     DS_OPERFACTOR,
+    DS_SYMSQUARE,
     DS_REDUCEORDER,
+    DS_LOWERREDUCE,
     DS_FOS,
     DS_RICCATI,
     DS_CHINI,
@@ -82,7 +84,9 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
     if (strcmp(s, "Kovacic")            == 0) return DS_KOVACIC;
     if (strcmp(s, "OperatorFactor")     == 0) return DS_OPERFACTOR;
+    if (strcmp(s, "SymmetricSquare") == 0) return DS_SYMSQUARE;
     if (strcmp(s, "ReductionOfOrder") == 0) return DS_REDUCEORDER;
+    if (strcmp(s, "LowerDerivativeReduction") == 0) return DS_LOWERREDUCE;
     if (strcmp(s, "FirstOrderSubstitution") == 0) return DS_FOS;
     if (strcmp(s, "Riccati")              == 0) return DS_RICCATI;
     if (strcmp(s, "Chini")                == 0) return DS_CHINI;
@@ -119,7 +123,9 @@ extern Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_operfactor_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_symsquare_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_lower_reduce_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_fos_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_chini_try(DSolveProblem* P, size_t* nbranch);
@@ -151,7 +157,9 @@ extern void dsolve_exactode_init(void);
 extern void dsolve_specialform_init(void);
 extern void dsolve_kovacic_init(void);
 extern void dsolve_operfactor_init(void);
+extern void dsolve_symsquare_init(void);
 extern void dsolve_reduce_order_init(void);
+extern void dsolve_lower_reduce_init(void);
 extern void dsolve_fos_init(void);
 extern void dsolve_riccati_init(void);
 extern void dsolve_chini_init(void);
@@ -302,11 +310,20 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_exactode_try);
             if (!result) result = dsolve_run(&P, dsolve_specialform_try);
             if (!result) result = dsolve_run(&P, dsolve_kovacic_try);
+            /* Third-order symmetric squares (solution space = products of a
+             * second-order basis: Airy^2, Bessel products, ...).  Before
+             * operfactor, which would otherwise churn on the non-factorable
+             * symmetric-square operator. */
+            if (!result) result = dsolve_run(&P, dsolve_symsquare_try);
             /* Higher-order (>=3) reducible linear operators: factor out a first-order
              * right factor (D-r) and recurse.  After Kovacic (owns order 2), before
              * the reduction/series methods. */
             if (!result) result = dsolve_run(&P, dsolve_operfactor_try);
             if (!result) result = dsolve_run(&P, dsolve_reduce_order_try);
+            /* General order>=3 reduction when y and all derivatives below some
+             * order m>=1 are absent (p=y^(m)); nonlinear-capable, so it runs
+             * after the linear operator/reduce_order methods. */
+            if (!result) result = dsolve_run(&P, dsolve_lower_reduce_try);
             if (!result) result = dsolve_run(&P, dsolve_fos_try);
             /* Riccati after fos: fos owns y'==(a x+b y+c)^2 with the cleaner
              * closed form; genuine Riccati (y'==y^2+x, ...) linearises here. */
@@ -368,7 +385,9 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
         case DS_KOVACIC:      result = dsolve_run(&P, dsolve_kovacic_try);     break;
         case DS_OPERFACTOR:   result = dsolve_run(&P, dsolve_operfactor_try);  break;
+        case DS_SYMSQUARE:    result = dsolve_run(&P, dsolve_symsquare_try);   break;
         case DS_REDUCEORDER:  result = dsolve_run(&P, dsolve_reduce_order_try); break;
+        case DS_LOWERREDUCE:  result = dsolve_run(&P, dsolve_lower_reduce_try); break;
         case DS_FOS:          result = dsolve_run(&P, dsolve_fos_try);          break;
         case DS_RICCATI:      result = dsolve_run(&P, dsolve_riccati_try);      break;
         case DS_CHINI:        result = dsolve_run_implicit(&P, dsolve_chini_try); break;
@@ -433,7 +452,9 @@ void dsolve_init(void) {
     dsolve_specialform_init();
     dsolve_kovacic_init();
     dsolve_operfactor_init();
+    dsolve_symsquare_init();
     dsolve_reduce_order_init();
+    dsolve_lower_reduce_init();
     dsolve_fos_init();
     dsolve_riccati_init();
     dsolve_chini_init();
