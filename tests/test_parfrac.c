@@ -172,6 +172,32 @@ void test_apart_edge_cases(void) {
     assert_apart_form("Apart[0/((x+1)(x+2)), x]", "0");
 }
 
+/* Radical *of the decomposition variable*: the explicit 2-arg form
+ * Apart[f(x^(1/m)), x] must decompose in the generator g = x^(1/m) exactly
+ * like the 1-arg form (regression: the 2-arg form used to return the
+ * Together'd single fraction because x^(1/m) is not polynomial in x). A
+ * radical of a *different* symbol must still be treated as a constant. */
+void test_apart_radical_of_variable(void) {
+    /* reported case: 2-arg form now matches the 1-arg decomposition */
+    assert_apart_form("Apart[1/((Sqrt[x] + 2) (Sqrt[x] + 3)), x]",
+                      "1/(2 + Sqrt[x]) - 1/(3 + Sqrt[x])");
+    assert_apart_form("Apart[1/((Sqrt[x] + 2) (Sqrt[x] + 3))]",
+                      "1/(2 + Sqrt[x]) - 1/(3 + Sqrt[x])");
+    /* cube-root generator over a different symbol name */
+    assert_apart_form("Apart[1/((y^(1/3) + 2) (y^(1/3) + 3)), y]",
+                      "1/(2 + y^(1/3)) - 1/(3 + y^(1/3))");
+    /* a polynomial part in the generator is carried out correctly */
+    assert_apart_form("Apart[(x + Sqrt[x])/((Sqrt[x]+1)(Sqrt[x]+2)), x]",
+                      "1 - 2/(2 + Sqrt[x])");
+    /* correctness by recombination for the 2-arg radical path */
+    assert_apart_recombines("1/((Sqrt[x] + 2) (Sqrt[x] + 3))", "x");
+    assert_apart_recombines("1/((y^(1/3) + 2) (y^(1/3) + 3))", "y");
+    /* radical of a DIFFERENT symbol stays a constant in the given variable:
+     * only the (x + 3) factor is in x, so there is nothing to split. */
+    assert_apart_form("Apart[1/((Sqrt[y] + 2) (x + 3)), x]",
+                      "1/((3 + x) (2 + Sqrt[y]))");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -182,6 +208,7 @@ int main(void) {
     TEST(test_apart_recombination);
     TEST(test_apart_multivariate_decline);
     TEST(test_apart_edge_cases);
+    TEST(test_apart_radical_of_variable);
     printf("All parfrac tests passed!\n");
     return 0;
 }

@@ -140,43 +140,65 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
         }
     }
 
-    /* Algebraic-generator pass (1-arg form): if the input has a
-     * sub-expression u with fractional rational exponents, substitute
-     * u -> g^m so the rational function becomes polynomial in g, run
-     * Apart in g recursively, then back-substitute.  This converts
-     * Apart[1/(-1+r^(3/7))] into partial fractions in r^(1/7).
-     * The 2-arg form Apart[expr, x] explicitly fixes the partial-
-     * fraction variable, so we do not auto-substitute there. */
-    if (apart_argc == 1) {
+    /* Algebraic-generator pass: if the input has a sub-expression u with
+     * fractional rational exponents, substitute u -> g^m so the rational
+     * function becomes polynomial in g, run Apart in g recursively, then
+     * back-substitute.  This converts Apart[1/(-1+r^(3/7))] into partial
+     * fractions in r^(1/7).
+     *
+     * The 1-arg form runs this unconditionally (the fresh generator g
+     * becomes the auto-detected variable).  The explicit 2-arg form
+     * Apart[expr, v] runs it too, but only when the radical is a genuine
+     * radical of v itself (base == v, atom == 1): then g = v^(1/m) is the
+     * right generator and Apart[f(Sqrt[x]), x] decomposes in g exactly like
+     * the 1-arg form (issue: the 2-arg form used to return the Together'd
+     * fraction because Sqrt[x] is not polynomial in x).  A radical of some
+     * *other* symbol — Apart[f(Sqrt[y]), x] — is left as an opaque constant
+     * in v, so the substitution is skipped there. */
+    {
         Expr* base = NULL;
         Expr* atom = NULL;
         int64_t m = 1;
         if (poly_find_radical_gen(expr, &base, &atom, &m)) {
-            char* gen = poly_make_fresh_gen(expr);
-            Expr* substituted = poly_subst_radical_to_gen(expr, base, atom, m, gen);
-            /* Recursive Apart call, propagating the extension if any. */
-            size_t inner_argc = 1 + (apart_alpha ? 1 : 0);
-            Expr** ap_args = malloc(sizeof(Expr*) * inner_argc);
-            ap_args[0] = substituted;
-            if (apart_alpha) {
-                ap_args[1] = expr_new_function(
-                    expr_new_symbol(SYM_Rule),
-                    (Expr*[]){
-                        expr_new_symbol(SYM_Extension),
-                        expr_copy((Expr*)apart_alpha)
-                    }, 2);
+            bool run_subst = (apart_argc == 1);
+            if (apart_argc == 2) {
+                const Expr* the_var = res->data.function.args[1];
+                run_subst = (atom->type == EXPR_INTEGER && atom->data.integer == 1)
+                            && expr_eq(base, (Expr*)the_var);
             }
-            Expr* call = expr_new_function(expr_new_symbol(SYM_Apart),
-                              ap_args, inner_argc);
-            free(ap_args);
-            Expr* result_in_g = evaluate(call);
-            expr_free(call);
-            Expr* final = poly_subst_radical_from_gen(result_in_g, base, atom, m, gen);
-            expr_free(result_in_g);
+            if (run_subst) {
+                char* gen = poly_make_fresh_gen(expr);
+                Expr* substituted = poly_subst_radical_to_gen(expr, base, atom, m, gen);
+                /* Recursive Apart call, propagating the extension if any.
+                 * The 2-arg form pins the decomposition variable to the fresh
+                 * generator g, so it is not swayed by whatever other symbol
+                 * collect_variables would otherwise auto-pick. */
+                size_t inner_argc = (apart_argc == 2 ? 2 : 1) + (apart_alpha ? 1 : 0);
+                Expr** ap_args = malloc(sizeof(Expr*) * inner_argc);
+                ap_args[0] = substituted;
+                if (apart_argc == 2) ap_args[1] = expr_new_symbol(gen);
+                if (apart_alpha) {
+                    ap_args[inner_argc - 1] = expr_new_function(
+                        expr_new_symbol(SYM_Rule),
+                        (Expr*[]){
+                            expr_new_symbol(SYM_Extension),
+                            expr_copy((Expr*)apart_alpha)
+                        }, 2);
+                }
+                Expr* call = expr_new_function(expr_new_symbol(SYM_Apart),
+                                  ap_args, inner_argc);
+                free(ap_args);
+                Expr* result_in_g = evaluate(call);
+                expr_free(call);
+                Expr* final = poly_subst_radical_from_gen(result_in_g, base, atom, m, gen);
+                expr_free(result_in_g);
+                expr_free(base);
+                expr_free(atom);
+                free(gen);
+                return final;
+            }
             expr_free(base);
             expr_free(atom);
-            free(gen);
-            return final;
         }
     }
 
