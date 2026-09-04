@@ -123,3 +123,32 @@ terms, two independent variables, constant-signed discriminant.
 
 Still open in §2b: wave-IVP d'Alembert formula; heat kernel / `Erf`; lower-order/
 inhomogeneous 2nd-order (telegraph); quasilinear/nonlinear first-order (§2a).
+
+---
+
+# DSolve M6 (Phase 2) — wave d'Alembert IVP  ✅ DONE (2026-09-04)
+
+`DSolve`WaveDAlembert` (`src/calculus/dsolve_wave.c`) — the whole-line wave IVP
+`u_tt==c² u_xx`, `u(x,t0)==f(x)`, `u_t(x,t0)==g(x)` → d'Alembert
+`½(f(x−cτ)+f(x+cτ)) + 1/(2c)∫_{x−cτ}^{x+cτ} g(K)dK`, `τ=t−t0`. Auto-dispatched
+(new `is_pde` cascade route) + pinned.
+
+- [x] parse (ICs arrive as equations → `neq==3`); sort PDE vs 2 ICs; fixed var=time, free=space
+- [x] sign-robust IC rhs extraction; wave speed from principal coeffs (reject parabolic/elliptic)
+- [x] d'Alembert body build (dummy `K`, collision-guarded; integral kept for undefined `g`)
+- [x] own multi-equation verify (rebuild with `f=Cos, g=Sin`; PDE residual + both ICs → 0)
+- [x] own assemble `{{u->Function[{x,t},…]}}`; auto route in dsolve.c + pinned builtin
+- [x] tests `t_wave_dalembert` (concrete verified; undefined at displacement IC; auto+pinned; declines)
+- [x] `make check-c99` PASS; all 3 DSolve ctest suites green
+- [x] valgrind: decline paths at baseline 13,440/6,312 (dsolve_wave leak-free); solving paths
+      inherit only the documented per-call Integrate-engine leak (LinearFirstOrder/AlmostLinear too)
+
+Key gotcha → memory: a PDE initial condition `u[x,t0]==f[x]` is a 2-arg point
+condition that `ds_is_condition` (single-var funcapps only) does NOT split off, so a
+wave IVP reaches the solver as `neq==3` (PDE + 2 ICs as equations); the method must
+sort them itself. Verifying a d'Alembert solution with undefined `f,g` is impossible
+(no Leibniz rule for the unevaluated `Integrate[g[K],…]`), so verify rebuilds with
+`f=Cos, g=Sin`.
+
+Still open in §2b: heat kernel / `Erf`; inhomogeneous / half-line / `Piecewise` wave;
+lower-order/inhomogeneous 2nd-order (telegraph); quasilinear/nonlinear first-order (§2a).

@@ -174,10 +174,14 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   constant-coefficient ODEs in a separation constant λ and recursing into the
   scalar cascade; back-substitution verified. **`PDEClassify`**
   (`dsolve_pdeclassify.c`) done — the discriminant classifier (Hyperbolic /
-  Parabolic / Elliptic) over the principal part. Still to do:
-  quasilinear/nonlinear first-order; inhomogeneous / lower-order-term 2nd-order
-  (telegraph/damped wave); the wave-IVP d'Alembert formula (initial data,
-  half-line, `Piecewise`); heat kernel / `Erf`.
+  Parabolic / Elliptic) over the principal part. **`WaveDAlembert`**
+  (`dsolve_wave.c`) done — the d'Alembert initial-value problem for the 1-D wave
+  equation on the whole line (`u_tt==c² u_xx` with `u(x,t0)==f(x)`,
+  `u_t(x,t0)==g(x)`), auto-dispatched and pinned; the method sorts the PDE from its
+  two initial conditions (which arrive as ordinary equations, `neq==3`) and carries
+  its own multi-equation verify. Still to do: quasilinear/nonlinear first-order;
+  inhomogeneous / lower-order-term 2nd-order (telegraph/damped wave); inhomogeneous
+  / half-line / `Piecewise` wave data; heat kernel / `Erf`.
 - **M7 — first-order substitution + attribute cleanup.** ✅ DONE.
   `DSolve`FirstOrderSubstitution` (`y'==F(a x + b y + c)`, completing the 1a
   first-order family bar Riccati/Lagrange/Abel/Chini) and `AutonomousReduction`
@@ -660,8 +664,19 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   a decidable constant — a mixed-type / parameter-dependent equation such as
   Tricomi's `y u_xx + u_yy == 0` (Δ = −4y) — leaves the call unevaluated (an
   honest decline, not a region-blind label). `dsolve_pdeclassify.c`.
-- `[ ] WaveEquation` (d'Alembert IVP formula; inhomogeneous; half-line;
-  `Piecewise`), `[ ] HeatEquation` (heat kernel / `Erf`).
+- `[✓] WaveDAlembert` — the initial-value problem for the 1-D wave equation on
+  the whole line: `u_tt == c² u_xx`, `u(x,t0) == f(x)`, `u_t(x,t0) == g(x)` →
+  d'Alembert `u = ½(f(x−cτ)+f(x+cτ)) + 1/(2c)∫_{x−cτ}^{x+cτ} g(s)ds`, `τ = t−t0`
+  (the velocity integral kept unevaluated for undefined `g`, dummy `K`). The two
+  initial conditions are two-argument point conditions the shared parser does not
+  recognise, so they arrive as ordinary equations (`neq==3`); the method sorts
+  PDE-vs-ICs itself (the fixed variable is time, the free one space), and has its
+  own multi-equation runner + verify (rebuild with `f==Cos, g==Sin` and require the
+  PDE residual and both ICs to vanish — the unevaluated integral of an undefined
+  `g` cannot be differentiated). Solved automatically by `DSolve` and via the
+  pinned `DSolve`WaveDAlembert`. `dsolve_wave.c`. *Future:* inhomogeneous forcing,
+  half-line / boundary problems, `Piecewise` data.
+- `[ ] HeatEquation` (heat kernel / `Erf`).
 
 ## Testing
 

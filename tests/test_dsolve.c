@@ -886,6 +886,38 @@ static void t_pdeclassify(void) {
     check_form("Head[PDEClassify[D[u[x,y],x] + D[u[x,y],y] == 0, u, {x,y}]]", "PDEClassify");
 }
 
+/* ---- M6 (Phase 2): wave-equation IVP by d'Alembert's formula (DSolve auto +
+ * pinned DSolve`WaveDAlembert).  Concrete data is fully back-substitution
+ * verified; undefined data is checked at the displacement condition (the velocity
+ * integral over a zero-width interval vanishes). ---- */
+static void t_wave_dalembert(void) {
+    /* f = Sin, g = 0, c = 2: u = (Sin[x-2t] + Sin[x+2t])/2, verified */
+    check_true("With[{b = u[x,t] /. DSolve[{D[u[x,t],{t,2}] == 4 D[u[x,t],{x,2}], "
+               "u[x,0] == Sin[x], Derivative[0,1][u][x,0] == 0}, u, {x,t}][[1]]}, "
+               "PossibleZeroQ[D[b,{t,2}] - 4 D[b,{x,2}]] && PossibleZeroQ[(b /. t->0) - Sin[x]] "
+               "&& PossibleZeroQ[D[b,t] /. t->0]]");
+    /* f = 0, g = Sin, c = 1: pure velocity, verified */
+    check_true("With[{b = u[x,t] /. DSolve[{D[u[x,t],{t,2}] == D[u[x,t],{x,2}], "
+               "u[x,0] == 0, Derivative[0,1][u][x,0] == Sin[x]}, u, {x,t}][[1]]}, "
+               "PossibleZeroQ[D[b,{t,2}] - D[b,{x,2}]] && PossibleZeroQ[b /. t->0] "
+               "&& PossibleZeroQ[(D[b,t] /. t->0) - Sin[x]]]");
+    /* undefined f, g (auto-dispatch): solved, and the displacement IC holds */
+    check_true("With[{r = DSolve[{D[u[x,t],{t,2}] == c^2 D[u[x,t],{x,2}], u[x,0] == f[x], "
+               "Derivative[0,1][u][x,0] == g[x]}, u, {x,t}]}, Head[r] === List && r =!= {} && "
+               "PossibleZeroQ[((u[x,t] /. r[[1]]) /. t->0) - f[x]]]");
+    /* pinned method solves the same */
+    check_true("With[{b = u[x,t] /. DSolve`WaveDAlembert[{D[u[x,t],{t,2}] == D[u[x,t],{x,2}], "
+               "u[x,0] == Cos[x], Derivative[0,1][u][x,0] == 0}, u, {x,t}][[1]]}, "
+               "PossibleZeroQ[D[b,{t,2}] - D[b,{x,2}]] && PossibleZeroQ[(b /. t->0) - Cos[x]]]");
+    /* declines an elliptic equation with 'ICs' (not a wave) */
+    check_form("Head[DSolve`WaveDAlembert[{D[u[x,y],{x,2}] + D[u[x,y],{y,2}] == 0, "
+               "u[x,0] == f[x], Derivative[0,1][u][x,0] == g[x]}, u, {x,y}]]",
+               "DSolve`WaveDAlembert");
+    /* declines the bare wave equation (no initial conditions, neq == 1) */
+    check_form("Head[DSolve`WaveDAlembert[D[u[x,t],{t,2}] == c^2 D[u[x,t],{x,2}], u, {x,t}]]",
+               "DSolve`WaveDAlembert");
+}
+
 /* Pinned system + PDE method builtins: each is REPL-callable as DSolve`<Name>[...]
  * (M8 systems, M6 PDE), verified by back-substitution, and declines a wrong-shape
  * input (no silent wrong answer). */
@@ -1627,6 +1659,7 @@ int main(void) {
     TEST(t_pde2_pinned_and_declines);
     TEST(t_pdesep);
     TEST(t_pdeclassify);
+    TEST(t_wave_dalembert);
     TEST(t_sys_pde_pinned_methods);
     TEST(t_declines_unsupported);
     /* M9: backfill for thin methods */
