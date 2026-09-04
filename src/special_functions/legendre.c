@@ -569,6 +569,352 @@ static Expr* legendre_assoc(Expr* n_e, Expr* m_e, int type, Expr* x_e) {
     return legendre_assoc_type23(ni, m, type, x_e);
 }
 
+/* ================================================================== */
+/* LegendreQ -- Legendre function of the second kind                   */
+/*                                                                    */
+/*   LegendreQ[n, x]        Legendre function Q_n(x).                  */
+/*   LegendreQ[n, m, x]     associated Q_n^m(x) (type 1).             */
+/*   LegendreQ[n, m, a, x]  Legendre function of type a (a in 1/2/3). */
+/*                                                                    */
+/* Unlike P_n, Q_n carries a logarithm even for integer n. The exact  */
+/* closed form is                                                     */
+/*   Q_n(x) = P_n(x) L(x) + v_n(x),   L(x) = (1/2)(Log[1+x]-Log[1-x]) */
+/* where the polynomial part v_n satisfies the SAME three-term        */
+/* recurrence as P_n but seeded v_0 = 0, v_1 = -1.                     */
+/*                                                                    */
+/* Non-integer order with an inexact argument is evaluated on the cut  */
+/* (|x| < 1) through the two Frobenius series at the origin,           */
+/*   Q_v(x) = Q_v(0) 2F1(-v/2,(v+1)/2;1/2;x^2)                         */
+/*          + Q_v'(0) x 2F1((1-v)/2,(v+2)/2;3/2;x^2),                  */
+/* built as an expression over Hypergeometric2F1/Gamma/Sin/Cos so it   */
+/* inherits their machine + arbitrary (MPFR) and complex numerics. The */
+/* exact special value Q_v(0) is emitted for an exact zero argument,   */
+/* which also lets Series[LegendreQ[v,x],{x,0,k}] fall out of naive    */
+/* Taylor via D[].                                                     */
+/* ------------------------------------------------------------------ */
+
+/* Coefficients of the polynomial part v_n(x) of Q_n = P_n L + v_n, via the same
+ * three-term recurrence as P_n but seeded v_0 = 0, v_1 = -1. `out` has length
+ * n+1, mpq_init'd to 0. */
+static void legendre_q_vcoeffs(unsigned long n, mpq_t* out) {
+    if (n == 0) return;                            /* v_0 = 0: leave zero */
+
+    mpq_t* prev = leg_mpq_array_new(n + 1);        /* v_{k-2} */
+    mpq_t* cur  = leg_mpq_array_new(n + 1);        /* v_{k-1} */
+    mpq_t* nw   = leg_mpq_array_new(n + 1);        /* v_k     */
+    if (!prev || !cur || !nw) {
+        leg_mpq_array_free(prev, n + 1);
+        leg_mpq_array_free(cur, n + 1);
+        leg_mpq_array_free(nw, n + 1);
+        return;
+    }
+
+    /* v_0 = 0 (prev already zero), v_1 = -1 (constant term). */
+    mpq_set_si(cur[0], -1, 1);
+
+    if (n == 1) {
+        for (size_t i = 0; i <= n; i++) mpq_set(out[i], cur[i]);
+    } else {
+        mpq_t a, b, t;
+        mpq_inits(a, b, t, (mpq_ptr)0);
+        for (unsigned long k = 2; k <= n; k++) {
+            /* nw[i] = ((2k-1) cur[i-1] - (k-1) prev[i]) / k */
+            for (unsigned long i = 0; i <= n; i++) {
+                mpq_set_ui(t, 0, 1);
+                if (i >= 1) {
+                    mpq_set_ui(a, 2 * k - 1, 1);
+                    mpq_mul(a, a, cur[i - 1]);
+                    mpq_add(t, t, a);
+                }
+                mpq_set_ui(b, k - 1, 1);
+                mpq_mul(b, b, prev[i]);
+                mpq_sub(t, t, b);
+                mpq_set_ui(a, k, 1);
+                mpq_div(t, t, a);
+                mpq_set(nw[i], t);
+            }
+            for (unsigned long i = 0; i <= n; i++) {
+                mpq_set(prev[i], cur[i]);
+                mpq_set(cur[i], nw[i]);
+            }
+        }
+        for (size_t i = 0; i <= n; i++) mpq_set(out[i], cur[i]);
+        mpq_clears(a, b, t, (mpq_ptr)0);
+    }
+
+    leg_mpq_array_free(prev, n + 1);
+    leg_mpq_array_free(cur, n + 1);
+    leg_mpq_array_free(nw, n + 1);
+}
+
+/* L(x) = (1/2)(Log[1+x] - Log[1-x]) = Times[-1/2, Log[1-x]] + Times[1/2, Log[1+x]]. */
+static Expr* legendre_L_expr(const Expr* x) {
+    Expr* one_plus_x = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_integer(1), expr_copy((Expr*)x) }, 2);
+    Expr* one_minus_x = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_integer(1),
+                   expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)x) }, 2) }, 2);
+    Expr* log_p = expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){ one_plus_x }, 1);
+    Expr* log_m = expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){ one_minus_x }, 1);
+    Expr* term_m = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ make_rational(-1, 2), log_m }, 2);
+    Expr* term_p = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ make_rational(1, 2), log_p }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ term_m, term_p }, 2);
+}
+
+/* Q_n(x) = P_n(x) L(x) + v_n(x) for integer n >= 0. */
+static Expr* legendre_q_closed(unsigned long n, const Expr* x) {
+    mpq_t* pc = leg_mpq_array_new(n + 1);
+    if (!pc) return NULL;
+    legendre_p_coeffs(n, pc);
+    Expr* pn = leg_poly_from_coeffs(pc, n, x);
+    leg_mpq_array_free(pc, n + 1);
+    if (!pn) return NULL;
+
+    mpq_t* vc = leg_mpq_array_new(n + 1);
+    if (!vc) { expr_free(pn); return NULL; }
+    legendre_q_vcoeffs(n, vc);
+    Expr* vn = leg_poly_from_coeffs(vc, n, x);
+    leg_mpq_array_free(vc, n + 1);
+    if (!vn) { expr_free(pn); return NULL; }
+
+    Expr* L = legendre_L_expr(x);
+    Expr* pnL = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ pn, L }, 2);
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ pnL, vn }, 2);
+    return eval_and_free(sum);
+}
+
+/* Sqrt[Pi] = Power[Pi, 1/2]. */
+static Expr* legendre_sqrt_pi(void) {
+    return expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ expr_new_symbol(SYM_Pi), make_rational(1, 2) }, 2);
+}
+
+/* nu*Pi/2 = Times[1/2, Pi, nu]. */
+static Expr* legendre_nu_pi_half(const Expr* nu) {
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ make_rational(1, 2), expr_new_symbol(SYM_Pi),
+                   expr_copy((Expr*)nu) }, 3);
+}
+
+/* Gamma[(nu+1)/2]. */
+static Expr* legendre_gamma_a(const Expr* nu) {
+    Expr* arg = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ make_rational(1, 2),
+                   expr_new_function(expr_new_symbol(SYM_Plus),
+                       (Expr*[]){ expr_copy((Expr*)nu), expr_new_integer(1) }, 2) }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Gamma), (Expr*[]){ arg }, 1);
+}
+
+/* Gamma[nu/2+1]. */
+static Expr* legendre_gamma_b(const Expr* nu) {
+    Expr* arg = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ make_rational(1, 2), expr_copy((Expr*)nu) }, 2),
+                   expr_new_integer(1) }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Gamma), (Expr*[]){ arg }, 1);
+}
+
+/* Q_v(0)  = -(Sqrt[Pi]/2) Sin[v Pi/2] Gamma[(v+1)/2] / Gamma[v/2+1]. */
+static Expr* legendre_q_coef0(const Expr* nu) {
+    Expr* sinp = expr_new_function(expr_new_symbol(SYM_Sin),
+        (Expr*[]){ legendre_nu_pi_half(nu) }, 1);
+    Expr* inv_gb = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ legendre_gamma_b(nu), expr_new_integer(-1) }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ make_rational(-1, 2), legendre_sqrt_pi(), sinp,
+                   legendre_gamma_a(nu), inv_gb }, 5);
+}
+
+/* Q_v'(0) =  Sqrt[Pi] Cos[v Pi/2] Gamma[v/2+1] / Gamma[(v+1)/2]. */
+static Expr* legendre_q_coef1(const Expr* nu) {
+    Expr* cosp = expr_new_function(expr_new_symbol(SYM_Cos),
+        (Expr*[]){ legendre_nu_pi_half(nu) }, 1);
+    Expr* inv_ga = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ legendre_gamma_a(nu), expr_new_integer(-1) }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ legendre_sqrt_pi(), cosp, legendre_gamma_b(nu), inv_ga }, 4);
+}
+
+/* Exact special value Q_v(0) for non-integer order (enables the origin Series). */
+static Expr* legendre_q_special0(const Expr* nu) {
+    return eval_and_free(legendre_q_coef0(nu));
+}
+
+/* Hypergeometric2F1[a, b, c, x^2]. Consumes a, b, c. */
+static Expr* legendre_2f1_x2(Expr* a, Expr* b, Expr* c, const Expr* x) {
+    Expr* x2 = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ expr_copy((Expr*)x), expr_new_integer(2) }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Hypergeometric2F1),
+        (Expr*[]){ a, b, c, x2 }, 4);
+}
+
+/* True iff `e` is a pure numeric quantity (Integer/Real/MPFR/BigInt/Rational,
+ * or Complex[..] of such), i.e. the numeric series actually collapsed. */
+static bool legendre_is_number_leaf(const Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER:
+        case EXPR_REAL:
+        case EXPR_BIGINT:
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+#endif
+            return true;
+        default: break;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        (e->data.function.head->data.symbol.name == SYM_Rational ||
+         e->data.function.head->data.symbol.name == SYM_Complex)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!legendre_is_number_leaf(e->data.function.args[i])) return false;
+        return true;
+    }
+    return false;
+}
+
+/* Numeric Q_v(x) for non-integer order on the cut |x| < 1. Returns NULL when
+ * outside the disk (deferred) or if the series did not collapse to a number. */
+static Expr* legendre_q_numeric(const Expr* nu, const Expr* x) {
+    /* Gate to the convergence disk |x| < 1 (real or complex modulus). */
+    Expr* absx = expr_new_function(expr_new_symbol(SYM_Abs),
+        (Expr*[]){ expr_copy((Expr*)x) }, 1);
+    Expr* cond = eval_and_free(expr_new_function(expr_new_symbol(SYM_Less),
+        (Expr*[]){ absx, expr_new_integer(1) }, 2));
+    bool in_disk = cond && cond->type == EXPR_SYMBOL &&
+                   cond->data.symbol.name == SYM_True;
+    expr_free(cond);
+    if (!in_disk) return NULL;
+
+    /* H1 = 2F1(-v/2, (v+1)/2; 1/2; x^2) */
+    Expr* a1 = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ make_rational(-1, 2), expr_copy((Expr*)nu) }, 2);
+    Expr* b1 = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ make_rational(1, 2),
+                   expr_new_function(expr_new_symbol(SYM_Plus),
+                       (Expr*[]){ expr_copy((Expr*)nu), expr_new_integer(1) }, 2) }, 2);
+    Expr* h1 = legendre_2f1_x2(a1, b1, make_rational(1, 2), x);
+
+    /* H2 = 2F1((1-v)/2, v/2+1; 3/2; x^2) */
+    Expr* a2 = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ make_rational(1, 2),
+                   expr_new_function(expr_new_symbol(SYM_Plus),
+                       (Expr*[]){ expr_new_integer(1),
+                                  expr_new_function(expr_new_symbol(SYM_Times),
+                                      (Expr*[]){ expr_new_integer(-1),
+                                                 expr_copy((Expr*)nu) }, 2) }, 2) }, 2);
+    Expr* b2 = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ make_rational(1, 2), expr_copy((Expr*)nu) }, 2),
+                   expr_new_integer(1) }, 2);
+    Expr* h2 = legendre_2f1_x2(a2, b2, make_rational(3, 2), x);
+
+    Expr* t1 = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ legendre_q_coef0(nu), h1 }, 2);
+    Expr* t2 = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ legendre_q_coef1(nu), expr_copy((Expr*)x), h2 }, 3);
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ t1, t2 }, 2);
+    Expr* out = eval_and_free(sum);
+
+    if (out && legendre_is_number_leaf(out)) return out;
+    expr_free(out);
+    return NULL;
+}
+
+/* LegendreQ[n, x]. */
+static Expr* legendre_q_two_arg(Expr* n_e, Expr* x_e) {
+    int64_t ni;
+    if (leg_exact_int(n_e, &ni)) {
+        if (ni < 0) return NULL;                   /* Q_n singular for n < 0 */
+        unsigned long n = (unsigned long)ni;
+        if (n > LEG_POLY_CAP) return NULL;
+        return legendre_q_closed(n, x_e);
+    }
+
+    /* Non-integer order: exact zero gives the exact special value; an inexact
+     * argument evaluates numerically on the cut; anything else stays symbolic. */
+    if (x_e->type == EXPR_INTEGER && x_e->data.integer == 0)
+        return legendre_q_special0(n_e);
+    if (arg_is_inexact(n_e) || arg_is_inexact(x_e))
+        return legendre_q_numeric(n_e, x_e);
+    return NULL;
+}
+
+/* Associated Q_n^m(x), all three types, for integer n >= 0 and integer m >= 0.
+ * Type 1:   (-1)^m (1-t^2)^(m/2) d^m/dt^m Q_n(t)
+ * Types 2/3: core (1+t)^(m/2) (∓1+t)^(-m/2),  core = (-1)^m (1-t)^m d^m/dt^m Q_n
+ * computed in a fresh dummy t, then substituted t -> x. */
+static Expr* legendre_q_assoc(Expr* n_e, Expr* m_e, int type, Expr* x_e) {
+    int64_t ni, mi;
+    if (!leg_exact_int(n_e, &ni) || !leg_exact_int(m_e, &mi)) return NULL;
+    if (ni < 0 || mi < 0) return NULL;             /* negative order/degree deferred */
+    unsigned long n = (unsigned long)ni;
+    if (n > LEG_POLY_CAP) return NULL;
+    unsigned long m = (unsigned long)mi;
+
+    /* Fresh, never-before-used differentiation variable. */
+    Expr* t = eval_and_free(expr_new_function(expr_new_symbol("Unique"), NULL, 0));
+    if (!t || t->type != EXPR_SYMBOL) { if (t) expr_free(t); return NULL; }
+
+    Expr* qn = legendre_q_closed(n, t);            /* Q_n(t) */
+    if (!qn) { expr_free(t); return NULL; }
+
+    /* Dm = d^m/dt^m Q_n(t)  (m == 0 -> Q_n(t)). */
+    Expr* dm;
+    if (m == 0) {
+        dm = qn;
+    } else {
+        Expr* spec = expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ expr_copy(t), expr_new_integer((int64_t)m) }, 2);
+        dm = eval_and_free(expr_new_function(expr_new_symbol(SYM_D),
+            (Expr*[]){ qn, spec }, 2));
+    }
+    if (!dm) { expr_free(t); return NULL; }
+
+    Expr* sign = expr_new_integer((m & 1u) ? -1 : 1);
+    Expr* body;
+    if (type == 1) {
+        /* (-1)^m (1 - t^2)^(m/2) Dm */
+        Expr* t2 = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ expr_copy(t), expr_new_integer(2) }, 2);
+        Expr* one_minus_t2 = expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_new_integer(1),
+                       expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(-1), t2 }, 2) }, 2);
+        Expr* pref = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ one_minus_t2, make_rational((int64_t)m, 2) }, 2);
+        body = expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ sign, pref, dm }, 3);
+    } else {
+        /* core = (-1)^m (1-t)^m Dm; then (1+t)^(m/2) (∓1+t)^(-m/2). */
+        Expr* one_minus_t = expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_new_integer(1),
+                       expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(-1), expr_copy(t) }, 2) }, 2);
+        Expr* one_minus_tm = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ one_minus_t, expr_new_integer((int64_t)m) }, 2);
+        Expr* core = expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ sign, one_minus_tm, dm }, 3);
+        Expr* p_plus = leg_pm_power(1, 1, (int64_t)m, t);       /* (1+t)^(m/2)  */
+        Expr* p_minus = (type == 2)
+            ? leg_pm_power(1, -1, -(int64_t)m, t)               /* (1-t)^(-m/2) */
+            : leg_pm_power(-1, 1, -(int64_t)m, t);              /* (-1+t)^(-m/2)*/
+        body = expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ core, p_plus, p_minus }, 3);
+    }
+
+    /* Substitute t -> x and evaluate. */
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_copy(t), expr_copy(x_e) }, 2);
+    Expr* result = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+        (Expr*[]){ body, rule }, 2));
+    expr_free(t);
+    return result;
+}
+
 /* ------------------------------------------------------------------ */
 /* Builtin entry point                                                 */
 /* ------------------------------------------------------------------ */
@@ -599,6 +945,31 @@ Expr* builtin_legendre_p(Expr* res) {
     return legendre_emit_argb(argc);
 }
 
+/* Mathematica-style diagnostic for a wrong LegendreQ argument count. */
+static Expr* legendre_q_emit_argb(size_t argc) {
+    fprintf(stderr,
+            "LegendreQ::argb: LegendreQ called with %zu argument%s; "
+            "between 2 and 4 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+Expr* builtin_legendre_q(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** args = res->data.function.args;
+
+    if (argc == 2) return legendre_q_two_arg(args[0], args[1]);
+    if (argc == 3) return legendre_q_assoc(args[0], args[1], 1, args[2]);
+    if (argc == 4) {
+        int64_t a;
+        if (!leg_exact_int(args[2], &a)) return NULL;  /* type must be 1/2/3 */
+        if (a < 1 || a > 3) return NULL;
+        return legendre_q_assoc(args[0], args[1], (int)a, args[3]);
+    }
+    return legendre_q_emit_argb(argc);
+}
+
 /* ------------------------------------------------------------------ */
 /* Registration                                                        */
 /* ------------------------------------------------------------------ */
@@ -607,5 +978,9 @@ void legendre_init(void) {
     symtab_add_builtin("LegendreP", builtin_legendre_p);
     symtab_get_def("LegendreP")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
-    /* Docstring lives in info.c (info_init). */
+
+    symtab_add_builtin("LegendreQ", builtin_legendre_q);
+    symtab_get_def("LegendreQ")->attributes |=
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
+    /* Docstrings live in info.c (info_init). */
 }

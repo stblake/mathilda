@@ -20,6 +20,22 @@
  *
  * Attributes: Listable, NumericFunction, Protected. */
 Expr* builtin_legendre_p(Expr* res);
+
+/* LegendreQ -- Legendre functions of the second kind Q_n(x) and the associated
+ * functions Q_n^m(x), sharing legendre.c's recurrence/polynomial machinery.
+ *
+ *   LegendreQ[n, x]        Legendre function Q_n(x).
+ *   LegendreQ[n, m, x]     associated Q_n^m(x) (type 1).
+ *   LegendreQ[n, m, a, x]  Legendre function of type a (a in {1, 2, 3}).
+ *
+ * Integer n >= 0 gives the exact closed form P_n(x) L(x) + v_n(x) with
+ * L(x) = (1/2)(Log[1+x] - Log[1-x]); non-integer order with an inexact argument
+ * is evaluated on the cut (|x| < 1) via the origin Frobenius series, at machine
+ * or arbitrary (MPFR) precision, real or complex.
+ *
+ * Attributes: Listable, NumericFunction, Protected. */
+Expr* builtin_legendre_q(Expr* res);
+
 void  legendre_init(void);
 
 #endif /* LEGENDRE_H */

@@ -596,9 +596,16 @@ static bool ndk_LegendreP_c(double nre, double nim, double xre, double xim,
     double v; if (!sf_machine_legendre_p(nre, xre, &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
+static bool ndk_LegendreQ_c(double nre, double nim, double xre, double xim,
+                            double* rr, double* ri) {
+    if (nim != 0.0 || xim != 0.0) return false;
+    double v; if (!sf_machine_legendre_q(nre, xre, &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
 static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_LegendreQ  = { ndk_LegendreQ_c,  true, NULL, NULL, false };
 
 #define NDK_BIN2(NAME, FN)                                                     \
 static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
@@ -715,6 +722,7 @@ void ndkernels_init(void) {
     REG_B(Pochhammer,  NDKB_Pochhammer);
     REG_B(Binomial,    NDKB_Binomial);
     REG_B(LegendreP,   NDKB_LegendreP);
+    REG_B(LegendreQ,   NDKB_LegendreQ);
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);

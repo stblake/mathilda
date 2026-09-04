@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, and the Legendre polynomials and associated Legendre functions `LegendreP`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, and the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`.
 
 ## Gamma
 
@@ -1766,4 +1766,60 @@ Out[1]= -3/2 x + 5/2 x^3
 
 In[2]:= LegendreP[10, 2, x]
 Out[2]= (1 - x^2) (3465/128 - 45045/32 x^2 + 675675/64 x^4 - 765765/32 x^6 + 2078505/128 x^8)
+```
+
+## LegendreQ
+
+`LegendreQ[n, x]` gives the Legendre function of the second kind `Q_n(x)`;
+`LegendreQ[n, m, x]` gives the associated Legendre function `Q_n^m(x)` (type 1);
+`LegendreQ[n, m, a, x]` gives the Legendre function of type `a` (`a ∈ {1, 2, 3}`,
+default `1`).
+
+- **Exact closed form.** Unlike `P_n`, `Q_n` carries a logarithm even for
+  integer order. An exact integer order `n ≥ 0` produces
+  `Q_n(x) = P_n(x) L(x) + v_n(x)` with `L(x) = (1/2)(Log[1+x] - Log[1-x])`, where
+  the polynomial part `v_n` satisfies the same three-term recurrence as `P_n`
+  but seeded `v_0 = 0`, `v_1 = -1`. For example
+  `LegendreQ[0, x] = (1/2)(Log[1+x] - Log[1-x])`,
+  `LegendreQ[1, x] = -1 + x L(x)`, and
+  `LegendreQ[5, x] = -8/15 + 49/8 x² - 63/8 x⁴ + L(x) (15/8 x - 35/4 x³ +
+  63/8 x⁵)`. Negative integer orders are singular (`Q_n` diverges) and stay
+  symbolic.
+- **Numerics.** A non-integer order with an inexact argument on the cut
+  (`|x| < 1`) evaluates through the two origin Frobenius series
+  `Q_v(x) = Q_v(0) 2F1(-v/2,(v+1)/2;1/2;x²) + Q_v'(0) x 2F1((1-v)/2,(v+2)/2;3/2;x²)`
+  at machine or arbitrary (MPFR) precision, real or complex. Examples:
+  `LegendreQ[1/3, 0.5] = -0.0399533`, `LegendreQ[1/2, 0.5] = -0.265596`,
+  `LegendreQ[1/3 - I, 0.5 + 0.45 I] = -0.346939 + 2.52382 I`, and
+  `N[LegendreQ[3/2, 1/2], 50]` is accurate to 50 digits with precision tracking
+  the input. An exact non-integer order at an exact non-zero argument (e.g.
+  `LegendreQ[3/2, 2]`) stays symbolic and numericalizes only under `N`; at an
+  exact zero it gives the special value
+  `Q_v(0) = -(√π/2) Sin[v π/2] Gamma[(v+1)/2] / Gamma[v/2+1]`.
+- **Associated functions (type 1).** For integer `n ≥ 0` and integer `m ≥ 0`,
+  `(-1)^m (1-x²)^(m/2) d^m/dx^m Q_n(x)`. Because `Q_n` is not a polynomial, these
+  carry `ArcTanh`/`Log` terms, e.g. `LegendreQ[3, 1, x]` and `LegendreQ[2, 2,
+  0.5] = 4.06927`. `m = 0` reduces to `Q_n`.
+- **Types 2 and 3.** These apply the branch-split prefactors `(1+x)^(m/2)
+  (1-x)^(-m/2)` (type 2) or `(1+x)^(m/2) (-1+x)^(-m/2)` (type 3) to the shared
+  core `(-1)^m (1-x)^m d^m/dx^m Q_n(x)` — the identical construction used for
+  `LegendreP` types 2/3 — so they equal type 1 on the cut but carry the branch
+  structure of type `a`.
+- **Derivative and Series.** `D[LegendreQ[n, x], x] = ((-1-n) x Q_n + (1+n)
+  Q_{n+1}) / (x²-1)`; higher integer-order derivatives follow by repetition.
+  `Series[LegendreQ[v, x], {x, 0, k}]` gives the origin expansion.
+- **Listable.** `LegendreQ[{0, 1, 2}, x]` threads element-wise.
+
+Numeric analytic continuation for `|x| ≥ 1`, non-integer / complex associated
+forms, negative-integer order, the asymptotic (`x → ∞`) series, and the
+symbolic-order (`{x, l}` with symbolic `l`) derivative are left symbolic.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= LegendreQ[2, x]
+Out[1]= -3/2 x + (1/2 Log[1 + x] - 1/2 Log[1 - x]) (-1/2 + 3/2 x^2)
+
+In[2]:= LegendreQ[2, 0.5]
+Out[2]= -0.818663
 ```

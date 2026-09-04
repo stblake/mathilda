@@ -3239,6 +3239,10 @@ target_include_directories(productlog_tests PRIVATE ../src)
 add_executable(legendre_tests test_legendre.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(legendre_tests PRIVATE ../src)
 
+add_executable(legendreq_tests test_legendreq.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(legendreq_tests PRIVATE ../src)
+add_test(NAME legendreq_tests COMMAND legendreq_tests)
+
 add_executable(airyai_tests test_airyai.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(airyai_tests PRIVATE ../src)
 

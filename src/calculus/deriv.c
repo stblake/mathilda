@@ -1395,6 +1395,56 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- LegendreQ[N, Z]: chain rule on the argument only.
+         *   d/dZ Q_N(Z) = ((-1-N) Z Q_N(Z) + (1+N) Q_{N+1}(Z)) / (Z^2 - 1).
+         *   d/dN Q_N(Z) = Derivative[1,0][LegendreQ][N,Z]  (no elementary form).
+         * Zero-derivative arms are dropped, so D[LegendreQ[n,x],x] keeps only the
+         * dZ term (LegendreP has the identical recurrence). */
+        if (h == SYM_LegendreQ && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* (-1-N) Z Q_N */
+                Expr* c0 = mk_fn2("Plus", mk_int(-1), mk_neg(expr_copy(N)));
+                Expr* qN = mk_fn2("LegendreQ", expr_copy(N), expr_copy(Z));
+                Expr* t0 = mk_fn2("Times", c0, mk_fn2("Times", expr_copy(Z), qN));
+                /* (1+N) Q_{N+1} */
+                Expr* c1 = mk_fn2("Plus", mk_int(1), expr_copy(N));
+                Expr* qN1 = mk_fn2("LegendreQ",
+                                mk_fn2("Plus", mk_int(1), expr_copy(N)), expr_copy(Z));
+                Expr* t1 = mk_fn2("Times", c1, qN1);
+                Expr* num = mk_fn2("Plus", t0, t1);
+                /* Z^2 - 1 */
+                Expr* den = mk_fn2("Plus", mk_int(-1),
+                                mk_fn2("Power", expr_copy(Z), mk_int(2)));
+                Expr* dQdZ = mk_fn2("Times", num, mk_fn2("Power", den, mk_int(-1)));
+                terms[nt++] = mk_fn2("Times", dQdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1,0][LegendreQ][N,Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("LegendreQ"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- BesselK[N, Z]: chain rule on both args.
          *   d/dZ BesselK[N, Z] = -(BesselK[N-1, Z] + BesselK[N+1, Z]) / 2  (DLMF 10.29.5)
          *   d/dN BesselK[N, Z] = Derivative[1,0][BesselK][N,Z]  (no elementary form).

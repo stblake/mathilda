@@ -1094,6 +1094,17 @@ void info_init(void) {
         "{1, 2, 3}, default 1). Integer n yields the explicit polynomial; a\n"
         "non-integer order with an inexact argument evaluates numerically at\n"
         "machine or arbitrary (MPFR) precision, real or complex. Listable.");
+    symtab_set_docstring("LegendreQ",
+        "LegendreQ[n, x]\n"
+        "\tgives the Legendre function of the second kind Q_n(x).\n"
+        "LegendreQ[n, m, x] gives the associated Legendre function Q_n^m(x).\n"
+        "LegendreQ[n, m, a, x] gives the Legendre function of type a (a in\n"
+        "{1, 2, 3}, default 1). For integer n the explicit closed form\n"
+        "P_n(x) (Log[1+x] - Log[1-x])/2 + v_n(x) is generated; a non-integer\n"
+        "order with an inexact argument on the cut (|x| < 1) evaluates\n"
+        "numerically at machine or arbitrary (MPFR) precision, real or\n"
+        "complex. D[LegendreQ[n,x],x] and the origin Series are supported.\n"
+        "Listable.");
     symtab_set_docstring("StieltjesGamma",
         "StieltjesGamma[n]\n"
         "\tgives the n-th Stieltjes constant gamma_n, the Laurent coefficients of\n"

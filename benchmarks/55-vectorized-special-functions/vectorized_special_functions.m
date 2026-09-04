@@ -21,6 +21,12 @@
    .m rules guarded by !NDArrayQ so they decline on a buffer.  benchOnce is kept
    so the row stays comparable across the history.
 
+   LEGENDRE, BOTH KINDS.  LegendreP/LegendreQ also carry NDArray binary kernels
+   (sf_machine_legendre_p/q): a degree-10 three-term recurrence per element on a
+   packed 10^6 buffer, a few ms each.  LegendreP beats scipy.special.eval_legendre
+   on wall-clock; LegendreQ has NO vectorized scipy counterpart at all (only the
+   scalar lqn, ~1000x slower), so its .py baseline is a numpy recurrence.
+
    Checks are a rounded scalar at a fixed rational input, never a sum over the
    random timing data.
    ========================================================================== *)
@@ -29,12 +35,14 @@ Get["../harness.m"];
 Get["../data.m"];
 
 require[{"FresnelC", "FresnelS", "Erfc", "Erfi", "ExpIntegralEi",
-         "SinIntegral", "CosIntegral", "Beta", "BesselI", "BesselK"}];
+         "SinIntegral", "CosIntegral", "Beta", "BesselI", "BesselK",
+         "LegendreP", "LegendreQ"}];
 
 seed[];
 n = 1000000;
 v = rand01[{n}] + 1/2;              (* in [0.5, 1.5]: safe for every function *)
 w = v + 1/2;
+vc = rand01[{n}] - 1/2;             (* in [-0.5, 0.5]: on the cut for LegendreQ *)
 
 (* ---- vectorized: buffer-speed, fair overhead comparison ---------------- *)
 
@@ -61,6 +69,18 @@ check["CosIntegral over 10^6", Round[10^6 N[CosIntegral[3/2]]]];
 
 bench["Beta[.,.] over 10^6", Beta[v, w];];
 check["Beta[.,.] over 10^6", Round[10^6 N[Beta[3/2, 2]]]];
+
+(* ---- Legendre functions of both kinds over the cut -------------------- *)
+(* Both run their registered NDArray binary kernel (sf_machine_legendre_p/q via
+   src/ndkernels.c): a degree-10 three-term recurrence per element on a packed
+   10^6 buffer.  LegendreQ has NO scipy counterpart -- the .py side times a
+   numpy recurrence -- so its column is a kernel-vs-numpy comparison. *)
+
+bench["LegendreP[10, .] over 10^6", LegendreP[10, vc];];
+check["LegendreP[10, .] over 10^6", Round[10^6 N[LegendreP[10, 1/2]]]];
+
+bench["LegendreQ[10, .] over 10^6", LegendreQ[10, vc];];
+check["LegendreQ[10, .] over 10^6", Round[10^6 N[LegendreQ[10, 1/2]]]];
 
 (* ---- no vector kernel: scalar threading, benchOnce --------------------- *)
 

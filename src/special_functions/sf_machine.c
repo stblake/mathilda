@@ -580,6 +580,28 @@ bool sf_machine_legendre_p(double n, double x, double* out) {
     return isfinite(p1);
 }
 
+/* LegendreQ[n, x] for a non-negative integer degree on the cut |x| < 1, by the
+ * same three-term recurrence as P_n but seeded Q_0 = atanh(x), Q_1 = x atanh(x)
+ * - 1.  Declines (returns false) for a non-integer/negative/large degree and for
+ * |x| >= 1 (where Q_n is complex-valued), leaving the symbolic/MPFR closed form
+ * to answer -- mirroring how the LegendreP kernel declines outside its regime. */
+bool sf_machine_legendre_q(double n, double x, double* out) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    if (!(x > -1.0 && x < 1.0)) return false;   /* also rejects NaN */
+    int N = (int)n;
+    double q0 = atanh(x);
+    if (N == 0) { *out = q0; return isfinite(q0); }
+    double q1 = x * q0 - 1.0;
+    if (N == 1) { *out = q1; return isfinite(q1); }
+    double qm1 = q0, qk = q1;
+    for (int k = 2; k <= N; k++) {
+        double q = ((2.0 * k - 1.0) * x * qk - (k - 1.0) * qm1) / (double)k;
+        qm1 = qk; qk = q;
+    }
+    *out = qk;
+    return isfinite(qk);
+}
+
 /* ---- Airy ---------------------------------------------------------------
  * Ai, Bi and their derivatives from the ascending series
  *     Ai = c1 f - c2 g,   Bi = sqrt(3) (c1 f + c2 g)
