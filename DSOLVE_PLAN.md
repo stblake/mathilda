@@ -181,10 +181,17 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   two initial conditions (which arrive as ordinary equations, `neq==3`) and carries
   its own multi-equation verify. **`HeatKernel`** (`dsolve_heat.c`) done — the
   Cauchy problem for the 1-D heat equation by the heat-kernel convolution (auto +
-  pinned; `neq==2`, verified at the kernel level). Still to do:
-  quasilinear/nonlinear first-order; inhomogeneous / lower-order-term 2nd-order
-  (telegraph/damped wave); inhomogeneous / half-line / `Piecewise` wave data; the
-  Erf-producing heat data; finite-interval Fourier-series problems.
+  pinned; `neq==2`, verified at the kernel level). **`PDEQuasilinear`**
+  (`dsolve_pdequasi.c`) done — Lagrange's method of characteristics for the
+  quasilinear `P u_{v1}+Q u_{v2}==R` (semilinear → explicit `C[1][ξ]`; conservation
+  law R==0 → implicit `φ1==C[1][u]`, e.g. inviscid Burgers), via a new
+  `dsolve_run_pde_implicit` substrate (implicit relation verified by the
+  implicit-function rule). **`PDEClairaut`** (`dsolve_pdeclairaut.c`) done — the
+  Clairaut form `u==v1 u_{v1}+v2 u_{v2}+f(u_{v1},u_{v2})` → complete integral +
+  singular envelope. Still to do: PDE Charpit (general nonlinear complete integral);
+  inhomogeneous / lower-order-term 2nd-order (telegraph/damped wave); inhomogeneous
+  / half-line / `Piecewise` wave data; the Erf-producing heat data; finite-interval
+  Fourier-series problems.
 - **M7 — first-order substitution + attribute cleanup.** ✅ DONE.
   `DSolve`FirstOrderSubstitution` (`y'==F(a x + b y + c)`, completing the 1a
   first-order family bar Riccati/Lagrange/Abel/Chini) and `AutonomousReduction`
@@ -626,8 +633,28 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   concrete test function (`C[1][z_]:>Sin[z]`) — zero_test cannot sample an
   arbitrary function, and D-of-a-2-var-Function-with-arbitrary-function crashes
   the evaluator (both pre-existing).
-- `[ ] PDEQuasilinear` (Lagrange), `[ ] PDECharpit` (nonlinear complete
-  integral), `[ ] PDEClairaut`.
+- `[✓] PDEQuasilinear` (Lagrange) — `P u_{v1}+Q u_{v2}==R`, linear in the first
+  derivatives (P,Q,R may depend on u), by the method of characteristics
+  `dv1/P=dv2/Q=du/R`. First cut, two bounded classes: **semilinear** (P,Q free of
+  u; base characteristic `dv2/dv1=Q/P` decouples → first integral ξ via recursion
+  into the scalar ODE cascade; linear u-ODE along the characteristic by the
+  integrating factor, with `Solve[ξ==const, v2]` for the y-along-characteristic
+  when the coefficients need it) → **explicit** `u==body` with C[1][ξ]
+  (`x u_x+y u_y==u → x C[1][y/x]`), generalizing `PDELinearFirstOrder` to variable
+  coefficients; **conservation law** (R==0, coefficients touching u; u invariant,
+  φ2=u, φ1 from `Q dv1-P dv2=0` with u a parameter) → **implicit**
+  `φ1(v1,v2,u)==C[1][u]` (inviscid Burgers `u u_x+u_y==0`). Declines coefficients
+  depending on u with R≠0 (full characteristic system: future) and non-elementary
+  characteristic integrals. New substrate `dsolve_run_pde_implicit`
+  (`PDEImplicit`/`PDEExplicit`/`PDEBranches` wrappers; implicit relation verified by
+  the implicit-function rule with concrete test functions). `dsolve_pdequasi.c`.
+- `[ ] PDECharpit` (nonlinear complete integral) — future.
+- `[✓] PDEClairaut` — `u==v1 u_{v1}+v2 u_{v2}+f(u_{v1},u_{v2})`; complete integral
+  `u==C[1] v1+C[2] v2+f(C[1],C[2])`, plus the singular envelope (eliminate the
+  constants from `{v1+f_{C1}==0, v2+f_{C2}==0}`) under `IncludeSingularSolutions`.
+  Nonlinear in the derivatives (linear/quasilinear methods decline; a degenerate
+  linear-f Clairaut is semilinear, so `PDEQuasilinear` runs first for the general
+  arbitrary-function solution). `dsolve_pdeclairaut.c`.
 
 ### 2b. Second order
 - `[✓] PDELinearSecondOrder` (the `PDEHyperbolicGeneral` item, generalized) —

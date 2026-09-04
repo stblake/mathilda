@@ -142,6 +142,18 @@ Expr* dsolve_extract_system_body(Expr* r, const char* fname);
  * {{u -> Function[{v1,...,vk}, body]}} (or the applied u[...] -> body form). */
 Expr* dsolve_run_pde(DSolveProblem* P, DSolveSysFn fn);
 
+/* Run one first-order quasilinear PDE method whose solution is naturally
+ * IMPLICIT.  `fn` returns bodies[0] carrying one of two wrapper heads (in the
+ * bare u-symbol DSolve`pdeU): DSolve`PDEImplicit[phi1, phi2] for the implicit
+ * relation phi1 == C[1][phi2] between two characteristic first integrals
+ * (verified by the implicit-function rule u_vi = -Psi_vi/Psi_u), or
+ * DSolve`PDEExplicit[body] for a semilinear u == body(v1,v2) solution (routed to
+ * the ordinary explicit PDE verify/assemble).  Assembles
+ * {{ phi1(...,u[v1,v2]) == C[1][phi2(...)] }} or {{u -> Function[...]}}.
+ * `dsolve_method_builtin_pde_implicit` is the strict pinned-method entry. */
+Expr* dsolve_run_pde_implicit(DSolveProblem* P, DSolveSysFn fn);
+Expr* dsolve_method_builtin_pde_implicit(Expr* res, DSolveSysFn fn);
+
 /* Shared REPL entry for a `DSolve`Method[...]` builtin: parse `res`, run `fn`
  * once (strict, no cascade), free the problem.  Returns the result or NULL. */
 Expr* dsolve_method_builtin(Expr* res, DSolveTryFn fn);

@@ -168,6 +168,10 @@ extern Expr** dsolve_pde1_solve(DSolveProblem* P);
 extern void dsolve_pde1_init(void);
 extern Expr** dsolve_pde2_solve(DSolveProblem* P);
 extern void dsolve_pde2_init(void);
+extern Expr** dsolve_pdequasi_solve(DSolveProblem* P);   /* PDEQuasilinear (Lagrange) */
+extern void dsolve_pdequasi_init(void);
+extern Expr** dsolve_pdeclairaut_solve(DSolveProblem* P);/* PDEClairaut (complete integral) */
+extern void dsolve_pdeclairaut_init(void);
 extern void dsolve_pdesep_init(void);  /* DSolve`SeparationOfVariables (pinned-only) */
 extern void dsolve_pdeclassify_init(void);  /* PDEClassify (standalone classifier) */
 extern Expr* dsolve_wave_ivp_run(DSolveProblem* P);  /* wave d'Alembert IVP (own runner) */
@@ -240,6 +244,15 @@ Expr* builtin_dsolve(Expr* res) {
     Expr* result = NULL;
     if (P.is_pde) {
         result = dsolve_run_pde(&P, dsolve_pde1_solve);
+        /* first-order nonlinear PDEs (after the linear const-coeff method, which
+         * keeps its cleaner explicit form for the shapes it owns): quasilinear
+         * Lagrange (characteristics) BEFORE Clairaut, so an equation that is both
+         * semilinear and a degenerate (linear-f) Clairaut gets the general
+         * arbitrary-function solution rather than the 2-parameter complete
+         * integral.  A genuine (nonlinear-f) Clairaut is nonlinear in the
+         * derivatives, which quasilinear declines, so Clairaut still claims it. */
+        if (!result) result = dsolve_run_pde_implicit(&P, dsolve_pdequasi_solve);
+        if (!result) result = dsolve_run_pde_implicit(&P, dsolve_pdeclairaut_solve);
         if (!result) result = dsolve_run_pde(&P, dsolve_pde2_solve);
         /* wave d'Alembert IVP: PDE + two initial conditions (neq==3); its own
          * runner (multi-equation verify/assemble, not the single-equation
@@ -430,6 +443,8 @@ void dsolve_init(void) {
     dsolve_normalform_init();
     dsolve_pde1_init();
     dsolve_pde2_init();
+    dsolve_pdequasi_init();
+    dsolve_pdeclairaut_init();
     dsolve_pdesep_init();
     dsolve_pdeclassify_init();
     dsolve_wave_init();

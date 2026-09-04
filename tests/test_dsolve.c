@@ -964,6 +964,53 @@ static void t_sys_pde_pinned_methods(void) {
     check_form("Head[DSolve`PDELinearFirstOrder[y'[x] == y[x], y, x]]", "DSolve`PDELinearFirstOrder");
 }
 
+/* ---- M6: first-order nonlinear PDEs — PDEQuasilinear (Lagrange) ---- */
+static void t_pde_quasilinear(void) {
+    /* semilinear, variable coefficients: x u_x + y u_y == u -> x C[1][y/x]. */
+    check_true("With[{uc = (u[x,y] /. DSolve[x D[u[x,y],x] + y D[u[x,y],y] == u[x,y], "
+               "u, {x,y}][[1]]) /. C[1][z_] :> Sin[z]}, "
+               "PossibleZeroQ[x D[uc,x] + y D[uc,y] - uc]]");
+    /* semilinear needing y expressed along the characteristic: u_x + x u_y == y. */
+    check_true("With[{uc = (u[x,y] /. DSolve[D[u[x,y],x] + x D[u[x,y],y] == y, "
+               "u, {x,y}][[1]]) /. C[1][z_] :> Sin[z]}, "
+               "PossibleZeroQ[D[uc,x] + x D[uc,y] - y]]");
+    /* conservation law (inviscid Burgers) is IMPLICIT: {{ G == C[1][u] }}. */
+    check_true("Head[DSolve[u[x,y] D[u[x,y],x] + D[u[x,y],y] == 0, u, {x,y}][[1,1]]] === Equal");
+    /* verify the implicit relation by implicit differentiation (C[1] pinned to #^2):
+     * with Psi(x,y,U) = G - U^2, u_x = -Psi_x/Psi_U, u_y = -Psi_y/Psi_U. */
+    check_true("Module[{rel, Psi}, "
+               "rel = DSolve[u[x,y] D[u[x,y],x] + D[u[x,y],y] == 0, u, {x,y}][[1,1]] /. C[1] -> (#^2 &); "
+               "Psi = (rel[[1]] - rel[[2]]) /. u[x,y] -> U; "
+               "PossibleZeroQ[(U (-D[Psi,x]/D[Psi,U]) + (-D[Psi,y]/D[Psi,U])) /. U -> u[x,y]]]");
+    /* pinned builtin solves a constant-coefficient linear PDE too (a superset). */
+    check_true("With[{uc = (u[x,y] /. DSolve`PDEQuasilinear[D[u[x,y],x] + 2 D[u[x,y],y] == 0, "
+               "u, {x,y}][[1]]) /. C[1][z_] :> Cos[z]}, PossibleZeroQ[D[uc,x] + 2 D[uc,y]]]");
+    /* declines a scalar ODE and a genuinely quasilinear non-conservation form. */
+    check_form("Head[DSolve`PDEQuasilinear[y'[x] == y[x], y, x]]", "DSolve`PDEQuasilinear");
+    check_form("Head[DSolve`PDEQuasilinear[u[x,y] D[u[x,y],x] + D[u[x,y],y] == u[x,y], u, {x,y}]]",
+               "DSolve`PDEQuasilinear");
+}
+
+/* ---- M6: PDE Clairaut — complete integral + singular envelope ---- */
+static void t_pde_clairaut(void) {
+    /* u == x u_x + y u_y + u_x u_y -> complete integral C[1] C[2] + C[1] x + C[2] y. */
+    check_true("With[{uc = u[x,y] /. DSolve[u[x,y] == x D[u[x,y],x] + y D[u[x,y],y] + "
+               "D[u[x,y],x] D[u[x,y],y], u, {x,y}][[1]]}, "
+               "PossibleZeroQ[uc - (x D[uc,x] + y D[uc,y] + D[uc,x] D[uc,y])]]");
+    /* IncludeSingularSolutions adds the envelope (u = -x y); EVERY branch verifies. */
+    check_true("And @@ Map[Function[br, With[{uc = u[x,y] /. br}, "
+               "PossibleZeroQ[uc - (x D[uc,x] + y D[uc,y] + D[uc,x] D[uc,y])]]], "
+               "DSolve[u[x,y] == x D[u[x,y],x] + y D[u[x,y],y] + D[u[x,y],x] D[u[x,y],y], "
+               "u, {x,y}, IncludeSingularSolutions -> True]]");
+    check_true("Length[DSolve[u[x,y] == x D[u[x,y],x] + y D[u[x,y],y] + D[u[x,y],x] D[u[x,y],y], "
+               "u, {x,y}, IncludeSingularSolutions -> True]] == 2");
+    /* pinned builtin with a different f (u_x^2), and declines a scalar ODE. */
+    check_true("With[{uc = u[x,y] /. DSolve`PDEClairaut[u[x,y] == x D[u[x,y],x] + y D[u[x,y],y] "
+               "+ D[u[x,y],x]^2, u, {x,y}][[1]]}, "
+               "PossibleZeroQ[uc - (x D[uc,x] + y D[uc,y] + D[uc,x]^2)]]");
+    check_form("Head[DSolve`PDEClairaut[y'[x] == y[x], y, x]]", "DSolve`PDEClairaut");
+}
+
 /* ---- DSolve is NOT HoldAll: an equation stored in a variable must solve ---- */
 static void t_not_holdall(void) {
     check_true("FreeQ[Attributes[DSolve], HoldAll]");
@@ -1687,6 +1734,8 @@ int main(void) {
     TEST(t_wave_dalembert);
     TEST(t_heat_kernel);
     TEST(t_sys_pde_pinned_methods);
+    TEST(t_pde_quasilinear);
+    TEST(t_pde_clairaut);
     TEST(t_declines_unsupported);
     /* M9: backfill for thin methods */
     TEST(t_method_homogeneous);

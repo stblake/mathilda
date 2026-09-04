@@ -1216,6 +1216,147 @@ Expr* dsolve_run_pde(DSolveProblem* P, DSolveSysFn fn) {
     return result;
 }
 
+/* ---- implicit (first-integral) PDE solutions --------------------------------
+ * A first-order quasilinear PDE  P u_v1 + Q u_v2 == R  has, in general, no
+ * explicit u -> body form: its general solution is the implicit relation
+ * phi1(v1,v2,u) == C[1][phi2(v1,v2,u)] between two independent first integrals
+ * of the characteristic system dv1/P = dv2/Q = du/R (Lagrange).  A PDE method on
+ * this path returns, in bodies[0], one of two wrapper heads carrying its result
+ * in terms of the BARE u-symbol DSolve`pdeU (so the verifier can differentiate
+ * treating u as an independent coordinate):
+ *   DSolve`PDEImplicit[phi1, phi2]  — the implicit relation above
+ *   DSolve`PDEExplicit[body]        — an explicit u == body(v1,v2) solution
+ *                                     (semilinear case; routed to the ordinary
+ *                                     explicit PDE verify/assemble).
+ * The implicit branch is verified by the implicit-function rule: with C[1]
+ * pinned to a concrete test function F, Psi(v1,v2,u) = phi1 - F(phi2) defines
+ * u(v1,v2) with u_vi = -Psi_vi / Psi_u; substituting into the residual must not
+ * be a decidable non-zero (a PossibleZeroQ sampling is the transcendental
+ * fallback, as in dsolve_verify_parametric). */
+static bool dsolve_verify_pde_implicit(const DSolveProblem* P,
+                                       const Expr* phi1, const Expr* phi2) {
+    if (P->neq < 1) return false;
+    const char* u  = P->fun_names[0];
+    const char* v1 = P->ind_names[0];
+    const char* v2 = P->ind_names[1];
+    const char* sU = intern_symbol("DSolve`pdeU");
+    const char* z  = intern_symbol("DSolve`pdez");
+
+    /* distinct concrete test functions for the arbitrary C[1]: Sin, Cos, #^2 */
+    Expr* tests[3];
+    tests[0] = ds_call1("Sin", expr_new_symbol(z));
+    tests[1] = ds_call1("Cos", expr_new_symbol(z));
+    tests[2] = expr_new_function(expr_new_symbol(SYM_Power),
+                   (Expr*[]){ expr_new_symbol(z), expr_new_integer(2) }, 2);
+
+    bool ok = true;
+    for (int t = 0; t < 3 && ok; t++) {
+        Expr* Fphi2 = ds_subst(expr_copy(tests[t]), expr_new_symbol(z),
+                               expr_copy((Expr*)phi2));
+        Expr* Psi = eval_and_free(ds_call2(SYM_Subtract,
+                        expr_copy((Expr*)phi1), Fphi2));     /* Psi = phi1 - F(phi2) */
+        Expr* Px = ds_d(expr_copy(Psi), expr_new_symbol(v1));
+        Expr* Py = ds_d(expr_copy(Psi), expr_new_symbol(v2));
+        Expr* Pu = ds_d(Psi, expr_new_symbol(sU));           /* consumes Psi */
+        Expr* Puinv = expr_new_function(expr_new_symbol(SYM_Power),
+                          (Expr*[]){ Pu, expr_new_integer(-1) }, 2);
+        Expr* ux = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+                       ds_call2(SYM_Times, Px, expr_copy(Puinv))));
+        Expr* uy = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+                       ds_call2(SYM_Times, Py, expr_copy(Puinv))));
+        expr_free(Puinv);
+
+        Expr* r = expr_copy(P->eq_residuals[0]);
+        r = ds_subst(r, pde_deriv_lit(u, 1, 0, v1, v2), ux);
+        r = ds_subst(r, pde_deriv_lit(u, 0, 1, v1, v2), uy);
+        r = ds_subst(r, expr_new_function(expr_new_symbol(u),
+                        (Expr*[]){ expr_new_symbol(v1), expr_new_symbol(v2) }, 2),
+                     expr_new_symbol(sU));
+        if (zero_test_decide(r) == ZERO_TEST_FALSE) {
+            Expr* pz = eval_and_free(ds_call1("PossibleZeroQ", expr_copy(r)));
+            if (!(pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True)) ok = false;
+            expr_free(pz);
+        }
+        expr_free(r);
+        expr_free(tests[t]);
+    }
+    return ok;
+}
+
+/* Assemble {{ phi1(v1,v2,u[v1,v2]) == C[1][phi2(...)] }} from the bare-u first
+ * integrals, renaming C[1] to the GeneratedParameters head.  phi1/phi2 borrowed. */
+static Expr* dsolve_assemble_pde_implicit(const DSolveProblem* P,
+                                          const Expr* phi1, const Expr* phi2) {
+    const char* uname = P->fun_names[0];
+    const char* v1 = P->ind_names[0];
+    const char* v2 = P->ind_names[1];
+    const char* sU = intern_symbol("DSolve`pdeU");
+    Expr* uapp = expr_new_function(expr_new_symbol(uname),
+                     (Expr*[]){ expr_new_symbol(v1), expr_new_symbol(v2) }, 2);
+    Expr* p1 = ds_subst(expr_copy((Expr*)phi1), expr_new_symbol(sU), expr_copy(uapp));
+    Expr* p2 = ds_subst(expr_copy((Expr*)phi2), expr_new_symbol(sU), uapp); /* consumes uapp */
+    Expr* arb = expr_new_function(ds_const(1), (Expr*[]){ p2 }, 1);
+    Expr* rel = expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ p1, arb }, 2);
+    Expr* rel2 = ds_rename_param(rel, P->param_head);
+    expr_free(rel);
+    Expr* inner = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ rel2 }, 1);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ inner }, 1);
+}
+
+/* One verified explicit branch as the inner {u -> Function[...]}: assemble via
+ * dsolve_assemble_pde (which returns {{rule}}) and lift its single inner list. */
+static Expr* pde_branch_inner(const DSolveProblem* P, Expr* body) {
+    Expr* wrapped = dsolve_assemble_pde(P, body);        /* {{ rule }} */
+    Expr* inner = expr_copy(wrapped->data.function.args[0]);  /* { rule } */
+    expr_free(wrapped);
+    return inner;
+}
+
+Expr* dsolve_run_pde_implicit(DSolveProblem* P, DSolveSysFn fn) {
+    Expr** bodies = fn(P);
+    if (!bodies) return NULL;
+    Expr* body = bodies[0];
+    Expr* result = NULL;
+    const char* wImpl = intern_symbol("DSolve`PDEImplicit");
+    const char* wExpl = intern_symbol("DSolve`PDEExplicit");
+    const char* wBran = intern_symbol("DSolve`PDEBranches");
+    if (body && head_is(body, wImpl) && body->data.function.arg_count == 2) {
+        Expr* phi1 = body->data.function.args[0];
+        Expr* phi2 = body->data.function.args[1];
+        if (dsolve_verify_pde_implicit(P, phi1, phi2))
+            result = dsolve_assemble_pde_implicit(P, phi1, phi2);
+    } else if (body && head_is(body, wExpl) && body->data.function.arg_count == 1) {
+        Expr* b = body->data.function.args[0];
+        if (dsolve_verify_pde(P, b))
+            result = dsolve_assemble_pde(P, b);
+    } else if (body && head_is(body, wBran)) {
+        /* multiple explicit branches (complete integral + singular envelopes);
+         * verify each and collect the survivors into {{...},...}. */
+        size_t n = body->data.function.arg_count;
+        Expr** inners = malloc((n ? n : 1) * sizeof(Expr*));
+        size_t nf = 0;
+        for (size_t i = 0; i < n; i++) {
+            Expr* b = body->data.function.args[i];
+            if (dsolve_verify_pde(P, b))
+                inners[nf++] = pde_branch_inner(P, b);
+        }
+        if (nf > 0) result = expr_new_function(expr_new_symbol(SYM_List), inners, nf);
+        free(inners);
+    }
+    if (body) expr_free(body);
+    free(bodies);
+    return result;
+}
+
+Expr* dsolve_method_builtin_pde_implicit(Expr* res, DSolveSysFn fn) {
+    DSolveProblem P;
+    if (!dsolve_parse(res, &P)) return NULL;
+    if (!P.is_pde) { dsolve_problem_free(&P); return NULL; }
+    Expr* r = dsolve_run_pde_implicit(&P, fn);
+    dsolve_problem_free(&P);
+    return r;
+}
+
 Expr* dsolve_run_system(DSolveProblem* P, DSolveSysFn fn) {
     Expr** bodies = fn(P);
     if (!bodies) return NULL;

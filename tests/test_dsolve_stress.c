@@ -358,6 +358,62 @@ static void pde_ok(int a, int b, const char* f) {
     ASSERT_TRUE(buf);
 }
 
+/* PDEQuasilinear (Lagrange) — variable-coefficient SEMILINEAR class Pc u_x +
+ * Qc u_y == Rc (Pc, Qc free of u so pde1 declines; Rc affine in u): the general
+ * solution is EXPLICIT with an arbitrary function of the characteristic
+ * invariant.  Guard Head === List first, then back-substitute with C[1] pinned
+ * to Sin (u[x,y] in Rc is rewritten to the solution too). */
+static void pdequasi_semilinear_ok(const char* Pc, const char* Qc, const char* Rc) {
+    char eqn[320], buf[1200];
+    snprintf(eqn, sizeof(eqn),
+        "(%s) D[u[x,y],x] + (%s) D[u[x,y],y] == (%s)", Pc, Qc, Rc);
+    snprintf(buf, sizeof(buf), "Head[DSolve[%s, u, {x, y}]] === List", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "With[{uc = (u[x,y] /. DSolve[%s, u, {x, y}][[1]]) /. C[1][z_] :> Sin[z]}, "
+        "PossibleZeroQ[(((%s) D[uc,x] + (%s) D[uc,y] - (%s)) /. u[x,y] -> uc)]]",
+        eqn, Pc, Qc, Rc);
+    ASSERT_TRUE(buf);
+}
+
+/* PDEQuasilinear — genuinely quasilinear CONSERVATION law Pc u_x + Qc u_y == 0
+ * (Pc or Qc depends on u): the solution is the IMPLICIT relation G == C[1][u].
+ * Guard the branch is an Equal, then verify by implicit differentiation with
+ * C[1] pinned to #^2 (u_vi = -Psi_vi / Psi_U, Psi = G - U^2). */
+static void pdequasi_conservation_ok(const char* Pc, const char* Qc) {
+    char eqn[320], buf[1200];
+    snprintf(eqn, sizeof(eqn),
+        "(%s) D[u[x,y],x] + (%s) D[u[x,y],y] == 0", Pc, Qc);
+    snprintf(buf, sizeof(buf), "Head[DSolve[%s, u, {x, y}][[1,1]]] === Equal", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "Module[{rel, Psi, ux, uy}, "
+        "rel = DSolve[%s, u, {x,y}][[1,1]] /. C[1] -> (#^2 &); "
+        "Psi = (rel[[1]] - rel[[2]]) /. u[x,y] -> U; "
+        "ux = -D[Psi,x]/D[Psi,U]; uy = -D[Psi,y]/D[Psi,U]; "
+        "PossibleZeroQ[((%s) ux + (%s) uy) /. u[x,y] -> U]]",
+        eqn, Pc, Qc);
+    ASSERT_TRUE(buf);
+}
+
+/* PDEClairaut — u == x u_x + y u_y + f(u_x, u_y) with a NONLINEAR f (given in the
+ * placeholder derivatives p = u_x, q = u_y); the complete integral is
+ * C[1] x + C[2] y + f(C[1],C[2]).  Guard Head === List, then verify the complete
+ * integral back-substitutes (bare constants C[1], C[2] survive verification). */
+static void pdeclairaut_ok(const char* f) {
+    char buf[1400];
+    snprintf(buf, sizeof(buf),
+        "Head[DSolve[u[x,y] == x D[u[x,y],x] + y D[u[x,y],y] + "
+        "((%s) /. {p -> D[u[x,y],x], q -> D[u[x,y],y]}), u, {x,y}]] === List", f);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "With[{uc = u[x,y] /. DSolve[u[x,y] == x D[u[x,y],x] + y D[u[x,y],y] + "
+        "((%s) /. {p -> D[u[x,y],x], q -> D[u[x,y],y]}), u, {x,y}][[1]]}, "
+        "PossibleZeroQ[uc - (x D[uc,x] + y D[uc,y] + ((%s) /. {p -> D[uc,x], q -> D[uc,y]}))]]",
+        f, f);
+    ASSERT_TRUE(buf);
+}
+
 /* ---------------------- families ---------------------- */
 
 static void t_stress_linear1(void) {
@@ -558,6 +614,30 @@ static void t_stress_pde(void) {
     pde_ok(2, 3, "0");
     pde_ok(1, 2, "y");
     pde_ok(3, 5, "x");
+}
+
+/* M6: first-order nonlinear PDEs — quasilinear (Lagrange) + Clairaut. */
+static void t_stress_pde_quasilinear(void) {
+    /* variable-coefficient semilinear (pde1 declines; quasilinear owns them) */
+    pdequasi_semilinear_ok("x", "y", "u[x,y]");    /* x C[1][y/x]          */
+    pdequasi_semilinear_ok("x", "-y", "0");        /* C[1][x y]            */
+    pdequasi_semilinear_ok("y", "x", "0");         /* C[1][y^2 - x^2]      */
+    pdequasi_semilinear_ok("2 x", "1", "0");       /* C[1][y - Log[x]/2]   */
+    pdequasi_semilinear_ok("x", "y", "2 u[x,y]");  /* c = 2                */
+    pdequasi_semilinear_ok("1", "x", "y");         /* y along characteristic */
+    /* genuinely quasilinear conservation laws (implicit) */
+    pdequasi_conservation_ok("u[x,y]", "1");       /* inviscid Burgers     */
+    pdequasi_conservation_ok("u[x,y]", "-1");
+    pdequasi_conservation_ok("1", "u[x,y]");
+    pdequasi_conservation_ok("u[x,y]", "x");
+}
+
+static void t_stress_pde_clairaut(void) {
+    pdeclairaut_ok("p q");          /* u_x u_y             */
+    pdeclairaut_ok("p^2 + q^2");    /* u_x^2 + u_y^2       */
+    pdeclairaut_ok("p^2");          /* u_x^2               */
+    pdeclairaut_ok("p q + p");      /* mixed nonlinear     */
+    pdeclairaut_ok("p^2 + q");      /* nonlinear + linear  */
 }
 
 /* Factorable: (y' - r1 y)(y' - r2 y) == 0 factors into two linear ODEs; EVERY
@@ -827,6 +907,8 @@ int main(void) {
     TEST(t_stress_triangular);
     TEST(t_stress_linsys_varcoeff);
     TEST(t_stress_pde);
+    TEST(t_stress_pde_quasilinear);
+    TEST(t_stress_pde_clairaut);
 
     printf("\nAll DSolve stress tests passed.\n");
     return 0;

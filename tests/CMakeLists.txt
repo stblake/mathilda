@@ -718,6 +718,8 @@ set(COMMON_SRC
     ../src/calculus/dsolve_liouville.c
     ../src/calculus/dsolve_pde1.c
     ../src/calculus/dsolve_pde2.c
+    ../src/calculus/dsolve_pdequasi.c
+    ../src/calculus/dsolve_pdeclairaut.c
     ../src/calculus/dsolve_pdesep.c
     ../src/calculus/dsolve_pdeclassify.c
     ../src/calculus/dsolve_wave.c
