@@ -168,10 +168,14 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   parabolic method is needed. The shared `dsolve_verify_pde` was generalized to
   arbitrary derivative order (scanned from the residual — `max_order` is 0 for
   PDEs) and multiple arbitrary functions (`C[1..4]` → distinct concrete test
-  functions). Still to do: quasilinear/nonlinear first-order; inhomogeneous /
-  lower-order-term 2nd-order (telegraph/damped wave); the wave-IVP d'Alembert
-  formula (initial data, half-line, `Piecewise`); heat; separation of variables;
-  `PDEClassify` (discriminant).
+  functions). **`SeparationOfVariables`** (`dsolve_pdesep.c`, pinned-only) done —
+  the separated product mode `u == X(v1) Y(v2)` for a homogeneous, constant-
+  coefficient, no-mixed-term linear PDE (heat, Helmholtz), splitting into two
+  constant-coefficient ODEs in a separation constant λ and recursing into the
+  scalar cascade; back-substitution verified. Still to do: quasilinear/nonlinear
+  first-order; inhomogeneous / lower-order-term 2nd-order (telegraph/damped wave);
+  the wave-IVP d'Alembert formula (initial data, half-line, `Piecewise`); heat
+  kernel / `Erf`; `PDEClassify` (discriminant).
 - **M7 — first-order substitution + attribute cleanup.** ✅ DONE.
   `DSolve`FirstOrderSubstitution` (`y'==F(a x + b y + c)`, completing the 1a
   first-order family bar Riccati/Lagrange/Abel/Chini) and `AutonomousReduction`
@@ -634,9 +638,21 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   arbitrary functions (`C[1..4]` → distinct test functions). `dsolve_pde2.c`.
   *Future:* inhomogeneous forcing, lower-order terms (telegraph/damped wave — the
   full symbol must factor into first-order operators).
+- `[✓] SeparationOfVariables` — separated product solution `u == X(v1) Y(v2)` of a
+  homogeneous, constant-coefficient linear PDE with **no mixed derivative term**.
+  Dividing by `X Y` separates into two constant-coefficient ODEs in a separation
+  constant λ — `Σ a_i X^(i) − λ X == 0`, `Σ b_j Y^(j) + (e+λ) Y == 0` — each solved
+  by recursing into the scalar cascade; λ becomes a generated constant. The single
+  redundant overall scale is absorbed (fixing a first-order side's lone constant to
+  1 loses no generality). Example: the heat equation `u_t == u_xx →
+  E^(λ t)(C[1] E^(−√λ x) + C[2] E^(√λ x))`; also Helmholtz `u_xx+u_yy+u==0`. Returns
+  the *representative product mode* (the general solution is a superposition over λ),
+  so **pinned-only** (not in the automatic cascade — matching `FirstOrderPowerSeries`
+  / `EigenvalueProblem`). Back-substitution verified. `dsolve_pdesep.c`. *Future:*
+  variable (product-separable) coefficients, BC-driven eigenfunction expansions.
 - `[ ] WaveEquation` (d'Alembert IVP formula; inhomogeneous; half-line;
   `Piecewise`), `[ ] HeatEquation` (heat kernel / `Erf`),
-  `[ ] SeparationOfVariables`, `[ ] PDEClassify` (discriminant).
+  `[ ] PDEClassify` (discriminant).
 
 ## Testing
 

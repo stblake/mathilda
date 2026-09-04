@@ -717,12 +717,14 @@ each is also callable as a pinned `DSolve`<Name>[...]` builtin (with its own doc
 | `DSolve`LinearFirstOrderSystem` | `Y' == A Y + b(x)`, constant `A`, **any** spectrum — fundamental matrix `e^{Ax}` from `JordanDecomposition` (diagonalizable, **defective**, or complex); forcing by variation of parameters |
 | `DSolve`LinearSystemVarCoeff` | genuinely-coupled, non-triangular, **variable-coefficient** `Y' == A(x) Y + b(x)` of the scalar-factor class `A(x) == f(x) B` (`B` constant): `t = ∫f dx` reduces it to `dY/dt == B Y`, so `Φ == e^{B t}` reuses the constant-matrix builder; forcing by variation of parameters. Solves `{y'==(2y+z)/x, z'==(y+2z)/x}` (→ `x`, `x³`) and `{y'==x z, z'==-x y}` (→ `Cos/Sin[x²/2]`). Declines a constant `A` (that is `LinearFirstOrderSystem`'s) and any non-scalar-factor `A(x)`; the wider commutative-antiderivative / Floquet-Magnus class is future |
 
-The first-order PDE method and the Sturm-Liouville eigenvalue method are likewise pinned:
+The PDE methods (first- and second-order, separation of variables) and the
+Sturm-Liouville eigenvalue method are likewise pinned:
 
 | Method | Solves |
 |---|---|
 | `DSolve`PDELinearFirstOrder` | constant-coefficient `a u_{v1} + b u_{v2} + c u == f` (method of characteristics; the generated arbitrary function is `C[1][·]`) |
 | `DSolve`PDELinearSecondOrder` | homogeneous, principal-part-only, constant-coefficient 2nd-order linear PDE `A u_{v1 v1} + B u_{v1 v2} + C u_{v2 v2} == 0` by operator factoring: the trial `u == f(v2 + λ v1)` gives the characteristic quadratic `A λ² + B λ + C == 0`, so one method covers all three discriminant signs — distinct real roots (hyperbolic) → `C[1][v2+λ1 v1] + C[2][v2+λ2 v1]` (the wave equation `u_tt == c² u_xx → C[1][x-c t] + C[2][x+c t]`, d'Alembert); complex roots (elliptic) → the complex-characteristic form (Laplace `u_xx + u_yy == 0 → C[1][y-I x] + C[2][y+I x]`); a repeated root (parabolic) → `C[1][w] + v1 C[2][w]`, `w == v2 + λ v1`. Generated arbitrary functions `C[1][·]`, `C[2][·]`. Declines lower-order terms, forcing, and non-constant coefficients |
+| `DSolve`SeparationOfVariables` | separated product solution `u == X(v1) Y(v2)` of a homogeneous, constant-coefficient linear PDE with **no mixed derivative term**. Dividing by `X Y` splits it into two constant-coefficient ODEs in a separation constant λ — `Σ a_i X^(i) − λ X == 0` and `Σ b_j Y^(j) + (e + λ) Y == 0` — each solved by recursing into the scalar cascade; λ becomes a generated constant, and the one redundant overall scale is absorbed. The heat equation `u_t == u_xx` gives `E^(λ t)(C[1] E^(−√λ x) + C[2] E^(√λ x))`; also Helmholtz `u_xx + u_yy + u == 0`. Returns the *representative product mode* (the general solution is a superposition over λ), so **pinned-only** — not in the automatic cascade. Declines mixed-derivative, inhomogeneous, and non-constant-coefficient equations |
 | `DSolve`EigenvalueProblem` | Sturm-Liouville `y'' + λ y == 0` on `[a,b]` with two homogeneous BCs (Dirichlet `y==0`, Neumann `y'==0`, or mixed) at two distinct points → the eigenvalue family + eigenfunctions: `{{λ -> ConditionalExpression[w_n², Element[C[1],Integers] && C[1]>=1], y -> Function[{x}, C[2] Sin/Cos[w_n(x-a)]]}}`, `w_n == n Pi/(b-a)` (same-type BCs) or `(2n-1)Pi/(2(b-a))` (mixed), `C[1]` the integer index, `C[2]` the amplitude. Every eigenpair is back-substitution verified under `C[1]` integer. **Pinned-only** (never misfires on an ordinary IVP/BVP). Constant weight only; Robin/periodic BCs and the `λ==0` Neumann mode are future |
 
 A **boundary-value problem** with multiple point conditions is fitted through the same
@@ -818,6 +820,17 @@ Out[14]= {{u -> Function[{t, x}, C[1][x - Sqrt[c^2] t] + C[2][x + Sqrt[c^2] t]]}
 
 In[15]:= DSolve[D[u[x,y],{x,2}] + D[u[x,y],{y,2}] == 0, u, {x,y}]  (* Laplace/elliptic *)
 Out[15]= {{u -> Function[{x, y}, C[1][-I x + y] + C[2][I x + y]]}}
+```
+
+For an equation with a lower-order term or mixed derivative orders (the heat
+equation `u_t == u_xx`, Helmholtz, ...), `DSolve`SeparationOfVariables` returns a
+separated product mode `X(v1) Y(v2)` with the separation constant as a generated
+constant (pinned-only — the general solution is a superposition over that
+constant):
+
+```
+In[16]:= DSolve`SeparationOfVariables[D[u[x,t],t] == D[u[x,t],{x,2}], u, {x,t}]
+Out[16]= {{u -> Function[{x, t}, E^(-C[3] t) (C[1] E^(-1/2 Sqrt[-4 C[3]] x) + C[2] E^(1/2 Sqrt[-4 C[3]] x))]}}
 ```
 
 ```

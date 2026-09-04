@@ -64,5 +64,36 @@ method / verifier must scan the residual for its order rather than read
 Deferred (documented future in §2b): inhomogeneous forcing + lower-order terms
 (telegraph/damped wave — the full symbol must factor into first-order operators);
 the wave-IVP d'Alembert formula (initial data, half-line, `Piecewise`); heat
-kernel; separation of variables; `PDEClassify` (discriminant); quasilinear /
-nonlinear first-order (§2a).
+kernel; `PDEClassify` (discriminant); quasilinear / nonlinear first-order (§2a).
+
+---
+
+# DSolve M6 (Phase 2) — separation of variables  ✅ DONE (2026-09-04)
+
+`DSolve`SeparationOfVariables` (`src/calculus/dsolve_pdesep.c`, pinned-only) —
+separated product mode `u == X(v1) Y(v2)` for a homogeneous, constant-coefficient,
+**no-mixed-term** linear PDE. Divide by `X Y` → two constant-coefficient ODEs in a
+separation constant λ (`Σ a_i X^(i) − λ X == 0`, `Σ b_j Y^(j) + (e+λ) Y == 0`),
+each solved by recursing into the scalar cascade; the one redundant overall scale
+absorbed (fix a first-order side's lone constant to 1). Pinned-only because the
+general solution is a superposition over λ.
+
+- [x] `dsolve_pdesep_solve`: order scan + per-(i,j) coefficient extraction; gate
+      (linear / constant-coeff / no-mixed / homogeneous / has both x- and y-deriv)
+- [x] build + solve the two ODEs via recursion into `DSolve` (applied form,
+      `dsolve_extract_applied_bodies`); absorb scale, renumber, λ → C[k]
+- [x] pinned builtin + init (ATTR_PROTECTED, docstring); NOT in the auto cascade
+- [x] tests `t_pdesep` (heat, heat-with-k, Helmholtz residual=0; decline mixed /
+      inhomogeneous / ODE-in-disguise); all 3 DSolve ctest suites green
+- [x] `make check-c99` PASS (root); valgrind at baseline 13,440/6,312, **zero**
+      `dsolve_pdesep` frames in the report
+- [x] docs: DSOLVE_PLAN.md §2b + M6, calculus.md (table + prose), changelog
+- [x] independently verified residual = 0 (heat, heat-k, Helmholtz)
+
+Design note: a product mode ≠ general solution, so pinned-only (matches
+`FirstOrderPowerSeries` / `EigenvalueProblem`). The `Sqrt[-4 λ]/2` form in some
+outputs is constcoeff's quadratic-formula spelling (cosmetic) and the sign of λ is
+a free-constant relabeling — the family is identical and back-sub verified.
+
+Still open in §2b: wave-IVP d'Alembert formula; heat kernel / `Erf`; `PDEClassify`;
+lower-order/inhomogeneous 2nd-order; quasilinear/nonlinear first-order (§2a).

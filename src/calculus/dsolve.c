@@ -168,6 +168,7 @@ extern Expr** dsolve_pde1_solve(DSolveProblem* P);
 extern void dsolve_pde1_init(void);
 extern Expr** dsolve_pde2_solve(DSolveProblem* P);
 extern void dsolve_pde2_init(void);
+extern void dsolve_pdesep_init(void);  /* DSolve`SeparationOfVariables (pinned-only) */
 extern Expr** dsolve_decouple_solve(DSolveProblem* P);
 extern Expr** dsolve_triangular_solve(DSolveProblem* P);
 /* dsolve_linsys_solve / dsolve_linsys_varcoeff_solve declared in dsolve_linsys.h */
@@ -418,6 +419,7 @@ void dsolve_init(void) {
     dsolve_normalform_init();
     dsolve_pde1_init();
     dsolve_pde2_init();
+    dsolve_pdesep_init();
     dsolve_decouple_init();
     dsolve_triangular_init();
     dsolve_linsys_init();

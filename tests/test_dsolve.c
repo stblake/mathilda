@@ -846,6 +846,30 @@ static void t_pde2_pinned_and_declines(void) {
                "/. C[1][z_] :> Sin[z]}, PossibleZeroQ[D[uc,x] + 3 D[uc,y]]]");
 }
 
+/* ---- M6 (Phase 2): separation of variables — DSolve`SeparationOfVariables
+ * (pinned-only). Product mode u = X(v1) Y(v2), back-substitution verified. ---- */
+static void t_pdesep(void) {
+    /* heat equation u_t == u_xx -> product mode, residual zero */
+    check_true("With[{r = DSolve`SeparationOfVariables[D[u[x,t],t] == D[u[x,t],{x,2}], u, {x,t}]}, "
+               "Head[r] === List && r =!= {} && "
+               "PossibleZeroQ[(D[#,t] - D[#,{x,2}]) &[u[x,t] /. r[[1]]]]]");
+    /* heat with a symbolic diffusivity k */
+    check_true("With[{r = DSolve`SeparationOfVariables[D[u[x,t],t] == k D[u[x,t],{x,2}], u, {x,t}]}, "
+               "Head[r] === List && PossibleZeroQ[(D[#,t] - k D[#,{x,2}]) &[u[x,t] /. r[[1]]]]]");
+    /* Helmholtz-type u_xx + u_yy + u == 0 (both sides 2nd order; has a u term) */
+    check_true("With[{r = DSolve`SeparationOfVariables[D[u[x,y],{x,2}] + D[u[x,y],{y,2}] + u[x,y] == 0, "
+               "u, {x,y}]}, PossibleZeroQ[(D[#,{x,2}] + D[#,{y,2}] + #) &[u[x,y] /. r[[1]]]]]");
+    /* declines a mixed-derivative term (pde2 territory) */
+    check_form("Head[DSolve`SeparationOfVariables[D[u[x,y],x,y] == 0, u, {x,y}]]",
+               "DSolve`SeparationOfVariables");
+    /* declines inhomogeneous forcing */
+    check_form("Head[DSolve`SeparationOfVariables[D[u[x,t],t] - D[u[x,t],{x,2}] == 1, u, {x,t}]]",
+               "DSolve`SeparationOfVariables");
+    /* declines an ODE-in-disguise (no v2 derivative) */
+    check_form("Head[DSolve`SeparationOfVariables[D[u[x,t],{x,2}] == 0, u, {x,t}]]",
+               "DSolve`SeparationOfVariables");
+}
+
 /* Pinned system + PDE method builtins: each is REPL-callable as DSolve`<Name>[...]
  * (M8 systems, M6 PDE), verified by back-substitution, and declines a wrong-shape
  * input (no silent wrong answer). */
@@ -1585,6 +1609,7 @@ int main(void) {
     TEST(t_pde2_repeated);
     TEST(t_pde2_distinct_asymmetric);
     TEST(t_pde2_pinned_and_declines);
+    TEST(t_pdesep);
     TEST(t_sys_pde_pinned_methods);
     TEST(t_declines_unsupported);
     /* M9: backfill for thin methods */
