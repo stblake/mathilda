@@ -1749,6 +1749,23 @@ static void t_linearizable_first_order(void) {
                "/(2 Sin[y[x]] Log[x] x), y, x][[1]]]");
 }
 
+/* M12: DSolve`SecondOrderSymmetry — nonlinear second-order Lie point symmetry.
+ * Verified NUMERICALLY (the solutions carry logs/radicals PossibleZeroQ cannot
+ * decide; lie2 itself relies on a numeric back-substitution guard). */
+static void t_second_order_symmetry(void) {
+    /* projective symmetry [x,y],[x^2,xy] — Cheb-Terrab et al. Eq.3 */
+    check_true("With[{s=DSolve[x^3 y''[x]==(y[x]-x y'[x])^2, y, x]}, "
+               "Head[s]===List && Abs[N[(x^3 y''[x]-(y[x]-x y'[x])^2) /. s[[1]] "
+               "/. {C[1]->7/5,C[2]->3/4} /. x->13/10, 14]] < 10^-6]");
+    /* separable-scaling symmetry [x,0],[0,y] (N5) */
+    check_true("With[{s=DSolve[2 x^2 y''[x] y[x]+y[x]^2==x^2 y'[x]^2, y, x]}, "
+               "Head[s]===List && Abs[N[(2 x^2 y''[x] y[x]+y[x]^2-x^2 y'[x]^2) /. s[[1]] "
+               "/. {C[1]->9/7,C[2]->2/5} /. x->8/5, 14]] < 10^-6]");
+    /* pinned method solves; declines a linear ODE (its domain is nonlinear) */
+    check_form("Head[DSolve`SecondOrderSymmetry[x^3 y''[x]==(y[x]-x y'[x])^2, y, x]]", "List");
+    check_true("Head[DSolve`SecondOrderSymmetry[y''[x]+y[x]==0, y, x]] =!= List");
+}
+
 /* Higher-order linear ODEs whose input form hides their class, fixed by
  * dsolve_linear_normalize: a rational RHS solved for the top derivative clears to
  * Euler form; a common coefficient factor divides out to constant-coefficient. */
@@ -1884,6 +1901,7 @@ int main(void) {
     TEST(t_rischnorman_enum_cap_no_crash);
     TEST(t_trig_coeff_linear_first_order);
     TEST(t_linearizable_first_order);
+    TEST(t_second_order_symmetry);
     TEST(t_linear_coeff_normalization);
     TEST(t_system_varcoeff);
     TEST(t_system_autonomous);

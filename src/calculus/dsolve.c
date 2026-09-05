@@ -140,6 +140,7 @@ extern Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_first_order_series_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_shifted_try(DSolveProblem* P, size_t* nbranch);
@@ -174,6 +175,7 @@ extern void dsolve_linearizable_init(void);
 extern void dsolve_lie_init(void);
 extern void dsolve_autonomous_init(void);
 extern void dsolve_liouville_init(void);
+extern void dsolve_lie2_init(void);
 extern void dsolve_frobenius_init(void);
 extern void dsolve_normalform_init(void);
 extern Expr** dsolve_pde1_solve(DSolveProblem* P);
@@ -368,6 +370,12 @@ Expr* builtin_dsolve(Expr* res) {
             /* Liouville: y'' + g(y)(y')^2 + h(x)y' == 0 (has both y and x, so
              * missing-y/missing-x reductions above decline).  Two quadratures. */
             if (!result) result = dsolve_run(&P, dsolve_liouville_try);
+            /* SecondOrderSymmetry: the general nonlinear-2nd-order backstop.  Finds
+             * a Lie POINT symmetry (polynomial-ansatz determining system) and
+             * reduces the order via canonical coordinates -> first-order ODE ->
+             * cascade.  Runs after the 2nd-order specialists and before the series
+             * fallback, mirroring how first-order Lie (below) sits before series. */
+            if (!result) result = dsolve_run(&P, dsolve_lie2_try);
             /* implicit first-integral fallback: a homogeneous ODE with no explicit
              * inverse (transcendental log-spiral) is returned as G(x,y[x]) == C[1] */
             if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
@@ -493,6 +501,7 @@ void dsolve_init(void) {
     dsolve_lie_init();
     dsolve_autonomous_init();
     dsolve_liouville_init();
+    dsolve_lie2_init();
     dsolve_frobenius_init();
     dsolve_normalform_init();
     dsolve_pde1_init();

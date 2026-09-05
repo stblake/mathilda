@@ -3430,3 +3430,34 @@ Two lessons from strengthening `src/solve/solverad.c`:
    on solverad's decline SET; widening what solverad attempts silently reroutes
    them — gate any such change and re-run `dsolve_tests` (t_homogeneous_algebraic)
    as the tripwire. Full write-up: `SOLVERAD_IMPROVEMENTS.md`.
+
+## M12 — nonlinear 2nd-order Lie symmetry (`DSolve`SecondOrderSymmetry`, dsolve_lie2.c)
+
+1. **A heuristic DSolve reduction MUST numerically back-substitute before returning.**
+   `dsolve_run`'s symbolic verify treats an *undecidable* residual as acceptable
+   (Solve policy — keep what can't be disproved). lie2's reductions produce solutions
+   with logs/radicals whose residual `zero_test` cannot decide, so a WRONG inversion
+   branch passes the symbolic verify and ships as a wrong answer. N1
+   (`y²(x²y''−xy'+y)=x³`) and N2 did exactly this (residual ≈ −5, not 0). **Fix:** try
+   EVERY inversion branch and reject any whose residual is numerically non-zero at
+   several sample points (`l2_num_ok`). **Apply to any new heuristic/undecidable-output
+   method** — the substrate verify is necessary but not sufficient there.
+
+2. **The evaluator re-invokes a declining DSolve builtin ~3× per user call.** The
+   fixed-point loop re-evaluates `DSolve[...]`; the equation re-normalizes each pass, so
+   the dispatcher's own fail-memo (keyed on the equation hash) misses the repeat. An
+   expensive *declining* method therefore pays its full cost ~3×. **Fix:** a
+   per-top-level decline memo inside the method (hash the residual, keyed on
+   `eval_toplevel_id()`), short-circuiting the repeat. A *solve* returns non-NULL so the
+   expr changes and is not re-invoked — this only bites declines.
+
+3. **TimeConstrained CAN be nested here** (empirically no crash — inner bailed, outer
+   completed), and is the only reliable interrupt for a pre-existing slow sub-call. lie2
+   wraps every recursive `DSolve`/`Solve`/`Integrate`/`NullSpace` in TimeConstrained
+   (2–3 s) so a data-dependent slow path (e.g. `DSolve`Separable`'s explicit inversion
+   hangs on the plain separable `q'==-2q(1+q)(1+2q)/r`) makes the symmetry decline
+   rather than the whole DSolve spin. A wall-clock `time()` deadline (not `clock()`) is
+   the outer cap. **Apply:** bound recursive sub-solves in any method that chains them.
+
+4. **A clock()-based deadline did NOT bound the sub-evals; time() did.** Prefer
+   wall-clock `time(NULL)` for a per-call CPU/hang budget in DSolve methods.

@@ -358,6 +358,59 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   All three DSolve ctest suites + `make check-c99` green; valgrind leak-clean; SymPy
   cross-validated the coupled variable-coefficient systems.
 
+- **M12 — nonlinear second-order Lie point symmetry (`SecondOrderSymmetry`).** ✅ DONE.
+  The general **nonlinear**-second-order backstop, targeting the ~110 nonlinear
+  2nd-order ODEs in the 12000.org "SymPy-failed" corpus (Kamke/Murphy; Maple's
+  `_with_linear_symmetries` on nonlinear equations + `_reducible,_mu_*`). Extends the
+  M10 first-order Lie machinery to the second prolongation. `dsolve_lie2.c`.
+  - **Symmetry search.** A point symmetry `X = ξ(x,y)∂ₓ + η(x,y)∂_y` satisfies the
+    second-prolongation determining equation (Cheb-Terrab, Duarte & da Mota,
+    physics/9703082 — the PDF is in the repo root; Eq. 2, here in the standard
+    prolongation form with `p=y'`):
+    `η_xx + (2η_xy−ξ_xx)p + (η_yy−2ξ_xy)p² − ξ_yy p³ + (η_y−2ξ_x−3ξ_y p)Φ − ξΦ_x −
+    ηΦ_y − (η_x+(η_y−ξ_x)p−ξ_y p²)Φ_p == 0`, `Φ = y''`. With `ξ,η` general bivariate
+    polynomials (degree ≤ 2) and `Φ` rational in `(x,y,p)`, this clears to a
+    polynomial identity in `(x,y,p)` whose coefficients are linear/homogeneous in the
+    ansatz coefficients; the determining system's `NullSpace` is a basis of admissible
+    `(ξ,η)` — the same machinery `dsolve_lie.c::lie_poly_symmetry` uses at first order,
+    lifted to `{x,y,p}`. (Maple/SymPy `symgen way=3`.)
+  - **Order reduction.** From one symmetry, build canonical coordinates `(r,s)` with
+    `Xr=0`, `Xs=1` (zero-component symmetries → `r,s` explicit; both-nonzero → `r`
+    from the characteristic `y'=η/ξ` via the cascade, `s=∫dx/ξ`). The ODE becomes a
+    first-order ODE `dq/dr==F(r,q)` in `q=ds/dr`, solved by recursing into the scalar
+    cascade; then `s=∫q dr + C[2]` and `s(x,y)==S(r(x,y))+C[2]` is solved for `y`.
+  - **Two verification gates (both essential).** (1) Every inversion branch is tried
+    and **numerically** back-substituted (`l2_num_ok`, 5 sample points) — the dsolve_run
+    symbolic verify KEEPS an undecidable residual (Solve policy), so a wrong reduction
+    branch with a symbolically-intractable residual (the seeds carry logs/radicals)
+    would otherwise slip through as a WRONG answer; N1/N2 were exactly such false
+    positives before this gate. (2) Only nonlinear ODEs: a **linearity gate** declines
+    `Φ` affine in `(y,y')` (linear ODEs are the domain of Euler/Kovacic/
+    SpecialFunction/Frobenius) — this also avoids the 8-dimensional-algebra symmetry
+    search on a Kovacic-declined high-degree rational coefficient.
+  - **Robustness.** lie2 chains recursive `DSolve`/`Solve`/`Integrate`/`NullSpace`
+    whose cost is data-dependent and can hit a **pre-existing** slow path (e.g. the
+    explicit inversion inside `DSolve\`Separable` hangs on a plain separable reduced
+    ODE). Every such sub-call is `TimeConstrained`-bounded (2–3 s), the whole attempt
+    carries a ~6 s wall-clock deadline, an undefined-function `Φ` is gated, and a
+    per-top-level **decline memo** collapses the evaluator's fixed-point re-invocation
+    (a decline is otherwise recomputed ~3×). A decline is a clean bounded fall-through
+    to the series fallback; a solve is fast.
+  - **Cascade slot:** after the nonlinear-2nd-order specialists (`ReductionOfOrder`,
+    `AutonomousReduction`, `Liouville`) and before the Frobenius series fallback,
+    mirroring how first-order Lie sits before series.
+  - *Solves:* N3 `x³y''=(y−xy')²`, N4 `x²yy''+x²y'²−5xyy'=4y²`, N5
+    `2x²yy''+y²=x²y'²`, the projective family `x²(x+y)y''=(xy'−y)²` and Eq.3
+    `y''=(xy'−y)²/x³`, and the arbitrary-coefficient generalizations (`dsolve_m12_stress`).
+    *Anti-overfit:* three forward-generator families all 100% back-substitution
+    verified — projective `x³y''=a(y−xy')²` (a∈[−4,6]), projective+linear
+    `x³y''=(y−xy')²+d x(y−xy')`, scaling `k x²yy''+y²=x²y'²`. *Declines* (bounded,
+    no wrong answer): genuinely harder nonlinear equations whose reduced ODE the
+    first-order cascade cannot close. Per-call leak is the inherited Integrate/Solve-
+    engine leak (as `AlmostLinear`/`LinearFirstOrder`), amplified by the sub-call
+    count; ownership within `dsolve_lie2.c` is clean. All DSolve ctest suites +
+    `dsolve_m12_stress` + `make check-c99` green.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -608,6 +661,18 @@ recursive sub-solves.
   two quadratures `∫Exp[∫g dy] dy == C[1] ∫Exp[-∫h dx] dx + C[2]`, solved for `y`.
   Distinct from `AutonomousReduction` (missing-`x`) / `ReductionOfOrder` (missing-`y`).
   After `AutonomousReduction` in the cascade. (SymPy `Liouville`.) `dsolve_liouville.c`.
+- `[✓] SecondOrderSymmetry` (`DSolve\`SecondOrderSymmetry`) — the general **nonlinear**
+  2nd-order backstop: find a Lie **point** symmetry `X=ξ∂ₓ+η∂_y` of `y''==Φ(x,y,y')`
+  by a polynomial-ansatz determining system (2nd-prolongation `NullSpace`, the M10
+  first-order machinery lifted to `{x,y,p}`), then reduce the order via canonical
+  coordinates `(r,s)` → first-order `dq/dr==F(r,q)` → cascade → invert for `y`. Every
+  inversion branch is NUMERICALLY back-substitution verified (the symbolic verify keeps
+  undecidable residuals, so a wrong branch must be caught here); linear ODEs are gated
+  out (their domain is Euler/Kovacic/SpecialFunction/Frobenius). All recursive
+  sub-solves are `TimeConstrained`-bounded with a wall-clock deadline + decline memo so
+  a decline is a clean bounded fall-through. Solves the scaling/projective/`_mu_*`
+  reducible families (Kamke/Murphy nonlinear 2nd-order). Runs after `Liouville`, before
+  the series fallback. See M12. `dsolve_lie2.c`.
 
 ### 1e. Systems
 
@@ -837,8 +902,11 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
 - **Stress tests:** parametrized forward-generator families per method group,
   back-substitution verified, each guarding `Head === List` first so a declined
   solve cannot pass vacuously. `tests/test_dsolve_m5_stress.c` covers Kovacic and
-  Frobenius/PowerSeries; `tests/test_dsolve_stress.c` covers the rest of the
-  cascade (LinearFirstOrder, Separable, Bernoulli, Homogeneous, Exact,
+  Frobenius/PowerSeries; `tests/test_dsolve_m12_stress.c` covers the nonlinear
+  2nd-order `SecondOrderSymmetry` families (verified NUMERICALLY — the solutions
+  carry logs/radicals PossibleZeroQ cannot decide, and lie2 itself relies on a
+  numeric back-substitution guard); `tests/test_dsolve_stress.c` covers the rest of
+  the cascade (LinearFirstOrder, Separable, Bernoulli, Homogeneous, Exact,
   LinearConstantCoefficients, EulerCauchy, ReductionOfOrder, 2×2 + triangular
   systems, first-order PDE). A generator builds the equation from parameters whose
   closed form is guaranteed — a chosen spectrum (ConstCoeff/Euler), a potential

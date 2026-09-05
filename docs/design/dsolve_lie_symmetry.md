@@ -300,6 +300,54 @@ Effect: `y' = Tan[ArcTan[y] + F[x²+y²]]` and the CT–Roche Eq-70 example
 `y' = -Tan[ArcTan[x/y] + H[x²+y²]]` decline in ~1 s instead of hanging, with no inert
 head and no wrong answer (verified by `t_lie_undefined_function_declines`).
 
+## 4b. Second-order point symmetry — `DSolve`SecondOrderSymmetry` (M12)
+
+The M10 machinery lifts to **nonlinear second-order** ODEs `y'' == Φ(x,y,y')`
+(`dsolve_lie2.c`). This is the algorithmic 2nd-order route of Cheb-Terrab, Duarte &
+da Mota (physics/9703082) — no longer "background": M12 uses it.
+
+**Determining condition.** A point symmetry `X = ξ(x,y)∂ₓ + η(x,y)∂_y` satisfies the
+second prolongation condition `η^{(2)}|_{y''=Φ} − ξΦ_x − ηΦ_y − η^{(1)}Φ_{y'} = 0`,
+i.e. (with `p = y'`)
+
+```
+S2 = η_xx + (2η_xy − ξ_xx)p + (η_yy − 2ξ_xy)p² − ξ_yy p³
+     + (η_y − 2ξ_x − 3ξ_y p)Φ − ξΦ_x − ηΦ_y − (η_x + (η_y − ξ_x)p − ξ_y p²)Φ_p == 0.
+```
+
+**Search.** For `Φ` rational in `(x,y,p)` and `ξ,η` general bivariate polynomials of
+total degree ≤ 2, `S2` clears to a polynomial identity in `(x,y,p)` whose coefficients
+are linear and homogeneous in the ansatz coefficients. `CoefficientList[…,{x,y,p}]` +
+`Outer[Coefficient,…]` + `NullSpace` returns a symmetry basis — exactly
+`lie_poly_symmetry` (§4) at the second prolongation, split over three variables. Catches
+translation/scaling `[x,0],[0,y]` and projective `[x,y],[x²,xy]` symmetries.
+
+**Reduction (canonical coordinates).** Given `(ξ,η)`: build `(r,s)` with `Xr=0`, `Xs=1`.
+Zero-component symmetries are explicit (`η=0 → r=y, s=∫dx/ξ`; `ξ=0 → r=x, s=∫dy/η`);
+both-nonzero uses the characteristic `y'=η/ξ` (solved by the cascade) for `r` and
+`s=∫dx/ξ|_{y=Y(x,r)}`. In `(r,s)` the ODE is autonomous in `s`, so `q=ds/dr` obeys a
+first-order `dq/dr==F(r,q)` (eliminate `p` via `q`, then the leftover variable via `r`;
+`F` must come out free of the eliminated variable — the symmetry guarantee, checked).
+Solve that by recursing the scalar cascade; `s=∫q dr + C[2]`; the relation
+`s(x,y)==S(r(x,y))+C[2]` is solved for `y`.
+
+**Two verification gates.** (1) `dsolve_run`'s symbolic verify keeps an *undecidable*
+residual (Solve policy) — but these solutions carry logs/radicals whose residual is
+undecidable, so a wrong inversion branch would ship as a WRONG answer. lie2 therefore
+tries every inversion branch and **numerically** back-substitutes each (`l2_num_ok`,
+5 sample points) before returning. (2) A linearity gate declines `Φ` affine in `(y,y')`:
+linear ODEs belong to Euler/Kovacic/SpecialFunction/Frobenius, and their 8-dimensional
+symmetry algebra makes the determining search over a high-degree rational coefficient
+expensive with no benefit.
+
+**Robustness.** The reduction chains recursive `DSolve`/`Solve`/`Integrate`/`NullSpace`
+whose cost is data-dependent and can hit a *pre-existing* slow path (the explicit
+inversion inside `DSolve`Separable` hangs on a plain separable reduced ODE). Each is
+`TimeConstrained`-bounded (2–3 s); a ~6 s wall-clock deadline caps the whole attempt; an
+undefined-function `Φ` is gated; and a per-top-level **decline memo** collapses the
+evaluator's ~3× fixed-point re-invocation of a declining builtin. A decline is thus a
+clean bounded fall-through to the series method.
+
 ## 5. References
 
 - E. S. Cheb-Terrab, A. D. Roche, *Symmetries and First Order ODE Patterns*,
@@ -312,8 +360,8 @@ head and no wrong answer (verified by `t_lie_undefined_function_declines`).
   arXiv:math-ph/0007023.
 - E. S. Cheb-Terrab, L. G. S. Duarte, L. A. C. P. da Mota, *Computer Algebra
   Solving of Second Order ODEs Using Symmetry Methods*, Comput. Phys. Commun. 108
-  (1998) 90; arXiv:gr-qc/9703082 (background; the algorithmic 2nd-order route, not
-  used by this first-order method).
+  (1998) 90; arXiv:gr-qc/9703082 — the algorithmic 2nd-order route implemented by
+  `DSolve`SecondOrderSymmetry` (M12; see §4b). PDF in the repo root.
 - P. J. Olver, *Applications of Lie Groups to Differential Equations*, GTM 107.
 - J. Starrett, *Solving Differential Equations by Symmetry Groups*, Amer. Math.
   Monthly 114 (2007) 778 (pedagogical; cited by SymPy's docs).
