@@ -256,6 +256,124 @@ static Expr* try_weierstrass(Expr* f, Expr* x) {
     return integrate_jeffrey_try(f, x);
 }
 
+/* Does the integrand contain a circular-trig kernel anywhere? */
+static bool integrand_has_trig(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* n = h->data.symbol.name;
+        if (n == SYM_Sin || n == SYM_Cos || n == SYM_Tan ||
+            n == SYM_Cot || n == SYM_Sec || n == SYM_Csc) return true;
+    }
+    if (integrand_has_trig(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (integrand_has_trig(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Every circular-trig kernel in `e` has an argument that depends on the
+ * integration variable `x` (i.e. `e` is a trig expression in x, not one carrying
+ * a foreign trig kernel such as Sec[y] treated as a parameter).  This keeps the
+ * Expand[TrigReduce[·]] linearization off multi-variable trig blobs, whose
+ * Expand blows up (the Lie first-integral integrands). */
+static bool trig_all_in_x(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && e->data.function.arg_count == 1) {
+        const char* n = h->data.symbol.name;
+        if ((n == SYM_Sin || n == SYM_Cos || n == SYM_Tan ||
+             n == SYM_Cot || n == SYM_Sec || n == SYM_Csc) &&
+            !depends_on_var(e->data.function.args[0], x))
+            return false;
+    }
+    if (!trig_all_in_x(h, x)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!trig_all_in_x(e->data.function.args[i], x)) return false;
+    return true;
+}
+
+/* Node count, capped: returns >= limit as soon as the budget is exceeded so a
+ * large integrand is rejected cheaply. */
+static long node_count_capped(const Expr* e, long limit) {
+    if (!e || limit <= 0) return 0;
+    long c = 1;
+    if (e->type == EXPR_FUNCTION) {
+        c += node_count_capped(e->data.function.head, limit - c);
+        for (size_t i = 0; i < e->data.function.arg_count && c < limit; i++)
+            c += node_count_capped(e->data.function.args[i], limit - c);
+    }
+    return c;
+}
+
+/* Build head[arg] and evaluate it (borrowing arg; the caller keeps ownership). */
+static Expr* apply1_eval(const char* head, const Expr* arg) {
+    Expr* call = expr_new_function(expr_new_symbol(head),
+                                   (Expr*[]){ expr_copy((Expr*)arg) }, 1);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
+/* Stage 1f0: linearity.  Split a Plus integrand and integrate term-by-term,
+ * committing ONLY if every term closes to an elementary antiderivative (no
+ * residual Integrate[...]); otherwise decline so the whole-integrand cascade
+ * (Weierstrass, Risch, ...) still runs and can capture a sum whose pieces are
+ * individually non-elementary.  Placed after the rational integrator (so
+ * rational sums keep their combined partial-fraction form) and before
+ * Weierstrass, which otherwise routes a trig polynomial such as
+ * Sin[2 x] + Sin[3 x] through the tan-half-angle substitution and produces a
+ * divergent rational form — or loops (the y' + Tan[x] y == q integrating-factor
+ * hang, and the constant-coefficient forcing integrals).
+ *
+ * A trig integrand that is NOT already a Plus (a product/power such as
+ * Cos[x]^2 or Cos[x](3 Sin[x] + K)) is first linearised by Expand[TrigReduce[·]]
+ * into a sum of Sin[k x]/Cos[k x] monomials, which the same term-by-term split
+ * then integrates cleanly.  Recursion handles nested terms; TrigReduce strictly
+ * lowers trig degree, so the descent terminates. */
+static Expr* try_linearity(Expr* f, Expr* x) {
+    Expr* target = NULL;                 /* a Plus we own (or borrow from f) */
+    Expr* owned  = NULL;                 /* non-NULL when we built `target` */
+    if (head_is(f, SYM_Plus) && f->data.function.arg_count >= 2) {
+        target = f;
+    } else if (integrand_has_trig(f) && trig_all_in_x(f, x)
+               && node_count_capped(f, 256) < 256) {
+        Expr* tr = apply1_eval("TrigReduce", f);
+        Expr* g  = tr ? apply1_eval("Expand", tr) : NULL;
+        if (tr) expr_free(tr);
+        if (g && head_is(g, SYM_Plus) && g->data.function.arg_count >= 2) {
+            target = g; owned = g;
+        } else { if (g) expr_free(g); return NULL; }
+    } else {
+        return NULL;
+    }
+
+    size_t n = target->data.function.arg_count;
+    Expr** parts = malloc(n * sizeof(Expr*));
+    size_t got = 0;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) {
+        Expr* gi = call_stage("Integrate", target->data.function.args[i], x);
+        if (!gi || result_contains_head(gi, "Integrate")) {
+            if (gi) expr_free(gi);
+            ok = false;
+            break;
+        }
+        parts[got++] = gi;
+    }
+    if (!ok) {
+        for (size_t i = 0; i < got; i++) expr_free(parts[i]);
+        free(parts);
+        if (owned) expr_free(owned);
+        return NULL;
+    }
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), parts, n);
+    free(parts);
+    if (owned) expr_free(owned);
+    Expr* r = evaluate(sum);   /* evaluate BORROWS sum */
+    expr_free(sum);
+    return r;
+}
+
 /* Stage 1e3: Goursat's pseudo-elliptic algorithm and its cube-/fourth-root
  * generalisations.  Recognises F(x)/R(x)^p (p in {1/2,1/3,2/3,1/4,3/4}); when
  * a Mobius automorphism of the roots of R makes the integrand pseudo-elliptic,
@@ -915,6 +1033,11 @@ Expr* builtin_integrate(Expr* res) {
              * that is guaranteed to close (and verified by construction), so it
              * runs ahead of the more expensive Eliminate/Solve substitution
              * search and ahead of Risch-Norman's complex-logarithm forms. */
+            /* Linearity before Weierstrass: term-by-term over a Plus so trig
+             * polynomials (Sin[2x]+Sin[3x], constant-coeff forcing sums) get the
+             * clean additive antiderivative instead of a divergent/looping
+             * tan-half-angle form.  Declines unless every term closes. */
+            if (!result) result = try_linearity(effective_f, x);
             if (!result) result = try_weierstrass(effective_f, x);
             if (!result) result = try_derivdivides(effective_f, x);
             if (!result) result = try_risch(effective_f, x);

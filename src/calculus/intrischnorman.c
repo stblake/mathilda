@@ -1848,6 +1848,10 @@ static int enumerate_monomials(Expr** vars, size_t nv, int total_degree,
             }
             Expr* xi = mk_pow(expr_copy(x), mk_int(i));
             Expr* prod = mk_times2(xi, lower_i[k]);
+            lower_i[k] = NULL;  /* moved into prod; NULL out so the
+                                 * PMINT_MAX_MONOMIALS / realloc-failure
+                                 * cleanup below cannot free it a second time
+                                 * (its subtree is now owned by acc). */
             acc[accn++] = eval_expand(prod);
         }
         free(lower_i);

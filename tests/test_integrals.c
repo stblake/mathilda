@@ -47,6 +47,21 @@ void test_integrals() {
 
     printf("Listable threading\n");
     assert_eval_eq("Integrate[{1, x, x^5/5}, x]", "{x, 1/2 x^2, 1/30 x^6}", 0);
+
+    /* Trig-polynomial linearity (try_linearity + Expand[TrigReduce]).  These
+     * previously hung or produced divergent tan-half-angle forms via the whole-
+     * integrand Weierstrass path.  Checked by close (no residual Integrate) and
+     * differentiate-back, so form differences do not matter. */
+    printf("Trig linearity: sum of sines\n");
+    assert_eval_eq("FreeQ[Integrate[Sin[2 x] + Sin[3 x], x], Integrate]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[D[Integrate[Sin[2 x] + Sin[3 x], x], x] "
+                   "- (Sin[2 x] + Sin[3 x])]", "True", 0);
+    printf("Trig linearity: Cos^2, Sin^4\n");
+    assert_eval_eq("PossibleZeroQ[D[Integrate[Cos[x]^2, x], x] - Cos[x]^2]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[D[Integrate[Sin[x]^4, x], x] - Sin[x]^4]", "True", 0);
+    printf("Trig linearity: product with parameter\n");
+    assert_eval_eq("PossibleZeroQ[D[Integrate[Cos[x] (3 Sin[x] + K), x], x] "
+                   "- Cos[x] (3 Sin[x] + K)]", "True", 0);
     printf("Done!\n");
 }
 

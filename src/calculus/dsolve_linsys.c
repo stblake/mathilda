@@ -75,16 +75,65 @@ static bool expr_contains_complex(const Expr* e) {
     return false;
 }
 
+/* Node count, capped: returns >= limit as soon as the budget is exceeded. */
+static long linsys_node_count(const Expr* e, long limit) {
+    if (!e || limit <= 0) return 0;
+    long c = 1;
+    if (e->type == EXPR_FUNCTION) {
+        c += linsys_node_count(e->data.function.head, limit - c);
+        for (size_t i = 0; i < e->data.function.arg_count && c < limit; i++)
+            c += linsys_node_count(e->data.function.args[i], limit - c);
+    }
+    return c;
+}
+
+/* Set *has_exp / *has_trig if the body carries an exponential (E^…) resp. a
+ * circular/hyperbolic function.  A body with BOTH — the mixed real+imaginary
+ * spectrum of an augmented higher-order system, e.g. E^{2t} together with
+ * Cos[2t] — is exactly the case where a full Simplify's Together spins trying
+ * to put them over a common denominator. */
+static void linsys_body_kind(const Expr* e, bool* has_exp, bool* has_trig) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* n = h->data.symbol.name;
+        if (n == SYM_Power && e->data.function.arg_count == 2) {
+            const Expr* base = e->data.function.args[0];
+            if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
+                *has_exp = true;
+        } else if (strcmp(n, "Cos") == 0 || strcmp(n, "Sin") == 0 ||
+                   strcmp(n, "Cosh") == 0 || strcmp(n, "Sinh") == 0) {
+            *has_trig = true;
+        }
+    }
+    linsys_body_kind(h, has_exp, has_trig);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        linsys_body_kind(e->data.function.args[i], has_exp, has_trig);
+}
+
 /* Realify + tidy a solution body; consumes `body`, returns owned.
  * ComplexExpand is applied ONLY when the body actually carries the imaginary unit
  * (a complex spectrum needing e^{a+ib x} -> e^{ax}Cos/Sin[bx]).  On an already-real
  * body it is skipped: ComplexExpand assumes real-but-possibly-negative variables and
  * would gratuitously split Log[x] -> Log[Abs[x]] + I Arg[x] (which arises in the
- * variable-coefficient forcing integral, e.g. Integrate[x^{-1}, x] = Log[x]). */
+ * variable-coefficient forcing integral, e.g. Integrate[x^{-1}, x] = Log[x]).
+ *
+ * The final canonicalisation is size-adaptive: a small body (the first-order 2x2/
+ * 3x3 systems) gets the pretty full Simplify; a LARGE body — as produced by the
+ * state-augmented higher-order systems (N = Σ order, e.g. a 4x4 with an irrational
+ * or mixed real/complex spectrum) — gets Expand instead, since a full Simplify
+ * there spends tens of seconds in Together/simp_search for no correctness gain
+ * (the result is back-substitution-verified regardless).  ComplexExpand already
+ * cancels the imaginary unit, so Expand yields a real (if less combined) form. */
+#define LINSYS_TIDY_SIMPLIFY_LIMIT 180
 Expr* dsolve_linsys_tidy(Expr* body) {
     Expr* ce   = expr_contains_complex(body)
                      ? eval_and_free(ds_call1("ComplexExpand", body)) : body;
-    Expr* si   = eval_and_free(ds_call1("Simplify", ce));
+    bool has_exp = false, has_trig = false;
+    linsys_body_kind(ce, &has_exp, &has_trig);
+    bool heavy = (has_exp && has_trig) ||
+                 linsys_node_count(ce, LINSYS_TIDY_SIMPLIFY_LIMIT) >= LINSYS_TIDY_SIMPLIFY_LIMIT;
+    Expr* si   = eval_and_free(ds_call1(heavy ? "Expand" : "Simplify", ce));
     Expr* rule = cosh_sinh_rule();
     return eval_and_free(internal_replace_repeated((Expr*[]){ si, rule }, 2));
 }
@@ -176,7 +225,12 @@ bool dsolve_linsys_extract_Ab(DSolveProblem* P, Expr** Aout, Expr** bout, bool* 
                 lead = (long)j; if (coeff) expr_free(coeff); coeff = d;
             } else expr_free(d);
         }
-        if (!ok || lead < 0 || !ds_free_of(coeff, xvar)) { if (coeff) expr_free(coeff); ok = false; break; }
+        /* The leading-derivative coefficient may depend on the independent
+         * variable (e.g. `t x' + y == 0`): dividing through gives a VARIABLE A,
+         * which the caller then routes — constant A to LinearFirstOrderSystem,
+         * f(x)·B scalar-factor A to LinearSystemVarCoeff.  It must, however, be
+         * free of the dependent variables (linearity). */
+        if (!ok || lead < 0) { if (coeff) expr_free(coeff); ok = false; break; }
         for (size_t j = 0; j < n; j++) if (!ds_free_of(coeff, Yn[j])) ok = false;
         if (RHS[lead]) ok = false;                        /* two eqns for same function */
         if (!ok) { expr_free(coeff); break; }
@@ -212,6 +266,13 @@ bool dsolve_linsys_extract_Ab(DSolveProblem* P, Expr** Aout, Expr** bout, bool* 
         Amat = expr_new_function(expr_new_symbol(SYM_List), rows, n); free(rows);
         bvec = expr_new_function(expr_new_symbol(SYM_List), bs, n); free(bs);
     }
+    /* Linearity gate: A = dRHS/dY must be free of every Y_j, else the system is
+     * nonlinear and neither the constant-A nor scalar-factor linear solver
+     * applies — building e^{A x} of a Y-dependent matrix diverges (the
+     * x'=y, y'=y^2/x family hung here).  Decline so the cascade moves on. */
+    if (ok && Amat)
+        for (size_t j = 0; j < n && ok; j++)
+            if (!ds_free_of(Amat, Yn[j])) ok = false;
     for (size_t k = 0; k < n; k++) if (RHS[k]) expr_free(RHS[k]);
     free(RHS); free(Dn); free(Yn);
 
@@ -248,8 +309,16 @@ Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
                                    ds_call2(SYM_Dot, PhiInv, expr_copy(b))));
                 if (head_is(integ, SYM_List) && integ->data.function.arg_count == n) {
                     for (size_t i = 0; i < n && force_ok; i++) {
-                        Expr* anti = ds_integrate(expr_copy(integ->data.function.args[i]),
-                                                  expr_new_symbol(xvar));
+                        /* Expand the variation-of-parameters integrand first: the
+                         * e^{-Mt} b component is a Together'd product of the
+                         * fundamental exponentials/trigs with the forcing, and
+                         * Expand distributes it into a sum that Integrate's
+                         * linearity pass integrates term-by-term (fast) instead
+                         * of routing the whole product through a slow substitution
+                         * search — the forced-augmented-system slowdown. */
+                        Expr* ig = eval_and_free(ds_call1("Expand",
+                                       expr_copy(integ->data.function.args[i])));
+                        Expr* anti = ds_integrate(ig, expr_new_symbol(xvar));
                         if (ds_has_head(anti, SYM_Integrate)) { expr_free(anti); force_ok = false; }
                         else rc[i] = add(rc[i], anti);
                     }
@@ -284,9 +353,14 @@ Expr** dsolve_linsys_solve(DSolveProblem* P) {
     size_t n = P->nfun;
     const char* xvar = P->ind_names[0];
 
-    /* This method claims only CONSTANT A with constant (or zero) forcing; a
-     * variable-coefficient A(x) is DSolve`LinearSystemVarCoeff's job. */
-    if (!ds_free_of(A, xvar) || (!b_zero && !ds_free_of(b, xvar))) {
+    /* This method claims CONSTANT A (a variable A(x) is
+     * DSolve`LinearSystemVarCoeff's job); the forcing b(x) MAY depend on x —
+     * dsolve_linsys_assemble carries it by variation of parameters
+     * Phi.(C + Integrate[Phi^{-1} b, x]) and declines gracefully (returns NULL)
+     * if that integral is not elementary.  (Previously variable b was rejected
+     * up front, dropping const-A systems with an honest forcing such as
+     * b == 2/(E^t - 1) through the whole cascade.) */
+    if (!ds_free_of(A, xvar)) {
         expr_free(A); expr_free(b); return NULL;
     }
 

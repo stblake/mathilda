@@ -228,6 +228,11 @@ Expr** dsolve_homog_basis(const Expr* charpoly, const char* lam, const char* xva
  * *order is the highest derivative order. */
 bool  dsolve_linear_coeffs(DSolveProblem* P, Expr*** coeffs, Expr** forcing, int* order);
 
+/* Normalize a coefficient vector for the const-coeff / Euler detectors: clear
+ * denominators to polynomial coefficients, then divide by their polynomial GCD.
+ * c[] (length order+1) and *forcing updated in place. */
+void  dsolve_linear_normalize(Expr** c, Expr** forcing, int order, const char* xvar);
+
 /* ---- second-order linear normal form (shared by SpecialFunctionForm,
  *      Kovacic, and Frobenius/PowerSeries) ---- */
 

@@ -57,6 +57,7 @@ typedef enum {
     DS_LINCOEFF,
     DS_ALMOSTLINEAR,
     DS_SEPREDUCED,
+    DS_LINEARIZABLE,
     DS_LIE,
     DS_AUTONOMOUS,
     DS_LIOUVILLE,
@@ -94,6 +95,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "LinearCoefficients")   == 0) return DS_LINCOEFF;
     if (strcmp(s, "AlmostLinear")         == 0) return DS_ALMOSTLINEAR;
     if (strcmp(s, "SeparableReduced")     == 0) return DS_SEPREDUCED;
+    if (strcmp(s, "Linearizable")         == 0) return DS_LINEARIZABLE;
     if (strcmp(s, "LieSymmetry")          == 0) return DS_LIE;
     if (strcmp(s, "LieGroup")             == 0) return DS_LIE;
     if (strcmp(s, "AutonomousReduction") == 0) return DS_AUTONOMOUS;
@@ -134,6 +136,7 @@ extern Expr** dsolve_lincoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lincoeff_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_almostlinear_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_sepreduced_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
@@ -167,6 +170,7 @@ extern void dsolve_abel_init(void);
 extern void dsolve_lincoeff_init(void);
 extern void dsolve_almostlinear_init(void);
 extern void dsolve_sepreduced_init(void);
+extern void dsolve_linearizable_init(void);
 extern void dsolve_lie_init(void);
 extern void dsolve_autonomous_init(void);
 extern void dsolve_liouville_init(void);
@@ -191,10 +195,16 @@ extern void dsolve_heat_init(void);
 extern Expr** dsolve_decouple_solve(DSolveProblem* P);
 extern Expr** dsolve_triangular_solve(DSolveProblem* P);
 /* dsolve_linsys_solve / dsolve_linsys_varcoeff_solve declared in dsolve_linsys.h */
+extern Expr** dsolve_sys_reduce_solve(DSolveProblem* P);
+extern Expr** dsolve_linsys_commutative_solve(DSolveProblem* P);
+extern Expr** dsolve_autosys_solve(DSolveProblem* P);
 extern void dsolve_decouple_init(void);
 extern void dsolve_triangular_init(void);
+extern void dsolve_sys_reduce_init(void);
 extern void dsolve_linsys_init(void);
 extern void dsolve_linsys_varcoeff_init(void);
+extern void dsolve_linsys_commutative_init(void);
+extern void dsolve_autosys_init(void);
 extern void dsolve_eigenvalue_init(void);
 
 /* ------------------------------------------------------------------ *
@@ -276,8 +286,17 @@ Expr* builtin_dsolve(Expr* res) {
     } else if (P.nfun > 1) {
         if (!result) result = dsolve_run_system(&P, dsolve_decouple_solve);
         if (!result) result = dsolve_run_system(&P, dsolve_triangular_solve);
+        /* Higher-order coupled systems: state-augment to first order, then reuse
+         * the constant-coefficient engine.  Declines pure first-order systems
+         * (that is LinearFirstOrderSystem below). */
+        if (!result) result = dsolve_run_system(&P, dsolve_sys_reduce_solve);
         if (!result) result = dsolve_run_system(&P, dsolve_linsys_solve);
         if (!result) result = dsolve_run_system(&P, dsolve_linsys_varcoeff_solve);
+        /* 2x2 commutative variable-coeff class A == a(t)I + b(t)K0 (rotation/
+         * decay), via Phi == Exp[∫a] Exp[(∫b)K0]; after the scalar-factor solver. */
+        if (!result) result = dsolve_run_system(&P, dsolve_linsys_commutative_solve);
+        /* 2-D autonomous (incl. nonlinear) via phase-plane orbit + reconstruction */
+        if (!result) result = dsolve_run_system(&P, dsolve_autosys_solve);
     } else
     switch (method) {
         case DS_AUTOMATIC:
@@ -293,6 +312,13 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_bernoulli_try);
             if (!result) result = dsolve_run(&P, dsolve_homogeneous_try);
             if (!result) result = dsolve_run(&P, dsolve_separable_try);
+            /* Linearizable by u = phi(y) (Log/Exp/Sin/Cos/Tan) -> linear/Bernoulli
+             * in u.  Deterministic (fixed substitution table) and gated to
+             * transcendental-in-y right-hand sides, so it runs ahead of Exact:
+             * it produces a clean explicit y = phi^{-1}(H) for the trig/exp/log-
+             * linearizable family, and gets there before Exact's integrating-
+             * factor search can spin on a transcendental-in-y equation. */
+            if (!result) result = dsolve_run(&P, dsolve_linearizable_try);
             if (!result) result = dsolve_run(&P, dsolve_exact_try);
             if (!result) result = dsolve_run(&P, dsolve_clairaut_try);
             /* Lagrange/d'Alembert (parametric general solution) — Clairaut, its
@@ -398,6 +424,7 @@ Expr* builtin_dsolve(Expr* res) {
             break;
         case DS_ALMOSTLINEAR: result = dsolve_run(&P, dsolve_almostlinear_try);  break;
         case DS_SEPREDUCED:   result = dsolve_run_implicit(&P, dsolve_sepreduced_try); break;
+        case DS_LINEARIZABLE: result = dsolve_run(&P, dsolve_linearizable_try);  break;
         case DS_LIE:          result = dsolve_run_implicit(&P, dsolve_lie_try);   break;
         case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);   break;
         case DS_LIOUVILLE:    result = dsolve_run(&P, dsolve_liouville_try);    break;
@@ -462,6 +489,7 @@ void dsolve_init(void) {
     dsolve_lincoeff_init();
     dsolve_almostlinear_init();
     dsolve_sepreduced_init();
+    dsolve_linearizable_init();
     dsolve_lie_init();
     dsolve_autonomous_init();
     dsolve_liouville_init();
@@ -478,7 +506,10 @@ void dsolve_init(void) {
     dsolve_heat_init();
     dsolve_decouple_init();
     dsolve_triangular_init();
+    dsolve_sys_reduce_init();
     dsolve_linsys_init();
     dsolve_linsys_varcoeff_init();
+    dsolve_linsys_commutative_init();
+    dsolve_autosys_init();
     dsolve_eigenvalue_init();
 }

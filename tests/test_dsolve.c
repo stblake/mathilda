@@ -230,6 +230,67 @@ static void t_euler_inhomogeneous(void) {
     check_true("PossibleZeroQ[(x^2 y''[x] - 2 y[x] - x^2) /. "
                "DSolve[x^2 y''[x] - 2 y[x] == x^2, y, x][[1]]]");
 }
+/* Complex-root inhomogeneous Euler: the x = e^t reduction to constant
+ * coefficients solves it; the older x-domain variation of parameters hung on
+ * the trig-of-Log products (regression for the reported x^2 y'' + y == x^2). */
+static void t_euler_inhomogeneous_complex(void) {
+    check_true("PossibleZeroQ[(x^2 y''[x] + y[x] - x^2) /. "
+               "DSolve[x^2 y''[x] + y[x] == x^2, y, x][[1]]]");
+    /* both fundamental (complex-root) modes are present */
+    check_true("Not[FreeQ[DSolve[x^2 y''[x] + y[x] == x^2, y, x][[1]], C[2]]]");
+    /* non-power forcing g(x) = Log[x] flows through the transformed solve */
+    check_true("PossibleZeroQ[(x^2 y''[x] + 4 x y'[x] + 2 y[x] - Log[x]) /. "
+               "DSolve[x^2 y''[x] + 4 x y'[x] + 2 y[x] == Log[x], y, x][[1]]]");
+    /* an IVP fits both constants through the transformed general solution */
+    check_true("PossibleZeroQ[(x^2 y''[x] + y[x] - x^2) /. "
+               "DSolve[{x^2 y''[x] + y[x] == x^2, y[1] == 0, y'[1] == 0}, "
+               "y, x][[1]]]");
+}
+/* Reported Euler-Cauchy corpus: forcing of every kind (power, resonant power,
+ * double-resonant, 1/x, Log, x^2 e^x -> ExpIntegralEi, Sin[Log], x Log, third
+ * order) and a shifted centre.  All checked by residual, since constant
+ * absorption / phase combination make the surface form differ from Mathematica
+ * while the solution is equivalent. */
+static void t_euler_regression_corpus(void) {
+    /* In[2]: resonant power r=2 (Log[x] term) */
+    check_true("PossibleZeroQ[(x^2 y''[x] - 2 y[x] - x^2) /. "
+               "DSolve[x^2 y''[x] - 2 y[x] == x^2, y[x], x][[1]]]");
+    /* In[3]: non-resonant power forcing */
+    check_true("PossibleZeroQ[(x^2 y''[x] - 2 x y'[x] + 2 y[x] - x^3) /. "
+               "DSolve[x^2 y''[x] - 2 x y'[x] + 2 y[x] == x^3, y[x], x][[1]]]");
+    /* In[4]: double resonance (repeated root r=2, forcing x^2) -> Log[x]^2 */
+    check_true("PossibleZeroQ[(x^2 y''[x] - 3 x y'[x] + 4 y[x] - x^2) /. "
+               "DSolve[x^2 y''[x] - 3 x y'[x] + 4 y[x] == x^2, y[x], x][[1]]]");
+    check_true("Not[FreeQ[DSolve[x^2 y''[x] - 3 x y'[x] + 4 y[x] == x^2, y[x], x][[1]], "
+               "Log[x]^2]]");
+    /* In[5]: complex roots +-i, forcing 1/x */
+    check_true("PossibleZeroQ[(x^2 y''[x] + x y'[x] + y[x] - 1/x) /. "
+               "DSolve[x^2 y''[x] + x y'[x] + y[x] == 1/x, y[x], x][[1]]]");
+    /* In[6]: complex roots, Log[x] forcing */
+    check_true("PossibleZeroQ[(x^2 y''[x] + y[x] - Log[x]) /. "
+               "DSolve[x^2 y''[x] + y[x] == Log[x], y[x], x][[1]]]");
+    /* In[7]: real roots, x^2 e^x forcing -> ExpIntegralEi (x-domain VoP) */
+    check_true("PossibleZeroQ[(x^2 y''[x] - 2 x y'[x] + 2 y[x] - x^2 Exp[x]) /. "
+               "DSolve[x^2 y''[x] - 2 x y'[x] + 2 y[x] == x^2 Exp[x], y[x], x][[1]]]");
+    check_true("Not[FreeQ[DSolve[x^2 y''[x] - 2 x y'[x] + 2 y[x] == x^2 Exp[x], y[x], x][[1]], "
+               "ExpIntegralEi]]");
+    /* In[8]: shifted Euler, centre -1 */
+    check_true("PossibleZeroQ[((x+1)^2 y''[x] - 3 (x+1) y'[x] + 3 y[x] - x^2) /. "
+               "DSolve[(x+1)^2 y''[x] - 3 (x+1) y'[x] + 3 y[x] == x^2, y[x], x][[1]]]");
+    check_true("Not[FreeQ[DSolve[(x+1)^2 y''[x] - 3 (x+1) y'[x] + 3 y[x] == x^2, y[x], x][[1]], "
+               "Log[1 + x]]]");
+    /* In[9]: real roots, Sin[Log[x]] forcing */
+    check_true("PossibleZeroQ[(x^2 y''[x] + 2 x y'[x] - 2 y[x] - Sin[Log[x]]) /. "
+               "DSolve[x^2 y''[x] + 2 x y'[x] - 2 y[x] == Sin[Log[x]], y[x], x][[1]]]");
+    /* In[10]: real roots, resonant x Log[x] forcing */
+    check_true("PossibleZeroQ[(x^2 y''[x] + x y'[x] - y[x] - x Log[x]) /. "
+               "DSolve[x^2 y''[x] + x y'[x] - y[x] == x Log[x], y[x], x][[1]]]");
+    /* In[11]: third-order Euler, x^4 forcing (three constants) */
+    check_true("PossibleZeroQ[(x^3 y'''[x] - 3 x^2 y''[x] + 6 x y'[x] - 6 y[x] - x^4) /. "
+               "DSolve[x^3 y'''[x] - 3 x^2 y''[x] + 6 x y'[x] - 6 y[x] == x^4, y[x], x][[1]]]");
+    check_true("Not[FreeQ[DSolve[x^3 y'''[x] - 3 x^2 y''[x] + 6 x y'[x] - 6 y[x] == x^4, y[x], x][[1]], "
+               "C[3]]]");
+}
 static void t_method_euler(void) {
     check_true("PossibleZeroQ[(x^2 y''[x] - 2 y[x]) /. "
                "DSolve`EulerCauchy[x^2 y''[x] - 2 y[x] == 0, y, x][[1]]]");
@@ -1629,6 +1690,151 @@ static void t_first_order_series_declines(void) {
                "DSolve`FirstOrderPowerSeries");
 }
 
+/* Regression: heap double-free in the Risch-Norman monomial enumerator
+ * (intrischnorman.c enumerate_monomials cap-cleanup) reached via the Lie
+ * first-integral quadrature. Pre-fix these corrupted the heap and crashed.
+ * The assertion is that evaluation completes (a crash aborts the binary) and
+ * returns either a solution (_List) or a clean decline (_DSolve); a generalized
+ * family exercises the same path so the guard is not overfit to one input. */
+static void t_rischnorman_enum_cap_no_crash(void) {
+    check_true("MatchQ[DSolve[x^2 - 1 + (y[x]^2 x^2 + x^3 + x) y'[x] == 0, "
+               "y[x], x], _List | _DSolve]");
+    check_true("MatchQ[DSolve[x^3 - 1 + (y[x]^2 x^2 + x^3 + x) y'[x] == 0, "
+               "y[x], x], _List | _DSolve]");
+    check_true("MatchQ[DSolve[2 x^2 - 3 + (y[x]^2 x^2 + x^3 + 2 x) y'[x] == 0, "
+               "y[x], x], _List | _DSolve]");
+    check_true("MatchQ[DSolve[x^4 - 1 + (y[x]^2 x^4 + x^5 + x) y'[x] == 0, "
+               "y[x], x], _List | _DSolve]");
+    /* direct multi-kernel Risch-Norman integrands drive a large basis */
+    check_true("MatchQ[Integrate[Exp[x] Log[x] Sin[x], x], _]");
+    check_true("MatchQ[Integrate[x^3 Exp[x] Log[x]^2 Sin[x], x], _]");
+}
+
+/* First-order linear ODEs with trig/elementary coefficients, which route
+ * through the integrating-factor solver mu = PowerExpand[Simplify[Exp[Int p]]].
+ * Pre-fix these hung (mu = Exp[messy Int Tan] left an un-collapsed
+ * Sqrt[Sec^2]/rational-trig integrand that spun in Integrate).  Verified by
+ * back-substitution residual. */
+static void t_trig_coeff_linear_first_order(void) {
+    check_true("PossibleZeroQ[(y'[x] + Tan[x] y[x] - 3 Cos[x]^2) /. "
+               "DSolve[y'[x] + Tan[x] y[x] == 3 Cos[x]^2, y[x], x][[1]]]");
+    check_true("PossibleZeroQ[(y'[x] - Tan[x] y[x] - Cos[x]) /. "
+               "DSolve[y'[x] - Tan[x] y[x] == Cos[x], y[x], x][[1]]]");
+    check_true("PossibleZeroQ[(y'[x] + Cot[x] y[x] - Csc[x]) /. "
+               "DSolve[y'[x] + Cot[x] y[x] == Csc[x], y[x], x][[1]]]");
+    check_true("PossibleZeroQ[(y'[x] + Tanh[x] y[x] - 1) /. "
+               "DSolve[y'[x] + Tanh[x] y[x] == 1, y[x], x][[1]]]");
+}
+
+/* First-order ODEs linearizable by u = phi(y) (DSolve`Linearizable): reduce to
+ * a linear/Bernoulli equation in u, solve, map back y = phi^{-1}(u).  Verified
+ * by back-substitution (y -> Function so y'[x] resolves). */
+static void t_linearizable_first_order(void) {
+    /* Log-family -> linear in Log[y] */
+    check_true("PossibleZeroQ[(y'[x] - y[x](Exp[x] + Log[y[x]])) /. "
+               "DSolve[y'[x] == y[x](Exp[x] + Log[y[x]]), y, x][[1]]]");
+    /* Exp-family -> linear in Exp[y] */
+    check_true("PossibleZeroQ[(y'[x] - Exp[x - y[x]](Exp[x] - Exp[y[x]])) /. "
+               "DSolve[y'[x] == Exp[x - y[x]](Exp[x] - Exp[y[x]]), y, x][[1]]]");
+    /* Sin-family -> linear in Sin[y] */
+    check_true("PossibleZeroQ[(y'[x] - Tan[y[x]]/(x+1) - (x+1) Exp[x] Sec[y[x]]) /. "
+               "DSolve[y'[x] - Tan[y[x]]/(x+1) == (x+1) Exp[x] Sec[y[x]], y, x][[1]]]");
+    /* Sin-family -> Bernoulli in Sin[y] */
+    check_true("PossibleZeroQ[(y'[x] Cos[y[x]] - Cos[x] Sin[y[x]]^2 - Sin[y[x]]) /. "
+               "DSolve[y'[x] Cos[y[x]] - Cos[x] Sin[y[x]]^2 - Sin[y[x]] == 0, y, x][[1]]]");
+    /* Cos-family -> Bernoulli in Cos[y], with a Log[x] coefficient */
+    check_true("PossibleZeroQ[(y'[x] - (-2 Cos[y[x]] + x^3 Cos[2 y[x]] Log[x] + x^3 Log[x])"
+               "/(2 Sin[y[x]] Log[x] x)) /. "
+               "DSolve[y'[x] == (-2 Cos[y[x]] + x^3 Cos[2 y[x]] Log[x] + x^3 Log[x])"
+               "/(2 Sin[y[x]] Log[x] x), y, x][[1]]]");
+}
+
+/* Higher-order linear ODEs whose input form hides their class, fixed by
+ * dsolve_linear_normalize: a rational RHS solved for the top derivative clears to
+ * Euler form; a common coefficient factor divides out to constant-coefficient. */
+static void t_linear_coeff_normalization(void) {
+    /* #95: y''' == (24x+24y)/x^3  -> Euler x^3 y''' - 24 y == 24 x */
+    check_true("PossibleZeroQ[(y'''[x] - (24 x + 24 y[x])/x^3) /. "
+               "DSolve[y'''[x] == (24 x + 24 y[x])/x^3, y, x][[1]]]");
+    /* #96: x(y'''+2y''-y'-2y) == 1 -> const-coeff y'''+2y''-y'-2y == 1/x */
+    check_true("PossibleZeroQ[(x y'''[x]+2 y''[x] x-y'[x] x-2 y[x] x-1) /. "
+               "DSolve[x y'''[x]+2 y''[x] x-y'[x] x-2 y[x] x==1, y, x][[1]]]");
+    /* common factor -> const-coeff (2nd order) */
+    check_true("PossibleZeroQ[(x y''[x]+3 x y'[x]+2 x y[x]-1) /. "
+               "DSolve[x y''[x]+3 x y'[x]+2 x y[x]==1, y, x][[1]]]");
+}
+
+/* Variable-coefficient first-order linear systems: the scalar-factor class
+ * A(t) = f(t) B (extract_Ab now admits a t-dependent leading coefficient) and
+ * the 2x2 commutative class A = a(t) I + b(t) K0 (DSolve`LinearSystemCommutative:
+ * rotation / hyperbolic / nilpotent).  Verified by back-substitution residual. */
+static void t_system_varcoeff(void) {
+    /* scalar-factor A = (1/t) B */
+    check_true("PossibleZeroQ[(t x'[t] + y[t]) /. "
+               "DSolve[{t x'[t]+y[t]==0, t y'[t]+x[t]==0}, {x[t],y[t]}, t][[1]]]");
+    /* scalar-factor with forcing */
+    check_true("PossibleZeroQ[(t x'[t]+2 x[t]-2 y[t]-t) /. "
+               "DSolve[{t x'[t]+2 x[t]-2 y[t]==t, t y'[t]+x[t]+5 y[t]==t^2}, "
+               "{x[t],y[t]}, t][[1]]]");
+    /* commutative hyperbolic K0^2 = I */
+    check_true("PossibleZeroQ[(x'[t]+x[t]-t y[t]) /. "
+               "DSolve[{x'[t]==-x[t]+t y[t], y'[t]==t x[t]-y[t]}, {x[t],y[t]}, t][[1]]]");
+    /* commutative rotation K0^2 = -I */
+    check_true("PossibleZeroQ[(x'[t]-x[t] Cos[t]+Sin[t] y[t]) /. "
+               "DSolve[{x'[t]==x[t] Cos[t]-Sin[t] y[t], y'[t]==x[t] Sin[t]+y[t] Cos[t]}, "
+               "{x[t],y[t]}, t][[1]]]");
+    /* commutative rotation with a = 1/t */
+    check_true("PossibleZeroQ[(x'[t]-x[t]/t-y[t]) /. "
+               "DSolve[{x'[t]==x[t]/t+y[t], y'[t]==-x[t]+y[t]/t}, {x[t],y[t]}, t][[1]]]");
+}
+
+/* 2-D autonomous (nonlinear) systems via the phase-plane reduction
+ * (DSolve`AutonomousSystem): solve the orbit dy/dx==g/f, reconstruct x(t).
+ * Verified by back-substitution; radical-orbit systems must decline (not crash). */
+static void t_system_autonomous(void) {
+    /* orbit y = C x -> exponential */
+    check_true("PossibleZeroQ[(x'[t] - y[t]) /. "
+               "DSolve[{x'[t]==y[t], y'[t]==y[t]^2/x[t]}, {x[t],y[t]}, t][[1]]]");
+    check_true("PossibleZeroQ[(y'[t] - y[t]^2/x[t]) /. "
+               "DSolve[{x'[t]==y[t], y'[t]==y[t]^2/x[t]}, {x[t],y[t]}, t][[1]]]");
+    /* orbit x y = C */
+    check_true("PossibleZeroQ[(x'[t] + 1/y[t]) /. "
+               "DSolve[{x'[t]==-1/y[t], y'[t]==1/x[t]}, {x[t],y[t]}, t][[1]]]");
+    /* orbit y = C x, Sqrt reconstruction */
+    check_true("PossibleZeroQ[(x'[t] - 1/y[t]) /. "
+               "DSolve[{x'[t]==1/y[t], y'[t]==1/x[t]}, {x[t],y[t]}, t][[1]]]");
+    /* radical orbit -> declines cleanly, no crash (returns unevaluated) */
+    check_true("MatchQ[DSolve[{x'[t]==y[t]/(x[t]-y[t]), y'[t]==x[t]/(x[t]-y[t])}, "
+               "{x[t],y[t]}, t], _DSolve | _List]");
+}
+
+/* Higher-order coupled linear ODE systems via state augmentation
+ * (DSolve`SystemReduce).  Verified by back-substitution into the ORIGINAL
+ * higher-order equations.  Covers: pure 2nd-order coupled, mixed order (one
+ * function 2nd, one 1st), a complex/mixed spectrum, and a forced system
+ * (variation of parameters). */
+static void t_system_higher_order(void) {
+    /* pure 2nd order, x''=4y, y''=4x (spectrum +/-2, +/-2i) */
+    check_true("PossibleZeroQ[(x''[t] - 4 y[t]) /. "
+               "DSolve[{x''[t]==4 y[t], y''[t]==4 x[t]}, {x[t],y[t]}, t][[1]]]");
+    check_true("PossibleZeroQ[(y''[t] - 4 x[t]) /. "
+               "DSolve[{x''[t]==4 y[t], y''[t]==4 x[t]}, {x[t],y[t]}, t][[1]]]");
+    /* mixed order: x is 2nd order, y is 1st order */
+    check_true("PossibleZeroQ[(x''[t]+x'[t]+y'[t]-2 y[t]) /. "
+               "DSolve[{x''[t]+x'[t]+y'[t]-2 y[t]==0, x'[t]+x[t]-y'[t]==0}, "
+               "{x[t],y[t]}, t][[1]]]");
+    check_true("PossibleZeroQ[(x'[t]+x[t]-y'[t]) /. "
+               "DSolve[{x''[t]+x'[t]+y'[t]-2 y[t]==0, x'[t]+x[t]-y'[t]==0}, "
+               "{x[t],y[t]}, t][[1]]]");
+    /* forced 2nd-order system (variation of parameters) */
+    check_true("PossibleZeroQ[(x''[t]-4 y[t]-Exp[t]) /. "
+               "DSolve[{x''[t]==4 y[t]+Exp[t], y''[t]==4 x[t]-Exp[t]}, "
+               "{x[t],y[t]}, t][[1]]]");
+    /* the number of arbitrary constants equals the total order (2+2 = 4) */
+    check_true("Length[Union[Cases[DSolve[{x''[t]==2 x[t]-3 y[t], "
+               "y''[t]==x[t]-2 y[t]}, {x[t],y[t]}, t], C[_], Infinity]]] == 4");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1673,6 +1879,15 @@ int main(void) {
     TEST(t_euler_real);
     TEST(t_euler_repeated);
     TEST(t_euler_inhomogeneous);
+    TEST(t_euler_inhomogeneous_complex);
+    TEST(t_euler_regression_corpus);
+    TEST(t_rischnorman_enum_cap_no_crash);
+    TEST(t_trig_coeff_linear_first_order);
+    TEST(t_linearizable_first_order);
+    TEST(t_linear_coeff_normalization);
+    TEST(t_system_varcoeff);
+    TEST(t_system_autonomous);
+    TEST(t_system_higher_order);
     TEST(t_method_euler);
     TEST(t_method_exactode);
     TEST(t_exactode_more);

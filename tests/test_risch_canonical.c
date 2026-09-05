@@ -272,6 +272,30 @@ static void test_canonical_robustness(void) {
     run_test("Head[Risch`NormalQ[t, t]] === Risch`NormalQ", "True");                     /* wrong arity */
 }
 
+/* ---- Regression: no crash on a non-polynomial-in-t input --------------
+ * risch_squarefree_t models its argument as a polynomial in the monomial t.
+ * The field gcd / exact-division primitives return NULL when handed something
+ * that is not (a radical / algebraic-in-t expression, as arises during an
+ * autonomous-system orbit reconstruction).  Before the fix that NULL flowed
+ * unchecked into rc_ddt / rc_sub_expand, which built a function node with a
+ * NULL argument and handed it to evaluate() -> SIGSEGV.  Each of the inputs
+ * below segfaulted the process on the unfixed code; they must now return a
+ * well-formed List (the routine declines, yielding empty factor lists).       */
+static void test_squarefree_radical_no_crash(void) {
+    #define SSF_RAD(P) "Head[Risch`SplitSquarefreeFactor[" P ", t, {x -> 1, t -> 1}]] === List"
+    run_test(SSF_RAD("Sqrt[t]*t^2 + t"),        "True");
+    run_test(SSF_RAD("Sqrt[t^2 + x]*t + t^2"),  "True");
+    run_test(SSF_RAD("t^2/(t - Sqrt[t^2 + 1])"),"True");
+    run_test(SSF_RAD("(t - Sqrt[t^2 + 1])*t"),  "True");
+    run_test(SSF_RAD("t^(3/2) + t"),            "True");
+    run_test(SSF_RAD("Sqrt[t] + 1"),            "True");
+    run_test(SSF_RAD("(x t - 1)^2 * Sqrt[t]"),  "True");
+    run_test(SSF_RAD("Sqrt[t]*(t^2 + t + 1)"),  "True");
+    run_test(SSF_RAD("t^(5/2) - 3 t^2 + 1"),    "True");
+    run_test(SSF_RAD("Sqrt[t^3 + t] + t^4"),    "True");
+    #undef SSF_RAD
+}
+
 int main(void) {
     core_init();
 
@@ -287,6 +311,7 @@ int main(void) {
     TEST(test_split_squarefree_edge);
     TEST(test_canonical_all_kinds);
     TEST(test_canonical_robustness);
+    TEST(test_squarefree_radical_no_crash);
 
     printf("All risch_canonical tests passed.\n");
     return 0;

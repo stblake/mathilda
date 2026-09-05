@@ -160,10 +160,21 @@ Expr** risch_squarefree_t(const Expr* p, const Expr* t, size_t* count) {
     Expr** out = malloc(cap * sizeof(Expr*));
 
     Expr* pp = rc_ddt(p, t);                        /* p' = dp/dt */
-    Expr* g  = risch_field_gcd_t(p, pp, t);         /* g  = gcd(p, p') */
-    Expr* c  = risch_field_divexact_t(p, g, t);     /* c1 = p / g */
-    Expr* ppg = risch_field_divexact_t(pp, g, t);   /* p'/g */
+    Expr* g  = pp ? risch_field_gcd_t(p, pp, t) : NULL;   /* g  = gcd(p, p') */
+    Expr* c  = g  ? risch_field_divexact_t(p, g, t)  : NULL;   /* c1 = p / g   */
+    Expr* ppg = g ? risch_field_divexact_t(pp, g, t) : NULL;   /* p'/g         */
     expr_free(pp); expr_free(g);
+    /* The field-in-t arithmetic (gcd / exact division) declines — returning
+     * NULL — on an input that is not a genuine polynomial in the transcendental
+     * monomial `t` (e.g. a radical / algebraic-in-t integrand handed in during
+     * a reconstruction step). Propagating a NULL `c`/`ppg` into rc_ddt /
+     * rc_sub_expand builds a function node with a NULL argument and hands it to
+     * evaluate() -> NULL-deref. Decline cleanly instead: no squarefree factors. */
+    if (!c || !ppg) {
+        expr_free(c); expr_free(ppg);
+        free(out);
+        return NULL;
+    }
     /* dd = p'/g - c1'  */
     Expr* c1d = rc_ddt(c, t);
     Expr* dd = rc_sub_expand(ppg, c1d);

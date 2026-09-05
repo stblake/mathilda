@@ -24,6 +24,42 @@ static Expr* xpow_expr(const char* xvar, Expr* p) {
                              (Expr*[]){ expr_new_symbol(xvar), p }, 2);
 }
 
+/* Does `e` syntactically mention the interned symbol `name`? */
+static bool sr_mentions(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
+    if (e->type == EXPR_FUNCTION) {
+        if (sr_mentions(e->data.function.head, name)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (sr_mentions(e->data.function.args[i], name)) return true;
+    }
+    return false;
+}
+
+/* True iff `e` depends on the dependent variable `yname` through anything other
+ * than a rational combination (Plus/Times/integer-power) — i.e. a transcendental
+ * head (Sin, Exp, Log, …) or a non-integer power wraps a y-containing subterm.
+ * SeparableReduced (SymPy `separable_reduced`) is defined only for F rational in
+ * (x, y); running its n = x r_x/(Y r_Y) Simplify on a trig/irrational F blows up
+ * (the #15/#16/#19/#76 hangs) before the shape can be rejected, so gate up front. */
+static bool sr_irrational_in_y(const Expr* e, const char* yname) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    const char* hn = (h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+    if (hn == SYM_Power && e->data.function.arg_count == 2) {
+        if (sr_mentions(e->data.function.args[0], yname)
+            && e->data.function.args[1]->type != EXPR_INTEGER)
+            return true;                         /* y^(non-integer) : irrational */
+    } else if (hn != SYM_Plus && hn != SYM_Times) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (sr_mentions(e->data.function.args[i], yname))
+                return true;                     /* transcendental function of y */
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sr_irrational_in_y(e->data.function.args[i], yname)) return true;
+    return false;
+}
+
 Expr** dsolve_sepreduced_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1 || P->max_order[0] != 1) return NULL;
     const char* yname = P->fun_names[0];
@@ -33,6 +69,12 @@ Expr** dsolve_sepreduced_try(DSolveProblem* P, size_t* nbranch) {
 
     Expr* F = dsolve_solve_top_derivative(P, 1);
     if (!F) return NULL;
+
+    /* Anti-hang / shape gate: SeparableReduced is only defined for F rational in
+     * the dependent variable.  A trig/exp/irrational dependence on y makes the
+     * n = x r_x/(Y r_Y) Simplify diverge, so decline cleanly here (the cascade
+     * then reaches Lie/substitution methods). */
+    if (sr_irrational_in_y(F, yname)) { expr_free(F); return NULL; }
 
     /* r = x F / y, with y[x] -> Y */
     Expr* r = eval_and_free(ds_call2(SYM_Times, expr_new_symbol(xvar),

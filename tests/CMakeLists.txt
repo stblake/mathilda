@@ -715,6 +715,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_lincoeff.c
     ../src/calculus/dsolve_almostlinear.c
     ../src/calculus/dsolve_sepreduced.c
+    ../src/calculus/dsolve_linearizable.c
     ../src/calculus/dsolve_lie.c
     ../src/calculus/dsolve_autonomous.c
     ../src/calculus/dsolve_liouville.c
@@ -729,8 +730,11 @@ set(COMMON_SRC
     ../src/calculus/dsolve_heat.c
     ../src/calculus/dsolve_decouple.c
     ../src/calculus/dsolve_triangular.c
+    ../src/calculus/dsolve_sys_reduce.c
     ../src/calculus/dsolve_linsys.c
     ../src/calculus/dsolve_linsys_varcoeff.c
+    ../src/calculus/dsolve_linsys_commutative.c
+    ../src/calculus/dsolve_autosys.c
     ../src/calculus/dsolve_eigenvalue.c
     ../src/calculus/dsolve_normalform.c
     ../src/calculus/dsolve_frobenius.c

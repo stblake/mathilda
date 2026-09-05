@@ -29,6 +29,7 @@ Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch) {
 
     Expr** a; Expr* g; int n;
     if (!dsolve_linear_coeffs(P, &a, &g, &n)) return NULL;
+    dsolve_linear_normalize(a, &g, n, P->ind_names[0]);
 
     /* constant coefficients: every a_k free of x, leading a_n nonzero */
     bool ok = true;

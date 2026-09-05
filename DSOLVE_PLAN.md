@@ -424,7 +424,24 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   `linear_coefficients`.) `dsolve_lincoeff.c`.
 - `[✓] SeparableReduced` — `x y'/y == G(x^n y)`: `n = x r_x/(y r_y)`, substitution
   `w=x^n y` → `Separable`; implicit first integral. (SymPy `separable_reduced`.)
-  `dsolve_sepreduced.c`.
+  `dsolve_sepreduced.c`. Gated to `F` rational-in-`y` (a trig/irrational
+  dependence on `y` made the `n` Simplify diverge).
+- `[✓] Linearizable` — first-order ODEs that become **linear or Bernoulli in a
+  new variable `u = phi(y)`** for elementary `phi` (Log/Exp/Sin/Cos/Tan): with
+  `u' = phi'(y) F(x,y)` re-expressed through `y = phi^{-1}(u)`, the RHS collapses
+  to `G(x,u)` linear/Bernoulli in `u`. Linear `G` is integrated directly
+  (`dsolve_linear_factor_solve`); a Bernoulli `G` recurses into the cascade under
+  a re-entry guard; then `y = phi^{-1}(H)`. The Sin/Cos/Tan cases introduce a
+  `Sqrt[1-u^2]`/`Sqrt[1+u^2]` from `Cos[ArcSin[u]]` etc. — a candidate is kept
+  only when that radical cancels (cheap eval-then-check, full Simplify only when
+  an inverse-trig remains that it can collapse, e.g. `Cos[2 ArcCos u] -> 2u^2-1`).
+  Gate: `F` transcendental in `y`; a per-`phi` kernel pre-filter avoids the
+  costly Simplify on inapplicable substitutions. Runs after the y-linear/
+  y-Bernoulli/separable specialists and **before Exact** (whose integrating-factor
+  search otherwise spins on a transcendental-in-`y` equation). Solves the Maple
+  `[F(x),G(x)y+H(x)]`-symmetry log family and the trig/exp-linearizable family
+  (`y'Cos[y] = Cos[x]Sin[y]^2 + Sin[y]`, `y' = e^{x-y}(e^x-e^y)`, …) with a clean
+  explicit `y = phi^{-1}(H)`. `dsolve_linearizable.c`.
 - `[✓] LieSymmetry` (`DSolve`LieGroup`/`LieSymmetry`) — heuristic infinitesimal
   point-symmetry method; the general first-order backstop, run after the specialists
   and before the series fallback. All ansatz heuristics implemented except the
@@ -466,6 +483,15 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   `dsolve_lie.c`.
 
 ### 1b. Linear constant-coefficient
+
+*Coefficient normalization (shared by const-coeff / Euler / undetermined-coeff):*
+`dsolve_linear_normalize` clears denominators (so a rational-RHS form
+`y''' == (24x+24y)/x^3` becomes the polynomial-coefficient Euler `x^3 y''' - 24y
+== 24x`) and divides by the polynomial GCD of the coefficients (so
+`x(y'''+2y''-y'-2y) == 1` becomes the CONSTANT-coefficient `y'''+2y''-y'-2y ==
+1/x`). Depth-gated to the outermost call so it does not slow `OperatorFactor`'s
+recursive sub-solves.
+
 - `[✓] LinearConstantCoefficients` — one method for homogeneous + inhomogeneous.
   Characteristic polynomial `Σ a_k λ^k`; roots via `Solve` with derivative-based
   multiplicity + dedup; complex-conjugate pairs → `e^(ax)(Cos,Sin)`; repeated
@@ -586,7 +612,8 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 ### 1e. Systems
 
 Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
-`LinearFirstOrderSystem`.
+`SystemReduce` → `LinearFirstOrderSystem` → `LinearSystemVarCoeff` →
+`LinearSystemCommutative` → `AutonomousSystem`.
 
 - `[✓] DecoupleSystem` — each equation involves one function: recurse into the scalar
   engine per function, renumber the generated constants. Handles variable-coefficient
@@ -598,6 +625,25 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   avoid colliding with the scalar engine's fresh `C[k]`). Coupled-but-triangular at
   **any** coefficient — constant or variable
   (`{y'==0, x'+y==0}` → `y=C[1], x=C[2]-C[1]x`;  `{y'==y/x, z'==y}`).
+- `[✓] SystemReduce` — **higher-order coupled linear systems** by STATE
+  AUGMENTATION. For functions of orders `m_j`, the state
+  `Y = (u_1,u_1',…,u_1^(m_1-1), u_2,…)` (`|Y| = Σ m_j`) advances as
+  `s_{j,k}' = s_{j,k+1}`, with the top rows `s_{j,m_j-1}' = u_j^(m_j)` obtained
+  by solving the `n` original equations for the `n` top derivatives (`LinearSolve`
+  on the leading matrix `L = ∂R/∂(u_j^(m_j))`). This yields `Y' == A Y + b(x)`;
+  when `A` is constant it is fed straight to `dsolve_linsys_assemble` (the same
+  Jordan → `e^{At}` → variation-of-parameters engine as `LinearFirstOrderSystem`,
+  so defective/complex spectra and forcing come for free), then the `u_j = s_{j,0}`
+  components are read back. Solves the constant-coefficient second-/higher-order
+  systems (`{x''+x'+y'-2y==0, x'+x-y'==0}`, `{x''==4y, y''==4x}`, mixed orders,
+  forced). Declines a **variable** `A` (variable-coefficient higher-order system)
+  or a **singular** leading matrix `L` (a differential-algebraic leading form) —
+  both routed to the future operator-determinant elimination fallback (P1b).
+  `dsolve_sys_reduce.c`. *(Realification note: the shared `dsolve_linsys_tidy` is
+  size/content-adaptive — a large or mixed exp+trig augmented body gets `Expand`
+  instead of a full `Simplify`, which otherwise spends tens of seconds in
+  `Together`; the result is back-substitution-verified either way.)* This is the
+  work `M8` promised at `:247` but never landed.
 - `[✓] LinearFirstOrderSystem` — `Y' == A Y + b(x)`, constant `A`, **any** spectrum.
   Fundamental matrix `Φ = e^{Ax} = S · e^{Jx} · S^{-1}` from `JordanDecomposition`
   (diagonalizable → `C e^{λx} v`; **defective → `x^k e^{λx}`** generalized-eigenvector
@@ -615,6 +661,37 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   antiderivative class (`[A,∫A]==0` but not scalar×constant) and the genuinely
   non-commuting Floquet/Magnus case — both need a symbolic `MatrixExp` of a variable
   matrix. (SymPy's non-constant `linear_neq_order1`.)
+- `[✓] AutonomousSystem` — 2-D **autonomous** systems `x'==f(x,y)`, `y'==g(x,y)`
+  (`f,g` free of `t`), including **nonlinear**, by the phase-plane reduction:
+  eliminate `t` via the orbit ODE `dy/dx == g/f` (a scalar first-order ODE the
+  cascade solves), then reconstruct `x(t)` from `x'==f(x,Y(x))` along the orbit;
+  `y(t)=Y(x(t))`. The orbit constant is renumbered to `C[2]` so the
+  reconstruction's fresh `C[1]` cannot collide. Solves `{x'=y, y'=y^2/x}` (orbit
+  `y=Cx`), `{x'=-1/y, y'=1/x}` (`xy=C`), `{x'=x/y, y'=y/x}` (`1/x-1/y=C`),
+  `{x'=1/y, y'=1/x}`. Restricted to a **rational** orbit + field: a radical orbit
+  (e.g. `Sqrt[x^2+C]` from `{x'=y/(x-y), y'=x/(x-y)}`) gives a nonelementary
+  reconstruction and is declined (that path also currently exposes a pre-existing
+  NULL deref in the radical Risch–Norman `risch_squarefree_t`). Last in the system
+  cascade. `dsolve_autosys.c`. *Future:* implicit-orbit / radical-orbit
+  reconstruction once the elliptic quadratures are supported.
+  Also: `dsolve_linsys_extract_Ab` now admits a **t-dependent leading-derivative
+  coefficient** (`t x' + y == 0`), dividing through to a variable `A` — so the
+  scalar-factor class is reached from the natural `t x' = …` spelling, not only
+  the pre-divided `x' = …/t` one.
+- `[✓] LinearSystemCommutative` — the **2x2 commutative class**
+  `A(t) == a(t) I + b(t) K0` (`K0` constant), i.e. `[A, ∫A] == 0`, where the
+  fundamental matrix is the ordinary exponential
+  `Phi = Exp[∫a] · Exp[(∫b) K0]` with, for constant traceless `K0` and
+  `mu^2 = -det K0`, `Exp[s K0] = Cosh[mu s] I + (Sinh[mu s]/mu) K0` (nilpotent
+  `mu=0`: `I + s K0`; complex `mu` realifies to the rotation Cos/Sin). Decomposed
+  by trace (`a`) and one scalar factor for the traceless remainder (`b K0`, `K0`
+  constant), which is robust where a symbolic `Eigenvectors[A]` returns a
+  non-constant `Sign[t]`-scaled basis. Covers the rotation/decay families the
+  scalar-factor reduction misses (`{x'=-x+t y, y'=t x-y}`, `{x'=x Cos t-y Sin t,
+  y'=x Sin t+y Cos t}`, `{x'=x/t+y, y'=-x+y/t}`, `(t^2+1)`-scaled). Forcing by
+  variation of parameters; after `LinearSystemVarCoeff` in the cascade; declines
+  constant or non-commutative `A`. `dsolve_linsys_commutative.c`. *Future:* the
+  n×n commutative case and the genuinely non-commuting Floquet/Magnus case.
 
 ### 1f. Conditions
 - `[✓]` IVP (fit constants at one point) — in the substrate.
