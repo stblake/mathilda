@@ -141,6 +141,7 @@ extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_changevar_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_first_order_series_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_shifted_try(DSolveProblem* P, size_t* nbranch);
@@ -176,6 +177,7 @@ extern void dsolve_lie_init(void);
 extern void dsolve_autonomous_init(void);
 extern void dsolve_liouville_init(void);
 extern void dsolve_lie2_init(void);
+extern void dsolve_changevar_init(void);
 extern void dsolve_frobenius_init(void);
 extern void dsolve_normalform_init(void);
 extern Expr** dsolve_pde1_solve(DSolveProblem* P);
@@ -338,6 +340,11 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_exactode_try);
             if (!result) result = dsolve_run(&P, dsolve_specialform_try);
             if (!result) result = dsolve_run(&P, dsolve_kovacic_try);
+            /* ChangeOfVariable: a 2nd-order linear ODE with TRANSCENDENTAL
+             * coefficients that the direct rational methods above declined may
+             * become rational under t = phi(x) (Cos/Sin/Tan) — transform, recurse,
+             * back-substitute (e.g. y''+Cot[x]y'+k(k+1)y==0 -> Legendre). */
+            if (!result) result = dsolve_run(&P, dsolve_changevar_try);
             /* Third-order symmetric squares (solution space = products of a
              * second-order basis: Airy^2, Bessel products, ...).  Before
              * operfactor, which would otherwise churn on the non-factorable
@@ -502,6 +509,7 @@ void dsolve_init(void) {
     dsolve_autonomous_init();
     dsolve_liouville_init();
     dsolve_lie2_init();
+    dsolve_changevar_init();
     dsolve_frobenius_init();
     dsolve_normalform_init();
     dsolve_pde1_init();

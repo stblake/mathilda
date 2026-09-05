@@ -1766,6 +1766,19 @@ static void t_second_order_symmetry(void) {
     check_true("Head[DSolve`SecondOrderSymmetry[y''[x]+y[x]==0, y, x]] =!= List");
 }
 
+/* M14: DSolve`ChangeOfVariable — transcendental-coefficient 2nd-order linear ODE
+ * rationalized by t = phi(x) (Cos/Sin/Tan), e.g. Legendre via t = Cos[x]. */
+static void t_change_of_variable(void) {
+    /* y'' + Cot[x] y' + k(k+1) y == 0  --(t=Cos[x])-->  Legendre; check C-coeffs vanish */
+    check_true("With[{s=DSolve[y''[x]+Cot[x] y'[x]+6 y[x]==0, y, x]}, "
+               "Head[s]===List && Module[{r=Simplify[(y''[x]+Cot[x] y'[x]+6 y[x]) /. s[[1]]]}, "
+               "Abs[N[Coefficient[r,C[1]] /. x->13/10, 12]] < 10^-5 && "
+               "Abs[N[Coefficient[r,C[2]] /. x->13/10, 12]] < 10^-5]]");
+    check_form("Head[DSolve`ChangeOfVariable[y''[x]+Cot[x] y'[x]+6 y[x]==0, y, x]]", "List");
+    /* declines an already-rational ODE (owned by the direct methods) */
+    check_true("Head[DSolve`ChangeOfVariable[y''[x]+y[x]==0, y, x]] =!= List");
+}
+
 /* Higher-order linear ODEs whose input form hides their class, fixed by
  * dsolve_linear_normalize: a rational RHS solved for the top derivative clears to
  * Euler form; a common coefficient factor divides out to constant-coefficient. */
@@ -1902,6 +1915,7 @@ int main(void) {
     TEST(t_trig_coeff_linear_first_order);
     TEST(t_linearizable_first_order);
     TEST(t_second_order_symmetry);
+    TEST(t_change_of_variable);
     TEST(t_linear_coeff_normalization);
     TEST(t_system_varcoeff);
     TEST(t_system_autonomous);

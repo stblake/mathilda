@@ -56,3 +56,17 @@ inherited Integrate/Solve-engine leak (as `AlmostLinear`); lie2's own ownership 
 **Out of scope / follow-ups:** pre-existing `DSolve`Separable` inversion hang on
 `q'==-2q(1+q)(1+2q)/r`; linear var-coeff timeouts (EQ4/5/9/10/11 — Kovacic/special-fn,
 M14 territory). Roadmap M13–M17 in `DSOLVE_PLAN.md`.
+
+## M13/M14 session addendum
+
+- **M13 (Abel/AIR): DEFERRED** — investigated thoroughly; the corpus `[_rational,_Abel]`
+  set (≈9/10 first-kind are `y'=f3 y³+f2 y²`) is not the constant-invariant class
+  (canonical `G0/G3` non-constant; reciprocal→Chini(n=−1) also declines). Needs the
+  full Abel Invariant Rational hierarchy (research-grade; Nasser's own solver + SymPy
+  both fail on precisely these). Not hacked (would risk wrong answers/overfit).
+- **M14 (ChangeOfVariable): DONE** — `src/calculus/dsolve_changevar.c`. 2nd-order linear
+  with transcendental coeffs → `t=φ(x)` (Cos/Sin/Tan) rationalizes → recurse → back-sub.
+  Flagship: `y''+Cot[x]y'+k(k+1)y==0 → Legendre`. Numerically verified on the original
+  (Legendre-Q has Log → undecidable residual). Bounded (TimeConstrained + deadline +
+  decline memo + re-entry guard). Anti-overfit: 2 families 9/9 (`test_dsolve_m14_stress.c`).
+  Valgrind leak-flat vs baseline. All 5 DSolve suites + check-c99 green.

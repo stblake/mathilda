@@ -411,6 +411,47 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     count; ownership within `dsolve_lie2.c` is clean. All DSolve ctest suites +
     `dsolve_m12_stress` + `make check-c99` green.
 
+- **M13 — Abel invariant (AIR).** ⏸ DEFERRED (research-grade). Investigation
+  established that the 12000.org `[_rational, _Abel]` corpus (≈9/10 of the
+  first-kind examples are `y' = f3(x)y³ + f2(x)y²`) is NOT in the tractable
+  constant-invariant class (the canonical `G0/G3` invariant is non-constant; the
+  reciprocal `y=1/v → Chini(n=−1)` forms also decline), and needs the full Abel
+  Invariant Rational method (Cheb-Terrab's multi-year algorithm; Nasser's own
+  solver *and* SymPy both fail on precisely these). A faithful implementation is
+  out of a single milestone's reach and a partial one risks wrong answers /
+  overfit, so it is deferred rather than hacked. Revisit with the dedicated AIR
+  invariant hierarchy + a checked-in solvable-class table.
+
+- **M14 — linear change-of-variable to canonical form (`ChangeOfVariable`).** ✅ DONE.
+  Second-order **linear** ODEs with TRANSCENDENTAL coefficients that the direct
+  rational methods (Euler/Kovacic/SpecialFunctionForm/Frobenius) miss, because they
+  are rational only after a change of the INDEPENDENT variable `t = phi(x)`.
+  `dsolve_changevar.c`.
+  - For `y'' + P(x) y' + Q(x) y == 0`, the substitution gives `Y'' + A(t) Y' +
+    B(t) Y == 0` with `A = (phi''+P phi')/phi'^2`, `B = Q/phi'^2` re-expressed in
+    `t`. Candidate `phi ∈ {Cos, Sin, Tan}[x]`, each with the trig-identity rewrite
+    (`Sin[x]→√(1−t²)`, … for `t=Cos[x]`) that rationalizes the coefficients; when
+    `A,B` come out rational in `t` the transformed equation is handed back to the
+    scalar cascade and the solution composed with `t=phi(x)`.
+  - Flagship: `y'' + Cot[x] y' + k(k+1) y == 0 --(t=Cos[x])--> (1−t²)Y''−2tY'+
+    k(k+1)Y==0` (Legendre), solved by Kovacic (integer degree).
+  - Verified NUMERICALLY on the ORIGINAL equation (the composed solution carries
+    Legendre-Q `Log` terms whose residual `zero_test` cannot decide, so dsolve_run's
+    symbolic verify alone would keep a bad transform). Bounded exactly as M12
+    (TimeConstrained sub-solves + wall-clock deadline + decline memo + a re-entry
+    guard, since it recurses `DSolve`); transcendental-coefficient gate so it never
+    touches an already-rational ODE.
+  - Cascade slot: after `Kovacic`, before the reduction/series methods.
+  - *Anti-overfit:* two forward-generator families, 9/9 verified — Legendre
+    `y''+Cot[x]y'+k(k+1)y==0` (k=1..5) and the Sturm-Liouville spelling
+    `y''Sin[x]+y'Cos[x]+m(m+1)ySin[x]==0` (m=1..4) — `tests/test_dsolve_m14_stress.c`
+    (+ pinned unit in `test_dsolve.c`). Valgrind leak-flat vs baseline (unlike M12,
+    changevar makes fewer sub-calls). *Future:* the associated-Legendre / Pöschl-
+    Teller potential `y''−(a+n(n−1)/sin²x)y==0` (transforms rationally but the
+    transformed hypergeometric solve needs the non-integer recognizer), Bessel/
+    Lommel via power substitution `t=x^k`, and the `E^x`/`Log` (Euler) substitutions.
+  All DSolve ctest suites + `make check-c99` green; no regression.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -621,6 +662,16 @@ recursive sub-solves.
   denominator factor has degree ≥ 2** (complex poles): its σ-`Solve` blows up there and
   Case 1c already covers those poles. Algebraic exponents via `RootReduce`/qqbar;
   second solution via `ReductionOfOrder`.
+- `[✓] ChangeOfVariable` (`DSolve\`ChangeOfVariable`) — 2nd-order linear with
+  TRANSCENDENTAL coefficients `y''+P y'+Q y==0`: try a change of the independent
+  variable `t=phi(x)` (`Cos`/`Sin`/`Tan`) that rationalizes the coefficients
+  (`A=(phi''+P phi')/phi'²`, `B=Q/phi'²` become rational in `t`), recurse the
+  cascade on the transformed equation, and back-substitute `t=phi(x)`. Flagship:
+  `y''+Cot[x]y'+k(k+1)y==0 → (1−t²)Y''−2tY'+k(k+1)Y==0` (Legendre) via `t=Cos[x]`.
+  NUMERICALLY verified on the original (Legendre-Q `Log` terms make the residual
+  undecidable); bounded sub-solves + deadline + decline memo + re-entry guard;
+  transcendental-coefficient gate. Runs after `Kovacic`, before series. See M14.
+  `dsolve_changevar.c`.
 - `[✓] FrobeniusSeries` / `[✓] PowerSeries` — series about `x0`: ordinary →
   power series, regular-singular → Frobenius (indicial quadratic + `Log`-term
   sub-cases by root difference), irregular → decline; truncated `SeriesData`
@@ -905,7 +956,9 @@ Cascade order (`nfun>1`): `DecoupleSystem` → `TriangularSystem` →
   Frobenius/PowerSeries; `tests/test_dsolve_m12_stress.c` covers the nonlinear
   2nd-order `SecondOrderSymmetry` families (verified NUMERICALLY — the solutions
   carry logs/radicals PossibleZeroQ cannot decide, and lie2 itself relies on a
-  numeric back-substitution guard); `tests/test_dsolve_stress.c` covers the rest of
+  numeric back-substitution guard); `tests/test_dsolve_m14_stress.c` covers the
+  `ChangeOfVariable` Legendre families (verified via vanishing C[1]/C[2] residual
+  coefficients); `tests/test_dsolve_stress.c` covers the rest of
   the cascade (LinearFirstOrder, Separable, Bernoulli, Homogeneous, Exact,
   LinearConstantCoefficients, EulerCauchy, ReductionOfOrder, 2×2 + triangular
   systems, first-order PDE). A generator builds the equation from parameters whose
