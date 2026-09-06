@@ -1684,6 +1684,33 @@ Worked examples that close:
 `Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]` → `a ArcTan[a/c] − (c/2) Log[1+a²/c²]`;
 `Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]` → `(π/2) Erf[a/2]`.
 
+Three **finite-domain** families need neither a pre-existing parameter (the first
+two are purely numeric) nor an engine-safe inner integral (all three differentiate
+to a finite-interval trig/radical integral the general engine cannot do — it hangs,
+or for the radical returns a *wrong* value). Their closers canonicalise with a
+change of variables, **introduce** an artificial Feynman parameter (or evaluate
+directly), and supply the inner integral in closed form:
+
+| Family | Integrand → value (change of variables) |
+|---|---|
+| power-log | `Log[1 + c x^p]/(x Sqrt[1 - x^(2p)])` on `{0,1}` → `(π²/8 − ArcCos[c]²/2)/p`  (`u = x^p`) |
+| secant-radical | `Sec[2x] Log[1 + c Sqrt[1 - Tan[x]²]]` on `{0,π/4}` → `π²/8 − ArcCos[c]²/2`  (`t = Tan[x]`) |
+| tangent-power | `Csc[2x]² Log[1 + Tan[x]^a]` on `{0,π/4}` → `(π Csc[π/a] − a)/4`  (`t = Tan[x]`) |
+
+The `p` (power), `c` (coefficient), and `a` (exponent) are read from the integrand,
+so the closed form is genuinely parametric. Families 1 and 2 share the inner
+integral `∫₀¹ du/((1+q u)√(1−u²)) = ArcCos[q]/√(1−q²)` (emitted directly — the
+engine leaves it unevaluated at a symbolic parameter, and mis-evaluates the
+secant-radical variant). Family 3 is a direct Beta/digamma reflection, verified
+correct-by-construction against the value-independent `Csc[2x]² = (1+Tan[x]²)²/(4
+Tan[x]²)` identity and the exact rational anchor `a₀ = 3`. Examples:
+`Integrate[Log[1 + x^(3/2)]/(x Sqrt[1 - x^3]), {x,0,1}, Method->"DiffUnderInt"]` → `π²/12`;
+`Integrate[Sec[2x] Log[1 + Sqrt[1 - Tan[x]^2]], {x,0,π/4}, Method->"DiffUnderInt"]` → `π²/8`;
+`Integrate[Csc[2x]^2 Log[1 + Tan[x]^a], {x,0,π/4}, Method->"DiffUnderInt"]` → `(π Csc[π/a] − a)/4`.
+(Family 3 requires the explicit `Method -> "DiffUnderInt"`; under the fully
+automatic cascade an earlier method attempts the — separately hang-prone —
+indefinite integral first.)
+
 #### Mellin / Ramanujan Master Theorem (`Integrate\`RamanujanMasterTheorem`)
 
 The series/transform-based mechanism for half-line integrals

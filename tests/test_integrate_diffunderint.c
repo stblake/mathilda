@@ -132,6 +132,73 @@ static void test_gaussian(void) {
                   "Pi/2 Erf[a/2]", "");
 }
 
+/* Finite-domain family 1 (power-log): Log[1 + c x^p]/(x Sqrt[1 - x^(2p)]) on
+ * {0,1} -> (Pi^2/8 - ArcCos[c]^2/2)/p.  Introduces an artificial parameter and
+ * emits the ArcCos inner integral (u = x^p substitution).  Diverse (c,p) so a
+ * hardcoded value cannot pass: p is read from the monomial and c from the Log. */
+static void test_finite_power_log(void) {
+    /* The reported case: c=1, p=3/2 -> Pi^2/12. */
+    assert_closes("Integrate[Log[1 + x Sqrt[x]]/(x Sqrt[1 - x^3]), {x, 0, 1}, "
+                  "Method -> \"DiffUnderInt\"]", "Pi^2/12", "");
+    assert_closes("Integrate[Log[1 + x]/(x Sqrt[1 - x^2]), {x, 0, 1}, "
+                  "Method -> \"DiffUnderInt\"]", "Pi^2/8", "");
+    assert_closes("Integrate[Log[1 + x^2]/(x Sqrt[1 - x^4]), {x, 0, 1}, "
+                  "Method -> \"DiffUnderInt\"]", "Pi^2/16", "");
+    assert_closes("Integrate[Log[1 + Sqrt[x]]/(x Sqrt[1 - x]), {x, 0, 1}, "
+                  "Method -> \"DiffUnderInt\"]", "Pi^2/4", "");
+    /* c != 1: the ArcCos[c] term must appear -- no collapse to a pi^2 multiple. */
+    assert_closes("Integrate[Log[1 + x/2]/(x Sqrt[1 - x^2]), {x, 0, 1}, "
+                  "Method -> \"DiffUnderInt\"]", "Pi^2/8 - ArcCos[1/2]^2/2", "");
+    assert_closes("Integrate[Log[1 + (Sqrt[3]/2) x^2]/(x Sqrt[1 - x^4]), {x, 0, 1}, "
+                  "Method -> \"DiffUnderInt\"]", "(Pi^2/8 - ArcCos[Sqrt[3]/2]^2/2)/2", "");
+}
+
+/* Finite-domain family 2 (secant-radical): Sec[2x] Log[1 + c Sqrt[1 - Tan[x]^2]]
+ * on {0,Pi/4} -> Pi^2/8 - ArcCos[c]^2/2.  Same ArcCos inner integral as family 1
+ * (via t = Tan[x], then the Feynman parameter on the radical). */
+static void test_finite_secant_radical(void) {
+    assert_closes("Integrate[Sec[2 x] Log[1 + Sqrt[1 - Tan[x]^2]], {x, 0, Pi/4}, "
+                  "Method -> \"DiffUnderInt\"]", "Pi^2/8", "");
+    assert_closes("Integrate[Log[1 + Sqrt[1 - Tan[x]^2]]/Cos[2 x], {x, 0, Pi/4}, "
+                  "Method -> \"DiffUnderInt\"]", "Pi^2/8", "");
+    assert_closes("Integrate[Sec[2 x] Log[1 + (1/2) Sqrt[1 - Tan[x]^2]], {x, 0, Pi/4}, "
+                  "Method -> \"DiffUnderInt\"]", "Pi^2/8 - ArcCos[1/2]^2/2", "");
+    assert_closes("Integrate[Sec[2 x] Log[1 + (Sqrt[3]/2) Sqrt[1 - Tan[x]^2]], {x, 0, Pi/4}, "
+                  "Method -> \"DiffUnderInt\"]", "Pi^2/8 - ArcCos[Sqrt[3]/2]^2/2", "");
+}
+
+/* Finite-domain family 3 (tangent-power): Csc[2x]^2 Log[1 + Tan[x]^a] on
+ * {0,Pi/4} -> (Pi Csc[Pi/a] - a)/4 (direct Beta/digamma reflection).  The
+ * general symbolic-a result is the strongest anti-overfit check. */
+static void test_finite_tangent_power(void) {
+    /* General a (the reported case), symbolic. */
+    assert_closes("Integrate[Log[1 + Tan[x]^a]/Sin[2 x]^2, {x, 0, Pi/4}, "
+                  "Method -> \"DiffUnderInt\"]", "(Pi Csc[Pi/a] - a)/4", "");
+    /* Same, with the Assumptions variant. */
+    assert_closes("Integrate[Log[1 + Tan[x]^a]/Sin[2 x]^2, {x, 0, Pi/4}, "
+                  "Method -> \"DiffUnderInt\", Assumptions -> Re[a] > 0]",
+                  "(Pi Csc[Pi/a] - a)/4", "Re[a] > 0");
+    /* Concrete exponents, integer and rational. */
+    assert_closes("Integrate[Csc[2 x]^2 Log[1 + Tan[x]^2], {x, 0, Pi/4}, "
+                  "Method -> \"DiffUnderInt\"]", "(Pi - 2)/4", "");
+    assert_closes("Integrate[Csc[2 x]^2 Log[1 + Tan[x]^3], {x, 0, Pi/4}, "
+                  "Method -> \"DiffUnderInt\"]", "(Pi Csc[Pi/3] - 3)/4", "");
+    assert_closes("Integrate[Csc[2 x]^2 Log[1 + Tan[x]^(5/2)], {x, 0, Pi/4}, "
+                  "Method -> \"DiffUnderInt\"]", "(Pi Csc[2 Pi/5] - 5/2)/4", "");
+}
+
+/* Emit guard: the in-builtin D[I,p]-J===0 check is tautological w.r.t. J (G=int J),
+ * so a bug in the emitted ArcCos inner integral would slip through.  These
+ * top-level cross-checks compare our closed form against the engine's OWN value of
+ * the same integral at a rational point (Form A directly, Form B via its cos-theta
+ * image), which the engine can do correctly there -- catching a sign/exponent bug. */
+static void test_arccos_emit_guard(void) {
+    assert_closes("Integrate[1/((1 + u/2) Sqrt[1 - u^2]), {u, 0, 1}]",
+                  "ArcCos[1/2]/Sqrt[3/4]", "");
+    assert_closes("Integrate[1/(1 + Cos[t]/2), {t, 0, Pi/2}]",
+                  "ArcCos[1/2]/Sqrt[1 - 1/4]", "");
+}
+
 /* Reachable three ways: Method string, the alias, and the direct builtin. */
 static void test_routing(void) {
     assert_closes("Integrate[(x^a - 1)/Log[x], {x, 0, 1}, "
@@ -198,6 +265,10 @@ void test_integrate_diffunderint(void) {
     TEST(test_rational_halfline);
     TEST(test_rational_halfline_general);
     TEST(test_gaussian);
+    TEST(test_finite_power_log);
+    TEST(test_finite_secant_radical);
+    TEST(test_finite_tangent_power);
+    TEST(test_arccos_emit_guard);
     TEST(test_routing);
     TEST(test_declines_cleanly);
     TEST(test_fugacity_cascade);

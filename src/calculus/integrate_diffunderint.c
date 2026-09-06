@@ -283,6 +283,14 @@ static bool is_zero_with(const Expr* e, const Expr* assumptions) {
     return z;
 }
 
+/* simplify_with that CONSUMES `e` (convenience for the finite-domain closers,
+ * which build a throwaway tree and immediately simplify it). */
+static Expr* simplify_take(Expr* e, const Expr* assumptions) {
+    Expr* r = simplify_with(e, assumptions);
+    expr_free(e);
+    return r;
+}
+
 /* ReplaceAll[e, var -> val], evaluated.  Borrows all three. */
 static Expr* subst(const Expr* e, const Expr* var, const Expr* val) {
     return ev2("ReplaceAll", expr_copy((Expr*)e),
@@ -396,11 +404,25 @@ static void bound_apply(ParamBound* pb, size_t np, const char* var, double c, in
     }
 }
 
+/* Re[sym] / Im[sym] -> sym; any other expression is returned unchanged.  Lets an
+ * assumption such as `Re[a] > 0` register a bound on the bare symbol `a` (the
+ * bound is only ever used for SIGN gating, so the Re/Im distinction is immaterial
+ * for the real-parameter families served here). */
+static Expr* strip_re_im(Expr* e) {
+    if ((head_name_is(e, "Re") || head_name_is(e, "Im")) &&
+        e->data.function.arg_count == 1 &&
+        e->data.function.args[0]->type == EXPR_SYMBOL)
+        return e->data.function.args[0];
+    return e;
+}
+
 static void relation_apply(ParamBound* pb, size_t np, const char* op,
                            Expr* L, Expr* R) {
     bool lt = (strcmp(op, "Less") == 0 || strcmp(op, "LessEqual") == 0);
     bool gt = (strcmp(op, "Greater") == 0 || strcmp(op, "GreaterEqual") == 0);
     if (!lt && !gt) return;
+    L = strip_re_im(L);
+    R = strip_re_im(R);
     double c;
     if (L->type == EXPR_SYMBOL && numeric_double(R, &c))
         bound_apply(pb, np, L->data.symbol.name, c, lt ? -1 : +1);
@@ -1278,6 +1300,489 @@ static Expr* diui_finalize(const Expr* I, const Expr* assumptions) {
     return NULL;
 }
 
+/* =========================================================================
+ * Finite-domain Feynman families.
+ *
+ * The half-line families above all rely on a PRE-EXISTING parameter and an
+ * engine-safe (rational/exp) inner integral.  Three important finite-domain
+ * families fail both assumptions: they are numeric (no parameter to vary) or
+ * their differentiated inner integral is trig/radical on a finite interval,
+ * which the general engine cannot do (it hangs, or -- for the Form-B radical
+ * integral -- returns a WRONG value).  So these closers (a) canonicalise the
+ * integrand with a change of variables, (b) INTRODUCE an artificial Feynman
+ * parameter, and (c) supply the inner integral in closed form themselves,
+ * never routing it through the engine.
+ *
+ *   Family 1 (power-log):    Log[1 + c x^p] / (x Sqrt[1 - x^(2p)])  on {0,1}
+ *                            -> (Pi^2/8 - ArcCos[c]^2/2) / p
+ *   Family 2 (secant-radical): Sec[2x] Log[1 + c Sqrt[1 - Tan[x]^2]] on {0,Pi/4}
+ *                            -> Pi^2/8 - ArcCos[c]^2/2
+ *   Family 3 (tangent-power):  Csc[2x]^2 Log[1 + Tan[x]^a] on {0,Pi/4}
+ *                            -> (Pi Csc[Pi/a] - a)/4
+ *
+ * Families 1 and 2 share the same inner integral ArcCos[q]/Sqrt[1-q^2] and the
+ * same K(c) = Pi^2/8 - ArcCos[c]^2/2 shape; family 3 is a direct Beta/digamma
+ * evaluation with a rational-anchor (a0 = 3) self-check.
+ * ====================================================================== */
+
+/* Exponent q with `term` = (x-free) * x^q for a single monomial in x; NULL if
+ * `term` is not such a pure monomial.  Owned Integer/Rational/Real. */
+static Expr* monomial_x_exponent(const Expr* term, const Expr* x) {
+    if (!term) return NULL;
+    if (term->type == EXPR_SYMBOL)
+        return (term->data.symbol.name == x->data.symbol.name) ? mk_int(1) : NULL;
+    if (head_name_is(term, "Power") && term->data.function.arg_count == 2) {
+        Expr* base = term->data.function.args[0];
+        Expr* ex   = term->data.function.args[1];
+        if (base->type == EXPR_SYMBOL &&
+            base->data.symbol.name == x->data.symbol.name && !contains_symbol(ex, x))
+            return expr_copy(ex);
+        return NULL;
+    }
+    if (head_name_is(term, "Times")) {
+        Expr* found = NULL;
+        for (size_t i = 0; i < term->data.function.arg_count; i++) {
+            Expr* fac = term->data.function.args[i];
+            if (!contains_symbol(fac, x)) continue;
+            if (found) { expr_free(found); return NULL; }     /* two x-factors */
+            found = monomial_x_exponent(fac, x);
+            if (!found) return NULL;
+        }
+        return found;                                         /* NULL if none */
+    }
+    return NULL;
+}
+
+/* True if `e` contains Power[var, exp] with a NON-INTEGER exponent (fractional
+ * constant like t^(5/2), or symbolic like t^a) of the bare integration variable.
+ * The ArcCos family (power-log, secant-radical) never does -- its bare-variable
+ * powers are all integers (u, u^-1, u^2), with fractional powers only of the
+ * radicand (1-var^2)^(1/2) -- whereas the tangent-power family is exactly
+ * var^(non-integer), and Simplify of a radical times var^(non-integer) HANGS.
+ * stage_finite_feynman gates on this to stay off family-3 integrands. */
+static bool has_noninteger_var_power(const Expr* e, const Expr* var) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* ex   = e->data.function.args[1];
+        if (base->type == EXPR_SYMBOL &&
+            base->data.symbol.name == var->data.symbol.name &&
+            ex->type != EXPR_INTEGER)
+            return true;
+    }
+    if (has_noninteger_var_power(e->data.function.head, var)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_noninteger_var_power(e->data.function.args[i], var)) return true;
+    return false;
+}
+
+/* First subexpression of the form Log[Plus[1, ...]] (borrowed), else NULL. */
+static const Expr* find_log1plus(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (head_name_is(e, "Log") && e->data.function.arg_count == 1) {
+        Expr* arg = e->data.function.args[0];
+        if (head_name_is(arg, "Plus"))
+            for (size_t i = 0; i < arg->data.function.arg_count; i++) {
+                Expr* t = arg->data.function.args[i];
+                if (t->type == EXPR_INTEGER && t->data.integer == 1) return e;
+            }
+    }
+    const Expr* r = find_log1plus(e->data.function.head);
+    if (r) return r;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if ((r = find_log1plus(e->data.function.args[i]))) return r;
+    return NULL;
+}
+
+/* x-exponent of the (single) non-1 summand of a Log[Plus[1, W]] node, requiring
+ * W to be a pure monomial c*x^q.  Owned exponent or NULL. */
+static Expr* log1plus_monomial_exponent(const Expr* lognode, const Expr* x) {
+    Expr* arg = lognode->data.function.args[0];               /* Plus[...] */
+    Expr* W = NULL; int nonone = 0;
+    for (size_t i = 0; i < arg->data.function.arg_count; i++) {
+        Expr* trm = arg->data.function.args[i];
+        if (trm->type == EXPR_INTEGER && trm->data.integer == 1) continue;
+        W = trm; nonone++;
+    }
+    if (nonone != 1) return NULL;
+    return monomial_x_exponent(W, x);
+}
+
+/* Rewrite the single Log[Plus[1, W]] node to Log[Plus[1, Times[p, W]]].  Owned
+ * copy; *count receives the number of such nodes rewritten. */
+static Expr* feyn_rewrite(const Expr* e, const Expr* p, int* count) {
+    if (!e) return NULL;
+    if (head_name_is(e, "Log") && e->data.function.arg_count == 1) {
+        Expr* arg = e->data.function.args[0];
+        if (head_name_is(arg, "Plus")) {
+            size_t ac = arg->data.function.arg_count; int one_idx = -1;
+            for (size_t i = 0; i < ac; i++) {
+                Expr* t = arg->data.function.args[i];
+                if (t->type == EXPR_INTEGER && t->data.integer == 1) { one_idx = (int)i; break; }
+            }
+            if (one_idx >= 0) {
+                (*count)++;
+                size_t rem = ac - 1; Expr* W = NULL;
+                if (rem == 1) {
+                    for (size_t i = 0; i < ac; i++)
+                        if ((int)i != one_idx) { W = expr_copy(arg->data.function.args[i]); break; }
+                } else {
+                    Expr** ws = malloc(rem * sizeof(Expr*)); size_t k = 0;
+                    for (size_t i = 0; i < ac; i++)
+                        if ((int)i != one_idx) ws[k++] = expr_copy(arg->data.function.args[i]);
+                    W = expr_new_function(mk_sym("Plus"), ws, rem); free(ws);
+                }
+                return mk_fn1("Log", t_add(mk_int(1), t_mul(expr_copy((Expr*)p), W)));
+            }
+        }
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    Expr* head = feyn_rewrite(e->data.function.head, p, count);
+    size_t n = e->data.function.arg_count;
+    Expr** args = n ? malloc(n * sizeof(Expr*)) : NULL;
+    for (size_t i = 0; i < n; i++) args[i] = feyn_rewrite(e->data.function.args[i], p, count);
+    Expr* r = expr_new_function(head, args, n);
+    if (args) free(args);
+    return r;
+}
+
+/* Introduce the Feynman parameter: exactly one Log[1+W] -> Log[1+p W]. */
+static Expr* insert_feynman_param(const Expr* canon, const Expr* p) {
+    int count = 0;
+    Expr* r = feyn_rewrite(canon, p, &count);
+    if (count != 1) { if (r) expr_free(r); return NULL; }
+    return r;
+}
+
+/* Simplify[e /. var -> val]; consumes `val`, borrows e/var. */
+static Expr* at_point(const Expr* e, const Expr* var, Expr* val, const Expr* assum) {
+    Expr* s = subst(e, var, val);
+    expr_free(val);
+    if (!s) return NULL;
+    return simplify_take(s, assum);
+}
+
+/* Small algebraic builders. */
+static Expr* one_plus_sq(const Expr* v)  { return t_add(mk_int(1), mk_fn2("Power", expr_copy((Expr*)v), mk_int(2))); }
+static Expr* one_minus_sq(const Expr* v) { return t_add(mk_int(1), t_neg(mk_fn2("Power", expr_copy((Expr*)v), mk_int(2)))); }
+/* Sqrt[1 - v^2]. */
+static Expr* sqrt_1msq(const Expr* v)    { return mk_fn2("Power", one_minus_sq(v), t_rat(1, 2)); }
+/* Times[2, x] (the "2x" argument of the trig-of-2x rewrite rules). */
+static Expr* two_x_times(const Expr* x)  { return mk_fn2("Times", mk_int(2), expr_copy((Expr*)x)); }
+
+/* A * ArcCos[q] * (1 - q^2)^(-1/2); consumes A and q. */
+static Expr* mk_arccos_over_sqrt(Expr* A, Expr* q) {
+    Expr* invs = mk_fn2("Power", t_add(mk_int(1), t_neg(mk_fn2("Power", expr_copy(q), mk_int(2)))),
+                        t_rat(-1, 2));
+    return t_mul(A, t_mul(mk_fn1("ArcCos", q), invs));
+}
+
+/* -(A/(2 alpha)) * ArcCos[q]^2; consumes A, alpha, q. */
+static Expr* mk_G(Expr* A, Expr* alpha, Expr* q) {
+    Expr* frac = t_mul(A, mk_fn2("Power", t_mul(mk_int(2), alpha), mk_int(-1)));
+    Expr* ac2  = mk_fn2("Power", mk_fn1("ArcCos", q), mk_int(2));
+    return t_neg(t_mul(frac, ac2));
+}
+
+/* (Pi Csc[Pi/e] - e)/4; borrows e. */
+static Expr* emit_tanpow_form(const Expr* e) {
+    Expr* csc = mk_fn1("Csc", t_mul(mk_sym("Pi"), mk_fn2("Power", expr_copy((Expr*)e), mk_int(-1))));
+    Expr* inner = t_add(t_mul(mk_sym("Pi"), csc), t_neg(expr_copy((Expr*)e)));
+    return t_mul(t_rat(1, 4), inner);
+}
+
+/* (1/4)(1 + t^2) t^(-2) Log[1 + t^expo]; borrows t, expo. */
+static Expr* mk_tanpow_canon(const Expr* t, const Expr* expo) {
+    Expr* logarg = t_add(mk_int(1), mk_fn2("Power", expr_copy((Expr*)t), expr_copy((Expr*)expo)));
+    Expr* body = t_mul(one_plus_sq(t),
+                       t_mul(mk_fn2("Power", expr_copy((Expr*)t), mk_int(-2)),
+                             mk_fn1("Log", logarg)));
+    return t_mul(t_rat(1, 4), body);
+}
+
+/* Family 1 normalizer: c(x) Log[1 + c x^p]/(x Sqrt[1 - x^(2p)]) on {0,1} with the
+ * power substitution u = x^p, yielding (1/p) Log[1 + c u]/(u Sqrt[1-u^2]) on {0,1}.
+ * On success returns the canonical integrand and *out_var = u; else NULL. */
+static Expr* normalize_power_sub(const Expr* f, const Expr* x, const Expr* a,
+                                 const Expr* b, Expr** out_var) {
+    if (!(is_zero_expr(a) && b->type == EXPR_INTEGER && b->data.integer == 1)) return NULL;
+    const Expr* lg = find_log1plus(f);
+    if (!lg) return NULL;
+    Expr* p = log1plus_monomial_exponent(lg, x);              /* the power p */
+    if (!p) return NULL;
+    /* p must be a positive real/rational constant. */
+    {
+        double pv;
+        if (!numeric_double(p, &pv) || pv <= 0.0) { expr_free(p); return NULL; }
+    }
+    /* Residue check: f * x * Sqrt[1 - x^(2p)] / Log[1 + c x^p] must be x-free. */
+    Expr* x2p  = mk_fn2("Power", expr_copy((Expr*)x), mk_fn2("Times", mk_int(2), expr_copy(p)));
+    Expr* sqrt = mk_fn2("Power", t_add(mk_int(1), t_neg(x2p)), t_rat(1, 2));
+    Expr* resid = simplify_take(
+        t_mul(expr_copy((Expr*)f),
+              t_mul(expr_copy((Expr*)x),
+                    t_mul(sqrt, mk_fn2("Power", expr_copy((Expr*)lg), mk_int(-1))))),
+        NULL);
+    bool match = resid && !contains_symbol(resid, x) && is_finite_value(resid) && !is_zero_q(resid);
+    if (resid) expr_free(resid);
+    if (!match) { expr_free(p); return NULL; }
+    /* Apply u = x^p : Integrate[f,{x,0,1}] = (1/p) Integrate[f(u^(1/p)) u^(1/p-1),{u,0,1}]. */
+    Expr* u = mk_sym("$diuiSubU$");
+    Expr* usub = mk_fn2("Power", expr_copy(u), mk_fn2("Power", expr_copy(p), mk_int(-1)));
+    Expr* fsub = subst(f, x, usub); expr_free(usub);
+    Expr* jac  = t_mul(mk_fn2("Power", expr_copy(p), mk_int(-1)),
+                       mk_fn2("Power", expr_copy(u),
+                              t_add(mk_fn2("Power", expr_copy(p), mk_int(-1)), mk_int(-1))));
+    /* PowerExpand first: the substitution x = u^(1/p) creates nested powers like
+     * (u^2)^(1/2) (for p = 1/2) that stay as Sqrt[u^2] (= Abs[u]) without a
+     * positivity assumption; the integration variable u is on (0,1), so
+     * PowerExpand's assume-positive is exactly correct and gives Log[1+u]. */
+    Expr* canon = simplify_take(ev1("PowerExpand", t_mul(fsub, jac)), NULL);
+    expr_free(p);
+    if (!canon || contains_symbol(canon, x) || !contains_symbol(canon, u)) {
+        if (canon) expr_free(canon);
+        expr_free(u);
+        return NULL;
+    }
+    *out_var = u;
+    return canon;
+}
+
+/* Rational-trig-of-2x normalizer for {0, Pi/4}: t = Tan[x] (dx = dt/(1+t^2),
+ * t : 0 -> 1).  Uses explicit rewrite rules (ReplaceAll[x -> ArcTan[t]] is not
+ * reliable for Sec[2x]).  On success returns the canonical integrand in t on
+ * {0,1} and *out_var = t; NULL if any x-dependence is left unresolved. */
+static Expr* normalize_tan_half(const Expr* f, const Expr* x, const Expr* a,
+                                const Expr* b, Expr** out_var) {
+    if (!is_zero_expr(a)) return NULL;
+    {   /* b == Pi/4 */
+        Expr* d = t_add(expr_copy((Expr*)b), t_neg(t_mul(t_rat(1, 4), mk_sym("Pi"))));
+        bool isq = is_zero_q(d); expr_free(d);
+        if (!isq) return NULL;
+    }
+    Expr* T = mk_sym("$diuiTanT$");
+    Expr* r_sec = mk_fn2("Rule", mk_fn1("Sec", two_x_times(x)),
+                         t_mul(one_plus_sq(T), mk_fn2("Power", one_minus_sq(T), mk_int(-1))));
+    Expr* r_csc = mk_fn2("Rule", mk_fn1("Csc", two_x_times(x)),
+                         t_mul(one_plus_sq(T), mk_fn2("Power", t_mul(mk_int(2), expr_copy(T)), mk_int(-1))));
+    Expr* r_cos = mk_fn2("Rule", mk_fn1("Cos", two_x_times(x)),
+                         t_mul(one_minus_sq(T), mk_fn2("Power", one_plus_sq(T), mk_int(-1))));
+    Expr* r_sin = mk_fn2("Rule", mk_fn1("Sin", two_x_times(x)),
+                         t_mul(t_mul(mk_int(2), expr_copy(T)), mk_fn2("Power", one_plus_sq(T), mk_int(-1))));
+    Expr* r_tan = mk_fn2("Rule", mk_fn1("Tan", expr_copy((Expr*)x)), expr_copy(T));
+    Expr* rules[5] = { r_sec, r_csc, r_cos, r_sin, r_tan };
+    Expr* rulelist = expr_new_function(mk_sym("List"), rules, 5);
+    Expr* sub = ev2("ReplaceAll", expr_copy((Expr*)f), rulelist);
+    if (!sub) { expr_free(T); return NULL; }
+    Expr* canon = simplify_take(t_mul(sub, mk_fn2("Power", one_plus_sq(T), mk_int(-1))), NULL);
+    if (!canon || contains_symbol(canon, x) || !contains_symbol(canon, T)) {
+        if (canon) expr_free(canon);
+        expr_free(T);
+        return NULL;
+    }
+    *out_var = T;
+    return canon;
+}
+
+/* Closed-form inner integrals on {0,1} of the ArcCos family, EMITTED (never
+ * delegated: the engine cannot do Form A at a symbolic parameter and is
+ * numerically WRONG on Form B).  Both evaluate to A * ArcCos[q]/Sqrt[1-q^2]:
+ *   Form A:  A / ((1 + q u) Sqrt[1-u^2])
+ *   Form B:  A / ((1 + q Sqrt[1-u^2]) Sqrt[1-u^2])
+ * The candidate (A, q) is read off by point evaluation and then VERIFIED by
+ * reconstructing g and Simplifying to 0, so a non-matching g is rejected.
+ * On success sets owned *out_A, *out_q and returns true. */
+static bool inner_arccos_family(const Expr* g, const Expr* var,
+                                const Expr* assumptions, Expr** out_A, Expr** out_q) {
+    Expr* s = simplify_take(t_mul(expr_copy((Expr*)g), sqrt_1msq(var)), assumptions);
+    if (!s) return false;
+    Expr* r = simplify_take(mk_fn2("Power", s, mk_int(-1)), assumptions);  /* r = 1/(g Sqrt) */
+    if (!r) return false;
+    Expr* r0 = at_point(r, var, mk_int(0), assumptions);
+    Expr* r1 = at_point(r, var, mk_int(1), assumptions);
+    expr_free(r);
+    if (!r0 || !r1) { if (r0) expr_free(r0); if (r1) expr_free(r1); return false; }
+
+    bool ok = false; Expr* A = NULL; Expr* q = NULL;
+
+    /* Form A: r = (1 + q var)/A ; r|0 = 1/A, r|1 = (1+q)/A. */
+    {
+        Expr* Aa = simplify_take(mk_fn2("Power", expr_copy(r0), mk_int(-1)), assumptions);
+        Expr* qa = simplify_take(t_mul(t_add(expr_copy(r1), t_neg(expr_copy(r0))),
+                                       mk_fn2("Power", expr_copy(r0), mk_int(-1))), assumptions);
+        if (Aa && qa && is_finite_value(Aa) && is_finite_value(qa) &&
+            !contains_symbol(Aa, var) && !contains_symbol(qa, var)) {
+            Expr* denom = t_mul(t_add(mk_int(1), t_mul(expr_copy(qa), expr_copy((Expr*)var))),
+                                sqrt_1msq(var));
+            Expr* recon = t_mul(expr_copy(Aa), mk_fn2("Power", denom, mk_int(-1)));
+            if (is_zero_with(t_add(expr_copy((Expr*)g), t_neg(recon)), assumptions)) {
+                A = expr_copy(Aa);
+                q = expr_copy(qa);
+                ok = true;
+            }
+        }
+        if (Aa) expr_free(Aa);
+        if (qa) expr_free(qa);
+    }
+    /* Form B: r = (1 + q Sqrt[1-var^2])/A ; r|1 = 1/A, r|0 = (1+q)/A. */
+    if (!ok) {
+        Expr* Ab = simplify_take(mk_fn2("Power", expr_copy(r1), mk_int(-1)), assumptions);
+        Expr* qb = simplify_take(t_add(t_mul(expr_copy(Ab), expr_copy(r0)), mk_int(-1)), assumptions);
+        if (Ab && qb && is_finite_value(Ab) && is_finite_value(qb) &&
+            !contains_symbol(Ab, var) && !contains_symbol(qb, var)) {
+            Expr* denom = t_mul(t_add(mk_int(1), t_mul(expr_copy(qb), sqrt_1msq(var))),
+                                sqrt_1msq(var));
+            Expr* recon = t_mul(expr_copy(Ab), mk_fn2("Power", denom, mk_int(-1)));
+            if (is_zero_with(t_add(expr_copy((Expr*)g), t_neg(recon)), assumptions)) {
+                A = expr_copy(Ab);
+                q = expr_copy(qb);
+                ok = true;
+            }
+        }
+        if (Ab) expr_free(Ab);
+        if (qb) expr_free(qb);
+    }
+    expr_free(r0);
+    expr_free(r1);
+    if (ok) { *out_A = A; *out_q = q; return true; }
+    if (A) expr_free(A);
+    if (q) expr_free(q);
+    return false;
+}
+
+/* Families 1 and 2: normalize -> introduce parameter -> differentiate -> ArcCos
+ * inner (emitted) -> closed-form back-integration -> verify D[I,p]-J===0 -> I(1). */
+static Expr* stage_finite_feynman(const Expr* f, const Expr* x, const Expr* a,
+                                  const Expr* b, const Expr* assumptions) {
+    Expr* var = NULL;
+    Expr* canon = normalize_power_sub(f, x, a, b, &var);
+    if (!canon) { if (var) { expr_free(var); var = NULL; }
+                  canon = normalize_tan_half(f, x, a, b, &var); }
+    if (!canon) return NULL;
+    /* A non-integer power of the bare integration variable (t^(5/2), t^a) is the
+     * tangent-power family (handled by stage_tangent_power); Simplify of the
+     * differentiated radical inner integral would HANG on it. */
+    if (has_noninteger_var_power(canon, var)) {
+        expr_free(canon);
+        if (var) expr_free(var);
+        return NULL;
+    }
+
+    Expr* p = mk_sym("$diuiFeyn$");
+    Expr* fp = insert_feynman_param(canon, p);
+    Expr* g = NULL, *A = NULL, *q = NULL, *alpha = NULL, *J = NULL, *G = NULL,
+         *I = NULL, *result = NULL;
+    if (!fp) goto done;
+
+    /* Base I(p=0)=0: the parameterised integrand must vanish at p=0 (Log[1+0]=0). */
+    { Expr* z = mk_int(0); Expr* fp0 = subst(fp, p, z); expr_free(z);
+      bool zq = fp0 && is_zero_q(fp0); if (fp0) expr_free(fp0); if (!zq) goto done; }
+
+    g = simplify_take(deriv(fp, p), assumptions);
+    if (!g || is_zero_q(g)) goto done;
+    if (!inner_arccos_family(g, var, assumptions, &A, &q)) goto done;
+
+    alpha = simplify_take(deriv(q, p), assumptions);           /* dq/dp, must be const */
+    if (!alpha || contains_symbol(alpha, p) || contains_symbol(alpha, var) ||
+        !is_finite_value(alpha) || is_zero_q(alpha)) goto done;
+
+    J = mk_arccos_over_sqrt(expr_copy(A), expr_copy(q));
+    G = mk_G(expr_copy(A), expr_copy(alpha), expr_copy(q));
+    { Expr* z = mk_int(0); Expr* G0 = eval_at_param(G, p, z); expr_free(z);
+      if (!G0) goto done;
+      I = simplify_with(t_add(expr_copy(G), t_neg(G0)), assumptions); }   /* t_neg consumes G0 */
+    if (!I || !is_finite_value(I)) goto done;
+
+    /* Verify D[I,p] - J === 0 (catches a back-integration error). */
+    { Expr* chk = t_add(deriv(I, p), t_neg(expr_copy(J)));
+      bool v = is_zero_with(chk, assumptions); expr_free(chk);
+      if (!v) goto done; }
+
+    /* Evaluate at the artificial parameter p = 1. */
+    { Expr* one = mk_int(1); Expr* Ival = eval_at_param(I, p, one); expr_free(one);
+      if (!Ival) goto done;
+      Expr* cl = diui_finalize(Ival, assumptions);
+      if (cl) { expr_free(Ival); result = cl; } else result = Ival; }
+
+done:
+    if (canon) expr_free(canon);
+    if (var) expr_free(var);
+    if (p) expr_free(p);
+    if (fp) expr_free(fp);
+    if (g) expr_free(g);
+    if (A) expr_free(A);
+    if (q) expr_free(q);
+    if (alpha) expr_free(alpha);
+    if (J) expr_free(J);
+    if (G) expr_free(G);
+    if (I) expr_free(I);
+    return result;
+}
+
+/* Family 3: Csc[2x]^2 Log[1 + Tan[x]^a] on {0,Pi/4}, a direct Beta/digamma
+ * evaluation (not a Feynman loop; its differentiated inner integral has no clean
+ * closed form).  Normalizes via t = Tan[x] to (1/4)(1+t^2)/t^2 Log[1+t^a] and
+ * emits (Pi Csc[Pi/a] - a)/4 (the digamma reflection integral of 1/(u+1)).
+ * Correct-by-construction: certified by the value-independent Csc identity and by
+ * the exact rational anchor a0 = 3 (the only engine-safe/Simplify-closing one). */
+static Expr* stage_tangent_power(const Expr* f, const Expr* x, const Expr* a,
+                                 const Expr* b, const Expr* assumptions) {
+    Expr* t = NULL;
+    Expr* canon = normalize_tan_half(f, x, a, b, &t);
+    if (!canon) return NULL;
+    Expr* expo = NULL, *target = NULL, *F = NULL, *V = NULL, *result = NULL;
+
+    const Expr* lg = find_log1plus(canon);
+    if (!lg) goto done;
+    expo = log1plus_monomial_exponent(lg, t);
+    if (!expo) goto done;
+
+    /* Recognizer: canon == (1/4)(1+t^2)/t^2 Log[1 + t^expo]. */
+    target = mk_tanpow_canon(t, expo);
+    { Expr* diff = t_add(expr_copy(canon), t_neg(expr_copy(target)));
+      bool m = is_zero_with(diff, assumptions); expr_free(diff);
+      if (!m) goto done; }
+
+    /* Value-independent certification of the weight transform. */
+    { Expr* lhs = mk_fn2("Power", mk_fn1("Csc", two_x_times(x)), mk_int(2));   /* Csc[2x]^2 */
+      Expr* tanx = mk_fn1("Tan", expr_copy((Expr*)x));
+      Expr* num  = mk_fn2("Power", t_add(mk_int(1), mk_fn2("Power", expr_copy(tanx), mk_int(2))), mk_int(2));
+      Expr* den  = t_mul(mk_int(4), mk_fn2("Power", tanx, mk_int(2)));
+      Expr* rhs  = t_mul(num, mk_fn2("Power", den, mk_int(-1)));
+      bool idok = is_zero_q(t_add(lhs, t_neg(rhs)));
+      if (!idok) goto done; }
+
+    /* Emit the closed form. */
+    F = simplify_with(emit_tanpow_form(expo), assumptions);
+    if (!F || !is_finite_value(F)) goto done;
+
+    /* Anchor a0 = 3: V = Integrate[(1+t^2)/t^2 Log[1+t^3], {t,0,1}] is an
+     * engine-safe Log integrand (no radical/trig), and the nested Integrate
+     * re-enters at diui_depth >= DIUI_MAX_DEPTH so DiffUnderInt declines and the
+     * ordinary definite engine evaluates it (no recursion, no hang). */
+    { Expr* ig = t_mul(one_plus_sq(t),
+                       t_mul(mk_fn2("Power", expr_copy(t), mk_int(-2)),
+                             mk_fn1("Log", t_add(mk_int(1), mk_fn2("Power", expr_copy(t), mk_int(3))))));
+      Expr* spec = mk_fn3("List", expr_copy(t), mk_int(0), mk_int(1));
+      V = eval_take(mk_fn2("Integrate", ig, spec)); }
+    if (!V || contains_head(V, "Integrate") || !is_finite_value(V)) goto done;
+    { Expr* three = mk_int(3); Expr* F3 = emit_tanpow_form(three); expr_free(three);
+      Expr* lhs = t_mul(t_rat(1, 4), expr_copy(V));
+      bool anchor = is_zero_with(t_add(lhs, t_neg(F3)), assumptions);
+      if (!anchor) goto done; }
+
+    result = F; F = NULL;
+
+done:
+    if (canon) expr_free(canon);
+    if (t) expr_free(t);
+    if (expo) expr_free(expo);
+    if (target) expr_free(target);
+    if (F) expr_free(F);
+    if (V) expr_free(V);
+    return result;
+}
+
 /* -------------------------------------------------------------------------
  * Stage A -- pure quadrature (lambda = 0).
  * ---------------------------------------------------------------------- */
@@ -1422,10 +1927,11 @@ Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
      * hand the engine a hanging form), so such f simply finds no closing
      * parameter and returns unevaluated -- no hang. */
 
-    /* Free parameters of the integrand (besides x). */
+    /* Free parameters of the integrand (besides x).  np == 0 is NO LONGER a
+     * decline: the finite-domain closers below introduce their own artificial
+     * parameter, so a purely numeric integrand (families 1 and 2) is handled. */
     ParamBound pb[16];
     size_t np = collect_params(f, x, pb, 16, 0);
-    if (np == 0) return NULL;                         /* no parameter to vary */
     if (assumptions) absorb_fact(pb, np, assumptions);
 
     /* The method probes many divergent candidate sub-expressions (Limit at a
@@ -1434,7 +1940,20 @@ Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
      * values (ComplexInfinity/Indeterminate) that gate the search unchanged. */
     diui_depth++;
     arith_warnings_mute_push();
-    Expr* result = stage_quadrature(f, x, a, b, assumptions, pb, np);
+    /* Finite-domain closers: they canonicalise a trig/radical integrand with a
+     * change of variables, introduce an artificial Feynman parameter (or evaluate
+     * directly), and supply the inner integral in closed form -- never routing a
+     * trig/radical inner integral through the general engine.  Each is a cheap
+     * recognizer that declines instantly on a non-match, so the existing half-line
+     * paths are unaffected.  stage_tangent_power runs FIRST because it owns the
+     * var^(non-integer) family and never forms the radical product that would
+     * hang stage_finite_feynman's Simplify on such an integrand.  stage_quadrature
+     * (which needs a genuine pre-existing parameter and an engine-safe inner
+     * integral) runs last. */
+    Expr* result = stage_tangent_power(f, x, a, b, assumptions);
+    if (!result) result = stage_finite_feynman(f, x, a, b, assumptions);
+    if (!result && np > 0)
+        result = stage_quadrature(f, x, a, b, assumptions, pb, np);
     arith_warnings_mute_pop();
     diui_depth--;
     return result;

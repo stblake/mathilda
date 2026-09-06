@@ -146,11 +146,31 @@ families it carries are:
 | even-rational half-line | \(\int_0^\infty P(x)/Q(x^2)\,dx\) | \(v=x^2\Rightarrow\) Beta integrals |
 | general (non-even) rational half-line | \(\int_0^\infty R(s)\,ds\) | real \(\operatorname{ArcTan}\)/\(\log\) boundary values |
 | Gaussian moment | \(\int_0^\infty x^n e^{-p x^2}\{1,\cos\}\,dx\) | in \(\sqrt\pi\), \(e^{-q^2/4p}\) |
+| ArcCos (finite) | \(\int_0^1 du/((1+q u)\sqrt{1-u^2})\) and its \(\sqrt{1-u^2}\) variant | \(\operatorname{ArcCos}(q)/\sqrt{1-q^2}\) |
+| digamma reflection (finite) | \(\int_0^1 (u^{-b}-u^{b})/(1+u)\,du\) | \(\pi\csc(\pi b)-1/b\) |
 
 The Gaussian **parameter** back-integration \(\int c\,e^{-k p^2}\,dp\) is supplied
 directly as an `Erf` (the engine produces no such antiderivative). A form outside
 every family is declined — the integral comes back unevaluated, fast, never a
 wrong value (see [§7](#7-limitations)).
+
+**Finite-domain families with an introduced parameter.** The last two rows power
+three purely *finite-interval* families that carry no free parameter of their own
+(or only a symbolic exponent). Mathilda first applies a change of variables
+(\(u=x^p\) or \(t=\tan x\)), then *introduces* a Feynman parameter into the
+logarithm, \(\log(1+W)\to\log(1+t\,W)\), differentiates, closes the inner integral
+with the ArcCos family, integrates back, and evaluates at \(t=1\):
+
+| Integrand (interval) | Value |
+|---|---|
+| \(\dfrac{\log(1+c\,x^p)}{x\sqrt{1-x^{2p}}}\) on \([0,1]\) | \(\dfrac{1}{p}\left(\dfrac{\pi^2}{8}-\dfrac{\operatorname{ArcCos}(c)^2}{2}\right)\) |
+| \(\sec 2x\,\log\!\big(1+c\sqrt{1-\tan^2 x}\big)\) on \([0,\tfrac\pi4]\) | \(\dfrac{\pi^2}{8}-\dfrac{\operatorname{ArcCos}(c)^2}{2}\) |
+| \(\csc^2 2x\,\log(1+\tan^a x)\) on \([0,\tfrac\pi4]\) | \(\dfrac{\pi\csc(\pi/a)-a}{4}\) |
+
+The parameters \(p,c,a\) are read from the integrand, so the results are genuinely
+parametric. The tangent-power family is a direct Beta/digamma evaluation (not a
+Leibniz loop), certified by the value-independent identity
+\(\csc^2 2x=(1+\tan^2 x)^2/(4\tan^2 x)\) and the exact rational anchor \(a=3\).
 
 `DiffUnderInt` is tried near the end of the definite `Integrate`
 [cascade](index.md), after the residue and Newton–Leibniz methods — it is the

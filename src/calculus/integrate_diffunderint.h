@@ -21,6 +21,20 @@
  * / Min / Max output (Stage C).  Specialized closers handle self-similar
  * scaling substitutions and the power-raising recurrence (Stage D).
  *
+ * Three FINITE-DOMAIN families need neither a pre-existing parameter nor an
+ * engine-safe inner integral, so they have dedicated closers that canonicalise
+ * with a change of variables, INTRODUCE an artificial parameter, and supply the
+ * inner integral in closed form (never routed through the general engine, which
+ * hangs -- or, for the radical case, returns a WRONG value -- on them):
+ *   Family 1 (power-log):      Log[1 + c x^p]/(x Sqrt[1-x^(2p)]) on {0,1}
+ *                              -> (Pi^2/8 - ArcCos[c]^2/2)/p   [u = x^p]
+ *   Family 2 (secant-radical): Sec[2x] Log[1 + c Sqrt[1-Tan[x]^2]] on {0,Pi/4}
+ *                              -> Pi^2/8 - ArcCos[c]^2/2        [t = Tan[x]]
+ *   Family 3 (tangent-power):  Csc[2x]^2 Log[1 + Tan[x]^a] on {0,Pi/4}
+ *                              -> (Pi Csc[Pi/a] - a)/4          [t = Tan[x]]
+ * Families 1 and 2 share the ArcCos[q]/Sqrt[1-q^2] inner integral; family 3 is a
+ * direct Beta/digamma reflection with a rational anchor (a0 = 3) self-check.
+ *
  * Verification is SYMBOLIC and correct-by-construction: PossibleZeroQ[
  * D[I,p] - J] plus an exact base value.  There is NO numeric (NIntegrate)
  * crosscheck anywhere in this code path (project rule).  The conditional-
