@@ -602,6 +602,24 @@ bool dsolve_linear_coeffs(DSolveProblem* P, Expr*** coeffs, Expr** forcing, int*
     return true;
 }
 
+/* True iff e is a rational function of xvar: after Together, both its Numerator
+ * and Denominator are polynomials in xvar.  Gates the polynomial/rational
+ * normaliser below away from transcendental-in-x coefficients (E^(f(x)), Sin[x],
+ * …), which FLINT's rational canonicaliser cannot process — see the note in
+ * dsolve_linear_normalize.  e is borrowed. */
+bool ds_is_rational_in(const Expr* e, const char* xvar) {
+    Expr* tg  = eval_and_free(ds_call1("Together", expr_copy((Expr*)e)));
+    Expr* num = eval_and_free(ds_call1("Numerator", expr_copy(tg)));
+    Expr* den = eval_and_free(ds_call1("Denominator", tg));            /* consumes tg */
+    Expr* pn  = eval_and_free(ds_call2("PolynomialQ", num, expr_new_symbol(xvar)));
+    Expr* pd  = eval_and_free(ds_call2("PolynomialQ", den, expr_new_symbol(xvar)));
+    bool ok = pn && pn->type == EXPR_SYMBOL && pn->data.symbol.name == SYM_True
+           && pd && pd->type == EXPR_SYMBOL && pd->data.symbol.name == SYM_True;
+    if (pn) expr_free(pn);
+    if (pd) expr_free(pd);
+    return ok;
+}
+
 /* Normalize an extracted linear-ODE coefficient vector for the constant-
  * coefficient / Euler detectors: (1) clear denominators by multiplying c[] and g
  * through by the product of their denominators, so the coefficients become
@@ -622,6 +640,20 @@ void dsolve_linear_normalize(Expr** c, Expr** g, int n, const char* xvar) {
      * the OperatorFactor stress corpus over its time budget.  g_dsolve_depth == 1
      * at the outermost call, >= 2 inside a recursion. */
     if (g_dsolve_depth > 1) return;
+    /* Gate: normalize's Denominator / PolynomialGCD / Cancel machinery is a
+     * polynomial/rational-function transform in x.  A coefficient that is
+     * transcendental in x (e.g. a_0 = a(lam E^(lam x) - a E^(2 lam x)), or a
+     * denominator (1 + E^(x^2/2))^2) is NOT a rational function of x; feeding it
+     * to PolynomialGCD/Cancel makes the FLINT rational-canonicaliser emit a
+     * non-finite content and then recurse on GCD(-Infinity, 1) until the stack
+     * overflows (a SIGSEGV on Kamke exp-coefficient equations 876/879, and the
+     * (1+E^(x^2/2))^2 case 298).  Such equations are never constant-coefficient
+     * or Euler anyway, so skipping normalize loses nothing and lets them fall
+     * through to Kovacic / Frobenius.  Guard by requiring every coefficient and
+     * the forcing to be rational in x (numerator and denominator polynomial). */
+    for (int k = 0; k <= n; k++)
+        if (!ds_is_rational_in(c[k], xvar)) return;
+    if (!ds_is_rational_in(*g, xvar)) return;
     /* (1) clear denominators: mult = Π Denominator[c_k] · Denominator[g] */
     Expr* mult = expr_new_integer(1);
     for (int k = 0; k <= n; k++)

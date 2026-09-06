@@ -3658,6 +3658,32 @@ endif()
 add_test(NAME solve_corpus_tests
          COMMAND solve_corpus_tests ../solve_corpus.m ../solve_check_prelude.m)
 
+# Self-verifying stress corpus for DSolve[].  The whole subsystem lives in
+# ../DSolve_test_status/ (corpora DE_examples_N.m, the harness, the verifier
+# prelude, and STATUS.md -- the cross-session dashboard).  Each corpus is a List
+# of {label, eqn, fn, iv, classif, sympy} records read HELD; the runner forks
+# per case, runs DSolve under TimeConstrained, and numerically back-substitutes
+# each explicit branch (systems skipped -- scalar-first campaign).  It is a
+# PROGRESS DASHBOARD: a per-section test fails only when non-PASS scalar cases
+# exceed the baseline passed as argv[3] (each method-wave lowers it, tracked in
+# DSolve_test_status/STATUS.md).  See DSOLVE_PLAN.md and tasks/todo.md.
+add_executable(dsolve_corpus_tests ../DSolve_test_status/test_dsolve_corpus.c
+               $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_corpus_tests PRIVATE
+                           ${CMAKE_CURRENT_SOURCE_DIR} ../src ../src/calculus)
+if(USE_ECM)
+    target_link_libraries(dsolve_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(dsolve_corpus_tests build_ecm)
+else()
+    target_link_libraries(dsolve_corpus_tests gmp m)
+endif()
+# Per-section dashboards.  argv = <corpus> <prelude> <baseline>.  Baselines are
+# the checked-in high-water marks recorded in DSolve_test_status/STATUS.md.
+add_test(NAME dsolve_corpus_2_1_2_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 612)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

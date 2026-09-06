@@ -76,6 +76,57 @@ static void t_m14_sinform(void) {
     }
 }
 
+/* Solve `eqn` and require the residual vanish numerically after instantiating a
+ * SYMBOLIC free parameter (regression guard for the cv_num_ok param-instantiation
+ * fix: a solution carrying a symbolic degree must still verify). */
+static void cv_ok_param(const char* eqn, const char* resid,
+                        const char* param, const char* pval) {
+    char buf[1400];
+    snprintf(buf, sizeof(buf),
+        "With[{sol = DSolve[%s, y, x]}, Head[sol] === List && Length[sol] >= 1 && "
+        "Module[{r = (%s) /. sol[[1]] /. {%s -> %s, C[1] -> 13/10, C[2] -> 7/10, x -> 11/10}}, "
+        "Abs[N[r, 20]] < 10^-6]]",
+        eqn, resid, param, pval);
+    ASSERT_TRUE(buf);
+}
+
+/* Symbolic-degree Legendre via t = Cos[x]: y'' + Cot[x] y' + nu(nu+1) y == 0 with
+ * nu SYMBOLIC (solution carries LegendreP[nu, Cos[x]] / LegendreQ[nu, Cos[x]]).
+ * Checked at several non-integer nu — before the cv_num_ok fix these all declined
+ * because the symbolic nu made the numeric verifier reject the correct transform. */
+static void t_m16_legendre_symbolic(void) {
+    const char* eqn = "y''[x] + Cot[x] y'[x] + nu (nu + 1) y[x] == 0";
+    const char* res = "y''[x] + Cot[x] y'[x] + nu (nu + 1) y[x]";
+    const char* nuv[] = { "7/3", "3/2", "12/5", "5/4" };
+    for (int i = 0; i < 4; i++) cv_ok_param(eqn, res, "nu", nuv[i]);
+}
+
+/* Solve `eqn` (symbolic-parameter trig-potential family) and require the residual
+ * vanish at two small generic parameter instantiations where the emitted 2F1
+ * numericizes cleanly (a,b,c,p,q < 1 keep the hypergeometric argument in range). */
+static void pt_verify(const char* eqn, const char* res) {
+    char buf[1600];
+    snprintf(buf, sizeof(buf),
+        "With[{sol = DSolve[%s, y, x]}, Head[sol] === List && Length[sol] >= 1 && "
+        "Module[{r1 = (%s) /. sol[[1]] /. {a->31/100,b->22/100,c->17/100,p->42/100,q->53/100,C[1]->13/10,C[2]->7/10,x->3/5}, "
+        "        r2 = (%s) /. sol[[1]] /. {a->-27/100,b->35/100,c->12/100,p->48/100,q->39/100,C[1]->9/10,C[2]->6/5,x->4/5}}, "
+        "  Abs[N[r1,18]] < 10^-6 && Abs[N[r2,18]] < 10^-6]]",
+        eqn, res, res);
+    ASSERT_TRUE(buf);
+}
+
+/* M16 Pöschl-Teller / trigonometric-potential recognizer (SpecialFunctionForm):
+ * y'' == (a + p(p-1)Csc^2 x + q(q-1)Sec^2 x) y and its Csc-only and
+ * (a Cos^2+b Sin^2+c)/Sin^2 spellings -> Hypergeometric2F1 (numerically verified). */
+static void t_m16_poschl_teller(void) {
+    pt_verify("y''[x] == (a + p (p-1) Csc[x]^2 + q (q-1) Sec[x]^2) y[x]",
+              "y''[x] - (a + p (p-1) Csc[x]^2 + q (q-1) Sec[x]^2) y[x]");
+    pt_verify("y''[x] == (a + p (p-1) Csc[x]^2) y[x]",
+              "y''[x] - (a + p (p-1) Csc[x]^2) y[x]");
+    pt_verify("y''[x] == ((a Cos[x]^2 + b Sin[x]^2 + c) y[x])/Sin[x]^2",
+              "y''[x] - ((a Cos[x]^2 + b Sin[x]^2 + c) y[x])/Sin[x]^2");
+}
+
 /* Pinned method solves; declines an already-rational ODE (not its domain). */
 static void t_m14_pinned(void) {
     ASSERT_TRUE("Head[DSolve`ChangeOfVariable[y''[x] + Cot[x] y'[x] + 6 y[x] == 0, y, x]] === List");
@@ -89,6 +140,8 @@ int main(void) {
 
     TEST(t_m14_legendre);
     TEST(t_m14_sinform);
+    TEST(t_m16_legendre_symbolic);
+    TEST(t_m16_poschl_teller);
     TEST(t_m14_pinned);
 
     printf("All DSolve M14 stress tests passed.\n");

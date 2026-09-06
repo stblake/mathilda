@@ -452,6 +452,67 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     Lommel via power substitution `t=x^k`, and the `E^x`/`Log` (Euler) substitutions.
   All DSolve ctest suites + `make check-c99` green; no regression.
 
+- **M15 — external corpus harness + §2.1.2 baseline + crash hardening.** ✅ DONE.
+  The first time DSolve is measured against a large *external* reference set:
+  Nasser Abbasi's 12000.org "Solving ODEs" §2.1.2 — 1204 ODEs Maple **and**
+  Mathematica both solve (SymPy only 157). Everything lives in
+  **`DSolve_test_status/`** (self-contained cross-session dashboard): the converter
+  `tools/latex_ode_to_mathilda.py` (tex4ht LaTeX → Mathilda syntax; function/indvar
+  detection, subscripts, `\operatorname`/`\textit` Maple heads; all 1391 equations
+  round-trip through the parser), the corpus `DE_examples_2.m` (1000 scalar + 204
+  systems), the fork-per-case self-verifying harness `test_dsolve_corpus.c` +
+  `dsolve_corpus_prelude.m` (runs `DSolve` under `TimeConstrained`, numerically
+  back-substitutes each explicit branch; systems skipped — scalar-first), the
+  ranked-gap reporter `tools/dsolve_corpus_report.py`, and `STATUS.md`. Registered
+  as the per-section ctest `dsolve_corpus_2_1_2_tests` (a progress dashboard gated at
+  the checked-in non-PASS baseline, argv[3]; each wave lowers it).
+  - **Baseline: 385/1000 scalar (38.5%), 0 FAIL, 6 crashes.** Measurement corrected
+    the roadmap: the orthogonal-polynomial (54/54), elliptic (7/7) and Bessel (2/2)
+    buckets are **already fully solved** by Kovacic — no recognizer wave needed.
+    Ranked scalar gaps: 2nd-order linear 222, 3rd/high-order linear 110,
+    2nd-order reducible-μ 70, **Abel 64**, 1st-order symmetry 38, solvable-for-y/x 25.
+  - **Two root-cause crash fixes** the corpus surfaced (both protect every caller):
+    (A) `dsolve_linear_normalize` now gates its polynomial/rational normalisation to
+    **rational-in-x coefficients** (new `ds_is_rational_in`) — a transcendental
+    coefficient (`a(λe^{λx}−a e^{2λx})`, `(1+e^{t²/2})²`) drove `PolynomialGCD`/`Cancel`
+    to a non-finite content and `GCD(−∞,1)` stack-overflow (SIGSEGV on 298/876/879,
+    which now **solve** via Frobenius); (B) `expr_to_mpolyq` guards `base^(−k)` with a
+    zero base, which called `fmpz_mpoly_q_inv(0)` and hard-ABORTed FLINT (SIGABRT on
+    the nonlinear 3rd-order 269). All 6 crashes now run clean; 0 crashes remain.
+  - Method waves M16+ target the ranked gaps (measured-biggest-first). All existing
+    DSolve ctest suites + `make check-c99` green; no regression.
+
+- **M16 — 2nd-order linear: change-of-variable + special-function recognizer.** ✅ DONE.
+  First measured method wave on the §2.1.2 corpus's largest bucket (2nd-order linear,
+  222 gap). Two verified increments, **388 → 396 scalar solved** (gap 612 → 604), 0
+  wrong answers, all DSolve suites + `make check-c99` green.
+  - **`cv_num_ok` symbolic-parameter verification** (`dsolve_changevar.c`). M14's numeric
+    back-substitution guard instantiated only `C[1]`/`C[2]`, so a transform whose
+    composed solution carried a **symbolic parameter** (e.g. `LegendreP[k, Cos x]` for
+    symbolic `k`) never numericized — every sample was NaN and the correct transform was
+    rejected. It now collects the residual's free parameters (argument-position symbols,
+    never function heads) and instantiates each at a distinct generic real, so
+    symbolic-degree Legendre-Cot (`y''+Cot x y'+k(k+1)y==0`) and its kin now solve
+    through M14's existing `t=Cos x` transform. Guard: `t_m16_legendre_symbolic`.
+  - **Pöschl-Teller / trigonometric-potential recognizer** (`dsolve_specialform.c`).
+    New row for `y'' == (a + p(p−1)Csc²x + q(q−1)Sec²x) y` (and the Csc-only and
+    `(a Cos²+b Sin²+c)/Sin²` spellings): extract `Q Sin²x Cos²x` as an even quadratic in
+    `Cos x` (rewriting `Sin^{2k}→(1−Cos²)^k`, then **Expand** — `Simplify` reverts it),
+    giving `a=−c0`, `p(p−1)=−c1`, `q(q−1)=−c2`; emit the verifiable
+    `Sin^p Cos^q ₂F₁((p+q±√(−a))/2, p+½, Sin²x)` and its `p→1−p` partner. Because the
+    ₂F₁ residual is undecidable by `zero_test`, emission is gated by an **in-method
+    numeric self-verify** (`sf_num_ok`, samples in `(0,π/2)`) — it can never ship a wrong
+    answer; a degenerate parameter set (singular ₂F₁ lower parameter) declines to
+    Frobenius. Guard: `t_m16_poschl_teller` (3 forms × 2 instantiations). BesselJ/Y,
+    LegendreP, Hypergeometric2F1 all numericize, so these solutions are corpus-verifiable;
+    GegenbauerC/HermiteH are inert (not used).
+  - **Measurement corrected the roadmap:** naive change-of-*independent*-variable
+    substitutions (`t=x^m`, `e^x`, `ln x`, `1/x`) had ~0 yield on the homogeneous-rational
+    residue (those need special-function recognisers, often at symbolic exponents), and the
+    canonical Gegenbauer/Jacobi bucket is already Kovacic-solved. Residue for M17:
+    Gegenbauer/Jacobi via an affine→Gauss ₂F₁ change of variable (math validated),
+    parabolic-cylinder, power→Bessel, and the Abel/operator-factoring buckets.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -630,7 +691,13 @@ recursive sub-solves.
   (`x y''+(b−x)y'−a y==0` → `Hypergeometric1F1[a,b,x]` + `x^(1−b) 1F1[a−b+1,2−b,x]`)
   and **Gauss** (`x(1−x)y''+(c−(a+b+1)x)y'−ab y==0` → `Hypergeometric2F1[a,b,c,x]` +
   `x^(1−c) 2F1[a−c+1,b−c+1,2−c,x]`; `a,b` recovered from `a+b`, `ab` via a
-  quadratic whose linear factors give radical-free roots). The hypergeometric
+  quadratic whose linear factors give radical-free roots), and **Pöschl-Teller**
+  (M16, `P=0`, `Q=c0+c1 Csc²x+c2 Sec²x` — extracted as an even quadratic in `Cos x`
+  after `Sin^{2k}→(1−Cos²)^k`; → `Sin^p Cos^q 2F1((p+q±√(−a))/2, p+½, Sin²x)` and the
+  `p→1−p` partner, `p(p−1)=−c1`, `q(q−1)=−c2`, `a=−c0`; gated by an in-method NUMERIC
+  self-verify since the 2F1 residual is undecidable — covers the Kamke/Murphy
+  Csc²/Sec²/(a Cos²+b Sin²+c)/Sin² trig-potential family, and the `y''+Cot x y'+…`
+  spellings once M14's t=Cos transform reaches this form). The hypergeometric
   heads auto-rewrite to `HypergeometricPFQ`, which has a `deriv.c` z-derivative
   rule, so the branches verify. The second solution carries `x^(1−b)`/`x^(1−c)`
   and is emitted only when that exponent parameter is a **non-integer number**

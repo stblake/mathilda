@@ -38,6 +38,7 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include <stdlib.h>
+#include <math.h>
 
 /* C[1] b0 + C[2] b1 ; b0,b1 consumed */
 static Expr* combo(Expr* b0, Expr* b1) {
@@ -51,6 +52,93 @@ static Expr* powrat(const Expr* a, int p, int q) {
                     expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ expr_new_integer(q), expr_new_integer(-1) }, 2)));  /* p/q */
     return eval_and_free(ds_call2(SYM_Power, expr_copy((Expr*)a), rat));
+}
+
+/* --- numeric self-verify for an emitted 2nd-order solution.  The Pöschl-Teller
+ *     row below returns a Hypergeometric2F1 combination whose residual zero_test
+ *     cannot decide, so (as with M12/M14) we gate emission on a numeric back-
+ *     substitution: only a solution that vanishes at several sample points, with
+ *     every symbolic parameter instantiated at a distinct generic real, is kept. */
+static void sf_collect_params(const Expr* e, const char** names, int* n, int cap) {
+    if (!e || *n >= cap) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        for (int i = 0; i < *n; i++) if (names[i] == nm) return;
+        names[(*n)++] = nm; return;
+    }
+    if (e->type == EXPR_FUNCTION) {
+        if (e->data.function.head && e->data.function.head->type != EXPR_SYMBOL)
+            sf_collect_params(e->data.function.head, names, n, cap);
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            sf_collect_params(e->data.function.args[i], names, n, cap);
+    }
+}
+static double sf_abs_at(const Expr* R, const char* xv, double xval) {
+    Expr* e = ds_subst(expr_copy((Expr*)R), expr_new_symbol(xv), expr_new_real(xval));
+    e = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", e))));
+    double m = (e && e->type == EXPR_REAL) ? e->data.real
+             : (e && e->type == EXPR_INTEGER) ? (double)e->data.integer : NAN;
+    expr_free(e); return m;
+}
+static bool sf_num_ok(const DSolveProblem* P, const Expr* general,
+                      const char* xv, const char* yname) {
+    Expr* R = expr_copy(P->eq_residuals[0]);
+    Expr* b0 = expr_copy((Expr*)general);
+    Expr* b1 = ds_d(expr_copy((Expr*)general), expr_new_symbol(xv));
+    Expr* b2 = ds_d(ds_d(expr_copy((Expr*)general), expr_new_symbol(xv)), expr_new_symbol(xv));
+    R = ds_subst(R, ds_make_funcapp(yname, 2, xv), b2);
+    R = ds_subst(R, ds_make_funcapp(yname, 1, xv), b1);
+    R = ds_subst(R, ds_make_funcapp(yname, 0, xv), b0);
+    R = ds_subst(R, ds_const(1), expr_new_real(1.3));
+    R = ds_subst(R, ds_const(2), expr_new_real(0.7));
+    {
+        const char* skip[] = { xv, intern_symbol("E"), intern_symbol("Pi"),
+            intern_symbol("I"), intern_symbol("C"), intern_symbol("EulerGamma"),
+            intern_symbol("Degree"), intern_symbol("GoldenRatio"),
+            intern_symbol("Catalan"), intern_symbol("Infinity") };
+        const int nskip = (int)(sizeof(skip)/sizeof(skip[0]));
+        const char* syms[64]; int ns = 0;
+        sf_collect_params(R, syms, &ns, 64);
+        int pi = 0;
+        for (int i = 0; i < ns; i++) {
+            bool sk = false;
+            for (int j = 0; j < nskip; j++) if (syms[i] == skip[j]) { sk = true; break; }
+            if (sk) continue;
+            double v = 0.29 + 0.13 * (double)pi; pi++;
+            R = ds_subst(R, expr_new_symbol(syms[i]), expr_new_real(v));
+        }
+    }
+    const double xs[] = { 0.2, 0.4, 0.6, 0.8, 1.0 };   /* in (0, pi/2), away from pi/2
+                                                        * where the 2F1 argument Sin^2 -> 1
+                                                        * can approach a branch point */
+    int small = 0, big = 0;
+    for (int i = 0; i < 5; i++) {
+        double m = sf_abs_at(R, xv, xs[i]);
+        if (isnan(m) || !isfinite(m)) continue;
+        if (m < 1e-6) small++; else if (m > 1e-3) big++;
+    }
+    expr_free(R);
+    return small >= 2 && big == 0;
+}
+
+/* Sin[x]^pe Cos[x]^q Hypergeometric2F1[(pe+q+s)/2, (pe+q-s)/2, pe+1/2, Sin[x]^2].
+ * The two Pöschl-Teller solutions are pt_sol(p) and pt_sol(1-p) (the second's
+ * lower parameter 3/2-p is exactly (1-p)+1/2).  pe, q, s borrowed. */
+static Expr* pt_sol(const Expr* pe, const Expr* q, const Expr* s, const char* xv) {
+    Expr* sin2 = ds_call2(SYM_Power, ds_call1("Sin", expr_new_symbol(xv)), expr_new_integer(2));
+    Expr* pq   = ds_call2(SYM_Plus, expr_copy((Expr*)pe), expr_copy((Expr*)q));   /* pe+q */
+    Expr* halfA = ds_call2(SYM_Power, expr_new_integer(2), expr_new_integer(-1)); /* 1/2 */
+    Expr* A = eval_and_free(ds_call2(SYM_Times,
+                  ds_call2(SYM_Plus, expr_copy(pq), expr_copy((Expr*)s)), expr_copy(halfA)));
+    Expr* B = eval_and_free(ds_call2(SYM_Times,
+                  ds_call2(SYM_Subtract, expr_copy(pq), expr_copy((Expr*)s)), expr_copy(halfA)));
+    Expr* C = eval_and_free(ds_call2(SYM_Plus, expr_copy((Expr*)pe), expr_copy(halfA))); /* pe+1/2 */
+    expr_free(pq); expr_free(halfA);
+    Expr* F = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric2F1),
+                  (Expr*[]){ A, B, C, sin2 }, 4));
+    Expr* sp = eval_and_free(ds_call2(SYM_Power, ds_call1("Sin", expr_new_symbol(xv)), expr_copy((Expr*)pe)));
+    Expr* cq = eval_and_free(ds_call2(SYM_Power, ds_call1("Cos", expr_new_symbol(xv)), expr_copy((Expr*)q)));
+    return eval_and_free(ds_call2(SYM_Times, sp, ds_call2(SYM_Times, cq, F)));
 }
 
 /* True iff e is an explicit number (NumberQ).  This guards the hypergeometric
@@ -524,6 +612,86 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
         expr_free(negprod); expr_free(W);
     }
 
+    /* ---- Trigonometric Pöschl-Teller potential: P == 0,
+     *      Q == c0 + c1 Csc[x]^2 + c2 Sec[x]^2   (c_i free of x).
+     * Equivalently y'' == (a + p(p-1) Csc^2 x + q(q-1) Sec^2 x) y with a = -c0,
+     * p(p-1) = -c1, q(q-1) = -c2.  Solutions (numerically verified):
+     *   y_{p} = Sin^p Cos^q 2F1((p+q+s)/2,(p+q-s)/2, p+1/2, Sin^2 x),  s = Sqrt[-a],
+     * with the second solution y_{1-p}.  Extraction: R = Q Sin^2 Cos^2, rewritten
+     * with Sin^2 -> 1-Cos^2, is the even quadratic in Cos[x]
+     *   -c0 Cos^4 + (c0+c1-c2) Cos^2 + c2.
+     * The 2F1 residual is undecidable by zero_test, so a numeric self-verify gates
+     * emission — a degenerate parameter set (singular 2F1 lower parameter) declines
+     * to the Frobenius fallback.  Covers Kamke/Murphy trig-potential equations
+     * (Csc^2/Sec^2/Cos^2/Sin^2), including those written via Cot^2 or (a Cos^2 + b
+     * Sin^2 + c)/Sin^2. */
+    if (!general && ds_is_zero(Pc)) {
+        Expr* cs = ds_call2(SYM_Power, ds_call1("Sin", expr_new_symbol(xvar)), expr_new_integer(2));
+        Expr* cc = ds_call2(SYM_Power, ds_call1("Cos", expr_new_symbol(xvar)), expr_new_integer(2));
+        Expr* cosx = ds_call1("Cos", expr_new_symbol(xvar));
+        Expr* R = ds_simplify(ds_call2(SYM_Times, expr_copy(Qc),
+                      ds_call2(SYM_Times, expr_copy(cs), expr_copy(cc))));            /* Q Sin^2 Cos^2 */
+        /* Rewrite every even power Sin^{2k} -> (1-Cos^2)^k (Simplify can introduce
+         * Sin^4/Sin^6), then Expand (NOT Simplify: it reverts 1-Cos^2 -> Sin^2). */
+        Expr* omc = ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(cc));      /* 1-Cos^2 */
+        Expr* rl[3];
+        for (int kk = 3; kk >= 1; kk--) {
+            Expr* lhs = ds_call2(SYM_Power, ds_call1("Sin", expr_new_symbol(xvar)),
+                            expr_new_integer(2 * kk));
+            Expr* rhs = (kk == 1) ? expr_copy(omc)
+                                  : ds_call2(SYM_Power, expr_copy(omc), expr_new_integer(kk));
+            rl[3 - kk] = expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){ lhs, rhs }, 2);
+        }
+        Expr* rules = expr_new_function(expr_new_symbol(SYM_List), rl, 3);
+        expr_free(omc);
+        Expr* R2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                       (Expr*[]){ expr_copy(R), rules }, 2));
+        R2 = eval_and_free(ds_call1("Expand", R2));
+        Expr* pq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ),
+                       (Expr*[]){ expr_copy(R2), expr_copy(cosx) }, 2));
+        bool ispoly = (pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True);
+        expr_free(pq);
+        if (ispoly) {
+            #define SF_COEF(k) eval_and_free(expr_new_function(expr_new_symbol("Coefficient"), \
+                (Expr*[]){ expr_copy(R2), expr_copy(cosx), expr_new_integer(k) }, 3))
+            Expr* k0 = SF_COEF(0); Expr* k1 = SF_COEF(1); Expr* k2 = SF_COEF(2);
+            Expr* k3 = SF_COEF(3); Expr* k4 = SF_COEF(4); Expr* k5 = SF_COEF(5);
+            #undef SF_COEF
+            /* pure even quadratic in Cos[x]^2: odd and degree-5 coeffs vanish */
+            if (ds_is_zero(k1) && ds_is_zero(k3) && ds_is_zero(k5)) {
+                Expr* c0 = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(k4)));  /* -k4 */
+                Expr* c2 = expr_copy(k0);
+                Expr* c1 = ds_simplify(ds_call2(SYM_Plus,
+                               ds_call2(SYM_Subtract, expr_copy(k2), expr_copy(c0)), expr_copy(c2)));
+                if (ds_free_of(c0, xvar) && ds_free_of(c1, xvar) && ds_free_of(c2, xvar)) {
+                    /* p=(1+Sqrt[1-4 c1])/2, q=(1+Sqrt[1-4 c2])/2, s=Sqrt[-a]=Sqrt[c0] */
+                    Expr* half = ds_call2(SYM_Power, expr_new_integer(2), expr_new_integer(-1));
+                    Expr* pP = ds_simplify(ds_call2(SYM_Times,
+                                   ds_call2(SYM_Plus, expr_new_integer(1),
+                                       ds_call1("Sqrt", ds_call2(SYM_Subtract, expr_new_integer(1),
+                                           ds_call2(SYM_Times, expr_new_integer(4), expr_copy(c1))))),
+                                   expr_copy(half)));
+                    Expr* qQ = ds_simplify(ds_call2(SYM_Times,
+                                   ds_call2(SYM_Plus, expr_new_integer(1),
+                                       ds_call1("Sqrt", ds_call2(SYM_Subtract, expr_new_integer(1),
+                                           ds_call2(SYM_Times, expr_new_integer(4), expr_copy(c2))))),
+                                   expr_copy(half)));
+                    Expr* s  = ds_simplify(ds_call1("Sqrt", expr_copy(c0)));            /* Sqrt[-a]=Sqrt[c0] */
+                    Expr* omp = eval_and_free(ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(pP))); /* 1-p */
+                    Expr* b0 = pt_sol(pP, qQ, s, xvar);
+                    Expr* b1 = pt_sol(omp, qQ, s, xvar);
+                    Expr* cand = combo(b0, b1);
+                    if (sf_num_ok(P, cand, xvar, P->fun_names[0])) general = cand;
+                    else expr_free(cand);
+                    expr_free(half); expr_free(pP); expr_free(qQ); expr_free(s); expr_free(omp);
+                }
+                expr_free(c0); expr_free(c1); expr_free(c2);
+            }
+            expr_free(k0); expr_free(k1); expr_free(k2); expr_free(k3); expr_free(k4); expr_free(k5);
+        }
+        expr_free(R); expr_free(R2); expr_free(cosx); expr_free(cs); expr_free(cc);
+    }
+
     expr_free(Pc); expr_free(Qc);
     if (!general) return NULL;
     Expr** out = malloc(sizeof(Expr*));
@@ -545,7 +713,10 @@ void dsolve_specialform_init(void) {
         "Bessel / modified Bessel (x^2 y'' + x y' +- (x^2 -+ v^2) y == 0), Kummer "
         "confluent hypergeometric (x y'' + (b - x) y' - a y == 0 -> "
         "Hypergeometric1F1), and Gauss hypergeometric "
-        "(x(1-x) y'' + (c - (a+b+1) x) y' - a b y == 0 -> Hypergeometric2F1). The "
+        "(x(1-x) y'' + (c - (a+b+1) x) y' - a b y == 0 -> Hypergeometric2F1), Legendre / "
+        "associated Legendre, and the trigonometric Pöschl-Teller potential "
+        "(y'' == (a + p(p-1) Csc^2 x + q(q-1) Sec^2 x) y -> Hypergeometric2F1, "
+        "numerically verified). The "
         "hypergeometric second solution is emitted only when b (resp. c) is not an "
         "integer; otherwise it declines to the series fallback.");
 }

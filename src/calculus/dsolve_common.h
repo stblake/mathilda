@@ -265,6 +265,9 @@ Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
 /* head[a] / head[a, b] — head is an interned symbol pointer; args consumed. */
 Expr* ds_call1(const char* head, Expr* a);
 Expr* ds_call2(const char* head, Expr* a, Expr* b);
+/* True iff e is a rational function of xvar (polynomial numerator & denominator
+ * after Together); gates the polynomial coefficient normaliser. */
+bool ds_is_rational_in(const Expr* e, const char* xvar);
 
 /* D[e, v] / Integrate[e, v] / Solve[eq, v] from C; args consumed, result owned. */
 Expr* ds_d(Expr* e, Expr* v);

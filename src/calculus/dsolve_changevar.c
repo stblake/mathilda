@@ -171,6 +171,27 @@ static double cv_abs_at(const Expr* R, const char* xv, double xval){
     double m = (e&&e->type==EXPR_REAL)?e->data.real:(e&&e->type==EXPR_INTEGER)?(double)e->data.integer:NAN;
     expr_free(e); return m;
 }
+/* Collect distinct interned symbol names appearing in ARGUMENT position (i.e. the
+ * free variables/parameters) — a plain-symbol function head (LegendreP, Cot, Plus,
+ * …) is NOT a parameter and must never be substituted, or the expression is
+ * destroyed. */
+static void cv_collect_params(const Expr* e, const char** names, int* n, int cap){
+    if (!e || *n >= cap) return;
+    if (e->type == EXPR_SYMBOL){
+        const char* nm = e->data.symbol.name;
+        for (int i = 0; i < *n; i++) if (names[i] == nm) return;
+        names[(*n)++] = nm; return;
+    }
+    if (e->type == EXPR_FUNCTION){
+        /* recurse into the head only if it is itself compound (e.g.
+         * Derivative[2][y]); a plain-symbol head is the function name, not a param */
+        if (e->data.function.head && e->data.function.head->type != EXPR_SYMBOL)
+            cv_collect_params(e->data.function.head, names, n, cap);
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            cv_collect_params(e->data.function.args[i], names, n, cap);
+    }
+}
+
 static bool cv_num_ok(const DSolveProblem* P, const Expr* body, const char* xv, const char* yname){
     /* residual with y^(k)[x] -> D[body,{x,k}], and C[1],C[2] -> sample reals */
     Expr* R = expr_copy(P->eq_residuals[0]);
@@ -180,9 +201,31 @@ static bool cv_num_ok(const DSolveProblem* P, const Expr* body, const char* xv, 
     R=ds_subst(R, ds_make_funcapp(yname,2,xv), b2);
     R=ds_subst(R, ds_make_funcapp(yname,1,xv), b1);
     R=ds_subst(R, ds_make_funcapp(yname,0,xv), b0);
-    /* substitute any leftover generated constants and free params with sample reals */
+    /* substitute any leftover generated constants with sample reals */
     R=ds_subst(R, ds_const(1), expr_new_real(1.3));
     R=ds_subst(R, ds_const(2), expr_new_real(0.7));
+    /* Instantiate every remaining FREE PARAMETER (symbolic degree k, coefficients
+     * a,b,n,...) with a distinct sample real — otherwise a solution carrying a
+     * symbolic parameter (e.g. LegendreP[k, Cos[x]] for symbolic k) never
+     * numericizes and the whole check spuriously rejects a correct transform. */
+    {
+        const char* skip[] = { xv, intern_symbol("E"), intern_symbol("Pi"),
+            intern_symbol("I"), intern_symbol("C"), intern_symbol("EulerGamma"),
+            intern_symbol("Degree"), intern_symbol("GoldenRatio"),
+            intern_symbol("Catalan"), intern_symbol("Infinity") };
+        const int nskip = (int)(sizeof(skip)/sizeof(skip[0]));
+        const char* syms[64]; int ns = 0;
+        cv_collect_params(R, syms, &ns, 64);
+        int pi = 0;
+        for (int i = 0; i < ns; i++){
+            bool sk = false;
+            for (int j = 0; j < nskip; j++) if (syms[i] == skip[j]) { sk = true; break; }
+            if (sk) continue;
+            /* distinct generic reals, kept small so Legendre/Bessel args stay in range */
+            double v = 0.31 + 0.17 * (double)pi; pi++;
+            R = ds_subst(R, expr_new_symbol(syms[i]), expr_new_real(v));
+        }
+    }
     const double xs[]={0.9, 1.35, 1.8, 2.4, 0.5};
     int small=0, big=0;
     for (int i=0;i<5;i++){

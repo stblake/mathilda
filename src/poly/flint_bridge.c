@@ -2391,7 +2391,18 @@ static int expr_to_mpolyq(const Expr* e, fmpz_mpoly_q_t out,
                     long am = m < 0 ? -m : m;
                     for (long i = 0; i < am; i++)
                         fmpz_mpoly_q_mul(out, out, bq, mctx);
-                    if (m < 0) fmpz_mpoly_q_inv(out, out, mctx);
+                    /* base^(negative) with base == 0 is a division by zero:
+                     * fmpz_mpoly_q_inv hard-ABORTS FLINT on a zero operand
+                     * (SIGABRT), so decline here and let the caller fall back
+                     * rather than take down the process (Kamke nonlinear
+                     * 3rd-order case (1+y'^2)y''' == (a+3y')y''^2). */
+                    if (m < 0) {
+                        if (fmpz_mpoly_is_zero(fmpz_mpoly_q_numref(out), mctx)) {
+                            fmpz_mpoly_q_clear(bq, mctx);
+                            return 0;
+                        }
+                        fmpz_mpoly_q_inv(out, out, mctx);
+                    }
                 }
                 fmpz_mpoly_q_clear(bq, mctx);
                 return ok;
