@@ -452,22 +452,58 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body, bool
         eqs[neq++] = expr_new_function(expr_new_symbol(SYM_Equal),
                         (Expr*[]){ bexpr, eval_and_free(expr_copy(P->conds[c].value)) }, 2);
     }
-    Expr* eqlist = expr_new_function(expr_new_symbol(SYM_List), eqs, neq);
-    free(eqs);
-    Expr* varlist = expr_new_function(expr_new_symbol(SYM_List), params, npar);
-    free(params);
-
-    Expr* solres = ds_solve(eqlist, varlist);
+    /* A single condition fitting a single constant is solved in Solve's SCALAR
+     * form (Solve[eq, C[1]]), never the list form (Solve[{eq}, {C[1]}]): only the
+     * scalar form applies inverse-function inversion, so a constant sitting inside
+     * a transcendental -- Sqrt[C[1]]==1, Log[3+C[1]]==0, Tan[..C[1]..]==k -- fits
+     * (the common first-order IVP), where the list form bubbles back unevaluated
+     * and leaked the general solution's C[1].  Multi-condition (2nd-order IVP) or
+     * under-determined fits keep the list form, which handles the linear system. */
+    bool scalar_fit = (neq == 1 && npar == 1);
+    Expr* solres;
+    if (scalar_fit) {
+        solres = ds_solve(eqs[0], params[0]);
+        free(eqs); free(params);
+    } else {
+        Expr* eqlist = expr_new_function(expr_new_symbol(SYM_List), eqs, neq);
+        free(eqs);
+        Expr* varlist = expr_new_function(expr_new_symbol(SYM_List), params, npar);
+        free(params);
+        solres = ds_solve(eqlist, varlist);
+    }
     Expr* fitted = NULL;
     if (solres && head_is(solres, SYM_List)) {
         if (solres->data.function.arg_count == 0) {
-            /* Solve proved the conditions inconsistent: no solution. */
-            if (no_solution) *no_solution = true;
+            /* Empty Solve result.  From the multi-condition LIST form this is a
+             * genuine inconsistency -> no solution (BVP soundness, M11).  From the
+             * single-condition SCALAR form it is unreliable: Solve returns {} when
+             * the fit point is a SINGULARITY of the solution basis (e.g. a Riccati
+             * -> Bessel IVP fitted at x0=0 where BesselK is infinite), which is NOT
+             * a real inconsistency -- so keep the general solution there instead of
+             * falsely reporting no-solution. */
+            if (no_solution && !scalar_fit) *no_solution = true;
         } else {
             Expr* branch = solres->data.function.args[0];   /* List[Rule[C[k],val],...] */
-            if (head_is(branch, SYM_List))
+            if (head_is(branch, SYM_List)) {
                 fitted = eval_and_free(internal_replace_all(
                     (Expr*[]){ expr_copy((Expr*)body), expr_copy(branch) }, 2));
+                /* A multivalued inverse (Solve[Tan[..C..]==k, C]) fits as a
+                 * ConditionalExpression over an integer family, reintroducing the
+                 * generated constant.  For a fully-determined single-constant fit
+                 * every branch satisfies the condition, so take the PRINCIPAL one:
+                 * strip ConditionalExpression, then collapse the residual family
+                 * index C[_] -> 0.  Guarded to the ConditionalExpression case so a
+                 * clean fit is untouched and an unfitted constant is never zeroed. */
+                if (scalar_fit && fitted &&
+                    ds_has_head(fitted, SYM_ConditionalExpression)) {
+                    Expr* strip = parse_expression("ConditionalExpression[e_, _] :> e");
+                    fitted = eval_and_free(internal_replace_all(
+                        (Expr*[]){ fitted, strip }, 2));
+                    Expr* zero = parse_expression("C[_] -> 0");
+                    fitted = eval_and_free(internal_replace_all(
+                        (Expr*[]){ fitted, zero }, 2));
+                }
+            }
         }
     }
     if (solres) expr_free(solres);

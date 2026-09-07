@@ -25,6 +25,7 @@ Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
 | 2026-09-07 (**M19 re-baseline**) | **424 / 1000** | **42.4%** | **576** | First full re-run since M16 — M17 + M18 measured together. The 396→424 jump is M17/M18 (the reports were stale). Honest post-M17/M18 baseline. 0 FAIL. |
 | 2026-09-07 (**M19**)      | **427 / 1000** | **42.7%** | **573** | **+3** (2.1.2-102, -568, -611), **0 FAIL, 0 regressions**. Confluent Whittaker/₁F₁ recogniser on the y'-free (P==0) surface. Gate baseline 612→**576** (573 measured non-PASS + 3 margin for intermittent fork-harness crashes). |
 | 2026-09-07 (**M20**)      | **432 / 1000** | **43.2%** | **568** | **+6** (2.1.2-402, -371, -372, -376, -403, -424), **0 FAIL, 0 real regressions**. `PolynomialShiftSubstitution` (`dsolve_polyshift.c`): the radical `[F(x),G(x)]`-symmetry sub-cluster of the 1st-order symmetry gap, `u=φ(x)+c y` → separable → implicit first integral. (The one P→U, 2.1.2-879, is a **load-flaky timeout** — a 2nd-order Frobenius case that PASSes in 5.9 s in isolation, under the 8 s fork limit, and is untouched by polyshift; effective +6 → 433 on a clean run.) Gate baseline 576→**572** (568 measured non-PASS + margin for the flaky fork-timeout cluster 879/208/872/983). |
+| 2026-09-08 (**M21** side-effect) | **436 / 1000** | **43.6%** | **564** | **+4, 0 FAIL, 0 regression.** Not a §2.1.2-targeted wave — the M21 §2.2.1 shared fixes (scalar-Solve IC fit + `NthAlgebraic` denominator-clearing) also close 4 §2.1.2 first-order cases, and the `dsFreeParams` verifier fix (numeric back-substitution was vacuous) surfaced **no** new FAIL. Gate baseline kept at **572** (margin for the flaky fork cluster; not lowered since §2.1.2 was not the focus). |
 
 ### Gap by bucket (baseline, ranked)
 
@@ -83,6 +84,53 @@ Post-fix re-run: 388/1000 solved, **612 non-PASS**, and 2 remaining "crashes"
 208 declines, 983 is a 4th-order Euler that times out) — intermittent, fork-layout
 -dependent, effectively declines. Left counted in the 612 baseline; chase if they
 become reproducible.
+
+---
+
+## Section 2.2.1 — "Problems 1 to 100" (Table 2.19, sorted by problem number)
+
+Corpus: `DE_examples_221.m` — 100 records, **all scalar, 63 IVPs** (4 symbolic ICs
+`y(a)=b`, 3 swapped-variable `x=x(y)`). Elementary first-order + simple 2nd-order
+(quadrature / linear / separable / homogeneous / Riccati). **Zero overlap** with §2.1.2
+(that corpus is the hard "SymPy-failed" residue with no ICs). This is the first corpus
+section carrying **initial conditions**: the equation slot is the DSolve-native list
+`{ode, ic...}` and the harness verifies the ODE residual **and every IC** (M21).
+`ctest -R dsolve_corpus_2_2_1_tests` · gate baseline **4**.
+
+| Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
+|------|--------------:|--------:|---------------:|-------|
+| 2026-09-08 (M21 baseline) | 86 / 100 | 86.0% | 14 | 0 FAIL. First IC-verifying run (prelude `dsFreeParams` `Heads->True` bug fixed → numeric verify is real). |
+| 2026-09-08 (**M21**)      | **96 / 100** | **96.0%** | **4** | **+10, 0 FAIL, 0 regression.** Three solver fixes (below). Gate baseline **4**. |
+
+**M21 fixes** (all in the scalar first-order cascade / fit substrate):
+1. **Swapped-variable `A/y'==B`** (#98/99/100) — `NthAlgebraic` now clears a
+   top-derivative-bearing denominator (`Numerator[Together[·]]`) and recurses on the
+   cleared ODE, so the `x=x(y)` spelling solves. (Worked around an `Exponent` bug — it
+   returns 0 when any funcapp is present — via `FreeQ`.)
+2. **Transcendental-inverse IC fit** (#29/30/33/34/40/61) — `dsolve_fit_constants` uses
+   Solve's **scalar** form for a single-condition/single-constant fit; only the scalar
+   form applies inverse-function inversion (a constant inside `Sqrt`/`Log`/`^(3/2)`/Airy
+   ratio now fits, where the list form bubbled back and leaked `C[1]`).
+3. **`ConditionalExpression` principal-branch collapse** (#60) — a multivalued `Tan`
+   inverse fits as a `ConditionalExpression` over an integer family; take the principal
+   branch → `y'=1+y², y(0)=0` gives `Tan[x]`.
+
+**Residue (4, all bounded UNEVAL, 0 wrong answers):**
+
+| Case | ODE | Why |
+|---|---|---|
+| 2.2.1-35 | `y'=Log[1+y²], y(0)=0` | non-elementary `∫dy/Log[1+y²]`; DSolve doesn't spot the equilibrium `y≡0` (bounded timeout, matches Maple/Mma) |
+| 2.2.1-47 | `y'=4(xy)^(1/3)` | homogeneous class-G; general solution is a degree-12 `Root` object the verify can't confirm |
+| 2.2.1-48 | `y'=2x Sec[y]` | separable, but the `ArcSin[Cos[2](…)]` inversion is slow (>8 s prelude limit) and carries constant artifacts |
+| 2.2.1-67 | `y'=6 e^{2x−y}, y(0)=0` | `Solve[E^y==Q, y]` reuses `C[1]` as the Log branch-index while `C[1]` is already the integration constant → collision (a `Solve` generated-constant bug; separate follow-up) |
+
+Full per-case results: `reports/2.2.1.tsv`; bucketed report: `reports/2.2.1.md`.
+
+**Verifier fix (affects all sections):** the corpus prelude's `dsFreeParams` used
+`Cases[…, Heads->True]`, collecting operator heads (`Plus`, `Times`, `Tan`, `Sec`) as
+"parameters" and substituting numbers for them — so every residual became
+non-numericizable and scored a vacuous `UNK` (trusted). Removing `Heads->True` makes the
+numeric back-substitution real for the first time. §2.1.2 re-verified: **0 new FAIL**.
 
 ---
 

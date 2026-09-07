@@ -129,11 +129,21 @@ def detect_symbols(rows_tex):
            re.search(r'(?<![A-Za-z])' + c + r'\s*\(', joined):
             arbs.add(c)
     main_set = set(mains); indvar = None
-    for cand in INDVAR_PREF:
+    # The independent variable is chosen from the MAIN (non-condition) rows only, so
+    # that parameters appearing solely in an initial condition (y(a)=b) never win, and
+    # a swapped-variable ODE (x = x(y), y independent) is detected from its own body.
+    main_rows = [r for r in rows_tex if not is_condition_row(r, mains)]
+    mjoined = ' '.join(main_rows) if main_rows else joined
+    for cand in INDVAR_PREF:                             # preferred standard letter, present
         if cand in main_set: continue
-        if re.search(r'(?<![A-Za-z0-9])' + cand + r'(?![A-Za-z0-9])', joined):
+        if re.search(r'(?<![A-Za-z0-9])' + cand + r'(?![A-Za-z0-9])', mjoined):
             indvar = cand; break
-    if indvar is None:
+    if indvar is None:                                   # any present non-main letter (x=x(y))
+        present = re.findall(r'(?<![A-Za-z0-9\\])([A-Za-z])(?![A-Za-z0-9])', mjoined)
+        for cand in sorted(set(present)):
+            if cand in main_set or cand in ARBFUN or cand == 'e': continue
+            indvar = cand; break
+    if indvar is None:                                   # autonomous: fresh standard letter
         for cand in INDVAR_PREF:
             if cand not in main_set: indvar = cand; break
     if indvar is None: indvar = 't'
@@ -201,6 +211,25 @@ def is_condition_row(row, mains):
     return False
 
 
+def convert_condition(row, mains, indvar):
+    """Convert an initial-condition row `y(P)=V` / `y'(P)=V` into a Mathilda
+    point equation `y[P] == V` / `y'[P] == V`. The point P and value V are
+    constants/parameters (numbers, `a`, `Pi/2`, `2 E`, ...) converted WITHOUT
+    the y->y[iv] substitution (mains=[]), so `0`/`a`/`Pi/2` stay literal."""
+    r = row.replace('&', '')
+    if '=' not in r: return None
+    lhs, rhs = r.split('=', 1)
+    lhs = lhs.replace(r'\left', '').replace(r'\right', '')
+    m = re.match(r'\s*([A-Za-z][0-9]*)\s*((?:\^\s*\{\s*(?:\\prime\s*)+\}\s*)?)\(', lhs)
+    if not m or m.group(1) not in mains: return None
+    sym = m.group(1); primes = m.group(2).count(r'\prime')
+    popen = m.end() - 1; pclose = find_matching(lhs, popen)
+    if pclose < 0: return None
+    point = convert_side(lhs[popen + 1:pclose], [], [], indvar)
+    value = convert_side(rhs, [], [], indvar)
+    return '%s%s[%s] == %s' % (sym, "'" * primes, point, value)
+
+
 def convert_row(tex):
     tex = normalize_subscripts(strip_array(tex))
     rows = [r for r in re.split(r'\\\\', tex) if r.strip()]
@@ -208,19 +237,31 @@ def convert_row(tex):
     eqs = []; conds = []
     for r in rows:
         if '=' not in r.replace('&', ''): continue
-        cond = is_condition_row(r, mains)
-        lhs, rhs = r.replace('&', '').split('=', 1)
-        eq = convert_side(lhs, mains, arbs, indvar) + ' == ' + convert_side(rhs, mains, arbs, indvar)
-        (conds if cond else eqs).append(eq)
+        if is_condition_row(r, mains):
+            c = convert_condition(r, mains, indvar)
+            if c: conds.append(c)
+        else:
+            lhs, rhs = r.replace('&', '').split('=', 1)
+            eq = convert_side(lhs, mains, arbs, indvar) + ' == ' + convert_side(rhs, mains, arbs, indvar)
+            eqs.append(eq)
     return mains, arbs, indvar, eqs, conds
 
 
 def parse_table(html_text):
-    """Yield dicts {n, tex, classif, sympy} from the tex4ht TBL-4 table."""
-    cell_re = re.compile(r"id='TBL-4-(\d+)-(\d+)'[^>]*>(.*?)</td>", re.S)
-    rows = {}
+    """Yield dicts {n, tex, classif, sympy} from the tex4ht problems table.
+
+    tex4ht numbers each section's table differently (`TBL-4-...` for \u00a72.1.2,
+    `TBL-12-...` for \u00a72.2.1) and the column order also varies between sections
+    (\u00a72.1.2 carries an extra ID column, so ODE sits at col 3; \u00a72.2.1 has ODE at
+    col 2). So we (1) auto-select the table with the most `\\[..\\]` ODE blocks,
+    and (2) read the column indices for #, ODE, classification and Sympy from
+    that table's header row rather than hard-coding them."""
+    cell_re = re.compile(r"id='TBL-(\d+)-(\d+)-(\d+)'[^>]*>(.*?)</td>", re.S)
+    tables = {}                                # tnum -> {row -> {col -> cell}}
     for m in cell_re.finditer(html_text):
-        rows.setdefault(int(m.group(1)), {})[int(m.group(2))] = m.group(3)
+        t, r, c = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        tables.setdefault(t, {}).setdefault(r, {})[c] = m.group(4)
+    if not tables: return
 
     def clean(x):
         x = re.sub(r'<!--.*?-->', ' ', x, flags=re.S)
@@ -231,11 +272,28 @@ def parse_table(html_text):
         mm = re.search(r'\\\[(.*?)\\\]', cell, re.S)
         return html.unescape(re.sub(r'<[^>]+>', ' ', mm.group(1))).strip() if mm else ''
 
+    # the ODE table is the one with the most rows carrying a LaTeX ODE block
+    def n_odes(tbl):
+        return sum(1 for row in tbl.values() for cell in row.values() if '\\[' in cell)
+    rows = tables[max(tables, key=lambda t: n_odes(tables[t]))]
+
+    # detect columns from the header row (the one whose cells name #, ODE, ...)
+    col = {'n': 1, 'ode': 2, 'classif': 3, 'sympy': 7}
     for r in sorted(rows):
-        cells = rows[r]; idx = clean(cells.get(1, ''))
-        if idx == '#' or not idx: continue
-        yield dict(n=idx, tex=rawtex(cells.get(3, '')),
-                   classif=clean(cells.get(4, '')), sympy=('\u2713' in cells.get(7, '')))
+        labels = {clean(v).lower(): c for c, v in rows[r].items()}
+        if '#' in labels and 'ode' in labels:
+            col['n'] = labels['#']; col['ode'] = labels['ode']
+            for txt, key in (('classification', 'classif'), ('sympy', 'sympy')):
+                hit = next((c for lab, c in labels.items() if txt in lab), None)
+                if hit is not None: col[key] = hit
+            break
+
+    for r in sorted(rows):
+        cells = rows[r]; idx = clean(cells.get(col['n'], ''))
+        if idx == '#' or not idx or not re.search(r'\d', idx): continue
+        yield dict(n=idx, tex=rawtex(cells.get(col['ode'], '')),
+                   classif=clean(cells.get(col['classif'], '')),
+                   sympy=('\u2713' in cells.get(col['sympy'], '')))
 
 
 def mm_escape(s):
@@ -251,7 +309,7 @@ def main():
 
     text = open(args.html, encoding='utf-8', errors='replace').read()
     recs = list(parse_table(text))
-    out_lines = []; n_scalar = 0; n_system = 0
+    out_lines = []; n_scalar = 0; n_system = 0; n_ivp = 0
     for rec in recs:
         mains, arbs, indvar, eqs, conds = convert_row(rec['tex'])
         label = '%s-%s' % (args.label, re.sub(r'[^0-9]', '', rec['n']))
@@ -259,35 +317,37 @@ def main():
         sy = 'True' if rec['sympy'] else 'False'
         if len(mains) > 1 or len(eqs) > 1:       # system (or multi-equation row)
             n_system += 1
-            eqn = '{' + ', '.join(eqs) + '}'
+            eqn = '{' + ', '.join(eqs + conds) + '}'
             fns = '{' + ', '.join(mains) + '}'
             cl = classif if classif else 'system_of_ODEs'
             out_lines.append('  {"%s", %s, %s, %s, "%s", %s}' %
                              (label, eqn, fns, indvar, mm_escape(cl), sy))
         else:                                    # scalar
             n_scalar += 1
-            eqn = eqs[0] if eqs else '(* NO ODE ROW: %s *) True == True' % mm_escape(rec['tex'][:40])
+            ode = eqs[0] if eqs else '(* NO ODE ROW: %s *) True == True' % mm_escape(rec['tex'][:40])
+            # IVP: emit the DSolve-native list {ode, ic1, ...}; else the bare equation.
+            eqn = '{' + ', '.join([ode] + conds) + '}' if conds else ode
+            if conds: n_ivp += 1
             out_lines.append('  {"%s", %s, %s, %s, "%s", %s}' %
                              (label, eqn, mains[0], indvar, mm_escape(classif), sy))
 
     header = (
         '(* DE_examples_%s.m --- ODE corpus from 12000.org "Solving ODEs" section %s\n'
-        '   "%s"\n'
         '   Source: %s (Table, %d rows).\n'
-        '   Every ODE here is solved by both Maple and Mathematica.\n'
         '   Generated by tools/latex_ode_to_mathilda.py --- DO NOT hand-edit; regenerate.\n\n'
         '   Record: {"label", equation(s), function(s), indVar, "MapleClassification", sympySolved}.\n'
-        '   Scalar rows: equation is one ODE, function is a symbol.\n'
+        '   Scalar ODE: equation is one ODE, function is a symbol.\n'
+        '   Scalar IVP (%d): equation is the DSolve-native list {ode, ic1, ...} (each ic a\n'
+        '     point equation y[x0]==v / y\'[x0]==v); function stays a symbol, so the scalar\n'
+        '     harness still handles it. The harness verifies the ODE residual AND every ic.\n'
         '   Systems (%d): equation is a List, function is a List; classification\n'
         '   contains "system_of_ODEs" so the scalar harness skips them.\n'
         '   Consumed (parsed, NOT evaluated) by tests/test_dsolve_corpus.c. *)\n\n'
-        '{\n' % (args.label, args.label,
-                 'Problems not solved, but were solved by Maple and Mathematica',
-                 args.url, len(recs), n_system))
+        '{\n' % (args.label, args.label, args.url, len(recs), n_ivp, n_system))
     with open(args.out, 'w') as f:
         f.write(header + ',\n'.join(out_lines) + '\n}\n')
-    sys.stderr.write('wrote %s: %d records (%d scalar, %d systems)\n' %
-                     (args.out, len(recs), n_scalar, n_system))
+    sys.stderr.write('wrote %s: %d records (%d scalar [%d IVP], %d systems)\n' %
+                     (args.out, len(recs), n_scalar, n_ivp, n_system))
 
 
 if __name__ == '__main__':

@@ -696,6 +696,57 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     rule verified); units `t_m20_*` in `test_dsolve.c`. All DSolve ctest suites +
     `make check-c99` green.
 
+- **M21 — §2.2.1 corpus (Problems 1–100) + initial-condition coverage.** ✅ DONE. The
+  first corpus section carrying **initial value problems**, and the first time the harness
+  verifies initial conditions rather than only the general solution's ODE residual. Nasser
+  Abbasi §2.2.1 "Table 2.19, Problems 1 to 100" — 100 elementary ODEs (quadrature / linear
+  / separable / homogeneous / Riccati), 63 IVPs (4 symbolic `y(a)=b`, 3 swapped-variable
+  `x=x(y)`), **zero overlap** with §2.1.2. **86 → 96 / 100 scalar, 0 FAIL, 0 regression.**
+  - **Corpus infrastructure (IC support).** The converter `tools/latex_ode_to_mathilda.py`
+    now (a) emits initial conditions instead of discarding them — an IVP record's equation
+    slot is the DSolve-native list `{ode, ic1, …}` (each ic a point equation `y[x0]==v` /
+    `y'[x0]==v`); (b) detects a swapped independent variable (`x=x(y)`, `y` un-primed) and
+    an autonomous IC-only parameter (`y(a)=b` → fresh `x`); (c) is section-agnostic
+    (auto-selects the problems table, reads columns from the header — §2.2.1 is `TBL-12`
+    with ODE at col 2, vs §2.1.2's `TBL-4`/col 3). The prelude `dsolve_corpus_prelude.m`
+    passes the list to `DSolve` and verifies **every member** — the ODE residual swept over
+    `iv`, and each IC (free of `iv`); an IVP whose solved branch still carries a generated
+    constant `C[k]` is scored UNEVAL (general solution, IC unfitted — not a wrong answer).
+  - **Verifier bug fixed (all sections).** `dsFreeParams` used `Cases[…, Heads->True]`,
+    collecting operator heads (`Plus`, `Times`, `Tan`, `Sec`) as "parameters" and
+    substituting numbers for them, so every residual became non-numericizable → a vacuous
+    `UNK` (trusted). Removing `Heads->True` (matching the internal `l2_num_ok` "never heads"
+    policy) makes the numeric back-substitution real for the first time; §2.1.2 re-verified
+    with **0 new FAIL**.
+  - **Three solver fixes (chase full coverage).**
+    1. **Swapped-variable `A/y'==B`** (2.2.1-98/99/100): `dsolve_nth_algebraic.c` clears a
+       top-derivative-bearing denominator (`Numerator[Together[·]]`, top derivative
+       restored) and recurses on the cleared ODE, so the linear normalizer owns a
+       `y`-dependent leading coefficient. Gated by `!PolynomialQ[Rsub,Dn]` so a normal
+       polynomial ODE is never hijacked; presence of the derivative in the cleared form is
+       tested with `FreeQ`, **not** `Exponent` (which mis-returns 0 whenever a funcapp is
+       present — a separate `src/poly/exponent.c` bug, worked around here).
+    2. **Transcendental-inverse IC fit** (2.2.1-29/30/33/34/40/61): `dsolve_fit_constants`
+       fits a single-condition/single-constant IVP through Solve's **scalar** form
+       `Solve[eq, C[1]]`, since only the scalar form applies inverse-function inversion —
+       the list form `Solve[{eq},{C}]` bubbles back on `Sqrt[C]==1`, `Log[3+C]==0`, an Airy
+       Möbius ratio, etc., leaking the general solution. A scalar-form empty result is
+       treated as "couldn't fit, keep general" (not no-solution: Solve returns `{}` at a
+       singular fit point, e.g. a Riccati→Bessel IVP fitted at `x0=0`).
+    3. **`ConditionalExpression` principal branch** (2.2.1-60): a multivalued `Tan` inverse
+       fits as `ConditionalExpression[…, Element[C[1],Integers]]`; strip it and collapse the
+       family index `C[_]→0`, guarded to the ConditionalExpression case so a clean fit is
+       untouched → `y'=1+y², y(0)=0` gives `Tan[x]`.
+  - **Residue (4, bounded UNEVAL, no wrong answers):** 2.2.1-35 (`y'=Log[1+y²]`,
+    non-elementary + missed equilibrium `y≡0`), -47 (homogeneous class-G degree-12 `Root`),
+    -48 (slow `ArcSin` separable, >8 s), -67 (`Solve[E^y==Q,y]` reuses `C[1]` as the Log
+    branch-index colliding with the integration constant — a `Solve` generated-constant bug,
+    separate follow-up). *Follow-ups filed:* the `Exponent`-with-funcapp bug and the
+    `Solve` generated-constant collision.
+  - New corpus `DSolve_test_status/DE_examples_221.m`; ctest `dsolve_corpus_2_2_1_tests`
+    (gate baseline 4); `reports/2.2.1.{tsv,md}`; STATUS.md §2.2.1 block. All DSolve ctest +
+    stress suites and `make check-c99` green; §2.1.2 gate held.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -761,8 +812,10 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   Runs at the front. `dsolve_factorable.c`.
 - `[✓] NthAlgebraic` — algebraic (degree ≥ 2) in the top derivative `y^(n)`: `Solve`
   for `y^(n)`, recurse each root branch (a branch free of `y` hits `Quadrature`);
-  also the degenerate no-derivative case. Runs at the front. (SymPy `nth_algebraic`.)
-  `dsolve_nth_algebraic.c`.
+  also the degenerate no-derivative case. Also clears a top-derivative-bearing
+  **denominator** (`A/y'==B`, the 12000.org `x=x(y)` spelling): `Numerator[Together[·]]`
+  restores a polynomial ODE that the linear normalizer then owns (M21). Runs at the front.
+  (SymPy `nth_algebraic`.) `dsolve_nth_algebraic.c`.
 - `[✓] AlmostLinear` — `f(x)g(y)y' + k(x)l(y) + m(x)==0`: substitution `u=∫g dy` →
   `u'+P u==Q` (integrating factor), then `l(y)==U(x)` solved for `y`. (SymPy
   `almost_linear`.) `dsolve_almostlinear.c`.

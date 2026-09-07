@@ -60,8 +60,18 @@ python3 tools/latex_ode_to_mathilda.py /tmp/sectionN.html \
   DSolve_test_status/DE_examples_K.m --label 2.1.K
 ```
 
-Then add a `dsolve_corpus_2_1_K_tests` entry in `tests/CMakeLists.txt` and a
-section block in `STATUS.md`.
+Then add a `dsolve_corpus_<section>_tests` entry in `tests/CMakeLists.txt` and a
+section block in `STATUS.md`. The converter is section-agnostic (auto-selects the
+problems table and reads its column layout from the header row, which varies between
+sections).
+
+**Initial-value problems.** When the source rows carry initial conditions (`y(0)=3`,
+`y'(0)=10`, symbolic `y(a)=b`), the converter emits the record's equation slot as the
+DSolve-native list `{ode, ic1, …}` (the function slot stays a bare symbol, so the scalar
+harness still handles it). The prelude solves `DSolve[{ode, ics}, y, x]` and verifies the
+ODE residual **and every initial condition**; an IVP whose solved branch still carries a
+generated constant `C[k]` (the general solution with the IC unfitted) scores UNEVAL, not
+PASS. §2.2.1 is the first IVP-carrying section; §2.1.2 has no ICs (bare equations).
 
 ## After a method-wave
 

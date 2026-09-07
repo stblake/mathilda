@@ -3701,6 +3701,13 @@ add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 572)
+# Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
+# The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
+# verifies the ODE residual AND every initial condition (M21).  Baseline 4.
+add_test(NAME dsolve_corpus_2_2_1_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_221.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

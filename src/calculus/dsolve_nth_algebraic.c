@@ -106,6 +106,42 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
                 for (size_t i = 0; i < ng; i++) expr_free(gs[i]);   /* declined */
             }
             if (gs) free(gs);
+        } else if (!ispoly) {
+            /* The top derivative appears RATIONALLY (in a denominator) rather than
+             * polynomially, e.g. A/y' == B.  Clear it: Numerator[Together[A/Dn - B]]
+             * = A - B Dn is polynomial in Dn.  When that cleared numerator genuinely
+             * carries the top derivative (degree >= 1 in Dn), recurse DSolve on the
+             * cleared ODE (top derivative restored) and let the full cascade own it --
+             * the linear normalizer handles a y-dependent leading coefficient (y^3 x'
+             * = 1 - 4 y^2 x) and Lagrange/NthAlgebraic-poly a higher-degree cleared
+             * form.  This closes the 12000.org "x = x(y)" spelling (A/x'[y] == B).
+             * The cleared form has the derivative polynomially, so re-entry can never
+             * clear again (no infinite recursion), and a normal polynomial-in-y' ODE
+             * (ispoly true) never reaches here, so nothing is hijacked. */
+            Expr* numDn = eval_and_free(ds_call1("Numerator",
+                              eval_and_free(ds_call1("Together", expr_copy(Rsub)))));
+            Expr* npq = eval_and_free(ds_call2("PolynomialQ", expr_copy(numDn),
+                                               expr_new_symbol(Dn)));
+            bool npoly = (npq->type == EXPR_SYMBOL && npq->data.symbol.name == SYM_True);
+            expr_free(npq);
+            /* The cleared numerator must still carry the top derivative (else clearing
+             * produced no ODE).  Tested with FreeQ, NOT Exponent: Exponent[expr, Dn]
+             * mis-returns 0 whenever expr contains any function application (Sin[y],
+             * x[y], ...), which every "x = x(y)" residual does. */
+            Expr* fq = eval_and_free(ds_call2("FreeQ", expr_copy(numDn),
+                                              expr_new_symbol(Dn)));
+            bool has_deriv = (fq->type == EXPR_SYMBOL && fq->data.symbol.name == SYM_False);
+            expr_free(fq);
+            if (npoly && has_deriv) {
+                /* restore the top derivative (Dn -> y^(n)[x]) and recurse on cleared==0 */
+                Expr* clearedR = ds_subst(numDn, expr_new_symbol(Dn), expr_copy(topLit));
+                Expr* subeqn = expr_new_function(expr_new_symbol(SYM_Equal),
+                                   (Expr*[]){ clearedR, expr_new_integer(0) }, 2);
+                recurse_collect(subeqn, yname, xvar, &acc, &nacc);
+            } else {
+                expr_free(numDn);
+            }
+            expr_free(Rsub);
         } else {
             expr_free(Rsub);
         }
