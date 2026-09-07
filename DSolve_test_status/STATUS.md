@@ -14,14 +14,16 @@ FAIL = wrong branch (numeric back-substitution) · SKIP = system.
 ## Section 2.1.2 — "Problems not solved, but were solved by Maple and Mathematica"
 
 Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
-`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **615**.
+`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **576**.
 
 | Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
 |------|--------------:|--------:|---------------:|-------|
 | 2026-09-06 (M15 baseline) | 385 / 1000 | 38.5% | 615 | 0 FAIL, 6 crashes. Infrastructure landed. |
 | 2026-09-06 (crash fixes)  | 388 / 1000 | 38.8% | 612 | 0 FAIL, crashes 6→2 (both non-reproducing). |
-| 2026-09-06 (M16)          | 396 / 1000 | 39.6% | **604** | +8 (cv_num_ok symbolic-param verify + Pöschl-Teller 2F1 recognizer). Gate baseline 605 (601 deterministic UNEVAL + ~4 margin for intermittent fork-harness crashes 208/872/983, none reproducing in isolation). |
-| 2026-09-07 (M18 Stage 1)  | ~403 / 1000 | ~40.3% | ~597 | +7 measured on the 80 reducible-μ UNEVAL targets (184, 207, 693, 906, 1013, 1014, 1094), **0 FAIL**. Reducible-μ integrating factor μ(x,y) (Cheb-Terrab & Roche 1999) + symbolic-parameter verify gate + a `TrigToExp[Coth]` sign-bug fix. Scalar total projected (full re-run pending); gate baseline unchanged at 605 (a landed wave only lowers non-PASS, so 605 stays safe). |
+| 2026-09-06 (M16)          | 396 / 1000 | 39.6% | 604 | +8 (cv_num_ok symbolic-param verify + Pöschl-Teller 2F1 recognizer). |
+| 2026-09-07 (M18 Stage 1)  | ~403 / 1000 | ~40.3% | ~597 | +7 projected on reducible-μ targets, **0 FAIL** (μ(x,y) Cheb-Terrab & Roche 1999 + `TrigToExp[Coth]` fix). Full re-run was pending — see next row. |
+| 2026-09-07 (**M19 re-baseline**) | **424 / 1000** | **42.4%** | **576** | First full re-run since M16 — M17 + M18 measured together. The 396→424 jump is M17/M18 (the reports were stale). Honest post-M17/M18 baseline. 0 FAIL. |
+| 2026-09-07 (**M19**)      | **427 / 1000** | **42.7%** | **573** | **+3** (2.1.2-102, -568, -611), **0 FAIL, 0 regressions**. Confluent Whittaker/₁F₁ recogniser on the y'-free (P==0) surface. Gate baseline 612→**576** (573 measured non-PASS + 3 margin for intermittent fork-harness crashes). |
 
 ### Gap by bucket (baseline, ranked)
 
@@ -115,12 +117,23 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   linear-ν-ODE μ; before `SecondOrderSymmetry`, linearity-gated. +7 reducible-μ solves
   (0 FAIL). Also: symbolic-parameter numeric-verify gate; `TrigToExp[Coth]` sign-bug fix.
   Anti-overfit `test_dsolve_m18_stress.c`; units `t_m18_*`.
-- **Next (M18 Stages 2/3)** — μ(x,y') (Lemma-3 Cases A–F + Lemma-2 μ̃) then μ(y,y') via
-  the y↔x swap. **BLOCKED**: Cases A/C/D verified to find valid μ, but reduced ODEs are
-  non-elementary (verified Maple/MMA return them implicitly) — needs an implicit/
-  non-elementary first-order solver. Also **investigated 3rd/high-order operator factoring
-  (110-gap)**: the OperatorFactor full-first-order-factorization composition fix solves +3
-  (253/283/628, verified) but was REVERTED — the construction's integrals are slow (Risch,
-  8–83 s) and bounding them needs `TimeConstrained`, which nests non-deterministically under
-  the harness (flaky PASS/UNEVAL); needs a non-`TimeConstrained` bounding mechanism first.
-  Also: Abel Invariant Rational (deferred M13).
+- **M19 (2026-09-07)** — confluent Whittaker/₁F₁ recogniser + **§2.1.2 re-baseline**. The
+  scoreboard was stale (pre-M17/M18); the first full re-run puts the honest baseline at
+  **424/1000 (42.4%), 0 FAIL** (the 396→424 jump is M17+M18). New
+  `specialform_whittaker_basis()` in `dsolve_specialform.c`: a y'-free `y''+Q y==0` with a
+  single finite double pole + rank-1 irregular point at ∞ → verifiable
+  `Exp[-z/2] z^(1/2±μ) ₁F₁[1/2±μ-κ, 1±2μ, z]` (self-verified vs the reduced equation;
+  inert `WhittakerM/W` never emitted). **424→427 (+3: 102, 568, 611), 0 FAIL, 0
+  regressions.** Gate 612→**576**. Anti-overfit `test_dsolve_m19_stress.c`; units `t_m19_*`.
+  *Scope note:* Whittaker runs on the **P==0 surface only** — the P≠0 pre-pass (recovery
+  factor) gained ~13 but regressed ~5 (94/470/472/806/811): the recovery factor shares the
+  finite-pole base with `z^(1/2±μ)`, stacking same-base radical powers whose verify hits
+  `$IterationLimit` and starves the Frobenius fallback. Data-dependent, not gate-able by
+  size → restricted to P==0 for 0 regressions.
+- **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
+  Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
+  verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-
+  cylinder/Hermite (`POLY_r ndeg=2`) and trig/hyperbolic-potential-with-`y'`. Also still open:
+  M18 Stages 2/3 (μ(x,y'), μ(y,y') — BLOCKED on a non-elementary first-order solver),
+  3rd/high-order operator factoring (needs non-`TimeConstrained` bounding), Abel Invariant
+  Rational (deferred M13).

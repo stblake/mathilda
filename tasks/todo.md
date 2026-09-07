@@ -1,69 +1,58 @@
-# DSolve M18 — reducible-μ integrating-factor method
+# DSolve M19 — confluent Whittaker / ₁F₁ recognizer (+ corpus re-baseline)
 
-Method: Cheb-Terrab & Roche, JSC 27(5):501–519 (1999). New file
-`src/calculus/dsolve_ifactor.c`, builtin `DSolve\`ReducibleIntegratingFactor`.
-Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-warm-willow.md`
+Plan: `/Users/user/.claude/plans/twinkly-chasing-hammock.md`
+Method: confluent equation → normal form `z''=r z` with one finite double pole +
+nonzero const at ∞ → Whittaker (κ,μ) → emit `e^{cz} z^μ ₁F₁[…]` (verifiable),
+new branch in `specialform_reduced_basis` (`src/calculus/dsolve_specialform.c`).
 
-## Stage 0 — substrate + shared pipeline + cascade wiring ✅ DONE
-- [x] `dsolve_ifactor.c` skeleton: three-function contract (try/builtin/init)
-- [x] Copy lie2 static kits: deadline/expired, TimeConstrained beval wrappers,
-      run_applied, decline memo, too_big, has_undef_fn, num_ok/abs_at
-- [x] Φ extraction (dsolve_solve_top_derivative(P,2)) + y'[x]→p, y[x]→Y substitution
-- [x] First-integral R build: R = ∫μ dp + G(x,y), fix G from (2.10); if_hypsimp collapse
-- [x] Symbolic verify gate A(R) = R_x + p R_y + Φ R_p == 0
-- [x] Reduce/solve: R==C[2] → recurse first-order cascade (C[1]) → explicit → num_ok → dsolve_run
-- [x] Cascade wiring: extern decl, init call, enum + ds_method_from_string + switch
-- [x] Register builtin + ATTR_PROTECTED + docstring
-- [x] **linearity gate** (declines linear ODEs — correctness + terminates Case-B recursion)
-- [x] Build green
+## Step 0 — corpus re-baseline (stale report predates M17/M18)
+- [x] full §2.1.2 re-run: TRUE baseline **424/1000 scalar (42.4%), 0 FAIL**, 576 UNEVAL
+- [~] regenerate reports/2.1.2.{md,tsv}; record in STATUS.md (pending M19 re-run finish)
 
-## Stage 1 — _mu_xy (Section 2.1) ✅ DONE
-- [x] poly-in-p deg≤2 test → a,b,c
-- [x] Case A: (2.16) existence → (2.17) μ (closed form) — 906/1094 → Airy
-- [x] Case B: (2.18) existence → solve ν-ODE (2.20) → (2.19) μ — case 14 (Coth)
-- [x] **SIDE FIX: TrigToExp[Coth] sign bug** (src/simp/trigsimp.c) — was −Coth
-- [x] Verify: 906/1094/14 solve (independent residual ~1e-16); 189/199/307/665 genuine declines
-- [~] Corpus re-measure (running, background by8o5b8ah)
+## Step 1 — Whittaker/₁F₁ recognizer ✅ DONE
+- [x] specialform_whittaker_basis(): single (x−x0)^2 pole via squarefree trick; num/den deg 2
+- [x] b0=g|x0, b1=g'|x0, b2=lead; c=2√(−b2), μ=√(1/4−b0), κ=b1/c (Qc-convention)
+- [x] emit W1/W2 = Exp[-z/2] z^(1/2±μ) Hypergeometric1F1[1/2±μ−κ, 1±2μ, z] (→auto PFQ)
+- [x] gate: decline IntegerQ[2μ]; keep symbolic μ; sf_num_ok in both P==0 and pre-pass
+- [x] pre-pass Whittaker fallback @ wider ≤200 leaf budget (cheap sf_ct)
 
-## Stage 2 — _mu_x_y1 (Section 2.2, Lemma 3) — ATTEMPTED, BLOCKED, REVERTED
-- Implemented + VERIFIED the μ-search for Cases A/C/D + Lemma-2 μ̃ (Kamke 226→μ=y';
-  136→(y'−1)/h(y'); 66→(y'+b)/(a(1+y'²)^{3/2}), all with A(R)=0 holding; the
-  per-candidate A(R)=0 gate — not the weaker μ̃-existence check — discriminates cases).
-- **0 new corpus solves** (measured twice): the reduced first integrals R==C[1] are
-  NON-ELEMENTARY first-order ODEs (y'=√(x²y²+2C), y'=Tan[C+Log[x−y]]) that neither our
-  cascade NOR (verified directly) Maple/Mathematica close in elementary explicit form.
-- Also introduced a t_m18_auto_dispatch suite regression → reverted to stub.
-- BLOCKED on: an implicit/non-elementary first-order ODE solver, or a policy to emit the
-  reduced first integral as an implicit answer. Exact equations in DSOLVE_PLAN.md M18.
+## Step 2 — SCOPE DECISION: P==0-only (correctness-first)
+- [x] pre-pass (P≠0) Whittaker gained 13 (97/101/104/…) BUT regressed 5 (94/470/472/806/811):
+      recovery factor Exp[-∫P/2] shares finite-pole base w/ Whittaker z^(1/2±μ) → composed
+      candidate stacks same-base radical powers → verify/zero_test/1F1-numeric $IterationLimit
+      → starves Frobenius series fallback (those cases' baseline PASS) → REGRESSION.
+- [x] leaf-count / μ-complexity CANNOT separate gains from regressions (data-dependent).
+- [x] DECISION: run Whittaker on y'-free (P==0) surface ONLY. 0 regressions; base self-verifies
+      against reduced eq. P≠0 confluent family (~13 cases) = documented future work.
+- [x] verified: 94/470/472/806/811 back to SERIES-PASS; 102/568 solve; 97/101/104 → baseline ABORT
+      (UNEVAL, not regression — never solved at baseline)
 
-## Stage 3 — _mu_y_y1 (Section 2.3) — BLOCKED (depends on Stage 2)
-
-## Tests + docs + gates ✅ DONE (Stage 1)
-- [x] tests/test_dsolve.c: t_m18_* units (Case A/B, auto-dispatch, decline, Coth regression)
-- [x] tests/test_dsolve_m18_stress.c + CMake (Case-A/Case-B forward-generator grids)
-- [x] all DSolve ctest suites (dsolve_tests 204 + m5/m12/m14/m17/m18 stress) + check-c99 green
-- [x] trig/hyperbolic/simplify/logexp suites green (Coth fix regression)
-- [x] valgrind: ifactor ownership clean (decline path byte-identical to Liouville control;
-      solve-path leak is the known inherited Integrate/Solve engine baseline)
-- [x] DSOLVE_PLAN.md (M18 + §1d), STATUS.md, changelog, calculus.md
-- [~] gate baseline argv[3] unchanged at 605 (safe — wave only lowers non-PASS; full re-run pending)
+## Step 3 — tests + gates + docs ✅ DONE
+- [x] test_dsolve_m19_stress.c (nf/shifted/energy/prepass grids) + CMake — pass
+- [x] t_m19_* units in test_dsolve.c (confluent/prepass/integer-2μ decline) — pass
+- [x] all DSolve ctest suites (dsolve_tests + m5/m12/m14/m17/m18/m19) + check-c99 green
+- [x] valgrind: whittaker path leak-flat (decline A==B, no growth under ×8)
+- [x] DSOLVE_PLAN.md M19 + §1c row; calculus.md; changelog; docstring
+- [~] STATUS.md re-baseline + M19 line; lower argv[3] gate baseline (pending re-run)
 
 ## Review
 
-Landed **M18 Stage 1**: `DSolve\`ReducibleIntegratingFactor` — the reducible-μ
-integrating-factor method for nonlinear 2nd-order ODEs, form μ(x,y) (Cheb-Terrab &
-Roche 1999). New file `src/calculus/dsolve_ifactor.c`; wired into `dsolve.c` before
-`SecondOrderSymmetry`. Two verify gates (symbolic A(R)=0 + numeric back-sub) ⇒ never a
-wrong answer. **+7 corpus solves, 0 FAIL.**
+Landed **M19**: the confluent Whittaker/₁F₁ recogniser (`specialform_whittaker_basis`
+in `dsolve_specialform.c`) + a **§2.1.2 re-baseline** (the scoreboard was stale, pre-
+M17/M18). A y'-free `y''+Q y==0` whose `Q` has a single finite double pole + rank-1
+irregular point at ∞ → verifiable `Exp[-z/2] z^(1/2±μ) ₁F₁[1/2±μ-κ, 1±2μ, z]`, self-
+verified against the reduced equation (inert `WhittakerM/W` never emitted).
 
-Two bugs fixed en route:
-1. **`TrigToExp[Coth]`** returned −Coth (sign-flipped denominator in
-   `src/simp/trigsimp.c`) — surfaced canonicalizing mixed hyperbolic/exp coefficients.
-2. **Symbolic-parameter verify gap**: the numeric gate now instantiates free
-   argument-position parameters at generic reals (M16 lesson) — unlocked case 184.
+**Measured: baseline 424/1000 (42.4%, the true post-M17/M18 number), M19 427 (+3: 102,
+568, 611), 0 FAIL, 0 regressions.** Gate 612→576. All DSolve ctest suites (dsolve_tests +
+m5/m12/m14/m17/m18/m19 stress) + check-c99 green; Whittaker path valgrind leak-flat.
 
-Scope decision: the user chose all three μ-forms, but Stage 2 (μ(x,y')) proved a
-re-plan point — Case A verified working yet 0 corpus yield (radical reduced ODEs +
-corpus targets are the harder Cases C–F). Landed the solid, verified Stage 1; Stages
-2/3 documented with exact equations for a focused follow-up rather than shipping
-half-finished zero-yield code.
+Key decision — **P==0-only scope (correctness over yield).** The P≠0 pre-pass Whittaker
+(with the normal-form recovery factor) gained ~13 (97/101/104/…) but **regressed ~5**
+(94/470/472/806/811): the recovery factor `Exp[-∫P/2]` shares the finite-pole base with
+the Whittaker `z^(1/2±μ)`, so the composed candidate stacks same-base symbolic-radical
+powers whose verify/`zero_test`/`HypergeometricPFQ`-numeric hits `$IterationLimit` and
+starves the Frobenius series fallback those cases relied on. Leaf-count and μ-complexity
+cannot separate gains from regressions (data-dependent evaluator fragility). Restricting
+to the P==0 surface (no recovery, no stacking) keeps 0 regressions; the P≠0 confluent
+family (~13 cases) is documented future work needing an evaluator-robustness fix.

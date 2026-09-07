@@ -453,6 +453,26 @@ static void t_m17_affine_declines_confluent(void) {
                "HypergeometricPFQ]");
 }
 
+/* ---- M19: confluent / Whittaker -> 1F1 recogniser (single finite double pole +
+ * rank-1 irregular point at infinity, emitted as Exp z^mu Hypergeometric1F1). ---- */
+
+/* corpus 2.1.2-102: x^2 y'' + (c x^2 + b x + a) y == 0 (P == 0), symbolic a,b,c ->
+ * verifiable 1F1; numeric residual with the parameters instantiated. */
+static void t_m19_whittaker_confluent(void) {
+    check_form("Head[DSolve`SpecialFunctionForm[x^2 y''[x] + (c x^2 + b x + a) y[x] == 0, y[x], x]]", "List");
+    check_true("Not[FreeQ[DSolve[x^2 y''[x] + (c x^2 + b x + a) y[x] == 0, y[x], x], HypergeometricPFQ]]");
+    check_true("Abs[N[(x^2 y''[x] + (c x^2 + b x + a) y[x]) /. "
+               "DSolve[x^2 y''[x] + (c x^2 + b x + a) y[x] == 0, y, x][[1]] "
+               "/. {C[1] -> 6/5, C[2] -> 4/5, a -> 2/5, b -> 1/3, c -> -3/5, x -> 6/5}]] < 1/1000000");
+}
+
+/* Integer 2 mu (mu == 1 here) makes the two 1F1 partners dependent / a lower
+ * parameter a non-positive integer -> a correct decline to the series fallback. */
+static void t_m19_declines_integer_2mu(void) {
+    check_true("FreeQ[DSolve`SpecialFunctionForm[y''[x] + (-1/4 + 1/x + (1/4 - 1)/x^2) y[x] == 0, y[x], x], "
+               "HypergeometricPFQ]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2046,6 +2066,8 @@ int main(void) {
     TEST(t_m17_associated_legendre);
     TEST(t_m17_normalform_bessel);
     TEST(t_m17_affine_declines_confluent);
+    TEST(t_m19_whittaker_confluent);
+    TEST(t_m19_declines_integer_2mu);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

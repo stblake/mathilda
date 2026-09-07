@@ -481,6 +481,178 @@ static Expr* specialform_reduced_basis(Expr* Qc, const char* xvar) {
     return general;
 }
 
+/* Numeric self-verify of a Whittaker candidate `base` against the REDUCED equation
+ * w'' + Qc w == 0 (Qc = the reduced-form coefficient given to the recogniser).  This
+ * is verified BEFORE the recovery factor is applied — crucial, because the composed
+ * mu*base stacks the recovery's and Whittaker's same-base symbolic-radical powers,
+ * whose re-summation drives the evaluator into $IterationLimit on some multi-parameter
+ * confluent forms; the reduced residual (single power per branch, no recovery) never
+ * stacks, so it is both cheap and thrash-free.  base solving the reduced equation
+ * means mu*base solves the original (the normal-form transformation is exact), so the
+ * caller may emit mu*base without the original-equation gate.  base, Qc borrowed. */
+static bool whittaker_num_ok(const Expr* base, const Expr* Qc, const char* xv) {
+    Expr* b2 = ds_d(ds_d(expr_copy((Expr*)base), expr_new_symbol(xv)), expr_new_symbol(xv));
+    Expr* R  = ds_call2(SYM_Plus, b2,
+                   ds_call2(SYM_Times, expr_copy((Expr*)Qc), expr_copy((Expr*)base)));  /* w'' + Qc w */
+    R = ds_subst(R, ds_const(1), expr_new_real(1.3));
+    R = ds_subst(R, ds_const(2), expr_new_real(0.7));
+    {
+        const char* skip[] = { xv, intern_symbol("E"), intern_symbol("Pi"),
+            intern_symbol("I"), intern_symbol("C"), intern_symbol("EulerGamma"),
+            intern_symbol("Degree"), intern_symbol("GoldenRatio"),
+            intern_symbol("Catalan"), intern_symbol("Infinity") };
+        const int nskip = (int)(sizeof(skip)/sizeof(skip[0]));
+        const char* syms[64]; int ns = 0;
+        sf_collect_params(R, syms, &ns, 64);
+        int pi = 0;
+        for (int i = 0; i < ns; i++) {
+            bool sk = false;
+            for (int j = 0; j < nskip; j++) if (syms[i] == skip[j]) { sk = true; break; }
+            if (sk) continue;
+            double v = 0.29 + 0.13 * (double)pi; pi++;
+            R = ds_subst(R, expr_new_symbol(syms[i]), expr_new_real(v));
+        }
+    }
+    const double xs[] = { 0.2, 0.4, 0.6, 0.8, 1.0 };
+    int small = 0, big = 0;
+    for (int i = 0; i < 5; i++) {
+        double m = sf_abs_at(R, xv, xs[i]);
+        if (isnan(m) || !isfinite(m)) continue;
+        if (m < 1e-6) small++; else if (m > 1e-3) big++;
+    }
+    expr_free(R);
+    return small >= 2 && big == 0;
+}
+
+/* ---- Whittaker / confluent-hypergeometric (1F1) reduced form ----
+ *   The reduced equation  w'' + Qc w == 0  has a SINGLE finite regular singular
+ *   point x0 (Qc a double pole there) and a rank-1 irregular point at infinity
+ *   (Qc -> b2 != 0 as x -> Infinity).  Write Qc = b2 + b1/(x-x0) + b0/(x-x0)^2
+ *   and match Whittaker's normal form
+ *       W'' + (-1/4 + kappa/z + (1/4 - mu^2)/z^2) W == 0     under  z = c (x-x0):
+ *       c = 2 Sqrt[-b2],  mu = Sqrt[1/4 - b0],  kappa = b1/c.
+ *   The two independent solutions are emitted as the VERIFIABLE 1F1 form
+ *       WhittakerM[kappa, +-mu, z] = Exp[-z/2] z^(1/2+-mu) 1F1[1/2+-mu-kappa, 1+-2mu, z]
+ *   -- Hypergeometric1F1 numericizes and carries a z-derivative rule, so the
+ *   residual back-substitutes; the inert WhittakerM/W heads are never emitted.
+ *   Declines when 2 mu is a numeric integer: the two 1F1 partners are then
+ *   dependent (2mu==0) or a lower parameter 1-+2mu is a non-positive integer
+ *   (singular 1F1), so the caller falls through to the Frobenius log-second
+ *   solution.  The single finite double pole is isolated by the squarefree-part
+ *   trick (den / gcd(den,den') of degree 1), so the two-finite-pole Gauss case
+ *   (affine->2F1) and the pole-free Airy/polynomial cases decline here.  The
+ *   pole-at-0, b1==0 special case (kappa==0) is the modified-Bessel normal form
+ *   claimed by the A + B/x^2 row above; this runs after it under the caller's
+ *   !general guard, and every emission is gated by the caller's sf_num_ok.
+ *   Qc, xvar borrowed; returns C[1] W1 + C[2] W2, or NULL. */
+static Expr* specialform_whittaker_basis(const Expr* Qc, const char* xvar) {
+    Expr* rt = sf_ct(expr_copy((Expr*)Qc));                 /* Cancel[Together[Qc]] */
+    if (ds_is_zero(rt)) { expr_free(rt); return NULL; }
+    Expr* den  = eval_and_free(ds_call1("Denominator", expr_copy(rt)));
+    Expr* dden = ds_d(expr_copy(den), expr_new_symbol(xvar));
+    Expr* gg   = eval_and_free(ds_call2("PolynomialGCD", expr_copy(den), dden));   /* consumes dden */
+    Expr* rad  = sf_ct(ds_call2(SYM_Times, expr_copy(den),                          /* den/gcd(den,den') */
+                     expr_new_function(expr_new_symbol(SYM_Power),
+                         (Expr*[]){ expr_copy(gg), expr_new_integer(-1) }, 2)));
+    Expr* dDen = eval_and_free(expr_new_function(expr_new_symbol("Exponent"),
+                     (Expr*[]){ expr_copy(den), expr_new_symbol(xvar) }, 2));
+    Expr* dRad = eval_and_free(expr_new_function(expr_new_symbol("Exponent"),
+                     (Expr*[]){ expr_copy(rad), expr_new_symbol(xvar) }, 2));
+    bool shape = (dDen->type == EXPR_INTEGER && dDen->data.integer == 2 &&
+                  dRad->type == EXPR_INTEGER && dRad->data.integer == 1);
+    expr_free(dDen); expr_free(dRad);
+    Expr* general = NULL;
+    if (shape) {
+        /* x0 = -c0/c1 from the squarefree denominator rad = c1 x + c0 */
+        Expr* r0 = eval_and_free(expr_new_function(expr_new_symbol("Coefficient"),
+                       (Expr*[]){ expr_copy(rad), expr_new_symbol(xvar), expr_new_integer(0) }, 3));
+        Expr* r1 = eval_and_free(expr_new_function(expr_new_symbol("Coefficient"),
+                       (Expr*[]){ expr_copy(rad), expr_new_symbol(xvar), expr_new_integer(1) }, 3));
+        Expr* x0 = sf_ct(ds_call2(SYM_Times, expr_new_integer(-1),
+                       ds_call2(SYM_Times, expr_copy(r0),
+                           expr_new_function(expr_new_symbol(SYM_Power),
+                               (Expr*[]){ expr_copy(r1), expr_new_integer(-1) }, 2))));
+        expr_free(r0); expr_free(r1);
+        /* g = Cancel[Together[ Qc (x-x0)^2 ]] must be a degree-2 polynomial */
+        Expr* g = sf_ct(ds_call2(SYM_Times, expr_copy((Expr*)Qc),
+                      ds_call2(SYM_Power,
+                          ds_call2(SYM_Subtract, expr_new_symbol(xvar), expr_copy(x0)),
+                          expr_new_integer(2))));
+        Expr* pq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ),
+                       (Expr*[]){ expr_copy(g), expr_new_symbol(xvar) }, 2));
+        Expr* dG = eval_and_free(expr_new_function(expr_new_symbol("Exponent"),
+                       (Expr*[]){ expr_copy(g), expr_new_symbol(xvar) }, 2));
+        bool gok = (pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True &&
+                    dG->type == EXPR_INTEGER && dG->data.integer == 2);
+        expr_free(pq); expr_free(dG);
+        if (gok) {
+            Expr* b0 = sf_ct(ds_subst(expr_copy(g), expr_new_symbol(xvar), expr_copy(x0)));
+            Expr* b1 = sf_ct(ds_subst(ds_d(expr_copy(g), expr_new_symbol(xvar)),
+                           expr_new_symbol(xvar), expr_copy(x0)));
+            Expr* b2 = eval_and_free(expr_new_function(expr_new_symbol("Coefficient"),
+                           (Expr*[]){ expr_copy(g), expr_new_symbol(xvar), expr_new_integer(2) }, 3));
+            if (!ds_is_zero(b2)) {
+                Expr* quarter = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                                    (Expr*[]){ expr_new_integer(4), expr_new_integer(-1) }, 2));    /* 1/4 */
+                Expr* mu = sf_ct(ds_call1("Sqrt", ds_call2(SYM_Subtract, quarter, expr_copy(b0))));
+                Expr* c  = sf_ct(ds_call2(SYM_Times, expr_new_integer(2),
+                               ds_call1("Sqrt", ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(b2)))));
+                Expr* kappa = sf_ct(ds_call2(SYM_Times, expr_copy(b1),
+                                  expr_new_function(expr_new_symbol(SYM_Power),
+                                      (Expr*[]){ expr_copy(c), expr_new_integer(-1) }, 2)));
+                /* decline 2 mu in Z (dependent / singular 1F1 lower parameter) */
+                Expr* twomu = sf_ct(ds_call2(SYM_Times, expr_new_integer(2), expr_copy(mu)));
+                Expr* iq = eval_and_free(ds_call1("IntegerQ", twomu));   /* consumes twomu */
+                bool dep = (iq->type == EXPR_SYMBOL && iq->data.symbol.name == SYM_True);
+                expr_free(iq);
+                if (!dep) {
+                    Expr* z = sf_ct(ds_call2(SYM_Times, expr_copy(c),
+                                  ds_call2(SYM_Subtract, expr_new_symbol(xvar), expr_copy(x0))));
+                    Expr* ehalf = eval_and_free(ds_call1("Exp",
+                                      ds_call2(SYM_Times,
+                                          eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                                              (Expr*[]){ expr_new_integer(-2), expr_new_integer(-1) }, 2)), /* -1/2 */
+                                          expr_copy(z))));
+                    Expr* half = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                                     (Expr*[]){ expr_new_integer(2), expr_new_integer(-1) }, 2));           /* 1/2 */
+                    Expr* branches[2] = { NULL, NULL };
+                    for (int s = 0; s < 2; s++) {
+                        Expr* smu = (s == 0) ? expr_copy(mu)
+                                  : ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(mu));   /* +-mu */
+                        Expr* exp1  = ds_call2(SYM_Plus, expr_copy(half), expr_copy(smu));        /* 1/2 +- mu */
+                        Expr* upper = ds_call2(SYM_Subtract,
+                                          ds_call2(SYM_Plus, expr_copy(half), expr_copy(smu)),
+                                          expr_copy(kappa));                                       /* 1/2 +- mu - kappa */
+                        Expr* lower = ds_call2(SYM_Plus, expr_new_integer(1),
+                                          ds_call2(SYM_Times, expr_new_integer(2), expr_copy(smu))); /* 1 +- 2 mu */
+                        expr_free(smu);
+                        Expr* zpow = eval_and_free(ds_call2(SYM_Power, expr_copy(z), exp1));       /* z^(1/2+-mu) */
+                        Expr* onef = expr_new_function(expr_new_symbol("Hypergeometric1F1"),
+                                         (Expr*[]){ upper, lower, expr_copy(z) }, 3);
+                        branches[s] = eval_and_free(ds_call2(SYM_Times, expr_copy(ehalf),
+                                          ds_call2(SYM_Times, zpow, onef)));
+                    }
+                    general = combo(branches[0], branches[1]);   /* consumes branches[] */
+                    expr_free(z); expr_free(ehalf); expr_free(half);
+                    /* Self-verify against the reduced equation w'' + Qc w == 0 before
+                     * returning (Qc is this recogniser's argument = the reduced-form
+                     * coefficient).  Guards a mis-read pole / parameter, and is safe on
+                     * the thrash-prone forms because it never applies the recovery. */
+                    if (general && !whittaker_num_ok(general, Qc, xvar)) {
+                        expr_free(general);
+                        general = NULL;
+                    }
+                }
+                expr_free(mu); expr_free(c); expr_free(kappa);
+            }
+            expr_free(b0); expr_free(b1); expr_free(b2);
+        }
+        expr_free(x0); expr_free(g);
+    }
+    expr_free(rt); expr_free(den); expr_free(gg); expr_free(rad);
+    return general;
+}
+
 /* ---- Gauss (hypergeometric 2F1) recogniser on the CANONICAL interval
  *      W = x(1-x): Q == -a b/W, P == (c-(a+b+1)x)/W.  Factored so the affine
  *      row below can call it on the mapped (P~, Q~, s).  Pc, Qc, xvar borrowed;
@@ -707,6 +879,12 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
      *      present.  Behaviour on P == 0 equations is unchanged. ---- */
     if (!general && ds_is_zero(Pc)) general = specialform_reduced_basis(Qc, xvar);
 
+    /* ---- Whittaker / confluent 1F1 (P == 0): single finite double pole + rank-1
+     *      irregular point at infinity, emitted as the verifiable Exp z^mu 1F1 form.
+     *      specialform_whittaker_basis self-verifies against the reduced equation
+     *      (== the original when P == 0), so it never ships a mis-read pole. ---- */
+    if (!general && ds_is_zero(Pc)) general = specialform_whittaker_basis(Qc, xvar);
+
     /* ---- Bessel / modified Bessel: P == 1/x, Q = s - v^2/x^2 ---- */
     if (!general) {
         Expr* oneOverX = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
@@ -929,6 +1107,17 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
              * reducible normal form is small (single power / A + B/x^2 / constant). */
             Expr* base = (leaf_count_internal(negr, true) > 50)
                        ? NULL : specialform_reduced_basis(negr, xvar);
+            /* NOTE: the confluent Whittaker recogniser is deliberately NOT run in this
+             * normal-form pre-pass (P != 0).  The recovery factor mu = Exp[-Int P/2]
+             * shares the finite-pole base (x - x0) with the Whittaker z^(1/2+-mu)
+             * factors, so the composed mu*base stacks two symbolic-radical powers of the
+             * same base; verifying / differentiating that (here, in dsolve_run, or in
+             * the numeric HypergeometricPFQ evaluation of a multi-parameter form) can
+             * drive the evaluator into $IterationLimit and starve the Frobenius fallback
+             * that otherwise solves these as a series -> a regression.  Whittaker is run
+             * only on the y'-free (P == 0) surface below, where there is no recovery
+             * factor and no stacking.  The P != 0 confluent family (corpus 97/101/104
+             * and kin) is future work pending an evaluator-robustness fix. */
             expr_free(negr);
             if (base) {
                 Expr* cand = eval_and_free(ds_call2(SYM_Times, mu, base));  /* mu (C[1] z0 + C[2] z1) */
@@ -1051,7 +1240,10 @@ void dsolve_specialform_init(void) {
         "local exponents pulled out (Y = s^r0 (1-s)^r1 F) to reach Hypergeometric2F1, "
         "gated by a numeric self-verify. Equations carrying a y' term are also tried "
         "through the Liouville normal form (y = z Exp[-Int P/2]) against the y'-free "
-        "Airy/Bessel recognisers. The hypergeometric second solution is emitted only "
-        "when b (resp. c) is not an integer; otherwise it declines to the series "
-        "fallback.");
+        "Airy/Bessel recognisers. A normal form with a single finite double pole and a "
+        "rank-1 irregular point at infinity is Whittaker's equation, emitted as the "
+        "confluent form Exp[-z/2] z^(1/2+-mu) Hypergeometric1F1[1/2+-mu-kappa, 1+-2mu, z] "
+        "(declining when 2 mu is an integer). The hypergeometric second solution is "
+        "emitted only when b (resp. c) is not an integer; otherwise it declines to the "
+        "series fallback.");
 }

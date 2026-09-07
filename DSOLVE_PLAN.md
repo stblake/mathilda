@@ -622,6 +622,44 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   - *Future:* the 3rd-order `_mu_y2`/`_mu_poly_yn` integrating factors (6 corpus cases);
     a first-order-cascade path for the radical reduced ODEs Stage-2 Case A produces.
 
+- **M19 — confluent Whittaker / ₁F₁ recognizer + §2.1.2 re-baseline.** ✅ DONE. The
+  confluent twin of M17's affine→Gauss ₂F₁ row, closing the 2nd-order-linear bucket's
+  confluent residue as verified `₁F₁` closed forms. A 2nd-order linear ODE whose
+  Liouville normal form `z''==r z` has ONE finite regular singular point `x0` (a double
+  pole of `r`) and a rank-1 irregular point at ∞ (`r → b2 ≠ 0`) is Whittaker's equation.
+  New `specialform_whittaker_basis()` in `dsolve_specialform.c` (no new method file, no
+  cascade edit).
+  - **Re-baseline (the plan's pending re-run).** The `reports/2.1.2.tsv` scoreboard was
+    stale (pre-M17/M18). A full re-run put the true post-M17/M18 baseline at **424/1000
+    scalar (42.4%), 0 FAIL** — not the projected ~403; M17 gained more than estimated.
+    This is the honest denominator for the M19 delta.
+  - **Method.** `Qc = b2 + b1/(x−x0) + b0/(x−x0)²` matched to `W'' + (−1/4 + κ/z +
+    (1/4−μ²)/z²)W==0` under `z = c(x−x0)`: `c = 2√(−b2)`, `μ = √(1/4−b0)`, `κ = b1/c`.
+    Emit `Exp[−z/2] z^(1/2±μ) Hypergeometric1F1[1/2±μ−κ, 1±2μ, z]` (numericizes, auto-
+    rewrites to `HypergeometricPFQ`, so the residual back-substitutes; the inert
+    `WhittakerM/W` heads are never emitted). Single finite double pole isolated by the
+    squarefree-part trick (`den/gcd(den,den')` degree 1) — the two-finite-pole Gauss
+    case (M17) and the pole-free Airy/polynomial cases decline here. Declines `2μ ∈ ℤ`
+    (dependent partners / singular ₁F₁ lower parameter → Frobenius log solution); keeps
+    symbolic `μ`. `base` self-verifies against the reduced equation `w'' + Qc w == 0`
+    before returning (0-FAIL by construction).
+  - **Scope: the y'-free (`P == 0`) surface only.** Deliberately NOT run in the Liouville
+    normal-form pre-pass (`P ≠ 0`): there the recovery factor `Exp[−∫P/2]` shares the
+    finite-pole base `(x−x0)` with the Whittaker `z^(1/2±μ)` factors, so the composed
+    candidate stacks two same-base symbolic-radical powers whose verify/`zero_test`/
+    `HypergeometricPFQ`-numeric can hit `$IterationLimit` and STARVE the Frobenius series
+    fallback — measured as a **regression** on ≈5 corpus cases (94/470/472/806/811).
+    Restricting to `P == 0` (no recovery, no stacking) keeps **0 regressions**.
+  - *Solves* the y'-free confluent cases 2.1.2-102 (`x²y''+(cx²+bx+a)y`), -568 and the
+    Whittaker/Coulomb normal forms (previously series-fallback). *Future work (biggest
+    residue, ~13 corpus cases):* the `P ≠ 0` confluent family (2.1.2-97/-101/-104 and kin)
+    — the pre-pass Whittaker with the recovery factor — pending an evaluator-robustness fix
+    for the same-base symbolic-radical-exponent verify; also parabolic-cylinder/Hermite
+    (`POLY_r ndeg=2`) and the trig/hyperbolic-potential-with-`y'` residues.
+  - Anti-overfit `tests/test_dsolve_m19_stress.c` (P==0 Whittaker `(κ,μ)` grid, shifted
+    pole, nonzero energy); units `t_m19_*` in `test_dsolve.c`. All DSolve ctest suites +
+    `make check-c99` green; Whittaker path valgrind leak-flat.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -821,7 +859,14 @@ recursive sub-solves.
   degree; numeric-self-verified). Ordinary Legendre keeps `LegendreP`; the associated
   case (μ≠0) declines to the affine path (3-arg `LegendreP` does not numericize). M17
   also adds a Liouville normal-form pre-pass so the P==0 Airy/Bessel recognizers fire
-  on an equation with a y' term. NOTE: the integer-degree **Legendre / Chebyshev / Gegenbauer / Jacobi**
+  on an equation with a y' term. **Confluent Whittaker / ₁F₁ (M19):** the confluent twin
+  of the affine→Gauss row — a normal form `z''==r z` with ONE finite regular singular
+  point (double pole of `r`) and a rank-1 irregular point at ∞ (`r → b2 ≠ 0`) is emitted
+  as verifiable `Exp[−z/2] z^(1/2±μ) Hypergeometric1F1[1/2±μ−κ, 1±2μ, z]` (`z=c(x−x0)`,
+  `c=2√(−b2)`, `μ=√(1/4−b0)`, `κ=b1/c`); declines `2μ ∈ ℤ`. Run on the **y'-free (P==0)
+  surface only** (the P≠0 recovery-factor path stacks same-base radical powers and can
+  `$IterationLimit` → future work); covers 2.1.2-102/-568 and the Whittaker/Coulomb normal
+  forms. NOTE: the integer-degree **Legendre / Chebyshev / Gegenbauer / Jacobi**
   family (both solutions elementary) is now solved *algorithmically* by Kovacic
   Case 1 (below), not by a recognizer — no LegendreP/Q head needed. A recognizer is
   only wanted for the **non-integer** degree (genuinely hypergeometric) cases and
