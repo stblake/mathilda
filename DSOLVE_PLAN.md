@@ -565,6 +565,63 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     suites + `make check-c99` green; refactor byte-for-byte behavior-preserving on the
     existing Airy/Bessel/Gauss rows.
 
+- **M18 — 2nd-order reducible-μ integrating factor (`ReducibleIntegratingFactor`).** IN
+  PROGRESS. The §2.1.2 corpus's largest *well-defined algorithmic* gap: the
+  `[_2nd_order, _reducible, _mu_*]` class (80 UNEVAL, all nonlinear). Method:
+  Cheb-Terrab & Roche, *Integrating Factors for Second-order ODEs*, J. Symb. Comput. 27
+  (1999) 501–519 (PDF in repo). A function μ(x,y,y') is an integrating factor of
+  `y''==Φ(x,y,y')` when `μ(y''−Φ)` is a total x-derivative `dR/dx`; from (2.8)–(2.10)
+  `μ=R_{y'}`, `R=∫μ dy'+G(x,y)`, `G` fixed by `R_x+y'R_y+ΦR_{y'}==0`. Then `R==C[1]` is a
+  first-order ODE → cascade. Two verify gates (symbolic `A(R)==0` = the paper's exactness
+  test (2.3), + numeric back-substitution) ⇒ a wrong μ is always a clean decline.
+  `dsolve_ifactor.c`, before `SecondOrderSymmetry` in the cascade; reuses the M12 lie2
+  robustness kit (deadline / TimeConstrained sub-solves / decline memo / node budget /
+  undefined-fn gate) and a **linearity gate** (declines linear ODEs — not the method's
+  domain, and it terminates the Case-B ν-ODE recursion).
+  - **Stage 1 — μ(x,y) (Section 2.1). ✅ DONE.** Φ a degree-≤2 poly in y'
+    (`y''=a y'²+b y'+c`), branch on `2a_x−b_y`: Case A closed-form μ (2.16–2.17); Case B
+    `μ=ν(x)e^{−∫a dy}` with ν from one linear ODE (2.18–2.21). Solves `y y'+y''==1`,
+    `y''−y y'==6` (→ Airy) and the Coth-coefficient Case-B family
+    `−(y'²/y²)+y''/y+2Coth[2x]y'/y==2`. *Side-fix:* `TrigToExp[Coth]` had a sign-flipped
+    denominator (=−Coth), surfaced while canonicalizing mixed hyperbolic/exp coefficients;
+    fixed in `src/simp/trigsimp.c`. Anti-overfit `tests/test_dsolve_m18_stress.c` (Case-A
+    `y''+k y y'==c`, Case-B `y y''−y'²+h(x)y²==0` grids); units `t_m18_*` in
+    `test_dsolve.c`. All DSolve ctest suites + trig/hyperbolic suites + `make check-c99`
+    green; no regression. **Measured: +7 §2.1.2 reducible-μ solves** (184, 207, 693, 906,
+    1013, 1014, 1094), 0 FAIL. Side-fix + symbolic-parameter verify gate (M16 lesson:
+    instantiate the residual's free *argument-position* params at generic reals — not
+    heads — so symbolic-coefficient ODEs numericize; this unlocked 184).
+  - **Stage 2 — μ(x,y') (Section 2.2, Lemma 3).** NEXT INCREMENT. `μ = 𝓕(x,y')·μ̃(x)`
+    (2.24-2.25). **𝓕 by Lemma 3** from `Υ = Φ_y` (2.35), six branches:
+    **A** `∂_{y'}(Υ_y/Υ)≠0` (2.36) → `𝓕 = 1/(y'-only-not-y factors of Υ)` (2.40);
+    **B** those factors free of y' → try A, test μ̃; **C** `G_xy/G_yy≠0` indep of y →
+    `w`=y-not-y' factors of Υ, `𝓗=∂_y ln w=𝒢''/𝒢'` (2.47), `p'=𝓗_x/𝓗_y=(w_xy w−w_x
+    w_y)/(w_yy w−w_y²)` (2.48), `𝓕=(p'+y')w/Υ` (2.50); **D** `𝓗=0`: `Λ=1/Υ`, `Ψ=Φ/Υ−y`,
+    diff (2.62-64) → linear-alg `p'`; **E** `𝓗'=0,𝓗≠0`: `Λ,Ψ` (2.80-83) → linear-alg
+    `p'`; **F** (2.83)/Λ_{y'} indep of y' → `β,γ,(2.94)` → linear-alg `p'`. **μ̃ by
+    Lemma 2** from `φ1=Φ_y𝓕−y'∂_{y'}(Φ_y𝓕)`, `φ2=∂_{y'}(Φ_y𝓕)`, `φ3=−∂_{y'}(Φ𝓕)`,
+    `φ4=∂_{y'}𝓕` (2.30-31): if φ2≠0 `μ̃=Exp∫(φ1_y−φ2_x)/φ2 dx` (2.33), else φ4≠0
+    `μ̃=Exp∫(φ3_{y'}−φ4_x)/φ4 dx` (2.34) — the integrand being x-only is the existence
+    condition. **Case discrimination:** the Lemma-2 μ̃-existence check is necessary but
+    NOT sufficient (a wrong case passes it); the `A(R)=0` gate per candidate is what
+    picks the right case. **BLOCKED finding (measured this session):** Cases A/C/D + Lemma
+    2 were implemented and VERIFIED to find valid μ (Kamke 226 → μ=y'; Kamke 136 →
+    (y'−1)/h(y'); Kamke 66 → (y'+b)/(a(1+y'²)^{3/2}) — all with `A(R)=0` holding), but the
+    wave yields **0 new corpus solves**: the reduced first integrals `R==C[1]` are
+    NON-ELEMENTARY first-order ODEs (`y'=√(x²y²+2C)`, `y'=Tan[C+Log[x−y]]`) that neither
+    our cascade nor — verified directly — Maple/Mathematica close in elementary explicit
+    form (those CAS return them implicitly). So the Cases-A/C/D μ-search was reverted, and
+    Stage 2 is **blocked on** either (a) a non-elementary/implicit first-order ODE solver,
+    or (b) a policy decision to emit the reduced first integral `R(x,y[x],y'[x])==C[1]` as
+    an implicit answer (as the existing chini/abel/homogeneous-implicit methods do for
+    first-order ODEs). Cases E/F (`𝓗'=0` exponential; the general p'(x)-elimination) were
+    not needed. The verified Cases-A/C/D code + μ̃ recovery are recoverable from this
+    session's history.
+  - **Stage 3 — μ(y,y') (Section 2.3).** Point-swap `y↔x`, reuse Stage 2, back-transform
+    `μ=μ_swapped(x,1/y')/y'²` (2.95). Pending Stage 2.
+  - *Future:* the 3rd-order `_mu_y2`/`_mu_poly_yn` integrating factors (6 corpus cases);
+    a first-order-cascade path for the radical reduced ODEs Stage-2 Case A produces.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -849,6 +906,14 @@ recursive sub-solves.
   a decline is a clean bounded fall-through. Solves the scaling/projective/`_mu_*`
   reducible families (Kamke/Murphy nonlinear 2nd-order). Runs after `Liouville`, before
   the series fallback. See M12. `dsolve_lie2.c`.
+- `[~] ReducibleIntegratingFactor` (`DSolve\`ReducibleIntegratingFactor`) — nonlinear
+  2nd-order `y''==Φ(x,y,y')` admitting an integrating factor μ of a restricted form
+  (Cheb-Terrab & Roche 1999; Maple `_reducible,_mu_*`): `μ=R_{y'}`, `R=∫μ dy'+G` with `G`
+  from `R_x+y'R_y+ΦR_{y'}==0` (2.9–2.10), then `R==C[1]` → first-order cascade. Symbolic
+  `A(R)==0` + numeric verify ⇒ wrong μ always declines. **Stage 1 done: μ(x,y)** (Φ deg-≤2
+  poly in y'; Case A closed-form / Case B linear-ν-ODE). Stages 2/3 (μ(x,y'), μ(y,y')) +
+  the 3rd-order forms are pending. Runs before `SecondOrderSymmetry` (cheaper algebraic
+  search, reaches ODEs with no point symmetry). Linearity gate. See M18. `dsolve_ifactor.c`.
 
 ### 1e. Systems
 

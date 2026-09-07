@@ -1113,7 +1113,7 @@ void trigsimp_init(void) {
         "Sinh[x_] :> -(E^-x/2) + E^x/2, "
         "Cosh[x_] :> E^-x/2 + E^x/2, "
         "Tanh[x_] :> -(E^-x/(E^-x+E^x)) + E^x/(E^-x+E^x), "
-        "Coth[x_] :> E^-x/(E^-x-E^x) + E^x/(E^-x-E^x), "
+        "Coth[x_] :> E^-x/(-E^-x+E^x) + E^x/(-E^-x+E^x), "
         "Sech[x_] :> 2/(E^-x + E^x), "
         "Csch[x_] :> 2/(-E^-x + E^x), "
         "ArcSin[x_] :> -I Log[I x + Sqrt[1 - x^2]], "

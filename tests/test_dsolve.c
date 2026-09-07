@@ -1915,6 +1915,59 @@ static void t_system_higher_order(void) {
                "y''[t]==x[t]-2 y[t]}, {x[t],y[t]}, t], C[_], Infinity]]] == 4");
 }
 
+/* ---- M18: DSolve`ReducibleIntegratingFactor (2nd-order integrating factor) ---- */
+
+/* mu(x,y) Case A (Section 2.1): Phi degree-2 poly in y', closed-form mu.
+ * y y' + y'' == 1  has mu = 1 -> first integral y' - x + y^2/2 == C[1] (Riccati)
+ * -> Airy.  Verified numerically on the original 2nd-order residual. */
+static void t_m18_mu_xy_caseA(void) {
+    check_form("Head[DSolve`ReducibleIntegratingFactor[y[x] y'[x] + y''[x] == 1, y[x], x]]",
+               "List");
+    check_true("Abs[N[(y[x] y'[x] + y''[x] - 1) /. "
+               "DSolve`ReducibleIntegratingFactor[y[x] y'[x] + y''[x] == 1, y, x][[1]] "
+               "/. {C[1] -> 13/10, C[2] -> 7/10, x -> 6/5}]] < 1/1000000");
+    /* an arbitrary-coefficient generalization y'' - k y y' == c also closes */
+    check_true("Abs[N[(y''[x] - y[x] y'[x] - 6) /. "
+               "DSolve`ReducibleIntegratingFactor[y''[x] - y[x] y'[x] == 6, y, x][[1]] "
+               "/. {C[1] -> 11/10, C[2] -> 3/5, x -> 7/5}]] < 1/1000000");
+}
+
+/* mu(x,y) Case B (Section 2.1, 2.18-2.21): the linear-nu-ODE subcase, with
+ * transcendental (Coth) coefficients.  -(y'^2/y^2)+y''/y+2Coth[2x]y'/y == 2.
+ * The correct answer needs TrigToExp[Coth] (fixed) and a numeric verify since the
+ * residual carries ArcTanh/Log terms zero_test cannot discharge. */
+static void t_m18_mu_xy_caseB(void) {
+    check_true("With[{sol = DSolve`ReducibleIntegratingFactor["
+               "-(y'[x]^2/y[x]^2)+(y''[x]/y[x])+(2 Coth[2 x] y'[x]/y[x]) == 2, y, x]}, "
+               "Head[sol] === List && Length[sol] >= 1 && "
+               "Abs[N[(-(y'[x]^2/y[x]^2)+(y''[x]/y[x])+(2 Coth[2 x] y'[x]/y[x]) - 2) /. "
+               "sol[[1]] /. {C[1] -> 13/10, C[2] -> 7/10, x -> 3/5}, 20]] < 10^-6]");
+}
+
+/* The method is auto-dispatched (not only pinned): DSolve solves case 14. */
+static void t_m18_auto_dispatch(void) {
+    check_true("With[{sol = DSolve["
+               "-(y'[x]^2/y[x]^2)+(y''[x]/y[x])+(2 Coth[2 x] y'[x]/y[x]) == 2, y, x]}, "
+               "Head[sol] === List && Length[sol] >= 1]");
+}
+
+/* Linearity gate: a LINEAR 2nd-order ODE is not the method's domain -> the pinned
+ * method declines (returns unevaluated), so the linear specialists own it and the
+ * Case-B nu-ODE recursion terminates. */
+static void t_m18_declines_linear(void) {
+    check_form("Head[DSolve`ReducibleIntegratingFactor[y''[x] + y[x] == 0, y[x], x]]",
+               "DSolve`ReducibleIntegratingFactor");
+    check_form("Head[DSolve`ReducibleIntegratingFactor[y''[x] + (2/x) y'[x] + y[x] == 0, y[x], x]]",
+               "DSolve`ReducibleIntegratingFactor");
+}
+
+/* Regression for the TrigToExp[Coth] sign bug this wave surfaced (denominator was
+ * E^-x - E^x, i.e. -Coth).  Guard it directly so it cannot silently return. */
+static void t_m18_trigtoexp_coth(void) {
+    check_true("PossibleZeroQ[ExpToTrig[TrigToExp[Coth[z]]] - Coth[z]]");
+    check_true("Abs[N[TrigToExp[Coth[2 z]] /. z -> 7/10] - N[Coth[7/5]]] < 1/1000000");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2124,6 +2177,12 @@ int main(void) {
     TEST(t_undetcoeff_declines);
     TEST(t_method_first_order_series);
     TEST(t_first_order_series_declines);
+    /* M18: reducible-mu integrating factor (2nd-order) */
+    TEST(t_m18_mu_xy_caseA);
+    TEST(t_m18_mu_xy_caseB);
+    TEST(t_m18_auto_dispatch);
+    TEST(t_m18_declines_linear);
+    TEST(t_m18_trigtoexp_coth);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

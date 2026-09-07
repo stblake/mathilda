@@ -61,6 +61,7 @@ typedef enum {
     DS_LIE,
     DS_AUTONOMOUS,
     DS_LIOUVILLE,
+    DS_IFACTOR,
     DS_FOPOWERSERIES,
     DS_FROBENIUS,
     DS_INVALID
@@ -100,6 +101,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "LieGroup")             == 0) return DS_LIE;
     if (strcmp(s, "AutonomousReduction") == 0) return DS_AUTONOMOUS;
     if (strcmp(s, "Liouville")            == 0) return DS_LIOUVILLE;
+    if (strcmp(s, "ReducibleIntegratingFactor") == 0) return DS_IFACTOR;
     if (strcmp(s, "FirstOrderPowerSeries") == 0) return DS_FOPOWERSERIES;
     if (strcmp(s, "FrobeniusSeries")     == 0) return DS_FROBENIUS;
     if (strcmp(s, "PowerSeries")         == 0) return DS_FROBENIUS;
@@ -141,6 +143,7 @@ extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_changevar_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_first_order_series_try(DSolveProblem* P, size_t* nbranch);
@@ -177,6 +180,7 @@ extern void dsolve_lie_init(void);
 extern void dsolve_autonomous_init(void);
 extern void dsolve_liouville_init(void);
 extern void dsolve_lie2_init(void);
+extern void dsolve_ifactor_init(void);
 extern void dsolve_changevar_init(void);
 extern void dsolve_frobenius_init(void);
 extern void dsolve_normalform_init(void);
@@ -377,6 +381,12 @@ Expr* builtin_dsolve(Expr* res) {
             /* Liouville: y'' + g(y)(y')^2 + h(x)y' == 0 (has both y and x, so
              * missing-y/missing-x reductions above decline).  Two quadratures. */
             if (!result) result = dsolve_run(&P, dsolve_liouville_try);
+            /* ReducibleIntegratingFactor: nonlinear-2nd-order integrating factor of a
+             * restricted form (mu(x,y)/mu(x,y')/mu(y,y')) -> first integral R==C[1] ->
+             * first-order cascade.  An ALGEBRAIC search (Cheb-Terrab & Roche 1999),
+             * cheaper than the symmetry ansatz below and reaching ODEs with no point
+             * symmetry, so it runs first; SecondOrderSymmetry is the heavier backstop. */
+            if (!result) result = dsolve_run(&P, dsolve_ifactor_try);
             /* SecondOrderSymmetry: the general nonlinear-2nd-order backstop.  Finds
              * a Lie POINT symmetry (polynomial-ansatz determining system) and
              * reduces the order via canonical coordinates -> first-order ODE ->
@@ -443,6 +453,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_LIE:          result = dsolve_run_implicit(&P, dsolve_lie_try);   break;
         case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);   break;
         case DS_LIOUVILLE:    result = dsolve_run(&P, dsolve_liouville_try);    break;
+        case DS_IFACTOR:      result = dsolve_run(&P, dsolve_ifactor_try);      break;
         case DS_FOPOWERSERIES: result = dsolve_run(&P, dsolve_first_order_series_try); break;
         case DS_FROBENIUS:    result = dsolve_run(&P, dsolve_frobenius_try);    break;
         default: break;
@@ -509,6 +520,7 @@ void dsolve_init(void) {
     dsolve_autonomous_init();
     dsolve_liouville_init();
     dsolve_lie2_init();
+    dsolve_ifactor_init();
     dsolve_changevar_init();
     dsolve_frobenius_init();
     dsolve_normalform_init();

@@ -718,6 +718,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_linearizable.c
     ../src/calculus/dsolve_lie.c
     ../src/calculus/dsolve_lie2.c
+    ../src/calculus/dsolve_ifactor.c
     ../src/calculus/dsolve_changevar.c
     ../src/calculus/dsolve_autonomous.c
     ../src/calculus/dsolve_liouville.c
@@ -3095,6 +3096,10 @@ add_test(NAME dsolve_m14_stress_tests COMMAND dsolve_m14_stress_tests)
 add_executable(dsolve_m17_stress_tests test_dsolve_m17_stress.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(dsolve_m17_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m17_stress_tests COMMAND dsolve_m17_stress_tests)
+
+add_executable(dsolve_m18_stress_tests test_dsolve_m18_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m18_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m18_stress_tests COMMAND dsolve_m18_stress_tests)
 
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)

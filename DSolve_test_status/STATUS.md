@@ -21,6 +21,7 @@ Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
 | 2026-09-06 (M15 baseline) | 385 / 1000 | 38.5% | 615 | 0 FAIL, 6 crashes. Infrastructure landed. |
 | 2026-09-06 (crash fixes)  | 388 / 1000 | 38.8% | 612 | 0 FAIL, crashes 6→2 (both non-reproducing). |
 | 2026-09-06 (M16)          | 396 / 1000 | 39.6% | **604** | +8 (cv_num_ok symbolic-param verify + Pöschl-Teller 2F1 recognizer). Gate baseline 605 (601 deterministic UNEVAL + ~4 margin for intermittent fork-harness crashes 208/872/983, none reproducing in isolation). |
+| 2026-09-07 (M18 Stage 1)  | ~403 / 1000 | ~40.3% | ~597 | +7 measured on the 80 reducible-μ UNEVAL targets (184, 207, 693, 906, 1013, 1014, 1094), **0 FAIL**. Reducible-μ integrating factor μ(x,y) (Cheb-Terrab & Roche 1999) + symbolic-parameter verify gate + a `TrigToExp[Coth]` sign-bug fix. Scalar total projected (full re-run pending); gate baseline unchanged at 605 (a landed wave only lowers non-PASS, so 605 stays safe). |
 
 ### Gap by bucket (baseline, ranked)
 
@@ -28,7 +29,7 @@ Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
 |---|--:|--:|--:|--:|---|
 | 2nd_linear            | 414 | 203 | 211 | 49.0 | M16 landed Legendre-symbolic + Pöschl-Teller; residue = Heun / parabolic-cylinder / Gegenbauer-Möbius / power→Bessel |
 | 3rd_high_linear       | 142 |  32 | 110 | 22.5 | OperatorFactor Beke / 2nd-order right factors |
-| 2nd_reducible_mu      | 102 |  32 |  70 | 31.4 | integrating-factor μ-reduction |
+| 2nd_reducible_mu      | 102 |  39 |  63 | 38.2 | **M18 Stage 1 (μ(x,y)) +7**; residue needs μ(x,y')/μ(y,y') Stages 2/3 (Lemma-3 Cases C–F) |
 | 1st_Abel              |  68 |   4 |  64 |  5.9 | Abel Invariant Rational (AIR, revive M13) |
 | 1st_with_symmetry     |  65 |  27 |  38 | 41.5 | targeted Lie symmetry ansätze |
 | 3rd_high_reducible    |  34 |   7 |  27 | 20.6 | higher-order missing-x/y + μ reduction |
@@ -107,7 +108,19 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   numerically-verified `Hypergeometric2F1`. 388→**396 solved**, gap 612→604,
   0 wrong answers; all DSolve suites + check-c99 green. Anti-overfit families
   `t_m16_legendre_symbolic`, `t_m16_poschl_teller`.
-- **Next (M17)** — measurement-ordered. Biggest remaining single-method gaps:
-  Abel Invariant Rational (64, deferred M13); 3rd/high-order operator factoring
-  (110); 2nd-order-linear residue (Gegenbauer/Jacobi via affine→Gauss 2F1 — math
-  already validated; parabolic-cylinder; power→Bessel).
+- **M17 (2026-09-07)** — 2nd-order-linear affine→Gauss ₂F₁ recognizer + Liouville
+  normal-form pre-pass in `SpecialFunctionForm`; the largest bucket (2nd-order linear).
+- **M18 Stage 1 (2026-09-07)** — reducible-μ integrating factor μ(x,y) (Cheb-Terrab &
+  Roche 1999, `dsolve_ifactor.c`): Φ degree-≤2 poly in y', Case A closed-form μ / Case B
+  linear-ν-ODE μ; before `SecondOrderSymmetry`, linearity-gated. +7 reducible-μ solves
+  (0 FAIL). Also: symbolic-parameter numeric-verify gate; `TrigToExp[Coth]` sign-bug fix.
+  Anti-overfit `test_dsolve_m18_stress.c`; units `t_m18_*`.
+- **Next (M18 Stages 2/3)** — μ(x,y') (Lemma-3 Cases A–F + Lemma-2 μ̃) then μ(y,y') via
+  the y↔x swap. **BLOCKED**: Cases A/C/D verified to find valid μ, but reduced ODEs are
+  non-elementary (verified Maple/MMA return them implicitly) — needs an implicit/
+  non-elementary first-order solver. Also **investigated 3rd/high-order operator factoring
+  (110-gap)**: the OperatorFactor full-first-order-factorization composition fix solves +3
+  (253/283/628, verified) but was REVERTED — the construction's integrals are slow (Risch,
+  8–83 s) and bounding them needs `TimeConstrained`, which nests non-deterministically under
+  the harness (flaky PASS/UNEVAL); needs a non-`TimeConstrained` bounding mechanism first.
+  Also: Abel Invariant Rational (deferred M13).
