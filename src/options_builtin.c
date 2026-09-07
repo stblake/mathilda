@@ -784,6 +784,7 @@ void options_register_defaults(void) {
         ob_add(&b, r_sym("Assumptions", "Automatic"));
         ob_add(&b, r_sym("ComplexityFunction", "Automatic"));
         ob_add(&b, r_sym("TransformationFunctions", "Automatic"));
+        ob_add(&b, r_sym("TimeConstraint", "Infinity"));
         ob_commit(&b, simp_fns[i]);
     }
 

@@ -1476,10 +1476,26 @@ static Expr* pseudo_rem(Expr* A, Expr* B, Expr* x) {
     /* expandedB is already expanded -- direct fast path is safe. */
     Expr* lcB = get_coeff_expanded(expandedB, x, degB);
 
+    /* Termination guard. A well-formed pseudo-division step strictly
+     * decreases the degree of R in the main variable x (the leading term
+     * cancels). If it ever fails to strictly decrease, the input is not a
+     * genuine polynomial in x over this generator set -- e.g. Factor over
+     * algebraically-dependent radical generators such as Sqrt[u] and u,
+     * where get_coeff_expanded cannot extract a true leading coefficient so
+     * the leading term never cancels. In that case the classic loop spins
+     * forever, re-expanding an ever-growing R (the Simplify[(x+Sqrt[u])
+     * u^(-1/2)] hang). We break instead and hand the non-reduced R back: the
+     * caller poly_gcd_internal has its own size/iteration budget and
+     * terminates, so Factor returns the input unfactored. The guard is inert
+     * for every well-formed input (degR always strictly decreases there). */
+    int prev_degR = -1;   /* -1 = no previous iteration yet */
     while (true) {
         int degR = get_degree_poly(R, x);
 
         if (degR < degB || is_zero_poly(R)) break;
+
+        if (prev_degR >= 0 && degR >= prev_degR) break;
+        prev_degR = degR;
 
         Expr* lcR = get_coeff_expanded(R, x, degR);
         int d = degR - degB;
@@ -1949,6 +1965,12 @@ Expr* builtin_subresultantpolynomialremainders(Expr* res) {
         if (dcur <= 0) break;
         Expr* r = pseudo_rem(prev, cur, x);
         if (is_zero_poly(r)) { expr_free(r); break; }
+        /* A valid subresultant chain has strictly-decreasing degree in x. If
+         * pseudo_rem handed back a non-reducing remainder (a degenerate input
+         * such as a "polynomial" over dependent radical generators, where its
+         * own termination guard tripped), stop with the chain built so far
+         * rather than spin this loop. Inert for every well-formed input. */
+        if (get_degree_poly(r, x) >= dcur) { expr_free(r); break; }
         if (n >= cap) { cap *= 2; chain = (Expr**)realloc(chain, sizeof(Expr*) * cap); }
         chain[n++] = r;
     }

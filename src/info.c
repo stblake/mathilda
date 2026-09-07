@@ -4093,6 +4093,7 @@ void info_init(void) {
         "  Assumptions (default $Assumptions) -- facts assumed while simplifying.\n"
         "  ComplexityFunction (default: leaf count plus integer-digit count, matching Mathematica) -- ranks candidate forms; the lowest-scoring form is returned.\n"
         "  TransformationFunctions (default Automatic) -- the functions applied to try to transform parts of expr. Automatic uses the built-in collection; {f1, f2, ...} uses only the fi; {Automatic, f1, ...} uses the built-in functions together with the fi.\n"
+        "  TimeConstraint (default Infinity) -- a per-sub-expression wall-clock budget in seconds; when a sub-expression's search exceeds it, the best form found so far is returned instead of continuing. A list {tLoc, ...} uses tLoc as the per-sub-expression budget.\n"
         "\n"
         "The built-in collection tries Together, Cancel, Expand, Factor, FactorSquareFree, Apart, TrigExpand, TrigFactor, and a TrigToExp/ExpToTrig roundtrip, keeping the smallest result.\n"
         "Under positivity / reality assumptions Simplify also applies Log/Power identities -- Log[a b] -> Log[a] + Log[b], (a b)^c -> a^c b^c, (a^p)^q -> a^(p q), Log[a^p] -> p Log[a] and the like -- whenever the operand-domain conditions are provable from the assumption set.\n"

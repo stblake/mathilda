@@ -72,6 +72,17 @@ size_t score_with_func(const Expr* e, const Expr* complexity_func);
 bool is_rule_with_lhs(const Expr* e, const char* lhs_symbol);
 bool head_threads_over(const char* h);
 
+/* Monotonic wall-clock seconds, for the Simplify TimeConstraint deadline. */
+double simp_mono_seconds(void);
+
+/* Per-Simplify-call time budget in seconds (HUGE_VAL = no limit): the
+ * per-subexpression TimeConstraint. Managed by save/set/restore in
+ * builtin_simplify (a dynamically-scoped value -- re-entrancy-safe, nested
+ * Simplify calls stack), and read at simp_search entry to arm a LOCAL
+ * deadline. Defined in simp_search.c. */
+double simp_current_time_budget(void);
+void   simp_set_time_budget(double seconds);
+
 /* ------------------------------------------------------------------ */
 /* simp_assume.c -- cross-module helpers used by several rewriters     */
 /* ------------------------------------------------------------------ */

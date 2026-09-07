@@ -1,3 +1,11 @@
+/* clock_gettime / CLOCK_MONOTONIC (used by simp_mono_seconds, the Simplify
+ * TimeConstraint clock) are POSIX, not C99. glibc hides them under -std=c99
+ * unless a feature-test macro is defined BEFORE the first include; placed
+ * below the first #include it has no effect (see SPEC.md §10). */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "simp.h"
 #include "simp_internal.h"
 #include "arithmetic.h"
@@ -68,6 +76,17 @@ bool simp_debug_enabled(void) {
 
 double simp_debug_elapsed_ms(clock_t t0) {
     return (double)(clock() - t0) * 1000.0 / (double)CLOCKS_PER_SEC;
+}
+
+/* Monotonic wall-clock seconds, for the Simplify TimeConstraint deadline.
+ * CLOCK_MONOTONIC is immune to NTP steps (unlike CLOCK_REALTIME); falls back
+ * to CPU clock() if the syscall is unavailable. Modelled on
+ * dt_wall_seconds() in datetime.c. */
+double simp_mono_seconds(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+    return (double)clock() / (double)CLOCKS_PER_SEC;  /* fallback */
 }
 
 void simp_debug_log(const char* xform, const Expr* in,

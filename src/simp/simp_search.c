@@ -59,6 +59,18 @@ static bool simp_contains_root_head(const Expr* e) {
     return false;
 }
 
+/* Per-Simplify-call TimeConstraint budget in seconds; HUGE_VAL == no limit.
+ * A dynamically-scoped value: builtin_simplify saves the current value, sets
+ * its own (from the TimeConstraint option), and restores it before returning,
+ * so nested Simplify calls stack correctly and the default (unset) path leaves
+ * it at HUGE_VAL -- every deadline check is then inert. simp_search reads it
+ * once at entry to arm a LOCAL deadline (so a nested search cannot clobber an
+ * outer one). See simp_internal.h. */
+static double g_simp_time_budget = HUGE_VAL;
+
+double simp_current_time_budget(void) { return g_simp_time_budget; }
+void   simp_set_time_budget(double seconds) { g_simp_time_budget = seconds; }
+
 static const char* SIMP_TRANSFORMS[] = {
     "Together",
     "Cancel",
@@ -1306,6 +1318,19 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
     Expr* best = expr_copy((Expr*)input);
     size_t best_score = score_with_func(best, complexity_func);
 
+    /* TimeConstraint: arm a LOCAL per-subexpression deadline from the current
+     * dynamically-scoped budget. The HUGE_VAL sentinel keeps the unlimited
+     * (default) path free of any clock read -- deadline stays HUGE_VAL and
+     * every check below short-circuits. On expiry we `goto search_done`, which
+     * returns the best-so-far form and frees seeds/abs_pre/sqsq_pre/rr_pre via
+     * the existing cleanup -- a normal C return, so nothing leaks. */
+    double simp_deadline = HUGE_VAL;
+    {
+        double budget = simp_current_time_budget();
+        if (budget > 0.0 && budget < HUGE_VAL)
+            simp_deadline = simp_mono_seconds() + budget;
+    }
+
     CandSet seeds;
     cs_init(&seeds);
     cs_add_or_free(&seeds, expr_copy((Expr*)input));
@@ -1777,9 +1802,18 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
      * they propagate as a new seed.
      */
     for (int round = 0; round < SIMP_ROUNDS; round++) {
+        /* TimeConstraint checkpoint: bail with the best-so-far if this
+         * subexpression's search has exhausted its budget (covers a slow
+         * seed phase too, since this runs before round 0's work). */
+        if (simp_deadline < HUGE_VAL && simp_mono_seconds() > simp_deadline)
+            goto search_done;
         CandSet next;
         cs_init(&next);
         for (size_t i = 0; i < seeds.count; i++) {
+            if (simp_deadline < HUGE_VAL && simp_mono_seconds() > simp_deadline) {
+                cs_free(&next);
+                goto search_done;
+            }
             const Expr* seed = seeds.items[i];
             size_t parent_score = score_with_func(seed, complexity_func);
 

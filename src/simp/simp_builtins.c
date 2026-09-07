@@ -583,6 +583,65 @@ static Expr* simplify_thread_list(Expr* res) {
     return result;
 }
 
+/* True iff some Power[base, Rational[p, q]] (q >= 2) in `e` has a *compound*
+ * polynomial base -- base is a function whose head is not Rational/Complex
+ * (e.g. Sqrt[6 + x^2]). That is a radicand the radical-fraction polish's
+ * Factor call can actually expose. It deliberately EXCLUDES bare-symbol or
+ * integer radicands like Sqrt[u] or Sqrt[6]: Factor cannot help there, and
+ * over algebraically-dependent generators such as Sqrt[u] and u it would
+ * hand poly_gcd_internal a degenerate pseudo-remainder sequence. Paired with
+ * simp_has_rational_root as the polish gate below. */
+static bool has_compound_radicand(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* head = e->data.function.head;
+    size_t argc = e->data.function.arg_count;
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
+        && argc == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp  = e->data.function.args[1];
+        if (exp->type == EXPR_FUNCTION && exp->data.function.head
+            && exp->data.function.head->type == EXPR_SYMBOL
+            && exp->data.function.head->data.symbol.name == SYM_Rational
+            && exp->data.function.arg_count == 2) {
+            const Expr* qq = exp->data.function.args[1];
+            if (qq->type == EXPR_INTEGER && qq->data.integer >= 2
+                && base->type == EXPR_FUNCTION && base->data.function.head
+                && base->data.function.head->type == EXPR_SYMBOL
+                && base->data.function.head->data.symbol.name != SYM_Rational
+                && base->data.function.head->data.symbol.name != SYM_Complex) {
+                return true;
+            }
+        }
+    }
+    for (size_t i = 0; i < argc; i++) {
+        if (has_compound_radicand(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* Parse a TimeConstraint option value into a per-subexpression budget in
+ * seconds. Accepts a machine-real number (Integer/Real/BigInt/Rational),
+ * Infinity / DirectedInfinity[1] (-> no limit), and a list {tLoc, ...} whose
+ * first element is the per-subexpression budget (matching FullSimplify's tLoc;
+ * there is deliberately NO whole-expression cap, per the "not on the entire
+ * expression at the top level" contract). Anything else, or a non-positive
+ * value, yields HUGE_VAL == "no limit" so the default path stays inert. */
+static double simp_parse_time_budget(const Expr* e) {
+    if (!e) return HUGE_VAL;
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity)
+        return HUGE_VAL;
+    if (e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_DirectedInfinity) return HUGE_VAL;   /* +Infinity */
+        if (h == SYM_List && e->data.function.arg_count >= 1)
+            return simp_parse_time_budget(e->data.function.args[0]);
+    }
+    double v;
+    if (common_machine_real_value(e, &v) && v > 0.0) return v;
+    return HUGE_VAL;
+}
+
 Expr* builtin_simplify(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -613,6 +672,7 @@ Expr* builtin_simplify(Expr* res) {
     Expr* opt_assumptions  = NULL;
     Expr* opt_complexity   = NULL;
     Expr* opt_transform    = NULL;
+    Expr* opt_timeconstraint = NULL;
 
     for (size_t i = 1; i < argc; i++) {
         Expr* a = res->data.function.args[i];
@@ -622,10 +682,17 @@ Expr* builtin_simplify(Expr* res) {
             opt_complexity = a->data.function.args[1];
         } else if (is_rule_with_lhs(a, "TransformationFunctions")) {
             opt_transform = a->data.function.args[1];
+        } else if (is_rule_with_lhs(a, "TimeConstraint")) {
+            /* Must precede the positional-assumption fallback: otherwise
+             * TimeConstraint -> t is silently swallowed as an assumption. */
+            opt_timeconstraint = a->data.function.args[1];
         } else if (positional_assum == NULL) {
             positional_assum = a;
         }
     }
+
+    /* Per-subexpression wall-clock budget (HUGE_VAL == no limit, the default). */
+    double time_budget = simp_parse_time_budget(opt_timeconstraint);
 
     /* Resolve TransformationFunctions into (use_builtin, user_funcs[]).
      *   Automatic             -> built-in pipeline only (the default).
@@ -788,6 +855,15 @@ Expr* builtin_simplify(Expr* res) {
      * permits it (Automatic, the default, or an explicit list that includes
      * Automatic). With an explicit user-only list we skip straight to applying
      * those functions to the input. */
+    /* Arm the per-subexpression TimeConstraint for the simplification work
+     * below. Save/restore the dynamically-scoped budget so nested Simplify
+     * calls (e.g. a ComplexityFunction that itself simplifies, or the
+     * per-element list threading) stack correctly and the outer budget is
+     * always restored on return. All early returns above this point are
+     * budget-neutral. */
+    double saved_time_budget = simp_current_time_budget();
+    simp_set_time_budget(time_budget);
+
     Expr* best = NULL;
     if (use_builtin) {
     if (simp_classify(expr) == SIMP_SHAPE_RATIONAL) {
@@ -1004,7 +1080,7 @@ Expr* builtin_simplify(Expr* res) {
      * Gated on an actual radical (rational-root) present and a STRICT score
      * improvement, so non-radical results and no-improvement cases are
      * untouched, and Factor's own cost gates keep it bounded. */
-    if (simp_has_rational_root(best)) {
+    if (simp_has_rational_root(best) && has_compound_radicand(best)) {
         Expr* fac = expr_new_function(expr_new_symbol(SYM_Factor),
                                       (Expr*[]){ expr_copy(best) }, 1);
         Expr* factored = eval_and_free(fac);
@@ -1044,6 +1120,7 @@ Expr* builtin_simplify(Expr* res) {
 
     simp_memo_free(&memo);
     assume_ctx_free(ctx);
+    simp_set_time_budget(saved_time_budget);   /* restore dynamic scope */
     return best;
 }
 

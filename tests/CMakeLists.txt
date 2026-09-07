@@ -3784,6 +3784,19 @@ else()
 endif()
 add_test(NAME fullsimplify_tests COMMAND fullsimplify_tests)
 
+# Regression: Simplify hang (Factor/pseudo_rem over radical generators) +
+# the Simplify TimeConstraint option. Forks per case, so a real hang fails
+# the specific input rather than freezing the suite.
+add_executable(simplify_hang_tests test_simplify_hang.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(simplify_hang_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(simplify_hang_tests gmp m ${ECM_LIB})
+    add_dependencies(simplify_hang_tests build_ecm)
+else()
+    target_link_libraries(simplify_hang_tests gmp m)
+endif()
+add_test(NAME simplify_hang_tests COMMAND simplify_hang_tests)
+
 # Per-rule corpus: loads tests/fullsimplify_corpus.m and checks
 # FullSimplify[input] == expected for each {input, expected} pair.
 add_executable(fullsimplify_corpus_tests test_fullsimplify_corpus.c $<TARGET_OBJECTS:mathilda_common>)

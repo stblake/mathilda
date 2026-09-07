@@ -204,6 +204,14 @@ Out[8]= True
   drops the integer-digit penalty.
 - **`TransformationFunctions`** (default `Automatic`) — the functions applied to
   try to transform parts of `expr` (see [TransformationFunctions](#transformationfunctions)).
+- **`TimeConstraint`** (default `Infinity`) — a **per-sub-expression** wall-clock
+  budget in seconds. When the heuristic search for a sub-expression exceeds it,
+  the best form found so far for that sub-expression is returned instead of
+  continuing; sibling sub-expressions each get their own fresh budget (this is
+  *not* a single top-level bound). It is a synchronous check between search
+  steps, so it fails gracefully with no memory leak, but it does not interrupt a
+  single long-running kernel call. A list `{tLoc, ...}` uses `tLoc` as the
+  per-sub-expression budget. `Infinity` (the default) imposes no limit.
 
 ```mathematica
 In[1]:= Simplify[1/(x - 1) + 1/(1 - x), TransformationFunctions -> {Together}]
