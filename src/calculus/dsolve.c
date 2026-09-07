@@ -54,6 +54,7 @@ typedef enum {
     DS_RICCATI,
     DS_CHINI,
     DS_ABEL,
+    DS_POLYSHIFT,
     DS_LINCOEFF,
     DS_ALMOSTLINEAR,
     DS_SEPREDUCED,
@@ -93,6 +94,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Riccati")              == 0) return DS_RICCATI;
     if (strcmp(s, "Chini")                == 0) return DS_CHINI;
     if (strcmp(s, "Abel")                 == 0) return DS_ABEL;
+    if (strcmp(s, "PolynomialShiftSubstitution") == 0) return DS_POLYSHIFT;
     if (strcmp(s, "LinearCoefficients")   == 0) return DS_LINCOEFF;
     if (strcmp(s, "AlmostLinear")         == 0) return DS_ALMOSTLINEAR;
     if (strcmp(s, "SeparableReduced")     == 0) return DS_SEPREDUCED;
@@ -134,6 +136,7 @@ extern Expr** dsolve_fos_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_chini_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_abel_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_polyshift_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lincoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lincoeff_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_almostlinear_try(DSolveProblem* P, size_t* nbranch);
@@ -172,6 +175,7 @@ extern void dsolve_fos_init(void);
 extern void dsolve_riccati_init(void);
 extern void dsolve_chini_init(void);
 extern void dsolve_abel_init(void);
+extern void dsolve_polyshift_init(void);
 extern void dsolve_lincoeff_init(void);
 extern void dsolve_almostlinear_init(void);
 extern void dsolve_sepreduced_init(void);
@@ -320,6 +324,15 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_bernoulli_try);
             if (!result) result = dsolve_run(&P, dsolve_homogeneous_try);
             if (!result) result = dsolve_run(&P, dsolve_separable_try);
+            /* PolynomialShiftSubstitution: y' == R(x) + g(x)(phi(x)+c y)^p with the
+             * substitution u = phi+c y -> separable; the deterministic replacement
+             * for abaco2_similar's aborting radical [F(x),G(x)]-symmetry cases.
+             * Its detection needs a fractional-power-of-(linear-in-y) atom that the
+             * standard methods above never produce, so placing it early is safe and
+             * — crucially — reaches these radical equations before Exact's/Lagrange's
+             * heavier searches spin on the (parameter-laden) radical.  Implicit,
+             * branch-safe output. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_polyshift_try);
             /* Linearizable by u = phi(y) (Log/Exp/Sin/Cos/Tan) -> linear/Bernoulli
              * in u.  Deterministic (fixed substitution table) and gated to
              * transcendental-in-y right-hand sides, so it runs ahead of Exact:
@@ -443,6 +456,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_RICCATI:      result = dsolve_run(&P, dsolve_riccati_try);      break;
         case DS_CHINI:        result = dsolve_run_implicit(&P, dsolve_chini_try); break;
         case DS_ABEL:         result = dsolve_run_implicit(&P, dsolve_abel_try);  break;
+        case DS_POLYSHIFT:    result = dsolve_run_implicit(&P, dsolve_polyshift_try); break;
         case DS_LINCOEFF:
             result = dsolve_run(&P, dsolve_lincoeff_try);
             if (!result) result = dsolve_run_implicit(&P, dsolve_lincoeff_implicit_try);
@@ -512,6 +526,7 @@ void dsolve_init(void) {
     dsolve_riccati_init();
     dsolve_chini_init();
     dsolve_abel_init();
+    dsolve_polyshift_init();
     dsolve_lincoeff_init();
     dsolve_almostlinear_init();
     dsolve_sepreduced_init();

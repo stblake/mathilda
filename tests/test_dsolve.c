@@ -473,6 +473,30 @@ static void t_m19_declines_integer_2mu(void) {
                "HypergeometricPFQ]");
 }
 
+/* ---- M20: PolynomialShiftSubstitution (x-dependent-shift substitution ->
+ * separable, implicit first integral).  Verified by the implicit-function rule
+ * D[G,x] + D[G,y[x]]*RHS == 0 (branch-safe). ---- */
+
+/* corpus 2.1.2-402: y' == x^2/2 + (1+x^2+x^3) Sqrt[x^3 - 6 y]; u = x^3 - 6 y. */
+static void t_m20_polyshift_402(void) {
+    check_form("Head[DSolve[y'[x] == x^2/2 + (1 + x^2 + x^3) Sqrt[x^3 - 6 y[x]], y, x][[1, 1]]]", "Equal");
+    check_true("With[{g = (DSolve[y'[x] == x^2/2 + (1 + x^2 + x^3) Sqrt[x^3 - 6 y[x]], y, x][[1, 1, 1]] "
+               "- C[1])}, Abs[N[(D[g, x] /. y'[x] -> (x^2/2 + (1 + x^2 + x^3) Sqrt[x^3 - 6 y[x]])) "
+               "/. {x -> 6/5, y[x] -> 1/10}, 20]] < 1/1000000]");
+}
+
+/* corpus 2.1.2-371: symbolic parameter a, base Sqrt[a x^4 + 8 y]. */
+static void t_m20_polyshift_371(void) {
+    check_true("Head[DSolve[y'[x] == -(1/2) Sqrt[a] x^3 (Sqrt[a] + Sqrt[a] x - 2 Sqrt[a x^4 + 8 y[x]])/(1 + x), "
+               "y, x][[1, 1]]] === Equal");
+}
+
+/* A radical base NONLINEAR in y (x + y^2) is outside the method's class -> not
+ * claimed by PolynomialShiftSubstitution. */
+static void t_m20_declines_nonlinear_base(void) {
+    check_true("Head[DSolve`PolynomialShiftSubstitution[y'[x] == Sqrt[x + y[x]^2], y, x]] =!= List");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2068,6 +2092,9 @@ int main(void) {
     TEST(t_m17_affine_declines_confluent);
     TEST(t_m19_whittaker_confluent);
     TEST(t_m19_declines_integer_2mu);
+    TEST(t_m20_polyshift_402);
+    TEST(t_m20_polyshift_371);
+    TEST(t_m20_declines_nonlinear_base);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

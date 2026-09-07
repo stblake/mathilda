@@ -712,6 +712,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_riccati.c
     ../src/calculus/dsolve_chini.c
     ../src/calculus/dsolve_abel.c
+    ../src/calculus/dsolve_polyshift.c
     ../src/calculus/dsolve_lincoeff.c
     ../src/calculus/dsolve_almostlinear.c
     ../src/calculus/dsolve_sepreduced.c
@@ -3105,6 +3106,10 @@ add_executable(dsolve_m19_stress_tests test_dsolve_m19_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m19_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m19_stress_tests COMMAND dsolve_m19_stress_tests)
 
+add_executable(dsolve_m20_stress_tests test_dsolve_m20_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m20_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m20_stress_tests COMMAND dsolve_m20_stress_tests)
+
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)
 
@@ -3695,7 +3700,7 @@ endif()
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 576)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 572)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

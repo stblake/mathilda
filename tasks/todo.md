@@ -1,58 +1,50 @@
-# DSolve M19 — confluent Whittaker / ₁F₁ recognizer (+ corpus re-baseline)
+# DSolve M20 — first-order symmetry gap, Stage 1: PolynomialShiftSubstitution
 
 Plan: `/Users/user/.claude/plans/twinkly-chasing-hammock.md`
-Method: confluent equation → normal form `z''=r z` with one finite double pole +
-nonzero const at ∞ → Whittaker (κ,μ) → emit `e^{cz} z^μ ₁F₁[…]` (verifiable),
-new branch in `specialform_reduced_basis` (`src/calculus/dsolve_specialform.c`).
+Method: `y' = R(x) + g(x)(φ(x)+c·y)^p` → `u=φ+c·y` → separable → implicit first integral.
+Generalizes FirstOrderSubstitution (linear arg ax+by+c) to x-dependent polynomial shift.
+Targets radical `[F(x),G(x)]` cases that abaco2_similar ABORTs: 365/371/372/376/378/402/403/424.
 
-## Step 0 — corpus re-baseline (stale report predates M17/M18)
-- [x] full §2.1.2 re-run: TRUE baseline **424/1000 scalar (42.4%), 0 FAIL**, 576 UNEVAL
-- [~] regenerate reports/2.1.2.{md,tsv}; record in STATUS.md (pending M19 re-run finish)
+## Step 0 — study templates
+- [ ] dsolve_fos.c (FirstOrderSubstitution: three-fn contract, substitution + recurse)
+- [ ] dsolve_run_implicit substrate + dsolve_method_builtin registration
+- [ ] cascade wiring in dsolve.c (enum, ds_method_from_string, extern, dispatch slot)
 
-## Step 1 — Whittaker/₁F₁ recognizer ✅ DONE
-- [x] specialform_whittaker_basis(): single (x−x0)^2 pole via squarefree trick; num/den deg 2
-- [x] b0=g|x0, b1=g'|x0, b2=lead; c=2√(−b2), μ=√(1/4−b0), κ=b1/c (Qc-convention)
-- [x] emit W1/W2 = Exp[-z/2] z^(1/2±μ) Hypergeometric1F1[1/2±μ−κ, 1±2μ, z] (→auto PFQ)
-- [x] gate: decline IntegerQ[2μ]; keep symbolic μ; sf_num_ok in both P==0 and pre-pass
-- [x] pre-pass Whittaker fallback @ wider ≤200 leaf budget (cheap sf_ct)
+## Step 1 — dsolve_polyshift.c
+- [ ] detect radical/power atom base^p (p non-integer), base linear in y → φ(x), c
+- [ ] u=φ+c·y; G(x,u)=φ'+c·f(x,(u-φ)/c); require free of y (general substitution test)
+- [ ] recurse dsolve_run on u'==G; back-substitute u=φ+c·y; emit implicit first integral
+- [ ] node budget + transcendental guard → fast decline on non-match
+- [ ] register DSolve`PolynomialShiftSubstitution + ATTR_PROTECTED + docstring; init hook
 
-## Step 2 — SCOPE DECISION: P==0-only (correctness-first)
-- [x] pre-pass (P≠0) Whittaker gained 13 (97/101/104/…) BUT regressed 5 (94/470/472/806/811):
-      recovery factor Exp[-∫P/2] shares finite-pole base w/ Whittaker z^(1/2±μ) → composed
-      candidate stacks same-base radical powers → verify/zero_test/1F1-numeric $IterationLimit
-      → starves Frobenius series fallback (those cases' baseline PASS) → REGRESSION.
-- [x] leaf-count / μ-complexity CANNOT separate gains from regressions (data-dependent).
-- [x] DECISION: run Whittaker on y'-free (P==0) surface ONLY. 0 regressions; base self-verifies
-      against reduced eq. P≠0 confluent family (~13 cases) = documented future work.
-- [x] verified: 94/470/472/806/811 back to SERIES-PASS; 102/568 solve; 97/101/104 → baseline ABORT
-      (UNEVAL, not regression — never solved at baseline)
+## Step 2 — cascade
+- [ ] slot after FirstOrderSubstitution (fos), before LieSymmetry
 
-## Step 3 — tests + gates + docs ✅ DONE
-- [x] test_dsolve_m19_stress.c (nf/shifted/energy/prepass grids) + CMake — pass
-- [x] t_m19_* units in test_dsolve.c (confluent/prepass/integer-2μ decline) — pass
-- [x] all DSolve ctest suites (dsolve_tests + m5/m12/m14/m17/m18/m19) + check-c99 green
-- [x] valgrind: whittaker path leak-flat (decline A==B, no growth under ×8)
-- [x] DSOLVE_PLAN.md M19 + §1c row; calculus.md; changelog; docstring
-- [~] STATUS.md re-baseline + M19 line; lower argv[3] gate baseline (pending re-run)
+## Step 3 — tests + gates + docs
+- [ ] test_dsolve_m20_stress.c (φ,c,g,p forward grid) + CMake
+- [ ] t_m20_* units in test_dsolve.c (402/371 solve + non-linear-base decline)
+- [ ] all DSolve ctest suites + check-c99 green; valgrind decline-path clean
+- [ ] re-measure §2.1.2: positive delta, 0 FAIL, 0 P→U regressions; lower gate baseline
+- [ ] DSOLVE_PLAN.md M20 + §1a; calculus.md; changelog; STATUS.md
 
 ## Review
 
-Landed **M19**: the confluent Whittaker/₁F₁ recogniser (`specialform_whittaker_basis`
-in `dsolve_specialform.c`) + a **§2.1.2 re-baseline** (the scoreboard was stale, pre-
-M17/M18). A y'-free `y''+Q y==0` whose `Q` has a single finite double pole + rank-1
-irregular point at ∞ → verifiable `Exp[-z/2] z^(1/2±μ) ₁F₁[1/2±μ-κ, 1±2μ, z]`, self-
-verified against the reduced equation (inert `WhittakerM/W` never emitted).
+Landed **M20 Stage 1**: `DSolve\`PolynomialShiftSubstitution` (`dsolve_polyshift.c`) — the
+x-dependent-shift generalisation of `FirstOrderSubstitution`. `y' = R(x) + g(x)(φ(x)+c y)^p`
+(R=−φ'/c) → `u=φ+c y` → separable `u'=c g u^p` → implicit first integral (branch-safe).
+Deterministic replacement for the radical `[F(x),G(x)]`-symmetry cases `abaco2_similar`
+aborts on. Cascade slot: after Separable, before Linearizable/Exact/Lagrange.
 
-**Measured: baseline 424/1000 (42.4%, the true post-M17/M18 number), M19 427 (+3: 102,
-568, 611), 0 FAIL, 0 regressions.** Gate 612→576. All DSolve ctest suites (dsolve_tests +
-m5/m12/m14/m17/m18/m19 stress) + check-c99 green; Whittaker path valgrind leak-flat.
+**Solves 2.1.2-402/-371/-372/-376/-403/-424** (6 of the 8 radical sub-cluster);
+365 (general separable) and 378 (x-dependent c) correctly decline.
 
-Key decision — **P==0-only scope (correctness over yield).** The P≠0 pre-pass Whittaker
-(with the normal-form recovery factor) gained ~13 (97/101/104/…) but **regressed ~5**
-(94/470/472/806/811): the recovery factor `Exp[-∫P/2]` shares the finite-pole base with
-the Whittaker `z^(1/2±μ)`, so the composed candidate stacks same-base symbolic-radical
-powers whose verify/`zero_test`/`HypergeometricPFQ`-numeric hits `$IterationLimit` and
-starves the Frobenius series fallback those cases relied on. Leaf-count and μ-complexity
-cannot separate gains from regressions (data-dependent evaluator fragility). Restricting
-to the P==0 surface (no recovery, no stacking) keeps 0 regressions; the P≠0 confluent
-family (~13 cases) is documented future work needing an evaluator-robustness fix.
+Two robustness lessons (both caused hangs, both fixed):
+1. `Simplify[(x+Sqrt[u])u^(-1/2)]` LOOPS → build the reduced form by plain evaluation, not
+   `ds_simplify` (eval combines same-base powers + additive cancellation to expose u-freeness).
+2. `nth_algebraic` recurses a Lagrange equation's radical branches (`y=2xy'+y'²` →
+   `y'=−x±√(x²+y)`) through every early method → polyshift ran on them and hung the suite;
+   fixed by lesson 1. Test early methods on nth_algebraic/Factorable branches, not just targets.
+
+All DSolve ctest suites (dsolve_tests + m5/m12/m14/m17/m18/m19/m20 stress) + check-c99 green.
+Corpus delta + STATUS/gate-baseline pending the full re-run (0-regression check across all
+first-order solves, since early-polyshift placement affects them all).

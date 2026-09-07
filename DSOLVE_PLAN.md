@@ -660,6 +660,42 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     pole, nonzero energy); units `t_m19_*` in `test_dsolve.c`. All DSolve ctest suites +
     `make check-c99` green; Whittaker path valgrind leak-flat.
 
+- **M20 — first-order symmetry gap, Stage 1: `PolynomialShiftSubstitution`.** ✅ DONE.
+  First wave on the §2.1.2 `1st_with_symmetry` bucket (65 tot, 38 UNEVAL — Mathilda's
+  clearest first-order upside, where SymPy is closest). The 38 subgroup as
+  `[F(x),G(x)y+H(x)]` (17), `[F(x),G(y)]` (12), `[F(x),G(x)]` (7), `[F(x)G(y),0]` (2) —
+  all *existing* M10 Lie-ansatz classes that decline/abort. Stage 1 takes the largest
+  deterministic ABORTing sub-cluster: the **radical substitution** family — `y' = R(x) +
+  g(x)(φ(x)+c y)^p` (`p` non-integer, `φ` poly-in-x, `c` const, `R = −φ'/c`), where
+  `u = φ+c y` reduces to the separable `u' = c g(x) u^p`, first integral `u^(1−p)/(1−p)
+  − ∫c g dx == C[1]` returned **implicitly** (branch-safe; verified by the implicit-
+  function rule). New `dsolve_polyshift.c` (`DSolve\`PolynomialShiftSubstitution`), the
+  x-dependent-shift generalisation of `FirstOrderSubstitution`.
+  - These are Maple's `[F(x),G(x)]`-symmetry cases; the heuristic `abaco2_similar`
+    (`dsolve_lie.c`) targets them but its `Q=ω_y/ω_yy`,`T=Q_x/Q_y` differentiates the
+    radical `ω`, blows past the node budget, and ABORTs. The deterministic substitution
+    sidesteps the symmetry machinery.
+  - **Cascade slot:** after `Separable`, before the heavier `Linearizable`/`Exact`/
+    `Lagrange` searches (which otherwise spin on the parameter-laden radical before the
+    late implicit slot is reached). Its detection needs a fractional-power-of-(linear-in-y)
+    atom that the standard methods never produce, so early placement is safe and steals
+    nothing (a `y' = a y + b√y` Bernoulli has an additive `a y` → reduced form is not the
+    pure `k(x)u^p` → declines).
+  - **Robustness:** the reduced form is built by plain evaluation, NOT `Simplify` —
+    `Simplify[(x+Sqrt[u]) u^(-1/2)]` loops (radical rationalisation), which the
+    `nth_algebraic` branches of a Lagrange equation (`y=2xy'+y'²` → `y'=−x±√(x²+y)`) hit;
+    the evaluator's same-base-power/additive cancellation exposes u-freeness without it.
+  - *Measured:* **427→432 scalar (+6), 0 FAIL, 0 real regressions.** *Solves*
+    2.1.2-402/-371/-372/-376/-403/-424 (previously `abaco2_similar` aborts).
+    *Declines (correctly):* 2.1.2-365 (general separable `u'=k(x)(1+I√u)`, not pure power),
+    2.1.2-378 (x-dependent `c` → substitution reintroduces y). *Future stages of the
+    symmetry gap:* quadratic-in-y' (48/342/981/992 → Factorable/NthAlgebraic robustness);
+    arbitrary-function families (~11, need undefined-function symmetry support); the
+    transcendental `u=y^{3/2}`/`u=e^{y/x}` analogues; general-separable reduced forms.
+  - Anti-overfit `tests/test_dsolve_m20_stress.c` (`(φ,c,g,p)` grids, implicit-function-
+    rule verified); units `t_m20_*` in `test_dsolve.c`. All DSolve ctest suites +
+    `make check-c99` green.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -708,6 +744,16 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 - `[✓] FirstOrderSubstitution` — `y'==F(a x + b y + c)`: detect the constant ratio
   `r = F_x/F_y`, substitute `v = y + r x` → autonomous separable `v'==r+H(v)`,
   solved inline; declines (stays symbolic) when the antiderivative does not invert.
+- `[✓] PolynomialShiftSubstitution` — `y'==R(x)+g(x)(φ(x)+c y)^p` (`p` non-integer, `φ`
+  polynomial in `x`, `c` constant, `R=−φ'/c`): the x-dependent-shift generalisation of
+  `FirstOrderSubstitution` (whose argument is only the constant-coefficient linear form).
+  The substitution `u=φ+c y` reduces it to the separable `u'==c g(x) u^p`; the first
+  integral `u^(1−p)/(1−p)−∫c g dx==C[1]` is returned implicitly (branch-safe, verified by
+  the implicit-function rule). The deterministic replacement for the radical
+  `[F(x),G(x)]`-symmetry cases `abaco2_similar` aborts on. Detection/reduction is
+  Simplify-free (plain evaluation) to avoid a radical-rationalisation loop. Runs after
+  `Separable`, before the heavier substitution/parametric searches. See M20.
+  `dsolve_polyshift.c`.
 - `[✓] Factorable` — factor the equation as a polynomial in the highest derivative
   (`F1·F2·…==0`); recurse the cascade on each factor, union the branch bodies.
   (SymPy `factorable`.) Factors over plain-symbol substitutes under a `PolynomialQ`
