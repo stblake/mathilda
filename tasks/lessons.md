@@ -3461,3 +3461,64 @@ Two lessons from strengthening `src/solve/solverad.c`:
 
 4. **A clock()-based deadline did NOT bound the sub-evals; time() did.** Prefer
    wall-clock `time(NULL)` for a per-call CPU/hang budget in DSolve methods.
+
+## M17 (2026-09-07): DSolve affine→Gauss ₂F₁ + normal-form pre-pass
+
+- **`Simplify` can silently produce a WRONG rational function** when the
+  denominator holds an unexpanded quadratic. Concretely
+  `Simplify[9 * (3/4/(10 + (5-3 s)^2 - 7 (5-3 s)))]` returns `-3/(4 s)` where the
+  true value is `3/(4 s (s-1))` — WRONG SIGN and a DROPPED POLE (at s=2 it gives
+  -3/8 vs the true 3/8). `Simplify[3/(4 s (s-1))]` in isolation is correct, so the
+  trigger is the unexpanded `(5-3 s)^2` in the denominator. **Lesson:** for the
+  indicial-limit and change-of-variable coefficient reductions, use
+  `Cancel[Together[·]]` (deterministic, correct) NOT `Simplify`. This bit both the
+  pole extraction (`q0` came out `Indeterminate` from `0*Infinity`) and the mapped
+  coefficient `Qt` (lost its `s=1` pole → the equation was no longer canonical Gauss
+  → the affine recognizer declined). The underlying `Simplify` bug is real and
+  separate; M17 routes around it. (Worth a dedicated investigation later.)
+- **Route "disguised" special-function equations to the NUMERICIZING head, not the
+  prettier inert one.** The associated-Legendre corpus cases were being caught by the
+  Legendre row, which emitted 3-arg `LegendreP[ν,μ,x]` — correct but NON-numericizing
+  for symbolic ν,μ, so both DSolve's own verify and the corpus numeric check failed
+  (→ declined to series). Making the Legendre row emit only the ordinary 2-arg form
+  (`μ==0`) and letting the associated case fall through to the affine→₂F₁ path (which
+  emits verifiable `Hypergeometric2F1`) is what actually solved them. General pattern:
+  when two forms are mathematically equivalent, PREFER the one that numericizes so the
+  self-verify is genuine.
+- **A "solution" that is a `SeriesData` is still `Head === List`.** A corpus/test
+  check of `Head[DSolve[...]] === List` passes VACUOUSLY on the Frobenius series
+  fallback. Always additionally require the closed-form head (`FreeQ[..., HypergeometricPFQ]`
+  is False) or a numeric residual, else a decline-to-series reads as a win.
+- **Derivative substitution needs the `y -> Function` form, not `y[x] -> body`.** A
+  numeric residual check `(...y''[x]...) /. DSolve[eqn, y[x], x][[1]]` leaves `y''[x]`
+  unreplaced (the rule only matches `y[x]`), so the residual never vanishes. Solve with
+  the bare `y` (`DSolve[eqn, y, x]` → `{y -> Function[{x}, ...]}`) so `y''[x]`
+  substitutes and differentiates.
+
+## M17 robustness — the affine/normal-form recognizers need decline-FAST gates
+
+- A new recognizer added to `dsolve_specialform_try` runs on EVERY 2nd-order-linear
+  equation that reaches it and isn't solved earlier — i.e. mostly on the DECLINE path.
+  So it must be cheap-to-decline, or it adds latency to unrelated equations and pushes
+  borderline cases over the corpus's 8s `TimeConstrained` (a PASS->UNEVAL regression that
+  looks like a bug but is pure latency). Gates that worked: skip the indicial
+  `FactorList`/`Solve` above 80 leaves; require RATIONAL regular singular points
+  (`sf_has_radical` on x1,x2 — radical RSPs make every downstream symbolic step slow);
+  size-cap the normal-form potential; and a wall-clock/deadline is NOT enough when a
+  SINGLE `Simplify`/`Solve`/`FactorList` call is the multi-second hang.
+- **`Simplify` on radical-parametric-but-rational-in-s coefficients is a hang;
+  `Cancel[Together]` is not.** The F-homotopy coefficients are rational in the mapped
+  variable but carry radical exponents in several parameters; `ds_simplify` spends minutes
+  canonicalising the radicals, `Cancel[Together]` does only the needed rational reduction.
+- **A new method must be gated to `g_dsolve_depth <= 1` if its output can loop in a
+  recursive caller.** The normal-form pre-pass emits `mu = Exp[-Int P/2] * z`; when
+  `OperatorFactor` peeled a first-order factor and re-solved the order-(n-1) quotient, that
+  `mu` composed back drove the evaluator into an infinite rewrite (`$IterationLimit`) on
+  3rd-order cases (2.1.2-900/1199). Precedent: `dsolve_common.c:642` gates
+  `dsolve_linear_normalize` the same way. The affine row (no recovery factor, no recursion)
+  did NOT need this.
+- **Verify a "regression" against the actual code, not just the TSV diff.** Of 11
+  apparent PASS->UNEVAL regressions, several were borderline-timeout cases (e.g. 2.1.2-997)
+  that ALSO time out on the pre-change HEAD binary — pure load-dependent flakiness, not
+  caused by the change. Swap the changed source files for their HEAD versions and re-test
+  the specific case before "fixing" it.

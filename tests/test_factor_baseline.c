@@ -85,6 +85,21 @@ static void test_univariate_factors(void) {
                "Plus[1, Times[-1, x], Power[x, 2], Times[-1, Power[x, 3]], Power[x, 4]]]", 100.0);
 }
 
+/* Regression: an UNEXPANDED Power[Plus[...], n] with numeric coefficients must not
+ * lose its leading term.  flint_univariate_factor previously computed the degree of
+ * the raw (un-expanded) argument, and get_degree_poly counts Power[base,k] only when
+ * base IS the variable — so (5-3s)^2 reported degree 0, capping the whole degree at 1
+ * and silently dropping the s^2 coefficient (Factor[(5-3s)^2 - 30 s] -> -5(-5+12s),
+ * a wrong lower-degree answer).  Factor now expands before computing the degree. */
+static void test_unexpanded_power_input(void) {
+    eval_check("Factor[(5 - 3 s)^2 - 30 s]",                 /* irreducible over Q */
+               "Plus[25, Times[-60, s], Times[9, Power[s, 2]]]", 50.0);
+    eval_check("Factor[(1 - s)^2 - (1 - s)]",
+               "Times[s, Plus[-1, s]]", 50.0);
+    eval_check("Factor[(1 + 2 s)^2 - (1 + 2 s)]",
+               "Times[2, s, Plus[1, Times[2, s]]]", 50.0);
+}
+
 /* Bivariate via factor_binomial / monomial-content (Phase 0). */
 static void test_bivariate_simple(void) {
     eval_check("Factor[x^2 - 4 y^2]",
@@ -264,6 +279,7 @@ int main(void) {
 
     /* Direct Factor */
     TEST(test_univariate_factors);
+    TEST(test_unexpanded_power_input);
     TEST(test_bivariate_simple);
     TEST(test_bivariate_hensel);
     TEST(test_multivariate_via_factor_roots);

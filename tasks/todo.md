@@ -1,40 +1,44 @@
-# DiffUnderInt: finite-domain Feynman families (3 types)
+# DSolve M17 — 2nd-order-linear special-function wave
 
-## Goal
-Make `Integrate[..., Method -> "DiffUnderInt"]` solve three parametric families:
-- **F1 power-log**: `Log[1+c x^p]/(x Sqrt[1-x^(2p)])` on {0,1} → `(Pi^2/8 - ArcCos[c]^2/2)/p`
-- **F2 secant-radical**: `Sec[2x] Log[1+c Sqrt[1-Tan[x]^2]]` on {0,Pi/4} → `Pi^2/8 - ArcCos[c]^2/2`
-- **F3 tangent-power**: `Csc[2x]^2 Log[1+Tan[x]^a]` on {0,Pi/4} → `(Pi Csc[Pi/a]-a)/4`
+## Part A — Affine → Gauss ₂F₁   ✅ + F-homotopy (exponent shift, needed for Gegenbauer/Jacobi/assoc-Legendre)
+- [x] Extract canonical Gauss row into static `specialform_gauss_basis(Pc,Qc,xvar)`
+- [x] Replace canonical Gauss block with a call to the helper (byte-identical output)
+- [x] Add `hgc_num_ok(...)` numeric self-verify (in-segment sampling; instantiates x1,h params)
+- [x] Add affine row: locate 2 finite RSPs (squarefree PolynomialLCM deg 2), map x=x1+h·s
+- [x] **F-homotopy** `specialform_fhomotopy`: pull local exponents Y=s^r0(1-s)^r1 F → canonical Gauss
+- [x] Decline deg L ≠ 2 / h==0 cleanly with full frees
+- [x] Use Cancel[Together] (not Simplify) for Pt/Qt and pole extraction (Simplify drops a pole)
+- [x] Legendre row: emit only ordinary (μ==0); associated (μ≠0) → affine 2F1
 
-## Tasks
-- [ ] Read the target regions of integrate_diffunderint.c precisely
-- [ ] `strip_re_im` helper + wire into `relation_apply` (Re[a]>0 parsing)
-- [ ] `insert_feynman_param(canon, p)` helper (single Log[1+W]→Log[1+p W])
-- [ ] `normalize_power_sub` (u=x^p) — F1 front-end
-- [ ] `normalize_tan_half` (rule-based t=Tan[x]) — F2/F3 front-end
-- [ ] `inner_arccos_family` (Form A + Form B → A ArcCos[q]/Sqrt[1-q^2])
-- [ ] `stage_finite_feynman` (F1+F2): normalize→insert→D→inner→closed-form G→verify→eval@1
-- [ ] `stage_tangent_power` (F3): normalize→emit digamma→subst-identity+a0=3 verify
-- [ ] Control-flow edit in `integrate_diffunderint_try` (drop np==0 bail, add stages)
-- [ ] Header overview comment update
-- [ ] Tests: 3 targets + corpus subset + emit-guard cross-checks
-- [ ] Docs: calculus.md, tutorial, changelog 2026-08-31.md
-- [x] Build, run tests, REPL spot-check, no-hang check, valgrind
+## Part B — Normal-form pre-pass   ✅
+- [x] Extract 4 P==0 rows into `specialform_reduced_basis(Qc,xvar)`
+- [x] Replace inline blocks with helper call (byte-identical output)
+- [x] Add P≠0 normal-form pre-pass row: dsolve_normal_form → -r → reduced_basis → mu·base, gate sf_num_ok
+- [x] Update DSolve`SpecialFunctionForm docstring
 
-## Review (done)
-- All 3 user integrals return correct closed forms (Method -> "DiffUnderInt"):
-  I1=π²/12, I2=π²/8, I3=(π Csc[π/a]−a)/4 (incl. Re[a]>0 variant).
-- Held-out corpus: 21/21 cases across F1 (p,c), F2 (c), F3 (a) all Simplify to 0.
-- New tests: test_finite_power_log / _secant_radical / _tangent_power /
-  _arccos_emit_guard — all pass; full DiffUnderInt suite + regression suites
-  (residue, newton_leibniz, dispatch, ramanujan, symmetry, beta, principalvalue)
-  all PASS.
-- Clean build (no warnings), make check-c99 clean, valgrind: 0 lost blocks trace
-  to new code (193 baseline blocks are libobjc/flint/eval noise).
-- Key implementation notes: parameter introduction (insert_feynman_param),
-  emitted ArcCos inner (engine unevaluated/wrong), digamma reflection for F3 with
-  a0=3 anchor, has_noninteger_var_power guard + tangent_power-first ordering to
-  avoid the t^a × radical Simplify hang, PowerExpand for the p=1/2 (u²)^(1/2) case,
-  Re[]/Im[] stripping in relation_apply.
-- Known limitation (pre-existing, documented): F3 needs explicit Method; under
-  Automatic an earlier method hits the hang-prone *indefinite* integral first.
+## Tests & docs
+- [x] Unit tests in test_dsolve.c (t_m17_affine_gauss/gegenbauer/associated_legendre/normalform_bessel/declines)
+- [x] New tests/test_dsolve_m17_stress.c + CMake add_executable/add_test (Gegenbauer/Jacobi/assocLeg/shifted/Bessel grids)
+- [~] Reconcile corpus gate argv[3] 612 → measured N  (WAITING on corpus run)
+- [x] DSOLVE_PLAN.md M17 entry + changelog 2026-09-07.md + calculus.md
+- [~] STATUS.md scoreboard  (WAITING on corpus number)
+
+## Gates
+- [x] make -j build + make check-c99 green
+- [x] dsolve_tests (incl 5 M17 units), dsolve_m5/m12/m14_stress, dsolve_stress, dsolve_m17_stress all green
+- [~] ctest dsolve_corpus_2_1_2_tests: measuring N (running)
+- [ ] valgrind leak-clean on new stress binary + dsolve_tests
+
+## Side-finding (user asked to fix): Factor drops squared term  ✅ FIXED
+- Factor[(5-3s)^2 - 30 s] = -5(-5+12s) WRONG (dropped 9s²); now = 9s²-60s+25.
+- Root cause: flint_univariate_factor computed degree on raw (unexpanded) arg;
+  get_degree_poly counts Power[base,k] only when base==var. Fix: expr_expand first.
+- Also fixes Simplify (calls Factor). Regression test: test_factor_baseline test_unexpanded_power_input.
+
+## Corpus regressions from the affine row / normal-form pre-pass  ✅ FIXED
+- 11 apparent PASS→UNEVAL: 7 second-order latency (affine row slow on decline path),
+  2 third-order $IterationLimit loops (900/1199), 1 pre-existing flaky (997, loops on HEAD too), 603 ok.
+- Fixes: quad-size gate (80 leaves) in specialform_quad_roots; radical-RSP gate (sf_has_radical);
+  sf_ct (Cancel[Together]) instead of Simplify in fhomotopy/gauss_basis; normal-form pre-pass
+  size gate (negr≤50) + depth gate (g_dsolve_depth≤1, avoids OperatorFactor-recursion loop).
+- Verified: all 10 real regressions solve <8s; 20+ improvements preserved; spherical-Bessel pre-pass kept.

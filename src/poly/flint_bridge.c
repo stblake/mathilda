@@ -4112,14 +4112,20 @@ static Expr* uni_poly_to_expr(const fmpz_poly_t f, const Expr* var) {
 
 static Expr* flint_univariate_factor(const Expr* P, const Expr* var) {
     if (!P || !var || var->type != EXPR_SYMBOL) return NULL;
-    int deg = get_degree_poly((Expr*)P, (Expr*)var);
-    if (deg < 1) return NULL;
+    /* Expand first: get_degree_poly counts Power[base,k] toward the degree only when
+     * base IS var, so an unexpanded Power[Plus[...],n] subterm (e.g. (5-3x)^2) reports
+     * degree 0 and silently caps the polynomial degree — dropping the leading
+     * coefficient and returning a wrong, lower-degree factorization.  get_coeff expands
+     * internally, but the degree bound must see the true expanded degree. */
+    Expr* expanded = expr_expand((Expr*)P);
+    int deg = get_degree_poly(expanded, (Expr*)var);
+    if (deg < 1) { expr_free(expanded); return NULL; }
 
     fmpz_poly_t G;
     fmpz_poly_init(G);
     int ok = 1;
     for (int i = 0; i <= deg && ok; i++) {
-        Expr* c = get_coeff((Expr*)P, (Expr*)var, i);
+        Expr* c = get_coeff(expanded, (Expr*)var, i);
         if (c->type == EXPR_INTEGER) {
             fmpz_poly_set_coeff_si(G, i, c->data.integer);
         } else if (c->type == EXPR_BIGINT) {
@@ -4166,6 +4172,7 @@ static Expr* flint_univariate_factor(const Expr* P, const Expr* var) {
     }
     fmpz_poly_clear(G);
     if (out) out = eval_and_free(out);
+    expr_free(expanded);
     return out;
 }
 

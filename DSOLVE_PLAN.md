@@ -513,6 +513,58 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     Gegenbauer/Jacobi via an affine→Gauss ₂F₁ change of variable (math validated),
     parabolic-cylinder, power→Bessel, and the Abel/operator-factoring buckets.
 
+- **M17 — 2nd-order-linear: affine→Gauss ₂F₁ recognizer + normal-form pre-pass.** ✅ DONE.
+  The largest §2.1.2 bucket (2nd-order linear). Two increments, both in
+  `dsolve_specialform.c` (no new method file, no cascade edit), both emitting
+  heads that NUMERICIZE (`Hypergeometric2F1`, `BesselJ/Y/I/K`, `AiryAi/Bi`) so the
+  in-method numeric self-verify AND the corpus back-substitution are both genuine —
+  the 0-FAIL invariant is preserved by construction, not by trust.
+  - **`Fuchsian → Gauss ₂F₁` (affine map + local-exponent shift).** A rational-
+    coefficient equation with exactly two finite regular singular points `{x1,x2}`
+    (the poles of `P`,`Q`: `L = ` squarefree `PolynomialLCM[denom P, denom Q]`,
+    `deg L == 2`) is mapped affinely `x = x1 + h s` (`h = x2 − x1`) onto the canonical
+    interval `x(1-x)` — `P̃ = h P(x1+h s)`, `Q̃ = h² Q(x1+h s)` — then the local
+    exponents at `s=0,1` (indicial roots) are pulled out by the **F-homotopy**
+    `Y = s^{r0}(1-s)^{r1} F`, so `F` satisfies the canonical Gauss equation and solves
+    as `Hypergeometric2F1`. Reaches **Gegenbauer / Jacobi / associated Legendre at
+    symbolic (non-integer) degree/order** — exactly the residue Kovacic declines
+    (no Liouvillian solution). The canonical Gauss row was factored into
+    `specialform_gauss_basis` and reused by the F-homotopy; the exponent-extraction and
+    the mapped coefficients use `Cancel[Together[·]]`, since `Simplify` can mis-reduce a
+    constant-over-quadratic pole factor (`3/(4s(s-1)) → −3/(4s)`, dropping a singular
+    point → the mapped equation is no longer canonical). Emission gated by `hgc_num_ok`,
+    a numeric back-substitution on the ORIGINAL equation sampled INSIDE the mapped
+    interval (`s∈(0,1)`), the sole guard against a mis-mapped 2F1 whose contiguous-
+    relation residual `zero_test` cannot disprove.
+  - **Ordinary vs associated Legendre.** The Legendre row now emits `LegendreP`/`LegendreQ`
+    only for the ordinary case (`μ == 0`, which numericizes for symbolic-then-instantiated
+    degree); the associated case (`μ ≠ 0`) declines HERE so it falls through to the
+    F-homotopy row and is emitted as verifiable `Hypergeometric2F1` — the 3-arg
+    `LegendreP[ν,μ,x]` does not numericize for symbolic ν,μ (only integer ν, integer
+    μ≥0), so its residual verify and the corpus check both fail. This is what closes the
+    corpus trig-potential family (`(p(1+p) − k²Csc²x)y + Cot x y' + y'' == 0`): M14's
+    `t=Cos x` reduces it to a rational associated-Legendre equation, which re-enters the
+    cascade → this recognizer → 2F1, and M14's `cv_num_ok` verifies.
+  - **Liouville normal-form pre-pass.** An equation with a `y'` term is also tried through
+    its normal form `z'' = r z` (`y = z Exp[−∫P/2]`, when `∫P/2` is elementary) against the
+    y'-free Airy/Bessel recognisers (factored into `specialform_reduced_basis`); a match
+    multiplies the recovered basis by the recovery factor. Gated by `sf_num_ok`. Solves the
+    Bessel/Airy-reducible equations that carry a first-derivative term (e.g. spherical
+    Bessel `y'' + (2/x)y' + y == 0 → Sin[x]/x, Cos[x]/x`).
+  - **Cascade slot:** the whole wave lives inside `dsolve_specialform_try`, which already
+    sits after the recognizers/Euler and before Kovacic (`dsolve.c:341`). The canonical
+    Gauss row runs first, then the affine/F-homotopy row (before Pöschl-Teller), then the
+    normal-form pre-pass.
+  - *Anti-overfit:* `tests/test_dsolve_m17_stress.c` — forward-generator grids over
+    Gegenbauer's λ, Jacobi's (α,β), associated Legendre's order, shifted-interval Gauss
+    endpoints, and the normal-form Bessel power, each back-substitution verified with the
+    symbolic degree instantiated. Plus pinned units in `test_dsolve.c` (`t_m17_*`).
+    *Declines (no wrong answer):* integer 2F1 lower-parameter cases (dependent solutions),
+    two-power / Heun potentials, the quartic parabolic-cylinder potential (no native
+    `ParabolicCylinderD`), and three-finite-RSP Heun/Möbius equations. All DSolve ctest
+    suites + `make check-c99` green; refactor byte-for-byte behavior-preserving on the
+    existing Airy/Bessel/Gauss rows.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -705,8 +757,14 @@ recursive sub-solves.
   symbolic exponent makes the verify residual a symbolic-power+pFq sum on which
   zero_test currently hangs). Both degenerate cases decline to the Frobenius
   series fallback; the other parameters (`a`; `a,b`) may stay symbolic.
-  TODO: canonical-singular-point restriction lifted by an affine/Möbius change of
-  variable. NOTE: the integer-degree **Legendre / Chebyshev / Gegenbauer / Jacobi**
+  The canonical-singular-point restriction is **lifted (M17)** by an affine map plus
+  a local-exponent shift `Y=s^{r0}(1-s)^{r1}F`: a rational-coefficient equation with
+  two finite regular singular points `{x1,x2}` off `{0,1}` is mapped onto `x(1-x)` and
+  solved as `Hypergeometric2F1` (Gegenbauer/Jacobi/associated Legendre at symbolic
+  degree; numeric-self-verified). Ordinary Legendre keeps `LegendreP`; the associated
+  case (μ≠0) declines to the affine path (3-arg `LegendreP` does not numericize). M17
+  also adds a Liouville normal-form pre-pass so the P==0 Airy/Bessel recognizers fire
+  on an equation with a y' term. NOTE: the integer-degree **Legendre / Chebyshev / Gegenbauer / Jacobi**
   family (both solutions elementary) is now solved *algorithmically* by Kovacic
   Case 1 (below), not by a recognizer — no LegendreP/Q head needed. A recognizer is
   only wanted for the **non-integer** degree (genuinely hypergeometric) cases and

@@ -1265,6 +1265,9 @@ static Expr* my_number_gcd(Expr* a, Expr* b) {
 /* Degree of `e` as a polynomial in `var`. Walks the expression tree   */
 /* once; returns 0 for constants, max-of-summands for Plus, sum-of-    */
 /* factors for Times, and the integer exponent for `var^k`.            */
+/* PRECONDITION: `e` must be EXPANDED. A Power[base,k] counts toward    */
+/* the degree only when base IS var, so an unexpanded (a + b var)^k     */
+/* reports degree 0 — pass expr_expand(e), as every caller must.       */
 int get_degree_poly(Expr* e, Expr* var) {
     if (!e) return 0;
     if (expr_eq(e, var)) return 1;

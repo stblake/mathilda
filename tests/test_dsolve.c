@@ -403,6 +403,56 @@ static void t_hypergeometric_integer_declines(void) {
                "=== DSolve`SpecialFunctionForm");
 }
 
+/* ---- M17: affine -> Gauss 2F1 for non-canonical regular singular points, and
+ *      the Liouville normal-form pre-pass for Bessel/Airy with a y' term. ---- */
+
+/* A Gauss-class equation whose two finite RSPs are {0, 2} (not the canonical
+ * {0,1}): mapped affinely and solved as Hypergeometric2F1.  Numeric residual
+ * check at an interior point (the 2F1 residual is a contiguous-relation identity
+ * zero_test cannot discharge). */
+static void t_m17_affine_gauss(void) {
+    check_form("Head[DSolve`SpecialFunctionForm[x (x - 2) y''[x] + (2 x - 3) y'[x] + y[x] == 0, y[x], x]]", "List");
+    check_true("Not[FreeQ[DSolve`SpecialFunctionForm[x (x - 2) y''[x] + (2 x - 3) y'[x] + y[x] == 0, y[x], x], "
+               "HypergeometricPFQ]]");
+    check_true("Abs[N[(x (x - 2) y''[x] + (2 x - 3) y'[x] + y[x]) /. "
+               "DSolve[x (x - 2) y''[x] + (2 x - 3) y'[x] + y[x] == 0, y, x][[1]] "
+               "/. {C[1] -> 13/10, C[2] -> 7/10, x -> 3/5}]] < 1/1000000");
+}
+/* Gegenbauer at symbolic degree n and symbolic lambda: the F-homotopy pulls the
+ * nonzero local exponents at x = +-1 to reach 2F1.  Kovacic owns the integer-n
+ * cases; symbolic n is exactly the genuinely-hypergeometric residue. */
+static void t_m17_gegenbauer_symbolic(void) {
+    check_true("Not[FreeQ[DSolve[(1 - x^2) y''[x] - (2 lam + 1) x y'[x] + n (n + 2 lam) y[x] == 0, y[x], x], "
+               "HypergeometricPFQ]]");
+    /* numeric residual on the ORIGINAL equation, all parameters instantiated */
+    check_true("Abs[N[((1 - x^2) y''[x] - (2 lam + 1) x y'[x] + n (n + 2 lam) y[x]) /. "
+               "DSolve[(1 - x^2) y''[x] - (2 lam + 1) x y'[x] + n (n + 2 lam) y[x] == 0, y, x][[1]] "
+               "/. {C[1] -> 6/5, C[2] -> 4/5, n -> 23/10, lam -> 7/10, x -> 3/10}]] < 1/100000");
+}
+/* Associated Legendre at symbolic degree n and order m: declined by the ordinary-
+ * Legendre row (mu != 0) and picked up as verifiable 2F1 by the affine/F-homotopy
+ * row.  Ordinary Legendre (mu == 0) must still emit LegendreP. */
+static void t_m17_associated_legendre(void) {
+    check_true("Not[FreeQ[DSolve[(1 - x^2) y''[x] - 2 x y'[x] + (n (n + 1) - m^2/(1 - x^2)) y[x] == 0, y[x], x], "
+               "HypergeometricPFQ]]");
+    check_true("Not[FreeQ[DSolve[(1 - x^2) y''[x] - 2 x y'[x] + n (n + 1) y[x] == 0, y[x], x], LegendreP]]");
+}
+/* Liouville normal-form pre-pass: y'' + (2/x) y' + y == 0 has no y'-free form
+ * directly, but its normal form is z'' + z == 0 -> spherical Bessel; the recovered
+ * solution is Sin[x]/x, Cos[x]/x (verified numerically). */
+static void t_m17_normalform_bessel(void) {
+    check_form("Head[DSolve`SpecialFunctionForm[y''[x] + (2/x) y'[x] + y[x] == 0, y[x], x]]", "List");
+    check_true("Abs[N[(y''[x] + (2/x) y'[x] + y[x]) /. "
+               "DSolve`SpecialFunctionForm[y''[x] + (2/x) y'[x] + y[x] == 0, y, x][[1]] "
+               "/. {C[1] -> 13/10, C[2] -> 7/10, x -> 6/5}]] < 1/1000000");
+}
+/* A non-hypergeometric rational equation (only one finite RSP -> Bessel/confluent,
+ * deg L != 2): the affine row declines rather than inventing a spurious 2F1. */
+static void t_m17_affine_declines_confluent(void) {
+    check_true("FreeQ[DSolve`SpecialFunctionForm[x^2 y''[x] + x y'[x] + (x^2 - 4) y[x] == 0, y[x], x], "
+               "HypergeometricPFQ]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -1937,6 +1987,12 @@ int main(void) {
     TEST(t_hypergeometric_symbolic_a);
     TEST(t_hypergeometric_gauss_symbolic_ab);
     TEST(t_hypergeometric_integer_declines);
+    /* M17: affine -> Gauss 2F1 + normal-form pre-pass */
+    TEST(t_m17_affine_gauss);
+    TEST(t_m17_gegenbauer_symbolic);
+    TEST(t_m17_associated_legendre);
+    TEST(t_m17_normalform_bessel);
+    TEST(t_m17_affine_declines_confluent);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);
