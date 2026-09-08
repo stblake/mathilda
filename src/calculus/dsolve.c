@@ -120,6 +120,7 @@ extern Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_homogeneous_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_exact_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lagrange_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_undetcoeff_try(DSolveProblem* P, size_t* nbranch);
@@ -133,6 +134,7 @@ extern Expr** dsolve_symsquare_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lower_reduce_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_fos_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_fos_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_chini_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_abel_try(DSolveProblem* P, size_t* nbranch);
@@ -341,6 +343,12 @@ Expr* builtin_dsolve(Expr* res) {
              * factor search can spin on a transcendental-in-y equation. */
             if (!result) result = dsolve_run(&P, dsolve_linearizable_try);
             if (!result) result = dsolve_run(&P, dsolve_exact_try);
+            /* Implicit first integral for an exact ODE whose potential F is
+             * transcendental (F == C[1] does not invert for y): F(x, y[x]) ==
+             * C[1], verified by the implicit-function rule.  Placed right after
+             * explicit Exact so it claims these (e.g. E^(x y)/Log/Sin y exact
+             * equations) before a later method spins on the same residual. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_exact_implicit_try);
             if (!result) result = dsolve_run(&P, dsolve_clairaut_try);
             /* Lagrange/d'Alembert (parametric general solution) — Clairaut, its
              * phi(p)==p special case, runs first. */
@@ -377,6 +385,11 @@ Expr* builtin_dsolve(Expr* res) {
              * after the linear operator/reduce_order methods. */
             if (!result) result = dsolve_run(&P, dsolve_lower_reduce_try);
             if (!result) result = dsolve_run(&P, dsolve_fos_try);
+            /* Implicit first integral when the autonomous integrand is non-
+             * elementary — chiefly y' == f[a x + b y + c] for an ARBITRARY f
+             * (problem 159): the inert-integral relation, verified by the
+             * implicit-function rule.  Only fires when explicit fos declined. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_fos_implicit_try);
             /* Riccati after fos: fos owns y'==(a x+b y+c)^2 with the cleaner
              * closed form; genuine Riccati (y'==y^2+x, ...) linearises here. */
             if (!result) result = dsolve_run(&P, dsolve_riccati_try);

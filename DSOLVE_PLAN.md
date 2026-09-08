@@ -747,6 +747,53 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     (gate baseline 4); `reports/2.2.1.{tsv,md}`; STATUS.md §2.2.1 block. All DSolve ctest +
     stress suites and `make check-c99` green; §2.1.2 gate held.
 
+- **M22 — §2.2.2 corpus (Problems 101–200) + homogeneous-correctness / exact-transcendental
+  / FOS-implicit waves.** ✅ DONE. The continuation of §2.2.1's Table 2.19 (100 elementary
+  ODEs, 9 IVPs, 0 systems). **82 → 92 / 100 scalar, 0 FAIL, 0 regression** (§2.1.2 and §2.2.1
+  ctests held). Every solver fix reuses the verified implicit first-integral substrate
+  (`dsolve_run_implicit` + `dsolve_verify_implicit`), so no wave can ship a wrong answer.
+  - **Converter fix (`tools/latex_ode_to_mathilda.py`, all sections).** `is_condition_row`
+    matched `<main>·(…)` multiplication (`y²(y'x+y)`, `x(5−x)`) as a `y(P)` initial condition
+    and silently dropped 8 ODE rows (109/119/129/166/175–178). Anchored to the LHS: a
+    condition row's LHS is *solely* the application `y(…)`/`y'(…)`. Regenerating §2.2.1 is
+    byte-for-byte identical (no regression); +6 of the 8 immediately PASS.
+  - **Homogeneous correctness (`dsolve_homogeneous.c`).** Retired latent WRONG answers (117
+    `y'x=y+√(x²+y²)` returned a spurious extra `x`; 112 `x²y'=xy+x²E^(y/x)` a spurious
+    `2 I C[1]π` inverse-branch) and a radical hang (107) — all previously masked as UNEVAL by
+    a timeout, i.e. FAILs waiting to surface. Root cause: the reduced RHS was built as
+    `F(x,v·x)`, whose `x` does not cancel for a radical/exp `F` (`√(x²+v²x²)` needs `x>0`) and
+    leaks into the `v`-integral. Now built as `F(1,v)` (degree-0 homogeneity makes them equal,
+    but `x→1` collapses radicals textually). Plus: `homog_exp_log_invert` gated to a log-sum
+    antiderivative (the rational-`F` case it was written for); a per-branch **numeric**
+    verification drops a spurious inverse-function branch the symbolic verify keeps as
+    undecidable (→ implicit fallback); `$rad` internal-placeholder leaks rejected (118). A
+    first attempt rejecting `ConditionalExpression[…,C∈ℤ]` in the *shared*
+    `dsolve_extract_solutions` was reverted — it broke legitimate periodic `Tan`-inverse
+    general solutions (121) and a §2.2.1 case — in favour of the method-local numeric check.
+  - **Exact transcendental (`dsolve_exact.c`, `dsolve.c`).** The potential `F(x,Y)` was built
+    correctly but `Solve[F==C,Y]` returns unevaluated for a transcendental `F`. Factored the
+    build into `exact_potential()` and added `dsolve_exact_implicit_try` returning
+    `F(x,y[x])==C[1]` via `dsolve_run_implicit`, wired **immediately after** explicit Exact in
+    the cascade so it claims 140/141/142/182/195 *before* a downstream method hangs. A
+    `Linearizable` Bernoulli-shape recursion gate (skip a reduced eqn carrying a transcendental
+    of `u`, e.g. the `E^(u+E^u)` the Log candidate builds on an `E^y` coefficient) removes the
+    pre-Exact hang that otherwise swallowed 141.
+  - **FirstOrderSubstitution implicit (`dsolve_fos.c`, `dsolve.c`).** `dsolve_fos_implicit_try`
+    returns the inert-integral relation `∫dv/(r+H(v))−x==C[1]` for `y'==f[a x+b y+c]` with an
+    arbitrary `f` (159) — the form Mathematica also returns; verified by the implicit-function
+    rule, kept on an undecidable inert-integral residual (the keep-the-undecidable policy).
+  - **Bernoulli mixed-radical gate (`dsolve_bernoulli.c`).** `(x y)^p` is not the pure
+    `B(x) y^n` form (a genuine Bernoulli term's y-power base is `Y` alone), and the exponent
+    detector's radical zero-test spun on it; decline early so Homogeneous owns 107.
+  - **Residue (8, bounded UNEVAL, no wrong answers):** 133 (`y=G(x,y')` trig), 160 (Bernoulli
+    with symbolic exponent `n`), 165 (correct but slow `Sin[x−y]` explicit — implicit is
+    future), 170 (elastica `r y''=(1+y'²)^{3/2}`), 175/176 (logistic IVP, flaky under the
+    forked 8 s limit), 177/178 (a **pre-existing** general-solution hang on the autonomous
+    quadratic `x'=a x(b−x)`; separate follow-up).
+  - New corpus `DSolve_test_status/DE_examples_222.m`; ctest `dsolve_corpus_2_2_2_tests`
+    (gate baseline 8); `reports/2.2.2.{tsv,md}`; STATUS.md §2.2.2 block. All DSolve ctest +
+    stress suites and `make check-c99` green; §2.1.2 / §2.2.1 gates held.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

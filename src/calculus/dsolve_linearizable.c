@@ -195,6 +195,14 @@ Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch) {
             Expr* ub = dsolve_linear_factor_solve(Pc, B, xvar);      /* consumes Pc, B */
             if (ub) { ubodies = malloc(sizeof(Expr*)); ubodies[0] = ub; nb = 1; }
         } else {
+            /* Recursion path (Bernoulli).  If G carries a transcendental function
+             * of u — e.g. E^(u + E^u) from the Log candidate on an E^y coefficient
+             * (the exact ODE Cos x + Log y + (x/y + E^y) y' == 0, problem 141) —
+             * it is not Bernoulli, and recursing DSolve on the nested exponential
+             * hangs; skip it.  (The LINEAR branch above already handled the
+             * reducible Log[E^u] == u case, so this only sees a genuine u-power
+             * or a non-reducible transcendental.) */
+            if (lz_transc_of_y(G, usym)) { expr_free(G); expr_free(dGu); continue; }
             Expr* Gu = ds_subst(expr_copy(G), expr_new_symbol(usym),
                                 ds_make_funcapp(ufun, 0, xvar));
             Expr* eqn = expr_new_function(expr_new_symbol(SYM_Equal),

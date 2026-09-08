@@ -16,6 +16,8 @@ living scoreboard all in one place.
 |---|---|
 | `DE_examples_2.m` | Section **2.1.2** corpus — 1204 ODE records (1000 scalar + 204 systems). |
 | `DE_examples_3.m` | Section **2.1.3** corpus. |
+| `DE_examples_221.m` | Section **2.2.1** corpus — 100 elementary ODEs (Table 2.19, Problems 1–100), 63 IVPs. |
+| `DE_examples_222.m` | Section **2.2.2** corpus — 100 elementary ODEs (Table 2.19, Problems 101–200), 9 IVPs. |
 | `test_dsolve_corpus.c` | Fork-per-case runner (compiled via `tests/CMakeLists.txt`). |
 | `dsolve_corpus_prelude.m` | Self-verifier: runs `DSolve` under `TimeConstrained` and numerically back-substitutes each branch. |
 | `STATUS.md` | **The scoreboard** — per-section, per-bucket solve counts + wave history. Update after every wave. |

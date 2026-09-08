@@ -3708,6 +3708,13 @@ add_test(NAME dsolve_corpus_2_2_1_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_221.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+# Section 2.2.2 "Problems 101 to 200" (Table 2.19): 100 elementary ODEs, 9 IVPs.
+# Continuation of §2.2.1; same IVP handling (equation slot {ode, ic...}).  M22.
+# Baseline is the checked-in non-PASS high-water mark; each wave lowers it.
+add_test(NAME dsolve_corpus_2_2_2_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_222.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

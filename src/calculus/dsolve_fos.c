@@ -91,8 +91,63 @@ Expr** dsolve_fos_try(DSolveProblem* P, size_t* nbranch) {
     return out;
 }
 
+/* Implicit first-integral entry.  Same reduction as dsolve_fos_try, but returns
+ * the separation relation  lhsInt(v) - x == C[1]  (v = y[x] + r x) via
+ * dsolve_run_implicit instead of Solving for v.  Fires when the explicit entry
+ * declines — chiefly when Integrate[1/(r+H), W] is non-elementary, which for an
+ * ARBITRARY F (y' == f[a x + b y + c], problem 159) it always is: the answer is
+ * the inert-integral relation Mathematica also returns.  dsolve_run_implicit
+ * verifies it by the implicit-function rule y' == -G_x/G_y (which reduces to the
+ * ODE); an unreduced inert-Integrate residual is undecidable and kept, matching
+ * the keep-the-undecidable policy the homogeneous log-spiral path also relies on. */
+Expr** dsolve_fos_implicit_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1) return NULL;
+    if (P->max_order[0] != 1) return NULL;
+    const char* xvar = P->ind_names[0];
+    const char* yname = P->fun_names[0];
+
+    Expr* F = dsolve_solve_top_derivative(P, 1);
+    if (!F) return NULL;
+    const char* Yname = intern_symbol("DSolve`fosY");
+    Expr* FY = ds_subst(F, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Yname));
+
+    Expr* Fx  = ds_d(expr_copy(FY), expr_new_symbol(xvar));
+    Expr* FYd = ds_d(expr_copy(FY), expr_new_symbol(Yname));
+    if (ds_is_zero(Fx) || ds_is_zero(FYd)) { expr_free(Fx); expr_free(FYd); expr_free(FY); return NULL; }
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+        Fx, expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ FYd, expr_new_integer(-1) }, 2) }, 2));
+    if (!ds_free_of(r, xvar) || !ds_free_of(r, Yname)) { expr_free(r); expr_free(FY); return NULL; }
+    r = ds_simplify(r);
+    if (ds_contains(r, Yname) || ds_contains(r, xvar)) { expr_free(r); expr_free(FY); return NULL; }
+
+    const char* Wname = intern_symbol("DSolve`fosW");
+    Expr* Wminus = eval_and_free(ds_call2(SYM_Subtract, expr_new_symbol(Wname),
+                       ds_call2(SYM_Times, expr_copy(r), expr_new_symbol(xvar))));
+    Expr* H = ds_subst(FY, expr_new_symbol(Yname), Wminus);
+    if (!ds_free_of(H, xvar)) { expr_free(H); expr_free(r); return NULL; }
+    Expr* denom = eval_and_free(ds_call2(SYM_Plus, expr_copy(r), H));
+    if (ds_is_zero(denom)) { expr_free(denom); expr_free(r); return NULL; }
+    Expr* invD = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ denom, expr_new_integer(-1) }, 2));
+    Expr* lhsInt = ds_integrate(invD, expr_new_symbol(Wname));
+
+    /* v = y[x] + r x ; relation  G = lhsInt(v) - x == C[1]. */
+    Expr* v = eval_and_free(ds_call2(SYM_Plus, ds_make_funcapp(yname, 0, xvar),
+                  ds_call2(SYM_Times, expr_copy(r), expr_new_symbol(xvar))));
+    expr_free(r);
+    Expr* G = ds_subst(lhsInt, expr_new_symbol(Wname), v);
+    G = eval_and_free(ds_call2(SYM_Subtract, G, expr_new_symbol(xvar)));
+
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = G;
+    *nbranch = 1;
+    return out;
+}
+
 static Expr* builtin_dsolve_fos(Expr* res) {
-    return dsolve_method_builtin(res, dsolve_fos_try);
+    Expr* r = dsolve_method_builtin(res, dsolve_fos_try);
+    if (!r) r = dsolve_method_builtin_implicit(res, dsolve_fos_implicit_try);
+    return r;
 }
 
 void dsolve_fos_init(void) {

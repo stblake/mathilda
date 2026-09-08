@@ -124,13 +124,14 @@ static Expr* exact_xayb_factor(const Expr* M, const Expr* N, const Expr* diff,
     return mu;
 }
 
-Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch) {
-    if (P->nfun != 1 || P->neq != 1) return NULL;
-    if (P->max_order[0] != 1) return NULL;
-    const char* xvar = P->ind_names[0];
-    const char* Yn = intern_symbol("DSolve`Y");
-    const char* Pn = intern_symbol("DSolve`p");
-
+/* Build the exact potential F(x,Y) with F_x = Mu*M, F_y = Mu*N (Mu an
+ * integrating factor: 1, mu(x), mu(y), or x^a y^b) for M + N y' == 0.  Returns
+ * F (owned), or NULL when the residual is not linear in p, cannot be made
+ * exact, or a potential integral is non-elementary.  Shared by the explicit
+ * Exact entry (which then Solves F == C[1] for Y) and the implicit entry (which
+ * returns F(x, y[x]) == C[1] for a transcendental, non-invertible F). */
+static Expr* exact_potential(DSolveProblem* P, const char* xvar, const char* Yn,
+                             const char* Pn) {
     Expr* R = dsolve_algebraic_residual(P, Yn, Pn);
     if (!R) return NULL;
 
@@ -189,20 +190,55 @@ Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch) {
     Expr* g = ds_integrate(gp, expr_new_symbol(Yn));
     if (ds_has_head(g, SYM_Integrate)) { expr_free(g); expr_free(Fx); return NULL; }
     Expr* Fpot = eval_and_free(ds_call2(SYM_Plus, Fx, g));
+    return Fpot;
+}
 
-    /* solution F(x, Y) == C[1], solved for Y */
+Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1) return NULL;
+    if (P->max_order[0] != 1) return NULL;
+    const char* xvar = P->ind_names[0];
+    const char* Yn = intern_symbol("DSolve`Y");
+    const char* Pn = intern_symbol("DSolve`p");
+
+    Expr* Fpot = exact_potential(P, xvar, Yn, Pn);
+    if (!Fpot) return NULL;
+
+    /* explicit solution F(x, Y) == C[1], solved for Y */
     Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ Fpot, ds_const(1) }, 2);
     Expr* solres = ds_solve(eq, expr_new_symbol(Yn));
     size_t nb = 0;
     Expr** bodies = dsolve_extract_solutions(solres, Yn, &nb);
     if (solres) expr_free(solres);
-    if (!bodies) return NULL;                 /* only explicit solutions in M1 */
+    if (!bodies) return NULL;                 /* transcendental F -> implicit entry */
     *nbranch = nb;
     return bodies;
 }
 
+/* Implicit first-integral entry: when Solve cannot invert F(x, Y) == C[1] for Y
+ * (a transcendental potential, e.g. x + E^(x y) + y^2 for problem 140), return
+ * the relation F(x, y[x]) == C[1] via dsolve_run_implicit, which verifies it by
+ * the implicit-function rule y' == -F_x/F_y == -M/N (the ODE itself). */
+Expr** dsolve_exact_implicit_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1) return NULL;
+    if (P->max_order[0] != 1) return NULL;
+    const char* xvar = P->ind_names[0];
+    const char* yname = P->fun_names[0];
+    const char* Yn = intern_symbol("DSolve`Y");
+    const char* Pn = intern_symbol("DSolve`p");
+
+    Expr* Fpot = exact_potential(P, xvar, Yn, Pn);
+    if (!Fpot) return NULL;
+    Expr* G = ds_subst(Fpot, expr_new_symbol(Yn), ds_make_funcapp(yname, 0, xvar));
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = G;
+    *nbranch = 1;
+    return out;
+}
+
 static Expr* builtin_dsolve_exact(Expr* res) {
-    return dsolve_method_builtin(res, dsolve_exact_try);
+    Expr* r = dsolve_method_builtin(res, dsolve_exact_try);
+    if (!r) r = dsolve_method_builtin_implicit(res, dsolve_exact_implicit_try);
+    return r;
 }
 
 void dsolve_exact_init(void) {

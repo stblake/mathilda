@@ -134,6 +134,56 @@ numeric back-substitution real for the first time. §2.1.2 re-verified: **0 new 
 
 ---
 
+## Section 2.2.2 — "Problems 101 to 200" (Table 2.19, sorted by problem number)
+
+Corpus: `DE_examples_222.m` — 100 records, **all scalar, 9 IVPs**. Continuation of
+§2.2.1 (same elementary Table 2.19): linear / separable / homogeneous (classes A/C/G) /
+Bernoulli / exact / Riccati / d'Alembert, plus a handful of 2nd-order missing-x/missing-y.
+**Zero overlap** with §2.1.2. `ctest -R dsolve_corpus_2_2_2_tests` · gate baseline **8**.
+
+| Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
+|------|--------------:|--------:|---------------:|-------|
+| 2026-09-08 (baseline) | 82 / 100 | 82.0% | 18 | 0 FAIL. Converter-fix generation (below). |
+| 2026-09-08 (**M22**)  | **92 / 100** | **92.0%** | **8** | **+10, 0 FAIL, 0 regression.** Homogeneous-correctness + Exact-transcendental + FOS-implicit waves. Gate baseline **8**. |
+
+**Converter fix (`tools/latex_ode_to_mathilda.py`, benefits every section):**
+`is_condition_row` matched `<main>·(…)` multiplication (`y²(y'x+y)`, `x(5−x)`) as a
+`y(P)` initial condition and dropped 8 ODE rows (109/119/129/166/175–178). Anchored to
+the LHS (must be *solely* `y(…)`/`y'(…)`). Regenerating §2.2.1 is byte-for-byte identical
+→ no regression; +6 of the 8 immediately PASS.
+
+**M22 solver waves** (all reuse the verified implicit first-integral substrate
+`dsolve_run_implicit`; 0 FAIL by construction):
+1. **Homogeneous correctness** (`dsolve_homogeneous.c`) — retired latent WRONG answers
+   (117 `√(x²+y²)`, 112 `E^(y/x)`) and a hang (107). Reduced RHS now via `F(1,v)` not
+   `F(x,v·x)` (radicals collapse under `x→1`, no spurious `x`); `homog_exp_log_invert`
+   gated to the log-sum case; explicit bodies numerically verified (drop the spurious
+   inverse-branch → implicit fallback); `$rad` placeholder leaks rejected.
+2. **Exact transcendental** (`dsolve_exact.c`, `dsolve.c`) — implicit potential
+   `F(x,y)==C[1]` for exact ODEs with transcendental `M,N` (140/141/142/182/195),
+   wired right after explicit Exact so it preempts the downstream hang. A Linearizable
+   Bernoulli-shape recursion gate (skip a reduced eqn with a transcendental of `u`,
+   e.g. `E^(u+E^u)`) removes the pre-Exact hang on 141.
+3. **FirstOrderSubstitution implicit** (`dsolve_fos.c`, `dsolve.c`) — inert-integral
+   relation for `y'==f[a x+b y+c]` with arbitrary `f` (159), as Mathematica returns.
+4. **Bernoulli mixed-radical gate** (`dsolve_bernoulli.c`) — decline `(x y)^p` (not the
+   pure `B(x)y^n` form; its detector spun), letting Homogeneous own 107.
+
+**Residue (8, all bounded UNEVAL, 0 wrong answers):**
+
+| Case | ODE | Why |
+|---|---|---|
+| 2.2.2-133 | `2x Sin y Cos y y'=4x²+Sin²y` | `y=G(x,y')` trig; slow/undecidable |
+| 2.2.2-160 | `y'+p x y=q x yⁿ` | Bernoulli with a **symbolic** exponent `n` (genuinely hard) |
+| 2.2.2-165 | `y'=Sin[x−y]` | correct explicit form but slow (>8 s prelude limit); implicit would be cleaner (future) |
+| 2.2.2-170 | `r y''=(1+y'²)^{3/2}` | elastica/catenary; reduced 1st-order ODE the cascade cannot close |
+| 2.2.2-175/176 | `x'=3x(5−x), x(0)=8/2` | logistic IVP; solves interactively (~1 s) but flaky under the forked cold-cache 8 s limit |
+| 2.2.2-177/178 | `x'=4x(7−x)`, `x'=7x(x−13)` | **pre-existing** general-solution hang on the autonomous quadratic (separate follow-up) |
+
+Full per-case results: `reports/2.2.2.tsv`; bucketed report: `reports/2.2.2.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:

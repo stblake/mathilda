@@ -205,9 +205,24 @@ def convert_side(expr, mains, arbs, indvar):
 
 
 def is_condition_row(row, mains):
+    """True iff the row is an initial/boundary condition `y(P)=V` / `y'(P)=V`.
+
+    A condition row's LHS is *solely* the function application.  The earlier
+    loose `<main>\\left(`-anywhere search misread multiplication (`y^2 (y' x+y)`,
+    `x (5-x)`) as an application and silently dropped the whole ODE row
+    (§2.2.2-109/119/129/166/175-178).  So anchor to the LHS (before the first
+    `=`) and require that, after removing `\\left`/`\\right`, the entire LHS is
+    exactly `y(...)` / `y'(...)` — the matching close-paren must end the LHS."""
+    r = row.replace('&', '')
+    if '=' not in r:
+        return False
+    lhs = r.split('=', 1)[0].replace(r'\left', '').replace(r'\right', '').strip()
     for f in mains:
-        if re.search(r'(?<![A-Za-z])' + re.escape(f) + r'\s*(?:\^\s*\{[^}]*\}\s*)?\\left\s*\(', row):
-            return True
+        m = re.match(r'\s*' + re.escape(f) + r'\s*(?:\^\s*\{\s*(?:\\prime\s*)+\}\s*)?\(', lhs)
+        if m:
+            cl = find_matching(lhs, m.end() - 1)
+            if cl >= 0 and lhs[cl + 1:].strip() == '':
+                return True
     return False
 
 

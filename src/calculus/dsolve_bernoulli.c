@@ -24,6 +24,28 @@
 static Expr* ev3(const char* head, Expr* a, Expr* b, Expr* c) {
     return eval_and_free(expr_new_function(expr_new_symbol(head), (Expr*[]){ a, b, c }, 3));
 }
+/* Does `e` contain a power  base^exp  with a NON-integer exponent whose base
+ * mixes BOTH x and Y?  Such a mixed radical (e.g. (x y)^(1/2) in
+ * y' x == y + 2 Sqrt[y x]) is not the pure B(x) Y^n Bernoulli form — the y-power
+ * base of a genuine Bernoulli term is Y alone — and it drives the exponent
+ * detector's radical zero-test into a spin.  Declining early lets the next
+ * cascade method (Homogeneous) own it. */
+static bool bern_mixed_radical(const Expr* e, const char* xvar, const char* Yn) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp  = e->data.function.args[1];
+        if (exp->type != EXPR_INTEGER
+            && ds_contains(base, xvar) && ds_contains(base, Yn)) return true;
+    }
+    if (bern_mixed_radical(e->data.function.head, xvar, Yn)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (bern_mixed_radical(e->data.function.args[i], xvar, Yn)) return true;
+    return false;
+}
+
 static Expr* powneg1(Expr* base) { /* base^-1; base consumed */
     return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ base, expr_new_integer(-1) }, 2);
 }
@@ -38,6 +60,7 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
     if (!F) return NULL;
     const char* Yn = intern_symbol("DSolve`Y");
     Expr* FY = ds_subst(F, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Yn));
+    if (bern_mixed_radical(FY, xvar, Yn)) { expr_free(FY); return NULL; }
 
     /* Q = FY - Y F_Y */
     Expr* Q = eval_and_free(ds_call2(SYM_Subtract, expr_copy(FY),
