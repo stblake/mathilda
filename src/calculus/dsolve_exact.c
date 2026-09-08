@@ -203,6 +203,17 @@ Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch) {
     Expr* Fpot = exact_potential(P, xvar, Yn, Pn);
     if (!Fpot) return NULL;
 
+    /* Gate the explicit inversion to a potential that is a RATIONAL function of Y.
+     * Solve on a rational-in-Y equation reduces to a terminating polynomial solve,
+     * but a potential carrying FRACTIONAL powers of Y (Y^(4/3), Y^(3/2) — the
+     * class-G / radical exact ODEs, e.g. 2.2.3-204:
+     *   6 x^(3/2) y^(4/3) - 10 x^(6/5) y^(3/2) == C) sends Solve into a
+     * non-terminating radical-inversion search.  Those are exactly the potentials
+     * the implicit entry returns verbatim as F(x, y[x]) == C[1] (as Maple and
+     * Mathematica do), so decline here and let the cascade's
+     * dsolve_exact_implicit_try own them. */
+    if (!ds_is_rational_in(Fpot, Yn)) { expr_free(Fpot); return NULL; }
+
     /* explicit solution F(x, Y) == C[1], solved for Y */
     Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ Fpot, ds_const(1) }, 2);
     Expr* solres = ds_solve(eq, expr_new_symbol(Yn));

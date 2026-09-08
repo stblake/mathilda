@@ -497,6 +497,32 @@ static void t_m20_declines_nonlinear_base(void) {
     check_true("Head[DSolve`PolynomialShiftSubstitution[y'[x] == Sqrt[x + y[x]^2], y, x]] =!= List");
 }
 
+/* ---- M23: exact ODE with a radical potential -> implicit first integral ---- */
+/* corpus 2.2.3-204: an EXACT ODE (M_y == N_x) whose potential
+ *   F = 6 x^(3/2) y^(4/3) - 10 x^(6/5) y^(3/2)
+ * carries fractional powers of y, so Solve[F == C[1], y] does not terminate.  The
+ * explicit Exact entry is gated to a rational-in-y potential (ds_is_rational_in),
+ * so this falls through to the implicit entry, which returns F(x, y[x]) == C[1]
+ * verbatim (as Maple/Mathematica do).  Verified here by the implicit-function
+ * rule: d/dx[F - C[1]] with y' -> -M/N must vanish. */
+static void t_m23_exact_radical(void) {
+    const char* ode = "9 Sqrt[x] y[x]^(4/3) - 12 x^(1/5) y[x]^(3/2) + "
+                      "(8 x^(3/2) y[x]^(1/3) - 15 x^(6/5) Sqrt[y[x]]) y'[x] == 0";
+    /* the branch is implicit (an Equal relation), not an explicit Rule */
+    check_form("Head[DSolve[9 Sqrt[x] y[x]^(4/3) - 12 x^(1/5) y[x]^(3/2) + "
+               "(8 x^(3/2) y[x]^(1/3) - 15 x^(6/5) Sqrt[y[x]]) y'[x] == 0, y, x][[1, 1]]]", "Equal");
+    (void)ode;
+    check_true("With[{g = DSolve[9 Sqrt[x] y[x]^(4/3) - 12 x^(1/5) y[x]^(3/2) + "
+               "(8 x^(3/2) y[x]^(1/3) - 15 x^(6/5) Sqrt[y[x]]) y'[x] == 0, y, x][[1, 1, 1]] - C[1]}, "
+               "Abs[N[(D[g, x] /. y'[x] -> "
+               "-(9 Sqrt[x] y[x]^(4/3) - 12 x^(1/5) y[x]^(3/2))/"
+               "(8 x^(3/2) y[x]^(1/3) - 15 x^(6/5) Sqrt[y[x]])) "
+               "/. {x -> 13/10, y[x] -> 7/10}, 20]] < 1/1000000]");
+    /* over-restriction guard: a rational-in-y exact ODE still solves EXPLICITLY
+     * (an explicit Rule branch), so the gate never demotes an invertible case. */
+    check_form("Head[DSolve[2 x y[x] + 1 + x^2 y'[x] == 0, y, x][[1, 1]]]", "Rule");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2095,6 +2121,7 @@ int main(void) {
     TEST(t_m20_polyshift_402);
     TEST(t_m20_polyshift_371);
     TEST(t_m20_declines_nonlinear_base);
+    TEST(t_m23_exact_radical);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

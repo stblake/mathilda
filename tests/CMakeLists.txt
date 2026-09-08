@@ -3715,6 +3715,15 @@ add_test(NAME dsolve_corpus_2_2_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_222.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+# Section 2.2.3 "Problems 201 to 300" (Table 2.19): 100 elementary ODEs, 35 IVPs.
+# Continuation of §2.2.2 (constant-coeff any-order, Euler/Emden-Fowler, elementary
+# first-order); same IVP handling (equation slot {ode, ic...}).  M23.  Baseline 1
+# (the sole residue 2.2.3-232, a nonlinear Emden-Fowler whose symmetry reduction
+# lands on an Abel equation of the 2nd kind).
+add_test(NAME dsolve_corpus_2_2_3_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_223.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

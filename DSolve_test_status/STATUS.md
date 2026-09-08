@@ -184,6 +184,42 @@ Full per-case results: `reports/2.2.2.tsv`; bucketed report: `reports/2.2.2.md`.
 
 ---
 
+## Section 2.2.3 — "Problems 201 to 300" (Table 2.19, sorted by problem number)
+
+Corpus: `DE_examples_223.m` — 100 records, **all scalar, 35 IVPs**. Continuation of
+§2.2.2 (same elementary Table 2.19), but skewed toward higher-order **constant-
+coefficient linear** (2nd/3rd/4th order, homogeneous + forced, real/repeated/complex
+roots), **Euler–Cauchy / Emden–Fowler**, and a handful of elementary first-order
+(exact / separable / linear / homogeneous class A/C/G / Bernoulli / d'Alembert).
+**Zero overlap** with §2.1.2. `ctest -R dsolve_corpus_2_2_3_tests` · gate baseline **1**.
+
+| Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
+|------|--------------:|--------:|---------------:|-------|
+| 2026-09-08 (baseline) | 98 / 100 | 98.0% | 2 | 0 FAIL. Converter unchanged (byte-identical §2.2.1/§2.2.2 regen). Two gaps: 204 (radical exact hang), 232 (Emden–Fowler). |
+| 2026-09-08 (**M23**)  | **99 / 100** | **99.0%** | **1** | **+1, 0 FAIL, 0 regression.** Exact radical-potential → implicit first integral. Gate baseline **1**. |
+
+**M23 solver fix** (reuses the verified implicit first-integral substrate; 0 FAIL by
+construction):
+- **Exact radical potential → implicit** (`dsolve_exact.c`) — 204's potential
+  `F = 6 x^(3/2) y^(4/3) − 10 x^(6/5) y^(3/2)` carries fractional powers of `y`, so the
+  explicit `Solve[F==C[1], y]` did not terminate (it hung the whole solve). The explicit
+  Exact entry is now gated to a **rational-in-`y`** potential (`ds_is_rational_in`), so a
+  radical/transcendental potential falls through to the existing implicit entry
+  `dsolve_exact_implicit_try`, which returns `F(x, y[x]) == C[1]` verbatim (as Maple and
+  Mathematica do), verified by the implicit-function rule. The gate never demotes an
+  invertible case: a rational-in-`y` potential (`t_exact_xayb`'s Laurent-in-`y` form,
+  `2xy+1+x²y'==0`) still solves explicitly.
+
+**Residue (1, bounded UNEVAL, 0 wrong answers):**
+
+| Case | ODE | Why |
+|---|---|---|
+| 2.2.3-232 | `y y'' == 6 x^4` | Emden–Fowler `_with_linear_symmetries`; the (correct) scaling-symmetry reduction `r=y/x³, s=ln x` lands on the autonomous `r r''+5r r'+6r²==6`, whose first-order reduction `r p p'==6−5rp−6r²` is an **Abel equation of the 2nd kind** — non-elementary for the cascade and squarely in the deferred-M13 (Abel Invariant Rational) territory. Declines cleanly (no wrong answer). |
+
+Full per-case results: `reports/2.2.3.tsv`; bucketed report: `reports/2.2.3.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -229,6 +265,17 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   finite-pole base with `z^(1/2±μ)`, stacking same-base radical powers whose verify hits
   `$IterationLimit` and starves the Frobenius fallback. Data-dependent, not gate-able by
   size → restricted to P==0 for 0 regressions.
+- **M20 (2026-09-08)** — first-order symmetry gap Stage 1: `PolynomialShiftSubstitution`
+  (`dsolve_polyshift.c`), the radical `[F(x),G(x)]`-symmetry sub-cluster. §2.1.2
+  432/1000 (+6). See DSOLVE_PLAN.md M20 and the §2.1.2 block above.
+- **M21 (2026-09-08)** — §2.2.1 corpus (Problems 1–100), first IVP-carrying section.
+  IC verification in the harness; 3 solver fixes. **96/100 (+10, 0 FAIL).** See §2.2.1 block.
+- **M22 (2026-09-08)** — §2.2.2 corpus (Problems 101–200). Homogeneous-correctness /
+  exact-transcendental / FOS-implicit waves. **92/100 (+10, 0 FAIL).** See §2.2.2 block.
+- **M23 (2026-09-08)** — §2.2.3 corpus (Problems 201–300). Exact radical-potential →
+  implicit first integral (`dsolve_exact.c`, `ds_is_rational_in` gate). **99/100 (+1,
+  0 FAIL, 0 regression);** sole residue 232 (Emden–Fowler → Abel 2nd kind). Anti-overfit
+  unit `t_m23_exact_radical`. See §2.2.3 block.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

@@ -1,43 +1,41 @@
-# DSolve M22 — §2.2.2 corpus + coverage waves
+# DSolve M23 — §2.2.3 corpus (Problems 201–300) + coverage
 
-## Wave 0 — Corpus infrastructure
-- [ ] Fix `tools/latex_ode_to_mathilda.py :: is_condition_row` (anchor to LHS)
-- [ ] Download §2.2.2 HTML into DSolve_test_status (or keep source note) & regenerate `DE_examples_222.m`
-- [ ] Regenerate `DE_examples_221.m` (must be byte-identical → proves no regression)
-- [ ] Register `dsolve_corpus_2_2_2_tests` in `tests/CMakeLists.txt`
-- [ ] Build harness + measure true 20s-forked baseline → `reports/2.2.2.{tsv,md}`
-- [ ] Add §2.2.2 block to STATUS.md + README contents row
+## Wave 0 — Corpus infrastructure (DONE)
+- [x] Fetch §2.2.3 HTML (indexsubsection12.htm = "Problems 201 to 300", Table 2.19)
+- [x] Generate `DE_examples_223.m` (100 scalar, 35 IVPs, 0 systems)
+- [x] Regen §2.2.1/§2.2.2 byte-identical (converter unchanged → no regression)
+- [x] Verify corpus parses through binary (harness ran clean)
+- [x] Measure baseline: **98/100 PASS, 0 FAIL, 2 UNEVAL** (204, 232)
+- [x] Register `dsolve_corpus_2_2_3_tests` in `tests/CMakeLists.txt` (baseline 1)
+- [x] reports/2.2.3.{tsv,md}; STATUS.md §2.2.3 block + README row
 
-## Wave 1 — Homogeneous correctness (latent wrong-answers; do first)
-- [x] Fix 1A: reduced function via `F(1,v)` not `F(x,v·x)` (dsolve_homogeneous.c) — fixes 117
-- [x] Fix 1B REVERTED (too broad, broke 121/144); replaced with in-method numeric verify `homog_num_wrong` — fixes 112
-- [x] Log-gate homog_exp_log_invert + reject `$rad` placeholder leaks — fixes 118
-- [x] Verify 112/117/118 (117 explicit-verified; 112/118 implicit) + 121/144 restored
+## Gap analysis (2 non-PASS)
+- **2.2.3-204** `9√x y^(4/3) − 12 x^(1/5) y^(3/2) + (8 x^(3/2) y^(1/3) − 15 x^(6/5)√y) y' == 0`
+  — EXACT (M_y==N_x), potential `F = 6 x^(3/2) y^(4/3) − 10 x^(6/5) y^(3/2)`.
+  Explicit `Solve[F==C, Y]` HANGS on the mixed fractional powers (4/3, 3/2). The
+  implicit entry returns `F(x,y[x])==C[1]` (as Maple/Mma do) — just needs a gate.
+- **2.2.3-232** `y y'' == 6 x^4` — Emden–Fowler `_with_linear_symmetries`; declines
+  cleanly (bounded UNEVAL). Has particular soln y=±x^3. Investigate M12 route.
 
-## Wave 2 — Exact transcendental
-- [x] Refactor potential into `exact_potential()`; add `dsolve_exact_implicit_try`
-- [x] Wire implicit fallback after explicit Exact (dsolve.c :343 + pinned)
-- [x] Linearizable Bernoulli-shape recursion gate (fixes 141 pre-Exact hang)
-- [x] Verify 140/141/182/195 solved
+## Wave 1 — Exact radical potential → implicit (fixes 204) — DONE
+- [x] Gate explicit `ds_solve` in `dsolve_exact_try` on `ds_is_rational_in(Fpot, Yn)`
+- [x] Verify 204 solves (implicit `F(x,y[x])==C[1]`); explicit path preserved (Rule)
+- [x] Anti-overfit unit `t_m23_exact_radical` (impl-fn-rule verify + explicit guard)
 
-## Wave 3 — FirstOrderSubstitution implicit fallback
-- [x] Add `dsolve_fos_implicit_try`; wire after explicit FOS (dsolve.c :386 + pinned)
-- [x] Verify 159 (inert-integral implicit, as Mathematica); 165 = slow-explicit residue
-- [x] Bernoulli mixed-radical gate → 107 solves via Homogeneous
+## Wave 2 — 2.2.3-232 (Emden–Fowler nonlinear 2nd-order) — RESIDUE
+- [x] Investigated: scaling symmetry `X=x∂ₓ+3y∂_y` reduces to autonomous
+      `r r''+5r r'+6r²==6` → Abel 2nd-kind first-order (`r p p'==6−5rp−6r²`),
+      non-elementary (deferred-M13 AIR). Documented as bounded UNEVAL, 0 wrong answer.
 
-## Regressions found & fixed (from ctest/corpus)
-- [x] Fix 1B (shared extract) reverted → 121/144 + §2.2.1 FAIL restored
-- [x] `ds_contains` pointer bug in Log-gate → log-family `(x+2y)/(2x+y)` explicit restored (dsolve_stress)
-- [x] Linearizable gate moved to recursion-only branch → `y'=y(e^x+Log y)` restored (dsolve_tests)
-
-## Residue + docs
-- [x] Residue documented (133/160/165/170/175-178) in STATUS.md
-- [x] DSOLVE_PLAN.md M22 entry + docs/spec/changelog + reports/2.2.2.{tsv,md}
-- [x] All 8 dsolve unit+stress ctests green; check-c99 green
-- [ ] Final corpus re-measure (§2.2.2/§2.2.1/§2.1.2 on final binary) — running
+## Wrap-up
+- [x] DSolve unit + all stress suites + §2.2.1/§2.2.2/§2.2.3 gates green; check-c99 green
+- [~] §2.1.2 gate running (regression check for the Exact routing change)
+- [x] DSOLVE_PLAN.md M23 entry + docs/spec/changelog + STATUS.md + calculus.md spec
 
 ## Review
-**Result: §2.2.2 82→92/100 (0 FAIL, +10). §2.2.1 held at 96 (0 FAIL). Converter fix
-benefits all sections (byte-identical §2.2.1 regen). 3 solver waves + Bernoulli gate,
-all via verified implicit substrate. 3 self-inflicted regressions caught by ctest/corpus
-and fixed. Delivery: uncommitted (user reviews).**
+**Result: §2.2.3 98→99/100 (0 FAIL, +1). Baseline was already high (elementary
+Table 2.19: const-coeff any-order + Euler + basic first-order — all covered).
+One surgical solver fix (Exact radical potential → implicit first integral, the
+radical twin of M22's transcendental-exact wave), reusing the verified implicit
+substrate. Sole residue 232 (Emden–Fowler → Abel 2nd kind). Converter unchanged
+→ §2.2.1/§2.2.2 byte-identical (no regression). Delivery: uncommitted (user reviews).**
