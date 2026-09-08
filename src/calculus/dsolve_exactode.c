@@ -104,6 +104,13 @@ Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch) {
                                         expr_new_symbol(xvar) }, 3);
             Expr* r = eval_and_free(call);
             body = extract_applied(r, yname);
+            /* A reduced sub-solve that leaves an unevaluated Integrate is not a
+             * usable closed form (e.g. 2x y''+(1-2x^2)y'-4x y==0 reduces to the
+             * first-order linear y' whose integrating-factor quadrature
+             * Integrate[x^(-3/2) E^(-x^2/2), x] is non-elementary here).  Decline
+             * so the cascade falls through to the Frobenius series solver, which
+             * returns a verified power series about x=0. */
+            if (body && ds_has_head(body, SYM_Integrate)) { expr_free(body); body = NULL; }
             expr_free(r);
         } else {
             expr_free(Gint);

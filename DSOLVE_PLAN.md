@@ -878,6 +878,57 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     `t_m24_trig_power_forcing`, `t_m24_complex_cuberoot_ivp` in `test_dsolve.c`. All DSolve ctest +
     stress suites and `make check-c99` green; §2.1.2/§2.2.1/§2.2.2/§2.2.3 gates held.
 
+- **M25 — §2.2.5 corpus (Problems 401–500) + Erf-verify / Kovacic fundamental-set /
+  transcendental-Frobenius waves.** ✅ DONE. The continuation of the Table 2.19 sequence, but a
+  **series-solution-heavy** chunk (Edwards & Penney, Ch. 8): 2nd-order linear (constant- and
+  variable-coefficient), Airy/Emden–Fowler, **Gegenbauer** (already Kovacic), **Bessel**,
+  **Jacobi/₂F₁**, one **Liénard**, one 3rd-order (100 records, 15 IVPs, 0 systems).
+  **95 → 99 / 100 scalar, 0 FAIL, 0 regression** (§2.1.2, §2.2.1–§2.2.4 ctests held). The
+  converter needed no change (§2.2.1–4 regenerate byte-for-byte identical). All three solver fixes
+  reuse verified machinery or return a series the Frobenius recurrence gates, so no wave can ship a
+  wrong answer.
+  - **Erf integrating-factor verify (`dsolve_common.c`, 428).** `y''+x y'+y==0` is exact, reducing
+    to the first-order linear `y'+x y==C[2]` whose integrating-factor solution carries
+    `Erf[-I x/Sqrt[2]]`. The closed form was produced correctly, but `dsolve_verify_body`'s
+    `zero_test` spun on the Gaussian×Erf residual: `E^(-x²/2)·E^(x²/2)` products sit in separate
+    summands, never combine to `E^0`, and numericalise as tiny·huge (a catastrophic cancellation),
+    so the numeric precision ladder climbs to 1000 bits on every Schwartz–Zippel sample and
+    effectively hangs. The verify now `ExpandAll`-normalises a residual **that contains Erf/Erfi**
+    before the zero-test (distributing the sums collapses the exponentials); gated to Erf/Erfi so
+    every other verify path is byte-for-byte unchanged. The underlying `zero_test` deficiency is
+    logged in `POSSIBLE_ZEROQ_IMPROVEMENTS.md` #1 for a later core fix.
+  - **Kovacic fundamental-set guard (`dsolve_kovacic.c`) + ExactODE non-elementary decline
+    (`dsolve_exactode.c`, 482).** `2x y''+(1-2x²)y'-4x y==0` has one Liouvillian solution
+    `√x E^(x²/2)`; its reduction-of-order second solution is non-elementary. Kovacic's
+    coincident-exponent path (`Sqrt[D]==0`) collapsed the two basis solutions to the same function
+    and returned the rank-deficient `(C[1]+C[2])√x E^(x²/2)` — it verifies (it does solve the ODE)
+    but is not a general solution. A final independence guard (`kovacic_body_independent`) extracts
+    `y1 = body/.{C[1]->1,C[2]->0}`, `y2 = body/.{C[1]->0,C[2]->1}` and rejects a dependent pair, so
+    the cascade falls through to Frobenius, whose two-parameter series is the correct general
+    solution. ExactODE also now declines when its reduced sub-solve leaves an unevaluated
+    `Integrate` (482's `Integrate[x^(-3/2) E^(-x²/2), x]` is non-elementary here), so 482 reaches
+    Kovacic/Frobenius rather than hanging on the junk body.
+  - **Transcendental-coefficient Frobenius (`dsolve_frobenius.c`, 463/490).** At a regular singular
+    point, `frobenius_regsing` forms `xP = x·P` and `x²Q`, then reads Taylor coefficients by direct
+    `x->0` substitution. When P,Q carry an analytic transcendental coefficient this leaves a
+    **removable singularity** (`6 Sin[x]/x` is 6 at 0 but substitutes to `6 Sin[0]/0 =
+    Indeterminate`), so the indicial roots came out garbage and Frobenius declined. A new
+    `normal_series` helper replaces `xP`, `x²Q` by their Taylor polynomials
+    (`Normal[Series[·,{x,0,N}]]`, a no-op for genuine polynomials) before the coefficient read, so
+    analytic transcendental coefficients yield a verified Frobenius series (463 → indicial roots
+    −2,−3; 490 → −1/2, 1).
+  - **Residue (1, bounded UNEVAL, 0 wrong answers):** 2.2.5-459 `x² y''+Cos[x] y'+x y==0`, an
+    **irregular** singular point at x=0 (`x·P = Cos[x]/x` is not analytic) whose only analytic
+    solution is a one-parameter formal power series (the second has an essential singularity). A
+    transcendental-coefficient equation Mathilda leaves unevaluated, **matching Mathematica** — the
+    shifted-Frobenius path deliberately declines transcendental coefficients rather than expand
+    about an arbitrary ordinary point. Declines cleanly.
+  - New corpus `DSolve_test_status/DE_examples_225.m`; ctest `dsolve_corpus_2_2_5_tests` (gate
+    baseline 1); `reports/2.2.5.{tsv,md}`; STATUS.md §2.2.5 block; README row. Anti-overfit units
+    `t_m25_exact_erf`, `t_m25_kovacic_fundamental_set`, `t_m25_transcendental_frobenius` in
+    `test_dsolve.c`. `POSSIBLE_ZEROQ_IMPROVEMENTS.md` created (zero_test Gaussian×Erf follow-up).
+    All DSolve ctest + stress suites and `make check-c99` green; §2.1.2/§2.2.1–§2.2.4 gates held.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

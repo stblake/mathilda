@@ -191,13 +191,38 @@ static int build_coeffs(Expr** Pk, Expr** Qk, const Expr* P0, const Expr* Q0,
     return 0;
 }
 
+/* Normal[Series[e, {x,0,N}]] — the Taylor polynomial of e about 0.  Consumes e.
+ * This resolves a REMOVABLE singularity (e.g. 6 Sin[x]/x -> 6 - x^2 + ...) that
+ * a direct x->0 substitution reports as Indeterminate; a genuine polynomial is
+ * returned unchanged (Series of a polynomial is that polynomial).  Falls back to
+ * e untouched if Series does not resolve to a plain expansion. */
+static Expr* normal_series(Expr* e, const char* x, int N) {
+    Expr* spec = expr_new_function(expr_new_symbol(SYM_List),
+                     (Expr*[]){ expr_new_symbol(x), expr_new_integer(0), expr_new_integer(N) }, 3);
+    Expr* ser = eval_and_free(ds_call2("Series", expr_copy(e), spec));
+    Expr* nrm = eval_and_free(ds_call1("Normal", expr_copy(ser)));
+    bool bad = ds_contains(ser, intern_symbol("Series")) ||
+               ds_contains(nrm, intern_symbol("SeriesData")) ||
+               ds_contains(nrm, intern_symbol("Indeterminate"));
+    expr_free(ser);
+    if (bad) { expr_free(nrm); return e; }
+    expr_free(e);
+    return nrm;
+}
+
 /* ------------------------------------------------------------------ *
  *  Regular singular point                                             *
  * ------------------------------------------------------------------ */
 static Expr* frobenius_regsing(const Expr* Pc, const Expr* Qc, const char* x, int N) {
-    /* xP and x^2 Q are analytic at 0 */
+    /* xP and x^2 Q are analytic at 0.  Forming them by multiplication leaves a
+     * removable singularity when P,Q carry transcendental analytic coefficients
+     * (P = 6 Sin[x]/x^2 -> xP = 6 Sin[x]/x, which is 6 at x=0 but substitutes to
+     * 6 Sin[0]/0 = Indeterminate).  taylor_coeff substitutes x=0, so replace them
+     * by their Taylor polynomials first (a no-op for genuine polynomials). */
     Expr* xP  = ds_simplify(T2(PowE(expr_new_symbol(x), expr_new_integer(1)), expr_copy((Expr*)Pc)));
     Expr* x2Q = ds_simplify(T2(PowE(expr_new_symbol(x), expr_new_integer(2)), expr_copy((Expr*)Qc)));
+    xP  = normal_series(xP,  x, N);
+    x2Q = normal_series(x2Q, x, N);
     Expr** Pk = malloc((size_t)(N + 1) * sizeof(Expr*));
     Expr** Qk = malloc((size_t)(N + 1) * sizeof(Expr*));
     for (int k = 0; k <= N; k++) { Pk[k] = taylor_coeff(xP, x, k); Qk[k] = taylor_coeff(x2Q, x, k); }

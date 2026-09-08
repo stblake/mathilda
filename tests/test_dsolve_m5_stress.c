@@ -94,7 +94,17 @@ static void t_kov_stress_apparent(void) {
 }
 
 /* omega = a x + c/x, c not in {0,1}  ->  r = a^2 x^2 + (a + 2ac) + (c^2-c)/x^2
- * (genuine order-2 pole). */
+ * (genuine order-2 pole).  For integer c only ONE Liouvillian solution exists (the
+ * planted y1 = x^c Exp[a x^2/2]); the reduction-of-order second solution is
+ * non-elementary.  So Kovacic alone cannot form a fundamental set and must DECLINE
+ * the degenerate one-parameter basis (the M25 independence guard -- previously it
+ * returned the rank-deficient (C[1]+C[2]) y1, which back-substitutes to zero but is
+ * NOT a general solution and passed the old weak Head===List check).  The full
+ * cascade then completes the solve via a Frobenius series about the regular singular
+ * point x=0 (a genuine two-parameter series when the indicial roots do not differ by
+ * an integer; a valid one-parameter branch when they do and the second is
+ * log-obstructed -- still correct, never wrong).  A progress guard: a solution comes
+ * back, no hang, no rank-deficient closed form.  (Cf. t_kov_growth_no_hang.) */
 static void t_kov_stress_pole(void) {
     int as[] = {1, 2};
     int cs[] = {2, 3, -2};
@@ -102,12 +112,17 @@ static void t_kov_stress_pole(void) {
         for (size_t ci = 0; ci < 3; ci++) {
             int a = as[ai], c = cs[ci];
             int A = a * a, C0 = a + 2 * a * c, Cp = c * c - c;
-            char eqn[256], res[256];
-            snprintf(eqn, sizeof(eqn),
-                     "y''[x] - (%d x^2 + %d + (%d)/x^2) y[x] == 0", A, C0, Cp);
-            snprintf(res, sizeof(res),
-                     "D[y[x],{x,2}] - (%d x^2 + %d + (%d)/x^2) y[x]", A, C0, Cp);
-            kovacic_ok(eqn, res);
+            char buf[512];
+            snprintf(buf, sizeof(buf),
+                     "Head[DSolve[y''[x] - (%d x^2 + %d + (%d)/x^2) y[x] == 0, y, x]] === List",
+                     A, C0, Cp);
+            ASSERT_TRUE(buf);
+            /* pinned Kovacic correctly DECLINES: only one Liouvillian solution exists,
+             * so it must not fabricate a rank-deficient (C[1]+C[2]) y1 basis. */
+            snprintf(buf, sizeof(buf),
+                     "Head[DSolve`Kovacic[y''[x] - (%d x^2 + %d + (%d)/x^2) y[x] == 0, y, x]] =!= List",
+                     A, C0, Cp);
+            ASSERT_TRUE(buf);
         }
 }
 

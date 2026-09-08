@@ -556,6 +556,59 @@ static void t_m24_complex_cuberoot_ivp(void) {
                "Abs[N[(y[0] /. s) - 1, 20]] < 1/1000000]");
 }
 
+/* ---- M25: exact ODE -> Erf closed form (verify no longer spins) ---- */
+/* corpus 2.2.5-428: y''+x y'+y==0 is exact, reducing to the first-order linear
+ * y'+x y==C[2] whose integrating-factor solution carries Erf[-I x/Sqrt[2]].  The
+ * closed form was produced correctly, but dsolve_verify_body's zero_test spun on
+ * the Gaussian x Erf residual (E^(-x^2/2) . E^(x^2/2) products that never combine
+ * defeat the numeric precision ladder, POSSIBLE_ZEROQ_IMPROVEMENTS.md #1), so the
+ * whole solve timed out.  The verify now ExpandAll-normalises an Erf/Erfi residual
+ * first, so the exact closed form returns.  (PZQ in this test likewise ExpandAlls
+ * to sidestep the same standing zero_test limitation.) */
+static void t_m25_exact_erf(void) {
+    /* returns an explicit closed-form Rule branch (not a timeout / decline) */
+    check_form("Head[DSolve[y''[x]+x y'[x]+y[x]==0, y, x][[1, 1]]]", "Rule");
+    /* the Erf solution back-substitutes to zero */
+    check_true("PossibleZeroQ[ExpandAll[(y''[x]+x y'[x]+y[x]) /. "
+               "DSolve[y''[x]+x y'[x]+y[x]==0, y, x][[1]]]]");
+}
+
+/* ---- M25: Kovacic must return a fundamental set (independence guard) ---- */
+/* corpus 2.2.5-482: 2x y''+(1-2x^2)y'-4x y==0 has ONE Liouvillian solution
+ * Sqrt[x] E^(x^2/2); its reduction-of-order second solution is non-elementary.
+ * Kovacic's coincident-exponent path collapsed to the rank-deficient
+ * (C[1]+C[2]) Sqrt[x] E^(x^2/2) -- it verifies but is not a general solution.
+ * The new independence guard rejects a degenerate basis, so the cascade falls
+ * through to Frobenius, which returns the correct two-parameter series. */
+static void t_m25_kovacic_fundamental_set(void) {
+    /* a genuine two-parameter solution: the two basis solutions (coeffs of C[1],
+     * C[2]) are linearly independent -- their ratio is non-constant. */
+    check_true("With[{b = y[x] /. DSolve[2 x y''[x]+(1-2 x^2) y'[x]-4 x y[x]==0, y, x][[1]]}, "
+               "!PossibleZeroQ[D[Normal[D[b, C[1]]]/Normal[D[b, C[2]]], x]]]");
+    /* it is a (Frobenius) series solution */
+    check_true("With[{s = DSolve[2 x y''[x]+(1-2 x^2) y'[x]-4 x y[x]==0, y, x]}, "
+               "MatchQ[s, {{y -> _Function}}] && !FreeQ[s, SeriesData]]");
+}
+
+/* ---- M25: transcendental-coefficient Frobenius at a regular singular point ---- */
+/* corpus 2.2.5-463/490: x^2 y''+6 Sin[x] y'+6 y==0 and 2x^2 y''+Sin[x] y'-Cos[x] y==0
+ * are regular singular at x=0, but forming xP = x*P leaves a removable singularity
+ * (6 Sin[x]/x is 6 at 0 but substitutes to 6 Sin[0]/0 = Indeterminate), so the
+ * indicial roots came out garbage and Frobenius declined.  frobenius_regsing now
+ * Taylor-normalises xP and x^2 Q first, so an analytic transcendental coefficient
+ * is handled and a verified Frobenius series is returned. */
+static void t_m25_transcendental_frobenius(void) {
+    /* both return a Frobenius series (they previously declined) */
+    check_true("With[{s = DSolve[x^2 y''[x]+6 Sin[x] y'[x]+6 y[x]==0, y, x]}, "
+               "MatchQ[s, {{y -> _Function}}] && !FreeQ[s, SeriesData]]");
+    check_true("With[{s = DSolve[2 x^2 y''[x]+Sin[x] y'[x]-Cos[x] y[x]==0, y, x]}, "
+               "MatchQ[s, {{y -> _Function}}] && !FreeQ[s, SeriesData]]");
+    /* correctness anchor: the 490 series back-substitutes to ~0 near x=0 */
+    check_true("With[{b = Normal[y[x] /. DSolve[2 x^2 y''[x]+Sin[x] y'[x]-Cos[x] y[x]==0, y, x][[1]]] "
+               "/. {C[1] -> 13/10, C[2] -> 7/10}}, "
+               "Abs[N[(2 x^2 D[b, {x,2}] + Sin[x] D[b, x] - Cos[x] b) /. x -> 1/10, 30]] < 1/100000]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2157,6 +2210,9 @@ int main(void) {
     TEST(t_m23_exact_radical);
     TEST(t_m24_trig_power_forcing);
     TEST(t_m24_complex_cuberoot_ivp);
+    TEST(t_m25_exact_erf);
+    TEST(t_m25_kovacic_fundamental_set);
+    TEST(t_m25_transcendental_frobenius);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

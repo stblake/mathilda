@@ -405,6 +405,18 @@ static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
             sub = ds_subst(sub, ds_make_funcapp(yname, k, xvar), dk);
         }
         sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
+        /* A Gaussian x Erf residual — the integrating-factor solution of an exact
+         * ODE, e.g. y''+x y'+y==0 whose closed form carries Erf[-I x/Sqrt[2]] —
+         * defeats zero_test's numeric precision ladder: the E^(-x^2/2) of the
+         * solution and the E^(x^2/2) from differentiating Erf sit in separate
+         * summands, never combine to E^0, and numericalise as tiny*huge (a
+         * catastrophic cancellation) so the ladder climbs to 1000 bits on every
+         * Schwartz-Zippel sample and effectively hangs (POSSIBLE_ZEROQ_IMPROVEMENTS.md
+         * #1).  ExpandAll distributes the sums so the exponentials become adjacent
+         * factors and collapse before the ladder runs.  Gated to Erf/Erfi residuals
+         * so every other verify path is byte-for-byte unchanged. */
+        if (ds_contains(sub, SYM_Erf) || ds_contains(sub, SYM_Erfi))
+            sub = eval_and_free(ds_call1("ExpandAll", sub));
         ZeroTestResult zt = zero_test_decide(sub);
         if (zt == ZERO_TEST_FALSE) {
             /* Guard against a zero_test FALSE-negative on a value-zero residual it

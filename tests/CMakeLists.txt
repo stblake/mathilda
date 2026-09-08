@@ -3734,6 +3734,17 @@ add_test(NAME dsolve_corpus_2_2_4_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_224.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+# Section 2.2.5 "Problems 401 to 500" (Table 2.19): 100 elementary ODEs, 15 IVPs.
+# Continuation of §2.2.4; a series-solution-heavy chunk (Edwards & Penney): 2nd-order
+# linear (const + variable coeff), Airy/Emden-Fowler, Gegenbauer, Bessel, Jacobi/2F1,
+# one Lienard.  Same IVP handling (equation slot {ode, ic...}).  M25.  Baseline 1 (the
+# sole residue 2.2.5-459, x^2 y''+Cos[x] y'+x y==0, an IRREGULAR singular point at x=0
+# whose only analytic solution is a one-parameter formal series -- a transcendental-
+# coefficient equation Mathilda leaves unevaluated, matching Mathematica).
+add_test(NAME dsolve_corpus_2_2_5_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_225.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

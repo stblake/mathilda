@@ -277,6 +277,51 @@ Full per-case results: `reports/2.2.4.tsv`; bucketed report: `reports/2.2.4.md`.
 
 ---
 
+## Section 2.2.5 — "Problems 401 to 500" (Table 2.19, sorted by problem number)
+
+Corpus: `DE_examples_225.m` — 100 records, **all scalar, 15 IVPs**. Continuation of
+§2.2.4, but a **series-solution-heavy** chunk (Edwards & Penney, Ch. 8): 2nd-order
+linear (constant- and variable-coefficient), Airy/Emden–Fowler, Gegenbauer (already
+Kovacic), Bessel, Jacobi/₂F₁, one Liénard, one 3rd-order. **Zero overlap** with §2.1.2.
+`ctest -R dsolve_corpus_2_2_5_tests` · gate baseline **1**.
+
+| Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
+|------|--------------:|--------:|---------------:|-------|
+| 2026-09-08 (baseline) | 95 / 100 | 95.0% | 5 | 0 FAIL. Converter unchanged (byte-identical §2.2.1–4 regen). 5 UNEVAL: 428/482 (exact→Erf verify spin / Kovacic degenerate basis) + 459/463/490 (transcendental-coeff singular). |
+| 2026-09-08 (**M25**)  | **99 / 100** | **99.0%** | **1** | **+4, 0 FAIL, 0 regression.** Three verified fixes (below). Gate baseline **1**. |
+
+**M25 fixes** (all reuse verified machinery / return series the recurrence gates; 0 FAIL
+by construction):
+1. **Erf integrating-factor verify (`dsolve_common.c`, 428).** `y''+x y'+y==0` is exact
+   → first-order linear `y'+x y==C[2]` → Erf closed form, but `dsolve_verify_body`'s
+   `zero_test` spun on the Gaussian×Erf residual (`E^(-x²/2)·E^(x²/2)` products that never
+   combine defeat the numeric precision ladder — `POSSIBLE_ZEROQ_IMPROVEMENTS.md` #1). The
+   verify now `ExpandAll`-normalises an Erf/Erfi residual first (gated to Erf/Erfi so every
+   other verify path is unchanged), so the exact Erf form returns.
+2. **Kovacic fundamental-set guard (`dsolve_kovacic.c` + `dsolve_exactode.c`, 482).**
+   `2x y''+(1-2x²)y'-4x y==0` has one Liouvillian solution `√x E^(x²/2)` (second is
+   non-elementary); Kovacic's coincident-exponent path collapsed to the rank-deficient
+   `(C[1]+C[2])√x E^(x²/2)` (it verifies but is not a general solution). A final
+   independence guard rejects a degenerate basis → cascade falls through to Frobenius →
+   correct two-parameter series. (ExactODE also now declines when its reduced sub-solve
+   leaves a non-elementary `Integrate`, so 482 reaches Kovacic/Frobenius rather than hanging.)
+3. **Transcendental-coefficient Frobenius (`dsolve_frobenius.c`, 463/490).** At a regular
+   singular point, forming `xP = x·P` leaves a removable singularity when P,Q carry an
+   analytic transcendental (`6 Sin[x]/x` is 6 at 0 but substitutes to `6 Sin[0]/0 =
+   Indeterminate`), so the indicial roots came out garbage and Frobenius declined.
+   `frobenius_regsing` now Taylor-normalises `xP`, `x²Q` first (a no-op for genuine
+   polynomials), so analytic transcendental coefficients yield a verified Frobenius series.
+
+**Residue (1, bounded UNEVAL, 0 wrong answers):**
+
+| Case | ODE | Why |
+|---|---|---|
+| 2.2.5-459 | `x² y''+Cos[x] y'+x y==0` | **irregular** singular point at x=0 (`x·P = Cos[x]/x` is not analytic); the only analytic solution is a one-parameter formal power series (the second has an essential singularity). A transcendental-coefficient equation Mathilda leaves unevaluated, **matching Mathematica** (the shifted-Frobenius path deliberately declines transcendental coefficients rather than expand about an arbitrary point). Declines cleanly (no wrong answer). |
+
+Full per-case results: `reports/2.2.5.tsv`; bucketed report: `reports/2.2.5.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -341,6 +386,18 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   **99/100 (+6, FAIL→0, 0 regression);** sole residue 381 (variable-coeff Legendre-type,
   SymPy-failed). Anti-overfit units `t_m24_trig_power_forcing`, `t_m24_complex_cuberoot_ivp`.
   See §2.2.4 block.
+- **M25 (2026-09-08)** — §2.2.5 corpus (Problems 401–500), a series-solution-heavy chunk. Three
+  verified fixes: (1) Erf integrating-factor verify — `dsolve_verify_body` `ExpandAll`-normalises a
+  Gaussian×Erf residual before `zero_test`, gated to Erf/Erfi, so the exact `y''+x y'+y==0` returns
+  its Erf closed form instead of hanging (`POSSIBLE_ZEROQ_IMPROVEMENTS.md` #1 logs the core
+  deficiency); (2) Kovacic fundamental-set independence guard — a coincident-exponent basis that
+  collapses to `(C[1]+C[2]) y1` is rejected so Frobenius returns the correct two-parameter series
+  (plus ExactODE declines a non-elementary reduced `Integrate`); (3) transcendental-coefficient
+  Frobenius — `frobenius_regsing` Taylor-normalises `xP`, `x²Q` so an analytic transcendental
+  coefficient (`6 Sin[x]/x`, removable at 0) yields a verified series. **99/100 (+4, 0 FAIL,
+  0 regression);** sole residue 459 (irregular singular point, matches Mathematica). Anti-overfit
+  units `t_m25_exact_erf`, `t_m25_kovacic_fundamental_set`, `t_m25_transcendental_frobenius`.
+  See §2.2.5 block.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

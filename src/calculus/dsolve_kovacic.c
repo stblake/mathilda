@@ -373,6 +373,30 @@ static bool candidates_independent(const Expr* ya, const Expr* yb, const char* x
     return indep;
 }
 
+/* A returned general solution C[1] y1 + C[2] y2 must be a genuine fundamental
+ * set.  When Kovacic's two exponents coincide (Sqrt[D]==0, a double omega, e.g.
+ * 2x y''+(1-2x^2)y'-4x y==0) the two basis solutions collapse to the same
+ * function and the assembled body degenerates to (C[1]+C[2]) y1 — it verifies
+ * (it does solve the ODE) but is rank-deficient, not a general solution.
+ * Extract y1 (C[1]->1,C[2]->0) and y2 (C[1]->0,C[2]->1) and require them
+ * independent; otherwise decline, so the cascade falls through to the Frobenius
+ * series solver (whose two-parameter series is the correct general solution —
+ * the missing second Liouvillian solution here is non-elementary). */
+static bool kovacic_body_independent(const Expr* body, const char* x) {
+    /* Only a two-generated-constant assembly can degenerate to (C[1]+C[2]) y1.  A
+     * body carrying no generated constant C[k] is a different (pre-existing) shape —
+     * a single specific solution — and must be left untouched, not misread as a
+     * collapsed basis.  So require a C[k] to be present before applying the check. */
+    if (!ds_contains(body, intern_symbol("C"))) return true;
+    Expr* y1 = ds_subst(ds_subst(expr_copy((Expr*)body), ds_const(1), expr_new_integer(1)),
+                        ds_const(2), expr_new_integer(0));
+    Expr* y2 = ds_subst(ds_subst(expr_copy((Expr*)body), ds_const(1), expr_new_integer(0)),
+                        ds_const(2), expr_new_integer(1));
+    bool indep = candidates_independent(y1, y2, x);
+    expr_free(y1); expr_free(y2);
+    return indep;
+}
+
 /* Assemble the general solution C[1] y1 + C[2] y2 from z1,z2 and recovery w. */
 static Expr* assemble_general(const Expr* z1, const Expr* z2, const Expr* recovery) {
     Expr* y1 = T2(expr_copy((Expr*)recovery), expr_copy((Expr*)z1));
@@ -1007,6 +1031,7 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
     }
 
     expr_free(r); expr_free(rd); expr_free(factors); expr_free(recovery);   /* rt was consumed by Denominator */
+    if (body && !kovacic_body_independent(body, x)) { expr_free(body); body = NULL; }
     if (!body) return NULL;
     Expr** out = malloc(sizeof(Expr*));
     out[0] = body;
