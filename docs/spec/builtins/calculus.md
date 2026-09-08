@@ -65,12 +65,15 @@ Partial derivative.
   `True`, matching Mathematica.
 - **Fundamental theorem of calculus**: `D[Integrate[f, x], x] -> f` for
   the indefinite form whose integration variable matches the
-  differentiation variable. A definite/iterated integral
-  (`Integrate[f, {x, a, b}]`) or a different integration variable is not
-  the FTC and is left to the generic rules (differentiation under the
-  integral sign is not performed). This lets a differentiated
-  antiderivative reduce even when the integral was returned partially
-  unevaluated (see `Integrate`'s partial log part).
+  differentiation variable. This lets a differentiated antiderivative
+  reduce even when the integral was returned partially unevaluated (see
+  `Integrate`'s partial log part).
+- **Leibniz rule** for a variable-limit definite integral:
+  `D[Integrate[e, {u, a, b}], x] -> (e /. u->b) D[b,x] − (e /. u->a) D[a,x]
+  + Integrate[D[e, x], {u, a, b}]` (the bound variable `u` a symbol
+  distinct from `x`). So `D[Integrate[h[u], {u,0,t}], t] -> h[t]`; this is
+  what lets an initial-value fit of a Green's-function convolution
+  `Integrate[K(t,s) f(s), {s,0,t}]` resolve at the base point.
 - Differentiates `Piecewise` clause-wise:
   `D[Piecewise[{{v1, c1}, ...}, d], x]` becomes
   `Piecewise[{{D[v1, x], c1}, ...}, D[d, x]]` — the value expressions
@@ -673,7 +676,7 @@ roadmap):
 | `DSolve`Exact` | `M + N y' == 0`, exact or via integrating factor `μ(x)`, `μ(y)`, or `μ = x^a y^b` (constant exponents `a,b` from the linear exactness condition `b(M/y) − a(N/x) + (M_y − N_x) == 0`, gated to polynomial `M,N` and accepted only after a symbolic exactness re-check) — solves e.g. `(x y − 2 x) y' == y − y^2 + 3 x^2 y^3` (`μ = x^-2 y^-3`). The potential `F` with `F_x = M`, `F_y = N` is inverted for `y` (`F == C[1]` explicit) only when it is a **rational function of `y`** (Solve then reduces to a terminating polynomial solve); a **radical/transcendental** potential (fractional powers of `y`, e.g. `6 x^(3/2) y^(4/3) − 10 x^(6/5) y^(3/2)`) is returned as the **implicit** first integral `{{F(x, y[x]) == C[1]}}` (verified by the implicit-function rule `y' == −M/N`), matching Maple/Mathematica |
 | `DSolve`Clairaut` | `y == x y' + f(y')` (general lines + singular envelope) |
 | `DSolve`Lagrange` | `y == x φ(y') + ψ(y')`, φ(y')≠y' (d'Alembert) — **parametric** general solution `{{x->Function[{t},X(t)], y->Function[{t},Y(t)]}}`, `t=y'`, `X` from the associated linear ODE |
-| `DSolve`LinearConstantCoefficients` | `a_n y^(n)+…+a_0 y == g(x)` (char. polynomial + variation of parameters) |
+| `DSolve`LinearConstantCoefficients` | `a_n y^(n)+…+a_0 y == g(x)` (char. polynomial + variation of parameters). For a forcing the indefinite VoP integral cannot close — an **arbitrary function `f(x)`** or a **`DiracDelta` impulse** — it emits the causal Green's-function convolution `Integrate[Σ_i y_i(x) cof_i(s) g(s)/(a_n W(s)), {s,0,x}]`; the kernel vanishes on the diagonal so a zero-IC IVP fits its constants to 0. A resonant cos/sin forcing closes to the clean `x Sin[w x]`; a `DiracDelta[x−a]` forcing sifts to a `HeavisideTheta[x−a]` impulse response (e.g. `x''+4x==DiracDelta[x]`, `x(0)=x'(0)=0` → `½ Sin[2x] HeavisideTheta[x]`) |
 | `DSolve`UndeterminedCoefficients` | tidy particular for a constant-coefficient linear ODE with UC forcing `g` (polynomial · exp · sin/cos, and sums), by superposition over `Expand[g]` with the ansatz `x^s Exp[a x](Cos[b x] Σ A_k x^k + Sin[b x] Σ B_k x^k)`; the resonance shift `s` is found by incrementing until the coefficient system solves (e.g. `y''-y==E^x → …+½ x E^x`). Runs before `LinearConstantCoefficients`, which stays the variation-of-parameters fallback for any other forcing |
 | `DSolve`EulerCauchy` | equidimensional `a_n (x−b)^n y^(n)+…+a_0 y == g(x)` about any constant centre `b` (detected as `b = x − n c_n/c_n'`), via the indicial polynomial (trial `(x−b)^r`). Real roots take the homogeneous `(x−b)^r` basis plus variation of parameters in `x` (keeps special-function forcing such as `∫e^x/x dx → ExpIntegralEi`); complex roots reduce to a constant-coefficient ODE by `(x−b)=e^t` and map back by `t→Log[x−b]` (hang-free particular solution, no trig-of-`Log` products) |
 | `DSolve`ExactODE` | linear of order ≥ 2 that is a total derivative `L[y] == d/dx(M[y])` (exactness `Σ(-1)^k a_k^(k) == 0`, tested as `a_0 == b_0'`): integrate once to the first integral `M[y] == ∫g dx + C[n]` and recurse into the scalar cascade on the order-(n-1) equation |
@@ -915,6 +918,17 @@ returns `{Integrate[f1, spec...], ..., Integrate[fn, spec...]}` for both the
 indefinite `x` and the definite `{x, a, b}` / contour spec forms.  (`Integrate`
 is deliberately not `Listable`, which would wrongly also thread over the range
 spec; the integrand-only threading is handled explicitly.)
+
+A **definite integral with a `DiracDelta[α x + β]` factor** uses the sifting
+property (ahead of every other method): `Integrate[DiracDelta[α x+β] h(x),
+{x,lo,hi}] -> (h /. x->x0)/|α| · B`, `x0 = −β/α`, where `B` is a
+`HeavisideTheta[hi−x0]` step for a symbolic upper limit (the causal convention —
+the full step even when `x0=lo`) and `1 / 0 / ½` (interior / outside / at an
+endpoint) for numeric limits.  A sum integrand (`1 + δ`, `t + δ`, `δ + cos`) is
+split by linearity, sifting each impulse and re-integrating the remainder.  An
+empty interval integrates to `0`.  `DiracDelta` is otherwise inert, so these
+never change an existing result — they are the sole source of a value for such
+inputs (used by `DSolve`'s Green's-function solutions of impulse-forced ODEs).
 
 - **Polynomials in `x`** — term-by-term integration via
   `Integrate`IntegratePolynomial`: `a x^n -> a x^(n+1)/(n+1)` for

@@ -322,6 +322,57 @@ Full per-case results: `reports/2.2.5.tsv`; bucketed report: `reports/2.2.5.md`.
 
 ---
 
+## Section 2.2.6 — "Problems 501 to 600" (Table 2.29, Edwards & Penney 6th ed.)
+
+Corpus: `DE_examples_226.m` — 100 records, **74 scalar (47 IVP) + 26 systems**
+(systems skipped by the scalar harness). A forced-linear chunk: constant-coefficient
+2nd/high-order IVPs with **general forcing f(t)** and **DiracDelta impulses**, plus
+variable-coefficient series/Bessel/Emden–Fowler/Liénard and the special Riccati
+`y'=x²+y²`. `ctest -R dsolve_corpus_2_2_6_tests` · gate baseline **2**.
+
+| Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
+|------|--------------:|--------:|---------------:|-------|
+| 2026-09-09 (baseline) | 57 / 74 | 77.0% | 17 | 0 FAIL. 17 UNEVAL: the forcing family 561–575 (general f + DiracDelta) all declined, plus 524 (slow Bessel) and 555 (singular-reduction hang, via timeout). |
+| 2026-09-09 (**M26**)  | **72 / 74** | **97.3%** | **2** | **+15, 0 FAIL, 0 regression.** The whole forcing family now solves (below). Gate baseline **2**. |
+
+**M26 fixes** (Green's-function variation of parameters, no Laplace transform):
+1. **Definite-integral variation of parameters (`dsolve_common.c`).** When the
+   indefinite VoP integral does not close (arbitrary or impulse forcing), emit the
+   causal Duhamel convolution `x_p = Integrate[Σ_i basis_i(t)·cof_i(s)·g(s)/(a_n W(s)),
+   {s,0,t}]` over a fresh dummy. The kernel vanishes on the diagonal, so a zero-IC IVP
+   fits its constants to 0. `TrigReduce`+`Expand` normalise the kernel so a resonant
+   cos/sin forcing closes to the clean `t Sin[w t]` form and an exponential kernel
+   integrates termwise. Covers 561–563, 572–575 (arbitrary f).
+2. **DiracDelta sifting under a definite integral (`integrate_dirac.c`, new).**
+   `∫ DiracDelta[αx+β] h(x) dx over [lo,hi] → h(x0)/|α|·B`, with a HeavisideTheta step
+   for a symbolic upper limit (causal convention, full step at the base point) and a
+   1 / 0 / ½ factor for numeric limits; a mixed integrand (1+δ, t+δ, δ+cos) is split by
+   linearity. Covers 564–571 (impulse forcing) and fixes standalone `Integrate[δ·f]`.
+3. **HeavisideTheta / DiracDelta value + derivative rules (`distributions.m`,
+   `deriv.c`).** `H(0)=0`, `H(x>0)=1`, `H(x<0)=0`, `δ(x≠0)=0`, and `H' = DiracDelta`,
+   so an IC fit at the base point resolves a shifted step/impulse and the causal
+   response satisfies its pre-impulse conditions. `dsolve_constcoeff.c` gates the
+   "homogeneous" branch off a DiracDelta forcing (it samples numerically to 0).
+4. **Undefined-function guards (`dsolve_common.c`, `integrate.c`).** Variation of
+   parameters skips the indefinite attempt for an arbitrary/undefined forcing (it never
+   closes and can hang), and `integrate_definite` skips the improper/parametric methods
+   (residue/Ramanujan/differentiation-under-the-integral) on an undefined-function
+   integrand — they cannot close a `K(t,s) f(s)` convolution and spent seconds churning
+   (the exp-kernel case dropped 6 s → 0.3 s). `dsolve_verify_body` keeps (never rejects)
+   a distributional residual (definite Integrate / DiracDelta / HeavisideTheta) rather
+   than driving `zero_test` into a spin.
+
+**Residue (2, bounded UNEVAL, 0 wrong answers):**
+
+| Case | ODE | Why |
+|---|---|---|
+| 2.2.6-524 | `y''+x⁴ y==0` | Emden–Fowler; the correct closed form `√x BesselJ[1/6, x³/3] + √x BesselY[1/6, x³/3]` is returned but takes longer than the 8 s per-case `TimeConstrained` DSolve budget (a performance residue, not a gap). |
+| 2.2.6-555 | `t x''+(t-2)x'+x==0`, x(0)=0 | Exact → the regular-singular first-order reduction `t x'+(t-3)x==C[2]` whose integrating-factor quadrature `∫E^t/t⁴` is non-elementary (`ExpIntegralEi`); a series residue. Declines via timeout (no wrong answer). |
+
+Full per-case results: `reports/2.2.6.tsv`; bucketed report: `reports/2.2.6.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:

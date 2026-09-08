@@ -660,6 +660,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_beta.c
     ../src/calculus/integrate_line.c
     ../src/calculus/integrate_residue.c
+    ../src/calculus/integrate_dirac.c
     ../src/calculus/integrate_diffunderint.c
     ../src/calculus/integrate_ramanujan.c
     ../src/calculus/intrat.c
@@ -3752,6 +3753,21 @@ add_test(NAME dsolve_corpus_2_2_5_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_225.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+
+# Section 2.2.6 "Problems 501 to 600" (Table 2.29, Edwards & Penney 6th ed.): 100
+# ODEs -- 74 scalar (47 IVP) + 26 systems (skipped).  Dominated by forced linear
+# constant-coefficient IVPs, including general forcing f(t) and DiracDelta impulses
+# (M26 added the definite-integral / Green's-function variation of parameters, the
+# DiracDelta sifting property under Integrate, and the HeavisideTheta/DiracDelta
+# value rules).  Baseline 2: the two residues are 2.2.6-524 (y''+x^4 y==0, an
+# Emden-Fowler equation whose Bessel closed form is correct but takes > the 8 s
+# per-case DSolve budget) and 2.2.6-555 (t x''+(t-2)x'+x==0, a regular-singular
+# reduction whose integrating-factor quadrature is non-elementary -- a series
+# residue, matching Mathematica).
+add_test(NAME dsolve_corpus_2_2_6_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_226.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

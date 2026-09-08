@@ -1,55 +1,66 @@
-# PossibleZeroQ hang fix — exponential-combining normalisation
+# DSolve M26 — §2.2.6 corpus (Problems 501–600) + general-forcing / DiracDelta
 
-Fix the `PossibleZeroQ` hang on Gaussian × Erf residuals (item #1 of
-`POSSIBLE_ZEROQ_IMPROVEMENTS.md`). Plan:
-`/Users/user/.claude/plans/let-s-improve-the-recently-snug-pebble.md`.
+Plan file: `/Users/user/.claude/plans/let-s-continue-our-implementation-stateless-biscuit.md`
 
-## Core change — src/zero_test.c  [DONE]
-- [x] Add `exp_exponent_is_nonlinear` + `expr_has_symbolic_exp_kernel` gate (narrowed to NON-LINEAR exponents).
-- [x] Add `zt_normalize_exp_kernels(const Expr*)` → `expr_expand_all` or NULL.
-- [x] Extract `zt_decide_core` from `zero_test_decide` body; wrap with normalisation.
-- [x] Extract `zt_decide_assuming_core` from `zero_test_decide_assuming` ctx-body; wrap.
-- [x] Update file/header docstrings.
+## Baseline (measured 2026-09-09)
+`DE_examples_226.m`: 100 records (74 scalar / 47 IVP + 26 systems).
+Corpus run: **57 PASS, 26 SKIP, 17 UNEVAL, 0 FAIL**.
+The 17 U: forcing family 561–575 (15), the 555 hang, and 524 (Bessel verify quirk).
 
-## DSolve workaround removal — src/calculus/dsolve_common.c  [DONE]
-- [x] Remove Erf/Erfi ExpandAll pre-pass (408-419).
-- [x] Remove FALSE-path Power[E,ztexp] re-check (421-436) — §2.2.5 corpus + y'+xy==Exp[3x] still solve.
+## Scoring insight
+Branch verdict UNK → PASS (only BAD→FAIL, UNFIT→UNEVAL block). So arbitrary-`f`
+scores PASS iff the **IC fit succeeds** (no leaked C[k]); DiracDelta scores PASS on
+trust, so the in-method probe verify is the correctness guarantee.
 
-## Tests  [DONE]
-- [x] test_zero_test.c: Group 16 "exponential-combining" (repro + preservation + must-be-False + stable).
-- [x] New tests/test_possiblezeroq_expcombine_stress.c (ctest-registered #220, hard exit, 31 cases).
-- [x] Register stress file in tests/CMakeLists.txt (no COMMON_SRC change).
+## Corpus / converter  [done]
+- [x] curl §2.2.6 HTML (WebFetch 403s); parse — 100 problems.
+- [x] Converter `\delta(arg)→DiracDelta[arg]` fix (paren-guarded; bare `delta`
+      Heun parameter preserved — verified via `convert_side`).
+- [x] Generate `DSolve_test_status/DE_examples_226.m`.
+- [x] Baseline measured.
 
-## Key finding during implementation
-- Blanket gate regressed a constant-coeff-ODE UC case (residual has incidental affine E^x that
-  cancels; ExpandAll mangled the trig part into a sampler-hostile form → False). FIX: narrow gate
-  to NON-LINEAR exponents (the tiny*huge overflow needs super-linear growth). Affine E^x untouched.
-- F4/F5-style flat-product & D[b,x]-b false-positives are PRE-EXISTING sampler limits (ExpandAll
-  is a no-op there); documented, not asserted.
+## Solver work (ordered; each lands 0 FAIL)
+- [x] 1. `integrate.c` — equal-limits rule `Integrate[_,{s,a,a}]→0`.
+- [x] 2. `integrate_dirac.c`/`.h` (new) — DiracDelta sifting; called first in real-axis
+      branch. (makefile auto-discovers src/calculus/*.c; added to tests COMMON_SRC.)
+- [x] 3. `deriv.c` — variable-limit Leibniz rule + `HeavisideTheta' = DiracDelta`.
+- [x] 4. `dsolve_common.c` — `dsolve_variation_of_parameters` definite-convolution
+      fallback (fresh dummy `DSolve`vpS`; TrigReduce+Expand; undefined-fn gate).
+- [x] 5. `distributions.m` (new, loaded from init.m) — H/DiracDelta value rules;
+      `dsolve_constcoeff.c` DiracDelta-forcing gate. (Chose value rules over an
+      in-method probe: the corpus verifier + probe-based unit tests are the gate.)
+- [x] 6. `dsolve_common.c` — `dsolve_verify_body` spin guard (keep distributional residual).
+- [x] 6b. `integrate.c` — skip improper/parametric methods on undefined-fn integrand
+      (the real anti-hang fix: exp convolution 6s→0.3s per eval).
+- [~] 7. 555 guard — reverted. The hang is upstream in `dsolve_linear1`'s solve of the
+      regular-singular reduced eqn (pre-existing; U in baseline). Left as a documented
+      residue (corpus 20s timeout handles it). ExactODE/spin-guard Ei attempts didn't fire.
 
-## Docs  [DONE]
-- [x] docs/spec/changelog/2026-09-07.md — PossibleZeroQ section (newest-first).
-- [x] docs/spec/builtins/expression-information.md — Stage 0 normalisation note.
-- [x] POSSIBLE_ZEROQ_IMPROVEMENTS.md — item #1 marked RESOLVED.
+## Wiring / docs
+- [x] `tests/CMakeLists.txt` — `dsolve_corpus_2_2_6_tests` (gate baseline 2).
+- [x] `tests/test_dsolve.c` — `t_m26_distributions/_impulse_forcing/_general_forcing`.
+- [x] `DSolve_test_status/STATUS.md` §2.2.6 block; `README.md` row; `reports/2.2.6.{md,tsv}`.
+- [x] `DSOLVE_PLAN.md` M26 entry.
+- [x] `docs/spec/builtins/calculus.md` (D Leibniz, Integrate DiracDelta sift, DSolve forcing)
+      + changelog `docs/spec/changelog/2026-09-07.md`.
+
+## Verification
+- [x] §2.2.6: **57→72/74 scalar, 0 FAIL** (2 residues: 524 slow-Bessel, 555 singular).
+- [x] 561 convolution, 564 `½ Sin[2t] HeavisideTheta[t]`, 569 resonant, systems — all correct.
+- [x] No regression: dsolve_corpus 2.2.1–2.2.5 gates held; series/reduce/integrate
+      (dispatch/diffunderint/ramanujan/symmetry/newton_leibniz)/trigreduce; dsolve_tests +
+      dsolve_stress_tests all pass.
+- [x] `make check-c99` clean; `dsolve_corpus_2_2_6_tests` ctest **Passed** (gate baseline 2).
+- [x] valgrind: new code (vp_definite_convolution / integrate_dirac / Leibniz) audited
+      leak-free and appears in NO leak stack. A small per-call leak exists in the
+      forced-equation cascade (`dsolve_factorable_try` / `poly_content` via ds_subst) —
+      **pre-existing** (a pre-M26 forced solve like 534 leaks the same way), out of M26 scope.
+      (macOS valgrind baseline ~13.4 KB noise; Linux CI is the definitive check.)
 
 ## Review
-Fix landed as a value-preserving Stage 0.5 exponential-combining normalisation in
-`src/zero_test.c`, applied at the top of both public entries (above the Stage-3
-routing gates the failing input hit). Gate narrowed to NON-LINEAR exponents after a
-blanket gate regressed a constant-coeff-ODE verify. DSolve workaround removed. New
-Group 16 in test_zero_test.c + ctest-registered test_possiblezeroq_expcombine_stress.c
-(31 cases). Broad regression sweep clean: zero_test, trigexp, PZQ assumptions/stress,
-dsolve, dsolve_stress, dsolve_m14_stress, simplify (1 FAIL pre-existing, no exp, soft
-assert), comparisons, integrate_risch_transcendental, integrate_fresnel, knowles_erf,
-erf, erfi — all pass / unchanged. valgrind identical to baseline; check-c99 clean.
-NOT committed (awaiting user).
-
-## Verification  [DONE except docs]
-- [x] Build main + tests (GCC clean, no unused-function warnings).
-- [x] Repro fixed (PossibleZeroQ[res] fast True; was >20s hang / 7703 iter-limit floods).
-- [x] zero-test/trigexp/assumptions/stress + DSolve/DSolve-stress suites: all pass, no verdict change.
-- [x] DSolve cases 428, 482, y'+xy==Exp[3x] still solve.
-- [x] valgrind: identical to baseline (0 new leaks/errors); make check-c99 clean.
-
-## Review
-(to be filled in)
+**M26 delivered: §2.2.6 corpus (Problems 501–600) added; 57→72/74 scalar solved, 0 FAIL.**
+The whole general-forcing / DiracDelta family (561–575) now solves via Green's-function
+variation of parameters (definite Duhamel convolution + DiracDelta sifting under Integrate
++ H/DiracDelta value rules + D Leibniz). Two pre-existing residues (524 slow Bessel, 555
+singular-reduction series) remain, both UNEVAL with no wrong answers. Not committed
+(awaiting user).

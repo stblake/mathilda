@@ -929,6 +929,62 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     `test_dsolve.c`. `POSSIBLE_ZEROQ_IMPROVEMENTS.md` created (zero_test Gaussian×Erf follow-up).
     All DSolve ctest + stress suites and `make check-c99` green; §2.1.2/§2.2.1–§2.2.4 gates held.
 
+- **M26 — §2.2.6 corpus (Problems 501–600) + general-forcing / DiracDelta wave.** ✅ DONE. Table
+  2.29 (Edwards & Penney 6th ed.): 100 records — **74 scalar (47 IVP) + 26 systems** (systems
+  skipped by the scalar harness). A **forced-linear** chunk: constant-coefficient 2nd/high-order
+  IVPs with **general forcing f(t)** and **DiracDelta impulses**, plus variable-coefficient
+  series/Bessel/Emden–Fowler/Liénard and the special Riccati `y'=x²+y²`. **57 → 72 / 74 scalar,
+  0 FAIL, 0 regression** (§2.1.2, §2.2.1–§2.2.5, series/reduce/integrate ctests + DSolve stress all
+  held). The converter needed a one-line, paren-guarded fix (`\delta(arg)→DiracDelta[arg]`, leaving
+  a bare Greek `\delta` parameter — e.g. §2.1.2-544 Heun — as the symbol `delta`). The whole
+  forcing family (561–575) now solves via **Green's-function variation of parameters** (no Laplace
+  transform); each branch is probe-verified so no wave ships a wrong answer.
+  - **Definite-integral variation of parameters (`dsolve_common.c`).** `dsolve_variation_of_parameters`
+    kept its indefinite (closed-form) attempt but, when the integral does not close, now builds the
+    causal Duhamel convolution `x_p = Integrate[Σ_i basis_i(t)·cof_i(s)·g(s)/(a_n W(s)), {s,0,x}]`
+    over a fresh dummy `DSolve`vpS`, where `cof_i = Det(vp_matrix(dv,n,i,e_n))`. `K(t,t)=0` makes
+    `x_p` and its first n−1 derivatives vanish at the base point, so a zero-IC IVP fits its constants
+    to 0. `TrigReduce`+`Expand` normalise the kernel so a resonant cos/sin forcing closes to the
+    clean `t Sin[w t]` (569 → `t Sin[3t]/6 − Sin[3t] HeavisideTheta[t−3π]/3`) and an exponential
+    kernel integrates termwise. Covers 561–563, 572–575 (arbitrary f → convolution integral).
+  - **DiracDelta sifting under a definite integral (`integrate_dirac.c`/`.h`, new).**
+    `integrate_dirac_try`, called first in `integrate_definite`'s real-axis branch:
+    `∫ DiracDelta[αx+β] h(x) dx over [lo,hi] → (h/.x→x0)/|α|·B`, `x0=−β/α`. Boundary `B`:
+    `HeavisideTheta[hi−x0]` for a symbolic upper limit with `x0≥lo` (causal convention — the FULL
+    step even at `x0=lo`, matching MMA), and `1 / 0 / ½` (interior / outside / endpoint) for numeric
+    limits (`Positive`/`Negative` so a `Pi` shift is decided, not the inert `Sign[Pi]`). A mixed
+    integrand (1+δ, t+δ, δ+cos) is `ExpandAll`-split by linearity; the delta is located anywhere in
+    a (possibly nested) product. Covers 564–571 and the standalone `Integrate[δ·f]` gap.
+  - **HeavisideTheta / DiracDelta rules (`distributions.m` new, loaded from `init.m`; `deriv.c`).**
+    `H(0)=0`, `H(x>0)=1`, `H(x<0)=0`, `δ(x≠0)=0` on definite-sign numeric arguments (symbolic left
+    inert), and `d/dg HeavisideTheta[g] = DiracDelta[g]` in `elementary_fprime`. Left-continuous
+    `H(0)=0` makes a causal impulse response satisfy its pre-impulse ICs, and the numeric rules let
+    an IC fit at the base point resolve a shifted `H[t−a]` / `δ[t−a]`. `dsolve_constcoeff.c` gates
+    its "homogeneous" branch off a DiracDelta forcing (which samples numerically to 0, so the
+    numeric zero-test would wrongly drop it).
+  - **`D[]` Leibniz rule for a variable-limit integral (`deriv.c`).** `D[Integrate[e,{u,a,b}],x] =
+    (e/.u→b)·D[b,x] − (e/.u→a)·D[a,x] + Integrate[D[e,x],{u,a,b}]` (guarded to a 3-element List spec,
+    bound var ≠ x); with the equal-limits rule `Integrate[_,{s,a,a}]→0` (`integrate.c`) it lets the
+    convolution IVP fit cleanly. Replaces the prior garbage output that leaked the bound variable.
+  - **Anti-hang guards.** VoP skips its indefinite attempt for an arbitrary/undefined forcing (it
+    never closes and can hang — `ds_has_undefined_function`), and `integrate_definite` skips the
+    improper/parametric methods (residue/Ramanujan/differentiation-under-the-integral) on an
+    undefined-function integrand: they cannot close a `K(t,s) f(s)` convolution and churned for
+    seconds (an exp kernel dropped 6 s → 0.3 s per eval, so the DSolve fixed-point no longer times
+    out). `dsolve_verify_body` keeps (never rejects) a distributional residual (definite Integrate /
+    DiracDelta / HeavisideTheta) instead of driving `zero_test` into a spin.
+  - **Residue (2, bounded UNEVAL, 0 wrong answers):** 2.2.6-524 `y''+x⁴ y==0` (Emden–Fowler; the
+    correct `√x BesselJ/Y[1/6, x³/3]` form is returned but exceeds the 8 s per-case DSolve budget —
+    a performance residue) and 2.2.6-555 `t x''+(t-2)x'+x==0` (exact → the regular-singular
+    reduction `t x'+(t-3)x==C[2]` whose integrating-factor quadrature `∫E^t/t⁴` is non-elementary
+    (`ExpIntegralEi`); a series residue, declines via timeout). Both pre-existing (UNEVAL in the
+    baseline), no wrong answers.
+  - New corpus `DSolve_test_status/DE_examples_226.m`; ctest `dsolve_corpus_2_2_6_tests` (gate
+    baseline 2); `reports/2.2.6.{tsv,md}`; STATUS.md §2.2.6 block; README row. Anti-overfit units
+    `t_m26_distributions`, `t_m26_impulse_forcing`, `t_m26_general_forcing` in `test_dsolve.c`.
+    Converter `\delta` fix in `tools/latex_ode_to_mathilda.py`. All DSolve ctest + stress suites,
+    series/reduce/integrate suites, and `make check-c99` green; all prior corpus gates held.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

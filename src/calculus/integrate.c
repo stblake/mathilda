@@ -31,6 +31,7 @@
 #include "integrate_beta.h"
 #include "integrate_line.h"
 #include "integrate_residue.h"
+#include "integrate_dirac.h"
 #include "integrate_diffunderint.h"
 #include "integrate_ramanujan.h"
 #include "intrat.h"
@@ -667,6 +668,27 @@ static bool option_lhs_is(Expr* opt, const char* sym) {
     return lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == sym;
 }
 
+/* True if e carries an arbitrary/undefined function -- a head symbol with no
+ * builtin and no DownValues (e.g. the forcing f in a Green's-function
+ * convolution Integrate[K(t,s) f(s), {s,0,t}]), or an inert Derivative.  The
+ * improper/parametric definite methods (residue, Ramanujan, differentiation
+ * under the integral, ...) cannot close such an integrand and spend seconds
+ * churning before declining, so the definite driver skips them for it. */
+static bool def_has_undefined_function(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        if (h->data.symbol.name == SYM_Derivative) return true;
+        SymbolDef* d = symtab_lookup(h->data.symbol.name);
+        if (!d || (!d->builtin_func && !d->down_values)) return true;
+    } else if (def_has_undefined_function(h)) {
+        return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (def_has_undefined_function(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* Definite / iterated integration Integrate[f, {x,a,b}, {y,c,d}, ..., opts].
  * Reduces innermost-first (the last spec is the inner integral) so an inner
  * bound may depend on an outer variable.  Returns NULL (unevaluated) if any
@@ -743,7 +765,20 @@ static Expr* integrate_definite(Expr* res) {
             Expr* b = spec->data.function.args[2];
             r = NULL;
             bool diverges = false;
-            if (mech == METHOD_AUTOMATIC || mech == METHOD_RESIDUE)
+            /* Exact identities, ahead of every method: an empty interval
+             * integrates to 0, and a DiracDelta[linear] integrand sifts to a
+             * point value (impulse / Green's-function forcing).  DiracDelta is
+             * otherwise inert, so these are the sole source of a value for such
+             * inputs and never override an existing result. */
+            if (expr_eq(a, b)) r = expr_new_integer(0);
+            if (!r) r = integrate_dirac_try(cur, x, a, b);
+            /* An integrand carrying an arbitrary/undefined function cannot be
+             * closed by the improper/parametric methods; under Automatic they
+             * are skipped for it (they churn for seconds before declining),
+             * leaving the integral in its correct unevaluated form.  Pinned
+             * methods are honoured regardless. */
+            bool has_undef = def_has_undefined_function(cur);
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_RESIDUE))
                 r = integrate_residue_try(cur, x, a, b, assumptions, &diverges);
             /* The residue method conclusively found a pole on the integration
              * contour: the integral does not converge.  Emit Integrate::idiv
@@ -762,7 +797,7 @@ static Expr* integrate_definite(Expr* res) {
              * even integrand that residue does not own.  It only claims a value
              * once the half converges, so a divergent principal value is never
              * reported as 0, and NULL always falls through unchanged. */
-            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_SYMMETRY))
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_SYMMETRY))
                 r = integrate_symmetry_try(cur, x, a, b, assumptions);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
              * parameter-differentiation mechanism, the Ramanujan/Mellin
@@ -779,15 +814,15 @@ static Expr* integrate_definite(Expr* res) {
              * antiderivatives (incomplete Beta) that FTC cannot reach.  After
              * Newton-Leibniz (which owns the integer-power cases via an
              * elementary antiderivative), before Ramanujan. */
-            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
                 r = integrate_beta_try(cur, x, a, b, assumptions);
-            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
                 r = integrate_trigpower_try(cur, x, a, b, assumptions);
             /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
              * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
              * transforms) that residue and FTC do not close.  Under Automatic it
              * runs before DiffUnderInt; the pinned mechanism has no fallback. */
-            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN ||
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN ||
                        mech == METHOD_OSC_POWER))
                 r = integrate_ramanujan_try(cur, x, a, b, assumptions);
             /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
@@ -800,7 +835,7 @@ static Expr* integrate_definite(Expr* res) {
             /* Differentiation under the integral sign: last resort under
              * Automatic (parameter-dependent improper/periodic integrals that
              * residue and FTC cannot close), or the pinned mechanism. */
-            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_DIFF_UNDER_INT))
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_DIFF_UNDER_INT))
                 r = integrate_diffunderint_try(cur, x, a, b, assumptions);
         }
         expr_free(cur);

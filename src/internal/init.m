@@ -11,3 +11,7 @@
    negative-integer-order reflection). Numeric evaluation is in the C
    builtin; these rules only fire for symbolic / exact arguments. *)
 LoadModule["bessel.m"];
+
+(* HeavisideTheta / DiracDelta value rules on numeric arguments, used by
+   DSolve's Green's-function / impulse solutions (see distributions.m). *)
+LoadModule["distributions.m"];

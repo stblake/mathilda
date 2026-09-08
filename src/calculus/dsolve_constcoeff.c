@@ -61,7 +61,12 @@ Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch) {
             free(hterms);
 
             Expr* general = NULL;
-            if (ds_is_zero(g)) {
+            /* Treat the equation as homogeneous only when the forcing is
+             * genuinely zero.  An impulse forcing DiracDelta[x - a] numerically
+             * samples to 0 everywhere off its support, so the numeric zero-test
+             * would wrongly call it zero and drop the particular solution; a
+             * DiracDelta-bearing g is never homogeneous. */
+            if (ds_is_zero(g) && !ds_contains(g, intern_symbol("DiracDelta"))) {
                 general = Hgen;
             } else {
                 Expr* yp = dsolve_variation_of_parameters(basis, (size_t)n, g, a[n], xvar);

@@ -609,6 +609,57 @@ static void t_m25_transcendental_frobenius(void) {
                "Abs[N[(2 x^2 D[b, {x,2}] + Sin[x] D[b, x] - Cos[x] b) /. x -> 1/10, 30]] < 1/100000]");
 }
 
+/* ---- M26: distribution value rules + DiracDelta sifting + Leibniz FTC ---- */
+static void t_m26_distributions(void) {
+    /* HeavisideTheta is left-continuous on definite-sign numeric arguments */
+    check_form("HeavisideTheta[0]", "0");
+    check_form("HeavisideTheta[3]", "1");
+    check_form("HeavisideTheta[-2]", "0");
+    check_form("HeavisideTheta[3 Pi]", "1");
+    check_form("DiracDelta[3]", "0");
+    check_form("DiracDelta[-2]", "0");
+    /* HeavisideTheta' = DiracDelta */
+    check_form("D[HeavisideTheta[t], t]", "DiracDelta[t]");
+    /* DiracDelta sifting under a definite integral (interior + endpoint) */
+    check_form("Integrate[DiracDelta[t - 1] f[t], {t, 0, 3}]", "f[1]");
+    check_true("PossibleZeroQ[Integrate[DiracDelta[t - 5] f[t], {t, 0, 3}]]");   /* outside -> 0 */
+    /* variable-limit Leibniz rule: D[Integrate[e,{u,0,t}],t] = e|_{u=t} */
+    check_form("D[Integrate[h[u], {u, 0, t}], t]", "h[t]");
+    check_true("PossibleZeroQ[D[Integrate[g[u] Sin[t - u], {u, 0, t}], t] "
+               "- Integrate[g[u] Cos[t - u], {u, 0, t}]]");
+}
+
+/* ---- M26: constant-coefficient ODE with a DiracDelta impulse forcing ---- */
+/* corpus 2.2.6-564: x''+4x==DiracDelta[t], x(0)=x'(0)=0 -> the causal impulse
+ * response (1/2) Sin[2t] HeavisideTheta[t] (Green's function via the definite
+ * variation-of-parameters convolution + the sifting property). */
+static void t_m26_impulse_forcing(void) {
+    check_form("Head[DSolve[{y''[t]+4 y[t]==DiracDelta[t], y[0]==0, y'[0]==0}, y, t][[1,1]]]",
+               "Rule");
+    /* value pinned numerically at t=1 (post-impulse): (1/2) Sin[2] */
+    check_true("Abs[N[(y[t] /. DSolve[{y''[t]+4 y[t]==DiracDelta[t], y[0]==0, y'[0]==0}, "
+               "y, t][[1]]) /. t -> 1] - 1/2 Sin[2]] < 1/1000000");
+    /* shifted impulse response starts at t=Pi (0 before, nonzero after) */
+    check_true("PossibleZeroQ[(y[t] /. DSolve[{y''[t]+4 y[t]==DiracDelta[t - Pi], y[0]==0, "
+               "y'[0]==0}, y, t][[1]]) /. t -> 1]");   /* t=1 < Pi -> 0 */
+}
+
+/* ---- M26: constant-coefficient ODE with an ARBITRARY forcing f(t) ---- */
+/* corpus 2.2.6-561..563/572..575: x''+..==f(t), zero ICs -> the Duhamel
+ * convolution Integrate[G(t,s) f(s), {s,0,t}].  Verified by a concrete probe:
+ * with f -> Cos[3 #] the convolution closes and back-substitutes to 0. */
+static void t_m26_general_forcing(void) {
+    /* an explicit branch carrying the (unevaluated) convolution integral */
+    check_true("With[{b = y[t] /. DSolve[{y''[t]+4 y[t]==f[t], y[0]==0, y'[0]==0}, y, t][[1]]}, "
+               "MatchQ[b, _] && !FreeQ[b, Integrate] && FreeQ[b, C]]");
+    /* probe verify (distinct complex roots): residual reduces to exactly 0 */
+    check_true("With[{b = (y[t] /. DSolve[{y''[t]+4 y[t]==f[t], y[0]==0, y'[0]==0}, y, t][[1]]) "
+               "/. f -> (Cos[3 #] &)}, PossibleZeroQ[Simplify[D[b, {t,2}] + 4 b - Cos[3 t]]]]");
+    /* real-root kernel must not hang and must probe-verify (f -> t) */
+    check_true("With[{b = (y[t] /. DSolve[{y''[t]+6 y'[t]+8 y[t]==f[t], y[0]==0, y'[0]==0}, y, t][[1]]) "
+               "/. f -> (# &)}, PossibleZeroQ[Simplify[D[b, {t,2}] + 6 D[b, t] + 8 b - t]]]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2213,6 +2264,9 @@ int main(void) {
     TEST(t_m25_exact_erf);
     TEST(t_m25_kovacic_fundamental_set);
     TEST(t_m25_transcendental_frobenius);
+    TEST(t_m26_distributions);
+    TEST(t_m26_impulse_forcing);
+    TEST(t_m26_general_forcing);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

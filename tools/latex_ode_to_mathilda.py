@@ -209,13 +209,18 @@ def convert_side(expr, mains, arbs, indvar):
                    lambda m, f=f: '\x00' + f + '\x00' + str(m.group(1).count(r'\prime')) + '\x00', s)
         s = re.sub(r'(?<![A-Za-z0-9\x00])' + re.escape(f) + r'(?![A-Za-z0-9])',
                    '\x00' + f + '\x000\x00', s)
+    # Dirac delta: `\delta(arg)` is the impulse DiracDelta[arg]; a bare `\delta`
+    # with no argument is an ordinary Greek parameter (e.g. the Heun coefficient
+    # in §2.1.2-544) and must stay the symbol `delta` via GREEK below.  `\left`/
+    # `\right` were already stripped (line above), so the paren is adjacent.
+    s = re.sub(r'\\delta\s*(?=\()', 'DiracDelta ', s)
     for k in sorted(FUNCS, key=len, reverse=True): s = s.replace(k, FUNCS[k] + ' ')
     for k in sorted(GREEK, key=len, reverse=True): s = re.sub(re.escape(k) + r'(?![A-Za-z])', GREEK[k], s)
     s = re.sub(r'\\([A-Za-z]+)', r'\1', s)
     s = s.replace('{', '(').replace('}', ')')
     s = re.sub('\x00([A-Za-z][0-9]*)\x00([0-9]+)\x00',
                lambda m: m.group(1) + ("'" * int(m.group(2))) + '[' + indvar + ']', s)
-    for h in (set(FUNCS.values()) | {'Sqrt', 'Exp'} | extra): s = fn_paren_to_bracket(s, h)
+    for h in (set(FUNCS.values()) | {'Sqrt', 'Exp', 'DiracDelta'} | extra): s = fn_paren_to_bracket(s, h)
     for idx, val in enumerate(protected): s = s.replace('\x07%d\x07' % idx, val)
     s = re.sub(r'\s*\[\s*', '[', s); s = re.sub(r'\s*\]', ']', s)
     s = re.sub(r'\(\s+', '(', s); s = re.sub(r'\s+\)', ')', s)

@@ -12,6 +12,7 @@
 
 #include "../sym_names.h"
 #include "../sym_intern.h"
+#include "../symtab.h"
 #include "../eval.h"
 #include "../common.h"
 #include "../internal.h"
@@ -392,6 +393,29 @@ void dsolve_problem_free(DSolveProblem* P) {
  * equivalent for elementary bodies but essential for a SeriesData body, whose
  * pure-function derivative Derivative[k][Function[{x}, SeriesData]][x] the
  * evaluator does not reduce (it returns 0) — matching the PDE-verify workaround. */
+/* True if e carries an unevaluated DEFINITE Integrate (Integrate[_, _List]) or a
+ * distributional head (DiracDelta / HeavisideTheta): a Green's-function / impulse
+ * residual that zero_test cannot decide and whose numeric precision ladder could
+ * spin (the 555-class failure).  Such a branch is accepted on its construction
+ * plus the method's own numeric probe verify, never driven through zero_test. */
+static bool ds_residual_is_distributional(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* hd = e->data.function.head;
+    if (hd->type == EXPR_SYMBOL) {
+        const char* hn = hd->data.symbol.name;
+        if (hn == SYM_HeavisideTheta || strcmp(hn, "DiracDelta") == 0) return true;
+        if (hn == SYM_Integrate && e->data.function.arg_count >= 2 &&
+            e->data.function.args[1]->type == EXPR_FUNCTION &&
+            e->data.function.args[1]->data.function.head->type == EXPR_SYMBOL &&
+            e->data.function.args[1]->data.function.head->data.symbol.name == SYM_List)
+            return true;
+    }
+    if (ds_residual_is_distributional(hd)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_residual_is_distributional(e->data.function.args[i])) return true;
+    return false;
+}
+
 static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
     if (P->nfun != 1) return true;    /* systems: verified separately */
     const char* yname = P->fun_names[0];
@@ -405,6 +429,10 @@ static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
             sub = ds_subst(sub, ds_make_funcapp(yname, k, xvar), dk);
         }
         sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
+        /* Distributional / Green's-function residual (definite Integrate,
+         * DiracDelta, HeavisideTheta): zero_test cannot decide it and its ladder
+         * could spin, so keep the branch on construction rather than reject. */
+        if (ds_residual_is_distributional(sub)) { expr_free(sub); continue; }
         /* A Gaussian x Erf residual — the integrating-factor solution of an exact
          * ODE, e.g. y''+x y'+y==0 whose closed form carries Erf[-I x/Sqrt[2]] —
          * used to defeat zero_test's numeric precision ladder (the E^(-x^2/2) of
@@ -802,6 +830,106 @@ static Expr* vp_matrix(Expr*** dv, size_t n, long repl, const Expr* gn) {
     return m;
 }
 
+/* True if e carries an arbitrary/undefined function of the variable -- a head
+ * symbol with no builtin and no DownValues (e.g. the forcing f in y'' = f(x)),
+ * or an inert Derivative.  Indefinite integration of such a term never closes
+ * and can hang, so variation of parameters routes it to the definite
+ * convolution instead.  (Mirrors lie_has_undefined_function in dsolve_lie.c.) */
+static bool ds_has_undefined_function(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        if (h->data.symbol.name == SYM_Derivative) return true;
+        SymbolDef* d = symtab_lookup(h->data.symbol.name);
+        /* No SymbolDef at all, or one with neither a builtin nor DownValues, is
+         * an arbitrary/undefined function head (e.g. the forcing f in f[x]). */
+        if (!d || (!d->builtin_func && !d->down_values)) return true;
+    } else if (ds_has_undefined_function(h)) {
+        return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_undefined_function(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* 1/e (fresh Power[e, -1]). */
+static Expr* vp_recip(Expr* e) {
+    return expr_new_function(expr_new_symbol(SYM_Power),
+               (Expr*[]){ e, expr_new_integer(-1) }, 2);
+}
+
+/* Definite-convolution (Green's-function) fallback for variation of parameters,
+ * used when the indefinite integral does not close in elementary form -- the
+ * arbitrary forcing g = f(x) and impulse g = DiracDelta(x - a) cases.  Returns
+ *   x_p(x) = Integrate[ Sum_i basis_i(x) cof_i(s) g(s) / (a_n(s) W(s)), {s,0,x} ]
+ * over a fresh dummy s, where cof_i = Det of the Wronskian matrix with column i
+ * replaced by the unit vector e_n, and W = detW.  The causal kernel vanishes on
+ * the diagonal (K(x,x) = 0), so x_p and its first n-1 derivatives are 0 at the
+ * base point x0 = 0 -- a zero-IC IVP fits its constants to 0.  Evaluating the
+ * integral sifts a DiracDelta g (integrate_dirac) and closes a polynomial g,
+ * while an arbitrary f is left as the convolution integral.  NULL on a
+ * degenerate build (vanishing Wronskian). */
+static Expr* vp_definite_convolution(Expr*** dv, Expr** basis, size_t n,
+                                     const Expr* g, const Expr* leadcoef,
+                                     const Expr* detW, const char* xvar) {
+    /* Fresh dummy s, distinct from xvar and any symbol occurring in g. */
+    const char* sname = intern_symbol("DSolve`vpS");
+    if (strcmp(sname, xvar) == 0 || ds_contains(g, sname)) {
+        char buf[32];
+        for (int k = 1; ; k++) {
+            snprintf(buf, sizeof buf, "DSolve`vpS%d", k);
+            sname = intern_symbol(buf);
+            if (strcmp(sname, xvar) != 0 && !ds_contains(g, sname)) break;
+        }
+    }
+    Expr* W_s = ds_subst(expr_copy((Expr*)detW),
+                         expr_new_symbol(xvar), expr_new_symbol(sname));
+    /* Simplify the Wronskian so trig identities collapse (e.g. the
+     * -3 Cos[3s]^2 - 3 Sin[3s]^2 denominator to -3); without this a resonant
+     * cos/sin forcing convolution cannot be integrated in closed form. */
+    W_s = ds_simplify(W_s);
+    if (ds_is_zero(W_s)) { expr_free(W_s); return NULL; }
+    Expr* g_s  = ds_subst(expr_copy((Expr*)g),
+                          expr_new_symbol(xvar), expr_new_symbol(sname));
+    Expr* lc_s = ds_subst(expr_copy((Expr*)leadcoef),
+                          expr_new_symbol(xvar), expr_new_symbol(sname));
+    Expr* one = expr_new_integer(1);
+    Expr** summ = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        Expr* Wi   = vp_matrix(dv, n, (long)i, one);
+        Expr* cof  = eval_and_free(ds_call1("Det", Wi));
+        Expr* cofs = ds_subst(cof, expr_new_symbol(xvar), expr_new_symbol(sname));
+        Expr* factors[5] = {
+            expr_copy(basis[i]), cofs, expr_copy(g_s),
+            vp_recip(expr_copy(lc_s)), vp_recip(expr_copy(W_s))
+        };
+        summ[i] = eval_and_free(
+            expr_new_function(expr_new_symbol(SYM_Times), factors, 5));
+    }
+    expr_free(one);
+    Expr* integrand = eval_and_free(
+        expr_new_function(expr_new_symbol(SYM_Plus), summ, n));
+    free(summ);
+    /* TrigReduce linearises trig products/powers (Cos[a s]^2, Cos Sin, ...) so a
+     * resonant cos/sin forcing closes to the clean t Sin[w t] form instead of an
+     * unwieldy half-angle antiderivative; Expand then re-distributes, since
+     * TrigReduce factors an exponential kernel as E^(a(t-s))(...), a form the
+     * integrator churns on -- the expanded sum of E^(a(t-s)) f(s) terms
+     * integrates termwise and fast. */
+    integrand = eval_and_free(ds_call1("Expand",
+                    eval_and_free(ds_call1("TrigReduce", integrand))));
+    Expr* spec = expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ expr_new_symbol(sname), expr_new_integer(0),
+                   expr_new_symbol(xvar) }, 3);
+    /* For an arbitrary forcing the integral stays an (unevaluated) convolution;
+     * integrate_definite skips the improper/parametric methods on an undefined-
+     * function integrand, so this closes fast for polynomial / trig / impulse
+     * forcing and returns quickly unevaluated otherwise. */
+    Expr* xp = eval_and_free(ds_call2(SYM_Integrate, integrand, spec));
+    expr_free(W_s); expr_free(g_s); expr_free(lc_s);
+    return xp;
+}
+
 Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
                                      const Expr* leadcoef, const char* xvar) {
     Expr*** dv = malloc(n * sizeof(Expr**));
@@ -819,7 +947,13 @@ Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
                             (Expr*[]){ expr_copy((Expr*)leadcoef), expr_new_integer(-1) }, 2)));
         Expr** ut = malloc(n * sizeof(Expr*));
         size_t uc = 0;
-        bool fail = false;
+        /* Skip the INDEFINITE attempt and go straight to the definite (causal)
+         * convolution when it cannot help: an impulse DiracDelta term collapses
+         * to 0 under indefinite integration (DiracDelta[x] = 0 for x != 0), and
+         * an arbitrary forcing f(x) never closes and can hang the integrator
+         * (e.g. the parametric f[x] E^(a x) of a real/complex-root kernel). */
+        bool fail = ds_contains(g, intern_symbol("DiracDelta")) ||
+                    ds_has_undefined_function(g);
         for (size_t i = 0; i < n && !fail; i++) {
             Expr* Wi = vp_matrix(dv, n, (long)i, gn);
             Expr* detWi = eval_and_free(ds_call1("Det", Wi));
@@ -834,7 +968,13 @@ Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
         if (!fail) {
             yp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ut, uc));
             yp = ds_simplify(yp);
-        } else { for (size_t i = 0; i < uc; i++) expr_free(ut[i]); }
+        } else {
+            /* The indefinite integral did not close -- arbitrary or impulse
+             * forcing.  Fall back to the causal Green's-function convolution,
+             * a definite integral from the base point 0. */
+            for (size_t i = 0; i < uc; i++) expr_free(ut[i]);
+            yp = vp_definite_convolution(dv, basis, n, g, leadcoef, detW, xvar);
+        }
         free(ut);
     }
     expr_free(detW);

@@ -396,6 +396,11 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         return mk_fn2("Times", coeff, gaussian);
     }
 
+    /* --- Heaviside step: d/dg HeavisideTheta[g] = DiracDelta[g].  Needed so a
+     * Green's-function / impulse solution differentiates cleanly (e.g. the IC
+     * fit of a causal impulse response), matching Mathematica. --- */
+    if (!strcmp(name, "HeavisideTheta")) return mk_fn1("DiracDelta", expr_copy(g));
+
     /* --- complementary error function: d/dg Erfc[g] = -(2/Sqrt[Pi]) E^(-g^2). --- */
     if (!strcmp(name, "Erfc")) {
         Expr* coeff = mk_fn2("Times", mk_int(-2),
@@ -841,6 +846,42 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
          * sign is not done here). */
         if (h == SYM_Integrate && n == 2 && expr_eq(args[1], x))
             return expr_copy(args[0]);
+
+        /* --- Leibniz rule for a variable-limit definite integral:
+         *   D[Integrate[e, {u, a, b}], x]
+         *     = (e/.u->b) D[b,x] - (e/.u->a) D[a,x] + Integrate[D[e,x], {u,a,b}].
+         * The bound variable u must be a symbol distinct from x.  This replaces
+         * the generic fallback, which would emit an inert Derivative[_,_][
+         * Integrate] with the bound variable leaked into the result. */
+        if (h == SYM_Integrate && n == 2 &&
+            args[1]->type == EXPR_FUNCTION &&
+            args[1]->data.function.head->type == EXPR_SYMBOL &&
+            args[1]->data.function.head->data.symbol.name == SYM_List &&
+            args[1]->data.function.arg_count == 3 &&
+            args[1]->data.function.args[0]->type == EXPR_SYMBOL &&
+            !expr_eq(args[1]->data.function.args[0], x)) {
+            Expr* e  = args[0];
+            Expr* u  = args[1]->data.function.args[0];
+            Expr* lo = args[1]->data.function.args[1];
+            Expr* hi = args[1]->data.function.args[2];
+            Expr* e_hi = eval_and_free(mk_fn2("ReplaceAll", expr_copy(e),
+                             mk_fn2("Rule", expr_copy(u), expr_copy(hi))));
+            Expr* e_lo = eval_and_free(mk_fn2("ReplaceAll", expr_copy(e),
+                             mk_fn2("Rule", expr_copy(u), expr_copy(lo))));
+            Expr* dhi = eval_and_free(deriv_of(hi, x, nonconsts));
+            Expr* dlo = eval_and_free(deriv_of(lo, x, nonconsts));
+            Expr* de  = eval_and_free(deriv_of(e, x, nonconsts));
+            Expr** listitems = malloc(3 * sizeof(Expr*));
+            listitems[0] = expr_copy(u);
+            listitems[1] = expr_copy(lo);
+            listitems[2] = expr_copy(hi);
+            Expr* newspec = mk_fnN_adopt(SYM_List, listitems, 3);
+            Expr** terms = malloc(3 * sizeof(Expr*));
+            terms[0] = mk_fn2("Times", e_hi, dhi);
+            terms[1] = mk_neg(mk_fn2("Times", e_lo, dlo));
+            terms[2] = mk_fn2("Integrate", de, newspec);
+            return mk_fnN_adopt(SYM_Plus, terms, 3);
+        }
 
         /* --- Log[b, f]: reduce to Log[f]/Log[b]. --- */
         if (h == SYM_Log && n == 2) {
