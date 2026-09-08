@@ -5,6 +5,12 @@
  * The general problem is undecidable (Richardson 1968), so PossibleZeroQ
  * combines several decidable / probabilistic sub-procedures:
  *
+ *   Stage 0.5 — Exponential-combining normalisation. When the input carries a
+ *              constant-base exponential with a NON-LINEAR exponent (E^f / Exp[f],
+ *              f super-linear in a free symbol), an ExpandAll pass collapses
+ *              same-base exponentials (E^a·E^(-a) → 1) so the numeric ladder never
+ *              faces a tiny·huge cancellation split across summands
+ *              (value-preserving; verdict unchanged).
  *   Stage 0  — Structural shortcuts (literal 0, Complex[0,0], …).
  *   Stage 1  — Rational normalization (Together / Cancel / Expand +
  *              is_zero_poly). Decides every identity in Q(x_1,…,x_n).

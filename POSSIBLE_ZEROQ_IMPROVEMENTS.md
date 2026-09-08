@@ -10,8 +10,27 @@ pick them up without re-deriving the analysis.
 
 ## 1. Spins on a Gaussian × Erf residual (the exact-ODE integrating-factor form)
 
-**Status:** open (found 2026-09-08, during DSolve M25 §2.2.5). A local DSolve-side
-workaround unblocks the corpus; the core recogniser deficiency below is untouched.
+**Status:** RESOLVED (2026-09-08). Fixed by the core recogniser change described in
+the "Suggested direction" below: an exponential-combining normalisation (Stage 0.5)
+runs `ExpandAll` on any input carrying a constant-base exponential with a *non-linear*
+symbol-dependent exponent, collapsing same-base exponentials before the numeric ladder.
+`PossibleZeroQ[res]` now returns `True` at machine speed (the flagship residual reduces
+to literal `0`). The gate is narrowed to *non-linear* exponents so an affine `E^x`
+(representable, ladder-friendly) is left untouched — a blanket gate regressed a
+constant-coefficient-ODE verify whose residual has an incidental affine `E^x` and a trig
+core that `ExpandAll` distributed into a sampler-hostile form. The local DSolve-side
+workaround in `dsolve_verify_body` was removed as redundant. See
+`src/zero_test.c` (`exp_exponent_is_nonlinear`, `expr_has_symbolic_exp_kernel`,
+`zt_normalize_exp_kernels`), `tests/test_zero_test.c` (Group 16),
+`tests/test_possiblezeroq_expcombine_stress.c`, and the 2026-09-07 changelog.
+
+Note the pre-existing (unrelated) sampler limitation this exposed: a genuine
+non-identity that differs from a zero residual only *inside* the `E·Erf[imaginary]`
+tiny·huge terms (e.g. `D[b,x]-b`) is still mis-classified `True` — the imaginary-argument
+`Erf` overflows to `Inf` at the sampler's moderate range, degrading to `UNKNOWN → True`.
+That is independent of this fix (which only ever produces a value-equal form).
+
+_Original report (retained for context):_
 
 ### Repro (minimal)
 

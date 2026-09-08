@@ -3316,6 +3316,13 @@ target_include_directories(possiblezeroq_assumptions_tests PRIVATE ../src)
 add_executable(possiblezeroq_stress_tests test_possiblezeroq_stress.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(possiblezeroq_stress_tests PRIVATE ../src)
 
+# Exponential-combining normalisation stress corpus (Stage 0.5; hard asserts,
+# so it IS ctest-registered, unlike the soft-assert possiblezeroq_* files above).
+add_executable(possiblezeroq_expcombine_stress_tests test_possiblezeroq_expcombine_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(possiblezeroq_expcombine_stress_tests m)
+target_include_directories(possiblezeroq_expcombine_stress_tests PRIVATE ../src)
+add_test(NAME possiblezeroq_expcombine_stress_tests COMMAND possiblezeroq_expcombine_stress_tests)
+
 add_executable(limit_stress_tests test_limit_stress.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(limit_stress_tests PRIVATE ../src)
 

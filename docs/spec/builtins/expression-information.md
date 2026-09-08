@@ -151,6 +151,18 @@ zero subset of the complex plane.
 
 Pipeline (each stage exits early on a definite verdict):
 
+0. **Exponential-combining normalisation** — when `expr` carries a
+   constant-base exponential with a *non-linear* symbol-dependent
+   exponent (`E^f` / `Exp[f]`, `f` super-linear in a free symbol), an
+   `ExpandAll` pass distributes the sums so same-base exponentials become
+   adjacent `Times` factors and collapse (`E^a · E^(-a) → 1`). This runs
+   before the stages below and is value-preserving (the verdict is
+   unchanged), but it removes the tiny·huge catastrophic cancellation that
+   otherwise arises when a Gaussian `E^(-g)` and a compensating `E^(+g)`
+   (e.g. from differentiating `Erf` of an imaginary argument) land in
+   different summands — a shape that made the numeric ladder climb to 1000
+   bits per sample and effectively hang. An *affine* exponent (`E^x`,
+   `E^(I x)`) stays representable and is deliberately left untouched.
 1. **Structural** — literal `0`, `Complex[0, 0]`, named non-zero
    constants like `Pi` are decided in O(1).
 2. **Rational normalisation** — `Together`, `Cancel`, `Expand` plus

@@ -891,6 +891,90 @@ static void test_flint_fuzz_kernel_differential(void) {
 }
 
 /* ============================================================== */
+/*  16. Exponential-combining normalisation (Stage 0.5)           */
+/*                                                                */
+/*  POSSIBLE_ZEROQ_IMPROVEMENTS.md #1: a Gaussian x Erf residual  */
+/*  whose same-base exponentials (E^(-x^2/2) from the solution,   */
+/*  E^(x^2/2) from differentiating Erf[-I x/Sqrt2]) sit in        */
+/*  SEPARATE summands never combined to E^0, so every             */
+/*  Schwartz-Zippel sample numericalised as a tiny*huge           */
+/*  catastrophic cancellation and the precision ladder climbed to */
+/*  1000 bits, hanging (> 20 s, flooding $IterationLimit).  The    */
+/*  recogniser now ExpandAlls a non-linear-exponent input first,  */
+/*  collapsing the exponentials before the ladder runs.  The      */
+/*  timed asserts are the hang-regression guard.                  */
+/* ============================================================== */
+
+/* Body b solving y'' + x y' + y == 0 — the exact repro. */
+#define ZT_ERF_BODY \
+    "E^(-1/2 x^2) (C[1] + I (C[2] Sqrt[Pi] Erf[-(I x)/Sqrt[2]]) / Sqrt[2])"
+
+static void test_expcomb_erf_ode_residual(void) {
+    assert_pzq_timed(
+        "PossibleZeroQ[With[{b = " ZT_ERF_BODY "}, D[b, {x, 2}] + x D[b, x] + b]]",
+        "True", 5.0);
+}
+static void test_expcomb_erf_ode_residual_numeric_consts(void) {
+    assert_pzq_timed(
+        "PossibleZeroQ[With[{b = E^(-1/2 x^2) (3 + I (5 Sqrt[Pi] "
+        "Erf[-(I x)/Sqrt[2]]) / Sqrt[2])}, D[b, {x, 2}] + x D[b, x] + b]]",
+        "True", 5.0);
+}
+static void test_expcomb_gaussian_only_residual(void) {
+    /* C[1] E^(-x^2/2) alone also solves y'' + x y' + y == 0 (no Erf); the
+     * Gaussian's non-linear exponent still trips the normalisation. */
+    assert_pzq_timed(
+        "PossibleZeroQ[With[{b = C[1] E^(-x^2/2)}, D[b, {x, 2}] + x D[b, x] + b]]",
+        "True", 5.0);
+}
+static void test_expcomb_erf_derivative_identity(void) {
+    assert_pzq_timed("PossibleZeroQ[D[Erf[x], x] - 2/Sqrt[Pi] E^(-x^2)]", "True", 5.0);
+}
+static void test_expcomb_erfi_derivative_identity(void) {
+    assert_pzq_timed("PossibleZeroQ[D[Erfi[x], x] - 2/Sqrt[Pi] E^(x^2)]", "True", 5.0);
+}
+
+/* Matched non-identities: adding a clean, non-overflowing term to the zero
+ * residual must still be rejected — the normalisation must not become a
+ * yes-machine.  (A genuine non-identity differing only INSIDE the E*Erf
+ * tiny*huge terms, e.g. D[b,x]-b, is a documented pre-existing sampler
+ * limitation, not asserted here.) */
+static void test_expcomb_residual_plus_gaussian_nonzero(void) {
+    assert_pzq("PossibleZeroQ[With[{b = " ZT_ERF_BODY
+               "}, D[b, {x, 2}] + x D[b, x] + b + E^(-x^2/2)]]", "False");
+}
+static void test_expcomb_residual_plus_one_nonzero(void) {
+    assert_pzq("PossibleZeroQ[With[{b = " ZT_ERF_BODY
+               "}, D[b, {x, 2}] + x D[b, x] + b + 1]]", "False");
+}
+static void test_expcomb_residual_plus_x_nonzero(void) {
+    assert_pzq("PossibleZeroQ[With[{b = " ZT_ERF_BODY
+               "}, D[b, {x, 2}] + x D[b, x] + b + x]]", "False");
+}
+
+/* Verdict preservation: ExpandAll is value-preserving, so every pre-existing
+ * exponential / trig-exp verdict is unchanged (whether or not the non-linear
+ * gate fires). */
+static void test_expcomb_preserve_exp_product(void) {
+    assert_pzq("PossibleZeroQ[E^(2 x) - E^x E^x]", "True");   /* linear: gate skips */
+    assert_pzq("PossibleZeroQ[E^(x + y) - E^x E^y]", "True"); /* linear: gate skips */
+    assert_pzq("PossibleZeroQ[E^(-x^2) E^(x^2) - 1]", "True");/* non-linear: gate fires */
+}
+static void test_expcomb_preserve_exp_nonzero(void) {
+    assert_pzq("PossibleZeroQ[E^x - E^(2 x)]", "False");
+}
+static void test_expcomb_preserve_trigexp(void) {
+    assert_pzq("PossibleZeroQ[E^(I x) + E^(-I x) - 2 Cos[x]]", "True");
+}
+
+/* Determinism: the verdict is a pure function of the normalised input. */
+static void test_expcomb_stable(void) {
+    assert_pzq_stable(
+        "PossibleZeroQ[With[{b = " ZT_ERF_BODY "}, D[b, {x, 2}] + x D[b, x] + b]]",
+        "True", 5);
+}
+
+/* ============================================================== */
 /*  Main driver                                                   */
 /* ============================================================== */
 
@@ -1048,6 +1132,20 @@ int main(void) {
     TEST(test_flint_decline_complex_coeff_zero);
     TEST(test_flint_decline_frac_power_nonzero);
     TEST(test_flint_fuzz_kernel_differential);
+
+    /* Group 16 — exponential-combining normalisation (Stage 0.5) */
+    TEST(test_expcomb_erf_ode_residual);
+    TEST(test_expcomb_erf_ode_residual_numeric_consts);
+    TEST(test_expcomb_gaussian_only_residual);
+    TEST(test_expcomb_erf_derivative_identity);
+    TEST(test_expcomb_erfi_derivative_identity);
+    TEST(test_expcomb_residual_plus_gaussian_nonzero);
+    TEST(test_expcomb_residual_plus_one_nonzero);
+    TEST(test_expcomb_residual_plus_x_nonzero);
+    TEST(test_expcomb_preserve_exp_product);
+    TEST(test_expcomb_preserve_exp_nonzero);
+    TEST(test_expcomb_preserve_trigexp);
+    TEST(test_expcomb_stable);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

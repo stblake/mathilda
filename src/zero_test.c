@@ -3,6 +3,17 @@
  *
  * Pipeline (early exit at any stage that yields a definite verdict):
  *
+ *   Stage 0.5 (normalisation) — when the input carries a constant-base
+ *             exponential with a NON-LINEAR symbol-dependent exponent
+ *             (Power[E, f] / Exp[f], f super-linear in a free symbol), ExpandAll
+ *             distributes the sums so same-base exponentials
+ *             become adjacent Times factors and collapse (E^a * E^(-a) -> 1).
+ *             Value-preserving, so the verdict is unchanged; it spares the numeric
+ *             ladder the tiny*huge catastrophic cancellation of a same-base
+ *             exponential product split across summands (a Gaussian * Erf residual
+ *             of an exact-ODE integrating-factor solution otherwise hangs the
+ *             ladder — POSSIBLE_ZEROQ_IMPROVEMENTS.md #1).
+ *
  *   Stage 0 — O(1) structural shortcuts: literal Integer/Real/BigInt/MPFR
  *             zero, Complex[0, 0], List of zeros, unbound symbol, …
  *
@@ -293,6 +304,106 @@ static bool expr_has_symbolic_exponent(const Expr* e) {
     for (size_t i = 0; i < argc; i++)
         if (expr_has_symbolic_exponent(e->data.function.args[i])) return true;
     return false;
+}
+
+/* True when the exponent `f` of an exponential depends on a free symbol
+ * NON-LINEARLY: it contains a Power[b, e] with a free-symbol base and e != 1
+ * (x^2, Sqrt[x]), a Power with a free-symbol exponent (c^x, x^x), a Times of two
+ * or more free-symbol factors (x y), or any non-arithmetic function of a free
+ * symbol (Sin[x], Log[x], a nested Exp).  A purely AFFINE exponent (c x + d,
+ * I x) is benign and must NOT trip the exponential-combining normalisation: at
+ * the sampler's moderate range (|x| <~ 64) an affine E^(c x) stays representable
+ * (e^64 ~ 1e28, well inside double), so the precision ladder resolves it without
+ * climbing, whereas a super-linear E^(x^2/2) reaches e^2048 and overflows —
+ * that overflow, paired with a compensating huge (Erf) in another summand, is
+ * the tiny*huge cancellation that defeats the ladder.  Narrowing to non-affine
+ * exponents also leaves the E^x homogeneous terms of a constant-coefficient ODE
+ * untouched, so ExpandAll cannot perturb a residual that is really a trig
+ * identity into a sampler-hostile form. */
+static bool exp_exponent_is_nonlinear(const Expr* f) {
+    if (!f || f->type != EXPR_FUNCTION) return false;   /* symbol / number: affine */
+    const Expr* head = f->data.function.head;
+    size_t argc = f->data.function.arg_count;
+    const char* nm = (head && head->type == EXPR_SYMBOL) ? head->data.symbol.name : NULL;
+    if (nm == SYM_Plus) {
+        for (size_t i = 0; i < argc; i++)
+            if (exp_exponent_is_nonlinear(f->data.function.args[i])) return true;
+        return false;
+    }
+    if (nm == SYM_Times) {
+        int nfree = 0;
+        for (size_t i = 0; i < argc; i++) {
+            const Expr* a = f->data.function.args[i];
+            if (exp_exponent_is_nonlinear(a)) return true;
+            if (has_free_symbols(a)) nfree++;
+        }
+        return nfree >= 2;   /* x*const is affine; x*y (two free factors) is not */
+    }
+    if (nm == SYM_Power && argc == 2) {
+        const Expr* b  = f->data.function.args[0];
+        const Expr* ex = f->data.function.args[1];
+        if (has_free_symbols(ex)) return true;                 /* c^x, x^x */
+        if (has_free_symbols(b)
+            && !(ex->type == EXPR_INTEGER && ex->data.integer == 1))
+            return true;                                       /* x^2, Sqrt[x] */
+        return false;
+    }
+    /* Any other head applied to a free-symbol argument (Sin, Log, nested Exp). */
+    for (size_t i = 0; i < argc; i++)
+        if (has_free_symbols(f->data.function.args[i])) return true;
+    return false;
+}
+
+/* True when `e` contains a CONSTANT-base exponential with a NON-LINEAR
+ * symbol-dependent exponent: Power[E, f] (base is the constant E) or Exp[f],
+ * with exp_exponent_is_nonlinear(f).  This is the shape that produces the
+ * tiny*huge magnitude swing which defeats the numeric ladder: a Gaussian E^(-g)
+ * and the E^(+g) that appears from differentiating Erf[-I x/Sqrt2] land in
+ * DIFFERENT summands, so the Times like-base collector never combines them to
+ * E^0 = 1, and every Schwartz-Zippel sample numericalises as a catastrophic
+ * cancellation (POSSIBLE_ZEROQ_IMPROVEMENTS.md #1).  Deliberately distinct from
+ * expr_has_symbolic_exponent, which matches a VARIABLE base (x^(1-c)) and
+ * EXCLUDES the constant-base case; and gated on nonlinearity so an affine E^x
+ * (representable, ladder-friendly) does not needlessly trip ExpandAll. */
+static bool expr_has_symbolic_exp_kernel(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* head = e->data.function.head;
+    size_t argc = e->data.function.arg_count;
+    if (head && head->type == EXPR_SYMBOL) {
+        const char* nm = head->data.symbol.name;
+        /* Power[E, f] with a non-linear free-symbol exponent. */
+        if (nm == SYM_Power && argc == 2) {
+            const Expr* base = e->data.function.args[0];
+            if (base && base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E
+                && exp_exponent_is_nonlinear(e->data.function.args[1]))
+                return true;
+        }
+        /* Exp[f] with a non-linear free-symbol argument. */
+        if (nm == SYM_Exp && argc == 1
+            && exp_exponent_is_nonlinear(e->data.function.args[0]))
+            return true;
+    }
+    if (expr_has_symbolic_exp_kernel(head)) return true;
+    for (size_t i = 0; i < argc; i++)
+        if (expr_has_symbolic_exp_kernel(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Exponential-combining normalisation (Stage 0.5), applied by the public entry
+ * points before any staged decision runs.  When `e` carries a symbol-dependent
+ * exponential (expr_has_symbolic_exp_kernel), ExpandAll distributes the sums so
+ * same-base exponentials become adjacent Times factors and collapse
+ * (E^a * E^(-a) -> E^0 = 1), removing the tiny*huge catastrophic cancellation
+ * BEFORE the numeric ladder (Stage 2/3) can climb to 1000 bits on it.  ExpandAll
+ * is a pure algebraic identity, so the verdict is provably unchanged; the gate
+ * only limits the cost to inputs that can actually exhibit the cancellation.
+ * expr_expand_all rebuilds every node via eval_and_free, so the Times like-base
+ * collector fires during expansion and the collapse needs no separate
+ * evaluate().  Returns a fresh owned tree (caller frees), or NULL when no
+ * exponential kernel is present (caller then uses `e` unchanged). */
+static Expr* zt_normalize_exp_kernels(const Expr* e) {
+    if (!expr_has_symbolic_exp_kernel(e)) return NULL;
+    return expr_expand_all((Expr*)e);
 }
 
 /* True when `e` is a PURE RATIONAL FUNCTION of its free symbols over Q: every
@@ -1378,7 +1489,9 @@ static ZeroTestResult decide_schwartz_zippel_assuming(const Expr* e, const Assum
 /*  Public entry points                                               */
 /* ------------------------------------------------------------------ */
 
-ZeroTestResult zero_test_decide(const Expr* e) {
+/* The staged decision procedure proper.  Operates on an expression already
+ * put through zt_normalize_exp_kernels by the public entry point below. */
+static ZeroTestResult zt_decide_core(const Expr* e) {
     ZeroTestResult r;
 
     r = decide_structural(e);
@@ -1430,10 +1543,21 @@ ZeroTestResult zero_test_decide(const Expr* e) {
     return decide_schwartz_zippel(e);
 }
 
-ZeroTestResult zero_test_decide_assuming(const Expr* e, const struct AssumeCtx* ctx) {
-    /* No usable assumptions → the legacy path, byte-for-byte. */
-    if (!ctx || ctx->count == 0) return zero_test_decide(e);
+/* Public entry.  Apply the exponential-combining normalisation (Stage 0.5),
+ * then run the staged decision procedure on the normalised expression.  The
+ * normalisation is value-preserving, so the verdict is unchanged; it only spares
+ * the numeric ladder the tiny*huge cancellation of a same-base exponential
+ * product split across summands (POSSIBLE_ZEROQ_IMPROVEMENTS.md #1). */
+ZeroTestResult zero_test_decide(const Expr* e) {
+    Expr* norm = zt_normalize_exp_kernels(e);
+    ZeroTestResult r = zt_decide_core(norm ? norm : e);
+    if (norm) expr_free(norm);
+    return r;
+}
 
+/* The assumption-aware staged procedure proper (ctx is guaranteed non-empty and
+ * the input already normalised by the public entry below). */
+static ZeroTestResult zt_decide_assuming_core(const Expr* e, const struct AssumeCtx* ctx) {
     /* A structurally decided literal (0, a non-zero constant, Complex[0,0], …)
      * is unconditional, so its verdict holds under any assumption. */
     ZeroTestResult r = decide_structural(e);
@@ -1461,6 +1585,17 @@ ZeroTestResult zero_test_decide_assuming(const Expr* e, const struct AssumeCtx* 
 
     /* Closed-form constant: assumptions are irrelevant to a definite number. */
     return decide_numeric(e);
+}
+
+/* Public entry (assumption-aware).  Same exponential-combining normalisation as
+ * zero_test_decide, then the assumption-aware staged procedure. */
+ZeroTestResult zero_test_decide_assuming(const Expr* e, const struct AssumeCtx* ctx) {
+    /* No usable assumptions → the legacy path, byte-for-byte. */
+    if (!ctx || ctx->count == 0) return zero_test_decide(e);
+    Expr* norm = zt_normalize_exp_kernels(e);
+    ZeroTestResult r = zt_decide_assuming_core(norm ? norm : e, ctx);
+    if (norm) expr_free(norm);
+    return r;
 }
 
 /* Read the $Assumptions OwnValue WITHOUT evaluating it (mirrors the reader in

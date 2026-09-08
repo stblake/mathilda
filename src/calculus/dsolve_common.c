@@ -407,33 +407,15 @@ static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
         sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
         /* A Gaussian x Erf residual — the integrating-factor solution of an exact
          * ODE, e.g. y''+x y'+y==0 whose closed form carries Erf[-I x/Sqrt[2]] —
-         * defeats zero_test's numeric precision ladder: the E^(-x^2/2) of the
-         * solution and the E^(x^2/2) from differentiating Erf sit in separate
-         * summands, never combine to E^0, and numericalise as tiny*huge (a
-         * catastrophic cancellation) so the ladder climbs to 1000 bits on every
-         * Schwartz-Zippel sample and effectively hangs (POSSIBLE_ZEROQ_IMPROVEMENTS.md
-         * #1).  ExpandAll distributes the sums so the exponentials become adjacent
-         * factors and collapse before the ladder runs.  Gated to Erf/Erfi residuals
-         * so every other verify path is byte-for-byte unchanged. */
-        if (ds_contains(sub, SYM_Erf) || ds_contains(sub, SYM_Erfi))
-            sub = eval_and_free(ds_call1("ExpandAll", sub));
+         * used to defeat zero_test's numeric precision ladder (the E^(-x^2/2) of
+         * the solution and the E^(x^2/2) from differentiating Erf sat in separate
+         * summands, never combined to E^0, and numericalised as tiny*huge, so the
+         * ladder climbed to 1000 bits on every sample and effectively hung).
+         * zero_test_decide now performs the exponential-combining ExpandAll
+         * normalisation itself (POSSIBLE_ZEROQ_IMPROVEMENTS.md #1), so no
+         * Erf-gated pre-pass or FALSE-path re-check is needed here. */
         ZeroTestResult zt = zero_test_decide(sub);
-        if (zt == ZERO_TEST_FALSE) {
-            /* Guard against a zero_test FALSE-negative on a value-zero residual it
-             * cannot syntactically normalise — notably E^a - E^b with a, b equal
-             * algebraically but not syntactically, which is exactly the residual
-             * of the Erf integrating-factor solution of y'+x y==Exp[3 x] (the
-             * unexpanded Gaussian exponent, amplified by E^large, defeats the
-             * numeric sampler).  Expand the E^() exponents and ONLY override the
-             * rejection when the normalised residual is PROVABLY zero; a genuinely
-             * nonzero residual survives normalisation and is still rejected. */
-            Expr* rule = parse_expression("Power[E, ztexp_] :> Power[E, Expand[ztexp]]");
-            Expr* subn = rule ? eval_and_free(ds_call2("ReplaceAll", expr_copy(sub), rule))
-                              : expr_copy(sub);
-            ZeroTestResult zt2 = zero_test_decide(subn);
-            expr_free(subn);
-            if (zt2 != ZERO_TEST_TRUE) { expr_free(sub); return false; }
-        }
+        if (zt == ZERO_TEST_FALSE) { expr_free(sub); return false; }
         expr_free(sub);
     }
     return true;
