@@ -1,41 +1,62 @@
-# DSolve M23 — §2.2.3 corpus (Problems 201–300) + coverage
+# M24 — §2.2.4 corpus (Problems 301–400)
 
-## Wave 0 — Corpus infrastructure (DONE)
-- [x] Fetch §2.2.3 HTML (indexsubsection12.htm = "Problems 201 to 300", Table 2.19)
-- [x] Generate `DE_examples_223.m` (100 scalar, 35 IVPs, 0 systems)
-- [x] Regen §2.2.1/§2.2.2 byte-identical (converter unchanged → no regression)
-- [x] Verify corpus parses through binary (harness ran clean)
-- [x] Measure baseline: **98/100 PASS, 0 FAIL, 2 UNEVAL** (204, 232)
-- [x] Register `dsolve_corpus_2_2_3_tests` in `tests/CMakeLists.txt` (baseline 1)
-- [x] reports/2.2.3.{tsv,md}; STATUS.md §2.2.3 block + README row
+Add Nasser Abbasi 12000.org §2.2.4 (indexsubsection13.htm, "Problems 301 to 400") to
+the DSolve corpus dashboard; measure baseline; close reuse-reachable gaps at 0 FAIL;
+decline research-grade residue cleanly. Mechanical repeat of M21–M23.
 
-## Gap analysis (2 non-PASS)
-- **2.2.3-204** `9√x y^(4/3) − 12 x^(1/5) y^(3/2) + (8 x^(3/2) y^(1/3) − 15 x^(6/5)√y) y' == 0`
-  — EXACT (M_y==N_x), potential `F = 6 x^(3/2) y^(4/3) − 10 x^(6/5) y^(3/2)`.
-  Explicit `Solve[F==C, Y]` HANGS on the mixed fractional powers (4/3, 3/2). The
-  implicit entry returns `F(x,y[x])==C[1]` (as Maple/Mma do) — just needs a gate.
-- **2.2.3-232** `y y'' == 6 x^4` — Emden–Fowler `_with_linear_symmetries`; declines
-  cleanly (bounded UNEVAL). Has particular soln y=±x^3. Investigate M12 route.
+## Step 1 — Convert HTML → corpus
+- [x] Convert `ss13.htm` → `DE_examples_224.m` (`--label 2.2.4`): 100 scalar, 24 IVP, 0 sys
+- [x] **Converter fix 1**: imaginary unit `i` (309/310/311) — exclude from indep-var + map→`I`
+- [x] **Converter fix 2**: `y^{(n)}` derivative notation (336/340/343) → `y'''''[x]`
+- [x] Regression guard: §2.2.1/2/3 regen byte-for-byte identical ✔
 
-## Wave 1 — Exact radical potential → implicit (fixes 204) — DONE
-- [x] Gate explicit `ds_solve` in `dsolve_exact_try` on `ds_is_rational_in(Fpot, Yn)`
-- [x] Verify 204 solves (implicit `F(x,y[x])==C[1]`); explicit path preserved (Rule)
-- [x] Anti-overfit unit `t_m23_exact_radical` (impl-fn-rule verify + explicit guard)
+## Step 2 — Register ctest + first baseline run
+- [x] Add `dsolve_corpus_2_2_4_tests` (baseline now 1)
+- [x] Baseline run: **93 PASS / 6 UNEVAL / 1 FAIL**
+- [x] Generate `reports/2.2.4.{tsv,md}`
 
-## Wave 2 — 2.2.3-232 (Emden–Fowler nonlinear 2nd-order) — RESIDUE
-- [x] Investigated: scaling symmetry `X=x∂ₓ+3y∂_y` reduces to autonomous
-      `r r''+5r r'+6r²==6` → Abel 2nd-kind first-order (`r p p'==6−5rp−6r²`),
-      non-elementary (deferred-M13 AIR). Documented as bounded UNEVAL, 0 wrong answer.
+## Step 3 — Analyze gaps + targeted verified fixes
+- [x] **FAIL 387** root-caused = harness `dsResidVerdict` sweep-var `k` ↔ ODE param `k`
+      collision → prelude `$dsSweep`/`$dsVal` (benefits every section) → PASS
+- [x] **326/362/363/365** trig-power/product forcing → `TrigReduce` in undetcoeff → PASS
+- [x] **312** complex cube-root IVP → `ComplexExpand` numeric roots in homog_basis → PASS
+- [x] Pinned units `t_m24_trig_power_forcing`, `t_m24_complex_cuberoot_ivp` (dsolve_tests OK)
+- [x] Residue 381 (var-coeff Legendre, SymPy-failed) declines cleanly
 
-## Wrap-up
-- [x] DSolve unit + all stress suites + §2.2.1/§2.2.2/§2.2.3 gates green; check-c99 green
-- [~] §2.1.2 gate running (regression check for the Exact routing change)
-- [x] DSOLVE_PLAN.md M23 entry + docs/spec/changelog + STATUS.md + calculus.md spec
+## Step 4 — Scoreboard + gate
+- [x] STATUS.md §2.2.4 block + wave-history bullet
+- [x] README.md contents row
+- [x] `dsolve_corpus_2_2_4_tests` baseline → 1 (final 99/1/0)
+
+## Step 5 — Plan + changelog + task log
+- [x] DSOLVE_PLAN.md M24 milestone entry
+- [x] `docs/spec/changelog/2026-09-07.md` M24 note (solver behavior changed)
+- [x] Review section (below)
+
+## Verification
+- [x] Final §2.2.4: **99 PASS / 1 UNEVAL / 0 FAIL**; new PASSes reproduced interactively
+- [x] §2.2.1/2.2.2/2.2.3/2.2.4 ctest gates hold
+- [~] §2.1.2 full re-run (0 FAIL so far at 461/1000; awaiting completion)
+- [x] All DSolve unit + stress suites green (dsolve_tests + m5/m12/m14/m17/m18/m19/m20)
+- [x] `make check-c99` green
+- [x] C changes leak-clean by review (eval_and_free idiom; macOS valgrind is documented-noisy)
+- [x] §2.2.1/2/3 `.m` files unchanged (byte-identical regen)
 
 ## Review
-**Result: §2.2.3 98→99/100 (0 FAIL, +1). Baseline was already high (elementary
-Table 2.19: const-coeff any-order + Euler + basic first-order — all covered).
-One surgical solver fix (Exact radical potential → implicit first integral, the
-radical twin of M22's transcendental-exact wave), reusing the verified implicit
-substrate. Sole residue 232 (Emden–Fowler → Abel 2nd kind). Converter unchanged
-→ §2.2.1/§2.2.2 byte-identical (no regression). Delivery: uncommitted (user reviews).**
+
+**Result: §2.2.4 baseline 93/6/1 → 99/1/0 (+6 solved, FAIL eliminated), 0 regression.**
+
+Two classes of fix. **Corpus fidelity** (converter): §2.2.4 was the first section to carry
+constant-coefficient *complex* ODEs written with the imaginary unit `i` and 5th-order
+`y^{(n)}` notation — both silently misconverted (309-311 picked `i` as the indep var;
+336/340/343 became powers of `y`). Fixed in the converter with the byte-identical §2.2.1/2/3
+regen invariant preserved.
+
+**Solver / harness** (3 fixes, all reuse verified machinery → 0-FAIL by construction):
+the lone FAIL (387) was a **harness** variable-capture bug (sweep index `k` colliding with a
+spring-constant parameter `k`), not a wrong answer — fixed once, benefits every section;
+trig-power/product forcing now `TrigReduce`s to first-harmonic sinusoids in
+`UndeterminedCoefficients`; and numeric complex characteristic roots are `ComplexExpand`-
+concretized so IVPs with cube/quartic roots fit. Sole residue 381 is a genuine
+variable-coefficient-nonhomogeneous gap (Kovacic homogeneous + var-params particular) SymPy
+also fails — a clean deterministic decline.

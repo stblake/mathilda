@@ -523,6 +523,39 @@ static void t_m23_exact_radical(void) {
     check_form("Head[DSolve[2 x y[x] + 1 + x^2 y'[x] == 0, y, x][[1, 1]]]", "Rule");
 }
 
+/* ---- M24: trig-power/product forcing via TrigReduce in UndeterminedCoefficients ---- */
+/* corpus 2.2.4-326/362/363/365: a constant-coefficient linear ODE whose forcing is a
+ * trig POWER or PRODUCT (Sin[x]^2, Cos[x]^3, Sin[3x] Sin[x], x Cos[x]^3) is not itself
+ * a UC function, so it previously declined to the (hanging) variation-of-parameters
+ * fallback.  UndeterminedCoefficients now TrigReduce-linearises the forcing into a sum
+ * of first-harmonic sinusoids, each a UC function, so it solves tidily. */
+static void t_m24_trig_power_forcing(void) {
+    /* solved (an explicit Rule branch), not declined */
+    check_form("Head[DSolve[y''[x]+y'[x]+y[x] == Sin[x]^2, y, x][[1, 1]]]", "Rule");
+    /* residual back-substitutes to zero (Sin^2 forcing, and the resonant x Cos^3) */
+    check_true("PossibleZeroQ[(y''[x]+y'[x]+y[x] - Sin[x]^2) /. "
+               "DSolve[y''[x]+y'[x]+y[x] == Sin[x]^2, y, x][[1]]]");
+    check_true("PossibleZeroQ[(y''[x]+y[x] - x Cos[x]^3) /. "
+               "DSolve[y''[x]+y[x] == x Cos[x]^3, y, x][[1]]]");
+}
+
+/* ---- M24: numeric complex roots concretized so an IVP fits ---- */
+/* corpus 2.2.4-312: y'''==y has complex cube roots the const-coeff basis emitted as
+ * Re[-(-1)^(1/3)]/Im[-(-1)^(1/3)] (Re/Im do not auto-evaluate on a radical power),
+ * which blocked the IVP constant-fit (the general solution leaked C[k]).
+ * dsolve_homog_basis now ComplexExpands the real/imag parts of a NUMERIC complex root,
+ * so the fit produces a fully-determined concrete solution. */
+static void t_m24_complex_cuberoot_ivp(void) {
+    /* one explicit branch, fully fitted -> no generated constant leaks */
+    check_true("With[{s = DSolve[{y'''[x] == y[x], y[0] == 1, y'[0] == 0, y''[0] == 0}, y, x]}, "
+               "MatchQ[s, {{y -> _Function}}] && FreeQ[s, C[_]]]");
+    /* satisfies the ODE and the initial value y(0) == 1 */
+    check_true("PossibleZeroQ[(y'''[x] - y[x]) /. "
+               "DSolve[{y'''[x] == y[x], y[0] == 1, y'[0] == 0, y''[0] == 0}, y, x][[1]]]");
+    check_true("With[{s = DSolve[{y'''[x] == y[x], y[0] == 1, y'[0] == 0, y''[0] == 0}, y, x][[1]]}, "
+               "Abs[N[(y[0] /. s) - 1, 20]] < 1/1000000]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2122,6 +2155,8 @@ int main(void) {
     TEST(t_m20_polyshift_371);
     TEST(t_m20_declines_nonlinear_base);
     TEST(t_m23_exact_radical);
+    TEST(t_m24_trig_power_forcing);
+    TEST(t_m24_complex_cuberoot_ivp);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

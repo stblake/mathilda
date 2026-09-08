@@ -53,16 +53,23 @@ dsFreeParams[resid_, iv_] := DeleteCases[
 
 (* Verdict for a single residual expression: "OK" (verified zero),
  * "BAD" (verified nonzero), or "UNK" (could not numericize). *)
+(* The sweep index and the residual-value holder are $-prefixed so they can never
+ * collide with an ODE PARAMETER of the same name: the loop variable dynamically
+ * rebinds every occurrence of its symbol while the residual is evaluated, so a
+ * plain `k` loop over a residual that carries a parameter `k` (e.g. §2.2.4-387,
+ * `m x''+k x==F0 Cos[om t]`) would force the spring constant to 0..5 instead of
+ * its generic sample value -> a bogus nonzero residual -> a FALSE "BAD". The
+ * converter never emits a `$`-prefixed symbol, so `$dsSweep`/`$dsVal` are safe. *)
 dsResidVerdict[resid_, iv_] := Module[
-  {params, consts, pv, vals = {}, k, cv, r, a, nsmall},
+  {params, consts, pv, vals = {}, $dsSweep, cv, $dsVal, a, nsmall},
   params = dsFreeParams[resid, iv];
   consts = DeleteDuplicates@Cases[resid, C[_Integer], Infinity];
   pv = MapIndexed[#1 -> (13/10 + First[#2]*4/17) &, params];
   Do[
-    cv = MapIndexed[#1 -> (7/10 + k/5 + First[#2]*3/19) &, consts];
-    r  = N[(resid /. pv /. cv /. iv -> (11/10 + k*5/13)), 20];
-    If[NumberQ[r] || Head[r] === Complex, AppendTo[vals, Abs[r]]];
-  , {k, 0, 5}];
+    cv = MapIndexed[#1 -> (7/10 + $dsSweep/5 + First[#2]*3/19) &, consts];
+    $dsVal = N[(resid /. pv /. cv /. iv -> (11/10 + $dsSweep*5/13)), 20];
+    If[NumberQ[$dsVal] || Head[$dsVal] === Complex, AppendTo[vals, Abs[$dsVal]]];
+  , {$dsSweep, 0, 5}];
   If[Length[vals] < 2, Return["UNK"]];
   nsmall = Count[vals, a_ /; a < $dsTol];
   If[nsmall >= Ceiling[Length[vals]/2], "OK", "BAD"]

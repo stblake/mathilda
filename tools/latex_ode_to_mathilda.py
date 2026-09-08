@@ -141,7 +141,13 @@ def detect_symbols(rows_tex):
     if indvar is None:                                   # any present non-main letter (x=x(y))
         present = re.findall(r'(?<![A-Za-z0-9\\])([A-Za-z])(?![A-Za-z0-9])', mjoined)
         for cand in sorted(set(present)):
-            if cand in main_set or cand in ARBFUN or cand == 'e': continue
+            # `e` (Euler's number) and `i` (imaginary unit) are mathematical
+            # constants, never the independent variable: a constant-coefficient
+            # complex ODE like `y''+2 i y'+3 y=0` (§2.2.4-309/310/311, no explicit
+            # independent variable) must NOT pick `i` as the indep var — it falls
+            # through to a fresh standard letter, and the bare `i` is mapped to the
+            # imaginary unit `I` in convert_side.
+            if cand in main_set or cand in ARBFUN or cand in ('e', 'i', 'I'): continue
             indvar = cand; break
     if indvar is None:                                   # autonomous: fresh standard letter
         for cand in INDVAR_PREF:
@@ -183,9 +189,22 @@ def convert_side(expr, mains, arbs, indvar):
     s = s.replace(r'\cdot', '*').replace(r'\times', '*')
     s = s.replace(r'{\mathrm e}', 'E').replace(r'\mathrm{e}', 'E').replace(r'{\rm e}', 'E')
     s = re.sub(r'\\mathrm\s*\{([^{}]*)\}', r'\1', s)
+    # A standalone `i` is the imaginary unit (Mathilda `I`), not a variable — the
+    # space-delimited `2 i`, `-i`, `2 i Sqrt[3]` of a complex constant-coefficient
+    # ODE.  Guarded to when `i` is neither a dependent function, arbitrary function,
+    # nor the independent variable, and the lookarounds exclude alphanumeric
+    # neighbours so `\sin`/`\pi`/`\prime`/subscripts (`i1`) are untouched.
+    if 'i' not in mains and 'i' not in arbs and indvar != 'i':
+        s = re.sub(r'(?<![A-Za-z0-9\\])i(?![A-Za-z0-9])', 'I', s)
     s = replace_frac(s); s = replace_sqrt(s)
     for f in arbs: s = _apply_arbfun(s, f, mains, indvar, protected)
     for f in sorted(mains, key=len, reverse=True):
+        # y^{(n)} — parenthesized derivative-order notation for 5th+ order (the
+        # \prime run becomes unwieldy): the n-th derivative, NOT y^n.  Must run
+        # before the bare-y catch below or `y^{(5)}` degrades to `y[x]^((5))`
+        # (§2.2.4-336/340/343).  \left/\right are already stripped (→ `y^{ (5 )}`).
+        s = re.sub(r'(?<![A-Za-z0-9\x00])' + re.escape(f) + r'\s*\^\s*\{\s*\(\s*([0-9]+)\s*\)\s*\}',
+                   lambda m, f=f: '\x00' + f + '\x00' + m.group(1) + '\x00', s)
         s = re.sub(r'(?<![A-Za-z0-9\x00])' + re.escape(f) + r'\s*\^\s*\{\s*((?:\\prime\s*)+)\}',
                    lambda m, f=f: '\x00' + f + '\x00' + str(m.group(1).count(r'\prime')) + '\x00', s)
         s = re.sub(r'(?<![A-Za-z0-9\x00])' + re.escape(f) + r'(?![A-Za-z0-9])',

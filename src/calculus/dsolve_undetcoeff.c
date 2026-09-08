@@ -234,8 +234,17 @@ Expr** dsolve_undetcoeff_try(DSolveProblem* P, size_t* nbranch) {
 
     Expr* general = NULL;
     if (basis && nb == (size_t)n) {
-        /* particular by superposition over the additive terms of Expand[g] */
-        Expr* gE = eval_and_free(ds_call1("Expand", expr_copy(g)));
+        /* particular by superposition over the additive terms of Expand[TrigReduce[g]].
+         * TrigReduce linearises trig POWERS and PRODUCTS into a sum of first-harmonic
+         * sinusoids (Sin[x]^2 -> 1/2 - Cos[2x]/2; Cos[x]^3 -> (3 Cos[x]+Cos[3x])/4;
+         * Sin[3x] Sin[x] -> (Cos[2x]-Cos[4x])/2), each of which IS a UC function — so
+         * a forcing like Sin[x]^2 (§2.2.4-326/362/363/365) that is not itself in the
+         * UC family now matches term by term instead of declining to the (hanging)
+         * variation-of-parameters fallback.  TrigReduce preserves value and never turns
+         * a UC function into a non-UC one, so it can only help: an already-reduced or
+         * non-trig forcing is returned unchanged. */
+        Expr* gR = eval_and_free(ds_call1("TrigReduce", expr_copy(g)));
+        Expr* gE = eval_and_free(ds_call1("Expand", gR));
         size_t nterms; Expr** terms;
         if (head_is(gE, SYM_Plus)) { nterms = gE->data.function.arg_count; terms = gE->data.function.args; }
         else { nterms = 1; terms = &gE; }

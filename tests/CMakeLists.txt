@@ -3724,6 +3724,16 @@ add_test(NAME dsolve_corpus_2_2_3_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_223.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+# Section 2.2.4 "Problems 301 to 400" (Table 2.19): 100 elementary ODEs, 24 IVPs.
+# Continuation of §2.2.3, skewed toward higher-order constant-coefficient linear
+# (2nd/3rd/5th order, homogeneous + forced) and nonlinear _with_linear_symmetries;
+# same IVP handling (equation slot {ode, ic...}).  M24.  Baseline 1 (the sole
+# residue 2.2.4-381, (x^2-1)y''-2xy'+2y==x^2-1, a variable-coefficient Legendre-type
+# whose homogeneous is Kovacic but the nonhomogeneous var-params is not wired).
+add_test(NAME dsolve_corpus_2_2_4_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_224.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

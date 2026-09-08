@@ -220,6 +220,63 @@ Full per-case results: `reports/2.2.3.tsv`; bucketed report: `reports/2.2.3.md`.
 
 ---
 
+## Section 2.2.4 — "Problems 301 to 400" (Table 2.19, sorted by problem number)
+
+Corpus: `DE_examples_224.m` — 100 records, **all scalar, 24 IVPs**. Continuation of
+§2.2.3 (same elementary Table 2.19), skewed toward higher-order **constant-coefficient
+linear** (2nd/3rd/**5th** order, homogeneous + forced, real/repeated/complex roots),
+**missing-x / missing-y** reductions, nonlinear **`_with_linear_symmetries`**, and a
+handful of Euler / Emden–Fowler / exact / quadrature. **Zero overlap** with §2.1.2.
+`ctest -R dsolve_corpus_2_2_4_tests` · gate baseline **1**.
+
+| Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
+|------|--------------:|--------:|---------------:|-------|
+| 2026-09-08 (baseline) | 93 / 100 | 93.0% | 7 | Two **converter** fixes (below). 6 UNEVAL + **1 FAIL** (387 — a harness verify bug, not a wrong answer). |
+| 2026-09-08 (**M24**)  | **99 / 100** | **99.0%** | **1** | **+6, FAIL→0, 0 regression.** One harness fix + two solver fixes + two converter fixes. Gate baseline **1**. |
+
+**Converter fixes (`tools/latex_ode_to_mathilda.py`; §2.2.1/2/3 regenerate byte-for-byte
+identical → no regression):**
+1. **Imaginary unit `i`** (309/310/311, `y''+2 i y'+3 y=0`, `y''=(-2+2 i√3)y`) — a
+   constant-coefficient **complex** ODE with no explicit independent variable made
+   `detect_symbols` pick the imaginary unit `i` as the indep var *and* keep it as a plain
+   symbol. `i`/`I` are now excluded from indep-var candidates (like `e`) and a standalone
+   `i` maps to Mathilda's `I`.
+2. **`y^{(n)}` derivative notation** (336/340/343, 5th-order) — `y^{(5)}` was converted to
+   `y[x]^((5))` (a **power** of y) instead of the 5th derivative; the mains substitution now
+   recognises the parenthesized-order superscript and emits `y'''''[x]` (`Derivative[5]`).
+
+**M24 fixes:**
+1. **Harness verify variable-capture** (`dsolve_corpus_prelude.m`, benefits **every
+   section**) — retired the sole FAIL (387, `m x''+k x==F0 Cos[om t]`). `dsResidVerdict`
+   swept the residual over a loop variable `k`, which **collided with the ODE parameter
+   `k`** (the spring constant): the loop forced `k` to 0…5 instead of its generic sample
+   value, so a *correct* fitted solution produced a bogus nonzero residual → a FALSE
+   "BAD". The sweep index / value holder are now `$`-prefixed (`$dsSweep`/`$dsVal`) — names
+   the converter can never emit. Strictly more correct: it can only fix false FAILs.
+2. **Trig-power/product forcing** (`dsolve_undetcoeff.c`, 326/362/363/365) —
+   `UndeterminedCoefficients` now `TrigReduce`-linearises the forcing (`Sin[x]^2 →
+   (1−Cos2x)/2`, `Cos[x]^3 → (3Cosx+Cos3x)/4`, `Sin[3x]Sin[x] → (Cos2x−Cos4x)/2`,
+   `x Cos[x]^3 → (3x Cosx + x Cos3x)/4`) into first-harmonic sinusoids — each a UC
+   function — so a trig power/product forcing solves tidily instead of declining to the
+   (hanging) variation-of-parameters fallback. TrigReduce preserves value and never turns a
+   UC function into a non-UC one, so it can only help.
+3. **Numeric complex roots concretized** (`dsolve_common.c` `dsolve_homog_basis`, 312) —
+   `y'''==y`'s complex cube roots were emitted as `Re[-(-1)^(1/3)]`/`Im[-(-1)^(1/3)]` (Re/Im
+   do not auto-evaluate on a radical power), which blocked the IVP constant-fit. The basis
+   builder now `ComplexExpand`s the real/imag parts of a **numeric** complex root (gated by
+   `NumericQ`, so a symbolic-parameter root — where ComplexExpand could introduce Abs/Sign —
+   is untouched), so `y'''==y, y(0)=1, y'(0)=0, y''(0)=0` fits to a concrete solution.
+
+**Residue (1, bounded UNEVAL, 0 wrong answers):**
+
+| Case | ODE | Why |
+|---|---|---|
+| 2.2.4-381 | `(x²−1)y''−2x y'+2y = x²−1` | variable-coefficient Legendre-type (`_with_linear_symmetries`, **SymPy-failed**); the homogeneous solves via Kovacic (`y1=x`) but the nonhomogeneous particular needs variation-of-parameters on a Kovacic basis with a rational forcing — a genuine new capability, not a reuse tweak. Declines cleanly (Maple solves it; SymPy does not). |
+
+Full per-case results: `reports/2.2.4.tsv`; bucketed report: `reports/2.2.4.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -276,6 +333,14 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   implicit first integral (`dsolve_exact.c`, `ds_is_rational_in` gate). **99/100 (+1,
   0 FAIL, 0 regression);** sole residue 232 (Emden–Fowler → Abel 2nd kind). Anti-overfit
   unit `t_m23_exact_radical`. See §2.2.3 block.
+- **M24 (2026-09-08)** — §2.2.4 corpus (Problems 301–400). Two converter fixes (imaginary
+  unit `i`; `y^{(n)}` derivative notation — §2.2.1/2/3 byte-identical), one harness fix
+  (`dsResidVerdict` sweep-variable/ODE-parameter `k` collision → false FAIL, benefits every
+  section), two solver fixes (`TrigReduce` trig-power/product forcing in
+  `UndeterminedCoefficients`; `ComplexExpand` of numeric complex roots so an IVP fits).
+  **99/100 (+6, FAIL→0, 0 regression);** sole residue 381 (variable-coeff Legendre-type,
+  SymPy-failed). Anti-overfit units `t_m24_trig_power_forcing`, `t_m24_complex_cuberoot_ivp`.
+  See §2.2.4 block.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

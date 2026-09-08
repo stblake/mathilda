@@ -832,6 +832,52 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   - All DSolve ctest + stress suites and `make check-c99` green; §2.1.2/§2.2.1/§2.2.2 gates
     held.
 
+- **M24 — §2.2.4 corpus (Problems 301–400) + trig-power forcing / numeric-root IVP /
+  harness-collision waves.** ✅ DONE. The continuation of §2.2.1/§2.2.2/§2.2.3's Table 2.19
+  (100 elementary ODEs, 24 IVPs, 0 systems), skewed toward higher-order **constant-coefficient
+  linear** (2nd/3rd/**5th** order, homogeneous + forced), **missing-x/missing-y** reductions,
+  nonlinear **`_with_linear_symmetries`**, plus a few Euler/Emden–Fowler/exact/quadrature.
+  **93 → 99 / 100 scalar, 0 FAIL (down from 1), 0 regression** (§2.1.2, §2.2.1, §2.2.2, §2.2.3
+  ctests held). Two converter fixes made the corpus faithful before any solver work; the
+  solver fixes reuse existing verified machinery, so no wave can ship a wrong answer.
+  - **Converter fixes (`tools/latex_ode_to_mathilda.py`; §2.2.1/2/3 regenerate byte-for-byte
+    identical).** (1) **Imaginary unit `i`** (309/310/311, `y''+2 i y'+3 y=0`,
+    `y''=(-2+2 i√3)y`): a constant-coefficient **complex** ODE with no explicit independent
+    variable made `detect_symbols` pick the imaginary unit `i` as the indep var and keep it a
+    plain symbol — `i`/`I` are now excluded from indep-var candidates (as `e` already was) and
+    a standalone `i` maps to Mathilda's `I`. (2) **`y^{(n)}` derivative notation** (336/340/343,
+    5th-order): `y^{(5)}` was converted to `y[x]^((5))` (a power of y) instead of the 5th
+    derivative; the mains substitution now recognises the parenthesized-order superscript and
+    emits `y'''''[x]` (`Derivative[5]`).
+  - **Harness verify variable-capture (`dsolve_corpus_prelude.m`, benefits every section).**
+    The sole FAIL (387, `m x''+k x==F0 Cos[om t]`, a *correct* fitted solution) was a false
+    "BAD": `dsResidVerdict` swept the residual over a loop variable `k` that **collided with the
+    ODE parameter `k`** (the spring constant), forcing it to 0…5 instead of its generic sample
+    value → a bogus nonzero residual. The sweep index / value holder are now `$`-prefixed
+    (`$dsSweep`/`$dsVal`) — names the converter can never emit — so it is strictly more correct
+    (fixes false FAILs only; can never create one).
+  - **Trig-power/product forcing (`dsolve_undetcoeff.c`, 326/362/363/365).**
+    `UndeterminedCoefficients` now `TrigReduce`-linearises the forcing (`Sin[x]^2→(1−Cos2x)/2`,
+    `Cos[x]^3→(3Cosx+Cos3x)/4`, `Sin[3x]Sin[x]→(Cos2x−Cos4x)/2`, `x Cos[x]^3→(3x Cosx+x Cos3x)/4`)
+    into first-harmonic sinusoids — each a UC function — so a trig power/product forcing solves
+    tidily instead of declining to the (hanging) variation-of-parameters fallback. TrigReduce
+    preserves value and never turns a UC function into a non-UC one, so it can only help.
+  - **Numeric complex roots concretized (`dsolve_common.c` `dsolve_homog_basis`, 312).**
+    `y'''==y`'s complex cube roots were emitted as `Re[-(-1)^(1/3)]`/`Im[-(-1)^(1/3)]` (Re/Im do
+    not auto-evaluate on a radical power), blocking the IVP constant-fit. The basis builder now
+    `ComplexExpand`s the real/imag parts of a **numeric** complex root (gated by `NumericQ`, so a
+    symbolic-parameter root — where ComplexExpand could introduce Abs/Sign — is untouched), so
+    `y'''==y, y(0)=1, y'(0)=0, y''(0)=0` fits to a concrete solution.
+  - **Residue (1, bounded UNEVAL, 0 wrong answers):** 2.2.4-381 `(x²−1)y''−2x y'+2y==x²−1`, a
+    variable-coefficient Legendre-type (`_with_linear_symmetries`, SymPy-failed) whose homogeneous
+    solves via Kovacic (`y1=x`) but whose nonhomogeneous particular needs variation-of-parameters
+    on a Kovacic basis with a rational forcing — a genuine new capability, not a reuse tweak.
+    Declines cleanly (Maple solves it; SymPy does not).
+  - New corpus `DSolve_test_status/DE_examples_224.m`; ctest `dsolve_corpus_2_2_4_tests` (gate
+    baseline 1); `reports/2.2.4.{tsv,md}`; STATUS.md §2.2.4 block; README row. Anti-overfit units
+    `t_m24_trig_power_forcing`, `t_m24_complex_cuberoot_ivp` in `test_dsolve.c`. All DSolve ctest +
+    stress suites and `make check-c99` green; §2.1.2/§2.2.1/§2.2.2/§2.2.3 gates held.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

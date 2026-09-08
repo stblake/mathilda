@@ -1739,11 +1739,27 @@ Expr** dsolve_homog_basis(const Expr* charpoly, const char* lam, const char* xva
                 if (c >= 0) {
                     used[i] = used[(size_t)c] = true;
                     Expr* a = eval_and_free(ds_call1("Re", expr_copy(R.roots[i])));
-                    for (int j = 0; j < R.mult[i]; j++) {
-                        basis[bc++] = hb_basis_trig(xvar, j, a, R.im[i], "Cos");
-                        basis[bc++] = hb_basis_trig(xvar, j, a, R.im[i], "Sin");
+                    Expr* imv = expr_copy(R.im[i]);
+                    /* Concretize Re/Im of a NUMERIC complex root before it enters the
+                     * basis exponent: Re/Im do not auto-evaluate on a radical power
+                     * (e.g. the cube root -(-1)^(1/3) of y'''==y leaves
+                     * Re[-(-1)^(1/3)]/Im[-(-1)^(1/3)] in the exponent), which a later
+                     * IVP constant-fit cannot solve to a number -> the IVP is scored
+                     * unfitted (§2.2.4-312).  ComplexExpand computes them for a pure
+                     * number (safe: no free symbol, so no Abs/Sign is introduced); a
+                     * root carrying a symbolic parameter is left untouched (its general
+                     * solution still back-substitutes). */
+                    Expr* isnum = eval_and_free(ds_call1("NumericQ", expr_copy(R.roots[i])));
+                    if (isnum && isnum->type == EXPR_SYMBOL && isnum->data.symbol.name == SYM_True) {
+                        a   = eval_and_free(ds_call1("ComplexExpand", a));
+                        imv = eval_and_free(ds_call1("ComplexExpand", imv));
                     }
-                    expr_free(a);
+                    expr_free(isnum);
+                    for (int j = 0; j < R.mult[i]; j++) {
+                        basis[bc++] = hb_basis_trig(xvar, j, a, imv, "Cos");
+                        basis[bc++] = hb_basis_trig(xvar, j, a, imv, "Sin");
+                    }
+                    expr_free(a); expr_free(imv);
                 } else {
                     for (int j = 0; j < R.mult[i]; j++) basis[bc++] = hb_basis_exp(xvar, j, R.roots[i]);
                     used[i] = true;
