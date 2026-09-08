@@ -380,7 +380,8 @@ def main():
         '     point equation y[x0]==v / y\'[x0]==v); function stays a symbol, so the scalar\n'
         '     harness still handles it. The harness verifies the ODE residual AND every ic.\n'
         '   Systems (%d): equation is a List, function is a List; classification\n'
-        '   contains "system_of_ODEs" so the scalar harness skips them.\n'
+        '   contains "system_of_ODEs". The harness back-substitutes the multi-\n'
+        '   function solution into every equation, exactly as for a scalar ODE.\n'
         '   Consumed (parsed, NOT evaluated) by tests/test_dsolve_corpus.c. *)\n\n'
         '{\n' % (args.label, args.label, args.url, len(recs), n_ivp, n_system))
     with open(args.out, 'w') as f:

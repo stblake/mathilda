@@ -660,6 +660,47 @@ static void t_m26_general_forcing(void) {
                "/. f -> (# &)}, PossibleZeroQ[Simplify[D[b, {t,2}] + 6 D[b, t] + 8 b - t]]]");
 }
 
+/* ---- M27: corpus harness now VERIFIES systems (back-substitution) ---- */
+/* A constant-coefficient system solves and both equations back-substitute to ~0
+ * -- exactly what the M27 corpus harness now checks for a system.  The second
+ * case (eigenvalues -10, -100) previously HUNG: dsolve_linsys_tidy Simplify-ed a
+ * body that is a sum of exponentials with widely-separated real decay rates, and
+ * Simplify's zero-test spins on Exp[-10 t] against Exp[-100 t].  tidy now Expands
+ * any exponential body instead of Simplifying it. */
+static void t_m27_system_verify(void) {
+    check_true("MatchQ[DSolve[{x'[t]==3 x[t]-2 y[t], y'[t]==2 x[t]+y[t]}, {x,y}, t], "
+               "{{x -> _Function, y -> _Function}}]");
+    check_true("With[{s = DSolve[{x'[t]==-50 x[t]+20 y[t], y'[t]==100 x[t]-60 y[t]}, {x,y}, t][[1]]}, "
+               "Max[Abs[N[{(x'[t]-(-50 x[t]+20 y[t])), (y'[t]-(100 x[t]-60 y[t]))} /. s "
+               "/. {C[1]->7/10, C[2]->13/10, t->3/10}, 20]]] < 1/1000000]");
+}
+
+/* ---- M27: Solve must mint a FRESH periodicity index (no C[1] collision) ---- */
+/* corpus 2.2.7-684: y'=2x Sec[y].  DSolve`Separable feeds Solve an equation that
+ * already carries the integration constant C[1]; Solve reused C[1] as the 2 Pi k
+ * inverse-trig periodicity index, so once its Element[C[1],Integers] constraint
+ * was dropped the shared C[1] shifted y by a non-multiple of 2 Pi -- a WRONG
+ * answer (masked as UNEVAL by the verifier's leaked->UNFIT rule).  solveinv now
+ * SEEDS its mint counter past every C[k] already in the equation, and
+ * dsolve_extract_solutions collapses the integer family (Element[C[k],Integers])
+ * to its principal branch, so the solution is correct at a CONTINUOUS constant. */
+static void t_m27_separable_inverse_constant(void) {
+    check_true("With[{s = DSolve[y'[x]==2 x Sec[y[x]], y, x][[1]]}, "
+               "Abs[N[(y'[x]-2 x Sec[y[x]]) /. s /. {C[1]->7/10, x->13/10}, 30]] < 1/1000000]");
+}
+
+/* ---- M27: the family collapse must NOT eat the integration constant ---- */
+/* corpus 2.2.7-695: y'=3x^2(1+y^2), y(0)=1 -> Tan[x^3+Pi/4].  The Tan/ArcTan
+ * inversion condition is a RANGE on x^3+C[1] (not Element[_,Integers]); collapsing
+ * every C[k] in a condition would zero the integration constant and break the IVP
+ * fit.  The collapse is scoped to Element[C[k],Integers] only, so the IC holds. */
+static void t_m27_ivp_family_intact(void) {
+    check_true("With[{s = DSolve[{y'[x]==3 x^2 (1+y[x]^2), y[0]==1}, y, x][[1]]}, "
+               "Abs[N[(y[0] /. s) - 1, 20]] < 1/1000000 && "
+               "Abs[N[(y'[x]-3 x^2 (1+y[x]^2)) /. s /. x->2/10, 20]] < 1/1000000]");
+    check_true("FreeQ[DSolve[{y'[x]==3 x^2 (1+y[x]^2), y[0]==1}, y, x], C[_]]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2267,6 +2308,9 @@ int main(void) {
     TEST(t_m26_distributions);
     TEST(t_m26_impulse_forcing);
     TEST(t_m26_general_forcing);
+    TEST(t_m27_system_verify);
+    TEST(t_m27_separable_inverse_constant);
+    TEST(t_m27_ivp_family_intact);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

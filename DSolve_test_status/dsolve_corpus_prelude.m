@@ -7,8 +7,12 @@
  * A corpus record is {label, equation(s), function(s), indVar, classif, sympy?}.
  * The equation slot is a single ODE for a general-solution problem, or the
  * DSolve-native list {ode, ic1, ...} for an initial-value problem (each ic a
- * point equation y[x0]==v / y'[x0]==v).  dsolveCheckCode[label, eqn, fn, iv,
- * classif] returns an integer verdict:
+ * point equation y[x0]==v / y'[x0]==v).  For a SYSTEM the equation slot is a
+ * List of equations {ode1, ode2, ...(, ic1, ...)} and the function slot is a
+ * List of the dependent functions {x, y, ...}; a system is verified exactly like
+ * a scalar ODE -- every branch is a rule-list {x->Function[..], y->Function[..]}
+ * back-substituted into every equation (see dsExplicitQ / dsBranchVerdict).
+ * dsolveCheckCode[label, eqn, fn, iv, classif] returns an integer verdict:
  *
  *   0 = PASS   DSolve returned a non-empty List of branches and every explicit
  *              branch back-substitutes numerically to ~0 -- for an IVP that is
@@ -23,7 +27,9 @@
  *              returned an IVP solution that still carries a generated constant
  *              C[k] -- i.e. the general solution with the initial condition
  *              unfitted, so the IVP is not actually solved (not a wrong answer).
- *   3 = SKIP   Systems (this is the scalar-first campaign) -- not counted.
+ *   3 = SKIP   Reserved for a record that is not a solvable ODE/system (e.g. a
+ *              converter placeholder).  Systems are NO LONGER skipped -- they are
+ *              solved and back-substituted like any other record (M27).
  *
  * Verification is by BACK-SUBSTITUTION, never string comparison, so it is
  * immune to solution spelling.  Free parameters and generated constants C[k]
@@ -75,9 +81,24 @@ dsResidVerdict[resid_, iv_] := Module[
   If[nsmall >= Ceiling[Length[vals]/2], "OK", "BAD"]
 ];
 
-(* Is a branch an explicit solution {fn -> Function[..]} (or several)? *)
-dsExplicitQ[br_List, fn_] := br =!= {} && AllTrue[br,
-  MatchQ[#, Rule[fn, _Function] | Rule[_[fn], _Function]] &];
+(* The target function symbol of an explicit rule (fn -> Function[..] or the
+ * applied form fn[iv] -> Function[..]); $Failed for an implicit/parametric rule. *)
+dsRuleFn[Rule[f_Symbol, _Function]]      := f;
+dsRuleFn[Rule[(_)[f_Symbol], _Function]] := f;
+dsRuleFn[_]                              := $Failed;
+
+(* Normalise the function slot to a list of dependent-function symbols: a scalar
+ * problem passes the bare symbol y, a system passes the List {x, y, ...}. *)
+dsFnList[fn_List] := fn;
+dsFnList[fn_]     := {fn};
+
+(* Is a branch a fully explicit solution?  Every rule must resolve to a Function
+ * (no implicit/parametric member) AND every dependent function must be present
+ * -- so a single scalar {y->Function[..]} and a system {x->Function[..],
+ * y->Function[..]} are both explicit, but a partially-solved system is not. *)
+dsExplicitQ[br_List, fn_] := Module[{fns = dsFnList[fn], got},
+  got = dsRuleFn /@ br;
+  br =!= {} && FreeQ[got, $Failed] && Complement[fns, got] === {}];
 dsExplicitQ[_, _] := False;
 
 (* An IVP/BVP problem gives the equation slot as a List {ode, ic1, ...}; a point
@@ -110,9 +131,8 @@ dsBranchVerdict[eqn_, br_, fn_, iv_] := Module[{eqs, resids, verds, leaked},
 
 dsolveCheckCode[label_, eqn_, fn_, iv_, classif_] := Module[
   {sol, verds},
-  (* skip systems (scalar-first campaign) *)
-  If[StringQ[classif] && StringContainsQ[classif, "system"], Return[3]];
-  If[ListQ[fn], Return[3]];
+  (* Systems (fn a List) are solved and verified exactly like scalars (M27): a
+   * branch is a rule-list {x->Function[..], ...} back-substituted per equation. *)
   sol = TimeConstrained[DSolve[eqn, fn, iv], $dsSolveTimeout, $Aborted];
   If[sol === $Aborted, Return[2]];
   If[Head[sol] === DSolve, Return[2]];        (* bubbled back unevaluated *)

@@ -57,17 +57,24 @@ def main():
         rows.append((code, label, cl))
 
     tot = collections.Counter(r[0] for r in rows)
-    scalar = [r for r in rows if r[0] != 'S']
-    npass = sum(1 for r in scalar if r[0] == 'P')
+    is_sys = lambda cl: 'system' in cl.lower()
+    # Systems are now solved and back-substituted like scalars (M27); report the
+    # two populations separately but bucket both (the 'system' bucket below).
+    systems = [r for r in rows if is_sys(r[2]) and r[0] != 'S']
+    scalar  = [r for r in rows if not is_sys(r[2]) and r[0] != 'S']
+    scored  = scalar + systems
+    solved  = lambda rs: sum(1 for r in rs if r[0] == 'P')
     print("== Overall ==")
-    print(f"  records: {len(rows)}   PASS {tot['P']}  FAIL {tot['F']}  UNEVAL {tot['U']}  SKIP(sys) {tot['S']}")
-    n_scalar = len(scalar)
-    print(f"  scalar: {n_scalar}   solved {npass} ({100.0*npass/max(1,n_scalar):.1f}%)   "
-          f"gap {n_scalar-npass}")
+    print(f"  records: {len(rows)}   PASS {tot['P']}  FAIL {tot['F']}  UNEVAL {tot['U']}  SKIP {tot['S']}")
+    ns, nps = len(scalar), solved(scalar)
+    print(f"  scalar:  {ns}   solved {nps} ({100.0*nps/max(1,ns):.1f}%)   gap {ns-nps}")
+    if systems:
+        nsy, npsy = len(systems), solved(systems)
+        print(f"  systems: {nsy}   solved {npsy} ({100.0*npsy/max(1,nsy):.1f}%)   gap {nsy-npsy}")
 
     b = collections.defaultdict(lambda: collections.Counter())
     ex = collections.defaultdict(list)
-    for code, label, cl in scalar:
+    for code, label, cl in scored:
         bk = bucket(cl); b[bk][code] += 1; b[bk]['tot'] += 1
         if code in ('U', 'F') and len(ex[bk]) < args.examples:
             ex[bk].append(label)
@@ -82,7 +89,7 @@ def main():
         print(f"  {k:22s} {t:4d} {p:5d} {c['U']:5d} {c['F']:5d} {100.0*p/max(1,t):6.1f}   "
               f"{', '.join(ex[k][:args.examples])}{star}")
 
-    fails = [r for r in scalar if r[0] == 'F']
+    fails = [r for r in scored if r[0] == 'F']
     if fails:
         print(f"\n== {len(fails)} FAIL (wrong closed form -- investigate) ==")
         for _, label, cl in fails[:40]:

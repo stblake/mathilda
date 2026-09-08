@@ -167,6 +167,34 @@ static Expr* mint_param(SolveInvCtx* ctx) {
                              (Expr*[]){ mk_int(k) }, 1);
 }
 
+/* Largest k such that param_head[k] (a positive-integer parameter) occurs in e;
+ * 0 if none.  The mint counter is SEEDED with this so a freshly minted family
+ * parameter (the periodic 2 Pi C[k] of an inverse-trig / Log branch) never
+ * collides with a constant ALREADY present in the equation — e.g. the
+ * integration constant C[1] that DSolve`Separable / DSolve`Linearizable add
+ * before calling Solve.  Without the seed the index reuses C[1], and once its
+ * Element[C[1], Integers] constraint is stripped the shared C[1] corrupts the
+ * solution (evaluated at a non-integer it shifts y by a non-multiple of 2 Pi). */
+static int max_param_index(const Expr* e, const char* param_head) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    int m = 0;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == param_head
+        && e->data.function.arg_count == 1) {
+        const Expr* a = e->data.function.args[0];
+        if (a && a->type == EXPR_INTEGER && a->data.integer > 0
+            && a->data.integer <= 1000000)
+            m = (int)a->data.integer;
+    }
+    int hm = max_param_index(h, param_head);
+    if (hm > m) m = hm;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        int cm = max_param_index(e->data.function.args[i], param_head);
+        if (cm > m) m = cm;
+    }
+    return m;
+}
+
 /* ------------------------------------------------------------------ *
  *  Forward decl for recursive solver re-entry.                        *
  * ------------------------------------------------------------------ */
@@ -1252,7 +1280,8 @@ Expr* solveinv_solve_inverse_equality(Expr* equation, Expr* var,
      * fresh per-call ctx is created here; re-entry from
      * solve_inner_equation goes through solveinv_drive directly with
      * the existing ctx so SOLVEINV_MAX_DEPTH is honoured. */
-    SolveInvCtx ctx = { opts, dom, 0, 0, false };
+    const char* ph = (opts->param_head) ? opts->param_head : intern_symbol("C");
+    SolveInvCtx ctx = { opts, dom, max_param_index(equation, ph), 0, false };
     return solveinv_drive(equation, var, &ctx);
 }
 

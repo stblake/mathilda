@@ -3705,10 +3705,14 @@ else()
 endif()
 # Per-section dashboards.  argv = <corpus> <prelude> <baseline>.  Baselines are
 # the checked-in high-water marks recorded in DSolve_test_status/STATUS.md.
+# Baseline 655 (M27 re-baseline: the harness now VERIFIES the 204 systems instead of
+# skipping them).  Measured non-PASS 651 = 554 scalar (446/1000 solved -- up +10 from
+# the Solve periodicity-index fix) + 97 systems (107/204 solved), 0 FAIL; +4 margin for
+# the pre-existing flaky fork-timeout cluster (879/208/872/983).
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 572)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 655)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
 # verifies the ODE residual AND every initial condition (M21).  Baseline 4.
@@ -3755,19 +3759,35 @@ add_test(NAME dsolve_corpus_2_2_5_tests
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Section 2.2.6 "Problems 501 to 600" (Table 2.29, Edwards & Penney 6th ed.): 100
-# ODEs -- 74 scalar (47 IVP) + 26 systems (skipped).  Dominated by forced linear
+# ODEs -- 74 scalar (47 IVP) + 26 systems.  Dominated by forced linear
 # constant-coefficient IVPs, including general forcing f(t) and DiracDelta impulses
 # (M26 added the definite-integral / Green's-function variation of parameters, the
 # DiracDelta sifting property under Integrate, and the HeavisideTheta/DiracDelta
-# value rules).  Baseline 2: the two residues are 2.2.6-524 (y''+x^4 y==0, an
-# Emden-Fowler equation whose Bessel closed form is correct but takes > the 8 s
-# per-case DSolve budget) and 2.2.6-555 (t x''+(t-2)x'+x==0, a regular-singular
-# reduction whose integrating-factor quadrature is non-elementary -- a series
-# residue, matching Mathematica).
+# value rules).  Baseline 5 (M27 re-baseline: the harness now VERIFIES systems by
+# back-substitution instead of skipping them, so all 100 are scored): 95 PASS =
+# 72/74 scalar + 23/26 systems.  The 5 residues are the two scalar ones (2.2.6-524
+# y''+x^4 y==0, an Emden-Fowler whose Bessel closed form exceeds the 8 s budget;
+# 2.2.6-555 t x''+(t-2)x'+x==0, a non-elementary regular-singular reduction) plus
+# three systems whose closed form exceeds the 8 s per-case budget.
 add_test(NAME dsolve_corpus_2_2_6_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_226.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 5)
+
+# Section 2.2.7 "Problems 601 to 700" (Table 2.31): 100 ODEs -- 50 scalar (23 IVP;
+# elementary first-order: separable / quadrature / linear / homogeneous / Riccati) +
+# 50 systems (25 2-D, 18 3-D, 7 4-D; 47 constant-coefficient, 3 variable-coefficient).
+# The first section that is HALF systems, and the wave (M27) that made the corpus
+# harness verify systems by back-substituting the multi-function solution.  Baseline
+# 7: 93 PASS = 48/50 scalar + 45/50 systems.  Residues: 3 constant-coefficient
+# systems whose closed form (irrational/complex eigenvalues + polynomial/exponential
+# forcing) exceeds the 8 s budget (603/606/607); the 2 genuinely variable-coefficient
+# non-triangular systems, an honest engine gap (604/608); the non-elementary
+# y'=Log[1+y^2] (675); and the slow homogeneous-class-G y'=4(x y)^(1/3) (683).
+add_test(NAME dsolve_corpus_2_2_7_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_227.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

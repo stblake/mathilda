@@ -22,18 +22,21 @@ living scoreboard all in one place.
 | `DE_examples_224.m` | Section **2.2.4** corpus — 100 elementary ODEs (Table 2.19, Problems 301–400), 24 IVPs. |
 | `DE_examples_225.m` | Section **2.2.5** corpus — 100 series-heavy ODEs (Table 2.19, Problems 401–500), 15 IVPs. |
 | `DE_examples_226.m` | Section **2.2.6** corpus — 100 ODEs (Table 2.29, Edwards & Penney, Problems 501–600): 74 scalar (47 IVP, forced linear with general f(t) / DiracDelta impulses) + 26 systems. |
+| `DE_examples_227.m` | Section **2.2.7** corpus — 100 ODEs (Table 2.31, Problems 601–700): 50 scalar (23 IVP, elementary first-order) + 50 systems (25 2-D / 18 3-D / 7 4-D). The first half-systems section. |
 | `test_dsolve_corpus.c` | Fork-per-case runner (compiled via `tests/CMakeLists.txt`). |
 | `dsolve_corpus_prelude.m` | Self-verifier: runs `DSolve` under `TimeConstrained` and numerically back-substitutes each branch. |
 | `STATUS.md` | **The scoreboard** — per-section, per-bucket solve counts + wave history. Update after every wave. |
 | `reports/` | Per-section bucketed gap reports (regenerated from the run TSV). |
 
 A corpus record is `{"label", equation(s), function(s), indVar, "MapleClassif", sympy?}`.
-Systems (`classif` contains `system_of_ODEs`, or a `List` function) are **skipped** —
-this is the scalar-first campaign.
+**Systems are VERIFIED like scalars (M27):** a system's equation slot is a `List` of
+equations and its function slot a `List` of dependent functions; a solution branch
+`{x->Function[…], y->Function[…], …}` is back-substituted into every equation exactly
+like a scalar ODE. (Through M26 systems were skipped — the "scalar-first" phase.)
 
 Verdict codes: `0 PASS` (verified closed form), `1 FAIL` (a branch is
 demonstrably nonzero — a wrong answer), `2 UNEVAL` (declined / timed out / `{}`),
-`3 SKIP` (system).
+`3 SKIP` (reserved for a record that is not a solvable ODE/system).
 
 ## Run a section (progress dashboard)
 

@@ -985,6 +985,72 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     Converter `\delta` fix in `tools/latex_ode_to_mathilda.py`. All DSolve ctest + stress suites,
     series/reduce/integrate suites, and `make check-c99` green; all prior corpus gates held.
 
+- **M27 — §2.2.7 corpus (Problems 601–700) + corpus-harness SYSTEM VERIFICATION.** ✅ DONE.
+  Table 2.31: 100 records — **50 scalar (23 IVP) + 50 systems** (25 2-D, 18 3-D, 7 4-D; 47
+  constant-coefficient + 3 variable-coefficient). The first section that is **half systems**,
+  and the wave that taught the corpus harness to **verify systems** rather than skip them
+  ("scalar-first" ran M15–M26). The scalar half is elementary first-order (separable /
+  quadrature / linear / homogeneous class-G / Riccati). **90 → 93 / 100** after two engine
+  fixes, **0 FAIL, 0 regression** (§2.2.1–§2.2.5 gates held; §2.1.2 and §2.2.6 re-baselined).
+  The converter needed no change (the `--label 2.2.7` run of the section-agnostic
+  `latex_ode_to_mathilda.py` produced a clean 100-record file; §2.2.1–§2.2.6 regenerate
+  byte-for-byte identical in their records — the only header edit is a wording change from
+  "the scalar harness skips them" to a system-shape description).
+  - **System verification in the harness (`dsolve_corpus_prelude.m`).** The numeric
+    back-substitution machinery (`dsResidVerdict` / `dsBranchVerdict`) already substituted a
+    whole rule-list `/. br` into each residual, so it was already multi-function-capable; only
+    `dsExplicitQ` hard-coded a single function symbol and `dsolveCheckCode` returned SKIP for a
+    system. `dsExplicitQ` now accepts a List function slot (every rule resolves to a
+    `Function`, and every dependent function is present — a partially-solved system is not
+    "explicit"), and the system-skip is removed. A system branch
+    `{x->Function[…], y->Function[…], …}` is back-substituted per equation exactly like a
+    scalar ODE; a general system solution's `C[1..n]` behave as free constants under the sweep
+    (residual ~0 for all sampled values). The verifier's `leaked→UNFIT` rule (a demonstrably-
+    nonzero residual with `C[k]` still present scores UNEVAL, not FAIL) means a wrong *general*
+    system solution cannot become a FAIL — the FAIL surface is only fitted IVP systems, of
+    which §2.2.7 has none. **Prior sections carrying systems were re-baselined:** §2.1.2 (204
+    systems) and §2.2.6 (26 systems, 72/74 scalar → 95/100 total = 72 scalar + 23 systems,
+    baseline 2→5); §2.2.1–§2.2.5 are pure scalar and unchanged. `tools/dsolve_corpus_report.py`
+    reports scalar and system populations separately.
+  - **Separated-exponent Simplify hang (`dsolve_linsys.c`).** A constant-coefficient system as
+    ordinary as `x'=-50x+20y, y'=100x-60y` (real eigenvalues -10, -100) HUNG uninterruptibly:
+    `dsolve_linsys_tidy` gave a small real-exponential body the "pretty" `Simplify`, and
+    `Simplify`'s zero-test spins on a **sum of exponentials with widely-separated decay rates**
+    (`Simplify[Exp[-10 t]+Exp[-100 t]]` does not return — it numericises `E^(-10 t)` against
+    `E^(-100 t)`, whose dynamic range drives the precision ladder to its ceiling; close rates
+    like -1,-2 are fine). The `heavy → Expand` gate (already used for complex-spectrum and
+    large bodies) now also covers **any** exponential body, so a real-exponential body never
+    reaches `Simplify`; the result is back-substitution-verified regardless. +2 systems
+    (636, 650). Documented in `POSSIBLE_ZEROQ_IMPROVEMENTS.md`.
+  - **Solve periodicity-index collision (`solveinv.c` + `dsolve_common.c`).** `y'=2x Sec[y]`
+    shipped a WRONG general solution (masked as UNEVAL by leaked→UNFIT): `DSolve\`Separable`
+    feeds Solve an equation already carrying the integration constant `C[1]`, and the
+    inverse-trig peeler minted `C[1]` again as the `2πk` periodicity index (its counter started
+    at 0, ignoring existing constants); once `dsolve_extract_solutions` stripped the
+    `Element[C[1],Integers]` constraint, the shared `C[1]` shifted `y` by a non-multiple of 2π
+    for non-integer values. Two root-cause fixes: (a) `solveinv` **seeds its mint counter with
+    the largest `C[k]` index already in the equation** (`max_param_index`), so a family
+    parameter is always fresh; (b) `dsolve_extract_solutions` **collapses the integer family to
+    its principal branch** (`Element[C[k],Integers]`-constrained `C[k] → 0`), scoped strictly to
+    the `Element[…,Integers]` atom — a *range* condition on the integration constant (e.g. the
+    `-π/2 < x³+C[1] ≤ π/2` from a `Tan`/`ArcTan` inversion) legitimately mentions `C[1]` and
+    must NOT be collapsed (that regressed `y'=3x²(1+y²), y(0)=1` before the scoping was
+    tightened). +1 (684). This is the pre-existing Solve generated-constant collision M21 filed
+    as a follow-up (also 2.2.1-67). `dsolve_tests`/`solve_tests`/`reduce_tests`/`solve_corpus`
+    all green (no regression from the minting change).
+  - **Residue (7, bounded UNEVAL, 0 wrong answers):** 603/606/607 (forced constant-coefficient
+    systems whose closed form with irrational/complex eigenvalues exceeds the 8 s per-case
+    budget — a performance residue); 604/608 (variable-coefficient non-triangular systems —
+    the honest `LinearSystemVarCoeff` gap, matching the plan's "one honest gap"); 675
+    (`y'=Log[1+y²]`, non-elementary, matches Mathematica); 683 (`y'=4(x y)^(1/3)`, homogeneous
+    class-G whose implicit inversion exceeds the 8 s budget).
+  - New corpus `DSolve_test_status/DE_examples_227.m`; ctest `dsolve_corpus_2_2_7_tests` (gate
+    baseline 7); `reports/2.2.7.{tsv,md}`; STATUS.md §2.2.7 block + M26/M27 wave-history bullets;
+    README row + systems-now-verified note. Anti-overfit units `t_m27_system_verify`,
+    `t_m27_separable_inverse_constant`, `t_m27_ivp_family_intact` in `test_dsolve.c`. All DSolve
+    ctest + stress suites (`dsolve`, m5/m12/m14/m17/m18/m19/m20), `solve`/`reduce`/`solve_corpus`,
+    and `make check-c99` green.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

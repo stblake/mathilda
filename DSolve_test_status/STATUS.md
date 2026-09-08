@@ -14,10 +14,10 @@ FAIL = wrong branch (numeric back-substitution) · SKIP = system.
 ## Section 2.1.2 — "Problems not solved, but were solved by Maple and Mathematica"
 
 Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
-`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **576**.
+`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **655** (M27: systems now verified).
 
-| Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
-|------|--------------:|--------:|---------------:|-------|
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
 | 2026-09-06 (M15 baseline) | 385 / 1000 | 38.5% | 615 | 0 FAIL, 6 crashes. Infrastructure landed. |
 | 2026-09-06 (crash fixes)  | 388 / 1000 | 38.8% | 612 | 0 FAIL, crashes 6→2 (both non-reproducing). |
 | 2026-09-06 (M16)          | 396 / 1000 | 39.6% | 604 | +8 (cv_num_ok symbolic-param verify + Pöschl-Teller 2F1 recognizer). |
@@ -26,6 +26,7 @@ Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
 | 2026-09-07 (**M19**)      | **427 / 1000** | **42.7%** | **573** | **+3** (2.1.2-102, -568, -611), **0 FAIL, 0 regressions**. Confluent Whittaker/₁F₁ recogniser on the y'-free (P==0) surface. Gate baseline 612→**576** (573 measured non-PASS + 3 margin for intermittent fork-harness crashes). |
 | 2026-09-07 (**M20**)      | **432 / 1000** | **43.2%** | **568** | **+6** (2.1.2-402, -371, -372, -376, -403, -424), **0 FAIL, 0 real regressions**. `PolynomialShiftSubstitution` (`dsolve_polyshift.c`): the radical `[F(x),G(x)]`-symmetry sub-cluster of the 1st-order symmetry gap, `u=φ(x)+c y` → separable → implicit first integral. (The one P→U, 2.1.2-879, is a **load-flaky timeout** — a 2nd-order Frobenius case that PASSes in 5.9 s in isolation, under the 8 s fork limit, and is untouched by polyshift; effective +6 → 433 on a clean run.) Gate baseline 576→**572** (568 measured non-PASS + margin for the flaky fork-timeout cluster 879/208/872/983). |
 | 2026-09-08 (**M21** side-effect) | **436 / 1000** | **43.6%** | **564** | **+4, 0 FAIL, 0 regression.** Not a §2.1.2-targeted wave — the M21 §2.2.1 shared fixes (scalar-Solve IC fit + `NthAlgebraic` denominator-clearing) also close 4 §2.1.2 first-order cases, and the `dsFreeParams` verifier fix (numeric back-substitution was vacuous) surfaced **no** new FAIL. Gate baseline kept at **572** (margin for the flaky fork cluster; not lowered since §2.1.2 was not the focus). |
+| 2026-09-09 (**M27**) | **446 / 1000 sc + 107 / 204 sys** | **44.6% sc / 52.5% sys** | **651** | **Systems now VERIFIED by back-substitution (was skipped): 553/1204 total, 0 FAIL.** Scalar solved **436 → 446 (+10)** — a side-effect of the M27 Solve periodicity-index fix (fresh mint index + integer-family collapse) closing inverse-function first-order cases. Systems scored for the first time: 107/204. Non-PASS 651 = 554 scalar + 97 systems (incl. 2 flaky fork-timeout crashes). Gate baseline **572 → 655** (651 + 4 margin). |
 
 ### Gap by bucket (baseline, ranked)
 
@@ -324,16 +325,18 @@ Full per-case results: `reports/2.2.5.tsv`; bucketed report: `reports/2.2.5.md`.
 
 ## Section 2.2.6 — "Problems 501 to 600" (Table 2.29, Edwards & Penney 6th ed.)
 
-Corpus: `DE_examples_226.m` — 100 records, **74 scalar (47 IVP) + 26 systems**
-(systems skipped by the scalar harness). A forced-linear chunk: constant-coefficient
+Corpus: `DE_examples_226.m` — 100 records, **74 scalar (47 IVP) + 26 systems**.
+A forced-linear chunk: constant-coefficient
 2nd/high-order IVPs with **general forcing f(t)** and **DiracDelta impulses**, plus
 variable-coefficient series/Bessel/Emden–Fowler/Liénard and the special Riccati
-`y'=x²+y²`. `ctest -R dsolve_corpus_2_2_6_tests` · gate baseline **2**.
+`y'=x²+y²`. `ctest -R dsolve_corpus_2_2_6_tests` · gate baseline **5** (M27
+re-baseline: systems are now verified, not skipped).
 
-| Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
-|------|--------------:|--------:|---------------:|-------|
-| 2026-09-09 (baseline) | 57 / 74 | 77.0% | 17 | 0 FAIL. 17 UNEVAL: the forcing family 561–575 (general f + DiracDelta) all declined, plus 524 (slow Bessel) and 555 (singular-reduction hang, via timeout). |
-| 2026-09-09 (**M26**)  | **72 / 74** | **97.3%** | **2** | **+15, 0 FAIL, 0 regression.** The whole forcing family now solves (below). Gate baseline **2**. |
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-09 (baseline) | 57 / 74 sc | 77.0% | 17 | 0 FAIL. 17 UNEVAL: the forcing family 561–575 (general f + DiracDelta) all declined, plus 524 (slow Bessel) and 555 (singular-reduction hang, via timeout). Systems skipped. |
+| 2026-09-09 (**M26**)  | **72 / 74 sc** | **97.3%** | **2** | **+15, 0 FAIL, 0 regression.** The whole forcing family now solves (below). |
+| 2026-09-09 (**M27**)  | **95 / 100** | **95.0%** | **5** | Systems now VERIFIED by back-substitution (was skipped): **72/74 scalar + 23/26 systems**, 0 FAIL. Gate baseline **2 → 5** (the 3 new system residues exceed the 8 s budget). |
 
 **M26 fixes** (Green's-function variation of parameters, no Laplace transform):
 1. **Definite-integral variation of parameters (`dsolve_common.c`).** When the
@@ -370,6 +373,58 @@ variable-coefficient series/Bessel/Emden–Fowler/Liénard and the special Ricca
 | 2.2.6-555 | `t x''+(t-2)x'+x==0`, x(0)=0 | Exact → the regular-singular first-order reduction `t x'+(t-3)x==C[2]` whose integrating-factor quadrature `∫E^t/t⁴` is non-elementary (`ExpIntegralEi`); a series residue. Declines via timeout (no wrong answer). |
 
 Full per-case results: `reports/2.2.6.tsv`; bucketed report: `reports/2.2.6.md`.
+
+---
+
+## Section 2.2.7 — "Problems 601 to 700" (Table 2.31)
+
+Corpus: `DE_examples_227.m` — 100 records, **50 scalar (23 IVP) + 50 systems** — the
+first section that is **half systems**, and the wave (**M27**) that taught the corpus
+harness to **verify systems** by back-substituting the multi-function solution (they
+were skipped through M26). Scalar half is elementary first-order (25 separable, 14
+quadrature, 8 linear, 2 homogeneous class-G, 1 Riccati); systems are 25 2-D / 18 3-D /
+7 4-D, 47 constant-coefficient + 3 variable-coefficient.
+`ctest -R dsolve_corpus_2_2_7_tests` · gate baseline **7**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-09 (baseline) | 90 / 100 | 90.0% | 10 | Before the two engine fixes: 0 FAIL. Systems verified for the first time (48/50 scalar + 42/50 systems). |
+| 2026-09-09 (**M27**)  | **93 / 100** | **93.0%** | **7** | **+3, 0 FAIL, 0 regression.** 48/50 scalar + 45/50 systems. Two engine fixes below took 90→93. |
+
+**M27 fixes** (system verification + two root-cause engine bugs the corpus surfaced):
+1. **Corpus harness verifies systems (`dsolve_corpus_prelude.m`).** `dsExplicitQ`
+   generalised to a List function slot, and the system-skip removed: a system branch
+   `{x->Function[…], y->Function[…], …}` is back-substituted per equation exactly like a
+   scalar (the numeric machinery already substituted a whole rule-list). §2.1.2 (204
+   systems) and §2.2.6 (26 systems) were re-baselined; §2.2.1–§2.2.5 (pure scalar) are
+   unchanged.
+2. **Separated-exponent Simplify hang (`dsolve_linsys.c`).** A constant-coefficient
+   system as ordinary as `x'=-50x+20y, y'=100x-60y` (eigenvalues -10, -100) HUNG:
+   `dsolve_linsys_tidy` Simplify-ed a body that is a sum of exponentials with
+   widely-separated real decay rates, and Simplify's zero-test spins numericising
+   `E^(-10 t)` against `E^(-100 t)` (catastrophic dynamic range). tidy now Expands any
+   exponential body (it already did for complex/large ones); +2 systems (636, 650).
+3. **Solve periodicity-index collision (`solveinv.c` + `dsolve_common.c`).** `y'=2x Sec[y]`
+   returned a WRONG answer (masked as UNEVAL by the leaked→UNFIT rule): `DSolve\`Separable`
+   feeds Solve an equation already carrying the integration constant `C[1]`, and Solve
+   reused `C[1]` as the `2πk` inverse-trig periodicity index; once its
+   `Element[C[1],Integers]` constraint was stripped the shared `C[1]` corrupted the
+   solution at non-integer values. `solveinv` now **seeds its mint counter past every
+   `C[k]` already in the equation** (fresh index), and `dsolve_extract_solutions` collapses
+   the integer family (`Element[C[k],Integers]` only — not a range condition, which would
+   zero the integration constant and broke `y'=3x²(1+y²), y(0)=1`) to its principal branch.
+   +1 (684).
+
+**Residue (7, bounded UNEVAL, 0 wrong answers):**
+
+| Case | ODE / system | Why |
+|---|---|---|
+| 2.2.7-603/606/607 | constant-coeff 2-D/3-D systems, forced | Irrational/complex eigenvalues + polynomial/exponential forcing: the correct closed form exceeds the 8 s per-case DSolve budget (a performance residue). |
+| 2.2.7-604/608 | variable-coefficient non-triangular systems | Genuinely coupled, variable-coefficient (`t x`, `E^t y` entries) — the honest engine gap (`LinearSystemVarCoeff` covers only the scalar-factor `A(x)=f(x)B` class). |
+| 2.2.7-675 | `y'=Log[1+y²], y(0)=0` | Non-elementary separable (plus the missed equilibrium `y≡0`) — matches Mathematica. |
+| 2.2.7-683 | `y'=4(x y)^(1/3)` | Homogeneous class-G; the implicit inversion path exceeds the 8 s budget (a performance residue). |
+
+Full per-case results: `reports/2.2.7.tsv`; bucketed report: `reports/2.2.7.md`.
 
 ---
 
@@ -449,6 +504,24 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   0 regression);** sole residue 459 (irregular singular point, matches Mathematica). Anti-overfit
   units `t_m25_exact_erf`, `t_m25_kovacic_fundamental_set`, `t_m25_transcendental_frobenius`.
   See §2.2.5 block.
+- **M26 (2026-09-09)** — §2.2.6 corpus (Problems 501–600), a forced-linear chunk.
+  Green's-function (definite-integral) variation of parameters, DiracDelta sifting under
+  `Integrate` (`integrate_dirac.c`), HeavisideTheta/DiracDelta value+derivative rules
+  (`distributions.m`). **72/74 scalar (+15, 0 FAIL).** See §2.2.6 block.
+- **M27 (2026-09-09)** — §2.2.7 corpus (Problems 601–700), the first **half-systems**
+  section, and the wave that made the corpus harness **verify systems** by
+  back-substitution (`dsolve_corpus_prelude.m`: `dsExplicitQ` generalised to a List
+  function slot, system-skip removed). §2.1.2 (204 systems) and §2.2.6 (26 systems)
+  re-baselined; §2.2.1–§2.2.5 (pure scalar) unchanged. Two root-cause engine fixes the
+  corpus surfaced: (2) `dsolve_linsys_tidy` Expands an exponential body instead of
+  Simplifying it — Simplify's zero-test hangs on a sum of exponentials with
+  widely-separated real decay rates (`x'=-50x+20y, y'=100x-60y`, eigenvalues -10,-100);
+  (3) `solveinv` seeds its parameter-mint counter past every `C[k]` already in the
+  equation and `dsolve_extract_solutions` collapses the integer periodicity family to its
+  principal branch, fixing a WRONG `y'=2x Sec[y]` answer from Solve reusing `C[1]` as the
+  `2πk` index. **§2.2.7 93/100 (48/50 scalar + 45/50 systems), 0 FAIL, 0 regression.**
+  Anti-overfit units `t_m27_system_verify`, `t_m27_separable_inverse_constant`,
+  `t_m27_ivp_family_intact`. See §2.2.7 block.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

@@ -105,3 +105,45 @@ that defeats Stage 2/3. Alternatives worth weighing:
 - `src/calculus/dsolve_common.c` — `dsolve_verify_body` (the affected caller and
   the site of the M25 local workaround).
 - DSolve §2.2.5 corpus cases 428, 482 (`DSolve_test_status/DE_examples_225.m`).
+
+---
+
+## 2. `Simplify` hangs on a sum of exponentials with widely-separated real rates
+
+**Status:** WORKED AROUND (2026-09-09, M27), core deficiency OPEN.
+
+**Minimal repro:** `Simplify[Exp[-10 t] + Exp[-100 t]]` does not return (an 8 s
+`TimeConstrained` aborts it); `Simplify[Exp[-t] + Exp[-2 t]]` returns instantly.
+
+**Diagnosis.** `Simplify` invokes a zero-test (`PossibleZeroQ` / `simp_search`
+equivalence checks) that numericalises the two terms at sample points. `E^(-10 t)`
+against `E^(-100 t)` spans a huge dynamic range at a generic `t` (e.g. at `t=1.1`,
+`e^{-11}` vs `e^{-110}` — a ratio of ~10^43), so any difference/equivalence probe
+sees `small ± tiny` and the precision ladder climbs to its ceiling without deciding.
+The separation, not the magnitude, is the trigger: rates within ~1 order (e.g.
+-1,-2) never provoke it.
+
+**Impact.** Constant-coefficient linear ODE *systems* whose spectrum is real but
+spread — e.g. `x'=-50x+20y, y'=100x-60y` (eigenvalues -10, -100) — produce a
+fundamental-matrix body that is exactly such a sum, and the tidy `Simplify` in
+`dsolve_linsys_tidy` hung the whole solve (uninterruptibly). §2.2.7 corpus systems
+636, 650 (and more broadly any wide-spectrum system) are affected.
+
+**Worked around (M27):** `dsolve_linsys_tidy` (`src/calculus/dsolve_linsys.c`) now
+routes *any* exponential-carrying body through `Expand` rather than `Simplify`
+(previously only complex-spectrum / large bodies took `Expand`); the result is
+back-substitution-verified regardless, so the cosmetic loss of combination is
+harmless. This does not fix the underlying `Simplify`/`zero_test` deficiency — a
+direct `Simplify` of a wide-spectrum exponential sum still hangs.
+
+**Suggested direction (core fix, deferred).** Same family as #1: before the numeric
+ladder, factor out the dominant exponential (`E^(-10 t) + E^(-100 t) = E^(-100 t)
+(E^(90 t) + 1)`) or compare terms in log-magnitude so a term negligible at the
+sample is not differenced against a large one; or cap the ladder / return `UNKNOWN`
+when per-point dynamic range exceeds the working precision.
+
+### Cross-references (#2)
+
+- `src/calculus/dsolve_linsys.c` — `dsolve_linsys_tidy` (the `Expand`-not-`Simplify`
+  workaround and its rationale comment).
+- DSolve §2.2.7 corpus systems 636, 650 (`DSolve_test_status/DE_examples_227.m`).

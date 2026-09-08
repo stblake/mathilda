@@ -1770,6 +1770,37 @@ Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
     return body;
 }
 
+/* Collapse the integer-family parameters of a stripped ConditionalExpression.
+ * A multivalued inverse (ArcSin / ArcCos / Log ...) returns v + 2 Pi C[k] gated
+ * by Element[C[k], Integers]; for an ODE GENERAL solution that discrete family
+ * is already subsumed by the continuous integration constant, so the principal
+ * branch (each constrained C[k] -> 0) is the intended solution.  `out` is
+ * consumed; `cond` is scanned for every C[integer] it mentions (the integration
+ * constant never appears in the Element[...] condition, so it is left intact).
+ * Mirrors the IC-path collapse in dsolve_fit_constants (M21). */
+static Expr* collapse_cond_families(Expr* out, const Expr* cond) {
+    if (!out || !cond || cond->type != EXPR_FUNCTION) return out;
+    /* Collapse ONLY a C[k] that the condition constrains as an integer index
+     * (Element[C[k], Integers]).  A range condition such as -Pi/2 < x^3 + C[1]
+     * <= Pi/2 (from a Tan/ArcTan inversion) legitimately mentions the continuous
+     * integration constant C[1]; collapsing that would zero the constant and
+     * break the IVP fit (regression on y'=3x^2(1+y^2), y(0)=1). */
+    if (head_is(cond, intern_symbol("Element")) && cond->data.function.arg_count == 2) {
+        const Expr* p   = cond->data.function.args[0];
+        const Expr* dom = cond->data.function.args[1];
+        if (dom->type == EXPR_SYMBOL && dom->data.symbol.name == intern_symbol("Integers")
+            && head_is(p, intern_symbol("C")) && p->data.function.arg_count == 1
+            && p->data.function.args[0]->type == EXPR_INTEGER)
+            return ds_subst(out, expr_copy((Expr*)p), expr_new_integer(0));
+        return out;
+    }
+    /* Recurse through boolean combinators (And / Or / ...) to reach every
+     * Element[...] atom; never collapse a bare C[k] found outside one. */
+    for (size_t i = 0; i < cond->data.function.arg_count; i++)
+        out = collapse_cond_families(out, cond->data.function.args[i]);
+    return out;
+}
+
 Expr** dsolve_extract_solutions(Expr* solres, const char* varname, size_t* n) {
     *n = 0;
     if (!solres || !head_is(solres, SYM_List)) return NULL;
@@ -1785,11 +1816,16 @@ Expr** dsolve_extract_solutions(Expr* solres, const char* varname, size_t* n) {
                 Expr* lhs = rule->data.function.args[0];
                 if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == varname) {
                     Expr* val = rule->data.function.args[1];
-                    /* strip ConditionalExpression[v, cond] -> v so the body verifies */
+                    /* strip ConditionalExpression[v, cond] -> v so the body
+                     * verifies, collapsing any integer periodicity family the
+                     * condition constrains (2 Pi C[k]) to its principal branch */
                     if (val->type == EXPR_FUNCTION && val->data.function.arg_count == 2
                         && head_is(val, intern_symbol("ConditionalExpression")))
-                        val = val->data.function.args[0];
-                    out[c++] = expr_copy(val);
+                        out[c++] = collapse_cond_families(
+                                       expr_copy(val->data.function.args[0]),
+                                       val->data.function.args[1]);
+                    else
+                        out[c++] = expr_copy(val);
                 }
             }
         }

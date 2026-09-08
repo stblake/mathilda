@@ -1,66 +1,62 @@
-# DSolve M26 — §2.2.6 corpus (Problems 501–600) + general-forcing / DiracDelta
+# M27 — §2.2.7 corpus (Problems 601–700) + corpus-harness system verification
 
-Plan file: `/Users/user/.claude/plans/let-s-continue-our-implementation-stateless-biscuit.md`
+Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-lively-ladybug.md`
 
-## Baseline (measured 2026-09-09)
-`DE_examples_226.m`: 100 records (74 scalar / 47 IVP + 26 systems).
-Corpus run: **57 PASS, 26 SKIP, 17 UNEVAL, 0 FAIL**.
-The 17 U: forcing family 561–575 (15), the 555 hang, and 524 (Bessel verify quirk).
+## Phase A — §2.2.7 corpus file
+- [x] Fetch `indexsubsection16.htm` + convert → `DSolve_test_status/DE_examples_227.m` (100 recs)
+- [x] Verify §2.2.1–§2.2.6 regenerate byte-for-byte identical records (converter change record-neutral)
+- [~] Subscripted-system indvar polish — SKIPPED (functional as-is; #609 solves; not needed)
 
-## Scoring insight
-Branch verdict UNK → PASS (only BAD→FAIL, UNFIT→UNEVAL block). So arbitrary-`f`
-scores PASS iff the **IC fit succeeds** (no leaked C[k]); DiracDelta scores PASS on
-trust, so the in-method probe verify is the correctness guarantee.
+## Phase B — Harness system verification (CORE)
+- [x] Generalized `dsExplicitQ` (dsRuleFn/dsFnList) to accept List `fn`
+- [x] Un-skip systems in `dsolveCheckCode`; route through DSolve + branch verifier
+- [x] Header docstring updated (fn-list exclusion unneeded: residual free of fns post-subst)
+- [x] Runner needs no change (verified by running §2.2.7/§2.2.6)
 
-## Corpus / converter  [done]
-- [x] curl §2.2.6 HTML (WebFetch 403s); parse — 100 problems.
-- [x] Converter `\delta(arg)→DiracDelta[arg]` fix (paren-guarded; bare `delta`
-      Heun parameter preserved — verified via `convert_side`).
-- [x] Generate `DSolve_test_status/DE_examples_226.m`.
-- [x] Baseline measured.
+## Phase C — Report bucketer + re-baseline prior sections
+- [x] `tools/dsolve_corpus_report.py`: scalar + systems lines in overall report
+- [x] Re-baseline §2.2.6 (26 systems) → 95/100, 0 FAIL, baseline 2→5; reports + CMake + STATUS
+- [x] Re-baseline §2.1.2 (204 systems) — DONE: 553/1204, 0 FAIL. Scalar 446/1000 (+10), systems 107/204. Baseline 572→655; reports/2.1.2.{tsv,md} + STATUS + CMake updated.
+- [x] Triage FAILs — §2.2.6: 0 new FAIL; §2.2.7: fixed #684 (Solve collision) + #695 regression
 
-## Solver work (ordered; each lands 0 FAIL)
-- [x] 1. `integrate.c` — equal-limits rule `Integrate[_,{s,a,a}]→0`.
-- [x] 2. `integrate_dirac.c`/`.h` (new) — DiracDelta sifting; called first in real-axis
-      branch. (makefile auto-discovers src/calculus/*.c; added to tests COMMON_SRC.)
-- [x] 3. `deriv.c` — variable-limit Leibniz rule + `HeavisideTheta' = DiracDelta`.
-- [x] 4. `dsolve_common.c` — `dsolve_variation_of_parameters` definite-convolution
-      fallback (fresh dummy `DSolve`vpS`; TrigReduce+Expand; undefined-fn gate).
-- [x] 5. `distributions.m` (new, loaded from init.m) — H/DiracDelta value rules;
-      `dsolve_constcoeff.c` DiracDelta-forcing gate. (Chose value rules over an
-      in-method probe: the corpus verifier + probe-based unit tests are the gate.)
-- [x] 6. `dsolve_common.c` — `dsolve_verify_body` spin guard (keep distributional residual).
-- [x] 6b. `integrate.c` — skip improper/parametric methods on undefined-fn integrand
-      (the real anti-hang fix: exp convolution 6s→0.3s per eval).
-- [~] 7. 555 guard — reverted. The hang is upstream in `dsolve_linear1`'s solve of the
-      regular-singular reduced eqn (pre-existing; U in baseline). Left as a documented
-      residue (corpus 20s timeout handles it). ExactODE/spin-guard Ei attempts didn't fire.
+## Phase D — §2.2.7 wire-up + chase coverage
+- [x] Added `dsolve_corpus_2_2_7_tests` to `tests/CMakeLists.txt` (baseline 7)
+- [x] Baseline-measured → reports/2.2.7.{tsv,md}. 90→93/100 after 2 engine fixes.
+- [x] Chased misses: fixed separated-exp Simplify hang (+2 sys), Solve collision (+1). #604/#608 documented.
 
-## Wiring / docs
-- [x] `tests/CMakeLists.txt` — `dsolve_corpus_2_2_6_tests` (gate baseline 2).
-- [x] `tests/test_dsolve.c` — `t_m26_distributions/_impulse_forcing/_general_forcing`.
-- [x] `DSolve_test_status/STATUS.md` §2.2.6 block; `README.md` row; `reports/2.2.6.{md,tsv}`.
-- [x] `DSOLVE_PLAN.md` M26 entry.
-- [x] `docs/spec/builtins/calculus.md` (D Leibniz, Integrate DiracDelta sift, DSolve forcing)
-      + changelog `docs/spec/changelog/2026-09-07.md`.
+## Phase E — Docs + anti-overfit units
+- [x] STATUS.md §2.2.7 block + M26/M27 wave-history + §2.2.6 re-baseline (§2.1.2 pending numbers)
+- [x] README.md Contents row + systems-now-verified note
+- [x] DSOLVE_PLAN.md M27 entry
+- [x] docs/spec/changelog/2026-09-07.md summary + POSSIBLE_ZEROQ_IMPROVEMENTS.md #2
+- [x] `t_m27_*` units in tests/test_dsolve.c (all pass)
 
 ## Verification
-- [x] §2.2.6: **57→72/74 scalar, 0 FAIL** (2 residues: 524 slow-Bessel, 555 singular).
-- [x] 561 convolution, 564 `½ Sin[2t] HeavisideTheta[t]`, 569 resonant, systems — all correct.
-- [x] No regression: dsolve_corpus 2.2.1–2.2.5 gates held; series/reduce/integrate
-      (dispatch/diffunderint/ramanujan/symmetry/newton_leibniz)/trigreduce; dsolve_tests +
-      dsolve_stress_tests all pass.
-- [x] `make check-c99` clean; `dsolve_corpus_2_2_6_tests` ctest **Passed** (gate baseline 2).
-- [x] valgrind: new code (vp_definite_convolution / integrate_dirac / Leibniz) audited
-      leak-free and appears in NO leak stack. A small per-call leak exists in the
-      forced-equation cascade (`dsolve_factorable_try` / `poly_content` via ds_subst) —
-      **pre-existing** (a pre-M26 forced solve like 534 leaks the same way), out of M26 scope.
-      (macOS valgrind baseline ~13.4 KB noise; Linux CI is the definitive check.)
+- [x] make + make check-c99 green
+- [x] dsolve/solve/reduce/solve_corpus + all dsolve stress suites green (no regression)
+- [x] dsolve_tests (incl t_m27_*) green
+- [x] §2.1.2 (655) + §2.2.6 (5) re-baselined; §2.2.7 (7) 0-FAIL; §2.2.1–5 gates hold (2.2.1/2.2.2 improved)
+- [x] valgrind spot-check: no new leaks (delta = documented per-call Integrate/Solve leak)
+- [~] code-review-graph rebuild — MCP server was DOWN at session start (CONNECT_TIMEOUT); could not
 
 ## Review
-**M26 delivered: §2.2.6 corpus (Problems 501–600) added; 57→72/74 scalar solved, 0 FAIL.**
-The whole general-forcing / DiracDelta family (561–575) now solves via Green's-function
-variation of parameters (definite Duhamel convolution + DiracDelta sifting under Integrate
-+ H/DiracDelta value rules + D Leibniz). Two pre-existing residues (524 slow Bessel, 555
-singular-reduction series) remain, both UNEVAL with no wrong answers. Not committed
-(awaiting user).
+
+**M27 complete.** §2.2.7 (Problems 601–700) added to the corpus, and the corpus harness
+now VERIFIES systems (the headline change) rather than skipping them.
+
+Results (all 0 FAIL):
+- §2.2.7: **93/100** — 48/50 scalar + 45/50 systems (baseline 7).
+- §2.2.6 re-baseline: **95/100** — 72/74 scalar + 23/26 systems (baseline 2→5).
+- §2.1.2 re-baseline: **553/1204** — scalar 446/1000 (+10 from the Solve fix), systems
+  107/204 (baseline 572→655).
+- §2.2.1–§2.2.5 gates hold; §2.2.1 (4→2) and §2.2.2 (8→7) improved as a side-effect.
+
+Three fixes (all root-cause, all verified):
+1. Harness system verification (`dsolve_corpus_prelude.m`): `dsExplicitQ` on a List fn.
+2. Separated-exponent `Simplify` hang (`dsolve_linsys.c`): tidy Expands exponential bodies.
+3. Solve periodicity-index collision (`solveinv.c` + `dsolve_common.c`): fresh mint index +
+   Element[…,Integers]-scoped family collapse. Fixed the M21-flagged wrong-answer class.
+
+No regressions: dsolve/solve/reduce/solve_corpus + 7 dsolve stress suites + check-c99 green;
+valgrind leak-clean. 3 anti-overfit units `t_m27_*`. Docs: DSOLVE_PLAN M27, STATUS, README,
+changelog, PZQ backlog #2.

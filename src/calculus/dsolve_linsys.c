@@ -118,20 +118,26 @@ static void linsys_body_kind(const Expr* e, bool* has_exp, bool* has_trig) {
  * would gratuitously split Log[x] -> Log[Abs[x]] + I Arg[x] (which arises in the
  * variable-coefficient forcing integral, e.g. Integrate[x^{-1}, x] = Log[x]).
  *
- * The final canonicalisation is size-adaptive: a small body (the first-order 2x2/
- * 3x3 systems) gets the pretty full Simplify; a LARGE body — as produced by the
- * state-augmented higher-order systems (N = Σ order, e.g. a 4x4 with an irrational
- * or mixed real/complex spectrum) — gets Expand instead, since a full Simplify
- * there spends tens of seconds in Together/simp_search for no correctness gain
- * (the result is back-substitution-verified regardless).  ComplexExpand already
- * cancels the imaginary unit, so Expand yields a real (if less combined) form. */
+ * The final canonicalisation is content-adaptive: a body with NO exponential (a
+ * pure polynomial/rational body — trivial or nilpotent-only spectrum) gets the
+ * pretty full Simplify; any body carrying an exponential — OR a LARGE body from a
+ * state-augmented higher-order system — gets Expand instead.  Two reasons Simplify
+ * is unsafe on an exponential body: (1) a large body spends tens of seconds in
+ * Together/simp_search for no correctness gain; (2) more seriously, `Simplify` of a
+ * SUM of real exponentials with WIDELY-SEPARATED decay rates hangs — its zero-test
+ * numericises e^{-10 t} against e^{-100 t}, whose catastrophic dynamic range drives
+ * the precision ladder to its ceiling (Simplify[Exp[-10 t] + Exp[-100 t]] does not
+ * return).  A 2x2 as ordinary as x'=-50x+20y, y'=100x-60y (eigenvalues -10,-100)
+ * hits exactly this, so an exponential body must never reach Simplify here.  Expand
+ * yields a correct (if less combined) form and the result is back-substitution-
+ * verified regardless; ComplexExpand already cancels the imaginary unit. */
 #define LINSYS_TIDY_SIMPLIFY_LIMIT 180
 Expr* dsolve_linsys_tidy(Expr* body) {
     Expr* ce   = expr_contains_complex(body)
                      ? eval_and_free(ds_call1("ComplexExpand", body)) : body;
     bool has_exp = false, has_trig = false;
     linsys_body_kind(ce, &has_exp, &has_trig);
-    bool heavy = (has_exp && has_trig) ||
+    bool heavy = has_exp ||
                  linsys_node_count(ce, LINSYS_TIDY_SIMPLIFY_LIMIT) >= LINSYS_TIDY_SIMPLIFY_LIMIT;
     Expr* si   = eval_and_free(ds_call1(heavy ? "Expand" : "Simplify", ce));
     Expr* rule = cosh_sinh_rule();
