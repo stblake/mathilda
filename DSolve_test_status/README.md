@@ -23,6 +23,7 @@ living scoreboard all in one place.
 | `DE_examples_225.m` | Section **2.2.5** corpus — 100 series-heavy ODEs (Table 2.19, Problems 401–500), 15 IVPs. |
 | `DE_examples_226.m` | Section **2.2.6** corpus — 100 ODEs (Table 2.29, Edwards & Penney, Problems 501–600): 74 scalar (47 IVP, forced linear with general f(t) / DiracDelta impulses) + 26 systems. |
 | `DE_examples_227.m` | Section **2.2.7** corpus — 100 ODEs (Table 2.31, Problems 601–700): 50 scalar (23 IVP, elementary first-order) + 50 systems (25 2-D / 18 3-D / 7 4-D). The first half-systems section. |
+| `DE_examples_228.m` | Section **2.2.8** corpus — 100 scalar first-order ODEs (Table 2.33, Edwards & Penney, Problems 701–800), 20 IVPs: separable / linear / homogeneous (class A/G/C) / exact / Bernoulli / quadrature. Elementary, same territory as §2.2.1–§2.2.4. |
 | `test_dsolve_corpus.c` | Fork-per-case runner (compiled via `tests/CMakeLists.txt`). |
 | `dsolve_corpus_prelude.m` | Self-verifier: runs `DSolve` under `TimeConstrained` and numerically back-substitutes each branch. |
 | `STATUS.md` | **The scoreboard** — per-section, per-bucket solve counts + wave history. Update after every wave. |

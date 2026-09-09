@@ -46,6 +46,36 @@ static bool bern_mixed_radical(const Expr* e, const char* xvar, const char* Yn) 
     return false;
 }
 
+/* Does `e` contain the dependent variable Y OUTSIDE the algebraic skeleton of a
+ * Bernoulli right-hand side?  A genuine Bernoulli F = A(x) Y + B(x) Y^n is a
+ * polynomial/power in Y: Y may appear only as a bare factor or as the BASE of a
+ * power whose exponent is constant (free of Y).  Two occurrences make F
+ * transcendental in Y and so NOT Bernoulli: (a) Y inside a non-Power function
+ * head (Sin[Y], Cos[Y], Exp[Y], Log[Y], ...) — e.g. the trig equation
+ * 2 x Sin[y] Cos[y] y' == 4 x^2 + Sin[y]^2, where F is rational in Sin[Y]/Cos[Y];
+ * (b) Y in a power EXPONENT (Y^Y, 2^Y).  The exponent detector's derivative +
+ * Cancel + free-of chain SPINS on such a transcendental F (seconds per decline),
+ * so gate it here and let the next cascade method (AlmostLinear / Linearizable)
+ * own it.  Mirrors the bern_mixed_radical early-decline guard. */
+static bool bern_Y_nonalgebraic(const Expr* e, const char* Yn) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* hn = h->data.symbol.name;
+        if (hn == SYM_Power) {
+            if (e->data.function.arg_count == 2
+                && ds_contains(e->data.function.args[1], Yn)) return true;  /* Y in exponent */
+        } else if (hn != SYM_Plus && hn != SYM_Times) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (ds_contains(e->data.function.args[i], Yn)) return true; /* Y inside f[...] */
+        }
+    }
+    if (bern_Y_nonalgebraic(h, Yn)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (bern_Y_nonalgebraic(e->data.function.args[i], Yn)) return true;
+    return false;
+}
+
 static Expr* powneg1(Expr* base) { /* base^-1; base consumed */
     return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ base, expr_new_integer(-1) }, 2);
 }
@@ -61,6 +91,7 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
     const char* Yn = intern_symbol("DSolve`Y");
     Expr* FY = ds_subst(F, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Yn));
     if (bern_mixed_radical(FY, xvar, Yn)) { expr_free(FY); return NULL; }
+    if (bern_Y_nonalgebraic(FY, Yn)) { expr_free(FY); return NULL; }
 
     /* Q = FY - Y F_Y */
     Expr* Q = eval_and_free(ds_call2(SYM_Subtract, expr_copy(FY),

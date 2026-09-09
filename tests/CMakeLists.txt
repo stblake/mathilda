@@ -3789,6 +3789,23 @@ add_test(NAME dsolve_corpus_2_2_7_tests
                  ../../DSolve_test_status/DE_examples_227.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
+# Section 2.2.8 "Problems 701 to 800" (Table 2.33, Edwards & Penney): 100 scalar
+# first-order ODEs (20 IVP), 0 systems.  Elementary families -- separable, linear,
+# homogeneous (class A/G/C), exact (incl. fractional-power), Bernoulli (incl.
+# fractional exponent), quadrature, plus a few y'=F(ax+by+c) substitution / Riccati
+# forms.  Same territory as 2.2.1-2.2.4.  M28.  Baseline 1: 99 PASS.  The M28 wave
+# fixed a Bernoulli cascade hang -- 757 (2 x Sin[y]Cos[y] y'==4x^2+Sin[y]^2) drove
+# the Bernoulli exponent detector, which needs F algebraic in y, into a multi-second
+# spin on a trig-in-y F, timing out the whole cascade before Linearizable could solve
+# it; dsolve_bernoulli.c now declines fast when y appears non-algebraically.  Sole
+# residue 2.2.8-783 (y'==1+x^2+y^2+x^2 y^4), a quartic-in-y equation solved by
+# Maple/Mma/SymPy only via the general "solve-for-y then differentiate" (Maple's
+# y=_G(x,y')) method Mathilda lacks -- declines cleanly, no wrong answer.
+add_test(NAME dsolve_corpus_2_2_8_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_228.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

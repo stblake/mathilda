@@ -428,6 +428,42 @@ Full per-case results: `reports/2.2.7.tsv`; bucketed report: `reports/2.2.7.md`.
 
 ---
 
+## Section 2.2.8 — "Problems 701 to 800" (Table 2.33, Edwards & Penney)
+
+Corpus: `DE_examples_228.m` — 100 records, **100 scalar (20 IVP), 0 systems** — a return
+to elementary first-order after the half-systems §2.2.7. Same territory as §2.2.1–§2.2.4:
+23 linear, 16 separable, ~25 homogeneous (class A/G/C), 11 exact (incl. two fractional-
+power potentials), 19 Bernoulli (several fractional-exponent), 3 quadrature, plus a few
+`y'=F(ax+by+c)` substitution / Riccati forms.
+`ctest -R dsolve_corpus_2_2_8_tests` · gate baseline **1**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-09 (baseline) | 98 / 100 | 98.0% | 2 | 0 FAIL, 0 crashes. Both residues in the `y=_G(x,y')` class. |
+| 2026-09-09 (**M28**)  | **99 / 100** | **99.0%** | **1** | **+1, 0 FAIL, 0 regression.** One Bernoulli cascade-hang fix below took 98→99. |
+
+**M28 fix** (one root-cause engine bug the corpus surfaced):
+1. **Bernoulli hangs the cascade on a transcendental-in-`y` RHS (`dsolve_bernoulli.c`).**
+   `2.2.8-757` `2 x Sin[y]Cos[y] y' == 4 x² + Sin[y]²` reduces (`u = Sin[y]²`) to the linear
+   `u' − u/x == 4 x`, which `Linearizable` solves in one step. But solved for `y'` the RHS is
+   a rational function of `Sin[y]`/`Cos[y]` — transcendental in `y`, not the Bernoulli form
+   `A(x) y + B(x) y^n` — and the Bernoulli exponent detector (`Y F_Y`, `Cancel`, `ds_free_of`)
+   spun on it for seconds, timing out the whole cascade (`$Aborted`) before `Linearizable` was
+   reached. `dsolve_bernoulli.c` now declines immediately when `y` appears inside a non-`Power`
+   function head (`Sin[y]`, `Exp[y]`, …) or in a power exponent — mirroring the existing
+   `bern_mixed_radical` early-decline guard; a genuine Bernoulli (algebraic in `y`) is
+   untouched. +1 (757).
+
+**Residue (1, bounded UNEVAL, 0 wrong answers):**
+
+| Case | ODE | Why |
+|---|---|---|
+| 2.2.8-783 | `y'=1+x²+y²+x²y⁴` | Quartic in `y` (beyond Abel). Maple/Mma/SymPy solve it only via the general "solve-for-`y` then differentiate" (Maple's `y=_G(x,y')`) method Mathilda lacks — declines cleanly. A future `SolvableForY` method would close it. |
+
+Full per-case results: `reports/2.2.8.tsv`; bucketed report: `reports/2.2.8.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -522,6 +558,15 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   `2πk` index. **§2.2.7 93/100 (48/50 scalar + 45/50 systems), 0 FAIL, 0 regression.**
   Anti-overfit units `t_m27_system_verify`, `t_m27_separable_inverse_constant`,
   `t_m27_ivp_family_intact`. See §2.2.7 block.
+- **M28 (2026-09-09)** — §2.2.8 corpus (Problems 701–800, Table 2.33, Edwards & Penney),
+  a return to elementary first-order (100 scalar, 20 IVP, 0 systems). One root-cause
+  engine fix: `dsolve_bernoulli.c` now declines fast when `y` appears non-algebraically
+  (inside a transcendental function or a power exponent) — the Bernoulli exponent detector
+  used to spin for seconds on the trig-in-`y` RHS of `2 x Sin[y]Cos[y] y'==4x²+Sin[y]²`
+  (757), timing out the whole cascade (`$Aborted`) before `Linearizable` could solve it.
+  **§2.2.8 99/100, 0 FAIL, 0 regression.** Sole residue 783 (`y'=1+x²+y²+x²y⁴`, a
+  quartic-in-`y` needing the general `y=_G(x,y')` solve-for-`y`-and-differentiate method).
+  Anti-overfit unit `t_m28_bernoulli_hang_trig_substitution`. See §2.2.8 block.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

@@ -1051,6 +1051,39 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     ctest + stress suites (`dsolve`, m5/m12/m14/m17/m18/m19/m20), `solve`/`reduce`/`solve_corpus`,
     and `make check-c99` green.
 
+- **M28 — §2.2.8 corpus (Problems 701–800) + Bernoulli cascade-hang fix.** ✅ DONE. Table 2.33
+  (Edwards & Penney): 100 records — **100 scalar (20 IVP), 0 systems**, a return to elementary
+  first-order after §2.2.7's half-systems chunk. The same families as §2.2.1–§2.2.4 (23 linear,
+  16 separable, ~25 homogeneous class A/G/C, 11 exact incl. two fractional-power potentials, 19
+  Bernoulli several with fractional exponent, 3 quadrature, plus a few `y'=F(ax+by+c)` /
+  Riccati). **98 → 99 / 100 scalar, 0 FAIL, 0 crashes, 0 regression** (§2.1.2, §2.2.1–§2.2.7 gates
+  held). The converter needed no change (`--label 2.2.8` on the section-agnostic
+  `latex_ode_to_mathilda.py` produced a clean 100-record file; §2.2.1–§2.2.7 regenerate
+  byte-for-byte identical). One root-cause engine fix reusing verified machinery, so no wave ships
+  a wrong answer.
+  - **Bernoulli fast-decline on a transcendental-in-`y` RHS (`dsolve_bernoulli.c`, 757).**
+    `2 x Sin[y]Cos[y] y' == 4 x² + Sin[y]²` reduces (`u = Sin[y]²`) to the linear `u' − u/x == 4 x`,
+    which `Linearizable` solves in one step — but solved for `y'` the RHS is a rational function of
+    `Sin[y]`/`Cos[y]`, transcendental in `y`, NOT the Bernoulli form `A(x) y + B(x) y^n`. The
+    exponent detector (`Q = Y − Y F_Y`, then `n = Y Q_Y/Q` via `Cancel`, then `ds_free_of`) spun for
+    seconds on the trig-rational expression, timing out the whole cascade (`$Aborted`) before
+    `Linearizable` was reached. A new early-decline gate `bern_Y_nonalgebraic` returns NULL
+    immediately when `y` appears inside a non-`Power` function head (`Sin[y]`, `Exp[y]`, …) or in a
+    power exponent — mirroring the existing `bern_mixed_radical` guard; a genuine Bernoulli
+    (algebraic in `y`, e.g. 752 `F = y − E^(-2x)/(2x) y³`) is untouched (the reconstruction check
+    already rejected any transcendental F, so this only makes the decline FAST, never changes an
+    answer). +1 (757).
+  - **Residue (1, bounded UNEVAL, 0 wrong answers):** 2.2.8-783 `y'=1+x²+y²+x²y⁴`, a quartic-in-`y`
+    equation (beyond Abel) that Maple/Mma/SymPy solve only via the general "solve-for-`y` then
+    differentiate" method (Maple's `y=_G(x,y')` class) — a `SolvableForY`/generalised-d'Alembert
+    method Mathilda does not have. Declines cleanly (no hang, no wrong answer); future work.
+  - New corpus `DSolve_test_status/DE_examples_228.m`; ctest `dsolve_corpus_2_2_8_tests` (gate
+    baseline 1); `reports/2.2.8.{tsv,md}`; STATUS.md §2.2.8 block + M28 wave-history bullet; README
+    row. Anti-overfit unit `t_m28_bernoulli_hang_trig_substitution` in `test_dsolve.c` (757 solves +
+    back-substitutes, the general `a`-coefficient family solves, and a genuine Bernoulli 752 still
+    solves via Bernoulli). All DSolve ctest + stress suites, `solve`/`reduce`, and `make check-c99`
+    green; §2.1.2/§2.2.1–§2.2.7 gates held.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

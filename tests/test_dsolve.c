@@ -701,6 +701,27 @@ static void t_m27_ivp_family_intact(void) {
     check_true("FreeQ[DSolve[{y'[x]==3 x^2 (1+y[x]^2), y[0]==1}, y, x], C[_]]");
 }
 
+/* ---- M28: Bernoulli must decline FAST on a transcendental-in-y RHS ---- */
+/* corpus 2.2.8-757: 2 x Sin[y] Cos[y] y' == 4 x^2 + Sin[y]^2 reduces (u = Sin[y]^2)
+ * to the linear u' - u/x == 4 x, which Linearizable solves instantly.  But the RHS,
+ * solved for y', is a rational function of Sin[y]/Cos[y] -- transcendental in y, not
+ * the Bernoulli form A(x) y + B(x) y^n -- and the Bernoulli exponent detector spun on
+ * it for seconds (derivative + Cancel + free-of on a trig mess), timing out the whole
+ * cascade before Linearizable was reached ($Aborted).  dsolve_bernoulli.c now declines
+ * immediately when y appears inside a non-Power function or a power exponent. */
+static void t_m28_bernoulli_hang_trig_substitution(void) {
+    /* solves explicitly now (the cascade reaches Linearizable instead of $Aborted) */
+    check_form("Head[DSolve[2 x Sin[y[x]] Cos[y[x]] y'[x] == 4 x^2 + Sin[y[x]]^2, y, x][[1, 1]]]", "Rule");
+    /* the solution back-substitutes to zero (numeric, C[1] and x instantiated) */
+    check_true("With[{s = DSolve[2 x Sin[y[x]] Cos[y[x]] y'[x] == 4 x^2 + Sin[y[x]]^2, y, x][[1]] /. C[1] -> 1}, "
+               "Abs[N[(2 x Sin[y[x]] Cos[y[x]] y'[x] - (4 x^2 + Sin[y[x]]^2)) /. s /. x -> 13/10, 20]] < 1/1000000]");
+    /* forward-generator: the general a-coefficient family solves too (not overfit to a==4) */
+    check_form("Head[DSolve[2 x Sin[y[x]] Cos[y[x]] y'[x] == 9 x^2 + Sin[y[x]]^2, y, x][[1, 1]]]", "Rule");
+    /* over-restriction guard: a GENUINE Bernoulli (2.2.8-752, F = y - E^(-2x)/(2x) y^3)
+     * is algebraic in y, so the new gate never fires and it still solves. */
+    check_form("Head[DSolve[2 y'[x] x + y[x]^3 E^(-2 x) == 2 y[x] x, y, x][[1, 1]]]", "Rule");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2311,6 +2332,7 @@ int main(void) {
     TEST(t_m27_system_verify);
     TEST(t_m27_separable_inverse_constant);
     TEST(t_m27_ivp_family_intact);
+    TEST(t_m28_bernoulli_hang_trig_substitution);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);
