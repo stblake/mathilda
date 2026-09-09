@@ -743,6 +743,96 @@ static void t_m29_sec_floor_verifies(void) {
                "Abs[N[(y''[x] + 4 y[x] - Sec[2 x]) /. s /. x -> 11/10, 20]] < 1/1000000]");
 }
 
+/* ---- M30: forced linear system with an irrational spectrum (no Integrate blow-up) ---- */
+/* corpus 2.2.10-924: {x'==2x+4y+3E^t, y'==5x-y-t^2} has eigenvalues (1+-Sqrt[89])/2.
+ * The variation-of-parameters integral Integrate[E^{-lambda t} t^m] rationalised the
+ * 1/lambda^k coefficient into a hundreds-of-digit integer and ran >90 s.  dsolve_linsys
+ * now abstracts a REAL-irrational eigenvalue to a fresh symbol before the integral (and
+ * Simplifies the algebraic coefficients, safe once the exponents are symbolic), then
+ * substitutes the eigenvalue back -- fast and exact.  Complex spectra stay concrete. */
+static void t_m30_linsys_irrational_forcing(void) {
+    /* 924 itself: solved, and both residuals back-substitute to ~0 */
+    check_true("MatchQ[DSolve[{x'[t]==2 x[t]+4 y[t]+3 E^t, y'[t]==5 x[t]-y[t]-t^2}, {x,y}, t], "
+               "{{x -> _Function, y -> _Function}}]");
+    check_true("With[{s = DSolve[{x'[t]==2 x[t]+4 y[t]+3 E^t, y'[t]==5 x[t]-y[t]-t^2}, {x,y}, t][[1]]}, "
+               "Max[Abs[N[{(x'[t]-(2 x[t]+4 y[t]+3 E^t)), (y'[t]-(5 x[t]-y[t]-t^2))} /. s "
+               "/. {C[1]->7/10, C[2]->13/10, t->3/10}, 20]]] < 1/1000000]");
+    /* anti-overfit: a DIFFERENT 2x2 forced system with an irrational spectrum
+     * (+-Sqrt[5]) and mixed exp/polynomial forcing solves and verifies too */
+    check_true("With[{s = DSolve[{x'[t]==x[t]+4 y[t]+E^t, y'[t]==x[t]-y[t]+t}, {x,y}, t][[1]]}, "
+               "Max[Abs[N[{(x'[t]-(x[t]+4 y[t]+E^t)), (y'[t]-(x[t]-y[t]+t))} /. s "
+               "/. {C[1]->7/10, C[2]->13/10, t->3/10}, 20]]] < 1/1000000]");
+    /* regression guard: a COMPLEX-spectrum forced system (924's sibling in the
+     * corpus, 2.2.10-927, spectrum {2,-1+-I,0}) must stay concrete and still solve */
+    check_true("MatchQ[DSolve[{x1'[t]==x2[t]+x3[t]+1, x2'[t]==x3[t]+x4[t]+t, "
+               "x3'[t]==x1[t]+x4[t]+t^2, x4'[t]==x1[t]+x2[t]+t^3}, {x1,x2,x3,x4}, t], "
+               "{{x1 -> _Function, x2 -> _Function, x3 -> _Function, x4 -> _Function}}]");
+}
+
+/* ---- M30: Kovacic closes an INHOMOGENEOUS variable-coefficient ODE ---- */
+/* corpus 2.2.10-907: (x^2-1)y''-2x y'+2y == x^2-1 (Legendre-type) declined -- the
+ * Kovacic solver handled only the homogeneous equation.  It now accepts a forcing
+ * (dsolve_second_order_PQ_forced), de-obfuscates the fundamental set it recovers
+ * (Sqrt[-1+x^2]E^(-1/2 Log[1+x]+3/2 Log[-1+x]) -> the clean {x,(x-1)^2}), and adds the
+ * particular solution by variation of parameters, re-verifying the full solution. */
+static void t_m30_kovacic_inhomogeneous(void) {
+    /* 907: an explicit closed-form branch (not a decline), residual ~0 */
+    check_form("Head[DSolve[(x^2-1) y''[x]-2 x y'[x]+2 y[x] == x^2-1, y, x][[1, 1]]]", "Rule");
+    check_true("With[{s = DSolve[(x^2-1) y''[x]-2 x y'[x]+2 y[x] == x^2-1, y, x][[1]] "
+               "/. {C[1]->6/5, C[2]->3/5}}, "
+               "Abs[N[((x^2-1) y''[x]-2 x y'[x]+2 y[x] - (x^2-1)) /. s /. x->7/10, 20]] < 1/1000000]");
+    /* anti-overfit: the SAME operator with a different forcing (== x) also closes */
+    check_form("Head[DSolve[(x^2-1) y''[x]-2 x y'[x]+2 y[x] == x, y, x][[1, 1]]]", "Rule");
+    check_true("With[{s = DSolve[(x^2-1) y''[x]-2 x y'[x]+2 y[x] == x, y, x][[1]] "
+               "/. {C[1]->6/5, C[2]->3/5}}, "
+               "Abs[N[((x^2-1) y''[x]-2 x y'[x]+2 y[x] - x) /. s /. x->7/10, 20]] < 1/1000000]");
+    /* regression: the homogeneous equation still solves (unchanged path) */
+    check_form("Head[DSolve[(x^2-1) y''[x]-2 x y'[x]+2 y[x] == 0, y, x]]", "List");
+}
+
+/* ---- M31: coupled DAG constant system — multi-term exponential forcing ---- */
+/* corpus 2.2.11-1014: {x1'=2x1, x2'=-7x1+9x2+7x3, x3'=2x3} is a DAG (x1,x3 sources,
+ * x2 sink) solved by TriangularSystem, which peels x1,x3 and hands the scalar engine
+ * x2' = 9 x2 + 7(C[k]-C[j])E^{2x}.  The integrating-factor integrand mu*q =
+ * E^{-9x}(7 C[k]E^{2x} - 7 C[j]E^{2x}) was passed to Integrate UN-combined, driving
+ * the exponential-substitution path to a 55 s, branch-WRONG (-1)^(1/9) antiderivative
+ * (kept because its residual is zero-test-undecidable).  Root fix in Integrate:
+ * integrate.c:try_linearity now distributes a product over a sum factor (c(g+h)->cg+ch),
+ * so the exponentials collapse to E^{-7x} (the clean single-product path) -- fast and
+ * correct.  (The direct Integrate bug is guarded in test_integrate_dispatch.c.) */
+static void t_m31_triangular_exp_forcing(void) {
+    /* 1014 itself: solves; both the wrong branch and the slowness are gone (residual ~0) */
+    check_true("And @@ (PossibleZeroQ /@ ({x1'[x]-2 x1[x], x2'[x]-(-7 x1[x]+9 x2[x]+7 x3[x]), x3'[x]-2 x3[x]} /. "
+               "DSolve[{x1'[x]==2 x1[x], x2'[x]==-7 x1[x]+9 x2[x]+7 x3[x], x3'[x]==2 x3[x]}, {x1,x2,x3}, x][[1]]))");
+    /* the peeled scalar equation in residual form with multi-term exponential forcing
+     * (the exact shape TriangularSystem feeds) must solve clean -- a branch-wrong
+     * antiderivative would make this residual nonzero */
+    check_true("With[{s = DSolve[x2'[x] - (-7 a E^(2 x) + 9 x2[x] + 7 b E^(2 x)) == 0, x2, x][[1]]}, "
+               "Abs[N[(x2'[x] - (-7 a E^(2 x) + 9 x2[x] + 7 b E^(2 x))) /. s "
+               "/. {C[1]->7/10, a->3/10, b->9/10, x->6/5}, 20]] < 1/1000000]");
+    /* anti-overfit: a DIFFERENT DAG constant system (other eigenvalues/forcing) */
+    check_true("And @@ (PossibleZeroQ /@ ({x1'[x]-3 x1[x], x2'[x]-(2 x1[x]+5 x2[x]-4 x3[x]), x3'[x]-3 x3[x]} /. "
+               "DSolve[{x1'[x]==3 x1[x], x2'[x]==2 x1[x]+5 x2[x]-4 x3[x], x3'[x]==3 x3[x]}, {x1,x2,x3}, x][[1]]))");
+}
+
+/* ---- M31: 4x4 constant system with large eigenvalues — answer is correct ---- */
+/* corpus 2.2.11-1001: spectrum {16,32,48,64}; the matrix-exponential solution is
+ * CORRECT (Simplify[residual]==0) but back-substitutes to a difference of E^{64x}-scale
+ * terms that the corpus prelude's 20-digit numeric sweep at x~1.1..3 misread as nonzero
+ * (catastrophic cancellation -> UNEVAL).  The solver was never wrong; the shared
+ * verifier now re-checks a not-small sample at 200-digit precision.  This guards that
+ * the solution is genuinely correct: residual ~0 at a small point (no cancellation noise). */
+static void t_m31_linsys_large_eigenvalue(void) {
+    check_true("MatchQ[DSolve[{x1'[x]==47 x1[x]-8 x2[x]+5 x3[x]-5 x4[x], x2'[x]==-10 x1[x]+32 x2[x]+18 x3[x]-2 x4[x], "
+               "x3'[x]==139 x1[x]-40 x2[x]-167 x3[x]-121 x4[x], x4'[x]==-232 x1[x]+64 x2[x]+360 x3[x]+248 x4[x]}, {x1,x2,x3,x4}, x], "
+               "{{x1 -> _Function, x2 -> _Function, x3 -> _Function, x4 -> _Function}}]");
+    check_true("With[{s = DSolve[{x1'[x]==47 x1[x]-8 x2[x]+5 x3[x]-5 x4[x], x2'[x]==-10 x1[x]+32 x2[x]+18 x3[x]-2 x4[x], "
+               "x3'[x]==139 x1[x]-40 x2[x]-167 x3[x]-121 x4[x], x4'[x]==-232 x1[x]+64 x2[x]+360 x3[x]+248 x4[x]}, {x1,x2,x3,x4}, x][[1]]}, "
+               "Max[Abs[N[{x1'[x]-(47 x1[x]-8 x2[x]+5 x3[x]-5 x4[x]), x2'[x]-(-10 x1[x]+32 x2[x]+18 x3[x]-2 x4[x]), "
+               "x3'[x]-(139 x1[x]-40 x2[x]-167 x3[x]-121 x4[x]), x4'[x]-(-232 x1[x]+64 x2[x]+360 x3[x]+248 x4[x])} /. s "
+               "/. {C[1]->7/10, C[2]->9/10, C[3]->11/10, C[4]->13/10, x->1/10}, 30]]] < 1/1000000]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2355,6 +2445,10 @@ int main(void) {
     TEST(t_m27_ivp_family_intact);
     TEST(t_m28_bernoulli_hang_trig_substitution);
     TEST(t_m29_sec_floor_verifies);
+    TEST(t_m30_linsys_irrational_forcing);
+    TEST(t_m30_kovacic_inhomogeneous);
+    TEST(t_m31_triangular_exp_forcing);
+    TEST(t_m31_linsys_large_eigenvalue);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

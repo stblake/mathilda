@@ -242,6 +242,9 @@ void  dsolve_linear_normalize(Expr** c, Expr** forcing, int order, const char* x
  * order is 2, the equation is linear, and the forcing is zero.  On true, *Pc
  * and *Qc are owned (Simplify-reduced). */
 bool  dsolve_second_order_PQ(DSolveProblem* P, Expr** Pc, Expr** Qc);
+/* As above but also accepts an inhomogeneous 2nd-order linear ODE (returns P, Q
+ * of the homogeneous part; the caller handles the forcing). */
+bool  dsolve_second_order_PQ_forced(DSolveProblem* P, Expr** Pc, Expr** Qc);
 
 /* The Liouville normal-form potential of y'' + P y' + Q y == 0.  Substituting
  * y = z * Exp[-Integrate[P/2, x]] kills the first-derivative term, leaving the

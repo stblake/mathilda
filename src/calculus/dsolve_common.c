@@ -746,15 +746,21 @@ void dsolve_linear_normalize(Expr** c, Expr** g, int n, const char* xvar) {
     if (d) expr_free(d);
 }
 
-bool dsolve_second_order_PQ(DSolveProblem* P, Expr** Pc, Expr** Qc) {
+static bool second_order_PQ_impl(DSolveProblem* P, Expr** Pc, Expr** Qc,
+                                 bool require_homog) {
     if (P->nfun != 1 || P->neq != 1) return false;
     if (P->max_order[0] != 2) return false;
     Expr** c; Expr* g; int n;
     if (!dsolve_linear_coeffs(P, &c, &g, &n)) return false;
     bool homog = ds_is_zero(g);
     expr_free(g);
-    if (n != 2 || !homog) { for (int k = 0; k <= n; k++) expr_free(c[k]); free(c); return false; }
-    /* normalized P = c1/c2, Q = c0/c2 */
+    if (n != 2 || (require_homog && !homog)) {
+        for (int k = 0; k <= n; k++) expr_free(c[k]);
+        free(c);
+        return false;
+    }
+    /* normalized P = c1/c2, Q = c0/c2 (from the homogeneous part; any forcing is
+     * the caller's responsibility) */
     *Pc = ds_simplify(ds_call2(SYM_Times, expr_copy(c[1]),
               expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){ expr_copy(c[2]), expr_new_integer(-1) }, 2)));
@@ -764,6 +770,17 @@ bool dsolve_second_order_PQ(DSolveProblem* P, Expr** Pc, Expr** Qc) {
     for (int k = 0; k <= 2; k++) expr_free(c[k]);
     free(c);
     return true;
+}
+
+bool dsolve_second_order_PQ(DSolveProblem* P, Expr** Pc, Expr** Qc) {
+    return second_order_PQ_impl(P, Pc, Qc, true);
+}
+
+/* As dsolve_second_order_PQ, but accepts an INHOMOGENEOUS equation too, returning
+ * P, Q of the homogeneous part.  The caller (Kovacic) then adds the particular
+ * solution by variation of parameters over the fundamental set it recovers. */
+bool dsolve_second_order_PQ_forced(DSolveProblem* P, Expr** Pc, Expr** Qc) {
+    return second_order_PQ_impl(P, Pc, Qc, false);
 }
 
 Expr* dsolve_normal_form(const Expr* Pc, const Expr* Qc, const char* xvar,

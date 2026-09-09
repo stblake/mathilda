@@ -47,6 +47,21 @@ static Expr* ev(const char* head, Expr* a) { return eval_and_free(ds_call1(head,
 static Expr* mul(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Times, a, b)); }
 static Expr* add(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Plus, a, b)); }
 
+/* True for a plain rational eigenvalue (Integer / big integer / Rational).  Such
+ * an eigenvalue is left concrete in the variation-of-parameters integral so the
+ * integrator still resolves genuine resonance (a forcing exponent equal to the
+ * eigenvalue).  A NON-rational eigenvalue (radical, Root, Complex, symbolic
+ * parameter) is instead abstracted to a fresh symbol before the integral — see
+ * the forcing branch of dsolve_linsys_assemble for why (Integrate rationalises a
+ * 1/lambda^k coefficient into a hundreds-of-digit integer and spins on it), and
+ * why the abstraction is resonance-safe (an irrational/complex eigenvalue cannot
+ * equal a rational/integer forcing exponent). */
+static bool linsys_is_rational_scalar(const Expr* e) {
+    if (!e) return false;
+    if (expr_is_integer_like(e)) return true;
+    return head_is((Expr*)e, SYM_Rational);
+}
+
 /* The rewrite rule  Cosh[a_] + Sinh[a_] :> E^a  (RuleDelayed), used to fold the
  * hyperbolic form Simplify prefers for a real repeated eigenvalue back to a
  * plain exponential without disturbing genuine Cos/Sin from complex spectra. */
@@ -308,8 +323,45 @@ Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
             for (size_t i = 0; i < n; i++) rc[i] = ds_const((int)i + 1);
             bool force_ok = true;
             if (!b_zero) {
+                /* Abstract every NON-rational eigenvalue on J's diagonal to a
+                 * fresh symbol before the variation-of-parameters integral.  An
+                 * irrational/algebraic eigenvalue lambda makes ds_integrate
+                 * rationalise the 1/lambda^k coefficient of Integrate[E^{-lambda x}
+                 * x^m, x] into a hundreds-of-digit integer and spin for many
+                 * seconds per term (Sqrt[89] in system 2.2.10-924 blew past 90 s);
+                 * a fresh symbol integrates in closed form instantly and the true
+                 * eigenvalue is substituted back afterwards.  Rational eigenvalues
+                 * stay concrete so genuine resonance is still handled by the
+                 * integrator — and an irrational/complex eigenvalue can never equal
+                 * a rational/integer forcing exponent, so abstracting it is
+                 * resonance-safe.  PhiInv uses the abstracted diagonal (Jsym); Phi
+                 * keeps the real eigenvalues, and the two meet only in Dot/Expand. */
+                Expr* Jsym = expr_copy(J);
+                const char** evn = malloc(n * sizeof(char*));
+                Expr** evval = malloc(n * sizeof(Expr*));
+                size_t nev = 0;
+                for (size_t i = 0; i < n; i++) {
+                    Expr* Jii = Jsym->data.function.args[i]->data.function.args[i];
+                    /* Abstract only REAL-irrational eigenvalues (radicals/Root).  A
+                     * complex eigenvalue a+ib is left concrete: it does not drive the
+                     * 1/lambda^k rationalisation blow-up (its e^{a x}Cos/Sin[b x] real
+                     * form is handled by the existing ComplexExpand path), and
+                     * abstracting it would needlessly route the integrand through the
+                     * expensive Simplify below — which times out on a 4x4 forced
+                     * system such as 2.2.10-927 (spectrum {2, -1+-I, 0}). */
+                    if (!linsys_is_rational_scalar(Jii) && !expr_contains_complex(Jii)) {
+                        char nm[48];
+                        snprintf(nm, sizeof(nm), "DSolve`sysEv%zu", i);
+                        evn[nev]   = intern_symbol(nm);
+                        evval[nev] = expr_copy(Jii);
+                        expr_free(Jii);
+                        Jsym->data.function.args[i]->data.function.args[i] =
+                            expr_new_symbol(evn[nev]);
+                        nev++;
+                    }
+                }
                 Expr* negt   = mul(expr_new_integer(-1), expr_copy(t));
-                Expr* PhiInv = dsolve_linsys_matexp(S, J, negt, n);
+                Expr* PhiInv = dsolve_linsys_matexp(S, Jsym, negt, n);
                 expr_free(negt);
                 Expr* integ  = ds_delist(eval_and_free(
                                    ds_call2(SYM_Dot, PhiInv, expr_copy(b))));
@@ -324,12 +376,31 @@ Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
                          * search — the forced-augmented-system slowdown. */
                         Expr* ig = eval_and_free(ds_call1("Expand",
                                        expr_copy(integ->data.function.args[i])));
+                        /* When eigenvalues were abstracted (nev>0) the fundamental
+                         * matrix carries the eigenvectors' algebraic-number entries
+                         * as UN-reduced nested fractions (e.g. Sqrt[89] over
+                         * (3/2+Sqrt[89]/2)(3/2-Sqrt[89]/2), which is just -20);
+                         * ds_integrate spins trying to normalise those coefficients.
+                         * A Simplify collapses them to closed algebraic numbers and
+                         * is SAFE here precisely because the exponents are now
+                         * symbols (DSolve`sysEv_k), not real exponentials — so the
+                         * widely-separated-decay-rate Simplify hang does not apply. */
+                        if (nev > 0) ig = eval_and_free(ds_call1("Simplify", ig));
                         Expr* anti = ds_integrate(ig, expr_new_symbol(xvar));
                         if (ds_has_head(anti, SYM_Integrate)) { expr_free(anti); force_ok = false; }
-                        else rc[i] = add(rc[i], anti);
+                        else {
+                            /* restore the real eigenvalues in the antiderivative */
+                            for (size_t k = 0; k < nev; k++)
+                                anti = ds_subst(anti, expr_new_symbol(evn[k]),
+                                                      expr_copy(evval[k]));
+                            rc[i] = add(rc[i], anti);
+                        }
                     }
                 } else force_ok = false;
                 expr_free(integ);
+                for (size_t k = 0; k < nev; k++) expr_free(evval[k]);
+                free(evn); free(evval);
+                expr_free(Jsym);
             }
 
             if (force_ok) {

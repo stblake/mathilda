@@ -331,6 +331,15 @@ static Expr* apply1_eval(const char* head, const Expr* arg) {
  * into a sum of Sin[k x]/Cos[k x] monomials, which the same term-by-term split
  * then integrates cleanly.  Recursion handles nested terms; TrigReduce strictly
  * lowers trig degree, so the descent terminates. */
+/* True when `f` is a product carrying a sum as a direct factor — the shape
+ * `c (g + h)` that linearity can distribute into `c g + c h`. */
+static bool times_has_plus_factor(const Expr* f) {
+    if (!head_is((Expr*)f, SYM_Times)) return false;
+    for (size_t i = 0; i < f->data.function.arg_count; i++)
+        if (head_is(f->data.function.args[i], SYM_Plus)) return true;
+    return false;
+}
+
 static Expr* try_linearity(Expr* f, Expr* x) {
     Expr* target = NULL;                 /* a Plus we own (or borrow from f) */
     Expr* owned  = NULL;                 /* non-NULL when we built `target` */
@@ -341,6 +350,24 @@ static Expr* try_linearity(Expr* f, Expr* x) {
         Expr* tr = apply1_eval("TrigReduce", f);
         Expr* g  = tr ? apply1_eval("Expand", tr) : NULL;
         if (tr) expr_free(tr);
+        if (g && head_is(g, SYM_Plus) && g->data.function.arg_count >= 2) {
+            target = g; owned = g;
+        } else { if (g) expr_free(g); return NULL; }
+    } else if (times_has_plus_factor(f) && node_count_capped(f, 256) < 256) {
+        /* Distribute a product over a sum factor: Integrate is linear, so
+         * c (g + h) -> c g + c h, integrated term-by-term.  This is what combines
+         * an exponential product such as E^{-9x}(a E^{2x} - b E^{2x}) into the
+         * sum a E^{-7x} - b E^{-7x}; the whole-integrand substitution path
+         * (DerivativeDivides) otherwise routes the un-distributed product through
+         * a fractional-power base substitution (u = E^{2x}), which is slow and,
+         * for funcapp/symbolic coefficients, returns a branch-WRONG antiderivative
+         * (a spurious (-1)^(1/d) factor).  try_rational has already consumed any
+         * polynomial/rational Times-Plus, so this fires only on transcendental /
+         * radical products.  The commit-only-if-every-term-closes guard below
+         * leaves a product whose distributed pieces are individually
+         * non-elementary on the whole-integrand cascade, so no sum that is
+         * elementary only as a whole is lost. */
+        Expr* g = apply1_eval("Expand", f);
         if (g && head_is(g, SYM_Plus) && g->data.function.arg_count >= 2) {
             target = g; owned = g;
         } else { if (g) expr_free(g); return NULL; }

@@ -402,6 +402,28 @@ static void test_crctable_polynomial_hyperbolic(void) {
         "- x/Cosh[2 x]^4]", "0", 0);
 }
 
+/* Linearity distributes a product over a sum factor (try_linearity).  Integrate
+ * is linear, so c (g + h) integrates term-by-term; without this the un-distributed
+ * product Times[E^{-9x}, Plus[...]] of exponentials took the exponential-
+ * substitution path and returned a slow, branch-WRONG antiderivative — a spurious
+ * (-1)^(1/d) factor for symbolic/funcapp coefficients (reported 2026-09-09:
+ * Integrate[E^(-9x)(a E^(2x) - b E^(2x)), x] -> -(1/7(a-b))/(E^(2x))^(7/2)).  All
+ * cases must diff-back to the integrand. */
+static void test_linearity_distributes_product(void) {
+    /* the reported case: symbolic coefficients */
+    assert_eval_eq(
+        "Simplify[D[Integrate[E^(-9 x) (a E^(2 x) - b E^(2 x)), x], x] "
+        "- E^(-9 x) (a E^(2 x) - b E^(2 x))]", "0", 0);
+    /* funcapp coefficients: the branch-WRONG (-1)^(1/9) case */
+    assert_eval_eq(
+        "Simplify[D[Integrate[E^(-9 x) (f[1] E^(2 x) - f[2] E^(2 x)), x], x] "
+        "- E^(-9 x) (f[1] E^(2 x) - f[2] E^(2 x))]", "0", 0);
+    /* anti-overfit: a different exponent spread and a three-term sum */
+    assert_eval_eq(
+        "Simplify[D[Integrate[E^(-5 x) (a E^(x) + b E^(3 x) - E^(4 x)), x], x] "
+        "- E^(-5 x) (a E^(x) + b E^(3 x) - E^(4 x))]", "0", 0);
+}
+
 void test_integrate_dispatch(void) {
     symtab_init();
     core_init();
@@ -422,6 +444,7 @@ void test_integrate_dispatch(void) {
     TEST(test_crctable_polynomial_hyperbolic);
     TEST(test_arctanh_real_branch);
     TEST(test_root_kernel_keeps_radicals);
+    TEST(test_linearity_distributes_product);
 
     printf("All Integrate dispatch tests passed!\n");
 }

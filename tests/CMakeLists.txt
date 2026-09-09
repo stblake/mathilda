@@ -3715,18 +3715,19 @@ add_test(NAME dsolve_corpus_2_1_2_tests
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 655)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
-# verifies the ODE residual AND every initial condition (M21).  Baseline 4.
+# verifies the ODE residual AND every initial condition (M21).  Baseline 2
+# (was 4; M31's shared prelude precision fix verified two more, see §2.2.11 block).
 add_test(NAME dsolve_corpus_2_2_1_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_221.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
 # Section 2.2.2 "Problems 101 to 200" (Table 2.19): 100 elementary ODEs, 9 IVPs.
 # Continuation of §2.2.1; same IVP handling (equation slot {ode, ic...}).  M22.
 # Baseline is the checked-in non-PASS high-water mark; each wave lowers it.
 add_test(NAME dsolve_corpus_2_2_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_222.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
 # Section 2.2.3 "Problems 201 to 300" (Table 2.19): 100 elementary ODEs, 35 IVPs.
 # Continuation of §2.2.2 (constant-coeff any-order, Euler/Emden-Fowler, elementary
 # first-order); same IVP handling (equation slot {ode, ic...}).  M23.  Baseline 1
@@ -3745,7 +3746,7 @@ add_test(NAME dsolve_corpus_2_2_3_tests
 add_test(NAME dsolve_corpus_2_2_4_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_224.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
 # Section 2.2.5 "Problems 401 to 500" (Table 2.19): 100 elementary ODEs, 15 IVPs.
 # Continuation of §2.2.4; a series-solution-heavy chunk (Edwards & Penney): 2nd-order
 # linear (const + variable coeff), Airy/Emden-Fowler, Gegenbauer, Bessel, Jacobi/2F1,
@@ -3787,7 +3788,7 @@ add_test(NAME dsolve_corpus_2_2_6_tests
 add_test(NAME dsolve_corpus_2_2_7_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_227.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 6)
 
 # Section 2.2.8 "Problems 701 to 800" (Table 2.33, Edwards & Penney): 100 scalar
 # first-order ODEs (20 IVP), 0 systems.  Elementary families -- separable, linear,
@@ -3822,6 +3823,57 @@ add_test(NAME dsolve_corpus_2_2_8_tests
 add_test(NAME dsolve_corpus_2_2_9_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_229.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+
+# Section 2.2.10 "Problems 901 to 1000" (Edwards & Penney): 100 records --
+# 56 scalar (15 IVP) + 44 systems.  Constant-coefficient linear (2nd/3rd/4th
+# order, homogeneous + forced, real/repeated/complex roots), Euler-Cauchy (2nd &
+# 3rd order, incl. Bessel), and 44 first-order LINEAR SYSTEMS (2x2/3x3/4x4 const
+# matrices, mostly homogeneous, 2 forced).  M30.  Baseline 0: 100 PASS.  Two
+# root-cause fixes the section surfaced (both in the linear-ODE machinery):
+#  - 924 (2x2 forced system, Sqrt[89] irrational eigenvalues) ran >90s because
+#    Integrate rationalised the 1/lambda^k VoP coefficient into a hundreds-of-
+#    digit integer; dsolve_linsys.c now abstracts a REAL-irrational eigenvalue to
+#    a fresh symbol before the integral (Simplifying the algebraic coefficients,
+#    safe once exponents are symbolic) and substitutes it back -- 0.6s.  Complex
+#    eigenvalues stay concrete (927's e^{a t}Cos/Sin path is unaffected).
+#  - 907 ((x^2-1)y''-2x y'+2y == x^2-1, a Legendre-type inhomogeneous var-coeff
+#    ODE) declined: Kovacic solved only the homogeneous equation.  It now accepts
+#    a forcing (dsolve_second_order_PQ_forced), de-obfuscates the fundamental set
+#    (Exp[c Log u]->u^c, split radicands, PowerExpand -> the clean {x,(x-1)^2}),
+#    and closes with variation of parameters (dsolve_kovacic.c).
+add_test(NAME dsolve_corpus_2_2_10_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2210.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+
+# Section 2.2.11 "Problems 1001 to 1100" (Edwards & Penney): 100 records --
+# 59 scalar (13 IVP) + 41 systems.  A large leading block of FIRST-ORDER CONSTANT-
+# COEFFICIENT LINEAR SYSTEMS (1001-1041, 2x2..6x6, defective/repeated/complex
+# spectra), then scalar quadrature/separable/first-order-linear and second-order
+# linear (const-coeff missing_x, exact, Euler, Gegenbauer, Emden-Fowler, Lienard,
+# Airy).  M31.  Baseline 0: 100 PASS.  Two root-cause fixes the section surfaced:
+#  - 1014 ({x1'=2x1, x2'=-7x1+9x2+7x3, x3'=2x3}, a DAG solved by TriangularSystem):
+#    the integrating-factor solve of the peeled x2 equation asked Integrate for
+#    Integrate[E^{-9x}(7 C[j]E^{2x}-7 C[k]E^{2x}), x] -- a product of an exponential
+#    with a SUM of exponentials, Times[c, Plus[...]], with the exponents uncombined.
+#    Integrate took the exponential-substitution path and returned, in 55s, a branch-
+#    WRONG antiderivative (a spurious (-1)^(1/9) factor; accepted here because its
+#    residual is zero-test-undecidable).  ROOT FIX in src/calculus/integrate.c:
+#    try_linearity now distributes a product over a sum factor (Integrate is linear:
+#    c(g+h) -> cg+ch, committing only if every term closes elementary), so the
+#    exponentials collapse (E^{-9x}E^{2x}->E^{-7x}) -- fast and correct, and it fixes
+#    the reported direct-Integrate bug too (test_integrate_dispatch.c).
+#  - 1001 (4x4 constant system, eigenvalues {16,32,48,64}): the solution is CORRECT
+#    but back-substitutes to a difference of E^{64x}-scale terms that, under the
+#    prelude's 20-digit numeric sweep at x~1.1..3, looks large (catastrophic
+#    cancellation) -> falsely "BAD" -> UNEVAL.  dsolve_corpus_prelude.m now re-
+#    evaluates a not-small residual sample at 200-digit precision: a true zero
+#    collapses to ~0, a genuine nonzero stays nonzero.  Monotone: can only lower a
+#    section's non-PASS count, never raise it, never introduces a FAIL.
+add_test(NAME dsolve_corpus_2_2_11_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2211.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of

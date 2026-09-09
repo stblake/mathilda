@@ -859,10 +859,86 @@ static Expr* kovacic_case1_general(const Expr* r, const Expr* rd,
     return body;
 }
 
+/* De-obfuscate an algebraic basis element that Kovacic returns in an
+ * un-collapsed radical / exp-of-log form.  The y = w z recovery factor
+ * w = Exp[-Integrate[P/2]] often equals a radical Sqrt[poly] while z carries
+ * Exp[sum of c*Log[factor]] terms, and their product is a clean polynomial (e.g.
+ * Sqrt[-1+x^2] E^(-1/2 Log[1+x] + 3/2 Log[-1+x]) is really (x-1)^2) — but the
+ * simplifier will not merge Sqrt[x-1]Sqrt[x+1] with Sqrt[x^2-1] across branch
+ * cuts, so the variation-of-parameters integral over the raw form does not close.
+ * Convert Exp[c Log u] to u^c, split each polynomial radicand into its
+ * irreducible factors, then PowerExpand to combine like bases.  These are
+ * branch-optimistic rewrites yielding a valid representative of the SAME ODE
+ * solution; the caller re-verifies the assembled solution numerically.  Consumes
+ * `e`, returns owned. */
+static Expr* kovacic_deobfuscate(Expr* e, const char* xvar) {
+    e = apply_rules(e, "E^(s_) :> E^(Expand[s])");
+    e = apply_rules(e, "E^(Plus[a_, b__]) :> E^a E^(Plus[b])");
+    e = apply_rules(e, "E^(c_. Log[u_]) :> u^c");
+    char rule[512];
+    snprintf(rule, sizeof(rule),
+        "(p_)^(r_ /; ! IntegerQ[r]) /; PolynomialQ[p, %s] && ! FreeQ[p, %s] :> "
+        "(Times @@ ((First[#]^(Last[#] r)) & /@ FactorList[p]))", xvar, xvar);
+    e = apply_rules(e, rule);
+    return eval_and_free(ds_call1("PowerExpand", e));
+}
+
+/* Inhomogeneous closure: given the just-found homogeneous general solution
+ * `homog` = C[1] y1 + C[2] y2 for a second-order linear ODE with forcing g(x),
+ * add the particular solution by variation of parameters over the fundamental
+ * set {y1, y2} (extracted as homog|C1->1,C2->0 and homog|C1->0,C2->1, then
+ * de-obfuscated so the VoP integral closes).  Consumes `homog`; returns
+ * C[1]y1 + C[2]y2 + yp rebuilt from the cleaned basis and numerically re-verified
+ * against the FULL equation, the unchanged `homog` when the equation is actually
+ * homogeneous, or NULL when the VoP integral is non-elementary / the result fails
+ * to verify (so the cascade falls through to Frobenius, never a wrong answer). */
+static Expr* kovacic_add_forcing(const DSolveProblem* P, Expr* homog, const char* x) {
+    const char* yname = P->fun_names[0];
+    int ord = P->max_order[0];
+    const Expr* R = P->eq_residuals[0];               /* borrowed */
+    Expr* g = expr_copy((Expr*)R);                    /* g = -(R with y,y',... -> 0) */
+    for (int k = ord; k >= 1; k--)
+        g = ds_subst(g, ds_make_funcapp(yname, k, x), expr_new_integer(0));
+    g = ds_subst(g, ds_make_funcapp(yname, 0, x), expr_new_integer(0));
+    if (ds_is_zero(g)) { expr_free(g); return homog; } /* genuinely homogeneous */
+    g = Neg(g);
+    Expr* lead = fn2("Coefficient", expr_copy((Expr*)R),
+                     ds_make_funcapp(yname, ord, x));  /* a_n (coeff of y^(ord)) */
+    Expr* y1 = kovacic_deobfuscate(
+                   ds_subst(ds_subst(expr_copy(homog), ds_const(1), expr_new_integer(1)),
+                            ds_const(2), expr_new_integer(0)), x);
+    Expr* y2 = kovacic_deobfuscate(
+                   ds_subst(ds_subst(expr_copy(homog), ds_const(1), expr_new_integer(0)),
+                            ds_const(2), expr_new_integer(1)), x);
+    Expr* basis[2] = { y1, y2 };
+    Expr* yp = dsolve_variation_of_parameters(basis, 2, g, lead, x);
+    expr_free(g); expr_free(lead);
+    if (!yp) { expr_free(y1); expr_free(y2); expr_free(homog); return NULL; }
+    expr_free(homog);       /* rebuild C[1] y1 + C[2] y2 + yp from the cleaned basis */
+    Expr* full = A2(A2(T2(ds_const(1), y1), T2(ds_const(2), y2)), yp);
+    if (!numeric_verify(P, full)) { expr_free(full); return NULL; }
+    return full;
+}
+
 Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
     Expr* Pc; Expr* Qc;
-    if (!dsolve_second_order_PQ(P, &Pc, &Qc)) return NULL;
+    if (!dsolve_second_order_PQ_forced(P, &Pc, &Qc)) return NULL;
     const char* x = P->ind_names[0];
+
+    /* Inhomogeneous? g(x) = -(residual with y and all derivatives zeroed).  When
+     * forced, Case 2's inline numeric_verify (which checks the FULL equation)
+     * would reject the homogeneous basis, so accept it there and defer to the
+     * end-stage variation-of-parameters closure + full verify. */
+    bool forced;
+    {
+        const char* yname = P->fun_names[0];
+        Expr* g0 = expr_copy(P->eq_residuals[0]);
+        for (int k = P->max_order[0]; k >= 1; k--)
+            g0 = ds_subst(g0, ds_make_funcapp(yname, k, x), expr_new_integer(0));
+        g0 = ds_subst(g0, ds_make_funcapp(yname, 0, x), expr_new_integer(0));
+        forced = !ds_is_zero(g0);
+        expr_free(g0);
+    }
 
     Expr* recovery = NULL;
     Expr* r = dsolve_normal_form(Pc, Qc, x, &recovery);
@@ -1021,7 +1097,10 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
             Expr* z2 = exp_integral(w2, x);
             if (z1 && z2) {
                 Expr* cand = assemble_general(z1, z2, recovery);
-                if (numeric_verify(P, cand)) body = cand; else expr_free(cand);
+                /* When forced, the homogeneous cand cannot satisfy the full
+                 * equation; accept the basis and let the end-stage VoP closure
+                 * verify.  Homogeneous input still gets the strict inline check. */
+                if (forced || numeric_verify(P, cand)) body = cand; else expr_free(cand);
             }
             if (z1) expr_free(z1);
             if (z2) expr_free(z2);
@@ -1033,6 +1112,10 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
     expr_free(r); expr_free(rd); expr_free(factors); expr_free(recovery);   /* rt was consumed by Denominator */
     if (body && !kovacic_body_independent(body, x)) { expr_free(body); body = NULL; }
     if (!body) return NULL;
+    /* Add the variation-of-parameters particular for an inhomogeneous equation
+     * (no-op when homogeneous); declines if the forcing integral is not
+     * elementary or the full solution fails to verify. */
+    if (forced) { body = kovacic_add_forcing(P, body, x); if (!body) return NULL; }
     Expr** out = malloc(sizeof(Expr*));
     out[0] = body;
     *nbranch = 1;

@@ -102,6 +102,7 @@ section carrying **initial conditions**: the equation slot is the DSolve-native 
 |------|--------------:|--------:|---------------:|-------|
 | 2026-09-08 (M21 baseline) | 86 / 100 | 86.0% | 14 | 0 FAIL. First IC-verifying run (prelude `dsFreeParams` `Heads->True` bug fixed → numeric verify is real). |
 | 2026-09-08 (**M21**)      | **96 / 100** | **96.0%** | **4** | **+10, 0 FAIL, 0 regression.** Three solver fixes (below). Gate baseline **4**. |
+| 2026-09-09 (M31 re-baseline) | **98 / 100** | **98.0%** | **2** | +2, 0 FAIL. Side-effect of M31's shared prelude precision fix (large-cancellation residuals now verify). Gate baseline **4 → 2**. |
 
 **M21 fixes** (all in the scalar first-order cascade / fit substrate):
 1. **Swapped-variable `A/y'==B`** (#98/99/100) — `NthAlgebraic` now clears a
@@ -146,6 +147,7 @@ Bernoulli / exact / Riccati / d'Alembert, plus a handful of 2nd-order missing-x/
 |------|--------------:|--------:|---------------:|-------|
 | 2026-09-08 (baseline) | 82 / 100 | 82.0% | 18 | 0 FAIL. Converter-fix generation (below). |
 | 2026-09-08 (**M22**)  | **92 / 100** | **92.0%** | **8** | **+10, 0 FAIL, 0 regression.** Homogeneous-correctness + Exact-transcendental + FOS-implicit waves. Gate baseline **8**. |
+| 2026-09-09 (M31 re-baseline) | **93 / 100** | **93.0%** | **7** | +1, 0 FAIL. Side-effect of M31's shared prelude precision fix. Gate baseline **8 → 7**. |
 
 **Converter fix (`tools/latex_ode_to_mathilda.py`, benefits every section):**
 `is_condition_row` matched `<main>·(…)` multiplication (`y²(y'x+y)`, `x(5−x)`) as a
@@ -234,6 +236,7 @@ handful of Euler / Emden–Fowler / exact / quadrature. **Zero overlap** with §
 |------|--------------:|--------:|---------------:|-------|
 | 2026-09-08 (baseline) | 93 / 100 | 93.0% | 7 | Two **converter** fixes (below). 6 UNEVAL + **1 FAIL** (387 — a harness verify bug, not a wrong answer). |
 | 2026-09-08 (**M24**)  | **99 / 100** | **99.0%** | **1** | **+6, FAIL→0, 0 regression.** One harness fix + two solver fixes + two converter fixes. Gate baseline **1**. |
+| 2026-09-09 (M31 re-baseline) | **100 / 100** | **100.0%** | **0** | +1, 0 FAIL. Side-effect of M31's shared prelude precision fix. Gate baseline **1 → 0**. |
 
 **Converter fixes (`tools/latex_ode_to_mathilda.py`; §2.2.1/2/3 regenerate byte-for-byte
 identical → no regression):**
@@ -390,6 +393,7 @@ quadrature, 8 linear, 2 homogeneous class-G, 1 Riccati); systems are 25 2-D / 18
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-09 (baseline) | 90 / 100 | 90.0% | 10 | Before the two engine fixes: 0 FAIL. Systems verified for the first time (48/50 scalar + 42/50 systems). |
 | 2026-09-09 (**M27**)  | **93 / 100** | **93.0%** | **7** | **+3, 0 FAIL, 0 regression.** 48/50 scalar + 45/50 systems. Two engine fixes below took 90→93. |
+| 2026-09-09 (M31 re-baseline) | **94 / 100** | **94.0%** | **6** | +1, 0 FAIL (48/50 scalar + 46/50 systems). Side-effect of M31's shared prelude precision fix. Gate baseline **7 → 6**. |
 
 **M27 fixes** (system verification + two root-cause engine bugs the corpus surfaced):
 1. **Corpus harness verifies systems (`dsolve_corpus_prelude.m`).** `dsExplicitQ`
@@ -493,6 +497,94 @@ Abel). Mathilda's strongest DSolve territory.
 **Residue: none** (0 UNEVAL, 0 FAIL).
 
 Full per-case results: `reports/2.2.9.tsv`; bucketed report: `reports/2.2.9.md`.
+
+---
+
+## Section 2.2.10 — "Problems 901 to 1000" (Edwards & Penney)
+
+Corpus: `DE_examples_2210.m` — 100 records, **56 scalar (15 IVP) + 44 systems**. The most
+systems-heavy section: constant-coefficient linear (2nd/3rd/4th order, homogeneous + forced,
+real / repeated / complex roots), Euler–Cauchy (2nd & 3rd order, incl. a Bessel and two
+Gegenbauer/Legendre-type equations), and **44 first-order linear systems** (2×2 / 3×3 / 4×4
+constant matrices — 42 homogeneous, 2 with polynomial/exponential forcing).
+`ctest -R dsolve_corpus_2_2_10_tests` · gate baseline **0**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-09 (baseline) | 98 / 100 | 98.0% | 2 | 0 FAIL, 0 crashes, 0 timeouts. Two UNEVAL: 924 (forced 2×2 system, irrational spectrum) and 907 (inhomogeneous Legendre-type var-coeff). |
+| 2026-09-09 (**M30**)  | **100 / 100** | **100.0%** | **0** | **+2, 0 FAIL, 0 regression.** Two root-cause fixes below (both in the linear-ODE machinery). 56/56 scalar + 44/44 systems. |
+
+**M30 fixes** (two root-cause bugs the section surfaced, both about *forced* linear ODEs):
+1. **Forced constant-coefficient systems with an irrational spectrum (`src/calculus/dsolve_linsys.c`).**
+   `2.2.10-924` (`x'=2x+4y+3eᵗ, y'=5x-y-t²`, eigenvalues `(1±√89)/2`) ran **>90 s**: the
+   variation-of-parameters integral `∫e^{−λt}tᵐ dt` made `Integrate` rationalise the `1/λᵏ`
+   coefficient of an irrational `λ` into a *hundreds-of-digit* integer and spin. The assembler
+   now abstracts a **real-irrational** eigenvalue to a fresh symbol before the integral (and
+   `Simplify`s the algebraic coefficients — safe once the exponents are symbolic, so the
+   widely-separated-decay-rate `Simplify` hang cannot apply), then substitutes the eigenvalue
+   back — **0.6 s**. **Rational** eigenvalues stay concrete so genuine resonance is still
+   handled; **complex** eigenvalues stay concrete too (their `e^{at}Cos/Sin[bt]` real form is
+   the existing `ComplexExpand` path — this is what keeps the complex-spectrum 4×4 `2.2.10-927`
+   fast).
+2. **Kovacic now closes an *inhomogeneous* variable-coefficient ODE (`src/calculus/dsolve_kovacic.c`).**
+   `2.2.10-907` (`(x²−1)y″−2xy′+2y == x²−1`, a Legendre-type equation) declined: the Kovacic
+   solver handled only the homogeneous equation. It now accepts a forcing
+   (`dsolve_second_order_PQ_forced`), **de-obfuscates** the fundamental set it recovers
+   (`Sqrt[−1+x²]·E^(−½Log[1+x]+3⁄2Log[−1+x])` is really `(x−1)²`; convert `Exp[c Log u]→uᶜ`,
+   split radicands, `PowerExpand`), and adds the particular solution by **variation of
+   parameters** over the cleaned basis, re-verifying the full solution numerically.
+
+**Residue: none** (0 UNEVAL, 0 FAIL).
+
+Full per-case results: `reports/2.2.10.tsv`; bucketed report: `reports/2.2.10.md`.
+
+---
+
+## Section 2.2.11 — "Problems 1001 to 1100" (Edwards & Penney)
+
+Corpus: `DE_examples_2211.m` — 100 records, **59 scalar (13 IVP) + 41 systems**. A large leading
+block of **41 first-order constant-coefficient linear systems** (1001–1041, 2×2 … 6×6 constant
+matrices — defective / repeated / complex spectra), then scalar first-order quadrature /
+separable / linear ("class A") and second-order linear — constant-coefficient (`missing_x`),
+exact, Euler, Gegenbauer, Emden–Fowler, Liénard, Airy. The scalar half is solved entirely out of
+the box (all 59/59); both gaps were systems.
+`ctest -R dsolve_corpus_2_2_11_tests` · gate baseline **0**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-09 (baseline) | 98 / 100 | 98.0% | 2 | 0 FAIL, 0 crashes, 0 timeouts. Two UNEVAL, both systems: 1014 (coupled 3×3 DAG) and 1001 (4×4, spectrum {16,32,48,64}). |
+| 2026-09-09 (**M31**)  | **100 / 100** | **100.0%** | **0** | **+2, 0 FAIL, 0 regression.** Two root-cause fixes below. 59/59 scalar + 41/41 systems. |
+
+**M31 fixes** (the two systems the section surfaced):
+1. **`Integrate` linearity over a distributed product (`src/calculus/integrate.c`, `try_linearity`).**
+   `2.2.11-1014` (`{x1'=2x1, x2'=−7x1+9x2+7x3, x3'=2x3}`) is a DAG solved by `TriangularSystem`,
+   which peels the sources `x1,x3` and asks the scalar engine to integrate the integrating-factor
+   integrand `Integrate[e^{−9x}(7 C[k]e^{2x} − 7 C[j]e^{2x}), x]` — a product of an exponential
+   with a **sum** of exponentials (`Times[c, Plus[…]]`, exponents uncombined). `Integrate` took
+   its exponential-substitution path and returned, in **55 s**, a **branch-wrong** antiderivative
+   (a spurious `(−1)^{1/9}` factor; it survived `dsolve_run_system`'s verify because the residual
+   is zero-test-*undecidable*). The **root fix** is in `Integrate` itself: `try_linearity` now
+   distributes a product over a sum factor — `Integrate` is linear, so `c(g+h) → cg+ch`,
+   integrated term-by-term and committed only if every term closes elementary (otherwise the
+   whole-integrand cascade still runs, so a sum that is elementary only as a whole is not lost).
+   The exponentials then collapse (`e^{−9x}e^{2x}→e^{−7x}`, the clean path) — fast and correct.
+   This also repairs the **direct** user-reported bug:
+   `Integrate[e^{−9x}(a e^{2x} − b e^{2x}), x]` was `−(a−b)/7 · (e^{2x})^{−7/2}` in ~9 s (ugly, and
+   genuinely branch-wrong for symbolic/funcapp coefficients), now `−(a−b)/7 · e^{−7x}` in ~4 ms.
+   Guarded by `test_linearity_distributes_product` (`tests/test_integrate_dispatch.c`).
+2. **Corpus verifier made cancellation-robust (`dsolve_corpus_prelude.m`, `dsResidVerdict`).**
+   `2.2.11-1001` (4×4, eigenvalues `{16,32,48,64}`) solves **correctly** (`Simplify[residual]≡0`),
+   but back-substitutes to a difference of `e^{64x}`-scale terms that, at the prelude's 20-digit
+   numeric sweep over `x≈1.1…3`, looks large (catastrophic cancellation: `|resid|@20 ≈ 8.9·10⁴³`
+   at `x=3`, but `@120 ≈ 2·10⁻⁵⁶`) → a false "BAD" → `UNFIT` → UNEVAL. The shared verifier now
+   **re-evaluates a not-small residual sample at 200-digit precision**: a genuine nonzero stays
+   nonzero, a cancellation artifact collapses to ~0. The change is **monotone** — it can only
+   turn a spurious "not small" into "small", so it can lower a section's non-PASS count, never
+   raise it, and never introduces a FAIL.
+
+**Residue: none** (0 UNEVAL, 0 FAIL).
+
+Full per-case results: `reports/2.2.11.tsv`; bucketed report: `reports/2.2.11.md`.
 
 ---
 
@@ -611,6 +703,42 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   branch-tracking term) from a non-numericizable "trust DSolve" pass to a genuine numeric
   residual ~0. Anti-overfit units `t_m29_sec_floor_verifies` (test_dsolve.c) and
   `test_rounding_deriv` (test_deriv.c). See §2.2.9 block.
+- **M30 (2026-09-09)** — §2.2.10 corpus (Problems 901–1000, Edwards & Penney): 56 scalar
+  (15 IVP) + **44 systems** — the most systems-heavy section (constant-coefficient linear of
+  every order, Euler–Cauchy incl. Bessel/Legendre-type, and 44 first-order linear systems up
+  to 4×4). **§2.2.10 100/100, 0 FAIL, 0 regression, baseline 0.** Two root-cause fixes, both
+  about *forced* linear ODEs: (1) a forced constant-coefficient system with a real-irrational
+  spectrum (924, `(1±√89)/2`) ran >90 s because `Integrate` rationalised the `1/λᵏ`
+  variation-of-parameters coefficient into a hundreds-of-digit integer — `dsolve_linsys.c` now
+  abstracts a real-irrational eigenvalue to a symbol before the integral and substitutes it
+  back (0.6 s; complex/rational spectra stay concrete, keeping the complex-4×4 927 fast);
+  (2) Kovacic gained an inhomogeneous closure — it accepts a forcing, de-obfuscates its
+  fundamental set (`Exp[c Log u]→uᶜ`, split radicands, `PowerExpand`), and adds a
+  variation-of-parameters particular (`dsolve_kovacic.c` + `dsolve_second_order_PQ_forced`),
+  solving the Legendre-type 907. Anti-overfit units `t_m30_linsys_irrational_forcing`,
+  `t_m30_kovacic_inhomogeneous`. See §2.2.10 block.
+- **M31 (2026-09-09)** — §2.2.11 corpus (Problems 1001–1100, Edwards & Penney): 59 scalar
+  (13 IVP) + **41 first-order constant-coefficient linear systems** (2×2 … 6×6, defective /
+  complex spectra). **§2.2.11 100/100, 0 FAIL, 0 regression, baseline 0** — the scalar half
+  (separable / quadrature / first-order-linear / 2nd-order const-coeff + Euler + Gegenbauer +
+  Emden–Fowler + Liénard + Airy) solved entirely out of the box; both gaps were systems. Two
+  root-cause fixes: (1) `2.2.11-1014` (a DAG solved by `TriangularSystem`) asked `Integrate` for
+  `Integrate[e^{−9x}(7 C[k]e^{2x}−7 C[j]e^{2x}), x]` — a product of an exponential with a SUM of
+  exponentials — which took the exponential-substitution path → 55 s and a branch-wrong
+  `(−1)^{1/9}` antiderivative (kept because its residual is zero-test-undecidable). The ROOT fix
+  is in `Integrate`: `src/calculus/integrate.c::try_linearity` now distributes a product over a
+  sum factor (`Integrate` is linear: `c(g+h)→cg+ch`, committed only if every term closes), so the
+  exponentials collapse to `e^{−7x}` — and it repairs the user-reported direct-`Integrate` bug too
+  (`Integrate[e^{−9x}(a e^{2x}−b e^{2x}), x]`, was slow + branch-wrong); (2) `2.2.11-1001` (4×4,
+  eigenvalues {16,32,48,64}) solves
+  **correctly** but back-substitutes to a difference of `e^{64x}`-scale terms the prelude's
+  20-digit sweep misread as nonzero (catastrophic cancellation) — `dsolve_corpus_prelude.m` now
+  re-checks a not-small residual sample at 200-digit precision (monotone: never introduces a
+  FAIL). The shared prelude fix also lifted four earlier sections whose correct-but-
+  cancellation-heavy answers now verify; their ctest baselines were tightened to match (see the
+  re-baseline note below). Anti-overfit units `t_m31_triangular_exp_forcing`,
+  `t_m31_linsys_large_eigenvalue` (`test_dsolve.c`) + `test_linearity_distributes_product`
+  (`test_integrate_dispatch.c`, the direct-`Integrate` regression guard). See §2.2.11 block.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

@@ -1114,6 +1114,54 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     and `test_rounding_deriv` (`test_deriv.c`: the five exact `Piecewise` forms + chain rule). All
     DSolve ctest + stress suites, `deriv`, and `make check-c99` green; §2.1.2/§2.2.1–§2.2.8 gates
     held.
+- **M30 — §2.2.10 corpus (Problems 901–1000) + forced-system / Kovacic-inhomogeneous fixes.** ✅
+  DONE. Edwards & Penney 901–1000: 100 records — **56 scalar (15 IVP) + 44 first-order linear
+  systems** (the most systems-heavy section; 2×2/3×3/4×4 constant matrices). **100/100, 0 FAIL,
+  0 regression, baseline 0.** Two root-cause fixes, both about *forced* linear ODEs: (1) a
+  real-irrational-spectrum forced system (924, `(1±√89)/2`) ran >90 s because `Integrate`
+  rationalised the `1/λᵏ` variation-of-parameters coefficient into a hundreds-of-digit integer —
+  `dsolve_linsys.c` now abstracts a real-irrational eigenvalue to a symbol before the integral
+  (complex/rational spectra stay concrete); (2) Kovacic gained an inhomogeneous closure
+  (`dsolve_kovacic.c` + `dsolve_second_order_PQ_forced`: accept a forcing, de-obfuscate the
+  fundamental set, add a variation-of-parameters particular), solving the Legendre-type 907.
+  Anti-overfit units `t_m30_linsys_irrational_forcing`, `t_m30_kovacic_inhomogeneous`. See the
+  §2.2.10 block in `DSolve_test_status/STATUS.md`.
+- **M31 — §2.2.11 corpus (Problems 1001–1100) + linear-integrand combine / cancellation-robust
+  verifier.** ✅ DONE. Edwards & Penney 1001–1100: 100 records — **59 scalar (13 IVP) + 41
+  first-order constant-coefficient linear systems** (2×2 … 6×6, defective/repeated/complex
+  spectra). The scalar half (separable / quadrature / first-order-linear / 2nd-order const-coeff
+  + Euler + Gegenbauer + Emden–Fowler + Liénard + Airy) solves entirely out of the box; both
+  gaps were systems. **§2.2.11 100/100, 0 FAIL, 0 crashes, 0 regression, baseline 0.** The
+  converter needed no change (the §2.2.10 `indexsubsection→section` scheme extends to
+  `indexsubsection20.htm`; §2.2.1–§2.2.10 regenerate byte-for-byte identical). Two root-cause
+  fixes:
+  - **`Integrate` linearity over a distributed product (`src/calculus/integrate.c`,
+    `try_linearity`).** `2.2.11-1014` (`{x1'=2x1, x2'=−7x1+9x2+7x3, x3'=2x3}`, a DAG solved by
+    `TriangularSystem`) asked `Integrate` for `Integrate[e^{−9x}(7 C[k]e^{2x}−7 C[j]e^{2x}), x]` —
+    a product of an exponential with a **sum** of exponentials (`Times[c, Plus[…]]`, exponents
+    uncombined) — which took the exponential-substitution path: **55 s** and a **branch-wrong**
+    `(−1)^{1/9}` antiderivative (accepted because its residual is zero-test-*undecidable*). The
+    **root fix** is in `Integrate`: `try_linearity` (the Plus-splitting stage, ahead of the
+    substitution stages) now distributes a product over a sum factor — `Integrate` is linear, so
+    `c(g+h) → cg+ch`, committed only if every term closes elementary (else the whole-integrand
+    cascade still runs). The exponentials then collapse (`e^{−9x}e^{2x}→e^{−7x}`) — fast and
+    correct. This *also* repairs the user-reported **direct** bug
+    `Integrate[e^{−9x}(a e^{2x}−b e^{2x}), x]` (was `−(a−b)/7·(e^{2x})^{−7/2}` in ~9 s, and
+    genuinely branch-wrong for symbolic/funcapp coefficients; now `−(a−b)/7·e^{−7x}` in ~4 ms).
+    Guarded by `test_linearity_distributes_product` (`test_integrate_dispatch.c`); all 22 integrate
+    unit suites stay green (a fully-elementary split is the only thing committed).
+  - **Corpus verifier made cancellation-robust (`dsolve_corpus_prelude.m`, `dsResidVerdict`).**
+    `2.2.11-1001` (4×4, eigenvalues {16,32,48,64}) solves **correctly** (`Simplify[residual]≡0`)
+    but back-substitutes to a difference of `e^{64x}`-scale terms that, at the prelude's 20-digit
+    sweep over `x≈1.1…3`, looks large (catastrophic cancellation) → a false "BAD" → UNEVAL. The
+    shared verifier now re-evaluates a not-small residual sample at 200-digit precision; the
+    change is **monotone** (can only turn a spurious "not small" into "small" — never introduces
+    a FAIL, never raises a section's non-PASS count). It also lifted four earlier sections whose
+    correct-but-cancellation-heavy answers now verify, re-baselined to match.
+  Anti-overfit units `t_m31_triangular_exp_forcing`, `t_m31_linsys_large_eigenvalue`
+  (`tests/test_dsolve.c`). All DSolve ctest + stress suites and `make check-c99` green;
+  §2.1.2/§2.2.1–§2.2.10 gates held (four improved). See the §2.2.11 block in
+  `DSolve_test_status/STATUS.md`.
 
 ## Phase 1 — ODE method catalog
 

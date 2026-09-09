@@ -67,13 +67,24 @@ dsFreeParams[resid_, iv_] := DeleteCases[
  * its generic sample value -> a bogus nonzero residual -> a FALSE "BAD". The
  * converter never emits a `$`-prefixed symbol, so `$dsSweep`/`$dsVal` are safe. *)
 dsResidVerdict[resid_, iv_] := Module[
-  {params, consts, pv, vals = {}, $dsSweep, cv, $dsVal, a, nsmall},
+  {params, consts, pv, vals = {}, $dsSweep, cv, $dsVal, $dsRex, a, nsmall},
   params = dsFreeParams[resid, iv];
   consts = DeleteDuplicates@Cases[resid, C[_Integer], Infinity];
   pv = MapIndexed[#1 -> (13/10 + First[#2]*4/17) &, params];
   Do[
     cv = MapIndexed[#1 -> (7/10 + $dsSweep/5 + First[#2]*3/19) &, consts];
-    $dsVal = N[(resid /. pv /. cv /. iv -> (11/10 + $dsSweep*5/13)), 20];
+    $dsRex = (resid /. pv /. cv /. iv -> (11/10 + $dsSweep*5/13));  (* exact *)
+    $dsVal = N[$dsRex, 20];
+    (* A fast-growing (large-eigenvalue) solution back-substitutes to a residual that
+     * is a difference of huge E^{lambda x} terms, so a TRUE zero looks large at
+     * 20-digit precision -- catastrophic cancellation (e.g. the eigenvalue-64 system
+     * 2.2.11-1001: |resid|@20 = 8.9*^43 at x=3, but @120 = 2*^-56).  When the 20-digit
+     * value is NOT already small, re-evaluate the EXACT residual at high precision:
+     * a genuine nonzero stays nonzero, a cancellation artifact collapses to ~0.  This
+     * only ever turns a spurious "not small" into "small" -- monotone: it can lower a
+     * section's non-PASS count, never raise it, and never introduces a FAIL. *)
+    If[(NumberQ[$dsVal] || Head[$dsVal] === Complex) && Abs[$dsVal] >= $dsTol,
+       $dsVal = N[$dsRex, 200]];
     If[NumberQ[$dsVal] || Head[$dsVal] === Complex, AppendTo[vals, Abs[$dsVal]]];
   , {$dsSweep, 0, 5}];
   If[Length[vals] < 2, Return["UNK"]];
