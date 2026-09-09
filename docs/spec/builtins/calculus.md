@@ -85,6 +85,19 @@ Partial derivative.
   derivative reproduces the same Piecewise (with
   `D[Indeterminate, x] = Indeterminate`) instead of degrading into a
   `Derivative[1, 0][Piecewise][...]` chain-rule form.
+- **Integer-rounding functions** — `Floor`, `Ceiling`, `Round`,
+  `IntegerPart`, `FractionalPart` are piecewise-constant, so their
+  derivative is a `Piecewise` that is zero (one for `FractionalPart`) off
+  the jump set and `Indeterminate` on it, multiplied by `D[g, x]` (the
+  chain rule):
+  - `D[Floor[x], x]   -> Piecewise[{{0, x > Floor[x]}}, Indeterminate]`
+  - `D[Ceiling[x], x] -> Piecewise[{{0, x < Ceiling[x]}}, Indeterminate]`
+  - `D[Round[x], x]   -> Piecewise[{{0, NotElement[-1/2 + Re[x], Integers] && NotElement[-1/2 + Im[x], Integers]}}, Indeterminate]`
+  - `D[IntegerPart[x], x] -> Piecewise[{{0, (Re[x]==0 || NotElement[Re[x], Integers]) && (Im[x]==0 || NotElement[Im[x], Integers])}}, Indeterminate]`
+  - `D[FractionalPart[x], x] -> Piecewise[{{1, (Re[x]==0 || NotElement[Re[x], Integers]) && (Im[x]==0 || NotElement[Im[x], Integers])}}, Indeterminate]`
+
+  matching Mathematica. So `D[Floor[3 x], x]` is
+  `3 Piecewise[{{0, 3 x > Floor[3 x]}}, Indeterminate]`.
 
 **Examples**:
 ```mathematica

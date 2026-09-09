@@ -1083,6 +1083,37 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     back-substitutes, the general `a`-coefficient family solves, and a genuine Bernoulli 752 still
     solves via Bernoulli). All DSolve ctest + stress suites, `solve`/`reduce`, and `make check-c99`
     green; §2.1.2/§2.2.1–§2.2.7 gates held.
+- **M29 — §2.2.9 corpus (Problems 801–900) + piecewise rounding-function derivatives.** ✅ DONE.
+  Edwards & Penney, Problems 801–900: 100 records — **100 scalar (35 IVP), 0 systems**, dominated
+  by second-order linear — 38 constant-coefficient homogeneous, 35 constant-coefficient
+  nonhomogeneous (undetermined coefficients / variation of parameters), 11 Euler/Emden–Fowler —
+  plus 7 with `x(t)` as the dependent variable (`x''` notation, 862–868), 3 complex-coefficient
+  (`i` in the equation: 857/858/859), and 6 first-order (separable / homogeneous / Bernoulli /
+  Abel). **100 / 100 scalar, 0 FAIL, 0 crashes, 0 regression, baseline 0** — Mathilda's strongest
+  DSolve territory, fully covered out of the box by the existing const-coeff (any order), Euler,
+  variation-of-parameters/Green's-function and first-order specialists. The converter needed no
+  change (`--label 2.2.9 --url …indexsubsection18.htm` on the section-agnostic
+  `latex_ode_to_mathilda.py`; complex `i`→`I` and `x''[t]` independent-variable inference already
+  handled; §2.2.1–§2.2.8 regenerate byte-for-byte identical in their records). **No ODE-solver fix
+  was required.** Instead the wave landed one general engine feature the corpus made visible:
+  - **Piecewise differentiation of the integer-rounding functions (`src/calculus/deriv.c`).**
+    `D` of `Floor`/`Ceiling`/`Round`/`IntegerPart`/`FractionalPart` now returns the Mathematica
+    `Piecewise[{{v, cond}}, Indeterminate]` form (value 0 off the jump set, 1 for `FractionalPart`;
+    `Round`'s jump set is the half-integers, `IntegerPart`/`FractionalPart` guard `Re`/`Im`
+    non-integrality), multiplied by `D[g,x]` so the chain rule composes. Modeled on the existing
+    `UnitStep` derivative handler. Problem `2.2.9-898` (`y''+9y == 2 Sec[3x]`) is solved by
+    variation of parameters and its verified solution carries a `Floor` branch-tracking term;
+    before this, `D[Floor[u],x]` was the inert `Derivative[1][Floor][u]`, so the ODE residual never
+    numericized and the corpus harness passed 898 only under the "non-numericizable ⇒ trust DSolve"
+    policy. The residual now reduces to a genuine numeric ~0 — 898 is verified, not merely trusted.
+  - **Residue: none** (0 UNEVAL, 0 FAIL).
+  - New corpus `DSolve_test_status/DE_examples_229.m`; ctest `dsolve_corpus_2_2_9_tests` (gate
+    baseline 0); `reports/2.2.9.{tsv,md}`; STATUS.md §2.2.9 block + M29 wave-history bullet; README
+    row. Anti-overfit units `t_m29_sec_floor_verifies` (`test_dsolve.c`: the Floor derivative
+    numericizes, 898 + a sibling `Sec`-forced equation solve and back-substitute to numeric zero)
+    and `test_rounding_deriv` (`test_deriv.c`: the five exact `Piecewise` forms + chain rule). All
+    DSolve ctest + stress suites, `deriv`, and `make check-c99` green; §2.1.2/§2.2.1–§2.2.8 gates
+    held.
 
 ## Phase 1 — ODE method catalog
 

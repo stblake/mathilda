@@ -3806,6 +3806,24 @@ add_test(NAME dsolve_corpus_2_2_8_tests
                  ../../DSolve_test_status/DE_examples_228.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
+# Section 2.2.9 "Problems 801 to 900" (Edwards & Penney): 100 scalar ODEs
+# (35 IVP), 0 systems.  Dominated by second-order linear: 38 const-coeff
+# homogeneous, 35 const-coeff nonhomogeneous (undetermined coefficients /
+# variation of parameters), 11 Euler/Emden-Fowler, plus 7 with x(t) as the
+# dependent variable (862-868), 3 complex-coefficient (857/858/859), and 6
+# first-order (separable / homogeneous / Bernoulli / Abel).  M29.  Baseline 0:
+# 100 PASS -- the section is fully covered out of the box by the existing
+# const-coeff (any order), Euler, variation-of-parameters/Green's-function and
+# first-order specialists.  No ODE-solver fix was needed; the M29 wave added
+# piecewise derivatives for Floor/Ceiling/Round/IntegerPart/FractionalPart
+# (src/calculus/deriv.c) so 898 (y''+9y==2 Sec[3x]), whose variation-of-
+# parameters solution carries a Floor branch-tracking term, verifies numerically
+# instead of relying on the non-numericizable "trust DSolve" path.
+add_test(NAME dsolve_corpus_2_2_9_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_229.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

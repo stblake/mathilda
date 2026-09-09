@@ -464,6 +464,38 @@ Full per-case results: `reports/2.2.8.tsv`; bucketed report: `reports/2.2.8.md`.
 
 ---
 
+## Section 2.2.9 — "Problems 801 to 900" (Edwards & Penney)
+
+Corpus: `DE_examples_229.m` — 100 records, **100 scalar (35 IVP), 0 systems**. Dominated by
+second-order linear: 38 constant-coefficient homogeneous, 35 constant-coefficient
+nonhomogeneous (undetermined coefficients / variation of parameters), 11 Euler/Emden–Fowler,
+plus 7 with `x(t)` as the dependent variable (`x''` notation, 862–868), 3 complex-coefficient
+(`i` in the equation: 857/858/859), and 6 first-order (separable / homogeneous / Bernoulli /
+Abel). Mathilda's strongest DSolve territory.
+`ctest -R dsolve_corpus_2_2_9_tests` · gate baseline **0**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-09 (baseline) | 100 / 100 | 100.0% | 0 | 0 FAIL, 0 crashes. Fully covered out of the box by the existing const-coeff / Euler / VoP / first-order specialists. |
+| 2026-09-09 (**M29**)  | **100 / 100** | **100.0%** | **0** | **0 FAIL, 0 regression.** No ODE-solver fix needed; the wave added piecewise rounding-function derivatives (below), upgrading 898's verification. |
+
+**M29 feature** (a general engine addition the corpus made visible, not an ODE-solver fix):
+1. **Piecewise derivatives of the integer-rounding functions (`src/calculus/deriv.c`).**
+   `D` of `Floor`/`Ceiling`/`Round`/`IntegerPart`/`FractionalPart` now returns the
+   Mathematica `Piecewise[{{v, cond}}, Indeterminate]` form (0 off the jump set, 1 for
+   `FractionalPart`), composing with the chain rule. Problem `2.2.9-898`
+   (`y''+9y == 2 Sec[3x]`) is solved by variation of parameters and its solution carries a
+   `Floor` branch-tracking term; previously `D[Floor[u],x]` was the inert
+   `Derivative[1][Floor][u]`, so the ODE residual never numericized and the harness passed
+   898 only under the "non-numericizable ⇒ trust DSolve" path. The residual now reduces to a
+   genuine numeric ~0 — 898 is verified, not merely trusted.
+
+**Residue: none** (0 UNEVAL, 0 FAIL).
+
+Full per-case results: `reports/2.2.9.tsv`; bucketed report: `reports/2.2.9.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -567,6 +599,18 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   **§2.2.8 99/100, 0 FAIL, 0 regression.** Sole residue 783 (`y'=1+x²+y²+x²y⁴`, a
   quartic-in-`y` needing the general `y=_G(x,y')` solve-for-`y`-and-differentiate method).
   Anti-overfit unit `t_m28_bernoulli_hang_trig_substitution`. See §2.2.8 block.
+- **M29 (2026-09-09)** — §2.2.9 corpus (Problems 801–900, Edwards & Penney): 100 scalar
+  (35 IVP), 0 systems, dominated by second-order linear constant-coefficient (homogeneous +
+  nonhomogeneous), Euler/Emden–Fowler, plus complex-coefficient and `x(t)`-dependent-variable
+  forms. **Fully solved out of the box — §2.2.9 100/100, 0 FAIL, 0 regression, baseline 0.**
+  No ODE-solver fix was required; instead the wave added a general engine feature the corpus
+  made visible: **piecewise derivatives of `Floor`/`Ceiling`/`Round`/`IntegerPart`/
+  `FractionalPart`** (`src/calculus/deriv.c`), returning the Mathematica
+  `Piecewise[{{v, cond}}, Indeterminate]` forms and composing with the chain rule. This
+  upgrades 898 (`y''+9y==2 Sec[3x]`, a variation-of-parameters solution carrying a `Floor`
+  branch-tracking term) from a non-numericizable "trust DSolve" pass to a genuine numeric
+  residual ~0. Anti-overfit units `t_m29_sec_floor_verifies` (test_dsolve.c) and
+  `test_rounding_deriv` (test_deriv.c). See §2.2.9 block.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

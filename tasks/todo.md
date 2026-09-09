@@ -1,25 +1,43 @@
-# M28 — DSolve §2.2.8 corpus (Problems 701–800)
+# M29 — DSolve §2.2.9 corpus (Problems 801–900) + piecewise differentiation of rounding functions
 
 ## Plan
-Replicate the M27 corpus-milestone process for §2.2.8 (Edwards & Penney, Table 2.33,
-100 scalar first-order ODEs). Generate corpus → baseline → root-cause-fix tractable
-residues → gate at honest residue → docs. 0 FAIL invariant.
+Two intersecting parts (they meet at problem 898 `y''+9y=2 Sec[3x]`):
+- **Part A**: add §2.2.9 (Problems 801–900) to the DSolve corpus (baseline 0 — 100/100
+  out of the box, measured).
+- **Part B**: piecewise derivatives of Floor/Ceiling/Round/IntegerPart/FractionalPart
+  (user request; upgrades 898 from UNK-trusted to genuinely verified).
 
-## Tasks
-- [x] 1. Generate `DE_examples_228.m` (100 records, 701–800, 20 IVP, 0 systems; spot-checked faithful).
-- [x] 2. Register gate; run baseline → **98/100 PASS, 0 FAIL, 0 crash**; 2 UNEVAL (757, 783). reports/2.2.8.{tsv,md} written.
-- [x] 3. Triage: 757 = tractable cascade-hang (Bernoulli); 783 = honest residue (needs general y=_G(x,y') method; all 3 CAS solve it but via a method we lack).
-- [x] 4. Root-cause fix: `dsolve_bernoulli.c` `bern_Y_nonalgebraic` fast-decline on transcendental-in-y → 757 solves via Linearizable. Re-run → **99/100, 0 FAIL**.
-- [x] 5. Final gate baseline set to 1 in CMakeLists (with rationale comment).
-- [x] 6. Added `t_m28_bernoulli_hang_trig_substitution` (757 solves+verifies, a-family, genuine-Bernoulli 752 guard). dsolve_tests: All passed.
-- [x] 7. Docs: STATUS.md §2.2.8 block + M28 bullet; README row; DSOLVE_PLAN.md M28; changelog 2026-09-07.md.
-- [~] 8. Verify: check-c99 ✅ exit 0; dsolve_tests ✅; §2.2.x + §2.1.2 corpus regression + stress suites — IN PROGRESS.
+## Progress
+- [x] Empirical: §2.2.9 = 100 scalar problems, converter handles unchanged, 100/100 PASS.
+- [x] Part B: 5 derivative handlers in `src/calculus/deriv.c` (after UnitStep block).
+- [x] Part B: rebuilt; all 5 outputs + chain rule match Mathematica exactly.
+- [x] Part B: tests in `tests/test_deriv.c` (`test_rounding_deriv`) — pass.
+- [x] Part A: generated `DSolve_test_status/DE_examples_229.m` (curl real page + --url).
+- [x] Part A: registered `dsolve_corpus_2_2_9_tests` in `tests/CMakeLists.txt` (baseline 0).
+- [x] Part A: reports/2.2.9.{tsv,md}, STATUS.md block + wave bullet, README row.
+- [x] Part A: regression — regenerated §2.2.1–§2.2.8, records byte-for-byte identical.
+- [x] `t_m29_sec_floor_verifies` in `tests/test_dsolve.c` (898 residual numericizes) — pass.
+- [x] Bookkeeping: DSOLVE_PLAN.md M29 entry, docs/spec/builtins/calculus.md, changelog 2026-09-07.md.
+- [x] Verify: §2.2.1–§2.2.9 gates pass; §2.1.2 gate passes; deriv/piecewise/nderiv units pass;
+      dsolve_tests pass; check-c99 clean; leaks 0 on deriv path.
+- [~] dsolve stress suites (running).
 
 ## Review
-### Outcome
-- §2.2.8 (Problems 701–800): **99/100 PASS, 0 FAIL, 0 crashes**. Sole residue 783 (quartic-in-y, `y=_G(x,y')`; future `SolvableForY` method).
-- One root-cause engine fix (Bernoulli fast-decline on transcendental-in-y), reusing verified machinery + the existing reconstruction/verify gate → no wrong answers possible.
-- 783 documented as honest residue (matches the M24–M27 "leave the research-grade residue" pattern).
-### Files
-- New: `DSolve_test_status/DE_examples_228.m`, `reports/2.2.8.{tsv,md}`.
-- Edited: `src/calculus/dsolve_bernoulli.c`, `tests/CMakeLists.txt`, `tests/test_dsolve.c`, `DSolve_test_status/STATUS.md`, `DSolve_test_status/README.md`, `DSOLVE_PLAN.md`, `docs/spec/changelog/2026-09-07.md`.
+**Outcome.** §2.2.9 (Problems 801–900) added to the DSolve corpus and solves **100/100** out of
+the box (baseline 0) — dominated by 2nd-order linear const-coeff (homogeneous + nonhomogeneous),
+Euler/Emden–Fowler, complex-coefficient, and x(t)-dependent-variable forms, all already covered
+by existing specialists. No ODE-solver fix was needed.
+
+**Engine feature (user request).** Added piecewise differentiation of the integer-rounding
+functions in `src/calculus/deriv.c` (5 handlers after the UnitStep block), returning the exact
+Mathematica `Piecewise[{{v, cond}}, Indeterminate]` forms and composing with the chain rule.
+This upgraded corpus 898 (`y''+9y==2 Sec[3x]`, a VoP solution carrying a Floor branch-tracking
+term) from a non-numericizable "trust DSolve" pass to a genuine numeric residual (~1e-38).
+
+**Verification.** 9× §2.2.x gates pass; §2.1.2 (1204 records) passes; no regression anywhere.
+deriv/deriv_array/deriv_symbolic_order/nderiv/piecewise/dsolve unit suites pass; check-c99 clean;
+0 leaks on the new derivative path (macOS `leaks`).
+
+**No new builtins/attributes/symbols** — all heads (Piecewise/NotElement/Element/Integers/Re/Im)
+and SYM_ constants already existed. Change set: deriv.c + 2 test files + CMakeLists + corpus file
++ 2 reports + STATUS/README/PLAN/spec/changelog docs.

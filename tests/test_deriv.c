@@ -151,6 +151,33 @@ static void test_piecewise_deriv(void) {
     check("D[UnitStep[x], {x, 5}]", ustep);
 }
 
+/* --- Piecewise derivatives of the integer-rounding functions ---------- */
+static void test_rounding_deriv(void) {
+    /* Floor'/Ceiling' are 0 off the integer jump set, Indeterminate on it. */
+    check("D[Floor[x], x]",
+          "Piecewise[List[List[0, Greater[x, Floor[x]]]], Indeterminate]");
+    check("D[Ceiling[x], x]",
+          "Piecewise[List[List[0, Less[x, Ceiling[x]]]], Indeterminate]");
+    /* Round' jump set is the half-integers. */
+    check("D[Round[x], x]",
+          "Piecewise[List[List[0, And[NotElement[Plus[Rational[-1, 2], Re[x]], "
+          "Integers], NotElement[Plus[Rational[-1, 2], Im[x]], Integers]]]], "
+          "Indeterminate]");
+    /* IntegerPart' = 0, FractionalPart' = 1, off the integer jump set. */
+    check("D[IntegerPart[x], x]",
+          "Piecewise[List[List[0, And[Or[Equal[Re[x], 0], NotElement[Re[x], "
+          "Integers]], Or[Equal[Im[x], 0], NotElement[Im[x], Integers]]]]], "
+          "Indeterminate]");
+    check("D[FractionalPart[x], x]",
+          "Piecewise[List[List[1, And[Or[Equal[Re[x], 0], NotElement[Re[x], "
+          "Integers]], Or[Equal[Im[x], 0], NotElement[Im[x], Integers]]]]], "
+          "Indeterminate]");
+    /* Chain rule: the D[g, x] factor rides through. */
+    check("D[Floor[3 x], x]",
+          "Times[3, Piecewise[List[List[0, Greater[Times[3, x], "
+          "Floor[Times[3, x]]]]], Indeterminate]]");
+}
+
 /* --- Total derivative (Dt) -------------------------------------------- */
 static void test_dt(void) {
     check("Dt[5]", "0");
@@ -228,6 +255,7 @@ int main(void) {
     TEST(test_higher_order);
     TEST(test_list_threading);
     TEST(test_piecewise_deriv);
+    TEST(test_rounding_deriv);
     TEST(test_dt);
     TEST(test_equal_distribution);
     TEST(test_nonconstants);

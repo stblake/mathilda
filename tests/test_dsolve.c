@@ -722,6 +722,27 @@ static void t_m28_bernoulli_hang_trig_substitution(void) {
     check_form("Head[DSolve[2 y'[x] x + y[x]^3 E^(-2 x) == 2 y[x] x, y, x][[1, 1]]]", "Rule");
 }
 
+/* ---- M29: Sec-forcing VoP solution verifies via piecewise Floor derivative ---- */
+/* corpus 2.2.9-898: y'' + 9y == 2 Sec[3x] is solved by variation of parameters and
+ * its solution carries a Floor[...] branch-tracking term.  Before M29 D[Floor[u],x]
+ * returned an inert Derivative[1][Floor][u], so the ODE residual never numericized
+ * and the corpus harness passed 898 only under the "non-numericizable => trust
+ * DSolve" path.  With piecewise rounding-function derivatives (deriv.c) the residual
+ * reduces to a genuine numeric ~0. */
+static void t_m29_sec_floor_verifies(void) {
+    /* the Floor derivative numericizes to 0 off the integer jump set (bare + chain) */
+    check_true("PossibleZeroQ[N[D[Floor[x], x] /. x -> 11/10]]");
+    check_true("PossibleZeroQ[N[D[Floor[3 x], x] /. x -> 7/10]]");
+    /* 898 solves and its residual back-substitutes to a numeric zero (not UNK) */
+    check_form("Head[DSolve[y''[x] + 9 y[x] == 2 Sec[3 x], y, x]]", "List");
+    check_true("With[{s = DSolve[y''[x] + 9 y[x] == 2 Sec[3 x], y, x][[1]] /. {C[1] -> 13/10, C[2] -> 7/10}}, "
+               "Abs[N[(y''[x] + 9 y[x] - 2 Sec[3 x]) /. s /. x -> 11/10, 20]] < 1/1000000]");
+    /* anti-overfit: a sibling Sec-forced equation solves and verifies too */
+    check_form("Head[DSolve[y''[x] + 4 y[x] == Sec[2 x], y, x]]", "List");
+    check_true("With[{s = DSolve[y''[x] + 4 y[x] == Sec[2 x], y, x][[1]] /. {C[1] -> 13/10, C[2] -> 7/10}}, "
+               "Abs[N[(y''[x] + 4 y[x] - Sec[2 x]) /. s /. x -> 11/10, 20]] < 1/1000000]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2333,6 +2354,7 @@ int main(void) {
     TEST(t_m27_separable_inverse_constant);
     TEST(t_m27_ivp_family_intact);
     TEST(t_m28_bernoulli_hang_trig_substitution);
+    TEST(t_m29_sec_floor_verifies);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

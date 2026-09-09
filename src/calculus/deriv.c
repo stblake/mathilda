@@ -1983,6 +1983,65 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fnN_adopt("Plus", terms, n);
         }
 
+        /* --- Floor / Ceiling / Round / IntegerPart / FractionalPart: the
+         *     integer-rounding functions are piecewise-constant, so their
+         *     derivative is a Piecewise that is 0 (or 1, for FractionalPart)
+         *     off the jump set and Indeterminate on it, multiplied by D[g, x]
+         *     (the chain rule, via deriv_of). Matches Mathematica; modeled on
+         *     the UnitStep handler above (Times[pw, 1] collapses to pw for the
+         *     bare g == x case). --- */
+        if (h == SYM_Floor && n == 1) {
+            Expr* cond = mk_fn2("Greater", expr_copy(args[0]),
+                                mk_fn1("Floor", expr_copy(args[0])));
+            Expr* pw = mk_fn2("Piecewise",
+                              mk_fn1("List", mk_fn2("List", mk_int(0), cond)),
+                              mk_sym("Indeterminate"));
+            return mk_fn2("Times", pw, deriv_of(args[0], x, nonconsts));
+        }
+        if (h == SYM_Ceiling && n == 1) {
+            Expr* cond = mk_fn2("Less", expr_copy(args[0]),
+                                mk_fn1("Ceiling", expr_copy(args[0])));
+            Expr* pw = mk_fn2("Piecewise",
+                              mk_fn1("List", mk_fn2("List", mk_int(0), cond)),
+                              mk_sym("Indeterminate"));
+            return mk_fn2("Times", pw, deriv_of(args[0], x, nonconsts));
+        }
+        if (h == SYM_Round && n == 1) {
+            /* zero off the half-integer jump set: both Re[g]-1/2 and Im[g]-1/2
+             * non-integers. */
+            Expr* reCond = mk_fn2("NotElement",
+                mk_fn2("Plus", mk_fn2("Rational", mk_int(-1), mk_int(2)),
+                       mk_fn1("Re", expr_copy(args[0]))),
+                mk_sym("Integers"));
+            Expr* imCond = mk_fn2("NotElement",
+                mk_fn2("Plus", mk_fn2("Rational", mk_int(-1), mk_int(2)),
+                       mk_fn1("Im", expr_copy(args[0]))),
+                mk_sym("Integers"));
+            Expr* pw = mk_fn2("Piecewise",
+                mk_fn1("List", mk_fn2("List", mk_int(0),
+                                      mk_fn2("And", reCond, imCond))),
+                mk_sym("Indeterminate"));
+            return mk_fn2("Times", pw, deriv_of(args[0], x, nonconsts));
+        }
+        if ((h == SYM_IntegerPart || h == SYM_FractionalPart) && n == 1) {
+            /* IntegerPart' = 0, FractionalPart' = 1, off the integer jump set:
+             * each of Re[g], Im[g] either zero or a non-integer. */
+            Expr* reCond = mk_fn2("Or",
+                mk_fn2("Equal", mk_fn1("Re", expr_copy(args[0])), mk_int(0)),
+                mk_fn2("NotElement", mk_fn1("Re", expr_copy(args[0])),
+                       mk_sym("Integers")));
+            Expr* imCond = mk_fn2("Or",
+                mk_fn2("Equal", mk_fn1("Im", expr_copy(args[0])), mk_int(0)),
+                mk_fn2("NotElement", mk_fn1("Im", expr_copy(args[0])),
+                       mk_sym("Integers")));
+            Expr* val = mk_int(h == SYM_FractionalPart ? 1 : 0);
+            Expr* pw = mk_fn2("Piecewise",
+                mk_fn1("List", mk_fn2("List", val,
+                                      mk_fn2("And", reCond, imCond))),
+                mk_sym("Indeterminate"));
+            return mk_fn2("Times", pw, deriv_of(args[0], x, nonconsts));
+        }
+
         /* --- SeriesData: term-by-term differentiation. --- */
         if (h == SYM_SeriesData && n == 6) {
             Expr* r = series_differentiate(f, x);
