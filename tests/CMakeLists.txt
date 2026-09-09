@@ -3876,6 +3876,33 @@ add_test(NAME dsolve_corpus_2_2_11_tests
                  ../../DSolve_test_status/DE_examples_2211.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
 
+# Section 2.2.12 "Problems 1101 to 1200" (Edwards & Penney): 100 records --
+# 100 scalar first-order ODEs (38 IVP), 0 systems.  Elementary first-order
+# territory (separable/linear/quadrature/homogeneous/Bernoulli/exact) plus a few
+# Abel/Riccati (mostly homogeneous class A) and two solvable-for-y/x forms.  M32.
+# Baseline 3 (97/100): went 80/19/1 -> 97/3/0 via three root-cause fixes the
+# section surfaced -- crucially it repaired a WRONG ANSWER (the section's sole FAIL):
+#  - IVP constant-fitting (dsolve_common.c): drop a fitted branch that still carries
+#    a generated C[k] or an Undefined value (an unsatisfiable +/- or Root branch is
+#    not a solution), and Bernoulli emits both real signs for an even 1-n root so the
+#    IVP fitter selects the branch through the initial point.  Fixed FAIL 1147 plus 11
+#    UNEVAL IVPs (1138,1140,1141,1143,1144,1145,1146,1149,1150,1152,1153).
+#  - Separable recognizer (dsolve_separable.c): accept generic-parameter splits, and a
+#    new implicit twin-try (dsolve_separable_implicit_try, mirroring Exact/ExactImplicit)
+#    returns the first integral Integrate[1/h,y] == Integrate[g,x] + C[1] -- keeping a
+#    non-elementary integral unevaluated -- when the relation does not invert for y
+#    (1133,1157?no,1173,1186; Root-form cubic IVPs 1149/1150).
+#  - Integrate Gaussian->Erf/Ei/PolyLog recognizer (risch_special.c): emitted the
+#    antiderivative in a literal x for EVERY integration variable; now threads the real
+#    variable (Integrate[E^(a^2/2),a] was ...Erf[.. x ..]).  Fixed 1182/1190.
+# Residue (3, research-grade, NOT wrong answers): 1135 (y=_G(x,y'), transcendental
+# d'Alembert -- induced p-ODE non-cascade-solvable), 1200 (x=_G(y,y'), cannot even be
+# solved-for-x: E^x plus linear x), 1157 (Abel 2nd kind (a y+b)/(c y+d), the M13 gap).
+add_test(NAME dsolve_corpus_2_2_12_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2212.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

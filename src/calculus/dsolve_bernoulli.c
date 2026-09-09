@@ -146,13 +146,27 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
     Expr* v = dsolve_linear_factor_solve(Pcoef, Qcoef, xvar);               /* consumes both */
     if (!v) { expr_free(omn); expr_free(nexp); return NULL; }
 
-    /* y = v^(1/(1-n)) */
+    /* y = v^(1/(1-n)).  When (1-n) is an EVEN integer the inverse y = v^(1/(1-n))
+     * is a two-valued real root, so BOTH signs are solutions (y^(1-n) = v);
+     * Bernoulli previously emitted only the principal (+) branch, which loses the
+     * negative-initial-value IVP (e.g. y'==(1-2x)/y, y(1)==-2 needs -Sqrt).  Emit
+     * both real branches so the IVP fitter can select the one through the initial
+     * point; the general solution then matches Mathematica's two-branch form. */
     Expr* body = eval_and_free(ds_call2(SYM_Power, v, powneg1(expr_copy(omn))));
+    bool two_signed = (omn->type == EXPR_INTEGER && (omn->data.integer % 2 == 0));
     expr_free(omn); expr_free(nexp);
 
-    Expr** out = malloc(sizeof(Expr*));
-    out[0] = body;
-    *nbranch = 1;
+    Expr** out;
+    if (two_signed) {
+        out = malloc(2 * sizeof(Expr*));
+        out[0] = body;
+        out[1] = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(body)));
+        *nbranch = 2;
+    } else {
+        out = malloc(sizeof(Expr*));
+        out[0] = body;
+        *nbranch = 1;
+    }
     return out;
 }
 

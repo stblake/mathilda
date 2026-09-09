@@ -3522,3 +3522,42 @@ Two lessons from strengthening `src/solve/solverad.c`:
   that ALSO time out on the pre-change HEAD binary — pure load-dependent flakiness, not
   caused by the change. Swap the changed source files for their HEAD versions and re-test
   the specific case before "fixing" it.
+
+## M32 — §2.2.12 corpus (2026-09-09)
+
+- **An IVP-fitter "drop unfitted branch" rule MUST distinguish an unsatisfiable branch
+  from an under-determined BVP.** My first cut dropped any IVP branch that still carried a
+  generated `C[k]` when `#conditions >= #constants`. That broke `y''+y==0, y[0]==0,
+  y[π]==0`, whose two BCs are DEPENDENT — the correct answer `C[2] Sin[x]` legitimately
+  keeps a free constant (`t_cc_bvp` regression). Fix: `dsolve_fit_constants` reports a
+  per-branch `fit_state` (OK / EMPTY=scalar-Solve-returned-`{}` / UNDEF=`Undefined`), and
+  `dsolve_run` decides WITH sibling context — drop UNDEF always, drop EMPTY only when a
+  sibling FIT_OK exists (the wrong `±`/Root branch), keep everything else (a lone
+  singularity, or a fit that fixed >=1 constant but left others = under-determined). "Fit
+  progressed" (Solve non-empty) ≠ "fully fit"; never conflate leftover-constant with
+  unsatisfiable.
+- **Template-based antiderivative recognizers can hardcode the integration variable.**
+  `risch_special.c`'s Gaussian→Erf / Ei / dilog recognizers spelled the result in a
+  LITERAL `x` (`rt_template("...Erf[(rmB+rmA2*x)/...]")`), so `Integrate[E^(a^2/2), a]`
+  came back `...Erf[...x...]` — silently WRONG for every non-`x` variable, and it only
+  surfaced via a DSolve over indep-var `a` (1182/1190) whose solution then failed to
+  verify. Thread the real variable through the template (add `"x" -> x` to the rule set;
+  `ReplaceAll` does not re-traverse substitutions and the matched coefficients are free of
+  `x`, so a parameter literally named `x` is safe). When auditing a numeric/Integrate head
+  for a non-`x` variable, grep its output for a stray `x`.
+- **`Separable` needs an implicit twin, like `Exact`/`ExactImplicit`.** It was the only
+  first-order method dispatched ONLY via `dsolve_run` (explicit), so a genuinely-separable
+  ODE whose `∫dy/g` is elementary-but-non-invertible (`Cot[t]y/(1+y)`) or non-elementary
+  (autonomous `−2ArcTan[y]/(1+y²)`) or Root-form (cubic-in-y IVP) just declined. Adding
+  `dsolve_separable_implicit_try` (via `dsolve_run_implicit`, keeping a non-elementary
+  integral UNEVALUATED — `D[Integrate[f,y],y]==f` lets the implicit-function-rule verify
+  still pass) closed all of them and, for IVPs, fits the constant on `G(x0,y0)` with no
+  inversion.
+- **`dsolve_tests` has a PRE-EXISTING 120 s whole-binary `alarm()` (`tests/test_utils.h`)**
+  that `t_rischnorman_enum_cap_no_crash` (ODE A `x²−1+(y²x²+x³+x)y'==0`, a deliberately
+  huge Risch-Norman basis, >200 s) exceeds on this machine — IDENTICAL on pristine `main`
+  (SIGALRM → exit 14 at test #42). CI does NOT run `dsolve_tests` (only `make check-c99` +
+  a Linux build), so this local-only limit went unnoticed. Corollary: when the unit suite
+  "regresses", confirm against a PRISTINE rebuild before attributing it — and remember that
+  running several Mathilda processes concurrently inflates every per-case timing (the 8 s
+  `TimeConstrained` and the alarm both fire on wall-clock).

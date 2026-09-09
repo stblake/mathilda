@@ -78,8 +78,15 @@ static Expr* rt_try_erf(Expr* f, Expr* x) {
     Expr* b1 = rt_coeff(ld, x, 0);   /* = b  */
     expr_free(ld);
 
-    const char* names[2] = { "rmA2", "rmB" };
-    Expr* vals[2] = { a2, b1 };
+    /* Thread the ACTUAL integration variable through the template as "x": the
+     * template text spells the variable "x", but the real variable may be a / t /
+     * s / ... .  ReplaceAll does not re-traverse a substituted subtree, and the
+     * matched coefficients (rmA2, rmB) are free of x by construction, so mapping
+     * "x" -> the real variable cannot corrupt a coefficient that happens to carry
+     * a parameter named x.  Without this the antiderivative was emitted in a
+     * literal x for every variable (Integrate[E^(a^2/2), a] -> Erf[.. x ..]). */
+    const char* names[3] = { "rmA2", "rmB", "x" };
+    Expr* vals[3] = { a2, b1, x };
     Expr* result = NULL;
     /* Since ld = f'/f is a degree-1 polynomial, f = K' E^((a2/2)x^2 + b1 x)
      * with K' a constant, so K' = f|_{x=0} (the exponent has no constant
@@ -95,7 +102,7 @@ static Expr* rt_try_erf(Expr* f, Expr* x) {
         Expr* erfpart = rt_template(
             "E^(-rmB^2/(2*rmA2)) *"
             " (-(Sqrt[Pi]*Erf[(rmB + rmA2*x)/(2*Sqrt[-rmA2/2])])/(2*Sqrt[-rmA2/2]))",
-            names, vals, 2);
+            names, vals, 3);
         if (erfpart) {
             /* Correct by construction: ld = f'/f is a degree-1 polynomial,
              * so f = K' E^(a x^2 + b x) exactly and this is its integral. */
@@ -144,12 +151,12 @@ static Expr* rt_try_ei(Expr* f, Expr* x) {
         Expr* bb = rt_coeff(v, x, 0);   /* b */
         Expr* cc = rt_coeff(den, x, 1); /* c */
         Expr* dd = rt_coeff(den, x, 0); /* d */
-        const char* names[5] = { "rmM", "rmA", "rmB", "rmC", "rmD" };
-        Expr* vals[5] = { num, aa, bb, cc, dd };
+        const char* names[6] = { "rmM", "rmA", "rmB", "rmC", "rmD", "x" };
+        Expr* vals[6] = { num, aa, bb, cc, dd, x };   /* "x" -> real integration variable */
         result = rt_template(
             "(rmM*E^(rmB - rmA*rmD/rmC)/rmC)"
             "*ExpIntegralEi[rmA*x + rmA*rmD/rmC]",
-            names, vals, 5);
+            names, vals, 6);
         expr_free(aa);
         expr_free(bb);
         expr_free(cc);
@@ -319,9 +326,9 @@ static Expr* rt_try_dilog(Expr* f, Expr* x) {
             (Expr*[]){ expr_copy(f), expr_copy(x), invlog }, 3);
         Expr* K = rt_eval1("Together", prod);
         if (K && rt_free_of_x(K, x) && !rt_is_zero(K)) {
-            const char* names[2] = { "rmK", "rmU1" };
-            Expr* vals[2] = { K, u1 };
-            result = rt_template("-rmK*PolyLog[2, -rmU1*x]", names, vals, 2);
+            const char* names[3] = { "rmK", "rmU1", "x" };
+            Expr* vals[3] = { K, u1, x };   /* "x" -> real integration variable */
+            result = rt_template("-rmK*PolyLog[2, -rmU1*x]", names, vals, 3);
         }
         if (K) expr_free(K);
     }

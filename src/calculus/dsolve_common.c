@@ -449,14 +449,25 @@ static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
     return true;
 }
 
+/* How the constant-fit turned out, so dsolve_run can decide per branch WITH
+ * knowledge of the sibling branches (a decision no single branch can make alone). */
+enum { FIT_OK = 0,     /* Solve fixed >=1 constant (fully fit, or under-determined). */
+       FIT_EMPTY = 1,  /* scalar Solve returned {} -- the condition is unsatisfiable
+                        * on this branch (a wrong +/- sign / Root index) IF a sibling
+                        * fits, else a genuine basis singularity to keep. */
+       FIT_UNDEF = 2 };/* the fit substituted Undefined/$Failed -- never a solution. */
+
 /* Fit generated constants to the initial/boundary conditions; returns a fresh
  * body (the general body copied when there is nothing to fit).  Sets *no_solution
- * (when non-NULL) true only when Solve PROVES the conditions inconsistent, i.e. it
- * returns an empty solution list {} — a well-posed but over-determined BVP with no
- * solution.  An undecided fit (Solve stays unevaluated) leaves *no_solution false
- * and keeps the general solution, matching Solve's own keep-the-undecidable policy. */
-static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body, bool* no_solution) {
+ * (when non-NULL) true only when Solve PROVES the conditions inconsistent (the LIST
+ * form returns {} -- an over-determined BVP with no solution).  Sets *fit_state to
+ * FIT_OK / FIT_EMPTY / FIT_UNDEF (see the enum) so the caller can drop a branch that
+ * an initial condition cannot be met on while keeping its siblings.  An undecided
+ * scalar fit (Solve stays unevaluated) keeps the general solution as FIT_OK. */
+static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
+                                  bool* no_solution, int* fit_state) {
     if (no_solution) *no_solution = false;
+    if (fit_state) *fit_state = FIT_OK;
     if (P->ncond == 0) return expr_copy((Expr*)body);
     Expr** params = NULL; size_t npar = 0;
     ds_collect_consts(body, &params, &npar);
@@ -494,16 +505,19 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body, bool
         solres = ds_solve(eqlist, varlist);
     }
     Expr* fitted = NULL;
+    bool inconsistent = false;
+    bool scalar_empty = false;
     if (solres && head_is(solres, SYM_List)) {
         if (solres->data.function.arg_count == 0) {
             /* Empty Solve result.  From the multi-condition LIST form this is a
              * genuine inconsistency -> no solution (BVP soundness, M11).  From the
-             * single-condition SCALAR form it is unreliable: Solve returns {} when
-             * the fit point is a SINGULARITY of the solution basis (e.g. a Riccati
-             * -> Bessel IVP fitted at x0=0 where BesselK is infinite), which is NOT
-             * a real inconsistency -- so keep the general solution there instead of
-             * falsely reporting no-solution. */
-            if (no_solution && !scalar_fit) *no_solution = true;
+             * single-condition SCALAR form it is EITHER an unsatisfiable inverse
+             * branch (a wrong +/- sign / Root index whose sibling fits -- drop) OR a
+             * basis SINGULARITY (a lone branch fitted at an infinite point -- keep).
+             * dsolve_fit_constants cannot tell which alone, so it reports FIT_EMPTY
+             * and dsolve_run decides using the sibling branches. */
+            if (!scalar_fit) inconsistent = true;
+            else scalar_empty = true;
         } else {
             Expr* branch = solres->data.function.args[0];   /* List[Rule[C[k],val],...] */
             if (head_is(branch, SYM_List)) {
@@ -529,7 +543,27 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body, bool
         }
     }
     if (solres) expr_free(solres);
-    if (!fitted) fitted = expr_copy((Expr*)body);   /* could not fit / no-sol: keep general */
+    (void)neq;
+    if (inconsistent) {            /* over-determined BVP: no solution */
+        if (no_solution) *no_solution = true;
+        return expr_copy((Expr*)body);
+    }
+    if (!fitted) fitted = expr_copy((Expr*)body);   /* undecided / singularity: keep general */
+
+    /* Classify the fit for dsolve_run's per-branch keep/drop decision.  An
+     * Undefined/$Failed value (the fit had no consistent constant on this branch --
+     * 2.2.12-1147's wrong answer) is never a solution.  A scalar empty-Solve is an
+     * unsatisfiable branch (drop if a sibling fits) or a singularity (keep if not).
+     * Anything else -- including a legitimately UNDER-DETERMINED fit that keeps a
+     * free constant (y''+y==0, y[0]==0, y[Pi]==0 -> C[2] Sin[x]) -- is FIT_OK. */
+    if (fit_state) {
+        if (ds_contains(fitted, SYM_Undefined) || ds_contains(fitted, intern_symbol("$Failed")))
+            *fit_state = FIT_UNDEF;
+        else if (scalar_empty)
+            *fit_state = FIT_EMPTY;
+        else
+            *fit_state = FIT_OK;
+    }
     return fitted;
 }
 
@@ -1006,19 +1040,38 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
     if (!bodies) return NULL;
     if (nb == 0) { free(bodies); return NULL; }
 
+    /* Fit every verified branch, recording HOW each fit turned out, then decide
+     * per branch WITH the sibling context (dsolve_fit_constants cannot): an
+     * Undefined fit is always dropped; a scalar unsatisfiable-condition branch
+     * (FIT_EMPTY) is dropped only when a sibling actually fits (the wrong +/- or
+     * Root branch of an IVP), and kept when none do (a lone basis singularity). */
     Expr** finals = malloc(nb * sizeof(Expr*));
-    size_t nf = 0, n_verified = 0, n_nosol = 0;
+    int*   fstate = malloc(nb * sizeof(int));
+    size_t nf = 0, n_verified = 0, n_nosol = 0, n_ok = 0;
     for (size_t b = 0; b < nb; b++) {
         if (!bodies[b]) continue;
         if (!dsolve_verify_body(P, bodies[b])) { expr_free(bodies[b]); continue; }
         n_verified++;
-        bool nosol = false;
-        Expr* fitted = dsolve_fit_constants(P, bodies[b], &nosol);
+        bool nosol = false; int st = FIT_OK;
+        Expr* fitted = dsolve_fit_constants(P, bodies[b], &nosol, &st);
         expr_free(bodies[b]);
-        if (nosol) { n_nosol++; expr_free(fitted); continue; }
+        if (nosol) { n_nosol++; if (fitted) expr_free(fitted); continue; }
+        if (!fitted) continue;
+        if (st == FIT_UNDEF) { expr_free(fitted); continue; }   /* never a solution */
+        fstate[nf] = st;
         finals[nf++] = fitted;
+        if (st == FIT_OK) n_ok++;
     }
     free(bodies);
+    if (n_ok > 0) {                 /* a sibling fit: drop the unsatisfiable branches */
+        size_t keep = 0;
+        for (size_t b = 0; b < nf; b++) {
+            if (fstate[b] == FIT_EMPTY) { expr_free(finals[b]); }
+            else finals[keep++] = finals[b];
+        }
+        nf = keep;
+    }
+    free(fstate);
     if (nf == 0) {
         free(finals);
         /* A verified general solution whose (boundary) conditions Solve proves

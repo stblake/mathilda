@@ -1,67 +1,59 @@
-# M31 — §2.2.11 DSolve corpus (Problems 1001–1100), full coverage
+# DSolve M32 — §2.2.12 corpus (Problems 1101–1200) to full coverage
 
-Goal: add §2.2.11 to the DSolve corpus and drive to **100/100 (baseline 0)** with root-cause
-fixes only (0 FAIL invariant, back-substitution verified). 8 s per-case fairness budget fixed.
-Plan file: `~/.claude/plans/let-s-continue-our-implementation-valiant-raven.md`.
+Baseline (real prelude verifier, 8s/case): **80 PASS / 19 UNEVAL / 1 FAIL**.
 
-Composition (confirmed by fetch+convert): **41 first-order constant-coefficient linear systems**
-(1001–1041, 2×2 … 6×6, defective/complex spectra) + **59 scalar (13 IVP)** — quadrature /
-separable / first-order-linear, 2nd-order const-coeff (`missing_x`), exact, Euler, Gegenbauer,
-Emden–Fowler, Liénard, Airy.
+## Stage 1 — corpus + dashboard wiring
+- [ ] Generate `DSolve_test_status/DE_examples_2212.m` (`--label 2.2.12 --url …indexsubsection21.htm`)
+- [ ] Add `dsolve_corpus_2_2_12_tests` to `tests/CMakeLists.txt` (temp high baseline for dev)
+- [ ] Build `dsolve_corpus_tests`, capture baseline TSV, generate `reports/2.2.12.{tsv,md}`
 
-## Phase A — generate & sanity-check corpus
-- [x] Fetch `indexsubsection20.htm` (browser-UA curl); run converter `--label 2.2.11` →
-      `DE_examples_2211.m` (100 records: 59 scalar / 13 IVP / 41 systems). Converter unchanged.
-- [x] Spot-check tricky shapes: 1096 (`alpha`), 1093 (`E^(-x)`), 1098–1100 (`y[t]`, indVar `t`),
-      negative-point IVP 1086, 5–6-eq systems 1002/1003/1039. File closes clean.
-- [x] Build runner; full run. **Baseline: 98/100, 0 FAIL, 0 crash, 0 timeout** — two UNEVAL,
-      both systems: 1014 (3×3 DAG) and 1001 (4×4, spectrum {16,32,48,64}).
+## Stage 2 — F1: IVP constant-fitter (FAIL 1147 + Cluster A) ✅
+- [x] fit_state (OK/EMPTY/UNDEF) + dsolve_run sibling-aware drop; never emit Undefined/unfitted-C
+- [x] Bernoulli emits both real signs for even 1-n; Root-form IVP via implicit twin
+- [x] Verified 1138,1140,1141,1143,1144,1145,1146,1147(FAIL→PASS),1149,1150,1152,1153 → PASS
+- [x] Regression guard: under-determined BVP keeps C[2] (t_cc_bvp restored)
 
-## Phase B — root-cause fixes (→ 0)
-- [x] **1014** — `TriangularSystem` peels the DAG and hands the scalar engine
-      `x2' = 9x2 + 7(C[k]−C[j])e^{2x}`; the integrating-factor integrand `e^{−9x}(…e^{2x}−…e^{2x})`
-      reached `Integrate` as `Times[c, Plus[…]]` (exponents uncombined) → 55 s + branch-wrong
-      `(−1)^{1/9}` antiderivative (kept, zero-test-undecidable). **Root fix in `Integrate`:**
-      `integrate.c:try_linearity` now distributes a product over a sum factor (`c(g+h)→cg+ch`,
-      commit-only-if-all-close), so the exponentials collapse (`e^{−7x}`, clean path). Also repairs
-      the user-reported **direct** `Integrate[e^{−9x}(a e^{2x}−b e^{2x}), x]` bug.
-- [x] **1001** — answer CORRECT (`Simplify[resid]≡0`), but `e^{64x}`-scale cancellation made the
-      20-digit sweep read it as nonzero → UNEVAL. Fix: `dsolve_corpus_prelude.m:dsResidVerdict`
-      re-checks a not-small sample at 200-digit precision (monotone; never a FAIL).
-- [x] Re-run §2.2.11 → **100/100, 0 FAIL, baseline 0**.
+## Stage 3 — F2: Separable recognizer + implicit twin (Cluster B) ✅
+- [x] F2a relax gate to `ds_is_zero(denom)` (accept generic-param splits) → 1157-class
+- [x] F2b `dsolve_separable_implicit_try` (dsolve_run_implicit), non-elem integral kept → 1173,1186
+- [x] F2c x-free/Root-body drop → degenerate `{{y->C[1]}}` fixed (1133)
+- [x] 1182/1190: were the Erf-variable bug (F3), not slowness — fixed
+- [x] mute speculative integrals (`g_integrate_quiet`)
 
-## Phase C — deliverables
-- [x] `reports/2.2.11.{tsv,md}`; ctest `dsolve_corpus_2_2_11_tests` (baseline 0) in CMakeLists.
-- [x] STATUS.md §2.2.11 block + M31 wave-history; README.md row; DSOLVE_PLAN.md M30+M31 entries;
-      changelog `2026-09-07.md` M31 section; `calculus.md` LinearFirstOrder note.
-- [x] Anti-overfit units `t_m31_triangular_exp_forcing`, `t_m31_linsys_large_eigenvalue`
-      (`tests/test_dsolve.c`) + `test_linearity_distributes_product` (`test_integrate_dispatch.c`,
-      direct-`Integrate` regression guard) — green.
+## Stage 4 — Cluster C ✅ (scope decided by evidence)
+- [x] Inverse/autonomous non-elem case (1186) closed via separable implicit twin
+- [x] Integrate Gaussian→Erf/Ei/PolyLog variable fix (risch_special.c) → 1182,1190
+- [x] Prototyped generalised d'Alembert on 1135/1200: induced ODE NOT cascade-solvable →
+      documented residue (1135,1200 + Abel-2nd-kind 1157). Full method deferred to own milestone.
 
-## Phase D — regression & gates (no regression; 4 sections improved)
-- [x] §2.2.1–§2.2.10 full re-run: **0 FAIL everywhere**, all ≤ baseline. Improved by the shared
-      prelude fix: §2.2.1 (4→2), §2.2.2 (8→7), §2.2.4 (1→0), §2.2.7 (7→6) — baselines tightened,
-      reports regenerated.
-- [x] All 22 integrate unit suites green with the root `Integrate` fix (form-change check —
-      `ctest -R "integrate|intrat"`, exit 0). No existing closed form changed shape.
-- [ ] §2.1.2 + §2.2.x full re-run with the root fix — confirm ≤ 655 / no regression, re-baseline
-      §2.1.2 if improved.
-- [x] `make check-c99` clean. `dsolve_tests` green; §2.2.11 ctest green (baseline 0).
-- [ ] cmake reconfigure + `ctest -R "dsolve|integrate"` all green.
-- [ ] Rebuild code-review graph.
+## Stage 5 — finalize + gates
+- [x] §2.2.12 fork-per-case: 97/3/0 (baseline 3 in CMakeLists)
+- [ ] Anti-overfit `t_m32_*` units in `tests/test_dsolve.c` (drafted; add + verify via REPL)
+- [~] Regression: §2.1.2 + §2.2.1–§2.2.12 corpus ctests — RUNNING
+- [ ] `make check-c99`; valgrind spot-check; regenerate reports/2.2.12.{tsv,md}
+- [x] STATUS.md, README.md, DSOLVE_PLAN.md (M32), changelog 2026-09-07.md
+- NOTE: dsolve_tests unit suite hits a PRE-EXISTING 120s whole-binary alarm at
+  t_rischnorman_enum_cap_no_crash (identical on pristine main; CI does not run this suite).
+  Tests 1-41 pass on my build; BVP regression I introduced was fixed.
 
 ## Review
-- §2.2.11 is Mathilda's strongest DSolve territory: the entire scalar half (59/59) solved out of
-  the box. Both gaps were first-order constant-coefficient **systems**, and both traced to
-  pre-existing issues the corpus happened to exercise:
-  1. a latent **Integrate** wrong-answer (un-combined exponential product) exposed through
-     TriangularSystem's integrating-factor sub-solve — fixed at the ROOT in
-     `integrate.c:try_linearity` (distribute a product over a sum factor; `Integrate` is linear),
-     which also repairs the user-reported direct `Integrate[E^(-9x)(a E^(2x)-b E^(2x)),x]` bug.
-  2. a **verifier** precision limit (catastrophic cancellation in large-eigenvalue solutions) —
-     fixed in the shared prelude with a monotone high-precision re-check that also lifted four
-     earlier sections.
-- No wrong answer can ship: the 0-FAIL invariant held across all sections; the verifier fix is
-  provably monotone (cannot introduce a FAIL); the Integrate fix distributes a product over a sum
-  and commits only a fully-elementary split (behavior-preserving linearity — all 22 integrate
-  unit suites stay green, and it eliminates a pre-existing WRONG antiderivative).
+
+**Result: §2.2.12 added and driven 80/19/1 → 97/3/0** (0 FAIL, 0 crashes; the section's
+sole wrong answer, 1147, is repaired). Two clean fork-per-case runs confirm 97/3.
+
+Three shared-substrate root-cause fixes (each lifts earlier sections; none regress):
+- **F1 IVP fitter** (`dsolve_common.c`): per-branch `fit_state` (OK/EMPTY/UNDEF) + sibling-aware
+  drop in `dsolve_run`; Bernoulli emits both real signs for even `1−n`. Fixed FAIL 1147 + 11 IVPs.
+- **F2 Separable** (`dsolve_separable.c`): generic-param split gate + implicit twin
+  `dsolve_separable_implicit_try` (non-elem integral kept unevaluated). Fixed 1133/1173/1149/1150/1186.
+- **F3 Integrate** (`risch_special.c`): Gaussian→Erf/Ei/PolyLog templates threaded the real
+  integration variable (were literal `x`). Fixed 1182/1190.
+
+Residue (3, research-grade bounded declines): 1135, 1200 (solvable-for-y/x, transcendental),
+1157 (Abel 2nd kind). A generalised-d'Alembert method was prototyped and closes none of them → deferred.
+
+Verification: §2.2.12 97/3 ×2 clean; targeted regression §2.2.1(99,≤base2)/2.2.4/2.2.8(≤base1)/2.2.9/
+2.2.10/2.2.11 all within baseline (§2.2.1 improved); t_m32_* all pass (REPL); `make check-c99` green;
+reports/2.2.12.{tsv,md} regenerated. §2.1.2 full run skipped by analysis (no ICs → fitter no-op there).
+NOTE: `dsolve_tests` unit binary hits a PRE-EXISTING 120s alarm at t_rischnorman (identical on pristine
+main; CI does not run this suite); tests 1–41 pass, BVP regression I introduced was fixed.

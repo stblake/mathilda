@@ -119,6 +119,7 @@ extern Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_homogeneous_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_separable_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exact_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
@@ -326,6 +327,14 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_bernoulli_try);
             if (!result) result = dsolve_run(&P, dsolve_homogeneous_try);
             if (!result) result = dsolve_run(&P, dsolve_separable_try);
+            /* Separable first integral (implicit): reached when the separated
+             * relation Integrate[1/h,y] == Integrate[g,x] + C[1] is elementary but
+             * does not invert for y (Log / Root / transcendental) -- e.g.
+             * y'==Cot[t]y/(1+y) -> y+Log[y]==Log[Sin t]+C, or the Root-form cubic
+             * separables whose IVP is fitted here as C = G(x0,y0) with no
+             * inversion.  Placed right after the explicit Separable, mirroring the
+             * Exact / ExactImplicit twin. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_separable_implicit_try);
             /* PolynomialShiftSubstitution: y' == R(x) + g(x)(phi(x)+c y)^p with the
              * substitution u = phi+c y -> separable; the deterministic replacement
              * for abaco2_similar's aborting radical [F(x),G(x)]-symmetry cases.

@@ -833,6 +833,51 @@ static void t_m31_linsys_large_eigenvalue(void) {
                "/. {C[1]->7/10, C[2]->9/10, C[3]->11/10, C[4]->13/10, x->1/10}, 30]]] < 1/1000000]");
 }
 
+/* ---- M32: §2.2.12 fixes (IVP fitter / Separable implicit / Integrate Erf variable) ---- */
+static void t_m32_ivp_unsatisfiable_branch_dropped(void) {
+    /* 1147 (was a WRONG answer): Sin[2x]+Cos[3y]y'==0, y[Pi/2]==0.  The "+" inverse branch
+     * cannot pass through the initial point; it must be DROPPED, not emitted with an Undefined
+     * constant.  Every returned branch is free of Undefined and C[_] and back-substitutes ~0. */
+    check_true("With[{s = DSolve[{Sin[2 x] + Cos[3 y[x]] y'[x] == 0, y[Pi/2] == 0}, y, x]}, "
+               "MatchQ[s, {__List}] && FreeQ[s, Undefined | C[_]] && "
+               "AllTrue[s, Abs[N[(Sin[2 x] + Cos[3 y[x]] y'[x]) /. # /. x -> 13/10, 20]] < 1/10^6 &]]");
+    /* 1143: the unsatisfiable -Sqrt branch drops, the +Sqrt fits to (-1+Sqrt[4x^2-15])/2 */
+    check_true("With[{s = DSolve[{y'[x] == (2 x)/(1 + 2 y[x]), y[2] == 0}, y, x]}, "
+               "MatchQ[s, {__List}] && FreeQ[s, C[_]] && "
+               "AllTrue[s, PossibleZeroQ[(y[x] /. #) - (-1 + Sqrt[4 x^2 - 15])/2] &]]");
+    /* 1138: a negative initial value needs the -Sqrt sign Bernoulli now also emits */
+    check_true("With[{s = DSolve[{y'[x] == (1 - 2 x)/y[x], y[1] == -2}, y, x]}, "
+               "MatchQ[s, {__List}] && FreeQ[s, C[_]] && "
+               "AllTrue[s, (N[y[1] /. #, 20] < 0) && "
+               "Abs[N[(y'[x] - (1 - 2 x)/y[x]) /. # /. x -> 6/5, 20]] < 1/10^6 &]]");
+}
+static void t_m32_bvp_underdetermined_keeps_constant(void) {
+    /* REGRESSION GUARD: an under-determined BVP (the two BCs are dependent) must KEEP the free
+     * constant -- the fitter drop must not discard y == C[2] Sin[x]. */
+    check_true("Not[FreeQ[DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x], C[2]]]");
+}
+static void t_m32_root_form_ivp(void) {
+    /* 1149: cubic-in-y separable IVP -> the explicit Root branch cannot be C-fit, so the implicit
+     * first integral fits C = G(x0,y0) with no inversion (fully fitted, no leftover constant). */
+    check_true("With[{s = DSolve[{y'[x] == (3 x^2 + 1)/(-6 y[x] + 3 y[x]^2), y[0] == 1}, y, x]}, "
+               "MatchQ[s, {__List}] && FreeQ[s, C[_]]]");
+}
+static void t_m32_separable_implicit_and_widened(void) {
+    /* 1173: Cot[t]y/(1+y) -- elementary but non-invertible -> implicit first integral */
+    check_true("MatchQ[DSolve[y'[t] == (Cot[t] y[t])/(1 + y[t]), y, t], {__List}]");
+    /* 1186: autonomous, non-elementary y-integral -> implicit relation carrying the unevaluated
+     * Integrate (verified by the implicit-function rule). */
+    check_true("MatchQ[DSolve[y'[x] == -((2 ArcTan[y[x]])/(1 + y[x]^2)), y, x], {__List}]");
+}
+static void t_m32_integrate_erf_variable(void) {
+    /* Integrate's Gaussian->Erf recognizer emitted a literal x for EVERY variable; now it threads
+     * the real integration variable (fixed the non-x-variable Bernoulli solves 1182/1190). */
+    check_true("FreeQ[Integrate[E^(a^2/2), a], x] && Not[FreeQ[Integrate[E^(a^2/2), a], a]]");
+    check_true("PossibleZeroQ[D[Integrate[E^(t^2/2), t], t] - E^(t^2/2)]");
+    /* regression: the x-variable case is unchanged */
+    check_true("Not[FreeQ[Integrate[E^(x^2/2), x], x]]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2449,6 +2494,12 @@ int main(void) {
     TEST(t_m30_kovacic_inhomogeneous);
     TEST(t_m31_triangular_exp_forcing);
     TEST(t_m31_linsys_large_eigenvalue);
+    /* M32: §2.2.12 IVP-fitter / Separable-implicit / Integrate-Erf-variable */
+    TEST(t_m32_ivp_unsatisfiable_branch_dropped);
+    TEST(t_m32_bvp_underdetermined_keeps_constant);
+    TEST(t_m32_root_form_ivp);
+    TEST(t_m32_separable_implicit_and_widened);
+    TEST(t_m32_integrate_erf_variable);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

@@ -1163,6 +1163,48 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   §2.1.2/§2.2.1–§2.2.10 gates held (four improved). See the §2.2.11 block in
   `DSolve_test_status/STATUS.md`.
 
+- **M32 — §2.2.12 corpus (Problems 1101–1200) + IVP-fitter / Separable-implicit /
+  Integrate-Erf-variable fixes.** ✅ DONE. Edwards & Penney 1101–1200: 100 records —
+  **100 scalar (38 IVP), 0 systems**, elementary first-order (separable / linear / quadrature /
+  homogeneous / Bernoulli / exact, plus homogeneous-class-A "Abel" rationals and two
+  solvable-for-y/x forms). **The first §2.2.x section NOT green out of the box:** baseline
+  **80/100 with a wrong answer (1 FAIL) + 19 UNEVAL → 97/100, 0 FAIL, 0 crashes, 0 regression.**
+  Three shared-substrate root-cause fixes (each lifts earlier sections too, none regress):
+  - **IVP constant-fitting (`src/calculus/dsolve_common.c`).** `dsolve_fit_constants` now reports a
+    per-branch `fit_state` (OK / EMPTY / UNDEF) and `dsolve_run` drops, WITH sibling context, a
+    branch an initial condition cannot be met on: one whose fit substituted `Undefined`/`$Failed`
+    (Solve had no consistent constant — `2.2.12-1147`, the section's sole **FAIL/wrong answer**),
+    or a scalar unsatisfiable inverse branch (wrong `±`/`Root` index) **when a sibling actually
+    fits** — so a lone basis singularity is still kept and a genuinely UNDER-determined BVP
+    (`y''+y==0, y[0]==0, y[π]==0 → C[2] Sin[x]`) keeps its free constant. `dsolve_bernoulli.c` emits
+    BOTH real signs for an even `1−n` root (`y'==(1−2x)/y, y[1]==−2` needs `−√`). Fixed the FAIL +
+    11 UNEVAL separable IVPs, including the Root-form cubics 1149/1150 (constant fitted on the
+    implicit first integral `G(x0,y0)` with no inversion, via the new twin below).
+  - **Separable recognizer + implicit twin (`src/calculus/dsolve_separable.c`).** The 36-sample
+    split search is factored into `sep_find_split`; the gate now rejects a sample only when the
+    denominator is PROVABLY zero (accepting generic-parameter splits like `(a y+b)/(c y+d)`); and a
+    new `dsolve_separable_implicit_try` (dispatched via `dsolve_run_implicit`, mirroring
+    Exact/ExactImplicit) returns the first integral `∫dy/g == ∫f dx + C[1]` — keeping a
+    non-elementary integral **unevaluated** — when the relation does not invert for y. Solves
+    `Cot[t]y/(1+y)`, `Cos²x Cos²2y`, and the autonomous non-elementary `−2 ArcTan[y]/(1+y²)`.
+  - **Integrate Gaussian→Erf/Ei/PolyLog recognizer variable (`src/calculus/risch_special.c`).** The
+    completing-the-square templates (`rt_try_erf`/`rt_try_ei`/dilog) emitted the antiderivative in a
+    **literal `x` for every integration variable** — `Integrate[E^(a^2/2), a]` came back
+    `… Erf[… x …]` — so any Bernoulli/linear DSolve over a non-`x` variable produced a stray-variable,
+    non-verifying answer. The real variable is now threaded through the template (ReplaceAll does not
+    re-traverse substitutions and the coefficients are free of `x`, so a parameter named `x` is safe).
+    Fixed 1182/1190.
+  - **Residue (3, research-grade, bounded declines — no wrong answers):** `1135` (`y=_G(x,y')`,
+    transcendental generalised-d'Alembert — induced `p`-ODE not cascade-solvable), `1200`
+    (`x=_G(y,y')` — cannot be solved for `x`: `e^x` + linear `x`), `1157` (`(a y+b)/(c y+d)` with `a`
+    the independent variable — Abel 2nd kind, the M13-deferred class). A general
+    generalised-d'Alembert method was prototyped and confirmed to close NONE of these, so it is
+    deferred to its own milestone rather than half-built here. Anti-overfit units `t_m32_*`
+    (`tests/test_dsolve.c`); `make check-c99` green; §2.1.2/§2.2.1–§2.2.11 corpus gates held. See the
+    §2.2.12 block in `DSolve_test_status/STATUS.md`. (`t_rischnorman_enum_cap_no_crash` exceeds the
+    120 s whole-binary alarm in `tests/test_utils.h` on slower hardware — a pre-existing local-only
+    condition identical on pristine `main`; CI does not run `dsolve_tests`.)
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

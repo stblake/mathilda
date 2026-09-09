@@ -588,6 +588,56 @@ Full per-case results: `reports/2.2.11.tsv`; bucketed report: `reports/2.2.11.md
 
 ---
 
+## Section 2.2.12 — "Problems 1101 to 1200" (Edwards & Penney)
+
+Corpus: `DE_examples_2212.m` — 100 records, **100 scalar (38 IVP), 0 systems**. Elementary
+first-order territory (36 separable / 18 linear / 15 linear "class A" / 13 quadrature /
+Bernoulli / exact / homogeneous), a run of "Abel 2nd type / class A" that are really
+homogeneous-degree-0 rational (solved as homogeneous), plus two solvable-for-y/x forms.
+`ctest -R dsolve_corpus_2_2_12_tests` · gate baseline **3**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-09 (baseline) | 80 / 100 | 80.0% | 20 | **1 FAIL** (1147, a wrong answer), 19 UNEVAL. Not solved out of the box — the section exposes real defects. |
+| 2026-09-09 (**M32**)  | **97 / 100** | **97.0%** | **3** | **+17, FAIL→0, 0 crashes, 0 regression.** Three root-cause fixes below. |
+
+**M32 fixes** (all shared-substrate, so they lift earlier sections too — none regress):
+1. **IVP constant-fitting (`src/calculus/dsolve_common.c`).** The fitter now DROPS a branch that
+   an initial condition cannot be met on: it substituted `Undefined` (Solve had no consistent
+   constant — `2.2.12-1147`, the section's sole **FAIL/wrong answer**), or it is a scalar
+   unsatisfiable inverse branch (the wrong `±` / `Root` index) — but ONLY when a sibling branch
+   actually fits, so a lone basis singularity is still kept and a legitimately UNDER-determined BVP
+   (`y''+y==0, y[0]==0, y[π]==0 → C[2] Sin[x]`) keeps its free constant. Bernoulli now emits BOTH
+   real signs for an even `1−n` root (`y'==(1−2x)/y, y[1]==−2` needs `−√`). This fixed the FAIL plus
+   11 UNEVAL separable IVPs (`±`-branch selection, sign flip, and the Root-form cubic separables
+   1149/1150, whose constant is fitted on the implicit first integral `G(x0,y0)` with no inversion).
+2. **Separable recognizer + implicit twin (`src/calculus/dsolve_separable.c`).** Accept
+   generic-parameter splits (`(a y+b)/(c y+d)`), and add `dsolve_separable_implicit_try` (mirroring
+   Exact/ExactImplicit) that returns the first integral `∫dy/g == ∫f dx + C[1]` — keeping a
+   non-elementary integral **unevaluated** — when the relation does not invert for y. Solves
+   `Cot[t]y/(1+y)`, `Cos²x Cos²2y`, and the autonomous non-elementary `−2 ArcTan[y]/(1+y²)` (1186).
+3. **Integrate Gaussian→Erf / Ei / PolyLog recognizer variable (`src/calculus/risch_special.c`).**
+   The completing-the-square templates emitted the antiderivative in a **literal `x` for every
+   integration variable** (`Integrate[E^(a^2/2), a]` was `… Erf[… x …]`), so any Bernoulli/linear
+   solve over a non-`x` independent variable produced a stray-variable — hence non-verifying —
+   answer. Now the real variable is threaded through the template. Fixed 1182/1190.
+
+**Residue (3, research-grade — NOT wrong answers, all bounded declines):**
+- `1135` `y'==(x−e^{−x})/(x+e^y)` (`y=_G(x,y')`) — solvable-for-y then differentiate; the induced
+  `p`-ODE is transcendental and not cascade-solvable.
+- `1200` `e^x sin y + 3y − (3x − e^x sin y)y' == 0` (`x=_G(y,y')`) — cannot even be solved for `x`
+  (`e^x` + linear `x`).
+- `1157` `y'==(a y+b)/(c y+d)` with `a` the independent variable — an Abel equation of the second
+  kind (the M13-deferred `[_Abel]` class).
+
+These three are the documented "solvable-for-y/x + Abel" gap (`DSOLVE_PLAN.md` M13 / M28 residue);
+a general generalised-d'Alembert method was prototyped and confirmed to close none of them, so it is
+deferred to its own milestone rather than half-built here.
+
+Full per-case results: `reports/2.2.12.tsv`; bucketed report: `reports/2.2.12.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -739,6 +789,22 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   re-baseline note below). Anti-overfit units `t_m31_triangular_exp_forcing`,
   `t_m31_linsys_large_eigenvalue` (`test_dsolve.c`) + `test_linearity_distributes_product`
   (`test_integrate_dispatch.c`, the direct-`Integrate` regression guard). See §2.2.11 block.
+- **M32 (2026-09-09)** — §2.2.12 corpus (Problems 1101–1200, Edwards & Penney): 100 scalar
+  first-order ODEs (38 IVP), 0 systems. **§2.2.12 80/19/1 → 97/3/0** (FAIL→0, 0 crashes, 0
+  regression) — the first §2.2.x section NOT solved out of the box; it exposed a wrong answer
+  and real defects. Three shared-substrate root-cause fixes (they lift earlier sections, none
+  regress): (1) **IVP constant-fitting** (`dsolve_common.c`) drops a branch an IC cannot be met
+  on — one fitted to `Undefined` (the FAIL 1147) or an unsatisfiable scalar `±`/`Root` inverse
+  branch, but only when a sibling fits (a lone singularity and a genuinely under-determined BVP
+  keep their constant), and Bernoulli emits both real signs for an even `1−n` root; (2)
+  **Separable** (`dsolve_separable.c`) accepts generic-parameter splits and gains an implicit
+  twin `dsolve_separable_implicit_try` (∫dy/g==∫f dx+C, non-elementary integral kept unevaluated)
+  for the non-invertible / Root-form / autonomous-non-elementary separables; (3) the **Integrate
+  Gaussian→Erf/Ei/PolyLog recognizer** (`risch_special.c`) emitted a literal `x` for every
+  integration variable — now threads the real variable, fixing every non-`x`-variable
+  Bernoulli/linear solve. Residue 3 (research-grade, bounded declines): 1135/1200 (solvable-for-y/x,
+  transcendental) and 1157 (Abel 2nd kind). Anti-overfit units `t_m32_*` (`test_dsolve.c`). See
+  §2.2.12 block.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-
