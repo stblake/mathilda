@@ -39,6 +39,9 @@ FUNCS = {r'\arcsin':'ArcSin', r'\arccos':'ArcCos', r'\arctan':'ArcTan',
          r'\wp':'WeierstrassP'}
 ARBFUN = set('fgh')                 # conventional arbitrary-function letters
 INDVAR_PREF = ['x', 't', 'z', 's', 'r', 'u', 'v']
+# \operatorname{Name} heads that map to a Mathilda builtin under a different name.
+# Maple's Heaviside is Mathilda's UnitStep (Mathilda has no HeavisideTheta head).
+OPNAME_RENAME = {'Heaviside': 'UnitStep'}
 
 
 def strip_array(tex):
@@ -179,12 +182,21 @@ def _apply_arbfun(s, f, mains, indvar, protected):
 
 def convert_side(expr, mains, arbs, indvar):
     protected = []; s = expr; extra = set()
-    for nm in re.findall(r'\\operatorname\s*\{([^{}]*)\}', s): extra.add(nm.strip())
-    s = re.sub(r'\\operatorname\s*\{([^{}]*)\}', lambda m: m.group(1).strip(), s)
+    def _opname(nm):
+        return OPNAME_RENAME.get(nm.strip(), nm.strip())
+    for nm in re.findall(r'\\operatorname\s*\{([^{}]*)\}', s): extra.add(_opname(nm))
+    s = re.sub(r'\\operatorname\s*\{([^{}]*)\}', lambda m: _opname(m.group(1)), s)
     for mm in re.findall(r'\\textit\s*\{\s*\\?_?(F\d+)\s*\}', s): extra.add('Maple' + mm)
     s = re.sub(r'\\textit\s*\{\s*\\?_?(F\d+)\s*\}', lambda m: 'Maple' + m.group(1), s)
     s = re.sub(r'\\textit\s*\{([^{}]*)\}', r'\1', s)
     s = s.replace(r'\left', '').replace(r'\right', '')
+    # Inequality relations + infinity — needed for Piecewise/UnitStep forcing
+    # conditions (0\le t<\pi, \pi\le t<\infty).  Longest first; the \le/\ge guards
+    # avoid eating a trailing letter (\left/\right are already stripped above).
+    s = re.sub(r'\\leq\b|\\le(?![a-zA-Z])', '<=', s)
+    s = re.sub(r'\\geq\b|\\ge(?![a-zA-Z])', '>=', s)
+    s = re.sub(r'\\neq\b|\\ne(?![a-zA-Z])', '!=', s)
+    s = re.sub(r'\\infty\b', 'Infinity', s)
     s = re.sub(r'\\[,;!> ]', ' ', s)
     s = s.replace(r'\cdot', '*').replace(r'\times', '*')
     s = s.replace(r'{\mathrm e}', 'E').replace(r'\mathrm{e}', 'E').replace(r'{\rm e}', 'E')
@@ -269,10 +281,75 @@ def convert_condition(row, mains, indvar):
     return '%s%s[%s] == %s' % (sym, "'" * primes, point, value)
 
 
+def protect_cases(tex):
+    """Replace each `\\left\\{ \\begin{array}{cc} ... \\end{array} \\right.` cases
+    block (a piecewise forcing function) with a single sentinel token carrying NO
+    `\\\\`, so the later row-split (`\\\\`) and strip_array leave it intact.  The raw
+    inner content is returned for later expansion into a Mathilda `Piecewise[...]`.
+    This must run BEFORE strip_array (which strips the inner array) and the split
+    (the cases' `\\\\` are piece separators, not equation-row separators)."""
+    blocks = []
+    def repl(m):
+        blocks.append(m.group(1))
+        return ' PWFORCE%d ' % (len(blocks) - 1)
+    tex = re.sub(r'\\left\s*\\?\{(.*?)\\right\s*\\?\.', repl, tex, flags=re.S)
+    return tex, blocks
+
+
+def _build_piecewise(block, mains, arbs, indvar):
+    """Convert one raw cases block into a Mathilda `Piecewise[{{v,c},...}, default]`.
+    Each row `value & condition` (rows separated by `\\\\`) becomes a clause; a row
+    whose condition is `otherwise` folds its value into the default (0 otherwise)."""
+    inner = re.sub(r'\\begin\s*\{array\}\s*\{[^}]*\}', '', block)
+    inner = re.sub(r'\\end\s*\{array\}', '', inner)
+    clauses = []; default = '0'
+    for p in re.split(r'\\\\', inner):
+        if not p.strip():
+            continue
+        if '&' not in p:                       # a lone value = the default branch
+            v = convert_side(p, mains, arbs, indvar)
+            if v: default = v
+            continue
+        val_raw, cond_raw = p.split('&', 1)
+        val = convert_side(val_raw, mains, arbs, indvar)
+        if 'otherwise' in cond_raw:            # \operatorname{otherwise} => default
+            default = val if val else '0'
+            continue
+        cond = convert_side(cond_raw, [], [], indvar)
+        # Drop (+/-)Infinity bounds: `a <= t < Infinity` == `a <= t`, and
+        # `-Infinity < t <= b` == `t <= b`.  A comparison against Infinity does not
+        # reduce to a bare True in the evaluator, which would leave the forcing's
+        # tail-clause Piecewise unevaluated inside a residual (a non-numericizing
+        # verify).  These half-open tails are always semantically equivalent.
+        cond = re.sub(r'\s*<=?\s*Infinity\s*$', '', cond)
+        cond = re.sub(r'^\s*-\s*Infinity\s*<=?\s*', '', cond)
+        clauses.append('{%s, %s}' % (val, cond))
+    if not clauses:
+        return default
+    return 'Piecewise[{%s}, %s]' % (', '.join(clauses), default)
+
+
+def expand_cases(eq, blocks, mains, arbs, indvar):
+    for i, blk in enumerate(blocks):
+        tok = 'PWFORCE%d' % i
+        if tok in eq:
+            eq = eq.replace(tok, _build_piecewise(blk, mains, arbs, indvar))
+    return eq
+
+
 def convert_row(tex):
+    # Detect the dependent function(s) and independent variable from the UNprotected
+    # tex: the cases-block split here exposes the forcing's independent variable
+    # (e.g. `t` inside `0<=t<Pi`), which protect_cases would otherwise hide in a
+    # sentinel — leaving detect_symbols to pick a spurious autonomous letter and the
+    # forcing referencing a foreign symbol.  (For rows with no cases block this is
+    # identical to detecting from the protected tex.)
+    det_rows = [r for r in re.split(r'\\\\', normalize_subscripts(strip_array(tex))) if r.strip()]
+    mains, arbs, indvar = detect_symbols(det_rows)
+    # Protect cases blocks, then split/convert per row using the symbols above.
+    tex, cases_blocks = protect_cases(tex)
     tex = normalize_subscripts(strip_array(tex))
     rows = [r for r in re.split(r'\\\\', tex) if r.strip()]
-    mains, arbs, indvar = detect_symbols(rows)
     eqs = []; conds = []
     for r in rows:
         if '=' not in r.replace('&', ''): continue
@@ -282,6 +359,7 @@ def convert_row(tex):
         else:
             lhs, rhs = r.replace('&', '').split('=', 1)
             eq = convert_side(lhs, mains, arbs, indvar) + ' == ' + convert_side(rhs, mains, arbs, indvar)
+            eq = expand_cases(eq, cases_blocks, mains, arbs, indvar)
             eqs.append(eq)
     return mains, arbs, indvar, eqs, conds
 

@@ -738,6 +738,44 @@ Full per-case results: `reports/2.2.14.tsv`; bucketed report: `reports/2.2.14.md
 
 ---
 
+## Section 2.2.15 — "Problems 1401 to 1500" (Boyce & DiPrima)
+
+Corpus: `DE_examples_2215.m` — 100 records, **39 scalar (18 IVP), 61 systems** (53 2×2 +
+8 3×3 constant-coefficient linear). The scalar half is high-order constant-coefficient linear
+(1462–1489) plus **step / piecewise / Heaviside-forced 2nd-order IVPs** (1492–1500, the Boyce
+& DiPrima Laplace-transform chapter).
+`ctest -R dsolve_corpus_2_2_15_tests` · gate baseline **2**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-10 (baseline) | 98 / 100 | 98.0% | 2 | 0 FAIL. **But 1492–1500 were FALSE passes**: DSolve returned an inert `Integrate[UnitStep[…]·Cos,t]` the prelude could not numericize (UNK → trusted). Genuine gap was 11. |
+| 2026-09-10 (**M35**)  | **98 / 100** | **98.0%** | **2** | **0 FAIL, 0 regression.** 1492–1500 now GENUINELY solve (verified `Piecewise` closed forms) via the new `DSolve\`PiecewiseForcing`. Gate baseline **2**. |
+
+**M35 additions.**
+- **`DSolve\`PiecewiseForcing`** (`src/calculus/dsolve_piecewise.c`, new method + builtin).
+  Linear ODE IVPs with `Piecewise`/`UnitStep`/Heaviside forcing, by **interval continuation**:
+  split at the forcing's breakpoints, solve each interval (recursing the scalar cascade), match
+  `y,…,y^(n-1)` across each breakpoint, assemble a verified `Piecewise`. No `LaplaceTransform`
+  needed. Runs before `UndeterminedCoefficients`/`LinearConstantCoefficients`, gated to
+  step/piecewise-forced linear IVPs; bounded (re-entry guard + `TimeConstrained` sub-solves +
+  wall-clock deadline + decline memo) with its own per-interval + per-IC numeric verify. E.g.
+  `y''+4y==Piecewise[{{1,0<=t<Pi}},0], y(0)=1,y'(0)=0` → `Piecewise[{{1/4+3/4Cos[2t],t<Pi},{Cos[2t],t>=Pi}},0]`.
+- **`dsolve_verify_body` distributional-keep** (`src/calculus/dsolve_common.c`): a residual
+  carrying `UnitStep`/`Piecewise` is accepted on construction (joins DiracDelta/HeavisideTheta/
+  definite-Integrate) — the numeric probe cannot run on it and `zero_test` spuriously rejected
+  the correct step-forced answer of 1497 (`y''+4y==Sin[t]−UnitStep[t−2π]Sin[t]`).
+- **Converter** (`tools/latex_ode_to_mathilda.py`): `\left\{…cases…\right.` → `Piecewise[…]`
+  (`otherwise`→default, `±∞` bounds dropped), `\le`/`\ge`/`\infty` mapping, `Heaviside`→`UnitStep`.
+
+**Residue (2, NOT wrong answers — bounded declines, both also ✗ in SymPy):**
+- `1463` `t(t−1)y''''+E^t y''+4t²y==0` — 4th-order, transcendental coefficient.
+- `1469` `t y'''+2y''−y'+t y==0` — 3rd-order, variable coefficient (the `3rd_high_linear`
+  operator-factoring bucket, future work).
+
+Full per-case results: `reports/2.2.15.tsv`; bucketed report: `reports/2.2.15.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:

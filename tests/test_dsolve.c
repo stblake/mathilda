@@ -2250,6 +2250,37 @@ static void t_m34_corpus_cases(void) {
                "8, $Aborted]] === List");
 }
 
+/* M35 — DSolve`PiecewiseForcing (§2.2.15): linear IVPs with piecewise/step/Heaviside
+ * forcing, solved by interval continuation into a verified Piecewise closed form. */
+static void t_m35_piecewise_forcing(void) {
+    /* 1492 — step forcing {1 on [0,Pi), 0 after}: a genuine Integrate-free Piecewise,
+     * verified in the SECOND interval (forcing 0) and at the IC (was an inert
+     * Integrate[Piecewise[..]*Cos,t] before M35). */
+    check_true("FreeQ[TimeConstrained[DSolve[{y''[t] + 4 y[t] == Piecewise[{{1, 0 <= t < Pi}, "
+               "{0, Pi <= t}}, 0], y[0] == 1, y'[0] == 0}, y, t], 15, $Aborted], Integrate]");
+    check_true("Module[{b}, b = y[t] /. DSolve[{y''[t] + 4 y[t] == Piecewise[{{1, 0 <= t < Pi}, "
+               "{0, Pi <= t}}, 0], y[0] == 1, y'[0] == 0}, y, t][[1]]; "
+               "!FreeQ[b, Piecewise] && Abs[N[(D[b, {t, 2}] + 4 b) /. t -> 4]] < 10^-6 && "
+               "Abs[N[b /. t -> 0] - 1] < 10^-6]");
+    /* 1497 — UnitStep forcing Sin[t] - UnitStep[t-2Pi] Sin[t]: the residual carries a
+     * UnitStep, which the distributional-keep verify accepts (zero_test spuriously
+     * rejected it before). Verified in the second interval (t > 2Pi, forcing 0). */
+    check_true("Module[{b}, b = y[t] /. DSolve[{y''[t] + 4 y[t] == Sin[t] - UnitStep[t - 2 Pi] Sin[t], "
+               "y[0] == 0, y'[0] == 0}, y, t][[1]]; FreeQ[b, Integrate] && "
+               "Abs[N[(D[b, {t, 2}] + 4 b) /. t -> 7]] < 10^-6]");
+    /* 1494 — three-piece triangular pulse: residual verified in the MIDDLE interval
+     * [1,2) where the forcing is 2-t (exercises the continuity handoff at both ends). */
+    check_true("Module[{b}, b = y[t] /. DSolve[{y''[t] + y[t] == Piecewise[{{t, 0 <= t < 1}, "
+               "{2 - t, 1 <= t < 2}, {0, 2 <= t}}, 0], y[0] == 1, y'[0] == 0}, y, t][[1]]; "
+               "Abs[N[(D[b, {t, 2}] + b - (2 - t)) /. t -> 3/2]] < 10^-6]");
+    /* 1499 — damped ramp (UnitStep) forcing on y''+y'+5/4 y: genuine closed form. */
+    check_true("FreeQ[TimeConstrained[DSolve[{y''[t] + y'[t] + 5/4 y[t] == "
+               "t - UnitStep[t - Pi/2] (t - Pi/2), y[0] == 0, y'[0] == 0}, y, t], 15, $Aborted], Integrate]");
+    /* Gate: a SMOOTH nonhomogeneous IVP is NOT piecewise-solved (falls through to
+     * UndeterminedCoefficients) — the method fires only on step/piecewise forcing. */
+    check_true("FreeQ[DSolve[{y''[t] + w^2 y[t] == Cos[2 t], y[0] == 1, y'[0] == 0}, y, t], Piecewise]");
+}
+
 static void t_rischnorman_enum_cap_no_crash(void) {
     check_true("MatchQ[DSolve[x^2 - 1 + (y[x]^2 x^2 + x^3 + x) y'[x] == 0, "
                "y[x], x], _List | _DSolve]");
@@ -2519,6 +2550,7 @@ int main(void) {
     TEST(t_euler_inhomogeneous_complex);
     TEST(t_euler_regression_corpus);
     TEST(t_m34_corpus_cases);
+    TEST(t_m35_piecewise_forcing);
     TEST(t_rischnorman_enum_cap_no_crash);
     TEST(t_trig_coeff_linear_first_order);
     TEST(t_linearizable_first_order);

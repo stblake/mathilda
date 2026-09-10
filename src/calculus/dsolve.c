@@ -151,6 +151,7 @@ extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_changevar_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_piecewise_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_first_order_series_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_shifted_try(DSolveProblem* P, size_t* nbranch);
@@ -189,6 +190,7 @@ extern void dsolve_liouville_init(void);
 extern void dsolve_lie2_init(void);
 extern void dsolve_ifactor_init(void);
 extern void dsolve_changevar_init(void);
+extern void dsolve_piecewise_init(void);
 extern void dsolve_frobenius_init(void);
 extern void dsolve_normalform_init(void);
 extern Expr** dsolve_pde1_solve(DSolveProblem* P);
@@ -365,6 +367,15 @@ Expr* builtin_dsolve(Expr* res) {
             /* Undetermined coefficients: a tidy particular for UC forcing of a
              * constant-coefficient linear ODE; runs before constcoeff (which is the
              * general variation-of-parameters fallback for any other forcing). */
+            /* Piecewise / step / Heaviside forcing IVP: interval-stitching.  Runs
+             * BEFORE UndeterminedCoefficients / LinearConstantCoefficients, whose
+             * variation-of-parameters leaves Integrate[UnitStep[...]*Cos[...],t]
+             * inert (a non-solution).  Gated inside the try-fn to fire ONLY when the
+             * forcing carries Piecewise/UnitStep AND it is an IVP, so smooth-forcing
+             * linear ODEs still fall through to undetcoeff; a resolved per-interval
+             * sub-problem has smooth forcing, so the recursive DSolve declines this
+             * method (plus the re-entry guard) — no infinite recursion. */
+            if (!result) result = dsolve_run(&P, dsolve_piecewise_try);
             if (!result) result = dsolve_run(&P, dsolve_undetcoeff_try);
             if (!result) result = dsolve_run(&P, dsolve_constcoeff_try);
             if (!result) result = dsolve_run(&P, dsolve_euler_try);
@@ -559,6 +570,7 @@ void dsolve_init(void) {
     dsolve_lie2_init();
     dsolve_ifactor_init();
     dsolve_changevar_init();
+    dsolve_piecewise_init();
     dsolve_frobenius_init();
     dsolve_normalform_init();
     dsolve_pde1_init();

@@ -1286,6 +1286,46 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   `make check-c99` green; all prior corpus gates held. See the §2.2.14 block in
   `DSolve_test_status/STATUS.md`. Version 0.131 → 0.132.
 
+- **M35 — §2.2.15 corpus (Problems 1401–1500, Boyce & DiPrima) + `DSolve\`PiecewiseForcing`
+  (step / piecewise / Heaviside forcing).** ✅ DONE. The Boyce & DiPrima Laplace-transform
+  chapter: 100 records — **39 scalar (18 IVP), 61 systems** (53 2×2 + 8 3×3 constant-coefficient
+  linear). Scalars are high-order constant-coefficient linear (1462–1489) plus **step-forced
+  2nd-order IVPs** (1492–1500). **98/100, 0 FAIL, 0 regression.** The 1492–1500 family was a set
+  of FALSE passes at baseline (DSolve returned an inert `Integrate[UnitStep[…]·Cos,t]` the prelude
+  could not numericize → UNK → trusted); they now GENUINELY solve.
+  - **`DSolve\`PiecewiseForcing`** (`dsolve_piecewise.c`, new method + `ATTR_PROTECTED` builtin).
+    Mathilda has `Piecewise`/`UnitStep` but no `LaplaceTransform`, so step-forced linear IVPs are
+    solved by **interval continuation**: normalize the forcing's finite breakpoints, solve on each
+    interval (recursing the scalar cascade), match the `C^(n-1)` continuity data `y,…,y^(n-1)`
+    across each breakpoint, and assemble a verified `Piecewise` closed form (Mathematica's own
+    output form). Routes through the standard `dsolve_run` (the constant-free `Piecewise` body
+    verifies; fit is a no-op), with its OWN per-interval + per-IC numeric guard `pw_num_ok` (since
+    `dsolve_run`'s probe samples only the first interval). Cascade slot: BEFORE
+    `UndeterminedCoefficients`/`LinearConstantCoefficients` (whose VoP leaves the inert integral),
+    gated to step/piecewise-forced linear IVPs so smooth forcing falls through; bounded exactly as
+    M12/M14 (re-entry guard + `TimeConstrained` sub-solves + wall-clock deadline + decline memo).
+    Solves e.g. `y''+4y==Piecewise[{{1,0<=t<Pi}},0], y(0)=1,y'(0)=0` →
+    `Piecewise[{{1/4+3/4Cos[2t],t<Pi},{Cos[2t],t>=Pi}},0]`.
+  - **`dsolve_verify_body` distributional-keep** (`dsolve_common.c`). A residual carrying
+    `UnitStep`/`Piecewise` joins `DiracDelta`/`HeavisideTheta`/definite-`Integrate` as
+    accepted-on-construction: the numeric probe cannot run on it (differentiating a `Piecewise`
+    yields a boundary term the probe reads as an undefined function → it bails) and `zero_test`
+    evaluates a piecewise condition on the wrong branch — it spuriously rejected the correct
+    step-forced answer of 1497 (`y''+4y==Sin[t]−UnitStep[t−2π]Sin[t]`). The producing method
+    self-verifies every interval and IC.
+  - **Converter** (`tools/latex_ode_to_mathilda.py`): the `\left\{…cases…\right.` environment now
+    converts to `Piecewise[{{v,c},…}, default]` (`otherwise`→default, `±∞` bounds dropped — a
+    comparison against `Infinity` does not reduce to `True`, which would leave the tail clause
+    unevaluated inside a residual); `\le`/`\ge`/`\infty` map to `<=`/`>=`/`Infinity`; Maple
+    `Heaviside` → Mathilda `UnitStep`. Symbol detection reads the UNprotected tex so the forcing's
+    independent variable is not hidden.
+  - **Residue (2, NOT wrong answers — bounded declines, both also ✗ in SymPy):** `1463`
+    `t(t−1)y''''+E^t y''+4t²y==0` (4th-order transcendental) and `1469` `t y'''+2y''−y'+t y==0`
+    (3rd-order variable-coefficient — the `3rd_high_linear` operator-factoring bucket, future work).
+  - Anti-overfit unit test `t_m35_piecewise_forcing` (`tests/test_dsolve.c`); `make check-c99`
+    green; §2.1.2/§2.2.1–§2.2.14 corpus gates all held. See the §2.2.15 block in
+    `DSolve_test_status/STATUS.md`. Version 0.132 → 0.133.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

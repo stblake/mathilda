@@ -722,6 +722,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_lie2.c
     ../src/calculus/dsolve_ifactor.c
     ../src/calculus/dsolve_changevar.c
+    ../src/calculus/dsolve_piecewise.c
     ../src/calculus/dsolve_autonomous.c
     ../src/calculus/dsolve_liouville.c
     ../src/calculus/dsolve_pde1.c
@@ -3938,6 +3939,20 @@ add_test(NAME dsolve_corpus_2_2_14_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2214.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+
+# Section 2.2.15 (Problems 1401-1500, Boyce & DiPrima): 100 records, 18 IVP,
+# 61 systems (53 2x2 + 8 3x3 constant-coefficient linear).  Scalars: high-order
+# constant-coefficient linear (1462-1489) + step/piecewise-forced 2nd-order IVPs
+# (1492-1500).  Baseline (pre-M35) 98/100 counted the 1492-1500 family PASS, but
+# they were FALSE passes: DSolve returned an inert Integrate[UnitStep[...]*Cos,t]
+# the prelude could not numericize (UNK -> trusted).  M35 adds DSolve`PiecewiseForcing
+# (interval continuation -> verified Piecewise closed form) so they now genuinely
+# solve; residue 2 (1463 4th-order transcendental, 1469 3rd-order variable-coeff --
+# both also unsolved by SymPy).
+add_test(NAME dsolve_corpus_2_2_15_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2215.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

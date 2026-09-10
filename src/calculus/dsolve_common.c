@@ -398,16 +398,23 @@ void dsolve_problem_free(DSolveProblem* P) {
  * pure-function derivative Derivative[k][Function[{x}, SeriesData]][x] the
  * evaluator does not reduce (it returns 0) — matching the PDE-verify workaround. */
 /* True if e carries an unevaluated DEFINITE Integrate (Integrate[_, _List]) or a
- * distributional head (DiracDelta / HeavisideTheta): a Green's-function / impulse
- * residual that zero_test cannot decide and whose numeric precision ladder could
- * spin (the 555-class failure).  Such a branch is accepted on its construction
- * plus the method's own numeric probe verify, never driven through zero_test. */
+ * distributional / piecewise head (DiracDelta / HeavisideTheta / UnitStep /
+ * Piecewise): a Green's-function / impulse / step residual that zero_test cannot
+ * decide and whose numeric probe cannot run (differentiating a Piecewise body
+ * yields a boundary term the probe reads as an undefined function, so it bails;
+ * and zero_test evaluates a piecewise condition on the wrong branch, so it can
+ * return a SPURIOUS nonzero -- it rejected the correct step-forced answer of
+ * y''+4y==Sin[t]-UnitStep[t-2Pi]Sin[t], §2.2.15-1497).  Such a branch is accepted
+ * on its construction plus the producing method's own numeric verify (the
+ * per-interval + per-IC pw_num_ok of DSolve`PiecewiseForcing), never driven
+ * through zero_test. */
 static bool ds_residual_is_distributional(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* hd = e->data.function.head;
     if (hd->type == EXPR_SYMBOL) {
         const char* hn = hd->data.symbol.name;
-        if (hn == SYM_HeavisideTheta || strcmp(hn, "DiracDelta") == 0) return true;
+        if (hn == SYM_HeavisideTheta || hn == SYM_UnitStep || hn == SYM_Piecewise
+            || strcmp(hn, "DiracDelta") == 0) return true;
         if (hn == SYM_Integrate && e->data.function.arg_count >= 2 &&
             e->data.function.args[1]->type == EXPR_FUNCTION &&
             e->data.function.args[1]->data.function.head->type == EXPR_SYMBOL &&

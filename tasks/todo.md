@@ -1,33 +1,50 @@
-# M34 — DSolve §2.2.14 corpus (Problems 1301–1400) → full coverage
+# M35 — DSolve §2.2.15 corpus (Problems 1401–1500) + piecewise/step forcing
 
-Baseline **90/100** → **99/100, 0 FAIL** (residue 1360 = forced Duffing, no CAS solves it).
+## 1. Converter (`tools/latex_ode_to_mathilda.py`)
+- [x] `replace_cases` pre-pass: `\left\{…cases…\right.` → `Piecewise[{{v,(c)},…},0]` (protect before split; detect symbols on UNprotected tex so `t` isn't hidden)
+- [x] `convert_side`: `\le`/`\leq`→`<=`, `\ge`/`\geq`→`>=`, `\infty`→`Infinity`; drop `±Infinity` bounds in clause conditions
+- [x] `Heaviside` → `UnitStep`
+- [x] Regenerate `DSolve_test_status/DE_examples_2215.m`; all 100 records parse
 
-## Step 0 — Land the corpus
-- [x] `DSolve_test_status/DE_examples_2214.m` (100 records)
-- [x] `dsolve_corpus_2_2_14_tests` in `tests/CMakeLists.txt` (baseline → 1)
-- [x] STATUS.md `## Section 2.2.14` block + wave-history (M33 + M34 backfilled)
-- [x] `reports/2.2.14.{md,tsv}`
+## 2. Baseline measurement
+- [x] Registered `dsolve_corpus_2_2_15_tests`; baseline 98/100, 0 FAIL, 2 UNEVAL (1463,1469)
+- [x] `reports/2.2.15.{md,tsv}` generated; STATUS.md updated
+- [x] Discovered 1492-1500 FALSE-passed at baseline (inert Integrate[UnitStep…], UNK→trusted)
 
-## Fixes (all verified against corpus + m34 stress)
-- [x] **A/B — robust VoP + numeric-zero verify short-circuit** (`dsolve_common.c`) → 1337/1341/1350/1354
-- [x] **C — bounded-Kovacic complex-pole gate** (`dsolve_kovacic.c`, alarm-free `time()`) → 1392/1393; forced-g inert VoP → 1350
-- [x] **D — exact plain-symbol first integral + SeriesData IVP Normal-fit + 2nd-order FIT_UNDECIDED fall-through** (`dsolve_exactode.c`, `dsolve_common.c`) → 1384/1381
-- [x] **E — IC-point Frobenius series** (`dsolve_frobenius.c`) → 1385
+## 3. New method `DSolve`PiecewiseForcing` (`src/calculus/dsolve_piecewise.c`)
+- [x] Detect linear scalar IVP with piecewise/step forcing; breakpoints via UnitStep root + Piecewise cond operands
+- [x] Interval continuation (recurse DSolve per piece; continuity handoff; pw_resolve per interval)
+- [x] Assemble `Piecewise[...]`; `pw_num_ok` internal guard (residual per interval + each IC)
+- [x] Bounded/re-entry (TimeConstrained + 8s deadline + decline memo)
+- [x] Cascade slot before `dsolve_undetcoeff_try`; registered in `dsolve_init`
+- [x] Shared fix: `ds_residual_is_distributional` +UnitStep/Piecewise (zero_test mis-rejects piecewise residuals; e.g. 1497)
 
-## Anti-overfit + hygiene
-- [x] `test_dsolve_m34_stress.c` (6 forward-generator families A–F + pinned) — PASSES
-- [x] `t_m34_corpus_cases` in `tests/test_dsolve.c` — PASSES (runs before the pre-existing slow test)
-- [x] version 0.131 → 0.132; DSOLVE_PLAN.md M34 bullet; changelog `2026-09-07.md`
-- [x] `make check-c99` — exit 0
-- [x] DSolve stress suites (m5/m12/m14/m17/m18/m19/m20) — all PASS
-- [ ] Full corpus regression sweep (`ctest -R dsolve_corpus_`) — RUNNING
-- [ ] valgrind spot-check VoP path (1337/1350)
+## 4. Hard residues
+- [x] 1463 (4th-order transcendental), 1469 (3rd-order variable-coeff): documented bounded declines (both also ✗ in SymPy)
 
-## Notes
-- `dsolve_tests` (206) SIGALRMs on this machine — **PRE-EXISTING** (clean HEAD/M33 also SIGALRMs,
-  exit 142, real 120.7s): the `alarm(120)` watchdog trips on a borderline suite dominated by the
-  pre-existing >30s `t_rischnorman_enum_cap_no_crash` (a first-order Abel `DSolve` — code my changes
-  do not touch). Both versions die at the same test. Not an M34 regression.
+## 5. Wiring & dashboard
+- [x] ctest baseline = 2 (the true residue)
+- [x] STATUS.md §2.2.15 block; README contents rows (2214 + 2215)
+- [x] `t_m35_piecewise_forcing` in `test_dsolve.c` (+ CMake COMMON_SRC entry)
+- [x] DSOLVE_PLAN.md M35 entry; version bump 0.132→0.133
+- [x] Changelog note (docs/spec/changelog/2026-09-07.md)
+
+## 6. Verification
+- [x] `make -j` clean (no warnings) + `make check-c99` green
+- [x] **All 15 §2.2.1–§2.2.15 corpus gates PASS (100%, 0 failed)** — no regression
+- [x] valgrind: solve works, 13.4KB leak == baseline plain-IVP (inherited engine leak; dsolve_piecewise adds none)
+- [x] Confirmed pre-existing: dsolve_tests SIGALRM at t_rischnorman (Abel hang) reproduces on clean M34 tree
+- [x] rebuilt code-review graph
 
 ## Review
-- M34 closed 9 genuine gaps (90→99). Residue 1360 is the honest ceiling (no CAS has a closed form).
+
+**M35 complete.** §2.2.15 (Boyce & DiPrima 1401–1500) added to the corpus at 98/100, 0 FAIL.
+The headline: the 9 step/piecewise-forced IVPs (1492–1500) that FALSE-passed at baseline
+(inert `Integrate[UnitStep…]`, scored UNK→trusted) now GENUINELY solve, via the new
+`DSolve\`PiecewiseForcing` (interval continuation → verified `Piecewise`, Mathematica's form),
+directly verified (residual ~0 in every interval + each IC). Two shared substrate fixes:
+`ds_residual_is_distributional` accepts UnitStep/Piecewise residuals (zero_test mis-rejects them),
+and the converter learned the `cases`/`Heaviside` LaTeX. Residue 2 (1463, 1469) are research-grade
+higher-order variable-coefficient equations SymPy also fails. No regression (corpus gates hold;
+valgrind flat vs baseline; the dsolve_tests SIGALRM is a pre-existing Abel-hang, confirmed on the
+clean M34 tree). Version 0.133.
