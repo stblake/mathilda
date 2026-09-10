@@ -1205,6 +1205,49 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     120 s whole-binary alarm in `tests/test_utils.h` on slower hardware — a pre-existing local-only
     condition identical on pristine `main`; CI does not run `dsolve_tests`.)
 
+- **M33 — §2.2.13 corpus (Problems 1201–1300) + exact-method robustness / separable
+  fast-decline / exact-vs-homogeneous IVP fall-through.** ✅ DONE. Edwards & Penney 1201–1300:
+  100 records — **100 scalar (32 IVP), 0 systems**, a MIX of first-order (exact / linear /
+  separable / homogeneous / Abel / symmetry) and 2nd-order linear (const-coeff,
+  Euler–Cauchy / "Emden–Fowler", reducible). Baseline **91/100 (0 FAIL, 9 UNEVAL) → 99/100,
+  0 FAIL, 0 regression.** Residue: `2.2.13-1203`, an Abel-2nd-kind (class B) — the
+  research-grade `[_Abel]` class deferred at M13. Five shared-substrate root-cause fixes
+  (each lifts earlier sections too; none regress):
+  - **Exact potential Path-1/Path-2 + syntactic-denominator clearing + robust `mu(y)`
+    (`dsolve_exact.c`).** (a) Build the potential from whichever coefficient integrates
+    cleanly — `∫M dx` (Path 1) or `∫N dy` (Path 2), NO `Simplify` on the hot path — so the
+    E^(x y) exact family (1201), whose `∫M dx` lands in a Tan half-angle form that leaves
+    `g'(y)` only *cancelling* to a function of y, is solved via the clean Path 2. (b) Clear an
+    inexact rational form (`y'==P/Q`, `1/x`/`1/y` poles) by its common denominator D (an
+    integrating factor), trying two exactness-gated candidates — the SYNTACTIC denominators
+    (handles a NEGATIVE exponential `E^(-x)`, which `Together` mis-factors as a spurious `E^x`
+    — 1233), then the `Together` denominator (summed `1/x`,`1/y` — 1216/1238); restricted to
+    the condition-free general solve (an IVP's cleared Root form does not inverse-fit). (c)
+    `mu(y)` is tried whenever `mu(x)` yields no factor (its free-of test can mis-decide on a
+    trig-rational derivative), fixing `mu = Sin y` equations (1214).
+  - **Implicit verify `Together`s the residual (`dsolve_common.c`).**
+    `dsolve_verify_implicit` combines `F_x + N(-F_x/F_y)` over a common denominator before the
+    zero-test: a `mu = Sin y` exact equation's telescoping residual has uncancelled `Csc`/`Cot`
+    poles that the numeric zero-test FALSE-NEGATIVES (proved "nonzero"), wrongly REJECTING a
+    correct branch (1214). Value-preserving, so it cannot mask a real nonzero.
+  - **Separable fast numeric pre-filter (`dsolve_separable.c`).** `sep_find_split` numerically
+    samples the separability check `F - g·h` at a generic real point and skips the expensive
+    symbolic zero-test when it is clearly nonzero — a non-separable transcendental RHS
+    (1201/1233) fast-declines in ~0 s not ~15 s (the pre-Exact cascade cost that pushed those
+    solvable equations past the 8 s per-case timeout). Never rejects a genuine split.
+  - **First-order IVP undecided-fit fall-through (`dsolve_common.c`).** New `FIT_UNDECIDED`
+    state: when a scalar FIRST-ORDER IVP's fit bubbles back unevaluated (Solve could not
+    resolve the single constant) and no branch achieved a real fit, `dsolve_run` DECLINES so
+    the cascade continues — closing the exact/homogeneous overlap 1205/1231, where Homogeneous
+    runs first and returns a transcendental log-form whose constant does not inverse-fit,
+    shadowing Exact's fitting polynomial first integral. Gated to `nfun==1 && max_order==1`:
+    a legitimately UNDER-determined BVP keeps its free constant (FIT_OK), and a higher-order
+    series IVP whose SeriesData fit bubbles yet verifies is untouched (else it would decline
+    correct §2.2.5/§2.2.6/§2.2.11 2nd-order IVPs — caught and gated during the wave).
+  Anti-overfit units `t_m33_*` (`tests/test_dsolve.c`); `make check-c99` green; §2.1.2 /
+  §2.2.1–§2.2.12 corpus gates all held at baseline. See the §2.2.13 block in
+  `DSolve_test_status/STATUS.md`. Version 0.130 → 0.131.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

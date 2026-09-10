@@ -29,6 +29,30 @@
 #include "../common.h"
 #include "integrate.h"          /* g_integrate_quiet: silence speculative nonelem */
 #include <stdlib.h>
+#include <math.h>
+
+/* Fast numeric pre-filter for the separability check  chk = F - g*h  (in x and
+ * Y): returns false only when chk evaluates to a clearly NON-zero finite number
+ * at a generic real sample -- a cheap reject of a non-separable F that avoids the
+ * expensive symbolic zero-test on a transcendental residual (the split search's
+ * whole cost on e.g. the E^(x y) / E^(2y) exact families).  Returns true (defer
+ * to the symbolic ds_is_zero) when chk is ~0 or does not numericize (a residual
+ * carrying an extra free parameter), so it NEVER rejects a genuine split. */
+static bool sep_chk_maybe_zero(const Expr* chk, const char* xvar, const char* Yname) {
+    static const double xs[] = { 1.3, 0.7 };
+    static const double ys[] = { 0.9, 1.7 };
+    for (int i = 0; i < 2; i++) {
+        Expr* e = expr_copy((Expr*)chk);
+        e = ds_subst(e, expr_new_symbol(xvar),  expr_new_real(xs[i]));
+        e = ds_subst(e, expr_new_symbol(Yname), expr_new_real(ys[i]));
+        e = eval_and_free(ds_call1("Abs", e));
+        double m = (e && e->type == EXPR_REAL)    ? e->data.real
+                 : (e && e->type == EXPR_INTEGER) ? (double)e->data.integer : NAN;
+        expr_free(e);
+        if (!isnan(m) && isfinite(m) && m > 1e-6) return false;   /* clearly non-zero */
+    }
+    return true;                                                  /* small / non-numeric */
+}
 
 /* Find a separation F(x,Y) = g(x) h(Y).  On success returns true and fills *g_out
  * / *h_out (owned by the caller) and *Yname_out (the interned dummy for y[x]).
@@ -74,8 +98,9 @@ static bool sep_find_split(DSolveProblem* P, Expr** g_out, Expr** h_out,
             expr_free(denom);
             Expr* prod = ds_call2(SYM_Times, expr_copy(gcand), expr_copy(hcand));
             Expr* check = eval_and_free(ds_call2(SYM_Subtract, expr_copy(FY), prod));
-            if (ds_is_zero(check)) { g = gcand; h = hcand; }
-            else { expr_free(gcand); expr_free(hcand); }
+            if (sep_chk_maybe_zero(check, xvar, Yname) && ds_is_zero(check)) {
+                g = gcand; h = hcand;
+            } else { expr_free(gcand); expr_free(hcand); }
             expr_free(check);
         }
     }

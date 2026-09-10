@@ -878,6 +878,63 @@ static void t_m32_integrate_erf_variable(void) {
     check_true("Not[FreeQ[Integrate[E^(x^2/2), x], x]]");
 }
 
+/* ---- M33: §2.2.13 exact-method robustness + IVP fall-through ----
+ * Implicit first integrals are verified by the implicit-function rule: for an
+ * exact M + N y' == 0 the returned relation G(x,y) == C has G_x = mu M, G_y = mu N,
+ * so M + N(-G_x/G_y) == 0 identically -- checked here with PossibleZeroQ. */
+static void t_m33_exact_transcendental(void) {
+    /* 1201: exact with an E^(x y) coefficient -- Integrate[M,x] comes back in a Tan
+     * half-angle form, so the potential is built from the OTHER coefficient (Path 2). */
+    check_true("With[{G = DSolve[2 x - 2 E^(y[x] x) Sin[2 x] + E^(y[x] x) Cos[2 x] y[x] "
+               "+ (-3 + E^(y[x] x) x Cos[2 x]) y'[x] == 0, y, x][[1,1,1]] /. y[x] -> Y}, "
+               "PossibleZeroQ[(2 x - 2 E^(Y x) Sin[2 x] + E^(Y x) Cos[2 x] Y) "
+               "+ (-3 + E^(Y x) x Cos[2 x]) (-D[G, x]/D[G, Y])]]");
+    /* 1233: y' == P/Q with a NEGATIVE exponential E^(-x); cleared by the SYNTACTIC
+     * denominator (Together would mis-factor E^(-x) as a spurious E^x). */
+    check_true("With[{G = DSolve[y'[x] == (-E^(2 y[x]) Cos[x] + Cos[y[x]] E^(-x))/"
+               "(2 E^(2 y[x]) Sin[x] - Sin[y[x]] E^(-x)), y, x][[1,1,1]] /. y[x] -> Y}, "
+               "PossibleZeroQ[(E^(2 Y) Cos[x] - Cos[Y] E^(-x)) "
+               "+ (2 E^(2 Y) Sin[x] - Sin[Y] E^(-x)) (-D[G, x]/D[G, Y])]]");
+}
+static void t_m33_exact_rational_clear(void) {
+    /* 1216 (1/x,1/y poles, cleared via Together) and 1238 (y'==-P/Q polynomial):
+     * cleared to an exact polynomial form -> Root-form explicit branches.  Mathilda
+     * cannot differentiate a Root w.r.t. its parameter, so verify each branch lies on
+     * the exact first integral F(x,y) == C (with C fixed to a generic value). */
+    check_true("With[{s = DSolve[3 x + 6/y[x] + (x^2/y[x] + 3 y[x]/x) y'[x] == 0, y, x] "
+               "/. C[1] -> 5}, MatchQ[s, {__List}] && AllTrue[s, Abs[N[(x^3 y[x] + 3 x^2 "
+               "+ y[x]^3 - 5) /. # /. x -> 7/5, 20]] < 1/10^6 &]]");
+    check_true("With[{s = DSolve[(-4 + 6 y[x] x + 2 y[x]^2)/(3 x^2 + 4 y[x] x + 3 y[x]^2) "
+               "+ y'[x] == 0, y, x] /. C[1] -> 5}, MatchQ[s, {__List}] && AllTrue[s, "
+               "Abs[N[(-4 x + 3 x^2 y[x] + 2 x y[x]^2 + y[x]^3 - 5) /. # /. x -> 7/5, 20]] "
+               "< 1/10^6 &]]");
+}
+static void t_m33_exact_mu_trig(void) {
+    /* 1214: exact via mu(y) = Sin y -- mu(y) is now tried even when mu(x)'s free-of
+     * test mis-decides; and the implicit verify combines over a common denominator so
+     * the telescoping Csc/Cot residual is not false-NEGATIVED by the numeric zero-test. */
+    check_true("With[{G = DSolve[E^x + (E^x Cot[y[x]] + 2 Csc[y[x]] y[x]) y'[x] == 0, y, x]"
+               "[[1,1,1]] /. y[x] -> Y}, PossibleZeroQ[E^x + "
+               "(E^x Cot[Y] + 2 Csc[Y] Y) (-D[G, x]/D[G, Y])]]");
+}
+static void t_m33_exact_homogeneous_ivp_fallthrough(void) {
+    /* 1205/1231: exact-AND-homogeneous IVPs.  Homogeneous runs first and returns a
+     * transcendental log-form whose constant does not inverse-fit (Solve bubbles back);
+     * dsolve_run now DECLINES that undecided IVP fit (FIT_UNDECIDED) so the cascade
+     * reaches Exact, whose polynomial first integral fits the IC cleanly. */
+    check_true("With[{s = DSolve[{2 x - y[x] + (-x + 2 y[x]) y'[x] == 0, y[1] == 3}, y, x]}, "
+               "MatchQ[s, {__List}] && FreeQ[s, C[_]] && AllTrue[s, (Abs[N[y[1] /. #, 20] - 3] "
+               "< 1/10^6) && Abs[N[(2 x - y[x] + (-x + 2 y[x]) y'[x]) /. # /. x -> 8/5, 20]] "
+               "< 1/10^6 &]]");
+    check_true("With[{s = DSolve[{x + y[x] + (x + 2 y[x]) y'[x] == 0, y[2] == 3}, y, x]}, "
+               "MatchQ[s, {__List}] && FreeQ[s, C[_]] && AllTrue[s, Abs[N[y[2] /. #, 20] - 3] "
+               "< 1/10^6 &]]");
+    /* regression guard: a genuinely UNDER-determined BVP still keeps its free constant
+     * (the fit SUCCEEDS with a residual C -- distinct from an undecided fit). */
+    check_true("MatchQ[DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi] == 0}, y, x], "
+               "{{y -> Function[{x}, _. C[2] Sin[x]]}}]");
+}
+
 /* ---- M4: systems of ODEs ---- */
 static void t_sys_decoupled(void) {
     check_true("And @@ (PossibleZeroQ /@ ({y'[x] - x^2 y[x], z'[x] - 5 z[x]} /. "
@@ -2500,6 +2557,12 @@ int main(void) {
     TEST(t_m32_root_form_ivp);
     TEST(t_m32_separable_implicit_and_widened);
     TEST(t_m32_integrate_erf_variable);
+    /* M33: §2.2.13 exact-method robustness (transcendental / denominator-clearing /
+     * mu(y) trig + implicit-verify Together) and exact-vs-homogeneous IVP fall-through */
+    TEST(t_m33_exact_transcendental);
+    TEST(t_m33_exact_rational_clear);
+    TEST(t_m33_exact_mu_trig);
+    TEST(t_m33_exact_homogeneous_ivp_fallthrough);
     /* M5: NormalForm + Kovacic + Frobenius/PowerSeries */
     TEST(t_normalform_bessel);
     TEST(t_normalform_const);

@@ -3903,6 +3903,15 @@ add_test(NAME dsolve_corpus_2_2_12_tests
                  ../../DSolve_test_status/DE_examples_2212.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
 
+# Section 2.2.13 (Problems 1201-1300, Edwards & Penney): 100 records, 32 IVP,
+# 0 systems.  52 second-order (incl. 6 Euler-Cauchy "Emden-Fowler") + 48
+# first-order (separable/linear/homogeneous/exact/Abel/symmetry).  Baseline set
+# after the M33 wave; research-grade Abel-2nd-type residue declines (bounded).
+add_test(NAME dsolve_corpus_2_2_13_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2213.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

@@ -455,7 +455,11 @@ enum { FIT_OK = 0,     /* Solve fixed >=1 constant (fully fit, or under-determin
        FIT_EMPTY = 1,  /* scalar Solve returned {} -- the condition is unsatisfiable
                         * on this branch (a wrong +/- sign / Root index) IF a sibling
                         * fits, else a genuine basis singularity to keep. */
-       FIT_UNDEF = 2 };/* the fit substituted Undefined/$Failed -- never a solution. */
+       FIT_UNDEF = 2,  /* the fit substituted Undefined/$Failed -- never a solution. */
+       FIT_UNDECIDED = 3 };/* Solve bubbled back unevaluated with a condition present --
+                        * the branch still carries its generated constant, so this
+                        * method did NOT solve the IVP (distinct from an under-determined
+                        * fit, where Solve SUCCEEDS and the free constant is genuine). */
 
 /* Fit generated constants to the initial/boundary conditions; returns a fresh
  * body (the general body copied when there is nothing to fit).  Sets *no_solution
@@ -548,19 +552,27 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
         if (no_solution) *no_solution = true;
         return expr_copy((Expr*)body);
     }
+    bool applied = (fitted != NULL);                /* Solve produced a fit */
     if (!fitted) fitted = expr_copy((Expr*)body);   /* undecided / singularity: keep general */
 
     /* Classify the fit for dsolve_run's per-branch keep/drop decision.  An
      * Undefined/$Failed value (the fit had no consistent constant on this branch --
      * 2.2.12-1147's wrong answer) is never a solution.  A scalar empty-Solve is an
      * unsatisfiable branch (drop if a sibling fits) or a singularity (keep if not).
-     * Anything else -- including a legitimately UNDER-DETERMINED fit that keeps a
-     * free constant (y''+y==0, y[0]==0, y[Pi]==0 -> C[2] Sin[x]) -- is FIT_OK. */
+     * A condition present but Solve bubbled back unevaluated (no fit applied) means
+     * the branch still carries its generated constant -- the IVP is UNSOLVED by this
+     * method (FIT_UNDECIDED); a later cascade method may fit it (e.g. Homogeneous's
+     * transcendental log-form does not invert for the constant, but Exact's
+     * polynomial first integral does).  This is DISTINCT from an under-determined
+     * fit, where Solve SUCCEEDS and the leftover free constant is genuine
+     * (y''+y==0, y[0]==0, y[Pi]==0 -> C[2] Sin[x], FIT_OK). */
     if (fit_state) {
         if (ds_contains(fitted, SYM_Undefined) || ds_contains(fitted, intern_symbol("$Failed")))
             *fit_state = FIT_UNDEF;
         else if (scalar_empty)
             *fit_state = FIT_EMPTY;
+        else if (!applied && P->ncond > 0)
+            *fit_state = FIT_UNDECIDED;
         else
             *fit_state = FIT_OK;
     }
@@ -1063,6 +1075,25 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
         if (st == FIT_OK) n_ok++;
     }
     free(bodies);
+    /* Conditions present but NO branch achieved a real fit, and at least one branch
+     * is FIT_UNDECIDED (Solve bubbled back, the constant unfitted): this method did
+     * not solve the IVP -- its "solution" is the unfitted general form.  Decline so
+     * the cascade continues to a method that CAN fit the condition (e.g. the exact /
+     * homogeneous overlap 2.2.13-1205/1231, where Homogeneous's transcendental
+     * log-form leaves C[1] and Exact's polynomial first integral fits it).
+     * Restricted to a FIRST-ORDER scalar IVP (one condition, one constant, fully
+     * determined): there the undecided fit is a genuine solver miss the cascade can
+     * route around.  Higher-order / series IVPs, whose SeriesData fit legitimately
+     * bubbles yet still verifies, keep the existing lenient behaviour. */
+    if (P->ncond > 0 && n_ok == 0 && P->nfun == 1 && P->max_order[0] == 1) {
+        bool any_undecided = false;
+        for (size_t b = 0; b < nf; b++) if (fstate[b] == FIT_UNDECIDED) any_undecided = true;
+        if (any_undecided) {
+            for (size_t b = 0; b < nf; b++) expr_free(finals[b]);
+            free(finals); free(fstate);
+            return NULL;
+        }
+    }
     if (n_ok > 0) {                 /* a sibling fit: drop the unsatisfiable branches */
         size_t keep = 0;
         for (size_t b = 0; b < nf; b++) {
@@ -1118,6 +1149,14 @@ static bool dsolve_verify_implicit(const DSolveProblem* P, const Expr* G) {
     for (size_t e = 0; e < P->neq && ok; e++) {
         Expr* sub = ds_subst(expr_copy(P->eq_residuals[e]),
                              ds_make_funcapp(yname, 1, xvar), expr_copy(yp));
+        /* An implicit residual is F_x + N*(-F_x/F_y), which telescopes to 0 over a
+         * common denominator.  The numeric zero-test can false-NEGATIVE on its
+         * uncancelled Csc/Cot poles (the mu = Sin y exact family, e.g.
+         * E^x + (E^x Cot y + 2 y Csc y) y' == 0) and so REJECT a correct branch.
+         * Combine over a common denominator first: value-preserving (cannot turn a
+         * genuinely nonzero residual into 0) and it renders the telescope a
+         * syntactic 0 that the decider settles cleanly. */
+        sub = eval_and_free(ds_call1("Together", sub));
         if (zero_test_decide(sub) == ZERO_TEST_FALSE) ok = false;
         expr_free(sub);
     }

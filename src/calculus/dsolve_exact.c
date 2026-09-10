@@ -124,6 +124,65 @@ static Expr* exact_xayb_factor(const Expr* M, const Expr* N, const Expr* diff,
     return mu;
 }
 
+/* Clear the residual's common denominator: an INEXACT form  M + N y' == 0  whose
+ * coefficients are rational in x, y (a coefficient pole 1/x, 1/y, or the
+ * y' == -P/Q spelling) can become an exact  P dx + Q dy  after multiplying
+ * through by the common denominator D.  D is then an integrating factor, and the
+ * cleared potential is a valid first integral of the original (D == 0 loci are
+ * dropped by the substrate's back-substitution verify).  Only reached when the
+ * raw form and every mu(x)/mu(y)/x^a y^b candidate already failed, so a
+ * genuinely-exact form — which clearing WOULD break — never enters here.  On
+ * success writes the owned cleared (Mm, Nn) and returns true; else false.
+ * M, N are borrowed. */
+/* (Mm, Nn)_exact test: M_y == N_x.  Mm, Nn borrowed. */
+static bool exact_pair_is_exact(const Expr* Mm, const Expr* Nn,
+                                const char* xvar, const char* Yn) {
+    Expr* d = eval_and_free(ds_call2(SYM_Subtract,
+                  ds_d(expr_copy((Expr*)Mm), expr_new_symbol(Yn)),
+                  ds_d(expr_copy((Expr*)Nn), expr_new_symbol(xvar))));
+    bool ex = ds_is_zero(d);
+    expr_free(d);
+    return ex;
+}
+
+/* Multiply (M, N) by candidate integrating factor D (consumed) and accept the
+ * cleared pair only if it is exact.  Returns true (writes Mm_out, Nn_out) or
+ * false.  A D free of both variables is a no-op factor and rejected. */
+static bool exact_apply_factor(Expr* D, const Expr* M, const Expr* N,
+                               const char* xvar, const char* Yn,
+                               Expr** Mm_out, Expr** Nn_out) {
+    bool trivial = ds_free_of(D, xvar) && ds_free_of(D, Yn);
+    if (trivial) { expr_free(D); return false; }
+    Expr* Mm = eval_and_free(ds_call1("Expand",
+                   ds_call2(SYM_Times, expr_copy(D), expr_copy((Expr*)M))));
+    Expr* Nn = eval_and_free(ds_call1("Expand",
+                   ds_call2(SYM_Times, D, expr_copy((Expr*)N))));   /* consumes D */
+    if (exact_pair_is_exact(Mm, Nn, xvar, Yn)) { *Mm_out = Mm; *Nn_out = Nn; return true; }
+    expr_free(Mm); expr_free(Nn);
+    return false;
+}
+
+static bool exact_clear_denominators(const Expr* M, const Expr* N, const char* Pn,
+                                     const char* xvar, const char* Yn,
+                                     Expr** Mm_out, Expr** Nn_out) {
+    /* Candidate A — the SYNTACTIC denominators of M and N.  Handles the y' == P/Q
+     * spelling (N == 1, M a ratio) even when P, Q carry a negative exponential
+     * like E^(-x), which the Together route (B) mis-factors as a spurious E^x
+     * denominator.  Tried first because it needs no Together. */
+    Expr* Da = eval_and_free(ds_call2(SYM_Times,
+                   ds_call1("Denominator", expr_copy((Expr*)M)),
+                   ds_call1("Denominator", expr_copy((Expr*)N))));
+    if (exact_apply_factor(Da, M, N, xvar, Yn, Mm_out, Nn_out)) return true;
+
+    /* Candidate B — the common denominator via Together.  Handles summed rational
+     * coefficients (1/x, 1/y) that A, seeing a bare Plus, leaves at 1.  Only
+     * computed when A fails (Together can be costly on transcendental atoms). */
+    Expr* R = eval_and_free(ds_call2(SYM_Plus, expr_copy((Expr*)M),
+                  ds_call2(SYM_Times, expr_copy((Expr*)N), expr_new_symbol(Pn))));
+    Expr* Db = eval_and_free(ds_call1("Denominator", eval_and_free(ds_call1("Together", R))));
+    return exact_apply_factor(Db, M, N, xvar, Yn, Mm_out, Nn_out);
+}
+
 /* Build the exact potential F(x,Y) with F_x = Mu*M, F_y = Mu*N (Mu an
  * integrating factor: 1, mu(x), mu(y), or x^a y^b) for M + N y' == 0.  Returns
  * F (owned), or NULL when the residual is not linear in p, cannot be made
@@ -158,39 +217,88 @@ static Expr* exact_potential(DSolveProblem* P, const char* xvar, const char* Yn,
         /* mu(x): (M_y - N_x)/N free of Y */
         Expr* r1 = eval_and_free(ds_call2(SYM_Times, expr_copy(diff), pw_inv(expr_copy(N))));
         if (ds_free_of(r1, Yn)) {
-            Expr* r1int = ds_integrate(r1, expr_new_symbol(xvar));
+            Expr* r1int = ds_integrate(expr_copy(r1), expr_new_symbol(xvar));
             if (!ds_has_head(r1int, SYM_Integrate)) Mu = eval_and_free(ds_call1("Exp", r1int));
             else expr_free(r1int);
-        } else {
-            expr_free(r1);
-            /* mu(y): (N_x - M_y)/M free of x */
+        }
+        expr_free(r1);
+        /* mu(y): (N_x - M_y)/M free of x.  Tried whenever mu(x) yielded no factor
+         * -- its free-of test can mis-decide on a trig-rational derivative, or its
+         * integral come back non-elementary, even when mu(y) succeeds cleanly
+         * (e.g. E^x + (E^x Cot y + 2 y Csc y) y' == 0, mu = Sin y). */
+        if (!Mu) {
             Expr* r2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
                 expr_new_integer(-1), expr_copy(diff), pw_inv(expr_copy(M)) }, 3));
             if (ds_free_of(r2, xvar)) {
-                Expr* r2int = ds_integrate(r2, expr_new_symbol(Yn));
+                Expr* r2int = ds_integrate(expr_copy(r2), expr_new_symbol(Yn));
                 if (!ds_has_head(r2int, SYM_Integrate)) Mu = eval_and_free(ds_call1("Exp", r2int));
                 else expr_free(r2int);
-            } else expr_free(r2);
+            }
+            expr_free(r2);
         }
     }
     /* fallback: mu = x^a y^b (constant exponents) when neither mu(x) nor mu(y) fits */
     if (!Mu) Mu = exact_xayb_factor(M, N, diff, xvar, Yn);
     expr_free(diff);
-    if (!Mu) { expr_free(M); expr_free(N); return NULL; }
 
-    /* Mm = Mu M, Nn = Mu N */
-    Expr* Mm = eval_and_free(ds_call2(SYM_Times, expr_copy(Mu), M));   /* consumes M */
-    Expr* Nn = eval_and_free(ds_call2(SYM_Times, expr_copy(Mu), N));   /* consumes N */
-    expr_free(Mu);
+    Expr* Mm, * Nn;
+    if (Mu) {
+        Mm = eval_and_free(ds_call2(SYM_Times, expr_copy(Mu), M));   /* consumes M */
+        Nn = eval_and_free(ds_call2(SYM_Times, expr_copy(Mu), N));   /* consumes N */
+        expr_free(Mu);
+    } else {
+        /* last resort: clear a rational form's common denominator (integrating
+         * factor mu = D), recognising y' == -P/Q and 1/x, 1/y coefficient poles.
+         * Restricted to the condition-free general solve: with an initial
+         * condition the cleared potential is a Root-form explicit whose C[1] does
+         * not inverse-fit, so an IVP that reaches here is left to whichever method
+         * already fits it (the explicit Root would otherwise shadow it, unfitted). */
+        bool ok = (P->ncond == 0) &&
+                  exact_clear_denominators(M, N, Pn, xvar, Yn, &Mm, &Nn);
+        expr_free(M); expr_free(N);
+        if (!ok) return NULL;
+    }
 
-    /* F = Integrate[Mm, x] + g(Y),  g'(Y) = Nn - d/dY Integrate[Mm, x] */
-    Expr* Fx = ds_integrate(Mm, expr_new_symbol(xvar));
-    if (ds_has_head(Fx, SYM_Integrate)) { expr_free(Fx); expr_free(Nn); return NULL; }
-    Expr* gp = eval_and_free(ds_call2(SYM_Subtract, Nn, ds_d(expr_copy(Fx), expr_new_symbol(Yn))));
-    Expr* g = ds_integrate(gp, expr_new_symbol(Yn));
-    if (ds_has_head(g, SYM_Integrate)) { expr_free(g); expr_free(Fx); return NULL; }
-    Expr* Fpot = eval_and_free(ds_call2(SYM_Plus, Fx, g));
-    return Fpot;
+    /* Build the potential from whichever coefficient integrates cleanly.
+     *  Path 1:  F = ∫Mm dx + g(Y),  g'(Y) = Nn - ∂_Y ∫Mm dx   (free of x, exact)
+     *  Path 2:  F = ∫Nn dY + h(x),  h'(x) = Mm - ∂_x ∫Nn dY   (free of Y, exact)
+     * The two are equal potentials, but one antiderivative can come back far
+     * messier than the other — e.g. the E^(x y) exact family, where ∫Mm dx lands
+     * in a Tan half-angle form that leaves g'(Y) only *cancelling* to a function
+     * of Y (not syntactically free of x), so integrating it would hang.  Take the
+     * path whose remainder derivative is already free of the other variable, with
+     * NO Simplify on the hot path. */
+    Expr* Fpot = NULL;
+    Expr* Fx = ds_integrate(expr_copy(Mm), expr_new_symbol(xvar));
+    if (!ds_has_head(Fx, SYM_Integrate)) {
+        Expr* gp = eval_and_free(ds_call2(SYM_Subtract, expr_copy(Nn),
+                       ds_d(expr_copy(Fx), expr_new_symbol(Yn))));
+        if (ds_free_of(gp, xvar)) {
+            Expr* g = ds_integrate(expr_copy(gp), expr_new_symbol(Yn));
+            if (!ds_has_head(g, SYM_Integrate))
+                Fpot = eval_and_free(ds_call2(SYM_Plus, expr_copy(Fx), g));
+            else expr_free(g);
+        }
+        expr_free(gp);
+    }
+    expr_free(Fx);
+    if (!Fpot) {                                    /* Path 2: integrate Nn dY */
+        Expr* Fy = ds_integrate(expr_copy(Nn), expr_new_symbol(Yn));
+        if (!ds_has_head(Fy, SYM_Integrate)) {
+            Expr* hp = eval_and_free(ds_call2(SYM_Subtract, expr_copy(Mm),
+                           ds_d(expr_copy(Fy), expr_new_symbol(xvar))));
+            if (ds_free_of(hp, Yn)) {
+                Expr* h = ds_integrate(expr_copy(hp), expr_new_symbol(xvar));
+                if (!ds_has_head(h, SYM_Integrate))
+                    Fpot = eval_and_free(ds_call2(SYM_Plus, expr_copy(Fy), h));
+                else expr_free(h);
+            }
+            expr_free(hp);
+        }
+        expr_free(Fy);
+    }
+    expr_free(Mm); expr_free(Nn);
+    return Fpot;                                     /* NULL if both paths messy */
 }
 
 Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch) {

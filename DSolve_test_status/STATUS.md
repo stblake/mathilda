@@ -638,6 +638,50 @@ Full per-case results: `reports/2.2.12.tsv`; bucketed report: `reports/2.2.12.md
 
 ---
 
+## Section 2.2.13 — "Problems 1201 to 1300" (Edwards & Penney)
+
+Corpus: `DE_examples_2213.m` — 100 records, **100 scalar (32 IVP), 0 systems**. A MIX of
+first-order (exact / linear / separable / homogeneous / Abel / symmetry) and 2nd-order linear
+(46 reducible-μ, 6 Euler–Cauchy "Emden–Fowler", plus const-coeff). Unlike the pure first-order
+§2.2.8/§2.2.12, half the section is 2nd-order.
+`ctest -R dsolve_corpus_2_2_13_tests` · gate baseline **1**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-09 (baseline) | 91 / 100 | 91.0% | 9 | 0 FAIL, 9 UNEVAL: exact-transcendental / rational-clear declines, a `mu=Sin y` hang, an exact/homogeneous IVP shadow, and 1 Abel-2nd-kind. |
+| 2026-09-09 (**M33**)  | **99 / 100** | **99.0%** | **1** | **+8, FAIL→0, 0 regression.** Five root-cause fixes below. |
+
+**M33 fixes** (all shared-substrate, so they lift earlier sections too — none regress):
+1. **Exact potential Path-1/Path-2 + syntactic-denominator clearing + robust `mu(y)`
+   (`src/calculus/dsolve_exact.c`).** Build the potential from whichever coefficient integrates
+   cleanly (`∫M dx` or `∫N dy`, no hot-path `Simplify`) — the E^(x y) family (1201) uses Path 2.
+   Clear an inexact rational form by its common denominator D, trying the SYNTACTIC denominators
+   (handles a negative exponential `E^(-x)` that `Together` mis-factors — 1233) then the
+   `Together` denominator (summed `1/x`,`1/y` — 1216/1238); condition-free only. Try `mu(y)`
+   whenever `mu(x)` yields no factor (`mu=Sin y` — 1214).
+2. **Implicit verify `Together`s the residual (`src/calculus/dsolve_common.c`).** A `mu=Sin y`
+   equation's telescoping implicit residual has uncancelled `Csc`/`Cot` poles that the numeric
+   zero-test FALSE-NEGATIVES, wrongly rejecting a correct branch (1214); combining over a common
+   denominator first (value-preserving) settles it.
+3. **Separable fast numeric pre-filter (`src/calculus/dsolve_separable.c`).** `sep_find_split`
+   numerically samples `F - g·h` and skips the symbolic zero-test on a clearly-nonzero point — a
+   non-separable transcendental RHS (1201/1233) fast-declines in ~0 s not ~15 s, the pre-Exact
+   cost that pushed those past the 8 s per-case timeout. Never rejects a genuine split.
+4. **First-order IVP undecided-fit fall-through (`src/calculus/dsolve_common.c`).** A scalar
+   first-order IVP whose fit bubbles back unevaluated (constant unfitted) now DECLINES so the
+   cascade continues — closing the exact/homogeneous overlap 1205/1231 (Homogeneous's
+   transcendental log-form shadows Exact's fitting polynomial integral). Gated to
+   `nfun==1 && max_order==1` so an under-determined BVP keeps its free constant and higher-order
+   series IVPs are untouched.
+
+**Residue (1, research-grade — NOT a wrong answer, a bounded decline):**
+- `1203` `x Log x + x y + (y Log x + x y) y' == 0` — an Abel equation of the second kind
+  (class B), the M13-deferred `[_Abel]` class (Nasser's own solver and SymPy also fail).
+
+Full per-case results: `reports/2.2.13.tsv`; bucketed report: `reports/2.2.13.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
