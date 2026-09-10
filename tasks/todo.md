@@ -1,50 +1,35 @@
-# M35 — DSolve §2.2.15 corpus (Problems 1401–1500) + piecewise/step forcing
+# M36 — DSolve §2.2.16 corpus (Problems 1501–1600)
 
-## 1. Converter (`tools/latex_ode_to_mathilda.py`)
-- [x] `replace_cases` pre-pass: `\left\{…cases…\right.` → `Piecewise[{{v,(c)},…},0]` (protect before split; detect symbols on UNprotected tex so `t` isn't hidden)
-- [x] `convert_side`: `\le`/`\leq`→`<=`, `\ge`/`\geq`→`>=`, `\infty`→`Infinity`; drop `±Infinity` bounds in clause conditions
-- [x] `Heaviside` → `UnitStep`
-- [x] Regenerate `DSolve_test_status/DE_examples_2215.m`; all 100 records parse
+Section: Boyce & DiPrima, indexsubsection25.htm. 100 records, all scalar, 56 IVP.
+Buckets: 39 separable, 25 linear, 13 quadrature, 16 2nd-order nonhomog + 2 high-order
+(step/impulse-forced IVPs 1501–1518), 5 specials (Clairaut 1536, Riccati 1577,
+symmetry 1575/1576, class-A 1561).
 
-## 2. Baseline measurement
-- [x] Registered `dsolve_corpus_2_2_15_tests`; baseline 98/100, 0 FAIL, 2 UNEVAL (1463,1469)
-- [x] `reports/2.2.15.{md,tsv}` generated; STATUS.md updated
-- [x] Discovered 1492-1500 FALSE-passed at baseline (inert Integrate[UnitStep…], UNK→trusted)
+## Steps
 
-## 3. New method `DSolve`PiecewiseForcing` (`src/calculus/dsolve_piecewise.c`)
-- [x] Detect linear scalar IVP with piecewise/step forcing; breakpoints via UnitStep root + Piecewise cond operands
-- [x] Interval continuation (recurse DSolve per piece; continuity handoff; pw_resolve per interval)
-- [x] Assemble `Piecewise[...]`; `pw_num_ok` internal guard (residual per interval + each IC)
-- [x] Bounded/re-entry (TimeConstrained + 8s deadline + decline memo)
-- [x] Cascade slot before `dsolve_undetcoeff_try`; registered in `dsolve_init`
-- [x] Shared fix: `ds_residual_is_distributional` +UnitStep/Piecewise (zero_test mis-rejects piecewise residuals; e.g. 1497)
-
-## 4. Hard residues
-- [x] 1463 (4th-order transcendental), 1469 (3rd-order variable-coeff): documented bounded declines (both also ✗ in SymPy)
-
-## 5. Wiring & dashboard
-- [x] ctest baseline = 2 (the true residue)
-- [x] STATUS.md §2.2.15 block; README contents rows (2214 + 2215)
-- [x] `t_m35_piecewise_forcing` in `test_dsolve.c` (+ CMake COMMON_SRC entry)
-- [x] DSOLVE_PLAN.md M35 entry; version bump 0.132→0.133
-- [x] Changelog note (docs/spec/changelog/2026-09-07.md)
-
-## 6. Verification
-- [x] `make -j` clean (no warnings) + `make check-c99` green
-- [x] **All 15 §2.2.1–§2.2.15 corpus gates PASS (100%, 0 failed)** — no regression
-- [x] valgrind: solve works, 13.4KB leak == baseline plain-IVP (inherited engine leak; dsolve_piecewise adds none)
-- [x] Confirmed pre-existing: dsolve_tests SIGALRM at t_rischnorman (Abel hang) reproduces on clean M34 tree
-- [x] rebuilt code-review graph
+- [x] 1. Generated `DE_examples_2216.m` (100 scalar, 56 IVP). Converter fix: `|…|`→`Abs[…]`.
+- [x] 2. Wired `dsolve_corpus_2_2_16_tests` (baseline 3).
+- [x] 3. Baseline measured: 96/100, 0 FAIL, 4 UNEVAL (1508,1509,1534,1590). Report generated.
+- [x] 4. Root-caused: fixed 1590 (cubic-log separable ≥3-log → implicit twin). 1508/1509/1534
+        = documented bounded declines (impulse √2 churn / converter indep-var). Final: 97/100.
+- [x] 5. Anti-overfit `t_m36_separable_cubic_log` added + registered; dsolve_tests green.
+- [x] 6. Docs updated (STATUS, README, DSOLVE_PLAN M36, changelog, version 0.134, CMake baseline 3).
+- [~] 7. Verify: check-c99 ✅; dsolve_tests ✅; full corpus ctest suite RUNNING (no-regression gate).
 
 ## Review
 
-**M35 complete.** §2.2.15 (Boyce & DiPrima 1401–1500) added to the corpus at 98/100, 0 FAIL.
-The headline: the 9 step/piecewise-forced IVPs (1492–1500) that FALSE-passed at baseline
-(inert `Integrate[UnitStep…]`, scored UNK→trusted) now GENUINELY solve, via the new
-`DSolve\`PiecewiseForcing` (interval continuation → verified `Piecewise`, Mathematica's form),
-directly verified (residual ~0 in every interval + each IC). Two shared substrate fixes:
-`ds_residual_is_distributional` accepts UnitStep/Piecewise residuals (zero_test mis-rejects them),
-and the converter learned the `cases`/`Heaviside` LaTeX. Residue 2 (1463, 1469) are research-grade
-higher-order variable-coefficient equations SymPy also fails. No regression (corpus gates hold;
-valgrind flat vs baseline; the dsolve_tests SIGALRM is a pre-existing Abel-hang, confirmed on the
-clean M34 tree). Version 0.133.
+**Outcome: §2.2.16 (Problems 1501–1600) added, 97/100, 0 FAIL, 0 regression.**
+
+Two root-cause fixes (no per-problem hacks):
+1. **Converter `Abs[…]`** (`tools/latex_ode_to_mathilda.py`) — `\left|…\right|`/`\lvert`/bare `|…|`
+   → `Abs[…]`. Necessary: without it the whole corpus file did not parse (1535 `y'==|y|+1`).
+2. **Cubic-log separable → implicit first integral** (`src/calculus/dsolve_separable.c`) — a
+   separable whose `∫1/h` has ≥3 distinct `Log` args has no explicit inverse `Solve` closes
+   (churns); the explicit path now declines it so the implicit twin returns `G==C[1]`. Closes 1590
+   (which SymPy does NOT solve). 1-/2-log relations stay explicit (no regression).
+
+Investigated but NOT fixed (documented bounded declines, all needing substantial substrate work):
+- 1508/1509: impulse Green's-function convolution churns on irrational `−1±I√2` roots; its
+  `TrigReduce` is REQUIRED for sift correctness (skipping it → spurious ramp, verified on 1506).
+  A tried VoP linearity-split + pure-impulse gate were reverted (broke 1506 / no corpus gain).
+- 1534: converter reads the parameter `a` as the independent variable (ambiguous source).

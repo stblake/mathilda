@@ -133,6 +133,40 @@ static bool sep_integrals(Expr* g, Expr* h, const char* Yname, const char* xvar,
     return true;
 }
 
+/* Collect the DISTINCT arguments of Log[..] subexpressions of e into args[0..*n)
+ * (borrowed pointers, de-duplicated by expr_eq), capped at `cap`.  Does not recurse
+ * into a Log's own argument (a nested Log is not expected in a separable integral). */
+static void sep_collect_log_args(const Expr* e, Expr** args, size_t* n, size_t cap) {
+    if (!e || e->type != EXPR_FUNCTION || *n >= cap) return;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL
+        && strcmp(head->data.symbol.name, "Log") == 0
+        && e->data.function.arg_count == 1) {
+        Expr* a = e->data.function.args[0];
+        for (size_t i = 0; i < *n; i++) if (expr_eq(args[i], a)) return;
+        args[(*n)++] = a;
+        return;
+    }
+    sep_collect_log_args(head, args, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        sep_collect_log_args(e->data.function.args[i], args, n, cap);
+}
+
+/* True when the LHS antiderivative Integrate[1/h, Y] carries THREE OR MORE distinct
+ * Log[..] arguments -- the partial-fraction integral of a cubic-or-higher h(Y),
+ * e.g. -1/2 Log[Y-1] + 1/6 Log[Y+1] + 1/3 Log[Y-2] (however the coefficients are
+ * spelled: outside the Log, or absorbed as Log[(Y-1)^(-1/2)] powers).  The relation
+ * Sum c_i Log[Y-r_i] == RHS has no elementary explicit inverse for Y that ds_solve
+ * closes -- it churns -- so the caller declines and the implicit first-integral twin
+ * emits G == C[1] (2.2.16-1590).  A ONE- or TWO-log relation is left on the explicit
+ * path: a single Log inverts by Exp, and two logs merge to a Mobius Log[(Y-a)/(Y-b)]
+ * that inverts (Tanh / logistic). */
+static bool sep_noninvertible_logsum(const Expr* lhsInt) {
+    Expr* args[8]; size_t n = 0;
+    sep_collect_log_args(lhsInt, args, &n, 8);
+    return n >= 3;
+}
+
 Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
     const char* xvar = P->ind_names[0];
     Expr* g = NULL; Expr* h = NULL; const char* Yname = NULL;
@@ -140,6 +174,14 @@ Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
 
     Expr* lhsInt = NULL; Expr* rhsInt = NULL;
     if (!sep_integrals(g, h, Yname, xvar, &lhsInt, &rhsInt, true)) return NULL;
+
+    /* Skip a non-invertible >=3-distinct-log relation (cubic+ h(Y)): ds_solve
+     * churns on it, so decline here and let the implicit first-integral twin
+     * (dsolve_separable_implicit_try, next in the cascade) return G == C[1]. */
+    if (sep_noninvertible_logsum(lhsInt)) {
+        expr_free(lhsInt); expr_free(rhsInt);
+        return NULL;
+    }
 
     /* Integrate[1/h, Y] == Integrate[g, x] + C[1], solved explicitly for Y. */
     Expr* rhs = eval_and_free(ds_call2(SYM_Plus, rhsInt, ds_const(1)));

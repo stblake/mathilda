@@ -3954,6 +3954,22 @@ add_test(NAME dsolve_corpus_2_2_15_tests
                  ../../DSolve_test_status/DE_examples_2215.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
+# Section 2.2.16 (Problems 1501-1600, Boyce & DiPrima): 100 records, 56 IVP,
+# 0 systems.  Buckets: 77 elementary first-order (39 separable, 25 linear, 13
+# quadrature) + 18 step/impulse-forced linear IVPs (1501-1518, 16 2nd-order + 2
+# high-order nonhomogeneous: UnitStep/Heaviside -> PiecewiseForcing, DiracDelta
+# -> variation-of-parameters, one mixed DiracDelta+UnitStep 1508) + 5 specials
+# (Clairaut 1536, Riccati 1577, first-order symmetry 1575/1576, class-A 1561).
+# M36: 97/100, 0 FAIL.  1590 (cubic-log separable, SymPy-unsolved) fixed via the
+# >=3-log non-invertible gate -> implicit first integral.  Residue 3: 1508
+# (mixed DiracDelta+UnitStep) and 1509 (Sin+DiracDelta, irrational roots) both
+# churn the impulse convolution; 1534 (converter picks the parameter `a` as the
+# independent variable of y'==a y^((a-1)/a)).
+add_test(NAME dsolve_corpus_2_2_16_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2216.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

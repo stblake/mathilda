@@ -190,6 +190,17 @@ def convert_side(expr, mains, arbs, indvar):
     s = re.sub(r'\\textit\s*\{\s*\\?_?(F\d+)\s*\}', lambda m: 'Maple' + m.group(1), s)
     s = re.sub(r'\\textit\s*\{([^{}]*)\}', r'\1', s)
     s = s.replace(r'\left', '').replace(r'\right', '')
+    # Absolute value: `\lvert x \rvert` / `\vert x \vert` / `\left|x\right|` (the
+    # bars are now bare after the \left/\right strip above) -> `Abs[x]`.  Run here,
+    # before the mains/derivative pass, so the wrapped body still picks up its
+    # `[x]` and the `{}`->`()` rewrite below cannot mangle `(|y|)` (§2.2.16-1535
+    # `y'==|y|+1`).  Non-nested pairs, left to right; a lone unmatched `|` is left
+    # untouched (the loop stops when no full pair remains).
+    s = s.replace(r'\lvert', '|').replace(r'\rvert', '|').replace(r'\vert', '|')
+    _prev = None
+    while _prev != s and '|' in s:
+        _prev = s
+        s = re.sub(r'\|\s*([^|]*?)\s*\|', r'Abs[\1]', s, count=1)
     # Inequality relations + infinity — needed for Piecewise/UnitStep forcing
     # conditions (0\le t<\pi, \pi\le t<\infty).  Longest first; the \le/\ge guards
     # avoid eating a trailing letter (\left/\right are already stripped above).

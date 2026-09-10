@@ -2281,6 +2281,26 @@ static void t_m35_piecewise_forcing(void) {
     check_true("FreeQ[DSolve[{y''[t] + w^2 y[t] == Cos[2 t], y[0] == 1, y'[0] == 0}, y, t], Piecewise]");
 }
 
+static void t_m36_separable_cubic_log(void) {
+    /* 2.2.16-1590 — cubic-in-y separable: Integrate[1/((1+y)(y-1)(y-2)), y] is a sum
+     * of THREE distinct logs, which ds_solve cannot invert to y (it churns).  The
+     * explicit Separable path now declines a >=3-log relation and the implicit first-
+     * integral twin returns G(x,y) == C[1].  Verified here by the implicit-function
+     * rule: the total x-derivative of G, with y' replaced by the ODE, is zero. */
+    check_true("Module[{r, g}, r = DSolve[y'[x] == -((1 + y[x]) (-1 + y[x]) (y[x] - 2))/(x + 1), y, x]; "
+               "MatchQ[r, {{_Equal}}] && (g = r[[1, 1, 1]] - r[[1, 1, 2]]; "
+               "PossibleZeroQ[(D[g, x] /. Derivative[1][y][x] -> "
+               "-((1 + y[x]) (-1 + y[x]) (y[x] - 2))/(x + 1))])]");
+    /* IVP: the constant is fitted (C = G(x0, y0), no inversion), so no C[k] remains. */
+    check_true("FreeQ[DSolve[{y'[x] == -((1 + y[x]) (-1 + y[x]) (y[x] - 2))/(x + 1), "
+               "y[1] == 0}, y, x], C[_]]");
+    /* Anti-overfit: a DIFFERENT cubic-log separable also solves implicitly. */
+    check_true("MatchQ[DSolve[y'[x] == (y[x] (y[x] - 1) (y[x] - 3))/x, y, x], {{_Equal}}]");
+    /* Regression: a TWO-log (logistic) separable stays on the EXPLICIT path — the
+     * >=3-log gate does not over-fire and swallow invertible relations. */
+    check_true("MatchQ[DSolve[y'[x] == (y[x]^2 - 1)/x, y, x], {{_Rule}}]");
+}
+
 static void t_rischnorman_enum_cap_no_crash(void) {
     check_true("MatchQ[DSolve[x^2 - 1 + (y[x]^2 x^2 + x^3 + x) y'[x] == 0, "
                "y[x], x], _List | _DSolve]");
@@ -2551,6 +2571,7 @@ int main(void) {
     TEST(t_euler_regression_corpus);
     TEST(t_m34_corpus_cases);
     TEST(t_m35_piecewise_forcing);
+    TEST(t_m36_separable_cubic_log);
     TEST(t_rischnorman_enum_cap_no_crash);
     TEST(t_trig_coeff_linear_first_order);
     TEST(t_linearizable_first_order);

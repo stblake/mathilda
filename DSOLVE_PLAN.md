@@ -1326,6 +1326,43 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     green; §2.1.2/§2.2.1–§2.2.14 corpus gates all held. See the §2.2.15 block in
     `DSolve_test_status/STATUS.md`. Version 0.132 → 0.133.
 
+- **M36 — §2.2.16 corpus (Problems 1501–1600, Boyce & DiPrima) + cubic-log separable → implicit
+  first integral.** ✅ DONE. 100 records, **all scalar (56 IVP), 0 systems**: 77 elementary
+  first-order (39 separable, 25 linear, 13 quadrature), 18 step/impulse-forced linear IVPs
+  (1501–1518: `UnitStep`/Heaviside → `PiecewiseForcing`, `DiracDelta` → variation of parameters,
+  one mixed `DiracDelta`+`UnitStep`), 5 specials (Clairaut 1536, Riccati 1577, first-order symmetry
+  1575/1576, class-A 1561). **Baseline 96/100 → 97/100, 0 FAIL, 0 regression.** Two increments:
+  - **Converter `Abs[…]`** (`tools/latex_ode_to_mathilda.py`). `\left|…\right|` / `\lvert…\rvert` /
+    `\vert…\vert` / bare `|…|` now convert to `Abs[…]` right after the `\left`/`\right` strip and
+    before the mains/`{}`→`()` passes (so the wrapped body still picks up its `[x]`). Without it the
+    `|` bars in 1535 `y'==|y|+1` survived into `(|y[x]|)` and the WHOLE corpus file failed to parse
+    as a `List` literal (blocking the section entirely).
+  - **Cubic-log separable → implicit first integral** (`src/calculus/dsolve_separable.c`). A
+    separable ODE whose y-side antiderivative `Integrate[1/h, y]` carries **≥3 distinct `Log[…]`
+    arguments** (the partial-fraction integral of a cubic-or-higher `h(y)`, e.g.
+    `−½Log[y−1]+⅙Log[y+1]+⅓Log[y−2]`) has no elementary explicit inverse for `y` that `ds_solve`
+    closes — it churns, and the implicit twin (next in the cascade) never runs. New
+    `sep_noninvertible_logsum` (a recursive distinct-`Log`-argument counter, robust to whether the
+    coefficient sits outside the `Log` or is absorbed as a `Log[(y−1)^(−1/2)]` power) makes the
+    explicit path decline, so the implicit first-integral twin returns `G(x,y)==C[1]`, verified by
+    the implicit-function rule and fitted on an IVP as `C=G(x0,y0)`. Closes **1590**
+    `y'+(1+y)(y−1)(y−2)/(x+1)==0, y(1)=0` — which **SymPy does not solve**. A one- or two-log
+    relation is untouched (single `Log` inverts by `Exp`; two logs merge to a Möbius
+    `Log[(y−a)/(y−b)]` → `Tanh`/logistic), so no separable regresses (§2.2.8/§2.2.12 held).
+  - *Residue (3, NOT wrong answers — bounded declines):* `1508`
+    `y''+3y'+2y==DiracDelta[t−5]+UnitStep[t−10]` and `1509` `y''+2y'+3y==Sin[t]+DiracDelta[t−3π]` —
+    the impulse Green's-function convolution churns on the irrational-frequency `−1±I√2` kernel; its
+    `TrigReduce` linearisation is REQUIRED for the `DiracDelta` sift to be correct (skipping it
+    produces a spurious ramp — verified on 1506), so it cannot simply be gated. `1534`
+    `y'==a y^((a−1)/a)` — the converter reads the parameter `a` as the independent variable (no
+    explicit indvar present); with that reading the equation is genuinely non-elementary, and
+    forcing `x` yields only a messy implicit form the prelude cannot verify. (All three would need a
+    substantial substrate rewrite — a direct Green's-kernel impulse sift, a dispatcher-level forcing
+    superposition, or an indep-var heuristic change risking all 15 prior corpora — so deferred.)
+  - Anti-overfit unit test `t_m36_separable_cubic_log` (`tests/test_dsolve.c`); `make check-c99`
+    green; §2.1.2/§2.2.1–§2.2.15 corpus gates all held. See the §2.2.16 block in
+    `DSolve_test_status/STATUS.md`. Version 0.133 → 0.134.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

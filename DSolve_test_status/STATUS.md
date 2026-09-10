@@ -776,6 +776,44 @@ Full per-case results: `reports/2.2.15.tsv`; bucketed report: `reports/2.2.15.md
 
 ---
 
+## Section 2.2.16 — "Problems 1501 to 1600" (Boyce & DiPrima)
+
+Corpus: `DE_examples_2216.m` — 100 records, **all scalar (56 IVP), 0 systems**. Buckets:
+77 elementary first-order (39 separable, 25 linear, 13 quadrature), 18 step/impulse-forced
+linear IVPs (1501–1518: `UnitStep`/Heaviside → `PiecewiseForcing`, `DiracDelta` → variation
+of parameters, one mixed `DiracDelta`+`UnitStep`), 5 specials (Clairaut 1536, Riccati 1577,
+first-order symmetry 1575/1576, class-A 1561).
+`ctest -R dsolve_corpus_2_2_16_tests` · gate baseline **3**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-11 (baseline) | 96 / 100 | 96.0% | 4 | 0 FAIL. Residue 1508/1509 (mixed/irrational-root impulse forcing), 1534 (converter indep-var), 1590 (cubic-log separable). |
+| 2026-09-11 (**M36**)  | **97 / 100** | **97.0%** | **3** | **0 FAIL, 0 regression.** 1590 now solves (cubic-log separable → implicit first integral; SymPy does **not** solve it). Gate baseline **3**. |
+
+**M36 additions.**
+- **Converter `Abs[…]`** (`tools/latex_ode_to_mathilda.py`): `\left|…\right|` / `\lvert…\rvert` /
+  `\vert…\vert` / bare `|…|` → `Abs[…]` (1535 `y'==|y|+1`). Without it the `|` bars survived into
+  `(|y[x]|)` and the whole corpus file failed to parse as a `List` literal.
+- **Cubic-log separable → implicit first integral** (`src/calculus/dsolve_separable.c`): the explicit
+  Separable path now declines a relation whose y-side antiderivative carries **≥3 distinct `Log[…]`
+  arguments** (a cubic-or-higher `h(y)` partial-fraction integral — no elementary explicit inverse for
+  `y`, `Solve` churns) via `sep_noninvertible_logsum`; the existing implicit twin returns `G(x,y)==C[1]`
+  (fitted on an IVP as `C=G(x0,y0)`). One- and two-log relations stay explicit (`Exp` / Möbius→`Tanh`).
+  Closes **1590** `y'+(1+y)(y−1)(y−2)/(x+1)==0, y(1)=0`. Anti-overfit: `t_m36_separable_cubic_log`.
+
+**Residue (3, NOT wrong answers — bounded declines):**
+- `1508` `y''+3y'+2y==DiracDelta[t−5]+UnitStep[t−10]` and `1509` `y''+2y'+3y==Sin[t]+DiracDelta[t−3π]`:
+  the impulse Green's-function convolution churns on the irrational-frequency (`−1±I√2`) kernel — its
+  `TrigReduce` linearisation is required for the `DiracDelta` sift to be correct, so it cannot simply be
+  skipped. (Both solved by SymPy — an honest gap, future work.)
+- `1534` `y'==a y^((a−1)/a)`: with no explicit independent variable, the converter reads the parameter
+  `a` as the independent variable; with that reading the equation is genuinely non-elementary, and
+  forcing `x` yields only a messy implicit form the prelude cannot verify.
+
+Full per-case results: `reports/2.2.16.tsv`; bucketed report: `reports/2.2.16.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
