@@ -2228,6 +2228,28 @@ static void t_first_order_series_declines(void) {
  * The assertion is that evaluation completes (a crash aborts the binary) and
  * returns either a solution (_List) or a clean decline (_DSolve); a generalized
  * family exercises the same path so the guard is not overfit to one input. */
+/* M34 (§2.2.14) — the four fixes' flagship corpus cases; forward-generator grids
+ * live in test_dsolve_m34_stress.c.  Each wraps DSolve in TimeConstrained so a
+ * regression that re-introduces a hang FAILS (=== $Aborted) rather than stalls. */
+static void t_m34_corpus_cases(void) {
+    /* 1337 — VoP verify short-circuit: the -Cos Log[Sec+Tan] answer's residual
+     * spins zero_test; the numeric-zero verify keeps it. */
+    check_true("Abs[N[(y''[x] + y[x] - Tan[x]) /. TimeConstrained[DSolve[y''[x] + y[x] == "
+               "Tan[x], y, x], 8, $Aborted][[1]] /. {C[1] -> 13/10, C[2] -> 7/10, x -> 1/2}, 20]] < 10^-6");
+    /* 1350 — forced Bessel operator, arbitrary g: inert-Integrate VoP integral form. */
+    check_true("Head[TimeConstrained[DSolve[x^2 y''[x] + x y'[x] + (x^2 - 1/4) y[x] == g[x], "
+               "y, x], 8, $Aborted]] === List");
+    /* 1384 — 2nd-order exact -> Frobenius series IVP, fit at x=0. */
+    check_true("FreeQ[TimeConstrained[DSolve[{y''[x] + Sin[x] y'[x] + Cos[x] y[x] == 0, y[0] == 0, "
+               "y'[0] == 1}, y, x], 8, $Aborted], C[_]]");
+    /* 1385 — IC-point transcendental Taylor series. */
+    check_true("FreeQ[TimeConstrained[DSolve[{x^2 y''[x] + (x + 1) y'[x] + 3 Log[x] y[x] == 0, "
+               "y[1] == 2, y'[1] == 0}, y, x], 8, $Aborted], C[_]]");
+    /* 1392 — cubic-coefficient Heun: Kovacic declines the complex poles -> series. */
+    check_true("Head[TimeConstrained[DSolve[(x^3 + 1) y''[x] + 4 x y'[x] + y[x] == 0, y, x], "
+               "8, $Aborted]] === List");
+}
+
 static void t_rischnorman_enum_cap_no_crash(void) {
     check_true("MatchQ[DSolve[x^2 - 1 + (y[x]^2 x^2 + x^3 + x) y'[x] == 0, "
                "y[x], x], _List | _DSolve]");
@@ -2496,6 +2518,7 @@ int main(void) {
     TEST(t_euler_inhomogeneous);
     TEST(t_euler_inhomogeneous_complex);
     TEST(t_euler_regression_corpus);
+    TEST(t_m34_corpus_cases);
     TEST(t_rischnorman_enum_cap_no_crash);
     TEST(t_trig_coeff_linear_first_order);
     TEST(t_linearizable_first_order);

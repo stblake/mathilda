@@ -24,6 +24,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>               /* isnan / isfinite / NAN: numeric verify probe */
+
+/* ds_has_undefined_function is public (declared in dsolve_common.h): kovacic's
+ * forcing closure needs it to accept an arbitrary-forcing VoP integral. */
 
 /* ------------------------------------------------------------------ *
  *  Small expression helpers                                           *
@@ -416,6 +420,84 @@ static bool ds_residual_is_distributional(const Expr* e) {
     return false;
 }
 
+/* Collect argument-position free symbols (a symbolic parameter such as k, a, b
+ * that a numeric probe must instantiate).  Recurses into arguments only, never a
+ * function head, so Sin/Cos/Log/Exp/C/Integrate stay untouched. */
+static void ds_collect_arg_syms(const Expr* e, const char** out, int* n, int cap) {
+    if (!e || *n >= cap) return;
+    if (e->type == EXPR_SYMBOL) {
+        for (int i = 0; i < *n; i++) if (out[i] == e->data.symbol.name) return;
+        out[(*n)++] = e->data.symbol.name;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ds_collect_arg_syms(e->data.function.args[i], out, n, cap);
+}
+
+/* NUMERIC back-substitution probe: is the (already body-substituted) residual
+ * `sub` numerically ZERO at a spread of clean real sample points?  Instantiates
+ * the generated constants C[1..8] and any free parameter symbols to distinct
+ * generic reals, then samples |sub| off the origin.  Returns true only when
+ * CONFIDENT (>= 3 real samples numericize, >= 3 are tiny, none is a real
+ * clearly-nonzero value); a complex/non-finite sample (a Log/ArcTan/Sqrt branch
+ * cut crossed by the sample point) is skipped, never counted as nonzero, so a
+ * correct answer is never rejected here.
+ *
+ * This is the same numeric verify sf_num_ok / l2_num_ok use, lifted into the
+ * generic scalar verify purely as a fast KEEP short-circuit: zero_test_decide's
+ * precision ladder can climb for many seconds on a residual that IS zero but
+ * carries Log branch cuts (the variation-of-parameters answer of y''+y==Tan[x],
+ * y''+y==2 Sec[x/2] -- >8 s, so the harness times them out).  When this cannot
+ * confirm zero it returns false and the branch falls through to the unchanged
+ * symbolic zero_test, so the REJECT path (a genuinely nonzero residual) is
+ * unaffected. */
+static bool ds_residual_numeric_zero(const Expr* sub0, const char* xv) {
+    Expr* R = expr_copy((Expr*)sub0);
+    for (int k = 1; k <= 8; k++)
+        R = ds_subst(R, ds_const(k), expr_new_real(0.31 + 0.17 * (double)k));
+    const char* skip[] = { xv, intern_symbol("E"), intern_symbol("Pi"),
+        intern_symbol("I"), intern_symbol("EulerGamma"), intern_symbol("Degree"),
+        intern_symbol("GoldenRatio"), intern_symbol("Catalan"),
+        intern_symbol("Infinity") };
+    const int nskip = (int)(sizeof(skip)/sizeof(skip[0]));
+    const char* syms[64]; int ns = 0;
+    ds_collect_arg_syms(R, syms, &ns, 64);
+    int pi = 0;
+    for (int i = 0; i < ns; i++) {
+        bool sk = false;
+        for (int j = 0; j < nskip; j++) if (syms[i] == skip[j]) { sk = true; break; }
+        if (sk) continue;
+        R = ds_subst(R, expr_new_symbol(syms[i]), expr_new_real(0.37 + 0.11 * (double)pi));
+        pi++;
+    }
+    /* An arbitrary-function or inert-Integrate residual (Bessel operator with an
+     * undefined forcing g[x]) never numericizes -- decline the numeric route so
+     * the symbolic keep-on-undecidable policy handles it. */
+    if (ds_has_undefined_function(R) || ds_has_head(R, SYM_Integrate)) {
+        expr_free(R); return false;
+    }
+    static const double xs[] = { 0.31, 0.53, 0.74, 1.13, 1.47, 1.92, 2.31, 2.68 };
+    int nsmall = 0, nbig = 0, ngood = 0;
+    for (int i = 0; i < 8; i++) {
+        Expr* at = ds_subst(expr_copy(R), expr_new_symbol(xv), expr_new_real(xs[i]));
+        Expr* mg = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", expr_copy(at)))));
+        Expr* ig = eval_and_free(ds_call1("Abs",
+                       eval_and_free(ds_call1("N", ds_call1("Im", at)))));
+        double mag = (mg && mg->type == EXPR_REAL) ? mg->data.real
+                   : (mg && mg->type == EXPR_INTEGER) ? (double)mg->data.integer : NAN;
+        double imag = (ig && ig->type == EXPR_REAL) ? ig->data.real
+                    : (ig && ig->type == EXPR_INTEGER) ? (double)ig->data.integer : NAN;
+        expr_free(mg); expr_free(ig);
+        if (isnan(mag) || !isfinite(mag)) continue;           /* couldn't numericize */
+        if (mag < 1e-8) { nsmall++; ngood++; }
+        else if (mag > 1e-4 && isfinite(imag) && imag < 1e-6) { nbig++; ngood++; }
+        /* else: a complex sample (branch cut) or borderline -- skip, don't reject */
+    }
+    expr_free(R);
+    return ngood >= 3 && nsmall >= 3 && nbig == 0;
+}
+
 static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
     if (P->nfun != 1) return true;    /* systems: verified separately */
     const char* yname = P->fun_names[0];
@@ -442,6 +524,13 @@ static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
          * zero_test_decide now performs the exponential-combining ExpandAll
          * normalisation itself (POSSIBLE_ZEROQ_IMPROVEMENTS.md #1), so no
          * Erf-gated pre-pass or FALSE-path re-check is needed here. */
+        /* Fast KEEP when the residual is NUMERICALLY zero: zero_test's precision
+         * ladder can spin for >8 s on a residual that is zero but carries Log/
+         * ArcTan branch cuts (the variation-of-parameters answer of y''+y==Tan[x],
+         * §2.2.14-1337/1341), so a numerically-confirmed zero keeps the branch
+         * without the symbolic test.  Only confirms zero; a nonzero / undecidable
+         * residual falls through to zero_test unchanged (reject path preserved). */
+        if (ds_residual_numeric_zero(sub, xvar)) { expr_free(sub); continue; }
         ZeroTestResult zt = zero_test_decide(sub);
         if (zt == ZERO_TEST_FALSE) { expr_free(sub); return false; }
         expr_free(sub);
@@ -480,15 +569,29 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
 
     Expr** eqs = malloc(P->ncond * sizeof(Expr*));
     size_t neq = 0;
+    /* A SeriesData body does not reduce under x->point (SeriesData[x0,x0,{a...}]
+     * stays a SeriesData, so the fit equation never exposes a[0]=C[1], a[1]=C[2],
+     * ...).  Take its Normal (the truncated polynomial) for the fit equations,
+     * which evaluates and differentiates at the IC point normally -- the
+     * Frobenius/ordinary-point series IVP (§2.2.14 1381/1384/1385).  The FINAL
+     * body keeps its SeriesData form (line ~616 substitutes the fitted constants
+     * into the original body); Normal is the identity on an elementary body. */
+    const Expr* fitbody = body;
+    Expr* normbody = NULL;
+    if (ds_has_head(body, SYM_SeriesData)) {
+        normbody = eval_and_free(ds_call1("Normal", expr_copy((Expr*)body)));
+        fitbody = normbody;
+    }
     for (size_t c = 0; c < P->ncond; c++) {
         if (P->conds[c].fi != 0) continue;               /* single-function M0 */
-        Expr* bexpr = expr_copy((Expr*)body);
+        Expr* bexpr = expr_copy((Expr*)fitbody);
         for (int d = 0; d < P->conds[c].order; d++)
             bexpr = ds_d(bexpr, expr_new_symbol(xvar));
         bexpr = ds_subst(bexpr, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
         eqs[neq++] = expr_new_function(expr_new_symbol(SYM_Equal),
                         (Expr*[]){ bexpr, eval_and_free(expr_copy(P->conds[c].value)) }, 2);
     }
+    if (normbody) expr_free(normbody);
     /* A single condition fitting a single constant is solved in Solve's SCALAR
      * form (Solve[eq, C[1]]), never the list form (Solve[{eq}, {C[1]}]): only the
      * scalar form applies inverse-function inversion, so a constant sitting inside
@@ -898,7 +1001,7 @@ static Expr* vp_matrix(Expr*** dv, size_t n, long repl, const Expr* gn) {
  * or an inert Derivative.  Indefinite integration of such a term never closes
  * and can hang, so variation of parameters routes it to the definite
  * convolution instead.  (Mirrors lie_has_undefined_function in dsolve_lie.c.) */
-static bool ds_has_undefined_function(const Expr* e) {
+bool ds_has_undefined_function(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
     if (h->type == EXPR_SYMBOL) {
@@ -1005,40 +1108,50 @@ Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
     Expr* detW = eval_and_free(ds_call1("Det", W));
     Expr* yp = NULL;
     if (!ds_is_zero(detW)) {
+        /* Collapse a trig/rational Wronskian (Cos^2+Sin^2 -> 1, ...) so the
+         * per-term integrals close in elementary form and the recovered constant
+         * factors are clean. */
+        detW = ds_simplify(detW);
         Expr* gn = eval_and_free(ds_call2(SYM_Times, expr_copy((Expr*)g),
                         expr_new_function(expr_new_symbol(SYM_Power),
                             (Expr*[]){ expr_copy((Expr*)leadcoef), expr_new_integer(-1) }, 2)));
-        Expr** ut = malloc(n * sizeof(Expr*));
-        size_t uc = 0;
-        /* Skip the INDEFINITE attempt and go straight to the definite (causal)
-         * convolution when it cannot help: an impulse DiracDelta term collapses
-         * to 0 under indefinite integration (DiracDelta[x] = 0 for x != 0), and
-         * an arbitrary forcing f(x) never closes and can hang the integrator
-         * (e.g. the parametric f[x] E^(a x) of a real/complex-root kernel). */
-        bool fail = ds_contains(g, intern_symbol("DiracDelta")) ||
-                    ds_has_undefined_function(g);
-        for (size_t i = 0; i < n && !fail; i++) {
-            Expr* Wi = vp_matrix(dv, n, (long)i, gn);
-            Expr* detWi = eval_and_free(ds_call1("Det", Wi));
-            Expr* uip = eval_and_free(ds_call2(SYM_Times, detWi,
-                            expr_new_function(expr_new_symbol(SYM_Power),
-                                (Expr*[]){ expr_copy(detW), expr_new_integer(-1) }, 2)));
-            Expr* ui = ds_integrate(uip, expr_new_symbol(xvar));
-            if (ds_has_head(ui, SYM_Integrate)) { expr_free(ui); fail = true; break; }
-            ut[uc++] = eval_and_free(ds_call2(SYM_Times, expr_copy(basis[i]), ui));
-        }
-        expr_free(gn);
-        if (!fail) {
-            yp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ut, uc));
-            yp = ds_simplify(yp);
-        } else {
-            /* The indefinite integral did not close -- arbitrary or impulse
-             * forcing.  Fall back to the causal Green's-function convolution,
-             * a definite integral from the base point 0. */
-            for (size_t i = 0; i < uc; i++) expr_free(ut[i]);
+        /* DiracDelta (impulse) forcing genuinely needs the causal Green's-function
+         * convolution: the impulse must be sifted at its base point and collapses
+         * to 0 under indefinite integration.  EVERY other forcing -- elementary or
+         * an arbitrary f(x) -- is handled by the per-term INDEFINITE Wronskian
+         * integral, keeping any non-closing term as an inert Integrate.  That is
+         * correct (D[Integrate]=integrand, and the inert terms carry the
+         * coefficient L[basis_i]=0 in the residual, so verification is
+         * Integrate-free), matches Mathematica's own integral-form answer for a
+         * non-elementary / arbitrary forcing, and -- crucially -- never enters the
+         * symbolic-limit definite integral, whose parametric DiffUnderInt
+         * escalation blows up (Exp->Cosh/Sinh) on any forcing that is not an
+         * undefined function (the §2.2.14 1337/1341/1350/1354 hang). */
+        if (ds_contains(g, intern_symbol("DiracDelta"))) {
+            expr_free(gn);
             yp = vp_definite_convolution(dv, basis, n, g, leadcoef, detW, xvar);
+        } else {
+            Expr** ut = malloc(n * sizeof(Expr*));
+            bool any_inert = false;
+            g_integrate_quiet++;   /* a non-closing Wronskian integral is kept inert */
+            for (size_t i = 0; i < n; i++) {
+                Expr* Wi = vp_matrix(dv, n, (long)i, gn);
+                Expr* detWi = eval_and_free(ds_call1("Det", Wi));
+                Expr* uip = eval_and_free(ds_call2(SYM_Times, detWi,
+                                expr_new_function(expr_new_symbol(SYM_Power),
+                                    (Expr*[]){ expr_copy(detW), expr_new_integer(-1) }, 2)));
+                Expr* ui = ds_integrate(uip, expr_new_symbol(xvar));
+                if (ds_has_head(ui, SYM_Integrate)) any_inert = true;
+                ut[i] = eval_and_free(ds_call2(SYM_Times, expr_copy(basis[i]), ui));
+            }
+            g_integrate_quiet--;
+            expr_free(gn);
+            yp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ut, n));
+            free(ut);
+            /* Simplify only a fully-closed elementary answer; an inert-Integrate
+             * body is left as-is (Simplify cannot help and could churn). */
+            if (!any_inert) yp = ds_simplify(yp);
         }
-        free(ut);
     }
     expr_free(detW);
     for (size_t k = 0; k < n; k++) { for (size_t j = 0; j < n; j++) expr_free(dv[k][j]); free(dv[k]); }
@@ -1081,11 +1194,15 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
      * the cascade continues to a method that CAN fit the condition (e.g. the exact /
      * homogeneous overlap 2.2.13-1205/1231, where Homogeneous's transcendental
      * log-form leaves C[1] and Exact's polynomial first integral fits it).
-     * Restricted to a FIRST-ORDER scalar IVP (one condition, one constant, fully
-     * determined): there the undecided fit is a genuine solver miss the cascade can
-     * route around.  Higher-order / series IVPs, whose SeriesData fit legitimately
-     * bubbles yet still verifies, keep the existing lenient behaviour. */
-    if (P->ncond > 0 && n_ok == 0 && P->nfun == 1 && P->max_order[0] == 1) {
+     * Extended to a SECOND-ORDER scalar IVP too: a special-function general
+     * solution whose basis is SINGULAR at the IC point cannot be fitted there
+     * (C[1]√x BesselJ[1/4,x²/2]+C[2]√x BesselY[1/4,x²/2] at x=0, §2.2.14-1381 --
+     * BesselY[1/4,0] is infinite), so the fit bubbles FIT_UNDECIDED; declining lets
+     * the cascade reach the Frobenius ordinary-point series, which fits the ICs
+     * cleanly (now that dsolve_fit_constants Normal-izes a SeriesData body).  An
+     * under-determined BVP is unaffected: its Solve SUCCEEDS (FIT_OK => n_ok>0), so
+     * the n_ok==0 guard never fires for it. */
+    if (P->ncond > 0 && n_ok == 0 && P->nfun == 1 && P->max_order[0] <= 2) {
         bool any_undecided = false;
         for (size_t b = 0; b < nf; b++) if (fstate[b] == FIT_UNDECIDED) any_undecided = true;
         if (any_undecided) {

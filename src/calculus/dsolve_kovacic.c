@@ -39,6 +39,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
+
+/* Wall-clock budget (CPU time, no alarm): the Case-1c apparent-singularity search
+ * is pole-structure driven, and a NON-REAL pole (declined below) is the main
+ * hazard; this deadline is a secondary backstop checked between combination-loop
+ * iterations.  time()-based, so unlike a nested TimeConstrained it leaves no stray
+ * SIGALRM to fire across the hundreds of Kovacic calls in a single-process test. */
+static time_t g_kv_deadline;
+static bool kv_expired(void) { return time(NULL) >= g_kv_deadline; }
 
 /* ---- small evaluated builders (args consumed, result owned) ---- */
 static Expr* T2(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Times, a, b)); }
@@ -723,6 +732,19 @@ static Expr* kovacic_case1_general(const Expr* r, const Expr* rd,
     if (k == 0 || k > KOV_C1G_MAXPOLES) {
         dsolve_roots_free(&pr); expr_free(sqinf); expr_free(ainf_p); expr_free(ainf_m); return NULL;
     }
+    /* Non-real (complex-conjugate) poles: the per-mask ω carries the pole
+     * locations as complex radicals (the cube roots of -1 for (x^3+1)y''+4x y'+y
+     * == 0), on which the ds_simplify(theta) below spins for many seconds -- and
+     * the equation is then genuinely Heun (no Liouvillian solution; Case 2 is
+     * already gated off for the degree-2 factor).  The classical Case-1c targets
+     * (Legendre/Chebyshev/Gegenbauer/Jacobi) all have REAL poles at +-1, so
+     * decline a complex pole to the Frobenius ordinary-point series (§2.2.14
+     * 1392/1393) rather than hang. */
+    for (size_t i = 0; i < k; i++)
+        if (!pr.isreal[i]) {
+            dsolve_roots_free(&pr); expr_free(sqinf); expr_free(ainf_p); expr_free(ainf_m);
+            return NULL;
+        }
 
     /* per-pole [√r]_c and α_c^± (kovacic_pole_data); `degen[i]` marks a redundant
      * sign bit (α^+==α^- with sqc==0).  A pole order incompatible with Case 1
@@ -755,6 +777,7 @@ static Expr* kovacic_case1_general(const Expr* r, const Expr* rd,
         for (int sinf = 0; sinf < 2; sinf++) {          /* ∞ sign: 1 = '+', 0 = '-' */
             Expr* ainf = sinf ? ainf_p : ainf_m;
             for (size_t mask = 0; mask < ncomb; mask++) {
+                if (kv_expired()) { sinf = 2; break; }   /* wall-clock budget spent */
                 bool redundant = false;                 /* skip fixed bits of degenerate poles */
                 for (size_t i = 0; i < k; i++)
                     if (degen[i] && ((mask >> i) & 1)) { redundant = true; break; }
@@ -916,6 +939,19 @@ static Expr* kovacic_add_forcing(const DSolveProblem* P, Expr* homog, const char
     if (!yp) { expr_free(y1); expr_free(y2); expr_free(homog); return NULL; }
     expr_free(homog);       /* rebuild C[1] y1 + C[2] y2 + yp from the cleaned basis */
     Expr* full = A2(A2(T2(ds_const(1), y1), T2(ds_const(2), y2)), yp);
+    /* An ARBITRARY forcing g(x) (an undefined function) yields an inert-Integrate
+     * VoP particular that cannot be numericized -- numeric_verify would reject a
+     * correct answer.  Accept it on the VoP construction (matching Mathematica's
+     * own integral-form answer for x^2 y''+x y'+(x^2-1/4)y==g[x], §2.2.14-1350);
+     * dsolve_run's symbolic verify keeps it under the undecidable policy. */
+    {
+        Expr* gchk = expr_copy((Expr*)R);
+        for (int k = ord; k >= 1; k--) gchk = ds_subst(gchk, ds_make_funcapp(yname, k, x), expr_new_integer(0));
+        gchk = ds_subst(gchk, ds_make_funcapp(yname, 0, x), expr_new_integer(0));
+        bool arbitrary = ds_has_undefined_function(gchk);
+        expr_free(gchk);
+        if (arbitrary) return full;
+    }
     if (!numeric_verify(P, full)) { expr_free(full); return NULL; }
     return full;
 }
@@ -924,6 +960,7 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
     Expr* Pc; Expr* Qc;
     if (!dsolve_second_order_PQ_forced(P, &Pc, &Qc)) return NULL;
     const char* x = P->ind_names[0];
+    g_kv_deadline = time(NULL) + 5;   /* per-call wall-clock budget */
 
     /* Inhomogeneous? g(x) = -(residual with y and all derivatives zeroed).  When
      * forced, Case 2's inline numeric_verify (which checks the FULL equation)
@@ -1047,7 +1084,7 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
      *      monic polynomial P over the local pole exponents (the classical Case-1
      *      completion the pole-only Riccati ansatz misses — e.g. Legendre,
      *      Chebyshev, Gegenbauer, Jacobi).  Runs before the heavier Case 2. ---- */
-    if (!body && degd >= 1) {
+    if (!body && degd >= 1 && !kv_expired()) {
         int counter = 1;
         body = kovacic_case1_general(r, rd, degn, degd, recovery, x, &counter);
     }

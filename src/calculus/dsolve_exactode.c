@@ -82,11 +82,18 @@ Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch) {
 
     Expr* body = NULL;
     if (exact) {
-        /* Reduced forcing: Integrate[g, x] + C[n].  Decline on a non-elementary
-         * antiderivative (an unevaluated Integrate would leak into the sub-solve). */
+        /* Reduced forcing: Integrate[g, x] + <first-integral constant>.  Decline on
+         * a non-elementary antiderivative (an unevaluated Integrate would leak into
+         * the sub-solve).  The first-integral constant is a PLAIN symbol, not C[n]:
+         * a generated C[n] on the RHS drives the reduced first-order engine's
+         * integrating-factor quadrature into the DiffUnderInt escalation (a C[_]
+         * head reads as a parametric function), which hangs on the non-elementary
+         * Integrate[C[2] E^(-Cos[x]), x] of §2.2.14-1384 -- a plain symbol returns
+         * the inert quadrature instantly.  Renamed back to C[n] in the body. */
         Expr* Gint = ds_integrate(expr_copy(g), expr_new_symbol(xvar));
         if (!ds_has_head(Gint, SYM_Integrate)) {
-            Expr* rhs = eval_and_free(ds_call2(SYM_Plus, Gint, ds_const(n)));
+            const char* fic = "DSolve`exFIC";   /* first-integral constant, plain symbol */
+            Expr* rhs = eval_and_free(ds_call2(SYM_Plus, Gint, expr_new_symbol(fic)));
 
             /* M[y] = Sum_{j=0}^{n-1} b[j] * y^(j). */
             Expr** terms = malloc((size_t)n * sizeof(Expr*));
@@ -105,12 +112,16 @@ Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch) {
             Expr* r = eval_and_free(call);
             body = extract_applied(r, yname);
             /* A reduced sub-solve that leaves an unevaluated Integrate is not a
-             * usable closed form (e.g. 2x y''+(1-2x^2)y'-4x y==0 reduces to the
-             * first-order linear y' whose integrating-factor quadrature
-             * Integrate[x^(-3/2) E^(-x^2/2), x] is non-elementary here).  Decline
-             * so the cascade falls through to the Frobenius series solver, which
-             * returns a verified power series about x=0. */
+             * usable closed form: the first-order linear engine returns the inert
+             * integrating-factor quadrature quickly (Integrate[exFIC E^(-Cos[x]),x]
+             * for y''+Sin[x]y'+Cos[x]y==0, §2.2.14-1384; Integrate[x^(-3/2)E^(-x^2/2),x]
+             * for 2x y''+(1-2x^2)y'-4x y==0).  Decline BEFORE the exFIC->C[n] rename:
+             * that rename re-evaluates the body, and renaming exFIC->C[2] INSIDE the
+             * inert Integrate would re-trigger the very C[2]-DiffUnderInt hang the
+             * plain symbol avoided.  Declining sends the cascade to the Frobenius
+             * series (which fits the ICs at the ordinary point x=0). */
             if (body && ds_has_head(body, SYM_Integrate)) { expr_free(body); body = NULL; }
+            if (body) body = ds_subst(body, expr_new_symbol(fic), ds_const(n));  /* -> C[n] */
             expr_free(r);
         } else {
             expr_free(Gint);

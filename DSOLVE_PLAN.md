@@ -1248,6 +1248,44 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   §2.2.1–§2.2.12 corpus gates all held at baseline. See the §2.2.13 block in
   `DSolve_test_status/STATUS.md`. Version 0.130 → 0.131.
 
+- **M34 — §2.2.14 corpus (Problems 1301–1400, Boyce & DiPrima) + VoP verify short-circuit /
+  robust variation of parameters / bounded-Kovacic complex-pole gate / SeriesData IVP fit /
+  IC-point Frobenius series.** ✅ DONE. The first Boyce & DiPrima section: 2nd-order-linear
+  dominated (38 with-symmetry, 19 const-coeff, 13 nonhomogeneous, 12 Emden–Fowler, 11 exact),
+  99 scalar (25 IVP) + 1 system. **90/100 → 99/100, 0 FAIL, 0 regression** via four shared-
+  substrate root-cause fixes (they lift earlier sections, none regress):
+  1. **Numeric-zero verify short-circuit + robust VoP** (`dsolve_common.c`). `dsolve_verify_body`
+     keeps a branch whose residual is NUMERICALLY zero at a spread of clean real points before the
+     symbolic `zero_test_decide`, whose precision ladder climbs for >8 s on a residual that IS zero
+     but carries Log/ArcTan branch cuts (`y''+y==Tan[x]` / `2 Sec[x/2]`, 1337/1341); the reject
+     path is unchanged. `dsolve_variation_of_parameters` reserves the symbolic-limit definite
+     convolution for DiracDelta forcing and keeps a per-term INDEFINITE Wronskian integral (inert
+     when non-elementary) otherwise — matching Mathematica's integral form and never entering the
+     parametric DiffUnderInt escalation that blows up on `Tan`/`Sec`/arbitrary `g` (1350/1354).
+  2. **Bounded-Kovacic complex-pole gate** (`dsolve_kovacic.c`). Case-1c declines a NON-REAL pole
+     (a `time()` wall-clock backstop, no alarm) — the complex-conjugate pole pair of
+     `(x^3+1)y''+4x y'+y==0`, whose `ds_simplify` on the complex radicals spins; a genuinely Heun
+     equation with no Liouvillian solution that then falls to the Frobenius series (1392/1393). The
+     forcing closure accepts an arbitrary-`g` inert-Integrate VoP particular (skips the
+     un-numericizable `numeric_verify`), closing the forced Bessel operator 1350.
+  3. **Exact-ODE plain-symbol first integral + SeriesData IVP fit** (`dsolve_exactode.c`,
+     `dsolve_common.c`). The exact reduction uses a PLAIN symbol (not `C[n]`) for the first-integral
+     constant — `C[n]` reads as a parametric function and drives the reduced integrating-factor
+     quadrature `Integrate[C[2] E^(-Cos[x]),x]` into a >8 s DiffUnderInt hang; it declines BEFORE
+     renaming (the rename re-evaluates and would re-trigger the hang inside the inert integral),
+     falling to the Frobenius series (1384). `dsolve_fit_constants` takes `Normal[body]` of a
+     SeriesData body so a series IVP fits `a[0]=C[1], a[1]=C[2]`, and the FIT_UNDECIDED fall-through
+     extends to a 2nd-order IVP (a special-function solution singular at the IC point, Bessel at
+     x=0, 1381, declines to the origin series).
+  4. **IC-point Frobenius series** (`dsolve_frobenius.c`). `dsolve_frobenius_shifted_try` prefers
+     the IVP's IC point as the expansion center when ordinary and lifts the rational-only gate
+     there, so a transcendental-coefficient equation Taylor-expands about x0
+     (`x^2 y''+(x+1)y'+3 Log[x] y==0, y[1]==2, y'[1]==0`, 1385).
+  Residue 1 (NOT a wrong answer): `1360` `u''+u'+u^3/5==Cos[t]` — a forced Duffing oscillator with
+  no closed form in Maple/Mathematica/SymPy. Anti-overfit units `t_m34_*` (`tests/test_dsolve.c`);
+  `make check-c99` green; all prior corpus gates held. See the §2.2.14 block in
+  `DSolve_test_status/STATUS.md`. Version 0.131 → 0.132.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

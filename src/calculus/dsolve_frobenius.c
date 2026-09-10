@@ -374,11 +374,34 @@ Expr** dsolve_frobenius_shifted_try(DSolveProblem* P, size_t* nbranch) {
     Expr* Pc; Expr* Qc;
     if (!dsolve_second_order_PQ(P, &Pc, &Qc)) return NULL;
     const char* x = P->ind_names[0];
-    if (!is_rational_in(Pc, x) || !is_rational_in(Qc, x)) {
-        expr_free(Pc); expr_free(Qc); return NULL;
+
+    Expr* x0 = NULL;
+    /* An IVP whose expansion CENTER is the IC point x0 and x0 is an ordinary point
+     * (P, Q finite there): expand the Taylor series about x0 so the ICs fit
+     * a[0]=C[1], a[1]=C[2] directly.  This is the ONLY route for a TRANSCENDENTAL-
+     * coefficient equation with no closed form -- x^2 y'' + (x+1) y' + 3 Log[x] y
+     * == 0, y[1]==2, y'[1]==0 (§2.2.14-1385): x=0 is singular (Log, x^2->0) so the
+     * origin-centred frobenius_try declines, but x=1 is ordinary.  taylor_coeff_at
+     * differentiates the coefficients symbolically, so a Log/Exp analytic at x0
+     * expands fine; the rational-only gate below is skipped on this path. */
+    if (P->ncond > 0 && P->conds[0].fi == 0) {
+        Expr* pt = expr_copy((Expr*)P->conds[0].point);
+        arith_warnings_mute_push();
+        Expr* pv = ds_simplify(ds_subst(expr_copy(Pc), expr_new_symbol(x), expr_copy(pt)));
+        Expr* qv = ds_simplify(ds_subst(expr_copy(Qc), expr_new_symbol(x), expr_copy(pt)));
+        arith_warnings_mute_pop();
+        if (is_finite_value(pv) && is_finite_value(qv)) x0 = pt; else expr_free(pt);
+        expr_free(pv); expr_free(qv);
+    }
+    /* No usable IC center: the rational-coefficient fallback about a small ordinary
+     * point (unchanged behaviour -- transcendental coefficients decline here). */
+    if (!x0) {
+        if (!is_rational_in(Pc, x) || !is_rational_in(Qc, x)) {
+            expr_free(Pc); expr_free(Qc); return NULL;
+        }
+        x0 = find_ordinary_point(Pc, Qc, x);
     }
     Expr* body = NULL;
-    Expr* x0 = find_ordinary_point(Pc, Qc, x);
     if (x0) { body = frobenius_ordinary_at(Pc, Qc, x, x0, FROB_ORDER); expr_free(x0); }
     expr_free(Pc); expr_free(Qc);
     if (!body) return NULL;

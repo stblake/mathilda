@@ -3099,6 +3099,10 @@ add_executable(dsolve_m17_stress_tests test_dsolve_m17_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m17_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m17_stress_tests COMMAND dsolve_m17_stress_tests)
 
+add_executable(dsolve_m34_stress_tests test_dsolve_m34_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m34_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m34_stress_tests COMMAND dsolve_m34_stress_tests)
+
 add_executable(dsolve_m18_stress_tests test_dsolve_m18_stress.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(dsolve_m18_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m18_stress_tests COMMAND dsolve_m18_stress_tests)
@@ -3910,6 +3914,29 @@ add_test(NAME dsolve_corpus_2_2_12_tests
 add_test(NAME dsolve_corpus_2_2_13_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2213.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+
+# Section 2.2.14 (Problems 1301-1400, Boyce & DiPrima): 100 records, 25 IVP,
+# 1 system.  2nd-order-linear dominated -- 38 _with_linear_symmetries, 19
+# _missing_x (const-coeff), 13 nonhomogeneous, 12 Emden-Fowler, 11 exact.
+# Baseline 90/100 (0 FAIL) -> 99/100 via three M34 root-cause fixes:
+#  - Robust variation of parameters (dsolve_common.c): the symbolic-limit definite
+#    convolution (Integrate[..,{vpS,0,x}]) is reserved for DiracDelta/causal forcing
+#    and bounded; elementary/arbitrary forcing keeps an inert indefinite Wronskian
+#    integral instead of the escalating parametric integral (1337,1341,1350,1354).
+#  - Bounded cascade hangs (dsolve_kovacic.c, dsolve_exactode.c): TimeConstrained
+#    heavy sub-solves so a Heun-class Kovacic (1392/1393) and an exact-ODE whose
+#    reduction has a non-elementary quadrature (1384) decline promptly and fall
+#    through to the Frobenius ordinary-point series.
+#  - 2nd-order IVP fit fall-through (dsolve_common.c): a general solution that
+#    cannot be fitted at a singular IC point (Bessel basis at x=0, 1381) declines so
+#    the cascade continues to the origin-centered series; and an ordinary-point
+#    series about the IC point x0!=0 with transcendental coefficients (1385).
+# Residue (1, NOT a wrong answer): 1360 forced Duffing u''+u'+u^3/5==Cos[t] --
+# genuinely nonlinear, no closed form in Maple/Mathematica/Sympy.
+add_test(NAME dsolve_corpus_2_2_14_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2214.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of

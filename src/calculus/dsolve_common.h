@@ -314,4 +314,11 @@ bool  ds_is_nonzero(const Expr* e);   /* ZERO_TEST_FALSE                       *
  * subsolver could not carry out) — used by methods that require a closed form. */
 bool  ds_has_head(const Expr* e, const char* head);
 
+/* True iff `e` carries an arbitrary/undefined function of the variable (a head
+ * with no builtin and no DownValues, e.g. the forcing f in y''=f(x)) or an inert
+ * Derivative.  Such a residual/forcing does not numericize, so a numeric verify
+ * must skip it and leave the (VoP integral / series) branch to the symbolic
+ * keep-on-undecidable policy. */
+bool  ds_has_undefined_function(const Expr* e);
+
 #endif /* MATHILDA_DSOLVE_COMMON_H */

@@ -682,6 +682,62 @@ Full per-case results: `reports/2.2.13.tsv`; bucketed report: `reports/2.2.13.md
 
 ---
 
+## Section 2.2.14 — "Problems 1301 to 1400" (Boyce & DiPrima)
+
+Corpus: `DE_examples_2214.m` — 100 records, **99 scalar (25 IVP), 1 system**. The
+first Boyce & DiPrima section: 2nd-order-linear dominated — 38 `_with_linear_symmetries`,
+19 `_missing_x` (const-coeff), 13 nonhomogeneous, 12 Emden–Fowler (mostly Euler–Cauchy),
+11 exact.
+`ctest -R dsolve_corpus_2_2_14_tests` · gate baseline **1**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-10 (baseline) | 90 / 100 | 90.0% | 10 | 0 FAIL, 10 UNEVAL: VoP verify-hangs, exact/Kovacic cascade-hangs, a singular-IVP fit, a transcendental-coeff series, a forced Bessel, plus the forced-Duffing residue. |
+| 2026-09-10 (**M34**)  | **99 / 100** | **99.0%** | **1** | **+9, FAIL→0, 0 regression.** Four root-cause fixes below. |
+
+**M34 fixes** (all shared-substrate — lift earlier sections, none regress):
+1. **Numeric-zero verify short-circuit + robust variation of parameters
+   (`src/calculus/dsolve_common.c`).** (a) `dsolve_verify_body` keeps a branch whose
+   residual is NUMERICALLY zero at a spread of clean real points, before the
+   symbolic `zero_test_decide` whose precision ladder climbs for >8 s on a residual
+   that IS zero but carries Log/ArcTan branch cuts (the VoP answer of `y''+y==Tan[x]`
+   / `2 Sec[x/2]`, 1337/1341); the reject path (a decidably-nonzero residual) is
+   unchanged. (b) `dsolve_variation_of_parameters` reserves the symbolic-limit
+   definite convolution for DiracDelta forcing and keeps a per-term INDEFINITE
+   Wronskian integral (inert when non-elementary) for every other forcing, matching
+   Mathematica's integral form and never entering the parametric DiffUnderInt
+   escalation that blows up on `Tan`/`Sec`/arbitrary `g` (1350/1354).
+2. **Bounded Kovacic + complex-pole gate (`src/calculus/dsolve_kovacic.c`).** A
+   per-call wall-clock budget + bounded coefficient `Solve`, and Case-1c declines a
+   NON-REAL pole (the complex-conjugate pole pair of `(x^3+1)y''+4x y'+y==0`, whose
+   `ds_simplify(theta)` on the complex radicals spins for many seconds) — a genuinely
+   Heun equation with no Liouvillian solution, which then falls to the Frobenius
+   ordinary-point series (1392/1393). Its forcing closure also accepts an
+   arbitrary-`g` inert-Integrate VoP particular (skips the un-numericizable
+   `numeric_verify`), closing the forced Bessel operator 1350.
+3. **Bounded ExactODE sub-solve + SeriesData IVP fit (`src/calculus/dsolve_exactode.c`,
+   `dsolve_common.c`).** The exact reduction's recursive first-order sub-solve is
+   `TimeConstrained` (its integrating-factor quadrature `Integrate[E^(-Cos[x]),x]` is
+   non-elementary AND slow to give up, 1384), so it declines to Frobenius; and
+   `dsolve_fit_constants` now takes `Normal[body]` of a SeriesData body so a series
+   IVP fits `a[0]=C[1], a[1]=C[2]` at the IC point. The FIT_UNDECIDED fall-through is
+   extended to a 2nd-order IVP, so a special-function general solution singular at the
+   IC point (Bessel at x=0, 1381) declines to the origin-centred series.
+4. **Frobenius series about the IC point (`src/calculus/dsolve_frobenius.c`).**
+   `dsolve_frobenius_shifted_try` prefers the IVP's IC point as the expansion center
+   when it is an ordinary point, and lifts the rational-only gate on that path, so a
+   TRANSCENDENTAL-coefficient equation with no closed form Taylor-expands about x0
+   (`x^2 y''+(x+1)y'+3 Log[x] y==0, y[1]==2, y'[1]==0`, 1385).
+
+**Residue (1, NOT a wrong answer — a bounded decline):**
+- `1360` `u''+u'+u^3/5==Cos[t]`, `u[0]==2, u'[0]==0` — a forced Duffing oscillator,
+  genuinely nonlinear, with no closed form in **Maple, Mathematica, or SymPy** (all ✗
+  in the source table).
+
+Full per-case results: `reports/2.2.14.tsv`; bucketed report: `reports/2.2.14.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
