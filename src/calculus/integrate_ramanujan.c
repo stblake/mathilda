@@ -758,14 +758,18 @@ static bool iv_prove_pos(const Expr* e, const Expr* as) {
     return iv_eval(e, as, &v) && ((v.lo > 0.0) || (v.lo == 0.0 && v.lo_open));
 }
 
-/* Prove the fugacity gate -1 < e <= 1 on the box: the lower bound is STRICT
- * (exclude the Bose boundary gamma' = -1, whose convergence strip differs),
- * the upper is nonstrict (the Fermi boundary gamma' = 1 keeps Re s > 0). */
+/* Prove the no-interior-pole gate gamma' > -1 on the box.  The lower bound is
+ * STRICT (exclude the Bose boundary gamma' = -1, whose convergence strip differs
+ * and which the concrete `bose` branch handles).  There is deliberately NO upper
+ * bound: for every gamma' > -1 the denominator A e^(c x) + gamma is zero-free on
+ * (0,Inf) (a root needs e^(c x) = -gamma' > 1, i.e. gamma' < -1), so the integral
+ * converges and equals its Fermi-Dirac analytic continuation for arbitrarily
+ * large fugacity gamma' > 1 (the degenerate Fermi gas), not just |gamma'| <= 1. */
 static bool iv_prove_fugacity(const Expr* e, const Expr* as) {
     Iv v;
     if (!iv_eval(e, as, &v)) return false;
     bool lower = (v.lo > -1.0) || (v.lo == -1.0 && v.lo_open);
-    return lower && (v.hi <= 1.0);
+    return lower;
 }
 
 /* A_eff > 0: engine proof, else the interval gate (symbolic fugacity). */
@@ -773,7 +777,7 @@ static bool prove_pos(const Expr* e, Expr* as) {
     return prove_true(Gt(cp(e), mk_int(0)), as) || iv_prove_pos(e, as);
 }
 
-/* 1/(A e^(c x) + gamma), A e^(c0) > 0, c > 0, gamma real with -1 <= gamma' <= 1
+/* 1/(A e^(c x) + gamma), A e^(c0) > 0, c > 0, gamma real with gamma' >= -1
  * (gamma' = gamma / A_eff, A_eff = A e^(c0)):  the exponential-geometric kernel of
  * the Bose-Einstein / Fermi-Dirac / general-fugacity integrals.  With u = e^(-c x),
  *   1/(e^(c x)+g') = u/(1+g' u) = (-1/g') sum_{j>=1} (-g')^j u^j    (|g'| e^(-c x) < 1)
@@ -783,8 +787,18 @@ static bool prove_pos(const Expr* e, Expr* as) {
  *                 g' = +1 (Fermi) -> Gamma(sv) c^(-sv) (-PolyLog(sv,-1)) = ... eta(sv),
  *                 strip Re sv > 0 (the -PolyLog form stays finite at sv=1, unlike
  *                 (1-2^(1-sv)) Zeta(sv) which is 0*Infinity there).
- * No interior pole on (0,Inf) for |g'| <= 1 (e^(c x) = -g' has x = ln(-g')/c <= 0);
- * at x=0 the denominator is A_eff(1+g'), zero only for g' = -1, hence the extra
+ * The admissible range is the exact CONVERGENCE region gamma' >= -1, NOT |g'| <= 1:
+ * the denominator A_eff(e^(c x) + g') is pole-free on (0,Inf) iff e^(c x) = -g' has
+ * no root x > 0, i.e. iff -g' <= 1, i.e. g' >= -1.  For g' > 1 -- the high-fugacity
+ * / positive-chemical-potential DEGENERATE Fermi gas (electrons in metals,
+ * white-dwarf matter) -- the geometric series above diverges near x=0, but the
+ * integral still converges and equals the same closed form by analytic
+ * continuation: the standard Fermi-Dirac integral identity
+ *   F_{sv-1}(eta) = -Li_{sv}(-e^{eta})    (Dingle/Blakemore),
+ * Li_sv being analytic off the cut [1,Inf) while its argument -g' < -1 sits on the
+ * negative real axis.  So the gate below is a single lower bound g' >= -1; the old
+ * upper cap |g'| <= 1 tracked the *series'* convergence, not the *integral's*.
+ * At x=0 the denominator is A_eff(1+g'), zero only for g' = -1, hence the extra
  * Re sv > 1 there.  The keyhole/reflection identity PolyLog(sv,1) = Zeta(sv) is
  * used to land the Bose case on the canonical Zeta head (Simplify does not do this
  * for a symbolic sv). */
@@ -836,13 +850,17 @@ static bool rec_expgeom(const Expr* K, const Expr* x, const Expr* sv,
 
     Expr* gp = simp(Tms(cp(gamma), Pw(cp(Aeff), mk_int(-1))));  /* gamma' = gamma/A_eff */
     expr_free(gamma);
-    /* Real gamma' with -1 <= gamma' <= 1 (a complex gamma' leaves the inequalities
-     * unevaluated, so prove_true is False -> declined).  A concrete gamma' is
-     * discharged by the engine; a SYMBOLIC fugacity is admitted by the interval
-     * gate when the Assumptions bound it into (-1, 1] (e.g. 0 < z < 1 proves the
-     * general Bose integral 1/(z^-1 e^x - 1) -> Gamma[s] PolyLog[s, z]). */
-    if (!prove_true(And2(mk_fn2("GreaterEqual", cp(gp), mk_int(-1)),
-                         mk_fn2("LessEqual", cp(gp), mk_int(1))), assumptions) &&
+    /* Real gamma' with gamma' >= -1 (a complex gamma' leaves the inequality
+     * unevaluated, so prove_true is False -> declined).  The single lower bound
+     * gamma' >= -1 IS the exact convergence condition (no interior pole; see
+     * iv_prove_fugacity): it admits gamma' = -1 (Bose -> Zeta, strip Re s > 1),
+     * the Fermi boundary gamma' = 1, and the high-fugacity Fermi region gamma' > 1
+     * (degenerate gas), while still declining the divergent Bose region gamma' < -1.
+     * A concrete gamma' is discharged by the engine; a SYMBOLIC fugacity is
+     * admitted by the interval gate when the Assumptions bound it above -1 (e.g.
+     * 0 < z < 1 proves 1/(z^-1 e^x - 1) -> Gamma[s] PolyLog[s, z]; z > 0 proves the
+     * degenerate Fermi 1/(e^x + z) -> -Gamma[s] PolyLog[s, -z]/z). */
+    if (!prove_true(mk_fn2("GreaterEqual", cp(gp), mk_int(-1)), assumptions) &&
         !iv_prove_fugacity(gp, assumptions)) {
         expr_free(c1); expr_free(Aeff); expr_free(gp); return false;
     }

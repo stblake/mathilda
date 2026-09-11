@@ -253,7 +253,9 @@ static void test_bose_fermi(void) {
     /* Monomial substitution: 1/(e^Sqrt[x]-1) -> 2 Zeta(2) = Pi^2/3. */
     assert_closes("Integrate[1/(Exp[Sqrt[x]]-1), {x,0,Infinity}, "
                   "Method -> \"RamanujanMasterTheorem\"]", "Pi^2/3", NULL);
-    /* Out of scope: |gamma'| = 2 > 1 -> unevaluated (never a wrong value). */
+    /* Divergent Bose side gamma' = -2 < -1 (interior pole at x = Log[2]) ->
+     * unevaluated (never a wrong value).  The relaxed gate admits gamma' > 1
+     * (high-fugacity Fermi, see test_high_fugacity_fermi) but not gamma' < -1. */
     assert_head_unevaluated(
         "Integrate`RamanujanMasterTheorem[1/(Exp[x]-2), {x,0,Infinity}]",
         "Integrate`RamanujanMasterTheorem");
@@ -290,6 +292,37 @@ static void test_symbolic_fugacity(void) {
         "Integrate`RamanujanMasterTheorem[x^(s-1)/(z^-1 Exp[x]-1), {x,0,Infinity}]",
         "Integrate`RamanujanMasterTheorem");
     /* Provably out-of-range fugacity (z > 2 => |gamma'| > 1, divergent) -> declines. */
+    assert_head_unevaluated(
+        "Integrate`RamanujanMasterTheorem[x^(s-1)/(Exp[x]-z), {x,0,Infinity}, "
+        "Assumptions -> Re[s] > 1 && z > 2]",
+        "Integrate`RamanujanMasterTheorem");
+}
+
+/* High-fugacity / positive-chemical-potential Fermi-Dirac (gamma' > 1): the
+ * DEGENERATE Fermi gas (electrons in metals, white-dwarf matter).  The
+ * denominator e^(c x) + gamma' with gamma' > 1 has no interior pole, so the
+ * integral converges for Re s > 0 and equals -Gamma(s) c^(-s) PolyLog(s,-gamma')/gamma'
+ * by the Fermi-Dirac analytic continuation -- the geometric series diverges here,
+ * the integral does not.  These were declined before the fugacity gate was relaxed
+ * from the series bound |gamma'| <= 1 to the true convergence bound gamma' >= -1. */
+static void test_high_fugacity_fermi(void) {
+    /* Concrete, s = 1: Int_0^Inf dx/(e^x + a) = (1/a) Log(1 + a).  a = 2 -> Log[3]/2. */
+    assert_closes("Integrate[1/(Exp[x]+2), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "Log[3]/2", NULL);
+    /* Concrete, s = 2: -PolyLog[2,-2]/2 (matches NIntegrate ~= 0.718373). */
+    assert_closes("Integrate[x/(Exp[x]+2), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "-PolyLog[2,-2]/2", NULL);
+    /* Larger fugacity, s = 1: a = 5 -> Log[6]/5. */
+    assert_closes("Integrate[1/(Exp[x]+5), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "Log[6]/5", NULL);
+    /* Symbolic degenerate Fermi gas: 1/(e^x + z), z > 0 admitted by the interval
+     * gate (gamma' = z > 0 > -1) -> -Gamma(s) PolyLog(s,-z)/z, strip Re s > 0. */
+    assert_cond_closes("Integrate[x^(s-1)/(Exp[x]+z), {x,0,Infinity}, "
+                       "Method -> \"RamanujanMasterTheorem\", Assumptions -> s > 0 && z > 0]",
+                       "-Gamma[s] PolyLog[s,-z]/z", "s > 0 && z > 0");
+    /* The divergent Bose side (gamma' < -1) must STILL decline: the relaxation
+     * lifted only the upper bound.  x^(s-1)/(e^x - z), z > 2 has gamma' = -z < -1
+     * (interior pole at x = Log[z]) -> unevaluated. */
     assert_head_unevaluated(
         "Integrate`RamanujanMasterTheorem[x^(s-1)/(Exp[x]-z), {x,0,Infinity}, "
         "Assumptions -> Re[s] > 1 && z > 2]",
@@ -374,6 +407,7 @@ void test_integrate_ramanujan(void) {
     TEST(test_parametric_differentiation);
     TEST(test_bose_fermi);
     TEST(test_symbolic_fugacity);
+    TEST(test_high_fugacity_fermi);
     TEST(test_frullani);
     TEST(test_log_weighted);
     TEST(test_declines_cleanly);

@@ -1763,7 +1763,7 @@ power prefactor sets `s = ρ + 1`:
 | `BesselJ[ν, λ x]`, `λ>0` | `2^{s-1} λ^{-s} Γ((ν+s)/2)/Γ((ν-s)/2+1)` | `-Re ν<Re s<3/2` |
 | `pFq[{a}; {b}; -λ x]`, `λ>0` | `(∏Γ(b_j)/∏Γ(a_i)) Γ(s) (∏Γ(a_i-s)/∏Γ(b_j-s)) λ^{-s}` | `0<Re s<min Re a_i` |
 | `PolyLog[ν, -λ x]`, `λ>0` | `π (-s)^{-ν} λ^{-s} / Sin(π s)` | `-1<Re s<0` |
-| `1/(e^{c x}+γ)`, `c>0`, `-1≤γ≤1` | `c^{-s} Γ(s) (-1/γ) PolyLog(s, -γ)` | `0<Re s` (`1<Re s` if `γ=-1`) |
+| `1/(e^{c x}+γ)`, `c>0`, `γ≥-1` | `c^{-s} Γ(s) (-1/γ) PolyLog(s, -γ)` | `0<Re s` (`1<Re s` if `γ=-1`) |
 
 The last row is the **exponential-geometric** kernel of the statistical-mechanics
 integrals: expanding `1/(e^{cx}+γ) = (-1/γ) Σ_{j≥1} (-γ)^j e^{-jcx}` and
@@ -1772,14 +1772,24 @@ integrating term by term lands on `PolyLog`. Its two headline specialisations ar
 Debye; the denominator zero at `x=0` tightens the strip to `Re s>1`) and `γ=+1`
 **Fermi–Dirac** `∫₀^∞ x^{s-1}/(e^{cx}+1) = c^{-s} Γ(s) η(s)` (emitted as
 `-Γ(s) PolyLog(s,-1)`, which stays finite at `s=1` where `(1-2^{1-s})ζ(s)` would
-be `0·∞`). A **symbolic fugacity** is admitted too — the general Bose integral
-`∫₀^∞ x^{s-1}/(z^{-1} e^x - 1) dx = Γ(s) PolyLog(s, z)` closes for a symbolic `z`
-whenever the `Assumptions` confine `γ' = -z` to `(-1, 1]`. The built-in
-assumption engine only discharges syntactic matches (it proves neither `1/z>0`
-nor `-1≤-z≤1` from `0<z<1`), so the `-1<γ'≤1` gate is decided by a small **sound
-interval-bound prover** over the parameter box read off the `Assumptions`:
-interval arithmetic yields a guaranteed enclosure, so the gate never accepts an
-inadmissible fugacity (an unbounded or out-of-range `z` simply declines).
+be `0·∞`). The admitted range is the exact **convergence** region `γ≥-1`, not the
+series' `|γ|≤1`: for `γ>1` — the high-fugacity / positive-chemical-potential
+**degenerate Fermi gas** (electrons in metals, white-dwarf matter) — the
+denominator `e^{cx}+γ` has no interior zero, so the integral converges for
+`Re s>0` and equals the same `-c^{-s} Γ(s) PolyLog(s,-γ)/γ` by the Fermi–Dirac
+analytic continuation `F_{s-1}(η)=-Li_s(-e^{η})` (Dingle/Blakemore), even though
+the geometric series diverges there; e.g. `∫₀^∞ 1/(e^x+2) dx = ½ ln 3`,
+`∫₀^∞ x/(e^x+2) dx = -½ PolyLog(2,-2)`. Only the divergent Bose region `γ<-1`
+(interior pole at `x=ln(-γ)>0`) stays declined. A **symbolic fugacity** is
+admitted too — the general Bose integral `∫₀^∞ x^{s-1}/(z^{-1} e^x - 1) dx =
+Γ(s) PolyLog(s, z)` closes for `0<z<1` and the degenerate Fermi
+`∫₀^∞ x^{s-1}/(e^x + z) dx = -Γ(s) PolyLog(s, -z)/z` closes for `z>0`. The
+built-in assumption engine only discharges syntactic matches (it proves neither
+`1/z>0` nor `γ'≥-1` from the raw bound), so the `γ'≥-1` gate is decided by a
+small **sound interval-bound prover** over the parameter box read off the
+`Assumptions`: interval arithmetic yields a guaranteed enclosure, so the gate
+never accepts an inadmissible fugacity (an unbounded-below or out-of-range `z`
+simply declines).
 
 Four operational layers extend the table:
 
