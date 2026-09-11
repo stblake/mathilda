@@ -76,6 +76,29 @@ static bool bern_Y_nonalgebraic(const Expr* e, const char* Yn) {
     return false;
 }
 
+/* Does `e` contain a Power whose BASE is a sum (Plus) mentioning Y — i.e. Y inside a
+ * compound rational denominator / polynomial base such as (4 y - 4 Sin[x])^(-1)?  A
+ * genuine Bernoulli term B(x) Y^n has base == Y (a bare symbol), never a sum, so such a
+ * form is NOT Bernoulli; worse, the exponent detector's Cancel on the resulting Möbius
+ * ratio can HANG (the trig-rational RHS of the exact equation 2.2.17-1697 — minutes).
+ * Decline early so the cascade reaches the owning method (Exact / AbelAIR).  Mirrors the
+ * bern_mixed_radical / bern_Y_nonalgebraic early gates. */
+static bool bern_Y_in_sum_power(const Expr* e, const char* Yn) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL
+            && base->data.function.head->data.symbol.name == SYM_Plus
+            && ds_contains(base, Yn)) return true;
+    }
+    if (bern_Y_in_sum_power(h, Yn)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (bern_Y_in_sum_power(e->data.function.args[i], Yn)) return true;
+    return false;
+}
+
 static Expr* powneg1(Expr* base) { /* base^-1; base consumed */
     return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ base, expr_new_integer(-1) }, 2);
 }
@@ -92,6 +115,7 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
     Expr* FY = ds_subst(F, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Yn));
     if (bern_mixed_radical(FY, xvar, Yn)) { expr_free(FY); return NULL; }
     if (bern_Y_nonalgebraic(FY, Yn)) { expr_free(FY); return NULL; }
+    if (bern_Y_in_sum_power(FY, Yn)) { expr_free(FY); return NULL; }
 
     /* Q = FY - Y F_Y */
     Expr* Q = eval_and_free(ds_call2(SYM_Subtract, expr_copy(FY),
@@ -158,10 +182,21 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
 
     Expr** out;
     if (two_signed) {
-        out = malloc(2 * sizeof(Expr*));
-        out[0] = body;
-        out[1] = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(body)));
-        *nbranch = 2;
+        /* Emit both real roots, but drop a sign that is CONFIDENTLY nonzero against the
+         * original ODE while the other verifies (a spurious branch of the even-root
+         * inverse).  Genuine two-branch solutions keep both (each residual ~0), so this
+         * never loses a valid branch; it is defence-in-depth alongside the fitter's
+         * verifying-root selection. */
+        Expr* bpos = body;
+        Expr* bneg = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(body)));
+        bool okp = ds_branch_num_ok(P, bpos), okn = ds_branch_num_ok(P, bneg);
+        if (okp && !okn) {
+            out = malloc(sizeof(Expr*)); out[0] = bpos; expr_free(bneg); *nbranch = 1;
+        } else if (okn && !okp) {
+            out = malloc(sizeof(Expr*)); out[0] = bneg; expr_free(bpos); *nbranch = 1;
+        } else {
+            out = malloc(2 * sizeof(Expr*)); out[0] = bpos; out[1] = bneg; *nbranch = 2;
+        }
     } else {
         out = malloc(sizeof(Expr*));
         out[0] = body;

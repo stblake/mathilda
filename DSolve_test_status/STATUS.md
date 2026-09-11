@@ -814,6 +814,50 @@ Full per-case results: `reports/2.2.16.tsv`; bucketed report: `reports/2.2.16.md
 
 ---
 
+## Section 2.2.17 — "Problems 1601 to 1700" (Nasser Abbasi)
+
+Corpus: `DE_examples_2217.m` — 100 records, **all scalar (28 IVP), 0 systems**. First-order
+dominated: 27 homogeneous, 23 Abel-tagged (most also `_homogeneous`/`_exact`, already solved),
+14 separable, 8 Bernoulli, 8 exact, 6 quadrature, 4 linear, 2 Riccati, plus 8 tagged
+`y=_G(x,y')` (no standard method).
+`ctest -R dsolve_corpus_2_2_17_tests` · gate baseline **13**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-11 (baseline) | 79 / 100 | 79.0% | 21 | **5 FAIL** (fractional-power ODEs shipping a wrong branch: 1622/1624/1636/1638/1641) + 16 UNEVAL. |
+| 2026-09-11 (**M37**)  | **87 / 100** | **87.0%** | **13** | **0 FAIL, 0 regression.** 5 FAILs fixed (numeric branch filters / verifying-root fitter / prelude-matching post-fit gate); `DSolve\`AbelAIR` closes 1604/1606/1607/1676. Gate baseline **13**. |
+
+**M37 additions.**
+- **Fractional-power branch correctness** (`src/calculus/dsolve_common.c`, `dsolve_bernoulli.c`,
+  `dsolve_separable.c`): the 5 FAILs were `√y`/`y^(1/3)`/`y^(3/2)` ODEs shipping a demonstrably
+  wrong explicit branch (e.g. 1638 `y'−2y==2√y, y(0)=1` → spurious `y=1`; 1622 `y'=3x(y−1)^(1/3)`
+  → a spurious complex twin). A shared numeric back-substitution filter matching the corpus
+  prelude's verdict now: (a) makes `dsolve_fit_constants` pick the `Solve` root that satisfies the
+  ODE (not blindly `args[0]`); (b) drops a robustly-nonzero `±`/principal-root branch in
+  Separable/Bernoulli (`ds_branch_num_ok`, gated by a cheap `ds_has_radical_power` pre-check); and
+  (c) a `dsolve_run` post-fit gate (`ds_branch_corpus_verifiable`) drops any first-order explicit
+  branch the harness would score BAD, so the cascade falls through to a verifiable (often implicit)
+  form (1636 → `DSolve\`Separable` `ArcCoth` first integral). The gate reuses the prelude grid +
+  majority, so it can only remove would-be-FAIL branches. Anti-overfit: `t_m37_fractional_power_branch`.
+- **`DSolve\`AbelAIR`** (`src/calculus/dsolve_abel_air.c`, new method): Abel-2nd-kind / rational-in-y
+  `y' == N/D` with `D = c(x)(P1 y+P0)^k` (single linear y-factor, `k∈{1,2}`) → scaling `u=y/s`
+  (`s=−P0/P1`) makes it separable → implicit first integral (implicit-function-rule verified; the
+  separation is checked exactly before integrating). Closes 1604/1606/1607/1676 — the Abel forms the
+  polynomial-RHS specialists reject. A down payment on the deferred full AIR method (M13). Anti-overfit:
+  `t_m37_abel_air`.
+
+**Residue (13, NOT wrong answers — bounded declines):**
+- The eight `y=_G(x,y')` nonelementary equations `1609/1610/1611/1612/1614/1616/1618` (`y'=tan(xy)`,
+  `y'=√(x²+y²)`, `y'=(x²+y²)²`, …) and `1691` — all `sympySolved=False`, no closed form.
+- `1624` `y'=3x(y−1)^(1/3), y(3)=−7`: the real solution `1−(x²−5)^(3/2)` needs real-branch cube-root
+  reasoning Mathilda's principal branch lacks.
+- `1601` (a garbled `Solve` inversion of the `ArcSin` relation), `1673` (Riccati), `1681`/`1689`
+  (nonelementary integrating factor).
+
+Full per-case results: `reports/2.2.17.tsv`; bucketed report: `reports/2.2.17.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:

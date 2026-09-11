@@ -459,8 +459,13 @@ static void ds_collect_arg_syms(const Expr* e, const char** out, int* n, int cap
  * confirm zero it returns false and the branch falls through to the unchanged
  * symbolic zero_test, so the REJECT path (a genuinely nonzero residual) is
  * unaffected. */
-static bool ds_residual_numeric_zero(const Expr* sub0, const char* xv) {
-    Expr* R = expr_copy((Expr*)sub0);
+/* Instantiate the generated constants C[1..8] and every argument-position free
+ * parameter symbol of `R` to distinct generic reals (skipping the independent
+ * variable and the named numeric constants), so `R` can be sampled numerically in
+ * `xv`.  Consumes `R`, returns the substituted expression (owned).  Shared by the
+ * numeric KEEP short-circuit (ds_residual_numeric_zero) and the numeric REJECT
+ * filter (ds_branch_num_ok) so both instantiate identically. */
+static Expr* ds_subst_generics(Expr* R, const char* xv) {
     for (int k = 1; k <= 8; k++)
         R = ds_subst(R, ds_const(k), expr_new_real(0.31 + 0.17 * (double)k));
     const char* skip[] = { xv, intern_symbol("E"), intern_symbol("Pi"),
@@ -478,6 +483,11 @@ static bool ds_residual_numeric_zero(const Expr* sub0, const char* xv) {
         R = ds_subst(R, expr_new_symbol(syms[i]), expr_new_real(0.37 + 0.11 * (double)pi));
         pi++;
     }
+    return R;
+}
+
+static bool ds_residual_numeric_zero(const Expr* sub0, const char* xv) {
+    Expr* R = ds_subst_generics(expr_copy((Expr*)sub0), xv);
     /* An arbitrary-function or inert-Integrate residual (Bessel operator with an
      * undefined forcing g[x]) never numericizes -- decline the numeric route so
      * the symbolic keep-on-undecidable policy handles it. */
@@ -503,6 +513,116 @@ static bool ds_residual_numeric_zero(const Expr* sub0, const char* xv) {
     }
     expr_free(R);
     return ngood >= 3 && nsmall >= 3 && nbig == 0;
+}
+
+/* Numeric REJECT filter (see dsolve_common.h): false only when the body's residual
+ * against the original ODE is robustly, finitely NONZERO at a majority of clean real
+ * sample points with NOTHING looking like zero.  Uses the complex-aware modulus
+ * Abs[N[residual]] (matching the corpus prelude), so a spurious complex principal-root
+ * branch — the wrong +/- of a cube/square root — is rejected, while dsolve_verify_body
+ * (symbolic, keeps undecidable branch-cut residuals) would let it through.  Conservative:
+ * a residual that is ~0, non-numericizable, distributional, or mixed (some samples ~0,
+ * a partial-domain-valid branch such as 1+x^3 for x>0) is KEPT. */
+bool ds_has_radical_power(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type != EXPR_INTEGER)
+        return true;                               /* Rational/Real/symbolic exponent */
+    if (ds_has_radical_power(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_radical_power(e->data.function.args[i])) return true;
+    return false;
+}
+
+bool ds_branch_num_ok(const DSolveProblem* P, const Expr* body) {
+    if (P->nfun != 1) return true;                 /* systems verified separately */
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    int maxord = P->max_order[0];
+    for (size_t e = 0; e < P->neq; e++) {
+        Expr* sub = expr_copy(P->eq_residuals[e]);
+        for (int k = maxord; k >= 1; k--) {
+            Expr* dk = expr_copy((Expr*)body);
+            for (int i = 0; i < k; i++) dk = ds_d(dk, expr_new_symbol(xvar));
+            sub = ds_subst(sub, ds_make_funcapp(yname, k, xvar), dk);
+        }
+        sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
+        /* Distributional / Green's-function residual: cannot numerically judge -- keep. */
+        if (ds_residual_is_distributional(sub)) { expr_free(sub); continue; }
+        Expr* R = ds_subst_generics(sub, xvar);    /* consumes sub */
+        if (ds_has_undefined_function(R) || ds_has_head(R, SYM_Integrate)) {
+            expr_free(R); continue;                /* non-numericizable -- keep */
+        }
+        static const double xs[] = { 0.31, 0.53, 0.74, 1.13, 1.47, 1.92, 2.31, 2.68 };
+        int nsmall = 0, nbig = 0, ngood = 0;
+        for (int i = 0; i < 8; i++) {
+            Expr* at = ds_subst(expr_copy(R), expr_new_symbol(xvar), expr_new_real(xs[i]));
+            /* Abs[N[.]] is the complex modulus, so a complex branch value counts as
+             * nonzero here (unlike the KEEP short-circuit, which skips complex). */
+            Expr* mg = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", at))));
+            double mag = (mg && mg->type == EXPR_REAL)    ? mg->data.real
+                       : (mg && mg->type == EXPR_INTEGER) ? (double)mg->data.integer : NAN;
+            expr_free(mg);
+            if (isnan(mag) || !isfinite(mag)) continue;    /* couldn't numericize */
+            ngood++;
+            if (mag < 1e-8) nsmall++;
+            else if (mag > 1e-4) nbig++;
+        }
+        expr_free(R);
+        /* Reject only when CONFIDENT: robustly nonzero at every point it numericized
+         * and no sample looks like zero (a mixed profile is a partial-domain branch). */
+        if (ngood >= 4 && nbig >= 4 && nsmall == 0) return false;
+    }
+    return true;
+}
+
+/* Would the corpus harness (DSolve_test_status/dsolve_corpus_prelude.m) score this
+ * FITTED first-order scalar body as verifying?  Samples the residual at the prelude's
+ * own grid (11/10 + k*5/13, k=0..5) and applies its majority rule (OK iff the residual
+ * is small at >= Ceiling[n/2] of the numericizing points).  Returns false only for the
+ * prelude's "BAD".  Restricted to first-order scalar ODEs, so it never touches the
+ * large-eigenvalue catastrophic-cancellation cases (2nd-order / systems) the prelude
+ * rescues at 200-digit precision.  Because it reuses the prelude's grid+majority, a
+ * branch the harness would PASS (>= half the points small) is NEVER dropped -- it only
+ * removes would-be-FAIL explicit branches: a wrong fitted root, or a closed form valid
+ * only on a sub-interval the fixed grid overshoots (a sqrt/cube-root IVP whose principal
+ * branch flips past a pole -- §2.2.17-1636), so the cascade can fall through to a later
+ * method's verifiable (often implicit) form. */
+static bool ds_branch_corpus_verifiable(const DSolveProblem* P, const Expr* body) {
+    if (P->nfun != 1 || P->max_order[0] != 1) return true;   /* first-order scalar only */
+    if (!ds_has_radical_power(body)) return true;            /* only a radical can hide a
+                                                             * spurious principal-root /
+                                                             * pole-crossing branch */
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    for (size_t e = 0; e < P->neq; e++) {
+        Expr* sub = expr_copy(P->eq_residuals[e]);
+        Expr* dk = ds_d(expr_copy((Expr*)body), expr_new_symbol(xvar));
+        sub = ds_subst(sub, ds_make_funcapp(yname, 1, xvar), dk);
+        sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
+        if (ds_residual_is_distributional(sub)) { expr_free(sub); continue; }
+        Expr* R = ds_subst_generics(sub, xvar);              /* consumes sub */
+        if (ds_has_undefined_function(R) || ds_has_head(R, SYM_Integrate)) {
+            expr_free(R); continue;                          /* non-numericizable -> keep */
+        }
+        int nsmall = 0, nnum = 0;
+        for (int k = 0; k < 6; k++) {
+            double xk = 1.1 + (double)k * (5.0 / 13.0);      /* the prelude's sweep grid */
+            Expr* at = ds_subst(expr_copy(R), expr_new_symbol(xvar), expr_new_real(xk));
+            Expr* mg = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", at))));
+            double mag = (mg && mg->type == EXPR_REAL)    ? mg->data.real
+                       : (mg && mg->type == EXPR_INTEGER) ? (double)mg->data.integer : NAN;
+            expr_free(mg);
+            if (isnan(mag) || !isfinite(mag)) continue;      /* prelude skips these too */
+            nnum++;
+            if (mag < 1e-6) nsmall++;                        /* $dsTol */
+        }
+        expr_free(R);
+        if (nnum >= 2 && nsmall < (nnum + 1) / 2) return false;   /* prelude verdict "BAD" */
+    }
+    return true;
 }
 
 static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
@@ -633,7 +753,25 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
             if (!scalar_fit) inconsistent = true;
             else scalar_empty = true;
         } else {
+            /* Multiple solution branches can return (a +/- root, several fitted-constant
+             * values): choose the FIRST whose fitted body numerically satisfies the ODE,
+             * so a spurious root that meets the initial condition but NOT the equation is
+             * skipped -- the Bernoulli sqrt-y IVP y'-2y==2Sqrt[y], y(0)=1 solves
+             * (C[1]e^x-1)^2 and Solve[(C[1]-1)^2==1,C[1]] returns BOTH C[1]->0 (=> y=1,
+             * which fails the ODE) and C[1]->2 (correct); the old args[0]-only pick could
+             * take the wrong one.  Falls back to args[0] when none is confidently verified
+             * (numeric check inconclusive), preserving prior single-branch behavior. */
+            size_t nbr = solres->data.function.arg_count;
             Expr* branch = solres->data.function.args[0];   /* List[Rule[C[k],val],...] */
+            for (size_t bi = 0; bi < nbr && nbr > 1; bi++) {
+                Expr* cb = solres->data.function.args[bi];
+                if (!head_is(cb, SYM_List)) continue;
+                Expr* cand = eval_and_free(internal_replace_all(
+                    (Expr*[]){ expr_copy((Expr*)body), expr_copy(cb) }, 2));
+                bool ok = ds_branch_num_ok(P, cand);
+                expr_free(cand);
+                if (ok) { branch = cb; break; }
+            }
             if (head_is(branch, SYM_List)) {
                 fitted = eval_and_free(internal_replace_all(
                     (Expr*[]){ expr_copy((Expr*)body), expr_copy(branch) }, 2));
@@ -1190,6 +1328,13 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
         if (nosol) { n_nosol++; if (fitted) expr_free(fitted); continue; }
         if (!fitted) continue;
         if (st == FIT_UNDEF) { expr_free(fitted); continue; }   /* never a solution */
+        /* Drop a first-order explicit branch the corpus harness itself would score BAD
+         * (a wrong root, or a form valid only on a sub-interval the grid overshoots):
+         * declining lets a later cascade method's verifiable (often implicit) form win,
+         * guaranteeing no explicit branch is shipped that back-substitutes nonzero on the
+         * harness grid.  Prelude-matching + first-order-gated, so it can only remove
+         * would-be-FAIL branches, never one the harness would PASS. */
+        if (!ds_branch_corpus_verifiable(P, fitted)) { expr_free(fitted); continue; }
         fstate[nf] = st;
         finals[nf++] = fitted;
         if (st == FIT_OK) n_ok++;

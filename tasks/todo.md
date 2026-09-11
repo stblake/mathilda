@@ -1,41 +1,62 @@
-# Task: high-fugacity (degenerate) Fermi–Dirac half-line integrals
+# DSolve M37 — §2.2.17 corpus (Problems 1601–1700) + 5-FAIL fix + Abel AIR
 
-## Context
-`klimanek/Bose-Fermi` (SymPy) is already fully subsumed by `rec_expgeom` in
-`src/calculus/integrate_ramanujan.c`. The one real gap: the fugacity gate caps
-`|γ'| ≤ 1`, declining the convergent high-fugacity Fermi regime `γ' > 1`
-(degenerate electron gas). Fix = relax the gate's upper bound; the closed form
-and strip are already general.
+Baseline (measured, existing binary + real prelude): **79 PASS / 5 FAIL / 16 UNEVAL**.
+Target: ≈89–90 PASS, **0 FAIL**, 0 regression.
 
-## Plan
-- [ ] Relax `iv_prove_fugacity` (drop upper `v.hi <= 1.0`; keep strict lower `γ' > -1`)
-- [ ] Relax `rec_expgeom` concrete gate (`GreaterEqual[γ',-1]` only, drop `LessEqual[γ',1]`)
-- [ ] Rewrite the derivation comment to state the true convergence region `γ' ≥ -1` + analytic continuation
-- [ ] Add `test_high_fugacity_fermi()` to `tests/test_integrate_ramanujan.c` (register in main)
-- [ ] Keep the divergent-Bose (`Exp[x]-z, z>2`) decline test unchanged
-- [ ] Changelog `docs/spec/changelog/2026-09-07.md` + `Mathilda_spec.md` row
-- [ ] Extend the definite-integration entry in `docs/spec/builtins/`
-- [ ] Build (`make -j`), run REPL checks + NIntegrate cross-check, run test suite
+## Phase 0 — Corpus creation & registration
+- [ ] 0.1 Generate `DSolve_test_status/DE_examples_2217.m` via converter (100 recs, 28 IVP)
+- [ ] 0.2 Register ctest `dsolve_corpus_2_2_17_tests` in `tests/CMakeLists.txt` (after :3971)
+- [ ] 0.3 Generate `reports/2.2.17.{tsv,md}`; add STATUS.md block + README.md row
+
+## Phase 1 — Fix the 5 FAILs (MANDATORY, restores 0-FAIL) — HEADLINE ✅ (section: 83/100, 0 FAIL)
+- [x] 1.1 New substrate helper `ds_branch_num_ok(P, body)` (reject-direction) + factored `ds_subst_generics`
+- [x] 1.2 `dsolve_fit_constants` — try all Solve roots, pick verifying one (1638/1641 → PASS)
+- [x] 1.3 `dsolve_separable_try` — numeric-filter ± inversion branches (1622 → PASS)
+- [x] 1.4 `dsolve_bernoulli.c` — numeric-filter ± two_signed branches (defensive)
+- [x] 1.5 NEW: `ds_branch_corpus_verifiable` post-fit gate in dsolve_run (prelude-matching, 1st-order) → 1636 PASS via Separable-implicit; general 0-FAIL guarantee
+- [~] 1.6 0-regression check on prior corpora — IN PROGRESS (dsolve_tests + §2.2.16 running)
+  Note: 1624 → bounded UNEVAL (cube-root real-branch domain restriction; documented residue, not a wrong answer)
+
+## Phase 2 — DSolve`AbelAIR (scaling reduction u=y/g(x) → separable) ✅
+- [x] 2.1 New `src/calculus/dsolve_abel_air.c` (pipeline + implicit-function verify + exact split check)
+- [x] 2.2 Wire cascade in dsolve.c (enum, string, externs, slot @:427, pinned, init)
+- [x] 2.3 Add file to tests/CMakeLists.txt COMMON_SRC
+- [x] 2.4 Closes 1604/1606/1607/1676 (relaxed deg_N gate for 1606); anti-overfit t_m37_abel_air
+
+## Phase 3 — Opportunistic UNEVALs ✅ (net +1: 1697)
+- [x] 3.1 1601 — rational-sample split tried; REVERTED (garbled Solve inversion, earns nothing)
+- [~] 3.2 1673 — left as residue (Riccati, risky)
+- [x] 3.3 BONUS 1697 — Bernoulli `bern_Y_in_sum_power` fast-decline gate → Exact claims it (fixes a
+      pre-existing cold hang masked by warm eval-memo caching in sequential measurement)
+
+## Phase 4 — Docs, version, gates
+- [x] 4.1 Changelog block (docs/spec/changelog/2026-09-07.md), version 0.134→0.135
+- [x] 4.2 DSOLVE_PLAN.md M37 entry; docs/spec/builtins/calculus.md DSolve`AbelAIR row
+- [x] 4.3 Anti-overfit unit tests t_m37_fractional_power_branch / t_m37_abel_air
+- [x] 4.4 §2.2.17 corpus: 87/100, 0 FAIL; ctest registered gate baseline 13; STATUS/README/reports done
+- [x] 4.5 Gates — ALL GREEN: full DSolve corpus ctest (18/18 incl §2.1.2's 1000 + §2.2.1–17, 0 fail,
+      2476s); `dsolve_stress_tests` ✅; `t_m37` assertions ✅ (verified directly); `make check-c99` ✅;
+      valgrind — no new leak/error traces to my code (builtin_times uninit = macOS baseline noise;
+      426 lost blocks = pre-existing Integrate/Solve per-call baseline).
+- [x] 4.6 Rebuilt code-review graph.
 
 ## Review
-Done. Single-gate relaxation in `rec_expgeom`/`iv_prove_fugacity`
-(`src/calculus/integrate_ramanujan.c`): the fugacity gate is now the integral's
-convergence bound `γ' ≥ -1`, not the geometric series' `|γ'| ≤ 1`. This turns on
-the high-fugacity / degenerate Fermi regime `γ' > 1`, previously declined:
-- `∫₀^∞ 1/(e^x+2) = ½Log[3]` (=0.549306), `∫₀^∞ x/(e^x+2) = -½PolyLog[2,-2]`
-  (=0.718373), `∫₀^∞ 1/(e^x+5) = ⅕Log[6]` — all matched `NIntegrate` exactly.
-- Symbolic: `∫₀^∞ x^(s-1)/(e^x+z) = -Γ[s]PolyLog[s,-z]/z` (`s>0,z>0`).
-- Divergent Bose `γ'<-1` still declines (verified `Exp[x]-z, z>2`).
+**§2.2.17 corpus: 87/100, 0 FAIL** (baseline 79/5/16). The 5 FAILs (fractional-power ODEs shipping
+a wrong branch) are fixed — 0-FAIL invariant restored — via one DRY mechanism: a numeric
+back-substitution filter matching the corpus prelude's verdict, at the IVP constant-fitter
+(verifying-root selection), the Separable/Bernoulli ± branches, and a prelude-matching post-fit gate
+in `dsolve_run` (all radical-gated for perf). `DSolve\`AbelAIR` (new, scaling u=y/s → separable)
+closes 4 Abel-2nd-kind UNEVALs (1604/1606/1607/1676) — a down payment on M13, full AIR invariant
+table deferred. Bonus: a `bern_Y_in_sum_power` fast-decline gate fixed a pre-existing Bernoulli
+cold-hang on 1697 (exact eqn) that warm sequential measurement had masked.
 
-Verification: `integrate_ramanujan_tests` — new `test_high_fugacity_fermi`
-passes; the only 2 FAILs are pre-existing Hypergeometric `1F1`/`2F1` **Mellin**
-cases (confirmed identical in a stashed baseline, unrelated to `rec_expgeom`).
-`integrate_dispatch_tests` 0 FAILs. `make` clean (gcc-16), `make check-c99` exit 0.
+**Residue 13 (bounded declines, no wrong answers):** 8 `y=_G(x,y')` nonelementary (SymPy also fails),
+1624 (cube-root real-branch), 1601 (garbled Solve inversion), 1673 (Riccati), 1681/1689 (nonelementary
+integrating factor).
 
-Docs: `docs/spec/builtins/calculus.md` (transform-table row `γ≥-1` + prose),
-`docs/spec/changelog/2026-09-07.md`.
+**Changed:** dsolve_common.{c,h}, dsolve_separable.c, dsolve_bernoulli.c, dsolve_abel_air.c (new),
+dsolve.c, tests/{CMakeLists.txt,test_dsolve.c}, version.h, DSOLVE_PLAN.md, docs/spec/..., DSolve_test_status/*.
+0 regression across all 18 corpus sections. Not committed (awaiting user).
 
-Assessment answer to the user: porting `klimanek/Bose-Fermi` wholesale was
-redundant — `rec_expgeom` already subsumed all its rows; this closes the one
-genuine gap (high-fugacity Fermi). No named `FermiDiracIntegral`/`BoseEinsteinIntegral`
-heads added (not in Mathematica; the `PolyLog`/`Zeta` forms are the faithful output).
+## Review
+(to be filled at completion)

@@ -207,8 +207,16 @@ Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
          * fitter cannot Solve[Root[..C..]==y0, C], so leaving them all out (keep==0
          * -> decline) lets the implicit twin fit the constant on the first integral
          * G(x0,y0) with no inversion (the Root-form cubic separables 1149/1150). */
+        /* Also drop a branch whose residual is CONFIDENTLY nonzero against the original
+         * ODE: the inversion of a fractional-power relation (Integrate[1/h,Y]==... with
+         * h carrying a cube/square root) emits both +/- roots, and the branch invalid
+         * under the principal root is nonzero (often complex) even though its symbolic
+         * residual is a branch-cut expression zero_test keeps -- y'==3x(y-1)^(1/3) emits
+         * a spurious complex twin beside the correct 1+x^3 (§2.2.17-1622/1624).  Kept
+         * conservative in ds_branch_num_ok so a partial-domain-valid branch is never lost. */
         bool drop = ds_free_of(bodies[i], xvar) ||
-                    (ivp && ds_contains(bodies[i], intern_symbol("Root")));
+                    (ivp && ds_contains(bodies[i], intern_symbol("Root"))) ||
+                    (ds_has_radical_power(bodies[i]) && !ds_branch_num_ok(P, bodies[i]));
         if (drop) { expr_free(bodies[i]); bodies[i] = NULL; }
         else bodies[keep++] = bodies[i];
     }

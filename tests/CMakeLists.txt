@@ -713,6 +713,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_riccati.c
     ../src/calculus/dsolve_chini.c
     ../src/calculus/dsolve_abel.c
+    ../src/calculus/dsolve_abel_air.c
     ../src/calculus/dsolve_polyshift.c
     ../src/calculus/dsolve_lincoeff.c
     ../src/calculus/dsolve_almostlinear.c
@@ -3969,6 +3970,22 @@ add_test(NAME dsolve_corpus_2_2_16_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2216.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+
+# Section 2.2.17 (Problems 1601-1700, Nasser Abbasi): 100 records, 28 IVP, 0
+# systems.  First-order-dominated: 27 homogeneous, 23 Abel-tagged (most overlap
+# _homogeneous/_exact and already solve), 14 separable, 8 Bernoulli, 8 exact, 6
+# quadrature, 4 linear, 2 Riccati, plus 8 Nasser tags `y=_G(x,y')` (no standard
+# method).  M37: baseline 79/100 with 5 FAIL (wrong fractional-power branches) ->
+# 87/100, 0 FAIL.  Fixed the 5 FAILs via the numeric branch filters / verifying-root
+# fitter / prelude-matching post-fit gate (dsolve_common.c), and added DSolve`AbelAIR
+# (scaling reduction u=y/s -> separable) closing 1604/1606/1607/1676.  Residue 13
+# (bounded declines, no wrong answers): the y=_G nonelementary set (1609-1618),
+# 1601 (ds_solve garbled inversion), 1624 (cube-root real-branch), 1673 (Riccati),
+# 1681/1689 (nonelementary integrating factor), 1691.
+add_test(NAME dsolve_corpus_2_2_17_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2217.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 13)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

@@ -321,4 +321,22 @@ bool  ds_has_head(const Expr* e, const char* head);
  * keep-on-undecidable policy. */
 bool  ds_has_undefined_function(const Expr* e);
 
+/* Numeric REJECT filter over a candidate solution BODY: returns false only when the
+ * body's residual against the original ODE(s) is CONFIDENTLY, robustly NONZERO — a
+ * wrong inversion branch, a spurious +/- sign, a wrong fitted-constant root, or a
+ * complex principal-root value.  Matches the corpus prelude's own numeric verdict
+ * (which flags a complex-large |residual| as BAD via Abs), catching the wrong branches
+ * that dsolve_verify_body's keep-on-undecidable (Solve) policy lets through.  Returns
+ * true (KEEP) whenever it cannot be confident — residual ~0, non-numericizable,
+ * distributional, or MIXED (some samples ~0: a partial-domain-valid branch) — so a
+ * correct branch is NEVER dropped.  Mirror of the internal numeric KEEP short-circuit
+ * in the reject direction. */
+bool  ds_branch_num_ok(const DSolveProblem* P, const Expr* body);
+
+/* True iff `e` contains a Power with a NON-integer exponent (a radical: Rational,
+ * Real, or symbolic exponent) — the cheap structural pre-check that gates the numeric
+ * branch filters: only a fractional-power solution can hide a spurious principal-root /
+ * pole-crossing branch, so a purely rational/exp/trig/log body skips the numeric probe. */
+bool  ds_has_radical_power(const Expr* e);
+
 #endif /* MATHILDA_DSOLVE_COMMON_H */

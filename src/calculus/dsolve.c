@@ -54,6 +54,7 @@ typedef enum {
     DS_RICCATI,
     DS_CHINI,
     DS_ABEL,
+    DS_ABEL_AIR,
     DS_POLYSHIFT,
     DS_LINCOEFF,
     DS_ALMOSTLINEAR,
@@ -94,6 +95,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Riccati")              == 0) return DS_RICCATI;
     if (strcmp(s, "Chini")                == 0) return DS_CHINI;
     if (strcmp(s, "Abel")                 == 0) return DS_ABEL;
+    if (strcmp(s, "AbelAIR")              == 0) return DS_ABEL_AIR;
     if (strcmp(s, "PolynomialShiftSubstitution") == 0) return DS_POLYSHIFT;
     if (strcmp(s, "LinearCoefficients")   == 0) return DS_LINCOEFF;
     if (strcmp(s, "AlmostLinear")         == 0) return DS_ALMOSTLINEAR;
@@ -139,6 +141,7 @@ extern Expr** dsolve_fos_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_chini_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_abel_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_abel_air_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_polyshift_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lincoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lincoeff_implicit_try(DSolveProblem* P, size_t* nbranch);
@@ -179,6 +182,7 @@ extern void dsolve_fos_init(void);
 extern void dsolve_riccati_init(void);
 extern void dsolve_chini_init(void);
 extern void dsolve_abel_init(void);
+extern void dsolve_abel_air_init(void);
 extern void dsolve_polyshift_init(void);
 extern void dsolve_lincoeff_init(void);
 extern void dsolve_almostlinear_init(void);
@@ -417,6 +421,10 @@ Expr* builtin_dsolve(Expr* res) {
              * sub-class); n=2 Chini is Riccati, already claimed above. */
             if (!result) result = dsolve_run_implicit(&P, dsolve_chini_try);
             if (!result) result = dsolve_run_implicit(&P, dsolve_abel_try);
+            /* Abel-2nd-kind / rational-in-y scaling reduction (u=y/s -> separable):
+             * claims the rational-in-y forms the polynomial-RHS specialists above
+             * reject (D carries y).  Down payment on the full AIR method (M13). */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_abel_air_try);
             /* First-order substitution reductions (after the named specialists):
              * LinearCoefficients (shift/homogeneous or separable), AlmostLinear
              * (u=Integrate[g,y] -> linear), SeparableReduced (w=x^n y -> separable). */
@@ -489,6 +497,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_RICCATI:      result = dsolve_run(&P, dsolve_riccati_try);      break;
         case DS_CHINI:        result = dsolve_run_implicit(&P, dsolve_chini_try); break;
         case DS_ABEL:         result = dsolve_run_implicit(&P, dsolve_abel_try);  break;
+        case DS_ABEL_AIR:     result = dsolve_run_implicit(&P, dsolve_abel_air_try); break;
         case DS_POLYSHIFT:    result = dsolve_run_implicit(&P, dsolve_polyshift_try); break;
         case DS_LINCOEFF:
             result = dsolve_run(&P, dsolve_lincoeff_try);
@@ -559,6 +568,7 @@ void dsolve_init(void) {
     dsolve_riccati_init();
     dsolve_chini_init();
     dsolve_abel_init();
+    dsolve_abel_air_init();
     dsolve_polyshift_init();
     dsolve_lincoeff_init();
     dsolve_almostlinear_init();

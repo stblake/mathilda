@@ -2301,6 +2301,51 @@ static void t_m36_separable_cubic_log(void) {
     check_true("MatchQ[DSolve[y'[x] == (y[x]^2 - 1)/x, y, x], {{_Rule}}]");
 }
 
+static void t_m37_fractional_power_branch(void) {
+    /* §2.2.17 — fractional-power first-order IVPs whose wrong principal-root / spurious
+     * fitted-constant branch used to be shipped as a corpus FAIL.  The verifying-root
+     * fitter + the numeric branch filters now select a branch that back-substitutes to
+     * zero.  Checked at an in-domain point (the closed forms are real only on the
+     * sub-interval containing the IC — √y, (y-1)^(1/3) flip sign past a pole). */
+    /* 1638: Bernoulli √y IVP -> y=(2E^x-1)^2, NOT the spurious constant y=1. */
+    check_true("PossibleZeroQ[((y'[x]-2 y[x]-2 Sqrt[y[x]]) /. "
+               "DSolve[{y'[x]-2 y[x]==2 Sqrt[y[x]], y[0]==1}, y, x][[1]]) /. x->1/2]");
+    /* 1641: √y, wrong-sign branch rejected. */
+    check_true("PossibleZeroQ[((y'[x]-y[x]-x Sqrt[y[x]]) /. "
+               "DSolve[{y'[x]-y[x]==x Sqrt[y[x]], y[0]==4}, y, x][[1]]) /. x->1/3]");
+    /* 1636: Bernoulli y^(3/2) IVP (solves to a verifiable implicit ArcCoth relation). */
+    check_true("MatchQ[DSolve[{y'[x]-y[x] x==y[x]^(3/2) x, y[1]==4}, y, x], {{_Equal}} | {{_Rule}}]");
+    /* 1622: cube-root general solution -> the real branch (1+x^3); the spurious complex
+     * twin is dropped, so every returned branch back-substitutes to zero for x>0. */
+    check_true("Module[{s = DSolve[y'[x]==3 x (-1+y[x])^(1/3), y, x]}, "
+               "Head[s]===List && Length[s]>=1 && "
+               "AllTrue[s, PossibleZeroQ[((y'[x]-3 x (-1+y[x])^(1/3)) /. #[[1]]) /. x->3/2] &]]");
+}
+
+static void t_m37_abel_air(void) {
+    /* §2.2.17-1604/1607/1606/1676 — Abel-2nd-kind / rational-in-y forms solved by
+     * DSolve`AbelAIR (scaling u=y/s -> separable), returned as an implicit first integral
+     * and verified by the implicit-function rule: the total x-derivative of G, with y'
+     * replaced by the ODE, is identically zero. */
+    /* 1604 (class B): y' + y == 2x E^-x/(1+E^x y). */
+    check_true("Module[{r, g, f}, f = (2 x E^(-x))/(1+E^x y[x]) - y[x]; "
+               "r = DSolve[y'[x]+y[x]==(2 x E^(-x))/(1+E^x y[x]), y, x]; "
+               "MatchQ[r, {{_Equal}}] && (g = r[[1,1,1]] - r[[1,1,2]]; "
+               "PossibleZeroQ[D[g, x] /. Derivative[1][y][x] -> f])]");
+    /* 1607 (class A): y' - 2y == x E^2x/(1 - y E^-2x). */
+    check_true("Module[{r, g, f}, f = (x E^(2 x))/(1-y[x] E^(-2 x)) + 2 y[x]; "
+               "r = DSolve[y'[x]-2 y[x]==(x E^(2 x))/(1-y[x] E^(-2 x)), y, x]; "
+               "MatchQ[r, {{_Equal}}] && (g = r[[1,1,1]] - r[[1,1,2]]; "
+               "PossibleZeroQ[D[g, x] /. Derivative[1][y][x] -> f])]");
+    /* 1606 (squared denominator (E^x+y)^2): the degree-2 linear-factor branch. */
+    check_true("MatchQ[DSolve[y'[x]-y[x]==((x+1) E^(4 x))/((E^x+y[x])^2), y, x], {{_Equal}}]");
+    /* Anti-overfit: a DIFFERENT scaling-reducible Abel-2nd-kind form, (y+x)y' == y + x^2/(y+x). */
+    check_true("MatchQ[DSolve`AbelAIR[(y[x]+x) y'[x]==y[x]+x^2/(y[x]+x), y, x], {{_Equal}}]");
+    /* Regression: a genuine Riccati (polynomial-in-y denominator free of y) is NOT claimed
+     * by AbelAIR -- it declines so Riccati/Chini keep it. */
+    check_true("MatchQ[DSolve`AbelAIR[y'[x]==x^2+y[x]^2, y, x], DSolve`AbelAIR[__]]");
+}
+
 static void t_rischnorman_enum_cap_no_crash(void) {
     check_true("MatchQ[DSolve[x^2 - 1 + (y[x]^2 x^2 + x^3 + x) y'[x] == 0, "
                "y[x], x], _List | _DSolve]");
@@ -2572,6 +2617,8 @@ int main(void) {
     TEST(t_m34_corpus_cases);
     TEST(t_m35_piecewise_forcing);
     TEST(t_m36_separable_cubic_log);
+    TEST(t_m37_fractional_power_branch);
+    TEST(t_m37_abel_air);
     TEST(t_rischnorman_enum_cap_no_crash);
     TEST(t_trig_coeff_linear_first_order);
     TEST(t_linearizable_first_order);

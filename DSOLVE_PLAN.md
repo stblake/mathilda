@@ -1363,6 +1363,41 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     green; §2.1.2/§2.2.1–§2.2.15 corpus gates all held. See the §2.2.16 block in
     `DSolve_test_status/STATUS.md`. Version 0.133 → 0.134.
 
+- **M37 — §2.2.17 corpus (Problems 1601–1700, Nasser Abbasi) + fractional-power branch
+  correctness fix + `DSolve\`AbelAIR` (Abel-2nd-kind scaling reduction).** ✅ DONE. 100 records,
+  **all scalar (28 IVP), 0 systems**: first-order-dominated (27 homogeneous, 23 Abel-tagged —
+  most overlap `_homogeneous`/`_exact` and already solve — 14 separable, 8 Bernoulli, 8 exact,
+  6 quadrature, 4 linear, 2 Riccati, 8 `y=_G(x,y')` no-method). **Baseline 79/100 with 5 FAIL →
+  87/100, 0 FAIL, 0 regression.** Two increments:
+  - **Fractional-power branch correctness (the 5 FAILs).** Five `√y`/`y^(1/3)`/`y^(3/2)` ODEs
+    shipped a demonstrably wrong explicit branch (e.g. `y'−2y==2√y, y(0)=1` → spurious `y=1`
+    instead of `(2Eˣ−1)²`; `y'=3x(y−1)^(1/3)` → a spurious complex twin beside the correct
+    `1+x³`). `dsolve_run`'s symbolic verify keeps an undecidable branch-cut residual (Solve
+    policy) and the corpus prelude's numeric check then flags it. Fixed with a shared numeric
+    back-substitution filter matching the prelude's verdict, at three points
+    (`src/calculus/dsolve_common.c`, `dsolve_bernoulli.c`, `dsolve_separable.c`): the IVP
+    constant-fitter (`dsolve_fit_constants`) tries all `Solve` roots and keeps the one that
+    numerically satisfies the ODE; Separable/Bernoulli drop a robustly-nonzero `±`/principal-root
+    branch (`ds_branch_num_ok`, gated by a cheap `ds_has_radical_power` pre-check); and a
+    prelude-matching post-fit gate (`ds_branch_corpus_verifiable`) in `dsolve_run` drops any
+    first-order explicit branch the harness would score BAD, letting the cascade fall through to a
+    verifiable (often implicit) form. The gate reuses the prelude's grid+majority, so it removes
+    only would-be-FAIL branches, never a would-PASS one.
+  - **`DSolve\`AbelAIR`** (`src/calculus/dsolve_abel_air.c`) — a down payment on the deferred AIR
+    method (M13). Solves the Abel-2nd-kind / rational-in-y forms `y' == N/D` with `D` a single
+    linear y-factor `c(x)(P1 y+P0)^k` (`k∈{1,2}`) — the shapes Riccati/Chini/Abel-1st reject — by
+    the scaling `u = y/s` (`s = −P0/P1`) that makes the equation separable; returns the implicit
+    first integral `∫1/B du|_{u→y/s} − ∫A dx`, verified by the implicit-function rule with the
+    separation checked exactly before integrating. Closes 1604/1606/1607/1676. The full
+    rational-invariant solvable-class table stays deferred. Cascade after Chini/Abel-1st, before
+    the substitution reductions and the Lie backstop.
+  - *Residue (13, bounded declines, no wrong answers):* the eight `y=_G(x,y')` nonelementary
+    equations (SymPy also fails), `1624` (cube-root real-branch), `1601` (garbled `Solve`
+    inversion), `1673` (Riccati), `1681`/`1689` (nonelementary integrating factor), `1691`.
+  - Anti-overfit unit tests `t_m37_fractional_power_branch` / `t_m37_abel_air`
+    (`tests/test_dsolve.c`); `make check-c99` green; §2.1.2/§2.2.1–§2.2.16 corpus gates all held.
+    See the §2.2.17 block in `DSolve_test_status/STATUS.md`. Version 0.134 → 0.135.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -1408,6 +1443,13 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   (`z=y+f2/(3 f3)`) → Chini n=3 → same implicit first integral. `dsolve_abel.c`
   (thin front-end over the shared Chini helper). The fuller constant-invariant
   class (with an x-rescaling) is future.
+- `[✓] AbelAIR` — `y'==N(x,y)/D(x,y)` with `D=c(x)(P1 y+P0)^k` a SINGLE linear y-factor
+  (`k∈{1,2}`): the Abel-2nd-kind / rational-in-y forms Riccati/Chini/Abel-1st reject
+  (they need `D` free of y). Scaling `u=y/s` (`s=−P0/P1`, the denominator's y-root) makes
+  it separable → implicit first integral `∫1/B du|_{u→y/s}−∫A dx`, implicit-function-rule
+  verified with the separation checked exactly before integrating. Runs after Chini/Abel-1st,
+  before the substitution reductions + Lie backstop. A down payment on the deferred full AIR
+  method (M13; the rational-invariant solvable-class table stays future). `dsolve_abel_air.c`.
 - `[✓] FirstOrderSubstitution` — `y'==F(a x + b y + c)`: detect the constant ratio
   `r = F_x/F_y`, substitute `v = y + r x` → autonomous separable `v'==r+H(v)`,
   solved inline; declines (stays symbolic) when the antiderivative does not invert.
