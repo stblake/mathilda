@@ -858,6 +858,48 @@ Full per-case results: `reports/2.2.17.tsv`; bucketed report: `reports/2.2.17.md
 
 ---
 
+## Section 2.2.18 — "Problems 1701 to 1800" (Nasser Abbasi)
+
+Corpus: `DE_examples_2218.m` — 100 records, **all scalar (14 IVP), 0 systems**. 45 first-order /
+55 second-order (no order ≥ 3). Mixed: 25 2nd-order `_with_linear_symmetries`, 17 2nd-order linear
+(exact/(non)homog), 10 separable, 8 2nd-order `_missing_x`, 11 Abel-2nd-kind, 8 quadrature, 5
+Emden–Fowler (all linear/Euler subtype), plus 3 Bernoulli, 3 Riccati, 3 linear, 2 exact, 2
+homogeneous-G.
+`ctest -R dsolve_corpus_2_2_18_tests` · gate baseline **4**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-11 (baseline) | 95 / 100 | 95.0% | 5 | 0 FAIL. Mathilda's 2nd-order stack (Kovacic/NormalForm/SpecialFunctionForm/change-of-var/Frobenius) already solves the bulk out of the box. |
+| 2026-09-11 (**M38**)  | **96 / 100** | **96.0%** | **4** | **0 FAIL, 0 regression.** Fixed the `zero_test` decay false-positive that made `DSolve\`Kovacic` drop an inhomogeneous forcing → `1763`. Gate baseline **4**. |
+
+**M38 additions.**
+- **`zero_test` decay false-positive → dropped-forcing correctness fix** (`src/calculus/dsolve_common.{c,h}`,
+  `dsolve_kovacic.c`). `PossibleZeroQ`/`zero_test` return **True** for a genuinely-nonzero *decaying*
+  expression (documented; e.g. `PossibleZeroQ[E^(-2x²)] === True`). Two second-order gates used it and
+  were corrupted: (1) the Wronskian nonzero-check in `dsolve_variation_of_parameters` (a decaying
+  `W = E^(-∫P)` read as a degenerate basis → VoP declined), and (2) `DSolve\`Kovacic`'s forcing
+  detection (a decaying forcing read as homogeneous → the particular was dropped and a
+  **homogeneous-only WRONG answer** shipped — masked as UNEVAL only by the corpus prelude's
+  leaked-`C[k]`→UNFIT leniency). New shared `ds_is_structural_zero` (`Expand[·] === 0`) gates both;
+  it is strictly safer for gating (a truly-zero forcing → `yp==0`; a truly-dependent basis is still
+  structurally 0), and the sensitive `zero_test` sampler is deliberately untouched (per the documented
+  "don't gate on PossibleZeroQ for decaying exprs"). `1763` `y''+4x y'+(4x²+2)y==8E^(-x(x+2))` now
+  solves as `(C[1]+C[2]x)E^(-x²)+2E^(-x²-2x)`. **Bonus, 0 regression:** the fix also improved
+  §2.1.2 (−5), §2.2.1 (−1), §2.2.2 (−2), §2.2.6 (−2), §2.2.7 (−1) — forced equations with decaying
+  Wronskians that previously wrongly declined now solve. Anti-overfit: `t_m38_forced_decay_wronskian`.
+
+**Residue (4, NOT wrong answers — bounded declines, all `sympySolved=False`):**
+- `1708`/`1709`: Abel-2nd-kind class B rational IVPs — the M13-deferred Abel Invariant Rational class.
+- `1729`: `∫Sin[x]/(b Cos x − x Sin x)` is genuinely non-elementary (`Integrate::nonelem`), so there is
+  no elementary integrating factor.
+- `1769`: variation of parameters needs `∫E^x/√x → √π Erfi[√x]`; the Erf/Erfi Risch tower
+  (`risch_special`/`knowles_erf`/`risch_tower`) handles only `∫x^(1/2)E^x`, not negative half-integer
+  powers — extending it is a deep-Risch feature (future).
+
+Full per-case results: `reports/2.2.18.tsv`; bucketed report: `reports/2.2.18.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:

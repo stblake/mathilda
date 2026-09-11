@@ -309,6 +309,9 @@ Expr* ds_delist(Expr* e);
 /* Zero recognition: strict (proved zero) / proved-nonzero, via zero_test. */
 bool  ds_is_zero(const Expr* e);      /* ZERO_TEST_TRUE                        */
 bool  ds_is_nonzero(const Expr* e);   /* ZERO_TEST_FALSE                       */
+/* STRUCTURAL zero (Expand[e] === 0): gate constructions on a possibly-DECAYING
+ * expression with this, never ds_is_zero -- zero_test false-positives on decay. */
+bool  ds_is_structural_zero(const Expr* e);
 
 /* True iff `e` still contains the head `Integrate` / `Solve` (i.e. a call the
  * subsolver could not carry out) — used by methods that require a closed form. */

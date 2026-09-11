@@ -72,6 +72,27 @@ bool ds_contains(const Expr* e, const char* name) {
 
 bool ds_is_zero(const Expr* e)    { return zero_test_decide(e) == ZERO_TEST_TRUE; }
 bool ds_is_nonzero(const Expr* e) { return zero_test_decide(e) == ZERO_TEST_FALSE; }
+
+/* STRUCTURAL zero test: Expand[e] is the literal integer 0.  Use this -- not
+ * ds_is_zero/zero_test -- to GATE a construction on "is this expression exactly
+ * zero" whenever the expression can be a DECAYING function of the variable.
+ * zero_test's numeric shrinkage-trend ladder returns TRUE for a genuinely-nonzero
+ * decaying expression (documented PossibleZeroQ decay false-positive), e.g.
+ * `PossibleZeroQ[E^(-2 x^2)] === True`.  That silently corrupted two second-order
+ * gates: the Wronskian nonzero-check in dsolve_variation_of_parameters (a decaying
+ * W = E^(-Integrate[P]) read as a degenerate basis -> VoP declined) and Kovacic's
+ * forcing detection (a decaying forcing read as homogeneous -> dropped particular,
+ * shipping a homogeneous-only WRONG answer; cf. 2.2.18-1763 y''+4x y'+(4x^2+2)y ==
+ * 8 E^(-x(x+2))).  Structural zero is the correct notion for these gates: a truly
+ * dependent basis / a genuinely absent forcing is structurally 0, while a decaying
+ * nonzero is not -- and a false "nonzero" here is harmless (VoP proceeds and yields
+ * yp; forcing runs VoP to yp==0), whereas the numeric false "zero" DROPS work. */
+bool ds_is_structural_zero(const Expr* e) {
+    Expr* x = eval_and_free(ds_call1("Expand", expr_copy((Expr*)e)));
+    bool z = (x->type == EXPR_INTEGER && x->data.integer == 0);
+    expr_free(x);
+    return z;
+}
 bool ds_has_head(const Expr* e, const char* head) { return ds_contains(e, head); }
 
 bool ds_free_of(const Expr* e, const char* var) {
@@ -1252,7 +1273,11 @@ Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
     Expr* W = vp_matrix(dv, n, -1, NULL);
     Expr* detW = eval_and_free(ds_call1("Det", W));
     Expr* yp = NULL;
-    if (!ds_is_zero(detW)) {
+    /* Structural, not zero_test: a decaying Wronskian W = E^(-Integrate[P]) (e.g.
+     * E^(-2x^2) for the E^(-x^2) fundamental set) is genuinely nonzero but
+     * zero_test's decay heuristic reads it as zero, which made VoP wrongly decline
+     * an inhomogeneous Kovacic/Euler equation (cf. ds_is_structural_zero). */
+    if (!ds_is_structural_zero(detW)) {
         /* Collapse a trig/rational Wronskian (Cos^2+Sin^2 -> 1, ...) so the
          * per-term integrals close in elementary form and the recovered constant
          * factors are clean. */

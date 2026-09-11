@@ -2346,6 +2346,36 @@ static void t_m37_abel_air(void) {
     check_true("MatchQ[DSolve`AbelAIR[y'[x]==x^2+y[x]^2, y, x], DSolve`AbelAIR[__]]");
 }
 
+static void t_m38_forced_decay_wronskian(void) {
+    /* §2.2.18-1763: y'' + 4x y' + (4x^2+2) y == 8 E^(-x(x+2)).  Homogeneous set
+     * (C1 + C2 x) E^(-x^2); its Wronskian E^(-2x^2) DECAYS, which zero_test's decay
+     * false-positive (PossibleZeroQ[E^(-2x^2)] === True) read as identically zero.
+     * That corrupted two gates: the Wronskian nonzero-check in
+     * dsolve_variation_of_parameters (-> VoP declined) and Kovacic's forcing
+     * detection (a decaying forcing read as homogeneous -> dropped the particular,
+     * shipping a homogeneous-only WRONG answer masked as UNEVAL by the corpus
+     * prelude's leaked-C[k] leniency).  ds_is_structural_zero (Expand[.]===0) gates
+     * both now, so Kovacic adds the VoP particular 2 E^(-x^2-2x).  Verified by
+     * numeric back-substitution at x=-1, where the forcing is O(1) (8e): a
+     * dropped-forcing answer's residual there is large, not ~0. */
+    check_true("Module[{s,r}, s=DSolve[y''[x]+4 y'[x] x+(4 x^2+2) y[x]==8 E^(-x (x+2)), y, x]; "
+               "MatchQ[s,{{_Rule}}] && (r=(y''[x]+4 y'[x] x+(4 x^2+2) y[x]-8 E^(-x (x+2)))"
+               "/.s[[1]]/.{C[1]->1,C[2]->1}; Abs[N[r /. x->-1]] < 1/1000000)]");
+    /* The particular is actually present (not homogeneous-only): with both generated
+     * constants zeroed the solution is the nonzero particular 2 E^(-x^2-2x) (=2e at x=-1). */
+    check_true("Module[{s,p}, s=DSolve[y''[x]+4 y'[x] x+(4 x^2+2) y[x]==8 E^(-x (x+2)), y, x]; "
+               "p=(y[x]/.s[[1]]/.{C[1]->0,C[2]->0}); Abs[N[p /. x->-1]] > 1]");
+    /* Anti-overfit: a DIFFERENT decaying-Wronskian forced 2nd-order equation --
+     * y'' + 2x y' + (x^2+1) y == E^(-x^2/2-x), homogeneous (C1+C2 x)E^(-x^2/2),
+     * Wronskian E^(-x^2) (also decaying). */
+    check_true("Module[{s,r}, s=DSolve[y''[x]+2 y'[x] x+(x^2+1) y[x]==E^(-x^2/2-x), y, x]; "
+               "MatchQ[s,{{_Rule}}] && (r=(y''[x]+2 y'[x] x+(x^2+1) y[x]-E^(-x^2/2-x))"
+               "/.s[[1]]/.{C[1]->1,C[2]->1}; Abs[N[r /. x->-1]] < 1/1000000)]");
+    /* Regression: the homogeneous equation still solves (fast, correct) -- the fix
+     * only changes forcing/Wronskian gating, not the homogeneous Kovacic path. */
+    check_true("MatchQ[DSolve[y''[x]+4 y'[x] x+(4 x^2+2) y[x]==0, y, x], {{_Rule}}]");
+}
+
 static void t_rischnorman_enum_cap_no_crash(void) {
     check_true("MatchQ[DSolve[x^2 - 1 + (y[x]^2 x^2 + x^3 + x) y'[x] == 0, "
                "y[x], x], _List | _DSolve]");
@@ -2619,6 +2649,7 @@ int main(void) {
     TEST(t_m36_separable_cubic_log);
     TEST(t_m37_fractional_power_branch);
     TEST(t_m37_abel_air);
+    TEST(t_m38_forced_decay_wronskian);
     TEST(t_rischnorman_enum_cap_no_crash);
     TEST(t_trig_coeff_linear_first_order);
     TEST(t_linearizable_first_order);

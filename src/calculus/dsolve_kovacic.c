@@ -923,7 +923,7 @@ static Expr* kovacic_add_forcing(const DSolveProblem* P, Expr* homog, const char
     for (int k = ord; k >= 1; k--)
         g = ds_subst(g, ds_make_funcapp(yname, k, x), expr_new_integer(0));
     g = ds_subst(g, ds_make_funcapp(yname, 0, x), expr_new_integer(0));
-    if (ds_is_zero(g)) { expr_free(g); return homog; } /* genuinely homogeneous */
+    if (ds_is_structural_zero(g)) { expr_free(g); return homog; } /* genuinely homogeneous */
     g = Neg(g);
     Expr* lead = fn2("Coefficient", expr_copy((Expr*)R),
                      ds_make_funcapp(yname, ord, x));  /* a_n (coeff of y^(ord)) */
@@ -973,7 +973,7 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
         for (int k = P->max_order[0]; k >= 1; k--)
             g0 = ds_subst(g0, ds_make_funcapp(yname, k, x), expr_new_integer(0));
         g0 = ds_subst(g0, ds_make_funcapp(yname, 0, x), expr_new_integer(0));
-        forced = !ds_is_zero(g0);
+        forced = !ds_is_structural_zero(g0);
         expr_free(g0);
     }
 

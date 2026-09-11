@@ -1398,6 +1398,35 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     (`tests/test_dsolve.c`); `make check-c99` green; §2.1.2/§2.2.1–§2.2.16 corpus gates all held.
     See the §2.2.17 block in `DSolve_test_status/STATUS.md`. Version 0.134 → 0.135.
 
+- **M38 — §2.2.18 corpus (Problems 1701–1800, Nasser Abbasi) + `zero_test` decay false-positive →
+  dropped-forcing correctness fix.** ✅ DONE. 100 records, **all scalar (14 IVP), 0 systems**; 45
+  first-order / 55 second-order (no order ≥ 3), mixed classes (25 2nd-order `_with_linear_symmetries`,
+  17 2nd-order linear exact/(non)homog, 10 separable, 8 2nd-order `_missing_x`, 11 Abel-2nd-kind, 8
+  quadrature, 5 Emden–Fowler linear/Euler subtype, plus Bernoulli/Riccati/linear/homogeneous). The
+  second-order stack (Kovacic/NormalForm/SpecialFunctionForm/change-of-variable/Frobenius) already
+  solved the bulk: **baseline 95/100, 0 FAIL → 96/100, 0 FAIL, 0 regression.** One increment:
+  - **`zero_test` decay false-positive → dropped forcing** (`src/calculus/dsolve_common.{c,h}`,
+    `dsolve_kovacic.c`). `PossibleZeroQ`/`zero_test` return **True** for a genuinely-nonzero *decaying*
+    expression (documented sampler limitation; `PossibleZeroQ[E^(-2x²)] === True`). Two second-order
+    gates were corrupted by it: (1) the Wronskian nonzero-check in `dsolve_variation_of_parameters`
+    (a decaying `W = E^(-∫P)` read as a degenerate basis → VoP declined), and (2) `DSolve\`Kovacic`'s
+    forcing detection (a decaying forcing read as homogeneous → the particular dropped and a
+    **homogeneous-only WRONG answer** shipped, masked as UNEVAL by the corpus prelude's leaked-`C[k]`→
+    UNFIT leniency). Fix: new shared `ds_is_structural_zero` (`Expand[·]===0`) gates both — strictly
+    safer (a truly-zero forcing → `yp==0`; a truly-dependent basis is still structurally 0) — with the
+    sensitive `zero_test` sampler left untouched (per the documented "don't gate on `PossibleZeroQ` for
+    decaying exprs"). `1763` `y''+4x y'+(4x²+2)y==8E^(-x(x+2))` now solves as
+    `(C[1]+C[2]x)E^(-x²)+2E^(-x²-2x)`. **Bonus (0 regression):** the same fix raised §2.1.2 (−5),
+    §2.2.1 (−1), §2.2.2 (−2), §2.2.6 (−2), §2.2.7 (−1) — forced equations with decaying Wronskians that
+    previously wrongly declined now solve.
+  - *Residue (4, bounded declines, all `sympySolved=False`, no wrong answers):* `1708`/`1709`
+    (Abel-2nd-kind class B, M13-deferred AIR class), `1729` (`∫Sin[x]/(b Cos x−x Sin x)` non-elementary
+    → no elementary integrating factor), `1769` (VoP needs `∫E^x/√x→√π Erfi[√x]`; the Erf/Erfi Risch
+    tower handles only `∫x^(1/2)E^x`, not negative half-integer powers — a deep-Risch extension, future).
+  - Anti-overfit unit test `t_m38_forced_decay_wronskian` (`tests/test_dsolve.c`); `make check-c99`
+    green; §2.1.2/§2.2.1–§2.2.17 corpus gates all held (several improved). See the §2.2.18 block in
+    `DSolve_test_status/STATUS.md`. Version 0.135 → 0.136.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

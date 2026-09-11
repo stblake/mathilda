@@ -3987,6 +3987,22 @@ add_test(NAME dsolve_corpus_2_2_17_tests
                  ../../DSolve_test_status/DE_examples_2217.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 13)
 
+# Section 2.2.18 (Problems 1701-1800, Nasser Abbasi): 100 records, 14 IVP, 0
+# systems.  45 first-order / 55 second-order (no order >= 3).  Mixed: 25 2nd-order
+# _with_linear_symmetries, 17 2nd-order linear (exact/(non)homog), 10 separable, 8
+# 2nd-order _missing_x, 11 Abel-2nd-kind, 8 quadrature, 5 Emden-Fowler (linear/Euler
+# subtype), plus Bernoulli/Riccati/linear/homogeneous.  M38: baseline 95/100, 0 FAIL
+# -> 96/100, 0 FAIL.  Fixed the zero_test decay false-positive that made Kovacic drop
+# an inhomogeneous forcing (ds_is_structural_zero gates the Wronskian in
+# dsolve_variation_of_parameters and Kovacic's forcing detection); 1763 now solves
+# with its particular.  Residue 4 (bounded declines, all sympy=False): 1708/1709
+# (Abel-2nd-kind class B, M13), 1729 (non-elementary integrating factor), 1769 (needs
+# Int[E^x/Sqrt[x]] -> Erfi, a deep-Risch Erf-tower extension).
+add_test(NAME dsolve_corpus_2_2_18_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2218.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the
