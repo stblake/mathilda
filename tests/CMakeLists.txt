@@ -723,6 +723,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_lie2.c
     ../src/calculus/dsolve_ifactor.c
     ../src/calculus/dsolve_changevar.c
+    ../src/calculus/dsolve_nonhomog_vop.c
     ../src/calculus/dsolve_piecewise.c
     ../src/calculus/dsolve_autonomous.c
     ../src/calculus/dsolve_liouville.c
@@ -4002,6 +4003,18 @@ add_test(NAME dsolve_corpus_2_2_18_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2218.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+
+# Section 2.2.19 (Problems 1801-1900, Nasser Abbasi): 100 records, 27 IVP, 0
+# systems.  Second-order-linear dominated: 3 Riccati, ~30 nonhomogeneous 2nd-order
+# linear (many sympy=False, transcendental forcing Tan[3x]/Sec^2/E^x Sec x/logistic),
+# many _with_linear_symmetries variable-coefficient homogeneous, Emden-Fowler,
+# Gegenbauer.  M39: baseline 94/100, 0 FAIL.  Gaps attacked by cluster --
+# change-of-variable + VoP (power sub t=x^k -> Bessel, forcing through changevar,
+# bounded VoP), IVP fit + log-power normalization, exact 2nd-order first integral.
+add_test(NAME dsolve_corpus_2_2_19_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2219.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 5)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

@@ -2376,6 +2376,36 @@ static void t_m38_forced_decay_wronskian(void) {
     check_true("MatchQ[DSolve[y''[x]+4 y'[x] x+(4 x^2+2) y[x]==0, y, x], {{_Rule}}]");
 }
 
+/* ---- M39: DSolve`VariationOfParameters (transcendental nonhomogeneous backstop) ---- */
+static void t_m39_nonhomog_vop(void) {
+    /* §2.2.19-1822: Sin[x] y'' + (2Sin-Cos) y' + (Sin-Cos) y == E^-x.  The
+     * homogeneous set {E^-x, E^-x Cos[x]} is found by ChangeOfVariable (t=Tan[x]);
+     * the transcendental coefficients keep Kovacic/Euler out, and none of the
+     * closed-form methods carries the forcing.  The VoP backstop solves the
+     * homogeneous, normalises the fundamental set (Simplify then PowerExpand, which
+     * reduces the 1/Sqrt[Sec^2 x] radicals ChangeOfVariable leaves), and adds the
+     * particular yp = -E^-x Sin[x].  Verified numerically at x=1 (forcing O(1)). */
+    check_true("Module[{s,r}, s=DSolve[Sin[x] y''[x]+(2 Sin[x]-Cos[x]) y'[x]"
+               "+(-Cos[x]+Sin[x]) y[x]==E^(-x), y, x]; MatchQ[s,{{_Rule}}] && "
+               "(r=(Sin[x] y''[x]+(2 Sin[x]-Cos[x]) y'[x]+(-Cos[x]+Sin[x]) y[x]-E^(-x))"
+               "/.s[[1]]/.{C[1]->1,C[2]->1}; Abs[N[r /. x->1]] < 1/1000000)]");
+    /* The particular is genuinely present (not homogeneous-only): both constants
+     * zeroed leaves the nonzero -E^-x Sin[x]. */
+    check_true("Module[{s,p}, s=DSolve[Sin[x] y''[x]+(2 Sin[x]-Cos[x]) y'[x]"
+               "+(-Cos[x]+Sin[x]) y[x]==E^(-x), y, x]; "
+               "p=(y[x]/.s[[1]]/.{C[1]->0,C[2]->0}); Abs[N[p /. x->1]] > 1/100]");
+    /* Anti-overfit: a DIFFERENT forcing (E^-x Cos[x]) on the same transcendental
+     * operator, not in the corpus -- still closes through the VoP backstop. */
+    check_true("Module[{s,r}, s=DSolve[Sin[x] y''[x]+(2 Sin[x]-Cos[x]) y'[x]"
+               "+(-Cos[x]+Sin[x]) y[x]==E^(-x) Cos[x], y, x]; MatchQ[s,{{_Rule}}] && "
+               "(r=(Sin[x] y''[x]+(2 Sin[x]-Cos[x]) y'[x]+(-Cos[x]+Sin[x]) y[x]-E^(-x) Cos[x])"
+               "/.s[[1]]/.{C[1]->1,C[2]->1}; Abs[N[r /. x->1]] < 1/1000000)]");
+    /* The backstop is gated to TRANSCENDENTAL coefficients: a rational-coefficient
+     * nonhomogeneous equation (Kovacic's domain) is declined by the pinned method. */
+    check_true("!MatchQ[DSolve`VariationOfParameters[4 x^2 y''[x]-4 y'[x] x"
+               "+(-16 x^2+3) y[x]==8 x^(5/2), y, x], {{_Rule}}]");
+}
+
 static void t_rischnorman_enum_cap_no_crash(void) {
     check_true("MatchQ[DSolve[x^2 - 1 + (y[x]^2 x^2 + x^3 + x) y'[x] == 0, "
                "y[x], x], _List | _DSolve]");
@@ -2650,6 +2680,7 @@ int main(void) {
     TEST(t_m37_fractional_power_branch);
     TEST(t_m37_abel_air);
     TEST(t_m38_forced_decay_wronskian);
+    TEST(t_m39_nonhomog_vop);
     TEST(t_rischnorman_enum_cap_no_crash);
     TEST(t_trig_coeff_linear_first_order);
     TEST(t_linearizable_first_order);

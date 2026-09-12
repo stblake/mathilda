@@ -1088,14 +1088,19 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
      *      elementary (dsolve_normal_form returns NULL otherwise -> skip).  Gated
      *      by sf_num_ok as a defensive numeric back-substitution: a sign/branch
      *      error in mu would otherwise reach the corpus as a numericizing FAIL. */
-    if (!general && !ds_is_zero(Pc) && g_dsolve_depth <= 1) {
+    if (!general && !ds_is_zero(Pc) && (g_dsolve_depth <= 1 || dsolve_nh_vop_active)) {
         /* Top-level only (g_dsolve_depth <= 1): a recursive caller such as
          * OperatorFactor peels a first-order factor and re-solves the order-(n-1)
          * quotient, and the mu = Exp[-Int P/2] recovery factor this pre-pass emits
          * composed back into that reduction can drive the evaluator into an infinite
          * rewrite ($IterationLimit).  The pre-pass only ever helps a genuine top-level
          * equation carrying a y' term, so restricting it to depth 1 loses nothing and
-         * keeps OperatorFactor / Riccati recursion clean (cf. dsolve_common.c:642). */
+         * keeps OperatorFactor / Riccati recursion clean (cf. dsolve_common.c:642).
+         * EXCEPTION: DSolve`VariationOfParameters (dsolve_nh_vop_active) recurses to
+         * solve the HOMOGENEOUS part and needs this recogniser for a Bessel/Airy set
+         * carrying a y' term (e.g. 4x^2 y'' - 4x y' + (3-16x^2) y == 8 x^(5/2)); it
+         * extracts the basis rather than composing mu back into a reduction, so the
+         * infinite-rewrite hazard does not apply. */
         Expr* mu = NULL;
         Expr* r  = dsolve_normal_form(Pc, Qc, xvar, &mu);
         if (mu) {

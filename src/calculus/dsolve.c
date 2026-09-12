@@ -154,6 +154,7 @@ extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_changevar_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_piecewise_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_first_order_series_try(DSolveProblem* P, size_t* nbranch);
@@ -194,6 +195,7 @@ extern void dsolve_liouville_init(void);
 extern void dsolve_lie2_init(void);
 extern void dsolve_ifactor_init(void);
 extern void dsolve_changevar_init(void);
+extern void dsolve_nonhomog_vop_init(void);
 extern void dsolve_piecewise_init(void);
 extern void dsolve_frobenius_init(void);
 extern void dsolve_normalform_init(void);
@@ -394,6 +396,15 @@ Expr* builtin_dsolve(Expr* res) {
              * become rational under t = phi(x) (Cos/Sin/Tan) — transform, recurse,
              * back-substitute (e.g. y''+Cot[x]y'+k(k+1)y==0 -> Legendre). */
             if (!result) result = dsolve_run(&P, dsolve_changevar_try);
+            /* General nonhomogeneous variation-of-parameters BACKSTOP: L[y]==g whose
+             * homogeneous L[y]==0 is solvable by a special-function / change-of-
+             * variable method that does not itself carry forcing.  Solves the
+             * homogeneous (recursively), normalises the fundamental set, adds the VoP
+             * particular.  Runs AFTER the closed-form 2nd-order methods so it never
+             * preempts their (own-forcing) results — it fires only for the residue
+             * they all declined (e.g. Sin[x] y'' + (2Sin-Cos) y' + (Sin-Cos) y ==
+             * E^-x, via ChangeOfVariable's transcendental homogeneous set). */
+            if (!result) result = dsolve_run(&P, dsolve_nonhomog_vop_try);
             /* Third-order symmetric squares (solution space = products of a
              * second-order basis: Airy^2, Bessel products, ...).  Before
              * operfactor, which would otherwise churn on the non-factorable
@@ -580,6 +591,7 @@ void dsolve_init(void) {
     dsolve_lie2_init();
     dsolve_ifactor_init();
     dsolve_changevar_init();
+    dsolve_nonhomog_vop_init();
     dsolve_piecewise_init();
     dsolve_frobenius_init();
     dsolve_normalform_init();

@@ -900,6 +900,55 @@ Full per-case results: `reports/2.2.18.tsv`; bucketed report: `reports/2.2.18.md
 
 ---
 
+## Section 2.2.19 — "Problems 1801 to 1900" (Nasser Abbasi)
+
+Corpus: `DE_examples_2219.m` — 100 records, **all scalar (27 IVP), 0 systems**. Second-order-linear
+dominated: 3 Riccati, ~30 nonhomogeneous 2nd-order linear (many `sympySolved=False`, with
+transcendental forcing `Tan[3x]` / `Sin[2x]Sec[2x]²` / `E^x Sec[x]` / `4/(1+E^-x)`), a large
+`_with_linear_symmetries` variable-coefficient homogeneous family, plus Emden–Fowler and Gegenbauer.
+`ctest -R dsolve_corpus_2_2_19_tests` · gate baseline **5**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-12 (baseline) | 94 / 100 | 94.0% | 6 | 0 FAIL. Mathilda's 2nd-order stack (Kovacic/SpecialFunctionForm/change-of-var/Frobenius + M38) already solves the bulk out of the box. |
+| 2026-09-12 (**M39**)  | **95 / 100** | **95.0%** | **5** | **0 FAIL, 0 regression.** New `DSolve\`VariationOfParameters` closes the transcendental-coefficient nonhomogeneous `1822`. Gate baseline **5**. |
+
+**M39 additions.**
+- **`DSolve\`VariationOfParameters`** (`src/calculus/dsolve_nonhomog_vop.c`) — the general
+  nonhomogeneous backstop for `L[y] == g(x)` (`g ≢ 0`) whose *homogeneous* part is solved by a method
+  that does not itself carry forcing. Recurses `DSolve` on `L[y]==0`, extracts and normalises the
+  fundamental set (`PowerExpand[Simplify[D[hom, C[k]]]]` — Simplify canonicalises `1+Tan²→Sec²`,
+  PowerExpand then reduces the residual radicals, e.g. `1/Sqrt[Sec² x]→Cos x`, so the VoP integrals
+  close), builds the particular by `dsolve_variation_of_parameters`, returns `hom + yp`
+  (numerically self-verified by `ds_branch_num_ok`; rejected if it carries an inert `Integrate`).
+  **Gated to transcendental (trigonometric) coefficients** — the ChangeOfVariable family — since a
+  rational-coefficient nonhomogeneous equation is Kovacic's / Euler's domain (each with its own
+  forcing closure); this keeps the class the backstop uniquely reaches while sparing every rational
+  case a redundant recursive re-solve. Runs after the closed-form 2nd-order methods, so it never
+  preempts them. No nested `TimeConstrained` (the documented no-nest hazard); `SpecialFunctionForm`'s
+  normal-form pre-pass is allowed to fire during this method's recursion (it extracts the basis, not
+  composing `μ` back into a reduction). Closes `1822`
+  `Sin[x] y'' + (2Sin−Cos) y' + (Sin−Cos) y == E^-x → −E^-x Sin[x] + {E^-x, E^-x Cos[x]}`.
+  Anti-overfit: `t_m39_nonhomog_vop`.
+
+**Residue (5, NOT wrong answers — bounded declines):**
+- `1817` (`2x y''+2y'+2y == Sin[√x]`, `sympy=False`): the homogeneous is `BesselJ/Y[0, 2√x]` but the
+  particular over that basis is genuinely non-elementary (a Struve/Lommel integral).
+- `1823` (`4x²y''−4xy'+(3−16x²)y == 8x^(5/2)`, `sympy=False`): the homogeneous `{√x E^(±2x)}` + VoP
+  particular `−√x/2` *is* elementary, but `DSolve\`Kovacic`'s constant-`r` path churns on the full
+  equation before the transcendental-gated backstop is reached (a Kovacic-robustness fix — future).
+- `1836` (2nd-order exact IVP): the ODE solves in `ExpIntegralEi` form, but the IC-fit `Solve` leaves
+  a linear system with `ExpIntegralEi[4]` constant coefficients unevaluated (a Solve limitation).
+- `1876` (`sympy=True`): Kovacic emits the homogeneous set as `E^(3Log[u]−2Log[v])`, whose IC-fit at
+  `x=4` injects `Log[−√2]` branch artifacts — a form-normalisation gap (flaky under numeric verify).
+- `1900` (`sympy=True`): `(x²−x+1)y''−(1−4x)y'+2y==0` is exact but reduces to a first-order linear
+  with a non-elementary integrating factor; its complex-conjugate singular points would need a
+  complex-parameter Gauss ₂F₁ recogniser.
+
+Full per-case results: `reports/2.2.19.tsv`; bucketed report: `reports/2.2.19.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:

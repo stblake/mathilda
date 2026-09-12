@@ -1427,6 +1427,43 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     green; §2.1.2/§2.2.1–§2.2.17 corpus gates all held (several improved). See the §2.2.18 block in
     `DSolve_test_status/STATUS.md`. Version 0.135 → 0.136.
 
+- **M39 — §2.2.19 corpus (Problems 1801–1900, Nasser Abbasi) + `DSolve\`VariationOfParameters`
+  (transcendental nonhomogeneous backstop).** ✅ DONE. 100 records, **all scalar (27 IVP), 0 systems**;
+  second-order-linear dominated (3 Riccati, ~30 nonhomogeneous 2nd-order linear with transcendental
+  forcing, a large `_with_linear_symmetries` variable-coefficient homogeneous family, Emden–Fowler,
+  Gegenbauer). The 2nd-order stack (Kovacic/SpecialFunctionForm/change-of-variable/Frobenius + M38)
+  already solved the bulk: **baseline 94/100, 0 FAIL → 95/100, 0 FAIL, 0 regression.** One increment:
+  - **`DSolve\`VariationOfParameters`** (`dsolve_nonhomog_vop.c`) — the general nonhomogeneous
+    backstop for `L[y] == g(x)` (`g ≢ 0`) whose homogeneous part is solved by a method that does not
+    itself carry forcing (chiefly `ChangeOfVariable`). Recurses `DSolve` on `L[y]==0`, extracts and
+    normalises the fundamental set (`PowerExpand[Simplify[D[hom, C[k]]]]` — Simplify canonicalises
+    `1+Tan²→Sec²`, PowerExpand then reduces the residual radicals `1/Sqrt[Sec²x]→Cos x` /
+    `Sqrt[1/(Pi x)]·x→Sqrt[x]/Sqrt[Pi]` so the VoP integrals close), builds the particular via
+    `dsolve_variation_of_parameters`, returns `hom + yp` (numerically self-verified by
+    `ds_branch_num_ok`; rejected on an inert `Integrate`). **Gated to transcendental (trigonometric)
+    coefficients** — a rational-coefficient nonhomogeneous equation is Kovacic's/Euler's domain (each
+    with its own forcing closure), so the gate keeps the class the backstop uniquely reaches while
+    sparing every rational case a redundant recursive re-solve on the large corpus. Cascade slot:
+    after `SpecialFunctionForm`/`Kovacic`/`ChangeOfVariable`, so it is a pure backstop that never
+    preempts their results (hence 0-regression by construction). Deliberately uses **no nested
+    `TimeConstrained`** (the documented no-nest hazard aborts the whole subtree); bounded by a
+    `time()`-deadline + decline memo + re-entry guard. `SpecialFunctionForm`'s depth-1-gated
+    normal-form pre-pass is allowed to fire during this method's recursion (exposed via
+    `dsolve_nh_vop_active`), since the backstop extracts the basis rather than composing the `μ`
+    recovery factor back into a reduction. Solves `1822`
+    `Sin[x] y'' + (2Sin−Cos) y' + (Sin−Cos) y == E^-x → −E^-x Sin[x] + {E^-x, E^-x Cos[x]}`.
+    Anti-overfit `t_m39_nonhomog_vop` (`tests/test_dsolve.c`): 1822, a different forcing on the same
+    transcendental operator, and the rational-coefficient decline.
+  - *Residue (5, bounded declines, no wrong answers):* `1817` (non-elementary Struve/Lommel
+    particular over a Bessel homogeneous set), `1823` (elementary `−√x/2` but Kovacic's constant-`r`
+    path churns before the transcendental-gated backstop is reached — a Kovacic-robustness fix,
+    future), `1836` (Solve leaves the `ExpIntegralEi`-constant IVP fit system unevaluated), `1876`
+    (Kovacic `E^(nLog)` IC-fit branch artifacts — a form-normalisation gap), `1900` (exact →
+    non-elementary integrating factor; complex-singular ₂F₁, future).
+  - `make check-c99` green; §2.1.2/§2.2.1–§2.2.18 corpus gates all held (0 regression — the backstop
+    only fires on prior-declined transcendental cases). See the §2.2.19 block in
+    `DSolve_test_status/STATUS.md`. Version 0.136 → 0.137.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

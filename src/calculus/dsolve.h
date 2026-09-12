@@ -25,6 +25,11 @@ Expr* builtin_dsolve(Expr* res);
  * per-command fail-memo. */
 extern int g_dsolve_depth;
 
+/* Nonzero while DSolve`VariationOfParameters (dsolve_nonhomog_vop.c) is recursing
+ * to solve a homogeneous part.  Read by dsolve_specialform.c to let its normal-form
+ * pre-pass fire below top level in that (mu-safe) context — see the comment there. */
+extern int dsolve_nh_vop_active;
+
 /* Register DSolve and fan out to every method's init.  Called from core_init. */
 void dsolve_init(void);
 
