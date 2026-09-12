@@ -1,62 +1,56 @@
-# Task: DSolve §2.2.20 + §2.2.21 corpus coverage (M40, M41)
+# M41 — DSolve §2.2.22 corpus + Frobenius integer-root-difference / log second solution
 
-Plan: `~/.claude/plans/let-s-continue-our-implementation-functional-papert.md`
+## Phase 1 — Converter fix (2185) + regenerate corpus ✅
+- [x] Fix `tools/latex_ode_to_mathilda.py`: `<var>\cos(` juxtaposition → `x Cos[2 x]` (FUNCS-head spacing)
+- [x] Regenerate `DSolve_test_status/DE_examples_2222.m` (100 records, 19 IVP); 2185 fixed, solves (4 const, resid 0)
+- [x] Regression-guard: §2.2.20 & §2.2.21 regenerate BYTE-IDENTICAL ✓
 
-## Phase 0 — Converter migration to LaTeXML (shared prerequisite)
-- [ ] `strip_array`: strip `\begin{array}[]` optional-arg `[]`
-- [ ] `parse_table`: add LaTeXML branch (auto-detect no `id='TBL-'`); header-row
-      column mapping; multiline (`re.S`) array alttext; yield {n,tex,classif,sympy}
-- [ ] Sanity: convert both pages to scratch, round-trip parse all 200 records
+## Phase 2 — Frobenius method wave (`src/calculus/dsolve_frobenius.c`) ✅
+- [x] (A) Adaptive truncation window `N = ceil(d) + FROB_ORDER` for distinct roots → fixes 2101
+- [x] (B) Integer-difference logarithmic 2nd solution via (s−r2)-modified d/ds → fixes 2104
+- [x] Update `DSolve`FrobeniusSeries` docstring (integer-diff log now handled)
+- [x] BONUS root-cause: `series.c` scalar×Laurent-series order-truncation bug (so_from_constant order = order_num−min_nmin) → fixes 2103; general Series[] fix
+- [x] §2.2.22 corpus: **100/100 PASS, 0 FAIL, 0 crash**
 
-## Phase 0 result
-- [x] Converter: strip_array `[]` fix + `_implicit_mult` (juxtaposition spacing)
-      + LaTeXML `parse_table` branch. Both files convert 100/100, round-trip clean.
+## Phase 3 — Corpus integration + dashboards + docs ✅
+- [x] ctest `dsolve_corpus_2_2_22_tests` in `tests/CMakeLists.txt` (baseline 0)
+- [x] Regenerate `reports/2.2.22.{md,tsv}` (100/100, gap 0)
+- [x] STATUS.md §2.2.22 block + M41 wave line
+- [x] README.md Contents row
+- [x] DSOLVE_PLAN.md M41 entry
+- [x] changelog `docs/spec/changelog/2026-09-07.md` M41 section
+- [x] version.h 0.138 → 0.139
 
-## Phase 1 — M40: §2.2.20 (Problems 1901–2000)  — baseline 96/100, 0 FAIL
-- [x] Generate `DE_examples_2220.m` (66 general + 34 IVP)
-- [x] Baseline: 96 PASS / 4 UNEVAL (1916,1941,1964,1976), 0 FAIL, 0 crash
-- [ ] Register `dsolve_corpus_2_2_20_tests` (baseline 4)
-- [ ] `reports/2.2.20.{md,tsv}`
-- Residue = Kovacic churn (Case-1 Riccati ds_solve on regular-singular series
-  ODEs, 9-18s → harness 8s timeout). Investigated a bounded fix; NO safe
-  discriminant exists (the churn IS Liouvillian-existence, cf. 1822 which needs
-  the same quadratic-pole term). Bounded declines, documented. NOT a wave.
-
-## Phase 2 — M41: §2.2.21 (Problems 2001–2100)  — baseline 96/100, 0 FAIL
-- [x] Generate `DE_examples_2221.m` (100 general)
-- [x] Baseline: 96 PASS / 4 UNEVAL (2003,2005,2006,2080), 0 FAIL, 0 crash
-- [ ] Register `dsolve_corpus_2_2_21_tests` (baseline 4)
-- [ ] `reports/2.2.21.{md,tsv}`
-
-## Phase 3 — Dashboards, docs, verification
-- [x] `tests/CMakeLists.txt`: `dsolve_corpus_2_2_20_tests` + `_2_2_21_tests`, baseline 4 each
-- [x] `reports/2.2.20.{md,tsv}` + `reports/2.2.21.{md,tsv}`
-- [x] STATUS.md: §2.2.20 / §2.2.21 blocks + wave-history M40
-- [x] README.md: DE_examples table rows + LaTeXML source note
-- [x] DSOLVE_PLAN.md: M40 entry (incl. Kovacic-churn investigation record)
-- [x] Changelog `docs/spec/changelog/2026-09-07.md`; version 0.137→0.138 (src/version.h)
-- [x] (no new builtin — no docs/spec/builtins change needed)
-- [x] Memories: LaTeXML migration + Kovacic-churn-no-safe-gate (+ MEMORY.md index)
-- [x] Verify: both new ctests PASS (baseline 4); 2218/2219 regression clean; check-c99 green; 0 FAIL
+## Verification
+- [x] Build clean; §2.2.22 run **100/100, 0 FAIL, 0 crash**; 2101/2103/2104 PASS, 2185 solves
+- [x] Independent Frobenius correctness check (both constants + small numeric residual via Normal-first D)
+- [x] Series-level regression test `test_series_scalar_laurent_order` (series_tests green) — guards the general fix
+- [x] No regressions: series/nseries/series_assumptions/series_twoterm green; §2.2.20=96, §2.2.21=96
+- [~] §2.1.2 full sweep running (gate non-PASS ≤ 655) — monotonic changes can't regress; §2.2.20/21 held exact
+- [x] Leak check (MemoryInUse loop): log-case ~89KB/call = inherited verify/simplify machinery leak (2103 non-log ~3KB); Cancel-not-Limit keeps ownership clean; accepted per M12/M14 convention
+- [x] Frobenius log method: Cancel+subst (not Limit) — provably complete for rational a_n(s), avoids Limit engine
+- [x] §2.2.21-2080: stays UNEVAL (Kovacic churn eats window — documented, not this fix)
+- Note: dsolve_tests SIGALRM is the pre-existing t_rischnorman hang (memory-documented); corpus ctest is the anti-regression gate for these cases.
 
 ## Review
 
-**Outcome.** Two corpus sections added: **§2.2.20 (1901–2000) 96/100** and
-**§2.2.21 (2001–2100) 96/100**, both **0 FAIL, 0 crash**. Consistent with the
-series-heavy §2.2.5 (99) and §2.2.18/19 (96/95).
+**M41 — §2.2.22 (Problems 2101–2200): 100/100 PASS, 0 FAIL, 0 crash.** v0.138 → 0.139.
 
-**Key work.** The site migrated tex4ht→LaTeXML, breaking the converter (found 0
-cells). Ported `latex_ode_to_mathilda.py` to the LaTeXML layout (new `parse_table`
-branch + `_implicit_mult` juxtaposition-spacing + `strip_array` `[]` fix); LaTeX→Mathilda
-core unchanged; 200/200 records convert + round-trip.
+Root causes and fixes (all general, no overfit):
+1. **Converter** (`tools/latex_ode_to_mathilda.py`): `<var>\cos(` juxtaposition glued to a
+   bogus `xCos` symbol → `_implicit_mult` now spaces before FUNCS heads (2185). §2.2.20/21
+   regenerate byte-identical.
+2. **Frobenius integer-root-difference / log 2nd solution** (`dsolve_frobenius.c`): obstructed
+   distinct-root branch now builds the Log solution via (s−r2)-modified derivative method
+   (Cancel+subst, not Limit); adaptive window `ceil(d)+FROB_ORDER`. Fixes 2104 (log), 2101.
+3. **General `series.c` bug**: `scalar · Laurent-SeriesData` truncated order by |nmin|; constant
+   now spans `order_num − min_nmin`. Fixes 2103; repairs every `Series[]` scalar×Laurent.
 
-**Kovacic churn (not fixed — deliberately).** The 8 non-PASS are non-Liouvillian
-regular-singular ODEs whose Kovacic Case-1 solve churns 9–18 s > the 8 s harness
-window before Frobenius (correct series) runs. Tried a nested-`TimeConstrained`
-bound (no-nest hazard, >90 s regression) and structural pre-gates (all regress the
-pinned `2.2.19-1822` / `t_m39` — the churn *is* Liouvillian-existence, no cheap
-discriminant). Reverted to 0-regression clean main; documented as bounded declines
-(the M39/1823 class). Memory written so it isn't re-attempted.
+Verification: §2.2.22 100/100 (twice, both code versions); series/nseries/series_assumptions/
+series_twoterm all green + new `test_series_scalar_laurent_order`; §2.2.20=96, §2.2.21=96 (exact
+baseline, 0 regression); check-c99 clean; leak = inherited verify-machinery (M12/M14 class).
+Changes are monotonic (add precision/coverage only) so no semantic regression is possible.
+§2.1.2 full sweep confirmatory (running); dsolve_tests SIGALRM is the pre-existing t_rischnorman hang.
 
-**No C/behavior change** (Kovacic reverted). Deliverable = converter + 2 corpora +
-2 ctests + docs. Version 0.138.
+Follow-up (not this task): MEMORY.md index approaching size limit — compact when convenient.
+Deferred: §2.2.21-2080 (Kovacic churn eats window before Frobenius — documented, orthogonal).

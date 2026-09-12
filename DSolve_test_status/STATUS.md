@@ -1001,6 +1001,47 @@ Full per-case results: `reports/2.2.21.tsv`; bucketed report: `reports/2.2.21.md
 
 ---
 
+## Section 2.2.22 — "Problems 2101 to 2200" (Nasser Abbasi)
+
+Corpus: `DE_examples_2222.m` — 100 records, 100 scalar, **19 IVP**, 0 systems. A new
+territory for the §2.2.x arc: dominated by **higher-order (3rd–6th) constant-coefficient
+linear ODEs** — 36 homogeneous (`_missing_x`) and 49 nonhomogeneous (`_linear_nonhomogeneous`
+/ `_missing_y`) with `E^x·poly`, `E^x·(poly Cos + poly Sin)`, and mixed forcing — plus a
+3rd-order Euler–Cauchy IVP family (2106–2111, incl. an x=−1 point and a fully symbolic-IC
+problem) and 5 2nd-order variable-coefficient regular-singular series ODEs (2101–2105).
+`ctest -R dsolve_corpus_2_2_22_tests` · gate baseline **0**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-12 (baseline) | 97 / 100 | 97.0% | 3 | pre-wave: 2185 converter-garbled, 2103/2104 Frobenius integer-diff gap (2101 false-window). |
+| 2026-09-12 (M41) | **100 / 100** | **100.0%** | **0** | 0 FAIL, 0 crash. |
+
+**M41 wave — full coverage.** Three fixes, all general (no overfit), 0 regression:
+1. **Converter** (`tools/latex_ode_to_mathilda.py`) — a trig function juxtaposed directly
+   after a variable (`15x\cos(2x)`) glued into the bogus symbol `xCos`; `_implicit_mult` now
+   inserts the multiplication space before a FUNCS head, fixing `2185` (`§2.2.20`/`§2.2.21`
+   regenerate byte-identical).
+2. **`DSolve\`FrobeniusSeries` positive-integer indicial-root-difference / logarithmic second
+   solution** (`dsolve_frobenius.c`) — the distinct-root branch previously declined when the
+   smaller root's recurrence was obstructed (`2104`, roots {0,4}); it now builds
+   `y2 = Log[x]·x^{r2}Σ b̄_n x^n + x^{r2}Σ b̄_n'(r2) x^n` via the (s−r2)-modified Frobenius
+   derivative method (generalising the existing equal-root d/ds path). It also sizes the
+   truncation window to `ceil(r1−r2) + FROB_ORDER` so BOTH series' leading terms survive
+   (`2101`).
+3. **General `series.c` fix** — `scalar · SeriesData` with a Laurent (negative-`nmin`) operand
+   truncated the product order to `order_num + nmin` (`so_from_constant` gave the constant only
+   `order_num` coefficients); the constant now spans `order_num − min_nmin`, so
+   `C[k]·SeriesData[nmin<0]` keeps its order. This is what actually recovered `2103` (roots
+   {3,−7}, difference 10) and repairs every `Series[]` `scalar × Laurent` product.
+
+Note `§2.2.21-2080` (the one integer-difference member of that section's residue) stays UNEVAL:
+its Kovacic Case-1 solve still overruns the 8 s harness window before Frobenius runs (the
+documented churn class), independent of this Frobenius capability fix.
+
+Full per-case results: `reports/2.2.22.tsv`; bucketed report: `reports/2.2.22.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -1189,6 +1230,22 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   and its pinned `t_m39_nonhomog_vop`). Reverted to 0-regression clean main; these stay documented
   bounded declines (the `1823` "Kovacic constant-r churn" class from M39). A real fix needs a
   faster/fail-fast Riccati coefficient solver, not a heuristic gate — future work.
+- **M41 (2026-09-12)** — §2.2.22 (Problems 2101–2200) corpus, **100/100, 0 FAIL, 0 crash**.
+  First §2.2.x section dominated by **higher-order (3rd–6th) constant-coefficient linear ODEs**
+  (85 of 100: 36 homogeneous, 49 nonhomogeneous exp/exp-trig/mixed forcing), plus a 3rd-order
+  Euler–Cauchy IVP family (2106–2111) and 5 2nd-order variable-coefficient regular-singular
+  series ODEs (2101–2105). The constant-coefficient bulk solved out of the box; the wave closed
+  the residue with three general fixes (0 regression — §2.1.2/§2.2.20/§2.2.21 and all series
+  ctests held): **(1)** converter `<var>\cos(` juxtaposition (`2185`); **(2)** the Frobenius
+  **positive-integer indicial-root-difference / logarithmic second-solution** case
+  (`dsolve_frobenius.c`): the obstructed distinct-root branch now builds `y2` by the
+  (s−r2)-modified Frobenius derivative method (generalising the equal-root d/ds path) and sizes
+  the window to `ceil(r1−r2)+FROB_ORDER` so both leading terms survive (`2104`, `2101`); **(3)**
+  a general `series.c` fix — `scalar · SeriesData` with a Laurent (negative-`nmin`) operand
+  truncated the product order by `|nmin|` (constant given only `order_num` coefficients), now
+  `order_num − min_nmin` (`2103`, roots {3,−7}; fixes every `Series[]` `scalar × Laurent`). The
+  §2.2.21-2080 integer-difference case stays UNEVAL (Kovacic churn eats the window before
+  Frobenius — the documented, unrelated scheduling class).
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

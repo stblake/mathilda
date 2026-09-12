@@ -197,6 +197,16 @@ def _implicit_mult(s):
     macros = []
     def _prot(m):
         macros.append(m.group(0)); return '\x01%d\x01' % (len(macros) - 1)
+    # A variable/digit directly juxtaposed against a trig/hyperbolic/log FUNCTION
+    # name is implicit multiplication and must be separated first, on the raw
+    # string: `15x\cos(2x)` -> `15x \cos(2x)`.  Otherwise the trailing `\cos` glues
+    # to the variable as the bogus symbol `xCos`, and `fn_paren_to_bracket` -- which
+    # skips a head preceded by a letter -- never rewrites `xCos (2x)` to
+    # `x Cos[2x]` (§2.2.22-2185; `\right)\cos(...)` already works because a `)` is
+    # not a letter).  Restricted to FUNCS heads so pure delimiters (`\left`/`\right`)
+    # and `\prime` runs are untouched -- prior sections regenerate byte-identically.
+    _fn = '|'.join(sorted((re.escape(k[1:]) for k in FUNCS), key=len, reverse=True))
+    s = re.sub(r'(?<=[A-Za-z0-9])(?=\\(?:' + _fn + r')(?![A-Za-z]))', ' ', s)
     t = re.sub(r'\\[A-Za-z]+(?:\s*\{[^{}]*\})?', _prot, s)
     t = re.sub(r'(?<=[0-9])(?=[A-Za-z])', ' ', t)      # 8y  -> 8 y
     t = re.sub(r'(?<=[A-Za-z])(?=[A-Za-z])', ' ', t)   # yx  -> y x

@@ -2980,6 +2980,7 @@ static Expr* series_base_var(Expr* x) {
 
 static SeriesObj* operand_to_series(Expr* op, Expr* x, Expr* x0,
                                     int64_t order_num, int64_t den,
+                                    int64_t min_nmin,
                                     bool* incompatible) {
     SeriesObj* s = NULL;
     if (is_series_data(op)) {
@@ -3006,8 +3007,16 @@ static SeriesObj* operand_to_series(Expr* op, Expr* x, Expr* x0,
             return NULL;
         }
         /* Constant: folds into the a0 term. Fast path for the common
-         * `series + scalar` / `scalar * series` shapes. */
-        s = so_from_constant(op, x, x0, order_num, den);
+         * `series + scalar` / `scalar * series` shapes.  A constant is EXACT (no
+         * truncation), so its coefficient span must reach far enough that
+         * `scalar * series` does not lose precision: so_mul's order is
+         * min(const.order + series.nmin, series.order + const.nmin=0), so when the
+         * series is Laurent (nmin < 0) a const.order == order_num would truncate the
+         * product to order_num + nmin.  Extend the constant by |min_nmin| in that
+         * case (never shrink it) so the product keeps the series's own order --
+         * fixes `C[k] * SeriesData[.., nmin<0, ..]` dropping O by |nmin|. */
+        int64_t const_order = order_num - (min_nmin < 0 ? min_nmin : 0);
+        s = so_from_constant(op, x, x0, const_order, den);
     } else if (expr_nonanalytic_in(op, x)) {
         /* Piecewise-constant / non-analytic dependence on x (Floor, Arg, ...):
          * no power-series expansion exists. Bail so the node stays symbolic,
@@ -3073,19 +3082,26 @@ static Expr* series_combine(Expr* const* args, size_t n,
     }
     if (!x) return NULL;                      /* no (well-formed) SeriesData */
 
-    /* Second pass: now that den is known, fold in each operand's order. */
+    /* Second pass: now that den is known, fold in each operand's order and the
+     * most-negative (den-aligned) nmin -- the latter tells the constant path how
+     * far a Laurent operand reaches, so `scalar * SeriesData[nmin<0]` is not
+     * truncated to order_num + nmin (see operand_to_series constant branch). */
+    int64_t min_nmin = 0;
     for (size_t i = 0; i < n; i++) {
         if (!is_series_data(args[i])) continue;
         Expr** sa = args[i]->data.function.args;
-        int64_t o = sa[4]->data.integer * (den / sa[5]->data.integer);
+        int64_t scale = den / sa[5]->data.integer;
+        int64_t o = sa[4]->data.integer * scale;
         if (o < order_num) order_num = o;
+        int64_t nm = sa[3]->data.integer * scale;
+        if (nm < min_nmin) min_nmin = nm;
     }
     if (order_num == INT64_MAX) order_num = 1;
 
     bool incompatible = false;
     SeriesObj* acc = NULL;
     for (size_t i = 0; i < n; i++) {
-        SeriesObj* t = operand_to_series(args[i], x, x0, order_num, den, &incompatible);
+        SeriesObj* t = operand_to_series(args[i], x, x0, order_num, den, min_nmin, &incompatible);
         if (!t) {
             if (acc) so_free(acc);
             return NULL;                     /* incompatible -> stays symbolic */
@@ -3152,7 +3168,7 @@ Expr* series_power(Expr* base, Expr* exp) {
     Expr* rewrite = mk_fn1("Exp",
         mk_times(expr_copy(exp), mk_fn1("Log", expr_copy(base))));
     bool incompatible = false;
-    SeriesObj* r = operand_to_series(rewrite, x, x0, order_num, den, &incompatible);
+    SeriesObj* r = operand_to_series(rewrite, x, x0, order_num, den, 0, &incompatible);
     expr_free(rewrite);
     if (!r) return NULL;
     so_trim_leading(r);

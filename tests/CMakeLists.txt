@@ -4040,6 +4040,21 @@ add_test(NAME dsolve_corpus_2_2_21_tests
                  ../../DSolve_test_status/DE_examples_2221.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
+# Section 2.2.22 (Problems 2101-2200, Nasser Abbasi): 100 records, 19 IVP, 0
+# systems.  Dominated by higher-order (3rd-6th) constant-coefficient linear ODEs
+# (36 homogeneous _missing_x, 49 nonhomogeneous with E^x*poly / E^x*(poly Cos +
+# poly Sin) / mixed forcing), a 3rd-order Euler-Cauchy IVP family (2106-2111,
+# incl. a fully symbolic-IC problem), and 5 2nd-order variable-coefficient
+# regular-singular series ODEs (2101-2105).  Baseline 100/100, 0 FAIL, 0 crash
+# (M41): the converter learned <var>\cos( juxtaposition (2185), and the Frobenius
+# method gained the positive-integer indicial-root-difference / logarithmic
+# second-solution case (2101/2103/2104) -- plus a general series.c fix for
+# scalar * Laurent-SeriesData order truncation.
+add_test(NAME dsolve_corpus_2_2_22_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2222.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

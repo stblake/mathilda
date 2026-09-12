@@ -12,8 +12,11 @@
  *        * indicial quadratic  s(s-1) + P0 s + Q0 == 0  (P0 = lim xP, Q0 = lim x^2 Q)
  *        * root difference not a non-negative integer -> two independent series
  *        * equal roots -> second solution carries a Log (via d/ds of the series)
- *        * positive-integer difference -> second series when unobstructed, else
- *          (a genuine Log is required) the method declines
+ *        * positive-integer difference -> two independent series when unobstructed;
+ *          when obstructed (a genuine Log is required) the second solution is built
+ *          by the (s-r2)-modified Frobenius derivative method (frobenius_log_second).
+ *          The truncation window widens to ceil(r1-r2)+FROB_ORDER so both series'
+ *          leading terms survive the merged SeriesData.
  *   - irregular singular                          -> decline
  *
  * The recurrence coefficients are exact (each a_n is solved to annihilate the
@@ -213,7 +216,58 @@ static Expr* normal_series(Expr* e, const char* x, int N) {
 /* ------------------------------------------------------------------ *
  *  Regular singular point                                             *
  * ------------------------------------------------------------------ */
-static Expr* frobenius_regsing(const Expr* Pc, const Expr* Qc, const char* x, int N) {
+/* Second (logarithmic) Frobenius solution for a positive-integer indicial-root
+ * difference d = r1 - r2 whose smaller-root recurrence is obstructed (a genuine
+ * Log is required -- build_coeffs(r2) returned 1).  This generalises the
+ * equal-root d/ds construction: build the coefficients a_n(s) for a SYMBOLIC
+ * exponent s (a_0 = 1); they carry a simple pole at s = r2 for n >= d, so form the
+ * regularised abar_n(s) = (s - r2) a_n(s) and
+ *     y2 = Log[x] * x^{r2} Sum abar_n(r2) x^n  +  x^{r2} Sum abar_n'(r2) x^n,
+ * i.e. d/ds [ x^s Sum abar_n(s) x^n ] at s = r2.  The first sum starts at x^{r1}
+ * (a multiple of the larger-root solution y1) -- the y1 Log[x] term; the second is
+ * the algebraic correction.  Each abar_n(r2), abar_n'(r2) is a removable-
+ * singularity limit.  Returns NULL (caller declines) if any limit is non-finite,
+ * so a construction the machinery cannot close never ships as a wrong answer. */
+static Expr* frobenius_log_second(Expr** Pk, Expr** Qk, const Expr* P0, const Expr* Q0,
+                                  int N, const Expr* r2, const char* x) {
+    const char* RR = intern_symbol("DSolve`fr");
+    Expr* rsym = expr_new_symbol(RR);
+    Expr** aR = malloc((size_t)(N + 1) * sizeof(Expr*));
+    (void)build_coeffs(Pk, Qk, P0, Q0, N, rsym, aR);   /* symbolic: never obstructed */
+    expr_free(rsym);
+
+    Expr** blog  = malloc((size_t)(N + 1) * sizeof(Expr*));
+    Expr** bcorr = malloc((size_t)(N + 1) * sizeof(Expr*));
+    bool ok = true;
+    for (int i = 0; i <= N; i++) {
+        /* abar = Cancel[(RR - r2) a_i(RR)] -- Cancel clears the removable (RR-r2)
+         * pole a_i(RR) carries at RR=r2 for i>=d, so the resulting rational is
+         * finite there and RR->r2 substitutes directly.  This is the exact value
+         * Limit[(RR-r2)a_i, RR->r2] gives but WITHOUT the per-call Limit-engine
+         * leak (frobenius_log_second calls this 2(N+1) times).  A non-finite result
+         * (Cancel failed to remove the pole) makes ok=false below, so a case the
+         * cancellation cannot close declines rather than shipping a wrong answer. */
+        Expr* smr2 = A2(expr_new_symbol(RR), Neg(expr_copy((Expr*)r2)));
+        Expr* abar = eval_and_free(ds_call1("Cancel", T2(smr2, expr_copy(aR[i]))));
+        /* blog_i = abar(r2);  bcorr_i = (d/ds abar)(r2) */
+        blog[i] = ds_simplify(ds_subst(expr_copy(abar), expr_new_symbol(RR), expr_copy((Expr*)r2)));
+        Expr* dab = eval_and_free(ds_call1("Cancel", ds_d(abar, expr_new_symbol(RR))));  /* consumes abar */
+        bcorr[i] = ds_simplify(ds_subst(dab, expr_new_symbol(RR), expr_copy((Expr*)r2)));
+        if (!is_finite_value(blog[i]) || !is_finite_value(bcorr[i])) ok = false;
+    }
+
+    Expr* y2 = NULL;
+    if (ok) {
+        Expr* ylog  = xr_series(x, r2, blog,  N);   /* x^{r2} Sum blog_i x^i (proportional to y1) */
+        Expr* ycorr = xr_series(x, r2, bcorr, N);
+        y2 = A2(T2(ylog, ds_call1("Log", expr_new_symbol(x))), ycorr);
+    }
+    for (int i = 0; i <= N; i++) { expr_free(aR[i]); expr_free(blog[i]); expr_free(bcorr[i]); }
+    free(aR); free(blog); free(bcorr);
+    return y2;
+}
+
+static Expr* frobenius_regsing(const Expr* Pc, const Expr* Qc, const char* x, int N0) {
     /* xP and x^2 Q are analytic at 0.  Forming them by multiplication leaves a
      * removable singularity when P,Q carry transcendental analytic coefficients
      * (P = 6 Sin[x]/x^2 -> xP = 6 Sin[x]/x, which is 6 at x=0 but substitutes to
@@ -221,13 +275,16 @@ static Expr* frobenius_regsing(const Expr* Pc, const Expr* Qc, const char* x, in
      * by their Taylor polynomials first (a no-op for genuine polynomials). */
     Expr* xP  = ds_simplify(T2(PowE(expr_new_symbol(x), expr_new_integer(1)), expr_copy((Expr*)Pc)));
     Expr* x2Q = ds_simplify(T2(PowE(expr_new_symbol(x), expr_new_integer(2)), expr_copy((Expr*)Qc)));
-    xP  = normal_series(xP,  x, N);
-    x2Q = normal_series(x2Q, x, N);
-    Expr** Pk = malloc((size_t)(N + 1) * sizeof(Expr*));
-    Expr** Qk = malloc((size_t)(N + 1) * sizeof(Expr*));
-    for (int k = 0; k <= N; k++) { Pk[k] = taylor_coeff(xP, x, k); Qk[k] = taylor_coeff(x2Q, x, k); }
-    expr_free(xP); expr_free(x2Q);
-    Expr* P0 = Pk[0]; Expr* Q0 = Qk[0];
+
+    /* Leading coefficients P0 = lim xP, Q0 = lim x^2 Q drive the indicial quadratic;
+     * Limit resolves a removable singularity that an x->0 substitution cannot, and
+     * only order-0 coefficients are needed so this is independent of the window N. */
+    Expr* zrp = expr_new_function(expr_new_symbol(SYM_Rule),
+                    (Expr*[]){ expr_new_symbol(x), expr_new_integer(0) }, 2);
+    Expr* P0 = ds_simplify(eval_and_free(ds_call2("Limit", expr_copy(xP), zrp)));
+    Expr* zrq = expr_new_function(expr_new_symbol(SYM_Rule),
+                    (Expr*[]){ expr_new_symbol(x), expr_new_integer(0) }, 2);
+    Expr* Q0 = ds_simplify(eval_and_free(ds_call2("Limit", expr_copy(x2Q), zrq)));
 
     /* indicial roots */
     const char* M = intern_symbol("DSolve`fs");
@@ -236,9 +293,15 @@ static Expr* frobenius_regsing(const Expr* Pc, const Expr* Qc, const char* x, in
     bool haveroots = dsolve_analyze_roots(Fpoly, M, 2, &R);
     expr_free(Fpoly);
 
-    Expr* body = NULL;
+    /* Order the roots (r1 the larger real part) and size the truncation window.  The
+     * two Frobenius series live on exponent ranges x^{r2}..x^{r1} that differ by
+     * d = r1 - r2, so the merged SeriesData needs ceil(d) + FROB_ORDER terms to
+     * carry BOTH leading coefficients -- otherwise the larger-root series (and its
+     * C[1]) is truncated away (a fixed 6-term window collapsed §2.2.22-2101/2103). */
+    int N = N0;
+    Expr* r1 = NULL; Expr* r2 = NULL; bool equal = false; bool have_pair = false;
     if (haveroots && R.total == 2) {
-        Expr* r1 = NULL; Expr* r2 = NULL; bool equal = false;
+        have_pair = true;
         if (R.ndist == 1) { r1 = expr_copy(R.roots[0]); r2 = expr_copy(R.roots[0]); equal = true; }
         else {
             /* order by real part so r1 is the larger root */
@@ -249,8 +312,26 @@ static Expr* frobenius_regsing(const Expr* Pc, const Expr* Qc, const char* x, in
             expr_free(sgn);
             r1 = expr_copy(R.roots[first_bigger ? 0 : 1]);
             r2 = expr_copy(R.roots[first_bigger ? 1 : 0]);
+            Expr* dce = eval_and_free(ds_call1("Ceiling", eval_and_free(ds_call1("Re",
+                            eval_and_free(ds_call2(SYM_Subtract, expr_copy(r1), expr_copy(r2)))))));
+            if (dce->type == EXPR_INTEGER && dce->data.integer > 0) {
+                long d2 = dce->data.integer; if (d2 > 50) d2 = 50;   /* guard runaway */
+                N = N0 + (int)d2;
+            }
+            expr_free(dce);
         }
+    }
 
+    /* Build the coefficient arrays to the (possibly widened) window N. */
+    xP  = normal_series(xP,  x, N);
+    x2Q = normal_series(x2Q, x, N);
+    Expr** Pk = malloc((size_t)(N + 1) * sizeof(Expr*));
+    Expr** Qk = malloc((size_t)(N + 1) * sizeof(Expr*));
+    for (int k = 0; k <= N; k++) { Pk[k] = taylor_coeff(xP, x, k); Qk[k] = taylor_coeff(x2Q, x, k); }
+    expr_free(xP); expr_free(x2Q);
+
+    Expr* body = NULL;
+    if (have_pair) {
         Expr** a1 = malloc((size_t)(N + 1) * sizeof(Expr*));
         if (equal) {
             /* symbolic recurrence in RR so we can differentiate w.r.t. the exponent */
@@ -277,19 +358,29 @@ static Expr* frobenius_regsing(const Expr* Pc, const Expr* Qc, const char* x, in
             Expr** a2 = malloc((size_t)(N + 1) * sizeof(Expr*));
             int obstr2 = build_coeffs(Pk, Qk, P0, Q0, N, r2, a2);
             if (!obstr1 && !obstr2) {
+                /* non-integer or unobstructed integer difference: two independent
+                 * series (the wider window now carries both leading terms). */
                 Expr* s1 = xr_series(x, r1, a1, N);
                 Expr* s2 = xr_series(x, r2, a2, N);
                 body = A2(T2(ds_const(1), s1), T2(ds_const(2), s2));
+            } else if (!obstr1) {
+                /* positive-integer difference, obstructed smaller root: y2 carries a
+                 * genuine Log (Frobenius derivative method, frobenius_log_second). */
+                Expr* y1 = xr_series(x, r1, a1, N);
+                Expr* y2 = frobenius_log_second(Pk, Qk, P0, Q0, N, r2, x);
+                if (y2) body = A2(T2(ds_const(1), y1), T2(ds_const(2), y2));
+                else expr_free(y1);
             }
             for (int i = 0; i <= N; i++) expr_free(a2[i]);
             free(a2);
         }
         for (int i = 0; i <= N; i++) expr_free(a1[i]);
         free(a1);
-        expr_free(r1); expr_free(r2);
     }
+    if (r1) expr_free(r1);
+    if (r2) expr_free(r2);
     if (haveroots) dsolve_roots_free(&R);
-
+    expr_free(P0); expr_free(Q0);
     for (int k = 0; k <= N; k++) { expr_free(Pk[k]); expr_free(Qk[k]); }
     free(Pk); free(Qk);
     return body;
@@ -485,8 +576,9 @@ void dsolve_frobenius_init(void) {
     symtab_set_docstring("DSolve`FrobeniusSeries",
         "DSolve`FrobeniusSeries[eqn, y, x] gives a truncated Frobenius series solution "
         "y == x^s Sum a_n x^n of a second-order linear ODE about a regular singular "
-        "point x == 0 (indicial quadratic s(s-1)+P0 s+Q0 == 0; equal or "
-        "non-integer-difference roots handled, with a Log term for equal roots).");
+        "point x == 0 (indicial quadratic s(s-1)+P0 s+Q0 == 0; equal, non-integer- "
+        "and positive-integer-difference roots handled, with a Log term for equal "
+        "roots and for an obstructed integer difference).");
 
     symtab_add_builtin("DSolve`FirstOrderPowerSeries", builtin_dsolve_first_order_series);
     symtab_get_def("DSolve`FirstOrderPowerSeries")->attributes |= ATTR_PROTECTED;

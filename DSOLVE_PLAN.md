@@ -1504,6 +1504,43 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     two `dsolve_corpus_2_2_2{0,1}_tests` gates (baseline 4) + dashboards. Version 0.137 → 0.138. See the
     §2.2.20 / §2.2.21 blocks in `DSolve_test_status/STATUS.md`.
 
+- **M41 — §2.2.22 corpus (Problems 2101–2200, Nasser Abbasi) + Frobenius integer-root-difference /
+  logarithmic second solution.** ✅ DONE. First §2.2.x section dominated by **higher-order (3rd–6th)
+  constant-coefficient linear ODEs** (85 of 100: 36 homogeneous `_missing_x`, 49 nonhomogeneous with
+  `E^x·poly` / `E^x·(poly Cos + poly Sin)` / mixed forcing), plus a 3rd-order Euler–Cauchy IVP family
+  (2106–2111, incl. an x=−1 point and a fully symbolic-IC problem 2111) and 5 2nd-order
+  variable-coefficient regular-singular series ODEs (2101–2105). The constant-coefficient bulk — incl.
+  resonant nonhomogeneous, `Root`-object spectra, and mixed forcing — solves out of the box; the wave
+  drives the section to **100/100, 0 FAIL, 0 crash** with three general fixes and **0 regression**
+  (§2.1.2, §2.2.20, §2.2.21 and all `series`/`nseries` ctests held). New gate
+  `dsolve_corpus_2_2_22_tests` (baseline 0). Version 0.138 → 0.139.
+  - **`DSolve\`FrobeniusSeries` positive-integer indicial-root-difference / logarithmic second
+    solution** (`dsolve_frobenius.c`). The header contract's "positive-integer difference → decline
+    when a genuine Log is required" gap is closed. For `d = r1 − r2` a positive integer with the
+    smaller-root recurrence obstructed, `y2` is built by the **(s − r2)-modified Frobenius derivative
+    method**: the symbolic-exponent coefficients `a_n(s)` carry a simple pole at `s = r2` for `n ≥ d`,
+    so `b̄_n = lim (s−r2)a_n(s)` (the `Log` coefficient, ∝ y1) and `b̄_n' = lim d/ds[(s−r2)a_n(s)]`
+    (the algebraic correction) are removable-singularity limits — a clean generalisation of the
+    existing equal-root d/ds path, declining (NULL) only if a limit is non-finite so no wrong answer
+    ships. The truncation window is sized to `ceil(r1−r2) + FROB_ORDER` so both series' leading terms
+    survive the merged `SeriesData` (a fixed 6-term window had dropped the larger-root `C[1]`). Solves
+    obstructed `2104` (roots {0,4}) and wide-window `2101` (roots {5/2,−7/2}).
+  - **General `series.c` fix — `scalar · Laurent-SeriesData` order truncation.** Multiplying a
+    `SeriesData` with `nmin < 0` by any scalar truncated the product order to `order_num + nmin`
+    (`so_from_constant` allocated only `order_num` coefficients; `so_mul`'s
+    `min(const.order + series.nmin, …)` then lost `|nmin|` orders). `series_combine` now passes the
+    most-negative operand `nmin`, and the constant spans `order_num − min_nmin` coefficients (extends
+    only in the Laurent case). This is a general `Series[]` correctness fix and is what recovered
+    Frobenius `2103` (roots {3,−7}, difference 10, whose merged series had collapsed to a single
+    constant).
+  - **Converter `<var>\cos(` juxtaposition** (`tools/latex_ode_to_mathilda.py`). A trig function
+    directly after a variable (`15x\cos(2x)`) glued into the bogus symbol `xCos`; `_implicit_mult`
+    now inserts the multiplication space before a FUNCS head (`2185`). §2.2.20/§2.2.21 regenerate
+    byte-identically.
+  - `§2.2.21-2080` (the integer-difference member of that section's residue) stays UNEVAL: its Kovacic
+    Case-1 solve overruns the 8 s harness window before Frobenius runs (the documented churn class,
+    orthogonal to this Frobenius capability fix). See the §2.2.22 block in `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

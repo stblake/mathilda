@@ -107,6 +107,24 @@ static void test_series_laurent(void) {
         "Rational[-1, 3628800], 0], -1, 11, 1]");
 }
 
+/* 4b. Regression: a scalar times a Laurent SeriesData (nmin < 0) must PRESERVE
+ * the O-order.  Before the M41 fix, so_from_constant gave the constant only
+ * order_num coefficients, so so_mul's order = min(const.order + series.nmin, ...)
+ * lost |nmin| orders: `a SeriesData[.., -2, 1, 1]` truncated to order -1 instead
+ * of 1.  This silently dropped the larger-root series in a Frobenius integer-
+ * root-difference solution (DSolve §2.2.22-2103).  The mixed add checks the same
+ * order survives when combined with a second (non-Laurent) SeriesData. */
+static void test_series_scalar_laurent_order(void) {
+    setup_full();
+    assert_fullform(
+        "a SeriesData[x, 0, {1, 2, 3}, -2, 1, 1]",
+        "SeriesData[x, 0, List[a, Times[2, a], Times[3, a]], -2, 1, 1]");
+    assert_fullform(
+        "a SeriesData[x, 0, {1, 2, 3}, -2, 1, 1] + b SeriesData[x, 0, {5}, 0, 1, 1]",
+        "SeriesData[x, 0, List[a, Times[2, a], Plus[Times[3, a], Times[5, b]]], "
+        "-2, 1, 1]");
+}
+
 /* 5. Leading-term form Series[f, x -> x0]: Mathematica emits the first
  * non-zero term and the next potential non-zero position as the O-term.
  * Exp[Sin[x]-x]^3 = 1 - x^3/2 + x^5/40 + ... so the first non-zero after
@@ -2308,6 +2326,7 @@ int main(void) {
     TEST(test_series_sin_cos);
     TEST(test_series_symbolic_f);
     TEST(test_series_laurent);
+    TEST(test_series_scalar_laurent_order);
     TEST(test_series_leading_term);
     TEST(test_series_puiseux_sqrt_sin);
     TEST(test_series_logarithmic_x_power_x);
