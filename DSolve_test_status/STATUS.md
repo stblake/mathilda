@@ -1042,6 +1042,46 @@ Full per-case results: `reports/2.2.22.tsv`; bucketed report: `reports/2.2.22.md
 
 ---
 
+## Section 2.2.23 — "Problems 2201 to 2300" (Nasser Abbasi)
+
+Corpus: `DE_examples_2223.m` — 100 records, 45 scalar (**17 IVP**) + **55 systems**. The first
+**systems-heavy** §2.2.x section since §2.2.15: 55 constant-coefficient homogeneous 2×2/3×3
+linear first-order systems (2238–2292; real / complex / repeated-defective / irrational-`Root`
+spectra) + 45 scalar — higher-order (3rd–6th) constant-coefficient linear nonhomogeneous
+(2201–2220), 3rd/4th-order Euler–Cauchy IVPs (2221–2233, at x=1 and x=−1), general
+undefined-`F(x)` forcing (2234–2237), and elementary first-order (2293–2300). Scalars solve via
+`LinearConstantCoefficients` / `UndeterminedCoefficients` / `EulerCauchy` / `ExactODE`; systems
+via the `LinearFirstOrderSystem` Jordan matrix exponential.
+`ctest -R dsolve_corpus_2_2_23_tests` · gate baseline **2**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-12 (baseline) | 97 / 100 | 97.0% | 3 | pre-wave: 2203 (Sinh·Cos−Cosh·Sin resonant forcing → UC declines → VoP hangs), 2220/2289 (cubic-`Root` spectrum, `sympy=False`). |
+| 2026-09-12 (M42) | **98 / 100** | **98.0%** | **2** | 0 FAIL, 0 crash. Residue 2220/2289 (both `sympy=False`). |
+
+**M42 wave.** Two general fixes (no overfit), 0 regression:
+1. **`DSolve\`UndeterminedCoefficients` hyperbolic forcing** (`dsolve_undetcoeff.c`) — the forcing
+   normalisation now expands `Sinh`/`Cosh` to real exponentials before matching, so
+   `Sinh[x] Cos[x] − Cosh[x] Sin[x]` (`2203`) becomes UC atoms `E^{±x}{Cos|Sin}` (resonant `x·…`
+   shift) instead of falling through to the hanging variation-of-parameters. A structural no-op
+   for non-hyperbolic forcing; the strict residual gate is unchanged (no wrong particular). Also
+   intercepts `y''−4y == Sinh/Cosh[..]` (§2.2.4/§2.2.9) with a cleaner particular.
+2. **Converter `\frac`/`\sqrt` brace-arg juxtaposition** (`tools/latex_ode_to_mathilda.py`) —
+   `_implicit_mult` protected a math macro *with* its first brace arg, so a fraction numerator /
+   radicand escaped the implicit-multiplication split and a coefficient×function glued into a
+   bogus symbol (`\frac{2ty}{…}`, `\frac{4y_1}{3}` → systems 2239/2240/2261, 2300). It now
+   protects only the *name* of `\frac`/`\sqrt`. §2.2.20/§2.2.21/§2.2.22 regenerate byte-identical.
+
+Residue 2 (both `sympySolved=False`, bounded declines — no wrong answers): `2289` (3×3 system,
+irreducible-cubic `t³−14t+40` complex-`Root` spectrum → the `Simplify[ComplexExpand[·]]`
+realifier churns on the `Root`-heavy matrix exponential, no solve in 60 s — the M40/M41
+irrational-spectrum-churn class) and `2220` (4th-order IVP whose homogeneous basis carries the
+same cubic-`Root` spectrum → `Solve` cannot fit the ICs over the `Root`-object exponential basis).
+
+Full per-case results: `reports/2.2.23.tsv`; bucketed report: `reports/2.2.23.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -1246,6 +1286,22 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   `order_num − min_nmin` (`2103`, roots {3,−7}; fixes every `Series[]` `scalar × Laurent`). The
   §2.2.21-2080 integer-difference case stays UNEVAL (Kovacic churn eats the window before
   Frobenius — the documented, unrelated scheduling class).
+- **M42 (2026-09-12)** — §2.2.23 (Problems 2201–2300) corpus, **98/100, 0 FAIL, 0 crash**. The
+  first **systems-heavy** §2.2.x section since §2.2.15: 55 constant-coefficient homogeneous
+  2×2/3×3 linear systems (2238–2292) + 45 scalar (higher-order const-coeff nonhomogeneous
+  2201–2220, Euler–Cauchy IVPs 2221–2233, `F(x)`-forcing 2234–2237, elementary 2293–2300).
+  Constant-coefficient bulk solved out of the box (systems via the `LinearFirstOrderSystem`
+  Jordan matrix exponential). Two general fixes (0 regression — §2.1.2, §2.2.4, §2.2.9,
+  §2.2.20–22 and all series ctests held): **(1)** `DSolve\`UndeterminedCoefficients` now expands
+  `Sinh`/`Cosh` forcing to real exponentials, so the resonant `Sinh·Cos−Cosh·Sin` forcing
+  (`2203`) matches as UC atoms instead of hanging in variation of parameters (also intercepts the
+  `y''−4y==Sinh/Cosh[..]` family in §2.2.4/§2.2.9 cleanly); **(2)** converter `\frac`/`\sqrt`
+  brace-arg juxtaposition — a fraction numerator escaped the implicit-multiplication split and a
+  coefficient×function glued into a bogus symbol (`\frac{2ty}{…}`, `\frac{4y_1}{3}` → 2239/2240/
+  2261, 2300); §2.2.20/21/22 regenerate byte-identical. Residue 2 (both `sympy=False`, bounded
+  declines): `2289` (3×3 system, cubic-`Root` complex spectrum → realifier churn, no solve in
+  60 s — the M40/M41 irrational-spectrum-churn class) and `2220` (4th-order IVP, same cubic-`Root`
+  basis → `Solve` IC-fit cannot close). Gate `dsolve_corpus_2_2_23_tests` baseline 2.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

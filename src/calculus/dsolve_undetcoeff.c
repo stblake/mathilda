@@ -3,7 +3,9 @@
  *
  * A tidy particular solution of a constant-coefficient linear ODE
  *     a_n y^(n) + ... + a_0 y == g(x)
- * whose forcing g is a "UC function" — a sum of terms x^m Exp[a x] {1|Cos[b x]|Sin[b x]}.
+ * whose forcing g is a "UC function" — a sum of terms x^m Exp[a x] {1|Cos[b x]|Sin[b x]}
+ * (hyperbolic Sinh/Cosh factors are expanded to real exponentials first, so
+ * Sinh[x] Cos[x] - Cosh[x] Sin[x] is UC too; see uc_expand_hyperbolic).
  * The homogeneous part is the usual characteristic-root fundamental set
  * (dsolve_homog_basis); the particular is found by superposition over the additive
  * terms of g, each with the ansatz
@@ -64,6 +66,25 @@ static Expr* uc_poly(const char* sym, int d, const char* xvar, Expr*** vars, siz
 /* Coefficient[e, v] with v a full expression (e.g. Cos[b x]); e,v borrowed. */
 static Expr* coeff_of(const Expr* e, const Expr* v) {
     return eval_and_free(ds_call2("Coefficient", expr_copy((Expr*)e), expr_copy((Expr*)v)));
+}
+
+/* Expand hyperbolic Sinh/Cosh in the forcing to REAL exponentials (takes
+ * ownership of g, returns owned).  A hyperbolic-times-trig/poly/exp forcing
+ * (Sinh[x] Cos[x] - Cosh[x] Sin[x], §2.2.23-2203) is then a sum of genuine UC
+ * atoms E^{a x} {1|Cos|Sin} that uc_particular matches, instead of a Cos*Sinh
+ * product that is not UC and declines to the (here hanging) variation-of-
+ * parameters fallback.  Sinh/Cosh only: they yield polynomial-exponential UC
+ * atoms, whereas Tanh/Sech/... give rational-exponential forcings that are not
+ * UC and correctly fall through.  TrigToExp is deliberately NOT used: it would
+ * also send Cos/Sin to COMPLEX exponentials, losing the clean real Cos/Sin
+ * atoms the Coefficient[.,Cos[b x]] extraction below relies on.  A no-op (a
+ * structural identity) when g carries no Sinh/Cosh, so non-hyperbolic forcing
+ * is byte-identical. */
+static Expr* uc_expand_hyperbolic(Expr* g) {
+    Expr* rules = parse_expression(
+        "{Sinh[uu_] :> (E^uu - E^(-uu))/2, Cosh[uu_] :> (E^uu + E^(-uu))/2}");
+    if (!rules) return g;
+    return eval_and_free(ds_call2("ReplaceAll", g, rules));
 }
 
 /* Particular solution for a single UC term T (in xvar), given the constant
@@ -243,7 +264,7 @@ Expr** dsolve_undetcoeff_try(DSolveProblem* P, size_t* nbranch) {
          * variation-of-parameters fallback.  TrigReduce preserves value and never turns
          * a UC function into a non-UC one, so it can only help: an already-reduced or
          * non-trig forcing is returned unchanged. */
-        Expr* gR = eval_and_free(ds_call1("TrigReduce", expr_copy(g)));
+        Expr* gR = eval_and_free(ds_call1("TrigReduce", uc_expand_hyperbolic(expr_copy(g))));
         Expr* gE = eval_and_free(ds_call1("Expand", gR));
         size_t nterms; Expr** terms;
         if (head_is(gE, SYM_Plus)) { nterms = gE->data.function.arg_count; terms = gE->data.function.args; }
@@ -289,6 +310,7 @@ void dsolve_undetcoeff_init(void) {
     symtab_get_def("DSolve`UndeterminedCoefficients")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`UndeterminedCoefficients",
         "DSolve`UndeterminedCoefficients[eqn, y, x] solves a constant-coefficient linear "
-        "ODE with polynomial/exponential/sinusoidal forcing by the method of undetermined "
-        "coefficients (characteristic-root homogeneous set + a matched trial particular).");
+        "ODE with polynomial/exponential/sinusoidal/hyperbolic forcing by the method of "
+        "undetermined coefficients (characteristic-root homogeneous set + a matched trial "
+        "particular).");
 }

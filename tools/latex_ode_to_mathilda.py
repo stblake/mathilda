@@ -207,6 +207,17 @@ def _implicit_mult(s):
     # and `\prime` runs are untouched -- prior sections regenerate byte-identically.
     _fn = '|'.join(sorted((re.escape(k[1:]) for k in FUNCS), key=len, reverse=True))
     s = re.sub(r'(?<=[A-Za-z0-9])(?=\\(?:' + _fn + r')(?![A-Za-z]))', ' ', s)
+    # `\frac` / `\sqrt` take MATH brace args (numerator / denominator / radicand)
+    # whose juxtaposed factors are implicit multiplication and MUST be separated
+    # (`\frac{2ty}{t^2+1}` -> `2 t y`, `\frac{4y_1}{3}` -> `4 y1`); otherwise the
+    # general macro rule below swallows the first brace arg with the macro, the run
+    # never splits, and the glued numerator becomes a bogus symbol whose dependent
+    # function never gets its `[x]` (§2.2.23-2239/2240/2261 systems, 2300 `2ty`).
+    # Protect only the macro NAME here so the following braces stay exposed to the
+    # digit/letter split.  A name-macro (`\operatorname{Heaviside}`, `\mathrm{e}`)
+    # still has its brace arg protected by the general rule, so its name is not
+    # shredded letter-by-letter.
+    s = re.sub(r'\\(?:frac|sqrt)\b', _prot, s)
     t = re.sub(r'\\[A-Za-z]+(?:\s*\{[^{}]*\})?', _prot, s)
     t = re.sub(r'(?<=[0-9])(?=[A-Za-z])', ' ', t)      # 8y  -> 8 y
     t = re.sub(r'(?<=[A-Za-z])(?=[A-Za-z])', ' ', t)   # yx  -> y x

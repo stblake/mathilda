@@ -1541,6 +1541,46 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     Case-1 solve overruns the 8 s harness window before Frobenius runs (the documented churn class,
     orthogonal to this Frobenius capability fix). See the §2.2.22 block in `DSolve_test_status/STATUS.md`.
 
+- **M42 — §2.2.23 corpus (Problems 2201–2300, Nasser Abbasi) + undetermined-coefficients hyperbolic
+  forcing + converter `\frac`/`\sqrt` juxtaposition.** ✅ DONE. The first **systems-heavy** §2.2.x
+  section since §2.2.15: 45 scalar (17 IVP) + **55 constant-coefficient homogeneous 2×2/3×3 linear
+  first-order systems** (2238–2292; real / complex / repeated-defective / irrational-`Root` spectra).
+  Scalar half is higher-order (3rd–6th) constant-coefficient linear nonhomogeneous (2201–2220),
+  3rd/4th-order Euler–Cauchy IVPs (2221–2233), general undefined-`F(x)` forcing (2234–2237), and
+  elementary first-order (2293–2300). The constant-coefficient bulk — scalars via
+  `LinearConstantCoefficients` / `UndeterminedCoefficients` / `EulerCauchy` / `ExactODE`, systems via
+  the `LinearFirstOrderSystem` Jordan matrix exponential — solves out of the box; the wave drives the
+  section to **98/100, 0 FAIL, 0 crash** with two general fixes and **0 regression** (§2.1.2, §2.2.4,
+  §2.2.9, §2.2.20–22 and all `series`/`nseries` ctests held). New gate `dsolve_corpus_2_2_23_tests`
+  (baseline 2). Version 0.139 → 0.140.
+  - **`DSolve\`UndeterminedCoefficients` — hyperbolic (`Sinh`/`Cosh`) forcing**
+    (`dsolve_undetcoeff.c`). A forcing carrying a hyperbolic×trig/poly/exp product
+    (`Sinh[x] Cos[x] − Cosh[x] Sin[x]`, `2203`) is not a UC function as written, so UC declined and
+    the equation fell through to the (here **hanging**) variation-of-parameters fallback (timeout).
+    The forcing normalisation now expands `Sinh`/`Cosh` to **real** exponentials
+    (`Sinh[u]→(E^u−E^{−u})/2`, keeping `Cos`/`Sin`; `TrigToExp` is deliberately avoided so the trig
+    atoms do not become complex exponentials the `Coefficient[·,Cos]` matcher loses), so the forcing
+    becomes a sum of genuine `E^{a x}{1|Cos|Sin}` atoms — including the resonant `x·E^{±x}(…)` shift.
+    A structural no-op when the forcing has no hyperbolic head (non-hyperbolic forcing byte-identical);
+    the strict in-method residual gate is unchanged, so no wrong particular ships. Closes `2203` and
+    intercepts the `y''−4y == Sinh/Cosh[..]` const-coeff family (§2.2.4-328/329/369, §2.2.9-875/876/
+    895) with a cleaner particular.
+  - **Converter — `\frac`/`\sqrt` math brace-arg juxtaposition** (`tools/latex_ode_to_mathilda.py`).
+    `_implicit_mult` protected a backslash macro *together with its first brace argument*, shielding a
+    `\frac` numerator / `\sqrt` radicand from the digit/letter split — so a juxtaposed
+    coefficient×function inside a fraction (`\frac{2ty}{t^2+1}`, `\frac{4y_1}{3}`) glued into a bogus
+    symbol whose dependent function never got its `[x]`/`[t]` (systems `2239`/`2240`/`2261`, `2300`).
+    It now protects only the *name* of the math macros `\frac`/`\sqrt` so their braces stay exposed,
+    while name-macros (`\operatorname{Heaviside}`, `\mathrm{e}`) keep their brace arg protected.
+    §2.2.20/§2.2.21/§2.2.22 regenerate **byte-identical**.
+  - **Residue 2 (both `sympySolved=False`, bounded declines — no wrong answers):** `2289` (3×3 system,
+    irreducible-cubic `t³−14t+40` complex-`Root` spectrum — the `Simplify[ComplexExpand[·]]` realifier
+    churns on the `Root`-heavy matrix exponential, no solve in 60 s; the M40/M41 irrational-spectrum-
+    churn class, where every attempted structural gate was reverted as unsafe) and `2220` (4th-order
+    IVP whose homogeneous basis carries the same cubic-`Root` spectrum, so the `Solve` IC-fit cannot
+    close over the `Root`-object exponential basis). See the §2.2.23 block in
+    `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

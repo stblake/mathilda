@@ -4055,6 +4055,20 @@ add_test(NAME dsolve_corpus_2_2_22_tests
                  ../../DSolve_test_status/DE_examples_2222.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
 
+# Section 2.2.23 (Problems 2201-2300, Nasser Abbasi): 100 records, 17 IVP, 55
+# systems.  The first SYSTEMS-heavy section since 2.2.15: 45 scalar (higher-order
+# 3rd-6th constant-coefficient linear nonhomogeneous 2201-2220, 3rd/4th-order
+# Euler-Cauchy IVPs 2221-2233, general F(x)-forcing 2234-2237, elementary
+# first-order 2293-2300) + 55 constant-coefficient homogeneous 2x2/3x3 linear
+# systems (2238-2292; real / complex / repeated-defective / irrational-Root
+# spectra).  Solved by LinearConstantCoefficients / UndeterminedCoefficients /
+# EulerCauchy / ExactODE (scalars) and LinearFirstOrderSystem (Jordan matrix
+# exponential; systems).  Baseline argv3 = the STATUS.md non-PASS count.
+add_test(NAME dsolve_corpus_2_2_23_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2223.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the
