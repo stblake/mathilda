@@ -177,6 +177,22 @@ static Expr* lc_recurse(DSolveProblem* P, const char* Yn, const char* un, const 
     return R;
 }
 
+/* True iff the equation is the affine-ratio (linear-coefficients) form
+ * y' == (a1 x+b1 y+c1)/(a2 x+b2 y+c2) that this method owns.  Exposed so an
+ * EARLIER, more expensive method that also matches this class can defer to it: the
+ * Lagrange/d'Alembert parametric method recognises every affine ratio as
+ * y == x F(y')+G(y') (with F rational in y'), but its integrating-factor linear
+ * ODE can spin uninterruptibly (2.2.24-2335); it declines this class so
+ * LinearCoefficients (a cheap structural reduction) claims it instead. */
+bool dsolve_is_linear_coefficients_form(DSolveProblem* P) {
+    if (P->nfun != 1 || P->neq != 1 || P->max_order[0] != 1) return false;
+    const char* Yn = intern_symbol("DSolve`lcY");
+    Expr *a1,*b1,*c1,*a2,*b2,*c2;
+    if (!lc_setup(P, Yn, &a1,&b1,&c1,&a2,&b2,&c2)) return false;
+    expr_free(a1);expr_free(b1);expr_free(c1);expr_free(a2);expr_free(b2);expr_free(c2);
+    return true;
+}
+
 /* Explicit branches. */
 Expr** dsolve_lincoeff_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1 || P->max_order[0] != 1) return NULL;

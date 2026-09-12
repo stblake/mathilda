@@ -4069,6 +4069,18 @@ add_test(NAME dsolve_corpus_2_2_23_tests
                  ../../DSolve_test_status/DE_examples_2223.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
+# Section 2.2.24 (Problems 2301-2400, Nasser Abbasi): 100 records, 51 IVP, 0
+# systems.  Mixed first-order (separable / linear / homogeneous class A/C / exact
+# / Bernoulli / Riccati / Abel / Lagrange-d'Alembert) + second-order (missing_x,
+# with_linear_symmetries, Emden-Fowler, Gegenbauer/Legendre).  Solved across the
+# scalar cascade (Separable / LinearFirstOrder / Exact / Riccati->specialform
+# Airy/Bessel / Kovacic / EulerCauchy / reduction).  Baseline argv3 = the
+# STATUS.md non-PASS count (lowered by each landed wave).
+add_test(NAME dsolve_corpus_2_2_24_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2224.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

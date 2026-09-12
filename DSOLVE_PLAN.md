@@ -1581,6 +1581,46 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     close over the `Root`-object exponential basis). See the §2.2.23 block in
     `DSolve_test_status/STATUS.md`.
 
+- **M43 — §2.2.24 corpus (Problems 2301–2400, Nasser Abbasi) + IVP inverse-branch correctness +
+  homogeneous-Root→implicit + Lagrange linear-coefficients deferral.** ✅ DONE. A **mixed**
+  first-order + second-order section: 100 scalar (51 IVP), 0 systems — first-order separable /
+  linear / homogeneous (class A/C) / exact / Bernoulli / Riccati / Abel / Lagrange–d'Alembert,
+  and second-order `_missing_x` / linear / Emden–Fowler / `_with_linear_symmetries` /
+  Gegenbauer–Legendre. Most solves out of the box (the special-function Riccati `y'=t+y²`→Airy
+  and `y'=t²+y²`→Bessel, every Abel-tagged case, and Legendre included). Baseline **90/100 with
+  1 FAIL** → **92/100, 0 FAIL, 0 crash** with two general root-cause fixes and **0 regression**
+  (all §2.2.x + §2.1.2 gates held; §2.2.1/2/6/7 improved 1–2 as a bonus). New gate
+  `dsolve_corpus_2_2_24_tests` (baseline 8). Version 0.140 → 0.141.
+  - **IVP inverse-branch correctness — a wrong-answer fix** (`dsolve_common.c`). The IVP
+    constant-fitter collapsed a multivalued inverse fit's `ConditionalExpression` integer-family
+    to its principal member (`C[_]→0`) only at the FINAL step, not while *choosing* among Solve's
+    inverse branches. For `t y'==y+√(t²+y²)`, `y[1]==0` (2329), `Solve[Sinh[C]==0,C]` returns an
+    odd family `Iπ+2Ikπ` and an even family `2Ikπ`; the candidate loop substitutes a generic
+    non-integer for the free family index, so BOTH look complex-nonzero and it fell back to
+    `args[0]` (odd/wrong), shipping `y=(1−t²)/2` — meets the IC, fails the ODE (correct
+    `(t²−1)/2`), and the transcendental residual is undecidable by `zero_test`. Fix: a new
+    `ds_collapse_principal` collapses each candidate to its principal member BEFORE the numeric
+    `ds_branch_num_ok` check (correct even family wins), plus a scoped final numeric-verify gate
+    (first-order scalar, radical bodies excluded) that drops any confidently-wrong fit. Bonus:
+    closes first-order IVPs in §2.2.1/2/6/7.
+  - **`DSolve\`Lagrange` defers the linear-coefficients class** (`dsolve_lagrange.c` + new public
+    predicate `dsolve_is_linear_coefficients_form` in `dsolve_lincoeff.c`). Every affine-ratio
+    `y'==(a1 x+b1 y+c1)/(a2 x+b2 y+c2)` also matches Lagrange as `y==x F(y')+G(y')` with `F`
+    rational in `y'`, but Lagrange's integrating-factor linear ODE spins uninterruptibly
+    (`TimeConstrained` cannot bound an inner `Integrate` — see
+    [[project_timeconstrained_no_nest]]); it timed out on 2335, which is NOT a genuine d'Alembert
+    equation. Lagrange now defers the class to `LinearCoefficients`, which solves it in ~1 s.
+    Genuine d'Alembert (polynomial `F`, e.g. `y==2x y'+y'²`) is unaffected — it still solves via
+    Lagrange's parametric path.
+  - **Deferred-class attempt** (per request): the special-function Riccati (Airy/Bessel) and every
+    Abel-tagged case in this section ALREADY solve — no gap, no new method needed. **Residue 8**
+    (all `sympySolved=False`, bounded declines — no wrong answers): `2304` (non-elementary
+    integrating-factor integral `∫(t²+1)^{1/2}(t⁴+1)^{1/4}dt`), `2327` (symbolic-coefficient
+    Erf-Riccati — `u''+k(t+b)u'+k²tb u==0` factors `(D+kt)(D+kb)` with an Erf second solution;
+    solves for concrete k,b, symbolic needs a symbolic 2nd-order operator-factoring method),
+    `2349`/`2350`/`2351` (`y'=e^{−t²}+y²` → `u''=e^{−t²}u`, non-elementary), `2352`/`2355`/`2356`
+    (`y=_G(x,y')` non-elementary). See the §2.2.24 block in `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

@@ -698,6 +698,24 @@ enum { FIT_OK = 0,     /* Solve fixed >=1 constant (fully fit, or under-determin
                         * method did NOT solve the IVP (distinct from an under-determined
                         * fit, where Solve SUCCEEDS and the free constant is genuine). */
 
+/* Collapse a fitted body to its PRINCIPAL representative: strip any
+ * ConditionalExpression wrapper and zero the residual integer-family index
+ * (C[_] -> 0).  A multivalued inverse fit (Solve[Sinh[C]==0, C] ->
+ * ConditionalExpression[2 I k Pi, k in Integers]) reintroduces a family index; for
+ * a fully-determined single-constant fit every family member meets the CONDITION
+ * but they are DIFFERENT functions (the Log[t]/branch shift does not cancel), so we
+ * must compare them at a fixed representative.  No-op on a body without a
+ * ConditionalExpression (a clean multi-branch numeric fit is untouched).  Consumes
+ * `e`, returns a fresh Expr. */
+static Expr* ds_collapse_principal(Expr* e) {
+    if (!e || !ds_has_head(e, SYM_ConditionalExpression)) return e;
+    Expr* strip = parse_expression("ConditionalExpression[v_, _] :> v");
+    e = eval_and_free(internal_replace_all((Expr*[]){ e, strip }, 2));
+    Expr* zero = parse_expression("C[_] -> 0");
+    e = eval_and_free(internal_replace_all((Expr*[]){ e, zero }, 2));
+    return e;
+}
+
 /* Fit generated constants to the initial/boundary conditions; returns a fresh
  * body (the general body copied when there is nothing to fit).  Sets *no_solution
  * (when non-NULL) true only when Solve PROVES the conditions inconsistent (the LIST
@@ -789,6 +807,12 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
                 if (!head_is(cb, SYM_List)) continue;
                 Expr* cand = eval_and_free(internal_replace_all(
                     (Expr*[]){ expr_copy((Expr*)body), expr_copy(cb) }, 2));
+                /* Compare candidate families at their PRINCIPAL member: a transcendental
+                 * inverse fit (Sinh[C]==0 -> {I Pi + 2 I k Pi} and {2 I k Pi}) leaves a
+                 * free family index that ds_subst_generics would otherwise set to a
+                 * non-integer generic, making BOTH families look complex/nonzero and
+                 * defaulting to args[0] (the wrong odd-multiple branch, 2.2.24-2329). */
+                cand = ds_collapse_principal(cand);
                 bool ok = ds_branch_num_ok(P, cand);
                 expr_free(cand);
                 if (ok) { branch = cb; break; }
@@ -803,15 +827,8 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
                  * strip ConditionalExpression, then collapse the residual family
                  * index C[_] -> 0.  Guarded to the ConditionalExpression case so a
                  * clean fit is untouched and an unfitted constant is never zeroed. */
-                if (scalar_fit && fitted &&
-                    ds_has_head(fitted, SYM_ConditionalExpression)) {
-                    Expr* strip = parse_expression("ConditionalExpression[e_, _] :> e");
-                    fitted = eval_and_free(internal_replace_all(
-                        (Expr*[]){ fitted, strip }, 2));
-                    Expr* zero = parse_expression("C[_] -> 0");
-                    fitted = eval_and_free(internal_replace_all(
-                        (Expr*[]){ fitted, zero }, 2));
-                }
+                if (scalar_fit && fitted)
+                    fitted = ds_collapse_principal(fitted);
             }
         }
     }
@@ -844,6 +861,21 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
             *fit_state = FIT_UNDECIDED;
         else
             *fit_state = FIT_OK;
+        /* Final correctness backstop for a first-order scalar IVP: an applied fit
+         * whose body is CONFIDENTLY a non-solution of the ODE (a spurious inverse
+         * branch that met the initial condition but not the equation, whose
+         * transcendental residual zero_test cannot disprove) is never a solution --
+         * drop it (FIT_UNDEF) so dsolve_run declines and the cascade may find a
+         * verifiable form, rather than shipping a wrong answer (2.2.24-2329). Scoped
+         * to first-order scalar, where the inverse-function branch hazard lives;
+         * ds_branch_num_ok rejects only when robustly nonzero (never a keep-worthy
+         * or non-numericizable residual).  Radical bodies are EXCLUDED here: a
+         * sqrt/cube-root branch valid only on a sub-interval is governed by the
+         * prelude-grid-aligned ds_branch_corpus_verifiable in dsolve_run, so this
+         * fixed-grid gate must not double-judge it. */
+        if (*fit_state == FIT_OK && applied && P->nfun == 1 && P->max_order[0] == 1 &&
+            !ds_has_radical_power(fitted) && !ds_branch_num_ok(P, fitted))
+            *fit_state = FIT_UNDEF;
     }
     return fitted;
 }

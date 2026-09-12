@@ -1082,6 +1082,55 @@ Full per-case results: `reports/2.2.23.tsv`; bucketed report: `reports/2.2.23.md
 
 ---
 
+## Section 2.2.24 — "Problems 2301 to 2400" (Nasser Abbasi)
+
+Corpus: `DE_examples_2224.m` — 100 records, 100 scalar (**51 IVP**), 0 systems.
+A MIXED first-order + second-order section: first-order separable / linear /
+homogeneous (class A/C) / exact / Bernoulli / Riccati / Abel / Lagrange–d'Alembert,
+and second-order `_missing_x` / linear / Emden–Fowler / `_with_linear_symmetries` /
+Gegenbauer–Legendre. Solved across the scalar cascade; the special-function Riccati
+(Airy `y'=t+y²`, Bessel `y'=t²+y²`), every Abel-tagged case, and Legendre all solve
+out of the box. `ctest -R dsolve_corpus_2_2_24_tests` · gate baseline **8**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-13 (baseline) | 90 / 100 | 90.0% | 10 | pre-wave: **1 FAIL** (2329, IVP fit picked complex C[1]=Iπ) + 9 UNEVAL (incl. 2 hangs: 2327 Erf-Riccati, 2335 Lagrange spin). |
+| 2026-09-13 (M43) | **92 / 100** | **92.0%** | **8** | **0 FAIL, 0 crash.** 2329 fixed (correctness) + 2335 solved (Lagrange→LinearCoefficients). |
+
+**M43 wave.** Two general root-cause fixes (no overfit), 0 regression, plus a
+bounded side benefit (§2.2.1/§2.2.2/§2.2.6/§2.2.7 each improved by 1–2):
+1. **IVP inverse-branch correctness** (`dsolve_common.c`) — the constant-fitter
+   collapsed a `ConditionalExpression` integer-family to its principal member
+   (`C[_]→0`) only at the FINAL fit, not while CHOOSING among Solve's branches, so a
+   transcendental inverse (`Solve[Sinh[C]==0,C]` returns an odd `Iπ+2Ikπ` family and
+   an even `2Ikπ` family) defaulted to `args[0]` (the odd/wrong family) and shipped a
+   body meeting the IC but not the ODE (2329: `(1−t²)/2` for `t y'=y+√(t²+y²)`,
+   correct `(t²−1)/2`). Fix: collapse each candidate to its principal member BEFORE
+   the numeric ODE check so the correct even family wins, plus a scoped final
+   numeric-verify gate dropping any confidently-wrong first-order scalar fit. Also
+   closes first-order IVPs in §2.2.1/2/6/7 (bonus).
+2. **Lagrange defers the linear-coefficients class** (`dsolve_lagrange.c` +
+   `dsolve_is_linear_coefficients_form` in `dsolve_lincoeff.c`) — every affine-ratio
+   `y'=(a1x+b1y+c1)/(a2x+b2y+c2)` also matches Lagrange as `y=x F(y')+G(y')` (F
+   rational in y'), but Lagrange's integrating-factor linear ODE spins
+   uninterruptibly (it timed out on 2335, which is NOT a genuine d'Alembert equation);
+   it now defers the class to LinearCoefficients, which solves it in ~1 s. Genuine
+   d'Alembert (polynomial F, e.g. `y=2x y'+y'²`) is unaffected.
+
+Residue 8 (all `sympySolved=False`, bounded declines — no wrong answers):
+`2304` (linear, non-elementary integrating-factor integral
+`∫(t²+1)^{1/2}(t⁴+1)^{1/4}dt`), `2327` (symbolic-coefficient Erf-Riccati
+`y'=k(a−y)(b−y)`; the linearised ODE `u''+k(t+b)u'+k²tb u==0` factors as
+`(D+kt)(D+kb)` with an Erf second solution — solves for CONCRETE k,b, but the
+symbolic case falls to a power series and needs a symbolic 2nd-order
+operator-factoring method), `2349`/`2350`/`2351` (`y'=e^{−t²}+y²` → `u''=e^{−t²}u`,
+non-elementary), `2352`/`2355`/`2356` (`y=_G(x,y')` non-elementary, e.g.
+`y'=e^{−t}+Log[1+y²]`).
+
+Full per-case results: `reports/2.2.24.tsv`; bucketed report: `reports/2.2.24.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -1302,6 +1351,25 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   declines): `2289` (3×3 system, cubic-`Root` complex spectrum → realifier churn, no solve in
   60 s — the M40/M41 irrational-spectrum-churn class) and `2220` (4th-order IVP, same cubic-`Root`
   basis → `Solve` IC-fit cannot close). Gate `dsolve_corpus_2_2_23_tests` baseline 2.
+- **M43 (2026-09-13)** — §2.2.24 (Problems 2301–2400) corpus, **92/100, 0 FAIL, 0 crash**. A
+  MIXED first-order + second-order section (100 scalar, 51 IVP, 0 systems). Baseline 90/100
+  had **1 FAIL** (2329) + 9 UNEVAL (2 of them hangs). Two general root-cause fixes, 0
+  regression: **(1) IVP inverse-branch correctness** (`dsolve_common.c`) — the constant-fitter
+  now collapses a `ConditionalExpression` integer-family to its principal member (`C[_]→0`)
+  BEFORE choosing among Solve's inverse branches (was only at the final fit), so a transcendental
+  inverse no longer defaults to the wrong family and ships a body meeting the IC but not the ODE
+  (2329 `t y'=y+√(t²+y²)` shipped `(1−t²)/2`, correct `(t²−1)/2`); a scoped final numeric-verify
+  gate drops any confidently-wrong first-order scalar fit. Bonus: also fixed first-order IVPs in
+  §2.2.1/2/6/7. **(2) Lagrange defers the linear-coefficients class** (`dsolve_lagrange.c` + a
+  shared predicate in `dsolve_lincoeff.c`) — an affine-ratio equation matches Lagrange as
+  `y=x F(y')+G(y')` with F rational, but its integrating-factor solve spins uninterruptibly
+  (`TimeConstrained` cannot bound an inner `Integrate`); Lagrange now defers the class to
+  `LinearCoefficients`, which solves 2335 in ~1 s (genuine d'Alembert unaffected). Deferred-class
+  attempt (per request): the special-function Riccati (Airy/Bessel) and every Abel-tagged case
+  ALREADY solve — no gap. Residue 8 (all `sympy=False`, bounded declines): 2304 (non-elementary
+  IF integral), 2327 (symbolic Erf-Riccati — needs symbolic 2nd-order operator factoring),
+  2349/2350/2351 (`y'=e^{−t²}+y²`, non-elementary), 2352/2355/2356 (`y=_G(x,y')`,
+  non-elementary). Gate `dsolve_corpus_2_2_24_tests` baseline 8.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

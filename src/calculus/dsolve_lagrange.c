@@ -31,6 +31,12 @@
 #include "../attr.h"
 #include <stdlib.h>
 
+/* Defined in dsolve_lincoeff.c: true for the affine-ratio class LinearCoefficients
+ * owns.  Every such equation is ALSO a Lagrange form y == x F(y')+G(y') with F
+ * rational in y', but Lagrange's integrating-factor linear ODE can spin
+ * uninterruptibly on it (2.2.24-2335), so Lagrange defers the class. */
+extern bool dsolve_is_linear_coefficients_form(DSolveProblem* P);
+
 /* base^-1; base consumed. */
 static Expr* powneg1(Expr* base) {
     return expr_new_function(expr_new_symbol(SYM_Power),
@@ -55,6 +61,12 @@ Expr** dsolve_lagrange_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     if (P->max_order[0] != 1) return NULL;
     if (P->ncond > 0) return NULL;              /* parametric IVP-fitting is future */
+    /* Defer the affine-ratio (linear-coefficients) class to LinearCoefficients: it
+     * matches here as y == x F(y')+G(y') with F rational in y', but the parametric
+     * integrating-factor solve can spin uninterruptibly (2.2.24-2335), while
+     * LinearCoefficients reduces it cleanly.  Genuine d'Alembert (non-affine-ratio)
+     * is unaffected. */
+    if (dsolve_is_linear_coefficients_form(P)) return NULL;
     const char* xvar = P->ind_names[0];
     const char* Yn = intern_symbol("DSolve`Y");
     const char* Pn = intern_symbol("DSolve`p");
