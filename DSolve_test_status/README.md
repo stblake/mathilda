@@ -35,6 +35,8 @@ living scoreboard all in one place.
 | `DE_examples_2217.m` | Section **2.2.17** corpus — 100 ODEs (Nasser Abbasi, Problems 1601–1700): **all scalar (28 IVP), 0 systems**. First-order dominated: 27 homogeneous, 23 Abel-tagged (most overlap `_homogeneous`/`_exact`), 14 separable, 8 Bernoulli, 8 exact, 6 quadrature, 4 linear, 2 Riccati, 8 `y=_G(x,y')` (no standard method). Baseline 79/100 with **5 FAIL** → **87/100, 0 FAIL** (M37): the 5 FAILs were fractional-power ODEs shipping a wrong branch, fixed by numeric branch filters / a verifying-root fitter / a prelude-matching post-fit gate; `DSolve\`AbelAIR` (scaling `u=y/s`→separable) closes 1604/1606/1607/1676. Residue 13: the eight `y=_G` nonelementary + `1624` (cube-root real-branch) + `1601` (garbled Solve inversion) + `1673`/`1681`/`1689`/`1691`. |
 | `DE_examples_2218.m` | Section **2.2.18** corpus — 100 ODEs (Nasser Abbasi, Problems 1701–1800): **all scalar (14 IVP), 0 systems**. 45 first-order / 55 second-order (no order ≥ 3). Mixed: 25 2nd-order `_with_linear_symmetries`, 17 2nd-order linear (exact/(non)homog), 10 separable, 8 2nd-order `_missing_x`, 11 Abel-2nd-kind, 8 quadrature, 5 Emden–Fowler (linear/Euler subtype), plus Bernoulli/Riccati/linear/homogeneous. Baseline **95/100 → 96/100, 0 FAIL** (M38): fixed a `zero_test` decay false-positive (`PossibleZeroQ[E^(-2x²)]==True`) that made `DSolve\`Kovacic` drop an inhomogeneous forcing and ship a homogeneous-only wrong answer (masked as UNEVAL) — new `ds_is_structural_zero` gates the Wronskian in `dsolve_variation_of_parameters` and Kovacic's forcing detection, so `1763` now solves with its particular. **Bonus:** the same fix improved §2.1.2 (−5) and §2.2.1/2/6/7 with 0 regressions. Residue 4 (all `sympySolved=False`): `1708`/`1709` (Abel-2nd-kind class B, M13), `1729` (non-elementary integrating factor), `1769` (needs `∫E^x/√x→Erfi`, a deep-Risch Erf-tower extension). |
 | `DE_examples_2219.m` | Section **2.2.19** corpus — 100 ODEs (Nasser Abbasi, Problems 1801–1900): **all scalar (27 IVP), 0 systems**. Second-order-linear dominated: 3 Riccati, ~30 nonhomogeneous 2nd-order linear (many `sympySolved=False`, transcendental forcing Tan/Sec²/E^x Sec x/logistic), a large `_with_linear_symmetries` variable-coefficient homogeneous family, Emden–Fowler, Gegenbauer. Baseline **94/100 → 95/100, 0 FAIL** (M39): new `DSolve\`VariationOfParameters` — the general nonhomogeneous backstop that solves the homogeneous part, normalises the fundamental set (`PowerExpand[Simplify[·]]`) and adds the VoP particular, gated to transcendental (ChangeOfVariable) coefficients so it never preempts Kovacic/Euler; closes `1822` (`Sin[x]y''+(2Sin−Cos)y'+(Sin−Cos)y==E^-x`). Residue 5 (bounded declines): `1817` (non-elementary Struve particular), `1823` (Kovacic constant-`r` churn before the backstop), `1836` (Solve can't fit an `ExpIntegralEi`-constant IVP system), `1876` (Kovacic `E^(nLog)` IC-fit branch artifacts), `1900` (exact → non-elementary integrating factor / complex-singular ₂F₁). |
+| `DE_examples_2220.m` | Section **2.2.20** corpus — 100 ODEs (Nasser Abbasi, Problems 1901–2000): **all scalar (34 IVP), 0 systems**. Every one a homogeneous 2nd-order linear ODE with a regular singular point ("series expansion around x0"): 86 `_with_linear_symmetries`, 12 `_exact _linear`. **First section from the site's new LaTeXML pages** (the tex4ht `indexsubsectionN.htm` URLs are now redirect stubs — see the converter note below). Baseline **96/100, 0 FAIL**; residue 4 = Kovacic Case-1 churn + one symbolic-parameter Heun (bounded declines). |
+| `DE_examples_2221.m` | Section **2.2.21** corpus — 100 ODEs (Nasser Abbasi, Problems 2001–2100): **all scalar, 0 IVP, 0 systems** — homogeneous 2nd-order linear regular-singular ("series expansion around x=0"), 86 `_with_linear_symmetries`, 9 `_exact _linear`, 1 Emden–Fowler. Baseline **96/100, 0 FAIL**; residue 4 = the same Kovacic Case-1 churn class. |
 | `test_dsolve_corpus.c` | Fork-per-case runner (compiled via `tests/CMakeLists.txt`). |
 | `dsolve_corpus_prelude.m` | Self-verifier: runs `DSolve` under `TimeConstrained` and numerically back-substitutes each branch. |
 | `STATUS.md` | **The scoreboard** — per-section, per-bucket solve counts + wave history. Update after every wave. |
@@ -71,20 +73,32 @@ baseline (argv[3] in `tests/CMakeLists.txt`). Each landed method-wave must
 
 ## Regenerate / add a corpus
 
-The site 403s automated fetch, so save the section HTML manually, then convert:
+The site 403s WebFetch but serves a browser user-agent, so save the section HTML
+manually, then convert:
 
 ```bash
-curl -sL -A "Mozilla/5.0" \
-  'https://12000.org/my_notes/solving_ODE/current_version/indexsubsectionN.htm' \
+curl -sL -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" \
+  'https://12000.org/my_notes/solving_ODE/current_version/Ch2.S2.SSN.htm' \
   -o /tmp/sectionN.html
 python3 tools/latex_ode_to_mathilda.py /tmp/sectionN.html \
-  DSolve_test_status/DE_examples_K.m --label 2.1.K
+  DSolve_test_status/DE_examples_K.m --label 2.2.K \
+  --url https://12000.org/.../Ch2.S2.SSN.htm
 ```
 
+**Source format note.** The corpora through §2.2.19 were built from the older
+tex4ht `indexsubsectionN.htm` pages; the site has since migrated to **LaTeXML
+("oxide")** and those URLs are now 1.4 KB redirect stubs. The live source is the
+`Ch2.S2.SSN.htm` "sorted sequentially" pages (`SSN = §2.2.N`, table id `Ch2.T(N+9)`).
+`latex_ode_to_mathilda.py` auto-detects the format: LaTeXML pages (no tex4ht
+`id='TBL-'` cells) go through `_parse_table_latexml`, which reads the column layout
+from the header `<tr>` legend (`# | ODE | classification | Solved? | Maple | Mma |
+Sympy | time`) over `ltx_td` cells and pulls each equation from its `<math alttext>`
+(the ODE array, plus IC rows for an IVP). The LaTeX→Mathilda core is shared; a
+juxtaposition-spacing pass (`_implicit_mult`) handles LaTeXML's delimiter-free
+products (`8y`, `yx`, `3y'x`).
+
 Then add a `dsolve_corpus_<section>_tests` entry in `tests/CMakeLists.txt` and a
-section block in `STATUS.md`. The converter is section-agnostic (auto-selects the
-problems table and reads its column layout from the header row, which varies between
-sections).
+section block in `STATUS.md`.
 
 **Initial-value problems.** When the source rows carry initial conditions (`y(0)=3`,
 `y'(0)=10`, symbolic `y(a)=b`), the converter emits the record's equation slot as the

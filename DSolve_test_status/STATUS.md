@@ -949,6 +949,58 @@ Full per-case results: `reports/2.2.19.tsv`; bucketed report: `reports/2.2.19.md
 
 ---
 
+## Section 2.2.20 — "Problems 1901 to 2000" (Nasser Abbasi)
+
+Corpus: `DE_examples_2220.m` — 100 records, **all scalar (34 IVP), 0 systems**. Every problem
+is a homogeneous 2nd-order linear ODE with a regular singular point, reference method **"series
+expansion around x0"** (x0 ∈ [-4,3]): 86 `_with_linear_symmetries`, 12 `_exact _linear
+_homogeneous`, 2 with `_with_symmetry_[0,F(x)]`. Same territory as the series-heavy §2.2.5
+(99/100) and §2.2.18/19. **First section converted from the site's new LaTeXML pages** — the
+old tex4ht `indexsubsectionN.htm` URLs are now redirect stubs, so `latex_ode_to_mathilda.py`
+gained a LaTeXML extraction branch (+ a juxtaposition-spacing pass so `8y`/`yx`/`3y'x` convert).
+`ctest -R dsolve_corpus_2_2_20_tests` · gate baseline **4**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-12 (baseline) | 96 / 100 | 96.0% | 4 | 0 FAIL, 0 crash. Mathilda's 2nd-order stack (Kovacic/SpecialFunctionForm/Frobenius) solves the bulk out of the box; verified Frobenius series score PASS by back-substitution. |
+
+**Residue (4, NOT wrong answers — bounded declines):** all `sympy=True`.
+- `1941`, `1964`, `1976` — **Kovacic Case-1 Riccati churn.** The equation is non-Liouvillian, but
+  Kovacic's Case-1 undetermined-coefficient solve (`ds_solve` on the `ω'+ω²==r` system, whose
+  cleared-denominator equations carry heavy high-degree coefficients from the regular-singular
+  `(leading)²` denominator) runs 9–18 s and then declines — overrunning the harness's 8 s
+  `TimeConstrained` before the Frobenius fallback (which returns the correct series in <0.1 s) can
+  run. `1976` is a load-flaky variant (solves in 0.06 s in isolation). See the **Kovacic churn**
+  note under Wave history — investigated, no safe pre-gate exists (the churn *is* the
+  Liouvillian-existence decision; the same quadratic-pole term is genuinely needed by
+  `2.2.19-1822`, so gating it regresses that documented solve + its pinned test).
+- `1916` — fully symbolic-parameter Heun `(βx²+αx+1)y''+(δx+γ)y'+εy==0`; no elementary/₂F₁ closed
+  form for arbitrary parameters, and Frobenius over symbolic coefficients declines.
+
+Full per-case results: `reports/2.2.20.tsv`; bucketed report: `reports/2.2.20.md`.
+
+---
+
+## Section 2.2.21 — "Problems 2001 to 2100" (Nasser Abbasi)
+
+Corpus: `DE_examples_2221.m` — 100 records, **all scalar, 0 IVP, 0 systems** — every one a
+homogeneous 2nd-order linear regular-singular ODE, "series expansion around x=0": 86
+`_with_linear_symmetries`, 9 `_exact _linear _homogeneous`, 3 with symmetry, 1 Emden–Fowler.
+`ctest -R dsolve_corpus_2_2_21_tests` · gate baseline **4**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-12 (baseline) | 96 / 100 | 96.0% | 4 | 0 FAIL, 0 crash. Solved out of the box by the 2nd-order stack. |
+
+**Residue (4, NOT wrong answers — bounded declines, all `sympy=True`):** `2003`, `2005`, `2006`,
+`2080` — the **Kovacic Case-1 Riccati churn** class described under §2.2.20 (non-Liouvillian
+regular-singular ODEs whose Kovacic Case-1 solve overruns the 8 s harness window before Frobenius
+runs).
+
+Full per-case results: `reports/2.2.21.tsv`; bucketed report: `reports/2.2.21.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -1116,6 +1168,27 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   Bernoulli/linear solve. Residue 3 (research-grade, bounded declines): 1135/1200 (solvable-for-y/x,
   transcendental) and 1157 (Abel 2nd kind). Anti-overfit units `t_m32_*` (`test_dsolve.c`). See
   §2.2.12 block.
+- **M40 (2026-09-12)** — §2.2.20 (Problems 1901–2000) + §2.2.21 (Problems 2001–2100) corpus
+  baselines, both **96/100, 0 FAIL, 0 crash**. Two 100-ODE series-solution sections (all
+  homogeneous 2nd-order linear regular-singular, "series expansion around x0"). **Converter
+  LaTeXML migration** (`tools/latex_ode_to_mathilda.py`): the site moved tex4ht→LaTeXML
+  ("oxide") and the old `indexsubsectionN.htm` URLs are now redirect stubs, so the current
+  `Ch2.S2.SSN.htm` pages need a new `parse_table` branch (header-row column mapping over
+  `ltx_td` cells, multiline array `alttext`) plus a juxtaposition-spacing pass (`_implicit_mult`:
+  LaTeXML writes `8y`/`yx`/`3y'x` with no delimiter) and a `strip_array` `[]` fix. The
+  LaTeX→Mathilda core (`convert_row`, IVP IC-splitting) is unchanged; both sections convert
+  100/100 and round-trip through the parser. **Kovacic churn investigated, no safe fix:** the 8
+  non-PASS across the two sections are non-Liouvillian regular-singular ODEs whose Kovacic Case-1
+  Riccati `ds_solve` runs 9–18 s and then declines, overrunning the harness's 8 s window before
+  the Frobenius fallback (correct series, <0.1 s) can run. A bounded fix was tried three ways —
+  a nested `TimeConstrained` around the solve (the documented no-nest hazard: standalone regressed
+  to >90 s), and two structural pre-gates skipping the churning complex-pole ansatz term. **No
+  cheap discriminant separates a fruitless churn from a real solve** — the churn *is* the
+  Liouvillian-existence decision, and every gate that speeds up 2003/2005/2006/1941 also skips the
+  order-2 quadratic-pole term that `2.2.19-1822` genuinely needs (regressing that documented solve
+  and its pinned `t_m39_nonhomog_vop`). Reverted to 0-regression clean main; these stay documented
+  bounded declines (the `1823` "Kovacic constant-r churn" class from M39). A real fix needs a
+  faster/fail-fast Riccati coefficient solver, not a heuristic gate — future work.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

@@ -45,7 +45,9 @@ OPNAME_RENAME = {'Heaviside': 'UnitStep'}
 
 
 def strip_array(tex):
-    tex = re.sub(r'\\begin\s*\{array\}', '', tex)
+    # `\begin{array}` may carry an optional positional arg (`\begin{array}[]{..}`,
+    # LaTeXML's spelling); strip it too or the `[]` leaks into the equation.
+    tex = re.sub(r'\\begin\s*\{array\}\s*(?:\[[^\]]*\])?', '', tex)
     tex = re.sub(r'\\end\s*\{array\}', '', tex)
     tex = re.sub(r'\{>\{\\displaystyle\s*\}[a-z]\s*@\{\\;\}\s*>\{\\displaystyle\s*\}[a-z]\s*\}', '', tex)
     return tex
@@ -180,8 +182,30 @@ def _apply_arbfun(s, f, mains, indvar, protected):
     return out
 
 
+def _implicit_mult(s):
+    """Insert a space at implicit-multiplication boundaries so juxtaposed tokens
+    are separable. The current LaTeXML pages juxtapose every product with no
+    delimiter (`8y`, `yx`, `3y^{\\prime}x`, `xy^{\\prime}`), whereas the older
+    tex4ht LaTeX was space-delimited — so this is a strict no-op on already-spaced
+    input and can only *add* correct separators, never remove a real one.
+
+    Backslash macros (and one optional brace arg) are protected first, so `\\prime`,
+    `\\sin`, `\\alpha`, `\\left`, `\\operatorname{Heaviside}`, `\\mathrm{e}` survive
+    intact; only bare single-letter variables and digits are separated. MMA-style
+    juxtaposition is multiplication, so even an un-split multi-letter run inside a
+    protected group stays semantically correct (`ab` == `a*b`)."""
+    macros = []
+    def _prot(m):
+        macros.append(m.group(0)); return '\x01%d\x01' % (len(macros) - 1)
+    t = re.sub(r'\\[A-Za-z]+(?:\s*\{[^{}]*\})?', _prot, s)
+    t = re.sub(r'(?<=[0-9])(?=[A-Za-z])', ' ', t)      # 8y  -> 8 y
+    t = re.sub(r'(?<=[A-Za-z])(?=[A-Za-z])', ' ', t)   # yx  -> y x
+    t = re.sub(r'\x01(\d+)\x01', lambda m: macros[int(m.group(1))], t)
+    return t
+
+
 def convert_side(expr, mains, arbs, indvar):
-    protected = []; s = expr; extra = set()
+    protected = []; s = _implicit_mult(expr); extra = set()
     def _opname(nm):
         return OPNAME_RENAME.get(nm.strip(), nm.strip())
     for nm in re.findall(r'\\operatorname\s*\{([^{}]*)\}', s): extra.add(_opname(nm))
@@ -375,8 +399,73 @@ def convert_row(tex):
     return mains, arbs, indvar, eqs, conds
 
 
+def _parse_table_latexml(html_text):
+    """Yield dicts {n, tex, classif, sympy} from a LaTeXML ('oxide') problems table.
+
+    The current 12000.org generator (as of Sept 2026; the older tex4ht
+    `indexsubsectionN.htm` pages are now redirect stubs). Layout: one <table>, no
+    <thead>; a header <tr> legend `# | ODE | CAS classification | Solved? | Maple |
+    Mma | Sympy | time(sec)`. The ODE cell holds the equation as a multi-row
+    `\\begin{array}` inside a <math alttext="..."> (row 1 = ODE, rows 2+ = ICs
+    `y(x0)=v \\\\ y'(x0)=v`); a second math element carries the `x=x0`
+    expansion-point note, which is ignored (DSolve fits the ICs directly)."""
+    def cell_text(c):
+        c = re.sub(r'<math[^>]*>.*?</math>', ' ', c, flags=re.S)
+        c = re.sub(r'<[^>]+>', ' ', c)
+        return re.sub(r'\s+', ' ', html.unescape(c)).strip()
+
+    def array_alttext(c):
+        # re.S: an IVP array's alttext spans literal newlines between its `\\` rows,
+        # so a non-DOTALL match would silently drop everything after row 1.
+        for a in re.findall(r'alttext="(.*?)"', c, re.S):
+            a = html.unescape(a)
+            if 'begin{array}' in a:
+                return a
+        return ''
+
+    tbls = re.findall(r'<table\b.*?</table>', html_text, re.S)
+    if not tbls:
+        return
+    tbl = max(tbls, key=lambda t: len(re.findall(r'begin\{array\}', t)))
+    rows = [re.findall(r'<t[dh]\b[^>]*>(.*?)</t[dh]>', r, re.S)
+            for r in re.findall(r'<tr\b.*?</tr>', tbl, re.S)]
+    rows = [r for r in rows if r]
+    if not rows:
+        return
+
+    # Read the column indices from the legend/header row (the one naming Sympy+time)
+    # rather than hard-coding; fall back to the observed default layout.
+    col = {'n': 0, 'ode': 1, 'classif': 2, 'sympy': 6}
+    for r in rows:
+        labels = [cell_text(c).lower() for c in r]
+        if any('sympy' in x for x in labels) and any('time' in x for x in labels):
+            for c, lab in enumerate(labels):
+                if lab in ('#', 'n'):          col['n'] = c
+                elif lab == 'ode':             col['ode'] = c
+                elif 'classification' in lab:  col['classif'] = c
+                elif 'sympy' in lab:           col['sympy'] = c
+            break
+
+    for r in rows:
+        if col['ode'] >= len(r):
+            continue
+        tex = array_alttext(r[col['ode']])
+        if not tex:                              # header / non-ODE row
+            continue
+        idx = cell_text(r[col['n']]) if col['n'] < len(r) else ''
+        if not re.search(r'\d', idx):
+            continue
+        classif = cell_text(r[col['classif']]) if col['classif'] < len(r) else ''
+        sympy = ('\u2713' in r[col['sympy']]) if col['sympy'] < len(r) else False
+        yield dict(n=idx, tex=tex, classif=classif, sympy=sympy)
+
+
 def parse_table(html_text):
-    """Yield dicts {n, tex, classif, sympy} from the tex4ht problems table.
+    """Yield dicts {n, tex, classif, sympy} from the problems table.
+
+    Two source formats, auto-selected: the current LaTeXML pages (no `id='TBL-'`
+    cells) go through `_parse_table_latexml`; the older tex4ht pages fall through
+    to the original path below.
 
     tex4ht numbers each section's table differently (`TBL-4-...` for \u00a72.1.2,
     `TBL-12-...` for \u00a72.2.1) and the column order also varies between sections
@@ -384,6 +473,9 @@ def parse_table(html_text):
     col 2). So we (1) auto-select the table with the most `\\[..\\]` ODE blocks,
     and (2) read the column indices for #, ODE, classification and Sympy from
     that table's header row rather than hard-coding them."""
+    if "id='TBL-" not in html_text and 'id="TBL-' not in html_text:
+        yield from _parse_table_latexml(html_text)
+        return
     cell_re = re.compile(r"id='TBL-(\d+)-(\d+)-(\d+)'[^>]*>(.*?)</td>", re.S)
     tables = {}                                # tnum -> {row -> {col -> cell}}
     for m in cell_re.finditer(html_text):

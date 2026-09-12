@@ -4016,6 +4016,30 @@ add_test(NAME dsolve_corpus_2_2_19_tests
                  ../../DSolve_test_status/DE_examples_2219.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 5)
 
+# Section 2.2.20 (Problems 1901-2000, Nasser Abbasi): 100 records, 34 IVP, 0
+# systems.  ALL homogeneous 2nd-order linear with a regular singular point
+# ("Series expansion around x0"); 86 _with_linear_symmetries, 12 _exact _linear.
+# First section converted from the site's new LaTeXML pages (the old tex4ht
+# indexsubsectionN.htm URLs are now redirect stubs; latex_ode_to_mathilda.py
+# gained a LaTeXML branch).  Baseline 96/100, 0 FAIL.  The 4 non-PASS
+# (1916 symbolic-parameter Heun; 1941/1964/1976 Kovacic Case-1 Riccati churn on a
+# regular-singular series ODE that times out before the Frobenius fallback) are
+# bounded declines, not wrong answers -- see STATUS.md.
+add_test(NAME dsolve_corpus_2_2_20_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2220.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+
+# Section 2.2.21 (Problems 2001-2100, Nasser Abbasi): 100 records, 0 IVP, 0
+# systems.  ALL homogeneous 2nd-order linear regular-singular ("Series expansion
+# around x=0"); 86 _with_linear_symmetries, 9 _exact _linear, 1 Emden-Fowler.
+# Baseline 96/100, 0 FAIL.  The 4 non-PASS (2003/2005/2006/2080) are the same
+# Kovacic Case-1 churn class as 2.2.20 -- bounded declines, no wrong answers.
+add_test(NAME dsolve_corpus_2_2_21_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2221.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

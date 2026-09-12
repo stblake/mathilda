@@ -1464,6 +1464,46 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     only fires on prior-declined transcendental cases). See the §2.2.19 block in
     `DSolve_test_status/STATUS.md`. Version 0.136 → 0.137.
 
+- **M40 — §2.2.20 (Problems 1901–2000) + §2.2.21 (Problems 2001–2100) corpus baselines + converter
+  LaTeXML migration.** ✅ DONE. Two 100-ODE series-solution sections, each **96/100, 0 FAIL, 0 crash**,
+  all homogeneous 2nd-order linear with a regular singular point ("series expansion around x0"; §2.2.20
+  has 34 IVPs at x0 ∈ [-4,3], §2.2.21 all general at x0=0). Same territory as the series-heavy §2.2.5
+  (99/100); the 2nd-order stack (Kovacic / SpecialFunctionForm / Frobenius) solves the bulk out of the
+  box, and a verified truncated Frobenius `SeriesData` scores PASS by back-substitution.
+  - **Converter LaTeXML migration** (`tools/latex_ode_to_mathilda.py`). The 12000.org site moved its
+    HTML generator **tex4ht → LaTeXML ("oxide")**; the old `indexsubsectionN.htm` URLs the earlier
+    corpora were built from are now 1.4 KB redirect stubs, and the current source is the
+    `Ch2.S2.SSN.htm` "sorted sequentially" pages (LaTeXML). The converter now auto-detects the format
+    (LaTeXML = no tex4ht `id='TBL-'` cells) and adds `_parse_table_latexml`: select the ODE `<table>`,
+    read the column layout from its header `<tr>` legend (`# | ODE | classification | Solved? | Maple |
+    Mma | Sympy | time`) over `ltx_td` cells, and pull each equation from the ODE cell's first
+    `<math alttext>` (a multi-row `\begin{array}` — row 1 the ODE, rows 2+ the ICs — read with `re.S`).
+    Two core fixes: `strip_array` now consumes the `\begin{array}[]` optional arg, and a new
+    `_implicit_mult` pass inserts spaces at implicit-multiplication boundaries (LaTeXML juxtaposes
+    products with no delimiter — `8y`, `yx`, `3y'x` — where tex4ht was space-delimited; a strict no-op
+    on the old format, macro-protected so `\prime`/`\operatorname{…}`/`\mathrm{…}` survive). The
+    `convert_row` LaTeX→Mathilda core and its IVP IC-splitting are unchanged; both sections convert
+    100/100 and round-trip through the parser.
+  - **Kovacic churn — investigated, no safe fix (bounded declines kept).** The 8 non-PASS across the
+    two sections (§2.2.20: `1941`/`1964`/`1976` + symbolic-Heun `1916`; §2.2.21: `2003`/`2005`/`2006`/
+    `2080`) are non-Liouvillian regular-singular ODEs whose `DSolve\`Kovacic` Case-1 Riccati solve
+    (`ds_solve` on `ω'+ω²==r`, cleared against the `(leading)²` denominator into a heavy high-degree
+    system) runs 9–18 s and then declines — overrunning the corpus harness's 8 s `TimeConstrained`
+    before the Frobenius fallback (correct series, <0.1 s) runs. This is the `1823` "Kovacic
+    constant-`r` churn" class flagged in M39. A bounded fix was attempted three ways and none is safe:
+    (a) a nested `TimeConstrained` around the solve — the documented no-nest hazard, which standalone
+    blew up to >90 s; (b)/(c) two structural pre-gates dropping the churning complex-pole ansatz term
+    (`df≥2`, then `df≥2 && order≥2`, then coexisting-high-real-pole). **No cheap structural discriminant
+    separates a fruitless churn from a real solve** — the churn *is* the Liouvillian-existence
+    decision, and every gate that speeds up `2003`/`2005`/`2006`/`1941` also drops the order-2
+    quadratic-pole term that `2.2.19-1822`'s `t=Tan[x]` transform genuinely needs, regressing that
+    documented solve and its pinned `t_m39_nonhomog_vop`. Reverted to 0-regression clean main. A real
+    fix needs a fail-fast Riccati coefficient solver (or an up-front Liouvillian/regular-singular
+    classifier), not a heuristic gate — future work, tracked with `1823`.
+  - No C/behavior change (Kovacic reverted); the deliverable is the converter migration + two corpora +
+    two `dsolve_corpus_2_2_2{0,1}_tests` gates (baseline 4) + dashboards. Version 0.137 → 0.138. See the
+    §2.2.20 / §2.2.21 blocks in `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
