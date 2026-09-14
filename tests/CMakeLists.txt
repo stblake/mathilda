@@ -4076,10 +4076,34 @@ add_test(NAME dsolve_corpus_2_2_23_tests
 # scalar cascade (Separable / LinearFirstOrder / Exact / Riccati->specialform
 # Airy/Bessel / Kovacic / EulerCauchy / reduction).  Baseline argv3 = the
 # STATUS.md non-PASS count (lowered by each landed wave).
+# M44: regenerated with the fixed converter (independent-variable juxtaposition +
+# autonomous-parameter fixes), which corrected 7 latent wrong-equation records.
+# 2327 (y'=k(a-y)(b-y)) now solves (was mistranscribed to indvar `a`, ABORT); the
+# corrected (correct-equation) 2353 (Abel) and 2357 (Bernoulli, nonelementary
+# integrating factor) are now honest UNEVAL where the buggy corpus had them PASSing
+# a DIFFERENT (t-as-constant) equation -- so the honest non-PASS is 9, not 8.
 add_test(NAME dsolve_corpus_2_2_24_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2224.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
+
+# Section 2.2.25 (Problems 2401-2500, Nasser Abbasi): 100 records, 32 IVP, 0
+# systems.  Second-order-linear-heavy: constant-coefficient nonhomogeneous (incl.
+# sec forcing + resonant fractional-power forcing), Airy / Hermite / Legendre /
+# Chebyshev / Laguerre / Gegenbauer / Bessel (symbolic order), Euler-Cauchy,
+# regular-singular (Frobenius), Emden-Fowler nonlinear, and first-order separable /
+# linear / exact / homogeneous.  Solved across the 2nd-order stack (Kovacic /
+# SpecialFunctionForm hypergeometric+Bessel+Airy recognizers / Frobenius fallback /
+# UndeterminedCoefficients / VariationOfParameters / EulerCauchy).  Baseline argv3 =
+# the STATUS.md non-PASS count.  Residue 4 (all sympySolved=False -- SymPy fails
+# them too): 2409 (parabolic-cylinder + forcing), 2410 (polynomial-solution
+# variable-coefficient nonhomogeneous -- needs clean-basis VoP), 2444 (transcendental-
+# coefficient power series, slower than the 8 s harness bound), 2477 (non-elementary
+# integrating factor).
+add_test(NAME dsolve_corpus_2_2_25_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2225.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

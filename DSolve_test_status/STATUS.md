@@ -1090,12 +1090,13 @@ homogeneous (class A/C) / exact / Bernoulli / Riccati / Abel / Lagrange–d'Alem
 and second-order `_missing_x` / linear / Emden–Fowler / `_with_linear_symmetries` /
 Gegenbauer–Legendre. Solved across the scalar cascade; the special-function Riccati
 (Airy `y'=t+y²`, Bessel `y'=t²+y²`), every Abel-tagged case, and Legendre all solve
-out of the box. `ctest -R dsolve_corpus_2_2_24_tests` · gate baseline **8**.
+out of the box. `ctest -R dsolve_corpus_2_2_24_tests` · gate baseline **9** (M44).
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-13 (baseline) | 90 / 100 | 90.0% | 10 | pre-wave: **1 FAIL** (2329, IVP fit picked complex C[1]=Iπ) + 9 UNEVAL (incl. 2 hangs: 2327 Erf-Riccati, 2335 Lagrange spin). |
-| 2026-09-13 (M43) | **92 / 100** | **92.0%** | **8** | **0 FAIL, 0 crash.** 2329 fixed (correctness) + 2335 solved (Lagrange→LinearCoefficients). |
+| 2026-09-13 (M43) | 92 / 100 | 92.0% | 8 | **0 FAIL, 0 crash.** 2329 fixed (correctness) + 2335 solved (Lagrange→LinearCoefficients). |
+| 2026-09-13 (M44) | **91 / 100** | **91.0%** | **9** | Corpus regenerated with the M44 converter fix (7 latent wrong-equation records corrected). **2327 now solves** (was mistranscribed to indvar `a`→ABORT, wrongly filed below as "Erf-Riccati"); the corrected 2353/2357 are honest UNEVAL where the buggy corpus had them PASS a *t-as-constant* equation. Net −1 (a truer score). |
 
 **M43 wave.** Two general root-cause fixes (no overfit), 0 regression, plus a
 bounded side benefit (§2.2.1/§2.2.2/§2.2.6/§2.2.7 each improved by 1–2):
@@ -1127,7 +1128,62 @@ operator-factoring method), `2349`/`2350`/`2351` (`y'=e^{−t²}+y²` → `u''=e
 non-elementary), `2352`/`2355`/`2356` (`y=_G(x,y')` non-elementary, e.g.
 `y'=e^{−t}+Log[1+y²]`).
 
+**M44 correction.** Regenerating with the fixed converter (independent-variable
+juxtaposition + autonomous-parameter detection) corrected 7 records that mixed
+`x` and `t` or picked a parameter as the independent variable. **2327 leaves the
+residue** — it is `y'=k(a−y)(b−y)` (an autonomous quadrature), not an "Erf-Riccati";
+the buggy corpus had `y'[a]==k(a−y[a])(b−y[a])` (indvar `a`), a spurious `dy/da`
+Riccati that ABORTed, so M43 mis-classified it. With indvar `x` it solves. Two
+records **enter** the residue honestly: `2353` (`y'=y³+e^{−5t}`, a genuine Abel of
+the first kind — research-grade, cf. M13) and `2357` (Bernoulli whose linearised
+integrating-factor integral `∫(1−cos4t)e^{t/4+sin4t/16}dt` is non-elementary), both
+of which the buggy corpus had PASSing a DIFFERENT (`t`-as-constant) equation. Honest
+residue **9**: `2304`, `2349`–`2352`, `2353`, `2355`–`2357`.
+
 Full per-case results: `reports/2.2.24.tsv`; bucketed report: `reports/2.2.24.md`.
+
+---
+
+## Section 2.2.25 — "Problems 2401 to 2500" (Nasser Abbasi)
+
+Corpus: `DE_examples_2225.m` — 100 records, 100 scalar (**32 IVP**), 0 systems.
+A SECOND-ORDER-LINEAR-heavy section: constant-coefficient nonhomogeneous (incl.
+`sec(t)` forcing and resonant fractional-power forcing `t^{5/2}e^{-2t}`), the
+orthogonal-polynomial / special-function families (Airy `y''=ty`, Hermite,
+Legendre, Chebyshev, Laguerre, Gegenbauer, Bessel at symbolic order `v`),
+Euler–Cauchy, regular-singular (Frobenius), Emden–Fowler nonlinear, plus
+first-order separable / linear / exact / homogeneous. Solved across the 2nd-order
+stack (Kovacic / SpecialFunctionForm hypergeometric+Bessel+Airy recognizers /
+Frobenius fallback / UndeterminedCoefficients / VariationOfParameters /
+EulerCauchy). `ctest -R dsolve_corpus_2_2_25_tests` · gate baseline **4**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-13 (baseline) | 95 / 100 | 95.0% | 5 | pre-wave: **0 FAIL, 0 crash**; 5 UNEVAL (2406 hang + 2409/2410/2444/2477). |
+| 2026-09-13 (M44) | **96 / 100** | **96.0%** | **4** | **0 FAIL, 0 crash.** 2406 fixed (VariationOfParameters fractional-power Simplify hang). |
+
+**M44 wave.** One general root-cause fix (no overfit), 0 regression:
+1. **VariationOfParameters fractional-power Simplify hang** (`dsolve_common.c`) — a
+   resonant fractional-power forcing (`y''+4y'+4y == t^{5/2}e^{-2t}`, 2406) closes to
+   an elementary `4/63 t^{9/2}e^{-2t}`, but `dsolve_variation_of_parameters` ended with
+   an unconditional `ds_simplify(yp)`, and `Simplify[t^{5/2}e^{-2t}]` itself HANGS (the
+   documented radical/pseudo-remainder Simplify pathology). The VoP body is already
+   auto-evaluated to a clean form, so the final Simplify is now SKIPPED when the answer
+   carries a fractional power (`ds_has_fractional_power`) — correct answer, no hang, and
+   no nested `TimeConstrained` (unsafe under the harness's own bound). Intercepts the
+   whole resonant-fractional-forcing class.
+
+Residue 4 (all `sympySolved=False` — SymPy fails them too, bounded declines, no wrong
+answers): `2409` (`y''+t²y/4 == f cos t`, parabolic-cylinder homogeneous part +
+forcing — needs a ParabolicCylinderD recognizer), `2410` (`(t²+1)y''−2ty'+2y = t²+1`;
+homogeneous solves via Kovacic but with a complex-radical basis `√(t−i)√(t+i)` that
+does not reduce to `√(t²+1)`, so VoP for the forcing cannot close — a clean-basis /
+polynomial-solution VoP would give the elementary `−t²+2t·arctan t+½(t²−1)log(t²+1)`),
+`2444` (`(1−t²)y''+y'/sin(1+t)+y=0`, transcendental-coefficient power series, slower
+than the harness's 8 s bound), `2477` (`y'+[t/(t²+1)+t³/(t⁴+1)]y=1`, non-elementary
+integrating factor `∫(t²+1)^{1/2}(t⁴+1)^{1/4}dt`, same class as §2.2.24-2304).
+
+Full per-case results: `reports/2.2.25.tsv`; bucketed report: `reports/2.2.25.md`.
 
 ---
 
@@ -1370,6 +1426,31 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   IF integral), 2327 (symbolic Erf-Riccati — needs symbolic 2nd-order operator factoring),
   2349/2350/2351 (`y'=e^{−t²}+y²`, non-elementary), 2352/2355/2356 (`y=_G(x,y')`,
   non-elementary). Gate `dsolve_corpus_2_2_24_tests` baseline 8.
+- **M44 (2026-09-13)** — §2.2.25 (Problems 2401–2500) corpus, **96/100, 0 FAIL, 0 crash**. A
+  SECOND-ORDER-LINEAR-heavy section (100 scalar, 32 IVP, 0 systems): constant-coefficient
+  nonhomogeneous (incl. `sec` and resonant fractional-power `t^{5/2}e^{-2t}` forcing), the
+  orthogonal-polynomial/special-function families (Airy/Hermite/Legendre/Chebyshev/Laguerre/
+  Gegenbauer/Bessel at symbolic order), Euler–Cauchy, regular-singular (Frobenius), Emden–Fowler
+  nonlinear, and first-order separable/linear/exact/homogeneous. Baseline **95/100**, then
+  96/100 via one general root-cause fix, 0 regression: **VariationOfParameters fractional-power
+  Simplify hang** (`dsolve_common.c`) — a resonant fractional forcing closes to an elementary
+  `t^{9/2}e^{-2t}` answer, but the final `ds_simplify(yp)` hung because `Simplify[t^{5/2}e^{-2t}]`
+  itself spins (radical/pseudo-remainder pathology); the VoP body is already auto-evaluated clean,
+  so the final Simplify is now skipped for a fractional-power answer (`ds_has_fractional_power`) —
+  no hang, no nested `TimeConstrained` (2406). **Also corrected THREE latent converter bugs**
+  (`tools/latex_ode_to_mathilda.py`), which additionally regenerated §2.2.24 (7 records; 2327 now
+  solves, honest 91/100 — see that section): (a) an independent-variable **juxtaposition** miss —
+  `t` glued to a digit/letter (`ty`, `2t`, `3t²`) was invisible to the word-boundary scan, so the
+  indvar defaulted to `x`, silently testing an `x`/`t`-mixed WRONG equation (8 recs here); (b) an
+  **autonomous-parameter** miss — `y'=k(a−y)(b−y)` picked the parameter `a` as indvar (a spurious
+  `dy/da` Riccati that ABORTs), now a unique-candidate rule falls through to a fresh `x` (2498);
+  (c) a **piecewise/cases** forcing (`\left\{…\right.`) whose `PWFORCE` sentinel was shredded by
+  the implicit-multiplication pass and whose `\begin{array}[]{cc}` optional arg leaked, now a
+  whitespace-tolerant expand + optional-arg strip → clean `Piecewise[…]` (2487). §2.2.20–23
+  regenerate byte-identically. Residue 4 (all `sympy=False`): 2409 (parabolic-cylinder + forcing),
+  2410 (polynomial-solution varcoef nonhomogeneous — needs clean-basis VoP), 2444 (slow
+  transcendental-coefficient series), 2477 (non-elementary integrating factor). Gate
+  `dsolve_corpus_2_2_25_tests` baseline 4; `dsolve_corpus_2_2_24_tests` raised 8→9. v0.141→0.142.
 - **Next** — the **P≠0 confluent family** (~13 cases: 97/101/104 and kin) is the biggest
   Whittaker residue, pending an evaluator-robustness fix for the same-base symbolic-radical
   verify (`zero_test` / `HypergeometricPFQ`-numeric `$IterationLimit`). Then parabolic-

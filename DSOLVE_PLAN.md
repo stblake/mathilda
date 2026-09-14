@@ -1621,6 +1621,47 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     `2349`/`2350`/`2351` (`y'=e^{−t²}+y²` → `u''=e^{−t²}u`, non-elementary), `2352`/`2355`/`2356`
     (`y=_G(x,y')` non-elementary). See the §2.2.24 block in `DSolve_test_status/STATUS.md`.
 
+- **M44 — §2.2.25 corpus (Problems 2401–2500, Nasser Abbasi) + VariationOfParameters
+  fractional-power Simplify-hang fix + three converter root-cause fixes.** ✅ DONE. A
+  **second-order-linear-heavy** section: 100 scalar (32 IVP), 0 systems — constant-coefficient
+  nonhomogeneous (incl. `sec(t)` and resonant fractional-power `t^{5/2}e^{-2t}` forcing), the
+  orthogonal-polynomial / special-function families (Airy `y''=ty`, Hermite, Legendre, Chebyshev,
+  Laguerre, Gegenbauer, Bessel at symbolic order `v`), Euler–Cauchy, regular-singular (Frobenius),
+  Emden–Fowler nonlinear, and first-order separable / linear / exact / homogeneous. The 2nd-order
+  stack (Kovacic / SpecialFunctionForm hypergeometric+Bessel+Airy recognizers / Frobenius fallback
+  / UndeterminedCoefficients / VariationOfParameters / EulerCauchy) solves the bulk out of the box.
+  Baseline **95/100, 0 FAIL, 0 crash** → **96/100** with one general root-cause fix and **0
+  regression**. New gate `dsolve_corpus_2_2_25_tests` (baseline 4). Version 0.141 → 0.142.
+  - **`dsolve_variation_of_parameters` fractional-power Simplify hang** (`dsolve_common.c`). A
+    resonant fractional-power forcing (`y''+4y'+4y == t^{5/2}e^{-2t}`, 2406) closes to the
+    elementary `4/63 t^{9/2}e^{-2t}`, but the routine ended with an unconditional
+    `ds_simplify(yp)`, and `Simplify[t^{5/2}e^{-2t}]` itself HANGS (the documented
+    radical/pseudo-remainder Simplify pathology; the harness's own `TimeConstrained` forbids a
+    nested one — see [[project_timeconstrained_no_nest]]). The VoP body is already auto-evaluated to
+    a clean form, so the final Simplify is now SKIPPED when the answer carries a fractional power
+    (new static `ds_has_fractional_power`). Correct answer, no hang, no nesting; intercepts the
+    whole resonant-fractional-forcing class. Non-fractional answers are byte-identical.
+  - **Three converter root-cause fixes** (`tools/latex_ode_to_mathilda.py`), each a latent bug the
+    prior LaTeXML sections had masked; **§2.2.20–23 regenerate byte-identically**, and §2.2.24 was
+    regenerated (7 records corrected — see its STATUS block; 2327 now solves, honest **91/100**,
+    gate 8→9): (a) **independent-variable juxtaposition** — a preferred indvar letter glued to a
+    digit or the dependent letter (`ty`, `2t`, `3t²`) was invisible to the word-boundary scan, so it
+    defaulted to `x`, silently generating an `x`/`t`-mixed WRONG equation (8 recs here, 6 in
+    §2.2.24); fixed by a fallback re-scan on the implicit-multiplication-separated body. (b)
+    **autonomous parameter as indvar** — `y'=k(a−y)(b−y)` picked the parameter `a` (a spurious
+    `dy/da` Riccati that ABORTs); a unique-candidate rule now falls through to a fresh `x` (2498;
+    §2.2.24-2327). (c) **piecewise/cases forcing** — the `PWFORCE` sentinel was shredded by the
+    implicit-multiplication pass and the `\begin{array}[]{cc}` optional arg leaked; a
+    whitespace-tolerant expand + optional-arg strip now yields a clean `Piecewise[…]` (2487).
+  - **Residue 4** (all `sympySolved=False` — SymPy fails them too, bounded declines, no wrong
+    answers): `2409` (`y''+t²y/4 == f cos t`, parabolic-cylinder homogeneous part + forcing —
+    needs a ParabolicCylinderD recognizer), `2410` (`(t²+1)y''−2ty'+2y = t²+1`; the homogeneous
+    solves via Kovacic but with a complex-radical basis `√(t−i)√(t+i)` that does not reduce to
+    `√(t²+1)`, so VoP for the forcing cannot close — a clean-basis / polynomial-solution VoP would
+    give the elementary answer), `2444` (transcendental-coefficient power series, slower than the
+    8 s harness bound), `2477` (non-elementary integrating factor, same class as §2.2.24-2304). All
+    §2.2.x + §2.1.2 gates held; see the §2.2.25 block in `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

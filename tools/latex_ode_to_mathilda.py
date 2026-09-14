@@ -143,17 +143,36 @@ def detect_symbols(rows_tex):
         if cand in main_set: continue
         if re.search(r'(?<![A-Za-z0-9])' + cand + r'(?![A-Za-z0-9])', mjoined):
             indvar = cand; break
+    if indvar is None:                                   # LaTeXML juxtaposition retry
+        # A preferred independent-variable letter can appear ONLY glued to a digit or
+        # the dependent letter (`y''-ty=0`, `4ty''+3y'-3y=0`, `y'-2ty=1`), which the
+        # word-boundary scan above misses; `y''-t^3 y=0` is caught only because its
+        # `t^` is clean.  Re-run the same preferred-letter scan on the implicit-
+        # multiplication-separated body before considering non-standard / autonomous
+        # letters.  A strict no-op when the body has no juxtaposed indvar, so a
+        # section whose variables are already clean regenerates byte-identically.
+        msep = ' '.join(_implicit_mult(r) for r in main_rows) if main_rows \
+               else _implicit_mult(joined)
+        for cand in INDVAR_PREF:
+            if cand in main_set: continue
+            if re.search(r'(?<![A-Za-z0-9])' + cand + r'(?![A-Za-z0-9])', msep):
+                indvar = cand; break
     if indvar is None:                                   # any present non-main letter (x=x(y))
         present = re.findall(r'(?<![A-Za-z0-9\\])([A-Za-z])(?![A-Za-z0-9])', mjoined)
-        for cand in sorted(set(present)):
-            # `e` (Euler's number) and `i` (imaginary unit) are mathematical
-            # constants, never the independent variable: a constant-coefficient
-            # complex ODE like `y''+2 i y'+3 y=0` (§2.2.4-309/310/311, no explicit
-            # independent variable) must NOT pick `i` as the indep var — it falls
-            # through to a fresh standard letter, and the bare `i` is mapped to the
-            # imaginary unit `I` in convert_side.
-            if cand in main_set or cand in ARBFUN or cand in ('e', 'i', 'I'): continue
-            indvar = cand; break
+        # `e` (Euler's number) and `i` (imaginary unit) are mathematical constants,
+        # never the independent variable: a constant-coefficient complex ODE like
+        # `y''+2 i y'+3 y=0` (§2.2.4-309/310/311, no explicit independent variable)
+        # must NOT pick `i` as the indep var — it falls through to a fresh standard
+        # letter, and the bare `i` is mapped to the imaginary unit `I` in convert_side.
+        cands = [c for c in sorted(set(present))
+                 if c not in main_set and c not in ARBFUN and c not in ('e', 'i', 'I')]
+        # A LONE non-standard letter is the genuine swapped-variable indep var
+        # (`dx/dy=f(x,y)` → `y`).  TWO OR MORE are parameters of an autonomous ODE
+        # (`y'=k(a-y)(b-y)`, §2.2.25-2498): picking the alphabetically-first (`a`)
+        # invents a spurious `dy/da` Riccati that DSolve cannot close — fall through
+        # to a fresh standard letter (`x`) instead, the intended quadrature reading.
+        if len(cands) == 1:
+            indvar = cands[0]
     if indvar is None:                                   # autonomous: fresh standard letter
         for cand in INDVAR_PREF:
             if cand not in main_set: indvar = cand; break
@@ -356,7 +375,10 @@ def _build_piecewise(block, mains, arbs, indvar):
     """Convert one raw cases block into a Mathilda `Piecewise[{{v,c},...}, default]`.
     Each row `value & condition` (rows separated by `\\\\`) becomes a clause; a row
     whose condition is `otherwise` folds its value into the default (0 otherwise)."""
-    inner = re.sub(r'\\begin\s*\{array\}\s*\{[^}]*\}', '', block)
+    # `\begin{array}` in a LaTeXML cases block carries an optional positional arg
+    # before its column spec (`\begin{array}[]{cc}`); consume both or the `[]{cc}`
+    # leaks into the first clause value (`begin(array)[](c c)2`).
+    inner = re.sub(r'\\begin\s*\{array\}\s*(?:\[[^\]]*\])?\s*\{[^}]*\}', '', block)
     inner = re.sub(r'\\end\s*\{array\}', '', inner)
     clauses = []; default = '0'
     for p in re.split(r'\\\\', inner):
@@ -387,9 +409,15 @@ def _build_piecewise(block, mains, arbs, indvar):
 
 def expand_cases(eq, blocks, mains, arbs, indvar):
     for i, blk in enumerate(blocks):
-        tok = 'PWFORCE%d' % i
-        if tok in eq:
-            eq = eq.replace(tok, _build_piecewise(blk, mains, arbs, indvar))
+        pw = _build_piecewise(blk, mains, arbs, indvar)
+        # The `PWFORCE<i>` sentinel is inserted by protect_cases and must survive
+        # until here, but convert_side runs _implicit_mult, whose letter-letter split
+        # shreds it into `P W F O R C E<i>` (letter->digit is NOT split, so `E<i>`
+        # stays glued).  Match a whitespace-tolerant form so the piecewise is expanded
+        # on the current LaTeXML pages; the intact form still matches when the input
+        # was already space-delimited (older tex4ht sections regenerate identically).
+        pat = re.compile(r'P\s*W\s*F\s*O\s*R\s*C\s*E\s*' + str(i) + r'(?![0-9])')
+        eq = pat.sub(lambda m: pw, eq)
     return eq
 
 

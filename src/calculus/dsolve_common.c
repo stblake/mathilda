@@ -1294,6 +1294,35 @@ static Expr* vp_definite_convolution(Expr*** dv, Expr** basis, size_t n,
     return xp;
 }
 
+/* True if `e` contains a Power[base, exp] whose exponent is a NON-integer (a
+ * Rational[p,q] or a non-integral Real).  Simplify has a documented hang on a
+ * fractional-power * exponential product (e.g. Simplify[t^(5/2) E^(-2t)] spins —
+ * cf. [[project_simplify_hang_pseudorem_and_timeconstrained]]).  A resonant
+ * fractional VoP forcing (y''+4y'+4y == t^(5/2) E^(-2t), §2.2.25-2406) closes to
+ * exactly that form, and the final ds_simplify(yp) below then hung the whole
+ * solve.  The VoP body is already auto-evaluated to a clean form, so we SKIP that
+ * simplify for a fractional-power answer — correct answer, no hang — rather than
+ * wrap it in a nested TimeConstrained, which is unsafe under the corpus harness's
+ * own TimeConstrained bound (the documented no-nest hazard). */
+static bool ds_has_fractional_power(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex && ex->type == EXPR_FUNCTION && ex->data.function.head
+            && ex->data.function.head->type == EXPR_SYMBOL
+            && ex->data.function.head->data.symbol.name == SYM_Rational)
+            return true;
+        if (ex && ex->type == EXPR_REAL && ex->data.real != floor(ex->data.real))
+            return true;
+    }
+    if (ds_has_fractional_power(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_fractional_power(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
                                      const Expr* leadcoef, const char* xvar) {
     Expr*** dv = malloc(n * sizeof(Expr**));
@@ -1351,8 +1380,10 @@ Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
             yp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ut, n));
             free(ut);
             /* Simplify only a fully-closed elementary answer; an inert-Integrate
-             * body is left as-is (Simplify cannot help and could churn). */
-            if (!any_inert) yp = ds_simplify(yp);
+             * body is left as-is (Simplify cannot help and could churn).  Also skip
+             * a fractional-power answer: it is already clean from auto-evaluation and
+             * Simplify hangs on the t^(p/q) E^(a t) form (see ds_has_fractional_power). */
+            if (!any_inert && !ds_has_fractional_power(yp)) yp = ds_simplify(yp);
         }
     }
     expr_free(detW);

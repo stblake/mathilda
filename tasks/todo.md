@@ -1,96 +1,102 @@
-# M43 — §2.2.24 corpus (Problems 2301–2400) + deferred-class attempts
+# M44 — §2.2.25 corpus (Problems 2401–2500), push for 100/100
 
 ## Plan
-Add Nasser Abbasi's §2.2.24 (2301–2400) to the DSolve corpus; measure; drive
-coverage with general root-cause fixes. User opted in to ALSO attempt the deferred
-research-grade classes (Abel Invariant Rational / special-fn Riccati), each behind
-numeric self-verify (decline-safe). Invariants: **0 FAIL, 0 regression**. Leave
-uncommitted. Section: 100 scalar (51 IVP), 0 systems; mixed 1st-order + 2nd-order.
-Milestone M43, version 0.140 → 0.141.
+Add Nasser Abbasi's §2.2.25 (2401–2500) to the DSolve corpus; measure; drive
+coverage toward **100/100** with general root-cause fixes only. Section: 100
+scalar ODEs (~32 IVP), 0 systems; 2nd-order-linear-heavy (Airy/Hermite/Legendre/
+Chebyshev/Laguerre/Gegenbauer/Bessel, Euler–Cauchy, regular-singular Frobenius,
+Emden–Fowler nonlinear, const-coeff nonhomogeneous incl. one `sec(t)` forcing).
+Invariants: **0 FAIL (0 wrong answers), 0 regression**. Real methods only — no
+hacks/overfit; a genuinely research-grade case is a *documented decline*, never a
+faked pass. Leave uncommitted. Milestone M44, version 0.141 → 0.142.
+Probe of 11 anticipated-hard cases: 10 already solve, 1 declines (#9 parabolic
+cylinder + cos forcing).
 
 ## Tasks
 ### Stage 0 — ingest + measure
-- [ ] 1. Generate `DSolve_test_status/DE_examples_2224.m` (converter, saved HTML)
-- [ ] 2. Add `dsolve_corpus_2_2_24_tests` gate in `tests/CMakeLists.txt`
-- [ ] 3. Build `dsolve_corpus_tests`; run full baseline (capture TSV)
-- [ ] 4. Generate `reports/2.2.24.{md,tsv}` via `dsolve_corpus_report.py`
-- [ ] 5. Triage the non-PASS list into buckets (already-solvable-but-broken vs deferred)
+- [x] 1. Generated `DSolve_test_status/DE_examples_2225.m` (100 recs, 32 IVP, 0 sys)
+- [x] 2. Spot-check found + fixed THREE converter bugs (all root-caused in
+      `tools/latex_ode_to_mathilda.py`):
+      - **indvar juxtaposition**: `t` glued to digit/letter (`ty`,`2t`) missed →
+        defaulted to `x` (8 recs in §2.2.25; also 6 latent in §2.2.24). Fallback
+        re-scan on implicit-mult-separated body.
+      - **autonomous parameter as indvar**: `y'=k(a-y)(b-y)` picked param `a`
+        (ABORT); now unique-candidate rule → fresh `x` (#2498; also §2.2.24-2327).
+      - **piecewise sentinel shred + `\begin{array}[]{cc}` optional arg**: `PWFORCE0`
+        split by implicit-mult → garbage; now whitespace-tolerant expand + optional
+        `[]` strip (#2487 → clean `Piecewise[...]`).
+      Byte-identity: §2.2.20–23 IDENTICAL; §2.2.24 improved by 7 correct recs
+      (regenerated in place). §2.2.1–19/§2.1.2 are tex4ht-sourced, out of scope.
+- [x] 3. Built harness. Baselines: **§2.2.25 = 95/100** (0 FAIL/crash, 5 UNEVAL);
+      **§2.2.24 re-measured = 91/100** (converter fix: 2327 U→P, but 2353/2357 revealed
+      as honest UNEVAL — M43's 92 included 2 false-passes on t-as-constant equations).
+- [ ] 4. Generate `reports/2.2.25.{md,tsv}` via `dsolve_corpus_report.py`
+- [ ] 5. Triage non-PASS: (a) converter artifact (b) engine gap (c) FAIL (d) research-grade
 
-### Stage 1 — proven root-cause gap closure (0 FAIL, 0 regression)
-- [x] 6. Baseline 90/100, 1 FAIL (2329), 9 U. Fixes landed:
-      - **2329 FAIL** (correctness): IVP fit picked complex C[1]=I*Pi (wrong branch,
-        satisfied IC not ODE). Fix in dsolve_common.c: collapse ConditionalExpression
-        family to principal (C[_]->0) before the numeric candidate check + a scoped
-        final numeric-verify gate on first-order scalar non-radical fits. → 2329 PASS.
-      - **Homogeneous degree gate** (dsolve_homogeneous.c): decline exp-log-invert
-        explicit Root of degree>=4 → clean implicit first integral (fixes unverifiable
-        quintic-Root hang; helps LinearCoefficients recursion).
-      - **Lagrange affine-ratio gate** (dsolve_lagrange.c + dsolve_lincoeff.c
-        predicate): Lagrange defers the linear-coefficients class (spins on its
-        integrating-factor solve) → LinearCoefficients solves it. → 2335 PASS.
-      - **Riccati SeriesData gate** (dsolve_riccati.c): decline when linearised ODE
-        returns a series (mapback hangs) — robustness.
-- [x] 7. Regression sweep 1 (2329+homog+fit): 0 FAIL, 0 regression, +4 improved
-      (221 2->1, 222 7->5, 226 5->3, 227 6->5). Sweep 2 (＋Lagrange) in progress.
-      Final sweep with all 4 fixes pending.
+### Stage 1 — root-cause gap closure toward 100/100 (0 FAIL, 0 regression)
+- [x] 6. No FAILs to fix — §2.2.25 had 0 FAIL, 0 crash from the baseline.
+- [x] 7. Converter artifacts closed (3 root-cause fixes, see item 2).
+- [x] 8. **VoP fractional-power Simplify-hang fix** (`dsolve_common.c`): the final
+      `ds_simplify(yp)` hangs on a fractional-power×exp answer (`Simplify[t^(5/2)E^(-2t)]`
+      itself spins); the body is already auto-eval clean, so skip Simplify for a
+      fractional-power answer (`ds_has_fractional_power`). No nested TimeConstrained.
+      → 2406 solves; §2.2.25 95→**96/100**.
+- [x] 9. Probed all residue. §2.2.25 residue 4 (2409/2410/2444/2477) are ALL
+      sympySolved=False (parabolic-cylinder, clean-basis-VoP, slow transcend series,
+      non-elem IF) — genuine research-grade/nonelementary, documented declines, no
+      hacks. §2.2.24 residue 9 (2353 Abel, 2357 nonelem Bernoulli IF, + M43's set).
+- [~] 10. Re-measured after fix (§2.2.25=96). Full §2.2.x regression sweep RUNNING.
 
-### Stage 2 — deferred classes (attempted per user opt-in; decline-safe)
-- [x] 8. 2a special-fn Riccati: CONFIRMED already solved (Airy 2348, Bessel 2358 PASS)
-      via existing linearize+specialform. Residue 2349/2350/2351 (y'=e^{-t^2}+y^2 ->
-      u''=e^{-t^2}u, non-elementary) + 2327 (symbolic Erf, needs 2nd-order operator
-      factoring) = bounded declines.
-- [x] 9. 2b Abel: ALL Abel-tagged cases in 2.2.24 already PASS (2353 via Chini/Abel;
-      2335 via lincoeff; 2339/2343 via exact). No Abel gap in this section — no AIR
-      work needed here.
-- [x] 10. 2c `y=_G(x,y')`: 2352/2355/2356 genuinely non-elementary (e.g.
-      y'=e^{-t}+Log[1+y^2]) — bounded declines (same class prior sections left).
-      Residue after Stage 1+2: 8 U, all sympy=False, all bounded declines, 0 FAIL.
+### Stage 2 — register + docs + version
+- [x] 11. Saved `reports/2.2.25.{tsv,md}` + re-saved `reports/2.2.24.{tsv,md}`; added
+      `dsolve_corpus_2_2_25_tests` gate (baseline 4); §2.2.24 gate 8→9.
+- [x] 12. STATUS.md §2.2.25 block + §2.2.24 M44 correction + M44 milestone-log line;
+      README.md row + §2.2.24 note.
+- [x] 13. `src/version.h` 0.141→0.142; DSOLVE_PLAN.md M44 entry; changelog M44 section.
 
-### Stage 3 — tracking + docs + version
-- [ ] 11. Regenerate report; lower CMake baseline to new non-PASS count
-- [ ] 12. Update STATUS.md + README row
-- [ ] 13. Add M43 entry to DSOLVE_PLAN.md (+ method status lines if new method)
-- [ ] 14. Changelog M43 in docs/spec/changelog/2026-09-07.md; new builtin docstring/docs if any
-- [ ] 15. Bump src/version.h → 0.141
-- [ ] 16. Gates: dsolve ctest suites, make check-c99, valgrind spot-check, REPL spot-checks
-- [ ] 17. Rebuild code-review graph; write Review section here
+### Stage 3 — verification
+- [x] 14a. `ctest -R dsolve_corpus_2_2` — **100% (25/25) passed, 0 regression** across
+      §2.2.1–25 (incl. new §2.2.25 baseline 4, updated §2.2.24 baseline 9). §2.2.25 gate
+      re-confirmed on the final rebuilt binary.
+- [x] 14b. §2.1.2 gate (**1000 cases**) PASSED, 0 regression; dsolve_stress_tests +
+      dsolve_m34_stress_tests PASSED. **dsolve_tests SIGALRM** — CONFIRMED **pre-existing**:
+      reverted my change to clean HEAD (M43), rebuilt, ran → also exits 142 (cumulative
+      >120s `alarm(120)` on the Risch–Norman-heavy suite, unrelated to VoP). Fix restored.
+- [x] 15a. `make check-c99` PASSES. Rebuilt `./Mathilda`; REPL spot-checks (2406 solves,
+      2487 piecewise, symbolic Bessel/Chebyshev) all good.
+- [x] 15b. valgrind: VoP fix is **leak-neutral** — fractional-power path (2406) and
+      integer path both lose the identical 13,496 B (the documented inherited
+      Integrate/Solve-engine per-call leak); the read-only helper adds no allocations.
+- [x] 16. Staff-engineer self-review done (diff is exactly helper + gated Simplify, no
+      debug residue; read-only traversal, interned-pointer compare). Graph refresh skipped:
+      incremental diff is vs HEAD~1, would not index uncommitted work; left uncommitted.
 
 ## Review
 
-**Outcome: §2.2.24 = 92/100, 0 FAIL, 0 crash, 0 regression.** Baseline was 90/100 with
-1 FAIL. Final fix set is **two** root-cause fixes (an intermediate homogeneous degree-gate
-and a Riccati SeriesData gate were tried and REVERTED — see below):
+**Outcome.** M44 adds §2.2.25 (Problems 2401–2500) to the DSolve corpus at **96/100,
+0 FAIL, 0 crash**, with **0 regression** across every sibling gate (§2.1.2 + §2.2.1–24).
 
-1. **2329 FAIL → PASS (correctness), `dsolve_common.c`.** The IVP constant-fitter collapsed a
-   `ConditionalExpression` integer-family to its principal member (`C[_]→0`) only at the FINAL
-   fit, not while CHOOSING among Solve's inverse branches. `Solve[Sinh[C]==0,C]` returns an odd
-   `Iπ+2Ikπ` family and an even `2Ikπ` family; the candidate loop substituted a generic
-   non-integer for the family index → both looked complex-nonzero → defaulted to `args[0]` (odd,
-   wrong) → shipped `(1−t²)/2` (meets IC, fails ODE; correct `(t²−1)/2`). Fix: new
-   `ds_collapse_principal` collapses each candidate to its principal member BEFORE the numeric
-   `ds_branch_num_ok` check, plus a scoped final numeric-verify gate (first-order scalar,
-   non-radical) dropping any confidently-wrong fit. Bonus: §2.2.1/2/6/7 each improved 1–2.
+**Root-cause fixes (no overfit, no hacks):**
+- **`dsolve_variation_of_parameters` fractional-power Simplify hang** (`dsolve_common.c`,
+  general): resonant fractional forcing closes to an elementary answer but the final
+  `ds_simplify` spun on `t^(p/q) E^(a t)`; skip it for a fractional-power answer (already
+  auto-eval clean). Fixes 2406 and the whole class. Leak-neutral, C99-clean.
+- **Three converter root-cause bugs** (`latex_ode_to_mathilda.py`): indvar juxtaposition,
+  autonomous-parameter-as-indvar, piecewise-sentinel/optional-arg. §2.2.20–23 byte-identical;
+  §2.2.24 regenerated (7 latent wrong-equation records corrected — a genuine integrity fix).
 
-2. **2335 solved, `dsolve_lagrange.c` + `dsolve_lincoeff.c`.** Every affine-ratio equation also
-   matches Lagrange as `y=x F(y')+G(y')` (F rational), but Lagrange's integrating-factor solve
-   spins uninterruptibly (`TimeConstrained` cannot bound an inner `Integrate`). New predicate
-   `dsolve_is_linear_coefficients_form` lets Lagrange defer the class to LinearCoefficients
-   (solves in ~1 s via explicit Root). Genuine d'Alembert (polynomial F) unaffected.
+**Honest ceiling.** The §2.2.25 residue of 4 (2409/2410/2444/2477) are all `sympySolved=False`
+— parabolic-cylinder + forcing, clean-basis VoP, slow transcendental series, non-elementary
+integrating factor — genuinely beyond current CAS reach (SymPy fails them too). §2.2.24 is a
+truer 91/100 (M43's 92 counted 2 mistranscribed-equation passes; 2327 now genuinely solves).
 
-**Dead ends (reverted, lesson learned):** first blamed the 2335 hang on homogeneous
-verification and added a degree-≥4 `Root`→implicit gate in `dsolve_homogeneous.c` (broke
-`t_stress_homogeneous`/`t_stress_lincoeff`, which verify explicit degree-4/5 Roots fine) and a
-Riccati SeriesData gate (regressed 2346/2347, which pass via a concrete-coefficient
-series-Riccati). Isolating the ACTUAL hang (Lagrange, via per-method timing) showed the
-Lagrange gate ALONE fixes 2335 — the homogeneous Root form verifies fine (~1 s). **Lesson:
-pin down the exact hanging method before adding gates; a net-improved count can hide a swap.**
+**Deliverables.** New `DE_examples_2225.m` + `reports/2.2.25.{md,tsv}`; regenerated
+`DE_examples_2224.m` + its reports; gates `dsolve_corpus_2_2_25_tests` (baseline 4) and
+`dsolve_corpus_2_2_24_tests` (8→9); STATUS.md/README.md/DSOLVE_PLAN.md/changelog updated;
+version 0.141→0.142. Left uncommitted per request.
 
-**Residue 8** (all `sympy=False`, bounded declines, no wrong answers): 2304 (non-elementary IF
-integral), 2327 (symbolic Erf-Riccati, needs symbolic 2nd-order operator factoring),
-2349/2350/2351 (`y'=e^{−t²}+y²`, non-elementary), 2352/2355/2356 (`y=_G(x,y')`).
+**Pre-existing (not addressed, not caused here):** dsolve_tests SIGALRM (Risch–Norman suite
+>120s), and the §2.2.24-2353 Abel / research-grade residue (M13-deferred).
 
-**Gates:** all DSolve corpus ctests 0 FAIL / at-or-below baseline (§2.2.1–24 + §2.1.2);
-`dsolve_stress_tests` PASS; `dsolve_tests` SIGALRMs at the PRE-EXISTING `t_rischnorman` Abel
-hang (49 tests pass first, 0 assertion failures); `make check-c99` PASS; valgrind: 0 serious
-errors, 0 leaks in new code (only the documented pre-existing engine per-call baseline).
-Left UNCOMMITTED per request.
+## Review
+_(to be filled in on completion)_
