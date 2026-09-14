@@ -723,6 +723,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_lie2.c
     ../src/calculus/dsolve_ifactor.c
     ../src/calculus/dsolve_changevar.c
+    ../src/calculus/dsolve_ratsol2.c
     ../src/calculus/dsolve_nonhomog_vop.c
     ../src/calculus/dsolve_piecewise.c
     ../src/calculus/dsolve_autonomous.c
@@ -4095,15 +4096,33 @@ add_test(NAME dsolve_corpus_2_2_24_tests
 # linear / exact / homogeneous.  Solved across the 2nd-order stack (Kovacic /
 # SpecialFunctionForm hypergeometric+Bessel+Airy recognizers / Frobenius fallback /
 # UndeterminedCoefficients / VariationOfParameters / EulerCauchy).  Baseline argv3 =
-# the STATUS.md non-PASS count.  Residue 4 (all sympySolved=False -- SymPy fails
-# them too): 2409 (parabolic-cylinder + forcing), 2410 (polynomial-solution
-# variable-coefficient nonhomogeneous -- needs clean-basis VoP), 2444 (transcendental-
+# the STATUS.md non-PASS count.  M45 lowered this 4 -> 3: 2410 (polynomial-solution
+# variable-coefficient nonhomogeneous) now solves via the new PolynomialSolution
+# method (clean-basis VoP; see dsolve_ratsol2.c).  Residue 3 (all sympySolved=False --
+# SymPy fails them too): 2409 (parabolic-cylinder + forcing), 2444 (transcendental-
 # coefficient power series, slower than the 8 s harness bound), 2477 (non-elementary
 # integrating factor).
 add_test(NAME dsolve_corpus_2_2_25_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2225.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+
+# Section 2.2.26 (Problems 2501-2600, Nasser Abbasi): 100 records, 50 IVP, 0
+# systems.  A Braun-textbook section: a first-order-nonlinear-heavy front half
+# (homogeneous class A/C, dAlembert, Bernoulli, Abel, exact, separable, Riccati)
+# and a second-order block (constant-coefficient "missing x", Euler-Cauchy,
+# Emden-Fowler, Gegenbauer, with-symmetry).  Baseline 87 -> 89 with two general
+# root-cause fixes (0 FAIL, 0 regression): the Bernoulli DSolve`Y integrating-factor
+# leak (dsolve_bernoulli.c, 2532) and the polynomial-solution 2nd-order path
+# (dsolve_ratsol2.c, 2592 -- also 2.2.25-2410).  Baseline argv3 = the STATUS.md
+# non-PASS count.  Residue 11 (all sympySolved=False -- SymPy/Mathematica fail them
+# too): non-integrable Riccati y'=e^{-t^2}+y^2 (2524/2525/2526), Abel y'=y^3+e^{-5t}
+# (2528), implicit y=G(x,y')/x=G(y,y') forms (2514/2527/2530/2531/2537), rational
+# (2539), abstract-coefficient y''+p(t)y'+q(t)y (2591).
+add_test(NAME dsolve_corpus_2_2_26_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2226.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 11)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

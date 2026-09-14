@@ -1661,6 +1661,41 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     give the elementary answer), `2444` (transcendental-coefficient power series, slower than the
     8 s harness bound), `2477` (non-elementary integrating factor, same class as §2.2.24-2304). All
     §2.2.x + §2.1.2 gates held; see the §2.2.25 block in `DSolve_test_status/STATUS.md`.
+- **M45 — §2.2.26 corpus (Problems 2501–2600, Nasser Abbasi) + Bernoulli integrating-factor
+  symbol-leak fix + new polynomial-solution 2nd-order method.** ✅ DONE. A Braun-textbook
+  MIXED section: 100 scalar (50 IVP), 0 systems — a first-order-nonlinear-heavy front half
+  (homogeneous class A/C, dAlembert, Bernoulli, Abel, exact, separable, Riccati) and a
+  second-order block (constant-coefficient `_missing_x`, Euler–Cauchy, Emden–Fowler,
+  Gegenbauer, `_with_linear_symmetries`). Baseline **87/100, 0 FAIL, 0 crash** → **89/100**
+  with two general root-cause fixes and **0 regression**. New gate `dsolve_corpus_2_2_26_tests`
+  (baseline 11). Version 0.142 → 0.143.
+  - **Bernoulli integrating-factor `DSolve\`Y` leak** (`dsolve_bernoulli.c`). The linearised
+    Bernoulli coefficients A, B are mathematically free of the reduction variable Y but stored
+    TEXTUALLY carrying a frozen `Q = FY − Y F_Y` (`Times` does not distribute over `Plus`).
+    When the reduced integrating-factor integral is ELEMENTARY the evaluator collapses it, but
+    when it is NON-elementary (`y' == (1+cos 4t)/4·y − (1−cos 4t)/800·y²`, 2532) the frozen
+    `DSolve\`Y` leaked into the unevaluated `Integrate`, so back-substitution scored UNEVAL.
+    `Cancel` each coefficient to lowest terms in Y before the linear solve — the same cheap
+    rational-GCD already used for the exponent n (never `Simplify`, which hangs on radical
+    coefficients). Intercepts the whole non-elementary-integrating-factor Bernoulli class;
+    Y-free coefficients are unchanged.
+  - **Polynomial-solution 2nd-order method** (new `src/calculus/dsolve_ratsol2.c`,
+    `DSolve\`PolynomialSolution`). A homogeneous 2nd-order linear ODE with rational coefficients
+    whose fundamental set is polynomial (`(t²+1)y''−2ty'+2y==0` → `{t, t²−1}`) is solved by a
+    degree-bounded undetermined-coefficient search (ansatz `Σ a_k x^k`, clear the denominator,
+    `Solve` the coefficient equations for the a_k null space); when forced, variation of
+    parameters over that clean basis. Runs BEFORE Kovacic, which returns the same set wrapped in
+    a complex-radical basis `√(t−i)√(t+i)` that does not reduce and blocks the VoP integrals.
+    Every returned solution is numerically self-verified (`ds_branch_num_ok`). Fixes **2592 here
+    AND §2.2.25-2410** (that section 96→**97/100**, gate 4→3). Const-coefficient / Euler /
+    special-function families are still claimed by their specialists earlier in the cascade
+    (verified: `y''−y==0`, Euler, `y''==0` unchanged).
+  - **Residue 11** (all `sympySolved=False` — SymPy/Mathematica fail them too, bounded declines,
+    no wrong answers): non-integrable Riccati `y'=e^{−t²}+y²` (`2524`/`2525`/`2526`), Abel
+    `y'=y³+e^{−5t}` (`2528`), implicit `y=G(x,y')` / `x=G(y,y')` forms not solvable for `y'`
+    (`2514`/`2527`/`2530`/`2531`/`2537`), rational `y'=(t²+y²)/(1+t+y²)` (`2539`), and the
+    abstract-coefficient `y''+p(t)y'+q(t)y==1+t` (`2591`, unsolvable for arbitrary p, q). All
+    §2.2.x + §2.1.2 gates held; see the §2.2.26 block in `DSolve_test_status/STATUS.md`.
 
 ## Phase 1 — ODE method catalog
 

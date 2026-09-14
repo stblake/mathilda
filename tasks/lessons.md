@@ -3561,3 +3561,35 @@ Two lessons from strengthening `src/solve/solverad.c`:
   "regresses", confirm against a PRISTINE rebuild before attributing it — and remember that
   running several Mathilda processes concurrently inflates every per-case timing (the 8 s
   `TimeConstrained` and the alarm both fire on wall-clock).
+
+## M45 — §2.2.26 corpus (2026-09-14)
+
+- **A new cascade method placed before an existing one runs on EVERY equation of its
+  guard class — its DECLINE path cost is pure overhead added to cases another method
+  owns, and can tip a borderline `TimeConstrained` case over.** `dsolve_ratsol2.c`
+  (`DSolve`PolynomialSolution`, before Kovacic) fires on every homogeneous/forced
+  2nd-order *rational-coefficient* ODE; for the common case with no polynomial fundamental
+  set it must still DECLINE, but a degree-10 ansatz + a `Coefficient[·,x,j]` loop +
+  `Solve` cost ~1 s, which pushed §2.2.20-1960 (`3x²y''+x(x+1)y'−(1+3x)y==0`, a ~6.8 s
+  Frobenius series that ratsol2 declines) toward the 8 s `TimeConstrained` bound. Fix:
+  keep the decline path cheap — a single `CoefficientList[Lnum, x]` instead of a loop of
+  `Coefficient` calls, and a modest degree cap (6, not 10). Dropped 1960 to ~5.7 s. A
+  too-small cap only makes the method DECLINE (never wrong), so cheapness costs nothing.
+- **`CoefficientList[e, x]` works on an expression whose coefficients are funcapps
+  (`a[k]`); `Exponent[e, x]` does NOT** (it returns 0 — the known funcapp bug), so an
+  undetermined-coefficient search must get its coefficient equations from `CoefficientList`
+  (or iterate a fixed upper bound), never from `Exponent`+`Coefficient`.
+- **A stray/orphaned Mathilda process silently poisons a whole `ctest -R dsolve_corpus`
+  sweep.** A hung child from an earlier REPL `TimeConstrained` probe (PID still alive) was
+  competing for CPU during the sweep; because `TimeConstrained`/`alarm` are wall-clock,
+  every borderline case near the 8 s bound flipped PASS→UNEVAL and 3 sections (2.2.12/15/20)
+  "failed" — all passed in isolation once the stray was killed. ALWAYS `pgrep -l Mathilda`
+  before trusting a corpus-sweep verdict, kill strays, and re-run clean. (Reinforces the
+  no-background-pollers / warm-vs-cold lessons; user time can also inflate under contention
+  in the threaded `-DMATHILDA_THREADS` build.)
+- **`Bernoulli` leaked its internal reduction symbol `DSolve`Y` into the answer when the
+  integrating-factor integral was non-elementary.** The linearised coefficients A, B are
+  Y-free mathematically but stored TEXTUALLY carrying the undistributed `Q = FY − Y F_Y`;
+  `Cancel` each before the linear solve (never `Simplify` — hangs on radicals). A non-
+  elementary integrating factor is exactly the case where the frozen symbol survives, since
+  the elementary case collapses it away during evaluation.

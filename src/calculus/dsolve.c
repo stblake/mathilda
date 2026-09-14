@@ -154,6 +154,7 @@ extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_changevar_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_ratsol2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_piecewise_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
@@ -195,6 +196,7 @@ extern void dsolve_liouville_init(void);
 extern void dsolve_lie2_init(void);
 extern void dsolve_ifactor_init(void);
 extern void dsolve_changevar_init(void);
+extern void dsolve_ratsol2_init(void);
 extern void dsolve_nonhomog_vop_init(void);
 extern void dsolve_piecewise_init(void);
 extern void dsolve_frobenius_init(void);
@@ -390,6 +392,12 @@ Expr* builtin_dsolve(Expr* res) {
              * before the heavier special-function / Kovacic / series machinery. */
             if (!result) result = dsolve_run(&P, dsolve_exactode_try);
             if (!result) result = dsolve_run(&P, dsolve_specialform_try);
+            /* Polynomial fundamental set: a homogeneous 2nd-order linear ODE with
+             * rational coefficients whose both solutions are polynomials (e.g.
+             * (x^2+1)y''-2xy'+2y==0 -> {x, x^2-1}).  Runs BEFORE Kovacic, which would
+             * otherwise return the same set in a complex-radical basis that blocks a
+             * downstream VariationOfParameters (2.2.26-2592, 2.2.25-2410). */
+            if (!result) result = dsolve_run(&P, dsolve_ratsol2_try);
             if (!result) result = dsolve_run(&P, dsolve_kovacic_try);
             /* ChangeOfVariable: a 2nd-order linear ODE with TRANSCENDENTAL
              * coefficients that the direct rational methods above declined may
@@ -591,6 +599,7 @@ void dsolve_init(void) {
     dsolve_lie2_init();
     dsolve_ifactor_init();
     dsolve_changevar_init();
+    dsolve_ratsol2_init();
     dsolve_nonhomog_vop_init();
     dsolve_piecewise_init();
     dsolve_frobenius_init();

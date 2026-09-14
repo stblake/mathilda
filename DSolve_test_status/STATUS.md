@@ -1155,12 +1155,13 @@ Euler–Cauchy, regular-singular (Frobenius), Emden–Fowler nonlinear, plus
 first-order separable / linear / exact / homogeneous. Solved across the 2nd-order
 stack (Kovacic / SpecialFunctionForm hypergeometric+Bessel+Airy recognizers /
 Frobenius fallback / UndeterminedCoefficients / VariationOfParameters /
-EulerCauchy). `ctest -R dsolve_corpus_2_2_25_tests` · gate baseline **4**.
+EulerCauchy). `ctest -R dsolve_corpus_2_2_25_tests` · gate baseline **3**.
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-13 (baseline) | 95 / 100 | 95.0% | 5 | pre-wave: **0 FAIL, 0 crash**; 5 UNEVAL (2406 hang + 2409/2410/2444/2477). |
-| 2026-09-13 (M44) | **96 / 100** | **96.0%** | **4** | **0 FAIL, 0 crash.** 2406 fixed (VariationOfParameters fractional-power Simplify hang). |
+| 2026-09-13 (M44) | 96 / 100 | 96.0% | 4 | **0 FAIL, 0 crash.** 2406 fixed (VariationOfParameters fractional-power Simplify hang). |
+| 2026-09-14 (M45) | **97 / 100** | **97.0%** | **3** | **0 FAIL, 0 crash.** 2410 fixed by the new PolynomialSolution method (§2.2.26 wave; clean polynomial basis {t, t²−1} → VoP closes). Gate 4→3. |
 
 **M44 wave.** One general root-cause fix (no overfit), 0 regression:
 1. **VariationOfParameters fractional-power Simplify hang** (`dsolve_common.c`) — a
@@ -1173,17 +1174,57 @@ EulerCauchy). `ctest -R dsolve_corpus_2_2_25_tests` · gate baseline **4**.
    no nested `TimeConstrained` (unsafe under the harness's own bound). Intercepts the
    whole resonant-fractional-forcing class.
 
-Residue 4 (all `sympySolved=False` — SymPy fails them too, bounded declines, no wrong
+Residue 3 (all `sympySolved=False` — SymPy fails them too, bounded declines, no wrong
 answers): `2409` (`y''+t²y/4 == f cos t`, parabolic-cylinder homogeneous part +
-forcing — needs a ParabolicCylinderD recognizer), `2410` (`(t²+1)y''−2ty'+2y = t²+1`;
-homogeneous solves via Kovacic but with a complex-radical basis `√(t−i)√(t+i)` that
-does not reduce to `√(t²+1)`, so VoP for the forcing cannot close — a clean-basis /
-polynomial-solution VoP would give the elementary `−t²+2t·arctan t+½(t²−1)log(t²+1)`),
-`2444` (`(1−t²)y''+y'/sin(1+t)+y=0`, transcendental-coefficient power series, slower
-than the harness's 8 s bound), `2477` (`y'+[t/(t²+1)+t³/(t⁴+1)]y=1`, non-elementary
-integrating factor `∫(t²+1)^{1/2}(t⁴+1)^{1/4}dt`, same class as §2.2.24-2304).
+forcing — needs a ParabolicCylinderD recognizer), `2444` (`(1−t²)y''+y'/sin(1+t)+y=0`,
+transcendental-coefficient power series, slower than the harness's 8 s bound), `2477`
+(`y'+[t/(t²+1)+t³/(t⁴+1)]y=1`, non-elementary integrating factor
+`∫(t²+1)^{1/2}(t⁴+1)^{1/4}dt`, same class as §2.2.24-2304). **M45 correction:** `2410`
+(`(t²+1)y''−2ty'+2y = t²+1`), previously blocked by Kovacic's complex-radical basis
+`√(t−i)√(t+i)`, now solves via the new PolynomialSolution method — the clean polynomial
+basis `{t, t²−1}` lets VoP close to the elementary `−t²+2t·arctan t+½(t²−1)log(t²+1)`.
 
 Full per-case results: `reports/2.2.25.tsv`; bucketed report: `reports/2.2.25.md`.
+
+---
+
+## Section 2.2.26 — "Problems 2501 to 2600" (Nasser Abbasi)
+
+Corpus: `DE_examples_2226.m` — 100 records, 100 scalar (**50 IVP**), 0 systems.
+A Braun-textbook section (*Differential Equations and Their Applications*): a
+FIRST-ORDER-NONLINEAR-heavy front half (homogeneous class A/C, dAlembert, Bernoulli,
+Abel, exact, separable, and Riccati) and a second-order block (constant-coefficient
+"missing x", Euler–Cauchy, Emden–Fowler, Gegenbauer, and with-symmetry linear).
+`ctest -R dsolve_corpus_2_2_26_tests` · gate baseline **11**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-14 (baseline) | 87 / 100 | 87.0% | 13 | pre-wave: **0 FAIL, 0 crash**; 13 UNEVAL (2532 + 2592 + 11 non-elementary). |
+| 2026-09-14 (M45) | **89 / 100** | **89.0%** | **11** | **0 FAIL, 0 crash.** 2532 (Bernoulli symbol-leak) + 2592 (polynomial-solution VoP) fixed. |
+
+**M45 wave.** Two general root-cause fixes (no overfit), 0 regression:
+1. **Bernoulli integrating-factor `DSolve\`Y` leak** (`dsolve_bernoulli.c`) — the linearised
+   Bernoulli coefficients A, B are mathematically free of the reduction variable Y but
+   stored TEXTUALLY with a frozen `Q = FY − Y F_Y`; when the reduced integrating-factor
+   integral is non-elementary (`y' == (1+cos 4t)/4·y − (1−cos 4t)/800·y²`, 2532) that
+   frozen `DSolve\`Y` leaked into the unevaluated `Integrate`, so back-substitution scored
+   UNEVAL. `Cancel` each coefficient to lowest terms in Y before the linear solve
+   (the same cheap rational-GCD already used for the exponent; never Simplify). Intercepts
+   the whole non-elementary-integrating-factor Bernoulli class.
+2. **Polynomial-solution 2nd-order path** (new `dsolve_ratsol2.c`, `DSolve\`PolynomialSolution`)
+   — a homogeneous 2nd-order linear ODE with rational coefficients whose fundamental set is
+   polynomial (`(t²+1)y''−2ty'+2y==0` → `{t, t²−1}`) is solved by a degree-bounded
+   undetermined-coefficient search; when forced, VoP over that clean basis. Runs BEFORE
+   Kovacic (whose complex-radical basis `√(t−i)√(t+i)` blocked the VoP). Fixes **2592 here
+   and §2.2.25-2410**.
+
+Residue 11 (all `sympySolved=False` — SymPy/Mathematica fail them too, bounded declines,
+no wrong answers): non-integrable Riccati `y'=e^{−t²}+y²` (`2524`/`2525`/`2526`), Abel
+`y'=y³+e^{−5t}` (`2528`), implicit `y=G(x,y')` / `x=G(y,y')` forms not solvable for `y'`
+(`2514`/`2527`/`2530`/`2531`/`2537`), rational `y'=(t²+y²)/(1+t+y²)` (`2539`), and the
+abstract-coefficient `y''+p(t)y'+q(t)y==1+t` (`2591`, unsolvable for arbitrary p, q).
+
+Full per-case results: `reports/2.2.26.tsv`; bucketed report: `reports/2.2.26.md`.
 
 ---
 

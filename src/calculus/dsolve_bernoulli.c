@@ -164,9 +164,22 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
     expr_free(FY); expr_free(Ynpow);
     if (!ok) { expr_free(A); expr_free(B); expr_free(omn); expr_free(nexp); return NULL; }
 
-    /* v' + Pcoef v == Qcoef,  Pcoef = -(1-n) A,  Qcoef = (1-n) B */
-    Expr* Pcoef = ev3(SYM_Times, expr_new_integer(-1), expr_copy(omn), A);  /* consumes A */
-    Expr* Qcoef = eval_and_free(ds_call2(SYM_Times, expr_copy(omn), B));     /* consumes B */
+    /* v' + Pcoef v == Qcoef,  Pcoef = -(1-n) A,  Qcoef = (1-n) B.
+     * A and B are mathematically free of Y (verified above), but can still carry Y
+     * TEXTUALLY: Q = FY - Y F_Y is stored undistributed (Times does not distribute
+     * over Plus), so B = Q/((1-n) Y^n) keeps a frozen DSolve`Y factor.  When the
+     * reduced linear integrating-factor integral is ELEMENTARY the evaluator collapses
+     * it away, but when it is NON-elementary dsolve_linear_factor_solve keeps it as an
+     * unevaluated Integrate[...] and the frozen DSolve`Y then LEAKS into the final
+     * answer (e.g. y' == (1+Cos[4x])/4 y - (1-Cos[4x])/800 y^2, whose integrating
+     * factor E^(x/4+Sin[4x]/16) has no elementary ∫mu q).  Cancel each coefficient to
+     * lowest terms in Y first, eliminating the textual Y before it can be frozen; it is
+     * the same cheap rational-GCD used for the exponent n above (never Simplify, which
+     * hangs on radical coefficients).  Mathematically Y-free forms are unchanged. */
+    Expr* Pcoef = eval_and_free(ds_call1("Cancel",
+                     ev3(SYM_Times, expr_new_integer(-1), expr_copy(omn), A)));  /* consumes A */
+    Expr* Qcoef = eval_and_free(ds_call1("Cancel",
+                     eval_and_free(ds_call2(SYM_Times, expr_copy(omn), B))));     /* consumes B */
     Expr* v = dsolve_linear_factor_solve(Pcoef, Qcoef, xvar);               /* consumes both */
     if (!v) { expr_free(omn); expr_free(nexp); return NULL; }
 

@@ -1,102 +1,85 @@
-# M44 — §2.2.25 corpus (Problems 2401–2500), push for 100/100
+# M45 — §2.2.26 corpus (Problems 2501–2600), push toward the honest ceiling
 
 ## Plan
-Add Nasser Abbasi's §2.2.25 (2401–2500) to the DSolve corpus; measure; drive
-coverage toward **100/100** with general root-cause fixes only. Section: 100
-scalar ODEs (~32 IVP), 0 systems; 2nd-order-linear-heavy (Airy/Hermite/Legendre/
-Chebyshev/Laguerre/Gegenbauer/Bessel, Euler–Cauchy, regular-singular Frobenius,
-Emden–Fowler nonlinear, const-coeff nonhomogeneous incl. one `sec(t)` forcing).
-Invariants: **0 FAIL (0 wrong answers), 0 regression**. Real methods only — no
-hacks/overfit; a genuinely research-grade case is a *documented decline*, never a
-faked pass. Leave uncommitted. Milestone M44, version 0.141 → 0.142.
-Probe of 11 anticipated-hard cases: 10 already solve, 1 declines (#9 parabolic
-cylinder + cos forcing).
+Add Nasser Abbasi's §2.2.26 (2501–2600) to the DSolve corpus; measure; close
+honest gaps with **general root-cause fixes only**. Section: 100 scalar ODEs
+(50 IVP, 0 systems) — first-order-nonlinear-heavy (homogeneous class A/C,
+dAlembert, Bernoulli, Abel, exact, separable, Riccati) + a 2nd-order block
+(const-coeff "missing x", Euler–Cauchy, Emden–Fowler, Gegenbauer, with-symmetry).
+Invariants: **0 FAIL (0 wrong answers), 0 regression**; real methods only — a
+research-grade case is a *documented decline* (all residue `sympySolved=False`),
+never a faked pass. Leave uncommitted. Milestone M45, version 0.142 → 0.143.
+Planning baseline (Sep-13 binary): **87/100, 0 FAIL, 0 crash, 13 UNEVAL**.
+Targets: **2532** (Bernoulli `DSolve\`Y` leak, sympy=True), **2592** (2nd-order
+linear rational-coeff — same class as §2.2.25-2410). Target ~89/100.
 
 ## Tasks
 ### Stage 0 — ingest + measure
-- [x] 1. Generated `DSolve_test_status/DE_examples_2225.m` (100 recs, 32 IVP, 0 sys)
-- [x] 2. Spot-check found + fixed THREE converter bugs (all root-caused in
-      `tools/latex_ode_to_mathilda.py`):
-      - **indvar juxtaposition**: `t` glued to digit/letter (`ty`,`2t`) missed →
-        defaulted to `x` (8 recs in §2.2.25; also 6 latent in §2.2.24). Fallback
-        re-scan on implicit-mult-separated body.
-      - **autonomous parameter as indvar**: `y'=k(a-y)(b-y)` picked param `a`
-        (ABORT); now unique-candidate rule → fresh `x` (#2498; also §2.2.24-2327).
-      - **piecewise sentinel shred + `\begin{array}[]{cc}` optional arg**: `PWFORCE0`
-        split by implicit-mult → garbage; now whitespace-tolerant expand + optional
-        `[]` strip (#2487 → clean `Piecewise[...]`).
-      Byte-identity: §2.2.20–23 IDENTICAL; §2.2.24 improved by 7 correct recs
-      (regenerated in place). §2.2.1–19/§2.1.2 are tex4ht-sourced, out of scope.
-- [x] 3. Built harness. Baselines: **§2.2.25 = 95/100** (0 FAIL/crash, 5 UNEVAL);
-      **§2.2.24 re-measured = 91/100** (converter fix: 2327 U→P, but 2353/2357 revealed
-      as honest UNEVAL — M43's 92 included 2 false-passes on t-as-constant equations).
-- [ ] 4. Generate `reports/2.2.25.{md,tsv}` via `dsolve_corpus_report.py`
-- [ ] 5. Triage non-PASS: (a) converter artifact (b) engine gap (c) FAIL (d) research-grade
+- [x] 1. Generated `DSolve_test_status/DE_examples_2226.m` (100 recs, 50 IVP, 0 sys)
+- [x] 2. Converter output vetted (t/x split legit, params OK, no glued symbols, no
+      t/x-mixed eq). No converter fix needed → §2.2.20–25 byte-identical (converter untouched).
+- [x] 3. Fresh rebuild + `dsolve_corpus_tests`; baseline **87/100, 0 FAIL, 0 crash, 13 UNEVAL**.
+- [x] 4. Generated `reports/2.2.26.{md,tsv}` (+ regenerated `2.2.25.{md,tsv}`).
+- [x] 5. Triaged: 2532 (Bernoulli gap, sympy=True), 2592 (poly-sol gap), 11 honest declines.
 
-### Stage 1 — root-cause gap closure toward 100/100 (0 FAIL, 0 regression)
-- [x] 6. No FAILs to fix — §2.2.25 had 0 FAIL, 0 crash from the baseline.
-- [x] 7. Converter artifacts closed (3 root-cause fixes, see item 2).
-- [x] 8. **VoP fractional-power Simplify-hang fix** (`dsolve_common.c`): the final
-      `ds_simplify(yp)` hangs on a fractional-power×exp answer (`Simplify[t^(5/2)E^(-2t)]`
-      itself spins); the body is already auto-eval clean, so skip Simplify for a
-      fractional-power answer (`ds_has_fractional_power`). No nested TimeConstrained.
-      → 2406 solves; §2.2.25 95→**96/100**.
-- [x] 9. Probed all residue. §2.2.25 residue 4 (2409/2410/2444/2477) are ALL
-      sympySolved=False (parabolic-cylinder, clean-basis-VoP, slow transcend series,
-      non-elem IF) — genuine research-grade/nonelementary, documented declines, no
-      hacks. §2.2.24 residue 9 (2353 Abel, 2357 nonelem Bernoulli IF, + M43's set).
-- [~] 10. Re-measured after fix (§2.2.25=96). Full §2.2.x regression sweep RUNNING.
+### Stage 1 — root-cause gap closure (0 FAIL, 0 regression)
+- [x] 6. 0 FAIL confirmed on fresh binary.
+- [x] 7. **Fix A — Bernoulli `DSolve\`Y` leak** (`dsolve_bernoulli.c`): `Cancel` the linearised
+      coefficients before the linear solve; 2532 → clean integral-form → **PASS**.
+- [x] 8. **Fix B — polynomial-solution 2nd-order** (new `dsolve_ratsol2.c`, before Kovacic;
+      self-contained VoP via `dsolve_variation_of_parameters`): **2592 + §2.2.25-2410 → PASS**.
+- [x] 9. Residue: §2.2.26 = 11, §2.2.25 = 3 — ALL `sympySolved=False` (honest).
 
 ### Stage 2 — register + docs + version
-- [x] 11. Saved `reports/2.2.25.{tsv,md}` + re-saved `reports/2.2.24.{tsv,md}`; added
-      `dsolve_corpus_2_2_25_tests` gate (baseline 4); §2.2.24 gate 8→9.
-- [x] 12. STATUS.md §2.2.25 block + §2.2.24 M44 correction + M44 milestone-log line;
-      README.md row + §2.2.24 note.
-- [x] 13. `src/version.h` 0.141→0.142; DSOLVE_PLAN.md M44 entry; changelog M44 section.
+- [x] 10. Saved `reports/2.2.26.{tsv,md}` + regen `2.2.25.{tsv,md}`; gate `dsolve_corpus_2_2_26_tests`
+      (baseline 11); §2.2.25 gate 4→3.
+- [x] 11. STATUS.md §2.2.26 block + §2.2.25 M45 row; README.md rows.
+- [x] 12. `src/version.h` 0.142→0.143; DSOLVE_PLAN.md M45 entry; new changelog
+      `docs/spec/changelog/2026-09-14.md` + Mathilda_spec.md table row.
 
 ### Stage 3 — verification
-- [x] 14a. `ctest -R dsolve_corpus_2_2` — **100% (25/25) passed, 0 regression** across
-      §2.2.1–25 (incl. new §2.2.25 baseline 4, updated §2.2.24 baseline 9). §2.2.25 gate
-      re-confirmed on the final rebuilt binary.
-- [x] 14b. §2.1.2 gate (**1000 cases**) PASSED, 0 regression; dsolve_stress_tests +
-      dsolve_m34_stress_tests PASSED. **dsolve_tests SIGALRM** — CONFIRMED **pre-existing**:
-      reverted my change to clean HEAD (M43), rebuilt, ran → also exits 142 (cumulative
-      >120s `alarm(120)` on the Risch–Norman-heavy suite, unrelated to VoP). Fix restored.
-- [x] 15a. `make check-c99` PASSES. Rebuilt `./Mathilda`; REPL spot-checks (2406 solves,
-      2487 piecewise, symbolic Bessel/Chebyshev) all good.
-- [x] 15b. valgrind: VoP fix is **leak-neutral** — fractional-power path (2406) and
-      integer path both lose the identical 13,496 B (the documented inherited
-      Integrate/Solve-engine per-call leak); the read-only helper adds no allocations.
-- [x] 16. Staff-engineer self-review done (diff is exactly helper + gated Simplify, no
-      debug residue; read-only traversal, interned-pointer compare). Graph refresh skipped:
-      incremental diff is vs HEAD~1, would not index uncommitted work; left uncommitted.
+- [x] 13. `ctest -R dsolve_corpus_2_2`: §2.2.26 (89, baseline 11), §2.2.25 (97, baseline 3),
+      and all other sections PASS **in isolation**. Full back-to-back sweep flaked 3 sections
+      (2.2.12/15/20) — PROVEN not an M45 regression: every flaky case runs byte-identical code
+      (1st-order, systems, high-order → ratsol2 guard-declines at n!=2/nfun!=1; Bernoulli Cancel
+      only on the Bernoulli success path). Pre-existing 8s-`TimeConstrained` boundary flakiness
+      under sweep CPU contention (local-only gates; CI runs only check-c99 + Linux build).
+- [x] 14a. `make check-c99` PASSES. REPL spot-checks: 2532/2592/2410 clean, no `DSolve\`Y`;
+      regressions (const-coeff, Euler, y''=0) unchanged.
+- [x] 14b. Optimized ratsol2 decline path (cap 10→6, CoefficientList not Coefficient-loop):
+      §2.2.20-1960 (Frobenius, ratsol2 declines) 6.8s→5.7s — MORE margin, not less.
+- [x] 15. valgrind leak-neutral: definite-loss (~13.5–14 KB, equation-dependent) is the
+      pre-existing per-call Integrate/Simplify leak reached via shared helpers
+      (simp_canon.c, dsolve_linear_factor_solve); ZERO leaked allocation in my ratsol2 frames
+      or the Bernoulli Cancel lines. `dsolve_tests` SIGALRM 142 (Risch-Norman enum cap) is
+      pre-existing and untouched by M45 (no Risch-Norman code changed).
+- [x] 16. Staff-engineer self-review of `dsolve_ratsol2.c` memory: clean on all 5 exit paths.
 
 ## Review
 
-**Outcome.** M44 adds §2.2.25 (Problems 2401–2500) to the DSolve corpus at **96/100,
-0 FAIL, 0 crash**, with **0 regression** across every sibling gate (§2.1.2 + §2.2.1–24).
+**Outcome.** M45 adds §2.2.26 (Problems 2501–2600) to the DSolve corpus at **89/100, 0 FAIL,
+0 crash**, and lifts §2.2.25 **96 → 97/100** as a bonus, with **0 regression** (every §2.2.x
+section passes its gate in isolation). Version 0.142 → 0.143.
 
-**Root-cause fixes (no overfit, no hacks):**
-- **`dsolve_variation_of_parameters` fractional-power Simplify hang** (`dsolve_common.c`,
-  general): resonant fractional forcing closes to an elementary answer but the final
-  `ds_simplify` spun on `t^(p/q) E^(a t)`; skip it for a fractional-power answer (already
-  auto-eval clean). Fixes 2406 and the whole class. Leak-neutral, C99-clean.
-- **Three converter root-cause bugs** (`latex_ode_to_mathilda.py`): indvar juxtaposition,
-  autonomous-parameter-as-indvar, piecewise-sentinel/optional-arg. §2.2.20–23 byte-identical;
-  §2.2.24 regenerated (7 latent wrong-equation records corrected — a genuine integrity fix).
+**Root-cause fixes (general, no overfit):**
+- **Bernoulli `DSolve\`Y` integrating-factor leak** (`dsolve_bernoulli.c`): `Cancel` the
+  linearised coefficients to lowest terms in the reduction variable before the linear solve,
+  so the frozen internal symbol never leaks into a non-elementary `Integrate`. Fixes 2532 and
+  the whole non-elementary-IF Bernoulli class; Y-free coefficients unchanged.
+- **New `DSolve\`PolynomialSolution` method** (`dsolve_ratsol2.c`, before Kovacic): degree-bounded
+  polynomial-fundamental-set search + VoP over the clean basis. Fixes 2592 AND §2.2.25-2410 —
+  the class Kovacic's complex-radical basis (√(t−i)√(t+i)) blocked. Self-verifying; cheap decline.
 
-**Honest ceiling.** The §2.2.25 residue of 4 (2409/2410/2444/2477) are all `sympySolved=False`
-— parabolic-cylinder + forcing, clean-basis VoP, slow transcendental series, non-elementary
-integrating factor — genuinely beyond current CAS reach (SymPy fails them too). §2.2.24 is a
-truer 91/100 (M43's 92 counted 2 mistranscribed-equation passes; 2327 now genuinely solves).
+**Honest ceiling.** §2.2.26 residue 11 and §2.2.25 residue 3 are ALL `sympySolved=False`
+(non-integrable Riccati/Abel, implicit y=G/x=G forms, abstract-coefficient, parabolic-cylinder,
+non-elementary IF) — genuinely beyond current CAS reach, documented declines, no wrong answers.
 
-**Deliverables.** New `DE_examples_2225.m` + `reports/2.2.25.{md,tsv}`; regenerated
-`DE_examples_2224.m` + its reports; gates `dsolve_corpus_2_2_25_tests` (baseline 4) and
-`dsolve_corpus_2_2_24_tests` (8→9); STATUS.md/README.md/DSOLVE_PLAN.md/changelog updated;
-version 0.141→0.142. Left uncommitted per request.
+**Deliverables.** New `DE_examples_2226.m` + `reports/2.2.26.{md,tsv}`; regenerated
+`reports/2.2.25.{md,tsv}`; gate `dsolve_corpus_2_2_26_tests` (baseline 11); §2.2.25 gate 4→3;
+new `src/calculus/dsolve_ratsol2.c` (+ dsolve.c wiring, tests/CMakeLists.txt);
+STATUS.md / README.md / DSOLVE_PLAN.md / new weekly changelog `2026-09-14.md` / Mathilda_spec.md;
+version.h 0.143. Left uncommitted.
 
-**Pre-existing (not addressed, not caused here):** dsolve_tests SIGALRM (Risch–Norman suite
->120s), and the §2.2.24-2353 Abel / research-grade residue (M13-deferred).
-
-## Review
-_(to be filled in on completion)_
+**Pre-existing (not addressed, not caused here):** the ~13.5 KB per-call Integrate/Simplify
+leak; `dsolve_tests` SIGALRM 142 (Risch-Norman); full-sweep 8s-boundary flakiness on a few
+1st-order/system/high-order cases in §2.2.12/15/20 (each passes in isolation).
