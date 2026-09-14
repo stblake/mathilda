@@ -3652,6 +3652,26 @@ void info_init(void) {
         "contents of the file rather than truncating them.\n"
         "expr >>> filename is equivalent to expr >>> \"filename\".\n"
         "Returns Null on success and $Failed if the file cannot be opened.");
+    symtab_set_docstring("ReadList",
+        "ReadList[\"file\"]\n"
+        "\treads all remaining expressions from a file and returns them as a list.\n"
+        "ReadList[\"file\", type]\n"
+        "\treads objects of the given type until end of file, returning the list read.\n"
+        "ReadList[\"file\", {type1, type2, ...}]\n"
+        "\treads one object of each type per pass, grouping each pass into a sublist,\n"
+        "\tuntil end of file. If end of file is reached partway through a pass, the\n"
+        "\tunread slots are filled with EndOfFile.\n"
+        "ReadList[\"file\", types, n]\n"
+        "\treads only the first n objects (or passes) of the specified types.\n"
+        "Types: Byte (integer code), Character (one-character string), Expression\n"
+        "\t(a complete evaluated expression), Number (integer, or real if it has a\n"
+        "\tdecimal point), Real (always an approximate number, C/Fortran E notation\n"
+        "\taccepted), Record (characters up to a record separator), String (a line),\n"
+        "\tWord (characters delimited by word separators).\n"
+        "Options RecordSeparators, WordSeparators, TokenWords, NullRecords and\n"
+        "\tNullWords control tokenisation; see Options[ReadList].\n"
+        "Returns $Failed if the file cannot be opened. There is no stream layer, so\n"
+        "\tthe named file is always opened and closed by ReadList.");
     symtab_set_docstring("FileExistsQ",
         "FileExistsQ[\"name\"]\n"
         "\tgives True if the file with the specified name exists, and gives False otherwise.\n"

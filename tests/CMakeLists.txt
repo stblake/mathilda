@@ -574,6 +574,7 @@ set(COMMON_SRC
     ../src/readwrite.c
     ../src/loadmodule.c
     ../src/files.c
+    ../src/io/readlist.c
     ../src/iter.c
     ../src/cond.c
     ../src/default_helper.c
@@ -4175,6 +4176,16 @@ else()
     target_link_libraries(files_tests gmp m)
 endif()
 add_test(NAME files_tests COMMAND files_tests)
+
+add_executable(readlist_tests test_readlist.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(readlist_tests PRIVATE ../src ../src/io)
+if(USE_ECM)
+    target_link_libraries(readlist_tests gmp m ${ECM_LIB})
+    add_dependencies(readlist_tests build_ecm)
+else()
+    target_link_libraries(readlist_tests gmp m)
+endif()
+add_test(NAME readlist_tests COMMAND readlist_tests)
 
 add_executable(time_constrained_tests test_time_constrained.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(time_constrained_tests PRIVATE ../src)

@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`) and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -11,6 +11,52 @@ Reads a sequence of Mathilda expressions from a file, evaluates each in order, a
 - Returns `$Failed` if the file cannot be opened.
 - Used by the REPL bootstrap to load `src/internal/init.m` (and the rules it pulls in).
 - Files conventionally end with `.m`.
+
+## ReadList
+Reads the objects contained in a file and returns them as a `List`, directed by a *read type* and modified by separator options. Unlike `Get`, the objects are **collected** (not just evaluated for their side effect), and non-expression types let a data file be read field by field.
+- `ReadList["file"]` — read every remaining expression; equivalent to `ReadList["file", Expression]`.
+- `ReadList["file", type]` — read objects of `type` until end of file → a flat list.
+- `ReadList["file", {type_1, type_2, ...}]` — read one object of each type per pass, grouping each pass into a sublist, until end of file → a list of sublists.
+- `ReadList["file", types, n]` — read only the first `n` objects (single type) or `n` passes (type list).
+
+**Read types**:
+
+| Type | Reads | Returns |
+|------|-------|---------|
+| `Byte` | one byte | integer code `0`–`255` |
+| `Character` | one byte | a one-character string |
+| `Word` | a run of non-separator characters | string |
+| `Record` | characters up to a record separator | string |
+| `String` | a line (up to a newline; a trailing `\r` is dropped) | string |
+| `Number` | one word token | integer if it has no decimal point or exponent, otherwise a real |
+| `Real` | one word token | always an approximate number |
+| `Expression` | one complete top-level expression | the **evaluated** expression |
+
+- `Number`/`Real` accept the C/Fortran scientific forms: `2.e5`, `2E5`, `1.5e-3`, and `2.*10^5` all denote `2×10^5`. `Real` always returns an approximate number; `Number` returns an integer only when the token has no explicit decimal point or exponent.
+
+**Options** (trailing rules; the defaults are the single source of truth in `Options[ReadList]`, so `SetOptions[ReadList, ...]` works):
+- `RecordSeparators -> {"\r\n", "\n", "\r"}` — the strings that terminate a `Record` (record separators also terminate a `Word`).
+- `WordSeparators -> {" ", "\t"}` — the strings that separate `Word`/`Number`/`Real` tokens.
+- `TokenWords -> {}` — strings always read as separate words even without surrounding separators (`TokenWords -> {"+"}` reads `a+b` as `{"a", "+", "b"}`).
+- `NullRecords -> False` — when `True`, empty records between adjacent record separators are kept rather than skipped.
+- `NullWords -> False` — when `True`, empty words between adjacent word separators are kept.
+
+**Features**:
+- `Protected`.
+- `$Failed` (with a `ReadList::noopen` diagnostic) if the file cannot be opened.
+- A malformed `Number`/`Real` token prints `ReadList::readn`, contributes `$Failed` in that position, and reading continues.
+- When end of file is reached partway through a `{type_1, ...}` pass, the unread slots of that final pass are filled with `EndOfFile`.
+- There is no stream layer, so the named file is always opened and closed by `ReadList`; the Mathematica "already-open stream" behaviour does not apply.
+
+**Example**:
+```
+(* data.txt: three lines "1 2 3", "4.5 6", "2e5 1.5e-3" *)
+ReadList["data.txt", Number]              (* {1, 2, 3, 4.5, 6, 200000., 0.0015} *)
+ReadList["data.txt", Word]                (* {"1", "2", "3", "4.5", "6", "2e5", "1.5e-3"} *)
+ReadList["pairs.txt", {Word, Number}]     (* {{"a", 1}, {"b", 2}, {"c", 3}} *)
+ReadList["odd.txt", {Number, Number}]     (* {{1, 2}, {3, EndOfFile}} for "1 2 3" *)
+ReadList["data.csv", Word, WordSeparators -> {","}]   (* {"a", "b", "c"} for "a,b,c" *)
+```
 
 ## LoadModule
 Loads an internal Mathilda source module, resolving its location independently of

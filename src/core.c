@@ -901,6 +901,8 @@ void core_init(void) {
     schurdecomp_init();
     fit_init();
     readwrite_init();
+    void readlist_init(void);
+    readlist_init();
     loadmodule_init();
     files_init();
     random_init();
