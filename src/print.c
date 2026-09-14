@@ -1801,6 +1801,22 @@ static void print_tex(Expr* e, int parent_prec) {
             printf("\\neg ");
             print_tex(e->data.function.args[0], 9500);
         }
+        else if (strcmp(context_display_name(head), "C") == 0 && argc == 1) {
+            /* The DSolve/Reduce/Integrate generated constant C[k] renders as
+             * the subscripted lowercase c_k, matching Mathematica's TeXForm
+             * (C[1] -> c_1). A single-character subscript stays bare (c_1,
+             * c_n); anything longer is braced (c_{10}, c_{n+1}) so LaTeX
+             * groups the whole subscript rather than only its first token. */
+            Expr* sub = e->data.function.args[0];
+            bool bare = (sub->type == EXPR_INTEGER
+                         && sub->data.integer >= 0 && sub->data.integer <= 9)
+                     || (sub->type == EXPR_SYMBOL
+                         && strlen(context_display_name(sub->data.symbol.name)) == 1);
+            printf("c_");
+            if (!bare) printf("{");
+            print_tex(sub, 0);
+            if (!bare) printf("}");
+        }
         else {
             const char* tex_fn = NULL;
             bool is_inv = false;

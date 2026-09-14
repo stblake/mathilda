@@ -53,6 +53,10 @@ void test_tostring_texform(void) {
      * its precise output the test will need to follow. */
     assert_eval_eq("ToString[x^2 + y^3, TeXForm]", "\"x^{2}+y^{3}\"", 0);
     assert_eval_eq("ToString[1/2, TeXForm]", "\"\\frac{1}{2}\"", 0);
+    /* The DSolve/Reduce generated constant C[k] renders as the subscripted
+     * c_k, matching Mathematica. Single-char subscript bare, longer braced. */
+    assert_eval_eq("ToString[C[1], TeXForm]", "\"c_1\"", 0);
+    assert_eval_eq("ToString[C[10], TeXForm]", "\"c_{10}\"", 0);
 }
 
 void test_tostring_invalid_form(void) {

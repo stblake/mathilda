@@ -376,6 +376,22 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         return;
     }
 
+    /* ---- C[k] → c_k : the DSolve/Reduce/Integrate generated constant of
+     * integration, matching Mathematica's TeXForm (c_1, c_2, ...) and the
+     * CLI TeX renderer (print.c). A single-character subscript stays bare;
+     * anything longer is braced so LaTeX groups the whole subscript. */
+    if (strcmp(hname, "C") == 0 && argc == 1) {
+        const Expr* sub = args[0];
+        int bare = (sub->type == EXPR_INTEGER
+                    && sub->data.integer >= 0 && sub->data.integer <= 9)
+                || (sub->type == EXPR_SYMBOL && strlen(sub->data.symbol.name) == 1);
+        lb_cat(b, "c_");
+        if (!bare) lb_cat(b, "{");
+        to_latex_prec(b, sub, PREC_ATOM);
+        if (!bare) lb_cat(b, "}");
+        return;
+    }
+
     /* ---- Plus[...] ---- */
     if (hname == SYM_Plus && argc >= 1) {
         render_plus(b, e, ctx_prec);

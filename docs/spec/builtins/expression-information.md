@@ -924,6 +924,7 @@ Out[3]= {32768.e, 1.94872e7, 1.06045e10}
 **Features**:
 - `Protected`.
 - An unsupported form leaves the call unevaluated (e.g. `ToString[x, FooForm]` returns `ToString[x, FooForm]`), so a typo is visible at the call site rather than silently downgraded.
+- `TeXForm` renders the generated constant `C[k]` (from `DSolve`, `Reduce`, `Integrate`) as the subscripted `c_k`, matching Mathematica: `ToString[C[1], TeXForm]` is `"c_1"`, and `ToString[C[10], TeXForm]` is `"c_{10}"` (single-character subscripts bare, longer ones braced). The same holds for the notebook LaTeX renderer.
 
 ```mathematica
 In[1]:= ToString[x^2 + y^3]
