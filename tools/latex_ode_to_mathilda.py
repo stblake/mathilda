@@ -125,6 +125,17 @@ def normalize_subscripts(tex):
     # (its convert_side regex allows an optional bare `_`), so prior corpora are
     # byte-identical.
     tex = tex.replace(r'\_', '_')
+    # The author sometimes renders a subscripted variable as an italic core whose
+    # subscript underscore is trapped INSIDE `\textit{}` with the index following the
+    # closing brace: `\textit{x\_}1` for `x_{1}` (§2.2.29-2824, whose sibling rows
+    # 2811/2825 use the clean `x_{1}`).  After the `\_`->`_` fold above this reads
+    # `\textit{x_}1`; rewrite it to the standard `x_{1}` so the flattening below — and
+    # the downstream prime / symbol-detection passes — treat it as an ordinary
+    # subscripted name.  Without this, `^{\prime}` degrades to a literal `^(prime)`
+    # power and the dependent functions are never detected.  A strict no-op unless the
+    # `\textit{X_}<digits>` (index OUTSIDE the brace) shape is present, so the
+    # §2.2.28 `\textit{f_1}` (index INSIDE) and all prior corpora are byte-identical.
+    tex = re.sub(r'\\textit\s*\{\s*([A-Za-z])_\s*\}\s*([0-9]+)', r'\1_{\2}', tex)
     tex = re.sub(r'([A-Za-z])_\s*\{\s*([0-9]+)\s*\}', r'\1\2', tex)
     tex = re.sub(r'([A-Za-z])_\s*([0-9])', r'\1\2', tex)
     return tex
@@ -133,9 +144,21 @@ def normalize_subscripts(tex):
 def detect_symbols(rows_tex):
     joined = ' '.join(rows_tex)
     primed = set(re.findall(r'([A-Za-z][0-9]*)\s*\^\s*\{\s*(?:\\prime\s*)+\}', joined))
-    mains = sorted(c for c in primed if c not in ARBFUN)
+    # A symbol that HEADS its own derivative row (`h^{\prime}&=-2z`, a system's
+    # dependent variable) is a main even when its letter is a conventional
+    # arbitrary-function letter (`h`, §2.2.29-2806/2807 — 4-variable linear systems
+    # x,y,z,h).  An arbitrary forcing function differentiated only INSIDE another
+    # equation's body (`f'(x)`/`g'(x)` in a scalar Abel/Riccati/linear ODE, §2.1.2)
+    # is NOT a row head and stays arbitrary.  The promotion is therefore gated on a
+    # START-anchored match per row, never a substring hit — so §2.1.2's embedded
+    # `f^{\prime}` in `y'=...f'...` does not spuriously become a dependent variable.
+    lhs_primed = set()
+    for r in rows_tex:
+        m = re.match(r'\s*&?\s*([A-Za-z][0-9]*)\s*\^\s*\{\s*(?:\\prime\s*)+\}', r)
+        if m: lhs_primed.add(m.group(1))
+    mains = sorted(c for c in primed if c not in ARBFUN or c in lhs_primed)
     if not mains: mains = ['y']
-    arbs = set(c for c in primed if c in ARBFUN)
+    arbs = set(c for c in primed if c in ARBFUN and c not in lhs_primed)
     for c in ARBFUN:
         if re.search(r'(?<![A-Za-z])' + c + r'\s*\\left', joined) or \
            re.search(r'(?<![A-Za-z])' + c + r'\s*\(', joined):
@@ -246,6 +269,16 @@ def _implicit_mult(s):
     # and `\prime` runs are untouched -- prior sections regenerate byte-identically.
     _fn = '|'.join(sorted((re.escape(k[1:]) for k in FUNCS), key=len, reverse=True))
     s = re.sub(r'(?<=[A-Za-z0-9])(?=\\(?:' + _fn + r')(?![A-Za-z]))', ' ', s)
+    # A LETTER directly juxtaposed against `\sqrt` is implicit multiplication and must
+    # be separated too (`x-k\sqrt{...}` -> `x-k \sqrt{...}`, §2.2.29-2890 / §2.2.24-2360
+    # / §2.2.26-2536 `t\sqrt{1-y^2}`).  `\sqrt` is protected below (so its radicand is
+    # exposed to the split) and is not a FUNCS head, so without this the letter glues
+    # to the `Sqrt` head after `replace_sqrt` as the bogus single symbol `kSqrt[...]` /
+    # `tSqrt[...]`.  Restricted to a LETTER lookbehind: a DIGIT before `\sqrt`
+    # (`2\sqrt{x}` -> `2Sqrt[x]`) already parses as multiplication and is left byte-
+    # identical.  `\frac` needs no such rule — it lowers to `((num)/(den))`, not a
+    # named head, so `k\frac{a}{b}` -> `k((a)/(b))` is already correct.
+    s = re.sub(r'(?<=[A-Za-z])(?=\\sqrt\b)', ' ', s)
     # `\frac` / `\sqrt` take MATH brace args (numerator / denominator / radicand)
     # whose juxtaposed factors are implicit multiplication and MUST be separated
     # (`\frac{2ty}{t^2+1}` -> `2 t y`, `\frac{4y_1}{3}` -> `4 y1`); otherwise the

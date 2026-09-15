@@ -1780,6 +1780,51 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     systems-solver work, deferred. All §2.2.x + §2.1.2 gates held; see the §2.2.28 block in
     `DSolve_test_status/STATUS.md`.
 
+- **M48 — §2.2.29 corpus (Problems 2801–2900, Nasser Abbasi) + three general converter
+  transcription fixes.** ✅ DONE. A first-order-nonlinear + linear-systems section: 75 scalar
+  (21 IVP) + 25 systems — 2×2/3×3/4×4 constant-coefficient linear systems (incl. subscripted
+  `x1`/`x2` and 4-variable `x,y,z,h`), autonomous 2nd-order `_missing_x` reducibles
+  (`z''+g(z)==0`), Sturm–Liouville eigenvalue BVPs (`y''+λy==0` with symbolic boundary `L`), and
+  a large first-order block (separable / linear / homogeneous class A/C / dAlembert / Abel /
+  Bernoulli / exact). Baseline **88/100, 0 FAIL, 0 crash** (scalars **70/75**, 93.3%) — **no
+  solver change**: the first-order + linear-system stack solves the section out of the box. The
+  wave was three general **converter** fixes (`tools/latex_ode_to_mathilda.py`), each a
+  transcription-fidelity bug found by spot-audit and each verified **byte-identical** on the
+  prior LaTeXML sections (§2.2.27/§2.2.28 full old-vs-new diff) and on §2.1.2's arbitrary-
+  function records (direct `detect_symbols` comparison). New gate `dsolve_corpus_2_2_29_tests`
+  (baseline 12). Version 0.145 → 0.146.
+  - **`\sqrt` letter-juxtaposition glue** (`_implicit_mult`). A variable letter juxtaposed with
+    `\sqrt` (`x-k\sqrt{x²+y²}`, `2890`; `t\sqrt{1-y²}`, latent prior `2.2.24-2360` / `2.2.26-2536`)
+    glued to the `Sqrt` head after `replace_sqrt` as the bogus single symbol `kSqrt[...]` /
+    `tSqrt[...]`, because `\sqrt` is protected (to expose its radicand) before the letter-split
+    and is not a FUNCS head. Fix: split a **letter** before `\sqrt`; a **digit** (`2\sqrt{x}` →
+    `2Sqrt[x]`) already parses as multiplication and is left byte-identical. (`\frac` needs no
+    such rule — it lowers to `((n)/(d))`, not a named head.) This also corrected the two latent
+    prior records; both were already PASS (formal implicit separable solutions even on the
+    garbled head) and remain PASS with the faithful equation, so those gates are unchanged (9/11).
+  - **`\textit{x\_}N` italic-glued subscript** (`normalize_subscripts`). One system (`2824`)
+    rendered its subscripted variables as `\textit{x\_}1` (italic core, index *outside* the
+    brace) instead of the clean `x_{1}` used by siblings `2811`/`2825`; the trapped underscore
+    defeated subscript+prime handling, so `^{\prime}` degraded to a literal `^(prime)` power and
+    the dependent functions were never detected (function list defaulted to `{y}`). Fix: fold
+    `\textit{X\_}N → X_{N}` early. Distinct from §2.2.28's `\textit{f\_1}` (index *inside* the
+    brace), which is untouched.
+  - **System dependent variable `h` misread as an arbitrary function** (`detect_symbols`).
+    `2806`/`2807` are 4-variable linear systems `x,y,z,h`, but `h` (a conventional arbitrary-
+    function letter, `ARBFUN={f,g,h}`) was dropped from the function list. Fix: a symbol that
+    **heads its own derivative row** (start-anchored `h^{\prime}&=−2z`) is a dependent variable
+    even when its letter is in `ARBFUN`; an arbitrary function differentiated only *inside*
+    another equation's body (`f'(x)`/`g'(x)` in a scalar Abel/Riccati ODE, §2.1.2) is not a row
+    head and stays arbitrary — the promotion is gated on a start-anchored match, never a
+    substring hit (verified §2.1.2 arbitrary-function records unchanged).
+  - **Residue 12** (all no elementary closed form): 7 nonlinear systems `2811`/`2813`–`2818`
+    (Riccati-type / Lotka–Volterra / coupled-nonlinear, `sympy=False`); 4 autonomous 2nd-order
+    `2820`/`2821`/`2822`/`2823` (`z''+g(z)==0`, Duffing/hyperelliptic, `sympy=False`); and `2819`
+    (`z''+z³==0`, `sympy=True` — energy first integral gives an *elliptic-integral* implicit
+    solution; DSolve times out at the 8 s bound and the form is not back-substitution-verifiable
+    — deep elliptic-ODE work, deferred). All §2.2.x + §2.1.2 gates held; see the §2.2.29 block in
+    `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

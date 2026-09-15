@@ -4086,6 +4086,13 @@ add_test(NAME dsolve_corpus_2_2_23_tests
 # corrected (correct-equation) 2353 (Abel) and 2357 (Bernoulli, nonelementary
 # integrating factor) are now honest UNEVAL where the buggy corpus had them PASSing
 # a DIFFERENT (t-as-constant) equation -- so the honest non-PASS is 9, not 8.
+# M48 corrected the EQUATION of 2360 (y'=t*sqrt(1-y^2), y(0)=1) -- mis-transcribed
+# `tSqrt[...]` (a bogus glued head from `t\sqrt{...}`; fixed by the general converter
+# \sqrt letter-juxtaposition rule in latex_ode_to_mathilda.py, which also fixed
+# 2.2.26-2536 and 2.2.29-2890).  The verdict is unchanged (it was already PASS as an
+# implicit separable solution -- formal even on the garbled head -- and is now the
+# faithful ArcSin[y]=t^2/2+Pi/2), so the baseline stays 9 (measured non-PASS 8 + the
+# standing 1-margin for the flaky fork-timeout cluster).
 add_test(NAME dsolve_corpus_2_2_24_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2224.m
@@ -4121,7 +4128,10 @@ add_test(NAME dsolve_corpus_2_2_25_tests
 # non-PASS count.  Residue 11 (all sympySolved=False -- SymPy/Mathematica fail them
 # too): non-integrable Riccati y'=e^{-t^2}+y^2 (2524/2525/2526), Abel y'=y^3+e^{-5t}
 # (2528), implicit y=G(x,y')/x=G(y,y') forms (2514/2527/2530/2531/2537), rational
-# (2539), abstract-coefficient y''+p(t)y'+q(t)y (2591).
+# (2539), abstract-coefficient y''+p(t)y'+q(t)y (2591).  M48 corrected the EQUATION
+# of 2536 (y'=t*sqrt(1-y^2), y(0)=1; same `tSqrt[...]` glue bug as 2.2.24-2360, fixed
+# by the general converter \sqrt rule) -- verdict unchanged (already PASS), baseline
+# stays 11.
 add_test(NAME dsolve_corpus_2_2_26_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2226.m
@@ -4151,6 +4161,26 @@ add_test(NAME dsolve_corpus_2_2_28_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2228.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 14)
+
+# Section 2.2.29 (Problems 2801-2900, Nasser Abbasi): 100 records, 75 scalar
+# (21 IVP), 25 systems.  A first-order-nonlinear + linear-systems section: 2x2/3x3/
+# 4x4 constant-coefficient linear systems (incl. the subscripted x1/x2 family),
+# autonomous 2nd-order "missing x" reducibles, Sturm-Liouville eigenvalue BVPs
+# (y''+lam y=0), and a large first-order block (separable, linear, homogeneous
+# class A/C, dAlembert, Abel, Bernoulli, exact).  Solved across the first-order
+# stack + constant-coefficient linear-system solver.  Baseline argv3 = the
+# STATUS.md non-PASS count.  Three general converter fixes landed with this section
+# (latex_ode_to_mathilda.py): the \sqrt letter-juxtaposition glue (2890, also prior
+# 2.2.24-2360 / 2.2.26-2536), the `\textit{x\_}N` italic-glued subscript (2824), and
+# system dependent-variable `h` wrongly read as an arbitrary function (2806/2807).
+# Residue 12 (11 sympySolved=False, no elementary closed form): 7 nonlinear systems
+# (2811/2813-2818), 4 autonomous 2nd-order needing elliptic/hyperelliptic forms
+# (2820/2821/2822/2823 Duffing), + 2819 (z''+z^3=0; elliptic-integral solution,
+# DSolve times out at the 8 s harness bound -- deferred).
+add_test(NAME dsolve_corpus_2_2_29_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2229.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 12)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

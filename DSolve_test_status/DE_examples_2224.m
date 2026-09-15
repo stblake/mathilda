@@ -72,7 +72,7 @@
   {"2.2.24-2357", {y'[t] == (((1+Cos[4 t])y[t])/(4))-(((1-Cos[4 t])y[t]^(2))/(800)), y[0] == 100}, y, t, "[_Bernoulli]", True},
   {"2.2.24-2358", {y'[t] == t^(2)+y[t]^(2), y[0] == 0}, y, t, "[[_Riccati, _special]]", False},
   {"2.2.24-2359", {y'[t] == t(1+y[t]), y[0] == -1}, y, t, "[_separable]", True},
-  {"2.2.24-2360", {y'[t] == tSqrt[1-y[t]^(2)], y[0] == 1}, y, t, "[_separable]", True},
+  {"2.2.24-2360", {y'[t] == t Sqrt[1-y[t]^(2)], y[0] == 1}, y, t, "[_separable]", True},
   {"2.2.24-2361", {2 t^(2)y''[t]+3 y'[t]t-y[t] == 0, y[1] == 2, y'[1] == 1}, y, t, "[[_2nd_order, _exact, _linear, _homogeneous]]", True},
   {"2.2.24-2362", {y''[t]+y'[t]t+y[t] == 0, y[0] == 0, y'[0] == 1}, y, t, "[[_2nd_order, _exact, _linear, _homogeneous]]", False},
   {"2.2.24-2363", y''[x]-y[x] == 0, y, x, "[[_2nd_order, _missing_x]]", True},

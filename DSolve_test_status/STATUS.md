@@ -1338,6 +1338,63 @@ Full per-case results: `reports/2.2.28.tsv`; bucketed report: `reports/2.2.28.md
 
 ---
 
+## Section 2.2.29 — "Problems 2801 to 2900" (Nasser Abbasi)
+
+Corpus: `DE_examples_2229.m` — 100 records, 75 scalar (**21 IVP**), 25 systems.
+A first-order-nonlinear + linear-systems section: 2×2/3×3/4×4 constant-coefficient
+linear systems (incl. the subscripted `x1`/`x2` family and 4-variable `x,y,z,h`
+systems), autonomous 2nd-order `_missing_x` reducibles (`z''+g(z)==0`),
+Sturm–Liouville eigenvalue BVPs (`y''+λy==0` with symbolic boundary `L`), and a
+large first-order block (separable, linear, homogeneous class A/C, dAlembert,
+Abel, Bernoulli, exact). `ctest -R dsolve_corpus_2_2_29_tests` · gate baseline **12**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-16 (M48) | **88 / 100** | **88.0%** | **12** | **0 FAIL, 0 crash.** Scalars **70/75** (93.3%); no solver change needed — the first-order + linear-system stack solves the section out of the box. Three general **converter** fixes landed the clean corpus (see below). Gate baseline **12**. |
+
+**M48 — three general converter fixes** (`tools/latex_ode_to_mathilda.py`), each a
+transcription-fidelity bug found by spot-audit; all verified byte-identical on the
+prior LaTeXML sections (§2.2.27/§2.2.28 full old-vs-new diff) and on §2.1.2's
+arbitrary-function records (direct `detect_symbols` comparison):
+1. **`\sqrt` letter-juxtaposition glue.** A variable letter juxtaposed with `\sqrt`
+   (`x-k\sqrt{x²+y²}`, 2890; `t\sqrt{1-y²}`, prior 2.2.24-2360 / 2.2.26-2536) glued
+   to the `Sqrt` head as the bogus single symbol `kSqrt[...]`/`tSqrt[...]`, because
+   `\sqrt` is protected (to expose its radicand) before the letter-split and is not
+   a FUNCS head. Fix: split a *letter* before `\sqrt` (a digit — `2\sqrt{x}` — already
+   parses as multiplication and is left byte-identical). `\frac` needs no such rule
+   (it lowers to `((n)/(d))`, not a named head).
+2. **`\textit{x\_}N` italic-glued subscript.** One system (2824) rendered its
+   subscripted variables as `\textit{x\_}1` (italic core, index outside the brace)
+   instead of the clean `x_{1}` used by its siblings (2811/2825); the trapped
+   underscore defeated subscript+prime handling, so `^{\prime}` degraded to a literal
+   `^(prime)` power and the dependent functions were never detected (function list
+   defaulted to `{y}`). Fix: fold `\textit{X\_}N → X_{N}` early in
+   `normalize_subscripts`.
+3. **System variable `h` misread as an arbitrary function.** 2806/2807 are
+   4-variable linear systems `x,y,z,h`, but `h` (a conventional arbitrary-function
+   letter, `ARBFUN={f,g,h}`) was dropped from the function list. Fix: a symbol that
+   *heads its own derivative row* (`h^{\prime}&=−2z`, start-anchored) is a dependent
+   variable even when its letter is in `ARBFUN`; an arbitrary function differentiated
+   only *inside* another equation's body (`f'(x)` in a scalar Abel/Riccati ODE,
+   §2.1.2) is not a row head and stays arbitrary.
+
+The `\sqrt` fix also corrected two latent wrong-equation records in prior sections
+(2.2.24-2360, 2.2.26-2536, both `t\sqrt{1-y²}→tSqrt[...]`); both were already PASS
+(as formal implicit separable solutions even on the garbled head) and remain PASS
+with the faithful equation, so those gates are unchanged (baselines 9 / 11).
+
+Residue 12 (all no elementary closed form): **7 nonlinear systems** 2811/2813–2818
+(Riccati-type / Lotka–Volterra / coupled-nonlinear, all `sympy=False`); **4
+autonomous 2nd-order** 2820/2821/2822/2823 (`z''+g(z)==0`, Duffing/hyperelliptic,
+`sympy=False`, elliptic-integral or no closed form); and **2819** (`z''+z³==0`,
+`sympy=True` — the energy first integral gives an *elliptic-integral* implicit
+solution; DSolve times out at the 8 s harness bound, and an implicit/elliptic form
+is not back-substitution-verifiable — deep elliptic-ODE work, deferred).
+
+Full per-case results: `reports/2.2.29.tsv`; bucketed report: `reports/2.2.29.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -1657,3 +1714,28 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   `sympy=False`) + 3×3 `E^t` (2785, `sympy=False`) + system arbitrary forcing (2708/2762/2780) +
   system DiracDelta/UnitStep forcing (2781/2782) — deep systems-solver work, deferred.
   Gate `dsolve_corpus_2_2_28_tests` baseline 14. v0.144→0.145.
+
+- **M48 (2026-09-16)** — §2.2.29 (Problems 2801–2900) corpus, **88/100, 0 FAIL, 0 crash**.
+  A first-order-nonlinear + linear-systems section (75 scalar, 21 IVP, 25 systems): 2×2/3×3/4×4
+  constant-coefficient linear systems, autonomous 2nd-order `_missing_x` reducibles, Sturm–
+  Liouville eigenvalue BVPs, and a large first-order block (separable/linear/homogeneous/
+  dAlembert/Abel/Bernoulli/exact). **No solver change** — the first-order + linear-system stack
+  solves it out of the box (scalars **70/75**). The wave was three general **converter** fixes
+  (`tools/latex_ode_to_mathilda.py`), each a transcription-fidelity bug caught by spot-audit,
+  all verified byte-identical on prior sections (§2.2.27/§2.2.28 full old-vs-new diff; §2.1.2
+  arbitrary-function `detect_symbols` comparison): (1) **`\sqrt` letter-juxtaposition glue** —
+  `x-k\sqrt{…}`→`kSqrt[…]` (2890; also latent prior 2.2.24-2360 / 2.2.26-2536 `t\sqrt{1-y²}`);
+  split a *letter* before `\sqrt` (a digit already multiplies, left byte-identical). (2)
+  **`\textit{x\_}N` italic-glued subscript** — 2824's `\textit{x\_}1` (vs sibling `x_{1}`) defeated
+  subscript+prime handling (`^{\prime}`→literal `^(prime)`, function list defaulted to `{y}`);
+  fold `\textit{X\_}N→X_{N}` early. (3) **system variable `h` misread as arbitrary function** —
+  2806/2807 are 4-var systems `x,y,z,h` but `h∈ARBFUN` was dropped from the function list; a
+  symbol that *heads its own derivative row* (start-anchored `h^{\prime}=…`) is a dependent
+  variable, while a `f'(x)` differentiated only inside a scalar ODE's body (§2.1.2) stays
+  arbitrary. The `\sqrt` fix corrected two latent prior records (2360/2536) whose verdict was
+  unchanged (already PASS as formal implicit solutions), so those gates hold at 9/11. Residue 12
+  (all no elementary closed form): 7 nonlinear systems (2811/2813–2818, `sympy=False`), 4
+  autonomous 2nd-order (2820–2823, Duffing/hyperelliptic, `sympy=False`), + 2819 (`z''+z³==0`,
+  elliptic-integral implicit solution, DSolve times out at 8 s — deferred). All prior gates
+  (§2.1.2 + §2.2.1–28) re-run — all hold. Gate `dsolve_corpus_2_2_29_tests` baseline 12.
+  v0.145→0.146.

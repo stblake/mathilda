@@ -3612,3 +3612,44 @@ Two lessons from strengthening `src/solve/solverad.c`:
   non-negotiable before landing a change to a SHARED path like `dsolve_fit_constants` (every
   IVP) or `dsolve_variation_of_parameters` (every nonhomogeneous solve), even when the section
   under test is green.
+
+## M48 (§2.2.29): three converter transcription bugs — always spot-audit a fresh corpus, and verify byte-identity by OLD-vs-NEW converter on the SAME HTML (not re-fetch)
+
+**Context.** §2.2.29 needed **no DSolve solver change** (the first-order + linear-system stack
+already solves it), but a spot-audit of the *generated* corpus caught three distinct converter
+(`tools/latex_ode_to_mathilda.py`) transcription bugs — each of which silently produces a WRONG
+equation that parses fine and would score a bogus verdict:
+1. **`\sqrt` letter-glue**: `x-k\sqrt{x²+y²}` → `kSqrt[...]` (a bogus single symbol, not `k·Sqrt`),
+   because `\sqrt` is protected before the letter-split and isn't a FUNCS head. Fix: split a
+   *letter* (not digit — `2\sqrt{x}`==`2*Sqrt[x]` is already correct and must stay byte-identical)
+   before `\sqrt`. This is the same class as prior latent bugs 2.2.24-2360 / 2.2.26-2536 — a single
+   general fix corrected all three.
+2. **`\textit{x\_}N` italic-glued subscript** (2824): source rendered `x_{1}` as `\textit{x\_}1`
+   (index *outside* the brace), which defeated subscript+prime handling → `^{\prime}` became a
+   literal `^(prime)` power and the function list defaulted to `{y}`. Distinct from §2.2.28's
+   `\textit{f\_1}` (index *inside*).
+3. **System variable `h` vs arbitrary function** (2806/2807): `h∈ARBFUN={f,g,h}` was ALWAYS dropped
+   from the function list, but here `h` is a genuine 4th system variable (`x,y,z,h`). The correct
+   discriminator is *start-anchored*: a symbol that HEADS its own derivative row (`h^{\prime}&=…`)
+   is a dependent variable; an `f'(x)` embedded in a scalar ODE's body (§2.1.2 Abel/Riccati) stays
+   arbitrary. A substring/`re.search` match would wrongly promote §2.1.2's embedded `f'`.
+
+**Why:** a converter bug is a *silent wrong-equation* — it parses, so the harness dutifully scores
+it (2360/2536 were even false-PASS on the garbled `tSqrt` head, as formal implicit solutions). The
+only defense is a spot-audit of the generated `.m` on every new section (function-list vs
+derivative-count checker; grep for letter-glued function heads `[a-z](Sqrt|Sin|…)[`).
+
+**How to apply.**
+- On EVERY new corpus section, before measuring: (a) run a system function-list vs derivative-count
+  consistency check; (b) grep for letter-glued function heads and mangled derivative notation
+  (`^(prime)`, `x_1`, glued `[a-z]Sqrt[`); (c) spot-read ~10 records against the source `alttext`.
+- **Byte-identity verification for a shared converter change is best done as OLD-converter vs
+  NEW-converter on the SAME fetched HTML**, not "re-fetch prior section and diff vs committed": the
+  12000.org `current_version` site drifts and old tex4ht URLs are now redirect stubs, so a re-fetch
+  diff conflates site drift with your change. `git show HEAD:tools/latex_ode_to_mathilda.py` → run
+  both on the identical HTML → diff isolates exactly your change's effect. For a section you can't
+  re-fetch (§2.1.2 stub), test the risky function (`detect_symbols`) directly old-vs-new on
+  representative reconstructed inputs.
+- A general converter fix legitimately corrects *latent* wrong records in prior sections; when it
+  does, regenerate those sections, confirm the diff is EXACTLY the intended correction, and re-check
+  their gate baselines (2360/2536 stayed PASS → baselines unchanged).
