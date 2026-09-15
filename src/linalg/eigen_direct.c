@@ -3776,7 +3776,9 @@ static Expr* direct_complex_general_mpfr(const MatM* A, MateigenWant want,
     /* Eigenvectors of M (in the original basis). */
     mpfr_t* M_evec_re = mpfr_array_alloc(N * N, bits);
     mpfr_t* M_evec_im = mpfr_array_alloc(N * N, bits);
-    size_t* identity_perm = (size_t*)malloc(sizeof(size_t) * N);
+    /* calloc (not malloc) so GCC -O3 cross-procedural -Wmaybe-uninitialized
+     * doesn't fire after schur_compute_eigvecs_M is inlined into the dispatcher. */
+    size_t* identity_perm = (size_t*)calloc(N, sizeof(size_t));
     for (size_t i = 0; i < N; i++) identity_perm[i] = i;
     schur_compute_eigvecs_M(H, Q, N, bits, M_eval_re, M_eval_im,
                               identity_perm, M_evec_re, M_evec_im);
