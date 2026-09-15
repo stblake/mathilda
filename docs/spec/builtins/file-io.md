@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -30,7 +30,7 @@ Reads the objects contained in a file and returns them as a `List`, directed by 
 | `String` | a line (up to a newline; a trailing `\r` is dropped) | string |
 | `Number` | one word token | integer if it has no decimal point or exponent, otherwise a real |
 | `Real` | one word token | always an approximate number |
-| `Expression` | one complete top-level expression | the **evaluated** expression |
+| `Expression` | one complete top-level expression | the expression (evaluated, unless an enclosing structure such as `Hold` protects it) |
 
 - `Number`/`Real` accept the C/Fortran scientific forms: `2.e5`, `2E5`, `1.5e-3`, and `2.*10^5` all denote `2×10^5`. `Real` always returns an approximate number; `Number` returns an integer only when the token has no explicit decimal point or exponent.
 
@@ -46,7 +46,7 @@ Reads the objects contained in a file and returns them as a `List`, directed by 
 - `$Failed` (with a `ReadList::noopen` diagnostic) if the file cannot be opened.
 - A malformed `Number`/`Real` token prints `ReadList::readn`, contributes `$Failed` in that position, and reading continues.
 - When end of file is reached partway through a `{type_1, ...}` pass, the unread slots of that final pass are filled with `EndOfFile`.
-- There is no stream layer, so the named file is always opened and closed by `ReadList`; the Mathematica "already-open stream" behaviour does not apply.
+- `ReadList` is a sequence of `Read` calls: it loops the shared reading engine (`src/io/read.c`) to end of file. It also accepts an open `InputStream` (reading from its current point and leaving it open); a named file that is not already open is opened and closed by `ReadList`.
 
 **Example**:
 ```
@@ -56,6 +56,87 @@ ReadList["data.txt", Word]                (* {"1", "2", "3", "4.5", "6", "2e5", 
 ReadList["pairs.txt", {Word, Number}]     (* {{"a", 1}, {"b", 2}, {"c", 3}} *)
 ReadList["odd.txt", {Number, Number}]     (* {{1, 2}, {3, EndOfFile}} for "1 2 3" *)
 ReadList["data.csv", Word, WordSeparators -> {","}]   (* {"a", "b", "c"} for "a,b,c" *)
+```
+
+## Read
+Reads **one** object (or one nested type structure) from an input stream, advancing the stream's current point, so successive `Read` calls return successive objects. `Read` is the primitive that `ReadList` loops.
+- `Read[stream]` — read one expression; equivalent to `Read[stream, Expression]`.
+- `Read[stream, type]` — read one object of the given type.
+- `Read[stream, {type_1, type_2, ...}]` — read one object of each type into a list.
+- `Read[stream, structure]` — read into any nested type structure, filled by a depth-first traversal. The structure may use any head, so `Read[stream, {{Number, Number}, {Number, Number}}]` reads a 2×2 matrix and `Read[stream, Hold[Expression]]` reads an expression without evaluating it.
+
+`stream` is an `InputStream` object (from `OpenRead`), a `"file"` string, or `File["file"]`. A named file that is not already open is opened and **left open**, so successive `Read["file", ...]` calls advance the same current point (finish with `Close["file"]`).
+
+The read types and the `RecordSeparators`/`WordSeparators`/`TokenWords`/`NullRecords`/`NullWords` options are exactly those of `ReadList` (defaults in `Options[Read]`).
+
+**Features**:
+- `Protected`.
+- Returns `EndOfFile` once past end of file. Within a partly-read `{type_1, ...}` structure, the unread trailing slots are filled with `EndOfFile`; a read that begins already at end of file returns a bare `EndOfFile`.
+- Returns `$Failed` for a stream that is not open, or (with `Read::readn`) for a token that is not of the requested numeric type.
+- The `Expression` leaf is read **unevaluated** and the constructed result is then evaluated by the surrounding evaluator — so `Read[s, Expression]` evaluates while `Read[s, Hold[Expression]]` stays held.
+
+**Example**:
+```
+s = OpenRead["data.txt"];     (* "1 2 3\n4.5 6\n" *)
+Read[s, Number]               (* 1 *)
+Read[s, Number]               (* 2 *)
+Read[s, {Number, Number}]     (* {3, 4.5} *)
+Read[s, Number]               (* 6 *)
+Read[s, Number]               (* EndOfFile *)
+Close[s]                      (* "data.txt" *)
+```
+
+## OpenRead / OpenWrite / OpenAppend
+Open a file and return a stream object addressing a persistent current point.
+- `OpenRead["file"]` / `OpenRead[File["file"]]` — open for reading; returns `InputStream["file", n]`.
+- `OpenWrite["file"]` — open for writing, truncating the file; returns `OutputStream["file", n]`.
+- `OpenAppend["file"]` — open for writing at the end of the file; returns `OutputStream["file", n]`.
+
+**Features**:
+- `Protected`. Return `$Failed` (with an `Open*::noopen` diagnostic) if the file cannot be opened.
+- The integer in the returned object is an internal handle into the stream registry; the object is inert and prints as itself.
+- The registry is freed on `Close` or, for anything still open, at program exit (no leaks).
+
+## Close
+Closes an open stream and returns its file name.
+- `Close[stream]` — close an `InputStream`/`OutputStream` object.
+- `Close["file"]` / `Close[File["file"]]` — close a stream opened for that file.
+
+**Features**: `Protected`. Returns `$Failed` (with `Close::stream`) if the stream is not open.
+
+## Streams
+Lists the currently open streams.
+- `Streams[]` — all open `InputStream`/`OutputStream` objects.
+- `Streams["file"]` — only the streams open for the named file.
+
+**Features**: `Protected`.
+
+## StreamPosition / SetStreamPosition
+Query and set the current point of a stream, as an integer byte offset.
+- `StreamPosition[stream]` — the current position.
+- `SetStreamPosition[stream, n]` — set the position to offset `n` (clamped into the file); returns the new position.
+- `SetStreamPosition[stream, Infinity]` — move to the end of the stream.
+
+**Features**: `Protected`. Return `$Failed` if the stream is not open.
+
+## Write / WriteString
+Write to an output stream.
+- `Write[stream, expr_1, expr_2, ...]` — write each expression in input form, then one newline.
+- `WriteString[stream, str_1, ...]` — write the strings with no added quotes or newline; non-string arguments are written in input form.
+
+`stream` may be an `OutputStream` object, a `"file"`, or `File["file"]`; a named file that is not already open is opened for writing (truncating) and left open.
+
+**Features**:
+- `Protected`. Return `$Failed` if the file cannot be opened.
+- `Write` evaluates its expression arguments before writing (use `Hold[...]` to write an unevaluated form), and output is flushed after each call so it round-trips with `Read`/`ReadList`.
+
+**Example**:
+```
+s = OpenWrite["out.txt"];
+Write[s, 1 + 1];              (* writes "2\n" *)
+Write[s, a + b];              (* writes "a + b\n" *)
+Close[s];
+ReadList["out.txt"]           (* {2, a + b} *)
 ```
 
 ## LoadModule

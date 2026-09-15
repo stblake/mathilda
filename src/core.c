@@ -903,6 +903,10 @@ void core_init(void) {
     readwrite_init();
     void readlist_init(void);
     readlist_init();
+    void streams_init(void);
+    streams_init();
+    void read_init(void);
+    read_init();
     loadmodule_init();
     files_init();
     random_init();

@@ -53,7 +53,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Assignment and rules (`Set`, `SetDelayed`, `Rule`, `RuleDelayed`) | [`builtins/assignment-and-rules.md`](docs/spec/builtins/assignment-and-rules.md) |
 | Scoping constructs (`Module`, `Block`, `With`) | [`builtins/scoping-constructs.md`](docs/spec/builtins/scoping-constructs.md) |
 | Pattern matching (`MatchQ`, `Cases`, `DeleteCases`, `Position`, `Count`, ...) | [`builtins/pattern-matching.md`](docs/spec/builtins/pattern-matching.md) |
-| File I/O (`Get`, `ReadList`, `Put`, `PutAppend`, `>>`, `>>>`) | [`builtins/file-io.md`](docs/spec/builtins/file-io.md) |
+| File I/O (`Get`, `ReadList`, `Read`, `OpenRead`, `OpenWrite`, `OpenAppend`, `Write`, `WriteString`, `Close`, `Streams`, `StreamPosition`, `SetStreamPosition`, `Put`, `PutAppend`, `>>`, `>>>`) | [`builtins/file-io.md`](docs/spec/builtins/file-io.md) |
 | Graphics (`Graphics`, `Graphics3D`, `Show`, `Plot`, `Plot3D`, `StreamPlot`, `Arrow`, `Point`, `Line`, `Rectangle`, `Circle`, `Disk`, `Polygon`, `Text`, ...) | [`builtins/graphics.md`](docs/spec/builtins/graphics.md) |
 | Graphs (`Graph`, `DirectedEdge`, `UndirectedEdge`, `GraphQ`, `VertexList`, `EdgeList`, `AdjacencyMatrix`, `FindShortestPath`, `GraphPlot`, ...) | [`builtins/graphs.md`](docs/spec/builtins/graphs.md) |
 | Packed arrays (`ToNDArray`/`ToPackedArray`, `FromNDArray`/`FromPackedArray`, `NDArrayQ`, `$AutoArrayPacking`) — invisible dense storage for ordinary `List`s | [`builtins/packed-arrays.md`](docs/spec/builtins/packed-arrays.md) |

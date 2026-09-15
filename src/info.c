@@ -3670,8 +3670,65 @@ void info_init(void) {
         "\tWord (characters delimited by word separators).\n"
         "Options RecordSeparators, WordSeparators, TokenWords, NullRecords and\n"
         "\tNullWords control tokenisation; see Options[ReadList].\n"
-        "Returns $Failed if the file cannot be opened. There is no stream layer, so\n"
-        "\tthe named file is always opened and closed by ReadList.");
+        "ReadList also accepts an open InputStream. A named file that is not\n"
+        "\talready open is opened and closed by ReadList. Returns $Failed if the\n"
+        "\tfile cannot be opened.");
+    symtab_set_docstring("Read",
+        "Read[stream]\n"
+        "\treads one expression from an open input stream and returns it.\n"
+        "Read[stream, type]\n"
+        "\treads one object of the specified type.\n"
+        "Read[stream, {type1, type2, ...}]\n"
+        "\treads a sequence of objects of the specified types into a list.\n"
+        "Read[stream, structure]\n"
+        "\treads into any nested type structure (for example {{Number, Number}, ...}\n"
+        "\tor Hold[Expression]), filled by a depth-first traversal.\n"
+        "The stream may be an InputStream from OpenRead, a \"file\", or File[\"file\"];\n"
+        "\ta named file that is not already open is opened and left open, so\n"
+        "\tsuccessive Read calls advance the same current point.\n"
+        "Types are Byte, Character, Expression, Number, Real, Record, String and\n"
+        "\tWord, as for ReadList; options RecordSeparators, WordSeparators,\n"
+        "\tTokenWords, NullRecords and NullWords control tokenisation.\n"
+        "Read returns EndOfFile past end of file, and $Failed for a stream that is\n"
+        "\tnot open or a token that is not of the requested type.");
+    symtab_set_docstring("OpenRead",
+        "OpenRead[\"file\"]\n"
+        "\topens a file for reading and returns an InputStream object; also accepts\n"
+        "\tFile[\"file\"]. Returns $Failed if the file cannot be opened.");
+    symtab_set_docstring("OpenWrite",
+        "OpenWrite[\"file\"]\n"
+        "\topens a file for writing (truncating it) and returns an OutputStream\n"
+        "\tobject; also accepts File[\"file\"]. Returns $Failed on failure.");
+    symtab_set_docstring("OpenAppend",
+        "OpenAppend[\"file\"]\n"
+        "\topens a file for appending and returns an OutputStream object; also\n"
+        "\taccepts File[\"file\"]. Returns $Failed on failure.");
+    symtab_set_docstring("Close",
+        "Close[stream]\n"
+        "\tcloses an open input or output stream and returns its file name.\n"
+        "Close[\"file\"] closes a stream opened for that file. Returns $Failed if\n"
+        "\tthe stream is not open.");
+    symtab_set_docstring("Streams",
+        "Streams[]\n"
+        "\tgives a list of all currently open streams.\n"
+        "Streams[\"file\"] lists only the open streams for the named file.");
+    symtab_set_docstring("StreamPosition",
+        "StreamPosition[stream]\n"
+        "\tgives the position of the current point in an open stream, as an integer\n"
+        "\tbyte offset.");
+    symtab_set_docstring("SetStreamPosition",
+        "SetStreamPosition[stream, n]\n"
+        "\tsets the current point of a stream to byte offset n and returns the new\n"
+        "\tposition. SetStreamPosition[stream, Infinity] moves to the end.");
+    symtab_set_docstring("Write",
+        "Write[stream, expr1, expr2, ...]\n"
+        "\twrites the expressions to an output stream in input form, followed by a\n"
+        "\tnewline. The stream may be an OutputStream, a \"file\", or File[\"file\"];\n"
+        "\ta named file that is not already open is opened for writing and left open.");
+    symtab_set_docstring("WriteString",
+        "WriteString[stream, str1, str2, ...]\n"
+        "\twrites the strings to an output stream with no added quotes or newline.\n"
+        "\tNon-string arguments are written in input form.");
     symtab_set_docstring("FileExistsQ",
         "FileExistsQ[\"name\"]\n"
         "\tgives True if the file with the specified name exists, and gives False otherwise.\n"
