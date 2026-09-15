@@ -1228,6 +1228,58 @@ Full per-case results: `reports/2.2.26.tsv`; bucketed report: `reports/2.2.26.md
 
 ---
 
+## Section 2.2.27 — "Problems 2601 to 2700" (Nasser Abbasi)
+
+Corpus: `DE_examples_2227.m` — 100 records, 96 scalar (**39 IVP**), 4 systems.
+A 2nd-order-LINEAR-heavy section: constant-coefficient nonhomogeneous
+(UndeterminedCoefficients / VariationOfParameters), `missing_y` reduction,
+Emden–Fowler (Airy/Bessel-reducible `y''±tⁿy`), 2nd-order exact-linear,
+Gegenbauer/Jacobi/Laguerre/Bessel/Lienard special forms, `with_linear_symmetries`,
+and 4 constant-coefficient 2×2 linear systems (two forced).
+`ctest -R dsolve_corpus_2_2_27_tests` · gate baseline **2**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-15 (baseline) | 97 / 100 | 97.0% | 3 | pre-wave: **0 FAIL**, **1 CRASH** (2690, Piecewise-forced IVP), 2 UNEVAL. |
+| 2026-09-15 (M46) | **98 / 100** | **98.0%** | **2** | **0 FAIL, 0 crash.** 2690 CRASH→PASS via the harness `dsFreeParams` fix. |
+
+**M46 wave.** One general root-cause fix (no overfit), 0 regression:
+1. **Corpus-harness chained-inequality crash** (`dsolve_corpus_prelude.m`,
+   `dsFreeParams`). A constant-coefficient IVP with **Piecewise/step forcing**
+   (`y''+y'+7y == Piecewise[{{t, 0<=t<2},{0, 2<=t}}]`, 2690) back-substitutes to a
+   residual carrying the chained inequality `0 <= t < 2`, represented as
+   `Inequality[0, LessEqual, t, Less, 2]` — with the comparison operators in
+   **argument** positions. The verifier's free-parameter collector
+   (`Cases[resid, s_Symbol, {0,∞}]`, whose "never Heads" reasoning assumes operators
+   sit in head position) then treated `LessEqual`/`Less` as free parameters and
+   substituted numbers for them, corrupting the `Piecewise` into garbage that
+   **SIGSEGV**ed when the residual was differentiated (`Integrate` derivative-divides
+   → `D` → NULL-arg deref in `evaluate_step`). Fix: exclude relational/logical/
+   piecewise operator symbols (`Less`, `LessEqual`, …, `And`, `Or`, `Piecewise`,
+   `UnitStep`, …) from the collector — they are never ODE parameters (the converter
+   emits value symbols only), so the exclusion is monotone-safe. Single-sided
+   conditions (`Less[t,2]`, operator as head) never triggered it, which is why the
+   piecewise-heavy §2.2.15 stayed green; only a chained inequality reaches it. The CAS
+   itself is robust on legitimate chained-inequality `Piecewise` (`D`/`Integrate`
+   verified clean); the fault was entirely in the test harness's substitution. With
+   the fix, 2690's variation-of-parameters answer verifies (FTC cancels the inert
+   integrals in the residual) → PASS.
+
+Regression check: the fix touches the shared prelude, so all 3 sections whose corpus
+carries a chained-inequality `Piecewise`/step condition were re-run — §2.2.15 (2/2),
+§2.2.16 (3/3), §2.2.25 (3/3) all hold at baseline; the remaining sections contain no
+such conditions, so `dsFreeParams` is provably unchanged for them.
+
+Residue 2 (both `sympySolved=False` — SymPy fails them, bounded UNEVAL declines, no
+wrong answers): the 2nd-order **exact** nonhomogeneous `y''+t³y'+3t²y==eᵗ` (2621 —
+integrates once to the linear `y'+t³y==eᵗ+C`, whose integrating-factor integral
+`∫e^{t⁴/4}eᵗ dt` is non-elementary), and the **transcendental-coefficient**
+`(1−t²)y''+y'/Sin[1+t]+y==0` (2641, no closed form).
+
+Full per-case results: `reports/2.2.27.tsv`; bucketed report: `reports/2.2.27.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -1499,3 +1551,27 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   M18 Stages 2/3 (μ(x,y'), μ(y,y') — BLOCKED on a non-elementary first-order solver),
   3rd/high-order operator factoring (needs non-`TimeConstrained` bounding), Abel Invariant
   Rational (deferred M13).
+- **M46 (2026-09-15)** — §2.2.27 (Problems 2601–2700) corpus, **98/100, 0 FAIL, 0 crash**.
+  A 2nd-order-LINEAR-heavy section (96 scalar, 39 IVP, 4 systems): constant-coefficient
+  nonhomogeneous (UndeterminedCoefficients/VariationOfParameters), missing-y reduction,
+  Emden–Fowler (Airy/Bessel-reducible `y''±tⁿy`, 13/13), 2nd-order exact-linear, ortho-poly
+  (Gegenbauer/Jacobi/Laguerre) + Bessel + Lienard special forms, with-linear-symmetries, and
+  4 constant-coefficient 2×2 linear systems (4/4). Baseline **97/100** (0 FAIL, **1 CRASH**),
+  then 98/100 via one general root-cause fix, 0 regression: **corpus-harness chained-inequality
+  crash** (`dsolve_corpus_prelude.m`, `dsFreeParams`). A Piecewise-forced IVP
+  (`y''+y'+7y == Piecewise[{{t, 0<=t<2},{0, 2<=t}}]`, 2690) back-substitutes to a residual
+  carrying the chained inequality `0<=t<2` ≡ `Inequality[0, LessEqual, t, Less, 2]`, with the
+  comparison operators in ARGUMENT position; the free-parameter collector (whose "never Heads"
+  rule assumes operators sit in head position) took `LessEqual`/`Less` as parameters and
+  substituted numbers, corrupting the `Piecewise` into an expression that SIGSEGVed when
+  differentiated (`Integrate` deriv-divides → `D` → NULL-arg deref in `evaluate_step`). Fix:
+  exclude relational/logical/piecewise operator symbols (never ODE parameters) from the
+  collector — monotone-safe; single-sided conditions (`Less[t,2]`, head position) never hit it,
+  which is why the piecewise-heavy §2.2.15 stayed green. CAS verified robust on legitimate
+  chained-inequality `Piecewise` `D`/`Integrate`; the fault was purely in the test harness.
+  2690 CRASH→PASS (VoP answer verifies once the residual's inert integrals cancel by FTC).
+  Regression: the 3 sections with a chained-inequality Piecewise (§2.2.15 2/2, §2.2.16 3/3,
+  §2.2.25 3/3) all hold; other sections carry no such operators (collector provably unchanged).
+  Residue 2 (`sympy=False`): 2621 (exact → non-elementary integrating factor `∫e^{t⁴/4}eᵗ dt`),
+  2641 (transcendental coefficient `y'/Sin[1+t]`). Gate `dsolve_corpus_2_2_27_tests` baseline 2.
+  v0.143→0.144.

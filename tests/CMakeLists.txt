@@ -4127,6 +4127,18 @@ add_test(NAME dsolve_corpus_2_2_26_tests
                  ../../DSolve_test_status/DE_examples_2226.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 11)
 
+# Section 2.2.27 (Problems 2601-2700, Nasser Abbasi): 100 records, 96 scalar
+# (39 IVP), 4 systems.  A 2nd-order-linear-heavy section: constant-coefficient
+# nonhomogeneous (UndeterminedCoefficients/VariationOfParameters), missing-y
+# reduction, Emden-Fowler (Airy/Bessel-reducible), 2nd-order exact linear,
+# Gegenbauer/Jacobi/Laguerre/Bessel/Lienard special forms, with-linear-symmetries,
+# and 4 constant-coefficient 2x2 linear systems (two forced).  Baseline argv3 =
+# the STATUS.md non-PASS count.
+add_test(NAME dsolve_corpus_2_2_27_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2227.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

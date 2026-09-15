@@ -1697,6 +1697,45 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     abstract-coefficient `y''+p(t)y'+q(t)y==1+t` (`2591`, unsolvable for arbitrary p, q). All
     §2.2.x + §2.1.2 gates held; see the §2.2.26 block in `DSolve_test_status/STATUS.md`.
 
+- **M46 — §2.2.27 corpus (Problems 2601–2700, Nasser Abbasi) + corpus-harness
+  chained-inequality crash fix.** ✅ DONE. A 2nd-order-LINEAR-heavy section: 96 scalar
+  (39 IVP) + 4 systems — constant-coefficient nonhomogeneous
+  (UndeterminedCoefficients/VariationOfParameters), `_missing_y` reduction, Emden–Fowler
+  (Airy/Bessel-reducible `y''±tⁿy`, 13/13), 2nd-order exact-linear, orthogonal-polynomial
+  (Gegenbauer/Jacobi/Laguerre) + Bessel + Lienard special forms, `_with_linear_symmetries`,
+  and 4 constant-coefficient 2×2 linear systems (two forced, 4/4). Baseline **97/100, 0 FAIL,
+  1 CRASH** → **98/100, 0 FAIL, 0 crash** with one general root-cause fix and **0 regression**.
+  New gate `dsolve_corpus_2_2_27_tests` (baseline 2). Version 0.143 → 0.144.
+  - **Corpus-harness chained-inequality crash** (`DSolve_test_status/dsolve_corpus_prelude.m`,
+    `dsFreeParams`). A constant-coefficient IVP with Piecewise/step forcing
+    (`y''+y'+7y == Piecewise[{{t, 0<=t<2},{0, 2<=t}}]`, 2690) back-substitutes to a residual
+    carrying the **chained** inequality `0<=t<2`, represented as
+    `Inequality[0, LessEqual, t, Less, 2]` with the comparison operators in **argument**
+    position. The verifier's free-parameter collector (`Cases[resid, s_Symbol, {0,∞}]`, whose
+    "instantiate params, never Heads" reasoning assumes operators occupy head position) then
+    treated `LessEqual`/`Less` as free parameters and substituted numbers for them, corrupting
+    the `Piecewise` into garbage that **SIGSEGV**ed when the residual was differentiated
+    (`Integrate` derivative-divides → `D`/`higher_order_partial` → NULL-arg deref in
+    `evaluate_step`). Fix: exclude relational/logical/piecewise operator symbols (`Less`,
+    `LessEqual`, `Greater`, `GreaterEqual`, `Equal`, `Unequal`, `Inequality`, `And`, `Or`,
+    `Not`, `Xor`, `Piecewise`, `UnitStep`, `HeavisideTheta`, `DiracDelta`) from the collector —
+    they are never ODE parameters (the converter emits value symbols only), so the exclusion is
+    **monotone-safe**. Single-sided conditions (`Less[t,2]`, operator as head) never triggered
+    it, which is why the piecewise-heavy §2.2.15 stayed green — only a chained inequality
+    reaches it. The CAS itself is robust on legitimate chained-inequality `Piecewise`
+    (`D`/`Integrate` verified clean); the fault was entirely in the test harness's substitution.
+    With the fix, 2690's variation-of-parameters answer verifies (the residual's inert integrals
+    cancel by the fundamental theorem) → PASS. **Regression:** the 3 sections whose corpus carries
+    a chained-inequality Piecewise/step condition were re-run — §2.2.15 (2/2), §2.2.16 (3/3),
+    §2.2.25 (3/3) all hold at baseline; the remaining sections contain no such operators, so
+    `dsFreeParams` is provably unchanged for them. No C code changed.
+  - **Residue 2** (both `sympySolved=False` — SymPy fails them, bounded UNEVAL declines, no
+    wrong answers): the 2nd-order **exact** nonhomogeneous `y''+t³y'+3t²y==eᵗ` (`2621` —
+    integrates once to the linear `y'+t³y==eᵗ+C`, whose integrating-factor integral
+    `∫e^{t⁴/4}eᵗ dt` is non-elementary), and the **transcendental-coefficient**
+    `(1−t²)y''+y'/Sin[1+t]+y==0` (`2641`, no closed form). All §2.2.x + §2.1.2 gates held; see the
+    §2.2.27 block in `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

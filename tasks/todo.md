@@ -1,54 +1,53 @@
-# Task: Read + a first-class stream layer for src/io/
+# DSolve corpus wave M46 — §2.2.27 (Problems 2601–2700)
 
-## Plan
-Introduce Mathilda's first input/output stream layer. `Read` is the single-object
-primitive with a persistent current point; `ReadList` is refactored to loop the
-same shared reading engine. Input + output + inspection/positioning.
+## Phase A — Corpus generation & registration
+- [x] Generate `DSolve_test_status/DE_examples_2227.m` via converter (100 records)
+- [x] Converter-invariance gate: converter untouched → prior sections invariant
+- [x] Register `dsolve_corpus_2_2_27_tests` ctest in `tests/CMakeLists.txt`
 
-Builtins: Read, OpenRead, OpenWrite, OpenAppend, Write, WriteString, Close,
-Streams, StreamPosition, SetStreamPosition. Inert heads: InputStream,
-OutputStream, File.
+## Phase B — Baseline measurement
+- [x] Build `dsolve_corpus_tests`, run §2.2.27 → baseline 97/100 (0 FAIL, 1 CRASH, 2 UNEVAL)
+- [x] Bucket report `reports/2.2.27.md`
 
-## Steps
-- [x] 1. Stream registry + objects + OpenRead/OpenWrite/OpenAppend/Close/Streams — done.
-- [x] 2. Reading engine (read.c) + read_structure (nested + EndOfFile pad, unevaluated Expression leaf) + builtin_read + Options[Read] — done.
-- [x] 3. Refactor ReadList onto the shared engine — done, readlist_tests 27/27 green.
-- [x] 4. Write/WriteString + StreamPosition/SetStreamPosition — done.
-- [x] 5. tests/test_streams.c (36 cases) + CMake wiring — all pass.
-- [x] 6. Docs + audits — done. check-c99 PASS; valgrind clean (no Mathilda frame in any leak).
+## Phase C — Root-cause fixes (one general fix; no overfit)
+- [x] CRASH 2690 root-caused: prelude `dsFreeParams` collected relational operators
+      (LessEqual/Less) from a CHAINED-inequality Piecewise condition
+      (Inequality[0,LessEqual,t,Less,2]) and substituted numbers → corrupt expr →
+      SIGSEGV. Fix: exclude relational/logical/piecewise operators. 2690 CRASH→PASS.
+- [x] Anti-overfit / regression: §2.2.15/2.2.16/2.2.25 (the only piecewise sections)
+      hold at baseline; non-piecewise sections provably unchanged. 1430 flake noted.
+- [x] §2.2.27 → 98/100, baseline set to 2 (2621/2641 sympy=False residue)
+
+## Phase D — Documentation, gates, version
+- [x] STATUS.md §2.2.27 block + M46 wave-history bullet
+- [x] README.md section row
+- [x] DSOLVE_PLAN.md M46 milestone
+- [x] docs/spec/changelog/2026-09-14.md note (top, newest-first)
+- [x] src/version.h 0.143 → 0.144
+- [x] Verify: gate passes (baseline 2, 52.8s); check-c99 exit 0; REPL spot-checks
 
 ## Review
 
-**Status: complete.** First input/output stream layer added to `src/io/`.
+**Result: §2.2.27 = 98/100, 0 FAIL, 0 crash.** (baseline 97/100 had 1 CRASH + 2 UNEVAL.)
 
-Files created: `src/io/read.{c,h}` (shared reading engine + Read), `src/io/streams.{c,h}`
-(registry + management/output builtins + inert heads), `tests/test_streams.c`.
-Files modified: `src/io/readlist.c` (refactored onto the shared engine),
-`src/sym_names.{h,c}` (13 interned names), `src/core.c` (streams_init/read_init),
-`src/info.c` (10 docstrings), `tests/CMakeLists.txt` (COMMON_SRC + streams_tests),
-`docs/spec/builtins/file-io.md`, `docs/spec/changelog/2026-09-14.md`, `Mathilda_spec.md`.
+**One general root-cause fix** (`dsolve_corpus_prelude.m`, `dsFreeParams`): a chained
+inequality in a Piecewise/step condition (`0<=t<2` ≡ `Inequality[0, LessEqual, t, Less, 2]`)
+puts comparison operators in argument position; the verifier collected `LessEqual`/`Less` as
+free parameters and substituted numbers → corrupted Piecewise → SIGSEGV on differentiation
+(2690). Fix = exclude relational/logical/piecewise operator symbols (never ODE parameters).
+Monotone-safe; 2690 CRASH→PASS. **No C code changed** (only version.h macro).
 
-Behaviour:
-- `Read[stream|"file"|File["file"], spec?]` — one object; nested type structures
-  (depth-first), `Hold[Expression]` held vs `Expression` evaluated, arbitrary heads.
-  EndOfFile past EOF; $Failed for closed stream / malformed number.
-- Persistent current point: successive Read/ReadList advance; filename form auto-opens
-  and stays open; `OpenRead`/`OpenWrite`/`OpenAppend` → InputStream/OutputStream handles.
-- `Write`/`WriteString` (fflush, round-trips with Read/ReadList); `Close` (returns name);
-  `Streams[]`/`Streams["file"]`; `StreamPosition`/`SetStreamPosition[..., n|Infinity]`.
-- `ReadList` is now literally a loop of the shared single-object reader; also reads from
-  an open InputStream.
+**Regression:** the only sections with chained-inequality Piecewise conditions
+(§2.2.15/2.2.16/2.2.25) all hold at baseline; every other section is provably unaffected
+(no such operators in their residuals). §2.2.15-1430 is a pre-existing flaky near-8s system
+solve (unrelated).
 
-Verification:
-- Main binary builds clean (gcc-16, no warnings from read.c/streams.c/readlist.c).
-- streams_tests: 36/36 pass. readlist_tests: 27/27 pass (behaviour-preserving refactor).
-- valgrind on streams_tests: 0 leak contexts touch any Mathilda frame (all "definitely
-  lost" blocks are macOS objc/dyld baseline noise). Registry freed by Close + atexit.
-- Audits: check-c99 PASS; check-packed-aware PASS (782 builtins, Read/stream heads
-  correctly NOT on any NDArray surface — they return objects/lists, not numeric kernels).
-- check-compile-coverage remains the PRE-EXISTING image-head failure (Read/stream heads
-  absent from it); not a regression. See memory project_check_compile_coverage_preexisting_red.
+**Residue 2** (both sympy=False, bounded declines): 2621 (exact → non-elementary integrating
+factor), 2641 (transcendental coefficient). Not chased — genuine no-closed-form cases.
 
-Not done (intentional/out of scope): ReadString/ReadLine/Skip/Find; pipes; OpenRead
-options stored on the stream; $Input/$Output redirection; exact syntax-error point (a
-parse failure stops, as ReadList already does).
+**Notable:** the CAS itself is robust on legitimate chained-inequality Piecewise D/Integrate;
+Emden–Fowler 13/13 (Airy/Bessel), systems 4/4, ortho-poly 7/7 all solved out of the box.
+
+**Files:** DE_examples_2227.m + reports/2.2.27.{tsv,md} (new); dsolve_corpus_prelude.m,
+tests/CMakeLists.txt (new gate, baseline 2), STATUS.md, README.md, DSOLVE_PLAN.md,
+changelog, version.h (edited).

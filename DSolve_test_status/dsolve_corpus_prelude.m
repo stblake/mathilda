@@ -43,7 +43,21 @@ $dsSolveTimeout = 8;          (* seconds per DSolve call *)
 $dsTol          = 1*^-6;
 $dsProtected    = {E, Pi, I, Infinity, ComplexInfinity, Indeterminate,
                    True, False, Degree, EulerGamma, GoldenRatio, Catalan,
-                   Complex, Rational, Integer, Real, List};
+                   Complex, Rational, Integer, Real, List,
+                   (* Relational / logical / structural operators.  These are
+                    * never ODE parameters (the converter emits value symbols
+                    * only), but a CHAINED inequality in a Piecewise/step
+                    * condition -- `0 <= t < 2` -> Inequality[0, LessEqual, t,
+                    * Less, 2] -- puts the operators in ARGUMENT positions, where
+                    * Cases[..., s_Symbol] below collects them as bogus "free
+                    * parameters".  Substituting numbers for LessEqual/Less then
+                    * corrupts the Piecewise into garbage that SIGSEGVs when the
+                    * residual is differentiated (2.2.27-2690).  Single-sided
+                    * conditions (`Less[t, 2]`, operator as head) never hit this,
+                    * which is why the piecewise-heavy S2.2.15 stayed green. *)
+                   Less, LessEqual, Greater, GreaterEqual, Equal, Unequal,
+                   Inequality, And, Or, Not, Xor, Piecewise, UnitStep,
+                   HeavisideTheta, DiracDelta};
 
 (* --- numeric back-substitution of one explicit branch ---------------------- *)
 
