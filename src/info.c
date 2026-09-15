@@ -3729,6 +3729,83 @@ void info_init(void) {
         "WriteString[stream, str1, str2, ...]\n"
         "\twrites the strings to an output stream with no added quotes or newline.\n"
         "\tNon-string arguments are written in input form.");
+
+    /* Read/ReadList type specifications. */
+    symtab_set_docstring("Byte",
+        "Byte\n"
+        "\tis a type specification in Read and ReadList that reads a single byte,\n"
+        "\treturned as an integer code from 0 to 255.");
+    symtab_set_docstring("Character",
+        "Character\n"
+        "\tis a type specification in Read and ReadList that reads a single\n"
+        "\tcharacter, returned as a one-character string.");
+    symtab_set_docstring("Expression",
+        "Expression\n"
+        "\tis a type specification in Read and ReadList that reads one complete\n"
+        "\tMathilda expression.");
+    symtab_set_docstring("Number",
+        "Number\n"
+        "\tis a type specification in Read and ReadList that reads a number,\n"
+        "\treturned as an integer when the token has no decimal point or exponent\n"
+        "\tand as an approximate number otherwise.");
+    symtab_set_docstring("Real",
+        "Real\n"
+        "\tis the head of approximate real numbers. As a type specification in Read\n"
+        "\tand ReadList it reads a number, always returned as an approximate number\n"
+        "\t(C/Fortran E notation is accepted).");
+    symtab_set_docstring("Record",
+        "Record\n"
+        "\tis a type specification in Read and ReadList that reads a sequence of\n"
+        "\tcharacters delimited by record separators (see RecordSeparators).");
+    symtab_set_docstring("String",
+        "String\n"
+        "\tis the head of string objects. As a type specification in Read and\n"
+        "\tReadList it reads a line, up to a newline.");
+    symtab_set_docstring("Word",
+        "Word\n"
+        "\tis a type specification in Read and ReadList that reads a sequence of\n"
+        "\tcharacters delimited by word separators (see WordSeparators).");
+    symtab_set_docstring("EndOfFile",
+        "EndOfFile\n"
+        "\tis the symbol returned by Read at the end of a file. ReadList uses it to\n"
+        "\tfill the unread slots of a type sequence truncated by end of file.");
+
+    /* Read/ReadList tokenisation options. */
+    symtab_set_docstring("RecordSeparators",
+        "RecordSeparators\n"
+        "\tis an option for Read and ReadList giving the list of strings that\n"
+        "\tseparate records. The default is {\"\\r\\n\", \"\\n\", \"\\r\"}.");
+    symtab_set_docstring("WordSeparators",
+        "WordSeparators\n"
+        "\tis an option for Read and ReadList giving the list of strings that\n"
+        "\tseparate words. The default is {\" \", \"\\t\"}.");
+    symtab_set_docstring("TokenWords",
+        "TokenWords\n"
+        "\tis an option for Read and ReadList giving strings to be read as separate\n"
+        "\twords even when not surrounded by word separators. The default is {}.");
+    symtab_set_docstring("NullRecords",
+        "NullRecords\n"
+        "\tis an option for Read and ReadList specifying whether a null record is\n"
+        "\tassumed between two adjacent record separators. The default is False.");
+    symtab_set_docstring("NullWords",
+        "NullWords\n"
+        "\tis an option for Read and ReadList specifying whether a null word is\n"
+        "\tassumed between two adjacent word separators. The default is False.");
+
+    /* Stream objects. */
+    symtab_set_docstring("InputStream",
+        "InputStream[\"name\", n]\n"
+        "\tis an object representing an open input stream, as returned by OpenRead.\n"
+        "\tThe integer n is an internal handle into the stream registry.");
+    symtab_set_docstring("OutputStream",
+        "OutputStream[\"name\", n]\n"
+        "\tis an object representing an open output stream, as returned by OpenWrite\n"
+        "\tor OpenAppend. The integer n is an internal handle into the stream registry.");
+    symtab_set_docstring("File",
+        "File[\"name\"]\n"
+        "\tis a symbolic wrapper for a file name, accepted wherever Read, ReadList,\n"
+        "\tOpenRead, OpenWrite, OpenAppend, and Close take a file.");
+
     symtab_set_docstring("FileExistsQ",
         "FileExistsQ[\"name\"]\n"
         "\tgives True if the file with the specified name exists, and gives False otherwise.\n"
