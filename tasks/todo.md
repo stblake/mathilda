@@ -1,53 +1,65 @@
-# DSolve corpus wave M46 — §2.2.27 (Problems 2601–2700)
+# DSolve M47 — §2.2.28 corpus (Problems 2701–2800)
 
-## Phase A — Corpus generation & registration
-- [x] Generate `DSolve_test_status/DE_examples_2227.m` via converter (100 records)
-- [x] Converter-invariance gate: converter untouched → prior sections invariant
-- [x] Register `dsolve_corpus_2_2_27_tests` ctest in `tests/CMakeLists.txt`
+Milestone: M47 = §2.2.28. Version bump 0.144 → 0.145.
+Definition of done: 0 FAIL, 0 crash; UNEVAL OK only for no-closed-form residue.
 
-## Phase B — Baseline measurement
-- [x] Build `dsolve_corpus_tests`, run §2.2.27 → baseline 97/100 (0 FAIL, 1 CRASH, 2 UNEVAL)
-- [x] Bucket report `reports/2.2.27.md`
+## Phase 1 — Fetch & convert
+- [x] Fetch Ch2.S2.SS28.htm (browser UA), verified title "Problems 2701 to 2800"
+- [x] Convert → DE_examples_2228.m (100 records: 18 scalar [3 IVP], 82 systems)
+- [x] Converter fix: subscripted arbitrary funcs f_1(t)/f_2(t) → f1[t]/f2[t]
+      (2708/2762/2780); byte-identical regen of §2.2.27 confirmed
 
-## Phase C — Root-cause fixes (one general fix; no overfit)
-- [x] CRASH 2690 root-caused: prelude `dsFreeParams` collected relational operators
-      (LessEqual/Less) from a CHAINED-inequality Piecewise condition
-      (Inequality[0,LessEqual,t,Less,2]) and substituted numbers → corrupt expr →
-      SIGSEGV. Fix: exclude relational/logical/piecewise operators. 2690 CRASH→PASS.
-- [x] Anti-overfit / regression: §2.2.15/2.2.16/2.2.25 (the only piecewise sections)
-      hold at baseline; non-piecewise sections provably unchanged. 1430 flake noted.
-- [x] §2.2.27 → 98/100, baseline set to 2 (2621/2641 sympy=False residue)
+## Phase 2 — Baseline measurement
+- [x] Build dsolve_corpus_tests
+- [x] Baseline: 84/100 PASS, 0 FAIL, 0 crash, 16 UNEVAL
+- [x] reports/2.2.28.md + .tsv generated
 
-## Phase D — Documentation, gates, version
-- [x] STATUS.md §2.2.27 block + M46 wave-history bullet
-- [x] README.md section row
-- [x] DSOLVE_PLAN.md M46 milestone
-- [x] docs/spec/changelog/2026-09-14.md note (top, newest-first)
-- [x] src/version.h 0.143 → 0.144
-- [x] Verify: gate passes (baseline 2, 52.8s); check-c99 exit 0; REPL spot-checks
+## Phase 3 — Root-cause fixes (2 general fixes, 0 FAIL throughout)
+- [x] 2719 (y''''+y==g[t]) radical-root VoP integrand simplify
+      (ds_has_var_fractional_power guard; 2406 t^(5/2) hang untouched)
+- [x] 2713 zero-ladder homogeneous IVP → y≡0 (tight guard; BVP excluded)
+- [x] Re-run §2.2.28: 86/100, 0 FAIL, scalars 18/18
+- [x] Re-run all gates → 0 regression (100% pass, 28/28; §2.1.2 no-IC + VoP-validated)
+
+## Phase 4 — Record & land
+- [x] tests/CMakeLists.txt — dsolve_corpus_2_2_28_tests gate (baseline 14)
+- [x] STATUS.md — §2.2.28 block + M47 wave-history line
+- [x] README.md — DE_examples_2228.m row
+- [x] DSOLVE_PLAN.md — M47 bullet
+- [x] docs/spec/changelog/2026-09-14.md — M47 entry
+- [x] src/version.h — 0.144 → 0.145; rebuilt (banner shows 0.145)
+- [x] make check-c99 clean
+- [x] Confirm regression run: all gates hold (100% pass, 0 FAIL)
+- [x] Confirm §2.2.28 ctest gate passes at baseline 14 (Passed 70.8s)
+- [x] Review section (below)
+
+## Residue 14 (all systems, no scalar gap)
+- 8 nonlinear systems 2788–2795 (sympy=False, no closed form)
+- 3×3 E^t system 2785 (sympy=False)
+- system arbitrary forcing 2708/2762/2780 (needs system-level VoP)
+- system DiracDelta/UnitStep 2781/2782 (needs systems Laplace/Green's)
 
 ## Review
 
-**Result: §2.2.27 = 98/100, 0 FAIL, 0 crash.** (baseline 97/100 had 1 CRASH + 2 UNEVAL.)
+**Result: §2.2.28 landed at 86/100, 0 FAIL, 0 crash (scalars 18/18). v0.145.**
 
-**One general root-cause fix** (`dsolve_corpus_prelude.m`, `dsFreeParams`): a chained
-inequality in a Piecewise/step condition (`0<=t<2` ≡ `Inequality[0, LessEqual, t, Less, 2]`)
-puts comparison operators in argument position; the verifier collected `LessEqual`/`Less` as
-free parameters and substituted numbers → corrupted Piecewise → SIGSEGV on differentiation
-(2690). Fix = exclude relational/logical/piecewise operator symbols (never ODE parameters).
-Monotone-safe; 2690 CRASH→PASS. **No C code changed** (only version.h macro).
+Two general root-cause fixes (both in `src/calculus/dsolve_common.c`):
+1. Constant-base-radical VoP integrand simplify (`dsolve_variation_of_parameters`) —
+   fixed 2719 (`y''''+y==g[t]`, irrational roots `(±1±i)/√2`); new
+   `ds_has_var_fractional_power` keeps the §2.2.25-2406 `t^(5/2)` Simplify hang guarded off.
+2. Homogeneous-linear-IVP zero-ladder → `y≡0` (`dsolve_fit_constants`) — fixed 2713
+   (irreducible-quartic `Root[]` fundamental set). Guarded by `ds_is_structural_zero(body[C->0])`
+   so nonhomogeneous IVPs fall through.
 
-**Regression:** the only sections with chained-inequality Piecewise conditions
-(§2.2.15/2.2.16/2.2.25) all hold at baseline; every other section is provably unaffected
-(no such operators in their residuals). §2.2.15-1430 is a pre-existing flaky near-8s system
-solve (unrelated).
+Converter fix (`tools/latex_ode_to_mathilda.py`): subscripted arbitrary forcing functions
+`f_1(t)`/`f_2(t)` → `f1[t]`/`f2[t]` (2708/2762/2780); §2.2.27 regenerates byte-identically.
 
-**Residue 2** (both sympy=False, bounded declines): 2621 (exact → non-elementary integrating
-factor), 2641 (transcendental coefficient). Not chased — genuine no-closed-form cases.
+**Process note (caught + fixed in-session):** the first cut of the zero-IVP shortcut lacked
+the homogeneity check and shipped WRONG answers (15 sections FAILed in the full regression —
+`y''+y==t, zero ICs` → particular `t`, which fails `y'(0)=0`). The `ctest -R dsolve_corpus`
+regression caught it; fixed with `ds_is_structural_zero(body[C->0])`, re-run 100% green.
+Lesson recorded in `tasks/lessons.md` + memory. Reinforces: always run the FULL corpus
+regression before landing a change to a shared path, even when the target section is green.
 
-**Notable:** the CAS itself is robust on legitimate chained-inequality Piecewise D/Integrate;
-Emden–Fowler 13/13 (Airy/Bessel), systems 4/4, ortho-poly 7/7 all solved out of the box.
-
-**Files:** DE_examples_2227.m + reports/2.2.27.{tsv,md} (new); dsolve_corpus_prelude.m,
-tests/CMakeLists.txt (new gate, baseline 2), STATUS.md, README.md, DSOLVE_PLAN.md,
-changelog, version.h (edited).
+**Verification:** `make check-c99` clean; `./Mathilda -v` → 0.145; `ctest -R dsolve_corpus`
+100% (28/28) incl. §2.1.2. Not committed (awaiting user go-ahead; would branch off main first).

@@ -1280,6 +1280,64 @@ Full per-case results: `reports/2.2.27.tsv`; bucketed report: `reports/2.2.27.md
 
 ---
 
+## Section 2.2.28 — "Problems 2701 to 2800" (Nasser Abbasi)
+
+Corpus: `DE_examples_2228.m` — 100 records, 18 scalar (**3 IVP**), 82 systems.
+A SYSTEMS-heavy section: constant-coefficient linear systems (2×2/3×3/4×4,
+homogeneous + `E^t`/trig/impulse/step forcing) and 8 nonlinear systems
+(Lotka–Volterra / epidemic / competition), plus 18 higher-order (3rd–6th)
+constant-coefficient scalar linear ODEs (homogeneous `_missing_x` + arbitrary-
+forcing `_missing_y`/VoP). `ctest -R dsolve_corpus_2_2_28_tests` · gate baseline **14**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-15 (baseline) | 84 / 100 | 84.0% | 16 | pre-wave: **0 FAIL, 0 crash**, 16 UNEVAL (2 scalar, 14 system). |
+| 2026-09-15 (M47) | **86 / 100** | **86.0%** | **14** | **0 FAIL, 0 crash.** Scalars **18/18**; 2713 + 2719 → PASS via two general fixes. |
+
+**M47 wave.** Two general root-cause fixes (no overfit), 0 regression:
+1. **Constant-base-radical VoP integrand simplify** (`dsolve_common.c`,
+   `dsolve_variation_of_parameters`). An irrational-root fundamental set —
+   `y''''+y==g[t]` (2719), roots `(±1±i)/√2`, basis `E^(±t/√2) Cos/Sin[t/√2]` —
+   makes each per-term VoP Cramer integrand run to hundreds of leaves; the
+   integrator then churns ~2 s per term and four terms overrun the 8 s solve
+   budget (→ UNEVAL), whereas the *sibling* `y''''−y==g[t]` (2718, clean basis
+   `{E^t,E^-t,Cos,Sin}`) closes fast. Fix: `Simplify` the per-term integrand
+   before integrating **when it carries a constant-base radical** (`2^(-1/2)` in
+   the exponent) and **no** `t^(p/q)` of the variable — the radical exponentials
+   collapse (~485 → ~44 leaves) and the inert convolution integral closes
+   instantly. Guarded off the `t^(p/q)` case so the documented `Simplify` hang on
+   `t^(5/2) E^(-2t)` (§2.2.25-2406) is never re-triggered; a clean-root VoP has no
+   fractional power and is byte-identical.
+2. **Homogeneous-linear-IVP zero-ladder → `y≡0`** (`dsolve_common.c`,
+   `dsolve_fit_constants`). A 4th-order homogeneous IVP with an *irreducible*
+   characteristic polynomial (2713: `r^4+4r^3+14r^2-20r+25`, irreducible over Q)
+   has a `Root[]`-object fundamental set; `Solve` bubbles unevaluated on the
+   Root-coefficient constant-fit system, so the IVP kept its constants → UNEVAL.
+   But the conditions are the *complete* zero derivative-ladder `y^(k)(0)==0`,
+   k=0..3, at a single point — a well-posed IVP whose unique solution is `y≡0`
+   (nonsingular Wronskian forces `C=0`). Fix: substitute every generated constant
+   with 0 when the conditions are exactly one-per-constant, all values the literal
+   0, all at the same point, and the order set exactly `{0..n-1}`. The tight guard
+   excludes a BVP (`y[0]==0, y[Pi]==0 → C[2] Sin[x]`, two order-0 conditions at
+   *different* points) and any under/over-determined set, so it can never turn a
+   genuine non-trivial answer to 0 (verified against those cases).
+
+Regression check: the VoP change touches the shared nonhomogeneous backstop and
+the fit change touches every IVP, so all prior corpus gates (§2.1.2 + §2.2.1–27)
+were re-run — all hold at their baselines, 0 new non-PASS.
+
+Residue 14 (all systems, no scalar gap): **8 nonlinear systems** 2788–2795
+(Lotka–Volterra / epidemic / competition / coupled-nonlinear, all `sympy=False`,
+no closed form); the **3×3 `E^t`** system 2785 (`sympy=False`, times out); **system
+arbitrary forcing** `f1[t]`/`f2[t]` (2708/2762/2780 — needs system-level variation
+of parameters over arbitrary functions); and **system impulse/step forcing**
+(2781 DiracDelta, 2782 UnitStep — needs the systems Laplace/Green's path). All
+deep systems-solver work, deferred.
+
+Full per-case results: `reports/2.2.28.tsv`; bucketed report: `reports/2.2.28.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -1575,3 +1633,27 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   Residue 2 (`sympy=False`): 2621 (exact → non-elementary integrating factor `∫e^{t⁴/4}eᵗ dt`),
   2641 (transcendental coefficient `y'/Sin[1+t]`). Gate `dsolve_corpus_2_2_27_tests` baseline 2.
   v0.143→0.144.
+- **M47 (2026-09-15)** — §2.2.28 (Problems 2701–2800) corpus, **86/100, 0 FAIL, 0 crash**.
+  A SYSTEMS-heavy section (18 scalar, 3 IVP, 82 systems): constant-coefficient linear systems
+  (2×2/3×3/4×4, homogeneous + `E^t`/trig/impulse/step forcing) + 8 nonlinear systems, plus 18
+  higher-order (3rd–6th) constant-coefficient scalar linear ODEs. Baseline **84/100** (0 FAIL,
+  0 crash, 16 UNEVAL), then 86/100 (scalars **18/18**) via two general root-cause fixes, 0
+  regression: (1) **constant-base-radical VoP integrand simplify** (`dsolve_common.c`,
+  `dsolve_variation_of_parameters`) — an irrational-root fundamental set `E^(±t/√2)` (2719,
+  `y''''+y==g[t]`) makes each per-term Cramer integrand hundreds of leaves and the integrator
+  churns ~2 s/term (4 terms overrun the 8 s budget, → UNEVAL); Simplify the integrand before
+  integrating when it carries a constant-base radical but no `t^(p/q)` (collapses ~485→~44
+  leaves; the sibling `y''''−y==g[t]` clean-root case was already fast). Guarded off `t^(p/q)`
+  so the §2.2.25-2406 `t^(5/2) E^(-2t)` Simplify hang is never re-triggered. (2) **homogeneous-
+  linear-IVP zero-ladder → `y≡0`** (`dsolve_common.c`, `dsolve_fit_constants`) — a 4th-order
+  homogeneous IVP with an irreducible characteristic polynomial (2713) has a `Root[]`
+  fundamental set, so `Solve` bubbles on the Root-coefficient fit and the IVP kept its
+  constants (UNEVAL); when the conditions are the complete zero derivative-ladder `y^(k)(x0)==0`,
+  k=0..n-1, at one point, the unique solution is `y≡0` (set all constants to 0). Tight guard
+  (one condition per constant, all values literal 0, one point, order set `{0..n-1}`) excludes a
+  BVP (`y[0]==0,y[Pi]==0 → C[2] Sin[x]`) — verified it never turns a non-trivial answer to 0.
+  Regression: VoP is the shared nonhomogeneous backstop and the fit touches every IVP, so all
+  §2.1.2 + §2.2.1–27 gates re-run — all hold. Residue 14 (all systems): 8 nonlinear (2788–2795,
+  `sympy=False`) + 3×3 `E^t` (2785, `sympy=False`) + system arbitrary forcing (2708/2762/2780) +
+  system DiracDelta/UnitStep forcing (2781/2782) — deep systems-solver work, deferred.
+  Gate `dsolve_corpus_2_2_28_tests` baseline 14. v0.144→0.145.

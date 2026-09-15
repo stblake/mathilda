@@ -118,6 +118,13 @@ def fn_paren_to_bracket(s, name):
 
 def normalize_subscripts(tex):
     """x_{1} / x_1 -> x1 (valid Mathematica symbol; used by subscripted systems)."""
+    # An escaped/text-mode underscore (`\textit{f\_1}`, the author's inconsistent
+    # markup for a subscripted arbitrary forcing function) is the same subscript as
+    # `f_1` — fold `\_` to `_` first so the flattening below catches it (§2.2.28-2708).
+    # A strict no-op on input without `\_`; the Maple `\_F\d+` case still matches
+    # (its convert_side regex allows an optional bare `_`), so prior corpora are
+    # byte-identical.
+    tex = tex.replace(r'\_', '_')
     tex = re.sub(r'([A-Za-z])_\s*\{\s*([0-9]+)\s*\}', r'\1\2', tex)
     tex = re.sub(r'([A-Za-z])_\s*([0-9])', r'\1\2', tex)
     return tex
@@ -133,6 +140,15 @@ def detect_symbols(rows_tex):
         if re.search(r'(?<![A-Za-z])' + c + r'\s*\\left', joined) or \
            re.search(r'(?<![A-Za-z])' + c + r'\s*\(', joined):
             arbs.add(c)
+    # Subscripted arbitrary forcing functions `f_1(t)`, `f_2(t)`, `g_2(t)` — after
+    # normalize_subscripts these read as the symbols `f1`,`f2`,`g2`, which would parse
+    # as multiplication (`f1 t`) unless recognized as function heads.  The name may be
+    # wrapped in `\textit{...}` (the author's inconsistent markup) and applied with
+    # `\left(...\)` or a bare `(`.  Restricted to an arbfun letter + digits so a
+    # genuine coefficient symbol is never misread (§2.2.28-2708/2762/2780).
+    for m in re.finditer(
+            r'(?<![A-Za-z])(?:\\textit\s*\{\s*)?([fgh][0-9]+)\s*\}?\s*(?:\\left|\()', joined):
+        arbs.add(m.group(1))
     main_set = set(mains); indvar = None
     # The independent variable is chosen from the MAIN (non-condition) rows only, so
     # that parameters appearing solely in an initial condition (y(a)=b) never win, and
@@ -181,10 +197,14 @@ def detect_symbols(rows_tex):
 
 
 def _apply_arbfun(s, f, mains, indvar, protected):
-    out = ''; i = 0
+    # `f` is the arbitrary-function name — a single conventional letter (`f`/`g`/`h`)
+    # or a subscripted form (`f1`,`f2`,`g2`).  Match the whole name with letter
+    # boundaries on both sides; for a single-letter name this is byte-identical to the
+    # original single-char scan.
+    out = ''; i = 0; n = len(f)
     while i < len(s):
-        if s[i] == f and (i == 0 or not s[i - 1].isalpha()) and (i + 1 >= len(s) or not s[i + 1].isalpha()):
-            j = i + 1; primes = 0
+        if s[i:i + n] == f and (i == 0 or not s[i - 1].isalpha()) and (i + n >= len(s) or not s[i + n].isalpha()):
+            j = i + n; primes = 0
             m = re.match(r'\s*\^\s*\{\s*((?:\\prime\s*)+)\}', s[j:])
             if m: primes = m.group(1).count(r'\prime'); j += m.end()
             k = j
@@ -284,7 +304,7 @@ def convert_side(expr, mains, arbs, indvar):
     if 'i' not in mains and 'i' not in arbs and indvar != 'i':
         s = re.sub(r'(?<![A-Za-z0-9\\])i(?![A-Za-z0-9])', 'I', s)
     s = replace_frac(s); s = replace_sqrt(s)
-    for f in arbs: s = _apply_arbfun(s, f, mains, indvar, protected)
+    for f in sorted(arbs, key=len, reverse=True): s = _apply_arbfun(s, f, mains, indvar, protected)
     for f in sorted(mains, key=len, reverse=True):
         # y^{(n)} — parenthesized derivative-order notation for 5th+ order (the
         # \prime run becomes unwieldy): the n-th derivative, NOT y^n.  Must run

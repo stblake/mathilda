@@ -3593,3 +3593,22 @@ Two lessons from strengthening `src/solve/solverad.c`:
   `Cancel` each before the linear solve (never `Simplify` — hangs on radicals). A non-
   elementary integrating factor is exactly the case where the frozen symbol survives, since
   the elementary case collapses it away during evaluation.
+- **A "zero-IC → y≡0" IVP shortcut is UNSOUND without a homogeneity check — it shipped wrong
+  answers across 15 sections (M47/§2.2.28).** The intended win: a homogeneous linear IVP with
+  the complete zero derivative-ladder `y^(k)(x0)==0`, k=0..n−1, at one point has the unique
+  solution `y≡0` (nonsingular Wronskian ⇒ C=0), which closes an IVP whose fundamental set is a
+  `Root[]` object (irreducible characteristic poly, §2.2.28-2713) where `Solve` bubbles on the
+  Root-coefficient fit. The FIRST guard (one condition per constant, all values literal 0, one
+  point, order set {0..n−1}) looked airtight but MISSED that the body may be NONHOMOGENEOUS:
+  for `y''+y==t, y(0)=0, y'(0)=0` the general body is `t + C[1]Cos + C[2]Sin`, so zeroing the
+  constants leaves the particular `t` — which satisfies the ODE and `y(0)=0` but VIOLATES
+  `y'(0)=0` → verdict FAIL (a demonstrably-wrong answer). It broke every IVP-heavy section
+  (§2.2.1/4/6/8… first-order, which can't even reach higher-order VoP — the tell that it was
+  the fit path, not the VoP change). Fix: fire the shortcut only when the body with all
+  constants set to 0 is STRUCTURALLY 0 (`ds_is_structural_zero(body[C->0])`) — the exact
+  homogeneity test; a nonhomogeneous body ≠ 0 falls through to the ordinary fit. Meta-lesson:
+  a "shortcut answer" derived from an IC pattern must be checked against the BODY, not just the
+  conditions — and the full `ctest -R dsolve_corpus` regression (which found this) is
+  non-negotiable before landing a change to a SHARED path like `dsolve_fit_constants` (every
+  IVP) or `dsolve_variation_of_parameters` (every nonhomogeneous solve), even when the section
+  under test is green.

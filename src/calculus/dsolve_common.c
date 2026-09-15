@@ -733,6 +733,60 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
     if (npar == 0) return expr_copy((Expr*)body);
     const char* xvar = P->ind_names[0];
 
+    /* Trivial-solution fast path.  A homogeneous linear IVP whose conditions are the
+     * COMPLETE zero derivative-ladder y^(k)(x0)==0 for k=0..n-1 at a SINGLE base point
+     * has the unique solution y==0: the fundamental set's Wronskian at x0 is nonzero,
+     * so C=0 is forced.  Substituting every generated constant with 0 gives that
+     * answer directly.  This closes an IVP whose fundamental set is expressed with
+     * Root[] objects (an irreducible characteristic polynomial) — where Solve bubbles
+     * unevaluated on the Root-coefficient fit system and the IVP would otherwise score
+     * UNEVAL (§2.2.28-2713: r^4+4r^3+14r^2-20r+25 is irreducible over Q, all four ICs
+     * zero).  The guard is tight so it can never turn a genuine non-trivial answer to
+     * 0: it requires exactly one condition per constant, all values the literal 0, all
+     * at the same point, and the order set exactly {0,...,n-1} — a BVP (y[0]==0,
+     * y[Pi]==0 -> C[2] Sin[x], NOT 0; two order-0 conditions at DIFFERENT points) or
+     * any under/over-determined set fails the guard and falls through to the fit. */
+    if (P->ncond == npar) {
+        bool zero_ivp = true;
+        const Expr* pt0 = NULL;
+        bool* seen = calloc(npar, sizeof(bool));
+        for (size_t c = 0; c < P->ncond; c++) {
+            const DSolveCond* cd = &P->conds[c];
+            int ord = cd->order;
+            if (cd->fi != 0
+                || !(cd->value && cd->value->type == EXPR_INTEGER && cd->value->data.integer == 0)
+                || ord < 0 || (size_t)ord >= npar || seen[ord]) { zero_ivp = false; break; }
+            seen[ord] = true;
+            if (!pt0) pt0 = cd->point;
+            else if (!expr_eq((Expr*)pt0, cd->point)) { zero_ivp = false; break; }
+        }
+        free(seen);
+        if (zero_ivp) {
+            /* Set every constant to 0 and test the result.  y≡0 is the solution ONLY
+             * when the ODE is HOMOGENEOUS — i.e. the body is a pure C-combination of
+             * the fundamental set and so vanishes at C=0.  A NONHOMOGENEOUS body
+             * (y''+y==t, zero ICs: t + C[1]Cos + C[2]Sin) does NOT vanish, and its
+             * particular satisfies the ODE and y(x0)=0 but NOT the higher derivative
+             * ICs — returning it would be a wrong answer.  So take the shortcut only
+             * when the zeroed body is structurally 0; otherwise fall through to the
+             * ordinary constant-fit (params[] left intact via expr_copy above). */
+            Expr** rules = malloc(npar * sizeof(Expr*));
+            for (size_t k = 0; k < npar; k++)
+                rules[k] = expr_new_function(expr_new_symbol(SYM_Rule),
+                              (Expr*[]){ expr_copy(params[k]), expr_new_integer(0) }, 2);
+            Expr* rulelist = expr_new_function(expr_new_symbol(SYM_List), rules, npar);
+            free(rules);
+            Expr* zero_body = eval_and_free(internal_replace_all(
+                (Expr*[]){ expr_copy((Expr*)body), rulelist }, 2));
+            if (ds_is_structural_zero(zero_body)) {
+                for (size_t k = 0; k < npar; k++) expr_free(params[k]);
+                free(params);
+                return zero_body;
+            }
+            expr_free(zero_body);
+        }
+    }
+
     Expr** eqs = malloc(P->ncond * sizeof(Expr*));
     size_t neq = 0;
     /* A SeriesData body does not reduce under x->point (SeriesData[x0,x0,{a...}]
@@ -1323,6 +1377,31 @@ static bool ds_has_fractional_power(const Expr* e) {
     return false;
 }
 
+/* Like ds_has_fractional_power, but only a Power whose BASE contains the
+ * independent variable counts — a genuine `t^(p/q)` of the variable, the form
+ * Simplify hangs on (see ds_has_fractional_power).  A CONSTANT-base radical
+ * (`2^(-1/2)` in the exponent of `E^(t/Sqrt[2])`, the fundamental set of an
+ * irrational-root ODE like r^4+1=0) does NOT count: Simplify collapses those
+ * cheaply, so such an integrand is safe — and beneficial — to simplify. */
+static bool ds_has_var_fractional_power(const Expr* e, const char* xvar) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* ex   = e->data.function.args[1];
+        bool frac = (ex && ex->type == EXPR_FUNCTION && ex->data.function.head
+                     && ex->data.function.head->type == EXPR_SYMBOL
+                     && ex->data.function.head->data.symbol.name == SYM_Rational)
+                 || (ex && ex->type == EXPR_REAL && ex->data.real != floor(ex->data.real));
+        if (frac && ds_contains(base, xvar)) return true;
+    }
+    if (ds_has_var_fractional_power(h, xvar)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_var_fractional_power(e->data.function.args[i], xvar)) return true;
+    return false;
+}
+
 Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
                                      const Expr* leadcoef, const char* xvar) {
     Expr*** dv = malloc(n * sizeof(Expr**));
@@ -1371,6 +1450,15 @@ Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
                 Expr* uip = eval_and_free(ds_call2(SYM_Times, detWi,
                                 expr_new_function(expr_new_symbol(SYM_Power),
                                     (Expr*[]){ expr_copy(detW), expr_new_integer(-1) }, 2)));
+                /* Collapse an irrational-root fundamental set's radical exponentials
+                 * (E^(±t/Sqrt[2]) from r^4+1=0, §2.2.28-2719) before integrating: the
+                 * raw per-term integrand runs to hundreds of leaves and the integrator
+                 * churns seconds per term (four of them overrun the solve budget),
+                 * while the collapsed form is a few dozen leaves and integrates
+                 * instantly.  Guarded to a CONSTANT-base radical — a t^(p/q) forcing
+                 * (§2.2.25-2406) is left untouched (documented Simplify hang). */
+                if (ds_has_fractional_power(uip) && !ds_has_var_fractional_power(uip, xvar))
+                    uip = ds_simplify(uip);
                 Expr* ui = ds_integrate(uip, expr_new_symbol(xvar));
                 if (ds_has_head(ui, SYM_Integrate)) any_inert = true;
                 ut[i] = eval_and_free(ds_call2(SYM_Times, expr_copy(basis[i]), ui));

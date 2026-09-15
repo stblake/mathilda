@@ -4139,6 +4139,19 @@ add_test(NAME dsolve_corpus_2_2_27_tests
                  ../../DSolve_test_status/DE_examples_2227.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
+# Section 2.2.28 (Problems 2701-2800, Nasser Abbasi): 100 records, 18 scalar
+# (3 IVP), 82 systems -- a systems-heavy section: constant-coefficient linear
+# systems (2x2/3x3/4x4, homogeneous + E^t/trig/impulse/step-forced) plus 18
+# higher-order (3rd-6th) constant-coefficient scalar linear ODEs (homogeneous +
+# arbitrary-forcing VoP).  Baseline argv3 = the STATUS.md non-PASS count.
+# Residue 14 (all systems): 8 nonlinear systems (2788-2795, sympy=False, no
+# closed form) + 3x3 E^t (2785, sympy=False) + system arbitrary forcing f1[t]/
+# f2[t] (2708/2762/2780) + system DiracDelta/UnitStep forcing (2781/2782).
+add_test(NAME dsolve_corpus_2_2_28_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2228.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 14)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

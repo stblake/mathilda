@@ -1736,6 +1736,50 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     `(1−t²)y''+y'/Sin[1+t]+y==0` (`2641`, no closed form). All §2.2.x + §2.1.2 gates held; see the
     §2.2.27 block in `DSolve_test_status/STATUS.md`.
 
+- **M47 — §2.2.28 corpus (Problems 2701–2800, Nasser Abbasi) + radical-root VoP integrand
+  simplify + homogeneous zero-IVP shortcut.** ✅ DONE. A SYSTEMS-heavy section: 18 scalar
+  (3 IVP) + 82 systems — constant-coefficient linear systems (2×2/3×3/4×4, homogeneous +
+  `E^t`/trig/impulse/step forcing), 8 nonlinear systems (Lotka–Volterra / epidemic /
+  competition), and 18 higher-order (3rd–6th) constant-coefficient scalar linear ODEs
+  (homogeneous `_missing_x` + arbitrary-forcing `_missing_y`/VoP). Baseline **84/100, 0 FAIL,
+  0 crash** → **86/100, 0 FAIL, 0 crash** (scalars **18/18**) with two general root-cause fixes
+  and **0 regression**. New gate `dsolve_corpus_2_2_28_tests` (baseline 14). Version 0.144 → 0.145.
+  - **Converter — subscripted arbitrary forcing functions** (`tools/latex_ode_to_mathilda.py`).
+    The source's `f_1(t)`, `f_2(t)` (and the author's inconsistent text form `\textit{f\_1}(t)`)
+    normalise to the symbols `f1`,`f2` but were then read as multiplication (`f1 t`) — a fidelity
+    bug like §2.2.24's `t`-as-constant. Generalised the arbitrary-function detection/application
+    from single letters `f`/`g`/`h` to subscripted `[fgh][0-9]+` (and fold `\_`→`_`), so
+    `f1[t]`,`f2[t]` are emitted as genuine function applications (2708/2762/2780). Byte-identical
+    on prior LaTeXML sections (§2.2.27 regenerates identically).
+  - **Constant-base-radical VoP integrand simplify** (`dsolve_common.c`,
+    `dsolve_variation_of_parameters`). An irrational-root fundamental set — `y''''+y==g[t]`
+    (`2719`), roots `(±1±i)/√2`, basis `E^(±t/√2) Cos/Sin[t/√2]` — makes each per-term Cramer
+    integrand hundreds of leaves, so the integrator churns ~2 s/term and four terms overrun the
+    8 s solve budget (→ UNEVAL), while the sibling `y''''−y==g[t]` (`2718`, clean basis
+    `{E^t,E^-t,Cos,Sin}`) closes fast. Fix: `Simplify` the per-term integrand before integrating
+    **when it carries a constant-base radical** (`2^(-1/2)` in the exponent) and **no** `t^(p/q)`
+    of the variable (collapses ~485 → ~44 leaves; the inert convolution integral then closes
+    instantly). New `ds_has_var_fractional_power` distinguishes the safe constant-base radical
+    from the documented `t^(5/2) E^(-2t)` Simplify hang (§2.2.25-`2406`), which is left untouched;
+    a clean-root VoP has no fractional power and is byte-identical.
+  - **Homogeneous-linear-IVP zero-ladder → `y≡0`** (`dsolve_common.c`, `dsolve_fit_constants`).
+    A 4th-order homogeneous IVP with an *irreducible* characteristic polynomial (`2713`:
+    `r⁴+4r³+14r²−20r+25`, irreducible over ℚ) has a `Root[]`-object fundamental set; `Solve`
+    bubbles unevaluated on the Root-coefficient constant-fit system, so the IVP kept its
+    constants → UNEVAL. But the conditions are the **complete** zero derivative-ladder
+    `y^(k)(x0)==0`, k=0..n−1, at a single point — a well-posed IVP whose unique solution is
+    `y≡0` (nonsingular Wronskian forces `C=0`). Fix: substitute every generated constant with 0
+    under a tight guard (one condition per constant, all values the literal 0, one base point,
+    order set exactly `{0..n−1}`), which excludes a BVP (`y[0]==0, y[Pi]==0 → C[2] Sin[x]`) and
+    any under/over-determined set, so it can never turn a genuine non-trivial answer to 0.
+  - **Residue 14** (all systems, no scalar gap; `sympySolved=False` where noted): 8 nonlinear
+    systems `2788`–`2795` (Lotka–Volterra / epidemic / competition, no closed form), the 3×3
+    `E^t` system `2785` (`sympy=False`), system arbitrary forcing `f1[t]`/`f2[t]`
+    (`2708`/`2762`/`2780`, needs system-level VoP over arbitrary functions), and system
+    DiracDelta/UnitStep forcing (`2781`/`2782`, needs the systems Laplace/Green's path) — deep
+    systems-solver work, deferred. All §2.2.x + §2.1.2 gates held; see the §2.2.28 block in
+    `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
