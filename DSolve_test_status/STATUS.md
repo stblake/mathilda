@@ -1395,6 +1395,63 @@ Full per-case results: `reports/2.2.29.tsv`; bucketed report: `reports/2.2.29.md
 
 ---
 
+## Section 2.2.30 — "Problems 2901 to 3000" (Nasser Abbasi)
+
+Corpus: `DE_examples_2230.m` — 100 records, **100 scalar (24 IVP), 0 systems**.
+An all-first-order section: a large homogeneous class A/C/G + Abel(2nd type) +
+rational + Bernoulli + linear + exact + separable block, plus a handful of
+symmetry / dAlembert cases. Solved entirely by the first-order stack.
+`ctest -R dsolve_corpus_2_2_30_tests` · gate baseline **7**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-16 (M49) | **93 / 100** | **93.0%** | **7** | **0 FAIL, 0 crash.** One general **converter** fix (Greek-letter variables) landed the clean corpus; one general **solver** fix (inverse-hyperbolic integrating factor) flipped 2980 (linear) from a spin-to-timeout to PASS. Gate baseline **7**. |
+
+**M49 — one general converter fix + one general solver fix**, each verified 0-regression:
+
+1. **Greek-letter macro as a first-class variable** (`tools/latex_ode_to_mathilda.py`).
+   Four records use `θ` (`\theta`) as an actual variable, which the single-letter
+   (`[A-Za-z]`) symbol-detection layer could not see: 2972/2973/2992 are `dr/dθ` ODEs
+   (θ is the **independent** variable — the converter defaulted the indvar to `x` and
+   read θ as a constant), and 2984 is `sin(θ)·θ'(t)+… = 0` (θ is the **dependent**
+   function of `t` — the derivative `\theta^{\prime}` mangled to a literal `^(prime)`
+   power and the function list defaulted to a fallback letter). The fix makes a Greek
+   macro a first-class name in detection: (a) primed-symbol detection recognises it as
+   a dependent variable; (b) a lone present Greek letter is adopted as the independent
+   variable **only for a first-order ODE** — the essential gate, so a 2nd-order
+   autonomous eigenvalue problem `y''+λy=0` (§2.2.29-2834ff, `_missing_x`) keeps `λ` as
+   a parameter and a fresh `x` as indvar; (c) `convert_side` canonicalises Greek
+   *variable* macros to their ASCII name before the derivative pass; (d) the
+   placeholder-expansion accepts multi-character identifiers. Verified byte-identical:
+   OLD-vs-NEW converter on the same fetched HTML for **all** of §2.2.20–§2.2.29
+   (IDENTICAL), and §2.1.2's arbitrary-function `detect_symbols` unchanged (direct
+   comparison). The only Greek variable names anywhere in the corpus are these four
+   new records.
+
+2. **Inverse-hyperbolic integrating factor** (`dsolve_linear_factor_solve`,
+   `src/calculus/dsolve_common.c`). 2980 is the *linear* ODE
+   `(x²−1)y'+4y = −(x²−1)²`, whose integrating factor is `μ = Exp[∫4/(x²−1)dx] =
+   Exp[−4 ArcTanh[x]]`. `Simplify`/`PowerExpand` (the existing IF cleanup, tuned for the
+   trig `Tan→Sec` case) leave `Exp[c ArcTanh]` intact, so `Integrate[μ q]` spun past
+   the 8 s harness bound → UNEVAL. Fix: when the IF still carries an ArcTanh/ArcCoth
+   factor (and no ArcTan/ArcSin/ArcCos, which rationalise to *complex* powers),
+   `TrigToExp` rewrites the inverse hyperbolics to Logs and `Simplify` collapses
+   `Exp[…]` to the real algebraic `(x−1)^a(x+1)^b`, after which the `μ q` integral is
+   elementary. The general solution and the `y[0]=−6` IVP fit both verify by
+   back-substitution (residual 0). Gated so every trig / polynomial-exponent IF the
+   pipeline already handled is byte-identical.
+
+Residue 7: **4 `sympy=False`** with no elementary closed form (2923/2944/2948/2955);
+and **3 deferred `sympy=True` gaps** — 2933 (dAlembert with a non-elementary
+intermediate integral, `Integrate::nonelem`), 2970 (`_with_symmetry_[F(x)*G(y),0]`
+Lie-symmetry case, DSolve spins to the harness bound), and 2979 (DSolve returns the
+correct 4-branch nested-radical general solution but the IVP fitter cannot fit
+`y[2]=−1` across the radical branches). All are honest UNEVAL, not wrong answers.
+
+Full per-case results: `reports/2.2.30.tsv`; bucketed report: `reports/2.2.30.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -1739,3 +1796,25 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   elliptic-integral implicit solution, DSolve times out at 8 s — deferred). All prior gates
   (§2.1.2 + §2.2.1–28) re-run — all hold. Gate `dsolve_corpus_2_2_29_tests` baseline 12.
   v0.145→0.146.
+- **M49 (2026-09-16)** — §2.2.30 (Problems 2901–3000) corpus, **93/100, 0 FAIL, 0 crash**.
+  An all-first-order section (100 scalar, 24 IVP, 0 systems): a large homogeneous class
+  A/C/G + Abel(2nd type) + rational + Bernoulli + linear + exact + separable block, plus
+  symmetry/dAlembert cases. Two general root-cause fixes, each verified 0-regression.
+  (1) **Greek-letter macro as a first-class variable** (`tools/latex_ode_to_mathilda.py`):
+  the single-letter symbol-detection layer could not see `θ` as a variable, so 2972/2973/2992
+  (`dr/dθ`, θ the *independent* variable) defaulted the indvar to `x` with θ read as a constant,
+  and 2984 (`sin(θ)·θ'(t)+…=0`, θ the *dependent* function) mangled the derivative to a literal
+  `^(prime)`. Fix makes a Greek macro a first-class name: primed-detection recognises a Greek
+  dependent variable; a lone present Greek letter is adopted as indvar **only for first-order**
+  ODEs (so §2.2.29-2834ff `y''+λy=0` keep `λ` a parameter — the essential gate); `convert_side`
+  canonicalises Greek *variable* macros before the derivative pass; placeholder-expansion accepts
+  multi-char identifiers. Byte-identical: OLD-vs-NEW converter on the same HTML for **all**
+  §2.2.20–§2.2.29 (IDENTICAL) and §2.1.2 `detect_symbols` unchanged. (2) **inverse-hyperbolic
+  integrating factor** (`dsolve_linear_factor_solve`): 2980 is the linear ODE
+  `(x²−1)y'+4y=−(x²−1)²`, μ=`Exp[−4 ArcTanh[x]]`; `Simplify`/`PowerExpand` leave `Exp[c ArcTanh]`
+  intact so `Integrate[μ q]` spun to the 8 s bound. Gated `TrigToExp` rationalisation collapses it
+  to the real algebraic `(x−1)^a(x+1)^b` (general + `y[0]=−6` IVP both verify by back-substitution),
+  leaving every trig/polynomial-exponent IF byte-identical. Residue 7: 4 `sympy=False`
+  (2923/2944/2948/2955), + 3 deferred `sympy=True` (2933 dAlembert non-elementary integral, 2970
+  Lie symmetry, 2979 IVP fit over 4 nested-radical branches). All prior gates (§2.1.2 + §2.2.1–29)
+  re-run — all hold. Gate `dsolve_corpus_2_2_30_tests` baseline 7. v0.146→0.147.

@@ -3653,3 +3653,52 @@ derivative-count checker; grep for letter-glued function heads `[a-z](Sqrt|Sin|�
 - A general converter fix legitimately corrects *latent* wrong records in prior sections; when it
   does, regenerate those sections, confirm the diff is EXACTLY the intended correction, and re-check
   their gate baselines (2360/2536 stayed PASS → baselines unchanged).
+
+---
+
+## M49 (§2.2.30) — Greek-letter variables in the converter + inverse-hyperbolic integrating factor
+
+Two general fixes; both examples of the same discipline: a spot-audit caught a *silent
+wrong-equation* the harness would have dutifully scored, and a hang-to-UNEVAL was a fixable
+solver defect, not a genuine no-closed-form gap.
+
+**1. Greek-letter macro must be a first-class variable in the converter.** The whole
+symbol-detection layer of `latex_ode_to_mathilda.py` assumed single-letter (`[A-Za-z]`) variable
+names, so `θ` (`\theta`, kept in backslash form through `_implicit_mult` as a protected macro and
+canonicalised late) was invisible as a variable:
+- 2972/2973/2992 are `dr/dθ` ODEs — θ the INDEPENDENT variable — mis-read with indvar `x` and θ as
+  a constant (a solvable but WRONG equation, a false-PASS risk).
+- 2984 is `sin(θ)·θ'(t)+…=0` — θ the DEPENDENT function of `t` — whose derivative `\theta^{\prime}`
+  mangled to a literal `^(prime)` power, function list defaulting to a fallback letter.
+The fix has four coordinated parts (all strict no-ops unless a Greek letter is actually a variable):
+(a) primed-symbol detection recognises a Greek macro as a dependent variable (`NAME_RE` alternation
++ `_canon_sym`); (b) a lone present Greek letter is adopted as the independent variable **only for a
+first-order ODE** — THE ESSENTIAL GATE: without it, a 2nd-order autonomous eigenvalue problem
+`y''+λy=0` (§2.2.29-2834ff, `_missing_x`) wrongly promotes the eigenvalue `λ` to the indvar (this
+regression was caught by the byte-identity sweep, NOT by reasoning — see below); (c) `convert_side`
+canonicalises Greek *variable* macros to ASCII before the mains/derivative pass (the general GREEK
+sub at the end runs too late for the derivative pass to see them); (d) the placeholder-expansion
+regex must accept multi-character identifiers (`[A-Za-z][A-Za-z0-9]*`, not `[A-Za-z][0-9]*`), or the
+multi-char `theta` placeholder survives unexpanded as `theta 0` / `theta 1`.
+
+**The byte-identity sweep is not optional and it earns its keep.** My first cut of (b) adopted ANY
+lone present Greek letter as indvar; the OLD-vs-NEW-converter-on-same-HTML diff of §2.2.29
+immediately flagged 2834–2839 flipping `y''[x]+lam y[x]==0, y, x` → `y''[lam]+lam y[lam]==0, y, lam`.
+The OLD converter was "correct" there only because it was BLIND to Greek letters; my fix exposed a
+latent over-eagerness (the same single-non-main-letter rule already has this shape for Latin
+letters). The first-order gate is the fix. Lesson: when generalising a detection heuristic, run the
+full OLD-vs-NEW sweep across every regenerable prior section — reasoning about "it's a no-op" is not
+proof; the diff is.
+
+**2. A hang-to-UNEVAL in a LINEAR ODE is a fixable defect, not a gap.** 2980 `(x²−1)y'+4y=−(x²−1)²`
+is linear, `sympy=True`, yet UNEVAL. Isolation (each integrating-factor piece computed separately)
+showed the integrals are all fast; the hang was `Integrate[μ q]` with `μ=Exp[−4 ArcTanh[x]]` left
+un-rationalised. `dsolve_linear_factor_solve` already did `PowerExpand[Simplify[μ]]` (tuned for the
+trig `Tan→Sec` case), but `Simplify` alone does NOT collapse `Exp[c ArcTanh[x]]` — it needs
+`TrigToExp` to rewrite the inverse hyperbolics to Logs first, after which `Simplify` gives the real
+algebraic `(x−1)^a(x+1)^b`. Fix gated to `ArcTanh`/`ArcCoth` present and `ArcTan`/`ArcSin`/`ArcCos`
+absent (those rationalise to COMPLEX powers `(1−Ix)^I` — not simpler, and could derail a working
+ArcTan-IF case). Empirically validated the transform on 8 representative μ (trig, polynomial,
+inverse) BEFORE touching C — only case 1 (ArcTanh) changed, everything else byte-identical — and
+simulated the full linear solve in the REPL (general + IVP both residual 0) before the C edit.
+`ds_contains` uses exact interned-pointer matching, so `ArcTanh` ≠ `ArcTan` (no substring hazard).

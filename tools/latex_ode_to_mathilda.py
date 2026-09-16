@@ -42,6 +42,18 @@ INDVAR_PREF = ['x', 't', 'z', 's', 'r', 'u', 'v']
 # \operatorname{Name} heads that map to a Mathilda builtin under a different name.
 # Maple's Heaviside is Mathilda's UnitStep (Mathilda has no HeavisideTheta head).
 OPNAME_RENAME = {'Heaviside': 'UnitStep'}
+# A variable NAME for symbol detection is either a single letter (+digits) or a
+# Greek-letter macro (`\theta`), which the detection layer must treat as one atomic
+# variable — the dependent function of a `\theta'` ODE (§2.2.30-2984) or the
+# independent variable of a `dr/d\theta` ODE (§2.2.30-2972/2973/2992).  The macros
+# are kept in their backslash form through _implicit_mult (protected as macros) and
+# canonicalised to their ASCII name late, so these helpers let detection see them as
+# the single tokens they denote.  `\pi`-as-Pi is the constant, never a variable.
+GREEK_ALT = '|'.join(re.escape(k) for k in sorted(GREEK, key=len, reverse=True))
+NAME_RE = r'(?:' + GREEK_ALT + r')|[A-Za-z][0-9]*'
+GREEK_CONST = {'Pi'}
+def _canon_sym(tok):
+    return GREEK.get(tok, tok)      # '\theta' -> 'theta'; 'r' -> 'r'
 
 
 def strip_array(tex):
@@ -143,7 +155,8 @@ def normalize_subscripts(tex):
 
 def detect_symbols(rows_tex):
     joined = ' '.join(rows_tex)
-    primed = set(re.findall(r'([A-Za-z][0-9]*)\s*\^\s*\{\s*(?:\\prime\s*)+\}', joined))
+    primed = set(_canon_sym(m) for m in re.findall(
+        r'(' + NAME_RE + r')\s*\^\s*\{\s*(?:\\prime\s*)+\}', joined))
     # A symbol that HEADS its own derivative row (`h^{\prime}&=-2z`, a system's
     # dependent variable) is a main even when its letter is a conventional
     # arbitrary-function letter (`h`, §2.2.29-2806/2807 — 4-variable linear systems
@@ -205,13 +218,28 @@ def detect_symbols(rows_tex):
         # letter, and the bare `i` is mapped to the imaginary unit `I` in convert_side.
         cands = [c for c in sorted(set(present))
                  if c not in main_set and c not in ARBFUN and c not in ('e', 'i', 'I')]
+        # A Greek-letter macro present as a non-dependent variable is the independent
+        # variable of a FIRST-order `dr/d\theta` ODE (§2.2.30-2972/2973/2992) — treat
+        # it exactly like a lone swapped-variable Latin letter.  The first-order gate
+        # is essential: in an autonomous SECOND-order eigenvalue problem
+        # `y''+\lambda y=0` (§2.2.29-2834ff, classified `_missing_x`) the lone Greek
+        # letter is a PARAMETER (the eigenvalue/frequency) and the independent
+        # variable is a fresh standard letter, not `\lambda`.  `\pi`-as-Pi (the
+        # constant) is excluded.  Strict no-op when no Greek variable is present, so
+        # Greek-free sections regenerate byte-identically.
+        max_order = max([0] + [g.count(r'\prime')
+                               for g in re.findall(r'\^\s*\{\s*((?:\\prime\s*)+)\}', mjoined)]
+                        + [int(n) for n in re.findall(r'\^\s*\{\s*\(\s*([0-9]+)\s*\)\s*\}', mjoined)])
+        gcands = sorted({GREEK[k] for k in GREEK
+                         if re.search(re.escape(k) + r'(?![A-Za-z])', mjoined)}
+                        - main_set - set(arbs) - GREEK_CONST) if max_order <= 1 else []
         # A LONE non-standard letter is the genuine swapped-variable indep var
         # (`dx/dy=f(x,y)` → `y`).  TWO OR MORE are parameters of an autonomous ODE
         # (`y'=k(a-y)(b-y)`, §2.2.25-2498): picking the alphabetically-first (`a`)
         # invents a spurious `dy/da` Riccati that DSolve cannot close — fall through
         # to a fresh standard letter (`x`) instead, the intended quadrature reading.
-        if len(cands) == 1:
-            indvar = cands[0]
+        if len(cands) + len(gcands) == 1:
+            indvar = (cands + gcands)[0]
     if indvar is None:                                   # autonomous: fresh standard letter
         for cand in INDVAR_PREF:
             if cand not in main_set: indvar = cand; break
@@ -337,6 +365,18 @@ def convert_side(expr, mains, arbs, indvar):
     if 'i' not in mains and 'i' not in arbs and indvar != 'i':
         s = re.sub(r'(?<![A-Za-z0-9\\])i(?![A-Za-z0-9])', 'I', s)
     s = replace_frac(s); s = replace_sqrt(s)
+    # Canonicalise the Greek-letter macros that name a VARIABLE (the independent
+    # variable, a dependent function, or an arbitrary function) to their ASCII name
+    # now — before the arbfun/mains derivative passes below — so a Greek dependent
+    # variable's derivative `\theta^{\prime}` and its bare occurrences convert like
+    # any Latin main (§2.2.30-2984) and a Greek independent variable prints cleanly
+    # (§2.2.30-2972/2973/2992).  Greek letters used only as PARAMETERS keep their
+    # backslash form until the general GREEK pass below, so this is a strict no-op
+    # for a section with no Greek variable (prior corpora byte-identical).
+    var_names = set(mains) | set(arbs) | {indvar}
+    for k in sorted(GREEK, key=len, reverse=True):
+        if GREEK[k] in var_names:
+            s = re.sub(re.escape(k) + r'(?![A-Za-z])', GREEK[k], s)
     for f in sorted(arbs, key=len, reverse=True): s = _apply_arbfun(s, f, mains, indvar, protected)
     for f in sorted(mains, key=len, reverse=True):
         # y^{(n)} — parenthesized derivative-order notation for 5th+ order (the
@@ -358,7 +398,7 @@ def convert_side(expr, mains, arbs, indvar):
     for k in sorted(GREEK, key=len, reverse=True): s = re.sub(re.escape(k) + r'(?![A-Za-z])', GREEK[k], s)
     s = re.sub(r'\\([A-Za-z]+)', r'\1', s)
     s = s.replace('{', '(').replace('}', ')')
-    s = re.sub('\x00([A-Za-z][0-9]*)\x00([0-9]+)\x00',
+    s = re.sub('\x00([A-Za-z][A-Za-z0-9]*)\x00([0-9]+)\x00',
                lambda m: m.group(1) + ("'" * int(m.group(2))) + '[' + indvar + ']', s)
     for h in (set(FUNCS.values()) | {'Sqrt', 'Exp', 'DiracDelta'} | extra): s = fn_paren_to_bracket(s, h)
     for idx, val in enumerate(protected): s = s.replace('\x07%d\x07' % idx, val)

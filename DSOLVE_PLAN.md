@@ -1825,6 +1825,43 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     — deep elliptic-ODE work, deferred). All §2.2.x + §2.1.2 gates held; see the §2.2.29 block in
     `DSolve_test_status/STATUS.md`.
 
+- **M49 — §2.2.30 corpus (Problems 2901–3000, Nasser Abbasi) + Greek-variable converter fix +
+  inverse-hyperbolic integrating-factor solver fix.** ✅ DONE. An all-first-order section: 100
+  scalar (24 IVP), 0 systems — a large homogeneous class A/C/G + Abel(2nd type) + rational +
+  Bernoulli + linear + exact + separable block, plus symmetry / dAlembert cases. Baseline
+  **93/100, 0 FAIL, 0 crash**. Two general root-cause fixes, each verified 0-regression. New gate
+  `dsolve_corpus_2_2_30_tests` (baseline 7). Version 0.146 → 0.147.
+  - **Greek-letter macro as a first-class variable** (`latex_ode_to_mathilda.py`). The
+    single-letter (`[A-Za-z]`) symbol-detection layer could not see `θ` (`\theta`) as a variable.
+    2972/2973/2992 are `dr/dθ` ODEs — θ the **independent** variable — so the converter defaulted
+    the indvar to `x` and read θ as a constant; 2984 is `sin(θ)·θ'(t)+…=0` — θ the **dependent**
+    function of `t` — so the derivative `\theta^{\prime}` mangled to a literal `^(prime)` power and
+    the function list defaulted to a fallback letter. Fix, four coordinated parts: (a) primed-symbol
+    detection recognises a Greek macro as a dependent variable (`NAME_RE`); (b) a lone present Greek
+    letter is adopted as the independent variable **only for a first-order ODE** — the essential
+    gate, so an autonomous 2nd-order eigenvalue problem `y''+λy=0` (§2.2.29-2834ff, `_missing_x`)
+    keeps `λ` a parameter and a fresh `x` as indvar; (c) `convert_side` canonicalises Greek
+    *variable* macros to ASCII before the mains/derivative pass; (d) placeholder-expansion accepts
+    multi-character identifiers. **Byte-identical** verification: OLD-vs-NEW converter on the same
+    fetched HTML for all of §2.2.20–§2.2.29 (IDENTICAL) and §2.1.2's arbitrary-function
+    `detect_symbols` (direct comparison) — the only Greek variable names anywhere in the corpus are
+    the four new records.
+  - **Inverse-hyperbolic integrating factor** (`dsolve_linear_factor_solve`,
+    `src/calculus/dsolve_common.c`). 2980 is the *linear* ODE `(x²−1)y'+4y=−(x²−1)²`, whose
+    integrating factor is `μ=Exp[∫4/(x²−1)dx]=Exp[−4 ArcTanh[x]]`. The existing IF cleanup
+    (`PowerExpand[Simplify[μ]]`, tuned for the trig `Tan→Sec` case) leaves `Exp[c ArcTanh]` intact,
+    so `Integrate[μ q]` spun past the 8 s harness bound → UNEVAL. Fix: when the IF still carries an
+    `ArcTanh`/`ArcCoth` factor **and** no `ArcTan`/`ArcSin`/`ArcCos` (those rationalise to *complex*
+    powers, not simpler), `TrigToExp` rewrites the inverse hyperbolics to Logs and `Simplify`
+    collapses `Exp[…]` to the real algebraic `(x−1)^a(x+1)^b`, after which the `μ q` integral is
+    elementary. General solution + `y[0]=−6` IVP both verify by back-substitution (residual 0);
+    every trig / polynomial-exponent IF the pipeline already handled is byte-identical.
+  - **Residue 7**: 4 `sympy=False` with no elementary closed form (`2923`/`2944`/`2948`/`2955`);
+    3 deferred `sympy=True` gaps — `2933` (dAlembert with a non-elementary intermediate integral),
+    `2970` (`_with_symmetry_[F(x)*G(y),0]` Lie-symmetry case, DSolve spins to the bound), `2979`
+    (correct 4-branch nested-radical general solution, but IVP fit over the radical branches fails).
+    All §2.2.x + §2.1.2 gates held; see the §2.2.30 block in `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

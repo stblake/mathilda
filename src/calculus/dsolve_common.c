@@ -2305,6 +2305,29 @@ Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
      * nonzero constant/branch and the final solution is verified by
      * back-substitution, so choosing a branch here is sound. */
     mu = eval_and_free(ds_call1("PowerExpand", ds_simplify(mu)));
+    /* Rationalise an inverse-hyperbolic integrating factor.  Integrating a rational
+     * p with a real quadratic denominator produces ArcTanh/ArcCoth terms
+     * (Integrate[4/(x^2-1),x] == -4 ArcTanh[x], §2.2.30-2980), and Simplify /
+     * PowerExpand leave Exp[c ArcTanh[x]] intact — so Integrate[mu q] below spins on
+     * the transcendental integrand.  TrigToExp rewrites the inverse hyperbolics to
+     * Logs, after which Simplify collapses Exp[...] to a REAL algebraic
+     * (x-1)^a (x+1)^b that integrates in closed form.  Gated to an ArcTanh/ArcCoth
+     * factor with no ArcTan/ArcSin/ArcCos present: those rationalise to COMPLEX powers
+     * ((1-I x)^I …), which are not simpler and could derail an ArcTan integrating
+     * factor the current pipeline already handles.  So every trig / polynomial-exponent
+     * integrating factor stays byte-identical; only the stuck inverse-hyperbolic case
+     * changes, and the final solution is verified by back-substitution regardless. */
+    if ((ds_contains(mu, intern_symbol("ArcTanh")) || ds_contains(mu, intern_symbol("ArcCoth")))
+        && !ds_contains(mu, intern_symbol("ArcTan"))
+        && !ds_contains(mu, intern_symbol("ArcSin"))
+        && !ds_contains(mu, intern_symbol("ArcCos"))) {
+        Expr* mu2 = eval_and_free(ds_call1("PowerExpand",
+                        ds_simplify(eval_and_free(ds_call1("TrigToExp", expr_copy(mu))))));
+        if (!ds_contains(mu2, intern_symbol("ArcTanh")) && !ds_contains(mu2, intern_symbol("ArcCoth")))
+            { expr_free(mu); mu = mu2; }
+        else
+            expr_free(mu2);
+    }
     Expr* integrand = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), Qcoef)); /* consumes Qcoef */
     Expr* Qint = ds_integrate(integrand, expr_new_symbol(xvar));
     g_integrate_quiet--;

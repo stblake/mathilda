@@ -4182,6 +4182,26 @@ add_test(NAME dsolve_corpus_2_2_29_tests
                  ../../DSolve_test_status/DE_examples_2229.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 12)
 
+# DSolve corpus regression gate: Nasser Abbasi's ODE collection, section 2.2.30
+# (Problems 2901-3000, 12000.org).  100 scalar first-order ODEs (24 IVPs, 0 systems):
+# a large homogeneous class A/C/G + Abel + rational + Bernoulli + linear + exact +
+# separable block, plus symmetry/dAlembert cases.  Solved across the first-order
+# stack.  Baseline argv3 = the STATUS.md non-PASS count (7).  Two general fixes
+# landed with this section: (1) latex_ode_to_mathilda.py now treats a Greek-letter
+# macro (\theta) as a first-class VARIABLE -- the independent variable of a
+# dr/d\theta ODE (2972/2973/2992) or a dependent function \theta'(t) (2984) -- gated
+# to first-order for the indvar case so 2nd-order eigenvalue \lambda parameters
+# (2.2.29-2834ff) are byte-identical; (2) dsolve_linear_factor_solve rationalises an
+# inverse-hyperbolic integrating factor Exp[c ArcTanh[x]] via TrigToExp before the
+# mu*q integral (2980 linear ODE previously spun to the 8 s bound).  Residue 7:
+# 4 sympySolved=False (2923/2944/2948/2955, no elementary closed form) + 3 deferred
+# sympy=True gaps (2933 dAlembert non-elementary intermediate integral, 2970 Lie
+# symmetry, 2979 IVP fit over 4 nested-radical branches).
+add_test(NAME dsolve_corpus_2_2_30_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2230.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the
