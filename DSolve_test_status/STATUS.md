@@ -1452,6 +1452,87 @@ Full per-case results: `reports/2.2.30.tsv`; bucketed report: `reports/2.2.30.md
 
 ---
 
+## Section 2.2.31 — "Problems 3001 to 3100" (Nasser Abbasi)
+
+Corpus: `DE_examples_2231.m` — 100 records, **100 scalar (20 IVP), 0 systems**.
+Two blocks: a first-order block (3001–3056 — homogeneous class A/C/G +
+Abel(2nd type) + rational + Bernoulli + linear + exact + separable) and a
+constant-coefficient **linear** block (3057–3100 — 2nd/3rd/high-order missing-x +
+quadrature). Solved by the first-order stack and `LinearConstantCoefficients`.
+`ctest -R dsolve_corpus_2_2_31_tests` · gate baseline **1**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-16 (M50) | **99 / 100** | **99.0%** | **1** | **0 FAIL, 0 crash.** One general **harness** fix (numeric verifier now numericizes the sample point with a high-precision real instead of an exact rational) flipped 3043 from a spurious spin-to-timeout to PASS. No solver change needed — the section solves out of the box. Gate baseline **1**. |
+
+**M50 — one general harness (verifier) fix**, verified 0-regression:
+
+1. **Real-valued sample point in the numeric back-substitution verifier**
+   (`dsolve_corpus_prelude.m`, `dsResidVerdict`). 3043 (`y'x = 2y + 2x⁴y³`, `y[1]=1`)
+   is solved instantly and correctly by DSolve (`y = 1/√((3/2 − x⁸/2)/x⁴)`, residual
+   `Simplify`s to 0, IC fits), yet it scored a spurious **UNEVAL**: the verifier
+   substituted an **exact rational** sample point into the radical residual, forming
+   `(hugeRational)^(3/2)` whose square-factor extraction factors a ~20-digit integer
+   and hung `Power` for minutes (at sweep points x = 193/130, 243/130 the exact
+   substitution never returned; the per-case fork alarm then scored it non-PASS). The
+   fix substitutes a high-**precision real** for the independent variable — `resid /.
+   iv -> N[pt, 24]` (and `N[pt, 210]` on the high-precision escalation tier) — so every
+   power is a fast floating power. The verifier's job is *numeric* back-substitution,
+   so it must numericize the point, not do exact radical algebra; the residual itself
+   stays symbolic, so the two-tier catastrophic-cancellation robustness (eigenvalue-64
+   systems, `2.2.11-1001`) is preserved. General across every section: any
+   homogeneous/Bernoulli/radical closed form carries `(P(x))^(3/2)` factors.
+
+Residue 1: **3049** (`3xy + (3x²+y²)y' = 0`, `y[0]=1`) — DSolve returns the correct
+4-branch homogeneous general solution, but every explicit radical branch factors `x`
+(so `y(0)=0` structurally) and the IVP fitter cannot fit `y[0]=1`; the clean IVP
+answer is the *implicit* first integral `y⁴+6x²y² = 1`. Same deferred class as
+`2.2.30-2979` (explicit homogeneous branches degenerate at the IC point). Honest
+UNEVAL, not a wrong answer.
+
+Full per-case results: `reports/2.2.31.tsv`; bucketed report: `reports/2.2.31.md`.
+
+---
+
+## Section 2.2.32 — "Problems 3101 to 3200" (Nasser Abbasi)
+
+Corpus: `DE_examples_2232.m` — 100 records, **100 scalar (8 IVP), 0 systems**.
+Entirely constant-coefficient **linear** ODEs: 2nd/3rd/high-order nonhomogeneous
+with polynomial / exponential / sinusoid forcing + resonance, plus variation-of-
+parameters-only forcing (`Sec`, `Tan`, `Csc`, `Log`). Solved by
+`UndeterminedCoefficients` + `LinearConstantCoefficients` (VoP).
+`ctest -R dsolve_corpus_2_2_32_tests` · gate baseline **4**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-16 (M51) | **96 / 100** | **96.0%** | **4** | **0 FAIL (as measured), 0 crash.** No solver change — the section solves out of the box. Residue: one masked-WRONG symbolic-coefficient case (3155) whose straightforward fix regresses §2.1.2 (deferred), one cold-timeout (3165), two timing-flaky VoP cases (3161/3164). Gate baseline **4**. |
+
+**M51 — measured, no solver change** (a solver fix was investigated and **reverted** as a net regression):
+
+Every case in the section is a constant-coefficient linear ODE solved by
+`UndeterminedCoefficients` / `LinearConstantCoefficients` (VoP). The four non-PASS cases:
+
+- **3155** (`y''+a²y==Sec[a x]`) — a **masked WRONG answer**. For a symbolic coefficient
+  `dsolve_homog_basis` realifies the complex roots `±√(-a²)` to `Exp[Re x](Cos,Sin)[Im x]`,
+  but `Re`/`Im` do not resolve to explicit reals (`ComplexExpand[Re[-½√(-4a²)]]` leaves
+  `Arg[-4a²]`/`(a⁴)^(1/4)`), so the basis does not back-substitute and the VoP particular is
+  wrong — DSolve returns `Sec[a x]/a² + Re/Im` mush (a genuine wrong answer at the REPL for
+  the whole `y''+(symbol)²y` class, only *masked* as UNEVAL in the corpus by the verifier's
+  leaked-`C[k]` rule). **Deferred:** a complex-**exponential** basis `Exp[r x]` for the
+  symbolic case is mathematically correct (back-substitutes exactly) and was implemented, but
+  the `√(-a²)`-laden exponential form slows the 2nd-order cascade **past the 8 s cold budget on
+  13 symbolic-coefficient §2.1.2 cases** (58/439/877/878/… Pöschl-Teller, shifted-Euler,
+  exponential-potential) — a net regression — so it was reverted. See the M51 note in
+  `src/calculus/dsolve_common.c`; a narrower fix that does not add cascade latency is future work.
+- **3165** (`y''+y==Tan[x/3]²`) — correct VoP solution, but the cold `DSolve` exceeds the 8 s
+  per-case bound (the `Tan²` VoP integral is expensive); it solves warm.
+- **3161** (`y''+4y==Sec[x]Tan[x]`) and **3164** (`y''+9y==Csc[2x]`) — correct VoP solutions
+  whose cold solve sits right at the 8 s bound; timing-sensitive (PASS under light load).
+
+Full per-case results: `reports/2.2.32.tsv`; bucketed report: `reports/2.2.32.md`.
+
+---
+
 ## Section 2.1.3
 
 Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
@@ -1818,3 +1899,29 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   (2923/2944/2948/2955), + 3 deferred `sympy=True` (2933 dAlembert non-elementary integral, 2970
   Lie symmetry, 2979 IVP fit over 4 nested-radical branches). All prior gates (§2.1.2 + §2.2.1–29)
   re-run — all hold. Gate `dsolve_corpus_2_2_30_tests` baseline 7. v0.146→0.147.
+- **M50 (2026-09-16)** — §2.2.31 (Problems 3001–3100) corpus, **99/100, 0 FAIL, 0 crash**. 100
+  scalar (20 IVP), 0 systems: a first-order block (3001–3056) + a constant-coefficient linear block
+  (3057–3100). **No solver change** — the section solves out of the box. One general **harness**
+  fix: the numeric back-substitution verifier (`dsolve_corpus_prelude.m`, `dsResidVerdict`) now
+  substitutes a high-precision **real** for the independent variable, not an exact rational — an
+  exact iv formed `(hugeRational)^(3/2)` in a radical residual whose square-factor extraction hung
+  `Power` for minutes (3043, solved instantly by DSolve, previously a spurious UNEVAL). General
+  across every section (also fixed 2.2.1-35, 2.2.12-1186, and lifted §2.1.2 to 557 PASS). Residue
+  1: 3049 (homogeneous IVP degenerate at x=0, same class as 2979). All prior gates (§2.1.2 +
+  §2.2.1–30) re-run standalone — all hold. Gate `dsolve_corpus_2_2_31_tests` baseline 1.
+  v0.147→0.148.
+- **M51 (2026-09-16)** — §2.2.32 (Problems 3101–3200) corpus, **96/100, 0 FAIL, 0 crash**. 100
+  scalar (8 IVP), 0 systems: entirely constant-coefficient linear ODEs with forcing + resonance,
+  plus VoP-only forcing (Sec/Tan/Csc/Log). **No solver change** — the section solves out of the box.
+  A solver fix was **investigated and reverted**: 3155 (`y''+a²y==Sec[a x]`) is a masked WRONG answer
+  (`Sec[a x]/a² + Re/Im` mush) for a symbolic coefficient, whose root cause is the symbolic
+  complex-root homogeneous basis in `dsolve_homog_basis`; the correct complex-**exponential** basis
+  `Exp[r x]` fixes it but slows 13 symbolic-coefficient §2.1.2 cases past the 8 s cold budget (net
+  regression), so it is deferred (M51 note in `dsolve_common.c`). Residue 4: 3155 (masked wrong,
+  deferred), 3165 (`y''+y==Tan[x/3]²`, cold DSolve > 8 s), 3161/3164 (correct VoP at the 8 s
+  boundary, timing-sensitive). **No solver behavior change lands** (the fix was reverted; `dsolve_common.c`
+  is byte-identical to main bar a comment), so every prior gate is behaviorally unchanged from its
+  confirmed baseline; §2.2.1–31 were additionally re-run green during the investigation. (§2.1.2's own
+  code is unchanged from the M50-confirmed 647 ≤ 655; a fresh clean re-run was not possible under heavy
+  external machine load, which alone swings §2.1.2 647→667.) Gate `dsolve_corpus_2_2_32_tests`
+  baseline 4. v0.148→0.149.

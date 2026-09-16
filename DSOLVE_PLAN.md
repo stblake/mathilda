@@ -1862,6 +1862,64 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     (correct 4-branch nested-radical general solution, but IVP fit over the radical branches fails).
     All §2.2.x + §2.1.2 gates held; see the §2.2.30 block in `DSolve_test_status/STATUS.md`.
 
+- **M50 — §2.2.31 corpus (Problems 3001–3100, Nasser Abbasi) + corpus-verifier exact-radical
+  hang fix.** ✅ DONE. 100 scalar (20 IVP), 0 systems, in two blocks: a first-order block
+  (3001–3056 — homogeneous class A/C/G + Abel(2nd type) + rational + Bernoulli + linear + exact +
+  separable) and a constant-coefficient **linear** block (3057–3100 — 2nd/3rd/high-order
+  `_missing_x` + quadrature). Baseline **99/100, 0 FAIL, 0 crash** — **no solver change** (the
+  first-order stack + `LinearConstantCoefficients` solve the section out of the box). New gate
+  `dsolve_corpus_2_2_31_tests` (baseline 1). Version 0.147 → 0.148. One general **harness**
+  root-cause fix, verified 0-regression:
+  - **Real-valued sample point in the numeric back-substitution verifier**
+    (`DSolve_test_status/dsolve_corpus_prelude.m`, `dsResidVerdict`). 3043
+    (`y'x = 2y + 2x⁴y³`, `y[1]=1`) is solved instantly and correctly by DSolve
+    (`y = 1/√((3/2 − x⁸/2)/x⁴)`; residual `Simplify`s to 0, IC fits), yet scored a spurious
+    **UNEVAL**: the verifier substituted an **exact rational** sample point into the radical
+    residual, forming `(hugeRational)^(3/2)`, whose square-factor extraction factors a ~20-digit
+    integer and hung `Power` for minutes (at x = 193/130, 243/130 the exact substitution never
+    returned; the per-case fork alarm then scored it non-PASS). The fix substitutes a
+    high-**precision real** for the independent variable — `resid /. iv -> N[pt, 24]` on the fast
+    tier, `N[pt, 210]` on the high-precision escalation tier — so every power is a fast floating
+    power. The verifier's job is *numeric* back-substitution, so it must numericize the point, not
+    do exact radical algebra; the residual stays symbolic, so the two-tier catastrophic-cancellation
+    robustness (eigenvalue-64 systems, `2.2.11-1001`) is preserved. General across every section —
+    it also incidentally fixed the same-class hang in prior sections (e.g. `2.2.1-35`).
+  - **Residue 1**: `3049` (`3xy + (3x²+y²)y' = 0`, `y[0]=1`) — DSolve returns the correct 4-branch
+    homogeneous general solution, but every explicit radical branch factors `x` (so `y(0)=0`
+    structurally) and the IVP fitter cannot fit `y[0]=1`; the clean IVP answer is the *implicit*
+    first integral `y⁴+6x²y² = 1`. Same deferred class as `2.2.30-2979`. Honest UNEVAL, not a wrong
+    answer. All §2.2.x + §2.1.2 gates re-run (standalone) — all hold. See the §2.2.31 block in
+    `DSolve_test_status/STATUS.md`.
+
+- **M51 — §2.2.32 corpus (Problems 3101–3200, Nasser Abbasi); symbolic complex-root basis fix
+  investigated + reverted.** ✅ DONE. 100 scalar (8 IVP), 0 systems — entirely constant-coefficient
+  **linear** ODEs (2nd/3rd/high-order nonhomogeneous) with polynomial / exponential / sinusoid
+  forcing + resonance, plus variation-of-parameters-only forcing (`Sec`/`Tan`/`Csc`/`Log`). Baseline
+  **96/100, 0 FAIL, 0 crash** — **no solver change** (solved out of the box by
+  `UndeterminedCoefficients` + `LinearConstantCoefficients`). New gate `dsolve_corpus_2_2_32_tests`
+  (baseline 4). Version 0.148 → 0.149.
+  - **Symbolic complex-root wrong answer (root-caused, fix DEFERRED).** `3155` (`y''+a²y==Sec[a x]`)
+    is a **masked wrong answer** for a symbolic coefficient: `dsolve_homog_basis`
+    (`src/calculus/dsolve_common.c`) realifies the complex roots `±√(-a²)` to `Exp[Re x](Cos,Sin)[Im x]`
+    but only concretizes `Re`/`Im` when the root is **numeric**; for a symbolic coefficient `Re`/`Im`
+    do not resolve to explicit reals (`ComplexExpand[Re[-½√(-4a²)]]` leaves `Arg[-4a²]`/`(a⁴)^(1/4)`),
+    so the basis does not back-substitute and the VoP particular is wrong — DSolve returns
+    `Sec[a x]/a² + Re/Im` mush (a genuine REPL wrong answer for the whole `y''+(symbol)²y` class, only
+    *masked* as UNEVAL in the corpus by the verifier's leaked-`C[k]` rule). The complex-**exponential**
+    basis `Exp[r x]` for the symbolic case is mathematically correct (`(√(-a²))² = -a²` exactly, so it
+    back-substitutes) and was implemented, but the `√(-a²)`-laden exponential form **slows the
+    2nd-order cascade past the 8 s cold budget on 13 symbolic-coefficient §2.1.2 cases** (58/439/877/…
+    Pöschl-Teller, shifted-Euler, exponential-potential — 557→544 §2.1.2 PASS), a net regression, so it
+    was **reverted** (M51 note in `dsolve_common.c`). A narrower fix that does not add cascade latency
+    is future work.
+  - **Residue 4:** `3155` (masked wrong, deferred as above); `3165` (`y''+y==Tan[x/3]²`, correct VoP
+    but cold `DSolve` > 8 s; solves warm); `3161`/`3164` (`y''+4y==Sec[x]Tan[x]`, `y''+9y==Csc[2x]`,
+    correct VoP whose cold solve sits at the 8 s boundary — timing-sensitive). Because the fix was
+    reverted, **no solver behavior change lands** — every prior gate is behaviorally unchanged from its
+    confirmed baseline (§2.2.1–31 additionally re-run green; §2.1.2's code is byte-identical to the
+    M50-confirmed 647 ≤ 655, a clean re-run being impossible under heavy external machine load that by
+    itself swings §2.1.2 647→667). See the §2.2.32 block in `DSolve_test_status/STATUS.md`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -2020,6 +2078,12 @@ recursive sub-solves.
   multiplicity + dedup; complex-conjugate pairs → `e^(ax)(Cos,Sin)`; repeated
   roots → `x^k e^(rx)`. Inhomogeneous by variation of parameters (Wronskian /
   Cramer + `Integrate`, particular `Simplify`d).
+  *Known bug (M51, deferred):* for a **symbolic** coefficient a complex pair `±√(-a²)`
+  realifies to `e^(Re x)(Cos,Sin)[Im x]` with `Re`/`Im` left unevaluated (they do not
+  resolve to explicit reals for a symbol), so the basis does not back-substitute and a
+  symbolic-coefficient nonhomogeneous solve returns a wrong particular
+  (`y''+a²y==Sec[a x] → Sec[a x]/a²` mush). The complex-exponential basis `e^(rx)` fixes
+  it but slows 13 symbolic-coefficient §2.1.2 cases past the cold budget — reverted.
   *Cosmetic gap:* for simple forcing the var-params particular can carry a
   homogeneous component (`7/2 Cos^2 x` for `7/4`) — correct and verified, less
   tidy than undetermined coefficients (a future refinement).

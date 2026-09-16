@@ -2495,7 +2495,16 @@ Expr** dsolve_homog_basis(const Expr* charpoly, const char* lam, const char* xva
                      * unfitted (§2.2.4-312).  ComplexExpand computes them for a pure
                      * number (safe: no free symbol, so no Abs/Sign is introduced); a
                      * root carrying a symbolic parameter is left untouched (its general
-                     * solution still back-substitutes). */
+                     * solution still back-substitutes).
+                     *
+                     * NOTE (M51, reverted): switching the symbolic case to a complex-
+                     * EXPONENTIAL basis Exp[r x] does fix a WRONG answer for the narrow
+                     * y''+(symbol)^2 y class (§2.2.32-3155, y''+a^2 y==Sec[a x] shipped
+                     * Sec[a x]/a^2 + Re/Im mush) -- but the Sqrt[-a^2]-laden exponential
+                     * form slows the 2nd-order cascade past the 8 s cold budget on 13
+                     * symbolic-coefficient §2.1.2 cases (58/439/877/... Poschl-Teller,
+                     * shifted-Euler, etc.), a NET regression.  Left as-is; a narrower fix
+                     * that does not add cascade latency is future work. */
                     Expr* isnum = eval_and_free(ds_call1("NumericQ", expr_copy(R.roots[i])));
                     if (isnum && isnum->type == EXPR_SYMBOL && isnum->data.symbol.name == SYM_True) {
                         a   = eval_and_free(ds_call1("ComplexExpand", a));

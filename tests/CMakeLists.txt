@@ -4202,6 +4202,44 @@ add_test(NAME dsolve_corpus_2_2_30_tests
                  ../../DSolve_test_status/DE_examples_2230.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
+# DSolve corpus regression gate: Nasser Abbasi's ODE collection, section 2.2.31
+# (Problems 3001-3100, 12000.org).  100 scalar ODEs (20 IVPs, 0 systems): a
+# first-order block (3001-3056: homogeneous class A/C/G + Abel-2nd-type + rational
+# + Bernoulli + linear + exact + separable) followed by a constant-coefficient
+# linear block (3057-3100: 2nd/3rd/high-order missing-x + quadrature), all solved
+# across the first-order stack and LinearConstantCoefficients.  Baseline argv3 = the
+# STATUS.md non-PASS count (1).  One general fix landed with this section:
+# dsolve_corpus_prelude.m::dsResidVerdict now substitutes a high-precision REAL for
+# the independent variable (never an exact rational) during numeric back-
+# substitution -- an exact iv formed (hugeRational)^(3/2) in a radical residual whose
+# square-factor extraction hung Power for minutes (3043: y'x=2y+2x^4 y^3, y[1]=1,
+# solved instantly by DSolve but scored a spurious UNEVAL).  Residue 1: 3049
+# (homogeneous IVP y[0]=1 whose explicit radical branches factor x, forcing y(0)=0,
+# so the y(0)=1 condition cannot be fitted -- same deferred class as 2.2.30-2979).
+add_test(NAME dsolve_corpus_2_2_31_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2231.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+
+# DSolve corpus regression gate: Nasser Abbasi's ODE collection, section 2.2.32
+# (Problems 3101-3200, 12000.org).  100 scalar ODEs (8 IVPs, 0 systems): entirely
+# constant-coefficient LINEAR ODEs (2nd/3rd/high-order nonhomogeneous) with
+# polynomial / exponential / sinusoid forcing + resonance, plus variation-of-
+# parameters-only forcing (Sec, Tan, Csc, Log).  Solved by UndeterminedCoefficients
+# + LinearConstantCoefficients (VoP) -- no solver change needed.  Baseline argv3 =
+# the STATUS.md non-PASS count (4).  Residue 4: 3155 (y''+a^2 y==Sec[a x], a masked
+# WRONG answer for a symbolic coefficient -- Sec[a x]/a^2 + Re/Im mush from the
+# symbolic complex-root homogeneous basis; a straightforward complex-exponential-basis
+# fix in dsolve_homog_basis is CORRECT but slows 13 symbolic-coefficient 2.1.2 cases
+# past the 8 s cold budget, a net regression, so it is DEFERRED -- see the M51 note in
+# dsolve_common.c); 3165 (y''+y==Tan[x/3]^2, correct VoP but cold DSolve > 8 s); and
+# 3161/3164 (y''+4y==Sec[x]Tan[x], y''+9y==Csc[2x], correct VoP whose cold solve sits
+# right at the 8 s bound -- timing-sensitive).  0 FAIL as measured (3155 is masked).
+add_test(NAME dsolve_corpus_2_2_32_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2232.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the
