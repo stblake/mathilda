@@ -183,6 +183,7 @@ extern const char* SYM_FactorList;
 extern const char* SYM_Fit;
 extern const char* SYM_FitRegularization;
 extern const char* SYM_FactorSquareFree;
+extern const char* SYM_FactorSquareFreeList;
 extern const char* SYM_FactorTerms;
 extern const char* SYM_False;
 extern const char* SYM_Fourier;

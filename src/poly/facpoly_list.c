@@ -145,33 +145,11 @@ static void absorb_factor(const Expr* f, Expr** numeric,
     (*n)++;
 }
 
-/* ===================================================================== */
-/* Entry point                                                           */
-/* ===================================================================== */
-
-Expr* builtin_factorlist(Expr* res) {
-    if (res->type != EXPR_FUNCTION) return NULL;
-    size_t argc = res->data.function.arg_count;
-    if (argc == 0) return factorlist_emit_argx(0);
-
-    /* Positions 2+ must be options (rules).  Report the last offender. */
-    Expr* last_bad = NULL;
-    for (size_t i = 1; i < argc; i++) {
-        if (!is_rule_head(res->data.function.args[i]))
-            last_bad = res->data.function.args[i];
-    }
-    if (last_bad) return factorlist_emit_nonopt(last_bad, 1, res);
-
-    /* Factor[poly, opts...] -- forward every argument verbatim. */
-    Expr** fargs = malloc(argc * sizeof(Expr*));
-    for (size_t i = 0; i < argc; i++)
-        fargs[i] = expr_copy(res->data.function.args[i]);
-    Expr* fac = eval_and_free(
-        expr_new_function(expr_new_symbol(SYM_Factor), fargs, argc));
-    free(fargs);
-    if (!fac) return NULL;
-
-    /* Split the factored form. */
+/* Split an evaluated factored form `fac` (a Times, a bare factor, or a number)
+ * into the pair-list {{numeric, 1}, {base_i, exp_i}, ...}.  Takes ownership of
+ * `fac` (frees it).  Shared by FactorList and FactorSquareFreeList, whose only
+ * difference is which head produced the product. */
+static Expr* product_to_pair_list(Expr* fac) {
     Expr* numeric = mk_int(1);
     size_t cap = 8, n = 0;
     Expr** bases = malloc(cap * sizeof(Expr*));
@@ -201,11 +179,77 @@ Expr* builtin_factorlist(Expr* res) {
 }
 
 /* ===================================================================== */
+/* Entry point                                                           */
+/* ===================================================================== */
+
+Expr* builtin_factorlist(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return factorlist_emit_argx(0);
+
+    /* Positions 2+ must be options (rules).  Report the last offender. */
+    Expr* last_bad = NULL;
+    for (size_t i = 1; i < argc; i++) {
+        if (!is_rule_head(res->data.function.args[i]))
+            last_bad = res->data.function.args[i];
+    }
+    if (last_bad) return factorlist_emit_nonopt(last_bad, 1, res);
+
+    /* Factor[poly, opts...] -- forward every argument verbatim. */
+    Expr** fargs = malloc(argc * sizeof(Expr*));
+    for (size_t i = 0; i < argc; i++)
+        fargs[i] = expr_copy(res->data.function.args[i]);
+    Expr* fac = eval_and_free(
+        expr_new_function(expr_new_symbol(SYM_Factor), fargs, argc));
+    free(fargs);
+    if (!fac) return NULL;
+
+    return product_to_pair_list(fac);
+}
+
+/* FactorSquareFreeList[poly] / FactorSquareFreeList[poly, Extension -> ext].
+ *
+ * A thin wrapper over FactorSquareFree: it square-free-factors via
+ * `FactorSquareFree[poly, opts...]` (every argument -- poly and the Extension
+ * option -- forwarded verbatim, so all extension handling lives in
+ * FactorSquareFree) and splits the resulting product into {factor, exponent}
+ * pairs, with the leading pair being the overall numerical factor {c, 1}. */
+Expr* builtin_factorsquarefreelist(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return NULL;  /* leave FactorSquareFreeList[] unevaluated */
+
+    /* FactorSquareFree[poly, opts...] -- forward every argument verbatim. */
+    Expr** fargs = malloc(argc * sizeof(Expr*));
+    for (size_t i = 0; i < argc; i++)
+        fargs[i] = expr_copy(res->data.function.args[i]);
+    Expr* fac = eval_and_free(
+        expr_new_function(expr_new_symbol(SYM_FactorSquareFree), fargs, argc));
+    free(fargs);
+    if (!fac) return NULL;
+
+    /* If FactorSquareFree declined (bad arity / unrecognised option), it comes
+     * back as an unevaluated FactorSquareFree[...] expression -- propagate the
+     * decline so FactorSquareFreeList[...] stays unevaluated too, rather than
+     * wrapping the inert call as a spurious factor. */
+    if (head_name_is(fac, SYM_FactorSquareFree)) {
+        expr_free(fac);
+        return NULL;
+    }
+
+    return product_to_pair_list(fac);
+}
+
+/* ===================================================================== */
 /* Init                                                                  */
 /* ===================================================================== */
 
 void factorlist_init(void) {
     symtab_add_builtin("FactorList", builtin_factorlist);
     symtab_get_def("FactorList")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    /* Docstring lives in info.c. */
+
+    symtab_add_builtin("FactorSquareFreeList", builtin_factorsquarefreelist);
+    symtab_get_def("FactorSquareFreeList")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     /* Docstring lives in info.c. */
 }

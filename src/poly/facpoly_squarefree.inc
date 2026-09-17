@@ -344,9 +344,182 @@ static Expr* factor_square_free_dispatcher(Expr* e) {
     return factored;
 }
 
-Expr* builtin_factorsquarefree(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+/* True for a pure numeric literal -- it belongs to the leading content of the
+ * square-free product rather than to a factor. */
+static bool sqf_is_number_literal(const Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER:
+        case EXPR_BIGINT:
+        case EXPR_REAL:
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+#endif
+            return true;
+        default:
+            break;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+        e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (strcmp(h, "Rational") == 0 || strcmp(h, "Complex") == 0) return true;
+    }
+    return false;
+}
 
+/* FactorSquareFree over an algebraic extension Q(alpha).
+ *
+ * Square-free factorisation is field-independent for rational-coefficient
+ * inputs, but the user may supply coefficients in Q(alpha) or ask for the
+ * decomposition to be performed there.  We obtain the irreducible-over-Q(alpha)
+ * factorisation from Factor (the Trager engine in qafactor.c, reached through
+ * builtin_factor's Extension option -- every argument, poly and options, is
+ * forwarded verbatim), then reconstruct the square-free decomposition by
+ * grouping the irreducible factors by multiplicity: for each distinct
+ * multiplicity k, the square-free factor of multiplicity k is Expand[product of
+ * all irreducibles that occur to the k-th power].  This needs no square-free-
+ * over-Q(alpha) primitive of its own.  Returns NULL when Factor declines, so
+ * the caller can fall back to the over-Q pipeline. */
+static Expr* factor_square_free_over_extension(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+
+    /* Factor[poly, opts...] -- forward every argument verbatim. */
+    Expr** fargs = malloc(sizeof(Expr*) * argc);
+    for (size_t i = 0; i < argc; i++) fargs[i] = expr_copy(res->data.function.args[i]);
+    Expr* fac = eval_and_free(expr_new_function(expr_new_symbol("Factor"), fargs, argc));
+    free(fargs);
+    if (!fac) return NULL;
+
+    /* Collect a numeric content plus (base, multiplicity) pairs. */
+    Expr* content = expr_new_integer(1);
+    size_t cap = 8, n = 0;
+    Expr** bases = malloc(sizeof(Expr*) * cap);
+    long*  mults = malloc(sizeof(long) * cap);
+
+    bool fac_is_times = (fac->type == EXPR_FUNCTION && fac->data.function.head &&
+                         fac->data.function.head->type == EXPR_SYMBOL &&
+                         strcmp(fac->data.function.head->data.symbol.name, "Times") == 0);
+    size_t nfac = fac_is_times ? fac->data.function.arg_count : 1;
+    Expr** faclist = fac_is_times ? fac->data.function.args : &fac;
+
+    for (size_t i = 0; i < nfac; i++) {
+        Expr* f = faclist[i];
+        if (sqf_is_number_literal(f)) {
+            content = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ content, expr_copy(f) }, 2));
+            continue;
+        }
+        Expr* base;
+        long mult;
+        if (f->type == EXPR_FUNCTION && f->data.function.head &&
+            f->data.function.head->type == EXPR_SYMBOL &&
+            strcmp(f->data.function.head->data.symbol.name, "Power") == 0 &&
+            f->data.function.arg_count == 2 &&
+            f->data.function.args[1]->type == EXPR_INTEGER) {
+            base = expr_copy(f->data.function.args[0]);
+            mult = (long)f->data.function.args[1]->data.integer;
+        } else {
+            base = expr_copy(f);
+            mult = 1;
+        }
+        if (n == cap) {
+            cap *= 2;
+            bases = realloc(bases, sizeof(Expr*) * cap);
+            mults = realloc(mults, sizeof(long) * cap);
+        }
+        bases[n] = base;
+        mults[n] = mult;
+        n++;
+    }
+    expr_free(fac);
+
+    /* Group by multiplicity and assemble Times[content, Power[sqfree_k, k]...].
+     * sqfree_k = Expand[product of bases sharing multiplicity k], matching the
+     * expanded normal form of the over-Q FactorSquareFree path. */
+    size_t term_cap = n + 1, term_n = 0;
+    Expr** terms = malloc(sizeof(Expr*) * term_cap);
+    terms[term_n++] = content;
+
+    bool* used = calloc(n ? n : 1, sizeof(bool));
+    for (size_t i = 0; i < n; i++) {
+        if (used[i]) continue;
+        long k = mults[i];
+        size_t pc = 0, pcap = 4;
+        Expr** pbases = malloc(sizeof(Expr*) * pcap);
+        for (size_t j = i; j < n; j++) {
+            if (used[j] || mults[j] != k) continue;
+            used[j] = true;
+            if (pc == pcap) { pcap *= 2; pbases = realloc(pbases, sizeof(Expr*) * pcap); }
+            pbases[pc++] = expr_copy(bases[j]);
+        }
+        Expr* prod;
+        if (pc == 1) {
+            prod = pbases[0];
+        } else {
+            prod = eval_and_free(expr_new_function(expr_new_symbol("Times"), pbases, pc));
+        }
+        free(pbases);
+        Expr* sqfree = expr_expand(prod);
+        expr_free(prod);
+
+        Expr* term;
+        if (k == 1) {
+            term = sqfree;
+        } else {
+            term = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ sqfree, expr_new_integer(k) }, 2));
+        }
+        if (term_n == term_cap) { term_cap *= 2; terms = realloc(terms, sizeof(Expr*) * term_cap); }
+        terms[term_n++] = term;
+    }
+    free(used);
+    for (size_t i = 0; i < n; i++) expr_free(bases[i]);
+    free(bases);
+    free(mults);
+
+    Expr* out = eval_and_free(expr_new_function(expr_new_symbol("Times"), terms, term_n));
+    free(terms);
+    return out;
+}
+
+Expr* builtin_factorsquarefree(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+    /* Parse a trailing Extension -> alpha option (mirrors builtin_factor).  Any
+     * trailing argument that is not an Extension rule leaves the call
+     * unevaluated (NULL), preserving the strict contract of the plain form. */
+    size_t argc = res->data.function.arg_count;
+    Expr* alpha_expr = NULL;  /* borrowed */
+    for (size_t i = 1; i < argc; i++) {
+        Expr* opt = res->data.function.args[i];
+        if (opt->type == EXPR_FUNCTION
+            && opt->data.function.head
+            && opt->data.function.head->type == EXPR_SYMBOL
+            && (opt->data.function.head->data.symbol.name == SYM_Rule
+                || opt->data.function.head->data.symbol.name == SYM_RuleDelayed)
+            && opt->data.function.arg_count == 2
+            && opt->data.function.args[0]->type == EXPR_SYMBOL
+            && opt->data.function.args[0]->data.symbol.name == SYM_Extension) {
+            alpha_expr = opt->data.function.args[1];
+        } else {
+            return NULL;  /* unknown / non-option trailing argument */
+        }
+    }
+
+    /* A *real* extension is anything but Extension -> None (Automatic and an
+     * explicit generator both route through Factor, which does its own
+     * autodetect / over-Q fall-back when no generator applies). */
+    bool real_ext = alpha_expr &&
+        !(alpha_expr->type == EXPR_SYMBOL && alpha_expr->data.symbol.name
+          && strcmp(alpha_expr->data.symbol.name, "None") == 0);
+
+    if (real_ext) {
+        Expr* out = factor_square_free_over_extension(res);
+        if (out) return out;
+        /* Fall through to the over-Q path on failure (graceful degradation). */
+    }
+
+    /* ---- Default over-Q path (unchanged; operates on args[0]) ---- */
 #ifdef USE_FLINT
     /* Parametric radical field Q(t..)(sqrt k): squarefree-factor over the field
      * via FLINT (sqrt(k) -> S collapse). Only fires when a Sqrt[symbol] is

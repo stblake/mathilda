@@ -1184,6 +1184,10 @@ add_executable(factorlist_tests test_factorlist.c $<TARGET_OBJECTS:mathilda_comm
 target_include_directories(factorlist_tests PRIVATE ../src)
 add_test(NAME factorlist_tests COMMAND factorlist_tests)
 
+add_executable(factorsquarefreelist_tests test_factorsquarefreelist.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(factorsquarefreelist_tests PRIVATE ../src)
+add_test(NAME factorsquarefreelist_tests COMMAND factorsquarefreelist_tests)
+
 add_executable(divisors_tests test_divisors.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(divisors_tests PRIVATE ../src)
 add_test(NAME divisors_tests COMMAND divisors_tests)

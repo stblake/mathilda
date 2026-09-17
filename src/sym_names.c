@@ -183,6 +183,7 @@ const char* SYM_FactorList = NULL;
 const char* SYM_Fit = NULL;
 const char* SYM_FitRegularization = NULL;
 const char* SYM_FactorSquareFree = NULL;
+const char* SYM_FactorSquareFreeList = NULL;
 const char* SYM_FactorTerms = NULL;
 const char* SYM_False = NULL;
 const char* SYM_Fourier = NULL;
@@ -1106,6 +1107,7 @@ void sym_names_init(void) {
     SYM_Fit                        = intern_symbol("Fit");
     SYM_FitRegularization          = intern_symbol("FitRegularization");
     SYM_FactorSquareFree           = intern_symbol("FactorSquareFree");
+    SYM_FactorSquareFreeList       = intern_symbol("FactorSquareFreeList");
     SYM_FactorTerms                = intern_symbol("FactorTerms");
     SYM_False                      = intern_symbol("False");
     SYM_FileBaseName               = intern_symbol("FileBaseName");

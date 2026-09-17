@@ -4047,7 +4047,11 @@ void info_init(void) {
         "\tcollecting repeated factors into powers.\n"
         "Computed via the Yun / Musser square-free decomposition using\n"
         "polynomial GCDs of poly with its derivative; cheaper than full Factor\n"
-        "and sufficient when only multiplicities are needed.");
+        "and sufficient when only multiplicities are needed.\n"
+        "FactorSquareFree[poly, Extension -> alpha] performs the decomposition\n"
+        "over Q(alpha) (alpha = Sqrt[c], c^(1/n), I, or a list of generators),\n"
+        "grouping the irreducible-over-Q(alpha) factors by multiplicity; the\n"
+        "default Extension -> None factors over Q.");
     symtab_set_docstring("Factor",
         "Factor[poly] factors a polynomial over the integers.\n"
         "Factor[poly, Extension -> alpha] factors over Q(alpha), where alpha is\n"
@@ -4064,6 +4068,12 @@ void info_init(void) {
         "forwarded verbatim.  The first element is always the overall numerical\n"
         "factor {c, 1} (it is {1, 1} when there is none); denominator factors of a\n"
         "rational function appear with negative exponents.");
+    symtab_set_docstring("FactorSquareFreeList",
+        "FactorSquareFreeList[poly] gives a list of the square-free factors of poly\n"
+        "together with their multiplicities, as {factor, exponent} pairs.  A thin\n"
+        "wrapper over FactorSquareFree: it splits that product form into pairs and\n"
+        "forwards the Extension option verbatim.  The first element is always the\n"
+        "overall numerical factor {c, 1} (it is {1, 1} when there is none).");
     symtab_set_docstring("FactorTerms",
         "FactorTerms[poly]\n\tpulls out any overall numerical factor in poly.\n"
         "FactorTerms[poly, x]\n\tpulls out any overall factor in poly that does not depend on x.\n"
