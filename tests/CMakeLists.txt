@@ -162,8 +162,29 @@ if(USE_FLINT)
         add_compile_definitions(USE_FLINT)
         include_directories(${FLINT_INCLUDE_DIRS})
         link_directories(${FLINT_LIBRARY_DIRS})
-        link_libraries(${FLINT_LIBRARIES})
+        # FLINT_LINK_LIBRARIES (absolute paths) in preference to FLINT_LIBRARIES (bare names that
+        # rely on link_directories reaching the linker). On the CI runner the bare-name form left
+        # every test binary with undefined references to fmpq_mat_det, fmpz_set_mpz and friends --
+        # USE_FLINT was defined, the bridge compiled for real, and -lflint never arrived. Absolute
+        # paths cannot be lost that way.
+        if(FLINT_LINK_LIBRARIES)
+            link_libraries(${FLINT_LINK_LIBRARIES})
+        else()
+            link_libraries(${FLINT_LIBRARIES})
+        endif()
+        message(STATUS "FLINT ${FLINT_VERSION}: ${FLINT_LINK_LIBRARIES}${FLINT_LIBRARIES}")
     else()
+        # DO NOT DEGRADE SILENTLY WHEN IT WAS ASKED FOR. `-DUSE_FLINT=ON` is a statement about what
+        # the caller wants covered; answering it by turning the feature off and printing a warning
+        # into a scrolling log is how a configuration ends up untested while looking green. That is
+        # the exact shape of issue #65. An unrequested default may still fall back.
+        if(DEFINED CACHE{USE_FLINT} AND USE_FLINT)
+            message(FATAL_ERROR
+                "USE_FLINT=ON was requested but FLINT >= 3.0 was not found by pkg-config.\n"
+                "  macOS (Homebrew): brew install flint\n"
+                "  Ubuntu/Debian:    sudo apt install libflint-dev   (needs >= 3.0)\n"
+                "Configure without -DUSE_FLINT=ON to build the tests with FLINT off instead.")
+        endif()
         message(WARNING "FLINT >= 3.0 not detected; building tests with USE_FLINT=OFF")
         message(WARNING "  macOS (Homebrew): brew install flint")
         message(WARNING "  Ubuntu/Debian:    sudo apt install libflint-dev   (needs >= 3.0)")

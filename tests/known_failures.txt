@@ -1,0 +1,29 @@
+# Tests that are known to fail, with the reason each one fails.
+#
+# `tools/run_test_suite.sh` (and the `tests` job in .github/workflows/build.yml) treats a listed
+# failure as expected and an UNLISTED one as a failure of the run. A listed test that starts passing
+# is reported so its line can be deleted.
+#
+# WHY A LIST AND NOT ZERO. The suite is 400+ binaries and some of them fail for reasons that have
+# nothing to do with whatever change is in front of you. A gate that is red the day it lands gets
+# ignored within a week, and then it is worse than no gate: people learn that red means nothing. The
+# ratchet keeps it meaningful — new breakage is loud, standing breakage is written down.
+#
+# EVERY LINE NEEDS A REASON. A bare test name here is a test nobody will ever fix, because nobody
+# will know whether it still matters. One line: what fails, and what would resolve it.
+#
+# Format:  <binary>  <one-line reason>
+
+compiledfunction_tests   test_cf_delegated_array_heads: compiled Variance/StandardDeviation differ from the interpreter by 2 ulp (8.9e-16) against an exact === assertion. Not a packing effect (identical under MATHILDA_NO_PACK=1). Resolve by aligning the two summations or asserting a tolerance.
+iter_tests               test_iter_autocompiled_boundary: expects the string "3." where the printer writes "3.0". The three int64-boundary loops compute correctly (3, 27670116110564327418, 3.0); the expectation is stale.
+ndarray_linalg_tests     test_det_edge: Det of a NON-SQUARE matrix leaks Hold[List] row heads into its result and message and exhausts the recursion limit. Reproduces on a plain List with MATHILDA_NO_PACK=1, so the bug is in Det's non-square guard, not the array substrate.
+simplify_tests           test_simplify_algebraic_u_power_extraction: expects "(-1 + x^2)/x^2^(3/2)", but x^2^(3/2) parses as Power[x, 2 Sqrt[2]] since ^ is right-associative — a different expression. The printer's "(x^2)^(3/2)" is correct and the expectation is wrong.
+
+# Measured on main at 9ee372e3 (2026-08-17): 437 passed, 7 failed. The three below are in the
+# NMinimize/FindMinimum work landed on 2026-08-16/17 and each fails DETERMINISTICALLY (three runs,
+# same exit) — so they are not flaky tests to be re-run, they are convergence assertions the
+# optimizers do not currently meet. They are recorded rather than fixed here because they belong to
+# whoever is iterating on those methods; expected to be short-lived lines.
+basin_hopping_tests      test_styblinski_tang_2d: NMinimize with Method -> {"BasinHopping", "SearchPoints" -> 6} does not reach the Styblinski-Tang minimum (-78.33198) within 1e-2.
+cobyla_tests             test_eq_line: FindMinimum[{x^2 + y^2, x + y == 1}, Method -> "COBYLA", MaxIterations -> 2000] does not reach 0.5 within 1e-4 — the equality-constrained case.
+findmin_methods_tests    test_rosenbrock [ConjugateGradient]: FindMinimum on Rosenbrock from {-1.2, 1} with Method -> "ConjugateGradient", MaxIterations -> 5000 does not converge to (1, 1) within 5e-3.
