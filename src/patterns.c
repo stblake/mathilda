@@ -165,6 +165,95 @@ Expr* builtin_first_case(Expr* res) {
     return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
 }
 
+/* FirstPosition[expr, pattern] gives the position (a list of indices) of the
+ * first element of expr matching pattern in depth-first order, or
+ * Missing["NotFound"] if none is found.
+ * FirstPosition[expr, pattern, default] returns default instead of the Missing.
+ * default is held (FirstPosition is HoldRest) and only evaluated when returned.
+ * FirstPosition[expr, pattern, default, levelspec] searches only the specified
+ * levels; a Heads -> True|False option is honoured (default True).
+ *
+ * This delegates to Position and takes the first result, so it inherits
+ * Position's levelspec parsing, Heads handling, association value -> Key[...]
+ * remapping, depth-first ordering, and first-n-match early stop unchanged. */
+Expr* builtin_first_position(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    /* A visible NDArray is an atom to the matcher; materialise it first.
+     * See patterns_delist_visible. */
+    { Expr* nd_ = patterns_delist_visible(res); if (nd_) return nd_; }
+    size_t argc = res->data.function.arg_count;
+
+    /* Split the (held) trailing Heads -> True|False option from the positional
+     * arguments expr, pattern, default, levelspec (default before levelspec). */
+    Expr* heads_opt = NULL;              /* borrowed pointer into res */
+    Expr* pos_args[4];
+    size_t np = 0;
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2 &&
+            a->data.function.head->type == EXPR_SYMBOL &&
+            a->data.function.head->data.symbol.name == SYM_Rule &&
+            a->data.function.args[0]->type == EXPR_SYMBOL &&
+            a->data.function.args[0]->data.symbol.name == SYM_Heads) {
+            heads_opt = a;
+        } else if (np < 4) {
+            pos_args[np++] = a;
+        } else {
+            return NULL;                 /* too many positional arguments */
+        }
+    }
+    if (np < 2) return NULL;             /* need at least expr and pattern */
+
+    Expr* expr    = pos_args[0];
+    Expr* pattern = pos_args[1];
+    Expr* deflt   = (np >= 3) ? pos_args[2] : NULL;   /* held; only if returned */
+    Expr* lspec   = (np >= 4) ? pos_args[3] : NULL;
+
+    /* Build the delegated Position call. */
+    Expr* pcall;
+    if (is_association(expr) && lspec == NULL) {
+        /* Only the 2-arg Position form performs the value -> Key[k] remapping. */
+        Expr* pa[2] = { expr_copy(expr), expr_copy(pattern) };
+        pcall = expr_new_function(expr_new_symbol(SYM_Position), pa, 2);
+    } else {
+        /* levelspec: the supplied one, or the {0, Infinity} default (which
+         * includes level 0 == the whole expression, giving position {}). */
+        Expr* ls;
+        if (lspec) {
+            ls = expr_copy(lspec);
+        } else {
+            Expr* largs[2] = { expr_new_integer(0), expr_new_symbol(SYM_Infinity) };
+            ls = expr_new_function(expr_new_symbol(SYM_List), largs, 2);
+        }
+        Expr* pa[5];
+        size_t k = 0;
+        pa[k++] = expr_copy(expr);
+        pa[k++] = expr_copy(pattern);
+        pa[k++] = ls;
+        pa[k++] = expr_new_integer(1);   /* n = 1: stop at the first match */
+        if (heads_opt) pa[k++] = expr_copy(heads_opt);
+        pcall = expr_new_function(expr_new_symbol(SYM_Position), pa, k);
+    }
+
+    Expr* raw = evaluate(pcall);
+    expr_free(pcall);
+
+    Expr* result = NULL;
+    if (raw && raw->type == EXPR_FUNCTION &&
+        raw->data.function.head->data.symbol.name == SYM_List &&
+        raw->data.function.arg_count >= 1) {
+        result = expr_copy(raw->data.function.args[0]);
+    }
+    if (raw) expr_free(raw);
+    if (result) return result;
+
+    /* No match: the (held) default, evaluated by the fixed-point loop when it is
+     * returned, else Missing["NotFound"]. */
+    if (deflt) return expr_copy(deflt);
+    Expr* margs[1] = { expr_new_string("NotFound") };
+    return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
+}
+
 /* DeleteMissing[expr] — remove all Missing[...] elements. Equivalent to
  * DeleteCases[expr, _Missing], so it inherits list and association-value
  * handling (over an association it drops entries whose value is Missing[...]). */
@@ -858,6 +947,8 @@ void patterns_init(void) {
         "\tvalue is Missing[...].");
     symtab_add_builtin("Position", builtin_position);
     symtab_get_def("Position")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("FirstPosition", builtin_first_position);
+    symtab_get_def("FirstPosition")->attributes |= ATTR_HOLDREST | ATTR_PROTECTED;
     symtab_add_builtin("Count", builtin_count);
     symtab_get_def("Count")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("MemberQ", builtin_memberq);

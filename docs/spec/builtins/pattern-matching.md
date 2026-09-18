@@ -84,6 +84,18 @@ Gives a list of the positions at which objects matching a pattern appear.
 - Defaults to levels `{0, Infinity}` with `Heads -> True`.
 - Yields lists of indices in lexicographic order.
 
+## FirstPosition
+Gives the position of the first element matching a pattern, in depth-first order.
+- `FirstPosition[expr, pattern]` — the position, or `Missing["NotFound"]` if none matches.
+- `FirstPosition[expr, pattern, default]` — `default` if no match is found.
+- `FirstPosition[expr, pattern, default, levelspec]`
+
+**Features**:
+- Attributes `{HoldRest, Protected}`; `default` is evaluated only when it is returned.
+- Same defaults as `Position`: levels `{0, Infinity}` with `Heads -> True`; a position of `{}` is the whole of `expr`.
+- Over an association the position is a key, e.g. `{Key[k], ...}`.
+- Delegates to `Position` (with the first-match cap), so traversal, level specs, the `Heads` option, and association handling match `Position` exactly.
+
 ## Count
 Gives the number of elements or subexpressions that match a pattern.
 - `Count[list, pattern]`

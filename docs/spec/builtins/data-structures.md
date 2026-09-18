@@ -31,7 +31,7 @@ evaluator's rule-epoch / GROUND-flag mechanism in `src/eval.c`).
 | **Transform** | `Map`, `Select`, `KeySelect`, `KeyTake`, `KeyDrop`, `DeleteMissing` |
 | **Aggregate** | `Total`, `Min`, `Max`, `Mean`, `Counts`, `CountsBy`, `GroupBy` (+reducer, `key->val`), `Gather`, `GatherBy`, `Merge`, `PositionIndex` |
 | **Order / rank** | `Sort`, `SortBy` (multi-key), `ReverseSort`, `ReverseSortBy`, `KeySort`, `KeySortBy`, `MaximalBy`, `MinimalBy`, `TakeLargest`(`By`), `TakeSmallest`(`By`), `Reverse` |
-| **Iterate / reduce** | `Table`/`Do`/`Sum`/`Product` (`{v, assoc}`), `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `Position`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
+| **Iterate / reduce** | `Table`/`Do`/`Sum`/`Product` (`{v, assoc}`), `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `Position`, `FirstPosition`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
 | **Structural** | `First`, `Last`, `Rest`, `Most`, `Take`, `Drop`, `Length` |
 | **Patterns** | `KeyValuePattern` (destructure/match, incl. in function definitions) |
 
@@ -555,6 +555,10 @@ Out[2]= {{Key["a"], 1}, {Key["c"]}}
 In[3]:= Extract[<|"a" -> {10, 20}|>, {Key["a"], 2}]
 Out[3]= 20
 ```
+
+`FirstPosition[assoc, patt]` returns the first such `{Key[k], subpos...}` (or
+`Missing["NotFound"]` / a supplied default), sharing this Key-remapping with
+`Position`.
 
 ## Predicate tests on values (AllTrue, AnyTrue, NoneTrue, MemberQ)
 Predicate tests apply to the **values** of an association (and to the elements

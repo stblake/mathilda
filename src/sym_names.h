@@ -210,6 +210,7 @@ extern const char* SYM_FindIntegerNullVector;
 extern const char* SYM_FindMaximum;
 extern const char* SYM_FindMinimum;
 extern const char* SYM_FindRoot;
+extern const char* SYM_FirstPosition;
 extern const char* SYM_Flat;
 extern const char* SYM_Flatten;
 extern const char* SYM_FlattenAt;

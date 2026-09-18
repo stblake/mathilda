@@ -210,6 +210,7 @@ const char* SYM_FindIntegerNullVector = NULL;
 const char* SYM_FindMaximum = NULL;
 const char* SYM_FindMinimum = NULL;
 const char* SYM_FindRoot = NULL;
+const char* SYM_FirstPosition = NULL;
 const char* SYM_Flat = NULL;
 const char* SYM_Flatten = NULL;
 const char* SYM_FlattenAt = NULL;
@@ -1130,6 +1131,7 @@ void sym_names_init(void) {
     SYM_FindMaximum                = intern_symbol("FindMaximum");
     SYM_FindMinimum                = intern_symbol("FindMinimum");
     SYM_FindRoot                   = intern_symbol("FindRoot");
+    SYM_FirstPosition              = intern_symbol("FirstPosition");
     SYM_Flat                       = intern_symbol("Flat");
     SYM_Flatten                    = intern_symbol("Flatten");
     SYM_FlattenAt                  = intern_symbol("FlattenAt");

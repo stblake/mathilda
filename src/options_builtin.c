@@ -889,7 +889,7 @@ void options_register_defaults(void) {
     /* ---- Structural functions reading Heads -> True|False ---- */
     struct { const char* fn; const char* dflt; } heads_fns[] = {
         { "Cases", "False" }, { "Count", "False" }, { "DeleteCases", "False" },
-        { "MemberQ", "False" }, { "Position", "True" }, { "FreeQ", "True" },
+        { "MemberQ", "False" }, { "Position", "True" }, { "FirstPosition", "True" }, { "FreeQ", "True" },
         { "Level", "False" }, { "Depth", "False" }, { "LeafCount", "False" },
         { "Map", "False" }, { "Apply", "False" }, { "MapAll", "False" },
         { "MapIndexed", "False" },

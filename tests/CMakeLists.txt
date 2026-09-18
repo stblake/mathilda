@@ -1161,6 +1161,10 @@ add_executable(flatten_at_tests test_flatten_at.c $<TARGET_OBJECTS:mathilda_comm
 target_include_directories(flatten_at_tests PRIVATE ../src)
 add_test(NAME flatten_at_tests COMMAND flatten_at_tests)
 
+add_executable(firstposition_tests test_firstposition.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(firstposition_tests PRIVATE ../src)
+add_test(NAME firstposition_tests COMMAND firstposition_tests)
+
 add_executable(rescale_tests test_rescale.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(rescale_tests PRIVATE ../src)
 add_test(NAME rescale_tests COMMAND rescale_tests)
