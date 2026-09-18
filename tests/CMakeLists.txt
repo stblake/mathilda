@@ -515,6 +515,7 @@ set(COMMON_SRC
     ../src/expand_power.c
     ../src/poly/poly.c
     ../src/poly/monomials.c
+    ../src/poly/polynomialreduce.c
     ../src/poly/minpoly.c
     ../src/poly/subresultants.c
     ../src/poly/subresultantpoly.c
@@ -1713,6 +1714,10 @@ target_include_directories(poly_tests PRIVATE ../src)
 add_executable(coefficient_rules_tests test_coefficient_rules.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(coefficient_rules_tests PRIVATE ../src)
 add_test(NAME coefficient_rules_tests COMMAND coefficient_rules_tests)
+
+add_executable(polynomialreduce_tests test_polynomialreduce.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(polynomialreduce_tests PRIVATE ../src)
+add_test(NAME polynomialreduce_tests COMMAND polynomialreduce_tests)
 
 add_executable(risch_field_tests test_risch_field.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(risch_field_tests PRIVATE ../src ../src/calculus)

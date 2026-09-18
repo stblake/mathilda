@@ -73,6 +73,14 @@ GBPoly*  gbpoly_from_gfp(const GFpPoly* a);
 GFpPoly** gfp_buchberger(GFpPoly* const* F, size_t n, size_t* out_n);
 void      gfp_basis_free(GFpPoly** G, size_t n);
 
+/* Multivariate division with cofactors over GF(p): on return
+ *   poly == sum_i (*quot_out)[i] * basis[i] + remainder   (mod p),
+ * the returned poly being the (fully reduced) remainder.  `*quot_out` is a
+ * fresh array of `n` GFpPoly* (one quotient per basis element); the caller
+ * owns each GFpPoly* and the array.  Drives PolynomialReduce's Modulus path. */
+GFpPoly*  gfp_divmod(const GFpPoly* poly, GFpPoly* const* basis, size_t n,
+                     GFpPoly*** quot_out);
+
 /* ---- solving support ---- */
 /* Substitute var -> value; returns a fresh, normalized poly. */
 GFpPoly* gfp_poly_subst(const GFpPoly* a, int var, uint64_t value);

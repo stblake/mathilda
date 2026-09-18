@@ -350,6 +350,96 @@ Expr* flint_expand_polynomial(const Expr* e) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Multivariate division with cofactors (PolynomialReduce fast path)  */
+/* ------------------------------------------------------------------ */
+
+int flint_polynomial_reduce(const Expr* poly, const Expr* const* divisors,
+                            int ndiv, const Expr* const* vars, int nvars,
+                            int order_kind, Expr*** quot_out, Expr** rem_out) {
+    if (!poly || !divisors || !vars || !quot_out || !rem_out
+        || nvars <= 0 || ndiv <= 0) return 0;
+
+    ordering_t ord = (order_kind == 1) ? ORD_DEGLEX
+                   : (order_kind == 2) ? ORD_DEGREVLEX : ORD_LEX;
+
+    /* Variables in the USER's order (index 0 is the highest-priority variable);
+     * the monomial order depends on it, so we do NOT sort. */
+    VarSet vs; memset(&vs, 0, sizeof vs);
+    for (int i = 0; i < nvars; i++) {
+        if (!vars[i] || vars[i]->type != EXPR_SYMBOL) { varset_free(&vs); return 0; }
+        varset_add(&vs, vars[i]->data.symbol.name);
+    }
+    if ((int)vs.count != nvars) { varset_free(&vs); return 0; }  /* repeated var */
+
+    fmpq_mpoly_ctx_t ctx;
+    fmpq_mpoly_ctx_init(ctx, (slong)nvars, ord);
+
+    fmpq_mpoly_t A; fmpq_mpoly_init(A, ctx);
+    int ok = to_mpoly(poly, A, ctx, &vs);
+
+    /* Convert divisors.  Zero divisors get quotient 0 and are not handed to
+     * FLINT; the non-zero ones keep their relative order (the decomposition is
+     * order-dependent, exactly as PolynomialReduce specifies). */
+    fmpq_mpoly_struct*        Bpool = (fmpq_mpoly_struct*)malloc(sizeof(fmpq_mpoly_struct) * (size_t)ndiv);
+    fmpq_mpoly_struct*        Qpool = (fmpq_mpoly_struct*)malloc(sizeof(fmpq_mpoly_struct) * (size_t)ndiv);
+    const fmpq_mpoly_struct** Bset  = (const fmpq_mpoly_struct**)malloc(sizeof(fmpq_mpoly_struct*) * (size_t)ndiv);
+    fmpq_mpoly_struct**       Qset  = (fmpq_mpoly_struct**)malloc(sizeof(fmpq_mpoly_struct*) * (size_t)ndiv);
+    int*                      orig  = (int*)malloc(sizeof(int) * (size_t)ndiv);
+    int nz = 0;
+    for (int i = 0; i < ndiv && ok; i++) {
+        fmpq_mpoly_init(&Bpool[nz], ctx);
+        if (!to_mpoly(divisors[i], &Bpool[nz], ctx, &vs)) {
+            fmpq_mpoly_clear(&Bpool[nz], ctx); ok = 0; break;
+        }
+        if (fmpq_mpoly_is_zero(&Bpool[nz], ctx)) {
+            fmpq_mpoly_clear(&Bpool[nz], ctx); continue;   /* skip zero divisor */
+        }
+        fmpq_mpoly_init(&Qpool[nz], ctx);
+        Bset[nz] = &Bpool[nz];
+        Qset[nz] = &Qpool[nz];
+        orig[nz] = i;
+        nz++;
+    }
+    /* All divisors zero: let the classical path handle the degenerate case. */
+    if (ok && nz == 0) ok = 0;
+
+    Expr** quots = NULL; Expr* rem = NULL;
+    if (ok) {
+        fmpq_mpoly_t R; fmpq_mpoly_init(R, ctx);
+        fmpq_mpoly_divrem_ideal(Qset, R, A, (fmpq_mpoly_struct* const*)Bset,
+                                (slong)nz, ctx);
+        quots = (Expr**)malloc(sizeof(Expr*) * (size_t)ndiv);
+        for (int i = 0; i < ndiv; i++) quots[i] = NULL;
+        int good = 1;
+        for (int j = 0; j < nz && good; j++) {
+            Expr* qe = mpoly_to_expr(&Qpool[j], ctx, &vs);
+            if (!qe) good = 0; else quots[orig[j]] = qe;
+        }
+        for (int i = 0; i < ndiv && good; i++)
+            if (!quots[i]) quots[i] = expr_new_integer(0);   /* zero-divisor slot */
+        if (good) { rem = mpoly_to_expr(R, ctx, &vs); if (!rem) good = 0; }
+        if (!good) {
+            if (quots) { for (int i = 0; i < ndiv; i++) if (quots[i]) expr_free(quots[i]);
+                         free(quots); quots = NULL; }
+            ok = 0;
+        }
+        fmpq_mpoly_clear(R, ctx);
+    }
+
+    for (int j = 0; j < nz; j++) { fmpq_mpoly_clear(&Bpool[j], ctx);
+                                   fmpq_mpoly_clear(&Qpool[j], ctx); }
+    free(Bpool); free(Qpool); free(Bset); free(Qset); free(orig);
+    fmpq_mpoly_clear(A, ctx);
+    fmpq_mpoly_ctx_clear(ctx);
+    varset_free(&vs);
+
+    if (!ok) return 0;
+    *quot_out = quots;
+    *rem_out = rem;
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Kernel-aware zero test (accelerator for poly.c is_zero_poly)      */
 /* ------------------------------------------------------------------ */
 
@@ -4379,6 +4469,13 @@ int flint_linear_system_terms(const Expr* equation,
                               flint_lsys_term_fn cb, void* user) {
     (void)equation; (void)vars; (void)nvars; (void)unknowns; (void)nunk;
     (void)cb; (void)user;
+    return 0;
+}
+int flint_polynomial_reduce(const Expr* poly, const Expr* const* divisors,
+                            int ndiv, const Expr* const* vars, int nvars,
+                            int order_kind, Expr*** quot_out, Expr** rem_out) {
+    (void)poly; (void)divisors; (void)ndiv; (void)vars; (void)nvars;
+    (void)order_kind; (void)quot_out; (void)rem_out;
     return 0;
 }
 void  flint_bridge_init(void) { /* no FLINT: nothing to register */ }

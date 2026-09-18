@@ -806,6 +806,14 @@ void options_register_defaults(void) {
     ob_commit(&b, "GroebnerBasis");
 
     ob_init(&b);
+    ob_add(&b, r_sym("CoefficientDomain", "RationalFunctions"));
+    ob_add(&b, r_int("Modulus", 0));
+    ob_add(&b, r_sym("MonomialOrder", "Lexicographic"));
+    ob_add(&b, r_list0("ParameterVariables"));
+    ob_add(&b, r_int("Tolerance", 0));
+    ob_commit(&b, "PolynomialReduce");
+
+    ob_init(&b);
     ob_add(&b, r_sym("Extension", "None"));
     ob_commit(&b, "MinimalPolynomial");
 

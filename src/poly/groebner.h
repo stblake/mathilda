@@ -100,6 +100,37 @@ void    gb_poly_set_wmat(GBPoly* p, const GBWeightMatrix* wmat);
  *       (otherwise Buchberger need not terminate). */
 bool    gb_wmat_validate(const int64_t* w, int n_rows, int n_vars);
 
+/* ------------------------------------------------------------------ */
+/*  Named monomial orders (shared by GroebnerBasis / PolynomialReduce  */
+/*  / the CoefficientRules family)                                      */
+/* ------------------------------------------------------------------ */
+
+/* Build the row-major weight matrix (caller frees with free()) for a
+ * "named" monomial order on `k` variables, described by three flags:
+ *   deg_sign  +1 = degree-first order, -1 = its Negative variant, 0 = a
+ *             pure (non-degree) order;
+ *   rev       reverse-lexicographic tail rows when true;
+ *   neg_lex   negate the pure-lex identity rows (NegativeLexicographic).
+ * Mirrors the construction Mathematica uses for its named orders. Sets
+ * *rows_out. This is the single source of truth also used by the
+ * CoefficientRules/MonomialList family. */
+int64_t* gb_build_order_matrix(int k, int deg_sign, int rev, int neg_lex,
+                               int* rows_out);
+
+/* Classify a named monomial-order string into the (deg_sign, rev, neg_lex)
+ * flags accepted by gb_build_order_matrix, plus a native GBOrder hint for
+ * the two orders the engine implements natively:
+ *   "Lexicographic"                      -> GB_ORDER_LEX
+ *   "DegreeReverseLexicographic"         -> GB_ORDER_GREVLEX
+ *   "DegreeLexicographic"                -> GB_ORDER_MATRIX (needs a matrix)
+ *   "NegativeLexicographic"              -> GB_ORDER_MATRIX
+ *   "NegativeDegreeLexicographic"        -> GB_ORDER_MATRIX
+ *   "NegativeDegreeReverseLexicographic" -> GB_ORDER_MATRIX
+ * Returns true iff `name` is a recognised order (the flags/hint are then
+ * filled); false otherwise (outputs untouched). */
+bool    gb_classify_named_order(const char* name, int* deg_sign, int* rev,
+                                int* neg_lex, GBOrder* native_hint);
+
 /* Append a term to the END without sorting; caller MUST follow up with
  * gb_poly_normalize() before any other operation. */
 void    gb_poly_push_term(GBPoly* p, const int* exps, const mpq_t coef);

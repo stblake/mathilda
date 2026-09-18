@@ -5293,4 +5293,5 @@ void poly_init(void) {
     subresultants_init();
     subresultantpolynomials_init();
     monomials_init();
+    polynomialreduce_init();
 }

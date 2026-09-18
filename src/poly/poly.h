@@ -35,6 +35,8 @@ Expr* builtin_monomiallist(Expr* res);
 Expr* builtin_coefficientrules(Expr* res);
 Expr* builtin_fromcoefficientrules(Expr* res);
 void  monomials_init(void);
+Expr* builtin_polynomialreduce(Expr* res);
+void  polynomialreduce_init(void);
 
 /* ------------------------------------------------------------------ */
 /* Internal polynomial helpers used by neighbouring modules           */

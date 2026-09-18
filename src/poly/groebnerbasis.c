@@ -90,6 +90,11 @@ typedef struct {
     Expr*   matrix_order;           /* MonomialOrder -> {{...},...}: borrowed
                                        weight-matrix value, NULL otherwise.
                                        Validated at dispatch (needs n_main). */
+    bool    named_matrix_req;       /* MonomialOrder -> a named order that has no
+                                       native GBOrder (DegreeLexicographic, the
+                                       Negative* family); the weight matrix is
+                                       built at dispatch when n_main is known. */
+    int     named_ds, named_rev, named_neg;  /* gb_build_order_matrix flags */
     GBMethod method;                /* Method -> ... */
     bool    sort_desc;              /* Sort -> True reverses the default
                                        LM-ascending output ordering */
@@ -120,6 +125,8 @@ static void extract_options(const Expr* res, size_t* n_pos,
     /* Defaults. */
     opt->order = GB_ORDER_LEX;
     opt->matrix_order = NULL;
+    opt->named_matrix_req = false;
+    opt->named_ds = opt->named_rev = opt->named_neg = 0;
     opt->method = GB_METHOD_BUCHBERGER;
     opt->sort_desc = false;
     opt->parameter_vars_given = false;
@@ -146,9 +153,27 @@ static void extract_options(const Expr* res, size_t* n_pos,
                 } else if (val->data.symbol.name == SYM_EliminationOrder) {
                     opt->order = GB_ORDER_ELIM;
                 } else {
-                    warn_once("nimpl", "unsupported MonomialOrder value; "
-                                       "falling back to Lexicographic");
-                    opt->order = GB_ORDER_LEX;
+                    /* DegreeLexicographic and the Negative* family have no
+                     * native GBOrder; request a weight matrix (built at
+                     * dispatch, where the main-variable count is known). */
+                    int ds = 0, rv = 0, nl = 0; GBOrder hint;
+                    if (gb_classify_named_order(val->data.symbol.name,
+                                                &ds, &rv, &nl, &hint)) {
+                        if (hint == GB_ORDER_LEX) {
+                            opt->order = GB_ORDER_LEX;
+                        } else if (hint == GB_ORDER_GREVLEX) {
+                            opt->order = GB_ORDER_GREVLEX;
+                        } else {
+                            opt->named_matrix_req = true;
+                            opt->named_ds = ds; opt->named_rev = rv;
+                            opt->named_neg = nl;
+                            opt->order = GB_ORDER_LEX;   /* placeholder */
+                        }
+                    } else {
+                        warn_once("nimpl", "unsupported MonomialOrder value; "
+                                           "falling back to Lexicographic");
+                        opt->order = GB_ORDER_LEX;
+                    }
                 }
             } else {
                 /* A non-symbol value is a candidate weight matrix.  It is
@@ -680,6 +705,35 @@ Expr* builtin_groebner_basis(Expr* res) {
             warn_once("nimpl", "weight-matrix MonomialOrder is not supported "
                                "with elimination or parameter variables; "
                                "falling back to Lexicographic");
+        }
+    }
+
+    /* Named non-lexicographic MonomialOrder (DegreeLexicographic, Negative*):
+     * build its weight matrix now that the main-variable count is known.
+     * Same restriction as a user weight matrix -- honoured only in the plain
+     * form where the joint var array equals the main-variable list. */
+    if (opt.named_matrix_req && !wmat_ptr) {
+        if (n_elim == 0 && n_params == 0) {
+            int wr = 0;
+            int64_t* buf = gb_build_order_matrix((int)n_main, opt.named_ds,
+                                                 opt.named_rev, opt.named_neg, &wr);
+            if (buf && gb_wmat_validate(buf, wr, (int)n_main)) {
+                wmat_buf = buf;
+                wmat_storage.n_rows = wr;
+                wmat_storage.n_vars = (int)n_main;
+                wmat_storage.w = wmat_buf;
+                wmat_ptr = &wmat_storage;
+                use_order = GB_ORDER_MATRIX;
+            } else {
+                free(buf);
+                warn_once("nimpl", "MonomialOrder is not a valid term order for "
+                                   "these variables; falling back to "
+                                   "Lexicographic");
+            }
+        } else {
+            warn_once("nimpl", "named non-lexicographic MonomialOrder is not "
+                               "supported with elimination or parameter "
+                               "variables; falling back to Lexicographic");
         }
     }
 

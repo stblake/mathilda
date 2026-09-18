@@ -405,13 +405,25 @@ static void test_coeff_domain_integers_documented(void) {
                   "Plus[-1, Times[5, x], Times[a, Power[x, 2]]]]");
 }
 
-static void test_nimpl_deglex_falls_back(void) {
-    mute_stderr_once();
-    /* DegreeLexicographic deferred -> nimpl + fall back to Lex. */
+static void test_deglex_honoured(void) {
+    /* DegreeLexicographic is now honoured via the shared named-order weight
+     * matrix (it no longer silently falls back to Lexicographic).  The result
+     * agrees with the equivalent explicit weight matrix {{1,1},{1,0}} and
+     * differs from the Lexicographic basis. */
     check_eq("GroebnerBasis[{x^2-2y^2, x y-3}, {x, y}, "
              "MonomialOrder -> DegreeLexicographic]",
-             "List[Plus[-9, Times[2, Power[y, 4]]], "
-                  "Plus[Times[3, x], Times[-2, Power[y, 3]]]]");
+             "List[Plus[-3, Times[x, y]], "
+                  "Plus[Power[x, 2], Times[-2, Power[y, 2]]], "
+                  "Plus[Times[-3, x], Times[2, Power[y, 3]]]]");
+    check_eq("GroebnerBasis[{x^2-2y^2, x y-3}, {x, y}, "
+             "MonomialOrder -> DegreeLexicographic] === "
+             "GroebnerBasis[{x^2-2y^2, x y-3}, {x, y}, "
+             "MonomialOrder -> {{1,1},{1,0}}]",
+             "True");
+    check_eq("GroebnerBasis[{x^2-2y^2, x y-3}, {x, y}, "
+             "MonomialOrder -> DegreeLexicographic] =!= "
+             "GroebnerBasis[{x^2-2y^2, x y-3}, {x, y}]",
+             "True");
 }
 
 /* ------------------------------------------------------------------ */
@@ -708,7 +720,7 @@ int main(void) {
     TEST(test_coeff_domain_integers_strong_basis);
     TEST(test_coeff_domain_integers_gcd_combination);
     TEST(test_coeff_domain_integers_documented);
-    TEST(test_nimpl_deglex_falls_back);
+    TEST(test_deglex_honoured);
     TEST(test_non_polynomial_unevaluated);
     TEST(test_coeff_domain_polynomials_equals_default);
     TEST(test_coeff_domain_inexact_numbers);

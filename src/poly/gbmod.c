@@ -324,6 +324,49 @@ restart: ;
     return r;
 }
 
+/* Like gfp_reduce, but also records the division quotients: on return
+ *   poly == sum_i (*quot_out)[i] * basis[i] + remainder   (mod p)
+ * with the remainder being the returned polynomial.  `*quot_out` is a fresh
+ * array of `n` GFpPoly* (one quotient per basis element); the caller owns
+ * each GFpPoly* AND the array (release with gfp_poly_free / free). */
+GFpPoly* gfp_divmod(const GFpPoly* poly, GFpPoly* const* basis, size_t n,
+                    GFpPoly*** quot_out) {
+    GFpPoly* r = gfp_poly_copy(poly);
+    int nv = r->n_vars;
+
+    GFpPoly** quot = (GFpPoly**)malloc(sizeof(GFpPoly*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        quot[i] = gfp_poly_new(nv, poly->order, poly->p);
+
+    if (r->n_terms == 0) { *quot_out = quot; return r; }
+
+    int* q = (int*)malloc(sizeof(int) * (size_t)(nv > 0 ? nv : 1));
+    bool reduced;
+    do {
+        reduced = false;
+        for (size_t t = 0; t < r->n_terms; t++) {
+            const int* re = gfp_exp_at(r, t);
+            for (size_t bi = 0; bi < n; bi++) {
+                const GFpPoly* g = basis[bi];
+                if (g->n_terms == 0) continue;
+                if (!exp_divides(gfp_poly_lm(g), re, q, nv)) continue;
+                uint64_t factor = gfp_mul(r->coefs[t], gfp_inv(g->coefs[0], g->p), g->p);
+                gfp_poly_push_term(quot[bi], q, factor);
+                GFpPoly* nr = gfp_poly_sub_mul(r, q, factor, g);
+                gfp_poly_free(r);
+                r = nr;
+                reduced = true;
+                goto restart;
+            }
+        }
+restart: ;
+    } while (reduced);
+    free(q);
+    for (size_t i = 0; i < n; i++) gfp_poly_normalize(quot[i]);
+    *quot_out = quot;
+    return r;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Buchberger                                                         */
 /* ------------------------------------------------------------------ */

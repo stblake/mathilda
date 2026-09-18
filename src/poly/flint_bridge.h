@@ -428,6 +428,23 @@ int flint_linear_system_terms(const Expr* equation,
                               Expr* const* unknowns, int nunk,
                               flint_lsys_term_fn cb, void* user);
 
+/*
+ * Multivariate division of `poly` by `divisors[0..ndiv-1]` over Q[vars] with a
+ * standard monomial order, returning the cofactors and remainder that
+ * PolynomialReduce needs: poly == sum_i quot[i]*divisors[i] + remainder, with
+ * the remainder fully reduced.  `vars` are the variables in priority order
+ * (vars[0] the most significant); `order_kind` selects 0 = Lexicographic,
+ * 1 = DegreeLexicographic, 2 = DegreeReverseLexicographic (the orders FLINT
+ * models natively).  On success returns 1 and fills *quot_out (a fresh malloc'd
+ * array of `ndiv` Expr*, one quotient per divisor in input order — a zero
+ * divisor yields 0) and *rem_out; the caller owns every returned Expr and the
+ * array.  Returns 0 (caller falls back to the gb_divmod engine) when FLINT is
+ * absent, a variable is not a symbol or repeats, all divisors are zero, or any
+ * operand is not a polynomial over Q in exactly `vars`.  Never mutates inputs. */
+int flint_polynomial_reduce(const Expr* poly, const Expr* const* divisors,
+                            int ndiv, const Expr* const* vars, int nvars,
+                            int order_kind, Expr*** quot_out, Expr** rem_out);
+
 /* Registers the M1 scaffolding builtin(s). Called from core_init(). */
 void flint_bridge_init(void);
 

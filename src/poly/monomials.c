@@ -39,6 +39,7 @@
 #include "expand.h"
 #include "symtab.h"
 #include "attr.h"
+#include "groebner.h"   /* gb_build_order_matrix, gb_classify_named_order */
 
 #include <stdlib.h>
 #include <string.h>
@@ -102,26 +103,9 @@ static void monos_free(Mono* monos, size_t n) {
  * (non-degree) order. `rev` selects reverse-lex tail rows when true. */
 static int64_t* named_matrix(int k, int deg_sign, int rev, int neg_lex,
                              int* rows_out) {
-    /* Pure lexicographic / negative-lexicographic: k identity(-signed) rows. */
-    if (deg_sign == 0) {
-        int64_t* w = calloc((size_t)(k > 0 ? k : 1) * (size_t)(k > 0 ? k : 1),
-                            sizeof(int64_t));
-        for (int i = 0; i < k; i++) w[(size_t)i * k + i] = neg_lex ? -1 : 1;
-        *rows_out = k;
-        return w;
-    }
-    /* Degree-first orders: row 0 is the (signed) total-degree row, then k-1
-     * lex or reverse-lex tail rows. */
-    int rows = k;                         /* deg row + (k-1) tail rows */
-    int64_t* w = calloc((size_t)(rows > 0 ? rows : 1) * (size_t)(k > 0 ? k : 1),
-                        sizeof(int64_t));
-    for (int j = 0; j < k; j++) w[j] = deg_sign;        /* total-degree row */
-    for (int r = 1; r < k; r++) {
-        if (rev) w[(size_t)r * k + (k - r)] = -1;        /* -e_{k-r} */
-        else     w[(size_t)r * k + (r - 1)] =  1;        /*  e_{r-1} */
-    }
-    *rows_out = rows;
-    return w;
+    /* Single source of truth lives in groebner.c so GroebnerBasis /
+     * PolynomialReduce and this family build byte-identical matrices. */
+    return gb_build_order_matrix(k, deg_sign, rev, neg_lex, rows_out);
 }
 
 /* Parse an explicit {{...},{...}} weight matrix into a fresh rows*k row-major
@@ -155,19 +139,9 @@ static int64_t* explicit_matrix(const Expr* v, int k, int* rows_out) {
 static int64_t* order_weight_matrix(const Expr* order_arg, int k, int* rows_out) {
     if (!order_arg) return named_matrix(k, 0, 0, 0, rows_out);   /* Lexicographic */
     if (order_arg->type == EXPR_STRING) {
-        const char* s = order_arg->data.string;
-        if (strcmp(s, "Lexicographic") == 0)
-            return named_matrix(k, 0, 0, 0, rows_out);
-        if (strcmp(s, "NegativeLexicographic") == 0)
-            return named_matrix(k, 0, 0, 1, rows_out);
-        if (strcmp(s, "DegreeLexicographic") == 0)
-            return named_matrix(k, +1, 0, 0, rows_out);
-        if (strcmp(s, "DegreeReverseLexicographic") == 0)
-            return named_matrix(k, +1, 1, 0, rows_out);
-        if (strcmp(s, "NegativeDegreeLexicographic") == 0)
-            return named_matrix(k, -1, 0, 0, rows_out);
-        if (strcmp(s, "NegativeDegreeReverseLexicographic") == 0)
-            return named_matrix(k, -1, 1, 0, rows_out);
+        int ds = 0, rv = 0, nl = 0; GBOrder hint;
+        if (gb_classify_named_order(order_arg->data.string, &ds, &rv, &nl, &hint))
+            return named_matrix(k, ds, rv, nl, rows_out);
         return NULL;                                /* unknown order string */
     }
     if (is_list_head(order_arg))

@@ -197,6 +197,61 @@ bool gb_wmat_validate(const int64_t* w, int n_rows, int n_vars) {
     return rank == n_vars;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Named monomial orders                                              */
+/* ------------------------------------------------------------------ */
+
+int64_t* gb_build_order_matrix(int k, int deg_sign, int rev, int neg_lex,
+                               int* rows_out) {
+    /* Pure lexicographic / negative-lexicographic: k identity(-signed) rows. */
+    if (deg_sign == 0) {
+        int64_t* w = (int64_t*)calloc((size_t)(k > 0 ? k : 1)
+                                      * (size_t)(k > 0 ? k : 1), sizeof(int64_t));
+        for (int i = 0; i < k; i++) w[(size_t)i * k + i] = neg_lex ? -1 : 1;
+        *rows_out = k;
+        return w;
+    }
+    /* Degree-first orders: row 0 is the (signed) total-degree row, then k-1
+     * lex or reverse-lex tail rows. */
+    int rows = k;
+    int64_t* w = (int64_t*)calloc((size_t)(rows > 0 ? rows : 1)
+                                  * (size_t)(k > 0 ? k : 1), sizeof(int64_t));
+    for (int j = 0; j < k; j++) w[j] = deg_sign;            /* total-degree row */
+    for (int r = 1; r < k; r++) {
+        if (rev) w[(size_t)r * k + (k - r)] = -1;           /* -e_{k-r} */
+        else     w[(size_t)r * k + (r - 1)] =  1;           /*  e_{r-1} */
+    }
+    *rows_out = rows;
+    return w;
+}
+
+bool gb_classify_named_order(const char* name, int* deg_sign, int* rev,
+                             int* neg_lex, GBOrder* native_hint) {
+    if (!name) return false;
+    int ds = 0, rv = 0, nl = 0;
+    GBOrder hint = GB_ORDER_MATRIX;
+    if (strcmp(name, "Lexicographic") == 0) {
+        ds = 0; rv = 0; nl = 0; hint = GB_ORDER_LEX;
+    } else if (strcmp(name, "DegreeLexicographic") == 0) {
+        ds = 1; rv = 0; nl = 0; hint = GB_ORDER_MATRIX;
+    } else if (strcmp(name, "DegreeReverseLexicographic") == 0) {
+        ds = 1; rv = 1; nl = 0; hint = GB_ORDER_GREVLEX;
+    } else if (strcmp(name, "NegativeLexicographic") == 0) {
+        ds = 0; rv = 0; nl = 1; hint = GB_ORDER_MATRIX;
+    } else if (strcmp(name, "NegativeDegreeLexicographic") == 0) {
+        ds = -1; rv = 0; nl = 0; hint = GB_ORDER_MATRIX;
+    } else if (strcmp(name, "NegativeDegreeReverseLexicographic") == 0) {
+        ds = -1; rv = 1; nl = 0; hint = GB_ORDER_MATRIX;
+    } else {
+        return false;
+    }
+    if (deg_sign)    *deg_sign = ds;
+    if (rev)         *rev = rv;
+    if (neg_lex)     *neg_lex = nl;
+    if (native_hint) *native_hint = hint;
+    return true;
+}
+
 /* qsort context.  Single-threaded; same convention as MPoly. */
 static const GBPoly* g_sort_ctx = NULL;
 static int sort_cmp_idx(const void* a, const void* b) {

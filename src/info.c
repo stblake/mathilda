@@ -4012,6 +4012,14 @@ void info_init(void) {
         "FromCoefficientRules[{expvec -> coeff, ...}, {x1, x2, ...}] reconstructs the polynomial\n"
         "Sum[coeff * x1^e1 * x2^e2 * ..., over rules]. The exponent vectors must match the number of\n"
         "variables. Inverse of CoefficientRules.");
+    symtab_set_docstring("PolynomialReduce",
+        "PolynomialReduce[poly, {p1, ..., pn}, {x1, ..., xk}] gives {{a1, ..., an}, b} with\n"
+        "a1 p1 + ... + an pn + b == poly and b minimal: no term of b is divisible by any leading\n"
+        "term of the pi. PolynomialReduce[poly, polys] uses Variables. Options as for GroebnerBasis:\n"
+        "MonomialOrder (Lexicographic default), CoefficientDomain (RationalFunctions default;\n"
+        "Rationals), Modulus -> p (over GF(p)), ParameterVariables. Free symbols outside the\n"
+        "variable list are coefficient-field parameters. If the pi are a Groebner basis, b is the\n"
+        "unique normal form.");
     symtab_set_docstring("Exponent",
         "Exponent[expr, form] gives the maximum power with which form appears in the\n"
         "expanded form of expr.\n"
