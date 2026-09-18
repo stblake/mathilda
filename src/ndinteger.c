@@ -71,6 +71,19 @@ static bool ndk_IntegerLength_ii(int64_t n, int64_t* out) {
     return true;
 }
 
+/* BitLength[n]: binary bits of n. BitLength[0] is 0 and, for n < 0,
+ * BitLength[n] = BitLength[BitNot[n]] with BitNot[n] = ~n = -n-1. Working on the
+ * unsigned magnitude `~(uint64_t)n` for negatives is exact for every int64
+ * (including INT64_MIN, whose complement is INT64_MAX), so this kernel — unlike
+ * ndk_IntegerLength_ii, which negates — never overflows and always succeeds. */
+static bool ndk_BitLength_ii(int64_t n, int64_t* out) {
+    uint64_t m = (n >= 0) ? (uint64_t)n : ~(uint64_t)n;
+    int64_t d = 0;
+    while (m) { d++; m >>= 1; }
+    *out = d;
+    return true;
+}
+
 /* EulerPhi[n] = |n| * prod (1 - 1/p). EulerPhi[0] is 0 and the sign of n is
  * ignored, both matching the scalar builtin. Divide before multiplying so the
  * running value never exceeds |n| and cannot overflow. */
@@ -156,6 +169,8 @@ static bool ndk_DivisorSigma_ii(int64_t k, int64_t n, int64_t* out) {
  * anyway (EulerPhi[3.] is not EulerPhi[3]). */
 static const NDUnaryKernel NDKU_IntegerLength =
     { NULL, NULL, false, false, NULL, ndk_IntegerLength_ii, true };
+static const NDUnaryKernel NDKU_BitLength =
+    { NULL, NULL, false, false, NULL, ndk_BitLength_ii, true };
 static const NDUnaryKernel NDKU_EulerPhi =
     { NULL, NULL, false, false, NULL, ndk_EulerPhi_ii, true };
 static const NDUnaryKernel NDKU_MoebiusMu =
@@ -414,6 +429,7 @@ Expr* ndint_sign_predicate(Expr* res, NDSignPred which) {
 
 void ndinteger_init(void) {
     symtab_set_ndarray_unary_kernel("IntegerLength", &NDKU_IntegerLength);
+    symtab_set_ndarray_unary_kernel("BitLength",     &NDKU_BitLength);
     symtab_set_ndarray_unary_kernel("EulerPhi",      &NDKU_EulerPhi);
     symtab_set_ndarray_unary_kernel("MoebiusMu",     &NDKU_MoebiusMu);
     symtab_set_ndarray_binary_kernel("GCD",          &NDKB_GCD);

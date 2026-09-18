@@ -99,6 +99,7 @@ bool int_only_head(const char* h, size_t na, bool* pred) {
     if (na >= 2 && (strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0)) return true;
     if ((na == 1 || na == 2)
         && (strcmp(h, "IntegerLength") == 0 || strcmp(h, "IntegerExponent") == 0)) return true;
+    if (na == 1 && strcmp(h, "BitLength") == 0) return true;
     if (na == 3 && strcmp(h, "PowerMod") == 0) return true;
     if ((na == 1 && (strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0))
         || (na == 2 && strcmp(h, "Divisible") == 0)) { *pred = true; return true; }

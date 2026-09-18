@@ -4422,6 +4422,12 @@ void info_init(void) {
         "IntegerLength[n, b] gives the number of base b digits in n.\n"
         "IntegerLength ignores the sign of n; IntegerLength[0] is 0.");
 
+    symtab_set_docstring("BitLength",
+        "BitLength[n] gives the number of binary bits needed to represent the "
+        "integer n.\n"
+        "For n > 0, BitLength[n] is Floor[Log[2, n]] + 1; BitLength[0] is 0.\n"
+        "For n < 0, BitLength[n] is equivalent to BitLength[BitNot[n]].");
+
     symtab_set_docstring("IntegerExponent",
         "IntegerExponent[n, b] gives the highest power of b that divides n.\n"
         "IntegerExponent[n] is equivalent to IntegerExponent[n, 10] and "

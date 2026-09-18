@@ -286,6 +286,7 @@ extern const char* SYM_InputForm;
 extern const char* SYM_Integer;
 extern const char* SYM_IntegerDigits;
 extern const char* SYM_IntegerLength;
+extern const char* SYM_BitLength;
 extern const char* SYM_IntegerExponent;
 extern const char* SYM_DigitCount;
 extern const char* SYM_DigitSum;

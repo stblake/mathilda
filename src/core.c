@@ -67,6 +67,7 @@
 #include "logexp.h"
 #include "piecewise.h"
 #include "int.h"
+#include "bitwise.h"
 #include "real.h"
 #include "interval.h"
 #include "attr.h"
@@ -803,6 +804,7 @@ void core_init(void) {
     void interp_init(void);
     interp_init();
     int_init();
+    bitwise_init();
     real_init();
     attr_init();
     purefunc_init();

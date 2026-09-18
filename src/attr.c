@@ -139,6 +139,7 @@ static SymbolAttr builtin_attrs[] = {
     {"IntegerPart", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"IntegerDigits", ATTR_PROTECTED | ATTR_LISTABLE},
     {"IntegerLength", ATTR_PROTECTED | ATTR_LISTABLE},
+    {"BitLength", ATTR_PROTECTED | ATTR_LISTABLE},
     {"DigitCount", ATTR_PROTECTED},
     {"FromDigits", ATTR_PROTECTED},
     {"FractionalPart", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},

@@ -783,7 +783,7 @@ static void pack_mark_aware_heads(void) {
          * fails -- they degrade through ndarray_delist_and_reeval explicitly
          * instead of falling out unevaluated. */
         "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu",
-        "IntegerLength", "PowerMod", "Prime", "IntegerDigits",
+        "IntegerLength", "BitLength", "PowerMod", "Prime", "IntegerDigits",
         /* The elementwise sign predicates. Now buffer on BOTH sides (§13 gap C.1
          * closed): the input is read straight off the buffer and the answer is a
          * packed NDT_BOOL array of True/False, never 10^6 Real comparisons nor
@@ -1089,7 +1089,7 @@ static void pack_mark_aware_heads(void) {
          * unevaluated (MoebiusMu[0], DivisorSigma[k, 0]) -- so the List path
          * and GMP still answer every case the buffer cannot. */
         "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu",
-        "IntegerLength", "PowerMod", "Prime", "IntegerDigits",
+        "IntegerLength", "BitLength", "PowerMod", "Prime", "IntegerDigits",
         /* The sign predicates answer with True/False, which no dtype holds --
          * but they READ an int64 buffer exactly, by comparison, and comparison
          * is the one operation on integers that needs no arithmetic to be

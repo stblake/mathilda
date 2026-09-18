@@ -232,6 +232,7 @@ include_directories(../src/list)
 include_directories(../src/ml)
 include_directories(../src/linalg)
 include_directories(../src/numbertheory)
+include_directories(../src/bitwise)
 include_directories(../src/poly)
 include_directories(../src/simp)
 include_directories(../src/stats)
@@ -288,6 +289,8 @@ set(COMMON_SRC
     ../src/attr.c
     ../src/core.c
     ../src/int.c
+    ../src/bitwise/bitwise.c
+    ../src/bitwise/bitlength.c
     ../src/real.c
     ../src/numberform.c
     ../src/comparisons.c
@@ -2470,6 +2473,16 @@ else()
     target_link_libraries(integer_length_tests gmp m)
 endif()
 add_test(NAME integer_length_tests COMMAND integer_length_tests)
+
+add_executable(bitwise_tests test_bitwise.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(bitwise_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(bitwise_tests gmp m ${ECM_LIB})
+    add_dependencies(bitwise_tests build_ecm)
+else()
+    target_link_libraries(bitwise_tests gmp m)
+endif()
+add_test(NAME bitwise_tests COMMAND bitwise_tests)
 
 add_executable(digit_count_tests test_digit_count.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(digit_count_tests PRIVATE ../src)

@@ -34,6 +34,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | String operations | [`builtins/string-operations.md`](docs/spec/builtins/string-operations.md) |
 | Arithmetic (`Plus`, `Times`, `Power`, `Mod`, `Factorial`, `Binomial`, ...) | [`builtins/arithmetic.md`](docs/spec/builtins/arithmetic.md) |
 | Number theory (`GCD`, `LCM`, `PowerMod`, `PrimeQ`, `FactorInteger`, `EulerPhi`, ...) | [`builtins/number-theory.md`](docs/spec/builtins/number-theory.md) |
+| Bitwise operations (`BitLength`, ...) | [`builtins/bitwise.md`](docs/spec/builtins/bitwise.md) |
 | Algebra (`Factor`, `Expand`, `Together`, `Apart`, `GroebnerBasis`, ...) | [`builtins/algebra.md`](docs/spec/builtins/algebra.md) |
 | Solutions of equations (`Solve`, `SolveAlways`, `Root`, `ToRadicals`, `Eliminate`, ...) | [`builtins/solutions-of-equations.md`](docs/spec/builtins/solutions-of-equations.md) |
 | Comparisons (`Equal`, `Less`, `Greater`, `SameQ`, `Inequality`, ...) | [`builtins/comparisons.md`](docs/spec/builtins/comparisons.md) |

@@ -173,6 +173,19 @@ static bool int_ilen(long long n, long long base, long long* out) {
     return false;
 }
 
+/* Number of binary bits of n; BitLength[0] is 0 and, for n < 0, BitLength[n] =
+ * BitLength[~n] (BitNot[n] = -n-1).  Counting bits of the unsigned magnitude
+ * ~(unsigned)n makes INT64_MIN exact (its complement is LLONG_MAX), so this
+ * never bails. */
+static bool int_blen(long long n, long long* out) {
+    unsigned long long m = (n >= 0) ? (unsigned long long)n
+                                    : ~(unsigned long long)n;
+    long long k = 0;
+    while (m) { k++; m >>= 1; }
+    *out = k;
+    return false;
+}
+
 /* Largest e with base^e dividing n.  IntegerExponent[0, b] is Infinity in the
  * interpreter, which is not a machine integer. */
 static bool int_iexp(long long n, long long base, long long* out) {
@@ -1066,6 +1079,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(LCM_I):   IOP(int_lcm(RA.i, RB.i, &RD.i));
             OP(ILEN_I):  IOP(int_ilen(RA.i, RB.i, &RD.i));
             OP(IEXP_I):  IOP(int_iexp(RA.i, RB.i, &RD.i));
+            OP(BLEN_I):  IOP(int_blen(RA.i, &RD.i));
             /* Ternary, so the operands are a RUN of registers starting at `a`
              * (the K_NARY shape KERNN uses), not the two operand fields. */
             OP(POWMOD_I): IOP(int_powmod(R[c->a].i, R[c->a + 1].i, R[c->a + 2].i, &RD.i));

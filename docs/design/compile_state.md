@@ -84,10 +84,11 @@ check what it accumulates in.**
 per-element loop. `ndstruct_sort` compares through a double as well and would
 need the same treatment. Both bail cleanly, which is the correct default.
 
-`Bit*` is NOT a coverage gap to close: `BitAnd`/`BitOr`/`BitXor`/`BitNot`/
-`BitShiftLeft`/`BitShiftRight` are unimplemented in the INTERPRETER (they return
-unevaluated), so compiling them would answer where the interpreter declines.
-Implement them there first.
+`BitLength` IS implemented and lowered (interpreter + `OP_BLEN_I`, unary — no
+base operand). The bitwise COMBINATORS `BitAnd`/`BitOr`/`BitXor`/`BitNot`/
+`BitShiftLeft`/`BitShiftRight` remain NOT a coverage gap to close: they are
+unimplemented in the INTERPRETER (they return unevaluated), so compiling them
+would answer where the interpreter declines. Implement them there first.
 
 **Two tests were passing for the wrong reason** and are worth remembering as a
 class: `must_bail_raw("NestList integer body", …, in2, RI2, 1)` passed with
