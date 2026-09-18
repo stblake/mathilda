@@ -1146,6 +1146,83 @@ In[3]:= CoefficientList[1 + a x^2 + b x y + c y^2, {x, y}]
 Out[3]= {{1, 0, c}, {0, b, 0}, {a, 0, 0}}
 ```
 
+## MonomialList
+Gives the list of monomials of a polynomial, sorted by a monomial order.
+- `MonomialList[poly]`
+- `MonomialList[poly, {var1, var2, ...}]`
+- `MonomialList[poly, vars, order]`
+
+**Features**:
+- `Protected`.
+- `MonomialList[poly]` is equivalent to `MonomialList[poly, Variables[poly]]`.
+- Works whether or not `poly` is given in expanded form (it is expanded internally).
+- `order` is `"Lexicographic"` (default), `"DegreeLexicographic"`,
+  `"DegreeReverseLexicographic"`, `"NegativeLexicographic"`,
+  `"NegativeDegreeLexicographic"`, `"NegativeDegreeReverseLexicographic"`, or an
+  explicit weight matrix `w` (monomials ranked by the lexicographic order of `w.v`).
+- `"NegativeLexicographic"` is `Sort` of the exponent vectors; `"Lexicographic"` is
+  its reverse.
+- `Modulus -> m` reduces coefficients modulo `m` (dropping monomials whose
+  coefficient vanishes).
+- `vars` may be `All` (equivalent to `Variables[poly]`).
+- `Plus @@ MonomialList[poly, vars]` reconstructs the expanded polynomial.
+
+```mathematica
+In[1]:= MonomialList[(x + y)^3]
+Out[1]= {x^3, 3 x^2 y, 3 x y^2, y^3}
+
+In[2]:= MonomialList[x^2 y^2 + x^3, {x, y}, "DegreeLexicographic"]
+Out[2]= {x^2 y^2, x^3}
+
+In[3]:= MonomialList[(x + 1)^5, x, Modulus -> 2]
+Out[3]= {x^5, x^4, x, 1}
+```
+
+## CoefficientRules
+Gives the exponent vectors and coefficients of the monomials of a polynomial as rules.
+- `CoefficientRules[poly]`
+- `CoefficientRules[poly, {var1, var2, ...}]`
+- `CoefficientRules[poly, vars, order]`
+
+**Features**:
+- `Protected`.
+- Returns `{expvec -> coeff, ...}`, one rule per monomial; the exponent vector lists
+  the powers of `vars` in order.
+- `CoefficientRules[poly]` is equivalent to `CoefficientRules[poly, Variables[poly]]`.
+- Same `order` settings and `Modulus -> m` option as `MonomialList`; `vars` may be
+  `All`. Works whether or not `poly` is expanded.
+- `FromCoefficientRules` is the inverse.
+- Note: the no-variable form uses `Variables[poly]`, which Mathilda returns in
+  canonical (sorted) order — so e.g. `CoefficientRules[y + x z]` uses the variable
+  order `{x, y, z}`.
+
+```mathematica
+In[1]:= CoefficientRules[(x + y)^3]
+Out[1]= {{3, 0} -> 1, {2, 1} -> 3, {1, 2} -> 3, {0, 3} -> 1}
+
+In[2]:= CoefficientRules[a x y^2 + b x^2 z, {x, y, z}, "DegreeReverseLexicographic"]
+Out[2]= {{1, 2, 0} -> a, {2, 0, 1} -> b}
+
+In[3]:= CoefficientRules[(x + 1)^5, x, Modulus -> 2]
+Out[3]= {{5} -> 1, {4} -> 1, {1} -> 1, {0} -> 1}
+```
+
+## FromCoefficientRules
+Reconstructs a polynomial from its `CoefficientRules` representation.
+- `FromCoefficientRules[rules, {var1, var2, ...}]`
+
+**Features**:
+- `Protected`.
+- Builds `Sum[coeff * var1^e1 * var2^e2 * ..., over rules]`; the exponent vectors must
+  match the number of variables.
+- Inverse of `CoefficientRules`: `FromCoefficientRules[CoefficientRules[poly, vars], vars]`
+  is `Expand[poly]`.
+
+```mathematica
+In[1]:= FromCoefficientRules[{{2, 0} -> a, {1, 1} -> b, {0, 2} -> c}, {x, y}]
+Out[1]= a x^2 + b x y + c y^2
+```
+
 ## Collect
 Collects together terms involving the same powers of objects matching a variable or variables.
 - `Collect[expr, x]`

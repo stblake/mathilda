@@ -507,12 +507,46 @@ static Expr* ds_subst_generics(Expr* R, const char* xv) {
     return R;
 }
 
+/* True if e contains Power[x, k] whose base is the independent variable x and whose
+ * exponent is NOT an integer (a symbol, rational, or real).  This is the residual
+ * shape that makes zero_test's precision ladder spin: the generalised power-potential
+ * Bessel / Whittaker solutions of y'' + A x^m y == 0 at a symbolic exponent
+ * (DSolve`SpecialFunctionForm).  A residual WITHOUT such a power (trig / radical /
+ * arbitrary-forcing solutions -- Pöschl-Teller, Csc^2/Tan, radical first-order) is
+ * handled fast by zero_test, so it keeps the early-return below. */
+static bool ds_has_symbolic_x_power(const Expr* e, const char* xv) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* ex   = e->data.function.args[1];
+        if (base && base->type == EXPR_SYMBOL && base->data.symbol.name == xv
+            && ex && ex->type != EXPR_INTEGER)
+            return true;
+    }
+    if (ds_has_symbolic_x_power(h, xv)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_symbolic_x_power(e->data.function.args[i], xv)) return true;
+    return false;
+}
+
 static bool ds_residual_numeric_zero(const Expr* sub0, const char* xv) {
     Expr* R = ds_subst_generics(expr_copy((Expr*)sub0), xv);
-    /* An arbitrary-function or inert-Integrate residual (Bessel operator with an
-     * undefined forcing g[x]) never numericizes -- decline the numeric route so
-     * the symbolic keep-on-undecidable policy handles it. */
-    if (ds_has_undefined_function(R) || ds_has_head(R, SYM_Integrate)) {
+    /* Decline the numeric route (hand to the symbolic keep-on-undecidable policy) for
+     * an inert-Integrate residual (never numericizes), or for an arbitrary/undefined-
+     * function residual -- UNLESS that residual also carries a symbolic exponent on x
+     * (x^m).  The exception is load-bearing: ds_has_undefined_function is true for any
+     * Derivative head, including the Derivative of a DEFINED special function
+     * (Bessel/Hypergeometric/Airy) from differentiating a special-function solution;
+     * for the generalised power-potential solutions of y'' + A x^m y == 0 (symbolic m)
+     * that residual carries x^m, and routing it to zero_test makes its precision ladder
+     * spin -- effectively hang.  So when a symbolic x-power is present we fall through to
+     * the numeric probe (which confirms zero cheaply).  A trig / radical / arbitrary-
+     * forcing residual has no such x-power, keeps the early-return, and reaches the
+     * (fast) zero_test exactly as before -- so this change does not slow those down. */
+    if (ds_has_head(R, SYM_Integrate)
+        || (ds_has_undefined_function(R) && !ds_has_symbolic_x_power(R, xv))) {
         expr_free(R); return false;
     }
     static const double xs[] = { 0.31, 0.53, 0.74, 1.13, 1.47, 1.92, 2.31, 2.68 };
@@ -642,6 +676,37 @@ static bool ds_branch_corpus_verifiable(const DSolveProblem* P, const Expr* body
         }
         expr_free(R);
         if (nnum >= 2 && nsmall < (nnum + 1) / 2) return false;   /* prelude verdict "BAD" */
+    }
+    return true;
+}
+
+/* Numeric check: does the fitted body satisfy every point CONDITION (initial /
+ * boundary value)?  Unlike ds_branch_num_ok, which checks the ODE RESIDUAL (and so
+ * passes y==0 for a homogeneous-looking equation), this catches a spurious
+ * constant-fit that solves the ODE but VIOLATES a condition -- e.g. Solve returning
+ * a degenerate constant at a removable singularity of the fit system, giving y==0
+ * for the 2nd-order IVP y''==(y')^2 Sin[x], y[0]==0, y'[0]==1/2 (2.2.33-3279, where
+ * y==0 meets y[0]==0 but not y'[0]==1/2 -- a WRONG answer the first-order-only ODE
+ * backstop never saw).  Conservative: rejects only when a condition residual
+ * numericizes to a robustly-nonzero value; a non-numericizable or free-parameter
+ * residual (which a genuine fit drives to an identical 0) is kept. */
+static bool ds_fit_meets_conditions(const DSolveProblem* P, const Expr* body) {
+    if (P->nfun != 1) return true;                 /* systems fit/verified separately */
+    const char* xvar = P->ind_names[0];
+    for (size_t c = 0; c < P->ncond; c++) {
+        if (P->conds[c].fi != 0) continue;
+        Expr* bexpr = expr_copy((Expr*)body);
+        for (int d = 0; d < P->conds[c].order; d++)
+            bexpr = ds_d(bexpr, expr_new_symbol(xvar));
+        bexpr = ds_subst(bexpr, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        Expr* resid = ds_call2(SYM_Subtract, bexpr, expr_copy((Expr*)P->conds[c].value));
+        Expr* R = ds_subst_generics(resid, xvar);  /* instantiate free params; consumes resid */
+        if (ds_has_undefined_function(R) || ds_has_head(R, SYM_Integrate)) { expr_free(R); continue; }
+        Expr* mg = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", R))));
+        double mag = (mg && mg->type == EXPR_REAL)    ? mg->data.real
+                   : (mg && mg->type == EXPR_INTEGER) ? (double)mg->data.integer : NAN;
+        expr_free(mg);
+        if (!isnan(mag) && isfinite(mag) && mag > 1e-4) return false;   /* condition violated */
     }
     return true;
 }
@@ -927,9 +992,16 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
          * sqrt/cube-root branch valid only on a sub-interval is governed by the
          * prelude-grid-aligned ds_branch_corpus_verifiable in dsolve_run, so this
          * fixed-grid gate must not double-judge it. */
-        if (*fit_state == FIT_OK && applied && P->nfun == 1 && P->max_order[0] == 1 &&
-            !ds_has_radical_power(fitted) && !ds_branch_num_ok(P, fitted))
-            *fit_state = FIT_UNDEF;
+        if (*fit_state == FIT_OK && applied && P->nfun == 1 && !ds_has_radical_power(fitted)) {
+            /* Reject a spurious fit: (a) at ANY order, one that VIOLATES a point
+             * condition -- a degenerate Solve root at a removable singularity of the
+             * fit system (y==0 for the 2nd-order IVP y''==(y')^2 Sin[x], y'(0)!=0,
+             * 2.2.33-3279); (b) for first-order scalar, additionally one whose ODE
+             * residual is confidently nonzero (a spurious inverse branch, 2.2.24-2329). */
+            bool bad = !ds_fit_meets_conditions(P, fitted);
+            if (!bad && P->max_order[0] == 1) bad = !ds_branch_num_ok(P, fitted);
+            if (bad) *fit_state = FIT_UNDEF;
+        }
     }
     return fitted;
 }
@@ -2494,23 +2566,51 @@ Expr** dsolve_homog_basis(const Expr* charpoly, const char* lam, const char* xva
                      * IVP constant-fit cannot solve to a number -> the IVP is scored
                      * unfitted (§2.2.4-312).  ComplexExpand computes them for a pure
                      * number (safe: no free symbol, so no Abs/Sign is introduced); a
-                     * root carrying a symbolic parameter is left untouched (its general
-                     * solution still back-substitutes).
+                     * root carrying a symbolic parameter takes the field-arithmetic branch
+                     * below (Re/Im on a radical root do NOT back-substitute -- the M51 bug).
                      *
-                     * NOTE (M51, reverted): switching the symbolic case to a complex-
-                     * EXPONENTIAL basis Exp[r x] does fix a WRONG answer for the narrow
-                     * y''+(symbol)^2 y class (§2.2.32-3155, y''+a^2 y==Sec[a x] shipped
-                     * Sec[a x]/a^2 + Re/Im mush) -- but the Sqrt[-a^2]-laden exponential
-                     * form slows the 2nd-order cascade past the 8 s cold budget on 13
-                     * symbolic-coefficient §2.1.2 cases (58/439/877/... Poschl-Teller,
-                     * shifted-Euler, etc.), a NET regression.  Left as-is; a narrower fix
-                     * that does not add cascade latency is future work. */
+                     * HISTORY (M51): swapping the WHOLE symbolic case to a complex-
+                     * EXPONENTIAL basis Exp[r x] also fixes the wrong answer (§2.2.32-3155,
+                     * y''+a^2 y==Sec[a x] shipped Sec[a x]/a^2 + Re/Im mush) but the
+                     * Sqrt[-a^2]-laden exponential regressed 13 symbolic-coeff §2.1.2 cases
+                     * past the 8 s cold budget, so the narrow field-arithmetic branch below
+                     * (pure-imaginary pair only) is used instead. */
                     Expr* isnum = eval_and_free(ds_call1("NumericQ", expr_copy(R.roots[i])));
-                    if (isnum && isnum->type == EXPR_SYMBOL && isnum->data.symbol.name == SYM_True) {
+                    bool numeric = (isnum && isnum->type == EXPR_SYMBOL &&
+                                    isnum->data.symbol.name == SYM_True);
+                    expr_free(isnum);
+                    if (numeric) {
                         a   = eval_and_free(ds_call1("ComplexExpand", a));
                         imv = eval_and_free(ds_call1("ComplexExpand", imv));
+                    } else {
+                        /* Symbolic PURE-IMAGINARY pair (r_c == -r, i.e. the y''+(sym)^2 y
+                         * class): Re/Im do not concretize on a radical root, so the trig
+                         * basis with unevaluated Re/Im does not back-substitute (M51 wrong
+                         * answer).  Recompute the (real) frequency by field arithmetic:
+                         * beta = Sqrt[-r^2], whose square evaluates to -r^2 exactly, so
+                         * Cos[beta x]/Sin[beta x] back-substitute.  Restricted to the pure-
+                         * imaginary pair so general complex-root cases stay byte-identical
+                         * (the M51-reverted whole-branch Exp[r x] regressed 13 symbolic-
+                         * coeff §2.1.2 cases on the 2nd-order cascade's 8 s cold budget). */
+                        Expr* sum = eval_and_free(ds_call1("Simplify",
+                            ds_call2(SYM_Plus, expr_copy(R.roots[i]),
+                                     expr_copy(R.roots[(size_t)c]))));
+                        bool pure_imag = ds_is_zero(sum);
+                        expr_free(sum);
+                        if (pure_imag) {
+                            Expr* negr2 = ds_call2(SYM_Times, expr_new_integer(-1),
+                                ds_call2(SYM_Power, expr_copy(R.roots[i]), expr_new_integer(2)));
+                            /* PowerExpand collapses Sqrt[a^2]->a so the frequency matches a
+                             * forcing term Sec[a x]/etc. and VoP integrates (Sqrt[a^2] as a
+                             * distinct atom blocks it); it leaves Sqrt[a^2+b^2] untouched. */
+                            Expr* beta = eval_and_free(ds_call1("Simplify",
+                                             ds_call1("PowerExpand",
+                                                 ds_call1("Sqrt", eval_and_free(negr2)))));
+                            expr_free(a); expr_free(imv);
+                            a = expr_new_integer(0);
+                            imv = beta;
+                        }
                     }
-                    expr_free(isnum);
                     for (int j = 0; j < R.mult[i]; j++) {
                         basis[bc++] = hb_basis_trig(xvar, j, a, imv, "Cos");
                         basis[bc++] = hb_basis_trig(xvar, j, a, imv, "Sin");

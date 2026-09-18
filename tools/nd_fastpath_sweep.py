@@ -688,6 +688,14 @@ OFF_BUFFER = {
     "StringRiffle", "StringSplit", "StringTrim",
     # Graph constructor over a coordinate/edge vector.
     "PathGraph",
+    # Symbolic/structural polynomial heads (added 2026-09-18 with the builtins).
+    # CoefficientRules[poly, vars] / MonomialList[poly, vars] return rules and
+    # symbolic monomials, not machine numbers. The gate materialises here only
+    # because a packed vector handed as the VARIABLE-LIST argument is boxed so its
+    # elements can be iterated as variables -- there is no element-wise numeric
+    # computation to place on a buffer. (FromCoefficientRules declines every array
+    # shape the sweep tries, so it never materialises and is intentionally absent.)
+    "CoefficientRules", "MonomialList",
 }
 
 

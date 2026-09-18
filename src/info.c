@@ -3996,6 +3996,22 @@ void info_init(void) {
         "\tgives the coefficient of form^n.  n may be a non-negative integer\n"
         "\tor (for Laurent / Puiseux expressions) a rational.");
     symtab_set_docstring("CoefficientList", "CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.\nCoefficientList[poly, {var1, var2, ...}] gives an array of coefficients of the variables.");
+    symtab_set_docstring("MonomialList",
+        "MonomialList[poly] gives the list of monomials of poly, using Variables[poly].\n"
+        "MonomialList[poly, {x1, x2, ...}] uses the given variables; MonomialList[poly, vars, order]\n"
+        "sorts by order. order is \"Lexicographic\" (default), \"DegreeLexicographic\",\n"
+        "\"DegreeReverseLexicographic\", \"NegativeLexicographic\", \"NegativeDegreeLexicographic\",\n"
+        "\"NegativeDegreeReverseLexicographic\", or an explicit weight matrix. Modulus -> m reduces\n"
+        "coefficients modulo m. vars may be All (equivalent to Variables[poly]).");
+    symtab_set_docstring("CoefficientRules",
+        "CoefficientRules[poly, {x1, x2, ...}] gives {expvec -> coeff, ...} for the monomials of poly.\n"
+        "CoefficientRules[poly] uses Variables[poly]; CoefficientRules[poly, vars, order] sorts by order\n"
+        "(same settings as MonomialList). Modulus -> m reduces coefficients modulo m. Works whether or\n"
+        "not poly is expanded. FromCoefficientRules is the inverse.");
+    symtab_set_docstring("FromCoefficientRules",
+        "FromCoefficientRules[{expvec -> coeff, ...}, {x1, x2, ...}] reconstructs the polynomial\n"
+        "Sum[coeff * x1^e1 * x2^e2 * ..., over rules]. The exponent vectors must match the number of\n"
+        "variables. Inverse of CoefficientRules.");
     symtab_set_docstring("Exponent",
         "Exponent[expr, form] gives the maximum power with which form appears in the\n"
         "expanded form of expr.\n"

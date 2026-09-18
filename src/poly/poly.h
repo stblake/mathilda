@@ -31,6 +31,10 @@ Expr* builtin_subresultants(Expr* res);
 void  subresultants_init(void);
 Expr* builtin_subresultantpolynomials(Expr* res);
 void  subresultantpolynomials_init(void);
+Expr* builtin_monomiallist(Expr* res);
+Expr* builtin_coefficientrules(Expr* res);
+Expr* builtin_fromcoefficientrules(Expr* res);
+void  monomials_init(void);
 
 /* ------------------------------------------------------------------ */
 /* Internal polynomial helpers used by neighbouring modules           */

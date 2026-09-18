@@ -740,11 +740,26 @@ static Expr* kovacic_case1_general(const Expr* r, const Expr* rd,
      * (Legendre/Chebyshev/Gegenbauer/Jacobi) all have REAL poles at +-1, so
      * decline a complex pole to the Frobenius ordinary-point series (§2.2.14
      * 1392/1393) rather than hang. */
-    for (size_t i = 0; i < k; i++)
-        if (!pr.isreal[i]) {
+    /* Complex poles: allow only a PURELY IMAGINARY conjugate pair (roots ±b I, from an
+     * x^2 + c factor, c > 0), whose per-pole α/(x∓bI) terms combine into a clean REAL
+     * rational so ds_simplify(theta) below stays cheap -- e.g.
+     * y'' - ((3+2x^2)/(1+x^2)^2) y == 0 (poles ±i -> x Sqrt[1+x^2]).  A complex pole
+     * with a NONZERO real part (roots of x^2+bx+c, b != 0) carries a sqrt-discriminant
+     * radical on which ds_simplify(theta) spins for many seconds, and those equations
+     * are typically genuinely Heun (no Liouvillian; Case 2 is already gated off for a
+     * degree-2 factor) -- e.g. (x^3+1)y''+4xy'+y==0, poles at the cube roots of -1.
+     * Decline the real-part-bearing complex pole to the Frobenius ordinary-point series
+     * (§2.2.14 1392/1393) rather than hang. */
+    for (size_t i = 0; i < k; i++) {
+        if (pr.isreal[i]) continue;
+        Expr* re = fn1("Re", expr_copy(pr.roots[i]));
+        bool pure_imag = ds_is_structural_zero(re);
+        expr_free(re);
+        if (!pure_imag) {
             dsolve_roots_free(&pr); expr_free(sqinf); expr_free(ainf_p); expr_free(ainf_m);
             return NULL;
         }
+    }
 
     /* per-pole [√r]_c and α_c^± (kovacic_pole_data); `degen[i]` marks a redundant
      * sign bit (α^+==α^- with sqc==0).  A pole order incompatible with Case 1
@@ -960,6 +975,16 @@ Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch) {
     Expr* Pc; Expr* Qc;
     if (!dsolve_second_order_PQ_forced(P, &Pc, &Qc)) return NULL;
     const char* x = P->ind_names[0];
+
+    /* Missing y-term (Q == 0): the equation is y'' + P y' == g -- first order in y'
+     * -- which ReductionOfOrder / quadrature solve cleanly and fast, so Kovacic is
+     * never the uniquely-needed method here.  Its normal form r = P^2/4 + P'/2 is
+     * nonzero, though, so the Case-1 pole/degree search CHURNS to the wall-clock
+     * budget (5 s) before declining, starving the rest of the cascade past the
+     * corpus 8 s bound (2.2.33-3256, (1-x^2)y''+x y'==1, where ReductionOfOrder has
+     * the answer in ~1 s but never runs).  Decline immediately. */
+    if (ds_is_structural_zero(Qc)) { expr_free(Pc); expr_free(Qc); return NULL; }
+
     g_kv_deadline = time(NULL) + 5;   /* per-call wall-clock budget */
 
     /* Inhomogeneous? g(x) = -(residual with y and all derivatives zeroed).  When

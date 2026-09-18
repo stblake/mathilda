@@ -511,6 +511,7 @@ set(COMMON_SRC
     ../src/expand.c
     ../src/expand_power.c
     ../src/poly/poly.c
+    ../src/poly/monomials.c
     ../src/poly/minpoly.c
     ../src/poly/subresultants.c
     ../src/poly/subresultantpoly.c
@@ -1705,6 +1706,10 @@ target_include_directories(backtrack_tests PRIVATE ../src)
 
 add_executable(poly_tests test_poly.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(poly_tests PRIVATE ../src)
+
+add_executable(coefficient_rules_tests test_coefficient_rules.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(coefficient_rules_tests PRIVATE ../src)
+add_test(NAME coefficient_rules_tests COMMAND coefficient_rules_tests)
 
 add_executable(risch_field_tests test_risch_field.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(risch_field_tests PRIVATE ../src ../src/calculus)
@@ -3126,6 +3131,10 @@ add_executable(dsolve_m20_stress_tests test_dsolve_m20_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m20_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m20_stress_tests COMMAND dsolve_m20_stress_tests)
 
+add_executable(dsolve_m55_stress_tests test_dsolve_m55_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m55_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m55_stress_tests COMMAND dsolve_m55_stress_tests)
+
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)
 
@@ -3720,14 +3729,14 @@ else()
 endif()
 # Per-section dashboards.  argv = <corpus> <prelude> <baseline>.  Baselines are
 # the checked-in high-water marks recorded in DSolve_test_status/STATUS.md.
-# Baseline 655 (M27 re-baseline: the harness now VERIFIES the 204 systems instead of
-# skipping them).  Measured non-PASS 651 = 554 scalar (446/1000 solved -- up +10 from
-# the Solve periodicity-index fix) + 97 systems (107/204 solved), 0 FAIL; +4 margin for
-# the pre-existing flaky fork-timeout cluster (879/208/872/983).
+# Baseline 644 (M55 generalised power-potential recogniser -- Bessel + Whittaker/1F1 -- plus
+# the Kovacic purely-imaginary-pole fix).  Measured 568 PASS / 636 non-PASS, 0 FAIL (up from
+# M54's 557/647: +7 power-potential, +4 Kovacic ±i poles / timing); +8 margin for the ~6-7 s
+# timing-boundary cluster (58/77/78/375/439/877) that flips P<->U on load.
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 655)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 644)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
 # verifies the ODE residual AND every initial condition (M21).  Baseline 2
@@ -4230,19 +4239,38 @@ add_test(NAME dsolve_corpus_2_2_31_tests
 # constant-coefficient LINEAR ODEs (2nd/3rd/high-order nonhomogeneous) with
 # polynomial / exponential / sinusoid forcing + resonance, plus variation-of-
 # parameters-only forcing (Sec, Tan, Csc, Log).  Solved by UndeterminedCoefficients
-# + LinearConstantCoefficients (VoP) -- no solver change needed.  Baseline argv3 =
-# the STATUS.md non-PASS count (4).  Residue 4: 3155 (y''+a^2 y==Sec[a x], a masked
-# WRONG answer for a symbolic coefficient -- Sec[a x]/a^2 + Re/Im mush from the
-# symbolic complex-root homogeneous basis; a straightforward complex-exponential-basis
-# fix in dsolve_homog_basis is CORRECT but slows 13 symbolic-coefficient 2.1.2 cases
-# past the 8 s cold budget, a net regression, so it is DEFERRED -- see the M51 note in
-# dsolve_common.c); 3165 (y''+y==Tan[x/3]^2, correct VoP but cold DSolve > 8 s); and
-# 3161/3164 (y''+4y==Sec[x]Tan[x], y''+9y==Csc[2x], correct VoP whose cold solve sits
-# right at the 8 s bound -- timing-sensitive).  0 FAIL as measured (3155 is masked).
+# + LinearConstantCoefficients (VoP).  Baseline argv3 = the STATUS.md non-PASS count.
+# M52 ratcheted this 4 -> 3: 3155 (y''+a^2 y==Sec[a x]) was a masked WRONG answer for a
+# symbolic coefficient (Sec[a x]/a^2 + Re/Im mush) and is now DETERMINISTICALLY fixed
+# (dsolve_homog_basis field-arithmetic beta = Sqrt[-r^2] for the pure-imaginary pair, +
+# UndeterminedCoefficients Simplify-before-zero-test so Sec forcing declines to VoP; see
+# the M52 changelog).  The remaining 3 are TIMING-sensitive (not solver bugs), so the
+# baseline keeps headroom for them: 3165 (y''+y==Tan[x/3]^2, cold DSolve > 8 s -- still
+# UNEVAL as measured) and 3161/3164 (y''+4y==Sec[x]Tan[x], y''+9y==Csc[2x], correct VoP
+# whose cold solve sits right at the 8 s bound -- PASS when the machine is unloaded).
+# 0 FAIL.
 add_test(NAME dsolve_corpus_2_2_32_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2232.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+
+# 12000.org "Solving ODEs" section 2.2.33 (Problems 3201-3300).  M53: 100 records
+# (93 scalar [14 IVP], 7 systems).  Measured 77/100 scalar PASS, 0 FAIL, 23 UNEVAL
+# (systems verified too).  Baseline argv3 = the non-PASS count (23), all UNEVAL and
+# mostly the reducible-mu class (_mu_x_y1 / _mu_y_y1 / _mu_xy -- the M18 Stage-2
+# target) plus quadrature / dAlembert / rational gaps and one converter miss (3296,
+# a multi-line array ODE row the tex4ht->Mathilda converter cannot extract).  0 FAIL:
+# case 3279 (y''==(y')^2 Sin[x], y[0]==0, y'[0]==1/2) initially shipped a WRONG y==0
+# (a degenerate Solve fit at a removable singularity that meets y[0] but not y'[0]);
+# the M52-adjacent ds_fit_meets_conditions gate (dsolve_common.c) now rejects a fit
+# violating any point condition at ANY order, so it declines honestly instead.  M54
+# lowered the baseline 23 -> 22: 3256 ((1-x^2)y''+x y'==1) flipped UNEVAL -> PASS after
+# the Kovacic Q==0 early-decline gate (Kovacic churned to its 5 s budget on this y-free
+# equation ahead of ReductionOfOrder, which now solves it in ~0.05 s).
+add_test(NAME dsolve_corpus_2_2_33_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2233.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 22)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

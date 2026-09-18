@@ -556,6 +556,31 @@ static void t_m24_complex_cuberoot_ivp(void) {
                "Abs[N[(y[0] /. s) - 1, 20]] < 1/1000000]");
 }
 
+/* ---- M52: symbolic-coefficient complex-root basis + UC declines non-UC forcing ---- */
+/* corpus 2.2.32-3155: y''+a^2 y == Sec[a x] (symbolic a) shipped a WRONG answer.  Two
+ * causes, both narrowly fixed: (1) dsolve_homog_basis realified the pure-imaginary root
+ * pair as Exp[Re x](Cos,Sin)[Im x] with Re/Im UNEVALUATED for a symbolic root (not back-
+ * substitutable) -> now beta = Sqrt[-r^2] by field arithmetic (PowerExpand), giving the
+ * real Cos[a x]/Sin[a x] basis; (2) UndeterminedCoefficients ACCEPTED the non-UC Sec
+ * forcing (y_p = Sec[a x]/a^2) because its residual zero-test gate hit a symbolic false
+ * positive -> now Simplify before the gate makes it decline to variation of parameters. */
+static void t_m52_symbolic_complex_root(void) {
+    /* homogeneous basis back-substitutes for a symbolic coefficient */
+    check_true("PossibleZeroQ[(y''[x] + a^2 y[x]) /. "
+               "DSolve[y''[x] + a^2 y[x] == 0, y, x][[1]]]");
+    /* the flagship nonhomogeneous case is now CORRECT (was Sec[a x]/a^2 + Re/Im mush) */
+    check_true("PossibleZeroQ[Simplify[(y''[x] + a^2 y[x] - Sec[a x]) /. "
+               "DSolve[y''[x] + a^2 y[x] == Sec[a x], y, x][[1]]]]");
+    /* UndeterminedCoefficients DECLINES the non-UC Sec forcing (stays unevaluated) */
+    check_true("SameQ[Head[DSolve`UndeterminedCoefficients[y''[x] + a^2 y[x] == Sec[a x], y, x]], "
+               "DSolve`UndeterminedCoefficients]");
+    /* genuine UC forcings still solve for a symbolic coefficient (poly + resonance) */
+    check_true("PossibleZeroQ[Simplify[(y''[x] + a^2 y[x] - x) /. "
+               "DSolve[y''[x] + a^2 y[x] == x, y, x][[1]]]]");
+    check_true("PossibleZeroQ[Simplify[(y''[x] + a^2 y[x] - Cos[a x]) /. "
+               "DSolve[y''[x] + a^2 y[x] == Cos[a x], y, x][[1]]]]");
+}
+
 /* ---- M25: exact ODE -> Erf closed form (verify no longer spins) ---- */
 /* corpus 2.2.5-428: y''+x y'+y==0 is exact, reducing to the first-order linear
  * y'+x y==C[2] whose integrating-factor solution carries Erf[-I x/Sqrt[2]].  The
@@ -2628,6 +2653,54 @@ static void t_m18_trigtoexp_coth(void) {
     check_true("Abs[N[TrigToExp[Coth[2 z]] /. z -> 7/10] - N[Coth[7/5]]] < 1/1000000");
 }
 
+/* ---- M54: Kovacic Q==0 early-decline (no churn on a y-free 2nd-order ODE) ---- */
+/* corpus 2.2.33-3256: (1-x^2)y''+x y'==1 has no y-term (Q==0), so it is first order in
+ * y' and belongs to ReductionOfOrder.  DSolve`Kovacic ran first and CHURNED to its 5 s
+ * wall-clock budget before declining, starving the cascade past the 8 s corpus bound
+ * (ReductionOfOrder solves it in ~0.05 s).  The Q==0 gate (dsolve_kovacic.c) declines
+ * immediately, so the equation now solves.  Guards: Kovacic declines (Q==0), the full
+ * solve succeeds and back-substitutes, and a genuine Kovacic case (Q!=0) still solves. */
+static void t_m54_kovacic_missing_y_no_churn(void) {
+    /* Kovacic declines the y-free equation immediately (Head stays unevaluated) */
+    check_true("SameQ[Head[DSolve`Kovacic[(1-x^2) y''[x] + x y'[x] == 1, y, x]], DSolve`Kovacic]");
+    /* the full cascade now solves it (via ReductionOfOrder) and it back-substitutes */
+    check_true("PossibleZeroQ[Simplify[((1-x^2) y''[x] + x y'[x] - 1) /. "
+               "DSolve[(1-x^2) y''[x] + x y'[x] == 1, y, x][[1]]]]");
+    /* a genuine Kovacic case (nonzero y-term) is untouched by the gate */
+    check_true("MatchQ[DSolve`Kovacic[z''[x] == (x^2+3) z[x], z, x], {{_}}]");
+}
+
+/* M55 -- generalised power-potential recogniser (DSolve`SpecialFunctionForm):
+ * y'' + A x^m y == 0 (single power -> Bessel) and y'' + (alpha x^(2c)+beta x^(c-1)) y == 0
+ * (two-term -> Coulomb/Whittaker -> Hypergeometric1F1), at SYMBOLIC exponent.  The
+ * residuals carry symbolic-exponent special functions that Simplify/zero_test cannot
+ * discharge, so every branch is verified NUMERICALLY (Head === List first so a decline
+ * cannot pass vacuously). */
+static void t_m55_generalized_power_potential(void) {
+    /* single power, symbolic exponent n (was garbage 0^n / ComplexInfinity from the
+     * series fallback; now Sqrt[x] Bessel_{1/(n+2)}) */
+    check_true("With[{s = DSolve[y''[x] + x^n y[x] == 0, y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && "
+               "Abs[N[(y''[x] + x^n y[x]) /. s[[1]] /. "
+               "{n -> 7/3, C[1] -> 12/10, C[2] -> 7/10, x -> 6/10}, 20]] < 10^-6]");
+    /* two-term (2.1.2-434): Coulomb/Whittaker -> 1F1, symbolic exponent c */
+    check_true("With[{s = DSolve[y''[x] + (a x^(2 c) + b x^(c - 1)) y[x] == 0, y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && "
+               "Abs[N[(y''[x] + (a x^(2 c) + b x^(c - 1)) y[x]) /. s[[1]] /. "
+               "{a -> -1, b -> 2, c -> 3, C[1] -> 12/10, C[2] -> 7/10, x -> 7/10}, 20]] < 10^-6]");
+    /* the exponent symbol named `n` must NOT hang: guards the ds_residual_numeric_zero /
+     * zero_test precision-ladder fix (2.1.2-792) */
+    check_true("With[{s = DSolve[y''[x] + (a x^(2 n) + b x^(n - 1)) y[x] == 0, y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && "
+               "Abs[N[(y''[x] + (a x^(2 n) + b x^(n - 1)) y[x]) /. s[[1]] /. "
+               "{a -> 1, b -> 1, n -> 2, C[1] -> 12/10, C[2] -> 7/10, x -> 5/10}, 20]] < 10^-6]");
+    /* y'-carrying member (2.1.2-803) via the Liouville normal-form pre-pass */
+    check_true("With[{s = DSolve[y''[x] + a x^n y'[x] + b x^(n - 1) y[x] == 0, y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && "
+               "Abs[N[(y''[x] + a x^n y'[x] + b x^(n - 1) y[x]) /. s[[1]] /. "
+               "{a -> 1, b -> 2, n -> 3, C[1] -> 12/10, C[2] -> 7/10, x -> 6/10}, 20]] < 10^-6]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2721,6 +2794,7 @@ int main(void) {
     TEST(t_m23_exact_radical);
     TEST(t_m24_trig_power_forcing);
     TEST(t_m24_complex_cuberoot_ivp);
+    TEST(t_m52_symbolic_complex_root);
     TEST(t_m25_exact_erf);
     TEST(t_m25_kovacic_fundamental_set);
     TEST(t_m25_transcendental_frobenius);
@@ -2885,6 +2959,8 @@ int main(void) {
     TEST(t_m18_auto_dispatch);
     TEST(t_m18_declines_linear);
     TEST(t_m18_trigtoexp_coth);
+    TEST(t_m54_kovacic_missing_y_no_churn);
+    TEST(t_m55_generalized_power_potential);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

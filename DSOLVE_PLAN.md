@@ -1920,6 +1920,121 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     M50-confirmed 647 ≤ 655, a clean re-run being impossible under heavy external machine load that by
     itself swings §2.1.2 647→667). See the §2.2.32 block in `DSolve_test_status/STATUS.md`.
 
+- **M52 — symbolic complex-root wrong answer fixed (narrow, latency-safe).** ✅ DONE. The
+  M51-deferred wrong answer for the `y'' + (symbol)² y` variation-of-parameters class
+  (`DSolve[y''+a²y==Sec[a x]] → Sec[a x]/a² + Re/Im` mush) is resolved. Root-caused to **two
+  independent** defects, each fixed narrowly so the M51 latency regression cannot recur:
+  - **Homogeneous basis** (`dsolve_homog_basis`, `src/calculus/dsolve_common.c`). A symbolic
+    complex conjugate pair realified to `Exp[Re x](Cos,Sin)[Im x]` with `Re`/`Im` left
+    **unevaluated** (they do not concretize on a radical root), so the basis did not
+    back-substitute. For the **pure-imaginary** pair (`r_c == -r`) the real frequency is now
+    `β = Simplify[PowerExpand[√(-r²)]]` (field arithmetic; `β² = -r²` exactly, and
+    `PowerExpand` collapses `√(a²)→a` so `β` matches the forcing and VoP integrates), giving
+    the real `Cos[a x]`/`Sin[a x]` basis. Restricted to the pure-imaginary pair, so general
+    complex-root cases (α≠0) stay byte-identical — the 13 symbolic-coefficient §2.1.2 cases
+    (58/439/877/… Pöschl-Teller, shifted-Euler, exponential-potential) that the
+    M51-reverted whole-branch `Exp[r x]` pushed past the 8 s cold budget are untouched
+    (re-timed cold ≈5–6 s, all still solving). Numeric path (`NumericQ`→`ComplexExpand`)
+    unchanged, so the M24 complex-cube-root IVP still fits.
+  - **Undetermined coefficients** (`dsolve_undetcoeff.c`). Independently, UC **accepted** the
+    non-UC forcing `Sec[a x]` (`y_p = Sec[a x]/a²`), winning the cascade ahead of
+    `LinearConstantCoefficients`' correct VoP. UC's residual zero-test gate (its intended
+    safety net) was defeated by a `zero_test` **false positive** — `PossibleZeroQ` of the raw
+    residual `D[Sec[a x],{x,2}]/a²` is `True` for a symbolic parameter though genuinely
+    nonzero (the numeric case already declined). The gate now `Simplify`s the residual first,
+    so the non-UC term declines to VoP; genuine UC residuals are provably zero either way, so
+    real accepts (poly/exp/sinusoid, incl. resonance) are unchanged.
+
+  Verified: new unit `t_m52_symbolic_complex_root` (`tests/test_dsolve.c`); all DSolve ctest
+  suites (unit + M12/M14/M18 stress) + `make check-c99` green; the three named §2.1.2 latency
+  cases re-timed within budget. Corpus §2.2.32-3155 flips from masked-UNEVAL to PASS. Version
+  0.149 → 0.150.
+
+- **M53 — §2.2.33 corpus (Problems 3201–3300) + IVP condition-verification.** ✅ DONE. 12000.org
+  §2.2.33: 100 records (93 scalar [14 IVP] + 7 systems), converted via
+  `tools/latex_ode_to_mathilda.py`. Baseline **77/100 PASS, 0 FAIL, 23 UNEVAL, 0 crash** (scalar
+  72/93, systems 5/7). New gate `dsolve_corpus_2_2_33_tests` (baseline 23); report
+  `DSolve_test_status/reports/2.2.33.md`. Dominant gap the `2nd_reducible_mu` class (13 UNEVAL —
+  the **M18 Stage-2** target), plus quadrature / dAlembert / rational and one converter miss
+  (3296, a multi-line `array` ODE row the converter cannot extract).
+  - **IVP condition-verification (0-FAIL restored).** 3279 (`y''==(y')² Sin[x]`, `y[0]==0`,
+    `y'[0]==1/2`) initially FAILed — DSolve shipped `y==0`, satisfying the ODE and `y[0]==0` but
+    **violating `y'[0]==1/2`** (correct is `Tan[x/2]`). Pre-existing bug: `Solve` returns the
+    degenerate `C[1]→1` at a *removable singularity* of the fit system and the constant-fitter
+    accepted it; the spurious-fit backstop (`dsolve_fit_constants`, `src/calculus/dsolve_common.c`)
+    checked only the ODE residual (which `y==0` passes) and only at first order. New helper
+    `ds_fit_meets_conditions` numerically verifies a fitted body against every point condition at
+    **any** order; the backstop now rejects a condition-violating fit (→ honest decline) rather
+    than shipping a wrong answer. Conservative (rejects only a robustly-nonzero condition residual),
+    so genuine fits are untouched. Regression-checked: control IVPs (incl. nonhomogeneous zero-IC
+    `y''+y==x`, BVP, M24) unchanged; IVP-heavy §2.2.12 (3≤3) and §2.2.14 (1≤1) within baseline;
+    `make check-c99` green. Version 0.150 → 0.151.
+
+- **M54 — Kovacic `Q==0` early-decline (reducible-ODE hang fix).** ✅ DONE. Targeting the
+  §2.2.33 reducible-μ gap, investigation showed the dominant concrete failure is not the (M18
+  note's own 0-yield) integrating-factor method but a **Kovacic churn**: `(1-x²)y''+xy'==1`
+  (§2.2.33-3256) **hung** because it has no y-term (`Q≡0`) — first order in `y'`, solved by
+  `ReductionOfOrder` in ~0.05 s — yet `DSolve\`Kovacic` (earlier in the cascade) has a nonzero
+  normal form and its Case-1 search churns to its 5 s budget before declining, starving the
+  cascade past budget. Fix (`src/calculus/dsolve_kovacic.c`): decline at once when `Q≡0`
+  (Kovacic is never uniquely needed for a y-free equation). 3256 now solves and back-substitutes;
+  genuine Kovacic cases (nonzero y-term) are untouched (the gate keys on `Q`, not the search).
+  New unit `t_m54_kovacic_missing_y_no_churn`; §2.2.33 78/100 PASS (3256 UNEVAL → PASS, 0 FAIL,
+  no other change), gate baseline 23 → 22; §2.1.2 (Kovacic's home turf) re-run within baseline;
+  `make check-c99` green. Version 0.151 → 0.152.
+
+- **M55 — §2.1.2 method wave: generalised power-potential recogniser.** ✅ DONE. First
+  gap-driven method wave on the master §2.1.2 corpus's largest bucket (2nd-order linear). Extends
+  `DSolve\`SpecialFunctionForm` (`dsolve_specialform.c`, new `specialform_power_potential` +
+  `whittaker_M_1F1`) to two power-potential families the numeric-exponent Bessel row missed, both
+  at **symbolic exponent** (the corpus shape) and both emitting heads that NUMERICIZE, so the
+  in-method `sf_num_ok` gate and the corpus back-substitution are genuine (0-FAIL by construction):
+  - **Single power** `y'' + A x^m y == 0` → `Sqrt[x] Z_{1/(m+2)}(κ x^((m+2)/2))`, `Z = BesselJ/Y`,
+    `κ = 2 Sqrt[A]/(m+2)`. Generalises the pre-existing `NumberQ[m]`-gated pure-power row to a
+    symbolic `m` (which previously fell to the series fallback and emitted `0^n`/`ComplexInfinity`
+    garbage).
+  - **Two-term** `y'' + (α x^(2c) + β x^(c-1)) y == 0`. This is NOT Bessel: under `ξ = x^(c+1)` it
+    becomes the Coulomb equation `w_ξξ + (c/d)(1/ξ) w_ξ + (α/d² + (β/d²)/ξ) w == 0` (`d = c+1`),
+    solved by `y = x^((1-d)/2) WhittakerM[κ, ±μ, z]` with `μ = 1/(2d)`, `κ = β/(2 d Sqrt[-α])`,
+    `z = (2 Sqrt[-α]/d) x^d`, emitted as the verifiable confluent form
+    `Exp[-z/2] z^(1/2±μ) Hypergeometric1F1[1/2±μ-κ, 1±2μ, z]`. Extraction groups the potential's
+    additive terms by their (symbolic) exponent `e = x T'/T` after `Expand` (so a factored
+    normal-form potential and un-combined like powers both reduce cleanly) and checks the
+    structural constraint `P_big − 2 P_sm == 2`. The `y'`-carrying members (`y'' + a x^n y' +
+    b x^(n-1) y == 0`, whose normal form is the two-term family) are reached through the existing
+    Liouville normal-form pre-pass (`y = z Exp[-∫P/2]`), whose monomial `z = κ x^d` carries no
+    finite-pole radical, so the pre-pass's Whittaker-exclusion NOTE does not apply.
+  - **Root-cause verify fix** (`dsolve_common.c`, `ds_residual_numeric_zero`, protects every
+    method): the generic verify's numeric KEEP short-circuit declined *any* residual flagged by
+    `ds_has_undefined_function`, which is true for a `Derivative` head — including the derivative
+    of a DEFINED special function (Bessel/pFq/Airy) produced by differentiating a special-function
+    solution. That false decline routed a symbolic-exponent special-function residual to
+    `zero_test`, whose precision ladder spins for many seconds (name-sensitively: it hung on the
+    exponent symbol `n`/`nn`, was fine on `c`/`k`/`m`). It now declines only inert `Integrate`; a
+    genuinely arbitrary forcing `f[x]` still fails to numericize (NaN samples → skipped → the same
+    `zero_test` fallback, which is fast for arbitrary forcing). This removed the hang and made 792
+    and the `y'`-carrying members solvable.
+  - *Anti-overfit:* four forward-generator families (`tests/test_dsolve_m55_stress.c`) — single
+    power (a>0/a<0, integer + fractional exponent), two-term Whittaker, `y'`-carrying (pre-pass),
+    and an `n`/`nn`-named exponent guard for the verify fix — all `Head === List` + numeric-
+    back-substitution verified; pinned unit `t_m55_generalized_power_potential`.
+  - §2.1.2: **557 → 564 PASS (+7), 640 non-PASS, 0 FAIL**; gate baseline 655 → 648. The
+    2nd-order-linear bucket rises to 239/414 (57.7%). The nine flagship power-potential cases
+    (2.1.2-72/81/103/434/791/792/803/804/805) all verify. Remaining apparent flips vs the older
+    checked-in report are pre-existing ~6-7 s timing-boundary cases (58/375/439/877) that flip
+    P↔U on load and are untouched by M55 (the verify fix keys on a symbolic x-exponent, which
+    those trig/radical residuals lack). All DSolve ctest suites (unit + M12/M14/M18/M55 stress)
+    green; `make check-c99` green; no regression. Version 0.152 → 0.153.
+  - **Kovacic purely-imaginary-pole fix** (follow-on, `dsolve_kovacic.c`): `kovacic_case1_general`
+    blanket-declined every non-real pole (a guard against a `ds_simplify(theta)` hang on Heun
+    complex-pole equations, §2.2.14-1392/1393), which also broke the ±i case
+    `y''−((3+2x²)/(1+x²)²)y==0 → x√(1+x²)` (regression masked for days by the pre-existing
+    Risch-Norman unit-suite hang, so `t_kovacic_complex_poles` never ran). Now declines only a
+    complex pole with a NONZERO real part (roots of `x²+bx+c`, `b≠0`, whose √-discriminant radical
+    is what spins the simplify); a purely-imaginary pair (`x²+c`) is solved. Heun cases still
+    decline fast (no hang) → Frobenius. §2.1.2 **564 → 568 PASS, 0 FAIL** (gate 648 → 644);
+    §2.2.14 unchanged 99/100. `t_kovacic_complex_poles` passes. Version 0.153 → 0.154.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -2078,12 +2193,14 @@ recursive sub-solves.
   multiplicity + dedup; complex-conjugate pairs → `e^(ax)(Cos,Sin)`; repeated
   roots → `x^k e^(rx)`. Inhomogeneous by variation of parameters (Wronskian /
   Cramer + `Integrate`, particular `Simplify`d).
-  *Known bug (M51, deferred):* for a **symbolic** coefficient a complex pair `±√(-a²)`
-  realifies to `e^(Re x)(Cos,Sin)[Im x]` with `Re`/`Im` left unevaluated (they do not
-  resolve to explicit reals for a symbol), so the basis does not back-substitute and a
-  symbolic-coefficient nonhomogeneous solve returns a wrong particular
-  (`y''+a²y==Sec[a x] → Sec[a x]/a²` mush). The complex-exponential basis `e^(rx)` fixes
-  it but slows 13 symbolic-coefficient §2.1.2 cases past the cold budget — reverted.
+  *Fixed (M52):* the M51 symbolic-coefficient wrong answer (`y''+a²y==Sec[a x] →
+  Sec[a x]/a²` mush) is resolved. Two narrow, latency-safe fixes: `dsolve_homog_basis`
+  now realifies a **pure-imaginary** symbolic pair by field arithmetic
+  `β = Simplify[PowerExpand[√(-r²)]]` (real `Cos[a x]`/`Sin[a x]`, back-substitutable;
+  general complex pairs α≠0 untouched, so the 13 §2.1.2 cold-budget cases are unchanged),
+  and `UndeterminedCoefficients` now `Simplify`s its residual before the zero-test gate so
+  the non-UC `Sec` forcing declines to VoP instead of shipping `Sec[a x]/a²` (a `zero_test`
+  false positive on the raw symbolic residual had defeated the gate).
   *Cosmetic gap:* for simple forcing the var-params particular can carry a
   homogeneous component (`7/2 Cos^2 x` for `7/4`) — correct and verified, less
   tidy than undetermined coefficients (a future refinement).

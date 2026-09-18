@@ -481,6 +481,182 @@ static Expr* specialform_reduced_basis(Expr* Qc, const char* xvar) {
     return general;
 }
 
+/* WhittakerM[k, m, z] as the verifiable confluent form
+ *   Exp[-z/2] z^(m+1/2) Hypergeometric1F1[m - k + 1/2, 1 + 2 m, z].
+ * (WhittakerM/W have no evaluator in Mathilda; the 1F1 form numericizes, so it can
+ * be back-substitution-verified.)  k, m, z borrowed. */
+static Expr* whittaker_M_1F1(const Expr* k, const Expr* m, const Expr* z) {
+    Expr* half = ds_call2(SYM_Power, expr_new_integer(2), expr_new_integer(-1));   /* 1/2 */
+    Expr* ez = eval_and_free(ds_call1("Exp",
+                   ds_call2(SYM_Times,
+                       ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(half)),
+                       expr_copy((Expr*)z))));                                      /* Exp[-z/2] */
+    Expr* zpow = eval_and_free(ds_call2(SYM_Power, expr_copy((Expr*)z),
+                     ds_call2(SYM_Plus, expr_copy((Expr*)m), expr_copy(half))));    /* z^(m+1/2) */
+    Expr* a1 = eval_and_free(ds_call2(SYM_Plus,
+                   ds_call2(SYM_Subtract, expr_copy((Expr*)m), expr_copy((Expr*)k)),
+                   expr_copy(half)));                                              /* m - k + 1/2 */
+    Expr* b1 = eval_and_free(ds_call2(SYM_Plus, expr_new_integer(1),
+                   ds_call2(SYM_Times, expr_new_integer(2), expr_copy((Expr*)m)))); /* 1 + 2 m */
+    Expr* f = expr_new_function(expr_new_symbol("Hypergeometric1F1"),
+                  (Expr*[]){ a1, b1, expr_copy((Expr*)z) }, 3);                     /* consumes a1,b1,z-copy */
+    Expr* r = eval_and_free(ds_call2(SYM_Times, ez, ds_call2(SYM_Times, zpow, f)));
+    expr_free(half);
+    return r;
+}
+
+/* ---- Generalised power-potential recogniser: P == 0, the reduced potential is
+ *      Q == A x^m                        (single power, SYMBOLIC exponent/coeff), or
+ *      Q == alpha x^(2c) + beta x^(c-1)   (two arbitrary powers whose exponents
+ *      satisfy  P_big - 2 P_sm == 2).
+ *
+ *  Both are Liouville-solvable.  This generalises the numeric-exponent pure-power
+ *  Bessel row (specialform_reduced_basis) to a symbolic exponent, and adds the
+ *  two-term family, which is NOT Bessel but confluent (Coulomb / Whittaker):
+ *
+ *    single power  y'' + A x^m y == 0
+ *       -> y = Sqrt[x] Z_{1/(m+2)}(kappa x^((m+2)/2)),  kappa = 2 Sqrt[A]/(m+2),
+ *          Z = BesselJ/BesselY.  (A's sign is left inside Sqrt[A]; sf_num_ok verifies.)
+ *
+ *    two-term  y'' + (alpha x^(2c) + beta x^(c-1)) y == 0,  put d = c+1:
+ *       under xi = x^d it becomes the Coulomb equation
+ *          w_xixi + (c/d)(1/xi) w_xi + (alpha/d^2 + (beta/d^2)/xi) w == 0,
+ *       solved by  y = x^((1-d)/2) WhittakerM[kappa, +-mu, z]  with
+ *          mu = 1/(2d),  kappa = beta/(2 d Sqrt[-alpha]),  z = (2 Sqrt[-alpha]/d) x^d.
+ *
+ *  Every corpus member (2.1.2-434/792/803/804 and kin) carries SYMBOLIC exponents,
+ *  so the residual is undecidable by zero_test; the caller gates every emission with
+ *  sf_num_ok (numeric back-substitution).  Additive terms are grouped by their
+ *  (symbolic) exponent e = x T'/T so an un-collected like-power pair (e.g. the
+ *  normal form of 803 carries b x^(n-1) and -a n/2 x^(n-1) separately) is combined;
+ *  a potential with three or more distinct powers (Euler + power, 820/822) declines.
+ *  Returns C[1] z0 + C[2] z1 or NULL.  Qc borrowed. */
+static Expr* specialform_power_potential(Expr* Qc, const char* xvar) {
+    if (!Qc || ds_is_zero(Qc)) return NULL;
+    Expr* x = expr_new_symbol(xvar);
+
+    /* Expand first: a normal-form potential from dsolve_normal_form arrives factored
+     * (e.g. -1/4 (a^2 x^(2n) + (-4b+2an) x^(n-1))), whose single Times/Plus node the
+     * per-term extraction cannot read.  Expand distributes it to a sum of monomials
+     * (like symbolic powers stay UN-combined -- the exponent grouping below fixes
+     * that).  Consumed at the end. */
+    Expr* Qe = eval_and_free(ds_call1("Expand", expr_copy(Qc)));
+
+    /* additive power terms (borrowed from Qe) */
+    Expr* raw[8]; int nraw = 0;
+    if (ds_has_head(Qe, SYM_Plus)) {
+        if (Qe->data.function.arg_count > 8) { expr_free(x); expr_free(Qe); return NULL; }
+        for (size_t i = 0; i < Qe->data.function.arg_count; i++) raw[nraw++] = Qe->data.function.args[i];
+    } else {
+        raw[nraw++] = Qe;
+    }
+
+    /* group by exponent: exps[g] distinct exponent, coefs[g] accumulated coefficient */
+    Expr* exps[3]; Expr* coefs[3]; int ng = 0; bool bad = false;
+    for (int i = 0; i < nraw && !bad; i++) {
+        Expr* T = raw[i];
+        Expr* e = ds_simplify(ds_call2(SYM_Times, expr_copy(x),                     /* e = x T'/T */
+                      ds_call2(SYM_Times, ds_d(expr_copy(T), expr_copy(x)),
+                          ds_call2(SYM_Power, expr_copy(T), expr_new_integer(-1)))));
+        Expr* co = ds_simplify(ds_call2(SYM_Times, expr_copy(T),                    /* coeff = T / x^e */
+                       ds_call2(SYM_Power, ds_call2(SYM_Power, expr_copy(x), expr_copy(e)),
+                           expr_new_integer(-1))));
+        if (!ds_free_of(e, xvar) || !ds_free_of(co, xvar)) { expr_free(e); expr_free(co); bad = true; break; }
+        int j = -1;
+        for (int g = 0; g < ng; g++) {
+            Expr* diff = ds_simplify(ds_call2(SYM_Subtract, expr_copy(e), expr_copy(exps[g])));
+            bool same = ds_is_zero(diff); expr_free(diff);
+            if (same) { j = g; break; }
+        }
+        if (j >= 0) {
+            coefs[j] = ds_simplify(ds_call2(SYM_Plus, coefs[j], co));   /* consumes old coefs[j], co */
+            expr_free(e);
+        } else if (ng < 3) {
+            exps[ng] = e; coefs[ng] = co; ng++;
+        } else {
+            expr_free(e); expr_free(co); bad = true; break;
+        }
+    }
+
+    Expr* general = NULL;
+
+    if (!bad && ng == 1) {
+        /* single power: Q = A x^m -> Sqrt[x] Bessel */
+        Expr* m = exps[0]; Expr* A = coefs[0];
+        Expr* mp2 = ds_simplify(ds_call2(SYM_Plus, expr_copy(m), expr_new_integer(2)));   /* m+2 */
+        if (!ds_is_zero(mp2)) {
+            Expr* nu = ds_simplify(ds_call2(SYM_Power, expr_copy(mp2), expr_new_integer(-1)));  /* 1/(m+2) */
+            Expr* kappa = ds_simplify(ds_call2(SYM_Times,                                  /* 2 Sqrt[A]/(m+2) */
+                              ds_call2(SYM_Times, expr_new_integer(2), ds_call1("Sqrt", expr_copy(A))),
+                              ds_call2(SYM_Power, expr_copy(mp2), expr_new_integer(-1))));
+            Expr* halfp = ds_simplify(ds_call2(SYM_Times, expr_copy(mp2),                   /* (m+2)/2 */
+                              ds_call2(SYM_Power, expr_new_integer(2), expr_new_integer(-1))));
+            Expr* arg = ds_simplify(ds_call2(SYM_Times, expr_copy(kappa),                   /* kappa x^((m+2)/2) */
+                            ds_call2(SYM_Power, expr_copy(x), expr_copy(halfp))));
+            Expr* sqrtx = powrat(x, 1, 2);
+            Expr* b0 = ds_call2(SYM_Times, expr_copy(sqrtx),
+                           expr_new_function(expr_new_symbol("BesselJ"),
+                               (Expr*[]){ expr_copy(nu), expr_copy(arg) }, 2));
+            Expr* b1 = ds_call2(SYM_Times, expr_copy(sqrtx),
+                           expr_new_function(expr_new_symbol("BesselY"),
+                               (Expr*[]){ expr_copy(nu), expr_copy(arg) }, 2));
+            general = combo(b0, b1);
+            expr_free(sqrtx); expr_free(nu); expr_free(kappa); expr_free(halfp); expr_free(arg);
+        }
+        expr_free(mp2);
+    } else if (!bad && ng == 2) {
+        /* two-term: pick P_big, P_sm with P_big - 2 P_sm == 2, then c = P_sm + 1 */
+        Expr* Ea = exps[0]; Expr* Eb = exps[1];
+        Expr* ca = ds_simplify(ds_call2(SYM_Subtract,
+                       ds_call2(SYM_Subtract, expr_copy(Ea),
+                           ds_call2(SYM_Times, expr_new_integer(2), expr_copy(Eb))),
+                       expr_new_integer(2)));                                 /* Ea - 2 Eb - 2 */
+        Expr* cb = ds_simplify(ds_call2(SYM_Subtract,
+                       ds_call2(SYM_Subtract, expr_copy(Eb),
+                           ds_call2(SYM_Times, expr_new_integer(2), expr_copy(Ea))),
+                       expr_new_integer(2)));                                 /* Eb - 2 Ea - 2 */
+        int big = ds_is_zero(ca) ? 0 : (ds_is_zero(cb) ? 1 : -1);
+        expr_free(ca); expr_free(cb);
+        if (big >= 0) {
+            Expr* Psm   = (big == 0) ? Eb : Ea;
+            Expr* alpha = (big == 0) ? coefs[0] : coefs[1];
+            Expr* beta  = (big == 0) ? coefs[1] : coefs[0];
+            Expr* d = ds_simplify(ds_call2(SYM_Plus, expr_copy(Psm), expr_new_integer(2)));  /* d = c+1 = P_sm+2 */
+            if (!ds_is_zero(alpha)) {
+                Expr* sqrtna = ds_call1("Sqrt", ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(alpha)));
+                Expr* invd = ds_call2(SYM_Power, expr_copy(d), expr_new_integer(-1));         /* 1/d */
+                Expr* mu = ds_simplify(ds_call2(SYM_Times,                                    /* 1/(2 d) */
+                               ds_call2(SYM_Power, expr_new_integer(2), expr_new_integer(-1)), expr_copy(invd)));
+                Expr* kappa = ds_simplify(ds_call2(SYM_Times, expr_copy(beta),                /* beta/(2 d Sqrt[-alpha]) */
+                                  ds_call2(SYM_Power,
+                                      ds_call2(SYM_Times, expr_new_integer(2),
+                                          ds_call2(SYM_Times, expr_copy(d), expr_copy(sqrtna))),
+                                      expr_new_integer(-1))));
+                Expr* z = ds_simplify(ds_call2(SYM_Times,                                     /* (2 Sqrt[-alpha]/d) x^d */
+                              ds_call2(SYM_Times, expr_new_integer(2),
+                                  ds_call2(SYM_Times, expr_copy(sqrtna), expr_copy(invd))),
+                              ds_call2(SYM_Power, expr_copy(x), expr_copy(d))));
+                Expr* pref = ds_simplify(ds_call2(SYM_Power, expr_copy(x),                    /* x^((1-d)/2) */
+                                 ds_call2(SYM_Times,
+                                     ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(d)),
+                                     ds_call2(SYM_Power, expr_new_integer(2), expr_new_integer(-1)))));
+                Expr* negmu = ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(mu));
+                Expr* w0 = whittaker_M_1F1(kappa, mu, z);
+                Expr* w1 = whittaker_M_1F1(kappa, negmu, z);
+                general = combo(ds_call2(SYM_Times, expr_copy(pref), w0),
+                                ds_call2(SYM_Times, expr_copy(pref), w1));
+                expr_free(sqrtna); expr_free(invd); expr_free(mu); expr_free(kappa);
+                expr_free(z); expr_free(pref); expr_free(negmu);
+            }
+            expr_free(d);
+        }
+    }
+
+    for (int g = 0; g < ng; g++) { expr_free(exps[g]); expr_free(coefs[g]); }
+    expr_free(x); expr_free(Qe);
+    return general;
+}
+
 /* Numeric self-verify of a Whittaker candidate `base` against the REDUCED equation
  * w'' + Qc w == 0 (Qc = the reduced-form coefficient given to the recogniser).  This
  * is verified BEFORE the recovery factor is applied — crucial, because the composed
@@ -879,6 +1055,18 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
      *      present.  Behaviour on P == 0 equations is unchanged. ---- */
     if (!general && ds_is_zero(Pc)) general = specialform_reduced_basis(Qc, xvar);
 
+    /* ---- Generalised power-potential (symbolic-exponent Bessel + two-term
+     *      Coulomb/Whittaker), P == 0.  Numerically gated: the symbolic-parameter
+     *      residual is undecidable by zero_test, so a sign/branch error would
+     *      otherwise reach the corpus as a numericizing FAIL. ---- */
+    if (!general && ds_is_zero(Pc)) {
+        Expr* cand = specialform_power_potential(Qc, xvar);
+        if (cand) {
+            if (sf_num_ok(P, cand, xvar, P->fun_names[0])) general = cand;
+            else expr_free(cand);
+        }
+    }
+
     /* ---- Whittaker / confluent 1F1 (P == 0): single finite double pole + rank-1
      *      irregular point at infinity, emitted as the verifiable Exp z^mu 1F1 form.
      *      specialform_whittaker_basis self-verifies against the reduced equation
@@ -1112,6 +1300,19 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
              * reducible normal form is small (single power / A + B/x^2 / constant). */
             Expr* base = (leaf_count_internal(negr, true) > 50)
                        ? NULL : specialform_reduced_basis(negr, xvar);
+            /* Generalised power-potential recogniser (symbolic-exponent Bessel /
+             * two-term confluent), on the normal-form potential of a y'-carrying
+             * equation whose reduced form is a power potential -- e.g.
+             * y'' + a x^n y' + b x^(n-1) y == 0, normal form
+             * -a^2/4 x^(2n) + (b - a n/2) x^(n-1).  Unlike the finite-pole Whittaker
+             * recogniser the NOTE below excludes, this family's z = kappa x^d is a
+             * MONOMIAL (no finite (x - x0) pole) and the recovery factor
+             * mu = Exp[-Int P/2] for a power/rational P is itself a monomial-exponent
+             * form, so the composed mu*base does not stack finite-pole radicals and
+             * the $IterationLimit hazard the NOTE describes does not apply.  Still
+             * gated by sf_num_ok below. */
+            if (!base && leaf_count_internal(negr, true) <= 50)
+                base = specialform_power_potential(negr, xvar);
             /* NOTE: the confluent Whittaker recogniser is deliberately NOT run in this
              * normal-form pre-pass (P != 0).  The recovery factor mu = Exp[-Int P/2]
              * shares the finite-pole base (x - x0) with the Whittaker z^(1/2+-mu)
@@ -1233,6 +1434,9 @@ void dsolve_specialform_init(void) {
     symtab_set_docstring("DSolve`SpecialFunctionForm",
         "DSolve`SpecialFunctionForm[eqn, y, x] recognises second-order linear ODEs "
         "whose solutions are named special functions: Airy (y'' == (A x + B) y), "
+        "the power potential y'' + A x^m y == 0 (symbolic m -> Sqrt[x] Bessel) and the "
+        "two-term y'' + (a x^(2c) + b x^(c-1)) y == 0 (-> Coulomb/Whittaker -> "
+        "Hypergeometric1F1), "
         "Bessel / modified Bessel (x^2 y'' + x y' +- (x^2 -+ v^2) y == 0), Kummer "
         "confluent hypergeometric (x y'' + (b - x) y' - a y == 0 -> "
         "Hypergeometric1F1), and Gauss hypergeometric "

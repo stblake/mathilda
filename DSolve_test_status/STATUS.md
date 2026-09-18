@@ -14,7 +14,7 @@ FAIL = wrong branch (numeric back-substitution) · SKIP = system.
 ## Section 2.1.2 — "Problems not solved, but were solved by Maple and Mathematica"
 
 Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
-`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **655** (M27: systems now verified).
+`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **644** (M55 power-potential recogniser + Kovacic ±i-pole fix).
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
@@ -27,12 +27,14 @@ Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
 | 2026-09-07 (**M20**)      | **432 / 1000** | **43.2%** | **568** | **+6** (2.1.2-402, -371, -372, -376, -403, -424), **0 FAIL, 0 real regressions**. `PolynomialShiftSubstitution` (`dsolve_polyshift.c`): the radical `[F(x),G(x)]`-symmetry sub-cluster of the 1st-order symmetry gap, `u=φ(x)+c y` → separable → implicit first integral. (The one P→U, 2.1.2-879, is a **load-flaky timeout** — a 2nd-order Frobenius case that PASSes in 5.9 s in isolation, under the 8 s fork limit, and is untouched by polyshift; effective +6 → 433 on a clean run.) Gate baseline 576→**572** (568 measured non-PASS + margin for the flaky fork-timeout cluster 879/208/872/983). |
 | 2026-09-08 (**M21** side-effect) | **436 / 1000** | **43.6%** | **564** | **+4, 0 FAIL, 0 regression.** Not a §2.1.2-targeted wave — the M21 §2.2.1 shared fixes (scalar-Solve IC fit + `NthAlgebraic` denominator-clearing) also close 4 §2.1.2 first-order cases, and the `dsFreeParams` verifier fix (numeric back-substitution was vacuous) surfaced **no** new FAIL. Gate baseline kept at **572** (margin for the flaky fork cluster; not lowered since §2.1.2 was not the focus). |
 | 2026-09-09 (**M27**) | **446 / 1000 sc + 107 / 204 sys** | **44.6% sc / 52.5% sys** | **651** | **Systems now VERIFIED by back-substitution (was skipped): 553/1204 total, 0 FAIL.** Scalar solved **436 → 446 (+10)** — a side-effect of the M27 Solve periodicity-index fix (fresh mint index + integer-family collapse) closing inverse-function first-order cases. Systems scored for the first time: 107/204. Non-PASS 651 = 554 scalar + 97 systems (incl. 2 flaky fork-timeout crashes). Gate baseline **572 → 655** (651 + 4 margin). |
+| 2026-09-17 (**M55**) | **564 / 1204 total** | — | **640** | **+7 (557 → 564), 0 FAIL.** Generalised power-potential recogniser in `DSolve\`SpecialFunctionForm`: single-power `y''+A x^m y==0` → Bessel and two-term `y''+(α x^(2c)+β x^(c-1)) y==0` → Coulomb/Whittaker → `Hypergeometric1F1`, both at symbolic exponent (nine flagship cases 72/81/103/434/791/792/803/804/805). Also a root-cause verify fix (`ds_residual_numeric_zero`) removing a `zero_test` precision-ladder hang on symbolic-exponent special-function residuals. 2nd_linear bucket 239/414 (57.7%). Gate baseline **655 → 648** (640 + 8 margin for the ~6-7 s timing-boundary cluster 58/375/439/877, unrelated to M55). |
+| 2026-09-17 (**Kovacic ±i fix**) | **568 / 1204 total** | — | **636** | **+4 (564 → 568), 0 FAIL.** Kovacic `kovacic_case1_general` blanket-declined every non-real pole (a guard against a `ds_simplify` hang on Heun complex poles); now declines only a pole with a nonzero real part, so a purely-imaginary pair (`x²+c` → poles ±bI) is solved — repairing the masked regression `y''−((3+2x²)/(1+x²)²)y==0 → x√(1+x²)` (`t_kovacic_complex_poles`). Heun cases still decline fast → Frobenius. 2nd_linear bucket 243/414 (58.7%). Gate baseline **648 → 644** (636 + 8 margin). |
 
 ### Gap by bucket (baseline, ranked)
 
 | Bucket | tot | PASS | UNEVAL | pass% | target method |
 |---|--:|--:|--:|--:|---|
-| 2nd_linear            | 414 | 203 | 211 | 49.0 | M16 landed Legendre-symbolic + Pöschl-Teller; residue = Heun / parabolic-cylinder / Gegenbauer-Möbius / power→Bessel |
+| 2nd_linear            | 414 | 243 | 171 | 58.7 | M55 power-potential recogniser (Bessel + Whittaker/1F1) + Kovacic ±i-pole fix; residue = Heun / parabolic-cylinder / Gegenbauer-Möbius |
 | 3rd_high_linear       | 142 |  32 | 110 | 22.5 | OperatorFactor Beke / 2nd-order right factors |
 | 2nd_reducible_mu      | 102 |  39 |  63 | 38.2 | **M18 Stage 1 (μ(x,y)) +7**; residue needs μ(x,y')/μ(y,y') Stages 2/3 (Lemma-3 Cases C–F) |
 | 1st_Abel              |  68 |   4 |  64 |  5.9 | Abel Invariant Rational (AIR, revive M13) |
@@ -1506,6 +1508,7 @@ parameters-only forcing (`Sec`, `Tan`, `Csc`, `Log`). Solved by
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-16 (M51) | **96 / 100** | **96.0%** | **4** | **0 FAIL (as measured), 0 crash.** No solver change — the section solves out of the box. Residue: one masked-WRONG symbolic-coefficient case (3155) whose straightforward fix regresses §2.1.2 (deferred), one cold-timeout (3165), two timing-flaky VoP cases (3161/3164). Gate baseline **4**. |
+| 2026-09-16 (M52) | **99 / 100** | **99.0%** | **1** (gate **3**) | **3155 FIXED** (narrow, latency-safe — see M52): `dsolve_homog_basis` field-arithmetic β for the pure-imaginary symbolic pair + `UndeterminedCoefficients` Simplify-before-zero-test. 3155 flips masked-UNEVAL → PASS; only 3165 UNEVAL as measured. Gate baseline ratcheted **4 → 3** (3155 removed deterministically; 3161/3164/3165 kept as timing headroom). |
 
 **M51 — measured, no solver change** (a solver fix was investigated and **reverted** as a net regression):
 
@@ -1530,6 +1533,39 @@ Every case in the section is a constant-coefficient linear ODE solved by
   whose cold solve sits right at the 8 s bound; timing-sensitive (PASS under light load).
 
 Full per-case results: `reports/2.2.32.tsv`; bucketed report: `reports/2.2.32.md`.
+
+---
+
+## Section 2.2.33 — "Problems 3201 to 3300" (Nasser Abbasi)
+
+Corpus: `DE_examples_2233.m` — 100 records, **93 scalar (14 IVP) + 7 systems**.
+Converted with `tools/latex_ode_to_mathilda.py`. Constant-coefficient linear
+nonhomogeneous (2nd/3rd/high-order) + reducible 2nd-order (missing-x / missing-y,
+the reducible-μ class) + quadrature / rational / dAlembert + small linear systems.
+`ctest -R dsolve_corpus_2_2_33_tests` · gate baseline **23**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-16 (M53) | **77 / 100** | **77.0%** | **23** | **0 FAIL, 0 crash.** Scalar 72/93, systems 5/7. Dominant gap the `2nd_reducible_mu` class (13 UNEVAL — the M18 Stage-2 target); + quadrature/dAlembert/rational and one converter miss (3296). One general solver fix drove 0 FAIL — see below. Gate baseline **23**. |
+| 2026-09-17 (M54) | **78 / 100** | **78.0%** | **22** | **0 FAIL.** 3256 (`(1-x²)y''+x y'==1`, y-free) flipped UNEVAL → PASS after the Kovacic `Q==0` early-decline gate (it churned to its 5 s budget ahead of `ReductionOfOrder`). No other verdict changed. Gate baseline **23 → 22**. |
+
+**M53 — one general solver fix (IVP condition-verification):**
+
+- **3279** (`y''==(y')² Sin[x]`, `y[0]==0`, `y'[0]==1/2`) initially **FAILed** — DSolve shipped
+  `y==0`, which satisfies the ODE and `y[0]==0` but **violates `y'[0]==1/2`** (correct is
+  `Tan[x/2]`). Pre-existing bug: `Solve` returns the degenerate `C[1]→1` at a *removable
+  singularity* of the fit system (`y'(0)` is `0/0` there, not `1/2`) and the constant-fitter
+  accepted it; the spurious-fit backstop (`dsolve_fit_constants`) verified only the ODE residual
+  (which `y==0` passes) and only at first order. New `ds_fit_meets_conditions` numerically
+  verifies a fitted body against every point condition at **any** order → declines honestly
+  instead of shipping the wrong answer. Regression-clean (§2.2.12 3≤3, §2.2.14 1≤1; control IVPs
+  unchanged).
+- **3296** — converter miss (a multi-line `array` ODE row the tex4ht→Mathilda converter cannot
+  extract → a degenerate `True==True` record). UNEVAL; the file is regenerate-only.
+- The remaining 21 UNEVAL are genuine method gaps: 13 `2nd_reducible_mu` (M18 Stage 2),
+  quadrature/dAlembert/rational, and 2 systems.
+
+Full per-case results: `reports/2.2.33.tsv`; bucketed report: `reports/2.2.33.md`.
 
 ---
 
@@ -1925,3 +1961,32 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   code is unchanged from the M50-confirmed 647 ≤ 655; a fresh clean re-run was not possible under heavy
   external machine load, which alone swings §2.1.2 647→667.) Gate `dsolve_corpus_2_2_32_tests`
   baseline 4. v0.148→0.149.
+- **M52 (2026-09-16)** — symbolic complex-root wrong answer **FIXED** (the M51 deferral). Two narrow,
+  latency-safe fixes: `dsolve_homog_basis` realifies a **pure-imaginary** symbolic root pair by field
+  arithmetic `β = Simplify[PowerExpand[√(-r²)]]` (real `Cos[a x]`/`Sin[a x]`; general complex pairs α≠0
+  untouched, so the 13 §2.1.2 cold-budget cases 58/439/877/… are byte-identical — re-timed cold ≈5–6 s,
+  all solving), and `UndeterminedCoefficients` `Simplify`s its residual before the zero-test gate so the
+  non-UC `Sec` forcing declines to VoP (a `zero_test` false positive on the raw symbolic residual had
+  defeated the gate and shipped `Sec[a x]/a²`). **§2.2.32 re-measured: 3155 flips masked-UNEVAL → PASS**;
+  non-PASS 4 → 1 as measured (only 3165 UNEVAL, cold >8 s). Gate `dsolve_corpus_2_2_32_tests` baseline
+  ratcheted **4 → 3** (3155 removed deterministically; 3161/3164/3165 kept as timing headroom). New unit
+  `t_m52_symbolic_complex_root`; all DSolve ctest suites + `make check-c99` green. v0.149→0.150.
+- **M53 (2026-09-16)** — §2.2.33 (Problems 3201–3300) corpus, **77/100, 0 FAIL, 23 UNEVAL, 0 crash**.
+  100 records (93 scalar [14 IVP] + 7 systems); converted with `latex_ode_to_mathilda.py`. Scalar
+  72/93, systems 5/7. New gate `dsolve_corpus_2_2_33_tests` (baseline 23); report `reports/2.2.33.md`.
+  Dominant gap the `2nd_reducible_mu` class (13 UNEVAL — the M18 Stage-2 target), + quadrature /
+  dAlembert / rational and one converter miss (3296, multi-line `array` ODE row). **One general
+  solver fix** (0-FAIL restored): 3279 (`y''==(y')² Sin[x]`, `y[0]==0`, `y'[0]==1/2`) shipped a WRONG
+  `y==0` (a degenerate `Solve` fit at a removable singularity meeting `y[0]` but not `y'[0]`); new
+  `ds_fit_meets_conditions` (`dsolve_common.c`) numerically verifies a fitted body against every point
+  CONDITION at ANY order (the old spurious-fit backstop checked only the ODE residual and only
+  first-order), so it now declines honestly. Regression-checked: IVP-heavy §2.2.12 (3≤3) and §2.2.14
+  (1≤1) within baseline; control IVPs (1st/2nd-order + nonhomogeneous zero-IC + BVP + M24) unchanged.
+  `make check-c99` green. v0.150→0.151.
+- **M54 (2026-09-17)** — Kovacic `Q==0` early-decline (reducible-ODE hang fix). §2.2.33-3256
+  (`(1-x²)y''+x y'==1`) **hung** — a y-free equation (first order in `y'`, solved by
+  `ReductionOfOrder` in ~0.05 s), but `DSolve\`Kovacic` (earlier in the cascade) churns its Case-1
+  search to its 5 s budget before declining, starving the cascade past the 8 s bound. Fix
+  (`src/calculus/dsolve_kovacic.c`): decline immediately when `Q≡0`. 3256 flips UNEVAL → PASS;
+  §2.2.33 **78/100, 0 FAIL** (gate baseline 23 → 22); genuine Kovacic cases (nonzero y-term)
+  untouched; §2.1.2 re-run within baseline. New unit `t_m54_kovacic_missing_y_no_churn`. v0.151→0.152.

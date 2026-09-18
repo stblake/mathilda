@@ -206,7 +206,18 @@ static Expr* uc_particular(const Expr* T, Expr** a, int n, const char* xvar) {
                         Lc = eval_and_free(ds_call2(SYM_Plus, Lc,
                                  ds_call2(SYM_Times, expr_copy(a[j]), dj)));
                     }
-                    Expr* resid = ds_call2(SYM_Subtract, Lc, expr_copy((Expr*)T));
+                    /* Simplify before the zero test.  The raw residual of a NON-UC
+                     * forcing carrying a symbolic parameter (e.g. Sec[a x], whose
+                     * "y_p = Sec[a x]/a^2" leaves residual D[Sec[a x],{x,2}]/a^2) is a
+                     * zero_test FALSE POSITIVE -- PossibleZeroQ of the unsimplified form
+                     * is True though it is genuinely nonzero -- which defeats this gate
+                     * and ships a WRONG particular (M51 y''+a^2 y == Sec[a x]).  Simplify
+                     * collapses it to a decidably-nonzero form so the term correctly
+                     * declines to constcoeff's variation of parameters.  A genuine UC
+                     * residual is provably zero either way, so real accepts are
+                     * unchanged (numeric coefficients already declined via VoP). */
+                    Expr* resid = eval_and_free(ds_call1("Simplify",
+                                      ds_call2(SYM_Subtract, Lc, expr_copy((Expr*)T))));
                     bool solves = ds_is_zero(resid);
                     expr_free(resid);
                     if (solves) yp = cand_s; else expr_free(cand_s);
