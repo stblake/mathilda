@@ -1,40 +1,71 @@
-# Task: Implement FirstPosition
+# Task: Implement AlgebraicNumber and ToNumberField
 
-Delegating to Position (shares Position's codebase). Attributes: HoldRest, Protected.
+Faithful WL recreation. FLINT `qqbar` backend (declines cleanly without FLINT).
+Plan: /Users/user/.claude/plans/let-s-implement-tonumberfield-tonumberfi-sorted-rain.md
 
-## Plan checklist
+## Phase 0 — Skeleton & registration
+- [ ] SYM_AlgebraicNumber, SYM_ToNumberField (3-site in sym_names.{h,c})
+- [ ] src/poly/algebraicnumber.{c,h} — builtin stub returning NULL + _init
+- [ ] src/poly/tonumberfield.{c,h} — builtin stub returning NULL + _init
+- [ ] Wire _init() in core.c (near minpoly/rootreduce block)
+- [ ] Attributes: AlgebraicNumber NHOLDALL|PROTECTED, ToNumberField PROTECTED
+- [ ] Docstrings in src/info.c (no examples)
+- [ ] tests/CMakeLists.txt: add both .c to COMMON_SRC + test target
+- [ ] Build clean, parses/prints, no-op
 
-- [x] `src/patterns.h` — declare `builtin_first_position`
-- [x] `src/patterns.c` — implement `builtin_first_position` + register in `patterns_init`
-- [x] `src/sym_names.h` — `extern SYM_FirstPosition`
-- [x] `src/sym_names.c` — define + intern `SYM_FirstPosition`
-- [x] `src/info.c` — docstring for FirstPosition
-- [x] `src/options_builtin.c` — `{ "FirstPosition", "True" }` Heads default
-- [x] `tests/test_firstposition.c` — new test file (23 cases)
-- [x] `tests/CMakeLists.txt` — register `firstposition_tests`
-- [x] `docs/spec/builtins/pattern-matching.md` + `data-structures.md` — FirstPosition entries (Position's canonical doc is in pattern-matching.md, not structural-manipulation.md)
-- [x] `docs/spec/changelog/2026-09-14.md` — changelog note
-- [x] Build clean (`make -j`, `make check-c99`)
-- [x] Run `firstposition_tests` (23/23) + `patterns_tests` (no regression)
-- [x] REPL spot-check all 15 spec examples — all match
-- [x] leak check (`leaks --atExit`): 0 leaks
-- [x] Rebuild code-review graph
+## Phase 1 — Recognition in flint_qqbar.c
+- [ ] to_qqbar + is_constant_algebraic + collect_atoms handle AlgebraicNumber
+- [ ] Verify RootReduce[AN]→Root; value-preservation
 
-## Review
+## Phase 2 — AlgebraicNumber canonicalisation
+- [ ] lc/φ/M reduction, rational branch, collapse, over-length fold, empty→0, malformed→NULL
+- [ ] expr_eq fixpoint guard
+- [ ] Verify examples 1,4–12 + idempotence
 
-Implemented `FirstPosition[expr, pattern, default, levelspec]` (attributes
-`HoldRest, Protected`) by **delegating to `Position`** with the first-match cap
-(`Position[expr, pattern, levelspec, 1, Heads->opt]`), taking `[[1]]`, and falling
-back to the held `default` (evaluated only when returned) or `Missing["NotFound"]`.
-Associations without a levelspec use the 2-arg `Position` form so its value→`Key[...]`
-remapping fires. This maximally shares Position's code (levelspec parsing, `Heads`,
-traversal/ordering, association handling) and is Wolfram-faithful because Position's
-ordering is already asserted by `test_position`.
+## Phase 3 — numericalize branch (numeric.c)
+- [ ] Build Σ ci θ^i, recurse. Verify N[...,50], Round, Less
 
-Verified: all 15 documented examples reproduce the spec exactly; 23-case unit suite
-passes; no `Position` regression; 0 memory leaks; clean build + C99 gate.
+## Phase 4 — is_numeric_quantity (core.c) + Re/Im (complex.c)
+- [ ] Verify Re[real]→self, Im→0, complex Equal/Unequal
 
-Design note: `FirstPosition` is a structural/pattern-search head (not numeric), so —
-like `Position` — it carries no ND-kernel / packed-aware / `Compile[]` obligation and
-reuses `patterns_delist_visible` for visible `NDArray` inputs. Known limitation
-(shared with `Position`): a levelspec over an association is not `Key`-remapped.
+## Phase 5 — Field arithmetic (plus/times/power)
+- [ ] algnum combine pre-pass. Verify examples 2,13–16 + mismatched-gen sum
+- [ ] Regression: plus/times/power/rootreduce suites
+
+## Phase 6 — ToNumberField + docs
+- [ ] All arg forms, decline a∉Q(θ), ToNumberField[2,1/2]→2
+- [ ] docs/spec + changelog + full-suite run + valgrind
+
+## Review — COMPLETE
+
+All phases done and verified. Every WL spec example reproduced exactly.
+
+**Files changed**
+- `src/sym_names.{h,c}` — SYM_AlgebraicNumber, SYM_ToNumberField (3-site).
+- `src/poly/flint_qqbar.{c,h}` — to_qqbar/is_constant_algebraic/collect_atoms
+  recognise AlgebraicNumber, Re/Im/Abs/Conjugate and E^(I Pi r); Expr-level entry
+  points (canonicalise, to-number-field, common-field, field arithmetic).
+- `src/poly/algebraicnumber.{c,h}`, `src/poly/tonumberfield.{c,h}` — new builtins.
+- `src/numeric.c` — N branch for AlgebraicNumber. `src/core.c` — is_numeric_quantity
+  clause + init wiring. `src/complex.c` — Re/Im/Abs real-algebraic hook.
+- `src/plus.c`, `src/times.c`, `src/power.c` — field-arithmetic combine passes
+  (placed after the int64 fast path — no hot-path cost).
+- `src/info.c` — docstrings. Docs: `docs/spec/builtins/algebra.md` + changelog.
+- Tests: `tests/test_algebraicnumber.c` (+ CMake target, COMMON_SRC entries).
+
+**Verification**
+- `tests/test_algebraicnumber.c`: all pass (spec examples pinned + RootReduce
+  value-preservation cross-checks all == 0).
+- Regressions green: core, eval, evaluate, numeric, numeric_stress/domain/complex,
+  complexexpand, power*, root_numeric, core_algebra, simplify, expand, comparisons,
+  boolean, rootreduce, numberfield.
+- `make check-c99`: clean. `make check-packed-aware`: my heads not flagged
+  (pre-existing FirstPosition failure is unrelated, from commit 34bbbf37).
+- Valgrind: no new lost blocks vs macOS baseline (definitely/indirectly/possibly
+  lost byte-identical to the `1+1` baseline run).
+
+**Known limitations (documented, not bugs)**
+- `RootReduce[Re[complex algebraic]]` yields a valid but differently-normalised
+  representation than WL (same value — cross-checked == 0). WL documents that
+  AlgebraicNumber representations are non-unique.
+- `Automatic` and `All` both use the qqbar minimal primitive element.

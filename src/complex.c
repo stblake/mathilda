@@ -6,6 +6,7 @@
 #include "numeric.h"
 #include "common.h"
 #include "sym_names.h"
+#include "flint_qqbar.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -222,12 +223,27 @@ static bool is_real_valued_head_call(Expr* e) {
            e->data.function.arg_count == 1;
 }
 
+/* A real AlgebraicNumber / Root object: Re returns it unchanged, Im returns 0.
+ * A non-real one stays wrapped (matching WL: Re/Im do not auto-reduce there). */
+static int is_real_algebraic_object(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION ||
+        e->data.function.head->type != EXPR_SYMBOL)
+        return 0;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h != SYM_AlgebraicNumber && h != SYM_Root) return 0;
+    return flint_qqbar_is_real(e) == 1;
+}
+
 Expr* builtin_re(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     /* Re[f[z]] -> f[z] when f is real-valued by construction (Re, Im, Abs, Arg). */
     if (is_real_valued_head_call(arg)) {
         res->data.function.args[0] = NULL;
+        return arg;
+    }
+    if (is_real_algebraic_object(arg)) {
+        res->data.function.args[0] = NULL;   /* Re[real AlgebraicNumber/Root] -> itself */
         return arg;
     }
     Expr *re, *im;
@@ -254,6 +270,9 @@ Expr* builtin_im(Expr* res) {
     /* Im[f[z]] -> 0 when f is real-valued by construction (Re, Im, Abs, Arg). */
     if (is_real_valued_head_call(arg)) {
         return expr_new_integer(0);
+    }
+    if (is_real_algebraic_object(arg)) {
+        return expr_new_integer(0);          /* Im[real AlgebraicNumber/Root] -> 0 */
     }
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {
@@ -323,6 +342,23 @@ Expr* builtin_abs(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Abs", arg); if (r) return r; }
+
+    /* Abs of a real AlgebraicNumber / Root object: the value itself when >= 0,
+     * else its negation — kept as an exact algebraic object. */
+    if (is_real_algebraic_object(arg)) {
+        Expr* zero = expr_new_integer(0);
+        int sgn = flint_qqbar_compare(arg, zero);   /* -1, 0, 1, or -2 */
+        expr_free(zero);
+        if (sgn == 0 || sgn == 1) {
+            res->data.function.args[0] = NULL;
+            return arg;
+        }
+        if (sgn == -1) {
+            Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(arg) }, 2);
+            return eval_and_free(neg);
+        }
+    }
 
     Expr *re, *im;
     bool from_complex = is_complex(arg, &re, &im);

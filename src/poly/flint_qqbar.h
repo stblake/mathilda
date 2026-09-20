@@ -58,4 +58,43 @@ int flint_qqbar_compare(const Expr* a, const Expr* b);
  * decide -- leave the whole statement unevaluated" (-1). */
 int flint_qqbar_is_real(const Expr* e);
 
+/* ------------------------------------------------------------------ */
+/*  AlgebraicNumber / ToNumberField Expr-level entry points            */
+/*  (used by the builtins in algebraicnumber.c / tonumberfield.c).     */
+/*  Every one returns a fresh owned Expr on success and NULL to        */
+/*  decline — a non-constant-algebraic argument, malformed coeffs, a   */
+/*  degree-cap overflow, or FLINT compiled out. None mutate an input.  */
+/* ------------------------------------------------------------------ */
+
+/* Canonicalise AlgebraicNumber[gen, coeffs] (coeffs a List of integers /
+ * rationals): reduce gen to an algebraic integer and coeffs to the power basis
+ * of its minimal polynomial. Returns the reduced AlgebraicNumber[g, {..}], or a
+ * plain Integer/Rational when the value is rational. */
+Expr* flint_qqbar_algebraic_number(const Expr* gen, const Expr* coeffs);
+
+/* ToNumberField[a, theta]: express the constant algebraic number `a` in the
+ * field Q(theta) as AlgebraicNumber[g, {..}] (g the algebraic-integer generator
+ * of Q(theta)); returns the rational `a` when Q(theta) = Q. NULL if a is not in
+ * Q(theta). */
+Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* theta);
+
+/* ToNumberField[{a0..a_{n-1}}] (or `All`): build a common field Q(a0,..) via a
+ * primitive element and return List[AlgebraicNumber[g, {..}], ..]. `smallest`
+ * is advisory (Automatic and All both use the qqbar primitive element). */
+Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
+                                         int smallest);
+
+/* ToNumberField[x]: express the single algebraic number x as an explicit
+ * AlgebraicNumber in Q(x). */
+Expr* flint_qqbar_to_number_field_self(const Expr* x);
+
+/* Same-field arithmetic for the Plus/Times/Power combination pre-passes. `a`
+ * (and `b`) are AlgebraicNumber objects; combining happens only when generators
+ * are structurally equal (expr_eq). `r` is an Integer/Rational scalar. */
+Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b);
+Expr* flint_qqbar_algnum_mul(const Expr* a, const Expr* b);
+Expr* flint_qqbar_algnum_pow(const Expr* a, long p);
+Expr* flint_qqbar_algnum_add_rational(const Expr* a, const Expr* r);
+Expr* flint_qqbar_algnum_scale_rational(const Expr* a, const Expr* r);
+
 #endif /* FLINT_QQBAR_H */

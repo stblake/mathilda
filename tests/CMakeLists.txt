@@ -628,6 +628,8 @@ set(COMMON_SRC
     ../src/poly/zupoly.c
     ../src/poly/flint_bridge.c
     ../src/poly/flint_qqbar.c
+    ../src/poly/algebraicnumber.c
+    ../src/poly/tonumberfield.c
     ../src/poly/bpoly.c
     ../src/poly/mpoly.c
     ../src/poly/mvfactor.c
@@ -1882,6 +1884,10 @@ add_test(NAME solve_integers_tests COMMAND solve_integers_tests)
 add_executable(numberfield_tests test_numberfield.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(numberfield_tests PRIVATE ../src ../src/numbertheory)
 add_test(NAME numberfield_tests COMMAND numberfield_tests)
+
+add_executable(algebraicnumber_tests test_algebraicnumber.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(algebraicnumber_tests PRIVATE ../src ../src/poly)
+add_test(NAME algebraicnumber_tests COMMAND algebraicnumber_tests)
 
 add_executable(thue_tests test_thue.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(thue_tests PRIVATE ../src ../src/numbertheory)

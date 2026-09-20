@@ -137,6 +137,7 @@
 #include "precision.h"
 #include "rationalize.h"
 #include "numeric.h"
+#include "flint_qqbar.h"
 #include "linsolve.h"
 #include "common.h"
 #include "sym_intern.h"
@@ -836,6 +837,10 @@ void core_init(void) {
     ratcanon_init();
     void rootreduce_init(void);
     rootreduce_init();
+    void algebraicnumber_init(void);
+    algebraicnumber_init();
+    void tonumberfield_init(void);
+    tonumberfield_init();
     expand_init();
     expand_power_init();
     solve_init();
@@ -2353,7 +2358,15 @@ static bool is_numeric_quantity(Expr* e) {
         if (e->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = e->data.function.head->data.symbol.name;
             if (head_name == SYM_Complex || head_name == SYM_Rational) return true;
-            
+
+            /* AlgebraicNumber[gen, {rationals}] is a numeric quantity, but its
+             * coefficient List is not itself a NumericFunction argument, so the
+             * generic recursion below would (wrongly) reject it.  Decide with the
+             * qqbar constant-algebraic test, which validates both the generator
+             * and that every coefficient is rational. */
+            if (head_name == SYM_AlgebraicNumber)
+                return flint_qqbar_is_constant_algebraic(e);
+
             SymbolDef* def = symtab_get_def(head_name);
             if (def && (def->attributes & ATTR_NUMERICFUNCTION)) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++) {

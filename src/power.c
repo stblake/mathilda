@@ -10,6 +10,7 @@
 #include "internal.h"
 #include "series.h"
 #include "ndarray.h"
+#include "flint_qqbar.h"
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -629,6 +630,18 @@ Expr* builtin_power(Expr* res) {
 
     Expr* base = res->data.function.args[0];
     Expr* exp = res->data.function.args[1];
+
+    /* AlgebraicNumber^integer: number-field power (negative exponents invert in
+     * the field). Fractional exponents (Sqrt etc.) are left symbolic, matching
+     * WL — those do not auto-reduce over an AlgebraicNumber. */
+    if (exp->type == EXPR_INTEGER &&
+        base->type == EXPR_FUNCTION && base->data.function.head &&
+        base->data.function.head->type == EXPR_SYMBOL &&
+        base->data.function.head->data.symbol.name == SYM_AlgebraicNumber &&
+        base->data.function.arg_count == 2) {
+        Expr* r = flint_qqbar_algnum_pow(base, (long)exp->data.integer);
+        if (r) return r;
+    }
 
     /* Interval base: integer powers are handled by the interval kernel (even/odd
      * and straddling-zero logic, reciprocal for negative n). Non-integer or

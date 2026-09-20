@@ -9,6 +9,7 @@
 #include "series.h"
 #include "ndarray.h"
 #include "checked_int.h"
+#include "flint_qqbar.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -319,6 +320,94 @@ Expr* make_times(Expr* a, Expr* b) {
 /* BasePower (the (base, exponent) pair) is shared with trig_canon.h, which
  * mutates the array we build here. */
 
+/* ---- AlgebraicNumber field multiplication ------------------------------- */
+
+static int times_is_algnum(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_AlgebraicNumber &&
+           e->data.function.arg_count == 2;
+}
+
+static int times_is_rational_number(const Expr* e) {
+    return e && (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT ||
+                 (e->type == EXPR_FUNCTION && e->data.function.head &&
+                  e->data.function.head->type == EXPR_SYMBOL &&
+                  e->data.function.head->data.symbol.name == SYM_Rational));
+}
+
+/* Combine same-generator AlgebraicNumber factors of a product via number-field
+ * multiplication; when there is exactly one generator, fold a rational
+ * coefficient into it.  Returns the rebuilt (evaluated) result, or NULL. */
+static Expr* algnum_times_combine(Expr** args, size_t n) {
+    int any = 0;
+    for (size_t i = 0; i < n; i++) if (times_is_algnum(args[i])) { any = 1; break; }
+    if (!any) return NULL;
+
+    Expr**       gens   = malloc(sizeof(Expr*) * n);
+    Expr**       accs   = malloc(sizeof(Expr*) * n);
+    const Expr** rats   = malloc(sizeof(Expr*) * n);
+    const Expr** others = malloc(sizeof(Expr*) * n);
+    size_t ng = 0, nrat = 0, no = 0;
+    int changed = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = args[i];
+        if (times_is_algnum(a)) {
+            size_t gi; int found = 0;
+            for (gi = 0; gi < ng; gi++)
+                if (expr_eq(gens[gi], a->data.function.args[0])) { found = 1; break; }
+            if (!found) { gens[ng] = a->data.function.args[0]; accs[ng] = expr_copy(a); ng++; }
+            else {
+                Expr* s = flint_qqbar_algnum_mul(accs[gi], a);
+                if (s) { expr_free(accs[gi]); accs[gi] = s; changed = 1; }
+                else others[no++] = a;
+            }
+        } else if (times_is_rational_number(a)) {
+            rats[nrat++] = a;
+        } else {
+            others[no++] = a;
+        }
+    }
+
+    int scaled = 0;
+    if (ng == 1 && nrat > 0 && times_is_algnum(accs[0])) {
+        Expr* rprod;
+        if (nrat == 1) rprod = expr_copy((Expr*)rats[0]);
+        else {
+            Expr** rc = malloc(sizeof(Expr*) * nrat);
+            for (size_t k = 0; k < nrat; k++) rc[k] = expr_copy((Expr*)rats[k]);
+            rprod = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), rc, nrat));
+            free(rc);
+        }
+        Expr* s = flint_qqbar_algnum_scale_rational(accs[0], rprod);
+        expr_free(rprod);
+        if (s) { expr_free(accs[0]); accs[0] = s; scaled = 1; changed = 1; }
+    }
+
+    if (!changed) {
+        for (size_t gi = 0; gi < ng; gi++) expr_free(accs[gi]);
+        free(gens); free(accs); free(rats); free(others);
+        return NULL;
+    }
+
+    size_t total = ng + no + (scaled ? 0 : nrat);
+    Expr** terms = malloc(sizeof(Expr*) * (total ? total : 1));
+    size_t t = 0;
+    for (size_t gi = 0; gi < ng; gi++)  terms[t++] = accs[gi];
+    for (size_t k = 0; k < no; k++)     terms[t++] = expr_copy((Expr*)others[k]);
+    if (!scaled)
+        for (size_t k = 0; k < nrat; k++) terms[t++] = expr_copy((Expr*)rats[k]);
+    free(gens); free(accs); free(rats); free(others);
+
+    Expr* result;
+    if (t == 0)      result = expr_new_integer(1);
+    else if (t == 1) result = terms[0];
+    else             result = expr_new_function(expr_new_symbol(SYM_Times), terms, t);
+    free(terms);
+    return eval_and_free(result);
+}
+
 Expr* builtin_times(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
@@ -345,6 +434,13 @@ Expr* builtin_times(Expr* res) {
             }
             if (!overflow) return expr_new_integer(acc);
         }
+    }
+
+    /* AlgebraicNumber field multiplication: combine same-generator factors. Placed
+     * after the int64 fast path so hot integer products never pay for the scan. */
+    {
+        Expr* combined = algnum_times_combine(res->data.function.args, n);
+        if (combined) return combined;
     }
 
     /* Fused special-case guard (mirrors builtin_plus). The NDArray, SeriesData,

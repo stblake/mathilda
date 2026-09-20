@@ -9,6 +9,7 @@
 #include "series.h"
 #include "ndarray.h"
 #include "checked_int.h"
+#include "flint_qqbar.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -355,6 +356,96 @@ static bool is_neg_of_plus(Expr* e, Expr** inner_plus_out) {
     return true;
 }
 
+/* ---- AlgebraicNumber field addition ------------------------------------- */
+
+static int plus_is_algnum(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_AlgebraicNumber &&
+           e->data.function.arg_count == 2;
+}
+
+static int plus_is_rational_number(const Expr* e) {
+    return e && (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT ||
+                 (e->type == EXPR_FUNCTION && e->data.function.head &&
+                  e->data.function.head->type == EXPR_SYMBOL &&
+                  e->data.function.head->data.symbol.name == SYM_Rational));
+}
+
+/* Combine same-generator AlgebraicNumber terms of a sum via number-field
+ * addition; when the sum has exactly one AlgebraicNumber generator, loose
+ * rational terms are folded into it.  Returns the rebuilt (evaluated) result, or
+ * NULL when there is nothing to combine (leaving the generic path untouched). */
+static Expr* algnum_plus_combine(Expr** args, size_t n) {
+    int any = 0;
+    for (size_t i = 0; i < n; i++) if (plus_is_algnum(args[i])) { any = 1; break; }
+    if (!any) return NULL;
+
+    Expr**       gens   = malloc(sizeof(Expr*) * n);   /* borrowed generators   */
+    Expr**       accs   = malloc(sizeof(Expr*) * n);   /* OWNED combined AN/grp  */
+    const Expr** rats   = malloc(sizeof(Expr*) * n);   /* borrowed rationals     */
+    const Expr** others = malloc(sizeof(Expr*) * n);   /* borrowed remaining     */
+    size_t ng = 0, nrat = 0, no = 0;
+    int changed = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = args[i];
+        if (plus_is_algnum(a)) {
+            size_t gi; int found = 0;
+            for (gi = 0; gi < ng; gi++)
+                if (expr_eq(gens[gi], a->data.function.args[0])) { found = 1; break; }
+            if (!found) { gens[ng] = a->data.function.args[0]; accs[ng] = expr_copy(a); ng++; }
+            else {
+                Expr* s = flint_qqbar_algnum_add(accs[gi], a);
+                if (s) { expr_free(accs[gi]); accs[gi] = s; changed = 1; }
+                else others[no++] = a;
+            }
+        } else if (plus_is_rational_number(a)) {
+            rats[nrat++] = a;
+        } else {
+            others[no++] = a;
+        }
+    }
+
+    int foldable = 0;
+    if (ng == 1 && nrat > 0 && plus_is_algnum(accs[0])) {
+        /* Fold the rational terms (their sum) into the single generator's c0. */
+        Expr* rsum;
+        if (nrat == 1) rsum = expr_copy((Expr*)rats[0]);
+        else {
+            Expr** rc = malloc(sizeof(Expr*) * nrat);
+            for (size_t k = 0; k < nrat; k++) rc[k] = expr_copy((Expr*)rats[k]);
+            rsum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), rc, nrat));
+            free(rc);
+        }
+        Expr* s = flint_qqbar_algnum_add_rational(accs[0], rsum);
+        expr_free(rsum);
+        if (s) { expr_free(accs[0]); accs[0] = s; foldable = 1; changed = 1; }
+    }
+
+    if (!changed) {
+        for (size_t gi = 0; gi < ng; gi++) expr_free(accs[gi]);
+        free(gens); free(accs); free(rats); free(others);
+        return NULL;
+    }
+
+    size_t total = ng + no + (foldable ? 0 : nrat);
+    Expr** terms = malloc(sizeof(Expr*) * (total ? total : 1));
+    size_t t = 0;
+    for (size_t gi = 0; gi < ng; gi++)  terms[t++] = accs[gi];              /* owned */
+    for (size_t k = 0; k < no; k++)     terms[t++] = expr_copy((Expr*)others[k]);
+    if (!foldable)
+        for (size_t k = 0; k < nrat; k++) terms[t++] = expr_copy((Expr*)rats[k]);
+    free(gens); free(accs); free(rats); free(others);
+
+    Expr* result;
+    if (t == 0)      result = expr_new_integer(0);
+    else if (t == 1) result = terms[0];
+    else             result = expr_new_function(expr_new_symbol(SYM_Plus), terms, t);
+    free(terms);
+    return eval_and_free(result);
+}
+
 Expr* builtin_plus(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -381,6 +472,14 @@ Expr* builtin_plus(Expr* res) {
                 }
             if (!overflow) return expr_new_integer(acc);
         }
+    }
+
+    /* AlgebraicNumber field addition: combine same-generator terms (and fold
+     * loose rationals into a single generator). Placed after the int64 fast path
+     * so the hot integer accumulator case never pays for the scan. */
+    {
+        Expr* combined = algnum_plus_combine(res->data.function.args, n);
+        if (combined) return combined;
     }
 
     /* Fused special-case guard. Each of the five pre-scans below (NDArray,

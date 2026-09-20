@@ -248,6 +248,22 @@ static int root_object_to_qqbar(const Expr* e, qqbar_t out) {
     return 1;
 }
 
+/* If `exp` has the form (I Pi r) for a rational r — the canonical
+ * Times[Complex[0, r], Pi] — set `out` to r and return 1; else return 0. Used to
+ * recognise E^(I Pi r) = exp(i pi r) as a root of unity. */
+static int exp_arg_i_pi_rational(const Expr* exp, fmpq_t out) {
+    if (!head_is(exp, "Times") || exp->data.function.arg_count != 2) return 0;
+    const Expr* a0 = exp->data.function.args[0];
+    const Expr* a1 = exp->data.function.args[1];
+    const Expr* co = NULL;
+    if (a0->type == EXPR_SYMBOL && a0->data.symbol.name == SYM_Pi)      co = a1;
+    else if (a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_Pi) co = a0;
+    if (!co || !head_is(co, "Complex") || co->data.function.arg_count != 2) return 0;
+    const Expr* reP = co->data.function.args[0];
+    if (!(reP->type == EXPR_INTEGER && reP->data.integer == 0)) return 0;   /* purely imaginary */
+    return fmpq_from_expr(co->data.function.args[1], out);
+}
+
 static int to_qqbar(const Expr* e, qqbar_t out) {
     if (!e) return 0;
     if (e->type == EXPR_INTEGER) { qqbar_set_si(out, (slong)e->data.integer); return 1; }
@@ -291,6 +307,21 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
     if (head_is(e, "Power") && n == 2) {
         const Expr* be = e->data.function.args[0];
         const Expr* xe = e->data.function.args[1];
+        /* E^(I Pi r), r rational, is the root of unity exp(i pi r) — algebraic. */
+        if (be->type == EXPR_SYMBOL && be->data.symbol.name == SYM_E) {
+            fmpq_t r; fmpq_init(r);
+            int ok = 0;
+            if (exp_arg_i_pi_rational(xe, r)) {
+                const fmpz* pn = fmpq_numref(r);
+                const fmpz* pd = fmpq_denref(r);
+                if (fmpz_fits_si(pn) && fmpz_fits_si(pd)) {
+                    qqbar_exp_pi_i(out, fmpz_get_si(pn), (ulong)fmpz_get_si(pd));
+                    ok = 1;
+                }
+            }
+            fmpq_clear(r);
+            return ok;   /* E with any other exponent is not algebraic */
+        }
         qqbar_t base; qqbar_init(base);
         int ok = to_qqbar(be, base);
         if (ok) {
@@ -332,6 +363,42 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
         if (ok) qqbar_sqrt(out, base);
         if (ok && qqbar_degree(out) > QQBAR_DEGREE_CAP) ok = 0;
         qqbar_clear(base);
+        return ok;
+    }
+    if ((head_is(e, "Re") || head_is(e, "Im") || head_is(e, "Abs") ||
+         head_is(e, "Conjugate")) && n == 1) {
+        /* Re/Im/Abs/Conjugate of a constant algebraic number is algebraic. */
+        qqbar_t z; qqbar_init(z);
+        int ok = to_qqbar(e->data.function.args[0], z);
+        if (ok) {
+            if      (head_is(e, "Re"))  qqbar_re(out, z);
+            else if (head_is(e, "Im"))  qqbar_im(out, z);
+            else if (head_is(e, "Abs")) qqbar_abs(out, z);
+            else                        qqbar_conj(out, z);
+        }
+        qqbar_clear(z);
+        return ok;
+    }
+    if (head_is(e, "AlgebraicNumber") && n == 2) {
+        /* AlgebraicNumber[gen, {c0..cm}] = sum ci gen^i, via Horner. */
+        const Expr* gen = e->data.function.args[0];
+        const Expr* cl  = e->data.function.args[1];
+        if (!head_is(cl, "List")) return 0;
+        qqbar_t g; qqbar_init(g);
+        if (!to_qqbar(gen, g)) { qqbar_clear(g); return 0; }
+        qqbar_t acc; qqbar_init(acc); qqbar_set_si(acc, 0);
+        fmpq_t c; fmpq_init(c);
+        int ok = 1;
+        size_t m = cl->data.function.arg_count;
+        for (size_t i = m; i-- > 0; ) {          /* highest coeff first */
+            if (!fmpq_from_expr(cl->data.function.args[i], c)) { ok = 0; break; }
+            qqbar_mul(acc, acc, g);
+            qqbar_add_fmpq(acc, acc, c);
+            if (qqbar_degree(acc) > QQBAR_DEGREE_CAP) { ok = 0; break; }
+        }
+        fmpq_clear(c);
+        if (ok) qqbar_set(out, acc);
+        qqbar_clear(acc); qqbar_clear(g);
         return ok;
     }
     if (head_is(e, "Root")) return root_object_to_qqbar(e, out);
@@ -445,6 +512,10 @@ static int collect_atoms(const Expr* e, qqbar_ptr atoms, int* na) {
         for (size_t i = 0; i < n; i++)
             if (!collect_atoms(e->data.function.args[i], atoms, na)) return 0;
         return 1;
+    } else if (head_is(e, "AlgebraicNumber") && n == 2) {
+        /* An AlgebraicNumber lies in Q(generator): its atoms are the generator's
+         * (the coefficients are rational, contributing none). */
+        return collect_atoms(e->data.function.args[0], atoms, na);
     } else if (head_is(e, "Rational")) {
         return 1;
     } else {
@@ -520,6 +591,94 @@ static int number_field_value(const Expr* e, const qqbar_t direct, qqbar_t out) 
 }
 
 /* ------------------------------------------------------------------ */
+/*  AlgebraicNumber / ToNumberField internals                          */
+/* ------------------------------------------------------------------ */
+
+/* Algebraic-integer generator of Q(alpha): phi = lc * alpha, where lc is the
+ * (positive) leading coefficient of alpha's primitive integer minimal
+ * polynomial. `lc_out` (caller-initialised) receives lc. */
+static void algint_generator(const qqbar_t alpha, qqbar_t phi_out, fmpz_t lc_out) {
+    slong d = qqbar_degree(alpha);
+    fmpz_poly_get_coeff_fmpz(lc_out, QQBAR_POLY(alpha), d);   /* lc > 0 */
+    qqbar_t lcq; qqbar_init(lcq); qqbar_set_fmpz(lcq, lc_out);
+    qqbar_mul(phi_out, alpha, lcq);
+    qqbar_clear(lcq);
+}
+
+/* Load a List[c0,..] of integer/rational Exprs into an fmpq_poly. 1 on success. */
+static int coeffs_to_fmpq_poly(const Expr* list, fmpq_poly_t out) {
+    if (!head_is(list, "List")) return 0;
+    fmpq_t c; fmpq_init(c);
+    int ok = 1;
+    size_t m = list->data.function.arg_count;
+    for (size_t i = 0; i < m; i++) {
+        if (!fmpq_from_expr(list->data.function.args[i], c)) { ok = 0; break; }
+        fmpq_poly_set_coeff_fmpq(out, (slong)i, c);
+    }
+    fmpq_clear(c);
+    return ok;
+}
+
+/* Build the canonical AlgebraicNumber value from a power-basis polynomial `p`
+ * (already reduced mod the minimal polynomial of `phi`, degree < n) over the
+ * algebraic-integer generator `phi` of degree n. Returns a plain Integer/Rational
+ * when the value is rational (n == 1, or every higher coefficient is zero),
+ * otherwise AlgebraicNumber[qqbar_to_expr(phi), {d0..d_{n-1}}] with the list
+ * padded to n. Consumes nothing; returns a fresh owned Expr. */
+static Expr* poly_to_algnum(const qqbar_t phi, const fmpq_poly_t p, slong n) {
+    Expr** dl = malloc(sizeof(Expr*) * (size_t)(n > 0 ? n : 1));
+    int all_higher_zero = 1;
+    fmpq_t di; fmpq_init(di);
+    for (slong i = 0; i < n; i++) {
+        fmpq_poly_get_coeff_fmpq(di, p, i);
+        dl[i] = expr_from_fmpq(di);
+        if (i >= 1 && !fmpq_is_zero(di)) all_higher_zero = 0;
+    }
+    fmpq_clear(di);
+
+    Expr* result;
+    if (n <= 1 || all_higher_zero) {
+        for (slong i = 1; i < n; i++) expr_free(dl[i]);
+        result = dl[0];                 /* the rational value d0 */
+        free(dl);
+    } else {
+        Expr* g = qqbar_to_expr(phi);
+        Expr* clist = expr_new_function(expr_new_symbol(SYM_List), dl, (size_t)n);
+        free(dl);
+        result = expr_new_function(expr_new_symbol(SYM_AlgebraicNumber),
+                     (Expr*[]){ g, clist }, 2);
+    }
+    return result;
+}
+
+/* Same-field binary op on two AlgebraicNumbers with expr_eq generators.
+ * op 0 = add, 1 = mul. Returns a fresh combined value, or NULL to decline. */
+static Expr* algnum_binop(const Expr* a, const Expr* b, int op) {
+    if (!head_is(a, "AlgebraicNumber") || !head_is(b, "AlgebraicNumber")) return NULL;
+    if (a->data.function.arg_count != 2 || b->data.function.arg_count != 2) return NULL;
+    const Expr* g = a->data.function.args[0];
+    if (!expr_eq(g, b->data.function.args[0])) return NULL;
+
+    qqbar_t phi; qqbar_init(phi);
+    if (!to_qqbar(g, phi)) { qqbar_clear(phi); return NULL; }
+    slong n = qqbar_degree(phi);
+
+    fmpq_poly_t M, pa, pb, r;
+    fmpq_poly_init(M); fmpq_poly_init(pa); fmpq_poly_init(pb); fmpq_poly_init(r);
+    fmpq_poly_set_fmpz_poly(M, QQBAR_POLY(phi));
+    Expr* result = NULL;
+    if (coeffs_to_fmpq_poly(a->data.function.args[1], pa) &&
+        coeffs_to_fmpq_poly(b->data.function.args[1], pb)) {
+        if (op == 0) { fmpq_poly_add(r, pa, pb); }
+        else         { fmpq_poly_mul(r, pa, pb); fmpq_poly_rem(r, r, M); }
+        result = poly_to_algnum(phi, r, n);
+    }
+    fmpq_poly_clear(M); fmpq_poly_clear(pa); fmpq_poly_clear(pb); fmpq_poly_clear(r);
+    qqbar_clear(phi);
+    return result;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Public API                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -542,10 +701,33 @@ int flint_qqbar_is_constant_algebraic(const Expr* e) {
     if (head_is(e, "Sqrt") && n == 1)
         return flint_qqbar_is_constant_algebraic(e->data.function.args[0]);
     if (head_is(e, "Power") && n == 2) {
+        const Expr* be = e->data.function.args[0];
         const Expr* xe = e->data.function.args[1];
+        if (be->type == EXPR_SYMBOL && be->data.symbol.name == SYM_E) {
+            fmpq_t r; fmpq_init(r);            /* E^(I Pi rational) is a root of unity */
+            int ok = exp_arg_i_pi_rational(xe, r);
+            fmpq_clear(r);
+            return ok;
+        }
         int exp_ok = xe->type == EXPR_INTEGER || head_is(xe, "Rational") ||
                      xe->type == EXPR_BIGINT;
-        return exp_ok && flint_qqbar_is_constant_algebraic(e->data.function.args[0]);
+        return exp_ok && flint_qqbar_is_constant_algebraic(be);
+    }
+    if ((head_is(e, "Re") || head_is(e, "Im") || head_is(e, "Abs") ||
+         head_is(e, "Conjugate")) && n == 1)
+        return flint_qqbar_is_constant_algebraic(e->data.function.args[0]);
+    if (head_is(e, "AlgebraicNumber") && n == 2) {
+        /* AlgebraicNumber[gen, {rationals}]: gen constant-algebraic, coeffs rational. */
+        if (!flint_qqbar_is_constant_algebraic(e->data.function.args[0])) return 0;
+        const Expr* cl = e->data.function.args[1];
+        if (!head_is(cl, "List")) return 0;
+        for (size_t i = 0; i < cl->data.function.arg_count; i++) {
+            const Expr* c = cl->data.function.args[i];
+            if (!(c->type == EXPR_INTEGER || c->type == EXPR_BIGINT ||
+                  head_is(c, "Rational")))
+                return 0;
+        }
+        return 1;
     }
     return 0;
 }
@@ -597,6 +779,208 @@ int flint_qqbar_is_real(const Expr* e) {
     return r;
 }
 
+Expr* flint_qqbar_algebraic_number(const Expr* gen, const Expr* coeffs) {
+    if (!gen || !coeffs || !head_is(coeffs, "List")) return NULL;
+
+    qqbar_t alpha; qqbar_init(alpha);
+    if (!to_qqbar(gen, alpha)) { qqbar_clear(alpha); return NULL; }
+
+    fmpz_t lc; fmpz_init(lc);
+    qqbar_t phi; qqbar_init(phi);
+    algint_generator(alpha, phi, lc);        /* phi = lc*alpha, algebraic integer */
+    slong n = qqbar_degree(phi);
+
+    /* p(x) = sum_i (c_i / lc^i) x^i. */
+    fmpq_poly_t p, M; fmpq_poly_init(p); fmpq_poly_init(M);
+    fmpq_poly_set_fmpz_poly(M, QQBAR_POLY(phi));   /* monic minimal polynomial */
+    fmpq_t c, lcpow, coef; fmpq_init(c); fmpq_init(lcpow); fmpq_init(coef);
+    fmpq_one(lcpow);
+    int ok = 1;
+    size_t m = coeffs->data.function.arg_count;
+    for (size_t i = 0; i < m; i++) {
+        if (!fmpq_from_expr(coeffs->data.function.args[i], c)) { ok = 0; break; }
+        fmpq_div(coef, c, lcpow);
+        fmpq_poly_set_coeff_fmpq(p, (slong)i, coef);
+        fmpq_mul_fmpz(lcpow, lcpow, lc);
+    }
+    fmpq_clear(c); fmpq_clear(lcpow); fmpq_clear(coef);
+
+    Expr* result = NULL;
+    if (ok) {
+        fmpq_poly_rem(p, p, M);              /* reduce to power basis of phi */
+        result = poly_to_algnum(phi, p, n);
+    }
+    fmpq_poly_clear(p); fmpq_poly_clear(M);
+    fmpz_clear(lc); qqbar_clear(phi); qqbar_clear(alpha);
+    return result;
+}
+
+Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* theta) {
+    if (!a || !theta) return NULL;
+    qqbar_t av, tv; qqbar_init(av); qqbar_init(tv);
+    if (!to_qqbar(a, av) || !to_qqbar(theta, tv)) {
+        qqbar_clear(av); qqbar_clear(tv); return NULL;
+    }
+    fmpz_t lc; fmpz_init(lc);
+    qqbar_t phi; qqbar_init(phi);
+    algint_generator(tv, phi, lc);
+    fmpz_clear(lc);
+    slong n = qqbar_degree(phi);
+
+    fmpq_poly_t f; fmpq_poly_init(f);
+    Expr* result = NULL;
+    if (qqbar_express_in_field(f, phi, av, 100000, 0, 64))
+        result = poly_to_algnum(phi, f, n);   /* NULL stays NULL when a not in Q(theta) */
+    fmpq_poly_clear(f);
+    qqbar_clear(phi); qqbar_clear(av); qqbar_clear(tv);
+    return result;
+}
+
+Expr* flint_qqbar_to_number_field_self(const Expr* x) {
+    return flint_qqbar_to_number_field(x, x);
+}
+
+Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
+                                         int smallest) {
+    (void)smallest;                            /* Automatic and All coincide here */
+    if (!as || n == 0) return NULL;
+
+    qqbar_ptr vals = _qqbar_vec_init((slong)n);
+    int ok = 1;
+    for (size_t i = 0; i < n && ok; i++)
+        if (!to_qqbar(as[i], vals + i)) ok = 0;
+
+    qqbar_t alpha, cand, ca; qqbar_init(alpha); qqbar_init(cand); qqbar_init(ca);
+    if (ok) qqbar_set(alpha, vals + 0);
+    for (size_t i = 1; i < n && ok; i++) {
+        int found = 0;
+        for (slong c = 1; c <= 16 && !found; c++) {   /* primitive element a + c*b */
+            qqbar_mul_si(ca, vals + i, c);
+            qqbar_add(cand, alpha, ca);
+            if (qqbar_degree(cand) <= QQBAR_DEGREE_CAP &&
+                in_field(vals + i, cand) && in_field(alpha, cand)) {
+                qqbar_set(alpha, cand); found = 1;
+            }
+        }
+        if (!found) ok = 0;
+    }
+    qqbar_clear(cand); qqbar_clear(ca);
+
+    Expr* result = NULL;
+    if (ok) {
+        fmpz_t lc; fmpz_init(lc);
+        qqbar_t phi; qqbar_init(phi);
+        algint_generator(alpha, phi, lc);
+        fmpz_clear(lc);
+        slong nn = qqbar_degree(phi);
+
+        Expr** items = malloc(sizeof(Expr*) * n);
+        int good = 1;
+        for (size_t i = 0; i < n && good; i++) {
+            fmpq_poly_t f; fmpq_poly_init(f);
+            if (qqbar_express_in_field(f, phi, vals + i, 100000, 0, 64))
+                items[i] = poly_to_algnum(phi, f, nn);
+            else { items[i] = NULL; good = 0; }
+            fmpq_poly_clear(f);
+        }
+        if (good) {
+            result = expr_new_function(expr_new_symbol(SYM_List), items, n);
+        } else {
+            for (size_t i = 0; i < n; i++) if (items[i]) expr_free(items[i]);
+        }
+        free(items);
+        qqbar_clear(phi);
+    }
+    qqbar_clear(alpha);
+    _qqbar_vec_clear(vals, (slong)n);
+    return result;
+}
+
+Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) {
+    return algnum_binop(a, b, 0);
+}
+
+Expr* flint_qqbar_algnum_mul(const Expr* a, const Expr* b) {
+    return algnum_binop(a, b, 1);
+}
+
+Expr* flint_qqbar_algnum_pow(const Expr* a, long p) {
+    if (!head_is(a, "AlgebraicNumber") || a->data.function.arg_count != 2) return NULL;
+    const Expr* g = a->data.function.args[0];
+    qqbar_t phi; qqbar_init(phi);
+    if (!to_qqbar(g, phi)) { qqbar_clear(phi); return NULL; }
+    slong n = qqbar_degree(phi);
+
+    fmpq_poly_t M, base, acc, tmp;
+    fmpq_poly_init(M); fmpq_poly_init(base); fmpq_poly_init(acc); fmpq_poly_init(tmp);
+    fmpq_poly_set_fmpz_poly(M, QQBAR_POLY(phi));
+
+    Expr* result = NULL;
+    if (coeffs_to_fmpq_poly(a->data.function.args[1], base)) {
+        int ok = 1;
+        unsigned long e = (p < 0) ? (unsigned long)(-(long long)p) : (unsigned long)p;
+        if (p < 0) {                        /* invert base modulo M first */
+            fmpq_poly_t d, s, t; fmpq_poly_init(d); fmpq_poly_init(s); fmpq_poly_init(t);
+            fmpq_poly_xgcd(d, s, t, base, M);   /* d = s*base + t*M */
+            if (fmpq_poly_degree(d) == 0 && !fmpq_poly_is_zero(d)) {
+                fmpq_t inv; fmpq_init(inv);
+                fmpq_poly_get_coeff_fmpq(inv, d, 0);   /* d is a nonzero constant */
+                fmpq_inv(inv, inv);
+                fmpq_poly_scalar_mul_fmpq(base, s, inv);   /* base = base^{-1} mod M */
+                fmpq_clear(inv);
+            } else ok = 0;                    /* non-invertible (should not happen) */
+            fmpq_poly_clear(d); fmpq_poly_clear(s); fmpq_poly_clear(t);
+        }
+        if (ok) {
+            fmpq_poly_set_ui(acc, 1);         /* acc = 1 */
+            while (e > 0) {                   /* square-and-multiply mod M */
+                if (e & 1UL) { fmpq_poly_mul(tmp, acc, base); fmpq_poly_rem(acc, tmp, M); }
+                e >>= 1;
+                if (e > 0) { fmpq_poly_mul(tmp, base, base); fmpq_poly_rem(base, tmp, M); }
+            }
+            result = poly_to_algnum(phi, acc, n);
+        }
+    }
+    fmpq_poly_clear(M); fmpq_poly_clear(base); fmpq_poly_clear(acc); fmpq_poly_clear(tmp);
+    qqbar_clear(phi);
+    return result;
+}
+
+/* a (AlgebraicNumber) combined with a rational scalar r: op 0 = a + r, 1 = a*r. */
+static Expr* algnum_rational(const Expr* a, const Expr* r, int op) {
+    if (!head_is(a, "AlgebraicNumber") || a->data.function.arg_count != 2) return NULL;
+    fmpq_t rq; fmpq_init(rq);
+    if (!fmpq_from_expr(r, rq)) { fmpq_clear(rq); return NULL; }
+    const Expr* g = a->data.function.args[0];
+    qqbar_t phi; qqbar_init(phi);
+    if (!to_qqbar(g, phi)) { qqbar_clear(phi); fmpq_clear(rq); return NULL; }
+    slong n = qqbar_degree(phi);
+    fmpq_poly_t p; fmpq_poly_init(p);
+    Expr* result = NULL;
+    if (coeffs_to_fmpq_poly(a->data.function.args[1], p)) {
+        if (op == 0) {                        /* add r to the constant coefficient */
+            fmpq_t c0; fmpq_init(c0);
+            fmpq_poly_get_coeff_fmpq(c0, p, 0);
+            fmpq_add(c0, c0, rq);
+            fmpq_poly_set_coeff_fmpq(p, 0, c0);
+            fmpq_clear(c0);
+        } else {                              /* scale every coefficient by r */
+            fmpq_poly_scalar_mul_fmpq(p, p, rq);
+        }
+        result = poly_to_algnum(phi, p, n);
+    }
+    fmpq_poly_clear(p); qqbar_clear(phi); fmpq_clear(rq);
+    return result;
+}
+
+Expr* flint_qqbar_algnum_add_rational(const Expr* a, const Expr* r) {
+    return algnum_rational(a, r, 0);
+}
+
+Expr* flint_qqbar_algnum_scale_rational(const Expr* a, const Expr* r) {
+    return algnum_rational(a, r, 1);
+}
+
 #else /* !USE_FLINT */
 
 int   flint_qqbar_is_constant_algebraic(const Expr* e) { (void)e; return 0; }
@@ -604,5 +988,14 @@ Expr* flint_qqbar_canonical(const Expr* e, QQBarMethod m) { (void)e; (void)m; re
 int   flint_qqbar_equal(const Expr* a, const Expr* b) { (void)a; (void)b; return -1; }
 int   flint_qqbar_compare(const Expr* a, const Expr* b) { (void)a; (void)b; return -2; }
 int   flint_qqbar_is_real(const Expr* e) { (void)e; return -1; }
+Expr* flint_qqbar_algebraic_number(const Expr* g, const Expr* c) { (void)g; (void)c; return NULL; }
+Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* t) { (void)a; (void)t; return NULL; }
+Expr* flint_qqbar_to_number_field_self(const Expr* x) { (void)x; return NULL; }
+Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n, int s) { (void)as; (void)n; (void)s; return NULL; }
+Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
+Expr* flint_qqbar_algnum_mul(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
+Expr* flint_qqbar_algnum_pow(const Expr* a, long p) { (void)a; (void)p; return NULL; }
+Expr* flint_qqbar_algnum_add_rational(const Expr* a, const Expr* r) { (void)a; (void)r; return NULL; }
+Expr* flint_qqbar_algnum_scale_rational(const Expr* a, const Expr* r) { (void)a; (void)r; return NULL; }
 
 #endif /* USE_FLINT */

@@ -603,6 +603,50 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         return expr_copy((Expr*)e);
     }
 
+    /* AlgebraicNumber[theta, {c0..cm}] → numericalize sum ci theta^i.  Runs
+     * before the generic rebuild because AlgebraicNumber is NHoldAll and
+     * numericalize does NOT honour NHold: the generic path would numericalize
+     * the generator and coefficient List in place and freeze the object (the
+     * AlgebraicNumber builtin declines on a machine-Real generator). Building
+     * the power sum and recursing reuses the Root/radical numeric backend, so
+     * this carries N to any requested precision. */
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_AlgebraicNumber
+        && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_FUNCTION
+        && e->data.function.args[1]->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.args[1]->data.function.head->data.symbol.name == SYM_List) {
+        const Expr* theta = e->data.function.args[0];
+        const Expr* cl    = e->data.function.args[1];
+        size_t m = cl->data.function.arg_count;
+        Expr** terms = (Expr**)malloc((m ? m : 1) * sizeof(Expr*));
+        size_t nt = 0;
+        for (size_t i = 0; i < m; i++) {
+            Expr* ci = expr_copy(cl->data.function.args[i]);
+            Expr* term;
+            if (i == 0) {
+                term = ci;                       /* constant term */
+            } else {
+                Expr* pw = (i == 1)
+                    ? expr_copy((Expr*)theta)
+                    : expr_new_function(expr_new_symbol(SYM_Power),
+                          (Expr*[]){ expr_copy((Expr*)theta),
+                                     expr_new_integer((int64_t)i) }, 2);
+                term = expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ ci, pw }, 2);
+            }
+            terms[nt++] = term;
+        }
+        Expr* poly = (nt == 0) ? expr_new_integer(0)
+                   : (nt == 1) ? terms[0]
+                   : expr_new_function(expr_new_symbol(SYM_Plus), terms, nt);
+        free(terms);
+        Expr* out = numericalize_rec(poly, spec);
+        expr_free(poly);
+        return out;
+    }
+
     /* Rational[n, d] → direct numeric quotient. Compute at full target
      * precision; a plain (double)n/d loses bits beyond 1e-15 and would
      * destroy the request for e.g. N[1/3, 40]. */
