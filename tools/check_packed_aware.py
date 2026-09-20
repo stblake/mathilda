@@ -141,6 +141,7 @@ EXEMPT = {
     "MemberQ": "as Cases",
     "Count": "as Cases",
     "Position": "as Cases",
+    "FirstPosition": "as Cases (delegates to Position; added v0.155)",
     "FirstCase": "as Cases",
     "DeleteCases": "as Cases",
     "FreeQ": "as Cases, in funcprog.c",
