@@ -3855,6 +3855,17 @@ static volatile sig_atomic_t tc_timed_out = 0;
  * outside a GMP allocation keeps the immediate async jump. */
 static volatile sig_atomic_t tc_gmp_alloc_busy = 0;
 
+/* Broader async-jump defer for a heavy, malloc-bound method (ParallelMixedTower)
+ * that runs inside a TimeConstrained body.  Unlike tc_gmp_alloc_busy -- set only
+ * around a single GMP malloc -- this stays raised for the WHOLE method call, so
+ * the SIGPROF handler never siglongjmps mid-execution (it could land inside a
+ * regular, unguarded malloc: an Expr node, a FLINT structure).  The deadline is
+ * still enforced, but only at safe points: tc_check_deadline (every rewrite
+ * step) and tc_alloc_safepoint (after each GMP alloc).  A pure-C loop with no
+ * GMP alloc inside the method may overrun its budget, but it cannot crash.  The
+ * count is saved / restored across the timeout unwind by tc_run_guarded. */
+static volatile sig_atomic_t tc_async_deferred = 0;
+
 /* Cooperative-backstop state.  tc_deadline_active is read on every
  * rewrite step by tc_check_deadline; when zero, the check returns
  * immediately without even reading the clock.  Both fields are updated
@@ -3869,7 +3880,7 @@ static void tc_sigprof_handler(int sig) {
     /* If the signal landed inside a GMP allocation, do NOT unwind here: that
      * would abandon libmalloc's held zone lock.  Record the timeout and let
      * tc_alloc_safepoint() take the jump the instant the allocator returns. */
-    if (tc_gmp_alloc_busy) return;
+    if (tc_gmp_alloc_busy || tc_async_deferred) return;
     siglongjmp(tc_jmp_env, 1);
 }
 
@@ -3921,12 +3932,15 @@ void tc_install_alloc_guard(void) {
     mp_set_memory_functions(tc_gmp_allocate, tc_gmp_reallocate, tc_gmp_deallocate);
 }
 
-/* True while a TimeConstrained[...] deadline is in force.  A heavy, malloc-bound
- * method (ParallelMixedTower) consults this to decline rather than run in the
- * window where the SIGALRM/siglongjmp interruption can fire mid-malloc -- the
- * known async-signal hazard.  Declining there simply restores the behaviour the
- * caller had before that method existed. */
-int tc_deadline_is_active(void) { return tc_deadline_active; }
+/* Enter / leave an async-jump-deferred region (see tc_async_deferred): a heavy,
+ * malloc-bound method brackets its work with these so a timeout is taken only at
+ * a safe point rather than mid-malloc.  Nesting is counted; the count is
+ * save/restored across a timeout unwind by tc_run_guarded, so a skipped pop
+ * cannot leave it stuck.  tc_async_region_active reports whether one is open --
+ * a heavy method uses it as a re-entry guard (do not start a second one). */
+void tc_async_defer_push(void)   { tc_async_deferred++; }
+void tc_async_defer_pop(void)    { if (tc_async_deferred > 0) tc_async_deferred--; }
+int  tc_async_region_active(void) { return tc_async_deferred > 0; }
 
 void tc_check_deadline(void) {
     if (!tc_deadline_active) return;
@@ -3969,9 +3983,19 @@ void tc_check_deadline(void) {
  * TC_NOINLINE so the isolation cannot be undone by the optimiser. */
 static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
     Expr* volatile result = NULL;
+    /* Transient per-body state a timeout siglongjmp would otherwise abandon --
+     * the async-jump-defer count (tc_async_deferred) and the message-suppression
+     * depth -- captured before the body and restored after the jump, so a body's
+     * skipped teardown (e.g. a ParallelMixedTower probe unwound mid-run) cannot
+     * leak into the rest of the session.  volatile so their post-jump values are
+     * well-defined and -Wclobbered stays quiet. */
+    volatile sig_atomic_t saved_defer  = tc_async_deferred;
+    volatile int          saved_msgdep = mth_msg_suppress_depth_save();
     if (sigsetjmp(tc_jmp_env, 1) == 0) {
         result = evaluate(body);
     }
+    tc_async_deferred = saved_defer;
+    mth_msg_suppress_depth_load(saved_msgdep);
     return result;
 }
 

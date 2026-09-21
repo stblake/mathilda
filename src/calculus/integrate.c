@@ -531,13 +531,13 @@ static Expr* try_crctable(Expr* f, Expr* x) {
  * cascade stage pay nothing for it. */
 static bool pmt_load_attempted = false;
 static bool pmt_load_succeeded  = false;
-/* The package calls Integrate[] on internal sub-problems (a degree-bound
- * criterion re-integrates a leading coefficient), so as an Automatic-cascade
- * stage it can re-enter itself.  A depth of 1 admits the outer call and makes
- * every nested one decline, so the inner Integrate[] falls through to the
- * rational / table stages instead of looping. */
-static int  pmt_depth = 0;
-#define MAX_PMT_DEPTH 1
+/* Async-jump defer (crash-safety inside TimeConstrained) + re-entry guard; see
+ * core.c.  tc_async_region_active is non-zero while a heavy method is already
+ * running, so the package's internal Integrate[] on a sub-problem declines here
+ * rather than re-entering the method and looping. */
+void tc_async_defer_push(void);
+void tc_async_defer_pop(void);
+int  tc_async_region_active(void);
 
 static void pmt_lazy_load(void) {
     if (pmt_load_attempted) return;
@@ -564,23 +564,25 @@ static void pmt_lazy_load(void) {
  * cold session without paying the ~1s package load until it is actually reached:
  * the builtin loads the .m worker lazily and delegates to it, returning the
  * worker's value unchanged -- the antiderivative, $Failed, or a List
- * certificate/failure.  The depth guard lives here, the single choke point
- * through which both the direct call and the cascade stage pass, so the worker's
- * own internal Integrate[] on a sub-problem cannot re-enter the method and loop. */
+ * certificate/failure.
+ *
+ * The delegation runs inside an async-jump-deferred region
+ * (tc_async_defer_push/pop): the package is malloc-heavy, and under an outer
+ * TimeConstrained the SIGPROF handler could otherwise siglongjmp out of a
+ * regular malloc (an Expr node, a FLINT structure) and crash.  Deferred, the
+ * deadline is still enforced at safe points (tc_check_deadline every rewrite
+ * step, tc_alloc_safepoint after each GMP alloc), so a runaway is still aborted
+ * -- just cleanly.  tc_async_region_active doubles as the single re-entry guard
+ * through which both the direct call and the cascade stage pass.  Both the defer
+ * count and the message-suppression depth are save/restored by tc_run_guarded,
+ * so a timeout unwinding through here leaves neither stuck. */
 static Expr* builtin_integrate_pmt(Expr* res) {
-    int tc_deadline_is_active(void);
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    if (pmt_depth >= MAX_PMT_DEPTH) return NULL;   /* no self re-entry (see above) */
-    /* Decline while a TimeConstrained[...] deadline is in force: this method is
-     * heavily malloc-bound, and running it in the window where the SIGALRM /
-     * siglongjmp interruption can fire mid-malloc is the known async-signal
-     * crash.  DSolve wraps its recursive Integrate[] in TimeConstrained, so this
-     * restores exactly its pre-ParallelMixedTower behaviour there. */
-    if (tc_deadline_is_active()) return NULL;
+    if (tc_async_region_active()) return NULL;   /* no self re-entry / nested heavy method */
     pmt_lazy_load();
     if (!pmt_load_succeeded) return NULL;
 
-    pmt_depth++;
+    tc_async_defer_push();
     /* Suppress the package's own diagnostics (BuildTower::function on an
      * unsupported generator, etc.): as a method probe it must not spew to the
      * user.  The fired-counter that the package's internal Check reads still
@@ -589,7 +591,7 @@ static Expr* builtin_integrate_pmt(Expr* res) {
     Expr* result = call_stage("ParallelMixed`ParallelIntegrateMixed",
                               res->data.function.args[0], res->data.function.args[1]);
     mth_msg_suppress_pop();
-    pmt_depth--;
+    tc_async_defer_pop();
     return result;   /* expression, $Failed, or a List certificate/failure */
 }
 

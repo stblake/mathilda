@@ -26,6 +26,10 @@ void mth_msg_suppress_push(void);
 void mth_msg_suppress_pop(void);
 /* Non-zero iff messages are currently suppressed. */
 int  mth_msg_suppressed(void);
+/* Save / restore the whole suppression depth (used by TimeConstrained to undo a
+ * Quiet[] region abandoned by a timeout siglongjmp). */
+int  mth_msg_suppress_depth_save(void);
+void mth_msg_suppress_depth_load(int d);
 
 /*
  * Narrow scope for the `Solve::ifun` advisory ("Inverse functions are being

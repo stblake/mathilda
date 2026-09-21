@@ -21,6 +21,13 @@ void mth_msg_suppress_pop(void) {
 
 int mth_msg_suppressed(void) { return g_msg_suppress_depth > 0; }
 
+/* Save / restore the suppression depth as one value.  TimeConstrained's timeout
+ * siglongjmp can unwind out of a Quiet[] region (its mth_msg_suppress_pop then
+ * never runs, leaving messages silenced for the rest of the session); the guard
+ * captures the depth before the body and restores it after the jump. */
+int  mth_msg_suppress_depth_save(void)     { return g_msg_suppress_depth; }
+void mth_msg_suppress_depth_load(int d)    { g_msg_suppress_depth = d; }
+
 /* Depth for the `Solve::ifun` advisory scope (see message.h).  Zero => the
  * message may print; > 0 => a complete-solution caller (Reduce) is on the
  * stack, so the "use Reduce" advice is moot and suppressed. */
