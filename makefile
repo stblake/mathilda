@@ -445,6 +445,59 @@ clean:
 	if [ -f $(TEST_DIR)/Makefile ]; then $(MAKE) -C $(TEST_DIR) clean; fi
 	rm -f $(addprefix $(TEST_DIR)/, $(CMAKE_TEST_BINARIES))
 
+# ---------------------------------------------------------------------------
+# Installation (issue #77).
+#
+# The Mathilda executable is NOT self-contained: its kernel is part C, part its
+# own language, and the `src/internal/` tree of `.m` bootstrap files is loaded
+# at RUNTIME (init.m/bessel.m/distributions.m at startup; simp/FullSimplify.m +
+# simp/transforms/*.m, CRCMathTablesIntegrals.m, and mixed/ParallelMixed.m
+# lazily). So an install must ship BOTH the binary and that module tree.
+#
+# We install into the FHS layout the loader already searches EXE-RELATIVE
+# (src/loadmodule.c: <exe>/../share/mathilda/internal/), so the result is
+# relocatable and needs no $MATHILDA_HOME: wherever `bin/Mathilda` ends up, it
+# finds `../share/mathilda/internal/`. That also makes staged/packaged installs
+# (Debian, SageMath, …) work via DESTDIR with no baked-in absolute path.
+#
+# Variables (GNU-standard). Note the LOWER-case `prefix`: giving the UPPER-case
+# PREFIX a default here would trip the opt-in `ifdef PREFIX` above and bake
+# -DMATHILDA_PREFIX into every ordinary build. `$(or ...)` lets both
+# `make install PREFIX=/opt` and `make install prefix=/opt` work, while a bare
+# `make` still defines nothing. Shared libraries (GMP, MPFR, Readline, and any
+# optional FLINT/ECM/PCRE2/FFTW/Raylib/LAPACK detected at build time) are a
+# separate runtime dependency on the target — see the README install section.
+prefix          ?= $(or $(PREFIX),/usr/local)
+exec_prefix     ?= $(prefix)
+bindir          ?= $(exec_prefix)/bin
+datarootdir     ?= $(prefix)/share
+datadir         ?= $(datarootdir)
+pkgdatadir      ?= $(datadir)/mathilda
+INSTALL         ?= install
+INSTALL_PROGRAM ?= $(INSTALL)
+INSTALL_DATA    ?= $(INSTALL) -m 644
+
+install: $(TARGET)
+	$(INSTALL) -d "$(DESTDIR)$(bindir)"
+	$(INSTALL_PROGRAM) $(TARGET) "$(DESTDIR)$(bindir)/$(TARGET)"
+	@# Recreate the runtime module tree, preserving simp/, simp/transforms/,
+	@# mixed/. Only *.m files are copied (editor backups etc. are skipped).
+	cd $(SRC_DIR)/internal && find . -type d \
+	    -exec $(INSTALL) -d "$(DESTDIR)$(pkgdatadir)/internal/{}" \;
+	cd $(SRC_DIR)/internal && find . -type f -name '*.m' \
+	    -exec $(INSTALL_DATA) '{}' "$(DESTDIR)$(pkgdatadir)/internal/{}" \;
+	@echo
+	@echo "Installed:"
+	@echo "  executable  -> $(DESTDIR)$(bindir)/$(TARGET)"
+	@echo "  module tree -> $(DESTDIR)$(pkgdatadir)/internal/"
+	@echo "The binary finds its modules relative to its own path, so no"
+	@echo "MATHILDA_HOME is needed. Ensure the shared libraries it links"
+	@echo "(see 'ldd'/'otool -L $(TARGET)') are present on the target."
+
+uninstall:
+	rm -f "$(DESTDIR)$(bindir)/$(TARGET)"
+	rm -rf "$(DESTDIR)$(pkgdatadir)"
+
 # Regenerate the documentation website's per-builtin pages from the docstrings,
 # attributes, and spec examples. Requires the built ./Mathilda binary (examples
 # are verified against it). The generated Markdown is committed; CI only builds
@@ -621,7 +674,7 @@ print-cc:
 	@echo "CC = $(CC)"
 	@$(CC) --version 2>/dev/null | head -1
 
-.PHONY: all clean docs docs-build docs-serve check-c99 check-interval check-packed-aware \
+.PHONY: all clean install uninstall docs docs-build docs-serve check-c99 check-interval check-packed-aware \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-fastpath-sweep check-menu-ids bench-gap check-diophantine-heldout print-cc
 

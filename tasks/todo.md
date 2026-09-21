@@ -1,43 +1,43 @@
-# Task: `Integrate::nonelem` warning for the ParallelMixedTower method
+# Task: Issue #77 — clarify installation (runtime code + libraries), Win/Linux/Mac
 
-Replicate RischTranscendental's non-elementary warning for the ParallelMixedTower method.
-Full plan: `~/.claude/plans/the-method-rischtranscendental-issues-precious-cookie.md`.
+**Issue:** Matthias Köppe (SageMath packager): "What do I need to copy into an
+installation prefix other than the `Mathilda` executable?"
 
-## Implementation checklist
+**Root cause:** the binary is not self-contained (the `src/internal/` `.m` module
+tree is loaded at runtime), and there was no `make install` target nor any
+documentation of what to ship. The loader already searches an exe-relative FHS
+layout (`<exe>/../share/mathilda/internal/`) — nothing populated it.
 
-- [x] `integrate.c`: add `#include "print.h"` (for `expr_to_string`)
-- [x] `integrate.c`: add file-static de-dup flag `g_integrate_nonelem_announced`
-- [x] `integrate.c`: add `integrate_announce_nonelementary(Expr*, Expr*)` helper
-- [x] `integrate.h`: declare the helper
-- [x] `integrate.c`: reset flag after `g_integrate_depth++` (depth==1)
-- [x] `integrate.c`: add `pmt_is_nonelementary_certificate` predicate + call helper in `builtin_integrate_pmt`
-- [x] `integrate_risch_transcendental.c`: route inline fprintf through the helper
-- [x] `integrate.c`: one docstring line for `Integrate\`ParallelMixedTower`
-- [x] `tests/test_parallelmixedtower.c`: certificate + stderr-capture tests
-- [x] `src/version.h`: bump 0.165 -> 0.166
-- [x] `docs/spec/builtins/calculus.md`: note the certificate
-- [x] `docs/spec/changelog/2026-09-21.md`: changelog note
-- [x] Build, run tests, manual REPL proof, valgrind spot-check
-- [ ] Commit + tag v0.166 (awaiting user go-ahead — on `main`, not auto-committing)
+## Plan
+
+- [x] Add `make install` / `make uninstall` (GNU vars: `DESTDIR`, `PREFIX`/`prefix`,
+      `bindir`, `datadir`, `INSTALL*`); installs binary → `$(PREFIX)/bin`, module
+      tree → `$(PREFIX)/share/mathilda/internal/`. Lower-case `prefix` default so a
+      bare `make` doesn't trip the opt-in `ifdef PREFIX` (`-DMATHILDA_PREFIX`).
+- [x] README: new "Installing Mathilda (deploying to a prefix)" section — the two
+      things to ship, `make install` + `DESTDIR`/overrides, the 4 resolution
+      mechanisms, manual copy, per-platform shared-library story (Win/Linux/Mac).
+- [x] README: document the undocumented **PCRE2** (`USE_REGEX`) optional dep
+      (prereq list, backends table, apt/brew/dnf install lines).
+- [x] Changelog: `## Build & packaging` note in `docs/spec/changelog/2026-09-21.md`
+      (no `$VersionNumber` bump — build tooling + prose are contributor-facing).
+- [ ] Respond to issue #77 (outward-facing — awaiting go-ahead on commit/push+post).
 
 ## Review
 
-Implemented exactly as planned. The `.m` worker already computed rigorous
-`{"not elementary", …}` certificates (the paper's three guarded `NotElementary`
-exits); the only gap was C-side, where the dispatcher discarded every list as a
-decline. Added a shared `integrate_announce_nonelementary` helper (used by both
-RischTranscendental and ParallelMixedTower) with a per-cascade de-dup flag so the
-two methods never double-print, and a `pmt_is_nonelementary_certificate` predicate
-that distinguishes `{"not elementary", …}` (warn) from `{"failed", …}` (silent).
+**Changes:** `makefile` (+install/uninstall, +.PHONY), `README.md` (install
+section + PCRE2), `docs/spec/changelog/2026-09-21.md` (build note). No C source
+touched → no version bump/tag.
 
-**Verified:**
-- `Integrate[1/(x Log[x+Sqrt[x^2+1]]), x]` and `Integrate[Tan[Sqrt[x^2+1]], x]`
-  → `Integrate::nonelem` on stderr, unevaluated (residue certificates).
-- `Exp[x^2]` via ParallelMixedTower → `{failed,…}`, correctly silent.
-- Elementary flagship `Log[x+Sqrt[x^2+1]]` → integrates, no message.
-- Automatic cascade prints the message exactly once (de-dup).
-- `$VersionNumber` → 0.166.
-- Suites pass: parallelmixedtower_tests, integrate_risch_transcendental_tests,
-  integrate_chebychev_tests, dsolve_tests. `make check-c99` clean.
-- valgrind: no leak frame references the new code (`integrate.c` absent from all
-  leak stacks); the pre-existing `.m`-package/baseline leaks are unrelated.
+**Verified (staged install into scratchpad):**
+- `make install DESTDIR=<stage> PREFIX=/usr/local` → binary at
+  `.../usr/local/bin/Mathilda`, all 11 `.m` files under
+  `.../usr/local/share/mathilda/internal/` with `simp/`, `simp/transforms/`,
+  `mixed/` preserved.
+- Installed binary run from CWD=`/` with `MATHILDA_HOME` unset (proves
+  exe-relative resolution + relocatability): `FullSimplify[Sin[x]^2+Cos[x]^2]`→`1`
+  (simp tree), `Integrate[1/(x^2+1),x]`→`ArcTan[x]`, `BesselJ[1/2,x]`→elementary
+  (bessel.m). No `LoadModule::nofile` on stderr.
+- `make uninstall DESTDIR=<stage> PREFIX=/usr/local` → 0 Mathilda files remain.
+- Bare `make` does NOT define `-DMATHILDA_PREFIX` (opt-in preserved);
+  `make PREFIX=…` does (fallback intact).

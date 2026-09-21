@@ -114,6 +114,7 @@ To build and run Mathilda you need:
 * **GMP-ECM** (`gmp-ecm` / `libecm-dev`) — Elliptic Curve Method integer factorization *(optional, auto-detected)*
 * **LAPACK / BLAS** — fast machine-precision linear algebra *(optional, auto-detected)*
 * **FFTW** ≥ 3 (`libfftw3` / `fftw3-dev`) — fast `Fourier`/`FourierDCT`/`FourierDST`; falls back to a naive $O(n^2)$ transform when absent *(optional, auto-detected via `pkg-config`)*
+* **PCRE2** (`libpcre2-8` / `libpcre2-dev`) — Perl-compatible regular expressions backing `RegularExpression`, `StringMatchQ`, `StringCases`, `StringReplace`, `StringSplit`; those heads warn and stay unevaluated when absent *(optional, auto-detected via `pkg-config`)*
 * **Raylib** ≥ 4.0 — interactive graphics window for `Plot`, `Plot3D`, `ContourPlot`, etc. *(optional, auto-detected via `pkg-config`; falls back to a text placeholder when absent)*
 * **CMake** — only required to build the test suite
 
@@ -128,6 +129,7 @@ The optional backends are controlled by build-time flags and **degrade gracefull
 | `USE_LAPACK`   | `1` | Fast machine-precision linear algebra. Auto-detected: Apple **Accelerate** on macOS, `lapacke`/`lapack`/`blas` on Linux. Falls back to the pure-C path (`USE_LAPACK=0`) if none is found. |
 | `USE_ECM`      | `1` | Elliptic Curve Method factorization via the system GMP-ECM library. Auto-detected via a compile-link probe; install `gmp-ecm` / `libecm-dev`. Falls back to disabled (`USE_ECM=0`) when absent. |
 | `USE_FFTW`     | `1` | FFTW-backed `Fourier`/`FourierDCT`/`FourierDST`. Auto-detected via `pkg-config fftw3`. Falls back to a naive $O(n^2)$ transform (`USE_FFTW=0`) when absent. |
+| `USE_REGEX`    | `1` | PCRE2-backed regular expressions: `RegularExpression`, `StringMatchQ`, `StringCases`, `StringReplace`, `StringSplit`. Auto-detected via `pkg-config libpcre2-8`. Those heads warn and stay unevaluated (`USE_REGEX=0`) when absent. |
 | `USE_THREADS`  | `1` | POSIX-thread parallelism for the element-wise packed-array kernels (`Sin`, `Exp`, `Erf`, …) on large arrays. Enabled on macOS/Linux; build the serial path via `make USE_THREADS=0`. |
 | `USE_GRAPHICS` | `1` | Interactive 2D/3D plot windows via Raylib. Auto-detected via `pkg-config raylib`. When absent, `Show`/`Plot`/`Plot3D`/`ContourPlot`/etc. print a text placeholder and return normally. Build without it via `make USE_GRAPHICS=0`. |
 
@@ -153,6 +155,9 @@ sudo apt install liblapacke-dev libopenblas-dev
 # Optional: FFTW for fast Fourier / FourierDCT / FourierDST
 sudo apt install libfftw3-dev
 
+# Optional: PCRE2 for regular-expression string functions
+sudo apt install libpcre2-dev
+
 # Optional: Raylib for interactive plot windows (Plot, Plot3D, ContourPlot, ...)
 sudo apt install libraylib-dev      # Ubuntu 24.04+ / Debian Bookworm+
 # or build from source: https://github.com/raysan5/raylib
@@ -163,7 +168,7 @@ sudo apt install cmake
 
 On Fedora/RHEL the equivalents are `gmp-devel`, `mpfr-devel`, `readline-devel`,
 `flint-devel` (≥ 3.0), `gmp-ecm-devel`, `lapack-devel`/`openblas-devel`,
-`fftw-devel`, plus `cmake`.
+`fftw-devel`, `pcre2-devel`, plus `cmake`.
 
 > **Note on FLINT versions.** Mathilda requires **FLINT ≥ 3.0** (the release that
 > merged ANTIC for number-field arithmetic). Distributions that only package
@@ -179,6 +184,8 @@ brew install gmp mpfr readline cmake
 brew install flint
 # Optional: FFTW for fast Fourier / FourierDCT / FourierDST:
 brew install fftw
+# Optional: PCRE2 for regular-expression string functions:
+brew install pcre2
 # Optional: Raylib for interactive plot windows:
 brew install raylib
 # Optional: GMP-ECM for advanced integer factorization:
@@ -218,6 +225,105 @@ The `makefile` auto-discovers `src/*.c`, configures and compiles internal depend
    ./Mathilda -file script.m       # a bare ./Mathilda script.m works too
    ./Mathilda --help               # all options
    ```
+
+### Installing Mathilda (deploying to a prefix)
+
+**The `Mathilda` executable is not self-contained.** Its kernel is written partly
+in C and partly in its own language: a tree of `.m` bootstrap modules under
+`src/internal/` is loaded *at runtime* — some at startup, some lazily on first
+use. Copy the binary alone and it will start, but `Simplify`/`FullSimplify`, the
+CRC integral table behind `Integrate`, the Bessel and distribution rules, and the
+`ParallelMixedTower` integration method will all be missing (you'll see a
+`LoadModule::nofile` diagnostic on stderr). An install must therefore provide
+**two** things alongside the binary:
+
+1. **The runtime module tree** — the whole `src/internal/` directory
+   (`init.m`, `bessel.m`, `distributions.m`, `simp/FullSimplify.m`,
+   `simp/transforms/*.m`, `CRCMathTablesIntegrals.m`, `mixed/ParallelMixed.m`).
+2. **The shared libraries** the binary was linked against (see *Shared libraries*
+   below).
+
+#### `make install` (recommended)
+
+```bash
+make PREFIX=/usr/local                 # build
+sudo make install PREFIX=/usr/local    # install binary + module tree
+```
+
+installs
+
+| What | Where |
+|------|-------|
+| the `Mathilda` executable | `$(PREFIX)/bin/Mathilda` |
+| the runtime `.m` module tree | `$(PREFIX)/share/mathilda/internal/` |
+
+The binary locates its modules **relative to its own path**
+(`<bindir>/../share/mathilda/internal/`), so the install is **relocatable** and
+needs no environment variable — move the whole prefix and it still works. The
+standard GNU variables are honoured for packaging:
+
+```bash
+make install DESTDIR=/tmp/stage PREFIX=/usr    # staged install (Debian, SageMath, …)
+make install prefix=/opt/mathilda              # or override bindir=/… datadir=/… directly
+make uninstall PREFIX=/usr/local               # remove both binary and module tree
+```
+
+Because resolution is exe-relative, `DESTDIR` staging bakes in no absolute path:
+build once, install into a staging root, and the packaged binary finds its modules
+wherever the package is finally unpacked.
+
+#### How the binary finds its modules
+
+`src/loadmodule.c` searches these locations in order (first hit wins), so you can
+deploy however suits you:
+
+1. **`$MATHILDA_HOME`** — point a binary at any module tree by exporting it to the
+   `internal` directory: `MATHILDA_HOME=/opt/app/share/mathilda/internal ./Mathilda`.
+2. **`<exe>/src/internal/`** — running straight from a build tree (the repo root).
+3. **`<exe>/../share/mathilda/internal/`** — the FHS layout `make install` creates.
+4. **compile-time `-DMATHILDA_PREFIX`** — `<prefix>/share/mathilda/internal/`,
+   baked in when you build with `make PREFIX=…`; a fallback for environments where
+   the executable's own path can't be determined.
+
+#### Manual install (without `make install`)
+
+```bash
+mkdir -p /opt/app/bin /opt/app/share/mathilda
+cp Mathilda /opt/app/bin/
+cp -R src/internal /opt/app/share/mathilda/internal
+/opt/app/bin/Mathilda          # finds ../share/mathilda/internal automatically
+```
+
+Or skip the layout entirely and set `MATHILDA_HOME` to wherever you placed
+`src/internal`.
+
+#### Shared libraries
+
+The binary is dynamically linked against every backend detected at build time, so
+the **target machine needs those same libraries** present (or link them
+statically). List them with:
+
+```bash
+ldd ./Mathilda        # Linux
+otool -L ./Mathilda   # macOS
+```
+
+* **Always:** GMP, MPFR, GNU Readline, plus the C runtime.
+* **When detected at build:** FLINT, GMP-ECM, PCRE2, FFTW, Raylib, LAPACK/BLAS.
+  Build a leaner, fewer-dependency binary by turning the optional backends off
+  (e.g. `make USE_GRAPHICS=0 USE_FFTW=0 USE_ECM=0`); each degrades gracefully at
+  runtime.
+* **Linux / macOS:** install the *runtime* packages on the target through the
+  system package manager, exactly as in *Installing dependencies* above — the
+  `-dev`/`-devel` headers are only needed to build; the target needs just the
+  runtime `.so`/`.dylib`. Apple's Accelerate framework (LAPACK/BLAS) ships with
+  macOS, so nothing extra is required there.
+* **Windows (MSYS2 / MinGW64):** the build produces `Mathilda.exe`; place the
+  MinGW64 DLLs it depends on (GMP, …) either beside the executable or on `PATH`
+  (`C:\msys64\mingw64\bin`). Readline is unavailable on Windows and is compiled
+  out automatically. See [`docs/building.md`](docs/building.md) for the full
+  Windows toolchain and packaging (the Tauri desktop app bundles the sidecar and
+  its DLLs for you).
 
 ### Running the Test Suite
 
