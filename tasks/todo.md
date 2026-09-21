@@ -1,66 +1,117 @@
-# Task: Implement `AlgebraicNumberTrace`
+# Task: Run `ParallelMixed.m` in Mathilda as `Integrate`ParallelMixedTower`
 
-Additive sibling of `AlgebraicNumberNorm`. Trace = sum of roots of minimal
-polynomial = `-c_{n-1}/c_n`; relative trace over `Q(theta)` = `(n/d)·absolute`.
+Port `mixed/ParallelMixed.m` (parallel Risch–Norman integrator over a simple radical
+in a mixed tower) so it loads/runs as a `.m` module and is exposed as an `Integrate`
+method — via `Method -> "ParallelMixedTower"`, the qualified symbol
+`Integrate`ParallelMixedTower[f, x]`, and in the automatic cascade. Purely additive
+(old C Risch–Norman NOT retired). Plan file:
+`~/.claude/plans/let-s-port-mixed-parallelmixed-m-to-zazzy-peacock.md`.
 
-## Implementation
-- [ ] Engine: `qqbar_abs_trace` + `flint_qqbar_algebraic_number_trace` + `#else` stub in `src/poly/flint_qqbar.c`
-- [ ] Prototype + doc comment in `src/poly/flint_qqbar.h`
-- [ ] New wrapper `src/poly/algebraicnumbertrace.c` + `.h`
-- [ ] Register in `src/core.c` (fwd-decl + call)
-- [ ] `SYM_AlgebraicNumberTrace` in `src/sym_names.h` + `.c`
-- [ ] `Extension -> None` default in `src/options_builtin.c`
-- [ ] Docstring in `src/info.c`
-- [ ] Bump `src/version.h` 0.159 -> 0.160
+## Phase 0 — Smoke spike (de-risk)  ✅ DONE
+- [x] Copy `mixed/ParallelMixed.m` → `src/internal/mixed/ParallelMixed.m` (canonical working copy; sync to mixed/ at commit)
+- [x] Loads clean via `Get` behind System-context Quiet/Check/Message shims
+- [x] G0 findings + fixes (4):
+  1. **RationalQ collision** → renamed package helper to `RationalFunctionQ` (was clashing with Protected builtin)
+  2. **SparseArray unimplemented** → dense assembly rewrite (line ~2130)
+  3. **`assoc[key]=val` unsupported in Mathilda** → implemented in `src/eval.c` apply_assignment (reroute to Part+Key when sym holds an Association)
+  4. **Part single-position list-RHS bug** (`m[[2]]={1,2,3}` gave `{0,1,0}`) → fixed `is_rhs_list` gate in `src/part.c` (distribute only for multi-position selectors)
+- [x] Core validated: Log[x], 1/(x Log[x]), x Exp[x], Sqrt[x], 1/Sqrt[1+x^2], x/Sqrt[1+x^2], 1/(1+Exp[x]) all integrate & D-check=0; Exp[x^2] declines correctly
+- [x] No test regression: association/list/core/eval + ctest sweep (14/14) all pass
+- [ ] STILL WRONG (revisit after Phase 1 real Check): `Sqrt[Tan[x]]` → false "not elementary" (SplitSpecials retry likely defeated by passthrough Check shim)
 
-## Tests
-- [ ] New `tests/test_algebraicnumbertrace.c` (mirror norm test)
-- [ ] CMake: COMMON_SRC + test target block in `tests/CMakeLists.txt`
+## Phase 0b — remaining package rewrites  ✅ DONE
+- [x] `KeyDropFrom` → `sample = KeyDrop[sample, Y]`
+- [x] `Hash` memo key: left as-is — works now that assoc-set handles Association-containing keys
 
-## Docs
-- [ ] `docs/spec/builtins/algebra.md` new section
-- [ ] `docs/spec/changelog/2026-09-21.md` append entry
+## Phase 1 — Message subsystem  ✅ DONE
+- [x] `Quiet`/`Check`/`Message` C builtins + fired counter in `src/message.c`; registered from `core_init`
+- [x] Counter bumped at arithmetic `Power::infy`/`Infinity::indet` (via `arith_warn`)
+- [x] Verified: Check[1/0,bad]→bad, Quiet suppresses, Message caught by Check
 
-## Verification
-- [ ] `make -j` + REPL smoke test of all spec examples
-- [ ] Build + run unit tests (ctest)
-- [ ] valgrind clean
-- [ ] `make check-c99`, `make check-fastpath-sweep`
-- [ ] Rebuild code-review-graph
-- [ ] Commit + tag v0.160
+## Phase 2-3 — bridge + wiring  ✅ DONE
+- [x] `builtin_integrate_pmt` (C, lazy-loads package, delegates to worker) + registered in integrate_init
+- [x] enum, method_from_string, try_parallelmixedtower (decline on List/$Failed), explicit switch case
+- [x] Cascade: inserted as LAST resort (after CRC), gated to skip pure rationals (`pmt_is_rational_structure`)
+- [x] All 3 surfaces work from cold session; Dcheck=0 on handled cases
+
+## Phase 4 — tests  ✅ DONE
+- [x] `tests/test_parallelmixedtower.c` (Message subsystem + assoc/Part fixes + method); CMake registered; PASSES
+- [x] No regression: association/list/core/eval pass; integrate_dispatch pass; crc_corpus PASS (~150s); intrat_corpus PASS
+- [ ] dsolve regression (running)
+
+## Phase 5 — house-keeping  ✅ DONE
+- [x] Version bump 0.160 → 0.161
+- [x] Docs: calculus.md (method 13 + Method list), control-flow.md (Quiet/Check/Message), changelog 2026-09-21
+- [x] check-c99 rc=0
+- [ ] Rebuild code-review-graph; sync mixed/ copy
+
+## Phase 1 — Message subsystem (C builtins)
+- [ ] `Quiet` (HoldAll) — reuse `mth_msg_suppress_push/pop`; 1- and 2-arg forms
+- [ ] Message-fired counter in `src/message.c` (+ `.h`)
+- [ ] `Message` (HoldFirst) — emit `Head::tag`, bump counter
+- [ ] `Check` (HoldAll) — return failexpr iff counter advanced
+- [ ] Bump counter at ~8 suppression-aware emission sites
+- [ ] `SYM_*` in `sym_names.{c,h}`; register in `core.c`; attrs; docstrings; usage
+- [ ] `tests/test_message.c` green (GATE before integrator relies on Check)
+
+## Phase 2 — Port the `.m` + bridge wrapper
+- [ ] Rewrite `SparseArray` (2130) → dense; `KeyDropFrom` (1681) → `KeyDrop`; `Hash` (1369,2172) → direct key
+- [ ] Append flat `Integrate`ParallelMixedTower[f_,x_Symbol] := ...` wrapper (/;-guarded decline) + Protected
+
+## Phase 3 — Wire into integrate.c
+- [ ] `pmt_lazy_load()` (clone `crc_lazy_load`)
+- [ ] Enum `METHOD_PARALLEL_MIXED_TOWER`; `method_from_string`
+- [ ] `try_parallelmixedtower()` (clone `try_crctable`)
+- [ ] Cascade insert (after `try_rischtranscendental`, before `try_crctable`)
+- [ ] Explicit `case` in dispatch switch; warning-list + docstring polish
+
+## Phase 4 — Tests
+- [ ] `tests/test_integrate_parallelmixedtower.c` (both surfaces + cascade + decline)
+- [ ] No-regression: `ctest -R 'message|integrate|dsolve|trigrat|intrat|crc'`
+- [ ] (optional) Charlwood corpus
+
+## Phase 5 — House-keeping
+- [ ] Version bump + tag (`v0.161`)
+- [ ] Docs: calculus.md + Message builtins doc + weekly changelog
+- [ ] Rebuild code-review-graph; valgrind
 
 ## Review
 
-Implemented `AlgebraicNumberTrace` as a precise mirror of `AlgebraicNumberNorm`.
+The port RUNS in Mathilda and is exposed as `Integrate`ParallelMixedTower` via all
+three surfaces (qualified symbol, `Method -> "ParallelMixedTower"`, and the Automatic
+cascade). What the Phase-0 spike uncovered was that the remaining work was NOT the
+stale `PARALLEL_MIXED.md`'s "3 rewrites + Message subsystem" — several load-bearing
+Mathilda gaps had to be closed first:
 
-- **Engine** (`src/poly/flint_qqbar.c`): `qqbar_abs_trace` reads coeff `x^{n-1}`
-  and the leading coeff, giving `-c_{n-1}/c_n` (sum of roots); the relative case
-  scales the absolute trace by the tower index `n/d` with `fmpq_mul_si` (norm
-  raises to that power). Reuses `to_qqbar`, `algint_generator`,
-  `qqbar_express_in_field`, `expr_from_fmpq`. `#else` stub added for `USE_FLINT=0`.
-- **Wiring**: wrapper `algebraicnumbertrace.c/.h`, `core.c` init, `sym_names.{c,h}`,
-  `Extension -> None` default in `options_builtin.c`, docstring in `info.c`,
-  version bumped 0.159 → 0.160.
+**Mathilda-core fixes (all verified, no test regression):**
+1. `assoc[key] = val` / nested `assoc[k1,k2] = val` element assignment — was making a
+   dead DownValue; now reroutes to the Part+`Key` machinery when the head holds an
+   Association (`src/eval.c`). *User-approved as the root-cause fix.*
+2. Single-position `Part` list-value assignment (`m[[2]] = {1,2,3}` gave `{0,1,0}`) —
+   pre-existing bug; distribution now gated on multi-position selectors (`src/part.c`).
+3. Message subsystem `Quiet`/`Check`/`Message` (`src/message.c`) + a fired counter bumped
+   at the arithmetic `Power::infy`/`indet` sites (`src/arithmetic.h`).
+4. `Integrate`ParallelMixedTower` C builtin (`builtin_integrate_pmt`) — lazy-loads the
+   ~2500-line package (the load is ~1s, so eager loading was rejected) and delegates;
+   messages suppressed during the probe.
 
-### Verification results
-- Build: clean under `gcc-16 -std=c99 -Wall -Wextra` with FLINT/MPFR/LAPACK/etc.
-- REPL smoke test: **all 12 spec examples produce the exact expected output**
-  (10, -11, 2, -2/3, 0, -1, 2, 1, {10,0}, 10, -3, True), plus both error messages.
-- Unit tests: `test_algebraicnumbertrace` all passed; 6 sibling algebraic-number
-  test suites still pass (no regression).
-- `make check-c99`: rc=0 (clean).
-- valgrind: leak totals **byte-identical** to the proven-clean `AlgebraicNumberNorm`
-  on the same inputs (13,440/420 def, 6,312/60 indir) → zero new leaks; remainder
-  is the documented qqbar/FLINT/startup baseline noise.
-- No leak stack trace mentions any AlgebraicNumberTrace symbol.
-- code-review-graph rebuilt.
-- `make check-fastpath-sweep`: the gate DID flag Trace (and, it turned out, Norm —
-  a silent omission in the prior commit that left the gate red). Both are algebraic-
-  number heads whose per-element cost is a qqbar min-poly read, not a numeric buffer
-  op, so both were added to `SKIP_EXPLOSIVE` (the documented sibling convention,
-  matching Denominator/Polynomial/IntegralBasis). Scoped `--only` check confirms both
-  are now skipped (exit 0). Full gate re-run: neither Trace nor Norm appears in the
-  NEW list — my change adds zero red heads and removes one (the overlooked Norm). The
-  gate still exits 1 from a PRE-EXISTING 28-head backlog (LinearModelFit, NMaximize,
-  Predict, ToNumberField, AlgebraicIntegerQ, Xor, ... from a stale OFF_BUFFER last
-  re-recorded 2026-08-03) — unrelated to this change and out of scope.
+**Package fixes** (`src/internal/mixed/ParallelMixed.m`, synced to `mixed/`):
+`RationalQ`→`RationalFunctionQ` (collision with the Protected builtin), `SparseArray`→
+dense assembly, `KeyDropFrom`→`KeyDrop`.
+
+**Cascade wiring:** last resort (after CRC), gated to skip pure rationals (a parametric
+rational otherwise burned a full iPIM attempt) AND to **decline while a TimeConstrained
+deadline is active** — the crash gate. That last one matters: PMT is malloc-heavy, and
+running it inside DSolve's `TimeConstrained[Integrate[...]]` window reproducibly tripped
+the pre-existing SIGALRM/siglongjmp-mid-malloc crash (dsolve died at 142). Declining then
+restores DSolve's exact pre-PMT behaviour. (`src/core.c` `tc_deadline_is_active`.)
+
+**Verified:** transcendental towers, simple radicals, flattened roots integrate &
+D-check=0; genuine non-elementary cases decline cleanly; core/eval/association/list +
+integrate_dispatch pass; crc_corpus PASS; intrat_corpus PASS; dsolve no longer crashes;
+`check-c99` rc=0; new `tests/test_parallelmixedtower.c` passes.
+
+**Known coverage gaps (algorithm, NOT infrastructure — the "Phase 4 corpus" work):**
+`Sqrt[Tan[x]]` (SplitSpecials), complex-residue realisation (`1/(1+x^3)` — but pure
+rationals are gated to BronsteinRational upstream anyway). These are the ongoing
+baseline-gated corpus refinement, not part of "make it run / callable / exposed".

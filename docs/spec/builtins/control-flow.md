@@ -946,3 +946,29 @@ Program     not compiled — every call runs the interpreter
 Reason      no machine lowering for this head at these argument types
 Bailed on   Integrate[x, x]
 ```
+
+## Quiet
+Evaluates an expression with messages suppressed.
+- `Quiet[expr]`: Evaluates `expr` and returns its value, suppressing any messages generated during the evaluation.
+- `Quiet[expr, spec]`: Same; `spec` (a message name or list) is accepted and ignored — all messages are suppressed.
+
+**Features**:
+- `HoldAll`, so the argument is evaluated under the suppression, not before it.
+- A message still *fires* while suppressed (an enclosing `Check` sees it); only the printing is silenced.
+
+## Check
+Detects whether a message was generated while evaluating an expression.
+- `Check[expr, failexpr]`: Returns `failexpr` if any message is generated during the evaluation of `expr`, otherwise the value of `expr`.
+- `Check[expr, failexpr, spec]`: Same; `spec` is accepted and ignored (any message counts).
+
+**Features**:
+- `HoldAll`. A `Throw` inside `expr` propagates (it is not a message).
+- Typically wrapped as `Quiet[Check[expr, failexpr]]` to detect a failure without printing its message.
+
+## Message
+Prints a named message.
+- `Message[sym::tag, e1, e2, ...]`: Notes that a diagnostic fired (so an enclosing `Check` sees it) and, unless messages are suppressed, prints the message text defined by `sym::tag`.
+
+**Features**:
+- `HoldFirst`.
+- Returns `Null`.

@@ -1273,6 +1273,17 @@ monotonically down.
      of `Sin^m/Cos^n` quotients), `E^(a x)` times circular or hyperbolic
      powers (the hyperbolic case guards the `a = n b` resonance), and
      polynomial × hyperbolic (`x^n Sinh/Cosh`, `x Sinh^m`, `x/Sinh^n = x Csch^n`).
+  13. `Integrate\`ParallelMixedTower[f, x]` — last resort: the parallel
+     (Risch-Norman) integrator over a **simple radical in a mixed transcendental
+     tower** (S. Blake, *Parallel Integration over Simple Radical Extensions II:
+     Mixed Towers*), a Wolfram-language package
+     (`src/internal/mixed/ParallelMixed.m`, lazy-loaded on first use).  Integrands
+     built from rational operations, one square root `y^m = q`, pure roots that
+     flatten (Lemma 3.2), and `Log`/`Exp`/`Tan` of field elements — the radical may
+     sit anywhere in the tower (the "mixed" case), and generators above it may
+     differentiate through `y`.  Correct by construction, re-differentiation
+     verified before returning; a non-elementary or not-yet-ported case declines.
+     Cascade-gated to skip pure rational functions (BronsteinRational's job).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
   dispatches strictly to a single subroutine, with no fallback:
@@ -1632,6 +1643,8 @@ monotonically down.
     algebraic extensions (`Sqrt`, `RootSum`) remain unimplemented, so integrands needing
     them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
+  - `"ParallelMixedTower"` — `Integrate\`ParallelMixedTower[f, x]` (parallel
+    Risch-Norman over a simple radical in a mixed transcendental tower).
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`
     (`Integrate\`Symmetry[f, {x, -c, c}]`): an odd integrand integrates to `0`,

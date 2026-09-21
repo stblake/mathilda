@@ -12,6 +12,7 @@
 #include "core.h"
 #include "symtab.h"
 #include "eval.h"
+#include "message.h"    /* message_init(): Quiet / Check / Message */
 #include "parse.h"
 #include "arithmetic.h"
 #include "numbertheory.h"
@@ -242,6 +243,7 @@ void core_init(void) {
      * any subsequent init step that triggers evaluation can already see
      * them. */
     eval_init();
+    message_init();          /* Quiet / Check / Message */
     system_constants_init();
     repl_hooks_init();
     parfrac_init();
@@ -3918,6 +3920,13 @@ static void tc_gmp_deallocate(void* ptr, size_t size) {
 void tc_install_alloc_guard(void) {
     mp_set_memory_functions(tc_gmp_allocate, tc_gmp_reallocate, tc_gmp_deallocate);
 }
+
+/* True while a TimeConstrained[...] deadline is in force.  A heavy, malloc-bound
+ * method (ParallelMixedTower) consults this to decline rather than run in the
+ * window where the SIGALRM/siglongjmp interruption can fire mid-malloc -- the
+ * known async-signal hazard.  Declining there simply restores the behaviour the
+ * caller had before that method existed. */
+int tc_deadline_is_active(void) { return tc_deadline_active; }
 
 void tc_check_deadline(void) {
     if (!tc_deadline_active) return;

@@ -4,6 +4,7 @@
 #include "expr.h"
 #include "message.h"   /* mth_msg_suppressed(): general quiet-region flag */
 #include <gmp.h>
+#include <stdio.h>
 
 // GCD helper
 int64_t gcd(int64_t a, int64_t b);
@@ -66,6 +67,14 @@ static inline void arith_warnings_mute_pop(void)    { if (g_arith_warnings_muted
  * depth (mth_msg_suppress_push/pop), so a quiet internal probe silences the
  * arithmetic diagnostics too. */
 static inline int  arith_warnings_muted(void)       { return g_arith_warnings_muted || mth_msg_suppressed(); }
+
+/* Emit an arithmetic diagnostic: note that a message fired -- so an enclosing
+ * Check[] sees it even while the print is suppressed -- then print it unless
+ * muted.  Consolidates the note+guard so the two never drift apart. */
+static inline void arith_warn(const char* msg) {
+    mth_msg_note_fired();
+    if (!arith_warnings_muted()) fputs(msg, stderr);
+}
 
 Expr* builtin_divide(Expr* res);
 Expr* builtin_subtract(Expr* res);

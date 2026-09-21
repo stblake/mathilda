@@ -54,6 +54,7 @@
 #include "loadmodule.h"
 #include "sym_intern.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_msg_suppress_push/pop: quiet ParallelMixedTower's internal probes */
 #include "series.h"
 
 #include <stdbool.h>
@@ -522,6 +523,136 @@ static Expr* try_crctable(Expr* f, Expr* x) {
     return result;
 }
 
+/* Stage: ParallelMixedTower.  A parallel (Risch-Norman) integrator over a
+ * simple radical in a mixed transcendental tower (S. Blake, Parallel
+ * Integration over Simple Radical Extensions II), implemented as a Wolfram-
+ * language package in src/internal/mixed/ParallelMixed.m and loaded lazily on
+ * first use exactly like the CRC table above -- sessions that never reach this
+ * cascade stage pay nothing for it. */
+static bool pmt_load_attempted = false;
+static bool pmt_load_succeeded  = false;
+/* The package calls Integrate[] on internal sub-problems (a degree-bound
+ * criterion re-integrates a leading coefficient), so as an Automatic-cascade
+ * stage it can re-enter itself.  A depth of 1 admits the outer call and makes
+ * every nested one decline, so the inner Integrate[] falls through to the
+ * rational / table stages instead of looping. */
+static int  pmt_depth = 0;
+#define MAX_PMT_DEPTH 1
+
+static void pmt_lazy_load(void) {
+    if (pmt_load_attempted) return;
+    pmt_load_attempted = true;
+
+    char path[2048];
+    if (!mathilda_resolve_internal("mixed/ParallelMixed.m", path, sizeof(path))) {
+        fprintf(stderr,
+            "Integrate`ParallelMixedTower::nofile: cannot locate "
+            "src/internal/mixed/ParallelMixed.m on disk.\n");
+        return;
+    }
+
+    int opened = 0;
+    Expr* res = mathilda_run_file(path, &opened);
+    bool failed = res && res->type == EXPR_SYMBOL
+                      && strcmp(res->data.symbol.name, "$Failed") == 0;
+    if (res) expr_free(res);
+    if (opened && !failed) pmt_load_succeeded = true;
+}
+
+/* The Integrate`ParallelMixedTower method symbol.  A thin C builtin so the
+ * qualified-symbol surface Integrate`ParallelMixedTower[f, x] is callable from a
+ * cold session without paying the ~1s package load until it is actually reached:
+ * the builtin loads the .m worker lazily and delegates to it, returning the
+ * worker's value unchanged -- the antiderivative, $Failed, or a List
+ * certificate/failure.  The depth guard lives here, the single choke point
+ * through which both the direct call and the cascade stage pass, so the worker's
+ * own internal Integrate[] on a sub-problem cannot re-enter the method and loop. */
+static Expr* builtin_integrate_pmt(Expr* res) {
+    int tc_deadline_is_active(void);
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (pmt_depth >= MAX_PMT_DEPTH) return NULL;   /* no self re-entry (see above) */
+    /* Decline while a TimeConstrained[...] deadline is in force: this method is
+     * heavily malloc-bound, and running it in the window where the SIGALRM /
+     * siglongjmp interruption can fire mid-malloc is the known async-signal
+     * crash.  DSolve wraps its recursive Integrate[] in TimeConstrained, so this
+     * restores exactly its pre-ParallelMixedTower behaviour there. */
+    if (tc_deadline_is_active()) return NULL;
+    pmt_lazy_load();
+    if (!pmt_load_succeeded) return NULL;
+
+    pmt_depth++;
+    /* Suppress the package's own diagnostics (BuildTower::function on an
+     * unsupported generator, etc.): as a method probe it must not spew to the
+     * user.  The fired-counter that the package's internal Check reads still
+     * advances while suppressed, so its failure detection is unaffected. */
+    mth_msg_suppress_push();
+    Expr* result = call_stage("ParallelMixed`ParallelIntegrateMixed",
+                              res->data.function.args[0], res->data.function.args[1]);
+    mth_msg_suppress_pop();
+    pmt_depth--;
+    return result;   /* expression, $Failed, or a List certificate/failure */
+}
+
+/* True if e is (structurally) a rational function -- built only from numbers,
+ * symbols, Plus, Times, Rational/Complex, and Power with an integer exponent.  A
+ * non-integer power (a radical) or any other head (Log, Exp, Sin, ...) makes it
+ * non-rational.  ParallelMixedTower's value is the radical/transcendental-tower
+ * case; a pure rational function is BronsteinRational's job (an earlier stage),
+ * so the cascade must NOT spend this stage's search on one -- notably a
+ * PARAMETRIC rational that BronsteinRational declines, which would otherwise
+ * burn the full iPIM attempt before failing anyway. */
+static bool pmt_is_rational_structure(const Expr* e) {
+    if (!e) return true;
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: case EXPR_REAL: case EXPR_SYMBOL:
+            return true;
+        case EXPR_FUNCTION: {
+            if (e->data.function.head->type != EXPR_SYMBOL) return false;
+            const char* h = e->data.function.head->data.symbol.name;
+            size_t n = e->data.function.arg_count;
+            if (h == SYM_Plus || h == SYM_Times ||
+                h == SYM_Rational || h == SYM_Complex) {
+                for (size_t i = 0; i < n; i++)
+                    if (!pmt_is_rational_structure(e->data.function.args[i]))
+                        return false;
+                return true;
+            }
+            if (h == SYM_Power && n == 2) {
+                if (e->data.function.args[1]->type != EXPR_INTEGER) return false;
+                return pmt_is_rational_structure(e->data.function.args[0]);
+            }
+            return false;   /* Log, Exp, Sin, Sqrt(=Power^rational), ... */
+        }
+        default: return false;   /* String, NDArray, ... */
+    }
+}
+
+/* Automatic-cascade / Method -> "ParallelMixedTower" stage: evaluate the method
+ * symbol and decline (continue the cascade) unless it returned an
+ * antiderivative.  ParallelIntegrateMixed signals "no result" with $Failed (a
+ * tower-build failure) or a List (a certificate {"not elementary", ...} or a
+ * failure tuple {"failed", ...}); an antiderivative is never a bare List.  An
+ * unresolved head means the .m worker never loaded. */
+static Expr* try_parallelmixedtower(Expr* f, Expr* x) {
+    /* Skip pure rational functions -- BronsteinRational owns them (see above). */
+    if (pmt_is_rational_structure(f)) return NULL;
+    Expr* result = call_stage("Integrate`ParallelMixedTower", f, x);
+    if (!result) return NULL;
+
+    bool decline =
+        result_is_unresolved(result, "Integrate`ParallelMixedTower") ||
+        (result->type == EXPR_SYMBOL &&
+         strcmp(result->data.symbol.name, "$Failed") == 0) ||
+        (result->type == EXPR_FUNCTION &&
+         result->data.function.head->type == EXPR_SYMBOL &&
+         strcmp(result->data.function.head->data.symbol.name, "List") == 0);
+    if (decline) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
 /* Method-option parsing.  Mirrors the canonical SYM_Method / SYM_Rule
  * idiom (see src/list.c:1480-1491 and src/facint.c:1276-1310). */
 typedef enum {
@@ -538,6 +669,7 @@ typedef enum {
     METHOD_RISCH_NORMAN_BLAKE,
     METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
+    METHOD_PARALLEL_MIXED_TOWER,
     METHOD_UNDEFINED,
     METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the real-axis FTC mechanism */
     METHOD_LINE_INTEGRAL,    /* definite-only: selects the complex contour mechanism */
@@ -568,6 +700,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "RischNormanBlake") == 0) return METHOD_RISCH_NORMAN_BLAKE;
     if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
+    if (strcmp(s, "ParallelMixedTower") == 0) return METHOD_PARALLEL_MIXED_TOWER;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
     if (strcmp(s, "NewtonLeibniz") == 0) return METHOD_NEWTON_LEIBNIZ;
     if (strcmp(s, "LineIntegral") == 0) return METHOD_LINE_INTEGRAL;
@@ -1114,6 +1247,11 @@ Expr* builtin_integrate(Expr* res) {
              * Log[1+ax]/x -> PolyLog), never changing an existing answer. */
             if (!result) result = try_rischtranscendental(effective_f, x);
             if (!result) result = try_crctable(effective_f, x);
+            /* Last resort: the parallel Risch-Norman integrator over a mixed
+             * tower.  After the CRC table so a tabled integral is answered
+             * cleanly and cheaply rather than paying this stage's package load
+             * and search on every case the table already covers. */
+            if (!result) result = try_parallelmixedtower(effective_f, x);
             break;
         case METHOD_RATIONAL:
             result = try_rational(effective_f, x);
@@ -1156,6 +1294,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_CRCTABLE:
             result = try_crctable(effective_f, x);
+            break;
+        case METHOD_PARALLEL_MIXED_TOWER:
+            result = try_parallelmixedtower(effective_f, x);
             break;
         case METHOD_UNDEFINED:
             result = try_undefined(effective_f, x);
@@ -1212,6 +1353,18 @@ Expr* builtin_integrate(Expr* res) {
 
 void integrate_init(void) {
     symtab_add_builtin("Integrate", builtin_integrate);
+
+    /* The ParallelMixedTower method symbol (lazy-loads src/internal/mixed/
+     * ParallelMixed.m on first use).  Registered here so the qualified-symbol
+     * surface Integrate`ParallelMixedTower[f, x] works from a cold session. */
+    symtab_add_builtin("Integrate`ParallelMixedTower", builtin_integrate_pmt);
+    symtab_get_def("Integrate`ParallelMixedTower")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Integrate`ParallelMixedTower",
+        "Integrate`ParallelMixedTower[f, x] integrates f with respect to x by the "
+        "parallel (Risch-Norman) method over a simple radical in a mixed "
+        "transcendental tower (S. Blake, Parallel Integration over Simple Radical "
+        "Extensions II). It returns the antiderivative, or $Failed / a certificate "
+        "list that Integrate's cascade treats as a decline.");
     /* NOT Listable: Listable would thread over a definite-integral range
      * spec `{x, a, b}` element-wise (producing garbage like
      * {Integrate[f,x], Integrate[f,a], Integrate[f,b]}).  The `{x,a,b}` form
@@ -1240,6 +1393,7 @@ void integrate_init(void) {
         "  \"RischNormanBlake\"    — Integrate`RischNormanBlake (parallel Risch-Norman over a radical y^m = q(x); Blake)\n"
         "  \"RischTranscendental\"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
+        "  \"ParallelMixedTower\" — Integrate`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
         "  \"NewtonLeibniz\"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
         "  \"LineIntegral\"        — complex contour integrals (implicit for the {x,z0,...,zn} form)\n"

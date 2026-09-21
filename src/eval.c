@@ -1087,6 +1087,44 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             /* We use the entire lhs as the pattern, and its head as the key */
             const char* symbol_name = lhs->data.function.head->data.symbol.name;
 
+            /* Association element assignment: `assoc[k1, ..., kn] = val` when
+             * the head symbol currently holds an Association -- Wolfram's
+             * assoc[key] = val sugar (a = <||>; a["x"] = 5 mutates a, it does
+             * NOT install a DownValue). Reroute to the Part machinery with each
+             * key wrapped in Key[...] (assoc[k] === assoc[[Key[k]]]); the keys
+             * are evaluated first (a = <||>; k = "x"; a[k] = 5 sets a["x"]).
+             * Guard on the symbol's stored OwnValue being an Association so an
+             * ordinary DownValue definition (f[x_] := ..., g[1] = 5) is
+             * untouched -- expr_part_assign re-reads and writes the symbol. */
+            {
+                Expr* expr_part_assign(Expr* lhs_p, Expr* rhs_p);
+                Rule* ov = symtab_get_own_values(symbol_name);
+                if (ov && ov->replacement &&
+                    ov->replacement->type == EXPR_FUNCTION &&
+                    ov->replacement->data.function.head->type == EXPR_SYMBOL &&
+                    ov->replacement->data.function.head->data.symbol.name == SYM_Association) {
+                    size_t nk = lhs->data.function.arg_count;
+                    Expr** pargs = malloc(sizeof(Expr*) * (nk + 1));
+                    pargs[0] = expr_copy(lhs->data.function.head);
+                    for (size_t i = 0; i < nk; i++) {
+                        Expr* kev = evaluate(lhs->data.function.args[i]);   /* evaluate borrows */
+                        Expr** karg = malloc(sizeof(Expr*));
+                        karg[0] = kev;
+                        pargs[i + 1] = expr_new_function(expr_new_symbol(SYM_Key), karg, 1);
+                        free(karg);
+                    }
+                    Expr* part_lhs = expr_new_function(expr_new_symbol(SYM_Part), pargs, nk + 1);
+                    free(pargs);
+                    Expr* assigned = expr_part_assign(part_lhs, rhs);
+                    expr_free(part_lhs);
+                    if (assigned) { expr_free(assigned); eval_clock_bump(); return true; }
+                    /* Could not place the key (e.g. a nested path through a
+                     * missing intermediate association): leave the Set
+                     * unevaluated rather than installing a spurious DownValue. */
+                    return false;
+                }
+            }
+
             /* f::usage = "..." additionally registers the string as f's
              * docstring so ?f and Information[f] surface it. The message is
              * still installed as a DownValue on MessageName below, which makes

@@ -86,6 +86,8 @@ Expr* builtin_time_constrained(Expr* res);
  * cooperatively. On those hosts, SIGPROF is the only mechanism, with
  * its usual portability caveats. */
 void tc_check_deadline(void);
+/* True while a TimeConstrained[...] deadline is in force (see core.c). */
+int  tc_deadline_is_active(void);
 
 /* Install GMP/MPFR memory functions guarded so the TimeConstrained SIGPROF
  * siglongjmp is never taken while libmalloc holds a zone lock (which would

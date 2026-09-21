@@ -385,6 +385,24 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
     return new_func;
 }
 
+/* Does the index spec select MORE THAN ONE position at some level -- a List of
+ * indices ({1,3}), a Span (1;;2), or All?  Only then does a List RHS distribute
+ * element-by-element across the selected positions.  When every index is a
+ * single scalar (an integer or a Key), the target is one position and the WHOLE
+ * RHS is stored there: `m[[2]] = {1,2,3}` gives {0,{1,2,3},0}, and
+ * `a[[Key[k]]] = {1,2,3}` stores the whole list -- matching Wolfram. */
+static bool part_indices_select_multiple(Expr** indices, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        Expr* idx = indices[i];
+        if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) return true;
+        if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL) {
+            const char* h = idx->data.function.head->data.symbol.name;
+            if (h == SYM_Span || h == SYM_List) return true;
+        }
+    }
+    return false;
+}
+
 Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     if (lhs->type != EXPR_FUNCTION || lhs->data.function.head->type != EXPR_SYMBOL || lhs->data.function.head->data.symbol.name != SYM_Part) return NULL;
     if (lhs->data.function.arg_count < 2) return NULL;
@@ -395,8 +413,9 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     Expr* current_val = symtab_get_own_values(sym->data.symbol.name) ? evaluate(sym) : NULL;
     if (!current_val) return NULL;
     
-    bool is_rhs_list = (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL && rhs->data.function.head->data.symbol.name == SYM_List);
-    
+    bool is_rhs_list = (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL && rhs->data.function.head->data.symbol.name == SYM_List)
+                       && part_indices_select_multiple(lhs->data.function.args + 1, lhs->data.function.arg_count - 1);
+
     size_t rhs_idx = 0;
     Expr* new_val = expr_part_assign_rec(current_val, lhs->data.function.args + 1, lhs->data.function.arg_count - 1, rhs, &rhs_idx, is_rhs_list);
     expr_free(current_val);

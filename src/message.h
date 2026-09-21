@@ -42,4 +42,21 @@ void mth_msg_ifun_suppress_push(void);
 void mth_msg_ifun_suppress_pop(void);
 int  mth_msg_ifun_suppressed(void);
 
+/*
+ * Message-fired counter.  Distinct from the suppression depth above: a message
+ * still "fires" (and bumps this counter) even while suppressed, so that
+ * Check[expr, failexpr] -- typically wrapped as Quiet[Check[expr, failexpr]] --
+ * can detect that a diagnostic was generated during expr's evaluation without
+ * that diagnostic reaching the user.  Emission sites call mth_msg_note_fired()
+ * at the point the message is generated (before the suppression check);
+ * builtin_check snapshots mth_msg_fired_count() around the evaluation of its
+ * first argument.  Coverage is incremental -- a site that does not yet note is
+ * simply invisible to Check, never a wrong answer.
+ */
+void          mth_msg_note_fired(void);
+unsigned long mth_msg_fired_count(void);
+
+/* Registers the Quiet / Check / Message builtins.  Called from core_init(). */
+void message_init(void);
+
 #endif /* MATHILDA_MESSAGE_H */
