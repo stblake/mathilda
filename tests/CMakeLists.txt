@@ -632,6 +632,7 @@ set(COMMON_SRC
     ../src/poly/tonumberfield.c
     ../src/poly/algebraicnumberpolynomial.c
     ../src/poly/algebraicintegerq.c
+    ../src/poly/algebraicnumberdenominator.c
     ../src/poly/numberfieldintegralbasis.c
     ../src/poly/bpoly.c
     ../src/poly/mpoly.c
@@ -1899,6 +1900,10 @@ add_test(NAME algebraicnumberpolynomial_tests COMMAND algebraicnumberpolynomial_
 add_executable(numberfieldintegralbasis_tests test_numberfieldintegralbasis.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(numberfieldintegralbasis_tests PRIVATE ../src ../src/poly)
 add_test(NAME numberfieldintegralbasis_tests COMMAND numberfieldintegralbasis_tests)
+
+add_executable(algebraicnumberdenominator_tests test_algebraicnumberdenominator.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(algebraicnumberdenominator_tests PRIVATE ../src ../src/poly)
+add_test(NAME algebraicnumberdenominator_tests COMMAND algebraicnumberdenominator_tests)
 
 add_executable(thue_tests test_thue.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(thue_tests PRIVATE ../src ../src/numbertheory)

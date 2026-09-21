@@ -1,61 +1,61 @@
-# Task: Implement NumberFieldIntegralBasis (+ AlgebraicIntegerQ)
+# Task: Implement AlgebraicNumberDenominator
 
-Plan: /Users/user/.claude/plans/continuing-on-from-our-magical-alpaca.md
+Plan: /Users/user/.claude/plans/continuing-on-from-our-crispy-stallman.md
+
+Definition: AlgebraicNumberDenominator[a] = smallest positive integer n with n*a
+an algebraic integer. NOTE: not qqbar_denominator (that is the min-poly leading
+coeff, which over-counts, e.g. AlgebraicNumber[Sqrt[2],{1/5,1}] -> 5 not 25).
+Algorithm: per-prime valuation over the primitive integer minimal polynomial.
 
 ## Phase A — Engine (src/poly/flint_qqbar.c + .h)
-- [ ] Add `#include "numberfield.h"` + `#include "numberfield_internal.h"`
-- [ ] `flint_qqbar_integral_basis(const Expr* a)` engine fn
-- [ ] `flint_qqbar_algebraic_integer_q(const Expr* x)` engine fn
-- [ ] FLINT-off stubs for both
-- [ ] Declare both in flint_qqbar.h
+- [ ] Add `#include <flint/fmpz_factor.h>`
+- [ ] `flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out)` engine fn
+- [ ] FLINT-off stub (return -1)
+- [ ] Declare in flint_qqbar.h
 
 ## Phase B — WL surface files
-- [ ] src/poly/numberfieldintegralbasis.{c,h}
-- [ ] src/poly/algebraicintegerq.{c,h}
+- [ ] src/poly/algebraicnumberdenominator.{c,h}  (::nalg message; Listable, Protected)
 
 ## Phase C — Registration & wiring
-- [ ] sym_names.h/.c: SYM_NumberFieldIntegralBasis, SYM_AlgebraicIntegerQ
-- [ ] core.c: forward-declare + call both inits
-- [ ] info.c: docstrings for both
-- [ ] version.h: bump + tag
+- [ ] sym_names.h/.c: SYM_AlgebraicNumberDenominator
+- [ ] core.c: forward-declare + call init
+- [ ] info.c: docstring
+- [ ] version.h: bump 0.157 -> 0.158
 
 ## Phase D — Docs
-- [ ] docs/spec/builtins/algebra.md: two sections
+- [ ] docs/spec/builtins/algebra.md: section
 - [ ] docs/spec/changelog/2026-09-21.md: entry
-- [ ] tools/nd_fastpath_sweep.py: SKIP_EXPLOSIVE += NumberFieldIntegralBasis
 
 ## Phase E — Tests
-- [ ] tests/test_numberfieldintegralbasis.c
+- [ ] tests/test_algebraicnumberdenominator.c
 - [ ] tests/CMakeLists.txt: COMMON_SRC + add_executable/add_test
-- [ ] optional leak script
 
-## Verification
-- [ ] make -j; make check-c99
-- [ ] build + run tests
-- [ ] REPL smoke test of all examples
-- [ ] valgrind vs baseline
-- [ ] audits green
-- [ ] graph refresh + memory note
+## Phase F — Verify
+- [x] make -j; make check-c99
+- [x] run unit test
+- [x] REPL smoke test all prompt examples
+- [x] valgrind
 
 ## Review
+All phases complete (v0.158). AlgebraicNumberDenominator[a] = smallest n with n*a
+an algebraic integer, via per-prime valuation over the minimal polynomial (NOT
+qqbar_denominator, which over-counts: AlgebraicNumber[Sqrt[2],{1/5,1}] -> 5 not 25).
 
-Status: DONE (pending user commit).
+Verification results:
+- Build: clean (gcc-16, -std=c99 -Wall -Wextra), binary relinked.
+- make check-c99: exit 0.
+- Unit test (tests/test_algebraicnumberdenominator.c, ~40 cases): all passed.
+- REPL smoke test: every example from the prompt matches exactly, incl. the
+  AlgebraicNumber divergence case (5) and the ToNumberField round-trip
+  (alpha = AlgebraicNumber[Sqrt[3], {-1, 1}], AlgebraicIntegerQ[alpha] -> True).
+- valgrind: byte-identical to a no-builtin baseline (13,440 def-lost in both =
+  known macOS baseline noise); zero leak stacks reference the new code.
+- make check-packed-aware: OK. Sibling algebraic tests: no regression.
 
-- Engine `flint_qqbar_integral_basis` + `flint_qqbar_algebraic_integer_q` in
-  `src/poly/flint_qqbar.c` (reuse `to_qqbar`/`algint_generator`/`poly_to_algnum`
-  + `nf_field_create`/`nf_ok_basis`). Round-2 HNF canonicalised to lower-triangular
-  (1-first, ascending degree) via rot180 of the column-reversed `fmpz_mat_hnf`.
-- Thin WL wrappers `numberfieldintegralbasis.c` (Listable|Protected) and
-  `algebraicintegerq.c` (Protected). Registered in core.c; SYM_ in sym_names;
-  docstrings in info.c; version 0.157.
-- Docs: algebra.md two sections; changelog 2026-09-21.md; SKIP_EXPLOSIVE.
-- Tests: test_numberfieldintegralbasis.c — ALL PASS. Sibling suites
-  (numberfield/algebraicnumber/algebraicnumberpolynomial) still pass.
-- Verification: build clean; check-c99 clean; check-packed-aware OK; valgrind
-  definitely-lost byte-identical to baseline (no new leaks).
-  check-compile-coverage RED is pre-existing (Image*/PackedArrayQ), my heads not
-  implicated.
-- Every user example reproduced exactly (via N[]); AlgebraicIntegerQ of every
-  basis element and integer combination is True.
+Files: src/poly/flint_qqbar.{c,h} (engine + stub), src/poly/algebraicnumberdenominator.{c,h}
+(surface), src/sym_names.{c,h}, src/core.c, src/info.c, src/version.h (0.157->0.158),
+docs/spec/builtins/algebra.md, docs/spec/changelog/2026-09-21.md,
+tools/nd_fastpath_sweep.py (SKIP_EXPLOSIVE), tests/test_algebraicnumberdenominator.c,
+tests/CMakeLists.txt.
 
-TODO for user: `git add` + commit (v0.157) + `git tag v0.157`.
+Not done (awaiting user): git commit / tag v0.158 / push (release policy).

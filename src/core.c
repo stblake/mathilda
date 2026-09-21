@@ -845,6 +845,8 @@ void core_init(void) {
     algebraicnumberpolynomial_init();
     void algebraicintegerq_init(void);
     algebraicintegerq_init();
+    void algebraicnumberdenominator_init(void);
+    algebraicnumberdenominator_init();
     void numberfieldintegralbasis_init(void);
     numberfieldintegralbasis_init();
     expand_init();

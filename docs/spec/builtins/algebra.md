@@ -400,6 +400,45 @@ In[4]:= AlgebraicIntegerQ[2^(1/3)/2]
 Out[4]= False
 ```
 
+## AlgebraicNumberDenominator
+
+Gives the denominator of an algebraic number.
+
+- `AlgebraicNumberDenominator[a]` — the smallest positive integer `n` such that
+  `n a` is an algebraic integer.
+
+`a` may be a rational, a radical (`1/Sqrt[3]`, `1/Sqrt[Sqrt[2]+3]`,
+`(1+3I)^(-1/3)`), a `Root` object, or an `AlgebraicNumber` object; an algebraic
+integer has denominator `1`. Computed exactly from the minimal polynomial by a
+per-prime valuation — **not** the raw leading coefficient of the minimal
+polynomial, which over-counts (for `1/5 + Sqrt[2]`, whose primitive minimal
+polynomial is `25 x^2 - 10 x - 49`, the leading coefficient is `25` but the
+denominator is `5`). By construction `AlgebraicNumberDenominator[a] a` is always
+an algebraic integer, and it is the canonical factor for writing `a = alpha / n`
+with `alpha = n a` an algebraic integer (`alpha = n ToNumberField[a, theta]`).
+
+Attributes `{Listable, Protected}` — `AlgebraicNumberDenominator[{a1, ...}]`
+threads to one denominator per element. A non-algebraic argument emits
+`AlgebraicNumberDenominator::nalg` and stays unevaluated. Requires FLINT; a
+`USE_FLINT=0` build leaves the head unevaluated.
+
+```
+In[1]:= AlgebraicNumberDenominator[1/Sqrt[3]]
+Out[1]= 3
+
+In[2]:= AlgebraicNumberDenominator[(1 + Sqrt[5])/2]
+Out[2]= 1
+
+In[3]:= AlgebraicNumberDenominator[AlgebraicNumber[Sqrt[2], {1/5, 1}]]
+Out[3]= 5
+
+In[4]:= AlgebraicNumberDenominator[{Sqrt[2], 1/Sqrt[2], 1/3}]
+Out[4]= {1, 2, 3}
+
+In[5]:= AlgebraicIntegerQ[AlgebraicNumberDenominator[1/Sqrt[1 + I]] / Sqrt[1 + I]]
+Out[5]= True
+```
+
 ## Apart
 
 Gives the partial fraction decomposition of a rational expression.

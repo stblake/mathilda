@@ -19,6 +19,7 @@
 
 #include <gmp.h>
 #include <flint/fmpz.h>
+#include <flint/fmpz_factor.h>
 #include <flint/fmpq.h>
 #include <flint/fmpz_poly.h>
 #include <flint/fmpq_poly.h>
@@ -1011,6 +1012,62 @@ int flint_qqbar_algebraic_integer_q(const Expr* x) {
     return r;
 }
 
+/* AlgebraicNumberDenominator[x]: the smallest positive integer d such that d*x is
+ * an algebraic integer.  Returns 1 and sets *out to that d (Integer / BigInt) on
+ * success; 0 if x is not a constant algebraic number; -1 if FLINT is compiled out.
+ *
+ * This is NOT qqbar_denominator (the leading coefficient a_n of the primitive
+ * integer minimal polynomial p(x) = sum_i a_i x^i): a_n is only an upper bound.
+ * Writing the monic minimal polynomial of d*x, its x^i coefficient is
+ * (a_i/a_n) d^{n-i}, so d*x is an algebraic integer iff for every i < n the
+ * denominator q_i of a_i/a_n divides d^{n-i}.  Since q_i | a_n, the minimal d
+ * divides a_n, and per prime P | a_n:
+ *     v_P(d) = max_{i<n} ceil( v_P(q_i) / (n-i) ),  v_P(q_i)=max(0, v_P(a_n)-v_P(a_i))
+ * (a zero coefficient contributes no constraint).  One factorisation of a_n --
+ * small in practice -- then a valuation scan gives the exact answer.  Example:
+ * 1/5 + Sqrt[2] has p = 25 x^2 - 10 x - 49, a_n = 25, yet d = 5. */
+int flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out) {
+    if (!x || !out) return 0;
+    qqbar_t v; qqbar_init(v);
+    if (!to_qqbar(x, v)) { qqbar_clear(v); return 0; }
+    slong n = qqbar_degree(v);
+    fmpz_t an; fmpz_init(an);
+    fmpz_poly_get_coeff_fmpz(an, QQBAR_POLY(v), n);   /* positive leading coeff */
+
+    fmpz_t d; fmpz_init_set_ui(d, 1);
+    if (!fmpz_is_one(an)) {
+        fmpz_factor_t fac; fmpz_factor_init(fac);
+        fmpz_factor(fac, an);                          /* an > 0: primes are positive */
+        fmpz_t ai, tmp, pk;
+        fmpz_init(ai); fmpz_init(tmp); fmpz_init(pk);
+        for (slong j = 0; j < fac->num; j++) {
+            const fmpz* P = fac->p + j;
+            slong vP_an = (slong) fac->exp[j];
+            slong best = 0;
+            for (slong i = 0; i < n; i++) {            /* i = 0 .. n-1 (i = n gives 1) */
+                fmpz_poly_get_coeff_fmpz(ai, QQBAR_POLY(v), i);
+                if (fmpz_is_zero(ai)) continue;        /* a_i/a_n = 0: no constraint */
+                slong vP_ai = fmpz_remove(tmp, ai, P); /* valuation of a_i at P */
+                slong vP_qi = vP_an - vP_ai;
+                if (vP_qi <= 0) continue;              /* a_i/a_n already P-integral */
+                slong ei   = n - i;
+                slong need = (vP_qi + ei - 1) / ei;    /* ceil(vP_qi / ei) */
+                if (need > best) best = need;
+            }
+            if (best > 0) {
+                fmpz_pow_ui(pk, P, (ulong) best);
+                fmpz_mul(d, d, pk);
+            }
+        }
+        fmpz_clear(ai); fmpz_clear(tmp); fmpz_clear(pk);
+        fmpz_factor_clear(fac);
+    }
+
+    *out = expr_from_fmpz(d);
+    fmpz_clear(d); fmpz_clear(an); qqbar_clear(v);
+    return 1;
+}
+
 Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) {
     return algnum_binop(a, b, 0);
 }
@@ -1109,6 +1166,7 @@ Expr* flint_qqbar_to_number_field_self(const Expr* x) { (void)x; return NULL; }
 Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n, int s) { (void)as; (void)n; (void)s; return NULL; }
 Expr* flint_qqbar_integral_basis(const Expr* a) { (void)a; return NULL; }
 int   flint_qqbar_algebraic_integer_q(const Expr* x) { (void)x; return -1; }
+int   flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out) { (void)x; (void)out; return -1; }
 Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_qqbar_algnum_mul(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_qqbar_algnum_pow(const Expr* a, long p) { (void)a; (void)p; return NULL; }

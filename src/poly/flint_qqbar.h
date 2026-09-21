@@ -102,6 +102,14 @@ Expr* flint_qqbar_integral_basis(const Expr* a);
  * iff its primitive integer minimal polynomial is monic. */
 int flint_qqbar_algebraic_integer_q(const Expr* x);
 
+/* AlgebraicNumberDenominator[x]: the smallest positive integer d such that d*x is
+ * an algebraic integer.  Returns 1 and sets *out to that d (a fresh owned Integer
+ * or BigInt Expr) on success; 0 when x is not a constant algebraic number; -1 when
+ * FLINT is compiled out.  Computed exactly from the minimal polynomial by a
+ * per-prime valuation (see flint_qqbar.c) -- not the raw min-poly leading
+ * coefficient, which over-counts. */
+int flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out);
+
 /* Same-field arithmetic for the Plus/Times/Power combination pre-passes. `a`
  * (and `b`) are AlgebraicNumber objects; combining happens only when generators
  * are structurally equal (expr_eq). `r` is an Integer/Rational scalar. */

@@ -260,6 +260,8 @@ SKIP_EXPLOSIVE = {
                                   # returns itself, so a packed vector materialises
     "NumberFieldIntegralBasis",   # Listable; each element is its own number field
                                   # -> a qqbar maximal-order solve, not a buffer op
+    "AlgebraicNumberDenominator", # Listable; each element is a qqbar min-poly +
+                                  # integer factorisation, not a buffer op
     "FactorTermsList", "MinimalPolynomial", "PolynomialSqrt", "PolynomialMod",
     "PolynomialQ", "IrreduciblePolynomialQ", "Variables", "PossibleZeroQ",
     "SimplifyCount", "TrigExpand", "TrigFactor", "TrigReduce", "TrigToExp",
