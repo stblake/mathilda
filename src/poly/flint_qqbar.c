@@ -279,7 +279,18 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
         fmpz_t z; fmpz_init(z); fmpz_set_mpz(z, e->data.bigint);
         qqbar_set_fmpz(out, z); fmpz_clear(z); return 1;
     }
-    if (e->type != EXPR_FUNCTION) return 0;   /* symbol / real / string */
+    if (e->type == EXPR_SYMBOL) {
+        /* GoldenRatio = (1 + Sqrt[5])/2 is the sole algebraic named constant;
+         * every other bare symbol (Pi, E, EulerGamma, ...) is non-algebraic. */
+        if (e->data.symbol.name == SYM_GoldenRatio) {
+            qqbar_sqrt_ui(out, 5);        /* Sqrt[5]        */
+            qqbar_add_ui(out, out, 1);    /* 1 + Sqrt[5]    */
+            qqbar_div_ui(out, out, 2);    /* (1 + Sqrt[5])/2 */
+            return 1;
+        }
+        return 0;
+    }
+    if (e->type != EXPR_FUNCTION) return 0;   /* real / string */
 
     size_t n = e->data.function.arg_count;
 
@@ -695,8 +706,9 @@ int flint_qqbar_is_constant_algebraic(const Expr* e) {
     switch (e->type) {
         case EXPR_INTEGER:
         case EXPR_BIGINT:  return 1;
+        case EXPR_SYMBOL:  return e->data.symbol.name == SYM_GoldenRatio; /* sole algebraic constant */
         case EXPR_FUNCTION: break;
-        default:           return 0;   /* real / string / free symbol */
+        default:           return 0;   /* real / string / other free symbol */
     }
     size_t n = e->data.function.arg_count;
     if (head_is(e, "Rational")) return 1;
@@ -1068,6 +1080,68 @@ int flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out) {
     return 1;
 }
 
+/* Absolute field norm N_{Q(a)/Q}(a) = product of the roots of a's minimal
+ * polynomial.  From the primitive integer minimal polynomial
+ * P(x) = c_n x^n + ... + c_0 (content 1, c_n > 0), the monic-over-Q constant
+ * term is c_0/c_n and the product of the n roots is (-1)^n c_0/c_n. */
+static void qqbar_abs_norm(const qqbar_t v, fmpq_t out) {
+    slong n = qqbar_degree(v);
+    fmpz_t c0, cn; fmpz_init(c0); fmpz_init(cn);
+    fmpz_poly_get_coeff_fmpz(c0, QQBAR_POLY(v), 0);
+    fmpz_poly_get_coeff_fmpz(cn, QQBAR_POLY(v), n);   /* positive leading coeff */
+    fmpq_set_fmpz_frac(out, c0, cn);                  /* c_0 / c_n, reduced */
+    if (n & 1) fmpq_neg(out, out);                    /* (-1)^n */
+    fmpz_clear(c0); fmpz_clear(cn);
+}
+
+/* AlgebraicNumberNorm[a] (theta == NULL): the absolute norm N_{Q(a)/Q}(a).
+ * AlgebraicNumberNorm[a, Extension -> theta] (theta != NULL): the relative norm
+ * N_{Q(theta)/Q}(a), defined when a lies in K = Q(theta).  By transitivity of
+ * the norm in the tower Q <= Q(a) <= K,
+ *     N_{K/Q}(a) = N_{Q(a)/Q}(a)^{[K:Q(a)]} = (absolute norm)^{n/d},
+ * with n = [K:Q] = deg minpoly(theta), d = [Q(a):Q] = deg minpoly(a); a in K
+ * forces d | n by the tower law.  Membership is decided by qqbar_express_in_field.
+ * Returns: 1 with *out set (a fresh owned Integer/Rational); 0 when a or theta is
+ * not a constant algebraic number; 2 when theta is given but a is not in Q(theta);
+ * -1 when FLINT is compiled out (the #else stub). */
+int flint_qqbar_algebraic_number_norm(const Expr* a, const Expr* theta, Expr** out) {
+    if (!a || !out) return 0;
+    qqbar_t av; qqbar_init(av);
+    if (!to_qqbar(a, av)) { qqbar_clear(av); return 0; }
+
+    fmpq_t norm; fmpq_init(norm);
+    qqbar_abs_norm(av, norm);
+    int rc = 1;
+
+    if (theta) {                              /* relative norm over Q(theta) */
+        qqbar_t tv; qqbar_init(tv);
+        if (!to_qqbar(theta, tv)) {
+            rc = 0;                           /* theta not a constant algebraic number */
+        } else {
+            slong d = qqbar_degree(av);
+            fmpz_t lc; fmpz_init(lc);
+            qqbar_t phi; qqbar_init(phi);
+            algint_generator(tv, phi, lc);    /* Q(phi) = Q(theta) */
+            fmpz_clear(lc);
+            slong n = qqbar_degree(phi);
+            fmpq_poly_t f; fmpq_poly_init(f);
+            if (qqbar_express_in_field(f, phi, av, 100000, 0, 64)) {
+                fmpq_pow_si(norm, norm, n / d);  /* (absolute norm)^{[K:Q(a)]} */
+            } else {
+                rc = 2;                          /* a is not an element of Q(theta) */
+            }
+            fmpq_poly_clear(f);
+            qqbar_clear(phi);
+        }
+        qqbar_clear(tv);
+    }
+
+    if (rc == 1) *out = expr_from_fmpq(norm);
+    fmpq_clear(norm);
+    qqbar_clear(av);
+    return rc;
+}
+
 Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) {
     return algnum_binop(a, b, 0);
 }
@@ -1167,6 +1241,7 @@ Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n, int s)
 Expr* flint_qqbar_integral_basis(const Expr* a) { (void)a; return NULL; }
 int   flint_qqbar_algebraic_integer_q(const Expr* x) { (void)x; return -1; }
 int   flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out) { (void)x; (void)out; return -1; }
+int   flint_qqbar_algebraic_number_norm(const Expr* a, const Expr* t, Expr** out) { (void)a; (void)t; (void)out; return -1; }
 Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_qqbar_algnum_mul(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_qqbar_algnum_pow(const Expr* a, long p) { (void)a; (void)p; return NULL; }

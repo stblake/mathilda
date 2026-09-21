@@ -439,6 +439,56 @@ In[5]:= AlgebraicIntegerQ[AlgebraicNumberDenominator[1/Sqrt[1 + I]] / Sqrt[1 + I
 Out[5]= True
 ```
 
+## AlgebraicNumberNorm
+
+Gives the field norm of an algebraic number.
+
+- `AlgebraicNumberNorm[a]` — the norm of the algebraic number `a`, defined as the
+  product of the roots of its minimal polynomial (equivalently, the product of the
+  conjugates of `a` over the rationals).
+- `AlgebraicNumberNorm[a, Extension -> theta]` — the norm of `a` **relative to the
+  field** `Q(theta)`, for `a` an element of `Q(theta)`.
+
+`a` may be an integer, a rational, a radical, `GoldenRatio`, a `Root` object, or an
+`AlgebraicNumber` object. For a primitive integer minimal polynomial
+`c_n x^n + ... + c_0` the absolute norm is `(-1)^n c_0 / c_n`, computed directly
+from the two coefficients — so an integer or rational returns itself, and the value
+is exact. The relative norm uses transitivity of the norm in the tower
+`Q ⊆ Q(a) ⊆ Q(theta)`: `N_{Q(theta)/Q}(a) = N_{Q(a)/Q}(a)^{[Q(theta):Q(a)]}`, i.e.
+the absolute norm raised to the tower index — so a rational `r` has relative norm
+`r^{[Q(theta):Q]}`. The norm is multiplicative over a fixed field.
+
+Attributes `{Listable, Protected}` — `AlgebraicNumberNorm[{a1, ...}]` threads to one
+norm per element, with any trailing `Extension` option repeated. Default option
+`Extension -> None` (the absolute norm). A non-algebraic argument emits
+`AlgebraicNumberNorm::nalg`; an argument that is not an element of the extension
+field emits `AlgebraicNumberNorm::ext`; either stays unevaluated. Requires FLINT; a
+`USE_FLINT=0` build leaves the head unevaluated.
+
+```
+In[1]:= AlgebraicNumberNorm[Sqrt[2]]
+Out[1]= -2
+
+In[2]:= AlgebraicNumberNorm[GoldenRatio]
+Out[2]= -1
+
+In[3]:= AlgebraicNumberNorm[1/Sqrt[Sqrt[2] + 3]]
+Out[3]= 1/7
+
+In[4]:= AlgebraicNumberNorm[{2 Sqrt[2], E^(Pi I/8), 1 + I}]
+Out[4]= {-8, 1, 2}
+
+In[5]:= AlgebraicNumberNorm[Sqrt[2], Extension -> E^(Pi I/4)]
+Out[5]= 4
+
+In[6]:= AlgebraicNumberNorm[{2, Sqrt[5]}, Extension -> Sqrt[5]]
+Out[6]= {4, -5}
+```
+
+Since the norm is multiplicative, a prime norm implies primality: `9 + Sqrt[10]`
+has norm `71` (a prime), so it is irreducible in `Z[Sqrt[10]]`. Units of a number
+field have norm `±1`.
+
 ## Apart
 
 Gives the partial fraction decomposition of a rational expression.

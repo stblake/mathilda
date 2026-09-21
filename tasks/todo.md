@@ -1,61 +1,44 @@
-# Task: Implement AlgebraicNumberDenominator
+# Task: Implement `AlgebraicNumberNorm`
 
-Plan: /Users/user/.claude/plans/continuing-on-from-our-crispy-stallman.md
+Field norm of an algebraic number (product of conjugates). Option `Extension -> None`
+(default) gives the relative norm over `Q(theta)`. Attributes `Listable, Protected`.
+FLINT-backed, exact, leak-free. Plan: `~/.claude/plans/continuing-on-from-our-crystalline-yeti.md`.
 
-Definition: AlgebraicNumberDenominator[a] = smallest positive integer n with n*a
-an algebraic integer. NOTE: not qqbar_denominator (that is the min-poly leading
-coeff, which over-counts, e.g. AlgebraicNumber[Sqrt[2],{1/5,1}] -> 5 not 25).
-Algorithm: per-prime valuation over the primitive integer minimal polynomial.
-
-## Phase A — Engine (src/poly/flint_qqbar.c + .h)
-- [ ] Add `#include <flint/fmpz_factor.h>`
-- [ ] `flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out)` engine fn
-- [ ] FLINT-off stub (return -1)
-- [ ] Declare in flint_qqbar.h
-
-## Phase B — WL surface files
-- [ ] src/poly/algebraicnumberdenominator.{c,h}  (::nalg message; Listable, Protected)
-
-## Phase C — Registration & wiring
-- [ ] sym_names.h/.c: SYM_AlgebraicNumberDenominator
-- [ ] core.c: forward-declare + call init
-- [ ] info.c: docstring
-- [ ] version.h: bump 0.157 -> 0.158
-
-## Phase D — Docs
-- [ ] docs/spec/builtins/algebra.md: section
-- [ ] docs/spec/changelog/2026-09-21.md: entry
-
-## Phase E — Tests
-- [ ] tests/test_algebraicnumberdenominator.c
-- [ ] tests/CMakeLists.txt: COMMON_SRC + add_executable/add_test
-
-## Phase F — Verify
-- [x] make -j; make check-c99
-- [x] run unit test
-- [x] REPL smoke test all prompt examples
-- [x] valgrind
+## Steps
+- [x] Engine: `qqbar_abs_norm` + `flint_qqbar_algebraic_number_norm` in `flint_qqbar.c` (+ `.h` proto + `#else` stub)
+- [x] Leverage: teach `to_qqbar` + `flint_qqbar_is_constant_algebraic` about `GoldenRatio -> (1+Sqrt[5])/2`
+- [x] Wrapper: `src/poly/algebraicnumbernorm.c` / `.h` (Extension option, tri-state mapping)
+- [x] Symbols: `sym_names.h` / `sym_names.c` (`SYM_AlgebraicNumberNorm`)
+- [x] Register: `core.c` init call; attributes `ATTR_LISTABLE | ATTR_PROTECTED`
+- [x] Docstring: `info.c` (terse, no examples)
+- [x] Options default: `options_builtin.c` (`Extension -> None`)
+- [x] Tests: `tests/test_algebraicnumbernorm.c` + `tests/CMakeLists.txt` — all passed
+- [x] Docs: `docs/spec/builtins/algebra.md` + `docs/spec/changelog/2026-09-21.md`
+- [x] Version: `src/version.h` 0.158 -> 0.159 (tag `v0.159` at commit time)
+- [x] Build clean; check-c99 PASS; check-packed-aware OK
+- [x] No-drift suite (rootreduce/algebraicnumber/numberfield/zero_test/core...): all PASS
+- [x] GoldenRatio leverage spot-check (RootReduce, comparisons, AlgebraicIntegerQ): improved, no drift
+- [x] check-array-exactness: 346 probes, 0 MIXED (OK); valgrind: no Mathilda/FLINT leak frames (macOS objc/dyld baseline only)
+- [x] Rebuilt code-review-graph
+- [ ] Commit + tag `v0.159` (awaiting user — not auto-committed)
 
 ## Review
-All phases complete (v0.158). AlgebraicNumberDenominator[a] = smallest n with n*a
-an algebraic integer, via per-prime valuation over the minimal polynomial (NOT
-qqbar_denominator, which over-counts: AlgebraicNumber[Sqrt[2],{1/5,1}] -> 5 not 25).
 
-Verification results:
-- Build: clean (gcc-16, -std=c99 -Wall -Wextra), binary relinked.
-- make check-c99: exit 0.
-- Unit test (tests/test_algebraicnumberdenominator.c, ~40 cases): all passed.
-- REPL smoke test: every example from the prompt matches exactly, incl. the
-  AlgebraicNumber divergence case (5) and the ToNumberField round-trip
-  (alpha = AlgebraicNumber[Sqrt[3], {-1, 1}], AlgebraicIntegerQ[alpha] -> True).
-- valgrind: byte-identical to a no-builtin baseline (13,440 def-lost in both =
-  known macOS baseline noise); zero leak stacks reference the new code.
-- make check-packed-aware: OK. Sibling algebraic tests: no regression.
+Implemented `AlgebraicNumberNorm[a]` (+ `Extension -> theta` relative norm), Listable/Protected,
+FLINT-backed, exact, leak-free. Key design: both cases reduce to one minimal-polynomial read —
+absolute norm `(-1)^n c_0/c_n` off the qqbar minpoly, relative norm by norm-in-towers
+`(absolute norm)^{[Q(theta):Q(a)]}` with membership via `qqbar_express_in_field`. No new
+resultant/`nf_elem_norm`/`mp_core` code.
 
-Files: src/poly/flint_qqbar.{c,h} (engine + stub), src/poly/algebraicnumberdenominator.{c,h}
-(surface), src/sym_names.{c,h}, src/core.c, src/info.c, src/version.h (0.157->0.158),
-docs/spec/builtins/algebra.md, docs/spec/changelog/2026-09-21.md,
-tools/nd_fastpath_sweep.py (SKIP_EXPLOSIVE), tests/test_algebraicnumberdenominator.c,
-tests/CMakeLists.txt.
+Bonus (leverage, user-approved): `to_qqbar` + `flint_qqbar_is_constant_algebraic` now recognise
+`GoldenRatio = (1+Sqrt[5])/2`, so `RootReduce`, `AlgebraicNumber`, `ToNumberField`, and algebraic
+comparisons handle it for free (`RootReduce[GoldenRatio]` → `1/2 (1+Sqrt[5])`, `GoldenRatio < 2`
+→ `True`, `AlgebraicIntegerQ[GoldenRatio]` → `True`).
 
-Not done (awaiting user): git commit / tag v0.158 / push (release policy).
+Verification: all spec examples match; new suite `test_algebraicnumbernorm.c` passes; 10 no-drift
+suites pass; build clean; check-c99 / check-packed-aware / check-array-exactness green; valgrind
+clean (baseline noise only). Two spec examples using `NumberFieldFundamentalUnits` were omitted —
+that head is not yet implemented in Mathilda (independent of `AlgebraicNumberNorm`).
+
+Note: `AlgebraicNumberNorm[-2/3]` prints as `-2/3` (Mathilda's rational convention), where the
+Mathematica reference shows `-(2/3)`; the value is identical.

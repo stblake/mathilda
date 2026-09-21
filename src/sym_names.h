@@ -35,6 +35,7 @@ extern const char* SYM_AlgebraicIntegerQ;
 extern const char* SYM_AlgebraicNumber;
 extern const char* SYM_AlgebraicNumberPolynomial;
 extern const char* SYM_AlgebraicNumberDenominator;
+extern const char* SYM_AlgebraicNumberNorm;
 extern const char* SYM_Algebraics;
 extern const char* SYM_NumberFieldIntegralBasis;
 extern const char* SYM_All;

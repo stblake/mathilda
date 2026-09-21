@@ -32,8 +32,9 @@ typedef enum {
 /* True if `e` has no free symbol and every head is one the qqbar converter can
  * handle (a necessary, cheap pre-filter; conversion may still fail on a degree
  * blow-up or an unsupported atom). Integers, rationals, radicals, roots of
- * unity, the imaginary unit and Root objects qualify; a bare symbol, Pi, E,
- * Log, Sin, ... do not. */
+ * unity, the imaginary unit, Root objects and the named constant GoldenRatio
+ * (the sole algebraic one) qualify; other bare symbols, Pi, E, Log, Sin, ...
+ * do not. */
 int flint_qqbar_is_constant_algebraic(const Expr* e);
 
 /* Canonicalise the constant algebraic number `e` under the chosen Method.
@@ -109,6 +110,15 @@ int flint_qqbar_algebraic_integer_q(const Expr* x);
  * per-prime valuation (see flint_qqbar.c) -- not the raw min-poly leading
  * coefficient, which over-counts. */
 int flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out);
+
+/* AlgebraicNumberNorm[a] (theta == NULL): the absolute field norm N_{Q(a)/Q}(a),
+ * the product of a's conjugates = (-1)^deg times the monic-over-Q constant term of
+ * a's minimal polynomial.  AlgebraicNumberNorm[a, Extension -> theta] (theta != NULL):
+ * the relative norm N_{Q(theta)/Q}(a) for a in K = Q(theta), equal to the absolute
+ * norm raised to the tower index [K:Q(a)].  Returns 1 with *out set to a fresh owned
+ * Integer/Rational; 0 when a (or theta) is not a constant algebraic number; 2 when
+ * theta is given but a is not an element of Q(theta); -1 when FLINT is compiled out. */
+int flint_qqbar_algebraic_number_norm(const Expr* a, const Expr* theta, Expr** out);
 
 /* Same-field arithmetic for the Plus/Times/Power combination pre-passes. `a`
  * (and `b`) are AlgebraicNumber objects; combining happens only when generators
