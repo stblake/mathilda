@@ -89,6 +89,36 @@ void test_purefunc_shadowing() {
     assert_eval_eq("Function[{x}, x + (# &)[99]][7]", "106", 0);
 }
 
+/* Function is a lexical closure (Wolfram-Language semantics): an outer named
+ * parameter is visible inside a nested pure function unless that nested
+ * Function rebinds the SAME name. Slots (#) are still claimed by the innermost
+ * enclosing Function of any form. */
+void test_purefunc_closure() {
+    /* Outer named parameter reaches inside a nested slot function -- the case
+     * that used to leave the parameter free (Part[pl,1] survived). */
+    assert_eval_eq("Function[pl, Map[(pl[[1]] + #) &, {10, 20}]][{5, 9}]",
+                   "{15, 25}", 0);
+    /* The partial-application idiom: Function[x, (x + #)&][a] -> (a + #)&. */
+    assert_eval_eq("Function[x, (x + #) &][10][20]", "30", 0);
+    /* Named parameter reaches inside a nested NAMED function it does not
+     * shadow (previously returned Function[x, x^n] with n free). */
+    assert_eval_eq("Function[n, Function[x, x^n]][2][3]", "9", 0);
+    assert_eval_eq("Function[x, Function[y, x + y]][3][4]", "7", 0);
+    /* Three levels deep. */
+    assert_eval_eq("Function[a, Function[b, Function[c, a + b + c]]][1][2][3]",
+                   "6", 0);
+    /* Shadowing: an inner Function that rebinds the name blocks substitution. */
+    assert_eval_eq("Function[x, Function[x, x]][1][2]", "2", 0);
+    /* Partial shadowing across a multi-parameter frame: x rebound, y not. */
+    assert_eval_eq("Function[{x, y}, Function[{x}, x + y]][10, 20][5]", "25", 0);
+    /* Slot shielding is preserved: the inner slot function keeps its own #. */
+    assert_eval_eq("Function[Function[# + 1]][5][10]", "11", 0);
+    /* Nested Map over an association-row parameter (the shape that surfaced the
+     * bug in the ParallelMixed integrator's `splittable` gate). */
+    assert_eval_eq("Map[Function[r, Map[r[[1]] + # &, {1, 2}]], {{10}, {20}}]",
+                   "{{11, 12}, {21, 22}}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -96,6 +126,7 @@ int main() {
     TEST(test_purefunc_basic);
     TEST(test_purefunc_attributes);
     TEST(test_purefunc_shadowing);
+    TEST(test_purefunc_closure);
 
     return 0;
 }

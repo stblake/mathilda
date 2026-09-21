@@ -3702,3 +3702,56 @@ ArcTan-IF case). Empirically validated the transform on 8 representative μ (tri
 inverse) BEFORE touching C — only case 1 (ArcTanh) changed, everything else byte-identical — and
 simulated the full linear solve in the REPL (general + IVP both residual 0) before the C edit.
 `ds_contains` uses exact interned-pointer matching, so `ArcTanh` ≠ `ArcTan` (no substring hazard).
+
+---
+
+## ParallelMixedTower: `Sqrt[Tan[x]]` failed on a nested-`Function` closure gap (2026-09-21, v0.164)
+
+`Integrate[Sqrt[Tan[x]], x, Method -> "ParallelMixedTower"]` returned unevaluated
+while the SymPy reference (`mixed/parallel_mixed.py`) and Mathematica solved it.
+The port (`src/internal/mixed/ParallelMixed.m`) HAD the SplitSpecials feature the
+case needs; it was silently disabled.
+
+**Root cause.** `splittable` (the gate that lets a degree-≥2 special be split into
+linear factors over the algebraic closure) was computed by a pure function nested
+inside another: `AnyTrue[unkLogs, Function[pl, AnyTrue[gens, …pl[[1]]…#…&]]]`.
+**Mathilda's `Function` does not close over an enclosing `Function`'s parameter**
+(known: [[project_mathilda_function_no_closure]]) — the inner body saw a free `pl`,
+so `PolynomialQ[pl[[1]], #]` was `PolynomialQ[Part[pl,1], #]` → `False`, and
+`splittable` collapsed to `False`. With no split, `iPIM` reported a
+holomorphic-remainder "not elementary" certificate that pre-empted the outer split
+retry.
+
+**Fix (root cause, v0.164).** First diagnosed as a `.m`-level issue and patched with a
+`With[]` injection; then the user asked to fix the underlying inconsistency with
+Mathematica, so the real fix landed in the **evaluator**: `substitute_names`
+(`src/purefunc.c`) now descends into nested `Function` expressions, dropping only the
+names a nested `Function` actually rebinds. The `.m` `With[]` band-aid was reverted —
+the natural nested-`Function` form now works. The rule is asymmetric and that
+asymmetry was the original blind spot: a **named** param is shadowed only by a nested
+`Function` rebinding that name; a **slot** `#` is claimed by the innermost enclosing
+`Function` of any form (so `substitute_slots` still does NOT descend). Covered by
+`test_purefunc.c::test_purefunc_closure` (partial application, named-in-named,
+shadowing, multi-param partial shadow, deep nesting, slot shielding).
+
+**Debugging path that worked.** Verbose trace (`"Verbose" -> True`) showed only ONE
+special log `log(1+u^4)` even under forced `"SplitSpecials" -> True` — i.e. the split
+never ran → `splittable` False. Probing the exact expression standalone gave `True`;
+the difference was `pl[[1]]` (an OUTER Function param) referenced inside an INNER pure
+function. Probe C nailed it: `Function[pl, Map[(pl[[1]]+#)&, {10,20}]][{5,9}]` →
+`{10+Part[pl,1], 20+Part[pl,1]}` — `pl` literally free.
+
+**Lessons.**
+1. A Mathilda↔Mathematica *semantic* discrepancy in a core construct (here
+   `Function` closures) should be fixed in the **evaluator**, not worked around per
+   call site. The `.m` `With[]` band-aid would have masked the bug and left it latent
+   across the whole 2500-line port (and everywhere else Function nests); one
+   `substitute_names` change fixes all of them and is verifiable against Mathematica
+   directly (`Function[x,(x+#)&][10]` → `(10+#)&`, etc.). Prefer the root cause.
+2. A false "not elementary" is a *fixable defect*, not a coverage gap — the same
+   trap as the DSolve linear-ODE hang above. The feature was present; a Mathilda
+   idiom silently disabled it.
+3. Verify a branch-sensitive Root-object antiderivative **numerically** (residual
+   ~1e-24 at several points), not by symbolic `Simplify` (>300s over the Root
+   objects) — and assert the head too, since `D[]` of an unevaluated `Integrate`
+   returns the integrand and passes a residual test vacuously.

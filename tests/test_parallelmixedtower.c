@@ -96,6 +96,23 @@ static void test_method_radical(void) {
         " - x/Sqrt[x^2 + 1]]", "0");
 }
 
+static void test_method_split_specials(void) {
+    /* Sqrt[Tan[x]] flattens to Integrate[2 u^2/(1 + u^4), u] with u = Sqrt[Tan[x]];
+     * the tower special 1 + u^4 must be split into its four linear factors over
+     * the algebraic closure (SplitSpecials) before the ansatz is solvable.
+     * Regression for the nested-Function closure bug that left `splittable`
+     * False (Mathilda's Function does not close over an enclosing Function's
+     * parameter), which disabled the split and reported "not elementary".
+     * Branch-sensitive over the Root objects, so verified numerically -- and the
+     * head is checked too, since D[unevaluated Integrate] returns the integrand
+     * and would let a decline pass the residual test vacuously. */
+    assert_eval(
+        "r = Integrate[Sqrt[Tan[x]], x, Method -> \"ParallelMixedTower\"];"
+        " {Head[r] =!= Integrate,"
+        "  Abs[N[(D[r, x] - Sqrt[Tan[x]]) /. x -> 1/2, 25]] < 10^-15}",
+        "{True, True}");
+}
+
 static void test_method_declines_cleanly(void) {
     /* Genuinely non-elementary: the Method form must DECLINE, leaving Integrate
      * unevaluated so the cascade / caller sees no answer (not a wrong one). */
@@ -117,6 +134,7 @@ void test_parallelmixedtower(void) {
     TEST(test_core_assignment_fixes);
     TEST(test_method_transcendental);
     TEST(test_method_radical);
+    TEST(test_method_split_specials);
     TEST(test_method_declines_cleanly);
 
     printf("All ParallelMixedTower tests passed!\n");

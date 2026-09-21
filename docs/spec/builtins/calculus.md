@@ -1263,7 +1263,11 @@ monotonically down.
      built from rational operations, one square root `y^m = q`, pure roots that
      flatten (Lemma 3.2), and `Log`/`Exp`/`Tan` of field elements — the radical may
      sit anywhere in the tower (the "mixed" case), and generators above it may
-     differentiate through `y`.  Correct by construction, re-differentiation
+     differentiate through `y`.  A special denominator prime is split into its
+     linear factors over the algebraic closure when a single logand does not
+     close the integral (SplitSpecials, Theorem 6.1) — e.g. `Sqrt[Tan[x]]`, whose
+     `1 + u^4` (with `u = Sqrt[Tan[x]]`) needs distinct coefficients on its four
+     factors over `Q(i, Sqrt[2])`.  Correct by construction, re-differentiation
      verified before returning; a non-elementary or not-yet-ported case declines.
      Cascade-gated to skip pure rational functions (BronsteinRational's job).
   If every stage gives up the call bubbles back unevaluated.

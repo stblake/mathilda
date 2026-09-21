@@ -131,12 +131,49 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count) {
 }
 
 /*
+ * function_binds_name:
+ * True if the nested Function expression `fn` (head == Function) rebinds
+ * `name` as one of its own NAMED parameters -- i.e. `name` is shadowed inside
+ * `fn`'s body. Slot-form functions (`Function[body]`, `Function[Null, body,
+ * ...]`) bind only slots, never names, so they shadow nothing here.
+ */
+static int function_binds_name(Expr* fn, const char* name) {
+    size_t fargc = fn->data.function.arg_count;
+    if (fargc <= 1) return 0;                       /* Function[body] -- slot form */
+    Expr* p = fn->data.function.args[0];
+    if (p->type == EXPR_SYMBOL) {
+        if (p->data.symbol.name == SYM_Null) return 0;   /* Function[Null, ...] -- slot form */
+        return strcmp(p->data.symbol.name, name) == 0;   /* Function[x, ...] */
+    }
+    if (p->type == EXPR_FUNCTION &&
+        p->data.function.head->type == EXPR_SYMBOL &&
+        p->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < p->data.function.arg_count; i++) {
+            Expr* v = p->data.function.args[i];
+            if (v->type == EXPR_SYMBOL && strcmp(v->data.symbol.name, name) == 0)
+                return 1;                                /* Function[{..., x, ...}, ...] */
+        }
+    }
+    return 0;
+}
+
+/*
  * substitute_names:
  * Walks `e` and replaces free occurrences of any parameter symbol in
  * `names` with the corresponding expression in `vals`. The substitution is
- * lexical (no evaluation) and does not recurse into nested Function
- * expressions -- those shadow the names in their own right, so the outer
- * Function's parameters must not leak into them.
+ * lexical (no evaluation).
+ *
+ * A nested Function IS descended into -- Mathematica's Function is a lexical
+ * closure, so an outer named parameter is visible inside a nested pure
+ * function unless that nested Function rebinds the SAME name. Only the
+ * shadowed names are dropped from the substitution set for that subtree; a
+ * slot-form inner function (`(... # ...)&`) rebinds no names, so every outer
+ * name still flows into its body (this is what makes
+ * `Function[x, (x + #)&][a]` yield `(a + #)&`, matching the Wolfram Language).
+ * Slots themselves are handled separately by substitute_slots and are claimed
+ * by the innermost enclosing Function of any form, so they are never touched
+ * here.
+ *
  * The returned expression is freshly allocated; the caller owns it and
  * `vals` is not consumed (copies are made as needed).
  */
@@ -153,21 +190,45 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) 
     }
 
     if (e->type == EXPR_FUNCTION) {
-        /* Do not descend into a nested Function -- its body scopes new
-         * parameters and the outer parameters may be shadowed. We copy
-         * the whole nested Function as-is. */
+        /* For a nested Function, drop from the substitution set any name it
+         * rebinds as a named parameter (a slot-form inner function rebinds
+         * none). Non-Function heads keep the full set. */
+        char** use_names = names;
+        Expr** use_vals = vals;
+        size_t use_count = count;
+        char** alloc_names = NULL;
+        Expr** alloc_vals = NULL;
         if (e->data.function.head->type == EXPR_SYMBOL &&
             e->data.function.head->data.symbol.name == SYM_Function) {
-            return expr_copy(e);
+            size_t kept = 0;
+            for (size_t i = 0; i < count; i++)
+                if (!(names[i] && function_binds_name(e, names[i]))) kept++;
+            if (kept == 0) return expr_copy(e);          /* every name shadowed */
+            if (kept != count) {
+                alloc_names = malloc(sizeof(char*) * kept);
+                alloc_vals = malloc(sizeof(Expr*) * kept);
+                size_t j = 0;
+                for (size_t i = 0; i < count; i++) {
+                    if (names[i] && function_binds_name(e, names[i])) continue;
+                    alloc_names[j] = names[i];
+                    alloc_vals[j] = vals[i];
+                    j++;
+                }
+                use_names = alloc_names;
+                use_vals = alloc_vals;
+                use_count = kept;
+            }
         }
 
         Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            new_args[i] = substitute_names(e->data.function.args[i], names, vals, count);
+            new_args[i] = substitute_names(e->data.function.args[i], use_names, use_vals, use_count);
         }
-        Expr* new_head = substitute_names(e->data.function.head, names, vals, count);
+        Expr* new_head = substitute_names(e->data.function.head, use_names, use_vals, use_count);
         Expr* res = expr_new_function(new_head, new_args, e->data.function.arg_count);
         free(new_args);
+        free(alloc_names);
+        free(alloc_vals);
         return res;
     }
 
@@ -187,8 +248,9 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) 
  *
  * Parameter binding is performed by lexical substitution (not by mutating
  * the global symbol table) so that references wrapped in Unevaluated still
- * see the substituted expression. Nested Function expressions are treated
- * as opaque to avoid capture.
+ * see the substituted expression. Substitution descends into nested Function
+ * expressions as a lexical closure would, stopping at a name only where a
+ * nested Function rebinds it (see substitute_names).
  */
 /*
  * trap_return:
