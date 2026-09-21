@@ -293,6 +293,40 @@ In[4]:= ToNumberField[Sqrt[Sqrt[2] + Sqrt[3]]]
 Out[4]= AlgebraicNumber[Root[1 - 10 #1^4 + #1^8 &, 4], {0, 1, 0, 0, 0, 0, 0, 0}]
 ```
 
+## AlgebraicNumberPolynomial
+
+Recovers the defining polynomial stored inside an `AlgebraicNumber` object.
+
+- `AlgebraicNumberPolynomial[a, x]` — for `a = AlgebraicNumber[theta, {c0, c1,
+  ..., cn}]`, gives the polynomial `c0 + c1 x + c2 x^2 + ... + cn x^n`, from which
+  `a` is recovered by the substitution `x -> theta`.
+
+An integer or rational `a` is the constant polynomial and is returned unchanged
+(`AlgebraicNumberPolynomial[2, x]` → `2`, `AlgebraicNumberPolynomial[1/2, x]` →
+`1/2`). Any other argument stays unevaluated after the
+`AlgebraicNumberPolynomial::naobj` message. `AlgebraicNumberPolynomial` carries
+`{Listable, Protected}` and threads over lists in both arguments.
+
+Because the coefficient vector is already held in the `AlgebraicNumber` object,
+this is a purely structural read + polynomial build — no FLINT is required (the
+head is usable without it, though only a FLINT build produces `AlgebraicNumber`
+objects to feed it). The polynomial form makes same-generator algebraic-number
+arithmetic explicit: adding two `AlgebraicNumberPolynomial` results, then
+substituting the generator and `RootReduce`-ing, reproduces the sum of the
+numbers.
+
+```
+In[1]:= AlgebraicNumberPolynomial[AlgebraicNumber[Sqrt[2] + Sqrt[3], {1, 2, 3, 4}], x]
+Out[1]= 1 + 2 x + 3 x^2 + 4 x^3
+
+In[2]:= AlgebraicNumberPolynomial[{2, AlgebraicNumber[Sqrt[2], {1, 2}]}, x]   (* threads *)
+Out[2]= {2, 1 + 2 x}
+
+In[3]:= a = AlgebraicNumber[Sqrt[2 + Sqrt[3]], {1, 2, 3, 4}];
+        RootReduce[(AlgebraicNumberPolynomial[a, x] /. x -> Sqrt[2 + Sqrt[3]]) == a]
+Out[3]= True
+```
+
 ## Apart
 
 Gives the partial fraction decomposition of a rational expression.

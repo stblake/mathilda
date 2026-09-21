@@ -256,6 +256,8 @@ SKIP_EXPLOSIVE = {
     # no-op), never a fast path a buffer could take.  They belong here beside
     # Simplify and Factor, not in OFF_BUFFER, which claims a fast path is owed.
     "D", "Dt", "Coefficient", "CoefficientList", "Decompose",
+    "AlgebraicNumberPolynomial",  # Listable thread of a no-op: a numeric element
+                                  # returns itself, so a packed vector materialises
     "FactorTermsList", "MinimalPolynomial", "PolynomialSqrt", "PolynomialMod",
     "PolynomialQ", "IrreduciblePolynomialQ", "Variables", "PossibleZeroQ",
     "SimplifyCount", "TrigExpand", "TrigFactor", "TrigReduce", "TrigToExp",

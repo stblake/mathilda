@@ -1,71 +1,53 @@
-# Task: Implement AlgebraicNumber and ToNumberField
+# Task: Implement `AlgebraicNumberPolynomial[a, x]`
 
-Faithful WL recreation. FLINT `qqbar` backend (declines cleanly without FLINT).
-Plan: /Users/user/.claude/plans/let-s-implement-tonumberfield-tonumberfi-sorted-rain.md
+Plan: `/Users/user/.claude/plans/continuing-on-from-our-crystalline-ladybug.md`
 
-## Phase 0 — Skeleton & registration
-- [ ] SYM_AlgebraicNumber, SYM_ToNumberField (3-site in sym_names.{h,c})
-- [ ] src/poly/algebraicnumber.{c,h} — builtin stub returning NULL + _init
-- [ ] src/poly/tonumberfield.{c,h} — builtin stub returning NULL + _init
-- [ ] Wire _init() in core.c (near minpoly/rootreduce block)
-- [ ] Attributes: AlgebraicNumber NHOLDALL|PROTECTED, ToNumberField PROTECTED
-- [ ] Docstrings in src/info.c (no examples)
-- [ ] tests/CMakeLists.txt: add both .c to COMMON_SRC + test target
-- [ ] Build clean, parses/prints, no-op
+## Steps
 
-## Phase 1 — Recognition in flint_qqbar.c
-- [ ] to_qqbar + is_constant_algebraic + collect_atoms handle AlgebraicNumber
-- [ ] Verify RootReduce[AN]→Root; value-preservation
+- [x] Create `src/poly/algebraicnumberpolynomial.h`
+- [x] Create `src/poly/algebraicnumberpolynomial.c` (structural, no FLINT)
+- [x] Wire `algebraicnumberpolynomial_init()` into `src/core.c`
+- [x] Add `SYM_AlgebraicNumberPolynomial` to `src/sym_names.h` + `src/sym_names.c`
+- [x] Add docstring in `src/info.c` (terse, no examples)
+- [x] Add attributes Listable | Protected (in _init)
+- [x] Create `tests/test_algebraicnumberpolynomial.c`
+- [x] Register test in `tests/CMakeLists.txt` (COMMON_SRC + add_test)
+- [x] Create `tests/scripts/algebraicnumberpolynomial_leakcheck.sh`
+- [x] Add `AlgebraicNumberPolynomial` to `SKIP_EXPLOSIVE` in `tools/nd_fastpath_sweep.py`
+- [x] Docs: `docs/spec/builtins/algebra.md` entry
+- [x] Docs: `docs/spec/changelog/2026-09-21.md` (created) + row in `Mathilda_spec.md` table
+- [x] Bump `src/version.h` 0.155 -> 0.156
+- [x] Build clean, run REPL examples, run unit tests, leak check, audits
+- [x] Rebuild code-review graph
 
-## Phase 2 — AlgebraicNumber canonicalisation
-- [ ] lc/φ/M reduction, rational branch, collapse, over-length fold, empty→0, malformed→NULL
-- [ ] expr_eq fixpoint guard
-- [ ] Verify examples 1,4–12 + idempotence
+## Review
 
-## Phase 3 — numericalize branch (numeric.c)
-- [ ] Build Σ ci θ^i, recurse. Verify N[...,50], Round, Less
+Implemented `AlgebraicNumberPolynomial[a, x]` — the inverse of `AlgebraicNumber`:
+for `a = AlgebraicNumber[theta, {c0,...,cn}]` it returns `c0 + c1 x + ... + cn x^n`.
 
-## Phase 4 — is_numeric_quantity (core.c) + Re/Im (complex.c)
-- [ ] Verify Re[real]→self, Im→0, complex Equal/Unequal
+**Design:** purely structural (reads the coefficient vector already stored in the
+object and builds a `Plus`/`Times`/`Power` tree, canonicalised by the evaluator).
+No FLINT is used — it provides no benefit here, and the head therefore works in a
+`USE_FLINT=0` build. Integer/rational inputs pass through unchanged; other inputs
+emit `AlgebraicNumberPolynomial::naobj` and stay unevaluated. Attributes
+`{Listable, Protected}`.
 
-## Phase 5 — Field arithmetic (plus/times/power)
-- [ ] algnum combine pre-pass. Verify examples 2,13–16 + mismatched-gen sum
-- [ ] Regression: plus/times/power/rootreduce suites
+**Verification (all green):**
+- Every example from the request reproduced in the REPL, incl. the round-trip
+  `b = poly /. x -> Sqrt[2+Sqrt[3]]` → `1 + 2 Sqrt[2+Sqrt[3]] + 3(2+Sqrt[3]) +
+  4(2+Sqrt[3])^(3/2)` and `RootReduce[b == a]` → `True`, and the addition-via-
+  polynomials `2 + 4 x^2 + 5 x^3`.
+- `tests/test_algebraicnumberpolynomial.c`: all passed (passthrough, build,
+  Listable over both args, round-trip via RootReduce zero test, addition identity,
+  naobj message via stderr capture, wrong-argc decline).
+- Leak gate `algebraicnumberpolynomial_leakcheck.sh`: **0 leaks for 0 bytes**.
+- `make check-packed-aware`: OK (head not flagged; no exemption needed — new file
+  has no NDArray dispatch markers).
+- `tools/nd_fastpath_sweep.py --only AlgebraicNumberPolynomial --gate-only`: 0
+  shapes flagged (SKIP_EXPLOSIVE honored).
+- `make check-c99`: clean.
+- Regression: `algebraicnumber_tests`, `rootreduce_tests`, `minimalpolynomial_tests`
+  all PASS.
 
-## Phase 6 — ToNumberField + docs
-- [ ] All arg forms, decline a∉Q(θ), ToNumberField[2,1/2]→2
-- [ ] docs/spec + changelog + full-suite run + valgrind
-
-## Review — COMPLETE
-
-All phases done and verified. Every WL spec example reproduced exactly.
-
-**Files changed**
-- `src/sym_names.{h,c}` — SYM_AlgebraicNumber, SYM_ToNumberField (3-site).
-- `src/poly/flint_qqbar.{c,h}` — to_qqbar/is_constant_algebraic/collect_atoms
-  recognise AlgebraicNumber, Re/Im/Abs/Conjugate and E^(I Pi r); Expr-level entry
-  points (canonicalise, to-number-field, common-field, field arithmetic).
-- `src/poly/algebraicnumber.{c,h}`, `src/poly/tonumberfield.{c,h}` — new builtins.
-- `src/numeric.c` — N branch for AlgebraicNumber. `src/core.c` — is_numeric_quantity
-  clause + init wiring. `src/complex.c` — Re/Im/Abs real-algebraic hook.
-- `src/plus.c`, `src/times.c`, `src/power.c` — field-arithmetic combine passes
-  (placed after the int64 fast path — no hot-path cost).
-- `src/info.c` — docstrings. Docs: `docs/spec/builtins/algebra.md` + changelog.
-- Tests: `tests/test_algebraicnumber.c` (+ CMake target, COMMON_SRC entries).
-
-**Verification**
-- `tests/test_algebraicnumber.c`: all pass (spec examples pinned + RootReduce
-  value-preservation cross-checks all == 0).
-- Regressions green: core, eval, evaluate, numeric, numeric_stress/domain/complex,
-  complexexpand, power*, root_numeric, core_algebra, simplify, expand, comparisons,
-  boolean, rootreduce, numberfield.
-- `make check-c99`: clean. `make check-packed-aware`: my heads not flagged
-  (pre-existing FirstPosition failure is unrelated, from commit 34bbbf37).
-- Valgrind: no new lost blocks vs macOS baseline (definitely/indirectly/possibly
-  lost byte-identical to the `1+1` baseline run).
-
-**Known limitations (documented, not bugs)**
-- `RootReduce[Re[complex algebraic]]` yields a valid but differently-normalised
-  representation than WL (same value — cross-checked == 0). WL documents that
-  AlgebraicNumber representations are non-unique.
-- `Automatic` and `All` both use the qqbar minimal primitive element.
+**Not done (awaiting user):** git commit + tag `v0.156` (per CLAUDE.md, commit/tag
+only on request).

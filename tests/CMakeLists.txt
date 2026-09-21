@@ -630,6 +630,7 @@ set(COMMON_SRC
     ../src/poly/flint_qqbar.c
     ../src/poly/algebraicnumber.c
     ../src/poly/tonumberfield.c
+    ../src/poly/algebraicnumberpolynomial.c
     ../src/poly/bpoly.c
     ../src/poly/mpoly.c
     ../src/poly/mvfactor.c
@@ -1888,6 +1889,10 @@ add_test(NAME numberfield_tests COMMAND numberfield_tests)
 add_executable(algebraicnumber_tests test_algebraicnumber.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(algebraicnumber_tests PRIVATE ../src ../src/poly)
 add_test(NAME algebraicnumber_tests COMMAND algebraicnumber_tests)
+
+add_executable(algebraicnumberpolynomial_tests test_algebraicnumberpolynomial.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(algebraicnumberpolynomial_tests PRIVATE ../src ../src/poly)
+add_test(NAME algebraicnumberpolynomial_tests COMMAND algebraicnumberpolynomial_tests)
 
 add_executable(thue_tests test_thue.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(thue_tests PRIVATE ../src ../src/numbertheory)

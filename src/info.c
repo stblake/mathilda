@@ -4247,6 +4247,14 @@ void info_init(void) {
         "ToNumberField[x] converts any algebraic number to an explicit\n"
         "\tAlgebraicNumber object.  The ai and theta may be radicals, Root objects,\n"
         "\tor AlgebraicNumber objects.  Attribute: Protected.");
+    symtab_set_docstring("AlgebraicNumberPolynomial",
+        "AlgebraicNumberPolynomial[a, x]\n"
+        "\tgives the polynomial in x corresponding to the AlgebraicNumber object a.\n"
+        "For a = AlgebraicNumber[theta, {c0, c1, ..., cn}], the result is the\n"
+        "\tpolynomial c0 + c1 x + ... + cn x^n, from which a is recovered by\n"
+        "\treplacing x with theta.  An integer or rational a is the constant\n"
+        "\tpolynomial and is returned unchanged; any other argument stays\n"
+        "\tunevaluated.  Threads over lists.  Attributes: Listable, Protected.");
     symtab_set_docstring("ToRadicals",
         "ToRadicals[expr]\n"
         "\tattempts to express all Root objects in expr in terms of radicals.\n"

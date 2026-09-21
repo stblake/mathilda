@@ -32,6 +32,7 @@ extern const char* SYM_AbsoluteTiming;
 extern const char* SYM_Accumulate;
 extern const char* SYM_AccuracyGoal;
 extern const char* SYM_AlgebraicNumber;
+extern const char* SYM_AlgebraicNumberPolynomial;
 extern const char* SYM_Algebraics;
 extern const char* SYM_All;
 extern const char* SYM_Alternatives;

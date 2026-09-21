@@ -17,6 +17,7 @@ const char* SYM_AbsoluteTiming = NULL;
 const char* SYM_Accumulate = NULL;
 const char* SYM_AccuracyGoal = NULL;
 const char* SYM_AlgebraicNumber = NULL;
+const char* SYM_AlgebraicNumberPolynomial = NULL;
 const char* SYM_Algebraics = NULL;
 const char* SYM_FLINT_PolynomialGCD = NULL;
 const char* SYM_FLINT_Resultant = NULL;
@@ -959,6 +960,7 @@ void sym_names_init(void) {
     SYM_Algebraics                 = intern_symbol("Algebraics");
     SYM_All                        = intern_symbol("All");
     SYM_AlgebraicNumber            = intern_symbol("AlgebraicNumber");
+    SYM_AlgebraicNumberPolynomial  = intern_symbol("AlgebraicNumberPolynomial");
     SYM_Alternatives               = intern_symbol("Alternatives");
     SYM_And                        = intern_symbol("And");
     SYM_Apart                      = intern_symbol("Apart");
