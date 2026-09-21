@@ -246,11 +246,18 @@ CRC integral table behind `Integrate`, the Bessel and distribution rules, and th
 #### `make install` (recommended)
 
 ```bash
-make PREFIX=/usr/local                 # build
-sudo make install PREFIX=/usr/local    # install binary + module tree
+make                                   # build (PREFIX optional here — see note)
+sudo make install PREFIX=/usr/local    # install binary + module tree under PREFIX
 ```
 
-installs
+`PREFIX` on the **build** line is optional: it only bakes in the compile-time
+`-DMATHILDA_PREFIX` *absolute* fallback (mechanism 4 below), a belt-and-suspenders
+path for environments where the executable can't determine its own location.
+Relocation itself is a **runtime** property (mechanism 3, `<exe>/../share/…`), so a
+bare `make` still produces a fully relocatable install. `PREFIX` on the **install**
+line is what actually chooses the destination.
+
+The two lines above install
 
 | What | Where |
 |------|-------|
