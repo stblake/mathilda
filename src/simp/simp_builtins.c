@@ -898,7 +898,12 @@ Expr* builtin_simplify(Expr* res) {
             && expr->data.function.head->data.symbol.name == SYM_Plus
             && simp_has_rational_root(expr)
             && !contains_explicit_complex(expr)
-            && !expr_has_nested_radical_radicand(expr)) {
+            && !expr_has_nested_radical_radicand(expr)
+            && !simp_contains_root_head(expr)) {
+            /* Root[...] objects would be handed to Together[..., Extension ->
+             * Automatic] / the poly engine as independent generators and blow
+             * up (algebraically-dependent roots -> degenerate pseudo-remainder).
+             * Skip this fast path; the qqbar coefficient pass does the algebra. */
             /* Two flavours of radical-fraction sum collapse here, both of
              * which simp_bottomup's per-subnode descent cannot reach on its
              * own (it simplifies each Plus child separately and never combines
@@ -1080,7 +1085,13 @@ Expr* builtin_simplify(Expr* res) {
      * Gated on an actual radical (rational-root) present and a STRICT score
      * improvement, so non-radical results and no-improvement cases are
      * untouched, and Factor's own cost gates keep it bounded. */
-    if (simp_has_rational_root(best) && has_compound_radicand(best)) {
+    if (simp_has_rational_root(best) && has_compound_radicand(best)
+            && !simp_contains_root_head(best)) {
+        /* A Root[...] object is a constant algebraic number that Factor treats
+         * as an independent polynomial generator; with several algebraically-
+         * dependent roots the multivariate factoriser blows up exponentially
+         * (the Sqrt[Tan[x]]-with-Root-coefficients hang). Decline here and let
+         * the qqbar coefficient pass handle the algebra. */
         Expr* fac = expr_new_function(expr_new_symbol(SYM_Factor),
                                       (Expr*[]){ expr_copy(best) }, 1);
         Expr* factored = eval_and_free(fac);

@@ -30,6 +30,14 @@ it can seed the next round.
 - The default complexity measure is `SimplifyCount` — total subexpression count
   plus the decimal-digit count of integer leaves — so `100 Log[2]` is preferred
   over its expanded `Log[2^100]` form.
+- **`Root[...]` objects** are treated as the constant algebraic numbers they are:
+  a qqbar pre-pass canonicalises constant-algebraic subexpressions
+  (`Simplify[Root[1+#^4&,2]^3 + Root[1+#^4&,2]]` → `I Sqrt[2]`), and an expression
+  whose coefficients are `Root` objects is simplified without the multivariate
+  blow-up that treating each `Root` as a polynomial generator once caused. A
+  rational-function identity with `Root` coefficients collapses to `0` when the
+  `Root`s are radical-expressible (degree ≤ 4, or a binomial); e.g.
+  `Simplify[D[Integrate[Sqrt[Tan[x]], x], x] - Sqrt[Tan[x]]]` → `0`.
 - Threads manually over `List`, `Equal`, `Unequal`, `Less`, `LessEqual`,
   `Greater`, `GreaterEqual`, `And`, `Or`, and `Not`, carrying any options through
   into each sub-call.

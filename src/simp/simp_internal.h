@@ -243,6 +243,12 @@ bool has_non_integer_power(const Expr* e);
  * (x^1.5) power. The precise gate for the algebraic-top Together fast path. */
 bool simp_has_rational_root(const Expr* e);
 
+/* True iff a Root[...] head appears anywhere in e. A Root object is a constant
+ * algebraic number that the multivariate poly engine mis-treats as a generator,
+ * so the algebraic Factor/Together fast paths decline on Root-bearing inputs to
+ * avoid the exponential pseudo-remainder blow-up. Defined in simp_search.c. */
+bool simp_contains_root_head(const Expr* e);
+
 /* transform_can_fire is the per-input gate used by both the heuristic
  * search and the bottom-up driver. */
 bool transform_can_fire(const char* name, const Expr* e,

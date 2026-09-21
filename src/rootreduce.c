@@ -144,28 +144,10 @@ static Expr* thread_parts(const Expr* arg) {
     return eval_and_free(out);
 }
 
-/* Recursively thread RootReduce over the structure of `e`: canonicalise every
- * maximal constant-algebraic subexpression (a polynomial/rational-function
- * coefficient) via qqbar, leaving the free-variable structure intact. Cheap —
- * flint_qqbar_canonical returns NULL immediately for anything carrying a free
- * symbol. Returns a newly-built, *unevaluated* tree; the caller evaluates once
- * so that e.g. Times[0, x^2] collapses and vanishing coefficients drop out.
- * Only the FLINT branch of builtin_rootreduce calls this, so it is guarded to
- * match — otherwise it is unused on the no-FLINT build (-Werror=unused-function). */
-#ifdef USE_FLINT
-static Expr* rr_thread_coeffs(const Expr* e, QQBarMethod method) {
-    Expr* q = flint_qqbar_canonical(e, method);
-    if (q) return q;                                   /* maximal const-algebraic */
-    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
-    size_t n = e->data.function.arg_count;
-    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++)
-        args[i] = rr_thread_coeffs(e->data.function.args[i], method);
-    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
-    free(args);
-    return out;
-}
-#endif
+/* Coefficient-threading canonicalisation (canonicalise every maximal
+ * constant-algebraic subexpression via qqbar, leaving free-variable structure
+ * intact) now lives in the qqbar engine as flint_qqbar_reduce_coeffs, so the
+ * same primitive can be reused by Simplify. */
 
 /* Thread RootReduce over a relational/logical head. For a binary
  * (in)equality of constant algebraic numbers, decide it exactly via qqbar;
@@ -245,7 +227,7 @@ Expr* builtin_rootreduce(Expr* res) {
     /* Polynomial / rational function with constant-algebraic coefficients:
      * thread RootReduce over the coefficients (e.g. a vanishing radical
      * coefficient reduces to 0 and its monomial drops out). */
-    Expr* threaded = rr_thread_coeffs(arg, method);
+    Expr* threaded = flint_qqbar_reduce_coeffs(arg, method);
     if (threaded && !expr_eq(threaded, arg)) return eval_and_free(threaded);
     expr_free(threaded);
 #endif

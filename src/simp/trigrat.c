@@ -55,6 +55,7 @@
 #include "expr.h"
 #include "simp.h"
 #include "sym_names.h"
+#include "flint_qqbar.h"
 
 /* ----------------------------------------------------------------------- */
 /* Tunables                                                                */
@@ -1338,9 +1339,22 @@ retry:
 /* The entry point.                                                        */
 /* ----------------------------------------------------------------------- */
 
-Expr* simp_trig_rational(const Expr* input,
-                         const AssumeCtx* ctx,
-                         const Expr* complexity_func) {
+/* True if `e` contains a Root[...] object that is a constant algebraic number
+ * (a coefficient the trig-rational machinery cannot reduce while it is opaque). */
+static bool tr_contains_algebraic_root(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
+        strcmp(e->data.function.head->data.symbol.name, "Root") == 0 &&
+        flint_qqbar_is_constant_algebraic(e))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (tr_contains_algebraic_root(e->data.function.args[i])) return true;
+    return false;
+}
+
+static Expr* simp_trig_rational_impl(const Expr* input,
+                                     const AssumeCtx* ctx,
+                                     const Expr* complexity_func) {
     (void)ctx; /* Unused for now; the algorithm is correctness-preserving
                   without assumptions. */
     if (!input) return NULL;
@@ -1493,4 +1507,32 @@ Expr* simp_trig_rational(const Expr* input,
     }
     expr_free(evald);
     return NULL;
+}
+
+/* Public entry.  When the input carries constant-algebraic Root[...] coefficients
+ * (e.g. the antiderivative of Sqrt[Tan[x]], whose coefficients are the quartic
+ * roots of 1 + t^4), the trig-rational core treats each Root as an opaque symbol
+ * with no relations, so the Cancel/ideal-reduction cannot prove an identity such
+ * as D[Integrate[Sqrt[Tan[x]]]] - Sqrt[Tan[x]] == 0.  For a radical-expressible
+ * Root (degree <= 4, or a binomial) ToRadicals rewrites it into Sqrt / I form
+ * that the existing radical machinery DOES reduce, so the identity collapses to
+ * 0.  Try that form first; a non-radical (degree >= 5) Root is left untouched by
+ * ToRadicals, so those inputs fall through to the plain path unchanged (no hang,
+ * no spurious change).  The strict leaf gate inside the core keeps whichever form
+ * is genuinely simpler, so a Root that does not collapse is never made worse. */
+Expr* simp_trig_rational(const Expr* input,
+                         const AssumeCtx* ctx,
+                         const Expr* complexity_func) {
+    if (!input) return NULL;
+    if (tr_contains_algebraic_root(input)) {
+        Expr* rad = tr_call_unary_copy("ToRadicals", input);
+        if (rad && !expr_eq(rad, input)) {
+            Expr* r = simp_trig_rational_impl(rad, ctx, complexity_func);
+            expr_free(rad);
+            if (r) return r;
+        } else if (rad) {
+            expr_free(rad);
+        }
+    }
+    return simp_trig_rational_impl(input, ctx, complexity_func);
 }

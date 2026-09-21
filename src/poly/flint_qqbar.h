@@ -43,6 +43,17 @@ int flint_qqbar_is_constant_algebraic(const Expr* e);
  * degree cap, or FLINT is unavailable. Never mutates `e`. */
 Expr* flint_qqbar_canonical(const Expr* e, QQBarMethod method);
 
+/* Walk `e` and replace every MAXIMAL constant-algebraic subexpression with its
+ * flint_qqbar_canonical form (folding combinations of Root / AlgebraicNumber /
+ * radicals / roots-of-unity / I / rationals; a vanishing combination collapses
+ * to 0). The free-variable structure is left intact — flint_qqbar_canonical
+ * declines (NULL) for anything carrying a free symbol, so the walker descends
+ * into it. Returns a fresh, *unevaluated* tree (the caller evaluates once, so
+ * e.g. Times[0, x] drops); returns a plain copy for an atomic number leaf; NULL
+ * only when FLINT is compiled out. Never mutates `e`. Cheap: it reduces numbers,
+ * never the multivariate polynomial engine, so it cannot blow up. */
+Expr* flint_qqbar_reduce_coeffs(const Expr* e, QQBarMethod method);
+
 /* Exact algebraic equality of two constant algebraic numbers.
  * Returns 1 (equal), 0 (unequal), or -1 (undecided: either operand is not a
  * constant algebraic number, or FLINT is off). */

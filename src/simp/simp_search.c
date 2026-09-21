@@ -18,6 +18,7 @@
 #include "radrat.h"
 #include "qa.h"
 #include "qafactor.h"
+#include "flint_qqbar.h"
 #include "simp_log.h"
 
 #include <math.h>
@@ -43,12 +44,19 @@
 bool contains_factorial(const Expr* e);
 bool simp_eq_head_sym(const Expr* e, const char* name);
 
-/* True if `e` contains a Root[...] head anywhere.  RootReduce canonicalises an
- * algebraic number to a Root[] object when no shorter radical spelling exists;
- * such an output is worse than the radical input, so the RootReduce pre-pass
- * only accepts a result that collapsed to a Root-free (rational / radical)
- * form. */
-static bool simp_contains_root_head(const Expr* e) {
+/* True if `e` contains a Root[...] head anywhere.  Two uses:
+ *  (1) RootReduce canonicalises an algebraic number to a Root[] object when no
+ *      shorter radical spelling exists; such an output is worse than the radical
+ *      input, so the RootReduce pre-pass only accepts a result that collapsed to
+ *      a Root-free (rational / radical) form.
+ *  (2) A Root[...] object is a CONSTANT algebraic number, but the multivariate
+ *      poly engine (collect_variables, poly.c) treats each distinct Root as an
+ *      independent generator -- algebraically-dependent roots then produce a
+ *      degenerate pseudo-remainder sequence that blows up exponentially. So the
+ *      algebraic fast paths (Factor/Together) decline on Root-bearing inputs and
+ *      leave the algebra to the qqbar coefficient pass instead of hanging.
+ * Exported via simp_internal.h for the gates in simp_builtins.c. */
+bool simp_contains_root_head(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
         strcmp(e->data.function.head->data.symbol.name, "Root") == 0)
@@ -1315,6 +1323,34 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         if (rr_pre) { expr_free(rr_pre); rr_pre = NULL; }
     }
 
+    /* Phase 0d: qqbar coefficient canonicalisation.  Unlike Phase 0c (which is
+     * gated to variable-FREE radical constants), this fires whenever a Root[...]
+     * object is present, even alongside a free variable, and canonicalises every
+     * maximal constant-algebraic subexpression via qqbar:
+     *   - bare Root arithmetic collapses: Root[1+#^4&,2]^3 + Root[1+#^4&,2] ->
+     *     I Sqrt[2];
+     *   - the algebraic-number COEFFICIENTS of a polynomial / rational / trig
+     *     form are folded and unified, so a vanishing combination drops out and
+     *     the downstream search sees canonical (and fewer distinct) constants.
+     * flint_qqbar_reduce_coeffs only reduces numbers (never the multivariate
+     * poly engine) so it is cheap and cannot blow up; it returns NULL when FLINT
+     * is compiled out.  Evaluate once (folding Times[0,_] etc.) and anchor the
+     * search on the result when it is no worse (<=, so canonicalising Root
+     * coefficients that merely tie is still taken). */
+    Expr* qq_pre = simp_contains_root_head(input)
+                       ? flint_qqbar_reduce_coeffs(input, QQBAR_METHOD_AUTOMATIC)
+                       : NULL;
+    if (qq_pre) qq_pre = eval_and_free(qq_pre);
+    if (qq_pre && !expr_eq(qq_pre, input) &&
+        score_with_func(qq_pre, complexity_func)
+            <= score_with_func((Expr*)input, complexity_func)) {
+        if (simp_debug_enabled())
+            simp_debug_log("QQBarCoeffs", input, qq_pre, 0.0);
+        input = qq_pre;
+    } else {
+        if (qq_pre) { expr_free(qq_pre); qq_pre = NULL; }
+    }
+
     Expr* best = expr_copy((Expr*)input);
     size_t best_score = score_with_func(best, complexity_func);
 
@@ -2096,6 +2132,7 @@ search_done:
     if (abs_pre) expr_free(abs_pre);
     if (sqsq_pre) expr_free(sqsq_pre);
     if (rr_pre) expr_free(rr_pre);
+    if (qq_pre) expr_free(qq_pre);
     return best;
 }
 

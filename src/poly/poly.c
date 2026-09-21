@@ -572,6 +572,16 @@ void collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capacit
     if (!e || is_number(e)) return;
     if (e->type == EXPR_FUNCTION) {
         const char* head = (e->data.function.head->type == EXPR_SYMBOL) ? e->data.function.head->data.symbol.name : "";
+        /* A Root[poly&, k] object is a CONSTANT algebraic number, not a
+         * polynomial variable (Mathematica's Variables[Root[..]+x] is {x}).
+         * Enumerating each distinct Root as an independent generator is both
+         * wrong and catastrophic: several algebraically-dependent roots (all
+         * roots of one polynomial) give the multivariate GCD a degenerate
+         * pseudo-remainder sequence that never terminates -- the Sqrt[Tan[x]]
+         * antiderivative hang. Skip it (do NOT recurse into its Slot-poly body,
+         * which would mine 1+#1^4 for a bogus variable). The Root stays inside
+         * coefficients, where field arithmetic handles it. */
+        if (strcmp(head, "Root") == 0) return;
         if (strcmp(head, "Plus") == 0 || strcmp(head, "Times") == 0 || strcmp(head, "List") == 0) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) collect_variables(e->data.function.args[i], vars_ptr, count, capacity);
             return;
@@ -1412,10 +1422,24 @@ Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
     /* expr_expand inside get_coeff by calling the direct helper.          */
     Expr* lcB = get_coeff_expanded(expandedB, x, degB);
 
+    /* Termination guard, identical in spirit to pseudo_rem's below. A genuine
+     * exact division strictly decreases deg(R) in x every step (the leading term
+     * cancels). Over algebraically-dependent generators (e.g. a Root[...] object
+     * mis-treated as an independent variable, or Sqrt[u] alongside u) the leading
+     * term never truly cancels -- get_coeff_expanded leaves a nonzero-looking
+     * artifact -- so degR stalls and this loop spins forever re-running
+     * together/cancel/expand on an ever-growing R. Break when degR fails to
+     * strictly decrease; R is then non-zero and control falls to the
+     * "not exactly divisible" return below (NULL), which every caller handles.
+     * Inert for well-formed input (degR always strictly decreases there). */
+    int prev_degR = -1;   /* -1 = no previous iteration yet */
     while (true) {
         int degR = get_degree_poly(R, x);
 
         if (degR < degB || is_zero_poly(R)) break;
+
+        if (prev_degR >= 0 && degR >= prev_degR) break;
+        prev_degR = degR;
 
         Expr* lcR = get_coeff_expanded(R, x, degR);
         int d = degR - degB;

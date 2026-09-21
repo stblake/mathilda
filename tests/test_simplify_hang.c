@@ -39,6 +39,22 @@ extern void core_init(void);
 
 static int failures = 0;
 
+/* The antiderivative of Sqrt[Tan[x]] produced by Integrate's ParallelMixedTower
+ * method: its coefficients are the quartic algebraic numbers Root[1+#^4&,k]
+ * (splitting field Q(i, Sqrt[2])). D[F,x] - Sqrt[Tan[x]] is identically 0, but
+ * Simplify over the Root objects used to hang (>300 s): the multivariate poly
+ * engine treated each of the four algebraically-dependent Roots as an
+ * independent generator (collect_variables), giving a degenerate pseudo-
+ * remainder sequence. collect_variables now treats a Root object as a constant,
+ * and trigrat radicalises the Root coefficients so the identity collapses. */
+#define SQRT_TAN_ANTIDERIV \
+  "(Root[1 + #1^4 &, 2] x" \
+  " + Root[1 + #1^4 &, 2]^3 Log[-Root[1 + #1^4 &, 3] + Sqrt[Tan[x]]]" \
+  " + (-1/2 Root[1 + #1^4 &, 2]^3 - 1/2 Root[1 + #1^4 &, 2]) Log[-Root[1 + #1^4 &, 4] + Sqrt[Tan[x]]]" \
+  " + (-1/2 Root[1 + #1^4 &, 2]^3 + 1/2 Root[1 + #1^4 &, 2]) Log[-Root[1 + #1^4 &, 1] + Sqrt[Tan[x]]])"
+#define SQRT_TAN_RESIDUAL_SIMPLIFY \
+  "Simplify[D[" SQRT_TAN_ANTIDERIV ", x] - Sqrt[Tan[x]]]"
+
 /* ---- in-process correctness helpers (fast; global alarm is the backstop) --- */
 
 /* Evaluate `input`, returning the printed result (caller frees) or NULL. */
@@ -154,9 +170,11 @@ int main(void) {
         "Factor[1 + x/Sqrt[u]]",
         "Factor[(x + Sqrt[a])/Sqrt[a]]",
         "Simplify[(v + Sqrt[u]) u^(-1/2)]",
+        SQRT_TAN_RESIDUAL_SIMPLIFY,                    /* Root-object hang */
+        "Simplify[Root[1 + #1^4 &, 2]^3 + Root[1 + #1^4 &, 2]]",
     };
     for (size_t i = 0; i < sizeof(battery) / sizeof(battery[0]); i++)
-        expect_terminates(battery[i], 5);
+        expect_terminates(battery[i], 10);
 
     /* ------------------------------------------------------------------ */
     /* Exact-output regressions (deterministic forms, verified post-fix).  */
@@ -171,6 +189,26 @@ int main(void) {
     /* Unrelated simplifications must be unchanged. */
     check_eq("Simplify[Sin[x]^2+Cos[x]^2]", "1");
     check_eq("Simplify[(x^2-1)/(x-1)]", "1 + x");
+
+    /* ------------------------------------------------------------------ */
+    /* Root[...] objects in Simplify (never hang; simplify Root arithmetic; */
+    /* collapse Root-coefficient rational identities to 0).                 */
+    /* ------------------------------------------------------------------ */
+    /* A Root object is a CONSTANT algebraic number, not a polynomial       */
+    /* variable -- Variables must exclude it (matches Mathematica).         */
+    check_eq("Variables[Root[1 + #1^4 &, 2] + x]", "{x}");
+    /* Bare Root arithmetic canonicalises through Simplify (qqbar coeff     */
+    /* pre-pass): Root^3 + Root over Q(i,Sqrt[2]) is I Sqrt[2].             */
+    check_eq("Simplify[Root[1 + #1^4 &, 2]^3 + Root[1 + #1^4 &, 2]]", "I Sqrt[2]");
+    check_eq("Simplify[Root[1 + #1^4 &, 2] - Root[1 + #1^4 &, 2]]", "0");
+    /* The motivating case: derivative of the Sqrt[Tan[x]] antiderivative   */
+    /* minus the integrand is identically 0 (was a >300 s hang).           */
+    check_eq(SQRT_TAN_RESIDUAL_SIMPLIFY, "0");
+    /* The derivative alone simplifies back to the integrand.               */
+    check_eq("Simplify[D[" SQRT_TAN_ANTIDERIV ", x]]", "Sqrt[Tan[x]]");
+    /* A NON-trig Root-coefficient rational identity also collapses to 0    */
+    /* (cubic field from x^3 - 2), via Together + the qqbar coeff pass.     */
+    check_eq("Simplify[D[Integrate[x/(x^3 - 2), x], x] - x/(x^3 - 2)]", "0");
 
     /* ------------------------------------------------------------------ */
     /* TimeConstraint option.                                              */

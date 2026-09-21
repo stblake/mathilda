@@ -769,6 +769,28 @@ Expr* flint_qqbar_canonical(const Expr* e, QQBarMethod method) {
     return out;
 }
 
+Expr* flint_qqbar_reduce_coeffs(const Expr* e, QQBarMethod method) {
+    if (!e) return NULL;
+    /* Atomic number leaf: already canonical, avoid rebuilding it via qqbar. A
+     * bare free symbol is not constant-algebraic, so flint_qqbar_canonical below
+     * declines it and we fall through to the identity copy. */
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL)
+        return expr_copy((Expr*)e);
+    /* Maximal constant-algebraic subexpression: fold to one canonical number. */
+    Expr* q = flint_qqbar_canonical(e, method);
+    if (q) return q;
+    /* Otherwise recurse into the (free-variable-bearing) structure. Non-function
+     * atoms (a symbol, a string) are returned as-is. */
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        args[i] = flint_qqbar_reduce_coeffs(e->data.function.args[i], method);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
 int flint_qqbar_equal(const Expr* a, const Expr* b) {
     if (!flint_qqbar_is_constant_algebraic(a) || !flint_qqbar_is_constant_algebraic(b))
         return -1;
@@ -1296,6 +1318,7 @@ Expr* flint_qqbar_algnum_scale_rational(const Expr* a, const Expr* r) {
 
 int   flint_qqbar_is_constant_algebraic(const Expr* e) { (void)e; return 0; }
 Expr* flint_qqbar_canonical(const Expr* e, QQBarMethod m) { (void)e; (void)m; return NULL; }
+Expr* flint_qqbar_reduce_coeffs(const Expr* e, QQBarMethod m) { (void)e; (void)m; return NULL; }
 int   flint_qqbar_equal(const Expr* a, const Expr* b) { (void)a; (void)b; return -1; }
 int   flint_qqbar_compare(const Expr* a, const Expr* b) { (void)a; (void)b; return -2; }
 int   flint_qqbar_is_real(const Expr* e) { (void)e; return -1; }
