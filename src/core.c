@@ -843,6 +843,10 @@ void core_init(void) {
     tonumberfield_init();
     void algebraicnumberpolynomial_init(void);
     algebraicnumberpolynomial_init();
+    void algebraicintegerq_init(void);
+    algebraicintegerq_init();
+    void numberfieldintegralbasis_init(void);
+    numberfieldintegralbasis_init();
     expand_init();
     expand_power_init();
     solve_init();

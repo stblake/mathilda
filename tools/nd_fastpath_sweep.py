@@ -258,6 +258,8 @@ SKIP_EXPLOSIVE = {
     "D", "Dt", "Coefficient", "CoefficientList", "Decompose",
     "AlgebraicNumberPolynomial",  # Listable thread of a no-op: a numeric element
                                   # returns itself, so a packed vector materialises
+    "NumberFieldIntegralBasis",   # Listable; each element is its own number field
+                                  # -> a qqbar maximal-order solve, not a buffer op
     "FactorTermsList", "MinimalPolynomial", "PolynomialSqrt", "PolynomialMod",
     "PolynomialQ", "IrreduciblePolynomialQ", "Variables", "PossibleZeroQ",
     "SimplifyCount", "TrigExpand", "TrigFactor", "TrigReduce", "TrigToExp",

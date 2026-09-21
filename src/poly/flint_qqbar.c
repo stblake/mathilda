@@ -22,7 +22,14 @@
 #include <flint/fmpq.h>
 #include <flint/fmpz_poly.h>
 #include <flint/fmpq_poly.h>
+#include <flint/fmpz_mat.h>
 #include <flint/qqbar.h>
+
+/* The maximal-order (Round 2 / Pohst-Zassenhaus) engine and its integral-basis
+ * accessors, used by flint_qqbar_integral_basis below. numberfield_internal.h
+ * guards its own FLINT includes and exposes nf_ok_basis / nf_ok_denom. */
+#include "numberfield.h"
+#include "numberfield_internal.h"
 
 /* Intermediate qqbar degree above which we give up and fall back (identity /
  * the parametric engine). WL's degree-21 examples stay comfortably under. */
@@ -896,6 +903,114 @@ Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
     return result;
 }
 
+/* NumberFieldIntegralBasis[a]: a Z-module basis of the ring of integers O_K of
+ * K = Q(a).  Builds the algebraic-integer generator phi of Q(a) (monic minimal
+ * polynomial f), hands f to the number-field layer -- nf_field_create runs
+ * Dedekind at every ramified prime and, where Z[phi] is not maximal, enlarges it
+ * to O_K by Round 2 (Pohst-Zassenhaus) -- then renders each basis row
+ * omega_i = (1/D) * sum_j W[i][j] phi^j back as a canonical AlgebraicNumber (or a
+ * plain Integer/Rational when the row is rational).  Returns a fresh List, or
+ * NULL to decline: `a` is not a constant algebraic number, its degree exceeds the
+ * cap, or the field layer cannot certify O_K (disc will not factor, or a prime is
+ * too large for a single-word modulus). */
+Expr* flint_qqbar_integral_basis(const Expr* a) {
+    if (!a) return NULL;
+
+    qqbar_t alpha; qqbar_init(alpha);
+    if (!to_qqbar(a, alpha)) { qqbar_clear(alpha); return NULL; }
+
+    fmpz_t lc; fmpz_init(lc);
+    qqbar_t phi; qqbar_init(phi);
+    algint_generator(alpha, phi, lc);        /* phi = lc*alpha, an algebraic integer */
+    fmpz_clear(lc);
+    slong n = qqbar_degree(phi);
+
+    /* Q(a) = Q: the ring of integers is Z, with integral basis {1}. */
+    if (n <= 1) {
+        qqbar_clear(phi); qqbar_clear(alpha);
+        Expr* one = expr_new_integer(1);
+        return expr_new_function(expr_new_symbol(SYM_List), &one, 1);
+    }
+    if (n > QQBAR_DEGREE_CAP) { qqbar_clear(phi); qqbar_clear(alpha); return NULL; }
+
+    /* Monic integer defining polynomial f[0..n] of phi (coeffs[n] == 1). */
+    mpz_t* coeffs = malloc(sizeof(mpz_t) * (size_t)(n + 1));
+    for (slong i = 0; i <= n; i++) {
+        mpz_init(coeffs[i]);
+        fmpz_t ci; fmpz_init(ci);
+        fmpz_poly_get_coeff_fmpz(ci, QQBAR_POLY(phi), i);
+        fmpz_get_mpz(coeffs[i], ci);
+        fmpz_clear(ci);
+    }
+
+    NumberField* K = nf_field_create((const mpz_t*)coeffs, (int)n);
+    for (slong i = 0; i <= n; i++) mpz_clear(coeffs[i]);
+    free(coeffs);
+    if (!K) { qqbar_clear(phi); qqbar_clear(alpha); return NULL; }
+
+    /* The Round-2 basis is a correct Z-basis of the numerator lattice L (so
+     * (1/D)*L = O_K), but its rows are arbitrarily ordered and unreduced.  Put
+     * it in the standard integral-basis presentation: the lower-triangular
+     * Hermite normal form in the theta-power basis, so omega_0 = 1 and omega_k
+     * has degree exactly k.  FLINT's fmpz_mat_hnf gives the UPPER-triangular
+     * HNF; the lower-triangular one is its 180-degree rotation applied to the
+     * column-reversed lattice, i.e. numerator[i][j] = H[n-1-i][n-1-j] where
+     * H = HNF(W with columns reversed).  (Monogenic W = I stays {1, theta, ..}.) */
+    const mpz_t* W = nf_ok_basis(K);
+    mpz_t D; mpz_init(D); nf_ok_denom(K, D);
+    fmpz_t Dz; fmpz_init(Dz); fmpz_set_mpz(Dz, D);
+
+    fmpz_mat_t A, H;
+    fmpz_mat_init(A, (slong)n, (slong)n);
+    fmpz_mat_init(H, (slong)n, (slong)n);
+    for (slong i = 0; i < n; i++)
+        for (slong j = 0; j < n; j++)
+            fmpz_set_mpz(fmpz_mat_entry(A, i, j), W[i * n + (n - 1 - j)]);
+    fmpz_mat_hnf(H, A);
+
+    Expr** items = malloc(sizeof(Expr*) * (size_t)n);
+    fmpq_t coef; fmpq_init(coef);
+    for (slong i = 0; i < n; i++) {
+        fmpq_poly_t row; fmpq_poly_init(row);
+        for (slong j = 0; j < n; j++) {
+            fmpq_set_fmpz_frac(coef, fmpz_mat_entry(H, n - 1 - i, n - 1 - j), Dz);
+            fmpq_poly_set_coeff_fmpq(row, j, coef);
+        }
+        items[i] = poly_to_algnum(phi, row, n);     /* rational row -> Integer/Rational */
+        fmpq_poly_clear(row);
+    }
+    fmpq_clear(coef);
+    fmpz_mat_clear(A); fmpz_mat_clear(H);
+    fmpz_clear(Dz); mpz_clear(D);
+
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, (size_t)n);
+    free(items);
+
+    nf_field_free(K);
+    qqbar_clear(phi); qqbar_clear(alpha);
+    return result;
+}
+
+/* AlgebraicIntegerQ[x]: 1 if x is an algebraic integer, 0 if it is not, -1 when
+ * undecided (FLINT compiled out).  x is an algebraic integer iff its primitive
+ * integer minimal polynomial is monic -- i.e. the (positive) leading coefficient
+ * of QQBAR_POLY(x) is 1.  A rational p/q has minimal polynomial q*x - p, so only
+ * integers (q == 1) qualify; anything that is not a constant algebraic number (a
+ * free symbol, Pi, ...) fails the to_qqbar conversion and is not an algebraic
+ * integer -> 0. */
+int flint_qqbar_algebraic_integer_q(const Expr* x) {
+    if (!x) return 0;
+    qqbar_t v; qqbar_init(v);
+    if (!to_qqbar(x, v)) { qqbar_clear(v); return 0; }
+    slong d = qqbar_degree(v);
+    fmpz_t lead; fmpz_init(lead);
+    fmpz_poly_get_coeff_fmpz(lead, QQBAR_POLY(v), d);
+    int r = fmpz_is_one(lead) ? 1 : 0;
+    fmpz_clear(lead);
+    qqbar_clear(v);
+    return r;
+}
+
 Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) {
     return algnum_binop(a, b, 0);
 }
@@ -992,6 +1107,8 @@ Expr* flint_qqbar_algebraic_number(const Expr* g, const Expr* c) { (void)g; (voi
 Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* t) { (void)a; (void)t; return NULL; }
 Expr* flint_qqbar_to_number_field_self(const Expr* x) { (void)x; return NULL; }
 Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n, int s) { (void)as; (void)n; (void)s; return NULL; }
+Expr* flint_qqbar_integral_basis(const Expr* a) { (void)a; return NULL; }
+int   flint_qqbar_algebraic_integer_q(const Expr* x) { (void)x; return -1; }
 Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_qqbar_algnum_mul(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_qqbar_algnum_pow(const Expr* a, long p) { (void)a; (void)p; return NULL; }

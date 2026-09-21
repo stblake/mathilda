@@ -88,6 +88,20 @@ Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
  * AlgebraicNumber in Q(x). */
 Expr* flint_qqbar_to_number_field_self(const Expr* x);
 
+/* NumberFieldIntegralBasis[a]: a Z-module basis of the ring of integers O_K of
+ * K = Q(a), as List[element, ..] with each element an algebraic integer
+ * (AlgebraicNumber[g, {..}], or a plain Integer/Rational).  The equation order
+ * Z[phi] is enlarged to O_K via Round 2 (Pohst-Zassenhaus) when it is not
+ * maximal.  Returns NULL to decline: `a` is not a constant algebraic number,
+ * exceeds the degree cap, or O_K cannot be certified (disc will not factor / a
+ * prime too large / FLINT compiled out). */
+Expr* flint_qqbar_integral_basis(const Expr* a);
+
+/* AlgebraicIntegerQ[x]: 1 (x is an algebraic integer), 0 (it is not), or -1
+ * (undecided -- FLINT compiled out).  Decided exactly: x is an algebraic integer
+ * iff its primitive integer minimal polynomial is monic. */
+int flint_qqbar_algebraic_integer_q(const Expr* x);
+
 /* Same-field arithmetic for the Plus/Times/Power combination pre-passes. `a`
  * (and `b`) are AlgebraicNumber objects; combining happens only when generators
  * are structurally equal (expr_eq). `r` is an Integer/Rational scalar. */
