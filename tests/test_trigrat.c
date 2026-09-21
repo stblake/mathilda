@@ -64,13 +64,13 @@ static double seconds(void) {
 }
 
 void test_trigrat_risch_tan_squared_derivative(void) {
-    /* D[Integrate`RischNorman[Tan[x]^2 + Tan[x] + 1, x], x] // Simplify
+    /* D[Integrate[Tan[x]^2 + Tan[x] + 1, x], x] // Simplify
      * should reduce to the integrand. Without the trig-rational fast
      * path, Simplify hangs indefinitely. We allow <= 30 s wall-clock
      * and accept any equivalent compact form (Sec[x]^2 + Tan[x], or the
      * factored Sec[x]^2 (1 + Cos[x] Sin[x]), etc.). */
     struct Expr* parsed = parse_expression(
-        "Simplify[D[Integrate`RischNorman[Tan[x]^2 + Tan[x] + 1, x], x]]");
+        "Simplify[D[Integrate[Tan[x]^2 + Tan[x] + 1, x], x]]");
     assert(parsed != NULL);
     double t0 = seconds();
     struct Expr* r = evaluate(parsed);
@@ -94,11 +94,11 @@ void test_trigrat_risch_tan_squared_derivative(void) {
 }
 
 void test_trigrat_risch_xn_sin_cos_derivative(void) {
-    /* D[Integrate`RischNorman[x^4 Sin[x] Cos[x], x], x] // Simplify
+    /* D[Integrate[x^4 Sin[x] Cos[x], x], x] // Simplify
      * should give back x^4 Sin[x] Cos[x] (or an equivalent compact
      * polynomial-times-trig product). Performance budget: < 5 s. */
     struct Expr* parsed = parse_expression(
-        "Simplify[D[Integrate`RischNorman[x^4 Sin[x] Cos[x], x], x]]");
+        "Simplify[D[Integrate[x^4 Sin[x] Cos[x], x], x]]");
     assert(parsed != NULL);
     double t0 = seconds();
     struct Expr* r = evaluate(parsed);

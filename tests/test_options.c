@@ -71,8 +71,8 @@ int main(void) {
     chk("OptionValue[Cases, Heads]", "False");
     chk("OptionValue[Eigenvalues, Cubics]", "False");
     /* SetOptions edits a registered default in place. */
-    chk("SetOptions[Integrate, Method -> \"RischNorman\"]", "{Method -> \"RischNorman\"}");
-    chk("Options[Integrate]", "{Method -> \"RischNorman\"}");
+    chk("SetOptions[Integrate, Method -> \"RischTranscendental\"]", "{Method -> \"RischTranscendental\"}");
+    chk("Options[Integrate]", "{Method -> \"RischTranscendental\"}");
 
     /* ---- Options[obj, name] / Options[obj, {names}] ---- */
     chk("Options[fa, a]", "{a -> 1}");

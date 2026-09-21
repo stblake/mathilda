@@ -3,12 +3,16 @@
  * `Integrate[f, x]` System` dispatcher.  Cascades through three
  * stages and supports an explicit `Method -> "..."` option:
  *
- *   1. Integrate`BronsteinRational   — polynomial / rational integrands
- *   2. Integrate`RischNorman         — parallel-Risch (Bronstein pmint)
- *   3. Integrate`CRCTable            — CRC integral table (lazy-loaded)
+ *   1. Integrate`BronsteinRational      — polynomial / rational integrands
+ *   2. Integrate`RischTranscendental    — recursive transcendental Risch
+ *   3. Integrate`CRCTable               — CRC integral table (lazy-loaded)
+ *   4. Integrate`ParallelMixedTower     — parallel Risch-Norman over a mixed
+ *                                         radical tower (last resort; .m)
  *
  * Method values: "Automatic" (default, full cascade), "BronsteinRational",
- * "RischNorman", "CRCTable" (strict passthrough, no fallback).
+ * "RischTranscendental", "CRCTable", "ParallelMixedTower" (strict passthrough,
+ * no fallback).  RischNorman / RischNormanBlake were removed in v0.163 --
+ * ParallelMixedTower subsumes both.
  *
  * The CRC table is large and most sessions never need it, so its
  * .m file is Get-loaded on first invocation of try_crctable() rather
@@ -35,8 +39,6 @@
 #include "integrate_diffunderint.h"
 #include "integrate_ramanujan.h"
 #include "intrat.h"
-#include "intrischnorman.h"
-#include "int_rnb.h"
 #include "integrate_risch_transcendental.h"
 #include "risch_canonical.h"
 #include "risch_structure.h"
@@ -418,38 +420,14 @@ static Expr* try_fresnel(Expr* f, Expr* x) {
     return integrate_fresnel_try(f, x);
 }
 
-/* Stage 2: Risch-Norman heuristic (Bronstein pmint). */
-static Expr* try_risch(Expr* f, Expr* x) {
-    Expr* result = call_stage("Integrate`RischNorman", f, x);
-    if (!result) return NULL;
-    if (result_is_unresolved(result, "Integrate`RischNorman")) {
-        expr_free(result);
-        return NULL;
-    }
-    return result;
-}
-
-/* Stage 2a: RischNormanBlake — parallel Risch-Norman over a simple radical
- * extension L = K(y), y^m = q(x).  Additive: handles exactly the single-radical
- * integrands the transcendental pmint (try_risch) declines, so it runs right
- * after it and neither stage can shadow the other. */
-static Expr* try_rischnormanblake(Expr* f, Expr* x) {
-    Expr* result = call_stage("Integrate`RischNormanBlake", f, x);
-    if (!result) return NULL;
-    if (result_is_unresolved(result, "Integrate`RischNormanBlake")) {
-        expr_free(result);
-        return NULL;
-    }
-    return result;
-}
-
-/* Stage 2b: recursive transcendental Risch integrator.
+/* Stage 2: recursive transcendental Risch integrator.
  * A decision procedure over a differential transcendental tower, with
  * rational / logarithmic / exponential / special-function cases, each
  * correct by construction (it fires only behind an exact certificate, so
- * it emits no wrong closed forms and needs no differentiation check).
- * Distinct from the parallel-Risch (pmint) heuristic Integrate`RischNorman
- * run just above it. */
+ * it emits no wrong closed forms and needs no differentiation check).  The
+ * former parallel-Risch (pmint) heuristics Integrate`RischNorman and
+ * Integrate`RischNormanBlake were removed in v0.163: ParallelMixedTower (a
+ * later stage) subsumes both -- the transcendental case and the simple radical. */
 static Expr* try_rischtranscendental(Expr* f, Expr* x) {
     Expr* result = call_stage("Integrate`RischTranscendental", f, x);
     if (!result) return NULL;
@@ -667,8 +645,6 @@ typedef enum {
     METHOD_CHEBYCHEV,
     METHOD_GOURSAT,
     METHOD_WEIERSTRASS,
-    METHOD_RISCH,
-    METHOD_RISCH_NORMAN_BLAKE,
     METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
     METHOD_PARALLEL_MIXED_TOWER,
@@ -698,8 +674,6 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "ChebychevAlgebraic") == 0) return METHOD_CHEBYCHEV;
     if (strcmp(s, "GoursatAlgebraic") == 0) return METHOD_GOURSAT;
     if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
-    if (strcmp(s, "RischNorman") == 0) return METHOD_RISCH;
-    if (strcmp(s, "RischNormanBlake") == 0) return METHOD_RISCH_NORMAN_BLAKE;
     if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(s, "ParallelMixedTower") == 0) return METHOD_PARALLEL_MIXED_TOWER;
@@ -1147,7 +1121,7 @@ Expr* builtin_integrate(Expr* res) {
                     "\"LinearRadicals\", \"QuadraticRadicals\", "
                     "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
                     "\"GoursatAlgebraic\", "
-                    "\"Weierstrass\", \"RischNorman\", \"RischNormanBlake\", "
+                    "\"Weierstrass\", "
                     "\"RischTranscendental\", "
                     "\"CRCTable\", \"NewtonLeibniz\", \"LineIntegral\".\n");
                 last_warned_hash = h;
@@ -1237,16 +1211,12 @@ Expr* builtin_integrate(Expr* res) {
             if (!result) result = try_linearity(effective_f, x);
             if (!result) result = try_weierstrass(effective_f, x);
             if (!result) result = try_derivdivides(effective_f, x);
-            if (!result) result = try_risch(effective_f, x);
-            /* RischNormanBlake: the radical-extension generalisation of the
-             * parallel method, picking up the y^m = q(x) integrands the
-             * transcendental pmint just declined. */
-            if (!result) result = try_rischnormanblake(effective_f, x);
-            /* Recursive transcendental Risch: runs after the pmint heuristic
-             * and is correct by construction, so it only adds closed forms
-             * the earlier stages missed (logarithmic polynomials, Gaussians
-             * -> Erf, exp/x -> ExpIntegralEi, 1/Log -> LogIntegral,
-             * Log[1+ax]/x -> PolyLog), never changing an existing answer. */
+            /* Recursive transcendental Risch: correct by construction, adding
+             * closed forms the earlier stages missed (logarithmic polynomials,
+             * Gaussians -> Erf, exp/x -> ExpIntegralEi, 1/Log -> LogIntegral,
+             * Log[1+ax]/x -> PolyLog).  The former RischNorman / RischNormanBlake
+             * pmint heuristics that ran here were removed in v0.163 -- the
+             * ParallelMixedTower stage below subsumes both. */
             if (!result) result = try_rischtranscendental(effective_f, x);
             if (!result) result = try_crctable(effective_f, x);
             /* Last resort: the parallel Risch-Norman integrator over a mixed
@@ -1284,12 +1254,6 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_WEIERSTRASS:
             result = integrate_jeffrey_full(effective_f, x);
-            break;
-        case METHOD_RISCH:
-            result = try_risch(effective_f, x);
-            break;
-        case METHOD_RISCH_NORMAN_BLAKE:
-            result = try_rischnormanblake(effective_f, x);
             break;
         case METHOD_RISCH_TRANSCENDENTAL:
             result = try_rischtranscendental(effective_f, x);
@@ -1382,7 +1346,7 @@ void integrate_init(void) {
         "may depend on outer variables).  See also Integrate`SingularPoints.\n"
         "Integrate[f, x, Method -> \"<name>\"] dispatches directly to a single\n"
         "subroutine, bypassing the default cascade.  Accepted method names:\n"
-        "  \"Automatic\"          — try BronsteinRational, then RischNorman, then CRCTable (default)\n"
+        "  \"Automatic\"          — the full dispatch cascade (default)\n"
         "  \"BronsteinRational\"  — Integrate`BronsteinRational (polynomial / rational)\n"
         "  \"DerivativeDivides\"  — Integrate`DerivativeDivides (substitution u(x); direct + Eliminate/Solve)\n"
         "  \"LinearRadicals\"     — Integrate`LinearRadicals (rationalise radicals of a x + b)\n"
@@ -1391,8 +1355,6 @@ void integrate_init(void) {
         "  \"ChebychevAlgebraic\" — Integrate`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem)\n"
         "  \"GoursatAlgebraic\"   — Integrate`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent)\n"
         "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
-        "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
-        "  \"RischNormanBlake\"    — Integrate`RischNormanBlake (parallel Risch-Norman over a radical y^m = q(x); Blake)\n"
         "  \"RischTranscendental\"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"ParallelMixedTower\" — Integrate`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II)\n"
@@ -1487,19 +1449,8 @@ void integrate_init(void) {
     integrate_diffunderint_init();
     integrate_ramanujan_init();
 
-    /* Initialise the parallel-Risch / Risch-Norman heuristic
-     * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,
-     * the fall-through for transcendental integrands. */
-    intrischnorman_init();
-
-    /* RischNormanBlake: parallel Risch-Norman generalised to a simple radical
-     * extension L = K(y), y^m = q(x).  Provides Integrate`RischNormanBlake[f,x],
-     * the radical-integrand fall-through after the transcendental pmint. */
-    int_rnb_init();
-
     /* Recursive transcendental Risch integrator:
-     * Integrate`RischTranscendental.  Correct by construction; inserted into the
-     * Automatic cascade after the parallel-Risch RischNorman. */
+     * Integrate`RischTranscendental.  Correct by construction. */
     integrate_risch_transcendental_init();
 
     /* Bronstein differential-field foundation (Symbolic Integration I, Ch. 3):

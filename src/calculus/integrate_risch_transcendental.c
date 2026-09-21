@@ -808,9 +808,8 @@ void integrate_risch_transcendental_init(void) {
         "procedure over a differential transcendental tower, with rational,\n"
         "logarithmic, exponential, and special-function (Erf, ExpIntegralEi,\n"
         "LogIntegral, PolyLog) cases.  Each case is correct by construction (no\n"
-        "differentiation check).  Distinct from Integrate`RischNorman, which is\n"
-        "the parallel-Risch (pmint) heuristic.  Out-of-scope integrands\n"
-        "(algebraic extensions, non-elementary answers) return unevaluated.");
+        "differentiation check).  Out-of-scope integrands (algebraic\n"
+        "extensions, non-elementary answers) return unevaluated.");
     rt_install("Risch`RischDE", builtin_risch_rischde,
         "Risch`RischDE[f, g, x] solves the Risch differential equation\n"
         "D[y] + f y == g for a rational y in C(x), or in the transcendental TOWER\n"

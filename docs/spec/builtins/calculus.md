@@ -1212,32 +1212,14 @@ monotonically down.
      continuous antiderivative rather than a complex-logarithm form.
   9. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
-  10. `Integrate\`RischNorman[f, x]` — Bronstein pmint (parallel Risch), all
-     transcendental integrands (declines any algebraic function of `x`).
-  11. `Integrate\`RischNormanBlake[f, x]` — the parallel Risch-Norman method
-     generalised to a **simple radical extension** `L = K(y)`, `y^m = q(x)`
-     (`K = Q(x)`), after S. Blake, *Parallel Integration over Simple Radical
-     Extensions*.  Picks up exactly the single-radical-of-`x` integrands the
-     transcendental pmint declines.  The antiderivative numerator ranges over
-     the integral closure `O = ⨁ R w_i` with the Trager basis `w_i = y^i/E_i`;
-     the logands are the `S`-units of `O` — irreducible denominator factors, the
-     **units at infinity** (m=2 continued fraction / polynomial Pell, so
-     `∫dx/√(x²+1) = Log[x+√(x²+1)]`), and the **branch-place / Jacobian-torsion
-     divisor** elements from a residue analysis (so genus-0 and 2-torsion
-     genus-1 curves and the `m=3` cube-root example close).  Exact per-coordinate
-     degree bounds keep the linear system small.  Correct by construction, then
-     numerically diff-back verified before returning; a mis-built system or a
-     non-elementary integrand declines (never a wrong answer).  Complex affine
-     places are handled: the imaginary unit in their residue logands is linearised
-     to an opaque symbol before the parallel solve (`Cancel`/`Together` otherwise
-     hang on `I` + a symbolic unknown), so e.g. `(x²-1)/((x²+1)√(x⁴+1))` closes
-     with a conjugate pair of complex logs.  The engine never hangs: a 4 s
-     wall-clock budget plus `TimeConstrained` caps on the heavy number-field calls
-     make any harder case decline within a few seconds.  Scope: `n = 1`,
-     `K = Q(x)`.  Debug surfaces:
-     `Integrate\`RNB\`Info`, `Integrate\`RNB\`Residues`, `Integrate\`RNB\`Logands`.
-  12. `Integrate\`RischTranscendental[f, x]` — the **recursive** transcendental
-     Risch algorithm; runs after RischNorman and only adds
+  10. *(Removed in v0.163.)* `Integrate\`RischNorman` (Bronstein's parallel-Risch
+     pmint heuristic) and `Integrate\`RischNormanBlake` (its generalisation to a
+     **simple radical extension** `L = K(y)`, `y^m = q(x)`, after S. Blake,
+     *Parallel Integration over Simple Radical Extensions*) were removed;
+     `Integrate\`ParallelMixedTower` below subsumes both — the transcendental case
+     and the simple radical, in a mixed tower (Blake, *Part II*).
+  11. `Integrate\`RischTranscendental[f, x]` — the **recursive** transcendental
+     Risch algorithm; adds
      closed forms the earlier stages missed.  Correct by construction (no
      differentiation check).  Handles logarithmic polynomials and the
      special-function cases below (Erf, ExpIntegralEi, LogIntegral, PolyLog).
@@ -1306,14 +1288,11 @@ monotonically down.
   - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).
-  - `"RischNorman"` — `Integrate\`RischNorman[f, x]` (parallel Risch / pmint).
-  - `"RischNormanBlake"` — `Integrate\`RischNormanBlake[f, x]`, parallel
-    Risch-Norman over a simple radical extension `y^m = q(x)`
-    (`src/calculus/int_rnb.c`); see cascade stage 11 above.
   - `"RischTranscendental"` — `Integrate\`RischTranscendental[f, x]`, the recursive
     transcendental Risch algorithm (`src/calculus/integrate_risch_transcendental.c`).
-    A decision procedure over a differential transcendental tower, distinct
-    from the parallel-Risch heuristic `"RischNorman"`.  Every case is correct
+    A decision procedure over a differential transcendental tower.  (The parallel-Risch
+    heuristics `"RischNorman"` and `"RischNormanBlake"` were removed in v0.163 —
+    `"ParallelMixedTower"` subsumes both.)  Every case is correct
     by construction — it fires only behind an exact structural certificate, so
     the result is not checked by differentiation.  Cases:
       - rational: delegated to `Integrate\`BronsteinRational`;
@@ -1884,7 +1863,7 @@ Out[7]= 1/6 Sqrt[3] ArcTan[(-1 + 2 x)/Sqrt[3]] +
         1/6 Sqrt[3] ArcTan[(1 + 2 x)/Sqrt[3]] +
         1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2]
 
-In[8]:= Integrate[Sin[x], x, Method -> "RischNorman"]  (* strict, no fallback *)
+In[8]:= Integrate[Sin[x], x, Method -> "RischTranscendental"]  (* strict, no fallback *)
 Out[8]= -Cos[x]
 
 In[9]:= Integrate[x^3, x, Method -> "BronsteinRational"]
@@ -2151,7 +2130,7 @@ The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
 `Integrate`BronsteinRational` (the explicit form),
 `Integrate`IntRationalLogPart` (Phase 2's LRT computation),
-`Integrate`RischNorman` (Bronstein pmint), `Integrate`LinearRadicals`
+`Integrate`RischTranscendental` (recursive transcendental Risch), `Integrate`LinearRadicals`
 (linear-radical substitution), `Integrate`QuadraticRadicals`
 (quadratic-radical Euler substitution), `Integrate`LinearRatioRadicals`
 (linear-fractional / Möbius radical substitution), `Integrate`Weierstrass`
@@ -2293,7 +2272,7 @@ unevaluated when no substitution closes the integral.  `Protected`.
 
 Known limitations: kernels must appear **literally** in `f` (so `Tan[x]`,
 which Mathilda keeps atomic rather than `Sin[x]/Cos[x]`, exposes no `Cos[x]`
-kernel — such integrands are handled by RischNorman instead); the reduced
+kernel — such integrands are handled by the transcendental Risch stage instead); the reduced
 integral must itself close under the other methods.
 
 ```mathematica

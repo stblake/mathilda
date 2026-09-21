@@ -680,8 +680,6 @@ set(COMMON_SRC
     ../src/calculus/integrate_diffunderint.c
     ../src/calculus/integrate_ramanujan.c
     ../src/calculus/intrat.c
-    ../src/calculus/intrischnorman.c
-    ../src/calculus/int_rnb.c
     ../src/calculus/integrate_risch_transcendental.c
     ../src/calculus/risch_util.c
     ../src/calculus/integrate_risch_rde.c
@@ -1838,10 +1836,6 @@ add_test(NAME cherry_sigma_tests COMMAND cherry_sigma_tests)
 add_executable(cherry_dilog_tests test_cherry_dilog.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cherry_dilog_tests PRIVATE ../src ../src/calculus)
 add_test(NAME cherry_dilog_tests COMMAND cherry_dilog_tests)
-
-add_executable(int_rnb_tests test_int_rnb.c $<TARGET_OBJECTS:mathilda_common>)
-target_include_directories(int_rnb_tests PRIVATE ../src ../src/calculus)
-add_test(NAME int_rnb_tests COMMAND int_rnb_tests)
 
 add_executable(cherry_dilog_exp_tests test_cherry_dilog_exp.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cherry_dilog_exp_tests PRIVATE ../src ../src/calculus)
@@ -3713,28 +3707,6 @@ else()
     target_link_libraries(integrate_unknown_tests gmp m)
 endif()
 add_test(NAME integrate_unknown_tests COMMAND integrate_unknown_tests)
-
-add_executable(intrischnorman_tests test_intrischnorman.c $<TARGET_OBJECTS:mathilda_common>)
-target_include_directories(intrischnorman_tests PRIVATE ../src)
-if(USE_ECM)
-    target_link_libraries(intrischnorman_tests gmp m ${ECM_LIB})
-    add_dependencies(intrischnorman_tests build_ecm)
-else()
-    target_link_libraries(intrischnorman_tests gmp m)
-endif()
-add_test(NAME intrischnorman_tests COMMAND intrischnorman_tests)
-
-# Wall-clock benchmark harness for Integrate`RischNorman.  Not a test
-# (no correctness asserts); built alongside the test suite so it is
-# easy to rebuild and run for profiling.
-add_executable(bench_intrischnorman bench_intrischnorman.c $<TARGET_OBJECTS:mathilda_common>)
-target_include_directories(bench_intrischnorman PRIVATE ../src)
-if(USE_ECM)
-    target_link_libraries(bench_intrischnorman gmp m ${ECM_LIB})
-    add_dependencies(bench_intrischnorman build_ecm)
-else()
-    target_link_libraries(bench_intrischnorman gmp m)
-endif()
 
 # Comprehensive corpus runner for IntegrateRationalTests.m and
 # IntegrateRationalInlineCases.m.  Loads the .m file at runtime and

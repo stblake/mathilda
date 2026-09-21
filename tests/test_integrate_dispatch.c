@@ -3,7 +3,7 @@
  * Smoke tests for the three-stage Integrate cascade and the Method
  * option added 2026-05-15.  Covers:
  *  - Cascade routing: rational integrand goes through BronsteinRational, an
- *    elementary one through RischNorman, an explicit CRCTable call
+ *    elementary one through the transcendental Risch stage, an explicit CRCTable call
  *    survives without infinite-looping on the formerly-divergent
  *    inputs (Formula 49 family).
  *  - Method option: strict passthrough; unknown method bubbles back
@@ -16,7 +16,7 @@
  *    fire today because Mathilda's matcher does not fully support
  *    /;-guarded multi-arg patterns (a separate work item); the
  *    cascade is in place for when that lands.
- *  - End-to-end Risch correctness (covered by intrischnorman_tests).
+ *  - End-to-end Risch correctness (covered by the RischTranscendental path).
  */
 
 #include "core.h"

@@ -3800,9 +3800,8 @@ Expr* builtin_symbol(Expr* res) {
  *      here and we abort.  ITIMER_PROF counts only CPU time of this
  *      process, matching the Mathematica semantic ("CPU time spent
  *      inside the main Mathilda kernel process").  SIGPROF is used
- *      (not SIGALRM) so the intrischnorman pmint timeout -- which is
- *      wall-clock based on SIGALRM/ITIMER_REAL -- and the test-harness
- *      alarm(60) keep working.
+ *      (not SIGALRM) so other SIGALRM/ITIMER_REAL users -- notably the
+ *      test-harness alarm(60) -- keep working.
  *
  *   2. Wall-clock cooperative deadline: capture
  *      clock_gettime(CLOCK_MONOTONIC) + budget on entry; the evaluator

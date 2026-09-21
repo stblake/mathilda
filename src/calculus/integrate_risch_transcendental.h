@@ -14,16 +14,15 @@
  * rational base case delegates to `Integrate`BronsteinRational`.
  *
  * It is reachable via the explicit backtick form and via
- * `Integrate[f, x, Method -> "RischTranscendental"]`, and it is inserted into
- * the Integrate Automatic cascade after `Integrate`RischNorman`.  As a
+ * `Integrate[f, x, Method -> "RischTranscendental"]`, and it is a stage in the
+ * Integrate Automatic cascade.  As a
  * decision procedure, every branch is correct by construction: each case
  * fires only behind an exact structural certificate that already proves
  * the closed form it emits, so the result is NOT checked by
  * differentiation (Risch integration is not a guess-and-verify search).
  *
- * This is deliberately distinct from `Integrate`RischNorman`, which is the
- * *parallel* Risch (Norman/pmint) heuristic; RischTranscendental is the recursive
- * Risch algorithm and never falls back on the parallel-Risch engine.
+ * (The parallel-Risch RischNorman / RischNormanBlake heuristics it once ran
+ * beside were removed in v0.163; ParallelMixedTower subsumes both.)
  *
  * Memory contract follows the standard Mathilda BuiltinFunc rule: the
  * caller (evaluator) owns `res`; on success the builtin returns a

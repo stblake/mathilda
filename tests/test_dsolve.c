@@ -2248,7 +2248,7 @@ static void t_first_order_series_declines(void) {
 }
 
 /* Regression: heap double-free in the Risch-Norman monomial enumerator
- * (intrischnorman.c enumerate_monomials cap-cleanup) reached via the Lie
+ * (enumerate_monomials cap-cleanup, formerly in intrischnorman.c) reached via the Lie
  * first-integral quadrature. Pre-fix these corrupted the heap and crashed.
  * The assertion is that evaluation completes (a crash aborts the binary) and
  * returns either a solution (_List) or a clean decline (_DSolve); a generalized

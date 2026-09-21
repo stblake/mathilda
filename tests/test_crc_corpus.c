@@ -317,7 +317,7 @@ int main(int argc, char** argv) {
             alarm(CORPUS_PER_CASE_TIMEOUT_SEC);
 
             /* Build Integrate[f, x, Method -> "CRCTable"] to bypass
-             * Rational / RischNorman and exercise the CRC rules
+             * Rational stages and exercise the CRC rules
              * directly. */
             Expr* method_rule = expr_new_function(expr_new_symbol("Rule"),
                 (Expr*[]){

@@ -992,7 +992,7 @@ Expr* builtin_simplify(Expr* res) {
              * to the normal bottom-up search. Doing this BEFORE simp_bottomup
              * means we bypass the per-subnode descent (which itself is
              * extremely slow on inputs like
-             *   D[Integrate`RischNorman[Tan[x]^2 + Tan[x] + 1, x], x]
+             *   D[Integrate[Tan[x]^2 + Tan[x] + 1, x], x]
              * because every internal node fires a full simp_search). */
             Expr* tr = simp_trig_rational(expr, ctx, opt_complexity);
             if (tr) {

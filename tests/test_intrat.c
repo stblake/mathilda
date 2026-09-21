@@ -207,7 +207,7 @@ static void test_integrate_rational_via_recognition(void) {
 static void test_integrate_unevaluated(void) {
     /* Genuinely non-elementary integrand: stays as Integrate[...].
      * (Sin[x] used to bubble back unevaluated; with the
-     * Integrate`RischNorman dispatcher hook it now closes to a
+     * transcendental Risch dispatcher hook it now closes to a
      * Tan[x/2]-form antiderivative.  1/Log[x] likewise now closes to
      * LogIntegral[x] via the widened li recognizer, so use a nested-log
      * integrand with no elementary/special-function antiderivative.) */
