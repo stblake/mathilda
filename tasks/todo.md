@@ -1,44 +1,66 @@
-# Task: Implement `AlgebraicNumberNorm`
+# Task: Implement `AlgebraicNumberTrace`
 
-Field norm of an algebraic number (product of conjugates). Option `Extension -> None`
-(default) gives the relative norm over `Q(theta)`. Attributes `Listable, Protected`.
-FLINT-backed, exact, leak-free. Plan: `~/.claude/plans/continuing-on-from-our-crystalline-yeti.md`.
+Additive sibling of `AlgebraicNumberNorm`. Trace = sum of roots of minimal
+polynomial = `-c_{n-1}/c_n`; relative trace over `Q(theta)` = `(n/d)·absolute`.
 
-## Steps
-- [x] Engine: `qqbar_abs_norm` + `flint_qqbar_algebraic_number_norm` in `flint_qqbar.c` (+ `.h` proto + `#else` stub)
-- [x] Leverage: teach `to_qqbar` + `flint_qqbar_is_constant_algebraic` about `GoldenRatio -> (1+Sqrt[5])/2`
-- [x] Wrapper: `src/poly/algebraicnumbernorm.c` / `.h` (Extension option, tri-state mapping)
-- [x] Symbols: `sym_names.h` / `sym_names.c` (`SYM_AlgebraicNumberNorm`)
-- [x] Register: `core.c` init call; attributes `ATTR_LISTABLE | ATTR_PROTECTED`
-- [x] Docstring: `info.c` (terse, no examples)
-- [x] Options default: `options_builtin.c` (`Extension -> None`)
-- [x] Tests: `tests/test_algebraicnumbernorm.c` + `tests/CMakeLists.txt` — all passed
-- [x] Docs: `docs/spec/builtins/algebra.md` + `docs/spec/changelog/2026-09-21.md`
-- [x] Version: `src/version.h` 0.158 -> 0.159 (tag `v0.159` at commit time)
-- [x] Build clean; check-c99 PASS; check-packed-aware OK
-- [x] No-drift suite (rootreduce/algebraicnumber/numberfield/zero_test/core...): all PASS
-- [x] GoldenRatio leverage spot-check (RootReduce, comparisons, AlgebraicIntegerQ): improved, no drift
-- [x] check-array-exactness: 346 probes, 0 MIXED (OK); valgrind: no Mathilda/FLINT leak frames (macOS objc/dyld baseline only)
-- [x] Rebuilt code-review-graph
-- [ ] Commit + tag `v0.159` (awaiting user — not auto-committed)
+## Implementation
+- [ ] Engine: `qqbar_abs_trace` + `flint_qqbar_algebraic_number_trace` + `#else` stub in `src/poly/flint_qqbar.c`
+- [ ] Prototype + doc comment in `src/poly/flint_qqbar.h`
+- [ ] New wrapper `src/poly/algebraicnumbertrace.c` + `.h`
+- [ ] Register in `src/core.c` (fwd-decl + call)
+- [ ] `SYM_AlgebraicNumberTrace` in `src/sym_names.h` + `.c`
+- [ ] `Extension -> None` default in `src/options_builtin.c`
+- [ ] Docstring in `src/info.c`
+- [ ] Bump `src/version.h` 0.159 -> 0.160
+
+## Tests
+- [ ] New `tests/test_algebraicnumbertrace.c` (mirror norm test)
+- [ ] CMake: COMMON_SRC + test target block in `tests/CMakeLists.txt`
+
+## Docs
+- [ ] `docs/spec/builtins/algebra.md` new section
+- [ ] `docs/spec/changelog/2026-09-21.md` append entry
+
+## Verification
+- [ ] `make -j` + REPL smoke test of all spec examples
+- [ ] Build + run unit tests (ctest)
+- [ ] valgrind clean
+- [ ] `make check-c99`, `make check-fastpath-sweep`
+- [ ] Rebuild code-review-graph
+- [ ] Commit + tag v0.160
 
 ## Review
 
-Implemented `AlgebraicNumberNorm[a]` (+ `Extension -> theta` relative norm), Listable/Protected,
-FLINT-backed, exact, leak-free. Key design: both cases reduce to one minimal-polynomial read —
-absolute norm `(-1)^n c_0/c_n` off the qqbar minpoly, relative norm by norm-in-towers
-`(absolute norm)^{[Q(theta):Q(a)]}` with membership via `qqbar_express_in_field`. No new
-resultant/`nf_elem_norm`/`mp_core` code.
+Implemented `AlgebraicNumberTrace` as a precise mirror of `AlgebraicNumberNorm`.
 
-Bonus (leverage, user-approved): `to_qqbar` + `flint_qqbar_is_constant_algebraic` now recognise
-`GoldenRatio = (1+Sqrt[5])/2`, so `RootReduce`, `AlgebraicNumber`, `ToNumberField`, and algebraic
-comparisons handle it for free (`RootReduce[GoldenRatio]` → `1/2 (1+Sqrt[5])`, `GoldenRatio < 2`
-→ `True`, `AlgebraicIntegerQ[GoldenRatio]` → `True`).
+- **Engine** (`src/poly/flint_qqbar.c`): `qqbar_abs_trace` reads coeff `x^{n-1}`
+  and the leading coeff, giving `-c_{n-1}/c_n` (sum of roots); the relative case
+  scales the absolute trace by the tower index `n/d` with `fmpq_mul_si` (norm
+  raises to that power). Reuses `to_qqbar`, `algint_generator`,
+  `qqbar_express_in_field`, `expr_from_fmpq`. `#else` stub added for `USE_FLINT=0`.
+- **Wiring**: wrapper `algebraicnumbertrace.c/.h`, `core.c` init, `sym_names.{c,h}`,
+  `Extension -> None` default in `options_builtin.c`, docstring in `info.c`,
+  version bumped 0.159 → 0.160.
 
-Verification: all spec examples match; new suite `test_algebraicnumbernorm.c` passes; 10 no-drift
-suites pass; build clean; check-c99 / check-packed-aware / check-array-exactness green; valgrind
-clean (baseline noise only). Two spec examples using `NumberFieldFundamentalUnits` were omitted —
-that head is not yet implemented in Mathilda (independent of `AlgebraicNumberNorm`).
-
-Note: `AlgebraicNumberNorm[-2/3]` prints as `-2/3` (Mathilda's rational convention), where the
-Mathematica reference shows `-(2/3)`; the value is identical.
+### Verification results
+- Build: clean under `gcc-16 -std=c99 -Wall -Wextra` with FLINT/MPFR/LAPACK/etc.
+- REPL smoke test: **all 12 spec examples produce the exact expected output**
+  (10, -11, 2, -2/3, 0, -1, 2, 1, {10,0}, 10, -3, True), plus both error messages.
+- Unit tests: `test_algebraicnumbertrace` all passed; 6 sibling algebraic-number
+  test suites still pass (no regression).
+- `make check-c99`: rc=0 (clean).
+- valgrind: leak totals **byte-identical** to the proven-clean `AlgebraicNumberNorm`
+  on the same inputs (13,440/420 def, 6,312/60 indir) → zero new leaks; remainder
+  is the documented qqbar/FLINT/startup baseline noise.
+- No leak stack trace mentions any AlgebraicNumberTrace symbol.
+- code-review-graph rebuilt.
+- `make check-fastpath-sweep`: the gate DID flag Trace (and, it turned out, Norm —
+  a silent omission in the prior commit that left the gate red). Both are algebraic-
+  number heads whose per-element cost is a qqbar min-poly read, not a numeric buffer
+  op, so both were added to `SKIP_EXPLOSIVE` (the documented sibling convention,
+  matching Denominator/Polynomial/IntegralBasis). Scoped `--only` check confirms both
+  are now skipped (exit 0). Full gate re-run: neither Trace nor Norm appears in the
+  NEW list — my change adds zero red heads and removes one (the overlooked Norm). The
+  gate still exits 1 from a PRE-EXISTING 28-head backlog (LinearModelFit, NMaximize,
+  Predict, ToNumberField, AlgebraicIntegerQ, Xor, ... from a stale OFF_BUFFER last
+  re-recorded 2026-08-03) — unrelated to this change and out of scope.

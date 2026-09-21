@@ -849,6 +849,8 @@ void core_init(void) {
     algebraicnumberdenominator_init();
     void algebraicnumbernorm_init(void);
     algebraicnumbernorm_init();
+    void algebraicnumbertrace_init(void);
+    algebraicnumbertrace_init();
     void numberfieldintegralbasis_init(void);
     numberfieldintegralbasis_init();
     expand_init();

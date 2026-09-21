@@ -1142,6 +1142,71 @@ int flint_qqbar_algebraic_number_norm(const Expr* a, const Expr* theta, Expr** o
     return rc;
 }
 
+/* Absolute field trace Tr_{Q(a)/Q}(a) = sum of the roots of a's minimal
+ * polynomial.  From the primitive integer minimal polynomial
+ * P(x) = c_n x^n + ... + c_0 (content 1, c_n > 0), the monic-over-Q coefficient
+ * of x^{n-1} is c_{n-1}/c_n and the sum of the n roots is -c_{n-1}/c_n.  For a
+ * degree-1 minimal polynomial (an integer or rational) this reads c_0/c_1 and
+ * gives a itself. */
+static void qqbar_abs_trace(const qqbar_t v, fmpq_t out) {
+    slong n = qqbar_degree(v);
+    fmpz_t c1, cn; fmpz_init(c1); fmpz_init(cn);
+    fmpz_poly_get_coeff_fmpz(c1, QQBAR_POLY(v), n - 1); /* coeff of x^{n-1} */
+    fmpz_poly_get_coeff_fmpz(cn, QQBAR_POLY(v), n);     /* positive leading coeff */
+    fmpq_set_fmpz_frac(out, c1, cn);                    /* c_{n-1} / c_n, reduced */
+    fmpq_neg(out, out);                                 /* sum of roots = -c_{n-1}/c_n */
+    fmpz_clear(c1); fmpz_clear(cn);
+}
+
+/* AlgebraicNumberTrace[a] (theta == NULL): the absolute trace Tr_{Q(a)/Q}(a).
+ * AlgebraicNumberTrace[a, Extension -> theta] (theta != NULL): the relative trace
+ * Tr_{Q(theta)/Q}(a), defined when a lies in K = Q(theta).  By transitivity of
+ * the trace in the tower Q <= Q(a) <= K,
+ *     Tr_{K/Q}(a) = [K:Q(a)] * Tr_{Q(a)/Q}(a) = (n/d) * (absolute trace),
+ * with n = [K:Q] = deg minpoly(theta), d = [Q(a):Q] = deg minpoly(a); a in K
+ * forces d | n by the tower law.  Membership is decided by qqbar_express_in_field.
+ * (Contrast the norm, which is multiplicative and raises to the power n/d; the
+ * trace is additive and scales by n/d.)  Returns: 1 with *out set (a fresh owned
+ * Integer/Rational); 0 when a or theta is not a constant algebraic number; 2 when
+ * theta is given but a is not in Q(theta); -1 when FLINT is compiled out. */
+int flint_qqbar_algebraic_number_trace(const Expr* a, const Expr* theta, Expr** out) {
+    if (!a || !out) return 0;
+    qqbar_t av; qqbar_init(av);
+    if (!to_qqbar(a, av)) { qqbar_clear(av); return 0; }
+
+    fmpq_t trace; fmpq_init(trace);
+    qqbar_abs_trace(av, trace);
+    int rc = 1;
+
+    if (theta) {                              /* relative trace over Q(theta) */
+        qqbar_t tv; qqbar_init(tv);
+        if (!to_qqbar(theta, tv)) {
+            rc = 0;                           /* theta not a constant algebraic number */
+        } else {
+            slong d = qqbar_degree(av);
+            fmpz_t lc; fmpz_init(lc);
+            qqbar_t phi; qqbar_init(phi);
+            algint_generator(tv, phi, lc);    /* Q(phi) = Q(theta) */
+            fmpz_clear(lc);
+            slong n = qqbar_degree(phi);
+            fmpq_poly_t f; fmpq_poly_init(f);
+            if (qqbar_express_in_field(f, phi, av, 100000, 0, 64)) {
+                fmpq_mul_si(trace, trace, n / d);  /* (absolute trace) * [K:Q(a)] */
+            } else {
+                rc = 2;                            /* a is not an element of Q(theta) */
+            }
+            fmpq_poly_clear(f);
+            qqbar_clear(phi);
+        }
+        qqbar_clear(tv);
+    }
+
+    if (rc == 1) *out = expr_from_fmpq(trace);
+    fmpq_clear(trace);
+    qqbar_clear(av);
+    return rc;
+}
+
 Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) {
     return algnum_binop(a, b, 0);
 }
@@ -1242,6 +1307,7 @@ Expr* flint_qqbar_integral_basis(const Expr* a) { (void)a; return NULL; }
 int   flint_qqbar_algebraic_integer_q(const Expr* x) { (void)x; return -1; }
 int   flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out) { (void)x; (void)out; return -1; }
 int   flint_qqbar_algebraic_number_norm(const Expr* a, const Expr* t, Expr** out) { (void)a; (void)t; (void)out; return -1; }
+int   flint_qqbar_algebraic_number_trace(const Expr* a, const Expr* t, Expr** out) { (void)a; (void)t; (void)out; return -1; }
 Expr* flint_qqbar_algnum_add(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_qqbar_algnum_mul(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_qqbar_algnum_pow(const Expr* a, long p) { (void)a; (void)p; return NULL; }

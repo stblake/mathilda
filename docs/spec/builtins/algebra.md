@@ -489,6 +489,58 @@ Since the norm is multiplicative, a prime norm implies primality: `9 + Sqrt[10]`
 has norm `71` (a prime), so it is irreducible in `Z[Sqrt[10]]`. Units of a number
 field have norm `±1`.
 
+## AlgebraicNumberTrace
+
+Gives the field trace of an algebraic number.
+
+- `AlgebraicNumberTrace[a]` — the trace of the algebraic number `a`, defined as the
+  sum of the roots of its minimal polynomial (equivalently, the sum of the
+  conjugates of `a` over the rationals).
+- `AlgebraicNumberTrace[a, Extension -> theta]` — the trace of `a` **relative to the
+  field** `Q(theta)`, for `a` an element of `Q(theta)`.
+
+`a` may be an integer, a rational, a radical, `GoldenRatio`, a `Root` object, or an
+`AlgebraicNumber` object. For a primitive integer minimal polynomial
+`c_n x^n + ... + c_0` the absolute trace is `-c_{n-1} / c_n`, computed directly from
+the two coefficients — so an integer or rational returns itself, and the value is
+exact. The relative trace uses transitivity of the trace in the tower
+`Q ⊆ Q(a) ⊆ Q(theta)`: `Tr_{Q(theta)/Q}(a) = [Q(theta):Q(a)] · Tr_{Q(a)/Q}(a)`, i.e.
+the absolute trace scaled by the tower index — so a rational `r` has relative trace
+`r · [Q(theta):Q]`. The trace is additive over a fixed field. (It is the additive
+counterpart of [`AlgebraicNumberNorm`](../builtins/algebra.md#algebraicnumbernorm),
+which is the multiplicative one.)
+
+Attributes `{Listable, Protected}` — `AlgebraicNumberTrace[{a1, ...}]` threads to one
+trace per element, with any trailing `Extension` option repeated. Default option
+`Extension -> None` (the absolute trace). A non-algebraic argument emits
+`AlgebraicNumberTrace::nalg`; an argument that is not an element of the extension
+field emits `AlgebraicNumberTrace::ext`; either stays unevaluated. Requires FLINT; a
+`USE_FLINT=0` build leaves the head unevaluated.
+
+```
+In[1]:= AlgebraicNumberTrace[5 + Sqrt[2]]
+Out[1]= 10
+
+In[2]:= AlgebraicNumberTrace[GoldenRatio]
+Out[2]= 1
+
+In[3]:= AlgebraicNumberTrace[Root[#1^4 + 11 #1^3 + #1^2 + #1 + 1 &, 1]]
+Out[3]= -11
+
+In[4]:= AlgebraicNumberTrace[{5 + Sqrt[2], E^(Pi I/8)}]
+Out[4]= {10, 0}
+
+In[5]:= AlgebraicNumberTrace[5, Extension -> Sqrt[2]]
+Out[5]= 10
+
+In[6]:= AlgebraicNumberTrace[E^(2 Pi I/3), Extension -> ToNumberField[{2^(1/3), E^(2 Pi I/3)}, All][[1, 1]]]
+Out[6]= -3
+```
+
+The trace is additive over a fixed field: `Tr(a + b) = Tr(a) + Tr(b)`. The absolute
+trace is the sum of `a`'s conjugates, so `AlgebraicNumberTrace[a]` equals the sum of
+the roots of `MinimalPolynomial[a, x]`.
+
 ## Apart
 
 Gives the partial fraction decomposition of a rational expression.

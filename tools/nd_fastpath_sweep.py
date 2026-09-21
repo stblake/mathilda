@@ -262,6 +262,10 @@ SKIP_EXPLOSIVE = {
                                   # -> a qqbar maximal-order solve, not a buffer op
     "AlgebraicNumberDenominator", # Listable; each element is a qqbar min-poly +
                                   # integer factorisation, not a buffer op
+    "AlgebraicNumberNorm",        # Listable; each element is a qqbar min-poly
+                                  # coefficient read, not a numeric buffer op
+    "AlgebraicNumberTrace",       # Listable; each element is a qqbar min-poly
+                                  # coefficient read, not a numeric buffer op
     "FactorTermsList", "MinimalPolynomial", "PolynomialSqrt", "PolynomialMod",
     "PolynomialQ", "IrreduciblePolynomialQ", "Variables", "PossibleZeroQ",
     "SimplifyCount", "TrigExpand", "TrigFactor", "TrigReduce", "TrigToExp",

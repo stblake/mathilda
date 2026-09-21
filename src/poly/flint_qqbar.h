@@ -120,6 +120,15 @@ int flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out);
  * theta is given but a is not an element of Q(theta); -1 when FLINT is compiled out. */
 int flint_qqbar_algebraic_number_norm(const Expr* a, const Expr* theta, Expr** out);
 
+/* AlgebraicNumberTrace[a] (theta == NULL): the absolute field trace Tr_{Q(a)/Q}(a),
+ * the sum of a's conjugates = -(coeff of x^{deg-1}) / (leading coeff) of a's minimal
+ * polynomial.  AlgebraicNumberTrace[a, Extension -> theta] (theta != NULL): the
+ * relative trace Tr_{Q(theta)/Q}(a) for a in K = Q(theta), equal to the absolute
+ * trace scaled by the tower index [K:Q(a)].  Returns 1 with *out set to a fresh owned
+ * Integer/Rational; 0 when a (or theta) is not a constant algebraic number; 2 when
+ * theta is given but a is not an element of Q(theta); -1 when FLINT is compiled out. */
+int flint_qqbar_algebraic_number_trace(const Expr* a, const Expr* theta, Expr** out);
+
 /* Same-field arithmetic for the Plus/Times/Power combination pre-passes. `a`
  * (and `b`) are AlgebraicNumber objects; combining happens only when generators
  * are structurally equal (expr_eq). `r` is an Integer/Rational scalar. */
