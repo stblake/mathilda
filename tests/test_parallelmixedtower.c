@@ -19,6 +19,12 @@
  * there would print FAIL yet let the suite report success.
  */
 
+/* dup/dup2/fileno (stderr capture for the Integrate::nonelem warning test) are
+ * POSIX; expose them under -std=c99. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "core.h"
 #include "test_utils.h"
 #include "expr.h"
@@ -29,6 +35,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>   /* dup, dup2, fileno */
 
 /* Evaluate `input`, hard-assert its printed form equals `expected`. */
 static void assert_eval(const char* input, const char* expected) {
@@ -40,6 +47,37 @@ static void assert_eval(const char* input, const char* expected) {
     ASSERT_STR_EQ(str, expected);
     free(str);
     expr_free(evaluated);
+}
+
+/* Evaluate `input` with stderr redirected to a temp file, and report whether
+ * `needle` appears in what was written there.  The Integrate::nonelem warning is
+ * a raw fprintf(stderr, ...) (deliberately not routed through Quiet[]/Check[],
+ * matching RischTranscendental), so this is the only way to assert it fired.
+ * dup/dup2 to a tmpfile (not freopen to /dev/tty) so the restore works in CI. */
+static int eval_stderr_contains(const char* input, const char* needle) {
+    fflush(stderr);
+    int saved = dup(fileno(stderr));
+    ASSERT(saved != -1);
+    FILE* cap = tmpfile();
+    ASSERT(cap != NULL);
+    dup2(fileno(cap), fileno(stderr));
+
+    Expr* parsed = parse_expression(input);
+    ASSERT(parsed != NULL);
+    Expr* evaluated = evaluate(parsed);
+    expr_free(parsed);
+    expr_free(evaluated);
+
+    fflush(stderr);
+    dup2(saved, fileno(stderr));   /* restore the real stderr */
+    close(saved);
+
+    rewind(cap);
+    char buf[8192];
+    size_t n = fread(buf, 1, sizeof(buf) - 1, cap);
+    buf[n] = '\0';
+    fclose(cap);
+    return strstr(buf, needle) != NULL;
 }
 
 /* ---------------------------------------------------------- Message subsystem */
@@ -123,6 +161,39 @@ static void test_method_declines_cleanly(void) {
     assert_eval("Integrate[1/(1 + x^2), x]", "ArcTan[x]");
 }
 
+static void test_method_certifies_nonelementary(void) {
+    /* 1/(x Log[x + Sqrt[x^2+1]]) is provably non-elementary: the residue at a
+     * normal prime is Sqrt[1+x^2]/x, outside the constant field (paper Thm 9.2(a),
+     * the "not elementary in one line" example).  The .m worker returns the raw
+     * {"not elementary", ...} certificate on the qualified-symbol surface. */
+    assert_eval(
+        "Head[Integrate`ParallelMixedTower[1/(x Log[x + Sqrt[x^2 + 1]]), x]]",
+        "List");
+    assert_eval(
+        "Integrate`ParallelMixedTower[1/(x Log[x + Sqrt[x^2 + 1]]), x][[1]]",
+        "\"not elementary\"");   /* a String prints with its quotes */
+    /* Through the Method surface the certificate is (as with RischTranscendental)
+     * reported and the integral left unevaluated -- never a wrong answer. */
+    assert_eval(
+        "Head[Integrate[1/(x Log[x + Sqrt[x^2 + 1]]), x, "
+        "Method -> \"ParallelMixedTower\"]]",
+        "Integrate");
+}
+
+static void test_nonelem_warning_emitted(void) {
+    /* A PROVED certificate must issue Integrate::nonelem, exactly as
+     * RischTranscendental does for its own field decision. */
+    ASSERT(eval_stderr_contains(
+        "Integrate[1/(x Log[x + Sqrt[x^2 + 1]]), x, Method -> \"ParallelMixedTower\"]",
+        "Integrate::nonelem"));
+    /* An inconclusive {"failed", ...} give-up (here Exp[x^2], which this stage
+     * cannot certify) must stay SILENT: failure of the parallel method proves
+     * nothing about elementarity. */
+    ASSERT(!eval_stderr_contains(
+        "Integrate[Exp[x^2], x, Method -> \"ParallelMixedTower\"]",
+        "Integrate::nonelem"));
+}
+
 void test_parallelmixedtower(void) {
     symtab_init();
     core_init();
@@ -136,6 +207,8 @@ void test_parallelmixedtower(void) {
     TEST(test_method_radical);
     TEST(test_method_split_specials);
     TEST(test_method_declines_cleanly);
+    TEST(test_method_certifies_nonelementary);
+    TEST(test_nonelem_warning_emitted);
 
     printf("All ParallelMixedTower tests passed!\n");
 }

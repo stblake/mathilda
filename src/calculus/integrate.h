@@ -40,6 +40,15 @@ extern int g_integrate_depth;
  * report about the ODE the user actually typed. */
 extern int g_integrate_quiet;
 
+/* Emits the user-facing `Integrate::nonelem` diagnostic for the original
+ * integrand `f` (in variable `x`), shared by every method that can PROVE the
+ * integrand has no elementary antiderivative (RischTranscendental via its field
+ * decision; ParallelMixedTower via a {"not elementary", ...} certificate).  The
+ * caller must have already established the proof; this routine handles only the
+ * gating (silent for internal recursion / speculative integration, and at most
+ * once per top-level cascade) and the message.  Borrows `f` and `x`. */
+void integrate_announce_nonelementary(Expr* f, Expr* x);
+
 /* Registers `Integrate` in the symbol table along with its docstring
  * and attributes.  Also calls `intrat_init()` to register every
  * `Integrate`...` package builtin so they are available before the

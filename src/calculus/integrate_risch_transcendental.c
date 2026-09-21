@@ -687,12 +687,11 @@ Expr* builtin_rischtranscendental(Expr* res) {
      * stay silent there and let the outermost frame speak. */
     if (!result && g_integrate_depth <= 1 && g_integrate_quiet == 0
         && rt_decide_field(f, x) == RT_DEC_NONELEMENTARY) {
-        char* fs = expr_to_string(f);
-        char* xs = expr_to_string(x);
-        fprintf(stderr,
-            "Integrate::nonelem: The integrand %s has no antiderivative "
-            "elementary in %s.\n", fs ? fs : "?", xs ? xs : "?");
-        free(fs); free(xs);
+        /* Shared with ParallelMixedTower's certificate path so the two methods
+         * stay byte-identical and cannot double-print in the Automatic cascade.
+         * The cheap depth/quiet gate above stays here to avoid the expensive
+         * rt_decide_field call on internal recursions; the helper re-checks it. */
+        integrate_announce_nonelementary(f, x);
     }
     arith_warnings_mute_pop();
     return result;

@@ -2675,6 +2675,21 @@ whole method search once because the integrand's factors reorder under Orderless
 on the first step — short-circuit to `NULL`, so the message is not repeated (and
 the expensive search runs once). A genuine re-run in a later command re-warns.
 
+`Integrate`ParallelMixedTower` emits the **same** `Integrate::nonelem` message
+under the same gating, when its package returns a *rigorous* non-elementarity
+certificate — a `{"not elementary", …}` result, corresponding to the paper's
+three guarded `NotElementary` exits: a residue outside the constant field, a
+proved non-torsion residue divisor, or a verified residue-free holomorphic
+remainder that the linear system shows to be non-exact under the exact proved
+bounds. Its inconclusive `{"failed", …}` give-ups stay **silent** — for the
+parallel method, failure proves nothing about elementarity. So
+`Integrate[1/(x Log[x + Sqrt[x^2 + 1]]), x]` warns (the residue `Sqrt[1+x^2]/x`
+is non-constant) and `Tan[Sqrt[x^2 + 1]]` warns (a non-constant residue at the
+hypertangent place at infinity), while `Exp[x^2]` — which this stage cannot
+certify — does not. A per-cascade de-dup flag ensures that when both
+`RischTranscendental` and `ParallelMixedTower` prove the same integrand
+non-elementary in the `Automatic` cascade, the message is printed once.
+
 ## Integrate`SigmaDecomposition — Cherry 1986 Theorem 4.4
 
 `Integrate`SigmaDecomposition[Phi, {f1, ..., fm}, x]` gives the degree-1

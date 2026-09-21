@@ -57,6 +57,7 @@
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "message.h"   /* mth_msg_suppress_push/pop: quiet ParallelMixedTower's internal probes */
+#include "print.h"     /* expr_to_string: naming the integrand in the Integrate::nonelem diagnostic */
 #include "series.h"
 
 #include <stdbool.h>
@@ -537,6 +538,24 @@ static void pmt_lazy_load(void) {
     if (opened && !failed) pmt_load_succeeded = true;
 }
 
+/* True iff `r` is a {"not elementary", ...} list -- the ParallelMixedTower
+ * package's RIGOROUS non-elementarity certificate (paper Algorithm 4, the three
+ * guarded NotElementary exits: a non-constant residue exactly decided in the
+ * residue field, a proved non-torsion residue divisor, or a verified
+ * residue-free holomorphic remainder insolvable under the exact proved bounds).
+ * A {"failed", ...} list, by contrast, is an inconclusive give-up that proves
+ * nothing -- the classical parallel method's failure -- and must NOT warn.  The
+ * package draws that boundary internally; here we only read the leading tag. */
+static bool pmt_is_nonelementary_certificate(const Expr* r) {
+    if (!r || r->type != EXPR_FUNCTION) return false;
+    Expr* h = r->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_List) return false;
+    if (r->data.function.arg_count < 1) return false;
+    const Expr* a0 = r->data.function.args[0];
+    return a0 && a0->type == EXPR_STRING
+        && strcmp(a0->data.string, "not elementary") == 0;
+}
+
 /* The Integrate`ParallelMixedTower method symbol.  A thin C builtin so the
  * qualified-symbol surface Integrate`ParallelMixedTower[f, x] is callable from a
  * cold session without paying the ~1s package load until it is actually reached:
@@ -570,6 +589,17 @@ static Expr* builtin_integrate_pmt(Expr* res) {
                               res->data.function.args[0], res->data.function.args[1]);
     mth_msg_suppress_pop();
     tc_async_defer_pop();
+    /* A {"not elementary", ...} certificate is the package's PROOF that no
+     * elementary antiderivative exists -- report it Mathematica-style, exactly
+     * as RischTranscendental does for its own field decision.  Emitted after the
+     * message-mute region (the diagnostic is about the user's integrand, not a
+     * package probe) and after the async-defer pop.  The result itself is
+     * returned unchanged: the qualified-symbol surface still exposes the raw
+     * certificate, and the cascade/Method stage (try_parallelmixedtower) still
+     * discards the List to leave Integrate[...] unevaluated. */
+    if (pmt_is_nonelementary_certificate(result))
+        integrate_announce_nonelementary(res->data.function.args[0],
+                                         res->data.function.args[1]);
     return result;   /* expression, $Failed, or a List certificate/failure */
 }
 
@@ -987,6 +1017,45 @@ int g_integrate_depth = 0;
 /* Speculative-integration suppression counter (see integrate.h). */
 int g_integrate_quiet = 0;
 
+/* De-dup flag for the user-facing Integrate::nonelem diagnostic within ONE
+ * top-level Integrate cascade.  Two cascade stages can each PROVE the same
+ * integrand non-elementary -- RischTranscendental (line ~1220) and, right after
+ * it, ParallelMixedTower (line ~1226) -- so without this guard
+ * Integrate[Exp[x^2], x] would print the identical warning twice.  Reset to 0
+ * when a fresh top-level cascade begins (g_integrate_depth crosses 0 -> 1);
+ * set to 1 by the first stage that speaks.  The direct qualified-symbol surface
+ * runs at depth 0 with only one method active and does not consult it. */
+static int g_integrate_nonelem_announced = 0;
+
+/* Emit the user-facing "no elementary antiderivative" diagnostic for the
+ * ORIGINAL integrand, shared by every method that can PROVE non-elementarity
+ * (currently RischTranscendental and ParallelMixedTower).  The caller is
+ * responsible for having established the proof (a RischTranscendental field
+ * decision, or a {"not elementary", ...} certificate from the ParallelMixedTower
+ * package); this routine only handles the gating and the message so the two
+ * methods stay byte-identical and cannot double-print.
+ *
+ * Gating mirrors the historical RischTranscendental site: silent for internal
+ * recursion (depth > 1, where naming a gensym variable would be meaningless),
+ * silent under speculative integration (g_integrate_quiet, e.g. the Kovacic
+ * solver / DSolve), and at most once per top-level cascade (depth == 1).  A raw
+ * fprintf to stderr, deliberately NOT routed through the Quiet[]/Check[] message
+ * subsystem -- matching RischTranscendental's long-standing behaviour. */
+void integrate_announce_nonelementary(Expr* f, Expr* x) {
+    if (g_integrate_depth > 1) return;    /* internal recursion: stay silent   */
+    if (g_integrate_quiet != 0) return;   /* speculative / DSolve suppression   */
+    if (g_integrate_depth == 1) {         /* cascade: at most one stage speaks  */
+        if (g_integrate_nonelem_announced) return;
+        g_integrate_nonelem_announced = 1;
+    }
+    char* fs = expr_to_string(f);
+    char* xs = expr_to_string(x);
+    fprintf(stderr,
+        "Integrate::nonelem: The integrand %s has no antiderivative "
+        "elementary in %s.\n", fs ? fs : "?", xs ? xs : "?");
+    free(fs); free(xs);
+}
+
 /* Fail-memo: the indefinite integrands the method cascade has FAILED on
  * (returned NULL for) so far in the CURRENT top-level evaluation.
  *
@@ -1177,6 +1246,11 @@ Expr* builtin_integrate(Expr* res) {
      * internal recursion variable when deciding whether to name it in a
      * nonelem diagnostic. */
     g_integrate_depth++;
+    /* Fresh top-level cascade: clear the Integrate::nonelem de-dup flag so the
+     * first stage that proves non-elementarity (RischTranscendental or, after
+     * it, ParallelMixedTower) speaks exactly once.  A sub-integral re-enters at
+     * depth >= 2 and must NOT clear it. */
+    if (g_integrate_depth == 1) g_integrate_nonelem_announced = 0;
 
     Expr* result = NULL;
     switch (method) {
@@ -1330,7 +1404,9 @@ void integrate_init(void) {
         "parallel (Risch-Norman) method over a simple radical in a mixed "
         "transcendental tower (S. Blake, Parallel Integration over Simple Radical "
         "Extensions II). It returns the antiderivative, or $Failed / a certificate "
-        "list that Integrate's cascade treats as a decline.");
+        "list that Integrate's cascade treats as a decline. When the method PROVES "
+        "the integrand has no elementary antiderivative it issues Integrate::nonelem, "
+        "as RischTranscendental does.");
     /* NOT Listable: Listable would thread over a definite-integral range
      * spec `{x, a, b}` element-wise (producing garbage like
      * {Integrate[f,x], Integrate[f,a], Integrate[f,b]}).  The `{x,a,b}` form
