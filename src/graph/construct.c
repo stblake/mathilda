@@ -1,8 +1,15 @@
 /* construct.c - builtin_graph: normalize, derive, validate, canonicalize.
  *
  * Accepts:
- *   Graph[edges]          -- vertices derived from the edges (directed default)
- *   Graph[verts, edges]   -- explicit vertex list
+ *   Graph[edges]                        -- vertices derived from the edges (directed default)
+ *   Graph[verts, edges]                 -- explicit vertex list
+ *   Graph[verts, edges, EdgeWeight -> {w1, ..., wm}]
+ *                                        -- explicit vertex list + per-edge weights, matched
+ *                                           to `edges` by position; wrong length is malformed
+ *                                           (left unevaluated), same as any other rejection
+ *                                           below. Weighted graphs require the explicit-vertex
+ *                                           form -- Graph[edges, EdgeWeight -> {...}] is not
+ *                                           accepted (deliberately out of scope; see the plan).
  *
  * Edge sugar is normalized on construction:
  *   Rule[u,v]        / u -> v    ->  DirectedEdge[u, v]
@@ -51,23 +58,44 @@ static Expr* normalize_edge(const Expr* e) {
     return expr_new_function(expr_new_symbol(out_head), args, 2);
 }
 
+/* True iff `opt` is Rule[EdgeWeight, List[...]] -- shape only, length is
+ * checked by the caller once the edge count is known. */
+static int is_edge_weight_rule(const Expr* opt) {
+    if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2)
+        return 0;
+    const char* h = fn_head(opt);
+    if (h != SYM_Rule) return 0;
+    const Expr* key = opt->data.function.args[0];
+    return key && key->type == EXPR_SYMBOL && key->data.symbol.name == SYM_EdgeWeight
+        && graph_is_list(opt->data.function.args[1]);
+}
+
 /* Assemble the canonical Graph from `res`, or NULL if the shape is wrong or the
  * result would be invalid. */
 static Expr* try_build_canonical(Expr* res) {
     size_t argc = res->data.function.arg_count;
     const Expr* verts_in = NULL;
     const Expr* edges_in = NULL;
+    const Expr* weight_opt = NULL;
 
     if (argc == 1) {
         edges_in = res->data.function.args[0];
     } else if (argc == 2) {
         verts_in = res->data.function.args[0];
         edges_in = res->data.function.args[1];
+    } else if (argc == 3) {
+        verts_in = res->data.function.args[0];
+        edges_in = res->data.function.args[1];
+        weight_opt = res->data.function.args[2];
+        if (!is_edge_weight_rule(weight_opt)) return NULL;
     } else {
         return NULL;
     }
     if (!graph_is_list(edges_in)) return NULL;
     if (verts_in && !graph_is_list(verts_in)) return NULL;
+    if (weight_opt && weight_opt->data.function.args[1]->data.function.arg_count
+                       != edges_in->data.function.arg_count)
+        return NULL;                          /* weight/edge count mismatch */
 
     size_t ne = edges_in->data.function.arg_count;
 
@@ -113,13 +141,30 @@ static Expr* try_build_canonical(Expr* res) {
         graph_vidx_free(seen);
     }
 
-    /* 3. Assemble candidate Graph[List verts, List edges] (moves ownership). */
+    /* 3. Assemble candidate Graph[List verts, List edges(, EdgeWeight -> List w)]
+     * (moves ownership). */
     Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), verts, nv);
     Expr* elist = expr_new_function(expr_new_symbol(SYM_List), edges, ne);
     free(verts);
     free(edges);
-    Expr* gargs[2] = { vlist, elist };
-    Expr* g = expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
+    Expr* g;
+    if (weight_opt) {
+        const Expr* win = weight_opt->data.function.args[1];
+        size_t nw = win->data.function.arg_count;
+        Expr** weights = (nw > 0) ? calloc(nw, sizeof(Expr*)) : NULL;
+        if (nw > 0 && !weights) { expr_free(vlist); expr_free(elist); return NULL; }
+        for (size_t i = 0; i < nw; i++)
+            weights[i] = expr_copy(win->data.function.args[i]);
+        Expr* wlist = expr_new_function(expr_new_symbol(SYM_List), weights, nw);
+        free(weights);
+        Expr* wargs[2] = { expr_new_symbol(SYM_EdgeWeight), wlist };
+        Expr* wrule = expr_new_function(expr_new_symbol(SYM_Rule), wargs, 2);
+        Expr* gargs[3] = { vlist, elist, wrule };
+        g = expr_new_function(expr_new_symbol(SYM_Graph), gargs, 3);
+    } else {
+        Expr* gargs[2] = { vlist, elist };
+        g = expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
+    }
 
     /* 4. Validate (self-loops, parallel edges, endpoint membership). */
     if (!graph_is_valid(g)) { expr_free(g); return NULL; }

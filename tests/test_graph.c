@@ -209,6 +209,23 @@ static void test_generators(void) {
     assert_eval_eq("VertexDegree[PathGraph[5]]", "{1, 2, 2, 2, 1}", 0);
     /* Explicit-vertex path. */
     assert_eval_eq("EdgeList[PathGraph[{a,b,c}]]", "{a <-> b, b <-> c}", 0);
+
+    /* StarGraph[n]: n vertices, n-1 edges; hub 1 has degree n-1, leaves 1. */
+    assert_eval_eq("VertexCount[StarGraph[5]]", "5", 0);
+    assert_eval_eq("EdgeCount[StarGraph[5]]", "4", 0);
+    assert_eval_eq("DirectedGraphQ[StarGraph[5]]", "False", 0);
+    assert_eval_eq("VertexDegree[StarGraph[5]]", "{4, 1, 1, 1, 1}", 0);
+    assert_eval_eq("EdgeList[StarGraph[4]]", "{1 <-> 2, 1 <-> 3, 1 <-> 4}", 0);
+    /* Degenerate sizes: a lone vertex, and the empty graph. */
+    assert_eval_eq("{VertexCount[StarGraph[1]], EdgeCount[StarGraph[1]]}",
+                   "{1, 0}", 0);
+    assert_eval_eq("{VertexCount[StarGraph[0]], EdgeCount[StarGraph[0]]}",
+                   "{0, 0}", 0);
+    /* A star is connected and is its own spanning tree. */
+    assert_eval_eq("ConnectedGraphQ[StarGraph[6]]", "True", 0);
+    assert_eval_eq("EdgeCount[FindSpanningTree[StarGraph[6]]]", "5", 0);
+    /* Symbolic argument stays unevaluated. */
+    assert_eval_eq("Head[StarGraph[x]]", "StarGraph", 0);
 }
 
 static void test_random_graph(void) {
@@ -519,6 +536,140 @@ static void test_vertex_coloring(void) {
 }
 
 
+/* ---- Edge weights (Graph[v,e,EdgeWeight->w], EdgeWeight, WeightedAdjacencyMatrix) ---- */
+static void test_edge_weights(void) {
+    /* AC-1: constructs and validates. */
+    assert_eval_eq("GraphQ[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]]", "True", 0);
+
+    /* AC-2: EdgeWeight[g] returns weights in EdgeList order. */
+    assert_eval_eq("EdgeWeight[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]]",
+                   "{5, 7}", 0);
+
+    /* AC-3: unweighted graphs default to all 1s. */
+    assert_eval_eq("EdgeWeight[Graph[{1,2,3},{1->2,2->3}]]", "{1, 1}", 0);
+    assert_eval_eq("EdgeWeight[CompleteGraph[3]]", "{1, 1, 1}", 0);
+
+    /* AC-4: WeightedAdjacencyMatrix on a directed weighted graph. */
+    assert_eval_eq(
+        "WeightedAdjacencyMatrix[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]]",
+        "{{0, 5, 0}, {0, 0, 7}, {0, 0, 0}}", 0);
+
+    /* AC-5: undirected weighted graph -> symmetric matrix. */
+    assert_eval_eq("WeightedAdjacencyMatrix[Graph[{1,2},{1<->2},EdgeWeight->{9}]]",
+                   "{{0, 9}, {9, 0}}", 0);
+
+    /* AC-6: unweighted WeightedAdjacencyMatrix equals AdjacencyMatrix exactly. */
+    assert_eval_eq(
+        "WeightedAdjacencyMatrix[CycleGraph[4]] == AdjacencyMatrix[CycleGraph[4]]",
+        "True", 0);
+
+    /* AC-7: weight/edge count mismatch is malformed, left unevaluated. */
+    assert_eval_eq("GraphQ[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5}]]", "False", 0);
+    assert_eval_eq("Head[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5}]]", "Graph", 0);
+
+    /* AC-8: terse summary unchanged for a weighted graph. */
+    assert_eval_eq("Graph[{1,2},{1<->2},EdgeWeight->{3}]",
+                   "Graph[<2 vertices, 1 edge>]", 0);
+
+    /* AC-9: InputForm round-trips through the parser. */
+    {
+        Expr* g = evaluate(parse_expression(
+            "Graph[{1,2},{1<->2},EdgeWeight->{3}]"));
+        ASSERT(g != NULL);
+        Expr* wrap_args[1] = { expr_copy(g) };
+        Expr* wrap = expr_new_function(expr_new_symbol("InputForm"), wrap_args, 1);
+        char* s = expr_to_string(wrap);
+        Expr* g2 = evaluate(parse_expression(s));
+        ASSERT(expr_eq(g, g2));
+        free(s);
+        expr_free(wrap);
+        expr_free(g);
+        expr_free(g2);
+    }
+    assert_eval_eq("InputForm[Graph[{1,2},{1<->2},EdgeWeight->{3}]]",
+                   "Graph[{1, 2}, {1 <-> 2}, EdgeWeight -> {3}]", 0);
+
+    /* AC-11: the graph_build_adj-routed builtins evaluate normally against a
+     * weighted graph, not left unevaluated -- the plan-reviewer-caught defect
+     * (graph_build_adj is a second, independent choke point from
+     * graph_is_valid) regression-tested directly. FindShortestPath's
+     * assertion stays {1, 2, 3} even after the weighted-shortest-path ticket:
+     * this specific graph has only one path from 1 to 3, so BFS and Dijkstra
+     * agree on it -- only GraphDistance's value changed (hop count 2 ->
+     * weighted total 5+7=12), tested here as the dedicated regression case. */
+    const char* wg = "Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]";
+    char buf[256];
+    snprintf(buf, sizeof(buf), "FindShortestPath[%s,1,3]", wg);
+    assert_eval_eq(buf, "{1, 2, 3}", 0);
+    snprintf(buf, sizeof(buf), "GraphDistance[%s,1,3]", wg);
+    assert_eval_eq(buf, "12", 0);
+    snprintf(buf, sizeof(buf), "ConnectedComponents[%s]", wg);
+    assert_eval_eq(buf, "{{1, 2, 3}}", 0);
+    snprintf(buf, sizeof(buf), "WeaklyConnectedComponents[%s]", wg);
+    assert_eval_eq(buf, "{{1, 2, 3}}", 0);
+    snprintf(buf, sizeof(buf), "Head[FindSpanningTree[%s]]", wg);
+    assert_eval_eq(buf, "Graph", 0);
+    const char* wug = "Graph[{1,2,3},{1<->2,2<->3},EdgeWeight->{5,7}]";
+    snprintf(buf, sizeof(buf), "ConnectedGraphQ[%s]", wug);
+    assert_eval_eq(buf, "True", 0);
+    snprintf(buf, sizeof(buf), "VertexConnectivity[%s]", wug);
+    assert_eval_eq(buf, "1", 0);
+
+    /* Non-goal, regression-tested: derived-vertex weighted construction
+     * (Graph[e, EdgeWeight->w], no explicit vertex list) is not accepted --
+     * fails safe (unevaluated), not silently. */
+    assert_eval_eq("Head[Graph[{1->2,2->3},EdgeWeight->{1,1}]]", "Graph", 0);
+
+    /* Regression: unweighted graphs and existing builtins are unaffected. */
+    assert_eval_eq("EdgeCount[CompleteGraph[5]]", "10", 0);
+}
+
+/* ---- Weighted shortest path (Dijkstra dispatch in FindShortestPath/GraphDistance) ---- */
+static void test_weighted_shortest_path(void) {
+    /* AC-1/AC-2: min-weight path differs from min-hop path; both agree it's {1,2,3,4}
+     * (weight 3) not the direct {1,4} edge (weight 10). */
+    const char* g1 = "Graph[{1,2,3,4},{1->2,2->3,3->4,1->4},EdgeWeight->{1,1,1,10}]";
+    char buf[256];
+    snprintf(buf, sizeof(buf), "FindShortestPath[%s,1,4]", g1);
+    assert_eval_eq(buf, "{1, 2, 3, 4}", 0);
+    snprintf(buf, sizeof(buf), "GraphDistance[%s,1,4]", g1);
+    assert_eval_eq(buf, "3", 0);
+    /* Exact integer, not a real -- the plan-reviewer-caught defect (a raw double
+     * accumulator would print "3."). */
+    snprintf(buf, sizeof(buf), "Head[GraphDistance[%s,1,4]]", g1);
+    assert_eval_eq(buf, "Integer", 0);
+
+    /* AC-3: unweighted graphs are unaffected (still plain BFS). */
+    assert_eval_eq("FindShortestPath[CycleGraph[6],1,4]", "{1, 2, 3, 4}", 0);
+    assert_eval_eq("GraphDistance[CycleGraph[6],1,4]", "3", 0);
+
+    /* AC-4: a symbolic weight falls back to BFS rather than erroring. */
+    assert_eval_eq(
+        "FindShortestPath[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{a,7}],1,3]",
+        "{1, 2, 3}", 0);
+
+    /* AC-5: a negative weight falls back to BFS (hop count, not a Dijkstra artifact). */
+    assert_eval_eq(
+        "GraphDistance[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{-1,7}],1,3]",
+        "2", 0);
+
+    /* AC-6: undirected weighted graph -- weights apply symmetrically. */
+    assert_eval_eq(
+        "FindShortestPath[Graph[{1,2,3},{1<->2,2<->3},EdgeWeight->{1,1}],1,3]",
+        "{1, 2, 3}", 0);
+
+    /* AC-7: unreachable target keeps existing semantics. */
+    assert_eval_eq("FindShortestPath[Graph[{1,2,3},{1->2},EdgeWeight->{5}],1,3]",
+                   "{}", 0);
+    assert_eval_eq("GraphDistance[Graph[{1,2,3},{1->2},EdgeWeight->{5}],1,3]",
+                   "Infinity", 0);
+
+    /* Rational weights stay exact. */
+    assert_eval_eq(
+        "GraphDistance[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{1/2,1/3}],1,3]",
+        "5/6", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -540,6 +691,8 @@ int main(void) {
     TEST(test_graphplot);
     TEST(test_vertex_coloring_internals);
     TEST(test_vertex_coloring);
+    TEST(test_edge_weights);
+    TEST(test_weighted_shortest_path);
 
     printf("All graph tests passed!\n");
     return 0;

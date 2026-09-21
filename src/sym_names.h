@@ -982,6 +982,7 @@ extern const char* SYM_AdjacencyGraph;
 extern const char* SYM_CompleteGraph;
 extern const char* SYM_CycleGraph;
 extern const char* SYM_PathGraph;
+extern const char* SYM_StarGraph;
 extern const char* SYM_RandomGraph;
 extern const char* SYM_FindShortestPath;
 extern const char* SYM_GraphDistance;
@@ -992,6 +993,8 @@ extern const char* SYM_FindSpanningTree;
 extern const char* SYM_VertexConnectivity;
 extern const char* SYM_GraphPlot;
 extern const char* SYM_FindVertexColoring;
+extern const char* SYM_EdgeWeight;
+extern const char* SYM_WeightedAdjacencyMatrix;
 
 /* NumberForm + Row (numeric-display formatting) and NumberForm's option
  * names. NumberForm is a print wrapper handled in print.c; the option-name

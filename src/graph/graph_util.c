@@ -20,6 +20,7 @@
 #include "sym_names.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 
 /* True iff e is a function node whose head is the interned symbol `sym`. */
 static int head_is_sym(const Expr* e, const char* sym) {
@@ -189,6 +190,41 @@ int graph_vertex_index(const Expr* verts, const Expr* v) {
     return -1;
 }
 
+/* True iff `opt` is a well-formed EdgeWeight -> List[n] rule, where n equals
+ * `edge_count`. Shape only -- does not inspect the individual weight values,
+ * which may be any expression (numeric weights are the expected case, but
+ * nothing here requires it, matching how vertices are already arbitrary
+ * expressions). */
+static int graph_edge_weight_rule_ok(const Expr* opt, size_t edge_count) {
+    if (!head_is_sym(opt, SYM_Rule) || opt->data.function.arg_count != 2) return 0;
+    const Expr* key = opt->data.function.args[0];
+    const Expr* val = opt->data.function.args[1];
+    if (!key || key->type != EXPR_SYMBOL || key->data.symbol.name != SYM_EdgeWeight)
+        return 0;
+    if (!graph_is_list(val)) return 0;
+    return val->data.function.arg_count == edge_count;
+}
+
+/* True iff g's shape is Graph[verts, edges] (unweighted) or
+ * Graph[verts, edges, EdgeWeight -> List[n]] with n == |edges| (weighted).
+ * Both `graph_is_valid` and `graph_build_adj` route through this instead of
+ * duplicating an `arg_count != 2` literal -- they are two independent choke
+ * points (a plan-reviewer-caught defect: widening only one left the other's
+ * 8 downstream builtins rejecting every weighted graph even though GraphQ
+ * reported it valid), so the arity/shape check itself must be shared, not
+ * just widened identically by hand in both places. Structural shape only --
+ * self-loops, parallel edges, etc. are still each caller's own job. */
+static int graph_shape_ok(const Expr* g) {
+    if (!head_is_sym(g, SYM_Graph)) return 0;
+    size_t argc = g->data.function.arg_count;
+    if (argc == 2) return 1;
+    if (argc != 3) return 0;
+    const Expr* edges = g->data.function.args[1];
+    if (!graph_is_list(edges)) return 0;
+    return graph_edge_weight_rule_ok(g->data.function.args[2],
+                                      edges->data.function.arg_count);
+}
+
 /* ---- Phase 5: adjacency scaffolding --------------------------------------- */
 
 /* Validation over an already-built vertex index; defined with graph_is_valid
@@ -206,7 +242,7 @@ void graph_adj_free(GraphAdj* a) {
 GraphAdj* graph_build_adj(const Expr* g) {
     /* Validate and index in one pass: graph_is_valid would build and throw away
      * the same vertex index, and the two fill passes below need it anyway. */
-    if (!head_is_sym(g, SYM_Graph) || g->data.function.arg_count != 2) return NULL;
+    if (!graph_shape_ok(g)) return NULL;
     const Expr* verts = g->data.function.args[0];
     const Expr* edges = g->data.function.args[1];
     if (!graph_is_list(verts) || !graph_is_list(edges)) return NULL;
@@ -325,7 +361,7 @@ static int graph_check(const Expr* g, const GraphVIdx* ix) {
 }
 
 int graph_is_valid(const Expr* g) {
-    if (!head_is_sym(g, SYM_Graph) || g->data.function.arg_count != 2)
+    if (!graph_shape_ok(g))
         return 0;
 
     const Expr* verts = g->data.function.args[0];
@@ -336,5 +372,77 @@ int graph_is_valid(const Expr* g) {
     if (!ix) return 0;                  /* cannot index => cannot validate */
     int ok = graph_check(g, ix);
     graph_vidx_free(ix);
+    return ok;
+}
+
+Expr* graph_resolve_edge_weights(const Expr* g) {
+    if (!graph_is_valid(g)) return NULL;
+    size_t ne = g->data.function.args[1]->data.function.arg_count;
+
+    if (g->data.function.arg_count == 3) {
+        const Expr* wlist = g->data.function.args[2]->data.function.args[1];
+        Expr** ws = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
+        if (ne > 0 && !ws) return NULL;
+        for (size_t i = 0; i < ne; i++) ws[i] = expr_copy(wlist->data.function.args[i]);
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), ws, ne);
+        free(ws);
+        return out;
+    }
+
+    /* Unweighted: default every edge's weight to 1, matching Wolfram Language. */
+    Expr** ws = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
+    if (ne > 0 && !ws) return NULL;
+    for (size_t i = 0; i < ne; i++) ws[i] = expr_new_integer(1);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), ws, ne);
+    free(ws);
+    return out;
+}
+
+/* Approximate double value of a numeric weight, for Dijkstra's internal
+ * vertex-selection comparisons ONLY -- never for a returned value (see
+ * graph_weight_to_double's caller: shortestpath.c reconstructs the exact
+ * GraphDistance answer separately, via Plus[] over the real Expr weights).
+ * A plain (not rounding-to-nearest) conversion is fine here: it only needs to
+ * preserve enough precision to compare relative distances correctly, not to
+ * reproduce N[expr]'s exact rounding. Returns NAN for anything not numeric --
+ * callers must gate with graph_weights_usable first. */
+double graph_weight_to_double(const Expr* w) {
+    if (!w) return NAN;
+    switch (w->type) {
+        case EXPR_INTEGER: return (double)w->data.integer;
+        case EXPR_REAL:    return w->data.real;
+        case EXPR_BIGINT:  return mpz_get_d(w->data.bigint);
+#ifdef USE_MPFR
+        case EXPR_MPFR:    return mpfr_get_d(w->data.mpfr, MPFR_RNDN);
+#endif
+        case EXPR_FUNCTION:
+            if (head_is_sym(w, SYM_Rational) && w->data.function.arg_count == 2) {
+                double p = graph_weight_to_double(w->data.function.args[0]);
+                double q = graph_weight_to_double(w->data.function.args[1]);
+                if (!isnan(p) && !isnan(q) && q != 0.0) return p / q;
+            }
+            return NAN;
+        default:
+            return NAN;
+    }
+}
+
+int graph_weights_usable(const Expr* g) {
+    if (!graph_is_valid(g) || g->data.function.arg_count != 3) return 0;
+    Expr* weights = graph_resolve_edge_weights(g);
+    if (!weights) return 0;
+
+    int ok = 1;
+    size_t n = weights->data.function.arg_count;
+    for (size_t i = 0; i < n && ok; i++) {
+        const Expr* w = weights->data.function.args[i];
+        /* expr_is_numeric_like also accepts Complex (numeric-component
+         * Complex[re,im]); Dijkstra needs an orderable real, so reject that
+         * shape explicitly rather than reusing the check unfiltered. */
+        if (!expr_is_numeric_like(w) || head_is_sym(w, SYM_Complex)) { ok = 0; break; }
+        double d = graph_weight_to_double(w);
+        if (isnan(d) || d < 0.0) ok = 0;
+    }
+    expr_free(weights);
     return ok;
 }

@@ -970,6 +970,8 @@ set(COMMON_SRC
     ../src/graph/connectivity.c
     ../src/graph/graphplot.c
     ../src/graph/vertexcoloring.c
+    ../src/graph/edgeweight.c
+    ../src/graph/wtadjmat.c
 )
 
 # render.c / render3d.c / label_font.c need a live Raylib + display; only

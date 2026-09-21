@@ -81,12 +81,25 @@ void graph_init(void) {
     symtab_set_docstring("DirectedGraphQ",
         "DirectedGraphQ[g] gives True if all edges of g are directed.");
 
+    symtab_add_builtin("EdgeWeight", builtin_edge_weight);
+    symtab_get_def("EdgeWeight")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("EdgeWeight",
+        "EdgeWeight[g] gives the weights of g's edges, in EdgeList order. "
+        "Defaults to all 1s if g was built without an EdgeWeight option.");
+
     /* ---- Phase 3: matrix views (linalg interop) -------------------------- */
     symtab_add_builtin("AdjacencyMatrix", builtin_adjacency_matrix);
     symtab_get_def("AdjacencyMatrix")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("AdjacencyMatrix",
         "AdjacencyMatrix[g] gives the 0/1 adjacency matrix of g (symmetric for "
         "undirected graphs).");
+
+    symtab_add_builtin("WeightedAdjacencyMatrix", builtin_weighted_adjacency_matrix);
+    symtab_get_def("WeightedAdjacencyMatrix")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("WeightedAdjacencyMatrix",
+        "WeightedAdjacencyMatrix[g] gives the adjacency matrix of g with each "
+        "entry the corresponding edge's weight (0 where there is no edge). "
+        "Equal to AdjacencyMatrix[g] when g has no EdgeWeight.");
 
     symtab_add_builtin("IncidenceMatrix", builtin_incidence_matrix);
     symtab_get_def("IncidenceMatrix")->attributes |= ATTR_PROTECTED;
@@ -110,6 +123,12 @@ void graph_init(void) {
     symtab_get_def("CycleGraph")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("CycleGraph",
         "CycleGraph[n] gives the cycle graph on n vertices.");
+
+    symtab_add_builtin("StarGraph", builtin_star_graph);
+    symtab_get_def("StarGraph")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("StarGraph",
+        "StarGraph[n] gives the star on n vertices: the hub 1 joined to each of "
+        "the n-1 leaves 2..n.");
 
     symtab_add_builtin("PathGraph", builtin_path_graph);
     symtab_get_def("PathGraph")->attributes |= ATTR_PROTECTED;

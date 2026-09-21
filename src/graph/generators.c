@@ -4,6 +4,7 @@
  *   CycleGraph[n]             - undirected cycle on 1..n
  *   PathGraph[n]              - undirected path 1-2-...-n
  *   PathGraph[{v1,...,vk}]    - undirected path over the given vertices
+ *   StarGraph[n]              - undirected star: hub 1 joined to leaves 2..n
  *   RandomGraph[{n, m}]       - undirected graph with n vertices, m random edges
  *   RandomGraph[{n, m}, k]    - a list of k such graphs
  *
@@ -34,11 +35,19 @@ static Expr* undirected_edge(long a, long b) {
     return expr_new_function(expr_new_symbol(SYM_UndirectedEdge), ea, 2);
 }
 
-/* Wrap vertex/edge C-arrays into a Graph[...] (moves ownership). */
+/* Wrap a calloc'd Expr* array into a List[...]: the elements move into the new
+ * node (expr_new_function copies the pointers, not the array), so the array
+ * itself is ours to free. */
+static Expr* make_list_owning(Expr** items, size_t n) {
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), items, n);
+    free(items);
+    return list;
+}
+
+/* Wrap vertex/edge C-arrays into a Graph[...] (moves ownership, frees both
+ * arrays). */
 static Expr* make_graph(Expr** verts, size_t nv, Expr** edges, size_t ne) {
-    Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), verts, nv);
-    Expr* elist = expr_new_function(expr_new_symbol(SYM_List), edges, ne);
-    Expr* gargs[2] = { vlist, elist };
+    Expr* gargs[2] = { make_list_owning(verts, nv), make_list_owning(edges, ne) };
     return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
 }
 
@@ -102,22 +111,25 @@ Expr* builtin_path_graph(Expr* res) {
     return make_graph(int_vertices(n), (size_t)n, edges, ne);
 }
 
-/* Vertices 1..n wrapped as a List; frees the intermediate C array, which
- * expr_new_function memcpys rather than adopting (src/expr.c:257). */
-static Expr* vertex_list(long n) {
-    Expr** verts = int_vertices(n);
-    Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), verts, (size_t)n);
-    free(verts);
-    return vlist;
+Expr* builtin_star_graph(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    long n = as_count(res->data.function.args[0]);
+    if (n < 0) return NULL;
+    /* Hub is vertex 1, joined to each of 2..n: exactly n-1 edges, with no
+     * duplicate possible at any size (unlike CycleGraph's wrap edge). */
+    size_t ne = (n > 0) ? (size_t)n - 1 : 0;
+    Expr** edges = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
+    for (long i = 2; i <= n; i++) edges[i - 2] = undirected_edge(1, i);
+    return make_graph(int_vertices(n), (size_t)n, edges, ne);
 }
 
 /* One random undirected graph: n vertices, m of the n(n-1)/2 candidate edges.
  * Returns NULL if the sampler declines or an allocation fails. Caller has
  * already validated n >= 0, m >= 0, maxe representable, m <= maxe.
  *
- * Assembly is inline rather than via make_graph (:36-41) on purpose: that
- * helper frees none of the arrays it is handed (its "moves ownership" comment
- * predates the memcpy) and takes an Expr** edge array, not a built List. */
+ * Assembly is inline rather than via make_graph: the edges arrive as an
+ * already-built List (RandomSample's result), not the Expr** array make_graph
+ * expects. */
 static Expr* one_random_graph(long n, unsigned long long maxe, long m) {
     /* n <= 1 leaves no candidates, and RandomSample[{}, m] is itself
      * unevaluated (is_nonempty_list, src/random.c:1707) — which is why
@@ -127,7 +139,7 @@ static Expr* one_random_graph(long n, unsigned long long maxe, long m) {
      * RandomSample[cand, 0], and skipping the call would shift the RNG stream
      * for every later draw. */
     if (maxe == 0) {
-        Expr* gargs[2] = { vertex_list(n),
+        Expr* gargs[2] = { make_list_owning(int_vertices(n), (size_t)n),
                            expr_new_function(expr_new_symbol(SYM_List), NULL, 0) };
         return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
     }
@@ -150,7 +162,7 @@ static Expr* one_random_graph(long n, unsigned long long maxe, long m) {
     Expr* sampled = evaluate(sample_call);   /* consumes sample_call */
     if (!graph_is_list(sampled)) { expr_free(sampled); return NULL; }
 
-    Expr* gargs[2] = { vertex_list(n), sampled };
+    Expr* gargs[2] = { make_list_owning(int_vertices(n), (size_t)n), sampled };
     return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
 }
 
