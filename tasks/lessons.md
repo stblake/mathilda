@@ -3755,3 +3755,24 @@ function. Probe C nailed it: `Function[pl, Map[(pl[[1]]+#)&, {10,20}]][{5,9}]` �
    ~1e-24 at several points), not by symbolic `Simplify` (>300s over the Root
    objects) — and assert the head too, since `D[]` of an unevaluated `Integrate`
    returns the integrand and passes a residual test vacuously.
+
+## 2026-09-22 — Mathematica divergence fixes (A1–A10) + FLINT nmod_poly
+
+1. **A print-formatting change has a very broad test blast radius.** The B2
+   denominator fold (`1/4/Sqrt[2]` → `1/(4 Sqrt[2])`, correct, matches MMA)
+   turned ~10 suites red because the OLD form was baked into their expected
+   output (parfrac, radicals, integration corpora). Run the FULL suite (or at
+   least every print-touching suite) BEFORE committing/pushing any change to the
+   printer. I pushed v0.170 before the backstop finished and had to revert B2
+   (v0.171). Classify each broad-suite failure against a baseline build of the
+   parent commit (git worktree add /tmp/x <parent>) before assuming it's yours.
+2. **Distinguish pre-existing/flaky failures from regressions with the baseline
+   binary, not reasoning alone.** MoebiusMu[10^50+1] flaked (1 vs -1) via ECM
+   non-determinism; PrimeNu, qrdecomposition (segfault), and two integrator
+   representation/decline cases failed identically on f9670b19 — all pre-existing.
+3. **A2 and A6 shared one root cause**: PolynomialMod not reducing Rational
+   coefficients also defeated PolynomialExtendedGCD's modular Euclidean loop.
+   Fix the reducer once, both fall out.
+4. **The packed/NDArray transparency gate does not protect Hold* iterator specs**
+   (Do/Table/Sum/Product) or AWARE heads — a packed list reaches them
+   un-materialised; materialise in iter_spec_parse (one fix point).

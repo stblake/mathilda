@@ -56,4 +56,20 @@ Every fix: extensive unit tests, no leaks, packed/NDArray + Compile surfaces res
 docs/spec/changelog/2026-09-21.md — divergence-fixes section added.
 
 ## Review
-(to be filled once verification completes)
+A1–A10 correctness + FLINT nmod_poly fast path + B3 landed and pushed (v0.170,
+commit 3c12c301). Broad backstop suite (476 pass / 18 fail) then classified the
+18 against a baseline build of the parent (f9670b19):
+- 8 fails were B2 printing-rot (my correct new output; tests encoded the old
+  1/4/Sqrt[2] form). B2 reverted (v0.171, 57ea1f8e) and deferred as a dedicated
+  test-expectation sweep, alongside B1; those 8 suites now pass.
+- 5 fails are PRE-EXISTING (fail identically on baseline f9670b19), NOT caused by
+  this work: risch_rde_tower (Integrate[E^(Log[x]^2)] FreeQ=True), intrischnorman
+  (1/Log[x] -> ExpIntegralEi vs LogIntegral), moebiusmu (flaky: ECM
+  non-determinism on 10^50+1), primenu (baseline also 7), qrdecomposition_machine
+  (segfault on baseline too — gcc-16 class).
+- 4 slow corpus/dsolve suites (crc_corpus, intrat_corpus, dsolve, dsolve_stress):
+  verifying on v0.171 (were 90s-timeout false-fails and/or B2-rot now reverted).
+
+Lesson: a print-formatting change has a broad blast radius via test expected-output;
+run the full suite (or at least all print-touching suites) BEFORE pushing such a
+change to main. Pushed before the backstop completed — corrected with the revert.
