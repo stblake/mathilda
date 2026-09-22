@@ -64,6 +64,7 @@ typedef enum {
     DS_AUTONOMOUS,
     DS_LIOUVILLE,
     DS_IFACTOR,
+    DS_FIRSTINTEGRAL,
     DS_FOPOWERSERIES,
     DS_FROBENIUS,
     DS_INVALID
@@ -106,6 +107,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "AutonomousReduction") == 0) return DS_AUTONOMOUS;
     if (strcmp(s, "Liouville")            == 0) return DS_LIOUVILLE;
     if (strcmp(s, "ReducibleIntegratingFactor") == 0) return DS_IFACTOR;
+    if (strcmp(s, "ReducibleFirstIntegral") == 0) return DS_FIRSTINTEGRAL;
     if (strcmp(s, "FirstOrderPowerSeries") == 0) return DS_FOPOWERSERIES;
     if (strcmp(s, "FrobeniusSeries")     == 0) return DS_FROBENIUS;
     if (strcmp(s, "PowerSeries")         == 0) return DS_FROBENIUS;
@@ -153,6 +155,7 @@ extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_ifactor_first_integral_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_changevar_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_ratsol2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch);
@@ -466,6 +469,13 @@ Expr* builtin_dsolve(Expr* res) {
              * cascade.  Runs after the 2nd-order specialists and before the series
              * fallback, mirroring how first-order Lie (below) sits before series. */
             if (!result) result = dsolve_run(&P, dsolve_lie2_try);
+            /* ReducibleFirstIntegral: reduction-of-order backstop for a nonlinear
+             * 2nd-order ODE whose integrating-factor first integral R(x,y,y')==C[1]
+             * is not elementarily solvable as a first-order ODE.  Runs AFTER the
+             * full-solution methods (ifactor-explicit, SecondOrderSymmetry) so a
+             * two-constant closed form always wins over the one-constant reduction
+             * (Cheb-Terrab & Roche 1999, Section 2.2; Maple's `_mu_x_y1` classes). */
+            if (!result) result = dsolve_run_first_integral(&P, dsolve_ifactor_first_integral_try);
             /* implicit first-integral fallback: a homogeneous ODE with no explicit
              * inverse (transcendental log-spiral) is returned as G(x,y[x]) == C[1] */
             if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
@@ -529,6 +539,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);   break;
         case DS_LIOUVILLE:    result = dsolve_run(&P, dsolve_liouville_try);    break;
         case DS_IFACTOR:      result = dsolve_run(&P, dsolve_ifactor_try);      break;
+        case DS_FIRSTINTEGRAL: result = dsolve_run_first_integral(&P, dsolve_ifactor_first_integral_try); break;
         case DS_FOPOWERSERIES: result = dsolve_run(&P, dsolve_first_order_series_try); break;
         case DS_FROBENIUS:    result = dsolve_run(&P, dsolve_frobenius_try);    break;
         default: break;

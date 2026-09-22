@@ -1730,6 +1730,68 @@ Expr* dsolve_method_builtin_implicit(Expr* res, DSolveTryFn fn) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  First integrals R(x, y[x], y'[x]) == C[1] of a SECOND-order ODE    *
+ *  (reduction of order — the integrating-factor methods, when the     *
+ *  reduced first-order ODE has no elementary explicit solution).      *
+ * ------------------------------------------------------------------ */
+
+/* Verify Rf is a first integral of the 2nd-order ODE y'' == Phi: the total
+ * x-derivative d/dx(Rf), with y''[x] replaced by Phi, must vanish.  Permissive
+ * (reject only on a decidably non-zero residual, like the implicit path) — the
+ * integrating-factor method's own A(R)=0 gate is the strict correctness guard. */
+static bool dsolve_verify_first_integral(DSolveProblem* P, const Expr* Rf) {
+    if (P->nfun != 1 || P->neq != 1) return false;
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    Expr* F = dsolve_solve_top_derivative(P, 2);            /* y'' == F(x, y, y') */
+    if (!F) return true;                                    /* cannot recompute; trust method */
+    Expr* dR = ds_d(expr_copy((Expr*)Rf), expr_new_symbol(xvar));         /* total d/dx(Rf) */
+    dR = ds_subst(dR, ds_make_funcapp(yname, 2, xvar), F);               /* y''[x] -> F */
+    dR = eval_and_free(ds_call1("Together", dR));
+    bool ok = (zero_test_decide(dR) != ZERO_TEST_FALSE);
+    expr_free(dR);
+    return ok;
+}
+
+/* The try-fn returns, per branch, the first-integral LHS Rf(x, y[x], y'[x]);
+ * this verifies each and assembles {{ Rf == C[1] }}.  Declines an IVP — one
+ * first-integral constant cannot fit two second-order conditions (the honest
+ * outcome, matching dsolve_run_parametric's IVP decline). */
+Expr* dsolve_run_first_integral(DSolveProblem* P, DSolveTryFn fn) {
+    if (P->ncond > 0) return NULL;
+    size_t nb = 0;
+    Expr** rs = fn(P, &nb);
+    if (!rs) return NULL;
+    if (nb == 0) { free(rs); return NULL; }
+    Expr** branches = malloc(nb * sizeof(Expr*));
+    size_t nf = 0;
+    for (size_t b = 0; b < nb; b++) {
+        if (!rs[b]) continue;
+        if (!dsolve_verify_first_integral(P, rs[b])) { expr_free(rs[b]); continue; }
+        Expr* c1 = ds_const(1);
+        Expr* rhs = ds_rename_param(c1, P->param_head);      /* C[1] -> GeneratedParameters head */
+        expr_free(c1);
+        Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
+                       (Expr*[]){ rs[b], rhs }, 2);          /* consumes rs[b], rhs */
+        branches[nf++] = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ eq }, 1);
+    }
+    free(rs);
+    if (nf == 0) { free(branches); return NULL; }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), branches, nf);
+    free(branches);
+    return out;
+}
+
+Expr* dsolve_method_builtin_first_integral(Expr* res, DSolveTryFn fn) {
+    DSolveProblem P;
+    if (!dsolve_parse(res, &P)) return NULL;
+    if (P.is_pde || P.nfun != 1) { dsolve_problem_free(&P); return NULL; }
+    Expr* r = dsolve_run_first_integral(&P, fn);
+    dsolve_problem_free(&P);
+    return r;
+}
+
+/* ------------------------------------------------------------------ *
  *  Parametric solutions { x == X(t), y == Y(t) } (Lagrange/d'Alembert)*
  * ------------------------------------------------------------------ */
 

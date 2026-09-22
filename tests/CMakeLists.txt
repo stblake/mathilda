@@ -3194,6 +3194,10 @@ add_executable(dsolve_m55_stress_tests test_dsolve_m55_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m55_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m55_stress_tests COMMAND dsolve_m55_stress_tests)
 
+add_executable(dsolve_m56_stress_tests test_dsolve_m56_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m56_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m56_stress_tests COMMAND dsolve_m56_stress_tests)
+
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)
 
@@ -3766,14 +3770,14 @@ else()
 endif()
 # Per-section dashboards.  argv = <corpus> <prelude> <baseline>.  Baselines are
 # the checked-in high-water marks recorded in DSolve_test_status/STATUS.md.
-# Baseline 644 (M55 generalised power-potential recogniser -- Bessel + Whittaker/1F1 -- plus
-# the Kovacic purely-imaginary-pole fix).  Measured 568 PASS / 636 non-PASS, 0 FAIL (up from
-# M54's 557/647: +7 power-potential, +4 Kovacic ±i poles / timing); +8 margin for the ~6-7 s
-# timing-boundary cluster (58/77/78/375/439/877) that flips P<->U on load.
+# Baseline 631 (M56 mu(x,y') integrating factors -> reduction-of-order first integrals
+# R(x,y[x],y'[x])==C[1]).  Measured 585 PASS / 619 non-PASS, 0 FAIL (up from 568/636: the
+# whole +17 is the 2nd_reducible_mu bucket, 38->55); +12 margin for the pre-existing 8 s
+# timing-boundary cluster (58/77/78/112/375/439/592/799/877) that flips P<->U by machine speed.
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 644)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 631)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
 # verifies the ODE residual AND every initial condition (M21).  Baseline 2

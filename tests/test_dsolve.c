@@ -2701,6 +2701,60 @@ static void t_m55_generalized_power_potential(void) {
                "{a -> 1, b -> 2, n -> 3, C[1] -> 12/10, C[2] -> 7/10, x -> 6/10}, 20]] < 10^-6]");
 }
 
+/* ---- M56: DSolve`ReducibleFirstIntegral (mu(x,y') integrating factors) ---- *
+ * Cheb-Terrab & Roche 1999 Section 2.2, Lemma 3 Cases A/C/D.  The answer is a
+ * reduction-of-order first integral {{ R(x, y[x], y'[x]) == C[1] }} (one constant,
+ * carries y'[x]); verified INTRINSICALLY (D[R,x] with y''->Phi vanishes), since the
+ * corpus verifier trusts an implicit branch on symbolic self-verification. */
+
+/* Case A (2.36-2.40) — Kamke 226: y'' == (x^2 y y' + x y^2)/y' -> mu == y',
+ * first integral y'^2/2 - x^2 y^2/2 == C[1]. */
+static void t_m56_mu_xyp_caseA(void) {
+    /* pinned method returns a single {R == C[1]} that contains y'[x] */
+    check_form("Head[DSolve`ReducibleFirstIntegral[y''[x] == (x^2 y[x] y'[x] + x y[x]^2)/y'[x], y[x], x]]",
+               "List");
+    check_true("With[{s = DSolve`ReducibleFirstIntegral[y''[x] == (x^2 y[x] y'[x] + x y[x]^2)/y'[x], y, x]}, "
+               "MatchQ[s[[1, 1]], _Equal] && Not[FreeQ[s[[1, 1, 1]], Derivative[1][y][x]]] && "
+               "Abs[N[((D[s[[1, 1, 1]], x] /. Derivative[2][y][x] -> (x^2 y[x] y'[x] + x y[x]^2)/y'[x]) "
+               "/. {y[x] -> 9/10, Derivative[1][y][x] -> 7/5, x -> 6/5}), 20]] < 10^-6]");
+}
+
+/* Case C (2.41-2.50) — Kamke 136 instance: y'' == (1 + y'^2)/(x - y) ->
+ * mu == (y'-1)/(1+y'^2). */
+static void t_m56_mu_xyp_caseC(void) {
+    check_true("With[{s = DSolve`ReducibleFirstIntegral[y''[x] == (1 + y'[x]^2)/(x - y[x]), y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && Not[FreeQ[s[[1, 1, 1]], Derivative[1][y][x]]] && "
+               "Abs[N[((D[s[[1, 1, 1]], x] /. Derivative[2][y][x] -> (1 + y'[x]^2)/(x - y[x])) "
+               "/. {y[x] -> 3/10, Derivative[1][y][x] -> 6/5, x -> 8/5}), 20]] < 10^-6]");
+}
+
+/* Case D (2.57-2.64, narrow family) — Kamke 66: y'' == a(c + b x + y)(1 + y'^2)^(3/2)
+ * -> mu == (b + y')/(a(1 + y'^2)^(3/2)). */
+static void t_m56_mu_xyp_caseD(void) {
+    check_true("With[{s = DSolve`ReducibleFirstIntegral["
+               "y''[x] == a (c + b x + y[x]) (1 + y'[x]^2)^(3/2), y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && Not[FreeQ[s[[1, 1, 1]], Derivative[1][y][x]]] && "
+               "Abs[N[((D[s[[1, 1, 1]], x] /. Derivative[2][y][x] -> a (c + b x + y[x]) (1 + y'[x]^2)^(3/2)) "
+               "/. {a -> 3/5, b -> 7/10, c -> 2/5, y[x] -> 9/10, Derivative[1][y][x] -> 7/5, x -> 6/5}), 20]] < 10^-6]");
+}
+
+/* Auto-dispatch: the automatic cascade emits the first integral (after the
+ * full-solution methods decline the reducible ODE). */
+static void t_m56_auto_dispatch(void) {
+    check_true("With[{s = DSolve[y''[x] == (x^2 y[x] y'[x] + x y[x]^2)/y'[x], y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && MatchQ[s[[1, 1]], _Equal]]");
+}
+
+/* Gates: a LINEAR ODE and an IVP both decline the first-integral method
+ * (returns unevaluated), so it never fabricates a reduction it cannot fit. */
+static void t_m56_declines_linear_and_ivp(void) {
+    check_form("Head[DSolve`ReducibleFirstIntegral[y''[x] == y[x], y[x], x]]",
+               "DSolve`ReducibleFirstIntegral");
+    check_form("Head[DSolve`ReducibleFirstIntegral["
+               "{y''[x] == (x^2 y[x] y'[x] + x y[x]^2)/y'[x], y[0] == 1, y'[0] == 2}, y[x], x]]",
+               "DSolve`ReducibleFirstIntegral");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2961,6 +3015,12 @@ int main(void) {
     TEST(t_m18_trigtoexp_coth);
     TEST(t_m54_kovacic_missing_y_no_churn);
     TEST(t_m55_generalized_power_potential);
+    /* M56: reducible mu(x,y') integrating factor -> first integral R == C[1] */
+    TEST(t_m56_mu_xyp_caseA);
+    TEST(t_m56_mu_xyp_caseC);
+    TEST(t_m56_mu_xyp_caseD);
+    TEST(t_m56_auto_dispatch);
+    TEST(t_m56_declines_linear_and_ivp);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

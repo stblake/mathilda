@@ -591,7 +591,7 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     1013, 1014, 1094), 0 FAIL. Side-fix + symbolic-parameter verify gate (M16 lesson:
     instantiate the residual's free *argument-position* params at generic reals — not
     heads — so symbolic-coefficient ODEs numericize; this unlocked 184).
-  - **Stage 2 — μ(x,y') (Section 2.2, Lemma 3).** NEXT INCREMENT. `μ = 𝓕(x,y')·μ̃(x)`
+  - **Stage 2 — μ(x,y') (Section 2.2, Lemma 3).** ✅ DONE in **M56** (below). `μ = 𝓕(x,y')·μ̃(x)`
     (2.24-2.25). **𝓕 by Lemma 3** from `Υ = Φ_y` (2.35), six branches:
     **A** `∂_{y'}(Υ_y/Υ)≠0` (2.36) → `𝓕 = 1/(y'-only-not-y factors of Υ)` (2.40);
     **B** those factors free of y' → try A, test μ̃; **C** `G_xy/G_yy≠0` indep of y →
@@ -604,19 +604,16 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     `μ̃=Exp∫(φ3_{y'}−φ4_x)/φ4 dx` (2.34) — the integrand being x-only is the existence
     condition. **Case discrimination:** the Lemma-2 μ̃-existence check is necessary but
     NOT sufficient (a wrong case passes it); the `A(R)=0` gate per candidate is what
-    picks the right case. **BLOCKED finding (measured this session):** Cases A/C/D + Lemma
-    2 were implemented and VERIFIED to find valid μ (Kamke 226 → μ=y'; Kamke 136 →
-    (y'−1)/h(y'); Kamke 66 → (y'+b)/(a(1+y'²)^{3/2}) — all with `A(R)=0` holding), but the
-    wave yields **0 new corpus solves**: the reduced first integrals `R==C[1]` are
-    NON-ELEMENTARY first-order ODEs (`y'=√(x²y²+2C)`, `y'=Tan[C+Log[x−y]]`) that neither
-    our cascade nor — verified directly — Maple/Mathematica close in elementary explicit
-    form (those CAS return them implicitly). So the Cases-A/C/D μ-search was reverted, and
-    Stage 2 is **blocked on** either (a) a non-elementary/implicit first-order ODE solver,
-    or (b) a policy decision to emit the reduced first integral `R(x,y[x],y'[x])==C[1]` as
-    an implicit answer (as the existing chini/abel/homogeneous-implicit methods do for
-    first-order ODEs). Cases E/F (`𝓗'=0` exponential; the general p'(x)-elimination) were
-    not needed. The verified Cases-A/C/D code + μ̃ recovery are recoverable from this
-    session's history.
+    picks the right case. **RESOLVED in M56 via path (b):** Cases A/C/D + Lemma 2 find valid
+    μ (Kamke 226 → μ=y'; Kamke 136 → (y'−1)/h(y'); Kamke 66 → (y'+b)/(a(1+y'²)^{3/2}) — all
+    with `A(R)=0` holding), but the reduced first integrals `R==C[1]` are NON-ELEMENTARY
+    first-order ODEs (`y'=√(x²y²+2C)`, `y'=Tan[C+Log[x−y]]`) that no CAS closes in elementary
+    explicit form (they return them implicitly). M18 had therefore reverted the search for lack
+    of *explicit* yield; **M56 keeps the search and emits the first integral
+    `R(x,y[x],y'[x])==C[1]` as a reduction-of-order answer** (the new `dsolve_run_first_integral`
+    runner + `DSolve\`ReducibleFirstIntegral`), as chini/abel/homogeneous-implicit already do for
+    first-order ODEs. Cases E/F (`𝓗'=0` exponential; the general p'(x)-elimination) and the
+    general (non-degenerate) Case D remain future.
   - **Stage 3 — μ(y,y') (Section 2.3).** Point-swap `y↔x`, reuse Stage 2, back-transform
     `μ=μ_swapped(x,1/y')/y'²` (2.95). Pending Stage 2.
   - *Future:* the 3rd-order `_mu_y2`/`_mu_poly_yn` integrating factors (6 corpus cases);
@@ -2034,6 +2031,43 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     is what spins the simplify); a purely-imaginary pair (`x²+c`) is solved. Heun cases still
     decline fast (no hang) → Frobenius. §2.1.2 **564 → 568 PASS, 0 FAIL** (gate 648 → 644);
     §2.2.14 unchanged 99/100. `t_kovacic_complex_poles` passes. Version 0.153 → 0.154.
+
+- **M56 — second-order integrating factors, Stage 2: μ(x, y′) → reduction-of-order first
+  integral.** ✅ DONE. Completes the "NEXT INCREMENT" the plan marked open inside M18: the
+  μ(x, y′) integrating-factor search (Cheb-Terrab & Roche 1999, Section 2.2, Lemma 3) — which
+  M18 had implemented-and-reverted because the reduced first integrals `R==C[1]` are
+  non-elementary first-order ODEs — now ships, **unblocked via path (b)**: emit
+  `R(x, y[x], y'[x]) == C[1]` as a Maple-style reduction-of-order answer.
+  - **μ(x, y′) search (`dsolve_ifactor.c`).** From `Υ = Φ_y`: **Case A** (`∂_{y′}(Υ_y/Υ)≠0`)
+    → `𝓕 = 1/(y′-only factors of Υ)`; **Case C** (`Υ_y≠0`, `∂_{y′}(Υ_y/Υ)=0`) → `w` the
+    y-only factors, `𝓗=w_y/w`, `p'=𝓗_x/𝓗_y`, `𝓕=(p'+y')w/Υ`; **Case D** (`Υ_y=0`, narrow
+    degenerate family) → `p'=Ψ_x`, `Ψ=Φ/Υ−y`, `𝓕=(p'+y')/Υ`. `μ̃(x)` by Lemma 2 (φ₁…φ₄,
+    x-only integrand existence). `if_factor_select` (via `FactorList`) does the split; a
+    mis-extraction only ever declines. (Case B → A/C; Cases E/F never occur in Kamke — future.)
+  - **Correctness gate unchanged.** Each candidate μ reconstructs `R=∫μ dy'+G(x,y)` (the
+    existing general `ifactor_build_R`) and must pass `A(R)=R_x+y'R_y+Φ R_{y'}==0` **symbolic
+    (`ifactor_R_ok`) + numeric (`ifactor_R_num_ok`, new)** before use → a wrong μ is a clean
+    decline, never a wrong answer.
+  - **Emit (`dsolve_run_first_integral` + `dsolve_method_builtin_first_integral`,
+    `dsolve_common.c`).** New runner parallel to `dsolve_run_implicit` but 2nd-order-aware:
+    verifies `d/dx(R)` vanishes modulo `y''==Φ` and assembles `{{ Rf == C[1] }}`; **declines an
+    IVP** (one constant cannot fit two conditions). The search is shared by two try-fns — the
+    unchanged explicit `dsolve_ifactor_try` (which still wins with a full two-constant closed
+    form when the reduced ODE is solvable) and the new `dsolve_ifactor_first_integral_try`
+    (reduction fallback), each with its own decline memo. Cascade: new
+    `DS_FIRSTINTEGRAL` after `SecondOrderSymmetry`, so full solutions always win.
+  - **Solves** Kamke 226 `y''=(x²yy'+xy²)/y'` → `y'[x]²/2 − x²y[x]²/2 == C[1]` (Case A),
+    Kamke 136 `y''=(1+y'²)/(x−y)` (Case C), Kamke 66 `y''=a(c+bx+y)(1+y'²)^{3/2}` (Case D).
+    New pinned builtin `DSolve\`ReducibleFirstIntegral` (docstring + `ATTR_PROTECTED`); units
+    `t_m56_*` (`tests/test_dsolve.c`); anti-overfit `tests/test_dsolve_m56_stress.c` (A/C/D
+    forward-generator grids, intrinsic first-integral verify). §2.1.2: **568 → 585 (+17), 0
+    FAIL** — the entire net gain is the `2nd_reducible_mu` bucket (38 → 55, gap 64 → 47),
+    verified first integrals for 1156 (`_mu_x_y1`), 14/198/897/1157 (`_mu_xy`, all
+    `sympy=False`); measurement deterministic across two runs. The 7 P→U flips are the
+    pre-existing 8 s timing-boundary cluster (linear/symmetry cases M56 declines; 112 needs
+    18.5 s), not regressions. Gate baseline 644 → 631. All DSolve stress suites
+    (m5/m12/m14/m18/m55/m56) + `make check-c99` green.
+    *Stage 3 (μ(y,y′), the point-swap) and Cases E/F remain future.* Version 0.171 → 0.172.
 
 ## Phase 1 — ODE method catalog
 

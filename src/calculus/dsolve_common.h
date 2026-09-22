@@ -89,6 +89,17 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn);
 Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn);
 Expr* dsolve_method_builtin_implicit(Expr* res, DSolveTryFn fn);
 
+/* ---- first integrals R(x, y[x], y'[x]) == C[1] of a SECOND-order ODE ----
+ * The try-fn returns, per branch, the first-integral LHS Rf (an expression in x,
+ * y[x] and y'[x]); `dsolve_run_first_integral` verifies each (d/dx(Rf) vanishes
+ * modulo y'' == Phi), and assembles {{ Rf == C[1] }}.  A reduction-of-order
+ * answer for a nonlinear 2nd-order ODE whose reduced first-order ODE has no
+ * elementary explicit solution (the integrating-factor methods).  An IVP is
+ * declined (one constant cannot fit two conditions).
+ * `dsolve_method_builtin_first_integral` is the strict pinned-method entry. */
+Expr* dsolve_run_first_integral(DSolveProblem* P, DSolveTryFn fn);
+Expr* dsolve_method_builtin_first_integral(Expr* res, DSolveTryFn fn);
+
 /* ---- parametric solutions of a first-order ODE ----
  * The try-fn returns, per branch, the wrapper DSolve`Param[X, Y, t] giving the
  * parametric solution { x == X(t), y == Y(t) } in the parameter symbol `t`

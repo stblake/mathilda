@@ -60,16 +60,18 @@ static void if_dbg(const char* where, const Expr* e) {
 }
 
 #define IF_MEMO_SLOTS 32
-static uint64_t if_memo_epoch = 0;
-static int      if_memo_n = 0;
-static uint64_t if_memo[IF_MEMO_SLOTS];
-static void if_memo_sync(uint64_t tid) { if (tid != if_memo_epoch) { if_memo_epoch = tid; if_memo_n = 0; } }
-static bool if_memo_seen(uint64_t h) {
-    for (int i = 0; i < if_memo_n; i++) if (if_memo[i] == h) return true;
+typedef struct { uint64_t epoch; int n; uint64_t h[IF_MEMO_SLOTS]; } IfMemo;
+/* Two independent per-toplevel decline memos: the explicit-solution path and the
+ * first-integral (reduction-of-order) path decline for different reasons, so an
+ * explicit decline must NOT suppress the first-integral attempt on the same ODE. */
+static IfMemo if_memo_explicit, if_memo_fi;
+static void if_memo_sync(IfMemo* m, uint64_t tid) { if (tid != m->epoch) { m->epoch = tid; m->n = 0; } }
+static bool if_memo_seen(IfMemo* m, uint64_t h) {
+    for (int i = 0; i < m->n; i++) if (m->h[i] == h) return true;
     return false;
 }
-static void if_memo_add(uint64_t h) {
-    if (if_memo_n < IF_MEMO_SLOTS && !if_memo_seen(h)) if_memo[if_memo_n++] = h;
+static void if_memo_add(IfMemo* m, uint64_t h) {
+    if (m->n < IF_MEMO_SLOTS && !if_memo_seen(m, h)) m->h[m->n++] = h;
 }
 
 /* ---- small helpers ---- */
@@ -319,6 +321,41 @@ static bool ifactor_R_ok(const Expr* R, const Expr* Phi,
     return z;
 }
 
+/* Numeric backstop for A(R) == 0: sample x, y, y' at several generic reals (with
+ * the genuine ODE parameters instantiated) and reject ONLY on a clearly-nonzero
+ * value.  Permissive by design — it catches a zero_test FALSE-POSITIVE (a wrong R
+ * that ifactor_R_ok wrongly accepted) without ever dropping a correct R that the
+ * sampler cannot evaluate (poles -> NaN, skipped).  R, Phi borrowed. */
+static bool ifactor_R_num_ok(const Expr* Phi, const Expr* R,
+                             const char* xv, const char* Yn, const char* Pn) {
+    Expr* Rx = if_d(expr_copy((Expr*)R), xv);
+    Expr* Ry = if_d(expr_copy((Expr*)R), Yn);
+    Expr* Rp = if_d(expr_copy((Expr*)R), Pn);
+    Expr* A = eval_and_free(ds_call2(SYM_Plus, Rx,
+                ds_call2(SYM_Plus,
+                    ds_call2(SYM_Times, expr_new_symbol(Pn), Ry),
+                    ds_call2(SYM_Times, expr_copy((Expr*)Phi), Rp))));
+    const double xs[] = { 1.3, 0.7, 2.1, 1.9, 0.55 };
+    const double ys[] = { 0.9, 1.7, 0.4, 2.3, 1.1  };
+    const double ps[] = { 1.2, 0.6, 1.8, 0.3, 2.2  };
+    int big = 0;
+    for (int i = 0; i < 5; i++) {
+        Expr* e = expr_copy(A);
+        e = ds_subst(e, expr_new_symbol(Yn), expr_new_real(ys[i]));
+        e = ds_subst(e, expr_new_symbol(Pn), expr_new_real(ps[i]));
+        e = ds_subst(e, expr_new_symbol(xv), expr_new_real(xs[i]));
+        e = if_instantiate_params(e, xv);   /* genuine params -> generic reals */
+        e = eval_and_free(ds_call1("Abs", e));
+        double m = (e && e->type == EXPR_REAL)    ? e->data.real
+                 : (e && e->type == EXPR_INTEGER) ? (double)e->data.integer
+                 : NAN;
+        expr_free(e);
+        if (isfinite(m) && m > 1e-3) big++;
+    }
+    expr_free(A);
+    return big == 0;
+}
+
 /* Given a validated first integral R(x,y,p), solve  R(x,y[x],y'[x]) == C[2]  as a
  * first-order ODE (recursing into the cascade; the sub-solve introduces C[1]),
  * numerically verify the explicit branch, and return the body y(x,C[1],C[2]) or
@@ -478,24 +515,182 @@ static Expr* ifactor_mu_xy(const Expr* Phi, const char* xv, const char* Yn, cons
 }
 
 /* ===================================================================== *
- *  Stage 2/3 (mu(x,y'), mu(y,y')) — BLOCKED on the reduced-ODE solver.     *
+ *  Stage 2:  mu(x, y')  [_mu_x_y1]   (Section 2.2, Lemma 3)              *
  *                                                                         *
- *  mu(x,y')=𝓕·μ̃(x) with 𝓕 from Lemma 3 (Υ=Φ_y (2.35)) and μ̃ from Lemma 2  *
- *  (2.30)-(2.34); mu(y,y') is the point-swap y<->x of that (2.95).  This   *
- *  session implemented and VERIFIED the μ-search for Cases A/C/D (Kamke    *
- *  226 → μ=y'; Kamke 136/66 → valid first integrals R with A(R)=0), but it *
- *  yields 0 new corpus solves: the reduced first integrals R==C[1] are     *
- *  NON-ELEMENTARY first-order ODEs (y'=Sqrt[x²y²+2C], y'=Tan[C+Log[x-y]])  *
- *  that neither our cascade nor — verified — Maple/Mathematica close in    *
- *  elementary explicit form; those CAS return them implicitly.  So Stage 2 *
- *  is BLOCKED on (a) a non-elementary/implicit first-order solver, or (b) a *
- *  policy decision to emit the reduced first integral R(x,y[x],y'[x])==C[1] *
- *  as an implicit answer.  The full Cases A–F + Lemma-2 μ̃ recovery are     *
- *  transcribed in DSOLVE_PLAN.md M18 for that follow-up.                   *
+ *  mu(x,y') = 𝓕(x,y')·μ̃(x): 𝓕 from Lemma 3 (Υ = Φ_y, 2.35), μ̃ from Lemma  *
+ *  2 (2.30)-(2.34).  Cases A/C/D (B resolves to A/C; E/F never occur in    *
+ *  Kamke's nonlinear 2nd-order set).  A candidate μ that survives the      *
+ *  A(R)=0 gate downstream is a valid integrating factor; a wrong one (or a *
+ *  mis-extracted factor) fails the gate and declines — never wrong.  The   *
+ *  reduced first integral R==C[1] is emitted as a reduction-of-order       *
+ *  answer by dsolve_run_first_integral when it is not elementarily         *
+ *  solvable (Cheb-Terrab & Roche 1999, Section 2.2).                       *
  * ===================================================================== */
-static Expr* ifactor_mu_x_y1(const Expr* Phi, const char* xv, const char* Yn, const char* Pn) {
-    (void)Phi; (void)xv; (void)Yn; (void)Pn; return NULL;
+
+/* Product of the multiplicative factors of E (over its factored numerator and
+ * denominator) that DEPEND ON `keep` and are FREE OF `drop`; denominator factors
+ * enter with negated exponent.  A pragmatic split whose only failure mode is a
+ * clean decline (the A(R)=0 gate rejects a wrong 𝓕).  E borrowed; owned or NULL. */
+static Expr* if_factor_select(const Expr* E, const char* keep, const char* drop) {
+    Expr* tg = eval_and_free(ds_call1("Together", expr_copy((Expr*)E)));
+    if (!tg) return NULL;
+    Expr* num = eval_and_free(ds_call1("Numerator", expr_copy(tg)));
+    Expr* den = eval_and_free(ds_call1("Denominator", tg));       /* consumes tg */
+    Expr* result = expr_new_integer(1);
+    Expr* sides[2] = { num, den };
+    int   sgn[2]   = { 1, -1 };
+    for (int s = 0; s < 2; s++) {
+        Expr* fl = eval_and_free(ds_call1("FactorList", expr_copy(sides[s])));
+        if (head_is(fl, SYM_List)) {
+            for (size_t i = 0; i < fl->data.function.arg_count; i++) {
+                Expr* pair = fl->data.function.args[i];
+                if (!head_is(pair, SYM_List) || pair->data.function.arg_count < 2) continue;
+                Expr* fac = pair->data.function.args[0];
+                Expr* ex  = pair->data.function.args[1];
+                if (!ds_contains(fac, keep) || !ds_free_of(fac, drop)) continue;
+                Expr* newexp = (sgn[s] == 1) ? expr_copy(ex)
+                             : eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(ex)));
+                Expr* pw = eval_and_free(ds_call2(SYM_Power, expr_copy(fac), newexp));
+                result = eval_and_free(ds_call2(SYM_Times, result, pw));
+            }
+        }
+        expr_free(fl);
+    }
+    expr_free(num); expr_free(den);
+    return result;
 }
+
+/* Lemma 2 (2.30)-(2.34): recover μ̃(x) from 𝓕.  Returns μ̃ (owned) or NULL when
+ * the existence condition fails (the integrand is not a function of x alone, or
+ * the x-quadrature does not close).  Phi, Fcal borrowed. */
+static Expr* if_mutilde(const Expr* Phi, const Expr* Fcal,
+                        const char* xv, const char* Yn, const char* Pn) {
+    Expr* Phiy = if_d(expr_copy((Expr*)Phi), Yn);                 /* Φ_y */
+    Expr* PhF  = eval_and_free(ds_call2(SYM_Times, Phiy, expr_copy((Expr*)Fcal)));  /* Φ_y 𝓕 */
+    Expr* phi2 = if_d(expr_copy(PhF), Pn);                        /* ∂_{y'}(Φ_y 𝓕) */
+    Expr* phi1 = eval_and_free(ds_call2(SYM_Subtract, expr_copy(PhF),
+                     ds_call2(SYM_Times, expr_new_symbol(Pn), expr_copy(phi2))));   /* Φ_y𝓕 − y' φ2 */
+    expr_free(PhF);
+    Expr* num = NULL; Expr* den = NULL;
+    if (!ds_is_zero(phi2)) {
+        num = eval_and_free(ds_call2(SYM_Subtract, if_d(expr_copy(phi1), Yn), if_d(expr_copy(phi2), xv)));
+        den = expr_copy(phi2);                                    /* (φ1_y − φ2_x)/φ2 (2.33) */
+    } else {
+        /* φ2 == 0: use φ3 = −∂_{y'}(Φ 𝓕), φ4 = ∂_{y'}𝓕 (2.34) */
+        Expr* PF = eval_and_free(ds_call2(SYM_Times, expr_copy((Expr*)Phi), expr_copy((Expr*)Fcal)));
+        Expr* phi3 = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), if_d(expr_copy(PF), Pn)));
+        expr_free(PF);
+        Expr* phi4 = if_d(expr_copy((Expr*)Fcal), Pn);
+        if (!ds_is_zero(phi4)) {
+            num = eval_and_free(ds_call2(SYM_Subtract, if_d(expr_copy(phi3), Pn), if_d(expr_copy(phi4), xv)));
+            den = expr_copy(phi4);
+        }
+        expr_free(phi3); expr_free(phi4);
+    }
+    expr_free(phi1); expr_free(phi2);
+    if (!num) return NULL;
+    Expr* integrand = eval_and_free(ds_call2(SYM_Times, num,
+                          ds_call2(SYM_Power, den, expr_new_integer(-1))));  /* consumes num, den */
+    integrand = if_hypsimp(integrand);                            /* collapse to test x-only */
+    Expr* mutil = NULL;
+    if (ds_free_of(integrand, Yn) && ds_free_of(integrand, Pn) && !if_too_big(integrand)) {
+        Expr* II = if_integrate_b(expr_copy(integrand), xv);
+        if (II && !if_aborted(II) && !ds_has_head(II, SYM_Integrate))
+            mutil = eval_and_free(ds_call1(SYM_Exp, II));
+        else expr_free(II);
+    }
+    expr_free(integrand);
+    return mutil;
+}
+
+/* Lemma 3 Case A (2.36)-(2.40): ∂_{y'}(Υ_y/Υ) != 0.  𝓕 = 1/(y'-only factors of Υ). */
+static Expr* if_muxyp_caseA(const Expr* Phi, const char* xv, const char* Yn, const char* Pn) {
+    Expr* Ups = if_d(expr_copy((Expr*)Phi), Yn);                  /* Υ = Φ_y */
+    if (ds_is_zero(Ups) || if_too_big(Ups)) { expr_free(Ups); return NULL; }
+    Expr* Upy   = if_d(expr_copy(Ups), Yn);
+    Expr* ratio = eval_and_free(ds_call2(SYM_Times, Upy,
+                      ds_call2(SYM_Power, expr_copy(Ups), expr_new_integer(-1))));
+    Expr* disc  = if_d(ratio, Pn);
+    bool  isA   = !ds_is_zero(disc);
+    expr_free(disc);
+    if (!isA) { expr_free(Ups); return NULL; }
+    Expr* q = if_factor_select(Ups, Pn, Yn);                      /* y'-only factors of Υ */
+    expr_free(Ups);
+    if (!q || ds_is_zero(q) || !ds_contains(q, Pn)) { expr_free(q); return NULL; }
+    Expr* Fcal = eval_and_free(ds_call2(SYM_Power, q, expr_new_integer(-1)));  /* 𝓕 = 1/q */
+    Expr* mutil = if_mutilde(Phi, Fcal, xv, Yn, Pn);
+    if (!mutil) { expr_free(Fcal); return NULL; }
+    Expr* mu = eval_and_free(ds_call2(SYM_Times, Fcal, mutil));
+    if (if_too_big(mu) || ds_is_zero(mu)) { expr_free(mu); return NULL; }
+    return mu;
+}
+
+/* Lemma 3 Case C (2.41)-(2.50): Υ_y != 0, ∂_{y'}(Υ_y/Υ) == 0.  w = y-only factors
+ * of Υ; 𝓗 = w_y/w; p' = 𝓗_x/𝓗_y; 𝓕 = (p'+y') w / Υ. */
+static Expr* if_muxyp_caseC(const Expr* Phi, const char* xv, const char* Yn, const char* Pn) {
+    Expr* Ups = if_d(expr_copy((Expr*)Phi), Yn);
+    if (ds_is_zero(Ups) || if_too_big(Ups)) { expr_free(Ups); return NULL; }
+    Expr* Upy = if_d(expr_copy(Ups), Yn);
+    if (ds_is_zero(Upy)) { expr_free(Upy); expr_free(Ups); return NULL; }   /* Υ_y==0 -> Case D */
+    Expr* ratio = eval_and_free(ds_call2(SYM_Times, Upy,
+                      ds_call2(SYM_Power, expr_copy(Ups), expr_new_integer(-1))));
+    Expr* disc  = if_d(ratio, Pn);
+    bool  isC   = ds_is_zero(disc);
+    expr_free(disc);
+    if (!isC) { expr_free(Ups); return NULL; }
+    Expr* w = if_factor_select(Ups, Yn, Pn);                      /* y-only factors of Υ */
+    if (!w || ds_is_zero(w) || !ds_contains(w, Yn)) { expr_free(w); expr_free(Ups); return NULL; }
+    Expr* wy = if_d(expr_copy(w), Yn);
+    Expr* H  = eval_and_free(ds_call2(SYM_Times, wy,
+                   ds_call2(SYM_Power, expr_copy(w), expr_new_integer(-1))));   /* 𝓗 = w_y/w */
+    Expr* Hx = if_d(expr_copy(H), xv);
+    Expr* Hy = if_d(H, Yn);                                       /* consumes H */
+    if (ds_is_zero(Hy)) { expr_free(Hx); expr_free(Hy); expr_free(w); expr_free(Ups); return NULL; }
+    Expr* pp = eval_and_free(ds_call2(SYM_Times, Hx,
+                   ds_call2(SYM_Power, Hy, expr_new_integer(-1))));  /* p' = 𝓗_x/𝓗_y */
+    if (!ds_free_of(pp, Yn) || !ds_free_of(pp, Pn)) { expr_free(pp); expr_free(w); expr_free(Ups); return NULL; }
+    Expr* Fcal = eval_and_free(ds_call2(SYM_Times,
+                     ds_call2(SYM_Plus, pp, expr_new_symbol(Pn)),
+                     ds_call2(SYM_Times, w,
+                         ds_call2(SYM_Power, expr_copy(Ups), expr_new_integer(-1)))));  /* (p'+y')w/Υ */
+    expr_free(Ups);
+    Expr* mutil = if_mutilde(Phi, Fcal, xv, Yn, Pn);
+    if (!mutil) { expr_free(Fcal); return NULL; }
+    Expr* mu = eval_and_free(ds_call2(SYM_Times, Fcal, mutil));
+    if (if_too_big(mu) || ds_is_zero(mu)) { expr_free(mu); return NULL; }
+    return mu;
+}
+
+/* Lemma 3 Case D (2.57)-(2.64), narrow degenerate family (Υ_y == 0 and
+ * Ψ = Φ/Υ − y free of y'): then (2.63) forces p''=0 and (2.64) gives p' = Ψ_x.
+ * 𝓕 = (p'+y')/Υ (w=1).  Covers Kamke 66; the general p''-elimination is future
+ * (the A(R)=0 gate keeps this narrow form safe). */
+static Expr* if_muxyp_caseD(const Expr* Phi, const char* xv, const char* Yn, const char* Pn) {
+    Expr* Ups = if_d(expr_copy((Expr*)Phi), Yn);
+    if (ds_is_zero(Ups) || if_too_big(Ups)) { expr_free(Ups); return NULL; }
+    Expr* Upy = if_d(expr_copy(Ups), Yn);
+    bool  isD = ds_is_zero(Upy);
+    expr_free(Upy);
+    if (!isD) { expr_free(Ups); return NULL; }                    /* Υ_y != 0 */
+    Expr* Psi = eval_and_free(ds_call2(SYM_Subtract,
+                    ds_call2(SYM_Times, expr_copy((Expr*)Phi),
+                        ds_call2(SYM_Power, expr_copy(Ups), expr_new_integer(-1))),
+                    expr_new_symbol(Yn)));                         /* Ψ = Φ/Υ − y */
+    if (!ds_free_of(Psi, Pn)) { expr_free(Psi); expr_free(Ups); return NULL; }
+    Expr* pp = if_d(Psi, xv);                                     /* p' = Ψ_x (consumes Psi) */
+    if (!ds_free_of(pp, Yn) || !ds_free_of(pp, Pn)) { expr_free(pp); expr_free(Ups); return NULL; }
+    Expr* Fcal = eval_and_free(ds_call2(SYM_Times,
+                     ds_call2(SYM_Plus, pp, expr_new_symbol(Pn)),
+                     ds_call2(SYM_Power, expr_copy(Ups), expr_new_integer(-1))));   /* (p'+y')/Υ */
+    expr_free(Ups);
+    Expr* mutil = if_mutilde(Phi, Fcal, xv, Yn, Pn);
+    if (!mutil) { expr_free(Fcal); return NULL; }
+    Expr* mu = eval_and_free(ds_call2(SYM_Times, Fcal, mutil));
+    if (if_too_big(mu) || ds_is_zero(mu)) { expr_free(mu); return NULL; }
+    return mu;
+}
+
+/* mu(y, y')  [_mu_y_y1]  (Section 2.3): point-swap y<->x of Stage 2 — future. */
 static Expr* ifactor_mu_y_y1(const Expr* Phi, const char* xv, const char* Yn, const char* Pn) {
     (void)Phi; (void)xv; (void)Yn; (void)Pn; return NULL;
 }
@@ -504,35 +699,10 @@ static Expr* ifactor_mu_y_y1(const Expr* Phi, const char* xv, const char* Yn, co
  *  try / builtin / init                                                 *
  * ===================================================================== */
 
-/* Turn a candidate mu into an explicit solution body, or NULL.  mu consumed. */
-static Expr* ifactor_from_mu(const DSolveProblem* P, const Expr* Phi, Expr* mu,
-                             const char* xv, const char* Yn, const char* Pn,
-                             const char* yname) {
-    if (!mu) return NULL;
-    if_dbg("mu", mu);
-    Expr* R = ifactor_build_R(Phi, mu, xv, Yn, Pn);
-    expr_free(mu);
-    if (!R) { if_dbg("build_R FAILED", NULL); return NULL; }
-    if (!ifactor_R_ok(R, Phi, xv, Yn, Pn)) { if_dbg("A(R)!=0", R); expr_free(R); return NULL; }
-    if_dbg("R", R);
-    Expr* body = ifactor_solve_from_R(P, R, xv, Yn, Pn, yname);
-    if (!body) if_dbg("solve_from_R FAILED", NULL);
-    expr_free(R);
-    return body;
-}
-
-Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch) {
-    if (P->nfun != 1 || P->neq != 1) return NULL;
-    if (P->max_order[0] != 2) return NULL;
-    const char* xv    = P->ind_names[0];
-    const char* yname = P->fun_names[0];
-    const char* Yn = intern_symbol("DSolve`ifY");
-    const char* Pn = intern_symbol("DSolve`ifP");
-
-    uint64_t memo_h = expr_hash(P->eq_residuals[0]);
-    if_memo_sync(eval_toplevel_id());
-    if (if_memo_seen(memo_h)) return NULL;
-
+/* Shape gate + Φ(x, ifY, ifP) extraction + undefined-fn / linearity gate.
+ * Returns Phi (owned) or NULL to decline.  Sets the wall-clock deadline. */
+static Expr* ifactor_prepare(DSolveProblem* P, const char* xv, const char* yname,
+                             const char* Yn, const char* Pn) {
     Expr* F = dsolve_solve_top_derivative(P, 2);      /* y'' == F(x, y, y') */
     if (!F) return NULL;
     Expr* Phi = ds_subst(expr_copy(F), ds_make_funcapp(yname, 1, xv), expr_new_symbol(Pn));
@@ -546,38 +716,114 @@ Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch) {
      * and must be declined here for TWO reasons: (1) correctness — this is not the
      * method's class; (2) termination — Case B of mu(x,y) reduces to a LINEAR
      * nu-ODE which it re-solves through the cascade; without this gate that nu-ODE
-     * would re-enter ifactor, spawn its own nu-ODE, and recurse without bound
-     * (hitting $RecursionLimit and poisoning any caller that recurses through
-     * DSolve, e.g. SpecialFunctionForm's normal-form pre-pass).  The gate makes the
-     * nu-ODE decline immediately so the linear specialists finish it. */
-    {
-        Expr* dY = if_d(expr_copy(Phi), Yn);
-        Expr* dP = if_d(expr_copy(Phi), Pn);
-        bool linear = ds_free_of(dY, Yn) && ds_free_of(dY, Pn)
-                   && ds_free_of(dP, Yn) && ds_free_of(dP, Pn);
-        expr_free(dY); expr_free(dP);
-        if (linear) { expr_free(Phi); return NULL; }
-    }
+     * would re-enter ifactor, spawn its own nu-ODE, and recurse without bound. */
+    Expr* dY = if_d(expr_copy(Phi), Yn);
+    Expr* dP = if_d(expr_copy(Phi), Pn);
+    bool linear = ds_free_of(dY, Yn) && ds_free_of(dY, Pn)
+               && ds_free_of(dP, Yn) && ds_free_of(dP, Pn);
+    expr_free(dY); expr_free(dP);
+    if (linear) { expr_free(Phi); return NULL; }
 
     g_if_deadline = time(NULL) + 6;
-    Expr* body = NULL;
+    return Phi;
+}
 
-    /* try the three mu-forms cheapest-first; each found mu funnels through the
-     * shared build-R / verify / solve pipeline. */
-    if (!body && !if_expired()) body = ifactor_from_mu(P, Phi, ifactor_mu_xy(Phi, xv, Yn, Pn), xv, Yn, Pn, yname);
-    if (!body && !if_expired()) body = ifactor_from_mu(P, Phi, ifactor_mu_x_y1(Phi, xv, Yn, Pn), xv, Yn, Pn, yname);
-    if (!body && !if_expired()) body = ifactor_from_mu(P, Phi, ifactor_mu_y_y1(Phi, xv, Yn, Pn), xv, Yn, Pn, yname);
+/* Build the first integral from a candidate mu and gate it: A(R)=0 symbolic
+ * (ifactor_R_ok) + numeric backstop (ifactor_R_num_ok).  mu consumed; returns the
+ * validated R in (x, ifY, ifP) form (owned) or NULL.  Phi borrowed. */
+static Expr* ifactor_gate_R(const Expr* Phi, Expr* mu,
+                            const char* xv, const char* Yn, const char* Pn) {
+    if (!mu) return NULL;
+    if_dbg("mu", mu);
+    Expr* R = ifactor_build_R(Phi, mu, xv, Yn, Pn);
+    expr_free(mu);
+    if (!R) { if_dbg("build_R FAILED", NULL); return NULL; }
+    if (!ifactor_R_ok(R, Phi, xv, Yn, Pn) || !ifactor_R_num_ok(Phi, R, xv, Yn, Pn)) {
+        if_dbg("A(R)!=0", R); expr_free(R); return NULL;
+    }
+    if_dbg("R", R);
+    return R;
+}
 
+/* Search the mu-forms cheapest-first — mu(x,y) (Stage 1), mu(x,y') Cases A/C/D
+ * (Stage 2), mu(y,y') (Stage 3 stub) — gating each candidate by A(R)=0.  Returns
+ * the first validated first integral R (owned, in (x, ifY, ifP) form) or NULL. */
+static Expr* ifactor_find_R(const Expr* Phi, const char* xv, const char* Yn, const char* Pn) {
+    Expr* R = NULL;
+    if (!R && !if_expired()) R = ifactor_gate_R(Phi, ifactor_mu_xy(Phi, xv, Yn, Pn),   xv, Yn, Pn);
+    if (!R && !if_expired()) R = ifactor_gate_R(Phi, if_muxyp_caseA(Phi, xv, Yn, Pn),  xv, Yn, Pn);
+    if (!R && !if_expired()) R = ifactor_gate_R(Phi, if_muxyp_caseC(Phi, xv, Yn, Pn),  xv, Yn, Pn);
+    if (!R && !if_expired()) R = ifactor_gate_R(Phi, if_muxyp_caseD(Phi, xv, Yn, Pn),  xv, Yn, Pn);
+    if (!R && !if_expired()) R = ifactor_gate_R(Phi, ifactor_mu_y_y1(Phi, xv, Yn, Pn), xv, Yn, Pn);
+    return R;
+}
+
+/* Explicit path: find a validated first integral, then solve R==C[2] as a
+ * first-order ODE (recursing) for the full explicit y(x, C[1], C[2]). */
+Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1) return NULL;
+    if (P->max_order[0] != 2) return NULL;
+    const char* xv    = P->ind_names[0];
+    const char* yname = P->fun_names[0];
+    const char* Yn = intern_symbol("DSolve`ifY");
+    const char* Pn = intern_symbol("DSolve`ifP");
+
+    uint64_t memo_h = expr_hash(P->eq_residuals[0]);
+    if_memo_sync(&if_memo_explicit, eval_toplevel_id());
+    if (if_memo_seen(&if_memo_explicit, memo_h)) return NULL;
+
+    Expr* Phi = ifactor_prepare(P, xv, yname, Yn, Pn);
+    if (!Phi) return NULL;
+
+    Expr* R = ifactor_find_R(Phi, xv, Yn, Pn);
+    Expr* body = R ? ifactor_solve_from_R(P, R, xv, Yn, Pn, yname) : NULL;
+    expr_free(R);
     expr_free(Phi);
-    if (!body) { if_memo_add(memo_h); return NULL; }
+    if (!body) { if_memo_add(&if_memo_explicit, memo_h); return NULL; }
     Expr** out = malloc(sizeof(Expr*));
     out[0] = body;
     *nbranch = 1;
     return out;
 }
 
+/* First-integral (reduction-of-order) path: find a validated first integral and
+ * return its LHS Rf(x, y[x], y'[x]); dsolve_run_first_integral emits Rf == C[1].
+ * Runs AFTER the explicit path (an explicit closed form always wins), and catches
+ * the reducible ODEs whose reduced first-order ODE is not elementarily solvable. */
+Expr** dsolve_ifactor_first_integral_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1) return NULL;
+    if (P->max_order[0] != 2) return NULL;
+    const char* xv    = P->ind_names[0];
+    const char* yname = P->fun_names[0];
+    const char* Yn = intern_symbol("DSolve`ifY");
+    const char* Pn = intern_symbol("DSolve`ifP");
+
+    uint64_t memo_h = expr_hash(P->eq_residuals[0]);
+    if_memo_sync(&if_memo_fi, eval_toplevel_id());
+    if (if_memo_seen(&if_memo_fi, memo_h)) return NULL;
+
+    Expr* Phi = ifactor_prepare(P, xv, yname, Yn, Pn);
+    if (!Phi) return NULL;
+
+    Expr* R = ifactor_find_R(Phi, xv, Yn, Pn);
+    expr_free(Phi);
+    if (!R) { if_memo_add(&if_memo_fi, memo_h); return NULL; }
+
+    /* applied first integral Rf = R[ifP -> y'[x], ifY -> y[x]] */
+    Expr* Rf = ds_subst(R, expr_new_symbol(Pn), ds_make_funcapp(yname, 1, xv));  /* consumes R */
+    Rf = ds_subst(Rf, expr_new_symbol(Yn), ds_make_funcapp(yname, 0, xv));
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = Rf;
+    *nbranch = 1;
+    return out;
+}
+
 static Expr* builtin_dsolve_ifactor(Expr* res) {
     return dsolve_method_builtin(res, dsolve_ifactor_try);
+}
+
+static Expr* builtin_dsolve_first_integral(Expr* res) {
+    return dsolve_method_builtin_first_integral(res, dsolve_ifactor_first_integral_try);
 }
 
 void dsolve_ifactor_init(void) {
@@ -589,4 +835,13 @@ void dsolve_ifactor_init(void) {
         "mu of a restricted form (mu(x,y), mu(x,y'), or mu(y,y')), reconstructing "
         "the first integral R(x,y,y') == C[1], and solving that first-order ODE "
         "(Cheb-Terrab & Roche 1999).");
+
+    symtab_add_builtin("DSolve`ReducibleFirstIntegral", builtin_dsolve_first_integral);
+    symtab_get_def("DSolve`ReducibleFirstIntegral")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`ReducibleFirstIntegral",
+        "DSolve`ReducibleFirstIntegral[eqn, y, x] finds an integrating factor mu "
+        "of a nonlinear second-order ODE y'' == Phi(x, y, y') (mu(x,y), mu(x,y'), "
+        "or mu(y,y'); Cheb-Terrab & Roche 1999) and returns the reduced first "
+        "integral R(x, y[x], y'[x]) == C[1] as a reduction-of-order answer — used "
+        "when that first-order ODE has no elementary explicit solution.");
 }

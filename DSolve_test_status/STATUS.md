@@ -14,7 +14,7 @@ FAIL = wrong branch (numeric back-substitution) · SKIP = system.
 ## Section 2.1.2 — "Problems not solved, but were solved by Maple and Mathematica"
 
 Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
-`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **644** (M55 power-potential recogniser + Kovacic ±i-pole fix).
+`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **631** (M56 μ(x,y′) reduction-of-order first integrals).
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
@@ -29,14 +29,15 @@ Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
 | 2026-09-09 (**M27**) | **446 / 1000 sc + 107 / 204 sys** | **44.6% sc / 52.5% sys** | **651** | **Systems now VERIFIED by back-substitution (was skipped): 553/1204 total, 0 FAIL.** Scalar solved **436 → 446 (+10)** — a side-effect of the M27 Solve periodicity-index fix (fresh mint index + integer-family collapse) closing inverse-function first-order cases. Systems scored for the first time: 107/204. Non-PASS 651 = 554 scalar + 97 systems (incl. 2 flaky fork-timeout crashes). Gate baseline **572 → 655** (651 + 4 margin). |
 | 2026-09-17 (**M55**) | **564 / 1204 total** | — | **640** | **+7 (557 → 564), 0 FAIL.** Generalised power-potential recogniser in `DSolve\`SpecialFunctionForm`: single-power `y''+A x^m y==0` → Bessel and two-term `y''+(α x^(2c)+β x^(c-1)) y==0` → Coulomb/Whittaker → `Hypergeometric1F1`, both at symbolic exponent (nine flagship cases 72/81/103/434/791/792/803/804/805). Also a root-cause verify fix (`ds_residual_numeric_zero`) removing a `zero_test` precision-ladder hang on symbolic-exponent special-function residuals. 2nd_linear bucket 239/414 (57.7%). Gate baseline **655 → 648** (640 + 8 margin for the ~6-7 s timing-boundary cluster 58/375/439/877, unrelated to M55). |
 | 2026-09-17 (**Kovacic ±i fix**) | **568 / 1204 total** | — | **636** | **+4 (564 → 568), 0 FAIL.** Kovacic `kovacic_case1_general` blanket-declined every non-real pole (a guard against a `ds_simplify` hang on Heun complex poles); now declines only a pole with a nonzero real part, so a purely-imaginary pair (`x²+c` → poles ±bI) is solved — repairing the masked regression `y''−((3+2x²)/(1+x²)²)y==0 → x√(1+x²)` (`t_kovacic_complex_poles`). Heun cases still decline fast → Frobenius. 2nd_linear bucket 243/414 (58.7%). Gate baseline **648 → 644** (636 + 8 margin). |
+| 2026-09-23 (**M56**) | **585 / 1204 total** | — | **619** | **+17 (568 → 585), 0 FAIL.** μ(x,y′) integrating factors (Cheb-Terrab & Roche §2.2, Lemma 3 Cases A/C/D) emitted as reduction-of-order first integrals `R(x,y[x],y'[x])==C[1]` (new `dsolve_run_first_integral` + `DSolve\`ReducibleFirstIntegral`, run after the full-solution methods). The **whole net gain is in the 2nd_reducible_mu bucket: 38 → 55 (+17)**, gap 64 → 47 — confirmed first integrals for e.g. 1156 (`_mu_x_y1`), 14/198/897/1157 (`_mu_xy`, all `sympy=False`). Measurement deterministic (two identical runs). The 2nd_linear bucket shows −5 (238) from the **pre-existing 8 s timing-boundary cluster** (58/77/78/375/112/592/799 — all linear/symmetry cases M56 declines; verified to solve in 5–18 s, 112 needs 18.5 s), offset by intervening non-DSolve gains (systems). Gate baseline **644 → 631** (619 + 12 margin for the timing cluster). |
 
 ### Gap by bucket (baseline, ranked)
 
 | Bucket | tot | PASS | UNEVAL | pass% | target method |
 |---|--:|--:|--:|--:|---|
-| 2nd_linear            | 414 | 243 | 171 | 58.7 | M55 power-potential recogniser (Bessel + Whittaker/1F1) + Kovacic ±i-pole fix; residue = Heun / parabolic-cylinder / Gegenbauer-Möbius |
-| 3rd_high_linear       | 142 |  32 | 110 | 22.5 | OperatorFactor Beke / 2nd-order right factors |
-| 2nd_reducible_mu      | 102 |  39 |  63 | 38.2 | **M18 Stage 1 (μ(x,y)) +7**; residue needs μ(x,y')/μ(y,y') Stages 2/3 (Lemma-3 Cases C–F) |
+| 2nd_reducible_mu      | 102 |  55 |  47 | 53.9 | **M56 μ(x,y′) first integrals +17** (38→55; Lemma-3 Cases A/C/D → `R==C[1]`); residue needs μ(y,y′) Stage 3 + general Case D / Cases E/F |
+| 2nd_linear            | 414 | 238 | 176 | 57.5 | M55 power-potential recogniser (Bessel + Whittaker/1F1) + Kovacic ±i-pole fix; residue = Heun / parabolic-cylinder / Gegenbauer-Möbius (−5 vs prior = pre-existing 8 s timing cluster) |
+| 3rd_high_linear       | 142 |  40 | 102 | 28.2 | OperatorFactor Beke / 2nd-order right factors |
 | 1st_Abel              |  68 |   4 |  64 |  5.9 | Abel Invariant Rational (AIR, revive M13) |
 | 1st_with_symmetry     |  65 |  27 |  38 | 41.5 | targeted Lie symmetry ansätze |
 | 3rd_high_reducible    |  34 |   7 |  27 | 20.6 | higher-order missing-x/y + μ reduction |
