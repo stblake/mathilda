@@ -220,7 +220,76 @@ static slong wl_root_index(const qqbar_t x) {
 static int to_qqbar(const Expr* e, qqbar_t out);
 
 /* Root[Function[...], k] -> the k-th root (WL order) of the body polynomial. */
+/* ------------------------------------------------------------------ */
+/*  Memo cache: Root[...] Expr -> qqbar.                                */
+/*                                                                      */
+/*  A Root object's qqbar value is a pure, session-independent constant */
+/*  (fixed by its minimal polynomial and root index), so this map never */
+/*  goes stale and needs no invalidation.  Isolating a Root's roots     */
+/*  (qqbar_roots_fmpz_poly) is the dominant cost of the algebraic-number */
+/*  engine whenever the same handful of generators are re-converted many */
+/*  times -- RootReduce zero-tests, AlgebraicNumber add/mul/pow (each    */
+/*  converts its generator), NullSpace/RowReduce ZeroTests -- so caching */
+/*  it collapses hundreds of isolations to one per distinct generator.   */
+/* ------------------------------------------------------------------ */
+#define QQBAR_CACHE_SIZE 4096u          /* power of two; open addressing */
+typedef struct { Expr* key; uint64_t h; qqbar_t val; int used; } QQBarCacheSlot;
+static QQBarCacheSlot g_qqbar_cache[QQBAR_CACHE_SIZE];
+static size_t g_qqbar_cache_count = 0;
+
+static void flint_qqbar_cache_reset(void) {
+    for (unsigned i = 0; i < QQBAR_CACHE_SIZE; i++) {
+        if (g_qqbar_cache[i].used) {
+            expr_free(g_qqbar_cache[i].key);
+            qqbar_clear(g_qqbar_cache[i].val);
+            g_qqbar_cache[i].key = NULL;
+            g_qqbar_cache[i].used = 0;
+        }
+    }
+    g_qqbar_cache_count = 0;
+}
+
+/* On hit, copy the cached value into `out` and return 1; else 0. */
+static int qqbar_cache_get(const Expr* e, uint64_t h, qqbar_t out) {
+    unsigned mask = QQBAR_CACHE_SIZE - 1u;
+    unsigned i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < QQBAR_CACHE_SIZE; probe++) {
+        QQBarCacheSlot* s = &g_qqbar_cache[i];
+        if (!s->used) return 0;                     /* empty slot => absent */
+        if (s->h == h && expr_eq(s->key, e)) { qqbar_set(out, s->val); return 1; }
+        i = (i + 1u) & mask;
+    }
+    return 0;
+}
+
+/* Insert (e -> val); bounded, resetting the table when it approaches full
+ * (distinct generators per session are few).  These are raw FLINT/Expr ops
+ * with no evaluation checkpoint, so no async TimeConstrained longjmp can
+ * interrupt mid-insert; `used` is still published last, defensively. */
+static void qqbar_cache_put(const Expr* e, uint64_t h, const qqbar_t val) {
+    if (g_qqbar_cache_count * 4u >= QQBAR_CACHE_SIZE * 3u)   /* >75% full */
+        flint_qqbar_cache_reset();
+    unsigned mask = QQBAR_CACHE_SIZE - 1u;
+    unsigned i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < QQBAR_CACHE_SIZE; probe++) {
+        QQBarCacheSlot* s = &g_qqbar_cache[i];
+        if (!s->used) {
+            s->key = expr_copy((Expr*)e);           /* refcount bump keeps it alive */
+            s->h = h;
+            qqbar_init(s->val);
+            qqbar_set(s->val, val);
+            s->used = 1;                             /* publish last */
+            g_qqbar_cache_count++;
+            return;
+        }
+        if (s->h == h && expr_eq(s->key, e)) return;   /* already present */
+        i = (i + 1u) & mask;
+    }
+}
+
 static int root_object_to_qqbar(const Expr* e, qqbar_t out) {
+    uint64_t h = expr_hash(e);
+    if (qqbar_cache_get(e, h, out)) return 1;
     size_t n = e->data.function.arg_count;
     if (n < 2) return 0;
     const Expr* fn = e->data.function.args[0];
@@ -253,6 +322,7 @@ static int root_object_to_qqbar(const Expr* e, qqbar_t out) {
     free(idx);
     _qqbar_vec_clear(roots, d);
     fmpz_poly_clear(P);
+    qqbar_cache_put(e, h, out);
     return 1;
 }
 
