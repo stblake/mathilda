@@ -393,6 +393,17 @@ Expr* builtin_lookup(Expr* res) {
         }
     }
 
+    /* Key[k] wraps a single literal key -- even a list-valued one -- so it must
+     * bypass the list-of-keys threading below (A5): Lookup[a, Key[{1,0}]] looks
+     * up the one key {1,0}, not the two keys 1 and 0. (Placed after the
+     * list-of-associations threading so Lookup[{a1,a2}, Key[k]] still threads.) */
+    if (head_is(key, SYM_Key) && key->data.function.arg_count == 1) {
+        Expr* inner = key->data.function.args[0];
+        Expr* v = assoc_lookup_value(assoc, inner);
+        if (v) return expr_copy(v);
+        return deflt ? expr_copy(deflt) : make_missing(inner);
+    }
+
     /* Lookup over a list of keys: single index build, then O(1) per key. */
     if (head_is(key, SYM_List)) {
         size_t na = assoc->data.function.arg_count;

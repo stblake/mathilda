@@ -20,7 +20,10 @@
    Stage 2 adds the norm search, vanishing orders, deep residues (n = 1),
    elliptic torsion (division polynomials, Miller functions) and the v_oo
    residue; stage 3 the units (continued fractions over Q and GF(p)), the
-   non-torsion certificate, and the holomorphic-remainder certificate, with
+   non-torsion certificates (Proposition 9.4: for the class at infinity by
+   the continued fraction over GF(p), for a residue divisor at finite
+   places by Cantor's algorithm in the Jacobian over GF(p), any genus), and
+   the holomorphic-remainder certificate, with
    the special exponents and degree bounds of Algorithm 6 (Section 8.2:
    proved where Proposition 8.11 applies, the classical guess elsewhere).  Radicals of degree m >= 3 (y^m = q,
    q m-th-power-free) are handled on the Trager basis w_i = y^i/E_i:
@@ -537,7 +540,26 @@ TorsionOrderAndMiller[q_, g_, pt_, Y_, bound_: 24] := Module[{toM, add, c, P, m}
    The coordinates over Q of algebraic constants in one common number
    field (ToNumberField), padded to a common length; a rational constant
    is its own coordinate.                                                   *)
-QCoords[consts_List] := PadRight[If[Head[#] === AlgebraicNumber, #[[2]], {#}] & /@ ToNumberField[consts]];
+QCoords[consts_List] := PadRows[If[Head[#] === AlgebraicNumber, #[[2]], {#}] & /@ ToNumberField[consts]];
+
+(* PadRows[rows]: the rows padded with zeros to a common length. The one-argument
+   PadRight now rectangularises a ragged list correctly (was A4, v0.170), so this
+   delegates to it. *)
+PadRows[rows_List] := PadRight[rows];
+
+(* QBasisDivisors[taus]
+   The residues taus (algebraic constants) over a Q-basis of their Q-span
+   (Algorithm 3(d)): {{beta_j, ns_j}, ...} with ns_j integer vectors and
+   tau_i = sum_j ns_j[[i]] beta_j, so that the divisor sum_i tau_i P_i is
+   sum_j beta_j D_j with D_j = sum_i ns_j[[i]] P_i; beta_j is the residue at
+   the j-th pivot divided by the common denominator of its row.  None if a
+   coordinate is not rational.                                              *)
+QBasisDivisors[taus_List] := Module[{A, Rr, piv, N0},
+  A = Transpose[QCoords[taus]];                            (* column i: the residue tau_i *)
+  If[! MatrixQ[A, MatchQ[#, _Integer | _Rational] &], Return[None]];
+  Rr = DeleteCases[RowReduce[A], {0 ..}];                  (* A[[All, i]] = sum_j Rr[[j, i]] A[[All, piv[[j]]]] *)
+  piv = FirstPosition[#, z_ /; z != 0][[1]] & /@ Rr;
+  Table[N0 = LCM @@ Denominator[Rr[[j]]]; {taus[[piv[[j]]]]/N0, N0 Rr[[j]]}, {j, Length[piv]}]];
 
 (* TorsionRealise[T, pending, Y, bound, verbose]
    Algorithm 3(d): the residue divisor of the pending primes {{p, pts,
@@ -553,7 +575,7 @@ QCoords[consts_List] := PadRight[If[Head[#] === AlgebraicNumber, #[[2]], {#}] & 
    list of {coefficient, pair} or None (a class of order > bound, no cubic
    model, or a place with non-constant coordinates).                        *)
 TorsionRealise[T_, pending_, Y_, bound_: 24, verbose_: False] := Catch[Module[
-  {gens = T["gens"], g, q = T["q"], places, toM, add, c, realise, out = {}, rest = {}, P, got, A, Rr, piv, N0, ns, terms, beta},
+  {gens = T["gens"], g, q = T["q"], places, toM, add, c, realise, out = {}, rest = {}, P, got, qb, ns, terms, beta},
   g = pending[[1, 2, 1, 1]];
   If[Exponent[q, g] =!= 3 || ! FreeQ[q, Alternatives @@ DeleteCases[gens, g]] || AnyTrue[pending, #[[2, 1, 1]] =!= g &], Throw[None, "tors"]];
   places = Cases[Flatten[Thread[{#[[2]], #[[3]]}] & /@ pending, 1], {_, tau_} /; tau =!= 0];
@@ -571,21 +593,49 @@ TorsionRealise[T_, pending_, Y_, bound_: 24, verbose_: False] := Catch[Module[
       If[verbose, Print["      torsion: [P - oo] of order ", got[[1]], " at (", pl[[1, 2]], ", ", pl[[1, 3]], "); Miller logand with coefficient ", RR[pl[[2]]/got[[1]]]]]],
     {pl, places}];
   If[rest =!= {},
-    A = Transpose[QCoords[rest[[All, 3]]]];                 (* column i: the residue of rest[[i]] *)
-    If[! MatrixQ[A, MatchQ[#, _Integer | _Rational] &], Throw[None, "tors"]];
-    Rr = DeleteCases[RowReduce[A], {0 ..}];                 (* A[[All, i]] = sum_j Rr[[j, i]] A[[All, piv[[j]]]] *)
-    piv = FirstPosition[#, z_ /; z != 0][[1]] & /@ Rr;
-    Do[N0 = LCM @@ Denominator[Rr[[j]]];
-      ns = N0 Rr[[j]];
-      terms = Cases[Transpose[{rest[[All, 2]], ns}], {_, n_} /; n != 0];
+    qb = QBasisDivisors[rest[[All, 3]]];
+    If[qb === None, Throw[None, "tors"]];
+    Do[{beta, ns} = bn;
+      terms = Cases[Thread[{rest[[All, 2]], ns}], {_, n_} /; n != 0];
       got = realise[terms];
       If[got === None, Throw[None, "tors"]];
-      beta = rest[[piv[[j]], 3]]/N0;
       AppendTo[out, {RR[beta/got[[1]]], got[[2]]}];
       If[verbose, Print["      torsion: the divisor ", StringRiffle[Cases[Transpose[{rest[[All, 1]], ns}], {pt_, n_} /; n != 0 :> ToString[n] <> "*(" <> ToString[pt[[2]], InputForm] <> ", " <> ToString[pt[[3]], InputForm] <> ")"], " + "],
         " - (", Total[ns], ") oo has order ", got[[1]], "; logand with coefficient ", RR[beta/got[[1]]]]],
-      {j, Length[piv]}]];
+      {bn, qb}]];
   out], "tors"];
+
+(* NontorsionDivisor[T, pending, verbose]
+   Proposition 9.4 for the residue divisor that Algorithm 3(a)-(d) leaves
+   unrealised (pending = {{p, pts, taus}, ...} on y^2 = q with constant
+   coordinates): each component over a Q-basis of the residues
+   (QBasisDivisors) is reduced modulo good primes and the orders of its
+   class in the Jacobians compared (NontorsionDivisorCertificate).  Returns
+   {data, divisor} for the first component certified non-torsion, the
+   integral then being non-elementary by Corollary 7.6; else None.       *)
+NontorsionDivisor[T_, pending_, verbose_: False] := Catch[Module[{gens = T["gens"], g, q = T["q"], places, consts, nf, an, mu, coords, qb, pl, certd, dv, z},
+  g = pending[[1, 2, 1, 1]];
+  If[! FreeQ[q, Alternatives @@ DeleteCases[gens, g]] || AnyTrue[pending, #[[2, 1, 1]] =!= g &], Return[None]];
+  places = Cases[Flatten[Thread[{#[[2]], #[[3]]}] & /@ pending, 1], {_, tau_} /; tau =!= 0];
+  consts = Flatten[{#[[1, 2]], #[[1, 3]], #[[2]]} & /@ places];
+  If[! FreeQ[consts, Alternatives @@ gens] || ! FreeQ[CoefficientList[q, g], Alternatives @@ gens], Return[None]];
+  (* one number field Q(theta) for the coordinates and the residues: ONE
+     ToNumberField call, whose theta the coordinates and mu share *)
+  nf = ToNumberField[consts];
+  an = FirstCase[nf, _AlgebraicNumber, None];
+  mu = If[an === None, None, CoefficientList[MinimalPolynomial[an[[1]], z], z]];
+  coords = PadRows[If[Head[#] === AlgebraicNumber, #[[2]], {#}] & /@ nf];
+  If[! MatrixQ[coords, MatchQ[#, _Integer | _Rational] &], Return[None]];
+  qb = QBasisDivisors[places[[All, 2]]];
+  If[qb === None, Return[None]];
+  Do[pl = Table[If[bn[[2, i]] == 0, Nothing, {{coords[[3 i - 2]], coords[[3 i - 1]]}, bn[[2, i]]}], {i, Length[places]}];
+    certd = NontorsionDivisorCertificate[q, g, pl, mu];
+    If[certd[[1]],
+      dv = StringRiffle[Table[If[bn[[2, i]] == 0, Nothing, ToString[bn[[2, i]]] <> "*(" <> ToString[places[[i, 1, 2]], InputForm] <> ", " <> ToString[places[[i, 1, 3]], InputForm] <> ")"], {i, Length[places]}], " + "];
+      If[verbose, Print["  the residue divisor ", dv, " (coefficient ", bn[[1]], ") is certified non-torsion by reduction mod p: ", certd[[2]]]];
+      Throw[{certd[[2]], dv}, "ntdiv"]],
+    {bn, qb}];
+  None], "ntdiv"];
 
 (* PairReduce[e, Ysym, q]
    The pair {a, b} = a + b y of an expression rational in the generators
@@ -1039,6 +1089,21 @@ SqrtPolyPartModP[q_, x_, p_] := Module[{Q, d2, d, lc, r, coeffs, qc, inv2r, acc}
     {k, 1, d}];
   Sum[coeffs[[k + 1]] x^(d - k), {k, 0, d}]];
 
+(* Modular polynomial arithmetic over GF(p). These now delegate directly to the
+   Mathilda core, which gained a correct (and FLINT nmod_poly-accelerated)
+   `Modulus -> p` for these heads (v0.170): PolynomialMod reduces rational and
+   big-integer coefficients (was A6), PolynomialQuotient/Remainder honour
+   `Modulus` (was A3), and PolynomialExtendedGCD is correct even when the inputs
+   are coprime over Q (was A2). The former hand-rolled substitutes -- a
+   CoefficientList/Sum round trip per step and a Euclidean loop over Q -- were
+   both the workaround AND the section-C performance bottleneck; the core path is
+   10-40x faster on the Jacobian arithmetic. `x` is retained in the signatures so
+   call sites are unchanged. *)
+ReduceModP[poly_, x_, p_] := PolynomialMod[poly, p];
+PolyQuoModP[a_, b_, x_, p_] := PolynomialQuotient[a, b, x, Modulus -> p];
+PolyRemModP[a_, b_, x_, p_] := PolynomialRemainder[a, b, x, Modulus -> p];
+PolyExtGCDModP[a_, b_, x_, p_] := PolynomialExtendedGCD[a, b, x, Modulus -> p];
+
 (* UnitDegreeModP[q, x, p, maxsteps]
    Order of the class [oo+ - oo-] on the reduction of y^2 = q modulo a
    good prime p: the degree of the fundamental unit of GF(p)[x][y], found
@@ -1048,12 +1113,12 @@ UnitDegreeModP[q_, x_, p_, maxsteps_: 10000] := Catch[Module[{s, Qp, P = 0, Q = 
   s = SqrtPolyPartModP[q, x, p];
   If[s === None, Throw[None, "udeg"]];
   Qp = PolynomialMod[q, p];
-  Do[a = PolynomialQuotient[P + s, Q, x, Modulus -> p];
+  Do[a = PolyQuoModP[P + s, Q, x, p];
     h = PolynomialMod[a hm1 + hm2, p]; k = PolynomialMod[a km1 + km2, p];
     c = PolynomialMod[h^2 - Qp k^2, p];
     If[Exponent[c, x] <= 0 && c =!= 0 && k =!= 0, Throw[Exponent[h, x], "udeg"]];
     P = PolynomialMod[a Q - P, p];
-    Q = PolynomialMod[PolynomialQuotient[Qp - P^2, Q, x, Modulus -> p], p];
+    Q = PolyQuoModP[Qp - P^2, Q, x, p];
     {hm2, hm1, km2, km1} = {hm1, h, km1, k},
     {maxsteps}];
   None], "udeg"];
@@ -1064,22 +1129,141 @@ UnitDegreeModP[q_, x_, p_, maxsteps_: 10000] := Catch[Module[{s, Qp, P = 0, Q = 
    (reduction is injective on prime-to-p torsion).  Two good primes whose
    N_p are incompatible with any common N certify non-torsion, hence the
    absence of non-constant units.  Returns {certified, {{p, N_p}, ...}}.  *)
-NontorsionCertificate[q_, x_, nprimes_: 4, pmax_: 1000] := Catch[Module[{Q, lc, disc, bad, data = {}, Np, n1, n2, p1, p2, r, num, den, okNum, okDen},
+NontorsionCertificate[q_, x_, nprimes_: 4, pmax_: 1000] := Catch[Module[{Q, lc, disc, bad, data = {}, Np, ps, p},
   Q = q; lc = Coefficient[Q, x, Exponent[Q, x]]; disc = Discriminant[Q, x];
   bad = 2 Numerator[lc] Denominator[lc] Numerator[disc] Times @@ (Denominator /@ CoefficientList[Q, x]);
-  Do[If[Mod[bad, p] == 0, Continue[]];
+  ps = Select[Range[3, pmax], PrimeQ];
+  Do[If[Mod[bad, p] == 0, Continue[]];   (* Do over a packed list now iterates (was A1) *)
     Np = UnitDegreeModP[q, x, p];
     If[Np === None, Continue[]];
     AppendTo[data, {p, Np}];
     If[Length[data] >= nprimes, Break[]],
-    {p, Select[Range[3, pmax], PrimeQ]}];
-  Do[{p1, n1} = data[[i]]; {p2, n2} = data[[j]];
-    r = n1/n2; num = Numerator[r]; den = Denominator[r];
-    okNum = num == 1 || FactorInteger[num][[All, 1]] === {p1};
-    okDen = den == 1 || FactorInteger[den][[All, 1]] === {p2};
-    If[! (okNum && okDen), Throw[{True, data}, "nt"]],
-    {i, Length[data]}, {j, i + 1, Length[data]}];
-  {False, data}], "nt"];
+    {p, ps}];
+  {IncompatibleQ[data], data}], "nt"];
+
+(* IncompatibleQ[data]
+   No finite N has N = N_p p^a for every {p, N_p} in data: for two primes
+   N_{p1}/N_{p2} = p2^b/p1^a, so in lowest terms the numerator must be a
+   power of p2 (or 1) and the denominator a power of p1 (or 1).          *)
+IncompatibleQ[data_] := Or @@ Flatten[Table[
+  With[{p1 = data[[i, 1]], p2 = data[[j, 1]], r = data[[i, 2]]/data[[j, 2]]},
+    ! ((Numerator[r] == 1 || FactorInteger[Numerator[r]][[All, 1]] === {p2}) &&
+       (Denominator[r] == 1 || FactorInteger[Denominator[r]][[All, 1]] === {p1}))],
+  {i, Length[data]}, {j, i + 1, Length[data]}]];
+
+(* ------------------------------------------- Jacobian arithmetic mod p
+   Cantor's algorithm on w^2 = f(jv), deg f = 2g + 1 (one place at
+   infinity), over GF(p): divisor classes as reduced Mumford pairs {u, v},
+   u monic of degree <= g, v^2 = f mod u, polynomials in the symbol jv with
+   integer coefficients in 0..p-1 (PolynomialMod); the identity is {1, 0}.
+   Used by NontorsionDivisorCertificate (Proposition 9.4 for a residue
+   divisor supported at finite places).
+   The divisions are PolyQuoModP/PolyRemModP (division over Q, then
+   reduction: Mathilda's PolynomialQuotient/PolynomialRemainder take no
+   Modulus option) and the extended gcd is PolyExtGCDModP (Mathilda's
+   PolynomialExtendedGCD ignores the Modulus for inputs coprime over Q). *)
+
+CantorAdd[f_, D1_, D2_, p_] := Module[{u1, v1, u2, v2, d1, e1, e2, d, c1, c2, s1, s2, u, v, t, g, monic},
+  monic[w_] := PolynomialMod[PowerMod[Coefficient[w, jv, Exponent[w, jv]], -1, p] w, p];
+  {u1, v1} = D1; {u2, v2} = D2;
+  {d1, {e1, e2}} = PolyExtGCDModP[u1, u2, jv, p];                                (* d1 = e1 u1 + e2 u2 *)
+  {d, {c1, c2}} = PolyExtGCDModP[d1, v1 + v2, jv, p];                             (* d = c1 d1 + c2 (v1 + v2) *)
+  s1 = PolynomialMod[c1 e1, p]; s2 = PolynomialMod[c1 e2, p];
+  u = PolyQuoModP[u1 u2, d^2, jv, p];
+  t = PolynomialMod[s1 u1 v2 + s2 u2 v1 + c2 (v1 v2 + f), p];
+  v = PolyRemModP[PolyQuoModP[t, d, jv, p], u, jv, p];
+  g = (Exponent[f, jv] - 1)/2;
+  While[Exponent[u, jv] > g,
+    u = monic[PolyQuoModP[f - v^2, u, jv, p]];
+    v = PolyRemModP[-v, u, jv, p]];
+  {monic[u], PolynomialMod[v, p]}];
+
+CantorMul[f_, n_, D_, p_] := Module[{R = {1, 0}, Q = D, k = n},
+  While[k > 0,
+    If[OddQ[k], R = CantorAdd[f, R, Q, p]];
+    Q = CantorAdd[f, Q, Q, p]; k = Quotient[k, 2]];
+  R];
+
+(* DivisorOrderModP[f, pts, p]
+   The order of the class of sum_P n_P (P - oo) in the Jacobian of
+   w^2 = f(jv) over GF(p), pts = {{{x0, y0}, n_P}, ...}: the Mumford
+   representative of the divisor by Cantor's algorithm, a multiple M of the
+   order by baby-step giant-step in the Weil interval [(Sqrt[p] - 1)^2g,
+   (Sqrt[p] + 1)^2g] (which contains #J(GF(p))), and the least divisor of
+   M annihilating the class; None if no multiple is found.                *)
+DivisorOrderModP[f_, pts_, p_] := Module[{D = {1, 0}, P, g, lo, hi, m, baby, B, G, step, M = None, j},
+  Do[P = {PolynomialMod[jv - pt[[1, 1]], p], Mod[Sign[pt[[2]]] pt[[1, 2]], p]};
+    Do[D = CantorAdd[f, D, P, p], {Abs[pt[[2]]]}],
+    {pt, pts}];
+  If[D === {1, 0}, Return[1]];
+  g = (Exponent[f, jv] - 1)/2;
+  lo = Max[1, Floor[N[(Sqrt[p] - 1)^(2 g)]] - 1]; hi = Ceiling[N[(Sqrt[p] + 1)^(2 g)]] + 1;
+  m = Floor[Sqrt[hi - lo]] + 1;
+  baby = <||>; B = {1, 0};
+  Do[If[! KeyExistsQ[baby, B], baby[B] = j]; B = CantorAdd[f, B, D, p], {j, 0, m - 1}];
+  G = CantorMul[f, lo, D, p]; step = CantorMul[f, m, D, p];
+  Do[j = Lookup[baby, Key[G], None];   (* Lookup with a list-valued key now works (was A5) *)
+    If[j =!= None && lo + i m - j > 0, M = lo + i m - j; Break[]];        (* [lo + i m] D = [j] D *)
+    G = CantorAdd[f, G, step, p],
+    {i, 0, m}];
+  If[M === None, Return[None]];
+  SelectFirst[Divisors[M], CantorMul[f, #, D, p] === {1, 0} &, None]];
+
+(* OddModel[f, r, p]
+   For f in GF(p)[jv] of even degree d with a root r: the odd-degree model
+   w^2 = f'(jv) of w^2 = f, f'(v) = v^d f(r + 1/v) of degree d - 1 (the
+   coefficient of v^d is f(r) = 0), and the point map
+   {x0, y0} -> {1/(x0 - r), y0/(x0 - r)^(d/2)}.                            *)
+OddModel[f_, r_, p_] := With[{d = Exponent[f, jv]},
+  {PolynomialMod[Expand[(f /. jv -> r + 1/jv) jv^d], p],
+   Function[{x0, y0}, With[{s = PowerMod[Mod[x0 - r, p], -1, p]}, {s, Mod[y0 PowerMod[s, d/2, p], p]}]]}];
+
+HornerModP[cs_, t_, p_] := Fold[Mod[#1 t + #2, p] &, 0, Reverse[cs]];      (* cs lowest first *)
+
+(* NontorsionDivisorCertificate[q, x, places, mu, nprimes, pmax, budget]
+   Certify that the class of a degree-0 divisor sum n_P P on y^2 = q with
+   places P = (x0, y0) of constant coordinates is NOT torsion, by reduction
+   modulo primes of good reduction (Proposition 9.4 for the residue divisor
+   that Algorithm 3(d) leaves unrealised): if the class had finite order N,
+   its reduction at a degree-one prime above p of the number field
+   K = Q(theta) of the coordinates would have order N_p with N = N_p p^a,
+   a >= 0 (reduction is injective on the prime-to-p torsion), so two primes
+   with incompatible N_p exclude every finite order.  N_p is the order of
+   the reduced class in the Jacobian over GF(p) (DivisorOrderModP), on an
+   odd-degree model when deg q is even (a root of q mod p moved to
+   infinity; primes without one are skipped); primes whose Weil bound
+   exceeds budget are skipped.  places = {{{a, b}, n}, ...} with a, b the
+   coordinates of x0, y0 over Q on the power basis of theta (lowest first),
+   mu the minimal polynomial of theta as its CoefficientList (None for
+   K = Q).  Returns {certified, {{p, N_p}, ...}}.                          *)
+NontorsionDivisorCertificate[q_, x_, places_, mu_, nprimes_: 2, pmax_: 1000, budget_: 2 10^7] := Catch[Module[
+  {d = Exponent[q, x], twoG, qc, muc, bad, data = {}, red, thetas, th, ev, pts, f, roots, mp, Np, z, ps, p},
+  twoG = If[OddQ[d], d - 1, d - 2];
+  qc = CoefficientList[q, x]; muc = If[mu === None, {0, 1}, mu];
+  bad = 2 Times @@ (Numerator[#] Denominator[#] & /@ DeleteCases[Join[qc, muc,
+      {Discriminant[q, x], Discriminant[Sum[muc[[i]] z^(i - 1), {i, Length[muc]}], z]}, Flatten[places[[All, 1]]]], 0]);
+  ps = Select[Range[3, pmax], PrimeQ];
+  Do[If[Mod[bad, p] == 0 || (Sqrt[p] + 1)^twoG > budget, Continue[]];   (* Do over a packed list now iterates (was A1) *)
+    red = Function[c, Mod[Numerator[c] PowerMod[Denominator[c], -1, p], p]];
+    thetas = Select[Range[0, p - 1], HornerModP[red /@ muc, #, p] == 0 &];
+    If[Length[thetas] == 0, Continue[]];               (* no degree-one prime of K above p *)
+    th = thetas[[1]];
+    ev = Function[a, HornerModP[red /@ a, th, p]];
+    pts = {{ev[#[[1, 1]]], ev[#[[1, 2]]]}, #[[2]]} & /@ places;
+    f = Sum[red[qc[[i]]] jv^(i - 1), {i, Length[qc]}];
+    If[EvenQ[d],
+      roots = Select[Range[0, p - 1], Mod[f /. jv -> #, p] == 0 && ! MemberQ[pts[[All, 1, 1]], #] &];
+      If[Length[roots] == 0, Continue[]];
+      {f, mp} = OddModel[f, roots[[1]], p];
+      pts = {mp[#[[1, 1]], #[[1, 2]]], #[[2]]} & /@ pts];
+    If[AnyTrue[pts, Mod[#[[1, 2]]^2 - (f /. jv -> #[[1, 1]]), p] != 0 &], Continue[]];
+    Np = DivisorOrderModP[f, pts, p];
+    If[Np === None, Continue[]];
+    AppendTo[data, {p, Np}];
+    If[IncompatibleQ[data], Throw[{True, data}, "ntd"]];
+    If[Length[data] >= nprimes, Break[]],
+    {p, ps}];
+  {False, data}], "ntd"];
 
 (* ResidueFree[T, g, Y]
    For n = 1, D = d/dx: certify that the differential g dx (g a pair) has
@@ -1744,8 +1928,8 @@ BuildTower[integrand_, x_Symbol] := Module[
     canChange = gens === {x} && a === x && FreeQ[e1, x] && q === None;
     If[canChange,
       rr2 = Unique["r"];
-      basesS = ToPair[# /. s -> rr2, rr2, 1 - If[hyper, -1, 1] c^2] & /@ bases;   (* s^2 = 1 - c^2, or c^2 - 1 *)
-      outerS = ToPair[e2 /. s -> rr2, rr2, 1 - If[hyper, -1, 1] c^2];
+      basesS = ToPair[# /. s -> rr2, rr2, If[hyper, c^2 - 1, 1 - c^2]] & /@ bases;   (* s^2 = 1 - c^2, or c^2 - 1 *)
+      outerS = ToPair[e2 /. s -> rr2, rr2, If[hyper, c^2 - 1, 1 - c^2]];
       If[AllTrue[basesS, #[[2]] === 0 &] && outerS[[1]] === 0,
         uNew = Unique["u"];
         expr = (If[hyper, 1, -1] outerS[[2]] /. c -> uNew) /. Thread[ph -> (basesS[[All, 1]] /. c -> uNew)];
@@ -1938,12 +2122,10 @@ ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeCon
 $ParallelMixedTimeBudget = 45;
 
 Options[ParallelIntegrateMixed] = {"Bounds" -> None, "Verbose" -> False, "Verify" -> False, "SplitSpecials" -> Automatic, "SpecialExponent" -> 0};
-(* iPIM shares these options via OptionsPattern[ParallelIntegrateMixed].  Its own
-   Options MUST be declared: Mathilda's OptionValue resolves an unpassed option's
-   default against the enclosing function head (Options[iPIM]), not against the
-   symbol named in OptionsPattern[...].  Without this, OptionValue["SpecialExponent"]
-   at the iPIM base run leaks unevaluated (returning 0 or a garbage antiderivative). *)
-Options[iPIM] = Options[ParallelIntegrateMixed];
+(* iPIM shares these options via OptionsPattern[ParallelIntegrateMixed]; an
+   unpassed OptionValue now resolves its default against ParallelIntegrateMixed
+   (the symbol named in OptionsPattern[...]), so a separate Options[iPIM]
+   declaration is no longer needed (was A9, v0.170). *)
 
 (* pair form: with "SplitSpecials" -> Automatic a failed system is retried with
    every special prime split into its linear factors over the algebraic
@@ -2351,7 +2533,12 @@ iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
      torsion on a cubic model (Algorithm 3(d)) *)
   If[torsion =!= {} && m == 2,
     got = TorsionRealise[T, torsion, Y, 24, verbose];
-    If[got =!= None, detLogs = Join[detLogs, got]; torsion = {}]];
+    If[got =!= None, detLogs = Join[detLogs, got]; torsion = {},
+      (* ... or not realisable at all: a component of the divisor that is
+         provably non-torsion (Proposition 9.4 by reduction mod p) is a
+         certificate of non-elementarity (Corollary 7.6) *)
+      certd = NontorsionDivisor[T, torsion, verbose];
+      If[certd =!= None, Throw[{"not elementary", "residue divisor not torsion: reduction mod p", certd[[1]], certd[[2]]}, "PIM"]]]];
   If[torsion =!= {}, Throw[{"needs torsion realisation (milestone iii)", {#[[1]], #[[3]]} & /@ torsion}, "PIM"]];
 
   (* residue at the hypertangent place at infinity (Lemma 8.1) *)

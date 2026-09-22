@@ -594,6 +594,31 @@ static void print_standard(Expr* e, int parent_prec) {
                     print_standard(num_args[i], 4500);
                 }
             } else {
+                /* A denominator already exists: fold any Rational numerator
+                 * factor's denominator into it, so 1/(4 Sqrt[2]) prints
+                 * "1/(4 Sqrt[2])" rather than "1/4/Sqrt[2]" (B2). Left untouched
+                 * when there is no other denominator, so "3/2 x" is unaffected. */
+                for (size_t i = 0; i < num_count; i++) {
+                    Expr* f = num_args[i];
+                    if (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL
+                        && f->data.function.head->data.symbol.name == SYM_Rational
+                        && f->data.function.arg_count == 2
+                        && f->data.function.args[0]->type == EXPR_INTEGER
+                        && f->data.function.args[1]->type == EXPR_INTEGER
+                        && f->data.function.args[1]->data.integer != 1) {
+                        den_args[den_count++] = expr_copy(f->data.function.args[1]);
+                        if (f->data.function.args[0]->data.integer == 1) {
+                            expr_free(num_args[i]);
+                            for (size_t j = i; j + 1 < num_count; j++) num_args[j] = num_args[j + 1];
+                            num_count--; i--;
+                        } else {
+                            Expr* np = expr_new_integer(f->data.function.args[0]->data.integer);
+                            expr_free(num_args[i]);
+                            num_args[i] = np;
+                        }
+                    }
+                }
+
                 Expr* num = NULL;
                 if (num_count == 0) num = expr_new_integer(1);
                 else if (num_count == 1) num = expr_copy(num_args[0]);
@@ -603,7 +628,33 @@ static void print_standard(Expr* e, int parent_prec) {
                     num = expr_new_function(expr_new_symbol(SYM_Times), nc, num_count);
                     free(nc);
                 }
-                
+
+                /* Stable-partition denominator factors so numeric ones lead:
+                 * a folded Rational denominator (e.g. 4) should print before a
+                 * symbolic factor (Sqrt[2]), giving "4 Sqrt[2]" not "Sqrt[2] 4". */
+                if (den_count > 1) {
+                    for (size_t a = 0; a < den_count; a++) {
+                        Expr* fa = den_args[a];
+                        int a_num = (fa->type == EXPR_INTEGER || fa->type == EXPR_REAL
+                                     || fa->type == EXPR_BIGINT
+                                     || (fa->type == EXPR_FUNCTION
+                                         && fa->data.function.head->type == EXPR_SYMBOL
+                                         && fa->data.function.head->data.symbol.name == SYM_Rational));
+                        if (a_num) {
+                            for (size_t b = a; b > 0; b--) {
+                                Expr* prev = den_args[b - 1];
+                                int prev_num = (prev->type == EXPR_INTEGER || prev->type == EXPR_REAL
+                                                || prev->type == EXPR_BIGINT
+                                                || (prev->type == EXPR_FUNCTION
+                                                    && prev->data.function.head->type == EXPR_SYMBOL
+                                                    && prev->data.function.head->data.symbol.name == SYM_Rational));
+                                if (prev_num) break;          /* keep numbers' relative order */
+                                den_args[b] = prev; den_args[b - 1] = fa;
+                            }
+                        }
+                    }
+                }
+
                 Expr* den = NULL;
                 if (den_count == 1) den = expr_copy(den_args[0]);
                 else {
@@ -1026,6 +1077,11 @@ Expr* builtin_print(Expr* res) {
     }
     g_print_output_form = saved;
     printf("\n");
+    /* B3: flush per Print so output appears incrementally down a pipe (stdout is
+     * fully buffered when not a tty) and survives a timeout kill -- matching
+     * wolframscript, which flushes on every Print. A tty is already line
+     * buffered, so this is a no-op there. */
+    fflush(stdout);
     return expr_new_symbol(SYM_Null);
 }
 

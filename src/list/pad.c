@@ -37,12 +37,26 @@ static Expr* pr_pad_at(Expr* P, const int64_t* coords, size_t n) {
     return pr_pad_at(P->data.function.args[idx], coords + 1, n - 1);
 }
 
+/* Rational and Complex are stored as EXPR_FUNCTION nodes but are atomic numeric
+ * leaves (mirror of part.c / flatten_at.c's is_atomic): the dimension scan and
+ * the builder must not descend into them, or PadRight[{{1}, {0, 1/8}}] treats
+ * Rational[1, 8] as a 2-element sub-row and pads to a spurious extra level. */
+static int pr_is_atomic(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 1;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_Complex || h == SYM_Rational) return 1;
+    }
+    return 0;
+}
+
 /* Walk a ragged array, recording the maximum width seen at each level.
- * Only EXPR_FUNCTION nodes contribute depth; atoms terminate a branch.
+ * Only non-atomic EXPR_FUNCTION nodes contribute depth; atoms (including
+ * Rational/Complex) terminate a branch.
  * dims is grown as needed; *depth is the number of populated levels. */
 static void pr_scan_dims(Expr* node, size_t level,
                          int64_t** dims, size_t* depth, size_t* cap) {
-    if (node->type != EXPR_FUNCTION) return;
+    if (pr_is_atomic(node)) return;
     if (level >= *cap) {
         size_t newcap = *cap ? *cap * 2 : 4;
         *dims = realloc(*dims, sizeof(int64_t) * newcap);
@@ -95,11 +109,12 @@ static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
     Expr*  head_src = NULL;     /* function whose head we copy */
     int    atom_row = 0;        /* node is a non-list atom -> 1-element row */
     size_t L = 0;
-    if (node && node->type == EXPR_FUNCTION) {
+    if (node && node->type == EXPR_FUNCTION && !pr_is_atomic(node)) {
         head_src = node;
         L = node->data.function.arg_count;
     } else if (node) {
-        atom_row = 1;           /* e.g. {a, {b,c}} -> a becomes a 1-row */
+        atom_row = 1;           /* e.g. {a, {b,c}} -> a becomes a 1-row; a
+                                 * Rational/Complex is atomic and stays whole */
         L = 1;
     }
 

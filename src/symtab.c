@@ -1086,8 +1086,15 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
              * supplied options and the head's defaults. */
             Expr* opts = env_get(env, "$OptionsPattern$");
             if (opts) {
+                /* OptionsPattern[s] resolves an unpassed option's default
+                 * against s's Options (A9); a bare OptionsPattern[] falls back
+                 * to the enclosing definition's own head. */
+                const char* head_sym = def->symbol_name;
+                Expr* optpat_head = env_get(env, "$OptionsPatternHead$");
+                if (optpat_head && optpat_head->type == EXPR_SYMBOL)
+                    head_sym = optpat_head->data.symbol.name;
                 Expr* resolved =
-                    optionvalue_inject_context(result, def->symbol_name, opts);
+                    optionvalue_inject_context(result, head_sym, opts);
                 expr_free(result);
                 result = resolved;
             }

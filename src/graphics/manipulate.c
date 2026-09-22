@@ -32,6 +32,7 @@
 #include "eval.h"
 #include "print.h"
 #include "plot_common.h"   /* raylib_verbose_enabled -- $RaylibVerbose */
+#include "ndarray.h"       /* is_ndarray / ndarray_to_nested_list -- packed control lists */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -135,31 +136,43 @@ static bool parse_control_spec(const Expr* e, ManipCtrl* out) {
     size_t rest_n = e->data.function.arg_count - 1;
     Expr** rest = e->data.function.args + 1;
 
-    /* Discrete: exactly one remaining arg, itself a nonempty List. */
-    if (rest_n == 1 && is_list_expr(rest[0])) {
-        size_t nv = rest[0]->data.function.arg_count;
-        if (nv == 0 || nv > MAX_DISCRETE_VALUES) {
-            if (default_expr) expr_free(default_expr);
-            return false;
-        }
-        out->kind = MCTRL_DISCRETE;
-        out->var  = expr_new_symbol(var_sym);
-        out->values = calloc(nv, sizeof(Expr*));
-        out->n_values = nv;
-        for (size_t i = 0; i < nv; i++)
-            out->values[i] = expr_copy((Expr*)rest[0]->data.function.args[i]);
-        out->selected_idx = 0;
-        out->default_idx  = 0;
-        if (default_expr) {
-            for (size_t i = 0; i < nv; i++) {
-                if (expr_eq(out->values[i], default_expr)) {
-                    out->selected_idx = out->default_idx = i;
-                    break;
-                }
+    /* Discrete: exactly one remaining arg, itself a nonempty List. A packed
+     * list / visible NDArray is an EXPR_NDARRAY that is_list_expr does not
+     * recognise, so materialise it first -- otherwise a control such as
+     * Manipulate[.., {u, Range[300]}] (whose value list packs) is silently
+     * dropped. The spec is already evaluated by the caller, so rest[0] can be
+     * a packed buffer here. */
+    if (rest_n == 1) {
+        Expr* mat = is_ndarray(rest[0]) ? ndarray_to_nested_list(rest[0]) : NULL;
+        const Expr* vals = mat ? mat : rest[0];
+        if (is_list_expr(vals)) {
+            size_t nv = vals->data.function.arg_count;
+            if (nv == 0 || nv > MAX_DISCRETE_VALUES) {
+                if (mat) expr_free(mat);
+                if (default_expr) expr_free(default_expr);
+                return false;
             }
-            expr_free(default_expr);
+            out->kind = MCTRL_DISCRETE;
+            out->var  = expr_new_symbol(var_sym);
+            out->values = calloc(nv, sizeof(Expr*));
+            out->n_values = nv;
+            for (size_t i = 0; i < nv; i++)
+                out->values[i] = expr_copy((Expr*)vals->data.function.args[i]);
+            out->selected_idx = 0;
+            out->default_idx  = 0;
+            if (default_expr) {
+                for (size_t i = 0; i < nv; i++) {
+                    if (expr_eq(out->values[i], default_expr)) {
+                        out->selected_idx = out->default_idx = i;
+                        break;
+                    }
+                }
+                expr_free(default_expr);
+            }
+            if (mat) expr_free(mat);
+            return true;
         }
-        return true;
+        if (mat) expr_free(mat);
     }
 
     /* Continuous range: 2 (min,max) or 3 (min,max,step) numeric args. */

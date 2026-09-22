@@ -1599,6 +1599,24 @@ void test_find_clusters_builder_agreement() {
                    "FindClusters", 0);
 }
 
+/* A8: the 1-arg Transpose swaps only the top two levels; a list of equal-length
+ * rows whose entries have differing deeper shapes is valid (was left
+ * unevaluated). The n-arg permutation form still requires full rectangularity. */
+void test_transpose_top_two_levels() {
+    assert_eval_eq("Transpose[{{{a, b, c}, {d, e, f}}, {t1, t2}}]",
+                   "{{{a, b, c}, t1}, {{d, e, f}, t2}}", 0);
+    /* Ordinary rectangular matrix unaffected. */
+    assert_eval_eq("Transpose[{{1, 2}, {3, 4}}]", "{{1, 3}, {2, 4}}", 0);
+    /* n-arg permutation forms unaffected. */
+    assert_eval_eq("Transpose[{{1, 2, 3}, {4, 5, 6}}, {2, 1}]",
+                   "{{1, 4}, {2, 5}, {3, 6}}", 0);
+    assert_eval_eq("Dimensions[Transpose[Array[a, {2, 3, 4}], {3, 1, 2}]]",
+                   "{3, 4, 2}", 0);
+    /* Genuinely ragged top level (unequal row lengths) stays unevaluated. */
+    assert_eval_eq("Transpose[{{a, b, c}, {d, e}}]",
+                   "Transpose[{{a, b, c}, {d, e}}]", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1657,6 +1675,7 @@ int main() {
     TEST(test_find_clusters);
     TEST(test_distance_functions);
     TEST(test_find_clusters_builder_agreement);
+    TEST(test_transpose_top_two_levels);
 
     printf("All list tests passed!\n");
     return 0;

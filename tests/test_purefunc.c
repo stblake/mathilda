@@ -113,6 +113,10 @@ void test_purefunc_closure() {
     assert_eval_eq("Function[{x, y}, Function[{x}, x + y]][10, 20][5]", "25", 0);
     /* Slot shielding is preserved: the inner slot function keeps its own #. */
     assert_eval_eq("Function[Function[# + 1]][5][10]", "11", 0);
+    /* A10: an outer SLOT-form function's # must flow into a nested NAMED
+     * function's body (previously left #1 free -> "2 + #1"). */
+    assert_eval_eq("Function[Function[y, # + y]][1][2]", "3", 0);
+    assert_eval_eq("Function[Function[{y}, #1 * y]][3][4]", "12", 0);
     /* Nested Map over an association-row parameter (the shape that surfaced the
      * bug in the ParallelMixed integrator's `splittable` gate). */
     assert_eval_eq("Map[Function[r, Map[r[[1]] + # &, {1, 2}]], {{10}, {20}}]",

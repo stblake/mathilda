@@ -247,6 +247,57 @@ static void test_soundness_fixes(void) {
         "True");
 }
 
+/* ------------------- non-torsion certificate at finite places (2026-09-22) */
+static void test_nontorsion_divisor_certificate(void) {
+    /* The hyperbolic parity rule (integrands odd in Sinh: u = Cosh[x] with
+     * sinh^2 = cosh^2 - 1).  Before the fix the tower used sinh^2 = 1 + cosh^2
+     * and Sinh[x]^3 came back as Cosh[x] + Cosh[x]^3/3. */
+    assert_eval(
+        "Simplify[D[Integrate`ParallelMixedTower[Sinh[x]^3, x], x] - Sinh[x]^3]",
+        "0");
+    assert_eval(
+        "r = Integrate`ParallelMixedTower[Coth[x] Sqrt[Cosh[x]], x];"
+        " Abs[N[(D[r, x] - Coth[x] Sqrt[Cosh[x]]) /. x -> 3/2, 25]] < 10^-15",
+        "True");
+    /* Proposition 9.4 for a residue divisor at finite places (Part II, example
+     * 10.20): the class of (1, Sqrt[2]) - (1, -Sqrt[2]) on y^2 = x^5 + 1 has
+     * orders 25 and 29 in the Jacobians over GF(7) and GF(17) -- incompatible
+     * with any finite order, so the divisor is not torsion.  The coordinates
+     * are given over Q on the power basis of theta = Sqrt[2] (minimal
+     * polynomial -2 + z^2, lowest first).  The package is loaded by the
+     * earlier tests; the first call below makes that explicit. */
+    assert_eval(
+        "Integrate`ParallelMixedTower[Log[x], x];"
+        " ParallelMixed`Private`NontorsionDivisorCertificate[x^5 + 1, x,"
+        "  {{{{1}, {0, 1}}, 1}, {{{1}, {0, -1}}, -1}}, {-2, 0, 1}]",
+        "{True, {{7, 25}, {17, 29}}}");
+    /* A torsion class must NOT be certified: (0, 1) - (0, -1) on y^2 = x^5 + 1
+     * is 5-torsion (div(y - 1) = 5 (0,1) - 5 oo), so every prime reports 5. */
+    assert_eval(
+        "ParallelMixed`Private`NontorsionDivisorCertificate[x^5 + 1, x,"
+        "  {{{{0}, {1}}, 1}, {{{0}, {-1}}, -1}}, None, 4]",
+        "{False, {{3, 5}, {7, 5}, {11, 5}, {13, 5}}}");
+    /* The certificate for [oo+ - oo-] (Cohen's -72 variant) was dead in
+     * Mathilda: its prime loop never ran (MATHILDA_DIVERGENCES.md A1) and the
+     * continued fraction over GF(p) never terminated (A3).  Orders 3, 13, 7, 21
+     * modulo 7, 11, 13, 17 are pairwise incompatible. */
+    assert_eval(
+        "ParallelMixed`Private`NontorsionCertificate[x^4 + 10 x^2 - 96 x - 72, x]",
+        "{True, {{7, 3}, {11, 13}, {13, 7}, {17, 21}}}");
+    /* Coth[x]/(1 + Sech[x]^5)^(3/2) itself: u = Sqrt[Cosh[x]] over y^2 = 1 + u^10
+     * (genus 4); the certificate needs ~7000 Jacobian operations at p = 17 and
+     * 41, which Mathematica does in 3 s and Mathilda's expression-level GF(p)
+     * arithmetic does not fit into $ParallelMixedTimeBudget (MATHILDA_DIVERGENCES.md
+     * C).  Until the core primitives are fixed the honest outcome is the clean
+     * decline; the certificate is the other admissible answer.  TIGHTEN to the
+     * certificate alone once the Modulus primitives are native. */
+    assert_eval(
+        "MatchQ[Integrate`ParallelMixedTower[Coth[x]/(1 + Sech[x]^5)^(3/2), x],"
+        " {\"not elementary\", \"residue divisor not torsion: reduction mod p\","
+        "  {{17, 29}, {41, 155}}, _} | {\"failed\", \"time budget exceeded\"}]",
+        "True");
+}
+
 void test_parallelmixedtower(void) {
     symtab_init();
     core_init();
@@ -263,6 +314,7 @@ void test_parallelmixedtower(void) {
     TEST(test_method_certifies_nonelementary);
     TEST(test_nonelem_warning_emitted);
     TEST(test_soundness_fixes);
+    TEST(test_nontorsion_divisor_certificate);
 
     printf("All ParallelMixedTower tests passed!\n");
 }

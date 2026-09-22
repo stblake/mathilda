@@ -1736,8 +1736,74 @@ static Expr* polynomialdivrem_with_extension(Expr* p, Expr* q, Expr* x,
 static int64_t poly_max_int_exponent(const Expr* e);   /* fwd: high-degree FLINT gate */
 #endif
 
+/* If the last argument of `res` is `Modulus -> m`, return m (borrowed, owned by
+ * res) and set *base_argc to the number of leading non-option arguments; else
+ * return NULL and leave *base_argc = arg_count. */
+static Expr* poly_modulus_option(Expr* res, size_t* base_argc) {
+    size_t n = res->data.function.arg_count;
+    *base_argc = n;
+    if (n == 0) return NULL;
+    Expr* last = res->data.function.args[n - 1];
+    if (last->type == EXPR_FUNCTION && last->data.function.head->type == EXPR_SYMBOL
+        && last->data.function.head->data.symbol.name == SYM_Rule
+        && last->data.function.arg_count == 2
+        && last->data.function.args[0]->type == EXPR_SYMBOL
+        && last->data.function.args[0]->data.symbol.name == SYM_Modulus) {
+        *base_argc = n - 1;
+        return last->data.function.args[1];
+    }
+    return NULL;
+}
+
+/* Classical F_p polynomial division fallback (used when FLINT is absent or the
+ * modulus is not a word-size prime): reduce p and q modulo m, divide over Q,
+ * then reduce quotient and remainder modulo m. Sound because polynomial
+ * division introduces denominators only from lc(q), which is a unit modulo a
+ * prime m (and, more generally, whenever gcd(lc(q mod m), m) = 1 -- the
+ * rational-aware PolynomialMod then reduces every coefficient to an integer).
+ * Returns {Q, R} (owned) or NULL. */
+static Expr* poly_divrem_mod_classical(Expr* p, Expr* q, Expr* x, Expr* m) {
+    Expr* pm = internal_polynomialmod((Expr*[]){expr_copy(p), expr_copy(m)}, 2);
+    Expr* qm = internal_polynomialmod((Expr*[]){expr_copy(q), expr_copy(m)}, 2);
+    if (is_zero_poly(qm)) { expr_free(pm); expr_free(qm); return NULL; }
+    Expr *Q = NULL, *R = NULL;
+    poly_div_rem(pm, qm, x, &Q, &R);
+    expr_free(pm); expr_free(qm);
+    if (!Q || !R) { if (Q) expr_free(Q); if (R) expr_free(R); return NULL; }
+    Expr* Qm = internal_polynomialmod((Expr*[]){Q, expr_copy(m)}, 2);  /* consumes Q */
+    Expr* Rm = internal_polynomialmod((Expr*[]){R, expr_copy(m)}, 2);  /* consumes R */
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){Qm, Rm}, 2);
+}
+
+/* Modular quotient/remainder dispatcher for PolynomialQuotient/Remainder/
+ * QuotientRemainder under `Modulus -> m`. `which`: 0 -> {Q,R}, 1 -> Q, 2 -> R.
+ * Tries the FLINT nmod_poly fast path (word-size prime m) then the classical
+ * fallback. Returns the requested result (owned) or NULL to stay unevaluated. */
+static Expr* poly_divrem_modulus(Expr* p, Expr* q, Expr* x, Expr* m, int which) {
+    if (m->type != EXPR_INTEGER || m->data.integer < 2) return NULL;
+    unsigned long pp = (unsigned long)m->data.integer;
+    Expr* fr = flint_nmod_poly_divrem(p, q, x, pp, which);   /* NULL unless word-size prime */
+    if (fr) return fr;
+    Expr* dr = poly_divrem_mod_classical(p, q, x, m);
+    if (!dr) return NULL;
+    if (which == 0) return dr;                               /* {Q, R} */
+    Expr* out = expr_copy(dr->data.function.args[which - 1]); /* which==1 -> Q, 2 -> R */
+    expr_free(dr);
+    return out;
+}
+
 Expr* builtin_polynomialquotient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
+
+    /* Modulus -> m: quotient over F_p (A3). */
+    {
+        size_t base_argc;
+        Expr* m = poly_modulus_option(res, &base_argc);
+        if (m && base_argc == 3)
+            return poly_divrem_modulus(res->data.function.args[0],
+                                       res->data.function.args[1],
+                                       res->data.function.args[2], m, 1);
+    }
 
     /* Strip a trailing Extension -> α option, if any.  When the user
      * passed `Extension -> Automatic`, run extension_autodetect on the
@@ -1817,6 +1883,16 @@ Expr* builtin_polynomialquotient(Expr* res) {
 Expr* builtin_polynomialremainder(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
 
+    /* Modulus -> m: remainder over F_p (A3). */
+    {
+        size_t base_argc;
+        Expr* m = poly_modulus_option(res, &base_argc);
+        if (m && base_argc == 3)
+            return poly_divrem_modulus(res->data.function.args[0],
+                                       res->data.function.args[1],
+                                       res->data.function.args[2], m, 2);
+    }
+
     /* Strip a trailing Extension -> α option, if any. */
     size_t poly_argc = res->data.function.arg_count;
     bool auto_flag = false;
@@ -1889,6 +1965,16 @@ Expr* builtin_polynomialremainder(Expr* res) {
 /* BronsteinRational pipeline (ExtendedEuclidean).                         */
 Expr* builtin_polynomialquotientremainder(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
+
+    /* Modulus -> m: {quotient, remainder} over F_p (A3). */
+    {
+        size_t base_argc;
+        Expr* m = poly_modulus_option(res, &base_argc);
+        if (m && base_argc == 3)
+            return poly_divrem_modulus(res->data.function.args[0],
+                                       res->data.function.args[1],
+                                       res->data.function.args[2], m, 0);
+    }
 
     size_t poly_argc = res->data.function.arg_count;
     bool auto_flag = false;
@@ -4818,8 +4904,11 @@ Expr* builtin_discriminant(Expr* res) {
         return NULL;
     }
     if (n == 0 || n == 1) {
+        /* Discriminant of a constant or linear polynomial is 1 by convention
+         * (the resultant Res(p, p') is the empty product). Matches Mathematica:
+         * Discriminant[z, z] == 1, Discriminant[2 z + 3, z] == 1. */
         expr_free(exp_poly);
-        return expr_new_integer(0); // Discriminant of constant or linear is 0 in some conventions, or 1? Mathematica says 1 for linear.
+        return expr_new_integer(1);
     }
     
     Expr* a_n = get_coeff(exp_poly, var, n);
@@ -4892,6 +4981,86 @@ static Expr* integer_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
     return NULL;
 }
 
+/* Reduce a rational num/den modulo the positive machine integer m_val to an
+ * Integer in [0, m). Returns NULL when den has no inverse mod m (gcd(den,m)!=1),
+ * in which case the caller leaves the term unchanged -- matching Mathematica,
+ * which cannot embed such a coefficient in Z/mZ. Borrows num and den. */
+static Expr* rational_mod_int(const Expr* num, const Expr* den, int64_t m_val) {
+    Expr* pm_args[3] = { expr_copy((Expr*)den),
+                         expr_new_integer(-1),
+                         expr_new_integer(m_val) };
+    Expr* inv = internal_powermod(pm_args, 3);      /* consumes pm_args */
+    if (!inv || inv->type != EXPR_INTEGER) {        /* no modular inverse */
+        if (inv) expr_free(inv);
+        return NULL;
+    }
+    Expr* t_args[2] = { expr_copy((Expr*)num), inv };   /* inv -> internal_times */
+    Expr* prod = internal_times(t_args, 2);             /* consumes t_args */
+    Expr* m_args[2] = { prod, expr_new_integer(m_val) };
+    return internal_mod(m_args, 2);                     /* Mod[num*inv, m] in [0,m) */
+}
+
+/* Reduce a scalar coefficient (Integer, BigInt, or Rational) modulo the positive
+ * machine integer m_val to an Integer in [0, m). Returns NULL if `c` is not such
+ * a coefficient, or if a Rational's denominator is not invertible mod m. */
+static Expr* coeff_mod_int(const Expr* c, int64_t m_val) {
+    if (c->type == EXPR_INTEGER) {
+        int64_t v = c->data.integer % m_val;
+        if (v < 0) v += m_val;
+        return expr_new_integer(v);
+    }
+    if (c->type == EXPR_BIGINT) {
+        Expr* m_args[2] = { expr_copy((Expr*)c), expr_new_integer(m_val) };
+        return internal_mod(m_args, 2);             /* Mod[bigint, m] -> [0,m) */
+    }
+    if (c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL
+        && c->data.function.head->data.symbol.name == SYM_Rational
+        && c->data.function.arg_count == 2) {
+        return rational_mod_int(c->data.function.args[0],
+                                c->data.function.args[1], m_val);
+    }
+    return NULL;
+}
+
+/* Reduce one expanded polynomial term modulo m_val. Never returns NULL: a term
+ * whose coefficient cannot be embedded in Z/mZ is returned unchanged. */
+static Expr* poly_term_mod_int(const Expr* term, int64_t m_val) {
+    /* Bare scalar coefficient (constant term). */
+    Expr* c = coeff_mod_int(term, m_val);
+    if (c) return c;
+    /* Coefficient * monomial: reduce the leading factor if it is a coefficient. */
+    if (term->type == EXPR_FUNCTION && term->data.function.head->type == EXPR_SYMBOL
+        && term->data.function.head->data.symbol.name == SYM_Times
+        && term->data.function.arg_count >= 1) {
+        Expr* rc = coeff_mod_int(term->data.function.args[0], m_val);
+        if (rc) {
+            size_t n = term->data.function.arg_count;
+            Expr** t_args = malloc(sizeof(Expr*) * n);
+            t_args[0] = rc;
+            for (size_t j = 1; j < n; j++)
+                t_args[j] = expr_copy(term->data.function.args[j]);
+            Expr* r = internal_times(t_args, n);
+            free(t_args);
+            return r;
+        }
+    }
+    /* Gaussian-integer coefficient. */
+    if (term->type == EXPR_FUNCTION && term->data.function.head->type == EXPR_SYMBOL
+        && term->data.function.head->data.symbol.name == SYM_Complex) {
+        int64_t r = term->data.function.args[0]->data.integer % m_val;
+        if (r < 0) r += m_val;
+        int64_t iv = term->data.function.args[1]->data.integer % m_val;
+        if (iv < 0) iv += m_val;
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Complex),
+                             (Expr*[]){expr_new_integer(r), expr_new_integer(iv)}, 2));
+    }
+    /* Anything else (e.g. a bare monomial): multiply by (1 mod m). */
+    int64_t one = 1 % m_val;
+    if (one < 0) one += m_val;
+    if (one == 1) return expr_copy((Expr*)term);
+    return internal_times((Expr*[]){expr_new_integer(one), expr_copy((Expr*)term)}, 2);
+}
+
 /* Reduce `poly` modulo a single divisor `m`. If `m` is an integer,    */
 /* every numeric coefficient is reduced into [0, |m|). Otherwise `m`   */
 /* is treated as a polynomial in its highest-indexed variable; we      */
@@ -4908,63 +5077,14 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
         if (expanded->type == EXPR_FUNCTION && expanded->data.function.head->data.symbol.name == SYM_Plus) {
             Expr** args = malloc(sizeof(Expr*) * expanded->data.function.arg_count);
             for(size_t i=0; i<expanded->data.function.arg_count; i++) {
-                Expr* term = expanded->data.function.args[i];
-                if (term->type == EXPR_INTEGER) {
-                    int64_t c = term->data.integer % m_val;
-                    if (c < 0) c += m_val;
-                    args[i] = expr_new_integer(c);
-                } else if (term->type == EXPR_FUNCTION && term->data.function.head->data.symbol.name == SYM_Times && term->data.function.args[0]->type == EXPR_INTEGER) {
-                    int64_t c = term->data.function.args[0]->data.integer % m_val;
-                    if (c < 0) c += m_val;
-                    Expr** t_args = malloc(sizeof(Expr*) * term->data.function.arg_count);
-                    t_args[0] = expr_new_integer(c);
-                    for(size_t j=1; j<term->data.function.arg_count; j++) t_args[j] = expr_copy(term->data.function.args[j]);
-                    args[i] = internal_times(t_args, term->data.function.arg_count);
-                    free(t_args);
-                } else if (term->type == EXPR_FUNCTION && term->data.function.head->data.symbol.name == SYM_Complex) {
-                    int64_t r = term->data.function.args[0]->data.integer % m_val;
-                    if (r < 0) r += m_val;
-                    int64_t i_val = term->data.function.args[1]->data.integer % m_val;
-                    if (i_val < 0) i_val += m_val;
-                    args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Complex), (Expr*[]){expr_new_integer(r), expr_new_integer(i_val)}, 2));
-                } else {
-                    int64_t c = 1 % m_val;
-                    if (c < 0) c += m_val;
-                    if (c == 1) args[i] = expr_copy(term);
-                    else args[i] = internal_times((Expr*[]){expr_new_integer(c), expr_copy(term)}, 2);
-                }
+                args[i] = poly_term_mod_int(expanded->data.function.args[i], m_val);
             }
             Expr* res = internal_plus(args, expanded->data.function.arg_count);
             free(args);
             expr_free(expanded);
             return res;
         } else {
-            Expr* term = expanded;
-            Expr* res = NULL;
-            if (term->type == EXPR_INTEGER) {
-                int64_t c = term->data.integer % m_val;
-                if (c < 0) c += m_val;
-                res = expr_new_integer(c);
-            } else if (term->type == EXPR_FUNCTION && term->data.function.head->data.symbol.name == SYM_Times && term->data.function.args[0]->type == EXPR_INTEGER) {
-                int64_t c = term->data.function.args[0]->data.integer % m_val;
-                if (c < 0) c += m_val;
-                Expr** t_args = malloc(sizeof(Expr*) * term->data.function.arg_count);
-                t_args[0] = expr_new_integer(c);
-                for(size_t j=1; j<term->data.function.arg_count; j++) t_args[j] = expr_copy(term->data.function.args[j]);
-                res = internal_times(t_args, term->data.function.arg_count);
-                free(t_args);
-            } else if (term->type == EXPR_FUNCTION && term->data.function.head->data.symbol.name == SYM_Complex) {
-                int64_t r = term->data.function.args[0]->data.integer % m_val;
-                if (r < 0) r += m_val;
-                int64_t i_val = term->data.function.args[1]->data.integer % m_val;
-                if (i_val < 0) i_val += m_val;
-                res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Complex), (Expr*[]){expr_new_integer(r), expr_new_integer(i_val)}, 2));
-            } else {
-                int64_t c = 1 % m_val;
-                if (c < 0) c += m_val;
-                if (c == 1) res = expr_copy(term);
-                else res = internal_times((Expr*[]){expr_new_integer(c), expr_copy(term)}, 2);
-            }
+            Expr* res = poly_term_mod_int(expanded, m_val);
             expr_free(expanded);
             return res;
         }
@@ -5160,6 +5280,15 @@ Expr* builtin_polynomialextendedgcd(Expr* res) {
         if (fx) return fx;
     }
 #endif
+
+    /* Modulus -> p over F_p: FLINT nmod_poly xgcd fast path (word-size prime),
+     * returning {g, {s, t}} with g monic and s*A + t*B == g (A2 / section C).
+     * Falls through to the classical modular Euclidean loop below otherwise
+     * (large prime, composite modulus, or USE_FLINT=0). */
+    if (mod_p && mod_p->type == EXPR_INTEGER && mod_p->data.integer >= 2) {
+        Expr* fx = flint_nmod_poly_xgcd(A, B, x, (unsigned long)mod_p->data.integer);
+        if (fx) return fx;
+    }
 
     Expr* r0 = expr_expand(A);
     Expr* r1 = expr_expand(B);

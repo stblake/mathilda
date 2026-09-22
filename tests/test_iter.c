@@ -374,6 +374,40 @@ void test_scoping_count_iterator() {
     assert_eval_eq("With[{n = 2}, Table[Table[0, {n}], {n}]]", "{{0, 0}, {0, 0}}", 0);
 }
 
+/* Regression: A1 -- Do/Table/Sum/Product must iterate a PACKED (EXPR_NDARRAY)
+ * list, not just an EXPR_FUNCTION List. A packed list reaches a HoldAll iterator
+ * through a symbol or an unevaluated producer (Range/Select/Prime of >= 4
+ * machine integers), bypassing the eval-time transparency gate; before the fix
+ * the packed bound was misrouted as a numeric range, so Do/Table came back
+ * unevaluated and Sum silently threaded a range over the buffer. */
+void test_iter_packed_list() {
+    /* PACK_MIN_ELEMENTS is 4, so use >= 4-element producers. */
+    assert_eval_eq("ps = Select[Range[3, 12], PrimeQ]; Table[p, {p, ps}]",
+                   "{3, 5, 7, 11}", 0);
+    assert_eval_eq("Table[p, {p, Select[Range[3, 12], PrimeQ]}]",
+                   "{3, 5, 7, 11}", 0);
+    assert_eval_eq("Table[p, {p, Prime[Range[2, 5]]}]", "{3, 5, 7, 11}", 0);
+    /* Sum was the silent-wrong case: threaded to {6, 15, 28, 66} before. */
+    assert_eval_eq("qs = Select[Range[3, 12], PrimeQ]; Sum[q, {q, qs}]", "26", 0);
+    assert_eval_eq("rs = Select[Range[3, 12], PrimeQ]; Product[r, {r, rs}]",
+                   "1155", 0);
+    /* Do runs, binding the iterator to each element (accumulate a total). */
+    assert_eval_eq("t = 0; ds = Range[4, 8]; Do[t = t + d, {d, ds}]; t", "30", 0);
+    /* Multiple iterators, inner one packed. */
+    assert_eval_eq("t = 0; es = Range[1, 4]; Do[t = t + i*j, {i, 1, 2}, {j, es}]; t",
+                   "30", 0);
+    /* Packed list bound locally by With (held), reaching Do via the local. */
+    assert_eval_eq("With[{u = Range[4, 7]}, Sum[v, {v, u}]]", "22", 0);
+    /* A visible NDArray iterates element-wise too. */
+    assert_eval_eq("Table[e, {e, NDArray[{10, 20, 30}, DataType -> \"int64\"]}]",
+                   "{10, 20, 30}", 0);
+    /* Small (< 4) lists never packed and always worked -- keep them green. */
+    assert_eval_eq("Table[p, {p, Range[3, 5]}]", "{3, 4, 5}", 0);
+    assert_eval_eq("Table[p, {p, {3, 5, 7}}]", "{3, 5, 7}", 0);
+    /* A non-packing producer (Divisors returns a plain List) still iterates. */
+    assert_eval_eq("Table[d, {d, Divisors[175]}]", "{1, 5, 7, 25, 35, 175}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -417,6 +451,7 @@ int main() {
     TEST(test_table_overcap_declines);
     TEST(test_iter_exactness_preserved);
     TEST(test_scoping_count_iterator);
+    TEST(test_iter_packed_list);
 
     printf("All iter tests passed!\n");
     symtab_clear();

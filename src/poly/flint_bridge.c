@@ -41,6 +41,9 @@
 #include <flint/gr.h>
 #include <flint/gr_poly.h>
 #include <flint/gr_mat.h>
+#include <flint/nmod.h>          /* nmod_mul */
+#include <flint/nmod_poly.h>     /* modular univariate polynomials over F_p */
+#include <flint/ulong_extras.h>  /* n_is_prime, n_invmod */
 
 /* `gr_poly_xgcd` — the wrapper that dispatches between the Euclidean and
  * half-GCD implementations by degree — only arrived in FLINT 3.2.
@@ -4434,9 +4437,139 @@ void flint_bridge_init(void) {
         "(fmpq_mpoly_factor_squarefree). Returns unevaluated if out of scope.");
 }
 
+/* ======================================================================
+ *  Modular univariate polynomial arithmetic over F_p (p a word-size prime)
+ * ----------------------------------------------------------------------
+ *  These back PolynomialQuotient/Remainder/QuotientRemainder, PolynomialGCD
+ *  and PolynomialExtendedGCD under `Modulus -> p`. FLINT's nmod_poly makes the
+ *  GF(p) Euclidean/division routines native (the classical Expr path is a
+ *  CoefficientList->Sum round trip per step; see MATHILDA_DIVERGENCES.md C).
+ *  Each declines (NULL) -- caller uses the classical fallback -- when the
+ *  input is not a univariate polynomial over Q in `x`, when p is not a
+ *  word-size prime (F_p must be a field for gcd/xgcd/divrem), or when a
+ *  coefficient's denominator is not invertible mod p.
+ * ====================================================================== */
+
+/* Expr (univariate in xname, rational coeffs) -> nmod_poly mod p. Returns 1 on
+ * success. Reuses expr_accum_fmpq_poly, then reduces each rational coefficient
+ * num/den to (num * den^{-1}) mod p. */
+static int expr_to_nmod_poly(const Expr* e, const char* xname,
+                             ulong p, nmod_poly_t out) {
+    fmpq_poly_t A;
+    fmpq_poly_init(A);
+    if (!expr_accum_fmpq_poly(e, xname, A)) { fmpq_poly_clear(A); return 0; }
+    slong len = fmpq_poly_length(A);
+    nmod_poly_zero(out);
+    fmpq_t c; fmpq_init(c);
+    fmpz_t nz, dz; fmpz_init(nz); fmpz_init(dz);
+    int ok = 1;
+    for (slong i = 0; i < len; i++) {
+        fmpq_poly_get_coeff_fmpq(c, A, i);
+        fmpz_set(nz, fmpq_numref(c));
+        fmpz_set(dz, fmpq_denref(c));
+        ulong nm = fmpz_fdiv_ui(nz, p);            /* numerator mod p, in [0,p) */
+        ulong dm = fmpz_fdiv_ui(dz, p);            /* denominator mod p */
+        if (dm == 0) { ok = 0; break; }            /* denominator not invertible */
+        ulong cm = (dm == 1) ? (nm % p)
+                             : nmod_mul(nm, n_invmod(dm, p), out->mod);
+        nmod_poly_set_coeff_ui(out, i, cm);
+    }
+    fmpz_clear(nz); fmpz_clear(dz); fmpq_clear(c);
+    fmpq_poly_clear(A);
+    return ok;
+}
+
+/* nmod_poly -> Expr polynomial in xname (coefficients as Integers in [0,p)). */
+static Expr* nmod_poly_to_expr(const nmod_poly_t P, const char* xname) {
+    slong len = nmod_poly_length(P);
+    if (len == 0) return expr_new_integer(0);
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)len);
+    size_t nt = 0;
+    for (slong i = 0; i < len; i++) {
+        ulong c = nmod_poly_get_coeff_ui(P, i);
+        if (c == 0) continue;
+        Expr* coeff = expr_new_integer((int64_t)c);
+        Expr* term;
+        if (i == 0) {
+            term = coeff;
+        } else {
+            Expr* mono = (i == 1)
+                ? expr_new_symbol(xname)
+                : expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ expr_new_symbol(xname), expr_new_integer((int64_t)i) }, 2);
+            if (c == 1) { expr_free(coeff); term = mono; }
+            else term = expr_new_function(expr_new_symbol(SYM_Times),
+                      (Expr*[]){ coeff, mono }, 2);
+        }
+        terms[nt++] = term;
+    }
+    Expr* r;
+    if (nt == 0)      { r = expr_new_integer(0); free(terms); return r; }
+    else if (nt == 1) { r = terms[0]; free(terms); }
+    else              { r = expr_new_function(expr_new_symbol(SYM_Plus), terms, nt); free(terms); }
+    return eval_and_free(r);   /* canonical ordering / normalisation */
+}
+
+/* which: 0 -> {Q,R} list, 1 -> Q only, 2 -> R only. */
+Expr* flint_nmod_poly_divrem(const Expr* a, const Expr* b, const Expr* x,
+                             unsigned long p, int which) {
+    if (!x || x->type != EXPR_SYMBOL) return NULL;
+    if (p < 2 || !n_is_prime(p)) return NULL;
+    const char* xn = x->data.symbol.name;
+    nmod_poly_t A, B, Q, R;
+    nmod_poly_init(A, p); nmod_poly_init(B, p);
+    nmod_poly_init(Q, p); nmod_poly_init(R, p);
+    Expr* out = NULL;
+    if (expr_to_nmod_poly(a, xn, p, A) && expr_to_nmod_poly(b, xn, p, B)
+        && !nmod_poly_is_zero(B)) {
+        nmod_poly_divrem(Q, R, A, B);
+        if (which == 1)      out = nmod_poly_to_expr(Q, xn);
+        else if (which == 2) out = nmod_poly_to_expr(R, xn);
+        else {
+            Expr* qe = nmod_poly_to_expr(Q, xn);
+            Expr* re = nmod_poly_to_expr(R, xn);
+            out = expr_new_function(expr_new_symbol(SYM_List),
+                                    (Expr*[]){ qe, re }, 2);
+        }
+    }
+    nmod_poly_clear(A); nmod_poly_clear(B); nmod_poly_clear(Q); nmod_poly_clear(R);
+    return out;
+}
+
+/* Returns {g, {s, t}} with g the monic gcd and s*a + t*b == g in F_p[x]. */
+Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x, unsigned long p) {
+    if (!x || x->type != EXPR_SYMBOL) return NULL;
+    if (p < 2 || !n_is_prime(p)) return NULL;
+    const char* xn = x->data.symbol.name;
+    nmod_poly_t A, B, G, S, T;
+    nmod_poly_init(A, p); nmod_poly_init(B, p); nmod_poly_init(G, p);
+    nmod_poly_init(S, p); nmod_poly_init(T, p);
+    Expr* out = NULL;
+    if (expr_to_nmod_poly(a, xn, p, A) && expr_to_nmod_poly(b, xn, p, B)) {
+        nmod_poly_xgcd(G, S, T, A, B);    /* G monic; S*A + T*B = G */
+        Expr* ge = nmod_poly_to_expr(G, xn);
+        Expr* se = nmod_poly_to_expr(S, xn);
+        Expr* te = nmod_poly_to_expr(T, xn);
+        Expr* bez = expr_new_function(expr_new_symbol(SYM_List),
+                                      (Expr*[]){ se, te }, 2);
+        out = expr_new_function(expr_new_symbol(SYM_List),
+                                (Expr*[]){ ge, bez }, 2);
+    }
+    nmod_poly_clear(A); nmod_poly_clear(B); nmod_poly_clear(G);
+    nmod_poly_clear(S); nmod_poly_clear(T);
+    return out;
+}
+
 #else /* !USE_FLINT */
 
 int   flint_bridge_available(void) { return 0; }
+Expr* flint_nmod_poly_divrem(const Expr* a, const Expr* b, const Expr* x,
+                             unsigned long p, int which) {
+    (void)a; (void)b; (void)x; (void)p; (void)which; return NULL;
+}
+Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x, unsigned long p) {
+    (void)a; (void)b; (void)x; (void)p; return NULL;
+}
 Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_expand_polynomial(const Expr* e) { (void)e; return NULL; }
 int   flint_is_polynomial_over_q(const Expr* e) { (void)e; return 0; }

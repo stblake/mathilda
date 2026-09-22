@@ -1163,6 +1163,16 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             size_t saved = env->count;
             env_set(env, "$OptionsPattern$", optlist);  /* env_set copies value */
             expr_free(optlist);
+            /* If the pattern is OptionsPattern[s] (a target symbol), record s so
+             * OptionValue resolves an unpassed option's DEFAULT against s's
+             * Options, not the enclosing definition's own (A9). A bare
+             * OptionsPattern[] leaves this unset -> the enclosing head is used. */
+            if (opt_pat->data.function.arg_count >= 1
+                && opt_pat->data.function.args[0]->type == EXPR_SYMBOL) {
+                Expr* tgt = expr_copy(opt_pat->data.function.args[0]);
+                env_set(env, "$OptionsPatternHead$", tgt);
+                expr_free(tgt);
+            }
             /* If the OptionsPattern was named (opts : OptionsPattern[]), also
              * bind that symbol to a Sequence of the matched options so the RHS
              * can splice them -- Sequence @@ ..., {opts}, or passing opts down

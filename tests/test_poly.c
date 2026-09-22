@@ -186,6 +186,31 @@ void test_discriminant() {
     run_test("Discriminant[5 x^4 - 3 x + 9, x]", "23273325");
     run_test("Discriminant[(x-1)(x-2)(x-3), x]", "4");
     run_test("Discriminant[(x-1)(x-2)(x-1), x]", "0");
+    /* A7: discriminant of a linear (or constant) polynomial is 1, not 0. */
+    run_test("Discriminant[z, z]", "1");
+    run_test("Discriminant[2 z + 3, z]", "1");
+    run_test("Discriminant[a x + b, x]", "1");
+}
+
+/* A2/A3: PolynomialQuotient/Remainder/QuotientRemainder and
+ * PolynomialExtendedGCD over F_p via `Modulus -> p` (FLINT nmod_poly fast path,
+ * classical fallback). Previously the div/rem heads returned unevaluated and
+ * ExtendedGCD ignored the modulus for inputs coprime over Q. */
+void test_polynomial_modulus() {
+    run_test("PolynomialQuotient[x^3 + 2, x + 1, x, Modulus -> 7]",
+             "Plus[1, Times[6, x], Power[x, 2]]");
+    run_test("PolynomialRemainder[x^3 + 2, x + 1, x, Modulus -> 7]", "1");
+    run_test("PolynomialQuotientRemainder[x^3 + 2, x + 1, x, Modulus -> 7]",
+             "List[Plus[1, Times[6, x], Power[x, 2]], 1]");
+    /* Non-monic divisor (leading coeff invertible mod 7). */
+    run_test("PolynomialQuotient[x^2 + 1, 2 x + 1, x, Modulus -> 7]",
+             "Plus[5, Times[4, x]]");
+    /* A2: coprime over Q, but a common factor (x-1) mod 7 -> gcd x+6. */
+    run_test("PolynomialExtendedGCD[x^2 + 5 x + 1, x^2 + 6 x, x, Modulus -> 7]",
+             "List[Plus[6, x], List[6, 1]]");
+    /* Monic case preserved. */
+    run_test("PolynomialExtendedGCD[x^2 + x + 1, x + 1, x, Modulus -> 2]",
+             "List[1, List[1, x]]");
 }
 
 void test_polynomialextendedgcd() {
@@ -232,7 +257,8 @@ int main() {
     TEST(test_bigint_poly);
     TEST(test_discriminant);
     TEST(test_polynomialextendedgcd);
-    
+    TEST(test_polynomial_modulus);
+
     printf("All polynomial tests passed!\n");
     return 0;
 }

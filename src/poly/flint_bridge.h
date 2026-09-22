@@ -445,6 +445,23 @@ int flint_polynomial_reduce(const Expr* poly, const Expr* const* divisors,
                             int ndiv, const Expr* const* vars, int nvars,
                             int order_kind, Expr*** quot_out, Expr** rem_out);
 
+/* Modular univariate polynomial arithmetic over F_p (p a word-size prime),
+ * backing PolynomialQuotient/Remainder/QuotientRemainder, PolynomialGCD and
+ * PolynomialExtendedGCD under `Modulus -> p`. `a`, `b` must be univariate
+ * polynomials over Q in the symbol `x`; coefficients are reduced mod p.
+ *
+ * flint_nmod_poly_divrem: which = 0 -> {Q, R} list, 1 -> Q only, 2 -> R only.
+ * flint_nmod_poly_xgcd:   {g, {s, t}} with g monic and s*a + t*b == g in F_p[x].
+ *
+ * Each returns NULL -- caller uses the classical fallback -- when FLINT is
+ * absent, `x` is not a symbol, p is not a word-size prime, an input is not a
+ * univariate polynomial over Q in x, or a coefficient denominator is not
+ * invertible mod p (and, for divrem, when the reduced divisor is zero). */
+Expr* flint_nmod_poly_divrem(const Expr* a, const Expr* b, const Expr* x,
+                             unsigned long p, int which);
+Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x,
+                           unsigned long p);
+
 /* Registers the M1 scaffolding builtin(s). Called from core_init(). */
 void flint_bridge_init(void);
 

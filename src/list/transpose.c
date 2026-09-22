@@ -20,6 +20,45 @@ static int get_array_dimensions(Expr* e, int64_t* dims, const char* head_name) {
     return depth + 1;
 }
 
+/* For the 1-arg Transpose the top two levels must be rectangular -- a List of
+ * rows, each a List of the same length -- while entries at the third level and
+ * below are opaque leaves. Returns 1 and sets nrows, ncols on success, else 0.
+ * (A8: Mathematica's 1-arg Transpose swaps only the first two levels, so a list
+ * of equal-length rows whose entries have differing deeper shapes is valid.) */
+static int get_top2_dims(Expr* e, const char* head_name,
+                         int64_t* nrows, int64_t* ncols) {
+    const char* h = intern_symbol(head_name);
+    if (!head_is(e, h)) return 0;
+    int64_t r = (int64_t)e->data.function.arg_count;
+    if (r == 0) return 0;
+    Expr* row0 = e->data.function.args[0];
+    if (!head_is(row0, h)) return 0;              /* not a list of lists */
+    int64_t c = (int64_t)row0->data.function.arg_count;
+    for (int64_t i = 1; i < r; i++) {
+        Expr* row = e->data.function.args[i];
+        if (!head_is(row, h)) return 0;
+        if ((int64_t)row->data.function.arg_count != c) return 0;  /* ragged top level */
+    }
+    *nrows = r; *ncols = c;
+    return 1;
+}
+
+/* Transpose only the top two levels: result[j][i] = list[i][j], with each
+ * list[i][j] kept whole (opaque). */
+static Expr* transpose_top2(Expr* list, const char* head, int64_t nr, int64_t nc) {
+    Expr** cols = malloc(sizeof(Expr*) * (size_t)(nc ? nc : 1));
+    for (int64_t j = 0; j < nc; j++) {
+        Expr** rowj = malloc(sizeof(Expr*) * (size_t)nr);
+        for (int64_t i = 0; i < nr; i++)
+            rowj[i] = expr_copy(list->data.function.args[i]->data.function.args[j]);
+        cols[j] = expr_new_function(expr_new_symbol(head), rowj, (size_t)nr);
+        free(rowj);
+    }
+    Expr* result = expr_new_function(expr_new_symbol(head), cols, (size_t)nc);
+    free(cols);
+    return result;
+}
+
 static Expr* get_element_at(Expr* e, int64_t* indices, size_t depth) {
     Expr* curr = e;
     for (size_t i = 0; i < depth; i++) {
@@ -62,7 +101,15 @@ Expr* builtin_transpose(Expr* res) {
 
     int64_t in_dims[64];
     int in_depth = get_array_dimensions(list, in_dims, head);
-    if (in_depth < 2) return NULL;
+    if (in_depth < 2) {
+        /* Ragged deeper entries: the 1-arg form still transposes the top two
+         * levels when they are rectangular, treating level-2 entries as opaque
+         * (A8). The n-arg permutation form genuinely needs full rectangularity. */
+        int64_t nr, nc;
+        if (res->data.function.arg_count == 1 && get_top2_dims(list, head, &nr, &nc))
+            return transpose_top2(list, head, nr, nc);
+        return NULL;
+    }
 
     int64_t* perm = malloc(sizeof(int64_t) * in_depth);
     if (res->data.function.arg_count == 1) {

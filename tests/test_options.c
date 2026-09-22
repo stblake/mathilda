@@ -123,6 +123,16 @@ int main(void) {
     chk("h[5]", "{5, 0}");
     chk("h[5, opt -> 9]", "{5, 9}");
 
+    /* ---- A9: OptionsPattern[other] resolves unpassed-option DEFAULTS against
+     * `other`'s Options, not the enclosing head's own. ---- */
+    run("Options[oiInner] = {\"opt\" -> 111}");
+    run("Options[oiOuter] = {\"opt\" -> 999}");
+    run("oiInner[OptionsPattern[]] := OptionValue[\"opt\"]");
+    run("oiOuter[OptionsPattern[oiInner]] := OptionValue[\"opt\"]");
+    chk("oiOuter[]", "111");                 /* default from oiInner, not oiOuter (999) */
+    chk("oiOuter[\"opt\" -> 5]", "5");        /* an explicitly passed option still wins */
+    chk("oiInner[]", "111");                  /* bare OptionsPattern[] unaffected */
+
     if (failures) {
         fprintf(stderr, "\n%d test(s) FAILED\n", failures);
         return 1;

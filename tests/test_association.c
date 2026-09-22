@@ -1393,6 +1393,19 @@ void test_delete_key_absent() {
                    "<|\"a\" -> 1, \"b\" -> 2|>", 0);
 }
 
+/* A5: Lookup[assoc, Key[k], default] must unwrap Key[k] and find a present key
+ * -- even when k is itself a list (Key[list] is one literal key, not the
+ * list-of-keys form). */
+void test_lookup_key_wrapper() {
+    assert_eval_eq("a = <||>; a[{1, 0}] = 2; Lookup[a, Key[{1, 0}], None]", "2", 0);
+    assert_eval_eq("a = <||>; a[{1, 0}] = 2; Lookup[a, Key[{9, 9}], None]", "None", 0);
+    assert_eval_eq("Lookup[<|x -> 5|>, Key[x], 0]", "5", 0);
+    /* Absent Key without a default -> Missing["KeyAbsent", k] (inner key). */
+    assert_eval_eq("Lookup[<|x -> 1|>, Key[y]]", "Missing[\"KeyAbsent\", y]", 0);
+    /* Key threads over a list of associations. */
+    assert_eval_eq("Lookup[{<|x -> 1|>, <|x -> 2|>}, Key[x], 0]", "{1, 2}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1666,6 +1679,7 @@ int main() {
     TEST(test_delete_keys_multiple);
     TEST(test_delete_key_nested);
     TEST(test_delete_key_absent);
+    TEST(test_lookup_key_wrapper);
 
     TEST(test_capstone_pipeline);
     TEST(test_capstone_counts_top);

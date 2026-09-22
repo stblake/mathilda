@@ -73,14 +73,29 @@ Expr* builtin_slotsequence(Expr* res) {
     return NULL;
 }
 
+/* A slot-form Function (Function[body], or Function[Null, ...]) establishes its
+ * own # scope; a named Function (Function[x, ...] / Function[{...}, ...]) does
+ * not rebind slots. */
+static int function_is_slot_form(Expr* fn) {
+    size_t fargc = fn->data.function.arg_count;
+    if (fargc <= 1) return 1;                              /* Function[body] */
+    Expr* p = fn->data.function.args[0];
+    if (p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Null) return 1;
+    return 0;                                              /* named parameter(s) */
+}
+
 static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count) {
     if (!e) return NULL;
-    
+
     if (e->type == EXPR_FUNCTION) {
-        // If it's another Function, don't recurse into it. 
-        // We only substitute slots for the current level.
-        if (e->data.function.head->type == EXPR_SYMBOL && 
-            e->data.function.head->data.symbol.name == SYM_Function) {
+        // A nested *slot-form* Function establishes its own # scope, so the
+        // enclosing function's slots must not be substituted into it. A nested
+        // *named* Function does not rebind slots, so an enclosing slot-form's #
+        // must still flow into its body (A10) -- fall through to the standard
+        // recursion below in that case.
+        if (e->data.function.head->type == EXPR_SYMBOL &&
+            e->data.function.head->data.symbol.name == SYM_Function &&
+            function_is_slot_form(e)) {
             return expr_copy(e);
         }
         

@@ -18,7 +18,16 @@ void test_polymod_basic(void) {
         {"PolynomialMod[3x^3+21x^2-7x+55,2x^2-7]", "257/2 + 7/2 x"},
         {"PolynomialMod[3x^3+21x^2-7x+55,x^2+I]", "55 - 21*I + (-7 - 3*I) x"},
         {"PolynomialMod[3x^3+21x^2-7x+55,{2x^2-7,9}]", "8 + x^2 + x^3"},
-        {"PolynomialMod[3x^3+21x^2*y^2-7x*y^3+55,{2x^2-7,x*y-3, 9}]", "1 + 7 x + x^3 + 4 y^2"}
+        {"PolynomialMod[3x^3+21x^2*y^2-7x*y^3+55,{2x^2-7,x*y-3, 9}]", "1 + 7 x + x^3 + 4 y^2"},
+        /* A6: rational coefficients are reduced mod an integer modulus via a
+         * modular inverse (num * den^{-1} mod m). */
+        {"PolynomialMod[1/2 + x, 7]", "4 + x"},
+        {"PolynomialMod[1/2 + 3/4 x, 7]", "4 + 6 x"},
+        {"PolynomialMod[2/3, 7]", "3"},
+        /* Big-integer coefficients are reduced too (10^30 mod 7 == 1). */
+        {"PolynomialMod[1000000000000000000000000000000 + x, 7]", "1 + x"},
+        /* Denominator not invertible mod m: term left unchanged (no false 0). */
+        {"PolynomialMod[1/7 + x, 7]", "1/7 + x"}
     };
 
     for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {

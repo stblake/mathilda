@@ -119,6 +119,10 @@ void test_padright_full() {
     check("PadRight[{a, b, c}]", "{a, b, c}");
     check("PadRight[{{1}, {2, 3}, {4, 5, 6}}]",
           "{{1, 0, 0}, {2, 3, 0}, {4, 5, 6}}");
+    /* A4: the one-arg form must not descend into atomic numeric heads
+     * (Rational/Complex are EXPR_FUNCTION nodes but atomic leaves). */
+    check("PadRight[{{1}, {0, 1/8}}]", "{{1, 0}, {0, 1/8}}");
+    check("PadRight[{{1, 2}, 1/8}]", "{{1, 2}, {1/8, 0}}");
 }
 
 /* ---- PadRight[list, Automatic, x]: pad to full with x ---- */

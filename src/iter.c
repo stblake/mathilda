@@ -46,6 +46,7 @@
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "ndarray.h"
 #include "checked_int.h"
 #include "numloop.h"
 #include <string.h>
@@ -96,6 +97,21 @@ bool iter_spec_parse(Expr* spec, IterSpec* out) {
         if (len == 2) {
             /* {i, bound}: list iteration if bound is a List, else {i,1,imax}. */
             Expr* bound = evaluate(spec->data.function.args[1]);
+            /* A packed list or visible NDArray is an EXPR_NDARRAY, which
+             * is_list_expr does not recognise. Left as-is it would be misrouted
+             * as a numeric range bound (imax) -- Do/Table then decline, and
+             * Sum/Product silently thread a range over the buffer. Materialise
+             * it to a nested List so it iterates element-wise, exactly as the
+             * equivalent literal or Range would. This is the single fix point
+             * for Do, Table, Sum, Product and every graphics plotter, all of
+             * which share iter_spec_parse. The bound is produced by the
+             * evaluate() above, after the eval-time transparency gate has run,
+             * so nothing else materialises it. */
+            if (is_ndarray(bound)) {
+                Expr* plain = ndarray_to_nested_list(bound);
+                expr_free(bound);
+                bound = plain;
+            }
             if (is_list_expr(bound)) {
                 out->kind = ITER_KIND_LIST;
                 out->list = bound;
