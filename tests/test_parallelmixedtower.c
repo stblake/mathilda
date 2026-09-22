@@ -194,6 +194,59 @@ static void test_nonelem_warning_emitted(void) {
         "Integrate::nonelem"));
 }
 
+/* --------------------------------------------- soundness/robustness regressions
+ * Guards for the defects the sympy-comparison stress test surfaced (see
+ * tasks/parallelmixedtower_stress.md).  Each was a wrong answer, a false
+ * certificate, an internal leak, or a hang on the strict method surface. */
+static void test_soundness_fixes(void) {
+    /* Fix 1 (N6): Sqrt[Log[x]] is non-elementary; the worker MUST decline with a
+     * {"failed", ...} tuple, not return 0.  Root cause was OptionValue[
+     * "SpecialExponent"] leaking (Options[iPIM] undefined) -> symbolic bound ->
+     * 0-equation trivial solve -> a bogus 0 antiderivative. */
+    assert_eval(
+        "MatchQ[Integrate`ParallelMixedTower[Sqrt[Log[x]], x], {\"failed\", ___}]",
+        "True");
+    /* Fix 1 (F2): the same leak baked an unevaluated OptionValue[...] into the
+     * answer for Tan[Sqrt[x]]/Sqrt[x].  Now: no OptionValue in the result, and it
+     * differentiates back to the integrand. */
+    assert_eval(
+        "r = Integrate`ParallelMixedTower[Tan[Sqrt[x]]/Sqrt[x], x];"
+        " {FreeQ[r, OptionValue],"
+        "  Abs[N[(D[r, x] - Tan[Sqrt[x]]/Sqrt[x]) /. x -> 1/2, 25]] < 10^-15}",
+        "{True, True}");
+    /* Fix 2 (T2): 1/(x (Log[x]^2+1)) was a FALSE non-elementary certificate
+     * (its integral is ArcTan[Log[x]]).  Root cause: a ragged Transpose[{pts,
+     * taus}] left unevaluated in RealisePoints, so unequal residues over the
+     * log-tower prime were never realised.  Now it solves (not a List). */
+    assert_eval(
+        "r = Integrate`ParallelMixedTower[1/(x (Log[x]^2 + 1)), x];"
+        " {Head[r] =!= List,"
+        "  Abs[N[(D[r, x] - 1/(x (Log[x]^2 + 1))) /. x -> 2, 25]] < 10^-15}",
+        "{True, True}");
+    /* Fix 2 (T10): 1/(x^4-1) -- same false-certificate class over x^2+1. */
+    assert_eval(
+        "r = Integrate`ParallelMixedTower[1/(x^4 - 1), x];"
+        " Abs[N[(D[r, x] - 1/(x^4 - 1)) /. x -> 2, 25]] < 10^-15",
+        "True");
+    /* Fix 3 (A11): x^3 ArcSin[x]/Sqrt[1-x^4] previously returned a WRONG
+     * antiderivative (bad quartic-realisation branch).  The hard verify-or-decline
+     * gate now differentiates the answer at generic complex points and demotes a
+     * non-verifying result to a clean {"failed", ...} decline. */
+    assert_eval(
+        "MatchQ[Integrate`ParallelMixedTower[x^3 ArcSin[x]/Sqrt[1 - x^4], x], {\"failed\", ___}]",
+        "True");
+    /* Fix 5 (R3, R4): simplest genus-0 conic + one rational pole -- were declines,
+     * fixed by the same Transpose->Thread correction on the curve branch. */
+    assert_eval(
+        "r = Integrate`ParallelMixedTower[1/((x + 1) Sqrt[x^2 + x + 1]), x];"
+        " Abs[N[(D[r, x] - 1/((x + 1) Sqrt[x^2 + x + 1])) /. x -> 2, 25]] < 10^-15",
+        "True");
+    assert_eval(
+        "r = Integrate`ParallelMixedTower[Sqrt[x^2 + 1]/x, x];"
+        " Abs[N[(D[r, x] - Sqrt[x^2 + 1]/x) /. x -> 2, 25]] < 10^-15",
+        "True");
+}
+
 void test_parallelmixedtower(void) {
     symtab_init();
     core_init();
@@ -209,6 +262,7 @@ void test_parallelmixedtower(void) {
     TEST(test_method_declines_cleanly);
     TEST(test_method_certifies_nonelementary);
     TEST(test_nonelem_warning_emitted);
+    TEST(test_soundness_fixes);
 
     printf("All ParallelMixedTower tests passed!\n");
 }

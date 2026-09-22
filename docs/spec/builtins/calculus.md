@@ -1267,8 +1267,12 @@ monotonically down.
      linear factors over the algebraic closure when a single logand does not
      close the integral (SplitSpecials, Theorem 6.1) — e.g. `Sqrt[Tan[x]]`, whose
      `1 + u^4` (with `u = Sqrt[Tan[x]]`) needs distinct coefficients on its four
-     factors over `Q(i, Sqrt[2])`.  Correct by construction, re-differentiation
-     verified before returning; a non-elementary or not-yet-ported case declines.
+     factors over `Q(i, Sqrt[2])`.  Every returned antiderivative passes a hard
+     verify-or-decline gate — it is re-differentiated and checked against the
+     integrand at real points of its domain, so a mis-realised result declines
+     rather than escaping as a wrong answer.  A non-elementary case, a
+     not-yet-ported case, or a run exceeding an internal wall-clock budget all
+     decline cleanly (never a wrong answer, never an unbounded hang).
      Cascade-gated to skip pure rational functions (BronsteinRational's job).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and

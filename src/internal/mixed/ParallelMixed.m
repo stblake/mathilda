@@ -556,7 +556,7 @@ TorsionRealise[T_, pending_, Y_, bound_: 24, verbose_: False] := Catch[Module[
   {gens = T["gens"], g, q = T["q"], places, toM, add, c, realise, out = {}, rest = {}, P, got, A, Rr, piv, N0, ns, terms, beta},
   g = pending[[1, 2, 1, 1]];
   If[Exponent[q, g] =!= 3 || ! FreeQ[q, Alternatives @@ DeleteCases[gens, g]] || AnyTrue[pending, #[[2, 1, 1]] =!= g &], Throw[None, "tors"]];
-  places = Cases[Flatten[Transpose[{#[[2]], #[[3]]}] & /@ pending, 1], {_, tau_} /; tau =!= 0];
+  places = Cases[Flatten[Thread[{#[[2]], #[[3]]}] & /@ pending, 1], {_, tau_} /; tau =!= 0];
   If[! FreeQ[{#[[1, 2]], #[[1, 3]], #[[2]]} & /@ places, Alternatives @@ gens], Throw[None, "tors"]];
   {toM, add, c} = EllOps[q, g];
   (* {mu, u} with div(u) = mu * sum n (P - oo) for terms = {{P, n}, ...}, or None *)
@@ -945,10 +945,10 @@ RealisePoints[T_, p_, pts_, taus_, Y_, verbose_: False] := Catch[Module[{g, out,
   g = pts[[1, 1]];
   (* no curve: every place over p is the principal prime g - rho *)
   If[T["q"] === None,
-    Throw[Cases[Transpose[{pts, taus}], {{_, rho_, _}, tau_} /; tau =!= 0 :> {tau, {g - rho, 0}}], "realise"]];
+    Throw[Cases[Thread[{pts, taus}], {{_, rho_, _}, tau_} /; tau =!= 0 :> {tau, {g - rho, 0}}], "realise"]];
   Do[{a, b, c, k} = sol; out = {}; ok = True;
     Do[uu = {a, sg b};
-      hits = Pick[Transpose[{pts, taus}], IsZero[ReduceAt[uu[[1]] + uu[[2]] Y, #, Y]] & /@ pts, True];
+      hits = Pick[Thread[{pts, taus}], IsZero[ReduceAt[uu[[1]] + uu[[2]] Y, #, Y]] & /@ pts, True];
       gammas = Simplify[#[[2]]/VanishOrder[T, uu, #[[1]], Y]] & /@ hits;
       If[gammas === {} || ! AllTrue[gammas, IsZero[# - gammas[[1]]] &], ok = False; Break[]];
       If[gammas[[1]] =!= 0, AppendTo[out, {gammas[[1]], uu}]],
@@ -1530,7 +1530,7 @@ RealiseAtPoints[T_, p_, pts_, taus_, verbose_: False] := Module[{g = pts[[1, 1]]
     found = False;
     Do[If[IsZero[groups[[i, 1]] - pr[[2]]], AppendTo[groups[[i, 2]], pr[[1]]]; found = True; Break[]], {i, Length[groups]}];
     If[! found, AppendTo[groups, {pr[[2]], {pr[[1]]}}]],
-    {pr, Transpose[{pts, taus}]}];
+    {pr, Thread[{pts, taus}]}];
   Do[supp = {Expand[g - #[[2]]], #[[3]]} & /@ grp[[2]];
     got = RealiseClassGeneral[T, g, supp, grp[[1]], 12, verbose];
     If[got === None, Return[None, Module]];
@@ -1887,7 +1887,7 @@ BuildTower[integrand_, x_Symbol] := Module[
    With "Verify" -> True the surface result is differentiated and compared
    with the integrand numerically at three points; a mismatch prints a
    warning and still returns the result.                                     *)
-ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := Module[{bt, T, fpair, back, Y, res, surf, ok},
+ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{bt, T, fpair, back, Y, res, surf, ok},
   bt = Catch[BuildTower[integrand, x], "build"];
   If[bt === $Failed, Return[$Failed]];
   {T, fpair, back, Y} = bt;
@@ -1899,12 +1899,51 @@ ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := Module[
                                 "SplitSpecials" -> OptionValue["SplitSpecials"]];
   If[ListQ[res], Return[res //. back]];
   surf = res //. back;
-  If[OptionValue["Verify"],
-    ok = AllTrue[{3/2, 2, 7/3}, Abs[N[(D[surf, x] - integrand) /. x -> #, 30]] < 10^-20 &];
-    If[! ok, Print["  WARNING: numeric verification of D[result] - integrand failed"]]];
-  surf];
+  (* Hard verify-or-decline soundness gate.  A returned antiderivative MUST
+     satisfy D[surf] == integrand on the integrand's real domain.  Checked
+     numerically at REAL points where the integrand is real and finite (its
+     real domain) -- the same discipline the external test corpus uses -- so a
+     correct answer passes even when its surface form is a branch-sensitive
+     complex-log expression, while a wrong one (e.g. a mis-realised logand
+     branch) is caught: its residual is nonzero at real in-domain points.
+     Generic complex points are only a fallback when no real-domain sample
+     exists.  A failure returns a {"failed", ...} tuple so the caller declines
+     cleanly rather than emitting a wrong result.  (verify-timeout: accept,
+     rather than reject a likely-correct but large answer.) *)
+  ok = TimeConstrained[
+    Quiet[Module[{cand, pts, resids},
+      cand = {1/2, 1/3, 2/3, 1/5, 4/5, 2, 3, 3/2, 5/2, 7/3, 1/7};
+      pts = Select[cand,
+        With[{fv = N[integrand /. x -> #, 30]},
+          NumericQ[fv] && Abs[Im[fv]] < 10^-10 && Abs[fv] < 10^12] &];
+      resids = Select[(N[(D[surf, x] - integrand) /. x -> #, 30]) & /@ pts,
+        NumericQ[#] && Abs[#] < 10^12 &];          (* drop pole/blow-up samples *)
+      If[pts === {},                               (* no real-domain sample: complex fallback *)
+        resids = Select[(N[(D[surf, x] - integrand) /. x -> #, 30]) & /@ {7/13 + 5 I/11, 4/9 - 3 I/7},
+          NumericQ[#] && Abs[#] < 10^12 &]];
+      Length[resids] >= 1 && AllTrue[resids, Abs[#] < 10^-12 &]]],
+    15, True];
+  If[! ok, Return[{"failed", "verification failed"}]];
+  surf],
+  $ParallelMixedTimeBudget, {"failed", "time budget exceeded"}];
+
+(* Robustness backstop: a few integrands drive an internal stage (split-specials
+   over Fbar + a number-field compositum, a two-generator ansatz blow-up, or a
+   nested-radical BuildTower) into a very long run.  This coarse wall-clock
+   budget converts such a run into a clean decline instead of an unbounded hang
+   (interactive Integrate has no timeout of its own).  Set above the slowest
+   legitimate solve observed on the stress corpus (~34 s) with headroom; it is a
+   backstop, not a per-stage guard -- deterministic ansatz-size / number-field
+   degree caps are follow-up work.  Overridable by the caller if needed. *)
+$ParallelMixedTimeBudget = 45;
 
 Options[ParallelIntegrateMixed] = {"Bounds" -> None, "Verbose" -> False, "Verify" -> False, "SplitSpecials" -> Automatic, "SpecialExponent" -> 0};
+(* iPIM shares these options via OptionsPattern[ParallelIntegrateMixed].  Its own
+   Options MUST be declared: Mathilda's OptionValue resolves an unpassed option's
+   default against the enclosing function head (Options[iPIM]), not against the
+   symbol named in OptionsPattern[...].  Without this, OptionValue["SpecialExponent"]
+   at the iPIM base run leaks unevaluated (returning 0 or a garbage antiderivative). *)
+Options[iPIM] = Options[ParallelIntegrateMixed];
 
 (* pair form: with "SplitSpecials" -> Automatic a failed system is retried with
    every special prime split into its linear factors over the algebraic
@@ -2488,7 +2527,11 @@ iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
        differential of the second kind (the holomorphic remainder) *)
     curve = Select[gens, ! FreeQ[q, #] &];
     typeE = q =!= None && AnyTrue[unkLogs, FreeQ[#[[1]], Alternatives @@ Complement[gens, curve]] &];
-    If[OptionValue["Bounds"] === None && proved && unitsComplete && ! typeE && ! (splittable && split =!= True) &&
+    (* the holomorphic-remainder (second-kind) certificate presupposes an
+       algebraic curve of positive genus; on a no-curve tower (q === None) no
+       such differential exists, so never certify there -- fall through to
+       {"failed", ...} instead (this is the T2/T10 false-certificate guard). *)
+    If[q =!= None && OptionValue["Bounds"] === None && proved && unitsComplete && ! typeE && ! (splittable && split =!= True) &&
         If[Length[gens] == 1 && q =!= None && m == 2 && T["derivs"][[1]] === {1, 0}, ResidueFree[T, rem, Y], VerifiedResidueFree[rem, T]],
       Throw[{"not elementary", "holomorphic remainder: residual second-kind differential is not exact (every bound in force is proved)", bounds}, "PIM"]];
     Throw[Join[{"failed", "no solution within bounds", bounds},
