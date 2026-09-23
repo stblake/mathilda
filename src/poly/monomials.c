@@ -40,6 +40,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "groebner.h"   /* gb_build_order_matrix, gb_classify_named_order */
+#include "flint_bridge.h" /* flint_field_monomials — field-coefficient fast path */
 
 #include <stdlib.h>
 #include <string.h>
@@ -247,10 +248,97 @@ static int term_to_expvec(Expr* term, Expr** vars, int k, int* exps,
 /* On success returns a malloc'd array of `*n_out` monomials (possibly zero)
  * sorted by the weight matrix; on non-polynomial input returns NULL. `poly`,
  * `vars`, `W`, and `modulus` are borrowed. */
+/* Sort by the weight key, merge byte-equal exponent vectors (adjacent after the
+ * sort) summing their coefficients, and drop zero coefficients.  Shared by the
+ * generic term loop and the field fast path so both finish identically.  Sets
+ * *n_out and returns the (in-place compacted) `monos`. */
+static Mono* finish_monomials(Mono* monos, size_t n, int keylen, int k,
+                              size_t* n_out) {
+    g_keylen = keylen;
+    qsort(monos, n, sizeof(Mono), cmp_key_desc);
+
+    size_t w = 0;
+    for (size_t r = 0; r < n; ) {
+        size_t s = r + 1;
+        Expr* coeff = monos[r].coeff;
+        monos[r].coeff = NULL;
+        while (s < n &&
+               memcmp(monos[r].exps, monos[s].exps, sizeof(int) * (size_t)k) == 0) {
+            coeff = internal_plus((Expr*[]){ coeff, monos[s].coeff }, 2);
+            monos[s].coeff = NULL;
+            s++;
+        }
+        int is_zero = (coeff->type == EXPR_INTEGER && coeff->data.integer == 0);
+        if (is_zero) {
+            expr_free(coeff);
+            free(monos[r].exps);
+            free(monos[r].key);
+        } else {
+            monos[w].exps  = monos[r].exps;
+            monos[w].key   = monos[r].key;
+            monos[w].coeff = coeff;
+            w++;
+        }
+        /* free the merged-away representatives (r+1 .. s-1) */
+        for (size_t x = r + 1; x < s; x++) {
+            free(monos[x].exps);
+            free(monos[x].key);
+        }
+        r = s;
+    }
+
+    *n_out = w;
+    return monos;
+}
+
+/* Native field-coefficient fast path for build_monomials.  When `poly` is a
+ * polynomial in `vars` with AlgebraicNumber[theta,..] (one number field Q(theta))
+ * coefficients, read the monomials straight out of the reduced FLINT polynomial
+ * — skipping Expand + per-term internal_times/internal_plus over AlgebraicNumber
+ * scalars — then finish through the shared sort/merge so the result is identical
+ * to the generic path.  Returns the Mono array (via finish_monomials) on success,
+ * or NULL to decline (caller uses the generic path). */
+static Mono* build_monomials_field(Expr* poly, Expr** vars, int k,
+                                   const int64_t* W, int rows, size_t* n_out) {
+    int*   fexps  = NULL;
+    Expr** fcoeff = NULL;
+    size_t fn     = 0;
+    int rc = flint_field_monomials(poly, vars, k, &fexps, &fcoeff, &fn);
+    if (rc < 0) return NULL;
+
+    int keylen = rows + k;
+    Mono* monos = malloc(sizeof(Mono) * (fn > 0 ? fn : 1));
+    for (size_t t = 0; t < fn; t++) {
+        int* exps = malloc(sizeof(int) * (size_t)(k > 0 ? k : 1));
+        for (int j = 0; j < k; j++) exps[j] = fexps[t * (size_t)k + j];
+        int64_t* key = malloc(sizeof(int64_t) * (size_t)(keylen > 0 ? keylen : 1));
+        for (int r = 0; r < rows; r++) {
+            int64_t acc = 0;
+            for (int j = 0; j < k; j++) acc += W[(size_t)r * k + j] * exps[j];
+            key[r] = acc;
+        }
+        for (int j = 0; j < k; j++) key[rows + j] = exps[j];
+        monos[t].exps  = exps;
+        monos[t].coeff = fcoeff[t];      /* move ownership */
+        monos[t].key   = key;
+    }
+    free(fexps);
+    free(fcoeff);
+    return finish_monomials(monos, fn, keylen, k, n_out);
+}
+
 static Mono* build_monomials(Expr* poly, Expr** vars, int k,
                              const int64_t* W, int rows, Expr* modulus,
                              size_t* n_out) {
     *n_out = 0;
+
+    /* Native field-coefficient read-off (no modulus): straight from FLINT,
+     * skipping the generic Expand + per-term evaluator work.  Declines (NULL)
+     * for anything but a single-field polynomial in `vars`. */
+    if (!modulus && flint_bridge_available()) {
+        Mono* fm = build_monomials_field(poly, vars, k, W, rows, n_out);
+        if (fm) return fm;
+    }
 
     /* Modulus first (reduces integer coefficients into [0,m) and drops the
      * terms that vanish), then Expand. */
@@ -303,43 +391,7 @@ static Mono* build_monomials(Expr* poly, Expr** vars, int k,
     }
     expr_free(expanded);
 
-    /* Sort, then merge byte-equal exponent vectors (adjacent after the sort)
-     * and drop zero coefficients. */
-    g_keylen = keylen;
-    qsort(monos, n, sizeof(Mono), cmp_key_desc);
-
-    size_t w = 0;
-    for (size_t r = 0; r < n; ) {
-        size_t s = r + 1;
-        Expr* coeff = monos[r].coeff;
-        monos[r].coeff = NULL;
-        while (s < n &&
-               memcmp(monos[r].exps, monos[s].exps, sizeof(int) * (size_t)k) == 0) {
-            coeff = internal_plus((Expr*[]){ coeff, monos[s].coeff }, 2);
-            monos[s].coeff = NULL;
-            s++;
-        }
-        int is_zero = (coeff->type == EXPR_INTEGER && coeff->data.integer == 0);
-        if (is_zero) {
-            expr_free(coeff);
-            free(monos[r].exps);
-            free(monos[r].key);
-        } else {
-            monos[w].exps  = monos[r].exps;
-            monos[w].key   = monos[r].key;
-            monos[w].coeff = coeff;
-            w++;
-        }
-        /* free the merged-away representatives (r+1 .. s-1) */
-        for (size_t x = r + 1; x < s; x++) {
-            free(monos[x].exps);
-            free(monos[x].key);
-        }
-        r = s;
-    }
-
-    *n_out = w;
-    return monos;
+    return finish_monomials(monos, n, keylen, k, n_out);
 }
 
 /* ------------------------------------------------------------------ */

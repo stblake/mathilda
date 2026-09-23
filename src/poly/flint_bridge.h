@@ -89,6 +89,22 @@ Expr* flint_expand_polynomial(const Expr* e);
  * polynomial over a single such field, or without FLINT. */
 Expr* flint_expand_polynomial_field(const Expr* e);
 
+/* Native field-coefficient CoefficientRules read-off.  For `poly` a polynomial
+ * in the user variables vars[0..nvars) with coefficients in one number field
+ * Q(theta) (rationals, AlgebraicNumber[theta,{..}] all sharing one theta, or,
+ * for Q(i), bare Complex), returns for each distinct gens-monomial its exponent
+ * vector (in user-variable order) and its coefficient, the coefficient in the
+ * SAME canonical form flint_expand_polynomial_field produces.
+ *
+ * On success returns the monomial count (>= 0) and hands the caller two malloc'd
+ * arrays it owns: *exps_out is count*nvars ints (row-major, user order; free()),
+ * *coeffs_out is count owned Expr* (expr_free each, then free the array).
+ * Returns -1 to decline (not a single-field polynomial in `vars`, a stray free
+ * symbol, a non-symbol variable, an all-scalar/tau-free field, or without
+ * FLINT); the caller then uses the generic path.  Never mutates `poly`. */
+int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
+                          int** exps_out, Expr*** coeffs_out, size_t* count_out);
+
 /* True (1) when `e` is a polynomial over Q in recognisable variables — i.e. the
  * kind of expression flint_expand_polynomial accepts (built from integers,
  * rationals, symbols, Plus/Times, and non-negative integer Power). Numeric
@@ -320,6 +336,21 @@ Expr* flint_rational_together(const Expr* e);
  * classical Cancel, or NULL out of scope. NULL without FLINT.
  */
 Expr* flint_rational_cancel(const Expr* e);
+
+/*
+ * Together / Cancel for a rational function whose coefficients live in one number
+ * field K = Q(theta): rationals, AlgebraicNumber[theta,{..}] (all sharing one
+ * theta), or, for the Gaussian field Q(i), bare Complex.  These are the paths the
+ * plain-Q and Gaussian kernels above decline (they reject the AlgebraicNumber
+ * representation).  The reduction runs natively over K[gens] via a self-
+ * certifying polynomial GCD (univariate via gr_poly over the antic number-field
+ * ring; multivariate via a modular fq_nmod GCD).  Every result is verified — the
+ * cancelled fraction is checked to divide the input exactly over K — so the
+ * function returns NULL (caller uses the generic path) whenever it cannot produce
+ * a certified, fully-reduced answer.  NULL without FLINT.
+ */
+Expr* flint_field_together(const Expr* e);
+Expr* flint_field_cancel(const Expr* e);
 
 /*
  * FLINT-native partial fraction decomposition over Q. Given a proper rational

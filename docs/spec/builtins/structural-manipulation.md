@@ -1195,6 +1195,11 @@ Gives the exponent vectors and coefficients of the monomials of a polynomial as 
 - Note: the no-variable form uses `Variables[poly]`, which Mathilda returns in
   canonical (sorted) order — so e.g. `CoefficientRules[y + x z]` uses the variable
   order `{x, y, z}`.
+- Polynomials whose coefficients live in one number field `Q(θ)`
+  (`AlgebraicNumber[θ, {..}]`, all sharing one θ — the ParallelMixedTower assembly's
+  representation) take a native FLINT read-off (θ→a fresh variable, group over the
+  field, read each coefficient back mod θ's minimal polynomial), byte-identical to
+  the generic path but without the per-term evaluator work. `MonomialList` shares it.
 
 ```mathematica
 In[1]:= CoefficientRules[(x + y)^3]

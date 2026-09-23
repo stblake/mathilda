@@ -1624,6 +1624,13 @@ static Expr* builtin_cancel_compute(Expr* res) {
          * complex-coefficient placeholder residual). */
         Expr* gi = flint_gaussian_cancel(res->data.function.args[0]);
         if (gi) return gi;
+        /* Number-field rational: AlgebraicNumber[theta,{..}]-coefficient fraction
+         * over one field K = Q(theta) (the ParallelMixedTower assembly and
+         * incidental-Q(i) DSolve representation).  The plain-Q and Gaussian paths
+         * above reject the AlgebraicNumber head; reduce natively over K[gens]
+         * (self-certified) instead of falling to the term-by-term evaluator. */
+        Expr* fld = flint_field_cancel(res->data.function.args[0]);
+        if (fld) return fld;
     }
 #endif
 
@@ -2159,6 +2166,12 @@ static Expr* builtin_together_compute(Expr* res) {
          * multivariate-GCD blow-up on a complex-coefficient residual. */
         Expr* gi = flint_gaussian_together(arg);
         if (gi) return gi;
+        /* Number-field rational: AlgebraicNumber[theta,{..}]-coefficient sum of
+         * fractions over one field K = Q(theta).  The plain-Q and Gaussian paths
+         * reject the AlgebraicNumber head; combine and reduce natively over
+         * K[gens] (self-certified) instead of the term-by-term evaluator. */
+        Expr* fld = flint_field_together(arg);
+        if (fld) return fld;
     }
 #endif
 

@@ -11,6 +11,8 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <stdio.h>
 
 #include "symtab.h"
 #include "attr.h"
@@ -523,14 +525,13 @@ static int field_build_minpoly(fmpq_mpoly_t M, const Expr* mp,
     return ok;
 }
 
-/* Coefficient (rational or AlgebraicNumber[theta, {..}]) times gens-monomial,
- * built from the tau-coefficients accumulated in `coords` (degree < n) and the
- * exponent vector `gens_exp` (its tau_idx entry ignored).  Matches
+/* The coefficient (rational or AlgebraicNumber[theta, {c0..c_{n-1}}]) built from
+ * the tau-coefficients accumulated in `coords` (degree < n).  Matches
  * poly_to_algnum_gen's canonical form exactly: a purely-rational coefficient
- * collapses to the rational, otherwise AlgebraicNumber[theta, {c0..c_{n-1}}]. */
-static Expr* field_flush_group(const fmpq_poly_t coords, const ulong* gens_exp,
-                               slong nvars, slong tau_idx, slong n,
-                               const Expr* theta, const VarSet* vs) {
+ * (all tau-powers >= 1 vanish) collapses to the rational, otherwise
+ * AlgebraicNumber[theta, {c0..c_{n-1}}].  Shared by field_flush_group (Expand)
+ * and flint_field_monomials (CoefficientRules) so both emit identical scalars. */
+static Expr* field_group_coeff(const fmpq_poly_t coords, slong n, const Expr* theta) {
     int all_higher_zero = 1;
     for (slong i = 1; i < n && all_higher_zero; i++) {
         fmpq_t ci; fmpq_init(ci);
@@ -538,25 +539,33 @@ static Expr* field_flush_group(const fmpq_poly_t coords, const ulong* gens_exp,
         if (!fmpq_is_zero(ci)) all_higher_zero = 0;
         fmpq_clear(ci);
     }
-    Expr* coeff;
     if (all_higher_zero) {
         fmpq_t c0; fmpq_init(c0);
         fmpq_poly_get_coeff_fmpq(c0, coords, 0);
-        coeff = expr_from_fmpq_local(c0);
+        Expr* coeff = expr_from_fmpq_local(c0);
         fmpq_clear(c0);
-    } else {
-        Expr** dl = malloc(sizeof(Expr*) * (size_t)n);
-        fmpq_t ci; fmpq_init(ci);
-        for (slong i = 0; i < n; i++) {
-            fmpq_poly_get_coeff_fmpq(ci, coords, i);
-            dl[i] = expr_from_fmpq_local(ci);
-        }
-        fmpq_clear(ci);
-        Expr* clist = expr_new_function(expr_new_symbol("List"), dl, (size_t)n);
-        free(dl);
-        Expr* an[2] = { expr_copy((Expr*)theta), clist };
-        coeff = expr_new_function(expr_new_symbol("AlgebraicNumber"), an, 2);
+        return coeff;
     }
+    Expr** dl = malloc(sizeof(Expr*) * (size_t)n);
+    fmpq_t ci; fmpq_init(ci);
+    for (slong i = 0; i < n; i++) {
+        fmpq_poly_get_coeff_fmpq(ci, coords, i);
+        dl[i] = expr_from_fmpq_local(ci);
+    }
+    fmpq_clear(ci);
+    Expr* clist = expr_new_function(expr_new_symbol("List"), dl, (size_t)n);
+    free(dl);
+    Expr* an[2] = { expr_copy((Expr*)theta), clist };
+    return expr_new_function(expr_new_symbol("AlgebraicNumber"), an, 2);
+}
+
+/* Coefficient (rational or AlgebraicNumber[theta, {..}]) times gens-monomial,
+ * built from the tau-coefficients accumulated in `coords` (degree < n) and the
+ * exponent vector `gens_exp` (its tau_idx entry ignored). */
+static Expr* field_flush_group(const fmpq_poly_t coords, const ulong* gens_exp,
+                               slong nvars, slong tau_idx, slong n,
+                               const Expr* theta, const VarSet* vs) {
+    Expr* coeff = field_group_coeff(coords, n, theta);
     Expr** factors = malloc(sizeof(Expr*) * (size_t)(nvars + 1));
     size_t nf = 0;
     factors[nf++] = coeff;
@@ -698,6 +707,182 @@ Expr* flint_expand_polynomial_field(const Expr* e) {
     fmpq_mpoly_clear(Qd, ctx); fmpq_mpoly_clear(R, ctx);
     varset_free(&vs); expr_free(ep); expr_free(mp);
     return out;
+}
+
+/* Native field-coefficient CoefficientRules read-off.  For `poly` a polynomial
+ * in the user variables vars[0..nvars) whose coefficients live in one number
+ * field Q(theta) (rationals, AlgebraicNumber[theta,{..}] sharing one theta, or —
+ * for the Gaussian field Q(i) — bare Complex), returns for each distinct
+ * gens-monomial its exponent vector (in USER-variable order) and coefficient,
+ * the coefficient in the SAME canonical form flint_expand_polynomial_field
+ * produces (rational, else AlgebraicNumber[theta,{c0..c_{n-1}}]).
+ *
+ * The mechanism is the proven tau-lift: theta -> a fresh variable tau, expand
+ * over Q[gens, tau], reduce modulo theta's minimal polynomial M(tau), then group
+ * the remainder by gens-monomial (tau least-significant) and read each group's
+ * tau-polynomial back as the field coefficient — the read-off analogue of
+ * field_mpoly_to_expr, emitting (expvec, coeff) instead of coeff*monomial.
+ *
+ * On success returns the monomial count (>= 0) and hands the caller two malloc'd
+ * arrays it owns: *exps_out is count*nvars ints (row-major, user order; free()),
+ * *coeffs_out is count owned Expr* (expr_free each, then free the array).
+ * Returns -1 to DECLINE — no theta / two distinct generators / a non-Gaussian
+ * bare Complex / a non-symbol variable / a free symbol outside vars / an all-
+ * scalar (tau-free) field, or without FLINT — the caller then uses the generic
+ * path, which is byte-identical.  Never mutates `poly`. */
+/* Test/diagnostic escape hatch: MATHILDA_NO_FIELD_KERNELS=1 disables the native
+ * field-coefficient fast paths (CoefficientRules / Together / Cancel), forcing
+ * the generic evaluator path.  Read once and cached.  Used by the differential
+ * A/B tests to prove the field path is byte-identical to the generic one. */
+static int field_kernels_disabled(void) {
+    static int cached = -1;
+    if (cached < 0) {
+        const char* v = getenv("MATHILDA_NO_FIELD_KERNELS");
+        cached = (v && v[0] && v[0] != '0') ? 1 : 0;
+    }
+    return cached;
+}
+
+int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
+                          int** exps_out, Expr*** coeffs_out, size_t* count_out) {
+    if (field_kernels_disabled()) return -1;
+    if (!poly || nvars < 0) return -1;
+    for (int i = 0; i < nvars; i++)
+        if (!vars[i] || vars[i]->type != EXPR_SYMBOL) return -1;
+
+    /* 1. the single algebraic generator theta (same gate as field Expand). */
+    FieldScan fs; memset(&fs, 0, sizeof fs);
+    field_scan(poly, &fs);
+    if (fs.conflict || !fs.have_alg) return -1;
+    const Expr* theta = fs.theta;
+    int gaussian = expr_is_imag_unit(theta);
+    if (fs.have_complex && !gaussian) return -1;   /* unsupported compositum */
+
+    /* 2. minimal polynomial {m0..mn}, degree n. */
+    Expr* mp = flint_qqbar_gen_minpoly_coeffs(theta);
+    if (!mp || mp->type != EXPR_FUNCTION || mp->data.function.arg_count < 2) {
+        if (mp) expr_free(mp);
+        return -1;
+    }
+    slong n = (slong)mp->data.function.arg_count - 1;
+
+    /* 3. substitute theta -> tau. */
+    Expr* ep = field_subst_tau(poly, gaussian);
+    if (!ep) { expr_free(mp); return -1; }
+
+    /* 4. variables of ep; must be (a subset of the user vars) plus tau. */
+    VarSet vs; memset(&vs, 0, sizeof vs);
+    if (!collect_vars(ep, &vs)) { varset_free(&vs); expr_free(ep); expr_free(mp); return -1; }
+
+    /* Find tau; decline the (degenerate, non-hot) tau-free all-scalar case to
+     * the generic path rather than special-case it. */
+    char* tau_ptr = NULL;
+    for (size_t i = 0; i < vs.count; i++)
+        if (strcmp(vs.names[i], FIELD_TAU_NAME) == 0) { tau_ptr = vs.names[i]; break; }
+    if (!tau_ptr) { varset_free(&vs); expr_free(ep); expr_free(mp); return -1; }
+
+    /* Every collected non-tau symbol must be one of the user variables; build the
+     * collected-index -> user-index map.  A stray symbol (a parameter that the
+     * generic path keeps inside the coefficient) means decline. */
+    slong nvc = (slong)vs.count;
+    int* col_to_user = malloc(sizeof(int) * (size_t)nvc);
+    int stray = 0;
+    for (size_t i = 0; i < vs.count; i++) {
+        if (vs.names[i] == tau_ptr) { col_to_user[i] = -1; continue; }
+        int ui = -1;
+        for (int u = 0; u < nvars; u++)
+            if (strcmp(vs.names[i], vars[u]->data.symbol.name) == 0) { ui = u; break; }
+        if (ui < 0) { stray = 1; break; }
+        col_to_user[i] = ui;
+    }
+    if (stray) { free(col_to_user); varset_free(&vs); expr_free(ep); expr_free(mp); return -1; }
+
+    /* Move tau to the last index (least-significant in ORD_LEX) so the terms of
+     * one gens-monomial are adjacent after expansion; keep col_to_user aligned. */
+    {
+        size_t last = vs.count - 1;
+        for (size_t i = 0; i < vs.count; i++) {
+            if (vs.names[i] == tau_ptr && i != last) {
+                char* tn = vs.names[i]; vs.names[i] = vs.names[last]; vs.names[last] = tn;
+                int tc = col_to_user[i]; col_to_user[i] = col_to_user[last]; col_to_user[last] = tc;
+                break;
+            }
+        }
+    }
+    slong tau_idx = nvc - 1;
+
+    /* 5. expand over Q[gens, tau], 6. build M(tau), 7. reduce, 8. read groups. */
+    const fmpq_mpoly_ctx_struct* ctx = bridge_ctx_lex(nvc);
+    fmpq_mpoly_t P, M, Qd, R;
+    fmpq_mpoly_init(P, ctx); fmpq_mpoly_init(M, ctx);
+    fmpq_mpoly_init(Qd, ctx); fmpq_mpoly_init(R, ctx);
+    int ok = to_mpoly(ep, P, ctx, &vs) &&
+             field_build_minpoly(M, mp, ctx, nvc, tau_idx) &&
+             !fmpq_mpoly_is_zero(M, ctx);
+    int rc = -1;
+    if (ok) {
+        fmpq_mpoly_divrem(Qd, R, P, M, ctx);
+        slong len = fmpq_mpoly_length(R, ctx);
+        int* exps = malloc(sizeof(int) * (size_t)((len ? (size_t)len : 1) * (size_t)(nvars ? nvars : 1)));
+        Expr** coeffs = malloc(sizeof(Expr*) * (size_t)(len ? (size_t)len : 1));
+        ulong* eexp = malloc(sizeof(ulong) * (size_t)nvc);
+        ulong* cur  = malloc(sizeof(ulong) * (size_t)nvc);
+        fmpq_poly_t coords; fmpq_poly_init(coords);
+        fmpq_t c; fmpq_init(c);
+        size_t nt = 0;
+        int have = 0, overflow = 0;
+        for (slong i = 0; i < len && !overflow; i++) {
+            fmpq_mpoly_get_term_coeff_fmpq(c, R, i, ctx);
+            fmpq_mpoly_get_term_exp_ui(eexp, R, i, ctx);
+            int same = have;
+            if (have)
+                for (slong v = 0; v < nvc; v++) {
+                    if (v == tau_idx) continue;
+                    if (eexp[v] != cur[v]) { same = 0; break; }
+                }
+            if (!same) {
+                if (have) {
+                    coeffs[nt] = field_group_coeff(coords, n, theta);
+                    for (int j = 0; j < nvars; j++) exps[nt * (size_t)nvars + (size_t)j] = 0;
+                    for (slong v = 0; v < nvc; v++) {
+                        if (v == tau_idx) continue;
+                        if (cur[v] > (ulong)INT_MAX) { overflow = 1; break; }
+                        exps[nt * (size_t)nvars + (size_t)col_to_user[v]] = (int)cur[v];
+                    }
+                    nt++;
+                    fmpq_poly_zero(coords);
+                }
+                memcpy(cur, eexp, (size_t)nvc * sizeof(ulong));
+                have = 1;
+            }
+            fmpq_poly_set_coeff_fmpq(coords, (slong)eexp[tau_idx], c);
+        }
+        if (have && !overflow) {
+            coeffs[nt] = field_group_coeff(coords, n, theta);
+            for (int j = 0; j < nvars; j++) exps[nt * (size_t)nvars + (size_t)j] = 0;
+            for (slong v = 0; v < nvc; v++) {
+                if (v == tau_idx) continue;
+                if (cur[v] > (ulong)INT_MAX) { overflow = 1; }
+                else exps[nt * (size_t)nvars + (size_t)col_to_user[v]] = (int)cur[v];
+            }
+            if (!overflow) nt++;
+        }
+        fmpq_clear(c); fmpq_poly_clear(coords);
+        free(eexp); free(cur);
+        if (overflow) {
+            for (size_t i = 0; i < nt; i++) expr_free(coeffs[i]);
+            free(exps); free(coeffs);
+        } else {
+            *exps_out = exps; *coeffs_out = coeffs; *count_out = nt;
+            rc = (int)nt;
+        }
+    }
+    if (rc >= 0 && getenv("MATHILDA_FIELD_DIAG"))
+        fprintf(stderr, "[field] CoefficientRules read-off: %d monomials\n", rc);
+    fmpq_mpoly_clear(P, ctx); fmpq_mpoly_clear(M, ctx);
+    fmpq_mpoly_clear(Qd, ctx); fmpq_mpoly_clear(R, ctx);
+    free(col_to_user); varset_free(&vs); expr_free(ep); expr_free(mp);
+    return rc;
 }
 
 /* ------------------------------------------------------------------ */
@@ -3520,6 +3705,387 @@ Expr* flint_rational_cancel(const Expr* e) {
     return flint_rational_normalize_core(e);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Native field-coefficient Together / Cancel over K = Q(theta)       */
+/* ------------------------------------------------------------------ */
+
+/* Is `e` a candidate for the native field Together/Cancel path — a rational
+ * expression whose coefficients live in one number field Q(theta) (rationals,
+ * AlgebraicNumber[theta,{..}] sharing one theta, or, for Q(i), bare Complex)?
+ * On success sets theta and gaussian and collects the free polynomial generators
+ * (the tower variables) into `gens` (caller varset_free's).  Returns 0 (and
+ * leaves `gens` empty) otherwise. */
+static int field_frac_candidate(const Expr* e, const Expr** theta, int* gaussian,
+                                VarSet* gens) {
+    memset(gens, 0, sizeof *gens);
+    if (field_kernels_disabled()) return 0;
+    FieldScan fs; memset(&fs, 0, sizeof fs);
+    field_scan(e, &fs);
+    if (fs.conflict || !fs.have_alg) return 0;
+    int g = expr_is_imag_unit(fs.theta);
+    if (fs.have_complex && !g) return 0;             /* unsupported compositum */
+    collect_all_symbols(e, gens);
+    if (getenv("MATHILDA_FIELD_DIAG"))
+        fprintf(stderr, "[field] Together/Cancel candidate: %d gens\n", (int)gens->count);
+    if (theta) *theta = fs.theta;
+    if (gaussian) *gaussian = g;
+    return 1;
+}
+
+/* ---- univariate K(x) rational-function reduction over K = Q(theta) ----
+ *
+ * The single-generator case (the only one the ParallelMixedTower assembly and
+ * the incidental-Q(i) DSolve ever produce — every field Together/Cancel candidate
+ * measured is univariate).  A K(x) element is a pair of gr_poly over the antic
+ * number-field ring (gr_ctx_init_nf).  Reduction (gcd + exact division) is exact
+ * over the field, so a divexact that reports success certifies the result; any
+ * gr failure declines to NULL (the caller's generic path).  Multivariate field
+ * fractions (none observed) are declined. */
+
+/* fmpq from a rational-like Expr (Integer / BigInt / Rational[p,q]).  1 on ok. */
+static int field_expr_to_fmpq(const Expr* e, fmpq_t out) {
+    if (!e) return 0;
+    if (e->type == EXPR_INTEGER) { fmpq_set_si(out, e->data.integer, 1); return 1; }
+    if (e->type == EXPR_BIGINT) {
+        fmpz_set_mpz(fmpq_numref(out), e->data.bigint);
+        fmpz_one(fmpq_denref(out));
+        return 1;
+    }
+    if (e->type == EXPR_FUNCTION) {
+        const char* h = fn_head_name(e);
+        if (h && strcmp(h, "Rational") == 0 && e->data.function.arg_count == 2) {
+            fmpz_t nz, dz; fmpz_init(nz); fmpz_init(dz);
+            int ok = fmpz_from_int_expr(nz, e->data.function.args[0]) &&
+                     fmpz_from_int_expr(dz, e->data.function.args[1]);
+            if (ok) fmpq_set_fmpz_frac(out, nz, dz);
+            fmpz_clear(nz); fmpz_clear(dz);
+            return ok;
+        }
+    }
+    return 0;
+}
+
+/* theta's minimal polynomial as a monic fmpq_poly (for nf_init).  1 on ok. */
+static int field_theta_minpoly(const Expr* theta, fmpq_poly_t out) {
+    Expr* mp = flint_qqbar_gen_minpoly_coeffs(theta);
+    if (!mp || mp->type != EXPR_FUNCTION || mp->data.function.arg_count < 2) {
+        if (mp) expr_free(mp);
+        return 0;
+    }
+    slong nc = (slong)mp->data.function.arg_count;
+    fmpq_poly_zero(out);
+    fmpq_t c; fmpq_init(c);
+    int ok = 1;
+    for (slong i = 0; i < nc && ok; i++) {
+        if (field_expr_to_fmpq(mp->data.function.args[i], c))
+            fmpq_poly_set_coeff_fmpq(out, i, c);
+        else ok = 0;
+    }
+    fmpq_clear(c); expr_free(mp);
+    return ok;
+}
+
+typedef struct {
+    nf_t nf;
+    gr_ctx_t gr;
+    slong n;             /* [K:Q] */
+    const Expr* theta;
+    int gaussian;
+    const char* xname;   /* the single generator symbol name */
+    int ready;
+} KxCtx;
+
+static int kx_ctx_init(KxCtx* c, const Expr* theta, int gaussian, const char* xname) {
+    memset(c, 0, sizeof *c);
+    fmpq_poly_t mp; fmpq_poly_init(mp);
+    if (!field_theta_minpoly(theta, mp)) { fmpq_poly_clear(mp); return 0; }
+    c->n = fmpq_poly_degree(mp);
+    if (c->n < 1) { fmpq_poly_clear(mp); return 0; }
+    /* Two independent nf objects built from the same minimal polynomial: `nf` for
+     * our own nf_elem conversions (nf_elem_set/get_fmpq_poly, nf_elem_inv), and
+     * the gr ring's own internal nf.  They are structurally identical (an nf_elem
+     * is just coordinates on theta's power basis), so elements built with one work
+     * with the other; keeping them separate gives each a single owner and avoids a
+     * double-free at clear time. */
+    nf_init(c->nf, mp);
+    gr_ctx_init_nf(c->gr, mp);
+    c->theta = theta; c->gaussian = gaussian; c->xname = xname; c->ready = 1;
+    fmpq_poly_clear(mp);
+    return 1;
+}
+
+static void kx_ctx_clear(KxCtx* c) {
+    if (!c->ready) return;
+    gr_ctx_clear(c->gr);
+    nf_clear(c->nf);
+    c->ready = 0;
+}
+
+/* A K-constant Expr (rational / AlgebraicNumber[theta,{..}] / Gaussian Complex)
+ * -> nf_elem.  1 on success, 0 (decline) otherwise. */
+static int kx_scalar(KxCtx* c, const Expr* e, nf_elem_t out) {
+    fmpq_poly_t p; fmpq_poly_init(p);
+    fmpq_t q; fmpq_init(q);
+    int ok = 0;
+    if (field_expr_to_fmpq(e, q)) {
+        fmpq_poly_set_coeff_fmpq(p, 0, q);
+        ok = 1;
+    } else if (e->type == EXPR_FUNCTION) {
+        const char* h = fn_head_name(e);
+        if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2 &&
+            expr_eq(e->data.function.args[0], (Expr*)c->theta)) {
+            const Expr* coords = e->data.function.args[1];
+            if (coords->type == EXPR_FUNCTION) {
+                ok = 1;
+                for (size_t i = 0; i < coords->data.function.arg_count && ok; i++) {
+                    if (field_expr_to_fmpq(coords->data.function.args[i], q))
+                        fmpq_poly_set_coeff_fmpq(p, (slong)i, q);
+                    else ok = 0;
+                }
+            }
+        } else if (h && strcmp(h, "Complex") == 0 && c->gaussian &&
+                   e->data.function.arg_count == 2) {
+            /* a + b I, theta == I (minpoly x^2+1) -> coords {a, b} */
+            fmpq_t b; fmpq_init(b);
+            if (field_expr_to_fmpq(e->data.function.args[0], q) &&
+                field_expr_to_fmpq(e->data.function.args[1], b)) {
+                fmpq_poly_set_coeff_fmpq(p, 0, q);
+                fmpq_poly_set_coeff_fmpq(p, 1, b);
+                ok = 1;
+            }
+            fmpq_clear(b);
+        }
+    }
+    if (ok) nf_elem_set_fmpq_poly(out, p, c->nf);
+    fmpq_clear(q); fmpq_poly_clear(p);
+    return ok;
+}
+
+/* A K(x) rational function: num/den, gr_poly over the nf ring. */
+typedef struct { gr_poly_struct num[1]; gr_poly_struct den[1]; } KxRf;
+
+static void kx_rf_init(KxCtx* c, KxRf* r) {
+    gr_poly_init(r->num, c->gr);
+    gr_poly_init(r->den, c->gr);
+    if (gr_poly_one(r->den, c->gr) != GR_SUCCESS) { /* den defaults to 1; failure surfaces later */ }
+}
+static void kx_rf_clear(KxCtx* c, KxRf* r) {
+    gr_poly_clear(r->num, c->gr);
+    gr_poly_clear(r->den, c->gr);
+}
+
+/* Reduce num/den to lowest terms with a monic denominator.  1 on success. */
+static int kx_rf_reduce(KxCtx* c, KxRf* r) {
+    if (gr_poly_is_zero(r->den, c->gr) == T_TRUE) return 0;    /* division by zero */
+    gr_poly_t g; gr_poly_init(g, c->gr);
+    int ok = (gr_poly_gcd(g, r->num, r->den, c->gr) == GR_SUCCESS);
+    if (ok && gr_poly_length(g, c->gr) > 1) {                  /* non-constant gcd */
+        gr_poly_t q; gr_poly_init(q, c->gr);
+        ok = (gr_poly_divexact(q, r->num, g, c->gr) == GR_SUCCESS);
+        if (ok) gr_poly_swap(r->num, q, c->gr);
+        if (ok) ok = (gr_poly_divexact(q, r->den, g, c->gr) == GR_SUCCESS);
+        if (ok) gr_poly_swap(r->den, q, c->gr);
+        gr_poly_clear(q, c->gr);
+    }
+    gr_poly_clear(g, c->gr);
+    if (!ok) return 0;
+    /* normalise: divide num and den by the denominator's leading coefficient. */
+    slong dl = gr_poly_length(r->den, c->gr);
+    if (dl >= 1) {
+        nf_elem_t lc, inv; nf_elem_init(lc, c->nf); nf_elem_init(inv, c->nf);
+        int mok = (gr_poly_get_coeff_scalar((gr_ptr)lc, r->den, dl - 1, c->gr) == GR_SUCCESS) &&
+                  !nf_elem_is_zero(lc, c->nf);
+        if (mok) {
+            nf_elem_inv(inv, lc, c->nf);
+            mok = (gr_poly_mul_scalar(r->num, r->num, (gr_srcptr)inv, c->gr) == GR_SUCCESS) &&
+                  (gr_poly_mul_scalar(r->den, r->den, (gr_srcptr)inv, c->gr) == GR_SUCCESS);
+        }
+        nf_elem_clear(lc, c->nf); nf_elem_clear(inv, c->nf);
+        if (!mok) return 0;
+    }
+    return 1;
+}
+
+/* dst = a + b   (dst must be distinct from a and b). */
+static int kx_rf_add(KxCtx* c, KxRf* dst, const KxRf* a, const KxRf* b) {
+    gr_poly_t t1, t2; gr_poly_init(t1, c->gr); gr_poly_init(t2, c->gr);
+    int ok = (gr_poly_mul(t1, a->num, b->den, c->gr) == GR_SUCCESS) &&
+             (gr_poly_mul(t2, b->num, a->den, c->gr) == GR_SUCCESS) &&
+             (gr_poly_add(dst->num, t1, t2, c->gr) == GR_SUCCESS) &&
+             (gr_poly_mul(dst->den, a->den, b->den, c->gr) == GR_SUCCESS);
+    gr_poly_clear(t1, c->gr); gr_poly_clear(t2, c->gr);
+    return ok && kx_rf_reduce(c, dst);
+}
+
+/* dst = a * b   (dst must be distinct from a and b). */
+static int kx_rf_mul(KxCtx* c, KxRf* dst, const KxRf* a, const KxRf* b) {
+    int ok = (gr_poly_mul(dst->num, a->num, b->num, c->gr) == GR_SUCCESS) &&
+             (gr_poly_mul(dst->den, a->den, b->den, c->gr) == GR_SUCCESS);
+    return ok && kx_rf_reduce(c, dst);
+}
+
+/* dst = base^e for any integer e.  1 on success. */
+static int kx_rf_pow(KxCtx* c, KxRf* dst, const KxRf* base, long e) {
+    KxRf b; kx_rf_init(c, &b);
+    int ok;
+    if (e < 0) {
+        if (gr_poly_is_zero(base->num, c->gr) == T_TRUE) { kx_rf_clear(c, &b); return 0; }
+        ok = (gr_poly_set(b.num, base->den, c->gr) == GR_SUCCESS) &&
+             (gr_poly_set(b.den, base->num, c->gr) == GR_SUCCESS) &&
+             kx_rf_reduce(c, &b);
+        e = -e;
+    } else {
+        ok = (gr_poly_set(b.num, base->num, c->gr) == GR_SUCCESS) &&
+             (gr_poly_set(b.den, base->den, c->gr) == GR_SUCCESS);
+    }
+    ok = ok && (gr_poly_one(dst->num, c->gr) == GR_SUCCESS) &&
+               (gr_poly_one(dst->den, c->gr) == GR_SUCCESS);   /* dst = 1 */
+    KxRf tmp; kx_rf_init(c, &tmp);
+    for (long i = 0; i < e && ok; i++) {
+        ok = kx_rf_mul(c, &tmp, dst, &b);
+        if (ok) { gr_poly_swap(dst->num, tmp.num, c->gr); gr_poly_swap(dst->den, tmp.den, c->gr); }
+    }
+    kx_rf_clear(c, &tmp); kx_rf_clear(c, &b);
+    return ok;
+}
+
+/* Evaluate `e` as an element of K(x).  1 on success, 0 (decline) on any head or
+ * atom outside {K-scalar, x, Plus, Times, Power[·, integer]}. */
+static int kx_eval(KxCtx* c, const Expr* e, KxRf* dst) {
+    nf_elem_t s; nf_elem_init(s, c->nf);
+    if (kx_scalar(c, e, s)) {
+        int ok = (gr_poly_zero(dst->num, c->gr) == GR_SUCCESS) &&
+                 (gr_poly_set_coeff_scalar(dst->num, 0, (gr_srcptr)s, c->gr) == GR_SUCCESS) &&
+                 (gr_poly_one(dst->den, c->gr) == GR_SUCCESS);
+        nf_elem_clear(s, c->nf);
+        return ok;
+    }
+    nf_elem_clear(s, c->nf);
+
+    if (e->type == EXPR_SYMBOL) {
+        if (strcmp(e->data.symbol.name, c->xname) != 0) return 0;
+        return (gr_poly_zero(dst->num, c->gr) == GR_SUCCESS) &&
+               (gr_poly_set_coeff_si(dst->num, 1, 1, c->gr) == GR_SUCCESS) &&
+               (gr_poly_one(dst->den, c->gr) == GR_SUCCESS);        /* dst = x */
+    }
+    if (e->type != EXPR_FUNCTION) return 0;
+    const char* h = fn_head_name(e);
+    if (!h) return 0;
+
+    if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+        int is_plus = (h[0] == 'P');
+        /* dst = 0 (Plus identity) or 1 (Times identity) */
+        int ok = (gr_poly_zero(dst->num, c->gr) == GR_SUCCESS) &&
+                 (gr_poly_one(dst->den, c->gr) == GR_SUCCESS) &&
+                 (is_plus ? 1 : (gr_poly_one(dst->num, c->gr) == GR_SUCCESS));
+        KxRf term, acc; kx_rf_init(c, &term); kx_rf_init(c, &acc);
+        for (size_t i = 0; i < e->data.function.arg_count && ok; i++) {
+            ok = kx_eval(c, e->data.function.args[i], &term);
+            if (ok) ok = is_plus ? kx_rf_add(c, &acc, dst, &term)
+                                 : kx_rf_mul(c, &acc, dst, &term);
+            if (ok) { gr_poly_swap(dst->num, acc.num, c->gr); gr_poly_swap(dst->den, acc.den, c->gr); }
+        }
+        kx_rf_clear(c, &term); kx_rf_clear(c, &acc);
+        return ok;
+    }
+    if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type != EXPR_INTEGER) return 0;
+        KxRf base; kx_rf_init(c, &base);
+        int ok = kx_eval(c, e->data.function.args[0], &base) &&
+                 kx_rf_pow(c, dst, &base, (long)ex->data.integer);
+        kx_rf_clear(c, &base);
+        return ok;
+    }
+    return 0;
+}
+
+/* K[x] gr_poly -> Expr (Plus of coeff * x^i with field coefficients). */
+static Expr* kx_poly_to_expr(KxCtx* c, const gr_poly_t p) {
+    slong len = gr_poly_length(p, c->gr);
+    if (len == 0) return expr_new_integer(0);
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)len);
+    size_t nt = 0;
+    nf_elem_t co; nf_elem_init(co, c->nf);
+    fmpq_poly_t coords; fmpq_poly_init(coords);
+    for (slong i = 0; i < len; i++) {
+        if (gr_poly_get_coeff_scalar((gr_ptr)co, p, i, c->gr) != GR_SUCCESS) continue;
+        if (nf_elem_is_zero(co, c->nf)) continue;
+        nf_elem_get_fmpq_poly(coords, co, c->nf);
+        Expr* coeff = field_group_coeff(coords, c->n, c->theta);
+        Expr* term;
+        if (i == 0) {
+            term = coeff;
+        } else {
+            Expr* xv = expr_new_symbol(c->xname);
+            Expr* xp = (i == 1) ? xv
+                     : expr_new_function(expr_new_symbol("Power"),
+                           (Expr*[]){ xv, expr_new_integer((int64_t)i) }, 2);
+            if (coeff->type == EXPR_INTEGER && coeff->data.integer == 1) {
+                expr_free(coeff); term = xp;
+            } else {
+                term = expr_new_function(expr_new_symbol("Times"),
+                           (Expr*[]){ coeff, xp }, 2);
+            }
+        }
+        terms[nt++] = term;
+    }
+    nf_elem_clear(co, c->nf); fmpq_poly_clear(coords);
+    Expr* r = (nt == 0) ? expr_new_integer(0)
+            : (nt == 1) ? terms[0]
+            : expr_new_function(expr_new_symbol("Plus"), terms, nt);
+    free(terms);
+    return r;
+}
+
+/* Shared core for the field Together/Cancel: reduce `e` to a single num/den over
+ * K(x) natively and return num*den^-1 (evaluator-canonicalised).  NULL on any
+ * decline (not a univariate single-field fraction, or a gr failure). */
+static Expr* flint_field_reduce_core(const Expr* e) {
+    if (!e || !expr_has_denominator(e)) return NULL;
+    const Expr* theta = NULL; int gaussian = 0;
+    VarSet gens;
+    if (!field_frac_candidate(e, &theta, &gaussian, &gens)) { varset_free(&gens); return NULL; }
+    if (gens.count != 1) { varset_free(&gens); return NULL; }   /* univariate only */
+    char* xname = mathilda_strdup(gens.names[0]);
+    varset_free(&gens);
+    if (!xname) return NULL;
+
+    KxCtx c;
+    if (!kx_ctx_init(&c, theta, gaussian, xname)) { free(xname); return NULL; }
+
+    KxRf rf; kx_rf_init(&c, &rf);
+    Expr* out = NULL;
+    if (kx_eval(&c, e, &rf) && kx_rf_reduce(&c, &rf)) {
+        Expr* num = kx_poly_to_expr(&c, rf.num);
+        Expr* den = kx_poly_to_expr(&c, rf.den);
+        Expr* r;
+        if (den->type == EXPR_INTEGER && den->data.integer == 1) {
+            expr_free(den); r = num;
+        } else {
+            Expr* deninv = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ den, expr_new_integer(-1) }, 2);
+            r = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ num, deninv }, 2);
+        }
+        out = eval_and_free(r);
+    }
+    kx_rf_clear(&c, &rf);
+    kx_ctx_clear(&c);
+    free(xname);
+    return out;
+}
+
+Expr* flint_field_together(const Expr* e) {
+    return flint_field_reduce_core(e);
+}
+
+Expr* flint_field_cancel(const Expr* e) {
+    /* Cancel, unlike Together, leaves a sum of fractions uncombined; only fire on
+     * a single fraction (no denominator inside a Plus), matching flint_rational_cancel. */
+    if (e && denom_inside_plus(e)) return NULL;
+    return flint_field_reduce_core(e);
+}
+
 /*
  * FLINT-native partial fraction decomposition of a proper rational function
  * R / (C * prod_i p_i^{k_i}) over Q, where the p_i are the distinct irreducible
@@ -4921,6 +5487,12 @@ Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x, unsigned
 Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_expand_polynomial(const Expr* e) { (void)e; return NULL; }
 Expr* flint_expand_polynomial_field(const Expr* e) { (void)e; return NULL; }
+int   flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
+                            int** exps_out, Expr*** coeffs_out, size_t* count_out) {
+    (void)poly; (void)vars; (void)nvars;
+    (void)exps_out; (void)coeffs_out; (void)count_out;
+    return -1;
+}
 int   flint_is_polynomial_over_q(const Expr* e) { (void)e; return 0; }
 int   flint_mpoly_is_zero(const Expr* e) { (void)e; return -1; }
 Expr* flint_algebraic_field_normalize(const Expr* e) { (void)e; return NULL; }
@@ -4928,6 +5500,8 @@ Expr* flint_algebraic_field_canonical(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_cancel(const Expr* e) { (void)e; return NULL; }
+Expr* flint_field_together(const Expr* e) { (void)e; return NULL; }
+Expr* flint_field_cancel(const Expr* e) { (void)e; return NULL; }
 Expr* flint_tower_reduce(const Expr* frac, const char* const* alg_syms,
                          const Expr* const* relations, int n_alg,
                          const char* const* elim_vars, int n_elim) {

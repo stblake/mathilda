@@ -1728,6 +1728,10 @@ add_executable(coefficient_rules_tests test_coefficient_rules.c $<TARGET_OBJECTS
 target_include_directories(coefficient_rules_tests PRIVATE ../src)
 add_test(NAME coefficient_rules_tests COMMAND coefficient_rules_tests)
 
+add_executable(field_together_cancel_tests test_field_together_cancel.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(field_together_cancel_tests PRIVATE ../src)
+add_test(NAME field_together_cancel_tests COMMAND field_together_cancel_tests)
+
 add_executable(polynomialreduce_tests test_polynomialreduce.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(polynomialreduce_tests PRIVATE ../src)
 add_test(NAME polynomialreduce_tests COMMAND polynomialreduce_tests)

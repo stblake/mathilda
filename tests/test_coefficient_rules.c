@@ -129,6 +129,63 @@ static void test_decline(void) {
              "Rule[List[0, 0, 1, 0, 2], 1]]");
 }
 
+/* Native field-coefficient read-off (flint_field_monomials): CoefficientRules /
+ * MonomialList on polynomials whose coefficients are AlgebraicNumber[theta,{..}]
+ * (the ParallelMixedTower assembly's post-substitution representation) route
+ * through the FLINT tau-lift instead of the generic per-term evaluator work.
+ * The results are byte-identical to the generic path — pinned here to literals
+ * and, more strongly, by the A/B differential run_field_coeffrules_ab.sh. */
+static void test_field_coefficients(void) {
+    /* Q(sqrt 2): the algebraic coefficient is preserved verbatim. */
+    run_test("CoefficientRules[AlgebraicNumber[Sqrt[2],{0,1}] x^2 + 3, {x}]",
+             "List[Rule[List[2], AlgebraicNumber[Power[2, Rational[1, 2]], List[0, 1]]], "
+             "Rule[List[0], 3]]");
+
+    /* Reduction modulo theta's minimal polynomial: (sqrt2 x + sqrt2)^2 has
+     * x^2-coefficient sqrt2^2 = 2 (rational), x^1-coefficient 2 sqrt2. */
+    run_test("CoefficientRules[Expand[(AlgebraicNumber[Sqrt[2],{0,1}] x + "
+             "AlgebraicNumber[Sqrt[2],{1,0}])^2], {x}]",
+             "List[Rule[List[2], 2], "
+             "Rule[List[1], AlgebraicNumber[Power[2, Rational[1, 2]], List[0, 2]]], "
+             "Rule[List[0], 1]]");
+
+    /* Gaussian field Q(i): AlgebraicNumber[I,{2,0}] collapses to the rational 2. */
+    run_test("CoefficientRules[AlgebraicNumber[I,{0,1}] x + AlgebraicNumber[I,{2,0}], {x}]",
+             "List[Rule[List[1], AlgebraicNumber[Complex[0, 1], List[0, 1]]], "
+             "Rule[List[0], 2]]");
+
+    /* A field coefficient that reduces to a rational is emitted as the rational
+     * (all-higher-tau-power-zero collapse), matching field Expand's canonical form. */
+    run_test("CoefficientRules[AlgebraicNumber[Sqrt[2],{0,1}] x^2 + "
+             "AlgebraicNumber[Sqrt[2],{5,0}], {x}]",
+             "List[Rule[List[2], AlgebraicNumber[Power[2, Rational[1, 2]], List[0, 1]]], "
+             "Rule[List[0], 5]]");
+
+    /* Degree-3 field Q(2^(1/3)) via a Root-object generator. */
+    run_test("CoefficientRules[AlgebraicNumber[2^(1/3),{0,1}] x^3 + "
+             "AlgebraicNumber[2^(1/3),{0,0,1}], {x}]",
+             "List[Rule[List[3], AlgebraicNumber[Root[Function[Plus[-2, Power[Slot[1], 3]]], 1], "
+             "List[0, 1, 0]]], Rule[List[0], AlgebraicNumber[Root[Function[Plus[-2, "
+             "Power[Slot[1], 3]]], 1], List[0, 0, 1]]]]");
+
+    /* Roundtrip invariant (self-validating, no toggle needed): the field path is
+     * on by default, so this exercises it and checks it inverts to Expand. */
+    run_test("FromCoefficientRules[CoefficientRules[AlgebraicNumber[Sqrt[2],{0,1}] x^2 + "
+             "AlgebraicNumber[Sqrt[2],{1,3}] x, {x}], {x}] == "
+             "Expand[AlgebraicNumber[Sqrt[2],{0,1}] x^2 + AlgebraicNumber[Sqrt[2],{1,3}] x]",
+             "True");
+
+    /* A stray non-variable symbol makes the fast path decline to the generic
+     * path (which keeps it inside the coefficient) — still correct. */
+    run_test("CoefficientRules[AlgebraicNumber[Sqrt[2],{0,1}] x^2 + a, {x}]",
+             "List[Rule[List[2], AlgebraicNumber[Power[2, Rational[1, 2]], List[0, 1]]], "
+             "Rule[List[0], a]]");
+
+    /* MonomialList shares the front end, so it benefits from the same fast path. */
+    run_test("MonomialList[AlgebraicNumber[Sqrt[2],{0,1}] x^2 + 3, {x}]",
+             "List[Times[AlgebraicNumber[Power[2, Rational[1, 2]], List[0, 1]], Power[x, 2]], 3]");
+}
+
 int main(void) {
     setbuf(stdout, NULL);
     printf("Starting coefficient_rules_tests\n");
@@ -141,6 +198,7 @@ int main(void) {
     TEST(test_modulus);
     TEST(test_fromcoefficientrules);
     TEST(test_decline);
+    TEST(test_field_coefficients);
 
     printf("All MonomialList / CoefficientRules / FromCoefficientRules tests passed!\n");
     return 0;
