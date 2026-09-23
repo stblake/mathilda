@@ -737,6 +737,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_lie2.c
     ../src/calculus/dsolve_ifactor.c
     ../src/calculus/dsolve_changevar.c
+    ../src/calculus/dsolve_solvefor.c
     ../src/calculus/dsolve_ratsol2.c
     ../src/calculus/dsolve_nonhomog_vop.c
     ../src/calculus/dsolve_piecewise.c
@@ -3198,6 +3199,10 @@ add_executable(dsolve_m56_stress_tests test_dsolve_m56_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m56_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m56_stress_tests COMMAND dsolve_m56_stress_tests)
 
+add_executable(dsolve_m57_stress_tests test_dsolve_m57_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m57_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m57_stress_tests COMMAND dsolve_m57_stress_tests)
+
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)
 
@@ -3770,14 +3775,16 @@ else()
 endif()
 # Per-section dashboards.  argv = <corpus> <prelude> <baseline>.  Baselines are
 # the checked-in high-water marks recorded in DSolve_test_status/STATUS.md.
-# Baseline 631 (M56 mu(x,y') integrating factors -> reduction-of-order first integrals
-# R(x,y[x],y'[x])==C[1]).  Measured 585 PASS / 619 non-PASS, 0 FAIL (up from 568/636: the
-# whole +17 is the 2nd_reducible_mu bucket, 38->55); +12 margin for the pre-existing 8 s
-# timing-boundary cluster (58/77/78/112/375/439/592/799/877) that flips P<->U by machine speed.
+# Baseline 629 (M57 SolvableForY / SolvableForX -- the y=G(x,y') differentiation method).
+# Clean re-run 590 PASS / 614 non-PASS, 0 FAIL (up from 585/619).  DETERMINISTIC M57 gain is
+# +2: 347 (y=_G(x,y')) and 352 (_with_symmetry_[F(x),G(y)]) now solve via SolvableForY; the
+# other +3 of the +5 is the documented _with_linear_symmetries timing cluster (2nd/high-order
+# cases M57 declines instantly) oscillating.  Baseline lowered by the +2 deterministic gain;
+# +12 margin kept for the timing cluster (58/79/80/94/375/592/799/983/1001) that flips P<->U.
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 631)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 629)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
 # verifies the ODE residual AND every initial condition (M21).  Baseline 2

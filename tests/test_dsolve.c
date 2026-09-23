@@ -2755,6 +2755,42 @@ static void t_m56_declines_linear_and_ivp(void) {
                "DSolve`ReducibleFirstIntegral");
 }
 
+/* ---- M57: SolvableForY / SolvableForX (the "dp" differentiation method) ---- */
+
+/* 2.1.2-347 at n=3: x^2 y'^3 - 3 x y' + y == 0.  Here y = 3 x y' - x^2 y'^3 is NOT
+ * affine in x (so Lagrange declines); SolvableForY isolates y, differentiates, and
+ * recurses on the induced separable ODE -> parametric {x->Function, y->Function}. */
+static void t_m57_solvablefory(void) {
+    /* pinned method returns a parametric branch with x-> and y-> rules */
+    check_true("Module[{s = DSolve`SolvableForY[x^2 (y'[x])^3 - 3 x y'[x] + y[x] == 0, y[x], x]}, "
+               "Head[s] === List && Length[s] >= 1 && MatchQ[Sort[First /@ s[[1]]], {x, y}]]");
+    /* automatic dispatch + numeric back-substitution on the ORIGINAL equation */
+    check_true("Module[{s = DSolve[x^2 (y'[x])^3 - 3 x y'[x] + y[x] == 0, y[x], x], xf, yf}, "
+               "Head[s] === List && Length[s] >= 1 && (xf = x /. s[[1]]; yf = y /. s[[1]]; "
+               "Max[Table[Abs[N[(x^2 (y'[x])^3 - 3 x y'[x] + y[x]) /. {"
+               "y'[x] -> (D[yf[t], t]/D[xf[t], t] /. t -> t0), y[x] -> yf[t0], x -> xf[t0]} "
+               "/. C[1] -> 3/5, 20]], {t0, {7/10, 6/5, 19/10}}]] < 10^-5)]");
+}
+
+/* Gates: a 2nd-order ODE declines (max_order gate); a transcendental-in-y ODE
+ * declines fast (PolynomialQ gate) rather than spinning the recursion. */
+static void t_m57_gates(void) {
+    check_form("Head[DSolve`SolvableForY[y''[x] + y[x] == 0, y[x], x]]",
+               "DSolve`SolvableForY");
+    check_form("Head[DSolve`SolvableForY[y'[x] == Sin[x y[x]], y[x], x]]",
+               "DSolve`SolvableForY");
+}
+
+/* SolvableForX (opt-in mirror): x = y y' + y'^2 (x - y y' - y'^2 == 0) solves for x
+ * and recurses on the induced y(p) ODE; verified numerically on the original. */
+static void t_m57_solvableforx(void) {
+    check_true("Module[{s = DSolve`SolvableForX[x - y[x] y'[x] - (y'[x])^2 == 0, y[x], x], xf, yf}, "
+               "Head[s] === List && Length[s] >= 1 && (xf = x /. s[[1]]; yf = y /. s[[1]]; "
+               "Max[Table[Abs[N[(x - y[x] y'[x] - (y'[x])^2) /. {"
+               "y'[x] -> (D[yf[t], t]/D[xf[t], t] /. t -> t0), y[x] -> yf[t0], x -> xf[t0]} "
+               "/. C[1] -> 3/5, 20]], {t0, {8/10, 13/10, 2}}]] < 10^-5)]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -3021,6 +3057,9 @@ int main(void) {
     TEST(t_m56_mu_xyp_caseD);
     TEST(t_m56_auto_dispatch);
     TEST(t_m56_declines_linear_and_ivp);
+    TEST(t_m57_solvablefory);
+    TEST(t_m57_gates);
+    TEST(t_m57_solvableforx);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

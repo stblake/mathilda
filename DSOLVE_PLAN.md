@@ -2069,6 +2069,43 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     (m5/m12/m14/m18/m55/m56) + `make check-c99` green.
     *Stage 3 (μ(y,y′), the point-swap) and Cases E/F remain future.* Version 0.171 → 0.172.
 
+- **M57 — `SolvableForY` / `SolvableForX`: the `y=G(x,y′)` differentiation method.** ✅ DONE.
+  The highest-yield tractable, deterministic §2.1.2 bucket (`1st_solvable_for_yx`) — a capability
+  Maple/Mathematica have and Mathilda lacked (Maple's `dp`/`dp2`). `dsolve_solvefor.c`.
+  - **Method.** For `F(x,y,y')==0` polynomial in `y` (`SolvableForY`) isolate `y = G(x,p)` (`p=y'`),
+    differentiate w.r.t. `x` (`p = G_x + G_p p'`), and recurse the cascade on the induced first-order
+    ODE `dx/dp = G_p/(p − G_x)` for `x = X(p,C)`; the general solution is **parametric**
+    `{{x->Function[{p},X], y->Function[{p},G(X,p)]}}`. `SolvableForX` is the `x`-mirror
+    (`x = H(y,p)`, `dy/dp = H_p/(1/p − H_y)`). This GENERALIZES `DSolve`Lagrange`, which is exactly
+    the special case where `y = x φ(p)+ψ(p)` makes the induced ODE linear.
+  - **Substrate reuse (zero substrate edits).** The whole parametric path
+    (`dsolve_run_parametric` / `dsolve_verify_parametric` / `dsolve_assemble_parametric`) is reused
+    verbatim, so every branch is back-substitution verified — **0 FAIL by construction**. The new
+    logic is: solve `R==0` for `y`/`x` generally (Lagrange did only R-linear-in-`y`), build the
+    induced ODE, and recurse.
+  - **Latency.** A cheap `PolynomialQ[R, solve_var]` pre-gate (mirroring `NthAlgebraic`) declines the
+    transcendental time-burners (`Tan[x y]`, `Log[Log[y]]`) that never close — `y'==Sin[x y]` went
+    20 s → 0.24 s. Bounded exactly as M14 (`TimeConstrained` sub-solves + wall-clock deadline +
+    re-entry guard + decline memo + bounded Simplify).
+  - **`SolvableForX` is pinned-only** (opt-in, like `FirstOrderPowerSeries`/`EigenvalueProblem`):
+    automatic corpus yield ~0, and a degree-1-in-`x` form with a cubic-denominator induced ODE
+    produces a transcendental branch whose back-substitution verify is slow (the risk to the Lie
+    backstop's time budget). `SolvableForY` is automatic, slotted after every named first-order
+    specialist and before the Lie backstop (Maple's late `dp` ordering).
+  - **Solves** the flagship `x^(n-1)(y')^n − n x y' + y == 0` (2.1.2-347 family; `y = n x y' −
+    x^(n-1)(y')^n` is not affine in `x`, so Lagrange declines), verified n=3..6 to ~1e-16.
+    *Anti-overfit:* `tests/test_dsolve_m57_stress.c` (347 + sign-variant 347+ forward-generator grids
+    + pinned SolvableForX, parametric numeric verify). Units `t_m57_*` (`test_dsolve.c`, verified in
+    isolation — pre-existing `t_m19` in-suite abort). §2.1.2 (clean re-run): **585 → 590 (net +5),
+    0 FAIL**; the **deterministic** M57 gain is **+2** (347 `y=_G(x,y')`, 352 `[F(x),G(y)]`-symmetry,
+    both via `SolvableForY`), the other +3 being the `_with_linear_symmetries` timing cluster
+    (2nd/high-order, declined instantly by `SolvableForY`) oscillating; 350/351 solve but exceed the
+    8 s forked budget. Gate baseline 631 → 629.
+    All DSolve stress suites (m5/m12/m14/m18/m55/m56/m57) + `make check-c99` green. Version 0.172 →
+    0.173. *Future:* explicit (non-parametric) `p(x)` route; parametric IVP fitting; parameter
+    elimination to an implicit `Φ(x,y)=0`; the `y⁽ⁿ⁾`-solvable higher-order generalization; the
+    radical / degree-≥4 bucket cases needing `Root`-object handling.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -2105,6 +2142,21 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
   `y'=Y'(t)/X'(t)`. Declines Clairaut (`φ≡p`) and genuinely-linear equations. Runs
   after `Clairaut` in the cascade. *Deferred (future):* singular-line solutions
   (roots of `φ(p)=p`) and parametric IVP constant-fitting (an IVP declines).
+- `[✓] SolvableForY` — the **"dp" differentiation method** (Maple's `dp`), of which
+  `Lagrange` is the linear special case. For `F(x,y,y')==0` **polynomial in `y`**
+  (`PolynomialQ` gate), isolate `y=G(x,p)` (`p=y'`), differentiate w.r.t. `x`, and
+  recurse the cascade on the induced first-order ODE `dx/dp=G_p/(p−G_x)` for
+  `x=X(p,C)` → parametric `{x=X(p,C), y=G(X,p)}` through `dsolve_run_parametric`
+  (back-substitution verified). Solves the `y=_G(x,y')` class, e.g.
+  `x^(n-1)(y')^n−n x y'+y==0`. Declines the Clairaut/singular case (`p−G_x==0`), a
+  `G` free of `p`, a `Root`/implicit branch. Runs late (after every named first-order
+  specialist, before the Lie backstop); bounded (M14 kit). See M57.
+  `dsolve_solvefor.c`.
+- `[✓] SolvableForX` — the `x`-mirror of `SolvableForY` (`x=H(y,p)`, `dx/dy=1/p` →
+  `dy/dp=H_p/(1/p−H_y)`). **Pinned-only** (opt-in; automatic yield ~0 and a
+  cubic-denominator induced ODE gives a slow-to-verify transcendental branch),
+  matching `FirstOrderPowerSeries`/`EigenvalueProblem`. Solves e.g.
+  `x−y y'−(y')^2==0`. See M57. `dsolve_solvefor.c`.
 - `[✓] Chini` — `y'==f(x) y^n+g(x) y+h(x)` (n≠0,1,2): the reducible-to-autonomous
   sub-class, via `y=f^(-1/(n-1)) u` → `u'==u^n+B u+C` (B,C constant); implicit first
   integral `∫du/(u^n+Bu+C)−x==C[1]` (rational integrand, always elementary) returned

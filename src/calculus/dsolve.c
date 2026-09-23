@@ -67,6 +67,8 @@ typedef enum {
     DS_FIRSTINTEGRAL,
     DS_FOPOWERSERIES,
     DS_FROBENIUS,
+    DS_SOLVABLEFORY,
+    DS_SOLVABLEFORX,
     DS_INVALID
 } DSolveMethod;
 
@@ -82,6 +84,8 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Exact")            == 0) return DS_EXACT;
     if (strcmp(s, "Clairaut")         == 0) return DS_CLAIRAUT;
     if (strcmp(s, "Lagrange")         == 0) return DS_LAGRANGE;
+    if (strcmp(s, "SolvableForY")     == 0) return DS_SOLVABLEFORY;
+    if (strcmp(s, "SolvableForX")     == 0) return DS_SOLVABLEFORX;
     if (strcmp(s, "UndeterminedCoefficients") == 0) return DS_UNDETCOEFF;
     if (strcmp(s, "LinearConstantCoefficients") == 0) return DS_CONSTCOEFF;
     if (strcmp(s, "EulerCauchy")      == 0) return DS_EULER;
@@ -128,6 +132,8 @@ extern Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exact_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lagrange_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_solvablefory_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_solvableforx_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_undetcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
@@ -173,6 +179,7 @@ extern void dsolve_separable_init(void);
 extern void dsolve_exact_init(void);
 extern void dsolve_clairaut_init(void);
 extern void dsolve_lagrange_init(void);
+extern void dsolve_solvefor_init(void);
 extern void dsolve_undetcoeff_init(void);
 extern void dsolve_constcoeff_init(void);
 extern void dsolve_euler_init(void);
@@ -482,6 +489,18 @@ Expr* builtin_dsolve(Expr* res) {
             /* deterministic linear-coefficients implicit first integral (log-spiral
              * subset): claimed before the Lie `linear` heuristic that also reaches it */
             if (!result) result = dsolve_run_implicit(&P, dsolve_lincoeff_implicit_try);
+            /* SolvableForY: the "dp" differentiation method.  Solve F(x,y,y')==0
+             * for y, differentiate, and recurse the cascade on the induced
+             * first-order ODE -> parametric solution.  Deterministic but expensive
+             * (recurses DSolve), so it runs after every named first-order specialist
+             * and the implicit fallbacks, and before the heuristic Lie backstop
+             * (matching Maple's late dp ordering).  Generalizes Lagrange (the
+             * linear-induced-ODE special case).  The SolvableForX mirror is
+             * PINNED-ONLY (not here): its automatic corpus yield is ~0 while a
+             * degree-1-in-x form with a cubic-denominator induced ODE produces a
+             * transcendental branch whose back-substitution verify is very slow,
+             * so it is opt-in like FirstOrderPowerSeries / EigenvalueProblem. */
+            if (!result) result = dsolve_run_parametric(&P, dsolve_solvablefory_try);
             /* Lie point-symmetry: the general first-order backstop.  Heuristic
              * (underdetermined determining PDE), so it runs after EVERY
              * deterministic specialist — including the homogeneous implicit
@@ -512,6 +531,8 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_EXACT:        result = dsolve_run(&P, dsolve_exact_try);       break;
         case DS_CLAIRAUT:     result = dsolve_run(&P, dsolve_clairaut_try);    break;
         case DS_LAGRANGE:     result = dsolve_run_parametric(&P, dsolve_lagrange_try); break;
+        case DS_SOLVABLEFORY: result = dsolve_run_parametric(&P, dsolve_solvablefory_try); break;
+        case DS_SOLVABLEFORX: result = dsolve_run_parametric(&P, dsolve_solvableforx_try); break;
         case DS_UNDETCOEFF:   result = dsolve_run(&P, dsolve_undetcoeff_try);  break;
         case DS_CONSTCOEFF:   result = dsolve_run(&P, dsolve_constcoeff_try);  break;
         case DS_EULER:        result = dsolve_run(&P, dsolve_euler_try);       break;
@@ -584,6 +605,7 @@ void dsolve_init(void) {
     dsolve_exact_init();
     dsolve_clairaut_init();
     dsolve_lagrange_init();
+    dsolve_solvefor_init();
     dsolve_undetcoeff_init();
     dsolve_constcoeff_init();
     dsolve_euler_init();
