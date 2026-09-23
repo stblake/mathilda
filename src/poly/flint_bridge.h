@@ -78,6 +78,17 @@ Expr* flint_multivariate_divexact(const Expr* a, const Expr* b);
  * input demands. */
 Expr* flint_expand_polynomial(const Expr* e);
 
+/* Expand a polynomial in the tower generators whose coefficients live in one
+ * number field Q(theta) — coefficients that are rationals, AlgebraicNumber[theta,
+ * {..}] (all sharing one theta), or, for the Gaussian field Q(i), Complex[a,b].
+ * Does the expansion natively (substitute theta -> a fresh variable, expand in
+ * packed fmpq_mpoly, reduce modulo theta's minimal polynomial) and returns the
+ * result with AlgebraicNumber/rational coefficients — the same value the generic
+ * Expand produces, without routing every partial product through the evaluator.
+ * Returns NULL (caller falls back to the generic distributor) when `e` is not a
+ * polynomial over a single such field, or without FLINT. */
+Expr* flint_expand_polynomial_field(const Expr* e);
+
 /* True (1) when `e` is a polynomial over Q in recognisable variables — i.e. the
  * kind of expression flint_expand_polynomial accepts (built from integers,
  * rationals, symbols, Plus/Times, and non-negative integer Power). Numeric

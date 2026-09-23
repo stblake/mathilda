@@ -2071,7 +2071,7 @@ BuildTower[integrand_, x_Symbol] := Module[
    With "Verify" -> True the surface result is differentiated and compared
    with the integrand numerically at three points; a mismatch prints a
    warning and still returns the result.                                     *)
-ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{bt, T, fpair, back, Y, res, surf, ok},
+ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn},
   bt = Catch[BuildTower[integrand, x], "build"];
   If[bt === $Failed, Return[$Failed]];
   {T, fpair, back, Y} = bt;
@@ -2083,31 +2083,51 @@ ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeCon
                                 "SplitSpecials" -> OptionValue["SplitSpecials"]];
   If[ListQ[res], Return[res //. back]];
   surf = res //. back;
-  (* Hard verify-or-decline soundness gate.  A returned antiderivative MUST
-     satisfy D[surf] == integrand on the integrand's real domain.  Checked
-     numerically at REAL points where the integrand is real and finite (its
-     real domain) -- the same discipline the external test corpus uses -- so a
-     correct answer passes even when its surface form is a branch-sensitive
-     complex-log expression, while a wrong one (e.g. a mis-realised logand
-     branch) is caught: its residual is nonzero at real in-domain points.
-     Generic complex points are only a fallback when no real-domain sample
-     exists.  A failure returns a {"failed", ...} tuple so the caller declines
-     cleanly rather than emitting a wrong result.  (verify-timeout: accept,
-     rather than reject a likely-correct but large answer.) *)
-  ok = TimeConstrained[
-    Quiet[Module[{cand, pts, resids},
+  (* Verify-or-decline soundness gate, with branch resolution.  A returned
+     antiderivative MUST satisfy D[surf] == integrand on the integrand's real
+     domain, checked numerically at REAL in-domain points (the discipline of the
+     external corpus).  But the parallel method integrates over y^2 = q and maps
+     the formal radical back as the PRINCIPAL Sqrt[q], so the surface can be the
+     true antiderivative only up to the branch of that radical:
+       - a global sign (D[surf] == -integrand everywhere): the decomposition took
+         the other root of y^2 = q, and -surf is the antiderivative (A11); or
+       - a sign that flips across a branch cut of the radicand on the real line
+         (D[surf] == +integrand on one component, == -integrand on the next --
+         e.g. Sqrt[1-Sin^6] == |Cos| Sqrt[...], A34): then no single elementary
+         expression is a global antiderivative and surf is the conventional
+         principal-branch answer, valid on each connected component.
+     Pin the branch numerically: sgn = +1/-1 chooses surf/-surf; sgn = 0 declines.
+     Soundness is preserved -- acceptance requires D[surf] to equal EXACTLY
+     +integrand or -integrand (to 1e-12) at every finite real sample; a genuinely
+     wrong surface gives a residual that is neither, and is still rejected.
+     (verify-timeout: accept as principal branch rather than reject a
+     likely-correct but large answer.) *)
+  sgn = TimeConstrained[
+    Quiet[Module[{cand, pts, dv, fv, keep, rp, rm, tol = 10^-12, anchor},
       cand = {1/2, 1/3, 2/3, 1/5, 4/5, 2, 3, 3/2, 5/2, 7/3, 1/7};
       pts = Select[cand,
-        With[{fv = N[integrand /. x -> #, 30]},
-          NumericQ[fv] && Abs[Im[fv]] < 10^-10 && Abs[fv] < 10^12] &];
-      resids = Select[(N[(D[surf, x] - integrand) /. x -> #, 30]) & /@ pts,
-        NumericQ[#] && Abs[#] < 10^12 &];          (* drop pole/blow-up samples *)
-      If[pts === {},                               (* no real-domain sample: complex fallback *)
-        resids = Select[(N[(D[surf, x] - integrand) /. x -> #, 30]) & /@ {7/13 + 5 I/11, 4/9 - 3 I/7},
-          NumericQ[#] && Abs[#] < 10^12 &]];
-      Length[resids] >= 1 && AllTrue[resids, Abs[#] < 10^-12 &]]],
-    15, True];
-  If[! ok, Return[{"failed", "verification failed"}]];
+        With[{v = N[integrand /. x -> #, 30]},
+          NumericQ[v] && Abs[Im[v]] < 10^-10 && Abs[v] < 10^12] &];
+      If[pts === {}, pts = {7/13 + 5 I/11, 4/9 - 3 I/7}];   (* complex fallback *)
+      dv = (N[D[surf, x] /. x -> #, 30]) & /@ pts;
+      fv = (N[integrand /. x -> #, 30]) & /@ pts;
+      keep = Select[Range[Length[pts]],
+        NumericQ[dv[[#]]] && NumericQ[fv[[#]]] && Abs[dv[[#]]] < 10^12 && Abs[fv[[#]]] < 10^12 &];
+      rp = (dv[[#]] - fv[[#]]) & /@ keep;                   (* D[surf] - f *)
+      rm = (dv[[#]] + fv[[#]]) & /@ keep;                   (* D[surf] + f *)
+      Which[
+        keep === {}, 0,                                     (* no usable sample *)
+        AllTrue[rp, Abs[#] < tol &],  1,                    (* D[surf] = +f everywhere *)
+        AllTrue[rm, Abs[#] < tol &], -1,                    (* D[surf] = -f everywhere -> -surf *)
+        AllTrue[Range[Length[keep]], Abs[rp[[#]]] < tol || Abs[rm[[#]]] < tol &],
+          (* branch cut: D[surf] = +-f exactly at every point -> principal-branch
+             answer, signed to match the sample nearest the origin *)
+          (anchor = First[Ordering[Abs[N[pts[[keep]], 30]]]];
+           If[Abs[rp[[anchor]]] < tol, 1, -1]),
+        True, 0]]],                                          (* not +-f: wrong answer *)
+    15, 1];
+  If[sgn === 0 || ! IntegerQ[sgn], Return[{"failed", "verification failed"}]];
+  If[sgn === -1, surf = -surf];
   surf],
   $ParallelMixedTimeBudget, {"failed", "time budget exceeded"}];
 
@@ -2202,8 +2222,23 @@ NumDen[e_] := With[{t = Together[e]}, {Numerator[t], Denominator[t]}];
 AlgAtoms[e_] := Module[{c},
   c = Select[DeleteDuplicates[Cases[e, _Root | Power[_?NumericQ, _Rational], {0, Infinity}]],
     ! MatchQ[#, _Integer | _Rational] &];
-  (* every Gaussian constant a + b I is I times rationals: one atom, I *)
-  If[! FreeQ[e, Complex], AppendTo[c, I]];
+  (* every Gaussian constant a + b I is I times rationals: one atom, I.
+     Detect a Complex atom with Cases on the _Complex pattern, NOT
+     FreeQ[e, Complex]: Mathilda's FreeQ with a bare type-symbol form does not
+     match an atom's type-head (FreeQ[I + w, Complex] is True where WL is False),
+     so a FreeQ[e, Complex] test misses I and the ansatz is assembled over Q with
+     a bare Complex[0,1] and one spurious equation.
+
+     Gated on $PMComplexField (only the split-specials retry sets it True): the
+     assembly over Q(i) is 5-10x more FLINT multivariate-polynomial work than over
+     Q, so an integrand whose Gaussian constants are incidental (a dsolve
+     intermediate that solves over Q anyway -- e.g. y' == (Cos+1)/(2-Sin y))
+     stays on the fast Q path, while the genuinely-algebraic split (Charlwood A1,
+     A16, A19, A20, A37, whose specials factor over Q(i)) declines over Q, retries
+     with the split, and there detects I and builds the field it needs.  The Q
+     assembly is never WRONG when I is present -- it only DECLINES (the spurious
+     equation) -- so trying it first is sound. *)
+  If[Cases[e, _Complex, {0, Infinity}] =!= {}, AppendTo[c, I]];
   c];
 
 (* FieldData[atoms]: None for no atoms; $Failed when the atoms do not generate

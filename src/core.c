@@ -94,6 +94,9 @@
 #include "lucas.h"
 #include "facpoly.h"
 #include "flint_bridge.h"
+#ifdef USE_FLINT
+#include <flint/flint.h>   /* __flint_set_memory_functions — guarded allocators */
+#endif
 #include "solve.h"
 #include "reduce.h"
 #include "findroot.h"
@@ -3963,11 +3966,62 @@ static void tc_gmp_deallocate(void* ptr, size_t size) {
     tc_alloc_safepoint();
 }
 
-/* Install the guarded GMP allocators.  Called once from core_init before any
- * GMP/MPFR use.  The wrappers delegate to the same malloc/realloc/free the GMP
- * default used, so memory allocated before this call is still freed correctly. */
+#ifdef USE_FLINT
+/* FLINT memory functions, guarded exactly like the GMP ones above.  Without
+ * this, the entire FLINT surface (polynomial factorisation, qqbar/antic
+ * arithmetic, the ParallelMixedTower split-specials ansatz) allocated through
+ * FLINT's own malloc, which had NO tc_alloc_safepoint -- so inside
+ * TimeConstrained's async-defer region (SIGPROF muted) a long FLINT call had no
+ * cooperative preemption point and could only be stopped by the OS backstop
+ * (issue: the 300s->420s Charlwood timeouts).  It also closes a latent crash:
+ * a SIGPROF landing mid-FLINT-malloc OUTSIDE the defer region would siglongjmp
+ * with libmalloc's zone lock held.  FLINT's realloc/free take one argument fewer
+ * than GMP's; a NULL ptr to realloc/free is valid C. */
+static void* tc_flint_allocate(size_t size) {
+    tc_gmp_alloc_busy = 1;
+    void* p = malloc(size);
+    tc_gmp_alloc_busy = 0;
+    if (!p && size) { fputs("Mathilda: FLINT memory exhausted\n", stderr); abort(); }
+    tc_alloc_safepoint();
+    return p;
+}
+
+static void* tc_flint_calloc(size_t num, size_t size) {
+    tc_gmp_alloc_busy = 1;
+    void* p = calloc(num, size);
+    tc_gmp_alloc_busy = 0;
+    if (!p && num && size) { fputs("Mathilda: FLINT memory exhausted\n", stderr); abort(); }
+    tc_alloc_safepoint();
+    return p;
+}
+
+static void* tc_flint_reallocate(void* ptr, size_t size) {
+    tc_gmp_alloc_busy = 1;
+    void* p = realloc(ptr, size);
+    tc_gmp_alloc_busy = 0;
+    if (!p && size) { fputs("Mathilda: FLINT memory exhausted\n", stderr); abort(); }
+    tc_alloc_safepoint();
+    return p;
+}
+
+static void tc_flint_deallocate(void* ptr) {
+    tc_gmp_alloc_busy = 1;
+    free(ptr);
+    tc_gmp_alloc_busy = 0;
+    tc_alloc_safepoint();
+}
+#endif
+
+/* Install the guarded GMP (and FLINT) allocators.  Called once from core_init
+ * before any GMP/MPFR/FLINT use.  The wrappers delegate to the same
+ * malloc/realloc/free the defaults used, so memory allocated before this call is
+ * still freed correctly. */
 void tc_install_alloc_guard(void) {
     mp_set_memory_functions(tc_gmp_allocate, tc_gmp_reallocate, tc_gmp_deallocate);
+#ifdef USE_FLINT
+    __flint_set_memory_functions(tc_flint_allocate, tc_flint_calloc,
+                                 tc_flint_reallocate, tc_flint_deallocate);
+#endif
 }
 
 /* Enter / leave an async-jump-deferred region (see tc_async_deferred): a heavy,

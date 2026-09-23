@@ -18,6 +18,7 @@
 #include "poly.h"
 #include "expand.h"
 #include "sym_names.h"
+#include "flint_qqbar.h"   /* flint_qqbar_gen_minpoly_coeffs, for field Expand */
 
 #ifdef USE_FLINT
 
@@ -44,6 +45,36 @@
 #include <flint/nmod.h>          /* nmod_mul */
 #include <flint/nmod_poly.h>     /* modular univariate polynomials over F_p */
 #include <flint/ulong_extras.h>  /* n_is_prime, n_invmod */
+
+/* Process-lifetime fmpq_mpoly context cache, keyed by variable count, for the
+ * ORD_LEX order (the one the Together/Cancel/Expand/CoefficientRules bridges use).
+ * An fmpq_mpoly context is a read-only descriptor (number of variables + monomial
+ * ordering), safe to share across every operation and cheap to keep; re-initialising
+ * one per call was the #1 profile leaf of the ParallelMixedTower Q(i) ansatz
+ * assembly (thousands of small multivariate-polynomial ops).  The table is bounded
+ * (one context per variable count up to the cap) and never cleared -- a fixed,
+ * tiny process-lifetime footprint.  A variable count above the cap (never seen in
+ * practice) falls back to a per-call context via bridge_ctx_lex returning NULL. */
+#define BRIDGE_CTX_LEX_CAP 128
+static fmpq_mpoly_ctx_struct* g_bridge_ctx_lex[BRIDGE_CTX_LEX_CAP + 1];
+
+/* Cached ORD_LEX context for `nvars` variables.  The caller must NOT clear it.
+ * A variable count above the cap (never seen in practice) returns a fresh one-off
+ * context (a bounded, one-time allocation, not cleared).  malloc cannot fail here:
+ * the FLINT allocator guard aborts on exhaustion, so this never returns NULL. */
+static const fmpq_mpoly_ctx_struct* bridge_ctx_lex(slong nvars) {
+    if (nvars < 0 || nvars > BRIDGE_CTX_LEX_CAP) {
+        fmpq_mpoly_ctx_struct* c = malloc(sizeof *c);
+        fmpq_mpoly_ctx_init(c, nvars, ORD_LEX);
+        return c;
+    }
+    if (!g_bridge_ctx_lex[nvars]) {
+        fmpq_mpoly_ctx_struct* c = malloc(sizeof *c);
+        fmpq_mpoly_ctx_init(c, nvars, ORD_LEX);
+        g_bridge_ctx_lex[nvars] = c;
+    }
+    return g_bridge_ctx_lex[nvars];
+}
 
 /* `gr_poly_xgcd` — the wrapper that dispatches between the Euclidean and
  * half-GCD implementations by degree — only arrived in FLINT 3.2.
@@ -336,8 +367,8 @@ Expr* flint_expand_polynomial(const Expr* e) {
     if (vs.count == 0) { varset_free(&vs); return NULL; } /* numeric: nothing to expand */
     qsort(vs.names, vs.count, sizeof(char*), cmp_str);
 
-    fmpq_mpoly_ctx_t ctx;
-    fmpq_mpoly_ctx_init(ctx, (slong)vs.count, ORD_LEX);
+    const fmpq_mpoly_ctx_struct* ctx;
+    ctx = bridge_ctx_lex((slong)vs.count);
 
     fmpq_mpoly_t P;
     fmpq_mpoly_init(P, ctx);
@@ -347,8 +378,325 @@ Expr* flint_expand_polynomial(const Expr* e) {
         out = mpoly_to_expr(P, ctx, &vs);
 
     fmpq_mpoly_clear(P, ctx);
-    fmpq_mpoly_ctx_clear(ctx);
+    /* ctx is a cached shared context: not cleared */
     varset_free(&vs);
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Field-coefficient Expand: polynomials over a number field Q(theta)  */
+/*                                                                      */
+/*  The ParallelMixedTower assembly expands polynomials in the tower    */
+/*  generators whose coefficients are AlgebraicNumber[theta, {..}] (or, */
+/*  for the Gaussian field Q(i), Complex[a,b]).  to_mpoly is rational-  */
+/*  only, so those expansions fell to the generic Expr multiplier,      */
+/*  re-evaluating every partial product through the full evaluator      */
+/*  (~50% of a DSolve Q(i) profile: malloc/clock/symbol churn).  This   */
+/*  does the whole expansion natively — substitute theta -> a fresh     */
+/*  variable tau, expand over Q[gens, tau] in packed fmpq_mpoly, reduce */
+/*  modulo the minimal polynomial M(tau), and read the reduced          */
+/*  polynomial back as AlgebraicNumber-coefficient terms in ONE pass.   */
+/*  This is the counterpart of SymPy's QQ<alpha> polynomial domain, and */
+/*  the output is byte-identical (after canonical re-ordering) to the   */
+/*  generic Expand it replaces.                                          */
+/* ------------------------------------------------------------------ */
+
+#define FIELD_TAU_NAME "$MTHFieldExpandTau"
+
+/* True iff `e` is the imaginary unit I == Complex[0, 1]. */
+static int expr_is_imag_unit(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    const char* h = fn_head_name(e);
+    if (!h || strcmp(h, "Complex") != 0 || e->data.function.arg_count != 2) return 0;
+    const Expr* re = e->data.function.args[0];
+    const Expr* im = e->data.function.args[1];
+    return re->type == EXPR_INTEGER && re->data.integer == 0 &&
+           im->type == EXPR_INTEGER && im->data.integer == 1;
+}
+
+typedef struct {
+    const Expr* theta;   /* generator of the first AlgebraicNumber seen */
+    int have_alg;
+    int have_complex;
+    int conflict;        /* two distinct algebraic generators present */
+} FieldScan;
+
+/* Locate the algebraic generator(s) of `e` without recursing into a generator
+ * or (rational) coordinate list.  Sets conflict when two AlgebraicNumbers carry
+ * structurally-distinct generators. */
+static void field_scan(const Expr* e, FieldScan* fs) {
+    if (fs->conflict || !e) return;
+    if (e->type != EXPR_FUNCTION) return;
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2) {
+        const Expr* g = e->data.function.args[0];
+        if (!fs->have_alg) { fs->theta = g; fs->have_alg = 1; }
+        else if (!expr_eq(g, fs->theta)) fs->conflict = 1;
+        return;
+    }
+    if (h && strcmp(h, "Complex") == 0) { fs->have_complex = 1; return; }
+    field_scan(e->data.function.head, fs);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        field_scan(e->data.function.args[i], fs);
+}
+
+/* c0 + c1*tau + ... + ck*tau^k from a coords List (rational entries). */
+static Expr* field_tau_from_coords(const Expr* coords) {
+    if (!coords || coords->type != EXPR_FUNCTION) return NULL;
+    size_t k = coords->data.function.arg_count;
+    if (k == 0) return expr_new_integer(0);
+    Expr** terms = malloc(sizeof(Expr*) * k);
+    if (!terms) return NULL;
+    size_t nt = 0;
+    for (size_t i = 0; i < k; i++) {
+        const Expr* ci = coords->data.function.args[i];
+        if (i == 0) {
+            terms[nt++] = expr_copy((Expr*)ci);
+        } else {
+            Expr* tsym = expr_new_symbol(FIELD_TAU_NAME);
+            Expr* tp;
+            if (i == 1) {
+                tp = tsym;
+            } else {
+                Expr* pw[2] = { tsym, expr_new_integer((int64_t)i) };
+                tp = expr_new_function(expr_new_symbol("Power"), pw, 2);
+            }
+            Expr* mt[2] = { expr_copy((Expr*)ci), tp };
+            terms[nt++] = expr_new_function(expr_new_symbol("Times"), mt, 2);
+        }
+    }
+    Expr* r = (nt == 1) ? terms[0]
+                        : expr_new_function(expr_new_symbol("Plus"), terms, nt);
+    free(terms);
+    return r;
+}
+
+/* Rewrite e replacing every field element by a polynomial in tau:
+ *   AlgebraicNumber[theta, {c0..ck}] -> c0 + c1 tau + ... + ck tau^k
+ *   Complex[a, b]                    -> a + b tau   (only when gaussian).
+ * Every other node is copied structurally.  NULL on failure. */
+static Expr* field_subst_tau(const Expr* e, int gaussian) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2)
+        return field_tau_from_coords(e->data.function.args[1]);
+    if (h && strcmp(h, "Complex") == 0 && e->data.function.arg_count == 2) {
+        if (!gaussian) return NULL;
+        Expr* bt[2] = { expr_copy(e->data.function.args[1]), expr_new_symbol(FIELD_TAU_NAME) };
+        Expr* pa[2] = { expr_copy(e->data.function.args[0]),
+                        expr_new_function(expr_new_symbol("Times"), bt, 2) };
+        return expr_new_function(expr_new_symbol("Plus"), pa, 2);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    if (!args) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        args[i] = field_subst_tau(e->data.function.args[i], gaussian);
+        if (!args[i]) { for (size_t j = 0; j < i; j++) expr_free(args[j]); free(args); return NULL; }
+    }
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return r;
+}
+
+/* M(tau) = sum_i m_i tau^i in `ctx` (tau at tau_idx) from integer List mp. */
+static int field_build_minpoly(fmpq_mpoly_t M, const Expr* mp,
+                               const fmpq_mpoly_ctx_struct* ctx,
+                               slong nvars, slong tau_idx) {
+    size_t nc = mp->data.function.arg_count;
+    ulong* exps = calloc((size_t)(nvars > 0 ? nvars : 1), sizeof(ulong));
+    if (!exps) return 0;
+    fmpq_mpoly_zero(M, ctx);
+    fmpq_t c; fmpq_init(c);
+    fmpz_t z; fmpz_init(z);
+    int ok = 1;
+    for (size_t i = 0; i < nc; i++) {
+        if (!fmpz_from_int_expr(z, mp->data.function.args[i])) { ok = 0; break; }
+        if (fmpz_is_zero(z)) continue;
+        fmpq_set_fmpz(c, z);                       /* denominator 1 */
+        memset(exps, 0, (size_t)nvars * sizeof(ulong));
+        exps[tau_idx] = (ulong)i;
+        fmpq_mpoly_set_coeff_fmpq_ui(M, c, exps, ctx);
+    }
+    fmpz_clear(z); fmpq_clear(c); free(exps);
+    return ok;
+}
+
+/* Coefficient (rational or AlgebraicNumber[theta, {..}]) times gens-monomial,
+ * built from the tau-coefficients accumulated in `coords` (degree < n) and the
+ * exponent vector `gens_exp` (its tau_idx entry ignored).  Matches
+ * poly_to_algnum_gen's canonical form exactly: a purely-rational coefficient
+ * collapses to the rational, otherwise AlgebraicNumber[theta, {c0..c_{n-1}}]. */
+static Expr* field_flush_group(const fmpq_poly_t coords, const ulong* gens_exp,
+                               slong nvars, slong tau_idx, slong n,
+                               const Expr* theta, const VarSet* vs) {
+    int all_higher_zero = 1;
+    for (slong i = 1; i < n && all_higher_zero; i++) {
+        fmpq_t ci; fmpq_init(ci);
+        fmpq_poly_get_coeff_fmpq(ci, coords, i);
+        if (!fmpq_is_zero(ci)) all_higher_zero = 0;
+        fmpq_clear(ci);
+    }
+    Expr* coeff;
+    if (all_higher_zero) {
+        fmpq_t c0; fmpq_init(c0);
+        fmpq_poly_get_coeff_fmpq(c0, coords, 0);
+        coeff = expr_from_fmpq_local(c0);
+        fmpq_clear(c0);
+    } else {
+        Expr** dl = malloc(sizeof(Expr*) * (size_t)n);
+        fmpq_t ci; fmpq_init(ci);
+        for (slong i = 0; i < n; i++) {
+            fmpq_poly_get_coeff_fmpq(ci, coords, i);
+            dl[i] = expr_from_fmpq_local(ci);
+        }
+        fmpq_clear(ci);
+        Expr* clist = expr_new_function(expr_new_symbol("List"), dl, (size_t)n);
+        free(dl);
+        Expr* an[2] = { expr_copy((Expr*)theta), clist };
+        coeff = expr_new_function(expr_new_symbol("AlgebraicNumber"), an, 2);
+    }
+    Expr** factors = malloc(sizeof(Expr*) * (size_t)(nvars + 1));
+    size_t nf = 0;
+    factors[nf++] = coeff;
+    for (slong v = 0; v < nvars; v++) {
+        if (v == tau_idx || gens_exp[v] == 0) continue;
+        Expr* var = expr_new_symbol(vs->names[v]);
+        if (gens_exp[v] == 1) {
+            factors[nf++] = var;
+        } else {
+            Expr* pw[2] = { var, expr_new_integer((int64_t)gens_exp[v]) };
+            factors[nf++] = expr_new_function(expr_new_symbol("Power"), pw, 2);
+        }
+    }
+    Expr* term = (nf == 1) ? factors[0]
+                           : expr_new_function(expr_new_symbol("Times"), factors, nf);
+    free(factors);
+    return term;
+}
+
+/* Reduced polynomial R (tau-degree < n) -> Expr with AlgebraicNumber
+ * coefficients.  Terms of R sharing a gens-monomial are adjacent because tau is
+ * the least-significant variable in ORD_LEX, so one linear pass groups them. */
+static Expr* field_mpoly_to_expr(const fmpq_mpoly_t R, const fmpq_mpoly_ctx_struct* ctx,
+                                 const VarSet* vs, slong tau_idx, slong n,
+                                 const Expr* theta) {
+    slong len = fmpq_mpoly_length(R, ctx);
+    if (len == 0) return expr_new_integer(0);
+    slong nvars = (slong)vs->count;
+    ulong* exps = malloc(sizeof(ulong) * (size_t)nvars);
+    ulong* cur  = malloc(sizeof(ulong) * (size_t)nvars);
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)len);
+    fmpq_poly_t coords; fmpq_poly_init(coords);
+    fmpq_t c; fmpq_init(c);
+    size_t nt = 0;
+    int have = 0;
+    for (slong i = 0; i < len; i++) {
+        fmpq_mpoly_get_term_coeff_fmpq(c, R, i, ctx);
+        fmpq_mpoly_get_term_exp_ui(exps, R, i, ctx);
+        int same = have;
+        if (have) {
+            for (slong v = 0; v < nvars; v++) {
+                if (v == tau_idx) continue;
+                if (exps[v] != cur[v]) { same = 0; break; }
+            }
+        }
+        if (!same) {
+            if (have) {
+                terms[nt++] = field_flush_group(coords, cur, nvars, tau_idx, n, theta, vs);
+                fmpq_poly_zero(coords);
+            }
+            memcpy(cur, exps, (size_t)nvars * sizeof(ulong));
+            have = 1;
+        }
+        fmpq_poly_set_coeff_fmpq(coords, (slong)exps[tau_idx], c);
+    }
+    if (have) terms[nt++] = field_flush_group(coords, cur, nvars, tau_idx, n, theta, vs);
+    fmpq_clear(c); fmpq_poly_clear(coords);
+    free(exps); free(cur);
+    Expr* res = (nt == 1) ? terms[0]
+                          : expr_new_function(expr_new_symbol("Plus"), terms, nt);
+    free(terms);
+    return res;
+}
+
+Expr* flint_expand_polynomial_field(const Expr* e) {
+    if (!e) return NULL;
+
+    /* 1. the single algebraic generator theta.  Only accelerate polynomials
+     * ALREADY in the AlgebraicNumber field representation — the assembly's hot
+     * path after the `/. rules` substitution, where the coefficients are
+     * AlgebraicNumber[theta, {..}].  A bare-Complex expression (e.g. a residue
+     * `x + I` in general integration) is left to the generic path: native
+     * Gaussian arithmetic already handles it, and rewriting its `I` into
+     * AlgebraicNumber[I,{0,1}] would change a structural form that downstream
+     * pattern matching (the log-pair -> ArcTan recombination) depends on.  Bare
+     * Complex is still substituted WITHIN a Gaussian field polynomial (theta == I
+     * with AlgebraicNumber[I,..] also present), so the two forms mix cleanly. */
+    FieldScan fs; memset(&fs, 0, sizeof fs);
+    field_scan(e, &fs);
+    if (fs.conflict || !fs.have_alg) return NULL;
+
+    const Expr* theta = fs.theta;
+    int gaussian = expr_is_imag_unit(theta);
+    if (fs.have_complex && !gaussian) return NULL;   /* unsupported compositum */
+
+    /* 2. minimal polynomial {m0..mn} */
+    Expr* mp = flint_qqbar_gen_minpoly_coeffs(theta);
+    if (!mp || mp->type != EXPR_FUNCTION || mp->data.function.arg_count < 2) {
+        if (mp) expr_free(mp);
+        return NULL;
+    }
+    slong n = (slong)mp->data.function.arg_count - 1;    /* degree of theta */
+
+    /* 3. substitute theta -> tau */
+    Expr* ep = field_subst_tau(e, gaussian);
+    if (!ep) { expr_free(mp); return NULL; }
+
+    /* 4. variables (gens sorted, tau last) */
+    VarSet vs; memset(&vs, 0, sizeof vs);
+    if (!collect_vars(ep, &vs)) {
+        varset_free(&vs); expr_free(ep); expr_free(mp);
+        return NULL;
+    }
+    char* tau_ptr = NULL;
+    for (size_t i = 0; i < vs.count; i++)
+        if (strcmp(vs.names[i], FIELD_TAU_NAME) == 0) { tau_ptr = vs.names[i]; break; }
+    if (!tau_ptr) {
+        /* every field element was rational: ep is a pure-Q polynomial */
+        Expr* out = flint_expand_polynomial(ep);
+        varset_free(&vs); expr_free(ep); expr_free(mp);
+        return out;
+    }
+    {
+        char** tmp = malloc(sizeof(char*) * vs.count);
+        size_t k = 0;
+        for (size_t i = 0; i < vs.count; i++)
+            if (vs.names[i] != tau_ptr) tmp[k++] = vs.names[i];
+        qsort(tmp, k, sizeof(char*), cmp_str);
+        for (size_t i = 0; i < k; i++) vs.names[i] = tmp[i];
+        vs.names[k] = tau_ptr;
+        free(tmp);
+    }
+    slong nvars = (slong)vs.count;
+    slong tau_idx = nvars - 1;
+
+    /* 5. expand over Q[gens, tau], 6. build M(tau), 7. reduce, 8. read back */
+    const fmpq_mpoly_ctx_struct* ctx = bridge_ctx_lex(nvars);
+    fmpq_mpoly_t P, M, Qd, R;
+    fmpq_mpoly_init(P, ctx); fmpq_mpoly_init(M, ctx);
+    fmpq_mpoly_init(Qd, ctx); fmpq_mpoly_init(R, ctx);
+    Expr* out = NULL;
+    if (to_mpoly(ep, P, ctx, &vs) &&
+        field_build_minpoly(M, mp, ctx, nvars, tau_idx) &&
+        !fmpq_mpoly_is_zero(M, ctx)) {
+        fmpq_mpoly_divrem(Qd, R, P, M, ctx);
+        out = field_mpoly_to_expr(R, ctx, &vs, tau_idx, n, theta);
+    }
+    fmpq_mpoly_clear(P, ctx); fmpq_mpoly_clear(M, ctx);
+    fmpq_mpoly_clear(Qd, ctx); fmpq_mpoly_clear(R, ctx);
+    varset_free(&vs); expr_free(ep); expr_free(mp);
     return out;
 }
 
@@ -587,8 +935,8 @@ int flint_mpoly_is_zero(const Expr* e) {
     /* One fmpq_mpoly variable per generator (ORD_LEX, arbitrary but consistent
      * order — zero-ness is order-independent). A purely numeric input (gc == 0)
      * still works: fmpq_mpoly over 0 generators is the constant ring Q. */
-    fmpq_mpoly_ctx_t ctx;
-    fmpq_mpoly_ctx_init(ctx, (slong)gc, ORD_LEX);
+    const fmpq_mpoly_ctx_struct* ctx;
+    ctx = bridge_ctx_lex((slong)gc);
     fmpq_mpoly_t P;
     fmpq_mpoly_init(P, ctx);
 
@@ -597,7 +945,7 @@ int flint_mpoly_is_zero(const Expr* e) {
         result = fmpq_mpoly_is_zero(P, ctx) ? 1 : 0;
 
     fmpq_mpoly_clear(P, ctx);
-    fmpq_mpoly_ctx_clear(ctx);
+    /* ctx is a cached shared context: not cleared */
     for (size_t i = 0; i < gc; i++) expr_free(gens[i]);
     free(gens);
     expr_free(ex);
@@ -620,8 +968,8 @@ static Expr* flint_multivariate_gcd_core(const Expr* a, const Expr* b,
     if (vs.count == 0) { varset_free(&vs); return NULL; } /* numeric: classical path */
     qsort(vs.names, vs.count, sizeof(char*), cmp_str);
 
-    fmpq_mpoly_ctx_t ctx;
-    fmpq_mpoly_ctx_init(ctx, (slong)vs.count, ORD_LEX);
+    const fmpq_mpoly_ctx_struct* ctx;
+    ctx = bridge_ctx_lex((slong)vs.count);
 
     fmpq_mpoly_t A, B, G;
     fmpq_mpoly_init(A, ctx);
@@ -659,7 +1007,7 @@ static Expr* flint_multivariate_gcd_core(const Expr* a, const Expr* b,
     fmpq_mpoly_clear(A, ctx);
     fmpq_mpoly_clear(B, ctx);
     fmpq_mpoly_clear(G, ctx);
-    fmpq_mpoly_ctx_clear(ctx);
+    /* ctx is a cached shared context: not cleared */
     varset_free(&vs);
     return out;
 }
@@ -684,8 +1032,8 @@ Expr* flint_multivariate_divexact(const Expr* a, const Expr* b) {
     if (vs.count == 0) { varset_free(&vs); return NULL; }
     qsort(vs.names, vs.count, sizeof(char*), cmp_str);
 
-    fmpq_mpoly_ctx_t ctx;
-    fmpq_mpoly_ctx_init(ctx, (slong)vs.count, ORD_LEX);
+    const fmpq_mpoly_ctx_struct* ctx;
+    ctx = bridge_ctx_lex((slong)vs.count);
 
     fmpq_mpoly_t A, B, Q;
     fmpq_mpoly_init(A, ctx);
@@ -702,7 +1050,7 @@ Expr* flint_multivariate_divexact(const Expr* a, const Expr* b) {
     fmpq_mpoly_clear(A, ctx);
     fmpq_mpoly_clear(B, ctx);
     fmpq_mpoly_clear(Q, ctx);
-    fmpq_mpoly_ctx_clear(ctx);
+    /* ctx is a cached shared context: not cleared */
     varset_free(&vs);
     return out;
 }
@@ -2220,8 +2568,8 @@ static Expr* flint_multivariate_resultant(const Expr* a, const Expr* b,
     qsort(vs.names, vs.count, sizeof(char*), cmp_str);
     slong vi = (slong)var_index(&vs, varname);
 
-    fmpq_mpoly_ctx_t ctx;
-    fmpq_mpoly_ctx_init(ctx, (slong)vs.count, ORD_LEX);
+    const fmpq_mpoly_ctx_struct* ctx;
+    ctx = bridge_ctx_lex((slong)vs.count);
     fmpq_mpoly_t A, B, R;
     fmpq_mpoly_init(A, ctx);
     fmpq_mpoly_init(B, ctx);
@@ -2236,7 +2584,7 @@ static Expr* flint_multivariate_resultant(const Expr* a, const Expr* b,
     fmpq_mpoly_clear(A, ctx);
     fmpq_mpoly_clear(B, ctx);
     fmpq_mpoly_clear(R, ctx);
-    fmpq_mpoly_ctx_clear(ctx);
+    /* ctx is a cached shared context: not cleared */
     varset_free(&vs);
     return out;
 }
@@ -4572,6 +4920,7 @@ Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x, unsigned
 }
 Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_expand_polynomial(const Expr* e) { (void)e; return NULL; }
+Expr* flint_expand_polynomial_field(const Expr* e) { (void)e; return NULL; }
 int   flint_is_polynomial_over_q(const Expr* e) { (void)e; return 0; }
 int   flint_mpoly_is_zero(const Expr* e) { (void)e; return -1; }
 Expr* flint_algebraic_field_normalize(const Expr* e) { (void)e; return NULL; }

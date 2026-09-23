@@ -2340,8 +2340,22 @@ Expr* evaluate(Expr* e) {
          * actually enforces the deadline.  When tripped, the call
          * siglongjmp's out of this loop straight to TimeConstrained's
          * sigsetjmp; no further cleanup runs here, exactly matching
-         * the signal-handler path. */
-        tc_check_deadline();
+         * the signal-handler path.
+         *
+         * Throttled: clock_gettime on every loop iteration was ~10% of
+         * DSolve's field-arithmetic profile.  The SIGPROF async timer is the
+         * PRIMARY deadline mechanism (and inside async-deferred regions, where
+         * SIGPROF is muted, allocation safepoints via tc_alloc_safepoint are),
+         * so this cooperative wall-clock read only needs to be sampled
+         * periodically.  Once every 128 iterations is far finer than any
+         * user-visible deadline yet reads the clock 128x less often; the very
+         * first iteration (tick 0) still checks so a pre-elapsed deadline trips
+         * at once.  A single global tick (evaluate is single-threaded) gives a
+         * uniform sampling rate across all nested evaluate() frames. */
+        {
+            static unsigned tc_check_tick = 0;
+            if ((tc_check_tick++ & 127u) == 0) tc_check_deadline();
+        }
 
         /* In-loop timestamp fixed-point exit.  The entry short-circuit at the top
          * of evaluate() only catches an ALREADY-stamped INPUT; a stamped FUNCTION

@@ -197,12 +197,96 @@ static void wl_sort_indices(qqbar_srcptr roots, slong n, slong* idx) {
     }
 }
 
+/* ---- wl_root_index: sorted-roots memo, keyed by minimal polynomial --------
+ * wl_root_index isolates a minpoly's d roots and O(d^2)-sorts them (each
+ * comparison an arb-ball qqbar_cmp_re + a qqbar_im that factors a polynomial)
+ * on EVERY call -- and qqbar_to_expr calls it once per degree>=3 conversion,
+ * i.e. after every AlgebraicNumber Plus/Times in a field ansatz.  The WL sort
+ * order depends only on the minpoly, so cache the sorted roots per minpoly and
+ * reduce a repeat call to a linear qqbar_equal scan.  This collapses the split-
+ * specials ansatz's thousands of full isolations+sorts over ONE field to one.
+ * The map is a pure function of the minpoly (session-independent, never stale);
+ * bounded, reset when it approaches full, and leaked at exit like the qqbar
+ * cache above. */
+#define WLROOTS_CACHE_SIZE 128u          /* power of two; open addressing */
+typedef struct { fmpz_poly_t poly; qqbar_ptr roots; slong d; uint64_t h; int used; } WLRootsSlot;
+static WLRootsSlot g_wlroots[WLROOTS_CACHE_SIZE];
+static size_t g_wlroots_count = 0;
+
+static uint64_t fmpz_poly_hashval(const fmpz_poly_struct* p) {
+    uint64_t h = 1469598103934665603ULL;          /* FNV-1a offset basis */
+    slong n = fmpz_poly_length(p);
+    fmpz_t c; fmpz_init(c);
+    for (slong i = 0; i < n; i++) {
+        fmpz_poly_get_coeff_fmpz(c, p, i);
+        uint64_t v = (uint64_t)fmpz_fdiv_ui(c, 4294967291u);   /* coeff mod a prime */
+        if (fmpz_sgn(c) < 0) v ^= 0x9e3779b97f4a7c15ULL;       /* separate sign */
+        h = (h ^ v) * 1099511628211ULL;
+    }
+    fmpz_clear(c);
+    return h;
+}
+
+static void wlroots_reset(void) {
+    for (unsigned i = 0; i < WLROOTS_CACHE_SIZE; i++) {
+        if (g_wlroots[i].used) {
+            fmpz_poly_clear(g_wlroots[i].poly);
+            _qqbar_vec_clear(g_wlroots[i].roots, g_wlroots[i].d);
+            g_wlroots[i].used = 0;
+        }
+    }
+    g_wlroots_count = 0;
+}
+
+/* Return the cached roots of minpoly `p` (degree d) in WL sort order, isolating
+ * and sorting on a miss; NULL if the table could not cache it (fall back). */
+static qqbar_srcptr wlroots_get(const fmpz_poly_struct* p, slong d, uint64_t h) {
+    unsigned mask = WLROOTS_CACHE_SIZE - 1u;
+    unsigned i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < WLROOTS_CACHE_SIZE; probe++) {
+        WLRootsSlot* s = &g_wlroots[i];
+        if (!s->used) break;                                   /* empty => miss */
+        if (s->h == h && s->d == d && fmpz_poly_equal(s->poly, p)) return s->roots;
+        i = (i + 1u) & mask;
+    }
+    if (g_wlroots_count * 4u >= WLROOTS_CACHE_SIZE * 3u) wlroots_reset();   /* >75% */
+    qqbar_ptr roots = _qqbar_vec_init(d);
+    qqbar_roots_fmpz_poly(roots, p, QQBAR_ROOTS_IRREDUCIBLE);
+    slong* idx = malloc(sizeof(slong) * (size_t)d);
+    wl_sort_indices(roots, d, idx);
+    qqbar_ptr sorted = _qqbar_vec_init(d);
+    for (slong j = 0; j < d; j++) qqbar_set(sorted + j, roots + idx[j]);
+    free(idx);
+    _qqbar_vec_clear(roots, d);
+    i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < WLROOTS_CACHE_SIZE; probe++) {
+        WLRootsSlot* s = &g_wlroots[i];
+        if (!s->used) {
+            fmpz_poly_init(s->poly); fmpz_poly_set(s->poly, p);
+            s->roots = sorted; s->d = d; s->h = h; s->used = 1;   /* publish last */
+            g_wlroots_count++;
+            return s->roots;
+        }
+        i = (i + 1u) & mask;
+    }
+    _qqbar_vec_clear(sorted, d);   /* table full even after reset: cannot cache */
+    return NULL;
+}
+
 /* 1-based WL index of x among the roots of its minimal polynomial. */
 static slong wl_root_index(const qqbar_t x) {
     slong d = qqbar_degree(x);
     if (d <= 0) return 1;
+    const fmpz_poly_struct* P = QQBAR_POLY(x);
+    qqbar_srcptr sorted = wlroots_get(P, d, fmpz_poly_hashval(P));
+    if (sorted) {
+        for (slong j = 0; j < d; j++)
+            if (qqbar_equal(sorted + j, x)) return j + 1;
+        return 1;                                  /* x must be one of them */
+    }
+    /* fallback (cache unavailable): the original isolate-and-sort per call */
     qqbar_ptr roots = _qqbar_vec_init(d);
-    qqbar_roots_fmpz_poly(roots, QQBAR_POLY(x), QQBAR_ROOTS_IRREDUCIBLE);
+    qqbar_roots_fmpz_poly(roots, P, QQBAR_ROOTS_IRREDUCIBLE);
     slong* idx = malloc(sizeof(slong) * (size_t)d);
     wl_sort_indices(roots, d, idx);
     slong k = 1;
@@ -534,6 +618,52 @@ static Expr* minpoly_slot_expr(const qqbar_t x) {
     return expr_new_function(expr_new_symbol(SYM_Function), (Expr*[]){ body }, 1);
 }
 
+/* ---- qqbar_to_expr Root-object memo, keyed by (minimal polynomial, index) ---- */
+#define Q2E_CACHE_SIZE 256u          /* power of two; open addressing */
+typedef struct { fmpz_poly_t poly; slong k; uint64_t h; Expr* val; int used; } Q2ESlot;
+static Q2ESlot g_q2e_cache[Q2E_CACHE_SIZE];
+static size_t g_q2e_count = 0;
+
+static void q2e_cache_reset(void) {
+    for (unsigned i = 0; i < Q2E_CACHE_SIZE; i++) {
+        if (g_q2e_cache[i].used) {
+            fmpz_poly_clear(g_q2e_cache[i].poly);
+            expr_free(g_q2e_cache[i].val);
+            g_q2e_cache[i].used = 0;
+        }
+    }
+    g_q2e_count = 0;
+}
+
+/* On hit, return a fresh copy of the cached Root Expr; else NULL. */
+static Expr* q2e_cache_get(const fmpz_poly_struct* p, slong k, uint64_t h) {
+    unsigned mask = Q2E_CACHE_SIZE - 1u, i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < Q2E_CACHE_SIZE; probe++) {
+        Q2ESlot* s = &g_q2e_cache[i];
+        if (!s->used) return NULL;
+        if (s->h == h && s->k == k && fmpz_poly_equal(s->poly, p)) return expr_copy(s->val);
+        i = (i + 1u) & mask;
+    }
+    return NULL;
+}
+
+/* Insert (minpoly, k) -> a shared copy of `root`; bounded, reset when near full. */
+static void q2e_cache_put(const fmpz_poly_struct* p, slong k, uint64_t h, const Expr* root) {
+    if (g_q2e_count * 4u >= Q2E_CACHE_SIZE * 3u) q2e_cache_reset();
+    unsigned mask = Q2E_CACHE_SIZE - 1u, i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < Q2E_CACHE_SIZE; probe++) {
+        Q2ESlot* s = &g_q2e_cache[i];
+        if (!s->used) {
+            fmpz_poly_init(s->poly); fmpz_poly_set(s->poly, p);
+            s->k = k; s->h = h; s->val = expr_copy((Expr*)root); s->used = 1;
+            g_q2e_count++;
+            return;
+        }
+        if (s->h == h && s->k == k && fmpz_poly_equal(s->poly, p)) return;
+        i = (i + 1u) & mask;
+    }
+}
+
 static Expr* qqbar_to_expr(const qqbar_t x) {
     if (qqbar_is_rational(x)) {
         fmpq_t q; fmpq_init(q); qqbar_get_fmpq(q, x);
@@ -559,11 +689,24 @@ static Expr* qqbar_to_expr(const qqbar_t x) {
         fmpz_clear(a); fmpz_clear(b); fmpz_clear(c); fmpz_clear(q);
         return eval_and_free(frac);
     }
-    /* degree >= 3: Root[Function[minpoly&], k] (held). */
-    Expr* fn = minpoly_slot_expr(x);
+    /* degree >= 3: Root[Function[minpoly&], k] (held).  Memoised by (minpoly, k):
+     * poly_to_algnum rebuilds this for the FIXED field generator on every
+     * AlgebraicNumber arithmetic result (`minpoly_slot_expr` re-allocates the whole
+     * minimal-polynomial expression each time), so caching collapses thousands of
+     * identical rebuilds -- the #1 cost of the Q(theta) ansatz assembly -- to one
+     * per field.  A Root object is a pure, session-independent constant, so the
+     * cache never goes stale; it shares the checked-in wl-roots cache reset. */
     slong k = wl_root_index(x);
-    return expr_new_function(expr_new_symbol(SYM_Root),
-               (Expr*[]){ fn, expr_new_integer((int64_t)k) }, 2);
+    {
+        uint64_t h = fmpz_poly_hashval(QQBAR_POLY(x)) ^ (uint64_t)(k * 0x9e3779b97f4a7c15ULL);
+        Expr* cached = q2e_cache_get(QQBAR_POLY(x), k, h);
+        if (cached) return cached;
+        Expr* fn = minpoly_slot_expr(x);
+        Expr* root = expr_new_function(expr_new_symbol(SYM_Root),
+                       (Expr*[]){ fn, expr_new_integer((int64_t)k) }, 2);
+        q2e_cache_put(QQBAR_POLY(x), k, h, root);
+        return expr_copy(root);
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -714,6 +857,104 @@ static int coeffs_to_fmpq_poly(const Expr* list, fmpq_poly_t out) {
  * when the value is rational (n == 1, or every higher coefficient is zero),
  * otherwise AlgebraicNumber[qqbar_to_expr(phi), {d0..d_{n-1}}] with the list
  * padded to n. Consumes nothing; returns a fresh owned Expr. */
+/* ---- field-generator cache: theta expr -> (minimal polynomial, degree, canonical?)
+ * algnum_binop/algnum_rational reduce a product mod theta's minimal polynomial;
+ * recomputing it via to_qqbar(theta) on every field add/mul/pow was a large slice of the
+ * Q(theta) ansatz cost (theta is fixed per field).  Keyed by the generator expr --
+ * the minimal polynomial is a pure function of it, so the cache never goes stale.
+ * `canon` records whether the generator IS the canonical (integer) generator qqbar
+ * would emit, so the AlgebraicNumber builtin can skip re-canonicalising an
+ * already-canonical value. */
+#define GENFD_CACHE_SIZE 128u
+typedef struct { Expr* key; uint64_t h; fmpz_poly_t minpoly; slong n; int canon; int used; } GenFDSlot;
+static GenFDSlot g_genfd_cache[GENFD_CACHE_SIZE];
+static size_t g_genfd_count = 0;
+
+static void genfd_cache_reset(void) {
+    for (unsigned i = 0; i < GENFD_CACHE_SIZE; i++) {
+        if (g_genfd_cache[i].used) {
+            expr_free(g_genfd_cache[i].key);
+            fmpz_poly_clear(g_genfd_cache[i].minpoly);
+            g_genfd_cache[i].used = 0;
+        }
+    }
+    g_genfd_count = 0;
+}
+
+/* On success set *Mout (a reference into the cache, valid until the next reset),
+ * *nout (degree) and *canon (1 iff gen is the canonical integer generator); return
+ * 1.  Return 0 iff gen is not a constant algebraic number. */
+static int genfd_get(const Expr* gen, const fmpz_poly_struct** Mout, slong* nout, int* canon) {
+    uint64_t h = expr_hash(gen);
+    unsigned mask = GENFD_CACHE_SIZE - 1u, i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < GENFD_CACHE_SIZE; probe++) {
+        GenFDSlot* s = &g_genfd_cache[i];
+        if (!s->used) break;
+        if (s->h == h && expr_eq(s->key, gen)) {
+            *Mout = s->minpoly; *nout = s->n; if (canon) *canon = s->canon; return 1;
+        }
+        i = (i + 1u) & mask;
+    }
+    qqbar_t phi; qqbar_init(phi);
+    if (!to_qqbar(gen, phi)) { qqbar_clear(phi); return 0; }
+    slong n = qqbar_degree(phi);
+    /* Canonical iff gen is EXACTLY the generator the AlgebraicNumber builtin would
+     * emit for this value: an algebraic integer (minpoly monic, so algint_generator
+     * does not rescale) whose printed form equals gen.  Only then can the builtin's
+     * fast path return AlgebraicNumber[gen, coeffs] unchanged (same generator AND
+     * same power basis for the coeffs). */
+    fmpz_t lead; fmpz_init(lead);
+    fmpz_poly_get_coeff_fmpz(lead, QQBAR_POLY(phi), n);
+    int is_alg_int = fmpz_is_one(lead);
+    fmpz_clear(lead);
+    Expr* cg = is_alg_int ? qqbar_to_expr(phi) : NULL;
+    int canonical = is_alg_int && cg && expr_eq(cg, gen);
+    if (cg) expr_free(cg);
+    if (g_genfd_count * 4u >= GENFD_CACHE_SIZE * 3u) genfd_cache_reset();
+    i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < GENFD_CACHE_SIZE; probe++) {
+        GenFDSlot* s = &g_genfd_cache[i];
+        if (!s->used) {
+            s->key = expr_copy((Expr*)gen); s->h = h;
+            fmpz_poly_init(s->minpoly); fmpz_poly_set(s->minpoly, QQBAR_POLY(phi));
+            s->n = n; s->canon = canonical; s->used = 1; g_genfd_count++;
+            *Mout = s->minpoly; *nout = n; if (canon) *canon = canonical;
+            qqbar_clear(phi);
+            return 1;
+        }
+        i = (i + 1u) & mask;
+    }
+    qqbar_clear(phi);
+    return 0;   /* table full even after reset: shouldn't happen */
+}
+
+/* poly_to_algnum reusing a KNOWN generator expr `gen` (canonical, fixed per field)
+ * instead of rebuilding it via qqbar_to_expr(phi) -- the hot path for field
+ * arithmetic, where theta never changes.  A rational result (all higher coords 0)
+ * still collapses to the plain number. */
+static Expr* poly_to_algnum_gen(const Expr* gen, const fmpq_poly_t p, slong n) {
+    Expr** dl = malloc(sizeof(Expr*) * (size_t)(n > 0 ? n : 1));
+    int all_higher_zero = 1;
+    fmpq_t di; fmpq_init(di);
+    for (slong i = 0; i < n; i++) {
+        fmpq_poly_get_coeff_fmpq(di, p, i);
+        dl[i] = expr_from_fmpq(di);
+        if (i >= 1 && !fmpq_is_zero(di)) all_higher_zero = 0;
+    }
+    fmpq_clear(di);
+    Expr* result;
+    if (n <= 1 || all_higher_zero) {
+        for (slong i = 1; i < n; i++) expr_free(dl[i]);
+        result = dl[0]; free(dl);
+    } else {
+        Expr* clist = expr_new_function(expr_new_symbol(SYM_List), dl, (size_t)n);
+        free(dl);
+        result = expr_new_function(expr_new_symbol(SYM_AlgebraicNumber),
+                     (Expr*[]){ expr_copy((Expr*)gen), clist }, 2);
+    }
+    return result;
+}
+
 static Expr* poly_to_algnum(const qqbar_t phi, const fmpq_poly_t p, slong n) {
     Expr** dl = malloc(sizeof(Expr*) * (size_t)(n > 0 ? n : 1));
     int all_higher_zero = 1;
@@ -748,22 +989,23 @@ static Expr* algnum_binop(const Expr* a, const Expr* b, int op) {
     const Expr* g = a->data.function.args[0];
     if (!expr_eq(g, b->data.function.args[0])) return NULL;
 
-    qqbar_t phi; qqbar_init(phi);
-    if (!to_qqbar(g, phi)) { qqbar_clear(phi); return NULL; }
-    slong n = qqbar_degree(phi);
+    /* theta's minimal polynomial + degree from the generator cache -- no to_qqbar
+     * per operation.  The result reuses the SAME generator expr g (theta is fixed
+     * per field), so poly_to_algnum_gen never rebuilds it via qqbar_to_expr. */
+    const fmpz_poly_struct* Mz; slong n;
+    if (!genfd_get(g, &Mz, &n, NULL)) return NULL;
 
     fmpq_poly_t M, pa, pb, r;
     fmpq_poly_init(M); fmpq_poly_init(pa); fmpq_poly_init(pb); fmpq_poly_init(r);
-    fmpq_poly_set_fmpz_poly(M, QQBAR_POLY(phi));
+    fmpq_poly_set_fmpz_poly(M, Mz);
     Expr* result = NULL;
     if (coeffs_to_fmpq_poly(a->data.function.args[1], pa) &&
         coeffs_to_fmpq_poly(b->data.function.args[1], pb)) {
         if (op == 0) { fmpq_poly_add(r, pa, pb); }
         else         { fmpq_poly_mul(r, pa, pb); fmpq_poly_rem(r, r, M); }
-        result = poly_to_algnum(phi, r, n);
+        result = poly_to_algnum_gen(g, r, n);
     }
     fmpq_poly_clear(M); fmpq_poly_clear(pa); fmpq_poly_clear(pb); fmpq_poly_clear(r);
-    qqbar_clear(phi);
     return result;
 }
 
@@ -894,6 +1136,45 @@ int flint_qqbar_is_real(const Expr* e) {
 Expr* flint_qqbar_algebraic_number(const Expr* gen, const Expr* coeffs) {
     if (!gen || !coeffs || !head_is(coeffs, "List")) return NULL;
 
+    /* Canonical fast path.  The evaluator re-canonicalises every AlgebraicNumber it
+     * sees; during the Q(theta) ansatz assembly that is the single largest cost
+     * (to_qqbar + reduce + poly_to_algnum + qqbar_to_expr, per re-evaluation).  When
+     * the generator is already the canonical integer generator (`canon` from the
+     * cache) and the coeffs are already reduced -- rational and length <= deg minpoly
+     * -- the slow path below returns exactly AlgebraicNumber[gen, coeffs] (padded to
+     * n), or the plain rational when only the constant term is nonzero.  Return that
+     * directly.  Anything else (non-canonical generator, an unreduced or non-rational
+     * coeff) falls through to the exact slow path. */
+    {
+        const fmpz_poly_struct* Mz; slong n; int canon;
+        if (genfd_get(gen, &Mz, &n, &canon) && canon) {
+            size_t m = coeffs->data.function.arg_count;
+            if ((slong)m <= n) {
+                int all_rat = 1, higher_nonzero = 0;
+                for (size_t i = 0; i < m; i++) {
+                    const Expr* c = coeffs->data.function.args[i];
+                    if (!(c->type == EXPR_INTEGER || c->type == EXPR_BIGINT || head_is(c, "Rational"))) { all_rat = 0; break; }
+                    if (i >= 1 && !(c->type == EXPR_INTEGER && c->data.integer == 0)) higher_nonzero = 1;
+                }
+                if (all_rat) {
+                    if (!higher_nonzero)
+                        return m >= 1 ? expr_copy((Expr*)coeffs->data.function.args[0]) : expr_new_integer(0);
+                    if ((slong)m == n)
+                        return expr_new_function(expr_new_symbol(SYM_AlgebraicNumber),
+                                   (Expr*[]){ expr_copy((Expr*)gen), expr_copy((Expr*)coeffs) }, 2);
+                    /* m < n: pad the coeff list to length n (as poly_to_algnum does). */
+                    Expr** dl = malloc(sizeof(Expr*) * (size_t)n);
+                    for (slong i = 0; i < n; i++)
+                        dl[i] = (size_t)i < m ? expr_copy((Expr*)coeffs->data.function.args[i]) : expr_new_integer(0);
+                    Expr* clist = expr_new_function(expr_new_symbol(SYM_List), dl, (size_t)n);
+                    free(dl);
+                    return expr_new_function(expr_new_symbol(SYM_AlgebraicNumber),
+                               (Expr*[]){ expr_copy((Expr*)gen), clist }, 2);
+                }
+            }
+        }
+    }
+
     qqbar_t alpha; qqbar_init(alpha);
     if (!to_qqbar(gen, alpha)) { qqbar_clear(alpha); return NULL; }
 
@@ -927,6 +1208,12 @@ Expr* flint_qqbar_algebraic_number(const Expr* gen, const Expr* coeffs) {
     return result;
 }
 
+/* Express x = res(alpha) exactly at the default working precision. */
+static int qqbar_express_in_field_retry(fmpq_poly_t res, const qqbar_t alpha,
+                                        const qqbar_t x) {
+    return qqbar_express_in_field(res, alpha, x, 100000, 0, 64);
+}
+
 Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* theta) {
     if (!a || !theta) return NULL;
     qqbar_t av, tv; qqbar_init(av); qqbar_init(tv);
@@ -941,7 +1228,7 @@ Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* theta) {
 
     fmpq_poly_t f; fmpq_poly_init(f);
     Expr* result = NULL;
-    if (qqbar_express_in_field(f, phi, av, 100000, 0, 64))
+    if (qqbar_express_in_field_retry(f, phi, av))
         result = poly_to_algnum(phi, f, n);   /* NULL stays NULL when a not in Q(theta) */
     fmpq_poly_clear(f);
     qqbar_clear(phi); qqbar_clear(av); qqbar_clear(tv);
@@ -990,7 +1277,7 @@ Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
         int good = 1;
         for (size_t i = 0; i < n && good; i++) {
             fmpq_poly_t f; fmpq_poly_init(f);
-            if (qqbar_express_in_field(f, phi, vals + i, 100000, 0, 64))
+            if (qqbar_express_in_field_retry(f, phi, vals + i))
                 items[i] = poly_to_algnum(phi, f, nn);
             else { items[i] = NULL; good = 0; }
             fmpq_poly_clear(f);
@@ -1217,7 +1504,7 @@ int flint_qqbar_algebraic_number_norm(const Expr* a, const Expr* theta, Expr** o
             fmpz_clear(lc);
             slong n = qqbar_degree(phi);
             fmpq_poly_t f; fmpq_poly_init(f);
-            if (qqbar_express_in_field(f, phi, av, 100000, 0, 64)) {
+            if (qqbar_express_in_field_retry(f, phi, av)) {
                 fmpq_pow_si(norm, norm, n / d);  /* (absolute norm)^{[K:Q(a)]} */
             } else {
                 rc = 2;                          /* a is not an element of Q(theta) */
@@ -1282,7 +1569,7 @@ int flint_qqbar_algebraic_number_trace(const Expr* a, const Expr* theta, Expr** 
             fmpz_clear(lc);
             slong n = qqbar_degree(phi);
             fmpq_poly_t f; fmpq_poly_init(f);
-            if (qqbar_express_in_field(f, phi, av, 100000, 0, 64)) {
+            if (qqbar_express_in_field_retry(f, phi, av)) {
                 fmpq_mul_si(trace, trace, n / d);  /* (absolute trace) * [K:Q(a)] */
             } else {
                 rc = 2;                            /* a is not an element of Q(theta) */
@@ -1310,13 +1597,12 @@ Expr* flint_qqbar_algnum_mul(const Expr* a, const Expr* b) {
 Expr* flint_qqbar_algnum_pow(const Expr* a, long p) {
     if (!head_is(a, "AlgebraicNumber") || a->data.function.arg_count != 2) return NULL;
     const Expr* g = a->data.function.args[0];
-    qqbar_t phi; qqbar_init(phi);
-    if (!to_qqbar(g, phi)) { qqbar_clear(phi); return NULL; }
-    slong n = qqbar_degree(phi);
+    const fmpz_poly_struct* Mz; slong n;             /* minpoly + degree from the cache */
+    if (!genfd_get(g, &Mz, &n, NULL)) return NULL;
 
     fmpq_poly_t M, base, acc, tmp;
     fmpq_poly_init(M); fmpq_poly_init(base); fmpq_poly_init(acc); fmpq_poly_init(tmp);
-    fmpq_poly_set_fmpz_poly(M, QQBAR_POLY(phi));
+    fmpq_poly_set_fmpz_poly(M, Mz);
 
     Expr* result = NULL;
     if (coeffs_to_fmpq_poly(a->data.function.args[1], base)) {
@@ -1341,11 +1627,10 @@ Expr* flint_qqbar_algnum_pow(const Expr* a, long p) {
                 e >>= 1;
                 if (e > 0) { fmpq_poly_mul(tmp, base, base); fmpq_poly_rem(base, tmp, M); }
             }
-            result = poly_to_algnum(phi, acc, n);
+            result = poly_to_algnum_gen(g, acc, n);
         }
     }
     fmpq_poly_clear(M); fmpq_poly_clear(base); fmpq_poly_clear(acc); fmpq_poly_clear(tmp);
-    qqbar_clear(phi);
     return result;
 }
 
@@ -1355,9 +1640,8 @@ static Expr* algnum_rational(const Expr* a, const Expr* r, int op) {
     fmpq_t rq; fmpq_init(rq);
     if (!fmpq_from_expr(r, rq)) { fmpq_clear(rq); return NULL; }
     const Expr* g = a->data.function.args[0];
-    qqbar_t phi; qqbar_init(phi);
-    if (!to_qqbar(g, phi)) { qqbar_clear(phi); fmpq_clear(rq); return NULL; }
-    slong n = qqbar_degree(phi);
+    const fmpz_poly_struct* Mz; slong n;              /* degree from the cache; reuse g */
+    if (!genfd_get(g, &Mz, &n, NULL)) { fmpq_clear(rq); return NULL; }
     fmpq_poly_t p; fmpq_poly_init(p);
     Expr* result = NULL;
     if (coeffs_to_fmpq_poly(a->data.function.args[1], p)) {
@@ -1370,9 +1654,9 @@ static Expr* algnum_rational(const Expr* a, const Expr* r, int op) {
         } else {                              /* scale every coefficient by r */
             fmpq_poly_scalar_mul_fmpq(p, p, rq);
         }
-        result = poly_to_algnum(phi, p, n);
+        result = poly_to_algnum_gen(g, p, n);
     }
-    fmpq_poly_clear(p); qqbar_clear(phi); fmpq_clear(rq);
+    fmpq_poly_clear(p); fmpq_clear(rq);
     return result;
 }
 
@@ -1382,6 +1666,31 @@ Expr* flint_qqbar_algnum_add_rational(const Expr* a, const Expr* r) {
 
 Expr* flint_qqbar_algnum_scale_rational(const Expr* a, const Expr* r) {
     return algnum_rational(a, r, 1);
+}
+
+/* Minimal polynomial of the algebraic generator `gen`, returned as a List of
+ * its integer coefficients low-to-high, {c0, c1, ..., cn} (the primitive
+ * integer minimal polynomial served from the generator cache), or NULL if gen
+ * is not a recognised algebraic generator.  The field-coefficient Expand in
+ * flint_bridge.c uses this to build the reduction modulus M(tau) without
+ * duplicating the qqbar minpoly machinery; keeping it here reuses the same
+ * genfd cache the AlgebraicNumber arithmetic already populates. */
+Expr* flint_qqbar_gen_minpoly_coeffs(const Expr* gen) {
+    if (!gen) return NULL;
+    const fmpz_poly_struct* Mz; slong n;
+    if (!genfd_get(gen, &Mz, &n, NULL)) return NULL;
+    if (n < 1) return NULL;
+    Expr** cs = malloc(sizeof(Expr*) * (size_t)(n + 1));
+    if (!cs) return NULL;
+    fmpz_t z; fmpz_init(z);
+    for (slong i = 0; i <= n; i++) {
+        fmpz_poly_get_coeff_fmpz(z, Mz, i);
+        cs[i] = expr_from_fmpz(z);
+    }
+    fmpz_clear(z);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), cs, (size_t)(n + 1));
+    free(cs);
+    return list;
 }
 
 #else /* !USE_FLINT */
@@ -1406,5 +1715,6 @@ Expr* flint_qqbar_algnum_mul(const Expr* a, const Expr* b) { (void)a; (void)b; r
 Expr* flint_qqbar_algnum_pow(const Expr* a, long p) { (void)a; (void)p; return NULL; }
 Expr* flint_qqbar_algnum_add_rational(const Expr* a, const Expr* r) { (void)a; (void)r; return NULL; }
 Expr* flint_qqbar_algnum_scale_rational(const Expr* a, const Expr* r) { (void)a; (void)r; return NULL; }
+Expr* flint_qqbar_gen_minpoly_coeffs(const Expr* gen) { (void)gen; return NULL; }
 
 #endif /* USE_FLINT */

@@ -228,12 +228,14 @@ static void test_soundness_fixes(void) {
         "r = Integrate`ParallelMixedTower[1/(x^4 - 1), x];"
         " Abs[N[(D[r, x] - 1/(x^4 - 1)) /. x -> 2, 25]] < 10^-15",
         "True");
-    /* Fix 3 (A11): x^3 ArcSin[x]/Sqrt[1-x^4] previously returned a WRONG
-     * antiderivative (bad quartic-realisation branch).  The hard verify-or-decline
-     * gate now differentiates the answer at generic complex points and demotes a
-     * non-verifying result to a clean {"failed", ...} decline. */
+    /* Fix 3 (A11): x^3 ArcSin[x]/Sqrt[1-x^4] used to return a WRONG antiderivative
+     * (the y-branch of the quartic realisation was the negative of the one the
+     * integrand pair was decomposed on), so the gate demoted it to a decline.  The
+     * gate now RESOLVES that branch numerically (accepts -surf when D[surf] == -f
+     * on the real domain), so A11 solves and verifies. */
     assert_eval(
-        "MatchQ[Integrate`ParallelMixedTower[x^3 ArcSin[x]/Sqrt[1 - x^4], x], {\"failed\", ___}]",
+        "r = Integrate`ParallelMixedTower[x^3 ArcSin[x]/Sqrt[1 - x^4], x];"
+        " Abs[N[(D[r, x] - x^3 ArcSin[x]/Sqrt[1 - x^4]) /. x -> 1/3, 25]] < 10^-15",
         "True");
     /* Fix 5 (R3, R4): simplest genus-0 conic + one rational pole -- were declines,
      * fixed by the same Transpose->Thread correction on the curve branch. */

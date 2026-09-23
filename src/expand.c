@@ -350,6 +350,12 @@ static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
         } else if (flint_bridge_available()) {
             Expr* fast = flint_expand_polynomial(e);
             if (fast) return fast;
+            /* Field-coefficient polynomials (over one Q(theta), e.g. the
+             * ParallelMixedTower ansatz over Q(i) or Q(sqrt d)) are rejected by
+             * the rational-only expander above; expand them natively instead of
+             * distributing term-by-term through the evaluator. */
+            Expr* fastf = flint_expand_polynomial_field(e);
+            if (fastf) return fastf;
         }
     }
 

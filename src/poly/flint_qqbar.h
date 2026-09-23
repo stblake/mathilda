@@ -149,4 +149,10 @@ Expr* flint_qqbar_algnum_pow(const Expr* a, long p);
 Expr* flint_qqbar_algnum_add_rational(const Expr* a, const Expr* r);
 Expr* flint_qqbar_algnum_scale_rational(const Expr* a, const Expr* r);
 
+/* Minimal polynomial of the algebraic generator `gen`, as a fresh List of its
+ * integer coefficients low-to-high {c0, c1, ..., cn}, or NULL when gen is not a
+ * recognised algebraic generator (or FLINT is compiled out).  Backs the
+ * field-coefficient Expand fast path in flint_bridge.c. */
+Expr* flint_qqbar_gen_minpoly_coeffs(const Expr* gen);
+
 #endif /* FLINT_QQBAR_H */
