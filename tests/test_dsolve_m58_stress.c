@@ -86,10 +86,33 @@ static void t_m58_order3(void) {
                 "Head[s] === List && Not[FreeQ[s[[1]], C[3]]]]");
 }
 
-/* The guard: a 3rd-order autonomous case with a non-elementary stage-2 quadrature
- * (2 y y''' == y', reduced p carries a Log) declines FAST rather than spinning. */
-static void t_m58_guard_declines(void) {
-    ASSERT_TRUE("Head[DSolve`AutonomousReduction[2 y[x] y'''[x] == y'[x], y[x], x]] =!= List");
+/* M59: a 3rd-order autonomous case with a non-elementary stage-2 quadrature
+ * (2 y y''' == y', reduced p carries a Log) is returned by the implicit companion
+ * as the INERT first integral Inactive[Integrate][1/p, y[x]] - x == C[1] (no spin). */
+static void t_m58_guard_implicit(void) {
+    ASSERT_TRUE("With[{s = DSolve`AutonomousReduction[2 y[x] y'''[x] == y'[x], y[x], x]}, "
+                "Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive[Integrate]]]");
+}
+
+/* M59: the order-3 autonomous residue whose stage-2 quadrature is non-elementary
+ * (the reduced p is a Sqrt of a non-quadratic radicand) each returns a verified inert
+ * first integral instead of declining.  Every branch is back-substitution verified by
+ * the method's own numeric self-verify (0 FAIL by construction), so asserting the
+ * inert-integral form is sufficient; a decline would make Head =!= List. */
+static void t_m59_implicit_family(void) {
+    const char* odes[] = {
+        "y[x]^3 y'[x] - y'[x] y''[x] + y[x] y'''[x] == 0",           /* 2.1.2-263 */
+        "15 y'[x]^3 - 18 y[x] y'[x] y''[x] + 4 y[x]^2 y'''[x] == 0", /* 2.1.2-267 */
+        "40 y'[x]^3 - 45 y[x] y'[x] y''[x] + 9 y[x]^2 y'''[x] == 0", /* 2.1.2-268 */
+        "y[x]^2 y'''[x] == y'[x]^3",                                 /* 2.1.2-1168 */
+    };
+    for (size_t i = 0; i < sizeof(odes) / sizeof(odes[0]); i++) {
+        char buf[512];
+        snprintf(buf, sizeof(buf),
+            "With[{s = DSolve`AutonomousReduction[%s, y[x], x]}, "
+            "Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive[Integrate]]]", odes[i]);
+        ASSERT_TRUE(buf);
+    }
 }
 
 int main(void) {
@@ -100,7 +123,8 @@ int main(void) {
     TEST(t_m58_power_family);
     TEST(t_m58_tantanh_family);
     TEST(t_m58_order3);
-    TEST(t_m58_guard_declines);
+    TEST(t_m58_guard_implicit);
+    TEST(t_m59_implicit_family);
 
     printf("All DSolve M58 stress tests passed.\n");
     return 0;

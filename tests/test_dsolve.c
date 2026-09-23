@@ -1386,14 +1386,15 @@ static void t_auto_method(void) {
     check_true("PossibleZeroQ[(y[x] y''[x] - y'[x]^2) /. "
                "DSolve`AutonomousReduction[y[x] y''[x] == y'[x]^2, y, x][[1]]]");
 }
-static void t_auto_declines_elliptic(void) {
-    /* y''==2y^3 reduces to an elliptic integral, which the AUTONOMOUS method cannot
-     * close (its stage-2 quadrature is non-elementary), so the pinned method declines
-     * rather than fabricate.  (The cascade as a whole now returns the implicit first
-     * integral y'^2/12 - y^4/12 == C[1] via the M56 integrating-factor method, so the
-     * bare DSolve[...] no longer stays symbolic — hence the pinned-method form here.) */
-    check_form("Head[DSolve`AutonomousReduction[y''[x] == 2 y[x]^3, y[x], x]]",
-               "DSolve`AutonomousReduction");
+static void t_auto_elliptic_implicit(void) {
+    /* y''==2y^3 reduces to an elliptic quadrature (non-elementary); the explicit
+     * autonomous method cannot close it, but the M59 implicit companion returns the
+     * inert first integral Inactive[Integrate][1/Sqrt[C[2]+y^4], y[x]] - x == C[1]
+     * (verified, no spin).  (The full cascade prefers the M56 polynomial first
+     * integral y'^2/12 - y^4/12 == C[1]; the pinned autonomous method gives the
+     * quadrature form here.) */
+    check_true("With[{s = DSolve`AutonomousReduction[y''[x] == 2 y[x]^3, y[x], x]}, "
+               "Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive[Integrate]]]");
 }
 
 /* ---- M58: AutonomousReduction lifted to any order n >= 2 ---- */
@@ -1411,12 +1412,12 @@ static void t_m58_order3(void) {
     check_true("Head[DSolve[y[x] y'''[x] == y'[x] y''[x], y, x]] === List");
 }
 
-/* A 3rd-order autonomous case whose reduced p carries a Log (2 y y'''==y') has a
- * NON-elementary stage-2 quadrature; the guard declines it FAST (no 45 s Integrate
- * spin, no wrong answer) rather than hang. */
-static void t_m58_declines_nonelementary(void) {
-    check_form("Head[DSolve`AutonomousReduction[2 y[x] y'''[x] == y'[x], y[x], x]]",
-               "DSolve`AutonomousReduction");
+/* M59: a 3rd-order autonomous case whose reduced p carries a Log (2 y y'''==y')
+ * has a NON-elementary stage-2 quadrature, so the implicit companion returns the
+ * INERT first integral Inactive[Integrate][1/p, y[x]] - x == C[1] (no 45 s spin). */
+static void t_m59_implicit_firstintegral(void) {
+    check_true("With[{s = DSolve`AutonomousReduction[2 y[x] y'''[x] == y'[x], y[x], x]}, "
+               "Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive[Integrate]]]");
 }
 static void t_auto_stress(void) {
     char eqn[256], res[256];
@@ -3013,9 +3014,9 @@ int main(void) {
     TEST(t_auto_power);
     TEST(t_auto_reciprocal);
     TEST(t_auto_method);
-    TEST(t_auto_declines_elliptic);
+    TEST(t_auto_elliptic_implicit);
     TEST(t_m58_order3);
-    TEST(t_m58_declines_nonelementary);
+    TEST(t_m59_implicit_firstintegral);
     TEST(t_auto_stress);
     TEST(t_not_holdall);
     TEST(t_pde_transport);

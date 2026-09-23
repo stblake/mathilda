@@ -2136,6 +2136,33 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     (inert quadrature, verified by implicit differentiation) for non-elementary stage-2, which
     would unlock the full Group-A (~+7) — matching Mathematica — and is a substrate-level task.
 
+- **M59 — `Inactive` primitive + implicit-first-integral autonomous companion.** ✅ DONE.
+  Realises M58's deferred "big lever". Two parts.
+  - **`Inactive` / `Activate` primitives** (`src/core.c`, `src/sym_names.{c,h}`, `src/calculus/deriv.c`).
+    `Inactive[f]` is an inert head-wrapper: `Inactive[f][args]` evaluates its args but does not fire
+    `f`'s rules, so `Inactive[Integrate][g,x]` holds the integral WITHOUT running the (uninterruptibly
+    spinning) integration cascade — the key finding was that this compound-head form is **already a
+    fixed point** (like `Derivative[n][f][x]`), so registration is just `ATTR_PROTECTED` and inertness
+    is automatic. The only real additions: a **`D`-FTC rule** `D[Inactive[Integrate][f,u],u]==f`
+    (`deriv.c`, at the compound-head dispatch — the different-variable case is handled by the generic
+    free-of-x short-circuit), and **`Activate`** (`Inactive[h]→h` + re-evaluate).
+  - **`dsolve_autonomous_implicit_try`** (`dsolve_autonomous.c`). Where the M58 explicit method
+    declines a non-elementary stage-2 quadrature, this returns the inert first integral
+    `Inactive[Integrate][1/p, y[x]] − x == C[1]` via `dsolve_run_implicit` — whose verify computes
+    `y'=−G_x/G_y=p` through the new FTC rule with no integration. Correctness is a **numeric
+    self-verify** (reconstruct `y'..y⁽ⁿ⁾` from the reduction chain, check the original ODE ≈0), since
+    `dsolve_run_implicit`'s verify passes vacuously at order n≥2. The M58 stage-1 reduction is factored
+    into a shared `ar_reduce`; the explicit method (order-2, 1143) is unchanged. Wired as a second
+    cascade slot + explicit-then-implicit pinned method (mirroring `Homogeneous`).
+  - *Solves:* the order-3 autonomous residue 263/264/267/268/1167/1168 (`p=Sqrt[…]`, + dups
+    710/711/712) now returns a verified inert first integral instead of declining;
+    `y'==Sqrt[y Log y+…]`'s 45 s spin → 0.0 s. §2.1.2 clean re-run **591 → 595 (deterministic +9),
+    0 FAIL** (`3rd_high_reducible` bucket 8 → 17 PASS; the net P↔U is the x-dependent timing cluster);
+    gate baseline 628 → 619. New `tests/test_inactive.c` + M59 units/stress;
+    core/deriv/integrate regression suites unaffected. Version 0.174 → 0.175. *Future:* upgrade the
+    `separable`/`fos`/`chini`/`exact` implicit paths to emit inert first integrals for their own
+    non-elementary quadratures (they currently decline), now that the mechanism exists.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

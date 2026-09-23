@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <time.h>
+#include <math.h>
 
 /* Recursion bounding (needed only once the method reduces order 3+: a stage-2
  * quadrature such as Integrate[1/Sqrt[y Log[y]+...]] is non-elementary and makes
@@ -82,21 +83,104 @@ static Expr* run_dsolve_applied(Expr* eqn, const char* fname, const char* varnam
     return body;
 }
 
-Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
+/* Collect distinct interned symbol names in ARGUMENT position (free vars/params);
+ * a function head (Log, Plus, ...) is NOT a parameter and must not be instantiated. */
+static void ar_collect_params(const Expr* e, const char** names, int* n, int cap) {
+    if (!e || *n >= cap) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        for (int i = 0; i < *n; i++) if (names[i] == nm) return;
+        names[(*n)++] = nm; return;
+    }
+    if (e->type == EXPR_FUNCTION) {
+        if (e->data.function.head && e->data.function.head->type != EXPR_SYMBOL)
+            ar_collect_params(e->data.function.head, names, n, cap);
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            ar_collect_params(e->data.function.args[i], names, n, cap);
+    }
+}
+
+/* Numeric self-verify of the implicit first integral.  dsolve_run_implicit's verify
+ * only substitutes y'[x] and so passes VACUOUSLY for order n>=2 (y''..y^(n) stay
+ * free).  So reconstruct EVERY derivative from the reduction chain (y'=p, y''=p p_y,
+ * ... = D[k] with pfun -> Function[{y}, pbody]), substitute y^(k)[x] -> D[k] and
+ * y[x] -> y into the ORIGINAL autonomous residual, and require it ~0 at sample y and
+ * generic constants -- so a wrong reduction is dropped (0 FAIL by construction). */
+static bool ar_num_ok(const DSolveProblem* P, const Expr* pbody, int n) {
+    const char* xvar = P->ind_names[0];
+    const char* yname = P->fun_names[0];
+    const char* Ysym = intern_symbol("DSolve`arY");
+    const char* pfun = intern_symbol("DSolve`arp");
+    /* pfunc = Function[{Ysym}, pbody] */
+    Expr* pfunc = expr_new_function(expr_new_symbol(SYM_Function), (Expr*[]){
+        expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_new_symbol(Ysym) }, 1),
+        expr_copy((Expr*)pbody) }, 2);
+    /* chain D[1..n] (abstract pfun) */
+    Expr** D = malloc((size_t)(n + 1) * sizeof(Expr*));
+    D[0] = NULL;
+    D[1] = ds_make_funcapp(pfun, 0, Ysym);
+    for (int k = 1; k < n; k++)
+        D[k + 1] = eval_and_free(ds_call2(SYM_Times, ds_make_funcapp(pfun, 0, Ysym),
+                       ds_d(expr_copy(D[k]), expr_new_symbol(Ysym))));
+    /* residual with y^(k)[x] -> (D[k] /. pfun -> pfunc), y[x] -> Ysym */
+    Expr* R = expr_copy(P->eq_residuals[0]);
+    for (int k = n; k >= 1; k--) {
+        Expr* yk = ds_subst(expr_copy(D[k]), expr_new_symbol(pfun), expr_copy(pfunc));
+        yk = eval_and_free(yk);
+        R = ds_subst(R, ds_make_funcapp(yname, k, xvar), yk);
+    }
+    R = ds_subst(R, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Ysym));
+    for (int k = 1; k <= n; k++) expr_free(D[k]);
+    free(D); expr_free(pfunc);
+    /* instantiate the constants C[1..n] and every remaining free parameter at
+     * distinct generic reals; sample Ysym; require |R| ~ 0. */
+    for (int k = 1; k <= n; k++)
+        R = ds_subst(R, ds_const(k), expr_new_real(0.37 + 0.11 * k));
+    {
+        const char* skip[] = { Ysym, xvar, intern_symbol("E"), intern_symbol("Pi"),
+            intern_symbol("I"), intern_symbol("EulerGamma"), intern_symbol("Degree") };
+        const int nskip = (int)(sizeof(skip) / sizeof(skip[0]));
+        const char* syms[64]; int ns = 0;
+        ar_collect_params(R, syms, &ns, 64);
+        int pi = 0;
+        for (int i = 0; i < ns; i++) {
+            bool sk = false;
+            for (int j = 0; j < nskip; j++) if (syms[i] == skip[j]) { sk = true; break; }
+            if (sk) continue;
+            R = ds_subst(R, expr_new_symbol(syms[i]), expr_new_real(0.43 + 0.19 * (pi++)));
+        }
+    }
+    const double ys[] = { 1.3, 0.7, 2.1, 1.7 };
+    int small = 0, big = 0;
+    for (int i = 0; i < 4; i++) {
+        Expr* e = ds_subst(expr_copy(R), expr_new_symbol(Ysym), expr_new_real(ys[i]));
+        e = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", e))));
+        double m = (e->type == EXPR_REAL) ? e->data.real
+                 : (e->type == EXPR_INTEGER) ? (double)e->data.integer : NAN;
+        expr_free(e);
+        if (isnan(m) || !isfinite(m)) continue;
+        if (m < 1e-6) small++; else if (m > 1e-3) big++;
+    }
+    expr_free(R);
+    return small >= 2 && big == 0;
+}
+
+/* Shared stage-1 reduction (both try-fns): gate + missing-x pre-gate + solve-for-top
+ * + autonomous check + the p=y'(y) derivative chain + solve the reduced order-(n-1)
+ * ODE + freeze its constants C[1..n-1] -> C[2..n].  Returns pbody = p(y, C[2..n])
+ * (owned) with *n_out set, or NULL (not autonomous / reduced ODE did not close).
+ * Sets g_ar_deadline.  No memo here -- each try-fn memoizes its own decline. */
+static Expr* ar_reduce(DSolveProblem* P, int* n_out) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     int n = P->max_order[0];
     if (n < 2) return NULL;
     const char* xvar  = P->ind_names[0];
     const char* yname = P->fun_names[0];
-    const char* Ysym = intern_symbol("DSolve`arY");   /* the reduced independent var (= y) */
-    const char* Mask = intern_symbol("DSolve`arMask"); /* a marker for any y^(k), k>=1     */
+    const char* Ysym = intern_symbol("DSolve`arY");
+    const char* Mask = intern_symbol("DSolve`arMask");
 
-    /* Cheap missing-x pre-gate, BEFORE the potentially expensive solve-for-top.
-     * A genuine autonomous y^(n)=f(y,...,y^(n-1)) has no explicit x once the funcapps
-     * y^(k)[x] are masked; if a bare x survives, the coefficients depend on x and this
-     * is not autonomous.  Without this, solving an x-dependent linear ODE with nested
-     * rational coefficients (an exact-ODE order reduction) for y^(n) blows up the
-     * rational arithmetic and hangs. */
+    /* missing-x pre-gate: mask y^(k)[x] and require no bare x survives (else the
+     * coefficients depend on x -> not autonomous; solving for y^(n) could then hang). */
     {
         Expr* Rm = expr_copy(P->eq_residuals[0]);
         for (int k = n; k >= 1; k--)
@@ -107,18 +191,13 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
         if (has_x) return NULL;
     }
 
-    /* decline memo + wall-clock deadline (the recursive sub-solves below can spin on
-     * a non-elementary stage-2 quadrature at order 3+). */
-    uint64_t memo_h = expr_hash(P->eq_residuals[0]);
-    ar_memo_sync(eval_toplevel_id());
-    if (ar_memo_seen(memo_h)) return NULL;
     g_ar_deadline = time(NULL) + 5;
 
     Expr* F = dsolve_solve_top_derivative(P, n);          /* y^(n) == F(x, y, ..., y^(n-1)) */
-    if (!F) { ar_memo_add(memo_h); return NULL; }
+    if (!F) return NULL;
 
-    /* autonomous check: mask y^(1..n-1) and y, require no explicit x and genuine y
-     * dependence (else it is the missing-y case ReductionOfOrder/LowerDerivative own). */
+    /* autonomous check on F: mask y^(1..n-1), y; require no explicit x and genuine y
+     * dependence (else the missing-y case ReductionOfOrder/LowerDerivative owns it). */
     {
         Expr* Ft = expr_copy(F);
         for (int k = n - 1; k >= 1; k--)
@@ -126,14 +205,12 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
         Ft = ds_subst(Ft, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Ysym));
         bool bad = !ds_free_of(Ft, xvar) || !ds_contains(Ft, Ysym);
         expr_free(Ft);
-        if (bad) { expr_free(F); ar_memo_add(memo_h); return NULL; }
+        if (bad) { expr_free(F); return NULL; }
     }
 
-    /* Reduction p = y'(y): the chain d/dx = p d/dy through y expresses each y^(k) as
-     *   D[1] = p,   D[k+1] = p * d/dy(D[k])
-     *   (y'' = p p_y,  y''' = p^2 p_yy + p p_y^2,  ...),
-     * so D[n] involves p^(n-1): substituting y^(k) -> D[k] gives an order-(n-1) ODE in
-     * p(y).  For n = 2 this is exactly the classical p p_y == f(y,p). */
+    /* Reduction p = y'(y): D[1]=p, D[k+1]=p d/dy(D[k]) (y''=p p_y, y'''=p^2 p_yy+p p_y^2,
+     * ...).  D[n] involves p^(n-1) -> substituting y^(k)->D[k] gives an order-(n-1) ODE
+     * in p(y).  For n=2 this is the classical p p_y == f(y,p). */
     const char* pfun = intern_symbol("DSolve`arp");
     Expr** D = malloc((size_t)(n + 1) * sizeof(Expr*));
     D[0] = NULL;
@@ -142,7 +219,6 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
         D[k + 1] = eval_and_free(ds_call2(SYM_Times, ds_make_funcapp(pfun, 0, Ysym),
                        ds_d(expr_copy(D[k]), expr_new_symbol(Ysym))));
 
-    /* Stage 1: D[n] == F with y^(k)[x] -> D[k] (k=1..n-1), y[x] -> Ysym. */
     Expr* rhs1 = expr_copy(F);
     expr_free(F);
     for (int k = n - 1; k >= 1; k--)
@@ -153,30 +229,39 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
     free(D);
     Expr* eq1  = expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ lhs1, rhs1 }, 2);
     Expr* pbody = run_dsolve_applied(eq1, pfun, Ysym, (int)(g_ar_deadline - time(NULL)));
+    if (!pbody) return NULL;
+
+    /* Freeze stage-1 constants C[1..n-1] -> C[2..n] (leaving C[1] for stage 2 / the
+     * implicit quadrature constant); C[k] stays a recognised constant (the fast path
+     * the elliptic stage-2 integrand needs -- see the M58 note). */
+    int off = 1;
+    pbody = dsolve_renumber_constants(pbody, n - 1, &off);
+    if (ar_expired()) { expr_free(pbody); return NULL; }
+    *n_out = n;
+    return pbody;
+}
+
+/* Explicit: reduce, then (elementary-quadrature only) solve y'==p(y) by separation. */
+Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1) return NULL;
+    uint64_t memo_h = expr_hash(P->eq_residuals[0]);
+    ar_memo_sync(eval_toplevel_id());
+    if (ar_memo_seen(memo_h)) return NULL;
+
+    int n = 0;
+    Expr* pbody = ar_reduce(P, &n);
     if (!pbody) { ar_memo_add(memo_h); return NULL; }
 
-    /* Freeze the stage-1 constants C[1..n-1] as the GENERATED constants C[2..n],
-     * distinct from the stage-2 solve's fresh C[1] so they cannot collide.  They must
-     * NOT be frozen to plain symbols: a plain symbolic parameter inside the stage-2
-     * integrand sends the first-order cascade down a ~27x slower path
-     * (DSolve[y'==Sqrt[a+y^4]] ~ 11s vs DSolve[y'==Sqrt[C[2]+y^4]] ~ 0.4s), and stage 2
-     * is exactly the elliptic / quadrature form autonomous reduction produces.  A C[k]
-     * is recognised as a constant (fast decline) and is already the final name (no
-     * rename).  dsolve_renumber_constants applies the shift as one simultaneous pass. */
-    int off = 1;
-    pbody = dsolve_renumber_constants(pbody, n - 1, &off);   /* C[1..n-1] -> C[2..n] */
-    if (ar_expired()) { expr_free(pbody); ar_memo_add(memo_h); return NULL; }
+    const char* xvar  = P->ind_names[0];
+    const char* yname = P->fun_names[0];
+    const char* Ysym  = intern_symbol("DSolve`arY");
 
-    /* Stage-2 quadrature-spin guard.  y' == p(y) is separable with quadrature
-     * Integrate[1/p, y]; for a non-elementary integrand (a Log under a radical, or a
-     * radical of a rational with a y-dependent denominator) Integrate SPINS
-     * uninterruptibly (TimeConstrained cannot preempt it — the 3rd-order reductions
-     * routinely produce such p, e.g. Sqrt[y Log y + ...]).  Decline BEFORE stage 2 in
-     * those cases (fast, no wrong answer).  The order-2 forms that solve are untouched:
-     * a rational p (y y''==(y')^2 -> p = C y) and a constant-denominator radical
-     * (a+b(y')^2 -> p = Sqrt[(C E^(2 b y)-a)/b], the Tan/Tanh case) both pass; the
-     * elliptic order-2 radical (Sqrt of a quartic) passes and fast-declines in stage 2
-     * as before. */
+    /* Stage-2 quadrature-spin guard: y'==p(y) is separable with quadrature
+     * Integrate[1/p,y], which SPINS uninterruptibly for a non-elementary integrand (a
+     * Log under a radical, or a y-denominator radical).  Decline here (fast) -- the
+     * IMPLICIT companion below picks these up and returns the inert first integral.
+     * The order-2 forms that solve are untouched (rational p; constant-denominator
+     * radical; the elliptic quartic passes and fast-declines in stage 2 as before). */
     {
         Expr* den = eval_and_free(ds_call1(SYM_Denominator,
                         ds_call1(SYM_Together, expr_copy(pbody))));
@@ -187,14 +272,11 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
         }
     }
 
-    /* Stage 2: y'[x] == P(y[x]) (autonomous, separable). */
     Expr* pOfY = ds_subst(pbody, expr_new_symbol(Ysym), ds_make_funcapp(yname, 0, xvar));
     Expr* eq2  = expr_new_function(expr_new_symbol(SYM_Equal),
                      (Expr*[]){ ds_make_funcapp(yname, 1, xvar), pOfY }, 2);
     Expr* ybody = run_dsolve_applied(eq2, yname, xvar, (int)(g_ar_deadline - time(NULL)));
     if (!ybody) { ar_memo_add(memo_h); return NULL; }
-
-    /* Reject a degenerate x-independent body. */
     if (ds_free_of(ybody, xvar)) { expr_free(ybody); ar_memo_add(memo_h); return NULL; }
 
     Expr** out = malloc(sizeof(Expr*));
@@ -203,8 +285,44 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
     return out;
 }
 
+/* Implicit companion (M59): where the explicit stage-2 quadrature is non-elementary,
+ * return the first integral Integrate[1/p, y] - x == C[1] with the integral kept INERT
+ * (Inactive[Integrate] -- dodges the uninterruptible Integrate cascade; verified by the
+ * FTC/implicit-function rule).  A numeric self-verify guarantees correctness. */
+Expr** dsolve_autonomous_implicit_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1) return NULL;
+    uint64_t memo_h = expr_hash(P->eq_residuals[0]) ^ 0x9E3779B97F4A7C15ull;
+    ar_memo_sync(eval_toplevel_id());
+    if (ar_memo_seen(memo_h)) return NULL;
+
+    int n = 0;
+    Expr* pbody = ar_reduce(P, &n);
+    if (!pbody) { ar_memo_add(memo_h); return NULL; }
+
+    if (!ar_num_ok(P, pbody, n)) { expr_free(pbody); ar_memo_add(memo_h); return NULL; }
+
+    const char* xvar  = P->ind_names[0];
+    const char* yname = P->fun_names[0];
+    const char* Ysym  = intern_symbol("DSolve`arY");
+
+    /* G = Inactive[Integrate][1/pbody, Ysym] /. Ysym -> y[x]  -  x */
+    Expr* invp = eval_and_free(ds_call2(SYM_Power, pbody, expr_new_integer(-1)));  /* consumes pbody */
+    Expr* inactHead = expr_new_function(expr_new_symbol(SYM_Inactive),
+                          (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+    Expr* integ = expr_new_function(inactHead, (Expr*[]){ invp, expr_new_symbol(Ysym) }, 2);
+    integ = ds_subst(integ, expr_new_symbol(Ysym), ds_make_funcapp(yname, 0, xvar));
+    Expr* G = eval_and_free(ds_call2(SYM_Subtract, integ, expr_new_symbol(xvar)));
+
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = G;
+    *nbranch = 1;
+    return out;
+}
+
 static Expr* builtin_dsolve_autonomous(Expr* res) {
-    return dsolve_method_builtin(res, dsolve_autonomous_try);
+    Expr* r = dsolve_method_builtin(res, dsolve_autonomous_try);
+    if (!r) r = dsolve_method_builtin_implicit(res, dsolve_autonomous_implicit_try);
+    return r;
 }
 
 void dsolve_autonomous_init(void) {

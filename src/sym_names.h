@@ -302,6 +302,8 @@ extern const char* SYM_IntegerString;
 extern const char* SYM_IntegerPart;
 extern const char* SYM_IntegerPartitions;
 extern const char* SYM_Integers;
+extern const char* SYM_Inactive;
+extern const char* SYM_Activate;
 extern const char* SYM_Integrate;
 extern const char* SYM_Intersection;
 extern const char* SYM_Interval;

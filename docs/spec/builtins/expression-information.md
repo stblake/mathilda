@@ -666,6 +666,38 @@ In[7]:= Trace[Nest[f, x, 3], _f]
 Out[7]= {f[f[f[x]]]}
 ```
 
+## Inactive
+Represents a head with evaluation of its own rules suppressed.
+- `Inactive[f]` — an inert form of the head `f`.
+- `Inactive[f][args...]` — evaluates `args` but does NOT fire `f`'s builtin/downvalues, so it stays symbolic.
+
+**Features**:
+- `Protected`.  Inertness is automatic: `Inactive[f][args]` is an unevaluated fixed point of a compound head (the head `Inactive[f]` carries no rule), analogous to `Derivative[n][f][x]`.
+- Chief use: holding an integral inert.  `Inactive[Integrate][g, x]` never runs the integration cascade, so a non-elementary integrand (which would otherwise be expensive or non-terminating) is held instantly.
+- **`D` applies the fundamental theorem of calculus** to an inactive integral WITHOUT evaluating it: `D[Inactive[Integrate][f, u], u]` = `f`.  (A different differentiation variable falls to the ordinary rules; an integrand free of it gives `0`.)  This lets an inert first integral verify by the implicit-function rule with no integration cost.
+- `Activate` reverses it.
+
+```mathematica
+In[1]:= Inactive[Integrate][1/Sqrt[y Log[y] + 3], y]   (* held; no integration *)
+Out[1]= Inactive[Integrate][1/Sqrt[3 + y Log[y]], y]
+
+In[2]:= D[Inactive[Integrate][1/p[y], y], y]
+Out[2]= 1/p[y]
+```
+
+## Activate
+Reactivates inactive forms in `expr` (replaces `Inactive[h]` by `h`) and re-evaluates.
+- `Activate[expr]`
+
+**Features**:
+- `Protected`.
+- Reverses `Inactive`: `Activate[Inactive[Integrate][g, x]]` becomes `Integrate[g, x]` and evaluates.
+
+```mathematica
+In[1]:= Activate[Inactive[Integrate][2 y, y]]
+Out[1]= y^2
+```
+
 ## ReleaseHold
 Removes `Hold`, `HoldForm`, `HoldPattern`, and `HoldComplete` in `expr`.
 - `ReleaseHold[expr]`

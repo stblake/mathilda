@@ -2073,6 +2073,20 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
     /* Derivative[...][f][args...].                                       */
     /* ------------------------------------------------------------------ */
     if (head->type == EXPR_FUNCTION) {
+        /* Fundamental theorem of calculus for an INACTIVE integral:
+         *   D[Inactive[Integrate][f, u], u] = f   (indefinite, u == diff var).
+         * This lets an inert integral (built to dodge Integrate's cost) verify by
+         * the implicit-function rule without ever running the integration cascade.
+         * A different differentiation variable is already handled by the free-of-x
+         * short-circuit above (an x-free inactive integral -> 0). */
+        Expr* ih = head->data.function.head;
+        if (x && head->data.function.arg_count == 1
+            && ih->type == EXPR_SYMBOL && ih->data.symbol.name == SYM_Inactive
+            && head->data.function.args[0]->type == EXPR_SYMBOL
+            && head->data.function.args[0]->data.symbol.name == SYM_Integrate
+            && n == 2 && expr_eq(args[1], x))
+            return expr_copy(args[0]);
+
         Expr* r = deriv_of_derivative_form(f, x, nonconsts);
         if (r) return r;
 

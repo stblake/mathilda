@@ -689,6 +689,23 @@ void core_init(void) {
     symtab_get_def("Evaluate")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ReleaseHold", builtin_releasehold);
     symtab_get_def("ReleaseHold")->attributes |= ATTR_PROTECTED;
+    /* Inactive[h] is an inert wrapper for a head: Inactive[h][args] evaluates its
+     * args but does NOT fire h's rules, so it stays symbolic (an unevaluated
+     * fixed point of a compound head, like Derivative[n][f][x]).  It needs no
+     * evaluation rule -- inertness is automatic -- only registration so it is
+     * official and Protected.  D applies FTC to Inactive[Integrate] (see deriv.c);
+     * Activate re-activates it. */
+    symtab_get_def("Inactive")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Inactive",
+        "Inactive[f] represents f with evaluation of its own rules suppressed, so "
+        "Inactive[f][args] stays unevaluated (its arguments still evaluate).  Used "
+        "to hold an integral inert, e.g. Inactive[Integrate][g, x]; Activate reverses it.");
+    symtab_add_builtin("Activate", builtin_activate);
+    symtab_get_def("Activate")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Activate",
+        "Activate[expr] reactivates every Inactive[h] in expr (replacing Inactive[h] "
+        "by h) and re-evaluates, so an inactive integral Inactive[Integrate][g,x] "
+        "becomes Integrate[g,x] and evaluates.");
     symtab_add_builtin("ToString", builtin_tostring);
     symtab_get_def("ToString")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ToExpression", builtin_toexpression);
@@ -1935,6 +1952,28 @@ Expr* builtin_releasehold(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     return release_hold_recursive(arg);
+}
+
+/* Reactivate: replace the head Inactive[h] -> h throughout, so an inert
+ * Inactive[Integrate][g, x] becomes Integrate[g, x].  The result is re-evaluated
+ * by the caller's fixed-point loop (the reactivated Integrate etc. then run). */
+static Expr* activate_recursive(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Inactive
+        && e->data.function.arg_count == 1)
+        return activate_recursive(e->data.function.args[0]);   /* Inactive[h] -> h */
+    Expr* h = activate_recursive(e->data.function.head);
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) args[i] = activate_recursive(e->data.function.args[i]);
+    Expr* out = expr_new_function(h, args, n);   /* consumes h, args */
+    free(args);
+    return out;
+}
+Expr* builtin_activate(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return activate_recursive(res->data.function.args[0]);
 }
 
 /*

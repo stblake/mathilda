@@ -158,6 +158,7 @@ extern Expr** dsolve_sepreduced_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_autonomous_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch);
@@ -483,6 +484,11 @@ Expr* builtin_dsolve(Expr* res) {
              * two-constant closed form always wins over the one-constant reduction
              * (Cheb-Terrab & Roche 1999, Section 2.2; Maple's `_mu_x_y1` classes). */
             if (!result) result = dsolve_run_first_integral(&P, dsolve_ifactor_first_integral_try);
+            /* AutonomousReduction implicit companion: an autonomous ODE whose reduced
+             * separable quadrature Integrate[1/p,y] is non-elementary is returned as the
+             * inert first integral Inactive[Integrate][1/p, y[x]] - x == C[1] (M59) --
+             * where the explicit autonomous method above declined (spin-guard). */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_autonomous_implicit_try);
             /* implicit first-integral fallback: a homogeneous ODE with no explicit
              * inverse (transcendental log-spiral) is returned as G(x,y[x]) == C[1] */
             if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
@@ -557,7 +563,9 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_SEPREDUCED:   result = dsolve_run_implicit(&P, dsolve_sepreduced_try); break;
         case DS_LINEARIZABLE: result = dsolve_run(&P, dsolve_linearizable_try);  break;
         case DS_LIE:          result = dsolve_run_implicit(&P, dsolve_lie_try);   break;
-        case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);   break;
+        case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);
+                              if (!result) result = dsolve_run_implicit(&P, dsolve_autonomous_implicit_try);
+                              break;
         case DS_LIOUVILLE:    result = dsolve_run(&P, dsolve_liouville_try);    break;
         case DS_IFACTOR:      result = dsolve_run(&P, dsolve_ifactor_try);      break;
         case DS_FIRSTINTEGRAL: result = dsolve_run_first_integral(&P, dsolve_ifactor_first_integral_try); break;

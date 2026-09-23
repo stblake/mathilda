@@ -57,6 +57,7 @@ Expr* builtin_evaluate(Expr* res);
 Expr* builtin_chop(Expr* res);
 Expr* builtin_clip(Expr* res);
 Expr* builtin_releasehold(Expr* res);
+Expr* builtin_activate(Expr* res);
 Expr* builtin_tostring(Expr* res);
 Expr* builtin_toexpression(Expr* res);
 Expr* builtin_symbol(Expr* res);
