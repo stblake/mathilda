@@ -146,6 +146,14 @@ static void test_to_number_field(void) {
                "Sqrt[5]},All][[2]] - Sqrt[5]");
     /* ToNumberField[{a..}, theta]: express each in Q(theta). */
     check_zero("ToNumberField[{1, Sqrt[2]}, Sqrt[2]][[2]] - Sqrt[2]");
+    /* Degree-8 nested-radical compositum: 64-bit field-membership precision is
+     * too low, so ToNumberField escalates precision (degree-gated, only for
+     * degree > 6).  Before the escalation this declined (unevaluated); the guard
+     * is that it now constructs a single theta and preserves value.  (Regression
+     * guard for the P8/P4 degree-16 precision fix.) */
+    check("Head[ToNumberField[{Sqrt[5], Sqrt[1 + Sqrt[5]], Sqrt[1 - Sqrt[5]]}]]", "List");
+    check("Abs[N[ToNumberField[{Sqrt[5], Sqrt[1 + Sqrt[5]], Sqrt[1 - Sqrt[5]]}][[2]] "
+          "- Sqrt[1 + Sqrt[5]], 40]] < 10^-30", "True");
 }
 
 /* ---------------- Field arithmetic ----------------------------------------- */

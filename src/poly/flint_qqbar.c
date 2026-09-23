@@ -713,10 +713,29 @@ static Expr* qqbar_to_expr(const qqbar_t x) {
 /*  Method -> "NumberField": common-number-field re-expression         */
 /* ------------------------------------------------------------------ */
 
+/* Express x in Q(alpha) at escalating working precision.  64 bits resolves
+ * membership for the low-degree fields the tower and dsolve build in the common
+ * case, so a single 64-bit attempt is tried first (unchanged from before).  For
+ * a HIGH-degree conjugate-root compositum (P8's quartic splitting field, degree
+ * 8+), 64 bits is too low and the membership test spuriously fails, declining a
+ * valid field; only there do we escalate 64 -> 256 -> 1024 -> 4096.  The
+ * `qqbar_degree(alpha) > 6` gate keeps the low-degree path byte-for-byte
+ * unchanged — it never escalates — which is what a prior ungated version got
+ * wrong (it regressed dsolve). */
+static int qqbar_express_in_field_esc(fmpq_poly_t res, const qqbar_t alpha,
+                                      const qqbar_t x) {
+    if (qqbar_express_in_field(res, alpha, x, 100000, 0, 64)) return 1;
+    if (qqbar_degree(alpha) <= 6) return 0;   /* common path: no escalation */
+    static const slong precs[3] = { 256, 1024, 4096 };
+    for (int i = 0; i < 3; i++)
+        if (qqbar_express_in_field(res, alpha, x, 100000, 0, precs[i])) return 1;
+    return 0;
+}
+
 /* True if x is expressible in Q(alpha). */
 static int in_field(const qqbar_t x, const qqbar_t alpha) {
     fmpq_poly_t f; fmpq_poly_init(f);
-    int ok = qqbar_express_in_field(f, alpha, x, 100000, 0, 64);
+    int ok = qqbar_express_in_field_esc(f, alpha, x);
     fmpq_poly_clear(f);
     return ok;
 }
@@ -1208,10 +1227,11 @@ Expr* flint_qqbar_algebraic_number(const Expr* gen, const Expr* coeffs) {
     return result;
 }
 
-/* Express x = res(alpha) exactly at the default working precision. */
+/* Express x = res(alpha) exactly, escalating the working precision for a
+ * high-degree compositum (see qqbar_express_in_field_esc). */
 static int qqbar_express_in_field_retry(fmpq_poly_t res, const qqbar_t alpha,
                                         const qqbar_t x) {
-    return qqbar_express_in_field(res, alpha, x, 100000, 0, 64);
+    return qqbar_express_in_field_esc(res, alpha, x);
 }
 
 Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* theta) {

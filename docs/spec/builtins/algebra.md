@@ -279,7 +279,12 @@ The `ai` and `theta` may be rationals, radicals, `Root`, or `AlgebraicNumber`
 objects. When `theta` is an algebraic integer the result is given in terms of
 `AlgebraicNumber[theta, ...]`; when the field is `Q` the plain rational is
 returned. Attribute: `Protected` (not `Listable` — the list form defines a
-common field over the whole list). Backed by FLINT's `qqbar` engine.
+common field over the whole list). Backed by FLINT's `qqbar` engine. Membership
+in the common field is tested at 64-bit working precision, escalating to
+256/1024/4096 bits for a high-degree (> 6) compositum where 64 bits cannot
+resolve membership — so a high-degree conjugate-root or nested-radical compositum
+(e.g. `Q(√5, √(1+√5), √(1-√5))`, the splitting field of a quartic) constructs a
+single generator instead of declining.
 
 ```
 In[1]:= ToNumberField[Sqrt[2], 2^(1/4)]
