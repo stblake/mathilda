@@ -2106,6 +2106,36 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     elimination to an implicit `Φ(x,y)=0`; the `y⁽ⁿ⁾`-solvable higher-order generalization; the
     radical / degree-≥4 bucket cases needing `Root`-object handling.
 
+- **M58 — higher-order autonomous reduction (missing-x, order n ≥ 3).** ✅ DONE.
+  Lifted `DSolve`AutonomousReduction` (`dsolve_autonomous.c`) from order-2-only to any
+  order n ≥ 2, completing the missing-x / missing-y reduction pair (the missing-y half at
+  order 3+ was already `LowerDerivativeReduction`). For `y⁽ⁿ⁾ == f(y,…,y⁽ⁿ⁻¹⁾)` (no explicit
+  x), the derivative chain `D₁=p, D_{k+1}=p·d/dy(D_k)` (`y''=p·p_y`, `y'''=p²·p_yy+p·p_y²`, …)
+  turns the ODE into an **(n−1)-order ODE in p(y)**, solved by recursion, then the separable
+  `y'==p(y)` closes it. Constants `C[1..n−1]` from stage 1 are frozen to `C[2..n]` via
+  `dsolve_renumber_constants` before stage 2 mints its fresh `C[1]`. For n=2 the chain
+  reproduces the classical `p·p_y == f(y,p)` exactly (order-2 behavior unchanged; the
+  Tan/Tanh and exponential families still solve, the elliptic case still declines).
+  - **Zero cascade/wiring changes** (the method was already registered); the change is
+    confined to `dsolve_autonomous.c` internals + reuse of `dsolve_renumber_constants`.
+  - **Stage-2 is the yield gate.** Stage 1 (the reduction) always closes, but the separable
+    stage-2 quadrature `∫dy/p(y)` is **non-elementary for most order-3 corpus cases** (a
+    `Sqrt` of a `Log`, a high-degree/hyperelliptic radicand, or a rational-under-radical),
+    and Integrate SPINS uninterruptibly on those (`TimeConstrained` cannot preempt it). A
+    **stage-2 spin-guard** declines before that spin — when `p` carries a `Log` or a
+    y-dependent denominator — keeping the elementary-quadrature cases (`y y'''==y'y''` →
+    `p=Sqrt[C₁y²+C₂]`, elementary) and the order-2 forms. A per-top-level decline memo +
+    a 5 s wall-clock deadline bound the recursion.
+  - **Yield:** §2.1.2 clean re-run **590 → 591 (deterministic +1), 0 FAIL** (`1143`
+    `y y'''==y'y''`); the other Group-A autonomous 3rd-order cases (263/264/267/268/1167/1168)
+    reduce correctly but their stage-2 quadrature is non-elementary, so they decline (matching
+    what an elementary-quadrature engine can do). The net P↔U movements are the
+    `_with_linear_symmetries` timing cluster oscillating. Gate baseline 629 → 628. The capability
+    is nonetheless real — Mathilda solved NO 3rd+ order autonomous ODE before, and future Integrate
+    improvements extend the set automatically. Version 0.173 → 0.174. *Future (the big lever):* return the **implicit first integral** `∫dy/p(y)==x+C`
+    (inert quadrature, verified by implicit differentiation) for non-elementary stage-2, which
+    would unlock the full Group-A (~+7) — matching Mathematica — and is a substrate-level task.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -2416,10 +2446,19 @@ recursive sub-solves.
   `y=const` is still rejected) so it declines instead of shipping a degenerate
   solution. Solves `y''==(y')^2`, the autonomous `a+b(y')^2` (→ Tan/Tanh), and the
   Riccati-in-p `c x (y')^2` families.
-- `[✓] AutonomousReduction` — `y''==f(y,y')` missing `x`: `p=y'(y)`, `p p'(y)==f`
-  (recurse), then `y'==p(y)` separable (recurse), constants renumbered across the
-  two stages; final body required to depend on `x` (rejects the degenerate
-  `y=const` that trivially back-substitutes). Solves `y y''==(y')^2 → C[2] E^(C[1] x)`.
+- `[✓] AutonomousReduction` — `y⁽ⁿ⁾==f(y,y',…,y⁽ⁿ⁻¹⁾)` missing `x`, **any order n ≥ 2**
+  (M58): `p=y'(y)`, the derivative chain `D_{k+1}=p·d/dy(D_k)` reduces to an
+  order-(n−1) ODE in `p(y)` (recurse), then `y'==p(y)` separable (recurse); stage-1
+  constants `C[1..n−1]` frozen to `C[2..n]` (via `dsolve_renumber_constants`) before
+  stage 2; final body required to depend on `x` (rejects the degenerate `y=const`).
+  For n=2 this is the classical `p p_y==f` (`y y''==(y')² → C E^(C x)`). A stage-2
+  spin-guard declines when `∫dy/p` would be non-elementary (a `Log`- or y-denominator
+  radicand — Integrate spins uninterruptibly there). Solves the 3rd-order
+  `y y'''==y'y''` (`p=Sqrt[C₁y²+C₂]`); the elliptic/hyperelliptic 3rd-order cases
+  reduce but decline (non-elementary quadrature). See M58.
+- `[~] EnergyIntegral` — `y''==f(y)`: subsumed by AutonomousReduction for the
+  elementary cases (`f` free of `y'` is a special case); genuinely elliptic ones
+  (`y''==2y^3`, `y''==-Sin[y]`) still decline (`WeierstrassP` inert head: future).
 - `[~] EnergyIntegral` — `y''==f(y)`: subsumed by AutonomousReduction for the
   elementary cases (`f` free of `y'` is a special case); genuinely elliptic ones
   (`y''==2y^3`, `y''==-Sin[y]`) still decline (`WeierstrassP` inert head: future).

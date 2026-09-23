@@ -3203,6 +3203,10 @@ add_executable(dsolve_m57_stress_tests test_dsolve_m57_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m57_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m57_stress_tests COMMAND dsolve_m57_stress_tests)
 
+add_executable(dsolve_m58_stress_tests test_dsolve_m58_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m58_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m58_stress_tests COMMAND dsolve_m58_stress_tests)
+
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)
 
@@ -3775,16 +3779,18 @@ else()
 endif()
 # Per-section dashboards.  argv = <corpus> <prelude> <baseline>.  Baselines are
 # the checked-in high-water marks recorded in DSolve_test_status/STATUS.md.
-# Baseline 629 (M57 SolvableForY / SolvableForX -- the y=G(x,y') differentiation method).
-# Clean re-run 590 PASS / 614 non-PASS, 0 FAIL (up from 585/619).  DETERMINISTIC M57 gain is
-# +2: 347 (y=_G(x,y')) and 352 (_with_symmetry_[F(x),G(y)]) now solve via SolvableForY; the
-# other +3 of the +5 is the documented _with_linear_symmetries timing cluster (2nd/high-order
-# cases M57 declines instantly) oscillating.  Baseline lowered by the +2 deterministic gain;
-# +12 margin kept for the timing cluster (58/79/80/94/375/592/799/983/1001) that flips P<->U.
+# Baseline 628 (M58 higher-order autonomous reduction -- AutonomousReduction lifted to any
+# order n>=2).  Clean re-run 591 PASS / 613 non-PASS, 0 FAIL (up from 590/614).  DETERMINISTIC
+# M58 gain is +1: 1143 (3rd_order, missing_x, y y'''==y'y'') now solves via the lifted
+# AutonomousReduction (reduced p=Sqrt[C1 y^2+C2] -> elementary stage-2 quadrature).  The other
+# order-3 autonomous cases reduce but their stage-2 quadrature is non-elementary and decline.
+# Net movements 79/80/94 gained, 58/161/1001 lost are all the _with_linear_symmetries timing
+# cluster (2nd/high-order) oscillating.  Baseline lowered by the +1 deterministic gain; margin
+# kept for the timing cluster (58/79/80/94/161/375/592/799/983/1001) that flips P<->U by load.
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 629)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 628)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
 # verifies the ODE residual AND every initial condition (M21).  Baseline 2
