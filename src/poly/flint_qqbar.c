@@ -1410,7 +1410,13 @@ Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
         fmpz_clear(lc);
         slong nn = qqbar_degree(phi);
 
-        Expr** items = malloc(sizeof(Expr*) * n);
+        /* calloc, not malloc: the loop below stops early on the first
+         * express-in-field miss (`&& good`), so items[j+1 .. n-1] are never
+         * assigned.  The error-path cleanup frees every non-NULL entry, so an
+         * uninitialised tail would free wild pointers -- a heap corruption that
+         * surfaced as a SEGV under ASan and as non-deterministic wrong numerics
+         * (a later Root/AlgebraicNumber reading corrupted memory) in batch runs. */
+        Expr** items = calloc(n, sizeof(Expr*));
         int good = 1;
         for (size_t i = 0; i < n && good; i++) {
             fmpq_poly_t f; fmpq_poly_init(f);
