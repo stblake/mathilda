@@ -397,7 +397,7 @@ static int ekset_contains(const EKSet* t, int ia, int ib, int directed) {
  * many graphs are kept alive past their last user reference. Module-static
  * with no locking, following the g_qqbar_cache precedent (flint_qqbar.c).
  * Only valid graphs are memoized: an invalid one is re-checked every call. */
-#define GRAPH_MEMO_SLOTS 4
+#define GRAPH_MEMO_SLOTS 8
 
 typedef struct {
     Expr*      g;       /* owned reference; NULL = empty slot                 */
@@ -442,9 +442,42 @@ static GraphMemo* graph_memo_insert(const Expr* g, GraphVIdx* ix, EKSet ek, size
 
 /* The memo entry for g, validating (and memoizing) it on a miss. NULL iff g is
  * not a valid graph (or validation could not allocate). */
+/* True iff a and b are Graph nodes with the same arity whose arguments are the
+ * very same nodes (pointer-equal) -- i.e. b is a fresh wrapper around a's
+ * parts, which is what the evaluator hands a builtin when it re-evaluates a
+ * stored graph (or the constructor's result) without changing any argument. */
+static int same_graph_parts(const Expr* a, const Expr* b) {
+    if (!a || !b || a->type != EXPR_FUNCTION || b->type != EXPR_FUNCTION) return 0;
+    size_t n = a->data.function.arg_count;
+    if (n != b->data.function.arg_count
+        || a->data.function.head->type != EXPR_SYMBOL
+        || b->data.function.head->type != EXPR_SYMBOL
+        || a->data.function.head->data.symbol.name != b->data.function.head->data.symbol.name)
+        return 0;
+    for (size_t i = 0; i < n; i++)
+        if (a->data.function.args[i] != b->data.function.args[i]) return 0;
+    return 1;
+}
+
 static const GraphMemo* graph_memo(const Expr* g) {
     for (int i = 0; i < GRAPH_MEMO_SLOTS; i++)
         if (g_graph_memo[i].g == g) return &g_graph_memo[i];
+
+    /* A fresh wrapper around a memoized graph's own argument nodes: re-key the
+     * entry to the new node instead of re-validating (which cost ~58 ms for a
+     * 5x10^5-edge graph on every use of a variable holding it, and burned a
+     * second slot per constructed graph). Sound: the vertex/edge Lists are the
+     * same nodes, now kept alive by the new wrapper's reference, so the index
+     * keys and every cached answer still describe it exactly. */
+    for (int i = 0; i < GRAPH_MEMO_SLOTS; i++) {
+        GraphMemo* m = &g_graph_memo[i];
+        if (m->g && same_graph_parts(m->g, g)) {
+            Expr* old = m->g;
+            m->g = expr_copy((Expr*)g);   /* refcount bump only; see graph_memo_insert */
+            expr_free(old);
+            return m;
+        }
+    }
 
     if (!graph_shape_ok(g)) return NULL;
     const Expr* verts = g->data.function.args[0];

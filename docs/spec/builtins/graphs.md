@@ -48,7 +48,7 @@ Keying on the node pointer is sound because the memo holds a reference: a
 referenced node can't be freed (so its address can't be reused), and a node with
 more than one reference is immutable (mutators `expr_unshare` first). A
 structurally equal graph at a different address just misses and is validated
-again. The memo keeps at most 4 graphs alive past their last user reference.
+again. The memo keeps at most 8 graphs alive past their last user reference. A fresh wrapper node around a memoized graph's own argument Lists (what the evaluator produces when re-evaluating a stored graph) re-keys the entry instead of re-validating.
 
 ## Graph
 A graph value.

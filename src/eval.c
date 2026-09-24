@@ -171,7 +171,8 @@ static inline bool eval_fixed_point_reusable(const Expr* e) {
 uint64_t eval_node_stamp(const Expr* e)   { return e ? eval_stamp_of(e) : 0; }
 bool     eval_node_is_ground(const Expr* e) { return e ? eval_ground_of(e) : false; }
 
-/* The six pure structural constructors. Their canonical form is a total,
+/* The pure structural constructors (six generic ones plus the graph value
+ * heads). Their canonical form is a total,
  * side-effect-free function of their arguments -- they read no mutable global
  * state -- so a fixed point built only from these heads over literal leaves is
  * immutable until one of the heads is itself redefined (which advances the rule
@@ -183,7 +184,14 @@ static inline bool ground_head(const Expr* h) {
     if (!h || h->type != EXPR_SYMBOL) return false;
     const char* n = h->data.symbol.name;
     return n == SYM_List || n == SYM_Association || n == SYM_Rule
-        || n == SYM_RuleDelayed || n == SYM_Complex || n == SYM_Rational;
+        || n == SYM_RuleDelayed || n == SYM_Complex || n == SYM_Rational
+        /* Graph values. DirectedEdge/UndirectedEdge are inert; Graph's builtin
+         * is a pure function of its arguments (it validates, and its memo is a
+         * cache of that function), so an evaluated graph stays a fixed point
+         * across OwnValue churn. Without these, every assignment made the next
+         * use of a stored 5x10^5-edge graph re-walk it (~34 ms). A weighted
+         * graph's bare EdgeWeight symbol is not ground, so it is not marked. */
+        || n == SYM_Graph || n == SYM_DirectedEdge || n == SYM_UndirectedEdge;
 }
 /* Is `a` ground *right now*? For a FUNCTION we trust its cached bit only if it
  * is still valid (eval_ground_valid); atoms are decided structurally. This is
