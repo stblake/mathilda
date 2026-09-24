@@ -18,6 +18,7 @@
 #include "graph.h"
 #include "expr.h"
 #include "sym_names.h"
+#include "graph_hyper.h"
 #include <stdlib.h>
 
 enum { DEG_TOTAL, DEG_IN, DEG_OUT };
@@ -50,7 +51,8 @@ static Expr* degree_dispatch(Expr* res, int mode) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
     const Expr* g = res->data.function.args[0];
-    if (!graph_is_valid(g)) return NULL;
+    if (!graph_is_valid(g))   /* a Hypergraph has only total degree */
+        return mode == DEG_TOTAL ? hyp_vertex_degree(res) : NULL;
     const Expr* verts = g->data.function.args[0];
 
     if (argc == 2) {
