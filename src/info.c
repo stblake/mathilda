@@ -1412,7 +1412,13 @@ void info_init(void) {
         "\t  \"OneStepRowReduction\"       — classical Gauss-Jordan with division per pivot\n"
         "\t  \"CofactorExpansion\"         — identity-if-invertible via Laplace cofactor\n"
         "\t                                 Det[m] (singular / rectangular m falls back\n"
-        "\t                                 to \"DivisionFreeRowReduction\")");
+        "\t                                 to \"DivisionFreeRowReduction\")\n"
+        "RowReduce[m, ZeroTest -> f]\n"
+        "\tuses the predicate f to decide when an entry is zero during the\n"
+        "\treduction (an entry is zero iff f[entry] is True).  Both a body\n"
+        "\tsuch as (RootReduce[Together[#]] === 0 &) and a predicate head\n"
+        "\tsuch as PossibleZeroQ are accepted; use it to catch algebraic\n"
+        "\tzeros a structural test would miss.  May be combined with Method.");
     symtab_set_docstring("LatticeReduce",
         "LatticeReduce[m]\n"
         "\tgives an LLL-reduced basis for the lattice spanned by the rows\n"

@@ -334,6 +334,77 @@ Expr* matsol_div_entry(Expr* num, Expr* den) {
 }
 
 /* ------------------------------------------------------------------
+ * ZeroTest option, shared by RowReduce and NullSpace.
+ * ------------------------------------------------------------------ */
+
+Expr* matsol_parse_zerotest_option(Expr* opt) {
+    if (!opt || opt->type != EXPR_FUNCTION) return NULL;
+    Expr* h = opt->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return NULL;
+    if ((h->data.symbol.name != SYM_Rule && h->data.symbol.name != SYM_RuleDelayed)
+        || opt->data.function.arg_count != 2) return NULL;
+    Expr* lhs = opt->data.function.args[0];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_ZeroTest) return NULL;
+    return opt->data.function.args[1];
+}
+
+int matsol_zt_is_zero(Expr* e, Expr* zt) {
+    if (!zt) return is_zero_poly(e);
+    Expr** a = malloc(sizeof(Expr*));
+    a[0] = expr_copy(e);
+    Expr* call = expr_new_function(expr_copy(zt), a, 1);
+    free(a);
+    Expr* r = eval_and_free(call);
+    int z = (r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True);
+    expr_free(r);
+    return z;
+}
+
+void matsol_rref_with_zerotest(Expr** flat, int rows, int cols, Expr* zt) {
+    int pr = 0;
+    for (int c = 0; c < cols && pr < rows; c++) {
+        int piv = -1;
+        for (int i = pr; i < rows; i++)
+            if (!matsol_zt_is_zero(flat[i * cols + c], zt)) { piv = i; break; }
+        if (piv < 0) continue;
+        if (piv != pr)
+            for (int j = 0; j < cols; j++) {
+                Expr* t = flat[pr * cols + j];
+                flat[pr * cols + j] = flat[piv * cols + j];
+                flat[piv * cols + j] = t;
+            }
+        /* scale the pivot row so the pivot becomes 1 (matsol_div_entry copies) */
+        Expr* pivv = expr_copy(flat[pr * cols + c]);
+        for (int j = 0; j < cols; j++) {
+            Expr* nv = matsol_div_entry(flat[pr * cols + j], pivv);
+            expr_free(flat[pr * cols + j]);
+            flat[pr * cols + j] = nv;
+        }
+        expr_free(pivv);
+        /* eliminate the pivot column from every other row */
+        for (int i = 0; i < rows; i++) {
+            if (i == pr) continue;
+            if (matsol_zt_is_zero(flat[i * cols + c], zt)) continue;
+            Expr* f = expr_copy(flat[i * cols + c]);
+            for (int j = 0; j < cols; j++) {
+                Expr* prod = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                (Expr*[]){ expr_copy(f), expr_copy(flat[pr * cols + j]) }, 2));
+                Expr* neg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                (Expr*[]){ expr_new_integer(-1), prod }, 2));
+                Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus),
+                                (Expr*[]){ expr_copy(flat[i * cols + j]), neg }, 2);
+                Expr* nv = matsol_canon_entry(diff);
+                expr_free(diff);
+                expr_free(flat[i * cols + j]);
+                flat[i * cols + j] = nv;
+            }
+            expr_free(f);
+        }
+        pr++;
+    }
+}
+
+/* ------------------------------------------------------------------
  * RowReduce -- OneStepRowReduction (textbook Gauss-Jordan with division)
  *
  * Per pivot:
@@ -1074,14 +1145,19 @@ Expr* builtin_rowreduce(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     size_t argc = res->data.function.arg_count;
-    if (argc < 1 || argc > 2) return NULL;
+    if (argc < 1) return NULL;
 
     Expr* arg = res->data.function.args[0];
 
+    /* Options after the matrix: Method -> "<name>" and/or ZeroTest -> f. */
     MatsolMethod method = MATSOL_AUTOMATIC;
-    if (argc == 2) {
-        method = matsol_parse_method_option(res->data.function.args[1]);
-        if (method == MATSOL_INVALID) {
+    Expr* zt = NULL;   /* borrowed from res */
+    for (size_t k = 1; k < argc; k++) {
+        Expr* opt = res->data.function.args[k];
+        Expr* zf = matsol_parse_zerotest_option(opt);
+        if (zf) { zt = zf; continue; }
+        MatsolMethod mm = matsol_parse_method_option(opt);
+        if (mm == MATSOL_INVALID) {
             static uint64_t last_warned = 0;
             matsol_warn_once(&last_warned, res,
                 "RowReduce::method: Method option value is not one of "
@@ -1089,6 +1165,31 @@ Expr* builtin_rowreduce(Expr* res) {
                 "\"OneStepRowReduction\", \"CofactorExpansion\".\n");
             return NULL;
         }
+        method = mm;
+    }
+
+    /* A ZeroTest runs an exact Gauss-Jordan RREF that consults the predicate for
+     * every zero decision (honouring the explicit option over the fast paths). */
+    if (zt) {
+        int64_t dims[64];
+        if (get_tensor_dims(arg, dims) != 2 || dims[0] == 0 || dims[1] == 0)
+            return expr_copy(arg);
+        int m = (int)dims[0], n = (int)dims[1];
+        Expr** flat = malloc(sizeof(Expr*) * (size_t)m * (size_t)n);
+        size_t idx = 0;
+        flatten_tensor(arg, flat, &idx);
+        matsol_rref_with_zerotest(flat, m, n, zt);
+        Expr** rows = malloc(sizeof(Expr*) * (size_t)m);
+        for (int i = 0; i < m; i++) {
+            Expr** el = malloc(sizeof(Expr*) * (size_t)n);
+            for (int j = 0; j < n; j++) el[j] = flat[i * n + j];
+            rows[i] = expr_new_function(expr_new_symbol(SYM_List), el, (size_t)n);
+            free(el);
+        }
+        free(flat);
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)m);
+        free(rows);
+        return out;
     }
 
     if (method == MATSOL_AUTOMATIC) method = matsol_resolve_automatic(arg);

@@ -90,11 +90,32 @@ static void test_idempotent(void) {
         "True", 0);
 }
 
+/* RowReduce[m, ZeroTest -> f]: f a predicate (RootReduce-based body or a head
+ * such as PossibleZeroQ), consulted for every zero decision.  Shares the
+ * machinery with NullSpace (matsol_rref_with_zerotest). */
+static void test_rowreduce_zerotest(void) {
+    assert_eval_eq("RowReduce[{{2, 3}, {4, 6}}, ZeroTest -> PossibleZeroQ]",
+                   "{{1, 3/2}, {0, 0}}", 0);
+    assert_eval_eq(
+        "RowReduce[{{2, 3}, {4, 6}}, ZeroTest -> (RootReduce[Together[#]] === 0 &)]",
+        "{{1, 3/2}, {0, 0}}", 0);
+    /* algebraic rank deficiency (row2 = Sqrt[2]*row1) */
+    assert_eval_eq(
+        "RowReduce[{{1, Sqrt[2]}, {Sqrt[2], 2}}, ZeroTest -> PossibleZeroQ]",
+        "{{1, Sqrt[2]}, {0, 0}}", 0);
+    /* Method and ZeroTest combined */
+    assert_eval_eq(
+        "RowReduce[{{2, 3}, {4, 6}}, Method -> \"OneStepRowReduction\", "
+        "ZeroTest -> PossibleZeroQ]",
+        "{{1, 3/2}, {0, 0}}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_rational_unchanged);
+    TEST(test_rowreduce_zerotest);
     TEST(test_q_sqrt2);
     TEST(test_q_i);
     TEST(test_cubic_field);

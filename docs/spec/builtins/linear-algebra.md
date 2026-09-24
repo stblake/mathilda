@@ -983,6 +983,7 @@ Out[10]= {{1/25}}
 Gives the row-reduced form of the matrix `m`.
 - `RowReduce[m]`
 - `RowReduce[m, Method -> "<name>"]`
+- `RowReduce[m, ZeroTest -> f]`
 
 **Features**:
 - `Protected`.
@@ -994,6 +995,7 @@ Gives the row-reduced form of the matrix `m`.
   - `Method -> "DivisionFreeRowReduction"` — Bareiss-like fraction-free Gauss-Jordan. Best for exact integer / rational / symbolic input — never produces a denominator larger than necessary.
   - `Method -> "OneStepRowReduction"` — classical Gauss-Jordan with one division per pivot per element. Each entry is canonicalised via `Together` so symbolic cancellations are still detected. Fast on numeric matrices.
   - `Method -> "CofactorExpansion"` — for a non-singular square matrix, returns the identity (verified via `Det[m] != 0` computed by Laplace cofactor expansion). On singular or rectangular input, falls back to `"DivisionFreeRowReduction"` and emits `RowReduce::cofnsq`.
+- `ZeroTest -> f` supplies a predicate deciding when an entry is zero during the reduction (zero iff `f[entry]` is `True`). Both a body such as `(RootReduce[Together[#]] === 0 &)` and a predicate head such as `PossibleZeroQ` are accepted. With a `ZeroTest`, an exact Gauss-Jordan RREF consults the predicate at every pivot (a structural RREF would pivot on an algebraic zero the predicate rejects) and keeps entries canonical via `Together`. Shares the machinery with `NullSpace` (`matsol_rref_with_zerotest`); `Method` and `ZeroTest` may be combined.
 - Unknown method names emit `RowReduce::method` and the call remains unevaluated.
 
 ```mathematica

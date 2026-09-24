@@ -68,6 +68,26 @@ Expr* matsol_canon_entry(Expr* e);
  * -1]] then Together-canonicalises. */
 Expr* matsol_div_entry(Expr* num, Expr* den);
 
+/* ZeroTest option (shared by RowReduce and NullSpace).
+ *
+ * RowReduce[m, ZeroTest -> f] / NullSpace[m, ZeroTest -> f]: f is a predicate
+ * applied to each entry; the entry counts as zero iff TrueQ[f[entry]].  Both a
+ * body (RootReduce[Together[#]] === 0 &) and a predicate head (PossibleZeroQ)
+ * work. */
+
+/* Extract a `ZeroTest -> f` rule: returns f (borrowed from `opt`) or NULL. */
+Expr* matsol_parse_zerotest_option(Expr* opt);
+
+/* Zero test for an entry: default (zt == NULL) is the structural is_zero_poly;
+ * with a predicate, zero iff TrueQ[zt[e]].  `zt` and `e` are borrowed. */
+int matsol_zt_is_zero(Expr* e, Expr* zt);
+
+/* In-place exact reduced row echelon form of the row-major flat[rows*cols]
+ * (owned Exprs), consulting `zt` for every zero decision and keeping each
+ * updated entry canonical via Together.  A structural RowReduce would pivot on
+ * an algebraic zero the predicate rejects, so the reduction itself uses zt. */
+void matsol_rref_with_zerotest(Expr** flat, int rows, int cols, Expr* zt);
+
 Expr* builtin_rowreduce(Expr* res);
 Expr* builtin_linearsolve(Expr* res);
 void  matsol_init(void);
