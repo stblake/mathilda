@@ -72,6 +72,16 @@ static void test_edge_add_delete(void) {
     assert_eval_eq("Head[EdgeDelete[" G4 ", {1<->2, 9<->10}]]", "EdgeDelete", 0);
     assert_eval_eq("Head[EdgeDelete[" D3 ", 2->1]]", "EdgeDelete", 0);
     assert_eval_eq("Head[EdgeDelete[" G4 ", 1->2]]", "EdgeDelete", 0);
+
+    /* Lists mixing literal items and patterns are classified per item
+     * (values from Mathematica 15). A whole-list pattern gate used to delete
+     * nothing from EdgeDelete and leave VertexDelete unevaluated. */
+    assert_eval_eq("gv[EdgeDelete[" G4 ", {UndirectedEdge[1,2], _[3,4]}]]",
+                   "{{1, 2, 3, 4}, {2 <-> 3}}", 0);
+    assert_eval_eq("gv[EdgeDelete[" G4 ", {_[3,4]}]]", "{{1, 2, 3, 4}, {1 <-> 2, 2 <-> 3}}", 0);
+    assert_eval_eq("gv[VertexDelete[" G4 ", {1, _?(# > 3 &)}]]", "{{2, 3}, {2 <-> 3}}", 0);
+    assert_eval_eq("gv[VertexDelete[" G4 ", {_?EvenQ}]]", "{{1, 3}, {}}", 0);
+    assert_eval_eq("Head[EdgeDelete[" G4 ", {1<->2, _[3,4], foo}]]", "EdgeDelete", 0);
 }
 
 static void test_subgraph_neighborhood(void) {

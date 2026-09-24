@@ -162,10 +162,16 @@ Expr* builtin_vertex_delete(Expr* res) {
     if (p >= 0) {
         vkeep[p] = 0;
     } else if (graph_is_list(arg)) {
+        /* Per item, as Mathematica: a literal vertex, or a pattern matched
+         * against every vertex -- VertexDelete[g, {1, _?(# > 3 &)}]. */
+        Expr* const* vs = g->data.function.args[0]->data.function.args;
         for (size_t i = 0; i < arg->data.function.arg_count; i++) {
-            int q = graph_vertex_position(g, arg->data.function.args[i]);
-            if (q < 0) { free(vkeep); return NULL; }        /* not a vertex */
-            vkeep[q] = 0;
+            Expr* item = arg->data.function.args[i];
+            int q = graph_vertex_position(g, item);
+            if (q >= 0) { vkeep[q] = 0; continue; }
+            if (!gops_has_pattern(item)) { free(vkeep); return NULL; }   /* not a vertex */
+            for (size_t k = 0; k < nv; k++)
+                if (gops_matchq(vs[k], item)) vkeep[k] = 0;
         }
     } else if (gops_has_pattern(arg)) {
         Expr* const* vs = g->data.function.args[0]->data.function.args;
@@ -305,36 +311,49 @@ Expr* builtin_edge_delete(Expr* res) {
     Expr* arg = res->data.function.args[1];
     if (!graph_is_valid(g)) return NULL;
     const Expr *a, *b;
-    int is_patt = 0;
     size_t ni = 0;
     Expr* const* items = NULL;
-    if (gops_has_pattern(arg)) is_patt = 1;
-    else if (gops_parse_edge(arg, &a, &b) >= 0) { items = &res->data.function.args[1]; ni = 1; }
-    else if (graph_is_list(arg)) items = gops_items(&res->data.function.args[1], &ni);
-    else return NULL;
+    if (graph_is_list(arg)) items = gops_items(&res->data.function.args[1], &ni);
+    else if (gops_has_pattern(arg) || gops_parse_edge(arg, &a, &b) >= 0) {
+        items = &res->data.function.args[1]; ni = 1;
+    } else return NULL;
 
+    /* Classify per item, as Mathematica does for EdgeDelete[g, {1<->2, _[3,4]}]:
+     * a pattern is matched against every edge; anything else must be a literal
+     * edge of g. (Gating on the whole list containing a pattern used to match
+     * each edge against the List itself, silently deleting nothing.) */
     size_t ne = g->data.function.args[1]->data.function.arg_count;
     unsigned char* ekeep = gops_malloc(ne, 1);
-    if (!ekeep) return NULL;
+    Expr** lits = gops_malloc(ni, sizeof(Expr*));
+    if (!ekeep || !lits) { free(ekeep); free(lits); return NULL; }
     memset(ekeep, 1, ne > 0 ? ne : 1);
-    if (is_patt) {
-        Expr* const* es = g->data.function.args[1]->data.function.args;
-        for (size_t k = 0; k < ne; k++)
-            if (gops_matchq(es[k], arg)) ekeep[k] = 0;
+    size_t nl = 0;
+    Expr* const* es = g->data.function.args[1]->data.function.args;
+    for (size_t i = 0; i < ni; i++) {
+        if (gops_has_pattern(items[i])) {
+            for (size_t k = 0; k < ne; k++)
+                if (gops_matchq(es[k], items[i])) ekeep[k] = 0;
+        } else {
+            lits[nl++] = items[i];
+        }
     }
 
+    /* Pattern matching may evaluate arbitrary code, so take the view last. */
     GopsView v;
-    if (!gops_view(g, &v)) { free(ekeep); return NULL; }
-    if (!is_patt) {
-        int* idx = gops_malloc(ni, sizeof(int));
-        if (!idx || !resolve_edges(&v, items, ni, idx, 0)) { free(idx); free(ekeep); return NULL; }
-        for (size_t i = 0; i < ni; i++) {
-            if (idx[i] < 0) { free(idx); free(ekeep); return NULL; }   /* not an edge */
+    if (!gops_view(g, &v)) { free(lits); free(ekeep); return NULL; }
+    if (nl > 0) {
+        int* idx = gops_malloc(nl, sizeof(int));
+        if (!idx || !resolve_edges(&v, lits, nl, idx, 0)) {
+            free(idx); free(lits); free(ekeep); return NULL;
+        }
+        for (size_t i = 0; i < nl; i++) {
+            if (idx[i] < 0) { free(idx); free(lits); free(ekeep); return NULL; }   /* not an edge */
             ekeep[idx[i]] = 0;
         }
         free(idx);
-        if (!gops_view(g, &v)) { free(ekeep); return NULL; }
+        if (!gops_view(g, &v)) { free(lits); free(ekeep); return NULL; }
     }
+    free(lits);
     unsigned char* vkeep = gops_malloc(v.nv, 1);
     if (!vkeep) { free(ekeep); return NULL; }
     memset(vkeep, 1, v.nv > 0 ? v.nv : 1);

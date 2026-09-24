@@ -48,7 +48,10 @@ Keying on the node pointer is sound because the memo holds a reference: a
 referenced node can't be freed (so its address can't be reused), and a node with
 more than one reference is immutable (mutators `expr_unshare` first). A
 structurally equal graph at a different address just misses and is validated
-again. The memo keeps at most 8 graphs alive past their last user reference. A fresh wrapper node around a memoized graph's own argument Lists (what the evaluator produces when re-evaluating a stored graph) re-keys the entry instead of re-validating.
+again. The memo keeps at most 8 graphs alive past their last user reference
+(plus up to 4 more held by the incidence cache behind `FindCycle`/`FindPath`/
+`FindEulerianCycle`, one per traversal mode); each is released as soon as its
+slot is reused. A fresh wrapper node around a memoized graph's own argument Lists (what the evaluator produces when re-evaluating a stored graph) re-keys the entry instead of re-validating.
 
 ## Graph
 A graph value.
@@ -567,6 +570,9 @@ Undirected on `1..N`; the edge list is the sorted list of pairs `{i, j}`,
   is `K_n`). `CompleteGraph` and `GraphDistance` are re-registered by wrappers
   that delegate their pre-existing forms to the original builtins.
 - Options (`DirectedEdges`, layout options) are not supported.
+- Resource limits: a family with more than 10^8 vertices or 5×10^7 edges is
+  left unevaluated rather than allocating gigabytes (e.g.
+  `GridGraph[Table[2, {26}]]`, ~8.7×10^8 edges).
 
 ### Algorithms and performance
 

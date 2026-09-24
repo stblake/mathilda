@@ -36,8 +36,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Resource caps. Every family builds its edges through pairs_add, which
+ * refuses past GEN_MAX_EDGES, so no generator can be driven into multi-GB
+ * allocations by a tiny call such as GridGraph[Table[2, {26}]] (67M vertices,
+ * ~870M edges): the call is left unevaluated instead. 5x10^7 edges bounds the
+ * key buffer at 400 MB. */
 #define GEN_MAX_VERTICES 100000000LL
-#define GEN_MAX_EDGES    200000000LL
+#define GEN_MAX_EDGES     50000000LL
 
 /* ---- pair accumulator ------------------------------------------------------ */
 
@@ -45,6 +50,7 @@ typedef struct { uint64_t* k; int64_t len, cap; int sorted; } Pairs;
 
 static int pairs_add(Pairs* p, int64_t a, int64_t b) {     /* 0-based, a != b */
     if (a > b) { int64_t t = a; a = b; b = t; }
+    if (p->len >= GEN_MAX_EDGES) return 0;                  /* edge cap reached */
     if (p->len == p->cap) {
         int64_t nc = p->cap ? p->cap * 2 : 64;
         uint64_t* nk = realloc(p->k, (size_t)nc * sizeof(uint64_t));
@@ -144,6 +150,11 @@ Expr* builtin_grid_graph(Expr* res) {
         if (dims[i] > GEN_MAX_VERTICES / n) return NULL;
         n *= dims[i];
     }
+    /* Exact edge count, sum_i (d_i - 1) n / d_i, checked up front so an
+     * over-cap grid is refused at once instead of after filling the buffer. */
+    int64_t ne = 0;
+    for (int i = 0; i < k; i++) ne += (dims[i] - 1) * (n / dims[i]);
+    if (ne > GEN_MAX_EDGES) return NULL;
     Pairs p = { NULL, 0, 0, 1 };
     for (int64_t v = 0; v < n; v++) {
         int64_t r = v;
