@@ -174,11 +174,12 @@ constructor path:
 - `RandomGraph[{n, m}, k]` — a list of `k` independently sampled such graphs.
   `k = 0` gives `{}`; `k = 1` gives a one-element list, **not** a bare `Graph`.
   A negative, non-integer, or symbolic `k` leaves the expression unevaluated,
-  silently — the convention the count-taking `Random*` heads share. Each
-  element costs a full `O(n^2)` candidate materialisation and its own
-  `RandomSample`, so time and peak memory scale as `O(k n^2)`. The candidate
-  list is freed once sampled, so a call retains only the graphs it returns
-  (until v0.183 it leaked roughly 364 KB per element at `n = 50`).
+  silently — the convention the count-taking `Random*` heads share. The
+  `n(n-1)/2` candidate edges are never materialised: each graph draws exactly
+  what `RandomSample` over the row-major candidate list would (so seeded
+  output is that of `RandomSample`), in `O(m)` time and memory per graph --
+  `RandomGraph[{200000, 300000}]` takes about 80 ms. (Until v0.185 each
+  element built the full `O(n^2)` candidate list, and leaked it.)
 
 ```
 EdgeCount[CompleteGraph[5]]      (* 10                        *)
@@ -204,7 +205,7 @@ are unweighted.
   `Infinity` if unreachable. Same weight-aware dispatch as `FindShortestPath`,
   and, on a weighted graph, returns a machine real as the Wolfram Language does
   (weights `{5, 7}` give `12.`), identical to `GraphDistance[g, s]` and
-  `GraphDistanceMatrix`. (Until v0.184 it returned an exact `Integer`/`Rational`,
+  `GraphDistanceMatrix`. (Until v0.186 it returned an exact `Integer`/`Rational`,
   which disagreed with both Mathematica and the single-source form.)
 - `ConnectedComponents[g]` / `WeaklyConnectedComponents[g]` — components of the
   underlying undirected graph.

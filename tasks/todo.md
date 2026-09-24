@@ -1,6 +1,6 @@
 # CURRENT (2026-09-24): Graph/Hypergraph parity loop (every 2h, cron d0f18078)
 
-- [x] Iteration 1 (v0.184): 4 parallel streams merged — ops (30), metrics (~35), algos (23),
+- [x] Iteration 1 (v0.186): 4 parallel streams merged — ops (30), metrics (~35), algos (23),
       hypergraphs (native subsystem). All benchmark cases at or ahead of Mathematica except
       GraphComplement (parity) and FR-form RandomHypergraph (packed-array output).
 - [ ] Next: VertexConnectivity/EdgeConnectivity on DIRECTED graphs must use strong connectivity
@@ -46,7 +46,7 @@ Semantics decisions (Wolfram-faithful where documented; a non-graph gives `False
 - [x] Verify: graph_tests, full ctest diffed against `main`, `make check-c99`, audit checks, leaks
 - [x] Speed pass (user ask: faster than Mathematica and Python): validated-graph memo, per-graph
       property caches, CSR adjacency, faster construction; `benchmarks/92-graph-predicates`
-- [x] Version bump v0.183, commit (local branch `graph-predicates-batch`)
+- [x] Version bump (v0.185), commit (local branch `graph-predicates-batch`)
 
 **Review.** 9 new heads, `DirectedGraphQ` edgeless fix, `RandomGraph` leak fix (`evaluate()` does
 not consume its argument, and `generators.c` assumed it did). Every case in experiments 29 and 92
@@ -85,9 +85,36 @@ A40 = wrong S'-unit coeff over Q(√5). Speed lever = native `nf_elem` RowReduce
       any common multiple → equivalent system). **A2 1.4s, A3 1.7s, P8 3.7s all solve+verify → 47/50.** Field solvers
       (A1/A16/A19/A37/P4) unregressed; v0.182. **A35 now fast-fails on branch/sign gate** (was budget); **A40 still budget** (Q(√5) 1st-rung coeff).
 - [ ] ~~**Phase 4** — P8 ToNumberField compositum~~ **OBSOLETE** (ToNumberField already succeeds; P8 folded into Phase 3)
-- [ ] **Phase 5** — A40: diagnose (dump/diff aug), S'-unit column arithmetic over θ
-- [ ] **Phase 6** — deep speed: native nf_elem assembly, ToNumberField field-build cache, heavy tail; four-CAS re-benchmark
+- [x] **Phase 4b** — A35: branch gate generalized to 4th-root-of-unity factor (D[surf]==u·f, u∈{1,-1,I,-I}; A35 has u=-I from Sqrt[q]=I·Sqrt[-q]).
+      **A35 solves+verifies ~1.3s → 48/50.** A11/A34 still solve. v0.183. (Do-loop, not nested Functions.)
+- [x] **Kernel/nested-Functions** — VERIFIED already resolved in the kernel (7 shapes: curried, stored-inner,
+      inner-in-list/assoc, slot, deep 3-level — all correct). Earlier gate failure was `MissingQ` UNIMPLEMENTED
+      (`MissingQ[Missing[]]` stays unevaluated), not the closure. Gate uses a `Do`-loop, robust. (MissingQ is a real
+      but separate builtin gap — flagged, not blocking.)
+- [~] **Phase 5** — A40: DIAGNOSED, NOT fixed (left at 48/50 sound). Root cause: S'-unit search collects 4 units from 2
+      same-conjugate-class sols (`c=1/5-2I/5`), missing the conjugate class `c=1/5+2I/5` MMA includes → ansatz can't span.
+      **Both quick fixes are UNSOUND (verified):** (1) dedup-by-norm-class DROPS independent generators (same-norm sols differ
+      by a non-constant Pell unit) → broke A19; (2) cap 4→8 over-completes → exact solve picks a spurious particular solution
+      that passes the gate's 11 fixed sample points but is WRONG off-gate → broke A19 (wrong at x=1/4, right at gate pts).
+      Real fix = principled S'-unit GROUP BASIS (deep, multi-session). ALSO exposed: the verify gate's fixed-11-sample-point
+      weakness (silent-wrong can pass). See [[project_charlwood_a40_sunit_conjugate_degenerate]]. Running off-gate audit of the 48.
+- [~] **Phase 6** — deep speed: PROFILED. Four-CAS benchmark (v0.183, warm): **48/50, total 26.1s, mean 544ms, median 117ms**
+      (median already beats MMA 166 / SymPy 505; behind Maxima 92). Heavy tail A28 4.7s, P8 3.7s, A1 3.4s, P4 2.5s.
+      **Bottleneck (sample of A28): `expr_compare`/`collect_symbols_in` in Orderless (Plus/Times) sorting, driven by
+      `Together`/`Cancel` — specifically the tower canonicalizer `Can[e]=Cancel[Together[e],Extension->Automatic]`
+      (`ParallelMixed.m:90`) run on RAW-radical column expressions before the field mapping → generic Expr path.**
+      Native-nf_elem fix = restructure the tower column arithmetic to run over the field θ / nf_elem (the deep G4c item;
+      the v0.177 field Cancel/Together kernels don't fire because Can uses Extension->Automatic on raw radicals, not
+      AlgebraicNumber[θ]). Large, focused, multi-session; gate every step with a byte-identical differential vs the
+      current Extension->Automatic result + the DSolve corpus. Native RowReduce (v0.179) already done (~24% on A2).
 - [ ] **Phase 7** — regression (DSolve tripwire!), tests, docs, version bumps + tags
+
+- [x] **Pollution hunt (user-requested)** — ASan found & FIXED a real memory bug: uninitialised-tail `expr_free`
+      in `flint_qqbar_to_number_field_common` error path (malloc→calloc); SEGV under ASan, heap corruption in batch. v0.184.
+      **A19 residual batch non-determinism PARTIALLY remains** (ASan-clean now, but A19 still non-deterministically wrong
+      off-gate in the 50-case batch — a 2nd, ASan-blind cause: non-deterministic S'-unit selection producing a wrong `r`
+      that the gate's 11 fixed sample points don't catch). Per-process A19 CORRECT (48/50 sound). Next: strengthen gate
+      (denser/randomized samples) + deterministic S'-unit selection.
 
 Hard gate every land: DSolve corpus green + differential value-identity + `make check-c99`.
 
