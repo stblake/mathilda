@@ -25,7 +25,10 @@ A40 = wrong S'-unit coeff over Q(√5). Speed lever = native `nf_elem` RowReduce
       any common multiple → equivalent system). **A2 1.4s, A3 1.7s, P8 3.7s all solve+verify → 47/50.** Field solvers
       (A1/A16/A19/A37/P4) unregressed; v0.182. **A35 now fast-fails on branch/sign gate** (was budget); **A40 still budget** (Q(√5) 1st-rung coeff).
 - [ ] ~~**Phase 4** — P8 ToNumberField compositum~~ **OBSOLETE** (ToNumberField already succeeds; P8 folded into Phase 3)
-- [ ] **Phase 5** — A40: diagnose (dump/diff aug), S'-unit column arithmetic over θ
+- [x] **Phase 4b** — A35: branch gate generalized to 4th-root-of-unity factor (D[surf]==u·f, u∈{1,-1,I,-I}; A35 has u=-I from Sqrt[q]=I·Sqrt[-q]).
+      **A35 solves+verifies ~1.3s → 48/50.** A11/A34 still solve. v0.183. (Do-loop, not nested Functions.)
+- [ ] **Kernel** — fix nested-Function closure in the C kernel (Function[u, ...Function[k,...u...]] failed); user-requested root-cause fix.
+- [ ] **Phase 5** — A40: diagnose (dump/diff aug), S'-unit column arithmetic over θ (Q(√5) first-rung coeff; still budget)
 - [ ] **Phase 6** — deep speed: native nf_elem assembly, ToNumberField field-build cache, heavy tail; four-CAS re-benchmark
 - [ ] **Phase 7** — regression (DSolve tripwire!), tests, docs, version bumps + tags
 

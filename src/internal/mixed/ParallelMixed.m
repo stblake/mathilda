@@ -2102,8 +2102,8 @@ ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeCon
      wrong surface gives a residual that is neither, and is still rejected.
      (verify-timeout: accept as principal branch rather than reject a
      likely-correct but large answer.) *)
-  sgn = TimeConstrained[
-    Quiet[Module[{cand, pts, dv, fv, keep, rp, rm, tol = 10^-12, anchor},
+  fac = TimeConstrained[
+    Quiet[Module[{cand, pts, dv, fv, keep, tol = 10^-12, units, gu, u},
       cand = {1/2, 1/3, 2/3, 1/5, 4/5, 2, 3, 3/2, 5/2, 7/3, 1/7};
       pts = Select[cand,
         With[{v = N[integrand /. x -> #, 30]},
@@ -2113,21 +2113,30 @@ ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeCon
       fv = (N[integrand /. x -> #, 30]) & /@ pts;
       keep = Select[Range[Length[pts]],
         NumericQ[dv[[#]]] && NumericQ[fv[[#]]] && Abs[dv[[#]]] < 10^12 && Abs[fv[[#]]] < 10^12 &];
-      rp = (dv[[#]] - fv[[#]]) & /@ keep;                   (* D[surf] - f *)
-      rm = (dv[[#]] + fv[[#]]) & /@ keep;                   (* D[surf] + f *)
+      (* The exact unit u with D[surf] == u f.  The formal radical y (y^2 = q) is
+         mapped back as the PRINCIPAL Sqrt[q], so surf can be the true
+         antiderivative up to a fourth root of unity: 1 or -1 for a real radical
+         (the global-sign case A11, and the other root of y^2=q); and +-I when q
+         is negative on the domain, where Sqrt[q] = I Sqrt[-q] leaves surf off by
+         a factor of I (Charlwood A35).  Then D[surf/u] == f and surf/u =
+         Conjugate[u] surf is the antiderivative.  Soundness: acceptance requires
+         D[surf] to equal EXACTLY u f (to 1e-12) at every finite real sample for a
+         single unit u; a genuinely wrong surface matches none. *)
+      units = {1, -1, I, -I};
+      gu = None;   (* the global unit u with D[surf] == u f, if any (# = keep index) *)
+      Do[If[AllTrue[keep, Abs[dv[[#]] - u fv[[#]]] < tol &], gu = u; Break[]], {u, units}];
       Which[
         keep === {}, 0,                                     (* no usable sample *)
-        AllTrue[rp, Abs[#] < tol &],  1,                    (* D[surf] = +f everywhere *)
-        AllTrue[rm, Abs[#] < tol &], -1,                    (* D[surf] = -f everywhere -> -surf *)
-        AllTrue[Range[Length[keep]], Abs[rp[[#]]] < tol || Abs[rm[[#]]] < tol &],
+        gu =!= None, 1/gu,                                  (* global unit u: surf/u *)
+        AllTrue[keep, Abs[dv[[#]] - fv[[#]]] < tol || Abs[dv[[#]] + fv[[#]]] < tol &],
           (* branch cut: D[surf] = +-f exactly at every point -> principal-branch
              answer, signed to match the sample nearest the origin *)
-          (anchor = First[Ordering[Abs[N[pts[[keep]], 30]]]];
-           If[Abs[rp[[anchor]]] < tol, 1, -1]),
-        True, 0]]],                                          (* not +-f: wrong answer *)
+          With[{anchor = keep[[First[Ordering[Abs[N[pts[[keep]], 30]]]]]]},
+           If[Abs[dv[[anchor]] - fv[[anchor]]] < tol, 1, -1]],
+        True, 0]]],                                          (* not a unit multiple: wrong answer *)
     15, 1];
-  If[sgn === 0 || ! IntegerQ[sgn], Return[{"failed", "verification failed"}]];
-  If[sgn === -1, surf = -surf];
+  If[fac === 0 || FreeQ[{1, -1, I, -I}, fac], Return[{"failed", "verification failed"}]];
+  If[fac =!= 1, surf = fac surf];
   surf],
   $ParallelMixedTimeBudget, {"failed", "time budget exceeded"}];
 
