@@ -1,5 +1,6 @@
 
 #include "plus.h"
+#include "sort.h"       /* expr_orderless_sort — memoized Orderless canonicalisation */
 #include "arithmetic.h"
 #include "complex.h"
 #include "interval.h"
@@ -881,7 +882,7 @@ Expr* builtin_plus(Expr* res) {
             }
         }
         if (!already_sorted)
-            qsort(final_args, idx, sizeof(Expr*), plus_cmp_ptrs);
+            expr_orderless_sort(final_args, idx);   /* memoized symbol sets */
         final_res = expr_new_function(expr_new_symbol(SYM_Plus), final_args, idx);
     }
     if (heap_bufs) free(final_args);

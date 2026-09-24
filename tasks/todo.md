@@ -320,3 +320,36 @@ same on the prior release. The direct `ParallelMixedTower` method solves and num
 **Remaining for full margin (Phase 2b/3, not done):** native `Together`/`Cancel`/`CoefficientRules`
 over field data — the residual after `Expand` — to push `DSolve[1219]` comfortably below 8 s;
 Phase 3 P8 conjugate-root compositum `ToNumberField`; degree-16 cases (P4/A2/A3/A27/A35/A40).
+
+## Review — v0.185 (Orderless canonicalisation: per-sort symbol-set memo) — SPEED
+
+**Context:** user directive after the Maxima investigation — "port a highly efficient version of
+Maxima's rational simplification to Mathilda" → chose the field-first tower restructure. Profiling
+first (Phase 0) redirected the work to the true root cause.
+
+**Finding (profiled, not guessed):** on the arithmetic-bound Charlwood cases the entire hot path is
+ONE C function — `collect_symbols_in` (`sort.c`), called from `expr_compare`'s polynomial-degree
+tier, which re-walks BOTH operands' whole subtrees on EVERY pairwise comparison. Canonically
+ordering an n-term Orderless `Plus`/`Times` re-walks each term O(log n) times. This overturned two
+wrong locus guesses: (1) NOT the ansatz `RowReduce` (A28's ansatz is trivial, `alg=False`, ~0 s —
+the 4 s is the residue loop); (2) NOT `Can`/`Extension->Automatic` (already free on radical-free
+input). See [[project_charlwood_bottleneck_collect_symbols_in]].
+
+**Landed:** `expr_orderless_sort` (sort.c) with a per-sort symbol-set memo (cache each node's symbol
+set by identity for one sort). Pitfalls fixed: by-value return (slot array moves on grow); a bump
+**arena** for the symbol arrays (per-node malloc was a net loss on many-small-term sorts); a cheap
+**size gate** (engage only when an arg has ≥48 nodes) so tiny `Plus`/`Times` pay zero overhead.
+Wired into `builtin_plus`/`builtin_times`, `eval_sort_args`, eval.c Orderless sort; `sort_abort_reset()`
+at the TimeConstrained siglongjmp recovery. `MATHILDA_NO_SYMMEMO=1` disables it (A/B).
+
+**Verified:** A28 in-process A/B 4.90 s → 4.11 s (~16%); no small-term regression (microbench 1.99
+vs 1.98); differential memo-vs-nomemo output byte-identical (md5); DSolve corpus 607 pass / 0 fail /
+597 non-PASS ≤ 605 baseline (no regression); sort/expand/eval/evaluate/expandfrac/parallelmixedtower/
+rootreduce/field_together_cancel/nullspace/nf_rowreduce all PASS; `leaks` 0; `check-c99` clean. The
+`dsolve_tests` unit suite aborts at `t_m17_normalform_bessel` — PRE-EXISTING (confirmed identical on
+pristine main via git-stash A/B), see [[project_dsolve_tests_m19_insuite_abort]].
+
+**Honest assessment:** modest, clean, GENERAL win (any large Orderless sort benefits) but NOT the
+7-14× Maxima gap. The transformative lever remains expression SIZE — the field-first tower
+restructure (compact `AlgebraicNumber[θ]` coefficients through the residue/tower arithmetic instead
+of raw Root/radical trees). Next.

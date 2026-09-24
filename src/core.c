@@ -4085,6 +4085,11 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
     volatile int          saved_msgdep = mth_msg_suppress_depth_save();
     if (sigsetjmp(tc_jmp_env, 1) == 0) {
         result = evaluate(body);
+    } else {
+        /* The unwind may have jumped out of an Orderless sort with the
+         * per-sort symbol-set memo still installed; drop it so a later
+         * expr_compare cannot dereference the abandoned stack memo. */
+        sort_abort_reset();
     }
     tc_async_deferred = saved_defer;
     mth_msg_suppress_depth_load(saved_msgdep);

@@ -1804,7 +1804,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                         }
                     }
                     if (!already_sorted) {
-                        qsort(res->data.function.args, res->data.function.arg_count, sizeof(Expr*), eval_compare_expr_ptrs);
+                        expr_orderless_sort(res->data.function.args, res->data.function.arg_count);
                         expr_invalidate_hash(res);   /* args reordered in place */
                         *changed = true;
                     }

@@ -15,6 +15,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -280,6 +281,164 @@ static int symbol_reverse_cmp(const void* pa, const void* pb) {
     return strcmp(b, a);
 }
 
+/* ====================================================================
+ * Per-sort symbol-set memoization.
+ *
+ * expr_compare's polynomial-degree tier (step 3, below) calls
+ * collect_symbols_in on BOTH operands of every pairwise comparison. qsort
+ * makes O(n log n) comparisons to canonicalise an n-argument Orderless head,
+ * so each argument's whole subtree is re-walked O(log n) times -- and this
+ * is the dominant cost of ordering the large algebraic sums that
+ * Together/Cancel/Expand produce during symbolic integration (a residue loop
+ * over an algebraic extension spends essentially all of its time right here).
+ *
+ * The symbol set of an expression is a pure function of its structure, and
+ * for the duration of one Orderless sort the sorted arguments and every
+ * subexpression they reach are immutable and are never freed. So memoize the
+ * set by node identity: each distinct subtree is walked at most once for the
+ * whole sort. Outside a sort (g_symmemo == NULL) expr_compare takes the
+ * original direct-walk path, byte-for-byte unchanged; the memo only ever
+ * caches collect_symbols_in, so the resulting order is identical.
+ *
+ * qsort takes no context pointer under C99, so the memo is a file-static
+ * installed around the qsort, mirroring current_sort_p just below. A
+ * TimeConstrained siglongjmp can in principle unwind out of the qsort with
+ * the memo still installed; sort_abort_reset() (called at the timeout
+ * recovery in core.c) drops the dangling pointer so a later comparison never
+ * reads freed memory. The heap the abandoned memo held is a bounded one-time
+ * leak, consistent with TimeConstrained's documented unwind-leak model.
+ * ==================================================================== */
+typedef struct {
+    const Expr*  key;    /* node identity; NULL marks an empty slot         */
+    const char** syms;   /* symbol pointers, owned by the arena below       */
+    size_t       n;      /* number of symbols                               */
+} SymMemoSlot;
+
+/* Bump-allocated storage for the per-node symbol arrays. A per-node malloc
+ * turned the memo into a net LOSS on the common many-small-term sort (the
+ * allocation costs more than re-walking a 5-node term saves); the arena makes
+ * a fill nearly free, so the memo helps big/repeated trees and never hurts.
+ * Arena blocks never move, so a slot's `syms` pointer stays valid across a
+ * table grow (which relocates only the slot structs). */
+typedef struct SymArenaBlock {
+    struct SymArenaBlock* next;
+    size_t used, cap;
+    const char* data[];  /* C99 flexible array member */
+} SymArenaBlock;
+
+typedef struct {
+    SymMemoSlot*   slots; /* open addressing; cap is a power of two          */
+    size_t         cap;
+    size_t         count;
+    SymArenaBlock* arena; /* owns every slot's syms array                    */
+    bool           ok;    /* cleared on OOM -> memo disabled, direct walk    */
+} SymMemo;
+
+static SymMemo* g_symmemo = NULL;
+
+static size_t symmemo_hash(const Expr* e, size_t mask) {
+    size_t p = (size_t)(uintptr_t)e;      /* pointers are aligned: mix the bits */
+    p ^= p >> 16;
+    p *= (size_t)0x45d9f3bU;
+    p ^= p >> 16;
+    return p & mask;
+}
+
+#define SYMARENA_BLOCK 2048u
+
+/* Bump-allocate n symbol slots from the arena; returns NULL only on OOM. */
+static const char** symarena_alloc(SymMemo* m, size_t n) {
+    if (n == 0) return NULL;
+    SymArenaBlock* b = m->arena;
+    if (!b || b->used + n > b->cap) {
+        size_t cap = n > SYMARENA_BLOCK ? n : SYMARENA_BLOCK;
+        b = (SymArenaBlock*)malloc(sizeof(SymArenaBlock) + cap * sizeof(const char*));
+        if (!b) return NULL;
+        b->used = 0; b->cap = cap; b->next = m->arena; m->arena = b;
+    }
+    const char** p = &b->data[b->used];
+    b->used += n;
+    return p;
+}
+
+/* Arm the memo without allocating: table and arena are created lazily on the
+ * first tier-3 lookup, so a sort whose comparisons all settle at the cheap
+ * numeric / symbol tiers (the overwhelmingly common tiny Plus/Times) allocates
+ * nothing at all. */
+static void symmemo_begin(SymMemo* m) {
+    m->slots = NULL; m->cap = 0; m->count = 0; m->arena = NULL; m->ok = true;
+}
+
+static bool symmemo_alloc(SymMemo* m, size_t cap) {
+    m->slots = (SymMemoSlot*)calloc(cap, sizeof(SymMemoSlot));
+    m->cap = m->slots ? cap : 0;
+    return m->slots != NULL;
+}
+
+static void symmemo_free(SymMemo* m) {
+    SymArenaBlock* b = m->arena;
+    while (b) { SymArenaBlock* nx = b->next; free(b); b = nx; }
+    free(m->slots);
+    m->slots = NULL; m->cap = 0; m->count = 0; m->arena = NULL;
+}
+
+static bool symmemo_grow(SymMemo* m) {
+    size_t ncap = m->cap << 1;
+    SymMemoSlot* ns = (SymMemoSlot*)calloc(ncap, sizeof(SymMemoSlot));
+    if (!ns) return false;
+    size_t mask = ncap - 1;
+    for (size_t i = 0; i < m->cap; i++) {
+        if (!m->slots[i].key) continue;
+        size_t h = symmemo_hash(m->slots[i].key, mask);
+        while (ns[h].key) h = (h + 1) & mask;
+        ns[h] = m->slots[i];
+    }
+    free(m->slots);
+    m->slots = ns; m->cap = ncap;
+    return true;
+}
+
+/* Look up e's memoized symbol list, computing and inserting it on a miss, and
+ * return it through *out_syms / *out_n.  Returns false (and disables the memo)
+ * on any allocation failure, so the caller falls back to a direct
+ * collect_symbols_in.
+ *
+ * The result is returned BY VALUE, never as a pointer into the slot array: a
+ * subsequent lookup may grow (reallocate) that array, moving every slot. The
+ * per-node `syms` heap block, by contrast, is only ever freed in
+ * symmemo_free() at the end of the sort, so the returned pointer stays valid
+ * across further lookups. */
+static bool symmemo_lookup(const Expr* e, const char*** out_syms, size_t* out_n) {
+    SymMemo* m = g_symmemo;
+    if (!m->ok) return false;
+    if (!m->slots && !symmemo_alloc(m, 16)) { m->ok = false; return false; }   /* lazy first use */
+    if (m->count * 2u >= m->cap && !symmemo_grow(m)) { m->ok = false; return false; }
+    size_t mask = m->cap - 1;
+    size_t h = symmemo_hash(e, mask);
+    while (m->slots[h].key) {
+        if (m->slots[h].key == e) { *out_syms = m->slots[h].syms; *out_n = m->slots[h].n; return true; }
+        h = (h + 1) & mask;
+    }
+    /* miss: compute the symbol set once and copy it into the arena */
+    SymSet tmp; symset_init(&tmp);
+    collect_symbols_in(e, &tmp);
+    if (!tmp.ok) { symset_free(&tmp); m->ok = false; return false; }
+    const char** syms = NULL;
+    if (tmp.count) {
+        syms = symarena_alloc(m, tmp.count);
+        if (!syms) { symset_free(&tmp); m->ok = false; return false; }
+        memcpy(syms, tmp.items, sizeof(const char*) * tmp.count);
+    }
+    m->slots[h].key = e;
+    m->slots[h].syms = syms;
+    m->slots[h].n = tmp.count;
+    m->count++;
+    symset_free(&tmp);
+    *out_syms = syms;
+    *out_n = tmp.count;
+    return true;
+}
+
 /* Compare two packed lists straight off their buffers. Valid ONLY when the
  * shapes match exactly and the elements materialise to the same head class,
  * because the List order is elementwise while a buffer scan would otherwise
@@ -454,8 +613,26 @@ int expr_compare(const Expr* a, const Expr* b) {
     /* 3. Polynomial degree vector comparison. */
     SymSet vs;
     symset_init(&vs);
-    collect_symbols_in(a, &vs);
-    collect_symbols_in(b, &vs);
+    if (g_symmemo) {
+        /* Orderless sort in flight: take each operand's symbol set from the
+         * per-sort memo (computing it at most once per distinct subtree)
+         * instead of re-walking the trees on every comparison. symset_add
+         * dedups, so the union -- and therefore the ordering -- is identical
+         * to the direct walk. */
+        const char** sa; size_t na; const char** sb; size_t nb;
+        if (symmemo_lookup(a, &sa, &na) && symmemo_lookup(b, &sb, &nb)) {
+            /* sa stays valid across the second lookup: only slot structs move
+             * on a grow, never the per-node symbol arrays. */
+            for (size_t i = 0; i < na; i++) symset_add(&vs, sa[i]);
+            for (size_t i = 0; i < nb; i++) symset_add(&vs, sb[i]);
+        } else {                                   /* memo hit OOM: fall back */
+            collect_symbols_in(a, &vs);
+            collect_symbols_in(b, &vs);
+        }
+    } else {
+        collect_symbols_in(a, &vs);
+        collect_symbols_in(b, &vs);
+    }
 
     qsort((void*)vs.items, vs.count, sizeof(const char*), symbol_reverse_cmp);
 
@@ -531,6 +708,67 @@ int expr_compare(const Expr* a, const Expr* b) {
 
     return 0;
 }
+
+/* qsort adaptor over Expr* slots, using the canonical order. */
+static int sort_cmp_expr_ptrs(const void* a, const void* b) {
+    return expr_compare(*(Expr* const*)a, *(Expr* const*)b);
+}
+
+/* True once e's node count reaches `budget`, visiting at most `budget` nodes
+ * (early-exit size probe). *counter carries the running count across siblings. */
+static bool expr_size_atleast(const Expr* e, int budget, int* counter) {
+    if (*counter >= budget) return true;
+    if (!e) return false;
+    if (++(*counter) >= budget) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (expr_size_atleast(e->data.function.head, budget, counter)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_size_atleast(e->data.function.args[i], budget, counter)) return true;
+    return false;
+}
+
+/* The memo repays its bookkeeping only when a term's subtree is big enough that
+ * re-walking it on every comparison dominates -- for the tiny terms of an
+ * ordinary Plus/Times the hash traffic would cost more than it saves. Probe a
+ * few arguments (bounded work) and engage the memo only when one is large. */
+#define SYMMEMO_SIZE_GATE 48
+static bool orderless_worth_memo(Expr** args, size_t n) {
+    size_t probe[3];
+    probe[0] = 0; probe[1] = n / 2; probe[2] = n - 1;
+    for (int k = 0; k < 3; k++) {
+        int c = 0;
+        if (expr_size_atleast(args[probe[k]], SYMMEMO_SIZE_GATE, &c)) return true;
+    }
+    return false;
+}
+
+/* Canonically sort args[0..n) in place (the Orderless canonicalisation), with
+ * the per-sort symbol-set memo installed so an n-term Plus/Times is ordered
+ * without re-walking each term O(log n) times. The order is identical to a
+ * plain qsort by expr_compare; only the redundant symbol collection is cached.
+ * Small heads take the plain path (the memo cannot repay its allocation). */
+void expr_orderless_sort(Expr** args, size_t n) {
+    if (!args || n < 2) return;
+    /* Escape hatch for A/B measurement and regression bisection. Read once. */
+    static int memo_off = -1;
+    if (memo_off < 0) memo_off = getenv("MATHILDA_NO_SYMMEMO") ? 1 : 0;
+    if (memo_off || !orderless_worth_memo(args, n)) {
+        qsort(args, n, sizeof(Expr*), sort_cmp_expr_ptrs);
+        return;
+    }
+    SymMemo memo;
+    symmemo_begin(&memo);                       /* table allocated lazily, if ever */
+    SymMemo* prev = g_symmemo;
+    g_symmemo = &memo;
+    qsort(args, n, sizeof(Expr*), sort_cmp_expr_ptrs);
+    g_symmemo = prev;
+    symmemo_free(&memo);
+}
+
+/* Drop any sort-scoped memo left dangling by a TimeConstrained siglongjmp that
+ * unwound out of expr_orderless_sort mid-qsort. Called at the timeout recovery
+ * so a subsequent expr_compare never dereferences the freed stack memo. */
+void sort_abort_reset(void) { g_symmemo = NULL; }
 
 /* ==================================================================== */
 

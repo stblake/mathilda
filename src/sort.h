@@ -19,4 +19,10 @@ Expr* builtin_orderedq(Expr* res);
 Expr* builtin_order(Expr* res);
 Expr* builtin_ordering(Expr* res);
 
+/* Canonically sort args[0..n) in place (Orderless canonicalisation) with a
+ * per-sort symbol-set memo; the order matches a plain qsort by expr_compare. */
+void expr_orderless_sort(Expr** args, size_t n);
+/* Clear sort-scoped memo state after a TimeConstrained siglongjmp. */
+void sort_abort_reset(void);
+
 #endif // SORT_H

@@ -203,5 +203,7 @@ EvalReturnAction eval_classify_return(Expr* e,
  * change in the current evaluation step. */
 bool eval_flatten_args(Expr* e, const char* head_name);
 int eval_compare_expr_ptrs(const void* a, const void* b);
-static inline void eval_sort_args(Expr* e) { if (e->type == EXPR_FUNCTION && e->data.function.arg_count > 0) qsort(e->data.function.args, e->data.function.arg_count, sizeof(Expr*), eval_compare_expr_ptrs); }
+/* Canonical Orderless sort with per-sort symbol-set memoization (sort.c). */
+void expr_orderless_sort(Expr** args, size_t n);
+static inline void eval_sort_args(Expr* e) { if (e->type == EXPR_FUNCTION && e->data.function.arg_count > 0) expr_orderless_sort(e->data.function.args, e->data.function.arg_count); }
 #endif // EVAL_H
