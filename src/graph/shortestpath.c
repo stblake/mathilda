@@ -131,10 +131,8 @@ static WAdj* build_wadj(const Expr* g) {
 /* Dijkstra from src over w; fills parent[] (-1 = root/unvisited) and dist[]
  * (DBL_MAX = unreached). O(V^2) array scan, no heap -- consistent with this
  * subsystem's existing small-graph exact-algorithm precedent
- * (VertexConnectivity's own brute-force). dist[] is for vertex-selection
- * comparisons ONLY; the exact GraphDistance value is reconstructed separately
- * by the caller via Plus[] over the real weight Exprs along the found path,
- * never printed from this array directly. */
+ * (VertexConnectivity's own brute-force). dist[t] is also GraphDistance's
+ * answer: a machine real, as in the Wolfram Language. */
 static void dijkstra(const WAdj* w, int src, int* parent, double* dist) {
     char* done = calloc((size_t)(w->n > 0 ? w->n : 1), sizeof(char));
     for (int i = 0; i < w->n; i++) { parent[i] = -1; dist[i] = DBL_MAX; }
@@ -154,33 +152,6 @@ static void dijkstra(const WAdj* w, int src, int* parent, double* dist) {
         }
     }
     free(done);
-}
-
-/* Exact total weight along the parent-chain path from src to t (inclusive),
- * built by summing the real Expr* weights (via evaluate(Plus[...])), so an
- * all-integer/-rational input keeps an exact integer/rational answer instead
- * of the double accumulator dijkstra() used only to pick the path. */
-static Expr* exact_path_weight(const WAdj* w, const int* parent, int src, int t) {
-    Expr** terms = NULL;
-    size_t nterms = 0, cap = 0;
-    int v = t;
-    while (v != src) {
-        int u = parent[v];
-        Expr* wt = NULL;
-        for (int j = 0; j < w->outdeg[u]; j++)
-            if (w->out[u][j] == v) { wt = w->outw[u][j]; break; }
-        if (!wt) { free(terms); return NULL; }        /* should not happen */
-        if (nterms == cap) {
-            cap = cap ? cap * 2 : 4;
-            terms = realloc(terms, cap * sizeof(Expr*));
-        }
-        terms[nterms++] = expr_copy(wt);
-        v = u;
-    }
-    if (nterms == 0) return expr_new_integer(0);       /* src == t */
-    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, nterms);
-    free(terms);
-    return evaluate(sum);
 }
 
 /* Resolve g, s, t to a GraphAdj and endpoint indices. Returns adj (caller frees)
@@ -253,8 +224,12 @@ Expr* builtin_graph_distance(Expr* res) {
         int* parent = calloc((size_t)w->n, sizeof(int));
         double* dist = calloc((size_t)w->n, sizeof(double));
         dijkstra(w, is, parent, dist);
+        /* A weighted distance is a machine real, as in the Wolfram Language
+         * (GraphDistance[g, 1, 3] with weights {5, 7} is 12., not 12): the
+         * Dijkstra accumulator itself, summed along the path in path order, so
+         * it agrees bit-for-bit with GraphDistance[g, s] / GraphDistanceMatrix. */
         out = (dist[it] == DBL_MAX) ? expr_new_symbol(SYM_Infinity)
-                                    : exact_path_weight(w, parent, is, it);
+                                    : expr_new_real(dist[it]);
         free(parent); free(dist); wadj_free(w);
     } else {
         int* parent = calloc((size_t)a->n, sizeof(int));

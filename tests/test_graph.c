@@ -602,7 +602,7 @@ static void test_edge_weights(void) {
     snprintf(buf, sizeof(buf), "FindShortestPath[%s,1,3]", wg);
     assert_eval_eq(buf, "{1, 2, 3}", 0);
     snprintf(buf, sizeof(buf), "GraphDistance[%s,1,3]", wg);
-    assert_eval_eq(buf, "12", 0);
+    assert_eval_eq(buf, "12.0", 0);
     snprintf(buf, sizeof(buf), "ConnectedComponents[%s]", wg);
     assert_eval_eq(buf, "{{1, 2, 3}}", 0);
     snprintf(buf, sizeof(buf), "WeaklyConnectedComponents[%s]", wg);
@@ -633,11 +633,14 @@ static void test_weighted_shortest_path(void) {
     snprintf(buf, sizeof(buf), "FindShortestPath[%s,1,4]", g1);
     assert_eval_eq(buf, "{1, 2, 3, 4}", 0);
     snprintf(buf, sizeof(buf), "GraphDistance[%s,1,4]", g1);
-    assert_eval_eq(buf, "3", 0);
-    /* Exact integer, not a real -- the plan-reviewer-caught defect (a raw double
-     * accumulator would print "3."). */
+    assert_eval_eq(buf, "3.0", 0);
+    /* A weighted distance is a machine real, as in the Wolfram Language
+     * (Mathematica 15: GraphDistance[...weights {5,7}..., 1, 3] is 12.), and
+     * agrees with GraphDistance[g, s] / GraphDistanceMatrix. */
     snprintf(buf, sizeof(buf), "Head[GraphDistance[%s,1,4]]", g1);
-    assert_eval_eq(buf, "Integer", 0);
+    assert_eval_eq(buf, "Real", 0);
+    snprintf(buf, sizeof(buf), "GraphDistance[%s,1,4] === GraphDistance[%s,1][[4]]", g1, g1);
+    assert_eval_eq(buf, "True", 0);
 
     /* AC-3: unweighted graphs are unaffected (still plain BFS). */
     assert_eval_eq("FindShortestPath[CycleGraph[6],1,4]", "{1, 2, 3, 4}", 0);
@@ -667,7 +670,7 @@ static void test_weighted_shortest_path(void) {
     /* Rational weights stay exact. */
     assert_eval_eq(
         "GraphDistance[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{1/2,1/3}],1,3]",
-        "5/6", 0);
+        "0.833333", 0);
 }
 
 /* ---- Structural predicates ------------------------------------------------ */

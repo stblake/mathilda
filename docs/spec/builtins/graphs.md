@@ -199,8 +199,10 @@ are unweighted.
   following edge direction for directed graphs either way.
 - `GraphDistance[g, s, t]` — the length/total weight of that path;
   `Infinity` if unreachable. Same weight-aware dispatch as `FindShortestPath`,
-  and returns an exact value (`Integer`/`Rational`) whenever the weights are
-  exact — never a `Real` artifact of the internal algorithm.
+  and, on a weighted graph, returns a machine real as the Wolfram Language does
+  (weights `{5, 7}` give `12.`), identical to `GraphDistance[g, s]` and
+  `GraphDistanceMatrix`. (Until v0.184 it returned an exact `Integer`/`Rational`,
+  which disagreed with both Mathematica and the single-source form.)
 - `ConnectedComponents[g]` / `WeaklyConnectedComponents[g]` — components of the
   underlying undirected graph.
 - `StronglyConnectedComponents[g]` — components following edge directions
