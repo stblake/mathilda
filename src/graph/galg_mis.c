@@ -18,12 +18,16 @@
  *
  * Exactness. A minimum vertex cover is the complement of a maximum independent
  * set, so both heads share one exact solver (gm_mis). It returns an optimum or
- * gives up -- after MIS_MAX_NODES search nodes, or when TimeConstrained's
- * deadline passes (galg_poll) -- and then the head stays unevaluated. It never
- * returns a merely-maximal set.
+ * gives up -- after MIS_MAX_NODES search nodes, MIS_MAX_WORK aggregate work,
+ * MIS_MAX_HELD ints of per-level scratch or MIS_MAX_DEPTH levels, or when
+ * TimeConstrained's deadline passes (galg_poll) -- and then the head stays
+ * unevaluated. It never returns a merely-maximal set.
  *
  * The solver:
- *   - Connected components are solved independently, and a component that is
+ *   - Connected components are solved independently. A bipartite component of
+ *     at least MIS_KONIG_MIN vertices (grids, meshes, trees, even cycles) is
+ *     solved exactly in O(m sqrt n) by Konig's theorem (gm_konig).
+ *   - Otherwise a component that is
  *     not sparse (average degree >= 8 or density >= 0.05, at most 3000
  *     vertices; the measured crossover) goes to the bitset
  *     maximum-clique branch and bound on its complement (galg_clique.c).
@@ -56,6 +60,10 @@
 #include <string.h>
 
 #define MIS_MAX_NODES 20000000L
+#define MIS_MAX_WORK   600000000LL   /* sum of live-set sizes over search nodes */
+#define MIS_MAX_HELD  (64LL << 20)   /* live-buffer ints held across open levels */
+#define MIS_MAX_DEPTH 20000          /* native recursion depth of gm_rec */
+#define MIS_KONIG_MIN 256            /* bipartite components this large: Konig */
 #define MIS_DENSE_MAX 3000
 #define MIS_DOM_DEG 8           /* domination is tested from vertices this small */
 
@@ -80,6 +88,8 @@ typedef struct {
     int* cid; int* csz; int* ccnt; int* ctouch;   /* clique-cover scratch     */
     char* insol;
     long nodes;
+    long long work, held;        /* budget: see MIS_MAX_WORK / MIS_MAX_HELD   */
+    int depth;
     int aborted;
 } GmMis;
 
@@ -350,8 +360,18 @@ static int gm_rec(GmMis* M, const int* vs, int k, int lb) {
     gm_reduce(M);
     int taken = (M->clen - cbase) + (M->flen - fbase);     /* folds count 1 */
     int maxlive = k + (M->flen - fbase);
-    int* live = malloc((size_t)(maxlive > 0 ? maxlive : 1) * sizeof(int));
     int result = lb;
+    int* live = NULL;
+    /* aggregate budgets: per-node work is linear in the live set, and every
+     * open level holds its own live buffer, so large inputs are bounded by
+     * work, held memory and native depth, not only by the node count */
+    M->work += maxlive;
+    M->held += maxlive;
+    M->depth++;
+    if (M->work > MIS_MAX_WORK || M->held > MIS_MAX_HELD || M->depth > MIS_MAX_DEPTH) {
+        M->aborted = 1; goto done;
+    }
+    live = malloc((size_t)(maxlive > 0 ? maxlive : 1) * sizeof(int));
     if (!live) { M->aborted = 1; goto done; }
     int nl = 0;
     for (int i = 0; i < k; i++) if (M->alive[vs[i]]) live[nl++] = vs[i];
@@ -443,6 +463,8 @@ static int gm_rec(GmMis* M, const int* vs, int k, int lb) {
     }
 done:
     free(live);
+    M->held -= maxlive;
+    M->depth--;
     while (M->wqn > 0) M->inq[M->wq[--M->wqn]] = 0;
     gm_undo(M, tmark);
     M->clen = cbase;
@@ -495,6 +517,107 @@ static int gm_greedy(const GalgUG* u, const int* vs, int k, int* out, char* dead
     return cnt;
 }
 
+/* Konig's theorem for a bipartite component vs (k vertices; loc[] is scratch
+ * of size u->n mapping a vertex to its index in vs). With sides L / R, a
+ * maximum matching (Hopcroft-Karp, iterative DFS) and Z = the vertices
+ * reachable from unmatched L-vertices along alternating paths, the minimum
+ * cover is (L \ Z) u (R n Z), so (L n Z) u (R \ Z) is a maximum independent
+ * set. O(m sqrt(n)). Writes it to out and returns its size; -1 if vs is not
+ * bipartite, -2 on allocation failure. */
+static int gm_konig(const GalgUG* u, const int* vs, int k, int* loc, int* out) {
+    const int INF = 0x3fffffff;
+    for (int i = 0; i < k; i++) loc[vs[i]] = i;
+    int* col = malloc((size_t)k * sizeof(int));
+    int* q = malloc((size_t)k * sizeof(int));
+    int* mate = malloc((size_t)k * sizeof(int));   /* partner (local), or -1 */
+    int* dist = malloc((size_t)k * sizeof(int));
+    int* it = malloc((size_t)k * sizeof(int));     /* DFS cursor into u->adj */
+    int* st = malloc((size_t)k * sizeof(int));
+    int r = -2;
+    if (!col || !q || !mate || !dist || !it || !st) goto out;
+    /* 2-colouring (BFS) */
+    for (int i = 0; i < k; i++) { col[i] = -1; mate[i] = -1; }
+    r = -1;
+    for (int s = 0; s < k; s++) {
+        if (col[s] >= 0) continue;
+        int h = 0, t = 0;
+        col[s] = 0; q[t++] = s;
+        while (h < t) {
+            int x = q[h++], gx = vs[x];
+            for (int j = u->off[gx]; j < u->off[gx + 1]; j++) {
+                int y = loc[u->adj[j]];
+                if (col[y] < 0) { col[y] = 1 - col[x]; q[t++] = y; }
+                else if (col[y] == col[x]) goto out;
+            }
+        }
+    }
+    /* Hopcroft-Karp: phases of BFS layering from free L-vertices, then
+     * vertex-disjoint shortest augmenting paths by DFS along the layers */
+    for (long iter = 0;; iter++) {
+        if ((iter & 15) == 0) galg_poll();
+        int h = 0, t = 0, found = 0;
+        for (int i = 0; i < k; i++) {
+            if (col[i] != 0) continue;
+            if (mate[i] < 0) { dist[i] = 0; q[t++] = i; } else dist[i] = INF;
+        }
+        while (h < t) {
+            int x = q[h++], gx = vs[x];
+            for (int j = u->off[gx]; j < u->off[gx + 1]; j++) {
+                int w = mate[loc[u->adj[j]]];
+                if (w < 0) found = 1;
+                else if (dist[w] == INF) { dist[w] = dist[x] + 1; q[t++] = w; }
+            }
+        }
+        if (!found) break;
+        for (int i = 0; i < k; i++) if (col[i] == 0) it[i] = u->off[vs[i]];
+        for (int s = 0; s < k; s++) {
+            if (col[s] != 0 || mate[s] >= 0) continue;
+            int sp = 0;
+            st[sp++] = s;
+            while (sp > 0) {
+                int x = st[sp - 1];
+                if (it[x] == u->off[vs[x] + 1]) { dist[x] = INF; sp--; continue; }
+                int y = loc[u->adj[it[x]++]];
+                int w = mate[y];
+                if (w < 0) {
+                    /* augment: each stacked L-vertex takes the R-vertex its
+                     * cursor just passed */
+                    for (int d = sp - 1; d >= 0; d--) {
+                        int a = st[d], b = loc[u->adj[it[a] - 1]];
+                        mate[a] = b; mate[b] = a;
+                    }
+                    break;
+                }
+                if (dist[w] == dist[x] + 1) st[sp++] = w;
+            }
+        }
+    }
+    /* Z: alternating reachability (reuse dist as the visited mark) */
+    {
+        int h = 0, t = 0;
+        for (int i = 0; i < k; i++) {
+            dist[i] = 0;
+            if (col[i] == 0 && mate[i] < 0) { dist[i] = 1; q[t++] = i; }
+        }
+        while (h < t) {
+            int x = q[h++], gx = vs[x];      /* x in L: non-matching edges out */
+            for (int j = u->off[gx]; j < u->off[gx + 1]; j++) {
+                int y = loc[u->adj[j]];
+                if (dist[y]) continue;
+                dist[y] = 1;
+                int w = mate[y];             /* y in R is matched (no free path) */
+                if (w >= 0 && !dist[w]) { dist[w] = 1; q[t++] = w; }
+            }
+        }
+        r = 0;
+        for (int i = 0; i < k; i++)
+            if ((col[i] == 0) == (dist[i] != 0)) out[r++] = vs[i];
+    }
+out:
+    free(col); free(q); free(mate); free(dist); free(it); free(st);
+    return r;
+}
+
 static void gm_free(GmMis* M) {
     if (M->nb) for (int i = 0; i < M->cap; i++) free(M->nb[i]);
     free(M->nb); free(M->nbn); free(M->nbcap); free(M->alive); free(M->deg); free(M->tr);
@@ -534,10 +657,11 @@ int galg_max_independent_set(const GalgUG* u, int* out) {
     int* tmp = malloc((size_t)n * sizeof(int));
     int* degw = malloc((size_t)n * sizeof(int));
     char* dead = malloc((size_t)n);
+    int* loc = malloc((size_t)n * sizeof(int));
     int total = -1;
     if (!M.nb || !M.nbn || !M.nbcap || !M.alive || !M.deg || !M.tr || !M.chosen || !M.folds
         || !M.wq || !M.inq || !M.mark || !M.mark2 || !M.cid || !M.csz || !M.ccnt || !M.ctouch
-        || !M.insol || !comp || !cst || !tmp || !degw || !dead || !gm_reserve(&M, n)) goto out;
+        || !M.insol || !comp || !cst || !tmp || !degw || !dead || !loc || !gm_reserve(&M, n)) goto out;
     for (int v = 0; v < cap; v++) M.cid[v] = -1;
     for (int v = 0; v < n; v++) {
         int d = u->off[v + 1] - u->off[v];
@@ -575,11 +699,20 @@ int galg_max_independent_set(const GalgUG* u, int* out) {
         long edges2 = 0;
         for (int i = 0; i < k; i++) edges2 += u->off[vs[i] + 1] - u->off[vs[i]];
         double dens = k > 1 ? (double)edges2 / ((double)k * (k - 1)) : 0;
-        int r;
+        int r = -1;
+        /* bipartite (grids, meshes, trees, even cycles): exact in polynomial
+         * time by Konig; small components keep the search below, whose
+         * choice among equal optima the tests pin */
+        if (k >= MIS_KONIG_MIN) {
+            r = gm_konig(u, vs, k, loc, tmp);
+            if (r == -2) { total = -1; break; }
+        }
         /* measured crossover: the complement-clique bound wins from about
          * average degree 8 up; branch and reduce below */
         double avgdeg = k > 0 ? (double)edges2 / k : 0;
-        if (k > 1 && k <= MIS_DENSE_MAX && (avgdeg >= 8 || dens >= 0.05)) {
+        if (r >= 0) {
+            /* Konig solved it */
+        } else if (k > 1 && k <= MIS_DENSE_MAX && (avgdeg >= 8 || dens >= 0.05)) {
             r = galg_mis_dense(u, vs, k, tmp);
             if (r < 0) { total = -1; break; }
         } else {
@@ -596,7 +729,7 @@ int galg_max_independent_set(const GalgUG* u, int* out) {
     }
 out:
     gm_free(&M);
-    free(comp); free(cst); free(tmp); free(degw); free(dead);
+    free(comp); free(cst); free(tmp); free(degw); free(dead); free(loc);
     return total;
 }
 

@@ -260,6 +260,16 @@ static void test_random_graph(void) {
     assert_eval_eq("Head[RandomGraph[{3, 10}, 2]]", "RandomGraph", 0);
     /* Independence: 5 draws from C(28,4) are not all the same edge set. */
     assert_eval_eq("Length[Union[EdgeList /@ RandomGraph[{8, 4}, 5]]] > 1", "True", 0);
+    /* The candidate edge list is never built (O(m) memory, not O(n^2)), but
+     * the draws are exactly RandomSample's over it: seeded output is pinned. */
+    assert_eval_eq("SeedRandom[42]; EdgeList[RandomGraph[{8, 10}]]",
+                   "{5 <-> 6, 2 <-> 5, 7 <-> 8, 4 <-> 7, 5 <-> 7, 4 <-> 5, 2 <-> 4, "
+                   "4 <-> 6, 2 <-> 8, 6 <-> 8}", 0);
+    assert_eval_eq("SeedRandom[9]; Sort[EdgeList[RandomGraph[{6, 15}]]] === "
+                   "EdgeList[CompleteGraph[6]]", "True", 0);
+    assert_eval_eq("EdgeCount[RandomGraph[{1000000, 5}]]", "5", 0);
+    assert_eval_eq("SeedRandom[3]; RandomSample[Range[1000], 5]", "{52, 649, 868, 846, 629}", 0);
+    assert_eval_eq("SeedRandom[3]; RandomSample[Range[10], 5]", "{1, 7, 10, 9, 8}", 0);
     /* n <= 1 and m = 0: edgeless graphs, no longer unevaluated. */
     assert_eval_eq("VertexCount[RandomGraph[{0, 0}]]", "0", 0);
     assert_eval_eq("EdgeCount[RandomGraph[{1, 0}]]", "0", 0);

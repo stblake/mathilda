@@ -692,11 +692,19 @@ separators. `VertexConnectivity` uses the same machinery (via
   allowed in the vertex forms.
 
 Independent sets are exact: connected components are solved separately; a
-component with average degree >= 8 (or density >= 0.05, up to 3000 vertices)
+bipartite component of at least 256 vertices (grids, meshes, trees, even
+cycles) is solved in O(m sqrt n) by König's theorem (Hopcroft-Karp matching,
+then alternating reachability) -- `GridGraph[{1000, 1000}]` takes about 1.2 s;
+otherwise a component with average degree >= 8 (or density >= 0.05, up to 3000 vertices)
 goes to the bitset maximum-clique search on its complement; sparser ones to
 branch and reduce (degree-0/1 and triangle reductions, degree-2 folding,
 domination, a greedy clique-cover upper bound, component splitting at every
-node, and branching on a maximum-degree vertex with its mirrors).
+node, and branching on a maximum-degree vertex with its mirrors). The search
+gives up -- the head stays unevaluated, never a merely maximal set -- after
+20 million nodes, 6 x 10^8 units of aggregate work (live-set size summed over
+nodes), 64M ints of per-level scratch or depth 20000, so a huge non-bipartite
+sparse input (e.g. `RandomGraph[{200000, 300000}]`) returns unevaluated in
+bounded memory rather than exhausting it.
 
 Weighted graphs: these heads optimize cardinality, as the Wolfram
 documentation states. (The differential test found Mathematica returning
@@ -739,8 +747,11 @@ Search over edge decisions with constraint propagation: each vertex needs
 exactly two chosen edges (directed: one in, one out), chosen edges form path
 fragments whose end-to-end links forbid short cycles, and the remaining graph
 must stay biconnected (directed: strongly connected) at every node. A random
-400-vertex cubic graph takes about 1 ms. Paths reduce to cycles through an
-added vertex.
+400-vertex cubic graph takes about 1 ms. Large meshes are not a fast case:
+the linear per-node biconnectivity check makes `GridGraph[{n, n}]` roughly
+quadratic in the vertex count (100 x 100 about 1.5 s, 150 x 150 about 7 s), so
+wrap far larger instances in `TimeConstrained`. Paths reduce to cycles through
+an added vertex.
 
 ### Isomorphism and canonical forms
 

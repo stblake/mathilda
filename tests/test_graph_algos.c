@@ -130,6 +130,14 @@ static void test_matching_covers(void) {
     /* exactness on a folding-heavy sparse graph: alpha(C_101) = 50 */
     assert_eval_eq("Length[First[FindIndependentVertexSet[CycleGraph[101]]]]", "50", 0);
     assert_eval_eq("Length[FindVertexCover[CycleGraph[101]]]", "51", 0);
+    /* bipartite components of >= 256 vertices: Konig (Hopcroft-Karp) */
+    assert_eval_eq("With[{g = GridGraph[{20, 20}], s = First[FindIndependentVertexSet[GridGraph[{20, 20}]]]}, "
+                   "{Length[s], IndependentVertexSetQ[g, s]}]", "{200, True}", 0);
+    assert_eval_eq("With[{g = GridGraph[{17, 23}], c = FindVertexCover[GridGraph[{17, 23}]]}, "
+                   "{Length[c], VertexCoverQ[g, c]}]", "{195, True}", 0);
+    assert_eval_eq("Length[First[FindIndependentVertexSet[CompleteGraph[{100, 300}]]]]", "300", 0);
+    assert_eval_eq("Length[FindVertexCover[GridGraph[{300, 300}]]]", "45000", 0);
+    assert_eval_eq("Length[First[FindIndependentVertexSet[CycleGraph[1001]]]]", "500", 0);
     /* Petersen: alpha = 4 */
     assert_eval_eq("Length[First[FindIndependentVertexSet[Graph[Range[10],{1<->2,2<->3,3<->4,"
                    "4<->5,5<->1,1<->6,2<->7,3<->8,4<->9,5<->10,6<->8,8<->10,10<->7,7<->9,9<->6}]]]]",

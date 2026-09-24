@@ -18,7 +18,11 @@
  * implementation does not share).
  *
  * Algorithm: search over EDGE decisions with constraint propagation, the
- * formulation that makes sparse instances (random cubic graphs, grids) easy:
+ * formulation that makes small sparse instances easy (a random 400-vertex
+ * cubic graph takes about 1 ms). It is not near-linear on large meshes: the
+ * per-node biconnectivity check is linear, so GridGraph[{n, n}] grows roughly
+ * quadratically in the vertex count (100 x 100 about 1.5 s, 150 x 150 about
+ * 7 s, far larger grids impractical without TimeConstrained):
  *   - every vertex needs exactly two chosen edges (directed: one chosen in-arc
  *     and one chosen out-arc): a vertex with two chosen edges excludes the
  *     rest, a vertex with exactly two remaining edges forces both, fewer is a
