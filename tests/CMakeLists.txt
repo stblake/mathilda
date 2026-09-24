@@ -976,6 +976,13 @@ set(COMMON_SRC
     ../src/graph/graphprops.c
     ../src/graph/membership.c
     ../src/graph/acyclic.c
+    ../src/graph/gops_common.c
+    ../src/graph/gops_edit.c
+    ../src/graph/gops_transform.c
+    ../src/graph/gops_setops.c
+    ../src/graph/gops_preds.c
+    ../src/graph/gops_cycles.c
+    ../src/graph/gops_init.c
 )
 
 # render.c / render3d.c / label_font.c need a live Raylib + display; only
@@ -1035,6 +1042,11 @@ add_executable(graph_tests test_graph.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(graph_tests m)
 target_include_directories(graph_tests PRIVATE ../src ../src/graph)
 add_test(NAME graph_tests COMMAND graph_tests)
+
+add_executable(graph_ops_tests test_graph_ops.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(graph_ops_tests m)
+target_include_directories(graph_ops_tests PRIVATE ../src ../src/graph)
+add_test(NAME graph_ops_tests COMMAND graph_ops_tests)
 
 # RG-2: the vertex-colouring guard rows take 1-2 minutes by design (they have to
 # actually spend FVC_MAX_STEPS to prove the head refuses instead of guessing).
