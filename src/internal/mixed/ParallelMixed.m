@@ -87,7 +87,32 @@ Begin["`Private`"];
    Root objects, etc.  Every pair operation runs its results through Can; it
    is the counterpart of SymPy's cancel(..., extension=True), the step that
    made the algebraic-number-heavy examples (Guenther) tractable.            *)
-Can[e_] := Cancel[Together[e], Extension -> Automatic];
+(* Field-aware canonicalisation.  When the coefficients involve algebraic
+   constants (Root objects, numeric radicals, Gaussian Complex numbers),
+   Cancel[Together[.], Extension -> Automatic] on the RAW radicals re-derives the
+   algebraic tower every call and runs the polynomial GCD over it -- the dominant
+   cost of the compositum cases (Charlwood P8 ~63% of its time, P4 ~33%).  Instead
+   map the atoms to AlgebraicNumber[theta] in one common number field K = Q(theta)
+   (FieldData = ToNumberField + a radical basis, MEMOISED by atom set so the field
+   is built once, ~2 ms), run the native FLINT field Together/Cancel over K, and
+   map the field coefficients back to radicals via FieldData's `back`.  Measured on
+   P8's worst call: value-identical, 0.48 s -> 0.0025 s (~190x), and a more reduced
+   result (LeafCount 390 -> 63) that also speeds every downstream op.  A rational
+   input, a tiny one (below the size gate, where the field detour costs more than it
+   saves), or one whose atoms do not generate a number field falls back to the
+   original Extension -> Automatic path unchanged.  $CanFieldEnabled = False forces
+   that path everywhere (A/B differential). *)
+$CanFieldEnabled = True;
+$CanFieldMemo = <||>;
+CanRaw[e_] := Cancel[Together[e], Extension -> Automatic];
+Can[e_] := Module[{atoms, key, fd},
+  If[! TrueQ[$CanFieldEnabled], Return[CanRaw[e]]];
+  atoms = DeleteDuplicates[Cases[e, _Root | _Complex | Power[_?NumericQ, _Rational], {0, Infinity}]];
+  If[atoms === {} || LeafCount[e] < 40, Return[CanRaw[e]]];
+  key = Sort[atoms];
+  fd = If[KeyExistsQ[$CanFieldMemo, key], $CanFieldMemo[key], $CanFieldMemo[key] = FieldData[atoms]];
+  If[! MatchQ[fd, {_, _}], Return[CanRaw[e]]];
+  Cancel[Together[e /. fd[[1]]], Extension -> Automatic] /. a_AlgebraicNumber :> fd[[2]][a]];
 
 (* $analyses: the once-per-integrand analyses of iPIM (Steps 1--14 of Algorithm 4), keyed by Hash[{f0, T}] *)
 $analyses = <||>;

@@ -41,8 +41,16 @@ native FLINT kernels). **T2** verify-gate hardening (2a) + A40/A19 S'-unit fix (
           consults/populates it; `MATHILDA_NO_SYMSET_CACHE=1` A/B. **A28 4.44→3.15s (~29%), tail
           ~6%**, system-wide Orderless win. Differential byte-identical (8 large exprs); sort/expand/
           evaluate/eval/rootreduce/PMT suites pass; 0 leaks. Cost: sizeof(Expr) 56→64.
-    - [ ] **T1b — .m field-first restructure** (the field half; hoist FieldData ahead of the tower
-          substrate, recast over AlgebraicNumber[θ] to cut evaluator round-trips on P8/P4/A2/A3/A35/A40).
+    - [x] **T1b — field-aware `Can`** (v0.189). Profiled: `Can` = 63% of P8, 33% of P4 (raw-radical
+          `Cancel[…,Ext→Auto]`); A2/A3 = evaluator round-trip churn (evaluate_step+malloc+builtin_times,
+          NOT Can — that's T1d/Phase B); A28 = collect_symbols_in (done T1a). Validated the lever: P8's
+          worst Can 0.48s→0.0025s (~190×) by mapping atoms→AlgebraicNumber[θ] (memoised FieldData) +
+          native field Cancel + map-back, value-identical. Landed field-aware `Can` (gated on algebraic
+          atoms + LeafCount≥40; `$CanFieldEnabled` A/B). **P8 3.44→0.62s (5.5×), P4 2.97→1.98s, A40→0.48s;
+          tail 20.3→16.3s (~20%).** Full 50 identical outcomes (48 sound); PMT/rootreduce/field/nf suites
+          pass; DSolve 2_2_13 unchanged.
+    - [ ] **T1d — A2/A3 evaluator churn** (native nf_elem AlgebraicNumber arith threaded through the
+          assembly; the deeper Phase-B C work — cuts evaluate_step/malloc/builtin_times round-trips).
     - [ ] **T1c — A28 further** (residue-loop expression size / native Q(x) arithmetic) if needed.
 - [ ] **T1(old) — native field-first tower arithmetic** (mean-time lever; after T2, or in parallel —
       disjoint code). Phase A: hoist field discovery (`FieldData` @2324) ahead of the tower
