@@ -43,6 +43,7 @@
 #include "expand.h"
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
+#include "flint_qqbar.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -1091,6 +1092,26 @@ Expr* builtin_rowreduce(Expr* res) {
     }
 
     if (method == MATSOL_AUTOMATIC) method = matsol_resolve_automatic(arg);
+
+    /* Native number-field fast path: a matrix of rationals and
+     * AlgebraicNumber[theta, ...] over one common theta reduces with FLINT
+     * antic nf_elem arithmetic instead of per-element evaluator dispatch. The
+     * reduced row echelon form is canonical, so the result is identical for
+     * every Method. Returns NULL (falls through to the classical path) for a
+     * pure-rational, mixed-generator, or non-field matrix. */
+    if (!getenv("MATHILDA_NO_NF_RREF")) {
+        int64_t dims[64];
+        if (get_tensor_dims(arg, dims) == 2 && dims[0] > 0 && dims[1] > 0) {
+            int m = (int)dims[0], n = (int)dims[1];
+            Expr** flat = malloc(sizeof(Expr*) * (size_t)m * (size_t)n);
+            size_t idx = 0;
+            flatten_tensor(arg, flat, &idx);
+            Expr* nfout = flint_qqbar_nf_mat_rref(flat, m, n);
+            for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
+            free(flat);
+            if (nfout) return nfout;
+        }
+    }
 
     switch (method) {
         case MATSOL_AUTOMATIC:

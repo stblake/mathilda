@@ -1,3 +1,35 @@
+# CURRENT (2026-09-24): Charlwood 49/50 + fastest-of-four CAS
+
+**Goal.** Solve the 6 remaining misses (A2, A3, A27, A35, A40, P8 → 49/50) AND make the suite
+total+median beat Maxima (12.8s/92ms), Mathematica (16.5s/166ms), SymPy (56.6s/505ms). Plan file:
+`~/.claude/plans/let-s-continue-to-implement-snappy-plum.md`. Full diagnosis in `MATHILDA_DIVERGENCES.md §E`.
+
+Root cause (path-dependent): A2/A3/A35 = `quo` over raw radicals (`ParallelMixed.m:2367-2371`);
+P8 = ToNumberField `$Failed` → Expr fallback; A27 = residue-realisation ZeroTest cost;
+A40 = wrong S'-unit coeff over Q(√5). Speed lever = native `nf_elem` RowReduce (FLINT).
+
+- [x] **Phase 0** — reproduced v0.178. **FINDINGS (revise plan):**
+      - **ToNumberField SUCCEEDS on every rung of A2/A3/P8/A35/A40** (`fd$Failed=False`). The Expr fallback
+        is NOT taken by any case — v0.178 precision escalation fixed compositum construction. ⇒ **Phase 4
+        (deep P8 ToNumberField) is OBSOLETE**; P8 is clean-path, same `quo` bug as A2/A3.
+      - A2/A3: conic-split rung 15 unk → **72/73 eq vs Mathematica 34** (2× doubling from `quo` over raw radicals).
+      - P8: clean path; declines 18→4→12 eq. A40 1st rung: 49 eq, no solution (wrong coeff, Q(√5)).
+      - A35/A40 split rungs (deg-~16, 9-atom compositum): field builds but assembly **too slow → budget**. Native arithmetic is the lever.
+      - **A27: `NullSpace` lacks `ZeroTest` support** — `.m` call `NullSpace[rows, ZeroTest->…]` (`:969`) rejected
+        as invalid Method (99× `NullSpace::method`), `ns` unevaluated → `First[ns]`=rows → 13663× `Dot::dotsh`.
+        A27 has never worked. Fix: map rows to `AlgebraicNumber[θ]` + default exact `NullSpace` (needs Phase 1).
+- [ ] **Phase 1** — native `RowReduce`/`NullSpace` over `AlgebraicNumber` matrices (nf_elem/FLINT), gated + differential test [START]
+- [ ] **Phase 2** — A27: map residue-class rows to field θ, drop the unsupported `ZeroTest`, default exact NullSpace; shape guard
+- [ ] **Phase 3** — A2/A3/P8: `quo` over field θ (reference-faithful, `:2367-2371`), eq-count differential vs Mathematica
+- [ ] ~~**Phase 4** — P8 ToNumberField compositum~~ **OBSOLETE** (ToNumberField already succeeds; P8 folded into Phase 3)
+- [ ] **Phase 5** — A40: diagnose (dump/diff aug), S'-unit column arithmetic over θ
+- [ ] **Phase 6** — deep speed: native nf_elem assembly, ToNumberField field-build cache, heavy tail; four-CAS re-benchmark
+- [ ] **Phase 7** — regression (DSolve tripwire!), tests, docs, version bumps + tags
+
+Hard gate every land: DSolve corpus green + differential value-identity + `make check-c99`.
+
+---
+
 # Plan: eliminate the ParallelMixedTower time-explosions & misses on Charlwood's 50
 
 **Goal:** make Mathilda the *fastest and most complete* of the four CAS on the

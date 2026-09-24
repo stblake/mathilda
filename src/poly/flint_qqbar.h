@@ -155,4 +155,13 @@ Expr* flint_qqbar_algnum_scale_rational(const Expr* a, const Expr* r);
  * field-coefficient Expand fast path in flint_bridge.c. */
 Expr* flint_qqbar_gen_minpoly_coeffs(const Expr* gen);
 
+/* Exact reduced row echelon form of an r×c row-major matrix (flat[], row-major)
+ * whose entries are rationals and AlgebraicNumber[theta, ...] over ONE common
+ * theta, via native FLINT antic nf_elem arithmetic.  The RREF is canonical, so
+ * the result equals the classical AlgebraicNumber RowReduce for any Method.
+ * Returns a List-of-Lists Expr (caller owns) or NULL to fall through to the
+ * classical path (no AlgebraicNumber entry, a second distinct generator, a
+ * non-field entry, or no FLINT).  Does not take ownership of flat[]. */
+Expr* flint_qqbar_nf_mat_rref(Expr** flat, int r, int c);
+
 #endif /* FLINT_QQBAR_H */
