@@ -203,6 +203,54 @@ parsed:
     return 1;
 }
 
+/* Parse EdgeCapacity (el, m entries; NULL: all 1) and VertexCapacity (vl, n
+ * entries) TOGETHER, so both lists share one exactness flag and one scale
+ * 2^shift -- they meet in a single network, where capacities on different
+ * scales would be summed wrongly. The two halves of one joint parse are split
+ * into ec / vc, each keeping its own any_inf; both carry the joint inf, a
+ * finite stand-in exceeding every finite sum of either. Returns 1, or 0 as
+ * gf_caps_parse does. */
+static int gf_caps_parse_joint(const Expr* el, long m, const Expr* vl, long n,
+                               GfCap* ec, GfCap* vc) {
+    memset(ec, 0, sizeof(*ec));
+    memset(vc, 0, sizeof(*vc));
+    Expr *eo = NULL, *vo = NULL;
+    const Expr* ep = el ? galg_plain_list(el, &eo) : NULL;
+    const Expr* vp = galg_plain_list(vl, &vo);
+    int ok = (!el || (ep && (long)ep->data.function.arg_count == m))
+             && vp && (long)vp->data.function.arg_count == n;
+    GfCap all;
+    memset(&all, 0, sizeof(all));
+    if (ok) {
+        Expr** items = malloc((size_t)(m + n > 0 ? m + n : 1) * sizeof(Expr*));
+        ok = items != NULL;
+        if (ok) {
+            for (long k = 0; k < m; k++)
+                items[k] = ep ? expr_copy(ep->data.function.args[k]) : expr_new_integer(1);
+            for (long k = 0; k < n; k++) items[m + k] = expr_copy(vp->data.function.args[k]);
+            Expr* both = expr_new_function(expr_new_symbol(SYM_List), items, (size_t)(m + n));
+            free(items);
+            ok = gf_caps_parse(both, m + n, &all);
+            expr_free(both);
+        }
+    }
+    expr_free(eo); expr_free(vo);
+    if (!ok) return 0;
+    ec->c = malloc((size_t)(m > 0 ? m : 1) * sizeof(int64_t));
+    vc->c = malloc((size_t)(n > 0 ? n : 1) * sizeof(int64_t));
+    if (!ec->c || !vc->c) { gf_cap_free(ec); gf_cap_free(vc); gf_cap_free(&all); return 0; }
+    memcpy(ec->c, all.c, (size_t)m * sizeof(int64_t));
+    memcpy(vc->c, all.c + m, (size_t)n * sizeof(int64_t));
+    ec->real = vc->real = all.real;
+    ec->shift = vc->shift = all.shift;
+    ec->inf = vc->inf = all.inf;
+    /* an Infinity entry was replaced by all.inf, which no finite entry reaches */
+    for (long k = 0; k < m; k++) if (ec->c[k] == all.inf) ec->any_inf = 1;
+    for (long k = 0; k < n; k++) if (vc->c[k] == all.inf) vc->any_inf = 1;
+    gf_cap_free(&all);
+    return 1;
+}
+
 /* The Expr for a scaled flow/cut value. */
 static Expr* gf_value(const GfCap* c, int64_t v) {
     if (c->any_inf && v >= c->inf) return expr_new_symbol(SYM_Infinity);
@@ -487,15 +535,11 @@ Expr* builtin_find_maximum_flow(Expr* res) {
     int nt = ns ? gf_terminals(g, res->data.function.args[2], &T) : 0;
     if (!ns || !nt) { free(S); free(T); return NULL; }
 
-    GfCap cap;
-    if (!gf_caps_parse(ov[0], m, &cap)) { free(S); free(T); return NULL; }
-    GfCap vcap;
+    GfCap cap, vcap;
     memset(&vcap, 0, sizeof(vcap));
-    if (ov[1] && !gf_caps_parse(ov[1], n, &vcap)) { gf_cap_free(&cap); free(S); free(T); return NULL; }
-    if (ov[1] && vcap.real != cap.real) {
-        /* Mixed exactness between the two lists: keep it simple, refuse. */
-        gf_cap_free(&cap); gf_cap_free(&vcap); free(S); free(T); return NULL;
-    }
+    int capok = ov[1] ? gf_caps_parse_joint(ov[0], m, ov[1], n, &cap, &vcap)
+                      : gf_caps_parse(ov[0], m, &cap);
+    if (!capok) { free(S); free(T); return NULL; }
 
     /* A terminal in both S and T: Mathematica answers 0 for s == t. */
     char* role = calloc((size_t)n + 1, 1);     /* 1 source, 2 sink */
@@ -516,7 +560,9 @@ Expr* builtin_find_maximum_flow(Expr* res) {
     int base = split ? 2 * n : n;
     int multi = (ns > 1 || nt > 1);
     int src = multi ? base : S[0], snk = multi ? base + 1 : T[0];
-    if (split && !multi) src = n + S[0];         /* flow leaves s from its out copy */
+    /* under splitting, flow enters s at its in copy and leaves t from its out
+     * copy, so the terminals' own capacity arcs are on every path */
+    if (split && !multi) snk = n + T[0];
     int nvx = base + (multi ? 2 : 0);
     long mu = 0;                                 /* undirected edges */
     for (long k = 0; k < m; k++) if (!edir[k]) mu++;
@@ -530,7 +576,10 @@ Expr* builtin_find_maximum_flow(Expr* res) {
     int64_t* cb = malloc((size_t)(np > 0 ? np : 1) * sizeof(int64_t));
     long* pos = malloc((size_t)(np > 0 ? np : 1) * sizeof(long));
     GfNet* N = NULL;
-    int64_t total = cap.inf + (split ? vcap.inf : 0);
+    /* With VertexCapacity both lists come from one joint parse, so cap.inf ==
+     * vcap.inf is the single finite stand-in for Infinity: every finite cut is
+     * below it, every cut through Infinity capacities reaches it. */
+    int64_t total = cap.inf;
     if (!pu || !pv || !cf || !cb || !pos) goto done;
     {
         long p = 0;
@@ -547,16 +596,18 @@ Expr* builtin_find_maximum_flow(Expr* res) {
             }
             for (int v = 0; v < n; v++, p++) {
                 pu[p] = v; pv[p] = n + v;
-                cf[p] = role[v] ? total : vcap.c[v];
+                /* terminals are capped too, as in Mathematica
+                 * (VertexCapacity -> {2, 10, 10} on 1-2-3 gives 2) */
+                cf[p] = vcap.c[v];
                 cb[p] = 0;
             }
         }
         if (multi) {
             for (int i = 0; i < ns; i++, p++) {
-                pu[p] = src; pv[p] = split ? n + S[i] : S[i]; cf[p] = total; cb[p] = 0;
+                pu[p] = src; pv[p] = S[i]; cf[p] = total; cb[p] = 0;
             }
             for (int i = 0; i < nt; i++, p++) {
-                pu[p] = T[i]; pv[p] = snk; cf[p] = total; cb[p] = 0;
+                pu[p] = split ? n + T[i] : T[i]; pv[p] = snk; cf[p] = total; cb[p] = 0;
             }
         }
     }
@@ -564,12 +615,9 @@ Expr* builtin_find_maximum_flow(Expr* res) {
     if (!N) goto done;
 
     int64_t flow = overlap ? 0 : gf_dinic(N, src, snk, INT64_MAX);
-    /* The flow is infinite iff it exceeds every finite cut. With vertex
-     * capacities the finite cuts are bounded by the sum of all finite edge
-     * and vertex capacities, which is total - 1 (each list's inf is its
-     * finite sum + 1). */
+    /* The flow is infinite iff it reaches the joint stand-in (see total). */
     GfCap vc = cap;
-    if (split) { vc.any_inf = cap.any_inf || vcap.any_inf; vc.inf = total - 1; }
+    if (split) vc.any_inf = cap.any_inf || vcap.any_inf;
 
     if (prop == GF_PROP_VALUE) {
         out = gf_value(&vc, flow);

@@ -29,8 +29,9 @@
  *     and may be a number or a list. Jacobi iteration when it converges
  *     (a * spectral radius < 1), else a dense LAPACK solve (n <= 4000), which
  *     like Wolfram answers even for a beyond the convergence radius (K4 with
- *     a = 1/2 gives -2). A singular system is left unevaluated (Wolfram:
- *     KatzCentrality::nosol). With no edges, or an exact a = 0, the answer is
+ *     a = 1/2 gives -2). A system singular up to rounding (pivot ratio below
+ *     1e-12, e.g. K4 with a = 1/3) is left unevaluated; Mathematica 15 returns
+ *     rounding noise there (~1.8*10^16 for K4, a = 1/3). With no edges, or an exact a = 0, the answer is
  *     b itself, exactly, as in Wolfram.
  *   HITS: {h, a} with a = A h (not renormalized) and h the same block
  *     construction as Eigenvector applied to A^T A: its blocks are the classes
@@ -531,6 +532,20 @@ Expr* builtin_katz_centrality(Expr* res) {
             memcpy(x, b, (size_t)n * sizeof(double));
             int info = mat_lapack_dgesv(n, 1, M, n, piv, x, n);
             int finite = info == 0;
+            /* dgesv flags only an exactly zero pivot; a system singular up to
+             * rounding (K4 with a = 1/3) leaves a ~1e-16 pivot and a garbage
+             * ~1e16 answer (which Mathematica 15 returns). M now holds the LU
+             * factors: treat a smallest pivot below 1e-12 of the largest as
+             * singular and leave the call unevaluated. */
+            if (finite) {
+                double umin = INFINITY, umax = 0.0;
+                for (int v = 0; v < n; v++) {
+                    double u = fabs(M[(size_t)v * n + v]);
+                    if (u < umin) umin = u;
+                    if (u > umax) umax = u;
+                }
+                if (!(umin > 1e-12 * umax)) finite = 0;
+            }
             for (int v = 0; v < n && finite; v++) if (!isfinite(x[v])) finite = 0;
             if (finite) out = gmet_real_vector(x, n);
         }

@@ -130,6 +130,10 @@ static void test_spectral_centralities(void) {
                    "{1000000, 1500000, 1750000}", 0);
     assert_eval_eq("Round[10^6 KatzCentrality[CompleteGraph[4], 0.5]]",
                    "{-2000000, -2000000, -2000000, -2000000}", 0);
+    /* singular up to rounding: unevaluated (Mathematica returns ~1.8*10^16) */
+    assert_eval_eq("Head[KatzCentrality[CompleteGraph[4], 1/3]]", "KatzCentrality", 0);
+    assert_eval_eq("Head[KatzCentrality[CycleGraph[4], 0.5]]", "KatzCentrality", 0);
+    assert_eval_eq("Round[KatzCentrality[CompleteGraph[4], 0.3333]]", "{10000, 10000, 10000, 10000}", 0);
     assert_eval_eq("Round[10^6 KatzCentrality[PathGraph[Range[4]], 0.2, {1, 2, 3, 4}]]",
                    "{1651543, 3257713, 4637024, 4927405}", 0);
     assert_eval_eq("KatzCentrality[CycleGraph[4], 0]",

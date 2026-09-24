@@ -58,6 +58,21 @@ static void test_max_flow(void) {
                    "VertexCapacity->{Infinity,1,1,Infinity}]", "1", 0);
     assert_eval_eq("FindMaximumFlow[Graph[{1->2,2->3,3->4,1->3}],1,4,"
                    "VertexCapacity->{1,1,1,1}]", "1", 0);
+    /* terminals are capped by their own vertex capacity (Mathematica 15) */
+    assert_eval_eq("FindMaximumFlow[PathGraph[{1,2,3}],1,3,EdgeCapacity->{10,10},"
+                   "VertexCapacity->{2,10,10}]", "2", 0);
+    assert_eval_eq("FindMaximumFlow[PathGraph[{1,2,3}],1,3,EdgeCapacity->{10,10},"
+                   "VertexCapacity->{10,10,2}]", "2", 0);
+    assert_eval_eq("FindMaximumFlow[CompleteGraph[4],{1,2},{3,4},"
+                   "VertexCapacity->{3,1,1,5}]", "3", 0);
+    /* exact EdgeCapacity with a non-integer VertexCapacity: one joint scale */
+    assert_eval_eq("FindMaximumFlow[PathGraph[{1,2,3}],1,3,VertexCapacity->{1,1/2,1}]", "0.5", 0);
+    assert_eval_eq("FindMaximumFlow[PathGraph[{1,2,3}],1,3,EdgeCapacity->{0.75,3},"
+                   "VertexCapacity->{1,0.5,1}]", "0.5", 0);
+    assert_eval_eq("FindMaximumFlow[PathGraph[{1,2,3}],1,3,EdgeCapacity->{Infinity,Infinity},"
+                   "VertexCapacity->{Infinity,Infinity,Infinity}]", "Infinity", 0);
+    assert_eval_eq("FindMaximumFlow[PathGraph[{1,2,3}],1,3,EdgeCapacity->{Infinity,Infinity},"
+                   "VertexCapacity->{Infinity,5,Infinity}]", "5", 0);
     /* packed flow matrix */
     assert_eval_eq("NDArrayQ[FindMaximumFlow[CycleGraph[4],1,3,\"FlowMatrix\"]]", "True", 0);
 }
