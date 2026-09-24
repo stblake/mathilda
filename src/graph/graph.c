@@ -16,6 +16,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "graph_metrics.h"
+#include "graph_hyper.h"
 
 void graph_init(void) {
     /* Graph -- construction, normalization, canonicalization (construct.c). */
@@ -288,4 +289,6 @@ void graph_init(void) {
     graph_ops_init();
     /* ---- Distance, centrality, clustering, generators (gmet_*.c) --------- */
     graph_metrics_init();
+    /* Hypergraph subsystem (hyp_*.c). */
+    graph_hyper_init();
 }

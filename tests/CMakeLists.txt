@@ -990,6 +990,11 @@ set(COMMON_SRC
     ../src/graph/gmet_cluster.c
     ../src/graph/gmet_generators.c
     ../src/graph/gmet_init.c
+    ../src/graph/hyp_util.c
+    ../src/graph/hyp_ops.c
+    ../src/graph/hyp_random.c
+    ../src/graph/hyp_transversal.c
+    ../src/graph/hyp_init.c
 )
 
 # render.c / render3d.c / label_font.c need a live Raylib + display; only
@@ -1058,6 +1063,10 @@ add_executable(graph_metrics_tests test_graph_metrics.c $<TARGET_OBJECTS:mathild
 target_link_libraries(graph_metrics_tests m)
 target_include_directories(graph_metrics_tests PRIVATE ../src ../src/graph)
 add_test(NAME graph_metrics_tests COMMAND graph_metrics_tests)
+add_executable(hypergraph_tests test_hypergraph.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(hypergraph_tests m)
+target_include_directories(hypergraph_tests PRIVATE ../src ../src/graph)
+add_test(NAME hypergraph_tests COMMAND hypergraph_tests)
 
 # RG-2: the vertex-colouring guard rows take 1-2 minutes by design (they have to
 # actually spend FVC_MAX_STEPS to prove the head refuses instead of guessing).

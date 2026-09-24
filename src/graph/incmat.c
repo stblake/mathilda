@@ -10,12 +10,13 @@
 #include "graph.h"
 #include "expr.h"
 #include "sym_names.h"
+#include "graph_hyper.h"
 #include <stdlib.h>
 
 Expr* builtin_incidence_matrix(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     const Expr* g = res->data.function.args[0];
-    if (!graph_is_valid(g)) return NULL;
+    if (!graph_is_valid(g)) return hyp_incidence_matrix(res);   /* Hypergraph, or NULL */
 
     const Expr* verts = g->data.function.args[0];
     const Expr* edges = g->data.function.args[1];

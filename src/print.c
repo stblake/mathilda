@@ -16,6 +16,7 @@
 #include "ndarray.h"
 #include "compile/compiled_function.h"
 #include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
+#include "graph_hyper.h"   /* hypergraph_is_valid, for Hypergraph[...] */
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -385,6 +386,15 @@ static void print_standard(Expr* e, int parent_prec) {
             printf("Graph[<%lu %s, %lu %s>]",
                    nv, nv == 1 ? "vertex" : "vertices",
                    ne, ne == 1 ? "edge" : "edges");
+        }
+        else if (g_inputform_depth == 0 && e->data.function.arg_count == 2
+                 && head == hyp_sym_hypergraph() && hypergraph_is_valid(e)) {
+            /* Hypergraph terse summary; InputForm/FullForm print the literal. */
+            unsigned long nv = (unsigned long)e->data.function.args[0]->data.function.arg_count;
+            unsigned long ne = (unsigned long)e->data.function.args[1]->data.function.arg_count;
+            printf("Hypergraph[<%lu %s, %lu %s>]",
+                   nv, nv == 1 ? "vertex" : "vertices",
+                   ne, ne == 1 ? "hyperedge" : "hyperedges");
         }
         else if (head == SYM_Rational && e->data.function.arg_count == 2) {
             print_standard(e->data.function.args[0], 5000);
