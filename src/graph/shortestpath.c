@@ -176,8 +176,12 @@ Expr* builtin_find_shortest_path(Expr* res) {
     Expr* out;
     if (graph_weights_usable(g)) {
         WAdj* w = build_wadj(g);
-        int* parent = calloc((size_t)w->n, sizeof(int));
-        double* dist = calloc((size_t)w->n, sizeof(double));
+        int* parent = w ? calloc((size_t)(w->n > 0 ? w->n : 1), sizeof(int)) : NULL;
+        double* dist = w ? calloc((size_t)(w->n > 0 ? w->n : 1), sizeof(double)) : NULL;
+        if (!parent || !dist) {                 /* allocation failure: unevaluated */
+            free(parent); free(dist); wadj_free(w); graph_adj_free(a);
+            return NULL;
+        }
         dijkstra(w, is, parent, dist);
         if (dist[it] == DBL_MAX) {
             out = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
@@ -221,8 +225,12 @@ Expr* builtin_graph_distance(Expr* res) {
     Expr* out;
     if (graph_weights_usable(g)) {
         WAdj* w = build_wadj(g);
-        int* parent = calloc((size_t)w->n, sizeof(int));
-        double* dist = calloc((size_t)w->n, sizeof(double));
+        int* parent = w ? calloc((size_t)(w->n > 0 ? w->n : 1), sizeof(int)) : NULL;
+        double* dist = w ? calloc((size_t)(w->n > 0 ? w->n : 1), sizeof(double)) : NULL;
+        if (!parent || !dist) {                 /* allocation failure: unevaluated */
+            free(parent); free(dist); wadj_free(w); graph_adj_free(a);
+            return NULL;
+        }
         dijkstra(w, is, parent, dist);
         /* A weighted distance is a machine real, as in the Wolfram Language
          * (GraphDistance[g, 1, 3] with weights {5, 7} is 12., not 12): the
