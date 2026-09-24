@@ -353,3 +353,27 @@ pristine main via git-stash A/B), see [[project_dsolve_tests_m19_insuite_abort]]
 7-14× Maxima gap. The transformative lever remains expression SIZE — the field-first tower
 restructure (compact `AlgebraicNumber[θ]` coefficients through the residue/tower arithmetic instead
 of raw Root/radical trees). Next.
+
+## Review — v0.186 (RowReduce OneStepRowReduction FLINT Q fast path) — SPEED
+
+**Finding (profiled):** the ParallelMixedTower ansatz calls `RowReduce[aug, Method ->
+"OneStepRowReduction"]` (chosen because it is far faster on AlgebraicNumber systems). But
+`rowreduce_onestep` (linsolve.c) lacked the FLINT `fmpq_mat_rref` fast path that `rowreduce_divfree`
+(the default method) has — so a PURE-RATIONAL `aug` reduced by the Expr Gauss-Jordan loop. Charlwood
+A1 (alg=False) has a 311×152 rational system: RowReduce was ~0.54 s of its 1.9 s biggest ansatz call.
+
+**Landed:** added the same `flint_mat_rref` fast path to `rowreduce_onestep`, before the classical
+loop. Non-rational matrices return NULL and fall through (AlgebraicNumber → nf_elem path upstream;
+inexact → the invented-1/0 classical loop). RREF is unique → value-identical.
+
+**Verified:** 200-case differential `RowReduce[m,Method->"OneStepRowReduction"] === RowReduce[m]` over
+random Q matrices ALL identical; inexact `{{2.,0.},{0.,4.}}` still returns machine 1./0.; A1 3.44 s →
+2.64 s (~23%); all Charlwood solve+verify; linearsolve/nf_rowreduce/nullspace PASS; DSolve corpus
+611 pass / 0 fail / 593 non-PASS ≤ 605 (no regression, marginally better); check-c99 clean.
+
+**Session speed tally (per-process, v0.184 → v0.186):** A1 3.38→2.64 (memo+FLINT-Q), A28 4.53→4.11
+(memo ~16% in-process A/B), A2/A3/A19/A27/A35 ~unchanged. Remaining heavy items are algorithmic:
+A35/A40 over-complex conjugate-atom field (degree-8 RootReduce back; deep — see
+[[project_charlwood_a40_sunit_conjugate_degenerate]]); A3/A2 field-Expand + retry ladder. kback for
+A35 was tried and REVERTED (fast back but bloats the answer to a degree-8 Root-polynomial, downstream
+eats the savings).

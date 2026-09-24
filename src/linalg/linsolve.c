@@ -455,6 +455,24 @@ static Expr* rowreduce_onestep(Expr* arg) {
     size_t idx = 0;
     flatten_tensor(arg, matrix, &idx);
 
+    /* Exact fast path: the reduced row echelon form is unique, so FLINT's exact
+     * rational RREF (fmpq_mat_rref) is identical to this division-free one-step
+     * reduction but computed in polynomial time. This matters for the callers
+     * that pass Method -> "OneStepRowReduction" over a PURE-RATIONAL system (the
+     * ParallelMixedTower ansatz on its alg=False rungs -- e.g. Charlwood A1 --
+     * whose 300+-row Q matrix was otherwise reduced by the Expr loop below). A
+     * non-rational matrix returns NULL and falls through: AlgebraicNumber
+     * matrices are taken by the nf_elem path upstream, and an inexact matrix
+     * needs the invented-1/0 exactness handling below. */
+    {
+        Expr* frref = flint_mat_rref(matrix, m, n);
+        if (frref) {
+            for (int i = 0; i < m * n; i++) expr_free(matrix[i]);
+            free(matrix);
+            return frref;
+        }
+    }
+
     int r = 0;
     for (int c = 0; c < n && r < m; c++) {
         int pivot_row = -1;
