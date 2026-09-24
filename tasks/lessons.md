@@ -3776,3 +3776,8 @@ function. Probe C nailed it: `Function[pl, Map[(pl[[1]]+#)&, {10,20}]][{5,9}]` â
 4. **The packed/NDArray transparency gate does not protect Hold* iterator specs**
    (Do/Table/Sum/Product) or AWARE heads â€” a packed list reaches them
    un-materialised; materialise in iter_spec_parse (one fix point).
+
+## Refpages are part of "documented" (2026-09-24)
+- Mistake: shipped ~120 graph heads with docstrings and grouped H3 spec prose, and called them documented. None had a refpage.
+- Rule: a builtin is documented only when `docs/spec/builtins/<cat>.md` has an H2 naming it (`## Name` or `## A / B`) with usage bullets, **Features** and fenced ```mathematica `In[n]:=`/`Out[n]=` examples. That is the only structure `site/generate.py` mines. Then run `make docs` and commit `site/docs`.
+- Check: `python3 -c "import sys; sys.path.insert(0,'site'); import generate as g; f=g.discover_builtins(); c,s=g.parse_spec_files(); print([n for n in f if n not in s])"` lists the builtins that have no section.
