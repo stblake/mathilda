@@ -237,8 +237,88 @@ static Expr* nullspace_machine_svd(Expr* m, int rows, int cols) {
 }
 #endif /* USE_LAPACK */
 
-/* The shared NullSpace core, parameterised by the RREF method. */
-static Expr* nullspace_core(Expr* m, MatsolMethod method) {
+/* Zero test for an entry.  Default (zt == NULL) is the exact structural test
+ * is_zero_poly.  With a user ZeroTest predicate (a Function or a symbol such as
+ * PossibleZeroQ, from NullSpace[m, ZeroTest -> f]) the entry is zero iff
+ * TrueQ[f[entry]] -- so both a boolean-returning body (RootReduce[Together[#]]
+ * === 0 &) and a predicate head (PossibleZeroQ) work.  `zt` is borrowed. */
+static int zt_is_zero(Expr* e, Expr* zt) {
+    if (!zt) return is_zero_poly(e);
+    Expr** a = malloc(sizeof(Expr*));
+    a[0] = expr_copy(e);
+    Expr* call = expr_new_function(expr_copy(zt), a, 1);
+    free(a);
+    Expr* r = eval_and_free(call);
+    int z = (r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True);
+    expr_free(r);
+    return z;
+}
+
+/* a op b via the evaluator, both consumed; returns the evaluated result. */
+static Expr* nsp_binop(const char* op, Expr* a, Expr* b) {
+    Expr** args = malloc(sizeof(Expr*) * 2);
+    args[0] = a; args[1] = b;
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(op), args, 2));
+    free(args);
+    return r;
+}
+
+/* Wrap `e` in Together and evaluate (consumes e) -- keeps entries canonical so
+ * the ZeroTest and the final pivot scan see a reduced form. */
+static Expr* nsp_together(Expr* e) {
+    Expr** args = malloc(sizeof(Expr*));
+    args[0] = e;
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together), args, 1));
+    free(args);
+    return r;
+}
+
+/* In-place exact reduced row echelon form of the row-major flat[rows*cols]
+ * (owned Exprs), using `zt` for every zero decision and Together to keep each
+ * updated entry canonical.  This is the RREF for NullSpace[m, ZeroTest -> f]:
+ * a structural RowReduce could pivot on an entry the ZeroTest considers zero
+ * (an algebraic zero not structurally 0), so the reduction itself must consult
+ * the ZeroTest, not just the post-hoc pivot scan. */
+static void rref_with_zerotest(Expr** flat, int rows, int cols, Expr* zt) {
+    int pr = 0;
+    for (int c = 0; c < cols && pr < rows; c++) {
+        int piv = -1;
+        for (int i = pr; i < rows; i++)
+            if (!zt_is_zero(flat[i * cols + c], zt)) { piv = i; break; }
+        if (piv < 0) continue;
+        if (piv != pr)
+            for (int j = 0; j < cols; j++) {
+                Expr* t = flat[pr * cols + j];
+                flat[pr * cols + j] = flat[piv * cols + j];
+                flat[piv * cols + j] = t;
+            }
+        /* scale the pivot row so the pivot becomes 1 */
+        Expr* pivv = expr_copy(flat[pr * cols + c]);
+        for (int j = 0; j < cols; j++)
+            flat[pr * cols + j] =
+                nsp_together(nsp_binop(SYM_Divide, flat[pr * cols + j], expr_copy(pivv)));
+        expr_free(pivv);
+        /* eliminate the pivot column from every other row */
+        for (int i = 0; i < rows; i++) {
+            if (i == pr) continue;
+            if (zt_is_zero(flat[i * cols + c], zt)) continue;
+            Expr* f = expr_copy(flat[i * cols + c]);
+            for (int j = 0; j < cols; j++) {
+                Expr* prod = nsp_binop(SYM_Times, expr_copy(f),
+                                       expr_copy(flat[pr * cols + j]));
+                Expr* neg = nsp_binop(SYM_Times, expr_new_integer(-1), prod);
+                flat[i * cols + j] =
+                    nsp_together(nsp_binop(SYM_Plus, flat[i * cols + j], neg));
+            }
+            expr_free(f);
+        }
+        pr++;
+    }
+}
+
+/* The shared NullSpace core, parameterised by the RREF method and an optional
+ * ZeroTest predicate (zt != NULL). */
+static Expr* nullspace_core(Expr* m, MatsolMethod method, Expr* zt) {
     int64_t dims[64];
     int rank = get_tensor_dims(m, dims);
 
@@ -259,32 +339,38 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
     /* Inexact (machine-real) matrix: solve by SVD, orders of magnitude
      * faster than row-reducing floats through the symbolic evaluator and
      * matching Mathematica's orthonormal null space.  Falls through to
-     * RowReduce if any entry is symbolic/complex/MPFR. */
-    if (common_has_machine_real(m)) {
+     * RowReduce if any entry is symbolic/complex/MPFR.  Skipped when a
+     * ZeroTest is supplied (an exact, possibly-algebraic reduction). */
+    if (!zt && common_has_machine_real(m)) {
         Expr* svd_ns = nullspace_machine_svd(m, rows, cols);
         if (svd_ns) return svd_ns;
     }
 #endif
 
-    Expr* rref = call_rowreduce(m, method);
-    if (!rref) return NULL;
-
-    /* RowReduce returns a {rows, cols} List of Lists.  Re-probe the
-     * shape because future variants of RREF could (in principle)
-     * return a rank-0 / non-list result on a degenerate input. */
-    int64_t rref_dims[64];
-    int rref_rank = get_tensor_dims(rref, rref_dims);
-    if (rref_rank != 2 || rref_dims[0] != rows || rref_dims[1] != cols) {
-        expr_free(rref);
-        return NULL;
-    }
-
     Expr** flat = malloc(sizeof(Expr*) * (size_t)rows * (size_t)cols);
-    {
+    if (zt) {
+        /* Exact RREF that consults the ZeroTest for every zero decision. */
+        size_t idx = 0;
+        flatten_tensor(m, flat, &idx);
+        rref_with_zerotest(flat, rows, cols, zt);
+    } else {
+        Expr* rref = call_rowreduce(m, method);
+        if (!rref) { free(flat); return NULL; }
+
+        /* RowReduce returns a {rows, cols} List of Lists.  Re-probe the
+         * shape because future variants of RREF could (in principle)
+         * return a rank-0 / non-list result on a degenerate input. */
+        int64_t rref_dims[64];
+        int rref_rank = get_tensor_dims(rref, rref_dims);
+        if (rref_rank != 2 || rref_dims[0] != rows || rref_dims[1] != cols) {
+            expr_free(rref);
+            free(flat);
+            return NULL;
+        }
         size_t idx = 0;
         flatten_tensor(rref, flat, &idx);
+        expr_free(rref);
     }
-    expr_free(rref);
 
     /* Locate the pivot column of each row: the leftmost non-zero
      * entry.  After a successful RowReduce that entry is 1, but we
@@ -294,7 +380,7 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
 
     for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
-            if (!is_zero_poly(flat[r * cols + c])) {
+            if (!zt_is_zero(flat[r * cols + c], zt)) {
                 /* Only record the first pivot we see for this column;
                  * a well-formed RREF guarantees each column has at
                  * most one pivot row, but guard against degenerate
@@ -314,7 +400,7 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
      * space, so its answer here is {{-0.894..., 0.447...}}; that is a different
      * and larger difference, recorded in the HPC plan rather than changed
      * here.) */
-    bool nsp_real = common_has_machine_real(m);
+    bool nsp_real = !zt && common_has_machine_real(m);
 
     /* Build basis vectors -- one per free column, rightmost first. */
     Expr** basis_rows = NULL;
@@ -369,18 +455,36 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
     return result;
 }
 
+/* Extract a ZeroTest -> f option: returns f (borrowed) if `opt` is
+ * Rule/RuleDelayed[ZeroTest, f], else NULL. */
+static Expr* nsp_zerotest_option(Expr* opt) {
+    if (!opt || opt->type != EXPR_FUNCTION) return NULL;
+    Expr* h = opt->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return NULL;
+    if ((h->data.symbol.name != SYM_Rule && h->data.symbol.name != SYM_RuleDelayed)
+        || opt->data.function.arg_count != 2) return NULL;
+    Expr* lhs = opt->data.function.args[0];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_ZeroTest) return NULL;
+    return opt->data.function.args[1];
+}
+
 Expr* builtin_nullspace(Expr* res) {
     if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 1 || argc > 2) return NULL;
+    if (argc < 1) return NULL;
 
     Expr* m = res->data.function.args[0];
 
+    /* Options after the matrix: Method -> "<name>" and/or ZeroTest -> f. */
     MatsolMethod method = MATSOL_AUTOMATIC;
-    if (argc == 2) {
-        method = matsol_parse_method_option(res->data.function.args[1]);
-        if (method == MATSOL_INVALID) {
+    Expr* zt = NULL;   /* borrowed from res */
+    for (size_t k = 1; k < argc; k++) {
+        Expr* opt = res->data.function.args[k];
+        Expr* zf = nsp_zerotest_option(opt);
+        if (zf) { zt = zf; continue; }
+        MatsolMethod mm = matsol_parse_method_option(opt);
+        if (mm == MATSOL_INVALID) {
             static uint64_t last_warned = 0;
             matsol_warn_once(&last_warned, res,
                 "NullSpace::method: Method option value is not one of "
@@ -388,11 +492,12 @@ Expr* builtin_nullspace(Expr* res) {
                 "\"OneStepRowReduction\", \"CofactorExpansion\".\n");
             return NULL;
         }
+        method = mm;
     }
 
     /* On success the evaluator (eval.c:813) frees `res` for us; on NULL
      * return it retains ownership.  Do not free `res` here. */
-    return nullspace_core(m, method);
+    return nullspace_core(m, method, zt);
 }
 
 void matnull_init(void) {

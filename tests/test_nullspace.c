@@ -383,6 +383,37 @@ static void test_nullspace_docstring(void) {
     printf("  PASS: Information[NullSpace] evaluated\n");
 }
 
+/* NullSpace[m, ZeroTest -> f]: f is a predicate (a boolean-returning body such
+ * as RootReduce[Together[#]] === 0 &, or a predicate head such as PossibleZeroQ)
+ * applied to every entry -- accepted, not rejected as an invalid Method, and
+ * used for every zero decision including algebraic zeros a structural test
+ * misses. */
+static void test_nullspace_zerotest(void) {
+    /* integer matrix: agrees with the default for both predicate forms */
+    assert_eval_eq(
+        "NullSpace[{{1,2,3},{4,5,6},{7,8,9}}, "
+        "ZeroTest -> (RootReduce[Together[#]] === 0 &)]",
+        "{{1, -2, 1}}", 0);
+    assert_eval_eq(
+        "NullSpace[{{1,2,3},{4,5,6},{7,8,9}}, ZeroTest -> PossibleZeroQ]",
+        "{{1, -2, 1}}", 0);
+    /* algebraic rank deficiency: row2 = Sqrt[2]*row1 -- a structural RREF would
+     * pivot on the second row and miss the dependency; the ZeroTest catches it. */
+    assert_eval_eq(
+        "NullSpace[{{1, Sqrt[2]}, {Sqrt[2], 2}}, ZeroTest -> PossibleZeroQ]",
+        "{{-Sqrt[2], 1}}", 0);
+    /* the returned vector is a genuine kernel element */
+    assert_eval_eq(
+        "Simplify[{{1, Sqrt[2]}, {Sqrt[2], 2}} . First[NullSpace["
+        "{{1, Sqrt[2]}, {Sqrt[2], 2}}, ZeroTest -> PossibleZeroQ]]]",
+        "{0, 0}", 0);
+    /* Method and ZeroTest may be given together */
+    assert_eval_eq(
+        "NullSpace[{{1,2,3},{4,5,6},{7,8,9}}, Method -> \"OneStepRowReduction\", "
+        "ZeroTest -> PossibleZeroQ]",
+        "{{1, -2, 1}}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -402,6 +433,7 @@ int main(void) {
     TEST(test_nullspace_method_onestep);
     TEST(test_nullspace_method_automatic_symbol);
     TEST(test_nullspace_method_unknown);
+    TEST(test_nullspace_zerotest);
     TEST(test_nullspace_non_matrix);
     TEST(test_nullspace_arity);
     TEST(test_nullspace_identity);

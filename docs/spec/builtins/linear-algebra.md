@@ -1014,6 +1014,7 @@ Out[4]= {{1, 0}, {0, 1}}
 Gives a basis for the null space of a matrix.
 - `NullSpace[m]`
 - `NullSpace[m, Method -> "<name>"]`
+- `NullSpace[m, ZeroTest -> f]`
 
 **Features**:
 - `Protected`.
@@ -1042,6 +1043,15 @@ Gives a basis for the null space of a matrix.
   - `Method -> "CofactorExpansion"` — identity-if-invertible path
     inside RowReduce; falls back to `"DivisionFreeRowReduction"` on
     singular / rectangular input.
+- `ZeroTest -> f` supplies a predicate that decides when an entry is
+  zero during the reduction (an entry is zero iff `f[entry]` is `True`).
+  Both a body such as `(RootReduce[Together[#]] === 0 &)` and a predicate
+  head such as `PossibleZeroQ` are accepted. With a `ZeroTest`, `NullSpace`
+  runs its own exact Gauss-Jordan RREF that consults the predicate at every
+  pivot (a structural RREF would pivot on an algebraic zero the predicate
+  rejects), keeping entries canonical via `Together`; e.g.
+  `NullSpace[{{1, Sqrt[2]}, {Sqrt[2], 2}}, ZeroTest -> PossibleZeroQ]` is
+  `{{-Sqrt[2], 1}}`. `Method` and `ZeroTest` may be combined.
 - Issues `NullSpace::matrix` and returns unevaluated if the argument
   is not a non-empty rank-2 tensor.
 - Issues `NullSpace::method` and returns unevaluated for unknown

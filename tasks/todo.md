@@ -18,8 +18,8 @@ A40 = wrong S'-unit coeff over Q(√5). Speed lever = native `nf_elem` RowReduce
       - **A27: `NullSpace` lacks `ZeroTest` support** — `.m` call `NullSpace[rows, ZeroTest->…]` (`:969`) rejected
         as invalid Method (99× `NullSpace::method`), `ns` unevaluated → `First[ns]`=rows → 13663× `Dot::dotsh`.
         A27 has never worked. Fix: map rows to `AlgebraicNumber[θ]` + default exact `NullSpace` (needs Phase 1).
-- [ ] **Phase 1** — native `RowReduce`/`NullSpace` over `AlgebraicNumber` matrices (nf_elem/FLINT), gated + differential test [START]
-- [ ] **Phase 2** — A27: map residue-class rows to field θ, drop the unsupported `ZeroTest`, default exact NullSpace; shape guard
+- [x] **Phase 1** — native `RowReduce` over `AlgebraicNumber` matrices (nf_elem/FLINT), gated + differential (120 matrices byte-identical); A2 8.9→6.8s; v0.179 tagged
+- [x] **Phase 2** — A27: `ZeroTest` option in `NullSpace` (any predicate; exact RREF consulting it). **A27 solves+verifies ~1.4s (44/50).** dsolve unchanged; v0.180
 - [ ] **Phase 3** — A2/A3/P8: `quo` over field θ (reference-faithful, `:2367-2371`), eq-count differential vs Mathematica
 - [ ] ~~**Phase 4** — P8 ToNumberField compositum~~ **OBSOLETE** (ToNumberField already succeeds; P8 folded into Phase 3)
 - [ ] **Phase 5** — A40: diagnose (dump/diff aug), S'-unit column arithmetic over θ
