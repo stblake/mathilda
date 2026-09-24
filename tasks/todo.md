@@ -1,3 +1,48 @@
+# ACTIVE (2026-09-24 pm): Best Maxima mean-time + A40/A19 completeness
+
+Plan file: `~/.claude/plans/cozy-sparking-whisper.md`. Two tracks:
+**T1** native field-first tower arithmetic (the mean-time lever; hoist FieldData ahead of
+the raw-radical tower substrate so `Can`/Together/Cancel/CoefficientRules hit the existing
+native FLINT kernels). **T2** verify-gate hardening (2a) + A40/A19 S'-unit fix (2b).
+
+- [x] **2a — harden the verify gate** (`ParallelMixed.m:2105-2141`). Denser FIXED set of 33
+      varied-denominator positive rationals (was 11) + hoist `D[surf,x]` out of the per-point
+      map (net FASTER than the old gate, which re-differentiated surf 11x). Deterministic, no
+      RNG side effect (SeedRandom is global, BlockRandom absent). **VERIFIED:** 46/50 verify OK
+      at independent off-gate points (branch-cut A11/A34/A35 included); P9 OK (domain-filtered);
+      A39/A40 decline (expected).
+      **KEY FINDING:** 2a exposed that **A19 was a silent-wrong pass** — old 11-point gate
+      accepted a residual-7.6 (grossly wrong) surf (proven by stash A/B on the v0.186 binary);
+      new gate declines it (cold AND warm). So prior "48/50" hid one wrong case; honest sound
+      count is **47/50**. A19's antiderivative is genuinely wrong via non-deterministic S'-unit
+      selection — same root cause as A40. See [[project_charlwood_a40_sunit_conjugate_degenerate]].
+      TODO before commit: DSolve corpus tripwire green; version bump + tag; changelog.
+- [x] **2b (A40 part) — conjugation-closed, deterministic S'-unit selection** (`ParallelMixed.m`
+      ~2707-2730). CONFIRMED by probe: `NormSearchAll` DOES return both conjugate orbits for A40
+      (`cvals={1/5-2I/5 ×2, 1/5+2I/5 ×2, ...}`, degb=0) — the bug was purely the orbit-blind
+      `SortBy`+cap-4 filling from one orbit. Fix landed: (1) total canonical order (Re/Im tie-breaks
+      → deterministic, kills batch non-determinism); (2) round-robin by norm class → cap takes one
+      generator per orbit, both y-signs, matching Mathematica's 4-unit set. **A40 solves+verifies
+      ~0.9s.** A1/A11/A16/A34/A37/P4 unregressed. Single-orbit cases unchanged (round-robin over one
+      group = identity).
+- [ ] **A19 correct solve — DEFERRED follow-up (deep).** A19 was never actually solved (silent-wrong
+      pass, now honest decline). Its field is Q(i,√2); it needs `deg_x b=1` **Pell-unit** generators
+      (`c=-3±2√2`) that the degb=0-first cap-4 never reaches. Round-robin does NOT help (single-orbit
+      per class). Needs the **independence/saturation-based S'-unit BASIS** (a divisor-lattice
+      independence test) — and there is NO Mathematica reference trace for A19 to target. Raising the
+      cap over-completes → spurious wrong solve (proven). Genuine subproject. → 49/50 when done.
+- [ ] **T1 — native field-first tower arithmetic** (mean-time lever; after T2, or in parallel —
+      disjoint code). Phase A: hoist field discovery (`FieldData` @2324) ahead of the tower
+      substrate (`Can`@90, Padd/Pmul/TDiv/TowerD@103-221, Tower[]@117, residue loop 2461-2653),
+      recast over AlgebraicNumber[θ] so the existing univariate KxRf CRE / field Expand /
+      CoefficientRules / nf_elem RREF fire. Measure vs Maxima (target total ≤ ~12.5s). Phase B:
+      native multivariate CRE-over-K in C only for the residual (the genuine gap).
+
+Hard gate every land: DSolve corpus green + off-gate value-identity + `make check-c99` + valgrind;
+substantive commits bump `src/version.h` (+0.001) and tag `v<STRING>`.
+
+---
+
 # CURRENT (2026-09-24): Charlwood 49/50 + fastest-of-four CAS
 
 **Goal.** Solve the 6 remaining misses (A2, A3, A27, A35, A40, P8 → 49/50) AND make the suite

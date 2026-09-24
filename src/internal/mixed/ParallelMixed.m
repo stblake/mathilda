@@ -2103,13 +2103,32 @@ ParallelIntegrateMixed[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeCon
      (verify-timeout: accept as principal branch rather than reject a
      likely-correct but large answer.) *)
   fac = TimeConstrained[
-    Quiet[Module[{cand, pts, dv, fv, keep, tol = 10^-12, units, gu, u},
-      cand = {1/2, 1/3, 2/3, 1/5, 4/5, 2, 3, 3/2, 5/2, 7/3, 1/7};
+    Quiet[Module[{cand, pts, dv, fv, keep, tol = 10^-12, units, gu, u, dsurf},
+      dsurf = D[surf, x];   (* differentiate once, reused at every sample below *)
+      (* A dense fixed spread of positive rationals, not just the original 11
+         anchors.  The sparse grid could be silently passed by a wrong,
+         over-complete surface that happened to agree at those 11 points (a
+         reverted A40 over-completion was wrong only off-grid, e.g. at x = 1/4;
+         A19's non-deterministic S'-unit selection could produce an r wrong off
+         the anchors).  The error of such a surface is a rational function that
+         agrees with the integrand only at its finitely many zeros, so a denser
+         grid of varied-denominator points rejects it.  The set is FIXED, so the
+         gate stays deterministic and has no RNG side effect on the caller's
+         random state (SeedRandom is global and BlockRandom is unavailable).
+         Soundness is unchanged: more samples can only reject more wrong
+         surfaces, never a correct one -- each kept point still tests
+         D[surf] == u f EXACTLY (to tol).  Hoisting D[surf,x] out of the map
+         makes this denser gate net-faster than the old 11-point one, which
+         re-differentiated surf once per point. *)
+      cand = {1/2, 1/3, 2/3, 1/5, 4/5, 2, 3, 3/2, 5/2, 7/3, 1/7,
+              1/4, 3/4, 1/6, 5/6, 2/7, 5/7, 6/7, 3/8, 5/8, 7/8,
+              2/9, 4/9, 7/9, 3/11, 7/11, 9/11, 5/13, 11/13,
+              4/3, 5/4, 7/4, 9/7};
       pts = Select[cand,
         With[{v = N[integrand /. x -> #, 30]},
           NumericQ[v] && Abs[Im[v]] < 10^-10 && Abs[v] < 10^12] &];
-      If[pts === {}, pts = {7/13 + 5 I/11, 4/9 - 3 I/7}];   (* complex fallback *)
-      dv = (N[D[surf, x] /. x -> #, 30]) & /@ pts;
+      If[pts === {}, pts = {7/13 + 5 I/11, 4/9 - 3 I/7, 2/7 + 3 I/5}];   (* complex fallback *)
+      dv = (N[dsurf /. x -> #, 30]) & /@ pts;
       fv = (N[integrand /. x -> #, 30]) & /@ pts;
       keep = Select[Range[Length[pts]],
         NumericQ[dv[[#]]] && NumericQ[fv[[#]]] && Abs[dv[[#]]] < 10^12 && Abs[fv[[#]]] < 10^12 &];
@@ -2685,9 +2704,30 @@ iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
                                   Exponent[pl[[1]], #] >= 1 && FreeQ[CoefficientList[pl[[1]], #], Alternatives @@ gens] &, None];
       If[gstar === None, Continue[]];
       sols = Select[NormSearchAll[q, pl[[1]], gstar, 2, 1], #[[2]] =!= 0 &];
+      (* Order the norm solutions so the four-generator cap covers conjugate
+         orbits, not just one orbit's several generators.  NormSearchAll returns
+         solutions of every norm class c (a^2 - q b^2 = c p^k); Galois-conjugate
+         classes -- e.g. A40's c = 1/5 -+ 2I/5 over Q(Sqrt[5], I) -- are DISTINCT
+         classes and BOTH are needed to span the log-part ansatz (Mathematica
+         collects one generator, both y-signs, from EACH orbit).  The old SortBy
+         keys were orbit-blind, so the cap filled all four slots from the first
+         orbit's two generators and permanently missed the conjugate orbit ->
+         A40 "no solution".  Fix: (1) a TOTAL canonical order (the trailing Re/Im
+         keys break every tie deterministically, killing the Solve-branch-order
+         non-determinism that made A19 wrong off-gate between runs); (2) a
+         round-robin by norm class so the first generators taken are one per
+         orbit.  A single-orbit case is left in its original within-orbit order
+         (round-robin over one group is the identity), so this neither dedups
+         within an orbit (A19 needs two independent same-class generators) nor
+         raises the cap (over-completion let the exact solve pick a spurious
+         particular solution). *)
       sols = SortBy[sols, {Exponent[#[[2]], gstar],
                            If[AllTrue[Join[CoefficientList[#[[1]], gstar], CoefficientList[#[[2]], gstar]], MatchQ[#, _Integer | _Rational] &], 0, 1],
-                           #[[4]]} &];
+                           #[[4]],
+                           Re[N[#[[3]], 30]], Im[N[#[[3]], 30]],
+                           Re[N[#[[1]] /. gstar -> 3/2, 30]], Im[N[#[[1]] /. gstar -> 3/2, 30]]} &];
+      sols = With[{grps = GatherBy[sols, RR[#[[3]]] &]},
+               Flatten[Table[Select[grps, Length[#] >= j &][[All, j]], {j, Max[Length /@ grps]}], 1]];
       sunits = {};
       Do[If[Length[sunits] >= 4, Break[]];
         Do[uuS = {Expand[sol[[1]]], Expand[sg sol[[2]]]};
