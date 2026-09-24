@@ -12,6 +12,43 @@
 #include <string.h>
 #include <stdio.h>   /* MATHILDA_HASH_VERIFY diagnostic */
 
+/* Persistent per-node symbol-set cache (see the `symset_cache` field in the
+ * Expr `function` union): one heap block per cached function node, holding the
+ * DISTINCT interned symbol-name pointers of its whole subtree.  Populated
+ * lazily by sort.c's Orderless comparison and reused across sorts; invalidated
+ * together with hash_cache (expr_invalidate_hash) and freed with the node.  The
+ * stored pointers are interned names owned by sym_intern (never freed here), so
+ * only the block itself is freed. */
+struct SymSetCache { uint32_t n; const char* syms[]; };
+
+bool expr_symset_cache_get(const Expr* e, const char* const** syms_out, uint32_t* n_out) {
+    if (!e || e->type != EXPR_FUNCTION || !e->data.function.symset_cache) return false;
+    *syms_out = e->data.function.symset_cache->syms;
+    *n_out    = e->data.function.symset_cache->n;
+    return true;
+}
+
+void expr_symset_cache_put(const Expr* e, const char* const* syms, size_t n) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (e->data.function.symset_cache) return;              /* already cached */
+    if (n > 0xffffffffu) return;                            /* absurd width: skip */
+    struct SymSetCache* c =
+        (struct SymSetCache*)malloc(sizeof(struct SymSetCache) + n * sizeof(const char*));
+    if (!c) return;                                         /* OOM: skip; correctness unaffected */
+    c->n = (uint32_t)n;
+    for (size_t i = 0; i < n; i++) c->syms[i] = syms[i];
+    /* Benign structural metadata on a logically-const node, exactly as
+     * expr_hash mutates hash_cache; the caller (a sort in flight) holds the
+     * node immutable. */
+    ((Expr*)e)->data.function.symset_cache = c;
+}
+
+void expr_symset_cache_clear(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    free(e->data.function.symset_cache);
+    e->data.function.symset_cache = NULL;
+}
+
 /* EXPR_COMPILED payload lifecycle — implemented in compile/compiled_function.c.
  * Forward-declared here so the core Expr node can adopt / share / release the
  * opaque payload without pulling the compiler headers into expr.c. */
@@ -265,6 +302,7 @@ Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count) {
      * slot holds garbage until initialised. assoc_from_rules attaches an index
      * to canonical associations after construction. */
     e->data.function.index = NULL;
+    e->data.function.symset_cache = NULL;   /* no symbol-set cache yet (see expr.h) */
     return e;
 }
 
@@ -529,6 +567,7 @@ Expr* expr_unshare(Expr* e) {
              * which any index would be stale. Absent index => O(n) scan, always
              * correct. */
             fresh->data.function.index = NULL;
+            fresh->data.function.symset_cache = NULL;   /* recompute lazily: a copy is a new node */
             fresh->data.function.head = expr_copy(e->data.function.head);
             fresh->data.function.arg_count = e->data.function.arg_count;
             if (e->data.function.arg_count > 0) {
@@ -579,6 +618,7 @@ void expr_free(Expr* e) {
             /* Free the cached Association index (NULL for every non-association
              * function node; assoc_index_free is a no-op on NULL). */
             assoc_index_free(e->data.function.index);
+            free(e->data.function.symset_cache);   /* block only; interned names are not owned */
             if (e->data.function.head) expr_free(e->data.function.head);
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (e->data.function.args && e->data.function.args[i]) {

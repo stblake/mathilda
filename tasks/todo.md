@@ -31,7 +31,20 @@ native FLINT kernels). **T2** verify-gate hardening (2a) + A40/A19 S'-unit fix (
       per class). Needs the **independence/saturation-based S'-unit BASIS** (a divisor-lattice
       independence test) — and there is NO Mathematica reference trace for A19 to target. Raising the
       cap over-completes → spurious wrong solve (proven). Genuine subproject. → 49/50 when done.
-- [ ] **T1 — native field-first tower arithmetic** (mean-time lever; after T2, or in parallel —
+- [~] **T1 — mean-time lever (profiled, heterogeneous tail).** Baseline tail (9 heavy cases,
+      warm) = ~20-21.7s = 77% of the ~26s total. Fresh profiling: **A28 (4.4s) ~80% `collect_symbols_in`**
+      (rational-bound); field cases (P8/P4/A2/A3/A35/A40 ~11s) = distributed evaluator round-trip
+      overhead. Two DISJOINT levers.
+    - [x] **T1a — persistent per-node symbol-set cache** (v0.188). `symset_cache` field on Expr
+          function union; lazy, reused across sorts, invalidated with hash_cache (all 6 mutation
+          sites via `expr_invalidate_hash`), freed with node, reset on unshare; `symmemo_lookup`
+          consults/populates it; `MATHILDA_NO_SYMSET_CACHE=1` A/B. **A28 4.44→3.15s (~29%), tail
+          ~6%**, system-wide Orderless win. Differential byte-identical (8 large exprs); sort/expand/
+          evaluate/eval/rootreduce/PMT suites pass; 0 leaks. Cost: sizeof(Expr) 56→64.
+    - [ ] **T1b — .m field-first restructure** (the field half; hoist FieldData ahead of the tower
+          substrate, recast over AlgebraicNumber[θ] to cut evaluator round-trips on P8/P4/A2/A3/A35/A40).
+    - [ ] **T1c — A28 further** (residue-loop expression size / native Q(x) arithmetic) if needed.
+- [ ] **T1(old) — native field-first tower arithmetic** (mean-time lever; after T2, or in parallel —
       disjoint code). Phase A: hoist field discovery (`FieldData` @2324) ahead of the tower
       substrate (`Can`@90, Padd/Pmul/TDiv/TowerD@103-221, Tower[]@117, residue loop 2461-2653),
       recast over AlgebraicNumber[θ] so the existing univariate KxRf CRE / field Expand /

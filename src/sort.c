@@ -408,6 +408,15 @@ static bool symmemo_grow(SymMemo* m) {
  * per-node `syms` heap block, by contrast, is only ever freed in
  * symmemo_free() at the end of the sort, so the returned pointer stays valid
  * across further lookups. */
+/* A/B toggle: MATHILDA_NO_SYMSET_CACHE=1 disables the persistent per-node
+ * symbol-set cache (the per-sort memo still runs), so a differential run can
+ * confirm the cache changes no canonical order. */
+static int symset_cache_off(void) {
+    static int off = -1;
+    if (off < 0) off = getenv("MATHILDA_NO_SYMSET_CACHE") ? 1 : 0;
+    return off;
+}
+
 static bool symmemo_lookup(const Expr* e, const char*** out_syms, size_t* out_n) {
     SymMemo* m = g_symmemo;
     if (!m->ok) return false;
@@ -419,9 +428,19 @@ static bool symmemo_lookup(const Expr* e, const char*** out_syms, size_t* out_n)
         if (m->slots[h].key == e) { *out_syms = m->slots[h].syms; *out_n = m->slots[h].n; return true; }
         h = (h + 1) & mask;
     }
-    /* miss: compute the symbol set once and copy it into the arena */
+    /* miss: take the symbol set from the persistent per-node cache if one was
+     * built in an EARLIER sort (so a node is never re-walked), else compute it
+     * once and populate the cache for later sorts.  collect_symbols_in -- the
+     * dominant cost of ordering the large algebraic sums integration builds --
+     * thus runs at most once per distinct node across the whole process. */
     SymSet tmp; symset_init(&tmp);
-    collect_symbols_in(e, &tmp);
+    const char* const* ncs; uint32_t ncn;
+    if (!symset_cache_off() && expr_symset_cache_get(e, &ncs, &ncn)) {
+        for (uint32_t i = 0; i < ncn; i++) symset_add(&tmp, ncs[i]);
+    } else {
+        collect_symbols_in(e, &tmp);
+        if (tmp.ok && !symset_cache_off()) expr_symset_cache_put(e, tmp.items, tmp.count);
+    }
     if (!tmp.ok) { symset_free(&tmp); m->ok = false; return false; }
     const char** syms = NULL;
     if (tmp.count) {
