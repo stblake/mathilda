@@ -1,3 +1,21 @@
+# CURRENT (2026-09-24): Graph/Hypergraph parity loop (every 2h, cron d0f18078)
+
+- [x] Iteration 1 (v0.184): 4 parallel streams merged — ops (30), metrics (~35), algos (23),
+      hypergraphs (native subsystem). All benchmark cases at or ahead of Mathematica except
+      GraphComplement (parity) and FR-form RandomHypergraph (packed-array output).
+- [ ] Next: VertexConnectivity/EdgeConnectivity on DIRECTED graphs must use strong connectivity
+      (Mathematica semantics; today uses underlying undirected — 43/69 random digraphs differ)
+- [ ] Next: Hypergraph head into the GROUND whitelist (~1 ms per use after Set)
+- [ ] Next gap batches: GraphLayout/GraphEmbedding + GraphPlot3D/LayeredGraphPlot; FindGraphCommunities
+      + CommunityGraphPlot; Tree/TreeGraph family; random-graph distributions (BarabasiAlbert,
+      WattsStrogatz, Bernoulli, DegreeGraph, SpatialGraph); KVertex/KEdge connected components;
+      DominatorTree; FindMinimumCostFlow; FindEdgeColoring / EdgeChromaticNumber; PlanarFaceList /
+      DualPlanarGraph; GraphPower/GraphProduct/GraphJoin/GraphSum; similarity measures
+      (VertexJaccard/Cosine/Dice); Graph options (VertexWeight, EdgeCapacity/EdgeCost properties).
+- Known flaky (pre-existing, not graph): primenu_tests fails ~20% of runs without GMP-ECM.
+
+---
+
 # CURRENT (2026-09-24): Graph batch — structural predicates + TopologicalSort
 
 **Goal.** Add the next batch of Wolfram graph heads missing from `src/graph/`, all built on the

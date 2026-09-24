@@ -13,6 +13,7 @@
  */
 
 #include "graph.h"
+#include "graph_algos.h"
 #include "expr.h"
 #include "sym_names.h"
 #include <stdlib.h>
@@ -53,6 +54,13 @@ static int some_cut_of_size(const GraphAdj* a, int k, char* removed) {
 
 Expr* builtin_vertex_connectivity(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
+    /* Even's algorithm on unit-capacity split-vertex max flows (galg_flow.c):
+     * polynomial, where the subset search below is exponential. The search is
+     * kept only as the fallback should the flow engine fail (allocation). */
+    if (graph_is_valid(res->data.function.args[0])) {
+        long k = galg_vertex_connectivity(res->data.function.args[0], -1, -1);
+        if (k >= 0) return expr_new_integer(k);
+    }
     GraphAdj* a = graph_build_adj(res->data.function.args[0]);
     if (!a) return NULL;
     int n = a->n;

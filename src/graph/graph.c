@@ -17,6 +17,7 @@
 #include "attr.h"
 #include "graph_metrics.h"
 #include "graph_hyper.h"
+#include "graph_algos.h"
 
 void graph_init(void) {
     /* Graph -- construction, normalization, canonicalization (construct.c). */
@@ -291,4 +292,7 @@ void graph_init(void) {
     graph_metrics_init();
     /* Hypergraph subsystem (hyp_*.c). */
     graph_hyper_init();
+    /* ---- Algos stream: flows, matchings, covers, cliques, Hamiltonian,
+     *      isomorphism, planarity (galg_*.c) ------------------------------- */
+    graph_algos_init();
 }

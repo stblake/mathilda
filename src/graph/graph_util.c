@@ -393,7 +393,7 @@ static int ekset_contains(const EKSet* t, int ia, int ib, int directed) {
  * immutable (mutators expr_unshare first -- see struct Expr). A structurally
  * equal graph at another address simply misses and is validated afresh.
  *
- * Bounded at GRAPH_MEMO_SLOTS entries, evicted round-robin, so at most that
+ * Bounded at GRAPH_MEMO_SLOTS entries, evicted least-recently-used, so at most that
  * many graphs are kept alive past their last user reference. Module-static
  * with no locking, following the g_qqbar_cache precedent (flint_qqbar.c).
  * Only valid graphs are memoized: an invalid one is re-checked every call. */
@@ -407,6 +407,7 @@ typedef struct {
     int*       eu;      /* eu[k], ev[k]: endpoint indices of edge k           */
     int*       ev;
     unsigned char* edir;/* edir[k]: 1 if edge k is a DirectedEdge             */
+    uint64_t   last_used; /* LRU clock value of the latest hit/insert         */
     signed char prop[GRAPH_PROP_COUNT];  /* cached answers; -1 = not computed */
     Expr*      cached[GRAPH_CACHED_COUNT]; /* owned cached results, or NULL  */
 } GraphMemo;
@@ -420,14 +421,20 @@ static void graph_memo_clear(GraphMemo* m) {
 }
 
 static GraphMemo g_graph_memo[GRAPH_MEMO_SLOTS];
-static int g_graph_memo_next = 0;
+static uint64_t g_graph_memo_clock = 0;   /* LRU clock */
 
-/* Store a validated graph's artefacts in the next slot (round-robin), taking
+/* Store a validated graph's artefacts in a free or least-recently-used slot, taking
  * ownership of ix/ek/eu/ev/edir. */
 static GraphMemo* graph_memo_insert(const Expr* g, GraphVIdx* ix, EKSet ek, size_t ndir,
                                     int* eu, int* ev, unsigned char* edir) {
-    GraphMemo* m = &g_graph_memo[g_graph_memo_next];
-    g_graph_memo_next = (g_graph_memo_next + 1) % GRAPH_MEMO_SLOTS;
+    /* Evict an empty slot, else the least recently used one: a head working
+     * on two graphs (GraphUnion, FindGraphIsomorphism, ...) keeps touching
+     * both, so LRU never evicts a partner that round-robin would. */
+    GraphMemo* m = &g_graph_memo[0];
+    for (int i = 0; i < GRAPH_MEMO_SLOTS; i++) {
+        if (!g_graph_memo[i].g) { m = &g_graph_memo[i]; break; }
+        if (g_graph_memo[i].last_used < m->last_used) m = &g_graph_memo[i];
+    }
     if (m->g) graph_memo_clear(m);
     /* expr_copy only bumps the refcount; it never writes the node's structure,
      * so casting away const here is safe. */
@@ -436,6 +443,7 @@ static GraphMemo* graph_memo_insert(const Expr* g, GraphVIdx* ix, EKSet ek, size
     m->ek = ek;
     m->ndir = ndir;
     m->eu = eu; m->ev = ev; m->edir = edir;
+    m->last_used = ++g_graph_memo_clock;
     for (int i = 0; i < GRAPH_PROP_COUNT; i++) m->prop[i] = -1;
     return m;
 }
@@ -461,7 +469,10 @@ static int same_graph_parts(const Expr* a, const Expr* b) {
 
 static const GraphMemo* graph_memo(const Expr* g) {
     for (int i = 0; i < GRAPH_MEMO_SLOTS; i++)
-        if (g_graph_memo[i].g == g) return &g_graph_memo[i];
+        if (g_graph_memo[i].g == g) {
+            g_graph_memo[i].last_used = ++g_graph_memo_clock;
+            return &g_graph_memo[i];
+        }
 
     /* A fresh wrapper around a memoized graph's own argument nodes: re-key the
      * entry to the new node instead of re-validating (which cost ~58 ms for a
@@ -475,6 +486,7 @@ static const GraphMemo* graph_memo(const Expr* g) {
             Expr* old = m->g;
             m->g = expr_copy((Expr*)g);   /* refcount bump only; see graph_memo_insert */
             expr_free(old);
+            m->last_used = ++g_graph_memo_clock;
             return m;
         }
     }
