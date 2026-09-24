@@ -159,7 +159,8 @@ static Expr* one_random_graph(long n, unsigned long long maxe, long m) {
     Expr* sample_args[2] = { cand_list, expr_new_integer(m) };
     Expr* sample_call = expr_new_function(expr_new_symbol("RandomSample"),
                                           sample_args, 2);
-    Expr* sampled = evaluate(sample_call);   /* consumes sample_call */
+    Expr* sampled = evaluate(sample_call);   /* does NOT consume sample_call */
+    expr_free(sample_call);
     if (!graph_is_list(sampled)) { expr_free(sampled); return NULL; }
 
     Expr* gargs[2] = { make_list_owning(int_vertices(n), (size_t)n), sampled };

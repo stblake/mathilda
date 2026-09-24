@@ -1,3 +1,45 @@
+# CURRENT (2026-09-24): Graph batch — structural predicates + TopologicalSort
+
+**Goal.** Add the next batch of Wolfram graph heads missing from `src/graph/`, all built on the
+existing `GraphAdj`/`GraphVIdx` substrate. Return types are Booleans or vertex lists, so no
+packed/Compile obligation applies (RG-2's "decide by return type" rule).
+
+Semantics decisions (Wolfram-faithful where documented; a non-graph gives `False` for every `*Q`):
+- `UndirectedGraphQ[g]` — every edge undirected; edgeless graphs are undirected (documented).
+- `DirectedGraphQ` fix — edgeless graph now `False` (Wolfram: "the empty graphs are undirected"),
+  so the two predicates are never both `True`.
+- `EmptyGraphQ[g]` — no edges (vertex count irrelevant).
+- `CompleteGraphQ[g]` / `[g, vlist]` — every ordered pair of distinct vertices joined by an edge
+  in that direction (undirected counts both ways); `[g, vlist]` tests the induced subgraph.
+- `BipartiteGraphQ[g]` — underlying undirected graph is 2-colourable.
+- `AcyclicGraphQ[g]` — no cycle, respecting direction; mixed graphs handled exactly by contracting
+  undirected components then checking the contracted digraph. `1->2, 2->1` is a cycle.
+- `TreeGraphQ[g]` — underlying graph connected, `>= 1` vertex, and `m == n - 1`.
+- `VertexQ[g, v]`, `EdgeQ[g, e]` — SameQ membership; `EdgeQ` accepts `->`/`<->` sugar; an
+  undirected edge matches either orientation; direction must match.
+- `TopologicalSort[g]` / `TopologicalSort[{rules}]` — Kahn's algorithm, ties broken by
+  VertexList position (smallest first); unevaluated for a cyclic graph or any undirected edge.
+
+- [x] Implement `src/graph/graphprops.c` (Undirected/Empty/Complete/Bipartite), `membership.c`
+      (VertexQ/EdgeQ), `acyclic.c` (AcyclicGraphQ/TreeGraphQ/TopologicalSort); fix `directedq.c`
+- [x] Register + docstrings + attributes in `graph.c`; prototypes in `graph.h`
+- [x] Tests in `tests/test_graph.c` (truth tables, mixed graphs, edge cases, memo soundness)
+- [x] `docs/spec/builtins/graphs.md` + `docs/spec/changelog/2026-09-21.md`
+- [x] Verify: graph_tests, full ctest diffed against `main`, `make check-c99`, audit checks, leaks
+- [x] Speed pass (user ask: faster than Mathematica and Python): validated-graph memo, per-graph
+      property caches, CSR adjacency, faster construction; `benchmarks/92-graph-predicates`
+- [x] Version bump v0.183, commit (local branch `graph-predicates-batch`)
+
+**Review.** 9 new heads, `DirectedGraphQ` edgeless fix, `RandomGraph` leak fix (`evaluate()` does
+not consume its argument, and `generators.c` assumed it did). Every case in experiments 29 and 92
+is at or ahead of both Mathematica 15.0 and networkx 3.6, with checks agreeing. The ctest failures
+(54) are identical on pristine `main`. They are pre-existing and environment-related (corpus paths
+assume `tests/build`, BitLength, image, QR, dsolve). `check-compile-coverage` gaps predate this work
+and involve no graph heads. Lesson: `evaluate()` never takes ownership of its argument; free the
+call yourself.
+
+---
+
 # CURRENT (2026-09-24): Charlwood 49/50 + fastest-of-four CAS
 
 **Goal.** Solve the 6 remaining misses (A2, A3, A27, A35, A40, P8 → 49/50) AND make the suite

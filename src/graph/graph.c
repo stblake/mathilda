@@ -79,7 +79,8 @@ void graph_init(void) {
     symtab_add_builtin("DirectedGraphQ", builtin_directed_graph_q);
     symtab_get_def("DirectedGraphQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DirectedGraphQ",
-        "DirectedGraphQ[g] gives True if all edges of g are directed.");
+        "DirectedGraphQ[g] gives True if g has at least one edge and all edges "
+        "of g are directed. An edgeless graph counts as undirected.");
 
     symtab_add_builtin("EdgeWeight", builtin_edge_weight);
     symtab_get_def("EdgeWeight")->attributes |= ATTR_PROTECTED;
@@ -210,6 +211,68 @@ void graph_init(void) {
         "instantly, while a dense one may exhaust the budget and refuse. "
         "FindVertexColoring[g, {c1, ...}] and FindVertexColoring[g, l] are not "
         "implemented.");
+
+    /* ---- Structural predicates & ordering -------------------------------- */
+    symtab_add_builtin("UndirectedGraphQ", builtin_undirected_graph_q);
+    symtab_get_def("UndirectedGraphQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("UndirectedGraphQ",
+        "UndirectedGraphQ[g] gives True if every edge of g is undirected "
+        "(including when g has no edges), and False otherwise.");
+
+    symtab_add_builtin("EmptyGraphQ", builtin_empty_graph_q);
+    symtab_get_def("EmptyGraphQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("EmptyGraphQ",
+        "EmptyGraphQ[g] gives True if g is a graph with no edges (it may have "
+        "vertices), and False otherwise.");
+
+    symtab_add_builtin("CompleteGraphQ", builtin_complete_graph_q);
+    symtab_get_def("CompleteGraphQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("CompleteGraphQ",
+        "CompleteGraphQ[g] gives True if every pair of distinct vertices of g is "
+        "joined by an edge in both directions (an undirected edge, or directed "
+        "edges both ways). CompleteGraphQ[g, vlist] tests the subgraph induced "
+        "by vlist; False if some element of vlist is not a vertex of g.");
+
+    symtab_add_builtin("BipartiteGraphQ", builtin_bipartite_graph_q);
+    symtab_get_def("BipartiteGraphQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("BipartiteGraphQ",
+        "BipartiteGraphQ[g] gives True if the vertices of g split into two sets "
+        "with every edge running between them (edge direction is ignored).");
+
+    symtab_add_builtin("VertexQ", builtin_vertex_q);
+    symtab_get_def("VertexQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("VertexQ",
+        "VertexQ[g, v] gives True if v is a vertex of the graph g (compared "
+        "structurally, as by SameQ), and False otherwise.");
+
+    symtab_add_builtin("EdgeQ", builtin_edge_q);
+    symtab_get_def("EdgeQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("EdgeQ",
+        "EdgeQ[g, e] gives True if e is an edge of the graph g. u->v means "
+        "DirectedEdge[u,v] and u<->v UndirectedEdge[u,v]; an undirected edge "
+        "matches in either orientation, and direction must agree.");
+
+    symtab_add_builtin("AcyclicGraphQ", builtin_acyclic_graph_q);
+    symtab_get_def("AcyclicGraphQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("AcyclicGraphQ",
+        "AcyclicGraphQ[g] gives True if g has no cycle, following directed edges "
+        "forwards and undirected edges either way: a forest when undirected, a "
+        "DAG when directed. u->v together with v->u is a cycle.");
+
+    symtab_add_builtin("TreeGraphQ", builtin_tree_graph_q);
+    symtab_get_def("TreeGraphQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TreeGraphQ",
+        "TreeGraphQ[g] gives True if g is a tree: at least one vertex, connected, "
+        "and with no cycles, ignoring edge direction. A disconnected forest is "
+        "not a tree.");
+
+    symtab_add_builtin("TopologicalSort", builtin_topological_sort);
+    symtab_get_def("TopologicalSort")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TopologicalSort",
+        "TopologicalSort[g] gives the vertices of the directed acyclic graph g "
+        "ordered so that u precedes v for every edge u->v; ties go to the vertex "
+        "earlier in VertexList[g]. TopologicalSort[{v->w, ...}] uses the rules as "
+        "the graph. Left unevaluated if g has a cycle or an undirected edge.");
 
     /* ---- Phase 6: visualization ------------------------------------------ */
     symtab_add_builtin("GraphPlot", builtin_graph_plot);

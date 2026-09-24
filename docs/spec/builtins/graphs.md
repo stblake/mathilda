@@ -26,6 +26,30 @@ vertex weights. Weighted shortest-path/distance and derived-vertex weighted
 construction (`Graph[e, EdgeWeight -> {...}]`, no explicit vertex list) remain
 out of scope.
 
+### Performance model: the validated-graph memo
+
+Because graphs are plain expressions, every accessor must know its argument is
+a valid graph. Rather than re-validate (a vertex hash index plus a parallel-edge
+check, `O(V + E)`) on every call, `src/graph/graph_util.c` keeps a small memo of
+the last few validated graph **nodes**, holding for each one a reference, the
+vertex index, the edge-key set, and every edge's endpoint indices. `Graph[...]`
+seeds it during construction, from the index it builds anyway. So on a graph
+you hold:
+
+- `VertexQ`, `EdgeQ`, `EmptyGraphQ`, `UndirectedGraphQ`, `DirectedGraphQ`,
+  `CompleteGraphQ` (single-kind graphs) are `O(1)`;
+- adjacency-based algorithms skip validation and build a CSR adjacency with no
+  hashing;
+- `AcyclicGraphQ`, `TreeGraphQ`, `BipartiteGraphQ` and `TopologicalSort` cache
+  their answer on the graph, so repeating a query is `O(1)`. Mathematica's atomic
+  `Graph` object caches properties the same way.
+
+Keying on the node pointer is sound because the memo holds a reference: a
+referenced node can't be freed (so its address can't be reused), and a node with
+more than one reference is immutable (mutators `expr_unshare` first). A
+structurally equal graph at a different address just misses and is validated
+again. The memo keeps at most 4 graphs alive past their last user reference.
+
 ## Graph
 A graph value.
 - `Graph[v, e]`: a graph with vertex list `v` and edge list `e`.
@@ -87,8 +111,10 @@ non-graph argument.
   `VertexInDegree` / `VertexOutDegree` give in-/out-degrees: a `DirectedEdge`
   adds to the source's out-degree and target's in-degree; an `UndirectedEdge`
   adds to both in- and out-degree of each endpoint.
-- `DirectedGraphQ[g]` — `True` iff `g` is a valid graph whose edges are all
-  directed.
+- `DirectedGraphQ[g]` — `True` iff `g` is a valid graph with at least one
+  edge, all of them directed. An edgeless graph counts as undirected (as in the
+  Wolfram Language), so `DirectedGraphQ` and `UndirectedGraphQ` are never both
+  `True`.
 - `EdgeWeight[g]` — the weights of `g`'s edges, in `EdgeList` order. Defaults
   to all `1`s when `g` was built without an `EdgeWeight` option.
 
@@ -147,9 +173,9 @@ constructor path:
   A negative, non-integer, or symbolic `k` leaves the expression unevaluated,
   silently — the convention the count-taking `Random*` heads share. Each
   element costs a full `O(n^2)` candidate materialisation and its own
-  `RandomSample`, so both time and memory scale as `O(k n^2)`; at `n = 50` a
-  call retains roughly 364 KB per element (a known limitation of the shared
-  single-graph path, not specific to the `k` form).
+  `RandomSample`, so time and peak memory scale as `O(k n^2)`. The candidate
+  list is freed once sampled, so a call retains only the graphs it returns
+  (until v0.183 it leaked roughly 364 KB per element at `n = 50`).
 
 ```
 EdgeCount[CompleteGraph[5]]      (* 10                        *)
@@ -206,6 +232,63 @@ Weighted `FindShortestPath`/`GraphDistance` use a plain O(V²) Dijkstra (no prio
 consistent with `VertexConnectivity`'s own small-graph exact-algorithm precedent above), and
 fall back to unweighted BFS rather than erroring whenever a weight isn't usable for it (not
 present, symbolic, or negative). No Bellman-Ford / negative-weight support.
+
+## Structural predicates & ordering
+
+Every `*Q` predicate here gives `False` — never unevaluated — for an argument
+that is not a valid graph. All run in linear time on first use and `O(1)` when
+repeated on the same graph (see *Performance model* above).
+
+- `UndirectedGraphQ[g]` — `True` iff every edge is undirected. Edgeless graphs
+  are undirected; a mixed graph is neither directed nor undirected.
+- `EmptyGraphQ[g]` — `True` iff `g` has no edges (any number of vertices,
+  including none).
+- `CompleteGraphQ[g]` — `True` iff every ordered pair of distinct vertices
+  `(u, v)` is joined by an edge usable from `u` to `v`: an undirected edge, or a
+  directed `u -> v`. A complete directed graph therefore needs both directions.
+  Graphs with 0 or 1 vertices are complete. `CompleteGraphQ[g, vlist]` tests the
+  subgraph induced by `vlist` (`False` if some element is not a vertex of `g`;
+  repeats are ignored; `{}` is complete).
+- `BipartiteGraphQ[g]` — `True` iff the vertices split into two sets with every
+  edge running between them. Edge direction is ignored; edgeless graphs are
+  bipartite.
+- `VertexQ[g, v]` — `True` iff `v` is a vertex of `g`, compared structurally (as
+  by `SameQ`): the vertex `2` is not matched by `2.0`.
+- `EdgeQ[g, e]` — `True` iff `e` is an edge of `g`. Accepts the constructor's
+  sugar (`u -> v` is `DirectedEdge[u, v]`, `u <-> v` is `UndirectedEdge[u, v]`).
+  An undirected edge matches in either orientation; direction must agree, so
+  `u -> v` is not an edge of `Graph[{u, v}, {u <-> v}]`.
+- `AcyclicGraphQ[g]` — `True` iff `g` has no cycle, where a cycle follows
+  directed edges forwards and undirected edges either way, never reusing an
+  edge. An undirected graph is acyclic iff it is a forest, a directed graph iff
+  it is a DAG; `u -> v` with `v -> u` is a 2-cycle. Mixed graphs are decided
+  exactly: undirected components are contracted (a repeated union-find join is
+  an undirected cycle, and a directed edge inside one component closes a cycle
+  through it), then the contracted digraph is checked with Kahn's algorithm.
+- `TreeGraphQ[g]` — `True` iff `g` has at least one vertex, is connected, and has
+  `VertexCount - 1` edges, i.e. is a tree when edge direction is ignored. An
+  out-tree such as `1 -> 2, 1 -> 3` is a tree; a disconnected forest, the
+  anti-parallel pair `1 -> 2, 2 -> 1`, and the null graph are not.
+- `TopologicalSort[g]` — the vertices of a directed acyclic graph, ordered so
+  that `u` precedes `v` for every edge `u -> v`. Kahn's algorithm; among the
+  vertices ready at each step, the one earliest in `VertexList[g]` goes first,
+  so the order is deterministic. `TopologicalSort[{v -> w, ...}]` uses the rules
+  as the graph (built through `Graph`). Left unevaluated for a cyclic graph, a
+  graph with any undirected edge, or a non-graph; an edgeless graph sorts to its
+  `VertexList`.
+
+```
+UndirectedGraphQ[Graph[{1,2},{}]]                        (* True           *)
+CompleteGraphQ[Graph[{1->2,2->1}]]                       (* True           *)
+CompleteGraphQ[Graph[{1->2}]]                            (* False          *)
+BipartiteGraphQ[CycleGraph[5]]                           (* False          *)
+EdgeQ[CycleGraph[3], 2<->1]                              (* True           *)
+EdgeQ[CycleGraph[3], 1->2]                               (* False          *)
+AcyclicGraphQ[Graph[{1,2,3},{1<->2,2->3,3->1}]]          (* False          *)
+TreeGraphQ[Graph[{1->2,1->3}]]                           (* True           *)
+TopologicalSort[{1->3,1->4,2->1,2->4,3->4,5->2,5->3}]    (* {5,2,1,3,4}    *)
+TopologicalSort[CycleGraph[3]]                           (* unevaluated    *)
+```
 
 ## Visualization
 

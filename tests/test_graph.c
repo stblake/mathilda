@@ -670,6 +670,189 @@ static void test_weighted_shortest_path(void) {
         "5/6", 0);
 }
 
+/* ---- Structural predicates ------------------------------------------------ */
+static void test_structural_predicates(void) {
+    /* UndirectedGraphQ: edgeless graphs are undirected; mixed graphs are not. */
+    assert_eval_eq("UndirectedGraphQ[CycleGraph[4]]", "True", 0);
+    assert_eval_eq("UndirectedGraphQ[Graph[{1,2},{}]]", "True", 0);
+    assert_eval_eq("UndirectedGraphQ[Graph[{1,2,3},{1->2,2<->3}]]", "False", 0);
+    assert_eval_eq("UndirectedGraphQ[Graph[{1->2}]]", "False", 0);
+    assert_eval_eq("UndirectedGraphQ[x]", "False", 0);
+
+    /* DirectedGraphQ: an edgeless graph counts as undirected, so the two
+     * predicates are never both True. */
+    assert_eval_eq("DirectedGraphQ[Graph[{1,2},{}]]", "False", 0);
+    assert_eval_eq("DirectedGraphQ[Graph[{1->2}]]", "True", 0);
+    assert_eval_eq("DirectedGraphQ[Graph[{1,2,3},{1->2,2<->3}]]", "False", 0);
+
+    /* EmptyGraphQ: no edges, any number of vertices. */
+    assert_eval_eq("EmptyGraphQ[Graph[{1,2},{}]]", "True", 0);
+    assert_eval_eq("EmptyGraphQ[Graph[{},{}]]", "True", 0);
+    assert_eval_eq("EmptyGraphQ[PathGraph[2]]", "False", 0);
+    assert_eval_eq("EmptyGraphQ[x]", "False", 0);
+
+    /* CompleteGraphQ: directed graphs need both directions. */
+    assert_eval_eq("CompleteGraphQ[CompleteGraph[5]]", "True", 0);
+    assert_eval_eq("CompleteGraphQ[CycleGraph[4]]", "False", 0);
+    assert_eval_eq("CompleteGraphQ[CycleGraph[3]]", "True", 0);
+    assert_eval_eq("CompleteGraphQ[Graph[{1->2}]]", "False", 0);
+    assert_eval_eq("CompleteGraphQ[Graph[{1->2,2->1}]]", "True", 0);
+    assert_eval_eq("CompleteGraphQ[Graph[{1,2,3},{1->2,2->1,2<->3,1<->3}]]", "True", 0);
+    /* An undirected edge alongside a same-direction directed edge lists the
+     * neighbour twice in out[]; it must still count once. */
+    assert_eval_eq("CompleteGraphQ[Graph[{1,2,3},{1<->2,1->2,1<->3}]]", "False", 0);
+    assert_eval_eq("CompleteGraphQ[Graph[{1},{}]]", "True", 0);
+    assert_eval_eq("CompleteGraphQ[Graph[{},{}]]", "True", 0);
+    assert_eval_eq("CompleteGraphQ[x]", "False", 0);
+    /* Induced-subgraph form. */
+    assert_eval_eq("CompleteGraphQ[Graph[{1<->2,2<->3,3<->1,3<->4}], {1,2,3}]", "True", 0);
+    assert_eval_eq("CompleteGraphQ[Graph[{1<->2,2<->3,3<->1,3<->4}], {1,3,4}]", "False", 0);
+    assert_eval_eq("CompleteGraphQ[Graph[{1->2,2->3,3->1}], {1,2,3}]", "False", 0);
+    assert_eval_eq("CompleteGraphQ[CycleGraph[4], {1,2,2}]", "True", 0);
+    assert_eval_eq("CompleteGraphQ[CycleGraph[4], {}]", "True", 0);
+    assert_eval_eq("CompleteGraphQ[CycleGraph[4], {1,5}]", "False", 0);
+
+    /* BipartiteGraphQ: odd cycles are not bipartite; direction is ignored. */
+    assert_eval_eq("BipartiteGraphQ[CycleGraph[4]]", "True", 0);
+    assert_eval_eq("BipartiteGraphQ[CycleGraph[5]]", "False", 0);
+    assert_eval_eq("BipartiteGraphQ[StarGraph[6]]", "True", 0);
+    assert_eval_eq("BipartiteGraphQ[Graph[{1->2,2->3,3->1}]]", "False", 0);
+    assert_eval_eq("BipartiteGraphQ[Graph[{1->2,2->3,3->4,4->1}]]", "True", 0);
+    assert_eval_eq("BipartiteGraphQ[Graph[{1,2},{}]]", "True", 0);
+    /* Disconnected: every component must be bipartite. */
+    assert_eval_eq("BipartiteGraphQ[Graph[{1,2,3,4,5},{1<->2,3<->4,4<->5,5<->3}]]", "False", 0);
+    assert_eval_eq("BipartiteGraphQ[x]", "False", 0);
+}
+
+/* ---- VertexQ / EdgeQ ------------------------------------------------------ */
+static void test_membership(void) {
+    assert_eval_eq("VertexQ[CycleGraph[3], 2]", "True", 0);
+    assert_eval_eq("VertexQ[CycleGraph[3], 7]", "False", 0);
+    /* Structural (SameQ) comparison: 2.0 is not the vertex 2. */
+    assert_eval_eq("VertexQ[CycleGraph[3], 2.0]", "False", 0);
+    assert_eval_eq("VertexQ[Graph[{a,f[b]},{a->f[b]}], f[b]]", "True", 0);
+    assert_eval_eq("VertexQ[x, 1]", "False", 0);
+
+    /* Undirected edges match either orientation, in any accepted spelling. */
+    assert_eval_eq("EdgeQ[CycleGraph[3], 1<->2]", "True", 0);
+    assert_eval_eq("EdgeQ[CycleGraph[3], 2<->1]", "True", 0);
+    assert_eval_eq("EdgeQ[CycleGraph[3], UndirectedEdge[3,1]]", "True", 0);
+    assert_eval_eq("EdgeQ[CycleGraph[4], 1<->3]", "False", 0);
+    /* Directed edges must match direction; direction is never blurred. */
+    assert_eval_eq("EdgeQ[Graph[{1->2}], 1->2]", "True", 0);
+    assert_eval_eq("EdgeQ[Graph[{1->2}], DirectedEdge[1,2]]", "True", 0);
+    assert_eval_eq("EdgeQ[Graph[{1->2}], 2->1]", "False", 0);
+    assert_eval_eq("EdgeQ[Graph[{1->2}], 1<->2]", "False", 0);
+    assert_eval_eq("EdgeQ[CycleGraph[3], 1->2]", "False", 0);
+    /* Not an edge expression / not a graph. */
+    assert_eval_eq("EdgeQ[Graph[{1->2}], foo]", "False", 0);
+    assert_eval_eq("EdgeQ[Graph[{1->2}], DirectedEdge[1,2,3]]", "False", 0);
+    assert_eval_eq("EdgeQ[x, 1->2]", "False", 0);
+    /* Weighted graphs answer the same. */
+    assert_eval_eq("EdgeQ[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}], 2->3]", "True", 0);
+}
+
+/* ---- AcyclicGraphQ / TreeGraphQ ------------------------------------------- */
+static void test_acyclic_and_tree(void) {
+    /* Undirected: acyclic = forest. */
+    assert_eval_eq("AcyclicGraphQ[PathGraph[4]]", "True", 0);
+    assert_eval_eq("AcyclicGraphQ[Graph[{1,2,3,4},{1<->2,3<->4}]]", "True", 0);
+    assert_eval_eq("AcyclicGraphQ[CycleGraph[4]]", "False", 0);
+    assert_eval_eq("AcyclicGraphQ[Graph[{1,2},{}]]", "True", 0);
+    assert_eval_eq("AcyclicGraphQ[Graph[{},{}]]", "True", 0);
+    /* Directed: acyclic = DAG; an anti-parallel pair is a 2-cycle. */
+    assert_eval_eq("AcyclicGraphQ[Graph[{1->2,2->3,1->3}]]", "True", 0);
+    assert_eval_eq("AcyclicGraphQ[Graph[{1->2,2->3,3->1}]]", "False", 0);
+    assert_eval_eq("AcyclicGraphQ[Graph[{1->2,2->1}]]", "False", 0);
+    /* Mixed: undirected edges are traversable either way, once. */
+    assert_eval_eq("AcyclicGraphQ[Graph[{1,2,3},{1<->2,2->3,3->1}]]", "False", 0);
+    assert_eval_eq("AcyclicGraphQ[Graph[{1,2,3,4},{1<->2,3<->4,2->3}]]", "True", 0);
+    assert_eval_eq("AcyclicGraphQ[Graph[{1,2,3,4},{1<->2,3<->4,2->3,4->1}]]", "False", 0);
+    assert_eval_eq("AcyclicGraphQ[Graph[{1,2,3,4},{1<->2,3<->4,2->3,1->4}]]", "True", 0);
+    /* A directed edge inside an undirected tree closes a cycle through it. */
+    assert_eval_eq("AcyclicGraphQ[Graph[{1,2},{1<->2,1->2}]]", "False", 0);
+    assert_eval_eq("AcyclicGraphQ[Graph[{1,2,3},{1<->2,2<->3,3->1}]]", "False", 0);
+    assert_eval_eq("AcyclicGraphQ[x]", "False", 0);
+
+    /* TreeGraphQ: connected, >= 1 vertex, n-1 edges; direction ignored. */
+    assert_eval_eq("TreeGraphQ[StarGraph[5]]", "True", 0);
+    assert_eval_eq("TreeGraphQ[PathGraph[6]]", "True", 0);
+    assert_eval_eq("TreeGraphQ[CycleGraph[4]]", "False", 0);
+    assert_eval_eq("TreeGraphQ[Graph[{1,2,3,4},{1<->2,3<->4}]]", "False", 0);
+    assert_eval_eq("TreeGraphQ[Graph[{1->2,1->3}]]", "True", 0);
+    assert_eval_eq("TreeGraphQ[Graph[{1->2,2->1}]]", "False", 0);
+    assert_eval_eq("TreeGraphQ[Graph[{1},{}]]", "True", 0);
+    assert_eval_eq("TreeGraphQ[Graph[{},{}]]", "False", 0);
+    assert_eval_eq("TreeGraphQ[x]", "False", 0);
+}
+
+/* ---- TopologicalSort ------------------------------------------------------ */
+static void test_topological_sort(void) {
+    assert_eval_eq("TopologicalSort[Graph[{1->2,1->3,2->4,3->4}]]", "{1, 2, 3, 4}", 0);
+    /* Ties go to the vertex earlier in VertexList. */
+    assert_eval_eq("TopologicalSort[Graph[{c->b,b->a}]]", "{c, b, a}", 0);
+    assert_eval_eq("TopologicalSort[Graph[{3,2,1},{1->2}]]", "{3, 1, 2}", 0);
+    /* Rules form. */
+    assert_eval_eq("TopologicalSort[{1->3,1->4,2->1,2->4,3->4,5->2,5->3}]",
+                   "{5, 2, 1, 3, 4}", 0);
+    /* Edgeless graph: the VertexList itself. */
+    assert_eval_eq("TopologicalSort[Graph[{a,b,c},{}]]", "{a, b, c}", 0);
+    assert_eval_eq("TopologicalSort[Graph[{},{}]]", "{}", 0);
+    /* Weighted DAGs sort the same (weights are irrelevant to order). */
+    assert_eval_eq("TopologicalSort[Graph[{1,2,3},{2->3,1->2},EdgeWeight->{4,5}]]",
+                   "{1, 2, 3}", 0);
+    /* Cyclic or undirected: unevaluated. */
+    assert_eval_eq("Head[TopologicalSort[Graph[{1->2,2->1}]]]", "TopologicalSort", 0);
+    assert_eval_eq("Head[TopologicalSort[Graph[{1->2,2->3,3->1}]]]", "TopologicalSort", 0);
+    assert_eval_eq("Head[TopologicalSort[CycleGraph[3]]]", "TopologicalSort", 0);
+    assert_eval_eq("Head[TopologicalSort[PathGraph[3]]]", "TopologicalSort", 0);
+    assert_eval_eq("Head[TopologicalSort[{1->2,2->1}]]", "TopologicalSort", 0);
+    assert_eval_eq("Head[TopologicalSort[{1->1}]]", "TopologicalSort", 0);
+    assert_eval_eq("TopologicalSort[x]", "TopologicalSort[x]", 0);
+
+    /* Every edge respects the order: check on a 200-vertex random DAG built
+     * by orienting a random graph's edges from lower to higher label, with the
+     * vertex list reversed so the sort has real work to do. */
+    assert_eval_eq(
+        "SeedRandom[7]; g0 = RandomGraph[{200, 800}];"
+        "dag = Graph[Reverse[Range[200]], "
+        "  DirectedEdge @@@ (Sort /@ (List @@@ EdgeList[g0]))];"
+        "ord = TopologicalSort[dag];"
+        "pos = AssociationThread[ord -> Range[200]];"
+        "{Length[ord], AcyclicGraphQ[dag], "
+        " And @@ (pos[#[[1]]] < pos[#[[2]]] & /@ EdgeList[dag])}",
+        "{200, True, True}", 0);
+}
+
+/* ---- Validated-graph memo soundness --------------------------------------- */
+static void test_graph_memo(void) {
+    /* In-place Part assignment on a memoized graph must not be answered from
+     * the stale entry: the memo's reference forces the mutator to unshare. */
+    assert_eval_eq("gm = CycleGraph[3]; {EdgeQ[gm, 1<->2], VertexQ[gm, 3]}",
+                   "{True, True}", 0);
+    assert_eval_eq("gm[[2]] = {}; {EdgeQ[gm, 1<->2], EmptyGraphQ[gm], "
+                   "UndirectedGraphQ[gm], DirectedGraphQ[gm]}",
+                   "{False, True, True, False}", 0);
+    assert_eval_eq("gm[[1]] = {1, 2, 3, 4}; {VertexQ[gm, 4], VertexCount[gm]}",
+                   "{True, 4}", 0);
+    /* Invalidating an edge list in place: now malformed, so every predicate
+     * reports False rather than a memoized True. */
+    assert_eval_eq("gm = PathGraph[3]; TreeGraphQ[gm]", "True", 0);
+    assert_eval_eq("gm[[2]] = {1 <-> 1}; {GraphQ[gm], TreeGraphQ[gm], VertexQ[gm, 1]}",
+                   "{False, False, False}", 0);
+    /* More live graphs than memo slots: each still answers correctly. */
+    assert_eval_eq("Table[EdgeQ[CycleGraph[k], k<->1], {k, 3, 12}]",
+                   "{True, True, True, True, True, True, True, True, True, True}", 0);
+    assert_eval_eq("gs = Table[CompleteGraph[k], {k, 1, 9}]; "
+                   "{CompleteGraphQ /@ gs, VertexQ[#, 1] & /@ gs}",
+                   "{{True, True, True, True, True, True, True, True, True}, "
+                   "{True, True, True, True, True, True, True, True, True}}", 0);
+    /* CompleteGraphQ count fast path, both single-kind shapes. */
+    assert_eval_eq("CompleteGraphQ[Graph[{1->2,2->1,1->3,3->1,2->3,3->2}]]", "True", 0);
+    assert_eval_eq("CompleteGraphQ[Graph[{1->2,2->1,1->3,3->1,2->3}]]", "False", 0);
+    assert_eval_eq("CompleteGraphQ[Graph[{1,2,3,4},{1<->2,1<->3,2<->3}]]", "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -693,6 +876,11 @@ int main(void) {
     TEST(test_vertex_coloring);
     TEST(test_edge_weights);
     TEST(test_weighted_shortest_path);
+    TEST(test_structural_predicates);
+    TEST(test_membership);
+    TEST(test_acyclic_and_tree);
+    TEST(test_topological_sort);
+    TEST(test_graph_memo);
 
     printf("All graph tests passed!\n");
     return 0;

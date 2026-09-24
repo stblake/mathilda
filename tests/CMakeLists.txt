@@ -973,6 +973,9 @@ set(COMMON_SRC
     ../src/graph/vertexcoloring.c
     ../src/graph/edgeweight.c
     ../src/graph/wtadjmat.c
+    ../src/graph/graphprops.c
+    ../src/graph/membership.c
+    ../src/graph/acyclic.c
 )
 
 # render.c / render3d.c / label_font.c need a live Raylib + display; only

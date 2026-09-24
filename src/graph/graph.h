@@ -61,6 +61,50 @@ int graph_is_valid(const Expr* g);
  * single lookup; for a whole pass over the edges, build a GraphVIdx instead. */
 int graph_vertex_index(const Expr* verts, const Expr* v);
 
+/* ---- Validated-graph memo queries (src/graph/graph_util.c) ----------------
+ * O(1) after the first call on a given graph node: validation results, the
+ * vertex index and the edge-key set are memoized per node (see the memo
+ * comment in graph_util.c for why pointer keying is sound). */
+
+/* Position of v in g's VertexList (first occurrence, SameQ), -1 if v is not a
+ * vertex, or -2 if g is not a valid graph. */
+int graph_vertex_position(const Expr* g, const Expr* v);
+
+/* 1 if g has the edge u->v (directed != 0: a DirectedEdge[u, v]) or u<->v
+ * (directed == 0: an UndirectedEdge in either orientation), 0 if not, -1 if g
+ * is not a valid graph. */
+int graph_has_edge(const Expr* g, const Expr* u, const Expr* v, int directed);
+
+/* Number of DirectedEdges in g, or -1 if g is not a valid graph. */
+long graph_directed_edge_count(const Expr* g);
+
+/* Borrowed views of g's edges as vertex indices: edge k runs eu[k] -> ev[k]
+ * and is a DirectedEdge iff directed[k]. Valid until the next graph call that
+ * could evict g from the memo -- copy what must outlive that. Returns 0 (and
+ * leaves the outputs untouched) if g is not a valid graph. */
+int graph_edge_indices(const Expr* g, const int** eu, const int** ev,
+                       const unsigned char** directed);
+
+/* Per-graph cache of computed answers, stored on g's memo entry, so a repeated
+ * query on the same graph node is O(1) -- the same design as Mathematica's
+ * atomic Graph object caching its properties. Safe for the same reason the
+ * memo is: the node it is keyed on is kept alive and hence immutable. */
+typedef enum {
+    GRAPH_PROP_ACYCLIC, GRAPH_PROP_TREE, GRAPH_PROP_BIPARTITE,
+    GRAPH_PROP_COUNT
+} GraphProp;
+
+/* The cached 0/1 answer, or -1 if not yet computed (or g not valid). */
+int  graph_prop_get(const Expr* g, GraphProp p);
+void graph_prop_set(const Expr* g, GraphProp p, int value);
+
+typedef enum { GRAPH_CACHED_TOPOSORT, GRAPH_CACHED_COUNT } GraphCached;
+
+/* A new reference to the cached result (caller frees), or NULL if none. */
+Expr* graph_cached_get(const Expr* g, GraphCached c);
+/* Stores a new reference to value (the caller keeps its own). */
+void  graph_cached_set(const Expr* g, GraphCached c, Expr* value);
+
 /* ---- Vertex index (src/graph/graph_util.c) --------------------------------
  * A hash index from vertex expression to an int, keyed on expr_hash/expr_eq.
  * It exists so that passes over the edge list -- validation, adjacency building,
@@ -83,6 +127,15 @@ int graph_vidx_get(const GraphVIdx* ix, const Expr* v);
  * inserted, 0 if it was already there (whose value is left untouched, so the
  * first insert of a repeated vertex wins). */
 int graph_vidx_put(GraphVIdx* ix, const Expr* v, int index);
+
+/* Constructor fast path: memoize g from an index and endpoint arrays its
+ * builder already has, instead of re-deriving them by validation. The caller
+ * guarantees g has the canonical shape with normalized edges, that every
+ * endpoint resolved (eu/ev[k] >= 0), and that ix's keys are nodes g keeps alive
+ * and ix maps each vertex to its FIRST VertexList position. This checks the
+ * rest -- self-loops (eu == ev) and parallel edges -- and returns 1 (g is now
+ * memoized) or 0 (g is invalid). Takes ownership of ix/eu/ev/edir either way. */
+int graph_memo_seed(const Expr* g, GraphVIdx* ix, int* eu, int* ev, unsigned char* edir);
 
 /* ---- Phase 2: query / representation builtins ----------------------------- */
 Expr* builtin_vertex_list(Expr* res);      /* VertexList[g]                    */
@@ -142,6 +195,7 @@ typedef struct GraphAdj {
     const Expr* verts;    /* borrowed: the vertex List of the source graph     */
     int*  outdeg; int** out;   /* successors:   out[i][0..outdeg[i]-1]         */
     int*  indeg;  int** in;    /* predecessors: in[i][0..indeg[i]-1]           */
+    int*  block;               /* CSR storage every out[i]/in[i] points into   */
 } GraphAdj;
 
 GraphAdj* graph_build_adj(const Expr* g);   /* NULL if g is not a valid graph  */
@@ -192,6 +246,19 @@ int fvc_search(const GraphAdj* a, int* colour, long* steps_out);
  * colouring whenever minimality cannot be proven -- above FVC_MAX_VERTICES, or
  * when the search exceeds FVC_MAX_STEPS. */
 Expr* builtin_find_vertex_coloring(Expr* res);   /* FindVertexColoring[g]      */
+
+/* ---- Structural predicates & ordering (graphprops.c, membership.c, acyclic.c)
+ * Every *Q predicate gives False for a non-graph; TopologicalSort is left
+ * unevaluated for a non-graph, a cyclic graph, or one with an undirected edge. */
+Expr* builtin_undirected_graph_q(Expr* res);  /* UndirectedGraphQ[g]           */
+Expr* builtin_empty_graph_q(Expr* res);       /* EmptyGraphQ[g]                */
+Expr* builtin_complete_graph_q(Expr* res);    /* CompleteGraphQ[g] / [g,vlist] */
+Expr* builtin_bipartite_graph_q(Expr* res);   /* BipartiteGraphQ[g]            */
+Expr* builtin_vertex_q(Expr* res);            /* VertexQ[g,v]                  */
+Expr* builtin_edge_q(Expr* res);              /* EdgeQ[g,e]                    */
+Expr* builtin_acyclic_graph_q(Expr* res);     /* AcyclicGraphQ[g]              */
+Expr* builtin_tree_graph_q(Expr* res);        /* TreeGraphQ[g]                 */
+Expr* builtin_topological_sort(Expr* res);    /* TopologicalSort[g] / [{rules}]*/
 
 /* ---- Phase 6: visualization ----------------------------------------------- */
 Expr* builtin_graph_plot(Expr* res);        /* GraphPlot[g] -> Graphics[...]   */
