@@ -2359,16 +2359,26 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
   Do[partsM = {#[[1]], MonicPair[#[[2]], gens]} & /@ parts[[i]];
     remM = MonicPair[remFr[[i]], gens];
     distinct = DeleteDuplicates[Join[partsM[[All, 2, 2]], {remM[[2]]}]];
-    (* the lcm of the distinct denominators and its quotients: over Q when
-       they are free of AlgebraicNumbers (after the monic normalisation the
-       usual case); else in radicals with Extension -> Automatic (Can may
-       have cancelled a factor of a special over the extension and left an
-       irrational denominator), mapped back into the field *)
+    (* the common multiple of the distinct denominators and its quotients.
+       Over Q (they are free of AlgebraicNumbers -- after the monic normalisation
+       the usual case) use the minimal PolynomialLCM.  With AlgebraicNumber[theta]
+       coefficients PolynomialLCM has NO number-field path -- it treats an
+       AlgebraicNumber coefficient as opaque and returns a spurious factor -- and
+       the old radical route (map back to radicals, Cancel[.., Extension ->
+       Automatic]) could drop a factor of a special over the extension; both left
+       an inconsistent, over-generated system (the Charlwood A2/A3/P8 divergence,
+       MATHILDA_DIVERGENCES.md E.2.1).  Instead use the PRODUCT of the distinct
+       denominators as the common multiple: any common multiple gives an
+       equivalent system -- L is unknown-free, so multiplying the polynomial
+       identity by an extra factor preserves its solution set -- and the quotient
+       L/dd is the product of the OTHER denominators, exact by construction with
+       no field gcd or division.  (The product is larger than the minimal LCM, so
+       the system may carry redundant rows that row-reduce to 0 == 0; it stays
+       consistent, which is what decides the solve.) *)
     quo = If[FreeQ[distinct, AlgebraicNumber],
       With[{L = Fold[PolynomialLCM, 1, distinct]}, Expand[Cancel[L/#]] & /@ distinct],
-      With[{dR = distinct /. an_AlgebraicNumber :> back[an]},
-        With[{L = Fold[PolynomialLCM[#1, #2, Extension -> Automatic] &, 1, dR]},
-          Expand[Cancel[L/#, Extension -> Automatic] /. rules] & /@ dR]]];
+      With[{nd = Length[distinct]},
+        Table[Expand[Times @@ Delete[distinct, k]], {k, nd}]]];
     dpos[dd_] := Position[distinct, _?(SameQ[#, dd] &), {1}, Heads -> False][[1, 1]];
     Do[If[part[[2, 1]] === 0, Continue[]];
       poly = Expand[part[[2, 1]] quo[[dpos[part[[2, 2]]]]]];
