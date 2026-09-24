@@ -302,3 +302,179 @@ TopologicalSort[CycleGraph[3]]                           (* unevaluated    *)
 Head[GraphPlot[CycleGraph[8]]]                 (* Graphics *)
 Count[GraphPlot[CompleteGraph[6]], _Line, Infinity]   (* 15 edges *)
 ```
+
+## Graph algorithms: flows, matchings, cliques, Hamiltonian cycles, isomorphism, planarity
+
+Implemented in `src/graph/galg_*.c` (declared in `src/graph/graph_algos.h`,
+registered by `graph_algos_init()`). All read graphs through the
+validated-graph memo, so on a graph built by `Graph[...]` they start from
+pre-resolved integer endpoints. Every head is `Protected`, stays unevaluated on
+a non-graph (the `*Q` predicates give `False`), and returns a fresh value.
+Semantics and output forms were checked against Mathematica 15 by a randomized
+differential test (`benchmarks/95-graph-algorithms/diff_mathematica.py`); where
+the answer is unique the outputs are identical.
+
+**Exactness policy.** Every NP-hard head (`FindVertexCover`,
+`FindIndependentVertexSet`, `FindClique`, `FindKClique`, the Hamiltonian heads,
+and the isomorphism search) returns a *proven* optimum / a complete answer, or
+stays unevaluated when its deterministic node budget is exhausted. All of them
+poll the `TimeConstrained` deadline, so `TimeConstrained[FindClique[g], 1]`
+returns `$Aborted` rather than hanging. They never return a merely-good answer.
+
+### Flows and cuts
+
+- `FindMaximumFlow[g, s, t]` — the maximum flow value from `s` to `t` (`s`, `t`
+  may be lists of sources/sinks; `s == t` gives `0`).
+  `FindMaximumFlow[g, s, t, "prop"]` with `"FlowValue"`, `"FlowMatrix"` (a dense
+  `n x n` matrix of edge flows, packed; Mathematica returns a `SparseArray`,
+  which Mathilda does not have) or `"EdgeList"` (the edges carrying flow,
+  oriented along it, in flow-matrix row order). Options `EdgeCapacity -> {c1,
+  ...}` (EdgeList order) and `VertexCapacity -> {c1, ...}` (VertexList order;
+  sources and sinks are uncapped). **Capacities ignore `EdgeWeight`**, exactly
+  as Mathematica does; without `EdgeCapacity` every edge has capacity 1. An
+  undirected edge carries flow either way.
+- `FindMinimumCut[g]` — `{value, {part1, part2}}`, a global minimum cut
+  weighted by `EdgeWeight` (else 1). For a graph with directed edges, the edges
+  counted run from `part1` (the source side) to `part2`. Unevaluated for fewer
+  than 2 vertices. Among equal cuts the shore without `VertexList[g][[1]]` is
+  listed first for undirected graphs (Mathematica's tie choice is not
+  reproducible; the value always agrees).
+- `FindEdgeCut[g]` / `FindEdgeCut[g, s, t]` — the edges of a minimum (s-t) edge
+  cut (weighted by `EdgeWeight`), in EdgeList order; the s-t cut is the one
+  closest to `s`, as in Mathematica. Directed graphs use strong connectivity.
+- `FindVertexCut[g]` / `FindVertexCut[g, s, t]` — a minimum vertex separator of
+  the underlying undirected graph, in VertexList order (the s-t separator
+  closest to `t`, `{}` for adjacent `s`, `t`). Mathematica's conventions: a
+  complete undirected graph gives its first `n-1` vertices, a graph with a
+  directed edge whose underlying graph is complete gives `{}`.
+- `EdgeConnectivity[g]` / `EdgeConnectivity[g, s, t]` — the (s-t) edge
+  connectivity, weighted by `EdgeWeight`; strong for directed graphs.
+
+Numbers: integer capacities/weights give exact Integers; Rational or Real ones
+give a Real (as Mathematica); `Infinity` is an allowed capacity; a negative or
+symbolic one leaves the call unevaluated. Internally everything is int64: reals
+are scaled by a common power of two, so the max flow of machine-real capacities
+is computed exactly.
+
+Algorithms: Dinic (BFS levels truncated at the sink, iterative blocking flow
+with current-arc pointers) on a CSR residual network; Nagamochi-Ibaraki for
+undirected global minimum cuts (maximum-adjacency orders that contract every
+edge whose attachment reaches the current bound, not one pair per phase as in
+Stoer-Wagner); `2(n-1)` bounded flows for directed global cuts; Even's
+split-vertex network with Esfahanian-Hakimi pair selection for vertex
+separators. `galg_vertex_connectivity(g, s, t)` exposes the same machinery as a
+fast replacement for the brute-force `VertexConnectivity` in `connectivity.c`
+(not wired in by this stream).
+
+### Matchings, covers, independent sets
+
+- `FindIndependentEdgeSet[g]` — a maximum matching (edge direction ignored),
+  edges in EdgeList order. Karp-Sipser greedy start, then Hopcroft-Karp when
+  the graph is bipartite and Edmonds' blossom algorithm otherwise (union-find
+  blossom bases; failed searches retire their Hungarian trees).
+- `FindEdgeCover[g]` — a minimum edge cover (maximum matching plus one edge per
+  exposed vertex); `{}` when `g` has an isolated vertex, as in Mathematica.
+- `FindVertexCover[g]` — a minimum vertex cover (complement of a maximum
+  independent set), in VertexList order.
+- `FindIndependentVertexSet[g]` — `{s}` with `s` a maximum independent set.
+  `FindIndependentVertexSet[g, k]`, `[g, {k}]`, `[g, {kmin, kmax}]` and a third
+  argument `n` / `All` enumerate MAXIMAL independent sets by size, exactly like
+  the `FindClique` spec forms below (these forms are limited to 8192 vertices).
+- `IndependentVertexSetQ[g, vs]`, `VertexCoverQ[g, vs]`,
+  `IndependentEdgeSetQ[g, es]`, `EdgeCoverQ[g, es]` — membership predicates; an
+  element that is not a vertex/edge of `g` gives `False` (an `UndirectedEdge`
+  matches either orientation, a `DirectedEdge` only as given), repeats are
+  allowed in the vertex forms.
+
+Independent sets are exact: connected components are solved separately; a
+component with average degree >= 8 (or density >= 0.05, up to 3000 vertices)
+goes to the bitset maximum-clique search on its complement; sparser ones to
+branch and reduce (degree-0/1 and triangle reductions, degree-2 folding,
+domination, a greedy clique-cover upper bound, component splitting at every
+node, and branching on a maximum-degree vertex with its mirrors).
+
+Weighted graphs: these heads optimize cardinality, as the Wolfram
+documentation states. (The differential test found Mathematica returning
+non-maximum matchings and non-minimum edge covers on weighted graphs.)
+
+### Cliques
+
+- `FindClique[g]` — `{c}` with `c` a maximum clique (a directed graph needs
+  edges both ways between clique members).
+- `FindClique[g, k]` (largest maximal clique with at most `k` vertices; `k` may
+  be `Infinity`), `FindClique[g, {k}]`, `FindClique[g, {kmin, kmax}]`, and
+  `FindClique[g, spec, n]` / `FindClique[g, spec, All]` — maximal cliques by
+  size, largest first; within one size Mathematica's order is reproduced
+  (`FindClique[CycleGraph[5], Infinity, All]` gives
+  `{{4,5},{3,4},{2,3},{1,5},{1,2}}`). `FindClique[g, 2]` is `{}` when every
+  maximal clique is larger.
+- `FindKClique[g, k]` — `{c}`, a largest set of vertices pairwise within
+  distance `k` (maximum clique of the `k`-th power graph).
+
+Maximum clique: bitset branch and bound with greedy-colouring bounds (Tomita's
+MCQ/MCS family in San Segundo's BBMC form), vertices numbered by reverse
+degeneracy order; graphs above 3000 vertices are decomposed by degeneracy
+(each vertex's later neighbourhood is a small local problem, skipped when its
+core number cannot beat the incumbent). Enumeration: pivoted Bron-Kerbosch on
+bitsets with size pruning.
+
+### Hamiltonian cycles and paths
+
+- `FindHamiltonianCycle[g]` — `{c}` with `c` a Hamiltonian cycle as a list of
+  edges (starting at `VertexList[g][[1]]`, each edge written in traversal
+  order), or `{}`. `FindHamiltonianCycle[g, n]` / `[g, All]` give up to `n` /
+  all of them, each once. The one-vertex graph gives `{{}}`; `K2` has none; a
+  directed 2-cycle is one.
+- `FindHamiltonianPath[g]` / `FindHamiltonianPath[g, s, t]` — a vertex list or
+  `{}` (`{}` for the one-vertex graph, as in Mathematica).
+- `HamiltonianGraphQ[g]` — `True` iff a Hamiltonian cycle exists (`True` for
+  one vertex, `False` for no vertices).
+
+Search over edge decisions with constraint propagation: each vertex needs
+exactly two chosen edges (directed: one in, one out), chosen edges form path
+fragments whose end-to-end links forbid short cycles, and the remaining graph
+must stay biconnected (directed: strongly connected) at every node. A random
+400-vertex cubic graph takes about 1 ms. Paths reduce to cycles through an
+added vertex.
+
+### Isomorphism and canonical forms
+
+- `IsomorphicGraphQ[g1, g2, ...]` — `True` iff all the graphs are isomorphic
+  (`False` if any argument is not a graph; one argument stays unevaluated, as
+  in Mathematica).
+- `FindGraphIsomorphism[g1, g2]` — `{assoc}` with `assoc` an Association
+  `v -> image` over `VertexList[g1]` in order, or `{}`.
+  `FindGraphIsomorphism[g1, g2, n]` / `[g1, g2, All]` give up to `n` / all of
+  them (the list order is the engine's search order; Mathematica's differs).
+  Two empty graphs give `{<||>}` (Mathematica gives `{}`, which contradicts its
+  own `IsomorphicGraphQ` answer `True`).
+- `CanonicalGraph[g]` — a graph on `1..n` with edges sorted, such that
+  `CanonicalGraph[g] === CanonicalGraph[h]` iff `g` and `h` are isomorphic.
+  The particular representative differs from Mathematica's (both are
+  arbitrary); properties such as `EdgeWeight` are dropped, as in Mathematica.
+- `GraphAutomorphismGroup[g]` — `PermutationGroup[{Cycles[...], ...}]` acting
+  on vertex positions, given by a generating set (the group is Mathematica's;
+  the generators may differ). Mathilda has no permutation-group functions, so
+  the result is an inert expression.
+
+Directed and mixed graphs are supported (Mathematica leaves mixed graphs
+unevaluated). The reduction to the engine also folds self-loops into vertex
+colours and turns an edge of multiplicity k > 1 into a coloured subdivision
+vertex, so loops and multigraphs will work unchanged once `Graph` accepts
+them (today's validator rejects both). Edge weights are ignored, as in
+Mathematica.
+
+Engine (`galg_iso.c`): individualization-refinement in the nauty / bliss /
+Traces family. Hopcroft-style equitable refinement (U, out and in relations
+counted separately, largest fragment skipped, every split decision a function
+of cell positions, sizes and counts only) emits a 64-bit trace that is
+compared event by event, so a branch that cannot match dies at its first
+deviating split. The search tree is iterative with exact undo (no recursion
+at depth n). Canonical labeling keeps the best leaf by (trace, relabeled
+graph) with automorphism pruning (leaf and internal-node automorphisms,
+jump-back, first-path orbits); the automorphisms found generate the whole
+group. `g -> h` searches run in lockstep against `h`'s trace, and every map
+returned is verified edge by edge. On an exactly 3-regular random graph with
+10^4 vertices (where colour refinement alone learns nothing)
+`IsomorphicGraphQ` takes about 4 ms against about 0.8 s in Mathematica 15; at
+10^5 vertices about 0.2 s against about 60 s.

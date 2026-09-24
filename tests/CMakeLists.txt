@@ -976,6 +976,16 @@ set(COMMON_SRC
     ../src/graph/graphprops.c
     ../src/graph/membership.c
     ../src/graph/acyclic.c
+    ../src/graph/galg_common.c
+    ../src/graph/galg_init.c
+    ../src/graph/galg_flow.c
+    ../src/graph/galg_matching.c
+    ../src/graph/galg_mis.c
+    ../src/graph/galg_clique.c
+    ../src/graph/galg_hamilton.c
+    ../src/graph/galg_planar.c
+    ../src/graph/galg_iso.c
+    ../src/graph/galg_isoheads.c
 )
 
 # render.c / render3d.c / label_font.c need a live Raylib + display; only
@@ -1035,6 +1045,11 @@ add_executable(graph_tests test_graph.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(graph_tests m)
 target_include_directories(graph_tests PRIVATE ../src ../src/graph)
 add_test(NAME graph_tests COMMAND graph_tests)
+
+add_executable(graph_algos_tests test_graph_algos.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(graph_algos_tests m)
+target_include_directories(graph_algos_tests PRIVATE ../src ../src/graph)
+add_test(NAME graph_algos_tests COMMAND graph_algos_tests)
 
 # RG-2: the vertex-colouring guard rows take 1-2 minutes by design (they have to
 # actually spend FVC_MAX_STEPS to prove the head refuses instead of guessing).

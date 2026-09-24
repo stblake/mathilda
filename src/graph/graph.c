@@ -14,6 +14,7 @@
 #include "graph.h"
 #include "symtab.h"
 #include "attr.h"
+#include "graph_algos.h"
 
 void graph_init(void) {
     /* Graph -- construction, normalization, canonicalization (construct.c). */
@@ -281,4 +282,8 @@ void graph_init(void) {
         "GraphPlot[g] gives a Graphics object drawing the graph g with a "
         "circular vertex layout. Vertex labels are off by default; pass "
         "VertexLabels -> True to draw them (in black).");
+
+    /* ---- Algos stream: flows, matchings, covers, cliques, Hamiltonian,
+     *      isomorphism, planarity (galg_*.c) ------------------------------- */
+    graph_algos_init();
 }
