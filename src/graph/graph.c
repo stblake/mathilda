@@ -12,6 +12,7 @@
  */
 
 #include "graph.h"
+#include "graph_ops.h"
 #include "symtab.h"
 #include "attr.h"
 
@@ -281,4 +282,7 @@ void graph_init(void) {
         "GraphPlot[g] gives a Graphics object drawing the graph g with a "
         "circular vertex layout. Vertex labels are off by default; pass "
         "VertexLabels -> True to draw them (in black).");
+
+    /* ---- Editing, transforms, set operations, cycles (gops_*.c) ------- */
+    graph_ops_init();
 }

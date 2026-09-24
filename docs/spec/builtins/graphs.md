@@ -302,3 +302,160 @@ TopologicalSort[CycleGraph[3]]                           (* unevaluated    *)
 Head[GraphPlot[CycleGraph[8]]]                 (* Graphics *)
 Count[GraphPlot[CompleteGraph[6]], _Line, Infinity]   (* 15 edges *)
 ```
+
+## Editing, transforms, set operations, cycles and paths
+
+Implemented in `src/graph/gops_*.c` (header `src/graph/graph_ops.h`). Every head
+leaves a non-graph argument unevaluated (the `*Q` predicates give `False`).
+Orders — of vertices, of edges, of cycle edges — follow Mathematica 15 unless a
+deviation is listed.
+
+**Performance.** Every edit is an integer pass over the validated-graph memo's
+endpoint arrays: `O(V + E)` plus one hash per argument item, with vertex, edge
+and weight nodes shared into the result. Results are registered with the memo
+(`graph_memo_seed`) from the endpoint arrays already computed and stamped as
+evaluated, so returning a graph costs one vertex hash per vertex — not a full
+re-validation — and the first accessor on the result is a memo hit. The
+cycle/path finders reuse a small per-graph cache of incidence lists (holding a
+reference to the graph, like the memo), so repeating a query skips the CSR
+build. At `10^5` vertices the edits run in 4–16 ms: 8–200x faster than
+Mathematica 15 (warm and cold) and 20–60x faster than networkx; the transforms
+`UndirectedGraph`, `DirectedGraph`, `FindEulerianCycle` and `FindPath` are
+1.1–1.6x faster; `GraphComplement` of a 1000-cycle (498500 new edges) is at
+parity, its time dominated by allocating and freeing edge expressions
+(`benchmarks/93-graph-ops-editing`).
+
+### Editing
+
+- `VertexAdd[g, v]`, `VertexAdd[g, {v1, ...}]` — appends vertices not already
+  present (repeats ignored). A list always means a list of vertices.
+- `VertexDelete[g, v | {v1, ...} | patt]` — removes vertices and their incident
+  edges; every listed vertex must exist (else unevaluated). A pattern removes the
+  matching vertices. Orders and weights of the survivors are kept.
+- `EdgeAdd[g, e | {e1, ...}]` — appends edges; endpoints not in `g` become new
+  vertices (appended in order). `u -> v` takes the graph's kind: undirected in an
+  undirected (or edgeless) graph, directed otherwise; `DirectedEdge` is always
+  directed. A new edge has weight 1 in a weighted graph.
+- `EdgeDelete[g, e | {e1, ...} | patt]` — removes edges; each must exist (an
+  undirected edge matches either orientation; `1 -> 2` is not an edge of an
+  undirected graph). Orders and remaining weights are kept.
+- `Subgraph[g, {v1, ...} | patt]` — the induced subgraph. Vertices in the given
+  order (non-vertices ignored, repeats dropped); edges emitted at their later
+  endpoint in that order, following each vertex's incidence order (out-edges and
+  undirected edges, then in-edges). Weights kept. An edge list (edge-induced
+  subgraph) is not supported (unevaluated).
+- `NeighborhoodGraph[g, v | {v1, ...}, k]` — subgraph induced by the vertices
+  within distance `k` (default 1) of the centres, direction ignored. Vertices:
+  the centres, then each centre's new vertices in `VertexList` order; edges as
+  for `Subgraph`. Non-vertex centres are ignored. `k = Infinity` is accepted
+  (Mathematica leaves it unevaluated).
+- `VertexReplace[g, rules]` — renames vertices by `Replace` (patterns and
+  `RuleDelayed` work); vertices mapped together merge.
+- `EdgeRules[g]` — edges as `u -> v` rules.
+- `VertexIndex[g, v]`, `EdgeIndex[g, e]` — 1-based positions (list arguments
+  give lists). `EdgeIndex` matches `u -> v` against an undirected edge of an
+  undirected graph, as Mathematica.
+- `IndexGraph[g]`, `IndexGraph[g, r]` — vertices renamed `r, r+1, ...`
+  (`r = 1`); weights kept.
+
+Deviation: Mathilda graphs are simple, so an edit whose result would have a
+self-loop or parallel edges — `EdgeAdd` of an existing edge, `VertexReplace`
+merging two adjacent vertices — is left unevaluated (Mathematica returns a
+multigraph).
+
+### Transforms
+
+- `GraphComplement[g]` — undirected `g`: every non-adjacent pair `i < j`;
+  directed or mixed `g`: every ordered pair with no edge usable from `i` to `j`,
+  as a directed edge. Row-major `VertexList` order; weights dropped.
+- `ReverseGraph[g]` — directed edges reversed; undirected edges, order and
+  weights kept.
+- `UndirectedGraph[g]` — `u -> v` and `v -> u` merge into one edge whose weight
+  is the sum (`Plus`) of theirs; edges oriented and ordered by `VertexList`
+  position (upper triangle, row-major). An undirected `g` is returned unchanged.
+- `DirectedGraph[g]` — each `u <-> v` becomes `u -> v, v -> u` in place (weight
+  duplicated). `DirectedGraph[g, "Acyclic"]` orients each undirected edge from
+  the earlier to the later vertex in `VertexList` (a DAG for undirected `g`) and
+  sorts by (tail, head) position; a mixed `g` keeps its edge order. Other
+  methods (`"Random"`, ...) are left unevaluated.
+- `LineGraph[g]` — vertices `1..m` (EdgeList positions). Undirected: `j <-> i`
+  for `i < j` sharing an endpoint, listed by `j`, then shared endpoint, then `i`.
+  Directed: `i -> j` when edge `i` ends where edge `j` starts, in `(i, j)` order.
+  Mixed graphs are unevaluated. Deviation: Mathematica numbers directed
+  line-graph vertices in a traversal order of its own; Mathilda always uses
+  EdgeList position (an isomorphic graph).
+
+### Set operations
+
+- `GraphUnion[g1, g2, ...]` — vertices: the union in canonical order. Edges: the
+  distinct edges (an undirected edge equals its reversal) — all undirected:
+  first-appearance order, each oriented by canonical vertex order; all directed:
+  first-appearance order; mixed: canonical (`Sort`) order. `GraphUnion[g]` is `g`.
+- `GraphIntersection[g1, g2, ...]` — vertices: the union (canonical order);
+  edges: those of `g1` present in every graph, canonical order.
+- `GraphDifference[g1, g2]` — vertices: the union (canonical order); edges:
+  those of `g1` not in `g2`, canonical order.
+- `GraphDisjointUnion[g1, g2, ...]` — vertices relabelled `1..n` (`g1`'s first),
+  edges translated in order; `GraphDisjointUnion[g]` is `g`.
+
+Weights are dropped by all four, as in Mathematica. Implementation: vertex lists
+equal to the first graph's are mapped by an `O(V)` elementwise `SameQ` check (no
+hashing); otherwise through one hash index over the union. The union is sorted
+with `expr_compare` only when not already sorted (machine integers are sorted as
+such), and edge keys over result positions are deduplicated in an integer hash
+set and ordered by stable counting sorts.
+
+### Predicates
+
+- `SimpleGraphQ[g]`, `LoopFreeGraphQ[g]` — `True` for every valid graph.
+- `MixedGraphQ[g]` — both directed and undirected edges.
+- `WeightedGraphQ[g]`, `EdgeWeightedGraphQ[g]` — `g` carries `EdgeWeight`.
+- `PathGraphQ[g]` — Mathematica's definition: at least one vertex, connected,
+  and every degree `<= 2` (undirected) or every in/out-degree `<= 1` (directed);
+  so cycles count (`PathGraphQ[CycleGraph[3]]` is `True`, as in Mathematica).
+  Mixed graphs are never paths.
+- `EulerianGraphQ[g]` — all degrees even (undirected) / in = out (directed) and
+  all edges in one connected component; edgeless graphs with a vertex are
+  Eulerian, the null graph is not. Mixed graphs are left unevaluated.
+
+### Cycles and paths
+
+- `FindEulerianCycle[g]`, `FindEulerianCycle[g, 1]` — `{cycle}` as a list of
+  edges, `{}` if none, `{{}}` for an edgeless graph with a vertex. Hierholzer's
+  algorithm, iterative, linear: starts at the first vertex with an edge, takes
+  edges in EdgeList order, reports undirected cycles in pop order and directed
+  ones forwards; undirected edges are written in the direction walked. This
+  reproduces Mathematica's cycle in most cases (not all). `n > 1` / `All` and
+  mixed graphs are left unevaluated.
+- `FindCycle[g]` — `{cycle}` or `{}`, in linear time, by Mathematica's own
+  search order (a stack DFS that scans a vertex's edges when visiting it), so the
+  reported cycle matches Mathematica's. `FindCycle[g, k]` (length `<= k`, `k` may
+  be `Infinity`), `FindCycle[g, {k}]`, `FindCycle[g, {kmin, kmax}]`,
+  `FindCycle[g, kspec, n]` (`n` or `All`) and `FindCycle[{g, v}, ...]` (cycles
+  through `v`; the plain form by BFS from `v`, linear) are supported. Each cycle
+  is reported once. The length-bounded / enumerating forms backtrack from each
+  vertex as the cycle's lowest vertex — exponential in the worst case (a cycle of
+  exact length `n` is a Hamiltonian cycle) — poll `TimeConstrained`, and give up
+  (unevaluated) after `5*10^7` steps. Their choice and order of cycles is
+  Mathilda's own (Mathematica's differs). Cycle length counts edges; undirected
+  cycles have length `>= 3`, directed `>= 2`. Mixed graphs, and weighted graphs
+  with a length spec, are left unevaluated.
+- `FindPath[g, s, t]` — `{path}` (a vertex list) or `{}`: the first path a DFS
+  meets, neighbours in EdgeList order — linear time and the same path as
+  Mathematica. `s == t` gives `{}`. `FindPath[g, s, t, kspec(, n)]` enumerates
+  simple paths depth-first within the length bounds and reports the first `n`
+  (or `All`) shortest first — Mathematica's order. Weighted graphs with a kspec
+  are left unevaluated (Mathematica measures the kspec in total weight there).
+
+```
+VertexDelete[Graph[{1,2,3,4},{1<->2,2<->3,3<->4},EdgeWeight->{5,6,7}], 2]
+                                     (* Graph[{1,3,4},{3<->4},EdgeWeight->{7}] *)
+EdgeList[EdgeAdd[CycleGraph[3], {1->4, 4<->5}]]  (* {1<->2,2<->3,3<->1,1<->4,4<->5} *)
+EdgeList[Subgraph[Graph[{1,2,3,4},{3<->4,1<->2,2<->3}], {3,2,4}]]  (* {2<->3,3<->4} *)
+VertexList[NeighborhoodGraph[PathGraph[Range[6]], {1,6}]]     (* {1,6,2,5} *)
+EdgeList[GraphUnion[Graph[{2<->1}], Graph[{3<->4}]]]           (* {1<->2,3<->4} *)
+EdgeList[UndirectedGraph[Graph[{1->2,2->1,2->3}]]]             (* {1<->2,2<->3} *)
+FindEulerianCycle[CycleGraph[4]]            (* {{1<->4,4<->3,3<->2,2<->1}} *)
+FindCycle[Graph[{1->2,2->3,3->4,4->2,3->1}]]   (* {{1->2,2->3,3->1}} *)
+FindPath[CompleteGraph[4], 1, 4, 2, All]       (* {{1,4},{1,3,4},{1,2,4}} *)
+```
