@@ -92,10 +92,10 @@ flow through silently:
 
 - Source: [`src/int.c`](https://github.com/stblake/mathilda/blob/main/src/int.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_bitwise.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bitwise.c)
+- Tests: [`tests/test_chinese_remainder.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chinese_remainder.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_digit_count.c`](https://github.com/stblake/mathilda/blob/main/tests/test_digit_count.c)
-- Tests: [`tests/test_integer_length.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integer_length.c)
-- Tests: [`tests/test_integer_string.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integer_string.c)
 
 ## Notes & additional examples
 

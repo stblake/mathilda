@@ -48,4 +48,4 @@ Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
 - Tests: [`tests/test_findclusters_ndim.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findclusters_ndim.c)
-- Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
+- Tests: [`tests/test_graph_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_ops.c)

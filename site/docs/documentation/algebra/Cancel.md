@@ -87,12 +87,13 @@ Out[14]= Sqrt[2] + x
 - The algebraic-generator pass runs `Together` on the substituted form (not just GCD-cancellation), so inputs whose `g`-substituted denominator is a Plus of terms with different `g`-denominators (e.g. `1/(g^2 - 1/g)` from `1/(y^(2/3) - 1/y^(1/3))`) are handled correctly.
 - Extracts algebraic-constant atoms (`Sqrt[2]`, `Sqrt[3]`, `CubeRoot[5]`, `2^(2/3)`, ...) that appear in every summand of *both* numerator *and* denominator and divides them out before the polynomial GCD step. Closes a long-standing gap where `PolynomialGCD[Sqrt[2], Sqrt[2] + Sqrt[2] x^4]` returns 1 (the integer-content recursion treats `Sqrt[2]` as having content 1), so cancellations whose only shared factor was an algebraic constant survived as-is. The pass is intentionally narrow — only `Power[integer, rational/non-integer]` factors are eligible — to avoid disturbing the rational-function intermediates that the integration dispatcher pattern-matches against.
 - **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) cancels common factors over `Q(alpha)` instead of `Q`. Implementation: lifts numerator and denominator into `Q(alpha)[x]` via the QAUPoly machinery, runs `qaupoly_gcd`, divides both sides by `g`, and re-renders. Works for single-fraction inputs; `Plus` inputs (sums of fractions) currently fall back to the no-extension path because `PolynomialQuotient` does not yet accept `Extension` (Phase 0.5 follow-up).
+- **Native `AlgebraicNumber`-coefficient path.** A single univariate fraction whose coefficients are `AlgebraicNumber[θ, {..}]` over one number field `Q(θ)` (the ParallelMixedTower assembly / incidental-`Q(i)` DSolve representation) is reduced natively over `K(x)` as a pair of FLINT `gr_poly` over the antic number-field ring (`gr_poly_gcd` + exact division; divexact reporting success certifies the result). Value-equal and fully reduced; declines to the generic path on any doubt.
 
 **Attributes:** `Listable`, `Protected`.
 
 ## References
 
-**See also:** [Together](../../algebra/Together/), [Plus](../../arithmetic/Plus/), [PolynomialQuotient](../../algebra/PolynomialQuotient/)
+**See also:** [Together](../../algebra/Together/), [Plus](../../arithmetic/Plus/), [PolynomialQuotient](../../algebra/PolynomialQuotient/), [AlgebraicNumber](../../algebra/AlgebraicNumber/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on polynomial GCD computation.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational function simplification.
@@ -101,7 +102,7 @@ Out[14]= Sqrt[2] + x
 - Tests: [`tests/test_crc_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_crc_corpus.c)
 - Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
 - Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
-- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_field_together_cancel.c`](https://github.com/stblake/mathilda/blob/main/tests/test_field_together_cancel.c)
 
 ## Notes & additional examples
 

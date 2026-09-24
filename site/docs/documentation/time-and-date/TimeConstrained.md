@@ -70,8 +70,10 @@ For a finite positive budget it installs a `SIGPROF` handler (`tc_sigprof_handle
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)
-- Tests: [`tests/test_groebner.c`](https://github.com/stblake/mathilda/blob/main/tests/test_groebner.c)
-- Tests: [`tests/test_time_constrained.c`](https://github.com/stblake/mathilda/blob/main/tests/test_time_constrained.c)
+- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
+- Tests: [`tests/test_dsolve_m34_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m34_stress.c)
+- Tests: [`tests/test_graph_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_ops.c)
+- Tests: [`tests/test_graph_slow.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_slow.c)
 
 ## Notes & additional examples
 

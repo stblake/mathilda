@@ -1,6 +1,6 @@
 # Other & Advanced
 
-112 built-in function(s) in this category.
+105 built-in function(s) in this category.
 
 - [`$AutoArrayPacking`]($AutoArrayPacking.md) — $AutoArrayPacking  _(Stable)_
 - [`$AutoCompilation`]($AutoCompilation.md) — $AutoCompilation  _(Stable)_
@@ -9,9 +9,6 @@
 - [`$RaylibVerbose`]($RaylibVerbose.md) — $RaylibVerbose  _(Experimental)_
 - [`$StreamColorBar`]($StreamColorBar.md) — $StreamColorBar[speed_min, speed_max]  _(Experimental)_
 - [`AccuracyGoal`](AccuracyGoal.md) — AccuracyGoal  _(Experimental)_
-- [`AdjacencyGraph`](AdjacencyGraph.md) — AdjacencyGraph[m] builds a graph on vertices 1..n from a 0/1 adjacency matrix m (undirected if m is symmetric, else directed).  _(Stable)_
-- [`AdjacencyList`](AdjacencyList.md) — AdjacencyList[g] gives the adjacency list of g; AdjacencyList[g,v] gives the vertices adjacent to v (successors for directed edges).  _(Stable)_
-- [`AdjacencyMatrix`](AdjacencyMatrix.md) — AdjacencyMatrix[g] gives the 0/1 adjacency matrix of g (symmetric for undirected graphs).  _(Stable)_
 - [`AiryAiPrime`](AiryAiPrime.md) — AiryAiPrime[z]  _(Stable)_
 - [`AiryBiPrime`](AiryBiPrime.md) — AiryBiPrime[z]  _(Stable)_
 - [`AspectRatio`](AspectRatio.md) — AspectRatio  _(Stable)_
@@ -20,42 +17,36 @@
 - [`Black`](Black.md) — Black  _(Experimental)_
 - [`Blue`](Blue.md) — Blue  _(Experimental)_
 - [`Brown`](Brown.md) — Brown  _(Experimental)_
+- [`Byte`](Byte.md) — Byte  _(Experimental)_
+- [`Character`](Character.md) — Character  _(Experimental)_
 - [`ChartLabels`](ChartLabels.md) — ChartLabels  _(Experimental)_
 - [`ChartStyle`](ChartStyle.md) — ChartStyle  _(Experimental)_
 - [`ClassifierFunction`](ClassifierFunction.md) — ClassifierFunction[method, parameters, featureCount, k] is the fitted classifier Classify returns. Apply it to a feature vector to get a class, or to a feature vector and "Probabilities" to get one rule per class.  _(Stable)_
-- [`CompleteGraph`](CompleteGraph.md) — CompleteGraph[n] gives the complete graph K_n on n vertices.  _(Stable)_
 - [`ComplexQ`](ComplexQ.md) — ComplexQ[expr]  _(Experimental)_
-- [`ConnectedComponents`](ConnectedComponents.md) — ConnectedComponents[g] gives the connected components of g (weak, on the underlying undirected graph).  _(Stable)_
-- [`ConnectedGraphQ`](ConnectedGraphQ.md) — ConnectedGraphQ[g] gives True if g is connected.  _(Stable)_
 - [`ContourLabels`](ContourLabels.md) — ContourLabels  _(Experimental)_
 - [`ContourShading`](ContourShading.md) — ContourShading  _(Experimental)_
 - [`ContourStyle`](ContourStyle.md) — ContourStyle  _(Experimental)_
 - [`Contours`](Contours.md) — Contours  _(Experimental)_
 - [`Cyan`](Cyan.md) — Cyan  _(Experimental)_
-- [`CycleGraph`](CycleGraph.md) — CycleGraph[n] gives the cycle graph on n vertices.  _(Stable)_
 - [`DataType`](DataType.md) — DataType[a]  _(Stable)_
 - [`DimensionReducerFunction`](DimensionReducerFunction.md) — DimensionReducerFunction[method, {means, loadings...}, featureCount, reducedDimension] is the reusable reducer DimensionReduction returns. Apply it to a feature vector, or to a matrix of them, to project into the reduced space.  _(Stable)_
-- [`DirectedGraphQ`](DirectedGraphQ.md) — DirectedGraphQ[g] gives True if all edges of g are directed.  _(Stable)_
-- [`EdgeCount`](EdgeCount.md) — EdgeCount[g] gives the number of edges in the graph g.  _(Stable)_
-- [`EdgeList`](EdgeList.md) — EdgeList[g] gives the list of edges of the graph g.  _(Stable)_
+- [`EndOfFile`](EndOfFile.md) — EndOfFile  _(Experimental)_
 - [`ExactNumberQ`](ExactNumberQ.md) — ExactNumberQ[expr]  _(Experimental)_
-- [`FindShortestPath`](FindShortestPath.md) — FindShortestPath[g,s,t] gives a shortest path from s to t as a list of vertices ({} if none).  _(Stable)_
-- [`FindSpanningTree`](FindSpanningTree.md) — FindSpanningTree[g] gives a spanning tree (forest) of g as a graph.  _(Stable)_
+- [`Expression`](Expression.md) — Expression  _(Stable)_
+- [`File`](File.md) — File["name"]  _(Stable)_
 - [`FourierParameters`](FourierParameters.md) — FourierParameters is an option for Fourier and InverseFourier that  _(Experimental)_
 - [`Frame`](Frame.md) — Frame  _(Experimental)_
 - [`FrameStyle`](FrameStyle.md) — FrameStyle  _(Experimental)_
 - [`FrameTicks`](FrameTicks.md) — FrameTicks  _(Experimental)_
 - [`FresnelC`](FresnelC.md) — FresnelC[z]  _(Stable)_
 - [`FresnelS`](FresnelS.md) — FresnelS[z]  _(Stable)_
-- [`GraphDistance`](GraphDistance.md) — GraphDistance[g,s,t] gives the length of a shortest path from s to t (Infinity if unreachable).  _(Stable)_
-- [`GraphPlot`](GraphPlot.md) — GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout. Vertex labels are off by default; pass VertexLabels -> True to draw them (in black).  _(Stable)_
 - [`Gray`](Gray.md) — Gray  _(Experimental)_
 - [`Green`](Green.md) — Green  _(Experimental)_
 - [`HoldFirst`](HoldFirst.md) — HoldFirst  _(Experimental)_
 - [`HoldRest`](HoldRest.md) — HoldRest  _(Experimental)_
 - [`ImageSize`](ImageSize.md) — ImageSize  _(Experimental)_
-- [`IncidenceMatrix`](IncidenceMatrix.md) — IncidenceMatrix[g] gives the vertex-edge incidence matrix of g (oriented: -1 tail, +1 head for directed edges).  _(Stable)_
 - [`InexactNumberQ`](InexactNumberQ.md) — InexactNumberQ[expr]  _(Experimental)_
+- [`InputStream`](InputStream.md) — InputStream["name", n]  _(Experimental)_
 - [`Interval`](Interval.md) — Interval[{min, max}] represents the range of real values between min and max, inclusive. Interval[{a1,b1}, {a2,b2}, ...] is the union of the ranges. Arithmetic and elementary functions thread through intervals, producing rigorous enclosures; exact endpoints are kept exact.  _(Stable)_
 - [`IntervalIntersection`](IntervalIntersection.md) — IntervalIntersection[i1, i2, ...] gives the interval representing the intersection of the intervals ij (Interval[] if they are disjoint).  _(Stable)_
 - [`IntervalMemberQ`](IntervalMemberQ.md) — IntervalMemberQ[interval, x] gives True if x lies within interval, and False otherwise. IntervalMemberQ[interval, other] tests whether the interval other is wholly contained in interval.  _(Stable)_
@@ -79,9 +70,13 @@
 - [`Modulus`](Modulus.md) — Modulus is an option for Solve.  Solve[poly == 0, x, Modulus -> p]  _(Experimental)_
 - [`NDArrayQ`](NDArrayQ.md) — NDArrayQ[expr]  _(Stable)_
 - [`NormalDistribution`](NormalDistribution.md) — NormalDistribution[mu, sigma] represents a normal distribution; NormalDistribution[] is the standard normal. Unlike a fitted model it prints its parameters in full, because they are what the user specified rather than an implementation detail.  _(Stable)_
+- [`NullRecords`](NullRecords.md) — NullRecords  _(Experimental)_
+- [`NullWords`](NullWords.md) — NullWords  _(Experimental)_
+- [`Number`](Number.md) — Number  _(Stable)_
 - [`Orange`](Orange.md) — Orange  _(Experimental)_
 - [`OrderlessPatternSequence`](OrderlessPatternSequence.md) — OrderlessPatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, in any order, that together match p1, p2, ....  _(Experimental)_
-- [`PathGraph`](PathGraph.md) — PathGraph[n] gives the path on n vertices; PathGraph[{v1,...}] the path over the given vertices.  _(Stable)_
+- [`OutputStream`](OutputStream.md) — OutputStream["name", n]  _(Experimental)_
+- [`PDEClassify`](PDEClassify.md) — PDEClassify[eqn, u, {v1, v2}] classifies a second-order linear PDE by the discriminant Δ = B² − 4 A C of its principal part A u_{v1 v1} + B u_{v1 v2} + C u_{v2 v2}: "Hyperbolic" (Δ > 0, e.g. the wave equation), "Parabolic" (Δ == 0, e.g. the heat equation), or "Elliptic" (Δ < 0, e.g. Laplace's equation). Only the highest-order terms determine the type. A discriminant whose sign is not a decidable constant (a mixed-type / parameter-dependent equation such as Tricomi's y u_xx + u_yy == 0) leaves the call unevaluated.  _(Stable)_
 - [`PatternSequence`](PatternSequence.md) — PatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, each in turn matching p1, p2, ....  _(Experimental)_
 - [`Pick`](Pick.md) — Pick[expr, sel]  _(Stable)_
 - [`Pink`](Pink.md) — Pink  _(Experimental)_
@@ -89,28 +84,26 @@
 - [`PrecisionGoal`](PrecisionGoal.md) — PrecisionGoal  _(Experimental)_
 - [`PredictorFunction`](PredictorFunction.md) — PredictorFunction[method, coefficients, featureCount] is the fitted object Predict returns. Apply it to a feature vector to get a prediction, or to "Method", "Coefficients" or "FeatureCount" to read it. A one-feature model also accepts a bare scalar.  _(Stable)_
 - [`Purple`](Purple.md) — Purple  _(Experimental)_
-- [`RandomGraph`](RandomGraph.md) — RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.  _(Stable)_
 - [`RatCanonPrototype`](RatCanonPrototype.md) — RatCanonPrototype[expr] (Phase-1 prototype) reduces a rational function over the differential/algebraic tower of expr via one FLINT reduction.  _(Stable)_
 - [`RationalQ`](RationalQ.md) — RationalQ[expr]  _(Experimental)_
+- [`Real`](Real.md) — Real  _(Stable)_
 - [`Reap`](Reap.md) — Reap[expr]  _(Stable)_
+- [`Record`](Record.md) — Record  _(Experimental)_
+- [`RecordSeparators`](RecordSeparators.md) — RecordSeparators  _(Experimental)_
 - [`Red`](Red.md) — Red  _(Experimental)_
 - [`ScalingFunctions`](ScalingFunctions.md) — ScalingFunctions  _(Experimental)_
 - [`Sow`](Sow.md) — Sow[e]  _(Stable)_
 - [`SplitBy`](SplitBy.md) — SplitBy[list, f]  _(Stable)_
+- [`String`](String.md) — String  _(Stable)_
 - [`StringExpression`](StringExpression.md) — StringExpression[p1, p2, ...] or p1 ~~ p2 ~~ ...  _(Stable)_
-- [`StronglyConnectedComponents`](StronglyConnectedComponents.md) — StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions).  _(Stable)_
 - [`Subsets`](Subsets.md) — Subsets[list]  _(Stable)_
+- [`TokenWords`](TokenWords.md) — TokenWords  _(Experimental)_
 - [`UniformDistribution`](UniformDistribution.md) — UniformDistribution[{lo, hi}] represents a continuous uniform distribution; UniformDistribution[] is uniform on {0, 1}.  _(Stable)_
 - [`VectorPoints`](VectorPoints.md) — VectorPoints  _(Experimental)_
 - [`VectorScale`](VectorScale.md) — VectorScale  _(Experimental)_
 - [`VectorStyle`](VectorStyle.md) — VectorStyle  _(Experimental)_
 - [`Verbatim`](Verbatim.md) — Verbatim[expr] is a pattern object that matches expr taken literally: the pattern constructs inside expr (Blank, Pattern, ...) are not interpreted, so Verbatim[x_] matches only the literal expression x_.  _(Experimental)_
-- [`VertexConnectivity`](VertexConnectivity.md) — VertexConnectivity[g] gives the minimum number of vertices whose removal disconnects g.  _(Stable)_
-- [`VertexCount`](VertexCount.md) — VertexCount[g] gives the number of vertices in the graph g.  _(Stable)_
-- [`VertexDegree`](VertexDegree.md) — VertexDegree[g] gives the list of vertex degrees; VertexDegree[g,v] gives the degree of vertex v.  _(Stable)_
-- [`VertexInDegree`](VertexInDegree.md) — VertexInDegree[g] / VertexInDegree[g,v] gives in-degrees (incoming directed edges; undirected edges count for both).  _(Stable)_
-- [`VertexList`](VertexList.md) — VertexList[g] gives the list of vertices of the graph g.  _(Stable)_
-- [`VertexOutDegree`](VertexOutDegree.md) — VertexOutDegree[g] / VertexOutDegree[g,v] gives out-degrees (outgoing directed edges; undirected edges count for both).  _(Stable)_
-- [`WeaklyConnectedComponents`](WeaklyConnectedComponents.md) — WeaklyConnectedComponents[g] gives the weakly connected components of g.  _(Stable)_
 - [`White`](White.md) — White  _(Experimental)_
+- [`Word`](Word.md) — Word  _(Experimental)_
+- [`WordSeparators`](WordSeparators.md) — WordSeparators  _(Experimental)_
 - [`Yellow`](Yellow.md) — Yellow  _(Experimental)_

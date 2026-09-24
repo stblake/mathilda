@@ -130,7 +130,7 @@ The int64 fast path below is chosen only when overflow is impossible by construc
 
 ## References
 
-**See also:** [Range](../../lists-and-iteration/Range/)
+**See also:** [Range](../../lists-and-iteration/Range/), [Real](../../other-advanced/Real/)
 
 - Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

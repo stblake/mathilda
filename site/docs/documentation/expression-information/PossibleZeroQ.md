@@ -97,6 +97,17 @@ zero_test.c — PossibleZeroQ: hybrid symbolic-numeric zero recognition.
 Pipeline (early exit at any stage that yields a definite verdict):
 
 ```text
+  Stage 0.5 (normalisation) — when the input carries a constant-base
+            exponential with a NON-LINEAR symbol-dependent exponent
+            (Power[E, f] / Exp[f], f super-linear in a free symbol), ExpandAll
+            distributes the sums so same-base exponentials
+            become adjacent Times factors and collapse (E^a * E^(-a) -> 1).
+            Value-preserving, so the verdict is unchanged; it spares the numeric
+            ladder the tiny*huge catastrophic cancellation of a same-base
+            exponential product split across summands (a Gaussian * Erf residual
+            of an exact-ODE integrating-factor solution otherwise hangs the
+            ladder — POSSIBLE_ZEROQ_IMPROVEMENTS.md #1).
+
   Stage 0 — O(1) structural shortcuts: literal Integer/Real/BigInt/MPFR
             zero, Complex[0, 0], List of zeros, unbound symbol, …
 
@@ -141,16 +152,16 @@ See ZERO_RECOGNISE_PLAN.md for design notes and references.
 
 ## References
 
-**See also:** [Pi](../../mathematical-constants/Pi/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/), [Expand](../../algebra/Expand/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [CoefficientList](../../algebra/CoefficientList/)
+**See also:** [ExpandAll](../../structural-manipulation/ExpandAll/), [Times](../../arithmetic/Times/), [Erf](../../special-functions/Erf/), [Pi](../../mathematical-constants/Pi/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/), [Expand](../../algebra/Expand/), [Plus](../../arithmetic/Plus/)
 
 - J. T. Schwartz, "Fast probabilistic algorithms for verification of polynomial identities", JACM 27 (1980).
 - R. Zippel, "Probabilistic algorithms for sparse polynomials", EUROSAM 1979.
 - Source: [`src/zero_test.c`](https://github.com/stblake/mathilda/blob/main/src/zero_test.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_divisorsigma.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisorsigma.c)
-- Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
-- Tests: [`tests/test_findintegernullvector.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findintegernullvector.c)
-- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
+- Tests: [`tests/test_dsolve_m5_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m5_stress.c)
+- Tests: [`tests/test_dsolve_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_stress.c)
 
 ## Notes & additional examples
 

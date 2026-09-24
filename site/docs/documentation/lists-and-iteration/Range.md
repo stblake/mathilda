@@ -68,10 +68,10 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
+- Tests: [`tests/test_array_pad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_pad.c)
+- Tests: [`tests/test_array_reshape.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_reshape.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_backtrack.c`](https://github.com/stblake/mathilda/blob/main/tests/test_backtrack.c)
-- Tests: [`tests/test_clip.c`](https://github.com/stblake/mathilda/blob/main/tests/test_clip.c)
-- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 
 ## Notes & additional examples
 

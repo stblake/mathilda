@@ -1,6 +1,6 @@
 # Special Functions
 
-40 built-in function(s) in this category.
+41 built-in function(s) in this category.
 
 - [`AiryAi`](AiryAi.md) — AiryAi[z]  _(Stable)_
 - [`AiryBi`](AiryBi.md) — AiryBi[z]  _(Stable)_
@@ -29,6 +29,7 @@
 - [`InverseErf`](InverseErf.md) — InverseErf[s]  _(Stable)_
 - [`InverseErfc`](InverseErfc.md) — InverseErfc[s]  _(Stable)_
 - [`LegendreP`](LegendreP.md) — LegendreP[n, x]  _(Stable)_
+- [`LegendreQ`](LegendreQ.md) — LegendreQ[n, x]  _(Stable)_
 - [`LerchPhi`](LerchPhi.md) — LerchPhi[z, s, a]  _(Stable)_
 - [`LogGamma`](LogGamma.md) — LogGamma[z]  _(Stable)_
 - [`LogIntegral`](LogIntegral.md) — LogIntegral[z]  _(Stable)_

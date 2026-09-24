@@ -154,7 +154,7 @@ value preserves the original exact/symbolic `x`.
 
 ## References
 
-**See also:** [List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [N](../../arithmetic/N/)
+**See also:** [List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [N](../../arithmetic/N/), [Real](../../other-advanced/Real/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

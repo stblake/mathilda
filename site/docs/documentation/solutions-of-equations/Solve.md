@@ -110,23 +110,23 @@ Out[24]= Solve[2 - 3.0 2.71828^x + E^(2 x) == 0, x]
 In[25]:= Solve[Log[x]^2-3Log[x]+2==0, x]
 Out[25]= {{x -> E}, {x -> E^2}}
 
-In[26]:= Solve[3 x == 1, x, Modulus -> 7]
-Out[26]= {{x -> 5}}
+In[26]:= Solve[Sec[x+y]-Tan[x+y]==0, y]
+Out[26]= {}
 
-In[27]:= Solve[{x^2 + y^2 == 1, x == y}, {x, y}, Modulus -> 7]
-Out[27]= {{x -> 2, y -> 2}, {x -> 5, y -> 5}}
+In[27]:= Tan[x+y]+Tan[-x-y]==0
+Out[27]= Tan[x + y] + Tan[-x - y] == 0
 
-In[28]:= Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Integers]
-Out[28]= {{x -> 1}, {x -> 2}, {x -> 3}}
+In[28]:= Coth[x+y]-Tanh[x+y]==0
+Out[28]= Coth[x + y] - Tanh[x + y] == 0
 
-In[29]:= Solve[x^2 + 2 y^3 == 3681 && x > 0 && y > 0, {x, y}, Integers]
-Out[29]= {{x -> 15, y -> 12}, {x -> 41, y -> 10}, {x -> 57, y -> 6}}
+In[29]:= Solve[3 x == 1, x, Modulus -> 7]
+Out[29]= {{x -> 5}}
 
-In[30]:= Solve[x^2 - 61 y^2 == 1 && x > 0 && y > 0 && x < 10^10, {x, y}, Integers]
-Out[30]= {{x -> 1766319049, y -> 226153980}}
+In[30]:= Solve[{x^2 + y^2 == 1, x == y}, {x, y}, Modulus -> 7]
+Out[30]= {{x -> 2, y -> 2}, {x -> 5, y -> 5}}
 
-In[31]:= Solve[x^3 + y^3 == z^3 && z > x > y > 0 && x,y,z < 10000, {x,y,z}, Integers]
-Out[31]= Solve[x^3 + y^3 == z^3 && z > x > y > 0 && x, y, z < 10000, {x, y, z}, Integers]
+In[31]:= Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Integers]
+Out[31]= {{x -> 1}, {x -> 2}, {x -> 3}}
 ```
 
 ### Applications (9)
@@ -268,7 +268,16 @@ The `dom` third argument selects the solution domain: default `Complexes`; `Real
     inverse trig/hyperbolic forms, and `Power[g, n]` for integer `n >= 2`.
     Multi-branch heads introduce a fresh integer parameter `C[k]` and wrap
     each solution in `ConditionalExpression[..., Element[C[k], Integers]]`.
-    Emits `Solve::ifun` on first use per call.
+    Emits `Solve::ifun` on first use per call.  Before peeling, a residual with
+    two or more `Log` terms in the variable is fused into a single
+    `Log[∏ uᵢ^{cᵢ}]` (`simp_log_fuse_all`, with a `Cancel` on the argument), so
+    combined-logarithm equations such as `Log[2 t] - Log[x + t] == C[1]`,
+    `Log[t] + Log[x - t] == C[1]`, and `3 Log[t] - Log[t^3 - x] == C[1]` reduce
+    to a single invertible `Log` and then to a rational/algebraic core.  The
+    exponential analogue needs no special step — the evaluator already gathers
+    `Exp[a] Exp[b]/Exp[c] → E^{a+b-c}`, and a polynomial/rational in `Exp[t]`
+    (e.g. `Exp[2 t] - x Exp[t] + C[1] == 0`, `Exp[t]/(x - Exp[t]) == C[1]`) is
+    handled by the `u = Exp[t]` kernel substitution.
   - Single equality, single variable, both specialists above decline (because
     the equation carries `Sqrt[...]` / `x^(p/q)` / nested radicals) ->
     `Solve`SolveRadicalsEquality` (also below).
@@ -311,6 +320,29 @@ The `dom` third argument selects the solution domain: default `Complexes`; `Real
     `{{x -> E}, {x -> E^2}}`).  Implemented in `src/solvetrig.c`
     (`solvetrig_solve_poly_in_kernel`), reusing the polynomial and
     inverse-function specialists.
+  - **Generalized two-argument trigonometric / hyperbolic** `f[A(y)] ± g[B(y)]
+    == c` (single variable, more than one trig/hyperbolic head over `y`, so the
+    single-peel isolator declines), `src/solve/solvetrigpair.c`. Reciprocal-
+    normalizes Tan/Cot/Sec/Csc → Sin/Cos and Tanh/… → Sinh/Cosh (under
+    `trig_canon` suppression), combines over a common denominator, and factors
+    the numerator into single-argument atoms via sum-to-product / reverse-angle-
+    addition identities; each atom is solved through the inverse-function
+    specialist and the branches are unioned. A **pole gate** drops any solution
+    family on which a denominator factor vanishes identically (so
+    `Solve[Sec[x+y]-Tan[x+y]==0, y]` -> `{}`), and factoring to `0`/nonzero-
+    constant handles parity identities (`Tan[x+y]+Tan[-x-y]==0` -> `{{}}`, i.e.
+    all `y`) and contradictions (`Coth[x+y]-Tanh[x+y]==0` -> `{}`). Handles
+    symbolic coefficients (`Solve[Sinh[a x+b y]-Sinh[c x+d y]==0, y]`),
+    higher-multiplicity arguments (`Tan[x^2+y]-Tan[x^2-2y]==0`), and
+    constant-RHS cases that collapse via product-to-sum
+    (`Cosh[x+y]+Cosh[x-y]==2`). Non-collapsing constant-RHS
+    (`Tan[x+y]-Tan[x-2y]==1`) and numeric mixed Sinh/Cosh
+    (`Sinh[x+y]-Cosh[x-2y]==0`) fall to a **single rational exponential
+    generator** `u = E^(σ y)` (σ = I/q circular, 1/q hyperbolic; q the rational
+    gcd of the var-coefficients) that reduces to a Laurent polynomial in `u`,
+    solved and unwound through the `Exp` peel (`Log[Root[…]]` output).
+    Symbolic-coefficient **mixed** Sinh/Cosh (`Sinh[a x+b y]+Cosh[c x+d y]==0`)
+    has no generator and declines (documented non-goal).
 - **Modular solving.** `Solve[poly == 0, x, Modulus -> p]` solves a
   single-variable polynomial equation over the finite ring `Z/pZ` by residue
   enumeration (`src/solvemod.c`), returning `{{x -> r}, ...}` with `r`
@@ -927,10 +959,10 @@ The `dom` third argument selects the solution domain: default `Complexes`; `Real
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 9 (solving systems).
 - Source: [`src/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
+- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 - Tests: [`tests/test_integrate_line.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_line.c)
+- Tests: [`tests/test_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_reduce.c)
 - Tests: [`tests/test_root_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_root_numeric.c)
-- Tests: [`tests/test_solve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_solve.c)
-- Tests: [`tests/test_solve_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_solve_corpus.c)
 
 ## Notes & additional examples
 

@@ -9,7 +9,7 @@
 
 **`Resolve[expr, dom]`**
 
-Eliminates the quantifiers (Exists, ForAll) from expr over the domain dom (Reals; the default and only supported domain), returning an equivalent quantifier-free statement -- True or False for a fully quantified sentence, or a condition on the remaining free variables. Parametric elimination is supported for a single free variable; an undecidable, alternating, or higher-dimensional case is left unevaluated rather than guessed.
+Eliminates the quantifiers (Exists, ForAll) from expr over the domain dom (Reals; the default and only supported domain), returning an equivalent quantifier-free statement -- True or False for a fully quantified sentence, or a condition on the remaining free variables (one or more). Alternating quantifier prefixes are eliminated inner-block-first. An undecidable sign, a non-Reals domain, or an unsupported case is left unevaluated rather than guessed.
 
 ## Examples
 
@@ -27,13 +27,15 @@ for the `Exists`, `ForAll` and `Resolve` heads.  See reduce_qe.h for the shape
 
 of the method and the three-case (by free-variable count) routing.
 
-This file owns the front-end only -- quantifier normalisation (flatten a same-kind chain, fold a 3-argument condition), free-variable collection, the fully-quantified DECISION path (Case A, which reuses the whole Reduce engine), and the routing to reduce_cad_qe for the parametric single-free-variable path
+This file owns the front-end only -- quantifier normalisation (flatten a same-kind chain, fold a 3-argument condition), free-variable collection, the fully-quantified DECISION path (Case A, which reuses the whole Reduce engine), the routing to reduce_cad_qe for the parametric (>=1 free variable) path, and the recursive composition that eliminates an alternating quantifier prefix
 
 ```text
-(Case B).  The CAD projection/lifting/fold machinery lives in reduce_cad.c.
+inner-block-first.  The CAD projection/lifting/fold and the multi-free-variable
 ```
 
-Hard invariant: any decline (a malformed node, an alternating quantifier prefix, >=2 free variables, a non-Reals domain, or an undecidable/unsolvable sub-problem) returns NULL, leaving the input unevaluated -- never a wrong formula.
+emission live in reduce_cad.c.
+
+Hard invariant: any decline (a malformed node, a non-Reals domain, or an undecidable/unsolvable sub-problem -- including an alternating sub-block whose inner elimination declines) returns NULL, leaving the input unevaluated -- never a wrong formula.
 
 ## Implementation notes
 

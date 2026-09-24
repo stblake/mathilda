@@ -233,6 +233,15 @@ def _parse_concatenated_literals(text, i):
 
 DOC_CALL_RE = re.compile(r'symtab_set_docstring\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,')
 
+# Some modules register through a local helper -- ``static void reg(const char*
+# name, BuiltinFunc f, const char* doc)`` whose body calls
+# ``symtab_set_docstring(name, doc)`` -- so the literal name sits in the helper
+# call instead: ``reg("VertexAdd", builtin_vertex_add, "VertexAdd[g, v] ...")``.
+# Only files that define such a forwarding helper are scanned for this form.
+DOC_HELPER_DEF_RE = re.compile(r'symtab_set_docstring\s*\(\s*name\s*,\s*doc\s*\)')
+DOC_HELPER_CALL_RE = re.compile(
+    r'\b\w*reg\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*\w+\s*,')
+
 
 def discover_builtins():
     """Return {name: {"doc": str, "module": "src/xxx.c"}} for public builtins."""
@@ -241,7 +250,10 @@ def discover_builtins():
         if "external" in cfile.parts:
             continue
         text = cfile.read_text(errors="replace")
-        for m in DOC_CALL_RE.finditer(text):
+        calls = list(DOC_CALL_RE.finditer(text))
+        if DOC_HELPER_DEF_RE.search(text):
+            calls += list(DOC_HELPER_CALL_RE.finditer(text))
+        for m in calls:
             raw_name = m.group(1)
             # Internal context-qualified helpers contain a backtick.
             if "`" in raw_name:

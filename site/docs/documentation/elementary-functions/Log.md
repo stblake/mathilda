@@ -81,9 +81,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 - Source: [`src/logexp.c`](https://github.com/stblake/mathilda/blob/main/src/logexp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
 - Tests: [`tests/test_accuracygoal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_accuracygoal.c)
+- Tests: [`tests/test_algebraicnumberdenominator.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumberdenominator.c)
 - Tests: [`tests/test_besselk.c`](https://github.com/stblake/mathilda/blob/main/tests/test_besselk.c)
 - Tests: [`tests/test_bessely.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bessely.c)
-- Tests: [`tests/test_cherry_dilog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog.c)
 
 ## Notes & additional examples
 

@@ -240,6 +240,22 @@
     "url": "documentation/other-advanced/AccuracyGoal/"
   },
   {
+    "name": "Activate",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Activate[expr] reactivates every Inactive[h] in expr (replacing Inactive[h] by h) and re-evaluates, so an inactive integral Inactive[Integrate][g,x] becomes Integrate[g,x] and evaluates.",
+    "url": "documentation/expression-information/Activate/"
+  },
+  {
+    "name": "AcyclicGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "AcyclicGraphQ[g] gives True if g has no cycle, following directed edges forwards and undirected edges either way: a forest when undirected, a DAG when directed. u->v together with v->u is a cycle.",
+    "url": "documentation/graphs/AcyclicGraphQ/"
+  },
+  {
     "name": "AddTo",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -249,27 +265,27 @@
   },
   {
     "name": "AdjacencyGraph",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "AdjacencyGraph[m] builds a graph on vertices 1..n from a 0/1 adjacency matrix m (undirected if m is symmetric, else directed).",
-    "url": "documentation/other-advanced/AdjacencyGraph/"
+    "url": "documentation/graphs/AdjacencyGraph/"
   },
   {
     "name": "AdjacencyList",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "AdjacencyList[g] gives the adjacency list of g; AdjacencyList[g,v] gives the vertices adjacent to v (successors for directed edges).",
-    "url": "documentation/other-advanced/AdjacencyList/"
+    "url": "documentation/graphs/AdjacencyList/"
   },
   {
     "name": "AdjacencyMatrix",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "AdjacencyMatrix[g] gives the 0/1 adjacency matrix of g (symmetric for undirected graphs).",
-    "url": "documentation/other-advanced/AdjacencyMatrix/"
+    "url": "documentation/graphs/AdjacencyMatrix/"
   },
   {
     "name": "AiryAi",
@@ -302,6 +318,54 @@
     "status": "Stable",
     "summary": "AiryBiPrime[z]",
     "url": "documentation/other-advanced/AiryBiPrime/"
+  },
+  {
+    "name": "AlgebraicIntegerQ",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicIntegerQ[x]",
+    "url": "documentation/algebra/AlgebraicIntegerQ/"
+  },
+  {
+    "name": "AlgebraicNumber",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumber[theta, {c0, c1, ..., cn}]",
+    "url": "documentation/algebra/AlgebraicNumber/"
+  },
+  {
+    "name": "AlgebraicNumberDenominator",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumberDenominator[a]",
+    "url": "documentation/algebra/AlgebraicNumberDenominator/"
+  },
+  {
+    "name": "AlgebraicNumberNorm",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumberNorm[a]",
+    "url": "documentation/algebra/AlgebraicNumberNorm/"
+  },
+  {
+    "name": "AlgebraicNumberPolynomial",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumberPolynomial[a, x]",
+    "url": "documentation/algebra/AlgebraicNumberPolynomial/"
+  },
+  {
+    "name": "AlgebraicNumberTrace",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumberTrace[a]",
+    "url": "documentation/algebra/AlgebraicNumberTrace/"
   },
   {
     "name": "AllTrue",
@@ -384,6 +448,14 @@
     "url": "documentation/elementary-functions/ArcTan/"
   },
   {
+    "name": "Area",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "Area[Polygon[{{x1, y1}, ...}]] gives the area of a simple 2D polygon. Exact (Integer/Rational) coordinates give an exact result; any Real coordinate gives a machine-precision result. A polygon with fewer than 3 distinct vertices has Undefined area.",
+    "url": "documentation/geometry/Area/"
+  },
+  {
     "name": "Arg",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -408,12 +480,28 @@
     "url": "documentation/structural-manipulation/ArrayFlatten/"
   },
   {
+    "name": "ArrayPad",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "ArrayPad[array, m]",
+    "url": "documentation/lists-and-iteration/ArrayPad/"
+  },
+  {
     "name": "ArrayPlot",
     "category": "Graphics",
     "slug": "graphics",
     "status": "Stable",
     "summary": "ArrayPlot[array, opts...]",
     "url": "documentation/graphics/ArrayPlot/"
+  },
+  {
+    "name": "ArrayReshape",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "ArrayReshape[list, dims]",
+    "url": "documentation/lists-and-iteration/ArrayReshape/"
   },
   {
     "name": "AspectRatio",
@@ -584,6 +672,14 @@
     "url": "documentation/special-functions/Beta/"
   },
   {
+    "name": "BetweennessCentrality",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "BetweennessCentrality[g] gives for each vertex v the sum over pairs of other vertices s, t of the fraction of shortest s-t paths passing through v (unordered pairs for undirected graphs, ordered pairs for directed ones). Brandes' algorithm; edge weights are ignored, as in Wolfram. Mixed graphs are not supported.",
+    "url": "documentation/graphs/BetweennessCentrality/"
+  },
+  {
     "name": "Binarize",
     "category": "Image Processing",
     "slug": "image-processing",
@@ -598,6 +694,22 @@
     "status": "Stable",
     "summary": "Binomial[n, m]",
     "url": "documentation/arithmetic/Binomial/"
+  },
+  {
+    "name": "BipartiteGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "BipartiteGraphQ[g] gives True if the vertices of g split into two sets with every edge running between them (edge direction is ignored).",
+    "url": "documentation/graphs/BipartiteGraphQ/"
+  },
+  {
+    "name": "BitLength",
+    "category": "Bitwise operations",
+    "slug": "bitwise",
+    "status": "Stable",
+    "summary": "BitLength[n] gives the number of binary bits needed to represent the integer n.",
+    "url": "documentation/bitwise/BitLength/"
   },
   {
     "name": "Black",
@@ -680,6 +792,14 @@
     "url": "documentation/other-advanced/Brown/"
   },
   {
+    "name": "Byte",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Byte",
+    "url": "documentation/other-advanced/Byte/"
+  },
+  {
     "name": "ByteCount",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -702,6 +822,14 @@
     "status": "Stable",
     "summary": "Cancel[expr] cancels out common factors in the numerator and denominator of expr.",
     "url": "documentation/algebra/Cancel/"
+  },
+  {
+    "name": "CanonicalGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "CanonicalGraph[g] gives a canonical form of g on vertices 1..n: two graphs are isomorphic iff their canonical graphs are identical.",
+    "url": "documentation/graphs/CanonicalGraph/"
   },
   {
     "name": "Cases",
@@ -752,6 +880,14 @@
     "url": "documentation/statistics/CentralMoment/"
   },
   {
+    "name": "Character",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Character",
+    "url": "documentation/other-advanced/Character/"
+  },
+  {
     "name": "CharacteristicPolynomial",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -784,6 +920,14 @@
     "url": "documentation/other-advanced/ChartStyle/"
   },
   {
+    "name": "Check",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Check[expr, failexpr] returns failexpr if a message is generated while evaluating expr, otherwise the value of expr.",
+    "url": "documentation/control-flow/Check/"
+  },
+  {
     "name": "ChineseRemainder",
     "category": "Number Theory",
     "slug": "number-theory",
@@ -798,6 +942,14 @@
     "status": "Stable",
     "summary": "Chop[expr]",
     "url": "documentation/elementary-functions/Chop/"
+  },
+  {
+    "name": "CirculantGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "CirculantGraph[n, j] gives the circulant graph on n vertices with i joined to i+j and i-j (mod n); CirculantGraph[n, {j1, j2, ...}] uses every jump ji.",
+    "url": "documentation/graphs/CirculantGraph/"
   },
   {
     "name": "ClassifierFunction",
@@ -848,6 +1000,22 @@
     "url": "documentation/elementary-functions/Clip/"
   },
   {
+    "name": "Close",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Close[stream]",
+    "url": "documentation/file-io/Close/"
+  },
+  {
+    "name": "ClosenessCentrality",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "ClosenessCentrality[g] gives, for each vertex v, r/s where r is the number of vertices reachable from v and s the sum of their distances from v (0 if v reaches none). Uses EdgeWeight as lengths.",
+    "url": "documentation/graphs/ClosenessCentrality/"
+  },
+  {
     "name": "Closing",
     "category": "Image Processing",
     "slug": "image-processing",
@@ -870,6 +1038,14 @@
     "status": "Stable",
     "summary": "CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.",
     "url": "documentation/algebra/CoefficientList/"
+  },
+  {
+    "name": "CoefficientRules",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "CoefficientRules[poly, {x1, x2, ...}] gives {expvec -> coeff, ...} for the monomials of poly.",
+    "url": "documentation/structural-manipulation/CoefficientRules/"
   },
   {
     "name": "Collect",
@@ -945,11 +1121,27 @@
   },
   {
     "name": "CompleteGraph",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
-    "summary": "CompleteGraph[n] gives the complete graph K_n on n vertices.",
-    "url": "documentation/other-advanced/CompleteGraph/"
+    "summary": "CompleteGraph[n] gives the complete graph on n vertices. CompleteGraph[{n1, n2, ...}] gives the complete multipartite graph with parts of sizes n1, n2, ....",
+    "url": "documentation/graphs/CompleteGraph/"
+  },
+  {
+    "name": "CompleteGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "CompleteGraphQ[g] gives True if every pair of distinct vertices of g is joined by an edge in both directions (an undirected edge, or directed edges both ways). CompleteGraphQ[g, vlist] tests the subgraph induced by vlist; False if some element of vlist is not a vertex of g.",
+    "url": "documentation/graphs/CompleteGraphQ/"
+  },
+  {
+    "name": "CompleteKaryTree",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "CompleteKaryTree[n] gives the complete binary tree with n levels; CompleteKaryTree[n, k] the complete k-ary tree with n levels.",
+    "url": "documentation/graphs/CompleteKaryTree/"
   },
   {
     "name": "Complex",
@@ -1041,19 +1233,27 @@
   },
   {
     "name": "ConnectedComponents",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "ConnectedComponents[g] gives the connected components of g (weak, on the underlying undirected graph).",
-    "url": "documentation/other-advanced/ConnectedComponents/"
+    "url": "documentation/graphs/ConnectedComponents/"
   },
   {
     "name": "ConnectedGraphQ",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "ConnectedGraphQ[g] gives True if g is connected.",
-    "url": "documentation/other-advanced/ConnectedGraphQ/"
+    "url": "documentation/graphs/ConnectedGraphQ/"
+  },
+  {
+    "name": "ConnectedHypergraphQ",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "ConnectedHypergraphQ[h] gives True if h has at least one vertex and is connected. h may be a plain List of hyperedges.",
+    "url": "documentation/hypergraphs/ConnectedHypergraphQ/"
   },
   {
     "name": "ConstantArray",
@@ -1126,6 +1326,14 @@
     "status": "Experimental",
     "summary": "Contours",
     "url": "documentation/other-advanced/Contours/"
+  },
+  {
+    "name": "ConvexHullRegion",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "ConvexHullRegion[{{x1, y1}, ...}] gives the convex hull of a set of 2D points: a Polygon with the hull vertices in counterclockwise order, a Line for collinear input, or a Point for a single point.",
+    "url": "documentation/geometry/ConvexHullRegion/"
   },
   {
     "name": "CoprimeQ",
@@ -1273,11 +1481,11 @@
   },
   {
     "name": "CycleGraph",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "CycleGraph[n] gives the cycle graph on n vertices.",
-    "url": "documentation/other-advanced/CycleGraph/"
+    "url": "documentation/graphs/CycleGraph/"
   },
   {
     "name": "CylindricalDecomposition",
@@ -1294,6 +1502,14 @@
     "status": "Stable",
     "summary": "D[f, x] gives the partial derivative of f with respect to x.",
     "url": "documentation/calculus/D/"
+  },
+  {
+    "name": "DSolve",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "DSolve[eqn, y, x] solves a differential equation for the function y with",
+    "url": "documentation/calculus/DSolve/"
   },
   {
     "name": "DataType",
@@ -1334,6 +1550,14 @@
     "status": "Stable",
     "summary": "Degree",
     "url": "documentation/mathematical-constants/Degree/"
+  },
+  {
+    "name": "DegreeCentrality",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "DegreeCentrality[g] gives the list of vertex degrees of g; DegreeCentrality[g, \"In\"] and [g, \"Out\"] count incoming and outgoing edges. In a mixed graph an undirected edge counts as one edge in each direction.",
+    "url": "documentation/graphs/DegreeCentrality/"
   },
   {
     "name": "Delete",
@@ -1520,12 +1744,20 @@
     "url": "documentation/structural-manipulation/Dimensions/"
   },
   {
-    "name": "DirectedGraphQ",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "name": "DirectedGraph",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
-    "summary": "DirectedGraphQ[g] gives True if all edges of g are directed.",
-    "url": "documentation/other-advanced/DirectedGraphQ/"
+    "summary": "DirectedGraph[g] replaces each undirected edge u<->v of g by the pair u->v, v->u (weights duplicated). DirectedGraph[g, \"Acyclic\"] instead orients each undirected edge from the vertex earlier in VertexList to the later one, giving a DAG for undirected g.",
+    "url": "documentation/graphs/DirectedGraph/"
+  },
+  {
+    "name": "DirectedGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "DirectedGraphQ[g] gives True if g has at least one edge and all edges of g are directed. An edgeless graph counts as undirected.",
+    "url": "documentation/graphs/DirectedGraphQ/"
   },
   {
     "name": "Discriminant",
@@ -1648,12 +1880,60 @@
     "url": "documentation/mathematical-constants/E/"
   },
   {
+    "name": "EccentricityCentrality",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EccentricityCentrality[g] gives 1/VertexEccentricity[g, v] for each vertex v (0 when the eccentricity is 0). Uses EdgeWeight as lengths.",
+    "url": "documentation/graphs/EccentricityCentrality/"
+  },
+  {
+    "name": "EdgeAdd",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeAdd[g, e] adds the edge e to g; EdgeAdd[g, {e1, ...}] adds several. Edges may be written u->v / DirectedEdge[u,v] or u<->v / UndirectedEdge[u,v]; endpoints not yet in g become new vertices (appended). A new edge gets weight 1 in a weighted graph. Adding a self-loop or an edge g already has (a multigraph) is left unevaluated.",
+    "url": "documentation/graphs/EdgeAdd/"
+  },
+  {
+    "name": "EdgeBetweennessCentrality",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeBetweennessCentrality[g] gives for each edge, in EdgeList order, the sum over ordered pairs of vertices s, t of the fraction of shortest s-t paths using that edge. Uses EdgeWeight as lengths.",
+    "url": "documentation/graphs/EdgeBetweennessCentrality/"
+  },
+  {
+    "name": "EdgeConnectivity",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeConnectivity[g] gives the minimum total weight of edges whose removal disconnects g (strongly, for directed graphs); EdgeConnectivity[g, s, t] gives the minimum s-t edge cut weight. EdgeWeight is used when present, else each edge counts 1.",
+    "url": "documentation/graphs/EdgeConnectivity/"
+  },
+  {
     "name": "EdgeCount",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "EdgeCount[g] gives the number of edges in the graph g.",
-    "url": "documentation/other-advanced/EdgeCount/"
+    "url": "documentation/graphs/EdgeCount/"
+  },
+  {
+    "name": "EdgeCoverQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeCoverQ[g, elist] gives True if elist is a set of edges of g touching every vertex of g.",
+    "url": "documentation/graphs/EdgeCoverQ/"
+  },
+  {
+    "name": "EdgeDelete",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeDelete[g, e] removes the edge e from g; EdgeDelete[g, {e1, ...}] removes several (each must be an edge of g, else the call stays unevaluated; an undirected edge matches either orientation); EdgeDelete[g, patt] removes every edge matching patt. Vertices, order and the remaining weights are kept.",
+    "url": "documentation/graphs/EdgeDelete/"
   },
   {
     "name": "EdgeDetect",
@@ -1664,12 +1944,52 @@
     "url": "documentation/image-processing/EdgeDetect/"
   },
   {
+    "name": "EdgeIndex",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeIndex[g, e] gives the position of the edge e in EdgeList[g] (an undirected edge matches either orientation; u->v and u<->v sugar are accepted); EdgeIndex[g, {e1, ...}] gives a list of positions.",
+    "url": "documentation/graphs/EdgeIndex/"
+  },
+  {
     "name": "EdgeList",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "EdgeList[g] gives the list of edges of the graph g.",
-    "url": "documentation/other-advanced/EdgeList/"
+    "url": "documentation/graphs/EdgeList/"
+  },
+  {
+    "name": "EdgeQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeQ[g, e] gives True if e is an edge of the graph g. u->v means DirectedEdge[u,v] and u<->v UndirectedEdge[u,v]; an undirected edge matches in either orientation, and direction must agree.",
+    "url": "documentation/graphs/EdgeQ/"
+  },
+  {
+    "name": "EdgeRules",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeRules[g] gives the edges of g as a list of rules u -> v (undirected edges too), in EdgeList order.",
+    "url": "documentation/graphs/EdgeRules/"
+  },
+  {
+    "name": "EdgeWeight",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeWeight[g] gives the weights of g's edges, in EdgeList order. Defaults to all 1s if g was built without an EdgeWeight option.",
+    "url": "documentation/graphs/EdgeWeight/"
+  },
+  {
+    "name": "EdgeWeightedGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EdgeWeightedGraphQ[g] gives True if g carries edge weights (EdgeWeight).",
+    "url": "documentation/graphs/EdgeWeightedGraphQ/"
   },
   {
     "name": "EditDistance",
@@ -1686,6 +2006,14 @@
     "status": "Stable",
     "summary": "Eigenvalues[m]",
     "url": "documentation/linear-algebra/Eigenvalues/"
+  },
+  {
+    "name": "EigenvectorCentrality",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EigenvectorCentrality[g] gives the eigenvector centrality of each vertex, computed per strongly connected component (each component of k > 1 vertices weighted by k - 1, total 1; isolated vertices 0). EigenvectorCentrality[g, \"In\"] (default) uses incoming edges, [g, \"Out\"] outgoing ones. Edge weights are ignored.",
+    "url": "documentation/graphs/EigenvectorCentrality/"
   },
   {
     "name": "Eigenvectors",
@@ -1712,12 +2040,28 @@
     "url": "documentation/solutions-of-equations/Eliminate/"
   },
   {
+    "name": "EmptyGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EmptyGraphQ[g] gives True if g is a graph with no edges (it may have vertices), and False otherwise.",
+    "url": "documentation/graphs/EmptyGraphQ/"
+  },
+  {
     "name": "End",
     "category": "Scoping Constructs",
     "slug": "scoping-constructs",
     "status": "Stable",
     "summary": "End[] restores the context that was active before the matching Begin[]",
     "url": "documentation/scoping-constructs/End/"
+  },
+  {
+    "name": "EndOfFile",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "EndOfFile",
+    "url": "documentation/other-advanced/EndOfFile/"
   },
   {
     "name": "EndPackage",
@@ -1806,6 +2150,14 @@
     "status": "Stable",
     "summary": "EulerPhi[n] gives the Euler totient phi(n), the number of integers from 1 to n coprime to n -- equivalently the order of the group (Z/nZ)* of units, so a^phi(n) == 1 (mod n) whenever gcd(a, n) == 1 (Euler's theorem).",
     "url": "documentation/number-theory/EulerPhi/"
+  },
+  {
+    "name": "EulerianGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "EulerianGraphQ[g] gives True if g has a cycle using every edge exactly once: all degrees even (undirected) or in-degree = out-degree (directed), with all edges in one connected component. Left unevaluated for mixed graphs.",
+    "url": "documentation/graphs/EulerianGraphQ/"
   },
   {
     "name": "Evaluate",
@@ -1918,6 +2270,14 @@
     "status": "Stable",
     "summary": "Export[\"file\", obj] writes obj to a file, choosing the format from the file extension; Export[\"file\", obj, \"FMT\"] states it explicitly. An Image writes to a raster file (PNG, JPEG, BMP, TGA); its samples outside the unit interval are clamped, since 8-bit output has no room for them. A Graphics object (the result of Plot, ListPlot, Graphics, ...) writes to PDF, PNG, or JPEG: PDF is a resolution-independent vector file produced without any external library and works headless, while PNG and JPEG render through the graphics backend and so need graphics support compiled in and a display. A Graphics3D object (Plot3D, ParametricPlot3D, ...) exports to PNG or JPEG the same way; it has no vector-PDF form. Returns the file name, so Import[Export[f, img]] round-trips.",
     "url": "documentation/file-io/Export/"
+  },
+  {
+    "name": "Expression",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Expression",
+    "url": "documentation/other-advanced/Expression/"
   },
   {
     "name": "ExtendedGCD",
@@ -2072,6 +2432,14 @@
     "url": "documentation/algebra/FactorSquareFree/"
   },
   {
+    "name": "FactorSquareFreeList",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "FactorSquareFreeList[poly] gives a list of the square-free factors of poly",
+    "url": "documentation/structural-manipulation/FactorSquareFreeList/"
+  },
+  {
     "name": "FactorTerms",
     "category": "Algebra",
     "slug": "algebra",
@@ -2118,6 +2486,14 @@
     "status": "Stable",
     "summary": "Fibonacci[n]",
     "url": "documentation/arithmetic/Fibonacci/"
+  },
+  {
+    "name": "File",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "File[\"name\"]",
+    "url": "documentation/other-advanced/File/"
   },
   {
     "name": "FileBaseName",
@@ -2168,12 +2544,92 @@
     "url": "documentation/file-io/FilePrint/"
   },
   {
+    "name": "FindClique",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindClique[g] gives {c} with c a maximum clique of g. FindClique[g, k] finds a maximal clique of at most k vertices, [g, {k}] of exactly k, [g, {kmin, kmax}] within the range; a third argument n (or All) gives up to n such cliques. For directed graphs a clique needs edges both ways. Exact branch and bound with colouring bounds.",
+    "url": "documentation/graphs/FindClique/"
+  },
+  {
     "name": "FindClusters",
     "category": "Lists and Iteration",
     "slug": "lists-and-iteration",
     "status": "Stable",
     "summary": "FindClusters[list]",
     "url": "documentation/lists-and-iteration/FindClusters/"
+  },
+  {
+    "name": "FindCycle",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindCycle[g] finds a cycle of g, as {list of edges}, or {}. FindCycle[g, k] finds a cycle of length at most k, FindCycle[g, {k}] of length exactly k, FindCycle[g, {kmin, kmax}] of length in that range; FindCycle[g, kspec, n] finds at most n (n an integer or All). Each cycle is reported once. Length-bounded searches are exhaustive and give up (unevaluated) after 5*10^7 steps; use TimeConstrained to bound them.",
+    "url": "documentation/graphs/FindCycle/"
+  },
+  {
+    "name": "FindEdgeCover",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindEdgeCover[g] gives a minimum edge cover of g: a smallest set of edges touching every vertex. Gives {} when g has an isolated vertex (no edge cover exists).",
+    "url": "documentation/graphs/FindEdgeCover/"
+  },
+  {
+    "name": "FindEdgeCut",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindEdgeCut[g] gives a minimum set of edges whose removal disconnects g (strongly, for directed graphs); FindEdgeCut[g, s, t] gives a minimum s-t edge cut. Uses EdgeWeight as capacity when present. Edges are returned in EdgeList order.",
+    "url": "documentation/graphs/FindEdgeCut/"
+  },
+  {
+    "name": "FindEulerianCycle",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindEulerianCycle[g] gives {c}, an Eulerian cycle c of g as a list of edges (Hierholzer's algorithm, linear time), or {} if there is none. Only FindEulerianCycle[g] and FindEulerianCycle[g, 1] are supported; mixed graphs are left unevaluated.",
+    "url": "documentation/graphs/FindEulerianCycle/"
+  },
+  {
+    "name": "FindGraphIsomorphism",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindGraphIsomorphism[g1, g2] gives {assoc}, an isomorphism from g1 to g2 as an association of vertices, or {} if the graphs are not isomorphic. FindGraphIsomorphism[g1, g2, n] / [g1, g2, All] gives up to n / all isomorphisms.",
+    "url": "documentation/graphs/FindGraphIsomorphism/"
+  },
+  {
+    "name": "FindHamiltonianCycle",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindHamiltonianCycle[g] gives {c} with c a Hamiltonian cycle of g as a list of edges, or {} if there is none. FindHamiltonianCycle[g, n] / [g, All] gives up to n / all Hamiltonian cycles. Exact backtracking with pruning; unevaluated if the search budget is exhausted.",
+    "url": "documentation/graphs/FindHamiltonianCycle/"
+  },
+  {
+    "name": "FindHamiltonianPath",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindHamiltonianPath[g] gives a Hamiltonian path of g as a vertex list, or {} if there is none; FindHamiltonianPath[g, s, t] one from s to t. Exact; unevaluated if the search budget is exhausted.",
+    "url": "documentation/graphs/FindHamiltonianPath/"
+  },
+  {
+    "name": "FindIndependentEdgeSet",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindIndependentEdgeSet[g] gives a maximum independent edge set (maximum matching) of g, ignoring edge direction. Hopcroft-Karp for bipartite graphs, Edmonds' blossom algorithm otherwise.",
+    "url": "documentation/graphs/FindIndependentEdgeSet/"
+  },
+  {
+    "name": "FindIndependentVertexSet",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindIndependentVertexSet[g] gives {s} with s a maximum independent vertex set of g. FindIndependentVertexSet[g, k] finds a maximal independent set of at most k vertices, [g, {k}] of exactly k, [g, {kmin, kmax}] within the range; a third argument n (or All) gives up to n such sets. Exact; unevaluated if the search budget is exhausted.",
+    "url": "documentation/graphs/FindIndependentVertexSet/"
   },
   {
     "name": "FindInstance",
@@ -2192,6 +2648,14 @@
     "url": "documentation/linear-algebra/FindIntegerNullVector/"
   },
   {
+    "name": "FindKClique",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindKClique[g, k] gives {c} with c a largest k-clique of g: a vertex set whose members are pairwise within distance k.",
+    "url": "documentation/graphs/FindKClique/"
+  },
+  {
     "name": "FindMaximum",
     "category": "Numerical Calculus",
     "slug": "numerical-calculus",
@@ -2200,12 +2664,44 @@
     "url": "documentation/numerical-calculus/FindMaximum/"
   },
   {
+    "name": "FindMaximumFlow",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindMaximumFlow[g, s, t] gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow[g, s, t, \"prop\"] gives \"FlowValue\", \"FlowMatrix\" (dense n x n matrix of edge flows) or \"EdgeList\" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -> {c1, ...} option (EdgeList order; default 1, EdgeWeight is ignored); VertexCapacity -> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.",
+    "url": "documentation/graphs/FindMaximumFlow/"
+  },
+  {
     "name": "FindMinimum",
     "category": "Numerical Calculus",
     "slug": "numerical-calculus",
     "status": "Stable",
     "summary": "FindMinimum[f, {x, x0}]",
     "url": "documentation/numerical-calculus/FindMinimum/"
+  },
+  {
+    "name": "FindMinimumCut",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindMinimumCut[g] gives {value, {part1, part2}}: a partition of the vertices minimizing the total weight of the edges from part1 to part2 (EdgeWeight when present, else 1). For directed graphs part1 is the source side. Nagamochi-Ibaraki for undirected graphs, max flows for directed ones.",
+    "url": "documentation/graphs/FindMinimumCut/"
+  },
+  {
+    "name": "FindMinimumTransversal",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "FindMinimumTransversal[h] gives a smallest set of vertices meeting every hyperedge of h (a minimum hitting set). Left unevaluated if some hyperedge is empty or the exact search exceeds its budget.",
+    "url": "documentation/hypergraphs/FindMinimumTransversal/"
+  },
+  {
+    "name": "FindPath",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindPath[g, s, t] finds a path from s to t, as {vertex list}, or {} (depth-first, linear time). FindPath[g, s, t, k] finds a path with at most k edges, FindPath[g, s, t, {k}] exactly k, {kmin, kmax} in a range; FindPath[g, s, t, kspec, n] finds at most n paths (n or All), shortest first. Length-bounded searches give up (unevaluated) after 5*10^7 steps.",
+    "url": "documentation/graphs/FindPath/"
   },
   {
     "name": "FindRoot",
@@ -2217,19 +2713,19 @@
   },
   {
     "name": "FindShortestPath",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "FindShortestPath[g,s,t] gives a shortest path from s to t as a list of vertices ({} if none).",
-    "url": "documentation/other-advanced/FindShortestPath/"
+    "url": "documentation/graphs/FindShortestPath/"
   },
   {
     "name": "FindSpanningTree",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "FindSpanningTree[g] gives a spanning tree (forest) of g as a graph.",
-    "url": "documentation/other-advanced/FindSpanningTree/"
+    "url": "documentation/graphs/FindSpanningTree/"
   },
   {
     "name": "FindThreshold",
@@ -2238,6 +2734,30 @@
     "status": "Stable",
     "summary": "FindThreshold[image] gives a threshold separating the image into two classes, by Otsu's method: the level maximising the BETWEEN-class variance w0 w1 (mu0 - mu1)^2, which is algebraically the same as minimising the weighted within-class variance but needs only one incremental pass over a 256-bin histogram. A colour image is reduced to Rec. 601 luminance first. Returns unevaluated for an image whose pixels are all identical, since no threshold splits one cluster into two.",
     "url": "documentation/image-processing/FindThreshold/"
+  },
+  {
+    "name": "FindVertexColoring",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Partial",
+    "summary": "FindVertexColoring[g] gives a MINIMAL vertex colouring of g as a list of integers in VertexList order: the number of distinct colours equals the chromatic number, and no edge joins two vertices of equal colour. Minimality is proven by exact search (Wolfram's \"BacktrackingDS\" method) seeded by DSATUR upper and clique lower bounds. Exact colouring is NP-hard, so there are two guards, and exceeding EITHER returns the expression UNEVALUATED -- never a valid-but-larger colouring. (1) Graphs of more than 128 vertices are refused outright. (2) The search gives up after 8 million nodes, on the order of 100 seconds; a node count rather than a clock, so the answer does not depend on how fast the host is. To bound how long a call may take, wrap it in TimeConstrained -- that is the intended lever, and the search polls for the deadline so it is honoured; the 8-million-node ceiling is a last-resort backstop for an unattended run, not the responsiveness mechanism. Cost is driven by DENSITY, not by vertex count: a sparse 128-vertex graph answers instantly, while a dense one may exhaust the budget and refuse. FindVertexColoring[g, {c1, ...}] and FindVertexColoring[g, l] are not implemented.",
+    "url": "documentation/graphs/FindVertexColoring/"
+  },
+  {
+    "name": "FindVertexCover",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindVertexCover[g] gives a minimum vertex cover of g (a smallest vertex set touching every edge), exact by branch and reduce. Stays unevaluated if optimality cannot be proven within the search budget.",
+    "url": "documentation/graphs/FindVertexCover/"
+  },
+  {
+    "name": "FindVertexCut",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "FindVertexCut[g] gives a minimum set of vertices whose removal disconnects the underlying undirected graph of g (n-1 vertices for a complete graph); FindVertexCut[g, s, t] gives a minimum set separating s from t ({} when they are adjacent).",
+    "url": "documentation/graphs/FindVertexCut/"
   },
   {
     "name": "First",
@@ -2254,6 +2774,14 @@
     "status": "Stable",
     "summary": "FirstCase[expr, patt]",
     "url": "documentation/functional-programming/FirstCase/"
+  },
+  {
+    "name": "FirstPosition",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
+    "status": "Stable",
+    "summary": "FirstPosition[expr, pattern] gives the position of the first element in expr matching pattern (in depth-first order), or Missing[\"NotFound\"] if no such element is found.",
+    "url": "documentation/pattern-matching/FirstPosition/"
   },
   {
     "name": "Fit",
@@ -2432,6 +2960,14 @@
     "url": "documentation/other-advanced/FresnelS/"
   },
   {
+    "name": "FromCoefficientRules",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "FromCoefficientRules[{expvec -> coeff, ...}, {x1, x2, ...}] reconstructs the polynomial",
+    "url": "documentation/structural-manipulation/FromCoefficientRules/"
+  },
+  {
     "name": "FromContinuedFraction",
     "category": "Number Theory",
     "slug": "number-theory",
@@ -2552,6 +3088,14 @@
     "url": "documentation/mathematical-constants/Glaisher/"
   },
   {
+    "name": "GlobalClusteringCoefficient",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GlobalClusteringCoefficient[g] gives 3 x (number of triangles) / (number of connected triples) of g, exactly.",
+    "url": "documentation/graphs/GlobalClusteringCoefficient/"
+  },
+  {
     "name": "GoldenAngle",
     "category": "Mathematical Constants",
     "slug": "mathematical-constants",
@@ -2600,20 +3144,100 @@
     "url": "documentation/graphs/Graph/"
   },
   {
-    "name": "GraphDistance",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "name": "GraphAutomorphismGroup",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
-    "summary": "GraphDistance[g,s,t] gives the length of a shortest path from s to t (Infinity if unreachable).",
-    "url": "documentation/other-advanced/GraphDistance/"
+    "summary": "GraphAutomorphismGroup[g] gives the automorphism group of g as PermutationGroup[{Cycles[...], ...}] acting on vertex positions.",
+    "url": "documentation/graphs/GraphAutomorphismGroup/"
+  },
+  {
+    "name": "GraphCenter",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphCenter[g] gives the vertices of g with minimum eccentricity; {} unless g is (strongly) connected.",
+    "url": "documentation/graphs/GraphCenter/"
+  },
+  {
+    "name": "GraphComplement",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphComplement[g] gives the complement of g: the same vertices, with an edge wherever g has none. For a directed or mixed g the complement is directed (u->v present iff no edge of g leads from u to v). Edges are in row-major VertexList order; weights are dropped.",
+    "url": "documentation/graphs/GraphComplement/"
+  },
+  {
+    "name": "GraphDensity",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphDensity[g] gives the number of edges of g divided by the number of possible edges: (directed edges + 2 undirected edges)/(n(n-1)).",
+    "url": "documentation/graphs/GraphDensity/"
+  },
+  {
+    "name": "GraphDiameter",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphDiameter[g] gives the greatest distance between two vertices of g: the maximum vertex eccentricity. Infinity unless g is (strongly) connected.",
+    "url": "documentation/graphs/GraphDiameter/"
+  },
+  {
+    "name": "GraphDifference",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphDifference[g1, g2] gives the graph on the union of the vertex sets whose edges are those of g1 not in g2, in canonical order. Weights are dropped.",
+    "url": "documentation/graphs/GraphDifference/"
+  },
+  {
+    "name": "GraphDisjointUnion",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphDisjointUnion[g1, g2, ...] gives the disjoint union of the gi, with vertices relabelled 1, 2, ..., n (g1's first, in VertexList order). Weights are dropped.",
+    "url": "documentation/graphs/GraphDisjointUnion/"
+  },
+  {
+    "name": "GraphDistance",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphDistance[g, s, t] gives the length of a shortest path from s to t (Infinity if unreachable). GraphDistance[g, s] gives the list of distances from s to every vertex, in VertexList order. Edge weights are used as lengths when g has EdgeWeight.",
+    "url": "documentation/graphs/GraphDistance/"
+  },
+  {
+    "name": "GraphDistanceMatrix",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphDistanceMatrix[g] gives the matrix of shortest-path distances between all pairs of vertices of g, rows and columns in VertexList order; entry {i, j} is the distance from vertex i to vertex j (Infinity if unreachable). GraphDistanceMatrix[g, d] keeps only distances at most d. Integers for unweighted graphs, machine reals when g has EdgeWeight (edge weights as lengths).",
+    "url": "documentation/graphs/GraphDistanceMatrix/"
+  },
+  {
+    "name": "GraphIntersection",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphIntersection[g1, g2, ...] gives the graph on the union of the vertex sets whose edges are those common to all the gi, in canonical order. Weights are dropped.",
+    "url": "documentation/graphs/GraphIntersection/"
+  },
+  {
+    "name": "GraphPeriphery",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphPeriphery[g] gives the vertices of g with maximum eccentricity; {} unless g is (strongly) connected.",
+    "url": "documentation/graphs/GraphPeriphery/"
   },
   {
     "name": "GraphPlot",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout. Vertex labels are off by default; pass VertexLabels -> True to draw them (in black).",
-    "url": "documentation/other-advanced/GraphPlot/"
+    "url": "documentation/graphs/GraphPlot/"
   },
   {
     "name": "GraphQ",
@@ -2622,6 +3246,30 @@
     "status": "Stable",
     "summary": "GraphQ[g] gives True if g is a valid graph, and False otherwise.",
     "url": "documentation/graphs/GraphQ/"
+  },
+  {
+    "name": "GraphRadius",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphRadius[g] gives the minimum vertex eccentricity of g. Infinity unless g is (strongly) connected.",
+    "url": "documentation/graphs/GraphRadius/"
+  },
+  {
+    "name": "GraphTriangleCount",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphTriangleCount[g] gives the number of triangles of an undirected graph g, or of directed 3-cycles of a directed graph. O(m^1.5) degree-ordered triangle listing.",
+    "url": "documentation/graphs/GraphTriangleCount/"
+  },
+  {
+    "name": "GraphUnion",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphUnion[g1, g2, ...] gives the graph whose vertices and edges are the unions of those of the gi (vertices in canonical order; an undirected edge equals its reversal). Weights are dropped.",
+    "url": "documentation/graphs/GraphUnion/"
   },
   {
     "name": "Gray",
@@ -2656,6 +3304,14 @@
     "url": "documentation/other-advanced/Green/"
   },
   {
+    "name": "GridGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GridGraph[{m, n}] gives the m x n grid graph; GridGraph[{n1, ..., nk}] the k-dimensional grid. The first coordinate varies fastest in the vertex numbering.",
+    "url": "documentation/graphs/GridGraph/"
+  },
+  {
     "name": "GroebnerBasis",
     "category": "Algebra",
     "slug": "algebra",
@@ -2672,6 +3328,22 @@
     "url": "documentation/data-structures/GroupBy/"
   },
   {
+    "name": "HITSCentrality",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "HITSCentrality[g] gives {h, a}: h is the principal eigenvector of A^T A (per block of vertices sharing in-neighbours, each block of k > 1 vertices weighted k - 1, total 1) and a = A h, with A the adjacency matrix (Wolfram's convention). Edge weights are ignored.",
+    "url": "documentation/graphs/HITSCentrality/"
+  },
+  {
+    "name": "HamiltonianGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "HamiltonianGraphQ[g] gives True if g has a Hamiltonian cycle. Exact; unevaluated if the search budget is exhausted.",
+    "url": "documentation/graphs/HamiltonianGraphQ/"
+  },
+  {
     "name": "HammingDistance",
     "category": "Lists and Iteration",
     "slug": "lists-and-iteration",
@@ -2686,6 +3358,14 @@
     "status": "Stable",
     "summary": "HankelMatrix[n] gives the n x n Hankel matrix with first row and column the integers 1..n.",
     "url": "documentation/linear-algebra/HankelMatrix/"
+  },
+  {
+    "name": "HararyGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "HararyGraph[k, n] gives the Harary graph: a k-connected graph on n vertices with the minimum number of edges (k >= 2, n > k).",
+    "url": "documentation/graphs/HararyGraph/"
   },
   {
     "name": "HarmonicNumber",
@@ -2824,6 +3504,38 @@
     "url": "documentation/special-functions/HurwitzZeta/"
   },
   {
+    "name": "HypercubeGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "HypercubeGraph[n] gives the n-dimensional hypercube graph on 2^n vertices.",
+    "url": "documentation/graphs/HypercubeGraph/"
+  },
+  {
+    "name": "HyperedgeConnectedComponents",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HyperedgeConnectedComponents[h] gives the components of the hyperedges of h under intersection, as Lists of 1-based hyperedge indices. HyperedgeConnectedComponents[h, s] gives the s-connected components: hyperedges with at least s vertices, joined when they share at least s.",
+    "url": "documentation/hypergraphs/HyperedgeConnectedComponents/"
+  },
+  {
+    "name": "HyperedgeDistance",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HyperedgeDistance[h, i, j] gives the length of a shortest walk of intersecting hyperedges from hyperedge i to hyperedge j, or Infinity. HyperedgeDistance[h, i, j, s] uses s-walks (consecutive hyperedges share at least s vertices). HyperedgeDistance[h, i] or [h, i, All, s] gives the distances from i to every hyperedge.",
+    "url": "documentation/hypergraphs/HyperedgeDistance/"
+  },
+  {
+    "name": "HyperedgeSizes",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HyperedgeSizes[h] gives the arity (Length) of each hyperedge of h, in EdgeList order.",
+    "url": "documentation/hypergraphs/HyperedgeSizes/"
+  },
+  {
     "name": "Hyperfactorial",
     "category": "Special Functions",
     "slug": "special-functions",
@@ -2862,6 +3574,134 @@
     "status": "Stable",
     "summary": "HypergeometricPFQ[{a1, ...}, {b1, ...}, z]",
     "url": "documentation/special-functions/HypergeometricPFQ/"
+  },
+  {
+    "name": "Hypergraph",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "Hypergraph[{e1, e2, ...}] represents a hypergraph whose hyperedges e_i are Lists of vertices; the vertices are derived in first-appearance order. Hypergraph[{v1, ...}, {e1, ...}] gives the vertices explicitly. Hypergraph[g] converts a Graph. Hyperedges may repeat, overlap, nest, be empty, or repeat a vertex; their order is kept for ordered (Wolfram-model) use, while set-based heads read each as the set of its vertices.",
+    "url": "documentation/hypergraphs/Hypergraph/"
+  },
+  {
+    "name": "HypergraphCliqueExpansion",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphCliqueExpansion[h] gives the 2-section of h: the undirected Graph on VertexList[h] with u<->v whenever u and v share a hyperedge.",
+    "url": "documentation/hypergraphs/HypergraphCliqueExpansion/"
+  },
+  {
+    "name": "HypergraphConnectedComponents",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphConnectedComponents[h] gives the connected components of h as Lists of vertices; two vertices are connected when a chain of hyperedges joins them. Components are ordered by their first vertex.",
+    "url": "documentation/hypergraphs/HypergraphConnectedComponents/"
+  },
+  {
+    "name": "HypergraphCorank",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphCorank[h] gives the smallest hyperedge arity of h (0 if h has no hyperedges).",
+    "url": "documentation/hypergraphs/HypergraphCorank/"
+  },
+  {
+    "name": "HypergraphDistance",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphDistance[h, u, v] gives the least number of hyperedges in a chain joining vertices u and v, or Infinity. HypergraphDistance[h, u] gives the distances from u to every vertex, in VertexList order.",
+    "url": "documentation/hypergraphs/HypergraphDistance/"
+  },
+  {
+    "name": "HypergraphDual",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphDual[h] gives the dual hypergraph: vertices 1..m (one per hyperedge of h) and, for each vertex v of h in VertexList order, the hyperedge of indices of the hyperedges containing v.",
+    "url": "documentation/hypergraphs/HypergraphDual/"
+  },
+  {
+    "name": "HypergraphEdgeAdd",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphEdgeAdd[h, e] appends the hyperedge e (a List); HypergraphEdgeAdd[h, {e1, ...}] appends several. New vertices are added.",
+    "url": "documentation/hypergraphs/HypergraphEdgeAdd/"
+  },
+  {
+    "name": "HypergraphEdgeDelete",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphEdgeDelete[h, e] or [h, {e1, ...}] deletes every hyperedge identical (SameQ) to one given.",
+    "url": "documentation/hypergraphs/HypergraphEdgeDelete/"
+  },
+  {
+    "name": "HypergraphLineGraph",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphLineGraph[h] gives the line graph of h: vertices 1..m, i<->j when hyperedges i and j intersect. HypergraphLineGraph[h, s] gives the s-line graph, joining hyperedges that share at least s vertices.",
+    "url": "documentation/hypergraphs/HypergraphLineGraph/"
+  },
+  {
+    "name": "HypergraphQ",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphQ[h] gives True if h is a valid Hypergraph, and False otherwise.",
+    "url": "documentation/hypergraphs/HypergraphQ/"
+  },
+  {
+    "name": "HypergraphRank",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphRank[h] gives the largest hyperedge arity of h (0 if h has no hyperedges).",
+    "url": "documentation/hypergraphs/HypergraphRank/"
+  },
+  {
+    "name": "HypergraphRestriction",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphRestriction[h, {v1, ...}] intersects every hyperedge of h with the given vertices, dropping hyperedges that miss them (Berge's induced sub-hypergraph).",
+    "url": "documentation/hypergraphs/HypergraphRestriction/"
+  },
+  {
+    "name": "HypergraphStarExpansion",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphStarExpansion[h] gives the incidence (star) expansion of h: the bipartite Graph on VertexList[h] and nodes Hyperedge[1], ..., Hyperedge[m], with v<->Hyperedge[j] whenever v lies in hyperedge j.",
+    "url": "documentation/hypergraphs/HypergraphStarExpansion/"
+  },
+  {
+    "name": "HypergraphToGraph",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphToGraph[h] converts h, read as an ordered hypergraph, to the directed Graph with v_a->v_b for every a<b in each hyperedge {v_1, ..., v_k} (the Function Repository's HypergraphToGraph). Self-loops are dropped and parallel edges merged. h may be a plain List of hyperedges.",
+    "url": "documentation/hypergraphs/HypergraphToGraph/"
+  },
+  {
+    "name": "HypergraphVertexAdd",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphVertexAdd[h, v] adds the vertex v to h; HypergraphVertexAdd[h, {v1, ...}] adds several. Existing vertices are left alone.",
+    "url": "documentation/hypergraphs/HypergraphVertexAdd/"
+  },
+  {
+    "name": "HypergraphVertexDelete",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphVertexDelete[h, v] or [h, {v1, ...}] deletes the vertices and every hyperedge containing one of them, as VertexDelete does for a Graph.",
+    "url": "documentation/hypergraphs/HypergraphVertexDelete/"
   },
   {
     "name": "I",
@@ -3088,12 +3928,20 @@
     "url": "documentation/file-io/Import/"
   },
   {
+    "name": "Inactive",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Inactive[f] represents f with evaluation of its own rules suppressed, so Inactive[f][args] stays unevaluated (its arguments still evaluate).  Used to hold an integral inert, e.g. Inactive[Integrate][g, x]; Activate reverses it.",
+    "url": "documentation/expression-information/Inactive/"
+  },
+  {
     "name": "IncidenceMatrix",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "IncidenceMatrix[g] gives the vertex-edge incidence matrix of g (oriented: -1 tail, +1 head for directed edges).",
-    "url": "documentation/other-advanced/IncidenceMatrix/"
+    "url": "documentation/graphs/IncidenceMatrix/"
   },
   {
     "name": "Increment",
@@ -3102,6 +3950,30 @@
     "status": "Stable",
     "summary": "Increment[x] or x++",
     "url": "documentation/assignment-and-rules/Increment/"
+  },
+  {
+    "name": "IndependentEdgeSetQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "IndependentEdgeSetQ[g, elist] gives True if elist is a set of edges of g no two of which share a vertex.",
+    "url": "documentation/graphs/IndependentEdgeSetQ/"
+  },
+  {
+    "name": "IndependentVertexSetQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "IndependentVertexSetQ[g, vlist] gives True if no two vertices of vlist are adjacent in g.",
+    "url": "documentation/graphs/IndependentVertexSetQ/"
+  },
+  {
+    "name": "IndexGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "IndexGraph[g] replaces the vertices of g by 1, 2, ..., n (in VertexList order); IndexGraph[g, r] by r, r+1, ..., r+n-1. Edge weights are kept.",
+    "url": "documentation/graphs/IndexGraph/"
   },
   {
     "name": "Inequality",
@@ -3142,6 +4014,14 @@
     "status": "Stable",
     "summary": "InputForm[expr]",
     "url": "documentation/expression-information/InputForm/"
+  },
+  {
+    "name": "InputStream",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "InputStream[\"name\", n]",
+    "url": "documentation/other-advanced/InputStream/"
   },
   {
     "name": "Insert",
@@ -3240,6 +4120,14 @@
     "url": "documentation/functional-programming/Interpolation/"
   },
   {
+    "name": "InterquartileRange",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "InterquartileRange[data]",
+    "url": "documentation/statistics/InterquartileRange/"
+  },
+  {
     "name": "Intersection",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -3328,6 +4216,14 @@
     "url": "documentation/algebra/IrreduciblePolynomialQ/"
   },
   {
+    "name": "IsomorphicGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "IsomorphicGraphQ[g1, g2, ...] gives True if all the graphs are isomorphic. Colour refinement with individualization-refinement search.",
+    "url": "documentation/graphs/IsomorphicGraphQ/"
+  },
+  {
     "name": "JacobiSymbol",
     "category": "Number Theory",
     "slug": "number-theory",
@@ -3342,6 +4238,30 @@
     "status": "Stable",
     "summary": "Join[list1, list2, ...]",
     "url": "documentation/data-structures/Join/"
+  },
+  {
+    "name": "JordanDecomposition",
+    "category": "Linear Algebra",
+    "slug": "linear-algebra",
+    "status": "Stable",
+    "summary": "JordanDecomposition[m]",
+    "url": "documentation/linear-algebra/JordanDecomposition/"
+  },
+  {
+    "name": "KaryTree",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "KaryTree[n] gives a binary tree with n vertices; KaryTree[n, k] a k-ary tree with n vertices, vertices numbered in breadth-first order.",
+    "url": "documentation/graphs/KaryTree/"
+  },
+  {
+    "name": "KatzCentrality",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "KatzCentrality[g, a] gives the Katz centrality x = a A^T x + 1 of each vertex; KatzCentrality[g, a, b] uses b (a number or a list) in place of 1. Edge weights are ignored.",
+    "url": "documentation/graphs/KatzCentrality/"
   },
   {
     "name": "KeyDrop",
@@ -3456,6 +4376,14 @@
     "url": "documentation/mathematical-constants/Khinchin/"
   },
   {
+    "name": "KirchhoffMatrix",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "KirchhoffMatrix[g] gives the Kirchhoff (Laplacian) matrix D - A of g, with D the diagonal matrix of vertex degrees (incident edges) and A the adjacency matrix. Dense (Wolfram returns a SparseArray); weights are ignored.",
+    "url": "documentation/graphs/KirchhoffMatrix/"
+  },
+  {
     "name": "Kurtosis",
     "category": "Statistics",
     "slug": "statistics",
@@ -3550,6 +4478,14 @@
     "status": "Stable",
     "summary": "LegendreP[n, x]",
     "url": "documentation/special-functions/LegendreP/"
+  },
+  {
+    "name": "LegendreQ",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "LegendreQ[n, x]",
+    "url": "documentation/special-functions/LegendreQ/"
   },
   {
     "name": "Length",
@@ -3704,6 +4640,14 @@
     "url": "documentation/calculus/Limit/"
   },
   {
+    "name": "LineGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "LineGraph[g] gives the line graph of g: one vertex per edge (numbered by EdgeList position); undirected edges sharing an endpoint are joined, and for directed g, edge i -> edge j when i ends where j starts. Mixed graphs are left unevaluated.",
+    "url": "documentation/graphs/LineGraph/"
+  },
+  {
     "name": "LinearModelFit",
     "category": "Machine Learning",
     "slug": "machine-learning",
@@ -3752,6 +4696,22 @@
     "url": "documentation/fourier-transforms/ListCorrelate/"
   },
   {
+    "name": "ListGradient",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "ListGradient[f]",
+    "url": "documentation/arithmetic/ListGradient/"
+  },
+  {
+    "name": "ListInterpolation",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "ListInterpolation[array]",
+    "url": "documentation/functional-programming/ListInterpolation/"
+  },
+  {
     "name": "ListPlot",
     "category": "Graphics",
     "slug": "graphics",
@@ -3782,6 +4742,14 @@
     "status": "Stable",
     "summary": "LocalAdaptiveBinarize[image, r] binarizes by comparing each pixel to the MEAN of its own (2r+1)x(2r+1) neighbourhood, and LocalAdaptiveBinarize[image, r, {c1, c2, c3}] to c1*mean + c2*stddev + c3. A global threshold cannot binarize unevenly lit content, and that is not a tuning problem: if one half of a page is darker than the other, no single number separates ink from paper in both halves at once. Mean alone (the default {1, 0, 0}) is Bradley's method; a negative c2 is Sauvola's, tightening the threshold where the neighbourhood is busy. Summed-area tables make the window statistics O(1) per pixel regardless of r -- without them a radius-16 window would be 1089 taps per pixel. The result is typed \"Bit\", since it is binary by construction. Colour is reduced to luminance first.",
     "url": "documentation/image-processing/LocalAdaptiveBinarize/"
+  },
+  {
+    "name": "LocalClusteringCoefficient",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "LocalClusteringCoefficient[g] gives for each vertex the fraction of pairs of its neighbours that are adjacent (exact); LocalClusteringCoefficient[g, v] gives it for v. For directed graphs, directed 3-cycles through v over in/out neighbour pairs.",
+    "url": "documentation/graphs/LocalClusteringCoefficient/"
   },
   {
     "name": "Log",
@@ -3830,6 +4798,14 @@
     "status": "Stable",
     "summary": "Lookup[assoc, key]",
     "url": "documentation/data-structures/Lookup/"
+  },
+  {
+    "name": "LoopFreeGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "LoopFreeGraphQ[g] gives True if g is a graph with no self-loops -- every valid Mathilda graph -- and False otherwise.",
+    "url": "documentation/graphs/LoopFreeGraphQ/"
   },
   {
     "name": "LucasL",
@@ -3992,6 +4968,22 @@
     "url": "documentation/data-structures/Mean/"
   },
   {
+    "name": "MeanClusteringCoefficient",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "MeanClusteringCoefficient[g] gives the mean of the local clustering coefficients of g, exactly.",
+    "url": "documentation/graphs/MeanClusteringCoefficient/"
+  },
+  {
+    "name": "MeanDeviation",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "MeanDeviation[data]",
+    "url": "documentation/statistics/MeanDeviation/"
+  },
+  {
     "name": "MeanFilter",
     "category": "Image Processing",
     "slug": "image-processing",
@@ -4000,12 +4992,28 @@
     "url": "documentation/image-processing/MeanFilter/"
   },
   {
+    "name": "MeanGraphDistance",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "MeanGraphDistance[g] gives the mean distance over all ordered pairs of distinct vertices of g: exact for unweighted graphs, a machine real for weighted ones, Infinity unless g is (strongly) connected.",
+    "url": "documentation/graphs/MeanGraphDistance/"
+  },
+  {
     "name": "Median",
     "category": "Data Structures",
     "slug": "data-structures",
     "status": "Stable",
     "summary": "Median[data]",
     "url": "documentation/data-structures/Median/"
+  },
+  {
+    "name": "MedianDeviation",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "MedianDeviation[data]",
+    "url": "documentation/statistics/MedianDeviation/"
   },
   {
     "name": "MedianFilter",
@@ -4040,6 +5048,14 @@
     "url": "documentation/data-structures/Merge/"
   },
   {
+    "name": "Message",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Message[sym::tag, args] prints the named message unless messages are suppressed.",
+    "url": "documentation/control-flow/Message/"
+  },
+  {
     "name": "Min",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -4070,6 +5086,14 @@
     "status": "Stable",
     "summary": "MinimalPolynomial[s, x]",
     "url": "documentation/algebra/MinimalPolynomial/"
+  },
+  {
+    "name": "MixedGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "MixedGraphQ[g] gives True if g has both directed and undirected edges.",
+    "url": "documentation/graphs/MixedGraphQ/"
   },
   {
     "name": "Mod",
@@ -4110,6 +5134,14 @@
     "status": "Stable",
     "summary": "Moment[data, r]",
     "url": "documentation/statistics/Moment/"
+  },
+  {
+    "name": "MonomialList",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "MonomialList[poly] gives the list of monomials of poly, using Variables[poly].",
+    "url": "documentation/structural-manipulation/MonomialList/"
   },
   {
     "name": "MorphologicalComponents",
@@ -4304,6 +5336,14 @@
     "url": "documentation/linear-algebra/NegativeDefiniteMatrixQ/"
   },
   {
+    "name": "NeighborhoodGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "NeighborhoodGraph[g, v] gives the subgraph of g induced by v and its neighbours; NeighborhoodGraph[g, v, k] by the vertices within distance k of v (k a non-negative integer or Infinity), edge direction ignored. NeighborhoodGraph[g, {v1, ...}, k] uses several centres. Vertices: the centres, then each centre's new vertices in VertexList order.",
+    "url": "documentation/graphs/NeighborhoodGraph/"
+  },
+  {
     "name": "Nest",
     "category": "Functional Programming",
     "slug": "functional-programming",
@@ -4416,12 +5456,44 @@
     "url": "documentation/lists-and-iteration/Nothing/"
   },
   {
+    "name": "NullRecords",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "NullRecords",
+    "url": "documentation/other-advanced/NullRecords/"
+  },
+  {
     "name": "NullSpace",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
     "status": "Stable",
     "summary": "NullSpace[m]",
     "url": "documentation/linear-algebra/NullSpace/"
+  },
+  {
+    "name": "NullWords",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "NullWords",
+    "url": "documentation/other-advanced/NullWords/"
+  },
+  {
+    "name": "Number",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Number",
+    "url": "documentation/other-advanced/Number/"
+  },
+  {
+    "name": "NumberFieldIntegralBasis",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "NumberFieldIntegralBasis[a]",
+    "url": "documentation/algebra/NumberFieldIntegralBasis/"
   },
   {
     "name": "NumberForm",
@@ -4470,6 +5542,30 @@
     "status": "Experimental",
     "summary": "OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.",
     "url": "documentation/expression-information/OneIdentity/"
+  },
+  {
+    "name": "OpenAppend",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "OpenAppend[\"file\"]",
+    "url": "documentation/file-io/OpenAppend/"
+  },
+  {
+    "name": "OpenRead",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "OpenRead[\"file\"]",
+    "url": "documentation/file-io/OpenRead/"
+  },
+  {
+    "name": "OpenWrite",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "OpenWrite[\"file\"]",
+    "url": "documentation/file-io/OpenWrite/"
   },
   {
     "name": "Opening",
@@ -4560,6 +5656,14 @@
     "url": "documentation/linear-algebra/Outer/"
   },
   {
+    "name": "OutputStream",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "OutputStream[\"name\", n]",
+    "url": "documentation/other-advanced/OutputStream/"
+  },
+  {
     "name": "OwnValues",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -4568,12 +5672,28 @@
     "url": "documentation/assignment-and-rules/OwnValues/"
   },
   {
+    "name": "PDEClassify",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "PDEClassify[eqn, u, {v1, v2}] classifies a second-order linear PDE by the discriminant \u0394 = B\u00b2 \u2212 4 A C of its principal part A u_{v1 v1} + B u_{v1 v2} + C u_{v2 v2}: \"Hyperbolic\" (\u0394 > 0, e.g. the wave equation), \"Parabolic\" (\u0394 == 0, e.g. the heat equation), or \"Elliptic\" (\u0394 < 0, e.g. Laplace's equation). Only the highest-order terms determine the type. A discriminant whose sign is not a decidable constant (a mixed-type / parameter-dependent equation such as Tricomi's y u_xx + u_yy == 0) leaves the call unevaluated.",
+    "url": "documentation/other-advanced/PDEClassify/"
+  },
+  {
     "name": "PDF",
     "category": "Machine Learning",
     "slug": "machine-learning",
     "status": "Stable",
     "summary": "PDF[dist, x] gives the probability density of dist at x, and threads over a list of x. Supports NormalDistribution and UniformDistribution.",
     "url": "documentation/machine-learning/PDF/"
+  },
+  {
+    "name": "PackedArrayQ",
+    "category": "Packed arrays",
+    "slug": "packed-arrays",
+    "status": "Stable",
+    "summary": "PackedArrayQ[expr]",
+    "url": "documentation/packed-arrays/PackedArrayQ/"
   },
   {
     "name": "PadLeft",
@@ -4590,6 +5710,14 @@
     "status": "Stable",
     "summary": "PadRight[list, n]",
     "url": "documentation/structural-manipulation/PadRight/"
+  },
+  {
+    "name": "PageRankCentrality",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "PageRankCentrality[g, a] gives the PageRank of each vertex with damping factor a (default 0.85): x = a P^T x + (1-a)/n, where a vertex with no outgoing edge links to every vertex; the entries sum to 1. Edge weights are ignored.",
+    "url": "documentation/graphs/PageRankCentrality/"
   },
   {
     "name": "ParametricPlot",
@@ -4641,11 +5769,19 @@
   },
   {
     "name": "PathGraph",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "PathGraph[n] gives the path on n vertices; PathGraph[{v1,...}] the path over the given vertices.",
-    "url": "documentation/other-advanced/PathGraph/"
+    "url": "documentation/graphs/PathGraph/"
+  },
+  {
+    "name": "PathGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "PathGraphQ[g] gives True if g is a path: connected with at least one vertex and, if undirected, every degree at most 2 and one edge fewer than vertices; if directed, every in- and out-degree at most 1. Mixed graphs are never paths.",
+    "url": "documentation/graphs/PathGraphQ/"
   },
   {
     "name": "PatternSequence",
@@ -4656,12 +5792,28 @@
     "url": "documentation/other-advanced/PatternSequence/"
   },
   {
+    "name": "Perimeter",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "Perimeter[Polygon[{{x1, y1}, ...}]] gives the perimeter of a simple 2D polygon: the sum of its edge lengths, including the closing edge. Exact coordinates give an exact (possibly symbolic, e.g. 2 + Sqrt[2]) result; Real coordinates give a machine-precision result.",
+    "url": "documentation/geometry/Perimeter/"
+  },
+  {
     "name": "Permutations",
     "category": "Lists and Iteration",
     "slug": "lists-and-iteration",
     "status": "Stable",
     "summary": "Permutations[list]",
     "url": "documentation/lists-and-iteration/Permutations/"
+  },
+  {
+    "name": "PetersenGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "PetersenGraph[] gives the Petersen graph; PetersenGraph[n, k] the generalized Petersen graph: inner vertices 1..n with i joined to i+k (mod n), outer cycle n+1..2n, and spokes i to n+i.",
+    "url": "documentation/graphs/PetersenGraph/"
   },
   {
     "name": "Pi",
@@ -4694,6 +5846,14 @@
     "status": "Experimental",
     "summary": "Pink",
     "url": "documentation/other-advanced/Pink/"
+  },
+  {
+    "name": "PlanarGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "PlanarGraphQ[g] gives True if g can be drawn in the plane without edge crossings. Linear-time left-right planarity test; gives False for non-graphs.",
+    "url": "documentation/graphs/PlanarGraphQ/"
   },
   {
     "name": "Plot",
@@ -4814,6 +5974,14 @@
     "status": "Stable",
     "summary": "PolynomialQuotientRemainder[p, q, x] returns {Quotient, Remainder}",
     "url": "documentation/calculus/PolynomialQuotientRemainder/"
+  },
+  {
+    "name": "PolynomialReduce",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "PolynomialReduce[poly, {p1, ..., pn}, {x1, ..., xk}] gives {{a1, ..., an}, b} with",
+    "url": "documentation/structural-manipulation/PolynomialReduce/"
   },
   {
     "name": "PolynomialRemainder",
@@ -5104,6 +6272,14 @@
     "url": "documentation/linear-algebra/QRDecomposition/"
   },
   {
+    "name": "Quantile",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "Quantile[data,q]",
+    "url": "documentation/statistics/Quantile/"
+  },
+  {
     "name": "Quartics",
     "category": "Solutions of Equations",
     "slug": "solutions-of-equations",
@@ -5118,6 +6294,14 @@
     "status": "Stable",
     "summary": "Quartiles[data]",
     "url": "documentation/statistics/Quartiles/"
+  },
+  {
+    "name": "Quiet",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Quiet[expr] evaluates expr with messages suppressed and returns its value. Quiet[expr, spec] suppresses all messages regardless of spec.",
+    "url": "documentation/control-flow/Quiet/"
   },
   {
     "name": "Quotient",
@@ -5161,11 +6345,19 @@
   },
   {
     "name": "RandomGraph",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
-    "summary": "RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.",
-    "url": "documentation/other-advanced/RandomGraph/"
+    "summary": "RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges. RandomGraph[{n, m}, k] gives a list of k such graphs; memory use grows with k.",
+    "url": "documentation/graphs/RandomGraph/"
+  },
+  {
+    "name": "RandomHypergraph",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "RandomHypergraph[{n, m}, k] gives a k-uniform hypergraph on 1..n with m independent uniformly random k-subsets as hyperedges; RandomHypergraph[{n, m}, k, c] gives c of them. RandomHypergraph[{n, {e, a}}] and [{n, {{e1, a1}, ...}}] draw e_i hyperedges of arity a_i with vertices chosen with replacement from 1..n. Honors SeedRandom.",
+    "url": "documentation/hypergraphs/RandomHypergraph/"
   },
   {
     "name": "RandomImage",
@@ -5288,6 +6480,30 @@
     "url": "documentation/arithmetic/ReIm/"
   },
   {
+    "name": "Read",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Read[stream]",
+    "url": "documentation/file-io/Read/"
+  },
+  {
+    "name": "ReadList",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "ReadList[\"file\"]",
+    "url": "documentation/file-io/ReadList/"
+  },
+  {
+    "name": "Real",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Real",
+    "url": "documentation/other-advanced/Real/"
+  },
+  {
     "name": "RealDigits",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -5312,6 +6528,22 @@
     "url": "documentation/other-advanced/Reap/"
   },
   {
+    "name": "Record",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Record",
+    "url": "documentation/other-advanced/Record/"
+  },
+  {
+    "name": "RecordSeparators",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "RecordSeparators",
+    "url": "documentation/other-advanced/RecordSeparators/"
+  },
+  {
     "name": "Red",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -5326,6 +6558,22 @@
     "status": "Partial",
     "summary": "Reduce[expr, vars]",
     "url": "documentation/solutions-of-equations/Reduce/"
+  },
+  {
+    "name": "RegionCentroid",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "RegionCentroid[Polygon[{{x1, y1}, ...}]] gives the centroid {cx, cy} of a simple 2D polygon with nonzero area. Exact coordinates give an exact result; Real coordinates give a machine-precision result.",
+    "url": "documentation/geometry/RegionCentroid/"
+  },
+  {
+    "name": "RegionMember",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "RegionMember[Polygon[{{x1, y1}, ...}], {x, y}] gives True if the point lies inside or on the boundary of the simple 2D polygon, and False otherwise.",
+    "url": "documentation/geometry/RegionMember/"
   },
   {
     "name": "RegularExpression",
@@ -5480,6 +6728,14 @@
     "url": "documentation/structural-manipulation/Reverse/"
   },
   {
+    "name": "ReverseGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "ReverseGraph[g] reverses every directed edge of g; undirected edges, the edge order and the weights are kept.",
+    "url": "documentation/graphs/ReverseGraph/"
+  },
+  {
     "name": "ReverseSort",
     "category": "Functional Programming",
     "slug": "functional-programming",
@@ -5616,6 +6872,14 @@
     "url": "documentation/functional-programming/Scan/"
   },
   {
+    "name": "SchurDecomposition",
+    "category": "Linear Algebra",
+    "slug": "linear-algebra",
+    "status": "Stable",
+    "summary": "SchurDecomposition[m]",
+    "url": "documentation/linear-algebra/SchurDecomposition/"
+  },
+  {
     "name": "Sec",
     "category": "Elementary Functions",
     "slug": "elementary-functions",
@@ -5744,6 +7008,14 @@
     "url": "documentation/arithmetic/SetPrecision/"
   },
   {
+    "name": "SetStreamPosition",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "SetStreamPosition[stream, n]",
+    "url": "documentation/file-io/SetStreamPosition/"
+  },
+  {
     "name": "Shortest",
     "category": "Pattern Matching",
     "slug": "pattern-matching",
@@ -5766,6 +7038,14 @@
     "status": "Stable",
     "summary": "Sign[x] gives -1, 0, or 1 for real numeric x according to its sign, and z/Abs[z] for a nonzero numeric complex z.",
     "url": "documentation/arithmetic/Sign/"
+  },
+  {
+    "name": "SimpleGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "SimpleGraphQ[g] gives True if g is a graph with no self-loops or parallel edges -- every valid Mathilda graph -- and False otherwise.",
+    "url": "documentation/graphs/SimpleGraphQ/"
   },
   {
     "name": "Simplify",
@@ -5976,6 +7256,14 @@
     "url": "documentation/machine-learning/Standardize/"
   },
   {
+    "name": "StarGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "StarGraph[n] gives the star on n vertices: the hub 1 joined to each of the n-1 leaves 2..n.",
+    "url": "documentation/graphs/StarGraph/"
+  },
+  {
     "name": "StieltjesGamma",
     "category": "Special Functions",
     "slug": "special-functions",
@@ -5990,6 +7278,30 @@
     "status": "Stable",
     "summary": "StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
     "url": "documentation/graphics/StreamPlot/"
+  },
+  {
+    "name": "StreamPosition",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "StreamPosition[stream]",
+    "url": "documentation/file-io/StreamPosition/"
+  },
+  {
+    "name": "Streams",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Streams[]",
+    "url": "documentation/file-io/Streams/"
+  },
+  {
+    "name": "String",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "String",
+    "url": "documentation/other-advanced/String/"
   },
   {
     "name": "StringCases",
@@ -6209,11 +7521,11 @@
   },
   {
     "name": "StronglyConnectedComponents",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions).",
-    "url": "documentation/other-advanced/StronglyConnectedComponents/"
+    "url": "documentation/graphs/StronglyConnectedComponents/"
   },
   {
     "name": "Subdivide",
@@ -6222,6 +7534,22 @@
     "status": "Stable",
     "summary": "Subdivide[n]",
     "url": "documentation/lists-and-iteration/Subdivide/"
+  },
+  {
+    "name": "Subgraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "Subgraph[g, {v1, v2, ...}] gives the subgraph of g induced by the listed vertices (elements that are not vertices of g are ignored); Subgraph[g, patt] uses the vertices matching patt. Vertices come in the order given; edges in lower-triangular order of that vertex order. Edge weights are kept.",
+    "url": "documentation/graphs/Subgraph/"
+  },
+  {
+    "name": "Subhypergraph",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "Subhypergraph[h, {v1, ...}] gives the sub-hypergraph induced by the given vertices: those of them in h, and the hyperedges lying entirely among them.",
+    "url": "documentation/hypergraphs/Subhypergraph/"
   },
   {
     "name": "SubresultantPolynomialRemainders",
@@ -6468,8 +7796,16 @@
     "category": "Packed arrays",
     "slug": "packed-arrays",
     "status": "Stable",
-    "summary": "ToNDArray[list] returns list stored as a dense machine-precision buffer. The result is still a List -- same Head, same printed form, same elements -- but NDArrayQ gives True for it. ToNDArray[list, DataType -> \"float64\"] forces the element type. Returns list unchanged when it is not rectangular, is empty, or holds anything other than uniformly Integer or uniformly Real machine values. Unlike automatic packing it ignores the size threshold.",
+    "summary": "ToNDArray[list] returns list stored as a dense machine-precision buffer. The result is still a List -- same Head, same printed form, same elements -- but NDArrayQ gives True for it. ToNDArray[list, DataType -> \"float64\"] forces the element type. A mix of Integer and Real machine values is widened to a Real buffer (the integers become doubles); an all-Integer list stays Integer. Returns list unchanged when it is not rectangular, is empty, or holds any non-machine value. Unlike automatic packing it ignores the size threshold.",
     "url": "documentation/packed-arrays/ToNDArray/"
+  },
+  {
+    "name": "ToNumberField",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "ToNumberField[a, theta]",
+    "url": "documentation/algebra/ToNumberField/"
   },
   {
     "name": "ToPackedArray",
@@ -6512,6 +7848,22 @@
     "url": "documentation/algebra/Together/"
   },
   {
+    "name": "TokenWords",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "TokenWords",
+    "url": "documentation/other-advanced/TokenWords/"
+  },
+  {
+    "name": "TopologicalSort",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "TopologicalSort[g] gives the vertices of the directed acyclic graph g ordered so that u precedes v for every edge u->v; ties go to the vertex earlier in VertexList[g]. TopologicalSort[{v->w, ...}] uses the rules as the graph. Left unevaluated if g has a cycle or an undirected edge.",
+    "url": "documentation/graphs/TopologicalSort/"
+  },
+  {
     "name": "Total",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -6550,6 +7902,22 @@
     "status": "Stable",
     "summary": "Transpose[list]",
     "url": "documentation/structural-manipulation/Transpose/"
+  },
+  {
+    "name": "TransversalHypergraph",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "TransversalHypergraph[h] gives the hypergraph of all minimal transversals (minimal hitting sets) of h, on the vertices of h. For a plain List of hyperedges the List of minimal transversals is returned. Left unevaluated if the search exceeds its budget.",
+    "url": "documentation/hypergraphs/TransversalHypergraph/"
+  },
+  {
+    "name": "TreeGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "TreeGraphQ[g] gives True if g is a tree: at least one vertex, connected, and with no cycles, ignoring edge direction. A disconnected forest is not a tree.",
+    "url": "documentation/graphs/TreeGraphQ/"
   },
   {
     "name": "TrigExpand",
@@ -6600,6 +7968,30 @@
     "url": "documentation/lists-and-iteration/Tuples/"
   },
   {
+    "name": "TuranGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "TuranGraph[n, k] gives the Turan graph: the complete k-partite graph on n vertices with parts as equal as possible.",
+    "url": "documentation/graphs/TuranGraph/"
+  },
+  {
+    "name": "UndirectedGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "UndirectedGraph[g] gives the undirected graph underlying g: u->v and v->u become the single edge u<->v, whose weight is the sum of theirs. Edges are oriented and ordered by VertexList position. An undirected g is returned unchanged.",
+    "url": "documentation/graphs/UndirectedGraph/"
+  },
+  {
+    "name": "UndirectedGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "UndirectedGraphQ[g] gives True if every edge of g is undirected (including when g has no edges), and False otherwise.",
+    "url": "documentation/graphs/UndirectedGraphQ/"
+  },
+  {
     "name": "Unequal",
     "category": "Comparisons",
     "slug": "comparisons",
@@ -6622,6 +8014,14 @@
     "status": "Stable",
     "summary": "UniformDistribution[{lo, hi}] represents a continuous uniform distribution; UniformDistribution[] is uniform on {0, 1}.",
     "url": "documentation/other-advanced/UniformDistribution/"
+  },
+  {
+    "name": "UniformHypergraphQ",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "UniformHypergraphQ[h] gives True if every hyperedge of h has the same arity. UniformHypergraphQ[h, k] gives True if h is k-uniform.",
+    "url": "documentation/hypergraphs/UniformHypergraphQ/"
   },
   {
     "name": "Union",
@@ -6800,60 +8200,140 @@
     "url": "documentation/solutions-of-equations/VerifySolutions/"
   },
   {
+    "name": "VertexAdd",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "VertexAdd[g, v] adds the vertex v to the graph g; VertexAdd[g, {v1, v2, ...}] adds several. Vertices already present are ignored; new ones are appended in order. Edge weights are kept.",
+    "url": "documentation/graphs/VertexAdd/"
+  },
+  {
     "name": "VertexConnectivity",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "VertexConnectivity[g] gives the minimum number of vertices whose removal disconnects g.",
-    "url": "documentation/other-advanced/VertexConnectivity/"
+    "url": "documentation/graphs/VertexConnectivity/"
   },
   {
     "name": "VertexCount",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "VertexCount[g] gives the number of vertices in the graph g.",
-    "url": "documentation/other-advanced/VertexCount/"
+    "url": "documentation/graphs/VertexCount/"
+  },
+  {
+    "name": "VertexCoverQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "VertexCoverQ[g, vlist] gives True if every edge of g has an endpoint in vlist.",
+    "url": "documentation/graphs/VertexCoverQ/"
   },
   {
     "name": "VertexDegree",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "VertexDegree[g] gives the list of vertex degrees; VertexDegree[g,v] gives the degree of vertex v.",
-    "url": "documentation/other-advanced/VertexDegree/"
+    "url": "documentation/graphs/VertexDegree/"
+  },
+  {
+    "name": "VertexDelete",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "VertexDelete[g, v] removes the vertex v and its incident edges from g; VertexDelete[g, {v1, ...}] removes several (each must be a vertex of g, else the call stays unevaluated); VertexDelete[g, patt] removes every vertex matching patt. Vertex and edge order and edge weights are kept.",
+    "url": "documentation/graphs/VertexDelete/"
+  },
+  {
+    "name": "VertexEccentricity",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "VertexEccentricity[g, v] gives the largest distance from v to any vertex reachable from v. With EdgeWeight the weights are lengths and, as in Wolfram, a vertex v cannot reach makes it Infinity.",
+    "url": "documentation/graphs/VertexEccentricity/"
   },
   {
     "name": "VertexInDegree",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "VertexInDegree[g] / VertexInDegree[g,v] gives in-degrees (incoming directed edges; undirected edges count for both).",
-    "url": "documentation/other-advanced/VertexInDegree/"
+    "url": "documentation/graphs/VertexInDegree/"
+  },
+  {
+    "name": "VertexIndex",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "VertexIndex[g, v] gives the position of the vertex v in VertexList[g]; VertexIndex[g, {v1, ...}] gives a list of positions.",
+    "url": "documentation/graphs/VertexIndex/"
   },
   {
     "name": "VertexList",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "VertexList[g] gives the list of vertices of the graph g.",
-    "url": "documentation/other-advanced/VertexList/"
+    "url": "documentation/graphs/VertexList/"
   },
   {
     "name": "VertexOutDegree",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "VertexOutDegree[g] / VertexOutDegree[g,v] gives out-degrees (outgoing directed edges; undirected edges count for both).",
-    "url": "documentation/other-advanced/VertexOutDegree/"
+    "url": "documentation/graphs/VertexOutDegree/"
+  },
+  {
+    "name": "VertexQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "VertexQ[g, v] gives True if v is a vertex of the graph g (compared structurally, as by SameQ), and False otherwise.",
+    "url": "documentation/graphs/VertexQ/"
+  },
+  {
+    "name": "VertexReplace",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "VertexReplace[g, {v1 -> w1, ...}] replaces vertices of g according to the rules (applied to each vertex as by Replace, so patterns work). Vertices mapped together merge; a merge that would create a self-loop or a parallel edge leaves the call unevaluated. Edge weights are kept.",
+    "url": "documentation/graphs/VertexReplace/"
   },
   {
     "name": "WeaklyConnectedComponents",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Graphs",
+    "slug": "graphs",
     "status": "Stable",
     "summary": "WeaklyConnectedComponents[g] gives the weakly connected components of g.",
-    "url": "documentation/other-advanced/WeaklyConnectedComponents/"
+    "url": "documentation/graphs/WeaklyConnectedComponents/"
+  },
+  {
+    "name": "WeightedAdjacencyMatrix",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "WeightedAdjacencyMatrix[g] gives the adjacency matrix of g with each entry the corresponding edge's weight (0 where there is no edge). Equal to AdjacencyMatrix[g] when g has no EdgeWeight.",
+    "url": "documentation/graphs/WeightedAdjacencyMatrix/"
+  },
+  {
+    "name": "WeightedGraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "WeightedGraphQ[g] gives True if g carries edge weights (EdgeWeight).",
+    "url": "documentation/graphs/WeightedGraphQ/"
+  },
+  {
+    "name": "WheelGraph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "WheelGraph[n] gives the wheel graph with n vertices: vertex 1 joined to every vertex of the cycle 2, ..., n.",
+    "url": "documentation/graphs/WheelGraph/"
   },
   {
     "name": "Which",
@@ -6886,6 +8366,38 @@
     "status": "Stable",
     "summary": "With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.",
     "url": "documentation/scoping-constructs/With/"
+  },
+  {
+    "name": "Word",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Word",
+    "url": "documentation/other-advanced/Word/"
+  },
+  {
+    "name": "WordSeparators",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "WordSeparators",
+    "url": "documentation/other-advanced/WordSeparators/"
+  },
+  {
+    "name": "Write",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Write[stream, expr1, expr2, ...]",
+    "url": "documentation/file-io/Write/"
+  },
+  {
+    "name": "WriteString",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "WriteString[stream, str1, str2, ...]",
+    "url": "documentation/file-io/WriteString/"
   },
   {
     "name": "Xor",

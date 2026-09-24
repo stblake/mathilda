@@ -48,11 +48,11 @@ Out[3]= f[Plus]
 
 ## References
 
-**See also:** [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [Symbol](../../expression-information/Symbol/)
+**See also:** [Real](../../other-advanced/Real/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [Symbol](../../expression-information/Symbol/), [String](../../other-advanced/String/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_airybi.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airybi.c)
+- Tests: [`tests/test_algebraicnumber.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumber.c)
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
 - Tests: [`tests/test_basin_hopping.c`](https://github.com/stblake/mathilda/blob/main/tests/test_basin_hopping.c)
-- Tests: [`tests/test_blas.c`](https://github.com/stblake/mathilda/blob/main/tests/test_blas.c)

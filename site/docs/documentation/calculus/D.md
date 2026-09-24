@@ -196,12 +196,15 @@ the closed-form symbolic-order path.
   `True`, matching Mathematica.
 - **Fundamental theorem of calculus**: `D[Integrate[f, x], x] -> f` for
   the indefinite form whose integration variable matches the
-  differentiation variable. A definite/iterated integral
-  (`Integrate[f, {x, a, b}]`) or a different integration variable is not
-  the FTC and is left to the generic rules (differentiation under the
-  integral sign is not performed). This lets a differentiated
-  antiderivative reduce even when the integral was returned partially
-  unevaluated (see `Integrate`'s partial log part).
+  differentiation variable. This lets a differentiated antiderivative
+  reduce even when the integral was returned partially unevaluated (see
+  `Integrate`'s partial log part).
+- **Leibniz rule** for a variable-limit definite integral:
+  `D[Integrate[e, {u, a, b}], x] -> (e /. u->b) D[b,x] − (e /. u->a) D[a,x]
+  + Integrate[D[e, x], {u, a, b}]` (the bound variable `u` a symbol
+  distinct from `x`). So `D[Integrate[h[u], {u,0,t}], t] -> h[t]`; this is
+  what lets an initial-value fit of a Green's-function convolution
+  `Integrate[K(t,s) f(s), {s,0,t}]` resolve at the base point.
 - Differentiates `Piecewise` clause-wise:
   `D[Piecewise[{{v1, c1}, ...}, d], x]` becomes
   `Piecewise[{{D[v1, x], c1}, ...}, D[d, x]]` — the value expressions
@@ -213,6 +216,19 @@ the closed-form symbolic-order path.
   derivative reproduces the same Piecewise (with
   `D[Indeterminate, x] = Indeterminate`) instead of degrading into a
   `Derivative[1, 0][Piecewise][...]` chain-rule form.
+- **Integer-rounding functions** — `Floor`, `Ceiling`, `Round`,
+  `IntegerPart`, `FractionalPart` are piecewise-constant, so their
+  derivative is a `Piecewise` that is zero (one for `FractionalPart`) off
+  the jump set and `Indeterminate` on it, multiplied by `D[g, x]` (the
+  chain rule):
+  - `D[Floor[x], x]   -> Piecewise[{{0, x > Floor[x]}}, Indeterminate]`
+  - `D[Ceiling[x], x] -> Piecewise[{{0, x < Ceiling[x]}}, Indeterminate]`
+  - `D[Round[x], x]   -> Piecewise[{{0, NotElement[-1/2 + Re[x], Integers] && NotElement[-1/2 + Im[x], Integers]}}, Indeterminate]`
+  - `D[IntegerPart[x], x] -> Piecewise[{{0, (Re[x]==0 || NotElement[Re[x], Integers]) && (Im[x]==0 || NotElement[Im[x], Integers])}}, Indeterminate]`
+  - `D[FractionalPart[x], x] -> Piecewise[{{1, (Re[x]==0 || NotElement[Re[x], Integers]) && (Im[x]==0 || NotElement[Im[x], Integers])}}, Indeterminate]`
+
+  matching Mathematica. So `D[Floor[3 x], x]` is
+  `3 Piecewise[{{0, 3 x > Floor[3 x]}}, Indeterminate]`.
 
 **Attributes:** `Protected`.
 

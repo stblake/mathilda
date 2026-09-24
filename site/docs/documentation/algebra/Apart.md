@@ -16,11 +16,11 @@ Option Extension -\> alpha factors the denominator over Q(alpha) before decompos
 
 </details>
 
-## Examples (11)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (4)
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Apart[1/((1+x)(5+x))]
@@ -34,35 +34,38 @@ Out[3]= -(-1 + y)/((1 + x) (1 + y)^2) + 2 y/((1 + y)^2 (x - y))
 
 In[4]:= Apart[1/(y^(2/3) - 1/y^(1/3))]
 Out[4]= 1/3/(-1 + y^(1/3)) + (1/3 - 1/3 y^(1/3))/(1 + y^(1/3) + y^(2/3))
+
+In[5]:= Apart[1/((Sqrt[x] + 2) (Sqrt[x] + 3)), x]
+Out[5]= 1/(2 + Sqrt[x]) - 1/(3 + Sqrt[x])
 ```
 
 ### Options (1)
 
 ```mathematica
-In[5]:= Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]
-Out[5]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
+In[6]:= Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]
+Out[6]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 ```
 
 ### Applications (6)
 
 ```mathematica
-In[6]:= Apart[1/(x (x+1))]
-Out[6]= 1/x - 1/(1 + x)
+In[7]:= Apart[1/(x (x+1))]
+Out[7]= 1/x - 1/(1 + x)
 
-In[7]:= Apart[(x+2)/(x^2 - 1)]
-Out[7]= -1/2/(1 + x) + 3/2/(-1 + x)
+In[8]:= Apart[(x+2)/(x^2 - 1)]
+Out[8]= -1/2/(1 + x) + 3/2/(-1 + x)
 
-In[8]:= Apart[1/(x^2 (x+1))]
-Out[8]= 1/x^2 - 1/x + 1/(1 + x)
+In[9]:= Apart[1/(x^2 (x+1))]
+Out[9]= 1/x^2 - 1/x + 1/(1 + x)
 
-In[9]:= Apart[(x^3 + 1)/(x^2 - 1)]
-Out[9]= x + 1/(-1 + x)
+In[10]:= Apart[(x^3 + 1)/(x^2 - 1)]
+Out[10]= x + 1/(-1 + x)
 
-In[10]:= Apart[(2 x + 3)/((x+1)^2 (x^2+1))]
-Out[10]= 1/2/(1 + x)^2 + 3/2/(1 + x) + (1 - 3/2 x)/(1 + x^2)
+In[11]:= Apart[(2 x + 3)/((x+1)^2 (x^2+1))]
+Out[11]= 1/2/(1 + x)^2 + 3/2/(1 + x) + (1 - 3/2 x)/(1 + x^2)
 
-In[11]:= Apart[1/(x^2 - 2), Extension -> Sqrt[2]]
-Out[11]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
+In[12]:= Apart[1/(x^2 - 2), Extension -> Sqrt[2]]
+Out[12]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 ```
 
 ## Implementation notes
@@ -83,9 +86,10 @@ Out[11]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 - `Protected`, `Listable`.
 - Writes `expr` as a polynomial in `var` together with a sum of ratios of polynomials with minimal denominators.
 - If `var` is not specified, intelligently selects the main polynomial variable natively.
+- **Algebraic-generator substitution.** When the input is a rational function of a radical or fractional power `g = u^(1/m)` (e.g. `Sqrt[x]`, `y^(1/3)`), the decomposition happens in `g`: the generator is substituted for a fresh symbol, `Apart` runs in that symbol, then `g` is back-substituted — so `Apart[1/((Sqrt[x]+2)(Sqrt[x]+3))]` gives `1/(2+Sqrt[x]) - 1/(3+Sqrt[x])`. The explicit two-argument form applies this too, but only when the radical is a genuine radical of `var` itself (`Apart[f[Sqrt[x]], x]`); a radical of any other symbol is left as an opaque constant in `var`.
 - Implements exact undetermined coefficients algebraically leveraging row-reduced identity expansions over algebraic inputs avoiding recursive fractional losses natively.
 - **Fast path (plain rationals over Q).** When `var` is a symbol and every coefficient is rational (no other symbol / radical / fractional power), the decomposition runs natively in FLINT `fmpq_poly` (`flint_apart_over_q`): a distinct-factor CRT split (`xgcd`) followed by a `p_i`-adic expansion, replacing the `O(S^2+)` symbolic `RowReduce`. High-degree denominators drop from tens of seconds to sub-second (`Apart[(x-99)/((x+2)^60 (x-3)^40), x]`: ~15.6 s → ~0.74 s). The multivariate / algebraic case declines to the classical elimination path, so output is unchanged.
-- When `Together[expr]` produces a numerator or denominator that is not polynomial in the chosen variable (e.g. fractional-power inputs whose Together'd form is `y^(1/3)/(y - 1)`), the matrix-of-coefficients algorithm cannot apply; Apart returns the `Together` form unchanged rather than synthesising a spurious zero.
+- When `Together[expr]` produces a numerator or denominator that is not polynomial in the chosen variable and no algebraic-generator substitution applies (e.g. fractional-power inputs whose Together'd form is `y^(1/3)/(y - 1)`), the matrix-of-coefficients algorithm cannot apply; Apart returns the `Together` form unchanged rather than synthesising a spurious zero.
 - **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) factors the denominator over `Q(alpha)` before partial-fraction decomposition runs, splitting reducible-over-extension factors (e.g. `x^2 - 2` into `(x - Sqrt[2])(x + Sqrt[2])` under `Extension -> Sqrt[2]`) and producing the corresponding linear-factor partial fractions. The pre-`Together` step is also extension-aware so any algebraic-number cancellations in numerator/denominator fire before splitting.
 
 **Attributes:** `Listable`, `Protected`.

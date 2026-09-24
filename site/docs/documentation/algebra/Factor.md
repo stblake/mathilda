@@ -131,9 +131,9 @@ The univariate **Berlekamp–Zassenhaus** core (`factor_zassenhaus`): take the p
 - Source: [`src/poly/facpoly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/facpoly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_cherry_dilog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog.c)
+- Tests: [`tests/test_cherry_dilog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog_exp.c)
+- Tests: [`tests/test_cherry_polylog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_polylog_exp.c)
 - Tests: [`tests/test_cherry_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_stress.c)
-- Tests: [`tests/test_eval_eager_exit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_eager_exit.c)
-- Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
 
 ## Notes & additional examples
 

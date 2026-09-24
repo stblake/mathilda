@@ -74,6 +74,7 @@ other trig builtins.
 
 - Source: [`src/simp/trigsimp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/trigsimp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 - Tests: [`tests/test_simp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_simp.c)
 - Tests: [`tests/test_trigexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_trigexpand.c)
 

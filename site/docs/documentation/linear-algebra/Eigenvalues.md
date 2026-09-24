@@ -192,7 +192,7 @@ returns *some* sensible answer — at worst the full Direct spectrum.
 
 ## References
 
-**See also:** [Solve](../../solutions-of-equations/Solve/), [N](../../arithmetic/N/)
+**See also:** [Solve](../../solutions-of-equations/Solve/), [Real](../../other-advanced/Real/), [N](../../arithmetic/N/)
 
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — the symmetric and unsymmetric eigenvalue problems.
 - L. N. Trefethen and D. Bau III, *Numerical Linear Algebra*, SIAM, 1997 — eigenvalue algorithms and the QR iteration.

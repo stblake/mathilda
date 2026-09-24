@@ -75,10 +75,10 @@ input is treated as a polynomial/rational expression.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (multivariate polynomial representation and variable sets).
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_coefficient_rules.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coefficient_rules.c)
 - Tests: [`tests/test_div2.c`](https://github.com/stblake/mathilda/blob/main/tests/test_div2.c)
 - Tests: [`tests/test_integrate_goursat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_goursat.c)
 - Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
-- Tests: [`tests/test_simplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_simplify.c)
 
 ## Notes & additional examples
 

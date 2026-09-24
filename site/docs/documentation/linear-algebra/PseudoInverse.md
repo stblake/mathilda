@@ -159,7 +159,7 @@ using `hermitian_transpose`, `mat_mult`, and `mat_invert` on the small `r × r` 
 
 ## References
 
-**See also:** [Rational](../../arithmetic/Rational/)
+**See also:** [Real](../../other-advanced/Real/), [Rational](../../arithmetic/Rational/)
 
 - A. Ben-Israel and T. N. E. Greville, *Generalized Inverses: Theory and Applications*, 2nd ed. (Springer, 2003).
 - Source: [`src/linalg/inv.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/inv.c)

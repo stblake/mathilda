@@ -90,11 +90,11 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## References
 
-**See also:** [DataType](../../other-advanced/DataType/), [SameQ](../../comparisons/SameQ/), [List](../../other-advanced/List/), [MatrixQ](../../expression-information/MatrixQ/), [VectorQ](../../expression-information/VectorQ/), [ListQ](../../expression-information/ListQ/), [Head](../../structural-manipulation/Head/), [ToNDArray](../../packed-arrays/ToNDArray/)
+**See also:** [Real](../../other-advanced/Real/), [DataType](../../other-advanced/DataType/), [SameQ](../../comparisons/SameQ/), [List](../../other-advanced/List/), [MatrixQ](../../expression-information/MatrixQ/), [VectorQ](../../expression-information/VectorQ/), [ListQ](../../expression-information/ListQ/), [Head](../../structural-manipulation/Head/)
 
 - Source: [`src/ndarray.c`](https://github.com/stblake/mathilda/blob/main/src/ndarray.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_bitwise.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bitwise.c)
 - Tests: [`tests/test_characteristicpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_characteristicpolynomial.c)
 - Tests: [`tests/test_chop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chop.c)
 - Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
-- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)

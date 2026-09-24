@@ -9,14 +9,16 @@
 
 writes poly as a product of pairwise-coprime square-free factors, collecting repeated factors into powers.
 
+**`FactorSquareFree[poly, Extension -> alpha] performs the decomposition`**
+
 <details>
 <summary>Notes</summary>
 
-Computed via the Yun / Musser square-free decomposition using polynomial GCDs of poly with its derivative; cheaper than full Factor and sufficient when only multiplicities are needed.
+Computed via the Yun / Musser square-free decomposition using polynomial GCDs of poly with its derivative; cheaper than full Factor and sufficient when only multiplicities are needed. over Q(alpha) (alpha = Sqrt\[c\], c^(1/n), I, or a list of generators), grouping the irreducible-over-Q(alpha) factors by multiplicity; the default Extension -\> None factors over Q.
 
 </details>
 
-## Examples (7)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -36,17 +38,24 @@ In[4]:= FactorSquareFree[{(x^2 - 1)(x - 1), (x^4 - 1)(x^2 - 1)}]
 Out[4]= {(1 + x) (-1 + x)^2, (1 + x^2) (-1 + x^2)^2}
 ```
 
+### Worked examples (1)
+
+```mathematica
+In[5]:= FactorSquareFree[x^2 - 2 Sqrt[2] x + 2, Extension -> Sqrt[2]]
+Out[5]= (-Sqrt[2] + x)^2
+```
+
 ### Applications (3)
 
 ```mathematica
-In[5]:= FactorSquareFree[x^5 - x^4 - x + 1]
-Out[5]= (-1 + x)^2 (1 + x + x^2 + x^3)
+In[6]:= FactorSquareFree[x^5 - x^4 - x + 1]
+Out[6]= (-1 + x)^2 (1 + x + x^2 + x^3)
 
-In[6]:= FactorSquareFree[(x^2+1)^3 (x-1)^2]
-Out[6]= (-1 + x)^2 (1 + x^2)^3
+In[7]:= FactorSquareFree[(x^2+1)^3 (x-1)^2]
+Out[7]= (-1 + x)^2 (1 + x^2)^3
 
-In[7]:= FactorSquareFree[x^8 + 4 x^6 + 6 x^4 + 4 x^2 + 1]
-Out[7]= (1 + x^2)^4
+In[8]:= FactorSquareFree[x^8 + 4 x^6 + 6 x^4 + 4 x^2 + 1]
+Out[8]= (1 + x^2)^4
 ```
 
 ## Implementation notes
@@ -62,6 +71,7 @@ Out[7]= (1 + x^2)^4
 - `Listable`, `Protected`.
 - Automatically threads over lists, as well as equations, inequalities and logic functions.
 - Works on both univariate and multivariate polynomials.
+- `Extension` runs the decomposition over an algebraic number field Q(alpha).  It reduces to `Factor[poly, Extension -> alpha]` (Trager engine) and groups the irreducible-over-Q(alpha) factors by multiplicity, so it also accepts inputs with algebraic-number coefficients, e.g. `FactorSquareFree[x^2 - 2 Sqrt[2] x + 2, Extension -> Sqrt[2]]` → `(-Sqrt[2] + x)^2`.  Because square-free structure is field-independent for rational inputs, an extension leaves a rational-coefficient answer unchanged; the default `Extension -> None` uses the fast over-Q Yun path.
 - Multivariate inputs use a cheap squarefree pre-check (F4 Stage 1): after content extraction in the main variable, `sqfree_cheap_check` substitutes integer values from `{1, -1, 2, -2, 3, -3, 4}` for the other variables and tests `gcd(image, image')` over `Z[x]`.  If any image is squarefree at an alpha that preserves the leading-x degree, the pre-check proves `pp` is squarefree in x and the expensive multivariate `gcd(pp, pp')` is skipped.  Soundness comes from content extraction guaranteeing any repeated factor of `pp` involves the main variable nontrivially.  Measured 6.6× speedup on 4-variable squarefree inputs (6.27 s → 0.95 s); non-squarefree inputs fall through to the original Yun loop with negligible overhead.
 - The cheap pre-check's univariate `gcd(image, image')` runs through `zupoly_gcd` (subresultant PRS, GMP `mpz_t` coefficients).  The previous implementation used `poly_gcd_internal` (Knuth-style primitive PRS at the Expr level) which suffers exponential coefficient growth on the intermediate pseudo-remainders; on a degree-31 univariate image (e.g. `Factor[Expand[x^2 (z^13 - x^12)(z^4 + 3 x^9 - y^13)(17 - 5 y - z^14)]]`) it ran for >120 s.  Routing the same gcd through subresultant PRS keeps coefficient sizes polynomially bounded and runs in sub-millisecond time on the same input, bringing the full Factor call to under 1 s.
 
@@ -69,11 +79,14 @@ Out[7]= (1 + x^2)^4
 
 ## References
 
+**See also:** [I](../../mathematical-constants/I/)
+
 - D. Y. Y. Yun, "On square-free decomposition algorithms", SYMSAC 1976.
 - K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer Algebra* (Kluwer, 1992).
 - Source: [`src/poly/facpoly_squarefree.inc`](https://github.com/stblake/mathilda/blob/main/src/poly/facpoly_squarefree.inc)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_facpoly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_facpoly.c)
+- Tests: [`tests/test_factorsquarefreelist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_factorsquarefreelist.c)
 - Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
 - Tests: [`tests/test_inexact_dispatch.c`](https://github.com/stblake/mathilda/blob/main/tests/test_inexact_dispatch.c)
 

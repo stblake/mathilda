@@ -16,7 +16,7 @@
 <details>
 <summary>Notes</summary>
 
-fundamental theorem of calculus (Method -\> "NewtonLeibniz"). multiple integral (innermost/last spec integrated first; inner bounds may depend on outer variables).  See also Integrate\`SingularPoints. subroutine, bypassing the default cascade.  Accepted method names: "Automatic"          — try BronsteinRational, then RischNorman, then CRCTable (default) "BronsteinRational"  — Integrate\`BronsteinRational (polynomial / rational) "DerivativeDivides"  — Integrate\`DerivativeDivides (substitution u(x); direct + Eliminate/Solve) "LinearRadicals"     — Integrate\`LinearRadicals (rationalise radicals of a x + b) "QuadraticRadicals"  — Integrate\`QuadraticRadicals (Euler substitution for Sqrt\[a x^2 + b x + c\]) "LinearRatioRadicals" — Integrate\`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d)) "ChebychevAlgebraic" — Integrate\`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem) "GoursatAlgebraic"   — Integrate\`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent) "Weierstrass"        — Integrate\`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution) "RischNorman"        — Integrate\`RischNorman (Bronstein pmint heuristic) "RischTranscendental"       — Integrate\`RischTranscendental (recursive transcendental Risch; correct by construction) "CRCTable"           — Integrate\`CRCTable (lazy-loaded CRC integral table) "Undefined"          — Integrate\`Undefined (unknown functions u\[x\], u'\[x\]; Roach §1.7) "NewtonLeibniz"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form) "LineIntegral"        — complex contour integrals (implicit for the {x,z0,...,zn} form) "Residue"             — improper/periodic real definite integrals by the residue theorem (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period, principal values, even half-lines); tried before NewtonLeibniz under Automatic "DiffUnderInt"         — parameter-dependent definite integrals by differentiation under the ("DifferentiationUnderIntegral") integral sign (Feynman's trick): Integrate\`DiffUnderInt; Laplace/Fourier, sinc, and even-rational half-line families; tried after Residue and NewtonLeibniz in the definite cascade "RamanujanMasterTheorem" — half-line Int\_0^Inf x^(s-1) f(x) dx by the Mellin transform / ("Mellin")              Ramanujan Master Theorem: Integrate\`RamanujanMasterTheorem; exp/Gaussian/algebraic/Cos/Sin/ArcTan/Log/BesselJ/pFq/PolyLog kernels (monomial x^k substitution; Erf, incomplete Gamma, BesselJ^2 reduced to pFq); also the exp-geometric kernel 1/(E^(c x)+g) (Bose-Einstein / Fermi-Dirac -\> Gamma\*PolyLog), a Frullani pre-pass (f(a x)-f(b x))/x -\> (f(0)-f(Inf)) Log\[b/a\], and a Log\[x\]^k weight; strip-gated, yielding a ConditionalExpression when Assumptions do not prove convergence; after NewtonLeibniz under Automatic Method -\> {"DerivativeDivides", "Substitution" -\> u} pins the kernel u(x), trialing only that substitution. Named methods are strict: failure returns unevaluated, with no fallback. The CRCTable rules are loaded from disk on first use only. An applied 1-D InterpolatingFunction integrates to its antiderivative InterpolatingFunction (mirroring D).
+fundamental theorem of calculus (Method -\> "NewtonLeibniz"). multiple integral (innermost/last spec integrated first; inner bounds may depend on outer variables).  See also Integrate\`SingularPoints. subroutine, bypassing the default cascade.  Accepted method names: "Automatic"          — the full dispatch cascade (default) "BronsteinRational"  — Integrate\`BronsteinRational (polynomial / rational) "DerivativeDivides"  — Integrate\`DerivativeDivides (substitution u(x); direct + Eliminate/Solve) "LinearRadicals"     — Integrate\`LinearRadicals (rationalise radicals of a x + b) "QuadraticRadicals"  — Integrate\`QuadraticRadicals (Euler substitution for Sqrt\[a x^2 + b x + c\]) "LinearRatioRadicals" — Integrate\`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d)) "ChebychevAlgebraic" — Integrate\`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem) "GoursatAlgebraic"   — Integrate\`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent) "Weierstrass"        — Integrate\`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution) "RischTranscendental"       — Integrate\`RischTranscendental (recursive transcendental Risch; correct by construction) "CRCTable"           — Integrate\`CRCTable (lazy-loaded CRC integral table) "ParallelMixedTower" — Integrate\`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II) "Undefined"          — Integrate\`Undefined (unknown functions u\[x\], u'\[x\]; Roach §1.7) "NewtonLeibniz"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form) "LineIntegral"        — complex contour integrals (implicit for the {x,z0,...,zn} form) "Residue"             — improper/periodic real definite integrals by the residue theorem (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period, principal values, even half-lines); tried before NewtonLeibniz under Automatic "DiffUnderInt"         — parameter-dependent definite integrals by differentiation under the ("DifferentiationUnderIntegral") integral sign (Feynman's trick): Integrate\`DiffUnderInt; Laplace/Fourier, sinc, and even-rational half-line families; tried after Residue and NewtonLeibniz in the definite cascade "RamanujanMasterTheorem" — half-line Int\_0^Inf x^(s-1) f(x) dx by the Mellin transform / ("Mellin")              Ramanujan Master Theorem: Integrate\`RamanujanMasterTheorem; exp/Gaussian/algebraic/Cos/Sin/ArcTan/Log/BesselJ/pFq/PolyLog kernels (monomial x^k substitution; Erf, incomplete Gamma, BesselJ^2 reduced to pFq); also the exp-geometric kernel 1/(E^(c x)+g) (Bose-Einstein / Fermi-Dirac -\> Gamma\*PolyLog), a Frullani pre-pass (f(a x)-f(b x))/x -\> (f(0)-f(Inf)) Log\[b/a\], and a Log\[x\]^k weight; strip-gated, yielding a ConditionalExpression when Assumptions do not prove convergence; after NewtonLeibniz under Automatic Method -\> {"DerivativeDivides", "Substitution" -\> u} pins the kernel u(x), trialing only that substitution. Named methods are strict: failure returns unevaluated, with no fallback. The CRCTable rules are loaded from disk on first use only. An applied 1-D InterpolatingFunction integrates to its antiderivative InterpolatingFunction (mirroring D).
 
 </details>
 
@@ -266,7 +266,7 @@ Out[45]= (2 ArcTanh[Tanh[1/2 x]/Sqrt[3]])/Sqrt[3]
 Strict, no fallback
 
 ```mathematica
-In[46]:= Integrate[Sin[x], x, Method -> "RischNorman"]
+In[46]:= Integrate[Sin[x], x, Method -> "RischTranscendental"]
 Out[46]= -Cos[x]
 ```
 
@@ -306,22 +306,22 @@ In[56]:= Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]
 Out[56]= Pi Log[1 + a]
 
 In[57]:= Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]
-Out[57]= a ArcTan[a/c] - 1/2 c Log[1 + a^2/c^2]
+Out[57]= 1/2 (a (ArcTan[1, a/c] - ArcTan[1, -a/c]) - c Log[1 + a^2/c^2])
 
 In[58]:= Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]
 Out[58]= 1/2 Pi Erf[1/2 a]
 
-In[59]:= Integrate[Exp[-x^2], {x,0,Infinity}]
-Out[59]= 1/2 Sqrt[Pi]
+In[59]:= Integrate[Log[1 + x^(3/2)]/(x Sqrt[1 - x^3]), {x,0,1}, Method->"DiffUnderInt"]
+Out[59]= 1/12 Pi^2
 
-In[60]:= Integrate[x^(s-1) Exp[-x], {x,0,Infinity}]
-Out[60]= ConditionalExpression[Gamma[s], s > 0]
+In[60]:= Integrate[Sec[2x] Log[1 + Sqrt[1 - Tan[x]^2]], {x,0,π/4}, Method->"DiffUnderInt"]
+Out[60]= Integrate[Sec[2 x] Log[1 + Sqrt[1 - Tan[x]^2]], {x, 0, 1/4 u03c0}, Method -> "DiffUnderInt"]
 
-In[61]:= Integrate[x^(s-1) BesselJ[ν,2√x]/x^(ν/2), {x,0,Infinity}]
-Out[61]= Integrate[BesselJ[u03bd, 2 u221ax] x^(-1 + s - 1/2 u03bd), {x, 0, Infinity}]
+In[61]:= Integrate[Csc[2x]^2 Log[1 + Tan[x]^a], {x,0,π/4}, Method->"DiffUnderInt"]
+Out[61]= Integrate[Csc[2 x]^2 Log[1 + Tan[x]^a], {x, 0, 1/4 u03c0}, Method -> "DiffUnderInt"]
 
-In[62]:= Integrate[x^(s-1) (Γ[a]-Γ[a,x])/x^a, {x,0,Infinity}]
-Out[62]= Integrate[x^(-1 - a + s) (u0393[a] - u0393[a, x]), {x, 0, Infinity}]
+In[62]:= Integrate[Exp[-x^2], {x,0,Infinity}]
+Out[62]= 1/2 Sqrt[Pi]
 ```
 
 ### Applications (8)
@@ -389,6 +389,32 @@ Ramanujan/Mellin method.
 
 .
 
+Three **finite-domain** families need neither a pre-existing parameter (the first
+two are purely numeric) nor an engine-safe inner integral (all three differentiate
+to a finite-interval trig/radical integral the general engine cannot do — it hangs,
+or for the radical returns a *wrong* value). Their closers canonicalise with a
+change of variables, **introduce** an artificial Feynman parameter (or evaluate
+directly), and supply the inner integral in closed form:
+
+| Family | Integrand → value (change of variables) |
+|---|---|
+| power-log | `Log[1 + c x^p]/(x Sqrt[1 - x^(2p)])` on `{0,1}` → `(π²/8 − ArcCos[c]²/2)/p`  (`u = x^p`) |
+| secant-radical | `Sec[2x] Log[1 + c Sqrt[1 - Tan[x]²]]` on `{0,π/4}` → `π²/8 − ArcCos[c]²/2`  (`t = Tan[x]`) |
+| tangent-power | `Csc[2x]² Log[1 + Tan[x]^a]` on `{0,π/4}` → `(π Csc[π/a] − a)/4`  (`t = Tan[x]`) |
+
+The `p` (power), `c` (coefficient), and `a` (exponent) are read from the integrand,
+so the closed form is genuinely parametric. Families 1 and 2 share the inner
+integral `∫₀¹ du/((1+q u)√(1−u²)) = ArcCos[q]/√(1−q²)` (emitted directly — the
+engine leaves it unevaluated at a symbolic parameter, and mis-evaluates the
+secant-radical variant). Family 3 is a direct Beta/digamma reflection, verified
+correct-by-construction against the value-independent `Csc[2x]² = (1+Tan[x]²)²/(4
+Tan[x]²)` identity and the exact rational anchor `a₀ = 3`. Examples:
+
+.
+(Family 3 requires the explicit `Method -> "DiffUnderInt"`; under the fully
+automatic cascade an earlier method attempts the — separately hang-prone —
+indefinite integral first.)
+
 ### Mellin / Ramanujan Master Theorem (`Integrate\`RamanujanMasterTheorem`)
 
 The series/transform-based mechanism for half-line integrals
@@ -411,7 +437,7 @@ power prefactor sets `s = ρ + 1`:
 | `BesselJ[ν, λ x]`, `λ>0` | `2^{s-1} λ^{-s} Γ((ν+s)/2)/Γ((ν-s)/2+1)` | `-Re ν<Re s<3/2` |
 | `pFq[{a}; {b}; -λ x]`, `λ>0` | `(∏Γ(b_j)/∏Γ(a_i)) Γ(s) (∏Γ(a_i-s)/∏Γ(b_j-s)) λ^{-s}` | `0<Re s<min Re a_i` |
 | `PolyLog[ν, -λ x]`, `λ>0` | `π (-s)^{-ν} λ^{-s} / Sin(π s)` | `-1<Re s<0` |
-| `1/(e^{c x}+γ)`, `c>0`, `-1≤γ≤1` | `c^{-s} Γ(s) (-1/γ) PolyLog(s, -γ)` | `0<Re s` (`1<Re s` if `γ=-1`) |
+| `1/(e^{c x}+γ)`, `c>0`, `γ≥-1` | `c^{-s} Γ(s) (-1/γ) PolyLog(s, -γ)` | `0<Re s` (`1<Re s` if `γ=-1`) |
 
 The last row is the **exponential-geometric** kernel of the statistical-mechanics
 integrals: expanding `1/(e^{cx}+γ) = (-1/γ) Σ_{j≥1} (-γ)^j e^{-jcx}` and
@@ -420,14 +446,24 @@ integrating term by term lands on `PolyLog`. Its two headline specialisations ar
 Debye; the denominator zero at `x=0` tightens the strip to `Re s>1`) and `γ=+1`
 **Fermi–Dirac** `∫₀^∞ x^{s-1}/(e^{cx}+1) = c^{-s} Γ(s) η(s)` (emitted as
 `-Γ(s) PolyLog(s,-1)`, which stays finite at `s=1` where `(1-2^{1-s})ζ(s)` would
-be `0·∞`). A **symbolic fugacity** is admitted too — the general Bose integral
-`∫₀^∞ x^{s-1}/(z^{-1} e^x - 1) dx = Γ(s) PolyLog(s, z)` closes for a symbolic `z`
-whenever the `Assumptions` confine `γ' = -z` to `(-1, 1]`. The built-in
-assumption engine only discharges syntactic matches (it proves neither `1/z>0`
-nor `-1≤-z≤1` from `0<z<1`), so the `-1<γ'≤1` gate is decided by a small **sound
-interval-bound prover** over the parameter box read off the `Assumptions`:
-interval arithmetic yields a guaranteed enclosure, so the gate never accepts an
-inadmissible fugacity (an unbounded or out-of-range `z` simply declines).
+be `0·∞`). The admitted range is the exact **convergence** region `γ≥-1`, not the
+series' `|γ|≤1`: for `γ>1` — the high-fugacity / positive-chemical-potential
+**degenerate Fermi gas** (electrons in metals, white-dwarf matter) — the
+denominator `e^{cx}+γ` has no interior zero, so the integral converges for
+`Re s>0` and equals the same `-c^{-s} Γ(s) PolyLog(s,-γ)/γ` by the Fermi–Dirac
+analytic continuation `F_{s-1}(η)=-Li_s(-e^{η})` (Dingle/Blakemore), even though
+the geometric series diverges there; e.g. `∫₀^∞ 1/(e^x+2) dx = ½ ln 3`,
+`∫₀^∞ x/(e^x+2) dx = -½ PolyLog(2,-2)`. Only the divergent Bose region `γ<-1`
+(interior pole at `x=ln(-γ)>0`) stays declined. A **symbolic fugacity** is
+admitted too — the general Bose integral `∫₀^∞ x^{s-1}/(z^{-1} e^x - 1) dx =
+Γ(s) PolyLog(s, z)` closes for `0<z<1` and the degenerate Fermi
+`∫₀^∞ x^{s-1}/(e^x + z) dx = -Γ(s) PolyLog(s, -z)/z` closes for `z>0`. The
+built-in assumption engine only discharges syntactic matches (it proves neither
+`1/z>0` nor `γ'≥-1` from the raw bound), so the `γ'≥-1` gate is decided by a
+small **sound interval-bound prover** over the parameter box read off the
+`Assumptions`: interval arithmetic yields a guaranteed enclosure, so the gate
+never accepts an inadmissible fugacity (an unbounded-below or out-of-range `z`
+simply declines).
 
 Four operational layers extend the table:
 
@@ -655,7 +691,7 @@ The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
 `Integrate`BronsteinRational` (the explicit form),
 `Integrate`IntRationalLogPart` (Phase 2's LRT computation),
-`Integrate`RischNorman` (Bronstein pmint), `Integrate`LinearRadicals`
+`Integrate`RischTranscendental` (recursive transcendental Risch), `Integrate`LinearRadicals`
 (linear-radical substitution), `Integrate`QuadraticRadicals`
 (quadratic-radical Euler substitution), `Integrate`LinearRatioRadicals`
 (linear-fractional / Möbius radical substitution), `Integrate`Weierstrass`
@@ -774,7 +810,7 @@ unevaluated when no substitution closes the integral.  `Protected`.
 
 Known limitations: kernels must appear **literally** in `f` (so `Tan[x]`,
 which Mathilda keeps atomic rather than `Sin[x]/Cos[x]`, exposes no `Cos[x]`
-kernel — such integrands are handled by RischNorman instead); the reduced
+kernel — such integrands are handled by the transcendental Risch stage instead); the reduced
 integral must itself close under the other methods.
 
 ### Integrate`LinearRadicals
@@ -954,12 +990,20 @@ integrate.c
 stages and supports an explicit `Method -> "..."` option:
 
 ```text
-  1. Integrate`BronsteinRational   — polynomial / rational integrands
-  2. Integrate`RischNorman         — parallel-Risch (Bronstein pmint)
-  3. Integrate`CRCTable            — CRC integral table (lazy-loaded)
+  1. Integrate`BronsteinRational      — polynomial / rational integrands
+  2. Integrate`RischTranscendental    — recursive transcendental Risch
+  3. Integrate`CRCTable               — CRC integral table (lazy-loaded)
+  4. Integrate`ParallelMixedTower     — parallel Risch-Norman over a mixed
+                                        radical tower (last resort; .m)
 ```
 
-Method values: "Automatic" (default, full cascade), "BronsteinRational", "RischNorman", "CRCTable" (strict passthrough, no fallback).
+Method values: "Automatic" (default, full cascade), "BronsteinRational", "RischTranscendental", "CRCTable", "ParallelMixedTower" (strict passthrough,
+
+```text
+no fallback).  RischNorman / RischNormanBlake were removed in v0.163 --
+```
+
+ParallelMixedTower subsumes both.
 
 The CRC table is large and most sessions never need it, so its .m file is Get-loaded on first invocation of try_crctable() rather
 
@@ -1136,10 +1180,14 @@ no multivariate integration, no constant of integration.
      continuous antiderivative rather than a complex-logarithm form.
   9. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
-  10. `Integrate\`RischNorman[f, x]` — Bronstein pmint (parallel Risch), all
-     integrands.
+  10. *(Removed in v0.163.)* `Integrate\`RischNorman` (Bronstein's parallel-Risch
+     pmint heuristic) and `Integrate\`RischNormanBlake` (its generalisation to a
+     **simple radical extension** `L = K(y)`, `y^m = q(x)`, after S. Blake,
+     *Parallel Integration over Simple Radical Extensions*) were removed;
+     `Integrate\`ParallelMixedTower` below subsumes both — the transcendental case
+     and the simple radical, in a mixed tower (Blake, *Part II*).
   11. `Integrate\`RischTranscendental[f, x]` — the **recursive** transcendental
-     Risch algorithm; runs after RischNorman and only adds
+     Risch algorithm; adds
      closed forms the earlier stages missed.  Correct by construction (no
      differentiation check).  Handles logarithmic polynomials and the
      special-function cases below (Erf, ExpIntegralEi, LogIntegral, PolyLog).
@@ -1175,6 +1223,25 @@ no multivariate integration, no constant of integration.
      of `Sin^m/Cos^n` quotients), `E^(a x)` times circular or hyperbolic
      powers (the hyperbolic case guards the `a = n b` resonance), and
      polynomial × hyperbolic (`x^n Sinh/Cosh`, `x Sinh^m`, `x/Sinh^n = x Csch^n`).
+  13. `Integrate\`ParallelMixedTower[f, x]` — last resort: the parallel
+     (Risch-Norman) integrator over a **simple radical in a mixed transcendental
+     tower** (S. Blake, *Parallel Integration over Simple Radical Extensions II:
+     Mixed Towers*), a Wolfram-language package
+     (`src/internal/mixed/ParallelMixed.m`, lazy-loaded on first use).  Integrands
+     built from rational operations, one square root `y^m = q`, pure roots that
+     flatten (Lemma 3.2), and `Log`/`Exp`/`Tan` of field elements — the radical may
+     sit anywhere in the tower (the "mixed" case), and generators above it may
+     differentiate through `y`.  A special denominator prime is split into its
+     linear factors over the algebraic closure when a single logand does not
+     close the integral (SplitSpecials, Theorem 6.1) — e.g. `Sqrt[Tan[x]]`, whose
+     `1 + u^4` (with `u = Sqrt[Tan[x]]`) needs distinct coefficients on its four
+     factors over `Q(i, Sqrt[2])`.  Every returned antiderivative passes a hard
+     verify-or-decline gate — it is re-differentiated and checked against the
+     integrand at real points of its domain, so a mis-realised result declines
+     rather than escaping as a wrong answer.  A non-elementary case, a
+     not-yet-ported case, or a run exceeding an internal wall-clock budget all
+     decline cleanly (never a wrong answer, never an unbounded hang).
+     Cascade-gated to skip pure rational functions (BronsteinRational's job).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
   dispatches strictly to a single subroutine, with no fallback:
@@ -1197,11 +1264,11 @@ no multivariate integration, no constant of integration.
   - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).
-  - `"RischNorman"` — `Integrate\`RischNorman[f, x]` (parallel Risch / pmint).
   - `"RischTranscendental"` — `Integrate\`RischTranscendental[f, x]`, the recursive
     transcendental Risch algorithm (`src/calculus/integrate_risch_transcendental.c`).
-    A decision procedure over a differential transcendental tower, distinct
-    from the parallel-Risch heuristic `"RischNorman"`.  Every case is correct
+    A decision procedure over a differential transcendental tower.  (The parallel-Risch
+    heuristics `"RischNorman"` and `"RischNormanBlake"` were removed in v0.163 —
+    `"ParallelMixedTower"` subsumes both.)  Every case is correct
     by construction — it fires only behind an exact structural certificate, so
     the result is not checked by differentiation.  Cases:
       - rational: delegated to `Integrate\`BronsteinRational`;
@@ -1442,6 +1509,41 @@ no multivariate integration, no constant of integration.
         `Integrate[Log[2+x]/x,x] = Log[2] Log[x] - PolyLog[2,-x/2]`,
         `Log[2x+3]/(x-1)`. Non-monic linear kernels (`Log[3+2x]/x`) and products
         of logs still decline;
+      - **exponential-tower dilogarithm** (Cherry, the exp-tower mirror of the
+        `R(x) Log[w]` case above): an integrand that is a rational-in-`E^(c x)`
+        combination of the weight-1 logs `{x} ∪ {Log[E^(cx)-ρ_k]}` → `PolyLog[2,
+        exp]`. With `θ=E^(cx)` and `x=Log[θ]/c` the "root at 0" tower-log, the
+        answer is matched natively in the tower (an ansatz of `PolyLog[2, Möbius(θ)]`,
+        `x Log[θ-ρ_k]`, `Log-Log`, and `x^2` terms; coefficients from a linear solve
+        over `{θ, x, Log[θ-ρ_k]}`; PowerExpand diff-back verified). Covers both the
+        rational-times-`x` forms and the outer-log forms:
+        `Integrate[x/(E^x-1),x] = x Log[1-E^-x] - PolyLog[2, E^-x]`,
+        `Integrate[x/(1+E^x),x]`, `Integrate[x E^x/(E^x-1),x]`,
+        `Integrate[x/(E^(2x)-1),x]` (rate `c=2`), `Integrate[Log[1+E^x],x] =
+        -PolyLog[2,-E^x]`, `Integrate[Log[1+E^-x],x]`, and mixtures. Weight-`≥2`
+        integrands (`x Log[1+E^x]`, `x^2/(E^x-1)` → `PolyLog[3]`), incommensurate
+        exponentials, and algebraic roots decline cleanly. The engine is reached
+        automatically from `Integrate` and directly via the debug surface
+        `Integrate\`Cherry\`DilogExp[f, x]`;
+      - **exponential-tower polylogarithm ladder** (the general-weight,
+        algebraic-root generalisation of the exp-tower dilogarithm): an integrand
+        `P(x)/Q(E^(c x))` — rational in `θ=E^(c x)`, polynomial in `x` — is
+        partial-fractioned over the (rational OR algebraic) roots `ρ` of `Q`, and
+        each simple pole `x^n/(θ-ρ)` is closed by the exact Cherry ladder
+        `INT x^n/(θ-ρ) = Σ_{k=0}^{n} -(1/ρ)(n!/(n-k)!)/c^{k+1} x^{n-k}
+        PolyLog[k+1, ρ/θ]` (from `d/dx PolyLog[k, ρ/θ] = -c PolyLog[k-1, ρ/θ]`,
+        `PolyLog[1,z] = -Log[1-z]`), so an `x^n` numerator yields polylogarithms up
+        to weight `n+1`: `Integrate[x^2/(E^x-1),x] = x^2 Log[1-E^-x] -
+        2 x PolyLog[2,E^-x] - 2 PolyLog[3,E^-x]`,
+        `Integrate[x^4/(E^(5x)-1),x] = ... - (24/3125) PolyLog[5, E^-5x]`
+        (rate `c=5`), and the **algebraic-root** family
+        `Integrate[x/(E^(2x)+E^x-1),x]`, `Integrate[x^2/(E^(2x)+E^x-1),x]` over
+        `Q(Sqrt[5])`. Correct by construction (telescoping IBP), PowerExpand-diff-
+        back verified over the constant field. Scope: single commensurable kernel,
+        `Q` a proper fraction in `θ` with simple nonzero roots; improper fractions,
+        `θ=0` (Laurent) poles, and repeated roots decline. Reached automatically
+        from `Integrate` (ahead of the weight-2 dilog form) and directly via
+        `Integrate\`Cherry\`PolyLogExp[f, x]`;
       - fractional (Rothstein–Trager) log-part: a proper rational function of
         `theta` with squarefree denominator `prod g_i` gives `sum_i c_i Log(g_i)`,
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
@@ -1496,6 +1598,8 @@ no multivariate integration, no constant of integration.
     algebraic extensions (`Sqrt`, `RootSum`) remain unimplemented, so integrands needing
     them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
+  - `"ParallelMixedTower"` — `Integrate\`ParallelMixedTower[f, x]` (parallel
+    Risch-Norman over a simple radical in a mixed transcendental tower).
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`
     (`Integrate\`Symmetry[f, {x, -c, c}]`): an odd integrand integrates to `0`,
@@ -1543,7 +1647,7 @@ no multivariate integration, no constant of integration.
 
 ## References
 
-**See also:** [PolynomialQuotientRemainder](../../calculus/PolynomialQuotientRemainder/), [Apart](../../algebra/Apart/), [Log](../../elementary-functions/Log/), [ToRadicals](../../solutions-of-equations/ToRadicals/), [Root](../../solutions-of-equations/Root/), [RootSum](../../solutions-of-equations/RootSum/), [Plus](../../arithmetic/Plus/), [Sqrt](../../arithmetic/Sqrt/)
+**See also:** [DSolve](../../calculus/DSolve/), [PolynomialQuotientRemainder](../../calculus/PolynomialQuotientRemainder/), [Apart](../../algebra/Apart/), [Log](../../elementary-functions/Log/), [ToRadicals](../../solutions-of-equations/ToRadicals/), [Root](../../solutions-of-equations/Root/), [RootSum](../../solutions-of-equations/RootSum/), [Plus](../../arithmetic/Plus/)
 
 - Bronstein, "Symbolic Integration I: Transcendental Functions", 2nd ed. (Springer, 2005).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 11–12.
@@ -1556,9 +1660,9 @@ no multivariate integration, no constant of integration.
 - Source: [`src/calculus/integrate.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/integrate.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
 - Tests: [`tests/test_cherry_dilog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog.c)
+- Tests: [`tests/test_cherry_dilog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog_exp.c)
 - Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
 - Tests: [`tests/test_cherry_li.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_li.c)
-- Tests: [`tests/test_cherry_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_stress.c)
 
 ## Notes & additional examples
 

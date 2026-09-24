@@ -120,7 +120,7 @@ Diagnostics mirror Wolfram's surface text:
 
 ## References
 
-**See also:** [Rational](../../arithmetic/Rational/)
+**See also:** [Rational](../../arithmetic/Rational/), [Real](../../other-advanced/Real/)
 
 - Source: [`src/linalg/hilbertmat.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/hilbertmat.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

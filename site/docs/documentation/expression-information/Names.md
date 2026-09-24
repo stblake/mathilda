@@ -15,10 +15,10 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= Names["List*"]
-Out[1]= {"List", "ListConvolve", "ListCorrelate", "ListPlot", "ListQ"}
+Out[1]= {"List", "ListConvolve", "ListCorrelate", "ListGradient", "ListInterpolation", "ListPlot", "ListQ"}
 
 In[2]:= Names["Ar@"]
-Out[2]= {"Arg", "Array", "Arrow"}
+Out[2]= {"Area", "Arg", "Array", "Arrow"}
 
 In[3]:= Names[RegularExpression["Si."]]
 Out[3]= {"Sin"}

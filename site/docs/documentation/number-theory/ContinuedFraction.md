@@ -148,7 +148,7 @@ Attributes: Listable, Protected.
 
 ## References
 
-**See also:** [Pi](../../mathematical-constants/Pi/)
+**See also:** [Real](../../other-advanced/Real/), [Pi](../../mathematical-constants/Pi/)
 
 - A. Ya. Khinchin, *Continued Fractions*, Dover, 1997 — the classical theory of convergents and best approximations.
 - G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008 — Chapter X, continued fractions.
