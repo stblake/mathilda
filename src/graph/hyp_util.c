@@ -16,7 +16,7 @@
  * hypergraph is its own fixed point (the constructor returns NULL for it).
  *
  * THE MEMO. graph_util.c's design, re-implemented locally (graph.h's memo is
- * Graph-specific and the brief forbids changing it): the last HYP_MEMO_SLOTS
+ * Graph-specific): the last HYP_MEMO_SLOTS
  * valid hypergraphs, keyed by node pointer, each slot holding a reference so
  * the node stays alive -- hence unrecyclable and immutable (mutators unshare a
  * node with refcount > 1). A slot stores the vertex index, hyperedges as a
@@ -68,10 +68,16 @@ typedef struct {
     int *soff, *sv;      /* distinct-vertex hyperedges (alias raw if no rep) */
     int has_rep;
     int *voff, *ve;      /* incidence, lazily built; NULL until then         */
+    uint64_t last_used;  /* LRU clock of the latest hit/insert               */
 } HypMemo;
 
+/* Least-recently-used eviction, like the graph memo (graph_util.c), so a
+ * cyclic pattern over a few live hypergraphs does not thrash. Module-static
+ * with no locking, following the same g_qqbar_cache precedent: hypergraph
+ * builtins run only on the evaluator thread (gmet worker threads never call
+ * into Expr code). */
 static HypMemo g_hyp_memo[HYP_MEMO_SLOTS];
-static int g_hyp_memo_next = 0;
+static uint64_t g_hyp_memo_clock = 0;
 
 static void hyp_memo_clear(HypMemo* s) {
     graph_vidx_free(s->ix);
@@ -105,8 +111,12 @@ static IntMap intmap_build(Expr* const* vs, size_t n) {
         if (x < lo) lo = x;
         if (x > hi) hi = x;
     }
-    if (hi - lo < 0 || (uint64_t)(hi - lo) > (uint64_t)n * 4 + 1024) return im;
-    size_t span = (size_t)(hi - lo) + 1;
+    /* Span in unsigned arithmetic: hi - lo as int64_t overflows (UB) when the
+     * vertices straddle more than INT64_MAX. Once it is bounded below, every
+     * x - lo for x in [lo, hi] is small, so the signed subtractions are safe. */
+    uint64_t width = (uint64_t)hi - (uint64_t)lo;
+    if (width > (uint64_t)n * 4 + 1024) return im;
+    size_t span = (size_t)width + 1;
     int* at = malloc(span * sizeof(int));
     if (!at) return im;
     for (size_t k = 0; k < span; k++) at[k] = -1;
@@ -183,8 +193,11 @@ static HypMemo* hyp_memo_from(const Expr* h, GraphVIdx* ix) {
     }
     free(stamp);
 
-    HypMemo* s = &g_hyp_memo[g_hyp_memo_next];
-    g_hyp_memo_next = (g_hyp_memo_next + 1) % HYP_MEMO_SLOTS;
+    HypMemo* s = &g_hyp_memo[0];
+    for (int i = 0; i < HYP_MEMO_SLOTS; i++) {
+        if (!g_hyp_memo[i].h) { s = &g_hyp_memo[i]; break; }
+        if (g_hyp_memo[i].last_used < s->last_used) s = &g_hyp_memo[i];
+    }
     if (s->h) hyp_memo_clear(s);
     s->h = expr_copy((Expr*)h);        /* refcount bump only; never mutates */
     s->ix = ix;
@@ -193,6 +206,7 @@ static HypMemo* hyp_memo_from(const Expr* h, GraphVIdx* ix) {
     s->soff = soff; s->sv = sv;
     s->has_rep = has_rep;
     s->voff = NULL; s->ve = NULL;
+    s->last_used = ++g_hyp_memo_clock;
     return s;
 
 fail:
@@ -204,7 +218,10 @@ fail:
 /* The memo entry for h, validating (and memoizing) on a miss; NULL if invalid. */
 static HypMemo* hyp_memo(const Expr* h) {
     for (int i = 0; i < HYP_MEMO_SLOTS; i++)
-        if (g_hyp_memo[i].h == h) return &g_hyp_memo[i];
+        if (g_hyp_memo[i].h == h) {
+            g_hyp_memo[i].last_used = ++g_hyp_memo_clock;
+            return &g_hyp_memo[i];
+        }
     if (!hyp_shape_ok(h)) return NULL;
     const Expr* verts = h->data.function.args[0];
     size_t n = verts->data.function.arg_count;
@@ -319,8 +336,9 @@ Expr* builtin_hypergraph(Expr* res) {
             }
         }
         unsigned char* seen = NULL;
-        if (allint && hi - lo >= 0 && (uint64_t)(hi - lo) <= (uint64_t)tot * 4 + 1024)
-            seen = calloc((size_t)(hi - lo) + 1, 1);
+        if (allint && m > 0 && hi >= lo                      /* unsigned span: no UB */
+            && (uint64_t)hi - (uint64_t)lo <= (uint64_t)tot * 4 + 1024)
+            seen = calloc((size_t)((uint64_t)hi - (uint64_t)lo) + 1, 1);
         if (seen) {
             for (size_t j = 0; j < m; j++) {
                 const Expr* e = a->data.function.args[j];

@@ -140,8 +140,7 @@ int galg_vertex_arg(const Expr* g, const Expr* v);
 Expr* galg_truth(int b);
 
 /* ---- Max-flow engine (galg_flow.c) -----------------------------------------
- * Internal entry point for a faster VertexConnectivity (not wired into
- * connectivity.c, which this stream does not own): the vertex connectivity of
+ * Internal entry point used by VertexConnectivity (connectivity.c): the vertex connectivity of
  * the underlying undirected graph of g, via Even's algorithm on unit-capacity
  * split-vertex max flows. With s, t >= 0, the minimum number of vertices whose
  * removal separates s from t (0 when adjacent, matching Wolfram). -1 on error. */

@@ -668,9 +668,8 @@ undirected global minimum cuts (maximum-adjacency orders that contract every
 edge whose attachment reaches the current bound, not one pair per phase as in
 Stoer-Wagner); `2(n-1)` bounded flows for directed global cuts; Even's
 split-vertex network with Esfahanian-Hakimi pair selection for vertex
-separators. `galg_vertex_connectivity(g, s, t)` exposes the same machinery as a
-fast replacement for the brute-force `VertexConnectivity` in `connectivity.c`
-(not wired in by this stream).
+separators. `VertexConnectivity` uses the same machinery (via
+`galg_vertex_connectivity`), replacing its former exponential subset search.
 
 ### Matchings, covers, independent sets
 
