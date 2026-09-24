@@ -38,7 +38,15 @@ A40 = wrong S'-unit coeff over Q(√5). Speed lever = native `nf_elem` RowReduce
       that passes the gate's 11 fixed sample points but is WRONG off-gate → broke A19 (wrong at x=1/4, right at gate pts).
       Real fix = principled S'-unit GROUP BASIS (deep, multi-session). ALSO exposed: the verify gate's fixed-11-sample-point
       weakness (silent-wrong can pass). See [[project_charlwood_a40_sunit_conjugate_degenerate]]. Running off-gate audit of the 48.
-- [ ] **Phase 6** — deep speed: native nf_elem assembly, ToNumberField field-build cache, heavy tail; four-CAS re-benchmark
+- [~] **Phase 6** — deep speed: PROFILED. Four-CAS benchmark (v0.183, warm): **48/50, total 26.1s, mean 544ms, median 117ms**
+      (median already beats MMA 166 / SymPy 505; behind Maxima 92). Heavy tail A28 4.7s, P8 3.7s, A1 3.4s, P4 2.5s.
+      **Bottleneck (sample of A28): `expr_compare`/`collect_symbols_in` in Orderless (Plus/Times) sorting, driven by
+      `Together`/`Cancel` — specifically the tower canonicalizer `Can[e]=Cancel[Together[e],Extension->Automatic]`
+      (`ParallelMixed.m:90`) run on RAW-radical column expressions before the field mapping → generic Expr path.**
+      Native-nf_elem fix = restructure the tower column arithmetic to run over the field θ / nf_elem (the deep G4c item;
+      the v0.177 field Cancel/Together kernels don't fire because Can uses Extension->Automatic on raw radicals, not
+      AlgebraicNumber[θ]). Large, focused, multi-session; gate every step with a byte-identical differential vs the
+      current Extension->Automatic result + the DSolve corpus. Native RowReduce (v0.179) already done (~24% on A2).
 - [ ] **Phase 7** — regression (DSolve tripwire!), tests, docs, version bumps + tags
 
 - [x] **Pollution hunt (user-requested)** — ASan found & FIXED a real memory bug: uninitialised-tail `expr_free`
