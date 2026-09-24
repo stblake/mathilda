@@ -15,6 +15,7 @@
 #include "graph_ops.h"
 #include "symtab.h"
 #include "attr.h"
+#include "graph_metrics.h"
 
 void graph_init(void) {
     /* Graph -- construction, normalization, canonicalization (construct.c). */
@@ -285,4 +286,6 @@ void graph_init(void) {
 
     /* ---- Editing, transforms, set operations, cycles (gops_*.c) ------- */
     graph_ops_init();
+    /* ---- Distance, centrality, clustering, generators (gmet_*.c) --------- */
+    graph_metrics_init();
 }

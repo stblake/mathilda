@@ -459,3 +459,145 @@ FindEulerianCycle[CycleGraph[4]]            (* {{1<->4,4<->3,3<->2,2<->1}} *)
 FindCycle[Graph[{1->2,2->3,3->4,4->2,3->1}]]   (* {{1->2,2->3,3->1}} *)
 FindPath[CompleteGraph[4], 1, 4, 2, All]       (* {{1,4},{1,3,4},{1,2,4}} *)
 ```
+
+## Distances, centralities, clustering and graph families
+
+Implemented in `src/graph/gmet_*.c` (header `src/graph/graph_metrics.h`,
+registered by `graph_metrics_init()` at the end of `graph_init()`). Every
+convention below was checked against Mathematica 15 with `wolframscript` on
+small graphs, including the undocumented ones (noted *reverse-engineered*).
+Numeric vector/matrix results are **packed** (`NDArrayQ` is `True`) whenever
+they are uniform machine numbers; a result containing `Infinity` or exact
+rationals is an ordinary list, as in Wolfram. Edge direction is followed; an
+undirected edge is usable both ways.
+
+**Weights.** Heads marked *(w)* use `EdgeWeight` as edge lengths and then
+answer in machine reals (Wolfram converts even integer weights); the others
+ignore weights exactly as Wolfram does. A symbolic, complex or negative weight
+leaves a *(w)* head unevaluated (Wolfram also refuses symbolic weights;
+negative weights, which Wolfram routes to Bellman–Ford, are not supported).
+
+### Distances
+
+- `GraphDistanceMatrix[g]` *(w)* — all-pairs distances, rows/columns in
+  `VertexList` order, `Infinity` when unreachable. Integers unweighted (packed
+  when every pair is reachable), reals weighted. `GraphDistanceMatrix[g, d]`
+  keeps distances `<= d` (others `Infinity`).
+- `GraphDistance[g, s]` *(w)* — distances from `s` to every vertex (the new
+  single-source form; `GraphDistance[g, s, t]` is unchanged). Weighted: reals,
+  except the source's own entry, which is an exact `0` as in Wolfram.
+- `VertexEccentricity[g, v]` *(w)* — unweighted: the largest distance to a
+  vertex `v` reaches (finite on disconnected graphs); weighted: `Infinity` if
+  `v` does not reach every vertex (Wolfram's weighted rule).
+- `GraphDiameter`, `GraphRadius`, `GraphCenter`, `GraphPeriphery`,
+  `MeanGraphDistance` *(w)* — unweighted and not strongly connected (not
+  connected, if undirected): `Infinity` / `{}`. Weighted: taken over the
+  weighted eccentricities, so a weighted digraph that is not strongly connected
+  can have a finite radius and a non-empty center (*reverse-engineered*).
+  `MeanGraphDistance` averages over ordered pairs of distinct vertices; exact
+  when unweighted; `Infinity` when some pair is unreachable; unevaluated for a
+  single vertex. Graphs with no vertices give diameter/radius `0`.
+- `GraphDensity[g]` — `(directed edges + 2 undirected edges)/(n (n - 1))`,
+  exact; unevaluated for `n < 2`.
+- `KirchhoffMatrix[g]` — `D - A`, `D` = number of incident edges, `A` the
+  (directed) adjacency matrix; weights ignored. **Deviation:** a dense packed
+  Integer matrix (Wolfram returns a `SparseArray`; this is its `Normal`).
+
+### Centralities
+
+- `DegreeCentrality[g]`, `[g, "In"]`, `[g, "Out"]` — exact degrees. On a mixed
+  graph an undirected edge counts once in each direction (so it adds 2 to the
+  default total), as in Wolfram.
+- `ClosenessCentrality[g]` *(w)* — `r/s`: `r` vertices reachable from `v`,
+  `s` the sum of their distances; 0 if none.
+- `EccentricityCentrality[g]` *(w)* — `1/e(v)` with `e` measured over the
+  reachable vertices (also when weighted); 0 when `e(v) = 0`.
+- `BetweennessCentrality[g]` — unnormalized; unordered pairs on undirected
+  graphs, ordered pairs on directed ones; weights ignored. **Deviation:** mixed
+  graphs are left unevaluated (Wolfram's values there match no standard
+  definition, e.g. `{1<->2, 2->3}` gives vertex 2 a betweenness of 0).
+- `EdgeBetweennessCentrality[g]` *(w)* — per edge in `EdgeList` order, summed
+  over **ordered** pairs even on undirected graphs (the edge of a `K2` scores
+  2); weighted ties within a relative `1e-12` share paths.
+- `PageRankCentrality[g]`, `[g, a]` — `x = a P^T x + (1 - a)/n`, dangling
+  vertices jump uniformly, `Total[x] = 1`, default `a = 0.85`, `0 <= a <= 1`.
+  Converged to `1e-14` (Wolfram stops near `1e-9`, so they agree to ~9 digits).
+- `EigenvectorCentrality[g]`, `[g, "In"]` (default), `[g, "Out"]` — per
+  strongly connected component: each component `C` with `|C| > 1` gets its
+  Perron vector scaled to total `(|C| - 1)/Σ(|C'| - 1)`; single-vertex
+  components get 0, so a DAG gives all zeros (*reverse-engineered*: reproduces
+  Wolfram exactly on every disconnected / non-strongly-connected case tried,
+  e.g. `K4 ⊔ K3 ⊔ K2` totals 3:2:1).
+- `KatzCentrality[g, a]`, `[g, a, b]` — `x = a A^T x + b` (`b` = 1, a number,
+  or a list). Answered even beyond the convergence radius, like Wolfram (`K4`
+  with `a = 1/2` gives `-2`; dense LAPACK solve, `n <= 4000`); a singular
+  system is unevaluated. No edges or an exact `a = 0` return `b` exactly.
+- `HITSCentrality[g]` — `{h, A.h}`; `h` is built like `EigenvectorCentrality`
+  but for `A^T A`, whose blocks are the classes of vertices sharing an
+  in-neighbour (*reverse-engineered*; reproduces Wolfram exactly, including
+  degenerate spectra such as `PathGraph[5]` and the all-zero answer for mixed
+  graphs whose classes are singletons).
+
+### Clustering
+
+All exact, weights ignored, mixed graphs unevaluated (as in Wolfram).
+Undirected: `t(v)` triangles at `v`; local `t(v)/C(d(v), 2)`, global
+`3T/Σ C(d, 2)`, mean of the locals. Directed (*reverse-engineered*): triangles
+are directed 3-cycles; local `c(v)/(in(v) out(v) - r(v))` with `r(v)` the
+reciprocally linked neighbours.
+
+- `GraphTriangleCount[g]`, `LocalClusteringCoefficient[g]` / `[g, v]`,
+  `GlobalClusteringCoefficient[g]`, `MeanClusteringCoefficient[g]`.
+
+### Graph families
+
+Undirected on `1..N`; the edge list is the sorted list of pairs `{i, j}`,
+`i < j` — identical to Wolfram's `EdgeList` for each family.
+
+- `WheelGraph[n]` (hub 1; `n = 1` or `n >= 4` — 2 and 3 would be multigraphs),
+  `HypercubeGraph[n]`, `GridGraph[{n1, ..., nk}]` (first coordinate fastest),
+  `KaryTree[n]`, `KaryTree[n, k]`, `CompleteKaryTree[n]`, `CompleteKaryTree[n, k]`
+  (`n` levels), `CirculantGraph[n, j]`, `CirculantGraph[n, {j1, ...}]`,
+  `PetersenGraph[]`, `PetersenGraph[n, k]` (inner star `1..n`, outer cycle
+  `n+1..2n`), `TuranGraph[n, k]` (larger parts first),
+  `HararyGraph[k, n]` (`k >= 2`, `n > k`),
+  `CompleteGraph[{n1, n2, ...}]` (complete multipartite; `CompleteGraph[{n}]`
+  is `K_n`). `CompleteGraph` and `GraphDistance` are re-registered by wrappers
+  that delegate their pre-existing forms to the original builtins.
+- Options (`DirectedEdges`, layout options) are not supported.
+
+### Algorithms and performance
+
+- **Bit-parallel multi-source BFS** (MS-BFS): 256 sources advance together,
+  one bit per source per vertex, so each BFS level walks the adjacency once
+  for the whole batch; batches run on a pthread team (`MATHILDA_THREADS`
+  builds; `MATHILDA_GRAPH_THREADS=1` forces serial). Used for all-pairs
+  distances and for the per-source summary (reach, distance sum, eccentricity)
+  from which closeness, eccentricity centrality and the diameter family reduce;
+  that summary is cached per graph node, so a sequence of those heads on one
+  graph pays for one all-pairs pass. Weighted: binary-heap Dijkstra per source.
+- **Brandes** betweenness (O(nm); weighted O(nm + n² log n) for edges),
+  sources spread over threads with per-thread accumulators.
+- **Triangle listing** with an acyclic orientation (degree order, or index
+  order when `maxdeg² <= 4m`), O(m^1.5) worst case; directed 3-cycles via
+  two-bit arc flags per edge.
+- **Spectral**: restarted Arnoldi (Krylov dimension 40, BLAS re-orthogonal-
+  ization, LAPACK on the Hessenberg matrix) per block, residual-tested to
+  `1e-13`; PageRank/Katz by (Jacobi) iteration with a correct stopping rule.
+- Finished results are cached per `(head, graph node, other arguments)` in a
+  16-slot cache holding references, the same soundness argument as the
+  validated-graph memo.
+
+Benchmarks: `benchmarks/94-graph-metrics` (warm and cold cases, vs Mathematica
+and networkx).
+
+```
+GraphDistanceMatrix[Graph[{1->2, 2->3, 3->1, 3->4}]]
+      (* {{0,1,2,3},{2,0,1,2},{1,2,0,1},{Infinity,Infinity,Infinity,0}} *)
+BetweennessCentrality[StarGraph[5]]          (* {6., 0., 0., 0., 0.} *)
+EdgeBetweennessCentrality[PathGraph[{1,2,3,4}]] (* {6., 8., 6.} *)
+LocalClusteringCoefficient[Graph[{1<->2,2<->3,3<->1,3<->4}]] (* {1, 1, 1/3, 0} *)
+EigenvectorCentrality[Graph[{1->2, 2->3, 3->1, 3->4}]]  (* {0.333333, 0.333333, 0.333333, 0.} *)
+EdgeList[WheelGraph[5]]
+      (* {1<->2,1<->3,1<->4,1<->5,2<->3,2<->5,3<->4,4<->5} *)
+```
