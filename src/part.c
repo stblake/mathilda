@@ -91,10 +91,6 @@ static bool span_resolve(const Expr* span, int64_t len,
     return true;
 }
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list);
-/* Single-index association Part: resolve one key/Key[k]/positional index into
- * its value (recursing for any remaining indices), or Missing["KeyAbsent", k].
- * Returns NULL only for an out-of-range positional index. */
-static Expr* assoc_part_single(Expr* assoc, Expr* idx, Expr** rest, size_t nrest);
 
 /* Assign through the value of association entry `entry`, recursing for any
  * remaining indices, and return the resulting entry. Takes ownership of `entry`
@@ -480,6 +476,9 @@ Expr* builtin_head(Expr* res) {
     return out;
 }
 
+/* Part of an association at one index level; defined below. */
+static Expr* assoc_part(Expr* assoc, Expr* idx, Expr** rest, size_t nrest);
+
 Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
     if (!expr || !indices) return NULL;
     if (nindices == 0) return expr_copy(expr);
@@ -488,31 +487,10 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
     Expr** rest = indices + 1;
     size_t nrest = nindices - 1;
 
-    /* Association indexing: assoc[[Key[k]]] / assoc[["strkey"]] look a key up
-     * by value; assoc[[i]] with a positive/negative integer is positional
-     * over the values (Wolfram semantics); assoc[[{k1,...}]] maps over the
-     * sub-indices, giving {assoc[[k1]], ...}. A missing key yields
-     * Missing["KeyAbsent", key]. */
-    if (is_association(expr)) {
-        if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
-            idx->data.function.head->data.symbol.name == SYM_List) {
-            size_t m = idx->data.function.arg_count;
-            Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
-            for (size_t j = 0; j < m; j++) {
-                Expr* sub = idx->data.function.args[j];
-                Expr* v = assoc_part_single(expr, sub, rest, nrest);
-                if (!v) {  /* e.g. positional out of range: report as missing */
-                    Expr* margs[2] = { expr_new_string("KeyAbsent"), expr_copy(sub) };
-                    v = expr_new_function(expr_new_symbol(SYM_Missing), margs, 2);
-                }
-                out[j] = v;
-            }
-            Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, m);
-            free(out);
-            return result;
-        }
-        return assoc_part_single(expr, idx, rest, nrest);
-    }
+    /* Association indexing (Wolfram semantics, see assoc_part): a single
+     * integer / key / Key[k] selects one VALUE; All, a Span or a List of
+     * positions or keys selects a sub-ASSOCIATION. */
+    if (is_association(expr)) return assoc_part(expr, idx, rest, nrest);
 
     // Handle integer index
     if (idx->type == EXPR_INTEGER) {
@@ -639,26 +617,94 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
     return NULL;
 }
 
-static Expr* assoc_part_single(Expr* assoc, Expr* idx, Expr** rest, size_t nrest) {
-    size_t na = assoc->data.function.arg_count;
-    Expr* lookup_key = NULL;   /* borrowed */
-    bool positional = false;
-    int64_t pos = 0;
+/* How one element of an association Part spec addresses the entries. */
+typedef enum { APS_POS, APS_KEY, APS_BAD } AssocSpecKind;
 
-    if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
-        idx->data.function.head->data.symbol.name == SYM_Key && idx->data.function.arg_count == 1) {
-        lookup_key = idx->data.function.args[0];
-    } else if (idx->type == EXPR_INTEGER) {
-        positional = true;
-        pos = idx->data.integer;
-    } else {
-        lookup_key = idx;  /* strings and other literal keys */
+/* Classify an association Part spec element. A machine integer is a position;
+ * a string or Key[k] is a key (*key is set to the BORROWED key expression).
+ * Anything else -- a bare symbol, a real, ... -- is not a valid part spec in
+ * Mathematica (Part::pkspec1), so the whole Part stays unevaluated. */
+static AssocSpecKind assoc_spec_kind(const Expr* s, const Expr** key) {
+    if (s->type == EXPR_INTEGER) return APS_POS;
+    if (s->type == EXPR_STRING) { *key = s; return APS_KEY; }
+    if (s->type == EXPR_FUNCTION && s->data.function.head->type == EXPR_SYMBOL &&
+        s->data.function.head->data.symbol.name == SYM_Key &&
+        s->data.function.arg_count == 1) {
+        *key = s->data.function.args[0];
+        return APS_KEY;
     }
+    return APS_BAD;
+}
 
-    if (positional) {
+/* Missing["KeyAbsent", spec] -- spec is the index as written (Key[k] or "k"),
+ * exactly as Mathematica reports it. */
+static Expr* assoc_key_absent(const Expr* spec) {
+    Expr* margs[2] = { expr_new_string("KeyAbsent"), expr_copy((Expr*)spec) };
+    return expr_new_function(expr_new_symbol(SYM_Missing), margs, 2);
+}
+
+/* The entry `e` with its value replaced by value[[rest]], or NULL when that
+ * deeper Part fails. With no deeper indices the entry itself is shared (a
+ * refcount bump), which keeps a RuleDelayed entry delayed. */
+static Expr* assoc_entry_part(const Expr* e, Expr** rest, size_t nrest) {
+    if (nrest == 0) return expr_copy((Expr*)e);
+    Expr* v = expr_part(e->data.function.args[1], rest, nrest);
+    if (!v) return NULL;
+    return assoc_entry_with_value(e, v);
+}
+
+/* Would Take accept this Span on `len` elements? Mathematica leaves a Part
+ * whose Span runs off either end unevaluated (Part::take) but allows the
+ * empty span that sits just inside, e.g. 3;;2 or 5;;4 on four entries. */
+static bool assoc_span_in_range(const Expr* span, int64_t len) {
+    int64_t s = 1, e = len, st = 1;
+    size_t argc = span->data.function.arg_count;
+    if (argc >= 1 && !span_slot(span->data.function.args[0], len, 0, &s)) return false;
+    if (argc >= 2 && !span_slot(span->data.function.args[1], len, 1, &e)) return false;
+    if (argc >= 3 && !span_slot(span->data.function.args[2], len, 2, &st)) return false;
+    if (st > 0) return s >= 1 && e <= len && s <= e + 1;
+    if (st < 0) return s <= len && e >= 1 && e <= s + 1;
+    return false;
+}
+
+/* Build the sub-association from `n` owned entries (NULL entries mean a
+ * deeper Part failed: everything is freed and NULL returned). Duplicate keys
+ * collapse as in the Association constructor. */
+static Expr* assoc_part_collect(Expr** ents, size_t n, bool ok) {
+    Expr* out = ok ? assoc_from_rules(ents, n) : NULL;
+    for (size_t i = 0; i < n; i++) if (ents[i]) expr_free(ents[i]);
+    free(ents);
+    return out;
+}
+
+/*
+ * Part of an association, one index level (`rest` are the deeper indices,
+ * applied to the selected values). Mirrors Mathematica 15:
+ *
+ *   a[[i]] / a[["k"]] / a[[Key[k]]]   the value (then [[rest]]); an absent key
+ *                                     gives Missing["KeyAbsent", spec] with
+ *                                     the spec as written, e.g. Key[k]
+ *   a[[0]]                            the head, Association
+ *   a[[All]], a[[m;;n;;s]]            a sub-association of those entries
+ *   a[[{i, j}]], a[[{"k", Key[k]}]]   a sub-association in the given order; an
+ *                                     absent key maps to its Missing[...]
+ *
+ * NULL (the Part stays unevaluated, as after Part::partw / pkspec1 / pmix /
+ * take / partd) for a position out of range, a Span running off the end, a
+ * spec list mixing positions with keys, a non-key atom such as a bare symbol,
+ * or a deeper index that fails on any selected value.
+ */
+static Expr* assoc_part(Expr* assoc, Expr* idx, Expr** rest, size_t nrest) {
+    size_t na = assoc->data.function.arg_count;
+    for (size_t i = 0; i < na; i++)
+        if (!is_rule2(assoc->data.function.args[i])) return NULL;  /* malformed */
+
+    const Expr* key = NULL;
+    AssocSpecKind kind = assoc_spec_kind(idx, &key);
+
+    if (kind == APS_POS) {
+        int64_t pos = idx->data.integer;
         if (pos == 0) {
-            /* assoc[[0]] gives the head Association (as for any expression);
-             * an integer *key* must be requested with Key[k]. */
             Expr* head = expr_head(assoc);
             if (!head) return NULL;
             Expr* result = expr_part(head, rest, nrest);
@@ -667,14 +713,73 @@ static Expr* assoc_part_single(Expr* assoc, Expr* idx, Expr** rest, size_t nrest
         }
         if (pos < 0) pos = (int64_t)na + pos + 1;
         if (pos < 1 || pos > (int64_t)na) return NULL;
-        Expr* rule = assoc->data.function.args[pos - 1];
-        return expr_part(rule->data.function.args[1], rest, nrest);
+        return expr_part(assoc->data.function.args[pos - 1]->data.function.args[1], rest, nrest);
     }
-    Expr* v = assoc_lookup_value(assoc, lookup_key);   /* O(1) via the key index */
-    if (v) return expr_part(v, rest, nrest);
-    /* Key absent. */
-    Expr* margs[2] = { expr_new_string("KeyAbsent"), expr_copy(lookup_key) };
-    return expr_new_function(expr_new_symbol(SYM_Missing), margs, 2);
+    if (kind == APS_KEY) {
+        Expr* v = assoc_lookup_value(assoc, key);   /* O(1) via the key index */
+        return v ? expr_part(v, rest, nrest) : assoc_key_absent(idx);
+    }
+
+    bool is_all  = idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All;
+    bool is_span = idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+                   idx->data.function.head->data.symbol.name == SYM_Span;
+    bool is_list = idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+                   idx->data.function.head->data.symbol.name == SYM_List;
+
+    if (is_all || is_span) {
+        int64_t start = 1, step = 1, count = (int64_t)na;
+        if (is_span && (!assoc_span_in_range(idx, (int64_t)na) ||
+                        !span_resolve(idx, (int64_t)na, &start, &step, &count)))
+            return NULL;
+        Expr** ents = malloc(sizeof(Expr*) * (count > 0 ? (size_t)count : 1));
+        bool ok = true;
+        int64_t k = start;
+        for (int64_t i = 0; i < count; i++, k += step) {
+            ents[i] = ok ? assoc_entry_part(assoc->data.function.args[k - 1], rest, nrest) : NULL;
+            if (!ents[i]) ok = false;
+        }
+        return assoc_part_collect(ents, (size_t)count, ok);
+    }
+
+    if (!is_list) return NULL;                       /* pkspec1 */
+
+    /* A list of positions or of keys -- never a mixture (Part::pmix). */
+    size_t m = idx->data.function.arg_count;
+    AssocSpecKind lkind = APS_BAD;
+    for (size_t j = 0; j < m; j++) {
+        const Expr* kj = NULL;
+        AssocSpecKind kd = assoc_spec_kind(idx->data.function.args[j], &kj);
+        if (kd == APS_BAD || (j > 0 && kd != lkind)) return NULL;
+        lkind = kd;
+        if (kd == APS_POS) {
+            int64_t p = idx->data.function.args[j]->data.integer;
+            if (p < 0) p = (int64_t)na + p + 1;
+            if (p < 1 || p > (int64_t)na) return NULL;   /* partw */
+        }
+    }
+    Expr** ents = malloc(sizeof(Expr*) * (m ? m : 1));
+    bool ok = true;
+    for (size_t j = 0; j < m; j++) {
+        Expr* sj = idx->data.function.args[j];
+        ents[j] = NULL;
+        if (!ok) continue;
+        if (lkind == APS_POS) {
+            int64_t p = sj->data.integer;
+            if (p < 0) p = (int64_t)na + p + 1;
+            ents[j] = assoc_entry_part(assoc->data.function.args[p - 1], rest, nrest);
+        } else {
+            const Expr* kj = NULL;
+            (void)assoc_spec_kind(sj, &kj);
+            Expr* v = assoc_lookup_value(assoc, kj);
+            Expr* nv = v ? expr_part(v, rest, nrest) : assoc_key_absent(sj);
+            if (nv) {
+                Expr* rargs[2] = { expr_copy((Expr*)kj), nv };
+                ents[j] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+            }
+        }
+        if (!ents[j]) ok = false;
+    }
+    return assoc_part_collect(ents, m, ok);
 }
 
 Expr* builtin_part(Expr* res) {
@@ -1064,8 +1169,134 @@ Expr* expr_insert(Expr* expr, Expr* elem, Expr* pos) {
     return expr_copy(expr);
 }
 
+static int64_t assoc_entry_index(const Expr* assoc, const Expr* idx);
+
+/* The insertion slot (0..n: before entry slot, n = at the end) named by one
+ * Insert position on an association of n entries -- an integer (negative
+ * counts from the end, -1 being the end), a string key or Key[k] (insert
+ * before that entry) -- or -1 when out of range or the key is absent. */
+static int64_t assoc_insert_slot(const Expr* assoc, const Expr* p) {
+    int64_t n = (int64_t)assoc->data.function.arg_count;
+    if (p->type == EXPR_INTEGER) {
+        int64_t v = p->data.integer;
+        if (v > 0) return v <= n + 1 ? v - 1 : -1;
+        if (v < 0) { v = n + v + 2; return v >= 1 ? v - 1 : -1; }
+        return -1;
+    }
+    if (p->type == EXPR_STRING ||
+        (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+         p->data.function.head->data.symbol.name == SYM_Key && p->data.function.arg_count == 1))
+        return assoc_entry_index(assoc, p);
+    return -1;
+}
+
+static int slot_cmp(const void* a, const void* b) {
+    int64_t x = *(const int64_t*)a, y = *(const int64_t*)b;
+    return (x > y) - (x < y);
+}
+
+/*
+ * Insert[assoc, rule(s), pos] (Mathematica 15). The rule, or list of rules, is
+ * placed at pos -- an integer, a key, Key[k], {pos} or {{pos1}, {pos2}, ...}
+ * -- and an existing entry with the same key is removed, so the NEW position
+ * wins: Insert[<|a -> 1, b -> 2, c -> 3|>, a -> 9, 3] is <|b -> 2, a -> 9, c -> 3|>.
+ * A deeper path {p, i, ...} inserts into the value at p. Anything but rules
+ * leaves the association unchanged (Mathematica says Insert::invdt and returns
+ * it); an out-of-range position or absent key leaves the call unevaluated.
+ */
+static Expr* assoc_insert(Expr* assoc, Expr* elem, Expr* pos) {
+    size_t n = assoc->data.function.arg_count;
+    for (size_t i = 0; i < n; i++)
+        if (!is_rule2(assoc->data.function.args[i])) return NULL;
+    bool is_list_pos = pos->type == EXPR_FUNCTION && pos->data.function.head->type == EXPR_SYMBOL &&
+                       pos->data.function.head->data.symbol.name == SYM_List;
+    bool list_of_paths = is_list_pos && pos->data.function.arg_count > 0 &&
+                         pos->data.function.args[0]->type == EXPR_FUNCTION &&
+                         pos->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+                         pos->data.function.args[0]->data.function.head->data.symbol.name == SYM_List;
+
+    /* A deep path {p, rest...}: insert elem into the value at p. */
+    if (is_list_pos && !list_of_paths && pos->data.function.arg_count >= 2) {
+        int64_t e = assoc_entry_index(assoc, pos->data.function.args[0]);
+        if (e < 0) return NULL;
+        Expr* entry = assoc->data.function.args[e];
+        Expr* val = entry->data.function.args[1];
+        if (is_atomic(val)) return NULL;
+        Expr* nv = insert_path(val, elem, pos->data.function.args + 1, pos->data.function.arg_count - 1);
+        Expr** ents = malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++)
+            ents[i] = (i == (size_t)e) ? assoc_entry_with_value(entry, nv)
+                                       : expr_copy(assoc->data.function.args[i]);
+        Expr* out = expr_new_function(expr_copy(assoc->data.function.head), ents, n);
+        free(ents);
+        return out;
+    }
+
+    /* The rules to insert. */
+    Expr** nr; size_t nn;
+    if (is_rule2(elem)) { nr = &elem; nn = 1; }
+    else if (elem->type == EXPR_FUNCTION && elem->data.function.head->type == EXPR_SYMBOL &&
+             elem->data.function.head->data.symbol.name == SYM_List) {
+        nr = elem->data.function.args; nn = elem->data.function.arg_count;
+        for (size_t i = 0; i < nn; i++) if (!is_rule2(nr[i])) return expr_copy(assoc);
+    } else {
+        return expr_copy(assoc);                        /* Insert::invdt */
+    }
+
+    /* The insertion slots. */
+    size_t ns = 1;
+    int64_t one;
+    int64_t* slots = &one;
+    if (is_list_pos) {
+        size_t m = pos->data.function.arg_count;
+        if (m == 0) return NULL;
+        if (!list_of_paths) {
+            one = assoc_insert_slot(assoc, pos->data.function.args[0]);   /* {p} */
+        } else {
+            slots = malloc(sizeof(int64_t) * m);
+            ns = m;
+            for (size_t i = 0; i < m; i++) {
+                Expr* pi = pos->data.function.args[i];
+                bool ok = pi->type == EXPR_FUNCTION && pi->data.function.arg_count == 1 &&
+                          pi->data.function.head->type == EXPR_SYMBOL &&
+                          pi->data.function.head->data.symbol.name == SYM_List;
+                slots[i] = ok ? assoc_insert_slot(assoc, pi->data.function.args[0]) : -1;
+            }
+            qsort(slots, ns, sizeof(int64_t), slot_cmp);
+        }
+    } else {
+        one = assoc_insert_slot(assoc, pos);
+    }
+    for (size_t i = 0; i < ns; i++)
+        if (slots[i] < 0) { if (slots != &one) free(slots); return NULL; }
+
+    /* Lay out old entries (minus those whose key is being inserted) and the new
+     * rules at each slot; assoc_from_rules then collapses repeated new keys. */
+    Expr* newset = assoc_from_rules(nr, nn);            /* O(1) key membership */
+    Expr** out = malloc(sizeof(Expr*) * (n + nn * ns + 1));
+    size_t k = 0, s = 0;
+    for (size_t i = 0; i <= n; i++) {
+        while (s < ns && slots[s] == (int64_t)i) {
+            for (size_t j = 0; j < nn; j++) out[k++] = nr[j];
+            s++;
+        }
+        if (i < n) {
+            Expr* r = assoc->data.function.args[i];
+            if (!assoc_lookup_value(newset, r->data.function.args[0])) out[k++] = r;
+        }
+    }
+    Expr* result = assoc_from_rules(out, k);            /* copies the (borrowed) rules */
+    free(out);
+    expr_free(newset);
+    if (slots != &one) free(slots);
+    return result;
+}
+
 Expr* builtin_insert(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    if (is_association(res->data.function.args[0]))
+        return assoc_insert(res->data.function.args[0], res->data.function.args[1],
+                            res->data.function.args[2]);
     return expr_insert(res->data.function.args[0], res->data.function.args[1], res->data.function.args[2]);
 }
 

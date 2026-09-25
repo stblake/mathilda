@@ -153,12 +153,20 @@ Out[3]= {<|"a" -> 1|>, <|"a" -> 3|>}
 ```
 
 ## KeyTake
-Gives the association of only the specified keys (association order preserved).
-Over a list of associations it threads, keeping the keys in each record.
+- `KeyTake[assoc, {k1, k2, ...}]` gives the association of only the specified
+  keys, **in the requested order**.
+- `KeyTake[{assoc1, ...}, keys]` threads over a list of associations.
+
+**Features**
+- Matches Mathematica 15: absent keys are skipped, and a key requested more
+  than once is placed at its last occurrence (`{"c", "a", "c"}` gives
+  `<|"a" -> .., "c" -> ..|>`).
+- `O(n + m)`: the association's entries are hash-indexed once; `RuleDelayed`
+  entries stay delayed.
 
 ```mathematica
 In[1]:= KeyTake[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {"c", "a"}]
-Out[1]= <|"a" -> 1, "c" -> 3|>
+Out[1]= <|"c" -> 3, "a" -> 1|>
 
 In[2]:= KeyTake[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3, "b" -> 4|>}, {"a"}]
 Out[2]= {<|"a" -> 1|>, <|"a" -> 3|>}
@@ -227,6 +235,11 @@ Hash-indexed grouping in `O(n)` plus the cost of `f`.
   sub-association (so `GroupBy[assoc, f, Total]` composes with value-threading
   `Total`). Distinct from `GroupBy[records, Key["field"]]`, which groups a
   *list* of record-associations by a field.
+- `GroupBy[list, {f1, f2, ...}]` groups at several levels, giving nested
+  associations (group by `f1`, then each group by `f2`, ...);
+  `GroupBy[list, {f1, f2, ...}, g]` applies the reducer `g` at the innermost
+  level only. A level written `keyfn -> valfn` transforms the elements the next
+  level sees, as in Mathematica 15.
 
 ```mathematica
 In[1]:= GroupBy[{1, 2, 3, 4, 5, 6}, EvenQ]
@@ -237,6 +250,12 @@ Out[2]= <|False -> 25, True -> 30|>
 
 In[3]:= GroupBy[{{"x", 1}, {"y", 2}, {"x", 3}}, First -> Last, Total]
 Out[3]= <|"x" -> 4, "y" -> 2|>
+
+In[4]:= GroupBy[{1, 2, 3, 4, 5, 6}, {EvenQ, # > 3 &}]
+Out[4]= <|False -> <|False -> {1, 3}, True -> {5}|>, True -> <|False -> {2}, True -> {4, 6}|>|>
+
+In[5]:= GroupBy[{1, 2, 3, 4, 5, 6}, {EvenQ, # > 3 &}, Total]
+Out[5]= <|False -> <|False -> 4, True -> 5|>, True -> <|False -> 2, True -> 10|>|>
 
 In[4]:= GroupBy[<|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>, EvenQ]
 Out[4]= <|False -> <|"a" -> 1, "c" -> 3|>, True -> <|"b" -> 2, "d" -> 4|>|>
@@ -597,6 +616,21 @@ Ordering and aggregation act on the **values** of an association: `Sort` orders
 the entries by value and `SortBy[assoc, f]` by `f` of each value (keys follow),
 while `Total`/`Min`/`Max` reduce over the values. `Join` merges associations
 (later values win).
+- `Sort[assoc, p]` / `Sort[list, p]` order with the ordering function `p`.
+- `SortBy[coll, f, p]` compares the `f`-values with `p`; `SortBy[coll, f]`
+  breaks ties by the canonical order of the elements (entries, for an
+  association), `SortBy[coll, {f1, f2, ...}]` by input position.
+- `Ordering[assoc]`, `Ordering[assoc, n]`, `Ordering[assoc, n, p]` give
+  positions over the values.
+- `ReverseSort[assoc]` is descending with ties kept in input order;
+  `ReverseSort[coll, p]` is `Reverse[Sort[coll, p]]`;
+  `ReverseSortBy[coll, f, p]` is `SortBy[coll, f, p[#2, #1] &]`.
+
+**Features**
+- With an ordering function, the sort is Mathematica 15's top-down merge sort
+  (the merge keeps the left element unless `p[left, right]` is `False` or
+  `-1`), so ties under a strict `p` such as `Greater` land exactly where
+  Mathematica puts them. `Ordering[..., p]` and `KeySort[assoc, p]` share it.
 
 ```mathematica
 In[1]:= Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
@@ -610,14 +644,35 @@ Out[3]= 6
 
 In[4]:= Join[<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>]
 Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
+
+In[5]:= Sort[<|"a" -> 2, "b" -> 3, "c" -> 1|>, Greater]
+Out[5]= <|"b" -> 3, "a" -> 2, "c" -> 1|>
+
+In[6]:= SortBy[<|"a" -> {1, 2}, "b" -> {0, 5}, "c" -> {1, 1}|>, First, Greater]
+Out[6]= <|"a" -> {1, 2}, "c" -> {1, 1}, "b" -> {0, 5}|>
+
+In[7]:= Ordering[<|"a" -> 2, "b" -> 2, "c" -> 1|>, All, Greater]
+Out[7]= {2, 1, 3}
+
+In[8]:= ReverseSort[<|"a" -> 2, "b" -> 2, "c" -> 1|>]
+Out[8]= <|"a" -> 2, "b" -> 2, "c" -> 1|>
 ```
 
 ## KeySort
-Sorts an association into canonical key order.
+- `KeySort[assoc]` sorts an association into canonical key order.
+- `KeySort[assoc, p]` sorts the entries by key using the ordering function `p`.
+
+**Features**
+- `KeySort[assoc, p]` orders the keys exactly as `Sort[Keys[assoc], p]` would
+  (the shared merge sort), so a `p` that does not evaluate to `False`/`-1`
+  leaves the order alone, as in Mathematica 15.
 
 ```mathematica
 In[1]:= KeySort[<|"c" -> 3, "a" -> 1, "b" -> 2|>]
 Out[1]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
+
+In[2]:= KeySort[<|"c" -> 1, "a" -> 2, "b" -> 3|>, -Order[#1, #2] &]
+Out[2]= <|"c" -> 1, "b" -> 3, "a" -> 2|>
 ```
 
 ## KeySortBy
@@ -705,15 +760,107 @@ e.g. `ReverseSort[GroupBy[txns, First, Total[#[[All, 2]]] &]]` groups, reduces
 and ranks in one expression (see [`../../../examples/association-showcase.md`](../../../examples/association-showcase.md)).
 
 ## Append, Prepend
-`Append`/`Prepend` extend an association with new entries (non-mutating siblings
-of `AssociateTo`); an existing key is updated in place, preserving order.
+- `Append[assoc, rule]` / `Prepend[assoc, rule]` add an entry at the end / the
+  front; `rule` may also be a list of rules or an association.
+- `AppendTo[a, rule]` / `PrependTo[a, rule]` do the same and assign back to `a`.
+
+**Features**
+- As in Mathematica 15, an existing entry with the same key is **moved**: it is
+  removed from its old position and the new value is placed at the end
+  (`Append`) or the front (`Prepend`).
+- A non-rule element leaves `Append`/`Prepend` unevaluated; `AppendTo[a, 5]`
+  assigns the unevaluated `Append[a, 5]`, exactly like Mathematica.
+- `O(n + m)`: membership is tested through an indexed association of the new
+  rules.
 
 ```mathematica
 In[1]:= Append[<|"a" -> 1, "b" -> 2|>, "c" -> 3]
 Out[1]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
 
-In[2]:= Append[<|"a" -> 1|>, "a" -> 99]
-Out[2]= <|"a" -> 99|>
+In[2]:= Append[<|"a" -> 1, "b" -> 2|>, "a" -> 9]
+Out[2]= <|"b" -> 2, "a" -> 9|>
+
+In[3]:= Prepend[<|"a" -> 1, "b" -> 2|>, "b" -> 9]
+Out[3]= <|"b" -> 9, "a" -> 1|>
+```
+
+## Part (reading an association)
+- `assoc[[i]]`, `assoc[["k"]]`, `assoc[[Key[k]]]` give one value.
+- `assoc[[All]]`, `assoc[[m ;; n ;; s]]` give a sub-association.
+- `assoc[[{i, j, ...}]]` and `assoc[[{"k1", Key[k2], ...}]]` give a
+  sub-association in the requested order.
+- Deeper indices apply to the selected values: `assoc[[All, 1]]`,
+  `assoc[[All, "x"]]`, `list[[All, Key[k]]]`.
+- `assoc[key]` (the accessor) takes a **literal** key: it does not unwrap
+  `Key[...]`.
+
+**Features**
+- An absent key gives `Missing["KeyAbsent", spec]` with the spec as written:
+  `<|"a" -> 1|>[[Key["b"]]]` is `Missing["KeyAbsent", Key["b"]]`; inside a key
+  list it becomes the entry `k -> Missing[...]`.
+- As in Mathematica 15, the Part stays unevaluated for a position out of range,
+  a span running off either end (an empty span just inside, such as `3 ;; 2`,
+  gives `<||>`), positions mixed with keys, a bare symbol or real as the spec,
+  or a deeper index that fails on any selected value. (Mathematica also prints
+  `Part::partw`, `Part::take`, `Part::pmix`, `Part::pkspec1` or `Part::partd`;
+  Mathilda does not print these messages.)
+- Sub-associations share their entries with the source, so `RuleDelayed`
+  values stay delayed.
+
+```mathematica
+In[1]:= <|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>[[2 ;; 3]]
+Out[1]= <|"b" -> 2, "c" -> 3|>
+
+In[2]:= <|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>[[{-1, 1}]]
+Out[2]= <|"d" -> 4, "a" -> 1|>
+
+In[3]:= <|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>[[{"c", "z"}]]
+Out[3]= <|"c" -> 3, "z" -> Missing["KeyAbsent", "z"]|>
+
+In[4]:= <|"x" -> {1, 2}, "y" -> {3, 4}|>[[All, 1]]
+Out[4]= <|"x" -> 1, "y" -> 3|>
+
+In[5]:= <|"a" -> 1|>[Key["a"]]
+Out[5]= Missing["KeyAbsent", Key["a"]]
+```
+
+## Catenate, Insert, Pick, Partition, Reverse on associations
+- `Catenate[{assoc1, list2, ...}]` and `Catenate[assoc]` take each
+  association's **values**, giving a List.
+- `Insert[assoc, rule(s), pos]` inserts at an integer position, a key, `Key[k]`,
+  `{pos}` or `{{pos1}, {pos2}, ...}`; `{p, i, ...}` inserts into the value at `p`.
+- `Pick[assoc, {sel1, ...}]` / `Pick[assoc, sel, patt]` pick entries by position,
+  testing the values' selectors.
+- `Partition[assoc, n]` stays unevaluated.
+- `Reverse[assoc, levels]` descends into values below level 1.
+
+**Features**
+- `Insert` removes an existing entry with the inserted key, so the new position
+  wins; a non-rule element returns the association unchanged, and an
+  out-of-range position or absent key leaves the call unevaluated
+  (Mathematica 15).
+- An association used as a `Pick` selector is atomic: the whole expression if
+  it matches the pattern, else `Sequence[]`, as in Mathematica 15 (it no longer
+  builds malformed `Rule[]` nodes).
+
+```mathematica
+In[1]:= Catenate[{<|"a" -> 1|>, <|"b" -> 2|>}]
+Out[1]= {1, 2}
+
+In[2]:= Insert[<|"a" -> 1, "b" -> 2, "c" -> 3|>, "d" -> 4, Key["b"]]
+Out[2]= <|"a" -> 1, "d" -> 4, "b" -> 2, "c" -> 3|>
+
+In[3]:= Insert[<|"a" -> 1, "b" -> 2, "c" -> 3|>, "a" -> 9, 3]
+Out[3]= <|"b" -> 2, "a" -> 9, "c" -> 3|>
+
+In[4]:= Pick[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {True, False, True}]
+Out[4]= <|"a" -> 1, "c" -> 3|>
+
+In[5]:= Partition[<|"a" -> 1, "b" -> 2|>, 1]
+Out[5]= Partition[<|"a" -> 1, "b" -> 2|>, 1]
+
+In[6]:= Reverse[<|"x" -> {1, 2}, "y" -> {3, 4}|>, 2]
+Out[6]= <|"x" -> {2, 1}, "y" -> {4, 3}|>
 ```
 
 ## KeyValuePattern

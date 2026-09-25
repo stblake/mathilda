@@ -1331,6 +1331,11 @@ target_link_libraries(association_tests m)
 target_include_directories(association_tests PRIVATE ../src)
 add_test(NAME association_tests COMMAND association_tests)
 
+add_executable(assoc_read_tests test_assoc_read.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(assoc_read_tests m)
+target_include_directories(assoc_read_tests PRIVATE ../src)
+add_test(NAME assoc_read_tests COMMAND assoc_read_tests)
+
 # Association performance regression gate: fails if a hash-backed op scales
 # worse than O(n) (doubling-ratio check; machine-independent).
 add_executable(bench_assoc bench_assoc.c $<TARGET_OBJECTS:mathilda_common>)
@@ -3487,6 +3492,7 @@ if(USE_ECM)
     add_dependencies(boolean_tests build_ecm)
     add_dependencies(names_tests build_ecm)
     add_dependencies(association_tests build_ecm)
+    add_dependencies(assoc_read_tests build_ecm)
     add_dependencies(bench_assoc build_ecm)
     add_dependencies(bench_ndarray_linalg build_ecm)
     add_dependencies(bench_compile build_ecm)
