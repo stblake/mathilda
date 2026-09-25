@@ -272,10 +272,6 @@ between runs and remains cacheable. See docs/practices/cache-architecture.md.
 - `gen_usage.py` — collect_names, main, query
 - `gen_version.py` — main
 
-## comparisons/
-- `hpc_bench.py` — apply_scale, as_pair, bench, fmt, main, nest, ratio, run_mathilda
-- `ndarray_reductions_bench.sh`
-
 ## docs/experiments/
 - `build_pdfs.sh`
 - `run.sh`

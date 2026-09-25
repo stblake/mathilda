@@ -18,8 +18,8 @@ Mathematica.  Joins the cases by label, classifies each one, and writes:
 WHY A JOB AND NOT ANOTHER WRITE-UP.  `docs/experiments/` holds twenty
 experiments as narrative, and `docs/experiments/run.sh` only prints the three
 systems' raw text side by side -- it does not parse, join, rank, or classify.
-`comparisons/hpc_bench.py` does aggregate, but its kernels are inline in a
-1791-line Python file, so there is nothing on disk to edit or run standalone.
+An earlier aggregating harness existed but kept its kernels inline in a single
+large Python file, so there was nothing on disk to edit or run standalone.
 This runs from kept `.m`/`.py` pairs and produces a ranked report, so it can be
 re-run at the end of every week and the diff read as the week's dev work.
 

@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-30 → 2026-07-31 ·
 **Commits**: `6c78653` and follow-ups ·
-**Harness**: [`comparisons/hpc_bench.py`](../../../comparisons/hpc_bench.py) ·
+**Harness**: [`hpc_sweep_primitives.py`](hpc_sweep_primitives.py) ·
 **Report**: [`docs/design/performance.md`](../../design/performance.md) §2–§8
 
 Common method in [`README.md`](../README.md).
@@ -142,7 +142,7 @@ third sweep is built out of *application pipelines* rather than primitives — s
 
 ## Still open
 
-The gate allowlist in `hpc_bench.py` is a to-do list, not a settled state.
+The gate allowlist the sweep carried is a to-do list, not a settled state.
 Remaining from these two sweeps: `ListConvolve` (addressed in experiment 11),
 `Tally`'s hash probe, and the `Reverse`/`RotateLeft`/`Differences`/`Accumulate`
 band of serial buffer work — partly addressed in experiment 11, partly still

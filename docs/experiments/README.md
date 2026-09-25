@@ -59,8 +59,6 @@ Common to every experiment; stated once here rather than nineteen times.
   by a standalone A/B rather than reported — see
   [`13-molecular-dynamics/`](13-molecular-dynamics/README.md).
 
-Reproduce with [`comparisons/hpc_bench.py`](../../comparisons/hpc_bench.py).
-
 ## How each experiment is laid out
 
 One folder per experiment, and the same three files in each:

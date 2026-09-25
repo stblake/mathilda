@@ -15,9 +15,8 @@
    be excellent at everything it was tuned for and hopeless one category over,
    and only a wide net finds that.
    
-   THE FULL 43-KERNEL SWEEP is in comparisons/hpc_bench.py, from which this file
-   is generated -- run that for the complete table.  This file is the subset that
-   fits in one readable page and reproduces each group's headline.
+   THE FULL 43-KERNEL SWEEP has more kernels than this file, which is the subset
+   that fits in one readable page and reproduces each group's headline.
    ======================================================================= *)
 
 SetAttributes[bench, HoldRest];

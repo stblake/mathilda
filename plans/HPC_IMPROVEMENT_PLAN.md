@@ -276,10 +276,9 @@ switching the default.
 
 ### 1.5 `Eigenvalues` / `Eigenvectors` → LAPACK (7.0×)
 
-Deliberately deferred once before, for a stated reason:
-[`NDARRAY_REDUCTIONS_COMPARISON.md`](../comparisons/NDARRAY_REDUCTIONS_COMPARISON.md)
-records that the eigenvalue **ordering** convention (by |λ| descending, ties broken
-by position) cannot be reproduced from LAPACK output without risking parity.
+Deliberately deferred once before, for a stated reason: the eigenvalue
+**ordering** convention (by |λ| descending, ties broken by position) cannot be
+reproduced from LAPACK output without risking parity.
 
 That is a reason to build an ordering shim, not to skip the item:
 
@@ -611,7 +610,7 @@ There is nothing to win here.
 
 ## Phase 7 — the second sweep's leftovers (added 2026-07-31)
 
-*Five kernels were added to `hpc_bench.py` to probe subsystems the original 38
+*Five kernels were added to the sweep to probe subsystems the original 38
 never touched — a Krylov solver, direct convolution, ODE integration, an
 irregular hash-keyed reduction, interpolation. Three of the five found something
 and were fixed on the spot (see `docs/design/performance.md` §8); what is below
@@ -805,15 +804,15 @@ Per item:
 1. **Differential sweep** — the operation over a packed buffer against the same
    value as a plain list, printed forms byte-identical (N2). The existing
    `ladiff`/`sdiff`-style sweeps are the template.
-2. **Cross-system value agreement** — `hpc_bench.py` already fails if the two
-   systems disagree on a benchmark's recorded answer.
+2. **Cross-system value agreement** — the `benchmarks/` job flags `CHECK-FAIL`
+   if the systems disagree on a case's recorded answer.
 3. **The full 395-binary suite**, with only the known-stale `simplify_tests`
    expectation failing.
 4. **`bench_pack` / `bench_eval` / `bench_compile` / `bench_assoc` /
    `bench_ndarray_linalg`** all within gate, with the new row's baseline recorded.
 5. **Valgrind** definitely-lost unchanged from the macOS start-up baseline.
 
-And per phase: re-run `comparisons/hpc_bench.py` and update
+And per phase: re-measure the affected rows and update
 `docs/design/performance.md`'s tables and its §9 counts. The document is the
 scoreboard; it should never be stale relative to the code.
 

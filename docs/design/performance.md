@@ -10,8 +10,6 @@ Companion to [`compile.md`](compile.md) (the compiler's design) and
 [`COMPILE_EXAMPLE.md`](../compile_example/COMPILE_EXAMPLE.md) (one worked problem
 in depth). This document is the broad sweep: many kernels, shallow each.
 
-Reproduce with [`comparisons/hpc_bench.py`](../../comparisons/hpc_bench.py).
-
 ---
 
 ## 1. Method
@@ -90,8 +88,7 @@ column-major one `ndt_get` at a time; it is now a cache-blocked transpose, or a
 numeric kernels. `Eigenvalues` uses Mathilda's own QR iteration, kept in
 preference to LAPACK because the eigenvalue *ordering* convention (|λ| ties broken
 by position) cannot be reproduced from LAPACK output without risking parity —
-a deliberate trade recorded in
-[`NDARRAY_REDUCTIONS_COMPARISON.md`](../../comparisons/NDARRAY_REDUCTIONS_COMPARISON.md).
+a deliberate trade.
 `QRDecomposition` was 18.7× and is now 14.0×: it now routes to `dgeqrf`+`dorgqr`
 (plan phase 1.3), but LAPACK's own factorisation is only a few milliseconds of
 that. The rest is the boundary — `na_load_matrix`/`na_build_matrix` convert
@@ -338,7 +335,7 @@ reduction, and interpolation.
 | `Tally`, 10⁷ integers into 10⁴ bins | **19.0 ms** | 17.9 ms | 1.06× | 1.230 s |
 | `ListConvolve`, 1024² image, 5×5 kernel | 312 ms | **33.7 ms** | 9.27× | 420 ms |
 
-All five are from one full `hpc_bench.py` run, so they share a kernel session with
+All five are from one full benchmark run, so they share a kernel session with
 the 38 above — which is how the `NDSolve` row turned out to be measuring the wrong
 thing; see the last subsection.
 
@@ -1720,21 +1717,12 @@ passed for months.
 
 ## 18. Reproducing
 
-```bash
-make -j$(sysctl -n hw.ncpu)
-python3 comparisons/hpc_bench.py                       # full run, all three systems
-python3 comparisons/hpc_bench.py --only fft,sort       # a subset, by id
-python3 comparisons/hpc_bench.py --scale 0.05          # smaller sizes, smoke test
-python3 comparisons/hpc_bench.py --system mathilda     # one system
-python3 comparisons/hpc_bench.py --system mathilda,numpy
-```
-
-The harness prints the markdown table above, writes raw JSON with `--json`, and
-exits nonzero if any benchmark's recorded answer differs between systems. Set
-`WOLFRAMSCRIPT` if `wolframscript` is not at the default macOS path, and
-`HPC_PYTHON` for a Python that has NumPy and SciPy (it defaults to
-`/usr/local/bin/python3.11`, and is deliberately not the interpreter running the
-harness).
+The aggregating harness that produced these tables (`comparisons/hpc_bench.py`)
+has been removed from the repository; the tables above are the recorded snapshot
+from the measurement dates in §1. Representative kernels from this sweep are kept
+as standalone sources under [`docs/experiments/`](../../docs/experiments/)
+(experiments 9 and 10), and the current cross-system benchmark job — a separate,
+gap-driven kernel set — is [`benchmarks/`](../../benchmarks/) (`make bench-gap`).
 
 ## See also
 
@@ -1745,5 +1733,3 @@ harness).
   end to end, with the bytecode.
 - [`packed_arrays.md`](packed_arrays.md) — the automatic packing model that most
   of §10 is about.
-- [`NDARRAY_REDUCTIONS_COMPARISON.md`](../../comparisons/NDARRAY_REDUCTIONS_COMPARISON.md)
-  — Mathilda vs NumPy vs Mathematica on reductions and elementwise kernels.

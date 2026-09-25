@@ -1,7 +1,7 @@
 # Experiment 10 — Third sweep: eight real-application pipelines, three systems
 
 **Date**: 2026-07-31 ·
-**Harness**: [`comparisons/hpc_bench.py`](../../../comparisons/hpc_bench.py) ·
+**Harness**: [`hpc_sweep_applications.py`](hpc_sweep_applications.py) ·
 **Report**: [`docs/design/performance.md`](../../design/performance.md) §9 ·
 **Result**: N-body **55.5 s → 439 ms**; k-means and logistic regression went from
 not finishing to finishing

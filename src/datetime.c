@@ -25,8 +25,7 @@
  * any operation that uses nd_parallel_for / nd_parallel_reduce or the platform
  * BLAS reports roughly cores x its true duration -- Timing[Total[bigArray]] on
  * an 8-core host reads ~8x the time the user actually waited.  That makes
- * Timing[] unusable for benchmarking the threaded NDArray paths, and it is why
- * comparisons/NDARRAY_REDUCTIONS_COMPARISON.md carries a warning about it.
+ * Timing[] unusable for benchmarking the threaded NDArray paths.
  *
  * CLOCK_MONOTONIC rather than CLOCK_REALTIME so an NTP step or a manual clock
  * change during a long evaluation cannot produce a negative interval.

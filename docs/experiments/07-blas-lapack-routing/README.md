@@ -58,8 +58,7 @@ The spread widens exactly where Mathilda stops using LAPACK.
 numeric kernels. `Eigenvalues` uses Mathilda's own QR iteration, kept in
 preference to LAPACK because the eigenvalue **ordering** convention (|λ| ties
 broken by position) cannot be reproduced from LAPACK output without risking
-parity — a deliberate trade, recorded in
-[`NDARRAY_REDUCTIONS_COMPARISON.md`](../../../comparisons/NDARRAY_REDUCTIONS_COMPARISON.md).
+parity — a deliberate trade.
 
 `QRDecomposition` went from 18.7× to 14.0×: LAPACK's own factorisation is only a
 few milliseconds of it. The rest is the boundary, plus ~24 ms materialising the

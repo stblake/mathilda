@@ -2,8 +2,8 @@
 """Experiment 9 -- First sweep: classical HPC primitives
 
 A representative kernel from each of the seven groups the first sweep
-covered.  See ``README.md``; the full 43-kernel sweep is in
-``comparisons/hpc_bench.py``, from which this file is generated.
+covered.  See ``README.md``; this file is the readable subset of the full
+43-kernel sweep.
 
     python3 hpc_sweep_primitives.py
 

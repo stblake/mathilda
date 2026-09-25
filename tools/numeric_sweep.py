@@ -753,7 +753,7 @@ def agree(a, b, tol=1e-5):
     by 1.2e-6 relative -- and at tol=1e-6 the first run of this sweep reported
     eleven such rows as value mismatches while every one of them agreed.
 
-    performance.md §8 records the identical bug in hpc_bench.py ("the harness
+    performance.md §8 records the identical bug in the HPC sweep harness ("the harness
     disagreed with itself about agreement"), which is why it is worth a comment
     rather than a quiet constant: any comparison against a printed value must be
     no tighter than the shorter printing, and six figures is 1e-5.

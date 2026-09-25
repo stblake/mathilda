@@ -143,9 +143,8 @@ comparison.
 **narrative**: each one investigated a hypothesis, and the write-ups are the
 record. Its `run.sh` prints the three systems' raw text side by side — it does
 not parse, join, rank, or classify.
-[`comparisons/hpc_bench.py`](../comparisons/hpc_bench.py) does aggregate, but its
-kernels are inline in a 1791-line Python file, so there is nothing on disk to
-edit or run standalone.
+An earlier aggregating harness existed but kept its kernels inline in a single
+large Python file, so there was nothing on disk to edit or run standalone.
 
 This directory is the **job**: file pairs on disk, a machine-readable contract,
 and a ranked report that can be diffed week over week.

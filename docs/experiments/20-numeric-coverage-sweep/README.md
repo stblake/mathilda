@@ -288,7 +288,7 @@ Worth recording because both are the *method* failing, not the system.
 figures; NumPy's repr gives seventeen. At a 10⁻⁶ tolerance the first run
 reported eleven rows as value mismatches where every one of them agreed —
 `1.1752e+06` against `1175201.4651842169`. `performance.md` §8 records the
-identical bug in `hpc_bench.py`. Any comparison against a printed value must be
+identical bug in the HPC sweep harness. Any comparison against a printed value must be
 no tighter than the shorter printing.
 
 **Probes that encoded the wrong semantics.** `Greater` and `EvenQ` are not
