@@ -203,6 +203,10 @@ Applies a rule or list of rules to transform each subpart of an expression.
 - Applies a rule only once to an expression.
 - Returns `expr` unmodified if no rules apply.
 - Maps across lists of rules appropriately.
+- Inside an association the rules reach the values only, never the keys:
+  `<|a -> 1, b -> 2|> /. b -> a` is unchanged. An association is itself a rule
+  set with literal keys: `{x, y} /. <|x -> 1|>` is `{1, y}` (see
+  [Association atomicity](data-structures.md#association-atomicity-structural-functions)).
 
 ```mathematica
 In[1]:= {x, x^2, y, z} /. x -> 1

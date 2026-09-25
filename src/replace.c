@@ -4,6 +4,8 @@
 #include "match.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "assoc_struct.h"   /* associations are atomic: rules reach values only */
+#include "common.h"         /* head_is */
 #include "part.h"
 #include <stdlib.h>
 #include <string.h>
@@ -294,11 +296,66 @@ Expr* builtin_replace_part(Expr* res) {
     return NULL;
 }
 
+/* One rule of a parsed rule set. `pattern == NULL` marks an ASSOCIATION used
+ * as a rule set (ReplaceAll[{"a", "b"}, <|"a" -> 1|>] is {1, "b"}), and then
+ * `replacement` is that association: its keys match LITERALLY, never as
+ * patterns (x /. <|x_ -> 1|> is x in Mathematica), so a whole association is
+ * one entry answered by an O(1) keyed lookup instead of n pattern matches. */
 typedef struct {
     Expr* pattern;
     Expr* replacement;
     bool delayed;
 } ReplaceRule;
+
+/* Append the rule(s) `r` to a growable rule array: a two-argument Rule or
+ * RuleDelayed, or a well-formed association (one keyed entry, see above).
+ * Anything else is ignored. Borrows from `r`. */
+static void rules_push(ReplaceRule** rules, size_t* cap, size_t* count, Expr* r) {
+    bool dict = assoc_is_wellformed(r);
+    if (!dict && !is_rule2(r)) return;
+    if (*count == *cap) {
+        *cap = *cap ? *cap * 2 : 4;
+        *rules = realloc(*rules, sizeof(ReplaceRule) * (*cap));
+    }
+    ReplaceRule* slot = &(*rules)[(*count)++];
+    if (dict) {
+        slot->pattern = NULL;
+        slot->replacement = r;
+        slot->delayed = false;   /* a RuleDelayed value is returned held */
+    } else {
+        slot->pattern = r->data.function.args[0];
+        slot->replacement = r->data.function.args[1];
+        slot->delayed = r->data.function.head->data.symbol.name == SYM_RuleDelayed;
+    }
+}
+
+/* Collect the rules of `rules_expr` (a rule, an association, or a List of
+ * them) into a fresh array the caller frees; *out_count receives the count. */
+static ReplaceRule* rules_collect(Expr* rules_expr, size_t* out_count) {
+    size_t cap = 4, count = 0;
+    ReplaceRule* rules = malloc(sizeof(ReplaceRule) * cap);
+    if (head_is(rules_expr, SYM_List)) {
+        for (size_t i = 0; i < rules_expr->data.function.arg_count; i++)
+            rules_push(&rules, &cap, &count, rules_expr->data.function.args[i]);
+    } else {
+        rules_push(&rules, &cap, &count, rules_expr);
+    }
+    *out_count = count;
+    return rules;
+}
+
+/* Try one rule at `e`: the owned, bound (but unevaluated) replacement, or NULL
+ * when the rule does not apply. */
+static Expr* rule_try(const ReplaceRule* r, Expr* e) {
+    if (!r->pattern) {
+        Expr* v = assoc_lookup_value(r->replacement, e);
+        return v ? expr_copy(v) : NULL;
+    }
+    MatchEnv* env = env_new();
+    Expr* out = match(e, r->pattern, env) ? replace_bindings(r->replacement, env) : NULL;
+    env_free(env);
+    return out;
+}
 
 static int64_t get_expr_depth_replace(Expr* e, bool heads) {
     if (e->type != EXPR_FUNCTION) return 1;
@@ -306,9 +363,10 @@ static int64_t get_expr_depth_replace(Expr* e, bool heads) {
         const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
-    int64_t max_d = 0;
+    bool assoc = assoc_is_wellformed(e);     /* parts = values */
+    int64_t max_d = assoc ? 1 : 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        int64_t d = get_expr_depth_replace(e->data.function.args[i], heads);
+        int64_t d = get_expr_depth_replace(struct_part(e, i, assoc), heads);
         if (d > max_d) max_d = d;
     }
     if (heads) {
@@ -345,14 +403,17 @@ static Expr* do_replace_at_level(Expr* e, int64_t current_level, int64_t min_l, 
             new_head = expr_copy(new_head);
         }
 
+        /* An atomic association's level-1 parts are its values; keys are
+         * never offered to the rules (assoc_struct.h). */
+        bool assoc = assoc_is_wellformed(e);
         size_t count = e->data.function.arg_count;
         Expr** new_args = NULL;
         if (count > 0) new_args = malloc(sizeof(Expr*) * count);
         for (size_t i = 0; i < count; i++) {
-            new_args[i] = do_replace_at_level(e->data.function.args[i], current_level + 1, min_l, max_l, heads, rules, num_rules);
+            new_args[i] = do_replace_at_level(struct_part(e, i, assoc), current_level + 1, min_l, max_l, heads, rules, num_rules);
         }
 
-        new_e = expr_new_function(new_head, new_args, count);
+        new_e = struct_rebuild(e, assoc, new_head, new_args, count, true);
         if (new_args) free(new_args);
     } else {
         new_e = expr_copy(e);
@@ -360,14 +421,11 @@ static Expr* do_replace_at_level(Expr* e, int64_t current_level, int64_t min_l, 
 
     if (match_level) {
         for (size_t i = 0; i < num_rules; i++) {
-            MatchEnv* env = env_new();
-            if (match(new_e, rules[i].pattern, env)) {
-                Expr* repl = replace_bindings(rules[i].replacement, env);
-                env_free(env);
+            Expr* repl = rule_try(&rules[i], new_e);
+            if (repl) {
                 expr_free(new_e);
                 return repl;
             }
-            env_free(env);
         }
     }
 
@@ -395,28 +453,9 @@ static Expr* apply_replace_nested(Expr* expr, Expr* rules_expr, int64_t min_l, i
         }
     }
     
-    size_t cap = 4;
     size_t num_rules = 0;
-    ReplaceRule* rules = malloc(sizeof(ReplaceRule) * cap);
-    
-    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol.name == SYM_List) {
-        for (size_t i = 0; i < rules_expr->data.function.arg_count; i++) {
-            Expr* r = rules_expr->data.function.args[i];
-            if (is_rule(r) && r->data.function.arg_count == 2) {
-                if (num_rules == cap) { cap *= 2; rules = realloc(rules, sizeof(ReplaceRule) * cap); }
-                rules[num_rules].pattern = r->data.function.args[0];
-                rules[num_rules].replacement = r->data.function.args[1];
-                rules[num_rules].delayed = r->data.function.head->data.symbol.name == SYM_RuleDelayed;
-                num_rules++;
-            }
-        }
-    } else if (is_rule(rules_expr) && rules_expr->data.function.arg_count == 2) {
-        rules[num_rules].pattern = rules_expr->data.function.args[0];
-        rules[num_rules].replacement = rules_expr->data.function.args[1];
-        rules[num_rules].delayed = rules_expr->data.function.head->data.symbol.name == SYM_RuleDelayed;
-        num_rules++;
-    }
-    
+    ReplaceRule* rules = rules_collect(rules_expr, &num_rules);
+
     Expr* result;
     if (num_rules > 0) {
         result = do_replace_at_level(expr, 0, min_l, max_l, heads, rules, num_rules);
@@ -469,24 +508,25 @@ Expr* builtin_replace(Expr* res) {
 
 static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules) {
     for (size_t i = 0; i < num_rules; i++) {
-        MatchEnv* env = env_new();
-        if (match(e, rules[i].pattern, env)) {
-            Expr* repl = replace_bindings(rules[i].replacement, env);
-            env_free(env);
-            return repl;
-        }
-        env_free(env);
+        Expr* repl = rule_try(&rules[i], e);
+        if (repl) return repl;
     }
 
     if (e->type == EXPR_FUNCTION) {
         Expr* new_head = do_replace_all(e->data.function.head, rules, num_rules);
+        /* Inside an atomic association the rules reach the values only: the
+         * keys and the k -> v entries are never matched, so
+         * <|a -> 1, b -> 2|> /. b -> a keeps both keys (assoc_struct.h). The
+         * head is still tried, as in Mathematica: <|a -> 1|> /. Association
+         * -> g is g[a -> 1]. */
+        bool assoc = assoc_is_wellformed(e);
         size_t count = e->data.function.arg_count;
         Expr** new_args = NULL;
         if (count > 0) new_args = malloc(sizeof(Expr*) * count);
         for (size_t i = 0; i < count; i++) {
-            new_args[i] = do_replace_all(e->data.function.args[i], rules, num_rules);
+            new_args[i] = do_replace_all(struct_part(e, i, assoc), rules, num_rules);
         }
-        Expr* new_e = expr_new_function(new_head, new_args, count);
+        Expr* new_e = struct_rebuild(e, assoc, new_head, new_args, count, true);
         if (new_args) free(new_args);
         return new_e;
     }
@@ -508,28 +548,9 @@ static Expr* apply_replace_all_nested(Expr* expr, Expr* rules_expr) {
         }
     }
     
-    size_t cap = 4;
     size_t num_rules = 0;
-    ReplaceRule* rules = malloc(sizeof(ReplaceRule) * cap);
-    
-    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol.name == SYM_List) {
-        for (size_t i = 0; i < rules_expr->data.function.arg_count; i++) {
-            Expr* r = rules_expr->data.function.args[i];
-            if (is_rule(r) && r->data.function.arg_count == 2) {
-                if (num_rules == cap) { cap *= 2; rules = realloc(rules, sizeof(ReplaceRule) * cap); }
-                rules[num_rules].pattern = r->data.function.args[0];
-                rules[num_rules].replacement = r->data.function.args[1];
-                rules[num_rules].delayed = r->data.function.head->data.symbol.name == SYM_RuleDelayed;
-                num_rules++;
-            }
-        }
-    } else if (is_rule(rules_expr) && rules_expr->data.function.arg_count == 2) {
-        rules[num_rules].pattern = rules_expr->data.function.args[0];
-        rules[num_rules].replacement = rules_expr->data.function.args[1];
-        rules[num_rules].delayed = rules_expr->data.function.head->data.symbol.name == SYM_RuleDelayed;
-        num_rules++;
-    }
-    
+    ReplaceRule* rules = rules_collect(rules_expr, &num_rules);
+
     Expr* result;
     if (num_rules > 0) {
         result = do_replace_all(expr, rules, num_rules);
@@ -632,35 +653,29 @@ Expr* builtin_replacelist(Expr* res) {
         }
     }
     
-    size_t cap = 16;
     size_t num_rules = 0;
-    ReplaceRule* rules = malloc(sizeof(ReplaceRule) * cap);
-    
-    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol.name == SYM_List) {
-        for (size_t i = 0; i < rules_expr->data.function.arg_count; i++) {
-            Expr* r = rules_expr->data.function.args[i];
-            if (is_rule(r) && r->data.function.arg_count == 2) {
-                if (num_rules == cap) { cap *= 2; rules = realloc(rules, sizeof(ReplaceRule) * cap); }
-                rules[num_rules].pattern = r->data.function.args[0];
-                rules[num_rules].replacement = r->data.function.args[1];
-                rules[num_rules].delayed = r->data.function.head->data.symbol.name == SYM_RuleDelayed;
-                num_rules++;
-            }
-        }
-    } else if (is_rule(rules_expr) && rules_expr->data.function.arg_count == 2) {
-        rules[num_rules].pattern = rules_expr->data.function.args[0];
-        rules[num_rules].replacement = rules_expr->data.function.args[1];
-        rules[num_rules].delayed = rules_expr->data.function.head->data.symbol.name == SYM_RuleDelayed;
-        num_rules++;
-    }
-    
+    ReplaceRule* rules = rules_collect(rules_expr, &num_rules);
+
     ReplaceListState state;
     state.results = malloc(sizeof(Expr*) * 16);
     state.count = 0;
     state.cap = 16;
     state.limit = limit;
-    
+
     for (size_t i = 0; i < num_rules; i++) {
+        if (state.limit >= 0 && (int64_t)state.count >= state.limit) break;
+        if (!rules[i].pattern) {
+            /* An association rule set: its literal keys match at most once. */
+            Expr* repl = rule_try(&rules[i], expr);
+            if (repl) {
+                if (state.count == state.cap) {
+                    state.cap *= 2;
+                    state.results = realloc(state.results, sizeof(Expr*) * state.cap);
+                }
+                state.results[state.count++] = repl;
+            }
+            continue;
+        }
         state.replacement = rules[i].replacement;
         state.delayed = rules[i].delayed;
         
@@ -692,31 +707,7 @@ Expr* builtin_replacelist(Expr* res) {
  * *out_count to the number of valid rules collected.
  */
 static ReplaceRule* parse_replace_rules(Expr* rules_expr, size_t* out_count) {
-    size_t cap = 4;
-    size_t count = 0;
-    ReplaceRule* rules = malloc(sizeof(ReplaceRule) * cap);
-
-    if (rules_expr->type == EXPR_FUNCTION &&
-        rules_expr->data.function.head->type == EXPR_SYMBOL &&
-        rules_expr->data.function.head->data.symbol.name == SYM_List) {
-        for (size_t i = 0; i < rules_expr->data.function.arg_count; i++) {
-            Expr* r = rules_expr->data.function.args[i];
-            if (is_rule(r) && r->data.function.arg_count == 2) {
-                if (count == cap) { cap *= 2; rules = realloc(rules, sizeof(ReplaceRule) * cap); }
-                rules[count].pattern = r->data.function.args[0];
-                rules[count].replacement = r->data.function.args[1];
-                rules[count].delayed = r->data.function.head->data.symbol.name == SYM_RuleDelayed;
-                count++;
-            }
-        }
-    } else if (is_rule(rules_expr) && rules_expr->data.function.arg_count == 2) {
-        rules[count].pattern = rules_expr->data.function.args[0];
-        rules[count].replacement = rules_expr->data.function.args[1];
-        rules[count].delayed = rules_expr->data.function.head->data.symbol.name == SYM_RuleDelayed;
-        count++;
-    }
-    *out_count = count;
-    return rules;
+    return rules_collect(rules_expr, out_count);
 }
 
 /*
@@ -727,16 +718,8 @@ static ReplaceRule* parse_replace_rules(Expr* rules_expr, size_t* out_count) {
  */
 static Expr* replaceat_apply_rules(ReplaceRule* rules, size_t num_rules, Expr* target) {
     for (size_t i = 0; i < num_rules; i++) {
-        MatchEnv* env = env_new();
-        if (match(target, rules[i].pattern, env)) {
-            Expr* repl = replace_bindings(rules[i].replacement, env);
-            if (rules[i].delayed) {
-                repl = eval_and_free(repl);
-            }
-            env_free(env);
-            return repl;
-        }
-        env_free(env);
+        Expr* repl = rule_try(&rules[i], target);
+        if (repl) return rules[i].delayed ? eval_and_free(repl) : repl;
     }
     return expr_copy(target);
 }

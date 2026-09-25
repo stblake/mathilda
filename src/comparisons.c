@@ -15,6 +15,7 @@
 #include "internal.h"
 #include "interval.h"
 #include "zero_test.h"
+#include "assoc_struct.h"   /* Equal/Unequal between associations */
 #include <stdio.h>
 #include <gmp.h>
 #include <math.h>
@@ -277,6 +278,48 @@ static ZeroTestResult numeric_pair_zero_test(Expr* a, Expr* b) {
     return zt;
 }
 
+/* Equality of two associations, as Mathematica 15 decides it:
+ *
+ *     <|a -> 1, b -> 2|> == <|b -> 2, a -> 1|>    False  (order matters)
+ *     <|a -> 1|> == <|a -> 1.|>                   True   (values by Equal)
+ *     <|1 -> a|> == <|1. -> a|>                   False  (keys by SameQ)
+ *     <|a :> 1|> == <|a -> 1|>                    False  (Rule vs RuleDelayed)
+ *     <|a -> x|> == <|a -> y|>                    stays unevaluated
+ *
+ * The entries must agree pairwise, in order, in their Rule/RuleDelayed head and
+ * (structurally) in their key; the values are then compared with Equal itself.
+ * Returns ASSOC_EQ_TRUE / ASSOC_EQ_FALSE / ASSOC_EQ_UNKNOWN, or ASSOC_EQ_NA
+ * when a and b are not both well-formed associations (the caller's ordinary
+ * rules then apply; <|a -> 1|> == 1 stays unevaluated). */
+enum { ASSOC_EQ_NA = -2, ASSOC_EQ_UNKNOWN = -1, ASSOC_EQ_FALSE = 0, ASSOC_EQ_TRUE = 1 };
+
+static int assoc_equal_verdict(Expr* a, Expr* b) {
+    if (!assoc_is_wellformed(a) || !assoc_is_wellformed(b)) return ASSOC_EQ_NA;
+    size_t n = a->data.function.arg_count;
+    if (n != b->data.function.arg_count) return ASSOC_EQ_FALSE;
+    for (size_t i = 0; i < n; i++) {
+        Expr* ea = a->data.function.args[i];
+        Expr* eb = b->data.function.args[i];
+        if (ea->data.function.head->data.symbol.name != eb->data.function.head->data.symbol.name ||
+            !expr_eq(ea->data.function.args[0], eb->data.function.args[0]))
+            return ASSOC_EQ_FALSE;
+    }
+    int verdict = ASSOC_EQ_TRUE;
+    for (size_t i = 0; i < n; i++) {
+        Expr* va = a->data.function.args[i]->data.function.args[1];
+        Expr* vb = b->data.function.args[i]->data.function.args[1];
+        if (expr_eq(va, vb)) continue;
+        Expr* pair[2] = { expr_copy(va), expr_copy(vb) };
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Equal), pair, 2));
+        bool t = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+        bool f = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_False;
+        if (r) expr_free(r);
+        if (f) return ASSOC_EQ_FALSE;
+        if (!t) verdict = ASSOC_EQ_UNKNOWN;
+    }
+    return verdict;
+}
+
 /*
  * builtin_equal: Implements Equal[lhs, rhs, ...].
  * Equal returns True if its arguments are identical (SameQ) or numerically equal (2 == 2.0).
@@ -305,8 +348,14 @@ Expr* builtin_equal(Expr* res) {
         bool equal = false;
         bool definitely_unequal = false;
 
+        int av;
         if (expr_eq(a, b)) {
             equal = true;
+        } else if ((av = assoc_equal_verdict(a, b)) != ASSOC_EQ_NA) {
+            if (av == ASSOC_EQ_FALSE) return expr_new_symbol(SYM_False);
+            if (av == ASSOC_EQ_TRUE) equal = true;
+            else all_equal = false;
+            continue;
         } else {
             bool can_compare = false;
             int cmp = compare_numeric(a, b, &can_compare);
@@ -389,6 +438,11 @@ Expr* builtin_unequal(Expr* res) {
             } else if (expr_eq(a, b)) {
                 // Structural identity
                 equal = true;
+            } else if (assoc_is_wellformed(a) && assoc_is_wellformed(b)) {
+                /* Entry-wise, as Equal decides it (assoc_equal_verdict). */
+                int av = assoc_equal_verdict(a, b);
+                if (av == ASSOC_EQ_TRUE) equal = true;
+                else if (av == ASSOC_EQ_FALSE) definitely_unequal = true;
             } else {
                 bool can_compare;
                 int cmp = compare_numeric(a, b, &can_compare);

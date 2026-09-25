@@ -10,6 +10,7 @@
 #endif
 
 #include "core.h"
+#include "assoc_struct.h" /* association atomicity: AtomQ/Depth/LeafCount/Level */
 #include "symtab.h"
 #include "eval.h"
 #include "message.h"    /* message_init(): Quiet / Check / Message */
@@ -2347,6 +2348,10 @@ Expr* builtin_atomq(Expr* res) {
      * atomic. */
     if (is_packed_list(arg)) return expr_new_symbol(SYM_False);
 
+    /* A well-formed association is an atom (Mathematica: AtomQ[<|a -> 1|>] is
+     * True); a malformed Association[1, 2] is not. See assoc_struct.h. */
+    if (assoc_is_wellformed(arg)) return expr_new_symbol(SYM_True);
+
     if (arg->type == EXPR_FUNCTION) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = arg->data.function.head->data.symbol.name;
@@ -3290,7 +3295,15 @@ Expr* builtin_quotient(Expr* res) {
     return expr_new_integer(result);
 }
 
-static int64_t get_expr_depth(Expr* e, bool heads) {
+/* Depth of e. An atomic association counts only its values and is never
+ * shallower than a one-level container: Depth[<||>] and Depth[<|a -> 1|>] are
+ * 2, Depth[<|a -> <|b -> 1|>|>] is 3 (assoc_struct.h).
+ *
+ * `empty_is_two` selects the Depth[] builtin's rule that an empty compound has
+ * depth 2 (Mathematica: Depth[{}] and Depth[f[]] are 2). Level's negative
+ * level specs keep the other convention, which is also Mathematica's there:
+ * Level[{{}}, {-2}] is {{{}}}, so {} sits at level -1. */
+static int64_t get_expr_depth_ex(Expr* e, bool heads, bool empty_is_two) {
     /* An NDArray is the flat-storage equivalent of a rank-deep nested List,
      * so its Depth matches: a rank-r array has depth r + 1 (the atom level). */
     if (e->type == EXPR_NDARRAY) return (int64_t)e->data.ndarray.rank + 1;
@@ -3302,16 +3315,21 @@ static int64_t get_expr_depth(Expr* e, bool heads) {
         if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
 
-    int64_t max_d = 0;
+    bool assoc = assoc_is_wellformed(e);
+    int64_t max_d = (assoc || empty_is_two) ? 1 : 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        int64_t d = get_expr_depth(e->data.function.args[i], heads);
+        int64_t d = get_expr_depth_ex(struct_part(e, i, assoc), heads, empty_is_two);
         if (d > max_d) max_d = d;
     }
     if (heads) {
-        int64_t d_head = get_expr_depth(e->data.function.head, heads);
+        int64_t d_head = get_expr_depth_ex(e->data.function.head, heads, empty_is_two);
         if (d_head > max_d) max_d = d_head;
     }
     return max_d + 1;
+}
+
+static int64_t get_expr_depth(Expr* e, bool heads) {
+    return get_expr_depth_ex(e, heads, false);
 }
 
 Expr* builtin_depth(Expr* res) {
@@ -3326,19 +3344,22 @@ Expr* builtin_depth(Expr* res) {
             }
         }
     }
-    return expr_new_integer(get_expr_depth(e, heads));
+    return expr_new_integer(get_expr_depth_ex(e, heads, true));
 }
 
 int64_t leaf_count_internal(Expr* e, bool heads) {
     if (!e) return 0;
     if (e->type != EXPR_FUNCTION) return 1;
     
+    /* An atomic association contributes its head and its values only:
+     * LeafCount[<|a -> 1|>] is 2 (assoc_struct.h). */
+    bool assoc = assoc_is_wellformed(e);
     int64_t count = 0;
     if (heads) {
         count += leaf_count_internal(e->data.function.head, heads);
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        count += leaf_count_internal(e->data.function.args[i], heads);
+        count += leaf_count_internal(struct_part(e, i, assoc), heads);
     }
     
     if (!heads && count == 0 && e->data.function.arg_count == 0) return 0;
@@ -3429,9 +3450,11 @@ static void level_rec(Expr* e, int64_t current_level, int64_t min_l, int64_t max
     }
 
     if (e->type == EXPR_FUNCTION && !atomic) {
+        /* An association's parts are its values (assoc_struct.h). */
+        bool assoc = assoc_is_wellformed(e);
         if (heads) level_rec(e->data.function.head, current_level + 1, min_l, max_l, heads, results, count, cap);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            level_rec(e->data.function.args[i], current_level + 1, min_l, max_l, heads, results, count, cap);
+            level_rec(struct_part(e, i, assoc), current_level + 1, min_l, max_l, heads, results, count, cap);
         }
     }
 

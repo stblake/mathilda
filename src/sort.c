@@ -4,6 +4,7 @@
 #include "sym_names.h"
 #include "arithmetic.h"
 #include "assoc.h"
+#include "assoc_struct.h"   /* OrderedQ compares an association's values */
 #include "ndarray.h"   /* ndt_get for NDArray canonical ordering */
 #include "ndstruct.h"  /* ndstruct_sort / ndstruct_ordering NDArray fast paths */
 #include "pack.h"      /* pack_offer — a sorted machine list packs */
@@ -1352,11 +1353,14 @@ Expr* builtin_orderedq(Expr* res) {
     
     Expr* old_p = current_sort_p;
     current_sort_p = p;
-    
+
+    bool assoc = assoc_is_wellformed(list);
     bool ordered = true;
     for (size_t i = 0; i < count - 1; i++) {
-        Expr* ea = list->data.function.args[i];
-        Expr* eb = list->data.function.args[i+1];
+        /* An association is ordered by its values, never its keys:
+         * OrderedQ[<|a -> 2, b -> 1|>] is False (assoc_struct.h). */
+        Expr* ea = struct_part(list, i, assoc);
+        Expr* eb = struct_part(list, i + 1, assoc);
         
         int cmp = 0;
         if (current_sort_p == NULL) {
