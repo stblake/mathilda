@@ -249,6 +249,11 @@ static void qr_property_check(const char* label, const char* m_src,
     Expr* qr = run(buf);
     free(buf);
 
+    /* A machine-precision {q, r} result is a rectangular numeric tensor and so
+     * packs into an EXPR_NDArray (>= PACK_MIN_ELEMENTS), which has no args[].
+     * Materialise it back to a nested List before the raw walk below. */
+    qr = test_delist(qr);
+
     /* q and r submatrices. */
     Expr* q = qr->data.function.args[0];
     Expr* r = qr->data.function.args[1];
@@ -419,6 +424,7 @@ static void test_machine_rank_deficient_dup_col(void) {
 static void test_machine_zero(void) {
     /* All-zero -> rank 0 -> {{}, {}}. */
     Expr* res = run("QRDecomposition[{{0.0, 0.0}, {0.0, 0.0}}]");
+    res = test_delist(res);   /* unpack if the result came back packed */
     Expr* q = res->data.function.args[0];
     Expr* r = res->data.function.args[1];
     if (q->data.function.arg_count != 0 || r->data.function.arg_count != 0) {
@@ -450,6 +456,7 @@ static void test_machine_pivot_diag_monotone(void) {
         "QRDecomposition["
         "{{0.1, 0.2, 5.0}, {0.3, 6.0, 0.4}, {7.0, 0.5, 0.6}},"
         " Pivoting -> True]");
+    res = test_delist(res);   /* {q, r, P} packs as a 3x3x3 numeric tensor */
     Expr* r = res->data.function.args[1];
     double *re, *im; int rows, cols;
     bool ok = extract_matrix(r, &re, &im, &rows, &cols);
@@ -478,7 +485,9 @@ static void test_machine_pivot_identity(void) {
         " qr},"
         " qr = QRDecomposition[m, Pivoting -> True];"
         " Chop[m . qr[[3]] - ConjugateTranspose[qr[[1]]] . qr[[2]]]]");
-    /* Expect an all-zero 3x3. */
+    /* Expect an all-zero 3x3.  Chop yields exact-integer zeros, so the
+     * residual packs into an int64 NDArray; materialise it before the walk. */
+    res = test_delist(res);
     double *re, *im; int rows, cols;
     bool ok = extract_matrix(res, &re, &im, &rows, &cols);
     ASSERT(ok);
@@ -555,6 +564,7 @@ static void test_machine_fuzz(void) {
             " qr = QRDecomposition[m];"
             " Chop[Transpose[qr[[1]]] . qr[[2]] - m, 10^-10]]", buf);
         Expr* res = run(ek);
+        res = test_delist(res);   /* Chop'd residual may pack; unpack to walk */
         double *re, *im; int rows, cols;
         if (!extract_matrix(res, &re, &im, &rows, &cols)) {
             fprintf(stderr, "FUZZ iter %d: extract failed: %s\n", iter, buf);

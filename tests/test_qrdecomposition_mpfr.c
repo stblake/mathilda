@@ -251,6 +251,11 @@ static void qrm_property_check(const char* label, const char* m_src,
     Expr* qr = run(nbuf);
     free(nbuf);
 
+    /* An arbitrary-precision {q, r} result is a rectangular numeric tensor and
+     * packs into an EXPR_NDArray, which has no args[]. Materialise it back to a
+     * nested List before the raw walk below. */
+    qr = test_delist(qr);
+
     Expr* q = qr->data.function.args[0];
     Expr* r = qr->data.function.args[1];
 
@@ -386,6 +391,7 @@ static void test_mpfr_rank_deficient_pivoted_30(void) {
     Expr* qr = run(
         "QRDecomposition[N[{{1, 2, 1}, {3, 4, 3}, {5, 6, 5}}, 30], "
         "Pivoting -> True]");
+    qr = test_delist(qr);   /* unpack if the result came back packed */
     if (qr->type != EXPR_FUNCTION || qr->data.function.arg_count != 3) {
         fprintf(stderr, "FAIL rank-def pivoted: bad result shape\n");
         g_failures++;
@@ -408,6 +414,7 @@ static void test_mpfr_rank_deficient_pivoted_30(void) {
 
 static void test_mpfr_zero_matrix(void) {
     Expr* res = run("QRDecomposition[N[{{0, 0}, {0, 0}}, 60]]");
+    res = test_delist(res);   /* unpack if the result came back packed */
     Expr* q = res->data.function.args[0];
     Expr* r = res->data.function.args[1];
     if (q->data.function.arg_count != 0 || r->data.function.arg_count != 0) {
@@ -425,6 +432,7 @@ static void test_mpfr_pivot_diag_monotone(void) {
         "QRDecomposition[N["
         "{{1/10, 2/10, 5}, {3/10, 6, 4/10}, {7, 5/10, 6/10}}, 60],"
         " Pivoting -> True]");
+    res = test_delist(res);   /* {q, r, P} packs as a 3x3x3 numeric tensor */
     Expr* r = res->data.function.args[1];
     double *re, *im; int rows, cols;
     bool ok = extract_matrix(r, &re, &im, &rows, &cols);
@@ -464,6 +472,7 @@ static void test_mpfr_pivot_identity(void) {
     snprintf(buf, buflen, "QRDecomposition[N[%s, %d], Pivoting -> True]",
              m_src, digits);
     Expr* qr = run(buf);
+    qr = test_delist(qr);   /* {q, r, P} packs as a 3x3x3 numeric tensor */
     Expr* q = qr->data.function.args[0];
     Expr* r = qr->data.function.args[1];
     Expr* P = qr->data.function.args[2];
