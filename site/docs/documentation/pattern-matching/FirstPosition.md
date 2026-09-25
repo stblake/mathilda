@@ -37,4 +37,5 @@ _No verified examples yet for this function._
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
+- Tests: [`tests/test_assoc_atomicity.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_atomicity.c)
 - Tests: [`tests/test_firstposition.c`](https://github.com/stblake/mathilda/blob/main/tests/test_firstposition.c)

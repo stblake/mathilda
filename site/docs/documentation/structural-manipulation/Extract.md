@@ -69,14 +69,14 @@ Out[5]= {x, x}
 
 ## References
 
-**See also:** [Position](../../data-structures/Position/), [Part](../../structural-manipulation/Part/), [Span](../../structural-manipulation/Span/)
+**See also:** [Position](../../data-structures/Position/), [Part](../../data-structures/Part/), [Span](../../structural-manipulation/Span/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_assoc_forms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_forms.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_mapindexed.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapindexed.c)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
-- Tests: [`tests/test_part.c`](https://github.com/stblake/mathilda/blob/main/tests/test_part.c)
 
 ## Notes & additional examples
 

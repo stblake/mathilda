@@ -1,16 +1,21 @@
 # Data Structures
 
-61 built-in function(s) in this category.
+81 built-in function(s) in this category.
 
 - [`Append`](Append.md) — Append[expr, elem] adds elem to the end of expr.  _(Stable)_
 - [`Apply`](Apply.md) — f @@ expr or Apply[f, expr]  _(Stable)_
+- [`ApplyTo`](ApplyTo.md) — ApplyTo[x, f]  _(Stable)_
 - [`AssociateTo`](AssociateTo.md) — AssociateTo[s, key -> val]  |  AssociateTo[s, {rules}]  _(Stable)_
 - [`Association`](Association.md) — Association[key1 -> val1, key2 -> val2, ...]  (also written <|...|>)  _(Stable)_
+- [`AssociationComap`](AssociationComap.md) — AssociationComap[{f1, f2, ...}, x]  _(Stable)_
 - [`AssociationMap`](AssociationMap.md) — AssociationMap[f, {k1, k2, ...}]  _(Stable)_
 - [`AssociationQ`](AssociationQ.md) — AssociationQ[expr]  _(Stable)_
 - [`AssociationThread`](AssociationThread.md) — AssociationThread[{k...}, {v...}]  |  AssociationThread[keys -> values]  _(Stable)_
 - [`Cases`](Cases.md) — Cases[{e1, e2, ...}, pattern] gives a list of the ei that match the pattern.  _(Stable)_
+- [`Catenate`](Catenate.md) — Catenate[{e1, e2, ...}]  _(Stable)_
 - [`Count`](Count.md) — Count[list, pattern] gives the number of elements in list that match pattern.  _(Stable)_
+- [`CountDistinct`](CountDistinct.md) — CountDistinct[expr]  _(Stable)_
+- [`CountDistinctBy`](CountDistinctBy.md) — CountDistinctBy[expr, f]  _(Stable)_
 - [`Counts`](Counts.md) — Counts[list]  _(Stable)_
 - [`CountsBy`](CountsBy.md) — CountsBy[list, f]  _(Stable)_
 - [`Delete`](Delete.md) — Delete[expr, n] deletes the element at position n in expr.  _(Stable)_
@@ -18,18 +23,24 @@
 - [`DeleteDuplicates`](DeleteDuplicates.md) — DeleteDuplicates[list]  _(Stable)_
 - [`DeleteDuplicatesBy`](DeleteDuplicatesBy.md) — DeleteDuplicatesBy[expr, f]  _(Stable)_
 - [`DeleteMissing`](DeleteMissing.md) — DeleteMissing[expr]  _(Stable)_
+- [`Discard`](Discard.md) — Discard[expr, crit]  _(Stable)_
 - [`Drop`](Drop.md) — Drop[list, n]  _(Stable)_
 - [`First`](First.md) — First[expr] gives the first element of expr.  _(Stable)_
 - [`FoldList`](FoldList.md) — FoldList[f, x, list]  _(Stable)_
 - [`Gather`](Gather.md) — Gather[list]  _(Stable)_
 - [`GatherBy`](GatherBy.md) — GatherBy[list, f]  _(Stable)_
 - [`GroupBy`](GroupBy.md) — GroupBy[list, f]  _(Stable)_
+- [`Insert`](Insert.md) — Insert[expr, elem, n] inserts elem at position n in expr.  _(Stable)_
 - [`Join`](Join.md) — Join[list1, list2, ...]  _(Stable)_
+- [`JoinAcross`](JoinAcross.md) — JoinAcross[{a1, ...}, {b1, ...}, spec]  _(Stable)_
+- [`Key`](Key.md) — Key[k]  _(Stable)_
+- [`KeyComplement`](KeyComplement.md) — KeyComplement[{assoc1, assoc2, ...}]  _(Stable)_
 - [`KeyDrop`](KeyDrop.md) — KeyDrop[assoc, key]  |  KeyDrop[assoc, {k1, ...}]  _(Stable)_
 - [`KeyExistsQ`](KeyExistsQ.md) — KeyExistsQ[assoc, key]  _(Stable)_
-- [`KeyFreeQ`](KeyFreeQ.md) — KeyFreeQ[assoc, key]  _(Stable)_
+- [`KeyFreeQ`](KeyFreeQ.md) — KeyFreeQ[assoc, patt]  _(Stable)_
+- [`KeyIntersection`](KeyIntersection.md) — KeyIntersection[{assoc1, assoc2, ...}]  _(Stable)_
 - [`KeyMap`](KeyMap.md) — KeyMap[f, assoc]  _(Stable)_
-- [`KeyMemberQ`](KeyMemberQ.md) — KeyMemberQ[assoc, key]  _(Stable)_
+- [`KeyMemberQ`](KeyMemberQ.md) — KeyMemberQ[assoc, patt]  _(Stable)_
 - [`KeySelect`](KeySelect.md) — KeySelect[assoc, pred]  _(Stable)_
 - [`KeySort`](KeySort.md) — KeySort[assoc]  _(Stable)_
 - [`KeySortBy`](KeySortBy.md) — KeySortBy[assoc, f]  _(Stable)_
@@ -49,7 +60,13 @@
 - [`Merge`](Merge.md) — Merge[{assoc1, assoc2, ...}, f]  _(Stable)_
 - [`Min`](Min.md) — Min[x1, x2, ...]  _(Stable)_
 - [`MinMax`](MinMax.md) — MinMax[list]  _(Stable)_
+- [`Missing`](Missing.md) — Missing[]  |  Missing["reason"]  |  Missing["reason", data]  _(Stable)_
+- [`MissingQ`](MissingQ.md) — MissingQ[expr]  _(Stable)_
 - [`Most`](Most.md) — Most[expr] gives all but the last element of expr.  _(Stable)_
+- [`Normal`](Normal.md) — Normal[expr]  _(Stable)_
+- [`Part`](Part.md) — expr[[i]] or Part[expr, i]  _(Stable)_
+- [`Partition`](Partition.md) — Partition[list, n]  _(Stable)_
+- [`Pick`](Pick.md) — Pick[expr, sel]  _(Stable)_
 - [`Position`](Position.md) — Position[expr, pattern] gives a list of the positions at which objects matching pattern appear in expr.  _(Stable)_
 - [`PositionIndex`](PositionIndex.md) — PositionIndex[list]  _(Stable)_
 - [`Prepend`](Prepend.md) — Prepend[expr, elem] adds elem to the beginning of expr.  _(Stable)_
@@ -57,9 +74,12 @@
 - [`Select`](Select.md) — Select[list, crit]  _(Stable)_
 - [`Sort`](Sort.md) — Sort[list] sorts the elements of list into canonical order.  _(Stable)_
 - [`SortBy`](SortBy.md) — SortBy[list, f]  _(Stable)_
+- [`Splice`](Splice.md) — Splice[{e1, e2, ...}]  _(Stable)_
 - [`StandardDeviation`](StandardDeviation.md) — StandardDeviation[data] gives the standard deviation estimate of the elements in data.  _(Stable)_
+- [`SubsetQ`](SubsetQ.md) — SubsetQ[a, b]  _(Stable)_
 - [`Take`](Take.md) — Take[list, n]  _(Stable)_
 - [`TakeWhile`](TakeWhile.md) — TakeWhile[list, crit]  _(Stable)_
 - [`Tally`](Tally.md) — Tally[list] counts the number of occurrences of each distinct element in list.  _(Stable)_
+- [`Transpose`](Transpose.md) — Transpose[list]  _(Stable)_
 - [`Values`](Values.md) — Values[assoc]  _(Stable)_
 - [`Variance`](Variance.md) — Variance[data] gives the unbiased variance estimate of the elements in data.  _(Stable)_

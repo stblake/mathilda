@@ -10,17 +10,17 @@
  *
  * Each assembles a Graph[List verts, List edges] expression and returns it; the
  * evaluator canonicalizes and validates it via builtin_graph. Vertices are the
- * integers 1..n (except the explicit PathGraph[{...}] form). RandomGraph reuses
- * the system RNG by evaluating RandomSample over the candidate edges, so it
- * honors SeedRandom.
+ * integers 1..n (except the explicit PathGraph[{...}] form). RandomGraph draws
+ * from the system RNG exactly as RandomSample over the candidate edges would
+ * (random_sample_indices), so it honors SeedRandom.
  *
  * Memory (SPEC section 4): returns freshly-allocated trees; frees res.
  */
 
 #include "graph.h"
 #include "expr.h"
-#include "eval.h"
 #include "sym_names.h"
+#include "random.h"
 #include <stdlib.h>
 #include <stdint.h>   /* SIZE_MAX */
 
@@ -126,41 +126,42 @@ Expr* builtin_star_graph(Expr* res) {
 /* One random undirected graph: n vertices, m of the n(n-1)/2 candidate edges.
  * Returns NULL if the sampler declines or an allocation fails. Caller has
  * already validated n >= 0, m >= 0, maxe representable, m <= maxe.
- *
- * Assembly is inline rather than via make_graph: the edges arrive as an
- * already-built List (RandomSample's result), not the Expr** array make_graph
- * expects. */
+ */
 static Expr* one_random_graph(long n, unsigned long long maxe, long m) {
-    /* n <= 1 leaves no candidates, and RandomSample[{}, m] is itself
-     * unevaluated (is_nonempty_list, src/random.c:1707) — which is why
-     * RandomGraph[{0,0}] failed before RG-1. Answer directly instead.
-     *
-     * Deliberately NOT extended to m == 0 with n >= 2: that case works via
-     * RandomSample[cand, 0], and skipping the call would shift the RNG stream
-     * for every later draw. */
+    /* n <= 1 leaves no candidates: the empty graph. */
     if (maxe == 0) {
         Expr* gargs[2] = { make_list_owning(int_vertices(n), (size_t)n),
                            expr_new_function(expr_new_symbol(SYM_List), NULL, 0) };
         return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
     }
 
-    /* All candidate undirected edges. */
-    size_t ncand = (size_t)maxe;
-    Expr** cand = calloc(ncand, sizeof(Expr*));
-    if (!cand) return NULL;                  /* absurd n: unevaluated, not a crash */
-    size_t k = 0;
-    for (long i = 1; i <= n; i++)
-        for (long j = i + 1; j <= n; j++)
-            cand[k++] = undirected_edge(i, j);
-    Expr* cand_list = expr_new_function(expr_new_symbol(SYM_List), cand, ncand);
-    free(cand);
-
-    /* Sample m of them without replacement, via the seeded system RNG. */
-    Expr* sample_args[2] = { cand_list, expr_new_integer(m) };
-    Expr* sample_call = expr_new_function(expr_new_symbol("RandomSample"),
-                                          sample_args, 2);
-    Expr* sampled = evaluate(sample_call);   /* consumes sample_call */
-    if (!graph_is_list(sampled)) { expr_free(sampled); return NULL; }
+    /* Sample m of the maxe candidate edges without replacement. The candidate
+     * list {1<->2, 1<->3, ..., (n-1)<->n} (row-major) is never built:
+     * random_sample_indices makes exactly RandomSample[cand, m]'s draws, so a
+     * seeded RandomGraph is unchanged, and each index decodes to its pair --
+     * O(m) memory rather than O(n^2). */
+    size_t* idx = random_sample_indices((size_t)maxe, (size_t)m);
+    if (!idx) return NULL;
+    Expr** es = malloc((size_t)(m > 0 ? m : 1) * sizeof(Expr*));
+    if (!es) { free(idx); return NULL; }
+    for (long e = 0; e < m; e++) {
+        /* row i (1-based) holds pairs (i, i+1..n) and starts at
+         * off(i) = (i-1)(2n-i)/2; find the last row with off(i) <= idx */
+        unsigned long long x = idx[e];
+        long lo = 1, hi = n - 1;
+        while (lo < hi) {
+            long mid = lo + (hi - lo + 1) / 2;
+            unsigned long long off = (unsigned long long)(mid - 1)
+                * (unsigned long long)(2 * n - mid) / 2;
+            if (off <= x) lo = mid; else hi = mid - 1;
+        }
+        unsigned long long off = (unsigned long long)(lo - 1)
+            * (unsigned long long)(2 * n - lo) / 2;
+        es[e] = undirected_edge(lo, lo + 1 + (long)(x - off));
+    }
+    free(idx);
+    Expr* sampled = expr_new_function(expr_new_symbol(SYM_List), es, (size_t)m);
+    free(es);
 
     Expr* gargs[2] = { make_list_owning(int_vertices(n), (size_t)n), sampled };
     return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);

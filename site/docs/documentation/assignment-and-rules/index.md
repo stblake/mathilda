@@ -21,7 +21,7 @@
 - [`ReplaceAll`](ReplaceAll.md) — expr /. rules or ReplaceAll[expr, rules]  _(Stable)_
 - [`ReplaceAt`](ReplaceAt.md) — ReplaceAt[expr, rules, n]  _(Stable)_
 - [`ReplaceList`](ReplaceList.md) — ReplaceList[expr, rules] attempts to transform the entire expression expr by applying a rule or list of rules in all possible ways, and returns a list of the results obtained.  _(Stable)_
-- [`ReplaceRepeated`](ReplaceRepeated.md) — expr //. rules or ReplaceRepeated[expr, rules]  _(Experimental)_
+- [`ReplaceRepeated`](ReplaceRepeated.md) — expr //. rules or ReplaceRepeated[expr, rules]  _(Stable)_
 - [`Rule`](Rule.md) — lhs -> rhs or Rule[lhs, rhs]  _(Stable)_
 - [`RuleDelayed`](RuleDelayed.md) — lhs :> rhs or RuleDelayed[lhs, rhs]  _(Stable)_
 - [`Set`](Set.md) — lhs = rhs or Set[lhs, rhs]  _(Stable)_

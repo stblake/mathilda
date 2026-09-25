@@ -9,11 +9,11 @@
 
 **`Sort[list, p] sorts using the ordering function p.`**
 
-## Examples (10)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (4)
+### Basic examples (8)
 
 ```mathematica
 In[1]:= Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
@@ -27,28 +27,40 @@ Out[3]= 6
 
 In[4]:= Join[<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>]
 Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
+
+In[5]:= Sort[<|"a" -> 2, "b" -> 3, "c" -> 1|>, Greater]
+Out[5]= <|"b" -> 3, "a" -> 2, "c" -> 1|>
+
+In[6]:= SortBy[<|"a" -> {1, 2}, "b" -> {0, 5}, "c" -> {1, 1}|>, First, Greater]
+Out[6]= <|"a" -> {1, 2}, "c" -> {1, 1}, "b" -> {0, 5}|>
+
+In[7]:= Ordering[<|"a" -> 2, "b" -> 2, "c" -> 1|>, All, Greater]
+Out[7]= {2, 1, 3}
+
+In[8]:= ReverseSort[<|"a" -> 2, "b" -> 2, "c" -> 1|>]
+Out[8]= <|"a" -> 2, "b" -> 2, "c" -> 1|>
 ```
 
 ### Applications (6)
 
 ```mathematica
-In[5]:= Sort[{3, 1, 2}]
-Out[5]= {1, 2, 3}
+In[9]:= Sort[{3, 1, 2}]
+Out[9]= {1, 2, 3}
 
-In[6]:= Sort[{5, 3, 8, 1}, Greater]
-Out[6]= {8, 5, 3, 1}
+In[10]:= Sort[{5, 3, 8, 1}, Greater]
+Out[10]= {8, 5, 3, 1}
 
-In[7]:= Sort[{x^2, x, 1, x^3}]
-Out[7]= {1, x, x^2, x^3}
+In[11]:= Sort[{x^2, x, 1, x^3}]
+Out[11]= {1, x, x^2, x^3}
 
-In[8]:= Sort[{"banana", "apple", "cherry"}]
-Out[8]= {"apple", "banana", "cherry"}
+In[12]:= Sort[{"banana", "apple", "cherry"}]
+Out[12]= {"apple", "banana", "cherry"}
 
-In[9]:= Sort[{{2, 1}, {1, 3}, {1, 2}}]
-Out[9]= {{1, 2}, {1, 3}, {2, 1}}
+In[13]:= Sort[{{2, 1}, {1, 3}, {1, 2}}]
+Out[13]= {{1, 2}, {1, 3}, {2, 1}}
 
-In[10]:= Sort[Range[10], (Mod[#1, 3] < Mod[#2, 3]) &]
-Out[10]= {3, 9, 6, 10, 1, 7, 4, 2, 8, 5}
+In[14]:= Sort[Range[10], (Mod[#1, 3] < Mod[#2, 3]) &]
+Out[14]= {3, 9, 6, 10, 1, 7, 4, 2, 8, 5}
 ```
 
 ## Performance
@@ -86,18 +98,23 @@ size)` because it rebuilds the symbol set per pair. The comparator is deliberate
 symmetric (order-independent symbol collection) so `qsort` cannot oscillate on `Orderless`
 heads with many unknowns.
 
+- With an ordering function, the sort is Mathematica 15's top-down merge sort
+  (the merge keeps the left element unless `p[left, right]` is `False` or
+  `-1`), so ties under a strict `p` such as `Greater` land exactly where
+  Mathematica puts them. `Ordering[..., p]` and `KeySort[assoc, p]` share it.
+
 **Attributes:** `Protected`.
 
 ## References
 
-**See also:** [SortBy](../../data-structures/SortBy/), [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/), [Join](../../data-structures/Join/)
+**See also:** [SortBy](../../data-structures/SortBy/), [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/), [Join](../../data-structures/Join/), [Greater](../../comparisons/Greater/)
 
 - Source: [`src/sort.c`](https://github.com/stblake/mathilda/blob/main/src/sort.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_assoc_read.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_read.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_bignum_rational_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bignum_rational_numeric.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
-- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 
 ## Notes & additional examples
 

@@ -38,6 +38,11 @@ Out[3]= a == b
   (`NumericQ`), so a free symbol still stays symbolic (`x == 0`).
 - For symbolic arguments that cannot be decided, the expression is returned
   unevaluated (`x == y`).
+- Two associations are equal when their entries agree in order, with identical
+  keys and `Equal` values: `<|a -> 1|> == <|a -> 1.|>` is `True`,
+  `<|a -> 1, b -> 2|> == <|b -> 2, a -> 1|>` is `False`. `Unequal` uses the
+  same test (see
+  [Association atomicity](../data-structures/index.md)).
 - `Equal` is `Orderless` for the equality test but preserves Mathematica's
   printed form.
 - An `Indeterminate` argument gives `False`, per IEEE 754 — see
@@ -47,14 +52,14 @@ Out[3]= a == b
 
 ## References
 
-**See also:** [NumericQ](../../expression-information/NumericQ/), [Orderless](../../expression-information/Orderless/)
+**See also:** [NumericQ](../../expression-information/NumericQ/), [Unequal](../../comparisons/Unequal/), [Orderless](../../expression-information/Orderless/)
 
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification: [`docs/spec/builtins/comparisons.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/comparisons.md)
+- Tests: [`tests/test_assoc_atomicity.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_atomicity.c)
 - Tests: [`tests/test_comparisons.c`](https://github.com/stblake/mathilda/blob/main/tests/test_comparisons.c)
 - Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
 - Tests: [`tests/test_eliminate.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eliminate.c)
-- Tests: [`tests/test_expand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expand.c)
 
 ## Notes & additional examples
 

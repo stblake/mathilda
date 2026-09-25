@@ -83,6 +83,8 @@ option `Heads -> True` additionally includes function heads as level elements.
 - Positive level `n` refers to distance from the top (level 0 is the whole expression).
 - Negative level `-n` refers to distance from the bottom (depth `n`).
 - Level `-1` corresponds to atomic objects.
+- An association's parts are its values: `Level[<|a -> 1, b -> 2|>, {1}]` is
+  `{1, 2}` (see [Association atomicity](../data-structures/index.md)).
 - Lists subexpressions in post-order (depth-first), resulting in lexicographic ordering of indices.
 
 **Attributes:** `Protected`.
@@ -91,6 +93,7 @@ option `Heads -> True` additionally includes function heads as level elements.
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_assoc_atomicity.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_atomicity.c)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
 - Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
 - Tests: [`tests/test_solve_integers.c`](https://github.com/stblake/mathilda/blob/main/tests/test_solve_integers.c)

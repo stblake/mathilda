@@ -62,14 +62,14 @@ elements. On its own a bare `Span` stays unevaluated.
 
 ## References
 
-**See also:** [Part](../../structural-manipulation/Part/)
+**See also:** [Part](../../data-structures/Part/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_assoc_read.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_read.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
 - Tests: [`tests/test_mapat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapat.c)
-- Tests: [`tests/test_part.c`](https://github.com/stblake/mathilda/blob/main/tests/test_part.c)
 
 ## Notes & additional examples
 

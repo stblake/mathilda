@@ -34,6 +34,7 @@ Out[3]= SlotSequence[1]
 
 - Source: [`src/purefunc.c`](https://github.com/stblake/mathilda/blob/main/src/purefunc.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_assoc_forms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_forms.c)
 - Tests: [`tests/test_purefunc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_purefunc.c)
 
 ## Notes & additional examples

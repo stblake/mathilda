@@ -51,7 +51,7 @@ Out[5]= 13
 
 ## References
 
-**See also:** [SubtractFrom](../../assignment-and-rules/SubtractFrom/), [TimesBy](../../assignment-and-rules/TimesBy/), [DivideBy](../../assignment-and-rules/DivideBy/), [HoldFirst](../../other-advanced/HoldFirst/), [Part](../../structural-manipulation/Part/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Increment](../../assignment-and-rules/Increment/)
+**See also:** [SubtractFrom](../../assignment-and-rules/SubtractFrom/), [TimesBy](../../assignment-and-rules/TimesBy/), [DivideBy](../../assignment-and-rules/DivideBy/), [HoldFirst](../../other-advanced/HoldFirst/), [Part](../../data-structures/Part/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Increment](../../assignment-and-rules/Increment/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

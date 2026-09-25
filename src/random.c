@@ -1867,12 +1867,52 @@ Expr* builtin_randomchoice(Expr* res) {
     return NULL;
 }
 
+/* Slot map for fisher_yates_sparse: open addressing on the slot index; an
+ * absent key holds its own index (the implicit identity array). */
+typedef struct { size_t* key; size_t* val; char* used; size_t mask; } FySlots;
+
+static size_t* fy_slot(FySlots* m, size_t k) {
+    size_t h = (size_t)((k * 0x9E3779B97F4A7C15ULL) >> 17) & m->mask;
+    while (m->used[h] && m->key[h] != k) h = (h + 1) & m->mask;
+    if (!m->used[h]) { m->used[h] = 1; m->key[h] = k; m->val[h] = k; }
+    return &m->val[h];
+}
+
+static size_t* fisher_yates_sparse(size_t total, size_t n) {
+    size_t cap = 16;
+    while (cap < 4 * (n + 1)) cap <<= 1;      /* <= 2n keys: load <= 1/2 */
+    FySlots m;
+    m.key = malloc(cap * sizeof(size_t));
+    m.val = malloc(cap * sizeof(size_t));
+    m.used = calloc(cap, 1);
+    m.mask = cap - 1;
+    size_t* result = malloc(sizeof(size_t) * (n ? n : 1));
+    if (!m.key || !m.val || !m.used || !result) {
+        free(m.key); free(m.val); free(m.used); free(result);
+        return NULL;
+    }
+    for (size_t i = 0; i < n; i++) {
+        size_t j = i + random_index(total - i);
+        size_t* a = fy_slot(&m, i);
+        size_t* b = fy_slot(&m, j);           /* no growth, so a stays valid */
+        size_t tmp = *a; *a = *b; *b = tmp;
+        result[i] = *a;
+    }
+    free(m.key); free(m.val); free(m.used);
+    return result;
+}
+
 /*
  * Fisher-Yates partial shuffle: select n elements from indices [0, total)
  * without replacement. Returns an array of n selected indices.
  * Caller must free the returned array.
  */
 static size_t* fisher_yates_sample(size_t total, size_t n) {
+    /* A sparse sample (total much larger than n) runs the same partial shuffle
+     * over a hash map of the displaced slots instead of an identity array of
+     * length total: identical random_index draws, identical result, O(n)
+     * memory. */
+    if (total / 4 > n) return fisher_yates_sparse(total, n);
     size_t* indices = malloc(sizeof(size_t) * total);
     if (!indices) return NULL;
     for (size_t i = 0; i < total; i++) indices[i] = i;
@@ -1893,6 +1933,11 @@ static size_t* fisher_yates_sample(size_t total, size_t n) {
     for (size_t i = 0; i < n; i++) result[i] = indices[i];
     free(indices);
     return result;
+}
+
+size_t* random_sample_indices(size_t total, size_t n) {
+    if (n > total) return NULL;
+    return fisher_yates_sample(total, n);
 }
 
 /*

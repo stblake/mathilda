@@ -24,6 +24,12 @@ double random_uniform_01(void);
 
 int64_t random_internal_int_range(int64_t lo, int64_t hi);
 
+/* n distinct indices from [0, total), drawn from the USER-VISIBLE stream with
+ * exactly the draws RandomSample[list, n] makes for a list of length total, so
+ * a caller can sample a huge implicit list without building it (RandomGraph).
+ * O(n) memory when n is small next to total. Caller frees; NULL on failure. */
+size_t* random_sample_indices(size_t total, size_t n);
+
 void random_push_seed(uint64_t seed);
 void random_pop_seed(void);
 

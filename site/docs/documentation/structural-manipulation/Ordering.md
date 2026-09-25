@@ -16,7 +16,7 @@
 <details>
 <summary>Notes</summary>
 
-Ties are broken by original position (Ordering is stable). Ordering works on an expression with any head, and on an Association (ordering its values), always returning a list of integer positions. Ordering has a packed-array fast path and is compilable.
+Without p, ties are broken by original position (Ordering is stable). Ordering works on an expression with any head, and on an Association (ordering its values), always returning a list of integer positions. Ordering has a packed-array fast path and is compilable.
 
 </details>
 
@@ -61,7 +61,7 @@ Out[5]= {2, 3, 1}
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_assoc_read.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_read.c)
 - Tests: [`tests/test_bignum_rational_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bignum_rational_numeric.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_ml_classify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_classify.c)
-- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)

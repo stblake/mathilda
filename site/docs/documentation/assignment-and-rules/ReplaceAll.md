@@ -64,6 +64,10 @@ Out[10]= 5
 - Applies a rule only once to an expression.
 - Returns `expr` unmodified if no rules apply.
 - Maps across lists of rules appropriately.
+- Inside an association the rules reach the values only, never the keys:
+  `<|a -> 1, b -> 2|> /. b -> a` is unchanged. An association is itself a rule
+  set with literal keys: `{x, y} /. <|x -> 1|>` is `{1, y}` (see
+  [Association atomicity](../data-structures/index.md)).
 
 **Attributes:** `Protected`.
 
@@ -71,9 +75,10 @@ Out[10]= 5
 
 - Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_assoc_atomicity.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_atomicity.c)
+- Tests: [`tests/test_assoc_forms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_forms.c)
 - Tests: [`tests/test_condition_downvalue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_condition_downvalue.c)
 - Tests: [`tests/test_match_extensive.c`](https://github.com/stblake/mathilda/blob/main/tests/test_match_extensive.c)
-- Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
 
 ## Notes & additional examples
 

@@ -28,7 +28,7 @@
 - [`ReverseSortBy`](ReverseSortBy.md) — ReverseSortBy[list, f]  _(Stable)_
 - [`Scan`](Scan.md) — Scan[f, expr]  _(Stable)_
 - [`SelectFirst`](SelectFirst.md) — SelectFirst[list, pred]  _(Stable)_
-- [`Slot`](Slot.md) — # or Slot[n] represents the n-th argument of a pure function.  _(Stable)_
+- [`Slot`](Slot.md) — # or Slot[n] represents the n-th argument of a pure function. #name (Slot["name"], also #"str") is the value of key "name" in the association the function is applied to.  _(Stable)_
 - [`SlotSequence`](SlotSequence.md) — ## or SlotSequence[n] represents arguments from the n-th onward.  _(Stable)_
 - [`TakeLargest`](TakeLargest.md) — TakeLargest[list, n]  _(Stable)_
 - [`TakeLargestBy`](TakeLargestBy.md) — TakeLargestBy[list, f, n]  _(Stable)_

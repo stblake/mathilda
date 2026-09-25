@@ -59,14 +59,14 @@ Out[8]= {{1, 1, 1}, {1, 2, 1}}
 
 ## References
 
-**See also:** [Part](../../structural-manipulation/Part/), [Extract](../../structural-manipulation/Extract/)
+**See also:** [Part](../../data-structures/Part/), [Extract](../../structural-manipulation/Extract/)
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_assoc_atomicity.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_atomicity.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
 - Tests: [`tests/test_integrate_risch_transcendental.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_risch_transcendental.c)
-- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
 
 ## Notes & additional examples
 

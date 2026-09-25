@@ -3885,3 +3885,7 @@ is Refine-local, deliberately kept off the hot `prov_pos` path. Reduce/CAD has n
 cooperative abort, so `TimeConstraint` is checked between entailment calls only
 (best-effort), never via async `TimeConstrained` (malloc-lock crash risk). See
 harness memory `[[project_refine_string_rule_rhs_bare_name]]`.
+## Refpages are part of "documented" (2026-09-24)
+- Mistake: shipped ~120 graph heads with docstrings and grouped H3 spec prose, and called them documented. None had a refpage.
+- Rule: a builtin is documented only when `docs/spec/builtins/<cat>.md` has an H2 naming it (`## Name` or `## A / B`) with usage bullets, **Features** and fenced ```mathematica `In[n]:=`/`Out[n]=` examples. That is the only structure `site/generate.py` mines. Then run `make docs` and commit `site/docs`.
+- Check: `python3 -c "import sys; sys.path.insert(0,'site'); import generate as g; f=g.discover_builtins(); c,s=g.parse_spec_files(); print([n for n in f if n not in s])"` lists the builtins that have no section.

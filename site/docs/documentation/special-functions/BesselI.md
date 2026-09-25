@@ -57,7 +57,7 @@ Out[7]= 0.5
 
 ## References
 
-**See also:** [BesselJ](../../special-functions/BesselJ/), [BesselK](../../special-functions/BesselK/), [N](../../arithmetic/N/), [Normal](../../power-series/Normal/), [Plus](../../arithmetic/Plus/), [Series](../../power-series/Series/)
+**See also:** [BesselJ](../../special-functions/BesselJ/), [BesselK](../../special-functions/BesselK/), [N](../../arithmetic/N/), [Normal](../../data-structures/Normal/), [Plus](../../arithmetic/Plus/), [Series](../../power-series/Series/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

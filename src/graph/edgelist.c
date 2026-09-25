@@ -4,10 +4,11 @@
 
 #include "graph.h"
 #include "expr.h"
+#include "graph_hyper.h"
 
 Expr* builtin_edge_list(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     const Expr* g = res->data.function.args[0];
-    if (!graph_is_valid(g)) return NULL;
+    if (!graph_is_valid(g)) return hyp_edge_list(res);   /* Hypergraph, or NULL */
     return expr_copy(g->data.function.args[1]);
 }

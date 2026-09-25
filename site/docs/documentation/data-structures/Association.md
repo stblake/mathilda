@@ -9,11 +9,11 @@
 
 Represents an association mapping keys to values with unique, insertion-ordered keys (last value wins on duplicates). Arguments may be rules, lists of rules, or other associations.
 
-## Examples (5)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (5)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= <|"a" -> 1, "b" -> 2|>
@@ -30,6 +30,9 @@ Out[4]= 10
 
 In[5]:= <|"a" -> <|"b" -> 5|>|>["a", "b"]
 Out[5]= 5
+
+In[6]:= Association[{{"a" -> 1}, {"b" -> 2, {"c" -> 3}}}]
+Out[6]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
 ```
 
 ## Implementation notes
@@ -40,7 +43,7 @@ Out[5]= 5
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_assoc_atomicity.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_atomicity.c)
+- Tests: [`tests/test_assoc_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_ops.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_core_algebra.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core_algebra.c)
-- Tests: [`tests/test_mapat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapat.c)
-- Tests: [`tests/test_mapindexed.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapindexed.c)

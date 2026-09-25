@@ -46,7 +46,7 @@ In[7]:= -Grad[k q/r, {r, t, p}, "Spherical"]
 Out[7]= {(k q)/r^2, 0, 0}
 
 In[8]:= Laplacian[Sin[r^2], {r, t}, "Polar"] // Simplify
-Out[8]= 4 - 4 r^2
+Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
 ```
 
 ## Implementation notes

@@ -5,7 +5,7 @@
 
 ## Description
 
-# or Slot\[n\] represents the n-th argument of a pure function.
+# or Slot\[n\] represents the n-th argument of a pure function. #name (Slot\["name"\], also #"str") is the value of key "name" in the association the function is applied to.
 
 ## Examples (3)
 
@@ -34,10 +34,10 @@ Out[3]= Slot[2]
 
 - Source: [`src/purefunc.c`](https://github.com/stblake/mathilda/blob/main/src/purefunc.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_assoc_forms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_forms.c)
 - Tests: [`tests/test_coefficient_rules.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coefficient_rules.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
-- Tests: [`tests/test_minimalpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_minimalpolynomial.c)
 
 ## Notes & additional examples
 

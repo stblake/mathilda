@@ -76,6 +76,8 @@ Out[8]= $Failed
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_assoc_forms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_forms.c)
+- Tests: [`tests/test_hypergraph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hypergraph.c)
 - Tests: [`tests/test_tostring_toexpression.c`](https://github.com/stblake/mathilda/blob/main/tests/test_tostring_toexpression.c)
 
 ## Notes & additional examples

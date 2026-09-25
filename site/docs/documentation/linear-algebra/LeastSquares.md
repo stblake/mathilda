@@ -231,7 +231,7 @@ call goes through eval_and_free so its argument tree is consumed and its return 
 
 ## References
 
-**See also:** [PseudoInverse](../../linear-algebra/PseudoInverse/), [Transpose](../../structural-manipulation/Transpose/), [Rational](../../arithmetic/Rational/)
+**See also:** [PseudoInverse](../../linear-algebra/PseudoInverse/), [Transpose](../../data-structures/Transpose/), [Rational](../../arithmetic/Rational/)
 
 - C. C. Paige, M. A. Saunders, "LSQR: An Algorithm for Sparse Linear Equations and Sparse Least Squares", ACM TOMS 8 (1982).
 - Gene H. Golub, Charles F. Van Loan, *Matrix Computations*, 4th ed. (Johns Hopkins University Press, 2013).

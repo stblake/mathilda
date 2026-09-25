@@ -20,6 +20,7 @@
 #include "sym_names.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 /* True iff e is a function node whose head is the interned symbol `sym`. */
@@ -227,71 +228,62 @@ static int graph_shape_ok(const Expr* g) {
 
 /* ---- Phase 5: adjacency scaffolding --------------------------------------- */
 
-/* Validation over an already-built vertex index; defined with graph_is_valid
- * below, and shared with graph_build_adj so the index is built only once. */
-static int graph_check(const Expr* g, const GraphVIdx* ix);
 
 void graph_adj_free(GraphAdj* a) {
     if (!a) return;
-    for (int i = 0; i < a->n; i++) { free(a->out[i]); free(a->in[i]); }
+    free(a->block);
     free(a->out); free(a->in);
     free(a->outdeg); free(a->indeg);
     free(a);
 }
 
+/* CSR adjacency: every out[i]/in[i] row points into ONE int block (a->block),
+ * so a build is a handful of allocations rather than two per vertex, and the
+ * endpoints come pre-resolved from the validated-graph memo, so the two passes
+ * below are integer-only (no expr_hash/expr_eq per edge). */
 GraphAdj* graph_build_adj(const Expr* g) {
-    /* Validate and index in one pass: graph_is_valid would build and throw away
-     * the same vertex index, and the two fill passes below need it anyway. */
-    if (!graph_shape_ok(g)) return NULL;
+    const int *eu, *ev;
+    const unsigned char* edir;
+    if (!graph_edge_indices(g, &eu, &ev, &edir)) return NULL;   /* validates */
     const Expr* verts = g->data.function.args[0];
-    const Expr* edges = g->data.function.args[1];
-    if (!graph_is_list(verts) || !graph_is_list(edges)) return NULL;
-
-    GraphVIdx* ix = vidx_build(verts);
-    if (!ix) return NULL;
-    if (!graph_check(g, ix)) { graph_vidx_free(ix); return NULL; }
-
     int n = (int)verts->data.function.arg_count;
-    size_t ne = edges->data.function.arg_count;
+    size_t ne = g->data.function.args[1]->data.function.arg_count;
+    size_t nn = (size_t)(n > 0 ? n : 1);
 
     GraphAdj* a = calloc(1, sizeof(GraphAdj));
-    if (!a) { graph_vidx_free(ix); return NULL; }
+    if (!a) return NULL;
     a->n = n;
     a->verts = verts;
-    a->outdeg = calloc((size_t)(n > 0 ? n : 1), sizeof(int));
-    a->indeg  = calloc((size_t)(n > 0 ? n : 1), sizeof(int));
-    a->out    = calloc((size_t)(n > 0 ? n : 1), sizeof(int*));
-    a->in     = calloc((size_t)(n > 0 ? n : 1), sizeof(int*));
+    a->outdeg = calloc(nn, sizeof(int));
+    a->indeg  = calloc(nn, sizeof(int));
+    a->out    = malloc(nn * sizeof(int*));
+    a->in     = malloc(nn * sizeof(int*));
+    if (!a->outdeg || !a->indeg || !a->out || !a->in) { graph_adj_free(a); return NULL; }
 
     /* Pass 1: count degrees. */
+    size_t slots = 0;
     for (size_t k = 0; k < ne; k++) {
-        const Expr* e = edges->data.function.args[k];
-        const char* kind = graph_edge_kind(e);
-        int ia = graph_vidx_get(ix, e->data.function.args[0]);
-        int ib = graph_vidx_get(ix, e->data.function.args[1]);
-        a->outdeg[ia]++; a->indeg[ib]++;
-        if (kind == SYM_UndirectedEdge) { a->outdeg[ib]++; a->indeg[ia]++; }
+        a->outdeg[eu[k]]++; a->indeg[ev[k]]++;
+        if (!edir[k]) { a->outdeg[ev[k]]++; a->indeg[eu[k]]++; }
+        slots += edir[k] ? 2 : 4;
     }
-    for (int i = 0; i < n; i++) {
-        a->out[i] = (a->outdeg[i] > 0) ? calloc((size_t)a->outdeg[i], sizeof(int)) : NULL;
-        a->in[i]  = (a->indeg[i]  > 0) ? calloc((size_t)a->indeg[i],  sizeof(int)) : NULL;
-    }
+    a->block = malloc((slots > 0 ? slots : 1) * sizeof(int));
+    if (!a->block) { graph_adj_free(a); return NULL; }
+    int* p = a->block;
+    for (int i = 0; i < n; i++) { a->out[i] = p; p += a->outdeg[i]; }
+    for (int i = 0; i < n; i++) { a->in[i]  = p; p += a->indeg[i]; }
 
-    /* Pass 2: fill (reuse degree counters as write cursors). */
-    int* oc = calloc((size_t)(n > 0 ? n : 1), sizeof(int));
-    int* ic = calloc((size_t)(n > 0 ? n : 1), sizeof(int));
+    /* Pass 2: fill, in edge order (so neighbour order matches the old
+     * per-vertex build exactly). */
+    int* oc = calloc(nn, sizeof(int));
+    int* ic = calloc(nn, sizeof(int));
+    if (!oc || !ic) { free(oc); free(ic); graph_adj_free(a); return NULL; }
     for (size_t k = 0; k < ne; k++) {
-        const Expr* e = edges->data.function.args[k];
-        const char* kind = graph_edge_kind(e);
-        int ia = graph_vidx_get(ix, e->data.function.args[0]);
-        int ib = graph_vidx_get(ix, e->data.function.args[1]);
+        int ia = eu[k], ib = ev[k];
         a->out[ia][oc[ia]++] = ib;  a->in[ib][ic[ib]++] = ia;
-        if (kind == SYM_UndirectedEdge) {
-            a->out[ib][oc[ib]++] = ia;  a->in[ia][ic[ia]++] = ib;
-        }
+        if (!edir[k]) { a->out[ib][oc[ib]++] = ia;  a->in[ia][ic[ia]++] = ib; }
     }
     free(oc); free(ic);
-    graph_vidx_free(ix);
     return a;
 }
 
@@ -331,8 +323,16 @@ int graph_count_components(const GraphAdj* a, const char* removed, int* active_o
  * Callers have checked g's outer shape (Graph head, two List arguments).
  *
  * Rejects, in the order the MVP did: an un-normalized or 3-argument edge, a
- * self-loop, an endpoint absent from the vertex list, and a parallel edge. */
-static int graph_check(const Expr* g, const GraphVIdx* ix) {
+ * self-loop, an endpoint absent from the vertex list, and a parallel edge.
+ *
+ * On success, when `keep` is non-NULL the edge-key set built along the way is
+ * handed to the caller (who frees keep->slot) instead of being discarded, and
+ * the number of directed edges is written to *ndir. When `eu` is non-NULL,
+ * edge i's endpoint indices and direction go to eu/ev/edir[i]. The
+ * validated-graph memo below keeps all of it, so EdgeQ and the direction
+ * predicates answer in O(1) and adjacency building needs no hash lookups. */
+static int graph_check_keep(const Expr* g, const GraphVIdx* ix, EKSet* keep,
+                            size_t* ndir, int* eu, int* ev, unsigned char* edir) {
     const Expr* edges = g->data.function.args[1];
     size_t ne = edges->data.function.arg_count;
 
@@ -340,6 +340,7 @@ static int graph_check(const Expr* g, const GraphVIdx* ix) {
     if (!ekset_init(&seen, ne)) return 0;
 
     int ok = 1;
+    size_t directed = 0;
     for (size_t i = 0; i < ne && ok; i++) {
         const Expr* edge = edges->data.function.args[i];
         const char* kind = graph_edge_kind(edge);
@@ -353,11 +354,233 @@ static int graph_check(const Expr* g, const GraphVIdx* ix) {
         int ib = graph_vidx_get(ix, v);
         if (ia < 0 || ib < 0) { ok = 0; break; }   /* endpoint not a vertex    */
 
+        if (kind == SYM_DirectedEdge) directed++;
+        if (eu) { eu[i] = ia; ev[i] = ib; edir[i] = (unsigned char)(kind == SYM_DirectedEdge); }
         if (!ekset_insert(&seen, ia, ib, kind == SYM_DirectedEdge)) ok = 0;
     }
 
-    free(seen.slot);
+    if (ok && keep) { *keep = seen; *ndir = directed; }
+    else free(seen.slot);
     return ok;
+}
+
+/* True iff the set holds the key ekset_insert would build for (ia, ib). */
+static int ekset_contains(const EKSet* t, int ia, int ib, int directed) {
+    uint64_t a = (uint32_t)ia, b = (uint32_t)ib;
+    if (!directed && a > b) { uint64_t tmp = a; a = b; b = tmp; }
+    uint64_t k = (a << 32) | b;
+    size_t s = (size_t)((k * 0x9E3779B97F4A7C15ULL) >> 32) & t->mask;
+    while (t->slot[s].used) {
+        if (t->slot[s].k == k && t->slot[s].directed == (unsigned char)directed)
+            return 1;
+        s = (s + 1) & t->mask;
+    }
+    return 0;
+}
+
+/* ---- Validated-graph memo --------------------------------------------------
+ * Graphs are plain Exprs, so every accessor used to re-validate its argument
+ * from scratch -- building a vertex hash index and an edge-key set, O(V + E) --
+ * before answering even an O(1) question: VertexQ/EdgeQ/EdgeCount on a
+ * 100000-vertex graph each spent ~2-6 ms there, against ~0 ms for networkx and
+ * for Mathematica's atomic Graph object.
+ *
+ * The memo remembers the last few graphs that passed validation, together with
+ * the vertex index and edge-key set validation built anyway. It is keyed on
+ * the node POINTER, which is sound because each slot holds a reference
+ * (expr_copy): a node with a live reference cannot be freed, so its address
+ * cannot be recycled for a different graph, and a node with refcount > 1 is
+ * immutable (mutators expr_unshare first -- see struct Expr). A structurally
+ * equal graph at another address simply misses and is validated afresh.
+ *
+ * Bounded at GRAPH_MEMO_SLOTS entries, evicted least-recently-used, so at most that
+ * many graphs are kept alive past their last user reference. Module-static
+ * with no locking, following the g_qqbar_cache precedent (flint_qqbar.c).
+ * Only valid graphs are memoized: an invalid one is re-checked every call. */
+#define GRAPH_MEMO_SLOTS 8
+
+typedef struct {
+    Expr*      g;       /* owned reference; NULL = empty slot                 */
+    GraphVIdx* ix;      /* vertex -> index; keys borrowed from g's vertex List */
+    EKSet      ek;      /* every edge's key, as built by graph_check          */
+    size_t     ndir;    /* number of DirectedEdges                            */
+    int*       eu;      /* eu[k], ev[k]: endpoint indices of edge k           */
+    int*       ev;
+    unsigned char* edir;/* edir[k]: 1 if edge k is a DirectedEdge             */
+    uint64_t   last_used; /* LRU clock value of the latest hit/insert         */
+    signed char prop[GRAPH_PROP_COUNT];  /* cached answers; -1 = not computed */
+    Expr*      cached[GRAPH_CACHED_COUNT]; /* owned cached results, or NULL  */
+} GraphMemo;
+
+static void graph_memo_clear(GraphMemo* m) {
+    graph_vidx_free(m->ix); free(m->ek.slot);
+    free(m->eu); free(m->ev); free(m->edir);
+    for (int i = 0; i < GRAPH_CACHED_COUNT; i++) if (m->cached[i]) expr_free(m->cached[i]);
+    expr_free(m->g);
+    memset(m, 0, sizeof(*m));
+}
+
+static GraphMemo g_graph_memo[GRAPH_MEMO_SLOTS];
+static uint64_t g_graph_memo_clock = 0;   /* LRU clock */
+
+/* Store a validated graph's artefacts in a free or least-recently-used slot, taking
+ * ownership of ix/ek/eu/ev/edir. */
+static GraphMemo* graph_memo_insert(const Expr* g, GraphVIdx* ix, EKSet ek, size_t ndir,
+                                    int* eu, int* ev, unsigned char* edir) {
+    /* Evict an empty slot, else the least recently used one: a head working
+     * on two graphs (GraphUnion, FindGraphIsomorphism, ...) keeps touching
+     * both, so LRU never evicts a partner that round-robin would. */
+    GraphMemo* m = &g_graph_memo[0];
+    for (int i = 0; i < GRAPH_MEMO_SLOTS; i++) {
+        if (!g_graph_memo[i].g) { m = &g_graph_memo[i]; break; }
+        if (g_graph_memo[i].last_used < m->last_used) m = &g_graph_memo[i];
+    }
+    if (m->g) graph_memo_clear(m);
+    /* expr_copy only bumps the refcount; it never writes the node's structure,
+     * so casting away const here is safe. */
+    m->g = expr_copy((Expr*)g);
+    m->ix = ix;
+    m->ek = ek;
+    m->ndir = ndir;
+    m->eu = eu; m->ev = ev; m->edir = edir;
+    m->last_used = ++g_graph_memo_clock;
+    for (int i = 0; i < GRAPH_PROP_COUNT; i++) m->prop[i] = -1;
+    return m;
+}
+
+/* The memo entry for g, validating (and memoizing) it on a miss. NULL iff g is
+ * not a valid graph (or validation could not allocate). */
+/* True iff a and b are Graph nodes with the same arity whose arguments are the
+ * very same nodes (pointer-equal) -- i.e. b is a fresh wrapper around a's
+ * parts, which is what the evaluator hands a builtin when it re-evaluates a
+ * stored graph (or the constructor's result) without changing any argument. */
+static int same_graph_parts(const Expr* a, const Expr* b) {
+    if (!a || !b || a->type != EXPR_FUNCTION || b->type != EXPR_FUNCTION) return 0;
+    size_t n = a->data.function.arg_count;
+    if (n != b->data.function.arg_count
+        || a->data.function.head->type != EXPR_SYMBOL
+        || b->data.function.head->type != EXPR_SYMBOL
+        || a->data.function.head->data.symbol.name != b->data.function.head->data.symbol.name)
+        return 0;
+    for (size_t i = 0; i < n; i++)
+        if (a->data.function.args[i] != b->data.function.args[i]) return 0;
+    return 1;
+}
+
+static const GraphMemo* graph_memo(const Expr* g) {
+    for (int i = 0; i < GRAPH_MEMO_SLOTS; i++)
+        if (g_graph_memo[i].g == g) {
+            g_graph_memo[i].last_used = ++g_graph_memo_clock;
+            return &g_graph_memo[i];
+        }
+
+    /* A fresh wrapper around a memoized graph's own argument nodes: re-key the
+     * entry to the new node instead of re-validating (which cost ~58 ms for a
+     * 5x10^5-edge graph on every use of a variable holding it, and burned a
+     * second slot per constructed graph). Sound: the vertex/edge Lists are the
+     * same nodes, now kept alive by the new wrapper's reference, so the index
+     * keys and every cached answer still describe it exactly. */
+    for (int i = 0; i < GRAPH_MEMO_SLOTS; i++) {
+        GraphMemo* m = &g_graph_memo[i];
+        if (m->g && same_graph_parts(m->g, g)) {
+            Expr* old = m->g;
+            m->g = expr_copy((Expr*)g);   /* refcount bump only; see graph_memo_insert */
+            expr_free(old);
+            m->last_used = ++g_graph_memo_clock;
+            return m;
+        }
+    }
+
+    if (!graph_shape_ok(g)) return NULL;
+    const Expr* verts = g->data.function.args[0];
+    const Expr* edges = g->data.function.args[1];
+    if (!graph_is_list(verts) || !graph_is_list(edges)) return NULL;
+    size_t ne = edges->data.function.arg_count, nb = ne > 0 ? ne : 1;
+    /* Un-normalized edges (u -> v sugar, as Graph's constructor sees on every
+     * fresh call) fail here in O(E) pointer checks, before any hashing. */
+    for (size_t k = 0; k < ne; k++)
+        if (!graph_edge_kind(edges->data.function.args[k])) return NULL;
+
+    GraphVIdx* ix = vidx_build(verts);
+    int* eu = malloc(nb * sizeof(int));
+    int* ev = malloc(nb * sizeof(int));
+    unsigned char* edir = malloc(nb);
+    EKSet ek;
+    size_t ndir = 0;
+    if (!ix || !eu || !ev || !edir
+        || !graph_check_keep(g, ix, &ek, &ndir, eu, ev, edir)) {
+        graph_vidx_free(ix); free(eu); free(ev); free(edir);
+        return NULL;
+    }
+    return graph_memo_insert(g, ix, ek, ndir, eu, ev, edir);
+}
+
+int graph_memo_seed(const Expr* g, GraphVIdx* ix, int* eu, int* ev, unsigned char* edir) {
+    size_t ne = g->data.function.args[1]->data.function.arg_count;
+    EKSet ek;
+    int ok = ekset_init(&ek, ne);
+    size_t ndir = 0;
+    for (size_t k = 0; k < ne && ok; k++) {
+        if (eu[k] == ev[k]) ok = 0;                    /* self-loop     */
+        else if (!ekset_insert(&ek, eu[k], ev[k], edir[k])) ok = 0;  /* parallel */
+        ndir += edir[k];
+    }
+    if (!ok) {
+        free(ek.slot); graph_vidx_free(ix); free(eu); free(ev); free(edir);
+        return 0;
+    }
+    graph_memo_insert(g, ix, ek, ndir, eu, ev, edir);
+    return 1;
+}
+
+int graph_vertex_position(const Expr* g, const Expr* v) {
+    const GraphMemo* m = graph_memo(g);
+    if (!m) return -2;
+    return graph_vidx_get(m->ix, v);
+}
+
+int graph_has_edge(const Expr* g, const Expr* u, const Expr* v, int directed) {
+    const GraphMemo* m = graph_memo(g);
+    if (!m) return -1;
+    int ia = graph_vidx_get(m->ix, u);
+    int ib = graph_vidx_get(m->ix, v);
+    if (ia < 0 || ib < 0) return 0;
+    return ekset_contains(&m->ek, ia, ib, directed);
+}
+
+long graph_directed_edge_count(const Expr* g) {
+    const GraphMemo* m = graph_memo(g);
+    return m ? (long)m->ndir : -1;
+}
+
+int graph_edge_indices(const Expr* g, const int** eu, const int** ev,
+                       const unsigned char** directed) {
+    const GraphMemo* m = graph_memo(g);
+    if (!m) return 0;
+    *eu = m->eu; *ev = m->ev; *directed = m->edir;
+    return 1;
+}
+
+int graph_prop_get(const Expr* g, GraphProp p) {
+    const GraphMemo* m = graph_memo(g);
+    return m ? m->prop[p] : -1;
+}
+
+void graph_prop_set(const Expr* g, GraphProp p, int value) {
+    GraphMemo* m = (GraphMemo*)graph_memo(g);
+    if (m) m->prop[p] = (signed char)(value ? 1 : 0);
+}
+
+Expr* graph_cached_get(const Expr* g, GraphCached c) {
+    GraphMemo* m = (GraphMemo*)graph_memo(g);
+    return (m && m->cached[c]) ? expr_copy(m->cached[c]) : NULL;
+}
+
+void graph_cached_set(const Expr* g, GraphCached c, Expr* value) {
+    GraphMemo* m = (GraphMemo*)graph_memo(g);
+    if (!m) return;
+    if (m->cached[c]) expr_free(m->cached[c]);
+    m->cached[c] = expr_copy(value);
 }
 
 int graph_is_valid(const Expr* g) {
@@ -368,11 +591,7 @@ int graph_is_valid(const Expr* g) {
     const Expr* edges = g->data.function.args[1];
     if (!graph_is_list(verts) || !graph_is_list(edges)) return 0;
 
-    GraphVIdx* ix = vidx_build(verts);
-    if (!ix) return 0;                  /* cannot index => cannot validate */
-    int ok = graph_check(g, ix);
-    graph_vidx_free(ix);
-    return ok;
+    return graph_memo(g) != NULL;
 }
 
 Expr* graph_resolve_edge_weights(const Expr* g) {

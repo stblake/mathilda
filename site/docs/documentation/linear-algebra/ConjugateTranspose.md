@@ -61,7 +61,7 @@ Out[6]= True
 
 ## References
 
-**See also:** [Transpose](../../structural-manipulation/Transpose/)
+**See also:** [Transpose](../../data-structures/Transpose/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

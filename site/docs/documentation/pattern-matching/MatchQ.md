@@ -59,10 +59,10 @@ Out[7]= True
 
 - Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
 - Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
+- Tests: [`tests/test_assoc_atomicity.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_atomicity.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_backtrack.c`](https://github.com/stblake/mathilda/blob/main/tests/test_backtrack.c)
 - Tests: [`tests/test_basin_hopping.c`](https://github.com/stblake/mathilda/blob/main/tests/test_basin_hopping.c)
-- Tests: [`tests/test_direct.c`](https://github.com/stblake/mathilda/blob/main/tests/test_direct.c)
 
 ## Notes & additional examples
 

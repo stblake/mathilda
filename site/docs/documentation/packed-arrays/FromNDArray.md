@@ -27,7 +27,7 @@ Out[2]= {1.0, 2.0}
 
 ## References
 
-**See also:** [Normal](../../power-series/Normal/)
+**See also:** [Normal](../../data-structures/Normal/)
 
 - Source: [`src/pack.c`](https://github.com/stblake/mathilda/blob/main/src/pack.c)
 - Specification: [`docs/spec/builtins/packed-arrays.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/packed-arrays.md)
