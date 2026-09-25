@@ -3079,6 +3079,162 @@ static Expr* fmpz_mpoly_to_expr(const fmpz_mpoly_t P, const fmpz_mpoly_ctx_t ctx
     return r;
 }
 
+/* ================================================================== */
+/*  TowerCRE: persistent multivariate-Q rational-function handles.      */
+/*                                                                      */
+/*  A session holds an fmpz_mpoly_ctx over a fixed list of generators   */
+/*  (the tower variables x, transcendentals, ...) and an arena of        */
+/*  fmpz_mpoly_q values addressed by integer handles.  Arithmetic        */
+/*  (add/sub/mul/div/deriv) stays in native num/den form across a whole  */
+/*  chain of operations -- Expr is crossed only once in (from_expr) and  */
+/*  once out (to_expr) -- so the ParallelMixedTower tower/residue        */
+/*  substrate no longer round-trips every coefficient op through the     */
+/*  generic evaluator (the A28 Orderless-sort and A1/A2/A3 evaluator-    */
+/*  churn cost, Charlwood native-CRE build M1: K = Q).  Every value is   */
+/*  kept canonical (lowest terms, positive denominator) by              */
+/*  fmpz_mpoly_q's own canonicalisation.  The whole arena is freed at    */
+/*  once (tcre_free); individual handles are never released, matching    */
+/*  the per-integration lifetime of the tower.                          */
+/* ================================================================== */
+
+struct TowerCRE {
+    fmpz_mpoly_ctx_t ctx;         /* over `gens`, ORD_LEX; var i == gens.names[i] */
+    VarSet gens;
+    fmpz_mpoly_q_struct* vals;    /* the handle arena (handle == index) */
+    int count;
+    int cap;
+    int ok;                       /* 0 if a decline was recorded (informational) */
+};
+
+/* Grow the arena by one initialised (zero) value; return its handle or -1. */
+static int tcre_slot(TowerCRE* t) {
+    if (t->count == t->cap) {
+        int nc = t->cap ? t->cap * 2 : 16;
+        fmpz_mpoly_q_struct* nv = realloc(t->vals, (size_t)nc * sizeof *nv);
+        if (!nv) return -1;       /* the FLINT alloc guard aborts before this in practice */
+        t->vals = nv; t->cap = nc;
+    }
+    fmpz_mpoly_q_init(&t->vals[t->count], t->ctx);   /* moving the struct on a later
+        realloc is safe: fmpz_mpoly_q_struct is trivially relocatable (its internal
+        coeff/exp arrays live in separate heap blocks the move does not disturb). */
+    return t->count++;
+}
+
+TowerCRE* tcre_new(const char* const* gens, int ngens) {
+    if (ngens < 0) return NULL;
+    TowerCRE* t = calloc(1, sizeof *t);
+    if (!t) return NULL;
+    for (int i = 0; i < ngens; i++)
+        if (!varset_add(&t->gens, gens[i])) { varset_free(&t->gens); free(t); return NULL; }
+    fmpz_mpoly_ctx_init(t->ctx, (slong)t->gens.count, ORD_LEX);
+    t->ok = 1;
+    return t;
+}
+
+void tcre_free(TowerCRE* t) {
+    if (!t) return;
+    for (int i = 0; i < t->count; i++) fmpz_mpoly_q_clear(&t->vals[i], t->ctx);
+    free(t->vals);
+    fmpz_mpoly_ctx_clear(t->ctx);
+    varset_free(&t->gens);
+    free(t);
+}
+
+/* Expr (a rational function in the generators over Q) -> handle, or -1 on a
+ * decline (a head/atom outside the {rational, gens, +, *, /, integer power}
+ * grammar of expr_to_mpolyq).  On decline the (zero) slot is left allocated and
+ * reclaimed by tcre_free. */
+int tcre_from_expr(TowerCRE* t, const Expr* e) {
+    if (!t || !e) return -1;
+    int h = tcre_slot(t);
+    if (h < 0) return -1;
+    if (!expr_to_mpolyq(e, &t->vals[h], t->ctx, &t->gens)) { t->ok = 0; return -1; }
+    return h;
+}
+
+/* handle -> Expr (num, or num * den^-1 for a non-trivial denominator).  The
+ * result is a raw (unevaluated) tree, as the other bridge readbacks are. */
+Expr* tcre_to_expr(TowerCRE* t, int h) {
+    if (!t || h < 0 || h >= t->count) return NULL;
+    fmpz_mpoly_q_struct* q = &t->vals[h];
+    Expr* num = fmpz_mpoly_to_expr(fmpz_mpoly_q_numref(q), t->ctx, &t->gens);
+    if (fmpz_mpoly_is_one(fmpz_mpoly_q_denref(q), t->ctx)) return num;
+    Expr* den = fmpz_mpoly_to_expr(fmpz_mpoly_q_denref(q), t->ctx, &t->gens);
+    Expr* deninv = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ den, expr_new_integer(-1) }, 2);
+    return expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ num, deninv }, 2);
+}
+
+/* Binary ring ops.  Each allocates a fresh result slot (distinct from a, b) and
+ * indexes the arena AFTER the slot grab (a realloc may have moved it). */
+int tcre_add(TowerCRE* t, int a, int b) {
+    if (!t || a < 0 || a >= t->count || b < 0 || b >= t->count) return -1;
+    int h = tcre_slot(t); if (h < 0) return -1;
+    fmpz_mpoly_q_add(&t->vals[h], &t->vals[a], &t->vals[b], t->ctx);
+    return h;
+}
+int tcre_sub(TowerCRE* t, int a, int b) {
+    if (!t || a < 0 || a >= t->count || b < 0 || b >= t->count) return -1;
+    int h = tcre_slot(t); if (h < 0) return -1;
+    fmpz_mpoly_q_sub(&t->vals[h], &t->vals[a], &t->vals[b], t->ctx);
+    return h;
+}
+int tcre_mul(TowerCRE* t, int a, int b) {
+    if (!t || a < 0 || a >= t->count || b < 0 || b >= t->count) return -1;
+    int h = tcre_slot(t); if (h < 0) return -1;
+    fmpz_mpoly_q_mul(&t->vals[h], &t->vals[a], &t->vals[b], t->ctx);
+    return h;
+}
+/* a / b, or -1 on a zero divisor (fmpz_mpoly_q_div hard-aborts on den 0). */
+int tcre_div(TowerCRE* t, int a, int b) {
+    if (!t || a < 0 || a >= t->count || b < 0 || b >= t->count) return -1;
+    if (fmpz_mpoly_q_is_zero(&t->vals[b], t->ctx)) return -1;
+    int h = tcre_slot(t); if (h < 0) return -1;
+    fmpz_mpoly_q_div(&t->vals[h], &t->vals[a], &t->vals[b], t->ctx);
+    return h;
+}
+
+/* d/d(varname) of handle a.  A variable not among the generators yields 0 (the
+ * function does not depend on it).  Quotient rule on num/den: for a = n/d,
+ * a' = (n' d - n d') / d^2, then canonicalise. */
+int tcre_deriv(TowerCRE* t, int a, const char* varname) {
+    if (!t || a < 0 || a >= t->count || !varname) return -1;
+    int vi = var_index(&t->gens, varname);
+    int h = tcre_slot(t); if (h < 0) return -1;
+    fmpz_mpoly_q_struct* r = &t->vals[h];
+    if (vi < 0) { fmpz_mpoly_q_zero(r, t->ctx); return h; }   /* independent of varname */
+    const fmpz_mpoly_struct* n = fmpz_mpoly_q_numref(&t->vals[a]);
+    const fmpz_mpoly_struct* d = fmpz_mpoly_q_denref(&t->vals[a]);
+    fmpz_mpoly_t np, dp, t1, t2, num, den;
+    fmpz_mpoly_init(np, t->ctx); fmpz_mpoly_init(dp, t->ctx);
+    fmpz_mpoly_init(t1, t->ctx); fmpz_mpoly_init(t2, t->ctx);
+    fmpz_mpoly_init(num, t->ctx); fmpz_mpoly_init(den, t->ctx);
+    fmpz_mpoly_derivative(np, n, (slong)vi, t->ctx);   /* n' */
+    fmpz_mpoly_derivative(dp, d, (slong)vi, t->ctx);   /* d' */
+    fmpz_mpoly_mul(t1, np, d, t->ctx);                 /* n' d */
+    fmpz_mpoly_mul(t2, n, dp, t->ctx);                 /* n d' */
+    fmpz_mpoly_sub(num, t1, t2, t->ctx);               /* n' d - n d' */
+    fmpz_mpoly_mul(den, d, d, t->ctx);                 /* d^2 */
+    /* write num/den directly, then let canonicalise restore the invariant */
+    fmpz_mpoly_set(fmpz_mpoly_q_numref(r), num, t->ctx);
+    fmpz_mpoly_set(fmpz_mpoly_q_denref(r), den, t->ctx);
+    fmpz_mpoly_q_canonicalise(r, t->ctx);
+    fmpz_mpoly_clear(np, t->ctx); fmpz_mpoly_clear(dp, t->ctx);
+    fmpz_mpoly_clear(t1, t->ctx); fmpz_mpoly_clear(t2, t->ctx);
+    fmpz_mpoly_clear(num, t->ctx); fmpz_mpoly_clear(den, t->ctx);
+    return h;
+}
+
+int tcre_is_zero(TowerCRE* t, int h) {
+    if (!t || h < 0 || h >= t->count) return -1;
+    return fmpz_mpoly_q_is_zero(&t->vals[h], t->ctx) ? 1 : 0;
+}
+int tcre_equal(TowerCRE* t, int a, int b) {
+    if (!t || a < 0 || a >= t->count || b < 0 || b >= t->count) return -1;
+    return fmpz_mpoly_q_equal(&t->vals[a], &t->vals[b], t->ctx) ? 1 : 0;
+}
+
 /* gr_poly (over fmpz_mpoly_q) -> Expr polynomial in `xname`, coefficients
  * rendered as rational functions num/den in the field variables. */
 static Expr* grpolyq_to_expr(const gr_poly_t P, gr_ctx_t gctx,
@@ -5534,6 +5690,19 @@ int flint_polynomial_reduce(const Expr* poly, const Expr* const* divisors,
     (void)order_kind; (void)quot_out; (void)rem_out;
     return 0;
 }
+/* TowerCRE (no FLINT): every entry declines. */
+TowerCRE* tcre_new(const char* const* gens, int ngens) { (void)gens; (void)ngens; return NULL; }
+void      tcre_free(TowerCRE* t) { (void)t; }
+int       tcre_from_expr(TowerCRE* t, const Expr* e) { (void)t; (void)e; return -1; }
+Expr*     tcre_to_expr(TowerCRE* t, int h) { (void)t; (void)h; return NULL; }
+int       tcre_add(TowerCRE* t, int a, int b) { (void)t; (void)a; (void)b; return -1; }
+int       tcre_sub(TowerCRE* t, int a, int b) { (void)t; (void)a; (void)b; return -1; }
+int       tcre_mul(TowerCRE* t, int a, int b) { (void)t; (void)a; (void)b; return -1; }
+int       tcre_div(TowerCRE* t, int a, int b) { (void)t; (void)a; (void)b; return -1; }
+int       tcre_deriv(TowerCRE* t, int a, const char* v) { (void)t; (void)a; (void)v; return -1; }
+int       tcre_is_zero(TowerCRE* t, int h) { (void)t; (void)h; return -1; }
+int       tcre_equal(TowerCRE* t, int a, int b) { (void)t; (void)a; (void)b; return -1; }
+
 void  flint_bridge_init(void) { /* no FLINT: nothing to register */ }
 
 #endif /* USE_FLINT */

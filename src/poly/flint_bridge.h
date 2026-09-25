@@ -504,6 +504,37 @@ Expr* flint_nmod_poly_divrem(const Expr* a, const Expr* b, const Expr* x,
 Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x,
                            unsigned long p);
 
+/* ------------------------------------------------------------------ *
+ * TowerCRE: persistent multivariate rational-function-over-Q handles.
+ *
+ * A session (`tcre_new`) fixes an ordered list of generator symbols and holds
+ * an arena of fmpz_mpoly_q values addressed by integer handles.  Arithmetic
+ * stays in native canonical num/den form across a whole chain of ops -- Expr
+ * is crossed only at `tcre_from_expr` (in) and `tcre_to_expr` (out) -- so the
+ * ParallelMixedTower tower/residue substrate can carry its Q(gens) coefficients
+ * without round-tripping each op through the generic evaluator (Charlwood
+ * native-CRE build M1: K = Q).  Handles are never individually freed; the whole
+ * arena is released by `tcre_free` (the per-integration lifetime of the tower).
+ *
+ * `tcre_from_expr` returns -1 when the expression is outside the {rational,
+ * generators, +, *, /, integer power} grammar.  The binary ops and `tcre_deriv`
+ * return a fresh handle, or -1 on a bad argument / zero divisor.  `tcre_deriv`
+ * differentiates by a generator NAME (a name not among the generators gives 0).
+ * Without FLINT every entry is a stub: `tcre_new` returns NULL and the rest
+ * return -1 / NULL. */
+typedef struct TowerCRE TowerCRE;
+TowerCRE* tcre_new(const char* const* gens, int ngens);
+void      tcre_free(TowerCRE* t);
+int       tcre_from_expr(TowerCRE* t, const Expr* e);
+Expr*     tcre_to_expr(TowerCRE* t, int h);
+int       tcre_add(TowerCRE* t, int a, int b);
+int       tcre_sub(TowerCRE* t, int a, int b);
+int       tcre_mul(TowerCRE* t, int a, int b);
+int       tcre_div(TowerCRE* t, int a, int b);
+int       tcre_deriv(TowerCRE* t, int a, const char* varname);
+int       tcre_is_zero(TowerCRE* t, int h);
+int       tcre_equal(TowerCRE* t, int a, int b);
+
 /* Registers the M1 scaffolding builtin(s). Called from core_init(). */
 void flint_bridge_init(void);
 

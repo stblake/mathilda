@@ -927,6 +927,86 @@ static void test_attributes(void) {
 
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  TowerCRE: persistent multivariate rational-function-over-Q handles */
+/* ------------------------------------------------------------------ */
+
+/* Assert the native-CRE handle `h` renders to a rational function value-equal
+ * to the source `ref_src`, i.e. Together[toExpr(h) - ref_src] evaluates to 0. */
+static void cre_expect(TowerCRE* T, int h, const char* ref_src) {
+    ASSERT(h >= 0);
+    Expr* got = tcre_to_expr(T, h);           /* owned raw tree */
+    ASSERT(got != NULL);
+    Expr* ref = eval_str(ref_src);            /* owned */
+    Expr* neg = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), ref }, 2);   /* consumes ref */
+    Expr* sum = expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ got, neg }, 2);                    /* consumes got, neg */
+    Expr* tog = expr_new_function(expr_new_symbol("Together"),
+                    (Expr*[]){ sum }, 1);                         /* consumes sum */
+    Expr* d = evaluate(tog);
+    expr_free(tog);
+    char* s = expr_to_string(d);
+    if (strcmp(s, "0") != 0) {
+        fprintf(stderr, "FAIL: TowerCRE result != (%s); Together[diff] = %s\n", ref_src, s);
+        exit(1);
+    }
+    free(s);
+    expr_free(d);
+}
+
+static void test_towercre(void) {
+    const char* gens[] = { "x", "t" };
+    TowerCRE* T = tcre_new(gens, 2);
+    ASSERT(T != NULL);
+
+    Expr* ea = eval_str("x/(1 + t)");
+    Expr* eb = eval_str("t/(x - 2)");
+    int ha = tcre_from_expr(T, ea);
+    int hb = tcre_from_expr(T, eb);
+    ASSERT(ha >= 0 && hb >= 0);
+
+    /* single ring ops match the evaluator's Together */
+    cre_expect(T, tcre_add(T, ha, hb), "Together[x/(1 + t) + t/(x - 2)]");
+    cre_expect(T, tcre_sub(T, ha, hb), "Together[x/(1 + t) - t/(x - 2)]");
+    cre_expect(T, tcre_mul(T, ha, hb), "Together[(x/(1 + t)) (t/(x - 2))]");
+    cre_expect(T, tcre_div(T, ha, hb), "Together[(x/(1 + t))/(t/(x - 2))]");
+    expr_free(ea); expr_free(eb);
+
+    /* derivative wrt each generator, and wrt a non-generator (-> 0) */
+    Expr* ec = eval_str("x^2 t/(1 + x)");
+    int hc = tcre_from_expr(T, ec);
+    ASSERT(hc >= 0);
+    cre_expect(T, tcre_deriv(T, hc, "x"), "Together[D[x^2 t/(1 + x), x]]");
+    cre_expect(T, tcre_deriv(T, hc, "t"), "Together[D[x^2 t/(1 + x), t]]");
+    cre_expect(T, tcre_deriv(T, hc, "z"), "0");
+    expr_free(ec);
+
+    /* a CHAIN kept native across ops: ((a + b) a)/b, then d/dx -- the point of
+     * the arena (no Expr round-trip between the ops) */
+    int hsum  = tcre_add(T, ha, hb);
+    int hprod = tcre_mul(T, hsum, ha);
+    int hquot = tcre_div(T, hprod, hb);
+    cre_expect(T, hquot,
+        "Together[((x/(1 + t) + t/(x - 2)) (x/(1 + t)))/(t/(x - 2))]");
+    cre_expect(T, tcre_deriv(T, hquot, "x"),
+        "Together[D[((x/(1 + t) + t/(x - 2)) (x/(1 + t)))/(t/(x - 2)), x]]");
+
+    /* zero-test and equality */
+    int hz = tcre_sub(T, ha, ha);
+    ASSERT(tcre_is_zero(T, hz) == 1);
+    ASSERT(tcre_is_zero(T, ha) == 0);
+    ASSERT(tcre_equal(T, ha, ha) == 1);
+    ASSERT(tcre_equal(T, ha, hb) == 0);
+
+    /* decline: a symbol that is not a generator */
+    Expr* bad = eval_str("w + 1");
+    ASSERT(tcre_from_expr(T, bad) == -1);
+    expr_free(bad);
+
+    tcre_free(T);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -960,6 +1040,7 @@ int main(void) {
     TEST(test_flint_num_ops);
     TEST(test_consumers);
     TEST(test_attributes);
+    TEST(test_towercre);
 
     printf("All FLINT bridge tests passed!\n");
     return 0;
