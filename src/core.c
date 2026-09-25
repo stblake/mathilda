@@ -1009,8 +1009,16 @@ void core_init(void) {
     void options_builtin_init(void);
     options_builtin_init();
 
+    /* Second-tier Association heads and the extended forms of existing heads
+     * (src/assoc_ops.c). Runs after every subsystem has registered its
+     * builtins because it wraps some of them (Keys, Normal, Transpose,
+     * DeleteMissing, ...), delegating every form it does not handle. */
+    void assoc_ops_init(void);
+    assoc_ops_init();
+
     /* Operator (curried) forms h[o...][x]. After every builtin and docstring
-     * is registered, since each row appends its form to the head's docstring. */
+     * is registered (including assoc_ops_init's heads), since each row appends
+     * its form to the head's docstring. */
     void opform_init(void);
     opform_init();
 

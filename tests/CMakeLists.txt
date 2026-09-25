@@ -301,6 +301,7 @@ set(COMMON_SRC
     ../src/vectoranal.c
     ../src/assoc.c
     ../src/assoc_index.c
+    ../src/assoc_ops.c
     ../src/ndarray.c
     ../src/ndinteger.c
     ../src/ndkernels.c
@@ -1348,6 +1349,11 @@ add_executable(assoc_read_tests test_assoc_read.c $<TARGET_OBJECTS:mathilda_comm
 target_link_libraries(assoc_read_tests m)
 target_include_directories(assoc_read_tests PRIVATE ../src)
 add_test(NAME assoc_read_tests COMMAND assoc_read_tests)
+# Second-tier Association heads, extended forms, Splice, Listable threading.
+add_executable(assoc_ops_tests test_assoc_ops.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(assoc_ops_tests m)
+target_include_directories(assoc_ops_tests PRIVATE ../src)
+add_test(NAME assoc_ops_tests COMMAND assoc_ops_tests)
 
 # Association performance regression gate: fails if a hash-backed op scales
 # worse than O(n) (doubling-ratio check; machine-independent).
@@ -3508,6 +3514,7 @@ if(USE_ECM)
     add_dependencies(assoc_forms_tests build_ecm)
     add_dependencies(assoc_atomicity_tests build_ecm)
     add_dependencies(assoc_read_tests build_ecm)
+    add_dependencies(assoc_ops_tests build_ecm)
     add_dependencies(bench_assoc build_ecm)
     add_dependencies(bench_ndarray_linalg build_ecm)
     add_dependencies(bench_compile build_ecm)

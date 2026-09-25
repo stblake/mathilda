@@ -220,6 +220,14 @@ static void test_opform_register_api(void) {
     check("myHeadS4b[x_, y_Integer, z___] := {x, y, z}; {myHeadS4b[f][1], myHeadS4b[f, g][1]}", "{{f, 1}, {f, 1, g}}");
 }
 
+/* Operator forms of the second-tier heads in src/assoc_ops.c (Mathematica 15). */
+static void test_opform_assoc_ops_heads(void) {
+    check("Discard[EvenQ][{1, 2, 3}]", "{1, 3}");
+    check("Discard[EvenQ][<|a -> 1, b -> 2|>]", "<|a -> 1|>");
+    check("CountDistinctBy[Mod[#, 2] &][{1, 2, 3, 5}]", "2");
+    check("AssociationComap[{f, g}][x]", "<|f -> f[x], g -> g[x]|>");
+}
+
 /* ---------------- Lookup laziness / KeyMemberQ patterns ---------------- */
 
 static void test_lookup_lazy_default(void) {
@@ -261,6 +269,7 @@ int main(void) {
     TEST(test_opform_list_heads);
     TEST(test_opform_negative);
     TEST(test_opform_register_api);
+    TEST(test_opform_assoc_ops_heads);
     TEST(test_lookup_lazy_default);
     TEST(test_keymemberq_patterns);
 

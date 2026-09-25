@@ -134,6 +134,7 @@ void opform_init(void) {
         "ReplaceAll", "Replace", "ReplacePart",
         "Append", "Prepend", "Delete",
         "TakeLargest", "TakeSmallest",
+        "Discard", "CountDistinctBy",           /* src/assoc_ops.c */
     };
     for (size_t i = 0; i < sizeof(DATA_FIRST_1) / sizeof(DATA_FIRST_1[0]); i++)
         opform_register(DATA_FIRST_1[i], 1, 1, 0);
@@ -146,6 +147,7 @@ void opform_init(void) {
     /* x last: h[f][x] == h[f, x]. */
     static const char* const DATA_SECOND_1[] = {
         "Map", "Apply", "KeyMap", "KeyValueMap", "AssociationMap",
+        "AssociationComap",                     /* AssociationComap[{f..}][x] */
     };
     for (size_t i = 0; i < sizeof(DATA_SECOND_1) / sizeof(DATA_SECOND_1[0]); i++)
         opform_register(DATA_SECOND_1[i], 1, 1, 1);

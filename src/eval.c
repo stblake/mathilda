@@ -19,6 +19,7 @@
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "assoc.h"                  /* assoc_lookup_value — O(1) <|...|>[key] */
+#include "assoc_ops.h"              /* Listable threading over associations, Splice */
 #include "interp.h"
 #include "interval.h"                /* interval_thread_call — Interval[...] threading */
 #include "compile/compiled_function.h"
@@ -706,6 +707,22 @@ static bool dv_binds_opaquely(const SymbolDef* def) {
     return true;
 }
 
+/* Classify the arguments of a Listable call in one pass: LA_LIST if any is an
+ * explicit List, LA_ASSOC if any is an Association (either bit or both). */
+enum { LA_LIST = 1, LA_ASSOC = 2 };
+static int listable_arg_kinds(const Expr* e) {
+    int kinds = 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* arg = e->data.function.args[i];
+        if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL)
+            continue;
+        const char* h = arg->data.function.head->data.symbol.name;
+        if (h == SYM_List) return kinds | LA_LIST;   /* List threading wins */
+        if (h == SYM_Association) kinds |= LA_ASSOC;
+    }
+    return kinds;
+}
+
 static bool has_list_arg(Expr* e) {
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
@@ -1186,6 +1203,7 @@ static bool flatten_sequences(Expr* e) {
 
     size_t new_count = 0;
     bool found_sequence = false;
+    bool found_splice = false;   /* Splice[list, h]: see eval_splice_args */
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
@@ -1193,13 +1211,16 @@ static bool flatten_sequences(Expr* e) {
             new_count += arg->data.function.arg_count;
             found_sequence = true;
         } else {
+            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
+                arg->data.function.head->data.symbol.name == SYM_Splice)
+                found_splice = true;
             new_count++;
         }
     }
 
     /* A lone Sequence[x] changes structure without changing arg_count, so we
      * cannot gate on (new_count == arg_count) -- test for any Sequence head. */
-    if (!found_sequence) return false;
+    if (!found_sequence) return found_splice && eval_splice_args(e);
     
     Expr** new_args = malloc(sizeof(Expr*) * new_count);
     size_t k = 0;
@@ -1220,6 +1241,7 @@ static bool flatten_sequences(Expr* e) {
     e->data.function.args = new_args;
     e->data.function.arg_count = new_count;
     expr_invalidate_hash(e);   /* Sequence splice rewrote args in place */
+    if (found_splice) eval_splice_args(e);
     return true;
 }
 
@@ -1759,8 +1781,21 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 if (eval_flatten_args_interned(res, head->data.symbol.name)) *changed = true;
             }
 
-            /* Listable: automatic threading */
-            if ((attrs & ATTR_LISTABLE) && has_list_arg(res)) {
+            /* Listable: automatic threading over Lists, else over the values
+             * of Association arguments (assoc_thread_listable; the List case
+             * wins when both are present, so a List stays the outer level).
+             * One pass classifies the arguments, so the List path pays only a
+             * pointer compare per argument for the association check. */
+            int la_kind = (attrs & ATTR_LISTABLE) ? listable_arg_kinds(res) : 0;
+            if (la_kind == LA_ASSOC) {
+                Expr* assoc_res = assoc_thread_listable(res);
+                if (assoc_res) {
+                    expr_free(res);
+                    *changed = true;
+                    return assoc_res;
+                }
+            }
+            if (la_kind & LA_LIST) {
                 /* Trace: threading evaluates the threaded elements internally;
                  * hide those sub-evaluations so x^{1..10} shows as a single
                  * rewrite to {x,x^2,...} rather than a decomposed one. */

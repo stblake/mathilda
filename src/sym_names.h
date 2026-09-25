@@ -347,6 +347,11 @@ extern const char* SYM_KeyExistsQ;
 extern const char* SYM_KeyDrop;
 extern const char* SYM_KeyTake;
 extern const char* SYM_KeyUnion;
+/* assoc_ops.c: Splice construct and JoinAcross option values */
+extern const char* SYM_Splice;
+extern const char* SYM_KeyCollisionFunction;
+extern const char* SYM_Left;
+extern const char* SYM_Right;
 extern const char* SYM_KeyValueMap;
 extern const char* SYM_AssociateTo;
 extern const char* SYM_Merge;
