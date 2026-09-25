@@ -399,6 +399,31 @@ In[3]:= 14/Sqrt[10]
 Out[3]= 7 Sqrt[2/5]
 ```
 
+## Minus
+Arithmetic negation as a function.
+- `Minus[x]` is `-x`, i.e. `Times[-1, x]`.
+
+**Features**:
+- `Listable`, `NumericFunction`, `Protected`, as in Mathematica.
+- Rewrites to `Times[-1, x]`, so numbers, rationals, complex numbers, `Plus`
+  distribution and symbolic arguments all behave exactly like `-x`.
+- Usable as a sort key: `SortBy[list, Minus]`, `KeySortBy[a, Minus]`.
+- Packed arrays and visible `NDArray`s stay on the buffer (`Minus` is on the
+  packed-aware list and hands the buffer to `Times`); `Compile[]` lowers it at
+  scalar and array shapes.
+- Any other argument count emits `Minus::argx` and stays unevaluated.
+
+```mathematica
+In[1]:= Minus[3]
+Out[1]= -3
+
+In[2]:= Minus[{1, 2.5, 1/2}]
+Out[2]= {-1, -2.5, -1/2}
+
+In[3]:= SortBy[{3, 1, 2}, Minus]
+Out[3]= {3, 2, 1}
+```
+
 ## Power (^)
 
 Exponentiation.

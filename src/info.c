@@ -2481,7 +2481,7 @@ void info_init(void) {
         "\n"
         "Parameter binding is lexical: named parameters are substituted into the body before evaluation. Nested Function expressions shadow their own parameters.\n"
         "By default Function has no Hold attributes; the arguments are evaluated before substitution. Adding HoldAll (or HoldFirst / HoldRest / HoldAllComplete) in the 3-arg form holds arguments in the chosen positions.");
-    symtab_set_docstring("Slot", "# or Slot[n] represents the n-th argument of a pure function.");
+    symtab_set_docstring("Slot", "# or Slot[n] represents the n-th argument of a pure function. #name (Slot[\"name\"], also #\"str\") is the value of key \"name\" in the association the function is applied to.");
     symtab_set_docstring("SlotSequence", "## or SlotSequence[n] represents arguments from the n-th onward.");
 
     // Predicates

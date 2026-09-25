@@ -1065,6 +1065,30 @@ static Expr* parse_primary(ParserState* s) {
                 count++;
                 s->pos++;
             }
+            /* Named slots (single '#' only, as in Mathematica):
+             *   #name      -> Slot["name"]   name = [A-Za-z$][A-Za-z0-9$`]*
+             *   #"string"  -> Slot["string"] any string literal
+             * `##name` stays SlotSequence[1]*name and `#1a` stays Slot[1]*a,
+             * matching the Wolfram Language lexer. */
+            if (count == 1 && (isalpha((unsigned char)*s->pos) || *s->pos == '$')) {
+                const char* start = s->pos;
+                while (isalnum((unsigned char)*s->pos) || *s->pos == '$' ||
+                       (*s->pos == '`' && (isalpha((unsigned char)s->pos[1]) || s->pos[1] == '$')))
+                    s->pos++;
+                size_t len = (size_t)(s->pos - start);
+                char* name = malloc(len + 1);
+                memcpy(name, start, len);
+                name[len] = '\0';
+                Expr* args[1] = { expr_new_string(name) };
+                free(name);
+                return expr_new_function(expr_new_symbol(SYM_Slot), args, 1);
+            }
+            if (count == 1 && *s->pos == '"') {
+                Expr* str = parse_string(s);
+                if (!str) return NULL;
+                Expr* args[1] = { str };
+                return expr_new_function(expr_new_symbol(SYM_Slot), args, 1);
+            }
             int64_t n = 1; // Default
             if (isdigit(*s->pos)) {
                 char* end;

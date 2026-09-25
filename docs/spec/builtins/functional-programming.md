@@ -69,6 +69,99 @@ In[7]:= Function[{a, b}, {Length[Unevaluated[a]], Length[Unevaluated[b]]}, HoldF
 Out[7]= {3, 0}
 ```
 
+## Named slots (#name, Slot["name"])
+A named slot reads a key of the association a pure function is applied to.
+- `#name` is `Slot["name"]`, where `name` is a letter or `$` followed by letters,
+  digits, `$` or context marks (`` ` ``).
+- `#"string"` is `Slot["string"]` for keys that are not plain names.
+- `(... #name ...) &[assoc]` substitutes `assoc["name"]` for each named slot.
+
+**Features**:
+- Parsed exactly as the Wolfram Language lexer does: `#1a` is still `#1*a`,
+  `##a` is `##*a`, and `#a_b` is `#a*_b`; `#`, `#n`, `##` and `##n` are unchanged.
+- Lookup uses the association's O(1) key index. `#a` reads the string key
+  `"a"`, never the symbol key `a`.
+- Named and numbered slots mix: `{#a, #} &[assoc]` gives `{assoc["a"], assoc}`.
+- A slot that cannot be filled stays in place with a message, as in
+  Mathematica: `Function::slota` when the association lacks the key,
+  `Function::slot1` when the first argument is not an association.
+- Printing round-trips: `Slot["a"]` prints as `#a` (`#"a b"` when quoting is
+  needed); `FullForm` shows `Slot["a"]`.
+- `Compile[]` does not lower named slots; such bodies run in the interpreter.
+
+```mathematica
+In[1]:= #a + #b &[<|"a" -> 1, "b" -> 2|>]
+Out[1]= 3
+
+In[2]:= Select[{<|"a" -> 1|>, <|"a" -> 3|>}, #a > 2 &]
+Out[2]= {<|"a" -> 3|>}
+
+In[3]:= #"first name" &[<|"first name" -> "Ada"|>]
+Out[3]= "Ada"
+
+In[4]:= FullForm[Hold[#name]]
+Out[4]= Hold[Slot["name"]]
+
+In[5]:= #a + #b &[<|"a" -> 1|>]
+Function::slota: Named slot b in #a + #b & cannot be filled from <|"a" -> 1|>.
+Out[5]= 1 + #b
+```
+
+## Operator forms (h[o][x])
+Many heads have a curried "operator form": the call without its data argument
+stays inert, and applying it to one expression supplies that argument.
+- `h[o][x]` evaluates `h[x, o]` for the data-first heads below.
+- `h[f][x]` evaluates `h[f, x]` for `Map`, `Apply`, `KeyMap`, `KeyValueMap`,
+  `AssociationMap`.
+- `Insert[e, n][x]` is `Insert[x, e, n]`; `TakeLargestBy[f, n][x]` and
+  `TakeSmallestBy[f, n][x]` are `TakeLargestBy[x, f, n]` / `TakeSmallestBy[x, f, n]`.
+
+**Features**:
+- One generic mechanism (`src/opform.c`): each head registers its operator
+  arity and the position of the data argument; the evaluator consults the table
+  for a call `h[o...][x]` whose head is a registered symbol. Other modules add
+  heads with `opform_register(head, min_ops, max_ops, insert_at)` from
+  `src/opform.h`, and the head's docstring gains an "Operator form:" line.
+- Data-first heads: `Select`, `SelectFirst`, `AllTrue`, `AnyTrue`, `NoneTrue`,
+  `Lookup`, `KeyTake`, `KeyDrop`, `KeySelect`, `KeySortBy`, `KeyExistsQ`,
+  `KeyMemberQ`, `KeyFreeQ`, `FreeQ`, `GroupBy`, `CountsBy`, `Merge`,
+  `DeleteDuplicatesBy`, `ReplaceAll`, `Replace`, `ReplacePart`, `Append`,
+  `Prepend`, `Delete`, `TakeLargest`, `TakeSmallest`. (`Cases`, `DeleteCases`,
+  `Count`, `Position`, `Extract`, `MemberQ`, `MapAt`, `SortBy`, `MaximalBy`,
+  `MinimalBy` already had operator forms.)
+- Only forms that exist in Mathematica are registered: `Take[2][l]`,
+  `Lookup[k, d][a]` and `Select[crit, n][l]` stay unevaluated, as they do there.
+- Exactly one data argument: `Select[OddQ][x, y]` is left alone.
+- If the rewritten call does not evaluate, the curried form is kept
+  (`KeyValueMap[f][{1}]` stays `KeyValueMap[f][{1}]`).
+- User-defined heads are unaffected: `f[1][2]` stays `f[1][2]`.
+
+```mathematica
+In[1]:= Select[OddQ][<|"a" -> 1, "b" -> 2, "c" -> 3|>]
+Out[1]= <|"a" -> 1, "c" -> 3|>
+
+In[2]:= Map[Lookup["a"], {<|"a" -> 1|>, <|"a" -> 2|>}]
+Out[2]= {1, 2}
+
+In[3]:= GroupBy[OddQ][{3, 1, 4, 1, 5}]
+Out[3]= <|True -> {3, 1, 1, 5}, False -> {4}|>
+
+In[4]:= KeyTake[{"a", "c"}][<|"a" -> 1, "b" -> 2, "c" -> 3|>]
+Out[4]= <|"a" -> 1, "c" -> 3|>
+
+In[5]:= Insert[x, 2][{a, b, c}]
+Out[5]= {a, x, b, c}
+
+In[6]:= Apply[f][{1, 2}]
+Out[6]= f[1, 2]
+
+In[7]:= TakeLargestBy[Minus, 2][{3, 1, 4, 1, 5}]
+Out[7]= {1, 1}
+
+In[8]:= Select[OddQ]
+Out[8]= Select[OddQ]
+```
+
 ## InterpolatingFunction
 `InterpolatingFunction[domain, table]` represents an approximate function
 whose values are found by interpolation, and — like `Function` — is evaluated

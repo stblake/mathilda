@@ -18,6 +18,8 @@
 #include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
 #include <stdio.h>
 #include <stdarg.h>
+#include <ctype.h>
+#include <stdbool.h>
 #include <string.h>
 
 #include <inttypes.h>
@@ -859,7 +861,16 @@ static void print_standard(Expr* e, int parent_prec) {
             if (idx->type == EXPR_INTEGER) {
                 printf("%" PRId64, idx->data.integer);
             } else if (idx->type == EXPR_STRING) {
-                print_string_literal(idx->data.string);
+                /* Named slot: Slot["a"] -> #a when "a" lexes back as a
+                 * name ([A-Za-z$][A-Za-z0-9$`]*), else #"a b" (quoted). */
+                const char* nm = idx->data.string;
+                bool bare = nm[0] && (isalpha((unsigned char)nm[0]) || nm[0] == '$');
+                for (const char* q = nm; bare && *q; q++)
+                    if (!(isalnum((unsigned char)*q) || *q == '$' ||
+                          (*q == '`' && (isalpha((unsigned char)q[1]) || q[1] == '$'))))
+                        bare = false;
+                if (bare) printf("%s", nm);
+                else print_string_literal(nm);
             } else {
                 print_standard(idx, 9500);
             }

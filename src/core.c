@@ -831,6 +831,7 @@ void core_init(void) {
     real_init();
     attr_init();
     purefunc_init();
+    void minus_init(void);  minus_init();   /* Minus[x] -> Times[-1, x] */
     stats_init();
     partitions_init();
     poly_init();
@@ -1004,6 +1005,11 @@ void core_init(void) {
      * so every option-name symbol used by the registry is already interned. */
     void options_builtin_init(void);
     options_builtin_init();
+
+    /* Operator (curried) forms h[o...][x]. After every builtin and docstring
+     * is registered, since each row appends its form to the head's docstring. */
+    void opform_init(void);
+    opform_init();
 
     /* Flag every symbol interned so far as a System symbol. At this point in
      * startup the interner holds exactly the kernel's built-in names (cached
