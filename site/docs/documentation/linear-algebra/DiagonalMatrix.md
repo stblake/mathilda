@@ -76,12 +76,14 @@ Out[8]= {{0, 0, 1, 0, 0, 0}, {0, 0, 0, 1, 0, 0}, {0, 0, 0, 0, 1, 0}, {0, 0, 0, 0
 
 ## References
 
+**See also:** [Real](../../other-advanced/Real/)
+
 - Source: [`src/linalg/construct.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/construct.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
 - Tests: [`tests/test_diagonal_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal_matrix_q.c)
 - Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
-- Tests: [`tests/test_lapack_builtin.c`](https://github.com/stblake/mathilda/blob/main/tests/test_lapack_builtin.c)
+- Tests: [`tests/test_jordandecomp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_jordandecomp.c)
 
 ## Notes & additional examples
 

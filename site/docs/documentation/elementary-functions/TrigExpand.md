@@ -144,6 +144,5 @@ calls. The pipeline (with the trig canonicalizer suppressed throughout):
 
 - Source: [`src/simp/trigsimp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/trigsimp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
-- Tests: [`tests/test_intrischnorman.c`](https://github.com/stblake/mathilda/blob/main/tests/test_intrischnorman.c)
 - Tests: [`tests/test_trigexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_trigexpand.c)
 - Tests: [`tests/test_trigfactor.c`](https://github.com/stblake/mathilda/blob/main/tests/test_trigfactor.c)

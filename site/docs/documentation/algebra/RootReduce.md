@@ -117,4 +117,7 @@ When `expr` carries no algebraic content (or the case is out of scope) it is ret
 
 - Source: [`src/rootreduce.c`](https://github.com/stblake/mathilda/blob/main/src/rootreduce.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
-- Tests: [`tests/test_rootreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rootreduce.c)
+- Tests: [`tests/test_algebraicnumber.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumber.c)
+- Tests: [`tests/test_algebraicnumberpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumberpolynomial.c)
+- Tests: [`tests/test_nf_rowreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nf_rowreduce.c)
+- Tests: [`tests/test_nullspace.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nullspace.c)

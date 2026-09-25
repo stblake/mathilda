@@ -103,7 +103,7 @@ Memory: receives `res` owned by the evaluator. Returns a fresh Expr* (a SeriesDa
 
 ## References
 
-**See also:** [SeriesData](../../power-series/SeriesData/), [Series](../../power-series/Series/), [Chop](../../elementary-functions/Chop/), [N](../../arithmetic/N/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
+**See also:** [SeriesData](../../power-series/SeriesData/), [Series](../../power-series/Series/), [Chop](../../elementary-functions/Chop/), [N](../../arithmetic/N/), [Real](../../other-advanced/Real/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

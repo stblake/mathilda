@@ -1,7 +1,13 @@
 # Algebra
 
-34 built-in function(s) in this category.
+42 built-in function(s) in this category.
 
+- [`AlgebraicIntegerQ`](AlgebraicIntegerQ.md) — AlgebraicIntegerQ[x]  _(Stable)_
+- [`AlgebraicNumber`](AlgebraicNumber.md) — AlgebraicNumber[theta, {c0, c1, ..., cn}]  _(Stable)_
+- [`AlgebraicNumberDenominator`](AlgebraicNumberDenominator.md) — AlgebraicNumberDenominator[a]  _(Stable)_
+- [`AlgebraicNumberNorm`](AlgebraicNumberNorm.md) — AlgebraicNumberNorm[a]  _(Stable)_
+- [`AlgebraicNumberPolynomial`](AlgebraicNumberPolynomial.md) — AlgebraicNumberPolynomial[a, x]  _(Stable)_
+- [`AlgebraicNumberTrace`](AlgebraicNumberTrace.md) — AlgebraicNumberTrace[a]  _(Stable)_
 - [`Apart`](Apart.md) — Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.  _(Stable)_
 - [`Cancel`](Cancel.md) — Cancel[expr] cancels out common factors in the numerator and denominator of expr.  _(Stable)_
 - [`Coefficient`](Coefficient.md) — Coefficient[expr, form]  _(Stable)_
@@ -21,6 +27,7 @@
 - [`HornerForm`](HornerForm.md) — HornerForm[poly]  _(Stable)_
 - [`IrreduciblePolynomialQ`](IrreduciblePolynomialQ.md) — IrreduciblePolynomialQ[poly]  _(Stable)_
 - [`MinimalPolynomial`](MinimalPolynomial.md) — MinimalPolynomial[s, x]  _(Stable)_
+- [`NumberFieldIntegralBasis`](NumberFieldIntegralBasis.md) — NumberFieldIntegralBasis[a]  _(Stable)_
 - [`Numerator`](Numerator.md) — Numerator[expr]  _(Stable)_
 - [`PolynomialExtendedGCD`](PolynomialExtendedGCD.md) — PolynomialExtendedGCD[poly1, poly2, x] gives the extended GCD of poly1 and poly2 treated as univariate polynomials in x.  _(Stable)_
 - [`PolynomialGCD`](PolynomialGCD.md) — PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.  _(Stable)_
@@ -34,5 +41,6 @@
 - [`RootReduce`](RootReduce.md) — RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised; a polynomial/rational function in a free variable has its constant-algebraic coefficients canonicalised. Threads over lists, rules (Solve results), equations, inequalities and logic. Option: Method -> "Automatic" | "Recursive" | "NumberField".  _(Stable)_
 - [`SubresultantPolynomials`](SubresultantPolynomials.md) — SubresultantPolynomials[poly1, poly2, var]  _(Stable)_
 - [`Subresultants`](Subresultants.md) — Subresultants[poly1, poly2, var]  _(Stable)_
+- [`ToNumberField`](ToNumberField.md) — ToNumberField[a, theta]  _(Stable)_
 - [`Together`](Together.md) — Together[expr] combines fractions over a common denominator, then cancels.  _(Stable)_
 - [`Variables`](Variables.md) — Variables[poly]  _(Stable)_

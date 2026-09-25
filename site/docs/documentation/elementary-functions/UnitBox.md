@@ -77,7 +77,7 @@ Out[7]= UnitBox[x]
 
 ## References
 
-**See also:** [Orderless](../../expression-information/Orderless/), [UnitStep](../../elementary-functions/UnitStep/), [Pi](../../mathematical-constants/Pi/), [Ramp](../../elementary-functions/Ramp/), [Complex](../../arithmetic/Complex/), [Sign](../../arithmetic/Sign/), [Floor](../../arithmetic/Floor/), [Interval](../../other-advanced/Interval/)
+**See also:** [Orderless](../../expression-information/Orderless/), [UnitStep](../../elementary-functions/UnitStep/), [Real](../../other-advanced/Real/), [Pi](../../mathematical-constants/Pi/), [Ramp](../../elementary-functions/Ramp/), [Complex](../../arithmetic/Complex/), [Sign](../../arithmetic/Sign/), [Floor](../../arithmetic/Floor/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

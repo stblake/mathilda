@@ -150,7 +150,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 - Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
 - Tests: [`tests/test_characteristicpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_characteristicpolynomial.c)
 - Tests: [`tests/test_cherry_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_stress.c)
-- Tests: [`tests/test_collect_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_collect_corpus.c)
+- Tests: [`tests/test_coefficient_rules.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coefficient_rules.c)
 
 ## Notes & additional examples
 

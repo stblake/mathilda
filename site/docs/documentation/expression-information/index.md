@@ -1,6 +1,6 @@
 # Expression Information
 
-62 built-in function(s) in this category.
+64 built-in function(s) in this category.
 
 - [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
 - [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
@@ -10,6 +10,7 @@
 - [`$MinNumber`]($MinNumber.md) — $MinNumber  _(Stable)_
 - [`$Version`]($Version.md) — $Version  _(Stable)_
 - [`$VersionNumber`]($VersionNumber.md) — $VersionNumber  _(Stable)_
+- [`Activate`](Activate.md) — Activate[expr] reactivates every Inactive[h] in expr (replacing Inactive[h] by h) and re-evaluates, so an inactive integral Inactive[Integrate][g,x] becomes Integrate[g,x] and evaluates.  _(Stable)_
 - [`AtomQ`](AtomQ.md) — AtomQ[expr]  _(Stable)_
 - [`Attributes`](Attributes.md) — Attributes[s] gives the list of attributes for s.  _(Stable)_
 - [`ByteCount`](ByteCount.md) — ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.  _(Stable)_
@@ -27,6 +28,7 @@
 - [`HoldComplete`](HoldComplete.md) — HoldComplete[expr]  _(Stable)_
 - [`HoldForm`](HoldForm.md) — HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.  _(Stable)_
 - [`Identity`](Identity.md) — Identity[expr] gives expr unchanged (the identity function).  _(Stable)_
+- [`Inactive`](Inactive.md) — Inactive[f] represents f with evaluation of its own rules suppressed, so Inactive[f][args] stays unevaluated (its arguments still evaluate).  Used to hold an integral inert, e.g. Inactive[Integrate][g, x]; Activate reverses it.  _(Stable)_
 - [`Information`](Information.md) — Information[symbol] or ?symbol returns information on symbol.  _(Stable)_
 - [`InputForm`](InputForm.md) — InputForm[expr]  _(Stable)_
 - [`IntegerQ`](IntegerQ.md) — IntegerQ[expr]  _(Stable)_

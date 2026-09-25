@@ -13,6 +13,10 @@ gives a list of vectors that forms a basis for the null space of the matrix m (i
 
 runs a specific elimination algorithm.  Accepted method names are the same as RowReduce / LinearSolve / Inverse: "Automatic"                 — alias for "DivisionFreeRowReduction" (default) "DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan "OneStepRowReduction"       — classical Gauss-Jordan with division per pivot "CofactorExpansion"         — identity-if-invertible (falls back to DivisionFreeRowReduction on singular / rectangular m)
 
+**`NullSpace[m, ZeroTest -> f]`**
+
+uses the predicate f to decide when an entry is zero during the reduction (an entry is zero iff f\[entry\] is True).  Both a body such as (RootReduce\[Together\[#\]\] === 0 &) and a predicate head such as PossibleZeroQ are accepted; use it to catch algebraic zeros a structural test would miss.  May be combined with Method.
+
 <details>
 <summary>Notes</summary>
 
@@ -153,6 +157,15 @@ owns `res` and frees it; on NULL return the caller retains ownership of `res`.
   - `Method -> "CofactorExpansion"` — identity-if-invertible path
     inside RowReduce; falls back to `"DivisionFreeRowReduction"` on
     singular / rectangular input.
+- `ZeroTest -> f` supplies a predicate that decides when an entry is
+  zero during the reduction (an entry is zero iff `f[entry]` is `True`).
+  Both a body such as `(RootReduce[Together[#]] === 0 &)` and a predicate
+  head such as `PossibleZeroQ` are accepted. With a `ZeroTest`, `NullSpace`
+  runs its own exact Gauss-Jordan RREF that consults the predicate at every
+  pivot (a structural RREF would pivot on an algebraic zero the predicate
+  rejects), keeping entries canonical via `Together`; e.g.
+  `NullSpace[{{1, Sqrt[2]}, {Sqrt[2], 2}}, ZeroTest -> PossibleZeroQ]` is
+  `{{-Sqrt[2], 1}}`. `Method` and `ZeroTest` may be combined.
 - Issues `NullSpace::matrix` and returns unevaluated if the argument
   is not a non-empty rank-2 tensor.
 - Issues `NullSpace::method` and returns unevaluated for unknown
@@ -162,7 +175,7 @@ owns `res` and frees it; on NULL return the caller retains ownership of `res`.
 
 ## References
 
-**See also:** [RowReduce](../../linear-algebra/RowReduce/), [LinearSolve](../../linear-algebra/LinearSolve/), [Inverse](../../linear-algebra/Inverse/), [Together](../../algebra/Together/)
+**See also:** [RowReduce](../../linear-algebra/RowReduce/), [LinearSolve](../../linear-algebra/LinearSolve/), [Inverse](../../linear-algebra/Inverse/), [Together](../../algebra/Together/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/)
 
 - Source: [`src/linalg/nullspace.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/nullspace.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

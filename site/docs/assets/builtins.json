@@ -240,6 +240,14 @@
     "url": "documentation/other-advanced/AccuracyGoal/"
   },
   {
+    "name": "Activate",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Activate[expr] reactivates every Inactive[h] in expr (replacing Inactive[h] by h) and re-evaluates, so an inactive integral Inactive[Integrate][g,x] becomes Integrate[g,x] and evaluates.",
+    "url": "documentation/expression-information/Activate/"
+  },
+  {
     "name": "AddTo",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -302,6 +310,54 @@
     "status": "Stable",
     "summary": "AiryBiPrime[z]",
     "url": "documentation/other-advanced/AiryBiPrime/"
+  },
+  {
+    "name": "AlgebraicIntegerQ",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicIntegerQ[x]",
+    "url": "documentation/algebra/AlgebraicIntegerQ/"
+  },
+  {
+    "name": "AlgebraicNumber",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumber[theta, {c0, c1, ..., cn}]",
+    "url": "documentation/algebra/AlgebraicNumber/"
+  },
+  {
+    "name": "AlgebraicNumberDenominator",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumberDenominator[a]",
+    "url": "documentation/algebra/AlgebraicNumberDenominator/"
+  },
+  {
+    "name": "AlgebraicNumberNorm",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumberNorm[a]",
+    "url": "documentation/algebra/AlgebraicNumberNorm/"
+  },
+  {
+    "name": "AlgebraicNumberPolynomial",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumberPolynomial[a, x]",
+    "url": "documentation/algebra/AlgebraicNumberPolynomial/"
+  },
+  {
+    "name": "AlgebraicNumberTrace",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "AlgebraicNumberTrace[a]",
+    "url": "documentation/algebra/AlgebraicNumberTrace/"
   },
   {
     "name": "AllTrue",
@@ -384,6 +440,14 @@
     "url": "documentation/elementary-functions/ArcTan/"
   },
   {
+    "name": "Area",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "Area[Polygon[{{x1, y1}, ...}]] gives the area of a simple 2D polygon. Exact (Integer/Rational) coordinates give an exact result; any Real coordinate gives a machine-precision result. A polygon with fewer than 3 distinct vertices has Undefined area.",
+    "url": "documentation/geometry/Area/"
+  },
+  {
     "name": "Arg",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -408,12 +472,28 @@
     "url": "documentation/structural-manipulation/ArrayFlatten/"
   },
   {
+    "name": "ArrayPad",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "ArrayPad[array, m]",
+    "url": "documentation/lists-and-iteration/ArrayPad/"
+  },
+  {
     "name": "ArrayPlot",
     "category": "Graphics",
     "slug": "graphics",
     "status": "Stable",
     "summary": "ArrayPlot[array, opts...]",
     "url": "documentation/graphics/ArrayPlot/"
+  },
+  {
+    "name": "ArrayReshape",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "ArrayReshape[list, dims]",
+    "url": "documentation/lists-and-iteration/ArrayReshape/"
   },
   {
     "name": "AspectRatio",
@@ -600,6 +680,14 @@
     "url": "documentation/arithmetic/Binomial/"
   },
   {
+    "name": "BitLength",
+    "category": "Bitwise operations",
+    "slug": "bitwise",
+    "status": "Stable",
+    "summary": "BitLength[n] gives the number of binary bits needed to represent the integer n.",
+    "url": "documentation/bitwise/BitLength/"
+  },
+  {
     "name": "Black",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -680,6 +768,14 @@
     "url": "documentation/other-advanced/Brown/"
   },
   {
+    "name": "Byte",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Byte",
+    "url": "documentation/other-advanced/Byte/"
+  },
+  {
     "name": "ByteCount",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -752,6 +848,14 @@
     "url": "documentation/statistics/CentralMoment/"
   },
   {
+    "name": "Character",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Character",
+    "url": "documentation/other-advanced/Character/"
+  },
+  {
     "name": "CharacteristicPolynomial",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -782,6 +886,14 @@
     "status": "Experimental",
     "summary": "ChartStyle",
     "url": "documentation/other-advanced/ChartStyle/"
+  },
+  {
+    "name": "Check",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Check[expr, failexpr] returns failexpr if a message is generated while evaluating expr, otherwise the value of expr.",
+    "url": "documentation/control-flow/Check/"
   },
   {
     "name": "ChineseRemainder",
@@ -848,6 +960,14 @@
     "url": "documentation/elementary-functions/Clip/"
   },
   {
+    "name": "Close",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Close[stream]",
+    "url": "documentation/file-io/Close/"
+  },
+  {
     "name": "Closing",
     "category": "Image Processing",
     "slug": "image-processing",
@@ -870,6 +990,14 @@
     "status": "Stable",
     "summary": "CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.",
     "url": "documentation/algebra/CoefficientList/"
+  },
+  {
+    "name": "CoefficientRules",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "CoefficientRules[poly, {x1, x2, ...}] gives {expvec -> coeff, ...} for the monomials of poly.",
+    "url": "documentation/structural-manipulation/CoefficientRules/"
   },
   {
     "name": "Collect",
@@ -1128,6 +1256,14 @@
     "url": "documentation/other-advanced/Contours/"
   },
   {
+    "name": "ConvexHullRegion",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "ConvexHullRegion[{{x1, y1}, ...}] gives the convex hull of a set of 2D points: a Polygon with the hull vertices in counterclockwise order, a Line for collinear input, or a Point for a single point.",
+    "url": "documentation/geometry/ConvexHullRegion/"
+  },
+  {
     "name": "CoprimeQ",
     "category": "Number Theory",
     "slug": "number-theory",
@@ -1294,6 +1430,14 @@
     "status": "Stable",
     "summary": "D[f, x] gives the partial derivative of f with respect to x.",
     "url": "documentation/calculus/D/"
+  },
+  {
+    "name": "DSolve",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "DSolve[eqn, y, x] solves a differential equation for the function y with",
+    "url": "documentation/calculus/DSolve/"
   },
   {
     "name": "DataType",
@@ -1672,6 +1816,14 @@
     "url": "documentation/other-advanced/EdgeList/"
   },
   {
+    "name": "EdgeWeight",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "EdgeWeight[g] gives the weights of g's edges, in EdgeList order. Defaults to all 1s if g was built without an EdgeWeight option.",
+    "url": "documentation/other-advanced/EdgeWeight/"
+  },
+  {
     "name": "EditDistance",
     "category": "Lists and Iteration",
     "slug": "lists-and-iteration",
@@ -1718,6 +1870,14 @@
     "status": "Stable",
     "summary": "End[] restores the context that was active before the matching Begin[]",
     "url": "documentation/scoping-constructs/End/"
+  },
+  {
+    "name": "EndOfFile",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "EndOfFile",
+    "url": "documentation/other-advanced/EndOfFile/"
   },
   {
     "name": "EndPackage",
@@ -1920,6 +2080,14 @@
     "url": "documentation/file-io/Export/"
   },
   {
+    "name": "Expression",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Expression",
+    "url": "documentation/other-advanced/Expression/"
+  },
+  {
     "name": "ExtendedGCD",
     "category": "Number Theory",
     "slug": "number-theory",
@@ -2072,6 +2240,14 @@
     "url": "documentation/algebra/FactorSquareFree/"
   },
   {
+    "name": "FactorSquareFreeList",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "FactorSquareFreeList[poly] gives a list of the square-free factors of poly",
+    "url": "documentation/structural-manipulation/FactorSquareFreeList/"
+  },
+  {
     "name": "FactorTerms",
     "category": "Algebra",
     "slug": "algebra",
@@ -2118,6 +2294,14 @@
     "status": "Stable",
     "summary": "Fibonacci[n]",
     "url": "documentation/arithmetic/Fibonacci/"
+  },
+  {
+    "name": "File",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "File[\"name\"]",
+    "url": "documentation/other-advanced/File/"
   },
   {
     "name": "FileBaseName",
@@ -2240,6 +2424,14 @@
     "url": "documentation/image-processing/FindThreshold/"
   },
   {
+    "name": "FindVertexColoring",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Partial",
+    "summary": "FindVertexColoring[g] gives a MINIMAL vertex colouring of g as a list of integers in VertexList order: the number of distinct colours equals the chromatic number, and no edge joins two vertices of equal colour. Minimality is proven by exact search (Wolfram's \"BacktrackingDS\" method) seeded by DSATUR upper and clique lower bounds. Exact colouring is NP-hard, so there are two guards, and exceeding EITHER returns the expression UNEVALUATED -- never a valid-but-larger colouring. (1) Graphs of more than 128 vertices are refused outright. (2) The search gives up after 8 million nodes, on the order of 100 seconds; a node count rather than a clock, so the answer does not depend on how fast the host is. To bound how long a call may take, wrap it in TimeConstrained -- that is the intended lever, and the search polls for the deadline so it is honoured; the 8-million-node ceiling is a last-resort backstop for an unattended run, not the responsiveness mechanism. Cost is driven by DENSITY, not by vertex count: a sparse 128-vertex graph answers instantly, while a dense one may exhaust the budget and refuse. FindVertexColoring[g, {c1, ...}] and FindVertexColoring[g, l] are not implemented.",
+    "url": "documentation/other-advanced/FindVertexColoring/"
+  },
+  {
     "name": "First",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -2254,6 +2446,14 @@
     "status": "Stable",
     "summary": "FirstCase[expr, patt]",
     "url": "documentation/functional-programming/FirstCase/"
+  },
+  {
+    "name": "FirstPosition",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
+    "status": "Stable",
+    "summary": "FirstPosition[expr, pattern] gives the position of the first element in expr matching pattern (in depth-first order), or Missing[\"NotFound\"] if no such element is found.",
+    "url": "documentation/pattern-matching/FirstPosition/"
   },
   {
     "name": "Fit",
@@ -2430,6 +2630,14 @@
     "status": "Stable",
     "summary": "FresnelS[z]",
     "url": "documentation/other-advanced/FresnelS/"
+  },
+  {
+    "name": "FromCoefficientRules",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "FromCoefficientRules[{expvec -> coeff, ...}, {x1, x2, ...}] reconstructs the polynomial",
+    "url": "documentation/structural-manipulation/FromCoefficientRules/"
   },
   {
     "name": "FromContinuedFraction",
@@ -3088,6 +3296,14 @@
     "url": "documentation/file-io/Import/"
   },
   {
+    "name": "Inactive",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Inactive[f] represents f with evaluation of its own rules suppressed, so Inactive[f][args] stays unevaluated (its arguments still evaluate).  Used to hold an integral inert, e.g. Inactive[Integrate][g, x]; Activate reverses it.",
+    "url": "documentation/expression-information/Inactive/"
+  },
+  {
     "name": "IncidenceMatrix",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -3142,6 +3358,14 @@
     "status": "Stable",
     "summary": "InputForm[expr]",
     "url": "documentation/expression-information/InputForm/"
+  },
+  {
+    "name": "InputStream",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "InputStream[\"name\", n]",
+    "url": "documentation/other-advanced/InputStream/"
   },
   {
     "name": "Insert",
@@ -3238,6 +3462,14 @@
     "status": "Stable",
     "summary": "Interpolation[data]",
     "url": "documentation/functional-programming/Interpolation/"
+  },
+  {
+    "name": "InterquartileRange",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "InterquartileRange[data]",
+    "url": "documentation/statistics/InterquartileRange/"
   },
   {
     "name": "Intersection",
@@ -3342,6 +3574,14 @@
     "status": "Stable",
     "summary": "Join[list1, list2, ...]",
     "url": "documentation/data-structures/Join/"
+  },
+  {
+    "name": "JordanDecomposition",
+    "category": "Linear Algebra",
+    "slug": "linear-algebra",
+    "status": "Stable",
+    "summary": "JordanDecomposition[m]",
+    "url": "documentation/linear-algebra/JordanDecomposition/"
   },
   {
     "name": "KeyDrop",
@@ -3552,6 +3792,14 @@
     "url": "documentation/special-functions/LegendreP/"
   },
   {
+    "name": "LegendreQ",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "LegendreQ[n, x]",
+    "url": "documentation/special-functions/LegendreQ/"
+  },
+  {
     "name": "Length",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -3750,6 +3998,22 @@
     "status": "Stable",
     "summary": "ListCorrelate[ker, list]",
     "url": "documentation/fourier-transforms/ListCorrelate/"
+  },
+  {
+    "name": "ListGradient",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "ListGradient[f]",
+    "url": "documentation/arithmetic/ListGradient/"
+  },
+  {
+    "name": "ListInterpolation",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "ListInterpolation[array]",
+    "url": "documentation/functional-programming/ListInterpolation/"
   },
   {
     "name": "ListPlot",
@@ -3992,6 +4256,14 @@
     "url": "documentation/data-structures/Mean/"
   },
   {
+    "name": "MeanDeviation",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "MeanDeviation[data]",
+    "url": "documentation/statistics/MeanDeviation/"
+  },
+  {
     "name": "MeanFilter",
     "category": "Image Processing",
     "slug": "image-processing",
@@ -4006,6 +4278,14 @@
     "status": "Stable",
     "summary": "Median[data]",
     "url": "documentation/data-structures/Median/"
+  },
+  {
+    "name": "MedianDeviation",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "MedianDeviation[data]",
+    "url": "documentation/statistics/MedianDeviation/"
   },
   {
     "name": "MedianFilter",
@@ -4038,6 +4318,14 @@
     "status": "Stable",
     "summary": "Merge[{assoc1, assoc2, ...}, f]",
     "url": "documentation/data-structures/Merge/"
+  },
+  {
+    "name": "Message",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Message[sym::tag, args] prints the named message unless messages are suppressed.",
+    "url": "documentation/control-flow/Message/"
   },
   {
     "name": "Min",
@@ -4110,6 +4398,14 @@
     "status": "Stable",
     "summary": "Moment[data, r]",
     "url": "documentation/statistics/Moment/"
+  },
+  {
+    "name": "MonomialList",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "MonomialList[poly] gives the list of monomials of poly, using Variables[poly].",
+    "url": "documentation/structural-manipulation/MonomialList/"
   },
   {
     "name": "MorphologicalComponents",
@@ -4416,12 +4712,44 @@
     "url": "documentation/lists-and-iteration/Nothing/"
   },
   {
+    "name": "NullRecords",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "NullRecords",
+    "url": "documentation/other-advanced/NullRecords/"
+  },
+  {
     "name": "NullSpace",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
     "status": "Stable",
     "summary": "NullSpace[m]",
     "url": "documentation/linear-algebra/NullSpace/"
+  },
+  {
+    "name": "NullWords",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "NullWords",
+    "url": "documentation/other-advanced/NullWords/"
+  },
+  {
+    "name": "Number",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Number",
+    "url": "documentation/other-advanced/Number/"
+  },
+  {
+    "name": "NumberFieldIntegralBasis",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "NumberFieldIntegralBasis[a]",
+    "url": "documentation/algebra/NumberFieldIntegralBasis/"
   },
   {
     "name": "NumberForm",
@@ -4470,6 +4798,30 @@
     "status": "Experimental",
     "summary": "OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.",
     "url": "documentation/expression-information/OneIdentity/"
+  },
+  {
+    "name": "OpenAppend",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "OpenAppend[\"file\"]",
+    "url": "documentation/file-io/OpenAppend/"
+  },
+  {
+    "name": "OpenRead",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "OpenRead[\"file\"]",
+    "url": "documentation/file-io/OpenRead/"
+  },
+  {
+    "name": "OpenWrite",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "OpenWrite[\"file\"]",
+    "url": "documentation/file-io/OpenWrite/"
   },
   {
     "name": "Opening",
@@ -4560,6 +4912,14 @@
     "url": "documentation/linear-algebra/Outer/"
   },
   {
+    "name": "OutputStream",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "OutputStream[\"name\", n]",
+    "url": "documentation/other-advanced/OutputStream/"
+  },
+  {
     "name": "OwnValues",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -4568,12 +4928,28 @@
     "url": "documentation/assignment-and-rules/OwnValues/"
   },
   {
+    "name": "PDEClassify",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "PDEClassify[eqn, u, {v1, v2}] classifies a second-order linear PDE by the discriminant \u0394 = B\u00b2 \u2212 4 A C of its principal part A u_{v1 v1} + B u_{v1 v2} + C u_{v2 v2}: \"Hyperbolic\" (\u0394 > 0, e.g. the wave equation), \"Parabolic\" (\u0394 == 0, e.g. the heat equation), or \"Elliptic\" (\u0394 < 0, e.g. Laplace's equation). Only the highest-order terms determine the type. A discriminant whose sign is not a decidable constant (a mixed-type / parameter-dependent equation such as Tricomi's y u_xx + u_yy == 0) leaves the call unevaluated.",
+    "url": "documentation/other-advanced/PDEClassify/"
+  },
+  {
     "name": "PDF",
     "category": "Machine Learning",
     "slug": "machine-learning",
     "status": "Stable",
     "summary": "PDF[dist, x] gives the probability density of dist at x, and threads over a list of x. Supports NormalDistribution and UniformDistribution.",
     "url": "documentation/machine-learning/PDF/"
+  },
+  {
+    "name": "PackedArrayQ",
+    "category": "Packed arrays",
+    "slug": "packed-arrays",
+    "status": "Stable",
+    "summary": "PackedArrayQ[expr]",
+    "url": "documentation/packed-arrays/PackedArrayQ/"
   },
   {
     "name": "PadLeft",
@@ -4654,6 +5030,14 @@
     "status": "Experimental",
     "summary": "PatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, each in turn matching p1, p2, ....",
     "url": "documentation/other-advanced/PatternSequence/"
+  },
+  {
+    "name": "Perimeter",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "Perimeter[Polygon[{{x1, y1}, ...}]] gives the perimeter of a simple 2D polygon: the sum of its edge lengths, including the closing edge. Exact coordinates give an exact (possibly symbolic, e.g. 2 + Sqrt[2]) result; Real coordinates give a machine-precision result.",
+    "url": "documentation/geometry/Perimeter/"
   },
   {
     "name": "Permutations",
@@ -4814,6 +5198,14 @@
     "status": "Stable",
     "summary": "PolynomialQuotientRemainder[p, q, x] returns {Quotient, Remainder}",
     "url": "documentation/calculus/PolynomialQuotientRemainder/"
+  },
+  {
+    "name": "PolynomialReduce",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "PolynomialReduce[poly, {p1, ..., pn}, {x1, ..., xk}] gives {{a1, ..., an}, b} with",
+    "url": "documentation/structural-manipulation/PolynomialReduce/"
   },
   {
     "name": "PolynomialRemainder",
@@ -5104,6 +5496,14 @@
     "url": "documentation/linear-algebra/QRDecomposition/"
   },
   {
+    "name": "Quantile",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "Quantile[data,q]",
+    "url": "documentation/statistics/Quantile/"
+  },
+  {
     "name": "Quartics",
     "category": "Solutions of Equations",
     "slug": "solutions-of-equations",
@@ -5118,6 +5518,14 @@
     "status": "Stable",
     "summary": "Quartiles[data]",
     "url": "documentation/statistics/Quartiles/"
+  },
+  {
+    "name": "Quiet",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Quiet[expr] evaluates expr with messages suppressed and returns its value. Quiet[expr, spec] suppresses all messages regardless of spec.",
+    "url": "documentation/control-flow/Quiet/"
   },
   {
     "name": "Quotient",
@@ -5164,7 +5572,7 @@
     "category": "Other & Advanced",
     "slug": "other-advanced",
     "status": "Stable",
-    "summary": "RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.",
+    "summary": "RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges. RandomGraph[{n, m}, k] gives a list of k such graphs; memory use grows with k.",
     "url": "documentation/other-advanced/RandomGraph/"
   },
   {
@@ -5288,6 +5696,30 @@
     "url": "documentation/arithmetic/ReIm/"
   },
   {
+    "name": "Read",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Read[stream]",
+    "url": "documentation/file-io/Read/"
+  },
+  {
+    "name": "ReadList",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "ReadList[\"file\"]",
+    "url": "documentation/file-io/ReadList/"
+  },
+  {
+    "name": "Real",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Real",
+    "url": "documentation/other-advanced/Real/"
+  },
+  {
     "name": "RealDigits",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -5312,6 +5744,22 @@
     "url": "documentation/other-advanced/Reap/"
   },
   {
+    "name": "Record",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Record",
+    "url": "documentation/other-advanced/Record/"
+  },
+  {
+    "name": "RecordSeparators",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "RecordSeparators",
+    "url": "documentation/other-advanced/RecordSeparators/"
+  },
+  {
     "name": "Red",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -5326,6 +5774,22 @@
     "status": "Partial",
     "summary": "Reduce[expr, vars]",
     "url": "documentation/solutions-of-equations/Reduce/"
+  },
+  {
+    "name": "RegionCentroid",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "RegionCentroid[Polygon[{{x1, y1}, ...}]] gives the centroid {cx, cy} of a simple 2D polygon with nonzero area. Exact coordinates give an exact result; Real coordinates give a machine-precision result.",
+    "url": "documentation/geometry/RegionCentroid/"
+  },
+  {
+    "name": "RegionMember",
+    "category": "Computational geometry",
+    "slug": "geometry",
+    "status": "Stable",
+    "summary": "RegionMember[Polygon[{{x1, y1}, ...}], {x, y}] gives True if the point lies inside or on the boundary of the simple 2D polygon, and False otherwise.",
+    "url": "documentation/geometry/RegionMember/"
   },
   {
     "name": "RegularExpression",
@@ -5616,6 +6080,14 @@
     "url": "documentation/functional-programming/Scan/"
   },
   {
+    "name": "SchurDecomposition",
+    "category": "Linear Algebra",
+    "slug": "linear-algebra",
+    "status": "Stable",
+    "summary": "SchurDecomposition[m]",
+    "url": "documentation/linear-algebra/SchurDecomposition/"
+  },
+  {
     "name": "Sec",
     "category": "Elementary Functions",
     "slug": "elementary-functions",
@@ -5742,6 +6214,14 @@
     "status": "Stable",
     "summary": "SetPrecision[x, n]",
     "url": "documentation/arithmetic/SetPrecision/"
+  },
+  {
+    "name": "SetStreamPosition",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "SetStreamPosition[stream, n]",
+    "url": "documentation/file-io/SetStreamPosition/"
   },
   {
     "name": "Shortest",
@@ -5976,6 +6456,14 @@
     "url": "documentation/machine-learning/Standardize/"
   },
   {
+    "name": "StarGraph",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "StarGraph[n] gives the star on n vertices: the hub 1 joined to each of the n-1 leaves 2..n.",
+    "url": "documentation/other-advanced/StarGraph/"
+  },
+  {
     "name": "StieltjesGamma",
     "category": "Special Functions",
     "slug": "special-functions",
@@ -5990,6 +6478,30 @@
     "status": "Stable",
     "summary": "StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
     "url": "documentation/graphics/StreamPlot/"
+  },
+  {
+    "name": "StreamPosition",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "StreamPosition[stream]",
+    "url": "documentation/file-io/StreamPosition/"
+  },
+  {
+    "name": "Streams",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Streams[]",
+    "url": "documentation/file-io/Streams/"
+  },
+  {
+    "name": "String",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "String",
+    "url": "documentation/other-advanced/String/"
   },
   {
     "name": "StringCases",
@@ -6468,8 +6980,16 @@
     "category": "Packed arrays",
     "slug": "packed-arrays",
     "status": "Stable",
-    "summary": "ToNDArray[list] returns list stored as a dense machine-precision buffer. The result is still a List -- same Head, same printed form, same elements -- but NDArrayQ gives True for it. ToNDArray[list, DataType -> \"float64\"] forces the element type. Returns list unchanged when it is not rectangular, is empty, or holds anything other than uniformly Integer or uniformly Real machine values. Unlike automatic packing it ignores the size threshold.",
+    "summary": "ToNDArray[list] returns list stored as a dense machine-precision buffer. The result is still a List -- same Head, same printed form, same elements -- but NDArrayQ gives True for it. ToNDArray[list, DataType -> \"float64\"] forces the element type. A mix of Integer and Real machine values is widened to a Real buffer (the integers become doubles); an all-Integer list stays Integer. Returns list unchanged when it is not rectangular, is empty, or holds any non-machine value. Unlike automatic packing it ignores the size threshold.",
     "url": "documentation/packed-arrays/ToNDArray/"
+  },
+  {
+    "name": "ToNumberField",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "ToNumberField[a, theta]",
+    "url": "documentation/algebra/ToNumberField/"
   },
   {
     "name": "ToPackedArray",
@@ -6510,6 +7030,14 @@
     "status": "Stable",
     "summary": "Together[expr] combines fractions over a common denominator, then cancels.",
     "url": "documentation/algebra/Together/"
+  },
+  {
+    "name": "TokenWords",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "TokenWords",
+    "url": "documentation/other-advanced/TokenWords/"
   },
   {
     "name": "Total",
@@ -6856,6 +7384,14 @@
     "url": "documentation/other-advanced/WeaklyConnectedComponents/"
   },
   {
+    "name": "WeightedAdjacencyMatrix",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "WeightedAdjacencyMatrix[g] gives the adjacency matrix of g with each entry the corresponding edge's weight (0 where there is no edge). Equal to AdjacencyMatrix[g] when g has no EdgeWeight.",
+    "url": "documentation/other-advanced/WeightedAdjacencyMatrix/"
+  },
+  {
     "name": "Which",
     "category": "Control Flow",
     "slug": "control-flow",
@@ -6886,6 +7422,38 @@
     "status": "Stable",
     "summary": "With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.",
     "url": "documentation/scoping-constructs/With/"
+  },
+  {
+    "name": "Word",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Word",
+    "url": "documentation/other-advanced/Word/"
+  },
+  {
+    "name": "WordSeparators",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "WordSeparators",
+    "url": "documentation/other-advanced/WordSeparators/"
+  },
+  {
+    "name": "Write",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Write[stream, expr1, expr2, ...]",
+    "url": "documentation/file-io/Write/"
+  },
+  {
+    "name": "WriteString",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "WriteString[stream, str1, str2, ...]",
+    "url": "documentation/file-io/WriteString/"
   },
   {
     "name": "Xor",

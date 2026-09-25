@@ -97,7 +97,7 @@ Out[12]= 5
 
 ## References
 
-**See also:** [Complex](../../arithmetic/Complex/), [Rational](../../arithmetic/Rational/)
+**See also:** [Real](../../other-advanced/Real/), [Complex](../../arithmetic/Complex/), [Rational](../../arithmetic/Rational/)
 
 - A. J. Menezes, P. C. van Oorschot and S. A. Vanstone, *Handbook of Applied Cryptography*, CRC Press, 1996 — §3.6 covers the discrete logarithm problem and its algorithms (baby-step giant-step, Pohlig–Hellman, index calculus).
 - R. Crandall and C. Pomerance, *Prime Numbers: A Computational Perspective*, 2nd ed., Springer, 2005 — §5.2, discrete logarithms.

@@ -70,10 +70,10 @@ Out[9]= 6
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (monomial extraction from polynomial normal forms).
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
+- Tests: [`tests/test_dsolve_m14_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m14_stress.c)
 - Tests: [`tests/test_expand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expand.c)
 - Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
-- Tests: [`tests/test_risch_field.c`](https://github.com/stblake/mathilda/blob/main/tests/test_risch_field.c)
-- Tests: [`tests/test_risch_hypertangent.c`](https://github.com/stblake/mathilda/blob/main/tests/test_risch_hypertangent.c)
 
 ## Notes & additional examples
 

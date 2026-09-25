@@ -13,6 +13,10 @@ gives the row-reduced form of the matrix m.
 
 runs a specific elimination algorithm.  Accepted method names: "Automatic"                 — alias for "DivisionFreeRowReduction" (default) "DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan "OneStepRowReduction"       — classical Gauss-Jordan with division per pivot "CofactorExpansion"         — identity-if-invertible via Laplace cofactor Det\[m\] (singular / rectangular m falls back to "DivisionFreeRowReduction")
 
+**`RowReduce[m, ZeroTest -> f]`**
+
+uses the predicate f to decide when an entry is zero during the reduction (an entry is zero iff f\[entry\] is True).  Both a body such as (RootReduce\[Together\[#\]\] === 0 &) and a predicate head such as PossibleZeroQ are accepted; use it to catch algebraic zeros a structural test would miss.  May be combined with Method.
+
 ## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
@@ -109,13 +113,14 @@ Algorithm choice for the four supported matrix families:
   - `Method -> "DivisionFreeRowReduction"` — Bareiss-like fraction-free Gauss-Jordan. Best for exact integer / rational / symbolic input — never produces a denominator larger than necessary.
   - `Method -> "OneStepRowReduction"` — classical Gauss-Jordan with one division per pivot per element. Each entry is canonicalised via `Together` so symbolic cancellations are still detected. Fast on numeric matrices.
   - `Method -> "CofactorExpansion"` — for a non-singular square matrix, returns the identity (verified via `Det[m] != 0` computed by Laplace cofactor expansion). On singular or rectangular input, falls back to `"DivisionFreeRowReduction"` and emits `RowReduce::cofnsq`.
+- `ZeroTest -> f` supplies a predicate deciding when an entry is zero during the reduction (zero iff `f[entry]` is `True`). Both a body such as `(RootReduce[Together[#]] === 0 &)` and a predicate head such as `PossibleZeroQ` are accepted. With a `ZeroTest`, an exact Gauss-Jordan RREF consults the predicate at every pivot (a structural RREF would pivot on an algebraic zero the predicate rejects) and keeps entries canonical via `Together`. Shares the machinery with `NullSpace` (`matsol_rref_with_zerotest`); `Method` and `ZeroTest` may be combined.
 - Unknown method names emit `RowReduce::method` and the call remains unevaluated.
 
 **Attributes:** `Protected`.
 
 ## References
 
-**See also:** [Together](../../algebra/Together/)
+**See also:** [Together](../../algebra/Together/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/), [NullSpace](../../linear-algebra/NullSpace/)
 
 - E. H. Bareiss, "Sylvester's Identity and Multistep Integer-Preserving Gaussian Elimination", Math. Comp. 22 (1968).
 - Source: [`src/linalg/linsolve.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/linsolve.c)

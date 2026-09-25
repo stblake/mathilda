@@ -73,6 +73,7 @@ standard integer/bigint arithmetic helpers.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_polymod.c`](https://github.com/stblake/mathilda/blob/main/tests/test_polymod.c)
+- Tests: [`tests/test_polynomialreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_polynomialreduce.c)
 
 ## Notes & additional examples
 

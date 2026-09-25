@@ -1,6 +1,6 @@
 # Functional Programming
 
-33 built-in function(s) in this category.
+34 built-in function(s) in this category.
 
 - [`AllTrue`](AllTrue.md) — AllTrue[list, test]  _(Stable)_
 - [`AnyTrue`](AnyTrue.md) — AnyTrue[list, test]  _(Stable)_
@@ -13,6 +13,7 @@
 - [`InterpolatingFunction`](InterpolatingFunction.md) — InterpolatingFunction[domain, table]  _(Stable)_
 - [`InterpolatingPolynomial`](InterpolatingPolynomial.md) — InterpolatingPolynomial[{f1, f2, ...}, x]  _(Stable)_
 - [`Interpolation`](Interpolation.md) — Interpolation[data]  _(Stable)_
+- [`ListInterpolation`](ListInterpolation.md) — ListInterpolation[array]  _(Stable)_
 - [`MapAll`](MapAll.md) — f //@ expr or MapAll[f, expr]  _(Stable)_
 - [`MapIndexed`](MapIndexed.md) — MapIndexed[f, expr]  _(Stable)_
 - [`MapThread`](MapThread.md) — MapThread[f, {{a1, a2, ...}, {b1, b2, ...}, ...}]  _(Stable)_

@@ -35,4 +35,4 @@ Against other systems, from the benchmark suite (same input, results cross-check
 - Tests: [`tests/test_array_flatten.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_flatten.c)
 - Tests: [`tests/test_backtrack.c`](https://github.com/stblake/mathilda/blob/main/tests/test_backtrack.c)
 - Tests: [`tests/test_blas.c`](https://github.com/stblake/mathilda/blob/main/tests/test_blas.c)
-- Tests: [`tests/test_constant_array.c`](https://github.com/stblake/mathilda/blob/main/tests/test_constant_array.c)
+- Tests: [`tests/test_coefficient_rules.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coefficient_rules.c)

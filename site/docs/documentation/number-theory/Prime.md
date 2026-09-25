@@ -108,10 +108,10 @@ exceed that bound, the call is left unevaluated.
 - M. Cipolla, "La determinazione assintotica dell'n-esimo numero primo", Rend. Accad. Sci. Fis. Mat. Napoli 8 (1902), 132–166.
 - Source: [`src/numbertheory/prime.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory/prime.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_chinese_remainder.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chinese_remainder.c)
+- Tests: [`tests/test_iter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_iter.c)
 - Tests: [`tests/test_jacobisymbol.c`](https://github.com/stblake/mathilda/blob/main/tests/test_jacobisymbol.c)
 - Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
-- Tests: [`tests/test_nsum.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nsum.c)
-- Tests: [`tests/test_prime.c`](https://github.com/stblake/mathilda/blob/main/tests/test_prime.c)
 
 ## Notes & additional examples
 

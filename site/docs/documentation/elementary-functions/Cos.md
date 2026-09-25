@@ -54,12 +54,12 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 | case | Mathilda | Wolfram | Python |
 |---|---:|---:|---:|
+| Interpolation evaluate, 20000 points | 18.9 s | 18.1 s | 0.073 s |
 | NSolve all roots, degree 50 | 15.9 s | 0.907 s | 0.184 s |
 | Simplify quartic-to-Cos[4x] | 2.35 s | 0.003 s | 7.45 s |
+| Interpolation over 10^5 array | 1.26 s | 4.57 s | 4.44 s |
 | TrigReduce product of 4 sines | 0.894 s | 0.14 s | 16.5 s |
 | FullSimplify nested radical | 0.185 s | 0.003 s | 1.28 s |
-| Simplify log-exp collapse | 0.059 s | 0.004 s | 1.35 s |
-| Simplify trig Pythagorean | 0.048 s | 0.004 s | 3.69 s |
 
 ## Implementation notes
 

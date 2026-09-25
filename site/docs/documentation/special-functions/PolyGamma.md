@@ -125,7 +125,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## References
 
-**See also:** [EulerGamma](../../mathematical-constants/EulerGamma/), [Series](../../power-series/Series/), [D](../../calculus/D/)
+**See also:** [EulerGamma](../../mathematical-constants/EulerGamma/), [Real](../../other-advanced/Real/), [Series](../../power-series/Series/), [D](../../calculus/D/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

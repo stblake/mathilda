@@ -120,7 +120,7 @@ are ever affected; exact integers and rationals are never chopped.
 
 ## References
 
-**See also:** [Rational](../../arithmetic/Rational/)
+**See also:** [Rational](../../arithmetic/Rational/), [Real](../../other-advanced/Real/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

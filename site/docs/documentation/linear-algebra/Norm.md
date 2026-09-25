@@ -113,7 +113,7 @@ Other matrix norms (SVD-based 2-norm, etc.) are not yet implemented and fall thr
 
 ## References
 
-**See also:** [List](../../other-advanced/List/), [Normalize](../../linear-algebra/Normalize/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/), [FindRoot](../../calculus/FindRoot/)
+**See also:** [List](../../other-advanced/List/), [Normalize](../../linear-algebra/Normalize/), [Real](../../other-advanced/Real/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/), [FindRoot](../../calculus/FindRoot/)
 
 - Source: [`src/linalg/norm.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/norm.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

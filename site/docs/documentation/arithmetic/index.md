@@ -1,6 +1,6 @@
 # Arithmetic
 
-50 built-in function(s) in this category.
+51 built-in function(s) in this category.
 
 - [`Abs`](Abs.md) — Abs[z] gives the absolute value (modulus) of numeric z, Sqrt[Re[z]^2 + Im[z]^2] for complex z.  _(Stable)_
 - [`Accumulate`](Accumulate.md) — Accumulate[list]  _(Stable)_
@@ -28,6 +28,7 @@
 - [`IntegerLength`](IntegerLength.md) — IntegerLength[n] gives the number of decimal digits in the integer n.  _(Stable)_
 - [`IntegerPart`](IntegerPart.md) — IntegerPart[x]  _(Stable)_
 - [`IntegerString`](IntegerString.md) — IntegerString[n] gives a string consisting of the decimal digits in the integer n.  _(Stable)_
+- [`ListGradient`](ListGradient.md) — ListGradient[f]  _(Stable)_
 - [`LucasL`](LucasL.md) — LucasL[n]  _(Stable)_
 - [`MantissaExponent`](MantissaExponent.md) — MantissaExponent[x] gives a list {m, e} containing the mantissa and exponent of the real number x, such that x = m * 10^e and 1/10 <= |m| < 1 (or m = 0 when x = 0).  _(Stable)_
 - [`Mod`](Mod.md) — Mod[m, n]  _(Stable)_

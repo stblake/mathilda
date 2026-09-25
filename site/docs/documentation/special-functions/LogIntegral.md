@@ -95,7 +95,7 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## References
 
-**See also:** [ExpIntegralEi](../../special-functions/ExpIntegralEi/), [Log](../../elementary-functions/Log/), [N](../../arithmetic/N/), [D](../../calculus/D/)
+**See also:** [ExpIntegralEi](../../special-functions/ExpIntegralEi/), [Log](../../elementary-functions/Log/), [Real](../../other-advanced/Real/), [N](../../arithmetic/N/), [D](../../calculus/D/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

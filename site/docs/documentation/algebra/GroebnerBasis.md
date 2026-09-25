@@ -88,7 +88,7 @@ Out[14]= {-1 + z^3, y^2 + y z + z^2, x + y + z}
 
 | Option               | Default          | Supported                                           |
 | -------------------- | ---------------- | --------------------------------------------------- |
-| `MonomialOrder`      | `Lexicographic`  | `Lexicographic`, `DegreeReverseLexicographic`, `EliminationOrder`, or an integer **weight matrix** `{{...}, ...}` (one column per variable) defining a custom term order |
+| `MonomialOrder`      | `Lexicographic`  | `Lexicographic`, `DegreeLexicographic`, `DegreeReverseLexicographic`, `EliminationOrder`, or an integer **weight matrix** `{{...}, ...}` (one column per variable) defining a custom term order. The `Negative*` orders are not well-founded (global) term orders, so they fall back to `Lexicographic` with a note. |
 | `CoefficientDomain`  | `Rationals`      | `Rationals`, `Automatic`, `Integers` (strong Gröbner basis over Z), `RationalFunctions` (basis over the field Q(params)), `Polynomials[x, ...]` (named symbols become coefficient-ring parameters), `InexactNumbers[p]` (monic basis with `p`-digit real coefficients) |
 | `Method`             | `Automatic`      | `"Buchberger"`, `"GroebnerWalk"`, `Automatic`        |
 | `Sort`               | `False`          | `True` reverses the main-variable list before the basis is computed (matching Mathematica's empirical behaviour). |
@@ -104,13 +104,12 @@ or that are used together with elimination/parameter variables, emit
 `GroebnerBasis::nimpl` and fall back to `Lexicographic`.
 
 Settings outside this table emit a `GroebnerBasis::nimpl` diagnostic to
-`stderr` and fall back to the default.  Deferred (not implemented in this
-release):
-
-- `MonomialOrder -> DegreeLexicographic`.
-- `Modulus -> n` (modular Gröbner bases): emits a
-  `GroebnerBasis::modnotimpl` diagnostic and falls back to the rational
-  basis.
+`stderr` and fall back to the default.  `MonomialOrder ->
+DegreeLexicographic` and the other named orders are built from a shared
+named-order weight matrix (`gb_build_order_matrix` in `src/poly/groebner.c`,
+also used by `PolynomialReduce` and the `CoefficientRules` / `MonomialList`
+family), so a named order and its explicit weight-matrix spelling return
+the identical basis.
 
 `CoefficientDomain -> Integers` computes a strong Gröbner basis over the
 ring Z (any parameter symbol is treated as an ordinary variable of the
@@ -239,6 +238,7 @@ For expensive target orders the front end can route through the **Gröbner walk*
 - Source: [`src/poly/groebnerbasis.c`](https://github.com/stblake/mathilda/blob/main/src/poly/groebnerbasis.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_groebner.c`](https://github.com/stblake/mathilda/blob/main/tests/test_groebner.c)
+- Tests: [`tests/test_polynomialreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_polynomialreduce.c)
 
 ## Notes & additional examples
 

@@ -1,6 +1,6 @@
 # Linear Algebra
 
-43 built-in function(s) in this category.
+45 built-in function(s) in this category.
 
 - [`CharacteristicPolynomial`](CharacteristicPolynomial.md) — CharacteristicPolynomial[m, x]  _(Stable)_
 - [`ConjugateTranspose`](ConjugateTranspose.md) — ConjugateTranspose[m]  _(Stable)_
@@ -22,6 +22,7 @@
 - [`IdentityMatrix`](IdentityMatrix.md) — IdentityMatrix[n] gives the n x n identity matrix.  _(Stable)_
 - [`Inner`](Inner.md) — Inner[f,list1,list2,g]  _(Stable)_
 - [`Inverse`](Inverse.md) — Inverse[m]  _(Stable)_
+- [`JordanDecomposition`](JordanDecomposition.md) — JordanDecomposition[m]  _(Stable)_
 - [`LUDecomposition`](LUDecomposition.md) — LUDecomposition[m]  _(Stable)_
 - [`LatticeReduce`](LatticeReduce.md) — LatticeReduce[m]  _(Stable)_
 - [`LeastSquares`](LeastSquares.md) — LeastSquares[m, b]  _(Stable)_
@@ -38,6 +39,7 @@
 - [`PseudoInverse`](PseudoInverse.md) — PseudoInverse[m]  _(Stable)_
 - [`QRDecomposition`](QRDecomposition.md) — QRDecomposition[m]  _(Stable)_
 - [`RowReduce`](RowReduce.md) — RowReduce[m]  _(Stable)_
+- [`SchurDecomposition`](SchurDecomposition.md) — SchurDecomposition[m]  _(Stable)_
 - [`SingularValueDecomposition`](SingularValueDecomposition.md) — SingularValueDecomposition[m]  _(Stable)_
 - [`SquareMatrixQ`](SquareMatrixQ.md) — SquareMatrixQ[m]  _(Stable)_
 - [`SymmetricMatrixQ`](SymmetricMatrixQ.md) — SymmetricMatrixQ[m]  _(Stable)_

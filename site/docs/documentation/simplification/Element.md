@@ -104,9 +104,9 @@ persistent state.
 - Source: [`src/simp/simp_builtins.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_builtins.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)
 - Tests: [`tests/test_basin_hopping.c`](https://github.com/stblake/mathilda/blob/main/tests/test_basin_hopping.c)
+- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 - Tests: [`tests/test_dual_annealing.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dual_annealing.c)
 - Tests: [`tests/test_element.c`](https://github.com/stblake/mathilda/blob/main/tests/test_element.c)
-- Tests: [`tests/test_fullsimplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fullsimplify.c)
 
 ## Notes & additional examples
 

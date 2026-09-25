@@ -165,8 +165,9 @@ variable-restricted form `PowerExpand[expr, {x1, …}]`.
 - Source: [`src/expand_power.c`](https://github.com/stblake/mathilda/blob/main/src/expand_power.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_cherry_dilog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog.c)
+- Tests: [`tests/test_cherry_dilog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog_exp.c)
 - Tests: [`tests/test_cherry_li.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_li.c)
-- Tests: [`tests/test_powerexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_powerexpand.c)
+- Tests: [`tests/test_cherry_polylog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_polylog_exp.c)
 
 ## Notes & additional examples
 

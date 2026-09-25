@@ -44,7 +44,7 @@ Out[7]= 0.98279372324732906798571061101466601449686
 
 ## References
 
-**See also:** [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
+**See also:** [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Real](../../other-advanced/Real/), [Rational](../../arithmetic/Rational/)
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

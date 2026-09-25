@@ -16,11 +16,11 @@ does simplification using assumptions assum.
 <details>
 <summary>Notes</summary>
 
-Options: Assumptions (default $Assumptions) -- facts assumed while simplifying. ComplexityFunction (default: leaf count plus integer-digit count, matching Mathematica) -- ranks candidate forms; the lowest-scoring form is returned. TransformationFunctions (default Automatic) -- the functions applied to try to transform parts of expr. Automatic uses the built-in collection; {f1, f2, ...} uses only the fi; {Automatic, f1, ...} uses the built-in functions together with the fi. The built-in collection tries Together, Cancel, Expand, Factor, FactorSquareFree, Apart, TrigExpand, TrigFactor, and a TrigToExp/ExpToTrig roundtrip, keeping the smallest result. Under positivity / reality assumptions Simplify also applies Log/Power identities -- Log\[a b\] -\> Log\[a\] + Log\[b\], (a b)^c -\> a^c b^c, (a^p)^q -\> a^(p q), Log\[a^p\] -\> p Log\[a\] and the like -- whenever the operand-domain conditions are provable from the assumption set. Assumptions can be equations, inequalities, domain specifications such as Element\[x, Integers\], or logical combinations of these. Lists of assumptions are converted to conjunctions. Simplify automatically threads over lists, equations, inequalities, and logic functions.
+Options: Assumptions (default $Assumptions) -- facts assumed while simplifying. ComplexityFunction (default: leaf count plus integer-digit count, matching Mathematica) -- ranks candidate forms; the lowest-scoring form is returned. TransformationFunctions (default Automatic) -- the functions applied to try to transform parts of expr. Automatic uses the built-in collection; {f1, f2, ...} uses only the fi; {Automatic, f1, ...} uses the built-in functions together with the fi. TimeConstraint (default Infinity) -- a per-sub-expression wall-clock budget in seconds; when a sub-expression's search exceeds it, the best form found so far is returned instead of continuing. A list {tLoc, ...} uses tLoc as the per-sub-expression budget. The built-in collection tries Together, Cancel, Expand, Factor, FactorSquareFree, Apart, TrigExpand, TrigFactor, and a TrigToExp/ExpToTrig roundtrip, keeping the smallest result. Under positivity / reality assumptions Simplify also applies Log/Power identities -- Log\[a b\] -\> Log\[a\] + Log\[b\], (a b)^c -\> a^c b^c, (a^p)^q -\> a^(p q), Log\[a^p\] -\> p Log\[a\] and the like -- whenever the operand-domain conditions are provable from the assumption set. Assumptions can be equations, inequalities, domain specifications such as Element\[x, Integers\], or logical combinations of these. Lists of assumptions are converted to conjunctions. Simplify automatically threads over lists, equations, inequalities, and logic functions.
 
 </details>
 
-## Examples (38)
+## Examples (40)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -122,32 +122,42 @@ In[30]:= Simplify[a + b, TransformationFunctions -> {(# /. a -> 0 &)}]
 Out[30]= b
 ```
 
+### Worked examples (2)
+
+```mathematica
+In[31]:= Simplify[Root[1+#^4&,2]^3 + Root[1+#^4&,2]]
+Out[31]= I Sqrt[2]
+
+In[32]:= Simplify[D[Integrate[Sqrt[Tan[x]], x], x] - Sqrt[Tan[x]]]
+Out[32]= 0
+```
+
 ### Applications (8)
 
 ```mathematica
-In[31]:= Simplify[(x^2 - 1)/(x - 1)]
-Out[31]= 1 + x
+In[33]:= Simplify[(x^2 - 1)/(x - 1)]
+Out[33]= 1 + x
 
-In[32]:= Simplify[Sin[x]^2 + Cos[x]^2]
-Out[32]= 1
+In[34]:= Simplify[Sin[x]^2 + Cos[x]^2]
+Out[34]= 1
 
-In[33]:= Simplify[x + x + x]
-Out[33]= 3 x
+In[35]:= Simplify[x + x + x]
+Out[35]= 3 x
 
-In[34]:= Simplify[Sqrt[x^2], x > 0]
-Out[34]= x
+In[36]:= Simplify[Sqrt[x^2], x > 0]
+Out[36]= x
 
-In[35]:= Simplify[Sqrt[x^2], Element[x, Reals]]
-Out[35]= Abs[x]
+In[37]:= Simplify[Sqrt[x^2], Element[x, Reals]]
+Out[37]= Abs[x]
 
-In[36]:= Simplify[Cosh[x]^2 - Sinh[x]^2]
-Out[36]= 1
+In[38]:= Simplify[Cosh[x]^2 - Sinh[x]^2]
+Out[38]= 1
 
-In[37]:= Simplify[Log[a b] - Log[a] - Log[b], {a > 0, b > 0}]
-Out[37]= 0
+In[39]:= Simplify[Log[a b] - Log[a] - Log[b], {a > 0, b > 0}]
+Out[39]= 0
 
-In[38]:= Simplify[Cos[3 x]/Cos[x] - (2 Cos[2 x] - 1)]
-Out[38]= 0
+In[40]:= Simplify[Cos[3 x]/Cos[x] - (2 Cos[2 x] - 1)]
+Out[40]= 0
 ```
 
 ## Options & behaviour
@@ -236,6 +246,14 @@ A predicate that appears literally among the assumed facts folds to `True`:
   drops the integer-digit penalty.
 - **`TransformationFunctions`** (default `Automatic`) — the functions applied to
   try to transform parts of `expr` (see [TransformationFunctions](#transformationfunctions)).
+- **`TimeConstraint`** (default `Infinity`) — a **per-sub-expression** wall-clock
+  budget in seconds. When the heuristic search for a sub-expression exceeds it,
+  the best form found so far for that sub-expression is returned instead of
+  continuing; sibling sub-expressions each get their own fresh budget (this is
+  *not* a single top-level bound). It is a synchronous check between search
+  steps, so it fails gracefully with no memory leak, but it does not interrupt a
+  single long-running kernel call. A list `{tLoc, ...}` uses `tLoc` as the
+  per-sub-expression budget. `Infinity` (the default) imposes no limit.
 
 ## Performance
 
@@ -320,6 +338,14 @@ wins depend on the structural provers in `simp_assume.c`.
 - The default complexity measure is `SimplifyCount` — total subexpression count
   plus the decimal-digit count of integer leaves — so `100 Log[2]` is preferred
   over its expanded `Log[2^100]` form.
+- **`Root[...]` objects** are treated as the constant algebraic numbers they are:
+  a qqbar pre-pass canonicalises constant-algebraic subexpressions
+  (`Simplify[Root[1+#^4&,2]^3 + Root[1+#^4&,2]]` → `I Sqrt[2]`), and an expression
+  whose coefficients are `Root` objects is simplified without the multivariate
+  blow-up that treating each `Root` as a polynomial generator once caused. A
+  rational-function identity with `Root` coefficients collapses to `0` when the
+  `Root`s are radical-expressible (degree ≤ 4, or a binomial); e.g.
+  `Simplify[D[Integrate[Sqrt[Tan[x]], x], x] - Sqrt[Tan[x]]]` → `0`.
 - Threads manually over `List`, `Equal`, `Unequal`, `Less`, `LessEqual`,
   `Greater`, `GreaterEqual`, `And`, `Or`, and `Not`, carrying any options through
   into each sub-call.
@@ -336,7 +362,7 @@ wins depend on the structural provers in `simp_assume.c`.
 - Tests: [`tests/test_assuming.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assuming.c)
 - Tests: [`tests/test_characteristicpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_characteristicpolynomial.c)
 - Tests: [`tests/test_cherry_dilog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog.c)
-- Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
+- Tests: [`tests/test_cherry_dilog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog_exp.c)
 
 ## Notes & additional examples
 

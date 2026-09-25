@@ -129,7 +129,7 @@ Implementation only supports integer bases b >= 2.  Non-integer bases
 
 ## References
 
-**See also:** [Rational](../../arithmetic/Rational/)
+**See also:** [Rational](../../arithmetic/Rational/), [Real](../../other-advanced/Real/)
 
 - Source: [`src/real.c`](https://github.com/stblake/mathilda/blob/main/src/real.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

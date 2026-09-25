@@ -60,7 +60,7 @@ Out[5]= Ramp[1.0 + 2.0*I]
 
 ## References
 
-**See also:** [Clip](../../elementary-functions/Clip/), [UnitStep](../../elementary-functions/UnitStep/), [Complex](../../arithmetic/Complex/)
+**See also:** [Real](../../other-advanced/Real/), [Clip](../../elementary-functions/Clip/), [UnitStep](../../elementary-functions/UnitStep/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

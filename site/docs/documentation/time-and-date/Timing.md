@@ -31,6 +31,18 @@ In[3]:= Timing[D[Tan[x]^10, x]][[2]]
 Out[3]= 10 Sec[x]^2 Tan[x]^9
 ```
 
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Interpolation evaluate, 20000 points | 18.9 s | 18.1 s | 0.073 s |
+| Interpolation over 10^5 array | 1.26 s | 4.57 s | 4.44 s |
+| Interpolation build, 2000 knots | 0.013 s | 0.761 s | 0.092 s |
+| Interpolation order 1 (linear) build | -- | 0.764 s | 0.014 s |
+| ListInterpolation 2-D 60x60 | -- | 0.823 s | 1.02 s |
+
 ## Implementation notes
 
 `builtin_timing` brackets a single `evaluate(arg)` call with `clock()` (CPU time, `CLOCKS_PER_SEC`) and returns `{seconds, result}` as a two-element `List`, where `seconds` is `(end - start)/CLOCKS_PER_SEC` as an `EXPR_REAL`. It measures processor time, not wall-clock, and times a single evaluation only. (Note: the argument is evaluated explicitly inside the builtin; `Timing` is not given Hold attributes here.)

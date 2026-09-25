@@ -18,8 +18,15 @@ construct.c - builtin_graph: normalize, derive, validate, canonicalize.
 Accepts:
 
 ```text
-  Graph[edges]          -- vertices derived from the edges (directed default)
-  Graph[verts, edges]   -- explicit vertex list
+  Graph[edges]                        -- vertices derived from the edges (directed default)
+  Graph[verts, edges]                 -- explicit vertex list
+  Graph[verts, edges, EdgeWeight -> {w1, ..., wm}]
+                                       -- explicit vertex list + per-edge weights, matched
+                                          to `edges` by position; wrong length is malformed
+                                          (left unevaluated), same as any other rejection
+                                          below. Weighted graphs require the explicit-vertex
+                                          form -- Graph[edges, EdgeWeight -> {...}] is not
+                                          accepted (deliberately out of scope; see the plan).
 ```
 
 Edge sugar is normalized on construction:
@@ -53,7 +60,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## References
 
-**See also:** [Rule](../../assignment-and-rules/Rule/), [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/)
+**See also:** [Rule](../../assignment-and-rules/Rule/), [EdgeWeight](../../other-advanced/EdgeWeight/), [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/)
 
 - Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)

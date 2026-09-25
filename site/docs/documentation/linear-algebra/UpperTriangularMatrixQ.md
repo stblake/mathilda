@@ -114,6 +114,7 @@ Out[13]= True
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_schurdecomp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_schurdecomp.c)
 - Tests: [`tests/test_upper_triangular_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_upper_triangular_matrix_q.c)
 
 ## Notes & additional examples

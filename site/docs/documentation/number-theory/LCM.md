@@ -56,10 +56,10 @@ Out[6]= 13548070123626141
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on GCD/LCM relations.
 - Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_chinese_remainder.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chinese_remainder.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
 - Tests: [`tests/test_integrate_linrad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_linrad.c)
-- Tests: [`tests/test_integrate_linratiorad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_linratiorad.c)
 
 ## Notes & additional examples
 

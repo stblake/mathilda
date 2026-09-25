@@ -115,9 +115,9 @@ Attributes: Listable, NumericFunction, Protected.
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_cherry_dilog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog.c)
+- Tests: [`tests/test_cherry_dilog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog_exp.c)
+- Tests: [`tests/test_cherry_polylog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_polylog_exp.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
-- Tests: [`tests/test_fullsimplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fullsimplify.c)
-- Tests: [`tests/test_integrate_diffunderint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_diffunderint.c)
 
 ## Notes & additional examples
 

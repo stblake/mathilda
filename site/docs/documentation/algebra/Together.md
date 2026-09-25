@@ -98,21 +98,22 @@ Crucially, `together_recursive` never expands `Power[Plus[...], n]` — `extract
 - Handles a single symbolic base appearing with rational fractional exponents (e.g. `y^(1/3)`, `y^(2/3)`, `y^(73/24)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial pipeline in `g`, then substitutes back.
 - **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) combines into a single fraction with the standard combiner, then runs `Cancel[..., Extension -> alpha]` on the result so algebraic-coefficient cancellations fire. Effective on simple inputs like `1/(x - Sqrt[2]) + 1/(x + Sqrt[2])`, which collapses to `(2 x)/(x^2 - 2)`. Inputs whose summands themselves carry algebraic-coefficient denominators are deferred to Phase 0.5 (which will plumb `Extension` through `PolynomialLCM` / `PolynomialQuotient` / `together_recursive`).
 - **Option `Extension -> Automatic` with polynomial radicands** (Phase E, 2026-05-25): when the input contains exactly one distinct radical `Sqrt[poly]` or `Power[poly, 1/q]` whose radicand is a polynomial in free symbols (e.g. `Sqrt[p+q]`, `Power[1+x^2, 1/3]`), `qa_cancel_with_poly_radical` substitutes the radical with a fresh symbol `S`, runs `Together`, reduces the numerator and denominator modulo `S^q - poly` via `PolynomialRemainder`, optionally rationalises via `PolynomialExtendedGCD` (when it shrinks the result), and substitutes back. Sample collapses: `Together[1/(x - Sqrt[p+q]) + 1/(x + Sqrt[p+q]), Extension -> Automatic]` returns `(2 x)/(-p - q + x^2)`; `Cancel[(x^2 - (p+q))/(x - Sqrt[p+q]), Extension -> Automatic]` returns `Sqrt[p+q] + x`. Multi-radical inputs (Cardano-style conjugate pairs) are rejected; the deeper limitation is documented in `docs/spec/changelog/2026-05-25.md`.
+- **Native `AlgebraicNumber`-coefficient path.** Same K(x) reduction as `Cancel` above, applied after combining the sum of fractions over a common denominator: a sum whose coefficients are `AlgebraicNumber[θ, {..}]` over one number field is combined and reduced natively over the antic number-field ring, value-equal to the generic path and fully reduced; declines on the multivariate case.
 
 **Attributes:** `Listable`, `Protected`.
 
 ## References
 
-**See also:** [PolynomialLCM](../../algebra/PolynomialLCM/), [PolynomialQuotient](../../algebra/PolynomialQuotient/), [PolynomialRemainder](../../algebra/PolynomialRemainder/), [PolynomialExtendedGCD](../../algebra/PolynomialExtendedGCD/), [Plus](../../arithmetic/Plus/), [Cancel](../../algebra/Cancel/)
+**See also:** [PolynomialLCM](../../algebra/PolynomialLCM/), [PolynomialQuotient](../../algebra/PolynomialQuotient/), [PolynomialRemainder](../../algebra/PolynomialRemainder/), [PolynomialExtendedGCD](../../algebra/PolynomialExtendedGCD/), [AlgebraicNumber](../../algebra/AlgebraicNumber/), [Cancel](../../algebra/Cancel/), [Plus](../../arithmetic/Plus/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational function arithmetic and common denominators.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on polynomial GCDs used in cancellation.
 - Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_cherry_dilog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog_exp.c)
 - Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
+- Tests: [`tests/test_cherry_polylog_exp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_polylog_exp.c)
 - Tests: [`tests/test_contfrac.c`](https://github.com/stblake/mathilda/blob/main/tests/test_contfrac.c)
-- Tests: [`tests/test_crc_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_crc_corpus.c)
-- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
 
 ## Notes & additional examples
 

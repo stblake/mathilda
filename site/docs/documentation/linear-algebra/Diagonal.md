@@ -68,3 +68,4 @@ A machine-precision matrix (a packed List or a visible NDArray) takes the buffer
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_diagonal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal.c)
+- Tests: [`tests/test_jordandecomp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_jordandecomp.c)

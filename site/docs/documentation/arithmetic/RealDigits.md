@@ -149,7 +149,7 @@ Implementation only supports integer bases b >= 2.  Non-integer bases
 
 ## References
 
-**See also:** [Rational](../../arithmetic/Rational/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [FromDigits](../../arithmetic/FromDigits/)
+**See also:** [Rational](../../arithmetic/Rational/), [Real](../../other-advanced/Real/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [FromDigits](../../arithmetic/FromDigits/)
 
 - Source: [`src/real.c`](https://github.com/stblake/mathilda/blob/main/src/real.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

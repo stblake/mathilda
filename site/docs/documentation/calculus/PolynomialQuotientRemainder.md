@@ -87,6 +87,7 @@ variable a symbol. Multivariate inputs are handled coefficient-wise in `x`.
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
 - Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
 - Tests: [`tests/test_intrat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_intrat.c)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
 
 ## Notes & additional examples
 

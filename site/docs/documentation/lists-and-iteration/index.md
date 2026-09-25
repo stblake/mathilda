@@ -1,8 +1,10 @@
 # Lists and Iteration
 
-19 built-in function(s) in this category.
+21 built-in function(s) in this category.
 
 - [`Array`](Array.md) — Array[f, n]  _(Stable)_
+- [`ArrayPad`](ArrayPad.md) — ArrayPad[array, m]  _(Stable)_
+- [`ArrayReshape`](ArrayReshape.md) — ArrayReshape[list, dims]  _(Stable)_
 - [`ConstantArray`](ConstantArray.md) — ConstantArray[c, n]  _(Stable)_
 - [`CosineDistance`](CosineDistance.md) — CosineDistance[u, v]  _(Stable)_
 - [`EditDistance`](EditDistance.md) — EditDistance[u, v]  _(Stable)_
