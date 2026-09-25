@@ -90,6 +90,49 @@
 }
 \lstnewenvironment{shell}{\lstset{style=mathildashell}}{}
 
+% ------------------------------------------------------ C source excerpts ---
+% \begin{ccode}[src/expr.h] ... \end{ccode}: a short, hand-quoted excerpt of the
+% actual C source, for the internals chapter. This is deliberately NOT a verified
+% transcript and NOT a Mathilda session: it is source code copied from the tree to
+% illustrate a data structure or control path, so nothing in the build runs or
+% checks it (unlike \mtranscript). It is tinted blue and titled with its source
+% file precisely so a reader never mistakes it for REPL output. Keep excerpts short
+% and load-bearing, and cite file:line in the prose so the reader can open the real
+% thing.
+\definecolor{mCsrcBg}{rgb}{0.955,0.965,0.99}
+\definecolor{mCsrcRule}{rgb}{0.50,0.55,0.72}
+\definecolor{mCsrcKw}{rgb}{0.10,0.20,0.50}
+\definecolor{mCsrcCmt}{rgb}{0.40,0.45,0.45}
+\lstdefinestyle{mathildacsrc}{%
+  language=C,
+  basicstyle=\footnotesize\ttfamily,
+  breaklines=true,
+  breakatwhitespace=false,
+  breakindent=0pt,
+  breakautoindent=false,
+  postbreak=\mbox{\textcolor{mCsrcRule}{$\hookrightarrow$}\space},
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=single,
+  rulecolor=\color{mCsrcRule},
+  backgroundcolor=\color{mCsrcBg},
+  framesep=6pt,
+  xleftmargin=10pt,
+  xrightmargin=6pt,
+  aboveskip=\medskipamount,
+  belowskip=\medskipamount,
+  keywordstyle=\bfseries\color{mCsrcKw},
+  commentstyle=\itshape\color{mCsrcCmt},
+  captionpos=t,
+  abovecaptionskip=1pt,
+  belowcaptionskip=3pt,
+}
+\lstnewenvironment{ccode}[1][C source, quoted from the tree]{%
+  \lstset{style=mathildacsrc,title={\normalfont\footnotesize\ttfamily
+    \textcolor{mCsrcKw}{#1}\hfill\normalfont\scriptsize\itshape not build-verified}}%
+}{}
+
 % \mtranscript{path}: include generated/<path>.tex verbatim, or a visible
 % placeholder if it has not been generated yet (so the doc still compiles).
 \newcommand{\mtranscript}[1]{%

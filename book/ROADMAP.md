@@ -180,14 +180,31 @@ etc. are not implemented.
 
 | # | Chapter | File | Status |
 |---|---------|------|--------|
-| 10 | The Internals of Mathilda | `chapters/10-internals.tex` | Planned |
+| 10 | The Internals of Mathilda | `chapters/10-internals.tex` | **Verified** |
 | 11 | The Development of Mathilda | `chapters/11-development.tex` | Planned |
 | 12 | Contributing to Mathilda | `chapters/12-contributing.tex` | Planned |
 | 13 | About the Author | `chapters/13-about-the-author.tex` | Planned |
 
-**Ch. 10 Internals scope.** The pipeline (parser → evaluator → printer), the symbol
-table, attributes, the pattern matcher, the rule engine — a reader's tour of
-`SPEC.md`.
+**Ch. 10 Internals scope** (Verified). The C-level, nitty-gritty depth behind
+Appendix A — ten sections, the largest chapter in the book: 10.1 expression trees
+(the `Expr` tagged union, refcount/stamp/hash metadata, int64↔bignum promotion);
+10.2 the evaluator (`evaluate`/`evaluate_step`, the full ordered per-call step
+sequence, O(1) attribute reads, the eval-clock/GROUND fixed-point cache,
+`$RecursionLimit` vs the hardcoded `$IterationLimit`, an attribute-bit table);
+10.3 non-standard evaluation (Hold attributes, Evaluate/Unevaluated/ReleaseHold,
+Set vs SetDelayed, Module alpha-renaming vs Block dynamic vs With lexical scoping);
+10.4 the pattern matcher (`MatchEnv`, backtracking by count-rollback, non-linear
+patterns, the sequence partition/subset search, guards re-entering `evaluate`);
+10.5 rules and the symbol table (specificity ordering — *not* recency — the dispatch
+pre-filter, interning, `SYM_*` pointers, contexts, the Replace family); 10.6 memory
+management (`expr_copy` as a refcount bump, copy-on-write, the builtin ownership
+contract, the node/args pools); 10.7 the parser and the printer; 10.8 the
+read–eval–print loop and session state (`$Line`, `$PreRead`/`$Pre`/`$Post`/
+`$PrePrint`, In/Out, `%`/`%%`, shown inert under the batch pipe as proof the loop is
+a layer); 10.9 numbers and the packed-array substrate (the transparency gate,
+cross-ref Ch 6/8); 10.10 bootstrapping (startup order, the two-tier C+`.m` design).
+Five hand-quoted C excerpts via a new `ccode` listing style; three framed diagrams.
+Written 2026-09-25.
 
 **Ch. 11 Development scope.** How Mathilda is built, including the AI-in-the-loop
 workflow; the testing, benchmarking, and audit machinery (the packed-array/compile

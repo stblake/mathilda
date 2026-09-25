@@ -1,5 +1,792 @@
 \chapter{The Internals of Mathilda}
 \label{ch:internals}
 
-\emph{This chapter is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+Everything in this book so far has looked at Mathilda from the outside: you type an
+expression, and an answer comes back. This chapter turns the machine over and looks
+at the works. It is the one place in the book where we get into the C-level detail
+of how the system is actually built---how an expression is laid out in memory, what
+the evaluator does on every step and in exactly what order, how the pattern matcher
+searches, how memory is owned and reclaimed, and how the parser, printer and the
+interactive loop bracket the whole thing.
+
+Appendix~\ref{app:architecture} is the aerial photograph: the pipeline in one
+figure, each subsystem named in a paragraph. This chapter is the walk on the
+ground. If you have not read that appendix, Figure~\ref{fig:pipeline} there is worth
+a glance first---it shows how the five components fit together and it is the frame we
+now fill in. Where the appendix says ``the evaluator reads the head's attributes,''
+this chapter tells you which field it reads, when, and what it costs.
+
+Two conventions for what follows. The \emph{transcripts} are, as everywhere in this
+book, real output from the running binary---the internals are observable from the
+REPL more often than you might expect, and we lean on that. The \emph{C excerpts},
+tinted blue and titled with their source file, are the exception: they are quoted by
+hand from the source tree to show a data structure or a control path, abridged for
+the page and \emph{not} run by the build the way the transcripts are. Treat them as a
+faithful sketch and open the named file for the whole truth.
+
+\section{Expression trees}
+\label{sec:int-expr}
+
+The foundational decision, the one from which everything else follows, is that
+\emph{every value is the same kind of object}: an \texttt{Expr}. A number, a symbol,
+a string, a list, a rule, a pattern, a matrix, a held piece of code---all of them are
+\texttt{Expr} nodes, and the whole system is machinery for building, comparing,
+rewriting and freeing them. You saw this from the user's side in
+Chapter~\ref{ch:datastructures}; here is the node itself.
+
+An \texttt{Expr} is a \emph{tagged union}. A single enum says which kind of value the
+node holds, and a union holds the payload for that kind:
+
+\begin{ccode}[src/expr.h (abridged)]
+typedef enum {
+    EXPR_INTEGER, EXPR_REAL, EXPR_SYMBOL, EXPR_STRING,
+    EXPR_FUNCTION, EXPR_BIGINT, EXPR_NDARRAY, EXPR_COMPILED
+#ifdef USE_MPFR
+    , EXPR_MPFR
+#endif
+} ExprType;
+
+typedef struct Expr {
+    ExprType type;
+    unsigned refcount;            /* shared ownership / copy-on-write         */
+    uint64_t last_evaluated_at;   /* eval-clock stamp; top bit = GROUND flag  */
+    uint64_t hash_cache;          /* memoized structural hash; 0 = unset      */
+    union {
+        int64_t integer;
+        double  real;
+        struct { char* name; struct SymbolDef* def; } symbol;
+        char*   string;
+        struct {
+            struct Expr*  head;
+            struct Expr** args;
+            size_t        arg_count;
+            struct AssocIndex*  index;         /* Association key->position   */
+            struct SymSetCache* symset_cache;  /* symbol set of the subtree  */
+        } function;
+        mpz_t bigint;                          /* GMP arbitrary-precision int */
+        NDArrayData ndarray;                   /* dense machine-number buffer */
+        struct CompiledFunction* compiled;
+#ifdef USE_MPFR
+        mpfr_t mpfr;                           /* arbitrary-precision real    */
+#endif
+    } data;
+} Expr;
+\end{ccode}
+
+The classic six kinds are the ones you meet first---integer, real, symbol, string,
+function, and the arbitrary-precision \texttt{EXPR\_BIGINT}. Two more,
+\texttt{EXPR\_NDARRAY} and \texttt{EXPR\_COMPILED}, are the dense numeric buffer of
+\S\ref{sec:int-packed} and the compiled-code object of
+Chapter~\ref{ch:compilation}; a ninth, \texttt{EXPR\_MPFR}, appears only in builds
+with extended-precision reals. All of the last three are \emph{atomic} to the
+evaluator---it never looks inside them.
+
+A \emph{function} node is the compound case, and it is the interesting one: a head
+(itself an \texttt{Expr*}) and a heap array of argument pointers with an explicit
+count. There is no separate capacity field---the array is allocated to exactly
+\texttt{arg\_count} entries---which matters later, when we pool these arrays by
+length (\S\ref{sec:int-memory}). The compound form \(\mathtt{f[x, y]}\) is a function
+node whose head is the symbol \texttt{f}; a list is a function node with head
+\texttt{List}. You can X-ray any surface syntax into this tree with \B{FullForm}, and
+confirm each node's kind with \B{Head} and \B{AtomQ}:
+
+\mtranscript{10-internals/expr-fullform}
+
+Read those as the tree behind the syntax. A sum is \texttt{Plus[a, Times[b, c]]}; a
+fraction is a single \texttt{Rational} node; a division is a \texttt{Times} against a
+\texttt{Power} with exponent \(-1\); a complex literal is \texttt{Complex[2, 3]}; and
+even a pattern, \(\mathtt{x\_}\), is an ordinary expression,
+\texttt{Pattern[x, Blank[]]}. \B{Head} of an integer is \texttt{Integer}, of a list
+is \texttt{List}: atoms carry a head too, which is why the same tools---\B{Part},
+\B{Map}, \B{Replace}---work on everything. \B{AtomQ} draws the one structural line
+that matters internally: an atom has no arguments to descend into, a function node
+does.
+
+\subsection*{The three metadata words}
+
+Before the union sit three machine words that are not part of the value at all. They
+are pure acceleration, invisible to equality and ordering, and understanding them
+explains most of what makes Mathilda fast.
+
+\texttt{refcount} is the reference count: shared ownership, discussed in full in
+\S\ref{sec:int-memory}. \texttt{last\_evaluated\_at} is a timestamp the evaluator
+stamps on a node when it reaches a fixed point, so a later evaluation of the same
+node can return instantly (\S\ref{sec:int-eval}); its top bit is a flag for
+loop-invariant values. \texttt{hash\_cache} memoizes the node's structural hash the
+first time anything asks for it, turning the repeated subtree walks in \texttt{Plus}
+grouping, \texttt{Association} indexing and set operations into
+\(O(1)\) reads.\calloutnote{Under the hood}{Because these three fields are metadata,
+not value, \texttt{expr\_eq}, \texttt{expr\_hash} and \texttt{expr\_compare} all
+ignore them---two nodes are equal when their \emph{structure} matches, whatever their
+refcounts or stamps. The flip side is a strict rule the whole tree obeys: a cached
+hash is only safe because a shared node is never mutated in place (\S\ref{sec:int-memory}),
+and any code that does rewrite a node's fields must reset \texttt{hash\_cache} to 0
+first. The \texttt{MATHILDA\_HASH\_VERIFY} build recomputes and asserts every cache
+hit to catch a missed reset.}
+
+Integers show a fourth theme---representations that adapt. A value begins life as a
+machine \texttt{int64}, and is promoted to a GMP bignum only when an operation would
+overflow, demoting back when a result fits again. There is only ever ``an integer,''
+never a user-visible big-integer mode:
+
+\mtranscript{10-internals/expr-bignum}
+
+\(2^{62}\) is a machine word; \(2^{63}\) has already overflowed into a
+\texttt{EXPR\_BIGINT}; \(100!\) is a 158-digit bignum---and \B{Head} says
+\texttt{Integer} for all of them. The promotion is a change of internal
+representation, not of type, and it is completely invisible from the language.
+
+\section{The evaluator}
+\label{sec:int-eval}
+
+The evaluator is the heart of the system, and its governing idea is
+\emph{fixed-point rewriting}: \texttt{evaluate(e)} calls \texttt{evaluate\_step(e)}
+over and over, each call rewriting the expression by one level, and stops when a step
+changes nothing. There is no separate ``simplifier'' pass and no explicit chaining of
+rules; composition is a consequence of running the step to a fixed point. You can
+watch the process directly with \B{Trace}, which records every intermediate expression:
+
+\mtranscript{10-internals/eval-trace}
+
+A definition and an arithmetic fold each show the shape of it---\texttt{f[3]} becomes
+\texttt{3\^{}2} becomes \texttt{9}; the three-term sum collapses to \texttt{9} in one
+step. And because a step just rewrites and the loop merely repeats, composition needs
+no plumbing at all: define one function in terms of another and the answer falls out
+over successive passes.
+
+\mtranscript{10-internals/eval-fixedpoint}
+
+Each element of the \B{Trace} list is one intermediate expression on the way to the
+answer: \texttt{g[10]} rewrites to \texttt{h[10]}, then to \texttt{10 + 1}, then to
+\texttt{11}, at which point a step produces nothing new and the loop halts. No code in
+\texttt{g} or \texttt{h} knows about the other; the loop is the only glue.
+
+\subsection*{One step, in order}
+
+The real content is what \texttt{evaluate\_step} does for a function call
+\(\mathtt{f[a_1, \dots, a_n]}\). The appendix gives the eight-line summary; the true
+sequence, in \texttt{src/eval.c}, is longer and every stage earns its place.
+Figure~\ref{fig:evalstep} lists it in order.
+
+\begin{figure}[h]
+\begin{framed}
+\small
+\begin{verbatim}
+   evaluate_step( f[a1, ..., an] ):
+
+    1.  evaluate the head f
+    2.  resolve f's SymbolDef once, cache it on the head node;
+        read attributes as (base_attributes | attributes)  -- O(1)
+    3.  evaluate each argument UNLESS a Hold attribute holds that slot
+          (Evaluate[] punches through a hold; atoms skip the recursion)
+    4.  reassemble f[...] from the evaluated arguments
+    5.  flatten Sequence[...] arguments        (unless SequenceHold)
+    6.  strip Nothing from a List
+    7.  strip Unevaluated[...] wrappers in non-held slots
+   7.5  transparency gate: materialize any packed buffer whose head
+          is not packed-aware                  (see 10.9)
+    8.  Flat      -- flatten nested f[f[...]]   if ATTR_FLAT
+    9.  Listable  -- thread over list arguments if ATTR_LISTABLE
+   10.  Orderless -- sort arguments canonically if ATTR_ORDERLESS
+   11.  try f's DOWNVALUES  (user/library rules)  -- before the builtin
+   12.  try f's NDArray element-wise machine kernel, if registered
+   13.  call f's builtin C function, if any
+   14.  Set / SetDelayed and the composite-head cases (pure Function, ...)
+\end{verbatim}
+\end{framed}
+\caption{One rewrite level. Steps 8--10 apply the associative, threading and
+commutative attributes in that fixed order; the surprise for a newcomer is step 11,
+where user \texttt{DownValues} are tried \emph{before} the builtin C code, so a rule
+you write can override a primitive.}
+\label{fig:evalstep}
+\end{figure}
+
+Three things about this sequence are worth dwelling on.
+
+\emph{Attributes are read once, and cheaply.} Step~2 resolves the head symbol to its
+definition record and caches the pointer on the head node, so subsequent touches skip
+the symbol-table lookup entirely. The attributes themselves are a single field read
+and a bitwise OR---\texttt{base\_attributes} (the immutable floor a builtin is born
+with) combined with \texttt{attributes} (whatever the user has since set). This
+replaced an older design that walked a 140-entry table of name comparisons on every
+call. The attribute bits are the small vocabulary that steers the generic loop; the
+full set is in Table~\ref{tab:attrs}.
+
+\emph{Holding happens in step~3, bit by bit.} Whether an argument is evaluated is
+decided per slot, by three lines:
+
+\begin{ccode}[src/eval.c (the argument loop)]
+bool hold = hold_all_complete;                        /* HoldAllComplete: every slot */
+if (i == 0 && (attrs & ATTR_HOLDFIRST)) hold = true;  /* HoldFirst: slot 0           */
+if (i >  0 && (attrs & ATTR_HOLDREST))  hold = true;  /* HoldRest:  slots 1..n       */
+\end{ccode}
+
+\texttt{HoldAll} needs no case of its own: it is simply \texttt{HoldFirst \& HoldRest}
+as a combined mask. Everything about non-standard evaluation---\texttt{Table} not
+evaluating its iterator, \texttt{If} not evaluating the branch it will not take,
+\texttt{Set} not evaluating its left side---reduces to which of these bits the head
+carries. That is the whole subject of \S\ref{sec:int-nonstd}.
+
+\emph{DownValues come before the builtin.} Step~11 is ahead of step~13 on purpose: a
+rule the user or a library has installed on \texttt{f} is tried before \texttt{f}'s
+own C code, so mathematics expressed as a rewrite rule (the integral tables, the
+derivative rules of \S\ref{sec:int-boot}) can extend or override a primitive without
+touching C.
+
+The attribute bits do all the steering, and you can read a head's bits from the
+language with \B{Attributes} and change them with \B{SetAttributes}:
+
+\mtranscript{10-internals/eval-attributes}
+
+\texttt{Plus} carries five attributes at once; \texttt{Sin} only two; \texttt{Table}
+is \texttt{HoldAll}; \texttt{Set} is \texttt{HoldFirst}. Watch the effect of each: an
+\texttt{Orderless} head sorts \texttt{b + a + c} into canonical order; adding
+\texttt{Flat} to \texttt{f} makes \texttt{f[f[a, b], c]} flatten to
+\texttt{f[a, b, c]}; adding \texttt{Listable} to \texttt{h} makes it thread over a
+list. Nothing about the main loop changed between those heads---only their bits did.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lll}
+\hline
+Attribute & Bit & Effect \\
+\hline
+\texttt{HoldFirst} & \texttt{1<<0} & do not evaluate argument 0 \\
+\texttt{HoldRest} & \texttt{1<<1} & do not evaluate arguments 1..n \\
+\texttt{HoldAll} & (both) & do not evaluate any argument \\
+\texttt{HoldAllComplete} & \texttt{1<<2} & hold all, and suppress Sequence/Flat/Unevaluated \\
+\texttt{Flat} & \texttt{1<<3} & associative: flatten nested same-head calls \\
+\texttt{Orderless} & \texttt{1<<4} & commutative: sort arguments canonically \\
+\texttt{Listable} & \texttt{1<<5} & thread element-wise over list arguments \\
+\texttt{NumericFunction} & \texttt{1<<6} & numeric under \texttt{N}; threads over intervals \\
+\texttt{Protected} & \texttt{1<<7} & values and attributes cannot be changed \\
+\texttt{OneIdentity} & \texttt{1<<8} & \(\mathtt{f[x]}\equiv\mathtt{x}\) for matching (\S\ref{sec:int-match}) \\
+\texttt{SequenceHold} & \texttt{1<<13} & do not flatten \texttt{Sequence} in arguments \\
+\texttt{Constant} & \texttt{1<<14} & derivative is zero \\
+\hline
+\end{tabular}
+\caption{The core attribute bits, from \texttt{src/attr.h}. \texttt{Locked},
+\texttt{Temporary} and the \texttt{NHold*} family occupy the remaining bits; bit 11,
+once \texttt{ReadProtected}, was removed---Mathilda never hides a definition.}
+\label{tab:attrs}
+\end{table}
+
+\subsection*{Knowing when to stop}
+
+A fixed-point loop needs to know when to quit, and doing that naively---comparing the
+whole tree before and after every step---would be quadratic on deep expressions.
+Mathilda avoids it with a cheap boolean: \texttt{evaluate\_step} reports whether it
+actually rewrote anything, and only when it claims a change does the loop fall back to
+a structural comparison. When a step fires no rule, the loop stops without walking the
+tree at all.
+
+Stability across \emph{calls} is handled by the \texttt{last\_evaluated\_at} stamp. A
+global evaluation clock ticks forward on every definition change---every \texttt{Set},
+\texttt{SetDelayed}, \texttt{Clear} or \texttt{SetAttributes}. When
+\texttt{evaluate} reaches a fixed point it stamps the result with the current clock;
+a later \texttt{evaluate} of a node already carrying the current stamp returns an
+inc-ref'd view immediately, skipping the loop and all of \texttt{evaluate\_step}. A
+single definition change, by bumping the clock, invalidates every cached evaluation in
+the system at once.\calloutnote{Under the hood}{The stamp's top bit is a second,
+finer cache. A node built entirely from literals under one of six pure structural
+constructors (\texttt{List}, \texttt{Association}, \texttt{Rule},
+\texttt{RuleDelayed}, \texttt{Complex}, \texttt{Rational}) is marked \emph{ground}:
+its value cannot depend on any symbol's definition, so it survives clock churn and can
+be re-validated as a fixed point in \(O(1)\) even after an ordinary assignment. This
+is what keeps a loop that rebuilds a constant list on every iteration from
+re-evaluating it every time.}
+
+Two limits bound the process, and they are deliberately asymmetric.
+\(\mathtt{\$RecursionLimit}\) caps how deep evaluation may nest; it is a real,
+user-settable symbol (default 1024, with a floor of 20), and on overflow the offending
+expression is returned wrapped in \texttt{Hold} so it cannot immediately re-enter.
+\(\mathtt{\$IterationLimit}\), by contrast, is \emph{not} a settable symbol at all: the
+number of fixed-point iterations for a single expression is capped by a compile-time
+constant (4096). It is an honest simplification---the constant is generous enough that
+only a pathological non-terminating rewrite reaches it---but it is worth knowing that,
+unlike in some systems, you cannot raise it from the language.
+
+\section{Non-standard evaluation}
+\label{sec:int-nonstd}
+
+``Non-standard evaluation'' is the umbrella term for everything that departs from the
+default ``evaluate all the arguments, then call the head.'' In many languages this
+would need special forms baked into the interpreter. In Mathilda it is one mechanism:
+the \texttt{Hold} attributes of \S\ref{sec:int-eval}, step~3. A head that wants to
+control its arguments simply carries \texttt{HoldFirst}, \texttt{HoldRest} or
+\texttt{HoldAll}, and the generic loop hands it the arguments unevaluated. Everything
+in this section is built from that one bit-test.
+
+\usagebox{Hold}
+
+The primitives that manage held code are small and composable:
+
+\mtranscript{10-internals/nonstandard-hold}
+
+\B{Hold} keeps its contents literally---it is nothing but a head carrying
+\texttt{HoldAll}, so \texttt{Hold[1 + 1]} never adds. \B{Evaluate} punches a hole in a
+hold, forcing just its argument while its siblings stay held. \B{Unevaluated} is the
+mirror image: it passes an argument through unevaluated and then dissolves, so
+\texttt{Length[Unevaluated[1 + 2 + 3]]} sees the three-element \texttt{Plus} and
+answers \texttt{3}. \B{ReleaseHold} strips a wrapper so its contents can finally run.
+The distinction between \B{Set} and \B{SetDelayed} is the same mechanism: \texttt{=}
+is \texttt{HoldFirst} (it holds the left side but evaluates the right side now), while
+\texttt{:=} is \texttt{HoldAll} (it holds both and re-evaluates the right side on every
+use). And \B{If}, carrying \texttt{HoldRest}, never touches the branch it does not
+take---which is why the untaken \texttt{boom = 1/0} above caused no error and left
+\texttt{boom} unassigned.
+
+\subsection*{Scoping without a stack}
+
+The scoping constructs are the richest users of held arguments, and they achieve their
+effects in three distinct ways---worth contrasting, because the differences are
+observable:
+
+\mtranscript{10-internals/nonstandard-scoping}
+
+\B{Module} implements lexical locals by \emph{alpha-renaming}: each local \texttt{x} is
+renamed to a globally fresh symbol \texttt{x\$}\textit{n}, and you can see the counter
+advance---the two identical \texttt{Module} calls return \texttt{Hold[x\$1]} and
+\texttt{Hold[x\$2]}. \B{Block}, by contrast, is \emph{dynamic} scoping: it does not
+rename anything but temporarily saves the global value of \texttt{n}, runs the body,
+and restores it---so inside the block \texttt{n} is 2 and after it \texttt{n} is 10
+again. \B{With} does neither: it substitutes its constants directly into the body
+before evaluation, a purely lexical rewrite. Pure functions
+(\(\mathtt{\#^2\, \&}\)) bind their \texttt{Slot} arguments by the same
+substitution.\calloutnote{Under the hood}{None of these three touches a call stack of
+activation records---Mathilda has no such thing. \texttt{Module} works by renaming and
+installing a temporary \texttt{OwnValue}; \texttt{Block} by saving and restoring a
+symbol's value cell; \texttt{With} and pure functions by lexical substitution into a
+held body. \texttt{Table} and the other iterators are dynamic scoping too, saving the
+iterator symbol's value around the loop. The uniform ``everything is an expression''
+model means a binding is just a value on a symbol, and scoping is just deciding when to
+put it there and when to take it away.}
+
+\section{The pattern matcher}
+\label{sec:int-match}
+
+Pattern matching is how Mathilda decides whether a rule applies, and it is the most
+combinatorially delicate subsystem in the tree. Chapter~\ref{ch:programming} taught
+the pattern \emph{language}---blanks, sequences, tests, conditions; this section is the
+engine beneath it, \texttt{src/match.c}. From the language side you drive it with
+\B{MatchQ} and its relatives:
+
+\mtranscript{10-internals/matcher-basics}
+
+Everything in that session is the matcher at work: a typed blank checks a head; a
+repeated name enforces equality; sequence blanks match runs of arguments; an
+\texttt{Orderless} head matches against reordered arguments; a test or condition
+gates a match; an \texttt{Optional} supplies a default. We now take the mechanism
+apart.
+
+\subsection*{Bindings and backtracking}
+
+Pattern variables are held in a \texttt{MatchEnv}: two parallel arrays, one of names
+and one of bound values, with a linear scan for lookup. A handful of variables is the
+common case, so a scan beats the overhead of a hash.
+
+\begin{ccode}[src/match.h and match.c]
+typedef struct MatchEnv {
+    char** symbols;     /* borrowed interned names -- NOT strdup'd     */
+    Expr** values;      /* the env owns a copy of each bound value     */
+    size_t count;
+    size_t capacity;
+    bool (*callback)(struct MatchEnv*, void*);  /* ReplaceList: see every match */
+    void* callback_data;
+} MatchEnv;
+
+/* Backtracking is a single integer. Bindings are only ever appended, so
+ * truncating the count back to a checkpoint is a complete, cheap undo. */
+static void env_rollback(MatchEnv* env, size_t saved_count) {
+    while (env->count > saved_count)
+        expr_free(env->values[--env->count]);
+}
+\end{ccode}
+
+That \texttt{env\_rollback} is the whole backtracking discipline. At every branch
+point the matcher records \texttt{env->count}, tries an alternative, and if it fails
+truncates the bindings back to the saved count and tries the next. Because a name is
+never overwritten---only appended after a check---rolling the count back is an exact
+undo. \emph{Non-linear} patterns fall straight out of this: when the matcher is about
+to bind a name that already has a value, it does not re-bind; it compares the new
+candidate to the existing binding with \texttt{expr\_eq} and fails if they differ.
+That single rule is why \texttt{f[x\_, x\_]} matches \texttt{f[a, a]} but not
+\texttt{f[a, b]}.
+
+The recursion itself threads a continuation---a \texttt{ParentMatch} chain
+representing ``the sibling patterns still to match''---so that a deep sub-match, on
+success, can carry on matching the arguments that follow it. There is no explicit work
+stack; the C call stack, guarded by the same \(\mathtt{\$RecursionLimit}\) the
+evaluator uses, is the stack.
+
+\subsection*{Sequences: the combinatorial heart}
+
+Ordinary structural matching is easy: same head, same arity, recurse pairwise. The
+hard part is sequence patterns, \(\mathtt{x\_\_}\) and \(\mathtt{x\_\_\_}\), which
+match \emph{runs} of arguments of unknown length. The matcher searches the partitions:
+for the first sequence pattern it tries letting it consume \(k\) arguments for each
+legal \(k\), and for each choice recurses on the rest. Figure~\ref{fig:backtrack}
+shows the search for \texttt{f[x\_\_, y\_\_]} against \texttt{f[1, 2, 3]}.
+
+\begin{figure}[h]
+\begin{framed}
+\small
+\begin{verbatim}
+   match  f[x__, y__]   against   f[1, 2, 3]        (each __ needs >= 1 arg)
+
+     x__ = {1}          x__ = {1,2}         x__ = {1,2,3}
+       |                   |                    |
+     y__ = {2,3}  OK     y__ = {3}   OK       y__ = {}   FAIL
+       ^                                        (y__ requires >= 1)
+       first success returned
+\end{verbatim}
+\end{framed}
+\caption{Sequence matching is a partition search with backtracking. Each split is
+tried in turn; the first that lets every remaining pattern match wins.}
+\label{fig:backtrack}
+\end{figure}
+
+Two forces make this affordable in practice. The first is a hard short-circuit: when a
+sequence pattern is the \emph{last} one in the argument list, it must consume all the
+remaining arguments, so there is nothing to search---\(k\) is pinned, not enumerated.
+This one rule is what keeps \texttt{Plus[x\_\_, y\_\_]} from hanging on a wide sum. The
+second is that for an ordinary (ordered) head the consumed run and the remainder are
+handed to the recursion as \emph{slices} of the caller's array---no copying.
+
+\texttt{Orderless} heads are where the real cost lives, because a commutative match may
+pair a pattern with arguments in any position, not just a contiguous run. There the
+matcher enumerates \(k\)-element \emph{subsets} of the arguments, which is genuinely
+combinatorial; it prunes hard (moving fixed elements ahead of variable-length blanks
+so the selective patterns filter first), but the worst case is why matching a
+complicated pattern against a very large sum can be slow. \texttt{Flat} heads add a
+third wrinkle: a single pattern element may consume several arguments, which the
+matcher assembles back into an \texttt{f[\dots]} sub-expression to match against.
+
+\subsection*{When the matcher calls the evaluator}
+
+A \mcode{PatternTest} (\(\mathtt{p\,?\,test}\)) and a \mcode{Condition}
+(\(\mathtt{p\,/;\,c}\)) are not structural: they are predicates. When the matcher reaches one, it substitutes
+the current bindings into the test or condition and \emph{calls
+\texttt{evaluate}}---the matcher and the evaluator are mutually recursive. A test that
+does not return \texttt{True} fails the match and triggers the same
+\texttt{env\_rollback} as a structural mismatch, so the partition search moves on to
+the next candidate. This is why \texttt{\_?EvenQ} and \texttt{x\_ /; x > 5} work: the
+condition is arbitrary Mathilda code, run mid-match with the tentative bindings in
+place.
+
+One attribute is a matcher-only concern: \texttt{OneIdentity}. It is \emph{not}
+applied during evaluation (\(\mathtt{f[x]}\) is never silently collapsed to
+\texttt{x}); it exists solely so that, when a structural match of \texttt{f[\dots]}
+fails, the matcher may retry treating the whole subject as a single argument---the
+behaviour that lets a pattern like \(\mathtt{a\_.\, x\_ + b\_.}\) match a bare
+\texttt{x}. Once a match succeeds, \texttt{replace\_bindings} substitutes the captured
+values into the rule's right-hand side, splicing any \texttt{Sequence} bindings into
+place, and returns the rewritten expression.
+
+\section{Rules and the symbol table}
+\label{sec:int-symtab}
+
+A rule is stored, retrieved and applied through the symbol table, and the design of
+that table is what makes rule dispatch fast even for a symbol with hundreds of
+definitions. Every symbol resolves to a \texttt{SymbolDef}: its \texttt{OwnValues}
+(bare assignments like \texttt{x = 5}), its \texttt{DownValues} (rules on a head, like
+\(\mathtt{f[x\_] := x^2}\)), an optional builtin C function pointer, its attribute
+bits, its docstring, and its NDArray kernels. A rule is a \texttt{Rule} node:
+
+\begin{ccode}[src/symtab.h (abridged)]
+typedef struct Rule {
+    Expr* pattern;
+    Expr* replacement;
+    int32_t     dispatch_arity;        /* arg count, or -1 for variable arity   */
+    const char* first_arg_head_canon;  /* interned head of arg 1, or NULL        */
+    int32_t     specificity;           /* larger = more specific; sorts the list */
+    struct Rule* next;
+} Rule;
+\end{ccode}
+
+\subsection*{Specificity, not recency}
+
+\texttt{DownValues} are kept in a linked list, and the order of that list is the order
+the matcher tries them---so it decides which of several applicable rules wins. The
+ordering is by \emph{specificity}: a more specific pattern (a literal
+\texttt{fib[0]}) sorts ahead of a more general one (\texttt{fib[n\_]}), with insertion
+order breaking ties. It is a common misconception that new definitions simply go to
+the front of the list. They do not. A general rule entered \emph{after} a specific one
+still yields to it:
+
+\mtranscript{10-internals/matcher-downvalues}
+
+The Fibonacci base cases \texttt{fib[0]} and \texttt{fib[1]}, though entered after the
+recursive rule, are tried first, and \texttt{DownValues[fib]} shows them at the front
+of the list. The decisive case is \texttt{r}: the specific \texttt{r[0]} is entered
+first, the general \texttt{r[x\_]} second, and yet \texttt{r[0]} still returns
+\texttt{special}---specificity beat recency.
+
+\usagebox{DownValues}
+
+Before the matcher is ever invoked, a cheap filter discards rules that cannot possibly
+apply. The \texttt{dispatch\_arity} and \texttt{first\_arg\_head\_canon} fields on each
+rule are a precomputed dispatch key: a rule whose pattern takes three arguments is
+skipped outright for a two-argument call, and a rule whose first argument must have
+head \texttt{Plus} is skipped when the input's first argument is an
+\texttt{Integer}---an interned-pointer comparison, no matching attempted. Only the
+survivors reach the backtracking matcher of \S\ref{sec:int-match}.
+\texttt{OwnValues} get an even shorter path: the overwhelmingly common
+\texttt{x = value} binding is recognised and returned without building a match
+environment at all.
+
+\subsection*{Interning and contexts}
+
+The symbol table is also the string interner. Every symbol name exists exactly once as
+a canonical \texttt{const char*}, so two references to \texttt{Sin} share one pointer
+and identity tests reduce to pointer equality---which is why the evaluator's hot paths
+can write \texttt{head == SYM\_List} instead of a string comparison. Those
+\texttt{SYM\_*} constants are the interned pointers for the kernel's own symbols,
+filled in once at startup.
+
+Layered over interning is the \B{Context} system: symbols live in namespaces, and
+\(\mathtt{\$Context}\) is where new ones are created.
+
+\mtranscript{10-internals/symtab-context}
+
+A fresh symbol is born in \texttt{Global`}; a builtin lives in \texttt{System`};
+\B{Begin} switches the current context so that symbols mentioned inside it are
+namespaced (\texttt{here} becomes \texttt{MyPkg`here}), and \B{End} restores the
+previous context. This is the machinery packages are built on.
+
+The rule \emph{engine}---\B{Replace}, \B{ReplaceAll} (\texttt{/.}) and
+\B{ReplaceRepeated} (\texttt{//.})---applies rules without installing them on a symbol:
+
+\mtranscript{10-internals/rules-replace}
+
+Note the semantics the internals enforce. \texttt{/.} rewrites top-down and does
+\emph{not} re-descend into a subexpression it has just rewritten---so
+\texttt{f[f[x]] /. f[a\_] -> a} yields \texttt{f[x]}, not \texttt{x}. \texttt{//.}
+repeats to a fixed point and does reach \texttt{x}. \B{Replace} acts only at the top
+level by default, which is why it leaves the list of \texttt{f}'s untouched. And
+\B{ReplaceList} returns \emph{every} way the pattern can match---the direct use of the
+matcher's success callback, enumerating all six orderings of the commutative sum.
+
+\section{Memory management}
+\label{sec:int-memory}
+
+Mathilda manages memory by hand---there is no garbage collector---and the entire
+scheme rests on one fact you have already met: \texttt{expr\_copy} is not a deep copy.
+It is a reference-count bump.
+
+\begin{ccode}[src/expr.c (abridged)]
+Expr* expr_copy(Expr* e) {          /* a logical copy: no tree is duplicated */
+    if (!e) return NULL;
+    e->refcount++;
+    return e;
+}
+
+void expr_free(Expr* e) {
+    if (!e) return;
+    if (e->refcount > 1) { e->refcount--; return; }  /* still shared: keep it */
+    /* last reference: release the payload by type -- mpz_clear a bignum, free
+     * an NDArray's buffer, recurse into a function node's head and args -- then
+     * recycle the node struct. Interned symbol names are never freed. */
+}
+\end{ccode}
+
+Sharing a subtree costs one increment; freeing decrements and reclaims only on the
+last reference. The invariant that makes this safe is that a node with
+\texttt{refcount > 1} is \emph{immutable}---any code wanting to rewrite a shared node
+first calls \texttt{expr\_unshare}, which returns a private one-level copy (its
+children still shared) and resets the metadata caches. This copy-on-write discipline
+is what lets the cached hash and evaluation stamp of \S\ref{sec:int-expr} be trusted.
+
+\subsection*{The builtin ownership contract}
+
+Every builtin obeys one contract, and getting it right is the single most important
+rule for anyone extending the system. A builtin \emph{takes ownership} of its argument
+expression. It returns either a freshly built \texttt{Expr*}---in which case the
+evaluator frees the original---or \texttt{NULL} to mean ``not my case,'' in which case
+the evaluator keeps the expression and leaves it unevaluated for a rule to handle. That
+\texttt{NULL} convention is exactly what lets a symbolic argument flow untouched
+through a head that only knows how to handle numbers. A builtin that wants to reuse a
+piece of its input must null the slot out before returning it, so the evaluator's
+subsequent free does not double-free the reused child.\calloutnote{Under the hood}{Two
+free-lists keep allocation cache-hot. Fixed-size \texttt{Expr} node structs are pooled
+in a bounded list (the dead node's link is stored in a union field it no longer needs),
+and the small argument arrays are pooled in per-length buckets for lengths 1 through 8
+---which is why the argument array is sized exactly, never over-allocated. Both pools
+are drained by an \texttt{atexit} hook, so a clean run leaves no reachable-but-unfreed
+memory and \texttt{valgrind} stays quiet.}
+
+You can watch the footprint from the language. \B{MemoryInUse} and \B{MaxMemoryUsed}
+report the process heap in bytes:
+
+\mtranscript{10-internals/memory-inuse}
+
+Building a million-element \B{Range} raises the footprint by about eight
+megabytes---a dense \texttt{int64} buffer of \(10^6\) elements
+(\S\ref{sec:int-packed}), not a million boxed nodes. \B{Clear} releases the binding,
+but the resident figure does not fall: freed memory returns to the process's own pools
+and allocator, not immediately to the operating system, so \B{MaxMemoryUsed} records
+the high-water mark. The numbers here are re-measured on every build and depend on the
+machine; it is their shape that is the lesson.
+
+\section{The parser and the printer}
+\label{sec:int-parse}
+
+The parser and printer are the two ends of the pipeline---the translation between the
+string a human types and the tree the evaluator rewrites.
+
+The parser (\texttt{src/parse.c}) is a \emph{Pratt}, or precedence-climbing, parser
+with no separate lexer: tokens are read inline as parsing proceeds. Every operator
+sits on a numeric precedence ladder that runs from 1 to 10000 in round steps, with
+generous gaps so a new operator can be slotted between two existing ones without
+renumbering. The best way to see the parser's decisions is to X-ray them with
+\B{FullForm}, which shows the tree the grouping produced:
+
+\mtranscript{10-internals/parser-fullform}
+
+Every line is a precedence decision made visible. \texttt{a + b*c} groups the
+multiplication first; \texttt{a\^{}b\^{}c} associates to the right; subtraction and
+division are not primitive at all---\texttt{a - b} is \texttt{Plus[a, Times[-1, b]]}
+and \texttt{a/b} is \texttt{Times[a, Power[b, -1]]}, so the evaluator needs rules only
+for \texttt{Plus}, \texttt{Times} and \texttt{Power}. A chain of equalities folds into
+a single \texttt{Inequality} node; \texttt{\&\&} binds tighter than \texttt{||}; the
+prefix \texttt{\#\^{}2 \&} is \texttt{Function[Power[Slot[1], 2]]}; and
+\texttt{a[[1]]} is \texttt{Part[a, 1]}. Implicit multiplication---the space in
+\texttt{b c}---is injected by the parser as an ordinary \texttt{Times} at the
+multiplication rung.
+
+The printer (\texttt{src/print.c}) runs the same ladder in reverse, adding parentheses
+exactly where a subexpression's precedence is lower than its context so that the output
+re-parses to the same tree:
+
+\mtranscript{10-internals/printer-forms}
+
+\B{InputForm} prints a form suitable for re-reading, \B{FullForm} the raw tree, and
+the default \texttt{OutputForm} the familiar two-dimensional-ish notation. The printer
+restores \texttt{Times[a, Power[b, -1]]} to \texttt{a/b}, \texttt{Rational[3, 4]} to
+\texttt{3/4}, and parenthesises \texttt{(a + b) c} because \texttt{Plus} binds looser
+than \texttt{Times}. It is the same precedence table the parser used, which is what
+guarantees the round trip.
+
+\section{The read--eval--print loop and session state}
+\label{sec:int-repl}
+
+The evaluator is wrapped by the interactive loop (\texttt{src/repl.c}), and it is
+worth being precise that the loop is a distinct layer---it does several things
+\emph{around} each call to \texttt{evaluate} that the evaluator itself knows nothing
+about. For one input line, in order, the loop:
+
+\begin{enumerate}
+  \item sets \(\mathtt{\$Line}\) to the current line number;
+  \item applies the \(\mathtt{\$PreRead}\) hook to the raw input \emph{text};
+  \item parses the text to an \texttt{Expr};
+  \item stores it as \texttt{In[\textit{n}]} (a \texttt{DownValue} on \texttt{In}), so
+        the literal input can be recalled;
+  \item applies the \(\mathtt{\$Pre}\) hook to the parsed expression;
+  \item calls \texttt{evaluate};
+  \item applies the \(\mathtt{\$Post}\) hook to the result;
+  \item stores the result as \texttt{Out[\textit{n}]} (a \texttt{DownValue} on
+        \texttt{Out});
+  \item applies the \(\mathtt{\$PrePrint}\) hook to a copy for display;
+  \item prints \texttt{Out[\textit{n}]= } and the expression.
+\end{enumerate}
+
+The history reach-backs are built on step 8: \texttt{\%} parses to
+\texttt{Out[-1]}, \texttt{\%\%} to \texttt{Out[-2]}, and \texttt{Out[\textit{n}]}
+resolves through the same \texttt{DownValue} store, a negative index counting back from
+\(\mathtt{\$Line}\). Because all of this lives in the loop and not in \texttt{evaluate},
+it is present only in an interactive session. The proof is to run the same lines
+\emph{non-interactively}---which is exactly how every transcript in this book is
+produced, through a batch pipe:
+
+\mtranscript{10-internals/repl-history}
+
+Outside the interactive loop there is no \texttt{In}/\texttt{Out} store and no running
+\(\mathtt{\$Line}\): \texttt{\%} stays the symbolic \texttt{Out[-1]}, \texttt{Out[1]}
+does not resolve, and \(\mathtt{\$Line}\) is just an unbound symbol. Nothing is broken
+---this is the same evaluator---but the session bookkeeping simply is not there,
+because the loop that maintains it is not running. That is the clearest possible
+demonstration that history is a service of the REPL, layered on top of a stateless
+evaluator.\calloutnote{Under the hood}{The loop chooses one of three modes at startup.
+A script given with \texttt{-file} is evaluated statement by statement with nothing
+echoed. A non-terminal standard input (a pipe) selects a line-oriented NDJSON protocol
+---the one that drives this book's build. Only a real terminal runs the interactive
+loop, with GNU Readline and the completeness-driven multi-line editing described in
+\texttt{SPEC.md}~\S11, where pressing Return submits only when brackets, strings and
+comments are all balanced.}
+
+\section{Numbers and the packed-array substrate}
+\label{sec:int-packed}
+
+Numbers deserve a closer look, because ``number'' is really several internal
+representations that the system chooses between automatically. The
+\texttt{Head}, though, is uniform:
+
+\mtranscript{10-internals/numbers-tower}
+
+An exact integer is a machine \texttt{int64} promoted to a GMP bignum as needed
+(\S\ref{sec:int-expr}); a rational is a \texttt{Rational} of two integers; a machine
+real is a \texttt{double}; and at higher precision the arithmetic moves onto MPFR,
+which is why \texttt{Precision[N[Pi, 40]]} reports about forty digits rather than the
+\texttt{MachinePrecision} of a bare \texttt{N}. Exactness is contagious in the usual
+way: \texttt{1/2 + 1/3} stays the exact \texttt{5/6}, but a single machine real, as in
+\texttt{1/2 + 0.5}, makes the whole result inexact. This numeric tower is the subject
+of \S\ref{sec:numcalc} from the mathematics side; here it is enough to see that one
+\texttt{Head} hides several machine types.
+
+The last representation is the one that makes numeric work fast: the packed array. A
+list all of whose elements are machine numbers can be stored not as a tree of boxed
+nodes but as a single \texttt{EXPR\_NDARRAY}---a dense, flat buffer. Crucially this is
+\emph{one node type with two surfaces}. A visible \texttt{NDArray[\dots]} that a user
+typed is atomic: its head is \texttt{NDArray}, and \texttt{AtomQ} is true. A
+\emph{packed list} is the same buffer wearing the head \texttt{List}: it is
+indistinguishable from the nested list it stores---\texttt{ListQ} is true, patterns
+match it, it prints as a list---and only \B{NDArrayQ} can tell the two apart.
+
+\mtranscript{10-internals/packed-gate}
+
+That indistinguishability is a promise the evaluator has to keep, and it keeps it with
+the \emph{transparency gate} of \S\ref{sec:int-eval}, step~7.5. There are thousands of
+places in the source that read a function node's argument array directly; a packed
+buffer has no such array. So before the evaluator hands a packed argument to any head
+that has not explicitly declared itself packed-aware, it \emph{materializes} the buffer
+back into an ordinary list. A head opts in only after it has been checked to read the
+buffer correctly, and the gate additionally materializes an integer buffer for any head
+not proven exact on \texttt{int64}---which is why \texttt{Total[Range[5]]} stays the
+exact integer \texttt{15} and never becomes \texttt{15.}. The full story of packing,
+the exactness contract, and the audit that guards the list of aware heads is in
+Chapter~\ref{ch:datastructures} (\S\ref{sec:ds-packed}); what matters here is that
+packing is a performance representation the evaluator makes invisible, at the cost of
+one gate check per call.
+
+\section{Bootstrapping: startup and the two-tier design}
+\label{sec:int-boot}
+
+When Mathilda starts, \texttt{main()} in \texttt{src/repl.c} builds the world in a
+fixed order: \texttt{symtab\_init()} creates the symbol table and interns the kernel's
+\texttt{SYM\_*} names, then \texttt{core\_init()} in \texttt{src/core.c} registers the
+core builtins and calls each subsystem's \texttt{*\_init()} function in turn---several
+dozen of them, from arithmetic through the special functions and the packed-array
+substrate to the higher-level algebra and graphics services. That ordered list of calls
+in \texttt{core.c} is the authoritative source of truth for initialization order.
+
+Then comes the seam that gives the system its character. After the C side is built,
+\texttt{main()} loads \texttt{src/internal/init.m}, which in turn reads the remaining
+bootstrap \texttt{.m} files. This is Mathilda's \emph{two-tier design}:
+performance-sensitive primitives are written in C, while a great deal of the actual
+mathematics is expressed as ordinary rewrite rules in Mathilda's own language. The
+derivative rules live in \texttt{deriv.m}; the integral tables are \texttt{.m} data;
+and the same fixed-point evaluator that runs your rules runs these:
+
+\mtranscript{10-internals/twotier-rules}
+
+\texttt{D[Sin[x], x]}, the chain rule for \texttt{D[f[g[x]], x]}, and the
+antiderivative of \(1/(1+x^2)\) are not special-cased in C---they are
+\texttt{DownValues} loaded at startup, tried at step~11 of every relevant evaluation
+(\S\ref{sec:int-eval}) exactly as a rule you write would be. This is the deepest
+reason the architecture holds together: because everything is an expression and the
+evaluator is a generic fixed-point loop, extending the system's mathematics most often
+means adding a rule, not writing C. The recipes for doing so---adding a builtin, a
+module, a pattern, an operator---are Chapter~\ref{ch:contributing}, and the build,
+test and audit machinery that keeps all of this honest is
+Chapter~\ref{ch:development}.

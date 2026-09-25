@@ -279,9 +279,10 @@ correctly. The \texttt{collatz} pair shows dispatch by \emph{guard}: two rules
 with the same shape but disjoint conditions act as a single case-split function.
 
 \calloutnote{Under the hood}{DownValues live on the head symbol in the symbol
-table (\texttt{src/symtab.c}) as a linked list. New DownValues go to the front,
-but Mathilda keeps genuinely more-specific patterns ahead of more-general ones so
-that \texttt{fib[0]} is tried before \texttt{fib[n\_]}. Evaluating
+table (\texttt{src/symtab.c}) as a linked list, kept in order of
+\emph{specificity}---genuinely more-specific patterns ahead of more-general ones,
+with insertion order breaking ties---so that \texttt{fib[0]} is tried before
+\texttt{fib[n\_]} however the two were entered (\S\ref{sec:int-symtab}). Evaluating
 \texttt{square[7]} is then just \texttt{apply\_down\_values}: walk the list, and
 the first pattern that matches wins---the same matcher, the same first-match
 rule, as \texttt{/.}. There is no separate ``function call'' machinery in the
