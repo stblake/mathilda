@@ -145,6 +145,13 @@ EXEMPT = {
     "FirstCase": "as Cases",
     "DeleteCases": "as Cases",
     "FreeQ": "as Cases, in funcprog.c",
+    # src/assoc_ops.c (ops_delist_visible): structural heads over arbitrary
+    # elements, whose is_ndarray test only materialises a VISIBLE NDArray.
+    "Discard": "as Cases (predicate test per element, like Select), in assoc_ops.c",
+    "CountDistinct": "as Cases, in assoc_ops.c; a Tally-backed buffer path would "
+    "need Compile[] lowering too, so it is left to the packed/Compile work",
+    "CountDistinctBy": "as Cases (applies an arbitrary f per element), in assoc_ops.c",
+    "SubsetQ": "as Cases (SameQ membership over arbitrary elements), in assoc_ops.c",
     "FlattenAt": "its is_ndarray in src/list/flatten_at.c is a materialise "
     "guard, not a fast path: a visible NDArray is atomic so the "
     "position walker cannot descend into it, and flattening one "

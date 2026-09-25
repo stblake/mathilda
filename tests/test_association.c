@@ -92,7 +92,9 @@ void test_unicode_arrow_rule() {
 
 void test_assoc_implicit_multiplication() {
     /* An association literal is a valid right operand of implicit Times. */
-    assert_eval_eq("2 <|\"a\" -> 1|>", "Times[2, Association[Rule[\"a\", 1]]]", 1);
+    /* Held, to test the parse; evaluated, Times threads over the values. */
+    assert_eval_eq("Hold[2 <|\"a\" -> 1|>]", "Hold[Times[2, Association[Rule[\"a\", 1]]]]", 1);
+    assert_eval_eq("2 <|\"a\" -> 1|>", "Association[Rule[\"a\", 2]]", 1);
     assert_eval_eq("3 <|\"x\" -> 4|>[\"x\"]", "12", 0);
 }
 

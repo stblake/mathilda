@@ -1005,6 +1005,13 @@ void core_init(void) {
     void options_builtin_init(void);
     options_builtin_init();
 
+    /* Second-tier Association heads and the extended forms of existing heads
+     * (src/assoc_ops.c). Runs after every subsystem has registered its
+     * builtins because it wraps some of them (Keys, Normal, Transpose,
+     * DeleteMissing, ...), delegating every form it does not handle. */
+    void assoc_ops_init(void);
+    assoc_ops_init();
+
     /* Flag every symbol interned so far as a System symbol. At this point in
      * startup the interner holds exactly the kernel's built-in names (cached
      * SYM_* pointers, registered builtins, option names with docstrings, ...).
