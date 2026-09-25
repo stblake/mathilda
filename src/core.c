@@ -10,6 +10,7 @@
 #endif
 
 #include "core.h"
+#include "assoc_struct.h" /* association atomicity: AtomQ/Depth/LeafCount/Level */
 #include "symtab.h"
 #include "eval.h"
 #include "message.h"    /* message_init(): Quiet / Check / Message */
@@ -594,6 +595,7 @@ void core_init(void) {
         "SortBy[list, f]\n\tSorts the elements of list by the canonical order of\n"
         "\tf applied to each element.\n"
         "SortBy[assoc, f]\n\tSorts an association by f applied to each value.\n"
+        "SortBy[list, f, p]\n\tCompares the f values with the ordering function p.\n"
         "SortBy[f]\n\tOperator form: SortBy[f][expr] is SortBy[expr, f].");
     symtab_add_builtin("MaximalBy", builtin_maximal_by);
     symtab_get_def("MaximalBy")->attributes |= ATTR_PROTECTED;
@@ -640,7 +642,8 @@ void core_init(void) {
     symtab_get_def("ReverseSortBy")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ReverseSortBy",
         "ReverseSortBy[list, f]\n\tSorts by f in descending order. Over an\n"
-        "\tassociation, sorts by f of each value, descending.");
+        "\tassociation, sorts by f of each value, descending.\n"
+        "ReverseSortBy[list, f, p]\n\tSorts by f using the reversed ordering function p.");
     symtab_add_builtin("OrderedQ", builtin_orderedq);
     symtab_get_def("OrderedQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Order", builtin_order);
@@ -831,6 +834,7 @@ void core_init(void) {
     real_init();
     attr_init();
     purefunc_init();
+    void minus_init(void);  minus_init();   /* Minus[x] -> Times[-1, x] */
     stats_init();
     partitions_init();
     poly_init();
@@ -1006,6 +1010,19 @@ void core_init(void) {
      * so every option-name symbol used by the registry is already interned. */
     void options_builtin_init(void);
     options_builtin_init();
+
+    /* Second-tier Association heads and the extended forms of existing heads
+     * (src/assoc_ops.c). Runs after every subsystem has registered its
+     * builtins because it wraps some of them (Keys, Normal, Transpose,
+     * DeleteMissing, ...), delegating every form it does not handle. */
+    void assoc_ops_init(void);
+    assoc_ops_init();
+
+    /* Operator (curried) forms h[o...][x]. After every builtin and docstring
+     * is registered (including assoc_ops_init's heads), since each row appends
+     * its form to the head's docstring. */
+    void opform_init(void);
+    opform_init();
 
     /* Flag every symbol interned so far as a System symbol. At this point in
      * startup the interner holds exactly the kernel's built-in names (cached
@@ -2002,10 +2019,49 @@ Expr* builtin_evaluate(Expr* res) {
     return out;
 }
 
+/*
+ * Append/Prepend (and the To forms) on an association, as in Mathematica 15:
+ * elem is a rule, a list of rules or an association; its entries go at the end
+ * (Append) or the front (Prepend) in their own order, and an existing entry
+ * with the same key is REMOVED from where it was -- so Prepend[<|a -> 1,
+ * b -> 2|>, b -> 9] is <|b -> 9, a -> 1|> and Append[<|a -> 1, b -> 2|>,
+ * a -> 9] is <|b -> 2, a -> 9|>. NULL (unevaluated) for any other elem.
+ * Key membership goes through an indexed association of the new rules, so
+ * this is O(n + m).
+ */
+static Expr* assoc_add_rules(const Expr* assoc, Expr* elem, bool prepend) {
+    Expr** nr; size_t nn;
+    if (is_rule2(elem)) { nr = &elem; nn = 1; }
+    else if (elem->type == EXPR_FUNCTION && elem->data.function.head->type == EXPR_SYMBOL &&
+             (elem->data.function.head->data.symbol.name == SYM_List || is_association(elem))) {
+        nr = elem->data.function.args; nn = elem->data.function.arg_count;
+        for (size_t i = 0; i < nn; i++) if (!is_rule2(nr[i])) return NULL;
+    } else {
+        return NULL;
+    }
+    size_t n = assoc->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) if (!is_rule2(assoc->data.function.args[i])) return NULL;
+
+    Expr* newset = assoc_from_rules(nr, nn);
+    Expr** out = malloc(sizeof(Expr*) * (n + nn + 1));
+    size_t k = 0;
+    if (prepend) for (size_t j = 0; j < nn; j++) out[k++] = nr[j];
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = assoc->data.function.args[i];
+        if (!assoc_lookup_value(newset, r->data.function.args[0])) out[k++] = r;
+    }
+    if (!prepend) for (size_t j = 0; j < nn; j++) out[k++] = nr[j];
+    Expr* result = assoc_from_rules(out, k);     /* copies; collapses repeated new keys */
+    free(out);
+    expr_free(newset);
+    return result;
+}
+
 Expr* builtin_append(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
+    if (is_association(expr)) return assoc_add_rules(expr, elem, false);
     /* One allocation and two memcpys on the buffer. Until this existed Append
      * was "correct by omission" in pack.c -- the gate materialised 10^6 Exprs
      * so the generic walk below could add one element to the end. */
@@ -2037,6 +2093,7 @@ Expr* builtin_prepend(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
+    if (is_association(expr)) return assoc_add_rules(expr, elem, true);
     if (is_ndarray(expr)) {                       /* see builtin_append above */
         Expr* nd = ndstruct_append(res, true);
         return nd ? nd : ndarray_delist_and_reeval(res);
@@ -2086,6 +2143,20 @@ Expr* builtin_append_to(Expr* res) {
         return NULL;
     }
 
+    /* An association appends by key (see assoc_add_rules); a non-rule elem
+     * leaves AppendTo unevaluated, as in Mathematica. */
+    if (is_association(current_val)) {
+        Expr* nv = assoc_add_rules(current_val, elem, false);
+        if (!nv) {
+            /* x = Append[x, elem] with Append left unevaluated -- exactly what
+             * Mathematica assigns for a non-rule elem. */
+            Expr* aa[2] = { current_val, expr_copy(elem) };      /* adopts current_val */
+            return inplace_assign_back(sym, expr_new_function(expr_new_symbol("Append"), aa, 2));
+        }
+        expr_free(current_val);
+        return inplace_assign_back(sym, nv);
+    }
+
     size_t new_count = current_val->data.function.arg_count + 1;
     Expr** new_args = malloc(sizeof(Expr*) * new_count);
     for (size_t i = 0; i < current_val->data.function.arg_count; i++) {
@@ -2111,6 +2182,16 @@ Expr* builtin_prepend_to(Expr* res) {
     if (!current_val || current_val->type != EXPR_FUNCTION) {
         if (current_val) expr_free(current_val);
         return NULL;
+    }
+
+    if (is_association(current_val)) {           /* see builtin_append_to */
+        Expr* nv = assoc_add_rules(current_val, elem, true);
+        if (!nv) {
+            Expr* pa[2] = { current_val, expr_copy(elem) };      /* adopts current_val */
+            return inplace_assign_back(sym, expr_new_function(expr_new_symbol("Prepend"), pa, 2));
+        }
+        expr_free(current_val);
+        return inplace_assign_back(sym, nv);
     }
 
     size_t new_count = current_val->data.function.arg_count + 1;
@@ -2348,6 +2429,10 @@ Expr* builtin_atomq(Expr* res) {
      * physically a single EXPR_NDARRAY node. A visible NDArray[...] stays
      * atomic. */
     if (is_packed_list(arg)) return expr_new_symbol(SYM_False);
+
+    /* A well-formed association is an atom (Mathematica: AtomQ[<|a -> 1|>] is
+     * True); a malformed Association[1, 2] is not. See assoc_struct.h. */
+    if (assoc_is_wellformed(arg)) return expr_new_symbol(SYM_True);
 
     if (arg->type == EXPR_FUNCTION) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {
@@ -3292,7 +3377,15 @@ Expr* builtin_quotient(Expr* res) {
     return expr_new_integer(result);
 }
 
-static int64_t get_expr_depth(Expr* e, bool heads) {
+/* Depth of e. An atomic association counts only its values and is never
+ * shallower than a one-level container: Depth[<||>] and Depth[<|a -> 1|>] are
+ * 2, Depth[<|a -> <|b -> 1|>|>] is 3 (assoc_struct.h).
+ *
+ * `empty_is_two` selects the Depth[] builtin's rule that an empty compound has
+ * depth 2 (Mathematica: Depth[{}] and Depth[f[]] are 2). Level's negative
+ * level specs keep the other convention, which is also Mathematica's there:
+ * Level[{{}}, {-2}] is {{{}}}, so {} sits at level -1. */
+static int64_t get_expr_depth_ex(Expr* e, bool heads, bool empty_is_two) {
     /* An NDArray is the flat-storage equivalent of a rank-deep nested List,
      * so its Depth matches: a rank-r array has depth r + 1 (the atom level). */
     if (e->type == EXPR_NDARRAY) return (int64_t)e->data.ndarray.rank + 1;
@@ -3304,16 +3397,21 @@ static int64_t get_expr_depth(Expr* e, bool heads) {
         if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
 
-    int64_t max_d = 0;
+    bool assoc = assoc_is_wellformed(e);
+    int64_t max_d = (assoc || empty_is_two) ? 1 : 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        int64_t d = get_expr_depth(e->data.function.args[i], heads);
+        int64_t d = get_expr_depth_ex(struct_part(e, i, assoc), heads, empty_is_two);
         if (d > max_d) max_d = d;
     }
     if (heads) {
-        int64_t d_head = get_expr_depth(e->data.function.head, heads);
+        int64_t d_head = get_expr_depth_ex(e->data.function.head, heads, empty_is_two);
         if (d_head > max_d) max_d = d_head;
     }
     return max_d + 1;
+}
+
+static int64_t get_expr_depth(Expr* e, bool heads) {
+    return get_expr_depth_ex(e, heads, false);
 }
 
 Expr* builtin_depth(Expr* res) {
@@ -3328,19 +3426,22 @@ Expr* builtin_depth(Expr* res) {
             }
         }
     }
-    return expr_new_integer(get_expr_depth(e, heads));
+    return expr_new_integer(get_expr_depth_ex(e, heads, true));
 }
 
 int64_t leaf_count_internal(Expr* e, bool heads) {
     if (!e) return 0;
     if (e->type != EXPR_FUNCTION) return 1;
     
+    /* An atomic association contributes its head and its values only:
+     * LeafCount[<|a -> 1|>] is 2 (assoc_struct.h). */
+    bool assoc = assoc_is_wellformed(e);
     int64_t count = 0;
     if (heads) {
         count += leaf_count_internal(e->data.function.head, heads);
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        count += leaf_count_internal(e->data.function.args[i], heads);
+        count += leaf_count_internal(struct_part(e, i, assoc), heads);
     }
     
     if (!heads && count == 0 && e->data.function.arg_count == 0) return 0;
@@ -3431,9 +3532,11 @@ static void level_rec(Expr* e, int64_t current_level, int64_t min_l, int64_t max
     }
 
     if (e->type == EXPR_FUNCTION && !atomic) {
+        /* An association's parts are its values (assoc_struct.h). */
+        bool assoc = assoc_is_wellformed(e);
         if (heads) level_rec(e->data.function.head, current_level + 1, min_l, max_l, heads, results, count, cap);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            level_rec(e->data.function.args[i], current_level + 1, min_l, max_l, heads, results, count, cap);
+            level_rec(struct_part(e, i, assoc), current_level + 1, min_l, max_l, heads, results, count, cap);
         }
     }
 

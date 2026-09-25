@@ -4,6 +4,7 @@
 #include "sym_names.h"
 #include "arithmetic.h"
 #include "assoc.h"
+#include "assoc_struct.h"   /* OrderedQ compares an association's values */
 #include "ndarray.h"   /* ndt_get for NDArray canonical ordering */
 #include "ndstruct.h"  /* ndstruct_sort / ndstruct_ordering NDArray fast paths */
 #include "pack.h"      /* pack_offer — a sorted machine list packs */
@@ -829,6 +830,85 @@ static int custom_compare(const void* a, const void* b) {
     return cmp_with_p(*(Expr**)a, *(Expr**)b, current_sort_p);
 }
 
+/*
+ * Mathematica's merge sort for a user ordering function p, over a permutation.
+ *
+ * Sort[list, p] is not "any sort consistent with p": a strict p such as Greater
+ * says False for equal elements, so ties come out in an order fixed by the
+ * algorithm -- Sort[<|a -> 2, b -> 2, c -> 1|>, Greater] is <|b -> 2, a -> 2,
+ * c -> 1|>. Mathematica 15 uses a top-down merge sort (left half floor(n/2))
+ * whose merge keeps the LEFT element unless p[left, right] is False or -1;
+ * this reproduces its output exactly, including Sort[list, -1 &] reversing the
+ * list and Order-style p (0 on ties) being stable. It is O(n log n) calls of p.
+ *
+ * subj[i] is what p compares for element i; idx is the permutation, sorted in
+ * place, tmp scratch of the same length. With p == NULL the canonical order is
+ * used (stable; `desc` flips it). `swap` calls p[right, left] instead, which is
+ * how ReverseSortBy[list, f, p] orders.
+ */
+static void p_merge_sort(size_t* idx, size_t* tmp, size_t n, Expr** subj,
+                         Expr* p, bool swap, bool desc) {
+    if (n < 2) return;
+    size_t m = n / 2;
+    p_merge_sort(idx, tmp, m, subj, p, swap, desc);
+    p_merge_sort(idx + m, tmp, n - m, subj, p, swap, desc);
+    size_t i = 0, j = m, k = 0;
+    while (i < m && j < n) {
+        Expr* l = subj[idx[i]];
+        Expr* r = subj[idx[j]];
+        bool left_first;
+        if (p) left_first = (swap ? cmp_with_p(r, l, p) : cmp_with_p(l, r, p)) <= 0;
+        else   left_first = desc ? expr_compare(l, r) >= 0 : expr_compare(l, r) <= 0;
+        tmp[k++] = left_first ? idx[i++] : idx[j++];
+    }
+    while (i < m) tmp[k++] = idx[i++];
+    while (j < n) tmp[k++] = idx[j++];
+    memcpy(idx, tmp, n * sizeof(size_t));
+}
+
+/* A fresh identity permutation of n sorted by p_merge_sort. Caller frees. */
+static size_t* p_sort_perm(Expr** subj, size_t n, Expr* p, bool swap, bool desc) {
+    size_t* idx = malloc(sizeof(size_t) * (n ? n : 1));
+    size_t* tmp = malloc(sizeof(size_t) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) idx[i] = i;
+    p_merge_sort(idx, tmp, n, subj, p, swap, desc);
+    free(tmp);
+    return idx;
+}
+
+/* The thing an ordering compares for element `elem` of a collection: the value
+ * of an association entry, else the element itself. Borrowed. */
+static Expr* sort_subject(Expr* elem, bool assoc) {
+    if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+        return elem->data.function.args[1];
+    return elem;
+}
+
+/* `coll` with its elements permuted by perm (entries, for an association).
+ * The head is kept. Caller owns the result. */
+static Expr* permute_collection(const Expr* coll, const size_t* perm) {
+    size_t n = coll->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) out[i] = expr_copy(coll->data.function.args[perm[i]]);
+    Expr* r = expr_new_function(expr_copy(coll->data.function.head), out, n);
+    free(out);
+    return r;
+}
+
+/* Sort a collection's elements (an association's entries by value) with the
+ * merge sort above. Caller owns the result. */
+static Expr* sort_collection_p(const Expr* coll, Expr* p, bool swap, bool desc) {
+    size_t n = coll->data.function.arg_count;
+    bool assoc = is_association(coll);
+    Expr** subj = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) subj[i] = sort_subject(coll->data.function.args[i], assoc);
+    size_t* perm = p_sort_perm(subj, n, p, swap, desc);
+    Expr* r = permute_collection(coll, perm);
+    free(perm);
+    free(subj);
+    return r;
+}
+
 Expr* builtin_sort(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) {
         return NULL;
@@ -848,12 +928,17 @@ Expr* builtin_sort(Expr* res) {
         return assoc_sort_by_value(list);
 
     Expr* p = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    
+
     size_t count = list->data.function.arg_count;
     if (count == 0) {
         return expr_copy(list);
     }
-    
+
+    /* Sort[list, p] / Sort[assoc, p]: Mathematica's merge sort, so ties under a
+     * strict p land where Mathematica puts them (an association compares its
+     * values; the entries move with them). */
+    if (p) return pack_offer(sort_collection_p(list, p, false, false));
+
     Expr** sorted_args = malloc(sizeof(Expr*) * count);
     for (size_t i = 0; i < count; i++) {
         sorted_args[i] = expr_copy(list->data.function.args[i]);
@@ -880,10 +965,70 @@ Expr* builtin_sort(Expr* res) {
 
 /* A payload paired with the sort key f[payload], for a key-once qsort
  * (avoids re-evaluating f during every comparison). */
-typedef struct { Expr* payload; Expr* key; } SortByPair;
+typedef struct { Expr* payload; Expr* key; size_t pos; bool multi; } SortByPair;
 
+/* SortBy order: by the key; ties by the canonical order of the element itself
+ * (for an association, of the whole entry, i.e. by key) when sorting by a
+ * single f, and by input position for a list {f1, f2, ...} -- both as in
+ * Mathematica 15: SortBy[{{1, "b"}, {1, "a"}}, First] puts {1, "a"} first,
+ * SortBy[{{1, "b"}, {1, "a"}}, {First}] leaves the order alone. */
 static int sortby_pair_cmp(const void* a, const void* b) {
-    return expr_compare(((const SortByPair*)a)->key, ((const SortByPair*)b)->key);
+    const SortByPair* pa = (const SortByPair*)a;
+    const SortByPair* pb = (const SortByPair*)b;
+    int c = expr_compare(pa->key, pb->key);
+    if (c) return c;
+    if (!pa->multi) {
+        c = expr_compare(pa->payload, pb->payload);
+        if (c) return c;
+    }
+    return (pa->pos < pb->pos) ? -1 : (pa->pos > pb->pos);
+}
+
+/* Canonical order of sort subjects, ties by the element: the pre-order
+ * SortBy[coll, f, p] merges from. Stable by position last. */
+static int subject_pair_cmp(const void* a, const void* b) {
+    const SortByPair* pa = (const SortByPair*)a;
+    const SortByPair* pb = (const SortByPair*)b;
+    int c = expr_compare(pa->key, pb->key);           /* key = the subject here */
+    if (c) return c;
+    c = expr_compare(pa->payload, pb->payload);
+    if (c) return c;
+    return (pa->pos < pb->pos) ? -1 : (pa->pos > pb->pos);
+}
+
+/* SortBy[coll, f, p] (swap = false) and ReverseSortBy[coll, f, p] (swap = true).
+ *
+ * Mathematica first puts the elements in canonical order of their subjects
+ * (values, for an association), then merge-sorts them by p applied to the
+ * f-values (p[b, a] for ReverseSortBy) -- see p_merge_sort. Reproduces e.g.
+ * SortBy[<|a -> {1, z}, b -> {1, y}|>, First, Greater] = <|a -> .., b -> ..|>. */
+static Expr* sort_by_with_p(const Expr* coll, Expr* f, Expr* p, bool swap) {
+    size_t n = coll->data.function.arg_count;
+    bool assoc = is_association(coll);
+    SortByPair* pre = malloc(sizeof(SortByPair) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        pre[i].payload = coll->data.function.args[i];                /* borrowed */
+        pre[i].key = sort_subject(coll->data.function.args[i], assoc); /* borrowed */
+        pre[i].pos = i;
+        pre[i].multi = false;
+    }
+    qsort(pre, n, sizeof(SortByPair), subject_pair_cmp);
+
+    Expr** fv = malloc(sizeof(Expr*) * (n ? n : 1));     /* owned f-values */
+    for (size_t i = 0; i < n; i++) {
+        Expr* ca[1] = { expr_copy(pre[i].key) };
+        Expr* call = expr_new_function(expr_copy(f), ca, 1);
+        fv[i] = evaluate(call);
+        expr_free(call);
+    }
+    size_t* perm = p_sort_perm(fv, n, p, swap, false);
+
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) out[i] = expr_copy(pre[perm[i]].payload);
+    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, n);
+    for (size_t i = 0; i < n; i++) expr_free(fv[i]);
+    free(out); free(perm); free(fv); free(pre);
+    return result;
 }
 
 /* SortBy[list, f]  — sort list elements by canonical order of f[element].
@@ -903,15 +1048,18 @@ Expr* builtin_sort_by(Expr* res) {
         Expr* func_args[1] = { inner };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
-    if (argc != 2) return NULL;
+    if (argc != 2 && argc != 3) return NULL;
 
     Expr* coll = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
-    if (coll->type != EXPR_FUNCTION) return expr_copy(coll);
+    if (coll->type != EXPR_FUNCTION) return argc == 2 ? expr_copy(coll) : NULL;
 
     bool assoc = is_association(coll);
     size_t n = coll->data.function.arg_count;
     if (n == 0) return expr_copy(coll);
+
+    /* SortBy[coll, f, p]: compare the f-values with the ordering function p. */
+    if (argc == 3) return sort_by_with_p(coll, f, res->data.function.args[2], false);
 
     SortByPair* pairs = malloc(sizeof(SortByPair) * n);
     /* SortBy[list, {f1, f2, ...}] sorts by f1, breaking ties with f2, ... .
@@ -927,6 +1075,8 @@ Expr* builtin_sort_by(Expr* res) {
         if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
             subject = elem->data.function.args[1];
         pairs[i].payload = expr_copy(elem);
+        pairs[i].pos = i;
+        pairs[i].multi = multi;
         if (multi) {
             size_t nc = f->data.function.arg_count;
             Expr** keyparts = malloc(sizeof(Expr*) * (nc ? nc : 1));
@@ -1091,6 +1241,12 @@ static Expr* sort_call_as(const Expr* res, const char* head) {
  * association), i.e. Reverse of Sort. */
 Expr* builtin_reverse_sort(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* ReverseSort[assoc]: descending by value with equal values kept in input
+     * order -- not Reverse[Sort[assoc]], which would flip the ties (Mathematica
+     * 15: ReverseSort[<|a -> 2, b -> 2, c -> 1|>] is <|a -> 2, b -> 2, c -> 1|>).
+     * With an ordering function it is Reverse[Sort[assoc, p]], below. */
+    if (res->data.function.arg_count == 1 && is_association(res->data.function.args[0]))
+        return sort_collection_p(res->data.function.args[0], NULL, false, true);
     Expr* call = sort_call_as(res, "Sort");
     Expr* asc = builtin_sort(call);   /* borrows call, returns a new expr */
     expr_free(call);
@@ -1099,7 +1255,16 @@ Expr* builtin_reverse_sort(Expr* res) {
 
 /* ReverseSortBy[coll, f] — descending by f (of each value for an association). */
 Expr* builtin_reverse_sort_by(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    /* ReverseSortBy[coll, f, p] is SortBy[coll, f, p[#2, #1] &] (Mathematica
+     * 15), which differs from Reverse[SortBy[coll, f, p]] on ties. */
+    if (res->data.function.arg_count == 3) {
+        Expr* coll = res->data.function.args[0];
+        if (coll->type != EXPR_FUNCTION || is_ndarray(coll)) return NULL;
+        if (coll->data.function.arg_count == 0) return expr_copy(coll);
+        return sort_by_with_p(coll, res->data.function.args[1], res->data.function.args[2], true);
+    }
+    if (res->data.function.arg_count != 2) return NULL;
     Expr* call = sort_call_as(res, "SortBy");
     Expr* asc = builtin_sort_by(call);
     expr_free(call);
@@ -1352,11 +1517,14 @@ Expr* builtin_orderedq(Expr* res) {
     
     Expr* old_p = current_sort_p;
     current_sort_p = p;
-    
+
+    bool assoc = assoc_is_wellformed(list);
     bool ordered = true;
     for (size_t i = 0; i < count - 1; i++) {
-        Expr* ea = list->data.function.args[i];
-        Expr* eb = list->data.function.args[i+1];
+        /* An association is ordered by its values, never its keys:
+         * OrderedQ[<|a -> 2, b -> 1|>] is False (assoc_struct.h). */
+        Expr* ea = struct_part(list, i, assoc);
+        Expr* eb = struct_part(list, i + 1, assoc);
         
         int cmp = 0;
         if (current_sort_p == NULL) {
@@ -1471,15 +1639,23 @@ Expr* builtin_ordering(Expr* res) {
     }
 
     int64_t* idx = malloc(sizeof(int64_t) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++) idx[i] = (int64_t)i;
-
-    Expr** old_subjects = ordering_subjects;
-    Expr*  old_p        = ordering_p;
-    ordering_subjects = subjects;
-    ordering_p = p;
-    qsort(idx, n, sizeof(int64_t), ordering_index_compare);
-    ordering_subjects = old_subjects;
-    ordering_p = old_p;
+    if (p) {
+        /* A user ordering function: Mathematica's merge sort, so a strict p
+         * places ties exactly as Sort[list, p] does (Ordering[{1, 1, 0, 1},
+         * All, Greater] is {4, 2, 1, 3}). */
+        size_t* perm = p_sort_perm(subjects, n, p, false, false);
+        for (size_t i = 0; i < n; i++) idx[i] = (int64_t)perm[i];
+        free(perm);
+    } else {
+        for (size_t i = 0; i < n; i++) idx[i] = (int64_t)i;
+        Expr** old_subjects = ordering_subjects;
+        Expr*  old_p        = ordering_p;
+        ordering_subjects = subjects;
+        ordering_p = NULL;
+        qsort(idx, n, sizeof(int64_t), ordering_index_compare);
+        ordering_subjects = old_subjects;
+        ordering_p = old_p;
+    }
 
     /* Which ranks of the permutation to emit: all of it, or a Take-style slice. */
     int64_t* sel = NULL;      /* 1-based ranks into the permutation */

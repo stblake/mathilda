@@ -302,8 +302,10 @@ static void test_malformed_association_does_not_crash(void) {
      * args[1] of the symbol `a` used to type-pun a SymbolDef* and segfault. */
     run_full("MapIndexed[f, Association[a, b]]",
              "Association[f[a, List[1]], f[b, List[2]]]");
-    /* The same bug was reachable through Map's assoc_map_values. */
-    run_full("Map[f, Association[a, b]]", "Association[a, b]");
+    /* The same bug was reachable through Map's assoc_map_values. A malformed
+     * association is an ordinary expression, so Map reaches its arguments
+     * (Mathematica 15: Association[f[a], f[b]]). */
+    run_full("Map[f, Association[a, b]]", "Association[f[a], f[b]]");
 }
 
 /* ---------- NDArray ---------- */

@@ -12,9 +12,10 @@
  * Cubics/Quartics radical solving), Together/Cancel over algebraic-number
  * extensions (Extension -> Automatic), PossibleZeroQ, Numerator/Denominator,
  * Expand -- via the eval_take(mk_fn...) idiom already used by
- * integrate_linratiorad.c.  A verbatim port of the WL appendix is impossible
- * (it relies on Association, which Mathilda lacks), so the control flow is
- * re-expressed in C while every algebraic step delegates to a builtin.
+ * integrate_linratiorad.c.  The WL appendix is not ported verbatim (it keeps
+ * its intermediate state in Associations; doing that through the evaluator
+ * would add a round trip per step), so the control flow is re-expressed in C
+ * while every algebraic step delegates to a builtin.
  *
  * 1. Recognition: split f into a rational cofactor F(t) and a single radical
  *    R(t)^q with q in {-1/2,-1/3,-2/3,-1/4,-3/4}; R must be a polynomial.

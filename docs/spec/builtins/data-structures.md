@@ -26,9 +26,10 @@ evaluator's rule-epoch / GROUND-flag mechanism in `src/eval.c`).
 | **Construct** | `Association` / `<\|…\|>`, `AssociationThread`, `AssociationMap`, `Association[{rules}]` (splice) |
 | **Access** | `assoc[key]`, `assoc[k1, k2]` (nested), `assoc[[key]]` / `[[Key[k]]]` / `[[i]]`, `Lookup`, `Normal` |
 | **Write** | `assoc[[key]] = v`, `AssociateTo`, `Append`, `Prepend`, `Join` (merge) |
-| **Keys & values** | `Keys`, `Values`, `KeyMap`, `KeyValueMap` |
+| **Keys & values** | `Keys`, `Values`, `KeyMap`, `KeyValueMap`, `KeyUnion`, `KeyIntersection`, `KeyComplement` |
 | **Presence** | `KeyExistsQ`, `KeyMemberQ`, `KeyFreeQ`, `MemberQ` |
-| **Transform** | `Map`, `Select`, `KeySelect`, `KeyTake`, `KeyDrop`, `DeleteMissing` |
+| **Transform** | `Map`, `Select`, `Discard`, `KeySelect`, `KeyTake`, `KeyDrop`, `DeleteMissing`, `Transpose`, arithmetic (Listable threading) |
+| **Combine** | `JoinAcross`, `Merge`, `Join`, `SubsetQ`, `CountDistinct`, `CountDistinctBy` |
 | **Aggregate** | `Total`, `Min`, `Max`, `Mean`, `Counts`, `CountsBy`, `GroupBy` (+reducer, `key->val`), `Gather`, `GatherBy`, `Merge`, `PositionIndex` |
 | **Order / rank** | `Sort`, `SortBy` (multi-key), `ReverseSort`, `ReverseSortBy`, `KeySort`, `KeySortBy`, `MaximalBy`, `MinimalBy`, `TakeLargest`(`By`), `TakeSmallest`(`By`), `Reverse` |
 | **Iterate / reduce** | `Table`/`Do`/`Sum`/`Product` (`{v, assoc}`), `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `Position`, `FirstPosition`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
@@ -42,6 +43,8 @@ Functions that consume or reduce a collection operate on an association's
 Represents a mapping from keys to values, written `<|k1 -> v1, k2 -> v2, ...|>`
 or `Association[k1 -> v1, ...]`.
 - Arguments may be rules, lists of rules, or other associations (which are spliced).
+  Lists may nest to any depth (`Association[{{a -> 1}, {b -> 2}}]`), and
+  `Splice[{rules}]` splices into a literal (see [Splice](#splice)).
 - Duplicate keys collapse with last-value-wins, preserving first-occurrence order.
 - `assoc[[key]]`, `assoc[[Key[key]]]` and `assoc[[i]]` extract values (a missing
   key gives `Missing["KeyAbsent", key]`); `assoc[[{k1, k2, ...}]]` gives the list
@@ -69,10 +72,18 @@ Out[4]= 10
 
 In[5]:= <|"a" -> <|"b" -> 5|>|>["a", "b"]
 Out[5]= 5
+
+In[6]:= Association[{{"a" -> 1}, {"b" -> 2, {"c" -> 3}}}]
+Out[6]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
 ```
 
 ## AssociationQ
 Tests whether an expression is an association.
+
+- `AssociationQ[expr]`: `True` only for a *well-formed* association, one whose
+  every entry is a two-argument `Rule` or `RuleDelayed`. A malformed
+  `Association[1, 2]`, which the constructor leaves unevaluated as Mathematica
+  does, gives `False`.
 
 ```mathematica
 In[1]:= AssociationQ[<|"a" -> 1|>]
@@ -80,22 +91,135 @@ Out[1]= True
 
 In[2]:= AssociationQ[{1, 2, 3}]
 Out[2]= False
+
+In[3]:= AssociationQ[Association[f[a -> 1]]]
+Out[3]= False
+```
+
+## Association atomicity (structural functions)
+An evaluated association is an **atom**, as in Mathematica: its parts are its
+values, and its keys and `Rule` wrappers are not parts at all.
+
+- `AtomQ[assoc]` is `True`; `Depth`, `LeafCount`, `Level`, `FreeQ`,
+  `OrderedQ`, `MemberQ`, `Count`, `Cases`, `Position` and `DeleteCases` see the
+  values only.
+- `Position` names a value by `Key[k]`, at any nesting depth.
+- `ReplaceAll`, `ReplaceRepeated` and `Replace` (with any level spec) rewrite
+  values, never keys, and never match a whole `k -> v` entry. The head is still
+  offered to the rules: `<|a -> 1|> /. Association -> g` is `g[a -> 1]`.
+- `Map`, `MapAll`, `MapIndexed`, `Apply` and `Scan` use the same levels, so a
+  level spec can never build a malformed `Association[f[a -> 1]]`. A
+  `RuleDelayed` entry stays delayed.
+- An association can serve as a rule set: `ReplaceAll`, `ReplaceRepeated`,
+  `Replace` and `ReplaceList` accept it, with its keys matched literally (not
+  as patterns) by a hash lookup.
+- `Equal` and `Unequal` compare two associations entry by entry, in order: keys
+  (and `Rule`/`RuleDelayed`) must be identical, values are compared with
+  `Equal`. When a value comparison is undecided, the result stays unevaluated.
+
+**Features**
+- One rule, in one place: `src/assoc_struct.h` gives every level walker the
+  parts of an association (its values) and rebuilds it with its keys intact.
+  So the behaviour is the same across all these functions, and a rebuilt
+  association never needs its keys re-canonicalised.
+- Only a well-formed association is atomic. `Association[1, 2]` is an ordinary
+  expression: `AtomQ` is `False` and `Level` sees `1` and `2`.
+- Linear time: the well-formedness check is paid once per visited node, and an
+  association used as a rule set costs one O(1) lookup per subexpression, not
+  one pattern match per key.
+- Differences from Mathematica, both deliberate:
+  - Mathematica does not re-evaluate the values of an association built by
+    `/.`: `<|"a" -> x^2|> /. x -> 3` is `<|"a" -> 3^2|>`. Mathilda gives
+    `<|"a" -> 9|>`. It has no "already evaluated" mark on the rebuilt node, so
+    the evaluator reduces the new values, as it does for a `List`.
+  - Mathematica treats an *unevaluated* `Association[...]` inside `Hold` as an
+    ordinary expression, so `Hold[<|a -> 1|>] /. a -> b` renames the key.
+    Mathilda has a single representation for both, so the key is left alone
+    there too.
+
+```mathematica
+In[1]:= AtomQ[<|a -> 1|>]
+Out[1]= True
+
+In[2]:= {Depth[<|a -> 1|>], Depth[<|a -> <|b -> 1|>|>], LeafCount[<|a -> 1|>]}
+Out[2]= {2, 3, 2}
+
+In[3]:= Level[<|a -> f[1], b -> 2|>, Infinity]
+Out[3]= {1, f[1], 2}
+
+In[4]:= FreeQ[<|a -> 1|>, a]
+Out[4]= True
+
+In[5]:= Position[{<|a -> 1, b -> {1}|>}, 1]
+Out[5]= {{1, Key[a]}, {1, Key[b], 1}}
+
+In[6]:= <|a -> 1, b -> 2|> /. b -> a
+Out[6]= <|a -> 1, b -> 2|>
+
+In[7]:= <|a -> 1, b -> 2|> /. 1 -> 5
+Out[7]= <|a -> 5, b -> 2|>
+
+In[8]:= Map[f, <|a -> {1}|>, {2}]
+Out[8]= <|a -> {f[1]}|>
+
+In[9]:= Apply[f, <|a -> {1}|>, {1}]
+Out[9]= <|a -> f[1]|>
+
+In[10]:= ReplaceAll[{x, y}, <|x -> 1|>]
+Out[10]= {1, y}
+
+In[11]:= <|a -> 1, b -> 2|> == <|b -> 2, a -> 1|>
+Out[11]= False
+
+In[12]:= <|a -> 1|> == <|a -> 1.|>
+Out[12]= True
+
+In[13]:= OrderedQ[<|a -> 2, b -> 1|>]
+Out[13]= False
+
+In[14]:= DeleteCases[{<|a -> 1, b -> 2|>}, 1, Infinity]
+Out[14]= {<|b -> 2|>}
 ```
 
 ## Keys
 Gives the list of keys of an association (or a list of rules).
+- `Keys[assoc]` gives `{k1, k2, ...}`; also accepts a rule or a list of rules.
+- `Keys[{assoc1, assoc2, ...}]` threads over a list (to any depth) of
+  associations and lists of rules.
+- `Keys[assoc, f]` wraps each key: `{f[k1], f[k2], ...}`.
+
+**Features**: an invalid list element gives `Keys::invrl` and leaves the call
+unevaluated. Mathematica has no level argument (`Keys[a, 2]` is the `f` form
+with `f = 2`), and neither does Mathilda.
 
 ```mathematica
 In[1]:= Keys[<|"a" -> 1, "b" -> 2|>]
 Out[1]= {"a", "b"}
+
+In[2]:= Keys[<|"a" -> 1, "b" -> 2|>, f]
+Out[2]= {f["a"], f["b"]}
+
+In[3]:= Keys[{<|"a" -> 1|>, <|"b" -> 2, "c" -> 3|>}]
+Out[3]= {{"a"}, {"b", "c"}}
 ```
 
 ## Values
 Gives the list of values of an association (or a list of rules).
+- `Values[assoc]` gives `{v1, v2, ...}`; also accepts a rule or a list of rules.
+- `Values[{assoc1, assoc2, ...}]` threads like `Keys`.
+- `Values[assoc, f]` wraps each value: `{f[v1], f[v2], ...}`.
+
+**Features**: same threading and error rules as `Keys`.
 
 ```mathematica
 In[1]:= Values[<|"a" -> 1, "b" -> 2|>]
 Out[1]= {1, 2}
+
+In[2]:= Values[<|"a" -> 1, "b" -> 2|>, f]
+Out[2]= {f[1], f[2]}
+
+In[3]:= Values[{<|"a" -> 1|>, {"b" -> 2}}]
+Out[3]= {{1}, {2}}
 ```
 
 ## Lookup
@@ -106,8 +230,17 @@ Looks up the value stored under a key.
   build (`O(n + m)`).
 - `Lookup[{a1, a2, ...}, key]` threads over a list of associations, extracting
   the key from each (a key/default thread through) — handy for pulling one field
-  out of a column of records.
+  out of a column of records. The list may mix associations and lists of rules:
+  `Lookup[{<|"a" -> 1|>, {"a" -> 3}, {}}, "a", 0]` gives `{1, 3, 0}`.
 - Also accepts a bare list of rules (like `Keys`/`Values`).
+- `Lookup[key][assoc]` is the operator form (see *Operator forms* in
+  `functional-programming.md`); `Lookup[key, default][assoc]` is not one, as in
+  Mathematica.
+
+**Features**:
+- `HoldAll`, as in Mathematica: the association and key are evaluated, the
+  default only when a key is actually absent (once per absent key), so a
+  default with side effects runs only when needed.
 
 ```mathematica
 In[1]:= Lookup[<|"a" -> 1, "b" -> 2|>, "b"]
@@ -118,12 +251,28 @@ Out[2]= 0
 
 In[3]:= Lookup[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3|>}, "a", 0]
 Out[3]= {1, 3}
+
+In[4]:= Lookup[<|"a" -> 1|>, "a", Print["never printed"]; 0]
+Out[4]= 1
+
+In[5]:= Lookup["a"][<|"a" -> 7|>]
+Out[5]= 7
 ```
 
 ## KeyExistsQ, KeyMemberQ, KeyFreeQ
-`KeyExistsQ`/`KeyMemberQ` test whether a key is present; `KeyFreeQ` is the
-complement (True when the key is absent). All three accept an association or a
-bare list of rules.
+`KeyExistsQ` tests whether a literal key is present. `KeyMemberQ` tests whether
+some key matches a pattern; `KeyFreeQ` is its complement. All three accept an
+association or a bare list of rules.
+- `KeyExistsQ[assoc, key]`, `KeyMemberQ[assoc, patt]`, `KeyFreeQ[assoc, patt]`.
+- Operator forms: `KeyExistsQ[key][assoc]`, `KeyMemberQ[patt][assoc]`,
+  `KeyFreeQ[patt][assoc]`.
+
+**Features**:
+- A pattern-free key keeps the O(1) index probe; a key containing a pattern
+  construct (`_`, `x_h`, `Alternatives`, `Except`, `PatternTest`, `Condition`,
+  ...) is matched against every key.
+- `KeyExistsQ` never treats its key as a pattern: `KeyExistsQ[a, _]` looks for
+  the literal key `_`, as in Mathematica.
 
 ```mathematica
 In[1]:= KeyExistsQ[<|"a" -> 1|>, "a"]
@@ -131,6 +280,15 @@ Out[1]= True
 
 In[2]:= KeyFreeQ[<|"a" -> 1|>, "b"]
 Out[2]= True
+
+In[3]:= KeyMemberQ[<|1 -> "x", "b" -> "y"|>, _Integer]
+Out[3]= True
+
+In[4]:= KeyFreeQ[<|"a" -> 1|>, _Integer]
+Out[4]= True
+
+In[5]:= KeyExistsQ[<|"a" -> 1|>, _]
+Out[5]= False
 ```
 
 ## KeyDrop
@@ -153,12 +311,20 @@ Out[3]= {<|"a" -> 1|>, <|"a" -> 3|>}
 ```
 
 ## KeyTake
-Gives the association of only the specified keys (association order preserved).
-Over a list of associations it threads, keeping the keys in each record.
+- `KeyTake[assoc, {k1, k2, ...}]` gives the association of only the specified
+  keys, **in the requested order**.
+- `KeyTake[{assoc1, ...}, keys]` threads over a list of associations.
+
+**Features**
+- Matches Mathematica 15: absent keys are skipped, and a key requested more
+  than once is placed at its last occurrence (`{"c", "a", "c"}` gives
+  `<|"a" -> .., "c" -> ..|>`).
+- `O(n + m)`: the association's entries are hash-indexed once; `RuleDelayed`
+  entries stay delayed.
 
 ```mathematica
 In[1]:= KeyTake[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {"c", "a"}]
-Out[1]= <|"a" -> 1, "c" -> 3|>
+Out[1]= <|"c" -> 3, "a" -> 1|>
 
 In[2]:= KeyTake[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3, "b" -> 4|>}, {"a"}]
 Out[2]= {<|"a" -> 1|>, <|"a" -> 3|>}
@@ -175,7 +341,13 @@ processing. Hash-indexed: the union and every rebuild are `O(n)`.
 In[1]:= KeyUnion[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]
 Out[1]= {<|"a" -> 1, "b" -> 2, "c" -> Missing["KeyAbsent", "c"]|>,
          <|"a" -> Missing["KeyAbsent", "a"], "b" -> 3, "c" -> 4|>}
+
+In[2]:= KeyUnion[{<|"a" -> 1|>, <|"b" -> 2|>}, 0 &]
+Out[2]= {<|"a" -> 1, "b" -> 0|>, <|"a" -> 0, "b" -> 2|>}
 ```
+
+- `KeyUnion[{...}, f]` fills an absent key `k` with `f[k]` instead of `Missing`.
+- The list may also hold rules and lists of rules.
 
 ## KeyValueMap
 Applies `f` to each key–value pair, giving `{f[k1, v1], f[k2, v2], ...}`.
@@ -227,6 +399,11 @@ Hash-indexed grouping in `O(n)` plus the cost of `f`.
   sub-association (so `GroupBy[assoc, f, Total]` composes with value-threading
   `Total`). Distinct from `GroupBy[records, Key["field"]]`, which groups a
   *list* of record-associations by a field.
+- `GroupBy[list, {f1, f2, ...}]` groups at several levels, giving nested
+  associations (group by `f1`, then each group by `f2`, ...);
+  `GroupBy[list, {f1, f2, ...}, g]` applies the reducer `g` at the innermost
+  level only. A level written `keyfn -> valfn` transforms the elements the next
+  level sees, as in Mathematica 15.
 
 ```mathematica
 In[1]:= GroupBy[{1, 2, 3, 4, 5, 6}, EvenQ]
@@ -237,6 +414,12 @@ Out[2]= <|False -> 25, True -> 30|>
 
 In[3]:= GroupBy[{{"x", 1}, {"y", 2}, {"x", 3}}, First -> Last, Total]
 Out[3]= <|"x" -> 4, "y" -> 2|>
+
+In[4]:= GroupBy[{1, 2, 3, 4, 5, 6}, {EvenQ, # > 3 &}]
+Out[4]= <|False -> <|False -> {1, 3}, True -> {5}|>, True -> <|False -> {2}, True -> {4, 6}|>|>
+
+In[5]:= GroupBy[{1, 2, 3, 4, 5, 6}, {EvenQ, # > 3 &}, Total]
+Out[5]= <|False -> <|False -> 4, True -> 5|>, True -> <|False -> 2, True -> 10|>|>
 
 In[4]:= GroupBy[<|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>, EvenQ]
 Out[4]= <|False -> <|"a" -> 1, "c" -> 3|>, True -> <|"b" -> 2, "d" -> 4|>|>
@@ -291,7 +474,8 @@ Out[2]= {<|"a" -> 1, "c" -> 3|>, <|"b" -> 2, "d" -> 4|>}
 ## Merge
 Combines several associations, applying `f` to the list of values collected for
 each key (in first-seen key order). The first argument may be a list *or* an
-association of associations.
+association of associations. The list may also hold rules and lists of rules;
+each rule contributes one value (`Merge[{a -> 1, a -> 2}, Total]` is `<|a -> 3|>`).
 
 ```mathematica
 In[1]:= Merge[{<|"a" -> 1|>, <|"a" -> 2, "b" -> 3|>}, Total]
@@ -299,6 +483,9 @@ Out[1]= <|"a" -> 3, "b" -> 3|>
 
 In[2]:= Merge[<|"g1" -> <|"a" -> 1|>, "g2" -> <|"a" -> 2, "b" -> 3|>|>, Total]
 Out[2]= <|"a" -> 3, "b" -> 3|>
+
+In[3]:= Merge[{"a" -> 1, "b" -> 2, "a" -> 3}, Total]
+Out[3]= <|"a" -> 4, "b" -> 2|>
 ```
 
 ## AssociateTo
@@ -462,9 +649,24 @@ Out[1]= <|"b" -> 3, "c" -> 3|>
 Removes `Missing[...]` elements — the natural cleanup after a multi-key
 `Lookup`. Over an association it drops entries whose value is `Missing[...]`.
 
+- `DeleteMissing[expr, n]` removes `Missing[...]` at levels 1 through `n`
+  (`n` a positive integer or `Infinity`); association values count as one level
+  below the association.
+- `DeleteMissing[expr, n, d]` removes the elements at levels 1..`n` that contain
+  a `Missing[...]` at depth `d` or less (`d = 0`: the element itself). Levels are
+  processed deepest first, so a sublist emptied at a deeper level is kept.
+- A first argument that is not a list or an association gives
+  `DeleteMissing::invrp`.
+
 ```mathematica
 In[1]:= DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]
 Out[1]= {1, 2}
+
+In[2]:= DeleteMissing[{1, {Missing[], 2}}, 2]
+Out[2]= {1, {2}}
+
+In[3]:= DeleteMissing[{{1, Missing[]}, {2}}, 1, 1]
+Out[3]= {{2}}
 ```
 
 ## DeleteDuplicates
@@ -597,6 +799,21 @@ Ordering and aggregation act on the **values** of an association: `Sort` orders
 the entries by value and `SortBy[assoc, f]` by `f` of each value (keys follow),
 while `Total`/`Min`/`Max` reduce over the values. `Join` merges associations
 (later values win).
+- `Sort[assoc, p]` / `Sort[list, p]` order with the ordering function `p`.
+- `SortBy[coll, f, p]` compares the `f`-values with `p`; `SortBy[coll, f]`
+  breaks ties by the canonical order of the elements (entries, for an
+  association), `SortBy[coll, {f1, f2, ...}]` by input position.
+- `Ordering[assoc]`, `Ordering[assoc, n]`, `Ordering[assoc, n, p]` give
+  positions over the values.
+- `ReverseSort[assoc]` is descending with ties kept in input order;
+  `ReverseSort[coll, p]` is `Reverse[Sort[coll, p]]`;
+  `ReverseSortBy[coll, f, p]` is `SortBy[coll, f, p[#2, #1] &]`.
+
+**Features**
+- With an ordering function, the sort is Mathematica 15's top-down merge sort
+  (the merge keeps the left element unless `p[left, right]` is `False` or
+  `-1`), so ties under a strict `p` such as `Greater` land exactly where
+  Mathematica puts them. `Ordering[..., p]` and `KeySort[assoc, p]` share it.
 
 ```mathematica
 In[1]:= Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
@@ -610,14 +827,35 @@ Out[3]= 6
 
 In[4]:= Join[<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>]
 Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
+
+In[5]:= Sort[<|"a" -> 2, "b" -> 3, "c" -> 1|>, Greater]
+Out[5]= <|"b" -> 3, "a" -> 2, "c" -> 1|>
+
+In[6]:= SortBy[<|"a" -> {1, 2}, "b" -> {0, 5}, "c" -> {1, 1}|>, First, Greater]
+Out[6]= <|"a" -> {1, 2}, "c" -> {1, 1}, "b" -> {0, 5}|>
+
+In[7]:= Ordering[<|"a" -> 2, "b" -> 2, "c" -> 1|>, All, Greater]
+Out[7]= {2, 1, 3}
+
+In[8]:= ReverseSort[<|"a" -> 2, "b" -> 2, "c" -> 1|>]
+Out[8]= <|"a" -> 2, "b" -> 2, "c" -> 1|>
 ```
 
 ## KeySort
-Sorts an association into canonical key order.
+- `KeySort[assoc]` sorts an association into canonical key order.
+- `KeySort[assoc, p]` sorts the entries by key using the ordering function `p`.
+
+**Features**
+- `KeySort[assoc, p]` orders the keys exactly as `Sort[Keys[assoc], p]` would
+  (the shared merge sort), so a `p` that does not evaluate to `False`/`-1`
+  leaves the order alone, as in Mathematica 15.
 
 ```mathematica
 In[1]:= KeySort[<|"c" -> 3, "a" -> 1, "b" -> 2|>]
 Out[1]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
+
+In[2]:= KeySort[<|"c" -> 1, "a" -> 2, "b" -> 3|>, -Order[#1, #2] &]
+Out[2]= <|"c" -> 1, "b" -> 3, "a" -> 2|>
 ```
 
 ## KeySortBy
@@ -658,17 +896,30 @@ Out[1]= <|False -> 5, True -> 5|>
 Maps each distinct element of a list to the list of 1-based positions where it
 occurs — `<|value -> {positions}|>`. Hash-indexed, `O(n)`.
 
+`PositionIndex[assoc]` maps each distinct value to the list of keys at which
+it occurs.
+
 ```mathematica
 In[1]:= PositionIndex[{a, b, a, c, a, b}]
 Out[1]= <|a -> {1, 3, 5}, b -> {2, 6}, c -> {4}|>
+
+In[2]:= PositionIndex[<|"a" -> x, "b" -> y, "c" -> x|>]
+Out[2]= <|x -> {"a", "c"}, y -> {"b"}|>
 ```
 
 ## AssociationMap
 Builds `<|k1 -> f[k1], k2 -> f[k2], ...|>` from a list of keys.
+- `AssociationMap[f, assoc]` applies `f` to each rule `k -> v`; each result may
+  be a rule, a list of rules, an association, or `{}`/`Nothing` (dropped), and
+  together they form the new association (last value wins on a repeated key).
+  Any other result gives `AssociationMap::invrlf`.
 
 ```mathematica
 In[1]:= AssociationMap[#^2 &, {1, 2, 3, 4}]
 Out[1]= <|1 -> 1, 2 -> 4, 3 -> 9, 4 -> 16|>
+
+In[2]:= AssociationMap[Reverse, <|"a" -> 1, "b" -> 2|>]
+Out[2]= <|1 -> "a", 2 -> "b"|>
 ```
 
 ## Iterating an association
@@ -705,15 +956,107 @@ e.g. `ReverseSort[GroupBy[txns, First, Total[#[[All, 2]]] &]]` groups, reduces
 and ranks in one expression (see [`../../../examples/association-showcase.md`](../../../examples/association-showcase.md)).
 
 ## Append, Prepend
-`Append`/`Prepend` extend an association with new entries (non-mutating siblings
-of `AssociateTo`); an existing key is updated in place, preserving order.
+- `Append[assoc, rule]` / `Prepend[assoc, rule]` add an entry at the end / the
+  front; `rule` may also be a list of rules or an association.
+- `AppendTo[a, rule]` / `PrependTo[a, rule]` do the same and assign back to `a`.
+
+**Features**
+- As in Mathematica 15, an existing entry with the same key is **moved**: it is
+  removed from its old position and the new value is placed at the end
+  (`Append`) or the front (`Prepend`).
+- A non-rule element leaves `Append`/`Prepend` unevaluated; `AppendTo[a, 5]`
+  assigns the unevaluated `Append[a, 5]`, exactly like Mathematica.
+- `O(n + m)`: membership is tested through an indexed association of the new
+  rules.
 
 ```mathematica
 In[1]:= Append[<|"a" -> 1, "b" -> 2|>, "c" -> 3]
 Out[1]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
 
-In[2]:= Append[<|"a" -> 1|>, "a" -> 99]
-Out[2]= <|"a" -> 99|>
+In[2]:= Append[<|"a" -> 1, "b" -> 2|>, "a" -> 9]
+Out[2]= <|"b" -> 2, "a" -> 9|>
+
+In[3]:= Prepend[<|"a" -> 1, "b" -> 2|>, "b" -> 9]
+Out[3]= <|"b" -> 9, "a" -> 1|>
+```
+
+## Part (reading an association)
+- `assoc[[i]]`, `assoc[["k"]]`, `assoc[[Key[k]]]` give one value.
+- `assoc[[All]]`, `assoc[[m ;; n ;; s]]` give a sub-association.
+- `assoc[[{i, j, ...}]]` and `assoc[[{"k1", Key[k2], ...}]]` give a
+  sub-association in the requested order.
+- Deeper indices apply to the selected values: `assoc[[All, 1]]`,
+  `assoc[[All, "x"]]`, `list[[All, Key[k]]]`.
+- `assoc[key]` (the accessor) takes a **literal** key: it does not unwrap
+  `Key[...]`.
+
+**Features**
+- An absent key gives `Missing["KeyAbsent", spec]` with the spec as written:
+  `<|"a" -> 1|>[[Key["b"]]]` is `Missing["KeyAbsent", Key["b"]]`; inside a key
+  list it becomes the entry `k -> Missing[...]`.
+- As in Mathematica 15, the Part stays unevaluated for a position out of range,
+  a span running off either end (an empty span just inside, such as `3 ;; 2`,
+  gives `<||>`), positions mixed with keys, a bare symbol or real as the spec,
+  or a deeper index that fails on any selected value. (Mathematica also prints
+  `Part::partw`, `Part::take`, `Part::pmix`, `Part::pkspec1` or `Part::partd`;
+  Mathilda does not print these messages.)
+- Sub-associations share their entries with the source, so `RuleDelayed`
+  values stay delayed.
+
+```mathematica
+In[1]:= <|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>[[2 ;; 3]]
+Out[1]= <|"b" -> 2, "c" -> 3|>
+
+In[2]:= <|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>[[{-1, 1}]]
+Out[2]= <|"d" -> 4, "a" -> 1|>
+
+In[3]:= <|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>[[{"c", "z"}]]
+Out[3]= <|"c" -> 3, "z" -> Missing["KeyAbsent", "z"]|>
+
+In[4]:= <|"x" -> {1, 2}, "y" -> {3, 4}|>[[All, 1]]
+Out[4]= <|"x" -> 1, "y" -> 3|>
+
+In[5]:= <|"a" -> 1|>[Key["a"]]
+Out[5]= Missing["KeyAbsent", Key["a"]]
+```
+
+## Catenate, Insert, Pick, Partition, Reverse on associations
+- `Catenate[{assoc1, list2, ...}]` and `Catenate[assoc]` take each
+  association's **values**, giving a List.
+- `Insert[assoc, rule(s), pos]` inserts at an integer position, a key, `Key[k]`,
+  `{pos}` or `{{pos1}, {pos2}, ...}`; `{p, i, ...}` inserts into the value at `p`.
+- `Pick[assoc, {sel1, ...}]` / `Pick[assoc, sel, patt]` pick entries by position,
+  testing the values' selectors.
+- `Partition[assoc, n]` stays unevaluated.
+- `Reverse[assoc, levels]` descends into values below level 1.
+
+**Features**
+- `Insert` removes an existing entry with the inserted key, so the new position
+  wins; a non-rule element returns the association unchanged, and an
+  out-of-range position or absent key leaves the call unevaluated
+  (Mathematica 15).
+- An association used as a `Pick` selector is atomic: the whole expression if
+  it matches the pattern, else `Sequence[]`, as in Mathematica 15 (it no longer
+  builds malformed `Rule[]` nodes).
+
+```mathematica
+In[1]:= Catenate[{<|"a" -> 1|>, <|"b" -> 2|>}]
+Out[1]= {1, 2}
+
+In[2]:= Insert[<|"a" -> 1, "b" -> 2, "c" -> 3|>, "d" -> 4, Key["b"]]
+Out[2]= <|"a" -> 1, "d" -> 4, "b" -> 2, "c" -> 3|>
+
+In[3]:= Insert[<|"a" -> 1, "b" -> 2, "c" -> 3|>, "a" -> 9, 3]
+Out[3]= <|"b" -> 2, "a" -> 9, "c" -> 3|>
+
+In[4]:= Pick[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {True, False, True}]
+Out[4]= <|"a" -> 1, "c" -> 3|>
+
+In[5]:= Partition[<|"a" -> 1, "b" -> 2|>, 1]
+Out[5]= Partition[<|"a" -> 1, "b" -> 2|>, 1]
+
+In[6]:= Reverse[<|"x" -> {1, 2}, "y" -> {3, 4}|>, 2]
+Out[6]= <|"x" -> {2, 1}, "y" -> {4, 3}|>
 ```
 
 ## KeyValuePattern
@@ -768,4 +1111,339 @@ Out[2]= <|"b" -> 20, "c" -> 30|>
 
 In[3]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
 Out[3]= <|"a" -> 1, "b" -> 2|>
+```
+
+## Arithmetic threading over associations
+Listable functions (`Plus`, `Times`, `Power`, `Sqrt`, `Sin`, `Abs`, `N`,
+`StringLength`, any user symbol with the `Listable` attribute, ...) map over
+the values of association arguments, keeping the keys.
+- Non-association arguments are repeated for every key: `<|a -> 1|> + 1` is
+  `<|a -> 2|>`.
+- Several association arguments must have the same keys **in the same order**;
+  otherwise `Association::incmp` is issued and the call stays unevaluated (as in
+  Mathematica 15, where `<|a -> 1, b -> 2|> + <|b -> 1, a -> 2|>` is also
+  rejected).
+- When a `List` argument is present too, List threading runs first, so the list
+  is the outer level: `<|a -> 1, b -> 2|> + {10, 20}` is a list of two
+  associations.
+- `Total`, `Mean` and the other reductions over a *list* of associations
+  follow from this (they reduce with `Plus`), while `Total[assoc]` and
+  `Mean[assoc]` still reduce the values of a single association.
+- A `RuleDelayed` entry of the first association stays delayed.
+
+**Features**: the rule lives in the evaluator's Listable step
+(`assoc_thread_listable`, `src/assoc_ops.c`). One pass classifies the
+arguments, so calls with a `List` argument, or with neither kind, take exactly
+the path they took before.
+
+```mathematica
+In[1]:= <|"a" -> 1, "b" -> 2|> + 10
+Out[1]= <|"a" -> 11, "b" -> 12|>
+
+In[2]:= 2 <|"a" -> 1, "b" -> 2|> + <|"a" -> 100, "b" -> 200|>
+Out[2]= <|"a" -> 102, "b" -> 204|>
+
+In[3]:= Sqrt[<|"a" -> 4, "b" -> 9|>]
+Out[3]= <|"a" -> 2, "b" -> 3|>
+
+In[4]:= <|"a" -> 1, "b" -> 2|> + {10, 20}
+Out[4]= {<|"a" -> 11, "b" -> 12|>, <|"a" -> 21, "b" -> 22|>}
+
+In[5]:= Total[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3, "b" -> 4|>}]
+Out[5]= <|"a" -> 4, "b" -> 6|>
+
+In[6]:= Mean[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3, "b" -> 4|>}]
+Out[6]= <|"a" -> 2, "b" -> 3|>
+
+In[7]:= <|"a" -> 1, "b" -> 2|> + <|"b" -> 1, "a" -> 2|>
+Association::incmp: The arguments <|"a" -> 1, "b" -> 2|> and <|"b" -> 1, "a" -> 2|> in <|"a" -> 1, "b" -> 2|> + <|"b" -> 1, "a" -> 2|> are incompatible.
+Out[7]= <|"a" -> 1, "b" -> 2|> + <|"b" -> 1, "a" -> 2|>
+```
+
+## Key
+`Key[k]` names the key `k` of an association.
+- `Key[k][assoc]` gives the value at `k`, or `Missing["KeyAbsent", k]`.
+- `assoc[[Key[k]]]`, `assoc[Key[k]]` and `Lookup[assoc, Key[k]]` read the key
+  literally, which matters when `k` is an integer (not a position) or a list
+  (not a list of keys).
+- Key specs in `GroupBy`, `SortBy`, `JoinAcross`, `MapAt`,
+  `ReplacePart` and `Extract` accept `Key[k]`.
+
+**Features**: attributes `{Protected}`.
+
+```mathematica
+In[1]:= Key["b"][<|"a" -> 1, "b" -> 2|>]
+Out[1]= 2
+
+In[2]:= Lookup[<|1 -> "one", {1, 2} -> "pair"|>, Key[{1, 2}]]
+Out[2]= "pair"
+
+In[3]:= Key["z"][<|"a" -> 1|>]
+Out[3]= Missing["KeyAbsent", "z"]
+```
+
+## Missing
+`Missing[]`, `Missing["reason"]` and `Missing["reason", data]` represent missing
+data. Key access on an absent key gives `Missing["KeyAbsent", k]`; `KeyUnion`
+fills gaps with `Missing["KeyAbsent", k]` and `JoinAcross` with
+`Missing["Unmatched"]` / `Missing["NotAvailable"]`.
+- Test with [`MissingQ`](#missingq); remove with [`DeleteMissing`](#deletemissing).
+
+**Features**: an inert head; attributes `{Protected}` (Mathematica also sets
+`ReadProtected`, which Mathilda does not implement).
+
+```mathematica
+In[1]:= <|"a" -> 1|>["q"]
+Out[1]= Missing["KeyAbsent", "q"]
+
+In[2]:= Missing["NotAvailable"]
+Out[2]= Missing["NotAvailable"]
+
+In[3]:= DeleteMissing[{1, Missing["NotAvailable"], 3}]
+Out[3]= {1, 3}
+```
+
+## MissingQ
+`MissingQ[expr]` gives `True` if `expr` has head `Missing`, and `False`
+otherwise.
+
+**Features**: attributes `{Protected}`; any other argument count gives
+`MissingQ::argx`.
+
+```mathematica
+In[1]:= MissingQ[Missing["KeyAbsent", "z"]]
+Out[1]= True
+
+In[2]:= MissingQ[<|"a" -> 1|>["z"]]
+Out[2]= True
+
+In[3]:= Select[{1, Missing[], 3}, Not @* MissingQ]
+Out[3]= {1, 3}
+```
+
+## KeyIntersection
+`KeyIntersection[{assoc1, assoc2, ...}]` restricts every association to the
+keys common to all of them, in the key order of `assoc1`.
+- Elements may also be rules or lists of rules.
+- `KeyIntersection[{}]` is `{}`; anything else that is not a list of
+  associations or rules gives `KeyIntersection::invar`.
+
+**Features**: attributes `{Protected}`; `O(total size)` via the persistent key
+index.
+
+```mathematica
+In[1]:= KeyIntersection[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]
+Out[1]= {<|"b" -> 2|>, <|"b" -> 3|>}
+
+In[2]:= KeyIntersection[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "a" -> 4|>}]
+Out[2]= {<|"a" -> 1, "b" -> 2|>, <|"a" -> 4, "b" -> 3|>}
+```
+
+## KeyComplement
+`KeyComplement[{assoc1, assoc2, ...}]` gives the entries of `assoc1` whose keys
+occur in none of the other associations.
+- Elements may also be rules or lists of rules; an empty list gives
+  `KeyComplement::empt`.
+
+**Features**: attributes `{Protected}`; `O(total size)`.
+
+```mathematica
+In[1]:= KeyComplement[{<|"a" -> 1, "b" -> 2, "c" -> 3|>, <|"b" -> 0|>, <|"c" -> 0|>}]
+Out[1]= <|"a" -> 1|>
+```
+
+## Discard
+The complement of `Select`.
+- `Discard[expr, crit]` drops the elements `e` for which `crit[e]` is `True`.
+- `Discard[expr, crit, n]` drops only the first `n` of them (`n` a non-negative
+  integer or `Infinity`).
+- On an association `crit` tests the values and the surviving entries keep
+  their keys; any other non-atomic expression keeps its head.
+
+**Features**: attributes `{Protected}`. An atomic first argument gives
+`Discard::normal`, a bad `n` gives `Discard::innf`. The operator form
+`Discard[crit]` is provided by the generic curried-form mechanism.
+
+```mathematica
+In[1]:= Discard[{1, 2, 3, 4, 5, 6}, EvenQ]
+Out[1]= {1, 3, 5}
+
+In[2]:= Discard[<|"a" -> 1, "b" -> 2, "c" -> 4|>, EvenQ]
+Out[2]= <|"a" -> 1|>
+
+In[3]:= Discard[{1, 2, 3, 4, 5, 6}, EvenQ, 2]
+Out[3]= {1, 3, 5, 6}
+```
+
+## CountDistinct
+`CountDistinct[expr]` gives the number of distinct elements of `expr` (of its
+values, for an association).
+
+**Features**: attributes `{Protected}`; one hash pass, `O(n)`; elements are
+distinct under `SameQ`, so `1` and `1.` count separately. An atomic argument
+gives `CountDistinct::normal`.
+
+```mathematica
+In[1]:= CountDistinct[{1, 2, 1, 3, 2}]
+Out[1]= 3
+
+In[2]:= CountDistinct[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
+Out[2]= 2
+```
+
+## CountDistinctBy
+`CountDistinctBy[expr, f]` gives the number of distinct values of `f[e]` over the
+elements `e` of `expr` (the values, for an association).
+
+**Features**: attributes `{Protected}`; `f` is applied once per element.
+
+```mathematica
+In[1]:= CountDistinctBy[{1, 2, 3, 4, 5}, EvenQ]
+Out[1]= 2
+
+In[2]:= CountDistinctBy[{"apple", "avocado", "banana"}, StringTake[#, 1] &]
+Out[2]= 2
+```
+
+## SubsetQ
+`SubsetQ[a, b]` gives `True` if every element of `b` occurs in `a`.
+- Multiplicity is ignored: `SubsetQ[{1, 1, 2}, {1, 1, 1}]` is `True`.
+- Lists and associations (compared by value) may be mixed; any other two
+  expressions must share their head (`SubsetQ[f[1, 2], f[1]]`), otherwise
+  `SubsetQ::heads`.
+
+**Features**: attributes `{Protected}`; `O(|a| + |b|)` with a hash set.
+
+```mathematica
+In[1]:= SubsetQ[{1, 2, 3}, {3, 1}]
+Out[1]= True
+
+In[2]:= SubsetQ[{1, 2}, {1, 4}]
+Out[2]= False
+
+In[3]:= SubsetQ[<|"a" -> 1, "b" -> 2|>, {2}]
+Out[3]= True
+```
+
+## Splice
+`Splice[{e1, e2, ...}]` is replaced by the sequence `e1, e2, ...` when it appears
+as an argument of a `List` or an `Association`.
+- `Splice[list, h]` splices into any head matching the pattern `h`
+  (`Splice[list, _]` everywhere). As in Mathematica, an explicit `h` never
+  splices into an `Association`.
+- Anywhere else it stays inert, so `f[Splice[{1, 2}]]` is unchanged.
+
+**Features**: attributes `{Protected}`. Handled in the evaluator's
+Sequence-flattening step, only once a `Splice` argument has been seen, so no
+other call pays for it; heads with `SequenceHold`/`HoldAllComplete` are left
+alone.
+
+```mathematica
+In[1]:= {1, Splice[{2, 3}], 4}
+Out[1]= {1, 2, 3, 4}
+
+In[2]:= <|"a" -> 1, Splice[{"b" -> 2, "c" -> 3}]|>
+Out[2]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
+
+In[3]:= Table[Splice[{i, -i}], {i, 3}]
+Out[3]= {1, -1, 2, -2, 3, -3}
+
+In[4]:= f[1, Splice[{2, 3}]]
+Out[4]= f[1, Splice[{2, 3}]]
+
+In[5]:= f[1, Splice[{2, 3}, _]]
+Out[5]= f[1, 2, 3]
+```
+
+## JoinAcross
+Joins two lists of associations on shared key values (a relational join).
+- `JoinAcross[{a1, ...}, {b1, ...}, spec]` merges each `ai` with every `bj`
+  whose join keys agree (inner join). `spec` is a key `k`, `Key[k]`, `k1 -> k2`
+  (keys named differently on the two sides), or a list of these (join on
+  several keys).
+- `JoinAcross[..., spec, "Inner" | "Left" | "Right" | "Outer"]` keeps unmatched
+  left and/or right rows; an unmatched row gets `Missing["Unmatched"]` for the
+  other side's keys.
+- Option `KeyCollisionFunction -> Left` (default) | `Right` | `f` resolves a
+  non-join key present on both sides; `f[k]` gives the pair of keys under which
+  the left and right values are kept.
+
+**Features**: attributes `{Protected}`; `Options[JoinAcross]` is
+`{KeyCollisionFunction -> Left}`. The right rows are hash-indexed on the
+join-key tuple, so a join costs `O(|left| + |right| + |output|)`. Output order
+matches Mathematica 15: matched pairs (left-major), then unmatched left rows,
+then unmatched right rows; rows whose key sets then differ are padded to the
+union with `Missing["NotAvailable"]`.
+
+```mathematica
+In[1]:= JoinAcross[{<|"id" -> 1, "name" -> "Ada"|>, <|"id" -> 2, "name" -> "Bob"|>}, {<|"id" -> 1, "dept" -> "R&D"|>, <|"id" -> 3, "dept" -> "Ops"|>}, Key["id"]]
+Out[1]= {<|"id" -> 1, "name" -> "Ada", "dept" -> "R&D"|>}
+
+In[2]:= JoinAcross[{<|"id" -> 1, "name" -> "Ada"|>, <|"id" -> 2, "name" -> "Bob"|>}, {<|"id" -> 1, "dept" -> "R&D"|>, <|"id" -> 3, "dept" -> "Ops"|>}, "id", "Outer"]
+Out[2]= {<|"id" -> 1, "name" -> "Ada", "dept" -> "R&D"|>, <|"id" -> 2, "name" -> "Bob", "dept" -> Missing["Unmatched"]|>, <|"id" -> 3, "name" -> Missing["Unmatched"], "dept" -> "Ops"|>}
+
+In[3]:= JoinAcross[{<|"k" -> 1, "x" -> 10|>}, {<|"key" -> 1, "y" -> 20|>}, "k" -> "key"]
+Out[3]= {<|"k" -> 1, "x" -> 10, "key" -> 1, "y" -> 20|>}
+
+In[4]:= JoinAcross[{<|"a" -> 1, "v" -> "L"|>}, {<|"a" -> 1, "v" -> "R"|>}, "a", KeyCollisionFunction -> Right]
+Out[4]= {<|"a" -> 1, "v" -> "R"|>}
+```
+
+## ApplyTo
+`ApplyTo[x, f]` sets `x` to `f[x]` and returns the new value (`x //= f` in
+Mathematica's notation).
+- `x` may be a symbol with a value, a part `s[[i]]`, or an association entry
+  `s[key]`; the write-back goes through `Set`.
+- A target without a value gives `ApplyTo::rvalue` and stays unevaluated.
+
+**Features**: attributes `{HoldFirst, Protected}`.
+
+```mathematica
+In[1]:= x = 5; ApplyTo[x, #^2 &]; x
+Out[1]= 25
+
+In[2]:= r = <|"n" -> 1|>; ApplyTo[r["n"], # + 10 &]; r
+Out[2]= <|"n" -> 11|>
+```
+
+## AssociationComap
+`AssociationComap[{f1, f2, ...}, x]` gives `<|f1 -> f1[x], f2 -> f2[x], ...|>`.
+
+**Features**: attributes `{Protected}`; a first argument that is not a list
+gives `AssociationComap::invl`. The operator form `AssociationComap[{f, ...}]`
+is provided by the generic curried-form mechanism.
+
+```mathematica
+In[1]:= AssociationComap[{Min, Max, Length}, {3, 1, 2}]
+Out[1]= <|Min -> 1, Max -> 3, Length -> 3|>
+```
+
+## Transpose (associations)
+`Transpose[<|k1 -> <|j1 -> v11, ...|>, ...|>]` swaps the two key levels of an
+association of associations.
+- The inner associations must share their keys in the same order, otherwise
+  `Transpose::nmtx`.
+- A list of associations is a vector (associations are atomic at that level),
+  which `Transpose` returns unchanged.
+
+```mathematica
+In[1]:= Transpose[<|"a" -> <|"x" -> 1, "y" -> 2|>, "b" -> <|"x" -> 3, "y" -> 4|>|>]
+Out[1]= <|"x" -> <|"a" -> 1, "b" -> 3|>, "y" -> <|"a" -> 2, "b" -> 4|>|>
+
+In[2]:= Transpose[{<|"x" -> 1|>, <|"x" -> 2|>}]
+Out[2]= {<|"x" -> 1|>, <|"x" -> 2|>}
+```
+
+## Normal (associations)
+`Normal[expr]` converts every association in `expr` to its list of rules, at
+any depth, but does not descend into the values of a converted association
+(Mathematica's rule). `Normal[expr, Association]` converts only associations.
+Held expressions (`Hold`, `HoldComplete`, ...) are left alone.
+
+```mathematica
+In[1]:= Normal[{<|"a" -> 1|>, f[<|"b" -> 2|>]}]
+Out[1]= {{"a" -> 1}, f[{"b" -> 2}]}
+
+In[2]:= Normal[<|"a" -> <|"b" -> 1|>|>]
+Out[2]= {"a" -> <|"b" -> 1|>}
 ```

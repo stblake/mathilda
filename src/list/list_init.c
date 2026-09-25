@@ -35,8 +35,9 @@ void list_init(void) {
     symtab_get_def("Catenate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Catenate",
         "Catenate[{e1, e2, ...}]\n\tConcatenates the ei (which must share a head)\n"
-        "\tinto one, flattening a single level. A list of associations merges into\n"
-        "\tone association (later keys win).");
+        "\tinto one, flattening a single level. Associations contribute their\n"
+        "\tvalues: Catenate[{<|a -> 1|>, <|b -> 2|>}] is {1, 2}; Catenate[assoc]\n"
+        "\tcatenates the association's values.");
     symtab_get_def("Join")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Join",
         "Join[list1, list2, ...]\n"

@@ -2,6 +2,7 @@
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "partition.h"
+#include "assoc.h"      /* is_association */
 
 static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_idx) {
     if (list->type != EXPR_FUNCTION) return expr_copy(list);
@@ -82,6 +83,10 @@ Expr* builtin_partition(Expr* res) {
     }
 
     if (list->type != EXPR_FUNCTION) return expr_copy(list);
+
+    /* Mathematica 15 does not partition an association: Partition[<|...|>, 2]
+     * stays unevaluated (it used to come back as the input, truncated). */
+    if (is_association(list)) return NULL;
 
     return partition_rec(list, n_spec, d_spec, 0);
 }

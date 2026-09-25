@@ -19,6 +19,7 @@
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "assoc.h"                  /* assoc_lookup_value — O(1) <|...|>[key] */
+#include "assoc_ops.h"              /* Listable threading over associations, Splice */
 #include "interp.h"
 #include "interval.h"                /* interval_thread_call — Interval[...] threading */
 #include "compile/compiled_function.h"
@@ -26,6 +27,7 @@
 #include "compile/autocompile.h"   /* $AutoCompilation */
 #include "numloop.h"                 /* $AutoCompilation also gates numloop */
 #include "plot_common.h"             /* $RaylibVerbose backing flag (raylib-free) */
+#include "opform.h"                  /* h[o...][x] operator (curried) forms */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -705,6 +707,22 @@ static bool dv_binds_opaquely(const SymbolDef* def) {
     return true;
 }
 
+/* Classify the arguments of a Listable call in one pass: LA_LIST if any is an
+ * explicit List, LA_ASSOC if any is an Association (either bit or both). */
+enum { LA_LIST = 1, LA_ASSOC = 2 };
+static int listable_arg_kinds(const Expr* e) {
+    int kinds = 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* arg = e->data.function.args[i];
+        if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL)
+            continue;
+        const char* h = arg->data.function.head->data.symbol.name;
+        if (h == SYM_List) return kinds | LA_LIST;   /* List threading wins */
+        if (h == SYM_Association) kinds |= LA_ASSOC;
+    }
+    return kinds;
+}
+
 static bool has_list_arg(Expr* e) {
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
@@ -1185,6 +1203,7 @@ static bool flatten_sequences(Expr* e) {
 
     size_t new_count = 0;
     bool found_sequence = false;
+    bool found_splice = false;   /* Splice[list, h]: see eval_splice_args */
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
@@ -1192,13 +1211,16 @@ static bool flatten_sequences(Expr* e) {
             new_count += arg->data.function.arg_count;
             found_sequence = true;
         } else {
+            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
+                arg->data.function.head->data.symbol.name == SYM_Splice)
+                found_splice = true;
             new_count++;
         }
     }
 
     /* A lone Sequence[x] changes structure without changing arg_count, so we
      * cannot gate on (new_count == arg_count) -- test for any Sequence head. */
-    if (!found_sequence) return false;
+    if (!found_sequence) return found_splice && eval_splice_args(e);
     
     Expr** new_args = malloc(sizeof(Expr*) * new_count);
     size_t k = 0;
@@ -1219,6 +1241,7 @@ static bool flatten_sequences(Expr* e) {
     e->data.function.args = new_args;
     e->data.function.arg_count = new_count;
     expr_invalidate_hash(e);   /* Sequence splice rewrote args in place */
+    if (found_splice) eval_splice_args(e);
     return true;
 }
 
@@ -1758,8 +1781,21 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 if (eval_flatten_args_interned(res, head->data.symbol.name)) *changed = true;
             }
 
-            /* Listable: automatic threading */
-            if ((attrs & ATTR_LISTABLE) && has_list_arg(res)) {
+            /* Listable: automatic threading over Lists, else over the values
+             * of Association arguments (assoc_thread_listable; the List case
+             * wins when both are present, so a List stays the outer level).
+             * One pass classifies the arguments, so the List path pays only a
+             * pointer compare per argument for the association check. */
+            int la_kind = (attrs & ATTR_LISTABLE) ? listable_arg_kinds(res) : 0;
+            if (la_kind == LA_ASSOC) {
+                Expr* assoc_res = assoc_thread_listable(res);
+                if (assoc_res) {
+                    expr_free(res);
+                    *changed = true;
+                    return assoc_res;
+                }
+            }
+            if (la_kind & LA_LIST) {
                 /* Trace: threading evaluates the threaded elements internally;
                  * hide those sub-evaluations so x^{1..10} shows as a single
                  * rewrite to {x,x^2,...} rather than a decomposed one. */
@@ -2029,18 +2065,15 @@ Expr* evaluate_step(Expr* e, bool* changed) {
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
                        head->data.function.head->data.symbol.name == SYM_Association &&
                        res->data.function.arg_count >= 1) {
-                /* 7a. Association as accessor: <|...|>[key] (or [Key[key]]) looks
-                 * the key up, giving the value or Missing["KeyAbsent", key] --
-                 * the idiomatic Wolfram accessor, complementing Lookup and Part.
+                /* 7a. Association as accessor: <|...|>[key] looks the key up,
+                 * giving the value or Missing["KeyAbsent", key] -- the idiomatic
+                 * Wolfram accessor, complementing Lookup and Part. The argument
+                 * is always a LITERAL key: unlike Part and Lookup, the accessor
+                 * does not unwrap Key[...], so <|"a" -> 1|>[Key["a"]] is
+                 * Missing["KeyAbsent", Key["a"]] (Mathematica 15).
                  * Multi-key <|...|>[k1, k2, ...] is nested lookup: the value for
                  * k1 is then applied to the remaining keys. */
-                Expr* keyarg = res->data.function.args[0];
-                Expr* lookup_key = keyarg;
-                if (keyarg->type == EXPR_FUNCTION && keyarg->data.function.head->type == EXPR_SYMBOL &&
-                    keyarg->data.function.head->data.symbol.name == SYM_Key &&
-                    keyarg->data.function.arg_count == 1) {
-                    lookup_key = keyarg->data.function.args[0];
-                }
+                Expr* lookup_key = res->data.function.args[0];
                 Expr* found = assoc_lookup_value(head, lookup_key);  /* O(1) via key index */
                 Expr* out;
                 if (found) {
@@ -2172,6 +2205,18 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 if (applied) {
                     expr_free(res);
                     *changed = true; /* InterpolatingFunction evaluated */
+                    return applied;
+                }
+            } else if (head->type == EXPR_FUNCTION && res->data.function.arg_count == 1 &&
+                       opform_matches(head)) {
+                /* 7f. Operator (curried) form of a registered builtin:
+                 * Select[crit][x] -> Select[x, crit], Map[f][x] -> Map[f, x],
+                 * Insert[e, n][x] -> Insert[x, e, n], ... (table in opform.c).
+                 * NULL (head declined the rewritten call) keeps h[o][x]. */
+                Expr* applied = opform_apply(head, res->data.function.args[0]);
+                if (applied) {
+                    expr_free(res);
+                    *changed = true;
                     return applied;
                 }
             } else if (head->type == EXPR_COMPILED) {

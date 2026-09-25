@@ -9,7 +9,9 @@
  * -------------------------------------------------------------------------- */
 
 #include "assoc.h"
+#include "match.h"   /* KeyMemberQ / KeyFreeQ key patterns */
 #include "assoc_index.h"
+#include "assoc_struct.h"  /* assoc_is_wellformed: AssociationQ */
 #include "ndreduce.h"
 #include "ndarray.h"
 #include "sym_names.h"
@@ -148,12 +150,13 @@ Expr* assoc_from_rules(Expr** rules, size_t count) {
             keys[nout] = k;
             value_slot[nout] = nout;
             ki_insert(&ki, slot, nout);
-            out[nout] = make_rule(expr_copy(k), expr_copy(v));
+            /* Keep the entry's own head, so a RuleDelayed stays delayed. */
+            out[nout] = assoc_entry_with_value(rules[i], expr_copy(v));
             nout++;
         } else {
             /* Key already present: overwrite the stored value (last wins). */
             size_t p = value_slot[idx];
-            Expr* newrule = make_rule(expr_copy(k), expr_copy(v));
+            Expr* newrule = assoc_entry_with_value(rules[i], expr_copy(v));
             expr_free(out[p]);
             out[p] = newrule;
         }
@@ -237,9 +240,13 @@ Expr* builtin_association(Expr* res) {
 /* ======================================================================
  * AssociationQ[expr] — True iff expr is an association.
  * ====================================================================== */
+/* Only a WELL-FORMED association answers True: the constructor leaves a
+ * malformed Association[1, 2] (or a Map/Apply result such as
+ * Association[f[a -> 1]]) unevaluated, and such a node is an ordinary
+ * expression, not an association (assoc_struct.h). */
 Expr* builtin_associationq(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
-    return expr_new_symbol(is_association(res->data.function.args[0])
+    return expr_new_symbol(assoc_is_wellformed(res->data.function.args[0])
                            ? SYM_True : SYM_False);
 }
 
@@ -357,9 +364,11 @@ static bool is_assoc_or_rule_list(const Expr* e) {
     return is_association(e) || head_is(e, SYM_List);
 }
 
-Expr* builtin_lookup(Expr* res) {
+/* The body of Lookup once its first two arguments are evaluated.  `deflt` is
+ * still HELD: it is evaluated only where a key is actually absent (once per
+ * absent key), so Lookup[<|a -> 1|>, a, Print["x"]] prints nothing. */
+static Expr* lookup_core(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc < 2 || argc > 3) return NULL;
     Expr* assoc = res->data.function.args[0];
     Expr* key   = res->data.function.args[1];
     Expr* deflt = argc == 3 ? res->data.function.args[2] : NULL;
@@ -401,7 +410,7 @@ Expr* builtin_lookup(Expr* res) {
         Expr* inner = key->data.function.args[0];
         Expr* v = assoc_lookup_value(assoc, inner);
         if (v) return expr_copy(v);
-        return deflt ? expr_copy(deflt) : make_missing(inner);
+        return deflt ? evaluate(deflt) : make_missing(inner);
     }
 
     /* Lookup over a list of keys: single index build, then O(1) per key. */
@@ -424,7 +433,7 @@ Expr* builtin_lookup(Expr* res) {
             if (idx != SIZE_MAX)
                 out[j] = expr_copy(rule_val(assoc->data.function.args[idx]));
             else
-                out[j] = deflt ? expr_copy(deflt) : make_missing(qk);
+                out[j] = deflt ? evaluate(deflt) : make_missing(qk);
         }
         Expr* list = make_list(out, nk);
         free(out); free(akeys); ki_free(&ki);
@@ -433,7 +442,26 @@ Expr* builtin_lookup(Expr* res) {
 
     Expr* v = assoc_lookup_value(assoc, key);
     if (v) return expr_copy(v);
-    return deflt ? expr_copy(deflt) : make_missing(key);
+    return deflt ? evaluate(deflt) : make_missing(key);
+}
+
+/* Lookup is HoldAll (as in Mathematica) so that the default stays lazy: the
+ * association and key(s) are evaluated here, the default only on a miss.
+ * When the arguments do not form a lookup, the call is returned with its
+ * first two arguments evaluated (or left alone if they were already). */
+Expr* builtin_lookup(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return NULL;
+    Expr* a0 = evaluate(res->data.function.args[0]);
+    Expr* a1 = evaluate(res->data.function.args[1]);
+    Expr* cargs[3] = { a0, a1, argc == 3 ? expr_copy(res->data.function.args[2]) : NULL };
+    Expr* call = expr_new_function(expr_copy(res->data.function.head), cargs, argc);
+    Expr* out = lookup_core(call);
+    if (!out && !(expr_eq(a0, res->data.function.args[0]) &&
+                  expr_eq(a1, res->data.function.args[1])))
+        return call;                     /* args changed: expose evaluated form */
+    expr_free(call);
+    return out;
 }
 
 /* ======================================================================
@@ -447,20 +475,58 @@ Expr* builtin_keyexistsq(Expr* res) {
     return expr_new_symbol(assoc_lookup_value(assoc, key) ? SYM_True : SYM_False);
 }
 
-/* KeyMemberQ[assoc, key] == KeyExistsQ; KeyFreeQ[assoc, key] is its complement.
- * All three accept an association or a bare list of rules (like Lookup). */
+/* True when `e` contains a pattern construct, so it must be matched rather
+ * than looked up.  A pattern-free key keeps the O(1) index probe. */
+static bool key_contains_pattern(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* n = h->data.symbol.name;
+        if (n == SYM_Blank || n == SYM_BlankSequence || n == SYM_BlankNullSequence ||
+            n == SYM_Pattern || n == SYM_Alternatives || n == SYM_Except ||
+            n == SYM_PatternTest || n == SYM_Condition || n == SYM_Optional ||
+            n == SYM_Repeated || n == SYM_RepeatedNull || n == SYM_HoldPattern ||
+            n == SYM_Verbatim)
+            return true;
+    } else if (key_contains_pattern(h)) {
+        return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (key_contains_pattern(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* True iff some key of `assoc` (association or rule list) matches `patt`.
+ * KeyMemberQ/KeyFreeQ treat their second argument as a pattern, as in
+ * Mathematica (KeyMemberQ[a, _] is True for any non-empty a); KeyExistsQ does
+ * not (KeyExistsQ[a, _] looks for the literal key `_`). */
+static bool assoc_some_key_matches(const Expr* assoc, Expr* patt) {
+    if (!key_contains_pattern(patt)) return assoc_lookup_value(assoc, patt) != NULL;
+    for (size_t i = 0; i < assoc->data.function.arg_count; i++) {
+        Expr* r = assoc->data.function.args[i];
+        if (!is_rule2(r)) continue;
+        MatchEnv* env = env_new();
+        bool ok = match(rule_key(r), patt, env);
+        env_free(env);
+        if (ok) return true;
+    }
+    return false;
+}
+
+/* KeyMemberQ[assoc, patt]: does any key match patt?  KeyFreeQ is its
+ * complement.  Both accept an association or a bare list of rules. */
 Expr* builtin_keymemberq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     if (!is_assoc_or_rule_list(assoc)) return NULL;
-    return expr_new_symbol(assoc_lookup_value(assoc, res->data.function.args[1]) ? SYM_True : SYM_False);
+    return expr_new_symbol(assoc_some_key_matches(assoc, res->data.function.args[1]) ? SYM_True : SYM_False);
 }
 
 Expr* builtin_keyfreeq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     if (!is_assoc_or_rule_list(assoc)) return NULL;
-    return expr_new_symbol(assoc_lookup_value(assoc, res->data.function.args[1]) ? SYM_False : SYM_True);
+    return expr_new_symbol(assoc_some_key_matches(assoc, res->data.function.args[1]) ? SYM_False : SYM_True);
 }
 
 /* ======================================================================
@@ -490,12 +556,48 @@ Expr* assoc_key_select(const Expr* assoc, const Expr* karg, bool take) {
     KeyIndex ki;
     if (!ki_init(&ki, nwanted)) return NULL;
     Expr** wk = malloc(sizeof(Expr*) * (nwanted ? nwanted : 1));
+    /* last[f] = position of the LAST occurrence of the key first seen at f. */
+    size_t* last = malloc(sizeof(size_t) * (nwanted ? nwanted : 1));
     for (size_t i = 0; i < nwanted; i++) {
         size_t slot, idx = ki_lookup(&ki, wk, wanted[i], &slot);
-        if (idx == SIZE_MAX) { wk[i] = wanted[i]; ki_insert(&ki, slot, i); }
+        if (idx == SIZE_MAX) { wk[i] = wanted[i]; ki_insert(&ki, slot, i); last[i] = i; }
+        else last[idx] = i;
     }
 
     size_t na = assoc->data.function.arg_count;
+    if (take) {
+        /* KeyTake keeps the REQUESTED order (Mathematica 15): KeyTake[<|a -> 1,
+         * b -> 2, c -> 3|>, {c, a}] is <|c -> 3, a -> 1|>. A repeated key is
+         * placed at its last occurrence ({c, a, c} gives <|a -> .., c -> ..|>),
+         * and absent keys are skipped. The association's entries are indexed
+         * once (keeping the entry, so a RuleDelayed stays delayed): O(n + m). */
+        KeyIndex ai;
+        Expr** ak = malloc(sizeof(Expr*) * (na ? na : 1));
+        if (!ki_init(&ai, na)) { free(ak); free(wk); free(last); ki_free(&ki); return NULL; }
+        for (size_t j = 0; j < na; j++) {
+            Expr* r = assoc->data.function.args[j];
+            ak[j] = NULL;
+            if (!is_rule2(r)) continue;
+            size_t slot;
+            if (ki_lookup(&ai, ak, rule_key(r), &slot) == SIZE_MAX) {
+                ak[j] = rule_key(r);
+                ki_insert(&ai, slot, j);
+            }
+        }
+        Expr** out = malloc(sizeof(Expr*) * (nwanted ? nwanted : 1));
+        size_t nout = 0;
+        for (size_t i = 0; i < nwanted; i++) {
+            size_t slot, f = ki_lookup(&ki, wk, wanted[i], &slot);
+            if (f == SIZE_MAX || last[f] != i) continue;   /* not its last occurrence */
+            size_t j = ki_lookup(&ai, ak, wanted[i], &slot);
+            if (j != SIZE_MAX) out[nout++] = expr_copy(assoc->data.function.args[j]);
+        }
+        Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+        free(out); free(ak); ki_free(&ai);
+        free(wk); free(last); ki_free(&ki);
+        return result;
+    }
+    free(last);
     Expr** out = malloc(sizeof(Expr*) * (na ? na : 1));
     size_t nout = 0;
     for (size_t i = 0; i < na; i++) {
@@ -829,6 +931,44 @@ Expr* builtin_groupby(Expr* res) {
      * association. */
     bool assoc_in = is_association(list);
     if (!head_is(list, SYM_List) && !assoc_in) return NULL;
+
+    /* GroupBy[list, {f1, f2, ...}(, red)]: multi-level grouping into nested
+     * associations -- group by f1, then each group by {f2, ...}, the reducer
+     * applying only at the innermost level (Mathematica 15). A level given as
+     * keyfn -> valfn transforms the elements the next level sees. */
+    if (head_is(f, SYM_List)) {
+        size_t nf = f->data.function.arg_count;
+        if (nf == 0) return NULL;
+        if (nf == 1) {   /* GroupBy[list, {f}(, red)] == GroupBy[list, f(, red)] */
+            Expr* a3[3] = { expr_copy(list), expr_copy(f->data.function.args[0]),
+                            reducer ? expr_copy(reducer) : NULL };
+            return expr_new_function(expr_new_symbol(SYM_GroupBy), a3, reducer ? 3 : 2);
+        }
+        Expr* first_args[2] = { expr_copy(list), expr_copy(f->data.function.args[0]) };
+        Expr* first_call = expr_new_function(expr_new_symbol(SYM_GroupBy), first_args, 2);
+        Expr* outer = evaluate(first_call);
+        expr_free(first_call);
+        if (!is_association(outer)) { expr_free(outer); return NULL; }
+        Expr** rest = malloc(sizeof(Expr*) * (nf - 1));
+        for (size_t i = 1; i < nf; i++) rest[i - 1] = expr_copy(f->data.function.args[i]);
+        Expr* rest_list = make_list(rest, nf - 1);
+        free(rest);
+        size_t ng = outer->data.function.arg_count;
+        Expr** rules = malloc(sizeof(Expr*) * (ng ? ng : 1));
+        for (size_t i = 0; i < ng; i++) {
+            Expr* r = outer->data.function.args[i];
+            Expr* sub[3] = { expr_copy(rule_val(r)), expr_copy(rest_list),
+                             reducer ? expr_copy(reducer) : NULL };
+            Expr* inner = expr_new_function(expr_new_symbol(SYM_GroupBy), sub, reducer ? 3 : 2);
+            rules[i] = make_rule(expr_copy(rule_key(r)), inner);   /* evaluator reduces inner */
+        }
+        Expr* result = expr_new_function(expr_new_symbol(SYM_Association), rules, ng);
+        free(rules);
+        expr_free(rest_list);
+        expr_free(outer);
+        return result;
+    }
+
     if (assoc_in && is_rule2(f)) return NULL;
     size_t n = list->data.function.arg_count;
 
@@ -1293,10 +1433,50 @@ static int rule_key_cmp(const void* a, const void* b) {
     return expr_compare(rule_key(ra), rule_key(rb));
 }
 
+/* KeySort[assoc, p]: order the entries by their keys under the ordering
+ * function p, exactly as Sort[keys, p] would (Ordering shares Sort's merge
+ * sort, so ties and non-boolean p behave identically). */
+static Expr* keysort_with_p(const Expr* assoc, Expr* p) {
+    size_t n = assoc->data.function.arg_count;
+    Expr** keys = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        if (!is_rule2(assoc->data.function.args[i])) {
+            for (size_t k = 0; k < i; k++) expr_free(keys[k]);
+            free(keys);
+            return NULL;
+        }
+        keys[i] = expr_copy(rule_key(assoc->data.function.args[i]));
+    }
+    Expr* ord_args[3] = { make_list(keys, n), expr_new_symbol(SYM_All), expr_copy(p) };
+    free(keys);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Ordering), ord_args, 3);
+    Expr* perm = evaluate(call);
+    expr_free(call);
+
+    Expr* result = NULL;
+    if (perm->type == EXPR_FUNCTION && head_is(perm, SYM_List) &&
+        perm->data.function.arg_count == n) {
+        Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+        size_t k = 0;
+        for (; k < n; k++) {
+            Expr* pk = perm->data.function.args[k];
+            if (pk->type != EXPR_INTEGER || pk->data.integer < 1 || pk->data.integer > (int64_t)n) break;
+            out[k] = expr_copy(assoc->data.function.args[pk->data.integer - 1]);
+        }
+        if (k == n) result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+        else for (size_t q = 0; q < k; q++) expr_free(out[q]);
+        free(out);
+    }
+    expr_free(perm);
+    return result;
+}
+
 Expr* builtin_keysort(Expr* res) {
-    if (res->data.function.arg_count != 1) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     if (!is_association(assoc)) return NULL;
+    if (argc == 2) return keysort_with_p(assoc, res->data.function.args[1]);
     size_t n = assoc->data.function.arg_count;
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) out[i] = expr_copy(assoc->data.function.args[i]);
@@ -1485,7 +1665,8 @@ void assoc_init(void) {
     symtab_add_builtin("AssociationQ", builtin_associationq);
     symtab_get_def("AssociationQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("AssociationQ",
-        "AssociationQ[expr]\n\tGives True if expr is an Association, else False.");
+        "AssociationQ[expr]\n\tGives True if expr is a valid Association (every entry a "
+        "Rule or RuleDelayed), else False.");
 
     symtab_add_builtin("Keys", builtin_keys);
     symtab_get_def("Keys")->attributes |= ATTR_PROTECTED;
@@ -1498,10 +1679,11 @@ void assoc_init(void) {
         "Values[assoc]\n\tGives a list of the values of an association (or rules).");
 
     symtab_add_builtin("Lookup", builtin_lookup);
-    symtab_get_def("Lookup")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Lookup")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("Lookup",
         "Lookup[assoc, key]\n\tGives the value for key, or Missing[\"KeyAbsent\", key].\n"
-        "Lookup[assoc, key, default]\n\tUses default when key is absent.\n"
+        "Lookup[assoc, key, default]\n\tUses default when key is absent (HoldAll: default is\n"
+        "\tevaluated only on a miss).\n"
         "Lookup[assoc, {k1, k2, ...}]\n\tLooks up several keys at once (O(n+m)).");
 
     symtab_add_builtin("KeyExistsQ", builtin_keyexistsq);
@@ -1512,14 +1694,14 @@ void assoc_init(void) {
     symtab_add_builtin("KeyMemberQ", builtin_keymemberq);
     symtab_get_def("KeyMemberQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("KeyMemberQ",
-        "KeyMemberQ[assoc, key]\n\tGives True if key is present in assoc (same as\n"
-        "\tKeyExistsQ), else False.");
+        "KeyMemberQ[assoc, patt]\n\tGives True if some key of assoc matches the pattern patt\n"
+        "\t(a literal key is an O(1) probe), else False.");
 
     symtab_add_builtin("KeyFreeQ", builtin_keyfreeq);
     symtab_get_def("KeyFreeQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("KeyFreeQ",
-        "KeyFreeQ[assoc, key]\n\tGives True if key is absent from assoc (the\n"
-        "\tcomplement of KeyExistsQ), else False.");
+        "KeyFreeQ[assoc, patt]\n\tGives True if no key of assoc matches the pattern patt\n"
+        "\t(the complement of KeyMemberQ), else False.");
 
     symtab_add_builtin("KeyDrop", builtin_keydrop);
     symtab_get_def("KeyDrop")->attributes |= ATTR_PROTECTED;
@@ -1531,7 +1713,7 @@ void assoc_init(void) {
     symtab_get_def("KeyTake")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("KeyTake",
         "KeyTake[assoc, {k1, ...}]\n"
-        "\tGives the association of only the specified keys (order preserved).");
+        "\tGives the association of only the specified keys, in the requested order.");
 
     symtab_add_builtin("KeyUnion", builtin_keyunion);
     symtab_get_def("KeyUnion")->attributes |= ATTR_PROTECTED;
@@ -1588,7 +1770,8 @@ void assoc_init(void) {
     symtab_add_builtin("KeySort", builtin_keysort);
     symtab_get_def("KeySort")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("KeySort",
-        "KeySort[assoc]\n\tSorts an association into canonical key order.");
+        "KeySort[assoc]\n\tSorts an association into canonical key order.\n"
+        "KeySort[assoc, p]\n\tSorts the entries by key using the ordering function p.");
 
     symtab_add_builtin("KeySortBy", builtin_keysortby);
     symtab_get_def("KeySortBy")->attributes |= ATTR_PROTECTED;

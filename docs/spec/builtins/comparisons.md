@@ -59,6 +59,11 @@ Tests whether two (or more) expressions are mathematically equal.
   (`NumericQ`), so a free symbol still stays symbolic (`x == 0`).
 - For symbolic arguments that cannot be decided, the expression is returned
   unevaluated (`x == y`).
+- Two associations are equal when their entries agree in order, with identical
+  keys and `Equal` values: `<|a -> 1|> == <|a -> 1.|>` is `True`,
+  `<|a -> 1, b -> 2|> == <|b -> 2, a -> 1|>` is `False`. `Unequal` uses the
+  same test (see
+  [Association atomicity](data-structures.md#association-atomicity-structural-functions)).
 - `Equal` is `Orderless` for the equality test but preserves Mathematica's
   printed form.
 - An `Indeterminate` argument gives `False`, per IEEE 754 — see

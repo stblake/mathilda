@@ -814,7 +814,10 @@ Gives the maximum number of indices needed to specify any part of expr, plus 1.
 - Raw objects (atoms) have depth 1.
 - Numbers, `Rational`, and `Complex` have depth 1.
 - Symbolic constants like `Pi`, `E`, `I` have depth 1.
-- Compound expressions have depth `1 + Max(depths of arguments)`.
+- Compound expressions have depth `1 + Max(depths of arguments)`; an empty one
+  has depth 2 (`Depth[{}]` is 2, as in Mathematica).
+- An association counts only its values: `Depth[<|a -> 1|>]` is 2 (see
+  [Association atomicity](data-structures.md#association-atomicity-structural-functions)).
 - With `Heads -> True`, it includes heads of expressions and their parts.
 
 ```mathematica
@@ -847,6 +850,8 @@ Gives a list of all subexpressions of expr on levels specified by levelspec.
 - Positive level `n` refers to distance from the top (level 0 is the whole expression).
 - Negative level `-n` refers to distance from the bottom (depth `n`).
 - Level `-1` corresponds to atomic objects.
+- An association's parts are its values: `Level[<|a -> 1, b -> 2|>, {1}]` is
+  `{1, 2}` (see [Association atomicity](data-structures.md#association-atomicity-structural-functions)).
 - Lists subexpressions in post-order (depth-first), resulting in lexicographic ordering of indices.
 
 ```mathematica
