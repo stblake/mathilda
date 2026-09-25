@@ -221,6 +221,31 @@ Out[4]= {"OK", "OK", h[], f[]}
 ## CompoundExpression (;)
 - `expr1; expr2; ...`: Evaluates a sequence of expressions, returning the last one.
 
+## DownValues, OwnValues
+
+- `DownValues[f]`: the list of transformation rules associated with the symbol
+  `f` as a function head — the rules set by `f[patt] = rhs` / `f[patt] := rhs`.
+- `OwnValues[f]`: the list of rules for `f` used as a bare symbol — the value set
+  by `f = rhs` / `f := rhs`.
+
+**Features**:
+- Each rule is returned as `HoldPattern[lhs] :> rhs` (a `RuleDelayed` whose
+  left-hand side is wrapped in `HoldPattern`), matching Mathematica. The
+  `HoldPattern` keeps the stored pattern from re-matching its own definition, and
+  the `RuleDelayed` keeps the right-hand side unevaluated, so the returned list is
+  **inert**: querying `DownValues[f]` for a recursive `f` does not re-trigger the
+  recursion, and a right-hand side such as `RandomInteger[...]` is shown held
+  rather than evaluated afresh on each query.
+- Returns `{}` for a symbol that carries no rules of the requested kind.
+
+```mathematica
+In[1]:= f[x_] := x^2; DownValues[f]
+Out[1]= {HoldPattern[f[x_]] :> x^2}
+
+In[2]:= a = 5; OwnValues[a]
+Out[2]= {HoldPattern[a] :> 5}
+```
+
 ## ClearAll, Remove
 
 - `ClearAll[s1, s2, ...]`: Clears all values (OwnValues and DownValues),

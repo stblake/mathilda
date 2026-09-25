@@ -2138,9 +2138,16 @@ static Expr* rules_to_list(Rule* r) {
     curr = r;
     for (size_t i = 0; i < count; i++) {
         Expr** rule_args = malloc(sizeof(Expr*) * 2);
-        rule_args[0] = expr_copy(curr->pattern);
+        /* Wrap the LHS in HoldPattern and join with RuleDelayed so the returned
+         * list is inert. Without HoldPattern the pattern (e.g. f[x_]) re-matches
+         * its own DownValue and fires when the result list is evaluated; a plain
+         * Rule would additionally re-evaluate the RHS. HoldPattern is HoldAll and
+         * RuleDelayed is HoldRest, so both sides stay held. This also matches
+         * Mathematica, which shows values as {HoldPattern[lhs] :> rhs}. */
+        rule_args[0] = expr_new_function(expr_new_symbol(SYM_HoldPattern),
+                                         (Expr*[]){expr_copy(curr->pattern)}, 1);
         rule_args[1] = expr_copy(curr->replacement);
-        rule_exprs[i] = expr_new_function(expr_new_symbol(SYM_Rule), rule_args, 2);
+        rule_exprs[i] = expr_new_function(expr_new_symbol(SYM_RuleDelayed), rule_args, 2);
         free(rule_args);
         curr = curr->next;
     }
