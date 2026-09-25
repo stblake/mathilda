@@ -105,6 +105,259 @@ static void collect_known_symbols(const AssumeCtx* ctx,
     }
 }
 
+/* ----------------------------------------------------------------------- */
+/* Structural assumption rewrites                                          */
+/*                                                                         */
+/* Some assumption-driven simplifications cannot be expressed as a rule    */
+/* keyed on a pre-enumerated symbol: Floor[e]->e needs to know e is an     */
+/* integer for an ARBITRARY subexpression e; Ceiling[x]->3 needs interval  */
+/* reasoning; Mod[a,4]->1 needs modular reasoning from an Element fact;    */
+/* Re[a+b I]->a needs every free symbol to be real. These are handled by a */
+/* bottom-up structural walk that queries the assume_known_* API at each   */
+/* node. The walk runs inside apply_assumption_rules, so Simplify (which   */
+/* calls apply_assumption_rules) benefits from it too.                     */
+/* ----------------------------------------------------------------------- */
+
+static bool sr_head(const Expr* e, const char* name) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
+}
+
+/* Numeric value of an Integer/Real/Bigint/Rational literal. */
+static bool sr_num(const Expr* e, double* v) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) { *v = (double)e->data.integer; return true; }
+    if (e->type == EXPR_REAL)    { *v = e->data.real; return true; }
+    if (e->type == EXPR_BIGINT)  { *v = mpz_get_d(e->data.bigint); return true; }
+    if (sr_head(e, "Rational") && e->data.function.arg_count == 2) {
+        const Expr* p = e->data.function.args[0];
+        const Expr* q = e->data.function.args[1];
+        if (p->type == EXPR_INTEGER && q->type == EXPR_INTEGER && q->data.integer != 0) {
+            *v = (double)p->data.integer / (double)q->data.integer; return true;
+        }
+    }
+    return false;
+}
+
+/* Does ctx prove the strict order A < B by a direct inequality fact? */
+static bool sr_proves_slt(const AssumeCtx* ctx, const Expr* A, const Expr* B) {
+    if (!ctx) return false;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr* f = ctx->facts[i];
+        if (f->type != EXPR_FUNCTION || !f->data.function.head ||
+            f->data.function.head->type != EXPR_SYMBOL ||
+            f->data.function.arg_count != 2) continue;
+        const char* h = f->data.function.head->data.symbol.name;
+        const Expr* x = f->data.function.args[0];
+        const Expr* y = f->data.function.args[1];
+        if (h == SYM_Less && expr_eq((Expr*)x, (Expr*)A) && expr_eq((Expr*)y, (Expr*)B))
+            return true;
+        if (h == SYM_Greater && expr_eq((Expr*)x, (Expr*)B) && expr_eq((Expr*)y, (Expr*)A))
+            return true;
+    }
+    return false;
+}
+
+/* Tightest numeric bounds on the bare symbol `sym` from direct inequality
+ * facts. Returns whether a lower / upper bound was found; *lo_strict indicates
+ * a strict `>`. */
+static void sr_bounds(const AssumeCtx* ctx, const Expr* sym,
+                      bool* has_lo, double* lo, bool* lo_strict,
+                      bool* has_hi, double* hi, bool* hi_strict) {
+    *has_lo = *has_hi = false;
+    if (!ctx) return;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr* f = ctx->facts[i];
+        if (f->type != EXPR_FUNCTION || !f->data.function.head ||
+            f->data.function.head->type != EXPR_SYMBOL ||
+            f->data.function.arg_count != 2) continue;
+        const char* h = f->data.function.head->data.symbol.name;
+        const Expr* A = f->data.function.args[0];
+        const Expr* B = f->data.function.args[1];
+        double k;
+        bool sym_left, strict; int kind; /* kind: -1 lower, +1 upper */
+        if (expr_eq((Expr*)A, (Expr*)sym) && sr_num(B, &k)) { sym_left = true; }
+        else if (expr_eq((Expr*)B, (Expr*)sym) && sr_num(A, &k)) { sym_left = false; }
+        else continue;
+        /* Normalise to "sym <op> k". */
+        if (h == SYM_Less)        { kind = sym_left ? +1 : -1; strict = true;  }
+        else if (h == SYM_LessEqual)   { kind = sym_left ? +1 : -1; strict = false; }
+        else if (h == SYM_Greater)     { kind = sym_left ? -1 : +1; strict = true;  }
+        else if (h == SYM_GreaterEqual){ kind = sym_left ? -1 : +1; strict = false; }
+        else continue;
+        if (kind < 0) { /* lower bound sym > k or sym >= k */
+            if (!*has_lo || k > *lo || (k == *lo && strict && !*lo_strict)) {
+                *has_lo = true; *lo = k; *lo_strict = strict;
+            }
+        } else {        /* upper bound sym < k or sym <= k */
+            if (!*has_hi || k < *hi || (k == *hi && strict && !*hi_strict)) {
+                *has_hi = true; *hi = k; *hi_strict = strict;
+            }
+        }
+    }
+}
+
+/* Collect distinct bare non-constant symbols appearing in e. */
+static void sr_collect_syms(const Expr* e, const Expr*** out, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (is_real_constant_symbol(e->data.symbol.name)) return;
+        for (size_t i = 0; i < *n; i++)
+            if ((*out)[i]->data.symbol.name == e->data.symbol.name) return;
+        if (*n == *cap) { *cap = *cap ? *cap * 2 : 8; *out = realloc(*out, *cap * sizeof(Expr*)); }
+        (*out)[(*n)++] = e;
+        return;
+    }
+    if (e->type == EXPR_FUNCTION) {
+        /* Descend into arguments only: a function's head (Plus, Times, Re, ...)
+         * is a structural operator, not a variable whose reality we require. */
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            sr_collect_syms(e->data.function.args[i], out, n, cap);
+    }
+}
+
+/* Bottom-up walk applying the structural assumption rewrites. Always returns a
+ * freshly owned tree; sets *changed when any node was rewritten. */
+static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int* changed) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+    for (size_t i = 0; i < n; i++)
+        args[i] = assume_structural_rewrite(e->data.function.args[i], ctx, changed);
+    Expr* node = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+
+    if (node->data.function.head->type != EXPR_SYMBOL) return node;
+    const char* h = node->data.function.head->data.symbol.name;
+    size_t nn = node->data.function.arg_count;
+
+    if (nn == 1) {
+        Expr* a0 = node->data.function.args[0];
+
+        /* Integer-valued roundings of a provably-integer argument. */
+        if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||
+             strcmp(h, "Round") == 0 || strcmp(h, "IntegerPart") == 0) &&
+            assume_known_integer(ctx, a0)) {
+            Expr* out = expr_copy(a0); expr_free(node); *changed = 1; return out;
+        }
+        if (strcmp(h, "FractionalPart") == 0 && assume_known_integer(ctx, a0)) {
+            expr_free(node); *changed = 1; return expr_new_integer(0);
+        }
+
+        /* Ceiling[x] / Floor[x] pinned to a single integer by numeric bounds. */
+        if ((strcmp(h, "Ceiling") == 0 || strcmp(h, "Floor") == 0) &&
+            a0->type == EXPR_SYMBOL) {
+            bool hl, hu, ls = false, us = false; double lo = 0, hi = 0;
+            sr_bounds(ctx, a0, &hl, &lo, &ls, &hu, &hi, &us);
+            if (strcmp(h, "Ceiling") == 0 && hu && hl) {
+                long c = (long)ceil(hi);
+                if ((double)c >= hi &&                       /* s <= c */
+                    (lo > (double)(c - 1) || (lo == (double)(c - 1) && ls))) { /* s > c-1 */
+                    expr_free(node); *changed = 1; return expr_new_integer(c);
+                }
+            }
+            if (strcmp(h, "Floor") == 0 && hl && hu) {
+                long fl = (long)floor(lo);
+                if ((double)fl <= lo &&                      /* s >= f */
+                    (hi < (double)(fl + 1) || (hi == (double)(fl + 1) && us))) { /* s < f+1 */
+                    expr_free(node); *changed = 1; return expr_new_integer(fl);
+                }
+            }
+        }
+
+        /* FractionalPart[a] from a Mod[a,1] fact plus the sign of a. */
+        if (strcmp(h, "FractionalPart") == 0 && a0->type == EXPR_SYMBOL && ctx) {
+            for (size_t i = 0; i < ctx->count; i++) {
+                const Expr* f = ctx->facts[i];
+                if (!fact_is_function(f, "Equal", 2)) continue;
+                const Expr* L = f->data.function.args[0];
+                const Expr* R = f->data.function.args[1];
+                const Expr* modv = NULL; const Expr* rv = NULL;
+                if (sr_head(L, "Mod") && L->data.function.arg_count == 2) { modv = L; rv = R; }
+                else if (sr_head(R, "Mod") && R->data.function.arg_count == 2) { modv = R; rv = L; }
+                if (!modv) continue;
+                if (!expr_eq((Expr*)modv->data.function.args[0], a0)) continue;
+                double one; const Expr* m1 = modv->data.function.args[1];
+                if (!(sr_num(m1, &one) && one == 1.0)) continue;
+                double r;
+                if (!sr_num(rv, &r) || !(r > 0.0 && r < 1.0)) continue;
+                Expr* out = NULL;
+                if (assume_known_negative(ctx, a0))
+                    out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                              (Expr*[]){ expr_copy((Expr*)rv), expr_new_integer(-1) }, 2));
+                else if (assume_known_nonneg(ctx, a0))
+                    out = expr_copy((Expr*)rv);
+                if (out) { expr_free(node); *changed = 1; return out; }
+            }
+        }
+
+        /* Re/Im/Conjugate/Arg of an expression whose every free symbol is real:
+         * ComplexExpand assumes reality, so it yields the refined form. */
+        if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 ||
+             strcmp(h, "Conjugate") == 0 || strcmp(h, "Arg") == 0)) {
+            const Expr** syms = NULL; size_t ns = 0, cap = 0;
+            sr_collect_syms(a0, &syms, &ns, &cap);
+            bool all_real = (ns > 0);
+            for (size_t i = 0; i < ns; i++)
+                if (!prov_re(ctx, syms[i])) { all_real = false; break; }
+            free(syms);
+            if (all_real) {
+                Expr* ce = eval_and_free(expr_new_function(expr_new_symbol("ComplexExpand"),
+                               (Expr*[]){ expr_copy(node) }, 1));
+                if (ce && !expr_eq(ce, node)) { expr_free(node); *changed = 1; return ce; }
+                if (ce) expr_free(ce);
+            }
+        }
+
+        /* ArcTan[Tan[e]] -> e when Re[e] (or e itself) lies in (-Pi/2, Pi/2). */
+        if (strcmp(h, "ArcTan") == 0 && sr_head(a0, "Tan") &&
+            a0->data.function.arg_count == 1) {
+            const Expr* inner = a0->data.function.args[0];
+            Expr* pihalf = eval_and_free(parse_expression("Pi/2"));
+            Expr* neghalf = eval_and_free(parse_expression("-Pi/2"));
+            Expr* u_re = eval_and_free(expr_new_function(expr_new_symbol(SYM_Re),
+                             (Expr*[]){ expr_copy((Expr*)inner) }, 1));
+            bool ok = (sr_proves_slt(ctx, neghalf, u_re) && sr_proves_slt(ctx, u_re, pihalf)) ||
+                      (sr_proves_slt(ctx, neghalf, inner) && sr_proves_slt(ctx, inner, pihalf));
+            expr_free(pihalf); expr_free(neghalf); expr_free(u_re);
+            if (ok) { Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out; }
+        }
+    }
+
+    /* Mod[a, m] -> r from an Element[(a + c)/m, Integers] fact. */
+    if (strcmp(h, "Mod") == 0 && nn == 2 && ctx) {
+        Expr* a = node->data.function.args[0];
+        Expr* m = node->data.function.args[1];
+        if (m->type == EXPR_INTEGER && m->data.integer > 0) {
+            long mm = m->data.integer;
+            for (size_t i = 0; i < ctx->count; i++) {
+                const Expr* f = ctx->facts[i];
+                if (!fact_is_function(f, "Element", 2)) continue;
+                const Expr* E = f->data.function.args[0];
+                const Expr* dom = f->data.function.args[1];
+                if (dom->type != EXPR_SYMBOL || dom->data.symbol.name != SYM_Integers) continue;
+                /* d = m*E - a; valid iff d is a constant integer (a cancels). */
+                Expr* d = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                                   (Expr*[]){ expr_new_integer(mm), expr_copy((Expr*)E) }, 2),
+                               expr_new_function(expr_new_symbol(SYM_Times),
+                                   (Expr*[]){ expr_new_integer(-1), expr_copy(a) }, 2) }, 2));
+                if (d->type == EXPR_INTEGER) {
+                    long dv = d->data.integer;
+                    long r = ((-dv) % mm + mm) % mm;
+                    expr_free(d); expr_free(node); *changed = 1; return expr_new_integer(r);
+                }
+                expr_free(d);
+            }
+        }
+    }
+
+    return node;
+}
+
 /* Produce a rewritten expression by applying assumption-derived rules via
  * ReplaceRepeated. Returns a newly owned expression, or NULL if no rules
  * were generated. The input is not consumed. */
@@ -121,6 +374,31 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
     collect_known_symbols(ctx, positives, &npos, reals, &nreal,
                           integers, &nint, negatives, &nneg,
                           evens, &neven, MAX_SYM);
+
+    /* Two further buckets not gathered by collect_known_symbols:
+     *   nonnegs -- x >= 0  (for (x^m)^r -> x^(m r) and Sqrt[x^2] -> x at x = 0)
+     *   abslt1  -- -1 < b < 1  (for (a^b)^c -> a^(b c)). */
+    char* nonnegs[MAX_SYM]; size_t nnn = 0;
+    char* abslt1 [MAX_SYM]; size_t nab = 0;
+    if (ctx) {
+        Expr* neg1 = expr_new_integer(-1);
+        Expr* pos1 = expr_new_integer(1);
+        for (size_t i = 0; i < ctx->count; i++) {
+            const Expr* f = ctx->facts[i];
+            if (f->type != EXPR_FUNCTION) continue;
+            for (size_t j = 0; j < f->data.function.arg_count; j++) {
+                Expr* a = f->data.function.args[j];
+                if (a->type != EXPR_SYMBOL) continue;
+                const char* nm = a->data.symbol.name;
+                if (assume_known_nonneg(ctx, a) && nnn < MAX_SYM &&
+                    !sym_already_listed(nonnegs, nnn, nm)) nonnegs[nnn++] = (char*)nm;
+                if (assume_known_gt(ctx, a, neg1) && assume_known_lt(ctx, a, pos1) &&
+                    nab < MAX_SYM && !sym_already_listed(abslt1, nab, nm)) abslt1[nab++] = (char*)nm;
+            }
+        }
+        expr_free(neg1);
+        expr_free(pos1);
+    }
 
     /* Build a single rule list "{r1, r2, ...}" as a string, then parse. */
     char buf[8192];
@@ -171,6 +449,16 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
          * sufficient assumption. The Plus arg list is canonical
          * (Plus[-1, Times[2, x^2]]). */
         SEP(); EMIT("ArcCosh[Plus[-1, Times[2, Power[%s, 2]]]] :> 2 ArcCosh[%s]", x, x);
+        /* General (x^m)^r -> x^(m r) for x > 0 and any m, r (covers
+         * (x^3)^(1/3) -> x and the like). */
+        SEP(); EMIT("Power[Power[%s, m_], r_] :> Power[%s, m r]", x, x);
+        /* x^p y^p -> (x y)^p for two positive bases x, y (any common
+         * exponent p). Emitted once per unordered pair. */
+        for (size_t j = i + 1; j < npos; j++) {
+            const char* y = positives[j];
+            SEP(); EMIT("Times[Power[%s, p_], Power[%s, p_], rest___] :> "
+                        "Power[Times[%s, %s], p] rest", x, y, x, y);
+        }
     }
 
     for (size_t i = 0; i < nneg; i++) {
@@ -192,6 +480,8 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
          * -> -Pi/2 for x < 0. Same `+ rest___` trick as above to handle
          * the embedded-in-larger-sum case. */
         SEP(); EMIT("ArcTan[%s] + ArcTan[Power[%s, -1]] + rest___ :> -Pi/2 + rest", x, x);
+        /* Log[x] -> I Pi + Log[-x]  for x < 0 (principal branch). */
+        SEP(); EMIT("Log[%s] :> I Pi + Log[-%s]", x, x);
     }
 
     /* For real-but-unknown-sign, Sqrt[x^2] -> Abs[x]. Skip symbols already
@@ -221,6 +511,13 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Tan[Pi %s] :> 0", n);
         SEP(); EMIT("Power[-1, Times[m_Integer /; EvenQ[m], %s]] :> 1", n);
         SEP(); EMIT("Power[Power[-1, %s], m_Integer /; EvenQ[m]] :> 1", n);
+        /* Shift identities: Cos[x + n Pi] -> (-1)^n Cos[x], likewise Sin, and
+         * Tan[x + n Pi] -> Tan[x] (period Pi), for integer n. The rest___
+         * absorbs the remaining Plus terms (Plus[] -> 0 gives the bare
+         * Cos[n Pi] case too). */
+        SEP(); EMIT("Cos[Plus[Times[%s, Pi], rest___]] :> Power[-1, %s] Cos[Plus[rest]]", n, n);
+        SEP(); EMIT("Sin[Plus[Times[%s, Pi], rest___]] :> Power[-1, %s] Sin[Plus[rest]]", n, n);
+        SEP(); EMIT("Tan[Plus[Times[%s, Pi], rest___]] :> Tan[Plus[rest]]", n);
     }
 
     /* Even-exponent identities: (-1)^m = 1 when m is even, and the
@@ -241,6 +538,26 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
             SEP(); EMIT("Power[-1, %s %s] :> 1", k, m);
             SEP(); EMIT("Power[Power[-1, %s], %s] :> 1", k, m);
         }
+    }
+
+    /* Non-negative (but not proven strictly positive) symbols: (x^m)^r ->
+     * x^(m r), Sqrt[x^2] -> x, Abs[x] -> x all hold at x >= 0 including x = 0.
+     * Strictly-positive symbols already received the stronger rule set above. */
+    for (size_t i = 0; i < nnn; i++) {
+        const char* x = nonnegs[i];
+        if (sym_already_listed(positives, npos, x)) continue;
+        if (sym_already_listed(negatives, nneg, x)) continue;
+        SEP(); EMIT("Abs[%s] :> %s", x, x);
+        SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> %s", x, x);
+        SEP(); EMIT("Power[Power[%s, m_], r_] :> Power[%s, m r]", x, x);
+        SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> %s Power[Times[rest], Rational[1, 2]]", x, x);
+    }
+
+    /* Symbols with -1 < b < 1: (a^b)^c -> a^(b c) on the principal branch,
+     * for any base a. */
+    for (size_t i = 0; i < nab; i++) {
+        const char* b = abslt1[i];
+        SEP(); EMIT("Power[Power[base_, %s], c_] :> Power[base, %s c]", b, b);
     }
 
     /* Equal[u, v] facts -> two-way substitution rules. We use immediate
@@ -306,11 +623,10 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         }
     }
 
-    if (!string_rules && eq_count == 0) {
-        free(eq_diffs);
-        return NULL;
-    }
-
+    /* Apply the synthesized string + Equal-substitution rules (if any) to
+     * obtain base_result; the structural pass below runs regardless. */
+    Expr* base_result = NULL;
+    if (string_rules || eq_count > 0) {
     size_t string_len = 0;
     if (string_rules && string_rules->type == EXPR_FUNCTION) {
         string_len = string_rules->data.function.arg_count;
@@ -396,7 +712,27 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
     Expr* call = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), call_args, 2);
     Expr* out = evaluate(call);
     expr_free(call);
-    return out;
+    base_result = out;
+    } else {
+        free(eq_diffs);   /* eq_count == 0: no entries were populated */
+    }
+
+    /* Structural assumption rewrites (Floor/Ceiling/Round/IntegerPart/
+     * FractionalPart/Mod, Re/Im/Conjugate/Arg, ArcTan[Tan]) run whether or not
+     * any string/Equal rule was generated, so a lone structural fact still
+     * fires and Simplify inherits the same rewrites. */
+    {
+        const Expr* walk_in = base_result ? base_result : input;
+        int schanged = 0;
+        Expr* walked = assume_structural_rewrite(walk_in, ctx, &schanged);
+        if (schanged && walked) {
+            Expr* ev = eval_and_free(walked);
+            if (base_result) expr_free(base_result);
+            return ev;
+        }
+        if (walked) expr_free(walked);
+    }
+    return base_result;
 
 overflow:
     /* Buffer was too small; bail out, no rules applied. */

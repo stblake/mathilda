@@ -521,6 +521,7 @@ set(COMMON_SRC
     ../src/poly/subresultantpoly.c
     ../src/rat.c
     ../src/rootreduce.c
+    ../src/refine.c
     ../src/poly/facpoly.c
     ../src/parfrac.c
     ../src/contfrac.c
@@ -1060,6 +1061,10 @@ add_test(NAME trigexp_zero_tests COMMAND trigexp_zero_tests)
 add_executable(rootreduce_tests test_rootreduce.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(rootreduce_tests PRIVATE ../src)
 add_test(NAME rootreduce_tests COMMAND rootreduce_tests)
+
+add_executable(refine_tests test_refine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(refine_tests PRIVATE ../src)
+add_test(NAME refine_tests COMMAND refine_tests)
 
 # MemoryInUse / MaxMemoryUsed. Values are machine-dependent, so the suite asserts
 # relations (positive, peak >= current, responds to allocation) rather than numbers.

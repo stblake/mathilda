@@ -3845,3 +3845,43 @@ correctness-neutral but performance-significant change; always measure the moved
   keep the full (grinding-but-sometimes-succeeding) search.
 
 See harness memory `[[feedback_integrate_cascade_ordering]]` and `[[project_integrate_parallelmixedtower]]`.
+
+---
+
+## Refine implementation (v0.197) — string-rule synthesis + assumption-engine gotchas
+
+Building `Refine` on top of the shared assumption engine (`apply_assumption_rules`,
+`prov_*`, `element_decide`) surfaced three reusable traps. All were self-caught via
+smoke tests + valgrind; recording so they don't recur when adding assumption rules
+or new symbolic builtins.
+
+1. **Rule RHS uses the BARE pattern name, never `name_`.** In the string-rule
+   synthesis (`simp_assume_rewrite.c`) the LHS binds `p_`, `base_`, `c_`, but the
+   RHS must reference them as `p`, `base`, `c`. Writing `Power[base_, %s c_]` on the
+   RHS builds `Pattern[base, Blank[]]`; the binding substitution then rewrites the
+   inner name (`base -> a`) giving `Pattern[a, Blank[]]` = `a_`, which leaks a
+   pattern variable into the result (`(a b)^p_`, `a_^(b c_)`). The existing rules
+   already show the convention (`... :> Power[x, 2 r]`, bare `r`). Mirror them.
+
+2. **A "collect the free variables" walk must NOT recurse into function heads.**
+   A recursive symbol collector that descends into `e->data.function.head` picks up
+   `Plus`, `Times`, `Complex`, `Re`, ... as if they were variables. This silently
+   broke the "all free symbols are real -> ComplexExpand" gate: `Re[a]` (bare-symbol
+   arg) worked, `Re[a + b I]` did not, because `prov_re("Times")` is false. Descend
+   into arguments only (see `collect_bare_vars` in `refine.c`).
+
+3. **`evaluate()` borrows its argument** (internal copy, never frees) — so
+   `evaluate(expr_new_function(...))` leaks the freshly-built wrapper. Use
+   `eval_and_free(...)` for anything you construct on the spot, or free it after.
+   valgrind pinned this to `parse_expression`/`ComplexExpand`/`Reduce` wrappers;
+   the fix made Refine's `definitely lost` identical to the Simplify baseline. See
+   `[[project_evaluate_borrows_argument]]`.
+
+Architecture note: capability gaps for Refine were closed in the SHARED engine
+(`prov_re`/`prov_int` special-function + inequality⟹real rules; the structural
+post-pass for Floor/Ceiling/Mod/Re/ArcTan), so `Simplify` inherits them. Only the
+Reduce/CAD-backed positivity *wiring* (deep-positivity pass, predicate entailment)
+is Refine-local, deliberately kept off the hot `prov_pos` path. Reduce/CAD has no
+cooperative abort, so `TimeConstraint` is checked between entailment calls only
+(best-effort), never via async `TimeConstrained` (malloc-lock crash risk). See
+harness memory `[[project_refine_string_rule_rhs_bare_name]]`.

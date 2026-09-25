@@ -76,8 +76,10 @@ static bool real_is_integer(double r) {
     return (double)i == r;
 }
 
-/* Element[x, dom] decision: 1 = True, 0 = False, -1 = undetermined. */
-static int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) {
+/* Element[x, dom] decision: 1 = True, 0 = False, -1 = undetermined. Exported
+ * (declared in simp_internal.h) so Refine can decide Element statements under
+ * its own assumption context. */
+int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) {
     if (!x || !dom) return -1;
 
     /* Direct fact lookup is always safe regardless of domain. */

@@ -367,6 +367,59 @@ In[2]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {}]
 Out[2]= Cos[x]^2 + Sin[x]^2
 ```
 
+## Refine
+Gives the form an expression would take if its symbols satisfied the assumptions.
+
+- `Refine[expr, assum]` — gives the form of `expr` obtained if the symbols in it
+  were replaced by explicit values satisfying `assum`.
+- `Refine[expr]` — uses the default assumptions from any enclosing `Assuming`
+  construct (`$Assumptions`).
+
+**Options**:
+- `Assumptions` (default `$Assumptions`) — default assumptions to append to
+  `assum`. Given as an option value it *replaces* `$Assumptions`; the same
+  positional/option policy as `Simplify` and `PossibleZeroQ`.
+- `TimeConstraint` (default `30`) — seconds to spend on any single condition
+  check (a `Reduce`/CAD entailment) before giving up on that transformation.
+
+**Features**:
+- `Protected`. Shares the assumption engine with `Simplify` (`AssumeCtx`,
+  `apply_assumption_rules`): every rewrite `Refine` applies is one `Simplify`
+  also applies. `Refine` is the rewrite-and-decide pass *without* `Simplify`'s
+  complexity-minimising search, so it does not, e.g., factor.
+- Assumption-driven rewrites: `Sqrt[x^2] -> x / -x / Abs[x]`,
+  `(x^m)^r -> x^(m r)` (for `x >= 0`), `(a^b)^c -> a^(b c)` (for `-1 < b < 1`),
+  `a^p b^p -> (a b)^p` (for `a, b > 0`), `Log[x] -> I Pi + Log[-x]` (`x < 0`),
+  `Log[x^p] -> p Log[x]` (`x > 0`), `Sin[k Pi] -> 0` and
+  `Cos[x + k Pi] -> (-1)^k Cos[x]` (integer `k`), `ArcTan[Tan[x]] -> x` on the
+  principal domain, `Re`/`Im`/`Conjugate` of real-symbol expressions,
+  `Floor`/`Ceiling`/`Round`/`IntegerPart`/`FractionalPart` and `Mod` under
+  integer / interval / modular facts.
+- Predicate decisions: `Element[x, dom]` via the assumption-aware domain
+  prover (including compound expressions); equations via the assumption-aware
+  zero test; inequalities and their logical combinations via the `Reduce`/CAD
+  entailment (`P` is `True` iff `assum && !P` is unsatisfiable over the reals).
+  Quantities appearing algebraically in inequalities are assumed real.
+- Purely symbolic/structural: no packed/NDArray kernel and no `Compile[]`
+  lowering (it returns symbolic expressions, not machine numbers).
+
+```mathematica
+In[1]:= Refine[Sqrt[x^2], x > 0]
+Out[1]= x
+
+In[2]:= Refine[Sqrt[x^2], Element[x, Reals]]
+Out[2]= Abs[x]
+
+In[3]:= Refine[Sign[x^2 - x y + y^2 + 1], Element[x | y, Reals]]
+Out[3]= 1
+
+In[4]:= Refine[a^2 - b^2 + 1 == 0, a + b == 0]
+Out[4]= False
+
+In[5]:= Assuming[x > 0, Refine[Sqrt[x^2 y^2], y < 0]]
+Out[5]= -x y
+```
+
 ## Assuming
 Evaluates an expression with extra assumptions in effect.
 

@@ -859,6 +859,8 @@ void core_init(void) {
     ratcanon_init();
     void rootreduce_init(void);
     rootreduce_init();
+    void refine_init(void);
+    refine_init();
     void algebraicnumber_init(void);
     algebraicnumber_init();
     void tonumberfield_init(void);

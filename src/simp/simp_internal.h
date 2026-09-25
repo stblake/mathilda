@@ -304,4 +304,8 @@ Expr* builtin_simplify_count(Expr* res);
 Expr* builtin_assuming(Expr* res);
 Expr* builtin_element(Expr* res);
 
+/* Element[x, dom] decision: 1 = True, 0 = False, -1 = undetermined. Defined in
+ * simp_builtins.c; used cross-module by Refine (src/refine.c). */
+int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx);
+
 #endif /* MATHILDA_SIMP_INTERNAL_H */

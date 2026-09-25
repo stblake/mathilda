@@ -565,6 +565,10 @@ bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
          * from sign alone, so fall back to nonneg here. */
         /* Cosh[real] >= 1 > 0. */
         if (h == SYM_Cosh && n == 1 && prov_re(ctx, a[0])) return true;
+        /* Gamma[x] > 0 for x > 0; n! > 0 for n >= 0 (so nested real/positive
+         * proofs through a Gamma/Factorial denominator go through). */
+        if (h == SYM_Gamma && n == 1 && prov_pos(ctx, a[0])) return true;
+        if (h == SYM_Factorial && n == 1 && prov_nn(ctx, a[0])) return true;
         /* Sqrt[positive] is positive (and Sqrt is Power[_, 1/2]; that path
          * handled above already). */
     }
@@ -674,10 +678,38 @@ bool prov_int(const AssumeCtx* ctx, const Expr* x) {
             }
             return true;
         }
-        /* Power[int, nonneg-int] is integer. */
-        if (h == SYM_Power && n == 2 &&
-            prov_int(ctx, a[0]) &&
-            a[1]->type == EXPR_INTEGER && a[1]->data.integer >= 0) return true;
+        /* Power[int, nonneg-int] is integer -- including a symbolic exponent
+         * proven to be a nonnegative integer (e.g. Floor[x]^k with k > 0). */
+        if (h == SYM_Power && n == 2 && prov_int(ctx, a[0]) &&
+            prov_int(ctx, a[1]) && prov_nn(ctx, a[1])) return true;
+        /* Integer-valued roundings of a real argument are integers. */
+        if (n == 1 && prov_re(ctx, a[0]) &&
+            (h == SYM_Floor || h == SYM_Ceiling ||
+             h == SYM_Round || h == SYM_IntegerPart)) return true;
+    }
+    return false;
+}
+
+/* A relational fact whose truth forces its algebraic operands to be real. Only
+ * inequalities do so; an equation (Equal/Unequal) does not (a + b == 0 admits
+ * complex a, b). */
+static bool fact_is_inequality(const Expr* f) {
+    if (!f || f->type != EXPR_FUNCTION || !f->data.function.head ||
+        f->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = f->data.function.head->data.symbol.name;
+    return h == SYM_Less || h == SYM_LessEqual ||
+           h == SYM_Greater || h == SYM_GreaterEqual ||
+           h == SYM_Inequality;
+}
+
+/* True iff the interned symbol name appears anywhere within e. */
+static bool expr_mentions_symbol(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
+    if (e->type == EXPR_FUNCTION) {
+        if (expr_mentions_symbol(e->data.function.head, name)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (expr_mentions_symbol(e->data.function.args[i], name)) return true;
     }
     return false;
 }
@@ -697,6 +729,15 @@ bool prov_re(const AssumeCtx* ctx, const Expr* x) {
                 fact_in_domain(f, x, "Integers") ||
                 fact_in_domain(f, x, "Algebraics")) return true;
             if (fact_implies_nonneg(f, x) || fact_implies_nonpos(f, x)) return true;
+        }
+        /* A bare symbol appearing algebraically in an inequality assumption is
+         * assumed real ("quantities that appear algebraically in inequalities
+         * are always assumed to be real"). */
+        if (x->type == EXPR_SYMBOL) {
+            for (size_t i = 0; i < ctx->count; i++)
+                if (fact_is_inequality(ctx->facts[i]) &&
+                    expr_mentions_symbol(ctx->facts[i], x->data.symbol.name))
+                    return true;
         }
     }
     if (x->type == EXPR_FUNCTION &&
@@ -727,6 +768,12 @@ bool prov_re(const AssumeCtx* ctx, const Expr* x) {
         }
         /* Log[positive] is real. */
         if (h == SYM_Log && n == 1 && prov_pos(ctx, a[0])) return true;
+        /* Gamma / LogGamma / Factorial of a positive argument are real. */
+        if (n == 1 && prov_pos(ctx, a[0]) &&
+            (h == SYM_Gamma || h == SYM_LogGamma || h == SYM_Factorial)) return true;
+        /* Pochhammer[a, b] is real for real a, b. */
+        if (h == SYM_Pochhammer && n == 2 &&
+            prov_re(ctx, a[0]) && prov_re(ctx, a[1])) return true;
         /* ArcTan[real] is real, ArcSinh[real] real. */
         if (n == 1 && prov_re(ctx, a[0])) {
             if (h == SYM_ArcTan || h == SYM_ArcSinh ||

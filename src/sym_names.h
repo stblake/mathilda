@@ -501,6 +501,7 @@ extern const char* SYM_FindInstance;
 extern const char* SYM_CylindricalDecomposition;
 extern const char* SYM_Reals;
 extern const char* SYM_Reduce;
+extern const char* SYM_Refine;
 extern const char* SYM_Repeated;
 extern const char* SYM_RepeatedNull;
 extern const char* SYM_Rescale;

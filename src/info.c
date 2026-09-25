@@ -4382,6 +4382,17 @@ void info_init(void) {
         "Assuming[assum, expr]\n\tevaluates expr with assum appended to $Assumptions, so that assum is included in the default assumptions used by functions such as Simplify.\n"
         "Assuming converts lists of assumptions to conjunctions.\n"
         "Assuming[assum, expr] is effectively equivalent to Block[{$Assumptions = $Assumptions && assum}, expr], so nested invocations compose and the rebinding of $Assumptions is restored on exit.");
+    symtab_set_docstring("Refine",
+        "Refine[expr, assum]\n\tgives the form of expr that would be obtained if the symbols in it were replaced by explicit values satisfying the assumptions assum.\n"
+        "Refine[expr]\n\tuses the default assumptions specified by any enclosing Assuming constructs ($Assumptions).\n"
+        "\n"
+        "Options:\n"
+        "  Assumptions (default $Assumptions) -- default assumptions to append to assum. Given as an option value, it prevents Refine from also using $Assumptions.\n"
+        "  TimeConstraint (default 30) -- how many seconds to spend on any single condition check before giving up on that transformation.\n"
+        "\n"
+        "Assumptions can be equations, inequalities, domain specifications such as Element[x, Integers], or logical combinations of these. Quantities appearing algebraically in inequalities are assumed to be real.\n"
+        "Refine can be applied to expressions, and to equations, inequalities, and domain specifications, which it decides to True or False when they provably follow from (or contradict) the assumptions.\n"
+        "Refine is one of the transformations tried by Simplify; use Simplify or FullSimplify for a broader search.");
     symtab_set_docstring("$Assumptions",
         "$Assumptions\n\tis the default setting for the Assumptions option used in Simplify and other functions that take assumptions.\n"
         "$Assumptions defaults to True (no assumptions). Functions like Assuming temporarily extend $Assumptions for the duration of their body.");
