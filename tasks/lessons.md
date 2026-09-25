@@ -3789,3 +3789,34 @@ splitspecials). Rule: after `sample`, add in-process `.m`-phase region timers (a
 accumulator) and run the real case ONCE before choosing a C target. Also verify an "obvious" opt
 actually helps: "expand the series once to order N" was SLOWER (the vanish-order loop stops at the
 first nonzero coefficient). See harness memory `feedback_profile_dotm_phase_before_c_kernel`.
+
+---
+
+## Reordering a method cascade exposes latent grind in stages it used to short-circuit (2026-09-25, v0.191)
+
+**Context:** moving `Integrate`GoursatAlgebraic` from an early cascade position to the end (after
+`ParallelMixedTower`) was requested as a one-line reorder. It was correct (tests pass) but the
+pseudo-elliptic `F/R^p` integrands Goursat used to catch first now flowed into the general *search*
+stages, which grind for tens of seconds before declining — an effective hang for `Integrate[(t-1)/
+((t+2)Sqrt[t^3-1]), t]`.
+
+**Lesson — when you move a specialist stage later in a polyalgorithm cascade, the inputs it used to
+consume become new inputs to whatever now runs before it.** Any stage that is *slow to decline* on
+that input class was previously masked and will now surface as a regression. A cascade reorder is a
+correctness-neutral but performance-significant change; always measure the moved-past inputs.
+
+**How to apply:**
+- Bisect a cascade grind with per-stage `clock()` markers guarded to the OUTERMOST call
+  (`g_integrate_depth == 1`) — recursion otherwise pollutes per-stage wall time and misattributes the
+  sink. Use `ulimit -t` per-process so one hang doesn't block the other probes; run each candidate
+  integrand/method in its own process.
+- The fix pattern: a single cheap *structural* predicate (here `has_pseudoelliptic_radical`: a
+  `Power[base, Rational]` whose `base` is a degree-≥3 polynomial via `Exponent`) that gates the
+  grind-prone SEARCH stages off for exactly the moved-past class, letting the intact input reach the
+  specialist. Do NOT gate the cheap deterministic pass of a stage — `DerivativeDivides` has a
+  direct-quotient-only entry (`integrate_derivdivides_try`) that still catches genuine folds; route to
+  that instead of disabling the whole stage.
+- Gate the CASCADE call site, not the shared routine, when the explicit `Method -> "..."` surface must
+  keep the full (grinding-but-sometimes-succeeding) search.
+
+See harness memory `[[feedback_integrate_cascade_ordering]]` and `[[project_integrate_parallelmixedtower]]`.

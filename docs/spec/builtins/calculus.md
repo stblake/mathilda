@@ -1123,6 +1123,22 @@ monotonically down.
   added 2026-06-09; `ChebychevAlgebraic` and `GoursatAlgebraic` added 2026-06-29):
   `Integrate[f, x]` (Method -> Automatic, default) tries each subroutine in
   order and returns the first non-`NULL` result:
+
+  **Execution order (as of v0.191):** the `GoursatAlgebraic` stage (item 7
+  below) now runs **last**, after `ParallelMixedTower` (item 13) — Goursat is
+  the deterministic specialist for pseudo-elliptic `F/R^p`, so every general
+  method is given first crack at any integrand it also handles.  To keep that
+  reorder cheap, the three *search* stages that otherwise grind for tens of
+  seconds on such an integrand before declining — `try_linearity`'s
+  product-over-sum split, `DerivativeDivides`'s Eliminate/Solve branch-search,
+  and `ParallelMixedTower`'s tower search — are skipped when `f` carries a
+  fractional power of a degree-≥3 polynomial in `x` (the pseudo-elliptic shape),
+  so it reaches the Goursat stage promptly (e.g.
+  `(x-1)/((x+2) Sqrt[x^3-1])` and `(x^4+2x^3-4)/(x^2 Sqrt[(x^2-1)(x^2-4)])` went
+  from an effective hang / 45 s to ~0.07 s).  Derivative-divides still runs its
+  cheap **direct-quotient** fold on those (so `x^2/(x^3-1)^(1/3)` is unaffected),
+  and the explicit `Method -> "ParallelMixedTower"` is not gated.  The item
+  numbers below group methods by kind and are unchanged.
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
      derivative (e.g. `f'[x]`); see below.
   2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
@@ -1198,7 +1214,8 @@ monotonically down.
      controls that decline) is collected in
      [`GOURSAT_EXERCISES.md`](../../../GOURSAT_EXERCISES.md) and mirrored as the
      `test_graded` ladder in `tests/test_integrate_goursat.c`.
-     - **Fresnel stage** (Automatic cascade, immediately after Goursat): a
+     - **Fresnel stage** (Automatic cascade, after the algebraic-radical
+       stages — where Goursat sat before its v0.191 move to the end): a
        Gaussian-phase trig integrand `K Sin[a x^2 + b x + c]` or `K Cos[...]`
        (`a != 0`, `K` free of `x`) closes to `FresnelS`/`FresnelC` by completing
        the square — the trigonometric sibling of the `K E^(a x^2+b x+c) -> Erf`
@@ -1258,7 +1275,7 @@ monotonically down.
      of `Sin^m/Cos^n` quotients), `E^(a x)` times circular or hyperbolic
      powers (the hyperbolic case guards the `a = n b` resonance), and
      polynomial × hyperbolic (`x^n Sinh/Cosh`, `x Sinh^m`, `x/Sinh^n = x Csch^n`).
-  13. `Integrate\`ParallelMixedTower[f, x]` — last resort: the parallel
+  13. `Integrate\`ParallelMixedTower[f, x]` — the parallel
      (Risch-Norman) integrator over a **simple radical in a mixed transcendental
      tower** (S. Blake, *Parallel Integration over Simple Radical Extensions II:
      Mixed Towers*), a Wolfram-language package
@@ -1276,7 +1293,13 @@ monotonically down.
      rather than escaping as a wrong answer.  A non-elementary case, a
      not-yet-ported case, or a run exceeding an internal wall-clock budget all
      decline cleanly (never a wrong answer, never an unbounded hang).
-     Cascade-gated to skip pure rational functions (BronsteinRational's job).
+     Cascade-gated to skip pure rational functions (BronsteinRational's job)
+     and, as of v0.191, pseudo-elliptic `F/R^p` integrands (a fractional power
+     of a degree-≥3 polynomial), which are the following Goursat stage's
+     exclusive domain and on which the tower search only grinds before declining.
+  14. `Integrate\`GoursatAlgebraic[f, x]` — runs **last** (moved here in v0.191;
+     described in full as item 7 above), the deterministic pseudo-elliptic
+     specialist that closes the `F/R^p` integrands the general stages leave.
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
   dispatches strictly to a single subroutine, with no fallback:

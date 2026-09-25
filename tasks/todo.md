@@ -1,4 +1,79 @@
-# ACTIVE (2026-09-25): Beat Maxima total (T1c→T1d) + A19 completeness
+# DONE (2026-09-25 pm): Book updates per book/BOOK_UPDATE_REVIEW.md ("everything" run)
+
+**COMPLETE.** All waves landed. `make examples` (197 transcripts), `make usage` (58 cards),
+`make check-links` (1300 uses, all resolve), `make pdf` (240 pages, 0 errors, no undefined
+refs/citations), Index regenerated (781 entries). Wave 2 (§4.3 Calculus+DSolve, §4.4 Linear
+Algebra, §4.7 Special Functions) and Wave 3 (Ch.6 Data Structures, Ch.7 Programming, Ch.9
+Data I/O, new §4.9 Geometry, new §4.10 Graphs) written by subagents, verified + integrated.
+Wave 4: 04-mathematics.tex wired the 2 new sections; ROADMAP statuses/scope updated; changelog
+note in docs/spec/changelog/2026-09-21.md; gen_usage.py ASCII-sanitize fix; site index
+regenerated. NO version bump (book prose = contributor/reader-facing docs). NOT committed
+(awaiting user). **Two kernel bugs surfaced (NOT fixed, out of scope):** Simplify[Laplacian[
+Sin[r^2],{r,t},"Polar"]]→wrong `4-4r^2`; DownValues renders evaluated not held.
+
+---
+
+# (superseded) ACTIVE (2026-09-25 pm): Book updates per book/BOOK_UPDATE_REVIEW.md ("everything" run)
+
+Bring the book current with Mathilda v0.113→v0.189 (anchor commit 8c4332ba). User chose the
+full run: UPDATE the Verified math sections + WRITE the stub sections from scratch + open new
+sections, all through the verified-example build (`make examples` → `\mtranscript`/`codepairs`,
+never a hand-typed `Out[]`), `make check-links` clean, `make pdf` clean. Book prose does NOT bump
+`$VersionNumber` (contributor/reader-facing docs, like SPEC.md prose). Changelog note in
+`docs/spec/changelog/2026-09-21.md`. Shared-file edits (ROADMAP.md, TheMathildaBook.tex structure,
+04-mathematics.tex \input lines, changelog, Index concepts) are done CENTRALLY (me), never by a
+drafting subagent — one owner per section .tex file.
+
+Wave 1 — UPDATE Verified chapters (me; also proves the build loop):
+- [x] §4.8 Statistics: added `Quantile`/`InterquartileRange`/`MeanDeviation`/`MedianDeviation` (new "Quantiles and robust spread" subsection + examples/statistics/quantile.m + Pitfall on estimator conventions + \usagebox{Quantile}). Transcript verified.
+- [x] §4.2 Algebra: number-field subsection (`ToNumberField`/`AlgebraicNumber*`/`NumberFieldIntegralBasis`/`AlgebraicIntegerQ`, \usagebox{ToNumberField}) — **FIXED the false "no AlgebraicNumber head" claim**; sparse-views subsection (`MonomialList`/`CoefficientRules`/`FromCoefficientRules`); division/ideal-membership subsection (`PolynomialReduce`); transcendental `Reduce` + `Simplify` over `Root`; `FactorSquareFreeList` mention. 4 new example files, all probe-verified.
+- [x] §4.5 Numerical Calculus: added Interpolation subsection (`Interpolation`/`ListInterpolation`) + examples. Probe-verified.
+- [x] §4.6 Number Theory: added `BitLength` to the Digits-and-bases subsection (only Bit* member so far). Probe-verified.
+- [x] Site index regenerated (site/generate.py) → builtins.json now 922 builtins incl. all post-anchor heads; §4.8 check-links passes. (Prereq for every campaign's \B{} links.)
+- [ ] Build gate 1: DEFERRED to the single integrated build after all drafting agents finish (global `make examples` races with in-progress `.m` files).
+
+Wave 2 — WRITE stub math sections from scratch (subagents, one file each):
+- [ ] §4.3 Calculus (D/Dt/Limit/Series/Residue/Integrate+Risch incl. ParallelMixedTower/Cherry/DiffUnderInt) + DSolve subsection
+- [ ] §4.4 Linear Algebra (vectors/matrices/Dot/Det/Inverse/decompositions incl. Jordan/Schur/LU/QR/SVD/eigen/ZeroTest/LinearSolve/packed)
+- [ ] §4.7 Special Functions (Gamma/Zeta/PolyGamma/Bessel/Airy/Erf/hypergeometric + LegendreQ)
+
+Wave 3 — WRITE system chapters + new sections (subagents):
+- [ ] Ch. 6 Data Structures (expressions/lists/associations/NDArray/packed + ArrayReshape/ArrayPad/ListGradient/FirstPosition/PackedArrayQ/ToPackedArray/ToNDArray)
+- [ ] Ch. 7 Programming (pattern matching/procedural/functional + Inactive/Activate)
+- [ ] Ch. 9 Data I/O (stream layer: Read/Open*/Write/WriteString/Close/Streams/StreamPosition/ReadList)
+- [ ] New §4.9 Computational Geometry (Area/Perimeter/RegionCentroid/RegionMember/ConvexHullRegion) + Bitwise (BitLength)
+- [ ] New Graphs section/chapter (StarGraph/FindVertexColoring/EdgeWeight/WeightedAdjacencyMatrix/weighted FindShortestPath+GraphDistance/RandomGraph)
+
+Wave 4 — integrate & finalize (me):
+- [ ] REVIEW behaviour-change prose (A1–A10 divergences, Function closure, Apart 2-arg) in §4.1/§4.2/Ch.3
+- [ ] Update ROADMAP.md statuses + scope (DSolve under §4.3; Jordan under §4.4; new geometry/graphs; Ch.9 caveat)
+- [ ] Regenerate Index concept `\index{}` entries; final `make pdf` clean
+- [ ] Changelog note in docs/spec/changelog/2026-09-21.md
+
+NOTE: NOT filling Ch.5 Graphics (needs figure-capture toolchain, deferred per ROADMAP), Ch.8 Compilation, Ch.10-13 (not in backlog).
+
+---
+
+# PAUSED (2026-09-25): mean-time push — user paused after v0.190
+
+**Status:** the Charlwood mean-time push is PAUSED. Banked this session: **v0.190** (c4c36046,
+tagged) native plain-Q `CoefficientRules` read-off (general ~27% win; Charlwood 23.7→22.7s, 48/50
+unchanged) + **a2e71ca2** dormant TowerCRE kernel. The Maxima gap (12.6s) is essentially untouched —
+each remaining lever is a large/uncertain restructure. **Resume pointers (per-case, `.m`-phase timed):**
+- **A1/A2/A3** — the confirmed lever is threading native polys (TowerCRE, `flint_polynomial_monomials`
+  pattern) through `AnsatzSystem`'s `parts` COLUMN CONSTRUCTION (`ParallelMixed.m` b_mono1/b_mono2,
+  ~2386–2405) so the Expand outputs aren't materialised+Orderless-sorted as Exprs. NOT the read-off
+  (v0.190 already did that; it didn't move A1). Large, uncertain payoff.
+- **A28** (3.2s) — algorithmic: reduce `VanishOrder` (~453) call count / per-call algebraic zero-test.
+  Two caching fixes FAILED (slower) — see [[project_charlwood_native_cre_build_m1_m2]].
+- **A27** (1.3s) — upstream in `ipim_main` (BuildTower/splitspecials), not pinned.
+Full diagnosis + lessons: memory [[project_charlwood_native_cre_build_m1_m2]],
+[[feedback_profile_dotm_phase_before_c_kernel]]. Full `dsolve_corpus_tests` = multi-hour; gate Q(i)
+with the `y'==(Cos x+1)/(2-Sin y)` case.
+
+---
+
+# (paused) 2026-09-25: Beat Maxima total (T1c→T1d) + A19 completeness
 
 Plan file: `~/.claude/plans/per-our-last-session-purring-rainbow.md`. Decisions: **mean-time
 first** (T1c → T1d → A19); **commit to beating Maxima's 12.6s total** (full native
@@ -528,3 +603,33 @@ A35/A40 over-complex conjugate-atom field (degree-8 RootReduce back; deep — se
 [[project_charlwood_a40_sunit_conjugate_degenerate]]); A3/A2 field-Expand + retry ladder. kback for
 A35 was tried and REVERTED (fast back but bloats the answer to a degree-8 Root-polynomial, downstream
 eats the savings).
+
+---
+
+## Integrate — move Goursat after ParallelMixedTower in the cascade (v0.191, 2026-09-25)
+
+**Task:** move the `Integrate`GoursatAlgebraic` stage after `ParallelMixedTower` in the Automatic cascade.
+
+**Plan:** (1) move the `try_goursat` call to run last (after `try_parallelmixedtower`) in the
+`METHOD_AUTOMATIC` block of `src/calculus/integrate.c`; (2) verify correctness; (3) verify perf.
+
+**What went sideways → re-plan (user chose "reorder + fix the grind"):** the literal reorder is
+correct (all tests pass) but exposed a pre-existing latent grind. With Goursat no longer short-
+circuiting pseudo-elliptic `F/R^p` integrands early, the *search* stages that now precede it grind
+for tens of seconds before declining. Bisected with depth-1 `clock()` stage markers on
+`(t-1)/((t+2)Sqrt[t^3-1])`: culprits were `try_linearity` (product-over-sum split into individually
+elliptic pieces), then `integrate_derivdivides_full`'s Eliminate/Solve search, then
+`ParallelMixedTower`'s tower search (45 s on the degree-4 `(t^4+2t^3-4)/(t^2 Sqrt[(t^2-1)(t^2-4)])`).
+
+**Landed:** one shared cheap gate `has_pseudoelliptic_radical(f,x)` (a fractional-power `Power[·,
+Rational]` node whose base is a degree-≥3 polynomial, via `Exponent`). Applied to: linearity's
+`times_has_plus_factor` branch (skip), `try_derivdivides` (route to direct-only
+`integrate_derivdivides_try`, preserving folds), and the *cascade* `try_parallelmixedtower` call
+(skip; explicit `Method` untouched). Degree-≤2 radicals (`Sqrt[quadratic]`) are deliberately not
+gated (their split pieces are elementary).
+
+**Verified:** period-3, cyclotomic sibling, and the degree-4 negative-descent case all went
+hang/45 s → ~0.07 s with identical answers; exponential-product control (`E^(-9x)(a E^(2x)-b E^(2x))`)
+still 0.003 s (linearity gate didn't harm it). 14 integrate test suites PASS (goursat, dispatch,
+derivdivides, parallelmixedtower, chebychev, linrad, quadrad, linratiorad, fresnel, jeffrey,
+risch_transcendental, symmetry, beta, unknown). Clean gcc-16 build. v0.191, docs + changelog updated.

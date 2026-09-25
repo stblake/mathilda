@@ -202,13 +202,28 @@ static Expr* try_rational(Expr* f, Expr* x) {
     return result;
 }
 
+/* True for a pseudo-elliptic F/R^p integrand (Sqrt/odd-root of a degree>=3
+ * polynomial) -- Goursat's domain.  Defined with the linearity helpers below;
+ * forward-declared here for the derivative-divides gate. */
+static bool has_pseudoelliptic_radical(const Expr* e, const Expr* x);
+
 /* Stage 1b: derivative-divides substitution.  Recognises integrands of the
  * shape c h(u(x)) u'(x) and reduces to Integrate[h[u], u].  Runs the fast,
  * branch-correct direct-quotient strategy first and then the more thorough
  * Eliminate/Solve branch-search (which closes radical substitutions such as
  * u = Sqrt[Tan[x]]); the latter's Eliminate diagnostics are muted while the
- * integrator drives it (see integrate_derivdivides.c). */
+ * integrator drives it (see integrate_derivdivides.c).
+ *
+ * A pseudo-elliptic F/R^p integrand (R a degree>=3 polynomial) is Goursat's
+ * domain, not derivative-divides': the Eliminate/Solve branch-search grinds
+ * for seconds on such a radicand (e.g. (t-1)/((t+2) Sqrt[t^3-1])) and closes
+ * nothing.  For those, run the cheap direct-quotient strategy only
+ * (integrate_derivdivides_try) -- it still catches the genuine folds like
+ * t^2/(t^3-1)^(1/3) via Pass 1 -- and leave the intact integrand for the
+ * Goursat stage.  Non-pseudo-elliptic integrands keep the full search. */
 static Expr* try_derivdivides(Expr* f, Expr* x) {
+    if (has_pseudoelliptic_radical(f, x))
+        return integrate_derivdivides_try(f, x);
     return integrate_derivdivides_full(f, x);
 }
 
@@ -344,6 +359,44 @@ static bool times_has_plus_factor(const Expr* f) {
     return false;
 }
 
+/* Exponent[poly, x] as a long, or -1 when it is not a non-negative machine
+ * integer (poly not polynomial in x, or Exponent left unevaluated).  Borrows
+ * both arguments; the caller keeps ownership. */
+static long poly_degree_in(const Expr* poly, const Expr* x) {
+    Expr* call = expr_new_function(expr_new_symbol("Exponent"),
+                                   (Expr*[]){ expr_copy((Expr*)poly),
+                                              expr_copy((Expr*)x) }, 2);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    long d = -1;
+    if (r && r->type == EXPR_INTEGER && r->data.integer >= 0)
+        d = (long)r->data.integer;
+    if (r) expr_free(r);
+    return d;
+}
+
+/* True if `e` contains a radical Power[base, r], r a non-integer rational
+ * (head Rational), whose base is a polynomial of degree >= 3 in x -- the
+ * pseudo-elliptic F(x)/R(x)^p shape (Goursat's domain, p in
+ * {1/2,1/3,2/3,1/4,3/4}).  Distributing such an integrand over a Plus shreds
+ * the shared radical into pieces that are individually non-elementary
+ * (elliptic), each of which then grinds through the whole-integrand cascade
+ * -- ParallelMixedTower especially -- before linearity's all-terms-close
+ * guard rejects the split.  Radicals of a degree<=2 radicand (Sqrt[quadratic]
+ * -> ArcSin/ArcTanh/Log) yield elementary pieces and split cleanly, so they
+ * are deliberately NOT flagged. */
+static bool has_pseudoelliptic_radical(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2
+        && head_is(e->data.function.args[1], SYM_Rational)
+        && poly_degree_in(e->data.function.args[0], x) >= 3)
+        return true;
+    if (has_pseudoelliptic_radical(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_pseudoelliptic_radical(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 static Expr* try_linearity(Expr* f, Expr* x) {
     Expr* target = NULL;                 /* a Plus we own (or borrow from f) */
     Expr* owned  = NULL;                 /* non-NULL when we built `target` */
@@ -357,7 +410,8 @@ static Expr* try_linearity(Expr* f, Expr* x) {
         if (g && head_is(g, SYM_Plus) && g->data.function.arg_count >= 2) {
             target = g; owned = g;
         } else { if (g) expr_free(g); return NULL; }
-    } else if (times_has_plus_factor(f) && node_count_capped(f, 256) < 256) {
+    } else if (times_has_plus_factor(f) && !has_pseudoelliptic_radical(f, x)
+               && node_count_capped(f, 256) < 256) {
         /* Distribute a product over a sum factor: Integrate is linear, so
          * c (g + h) -> c g + c h, integrated term-by-term.  This is what combines
          * an exponential product such as E^{-9x}(a E^{2x} - b E^{2x}) into the
@@ -370,7 +424,12 @@ static Expr* try_linearity(Expr* f, Expr* x) {
          * radical products.  The commit-only-if-every-term-closes guard below
          * leaves a product whose distributed pieces are individually
          * non-elementary on the whole-integrand cascade, so no sum that is
-         * elementary only as a whole is lost. */
+         * elementary only as a whole is lost.  The has_pseudoelliptic_radical
+         * gate above additionally skips a product sharing a Sqrt/odd-root of a
+         * degree>=3 polynomial (Goursat's pseudo-elliptic F/R^p domain):
+         * distributing there manufactures individually non-elementary elliptic
+         * pieces that each grind through PMT before the guard rejects the
+         * split, so the integrand is left intact for the Goursat stage. */
         Expr* g = apply1_eval("Expand", f);
         if (g && head_is(g, SYM_Plus) && g->data.function.arg_count >= 2) {
             target = g; owned = g;
@@ -1264,11 +1323,6 @@ Expr* builtin_integrate(Expr* res) {
              * rationalising substitution that closes (correct by construction),
              * so it runs ahead of the Eliminate/Solve search and Risch-Norman. */
             if (!result) result = try_chebychev(effective_f, x);
-            /* Goursat pseudo-elliptic (and cube-/fourth-root) reductions:
-             * deterministic, correct-by-construction descents to genus-0
-             * curves, so they run ahead of the Eliminate/Solve search and
-             * Risch-Norman. */
-            if (!result) result = try_goursat(effective_f, x);
             /* Fresnel: K Sin/Cos of a quadratic -> FresnelS/FresnelC by completing
              * the square (the trig sibling of the Gaussian -> Erf recognizer),
              * deterministic and diff-back verified. */
@@ -1293,11 +1347,31 @@ Expr* builtin_integrate(Expr* res) {
              * ParallelMixedTower stage below subsumes both. */
             if (!result) result = try_rischtranscendental(effective_f, x);
             if (!result) result = try_crctable(effective_f, x);
-            /* Last resort: the parallel Risch-Norman integrator over a mixed
-             * tower.  After the CRC table so a tabled integral is answered
-             * cleanly and cheaply rather than paying this stage's package load
-             * and search on every case the table already covers. */
-            if (!result) result = try_parallelmixedtower(effective_f, x);
+            /* The parallel Risch-Norman integrator over a mixed tower.  After
+             * the CRC table so a tabled integral is answered cleanly and
+             * cheaply rather than paying this stage's package load and search
+             * on every case the table already covers.  Skipped for a pseudo-
+             * elliptic F/R^p integrand (Goursat's exclusive domain): PMT's
+             * tower search over that genus>0 algebraic curve only grinds --
+             * tens of seconds before declining (e.g. 45s on
+             * (t^4+2t^3-4)/(t^2 Sqrt[(t^2-1)(t^2-4)])) -- and closes nothing,
+             * so the integrand goes straight to the Goursat stage that does.
+             * The explicit Method -> "ParallelMixedTower" is unaffected. */
+            if (!result && !has_pseudoelliptic_radical(effective_f, x))
+                result = try_parallelmixedtower(effective_f, x);
+            /* Goursat pseudo-elliptic (and cube-/fourth-root) reductions to
+             * genus-0 curves.  Runs last, after ParallelMixedTower: it is a
+             * specialist for pseudo-elliptic F/R^p (p in {1/2,1/3,2/3,1/4,3/4})
+             * that the general methods above do not close, so every earlier
+             * stage gets first crack at any integrand it also handles.  (The
+             * grind-prone search stages -- linearity's product-split,
+             * derivative-divides' Eliminate/Solve, and PMT's tower search --
+             * are gated off above for exactly this F/R^p shape, on which they
+             * only spin before declining, so such an integrand reaches this
+             * stage promptly.)  Still correct-by-construction (an internal
+             * differentiate-back guard), so a decline here leaves the integral
+             * unevaluated rather than wrong. */
+            if (!result) result = try_goursat(effective_f, x);
             break;
         case METHOD_RATIONAL:
             result = try_rational(effective_f, x);
