@@ -238,6 +238,46 @@
   }%
 }
 
+% ----------------------------------------------------- bytecode listings ---
+% \compileprint{path}: show the bytecode a CompiledFunction disassembles to,
+% i.e. the output of CompilePrint. That output is written to the terminal (a raw
+% stdout write) and is NOT carried on the In[]/Out[] pipe build_examples.py reads,
+% so book/tools/gen_compileprint.py captures it from the real binary into
+% generated/compileprint/<path>.txt; this box renders it verbatim. The listing is
+% still produced by the binary at build time -- the verified-example promise holds.
+% Fixed columns keep the operand table aligned; breaklines wraps the one or two
+% long "readable rendering" lines with the usual continuation marker.
+\lstdefinestyle{mathildabytecode}{%
+  basicstyle=\scriptsize\ttfamily,
+  breaklines=true,
+  breakatwhitespace=true,
+  breakindent=0pt,
+  breakautoindent=false,
+  postbreak=\mbox{\textcolor{mReplRule}{$\hookrightarrow$}\space},
+  columns=fixed,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=none,
+  aboveskip=2pt,
+  belowskip=0pt,
+  xleftmargin=0pt}
+\newcommand{\compileprint}[1]{%
+  \IfFileExists{generated/compileprint/#1.txt}{%
+    \par\addvspace{\medskipamount}%
+    \begin{tcolorbox}[enhanced, breakable, colback=black!2, colframe=black!45,
+      boxrule=0.4pt, left=7pt, right=7pt, top=4pt, bottom=5pt,
+      colbacktitle=black!7, coltitle=black, fonttitle=\bfseries,
+      title={\normalfont\footnotesize\ttfamily CompilePrint}]
+      \lstinputlisting[style=mathildabytecode]{generated/compileprint/#1.txt}%
+    \end{tcolorbox}%
+    \par\addvspace{\medskipamount}%
+  }{%
+    \begin{tcolorbox}[colback=red!5,colframe=red!60!black,boxrule=0.4pt]
+      \small\ttfamily [\,bytecode ``#1'' not generated --- run \textup{make compileprint}\,]
+    \end{tcolorbox}%
+  }%
+}
+
 % -------------------------------------------------------- callout footnotes ---
 % Theory / Under the hood / Pitfall asides are set as ordinary (uncoloured)
 % footnotes with an italic run-in label, anchored to the sentence they annotate,

@@ -1118,6 +1118,26 @@ void test_cf_runtime_options(void) {
     /* Turning it off must not change any result that FITS. */
     assert_eval_eq("Compile[{{a, _Integer}}, a*a, RuntimeOptions -> \"Speed\"][7]", "49", 0);
 
+    /* POWI_I under wrap (regression, v0.195).  ci_powi returned true on overflow
+     * WITHOUT writing the destination, so wrap mode used an unwritten register:
+     * the result was non-deterministic (stack garbage on a cold frame) and could
+     * leak a prior call's value (cf[3000000] after cf[1000] returned 1000^3).  The
+     * fixed helper writes the true modular power either way. */
+    assert_eval_eq("Compile[{{n, _Integer}}, n^3, RuntimeOptions -> \"Speed\"][3000000]",
+                   "8553255926290448384", 0);                       /* == 3000000^3 mod 2^64 */
+    assert_eval_eq("Mod[Compile[{{n, _Integer}}, n^3, RuntimeOptions -> \"Speed\"][3000000], "
+                   "2^64] == Mod[3000000^3, 2^64]", "True", 0);
+    /* No stale-state leak: an overflowing call after a fitting one must NOT return
+     * the fitting call's value.  Same object, both call orders. */
+    assert_eval_eq("With[{cf = Compile[{{n, _Integer}}, n^3, RuntimeOptions -> \"Speed\"]}, "
+                   "{cf[1000], cf[3000000]}]", "{1000000000, 8553255926290448384}", 0);
+    /* Wrap must not change a POWI_I result that FITS. */
+    assert_eval_eq("Compile[{{n, _Integer}}, n^3, RuntimeOptions -> \"Speed\"][100]", "1000000", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, n^3, RuntimeOptions -> \"Speed\"][2000000] "
+                   "=== 2000000^3", "False", 0);                    /* overflows -> wraps, != exact */
+    /* And the DEFAULT (checked) POWI_I is untouched by the fix: exact via bignum. */
+    assert_eval_eq("Compile[{{n, _Integer}}, n^3][3000000] === 3000000^3", "True", 0);
+
     /* Composes with the other option, in either order. */
     assert_eval_eq("Compile[{{a, _Integer}}, a*a, RuntimeOptions -> \"Speed\", "
                    "RuntimeAttributes -> Listable][{3, 4}]", "{9, 16}", 0);

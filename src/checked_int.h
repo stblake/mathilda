@@ -97,16 +97,23 @@ static inline bool ci_abs(long long a, long long* out) {
  * a Rational in the interpreter and is rejected before reaching here. */
 static inline bool ci_powi(long long b, long long n, long long* out) {
     long long r = 1;
+    bool ovf = false;
     while (n > 0) {
-        if (n & 1) { if (ci_mul(r, b, &r)) return true; }
+        /* Accumulate the WRAPPED product on every step and OR the overflow flag,
+         * never returning early: the contract is to write *out either way (ci_mul
+         * writes the wrapped product even on overflow), so a caller in wrap mode
+         * ("Speed" / CatchMachineIntegerOverflow -> False) gets the true modular
+         * result instead of an unwritten register.  The returned flag is still
+         * true iff some step overflowed, so the checked path is unchanged. */
+        if (n & 1) ovf |= ci_mul(r, b, &r);
         n >>= 1;
         /* Squaring on the final round is dead work, and squaring a large base
          * is exactly where a spurious overflow would be reported for a result
-         * that fits. */
-        if (n > 0 && ci_mul(b, b, &b)) return true;
+         * that fits — so only square while another round remains. */
+        if (n > 0) ovf |= ci_mul(b, b, &b);
     }
     *out = r;
-    return false;
+    return ovf;
 }
 
 /* ------------------------------------------------------------------ *
@@ -158,16 +165,19 @@ static inline bool ci_abs_i64(int64_t a, int64_t* out) {
 }
 static inline bool ci_powi_i64(int64_t b, int64_t n, int64_t* out) {
     int64_t r = 1;
+    bool ovf = false;
     while (n > 0) {
-        if (n & 1) { if (ci_mul_i64(r, b, &r)) return true; }
+        /* Accumulate the wrapped product and OR the overflow flag rather than
+         * returning early — the same write-*out-either-way contract as ci_powi. */
+        if (n & 1) ovf |= ci_mul_i64(r, b, &r);
         n >>= 1;
         /* Squaring on the final round is dead work, and squaring a large base
          * is exactly where a spurious overflow would be reported for a result
-         * that fits. */
-        if (n > 0 && ci_mul_i64(b, b, &b)) return true;
+         * that fits — so only square while another round remains. */
+        if (n > 0) ovf |= ci_mul_i64(b, b, &b);
     }
     *out = r;
-    return false;
+    return ovf;
 }
 
 /* True when `v` is exactly representable as a double, i.e. |v| <= 2^53.  The

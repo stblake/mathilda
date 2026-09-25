@@ -1,5 +1,391 @@
 \chapter{Compilation and the Compiler}
 \label{ch:compilation}
 
-\emph{This chapter is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+Everything you have done so far has gone through the evaluator: you type an
+expression, Mathilda rewrites it until it stops changing, and prints the result.
+That machine is wonderfully general---it will happily add a symbol to a bignum,
+thread a function over a ragged list, or apply a rule you wrote a moment ago---but
+generality has a price. To evaluate \(x^2 + 1\) at a single machine number, the
+evaluator still walks a tree, reads attributes, checks for rules, and dispatches
+on the head at every node, allocating and freeing expression objects as it goes.
+For one evaluation that cost is invisible. Inside a loop that runs a million
+times over plain \texttt{double}s, it is almost all of the running time.
+
+This chapter is about the other gear. \B{Compile} takes a numeric expression and
+lowers it, once, to typed \emph{bytecode}\index{compilation!bytecode}---a short
+program of monomorphic instructions run by a small register machine that never
+allocates an expression, never consults the symbol table, and never asks what
+type a value has, because the types were all settled at compile time. The answer
+is exactly the evaluator's; the speed is eight to several hundred times
+greater\index{Compile!performance}. The same machine runs quietly behind
+\B{Table}, \B{Plot}, \B{NIntegrate} and \B{Nest} without your asking, a feature
+called \emph{auto-compilation}\index{auto-compilation} that this chapter also
+takes apart and shows you how to switch off.
+
+A word to prevent one confusion. This is the \mcode{Compile} \emph{builtin}---a
+tool inside the running system---not the business of compiling Mathilda itself
+from C source, which is Chapter~\ref{ch:building}. Here nothing touches a C
+compiler; the ``compiler'' is a component of the evaluator, and its target is a
+bytecode of its own.
+
+\section{From an expression tree to bytecode}
+\label{sec:compile-basics}
+
+\B{Compile} takes two arguments: a list of parameters and a body to evaluate over
+them. The result is a \mcode{CompiledFunction}, an opaque object you call exactly
+like any function.
+
+\begin{codepairs}
+\pair{08-compilation/basics/1}{\B{Compile} holds its arguments and returns a
+\texttt{CompiledFunction}---the body is not evaluated symbolically, it is
+\emph{compiled}. It echoes showing its parameters and the source body.}
+\pair{08-compilation/basics/2}{Bind it to a name and it behaves like a function.
+Here the parameter is declared \mcode{\{x, \_Real\}}: a machine real.}
+\pair{08-compilation/basics/3}{Called on a real, it runs the bytecode and returns
+a machine real.}
+\pair{08-compilation/basics/4}{An exact integer argument is accepted and coerced
+to the declared type---\(3\) enters as \(3.0\), so the result is \(10.0\).}
+\pair{08-compilation/basics/5}{Parameters can be typed \mcode{\_Integer} \dots}
+\pair{08-compilation/basics/6}{\dots or \mcode{\_Complex}; the compiler emits
+integer or complex opcodes accordingly.}
+\pair{08-compilation/basics/7}{And when an argument is \emph{not} a machine
+number, the compiled function quietly hands the work back to the evaluator: a
+symbolic \(y\) gives the ordinary symbolic answer. Compilation is an
+optimisation, never a restriction on what you may pass.}
+\end{codepairs}
+
+The parameter list is the compiler's type declaration. A bare symbol means a
+machine real; \mcode{\{x, \_Real\}}, \mcode{\{n, \_Integer\}}, and
+\mcode{\{z, \_Complex\}} name the three scalar types explicitly; and a third
+entry gives an \emph{array} rank, so \mcode{\{v, \_Real, 1\}} is a rank-1 vector
+of reals and \mcode{\{m, \_Real, 2\}} a matrix (\S\ref{sec:compile-arrays}). Every
+downstream instruction is chosen from these declared types, which is why the
+compiler must know them up front.
+
+\usagebox{Compile}
+
+That last row of the example is the single most important thing to understand
+about \mcode{Compile}: its \emph{fallback contract}\index{Compile!interpreter
+fallback}. A \texttt{CompiledFunction} always agrees with the evaluator. If you
+hand it an argument it cannot represent as a machine number, or if the body uses
+something the compiler cannot lower (\S\ref{sec:compile-cliff}), it does not fail
+and it does not lie---it re-runs the expression through the interpreter and
+returns that. You never trade correctness for speed; at worst you fail to gain
+the speed.
+
+\section{What the compiler produces}
+\label{sec:compile-bytecode}
+
+The best way to see what compilation \emph{is} is to look at what it produces.
+\B{CompilePrint} disassembles a compiled function and writes its bytecode to the
+terminal:
+
+\compileprint{08-compilation/scalar}
+
+Read it from the top. The \emph{signature} records the parameter types and the
+source body. Then three \emph{registers}: \texttt{R0} holds the argument, the
+result comes back in \texttt{R1}, and one scratch register was enough. Then eight
+instructions. Each is \emph{monomorphic}\index{compilation!monomorphic opcodes}:
+\texttt{ADD\_RK} is ``add a real constant \(K\) to a real register,''
+\texttt{MUL\_R} is ``multiply two real registers.'' There is no run-time test of
+what type the operands are, because the answer was fixed when the program was
+built---that erasure of per-node type dispatch is the whole source of the
+speed-up. Notice too that Horner's nested form fell straight out of the source:
+the compiler folded each numeric coefficient into an \emph{immediate} operand
+(the \(K\) in \texttt{ADD\_RK}) rather than loading it from a register. The
+program ends, as every compiled program does, with \texttt{RET}.
+
+Not every body is straight-line. Control flow compiles to
+jumps\index{compilation!control flow}: a conditional becomes a compare into a
+Boolean register and a \emph{jump-if-zero} (\texttt{JZ}) around the branch not
+taken, with the jump targets marked \texttt{>}.
+
+\compileprint{08-compilation/branch}
+
+And a counted loop compiles to a single back-edge---here \texttt{LOOP}, over
+\emph{integer} opcodes (\texttt{POWI\_I}, \texttt{ADD\_I}), because every value in
+this body is an integer and the ``all-Real fast path'' note is absent:
+
+\compileprint{08-compilation/loop}
+
+\calloutnote{Under the hood}{The register machine is a threaded-code interpreter:
+on GCC and Clang each opcode's handler ends by computing the address of the next
+handler and jumping straight to it (a computed \texttt{goto}), so there is no
+per-instruction \texttt{switch}. Registers are a flat array of 16-byte slots on
+the C stack, banked into scalar, array and ``tile'' regions, so a scalar program
+allocates nothing at all per call. Elementary and special functions
+(\texttt{Sin}, \texttt{Gamma}, \texttt{Erf}, \dots) do not each get their own
+opcode; they share a \texttt{KERN} instruction that carries a pointer to the same
+machine kernel the packed-array code uses (\S\ref{sec:ds-packed}), so a new
+special function becomes compilable for free.}
+
+You do not usually need the disassembly. What you do need, often, is a quick
+answer to ``did this body actually compile, and to what?''---and for that there
+is \B{CompileDiagnostics}, which type-checks a body without building the object
+and reports what it found:
+
+\begin{codepairs}
+\pair{08-compilation/diagnostics/1}{The result type is \texttt{Real}; the
+optimised program is three instructions, down from five before the optimiser
+(constant folding, common-subexpression elimination and dead-code removal run on
+the bytecode).}
+\pair{08-compilation/diagnostics/2}{A trigonometric identity the compiler does
+\emph{not} know: it dutifully computes both \(\sin^2\) and \(\cos^2\) in six
+instructions rather than returning \(1\). The compiler is a lowering, not a
+simplifier---simplify first, then compile.}
+\pair{08-compilation/diagnostics/3}{Array reductions compile too:
+\(\mathtt{Total}[v] + \mathtt{Max}[v]\) over a real vector is twelve
+instructions, all machine code.}
+\end{codepairs}
+
+\usagebox{CompileDiagnostics}
+\usagebox{CompilePrint}
+
+\section{How fast? Compiled against the tree}
+\label{sec:compile-speed}
+
+Numbers make the case. Here is one polynomial body run over a million points two
+ways: once as a \texttt{CompiledFunction}, and once as an ordinary definition
+\mcode{treePoly[x\_] := \dots} that the evaluator must rewrite node by node. We
+time each with \B{AbsoluteTiming}, which reports elapsed wall-clock seconds, and
+take the ratio:
+
+\mtranscript{08-compilation/speed-scalar}
+
+\noindent The compiled loop is more than ten times faster here, for identical
+output. (The exact ratio is re-measured every time this book is built and depends
+on the machine; it is the \emph{order} of the thing that is stable.)
+
+\calloutnote{Pitfall}{Measure with \B{AbsoluteTiming} (wall-clock), not \B{Timing}
+(CPU seconds \emph{summed over threads}): a compiled array kernel that uses
+several cores can report a \mcode{Timing} larger than the wall-clock time it
+actually took, which reads backwards. And time distinct expressions, or discard a
+warm-up run: the first evaluation of anything pays one-off costs (compilation
+itself, cold caches) that a fair comparison should not count.}
+
+How does that hold up against a mature numerical stack? The table below pits
+Mathilda's compiled kernels against Python---vectorised NumPy where a vectorised
+form exists, a plain CPython loop where one does not\calloutnote{Performance}{From
+\texttt{docs/design/performance.md}, measured 2026-07-30 on an Intel Core
+i9-9880H with NumPy 2.4.4 / SciPy 1.17.1 on CPython 3.11 (both linked against
+Apple Accelerate). Lennard-Jones, Mandelbrot and Monte~Carlo are vectorised NumPy
+and are genuine library comparisons; the logistic map has no vectorised form
+(numba was not installed), so its row is ``what a Python user without a JIT
+measures,'' not a library result.}:
+
+\begin{center}
+\begin{tabular}{lrr}
+\hline
+Benchmark & Mathilda & Python / NumPy \\
+\hline
+Lennard-Jones energy, 1452 bodies (all pairs) & 133.19 ms & 91.25 ms \\
+Mandelbrot, \(800\times800\), 100 iterations & 769.23 ms & 980.20 ms \\
+Monte Carlo \(\pi\), \(10^{7}\) samples (vectorised) & 162.36 ms & 204.53 ms \\
+Logistic map, \(10^{7}\) iterations & 183.76 ms & 460.57 ms \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Mathilda's compiled code wins three of the four rows and is close on the
+fourth. It is worth being precise about that fourth: Lennard-Jones is where
+NumPy's vectorised all-pairs form, running a hand-tuned C loop under one Python
+call, comes out ahead---91~ms against 133. That is the honest shape of it. Where
+the work is a genuine scalar recurrence with no array form, such as the logistic
+map, the gap the other way is largest, because that is exactly the case a
+vectorised library cannot help with and a bytecode VM can.
+
+\section{The compilable subset is a cliff}
+\label{sec:compile-cliff}
+
+The compiler does not handle every function---and the way it fails is the single
+most important operational fact in this chapter. The compilable
+subset\index{compilation!compilable subset} is a \emph{cliff, not a slope}: if
+\emph{one} head anywhere in the body cannot be lowered, the \emph{whole} body
+falls back to the interpreter. Not the offending sub-expression---all of it. And
+because the fallback is silent and gives the right answer, nothing tells you it
+happened except the clock.
+
+\B{CompileDiagnostics} is how you see the edge of the cliff. Give it the argument
+types and a body, and it tells you whether the body compiles and, if not, the
+exact innermost sub-expression that stopped it:
+
+\begin{codepairs}
+\pair{08-compilation/cliff/1}{\(\mathtt{Sin}[x] + \mathtt{Gamma}[x]\) compiles:
+both heads have machine kernels.}
+\pair{08-compilation/cliff/2}{Replace \texttt{Gamma} with \B{BarnesG}, which has
+no machine kernel, and the whole body is rejected---the report names
+\texttt{BarnesG[x]} as the culprit even though \(\sin\) beside it was perfectly
+compilable.}
+\pair{08-compilation/cliff/3}{The same over arrays: \B{Total} lowers, but
+\B{Riffle} does not, so \(\mathtt{Total}[\mathtt{Riffle}[v, 0.]]\) does not
+compile at all.}
+\pair{08-compilation/cliff/4}{And an integer body: \B{MoebiusMu} has no machine
+lowering, so it sinks the sum with \B{EulerPhi} regardless of the latter.}
+\end{codepairs}
+
+The lesson is a workflow. When a numeric loop is slower than you expected, do not
+guess---ask \mcode{CompileDiagnostics} whether the body even compiled, fix or
+remove the one head it names, and ask again. The reward for staying on the subset
+is total; the penalty for stepping off it, by one head, is also total.
+
+\calloutnote{Under the hood}{Which heads are on the subset is not a fixed list but
+a moving frontier, and it is guarded. A build-time audit,
+\texttt{make check-compile-coverage}, cross-checks every head that has a fast
+numeric path in the interpreter against whether it also compiles, and fails the
+build if a newly-added numeric builtin forgets its compiled lowering---so the
+cliff can only ever recede. When an auto-compiled builtin
+(\S\ref{sec:compile-auto}) falls back, setting the environment variable
+\texttt{MATHILDA\_COMPILE\_DIAG=1} makes it name the head that forced it, on
+standard error.}
+
+\section{Auto-compilation}
+\label{sec:compile-auto}
+
+Most of the time the compiler works for you without being asked. When you write a
+\B{Table} over a real range, or a \B{Plot}, or an \B{NIntegrate}, or a \B{Nest}
+with a machine-number seed, Mathilda tries to compile the body once and run the
+compiled form at every sample point or iteration. This is \emph{auto-compilation},
+and it is why numeric work in Mathilda is fast without a single call to
+\mcode{Compile} in sight.
+
+The one switch that governs it is \B{\$AutoCompilation}\index{auto-compilation}.
+It is \texttt{True} by default; set it to \texttt{False} and every such body goes
+through the interpreter instead. Because a compiled body is contracted to give the
+interpreter's answer, the switch changes speed and \emph{nothing else}---which is
+exactly what makes it useful for measuring the effect. The session below turns it
+off and on around the same \B{Table}, confirms the result is byte-for-byte the
+same either way, and then times a million-step logistic-map iteration each way:
+
+\mtranscript{08-compilation/autocompile}
+
+\noindent The two tables (\texttt{r1} and \texttt{r2}) are equal: the switch is a
+pure performance control, never a semantic one. The final ratio---dozens to
+one---is the interpreter tax that auto-compilation removes from the
+\(3.5\,x(1-x)\) recurrence. (As before, the exact figure is re-measured on each
+build; its order is the point.)
+
+Two mechanisms hide behind the one switch. An \emph{adapter} compiles a held body
+once and reuses it across many sample points---this is what \B{Table}, \B{Plot},
+\B{Plot3D}, \B{NIntegrate}, \B{NSum}, \B{Sum}, \B{Product} and \B{FindRoot} use.
+A separate \emph{loop compiler} handles the bodies of \B{Do}, \B{While},
+\B{Nest}, \B{Fold}, \B{Map} and their kin. Both are gated by the same
+\mcode{\$AutoCompilation} flag, and both are conservative in the same way: an
+exact-integer \mcode{Table} iterator such as \mcode{\{i, 1, n\}} is left to the
+interpreter, because exactness must be preserved, while an inexact one like
+\mcode{\{i, 1., n\}} is fair game.
+
+\calloutnote{Pitfall}{Auto-compilation never wraps a machine integer
+(\S\ref{sec:compile-precision}): you did not ask it to compile anything, so it may
+not turn a transparent speed-up into a silently different answer. If an
+auto-compiled integer computation would overflow, it abandons the compiled run and
+lets the interpreter promote to a bignum---the safe default is not negotiable
+behind your back.}
+
+\section{Arrays, packing, and fusion}
+\label{sec:compile-arrays}
+
+A parameter with a rank compiles to code that operates on a whole array in one
+call. Declare \mcode{\{u, \_Real, 1\}} and the body is compiled to run over the
+backing buffer of a packed array (\S\ref{sec:ds-packed}), start to finish, with no
+per-element expression ever built:
+
+\mtranscript{08-compilation/arrays}
+
+\noindent The result of a million-element call is itself a packed array
+(\B{NDArrayQ} confirms it), ready to feed the next operation without unpacking.
+
+What makes the array path fast is worth stating precisely, because it is not what
+one first assumes. Look again at the disassembly of exactly this body:
+
+\compileprint{08-compilation/array}
+
+\noindent The element-wise chain \(u^2 + 1\) was \emph{fused}\index{compilation!fusion}
+into a single strip-mined pass: one parallel loop (\texttt{APAR}) walks the buffer
+in 64-wide tiles, and within each tile the square and the add happen on tile
+registers (\texttt{VPOWI\_R}, \texttt{VADD\_R}) before the result is written back
+(\texttt{VSTORE\_R}). There is no intermediate array holding \(u^2\). Array speed
+in Mathilda does not come from ``removing interpretation''---the packed
+interpreter is already fast, because it too calls machine kernels
+(\S\ref{sec:ds-packed}). It comes from \emph{removing per-element dispatch and
+intermediate buffers}, which is why compiling a length-16 vector barely helps
+while compiling a long one, or a longer chain of operations, helps a great deal.
+
+\calloutnote{Performance}{This is the same lesson the packed-array chapter
+teaches from the other side. Packing decides whether the data is a dense buffer at
+all; compilation, and the fusion it enables, decides how few passes over that
+buffer the arithmetic takes. The two compose: a compiled body over packed
+arguments is the fast path, and it is the one \B{Table}, \B{Plot} and the numeric
+solvers of Chapter~\ref{ch:datastructures}'s sequel put you on automatically.}
+
+\section{Machine integers and arbitrary precision}
+\label{sec:compile-precision}
+
+By default the compiler's integers are machine \texttt{int64}s and its reals are
+machine \texttt{double}s---that is the point, and it is what makes the code fast.
+But two questions follow immediately: what happens when a machine integer
+overflows, and what if machine precision is not enough? Mathilda has a careful
+answer to each.
+
+\begin{codepairs}
+\pair{08-compilation/precision/1}{\(3000000^3\) is far past the \texttt{int64}
+range. The compiled code detects the overflow, abandons the call, and the
+interpreter re-runs it and promotes to a bignum \dots}
+\pair{08-compilation/precision/2}{\dots giving exactly the interpreter's answer.
+Overflow is caught, never wrapped: the compiled result is always the true one.}
+\pair{08-compilation/precision/3}{For more digits than a \texttt{double} holds,
+\mcode{WorkingPrecision -> n} compiles the arithmetic in extended precision (MPFR)
+at \(n\) digits---here \(\sqrt{2}\) to forty \dots}
+\pair{08-compilation/precision/4}{\dots identical to what the interpreter computes
+at the same precision.}
+\pair{08-compilation/precision/5}{The diagnostics confirm the result type is now
+\texttt{MPFRReal}, not \texttt{Real}.}
+\pair{08-compilation/precision/6}{Alternatively \mcode{"BigIntegers" -> True}
+keeps integer arithmetic exact (GMP) \emph{inside} the compiled code, so the cube
+stays compiled and correct rather than bailing out on overflow \dots}
+\pair{08-compilation/precision/7}{\dots with result type \texttt{BigInteger}.}
+\end{codepairs}
+
+There is a third mode, for the rare case where you know your integers stay within
+range and want to skip even the overflow check: \mcode{RuntimeOptions -> "Speed"}.
+It removes the per-operation check, so an overflowing result is left wrapped
+modulo \(2^{64}\) instead of being promoted:
+
+\begin{codepairs}
+\pair{08-compilation/precision/8}{The same cube, now in \texttt{"Speed"} mode: no
+promotion, so the answer is the low 64 bits of the true result---a different, and
+here plainly wrong, number.}
+\pair{08-compilation/precision/9}{Which is exactly \(3000000^3 \bmod 2^{64}\): the
+machine word has simply wrapped.}
+\end{codepairs}
+
+\noindent This is the one place in the chapter where the compiled answer is
+\emph{not} contracted to the true one, and it is off by default for that reason.
+Reach for it only when you have measured that the check matters and proven that
+your values cannot overflow.
+
+\calloutnote{Under the hood}{The extended-precision modes are deliberately narrow:
+\mcode{WorkingPrecision} and \mcode{"BigIntegers"} cover straight-line arithmetic
+and the elementary functions on scalars---enough for the sample-point bodies the
+numeric solvers of \S\ref{sec:numcalc} compile at high precision---but not arrays
+or control flow, which stay on the machine path. The machine path itself is
+untouched by these options: switch them off and the bytecode is identical to the
+last byte.}
+
+\section{When to compile}
+\label{sec:compile-when}
+
+The rule of thumb is short. If a numeric expression is evaluated many times---in a
+loop, over an array, at every abscissa of an integration---compilation is a large,
+free win, and most of the time (\S\ref{sec:compile-auto}) you get it without
+asking. Reach for \mcode{Compile} explicitly when you want to build the fast
+function once and reuse it, when you want to hand it to \B{Map} or a solver, or
+when you simply want to see with \mcode{CompileDiagnostics} and \mcode{CompilePrint}
+what the machine is doing. Do \emph{not} compile a symbolic computation, a
+one-shot evaluation, or a body full of heads off the subset---there the fallback
+gives you nothing but the overhead of trying.
+
+The threads pulled together here run through the rest of the book. The packed
+arrays the compiler operates on are Chapter~\ref{ch:datastructures}; the numeric
+solvers that auto-compile their integrands and right-hand sides are
+\S\ref{sec:numcalc}; and the evaluator whose generality the compiler trades away
+for speed is the subject of the internals to come.

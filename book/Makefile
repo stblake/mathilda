@@ -19,8 +19,9 @@ MATHILDA  := ../Mathilda
 LATEXMK   := latexmk
 EXAMPLES  := $(shell find examples -name '*.m' 2>/dev/null)
 FIGURES   := $(shell find figures -name '*.m' 2>/dev/null)
+CPRINT    := $(shell find compileprint -name '*.m' 2>/dev/null)
 
-.PHONY: pdf all links version examples usage figures check-links clean distclean help
+.PHONY: pdf all links version examples usage figures compileprint check-links clean distclean help
 
 all: pdf
 
@@ -68,8 +69,17 @@ $(GEN)/.figures.stamp: $(FIGURES) $(TOOLS)/gen_figures.py ../site/verify_tutoria
 	$(PYTHON) $(TOOLS)/gen_figures.py
 	@mkdir -p $(GEN) && touch $@
 
+# --- bytecode listings (\compileprint): CompilePrint output captured from the
+#     binary (it is a raw stdout write, not carried on the In[]/Out[] pipe) ------
+compileprint: | $(MATHILDA)
+	$(PYTHON) $(TOOLS)/gen_compileprint.py
+
+$(GEN)/.compileprint.stamp: $(CPRINT) $(TOOLS)/gen_compileprint.py ../site/verify_tutorial.py | $(MATHILDA)
+	$(PYTHON) $(TOOLS)/gen_compileprint.py
+	@mkdir -p $(GEN) && touch $@
+
 # --- the book -------------------------------------------------------------
-pdf: $(GEN)/builtinlinks.tex $(GEN)/version.tex $(GEN)/.examples.stamp $(GEN)/.usage.stamp $(GEN)/.figures.stamp
+pdf: $(GEN)/builtinlinks.tex $(GEN)/version.tex $(GEN)/.examples.stamp $(GEN)/.usage.stamp $(GEN)/.figures.stamp $(GEN)/.compileprint.stamp
 	$(LATEXMK) -pdf -interaction=nonstopmode -halt-on-error $(BOOK).tex
 
 # --- checks ---------------------------------------------------------------

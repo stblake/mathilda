@@ -142,7 +142,7 @@ returns graphics, no text transcript). Written 2026-09-25.
 | 5 | Graphics | `chapters/05-graphics.tex` | Planned |
 | 6 | Data Structures | `chapters/06-data-structures.tex` | **Verified** |
 | 7 | Programming in Mathilda | `chapters/07-programming.tex` | **Verified** |
-| 8 | Compilation and the Compiler | `chapters/08-compilation.tex` | Planned |
+| 8 | Compilation and the Compiler | `chapters/08-compilation.tex` | **Verified** |
 | 9 | Data I/O | `chapters/09-data-io.tex` | **Verified** |
 
 **Ch. 5 Graphics scope.** `Plot`/`Plot3D`/`ListPlot`/`Graphics`/`Show` primitives,
@@ -157,9 +157,16 @@ work fast. Heavy `underhood`/`performance` content.
 **Ch. 7 Programming scope** (per outline): pattern matching, procedural programming,
 functional programming — the three paradigms Mathilda supports, and how they compose.
 
-**Ch. 8 Compilation scope.** `Compile[]`, auto-compilation, the bytecode VM, the
-compilable subset as a cliff, and how packed arrays and compilation combine. (This is
-the `Compile[]` *builtin*, distinct from Chapter 2's build-the-software material.)
+**Ch. 8 Compilation scope** (Verified). `Compile[]`, `CompileDiagnostics`,
+`CompilePrint`, and the `CompiledFunction` object; the bytecode VM (typed monomorphic
+opcodes, register banks, threaded dispatch); the fallback contract; the compilable
+subset as a **cliff**; auto-compilation and the `$AutoCompilation` switch; rank-1
+arrays, packing and fusion; and machine integers / overflow / arbitrary precision
+(`WorkingPrecision`, `"BigIntegers"`). (This is the `Compile[]` *builtin*, distinct
+from Chapter 2's build-the-software material.) The bytecode listings are captured
+from the real binary by a new `\compileprint` macro + `book/tools/gen_compileprint.py`
+(CompilePrint's disassembly is a raw stdout write, not carried on the In/Out pipe).
+Written 2026-09-25.
 
 **Ch. 9 Data I/O scope** (Verified). The stream layer now exists (`src/io/`), so this
 was written 2026-09-25 covering what is implemented: `OpenWrite`/`OpenRead`/
