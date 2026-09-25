@@ -1,4 +1,89 @@
-# ACTIVE (2026-09-24 pm): Best Maxima mean-time + A40/A19 completeness
+# ACTIVE (2026-09-25): Beat Maxima total (T1c→T1d) + A19 completeness
+
+Plan file: `~/.claude/plans/per-our-last-session-purring-rainbow.md`. Decisions: **mean-time
+first** (T1c → T1d → A19); **commit to beating Maxima's 12.6s total** (full native
+multivariate-over-K CRE; carry A27 with T1c, A35 with T1d). A39 non-elementary → 49 is the ceiling.
+
+- [ ] **Phase 0 — fresh profiling at v0.189** (re-confirm hot paths before writing C).
+  - [x] Baseline recorded (v0.189, TIMEOUT=60, this machine): **48/50, total 23.7s kernel** vs
+        Maxima 12.6s (gap 11.1s). Heavy: A28 3.46, A1 3.02, P4 1.99, A3 1.99, A2 1.69, A35 1.61,
+        A27 1.41; P8 0.63 (v0.189 field-Can win). A19 declines, A39 non-elementary. NB matching
+        Maxima on the tail alone → ~15s; beating 12.6s also needs the diffuse per-case native-CRE win.
+  - [x] Per-case profile done (`sample`, v0.189; full write-up in
+        `scratchpad/PHASE0_PROFILE.md`). **Findings that change the build:**
+        (1) **A28 = `collect_symbols_in` 8781** (Orderless sort of LARGE Q(x) sums), NOT `Simplify`
+            — no `simp_*` leaf. The plan's "reduce per-place Simplify" lever is WRONG for A28; the
+            lever is expression SIZE (native coefficients → big sums never built/sorted).
+        (2) **A27 = `collect_symbols_in` 1262** — its `Simplify` cost surfaces as the internal
+            Together/Cancel Orderless sort. Carried by the same expression-size lever. ✓
+        (3) **A1 (3.02s, 2nd-biggest, NOT an original target) = evaluator churn over Q(x)**
+            (evaluate_step 2141, builtin_times/power) — same disease as A2/A3, fixed by the K=Q lever. Bonus.
+        (4) **A2/A3 = evaluator churn over K(x)** (evaluate_step 1654/1741) — T1d. ✓
+        (5) **A35 = BIGNUM** (`__gmpn_mul_basecase` 1821) — huge reduced deg-8 coeffs; native nf_elem
+            keeps coeffs reduced, partial help; bit-length partly inherent.
+  - [x] **Output = build order (REVISED): T1c and T1d are ONE build at two field specializations.**
+        The tower coefficient ring is MULTIVARIATE over K (A28 Q(x); A1 Q(x,L1,L2); A2 Q(i)(x,T)).
+        Univariate KxRf does NOT cover it — need multivariate-poly-over-K CRE (PackedRatFuncOverK)
+        from the start, K=Q the fast special (fmpq_mpoly). Thread through the tower substrate so
+        Padd/Pmul/Pdiv/TMul/TDiv/TowerD/Dhat never leave native form.
+- [~] **M1 (was T1c) — native multivariate rational-function-over-Q CRE.**
+  - [x] **M1a — CRE kernel (isolated, done).** `TowerCRE` persistent-handle layer in
+        `src/poly/flint_bridge.c` (arena of `fmpz_mpoly_q` over a gens `fmpz_mpoly_ctx`; reuses
+        `expr_to_mpolyq`/`fmpz_mpoly_to_expr`). Public API in `flint_bridge.h`: `tcre_new/free/
+        from_expr/to_expr/add/sub/mul/div/deriv/is_zero/equal` (+ no-FLINT stubs). `deriv` = quotient
+        rule via `fmpz_mpoly_derivative`. **Differential test `test_towercre` (tests/test_flint_bridge.c):
+        native chain == evaluator Together/D (add/sub/mul/div/deriv, chain persistence, deriv wrt
+        gen/non-gen, zero/equal, decline) — PASSES.** Leak-clean (A/B: no new leak site vs baseline);
+        `make check-c99` clean; GCC build clean. NOT wired into the integrator → no behavior change,
+        no version bump. NOT committed (awaiting user request).
+  - [!] **M1b — BLOCKED: `.m`-phase profiling OVERTURNED the premise.** Temporary `PMtick` timers
+        (since reverted) showed the tower pair arithmetic (Padd/Pmul/Pdiv — what TowerCRE accelerates)
+        is ~0.005 s on A28. The real per-case bottlenecks are DIFFERENT and heterogeneous:
+        - **A28 (3.2s) = `VanishOrder`** (`ParallelMixed.m` ~453, inside RealisePoints): `Sqrt[q(rho+e)]`
+          local series at Root-object places × many calls. "Expand once to order 8" was SLOWER (loop
+          stops at first nonzero coeff) — reverted. Lever = algebraic-series arithmetic / fewer calls.
+        - **A1 (2.77s) = AnsatzSystem `ans_build` 1.57 + `ans_eqn` 0.64** (Expand/`cg.Dg0s` Dot/
+          CoefficientRules over Q). **A2/A3** = same ≈0.9–1.2s + `ans_cols` ~0.12 + ~0.55 upstream (K=Q(θ)).
+        - **A27 (1.33s) = ENTIRELY upstream** (BuildTower/splitspecials; ansatz+residue ~0.004s).
+        TowerCRE (M1a) MAY still help A1's ans_build/eqn if the ANSATZ polynomial arithmetic (not the
+        tower substrate) is recast onto it — but must be measured vs existing Expand/CoefficientRules
+        (already fmpq_mpoly over Q) first. Lesson: [[feedback_profile_dotm_phase_before_c_kernel]].
+  - [x] **M1a committed** (a2e71ca2) as dormant infra (no bump/tag).
+  - [x] **DIAGNOSE-ALL pass done (user-requested; .m-phase timers, reverted).** Per-case fix plan:
+        - **A1 (2.77s) = AnsatzSystem** `b_mono2` 1.15 + `ans_eqn` 0.71 + `b_mono1` 0.47. Plain-Q
+          multivariate Expand IS already FLINT (`flint_expand_polynomial`); the cost is the
+          INTERMEDIATE Expr Plus/Times (`cg.Dg0s` Dot, `2 qF qF s1 + …`, `part×quo`) built and
+          Orderless-SORTED before/around Expand. **Fix: keep the ansatz column polys native (fmpq_mpoly
+          / field τ-lift) across the dot+linear-combo+Expand, read CoefficientRules directly — never
+          materialise the big Expr Plus.** This is where TowerCRE/native-poly is threaded (into
+          AnsatzSystem, NOT the tower substrate).
+        - **A2/A3 (1.6/1.9s) = same AnsatzSystem cost over K=Q(θ) (~1.0–1.2s) + ~0.55s UPSTREAM**
+          (BuildTower/splitspecials/FieldData). Field poly arithmetic + an upstream pass.
+        - **A28 (3.2s) = `VanishOrder`** (`ParallelMixed.m` ~453). `Sqrt[q(rho+e)]` local series depends
+          ONLY on the place rho, but is recomputed for every (norm-solution × sign × hit) `uu`. **Fix:
+          memoise the per-place sqrt series (cache by rho), reuse across all uu.** (NOT "expand once to
+          order 8" — that was slower, reverted: the loop stops at the first nonzero coeff.)
+        - **A27 (1.3s) = iPIM pre-residue/pre-ansatz stage** (`ipim_main` 1.25s; residue+ansatz ~0).
+          Trig case; exact line (FactorList/ClassifyPrime/rem/bounds/Simplify) needs one more
+          iPIM-internal timing pass. Lower priority until pinned.
+        **Recommended order:** A28 per-place series memo (clean, safe, biggest single case) → A1
+        AnsatzSystem native-poly (biggest combined, ~2.3s; transfers to A2/A3) → A2/A3 upstream +
+        field → A27. Each gated: differential value-identity + Charlwood 50 solve/verify + DSolve corpus.
+- [ ] **M2 (was T1d) — extend the CRE coefficients to K=Q(θ) (nf_elem) + native ∂/∂x over K.**
+      Fixes A2/A3 (evaluator churn) and A35/P4 (partial). `PackedRatFuncOverK` in flint_bridge.c
+      generalizing KxRf 3788–4082. Gate: differential fuzz vs Expand/Cancel/Together/CoefficientRules/
+      RowReduce over random Q(θ) + DSolve corpus.
+- [ ] **A19 — independence-based S′-unit group basis** (port nfunits.c pattern add_if_independent 217 /
+      p_saturate 292 / cert_saturate 363 to the function-field selection 2727–2778; replace cap 2757).
+      Honest-decline fallback (48/50) if too deep. Gate: hardened 33-pt + off-gate random; A16/A37/P4/A40 unregressed.
+
+Hard gate every land: DSolve corpus green + off-gate value-identity + differential A/B + `make check-c99`
++ valgrind; substantive commits bump `src/version.h` (+0.001) and tag `v<STRING>`; changelog
+`docs/spec/changelog/2026-09-21.md`.
+
+---
+
+# ACTIVE (2026-09-24 pm): Best Maxima mean-time + A40/A19 completeness (SUPERSEDED by 2026-09-25 above)
 
 Plan file: `~/.claude/plans/cozy-sparking-whisper.md`. Two tracks:
 **T1** native field-first tower arithmetic (the mean-time lever; hoist FieldData ahead of

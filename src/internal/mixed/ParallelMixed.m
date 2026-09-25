@@ -2434,12 +2434,16 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
         Table[Expand[Times @@ Delete[distinct, k]], {k, nd}]]];
     dpos[dd_] := Position[distinct, _?(SameQ[#, dd] &), {1}, Heads -> False][[1, 1]];
     Do[If[part[[2, 1]] === 0, Continue[]];
-      poly = Expand[part[[2, 1]] quo[[dpos[part[[2, 2]]]]]];
+      (* leave the product unexpanded: CoefficientRules expands it internally,
+         and its native fmpq_mpoly read-off multiplies the factors natively and
+         reads the terms straight out -- avoiding the big Expr Plus that the
+         explicit Expand built and Orderless-sorted (the ans_eqn hot spot). *)
+      poly = part[[2, 1]] quo[[dpos[part[[2, 2]]]]];
       Do[If[! KeyExistsQ[rowOf, {i, cr[[1]]}], nrows++; rowOf[{i, cr[[1]]}] = nrows];
         AppendTo[entries, {rowOf[{i, cr[[1]]}], colIdx[part[[1]]]} -> cr[[2]]],
         {cr, CoefficientRules[poly, gens]}],
       {part, partsM}];
-    poly = Expand[remM[[1]] quo[[dpos[remM[[2]]]]]];
+    poly = remM[[1]] quo[[dpos[remM[[2]]]]];
     Do[If[! KeyExistsQ[rowOf, {i, cr[[1]]}], nrows++; rowOf[{i, cr[[1]]}] = nrows];
       AppendTo[rhs, {rowOf[{i, cr[[1]]}], ncols + 1} -> cr[[2]]],
       {cr, CoefficientRules[poly, gens]}],

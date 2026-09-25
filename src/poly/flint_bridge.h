@@ -105,6 +105,17 @@ Expr* flint_expand_polynomial_field(const Expr* e);
 int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
                           int** exps_out, Expr*** coeffs_out, size_t* count_out);
 
+/* Plain-Q counterpart of flint_field_monomials: `poly` a polynomial in EXACTLY
+ * `vars` with rational coefficients (no other symbol, no denominator, no
+ * negative power).  Converts to fmpq_mpoly (to_mpoly multiplies an unexpanded
+ * product natively) and reads the (exponent vector, rational coefficient) terms
+ * straight out, skipping the generic Expr Expand + per-term walk + Orderless
+ * re-sort.  Same output contract and return convention as flint_field_monomials
+ * (count >= 0 on success, -1 to decline; caller uses the generic path).
+ * MATHILDA_NO_POLYQ_MONOMIALS forces a decline (A/B). */
+int flint_polynomial_monomials(const Expr* poly, Expr* const* vars, int nvars,
+                               int** exps_out, Expr*** coeffs_out, size_t* count_out);
+
 /* True (1) when `e` is a polynomial over Q in recognisable variables — i.e. the
  * kind of expression flint_expand_polynomial accepts (built from integers,
  * rationals, symbols, Plus/Times, and non-negative integer Power). Numeric

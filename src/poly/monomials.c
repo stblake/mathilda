@@ -327,17 +327,54 @@ static Mono* build_monomials_field(Expr* poly, Expr** vars, int k,
     return finish_monomials(monos, fn, keylen, k, n_out);
 }
 
+/* Plain-Q counterpart of build_monomials_field: reads the (expvec, rational
+ * coefficient) terms of a Q-polynomial straight out of fmpq_mpoly (via
+ * flint_polynomial_monomials), skipping the generic Expr Expand + per-term walk
+ * + Orderless re-sort.  Same finish_monomials tail, so the result is identical
+ * to the generic path. */
+static Mono* build_monomials_polyQ(Expr* poly, Expr** vars, int k,
+                                   const int64_t* W, int rows, size_t* n_out) {
+    int*   fexps  = NULL;
+    Expr** fcoeff = NULL;
+    size_t fn     = 0;
+    int rc = flint_polynomial_monomials(poly, vars, k, &fexps, &fcoeff, &fn);
+    if (rc < 0) return NULL;
+
+    int keylen = rows + k;
+    Mono* monos = malloc(sizeof(Mono) * (fn > 0 ? fn : 1));
+    for (size_t t = 0; t < fn; t++) {
+        int* exps = malloc(sizeof(int) * (size_t)(k > 0 ? k : 1));
+        for (int j = 0; j < k; j++) exps[j] = fexps[t * (size_t)k + j];
+        int64_t* key = malloc(sizeof(int64_t) * (size_t)(keylen > 0 ? keylen : 1));
+        for (int r = 0; r < rows; r++) {
+            int64_t acc = 0;
+            for (int j = 0; j < k; j++) acc += W[(size_t)r * k + j] * exps[j];
+            key[r] = acc;
+        }
+        for (int j = 0; j < k; j++) key[rows + j] = exps[j];
+        monos[t].exps  = exps;
+        monos[t].coeff = fcoeff[t];      /* move ownership */
+        monos[t].key   = key;
+    }
+    free(fexps);
+    free(fcoeff);
+    return finish_monomials(monos, fn, keylen, k, n_out);
+}
+
 static Mono* build_monomials(Expr* poly, Expr** vars, int k,
                              const int64_t* W, int rows, Expr* modulus,
                              size_t* n_out) {
     *n_out = 0;
 
-    /* Native field-coefficient read-off (no modulus): straight from FLINT,
-     * skipping the generic Expand + per-term evaluator work.  Declines (NULL)
-     * for anything but a single-field polynomial in `vars`. */
+    /* Native read-off (no modulus): straight from FLINT, skipping the generic
+     * Expand + per-term evaluator work + Orderless re-sort.  Try the field path
+     * (algebraic coefficients) first, then the plain-Q path; each declines
+     * (NULL) unless `poly` is a polynomial in exactly `vars`. */
     if (!modulus && flint_bridge_available()) {
         Mono* fm = build_monomials_field(poly, vars, k, W, rows, n_out);
         if (fm) return fm;
+        Mono* qm = build_monomials_polyQ(poly, vars, k, W, rows, n_out);
+        if (qm) return qm;
     }
 
     /* Modulus first (reduces integer coefficients into [0,m) and drops the

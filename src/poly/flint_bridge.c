@@ -885,6 +885,59 @@ int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
     return rc;
 }
 
+static void collect_all_symbols(const Expr* e, VarSet* vs);  /* defined below */
+
+/* Plain-Q analogue of flint_field_monomials: when `poly` is a polynomial in
+ * EXACTLY `vars` with rational coefficients (no other symbol, no denominator in
+ * the vars, no negative power), convert it to fmpq_mpoly (to_mpoly multiplies an
+ * unexpanded product natively) and read the (exponent vector, rational
+ * coefficient) terms straight out -- skipping the generic Expr Expand + per-term
+ * walk AND the Orderless re-sort of the expanded Plus that dominates the
+ * ParallelMixedTower ansatz read-off on the rational cases (Charlwood A1).
+ * Fills *exps_out (count*nvars ints, row-major exps[t*nvars+j]), *coeffs_out
+ * (count owned Exprs), *count_out; returns the term count (>= 0) on success, or
+ * -1 to decline (a symbol outside `vars`, a denominator/negative power, or no
+ * FLINT) -- the caller then uses the generic path.  Disable for A/B with
+ * MATHILDA_NO_POLYQ_MONOMIALS. */
+int flint_polynomial_monomials(const Expr* poly, Expr* const* vars, int nvars,
+                               int** exps_out, Expr*** coeffs_out, size_t* count_out) {
+    if (!poly || nvars < 0) return -1;
+    if (getenv("MATHILDA_NO_POLYQ_MONOMIALS")) return -1;
+    for (int i = 0; i < nvars; i++)
+        if (!vars[i] || vars[i]->type != EXPR_SYMBOL) return -1;
+    VarSet vs; memset(&vs, 0, sizeof vs);
+    for (int i = 0; i < nvars; i++)
+        if (!varset_add(&vs, vars[i]->data.symbol.name)) { varset_free(&vs); return -1; }
+    /* every symbol of poly must be one of the vars, else it is a symbolic
+     * coefficient the generic CoefficientRules keeps inside the coefficient. */
+    VarSet all; memset(&all, 0, sizeof all);
+    collect_all_symbols(poly, &all);
+    int scoped = 1;
+    for (size_t i = 0; i < all.count && scoped; i++)
+        if (var_index(&vs, all.names[i]) < 0) scoped = 0;
+    varset_free(&all);
+    if (!scoped) { varset_free(&vs); return -1; }
+    const fmpq_mpoly_ctx_struct* ctx = bridge_ctx_lex(nvars);
+    fmpq_mpoly_t P; fmpq_mpoly_init(P, ctx);
+    if (!to_mpoly(poly, P, ctx, &vs)) { fmpq_mpoly_clear(P, ctx); varset_free(&vs); return -1; }
+    slong len = fmpq_mpoly_length(P, ctx);
+    int* exps = malloc(sizeof(int) * (size_t)((len ? (size_t)len : 1) * (size_t)(nvars ? nvars : 1)));
+    Expr** coeffs = malloc(sizeof(Expr*) * (size_t)(len ? (size_t)len : 1));
+    ulong* eexp = malloc(sizeof(ulong) * (size_t)(nvars ? nvars : 1));
+    fmpq_t c; fmpq_init(c);
+    for (slong t = 0; t < len; t++) {
+        fmpq_mpoly_get_term_coeff_fmpq(c, P, t, ctx);
+        fmpq_mpoly_get_term_exp_ui(eexp, P, t, ctx);
+        coeffs[t] = expr_from_fmpq_local(c);
+        for (int j = 0; j < nvars; j++)
+            exps[(size_t)t * (size_t)nvars + (size_t)j] = (int)eexp[j];
+    }
+    fmpq_clear(c); free(eexp);
+    fmpq_mpoly_clear(P, ctx); varset_free(&vs);
+    *exps_out = exps; *coeffs_out = coeffs; *count_out = (size_t)len;
+    return (int)len;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Multivariate division with cofactors (PolynomialReduce fast path)  */
 /* ------------------------------------------------------------------ */
@@ -5645,6 +5698,12 @@ Expr* flint_expand_polynomial(const Expr* e) { (void)e; return NULL; }
 Expr* flint_expand_polynomial_field(const Expr* e) { (void)e; return NULL; }
 int   flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
                             int** exps_out, Expr*** coeffs_out, size_t* count_out) {
+    (void)poly; (void)vars; (void)nvars;
+    (void)exps_out; (void)coeffs_out; (void)count_out;
+    return -1;
+}
+int   flint_polynomial_monomials(const Expr* poly, Expr* const* vars, int nvars,
+                                 int** exps_out, Expr*** coeffs_out, size_t* count_out) {
     (void)poly; (void)vars; (void)nvars;
     (void)exps_out; (void)coeffs_out; (void)count_out;
     return -1;

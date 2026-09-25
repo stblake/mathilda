@@ -3776,3 +3776,16 @@ function. Probe C nailed it: `Function[pl, Map[(pl[[1]]+#)&, {10,20}]][{5,9}]` �
 4. **The packed/NDArray transparency gate does not protect Hold* iterator specs**
    (Do/Table/Sum/Product) or AWARE heads — a packed list reaches them
    un-materialised; materialise in iter_spec_parse (one fix point).
+
+## 2026-09-25 — Profile the .m PHASE before building a C kernel (Charlwood mean-time)
+
+Chased the ParallelMixedTower mean-time tail. `sample` C-self-time (collect_symbols_in on
+A28; evaluate_step churn on A1/A2/A3) read like "tower coefficient arithmetic → build a native
+CRE." Built a validated `fmpz_mpoly_q` handle kernel (TowerCRE). Then temporary `.m`-phase
+`AbsoluteTiming` timers showed the tower pair ops (Padd/Pmul/Pdiv) are ~0.005 s — a NON-bottleneck.
+Real per-case costs: A28 = `VanishOrder` sqrt-series at Root places; A1 = AnsatzSystem
+`ans_build`/`ans_eqn` (Expand/CoefficientRules over Q); A27 = entirely upstream (BuildTower/
+splitspecials). Rule: after `sample`, add in-process `.m`-phase region timers (a HoldRest `PMtick`
+accumulator) and run the real case ONCE before choosing a C target. Also verify an "obvious" opt
+actually helps: "expand the series once to order N" was SLOWER (the vanish-order loop stops at the
+first nonzero coefficient). See harness memory `feedback_profile_dotm_phase_before_c_kernel`.
