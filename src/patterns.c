@@ -5,6 +5,7 @@
 #include "core.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "assoc_struct.h"  /* associations are atomic: walkers see values only */
 #include "ndarray.h"   /* is_ndarray — see patterns_delist_visible */
 #include <stdlib.h>
 #include <string.h>
@@ -71,9 +72,10 @@ static int64_t get_expr_depth_patterns(Expr* e, bool heads) {
         const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
-    int64_t max_d = 0;
+    bool assoc = assoc_is_wellformed(e);     /* parts = values */
+    int64_t max_d = assoc ? 1 : 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        int64_t d = get_expr_depth_patterns(e->data.function.args[i], heads);
+        int64_t d = get_expr_depth_patterns(struct_part(e, i, assoc), heads);
         if (d > max_d) max_d = d;
     }
     if (heads) {
@@ -90,9 +92,10 @@ static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int
         if (heads) {
             do_cases_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, replacement, delayed, results, count, cap, max_results);
         }
+        bool assoc = assoc_is_wellformed(e);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (max_results >= 0 && (int64_t)(*count) >= max_results) break;
-            do_cases_at_level(e->data.function.args[i], current_level + 1, min_l, max_l, heads, pattern, replacement, delayed, results, count, cap, max_results);
+            do_cases_at_level(struct_part(e, i, assoc), current_level + 1, min_l, max_l, heads, pattern, replacement, delayed, results, count, cap, max_results);
         }
     }
 
@@ -285,8 +288,10 @@ Expr* builtin_cases(Expr* res) {
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
 
-    /* Cases[assoc, patt, ...] collects matching values (Cases[Values[assoc], ...]). */
-    if (argc >= 2 && is_association(res->data.function.args[0])) {
+    /* Cases[assoc, patt] collects matching values (Cases[Values[assoc], patt]).
+     * With a level spec or option the association-aware walker below runs, so
+     * that e.g. Cases[<|a -> 1|>, _, {0}] is {<|a -> 1|>} and not {{1}}. */
+    if (argc == 2 && assoc_is_wellformed(res->data.function.args[0])) {
         Expr* r = assoc_apply_over_values(res); if (r) return r;
     }
 
@@ -391,7 +396,33 @@ static Expr* do_delete_cases_at_level(Expr* e, int64_t current_level, int64_t mi
     *delete_me = false;
     Expr* result;
 
-    if (e->type == EXPR_FUNCTION) {
+    if (assoc_is_wellformed(e)) {
+        /* An atomic association: its parts are its values, and deleting a
+         * value drops the whole entry, so the result stays well formed:
+         * DeleteCases[{<|a -> 1, b -> 2|>}, 1, Infinity] is {<|b -> 2|>}.
+         * Keys are never tested (assoc_struct.h). */
+        size_t n = e->data.function.arg_count;
+        Expr** kept = malloc(sizeof(Expr*) * (n ? n : 1));
+        size_t nk = 0;
+        bool head_delete = false;
+        Expr* new_head = heads
+            ? do_delete_cases_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, count_remaining, &head_delete)
+            : expr_copy(e->data.function.head);
+        for (size_t i = 0; i < n; i++) {
+            Expr* entry = e->data.function.args[i];
+            bool del = false;
+            Expr* nv = do_delete_cases_at_level(struct_part(e, i, true), current_level + 1, min_l, max_l, heads, pattern, count_remaining, &del);
+            if (del) { expr_free(nv); continue; }
+            Expr* rargs[2] = { expr_copy(entry->data.function.args[0]), nv };
+            kept[nk++] = expr_new_function(expr_copy(entry->data.function.head), rargs, 2);
+        }
+        if (head_delete) {
+            expr_free(new_head);
+            new_head = expr_new_symbol(SYM_Sequence);
+        }
+        result = expr_new_function(new_head, kept, nk);
+        free(kept);
+    } else if (e->type == EXPR_FUNCTION) {
         size_t orig_count = e->data.function.arg_count;
         size_t cap = orig_count > 0 ? orig_count : 1;
         Expr** new_args = malloc(sizeof(Expr*) * cap);
@@ -487,7 +518,7 @@ Expr* builtin_delete_cases(Expr* res) {
 
     /* DeleteCases[assoc, patt] drops entries whose value matches patt, keeping
      * the result an association. */
-    if (argc == 2 && is_association(res->data.function.args[0]))
+    if (argc == 2 && assoc_is_wellformed(res->data.function.args[0]))
         return assoc_delete_cases(res->data.function.args[0], res->data.function.args[1]);
 
     if (argc < 2) return NULL;
@@ -545,23 +576,35 @@ Expr* builtin_delete_cases(Expr* res) {
     return result;
 }
 
-static void do_position_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, Expr*** results, size_t* count, size_t* cap, int64_t max_results, int64_t* current_path, size_t path_len) {
+/* `current_path` holds the integer position components; `current_keys` runs
+ * parallel to it and is non-NULL at a component that lies inside an atomic
+ * association, where the component is Key[current_keys[i]] (a borrowed key)
+ * instead of an integer: Position[{<|a -> 1|>}, 1] is {{1, Key[a]}}. */
+static void do_position_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, Expr*** results, size_t* count, size_t* cap, int64_t max_results, int64_t* current_path, Expr** current_keys, size_t path_len) {
     if (max_results >= 0 && (int64_t)(*count) >= max_results) return;
 
     if (e->type == EXPR_FUNCTION) {
         int64_t* next_path = malloc(sizeof(int64_t) * (path_len + 1));
-        if (path_len > 0) memcpy(next_path, current_path, sizeof(int64_t) * path_len);
-        
+        Expr** next_keys = malloc(sizeof(Expr*) * (path_len + 1));
+        if (path_len > 0) {
+            memcpy(next_path, current_path, sizeof(int64_t) * path_len);
+            memcpy(next_keys, current_keys, sizeof(Expr*) * path_len);
+        }
+        bool assoc = assoc_is_wellformed(e);   /* parts = values, at Key[k] */
+
         if (heads) {
             next_path[path_len] = 0;
-            do_position_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, results, count, cap, max_results, next_path, path_len + 1);
+            next_keys[path_len] = NULL;
+            do_position_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, results, count, cap, max_results, next_path, next_keys, path_len + 1);
         }
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (max_results >= 0 && (int64_t)(*count) >= max_results) break;
             next_path[path_len] = i + 1;
-            do_position_at_level(e->data.function.args[i], current_level + 1, min_l, max_l, heads, pattern, results, count, cap, max_results, next_path, path_len + 1);
+            next_keys[path_len] = assoc ? e->data.function.args[i]->data.function.args[0] : NULL;
+            do_position_at_level(struct_part(e, i, assoc), current_level + 1, min_l, max_l, heads, pattern, results, count, cap, max_results, next_path, next_keys, path_len + 1);
         }
         free(next_path);
+        free(next_keys);
     }
 
     if (max_results >= 0 && (int64_t)(*count) >= max_results) return;
@@ -581,9 +624,14 @@ static void do_position_at_level(Expr* e, int64_t current_level, int64_t min_l, 
         MatchEnv* env = env_new();
         if (match(e, pattern, env)) {
             // Add path to results
-            Expr** path_exprs = malloc(sizeof(Expr*) * path_len);
+            Expr** path_exprs = malloc(sizeof(Expr*) * (path_len ? path_len : 1));
             for (size_t i = 0; i < path_len; i++) {
-                path_exprs[i] = expr_new_integer(current_path[i]);
+                if (current_keys[i]) {
+                    Expr* k = expr_copy(current_keys[i]);
+                    path_exprs[i] = expr_new_function(expr_new_symbol(SYM_Key), &k, 1);
+                } else {
+                    path_exprs[i] = expr_new_integer(current_path[i]);
+                }
             }
             Expr* pos_expr = expr_new_function(expr_new_symbol(SYM_List), path_exprs, path_len);
             free(path_exprs);
@@ -616,49 +664,9 @@ Expr* builtin_position(Expr* res) {
 
     if (argc < 2) return NULL;
 
-    /* Position[assoc, patt] reports positions inside the *values* as
-     * {Key[k], subpos...} (Wolfram semantics). Delegate to Position over
-     * Values[assoc] (which handles nested descent and head positions), then
-     * remap each result's leading value-index to Key[key]. */
-    if (argc == 2 && is_association(res->data.function.args[0])) {
-        Expr* assoc = res->data.function.args[0];
-        size_t na = assoc->data.function.arg_count;
-        Expr* vals = assoc_values_list(assoc);                     /* List of values */
-        Expr* pargs[2] = { vals, expr_copy(res->data.function.args[1]) };
-        Expr* pcall = expr_new_function(expr_new_symbol(SYM_Position), pargs, 2);
-        Expr* raw = evaluate(pcall);                               /* {{i, sub...}, ...} */
-        expr_free(pcall);
-        if (!(raw && raw->type == EXPR_FUNCTION &&
-              raw->data.function.head->data.symbol.name == SYM_List)) return raw;
-
-        size_t nr = raw->data.function.arg_count;
-        Expr** out = malloc(sizeof(Expr*) * (nr ? nr : 1));
-        size_t nout = 0;
-        for (size_t i = 0; i < nr; i++) {
-            Expr* pl = raw->data.function.args[i];
-            /* Position lists look like {idx, sub...}; idx is the 1-based value
-             * index. idx == 0 is the synthetic Values-list head — not a real
-             * entry — so drop it. */
-            if (!(pl->type == EXPR_FUNCTION && pl->data.function.head->data.symbol.name == SYM_List &&
-                  pl->data.function.arg_count >= 1 &&
-                  pl->data.function.args[0]->type == EXPR_INTEGER)) continue;
-            int64_t vi = pl->data.function.args[0]->data.integer;
-            if (vi < 1 || vi > (int64_t)na) continue;
-            Expr* rule = assoc->data.function.args[vi - 1];
-            if (!(rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2)) continue;
-            size_t plen = pl->data.function.arg_count;
-            Expr** np = malloc(sizeof(Expr*) * plen);
-            Expr* kargs[1] = { expr_copy(rule->data.function.args[0]) };
-            np[0] = expr_new_function(expr_new_symbol(SYM_Key), kargs, 1);
-            for (size_t j = 1; j < plen; j++) np[j] = expr_copy(pl->data.function.args[j]);
-            out[nout++] = expr_new_function(expr_new_symbol(SYM_List), np, plen);
-            free(np);
-        }
-        expr_free(raw);
-        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, nout);
-        free(out);
-        return result;
-    }
+    /* Position inside an association reports {Key[k], subpos...} for its
+     * values (and {0} for its head, {} for itself) -- handled by the
+     * association-aware walker, at any nesting depth (assoc_struct.h). */
 
     Expr* expr = res->data.function.args[0];
     Expr* pattern = res->data.function.args[1];
@@ -711,7 +719,7 @@ Expr* builtin_position(Expr* res) {
     size_t cap = 16;
     Expr** results = malloc(sizeof(Expr*) * cap);
 
-    do_position_at_level(expr, 0, min_l, max_l, heads, pattern, &results, &count, &cap, max_results, NULL, 0);
+    do_position_at_level(expr, 0, min_l, max_l, heads, pattern, &results, &count, &cap, max_results, NULL, NULL, 0);
 
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, count);
     free(results);
@@ -723,8 +731,9 @@ static void do_count_at_level(Expr* e, int64_t current_level, int64_t min_l, int
         if (heads) {
             do_count_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, count);
         }
+        bool assoc = assoc_is_wellformed(e);   /* parts = values */
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            do_count_at_level(e->data.function.args[i], current_level + 1, min_l, max_l, heads, pattern, count);
+            do_count_at_level(struct_part(e, i, assoc), current_level + 1, min_l, max_l, heads, pattern, count);
         }
     }
 
@@ -766,7 +775,7 @@ Expr* builtin_count(Expr* res) {
     }
 
     /* Count[assoc, patt] counts matching values (Count[Values[assoc], patt]). */
-    if (argc >= 2 && is_association(res->data.function.args[0])) {
+    if (argc == 2 && assoc_is_wellformed(res->data.function.args[0])) {
         Expr* r = assoc_apply_over_values(res); if (r) return r;
     }
 
@@ -844,8 +853,9 @@ static bool do_member_at_level(Expr* e, int64_t current_level, int64_t min_l, in
         if (heads) {
             if (do_member_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern)) return true;
         }
+        bool assoc = assoc_is_wellformed(e);   /* parts = values */
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            if (do_member_at_level(e->data.function.args[i], current_level + 1, min_l, max_l, heads, pattern)) return true;
+            if (do_member_at_level(struct_part(e, i, assoc), current_level + 1, min_l, max_l, heads, pattern)) return true;
         }
     }
     return false;
@@ -868,7 +878,7 @@ Expr* builtin_memberq(Expr* res) {
     }
 
     /* MemberQ[assoc, form] tests the association's values. */
-    if (argc >= 2 && is_association(res->data.function.args[0])) {
+    if (argc == 2 && assoc_is_wellformed(res->data.function.args[0])) {
         Expr* r = assoc_apply_over_values(res); if (r) return r;
     }
 

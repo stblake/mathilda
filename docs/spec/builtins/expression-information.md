@@ -50,7 +50,9 @@ Out[12]= {}
 
 ## AtomQ, NumberQ, IntegerQ, StringQ, MachineNumberQ
 Predicates for testing expression types.
-- `AtomQ[expr]`: `True` if the expression has no parts.
+- `AtomQ[expr]`: `True` if the expression has no parts. A well-formed
+  association is an atom (`AtomQ[<|a -> 1|>]` is `True`); see
+  [Association atomicity](data-structures.md#association-atomicity-structural-functions).
 - `NumberQ[expr]`: `True` if the expression is a numeric type (Integer, Real, Rational, Complex).
 - `IntegerQ[expr]`: `True` if the expression is an Integer or BigInt.
 - `MachineIntegerQ[expr]`: `True` if `expr` is a machine-word (64-bit) integer;

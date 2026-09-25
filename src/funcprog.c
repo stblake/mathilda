@@ -6,6 +6,7 @@
 #include "match.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "assoc_struct.h" /* associations are atomic to the level walkers */
 #include "common.h"
 #include "numloop.h"
 #include "ndarray.h"
@@ -31,9 +32,11 @@ static int64_t get_depth(Expr* e) {
         const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
-    int64_t max_d = 0;
+    /* An atomic association's parts are its values (assoc_struct.h). */
+    bool assoc = assoc_is_wellformed(e);
+    int64_t max_d = assoc ? 1 : 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        int64_t d = get_depth(e->data.function.args[i]);
+        int64_t d = get_depth(struct_part(e, i, assoc));
         if (d > max_d) max_d = d;
     }
     return max_d + 1;
@@ -158,7 +161,7 @@ static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpe
  * element's arguments sit one level past max and would otherwise each cost a
  * recursive call that only shares. Inlined by the compiler at -O3. */
 static Expr* apply_child(Expr* f, Expr* child, int64_t child_level, LevelSpec spec) {
-    if (spec.min >= 0 && child_level > spec.max)
+    if (spec.min >= 0 && spec.max >= 0 && child_level > spec.max)
         return expr_copy(child);
     return apply_at_level(f, child, child_level, spec);
 }
@@ -173,22 +176,29 @@ static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpe
      * Moreover, once we are past the maximum level no application can occur here
      * or at any deeper node (levels only increase with depth), so the whole
      * subtree passes through unchanged -- an O(1) refcount bump instead of a
-     * structural clone. Only the negative-spec case still needs get_depth. */
+     * structural clone. Only the negative-spec case still needs get_depth.
+     * A negative bound is a depth, not a level (Apply[f, e, -1] is levels
+     * {1, -1}), so it takes the membership test below, as in Map/MapIndexed. */
     bool should_apply;
-    if (spec.min >= 0) {
+    if (spec.min >= 0 && spec.max >= 0) {
         if (current_level > spec.max) return expr_copy(expr);
         should_apply = (current_level >= spec.min && current_level <= spec.max);
     } else {
         int64_t d = get_depth(expr);
-        should_apply = (current_level >= spec.min && current_level <= spec.max) ||
-                       (-d >= spec.min && -d <= spec.max);
+        bool lo = (spec.min >= 0) ? (current_level >= spec.min) : (-d >= spec.min);
+        bool hi = (spec.max >= 0) ? (current_level <= spec.max) : (-d <= spec.max);
+        should_apply = lo && hi;
     }
+
+    /* An atomic association's parts are its values: f @@ <|a -> 1|> is f[1],
+     * and Apply[f, <|a -> g[1]|>, {1}] is <|a -> f[1]|> (assoc_struct.h). */
+    bool assoc = assoc_is_wellformed(expr);
 
     if (should_apply) {
         size_t count = expr->data.function.arg_count;
-        Expr** args = malloc(sizeof(Expr*) * count);
+        Expr** args = malloc(sizeof(Expr*) * (count ? count : 1));
         for (size_t i = 0; i < count; i++) {
-            args[i] = apply_child(f, expr->data.function.args[i], current_level + 1, spec);
+            args[i] = apply_child(f, struct_part(expr, i, assoc), current_level + 1, spec);
         }
         Expr* new_func = expr_new_function(expr_copy(f), args, count);
         free(args);
@@ -198,19 +208,19 @@ static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpe
     }
 
     size_t count = expr->data.function.arg_count;
-    Expr** new_args = malloc(sizeof(Expr*) * count);
+    Expr** new_args = malloc(sizeof(Expr*) * (count ? count : 1));
     for (size_t i = 0; i < count; i++) {
-        new_args[i] = apply_child(f, expr->data.function.args[i], current_level + 1, spec);
+        new_args[i] = apply_child(f, struct_part(expr, i, assoc), current_level + 1, spec);
     }
-    
+
     Expr* new_head = NULL;
     if (spec.heads) {
         new_head = apply_at_level(f, expr->data.function.head, current_level + 1, spec);
     } else {
         new_head = expr_copy(expr->data.function.head);
     }
-    
-    Expr* result = expr_new_function(new_head, new_args, count);
+
+    Expr* result = struct_rebuild(expr, assoc, new_head, new_args, count, false);
     free(new_args);
     return result;
 }
@@ -228,7 +238,7 @@ Expr* builtin_apply(Expr* res) {
      * f @@ <|k1 -> v1, ...|> is f[v1, ...] (matching Wolfram, and consistent
      * with Total = Plus @@ assoc). Only the default level applies here; an
      * explicit level spec falls through to the generic traversal. */
-    if (ls == NULL && is_association(expr)) {
+    if (ls == NULL && assoc_is_wellformed(expr)) {
         size_t n = expr->data.function.arg_count;
         Expr** vargs = malloc(sizeof(Expr*) * (n ? n : 1));
         for (size_t i = 0; i < n; i++)
@@ -277,8 +287,11 @@ static Expr* map_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec 
      * O(1) refcount bump instead of a full bottom-up descent + rebuild. This is
      * what stops the common `f /@ list` from walking (and rebuilding) the entire
      * tree when f only touches level 1 -- cost was growing with element depth.
-     * Only the negative-spec case still needs get_depth below. */
-    if (spec.min >= 0 && current_level > spec.max)
+     * Only the negative-spec case still needs get_depth below. A NEGATIVE max
+     * (Map[f, e, -1] is levels {1, -1}) is a depth bound, not a level, so it
+     * must not take this exit. */
+    bool nonneg = spec.min >= 0 && spec.max >= 0;
+    if (nonneg && current_level > spec.max)
         return expr_copy(expr);
 
     Expr* intermediate = NULL;
@@ -287,12 +300,15 @@ static Expr* map_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec 
      * shared wholesale as `intermediate` -- no per-child recursion and no
      * structural rebuild -- and f (if it applies at this level) wraps the shared
      * subtree. */
-    if (expr->type == EXPR_FUNCTION && !(spec.min >= 0 && current_level + 1 > spec.max)) {
+    if (expr->type == EXPR_FUNCTION && !(nonneg && current_level + 1 > spec.max)) {
         // Recurse first (Bottom-up)
+        /* An atomic association's parts are its values; keys and Rule/
+         * RuleDelayed wrappers are kept, never mapped (assoc_struct.h). */
+        bool assoc = assoc_is_wellformed(expr);
         size_t count = expr->data.function.arg_count;
-        Expr** new_args = malloc(sizeof(Expr*) * count);
+        Expr** new_args = malloc(sizeof(Expr*) * (count ? count : 1));
         for (size_t i = 0; i < count; i++) {
-            new_args[i] = map_at_level(f, expr->data.function.args[i], current_level + 1, spec);
+            new_args[i] = map_at_level(f, struct_part(expr, i, assoc), current_level + 1, spec);
         }
 
         Expr* new_head = NULL;
@@ -302,19 +318,23 @@ static Expr* map_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec 
             new_head = expr_copy(expr->data.function.head);
         }
 
-        intermediate = expr_new_function(new_head, new_args, count);
+        intermediate = struct_rebuild(expr, assoc, new_head, new_args, count, false);
         free(new_args);
     } else {
         intermediate = expr_copy(expr);
     }
 
+    /* Mixed positive/negative membership, as in MapIndexed: a bound >= 0 is a
+     * level from the root, a bound < 0 a negative depth of the ORIGINAL
+     * subtree (the rebuilt one carries f[...] wrappers that would shift it). */
     bool should_map;
-    if (spec.min >= 0) {
+    if (nonneg) {
         should_map = (current_level >= spec.min && current_level <= spec.max);
     } else {
-        int64_t d = get_depth(intermediate);
-        should_map = (current_level >= spec.min && current_level <= spec.max) ||
-                     (-d >= spec.min && -d <= spec.max);
+        int64_t d = get_depth(expr);
+        bool lo = (spec.min >= 0) ? (current_level >= spec.min) : (-d >= spec.min);
+        bool hi = (spec.max >= 0) ? (current_level <= spec.max) : (-d <= spec.max);
+        should_map = lo && hi;
     }
 
     if (should_map) {
@@ -380,9 +400,15 @@ Expr* builtin_map(Expr* res) {
 
     /* Map over an association threads over its values, preserving keys:
      * Map[f, <|k -> v|>] -> <|k -> f[v]|>. Only the default level (no explicit
-     * level spec) is special-cased; deeper level specs fall through. */
-    if (res->data.function.arg_count == 2 && is_association(expr))
-        return assoc_map_values(f, expr);
+     * level spec) is special-cased; deeper level specs fall through. The
+     * generic walker is association-aware (assoc_struct.h), which keeps a
+     * RuleDelayed entry delayed: Map[f, <|a :> 1 + 1|>] is <|a :> f[1 + 1]|>.
+     * A malformed Association[1, 2] is an ordinary expression and maps over
+     * its arguments below. */
+    if (res->data.function.arg_count == 2 && assoc_is_wellformed(expr)) {
+        LevelSpec one = {1, 1, false};
+        return map_at_level(f, expr, 0, one);
+    }
 
     /* Automatic numeric fast-path: Map[f, {machine numbers}] with f a numeric
      * pure function runs the compiled body per element (no per-element evaluate).
@@ -466,10 +492,7 @@ static Expr* mi_position(const MIPath* path) {
  * malformed Association[a, b] intact, so an entry's args[0]/args[1] must not
  * be read until this has passed — doing so type-puns a symbol's SymbolDef*. */
 static bool mi_is_assoc(const Expr* e) {
-    if (!is_association(e)) return false;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (!is_rule2(e->data.function.args[i])) return false;
-    return true;
+    return assoc_is_wellformed(e);          /* shared rule: assoc_struct.h */
 }
 
 /* Rebuild `expr` bottom-up, wrapping each part selected by `spec` in
@@ -1285,9 +1308,10 @@ static Expr* scan_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec
             Expr* s = scan_at_level(f, expr->data.function.head, current_level + 1, spec);
             if (s) return s;
         }
+        bool assoc = assoc_is_wellformed(expr);   /* parts = values */
         size_t count = expr->data.function.arg_count;
         for (size_t i = 0; i < count; i++) {
-            Expr* s = scan_at_level(f, expr->data.function.args[i], current_level + 1, spec);
+            Expr* s = scan_at_level(f, struct_part(expr, i, assoc), current_level + 1, spec);
             if (s) return s;
         }
     }
@@ -1328,13 +1352,10 @@ Expr* builtin_scan(Expr* res) {
     parse_options(res, ls ? 3 : 2, &spec);                     /* Heads->True */
 
     /* Association at the default level: scan the values (mirrors Map). */
-    if (ls == NULL && is_association(expr)) {
+    if (ls == NULL && !spec.heads && assoc_is_wellformed(expr)) {
         size_t n = expr->data.function.arg_count;
         for (size_t i = 0; i < n; i++) {
-            Expr* elem = expr->data.function.args[i];
-            Expr* val = (elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
-                        ? elem->data.function.args[1] : elem;
-            Expr* s = scan_apply(f, expr_copy(val));
+            Expr* s = scan_apply(f, expr_copy(struct_part(expr, i, true)));
             if (s) return s;
         }
         return expr_new_symbol(SYM_Null);
@@ -1587,8 +1608,10 @@ static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelS
                 return false;
             }
         }
+        /* Keys are not parts of an association: FreeQ[<|a -> 1|>, a] is True. */
+        bool assoc = assoc_is_wellformed(expr);
         for (size_t i = 0; i < expr->data.function.arg_count; i++) {
-            if (!freeq_at_level(expr->data.function.args[i], form, current_level + 1, spec)) {
+            if (!freeq_at_level(struct_part(expr, i, assoc), form, current_level + 1, spec)) {
                 return false;
             }
         }

@@ -74,12 +74,105 @@ Out[5]= 5
 ## AssociationQ
 Tests whether an expression is an association.
 
+- `AssociationQ[expr]`: `True` only for a *well-formed* association, one whose
+  every entry is a two-argument `Rule` or `RuleDelayed`. A malformed
+  `Association[1, 2]`, which the constructor leaves unevaluated as Mathematica
+  does, gives `False`.
+
 ```mathematica
 In[1]:= AssociationQ[<|"a" -> 1|>]
 Out[1]= True
 
 In[2]:= AssociationQ[{1, 2, 3}]
 Out[2]= False
+
+In[3]:= AssociationQ[Association[f[a -> 1]]]
+Out[3]= False
+```
+
+## Association atomicity (structural functions)
+An evaluated association is an **atom**, as in Mathematica: its parts are its
+values, and its keys and `Rule` wrappers are not parts at all.
+
+- `AtomQ[assoc]` is `True`; `Depth`, `LeafCount`, `Level`, `FreeQ`,
+  `OrderedQ`, `MemberQ`, `Count`, `Cases`, `Position` and `DeleteCases` see the
+  values only.
+- `Position` names a value by `Key[k]`, at any nesting depth.
+- `ReplaceAll`, `ReplaceRepeated` and `Replace` (with any level spec) rewrite
+  values, never keys, and never match a whole `k -> v` entry. The head is still
+  offered to the rules: `<|a -> 1|> /. Association -> g` is `g[a -> 1]`.
+- `Map`, `MapAll`, `MapIndexed`, `Apply` and `Scan` use the same levels, so a
+  level spec can never build a malformed `Association[f[a -> 1]]`. A
+  `RuleDelayed` entry stays delayed.
+- An association can serve as a rule set: `ReplaceAll`, `ReplaceRepeated`,
+  `Replace` and `ReplaceList` accept it, with its keys matched literally (not
+  as patterns) by a hash lookup.
+- `Equal` and `Unequal` compare two associations entry by entry, in order: keys
+  (and `Rule`/`RuleDelayed`) must be identical, values are compared with
+  `Equal`. When a value comparison is undecided, the result stays unevaluated.
+
+**Features**
+- One rule, in one place: `src/assoc_struct.h` gives every level walker the
+  parts of an association (its values) and rebuilds it with its keys intact.
+  So the behaviour is the same across all these functions, and a rebuilt
+  association never needs its keys re-canonicalised.
+- Only a well-formed association is atomic. `Association[1, 2]` is an ordinary
+  expression: `AtomQ` is `False` and `Level` sees `1` and `2`.
+- Linear time: the well-formedness check is paid once per visited node, and an
+  association used as a rule set costs one O(1) lookup per subexpression, not
+  one pattern match per key.
+- Differences from Mathematica, both deliberate:
+  - Mathematica does not re-evaluate the values of an association built by
+    `/.`: `<|"a" -> x^2|> /. x -> 3` is `<|"a" -> 3^2|>`. Mathilda gives
+    `<|"a" -> 9|>`. It has no "already evaluated" mark on the rebuilt node, so
+    the evaluator reduces the new values, as it does for a `List`.
+  - Mathematica treats an *unevaluated* `Association[...]` inside `Hold` as an
+    ordinary expression, so `Hold[<|a -> 1|>] /. a -> b` renames the key.
+    Mathilda has a single representation for both, so the key is left alone
+    there too.
+
+```mathematica
+In[1]:= AtomQ[<|a -> 1|>]
+Out[1]= True
+
+In[2]:= {Depth[<|a -> 1|>], Depth[<|a -> <|b -> 1|>|>], LeafCount[<|a -> 1|>]}
+Out[2]= {2, 3, 2}
+
+In[3]:= Level[<|a -> f[1], b -> 2|>, Infinity]
+Out[3]= {1, f[1], 2}
+
+In[4]:= FreeQ[<|a -> 1|>, a]
+Out[4]= True
+
+In[5]:= Position[{<|a -> 1, b -> {1}|>}, 1]
+Out[5]= {{1, Key[a]}, {1, Key[b], 1}}
+
+In[6]:= <|a -> 1, b -> 2|> /. b -> a
+Out[6]= <|a -> 1, b -> 2|>
+
+In[7]:= <|a -> 1, b -> 2|> /. 1 -> 5
+Out[7]= <|a -> 5, b -> 2|>
+
+In[8]:= Map[f, <|a -> {1}|>, {2}]
+Out[8]= <|a -> {f[1]}|>
+
+In[9]:= Apply[f, <|a -> {1}|>, {1}]
+Out[9]= <|a -> f[1]|>
+
+In[10]:= ReplaceAll[{x, y}, <|x -> 1|>]
+Out[10]= {1, y}
+
+In[11]:= <|a -> 1, b -> 2|> == <|b -> 2, a -> 1|>
+Out[11]= False
+
+In[12]:= <|a -> 1|> == <|a -> 1.|>
+Out[12]= True
+
+In[13]:= OrderedQ[<|a -> 2, b -> 1|>]
+Out[13]= False
+
+In[14]:= DeleteCases[{<|a -> 1, b -> 2|>}, 1, Infinity]
+Out[14]= {<|b -> 2|>}
 ```
 
 ## Keys

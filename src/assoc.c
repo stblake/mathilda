@@ -11,6 +11,7 @@
 #include "assoc.h"
 #include "match.h"   /* KeyMemberQ / KeyFreeQ key patterns */
 #include "assoc_index.h"
+#include "assoc_struct.h"  /* assoc_is_wellformed: AssociationQ */
 #include "ndreduce.h"
 #include "ndarray.h"
 #include "sym_names.h"
@@ -238,9 +239,13 @@ Expr* builtin_association(Expr* res) {
 /* ======================================================================
  * AssociationQ[expr] — True iff expr is an association.
  * ====================================================================== */
+/* Only a WELL-FORMED association answers True: the constructor leaves a
+ * malformed Association[1, 2] (or a Map/Apply result such as
+ * Association[f[a -> 1]]) unevaluated, and such a node is an ordinary
+ * expression, not an association (assoc_struct.h). */
 Expr* builtin_associationq(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
-    return expr_new_symbol(is_association(res->data.function.args[0])
+    return expr_new_symbol(assoc_is_wellformed(res->data.function.args[0])
                            ? SYM_True : SYM_False);
 }
 
@@ -1545,7 +1550,8 @@ void assoc_init(void) {
     symtab_add_builtin("AssociationQ", builtin_associationq);
     symtab_get_def("AssociationQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("AssociationQ",
-        "AssociationQ[expr]\n\tGives True if expr is an Association, else False.");
+        "AssociationQ[expr]\n\tGives True if expr is a valid Association (every entry a "
+        "Rule or RuleDelayed), else False.");
 
     symtab_add_builtin("Keys", builtin_keys);
     symtab_get_def("Keys")->attributes |= ATTR_PROTECTED;
