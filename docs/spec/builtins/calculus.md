@@ -1290,7 +1290,15 @@ monotonically down.
      factors over `Q(i, Sqrt[2])`.  Every returned antiderivative passes a hard
      verify-or-decline gate — it is re-differentiated and checked against the
      integrand at real points of its domain, so a mis-realised result declines
-     rather than escaping as a wrong answer.  A non-elementary case, a
+     rather than escaping as a wrong answer.  As of v0.192 a nested radical whose
+     radicand is a genus-0 conic in the tower generators (e.g. `Sqrt[x + Sqrt[x]]`,
+     whose radicand is `Sqrt[x]·(1 + Sqrt[x])`) is kept **fused** as the simple
+     radical rather than split into a product of independent radicals
+     (`Sqrt[a b] = Sqrt[a] Sqrt[b]` holds only for `a, b > 0`), so the
+     antiderivative is faithful at negative and complex arguments too, not merely
+     on the integrand's real domain; the branch-unsafe split is still used where it
+     is genuinely needed to lower the genus of a higher-degree radicand.  A
+     non-elementary case, a
      not-yet-ported case, or a run exceeding an internal wall-clock budget all
      decline cleanly (never a wrong answer, never an unbounded hang).
      Cascade-gated to skip pure rational functions (BronsteinRational's job)

@@ -132,6 +132,19 @@ static void test_method_radical(void) {
     assert_eval(
         "Simplify[D[Integrate`ParallelMixedTower[x/Sqrt[x^2 + 1], x], x]"
         " - x/Sqrt[x^2 + 1]]", "0");
+    /* Nested radical Sqrt[x + Sqrt[x]] = Sqrt[Sqrt[x] (1 + Sqrt[x])]: the outer
+     * radicand is a genus-0 conic in u = Sqrt[x], so it must stay FUSED as the
+     * simple radical y^2 = u^2 + u rather than split (branch-unsafe) into the
+     * x^(1/4) Sqrt[1 + Sqrt[x]] form that is a correct antiderivative only on
+     * x > 0.  Guards both properties: the answer is free of the split fourth root
+     * x^(1/4), and D[r] equals the integrand at a COMPLEX point off the positive
+     * reals -- the global-fidelity check the real-only verify gate cannot make,
+     * where the old split form differed from the integrand. */
+    assert_eval(
+        "r = Integrate[Sqrt[x + Sqrt[x]], x, Method -> \"ParallelMixedTower\"];"
+        " {Head[r] =!= Integrate, FreeQ[r, Power[x, 1/4]],"
+        "  Abs[N[(D[r, x] - Sqrt[x + Sqrt[x]]) /. x -> 2 + I, 25]] < 10^-15}",
+        "{True, True, True}");
 }
 
 static void test_method_split_specials(void) {

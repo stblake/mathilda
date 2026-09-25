@@ -1913,11 +1913,25 @@ BuildTower[integrand_, x_Symbol] := Module[
     dsgn = If[EvenQ[mr] && signFix[den] =!= den, (-1)^Numerator[ex], 1];
     (* pure-root factors: a factor of the squarefree radicand that is itself a
        generator g, positive at the sample point, is split off as g^ex so that
-       it flattens (Lemma 3.2): Sqrt[2 t (1 + t^2)] = Sqrt[2] Sqrt[t] Sqrt[1 + t^2] *)
-    pure = 1; rest = const;
-    Do[If[fc[[2]] == 1 && MemberQ[gens, fc[[1]]] && signFix[fc[[1]]] === fc[[1]],
-        pure *= fc[[1]]^ex, rest *= fc[[1]]^fc[[2]]],
-      {fc, FactorList[sf]}];
+       it flattens (Lemma 3.2): Sqrt[2 t (1 + t^2)] = Sqrt[2] Sqrt[t] Sqrt[1 + t^2].
+       This split is branch-unsafe (Sqrt[a b] = Sqrt[a] Sqrt[b] holds only for
+       a, b > 0), so it is done ONLY when it is actually needed to reduce the
+       radicand to a handled curve: either a simple radical y^m = q already exists
+       (q =!= None -- keeping the factor fused would demand a second radical), or
+       the fused squarefree radicand is not yet a genus-0 conic (total degree >= 3
+       in the generators, so pulling a linear generator factor lowers the genus, as
+       in the cubic example above).  When the fused radicand is already a genus-0
+       conic (total degree <= 2) it can serve directly as the simple radical
+       y^2 = q; keeping it fused then makes the back-substitution y -> Sqrt[q]
+       globally faithful -- e.g. Sqrt[Sqrt[x] + x] stays fused instead of splitting
+       into the (x > 0)-only x^(1/4) Sqrt[1 + Sqrt[x]]. *)
+    pure = 1;
+    If[q === None && With[{dm = Unique["d"]}, Exponent[Expand[sf /. Thread[gens -> gens dm]], dm]] <= 2,
+      rest = const sf,                 (* genus-0 conic: keep the radical fused *)
+      rest = const;
+      Do[If[fc[[2]] == 1 && MemberQ[gens, fc[[1]]] && signFix[fc[[1]]] === fc[[1]],
+          pure *= fc[[1]]^ex, rest *= fc[[1]]^fc[[2]]],
+        {fc, FactorList[sf]}]];
     sf = Expand[rest];                 (* expanded, as before the split *)
     If[FreeQ[sf, Alternatives @@ Join[gens, {Y}]], Return[Together[dsgn sq^(mr ex) sf^ex/den^(mr ex)] pure]];
     Together[dsgn sq^(mr ex)/den^(mr ex)] pure Power[sf, ex]];

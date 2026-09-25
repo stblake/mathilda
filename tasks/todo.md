@@ -1,3 +1,41 @@
+# ACTIVE (2026-09-25): Fix ParallelMixedTower branch defect on nested radicals
+
+**Bug:** `Integrate[Sqrt[x + Sqrt[x]], x, Method -> "ParallelMixedTower"]` returned
+`1/4 Log[x^(1/4) + Sqrt[1+Sqrt[x]]] + 1/12 Sqrt[1+Sqrt[x]](-3 x^(1/4)+2 x^(3/4)+8 x^(5/4))`,
+correct only for x > 0. Root cause: `rootNormalize` (src/internal/mixed/ParallelMixed.m)
+split the nested radical `Sqrt[Sqrt[x](1+Sqrt[x])]` into `x^(1/4) Sqrt[1+Sqrt[x]]` (the
+branch-unsafe `Sqrt[a b]=Sqrt[a]Sqrt[b]`). Fix (approved: un-split genus-0 conics): the
+pure-generator-factor split now runs only when needed for genus reduction (existing radical,
+or fused squarefree radicand total degree >= 3); a genus-0 conic (deg <= 2, q === None) stays
+fused as the simple radical y^2 = q, so back-sub y -> Sqrt[q] is globally faithful.
+
+- [x] Edit `rootNormalize` split gate (src/internal/mixed/ParallelMixed.m ~1914-1926)
+- [x] Reproduce: result now `1/8 Log[1/2+Sqrt[x]+Sqrt[Sqrt[x]+x]] + 1/12 Sqrt[Sqrt[x]+x](-3+2Sqrt[x]+8x)`
+- [x] Global diff-back ~0 at x=-1/2, 2+I, 1/3-I/5, 7 (the OFF-positive-reals check the gate lacks); FTC [1,4] matches NIntegrate
+- [x] PMT unit test (tests/build/parallelmixedtower_tests): all pass
+- [x] Charlwood corpus A/B: baseline 48/50 (A19, A39) → WITH fix 48/50 (A19, A39). ZERO regressions; only P9, A35 change form (both to fused radical, both still verified)
+- [x] All integrate_* + trigrat + parallelmixedtower unit tests pass
+- [x] Extend tests/test_parallelmixedtower.c with nested-radical global-correctness case (free of x^(1/4) + diff-back at x=2+I)
+- [x] docs/spec/changelog/2026-09-21.md note; per-category spec (calculus.md) update
+- [x] Version bump src/version.h -> 0.192; rebuilt, $VersionNumber -> 0.192
+- [ ] COMMIT + tag v0.192 — deferred to user (harness: commit only when asked); version.h already bumped for inclusion
+- [ ] (optional) Sync untracked dev copy mixed/ParallelMixed.m — left to user (scratch, not runtime-loaded)
+
+### Review
+Root cause was the branch-unsafe pure-root-factor split in `rootNormalize`
+(src/internal/mixed/ParallelMixed.m ~1914): it pulled `Sqrt[Sqrt[x]] = x^(1/4)` out of
+`Sqrt[Sqrt[x](1+Sqrt[x])]`, building the whole tower in an (x>0)-only basis. The one-line
+functional change gates that split on a genus test: keep a genus-0 conic radicand fused
+(deg ≤ 2 in the generators, q === None) so it serves directly as the simple radical y^2=q
+and back-substitutes globally; still split when needed to lower genus (deg ≥ 3) or when a
+radical already exists. Result now `1/8 Log[1/2 + Sqrt[x] + Sqrt[Sqrt[x]+x]] + 1/12
+Sqrt[Sqrt[x]+x](-3+2Sqrt[x]+8x)`, verified at negative and complex arguments. Blast radius
+tiny (2 Charlwood cases re-form, both improvements). NB: the verify-or-decline gate still
+samples only positive reals — it did not catch this and cannot catch a future branch defect;
+the durable fix here is at construction, not the gate.
+
+---
+
 # DONE (2026-09-25 pm): Book updates per book/BOOK_UPDATE_REVIEW.md ("everything" run)
 
 **COMPLETE.** All waves landed. `make examples` (197 transcripts), `make usage` (58 cards),

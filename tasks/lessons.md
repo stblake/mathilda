@@ -1,5 +1,30 @@
 # Lessons learned
 
+## ParallelMixedTower nested-radical antiderivatives were branch-split (correct only on x>0) (2026-09-25)
+
+`Integrate[Sqrt[x + Sqrt[x]], x, Method -> "ParallelMixedTower"]` returned
+`1/4 Log[x^(1/4)+Sqrt[1+Sqrt[x]]] + 1/12 Sqrt[1+Sqrt[x]](-3 x^(1/4)+2 x^(3/4)+8 x^(5/4))`.
+It looks wrong (derivative simplifies to `x^(1/4) Sqrt[1+Sqrt[x]]`, not the integrand) but is
+a *correct* antiderivative for x>0 — the two forms are equal there since
+`Sqrt[x+Sqrt[x]] = Sqrt[Sqrt[x](1+Sqrt[x])] = x^(1/4) Sqrt[1+Sqrt[x]]`. The real defect the
+user flagged: it is correct **only** on x>0. Lessons:
+
+- **Real-only diff-back is NOT proof of global correctness.** ParallelMixedTower's
+  verify-or-decline gate (`src/internal/mixed/ParallelMixed.m` ~2130) samples only
+  positive-real rationals, where a branch-split form `Sqrt[a]Sqrt[b]` matches `Sqrt[a b]`.
+  It cannot catch (and never will catch) a form that is wrong off the positive reals. When
+  judging a radical antiderivative, diff-back at NEGATIVE and COMPLEX points.
+- **Root cause was branch-unsafe radical splitting at construction, not the gate.**
+  `BuildTower`'s `rootNormalize` pulled a generator factor out from under a root
+  (`Sqrt[Sqrt[x]] = x^(1/4)`), an application of `Sqrt[a b]=Sqrt[a]Sqrt[b]` (valid only for
+  a,b>0). Fix (v0.192): only do that split when it lowers genus (fused squarefree radicand
+  degree ≥ 3, or a radical already exists); a genus-0 conic (deg ≤ 2, `q === None`) stays
+  fused as the simple radical `y^2=q`, so back-sub `y -> Sqrt[q]` is globally faithful. The
+  genus-reducing split (cubic `Sqrt[2 t(1+t^2)]`) is preserved. Charlwood 48/50 unchanged;
+  only P9/A35 re-form (both improvements). See memory
+  `project_parallelmixedtower_branch_fidelity_genus0_fuse`.
+
+
 ## A cascade method that recurses `DSolve` can leak/hang through the shared engine, and can hijack callers (2026-09-02)
 
 Landing DSolve M9 (the 8 SymPy parity methods) surfaced three traps worth keeping:
