@@ -367,6 +367,38 @@ right-hand side for speed, and---because diffusion is stiff---integrates the sem
 BDF method by default. The returned object is then a two-dimensional \texttt{InterpolatingFunction} in
 \(t\) and \(x\).}
 
+\subsection{Interpolation}
+\label{ssec:nc-interpolation}
+
+\B{NDSolve} \emph{produces} an \texttt{InterpolatingFunction}; \B{Interpolation} and
+\B{ListInterpolation} \emph{build} one directly from data. Give \B{Interpolation} a
+list of \(\{x, y\}\) points and it returns a callable that agrees with them and fills
+the gaps with a piecewise polynomial; \B{ListInterpolation} does the same for values
+sampled on a regular grid, where the abscissae are implicit.
+
+\begin{codepairs}
+\pair{numerical-calculus/interpolation/1}{\B{Interpolation} of four points from the
+cube \(x^3\) returns an \texttt{InterpolatingFunction} over \([1,4]\).}
+\pair{numerical-calculus/interpolation/2}{Evaluated between the knots it gives
+\(2.5^3 = 15.625\)---exact here, because a cubic spline reproduces a cubic.}
+\pair{numerical-calculus/interpolation/3}{\B{ListInterpolation} takes bare values
+\(\{1,4,9,16,25\}\) on the implicit grid \(1,\ldots,5\).}
+\pair{numerical-calculus/interpolation/4}{At \(2.5\) it returns \(6.25 = 2.5^2\), the
+underlying square recovered exactly.}
+\pair{numerical-calculus/interpolation/5}{A second argument places the grid: the same
+values on \([0,2]\) put \(9\) at the coordinate \(1\) (the midpoint sample).}
+\end{codepairs}
+
+By default these build a cubic spline, so the interpolant is twice continuously
+differentiable and reproduces any polynomial up to degree three
+exactly.\calloutnote{Performance}{When the data is a packed array of machine reals,
+\B{ListInterpolation} assembles the spline coefficients on the raw buffer in one
+pass---an order-of-magnitude faster than boxing each sample---and the resulting
+\texttt{InterpolatingFunction} evaluates by a binary search for the interval followed
+by a Horner evaluation of the local polynomial. It is the natural bridge from sampled
+data back to the continuous operations---\B{D}, \B{NIntegrate}, \B{FindRoot}---of the
+rest of this section.}
+
 \subsection{Roots of polynomials}
 \label{ssec:nroots}
 

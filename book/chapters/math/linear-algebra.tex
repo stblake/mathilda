@@ -1,5 +1,503 @@
 \section{Linear Algebra}
 \label{sec:linalg}
 
-\emph{This section is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+Linear algebra is where symbolic computation and fast numerics meet most
+directly, and Mathilda meets them with a single idea: a matrix is not a special
+kind of value. It is an ordinary expression---a \B{List} of \B{List}s---so the
+generic tools you already know (\B{Part}, \B{Map}, \B{Transpose}) apply to it
+without ceremony, and a routine like \B{Det} or \B{Inverse} simply reads the
+structure off the tree.\index{matrix!as an expression} That uniformity is one of
+the two themes of this section. The other is the split that runs underneath every
+function here: the \emph{same} call is answered exactly when its entries are exact
+and at the speed of C when they are machine numbers. Hand \B{Inverse} an integer
+matrix and you get an exact rational inverse; hand it a matrix of measured reals
+and the work goes to LAPACK over a packed buffer. The mathematics you type is the
+mathematics that runs, whichever world the data lives in.
+
+We climb from structure to spectrum. First the matrix as an expression---its
+shape, its constructors, and the packed-array substrate that makes it
+fast---then the products and norms that turn vectors into geometry; the
+determinant, inverse, and matrix powers; solving linear systems exactly and in
+the least-squares sense; rank, row reduction, and the null space, with the
+user-facing \texttt{ZeroTest} option that makes exact reduction possible where a
+structural pivot would fail; the classical matrix decompositions (LU, QR, SVD,
+Schur); and finally the eigenproblem---eigenvalues, eigenvectors, and the Jordan
+canonical form---closing with the machine--exact divide that governs all of it.
+
+\subsection{Vectors and matrices as expressions}
+\label{ssec:la-matrices}
+
+A vector is a flat list; a matrix is a list of equal-length rows. Because that is
+all a matrix is, the everyday expression tools work on it unchanged, and a
+handful of predicates and constructors round out the vocabulary.
+
+\begin{codepairs}
+\pair{linear-algebra/matrices/1}{A \(3\times3\) matrix is just a list of three
+rows.}
+\pair{linear-algebra/matrices/2}{\B{Dimensions} reads the shape---here \(3\times3\).}
+\pair{linear-algebra/matrices/3}{\B{MatrixQ} confirms it is a rectangular rank-2
+array (its siblings \B{VectorQ} and \B{SquareMatrixQ} test the other shapes).}
+\pair{linear-algebra/matrices/4}{\B{Part} slices a column: \texttt{m[[All, 2]]} is
+the second entry of every row.}
+\pair{linear-algebra/matrices/5}{And because rows are ordinary lists, \B{Map}
+threads \B{Total} over them to sum each row---no matrix-specific machinery
+needed.}
+\pair{linear-algebra/matrices/6}{\B{Transpose} exchanges rows and columns.}
+\pair{linear-algebra/matrices/7}{\B{ConjugateTranspose} transposes \emph{and}
+conjugates---the adjoint \(A^{*}\), the right notion for complex matrices.}
+\pair{linear-algebra/matrices/8}{\B{IdentityMatrix} builds the \(n\times n\)
+identity.}
+\pair{linear-algebra/matrices/9}{\B{DiagonalMatrix} places a list on the
+diagonal; the off-diagonal zeros are exact when the diagonal is.}
+\pair{linear-algebra/matrices/10}{\B{Diagonal} reads the diagonal back out.}
+\end{codepairs}
+
+The lesson of pairs~4 and~5 is worth dwelling on: nothing in \texttt{m[[All, 2]]}
+or \texttt{Map[Total, m]} knows it is operating on a ``matrix.'' They are the same
+generic operators that act on any expression, and they work here for free because
+a matrix \emph{is} an expression. The specialised predicates---\B{SymmetricMatrixQ},
+\B{HermitianMatrixQ}, \B{PositiveDefiniteMatrixQ}---layer structural tests on top
+of that same representation.
+
+\calloutnote{Under the hood}{Behind the plain list is an invisible fast lane. When
+every entry is a machine number, Mathilda may hold the matrix as a
+\emph{packed array}\index{packed array}: a flat, row-major buffer of raw
+\texttt{double}s carrying its shape on the side, exactly like NumPy's
+\texttt{ndarray}, rather than a tree of boxed \texttt{Expr} nodes. \B{Head},
+\B{ListQ}, printing, and pattern matching cannot tell a packed list from any
+other list---it is the \emph{same value}, only stored densely---so the uniformity
+above costs nothing. The visible form of that same storage is \B{NDArray}, which
+prints as \texttt{NDArray[\ldots]} and announces itself; the two share every
+kernel. Packing and the transparency gate that guards it are covered in
+\S\ref{ssec:la-precision}.}
+
+\subsection{Products and norms}
+\label{ssec:la-products}
+
+The single operator \B{Dot} (written as an infix period, \texttt{.}) carries the
+whole algebra of products: vector--vector, matrix--vector, and matrix--matrix are
+one function, contracting the last index of its left argument with the first index
+of its right.
+
+\begin{codepairs}
+\pair{linear-algebra/products/1}{A matrix times a vector---each output entry is a
+row dotted with \(\{x, y\}\).}
+\pair{linear-algebra/products/2}{Two matrices multiply to a matrix, row-by-column.}
+\pair{linear-algebra/products/3}{Two vectors contract to a scalar, the inner
+product \(1\cdot4 + 2\cdot5 + 3\cdot6 = 32\).}
+\pair{linear-algebra/products/4}{\B{Cross} is the \(3\)-dimensional cross product:
+\(\hat x \times \hat y = \hat z\).}
+\pair{linear-algebra/products/5}{In general \B{Cross} takes \(n-1\) vectors of
+length \(n\); with one \(2\)-vector it returns the perpendicular in the plane.}
+\pair{linear-algebra/products/6}{\B{Tr} sums the diagonal---the trace, invariant
+under similarity.}
+\end{codepairs}
+
+A \emph{norm} measures length. \B{Norm} defaults to the Euclidean (\(2\)-)norm but
+takes any \(p\), and \B{Normalize} scales a vector to unit length.
+
+\begin{codepairs}
+\pair{linear-algebra/products/7}{\B{Norm} of a symbolic vector is the Hermitian
+\(2\)-norm \(\sqrt{\sum |x_i|^2}\)---note the \B{Abs}, so it is correct for complex
+entries.}
+\pair{linear-algebra/products/8}{The \(1\)-norm sums absolute values: \(1+2+3=6\).}
+\pair{linear-algebra/products/9}{The \(\infty\)-norm takes the largest,
+\(\max\{1,2,3\}=3\).}
+\pair{linear-algebra/products/10}{\B{Normalize} divides by the norm, sending
+\(\{3,4\}\) to the unit vector \(\{3/5, 4/5\}\).}
+\end{codepairs}
+
+The \(p\)-norms interpolate a family: \(p=1\) the taxicab length, \(p=2\) the
+straight-line length, and \(p=\infty\) the largest coordinate. That the symbolic
+answer in pair~7 uses \(\lvert x\rvert^2\) rather than \(x^2\) is not pedantry---for
+a complex vector the length-squared is \(\sum x_i\overline{x_i}\), and writing
+\(x^2\) would give the wrong answer off the real axis.
+
+\calloutnote{Performance}{On a machine-precision vector or matrix these route
+through LAPACK: the \(2\)-norm uses \texttt{dnrm2}'s running-scale recurrence and
+the matrix norms use \texttt{dlange}, so a well-scaled vector whose true norm is
+representable never overflows to \texttt{inf}. \texttt{Norm[\{1e200, 1e200\}]}
+returns \(1.414\times10^{200}\)---the naive \(\sqrt{x_1^2 + x_2^2}\) would square to
+infinity first. Both \B{Norm} and \B{Dot} lower inside \B{Compile}, so a norm or
+inner product inside a tight numerical loop runs at buffer speed
+(\texttt{src/linalg/norm.c}, \texttt{dot.c}).}
+
+\subsection{Determinant, inverse, and matrix powers}
+\label{ssec:la-det}
+
+The determinant collapses a square matrix to a single number that vanishes exactly
+when the matrix is singular; the inverse undoes the linear map when it does not.
+
+\begin{codepairs}
+\pair{linear-algebra/det/1}{\B{Det} of a numeric matrix is exact: \(1\cdot4 -
+2\cdot3 = -2\).}
+\pair{linear-algebra/det/2}{For a symbolic matrix it returns the Laplace
+(cofactor) expansion along the first row.}
+\pair{linear-algebra/det/3}{\B{Inverse} of an integer matrix comes back with exact
+rational entries.}
+\pair{linear-algebra/det/4}{Symbolically, the \(2\times2\) inverse is the classical
+adjugate over the determinant \(ad-bc\).}
+\pair{linear-algebra/det/5}{Store a matrix to check the defining identity\ldots}
+\pair{linear-algebra/det/6}{\ldots{}\(A\,A^{-1}\) is the identity, exactly.}
+\pair{linear-algebra/det/7}{\B{MatrixPower} raises a matrix to an integer power by
+repeated squaring; the tenth power of \(\left(\begin{smallmatrix}1&1\\1&0\end{smallmatrix}\right)\)
+is a block of consecutive Fibonacci numbers.}
+\pair{linear-algebra/det/8}{It works symbolically too---here the square of a
+general \(2\times2\) matrix.}
+\end{codepairs}
+
+Pair~7 is a small gem: the powers of the matrix \(\left(\begin{smallmatrix}1&1\\1&0\end{smallmatrix}\right)\)
+generate the Fibonacci sequence, because that matrix encodes the recurrence
+\(F_{n+1}=F_n+F_{n-1}\). Its tenth power holds \(F_{11}=89\) and \(F_{10}=55\), and
+\B{MatrixPower} reaches them in \(\lceil\log_2 10\rceil=4\) matrix multiplications
+rather than nine, by repeated squaring.
+
+\calloutnote{Under the hood}{\B{Det} and \B{Inverse} each choose a path by the kind
+of entries they see. An all-integer or rational matrix is handed to FLINT's
+\texttt{fmpq\_mat\_det} / \texttt{fmpq\_mat\_inv}, which work in polynomial time and
+return the exact answer---so a \(12\times12\) Hilbert determinant is instant, not an
+\(O(n!)\) Laplace expansion. A machine-real matrix factorises through LAPACK's
+\texttt{dgetrf} LU; a genuinely arbitrary-precision (MPFR) matrix uses an
+\(O(n^3)\) MPFR LU. Only a \emph{symbolic} matrix falls to cofactor expansion,
+which is why pair~2 shows it. The determinant of a large machine matrix is the
+product of the LU pivots and can exceed the IEEE-double range---a
+\(200\times200\) random matrix has \(\lvert\det\rvert\approx10^{340}\)---so Mathilda
+re-accumulates the pivot product in an MPFR value of unbounded exponent rather than
+returning \texttt{inf} (\texttt{src/linalg/det.c}, \texttt{inv.c}, \texttt{matpow.c}).}
+
+\subsection{Solving linear systems}
+\label{ssec:la-linsolve}
+
+To solve \(A\mathbf{x}=\mathbf{b}\) is the central task of the subject. \B{LinearSolve}
+does it exactly when it can, over- and under-determined systems included; when no
+exact solution exists, \B{LeastSquares} returns the closest thing.
+
+\begin{codepairs}
+\pair{linear-algebra/linsolve/1}{A square system, solved exactly over the
+rationals.}
+\pair{linear-algebra/linsolve/2}{With symbolic entries the answer is Cramer's
+rule: each component is a ratio of determinants sharing the denominator
+\(ru-st=\det A\).}
+\pair{linear-algebra/linsolve/3}{An \emph{under}-determined system (more unknowns
+than equations) returns one particular solution, with the free variables set to
+zero---use \B{Solve} for the full parametrised family.}
+\pair{linear-algebra/linsolve/4}{When the system is \emph{over}-determined and
+inconsistent, \B{LeastSquares} minimises \(\lVert A\mathbf{x}-\mathbf{b}\rVert\):
+the best-fit line \(y = \tfrac{19}{3} + \tfrac12 x\) through \((1,7),(2,7),(3,8)\).}
+\pair{linear-algebra/linsolve/5}{And when the system \emph{is} consistent, the
+least-squares solution coincides with the exact one.}
+\end{codepairs}
+
+The distinction in pairs~3 and~4 is the whole geometry of the problem.
+\B{LinearSolve} answers ``is \(\mathbf{b}\) in the column
+space\index{Cramer's rule} of \(A\)?''---if so,
+which combination of columns produces it. When \(A\) has more columns than rows the
+answer is a whole affine subspace, and \B{LinearSolve} hands back one point of it;
+when \(A\) has more rows than columns and \(\mathbf{b}\) lies off the column space,
+there is no solution at all, and \B{LeastSquares} instead returns the
+\(\mathbf{x}\) whose image \(A\mathbf{x}\) is the orthogonal projection of
+\(\mathbf{b}\) onto the column space---the least-squares fit\index{least squares} that underlies all of
+linear regression (and \B{Fit}, in \S\ref{sec:statistics}).
+
+\calloutnote{Theory}{\B{LeastSquares} minimises \(\lVert A\mathbf{x}-\mathbf{b}\rVert_2\).
+Setting the gradient to zero gives the \emph{normal equations} \(A^{*}A\,\mathbf{x} =
+A^{*}\mathbf{b}\), whose solution is \(\mathbf{x}=A^{+}\mathbf{b}\) with \(A^{+}\) the
+\B{PseudoInverse}\index{Moore-Penrose pseudoinverse}. For a rank-deficient \(A\)
+the minimiser is not unique, and \(A^{+}\mathbf{b}\) picks out the one of smallest
+norm. A machine-real system takes a thin SVD rather than forming \(A^{+}\)
+explicitly---a \(500\times500\) least-squares fit that never finished on the exact
+pipeline costs \(77\)~ms this way (\texttt{src/linalg/lstsq.c}).}
+
+\usagebox{LinearSolve}
+
+\subsection{Rank, row reduction, and the null space}
+\label{ssec:la-reduction}
+
+Beneath solving lies elimination. \B{RowReduce} brings a matrix to reduced row
+echelon form; \B{MatrixRank} counts the independent rows; and \B{NullSpace}
+returns a basis for the vectors the matrix annihilates. The three are one
+computation seen from three angles.
+
+\begin{codepairs}
+\pair{linear-algebra/reduction/1}{\B{RowReduce} of a rank-deficient matrix: the
+bottom row of zeros is the dependency made visible.}
+\pair{linear-algebra/reduction/2}{\B{MatrixRank} reports \(2\)---the third row is
+the sum of a scaling of the first two.}
+\pair{linear-algebra/reduction/3}{\B{NullSpace} returns the one vector \(\{1,-2,1\}\)
+spanning the kernel.}
+\pair{linear-algebra/reduction/4}{Store the matrix\ldots}
+\pair{linear-algebra/reduction/5}{\ldots and confirm it: \(A\) times the null
+vector is \(\mathbf 0\).}
+\pair{linear-algebra/reduction/6}{These are exact even symbolically---row-reducing
+a matrix whose third row is \(\text{row}_1+\text{row}_2\) exposes the zero row and
+the exact rational entries above.}
+\pair{linear-algebra/reduction/7}{\B{MatrixRank} sees the symbolic dependency too:
+the second row is \(2\) times the first, so the rank is \(1\).}
+\end{codepairs}
+
+The rank-nullity theorem\index{rank-nullity theorem} is on display: a
+\(3\times3\) matrix of rank \(2\)
+(pair~2) has a null space of dimension \(3-2=1\) (pair~3), and their sum recovers
+the column count. That Mathilda finds these exactly, over rationals \emph{and} over
+symbols, is the point of pairs~6 and~7---the elimination is fraction-free, so no
+spurious denominator ever appears.
+
+\calloutnote{Under the hood}{The default reduction is a Bareiss-like
+\emph{fraction-free} Gauss--Jordan elimination\index{Bareiss algorithm}: it clears
+each column with cross-multiplications chosen so that the exact divisions leave no
+denominator larger than necessary, keeping intermediate coefficients from
+exploding the way naive Euclidean elimination would. An all-integer or rational
+matrix instead goes to FLINT's \texttt{fmpq\_mat\_rref}, whose reduced echelon form
+is unique and therefore matches. \B{MatrixRank} and \B{NullSpace} both call back
+into \B{RowReduce} through the evaluator, so every improvement to it propagates to
+them for free (\texttt{src/linalg/linsolve.c}, \texttt{matrank.c},
+\texttt{nullspace.c}).}
+
+\subsection{Exact reduction and the \texttt{ZeroTest} option}
+\label{ssec:la-zerotest}
+
+Elimination lives or dies on one question asked at every pivot: \emph{is this entry
+zero?} For numbers it is trivial. For symbols it is the hardest question in the
+system, and it is where exact linear algebra quietly goes wrong if you are not
+careful. Consider a matrix whose two rows are equal---but equal only after a
+trigonometric identity that Mathilda does not apply on its own.
+
+\begin{codepairs}
+\pair{linear-algebra/zerotest/1}{The Pythagorean identity is true, but it does not
+auto-simplify: Mathilda leaves \texttt{Cos[x]\^{}2 + Sin[x]\^{}2} as written.}
+\pair{linear-algebra/zerotest/2}{So these two rows are mathematically identical---the
+top-left entry \emph{is} \(1\)---but not \emph{structurally} identical.}
+\pair{linear-algebra/zerotest/3}{The default \B{NullSpace} uses a structural zero
+test. It cannot see that the rows are dependent, so it wrongly reports full rank
+and an empty kernel.}
+\pair{linear-algebra/zerotest/4}{Supply \texttt{ZeroTest -> (Simplify[\#] === 0 \&)}
+and the reduction consults \B{Simplify} at every pivot---now it finds the
+dependency and returns the true null vector.}
+\end{codepairs}
+
+This is the reason for the user-facing \texttt{ZeroTest} option on \B{RowReduce}
+and \B{NullSpace}.\index{ZeroTest option}\index{zero testing!symbolic} The default
+structural test treats each distinct radical or transcendental as an independent
+symbol---fast, and correct whenever the answer is structurally apparent, but blind
+to any zero that only appears after simplification. Passing a predicate---a body
+like \texttt{(Simplify[\#] === 0 \&)} or a head like \B{PossibleZeroQ}---replaces
+that test with a semantic one, and the elimination pivots on genuine, not merely
+apparent, non-zeros.
+
+\calloutnote{Theory}{There is no perfect \texttt{ZeroTest}, and this is a theorem,
+not a limitation of effort. \emph{Richardson's theorem}\index{Richardson's theorem}
+shows that for expressions built from the rationals, \(\pi\), \(\log\), \(\exp\),
+sines, and absolute values, deciding whether an expression is identically zero is
+\emph{undecidable}. Every computer algebra system therefore chooses a zero test
+that is sound but incomplete---it never calls a non-zero zero, but may fail to
+prove a genuine zero. Making that choice a user-supplied option is the honest
+design: you decide how hard to work at each pivot, trading speed against the
+strength of the test, with \B{Simplify} or \B{PossibleZeroQ} at the strong end.}
+
+The same fault line runs through \emph{numeric} reduction, where the question
+becomes ``is this entry small enough to treat as zero?'' Here the answer depends on
+a tolerance, and the exact and machine paths part company sharply.
+
+\begin{codepairs}
+\pair{linear-algebra/zerotest/5}{A matrix whose two off-diagonal pivots are tiny
+but exactly non-zero.}
+\pair{linear-algebra/zerotest/6}{Exactly, this matrix has three independent
+rows---the tiny entries \(10^{-10}\) and \(10^{-20}\) are genuinely non-zero.}
+\pair{linear-algebra/zerotest/7}{Convert to machine reals and one pivot falls below
+the default tolerance: \B{MatrixRank} now reports \(2\).}
+\pair{linear-algebra/zerotest/8}{Force \texttt{Tolerance -> 0} and every non-zero
+counts again, recovering the rank of \(3\).}
+\end{codepairs}
+
+Neither answer is wrong; they answer different questions. Exact reduction asks
+whether an entry is \emph{algebraically} zero and keeps the tiny pivots; machine
+reduction asks whether it is zero \emph{to working precision} and discards them,
+which is exactly what you want when the small entries are round-off rather than
+signal. The lesson is to know which question you are asking---and to reach for
+\texttt{Tolerance} (numeric) or \texttt{ZeroTest} (exact) when the default answers
+a different one.
+
+\subsection{Matrix decompositions}
+\label{ssec:la-decomp}
+
+A decomposition rewrites a matrix as a product of simpler factors---triangular,
+orthogonal, diagonal---and almost every serious numerical algorithm is a
+decomposition in disguise. Mathilda ships the classical four.
+
+\begin{codepairs}
+\pair{linear-algebra/decomp/1}{\B{LUDecomposition} returns the combined
+lower/upper factors, the pivot permutation, and a condition estimate---here the
+factorisation of a Vandermonde-like matrix.}
+\pair{linear-algebra/decomp/2}{\B{QRDecomposition} factors \(A\) into an
+orthonormal \texttt{q} and an upper-triangular \texttt{r}. This is the classic
+textbook \(3\times3\), and its \(Q\) is exactly rational.}
+\pair{linear-algebra/decomp/3}{The orthonormal factor \texttt{q}: its rows are
+mutually perpendicular unit vectors.}
+\pair{linear-algebra/decomp/4}{The upper-triangular factor \texttt{r}.}
+\pair{linear-algebra/decomp/5}{And they reconstruct the original exactly:
+\(Q^{\mathsf T} R = A\).}
+\pair{linear-algebra/decomp/6}{\B{SingularValueDecomposition} of a rank-\(1\)
+matrix: a single non-zero singular value \(\sqrt{10}\) on the diagonal of
+\(\Sigma\), the rest zero.}
+\pair{linear-algebra/decomp/7}{A symmetric machine matrix for the Schur form\ldots}
+\pair{linear-algebra/decomp/8}{\ldots factored by \B{SchurDecomposition}\ldots}
+\pair{linear-algebra/decomp/9}{\ldots into an orthonormal \texttt{q} and an
+upper-triangular \texttt{t} (diagonal here, since the matrix is symmetric): its
+diagonal carries the eigenvalues.}
+\pair{linear-algebra/decomp/10}{\B{Chop} confirms \(A = Q\,T\,Q^{*}\) to machine
+zero.}
+\end{codepairs}
+
+Each factorisation answers a different need. \B{LUDecomposition} is the engine of
+\B{LinearSolve}: once \(A=LU\), each right-hand side costs only two triangular
+solves. \B{QRDecomposition} orthogonalises the columns and is the stable way to
+solve least-squares problems and the workhorse of the eigenvalue algorithm.
+\B{SingularValueDecomposition} is the most revealing of all---the singular values
+are the semi-axes of the ellipsoid \(A\) maps the unit sphere onto, the number of
+non-zero ones is the rank (pair~6 makes a rank-\(1\) matrix show a single
+\(\sqrt{10}\)), and truncating the small ones is the mathematics of data
+compression and \B{PseudoInverse}. \B{SchurDecomposition}\index{Schur decomposition} is the theoretical keystone:
+\emph{every} square matrix is unitarily
+similar to a (quasi-)upper-triangular one whose diagonal is the spectrum, so the
+eigenvalues can be read off without ever solving a polynomial.
+
+\calloutnote{Under the hood}{The decompositions dispatch on precision. A
+machine-real matrix goes to LAPACK---\texttt{dgetrf} (LU), a Householder
+\texttt{dgeqrf} (QR)\index{Householder reflection}, divide-and-conquer
+\texttt{dgesdd} (SVD), and the Francis QR iteration \texttt{dgees} (Schur)---wired
+through a four-tier autodetection ladder (Apple Accelerate, then two flavours of
+system LAPACK, then a graceful fallback). An arbitrary-precision matrix runs a
+hand-rolled MPFR kernel at the requested precision (Householder QR, one-sided
+Jacobi SVD, Hessenberg+Francis Schur). An exact or symbolic matrix stays on a
+modified Gram--Schmidt or eigendecomposition path and returns exact
+\texttt{Sqrt[\ldots]} forms. \B{SchurDecomposition} is numeric only---a generic
+matrix has no closed-form symbolic Schur form---and is left unevaluated on symbolic
+input rather than answered wrongly (\texttt{src/linalg/ludecomp.c},
+\texttt{qrdecomp.c}, \texttt{svdecomp.c}, \texttt{schurdecomp.c},
+\texttt{lapack.c}).}
+
+\subsection{Eigenvalues, eigenvectors, and the Jordan form}
+\label{ssec:la-eigen}
+
+An eigenvector is a direction the matrix merely scales; its eigenvalue is the
+scale. Finding them is the deepest structural question you can ask of a linear map,
+and it is where the exact/numeric split is most vivid.
+
+\begin{codepairs}
+\pair{linear-algebra/eigen/1}{\B{CharacteristicPolynomial} gives \(\det(A - xI)\),
+whose roots are the eigenvalues: \(x^2 - 5x - 2\) here.}
+\pair{linear-algebra/eigen/2}{\B{Eigenvalues} of an exact matrix stays exact,
+returning genuine surds---and a \(0\), certifying the matrix is singular.}
+\pair{linear-algebra/eigen/3}{Symbolically, the \(2\times2\) eigenvalues are the
+trace-and-determinant quadratic formula.}
+\pair{linear-algebra/eigen/4}{A \(90^\circ\) rotation has no real eigenvectors, so
+its eigenvalues are the complex pair \(\pm i\).}
+\pair{linear-algebra/eigen/5}{\B{Eigenvectors} of a defective matrix: the repeated
+eigenvalue \(2\) supplies only one eigenvector, so the deficient slot is padded
+with a zero vector to keep the list aligned with the eigenvalues.}
+\end{codepairs}
+
+Pair~5 is the crack through which the Jordan form enters. The matrix there has
+eigenvalue \(2\) with algebraic multiplicity \(2\) but only \emph{one} independent
+eigenvector---it is \emph{defective}, not diagonalizable. The zero-vector padding
+is Mathilda telling you honestly that an eigenvector is missing. The remedy is the
+\emph{Jordan canonical form}\index{Jordan canonical form}: the closest a defective
+matrix can come to diagonal, with the missing eigenvectors replaced by
+\emph{generalized} ones\index{generalized eigenvector} and a tell-tale \(1\) on the
+superdiagonal.
+
+\begin{codepairs}
+\pair{linear-algebra/eigen/6}{A matrix with a defective eigenvalue \(12\).}
+\pair{linear-algebra/eigen/7}{\B{JordanDecomposition} returns the similarity
+\(S\) and the Jordan form \(J\)\ldots}
+\pair{linear-algebra/eigen/8}{\ldots whose \(J\) has a \(2\times2\) Jordan block for
+\(12\): the eigenvalue twice on the diagonal, a \(1\) above it marking the deficient
+eigenspace.}
+\pair{linear-algebra/eigen/9}{And the decomposition reconstructs the matrix:
+\(A = S\,J\,S^{-1}\).}
+\end{codepairs}
+
+The superdiagonal \(1\) in pair~8 is the entire content of the Jordan form: it says
+that eigenvalue \(12\) has a two-step chain of generalized eigenvectors rather than
+two independent ones. Read \(J\) and you read the matrix's deepest invariant---the
+sizes of its Jordan blocks---which no similarity transformation can change.
+
+\calloutnote{Under the hood}{\B{Eigenvalues} does \emph{not} form \(\det(A-xI)\) and
+expand a symbolic determinant; it uses the Faddeev--LeVerrier--Souriau
+recurrence\index{Faddeev-LeVerrier algorithm}, which produces the characteristic
+polynomial in \(O(n^4)\) matrix multiplications, then hands the polynomial to
+\B{Solve}---so eigenvalues of a large exact matrix return quickly, and the exact
+roots come back as radicals or \B{Root} objects (\S\ref{sec:algebra}). The exact
+\B{JordanDecomposition} reads each block's size from the nullity sequence
+\(\dim\ker(A-\lambda I)^k\); a machine-real matrix with a distinct spectrum is
+diagonalizable and takes a direct LAPACK \texttt{dgeev} path (a \(100\times100\)
+in \(\approx\!9.6\)~ms), while a defective or ambiguous numeric matrix is
+rationalised, decomposed exactly, and numericalised back to recover the true block
+structure (\texttt{src/linalg/eigen.c}, \texttt{charpoly.c}, \texttt{jordandecomp.c}).}
+
+\usagebox{Eigenvalues}
+
+\usagebox{JordanDecomposition}
+
+\subsection{The machine--exact divide}
+\label{ssec:la-precision}
+
+Every routine in this section has, in fact, been choosing between worlds all along.
+It is worth watching the choice happen on one matrix. The Hilbert matrix---entries
+\(1/(i+j-1)\), symmetric and famously ill-conditioned---is the perfect specimen.
+
+\begin{codepairs}
+\pair{linear-algebra/precision/1}{Exact: \B{Det} of the \(5\times5\)
+\B{HilbertMatrix} is the precise rational \(1/266716800000\).}
+\pair{linear-algebra/precision/2}{Machine: the same determinant over doubles is a
+single \texttt{Real}---accurate to the digits shown, but a rounded number, not an
+exact one.}
+\pair{linear-algebra/precision/3}{Arbitrary precision: at \(40\) digits (MPFR) the
+determinant of the \(7\times7\) Hilbert matrix comes back to full requested
+precision.}
+\pair{linear-algebra/precision/4}{Exact inversion of an ill-conditioned matrix is
+no trouble at all when the arithmetic is exact---integer entries, computed by
+FLINT.}
+\pair{linear-algebra/precision/5}{The visible packed form: an \B{NDArray} is a
+dense machine buffer that announces itself.}
+\pair{linear-algebra/precision/6}{\B{Dot} over two \texttt{NDArray}s runs on the raw
+buffers and returns a closed-system \texttt{NDArray}\ldots}
+\pair{linear-algebra/precision/7}{\ldots and \B{Det} of one returns a bare machine
+scalar, straight off the buffer.}
+\end{codepairs}
+
+The three determinants---an exact rational, a machine \texttt{Real}, and a
+\(40\)-digit MPFR number---are the same mathematical quantity computed in three
+number systems, and Mathilda selects among them purely from the \emph{kind} of the
+entries. Exact in, exact out (via FLINT or fraction-free elimination); machine in,
+LAPACK out; high-precision MPFR in, an MPFR kernel out. Nothing about the syntax
+changes; the representation of the data decides the path.\index{arbitrary precision}\index{LAPACK}
+
+\calloutnote{Performance}{The packed array is what makes the machine path fast, and
+the rule that keeps it safe is the \emph{transparency gate}\index{packed array!transparency gate}: a
+machine-number list may be held as a raw buffer, and a numeric routine on the
+``aware'' list (\B{Dot}, \B{Det}, \B{Inverse}, \B{LinearSolve}, \B{Norm},
+\B{MatrixRank}, and their kin) reads that buffer directly---no per-element boxing,
+no re-parsing---so a \(300\times300\) \texttt{MatrixPower[A, 4]} is the \(0.69\)~ms of
+its two \texttt{dgemm} calls. A routine \emph{not} on that list transparently
+un-packs first, trading speed for correctness but never the answer. The same
+machine heads lower inside \B{Compile}, so a linear-algebra kernel written at the
+prompt runs at full speed inside a compiled numerical loop
+(\texttt{src/pack.c}, \texttt{src/linalg/ndlinalg.c}; see also
+\S\ref{sec:statistics} on packed reductions).}
+
+\subsection*{Where this connects}
+
+Linear algebra is the substrate the rest of the system computes on. The
+least-squares solve of \S\ref{ssec:la-linsolve} is the machinery behind \B{Fit}
+and the correlation matrix of \S\ref{sec:statistics}, both of them a \B{Dot} of a
+matrix with its \B{Transpose}. The exact eigenvalues of \S\ref{ssec:la-eigen} flow
+straight out of the polynomial solving and \B{Root} objects of \S\ref{sec:algebra},
+and the fraction-free elimination beneath \B{RowReduce} is the same idea as the
+subresultant sequences that tame coefficient growth there. The machine kernels and
+the packed substrate reappear wherever numbers are crunched in bulk---the numerical
+calculus, the optimizers, the machine-learning primitives---and every machine head
+named here lowers inside \B{Compile} (Chapter~\ref{ch:compilation}), so the
+linear algebra you write interactively is the linear algebra that runs in a tight
+loop. For the exhaustive options of any function above, its reference page is one
+\texttt{?Name} away at the prompt.

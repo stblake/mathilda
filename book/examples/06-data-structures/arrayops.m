@@ -1,0 +1,13 @@
+# 6.2 Array operations: reshape, pad, gradient, first position
+ArrayReshape[Range[12], {3, 4}]
+ArrayReshape[{a, b, c, d, e, f, g}, {3, 3}, x]
+ArrayPad[{1, 2, 3}, 2]
+ArrayPad[{1, 2, 3}, {1, 2}, "Fixed"]
+ArrayPad[Range[10], -2]
+ListGradient[{1, 4, 9, 16, 25}]
+ListGradient[{a, b, c, d, e}]
+ListGradient[{0, 1, 8, 27, 64, 125, 216}, DifferenceOrder -> 4]
+FirstPosition[{3, 5, 7, 9, 11}, 7]
+FirstPosition[{{1, 2}, {3, 4}}, 4]
+FirstPosition[{1, 2, 3}, 99]
+FirstPosition[{1, 2, 3}, 99, "none"]

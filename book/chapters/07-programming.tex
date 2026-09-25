@@ -1,5 +1,758 @@
 \chapter{Programming in Mathilda}
 \label{ch:programming}
 
-\emph{This chapter is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+Everything in the previous chapters was, in a sense, one long computation: you
+typed an expression, Mathilda rewrote it until it stopped changing, and printed
+the result. This chapter is about writing \emph{your own} rewrites---about
+turning Mathilda from a calculator you drive into a language you program. It
+supports three styles, and the point of the chapter is that they are not three
+separate languages bolted together but three faces of one mechanism. A
+\emph{pattern-based} program describes what an expression looks like and how to
+transform it. A \emph{procedural} program says do this, then that, changing
+variables as it goes. A \emph{functional} program builds a result by applying
+and composing functions rather than by mutating anything. You can mix all three
+in a single line, because underneath they are the same thing: rules, applied by
+the evaluator to expressions, under the control of a handful of
+attributes.\index{programming language}
+
+That last clause is the load-bearing one, and it is worth stating before any
+syntax. Two facts from the system's design govern everything here. First,
+\emph{everything is an expression}\index{expression!uniformity}---a list, a rule,
+a pattern, a function definition, a loop are all trees with a head and
+arguments, so the same tools operate on all of them. Second, \emph{attributes
+drive evaluation}\index{attribute}: before Mathilda touches a call \texttt{f[\ldots]}
+it reads the attributes of \texttt{f}, and those bits decide whether the
+arguments are evaluated or held, threaded over lists, flattened, or sorted. Once
+you see the paradigms as different ways of installing and firing rules, and the
+attributes as the switches that shape when rules fire, the language stops being a
+grab-bag of commands and becomes a single coherent machine. We build up to that
+machine deliberately, closing the chapter with the attributes that were quietly
+running the whole time.
+
+We take pattern matching first, because it is the most characteristic style and
+the one the other two lean on. Then procedural programming---scoping, branching,
+and loops---for the moments when a plain imperative recipe is the clearest thing
+to write. Then functional programming, the shortest and often the fastest code.
+And finally evaluation control: how to stop the evaluator, restart it, and hold a
+head inert, which is where the attribute story comes home.
+
+\section{Pattern matching and rules}
+\label{sec:prog-patterns}
+
+A \emph{pattern}\index{pattern matching} is a template that describes a class of
+expressions. Matching a pattern against a subject is the act of unifying the two
+structurally---checking that the subject has the described shape and, along the
+way, binding names to the pieces that filled the blanks. This one operation is
+the engine beneath \B{Cases}, \B{Replace}, every rule you write with
+\texttt{->}, and every function you define with \texttt{:=}. Learn it once and
+you have learned the spine of the language.
+
+\subsection{The blank and its kin}
+\label{ssec:prog-blank}
+
+The atom of every pattern is the \emph{blank}, written \texttt{\_}
+(\B{Blank}\index{pattern matching!Blank (underscore)}): it matches any single
+expression. A blank can be \emph{typed} by writing a head after it---\texttt{\_Integer}
+matches only an expression whose head is \texttt{Integer}---and it can be
+\emph{named}, as in \texttt{x\_}, which matches anything and binds the name
+\texttt{x} to whatever it matched. Two relatives match \emph{runs} of arguments
+rather than a single one: \B{BlankSequence} (\texttt{\_\_}) matches one or more
+expressions, and \B{BlankNullSequence} (\texttt{\_\_\_}) matches zero or more.
+\B{MatchQ}\texttt{[expr, patt]} asks the yes/no question directly, and is the
+quickest way to build an intuition for what fits what.
+
+\begin{codepairs}
+\pair{07-programming/patterns/1}{The bare typed blank: \(42\) has head
+\texttt{Integer}.}
+\pair{07-programming/patterns/2}{\(3.14\) does not---its head is \texttt{Real}, so
+\texttt{\_Integer} fails.}
+\pair{07-programming/patterns/3}{\ldots but \texttt{\_Real} matches it. A typed
+blank is a structural test on the head.}
+\pair{07-programming/patterns/4}{Head-typed blanks reach the atomic numeric heads:
+\(1/2\) is \texttt{Rational[1, 2]}.}
+\pair{07-programming/patterns/5}{And \(3 + 4\,i\) is \texttt{Complex[3, 4]}.}
+\pair{07-programming/patterns/6}{Structure, not just heads: \texttt{f[\_, \_]}
+matches a two-argument \texttt{f}.}
+\pair{07-programming/patterns/7}{\texttt{\_\_} (\B{BlankSequence}) matches a run of
+one or more arguments.}
+\pair{07-programming/patterns/8}{An empty \texttt{f[]} has no arguments, so
+\texttt{\_\_} (one or more) fails\ldots}
+\pair{07-programming/patterns/9}{\ldots while \texttt{\_\_\_}
+(\B{BlankNullSequence}, zero or more) matches it.}
+\pair{07-programming/patterns/10}{Sequence blanks match \emph{positions}: some
+prefix, a \(3\), some suffix.}
+\pair{07-programming/patterns/11}{A named typed blank binds: the rule fires only on
+the integer-argument \texttt{f} and rewrites it, leaving the others untouched.}
+\end{codepairs}
+
+The last line is the whole idea in miniature. The named blank \texttt{n\_Integer}
+does two jobs at once---it \emph{restricts} the match to an integer argument and
+it \emph{captures} that argument as \texttt{n}, ready to be used on the
+right-hand side. The two calls that do not fit, \texttt{f[x]} and \texttt{f[1, 2]},
+are simply left alone; a pattern that does not match is not an error, it is a
+non-event.\index{pattern matching!named pattern}
+
+\calloutnote{Under the hood}{Matching is structural tree unification with
+backtracking, in \texttt{src/match.c}. A named pattern binds its variable in a
+\texttt{MatchEnv}; a sequence blank (\texttt{\_\_}, \texttt{\_\_\_}) forces a
+\emph{search} over how to partition the remaining arguments, and the matcher
+backtracks through the partitions until the rest of the pattern also fits. A
+non-linear pattern---the same name used twice, as in \texttt{f[x\_, x\_]}---simply
+checks that the two bindings are structurally equal, which is why it can express
+``two equal arguments'' with no extra syntax.}
+
+\subsection{Selecting by pattern}
+\label{ssec:prog-select}
+
+Once a pattern can say \emph{what to look for}, a family of functions puts it to
+work searching a larger expression. \B{Cases} keeps the elements that match;
+\B{Count} tallies them; \B{Position} reports where they are; \B{DeleteCases}
+removes them; and \B{Select}, the workhorse's cousin, keeps elements for which a
+\emph{predicate function} returns \texttt{True}. A rule attached to \B{Cases}
+transforms each match as it is collected.
+
+\begin{codepairs}
+\pair{07-programming/cases/1}{A deliberately mixed bag---integers, a string, a
+real, symbols, a power.}
+\pair{07-programming/cases/2}{\B{Cases} with \texttt{\_Integer} keeps the three
+integers.}
+\pair{07-programming/cases/3}{With the predicate pattern \texttt{\_?NumberQ} it
+keeps every number, real included.}
+\pair{07-programming/cases/4}{\B{Count} returns how many matched rather than which.}
+\pair{07-programming/cases/5}{\B{Position} gives the paths of the matches---here the
+two places \texttt{b} occurs.}
+\pair{07-programming/cases/6}{\B{Select} filters by a predicate: the primes up to
+\(20\).}
+\pair{07-programming/cases/7}{\B{DeleteCases} is the complement of \B{Cases}: drop
+the \texttt{Missing[]} markers.}
+\pair{07-programming/cases/8}{A rule on \B{Cases} transforms each match---here each
+pair to its sum.}
+\end{codepairs}
+
+The division of labor is worth noticing. \B{Cases} and its relatives take a
+\emph{pattern} and match structure; \B{Select} takes a \emph{function} and tests
+each element. They overlap---\texttt{Cases[list, \_?EvenQ]} and
+\texttt{Select[list, EvenQ]} agree---but the pattern form can do things a
+predicate cannot, such as destructure (\texttt{\{a\_, b\_\}}) and rewrite in the
+same breath, as pair~8 does.
+
+\subsection{Constraining a match}
+\label{ssec:prog-constrain}
+
+A bare blank is often too generous. Three constructs narrow it. A
+\emph{pattern test}, \texttt{patt\,?\,f}, keeps the match only if the function
+\texttt{f} applied to it returns \texttt{True}. A \emph{condition},
+\texttt{patt\,/;\,cond}, keeps it only if the boolean expression \texttt{cond}---which
+may mention the pattern's bound names---is \texttt{True}. And
+\emph{alternatives}, \texttt{p1\,|\,p2\,|\,\ldots}, match any one of several
+patterns. The complementary \texttt{Except[c]} matches anything that does
+\emph{not} match \texttt{c}.
+
+\begin{codepairs}
+\pair{07-programming/constrain/1}{\texttt{\_?EvenQ}: the blank, then the predicate
+\B{EvenQ} applied to what it matched.}
+\pair{07-programming/constrain/2}{\texttt{n\_ /; n > 7}: a condition on the bound
+name \texttt{n}---an arbitrary boolean, not just a head test.}
+\pair{07-programming/constrain/3}{\texttt{2 | 4 | 6}: alternatives match any one of
+the listed forms.}
+\pair{07-programming/constrain/4}{A condition drives a rewrite: negate exactly the
+negative elements. This is \(\lvert\cdot\rvert\) written as a rule.}
+\pair{07-programming/constrain/5}{A condition may relate two bound names:
+\texttt{a < b} keeps only the increasing pairs.}
+\pair{07-programming/constrain/6}{\texttt{Except[\_String]} keeps everything that is
+not a string.}
+\end{codepairs}
+
+The difference between \texttt{?} and \texttt{/;} is the difference between a
+test on the \emph{whole match} and a test on its \emph{named parts}.
+\texttt{\_?f} hands the matched expression to \texttt{f} and asks for a verdict;
+\texttt{patt /; cond} evaluates an arbitrary predicate that can see every name the
+pattern bound, so \texttt{\{a\_, b\_\} /; a < b} can compare two pieces at once, a
+thing no single-argument predicate test can do. Reach for the test when the
+condition is ``this one thing passes \texttt{f}'', and for the condition when the
+constraint couples several bindings.
+
+\calloutnote{Theory}{A condition can make matching \emph{undecidable} in general,
+because \texttt{cond} is an arbitrary Mathilda computation---the matcher cannot
+know whether it halts. This is the price of the expressiveness: the same
+generality that lets \texttt{/;} express any side condition means a pattern is a
+tiny program, not a finite automaton. In practice conditions are cheap boolean
+checks, but it is worth remembering that ``does this match?'' is, with
+\texttt{/;} in play, as hard as ``does this program return \texttt{True}?''}
+
+\subsection{Rules and replacement}
+\label{ssec:prog-rules}
+
+A \emph{rule} pairs a pattern with a replacement. \B{Rule} (\texttt{lhs -> rhs})
+is \emph{immediate}: its right-hand side is evaluated once, when the rule is
+built. \B{RuleDelayed} (\texttt{lhs :> rhs}) is \emph{delayed}: the right-hand
+side is held and re-evaluated afresh on every match, after the pattern's names
+are bound. Rules are applied by three operators that differ only in \emph{where}
+and \emph{how often} they look: \B{Replace} tries the rule at one level (the
+whole expression by default), \B{ReplaceAll} (\texttt{/.}) sweeps the entire tree
+top-down, and \B{ReplaceRepeated} (\texttt{//.}) applies \texttt{/.} over and over
+until the expression stops changing.
+
+\begin{codepairs}
+\pair{07-programming/rules/1}{\B{Replace} rewrites the whole expression when it
+matches the rule's left-hand side.}
+\pair{07-programming/rules/2}{\B{ReplaceAll} (\texttt{/.}) finds the \(x^2\)
+\emph{inside} the sum and rewrites it in place.}
+\pair{07-programming/rules/3}{It rewrites every occurrence in one downward sweep:
+both \texttt{x} and the \texttt{x} inside \(x^2\).}
+\pair{07-programming/rules/4}{A list of rules is applied together---a simultaneous
+substitution.}
+\pair{07-programming/rules/5}{Given a list of \emph{rule lists}, \B{Replace} maps
+over them, giving one answer per alternative.}
+\pair{07-programming/rules/6}{\texttt{/.} applies a rule once per part and does not
+re-descend into what it just built---so one \texttt{f} is peeled off.}
+\pair{07-programming/rules/7}{\texttt{//.} (\B{ReplaceRepeated}) repeats to a fixed
+point, peeling every \texttt{f} until nothing changes.}
+\pair{07-programming/rules/8}{\B{Rule} (\texttt{->}) evaluates its RHS \emph{once};
+the counter is bumped at rule-build time, so all three parts get the same \(1\).}
+\pair{07-programming/rules/9}{\B{RuleDelayed} (\texttt{:>}) re-evaluates its RHS per
+match, so the counter climbs \(1, 2, 3\).}
+\end{codepairs}
+
+Pairs~6 and~7 draw the line between \texttt{/.} and \texttt{//.}: the single
+sweep peels one layer, the repeated sweep runs to a fixed point. Pairs~8 and~9
+draw the sharper and more consequential line between \texttt{->} and
+\texttt{:>}.\index{rule!immediate vs delayed} With a passive right-hand side the
+two are indistinguishable, but the moment the RHS \emph{does} something---calls a
+random generator, reads a counter, evaluates a costly function---the choice
+matters. Use \texttt{:>} whenever the right-hand side should be recomputed for
+each match, which is nearly always the case for rules with bound pattern
+variables.
+
+\calloutnote{Pitfall}{\texttt{/.}\ descends into \emph{heads} as well as
+arguments, because a head is just another part of the tree. A blank rule like
+\texttt{\_ -> new} applied to \texttt{\{a, b\}} will therefore also match the head
+\texttt{List} and replace it---rarely what you want. When you mean ``the elements,
+not the structure,'' constrain the pattern (\texttt{\_Symbol}, say) or apply the
+rule at a definite level with \texttt{Replace[expr, rule, \{1\}]}, as pairs~8 and~9
+do to keep the counter demonstration clean.}
+
+\usagebox{ReplaceAll}
+
+\subsection{Functions as rules: DownValues}
+\label{ssec:prog-downvalues}
+
+Here the whole apparatus pays off. Defining a function with \texttt{:=}
+(\B{SetDelayed}) does not create a new kind of object---it \emph{installs a
+delayed rule} on a symbol. \texttt{square[x\_] := x\^{}2} attaches to the symbol
+\texttt{square} the rule ``a call matching \texttt{square[x\_]} rewrites to
+\texttt{x\^{}2}''. These rules are the symbol's
+\emph{DownValues}\index{DownValues}, and every time you write \texttt{square[7]}
+the evaluator matches the call against them, exactly as \texttt{/.}\ would. A
+function \emph{is} a bundle of pattern rules.
+
+\begin{codepairs}
+\pair{07-programming/downvalues/1}{Install a rule on \texttt{square} with
+\texttt{:=}.}
+\pair{07-programming/downvalues/2}{It fires by matching: on a number, a symbolic
+sum, and a constant alike.}
+\pair{07-programming/downvalues/3}{A second symbol, \texttt{area}, gets its own
+rule\ldots}
+\pair{07-programming/downvalues/4}{\ldots and a \emph{second} rule with a different
+argument count.}
+\pair{07-programming/downvalues/5}{Dispatch is by pattern: one argument gives the
+disk area, two the rectangle.}
+\pair{07-programming/downvalues/6}{The base cases of \texttt{fib} are installed with
+\texttt{=} (immediate).}
+\pair{07-programming/downvalues/7}{The second base case.}
+\pair{07-programming/downvalues/8}{The recursive case, with \texttt{:=}, refers to
+\texttt{fib} of smaller arguments.}
+\pair{07-programming/downvalues/9}{\texttt{fib[10]} unwinds through the rules to
+\(55\).}
+\pair{07-programming/downvalues/10}{\texttt{collatz} on even integers---the guard
+\texttt{\_?EvenQ} selects the rule\ldots}
+\pair{07-programming/downvalues/11}{\ldots and a separate rule handles the odd case.}
+\pair{07-programming/downvalues/12}{\B{NestList} then iterates the two-rule function:
+the Collatz orbit of \(27\).}
+\end{codepairs}
+
+The \texttt{fib} definition shows why the ordering of rules matters and how
+recursion falls out for free. The two base cases \texttt{fib[0]} and
+\texttt{fib[1]} are \emph{more specific} than the general \texttt{fib[n\_]}, and
+Mathilda tries specific rules before general ones, so the recursion bottoms out
+correctly. The \texttt{collatz} pair shows dispatch by \emph{guard}: two rules
+with the same shape but disjoint conditions act as a single case-split function.
+
+\calloutnote{Under the hood}{DownValues live on the head symbol in the symbol
+table (\texttt{src/symtab.c}) as a linked list. New DownValues go to the front,
+but Mathilda keeps genuinely more-specific patterns ahead of more-general ones so
+that \texttt{fib[0]} is tried before \texttt{fib[n\_]}. Evaluating
+\texttt{square[7]} is then just \texttt{apply\_down\_values}: walk the list, and
+the first pattern that matches wins---the same matcher, the same first-match
+rule, as \texttt{/.}. There is no separate ``function call'' machinery in the
+kernel; a user function and a rewrite rule are one mechanism.}
+
+This unity buys a classic trick almost for free. A rule whose right-hand side
+\emph{installs another rule} turns a function into its own cache:
+
+\mtranscript{07-programming/memoize}
+
+The definition \texttt{fib[n\_] := fib[n] = fib[n-1] + fib[n-2]} reads oddly at
+first. Each time it fires for a new \texttt{n}, the inner \texttt{fib[n] = \ldots}
+is an immediate assignment that installs a \emph{new}, specific DownValue
+\texttt{fib[n] -> value}. The next request for that same \texttt{n} matches the
+new specific rule instead of re-entering the recursion. Naive \texttt{fib} makes
+exponentially many calls; this one makes \(O(n)\), which is why \texttt{fib[100]}
+returns a twenty-one-digit integer instantly rather than after the heat death of
+the machine.\index{memoization}\index{dynamic programming}
+
+\calloutnote{Performance}{Memoization by self-installing rules is the CAS
+idiom for dynamic programming. The cost is memory---each computed value becomes a
+permanent DownValue on the symbol---so it is a space-for-time trade, not a free
+lunch; a long-running kernel that memoizes over a wide domain will accumulate
+rules until the symbol is cleared. The win is asymptotic and often enormous, but
+the stored table is real, and \B{Clear} is how you reclaim it.}
+
+\section{Procedural programming}
+\label{sec:prog-procedural}
+
+Sometimes the clearest description of a computation is a recipe: set this up, do
+that repeatedly, choose between these branches. Mathilda has the full
+imperative apparatus, and because assignments and loops are themselves
+expressions with attributes, they compose with the other two paradigms rather
+than sitting apart from them.
+
+\subsection{Assignment and scoping}
+\label{ssec:prog-scoping}
+
+Two assignment operators anchor procedural code: \B{Set} (\texttt{=}) evaluates
+its right-hand side \emph{now} and binds the result, while \B{SetDelayed}
+(\texttt{:=}) holds the right-hand side and re-evaluates it on each use---the same
+immediate/delayed distinction as \texttt{->} versus \texttt{:>}, and for the same
+reason. A sequence of steps is joined with \B{CompoundExpression}
+(\texttt{;}), which evaluates each in turn and returns the last.
+
+The subtler question is \emph{scoping}: how to introduce a variable that is local
+to a block of code, so it neither sees nor disturbs the outside world. Mathilda
+offers three constructs, and the differences between them are exactly the
+differences a working programmer needs to understand. \B{Module} creates genuinely
+\emph{fresh} local variables (lexical scoping). \B{With} performs lexical
+\emph{substitution}, replacing a name by a value textually before the body runs.
+\B{Block} does \emph{dynamic} scoping, temporarily overriding a symbol's global
+value for the duration of the body and restoring it afterward.
+
+\begin{codepairs}
+\pair{07-programming/scoping/1}{A global \texttt{x} exists in the session.}
+\pair{07-programming/scoping/2}{\B{Module} makes a fresh, private \texttt{x}; inside,
+it is \(2\).}
+\pair{07-programming/scoping/3}{The global \texttt{x} is untouched---still \(100\).}
+\pair{07-programming/scoping/4}{\B{With} substitutes \texttt{x -> 5} into the body
+before evaluating it.}
+\pair{07-programming/scoping/5}{Because \B{With} substitutes \emph{textually}, it
+reaches inside \B{Hold}: \texttt{a} becomes \(2\) even though the body is held.}
+\pair{07-programming/scoping/6}{A \B{Module} local can be read and assigned from
+inside a nested pure function---here a running counter.}
+\pair{07-programming/scoping/7}{A global \texttt{n}\ldots}
+\pair{07-programming/scoping/8}{\ldots and a function \texttt{g} that reads it.}
+\pair{07-programming/scoping/9}{\B{Block} overrides \texttt{n} \emph{dynamically}:
+\texttt{g[]} sees the temporary \(3\), so \(3^2 = 9\).}
+\pair{07-programming/scoping/10}{\B{Module} does \emph{not}: its private \texttt{n}
+is invisible to \texttt{g}, which still reads the global \(100\).}
+\pair{07-programming/scoping/11}{Afterward the global \texttt{n} is restored, and
+\texttt{g[]} is \(100\) again.}
+\end{codepairs}
+
+Pairs~9 and~10 are the crux, and the single most useful thing to internalize
+about scoping. \B{Block} localizes a \emph{value}: for the duration of its body,
+the symbol \texttt{n} has a new value, and \emph{any} code that reads
+\texttt{n}---including a function \texttt{g} defined elsewhere---sees it. \B{Module}
+localizes a \emph{name}: it invents a brand-new symbol so its \texttt{n} cannot
+possibly collide with anyone else's, which is exactly why \texttt{g}, whose body
+refers to the ordinary global \texttt{n}, does not see the Module's version.
+Module is what you want almost always, because it is hygienic; Block is the right
+tool precisely when you \emph{do} want to reach into other code's use of a symbol---temporarily
+raising \texttt{\$RecursionLimit}, say, or overriding a constant for one
+computation.\index{scoping!lexical}\index{scoping!dynamic}
+
+\calloutnote{Under the hood}{\B{Module} implements freshness by renaming: its
+local \texttt{x} becomes a uniquely numbered symbol \texttt{x\$nnn} (drawn from
+\texttt{\$ModuleNumber}) carrying the \texttt{Temporary} attribute, which is why
+it cannot clash with a global \texttt{x} or with another Module's. \B{With} needs
+no rename because it substitutes and then vanishes---and because the substitution
+happens \emph{before} the body evaluates, it is the one scoping construct that
+penetrates a \B{Hold} (pair~5). \B{Block} saves the symbol's current value, installs
+the new one, and restores the old value on exit even if the body throws. All
+three are \texttt{HoldAll}, so the body is not evaluated until the locals are in
+place.}
+
+\usagebox{Module}
+
+\subsection{Branching}
+\label{ssec:prog-branching}
+
+Three constructs choose among alternatives. \B{If}\texttt{[cond, t, f]} is the
+two-way branch. \B{Which}\texttt{[t1, v1, t2, v2, \ldots]} walks a list of
+test/value pairs and returns the value of the first test that is \texttt{True}---a
+multi-way branch, with a trailing \texttt{True} acting as the catch-all.
+\B{Switch}\texttt{[e, form1, v1, \ldots]} instead \emph{pattern-matches} the
+value \texttt{e} against a sequence of forms, so it dispatches on shape rather
+than on a chain of booleans, with a trailing \texttt{\_} as the default.
+
+\begin{codepairs}
+\pair{07-programming/branching/1}{\B{If} chooses the true branch.}
+\pair{07-programming/branching/2}{\B{Which} as a multi-way classifier\ldots}
+\pair{07-programming/branching/3}{\ldots dispatched over a list with
+\texttt{/@}.}
+\pair{07-programming/branching/4}{The sign function, three cases with a \texttt{True}
+default.}
+\pair{07-programming/branching/5}{Its values on a negative, zero, and positive
+input.}
+\pair{07-programming/branching/6}{\B{Switch} dispatches on \emph{pattern}, not on a
+boolean chain.}
+\pair{07-programming/branching/7}{So it separates an integer, a real, and a symbol
+by their heads.}
+\pair{07-programming/branching/8}{\B{Switch} inside a pure function, mapped over a
+list.}
+\end{codepairs}
+
+Which and Switch are the same idea approached from the two sides of the chapter:
+Which tests \emph{predicates} (procedural), Switch matches \emph{patterns}
+(the rewriting style). Choose Switch when the distinction you care about is
+structural---a head, a shape---and Which when it is a numeric or logical
+condition.
+
+\calloutnote{Under the hood}{\B{If} is \texttt{HoldRest}, \B{Which} is
+\texttt{HoldAll}, and \B{Switch} is \texttt{HoldRest}: the branches are held and
+only the chosen one is ever evaluated. Without that, \texttt{If[x > 0, expensive,
+cheap]} would compute both arms before choosing---the attribute is not an
+optimization but a correctness requirement. This is the first place the attribute
+system does visible work; \S\ref{sec:prog-attributes} makes the pattern explicit.
+The three lower to machine branches inside \B{Compile} as well, so a classifier
+used in a numeric loop costs nothing (Chapter~\ref{ch:compilation}).}
+
+\subsection{Loops}
+\label{ssec:prog-loops}
+
+For genuine iteration Mathilda has \B{Do} (repeat over a range), \B{While}
+(repeat while a test holds), and \B{For} (the C-style initialize/test/increment
+loop). \B{Break} exits the enclosing loop early and \B{Continue} skips to its next
+iteration; both take effect the instant they are evaluated.
+
+\begin{codepairs}
+\pair{07-programming/loops/1}{\B{Do} accumulates \(1 + 2 + \cdots + 100 = 5050\).}
+\pair{07-programming/loops/2}{The same shape builds \(6! = 720\).}
+\pair{07-programming/loops/3}{\B{While} doubles until it passes \(100\).}
+\pair{07-programming/loops/4}{\B{For} sums the first ten squares, \(385\).}
+\pair{07-programming/loops/5}{\B{Break} leaves the loop as soon as \texttt{i}
+exceeds \(3\), so the last value recorded is \(3\).}
+\pair{07-programming/loops/6}{\B{Continue} skips the even \texttt{i}, summing only
+the odds: \(1+3+5+7+9 = 25\).}
+\end{codepairs}
+
+Each loop here returns a value through an accumulator variable, which is the
+honest way to use them: a loop's own return value is \texttt{Null}. That is the
+tell that loops are about \emph{effects}---changing \texttt{s}, \texttt{p},
+\texttt{n}---not about producing a value, and it is the seam where procedural code
+gives way to the functional style of the next section, which produces values
+without mutating anything.
+
+\calloutnote{Performance}{A loop whose body is entirely machine arithmetic takes
+an automatic fast path (\texttt{src/numloop.c}): it is compiled to a small
+double-stack program and run with no \texttt{Expr} allocation per iteration, so
+\texttt{Do[s = s + i, \{i, 1, 10\^{}7\}]} is a tight machine loop, not ten million
+evaluator steps. The moment the body does something non-numeric---a \B{Print}, a
+symbolic head, a call to a user function---the fast path silently declines and the
+interpreter runs the body exactly as written, so the answer is always the
+interpreter's. An exact-integer counter accumulates in overflow-checked
+\texttt{int64} and promotes to a bignum rather than wrapping, which is why
+\texttt{Do[p = p\,i, \{i, 1, 6\}]} is exactly \(720\) and would be exactly
+\(25!\) at the top end.}
+
+\section{Functional programming}
+\label{sec:prog-functional}
+
+Functional code builds a result by applying and composing functions instead of
+mutating variables. It is usually the shortest way to say what you mean, and---because
+it avoids explicit loops---often the fastest, since the same numeric
+fast path that accelerates \B{Do} also drives \B{Map}, \B{Nest}, and \B{Fold}.
+
+\subsection{Pure functions}
+\label{ssec:prog-purefunc}
+
+A \emph{pure} (anonymous) function is one written without a name.
+\B{Function}\texttt{[x, body]} names its parameter explicitly; the terser
+\texttt{body\,\&} leaves the parameters implicit, referring to them by
+\B{Slot}: \texttt{\#} or \texttt{\#1} is the first argument, \texttt{\#2} the
+second, and \B{SlotSequence} \texttt{\#\#} is all of them at once.\index{pure function}\index{anonymous function}
+
+\begin{codepairs}
+\pair{07-programming/purefunc/1}{\texttt{\#\^{}2 \&} is the squaring function;
+\texttt{\#} is its argument.}
+\pair{07-programming/purefunc/2}{\texttt{\#1} and \texttt{\#2} are the first and
+second arguments.}
+\pair{07-programming/purefunc/3}{The named form \B{Function}\texttt{[u, u\^{}3]} is
+the same idea, spelled out.}
+\pair{07-programming/purefunc/4}{A named function of two parameters.}
+\pair{07-programming/purefunc/5}{Pure functions are values: pass one straight to
+\B{Map}.}
+\pair{07-programming/purefunc/6}{And to \B{Select} as a predicate.}
+\pair{07-programming/purefunc/7}{\texttt{\#\#} (\B{SlotSequence}) is the whole
+argument run, spliced---here twice.}
+\pair{07-programming/purefunc/8}{\texttt{\#2} before \texttt{\#1} reorders the
+arguments.}
+\end{codepairs}
+
+The \texttt{\&} notation is the connective tissue of functional Mathilda: it lets
+you write a one-off function exactly where it is needed---as the thing to map, the
+predicate to select by, the step to iterate---without the ceremony of naming it.
+Named \B{Function} earns its keep when the body is long enough that \texttt{\#1},
+\texttt{\#2}, \texttt{\#3} become hard to read, or when you need its third-argument
+form to give the function evaluation attributes of its own.
+
+\calloutnote{Under the hood}{A pure function binds its parameters by
+\emph{lexical substitution} (\texttt{src/purefunc.c}), not through the global
+symbol table: when \texttt{(\#\^{}2 \&)[a + b]} fires, \texttt{\#} is replaced by
+\texttt{a + b} in the body before it evaluates. Nested pure functions scope
+correctly---an inner \texttt{\&} establishes a fresh set of slots that shadow the
+outer ones---but named-parameter \B{Function}s are deliberately \emph{not}
+closures: an inner \texttt{Function[e, \ldots]} does not capture an outer
+function's parameter. When you need that capture, inject the value with \B{With}.}
+
+\usagebox{Function}
+
+\subsection{Mapping and applying}
+\label{ssec:prog-map}
+
+Two operators cover most higher-order work. \B{Map} (\texttt{/@}) applies a
+function to each element of an expression. \B{Apply} (\texttt{@@}) does something
+subtler and often surprising to newcomers: it replaces the \emph{head} of an
+expression. \texttt{Plus @@ \{1, 2, 3, 4\}} turns the list's head \texttt{List}
+into \texttt{Plus}, giving \texttt{Plus[1, 2, 3, 4]}, which evaluates to the sum.
+\B{MapThread} and \B{Thread} generalize mapping to several lists at once.
+
+\begin{codepairs}
+\pair{07-programming/mapapply/1}{\B{Map} wraps each element in \texttt{box}.}
+\pair{07-programming/mapapply/2}{\texttt{/@} is the same operator in infix form.}
+\pair{07-programming/mapapply/3}{\B{Apply} replaces the head \texttt{List} with
+\texttt{Plus}\ldots}
+\pair{07-programming/mapapply/4}{\ldots which \texttt{@@} writes infix; the list
+becomes a sum.}
+\pair{07-programming/mapapply/5}{With a symbolic head the mechanism is bare:
+\texttt{List} becomes \texttt{f}.}
+\pair{07-programming/mapapply/6}{\texttt{@@@} applies at level one---the head of each
+sublist.}
+\pair{07-programming/mapapply/7}{\B{MapThread} zips several lists through a function
+of several arguments.}
+\pair{07-programming/mapapply/8}{\B{Thread} spreads a function over the list
+argument, copying the scalar \texttt{u} across.}
+\pair{07-programming/mapapply/9}{\B{Thread} over \texttt{==} turns one list equation
+into a list of equations.}
+\end{codepairs}
+
+\B{Map} changes the \emph{elements}, \B{Apply} changes the \emph{head}: holding
+that distinction straight is most of what it takes to read functional Mathilda
+fluently. The two combine constantly---\texttt{Total} is essentially
+\texttt{Plus @@}, and a great many one-liners are a \texttt{Map} to transform
+elements followed by an \texttt{Apply} to combine them.
+
+\subsection{Building by iteration}
+\label{ssec:prog-iterate}
+
+Where a procedural program loops, a functional one iterates a function. \B{Nest}
+applies a function \(n\) times; \B{NestList} records every intermediate result.
+\B{Fold} threads a binary function through a list, carrying an accumulator;
+\B{FoldList} keeps the running history---which is exactly a cumulative reduction.
+\B{Composition} (\texttt{@*}) builds the function that applies several functions
+in succession.
+
+\begin{codepairs}
+\pair{07-programming/iterate/1}{\B{Nest} applies \texttt{f} three times,
+symbolically.}
+\pair{07-programming/iterate/2}{\B{NestList} keeps every stage of the same
+iteration.}
+\pair{07-programming/iterate/3}{With a numeric function it collapses to a number:
+\((1+\cdot)^2\) thrice from \(1\).}
+\pair{07-programming/iterate/4}{A trivial counter, to read the shape of the
+output.}
+\pair{07-programming/iterate/5}{Newton's iteration for \(\sqrt 2\)---each step
+\((x + 2/x)/2\)---converging in a handful of steps.}
+\pair{07-programming/iterate/6}{\B{Fold} sums a list through an accumulator, giving
+\(10\).}
+\pair{07-programming/iterate/7}{\B{FoldList} keeps the partial sums---a cumulative
+total.}
+\pair{07-programming/iterate/8}{\B{Fold} by Horner's rule assembles the digits
+\(1, 9, 2, 6\) into the base-ten number \(1926\).}
+\pair{07-programming/iterate/9}{\B{Composition} applies its functions
+innermost-first.}
+\pair{07-programming/iterate/10}{\texttt{@*} is the same, in infix.}
+\end{codepairs}
+
+The Newton example (pair~5) is worth dwelling on, because it shows functional
+iteration doing real numerical work: each application of the pure function
+\texttt{(\# + 2/\#)/2 \&} is one Newton step for \(\sqrt 2\), and \B{NestList}
+exhibits the quadratic convergence---the digits roughly double each step until the
+machine-precision limit is reached and the value stops moving. The same
+computation as a \B{While} loop would be several lines and a mutable variable;
+here it is one expression, and it takes the numeric fast path automatically.
+
+\calloutnote{Performance}{\B{Nest}, \B{NestList}, \B{Fold}, \B{FoldList}, \B{Map}
+and their relatives share the loop fast path (\texttt{src/numloop.c}): when the
+iterated function is machine arithmetic throughout, the whole iteration runs as
+compiled \texttt{double} bytecode with no per-step allocation. And crucially, the
+same functional heads \emph{also} lower inside \B{Compile}, so a \B{Fold} or
+\B{Nest} written at the prompt is the same \B{Fold} or \B{Nest} that runs inside a
+compiled kernel (Chapter~\ref{ch:compilation}). Exactness is preserved position
+by position: a value the iteration merely passes through keeps its exact type
+even when computed neighbors have gone inexact.}
+
+\section{Controlling evaluation}
+\label{sec:prog-evaluation}
+
+All three paradigms rest on the evaluator, and to program well you sometimes need
+to \emph{stop} it: to keep an expression in the form you typed rather than the
+form it would reduce to. Mathilda gives you fine control over evaluation, and the
+tools reveal the machinery that has been running underneath the whole chapter.
+
+\subsection{Holding and releasing}
+\label{ssec:prog-hold}
+
+\B{Hold}\texttt{[expr]} keeps \texttt{expr} unevaluated. \B{HoldForm} does the
+same but prints without the wrapper showing, so held expressions display
+naturally. \B{Evaluate}, inside a held argument, forces \emph{that} argument to
+evaluate anyway. And \B{ReleaseHold} strips the wrappers, letting the held
+expression finally run.
+
+\begin{codepairs}
+\pair{07-programming/holds/1}{\B{Hold} keeps \(1+1\) from evaluating.}
+\pair{07-programming/holds/2}{\B{HoldForm} holds too, but prints without showing the
+wrapper.}
+\pair{07-programming/holds/3}{\B{Hold} shields all of its arguments.}
+\pair{07-programming/holds/4}{\B{Evaluate} punches through the hold for one
+argument---\(1+1\) becomes \(2\), the other stays.}
+\pair{07-programming/holds/5}{\B{ReleaseHold} removes the wrapper and lets
+evaluation resume.}
+\pair{07-programming/holds/6}{\B{Hold} holds because it \emph{carries the attribute}
+\texttt{HoldAll}.}
+\pair{07-programming/holds/7}{So does \B{SetDelayed}---which is why \texttt{:=} can
+capture an unevaluated right-hand side.}
+\end{codepairs}
+
+Pairs~6 and~7 are the reveal. \B{Hold} is not special-cased in the evaluator; it
+holds its arguments because it has the attribute \texttt{HoldAll}, and
+\emph{anything} with that attribute holds the same way. \B{SetDelayed} has it too,
+which is the whole reason \texttt{f[x\_] := body} can store \texttt{body}
+unevaluated instead of computing it once at definition time. Holding is not a
+feature of a few privileged heads---it is an attribute, and the next subsection
+shows how to make it, and the others, do work.
+
+\subsection{Inactive heads}
+\label{ssec:prog-inactive}
+
+Holding an \emph{argument} is one thing; sometimes you want to hold a
+\emph{head}---to build \texttt{Plus[2, 3]} or \texttt{Integrate[f, x]} as an inert
+object that will not fire until you say so. \B{Inactive}\texttt{[f]} is that inert
+form of the head \texttt{f}: \texttt{Inactive[f][args]} evaluates its arguments
+but does not run \texttt{f}'s own rules, so the call stays symbolic.
+\B{Activate} reverses it, turning every \texttt{Inactive[h]} back into \texttt{h}
+and letting evaluation proceed.
+
+\begin{codepairs}
+\pair{07-programming/inactive/1}{\B{Inactive}\texttt{[Plus]} is an inert head:
+\texttt{Plus} does not fire, so the sum stays symbolic.}
+\pair{07-programming/inactive/2}{The \emph{arguments} still evaluate---\(1+1\) and
+\(2+2\) reduce---but the outer \texttt{Plus} does not.}
+\pair{07-programming/inactive/3}{\B{Activate} releases the head and the addition
+finally happens.}
+\pair{07-programming/inactive/4}{The chief use: holding an integral inert, so no
+integration cascade runs.}
+\pair{07-programming/inactive/5}{\B{D} applies the fundamental theorem of calculus
+to the inert integral \emph{without} evaluating it.}
+\pair{07-programming/inactive/6}{And \B{Activate} runs the held integral when you
+want the answer.}
+\end{codepairs}
+
+The distinction in pairs~1 and~2 is precise and worth stating: \B{Inactive} freezes
+the \emph{head}, not the arguments, so \texttt{Inactive[Plus][1+1, 2+2]} evaluates
+its arguments to \texttt{Inactive[Plus][2, 4]} and stops there. This is more than
+a curiosity. An inert \texttt{Inactive[Integrate][g, x]} lets you write down an
+integral you do not (yet) want to compute---perhaps because the integrand is
+non-elementary and the attempt would be expensive---and still manipulate it
+symbolically. Pair~5 shows the payoff: \B{D} knows that differentiating an integral
+gives back the integrand, and applies that rule to the inert form directly, so an
+inert first integral can be verified without ever paying for the
+integration.\index{Inactive!fundamental theorem of calculus}
+
+\calloutnote{Under the hood}{Inertness is automatic, not a special rule.
+\texttt{Inactive[f][args]} is an expression whose head is the compound
+\texttt{Inactive[f]}, and that compound head carries no DownValues, so the call is
+already a fixed point of the evaluator---there is nothing to fire. It is the same
+structural trick as \texttt{Derivative[n][f][x]}, a call through a compound head.
+\B{Activate} is then just a targeted replacement of \texttt{Inactive[h]} by
+\texttt{h} followed by re-evaluation.}
+
+\subsection{Attributes drive it all}
+\label{sec:prog-attributes}
+
+We can now name the mechanism that has been at work in every section. Before
+Mathilda processes a call \texttt{f[a1, \ldots, aN]}, it reads the
+\emph{attributes} of \texttt{f} and lets them shape the step: which arguments to
+evaluate (the \texttt{Hold} family), whether to thread over lists
+(\texttt{Listable}), whether to flatten nested same-head calls (\texttt{Flat}),
+whether to sort the arguments (\texttt{Orderless}). \B{Attributes} reports them,
+\B{SetAttributes} adds them, and \B{ClearAttributes} removes them---and you can set
+them on your own symbols, watching the evaluator's behavior change.
+
+\begin{codepairs}
+\pair{07-programming/attributes/1}{\B{Plus} is \texttt{Flat} (associative),
+\texttt{Listable}, \texttt{Orderless} (commutative), and more---its algebra is its
+attributes.}
+\pair{07-programming/attributes/2}{Give a fresh symbol \texttt{circ} the attribute
+\texttt{Orderless}\ldots}
+\pair{07-programming/attributes/3}{\ldots and its arguments are sorted into canonical
+order automatically.}
+\pair{07-programming/attributes/4}{Make \texttt{gp} \texttt{Flat}\ldots}
+\pair{07-programming/attributes/5}{\ldots and nested \texttt{gp} calls flatten into
+one.}
+\pair{07-programming/attributes/6}{Make \texttt{hl} \texttt{Listable}\ldots}
+\pair{07-programming/attributes/7}{\ldots and it threads element-wise over a list
+argument, with no loop written.}
+\pair{07-programming/attributes/8}{Over several list arguments it threads them in
+parallel.}
+\pair{07-programming/attributes/9}{Remove the attribute\ldots}
+\pair{07-programming/attributes/10}{\ldots and the threading stops---\texttt{hl}
+holds the list whole again.}
+\end{codepairs}
+
+This is the design at the heart of Mathilda, and it is why the language feels so
+uniform. The evaluator itself is small and generic; it does not know that
+\B{Plus} is commutative or that \B{Sin} threads over lists. It knows only how to
+read attribute bits and act on them. Commutativity is \texttt{Orderless};
+associativity is \texttt{Flat}; element-wise threading is \texttt{Listable};
+holding an argument is one of the \texttt{Hold} bits. A new builtin opts into any
+of these behaviors by setting a flag, and the same seven or eight attributes
+compose to describe everything from arithmetic to your own functions. The three
+paradigms of this chapter are three ways of installing rules; the attributes are
+the dial that sets \emph{when and how} those rules fire.\index{attribute!Flat}\index{attribute!Orderless}\index{attribute!Listable}\index{attribute!HoldAll}
+
+\calloutnote{Theory}{The evaluator's per-call sequence is fixed and worth
+memorizing: evaluate the head; read its attributes; evaluate the arguments except
+those held; thread if \texttt{Listable}; flatten if \texttt{Flat}; sort if
+\texttt{Orderless}; then try the builtin, then the DownValues. Each attribute is a
+step in that pipeline, which is why \texttt{Orderless} on \texttt{circ} and
+\texttt{Flat} on \texttt{gp} take effect the instant they are set, with no change
+to the symbol's rules---they change how the evaluator \emph{prepares} the call
+before any rule is consulted. The mechanism lives in \texttt{src/eval.c} and
+\texttt{src/attr.c}.}
+
+\section*{Where this connects}
+
+Programming in Mathilda is not a layer on top of the algebra system; it is the
+same system, used deliberately. A function you define with \texttt{:=} is a rule
+in the symbol table, matched by the same engine that powers \B{Solve}'s
+case analysis and the derivative rules of Chapter~\ref{ch:mathematics}; the
+pattern language of \S\ref{sec:prog-patterns} is the language those internal rule
+sets are written in. The functional iteration of \S\ref{ssec:prog-iterate} and the
+loops of \S\ref{ssec:prog-loops} share one numeric fast path, and both lower into
+the bytecode compiler---so the \B{Map}, \B{Fold}, and \B{Nest} you write here are
+exactly what \B{Compile} accelerates in Chapter~\ref{ch:compilation}, where the
+compilable subset and its cliff are the subject. The attributes of
+\S\ref{sec:prog-attributes} are the same bits Chapter~\ref{ch:internals} traces
+through the evaluator, and the ``everything is an expression'' model that lets
+\B{Map} and \B{ReplaceAll} work on rules, patterns, and functions alike is the
+data model of Chapter~\ref{ch:datastructures}. As always, the exhaustive options
+of any function named here are one \texttt{?Name} away at the prompt.

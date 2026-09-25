@@ -1,5 +1,675 @@
 \section{Calculus}
 \label{sec:calculus}
 
-\emph{This section is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+Algebra computes with expressions as static objects; calculus computes with the
+\emph{change} in them. This is the longest section of the book, because it is
+where a computer algebra system does its most characteristic work---turning the
+limit processes of the calculus into finite, exact algebra. We climb in the
+order the subject is usually taught, but with the machinery on show throughout:
+differentiation, limits, power series, residues, then the two faces of
+integration---first the indefinite integral and the deep decision problem
+beneath it, then the definite integral and the complex-analytic and
+transform methods that evaluate it---and finally differential equations, where
+all of the preceding tools are put to work at once.
+
+The theme that runs through everything is a single distinction. \emph{Some}
+operations of calculus are algorithmic in the strict sense: there is a procedure
+that always terminates with the right answer or a proof that none exists.
+Differentiation is the obvious one---the chain rule is a finite recursion on the
+structure of an expression---but so, remarkably, is integration in elementary
+terms, by the Risch algorithm. \emph{Other} operations are not decidable at all,
+and there the system is a toolbox of specialised engines, each complete on the
+family it recognises and honest enough to decline the rest. You will see both
+kinds, and the book will be explicit about which is which.
+
+\subsection{Differentiation}
+\label{ssec:calc-deriv}
+
+Differentiation\index{differentiation} is the one operation in this section that
+is purely mechanical, and Mathilda treats it accordingly. \B{D} computes partial
+derivatives, holding every symbol other than the differentiation variable
+constant.
+
+\begin{codepairs}
+\pair{calculus/derivatives/1}{\B{D}\texttt{[f, x]} differentiates \(f\) with
+respect to \(x\): the power rule, \(3x^2\).}
+\pair{calculus/derivatives/2}{The chain rule for a composite, \(\frac{d}{dx}\sin
+x^2 = 2x\cos x^2\).}
+\pair{calculus/derivatives/3}{\texttt{D[f, \{x, n\}]} takes the \(n\)-th
+derivative---here the third, \(-a^3\cos ax\).}
+\pair{calculus/derivatives/4}{The base-\(b\) logarithm: \(\frac{d}{dx}\log_b x =
+1/(x\log b)\).}
+\pair{calculus/derivatives/5}{For an \emph{unknown} function the chain rule
+produces a \B{Derivative} object: \(f'(g(x))\,g'(x)\), written
+\texttt{Derivative[1][\ldots]}.}
+\pair{calculus/derivatives/6}{\B{Derivative}\texttt{[2][f]} is the second-derivative
+operator itself, carried symbolically until \(f\) is known.}
+\end{codepairs}
+
+The last two lines expose the internal representation. An \(n\)-th derivative of
+an unknown function is not left as \(D[\ldots]\); it is stored as the operator
+\texttt{Derivative[n][f]} applied to its argument, so that
+\texttt{Derivative[1][f][g[x]]} means ``\(f'\) evaluated at \(g(x)\).'' This is
+what lets Mathilda differentiate the same expression again and again and always
+recognise what it is looking at.
+
+Handed a list of variables, \B{D} produces the objects of vector calculus
+directly. A single bracketed variable list is a gradient; a repeated one is a
+higher array derivative; a vector argument is differentiated component-wise.
+
+\begin{codepairs}
+\pair{calculus/derivatives/7}{\texttt{D[f, \{\{x, y\}\}]} is the
+gradient\index{gradient} \(\nabla f = (f_x, f_y)\).}
+\pair{calculus/derivatives/8}{Repeating the variable list gives the second array
+derivative---the Hessian\index{Hessian matrix} \(\nabla^2 f\).}
+\pair{calculus/derivatives/9}{For a \emph{vector} field the same call yields the
+Jacobian\index{Jacobian matrix}, one gradient row per component.}
+\pair{calculus/derivatives/10}{\B{Dt} is the \emph{total} derivative: every
+symbol is an implicit function of everything, so each contributes a
+\texttt{Dt} differential.}
+\pair{calculus/derivatives/11}{So \texttt{Dt} of \(x^n\) carries a \(\log\) term
+from the exponent's own dependence.}
+\end{codepairs}
+
+The difference between \B{D} and \B{Dt}\index{total derivative} is exactly the
+difference between a partial and a total derivative in an ordinary calculus
+course: \texttt{D[y, x]} is \(0\) because \(y\) is held fixed, while
+\texttt{Dt[y, x]} is the differential \texttt{Dt[y, x]} because \(y\) may depend
+on \(x\). Give a function a definition, and its derivative computes to an
+ordinary expression:
+
+\begin{codepairs}
+\pair{calculus/derivatives/13}{Once \(f(x)=x^5+6x^3\) is defined,
+\texttt{f'[x]} evaluates the operator: \(18x^2+5x^4\).}
+\pair{calculus/derivatives/14}{And \texttt{f'[5]} is a plain number.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Differentiation is the textbook example of the
+system's two-tier design---C for speed, rewrite rules for mathematics---and of
+that design evolving. The derivative rules once lived as pattern-matching
+\texttt{DownValues} in \texttt{src/internal/deriv.m}; every call walked a linear
+list of some sixty rules through the full rule engine. They were promoted to a
+native C dispatcher (\texttt{src/calculus/deriv.c}) that branches on the head
+symbol in a single comparison and builds the derivative tree directly, for a
+2--8\(\times\) speedup, and \texttt{deriv.m} is now an empty hook you can still
+drop custom \texttt{Dt} identities into. The higher tier survives where it earns
+its keep: the integral tables (\texttt{CRCMathTablesIntegrals.m}) and the mixed-tower
+integrator (\texttt{src/internal/mixed/ParallelMixed.m}) below are still Mathilda
+programs, loaded at startup.}
+
+The vector operators \B{Grad}, \B{Div}, \B{Curl}, and \B{Laplacian} are assembled
+entirely from \B{D}, so they inherit every rule it knows.\index{vector calculus}
+
+\begin{codepairs}
+\pair{calculus/vector-calculus/1}{\B{Grad} of a scalar is its gradient vector.}
+\pair{calculus/vector-calculus/2}{\B{Grad} of a vector field is its Jacobian.}
+\pair{calculus/vector-calculus/3}{\B{Div} contracts a field against the variables:
+\(\nabla\cdot\mathbf{F}\).}
+\pair{calculus/vector-calculus/4}{\B{Curl} of \((-y, x, 0)\) is the constant
+vorticity \((0,0,2)\).}
+\pair{calculus/vector-calculus/5}{\B{Laplacian} of \(x^2+y^2+z^2\) is \(6\).}
+\pair{calculus/vector-calculus/6}{With a chart name the operators use the
+orthonormal basis---here the Coulomb field \(-\nabla(kq/r)= (kq/r^2)\,\hat r\) in
+spherical coordinates.}
+\pair{calculus/vector-calculus/7}{And the spherical divergence of \(r^2\hat r\)
+is \(4r\), from \(\frac{1}{r^2}\partial_r(r^2\cdot r^2)\).}
+\end{codepairs}
+
+\calloutnote{Theory}{The three-argument chart form does the real differential
+geometry. In a curvilinear orthogonal chart the operators are not just
+partial derivatives: each carries the chart's scale factors (Lam\'e
+coefficients) \(h_i\), so the spherical divergence is
+\(\frac1{J}\sum_i \partial_i\!\big(\tfrac{J}{h_i}F_i\big)\) with \(J=\prod_i
+h_i\). Mathilda knows the Cartesian, polar, cylindrical, and spherical charts;
+field ranks that would need Christoffel symbols (a vector Laplacian, the gradient
+of a vector field in a curved chart) are left unevaluated rather than guessed.}
+
+\subsection{Limits}
+\label{ssec:calc-limit}
+
+\B{Limit} evaluates the limit of an expression as a variable approaches a point,
+finite or infinite. The easy cases are the ones a first course drills; the hard
+ones are where a CAS earns its name.
+
+\begin{codepairs}
+\pair{calculus/limits/1}{The archetypal \(0/0\) form: \(\sin x / x \to 1\).}
+\pair{calculus/limits/2}{A removable singularity---the difference quotient of
+\(x^2\) at \(1\).}
+\pair{calculus/limits/3}{Another \(0/0\), giving \(\tfrac12\).}
+\pair{calculus/limits/4}{The definition of \(e\), as a \(1^\infty\) form.}
+\pair{calculus/limits/5}{With no direction, \(1/x\) at \(0\) is
+\mcode{ComplexInfinity}---the two sides disagree in sign.}
+\pair{calculus/limits/6}{Fixing \texttt{Direction} takes the one-sided limit,
+here \(+\infty\) from above.}
+\end{codepairs}
+
+The default is the two-sided limit; \texttt{Direction -> "FromAbove"} and
+\texttt{"FromBelow"} select a one-sided approach, and the answer
+\mcode{ComplexInfinity} in pair~5 is Mathilda telling you the unsigned limit is
+infinite because the signed one does not exist. So far this is bookkeeping.
+The following are not:
+
+\begin{codepairs}
+\pair{calculus/limits/7}{A \(\infty^0\) form whose value is the largest base,
+\(5\)---no series expansion reaches this.}
+\pair{calculus/limits/8}{A tower of nested exponentials whose leading terms
+cancel to leave \(-1\).}
+\pair{calculus/limits/9}{An oscillation that genuinely has no limit:
+\mcode{Indeterminate}, not a guessed value.}
+\end{codepairs}
+
+Pairs~7 and~8 are the province of a genuine algorithm.\calloutnote{Theory}{The
+last resort for a limit of an exp--log function is \emph{Gruntz's most-rapidly-varying
+algorithm}\index{Gruntz's algorithm} (his 1996 ETH thesis, implemented in
+\texttt{src/calculus/gruntz.c}). Rather than expand from the bottom up---where the
+intermediate expressions swell catastrophically on cancellation-heavy towers like
+pair~8---it identifies the single most rapidly varying subexpression \(w\), rewrites
+the whole function as a series in \(w\to 0^+\), and reads the limit off the leading
+term. Because the rewriting is driven by the comparability classes of the
+subexpressions, the swell never happens: \((3^x+5^x)^{1/x}\) collapses at once to
+\(5\), the base that dominates. Gruntz also runs as the silent fallback inside the
+default cascade, after the substitution, rational, series, and L'Hospital layers
+have had their turn.} Pair~9 is the honest counterpart: \(x\sin x\) oscillates
+with growing amplitude, so no limit exists, and Mathilda proves this (via an
+oscillatory normal-form analysis) rather than returning a plausible-looking
+number. That refusal to guess is the through-line of the whole section.
+
+\usagebox{Limit}
+
+\subsection{Series}
+\label{ssec:calc-series}
+
+A power series is the local linearisation carried to all orders. \B{Series}
+computes the Taylor, Laurent, or Puiseux expansion of an expression about a
+point, to a requested order.
+
+\begin{codepairs}
+\pair{calculus/series/1}{The Taylor series\index{Taylor series} of \(e^x\) to
+order five, with its \(O[x]^6\) remainder term.}
+\pair{calculus/series/2}{\B{Normal} strips the \(O\) term, leaving an ordinary
+polynomial you can compute with.}
+\pair{calculus/series/3}{\B{SeriesCoefficient} extracts a single coefficient
+without forming the whole series---here \(1/7!\).}
+\pair{calculus/series/4}{A \emph{Laurent}\index{Laurent series} series: \(1/\sin
+x\) has a pole at \(0\), so the expansion starts at \(x^{-1}\).}
+\pair{calculus/series/5}{A \emph{Puiseux}\index{Puiseux series} series in
+fractional powers, for \(\sqrt{\sin x}\).}
+\pair{calculus/series/6}{Symbolic exponents survive: the binomial series of
+\((1+x)^n\) keeps \(n\) unevaluated.}
+\end{codepairs}
+
+The three expansion types are one mechanism seen at three scales: a Taylor series
+when the function is analytic, a Laurent series with negative powers at a pole, a
+Puiseux series with fractional powers at a branch point. The expansion can also be
+taken at infinity, and an unknown function expands formally through its
+derivatives:
+
+\begin{codepairs}
+\pair{calculus/series/7}{An asymptotic\index{asymptotic expansion} expansion at
+\(\infty\): the arctangent tends to \(\pi/2\) with a \(1/x\) tail.}
+\pair{calculus/series/8}{For an unknown \(f\) the coefficients appear as
+\B{Derivative} values---the Taylor series in symbolic form.}
+\pair{calculus/series/9}{The internal object is \B{SeriesData}; constructing one
+by hand prints as the same series.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Behind the printed sum is a \B{SeriesData} object
+carrying the expansion variable, the centre, the coefficient list, the leading and
+trailing exponents, and a denominator that makes fractional powers exact integers
+internally. It is a first-class value: \B{D}, \B{Integrate}, \B{Plus}, \B{Times},
+and \B{Power} all operate on it term by term and return a new truncated series, so
+you can do arithmetic with series as freely as with polynomials. Coefficients
+promote automatically to arbitrary-precision rationals when machine integers would
+overflow, so a deep Laurent expansion such as \(\operatorname{Series}[1/\sin^{10}x]\)
+stays exact.}
+
+\subsection{Residues}
+\label{ssec:calc-residue}
+
+The residue of a function at an isolated singularity---the coefficient of
+\((z-z_0)^{-1}\) in its Laurent series---is the single number that complex
+analysis needs to integrate around a pole. \B{Residue} reads it straight out of
+the series.
+
+\begin{codepairs}
+\pair{calculus/residues/1}{The residue\index{residue} of \(1/z\) at \(0\) is
+\(1\).}
+\pair{calculus/residues/2}{A double pole with no simple part: \(1/z^2\) has
+residue \(0\).}
+\pair{calculus/residues/3}{\(\cot z\) has a simple pole at \(0\) with residue
+\(1\).}
+\pair{calculus/residues/4}{A higher-order pole: residue \(-3/4\) at the double
+pole \(z=0\).}
+\pair{calculus/residues/5}{A complex pole---\(1/(z^2+1)\) at \(z=i\) has residue
+\(-i/2\).}
+\pair{calculus/residues/6}{A fifth-order pole: \(1/\sin^5 z\) at \(0\)
+gives \(3/8\).}
+\pair{calculus/residues/7}{At a \emph{branch} point the residue is undefined, so
+the call is left unevaluated.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{For a general integrand the residue is the \(-1\)
+coefficient of \B{Series}; the engine raises the expansion order automatically
+when the pole's order is hidden behind an unknown factor. But a rational function
+with an algebraic (radical) pole location would trip the series inverter, so a
+simple pole short-circuits to the exact formula \(P(z_0)/Q'(z_0)\) computed
+directly, and higher-order rational poles expand the numerator and denominator
+\emph{separately} to keep each algebraic coefficient in its minimal radical
+spelling. A fractional-power (Puiseux) expansion signals a branch point---pair~7---where
+the notion of residue does not apply, so the call declines rather than return a
+Laurent coefficient that is not there.} The residue theorem this feeds---summing
+residues to evaluate a real integral---reappears in \S\ref{ssec:calc-definite},
+where Mathilda uses it as a definite-integration engine in its own right.
+
+\subsection{Indefinite integration: the Risch story}
+\label{ssec:calc-integrate}
+
+Integration is the centre of this section and the deepest single algorithm in the
+system. Where differentiation is a finite recursion, integration in closed form
+is a genuine decision problem, and the theory that settles it is one of the
+triumphs of twentieth-century computer algebra. We start with the cases that look
+familiar and work toward the machinery that makes them possible.
+
+\begin{codepairs}
+\pair{calculus/integrate-elementary/1}{Term-by-term integration of a polynomial.}
+\pair{calculus/integrate-elementary/2}{A logarithmic derivative recognised
+directly: \(\int 2x/(x^2+1) = \log(1+x^2)\).}
+\pair{calculus/integrate-elementary/3}{The arctangent, from an irreducible
+quadratic denominator.}
+\pair{calculus/integrate-elementary/4}{A partial-fraction case; the answer combines
+two of the three logarithms into a single quadratic \(\log\).}
+\pair{calculus/integrate-elementary/5}{Two irreducible quadratic factors give a
+mixed \(\log\)/\(\arctan\) answer.}
+\end{codepairs}
+
+These are all \emph{rational} integrands, and for them integration is completely
+solved.\calloutnote{Under the hood}{The rational integrator
+(\texttt{src/calculus/intrat.c}) is a faithful implementation of the modern
+pipeline: \emph{Hermite reduction}\index{Hermite reduction} splits off the part
+of the answer that is itself rational (the repeated-pole part), leaving a
+residual with a square-free denominator; the \emph{Lazard--Rioboo--Trager}
+algorithm\index{Rothstein--Trager} then produces the logarithmic part as a sum
+\(\sum_i c_i\log(g_i)\) whose constants \(c_i\) are the roots of a
+resultant---never by an undetermined-coefficient solve. Rioboo's conversion turns
+each complex-conjugate pair of logarithms into a real \(\arctan\), which is why
+pair~5 comes out in real form. For plain rational inputs the heavy polynomial
+arithmetic is handed to FLINT~\cite{flint}; the classical account is
+Geddes--Czapor--Labahn~\cite{gcl}. Every branch ends at the same universal check:
+\(\operatorname{Cancel}[\operatorname{Together}[D[\text{result}]-f]]\) must be
+\(0\).} Rational functions of radicals are next, rationalised by the right
+substitution:
+
+\begin{codepairs}
+\pair{calculus/integrate-elementary/6}{A rational function of \(\sqrt x\),
+rationalised by \(u=\sqrt x\).}
+\pair{calculus/integrate-elementary/7}{A square root of a quadratic, handled by a
+Euler substitution.}
+\end{codepairs}
+
+Now the mathematics deepens. Many perfectly innocent-looking integrands have
+\emph{no} antiderivative among the elementary functions---and this is a theorem,
+not a gap. \emph{Liouville's theorem}\index{Liouville's theorem} says that if an
+elementary function has an elementary antiderivative, that antiderivative has a
+very restricted shape: the original function plus a sum of constant multiples of
+logarithms of elementary functions. When no such shape exists, the integral is
+provably non-elementary, and the honest answer is a \emph{new} function named for
+exactly that integral.
+
+\begin{codepairs}
+\pair{calculus/integrate-special/1}{Integration by parts, done for you:
+\(\int x e^x = (x-1)e^x\).}
+\pair{calculus/integrate-special/2}{\(e^{-x^2}\) has no elementary integral, so
+the answer is the error function \B{Erf}.}
+\pair{calculus/integrate-special/3}{\(e^x/x\) gives the exponential integral
+\B{ExpIntegralEi}.}
+\pair{calculus/integrate-special/4}{\(1/\log x\) is the logarithmic integral,
+returned as \(\operatorname{Ei}(\log x)\).}
+\pair{calculus/integrate-special/5}{\(\sin x/x\) gives the sine integral
+\B{SinIntegral}.}
+\pair{calculus/integrate-special/6}{A dilogarithm\index{dilogarithm} appears:
+\(\int \log x/(1+x) = \log x\log(1+x) + \operatorname{Li}_2(-x)\).}
+\pair{calculus/integrate-special/7}{And a genuine polylogarithm ladder for
+\(x/(e^x-1)\), the Bose--Einstein integrand.}
+\end{codepairs}
+
+Each of these is correct \emph{by construction}: the algorithm certifies that no
+elementary form exists before it reaches for the special function, so \B{Erf},
+\B{ExpIntegralEi}, \B{SinIntegral}, and \B{PolyLog} are not approximations or
+placeholders---they are the exact antiderivatives, and their appearance is a
+statement about the integrand.\calloutnote{Theory}{The engine behind pairs~2--7
+is the \emph{Risch algorithm}\index{Risch algorithm}
+(\texttt{src/calculus/integrate\_risch\_transcendental.c}), the decision
+procedure for integration in a differential field built by adjoining
+exponentials and logarithms one at a time. Its heart is the
+\emph{Risch differential equation}: closing the exponential part of an integral
+amounts to solving \(q' + f'q = p\) for a polynomial \(q\), which Mathilda does by
+Bronstein's polynomial-time SPDE reduction rather than an undetermined-coefficient
+blow-up. Layered above the base algorithm are engines for the special-function
+answers: a Gaussian recogniser for \B{Erf}, Cherry's algorithms for the exponential
+and logarithmic integrals and the \emph{polylogarithm ladder}\index{polylogarithm
+ladder} \(\int x^n/(e^{cx}-\rho)\), and a dilogarithm recogniser. When the field
+decision proves an integral non-elementary but the special-function engines cannot
+name it, the integral is returned unevaluated with an \texttt{Integrate::nonelem}
+message explaining why.}
+
+The book promised to be explicit about what is decidable, and integration lets it
+keep the promise directly. The predicate that decides elementary integrability is
+exposed:
+
+\begin{codepairs}
+\pair{calculus/elementary-q/1}{\(e^x/x\) is \emph{not} elementary---a proof, not a
+timeout.}
+\pair{calculus/elementary-q/2}{Nor is \(e^{x^2}\).}
+\pair{calculus/elementary-q/4}{But \(e^x/(1+e^x)\) is: its integral is
+\(\log(1+e^x)\).}
+\pair{calculus/elementary-q/5}{And \(\sin x/x\) is not---the sine integral is the
+statement that it is not.}
+\end{codepairs}
+
+A \texttt{False} here is backed by an exact certificate---a non-constant residue,
+or a Risch differential equation with no rational solution---so it means ``no
+elementary antiderivative exists,'' never ``I gave up.'' This soundness is
+purchased at a real cost, which is worth seeing:
+
+\begin{codepairs}
+\pair{calculus/elementary-q/6}{A correct answer in an awkward dress:
+\(\int\cos(\log x)\) is real, but printed through complex powers of \(x\).}
+\end{codepairs}
+
+\calloutnote{Pitfall}{The output of pair~6 is exactly
+\(\tfrac{x}{2}(\cos\log x + \sin\log x)\)---but Mathilda returns it as
+\((\tfrac14-\tfrac{i}4)x^{1+i}+(\tfrac14+\tfrac{i}4)x^{1-i}\), a genuinely real
+quantity written with conjugate complex exponents. The transcendental integrator
+reaches trigonometric integrands by exponentialising with \(\cos =
+(e^{i\cdot}+e^{-i\cdot})/2\), and the current simplifier does not always fold the
+result back to real form. The value is right and \(\B{N}\) confirms it; the form is
+a known cosmetic limitation, not an error. Prefer the algebraic routes when a real
+closed form matters.}
+
+Two further capabilities of \B{Integrate} deserve mention, because they reach
+integrands the classical Risch algorithm alone cannot. The first is the
+\texttt{"ParallelMixedTower"}\index{ParallelMixedTower method} method, a parallel
+Risch--Norman integrator over a \emph{mixed} transcendental tower that may contain
+a square root anywhere in its structure. It is what closes hard algebraic-function
+integrals such as the classic \(\int\sqrt{\tan x}\):
+
+\begin{codepairs}
+\pair{calculus/integrate-special/8}{\(\int\sqrt{\tan x}\,dx\): a mixed radical
+tower, closed in real \(\arctan\)/\(\log\) form.}
+\end{codepairs}
+
+The parallel method treats the whole integrand as living in a differential field
+built over rational operations, one square root, and \(\log\)/\(\exp\)/\(\tan\) of
+field elements, and solves for the antiderivative by an ansatz whose unknowns are
+found by linear algebra---then verifies every result by re-differentiating before
+returning it, so a case it cannot realise correctly declines rather than escaping
+as a wrong answer. The second is Feynman's trick,
+\texttt{"DiffUnderInt"}---differentiation under the integral sign---which belongs
+to definite integration and is taken up next.
+
+\usagebox{Integrate}
+
+\subsection{Definite integration}
+\label{ssec:calc-definite}
+
+A definite integral is not just an antiderivative evaluated at two points---not
+when the integrand has poles, the interval runs to infinity, or the
+antiderivative crosses a branch cut. Mathilda's definite integrator is a cascade
+of methods, each correct on the family it claims. The workhorse is the
+fundamental theorem of calculus, made careful.
+
+\begin{codepairs}
+\pair{calculus/definite/1}{The elementary case: \(\int_0^1 x^2 = 1/3\).}
+\pair{calculus/definite/2}{An \emph{improper} integral that converges---the
+singularity at \(0\) is integrable.}
+\pair{calculus/definite/3}{An infinite upper limit, evaluated through the
+\B{Limit} engine.}
+\pair{calculus/definite/11}{An iterated double integral, reduced innermost-first.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The Newton--Leibniz mechanism
+(\texttt{src/calculus/integrate\_newton\_leibniz.c}) antidifferentiates \(f\),
+locates the real poles of the \emph{integrand} strictly inside the interval, splits
+the interval there, and evaluates each boundary through \B{Limit}---a plain limit at
+infinite endpoints, a one-sided limit at interior poles. This is how the improper
+integrals above acquire their finite values, and how a genuinely divergent
+integral is caught and left unevaluated rather than assigned the difference of two
+infinities.} That last safeguard matters:
+
+\begin{codepairs}
+\pair{calculus/definite/10}{\(\int_{-1}^1 dx/x\) diverges, and Mathilda says so by
+returning the input unevaluated (with an \texttt{Integrate::idiv} message).}
+\end{codepairs}
+
+For the classical improper and periodic integrals that complex analysis dispatches
+by summing residues, a residue-theorem engine runs \emph{before} Newton--Leibniz.
+These answers are correct by construction---once the structural gates hold, the
+residue theorem gives the exact value.
+
+\begin{codepairs}
+\pair{calculus/definite/4}{A rational function over the whole line, by residues in
+the upper half-plane: \(\pi/\sqrt2\).}
+\pair{calculus/definite/5}{A Fourier integral, by Jordan's lemma\index{Jordan's
+lemma}: \(\int_{-\infty}^\infty \cos x/(1+x^2) = \pi/e\).}
+\pair{calculus/definite/9}{A rational function of \(\cos x\) over a full period, via
+\(z=e^{ix}\) on the unit circle.}
+\end{codepairs}
+
+A third family---half-line integrals of transcendental functions that neither
+residues nor the FTC close---is handled by a Mellin-transform engine built on the
+Ramanujan Master Theorem\index{Ramanujan Master Theorem}, and a fourth by
+symmetry.
+
+\begin{codepairs}
+\pair{calculus/definite/6}{The Gaussian \(\int_0^\infty e^{-x^2} = \sqrt\pi/2\).}
+\pair{calculus/definite/7}{The sinc integral \(\int_0^\infty \sin x/x = \pi/2\).}
+\pair{calculus/definite/8}{The Debye integral \(\int_0^\infty x^3/(e^x-1) =
+\pi^4/15\)---the Stefan--Boltzmann law, from the Bose--Einstein kernel.}
+\end{codepairs}
+
+\calloutnote{Theory}{Pair~8 is Ramanujan's Master Theorem\index{Mellin transform}
+at work. If \(f(x)=\sum_k (-1)^k\varphi(k)x^k/k!\) then its Mellin transform
+\(\int_0^\infty x^{s-1}f(x)\,dx\) equals \(\Gamma(s)\varphi(-s)\) on a
+fundamental strip, and the Bose--Einstein kernel \(1/(e^{x}-1)\) lands on
+\(\Gamma(s)\zeta(s)\)---so \(\int_0^\infty x^3/(e^x-1)=\Gamma(4)\zeta(4)=6\cdot
+\pi^4/90=\pi^4/15\). Every application is gated on its convergence strip, checked
+by \B{Simplify} or against your \texttt{Assumptions}; when the strip cannot be
+proved the value is returned as a \B{ConditionalExpression}, matching Wolfram, and
+a provably violated strip declines. The Fermi--Dirac companion
+\(\int_0^\infty x^3/(e^x+1)=7\pi^4/120\) comes out the same way.}
+
+When an endpoint is complex, or the spec lists more than two points, \B{Integrate}
+switches to a genuine contour integral along the straight segments.
+
+\begin{codepairs}
+\pair{calculus/contour/1}{A contour integral of \(1/z\) between two complex
+points---a difference of principal logarithms.}
+\pair{calculus/contour/2}{\(\int_0^{1+i} z^2\,dz\), path-independent because
+\(z^2\) is entire.}
+\pair{calculus/contour/3}{A closed square loop around the origin gives \(2\pi
+i\)---the residue theorem\index{residue theorem}, numerically.}
+\end{codepairs}
+
+The Cauchy principal value\index{Cauchy principal value} is available for the
+odd-order interior poles where the symmetric divergences cancel:
+
+\begin{codepairs}
+\pair{calculus/contour/4}{The principal value across the pole at \(x=2\):
+\(-\log 2\).}
+\end{codepairs}
+
+Finally, differentiation under the integral sign---\emph{Feynman's
+trick}\index{Feynman's trick}\index{differentiation under the integral sign}---is
+a definite-integration method in its own right. For a parameter-dependent integral
+\(I(p)\), it differentiates the integrand in \(p\), evaluates the simpler integral,
+and integrates back, fixing the constant from an exact base value.
+
+\begin{codepairs}
+\pair{calculus/feynman/1}{\(\int_0^1 (x^a-1)/\log x\,dx = \log(1+a)\), the standard
+Feynman warm-up.}
+\pair{calculus/feynman/2}{And \(\int_0^\infty \log(1+a^2x^2)/(1+x^2)\,dx = \pi\log(1+a)\)
+under \(a>0\).}
+\end{codepairs}
+
+\subsection{Differential equations}
+\label{ssec:calc-dsolve}
+
+The whole apparatus of this section converges on \B{DSolve}, which solves
+differential equations symbolically. It returns solutions as rules, with the
+constants of integration named \texttt{C[1]}, \texttt{C[2]}, and so on; initial
+or boundary conditions, given as equations, are fitted to those constants. Like
+\B{Integrate}, it is a cascade polyalgorithm---a long sequence of specialised
+methods, each recognising an equation type it can solve completely. We survey it
+by that classification, which is also the classification any course on
+differential equations teaches.
+
+We begin, as promised, with the warm-up:
+
+\begin{codepairs}
+\pair{calculus/dsolve-first-order/1}{The exponential equation \(y'=y\): the
+solution is \(C_1 e^x\).}
+\pair{calculus/dsolve-first-order/2}{Separable, \(y'=xy\): \(C_1 e^{x^2/2}\).}
+\pair{calculus/dsolve-first-order/3}{First-order linear, solved by an integrating
+factor\index{integrating factor}.}
+\pair{calculus/dsolve-first-order/4}{A Bernoulli\index{Bernoulli equation}
+equation \(y'=y+xy^2\), linearised by \(v=y^{-1}\).}
+\pair{calculus/dsolve-first-order/5}{An exact\index{exact equation} equation;
+the potential inverts to the explicit \(y=C_1/(1+x^2)\).}
+\pair{calculus/dsolve-first-order/6}{A Clairaut\index{Clairaut equation} equation,
+whose general solution is a family of lines.}
+\pair{calculus/dsolve-first-order/7}{A quadratic (Riccati\index{Riccati equation})
+right-hand side, whose solution is a shifted tangent.}
+\pair{calculus/dsolve-first-order/8}{An initial-value problem---the constant is
+fitted to \(y(0)=5\).}
+\end{codepairs}
+
+Each line above is a different classical method: separable, linear, Bernoulli,
+exact, Clairaut, Riccati. \B{DSolve} recognises the shape of the equation and
+dispatches to the matching engine, and every branch it returns is verified by
+back-substitution before you see it. The linear constant-coefficient case---the
+backbone of a differential-equations course---is next, with the forcing handled by
+undetermined coefficients or variation of parameters.
+
+\begin{codepairs}
+\pair{calculus/dsolve-linear/1}{A damped oscillator: complex characteristic roots
+give \(e^{-2x}\) times sine and cosine.}
+\pair{calculus/dsolve-linear/2}{Resonant forcing, \(y''-y=e^x\): the particular
+solution carries the tell-tale factor of \(x\).}
+\pair{calculus/dsolve-linear/3}{Repeated integration, in \B{Function} form.}
+\pair{calculus/dsolve-linear/4}{A boundary-value problem, fitted at two points to
+give \(\sin x\).}
+\pair{calculus/dsolve-linear/5}{An \emph{inconsistent} BVP: \texttt{\{\}} means no
+solution exists, distinct from an unhandled equation.}
+\end{codepairs}
+
+The resonance in pair~2 is worth pausing on: when the forcing frequency coincides
+with a natural frequency, the naive particular solution fails, and \B{DSolve}
+detects the coincidence and multiplies by \(x\) automatically---the same
+resonance a physicist watches for in a driven oscillator. Pair~5 shows the
+system's care with existence: an over-determined boundary-value problem returns
+the empty list as a proof that no solution exists, which is a different statement
+from leaving an equation symbolic because no method applied.
+
+Beyond constant coefficients lies the variable-coefficient world, where the
+solutions are the named special functions of \S\ref{ssec:calc-series} and the
+answer often hinges on a deep classical algorithm.
+
+\begin{codepairs}
+\pair{calculus/dsolve-special/1}{The Airy equation \(y''=xy\), whose solutions are
+\B{AiryAi} and \B{AiryBi}.}
+\pair{calculus/dsolve-special/2}{Bessel's equation of order \(2\), giving
+\B{BesselJ} and \B{BesselY}.}
+\pair{calculus/dsolve-special/3}{An Euler--Cauchy\index{Euler--Cauchy equation}
+equidimensional equation, solved by \(x^r\) with complex exponents.}
+\pair{calculus/dsolve-special/4}{A Liouvillian solution found by Kovacic's
+algorithm---elementary, not a series.}
+\pair{calculus/dsolve-special/5}{No closed form exists, so the fallback is a
+Frobenius\index{Frobenius method} power series about the origin.}
+\end{codepairs}
+
+\calloutnote{Theory}{Pair~4 is the crown of second-order theory.
+\emph{Kovacic's algorithm}\index{Kovacic's algorithm}
+(\texttt{src/calculus/dsolve\_kovacic.c}) decides whether a second-order linear
+ODE \(y''+Py'+Qy=0\) has a \emph{Liouvillian} solution---one built from exponentials,
+integrals, and algebraic functions---and constructs it when it does, by examining
+the equation's reduced normal form \(z''=rz\) and the local behaviour of \(r\) at
+its poles and at infinity. When it succeeds you get a genuine closed form (here
+\((C_1+C_2e^{x^2})e^{-x^2/2}/\sqrt x\)); when it proves none exists, control passes
+to the Frobenius\index{Frobenius method} series method, which expands about a regular
+singular point with an indicial equation fixing the leading exponents. The two
+together---Kovacic for the closed form, Frobenius for its absence---cover the
+second-order linear equations a course would set.}
+
+Systems of equations are dispatched to their own cascade, which diagonalises the
+coefficient matrix and handles real, complex, and defective spectra.
+
+\begin{codepairs}
+\pair{calculus/dsolve-systems/1}{A \(2\times2\) system with complex eigenvalues:
+the solution is oscillatory.}
+\pair{calculus/dsolve-systems/2}{A system with real eigenvalues \(-1\) and \(3\):
+a combination of growing and decaying exponentials.}
+\end{codepairs}
+
+Two engines stand out for their generality. The first is the Lie point-symmetry
+method, the general backstop for first-order equations.\calloutnote{Theory}{A
+\emph{Lie point symmetry}\index{Lie point symmetry} is an infinitesimal
+transformation \(V=\xi\,\partial_x+\eta\,\partial_y\) that maps solution curves to
+solution curves. Finding one is an underdetermined PDE---so Mathilda's engine
+(documented in \texttt{docs/design/dsolve\_lie\_symmetry.md}) runs a table of
+ansatz heuristics, each proposing a shape for \((\xi,\eta)\) and testing it against
+the linearised symmetry condition. An accepted symmetry hands over an integrating
+factor \(\mu=1/(\eta-\xi\omega)\), whose quadrature is the first integral of the
+equation. Because a first integral need not admit an explicit \(y(x)\), the answer
+is often returned \emph{implicitly}, as a relation \(G(x,y)=C_1\).}
+
+\begin{codepairs}
+\pair{calculus/dsolve-lie/1}{A symmetry with a rational infinitesimal yields an
+implicit first integral.}
+\pair{calculus/dsolve-lie/2}{An irrational right-hand side \(\sqrt{ax+by+c}\),
+handled by a similarity-ansatz symmetry.}
+\end{codepairs}
+
+The second is the partial-differential-equation solver, which handles first-order
+equations by characteristics and the classical second-order equations of
+mathematical physics.
+
+\begin{codepairs}
+\pair{calculus/dsolve-pde/1}{The transport equation, by the method of
+characteristics\index{method of characteristics}: an arbitrary function of
+\(x-ct\).}
+\pair{calculus/dsolve-pde/2}{A first-order PDE with a lower-order term and forcing.}
+\pair{calculus/dsolve-pde/3}{The wave equation as an initial-value problem, by
+d'Alembert's formula\index{d'Alembert's formula}.}
+\pair{calculus/dsolve-pde/5}{A Sturm--Liouville\index{Sturm--Liouville problem}
+eigenvalue problem: the eigenvalues \(n^2\) and eigenfunctions \(\sin(nx)\).}
+\end{codepairs}
+
+The arbitrary function \texttt{C[1][\ldots]} in pairs~1 and~2 is the PDE analogue
+of an integration constant---a first-order PDE's general solution contains an
+arbitrary \emph{function}, not merely a constant, and it is a function of the
+characteristic coordinate the equation is constant along. Pair~3 is d'Alembert's
+formula for the vibrating string, and pair~5 is the eigenvalue quantisation that
+underlies every separated boundary-value problem, returned as a
+\B{ConditionalExpression} indexed by an integer. The heat equation is solved by
+its Gaussian kernel; because that convolution is non-elementary for a general
+initial condition, Mathilda keeps it as an integral rather than inventing a closed
+form---the same honesty about non-elementarity that governs \B{Integrate}.
+
+\usagebox{DSolve}
+
+\subsection*{Where this connects}
+
+Calculus is where the rest of Mathilda's mathematics is put to work at once.
+Every integral of a rational function leans on the factoring, partial-fraction,
+and resultant machinery of \S\ref{sec:algebra}; every \B{Root} object in an
+antiderivative is an exact algebraic number the solver returns; the definite
+integrals close through the same \B{Limit} engine that opens this section, and the
+contour methods rest on \B{Residue}. \B{DSolve} in turn calls on all of it---on
+\B{Integrate} for its quadratures, on the eigenvalue routines of \S\ref{sec:linalg}
+for its systems, and on the special functions of \S\ref{ssec:calc-series} for its
+closed forms. Where a symbolic answer does not exist, or exists but is too costly
+to want, the numerical companions \B{NIntegrate}, \B{NDSolve}, and their relatives
+in \S\ref{sec:numcalc} take over, and the numeric loops that evaluate a
+series or a special function accelerate through the compiler of
+Chapter~\ref{ch:compilation}. As always, the exhaustive options for any function
+named here are one \texttt{?Name} away at the prompt.

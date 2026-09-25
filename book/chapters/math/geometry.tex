@@ -1,0 +1,272 @@
+\section{Computational Geometry}
+\label{sec:geometry}
+
+Every section so far has computed with numbers, polynomials, and functions. This
+one computes with \emph{shapes}. A polygon is a list of corner points, a point
+set is a scatter of coordinates, and the questions are the ones you would ask
+with a ruler and a piece of string: how much area does this figure enclose, how
+long is its boundary, where is its balance point, does a given point fall inside
+it, and---given only a cloud of points---what is the smallest convex fence that
+holds them all? These are the primitives of computational
+geometry\index{computational geometry}, and Mathilda answers them for planar
+figures built from \mcode{Polygon} and raw point lists.
+
+The organizing principle is the one that runs through the whole system:
+\emph{stay exact while the input is exact}. Give a polygon integer or rational
+corners and its area comes back an exact integer or rational, its centroid an
+exact pair of rationals, and its perimeter an exact sum of surds---never a
+rounded decimal that has quietly discarded the last few digits. Under the hood
+every coordinate is loaded into a GMP\index{GMP} rational and every predicate---
+the sign of a cross product, the containment of a point---is decided by exact
+integer comparison, so there are no tolerance thresholds and no near-miss
+misclassifications. Only when you write a coordinate as an approximate real does
+the computation switch to machine numbers, following the same numeric-contagion
+rule as the rest of Mathilda.\index{exact arithmetic!in geometry}
+
+We take the primitives in turn: first the two metric quantities of a single
+polygon, its \emph{area} and \emph{perimeter} (\B{Area}, \B{Perimeter}); then its
+\emph{centroid} (\B{RegionCentroid}); then the \emph{point-in-polygon} test
+(\B{RegionMember}); and finally the \emph{convex hull} of a point set
+(\B{ConvexHullRegion}), the one construction here that must invent its own output
+shape rather than measure a given one.
+
+\subsection{Area and perimeter of a polygon}
+\label{ssec:geo-area}
+
+The area of a polygon is computed by the \emph{shoelace formula}, and it is worth
+seeing why it works before seeing it run. \B{Area} takes a \mcode{Polygon} and
+returns the region it encloses:
+
+\begin{codepairs}
+\pair{geometry/area/1}{A four-by-three axis-aligned rectangle, stored for reuse.}
+\pair{geometry/area/2}{\B{Area} returns the exact integer \(12\)---base times
+height, as it must.}
+\pair{geometry/area/3}{A triangle with a \emph{rational} corner: the area is the
+exact rational \(1/4\), not \(0.25\). Nothing has been rounded.}
+\pair{geometry/area/4}{A concave, five-sided polygon with a notch cut into its top
+edge. The shoelace formula handles concavity with no special case: \(10\).}
+\end{codepairs}
+
+The rectangle and the concave pentagon make the same point from two directions.
+The formula never asks whether the polygon is convex; it sums a signed
+contribution from each edge, and the signs cancel exactly the double-counted and
+re-entrant parts. And the rational triangle shows the exactness promise kept: an
+integer-and-rational input yields a rational output, carried as \(1/4\) rather
+than collapsed to a float.
+
+\calloutnote{Theory}{The \emph{shoelace formula}\index{shoelace formula} gives the
+area of a simple polygon with vertices \((x_1,y_1),\dots,(x_n,y_n)\) in order as
+\[
+  A \;=\; \frac12\left\lvert\sum_{i=1}^{n}\bigl(x_i\,y_{i+1}-x_{i+1}\,y_i\bigr)\right\rvert,
+\]
+indices taken cyclically so \((x_{n+1},y_{n+1})=(x_1,y_1)\). Each term is twice
+the signed area of the triangle formed by the origin and one edge; summing over
+the edges telescopes into the enclosed area by Green's
+theorem\index{Green's theorem}, \(A=\tfrac12\oint(x\,dy-y\,dx)\). The name is the
+mnemonic: writing the coordinates in two columns and multiplying along the
+diagonals looks like lacing a shoe. Because every product is of two exact
+coordinates, the sum---and hence the area---is computed with no rounding at all.}
+
+\usagebox{Area}
+
+The \B{Perimeter} is the sum of the edge lengths, the closing edge included. Here
+the exactness promise takes a more interesting form, because a length is a square
+root and most square roots are irrational:
+
+\begin{codepairs}
+\pair{geometry/perimeter/1}{A unit right triangle: two legs of length \(1\) and a
+hypotenuse of \(\sqrt2\), returned as the exact surd \(2+\sqrt2\).}
+\pair{geometry/perimeter/2}{Shrink one leg to \(1/2\) and the hypotenuse becomes
+\(\sqrt{5}/2\); the perimeter is the exact \(3/2+\tfrac12\sqrt5\).}
+\pair{geometry/perimeter/3}{Write even one corner as a real---here a \(3\)-\(4\)-\(5\)
+triangle with real coordinates---and the whole computation goes to machine
+numbers: \(12.0\).}
+\end{codepairs}
+
+Where \B{Area} could keep everything rational, \B{Perimeter} cannot: the length of
+an edge \((\Delta x,\Delta y)\) is \(\sqrt{\Delta x^2+\Delta y^2}\), and Mathilda
+builds exactly that expression---a sum of \mcode{Sqrt} terms---and hands it to the
+evaluator, which canonicalizes the radicals (\(\sqrt8\to2\sqrt2\),
+\(\sqrt{5/4}\to\tfrac12\sqrt5\)) and collects the result. So the perimeter of the
+first triangle is the symbolic \(2+\sqrt2\), not \(2.414\dots\); you get digits
+only when you ask, with \B{N}. The moment a coordinate is inexact, though, there
+is no exactness left to preserve, and the third example drops straight to a
+machine \(12.0\).\index{exact arithmetic!surds}
+
+\calloutnote{Under the hood}{Both heads live in \texttt{src/geometry.c}. Exact
+coordinates are parsed into GMP rationals (\texttt{mpq\_t}); \B{Area} accumulates
+the shoelace sum in rational arithmetic and normalizes the result to an
+\mcode{Integer} when the denominator is \(1\). \B{Perimeter} instead assembles a
+\mcode{Plus} of \mcode{Sqrt}\texttt{[dx\^{}2 + dy\^{}2]} terms and lets the
+ordinary evaluator do the radical simplification, which is why its output looks
+exactly like arithmetic you could have typed by hand. A single real coordinate
+flips an \texttt{exact} flag and the same routines run on \texttt{double}s
+instead. Consecutive repeated vertices---including the wrap-around pair---are
+collapsed first, so a degenerate edge cannot smuggle a spurious there-and-back
+length into the sum; a figure that collapses to fewer than three distinct corners
+returns \mcode{Undefined} rather than a confident \(0\).}
+
+\subsection{The centroid}
+\label{ssec:geo-centroid}
+
+The \emph{centroid} of a region is its center of mass, assuming uniform density---
+the point on which a cardboard cutout of the polygon would balance.
+\B{RegionCentroid} returns it as a coordinate pair, exact when the polygon is:
+
+\begin{codepairs}
+\pair{geometry/centroid/1}{The centroid of the unit right triangle sits at
+\(\{1/3,1/3\}\)---one third of the way in from each leg, the classical result that
+the centroid divides each median \(2\!:\!1\).}
+\pair{geometry/centroid/2}{For the concave pentagon the balance point is
+\(\{2,7/5\}\): pulled below the center by the notch removed from the top, and
+exact to the last digit.}
+\end{codepairs}
+
+The triangle answer is one you can check against a theorem: the centroid of a
+triangle is the average of its three vertices,
+\(\tfrac13(\{0,0\}+\{1,0\}+\{0,1\})=\{1/3,1/3\}\). For a general polygon the
+centroid is \emph{not} the average of the vertices---that would weight a cluster
+of nearby corners too heavily---but an area-weighted integral, and the concave
+pentagon shows the difference: its answer reflects where the mass actually is,
+notch and all.
+
+\calloutnote{Theory}{For a simple polygon the centroid \((C_x,C_y)\) is the
+area-weighted average
+\[
+  C_x=\frac{1}{6A}\sum_{i=1}^{n}(x_i+x_{i+1})\,(x_i y_{i+1}-x_{i+1}y_i),
+  \qquad
+  C_y=\frac{1}{6A}\sum_{i=1}^{n}(y_i+y_{i+1})\,(x_i y_{i+1}-x_{i+1}y_i),
+\]
+with \(A\) the signed shoelace area and the same cyclic indexing. The cross-product
+weights \(x_i y_{i+1}-x_{i+1}y_i\) are exactly the shoelace terms of the previous
+subsection, so the centroid reuses that computation; dividing two exact rational
+sums keeps the result rational.\index{centroid!of a polygon} A zero-area polygon
+has no area to weight by, so \B{RegionCentroid} declines rather than dividing by
+zero.}
+
+\subsection{Point-in-polygon: the membership test}
+\label{ssec:geo-member}
+
+Given a polygon and a point, is the point inside it? This innocent question is a
+workhorse of graphics, geographic information systems, and collision detection,
+and its exact answer on the boundary is where naive implementations go wrong.
+\B{RegionMember} returns \mcode{True} when the point lies inside \emph{or on} the
+polygon, \mcode{False} otherwise:
+
+\begin{codepairs}
+\pair{geometry/member/1}{A \(2\times2\) square, stored for the queries below.}
+\pair{geometry/member/2}{A point squarely in the interior: \mcode{True}.}
+\pair{geometry/member/3}{A point \emph{on the right edge}, \(\{2,1\}\):
+\mcode{True}. Boundary points count as members.}
+\pair{geometry/member/4}{A point outside the square: \mcode{False}.}
+\pair{geometry/member/5}{An exact \emph{rational} query point, \(\{1,1\}/2\), inside
+a triangle: decided exactly, \mcode{True}.}
+\pair{geometry/member/6}{The subtle case---a point in the \emph{notch} of the
+concave pentagon. It sits within the polygon's bounding box but outside the figure
+itself, and the crossing test correctly returns \mcode{False}.}
+\end{codepairs}
+
+Two of these repay attention. The boundary point \(\{2,1\}\) returns \mcode{True}
+because the test is deliberately inclusive, and---crucially---because the input is
+exact, that boundary decision is exact: the point lies on the edge if and only if
+a cross product is \emph{exactly} zero, a question GMP integers answer with no
+ambiguity. A floating-point implementation would have to guess at a tolerance and
+could fall either way. And the notch case shows why a bounding-box check is not
+enough: the concave figure requires a genuine crossing test, which handles
+concavity as transparently as the shoelace formula did.
+
+\calloutnote{Theory}{The membership test is the \emph{ray-casting}\index{ray casting}
+algorithm, a direct application of the Jordan curve
+theorem\index{Jordan curve theorem}: a simple closed curve divides the plane into
+an inside and an outside, and a ray from any point crosses the boundary an odd
+number of times if the point is inside, an even number if outside. Mathilda casts a
+horizontal ray and counts the edges it crosses, using the sign of the edge--point
+cross product to decide each crossing consistently; a separate exact check catches
+the point lying directly on an edge (cross product zero, and inside the edge's
+bounding box) and reports membership. On exact input every one of these decisions
+is an exact integer comparison---the code path in \texttt{src/geometry.c} runs the
+crossing count over \texttt{mpq\_t} coordinates---so there is no epsilon and no
+boundary case that rounds the wrong way.}
+
+\subsection{The convex hull}
+\label{ssec:geo-hull}
+
+The constructions so far measured a polygon you supplied. \B{ConvexHullRegion}
+does the opposite: given only a scatter of points, it \emph{builds} the smallest
+convex region containing them all---the shape a rubber band would take if
+stretched around the whole set and released. It is the most algorithmically
+substantial primitive in this section, and its result depends on the dimension of
+the points' arrangement:
+
+\begin{codepairs}
+\pair{geometry/hull/1}{Six points: the four corners of a square, one point on the
+bottom edge, and one dead center.}
+\pair{geometry/hull/2}{The hull is the square. The mid-edge point \(\{1,0\}\) is
+collinear and the center point \(\{1,1\}\) is interior, so both are dropped---only
+the four extreme corners survive, listed counterclockwise from the lexicographic
+minimum.}
+\pair{geometry/hull/3}{Feeding the hull straight into \B{Area} gives \(4\): the
+primitives compose, and the whole pipeline stays exact.}
+\pair{geometry/hull/4}{The four corners of a square with its center added again
+reduce to the square---the interior point never reaches the boundary.}
+\pair{geometry/hull/5}{When the points are all \emph{collinear} there is no
+two-dimensional hull, so the result degrades to the \mcode{Line} through the two
+extremes.}
+\pair{geometry/hull/6}{And a single point is its own hull, returned as a
+\mcode{Point}.}
+\end{codepairs}
+
+The first example is the whole idea in miniature. Of six input points only four
+are \emph{vertices} of the hull; the collinear and interior points contribute
+nothing to the convex boundary and are discarded. That the vertices come back in
+counterclockwise order starting from the lexicographically smallest point is not
+incidental---it is a canonical ordering, so the same point set always yields the
+same \mcode{Polygon}, and two hulls can be compared directly. The degenerate
+returns matter too: rather than forcing a two-dimensional answer onto
+one-dimensional data, the routine hands back a \mcode{Line} or a \mcode{Point},
+telling you the true dimension of the arrangement.
+
+\calloutnote{Under the hood}{\B{ConvexHullRegion} uses \emph{Andrew's monotone
+chain}\index{convex hull!monotone chain}\index{Andrew's monotone chain}, a clean
+variant of the Graham scan. The points are first sorted lexicographically by
+\(x\) then \(y\); duplicates, now adjacent, are removed. The algorithm then sweeps
+left to right building the \emph{lower} hull and right to left building the
+\emph{upper} hull, at each step popping any vertex that would make a non-left
+turn---detected by the sign of the cross product of the last two edges. A
+cross product of zero means three collinear points, and the middle one is popped,
+which is exactly why interior and collinear-middle points never appear in the
+result. The cost is \(O(n\log n)\), dominated by the sort; the hull-building sweeps
+are linear. As everywhere in \texttt{src/geometry.c}, exact input runs the turn
+predicate on \texttt{mpq\_t} cross products, so collinearity is decided
+exactly---no nearly-collinear point is kept or dropped by a rounding accident.}
+
+\usagebox{ConvexHullRegion}
+
+\calloutnote{Pitfall}{These heads assume a \emph{simple} polygon---one whose edges
+do not cross. Hand \B{Area} a self-intersecting vertex list and it returns the
+signed shoelace value under the even--odd rule, which is not the area Wolfram
+Language reports for the enclosed region; self-intersection is not detected at
+runtime. They are also strictly planar: a non-2D point list, symbolic
+coordinates, or a \mcode{Polygon} with holes leaves the expression unevaluated
+rather than guessing. And a coordinate too large to represent as a machine double,
+queried on the machine path, is declined outright---an overflow to infinity would
+turn every cross product into a \mcode{NaN} that silently reads as ``collinear,''
+so the honest answer is to decline. Keep the coordinates exact and that trap never
+arises.}
+
+\subsection*{Where this connects}
+
+Computational geometry is where Mathilda's exact-arithmetic core meets the plane.
+Its bedrock is the rational arithmetic of \S\ref{sec:arithmetic}: every area,
+centroid, and membership decision is ultimately a comparison of GMP rationals, and
+the surds returned by \B{Perimeter} are canonicalized by the same radical
+machinery that serves the algebra of \S\ref{sec:algebra}. The cross product that
+decides a turn in the convex hull and a crossing in the membership test is the
+same \(2\times2\) determinant that the linear algebra of \S\ref{sec:linalg}
+computes in the large, and the shoelace area is a discrete line integral---a
+foothold on the vector calculus of the numerical chapter. Once a region is in
+hand, the graphics chapter (Chapter~\ref{ch:graphics}) draws it: a \mcode{Polygon}
+or the \mcode{Line} and \mcode{Point} that \B{ConvexHullRegion} can return are
+themselves graphics primitives, so a hull can be computed exactly and then shown.
+For the exhaustive options of any function named here, its reference page is one
+\texttt{?Name} away at the prompt.

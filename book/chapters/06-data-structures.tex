@@ -1,5 +1,545 @@
 \chapter{Data Structures}
 \label{ch:datastructures}
 
-\emph{This chapter is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+The previous chapters computed with mathematics; this one steps back to ask what,
+exactly, a value \emph{is} inside Mathilda. The answer is unusually simple, and it
+is the foundation everything else rests on: there is only one kind of value, the
+\emph{expression}, and every list, matrix, rule, pattern, and association you will
+ever type is one. That uniformity is what lets a single handful of tools---\B{Part},
+\B{Map}, \B{ReplaceAll}---work on everything without special cases. But simplicity at
+the surface is not the same as naivety underneath. Behind the uniform tree, Mathilda
+keeps two specialized structures that make real work fast: the \emph{association},
+a hash-backed key--value store with amortized \(O(1)\) lookup, and the \emph{packed
+array}, a dense machine-precision buffer that runs numeric code at the speed of C.
+The theme of the chapter is precisely this tension---one uniform data model on top,
+invisible acceleration beneath---and how Mathilda keeps the two from ever
+contradicting each other.
+
+We build up in four steps. First the expression tree itself: head and arguments,
+atoms and compounds, and the tools that read a value's shape. Then lists---the
+workhorse aggregate---their parts, spans, and the newer array operations. Then
+associations, the key--value store. And finally the packed-array substrate, where
+most of the chapter's ``under the hood'' weight lies, because that is where a
+transparent list quietly becomes a C buffer and back again.
+
+\section{Everything is an expression}
+\label{sec:ds-expressions}
+
+Type \(a + b\,c\) and it looks like an infix formula. It is not stored as one.
+Every compound value in Mathilda is a \emph{function application}\index{expression!head
+and arguments}---a head applied to a sequence of arguments---and \B{FullForm} prints
+that underlying tree with the surface syntax stripped away.
+
+\begin{codepairs}
+\pair{06-data-structures/expressions/1}{The sum-of-products \(a+bc\) is
+\texttt{Plus} applied to \(a\) and \texttt{Times[b, c]}: operators are just
+shorthand for named heads.}
+\pair{06-data-structures/expressions/2}{A list is no different---\(\{1,2,3\}\) is
+\texttt{List[1, 2, 3]}, the head \B{List} applied to three arguments.}
+\pair{06-data-structures/expressions/3}{Even a fraction is a compound: \(1/2\) is
+\texttt{Rational[1, 2]}. What prints as a number is a two-argument tree.}
+\end{codepairs}
+
+Because there is only one representation, the head of a value tells you what kind of
+thing it is, and \B{Head} reads it off for anything at all---an operator expression,
+an atom, a list, or a call to an undefined function.
+
+\begin{codepairs}
+\pair{06-data-structures/expressions/4}{The head of \(a+bc\) is \B{Plus}\ldots}
+\pair{06-data-structures/expressions/5}{\ldots and of the sub-product \(bc\) it is
+\B{Times}.}
+\pair{06-data-structures/expressions/6}{A machine integer has head \texttt{Integer}\ldots}
+\pair{06-data-structures/expressions/7}{\ldots a machine real, head \texttt{Real}\ldots}
+\pair{06-data-structures/expressions/8}{\ldots a fraction, head \B{Rational}\ldots}
+\pair{06-data-structures/expressions/9}{\ldots and a complex number, head \B{Complex}.}
+\pair{06-data-structures/expressions/10}{Strings carry head \texttt{String}.}
+\pair{06-data-structures/expressions/11}{A list's head is \texttt{List}\ldots}
+\pair{06-data-structures/expressions/12}{\ldots and an unknown \(f[x]\) has head
+\(f\), the symbol you named. Nothing is privileged.}
+\end{codepairs}
+
+The values that have no internal parts to descend into---numbers, symbols,
+strings---are the \emph{atoms}\index{atom}; everything else is a compound with a
+head and arguments. \B{AtomQ} draws the line, and it is worth watching where it
+falls, because ``looks compound'' and ``is compound'' are not the same.
+
+\begin{codepairs}
+\pair{06-data-structures/expressions/13}{An integer is an atom\ldots}
+\pair{06-data-structures/expressions/14}{\ldots so is a symbol\ldots}
+\pair{06-data-structures/expressions/15}{\ldots and so, despite printing as
+\(1/2\), is a \B{Rational}: it is indivisible as a value even though its
+\texttt{FullForm} shows two integers.}
+\pair{06-data-structures/expressions/16}{A function call is not an atom---you can
+take it apart.}
+\pair{06-data-structures/expressions/17}{Neither is a list.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{An \texttt{Expr} is a tagged union
+(\texttt{src/expr.h}): the tag is one of \texttt{EXPR\_INTEGER} (a machine
+\texttt{int64}), \texttt{EXPR\_REAL} (a \texttt{double}), \texttt{EXPR\_SYMBOL},
+\texttt{EXPR\_STRING}, \texttt{EXPR\_BIGINT} (a GMP integer), or
+\texttt{EXPR\_FUNCTION} (a head pointer plus an argument array). The first five are
+the atoms; only \texttt{EXPR\_FUNCTION} has parts. Expressions are treated as
+immutable during evaluation---a transformation returns a new tree rather than
+editing one in place---and \texttt{expr\_copy} is a reference-count bump, not a deep
+clone, so this costs far less than it sounds. A \texttt{Rational} and a
+\texttt{Complex} are \texttt{EXPR\_FUNCTION} nodes at the level of storage, but
+\B{AtomQ} reports them atomic because they behave as single numbers; that deliberate
+override is the gap between the two answers above.}
+
+The shape of a tree---how deeply it nests, and what lives at each level---is itself
+queryable. \bidx{Depth}\mcode{Depth} gives one more than the longest path from the
+root to a leaf, and \B{Level} collects the subexpressions at a chosen depth.
+
+\begin{codepairs}
+\pair{06-data-structures/expressions/18}{\mcode{Depth} of \(f[g[h[x]]]\) is
+\(4\): three nested heads plus the atom \(x\) at the bottom.}
+\pair{06-data-structures/expressions/19}{A \(2\times2\) matrix has depth \(3\)---the
+outer list, the rows, and the numbers.}
+\pair{06-data-structures/expressions/20}{\B{Level} with the specification
+\(\{-1\}\) gathers the atoms (level \(-1\) counts up from the leaves): every
+number and symbol at the bottom of \(a + f[x, y^n]\).}
+\pair{06-data-structures/expressions/21}{Level \(2\) instead gathers everything
+within two steps of the root, so \(y^n\) appears whole rather than split into
+\(y\) and \(n\).}
+\end{codepairs}
+
+A negative level counts distance from the leaves and a positive one distance from
+the root, so \(\{-1\}\) is ``the atoms'' and \(2\) is ``down to two levels
+deep.''\index{levelspec} These level specifications are shared by \B{Map},
+\B{Cases}, \B{Position}, and the rest of the structural operators---learn them once
+and they apply everywhere, which is the recurring dividend of the uniform model.
+
+\section{Lists}
+\label{sec:ds-lists}
+
+The list is the aggregate you will reach for most, and because it is just an
+\texttt{EXPR\_FUNCTION} with head \texttt{List}, every generic tool applies to it
+unchanged. What lists add is a rich vocabulary for addressing their elements.
+
+\subsection{Parts and spans}
+\label{ssec:ds-parts}
+
+\B{Part}---written \(\mathit{expr}\)\texttt{[[\ldots]]}---extracts an element by
+position, counting from \(1\), or from the end with negative indices. A
+\emph{span}\index{list!span}---the \B{Span} operator, written \texttt{i ;; j}---extracts
+a contiguous run, optionally with a step; and for a nested list a comma-separated
+index descends level by level.
+
+\begin{codepairs}
+\pair{06-data-structures/lists/2}{The third element of the vector of primes.}
+\pair{06-data-structures/lists/3}{A negative index counts from the end: \(-1\) is
+the last.}
+\pair{06-data-structures/lists/4}{A span \texttt{2 ;; 4} takes elements two through
+four inclusive.}
+\pair{06-data-structures/lists/5}{With a step, \texttt{1 ;; -1 ;; 2} takes every
+second element from first to last.}
+\pair{06-data-structures/lists/7}{On a matrix, \texttt{[[2, 3]]} descends: row
+two, then column three.}
+\pair{06-data-structures/lists/8}{\texttt{All} in a slot keeps that whole axis, so
+\texttt{[[All, 2]]} is the second column.}
+\end{codepairs}
+
+The same \texttt{[[\ldots]]} notation reads a single element, a slice, or a whole
+axis depending on what you put in the slot, and it composes down through any depth
+of nesting---a direct consequence of a matrix being nothing more special than a list
+of lists.
+
+\subsection{Shape and nesting}
+\label{ssec:ds-shape}
+
+\B{Length} counts the top-level arguments of any expression, and \B{Dimensions}
+reports the rectangular shape of a nested list---the lengths at each level, read
+outward in.
+
+\begin{codepairs}
+\pair{06-data-structures/lists/9}{Six primes, length six.}
+\pair{06-data-structures/lists/10}{\B{Length} of the matrix is \(2\)---it has two
+rows; length is always the count of immediate arguments.}
+\pair{06-data-structures/lists/11}{\B{Dimensions} gives the full shape:
+\(2\times3\).}
+\pair{06-data-structures/lists/12}{And for a rank-\(3\) array, all three axis
+lengths.}
+\pair{06-data-structures/lists/13}{Because \B{Length} is generic, it counts the
+arguments of any head---here the four arguments of \(f\).}
+\end{codepairs}
+
+The contrast between the last two pairs is the point: \B{Dimensions} presumes the
+rectangular, tensor-like structure a numeric array has, while \B{Length} makes no
+such assumption and works on \(f[a,b,c,d]\) exactly as on a list. One is for data;
+both are for expressions.
+
+\subsection{Reshaping, padding, and gradients}
+\label{ssec:ds-arrayops}
+
+Four operations turn a flat list into a shaped one, resize it, differentiate it, and
+locate a value inside it. \B{ArrayReshape} pours the elements of a list, in
+row-major order, into an array of whatever shape you request; \B{ArrayPad} grows (or,
+with negative amounts, trims) an array at its edges under a choice of fill scheme;
+\B{ListGradient} takes the numerical derivative of sampled data by finite
+differences; and \B{FirstPosition} finds where a pattern first matches.
+
+\begin{codepairs}
+\pair{06-data-structures/arrayops/1}{\B{ArrayReshape} lays \(1\ldots12\) into a
+\(3\times4\) grid, filling row by row.}
+\pair{06-data-structures/arrayops/2}{When the data runs short, the third argument
+supplies the fill: seven elements into a \(3\times3\) grid, padded with \(x\).}
+\pair{06-data-structures/arrayops/3}{\B{ArrayPad} adds two elements of the default
+fill (\(0\)) at each end.}
+\pair{06-data-structures/arrayops/4}{An asymmetric \(\{1,2\}\) pad with the
+\texttt{"Fixed"} scheme repeats the edge values rather than inserting zeros.}
+\pair{06-data-structures/arrayops/5}{A negative amount trims: \(-2\) drops two from
+each end.}
+\end{codepairs}
+
+\B{ListGradient} is the most mathematically interesting of the four---a
+from-first-principles port of \texttt{numpy.gradient}. On the interior of the array
+it takes a second-order central difference; at each endpoint, where a centered
+stencil would run off the edge, it falls back to a one-sided difference.
+
+\begin{codepairs}
+\pair{06-data-structures/arrayops/6}{Sample \(x^2\) at \(x=1,\dots,5\)
+(\(\{1,4,9,16,25\}\)); the interior values \(4,6,8\) are exactly the derivative
+\(2x\) at \(x=2,3,4\), and the ends \(3,9\) are the one-sided approximations.}
+\pair{06-data-structures/arrayops/7}{With symbolic input the finite-difference
+formula itself is returned---halved central differences inside, full one-sided
+differences at the ends.}
+\pair{06-data-structures/arrayops/8}{Sampling \(x^3\) and asking for a fourth-order
+stencil recovers \(3x^2\) exactly at every point, endpoints included.}
+\end{codepairs}
+
+\calloutnote{Theory}{The single kernel behind \B{ListGradient} is Fornberg's
+finite-difference-weight recurrence\index{finite differences!Fornberg weights},
+which produces the exact weights for a derivative of any order on any (even
+non-uniform) grid. A second-order interior stencil is
+\((f_{i+1}-f_{i-1})/2h\)---which is why sampling a quadratic gives the derivative
+back with no error, since the central difference of \(x^2\) is exact---and the
+endpoints drop to first order (numpy's \texttt{edge\_order = 1}). Because the weights
+are exact rationals, integer input yields exact \B{Rational} output and symbolic
+input a symbolic formula, as the middle pair shows; only a machine-real array takes
+the packed floating-point fast path of \S\ref{sec:ds-packed}.}
+
+\B{FirstPosition} reports the position of the first match as a list of indices---the
+very indices \B{Part} would use to extract it---searching depth-first through the
+whole expression.
+
+\begin{codepairs}
+\pair{06-data-structures/arrayops/9}{The value \(7\) sits at position \(\{3\}\).}
+\pair{06-data-structures/arrayops/10}{In a nested list the position is a full index
+path: \(4\) is at row two, column two.}
+\pair{06-data-structures/arrayops/11}{No match returns \(\mcode{Missing["NotFound"]}\)\ldots}
+\pair{06-data-structures/arrayops/12}{\ldots unless you supply a default, which is
+returned in its place.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{\B{FirstPosition} takes its arguments with the attribute
+\texttt{HoldRest}, so the default is evaluated only if it is actually
+returned---a deliberate design that lets you write an expensive fallback without
+paying for it on a hit. The search follows \B{Position}'s conventions exactly
+(levels \(\{0,\infty\}\), \texttt{Heads -> True}), which is why a position can be
+the empty list \(\{\}\), meaning the whole expression matched.}
+
+\section{Associations}
+\label{sec:ds-associations}
+
+A list indexes by position. Often what you have instead is a set of named
+fields---a record, a lookup table, a histogram---and forcing that onto positional
+storage means remembering that ``price is element three.'' The \B{Association}\index{association!keyed
+store}, written \texttt{<|key -> value, \ldots|>}, indexes by \emph{key}: any expression can
+be a key, keys are unique, and they keep their insertion order.
+
+\begin{codepairs}
+\pair{06-data-structures/associations/1}{An inventory keyed by fruit name. It prints
+back in the order written.}
+\pair{06-data-structures/associations/2}{Applied like a function,
+\(\mathit{assoc}[\mathit{key}]\) looks the key up---the idiomatic accessor.}
+\pair{06-data-structures/associations/3}{The \texttt{[[key]]} form does the same
+through \B{Part}.}
+\pair{06-data-structures/associations/4}{\B{Keys} lists the keys, in order\ldots}
+\pair{06-data-structures/associations/5}{\ldots and \B{Values} the corresponding
+values.}
+\pair{06-data-structures/associations/6}{\B{Lookup} is the explicit accessor.}
+\pair{06-data-structures/associations/7}{Its three-argument form supplies a default
+for an absent key---the safe way to read data that may be incomplete.}
+\pair{06-data-structures/associations/8}{\B{KeyExistsQ} tests for a key's
+presence\ldots}
+\pair{06-data-structures/associations/9}{\ldots reporting \texttt{False} when it is
+missing.}
+\pair{06-data-structures/associations/10}{A bare lookup of an absent key returns a
+\mcode{Missing} marker naming what was not found, rather than an error.}
+\end{codepairs}
+
+Two behaviors set associations apart from a bag of rules. Keys are unique with
+last-value-wins, and functions that consume a collection act on the
+\emph{values}\index{association!value threading} while keeping keys aligned.
+
+\begin{codepairs}
+\pair{06-data-structures/associations/11}{A repeated key collapses: the later value
+wins, but the key keeps its first position.}
+\pair{06-data-structures/associations/12}{\B{Map} threads over values and returns an
+association---keys ride along untouched.}
+\pair{06-data-structures/associations/13}{\B{Total} reduces over the values, exactly
+as it would over \texttt{Values[inv]}.}
+\pair{06-data-structures/associations/14}{\B{AssociationThread} zips a list of keys
+against a list of values into an association---the constructor to reach for when the
+two arrive separately.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Single-key access is amortized \(O(1)\). A persistent
+key\(\rightarrow\)position hash index (\texttt{src/assoc\_index.h}) is cached on the
+association and built on the first single-key read, so \B{Lookup}, \B{KeyExistsQ},
+\(\mathit{a}[\mathit{key}]\), and \(\mathit{a}[[\mathit{key}]]\) never scan the
+entries. The index reuses spare space already on the expression node, so it costs no
+extra memory, and it is transparent to \B{SameQ}, \B{Sort}, and \B{Union}, which see
+the association exactly as before. The value-threading rule---that \B{Map}, \B{Total},
+\B{Select}, \B{Cases}, and their kin operate on values and keep keys aligned---runs
+through one shared helper, which is why these operations compose predictably into
+data pipelines.}
+
+\subsection{Aggregating: Counts, GroupBy, and Merge}
+\label{ssec:ds-aggregate}
+
+The reason associations matter for data work is that they are what the aggregation
+operators \emph{produce}. \B{Counts} tallies a list into an association from value to
+frequency; \B{GroupBy} partitions a list by a key function; and \B{Merge} combines
+several associations, reconciling clashing keys with a function of your choosing.
+
+\begin{codepairs}
+\pair{06-data-structures/aggregate/1}{\B{Counts} turns a list of observations into
+an empirical frequency table---the discrete distribution of the sample.}
+\pair{06-data-structures/aggregate/2}{\B{GroupBy} partitions \(1\ldots10\) by
+\texttt{EvenQ}: two groups, keyed \texttt{False} and \texttt{True}.}
+\pair{06-data-structures/aggregate/3}{Its three-argument form applies a reducer to
+each group---here \B{Total}, collapsing the split-apply-combine in one call.}
+\pair{06-data-structures/aggregate/5}{With a \(\mathit{key}\to\mathit{value}\) rule,
+\B{GroupBy} groups the rows by their \B{First} field but collects the \B{Last}: sales
+gathered per category.}
+\pair{06-data-structures/aggregate/6}{Add a reducer and the same call groups,
+extracts, and totals---a one-line group-and-sum.}
+\pair{06-data-structures/aggregate/7}{\B{Merge} unions the keys of two associations
+and applies \B{Total} to the values collected under each: the shared key \(y\) sums
+its two contributions, the unshared keys pass through.}
+\end{codepairs}
+
+The middle pairs are the split-apply-combine idiom\index{split-apply-combine} that
+data analysis lives on: \emph{split} the data into groups, \emph{apply} a summary to
+each, \emph{combine} the summaries into one table. \B{GroupBy} does all three, and
+because the result is an association it feeds straight into another aggregation---the
+frequency table from \B{Counts} is exactly the empirical distribution the statistics
+chapter (\S\ref{sec:statistics}) builds its estimators on.
+
+\usagebox{Association}
+
+\section{NDArrays and packed arrays}
+\label{sec:ds-packed}
+
+Everything so far treated a list as a tree of independent expression nodes. For
+symbolic work that is exactly right. For numeric work it is ruinous: a list of a
+million reals is a million separate nodes, and the evaluator sweeps every argument of
+every call on every pass, so merely \emph{holding} a large list costs time on each
+operation, whether or not anything is computed. Mathilda's answer is the
+\emph{packed array}\index{packed array}---the same list, stored as one dense
+machine-precision buffer instead of a million nodes---and the discipline that keeps
+that storage change completely invisible.
+
+\subsection{The invisible buffer}
+\label{ssec:ds-invisible}
+
+\B{ToNDArray} packs a list into a buffer and hands it back looking exactly like the
+list it was. The only tool that can tell the difference is \B{NDArrayQ}, which asks
+about storage rather than about value.
+
+\begin{codepairs}
+\pair{06-data-structures/packing/1}{\B{ToNDArray} returns what looks like an ordinary
+list of reals---because that is what it still is.}
+\pair{06-data-structures/packing/2}{Its head is \texttt{List}, it is a list, and it
+is not an atom: every structural predicate answers as it would for the unpacked
+list.}
+\pair{06-data-structures/packing/3}{Only \B{NDArrayQ} reveals that it is packed.}
+\pair{06-data-structures/packing/4}{And it is \B{SameQ} to the plain list---same
+value, same identity.}
+\pair{06-data-structures/packing/5}{\B{DataType} reports the element type\index{data
+type!machine (dtype)} of the buffer: a \texttt{"float64"} of doubles.}
+\end{codepairs}
+
+The contract is exact: packing changes representation and \emph{nothing else}---not
+the value, not an element's head, not the printed form, not the ordering. So the
+representation Mathilda picks on its own can never be observed. That single rule is
+what the rest of this section is really about.
+
+\subsection{The exactness contract}
+\label{ssec:ds-exact}
+
+The sharpest test of the contract\index{packed array!exactness contract} is exact
+integers. A list of integers packs to an \texttt{int64} buffer---and every element
+must still come back an \emph{Integer}, not a real, because \(1 \ne 1.0\) is a
+difference the buffer is forbidden to introduce.
+
+\begin{codepairs}
+\pair{06-data-structures/packing/7}{An all-integer list packs to \texttt{"int64"},
+not to floats.}
+\pair{06-data-structures/packing/8}{And an element read back out has head
+\texttt{Integer}, exactly as from the unpacked list.}
+\pair{06-data-structures/packing/9}{A reduction stays exact: the sum of \(1\ldots
+1000\) is the integer \(500500\), computed on the buffer but with no loss of
+exactness.}
+\pair{06-data-structures/packing/10}{Where a buffer cannot hold the exact answer, it
+abandons: \(\mathit{Range}[10]/2\) is a list of exact \B{Rational}s, which no
+machine buffer represents, so the ordinary list gives them.}
+\pair{06-data-structures/packing/11}{And a list holding a \B{Rational} refuses to
+pack at all---\B{ToNDArray} returns it unchanged rather than round it.}
+\end{codepairs}
+
+The rule is the same one that governs the numeric tower everywhere in Mathilda:
+compute the buffer answer only when it is \emph{the} answer the interpreter would
+give, and otherwise fall back to the slower, exact path. An overflow past
+\texttt{int64}, a rational, a radical, a symbol---each makes the buffer decline and
+the ordinary list answer.
+
+\calloutnote{Pitfall}{Only \B{ToNDArray} widens a mixed integer/real list to a float
+buffer, because you explicitly asked for a single machine type. \emph{Automatic}
+packing never does: it leaves \(\{1, 2, 3.\}\) an ordinary list, since silently
+turning the exact \(1\) into \(1.0\) would be an observable change and the system is
+forbidden to make one on its own. The asymmetry is the contract in action---a
+representation you request may cost exactness; one the system chooses for you never
+may.}
+
+\subsection{When packing happens}
+\label{ssec:ds-auto}
+
+You rarely call \B{ToNDArray} yourself. The common case is that a \emph{producer}
+builds a packed array directly: \B{Range}, \B{ConstantArray}, \B{Table} with a
+machine-real body, and a handful of others write the buffer without ever
+materializing the nodes---which is where most of the win is, since building a million
+nodes and then packing them costs far more than writing a million doubles.
+
+\begin{codepairs}
+\pair{06-data-structures/packing/12}{\B{Range} of reals packs automatically once the
+result is big enough.}
+\pair{06-data-structures/packing/13}{A list written out literally in the source never
+packs, at any size---there is no producer to opt in, and a source literal is left
+exactly as typed.}
+\pair{06-data-structures/packing/14}{The master switch \B{\$AutoArrayPacking} turns
+automatic packing off\ldots}
+\pair{06-data-structures/packing/15}{\ldots and back on. It never touches an explicit
+\B{ToNDArray}---that is the user asking, not the system guessing.}
+\end{codepairs}
+
+The distinction in the middle pairs surprises people: \mcode{Range[1., 300.]} packs
+but the identical-looking literal \(\{1., 2., 3., 4.\}\) does not. Packing is opt-in
+per producer, and a hand-written literal has no producer to opt in. A threshold of
+four elements (the size of a \(2\times2\) matrix, so that any matrix packs) keeps the
+mechanism from paying its own overhead on tiny lists.
+
+\subsection{The visible NDArray}
+\label{ssec:ds-visible}
+
+The packed list is one of two faces of the same storage. The other is the
+\emph{visible} \B{NDArray}---the identical dense buffer, but wearing its own head, so
+it announces itself as a distinct, purely numeric object modelled on numpy's
+\texttt{ndarray}. The two share every byte of representation and differ only in what
+they claim to be.
+
+\begin{codepairs}
+\pair{06-data-structures/ndarray/2}{\B{NDArray} prints wrapped in its own head\ldots}
+\pair{06-data-structures/ndarray/3}{\ldots whose \B{Head} is \texttt{NDArray}, not
+\texttt{List}.}
+\pair{06-data-structures/ndarray/4}{So it is \emph{not} \B{SameQ} to the plain
+list---the head is part of a value's identity.}
+\pair{06-data-structures/ndarray/5}{\B{NDArrayQ} is \texttt{True} for both faces: it
+asks about storage.}
+\pair{06-data-structures/ndarray/6}{\B{PackedArrayQ} is the narrower test---\texttt{True}
+only for the packed \emph{list}, \texttt{False} for the visible \texttt{NDArray},
+which is an atom rather than a list that happens to be packed.}
+\pair{06-data-structures/ndarray/7}{\B{Normal} converts a visible array back to an
+ordinary nested list.}
+\end{codepairs}
+
+The difference is one of intent. A packed list is Mathilda saying ``this is an
+ordinary list; I have merely chosen to store it efficiently.'' A visible
+\B{NDArray} is you saying ``this is a numeric array; treat it as one''---so it
+combines with scalars by numpy-style broadcasting, refuses symbolic operands, and
+stays a closed system under the linear-algebra routines. \B{ToPackedArray} and
+\B{FromPackedArray} are Mathematica's names for \B{ToNDArray} and \B{FromNDArray},
+the same builtins under a second registration.
+
+\begin{codepairs}
+\pair{06-data-structures/ndarray/8}{\B{ToPackedArray} widens a mixed integer/real
+list to a single \texttt{"float64"} buffer\ldots}
+\pair{06-data-structures/ndarray/9}{\ldots the integers becoming doubles, since one
+buffer holds one machine type.}
+\pair{06-data-structures/ndarray/11}{A derived array stays packed: adding a scalar to
+a packed list gives a packed list.}
+\pair{06-data-structures/ndarray/12}{So does mapping an elementary function over
+it---\B{Sin} of a packed buffer is a packed buffer.}
+\pair{06-data-structures/ndarray/13}{And \B{N} widens a packed \texttt{int64} buffer
+to a packed \texttt{float64} one in a single pass, rather than boxing a million
+reals.}
+\pair{06-data-structures/ndarray/15}{The visible \B{NDArray} carries its rank and
+shape directly, so \B{Dimensions} reads them in \(O(1)\).}
+\end{codepairs}
+
+\usagebox{NDArray}
+
+\subsection{The transparency gate}
+\label{ssec:ds-gate}
+
+If a packed list can flow into any operation, what stops an operation that knows
+nothing about buffers---a pattern match, a \B{Cases} scan, a user-defined rule---from
+reading garbage out of one? The answer is the \emph{transparency
+gate}\index{packed array!transparency gate}, and it is the mechanism that makes the
+whole abstraction safe.
+
+\begin{codepairs}
+\pair{06-data-structures/gate/2}{Start with a packed range.}
+\pair{06-data-structures/gate/3}{\B{Cases}---which has no idea packing exists---filters
+it with a pattern and gets exactly the right answer.}
+\pair{06-data-structures/gate/4}{\B{Reverse} understands buffers, so it reverses in
+place\ldots}
+\pair{06-data-structures/gate/5}{\ldots and keeps the result packed.}
+\pair{06-data-structures/gate/6}{And the buffer path and the ordinary path agree on
+the answer, by construction.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The gate lives in the evaluator (\texttt{src/eval.c}),
+just before a call reaches its builtin. Its rule inverts the usual default: a packed
+buffer is \emph{materialized} back into ordinary nodes for any head that has not
+explicitly declared itself packed-aware on the \texttt{AWARE} list in
+\texttt{src/pack.c}. So \B{Cases}, \B{Position}, \B{ReplaceAll}, pattern matching,
+and every user rule are correct with no code of their own---they simply never see a
+buffer. A head like \B{Reverse}, \B{Total}, \B{Sin}, or \B{Dot} that \emph{has} opted
+in and been checked receives the buffer intact and runs its C kernel. Forgetting to
+opt a head in costs a materialization---a slowdown---never a wrong answer. The
+storage overlay is arranged so that a walker which slipped past the gate and iterated
+a buffer as if it were a node array would segfault immediately rather than return
+something plausible, turning the dangerous silent-wrong-answer class into a loud
+crash.}
+
+\calloutnote{Performance}{The payoff is large and the design record measures it on a
+\(10^6\)-element list of reals: \B{Length} falls from about \(30.6\)
+milliseconds on an ordinary list to \(2\) microseconds packed, \B{Total} from
+\(95.8\) milliseconds to \(4.0\), and \B{Sin} from \(320\) milliseconds to
+\(16.8\)---the \(30\)-nanosecond-per-element-per-pass evaluator sweep replaced by a
+tight loop over contiguous memory (\texttt{docs/design/packed\_arrays.md}). Because a
+packed buffer is exactly the representation \B{Compile} wants, these same arrays cross
+the compiled-code boundary without being unpacked and repacked at each end---the
+subject of Chapter~\ref{ch:compilation}.}
+
+\section*{Where this connects}
+
+Data structures are the substrate the rest of Mathilda stands on. The uniform
+expression tree of \S\ref{sec:ds-expressions} is what makes the pattern matcher and
+rule engine of Chapter~\ref{ch:programming} possible: a pattern is an expression, a
+rule is an expression, and matching one tree against another is the single mechanism
+behind \B{Map}, \B{Cases}, \B{ReplaceAll}, and every definition you write. The
+levelspecs and structural operators introduced here reappear there as the working
+vocabulary of functional programming. Associations are the natural output of the
+grouping and counting that descriptive statistics (\S\ref{sec:statistics}) runs on,
+and their \(O(1)\) keyed store underlies any code that indexes data by name. The
+packed-array substrate of \S\ref{sec:ds-packed} is where numeric Mathilda gets its
+speed: it feeds the machine-precision linear algebra of \S\ref{sec:linalg}, and it is
+half of the story of \B{Compile} (Chapter~\ref{ch:compilation}), the other half being
+the bytecode VM that consumes those buffers. For the exhaustive options of any
+function named here, its reference page is one \texttt{?Name} away at the prompt---and
+the full machinery of the evaluator, the matcher, and the transparency gate is laid
+out in Chapter~\ref{ch:internals}.

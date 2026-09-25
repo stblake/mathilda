@@ -1,0 +1,354 @@
+\section{Graphs}
+\label{sec:graphs}
+
+Every section so far has computed with objects that carry a \emph{value}---an
+integer, a polynomial, a matrix of numbers. A graph is different in kind: it is
+pure \emph{structure}, a set of things together with a record of which of them
+are joined, and nothing else. Strip the labels off a road map, a molecule, a
+citation network, or a circuit and what remains---who is adjacent to
+whom---is a graph. The mathematics of these objects, \emph{graph theory}, asks
+questions that have no analogue for a single number: is everything reachable
+from everything else, what is the cheapest route between two points, how few
+colours suffice to keep neighbours distinct?\index{graph}
+
+Mathilda represents a graph with the same machinery it uses for everything
+else. A graph is an ordinary expression---no new kind of value is introduced,
+just a head \B{Graph} wrapping a list of vertices and a list of edges---so the
+generic tools you already know (\B{Part}, \B{Map}, \B{ReplaceAll}) reach inside
+it, and its matrix views drop straight into the linear algebra of
+\S\ref{sec:linalg}. We build graphs and read them back; take their matrix views
+and hand them to \B{Eigenvalues}; call the ready-made generators; measure local
+structure with vertex degrees; compute shortest paths---first by hop count, then
+by weight, which is Dijkstra's algorithm; and finally colour a graph with the
+fewest colours possible, a problem easy to state and, in the exact, NP-hard to
+solve.
+
+\subsection{Building a graph}
+\label{ssec:graph-construct}
+
+A graph is written \B{Graph}\mcode{[v, e]}, where \mcode{v} is the list of
+vertices and \mcode{e} the list of edges. An edge is a pair of vertices with a
+head that records whether it has a direction: \mcode{DirectedEdge[u, v]} for an
+arrow \(u \to v\), \mcode{UndirectedEdge[u, v]} for a plain link. You rarely
+type those heads, because the two rule arrows are accepted as
+shorthand---\mcode{u -> v} (a \B{Rule}) becomes a directed edge and
+\mcode{u <-> v} (the \mcode{TwoWayRule} operator) an undirected
+one.\index{graph!edge}\index{graph!directed}\index{graph!undirected} Vertices
+may be any expressions at all: integers here, but symbols, strings, or lists
+work just as well.
+
+\begin{codepairs}
+\pair{graphs/construction/1}{A directed four-cycle. In standard output a graph
+prints as a terse summary---its vertex and edge counts---not its full guts.}
+\pair{graphs/construction/2}{\B{InputForm} shows the canonical form, which
+round-trips through the parser: the arrows survive as written.}
+\pair{graphs/construction/3}{\B{VertexList} reads back the vertices in canonical
+order\ldots}
+\pair{graphs/construction/4}{\ldots and \B{EdgeList} the edges, in the directed
+form the shorthand produced.}
+\pair{graphs/construction/5}{\B{EdgeCount} is one of the cardinalities
+(\B{VertexCount} is the other).}
+\end{codepairs}
+
+You need not spell out the vertices. Given only the edges, \B{Graph} derives the
+vertex set from them, in order of first appearance; and undirected edges print
+back with the \mcode{<->} arrow:
+
+\begin{codepairs}
+\pair{graphs/construction/6}{With no vertex list, the vertices are read off the
+edges---here \(a, b, c\).}
+\pair{graphs/construction/7}{An undirected path, its edges echoed in
+\mcode{UndirectedEdge} shorthand.}
+\pair{graphs/construction/8}{Construction \emph{validates}: this self-loop is
+rejected, so \B{GraphQ} reports the result is not a well-formed graph.}
+\end{codepairs}
+
+The last line is worth dwelling on. Mathilda's graphs are \emph{simple}: no
+self-loops, no parallel edges, no vertex named in an edge but missing from the
+vertex list. Malformed input is not silently repaired---it is left unevaluated,
+and \B{GraphQ} is the predicate that tells you whether you hold a valid graph.
+
+\usagebox{Graph}
+
+\calloutnote{Under the hood}{There is no new \texttt{EXPR} tag for graphs. A
+graph is literally the expression \texttt{Graph[List[v1, ...], List[e1, ...]]},
+which is why \B{Part} and \B{Map} and pattern replacement
+work on it unchanged---the uniformity principle of \S\ref{sec:session-state} at
+work. On construction, \texttt{src/graph/construct.c} normalizes the edge
+shorthand to \texttt{DirectedEdge}/\texttt{UndirectedEdge}, then validates
+simplicity and endpoint membership before handing back the canonical form. The
+terse \texttt{Graph[<n vertices, m edges>]} you see is only how the printer
+summarizes it; \B{FullForm} exposes the tree.}
+
+\subsection{Matrix views}
+\label{ssec:graph-matrix}
+
+The oldest bridge between graph theory and computation is the \emph{adjacency
+matrix}: the \(n \times n\) array whose \((i,j)\) entry is \(1\) when there is an
+edge from vertex \(i\) to vertex \(j\) and \(0\) otherwise.\index{adjacency
+matrix} \B{AdjacencyMatrix} builds it, and---this is the point---it returns an
+ordinary matrix, a list of lists, so every tool of linear algebra applies to it
+directly. Take the directed four-cycle \(g\) from above:
+
+\begin{codepairs}
+\pair{graphs/matrices/2}{The adjacency matrix of the directed 4-cycle: a single
+\(1\) in each row, walking the cycle.}
+\pair{graphs/matrices/3}{\B{Det} of it is just \(\pm1\)---the cycle is a
+permutation matrix.}
+\pair{graphs/matrices/4}{The \emph{undirected} 4-cycle is symmetric, so
+\B{Eigenvalues} are real: its spectrum \(\{-2, 2, 0, 0\}\).}
+\end{codepairs}
+
+That last computation is a first taste of \emph{spectral graph
+theory}\index{spectral graph theory}: the eigenvalues of the adjacency matrix
+encode structural facts about the graph---connectivity, bipartiteness, the count
+of closed walks---and here the extreme values \(\pm2\) are the signature of a
+2-regular bipartite cycle. Because the matrix is a genuine \B{List} of lists,
+nothing about the graph subsystem had to be taught linear algebra; the two meet
+on common ground.
+
+Edges may also carry \emph{weights}---a distance, a cost, a capacity---supplied
+as a third argument \mcode{EdgeWeight -> \{w1, ...\}}, matched to the edges by
+position. \B{EdgeWeight} reads them back, and \B{WeightedAdjacencyMatrix} places
+each edge's weight where the plain adjacency matrix would place a \(1\):
+
+\begin{codepairs}
+\pair{graphs/matrices/6}{The weights, in edge order, of a two-edge weighted
+graph \(w\).}
+\pair{graphs/matrices/7}{Its weighted adjacency matrix carries \(5\) and \(7\)
+in place of ones.}
+\pair{graphs/matrices/8}{An unweighted graph defaults every weight to \(1\), so
+its weighted matrix coincides with its plain one.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\B{AdjacencyMatrix} (\texttt{src/graph/adjmat.c})
+materializes a dense \(n\times n\) matrix in canonical vertex order, so
+\B{Det}, \B{Tr}, and \B{Eigenvalues} consume it with no conversion.
+Its inverse, \B{AdjacencyGraph}, rebuilds a graph from a 0/1 matrix, and
+\B{IncidenceMatrix} gives the \(|V|\times|E|\) vertex--edge view instead. For a
+large sparse graph the dense matrix is the wrong representation---the search
+routines below never form it, walking an integer-indexed adjacency list
+instead---but for the small graphs where you actually want a determinant or a
+spectrum, dense is exactly right.}
+
+\subsection{Ready-made graphs}
+\label{ssec:graph-generators}
+
+Named families of graphs recur so often that Mathilda generates them directly,
+each on the vertices \(1,\dots,n\). \B{StarGraph}\mcode{[n]} joins a central hub
+to \(n-1\) leaves---the simplest hub-and-spoke topology, and a graph you will
+meet again as a tree.\index{star graph}
+
+\begin{codepairs}
+\pair{graphs/generators/1}{The star on five vertices: a hub and four leaves,
+four edges in all.}
+\pair{graphs/generators/2}{Its edges all emanate from vertex \(1\).}
+\pair{graphs/generators/3}{So vertex \(1\) has degree \(4\) and every leaf
+degree \(1\)---the defining shape of a star.}
+\end{codepairs}
+
+For experiments and average-case behaviour you want a graph drawn \emph{at
+random}. \B{RandomGraph}\mcode{[\{n, m\}]} samples uniformly among all graphs with
+\(n\) vertices and exactly \(m\) edges---the \(G(n,m)\) model of Erd\H{o}s and
+R\'enyi.\index{random graph} It draws from the same seeded stream as the other
+random builtins, so \B{SeedRandom} makes any run reproducible---which is exactly
+why every example in this book can be regenerated:
+
+\begin{codepairs}
+\pair{graphs/generators/5}{With the stream seeded, a random graph on six
+vertices with eight edges---the same one on every run.}
+\pair{graphs/generators/6}{Its eight edges, drawn uniformly without
+replacement.}
+\pair{graphs/generators/7}{A second argument asks for a list of independent
+samples; here three of them.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\B{RandomGraph} (\texttt{src/graph/generators.c})
+enumerates the \(\binom{n}{2}\) candidate edges and hands them to
+\B{RandomSample}, so it shares the one global RNG that \B{SeedRandom} controls
+and \B{RandomReal} draws from. The count form \mcode{RandomGraph[\{n,m\}, k]}
+costs a full candidate materialization per sample, so its time and memory scale
+as \(O(k\,n^2)\)---fine for the small graphs of a teaching example, a real
+consideration at scale. \B{CompleteGraph}, \B{CycleGraph}, and \B{PathGraph}
+round out the family.}
+
+\subsection{Local structure: vertex degrees}
+\label{ssec:graph-degree}
+
+The most local fact about a vertex is its \emph{degree}: how many edges touch
+it. In a directed graph this splits in two. The \emph{out-degree} counts edges
+leaving a vertex, the \emph{in-degree} edges arriving---and the distinction is
+the whole content of ``who points at whom''.\index{degree (graph)!in-degree}\index{degree
+(graph)!out-degree} Take a directed graph with one extra chord:
+
+\begin{codepairs}
+\pair{graphs/degrees/2}{The 4-cycle \(1\!\to\!2\!\to\!3\!\to\!4\!\to\!1\) with an
+added chord \(1\!\to\!3\).}
+\pair{graphs/degrees/3}{\B{VertexInDegree}: vertex \(3\) is now pointed at twice
+(by \(2\) and by \(1\)), the rest once.}
+\pair{graphs/degrees/4}{\B{VertexOutDegree}: vertex \(1\) now emits twice, the
+rest once.}
+\pair{graphs/degrees/5}{A second argument asks about a single vertex---the
+in-degree of \(3\).}
+\pair{graphs/degrees/6}{And the out-degree of \(1\).}
+\end{codepairs}
+
+The two degree sequences are not independent: every directed edge contributes
+exactly one to some vertex's out-degree and one to another's in-degree, so their
+sums are equal, each counting the edges once. That is the directed form of the
+\emph{handshaking lemma}, and summing either sequence recovers
+\B{EdgeCount}. For an undirected graph the plain \B{VertexDegree} counts incident
+edges, as it did for the star above.
+
+\subsection{Shortest paths}
+\label{ssec:graph-shortest}
+
+Now a global question: what is the shortest route from one vertex to another?
+The answer depends on what ``short'' means. With no weights, length is
+\emph{hop count}---the number of edges---and the shortest path is found by
+breadth-first search. With weights, length is the \emph{total weight} along the
+path, and finding the cheapest route is the province of Dijkstra's
+algorithm.\index{shortest path} \B{FindShortestPath} returns the route as a
+vertex list, \B{GraphDistance} its length; both make the same choice
+automatically, keyed on whether the graph carries usable edge weights.
+
+Consider a small road network among five towns, its edge weights the distances
+between them. Let \mcode{roads} be that weighted graph and \mcode{plain} the
+same towns and roads with the distances forgotten:
+
+\begin{codepairs}
+\pair{graphs/shortestpath/4}{The cheapest route from \(a\) to \(e\) threads
+through all five towns\ldots}
+\pair{graphs/shortestpath/5}{\ldots for a total distance of \(8\).}
+\pair{graphs/shortestpath/7}{Forget the weights and the shortest path is the one
+with \emph{fewest hops}: straight across, \(a\!\to\!c\!\to\!e\).}
+\pair{graphs/shortestpath/8}{That route is only two edges long\ldots}
+\end{codepairs}
+
+Here is the lesson of weighting in one pair of answers. The two-hop route
+\(a\to c\to e\) looks shortest, and by hop count it is; but its edges are heavy
+(\(5\) and \(8\), total \(13\)), while the four-hop detour
+\(a\to b\to c\to d\to e\) stays on cheap roads and totals only \(8\). The fewest
+steps and the least distance need not agree, and Dijkstra finds the latter.
+Because the weights were exact integers, so is the distance---Mathilda does not
+launder an exact answer through floating point:
+
+\begin{codepairs}
+\pair{graphs/shortestpath/9}{Rational weights stay rational: the distance
+\(1/2 + 1/3 = 5/6\) is returned exactly, not as a decimal.}
+\end{codepairs}
+
+\calloutnote{Theory}{\emph{Dijkstra's algorithm}\index{Dijkstra's algorithm}
+grows a set of vertices whose shortest distance from the source is settled,
+repeatedly admitting the unsettled vertex of least tentative distance and
+relaxing its neighbours. Its correctness rests on one hypothesis:
+\emph{non-negative weights}. If every edge is non-negative, then the moment a
+vertex is admitted its tentative distance cannot be beaten by any later route,
+because any such route would have to pass through an as-yet-farther vertex and
+so be no shorter. Breadth-first search is exactly Dijkstra with every weight
+equal to \(1\): the frontier expands one hop at a time, settling vertices in
+order of hop count. So the unweighted and weighted cases are one algorithm, and
+Mathilda dispatches between them on the weights alone.}
+
+\calloutnote{Under the hood}{Both routines (\texttt{src/graph/shortestpath.c})
+build an integer-indexed adjacency on demand---never the dense matrix of
+\S\ref{ssec:graph-matrix}---and run a plain \(O(V^2)\) Dijkstra, no priority
+queue, which is the right trade for the small graphs the subsystem targets. The
+floating-point accumulator inside Dijkstra only \emph{orders} the frontier; the
+returned \B{GraphDistance} is recomputed exactly along the chosen path, so an
+integer- or rational-weighted graph yields an exact answer. A \emph{negative}
+weight would break Dijkstra's hypothesis, so rather than return a wrong answer
+the routines fall back to unweighted breadth-first search when a weight is
+negative, symbolic, or absent---there is no Bellman--Ford path here.}
+
+\usagebox{FindShortestPath}
+
+\calloutnote{Pitfall}{Because a negative or symbolic weight silently demotes the
+computation to hop-count BFS, a graph you \emph{intended} to be weighted but
+whose weights are not all non-negative numbers will quietly answer the wrong
+question---fewest hops, not least cost. When weights matter, check that they are
+all present and non-negative; \B{GraphDistance} returning an integer where you
+expected a weighted total is the tell.}
+
+\subsection{Colouring a graph}
+\label{ssec:graph-colouring}
+
+The last problem is deceptively simple to state. A \emph{proper colouring}
+assigns a colour to each vertex so that no edge joins two vertices of the same
+colour; the least number of colours that admits a proper colouring is the
+graph's \emph{chromatic number} \(\chi(G)\).\index{chromatic number}\index{graph
+colouring} \B{FindVertexColoring} returns a colouring as a list of integer
+labels in vertex order, and---crucially---it returns a \emph{minimal} one: the
+largest label it uses \emph{is} \(\chi(G)\). Three graphs tell the story:
+
+\begin{codepairs}
+\pair{graphs/coloring/1}{An even cycle is \emph{bipartite}: two colours suffice,
+alternating around the ring.}
+\pair{graphs/coloring/2}{An \emph{odd} cycle cannot be 2-coloured---close the
+ring and the two ends clash---so it needs three.}
+\pair{graphs/coloring/3}{In the complete graph every pair is adjacent, so no two
+vertices may share a colour: \(\chi(K_4) = 4\).}
+\pair{graphs/coloring/4}{Reading off the chromatic number is just the largest
+label used.}
+\end{codepairs}
+
+These three cases map out the extremes. A graph is 2-colourable exactly when it
+is bipartite---when it has no odd cycle---so even cycles, paths, trees, and the
+star all take two colours, while a single odd cycle already forces three. At the
+other end, the complete graph \(K_n\) forces all \(n\): every vertex neighbours
+every other, so all must differ. The star makes the bipartite point cleanly:
+
+\begin{codepairs}
+\pair{graphs/coloring/5}{The star is bipartite (hub against leaves), so two
+colours suffice however many leaves there are.}
+\end{codepairs}
+
+\calloutnote{Theory}{That \(\chi(G)=2\) iff \(G\) is bipartite iff \(G\) has no
+odd cycle is a theorem with a one-line proof: 2-colouring \emph{is} a
+2-partition with no edge inside a part, and an odd cycle admits no such
+partition. But for \(k\ge 3\), deciding whether \(\chi(G)\le k\) is
+\emph{NP-complete}\index{NP-hardness}---one of Karp's original 21 problems---so
+no method is known that computes \(\chi(G)\) in polynomial time in general. This
+is why \B{FindVertexColoring} carries a warning the shortest-path functions do
+not: computing it exactly can be expensive.}
+
+\calloutnote{Under the hood}{A greedy colouring is cheap but not minimal;
+Mathilda's \B{FindVertexColoring} (\texttt{src/graph/vertexcoloring.c}) instead
+proves minimality by exact search---a DSATUR branch-and-bound bracketed between
+a cheap DSATUR upper bound and a clique-based lower bound---and this is Wolfram's
+own \texttt{"BacktrackingDS"} method. Because the problem is NP-hard, the search
+refuses rather than lie: above \(128\) vertices, or after an eight-million-node
+budget, it returns \emph{unevaluated}---never a valid-but-larger colouring. Cost
+is driven by edge \emph{density}, not vertex count, so a sparse graph on many
+vertices colours instantly while a dense small one can exhaust the budget. To
+bound the time, wrap the call in \B{TimeConstrained}.}
+
+\usagebox{FindVertexColoring}
+
+\subsection{Drawing a graph}
+\label{ssec:graph-plot}
+
+A picture often says what a vertex list cannot. \B{GraphPlot}\mcode{[g]} lays the
+vertices out and draws the edges, producing a \texttt{Graphics} object that
+renders through the same pipeline as \B{Plot} and \B{Show} (a window when
+graphics support is compiled in, a text placeholder otherwise). Being a picture,
+it has no printed transcript to reproduce here---it is output for the eye, not
+the page---so we only note its existence; the graphics chapter
+(Chapter~\ref{ch:graphics}) is where drawing is taken up in earnest.
+
+\subsection*{Where this connects}
+
+Graphs are where Mathilda's ``everything is an expression'' principle earns its
+keep: a graph is a plain \B{Graph} tree, so the generic structural tools operate
+on it and its matrix views are ordinary matrices. That last fact ties this
+section to the linear algebra of \S\ref{sec:linalg}---the adjacency matrix is
+the object spectral graph theory studies, and \B{Eigenvalues}, \B{Det}, and
+\B{Dot} apply to it with nothing in between. The reproducible sampling of
+\B{RandomGraph} rests on the same seeded random-number stream as the simulations
+of \S\ref{ssec:stat-distributions}. And the two search algorithms met here are
+templates for a wider family---the same integer-indexed traversal underlies
+\B{ConnectedComponents}, \B{FindSpanningTree}, and \B{VertexConnectivity}---while
+the exact, refuse-rather-than-approximate discipline of \B{FindVertexColoring}
+is the same stance Mathilda takes throughout: an honest ``I cannot'' in place of
+a plausible wrong answer. For the full options of any function named here, its
+reference page is one \texttt{?Name} away at the prompt.

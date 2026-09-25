@@ -1,0 +1,10 @@
+# 4.3.2 Limits
+Limit[Sin[x]/x, x -> 0]
+Limit[(x^2 - 1)/(x - 1), x -> 1]
+Limit[(1 - Cos[x])/x^2, x -> 0]
+Limit[(1 + 1/x)^x, x -> Infinity]
+Limit[1/x, x -> 0]
+Limit[1/x, x -> 0, Direction -> "FromAbove"]
+Limit[(3^x + 5^x)^(1/x), x -> Infinity]
+Limit[E^x (E^(1/x - E^-x) - E^(1/x)), x -> Infinity]
+Limit[x Sin[x], x -> Infinity]

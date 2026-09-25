@@ -1,5 +1,548 @@
 \section{Special Functions}
 \label{sec:specialfns}
 
-\emph{This section is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+The elementary functions---polynomials, the exponential, the trigonometric and
+their inverses---run out long before mathematics does. The moment you write down
+an integral like \(\int_0^\infty t^{z-1}e^{-t}\,dt\), or a power series whose
+coefficients grow by a fixed ratio, or the solution of a second-order linear
+differential equation with a variable coefficient, you have left the elementary
+world and entered the realm of the \emph{special functions}: the gamma and zeta
+functions, the error function, the Bessel and Airy functions, the Legendre and
+hypergeometric families.\index{special functions} They are ``special'' only in
+the sense that they were named and tabulated before computers existed; today they
+are as ordinary as \(\sin\), and Mathilda treats them so.
+
+What makes a special function useful in a computer algebra system is that it wears
+three faces at once, and Mathilda shows you all three. There are the
+\emph{exact symbolic values}---\(\Gamma(1/2)=\sqrt\pi\), \(\zeta(2)=\pi^2/6\)---which a
+numeric library can only approximate. There are the \emph{symbolic identities}: the
+recurrences, reflection and derivative rules, series expansions, and orthogonality
+relations that let these functions participate in algebra rather than merely
+returning numbers. And there is \emph{rigorous arbitrary-precision numerics}, for
+when a number really is what you want, computed to any precision you ask for and,
+where the kernel is backed by FLINT's ball arithmetic, with a guaranteed error
+bound. This section takes the major families in turn, and the same three faces
+recur in each: what closes into a clean symbol, what identity the system knows, and
+how it puts a number on the value.
+
+\subsection{The gamma family}
+\label{ssec:sf-gamma}
+
+Everything begins with the \B{Gamma} function, \(\Gamma(z)=\int_0^\infty
+t^{z-1}e^{-t}\,dt\), the continuous interpolation of the
+factorial.\index{gamma function} Its defining property, \(\Gamma(z+1)=z\,\Gamma(z)\)
+with \(\Gamma(1)=1\), forces \(\Gamma(n)=(n-1)!\) at the integers, and from the
+single exact value \(\Gamma(1/2)=\sqrt\pi\) the recurrence generates the whole
+ladder of half-integers.
+
+\begin{codepairs}
+\pair{special-functions/gamma/1}{At the positive integers \B{Gamma} is the shifted
+factorial: \(\Gamma(n)=(n-1)!\), so this is \(0!\) through \(5!\).}
+\pair{special-functions/gamma/2}{The one transcendental seed value,
+\(\Gamma(1/2)=\sqrt\pi\), returned exactly.}
+\pair{special-functions/gamma/3}{The recurrence climbs from it:
+\(\Gamma(7/2)=\tfrac{15}{8}\sqrt\pi\), a rational multiple of \(\sqrt\pi\).}
+\pair{special-functions/gamma/4}{And descends to the negative half-integers---here
+\(\Gamma(-1/2)=-2\sqrt\pi\), finite because the poles fall only on the
+\emph{integers}.}
+\pair{special-functions/gamma/5}{At the non-positive integers \(\Gamma\) has simple
+poles, reported as \mcode{ComplexInfinity}.}
+\pair{special-functions/gamma/6}{The two-argument form is the upper incomplete
+gamma \(\Gamma(a,z)\); at a positive integer \(a\) it closes into elementary
+form.}
+\pair{special-functions/gamma/7}{With a numeric second argument that closed form is
+an exact number: \(\Gamma(5,2)=168/e^{2}\).}
+\pair{special-functions/gamma/8}{Where no symbol exists, \B{N} delivers digits---here
+\(\Gamma(i)\) to thirty places, real and imaginary parts together.}
+\pair{special-functions/gamma/9}{And \(\Gamma\) knows its own derivative, which
+closes through the digamma function \(\psi=\Gamma'/\Gamma\).}
+\end{codepairs}
+
+The half-integer ladder (pairs~2--4) is the gamma function's signature, and it is
+worth seeing why it terminates in \(\sqrt\pi\) rather than another special value.
+\calloutnote{Theory}{The reflection formula
+\(\Gamma(z)\,\Gamma(1-z)=\pi/\sin(\pi z)\)\index{gamma function!reflection formula}
+evaluated at \(z=1/2\) gives \(\Gamma(1/2)^2=\pi\), hence \(\Gamma(1/2)=\sqrt\pi\).
+Combined with the recurrence \(\Gamma(z+1)=z\,\Gamma(z)\), it pins every
+half-integer to a rational multiple of \(\sqrt\pi\). The same reflection formula
+explains the pole structure: since \(1/\Gamma\) is entire with zeros exactly at
+\(0,-1,-2,\dots\), \(\Gamma\) itself has simple poles there and nowhere else, which
+is why pair~4 is finite but pair~5 is not.} The numeric face (pairs~7--8) is the
+one a differential-equation solver or a statistics routine actually leans
+on.\calloutnote{Under the hood}{\B{Gamma} lives in
+\texttt{src/special\_functions/gamma.c}. A machine-precision real routes to the C
+library's \texttt{tgamma}; an arbitrary-precision real to MPFR's correctly rounded
+\texttt{mpfr\_gamma}; and an arbitrary-precision \emph{complex} argument to Spouge's
+approximation, whose coefficients are recomputed at runtime to the precision you
+request, with the reflection formula handling \(\operatorname{Re}(z)<\tfrac12\). The
+incomplete form uses \texttt{mpfr\_gamma\_inc} on the real axis and a lower-incomplete
+series or a Lentz continued fraction in the complex plane.}
+
+\usagebox{Gamma}
+
+The \B{Beta} function \(B(a,b)=\Gamma(a)\Gamma(b)/\Gamma(a+b)\) is the gamma
+function's closest relative---the normalizing constant of the beta distribution and
+the value of the integral \(\int_0^1 t^{a-1}(1-t)^{b-1}\,dt\).\index{beta function}
+Because it is built entirely from gammas, its exact reductions follow from theirs.
+
+\begin{codepairs}
+\pair{special-functions/beta/1}{A positive integer argument collapses the gamma
+ratio to a rational: \(B(2,3)=1/12\).}
+\pair{special-functions/beta/2}{Even with a rational partner it stays exact,
+\(B(3,1/3)=27/14\).}
+\pair{special-functions/beta/3}{Half-integers fold to rational multiples of \(\pi\)
+instead---\(B(1/2,1/2)=\pi\), the arcsine normalization.}
+\pair{special-functions/beta/4}{And \(B(5/2,7/2)=\tfrac{3}{256}\pi\).}
+\pair{special-functions/beta/5}{When no such collapse is available, the residual
+gamma form survives rather than being forced to a number.}
+\pair{special-functions/beta/6}{A fully numeric call evaluates like any other.}
+\end{codepairs}
+
+Pair~5 is a small lesson in the system's temperament: \(B(1/3,1/3)\) is left as
+\(\Gamma(1/3)^2/\Gamma(2/3)\) because no further exact simplification is available
+without the reflection formula, which Mathilda does not apply automatically to a
+product of gammas at complementary rationals.\calloutnote{Pitfall}{Do not expect
+\(\Gamma(1/3)\,\Gamma(2/3)\) to collapse to \(2\pi/\sqrt3\) on its own. The gamma
+reflection and multiplication identities are known to the theory but are \emph{not}
+auto-applied---applying them blindly would fight as often as it helps---so products
+of gammas at rational points are carried symbolically until you rewrite them by
+hand. This is the honest cost of not over-simplifying.}
+
+Two functions read the shape of the gamma function near its poles and along the
+real axis. \B{LogGamma} is the log-gamma function \(\log\Gamma(z)\): the analytic
+continuation of \(\log(\Gamma(z))\), not the same thing as \(\log(\Gamma(z))\)
+term by term, and the right primitive whenever \(\Gamma\) itself would overflow.
+\B{PolyGamma} is the family of logarithmic derivatives: \(\psi(z)=\psi^{(0)}(z)=
+\Gamma'(z)/\Gamma(z)\) is the digamma function,\index{digamma function} and
+\(\psi^{(n)}\) its \(n\)-th derivative.
+
+\begin{codepairs}
+\pair{special-functions/polygamma/1}{\B{LogGamma} keeps integers exact as the log of
+a factorial: \(\log\Gamma(10)=\log(362880)=\log(9!)\).}
+\pair{special-functions/polygamma/2}{At \(z=171\) the gamma function has already
+overflowed a machine double---}
+\pair{special-functions/polygamma/3}{---but \B{LogGamma} sails on, returning
+\(\approx706.6\). This is why factorial ratios and log-likelihoods are computed
+through it, never through \(\Gamma\) directly.}
+\pair{special-functions/polygamma/4}{The digamma at a positive integer is a rational
+minus Euler's constant: \(\psi(5)=\tfrac{25}{12}-\gamma\).}
+\pair{special-functions/polygamma/5}{Gauss's digamma theorem closes rational
+arguments into elementary form: \(\psi(1/2)=-\gamma-\log 4\).}
+\pair{special-functions/polygamma/6}{The trigamma at \(1\) is \(\zeta(2)=\pi^2/6\).}
+\pair{special-functions/polygamma/7}{\B{LogGamma} differentiates to digamma\ldots}
+\pair{special-functions/polygamma/8}{\ldots and each further derivative raises the
+polygamma order by one.}
+\end{codepairs}
+
+The contrast between pairs~2 and~3 is the entire reason \B{LogGamma} exists as a
+first-class head rather than a shorthand for \texttt{Log[Gamma[z]]}: it stays finite
+across a range where the gamma function runs from \(10^{-300}\) to \(10^{300}\), and
+its imaginary part tracks the \emph{continued} argument past \(\pi\), where a naive
+\(\log(\Gamma(z))\) would wrap.\calloutnote{Under the hood}{\B{PolyGamma}
+(\texttt{src/special\_functions/polygamma.c}) handles order \(n=0\) at rational
+arguments through the Gauss digamma theorem---a finite trigonometric sum---and closes
+odd orders through \(\zeta(n{+}1)\). Numerically it uses MPFR's digamma for
+\(n=0\) and a recurrence-shift plus a Bernoulli asymptotic expansion for higher
+orders; complex arbitrary-precision values are handed to FLINT's \texttt{acb\_polygamma}.
+The negative order \(\psi^{(-1)}(z)\) is \B{LogGamma} itself.}
+
+The last member of the family is the \B{Pochhammer} symbol \((a)_n=
+a(a+1)\cdots(a+n-1)=\Gamma(a+n)/\Gamma(a)\), the \emph{rising factorial} that
+supplies the coefficients of every hypergeometric series we meet at the end of this
+section.\index{Pochhammer symbol}
+
+\begin{codepairs}
+\pair{special-functions/pochhammer/1}{A symbolic base gives an explicit polynomial
+product of \(n\) linear factors.}
+\pair{special-functions/pochhammer/2}{A numeric base gives an exact value,
+\((10)_6=3603600\).}
+\pair{special-functions/pochhammer/3}{\((1)_{25}\) is just \(25!\), carried exactly
+as a GMP big integer.}
+\pair{special-functions/pochhammer/4}{Half-integer arguments reduce through the gamma
+ratio: \((1/2)_3=15/8\).}
+\pair{special-functions/pochhammer/5}{And \((3/2)_{1/2}=2/\sqrt\pi\), a gamma ratio
+that happens to close.}
+\end{codepairs}
+
+\subsection{The zeta family}
+\label{ssec:sf-zeta}
+
+The Riemann zeta function \(\zeta(s)=\sum_{n\ge1}n^{-s}\) is the deepest object in
+this section, and \B{Zeta} carries its exact arithmetic.\index{Riemann zeta
+function} At the even positive integers it closes into powers of \(\pi\); its values
+at the non-positive integers, defined by analytic continuation, are rational; and
+its values at the odd positive integers are believed to be new transcendentals with
+no closed form at all.
+
+\begin{codepairs}
+\pair{special-functions/zeta/1}{The even values are rational multiples of powers of
+\(\pi\): \(\zeta(2)=\pi^2/6\)\ldots}
+\pair{special-functions/zeta/2}{\ldots and \(\zeta(4)=\pi^4/90\).}
+\pair{special-functions/zeta/3}{This is exactly the Basel sum, which \B{Sum}
+recognizes independently and returns identically.}
+\pair{special-functions/zeta/4}{Analytic continuation gives \(\zeta(0)=-1/2\)\ldots}
+\pair{special-functions/zeta/5}{\ldots and the famous \(\zeta(-1)=-1/12\).}
+\pair{special-functions/zeta/6}{The negative even integers are the \emph{trivial
+zeros}: \(\zeta(-2)=0\).}
+\pair{special-functions/zeta/7}{The odd values have no known closed form, so
+\(\zeta(3)\) is returned as itself---a genuine constant, not a failure.}
+\pair{special-functions/zeta/8}{But it is a \emph{number}: \B{N} gives Apéry's
+constant to thirty digits.}
+\pair{special-functions/zeta/9}{On the critical line, at the height \(t=14.1347\ldots\)
+of the first nontrivial zero, \(\zeta(1/2+it)\) collapses to the order of
+\(10^{-7}\)---the Riemann hypothesis made visible.}
+\pair{special-functions/zeta/10}{The Hurwitz zeta \(\zeta(s,a)=\sum_{n\ge0}(n+a)^{-s}\)
+shifts the denominators, and still closes: \(\zeta(2,3)=\pi^2/6-5/4\).}
+\pair{special-functions/zeta/11}{The Stieltjes constants are inert symbols; the
+zeroth is Euler's constant \(\gamma\).}
+\end{codepairs}
+
+Pairs~4--6 are not sleight of hand but the content of the \emph{functional
+equation}, and pair~9 is a numerical glimpse of the most famous open problem in
+mathematics.\calloutnote{Theory}{Riemann's functional
+equation\index{Riemann zeta function!functional equation}
+\(\zeta(s)=2^s\pi^{s-1}\sin(\pi s/2)\,\Gamma(1-s)\,\zeta(1-s)\) relates the value at
+\(s\) to the value at \(1-s\), and with it the whole left half-plane is determined by
+the right. The factor \(\sin(\pi s/2)\) vanishes at the negative even integers,
+producing the trivial zeros of pair~6; the values \(\zeta(0)=-1/2\) and
+\(\zeta(-1)=-1/12\) fall out of the same equation. The \emph{nontrivial} zeros all
+lie in the strip \(0<\operatorname{Re}(s)<1\), and the \emph{Riemann hypothesis}
+\index{Riemann hypothesis} asserts they lie exactly on the line
+\(\operatorname{Re}(s)=1/2\); pair~9 evaluates \(\zeta\) at the first of them, where
+it is zero to the precision requested.} The even values, by contrast, are elementary
+once you know the Bernoulli numbers.\calloutnote{Theory}{Euler's formula
+\(\zeta(2n)=(-1)^{n+1}\dfrac{B_{2n}(2\pi)^{2n}}{2\,(2n)!}\) expresses every even zeta
+value through a \B{BernoulliB} number\index{Bernoulli numbers}; for \(n=1\),
+\(B_2=1/6\) gives \(\zeta(2)=\pi^2/6\). No analogous formula is known for the odd
+values, which is why \(\zeta(3)\) (pair~7) has no closed form while \(\zeta(2)\) and
+\(\zeta(4)\) do.} Underneath the exact layer is a rigorous numeric
+one.\calloutnote{Under the hood}{\B{Zeta}, \B{HurwitzZeta} and \B{StieltjesGamma}
+(\texttt{src/special\_functions/zeta.c}, and \texttt{src/flint\_num\_bridge.c} for
+the numerics) delegate arbitrary-precision \emph{complex} evaluation to FLINT's Arb
+library---\texttt{acb\_dirichlet\_zeta}, \texttt{acb\_dirichlet\_hurwitz},
+\texttt{acb\_dirichlet\_stieltjes}. Arb works in \emph{ball arithmetic}\index{ball
+arithmetic}: every value carries a midpoint and a rigorous radius, so pair~9's
+near-zero comes with a proof that the true value lies within a known ball of the
+printed digits---not a hope that rounding behaved.}
+
+\usagebox{Zeta}
+
+The Stieltjes constants \(\gamma_n\) (pair~11) are the coefficients of the Laurent
+expansion of \(\zeta\) about its pole at \(s=1\); the zeroth is Euler's constant
+\(\gamma\), surfaced here as \B{EulerGamma}, and the rest are carried as inert
+\B{StieltjesGamma} symbols.
+
+\subsection{Error functions and the integral functions}
+\label{ssec:sf-erf}
+
+The error function \(\operatorname{erf}(z)=\frac{2}{\sqrt\pi}\int_0^z e^{-t^2}\,dt\)
+is the antiderivative of the Gaussian, and no elementary function equals
+it---which is precisely why it needs a name.\index{error function} \B{Erf}, its
+complement \B{Erfc}, the imaginary variant \B{Erfi}, and the inverse \B{InverseErf}
+form a small closed world.
+
+\begin{codepairs}
+\pair{special-functions/erf/1}{\(\operatorname{erf}(0)=0\)\ldots}
+\pair{special-functions/erf/2}{\ldots and \(\operatorname{erf}(\infty)=1\): the total
+mass of the normalized Gaussian.}
+\pair{special-functions/erf/3}{It is an odd function, and the odd symmetry is applied
+symbolically.}
+\pair{special-functions/erf/4}{Arbitrary-precision numerics track the digits you ask
+for.}
+\pair{special-functions/erf/5}{The complement \(\operatorname{erfc}=1-\operatorname{erf}\)
+vanishes at infinity, computed cancellation-free so the tail keeps its
+significance.}
+\pair{special-functions/erf/6}{The imaginary error function
+\(\operatorname{erfi}(z)=-i\,\operatorname{erf}(iz)\) has its own kernel.}
+\pair{special-functions/erf/7}{The derivative is the Gaussian itself---so the whole
+Taylor series is generated from this one rule.}
+\pair{special-functions/erf/8}{The inverse function has exact endpoints:
+\(\operatorname{erf}^{-1}(1)=\infty\).}
+\pair{special-functions/erf/9}{And numeric values in between, on \([-1,1]\).}
+\end{codepairs}
+
+The split between \B{Erf} and \B{Erfc} (pairs~2 and~5) is not redundancy but
+numerics: for large positive \(z\), \(\operatorname{erf}(z)\) is so close to \(1\)
+that \(1-\operatorname{erf}(z)\) loses every significant digit to cancellation, so
+\(\operatorname{erfc}\) is computed by its own cancellation-free
+route.\calloutnote{Under the hood}{The kernels live in
+\texttt{src/special\_functions/erf.c} (and \texttt{inverf.c} for the inverse). Real
+arguments use the C library or MPFR's \texttt{erf}/\texttt{erfc}; complex arguments
+sum the cancellation-aware Maclaurin series of DLMF~7.6.2 in MPFR with
+\(|z|^2/\ln2\) guard bits, so even a machine-precision complex result carries full
+accuracy. Neither the C library nor MPFR ships an inverse error function, so
+\B{InverseErf} is Newton's iteration on \(\operatorname{erf}(z)-s\), started from a
+Winitzki seed and polished to the working precision.}
+
+The same principle---name the antiderivative when it is not elementary---generates a
+whole class of \emph{integral functions}, and Mathilda produces them directly when
+you integrate.
+
+\begin{codepairs}
+\pair{special-functions/integrals/1}{The sine integral \(\operatorname{Si}\) is the
+antiderivative of the sinc function, and \B{Integrate} returns it by name.}
+\pair{special-functions/integrals/2}{The cosine integral \(\operatorname{Ci}\)
+likewise.}
+\pair{special-functions/integrals/3}{The exponential integral \(\operatorname{Ei}\)
+names \(\int e^x/x\,dx\).}
+\pair{special-functions/integrals/4}{And \(\int dx/\log x\) is the same function in
+disguise---the logarithmic integral \(\operatorname{li}(x)=\operatorname{Ei}(\log x)\).}
+\end{codepairs}
+
+Each of these is a genuine function with the full three-faced treatment: it
+evaluates, it differentiates, it has special values.
+
+\begin{codepairs}
+\pair{special-functions/integrals/5}{\B{SinIntegral} to twenty digits\ldots}
+\pair{special-functions/integrals/6}{\ldots \B{CosIntegral}\ldots}
+\pair{special-functions/integrals/7}{\ldots \B{ExpIntegralEi}\ldots}
+\pair{special-functions/integrals/8}{\ldots and \B{LogIntegral}, whose growth rate is
+the density of the primes.}
+\pair{special-functions/integrals/9}{\(\operatorname{Si}\) saturates to \(\pi/2\) at
+infinity---the Dirichlet integral \(\int_0^\infty \sin(x)/x\,dx\).}
+\pair{special-functions/integrals/10}{The Fresnel integral \(C\) of optics and
+diffraction, \B{FresnelC}\ldots}
+\pair{special-functions/integrals/11}{\ldots and its partner \B{FresnelS}.}
+\pair{special-functions/integrals/12}{And \(\operatorname{Si}\) differentiates back
+to the cardinal sine \B{Sinc}---the loop closes.}
+\end{codepairs}
+
+That \(\int dx/\log x\) and \(\int e^x/x\,dx\) come back as the \emph{same} function
+(pairs~3--4) is the logarithmic integral's claim to fame: \(\operatorname{li}(x)\)
+is the leading term of the prime-counting function, and the substitution
+\(t=\log x\) turns one integral into the other.\calloutnote{Under the hood}{On the
+real axis \B{ExpIntegralEi} uses MPFR's correctly rounded \texttt{mpfr\_eint} for
+\(x>0\) and an on-cut convergent series for \(x<0\); large \(|z|\) switches to the
+asymptotic expansion, and the two regimes overlap and agree. \B{LogIntegral} is
+literally \(\operatorname{Ei}(\log z)\), reusing the same kernel. The sine, cosine,
+and Fresnel integrals sum their Maclaurin series for moderate arguments and their
+trigonometric-prefactored asymptotic forms for large ones, with the complex plane
+handled by the shared MPFR-complex toolkit.}
+
+\subsection{Bessel and Airy functions}
+\label{ssec:sf-bessel}
+
+Bessel functions are what solutions to the wave and heat equations look like in
+cylindrical coordinates, and they are the archetype of a function defined by a
+differential equation rather than a formula.\index{Bessel functions} \B{BesselJ}
+is the function of the first kind, regular at the origin; \B{BesselY} the second
+kind, singular there; and \B{BesselI}, \B{BesselK} the modified pair for the
+hyperbolic version of the equation.
+
+\begin{codepairs}
+\pair{special-functions/bessel/1}{\(J_0(0)=1\); every higher \(J_n\) vanishes at the
+origin.}
+\pair{special-functions/bessel/2}{At half-integer order the Bessel function is
+\emph{elementary}: \(J_{1/2}(x)=\sqrt{2/\pi x}\,\sin x\).}
+\pair{special-functions/bessel/3}{And \(J_{-1/2}(x)=\sqrt{2/\pi x}\,\cos x\)---the
+spherical Bessel functions in disguise.}
+\pair{special-functions/bessel/4}{Numerics to any precision.}
+\pair{special-functions/bessel/5}{The Frobenius series about the origin, generated on
+demand.}
+\pair{special-functions/bessel/6}{The recurrence shows itself in the derivative:
+\(J_0'=-J_1\).}
+\pair{special-functions/bessel/7}{The second kind \(Y_0\), singular at the
+origin\ldots}
+\pair{special-functions/bessel/8}{\ldots the modified \(I_0\)\ldots}
+\pair{special-functions/bessel/9}{\ldots and \(K_0\), the exponentially decaying
+modified solution.}
+\end{codepairs}
+
+The half-integer reductions (pairs~2--3) are a real theorem, not a lookup: they are
+why a quantum-mechanics problem in a spherical well produces \(\sin\) and \(\cos\)
+over \(\sqrt r\).\calloutnote{Theory}{The Bessel functions \(J_\nu\) and \(Y_\nu\)
+are the two independent solutions of Bessel's equation
+\(x^2y''+xy'+(x^2-\nu^2)y=0\). When \(\nu\) is a half-integer the equation degenerates
+just enough for the solution to close in elementary terms: \(J_{1/2}\) and
+\(J_{-1/2}\) are \(\sin\) and \(\cos\) scaled by \(\sqrt{2/\pi x}\), and the
+three-term recurrence \(J_{\nu-1}(x)+J_{\nu+1}(x)=\tfrac{2\nu}{x}J_\nu(x)\) generates
+every other half-integer order from them. Mathilda applies exactly this reduction
+(\texttt{src/special\_functions/bessel.c}).}
+
+\usagebox{BesselJ}
+
+The Airy functions are the simplest functions that oscillate on one side of the
+origin and decay on the other, the model for a wave near a turning
+point.\index{Airy functions} \B{AiryAi} and \B{AiryBi} solve \(y''=xy\), and their
+values at the origin tie the whole family back to the gamma function.
+
+\begin{codepairs}
+\pair{special-functions/airy/1}{\(\operatorname{Ai}(0)\) closes through the gamma
+function: \(1/(3^{2/3}\Gamma(2/3))\).}
+\pair{special-functions/airy/2}{\(\operatorname{Bi}(0)\) shares the same
+\(\Gamma(2/3)\), scaled differently.}
+\pair{special-functions/airy/3}{The derivative at the origin brings in
+\(\Gamma(1/3)\) instead.}
+\pair{special-functions/airy/4}{The Airy value numerically, to thirty digits\ldots}
+\pair{special-functions/airy/5}{\ldots and at \(x=1\), already deep in the decaying
+region.}
+\pair{special-functions/airy/6}{\B{AiryAi} differentiates to its own derivative head,
+\B{AiryAiPrime}, closing the family under \B{D}.}
+\end{codepairs}
+
+That \(\operatorname{Ai}(0)\) and \(\operatorname{Ai}'(0)\) involve \(\Gamma(2/3)\)
+and \(\Gamma(1/3)\) respectively (pairs~1--3) is the thread tying this subsection
+back to the first: the special functions are a single web, and the gamma function
+sits near its center.\calloutnote{Theory}{The Airy equation \(y''=xy\) has no
+singular points at finite \(x\), so both solutions are entire. The initial values
+\(\operatorname{Ai}(0)=3^{-2/3}/\Gamma(2/3)\) and
+\(\operatorname{Ai}'(0)=-3^{-1/3}/\Gamma(1/3)\) come from the Mellin-transform
+representation of the solution, and every Taylor coefficient follows from the
+equation by \(y^{(n+2)}=x\,y^{(n)}+n\,y^{(n-1)}\). The kernels are in
+\texttt{src/special\_functions/airyai.c} and \texttt{airybi.c}.}
+
+\subsection{Legendre functions of the first and second kind}
+\label{ssec:sf-legendre}
+
+Legendre's equation \((1-x^2)y''-2xy'+n(n+1)y=0\) is the angular part of Laplace's
+equation on the sphere, and it too has two independent
+solutions.\index{Legendre functions} \B{LegendreP} is the first: at a non-negative
+integer degree it is the Legendre \emph{polynomial}, the workhorse of Gaussian
+quadrature and multipole expansions. \B{LegendreQ} is the second kind---the other
+solution of the same equation---and it is new in this release.\index{Legendre
+functions!second kind}
+
+\begin{codepairs}
+\pair{special-functions/legendre/1}{The Legendre polynomials \(P_0\) through \(P_3\),
+generated on demand.}
+\pair{special-functions/legendre/2}{\(P_4\), with its characteristic rational
+coefficients.}
+\pair{special-functions/legendre/3}{Orthogonality on \([-1,1]\): the squared norm is
+\(\int_{-1}^1 P_n^2 = 2/(2n{+}1)\), here \(2/5\).}
+\pair{special-functions/legendre/4}{And distinct degrees are orthogonal---the
+integral of \(P_2P_3\) is exactly zero.}
+\pair{special-functions/legendre/5}{The second-kind solution \(Q_0\) is the
+logarithm \(\tfrac12\log\frac{1+x}{1-x}=\operatorname{arctanh}x\).}
+\pair{special-functions/legendre/6}{\(Q_1\) carries that same logarithm, times
+\(x\), minus one.}
+\pair{special-functions/legendre/7}{\(Q_2\) pairs the logarithm with the polynomial
+\(P_2\)---the general pattern.}
+\pair{special-functions/legendre/8}{And \(Q\) evaluates numerically like any other
+function.}
+\end{codepairs}
+
+Pairs~3--4 are the property that makes the Legendre polynomials indispensable, and
+the system computes them exactly rather than numerically.\calloutnote{Theory}{The
+polynomials \(P_n\) are orthogonal on \([-1,1]\):
+\(\int_{-1}^1 P_m(x)P_n(x)\,dx = \frac{2}{2n+1}\delta_{mn}\). This single relation is
+what lets any function on the interval be expanded in a Legendre series, and it is the
+foundation of Gauss--Legendre quadrature. The second-kind solution \(Q_n\) satisfies
+the same differential equation but is singular at \(x=\pm1\)---the endpoints where the
+logarithm in pairs~5--7 blows up---so a physical solution regular on the whole sphere
+keeps only the \(P_n\) part. \B{LegendreQ} follows the pattern
+\(Q_n(x)=P_n(x)\,Q_0(x)-W_{n-1}(x)\) with \(Q_0=\operatorname{arctanh}x\); the
+implementation is in \texttt{src/special\_functions/legendre.c}.} The visible
+structure of \(Q_2\) in pair~7---a Legendre polynomial multiplying
+\(\operatorname{arctanh}x\), minus a lower-degree polynomial---is exactly that
+recurrence made concrete.
+
+\subsection{The hypergeometric family: one function to rule them all}
+\label{ssec:sf-hypergeometric}
+
+Almost every function in this section is a special case of one
+master series.\index{hypergeometric function} The generalized hypergeometric
+function
+\[
+  {}_pF_q\!\left(\begin{matrix}a_1,\dots,a_p\\ b_1,\dots,b_q\end{matrix};z\right)
+  = \sum_{k=0}^\infty
+    \frac{(a_1)_k\cdots(a_p)_k}{(b_1)_k\cdots(b_q)_k}\,\frac{z^k}{k!}
+\]
+is a power series whose term ratio is a fixed rational function of the summation
+index---and that one structural constraint is general enough to contain the
+exponential, the logarithm, the trigonometric functions, the Bessel functions, the
+error function, and the Legendre functions as special cases. Mathilda exposes it as
+\B{HypergeometricPFQ}, with the classical low-order cases \B{Hypergeometric2F1}
+(Gauss), \B{Hypergeometric1F1} (Kummer's confluent), and \B{Hypergeometric0F1}
+(the confluent limit) as named heads. The system's job is to \emph{recognize} when a
+hypergeometric collapses to something elementary, and it does.
+
+\begin{codepairs}
+\pair{special-functions/hypergeometric/1}{Gauss's \({}_2F_1(1,1;2;x)\) is a
+logarithm in disguise: \(-\log(1-x)/x\).}
+\pair{special-functions/hypergeometric/2}{A negative-integer parameter terminates the
+series into a polynomial---here \((1-x)^3\).}
+\pair{special-functions/hypergeometric/3}{Kummer's \({}_1F_1(1;2;x)\) is
+\((e^x-1)/x\)\ldots}
+\pair{special-functions/hypergeometric/4}{\ldots and when its two parameters agree it
+is the exponential itself.}
+\pair{special-functions/hypergeometric/5}{The confluent \({}_0F_1(;1/2;x)\) is a
+hyperbolic cosine of a square root.}
+\pair{special-functions/hypergeometric/6}{The generalized \({}_pF_q\) carries any
+number of parameters, and reduces by the same rules---here matching pair~1.}
+\pair{special-functions/hypergeometric/7}{Where no elementary form exists, it is a
+number: this one is \(2\log 2\).}
+\end{codepairs}
+
+The unification is not just aesthetic; it is how a CAS avoids re-implementing the
+same reductions a dozen times.\calloutnote{Theory}{A function is
+\emph{hypergeometric} when the ratio of consecutive series coefficients,
+\(c_{k+1}/c_k\), is a rational function of \(k\)---and astonishingly many functions
+are. The exponential is \({}_0F_0\); \(\log(1-x)=-x\,{}_2F_1(1,1;2;x)\) (pair~1);
+\(J_\nu(x)\) is a \({}_0F_1\) up to a power factor (compare pair~5's \(\cosh\), which
+is \(J_{-1/2}\) territory); \(\operatorname{erf}\), the Legendre and Gegenbauer
+polynomials, and the Airy functions are all \({}_pF_q\) with particular parameters.
+The two levers that produce a closed form are visible above: a \emph{negative
+integer} upper parameter truncates the infinite series to a polynomial (pair~2), and
+special parameter relations trigger classical summation theorems (pairs~1, 3--5).
+Mathilda's reductions live in \texttt{src/special\_functions/hypergeopfq.c}.}
+
+Three functions extend the reach of the elementary world one step further and round
+out the family. The polylogarithm \B{PolyLog} generalizes the logarithm to a whole
+ladder of orders;\index{polylogarithm} the Lerch transcendent \B{LerchPhi} contains
+the polylogarithm, the Hurwitz zeta, and much else as special
+cases;\index{Lerch transcendent} and the Lambert \(W\) function \B{ProductLog}
+inverts \(w\,e^w=z\), the transcendental equation that appears whenever an unknown
+sits both inside and outside an exponential.\index{Lambert W function}
+
+\begin{codepairs}
+\pair{special-functions/polylog/1}{Order one is the logarithm:
+\(\operatorname{Li}_1(x)=-\log(1-x)\).}
+\pair{special-functions/polylog/2}{The dilogarithm at \(1\) is \(\zeta(2)=\pi^2/6\).}
+\pair{special-functions/polylog/3}{At \(-1\) it is \(-\pi^2/12\).}
+\pair{special-functions/polylog/4}{And the celebrated closed form
+\(\operatorname{Li}_2(1/2)=\pi^2/12-\tfrac12\log^2 2\).}
+\pair{special-functions/polylog/5}{At argument \(1\) the order-\(s\) polylog is
+\(\zeta(s)\), so \(\operatorname{Li}_3(1)=\zeta(3)\).}
+\pair{special-functions/polylog/6}{The Lerch transcendent reduces to the same
+logarithm for these arguments---the master function containing all the rest.}
+\pair{special-functions/polylog/7}{The Lambert \(W\): \(W(e)=1\), since
+\(1\cdot e^1=e\).}
+\pair{special-functions/polylog/8}{And \(W(-1/e)=-1\), the branch point.}
+\pair{special-functions/polylog/9}{Its value at \(1\) is the omega constant,
+\(0.5671\ldots\).}
+\pair{special-functions/polylog/10}{Its derivative is written implicitly in terms of
+itself---the signature of a function defined by inversion.}
+\end{codepairs}
+
+The dilogarithm identities (pairs~2--4) are among the most beautiful closed forms in
+analysis, and that Mathilda knows \(\operatorname{Li}_2(1/2)=\pi^2/12-\tfrac12\log^2
+2\) exactly rather than as a decimal is the whole point of a symbolic
+system.\calloutnote{Under the hood}{\B{PolyLog}
+(\texttt{src/special\_functions/polylog.c}), \B{LerchPhi} (\texttt{lerchphi.c}), and
+\B{ProductLog} (\texttt{productlog.c}) each carry their own special-value tables and
+their own numeric kernels. The Lerch transcendent
+\(\Phi(z,s,a)=\sum_{k\ge0}z^k/(k+a)^s\) is the genuine master function of the three:
+\(\operatorname{Li}_s(z)=z\,\Phi(z,s,1)\) and \(\zeta(s,a)=\Phi(1,s,a)\), so pair~6's
+reduction and the Hurwitz zeta of \S\ref{ssec:sf-zeta} are two faces of one series.
+\B{ProductLog}'s implicit derivative (pair~10) comes from differentiating
+\(w\,e^w=z\) directly, since no explicit formula for \(W\) exists.}
+
+\subsection*{Where this connects}
+
+The special functions are the point where the three layers of Mathilda meet on a
+single object. Their \emph{exact} values are computed by the same rational and
+symbolic arithmetic as \S\ref{sec:arithmetic} and \S\ref{sec:algebra}; their
+\emph{identities}---the derivatives that close the gamma, Bessel, Airy, and Legendre
+families under \B{D}, the series expansions, the antiderivatives that \B{Integrate}
+returns by name---are what let them take part in the calculus of
+\S\ref{sec:calculus} rather than merely being evaluated at its end; and their
+\emph{numerics}, backed by MPFR on the real line and by FLINT's rigorous Arb ball
+arithmetic in the complex plane, are what the numerical methods of
+\S\ref{sec:numcalc} call when an integral or a differential equation resolves into
+one of these functions. The orthogonality of the Legendre polynomials underwrites
+Gaussian quadrature; the gamma and zeta functions thread through analytic number
+theory; and the hypergeometric family is the organizing idea that keeps the whole
+collection from being a bag of unrelated formulas. For the exhaustive options and
+corner cases of any function named here---the branch-cut conventions, the incomplete
+and generalized forms, the full list of recognized reductions---its reference page
+is one \texttt{?Name} away at the prompt.

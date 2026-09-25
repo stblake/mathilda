@@ -1,0 +1,10 @@
+# 4.3.3 Series
+Series[Exp[x], {x, 0, 5}]
+Normal[Series[Exp[x], {x, 0, 5}]]
+SeriesCoefficient[Exp[x], {x, 0, 7}]
+Series[1/Sin[x], {x, 0, 4}]
+Series[Sqrt[Sin[x]], {x, 0, 4}]
+Series[(1 + x)^n, {x, 0, 3}]
+Series[ArcTan[x], {x, Infinity, 4}]
+Series[f[x], {x, 0, 3}]
+SeriesData[x, 0, {1, 1, 1/2, 1/6}, 0, 4, 1]

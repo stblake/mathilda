@@ -133,9 +133,80 @@ the signature of a roughly symmetric batch.}
 The interquartile range \(Q_3 - Q_1 = 5.6125 - 5.2975 = 0.315\) captures the
 spread of the central half while ignoring the tails entirely, which is why it,
 like the median, is a robust measure. That the mean and median nearly coincide
-here---\(5.448\) against \(5.46\)---is the numerical fingerprint of symmetry;
-where they part company, the data is skewed, and measuring that skew is the next
-step.
+here---\(5.448\) against \(5.46\)---is the numerical fingerprint of symmetry. The
+quartiles are only three of a whole continuum of cut points, and the robust
+measures of spread are built on them; both are taken up next.
+
+\subsection{Quantiles and robust spread}
+\label{ssec:stat-quantiles}
+
+The median and the quartiles are special cases of one idea. The \emph{quantile} at
+a fraction \(q\in[0,1]\) is the value below which that fraction of the data lies:
+the median is the quantile at \(q=\tfrac12\), the quartiles are the quantiles at
+\(\tfrac14,\tfrac12,\tfrac34\), and a percentile is a quantile written as a
+percentage. \B{Quantile} computes any of them---one \(q\), or a whole list at
+once---and \B{InterquartileRange}, \B{MeanDeviation}, and \B{MedianDeviation} build
+on the same order statistics to measure spread without letting the tails dominate.
+Michelson's batch, an even twenty readings, is the revealing case:
+
+\begin{codepairs}
+\pair{statistics/quantile/1}{The Michelson batch once more---twenty values, an even
+count.}
+\pair{statistics/quantile/2}{\B{Quantile} at \(\tfrac12\) returns \(930\)---an actual
+measurement, the lower of the two central readings.}
+\pair{statistics/quantile/3}{\B{Median}, by contrast, returns \(940\), the
+\emph{average} of the two central readings. The two disagree by design (see below).}
+\pair{statistics/quantile/4}{A list of fractions in one call gives the three
+quartiles \(\{850, 930, 980\}\)---the same estimator as pair~2 at the center.}
+\pair{statistics/quantile/5}{The ninth decile, i.e. the \(90\)th percentile: the
+reading below which nine-tenths of the data falls, here \(1000\).}
+\pair{statistics/quantile/6}{\B{InterquartileRange} is \(Q_3 - Q_1 = 130\), the
+spread of the central half---robust, because it discards the outer quarters
+entirely.}
+\pair{statistics/quantile/7}{\B{MeanDeviation} averages the \emph{absolute}
+deviations from the mean, staying exact at \(416/5\).}
+\pair{statistics/quantile/8}{\B{MedianDeviation} takes the median of the absolute
+deviations from the median---the robust analogue, here \(60\).}
+\pair{statistics/quantile/9}{And the mean deviation as a decimal, \(83.2\) km/s.}
+\end{codepairs}
+
+The gap between pairs~2 and~3 is not a bug but a definition. \B{Quantile} in its
+default form inverts the \emph{empirical distribution function}: it returns the
+smallest data value at or above which the cumulative fraction reaches \(q\), so its
+answer is always a value that actually occurs in the sample. \B{Median} and
+\B{Quartiles}, on the other hand, \emph{interpolate} between the two order
+statistics that straddle \(q\) when the sample size makes the cut fall between them.
+On an odd-sized sample the two conventions coincide; on an even one---twenty
+here---they can differ by a whole step, which is exactly the \(930\) against
+\(940\) you see.\index{quantile!estimator conventions}
+
+\calloutnote{Pitfall}{There is no single ``the'' quantile of a finite sample: at
+least nine estimator conventions are in common use, differing in how they
+interpolate near a cut point. Mathilda's \B{Quantile} defaults to the simplest---the
+inverse of the empirical CDF, which never invents a value between data points---so
+\texttt{Quantile[data, 1/2]} is \emph{not} in general the same as \B{Median}.
+When you need a specific convention, state it; when you just want the middle, use
+\B{Median} and say so.}
+
+The two deviation measures round out the robust toolkit. \B{MeanDeviation} is the
+mean of \(\lvert x_i - \bar x\rvert\)---a spread in the original units, like the
+standard deviation but built on absolute rather than squared deviations, so a single
+outlier pulls it less hard. \B{MedianDeviation} goes further, taking the
+\emph{median} of the absolute deviations about the median; it inherits the median's
+resistance twice over and is the estimator of choice when the data may be
+contaminated.\calloutnote{Theory}{The median absolute deviation, \(\operatorname{MAD}
+= \operatorname{median}_i \lvert x_i - \operatorname{median}(x)\rvert\), has a
+\emph{breakdown point} of \(50\%\): up to half the data can be sent to infinity
+before the estimate does the same, the highest any estimator of scale can achieve.
+Scaled by \(1.4826\) it is a consistent estimator of the standard deviation for
+normal data, which is why robust statistics reaches for it in place of
+\B{StandardDeviation} whenever outliers are a concern.\index{median absolute
+deviation}\index{breakdown point}}
+
+\usagebox{Quantile}
+
+When the mean and median part company, as they did on Newcomb's contaminated
+timings, the data is \emph{skewed}---and measuring that skew is where we turn next.
 
 \subsection{Shape: moments, skewness, and kurtosis}
 \label{ssec:stat-shape}

@@ -1,0 +1,11 @@
+# Ch.7 -- iteration combinators: Nest, NestList, Fold, FoldList, Composition
+Nest[f, x, 3]
+NestList[f, x, 3]
+Nest[(1 + #)^2 &, 1, 3]
+NestList[# + 1 &, 0, 5]
+NestList[(# + 2/#)/2 &, 1.0, 5]
+Fold[Plus, 0, {1, 2, 3, 4}]
+FoldList[Plus, 0, {1, 2, 3, 4}]
+Fold[10 #1 + #2 &, 0, {1, 9, 2, 6}]
+Composition[f, g, h][x]
+(f @* g @* h)[x]

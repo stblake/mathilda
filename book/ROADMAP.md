@@ -47,7 +47,7 @@ functions, and a first plot. **Deferred:** plotting the §3.5 NDSolve solution a
 figure — waiting on native Mathilda graphics export (coming soon), rather than
 rendering sampled data through an external toolchain.
 
-## Chapter 4 — Mathematics in Mathilda (sections 4.1–4.7)
+## Chapter 4 — Mathematics in Mathilda (sections 4.1–4.10)
 
 This is one chapter (`chapters/04-mathematics.tex`) whose sections are the individual
 mathematical domains, each its own file under `chapters/math/` and its own campaign.
@@ -56,12 +56,14 @@ mathematical domains, each its own file under `chapters/math/` and its own campa
 |---|---------|------|--------|
 | 4.1 | Arithmetic | `chapters/math/arithmetic.tex` | **Verified** |
 | 4.2 | Algebra | `chapters/math/algebra.tex` | **Verified** |
-| 4.3 | Calculus | `chapters/math/calculus.tex` | Planned |
-| 4.4 | Linear Algebra | `chapters/math/linear-algebra.tex` | Planned |
+| 4.3 | Calculus | `chapters/math/calculus.tex` | **Verified** |
+| 4.4 | Linear Algebra | `chapters/math/linear-algebra.tex` | **Verified** |
 | 4.5 | Numerical Calculus | `chapters/math/numerical-calculus.tex` | **Verified** |
 | 4.6 | Number Theory | `chapters/math/number-theory.tex` | **Verified** |
-| 4.7 | Special Functions | `chapters/math/special-functions.tex` | Planned |
+| 4.7 | Special Functions | `chapters/math/special-functions.tex` | **Verified** |
 | 4.8 | Statistics | `chapters/math/statistics.tex` | **Verified** |
+| 4.9 | Computational Geometry | `chapters/math/geometry.tex` | **Verified** |
+| 4.10 | Graphs | `chapters/math/graphs.tex` | **Verified** |
 
 **§4.1 Arithmetic scope** (broadened beyond the original three-subsection outline):
 - **Types & operators** — the numeric heads (`Head`), and how `+ - * / ^` reduce to
@@ -83,14 +85,21 @@ over algebraic number fields; GCD/resultants; Gröbner bases; Solve for polynomi
 systems. Show the algorithms (square-free decomposition, Hensel lifting) in
 `underhood` boxes.
 
-**§4.3 Calculus scope** (per outline): 4.3.1 Derivatives, 4.3.2 Limits, 4.3.3 Series,
-4.3.4 Residues, 4.3.5 Indefinite integration (the Risch story), 4.3.6 Definite
-integration (contour methods, Mellin, symmetry). A large section — likely split into
-several campaigns.
+**§4.3 Calculus scope** (Verified): 4.3.1 Derivatives (`D`/`Dt`/`Derivative` +
+`Grad`/`Div`/`Curl`/`Laplacian`), 4.3.2 Limits, 4.3.3 Series, 4.3.4 Residues,
+4.3.5 Indefinite integration — the Risch story (incl. the `ParallelMixedTower`,
+Cherry di/polylog, and `DiffUnderInt` engines as `Integrate` methods), 4.3.6 Definite
+integration (contour methods, Mellin, symmetry), and **4.3.7 Differential equations
+(`DSolve`)** — first-order families, linear const-/variable-coefficient (Kovacic,
+Frobenius), special-function ODEs, systems, Lie point symmetry, integrating factors,
+PDEs, and BVP/Sturm–Liouville. Written 2026-09-25.
 
-**§4.4 Linear Algebra scope.** Vectors/matrices as expressions; Dot/Det/Inverse; the
-decompositions (LU/QR/Cholesky/SVD/Schur); eigen-problems; the machine-precision
-(LAPACK) vs exact/MPFR split; packed arrays for speed.
+**§4.4 Linear Algebra scope** (Verified). Vectors/matrices as expressions;
+Dot/Det/Inverse; solving & reduction (`LinearSolve`/`LeastSquares`/`RowReduce`/
+`NullSpace`, and the `ZeroTest` option for exact reduction); the decompositions
+(LU/QR/SVD/**Schur**/**Jordan**); eigen-problems; the machine-precision (LAPACK) vs
+exact/MPFR split; packed arrays for speed. (`CholeskyDecomposition` is not yet
+implemented, so it is not covered.)
 
 **§4.5 Numerical Calculus scope.** `ND`, `NIntegrate`, `NSum`/`NProduct`, `NDSolve`,
 `NLimit`/`NSeries`, `FindRoot`; accuracy/precision goals; when and why to go numeric.
@@ -115,15 +124,26 @@ summary (`Min`/`Quartiles`/`Max` on Cavendish's 1798 density data); shape
 `LearnDistribution`, the law of large numbers). Ch. 3 gets a short tour section
 (§3.11). Exact-while-exact throughout, with packed-array/`Compile` notes.
 
+**§4.9 Computational Geometry scope** (Verified). `Area`/`Perimeter` (shoelace),
+`RegionCentroid`, `RegionMember` (point-in-polygon), `ConvexHullRegion` (monotone
+chain) over `Polygon`/point sets, with exact GMP-rational coordinates. Written
+2026-09-25.
+
+**§4.10 Graphs scope** (Verified). `Graph` construction, `VertexList`/`EdgeList`,
+`AdjacencyMatrix`/`WeightedAdjacencyMatrix`/`EdgeWeight`, generators (`StarGraph`,
+`RandomGraph`), `GraphDistance`/`FindShortestPath` (weighted Dijkstra),
+`FindVertexColoring` (exact minimal colouring), and `GraphPlot` (prose only — it
+returns graphics, no text transcript). Written 2026-09-25.
+
 ## The System (Chapters 5–9)
 
 | # | Chapter | File | Status |
 |---|---------|------|--------|
 | 5 | Graphics | `chapters/05-graphics.tex` | Planned |
-| 6 | Data Structures | `chapters/06-data-structures.tex` | Planned |
-| 7 | Programming in Mathilda | `chapters/07-programming.tex` | Planned |
+| 6 | Data Structures | `chapters/06-data-structures.tex` | **Verified** |
+| 7 | Programming in Mathilda | `chapters/07-programming.tex` | **Verified** |
 | 8 | Compilation and the Compiler | `chapters/08-compilation.tex` | Planned |
-| 9 | Data I/O | `chapters/09-data-io.tex` | Planned |
+| 9 | Data I/O | `chapters/09-data-io.tex` | **Verified** |
 
 **Ch. 5 Graphics scope.** `Plot`/`Plot3D`/`ListPlot`/`Graphics`/`Show` primitives,
 options, the adaptive sampler. **Toolchain note:** graphics return `plot`/`image`
@@ -141,8 +161,13 @@ functional programming — the three paradigms Mathilda supports, and how they c
 compilable subset as a cliff, and how packed arrays and compilation combine. (This is
 the `Compile[]` *builtin*, distinct from Chapter 2's build-the-software material.)
 
-**Ch. 9 Data I/O scope.** *Mostly not implemented yet in Mathilda* — write this last,
-and only cover what actually exists; be explicit about what is not yet supported.
+**Ch. 9 Data I/O scope** (Verified). The stream layer now exists (`src/io/`), so this
+was written 2026-09-25 covering what is implemented: `OpenWrite`/`OpenRead`/
+`OpenAppend`, `Write`/`WriteString`/`Read`/`Close`, `Streams`/`StreamPosition`,
+`ReadList` (type-directed), and `Get`/`Put`. It is scrupulously explicit about the
+gaps: `Import`/`Export` are raster-image only (they stay unevaluated on data files),
+there is no CSV/JSON parser, and `ReadString`/`BinaryRead`/`CopyFile`/`DeleteFile`
+etc. are not implemented.
 
 ## The Project (Chapters 10–13)
 

@@ -1,0 +1,12 @@
+# 4.3.6 Definite integration
+Integrate[x^2, {x, 0, 1}]
+Integrate[1/Sqrt[x], {x, 0, 1}]
+Integrate[1/(1 + x^2), {x, 0, Infinity}]
+Integrate[1/(1 + x^4), {x, -Infinity, Infinity}]
+Integrate[Cos[x]/(1 + x^2), {x, -Infinity, Infinity}]
+Integrate[Exp[-x^2], {x, 0, Infinity}]
+Integrate[Sin[x]/x, {x, 0, Infinity}]
+Integrate[x^3/(Exp[x] - 1), {x, 0, Infinity}]
+Integrate[1/(2 + Cos[x]), {x, 0, 2 Pi}]
+Integrate[1/x, {x, -1, 1}]
+Integrate[x y, {x, 0, 1}, {y, 0, 1}]

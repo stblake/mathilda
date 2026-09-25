@@ -67,6 +67,25 @@ def query(names):
     return usage, attrs
 
 
+# The card body is rendered verbatim by `listings`, which (under inputenc utf8)
+# rejects multibyte UTF-8 bytes -- so a docstring's em-dash or section sign would
+# abort the whole PDF build. `?Name` in the REPL is unaffected; this only touches
+# the book card. Map the typographic characters that occur in docstrings to ASCII
+# and drop anything else non-ASCII.
+_ASCII_MAP = {
+    "—": "--", "–": "-", "−": "-", "…": "...",
+    "‘": "'", "’": "'", "“": '"', "”": '"',
+    "§": "Sec.", "×": "x", "→": "->", "←": "<-",
+    "≤": "<=", "≥": ">=", "±": "+/-", "·": ".",
+}
+
+
+def _ascii_safe(s):
+    for k, v in _ASCII_MAP.items():
+        s = s.replace(k, v)
+    return s.encode("ascii", "ignore").decode("ascii")
+
+
 def main():
     names = collect_names()
     if not names:
@@ -77,9 +96,9 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     usage, attrs = query(names)
     for n in names:
-        u = usage.get(n, "").rstrip("\n")
+        u = _ascii_safe(usage.get(n, "").rstrip("\n"))
         (OUT / f"{n}.txt").write_text((u + "\n") if u else f"(no usage string for {n})\n")
-        a = re.sub(r"^\s*\{|\}\s*$", "", attrs.get(n, "").strip())
+        a = _ascii_safe(re.sub(r"^\s*\{|\}\s*$", "", attrs.get(n, "").strip()))
         (OUT / f"{n}.attr").write_text(a)
         print(f"gen_usage: {n} ({len(u)} chars; attributes: {a})")
     print(f"gen_usage: wrote {len(names)} usage card(s) -> {OUT.relative_to(ROOT)}")

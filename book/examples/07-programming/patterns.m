@@ -1,0 +1,12 @@
+# Ch.7 -- blanks, head-typed blanks, sequence blanks, MatchQ
+MatchQ[42, _Integer]
+MatchQ[3.14, _Integer]
+MatchQ[3.14, _Real]
+MatchQ[1/2, _Rational]
+MatchQ[3 + 4 I, _Complex]
+MatchQ[f[a, b], f[_, _]]
+MatchQ[f[a, b, c], f[__]]
+MatchQ[f[], f[__]]
+MatchQ[f[], f[___]]
+MatchQ[{1, 2, 3, 4}, {___, 3, ___}]
+{f[1], f[x], f[1, 2]} /. f[n_Integer] :> square[n]

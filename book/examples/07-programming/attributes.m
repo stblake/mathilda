@@ -1,0 +1,11 @@
+# Ch.7 -- attributes drive evaluation: Orderless, Flat, Listable
+Attributes[Plus]
+SetAttributes[circ, Orderless]
+circ[c, a, b]
+SetAttributes[gp, Flat]
+gp[a, gp[b, c], d]
+SetAttributes[hl, Listable]
+hl[{1, 2, 3}]
+hl[{1, 2}, {3, 4}]
+ClearAttributes[hl, Listable]
+hl[{1, 2, 3}]

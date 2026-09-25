@@ -460,6 +460,17 @@ casting out nines.}
 \(1\), two \(2\)s, three \(3\)s, four \(4\)s (the final slot counts the zeros).}
 \end{codepairs}
 
+Base two earns its own function. \B{BitLength} returns the number of binary digits---the
+position of the highest set bit---which is \B{IntegerLength} in base \(2\), and the natural
+measure of how many bits a number occupies:
+
+\begin{codepairs}
+\pair{number-theory/digits/11}{\B{BitLength} of \(255\) is \(8\): the eight ones of pair~2
+above.}
+\pair{number-theory/digits/12}{It is exact for arbitrarily large integers---\(2^{100}\)
+needs \(101\) bits, the leading one plus a hundred zeros.}
+\end{codepairs}
+
 \usagebox{IntegerDigits}
 
 \subsection{Combinatorial number theory}

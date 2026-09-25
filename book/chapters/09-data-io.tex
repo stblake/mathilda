@@ -1,5 +1,370 @@
 \chapter{Data I/O}
 \label{ch:dataio}
 
-\emph{This chapter is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+Every computation so far has begun and ended inside the session: you typed an
+expression, Mathilda evaluated it, and the result scrolled past. This chapter is
+about the doorway to the world outside that session---reading numbers a
+colleague measured and left in a file, saving a result so the next run can pick
+it up, turning a table on disk into a list you can compute with. It is the least
+mathematical chapter in the book and, for day-to-day work, one of the most
+useful.\index{file I/O}
+
+A word of honesty before we begin. Input and output is a \emph{young} part of
+Mathilda, and this chapter is deliberately narrow: it documents what the system
+actually does today and is explicit about what it does not. What exists is a
+genuine, Mathematica-shaped \emph{stream layer}---you open a file, get a stream
+object, and read or write through it---together with \B{ReadList} for reading a
+data file field by field, \B{Get} and \B{Put} for saving and reloading whole
+Mathilda expressions, and a handful of pure path utilities. What does \emph{not}
+yet exist is just as important to know: there is no general \B{Import}/\B{Export}
+of data formats (those two are confined to raster images and graphics,
+\S\ref{sec:io-importexport}), no binary read/write, and no file-management verbs
+such as copying or deleting. Where a gap matters, this chapter names it rather
+than papering over it.
+
+Because every example in this book is re-run from scratch at build time (this
+chapter is no exception), each one here is self-contained: it writes a
+file under \texttt{/tmp} and then reads that same file back, so nothing depends
+on data that happens to be lying around. That discipline is worth adopting in
+your own scripts, and it makes the round trip---write, then read---the natural
+place to start.
+
+\section{The round trip: writing and reading a file}
+\label{sec:io-roundtrip}
+
+The smallest complete story in file I/O is to write something and read it back.
+Three functions open the door. \B{OpenWrite} opens a file for writing and hands
+back a stream object; \B{WriteString} sends raw text to that stream; and \B{Close}
+finishes, flushing and releasing the file. To read the data back as numbers,
+\mcode{ReadList} does the whole job in one call.
+
+\begin{codepairs}
+\pair{09-data-io/roundtrip/1}{\mcode{OpenWrite} truncates the file and returns an
+\B{OutputStream} object. The integer is an internal handle---the first stream
+opened this session, so \(1\).}
+\pair{09-data-io/roundtrip/2}{\mcode{WriteString} sends two lines of text to the
+stream; the trailing semicolon suppresses its (empty) result.}
+\pair{09-data-io/roundtrip/3}{\mcode{Close} flushes and releases the file,
+returning its name to confirm the stream is shut.}
+\pair{09-data-io/roundtrip/4}{\B{FileExistsQ} confirms the file is really on
+disk.}
+\pair{09-data-io/roundtrip/5}{\mcode{ReadList} with the read type \texttt{Number}
+scans the whole file and returns its six numbers as a flat list.}
+\end{codepairs}
+
+Two things are worth pausing on. First, the newline in the string
+\texttt{"88 91 79\textbackslash n95 82 100\textbackslash n"} is a real newline:
+Mathilda's string lexer honors the C escapes \mcode{\textbackslash n} and
+\mcode{\textbackslash t}, so you can lay out a file's lines directly in a string
+literal.\index{string!escape sequences} Second, \mcode{ReadList} did not care that
+the six numbers were split across two lines---read as \texttt{Number}, whitespace
+and line breaks alike simply separate one token from the next. Where the numbers
+sit in the file is a formatting detail; what you get back is the data.
+
+\calloutnote{Under the hood}{A stream reaches the language as an inert object,
+\mcode{OutputStream}\texttt{["name", }\emph{id}\texttt{]} or
+\B{InputStream}\texttt{["name", }\emph{id}\texttt{]}, whose integer is a handle
+into a process-global registry (\texttt{src/io/streams.c}). An output stream
+holds an open \texttt{FILE*}; an input stream slurps the whole file into a buffer
+with a moving read point. The registry is freed by \mcode{Close} or, for anything
+left open, by an \texttt{atexit} hook at program exit, so a session that forgets
+to close a stream still leaks nothing under valgrind.}
+
+\usagebox{OpenWrite}
+
+\section{Type-directed reading}
+\label{sec:io-readtypes}
+
+The power of \mcode{ReadList} is that you tell it \emph{what kind} of object to read,
+and it interprets the bytes accordingly. The same file can be read as numbers, as
+words, as whole lines, or as raw bytes---you choose by naming a \emph{read type}.
+Take a small table with integers, decimals, and scientific-notation tokens:
+
+\begin{codepairs}
+\pair{09-data-io/readtypes/4}{\texttt{Number} reads each token as a number:
+integers stay exact, and \texttt{2e5}/\texttt{1.5e-3} become reals.}
+\pair{09-data-io/readtypes/5}{\texttt{Real} forces every token to an approximate
+number, so even \(1\) comes back as \(1.0\).}
+\pair{09-data-io/readtypes/6}{\texttt{Word} keeps each token as a string, doing no
+numeric parsing at all.}
+\pair{09-data-io/readtypes/7}{\texttt{String} reads a whole line at a time---three
+lines, three strings.}
+\pair{09-data-io/readtypes/8}{\texttt{Byte} reads raw byte codes; the first five
+bytes of \texttt{"1 2 3"} are the ASCII codes \(49, 32, 50, 32, 51\).}
+\pair{09-data-io/readtypes/9}{\texttt{Character} reads one-character strings,
+byte by byte.}
+\pair{09-data-io/readtypes/10}{A third argument caps the read: only the first
+three numbers.}
+\end{codepairs}
+
+So the same bytes on disk become, depending on the type you ask for, seven
+numbers, seven words, three whole lines, or a stream of raw byte codes. The read
+type is the lens.\index{ReadList@\mcode{ReadList}!read types}
+
+A \emph{list} of types reads a heterogeneous record: one object of each type per
+pass, grouped into a sublist, repeated to end of file. This is exactly how you
+read a columnar file whose fields have different types---a name and an age, say:
+
+\begin{codepairs}
+\pair{09-data-io/readtypes/14}{\texttt{\{Word, Number\}} reads a string then a
+number on each pass, giving one \(\{\text{name}, \text{age}\}\) pair per line.}
+\pair{09-data-io/readtypes/18}{When end of file arrives partway through a
+pass---here after the lone \(3\)---the unread slot is filled with \B{EndOfFile}
+rather than dropped, so the record structure stays intact.}
+\end{codepairs}
+
+That \mcode{EndOfFile} in the last pair is not an error; it is how the reader tells
+you a record was cut short, so a ragged file never silently loses its shape.
+
+\calloutnote{Theory}{The read types divide cleanly by what counts as a boundary.
+\texttt{Byte} and \texttt{Character} consume exactly one byte and never look for a
+separator. \texttt{Word}, \texttt{Number}, and \texttt{Real} scan up to the next
+\emph{word separator} (whitespace by default). \texttt{Record} and \texttt{String}
+scan up to the next \emph{record separator} (a line break). \texttt{Expression}
+reads one complete Mathilda expression---the type that makes \mcode{Get} and
+\mcode{ReadList} interchangeable for saved results (\S\ref{sec:io-putget}).}
+
+\usagebox{ReadList}
+
+\section{Separators and delimited data}
+\label{sec:io-separators}
+
+The word and record separators are not fixed; you set them with options, and that
+is what lets \mcode{ReadList} read comma-separated values, tab-separated files, and
+other delimited formats. \texttt{WordSeparators} names the strings that break one
+token from the next:
+
+\begin{codepairs}
+\pair{09-data-io/separators/4}{With \texttt{WordSeparators -> \{","\}}, the comma
+becomes the delimiter and a CSV of numbers reads as a flat list.}
+\pair{09-data-io/separators/5}{Pair the comma delimiter with a type list to read
+the CSV row by row into sublists---a small numeric matrix.}
+\end{codepairs}
+
+The complementary option, \texttt{TokenWords}, forces a given string to be split
+off as its own word even when nothing surrounds it---useful when an operator or
+punctuation mark is glued to its neighbors:
+
+\begin{codepairs}
+\pair{09-data-io/separators/9}{Read as plain \texttt{Word}s, \texttt{"a+b"} is a
+single token---there is no separator inside it.}
+\pair{09-data-io/separators/10}{\texttt{TokenWords -> \{"+"\}} makes the plus sign
+a word in its own right, splitting the run into three.}
+\end{codepairs}
+
+Alongside these, \texttt{RecordSeparators} sets what ends a line (the default is
+the usual trio of \texttt{"\textbackslash r\textbackslash n"},
+\texttt{"\textbackslash n"}, and \texttt{"\textbackslash r"}), and the boolean
+options \texttt{NullWords} and \texttt{NullRecords} decide whether empty fields
+between adjacent separators are kept or skipped---the difference between reading
+\texttt{a,,b} as two fields or three.\index{separator!word}\index{separator!record}
+Between them, these options cover the common shapes of plain-text tabular
+data.
+
+\calloutnote{Pitfall}{Mathilda has no dedicated CSV importer---a comma-delimited
+file is just a file you hand the right \texttt{WordSeparators}. That is flexible,
+but it also means the quoting and escaping conventions of the CSV standard
+(quoted fields containing commas, doubled quotes) are \emph{not} understood: a
+field is whatever lies between separators, quotes and all. For clean numeric
+tables this is exactly right; for messy real-world CSV with embedded commas, it
+is a sharp edge to know about.}
+
+\section{The stream as a cursor}
+\label{sec:io-streams}
+
+\mcode{ReadList} reads a whole file in one gulp. When you want to read a file
+\emph{incrementally}---a header, then a body sized by what the header said, or a
+record at a time in a loop---you open the file yourself and read through the
+stream. \B{OpenRead} returns an \mcode{InputStream} that carries a persistent
+\emph{current point}, and each \B{Read} advances it, so successive reads return
+successive objects.
+
+\begin{codepairs}
+\pair{09-data-io/streams/4}{\mcode{OpenRead} returns an \mcode{InputStream}. Its handle
+is \(2\): the write stream that created the file was handle \(1\).}
+\pair{09-data-io/streams/5}{\mcode{Read} takes one object and moves the point past it.}
+\pair{09-data-io/streams/6}{The next \mcode{Read} continues from where the last one
+stopped---the cursor persists.}
+\pair{09-data-io/streams/7}{A read type may itself be a list: this reads the next
+two numbers as a pair.}
+\pair{09-data-io/streams/8}{\B{StreamPosition} reports the current point as a byte
+offset into the file.}
+\pair{09-data-io/streams/9}{\B{Streams} lists every stream still open.}
+\pair{09-data-io/streams/10}{\B{SetStreamPosition} moves the point---here back to
+the start, returning the new offset.}
+\pair{09-data-io/streams/11}{So the very next \mcode{Read} yields the first number
+again.}
+\end{codepairs}
+
+Positioning turns a stream into random-access storage: \mcode{StreamPosition} tells
+you where you are, \mcode{SetStreamPosition} takes you anywhere in the file (and
+\texttt{SetStreamPosition[}stream\texttt{, Infinity]} jumps to the end). Because a
+type structure can nest, a single \mcode{Read} can pull in a whole shaped object---a
+matrix, for instance, read as a list of rows:
+
+\begin{codepairs}
+\pair{09-data-io/streams/17}{A nested type structure fills depth-first, so this
+reads the file's four numbers into a \(2\times 2\) matrix in one call.}
+\pair{09-data-io/streams/21}{Once the point is past the last object, \mcode{Read}
+returns \mcode{EndOfFile}---the sentinel a read loop watches for to stop.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\mcode{ReadList} is not a separate engine---it is literally
+a loop of the same \texttt{read\_structure()} routine that \mcode{Read} calls once
+(\texttt{src/io/read.c}), run to end of file. That is why the two share their read
+types and every separator option to the letter: there is one reader, exposed two
+ways. The \texttt{Expression} leaf is read \emph{unevaluated} and handed to the
+ordinary evaluator, which is why \texttt{Read[s, Expression]} evaluates what it
+read while \texttt{Read[s, Hold[Expression]]} keeps it held.}
+
+\section{Persisting expressions: Put, Get, and Write}
+\label{sec:io-putget}
+
+The reading so far has treated a file as \emph{data}---numbers and words. But a
+file can also hold Mathilda \emph{expressions}, written in the same input syntax
+you type at the prompt, and this is how you save a result and reload it in a later
+session. \B{Write} sends an expression to a stream in input form; \mcode{Put} (and its
+operator \mcode{>>}) writes to a named file; \mcode{Get} reads a file back, evaluating
+as it goes.
+
+First, the distinction between the two ways of writing. \mcode{Write} renders each
+argument in input form and---crucially---\emph{evaluates} it first, whereas
+\mcode{WriteString} writes its text raw:
+
+\begin{codepairs}
+\pair{09-data-io/putget/6}{Reading the file back as lines shows what was written:
+\mcode{Write}\texttt{[s, 2 + 2]} evaluated to \texttt{4} before writing, \(x^2+1\) was
+written in input form, and \mcode{WriteString}'s text went out verbatim.}
+\end{codepairs}
+
+For saving results, the \mcode{>>} operator and \mcode{Get} are the everyday tools.
+\mcode{>>} is shorthand for \mcode{Put}: it writes one expression to a file, replacing
+whatever was there. \mcode{>>>} is \B{PutAppend}: it adds to the file instead.
+
+\begin{codepairs}
+\pair{09-data-io/putget/7}{\texttt{FactorInteger[40320] >> file} writes the
+factorization of \(8!\) to a file (the result is suppressed).}
+\pair{09-data-io/putget/8}{\mcode{Get} reads the file, evaluating each expression, and
+returns the value of the last---here the one factorization we wrote.}
+\pair{09-data-io/putget/11}{After two \mcode{>>>} appends, \mcode{Get} returns only
+the \emph{last} expression in the file: the factorization of \(100\).}
+\pair{09-data-io/putget/12}{\mcode{ReadList} reads the same file as
+\texttt{Expression}s and \emph{collects} all three, rather than keeping only the
+last.}
+\end{codepairs}
+
+That contrast between pairs is the whole design. \mcode{Get} is for \emph{loading}: it
+runs a file as a script and gives you the final value, exactly as the REPL
+bootstrap loads Mathilda's own startup definitions. \mcode{ReadList} is for
+\emph{collecting}: it gathers every expression into a list. \mcode{Put} writes several
+expressions at once, and they round-trip through \mcode{ReadList} unchanged:
+
+\begin{codepairs}
+\pair{09-data-io/putget/13}{\mcode{Put} writes two expressions, one per line.}
+\pair{09-data-io/putget/14}{\mcode{ReadList} reads them straight back---a symbolic
+result saved to disk and recovered intact.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\mcode{Get} and \mcode{Put} predate the stream layer and live
+in \texttt{src/readwrite.c}; \mcode{Get} shares its file-reading core with
+\texttt{LoadModule}, the same machinery that loads \texttt{src/internal/init.m} at
+startup. Because \mcode{Put} renders with the standard printer, a saved file is
+ordinary Mathilda source---you can open it in an editor, and \mcode{Get} it back like
+any script.}
+
+\usagebox{Get}
+
+\section{File names and existence}
+\label{sec:io-filenames}
+
+The last group of functions is the plumbing around the files themselves: testing
+whether a path exists and taking a file name apart. \mcode{FileExistsQ} is the one
+that touches the disk; the rest are pure string operations on the path, and never
+open anything.
+
+\begin{codepairs}
+\pair{09-data-io/filenames/4}{\mcode{FileExistsQ} is \texttt{True} for a file we just
+wrote\ldots}
+\pair{09-data-io/filenames/5}{\ldots and \texttt{False} for one that is not there.}
+\pair{09-data-io/filenames/6}{\B{FileExtension} returns the trailing extension,
+without the dot.}
+\pair{09-data-io/filenames/7}{\B{FileBaseName} returns the leaf with that one
+extension stripped---note it splits off only the last suffix.}
+\pair{09-data-io/filenames/10}{\B{FileNameSplit} breaks a path into its
+components; the leading \texttt{""} marks an absolute path.}
+\pair{09-data-io/filenames/11}{\B{FileNameJoin} is the inverse, assembling
+components with the OS separator.}
+\pair{09-data-io/filenames/12}{Split then join round-trips to a canonical form of
+the original path.}
+\end{codepairs}
+
+These are string surgery, portable and side-effect-free---\mcode{FileNameJoin} and
+\mcode{FileNameSplit} even take an \texttt{OperatingSystem} option so you can
+manipulate Windows paths from Unix or vice versa.\index{file path!components} One
+more console convenience rounds out the set: \B{FilePrint} streams the raw bytes
+of a file straight to your terminal, the equivalent of the shell's
+\texttt{cat}, with optional line ranges (\texttt{FilePrint["f", 1;;10]}). It
+writes as a side effect and returns nothing, which is precisely why it does not
+appear in the verified transcripts of this chapter---there is no value to
+capture. Throughout, we have shown a file's contents by reading them back as data
+with \mcode{ReadList}; \mcode{FilePrint} is the quick look when you are at the prompt.
+
+\section{Import and Export: images and graphics}
+\label{sec:io-importexport}
+
+A reader coming from Mathematica will expect \mcode{Import} and \mcode{Export} to be the
+universal front door for data---CSV, JSON, spreadsheets, and a hundred other
+formats. In Mathilda today they are far narrower, and it is important to be plain
+about it: \mcode{Import} and \mcode{Export} handle \emph{raster images and graphics
+only}. An image round-trips cleanly through a file---
+
+\begin{codepairs}
+\pair{09-data-io/importexport/2}{\mcode{Export} writes an image to a PNG and returns
+the file name.}
+\pair{09-data-io/importexport/3}{\mcode{Import} reads it back; the dimensions survive
+the round trip.}
+\end{codepairs}
+
+---but a data file is not something they claim, and they say so by declining
+rather than guessing:
+
+\begin{codepairs}
+\pair{09-data-io/importexport/7}{Handed a plain text file, \mcode{Import} stays
+unevaluated---its head comes back as \texttt{Import}, the sign of a call left
+alone, not a \mcode{\$Failed}.}
+\pair{09-data-io/importexport/8}{Likewise \mcode{Export} declines to write a bare list
+to a \texttt{.csv}: there is no data-format writer behind it yet.}
+\end{codepairs}
+
+The image and graphics side of \mcode{Import}/\mcode{Export} is real and useful---PNG,
+JPEG, BMP, and a resolution-independent vector PDF for plots---and it belongs to
+the graphics story, so the graphics chapter (Chapter~\ref{ch:graphics}) develops
+it in full. For structured \emph{data}, the honest advice is to reach for the
+tools of this chapter instead: \mcode{ReadList} with the right separators for tabular
+text, and \mcode{Put}/\mcode{Get} for anything expressible as Mathilda expressions. A
+general format layer is future work, not a present feature.
+
+\calloutnote{Pitfall}{The difference between an unevaluated result and
+\mcode{\$Failed} is a real signal, not a quirk. \mcode{\$Failed} means ``I tried
+and could not''---a missing file, a malformed number. A call that comes back with
+its own head, like \texttt{Import[\ldots]} above, means ``I do not handle this at
+all,'' leaving the expression untouched so a rule of your own could still act on
+it. Reading that distinction saves you from debugging a failure that never
+happened.}
+
+\subsection*{Where this connects}
+
+Data I/O is the seam between Mathilda and everything outside it, and its two
+halves lead in different directions. The \emph{data} side---\mcode{ReadList} and the
+stream layer---feeds the rest of the book: a file of measurements read as a packed
+list of numbers is exactly the input the statistics of \S\ref{sec:statistics}
+summarize and the array engine of Chapter~\ref{ch:datastructures} accelerates,
+and reading a matrix with a nested \mcode{Read} structure produces the same lists that
+the linear algebra of \S\ref{sec:linalg} operates on. The \emph{expression}
+side---\mcode{Put} and \mcode{Get}---is how a symbolic result outlives its session and how
+Mathilda loads its own definitions at startup, a thread the internals chapter
+(Chapter~\ref{ch:internals}) picks up. The image and graphics forms of \mcode{Import}
+and \mcode{Export} are taken up in Chapter~\ref{ch:graphics}. And for the exhaustive
+options of any function named here---every read type, every separator, every
+edge case of a path utility---its reference page is one \texttt{?Name} away at the
+prompt.

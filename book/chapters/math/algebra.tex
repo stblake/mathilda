@@ -65,6 +65,28 @@ These are the lenses through which the heavier operations see a polynomial, and 
 those operations---expansion, factoring, division---returns an ordinary expression you
 can hand straight back to another.
 
+Two further views matter once there is more than one variable. \B{CoefficientList}
+returns a dense array, which is wasteful for a polynomial with few terms in many
+variables; \B{CoefficientRules} instead gives the \emph{sparse} representation---each
+term as a rule from its exponent vector to its coefficient---and \B{MonomialList}
+returns the individual monomial terms. \B{FromCoefficientRules} inverts the sparse
+form.
+
+\begin{codepairs}
+\pair{algebra/sparsepoly/1}{\B{MonomialList} splits the expanded cube into its four
+monomial terms.}
+\pair{algebra/sparsepoly/2}{\B{CoefficientRules} is the sparse view: exponent vector
+\(\{i,j\}\) (the powers of \(x\) and \(y\)) mapped to its coefficient---the binomial
+coefficients of \((x+y)^3\).}
+\pair{algebra/sparsepoly/3}{\B{FromCoefficientRules} rebuilds the polynomial from
+those rules.}
+\end{codepairs}
+
+The sparse form is the one the multivariate machinery actually uses: it is exactly
+FLINT's \texttt{fmpq\_mpoly} exponent-coefficient encoding surfaced at the language
+level, so a polynomial in a dozen variables with a handful of terms is stored and
+manipulated in space proportional to the terms, not to the dense monomial grid.
+
 \subsection{Expanding and collecting}
 \label{ssec:alg-expand}
 
@@ -108,7 +130,9 @@ factorization is unique up to order and rational multiples, and Mathilda compute
 exactly. \B{FactorList} returns the same information as a list of
 $\{\text{factor}, \text{multiplicity}\}$ pairs; \B{FactorTerms} pulls out only the
 numeric content; and \B{FactorSquareFree} does a partial job that is worth understanding
-because it is the first step of the full algorithm.
+because it is the first step of the full algorithm---\B{FactorSquareFreeList} returns
+that same partial decomposition as a list of $\{\text{factor}, \text{multiplicity}\}$
+pairs, the square-free analogue of \B{FactorList}.
 
 \begin{codepairs}
 \pair{algebra/factor/1}{\B{Factor} splits $x^6-1$ into four irreducible pieces over
@@ -198,10 +222,68 @@ machinery of the previous subsection, and lift each factor back by a GCD. A towe
 $\mathbb{Q}(\alpha_1,\ldots,\alpha_n)$ is first collapsed to a single
 \emph{primitive element}\index{primitive element theorem} $\gamma$ by the same
 resultant construction, so the multi-generator case needs no new ideas. The code is in
-\texttt{src/poly/qafactor.c}.} Mathilda represents an algebraic number not by a special
-\texttt{AlgebraicNumber} head but by a \B{Root} object---an exact reference to ``the
-$k$-th root of this polynomial''---and \B{ToRadicals} will re-express such a root in
-radicals when a radical form exists.
+\texttt{src/poly/qafactor.c}.} Mathilda has two complementary ways to name an
+algebraic number. A \B{Root} object---``the $k$-th root of this polynomial''---is the
+implicit form the equation solvers return, and \B{ToRadicals} re-expresses one in
+radicals when a radical form exists. When instead you want to \emph{compute} inside a
+fixed field---to add, multiply, and divide its elements and keep every result in that
+same field---the explicit \B{AlgebraicNumber} representation is the right tool, and it
+is the subject of the next subsection.
+
+\subsection{Working in a number field}
+\label{ssec:alg-numberfield}
+
+The previous subsection factored \emph{over} a number field; this one computes
+\emph{inside} one. \B{ToNumberField} takes an algebraic number, adjoins a generator
+\(\theta\), and returns the number as an element of \(\mathbb{Q}(\theta)\) written in
+the \emph{power basis}\index{power basis} \(1, \theta, \theta^2, \ldots,
+\theta^{d-1}\): an \B{AlgebraicNumber} object carrying the generator and a vector of
+rational coordinates. Once a number is in that form, the four field operations stay
+inside the field and reduce to a canonical representative.
+
+\begin{codepairs}
+\pair{algebra/numberfield/1}{\B{ToNumberField} adjoins \(\sqrt2\) and writes the
+number in the power basis \(\{1,\sqrt2\}\): the coordinate vector \(\{0,1\}\) means
+\(0\cdot1 + 1\cdot\sqrt2\).}
+\pair{algebra/numberfield/2}{Arithmetic stays in the field and reduces---\(a^2\) is
+the rational \(2\).}
+\pair{algebra/numberfield/3}{\((1+\sqrt2)(1-\sqrt2) = 1-2 = -1\), again a rational.}
+\pair{algebra/numberfield/4}{Division too: \(1/(1+\sqrt2) = \sqrt2-1\), the
+coordinate vector \(\{-1,1\}\).}
+\pair{algebra/numberfield/5}{A tower collapses to a single \emph{primitive element}:
+\(\sqrt2+\sqrt3\) generates the degree-\(4\) field \(\mathbb{Q}\) adjoin a root of
+\(x^4-10x^2+1\), and the number is that generator itself.}
+\pair{algebra/numberfield/6}{\B{AlgebraicNumberNorm}: the field norm of \(\sqrt2\)
+over \(\mathbb{Q}\), the product of its conjugates \(\pm\sqrt2\), is \(-2\).}
+\pair{algebra/numberfield/7}{\B{AlgebraicNumberTrace}: the sum of the conjugates,
+\(\sqrt2 + (-\sqrt2) = 0\).}
+\pair{algebra/numberfield/8}{\B{NumberFieldIntegralBasis}: the ring of integers of
+\(\mathbb{Q}(\sqrt5)\) is spanned by \(1\) and \((1+\sqrt5)/2\)---\emph{not} by
+\(\sqrt5\) alone.}
+\pair{algebra/numberfield/9}{\B{AlgebraicIntegerQ} confirms the golden ratio
+\((1+\sqrt5)/2\), a root of \(x^2-x-1\), is an algebraic integer\ldots}
+\pair{algebra/numberfield/10}{\ldots while \(1/2\) is not.}
+\end{codepairs}
+
+The norm and trace are not ad hoc: \(\mathbb{Q}(\theta)\) is a \(d\)-dimensional
+vector space over \(\mathbb{Q}\), and multiplication by a fixed element \(\alpha\) is
+a linear map on that space. Its determinant is the \B{AlgebraicNumberNorm} and its
+trace the \B{AlgebraicNumberTrace}---equivalently, the product and sum of the
+\(d\) conjugates of \(\alpha\).\calloutnote{Theory}{An \emph{algebraic
+integer}\index{algebraic integer} is a root of a monic polynomial with \emph{integer}
+coefficients; the algebraic integers of \(\mathbb{Q}(\theta)\) form a ring, its
+\emph{ring of integers}\index{ring of integers}, and \B{NumberFieldIntegralBasis}
+returns a \(\mathbb{Z}\)-basis for it. That ring is generally \emph{larger} than
+\(\mathbb{Z}[\theta]\): for \(\mathbb{Q}(\sqrt d)\) with \(d\) square-free it is
+\(\mathbb{Z}[\sqrt d]\) when \(d\equiv 2,3 \pmod 4\) but
+\(\mathbb{Z}\!\big[\tfrac{1+\sqrt d}{2}\big]\) when \(d\equiv 1\pmod 4\)---which is
+exactly why \(\sqrt5\) yields the golden-ratio basis element above. Mathilda builds
+these fields on FLINT's \texttt{qqbar} and \texttt{nf\_elem} number-field
+arithmetic~\cite{flint}.} A \B{Root} object and an \B{AlgebraicNumber} name the same
+numbers from opposite ends---the former implicit and canonical for solving, the latter
+explicit and closed under arithmetic---and \B{RootReduce} moves between them.
+
+\usagebox{ToNumberField}
 
 \subsection{GCD, resultants, and elimination}
 \label{ssec:alg-gcd}
@@ -373,6 +455,31 @@ theorem underwrites both \B{Eliminate} and the triangular back-substitution the 
 solver of \S\ref{ssec:alg-solve-systems} walks down; Cox--Little--O'Shea~\cite{clo} give
 it with the implicitization algorithm.}
 
+\subsection{Division and ideal membership}
+\label{ssec:alg-polyreduce}
+
+A Gr\"obner basis answers the ideal-membership question ``is $f$ a consequence of
+these polynomials?'' by a single multivariate division, and \B{PolynomialReduce}
+performs that division explicitly. Given a polynomial and a list of divisors, it
+returns the \emph{cofactors}---one quotient per divisor---and the \emph{remainder}
+left over.
+
+\begin{codepairs}
+\pair{algebra/polyreduce/1}{Dividing $x^2+y^2$ by $\{x-y,\,x+y\}$ gives cofactors
+$\{x+y,\,0\}$ and remainder $2y^2$: indeed $(x+y)(x-y) + 0\cdot(x+y) + 2y^2 =
+x^2+y^2$.}
+\pair{algebra/polyreduce/2}{The remainder is what decides membership. Here it is the
+nonzero constant $5$, so $xy-1$ does \emph{not} lie in the ideal
+$\langle x-2,\,y-3\rangle$---equivalently, $xy-1$ does not vanish at the point
+$(2,3)$.}
+\end{codepairs}
+
+When the divisors form a Gr\"obner basis, this division is \emph{canonical}: the
+remainder is zero exactly when the polynomial lies in the ideal, and is otherwise a
+unique normal form independent of the order in which the divisors are tried. That is
+the computational payoff of \S\ref{ssec:alg-groebner}---the basis turns an
+undecidable-looking membership question into one division.
+
 \subsection{Solving a polynomial equation}
 \label{ssec:alg-solve-poly}
 
@@ -498,6 +605,38 @@ solutions, surfaced by name.
 cell: $x$ sweeps the interval $[-1,1]$, and for each such $x$ the fibre in $y$ is the segment
 between the two arcs $\pm\sqrt{1-x^2}$ (printed here in the equivalent form
 $\pm\frac12\sqrt{4-4x^2}$).}
+\end{codepairs}
+
+\B{Reduce} is not confined to polynomials. It also solves \emph{transcendental}
+equations---trigonometric, exponential, logarithmic---returning, in keeping with its
+contract, the complete solution set rather than one branch.
+
+\begin{codepairs}
+\pair{algebra/transcendental/1}{Over a bounded interval a trigonometric equation has
+finitely many solutions, and \B{Reduce} lists them: \(\sin x = \tfrac12\) on
+\([0,2\pi)\) holds at \(\pi/6\) and \(5\pi/6\).}
+\pair{algebra/transcendental/2}{Unbounded, the answer is the full \emph{periodic
+family}, parametrised by an integer \(C[1]\)---every odd multiple of \(\pi/2\).}
+\pair{algebra/transcendental/3}{An exponential equation is solved over the complex
+numbers, so every branch appears: \(e^x = 5\) at \(\log 5\) plus integer multiples of
+\(2\pi i\).}
+\pair{algebra/transcendental/4}{And a logarithm is inverted directly: \(\log x = 2\)
+gives \(x = e^2\).}
+\end{codepairs}
+
+The periodic and multi-branch answers are the transcendental face of the same
+completeness promise: where a polynomial equation has finitely many roots, a
+trigonometric or exponential one has an infinite lattice of them, and \B{Reduce}
+names the whole lattice with an integer parameter rather than reporting only the
+principal solution. That same refusal to settle for a partial answer now reaches
+\B{Simplify} acting on \B{Root} objects, whose arithmetic it collapses exactly:
+
+\begin{codepairs}
+\pair{algebra/transcendental/5}{The square of the second root of \(x^2-2\) is exactly
+the rational \(2\)---\B{Simplify} recognises the algebraic identity rather than
+returning to a decimal.}
+\pair{algebra/transcendental/6}{And the two roots of \(x^2-2\), being \(\pm\sqrt2\),
+sum to \(0\).}
 \end{codepairs}
 
 Solving over the \emph{integers}---Diophantine equations---is a different world of methods
