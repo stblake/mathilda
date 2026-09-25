@@ -671,3 +671,30 @@ hang/45 s → ~0.07 s with identical answers; exponential-product control (`E^(-
 still 0.003 s (linearity gate didn't harm it). 14 integrate test suites PASS (goursat, dispatch,
 derivdivides, parallelmixedtower, chebychev, linrad, quadrad, linratiorad, fresnel, jeffrey,
 risch_transcendental, symmetry, beta, unknown). Clean gcc-16 build. v0.191, docs + changelog updated.
+
+# Association overhaul (branch `association-overhaul`, started 2026-09-25)
+
+Source: `reports/association/` (the 5-angle audit against Mathematica 15). Seven parallel streams, each in its own worktree, merged here one by one with a version bump per stream.
+
+- [ ] S1 **Atomicity and patterns**: AtomQ/Depth/Level/FreeQ/OrderedQ; `/.` leaves keys alone; Map/Apply/Replace level specs; AssociationQ checks well-formedness; an association works as a rule set; `==` on associations.
+- [ ] S2 **Mutation and write performance**:
+  - fix `+=`/`++`/`--`/`*=`, `a[k]=.`, KeyDropFrom, `Delete[a,Key[k]]`, `a[k1][k2]=v`;
+  - O(1) in-place updates with an incremental index;
+  - drop the double canonicalisation and cut memory per entry;
+  - keep RuleDelayed on rebuild; make the index and the scan agree;
+  - add bench gates; fix the stale comments.
+- [ ] S3 **Read-side Part and ordering**: `[[span]]`, `[[{..}]]`, `[[All]]`, `a[Key[k]]`; `Sort[a,p]`, `KeyTake` order, `Prepend`, `Catenate`, `Partition`, `KeySort[a,p]`, `Insert` with Key, `Pick` with an association mask, multi-level `GroupBy`.
+- [ ] S4 **Parser, Minus and operator forms**: `#name`; `Slot["k"]` on associations; `Minus[3]`; curried forms of every association head plus `Select[p]`/`Apply[f]`; lazy `Lookup` default; `KeyMemberQ` patterns.
+- [ ] S5 **New heads and threading**:
+  - new heads: KeyIntersection, KeyComplement, MissingQ, JoinAcross, ApplyTo, Transpose, Discard, CountDistinct, SubsetQ;
+  - extended forms: KeyUnion fill, `Keys`/`Values` with a function and over lists, AssociationMap and PositionIndex on associations, Merge of rule lists, nested rule lists, deep `Normal`;
+  - arithmetic threading over associations;
+  - docs for Key and Missing.
+- [ ] S6 **Packed, NDArray and Compile**:
+  - packed PositionIndex; vectorised GroupBy;
+  - NDArray arguments to AssociationThread/AssociationMap/GroupBy;
+  - packed `Values`;
+  - Compile lowering of Keys, `p[k]` and Part; Map/Select as producers;
+  - update the audit lists.
+- [ ] S7 **Query, Dataset and JSON**: core Query operators, a minimal Dataset, RawJSON/JSON ImportString/ExportString.
+- [ ] Merge all streams; full ctest against main; leaks; re-run the Mathematica differential battery (`/tmp/assocreport/diff`) and the performance benchmarks; update docs and refpages; write the changelog.
