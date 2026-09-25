@@ -65,8 +65,9 @@ void test_key_operator_form() {
     assert_eval_eq("SortBy[{<|\"age\" -> 41|>, <|\"age\" -> 36|>}, Key[\"age\"]]",
                    "{<|\"age\" -> 36|>, <|\"age\" -> 41|>}", 0);
     assert_eval_eq("Map[Key[\"v\"], {<|\"v\" -> 1|>, <|\"v\" -> 2|>}]", "{1, 2}", 0);
-    /* The existing accessor assoc[Key[k]] is unchanged. */
-    assert_eval_eq("<|\"a\" -> 1|>[Key[\"a\"]]", "1", 0);
+    /* The accessor takes a LITERAL key: assoc[Key[k]] looks up Key[k]
+     * itself, as in Mathematica 15 (Part and Lookup unwrap Key). */
+    assert_eval_eq("<|\"a\" -> 1|>[Key[\"a\"]]", "Missing[\"KeyAbsent\", Key[\"a\"]]", 0);
 }
 
 void test_apply_over_association_values() {
@@ -213,17 +214,17 @@ void test_part_missing_key() {
 }
 
 void test_part_key_list() {
-    assert_eval_eq("<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>[[{\"a\", \"c\"}]]", "{1, 3}", 0);
+    assert_eval_eq("<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>[[{\"a\", \"c\"}]]", "<|\"a\" -> 1, \"c\" -> 3|>", 0);
 }
 
 void test_part_key_list_missing() {
     assert_eval_eq("<|\"a\" -> 1, \"b\" -> 2|>[[{\"a\", \"z\"}]]",
-                   "{1, Missing[\"KeyAbsent\", \"z\"]}", 0);
+                   "<|\"a\" -> 1, \"z\" -> Missing[\"KeyAbsent\", \"z\"]|>", 0);
 }
 
 void test_part_key_list_nested() {
     assert_eval_eq("<|\"a\" -> {10, 20}, \"b\" -> {30, 40}|>[[{\"a\", \"b\"}, 2]]",
-                   "{20, 40}", 0);
+                   "<|\"a\" -> 20, \"b\" -> 40|>", 0);
 }
 
 void test_part_zero_gives_head() {
@@ -246,7 +247,7 @@ void test_keydrop_list() {
 
 void test_keytake_list() {
     assert_eval_eq("KeyTake[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, {\"c\", \"a\"}]",
-                   "<|\"a\" -> 1, \"c\" -> 3|>", 0);  /* association order preserved */
+                   "<|\"c\" -> 3, \"a\" -> 1|>", 0);  /* requested order (Mathematica 15) */
 }
 
 void test_keydrop_keytake_over_records() {
@@ -548,10 +549,10 @@ void test_catenate() {
     assert_eval_eq("Catenate[{{1, 2}, {3, 4}, {5}}]", "{1, 2, 3, 4, 5}", 0);
     assert_eval_eq("Catenate[{}]", "{}", 0);
     assert_eval_eq("Catenate[{f[1, 2], f[3]}]", "f[1, 2, 3]", 0);
-    /* A list of associations merges into one (later keys win). */
+    /* Associations contribute their values (Mathematica 15). */
     assert_eval_eq("Catenate[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"b\" -> 3, \"c\" -> 4|>}]",
-                   "<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 4|>", 0);
-    assert_eval_eq("Catenate[{<||>, <|\"a\" -> 1|>}]", "<|\"a\" -> 1|>", 0);
+                   "{1, 2, 3, 4}", 0);
+    assert_eval_eq("Catenate[{<||>, <|\"a\" -> 1|>}]", "{1}", 0);
     /* Composes with GroupBy: flatten the grouped buckets back to one list. */
     assert_eval_eq("Catenate[Values[GroupBy[Range[6], EvenQ]]]", "{1, 3, 5, 2, 4, 6}", 0);
 }
@@ -1052,7 +1053,8 @@ void test_accessor_missing() {
 }
 
 void test_accessor_key_wrapper() {
-    assert_eval_eq("<|1 -> 10, 2 -> 20|>[Key[2]]", "20", 0);
+    assert_eval_eq("<|1 -> 10, 2 -> 20|>[Key[2]]", "Missing[\"KeyAbsent\", Key[2]]", 0);
+    assert_eval_eq("<|1 -> 10, 2 -> 20|>[[Key[2]]]", "20", 0);
 }
 
 void test_accessor_bound_symbol() {

@@ -1344,6 +1344,10 @@ add_executable(assoc_atomicity_tests test_assoc_atomicity.c $<TARGET_OBJECTS:mat
 target_link_libraries(assoc_atomicity_tests m)
 target_include_directories(assoc_atomicity_tests PRIVATE ../src)
 add_test(NAME assoc_atomicity_tests COMMAND assoc_atomicity_tests)
+add_executable(assoc_read_tests test_assoc_read.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(assoc_read_tests m)
+target_include_directories(assoc_read_tests PRIVATE ../src)
+add_test(NAME assoc_read_tests COMMAND assoc_read_tests)
 
 # Association performance regression gate: fails if a hash-backed op scales
 # worse than O(n) (doubling-ratio check; machine-independent).
@@ -3503,6 +3507,7 @@ if(USE_ECM)
     add_dependencies(association_tests build_ecm)
     add_dependencies(assoc_forms_tests build_ecm)
     add_dependencies(assoc_atomicity_tests build_ecm)
+    add_dependencies(assoc_read_tests build_ecm)
     add_dependencies(bench_assoc build_ecm)
     add_dependencies(bench_ndarray_linalg build_ecm)
     add_dependencies(bench_compile build_ecm)

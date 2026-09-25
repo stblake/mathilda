@@ -135,10 +135,12 @@ Expr* builtin_join(Expr* res) {
 }
 
 /* Catenate[{e1, e2, ...}] flattens one level: the ei must share a head, and
- * their elements are concatenated under it. A list of associations merges into
- * one association (later keys win, like Join), so it composes with GroupBy /
- * Merge pipelines that produce a list of associations. Returns NULL (leave
- * unevaluated) for a non-list argument or mixed heads. */
+ * their elements are concatenated under it. Associations take part through
+ * their VALUES, as in Mathematica 15: Catenate[{<|a -> 1|>, <|b -> 2|>}] is
+ * {1, 2}, Catenate[{<|a -> 1|>, {2, 3}}] is {1, 2, 3}, and the collection may
+ * itself be an association (Catenate[<|x -> {1, 2}, y -> <|q -> 3|>|>] is
+ * {1, 2, 3}). Returns NULL (leave unevaluated) for a non-list argument or
+ * mixed heads. */
 Expr* builtin_catenate(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* lst = res->data.function.args[0];
@@ -150,31 +152,57 @@ Expr* builtin_catenate(Expr* res) {
      * is Join. ndstruct_catenate handles both; anything else falls through. */
     { Expr* nd = ndstruct_catenate(res); if (nd) return nd; }
     if (is_ndarray(lst)) return ndarray_delist_and_reeval(res);
-    if (!(lst->type == EXPR_FUNCTION && lst->data.function.head->type == EXPR_SYMBOL &&
+    bool coll_assoc = is_association(lst);
+    if (!coll_assoc && !(lst->type == EXPR_FUNCTION && lst->data.function.head->type == EXPR_SYMBOL &&
           lst->data.function.head->data.symbol.name == SYM_List))
         return NULL;
 
     size_t m = lst->data.function.arg_count;
-    Expr** els = lst->data.function.args;
     if (m == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
-    /* All associations: merge their rules (assoc_from_rules copies and collapses
-     * duplicate keys with last-value-wins, preserving first-occurrence order). */
-    bool all_assoc = true;
-    for (size_t i = 0; i < m; i++)
-        if (!is_association(els[i])) { all_assoc = false; break; }
-    if (all_assoc) {
+    /* Any association involved: every part (the values, for an association
+     * collection) must be a List or an Association, and the result is the
+     * List of their elements / values. */
+    bool any_assoc = coll_assoc;
+    for (size_t i = 0; i < m && !any_assoc; i++)
+        if (is_association(lst->data.function.args[i])) any_assoc = true;
+    if (any_assoc) {
         size_t total = 0;
-        for (size_t i = 0; i < m; i++) total += els[i]->data.function.arg_count;
-        Expr** rules = malloc(sizeof(Expr*) * (total ? total : 1));
+        for (size_t i = 0; i < m; i++) {
+            Expr* e = lst->data.function.args[i];
+            if (coll_assoc) {
+                if (!is_rule2(e)) return NULL;
+                e = e->data.function.args[1];
+            }
+            bool is_l = e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+                        e->data.function.head->data.symbol.name == SYM_List;
+            if (!is_l && !is_association(e)) return NULL;
+            total += e->data.function.arg_count;
+        }
+        Expr** out_args = malloc(sizeof(Expr*) * (total ? total : 1));
         size_t k = 0;
-        for (size_t i = 0; i < m; i++)
-            for (size_t j = 0; j < els[i]->data.function.arg_count; j++)
-                rules[k++] = els[i]->data.function.args[j];   /* borrowed; copied inside */
-        Expr* out = assoc_from_rules(rules, total);
-        free(rules);
+        for (size_t i = 0; i < m; i++) {
+            Expr* e = lst->data.function.args[i];
+            if (coll_assoc) e = e->data.function.args[1];
+            bool ea = is_association(e);
+            for (size_t j = 0; j < e->data.function.arg_count; j++) {
+                Expr* x = e->data.function.args[j];
+                if (ea) {
+                    if (!is_rule2(x)) {
+                        for (size_t q = 0; q < k; q++) expr_free(out_args[q]);
+                        free(out_args);
+                        return NULL;
+                    }
+                    x = x->data.function.args[1];
+                }
+                out_args[k++] = expr_copy(x);
+            }
+        }
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), out_args, k);
+        free(out_args);
         return out;
     }
+    Expr** els = lst->data.function.args;
 
     /* Otherwise every element must be a function sharing a common head; their
      * arguments are concatenated under it ({{1,2},{3,4}} -> {1,2,3,4}). */

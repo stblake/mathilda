@@ -150,12 +150,13 @@ Expr* assoc_from_rules(Expr** rules, size_t count) {
             keys[nout] = k;
             value_slot[nout] = nout;
             ki_insert(&ki, slot, nout);
-            out[nout] = make_rule(expr_copy(k), expr_copy(v));
+            /* Keep the entry's own head, so a RuleDelayed stays delayed. */
+            out[nout] = assoc_entry_with_value(rules[i], expr_copy(v));
             nout++;
         } else {
             /* Key already present: overwrite the stored value (last wins). */
             size_t p = value_slot[idx];
-            Expr* newrule = make_rule(expr_copy(k), expr_copy(v));
+            Expr* newrule = assoc_entry_with_value(rules[i], expr_copy(v));
             expr_free(out[p]);
             out[p] = newrule;
         }
@@ -555,12 +556,48 @@ Expr* assoc_key_select(const Expr* assoc, const Expr* karg, bool take) {
     KeyIndex ki;
     if (!ki_init(&ki, nwanted)) return NULL;
     Expr** wk = malloc(sizeof(Expr*) * (nwanted ? nwanted : 1));
+    /* last[f] = position of the LAST occurrence of the key first seen at f. */
+    size_t* last = malloc(sizeof(size_t) * (nwanted ? nwanted : 1));
     for (size_t i = 0; i < nwanted; i++) {
         size_t slot, idx = ki_lookup(&ki, wk, wanted[i], &slot);
-        if (idx == SIZE_MAX) { wk[i] = wanted[i]; ki_insert(&ki, slot, i); }
+        if (idx == SIZE_MAX) { wk[i] = wanted[i]; ki_insert(&ki, slot, i); last[i] = i; }
+        else last[idx] = i;
     }
 
     size_t na = assoc->data.function.arg_count;
+    if (take) {
+        /* KeyTake keeps the REQUESTED order (Mathematica 15): KeyTake[<|a -> 1,
+         * b -> 2, c -> 3|>, {c, a}] is <|c -> 3, a -> 1|>. A repeated key is
+         * placed at its last occurrence ({c, a, c} gives <|a -> .., c -> ..|>),
+         * and absent keys are skipped. The association's entries are indexed
+         * once (keeping the entry, so a RuleDelayed stays delayed): O(n + m). */
+        KeyIndex ai;
+        Expr** ak = malloc(sizeof(Expr*) * (na ? na : 1));
+        if (!ki_init(&ai, na)) { free(ak); free(wk); free(last); ki_free(&ki); return NULL; }
+        for (size_t j = 0; j < na; j++) {
+            Expr* r = assoc->data.function.args[j];
+            ak[j] = NULL;
+            if (!is_rule2(r)) continue;
+            size_t slot;
+            if (ki_lookup(&ai, ak, rule_key(r), &slot) == SIZE_MAX) {
+                ak[j] = rule_key(r);
+                ki_insert(&ai, slot, j);
+            }
+        }
+        Expr** out = malloc(sizeof(Expr*) * (nwanted ? nwanted : 1));
+        size_t nout = 0;
+        for (size_t i = 0; i < nwanted; i++) {
+            size_t slot, f = ki_lookup(&ki, wk, wanted[i], &slot);
+            if (f == SIZE_MAX || last[f] != i) continue;   /* not its last occurrence */
+            size_t j = ki_lookup(&ai, ak, wanted[i], &slot);
+            if (j != SIZE_MAX) out[nout++] = expr_copy(assoc->data.function.args[j]);
+        }
+        Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+        free(out); free(ak); ki_free(&ai);
+        free(wk); free(last); ki_free(&ki);
+        return result;
+    }
+    free(last);
     Expr** out = malloc(sizeof(Expr*) * (na ? na : 1));
     size_t nout = 0;
     for (size_t i = 0; i < na; i++) {
@@ -894,6 +931,44 @@ Expr* builtin_groupby(Expr* res) {
      * association. */
     bool assoc_in = is_association(list);
     if (!head_is(list, SYM_List) && !assoc_in) return NULL;
+
+    /* GroupBy[list, {f1, f2, ...}(, red)]: multi-level grouping into nested
+     * associations -- group by f1, then each group by {f2, ...}, the reducer
+     * applying only at the innermost level (Mathematica 15). A level given as
+     * keyfn -> valfn transforms the elements the next level sees. */
+    if (head_is(f, SYM_List)) {
+        size_t nf = f->data.function.arg_count;
+        if (nf == 0) return NULL;
+        if (nf == 1) {   /* GroupBy[list, {f}(, red)] == GroupBy[list, f(, red)] */
+            Expr* a3[3] = { expr_copy(list), expr_copy(f->data.function.args[0]),
+                            reducer ? expr_copy(reducer) : NULL };
+            return expr_new_function(expr_new_symbol(SYM_GroupBy), a3, reducer ? 3 : 2);
+        }
+        Expr* first_args[2] = { expr_copy(list), expr_copy(f->data.function.args[0]) };
+        Expr* first_call = expr_new_function(expr_new_symbol(SYM_GroupBy), first_args, 2);
+        Expr* outer = evaluate(first_call);
+        expr_free(first_call);
+        if (!is_association(outer)) { expr_free(outer); return NULL; }
+        Expr** rest = malloc(sizeof(Expr*) * (nf - 1));
+        for (size_t i = 1; i < nf; i++) rest[i - 1] = expr_copy(f->data.function.args[i]);
+        Expr* rest_list = make_list(rest, nf - 1);
+        free(rest);
+        size_t ng = outer->data.function.arg_count;
+        Expr** rules = malloc(sizeof(Expr*) * (ng ? ng : 1));
+        for (size_t i = 0; i < ng; i++) {
+            Expr* r = outer->data.function.args[i];
+            Expr* sub[3] = { expr_copy(rule_val(r)), expr_copy(rest_list),
+                             reducer ? expr_copy(reducer) : NULL };
+            Expr* inner = expr_new_function(expr_new_symbol(SYM_GroupBy), sub, reducer ? 3 : 2);
+            rules[i] = make_rule(expr_copy(rule_key(r)), inner);   /* evaluator reduces inner */
+        }
+        Expr* result = expr_new_function(expr_new_symbol(SYM_Association), rules, ng);
+        free(rules);
+        expr_free(rest_list);
+        expr_free(outer);
+        return result;
+    }
+
     if (assoc_in && is_rule2(f)) return NULL;
     size_t n = list->data.function.arg_count;
 
@@ -1358,10 +1433,50 @@ static int rule_key_cmp(const void* a, const void* b) {
     return expr_compare(rule_key(ra), rule_key(rb));
 }
 
+/* KeySort[assoc, p]: order the entries by their keys under the ordering
+ * function p, exactly as Sort[keys, p] would (Ordering shares Sort's merge
+ * sort, so ties and non-boolean p behave identically). */
+static Expr* keysort_with_p(const Expr* assoc, Expr* p) {
+    size_t n = assoc->data.function.arg_count;
+    Expr** keys = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        if (!is_rule2(assoc->data.function.args[i])) {
+            for (size_t k = 0; k < i; k++) expr_free(keys[k]);
+            free(keys);
+            return NULL;
+        }
+        keys[i] = expr_copy(rule_key(assoc->data.function.args[i]));
+    }
+    Expr* ord_args[3] = { make_list(keys, n), expr_new_symbol(SYM_All), expr_copy(p) };
+    free(keys);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Ordering), ord_args, 3);
+    Expr* perm = evaluate(call);
+    expr_free(call);
+
+    Expr* result = NULL;
+    if (perm->type == EXPR_FUNCTION && head_is(perm, SYM_List) &&
+        perm->data.function.arg_count == n) {
+        Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+        size_t k = 0;
+        for (; k < n; k++) {
+            Expr* pk = perm->data.function.args[k];
+            if (pk->type != EXPR_INTEGER || pk->data.integer < 1 || pk->data.integer > (int64_t)n) break;
+            out[k] = expr_copy(assoc->data.function.args[pk->data.integer - 1]);
+        }
+        if (k == n) result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+        else for (size_t q = 0; q < k; q++) expr_free(out[q]);
+        free(out);
+    }
+    expr_free(perm);
+    return result;
+}
+
 Expr* builtin_keysort(Expr* res) {
-    if (res->data.function.arg_count != 1) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     if (!is_association(assoc)) return NULL;
+    if (argc == 2) return keysort_with_p(assoc, res->data.function.args[1]);
     size_t n = assoc->data.function.arg_count;
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) out[i] = expr_copy(assoc->data.function.args[i]);
@@ -1598,7 +1713,7 @@ void assoc_init(void) {
     symtab_get_def("KeyTake")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("KeyTake",
         "KeyTake[assoc, {k1, ...}]\n"
-        "\tGives the association of only the specified keys (order preserved).");
+        "\tGives the association of only the specified keys, in the requested order.");
 
     symtab_add_builtin("KeyUnion", builtin_keyunion);
     symtab_get_def("KeyUnion")->attributes |= ATTR_PROTECTED;
@@ -1655,7 +1770,8 @@ void assoc_init(void) {
     symtab_add_builtin("KeySort", builtin_keysort);
     symtab_get_def("KeySort")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("KeySort",
-        "KeySort[assoc]\n\tSorts an association into canonical key order.");
+        "KeySort[assoc]\n\tSorts an association into canonical key order.\n"
+        "KeySort[assoc, p]\n\tSorts the entries by key using the ordering function p.");
 
     symtab_add_builtin("KeySortBy", builtin_keysortby);
     symtab_get_def("KeySortBy")->attributes |= ATTR_PROTECTED;

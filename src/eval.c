@@ -2030,18 +2030,15 @@ Expr* evaluate_step(Expr* e, bool* changed) {
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
                        head->data.function.head->data.symbol.name == SYM_Association &&
                        res->data.function.arg_count >= 1) {
-                /* 7a. Association as accessor: <|...|>[key] (or [Key[key]]) looks
-                 * the key up, giving the value or Missing["KeyAbsent", key] --
-                 * the idiomatic Wolfram accessor, complementing Lookup and Part.
+                /* 7a. Association as accessor: <|...|>[key] looks the key up,
+                 * giving the value or Missing["KeyAbsent", key] -- the idiomatic
+                 * Wolfram accessor, complementing Lookup and Part. The argument
+                 * is always a LITERAL key: unlike Part and Lookup, the accessor
+                 * does not unwrap Key[...], so <|"a" -> 1|>[Key["a"]] is
+                 * Missing["KeyAbsent", Key["a"]] (Mathematica 15).
                  * Multi-key <|...|>[k1, k2, ...] is nested lookup: the value for
                  * k1 is then applied to the remaining keys. */
-                Expr* keyarg = res->data.function.args[0];
-                Expr* lookup_key = keyarg;
-                if (keyarg->type == EXPR_FUNCTION && keyarg->data.function.head->type == EXPR_SYMBOL &&
-                    keyarg->data.function.head->data.symbol.name == SYM_Key &&
-                    keyarg->data.function.arg_count == 1) {
-                    lookup_key = keyarg->data.function.args[0];
-                }
+                Expr* lookup_key = res->data.function.args[0];
                 Expr* found = assoc_lookup_value(head, lookup_key);  /* O(1) via key index */
                 Expr* out;
                 if (found) {

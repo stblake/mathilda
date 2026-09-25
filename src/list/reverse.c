@@ -2,6 +2,7 @@
 #include "reverse.h"
 #include "ndarray.h"
 #include "ndstruct.h"
+#include "assoc.h"
 
 static bool should_reverse_at_level(Expr* level_spec, size_t current_level) {
     if (!level_spec) return current_level == 1;
@@ -22,9 +23,18 @@ static Expr* reverse_rec(Expr* expr, Expr* level_spec, size_t current_level) {
     Expr** new_args = malloc(sizeof(Expr*) * len);
     bool do_rev = should_reverse_at_level(level_spec, current_level);
 
+    /* An association's entries are its elements, and the next level down is
+     * each entry's VALUE, not the Rule: Reverse[<|x -> {1, 2}, y -> {3}|>, 2]
+     * is <|x -> {2, 1}, y -> {3}|> (never <|{1, 2} -> x, ...|>). */
+    bool assoc = is_association(expr);
     for (size_t i = 0; i < len; i++) {
         size_t src_idx = do_rev ? (len - 1 - i) : i;
-        new_args[i] = reverse_rec(expr->data.function.args[src_idx], level_spec, current_level + 1);
+        Expr* child = expr->data.function.args[src_idx];
+        if (assoc && is_rule2(child))
+            new_args[i] = assoc_entry_with_value(child,
+                reverse_rec(child->data.function.args[1], level_spec, current_level + 1));
+        else
+            new_args[i] = reverse_rec(child, level_spec, current_level + 1);
     }
 
     Expr* result = expr_new_function(expr_copy(expr->data.function.head), new_args, len);

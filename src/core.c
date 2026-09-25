@@ -595,6 +595,7 @@ void core_init(void) {
         "SortBy[list, f]\n\tSorts the elements of list by the canonical order of\n"
         "\tf applied to each element.\n"
         "SortBy[assoc, f]\n\tSorts an association by f applied to each value.\n"
+        "SortBy[list, f, p]\n\tCompares the f values with the ordering function p.\n"
         "SortBy[f]\n\tOperator form: SortBy[f][expr] is SortBy[expr, f].");
     symtab_add_builtin("MaximalBy", builtin_maximal_by);
     symtab_get_def("MaximalBy")->attributes |= ATTR_PROTECTED;
@@ -641,7 +642,8 @@ void core_init(void) {
     symtab_get_def("ReverseSortBy")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ReverseSortBy",
         "ReverseSortBy[list, f]\n\tSorts by f in descending order. Over an\n"
-        "\tassociation, sorts by f of each value, descending.");
+        "\tassociation, sorts by f of each value, descending.\n"
+        "ReverseSortBy[list, f, p]\n\tSorts by f using the reversed ordering function p.");
     symtab_add_builtin("OrderedQ", builtin_orderedq);
     symtab_get_def("OrderedQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Order", builtin_order);
@@ -2007,10 +2009,49 @@ Expr* builtin_evaluate(Expr* res) {
     return out;
 }
 
+/*
+ * Append/Prepend (and the To forms) on an association, as in Mathematica 15:
+ * elem is a rule, a list of rules or an association; its entries go at the end
+ * (Append) or the front (Prepend) in their own order, and an existing entry
+ * with the same key is REMOVED from where it was -- so Prepend[<|a -> 1,
+ * b -> 2|>, b -> 9] is <|b -> 9, a -> 1|> and Append[<|a -> 1, b -> 2|>,
+ * a -> 9] is <|b -> 2, a -> 9|>. NULL (unevaluated) for any other elem.
+ * Key membership goes through an indexed association of the new rules, so
+ * this is O(n + m).
+ */
+static Expr* assoc_add_rules(const Expr* assoc, Expr* elem, bool prepend) {
+    Expr** nr; size_t nn;
+    if (is_rule2(elem)) { nr = &elem; nn = 1; }
+    else if (elem->type == EXPR_FUNCTION && elem->data.function.head->type == EXPR_SYMBOL &&
+             (elem->data.function.head->data.symbol.name == SYM_List || is_association(elem))) {
+        nr = elem->data.function.args; nn = elem->data.function.arg_count;
+        for (size_t i = 0; i < nn; i++) if (!is_rule2(nr[i])) return NULL;
+    } else {
+        return NULL;
+    }
+    size_t n = assoc->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) if (!is_rule2(assoc->data.function.args[i])) return NULL;
+
+    Expr* newset = assoc_from_rules(nr, nn);
+    Expr** out = malloc(sizeof(Expr*) * (n + nn + 1));
+    size_t k = 0;
+    if (prepend) for (size_t j = 0; j < nn; j++) out[k++] = nr[j];
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = assoc->data.function.args[i];
+        if (!assoc_lookup_value(newset, r->data.function.args[0])) out[k++] = r;
+    }
+    if (!prepend) for (size_t j = 0; j < nn; j++) out[k++] = nr[j];
+    Expr* result = assoc_from_rules(out, k);     /* copies; collapses repeated new keys */
+    free(out);
+    expr_free(newset);
+    return result;
+}
+
 Expr* builtin_append(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
+    if (is_association(expr)) return assoc_add_rules(expr, elem, false);
     /* One allocation and two memcpys on the buffer. Until this existed Append
      * was "correct by omission" in pack.c -- the gate materialised 10^6 Exprs
      * so the generic walk below could add one element to the end. */
@@ -2042,6 +2083,7 @@ Expr* builtin_prepend(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
+    if (is_association(expr)) return assoc_add_rules(expr, elem, true);
     if (is_ndarray(expr)) {                       /* see builtin_append above */
         Expr* nd = ndstruct_append(res, true);
         return nd ? nd : ndarray_delist_and_reeval(res);
@@ -2091,6 +2133,20 @@ Expr* builtin_append_to(Expr* res) {
         return NULL;
     }
 
+    /* An association appends by key (see assoc_add_rules); a non-rule elem
+     * leaves AppendTo unevaluated, as in Mathematica. */
+    if (is_association(current_val)) {
+        Expr* nv = assoc_add_rules(current_val, elem, false);
+        if (!nv) {
+            /* x = Append[x, elem] with Append left unevaluated -- exactly what
+             * Mathematica assigns for a non-rule elem. */
+            Expr* aa[2] = { current_val, expr_copy(elem) };      /* adopts current_val */
+            return inplace_assign_back(sym, expr_new_function(expr_new_symbol("Append"), aa, 2));
+        }
+        expr_free(current_val);
+        return inplace_assign_back(sym, nv);
+    }
+
     size_t new_count = current_val->data.function.arg_count + 1;
     Expr** new_args = malloc(sizeof(Expr*) * new_count);
     for (size_t i = 0; i < current_val->data.function.arg_count; i++) {
@@ -2116,6 +2172,16 @@ Expr* builtin_prepend_to(Expr* res) {
     if (!current_val || current_val->type != EXPR_FUNCTION) {
         if (current_val) expr_free(current_val);
         return NULL;
+    }
+
+    if (is_association(current_val)) {           /* see builtin_append_to */
+        Expr* nv = assoc_add_rules(current_val, elem, true);
+        if (!nv) {
+            Expr* pa[2] = { current_val, expr_copy(elem) };      /* adopts current_val */
+            return inplace_assign_back(sym, expr_new_function(expr_new_symbol("Prepend"), pa, 2));
+        }
+        expr_free(current_val);
+        return inplace_assign_back(sym, nv);
     }
 
     size_t new_count = current_val->data.function.arg_count + 1;

@@ -22,6 +22,7 @@
 #include "list_common.h"
 #include "match.h"
 #include "pick.h"
+#include "assoc.h"
 
 /* True when `sel` matches `patt`. Bindings are irrelevant here (Pick has no
  * right-hand side to substitute into), so the environment is discarded. */
@@ -51,14 +52,24 @@ static Expr* pick_rec(Expr* expr, Expr* sel, Expr* patt, bool* ok) {
         }
     }
 
+    /* An association picks by POSITION over its entries, comparing each
+     * VALUE with the selector and keeping the entry (keys survive); a deeper
+     * pick rebuilds the entry around the picked value. An association used as
+     * a selector is atomic, as in Mathematica (it never descends). */
+    bool assoc = is_association(expr);
+    if (assoc)
+        for (size_t i = 0; i < n; i++)
+            if (!is_rule2(expr->data.function.args[i])) { free(kept); *ok = false; return NULL; }
+
     size_t kept_count = 0;
     for (size_t i = 0; i < n; i++) {
-        Expr* e_i = expr->data.function.args[i];
+        Expr* entry = expr->data.function.args[i];
+        Expr* e_i = assoc ? entry->data.function.args[1] : entry;
         Expr* s_i = sel->data.function.args[i];
 
         if (pick_selects(s_i, patt)) {
-            kept[kept_count++] = expr_copy(e_i);
-        } else if (s_i->type == EXPR_FUNCTION) {
+            kept[kept_count++] = expr_copy(entry);
+        } else if (s_i->type == EXPR_FUNCTION && !is_association(s_i)) {
             /* Compound selector that did not match as a whole: descend. The
              * corresponding expression element must be compound and of equal
              * length, which pick_rec verifies. */
@@ -68,7 +79,7 @@ static Expr* pick_rec(Expr* expr, Expr* sel, Expr* patt, bool* ok) {
                 free(kept);
                 return NULL;
             }
-            kept[kept_count++] = sub;
+            kept[kept_count++] = assoc ? assoc_entry_with_value(entry, sub) : sub;
         }
         /* else: atomic selector, no match -> element is simply dropped. */
     }
@@ -91,6 +102,19 @@ Expr* builtin_pick(Expr* res) {
      * 1, a symbol, ...) simply fails to match and is dropped. */
     Expr* implicit_true = (argc == 2) ? expr_new_symbol(SYM_True) : NULL;
     Expr* patt = implicit_true ? implicit_true : res->data.function.args[2];
+
+    /* An association selector is atomic: the whole expr if it matches patt,
+     * else nothing (Sequence[]) -- Mathematica 15's answer, where the old
+     * walk built malformed Rule[] nodes by descending into its entries. */
+    if (pick_selects(sel, patt)) {             /* the selector as a whole: all */
+        if (implicit_true) expr_free(implicit_true);
+        return expr_copy(expr);
+    }
+    if (is_association(sel)) {
+        bool whole = false;
+        if (implicit_true) expr_free(implicit_true);
+        return whole ? expr_copy(expr) : expr_new_function(expr_new_symbol(SYM_Sequence), NULL, 0);
+    }
 
     bool ok = true;
     Expr* result = pick_rec(expr, sel, patt, &ok);
