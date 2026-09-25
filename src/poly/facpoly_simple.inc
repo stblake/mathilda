@@ -68,14 +68,17 @@ static bool extract_monomial_walk(Expr* e, int64_t* c,
     return false;
 }
 
-static void extract_monomial(Expr* e, int64_t* c, Expr*** vars, int64_t** exps, size_t* count) {
+/* Returns true iff `e` parses as a pure polynomial monomial (integer times
+ * variables/integer-powers). On false the outputs are left safe-to-free but
+ * MEANINGLESS (partial c/count), so callers MUST check the return value before
+ * trusting c/vars/exps/count. Treating a failed parse as a bare constant is
+ * exactly what let factor_binomial misread Cos[r^2]-r^2 as 1-r^2. Either way
+ * the caller still frees *vars and *exps (which may be partially populated). */
+static bool extract_monomial(Expr* e, int64_t* c, Expr*** vars, int64_t** exps, size_t* count) {
     *c = 1; *count = 0;
     *vars = NULL; *exps = NULL;
     size_t cap = 0;
-    if (!extract_monomial_walk(e, c, vars, exps, count, &cap)) {
-        /* On failure, leave outputs in a safe state: caller still needs
-         * to free *vars and *exps (which may be partially populated). */
-    }
+    return extract_monomial_walk(e, c, vars, exps, count, &cap);
 }
 
 static Expr* make_binomial_sum(Expr* A, Expr* B, int k, bool is_diff) {
@@ -114,9 +117,17 @@ static Expr* factor_binomial(Expr* P) {
     int64_t *e1 = NULL, *e2 = NULL;
     size_t count1, count2;
     
-    extract_monomial(P->data.function.args[0], &c1, &v1, &e1, &count1);
-    extract_monomial(P->data.function.args[1], &c2, &v2, &e2, &count2);
-    
+    /* Both terms must parse as genuine polynomial monomials. When a term is
+     * opaque (Cos[r^2], r^2 Sin[r^2], ...) the walk fails; treating it as a
+     * bare constant would misread e.g. Cos[r^2]-r^2 as 1-r^2 and hand back the
+     * unsound factorisation (1-r)(1+r). Bail so Factor leaves it alone. */
+    bool ok1 = extract_monomial(P->data.function.args[0], &c1, &v1, &e1, &count1);
+    bool ok2 = extract_monomial(P->data.function.args[1], &c2, &v2, &e2, &count2);
+    if (!ok1 || !ok2) {
+        free(v1); free(e1); free(v2); free(e2);
+        return NULL;
+    }
+
     int64_t K = 0;
     for(size_t i=0; i<count1; i++) K = gcd(K, e1[i]);
     for(size_t i=0; i<count2; i++) K = gcd(K, e2[i]);
