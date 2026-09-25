@@ -550,6 +550,9 @@ static void pack_mark_aware_heads(void) {
          * Divide deliberately is NOT, because Range[10]/2 is a list of exact
          * Rationals and no buffer holds one. */
         "Subtract", "Divide",
+        /* Minus is the same one-rewrite case: builtin_minus always returns
+         * Times[-1, x], so Times sees the buffer (src/minus.c). */
+        "Minus",
         /* Structural ops over the buffer (src/ndstruct.c). ConjugateTranspose
          * joined 2026-08-01: it delegates to Transpose and Conjugate, both of
          * which have had buffer paths all along, but its rank-1 one-argument
@@ -971,8 +974,8 @@ static void pack_mark_aware_heads(void) {
          * exactness, so an integer buffer stays one. Divide is NOT here on
          * purpose: it rewrites to Times[a, Power[b, -1]], and Range[10]/2 is a
          * list of exact Rationals -- the integer buffer has to materialise for
-         * the List path to give them. */
-        "Subtract",
+         * the List path to give them. Minus rewrites to Times[-1, x]. */
+        "Subtract", "Minus",
         /* Exact int64 reductions (src/ndreduce.c). Total/Max/Min/Accumulate
          * answer with Integers; Mean and Median build the exact reduced
          * Rational (Mean[Range[10]] is 11/2, Median[Range[300]] is 301/2). */

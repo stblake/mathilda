@@ -478,6 +478,8 @@ set(COMMON_SRC
     ../src/interp.c
     ../src/interp_mpfr.c
     ../src/purefunc.c
+    ../src/minus.c
+    ../src/opform.c
     ../src/modular.c
     ../src/sort.c
     ../src/sowreap.c
@@ -1330,6 +1332,13 @@ add_executable(association_tests test_association.c $<TARGET_OBJECTS:mathilda_co
 target_link_libraries(association_tests m)
 target_include_directories(association_tests PRIVATE ../src)
 add_test(NAME association_tests COMMAND association_tests)
+
+# Named slots (#name), Minus, generic operator forms h[o][x], Lookup's lazy
+# default and KeyMemberQ/KeyFreeQ key patterns.
+add_executable(assoc_forms_tests test_assoc_forms.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(assoc_forms_tests m)
+target_include_directories(assoc_forms_tests PRIVATE ../src)
+add_test(NAME assoc_forms_tests COMMAND assoc_forms_tests)
 
 # Association performance regression gate: fails if a hash-backed op scales
 # worse than O(n) (doubling-ratio check; machine-independent).
@@ -3487,6 +3496,7 @@ if(USE_ECM)
     add_dependencies(boolean_tests build_ecm)
     add_dependencies(names_tests build_ecm)
     add_dependencies(association_tests build_ecm)
+    add_dependencies(assoc_forms_tests build_ecm)
     add_dependencies(bench_assoc build_ecm)
     add_dependencies(bench_ndarray_linalg build_ecm)
     add_dependencies(bench_compile build_ecm)

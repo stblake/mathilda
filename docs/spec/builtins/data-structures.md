@@ -108,6 +108,14 @@ Looks up the value stored under a key.
   the key from each (a key/default thread through) — handy for pulling one field
   out of a column of records.
 - Also accepts a bare list of rules (like `Keys`/`Values`).
+- `Lookup[key][assoc]` is the operator form (see *Operator forms* in
+  `functional-programming.md`); `Lookup[key, default][assoc]` is not one, as in
+  Mathematica.
+
+**Features**:
+- `HoldAll`, as in Mathematica: the association and key are evaluated, the
+  default only when a key is actually absent (once per absent key), so a
+  default with side effects runs only when needed.
 
 ```mathematica
 In[1]:= Lookup[<|"a" -> 1, "b" -> 2|>, "b"]
@@ -118,12 +126,28 @@ Out[2]= 0
 
 In[3]:= Lookup[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3|>}, "a", 0]
 Out[3]= {1, 3}
+
+In[4]:= Lookup[<|"a" -> 1|>, "a", Print["never printed"]; 0]
+Out[4]= 1
+
+In[5]:= Lookup["a"][<|"a" -> 7|>]
+Out[5]= 7
 ```
 
 ## KeyExistsQ, KeyMemberQ, KeyFreeQ
-`KeyExistsQ`/`KeyMemberQ` test whether a key is present; `KeyFreeQ` is the
-complement (True when the key is absent). All three accept an association or a
-bare list of rules.
+`KeyExistsQ` tests whether a literal key is present. `KeyMemberQ` tests whether
+some key matches a pattern; `KeyFreeQ` is its complement. All three accept an
+association or a bare list of rules.
+- `KeyExistsQ[assoc, key]`, `KeyMemberQ[assoc, patt]`, `KeyFreeQ[assoc, patt]`.
+- Operator forms: `KeyExistsQ[key][assoc]`, `KeyMemberQ[patt][assoc]`,
+  `KeyFreeQ[patt][assoc]`.
+
+**Features**:
+- A pattern-free key keeps the O(1) index probe; a key containing a pattern
+  construct (`_`, `x_h`, `Alternatives`, `Except`, `PatternTest`, `Condition`,
+  ...) is matched against every key.
+- `KeyExistsQ` never treats its key as a pattern: `KeyExistsQ[a, _]` looks for
+  the literal key `_`, as in Mathematica.
 
 ```mathematica
 In[1]:= KeyExistsQ[<|"a" -> 1|>, "a"]
@@ -131,6 +155,15 @@ Out[1]= True
 
 In[2]:= KeyFreeQ[<|"a" -> 1|>, "b"]
 Out[2]= True
+
+In[3]:= KeyMemberQ[<|1 -> "x", "b" -> "y"|>, _Integer]
+Out[3]= True
+
+In[4]:= KeyFreeQ[<|"a" -> 1|>, _Integer]
+Out[4]= True
+
+In[5]:= KeyExistsQ[<|"a" -> 1|>, _]
+Out[5]= False
 ```
 
 ## KeyDrop

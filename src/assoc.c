@@ -9,6 +9,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "assoc.h"
+#include "match.h"   /* KeyMemberQ / KeyFreeQ key patterns */
 #include "assoc_index.h"
 #include "ndreduce.h"
 #include "ndarray.h"
@@ -357,9 +358,11 @@ static bool is_assoc_or_rule_list(const Expr* e) {
     return is_association(e) || head_is(e, SYM_List);
 }
 
-Expr* builtin_lookup(Expr* res) {
+/* The body of Lookup once its first two arguments are evaluated.  `deflt` is
+ * still HELD: it is evaluated only where a key is actually absent (once per
+ * absent key), so Lookup[<|a -> 1|>, a, Print["x"]] prints nothing. */
+static Expr* lookup_core(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc < 2 || argc > 3) return NULL;
     Expr* assoc = res->data.function.args[0];
     Expr* key   = res->data.function.args[1];
     Expr* deflt = argc == 3 ? res->data.function.args[2] : NULL;
@@ -401,7 +404,7 @@ Expr* builtin_lookup(Expr* res) {
         Expr* inner = key->data.function.args[0];
         Expr* v = assoc_lookup_value(assoc, inner);
         if (v) return expr_copy(v);
-        return deflt ? expr_copy(deflt) : make_missing(inner);
+        return deflt ? evaluate(deflt) : make_missing(inner);
     }
 
     /* Lookup over a list of keys: single index build, then O(1) per key. */
@@ -424,7 +427,7 @@ Expr* builtin_lookup(Expr* res) {
             if (idx != SIZE_MAX)
                 out[j] = expr_copy(rule_val(assoc->data.function.args[idx]));
             else
-                out[j] = deflt ? expr_copy(deflt) : make_missing(qk);
+                out[j] = deflt ? evaluate(deflt) : make_missing(qk);
         }
         Expr* list = make_list(out, nk);
         free(out); free(akeys); ki_free(&ki);
@@ -433,7 +436,26 @@ Expr* builtin_lookup(Expr* res) {
 
     Expr* v = assoc_lookup_value(assoc, key);
     if (v) return expr_copy(v);
-    return deflt ? expr_copy(deflt) : make_missing(key);
+    return deflt ? evaluate(deflt) : make_missing(key);
+}
+
+/* Lookup is HoldAll (as in Mathematica) so that the default stays lazy: the
+ * association and key(s) are evaluated here, the default only on a miss.
+ * When the arguments do not form a lookup, the call is returned with its
+ * first two arguments evaluated (or left alone if they were already). */
+Expr* builtin_lookup(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return NULL;
+    Expr* a0 = evaluate(res->data.function.args[0]);
+    Expr* a1 = evaluate(res->data.function.args[1]);
+    Expr* cargs[3] = { a0, a1, argc == 3 ? expr_copy(res->data.function.args[2]) : NULL };
+    Expr* call = expr_new_function(expr_copy(res->data.function.head), cargs, argc);
+    Expr* out = lookup_core(call);
+    if (!out && !(expr_eq(a0, res->data.function.args[0]) &&
+                  expr_eq(a1, res->data.function.args[1])))
+        return call;                     /* args changed: expose evaluated form */
+    expr_free(call);
+    return out;
 }
 
 /* ======================================================================
@@ -447,20 +469,58 @@ Expr* builtin_keyexistsq(Expr* res) {
     return expr_new_symbol(assoc_lookup_value(assoc, key) ? SYM_True : SYM_False);
 }
 
-/* KeyMemberQ[assoc, key] == KeyExistsQ; KeyFreeQ[assoc, key] is its complement.
- * All three accept an association or a bare list of rules (like Lookup). */
+/* True when `e` contains a pattern construct, so it must be matched rather
+ * than looked up.  A pattern-free key keeps the O(1) index probe. */
+static bool key_contains_pattern(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* n = h->data.symbol.name;
+        if (n == SYM_Blank || n == SYM_BlankSequence || n == SYM_BlankNullSequence ||
+            n == SYM_Pattern || n == SYM_Alternatives || n == SYM_Except ||
+            n == SYM_PatternTest || n == SYM_Condition || n == SYM_Optional ||
+            n == SYM_Repeated || n == SYM_RepeatedNull || n == SYM_HoldPattern ||
+            n == SYM_Verbatim)
+            return true;
+    } else if (key_contains_pattern(h)) {
+        return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (key_contains_pattern(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* True iff some key of `assoc` (association or rule list) matches `patt`.
+ * KeyMemberQ/KeyFreeQ treat their second argument as a pattern, as in
+ * Mathematica (KeyMemberQ[a, _] is True for any non-empty a); KeyExistsQ does
+ * not (KeyExistsQ[a, _] looks for the literal key `_`). */
+static bool assoc_some_key_matches(const Expr* assoc, Expr* patt) {
+    if (!key_contains_pattern(patt)) return assoc_lookup_value(assoc, patt) != NULL;
+    for (size_t i = 0; i < assoc->data.function.arg_count; i++) {
+        Expr* r = assoc->data.function.args[i];
+        if (!is_rule2(r)) continue;
+        MatchEnv* env = env_new();
+        bool ok = match(rule_key(r), patt, env);
+        env_free(env);
+        if (ok) return true;
+    }
+    return false;
+}
+
+/* KeyMemberQ[assoc, patt]: does any key match patt?  KeyFreeQ is its
+ * complement.  Both accept an association or a bare list of rules. */
 Expr* builtin_keymemberq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     if (!is_assoc_or_rule_list(assoc)) return NULL;
-    return expr_new_symbol(assoc_lookup_value(assoc, res->data.function.args[1]) ? SYM_True : SYM_False);
+    return expr_new_symbol(assoc_some_key_matches(assoc, res->data.function.args[1]) ? SYM_True : SYM_False);
 }
 
 Expr* builtin_keyfreeq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     if (!is_assoc_or_rule_list(assoc)) return NULL;
-    return expr_new_symbol(assoc_lookup_value(assoc, res->data.function.args[1]) ? SYM_False : SYM_True);
+    return expr_new_symbol(assoc_some_key_matches(assoc, res->data.function.args[1]) ? SYM_False : SYM_True);
 }
 
 /* ======================================================================
@@ -1498,10 +1558,11 @@ void assoc_init(void) {
         "Values[assoc]\n\tGives a list of the values of an association (or rules).");
 
     symtab_add_builtin("Lookup", builtin_lookup);
-    symtab_get_def("Lookup")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Lookup")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("Lookup",
         "Lookup[assoc, key]\n\tGives the value for key, or Missing[\"KeyAbsent\", key].\n"
-        "Lookup[assoc, key, default]\n\tUses default when key is absent.\n"
+        "Lookup[assoc, key, default]\n\tUses default when key is absent (HoldAll: default is\n"
+        "\tevaluated only on a miss).\n"
         "Lookup[assoc, {k1, k2, ...}]\n\tLooks up several keys at once (O(n+m)).");
 
     symtab_add_builtin("KeyExistsQ", builtin_keyexistsq);
@@ -1512,14 +1573,14 @@ void assoc_init(void) {
     symtab_add_builtin("KeyMemberQ", builtin_keymemberq);
     symtab_get_def("KeyMemberQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("KeyMemberQ",
-        "KeyMemberQ[assoc, key]\n\tGives True if key is present in assoc (same as\n"
-        "\tKeyExistsQ), else False.");
+        "KeyMemberQ[assoc, patt]\n\tGives True if some key of assoc matches the pattern patt\n"
+        "\t(a literal key is an O(1) probe), else False.");
 
     symtab_add_builtin("KeyFreeQ", builtin_keyfreeq);
     symtab_get_def("KeyFreeQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("KeyFreeQ",
-        "KeyFreeQ[assoc, key]\n\tGives True if key is absent from assoc (the\n"
-        "\tcomplement of KeyExistsQ), else False.");
+        "KeyFreeQ[assoc, patt]\n\tGives True if no key of assoc matches the pattern patt\n"
+        "\t(the complement of KeyMemberQ), else False.");
 
     symtab_add_builtin("KeyDrop", builtin_keydrop);
     symtab_get_def("KeyDrop")->attributes |= ATTR_PROTECTED;

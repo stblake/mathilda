@@ -7,6 +7,10 @@
 
 #include "attr.h"
 #include "sym_names.h"
+#include "assoc.h"
+#include "message.h"
+#include "print.h"
+#include <stdio.h>
 
 static uint32_t parse_pure_attr(Expr* attr_expr) {
     if (attr_expr->type == EXPR_SYMBOL) {
@@ -84,7 +88,37 @@ static int function_is_slot_form(Expr* fn) {
     return 0;                                              /* named parameter(s) */
 }
 
-static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count) {
+/* Report a named slot (#name) that cannot be filled, Mathematica-style:
+ *   Function::slota  -- the first argument is an association without the key
+ *   Function::slot1  -- the first argument is not an association at all
+ * The slot is then left in place (WL returns e.g. `1 + #b`). */
+static void named_slot_message(Expr* fn, const char* name, Expr** args, size_t arg_count) {
+    mth_msg_note_fired();
+    if (mth_msg_suppressed()) return;
+    char* fs = fn ? expr_to_string(fn) : NULL;
+    if (arg_count >= 1 && is_association(args[0])) {
+        char* as = expr_to_string(args[0]);
+        fprintf(stderr, "Function::slota: Named slot %s in %s cannot be filled from %s.\n",
+                name, fs ? fs : "Function[...]", as ? as : "<|...|>");
+        free(as);
+    } else {
+        Expr** cp = malloc(sizeof(Expr*) * (arg_count ? arg_count : 1));
+        for (size_t i = 0; i < arg_count; i++) cp[i] = expr_copy(args[i]);
+        Expr* call = expr_new_function(expr_new_symbol(SYM_List), cp, arg_count);
+        free(cp);
+        char* cs = expr_to_string(call);          /* "{a1, a2}" -> "[a1, a2]" */
+        expr_free(call);
+        size_t cl = cs ? strlen(cs) : 0;
+        if (cl >= 2) { cs[0] = '['; cs[cl - 1] = ']'; }
+        fprintf(stderr, "Function::slot1: (%s)%s is expected to have an Association "
+                "as the first argument.\n", fs ? fs : "Function[...]", cl >= 2 ? cs : "[]");
+        free(cs);
+    }
+    free(fs);
+}
+
+/* `fn` is the Function being applied (for diagnostics only; may be NULL). */
+static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn) {
     if (!e) return NULL;
 
     if (e->type == EXPR_FUNCTION) {
@@ -111,6 +145,16 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count) {
                         return expr_copy(args[idx - 1]);
                     }
                 }
+                /* Named slot #name == Slot["name"]: the value stored under the
+                 * key "name" in the first argument, which must be an
+                 * association (O(1) via the key index). */
+                if (arg->type == EXPR_STRING) {
+                    Expr* v = (arg_count >= 1 && is_association(args[0]))
+                                  ? assoc_lookup_value(args[0], arg) : NULL;
+                    if (v) return expr_copy(v);
+                    named_slot_message(fn, arg->data.string, args, arg_count);
+                    return expr_copy(e);
+                }
             }
             
             if (head == SYM_SlotSequence && e->data.function.arg_count == 1) {
@@ -134,9 +178,9 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count) {
         // Standard recursion for other functions
         Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            new_args[i] = substitute_slots(e->data.function.args[i], args, arg_count);
+            new_args[i] = substitute_slots(e->data.function.args[i], args, arg_count, fn);
         }
-        Expr* new_head = substitute_slots(e->data.function.head, args, arg_count);
+        Expr* new_head = substitute_slots(e->data.function.head, args, arg_count, fn);
         Expr* res = expr_new_function(new_head, new_args, e->data.function.arg_count);
         free(new_args);
         return res;
@@ -297,7 +341,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
     /* Function[body] -- slot form with 1 argument */
     if (head_argc == 1) {
         Expr* body = head->data.function.args[0];
-        Expr* substituted = substitute_slots(body, args, arg_count);
+        Expr* substituted = substitute_slots(body, args, arg_count, head);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
         return trap_return(result);
@@ -311,7 +355,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
     /* Function[Null, body, ...] -- slot form with attributes.
      * (Null indicates "use slots" rather than named parameters.) */
     if (params->type == EXPR_SYMBOL && params->data.symbol.name == SYM_Null) {
-        Expr* substituted = substitute_slots(body, args, arg_count);
+        Expr* substituted = substitute_slots(body, args, arg_count, head);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
         return trap_return(result);

@@ -26,6 +26,7 @@
 #include "compile/autocompile.h"   /* $AutoCompilation */
 #include "numloop.h"                 /* $AutoCompilation also gates numloop */
 #include "plot_common.h"             /* $RaylibVerbose backing flag (raylib-free) */
+#include "opform.h"                  /* h[o...][x] operator (curried) forms */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -2172,6 +2173,18 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 if (applied) {
                     expr_free(res);
                     *changed = true; /* InterpolatingFunction evaluated */
+                    return applied;
+                }
+            } else if (head->type == EXPR_FUNCTION && res->data.function.arg_count == 1 &&
+                       opform_matches(head)) {
+                /* 7f. Operator (curried) form of a registered builtin:
+                 * Select[crit][x] -> Select[x, crit], Map[f][x] -> Map[f, x],
+                 * Insert[e, n][x] -> Insert[x, e, n], ... (table in opform.c).
+                 * NULL (head declined the rewritten call) keeps h[o][x]. */
+                Expr* applied = opform_apply(head, res->data.function.args[0]);
+                if (applied) {
+                    expr_free(res);
+                    *changed = true;
                     return applied;
                 }
             } else if (head->type == EXPR_COMPILED) {
