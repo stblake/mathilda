@@ -59,6 +59,42 @@ static void factor_memo_put(FactorMemo* m, Expr* key, Expr* value);
 
 Expr* bz_factor_to_expr(Expr* P, Expr* var);
 
+/* True if `e` still carries a genuine denominator -- a Power[base, k] with k a
+ * negative integer (or a Rational with negative numerator) over a non-numeric
+ * base (a symbol or compound; a numeric base's negative power is just a rational
+ * constant, not a denominator to combine).  builtin_factor derives num/den from
+ * Together, which is contracted to return a single reduced fraction, so a clean
+ * num/den is denominator-free.  When Together declines to combine (e.g. it bails
+ * on >=2 dependent trig/hyperbolic kernels over Q(i) to avoid a GCD blow-up,
+ * leaving a sum of fractions), the "numerator" still contains such a Power and is
+ * NOT a polynomial -- feeding it to the polynomial factorer treats 1/(x-I) as a
+ * variable and yields a NON-EQUIVALENT result (e.g.
+ * Factor[(Cosh[x]+Sinh[x])/(-I+x) + (Cosh[x]+Sinh[x])/(I+x)] -> 0).  Detecting
+ * this lets Factor decline safely (return the input unchanged) instead of
+ * emitting a wrong answer. */
+static bool factor_has_leftover_denominator(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* ex   = e->data.function.args[1];
+        bool neg = (ex->type == EXPR_INTEGER && ex->data.integer < 0);
+        if (!neg && ex->type == EXPR_FUNCTION && ex->data.function.head &&
+            ex->data.function.head->type == EXPR_SYMBOL &&
+            ex->data.function.head->data.symbol.name == SYM_Rational &&
+            ex->data.function.arg_count == 2 &&
+            ex->data.function.args[0]->type == EXPR_INTEGER &&
+            ex->data.function.args[0]->data.integer < 0)
+            neg = true;
+        if (neg && base && (base->type == EXPR_SYMBOL || base->type == EXPR_FUNCTION))
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (factor_has_leftover_denominator(e->data.function.args[i])) return true;
+    return false;
+}
+
 #include "facpoly_squarefree.inc"
 #include "facpoly_simple.inc"
 #include "facpoly_monomial_content.inc"

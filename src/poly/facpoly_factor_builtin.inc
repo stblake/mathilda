@@ -309,6 +309,30 @@ Expr* builtin_factor(Expr* res) {
     Expr* den = evaluate(d_call);
     expr_free(d_call);
 
+    /* Correctness guard: the polynomial factorer below assumes num and den are
+     * genuine polynomials (Together, above, is contracted to return a single
+     * reduced fraction).  When Together declines to combine -- e.g. it bails on
+     * a sum of fractions whose numerators share >=2 dependent trig/hyperbolic
+     * kernels over Q(i), to avoid a GCD blow-up -- Numerator returns the whole
+     * uncombined sum, which still carries Power[linear, -1] denominators.
+     * Factoring that non-polynomial treats 1/(x-I) as an indeterminate and
+     * returns a NON-EQUIVALENT result (Factor[(Cosh[x]+Sinh[x])/(-I+x) +
+     * (Cosh[x]+Sinh[x])/(I+x)] collapsed to 0, which then propagated a wrong
+     * Simplify answer).  Factor must be equivalence-preserving, so decline
+     * cleanly: return the input unchanged rather than a false factorisation. */
+    if (factor_has_leftover_denominator(num) ||
+        factor_has_leftover_denominator(den)) {
+        Expr* out = expr_copy(arg);
+        expr_free(together);
+        expr_free(num);
+        expr_free(den);
+        if (memo_key) {
+            factor_memo_put(memo, memo_key, out);
+            expr_free(memo_key);
+        }
+        return out;
+    }
+
     /* Scope discipline: when called from inside Simplify (where a
      * Factor memo is active), use the SHARED-scope behavior -- both
      * numerator and denominator use the variable list collected from
