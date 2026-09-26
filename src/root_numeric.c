@@ -28,6 +28,7 @@
 #include "sym_names.h"
 #include "arithmetic.h"
 #include "symtab.h"
+#include "message.h"       /* mth_msg_suppressed / _note_fired: honour Quiet[] */
 
 #include "poly/zupoly.h"
 #include "poly/poly_eval_mpfr.h"
@@ -56,6 +57,13 @@
  * unused static on the no-MPFR build (-Werror=unused-function). */
 #ifdef USE_MPFR
 static void root_warn(const char* tag, const char* fmt, ...) {
+    /* These are Wolfram-style diagnostics (Root::conv / ::poly / ::indx).  Note
+     * the firing so Check[] can detect it, then stay silent under Quiet[] — the
+     * .m integrators (ParallelMixedTower, ...) run these root numericalisations
+     * inside Quiet[] and expect the messages suppressed exactly as Mathematica
+     * suppresses its own internals.  Matches the ops_msg pattern in assoc_ops.c. */
+    mth_msg_note_fired();
+    if (mth_msg_suppressed()) return;
     va_list ap;
     fprintf(stderr, "Root::%s: ", tag);
     va_start(ap, fmt);
@@ -862,9 +870,9 @@ static Expr* solve_root_inexact(Expr* body, int64_t k,
 }
 
 /* ====================================================================
- *  Entry point
+ *  Entry point (uncached core — see the memoising wrapper below)
  * ================================================================== */
-Expr* root_numericalize(const Expr* root_expr, NumericSpec spec) {
+static Expr* root_numericalize_uncached(const Expr* root_expr, NumericSpec spec) {
     Expr* body = NULL;
     int64_t k = 0;
     if (!parse_root_call(root_expr, &body, &k)) return NULL;
@@ -909,6 +917,126 @@ Expr* root_numericalize(const Expr* root_expr, NumericSpec spec) {
      * after numeric substitution — be numericalised, so N and the numeric
      * optimisers (NMinimize) can evaluate them. */
     return solve_root_inexact(body, k, target_bits, want_machine);
+}
+
+/* ====================================================================
+ *  root_numericalize result memo, keyed by (Root[] expr, mode, bits)
+ *
+ *  N[Root[p, k]] at a fixed precision is a pure, deterministic function of the
+ *  Root object and the request: identical inputs always give an identical value
+ *  (or the identical non-convergence — the solver reads no mutable global
+ *  state).  Yet one numeric verification re-numericalises the *same* Root
+ *  constant many times: the ParallelMixedTower verify-gate samples a candidate
+ *  antiderivative — which carries Root constants — at dozens of points, and each
+ *  sample recomputes those loop-invariant constants from scratch.  When such a
+ *  constant's minimal polynomial is one the MPFR companion-QR cannot refine
+ *  (high degree, huge coefficients), every recomputation costs three escalating
+ *  arbitrary-precision eigen-solves: Integrate[Sqrt[t^7/(1-5 t^2)] // PowerExpand,
+ *  t] burned 82 s and 1560 Root::conv lines on TWO deg-16 constants recomputed
+ *  260x each.  Memoising collapses that to one solve per (constant, precision).
+ *
+ *  A Root object is a session-independent constant, so an entry never goes
+ *  stale.  Bounded open addressing, reset near full, leaked at exit — the same
+ *  discipline as the qqbar caches in flint_qqbar.c.
+ * ================================================================== */
+#define RNUM_CACHE_SIZE 256u          /* power of two; open addressing */
+typedef struct {
+    Expr*    key;      /* deep copy of the Root[] expr, for collision-check */
+    int      mode;     /* spec.mode */
+    long     bits;     /* spec.bits */
+    uint64_t h;        /* expr_hash(key) mixed with mode/bits */
+    Expr*    val;      /* result (NULL == non-convergence / declined) */
+    int      fired;    /* the uncached call emitted >= 1 diagnostic */
+    int      used;
+} RNumSlot;
+static RNumSlot g_rnum_cache[RNUM_CACHE_SIZE];
+static size_t   g_rnum_count = 0;
+
+static uint64_t rnum_key_hash(const Expr* root_expr, NumericSpec spec) {
+    uint64_t h = expr_hash(root_expr);
+    h ^= (uint64_t)spec.mode * 0x9e3779b97f4a7c15ULL;
+    h ^= (uint64_t)(unsigned long)spec.bits + 0x165667b19e3779f9ULL;
+    return h;
+}
+
+static void rnum_cache_reset(void) {
+    for (unsigned i = 0; i < RNUM_CACHE_SIZE; i++) {
+        if (g_rnum_cache[i].used) {
+            expr_free(g_rnum_cache[i].key);
+            expr_free(g_rnum_cache[i].val);   /* expr_free(NULL) is a no-op */
+            g_rnum_cache[i].used = 0;
+        }
+    }
+    g_rnum_count = 0;
+}
+
+/* Probe.  On hit fills *out (a fresh copy, or NULL for a cached non-result) and
+ * *fired, and returns 1; on miss returns 0. */
+static int rnum_cache_get(const Expr* root_expr, NumericSpec spec, uint64_t h,
+                          Expr** out, int* fired) {
+    unsigned mask = RNUM_CACHE_SIZE - 1u, i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < RNUM_CACHE_SIZE; probe++) {
+        RNumSlot* s = &g_rnum_cache[i];
+        if (!s->used) return 0;
+        if (s->h == h && s->mode == (int)spec.mode && s->bits == spec.bits
+            && expr_eq(s->key, root_expr)) {
+            *out   = s->val ? expr_copy(s->val) : NULL;
+            *fired = s->fired;
+            return 1;
+        }
+        i = (i + 1u) & mask;
+    }
+    return 0;   /* table full without a match: treat as a miss */
+}
+
+static void rnum_cache_put(const Expr* root_expr, NumericSpec spec, uint64_t h,
+                           const Expr* val, int fired) {
+    if (g_rnum_count * 4u >= RNUM_CACHE_SIZE * 3u) rnum_cache_reset();   /* >75% */
+    unsigned mask = RNUM_CACHE_SIZE - 1u, i = (unsigned)h & mask;
+    for (unsigned probe = 0; probe < RNUM_CACHE_SIZE; probe++) {
+        RNumSlot* s = &g_rnum_cache[i];
+        if (!s->used) {
+            s->key   = expr_copy((Expr*)root_expr);
+            s->mode  = (int)spec.mode;
+            s->bits  = spec.bits;
+            s->h     = h;
+            s->val   = val ? expr_copy((Expr*)val) : NULL;
+            s->fired = fired;
+            s->used  = 1;
+            g_rnum_count++;
+            return;
+        }
+        if (s->h == h && s->mode == (int)spec.mode && s->bits == spec.bits
+            && expr_eq(s->key, root_expr)) return;   /* already present */
+        i = (i + 1u) & mask;
+    }
+}
+
+/* ====================================================================
+ *  Entry point (public, memoising)
+ * ================================================================== */
+Expr* root_numericalize(const Expr* root_expr, NumericSpec spec) {
+    /* Only genuine Root[Function[..], k] calls are memoised; a malformed
+     * argument returns NULL cheaply from the core and need not be cached. */
+    Expr* body_probe = NULL; int64_t k_probe = 0;
+    if (!parse_root_call(root_expr, &body_probe, &k_probe)) return NULL;
+
+    uint64_t h = rnum_key_hash(root_expr, spec);
+    Expr* cached = NULL; int cached_fired = 0;
+    if (rnum_cache_get(root_expr, spec, h, &cached, &cached_fired)) {
+        /* Preserve Check[] semantics: a memoised computation that fired a
+         * diagnostic re-notes the firing on every hit so Check[] still sees it.
+         * root_warn (Fix A) keeps it silent under Quiet[]; the hit itself never
+         * reprints, which also throttles an unquieted storm to the first miss. */
+        if (cached_fired) mth_msg_note_fired();
+        return cached;
+    }
+
+    unsigned long fired_before = mth_msg_fired_count();
+    Expr* out = root_numericalize_uncached(root_expr, spec);
+    int fired = (mth_msg_fired_count() != fired_before);
+    rnum_cache_put(root_expr, spec, h, out, fired);
+    return out;
 }
 
 #else  /* USE_MPFR not defined */

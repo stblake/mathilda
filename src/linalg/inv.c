@@ -54,12 +54,29 @@
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
 #include "common.h"
+#include "message.h"     /* mth_msg_suppressed / _note_fired: honour Quiet[] */
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
+
+/* Emit a Wolfram-style Inverse::tag diagnostic.  Note the firing so Check[]
+ * sees it, then stay silent under Quiet[] — the .m linear-algebra callers
+ * (ParallelMixedTower's LinearSolve/RowReduce over degenerate fibres, ...) run
+ * these inside Quiet[] and expect suppression, exactly as Mathematica hides its
+ * own internals.  A bare fprintf(stderr, ...) bypassed both and could storm
+ * when a caller looped.  Matches the ops_msg / root_warn pattern. */
+static void inv_warn(const char* fmt, ...) {
+    mth_msg_note_fired();
+    if (mth_msg_suppressed()) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
 
 /* ------------------------------------------------------------------ *
  *  Inverse workers.                                                   *
@@ -134,7 +151,7 @@ static Expr* inverse_divfree(Expr* arg, int n) {
         if (pivot_row == -1) {
             /* Singular matrix */
             char* arg_str = expr_to_string(arg);
-            fprintf(stderr, "Inverse::sing: Matrix %s is singular.\n", arg_str);
+            inv_warn("Inverse::sing: Matrix %s is singular.\n", arg_str);
             free(arg_str);
             expr_free(P);
             for (int i = 0; i < n * cols; i++) expr_free(matrix[i]);
@@ -202,7 +219,7 @@ static Expr* inverse_divfree(Expr* arg, int n) {
     /* If we didn't get n pivots, matrix is singular */
     if (r < n) {
         char* arg_str = expr_to_string(arg);
-        fprintf(stderr, "Inverse::sing: Matrix %s is singular.\n", arg_str);
+        inv_warn("Inverse::sing: Matrix %s is singular.\n", arg_str);
         free(arg_str);
         for (int i = 0; i < n * cols; i++) expr_free(matrix[i]);
         free(matrix);
@@ -336,7 +353,7 @@ static Expr* inverse_onestep(Expr* arg, int n) {
         }
         if (pivot_row == -1) {
             char* arg_str = expr_to_string(arg);
-            fprintf(stderr, "Inverse::sing: Matrix %s is singular.\n", arg_str);
+            inv_warn("Inverse::sing: Matrix %s is singular.\n", arg_str);
             free(arg_str);
             for (int i = 0; i < n * cols; i++) expr_free(matrix[i]);
             free(matrix);
@@ -448,7 +465,7 @@ static Expr* inverse_cofactor(Expr* arg, int n) {
 
     if (is_zero_poly(det_a)) {
         char* arg_str = expr_to_string(arg);
-        fprintf(stderr, "Inverse::sing: Matrix %s is singular.\n", arg_str);
+        inv_warn("Inverse::sing: Matrix %s is singular.\n", arg_str);
         free(arg_str);
         expr_free(det_a);
         for (int i = 0; i < n * n; i++) expr_free(flat[i]);
@@ -581,10 +598,9 @@ Expr* builtin_inverse(Expr* res) {
     int trank = get_tensor_dims(arg, dims);
     if (trank != 2 || dims[0] != dims[1] || dims[0] == 0) {
         char* arg_str = expr_to_string(arg);
-        fprintf(stderr,
-                "Inverse::matsq: Argument %s at position 1 is not a "
-                "non-empty square matrix.\n",
-                arg_str);
+        inv_warn("Inverse::matsq: Argument %s at position 1 is not a "
+                 "non-empty square matrix.\n",
+                 arg_str);
         free(arg_str);
         return NULL;
     }
