@@ -213,6 +213,33 @@ unevaluated---rather than guess. \B{Limit} and \B{Resolve} are complementary:
 \B{Limit} reaches the transcendental limits a decision procedure cannot, while
 \B{Resolve} certifies the algebraic ones with a proof.}
 
+The definition does not care how many variables \(x\) stands for. A limit in the
+plane\index{limit!multivariate}, \(\lim_{(x,y)\to(a,b)} f(x,y)=L\), is the same
+sentence with the punctured disc \(0<\lVert(x,y)-(a,b)\rVert<\delta\) as the
+neighbourhood; squaring the norm keeps it polynomial,
+\(0<(x-a)^2+(y-b)^2<\delta^2\), and the inner \B{ForAll} now binds \emph{both}
+coordinates. Mathilda proves such a limit exactly as before:
+
+\begin{codepairs}
+\pair{calculus/limits/12}{\(\lim_{(x,y)\to(0,0)}(x+y)=0\), proved from the planar
+\(\varepsilon\)--\(\delta\) definition---the inner \B{ForAll} quantifies the pair
+\(\{x,y\}\) over the punctured disc.}
+\pair{calculus/limits/13}{\(\lim_{(x,y)\to(0,0)}(x^2+y^2)=0\) the same way.}
+\end{codepairs}
+
+Proving a \emph{correct} planar limit is cheap---both take under a second---but the
+symmetry with the one-variable case is not complete, and the reason is the cost of
+the decision procedure.\calloutnote{Under the hood}{The inner block now eliminates
+two variables beneath three parameters, so the CAD runs in four variables
+(\(x,y,\delta,\varepsilon\)) where the line needed three---and cylindrical algebraic
+decomposition is doubly exponential in the variable count. Proving a true limit
+stays fast because an \(\exists\delta\) witness is found early; but \emph{refuting} a
+wrong planar limit must show that \emph{no} \(\delta\) works, which drives the full
+four-variable decomposition, and at present Mathilda runs that to its limit and
+\emph{declines}---returns the statement unevaluated---rather than assert a verdict it
+cannot certify. The soundness contract holds at the edge of tractability, not only at
+the edge of decidability.}
+
 \usagebox{Limit}
 
 \subsection{Series}
