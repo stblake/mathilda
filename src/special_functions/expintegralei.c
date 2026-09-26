@@ -707,7 +707,7 @@ Expr* builtin_expintegralei(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
-    if (argc == 1) return ei_one_arg(args[0]);
+    if (argc == 1) return numeric_promote_result_if_degenerate(ei_one_arg(args[0]), res);
     return ei_emit_argx(argc);
 }
 

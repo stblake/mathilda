@@ -13,6 +13,7 @@
  */
 
 #include "barnesg.h"
+#include "numeric.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -220,7 +221,11 @@ Expr* builtin_barnesg(Expr* res) {
     if (barnes_is_inexact(arg)) {
         Expr* val = barnesg_numeric(arg);
         if (val && expr_is_numeric_like(val)) return val;
-        expr_free(val);
+        /* BarnesG[100.] is ~3*10^6626: the machine continuation overflows a
+         * double. Promote the degenerate result to an extended-exponent MPFR
+         * real (or, past MPFR's range, let the evaluator net make it Overflow[]). */
+        val = numeric_promote_result_if_degenerate(val, res);
+        if (val) return val;
     }
 
     return NULL;

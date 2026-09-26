@@ -1020,7 +1020,10 @@ Expr* builtin_power(Expr* res) {
                  * the cleanup threshold (e.g. 1/(-2.22e-16) -> ... - 0.55 I). */
                 if (vbase_im == 0.0 && vexp_im == 0.0 &&
                     (vbase_re >= 0.0 || floor(vexp_re) == vexp_re)) {
-                    return expr_new_real(pow(vbase_re, vexp_re));
+                    /* 2.^2000 overflows a double, 2.^-2000 underflows to 0;
+                     * promote a degenerate result to an extended-exponent real. */
+                    return numeric_promote_result_if_degenerate(
+                        expr_new_real(pow(vbase_re, vexp_re)), res);
                 }
 
                 double complex result = cpow(z, w);

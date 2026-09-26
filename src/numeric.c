@@ -1218,7 +1218,359 @@ static bool expr_has_zero_real(const Expr* e) {
     }
     return false;
 }
+
+/* True when the tree carries an Overflow[] or Indeterminate. The evaluator's
+ * inf/nan net converts a leaked machine overflow into one of these *during* the
+ * machine-mode inner evaluation, so N[]'s own MPFR retry (which used to detect
+ * the raw Inf/NaN) must recognise them as the same degeneracy signal. */
+static bool expr_has_overflow_or_indeterminate(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_Indeterminate;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Overflow) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i) {
+        if (expr_has_overflow_or_indeterminate(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* True when some MPFR leaf is finite and nonzero yet its magnitude is outside
+ * the machine-double range — a value only an extended-exponent (promoted)
+ * representation can hold (Exp[1000.] -> 1.97*10^434, Exp[-1000.] -> 1.9*10^-434).
+ * This distinguishes a promoted overflow/underflow, which a machine-mode N[]
+ * should recompute from the exact form for full accuracy, from an ordinary
+ * in-range MPFR result (which it should leave alone). */
+static bool expr_has_extended_range_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_MPFR) {
+        if (mpfr_zero_p(e->data.mpfr) || mpfr_nan_p(e->data.mpfr) || mpfr_inf_p(e->data.mpfr))
+            return false;
+        double d = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+        return !isfinite(d) || d == 0.0;   /* overflowed or underflowed a double */
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i)
+        if (expr_has_extended_range_real(e->data.function.args[i])) return true;
+    return false;
+}
 #endif  /* USE_MPFR */
+
+/* ------------------------------------------------------------------------
+ *  inf / nan never escape a numeric result
+ *
+ *  A raw IEEE infinity or NaN is an artifact of the C math library, not a
+ *  Mathilda value: Exp[800.] overflowing a double must never surface as
+ *  `inf.0`, nor Binomial[2000., 1000.] as `nan`. The evaluator routes every
+ *  NumericFunction result through numeric_sanitize_nonfinite() as a
+ *  last-resort backstop, rewriting a leaked non-finite machine real into a
+ *  genuine construct:
+ *      +Inf -> Overflow[]      -Inf -> -Overflow[]      NaN -> Indeterminate
+ *  The representable-overflow cases (Exp[800.] -> 2.7*10^347, ...) are promoted
+ *  to an extended-exponent MPFR real upstream in each head's machine-real path,
+ *  so this net only fires for magnitudes past even MPFR's exponent range, where
+ *  Overflow[] is the correct answer (as it is in Mathematica). Always compiled:
+ *  the "no inf/nan" invariant must hold with or without MPFR.
+ * ---------------------------------------------------------------------- */
+
+static Expr* make_overflow_expr(void) {
+    return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
+}
+
+/* Cheap top-level test used to gate the rewrite: is `e` a machine real, or a
+ * Complex of machine reals, carrying an Inf or NaN? The common finite path
+ * pays only this type check. */
+/* A single leaf carrying an Inf or NaN (machine or MPFR). */
+static bool leaf_is_nonfinite(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return !isfinite(e->data.real);
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_nan_p(e->data.mpfr) || mpfr_inf_p(e->data.mpfr);
+#endif
+    return false;
+}
+
+bool numeric_result_has_nonfinite(const Expr* e) {
+    if (!e) return false;
+    if (leaf_is_nonfinite(e)) return true;
+    Expr *re, *im;
+    if (is_complex((Expr*)e, &re, &im)) {
+        if (leaf_is_nonfinite(re) || leaf_is_nonfinite(im)) return true;
+    }
+    return false;
+}
+
+/* NaN? / (positive) Inf? for a single machine-or-MPFR leaf. */
+static bool leaf_is_nan(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return isnan(e->data.real);
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_nan_p(e->data.mpfr) != 0;
+#endif
+    return false;
+}
+static bool leaf_is_neg_inf(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return isinf(e->data.real) && e->data.real < 0.0;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_inf_p(e->data.mpfr) && mpfr_sgn(e->data.mpfr) < 0;
+#endif
+    return false;
+}
+
+/* Rewrite a leaked non-finite machine real into a Mathilda construct. Takes
+ * ownership of `e` and returns the replacement (freeing `e`), or `e` unchanged
+ * when it holds nothing non-finite — so it is safe to call unconditionally,
+ * though the evaluator gates it on numeric_result_has_nonfinite() to keep the
+ * hot path free. */
+/* Build the construct a non-finite leaf collapses to. `nan` wins over sign. */
+static Expr* nonfinite_construct(bool nan, bool neg) {
+    if (nan) return expr_new_symbol(SYM_Indeterminate);
+    if (neg) {
+        Expr* a[2] = { expr_new_integer(-1), make_overflow_expr() };
+        return expr_new_function(expr_new_symbol(SYM_Times), a, 2);   /* -Overflow[] */
+    }
+    return make_overflow_expr();
+}
+
+Expr* numeric_sanitize_nonfinite(Expr* e) {
+    if (!e) return e;
+    if (leaf_is_nonfinite(e)) {
+        Expr* r = nonfinite_construct(leaf_is_nan(e), leaf_is_neg_inf(e));
+        expr_free(e);
+        return r;
+    }
+    Expr *re, *im;
+    if (is_complex(e, &re, &im)) {
+        if (leaf_is_nonfinite(re) || leaf_is_nonfinite(im)) {
+            /* A complex overflow has no meaningful sign; NaN anywhere -> Indeterminate. */
+            Expr* r = nonfinite_construct(leaf_is_nan(re) || leaf_is_nan(im), false);
+            expr_free(e);
+            return r;
+        }
+    }
+    return e;
+}
+
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------------
+ *  L2: promote a degenerate machine-real call to an extended-exponent real
+ *
+ *  Every head with a machine-real fast path also has an MPFR path (N[f[exact]]
+ *  promotes). When the machine path yields a degenerate double — Inf/NaN from
+ *  overflow, or 0 from underflow — the fix is to recompute the SAME call with
+ *  its machine-real arguments promoted to MPFR (whose exponent range is
+ *  effectively unbounded) and present the result at machine precision. This is
+ *  the single mechanism behind Gamma[256.] -> 3.35*10^504, Exp[800.], Sinh,
+ *  Binomial, BernoulliB, ... : each head calls numeric_promote_machine_call()
+ *  from its own (cold) degeneracy branch, where the arguments are still live.
+ * ---------------------------------------------------------------------- */
+
+/* Promote a machine-real leaf (EXPR_REAL, or a Complex of them) to an MPFR at
+ * `bits`; copy any other atom unchanged. Sets *saw when a machine real was
+ * actually promoted, so a call with nothing to promote can bail cheaply. */
+static Expr* promote_leaf_to_mpfr(const Expr* e, mpfr_prec_t bits, bool* saw) {
+    if (!e) return NULL;
+    if (e->type == EXPR_REAL) {
+        *saw = true;
+        Expr* m = expr_new_mpfr_bits(bits);
+        mpfr_set_d(m->data.mpfr, e->data.real, MPFR_RNDN);
+        return m;
+    }
+    Expr *re, *im;
+    if (is_complex((Expr*)e, &re, &im) &&
+        (re->type == EXPR_REAL || im->type == EXPR_REAL)) {
+        return make_complex(promote_leaf_to_mpfr(re, bits, saw),
+                            promote_leaf_to_mpfr(im, bits, saw));
+    }
+    /* Recurse into function arguments so machine reals inside List parameters
+     * are promoted too (HypergeometricPFQ[{1.}, {2.}, 900.] -> all-MPFR). The
+     * call is a numeric computation, so every real leaf is fair game. */
+    if (e->type == EXPR_FUNCTION) {
+        size_t n = e->data.function.arg_count;
+        Expr** a = (Expr**)malloc(n * sizeof(Expr*));
+        for (size_t i = 0; i < n; ++i)
+            a[i] = promote_leaf_to_mpfr(e->data.function.args[i], bits, saw);
+        Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+        free(a);
+        return out;
+    }
+    return expr_copy((Expr*)e);
+}
+
+/* Classify a numeric leaf: finite? and, when finite, a (signed) zero?
+ * A symbolic / non-numeric result is reported as not finite. */
+static bool numeric_leaf_is_finite(const Expr* e, bool* is_zero) {
+    *is_zero = false;
+    if (!e) return false;
+    if (e->type == EXPR_REAL) { *is_zero = (e->data.real == 0.0); return isfinite(e->data.real); }
+    if (e->type == EXPR_MPFR) {
+        if (mpfr_nan_p(e->data.mpfr) || mpfr_inf_p(e->data.mpfr)) return false;
+        *is_zero = (mpfr_zero_p(e->data.mpfr) != 0);
+        return true;
+    }
+    if (e->type == EXPR_INTEGER) { *is_zero = (e->data.integer == 0); return true; }
+    Expr *re, *im;
+    if (is_complex((Expr*)e, &re, &im)) {
+        bool zr, zi;
+        bool fr = numeric_leaf_is_finite(re, &zr);
+        bool fi = numeric_leaf_is_finite(im, &zi);
+        *is_zero = zr && zi;
+        return fr && fi;
+    }
+    return false;
+}
+
+/* Round an MPFR result (or the parts of a Complex) down to a machine 53-bit
+ * mantissa in place: a value computed at a higher working precision is then
+ * presented as a machine number (Precision ~ 15.95), matching N[f[exact]]. The
+ * exponent is untouched, so an overflowing magnitude survives the round. */
+static void round_leaf_to_machine(Expr* e) {
+    if (!e) return;
+    if (e->type == EXPR_MPFR) { mpfr_prec_round(e->data.mpfr, 53, MPFR_RNDN); return; }
+    Expr *re, *im;
+    if (is_complex(e, &re, &im)) { round_leaf_to_machine(re); round_leaf_to_machine(im); }
+}
+
+/* If a promoted pure-real MPFR value sits inside the normal machine-double range
+ * (Binomial[1000., 500.] -> 2.7*10^299, whose tgamma ratio only overflowed as an
+ * intermediate), hand it back as a machine Real so MachineNumberQ agrees with
+ * Mathematica. A magnitude past DBL_MAX (Gamma[256.]) stays MPFR; one below
+ * DBL_MIN (Exp[-800.] -> 3.7*10^-348) stays MPFR too, since a double would
+ * re-underflow it to zero. Complex results are left as MPFR. */
+static Expr* demote_to_machine_if_fits(Expr* r) {
+    if (r && r->type == EXPR_MPFR && !mpfr_zero_p(r->data.mpfr)) {
+        double d = mpfr_get_d(r->data.mpfr, MPFR_RNDN);
+        if (isfinite(d) && d != 0.0) {   /* normal double: exact for a 53-bit source */
+            expr_free(r);
+            return expr_new_real(d);
+        }
+    }
+    return r;
+}
+
+Expr* numeric_promote_machine_call(const Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION) return NULL;
+    size_t n = call->data.function.arg_count;
+    if (n == 0) return NULL;
+
+    /* Machine precision first (so the output matches N[f[exact]]'s ~15.95
+     * digits); a high-precision retry only if that underflowed to zero — some
+     * MPFR kernels (BesselK) drop the exponent at 53 bits though the value is
+     * representable. Rounding the retry back to 53 bits keeps machine output. */
+    const mpfr_prec_t passes[2] = { 53, (mpfr_prec_t)(53 + NUMERIC_GUARD_BITS + 64) };
+    for (int p = 0; p < 2; ++p) {
+        mpfr_prec_t bits = passes[p];
+        bool saw = false;
+        Expr** args = (Expr**)malloc(n * sizeof(Expr*));
+        if (!args) return NULL;
+        for (size_t i = 0; i < n; ++i)
+            args[i] = promote_leaf_to_mpfr(call->data.function.args[i], bits, &saw);
+        if (!saw) {                       /* no machine real to promote */
+            for (size_t i = 0; i < n; ++i) expr_free(args[i]);
+            free(args);
+            return NULL;
+        }
+        Expr* promoted = expr_new_function(expr_copy(call->data.function.head), args, n);
+        free(args);
+        Expr* r = eval_and_free(promoted);
+
+        bool is_zero = false;
+        bool finite = numeric_leaf_is_finite(r, &is_zero);
+
+        if (finite && !is_zero) {
+            if (bits > 53) round_leaf_to_machine(r);
+            return demote_to_machine_if_fits(r);   /* machine when representable */
+        }
+        /* Degenerate at this precision. The machine-precision (53-bit) pass can
+         * be misleading: a kernel may flush to zero (BesselK), or take an
+         * internal machine path that overflows though the value is representable
+         * (Erfi, ExpIntegralEi). Retry once at a high working precision before
+         * concluding anything. */
+        if (p == 0) { expr_free(r); continue; }
+
+        /* Second pass still degenerate: this is the real shape of the value. */
+        if (finite && is_zero) { expr_free(r); return NULL; }  /* true zero: keep machine 0 */
+        if (r && (r->type == EXPR_REAL || r->type == EXPR_MPFR)) {
+            /* Non-finite even in MPFR: past the exponent range -> Overflow[] etc. */
+            return numeric_sanitize_nonfinite(r);
+        }
+        expr_free(r);                     /* symbolic decline: keep caller's behaviour */
+        return NULL;
+    }
+    return NULL;
+}
+#else  /* !USE_MPFR: no arbitrary-precision path to promote into */
+Expr* numeric_promote_machine_call(const Expr* call) { (void)call; return NULL; }
+#endif /* USE_MPFR */
+
+/* Wrap the pure-real machine result `v` of a unary numeric `call` (head[x]),
+ * where `xin` is the real input. A degenerate `v` — Inf/NaN from overflow, or a
+ * flush-to-zero from a nonzero argument — is recomputed in MPFR via
+ * numeric_promote_machine_call so Exp[800.], Sinh[800.], Sech[800.], ... return
+ * the true extended-exponent value instead of leaking a libm artifact. In a
+ * build without MPFR this is exactly expr_new_real(v) (and the evaluator's net
+ * still stops any Inf/NaN from escaping). */
+Expr* numeric_machine_real_or_promote(double v, double xin, const Expr* call) {
+#ifdef USE_MPFR
+    if (!isfinite(v) || (v == 0.0 && xin != 0.0)) {
+        Expr* p = numeric_promote_machine_call(call);
+        if (p) return p;
+    }
+#else
+    (void)xin; (void)call;
+#endif
+    return expr_new_real(v);
+}
+
+#ifdef USE_MPFR
+/* True when `call` has at least one non-zero machine-real argument (the usual
+ * signature of an argument big/small enough to have driven an over/underflow).
+ * Only consulted on the MPFR promotion path. */
+static bool call_has_nonzero_real_arg(const Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < call->data.function.arg_count; ++i) {
+        Expr* a = call->data.function.args[i];
+        if (a && a->type == EXPR_REAL && a->data.real != 0.0) return true;
+        Expr *re, *im;
+        if (a && is_complex(a, &re, &im)) {
+            if (re->type == EXPR_REAL && re->data.real != 0.0) return true;
+            if (im->type == EXPR_REAL && im->data.real != 0.0) return true;
+        }
+    }
+    return false;
+}
+#endif
+
+/* Wrap the *result* `r` of a numeric `call` computed via a machine fast path.
+ * If `r` is degenerate — Inf/NaN, or a flush-to-zero while the call has a
+ * non-zero real argument — recompute the call in MPFR (numeric_promote_machine_call)
+ * and return that, freeing `r`. Otherwise return `r` unchanged. For heads whose
+ * numeric core is a helper that only sees the argument (Erfc/Erfi/ExpIntegralEi,
+ * ...), so the argument-live promotion is applied here at the builtin entry.
+ * Always compiled; a no-op without MPFR (the evaluator's net still catches Inf/
+ * NaN). NULL `r` (declined) is returned unchanged. */
+Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call) {
+#ifdef USE_MPFR
+    if (!r) return r;
+    bool degen = false;
+    if (r->type == EXPR_REAL) {
+        double v = r->data.real;
+        degen = !isfinite(v) || (v == 0.0 && call_has_nonzero_real_arg(call));
+    } else {
+        Expr *re, *im;
+        if (is_complex(r, &re, &im))
+            degen = leaf_is_nonfinite(re) || leaf_is_nonfinite(im);
+    }
+    if (degen) {
+        Expr* p = numeric_promote_machine_call(call);
+        if (p) { expr_free(r); return p; }
+    }
+#else
+    (void)call;
+#endif
+    return r;
+}
 
 /* ------------------------------------------------------------------------
  *  Top-level dispatch
@@ -1246,7 +1598,15 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
      * in MPFR and keep the answer only if it is genuinely better. Fires
      * only on a degenerate result, so the normal path pays nothing. */
     if (spec.mode == NUMERIC_MODE_MACHINE && s.has_call && !s.has_infinity) {
-        bool inf  = expr_has_nonfinite_real(r);
+        /* A raw Inf/NaN, or the Overflow[]/Indeterminate the net rewrote one
+         * into, both signal a machine overflow that MPFR may resolve. An MPFR
+         * leaf in a machine-mode result likewise means a head already promoted
+         * an overflow internally (Exp[1000.] -> 1.97*10^434): recompute from the
+         * exact form at working precision, since a head that promoted a *rounded*
+         * machine argument (E^1000 as (2.718...53-bit)^1000) is less accurate
+         * than deriving E to full precision here. */
+        bool inf  = expr_has_nonfinite_real(r) || expr_has_overflow_or_indeterminate(r)
+                 || expr_has_extended_range_real(r);
         bool zero = !inf && !s.has_zero && expr_has_zero_real(r);
         if (inf || zero) {
             NumericSpec retry = spec;
@@ -1255,6 +1615,7 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
                        ? work.bits : (long)DBL_MANT_DIG + NUMERIC_GUARD_BITS;
             Expr* alt = numeric_round_result(numericalize_rec(e, retry), spec);
             bool better = alt && !expr_has_nonfinite_real(alt)
+                       && !expr_has_overflow_or_indeterminate(alt)
                        && (inf || !expr_has_zero_real(alt));
             if (better) {
                 expr_free(r);

@@ -34,6 +34,7 @@
  * Attributes: Listable, Protected.
  */
 #include "eulere.h"
+#include "numeric.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -331,8 +332,10 @@ Expr* builtin_eulere(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
-    if (argc == 1) return euler_one_arg(args[0]);
-    if (argc == 2) return euler_two_arg(args[0], args[1]);
+    /* EulerE[200.] is ~6*10^335: mpz_get_d overflows a double, so a machine-real
+     * index promotes to an extended-exponent MPFR real. */
+    if (argc == 1) return numeric_promote_result_if_degenerate(euler_one_arg(args[0]), res);
+    if (argc == 2) return numeric_promote_result_if_degenerate(euler_two_arg(args[0], args[1]), res);
     return euler_emit_argt(argc);
 }
 

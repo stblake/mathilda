@@ -395,10 +395,11 @@ static void test_overflow_keeps_a_machine_number(void) {
     assert_prints("Precision[N[Exp[1000]]]", "15.9546");
     assert_prints("Precision[N[1001!]]",     "15.9546");
 
-    /* Beyond MPFR's own exponent range (~10^323228458) there is nothing
-     * left to recover, and the honest answer stays infinite rather than
-     * costing a retry that cannot succeed. */
-    assert_prints("N[Exp[10^25]]", "inf.0");
+    /* Beyond MPFR's own exponent range (~10^323228458) there is nothing left
+     * to recover. A raw IEEE `inf.0` is a libm artifact, never a Mathilda value,
+     * so the honest answer is Overflow[] (as in Mathematica) rather than a
+     * leaked infinity. */
+    assert_prints("N[Exp[10^25]]", "Overflow[]");
 }
 
 /* A machine number outside IEEE range must still compare. Coercing it to a

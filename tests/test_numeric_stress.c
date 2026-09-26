@@ -307,6 +307,14 @@ static ResKind classify(const Expr* e, mpfr_t re, mpfr_t im) {
             && strcmp(h->data.symbol.name, "DirectedInfinity") == 0) {
             return RES_DEGENERATE;
         }
+        /* Overflow[] / Underflow[] are emitted as 0-arg functions, not bare
+         * symbols: a magnitude past the MPFR exponent range now yields Overflow[]
+         * rather than a leaked inf.0 (the invariant that inf/nan never escape). */
+        if (h && h->type == EXPR_SYMBOL
+            && (strcmp(h->data.symbol.name, "Overflow") == 0
+                || strcmp(h->data.symbol.name, "Underflow") == 0)) {
+            return RES_DEGENERATE;
+        }
     }
 
     bool fin = true;

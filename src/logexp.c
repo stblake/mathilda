@@ -477,11 +477,11 @@ Expr* builtin_exp(Expr* res) {
     bool inexact = false;
     if (get_approx(z, &c, &inexact) && inexact) {
         double complex s = cexp(c);
-        // Return real result if output is purely real, otherwise return complex
-        Expr* ret = NULL;
-        if (cimag(c) == 0.0) ret = expr_new_real(creal(s));
-        else ret = make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
-        return ret;
+        // Return real result if output is purely real, otherwise return complex.
+        // A pure-real Exp[x] that over/underflows the double range (Exp[800.],
+        // Exp[-800.]) promotes to an extended-exponent MPFR real.
+        if (cimag(c) == 0.0) return numeric_machine_real_or_promote(creal(s), creal(c), res);
+        return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
 
     // Remains unevaluated if it doesn't match above rules

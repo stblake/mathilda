@@ -1685,8 +1685,12 @@ Expr* builtin_besselk(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2) return besselk_emit_argx(argc);
-    return besselk_two_arg(res->data.function.args[0],
-                           res->data.function.args[1]);
+    /* BesselK[0, 800.] ~ 1.6*10^-349 underflows a double (and even a 53-bit
+     * MPFR kernel drops the exponent), so a flush-to-zero result promotes and
+     * re-evaluates at higher working precision. */
+    return numeric_promote_result_if_degenerate(
+        besselk_two_arg(res->data.function.args[0],
+                        res->data.function.args[1]), res);
 }
 
 static Expr* besseli_two_arg(Expr* order, Expr* z) {

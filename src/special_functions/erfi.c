@@ -556,7 +556,7 @@ Expr* builtin_erfi(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
-    if (argc == 1) return erfi_one_arg(args[0]);
+    if (argc == 1) return numeric_promote_result_if_degenerate(erfi_one_arg(args[0]), res);
     return erfi_emit_argx(argc);
 }
 

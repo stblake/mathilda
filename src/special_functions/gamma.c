@@ -643,7 +643,17 @@ static Expr* gamma_one_arg(Expr* arg) {
         if (isnan(r)) return expr_new_symbol(SYM_ComplexInfinity); /* pole at <=0 integer */
         if (isinf(r)) {
             if (v <= 0.0) return expr_new_symbol(SYM_ComplexInfinity);
-            return NULL; /* overflow for large positive z: stay symbolic */
+#ifdef USE_MPFR
+            /* Overflow: the true value is finite but its exponent exceeds the
+             * IEEE double range (Gamma[172.] .. ~1e504). A machine *number*
+             * (53-bit mantissa, extended exponent) represents it fine, and
+             * N[Gamma[n]] already returns one, so recompute in MPFR at machine
+             * precision and hand back that promoted real rather than dropping
+             * the input on the floor. */
+            Expr* promoted = numeric_mpfr_apply_unary(arg, 53, mpfr_gamma);
+            if (promoted) return promoted;
+#endif
+            return NULL; /* no MPFR build: stay symbolic */
         }
         return expr_new_real(r);
     }
@@ -787,7 +797,16 @@ static Expr* gamma_two_arg(Expr* a, Expr* z) {
             } else if (prec > 53) {
                 out = expr_new_mpfr_copy(rv);            /* arbitrary precision */
             } else {
-                out = expr_new_real(mpfr_get_d(rv, MPFR_RNDN)); /* machine */
+                /* Machine precision: collapse to a double only when it fits.
+                 * Gamma[900., 1.] ~ 7.5*10^2266 overflows and Gamma[2., 800.] ~
+                 * 2.9*10^-345 underflows a double; keep the 53-bit MPFR value
+                 * (an extended-exponent machine number) instead of leaking
+                 * inf.0 / 0.0. */
+                double d = mpfr_get_d(rv, MPFR_RNDN);
+                if (isfinite(d) && (d != 0.0 || mpfr_zero_p(rv)))
+                    out = expr_new_real(d);              /* machine */
+                else
+                    out = expr_new_mpfr_copy(rv);        /* extended exponent */
             }
         }
         mpfr_clear(av); mpfr_clear(zv); mpfr_clear(rv);

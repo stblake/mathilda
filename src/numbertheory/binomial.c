@@ -5,6 +5,7 @@
 #include "numbertheory.h"
 #include "numbertheory_internal.h"
 #include "arithmetic.h"
+#include "numeric.h"   /* numeric_promote_result_if_degenerate */
 #include "eval.h"
 #include "sym_names.h"
 #include "internal.h"
@@ -310,7 +311,11 @@ Expr* builtin_binomial(Expr* res) {
     if (arg_n->type == EXPR_REAL || arg_m->type == EXPR_REAL) {
         double nv, mv;
         if (binomial_to_double(arg_n, &nv) && binomial_to_double(arg_m, &mv)) {
-            return expr_new_real(tgamma(nv + 1.0) / (tgamma(mv + 1.0) * tgamma(nv - mv + 1.0)));
+            /* The tgamma ratio overflows to Inf (or Inf/Inf -> NaN) well before
+             * the binomial coefficient itself leaves the double range, so
+             * promote a degenerate result to MPFR. */
+            return numeric_promote_result_if_degenerate(
+                expr_new_real(tgamma(nv + 1.0) / (tgamma(mv + 1.0) * tgamma(nv - mv + 1.0))), res);
         }
     }
 

@@ -1,5 +1,18 @@
 # Elementary Functions
 
+## Machine overflow never leaks a libm artifact
+
+A numeric function on a machine-precision argument whose true value over/underflows
+the IEEE double range never returns a raw `inf.0`, `-inf.0`, or `nan` — those are
+C-library artifacts, not Mathilda values. `Exp[800.]` promotes to an
+extended-exponent machine number (`2.72…×10^347`, `MachineNumberQ → False`, as
+`N[Exp[800]]` already gave); `Exp[-800.]` to `3.67…×10^-348`; a magnitude past even
+MPFR's exponent range (`Exp[10^25]`) returns `Overflow[]` (`Indeterminate` for a
+`NaN`). This holds for the elementary heads here (`Exp`, `Power`, `Sinh`, `Cosh`,
+`Sech`, `Csch`) and the special/number-theory heads (`Gamma`, `Factorial`,
+`Binomial`, `Erfi`, `Erfc`, `BesselK`, `BernoulliB`, …); see
+[`special-functions.md`](special-functions.md) and the 2026-09-21 changelog.
+
 ## Trig Functions
 `Sin`, `Cos`, `Tan`, `Cot`, `Sec`, `Csc` and their inverses `ArcSin`, etc.
 

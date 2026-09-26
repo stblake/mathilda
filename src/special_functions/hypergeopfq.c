@@ -785,6 +785,12 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
     Expr* n = try_numeric(a, b, z);
     if (n) return n;
 
+    /* (7b) The machine series bails out (returns NULL) once a partial sum
+     * overflows a double -- Hypergeometric1F1[1., 2., 900.] ~ 8*10^387. Promote
+     * the whole call to MPFR (parameters inside the lists included) and retry at
+     * the extended exponent range. */
+    { Expr* p = numeric_promote_machine_call(res); if (p) return p; }
+
     /* (8) Stay unevaluated. */
     return NULL;
 }

@@ -1,54 +1,57 @@
-# Task: overflow-robust Schwartz–Zippel sampler in PossibleZeroQ / zero_test
+# Task: libm inf/nan must never leak into a Mathilda result
 
-Fixes POSSIBLE_ZEROQ_IMPROVEMENTS.md #2 (wide dynamic range): overflow sample points
-made the sampler abort to UNKNOWN→True for nowhere-zero functions. Re-draw/skip overflow
-points instead. Scope: overflow-robust sampler only (item #1 residual out of scope).
+## Bug report
+`Gamma[256.]` returned `Gamma[256.0]` (unevaluated). Broader class: elementary /
+special functions on machine-real args whose true value over/underflows the IEEE
+double range leak libm artifacts — `inf.0`, `-inf.0`, `nan`, a spurious `0.`, or
+stay unevaluated. User directive: **`inf.0` and `nan` are not Mathilda
+constructs; they must never be returned.**
 
-## Implementation (all src/zero_test.c unless noted)
-- [ ] Add `ZT_OVERFLOW_SHELL_BITS[]` ladder constant {6,4,2,1,0}
-- [ ] `evaluate_rung`: add `bool* out_overflow`; ok&&!isfinite(mag) → flag + UNKNOWN; !ok → plain UNKNOWN
-- [ ] `decide_numeric`: add `bool* out_overflow` (+ fwd decl :159); propagate from rung-0 call, NULL to higher rungs
-- [ ] `screen_point`: add `bool* out_overflow`; propagate
-- [ ] `sample_random_value(int num_bits)`; `sample_channel(...,int num_bits)`; `sample_random_value_spec(...,int num_bits)` (two-sided range branch ignores num_bits)
-- [ ] `sz_trial`: add `int num_bits`, `bool* out_overflow`; thread through draw + eval calls
-- [ ] `decide_schwartz_zippel_core`: shell-ladder retry on overflow-UNKNOWN in screen + confirm loops; skip if all shells overflow; screen returns UNKNOWN if zero informative points; confirm retains TRUE
-- [ ] `zt_decide_core` Stage 2 call (:1716): pass NULL
+## Root cause
+`N[f[exact]]` already promotes machine overflow/underflow to an extended-exponent
+MPFR real (numeric.c:1248 retry) — so every affected head already has a correct
+MPFR path. The bug is that a machine-`EXPR_REAL` argument takes a *separate*
+double-only fast path that calls libm directly and never promotes.
 
-## Tests
-- [ ] Group 18 in tests/test_zero_test.c: E^(-10t)+E^(-100t), Gamma[x^2]+1, Gamma[x+1]-x Gamma[x]+E^(x^2) → False (timed + stable); overflow-prone identities stay True; matched non-identities stay False
-- [ ] Run zero_test_tests, trigexp_zero_tests, possiblezeroq_* (grep FAIL), + downstream: refine, comparisons/Equal, dsolve, solve, integrate, limit, interp, radical_simplify, nullspace
-- [ ] Inspect every True→False flip
+## Design (two complementary layers + enforcement)
+- **L1 — universal safety net (invariant).** In `eval.c` at the builtin-return
+  site: if a `ATTR_NUMERICFUNCTION` result carries a non-finite `EXPR_REAL`
+  (`±inf`/`nan`, incl. inside `Complex[...]`), rewrite it to a real construct:
+  `+inf → Overflow[]`, `-inf → -Overflow[]`, `nan → Indeterminate`,
+  complex-nonfinite → `Overflow[]`/`Indeterminate`. Reads only the *result*
+  (avoids the builtin-ownership-of-`res` problem); fires only on the cold
+  non-finite path (zero hot-path cost). Guarantees the invariant for ALL heads.
+- **L2 — per-function promotion (correctness).** Each affected head, in its
+  machine-real branch (args still in scope), detects the degenerate double and
+  recomputes via its existing MPFR kernel at 53-bit precision → extended-exponent
+  `EXPR_MPFR`, matching `N[f[exact]]`. Shared helper for the common
+  `get_approx`+libm pattern; inline MPFR for compound heads.
+- **L3 — enforcement sweep.** Machine-input companion to `test_numeric_stress.c`:
+  for each (head,arg), assert `f[x.]` is never inf/nan and, when the HP oracle is
+  finite, `f[x.] ≈ N[f[x],30]`. Beyond-MPFR extremes must be `Overflow[]` (not
+  inf.0). Ratcheting known-gaps like the existing harness.
 
-## Docs / release
-- [ ] POSSIBLE_ZEROQ_IMPROVEMENTS.md #2 status
-- [ ] docs/spec/builtins/expression-information.md PossibleZeroQ note
-- [ ] docs/spec/changelog/2026-09-21.md entry
-- [ ] src/version.h → 0.206; tag v0.206
-- [ ] valgrind spot-check; rebuild code-review graph
+## Affected heads (audit)
+overflow→inf/nan: Exp, Power, Sinh, Cosh, Factorial, Binomial(nan), Erfi,
+Gamma(2-arg), BernoulliB, EulerE, BarnesG, Hyperfactorial(nan), ExpIntegralEi.
+unevaluated: Hypergeometric1F1/HypergeometricPFQ.
+underflow→0: Exp, Power, Sech, Csch, Erfc, Gamma(2-arg), BesselK.
+Already correct (mirror these): Gamma(1-arg, now fixed), Factorial2, Pochhammer,
+Beta, LogGamma, BesselI, AiryAi/Bi, Sinh/CoshIntegral, Fibonacci, LucasL.
 
-## Review (completed 2026-09-26, v0.208)
+## Plan / checklist
+- [x] Reproduce; locate machine-real paths; validate promotion mechanism on Gamma[1-arg].
+- [x] L1: safety net in eval.c + `numeric_result_has_nonfinite`/`numeric_sanitize_nonfinite` (handles REAL + MPFR; not attribute-gated).
+- [x] L2 helpers: `numeric_promote_machine_call` (re-eval with args→MPFR, 2-pass precision, demote-if-fits), `numeric_machine_real_or_promote`, `numeric_promote_result_if_degenerate`.
+- [x] L2 wiring: Exp, Power, Sinh/Cosh/Sech/Csch, Factorial, Binomial, Gamma(2-arg, local keep-MPFR), Erfc, Erfi, ExpIntegralEi, BernoulliB, EulerE, BarnesG, Hyperfactorial, Hypergeometric1F1/PFQ, BesselK.
+- [x] numericalize retry: also trigger on Overflow[]/Indeterminate and extended-range MPFR (fixes net×N interaction AND N[Exp[1000]] accuracy).
+- [x] Tests: numeric_largearg (updated the case that codified the old inf.0), numeric_stress classifier reads Overflow[]/Underflow[] function form. Full battery 31/31; controls unchanged.
+- [x] valgrind: no leaks from new code (only macOS objc/dyld startup noise, stacks all in system libs).
+- [x] Full suite: 500 pass; 6 failures PROVEN pre-existing (byte-identical on stashed clean main): crc_corpus, dsolve_stress, intrischnorman, moebiusmu, primenu (documented probabilistic ECM), risch_rde_tower; dsolve_tests/dsolve_corpus slow/crashy pre-existing. Only numloop + numeric_largearg needed updating (they had codified the old inf.0).
+- [ ] Commit + tag v0.209 — awaiting user go-ahead (on `main`, shared tree).
 
-**Outcome.** Fixed the wrong/flaky `True` in `PossibleZeroQ` for wide-dynamic-range
-exponential sums (POSSIBLE_ZEROQ_IMPROVEMENTS.md #2). Root cause: the Schwartz–Zippel
-sampler aborted the whole test on the first IEEE-overflow sample point (`E^(large) → ±Inf`),
-collapsing `UNKNOWN → True` for nowhere-zero functions, with the verdict decided by hash-seeded
-draw order. Fix (`src/zero_test.c`): `evaluate_rung` flags an overflow (`ok && !isfinite(mag)`)
-distinctly from a symbolic residue; `sz_trial_shelled` re-draws an overflow point through a
-shrinking magnitude-shell ladder (`2^6→2^4→2^2→2^1→2^0`, `|value|>=1` floor kept), skipping only
-if every shell overflows; a whole screen of overflow-only points returns an honest `UNKNOWN`.
-
-**Scope narrowed during implementation.** An initial broader version (re-drawing symbolic
-residues and sampled poles too) regressed `test_battery_weierstrass_cosh_product_roundtrip` by
-exposing a *separate* pre-existing deep-cancellation false-negative in the screen phase. Narrowed
-to the IEEE-overflow class only, which is byte-for-byte behaviour-preserving for non-overflowing
-inputs — so no regressions. `Gamma[x^2]+1` (special-function magnitude-decline residue) and the
-deep-cancellation screen weakness are logged as follow-ups #4/#5 in POSSIBLE_ZEROQ_IMPROVEMENTS.md.
-
-**Verification.** All green: `zero_test_tests` (incl. new Group 18) + `trigexp_zero_tests`,
-`possiblezeroq_{expcombine,assumptions,stress}`, `refine_tests`, `interp`/`nullspace`/
-`solve_radicals_reals`/`limit`, `integrate_goursat`/`integrate_jeffrey`, DSolve corpus §2.2.7
-(wide-spectrum systems, within baseline). Determinism confirmed (stable ×8). Clean GCC build
-(`-std=c99 -Wall -Wextra`, no warnings). No new heap allocations (leak risk nil). `$VersionNumber
-= 0.208`.
-
-**Not committed yet** — awaiting go-ahead to commit to main + tag `v0.208`.
+## Review
+- Root cause: machine-`EXPR_REAL` args took a double-only fast path; overflow/underflow leaked `inf.0`/`nan`/`0.`/unevaluated. `N[f[exact]]` already promoted, so every head had a working MPFR path — the fix routes the machine branch into it.
+- Two layers: (L1) evaluator net guarantees no inf/nan ever escapes (→ Overflow[]/-Overflow[]/Indeterminate); (L2) per-head promotion gives the correct finite extended-exponent value. Machine result when in double range (Binomial[1000.,500.]→MachineNumberQ True), MPFR when past it (Gamma[256.]), Overflow[] past MPFR range.
+- Pre-existing, NOT introduced (verified against stashed main): `Sum[Exp[c. k],{k,1,n}]` with large machine c hangs / gives 0.0 (geometric-sum path). Out of scope; separate bug.
+- 17 heads fixed + universal net. `check-*` audits untouched (no packed/compile surface change).

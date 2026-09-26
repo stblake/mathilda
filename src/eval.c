@@ -28,6 +28,7 @@
 #include "numloop.h"                 /* $AutoCompilation also gates numloop */
 #include "plot_common.h"             /* $RaylibVerbose backing flag (raylib-free) */
 #include "opform.h"                  /* h[o...][x] operator (curried) forms */
+#include "numeric.h"                 /* numeric_sanitize_nonfinite -- no inf/nan leaks */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -1919,6 +1920,20 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     Expr* ret = hdef->builtin_func(res);
                     g_trace_suppress--;
                     if (ret) {
+                        /* No inf/nan may leak: a machine fast path that
+                         * overflowed a double past even MPFR's exponent range
+                         * would otherwise hand back `inf.0`/`nan`, which are
+                         * libm artifacts, not Mathilda values. Rewrite to
+                         * Overflow[]/-Overflow[]/Indeterminate. Not gated on
+                         * NumericFunction -- BernoulliB / EulerE and friends are
+                         * only Listable, yet must never leak either -- the cheap
+                         * type check IS the gate, so the finite path is
+                         * untouched. (Representable overflows are promoted to an
+                         * extended-exponent MPFR real inside each head, upstream
+                         * of here.) */
+                        if (numeric_result_has_nonfinite(ret)) {
+                            ret = numeric_sanitize_nonfinite(ret);
+                        }
                         expr_free(res);
                         *changed = true; /* Built-in produced a rewrite */
                         return ret;

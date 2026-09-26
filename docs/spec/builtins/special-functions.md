@@ -2,6 +2,14 @@
 
 Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, and the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`.
 
+**Machine overflow/underflow** on a machine-precision argument never leaks a libm
+`inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
+`Gamma[900., 1.] → 7.50…×10^2266`, `BesselK[0, 800.] → 1.63…×10^-349`,
+`BernoulliB[300.]`, `Hyperfactorial[50.]`, `Hypergeometric1F1[1., 2., 900.]`, … all
+promote to an extended-exponent machine number (matching `N[f[exact]]`), and a
+magnitude past MPFR's range returns `Overflow[]`/`Indeterminate`. See
+[`elementary-functions.md`](elementary-functions.md) and the 2026-09-21 changelog.
+
 ## Gamma
 
 

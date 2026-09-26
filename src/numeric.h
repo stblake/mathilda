@@ -268,6 +268,43 @@ Expr* builtin_n(Expr* res);
  * structurally invalid call (arity != 1). */
 Expr* builtin_machinenumberq(Expr* res);
 
+/* inf/nan are libm artifacts, never Mathilda values. The evaluator routes
+ * every NumericFunction result through this backstop so a leaked non-finite
+ * machine real (a double that overflowed to +/-Inf, or a NaN) is rewritten:
+ *   +Inf -> Overflow[]   -Inf -> -Overflow[]   NaN -> Indeterminate
+ * numeric_result_has_nonfinite() is the cheap gate (a type check on the
+ * common finite path); numeric_sanitize_nonfinite() takes ownership of `e`
+ * and returns the rewrite (freeing `e`), or `e` unchanged. Both always
+ * compiled — the invariant holds with or without MPFR. */
+bool  numeric_result_has_nonfinite(const Expr* e);
+Expr* numeric_sanitize_nonfinite(Expr* e);
+
+/* L2 correctness: a head whose machine-real fast path produced a degenerate
+ * double (Inf/NaN from overflow, or 0 from underflow) calls this from its own
+ * degeneracy branch, with `call` = the builtin's own `res` (head[args...], args
+ * still live). It rebuilds the call with every machine-real argument (anywhere,
+ * including inside List parameters) promoted to MPFR, evaluates it (reaching the
+ * head's MPFR path — the same one N[f[exact]] uses), and returns the finite
+ * result at machine precision, or Overflow[]/Indeterminate when the magnitude is
+ * past even MPFR's exponent range. Returns NULL when there is nothing to
+ * promote, the value is a genuine zero, or the MPFR path itself declines — the
+ * caller then keeps its existing behaviour (and the evaluator's inf/nan net
+ * remains the final backstop). Without MPFR it is a no-op returning NULL. */
+Expr* numeric_promote_machine_call(const Expr* call);
+
+/* Convenience for the shared `get_approx` + libm pure-real branch: wrap a
+ * machine result `v` of the unary `call` (input `xin`), promoting a degenerate
+ * result via numeric_promote_machine_call. Always compiled; without MPFR it is
+ * expr_new_real(v). */
+Expr* numeric_machine_real_or_promote(double v, double xin, const Expr* call);
+
+/* Wrap the result `r` of a numeric `call`: if `r` is a degenerate machine real
+ * (Inf/NaN, or a flush-to-zero while the call has a non-zero real argument),
+ * recompute in MPFR (numeric_promote_machine_call) and return that (freeing
+ * `r`); else return `r`. For heads whose numeric core only sees the argument
+ * (Erfc/Erfi/ExpIntegralEi/...). Always compiled; a no-op without MPFR. */
+Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call);
+
 /* Registers N (and, in Phase 2, Precision/Accuracy/SetPrecision/SetAccuracy
  * and MachinePrecision) with the symbol table. */
 void numeric_init(void);

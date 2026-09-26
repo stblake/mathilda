@@ -13,6 +13,7 @@
  */
 
 #include "hyperfactorial.h"
+#include "numeric.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -87,7 +88,11 @@ Expr* builtin_hyperfactorial(Expr* res) {
     if (hf_is_inexact(arg)) {
         Expr* val = hf_numeric(arg);
         if (val && expr_is_numeric_like(val)) return val;
-        expr_free(val);
+        /* Hyperfactorial[50.] is ~10^1895: the machine continuation overflows a
+         * double (and its intermediate can go NaN). Promote to an extended-
+         * exponent MPFR real, or let the net make a past-range result Overflow[]. */
+        val = numeric_promote_result_if_degenerate(val, res);
+        if (val) return val;
     }
 
     return NULL;

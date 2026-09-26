@@ -493,13 +493,17 @@ static void test_list_fallback_exact_and_symbolic(void) {
 static void test_list_nonfinite_falls_back(void) {
     /* A non-finite intermediate abandons the compiled run, so what the caller
      * sees is whatever the interpreter produces -- these assert that outcome,
-     * which is the whole content of the bail contract. (Mathilda's own Real
-     * arithmetic overflows to inf.0 rather than to the symbol Infinity, so the
-     * two paths land on the same answer by construction.) */
-    expect_full("NestList[#^2&, 10.^200, 2]", "List[1e+200, inf.0, inf.0]");
-    expect_full("Accumulate[{1.*^308, 1.*^308}]", "List[1e+308, inf.0]");
+     * which is the whole content of the bail contract. A libm inf.0 never
+     * escapes a Mathilda result: a numeric head promotes an overflow to an
+     * extended-exponent real (#^2 via Power: 10.^200 -> 10^400 -> 10^800), and
+     * Plus/Times past the double range yield Overflow[] (never inf.0). Both
+     * paths still land on the same answer -- the compiled run bails, the
+     * interpreter answers. */
+    expect_full("NestList[#^2&, 10.^200, 2]",
+                "List[1e+200, 1e+400, 9.999999999999999e+799]");
+    expect_full("Accumulate[{1.*^308, 1.*^308}]", "List[1e+308, Overflow[]]");
     expect_full("FoldList[#1 + #2&, 0., {1.*^308, 1.*^308}]",
-                "List[0.0, 1e+308, inf.0]");
+                "List[0.0, 1e+308, Overflow[]]");
 }
 
 /* The int64 exact-loop fast path (src/numloop.c): a counter loop with an integer

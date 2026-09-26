@@ -364,7 +364,7 @@ Expr* builtin_sinh(Expr* res) {
     bool inexact = false;
     if (get_approx(arg, &c, &inexact) && inexact) {
         double complex s = csinh(c);
-        if (cimag(c) == 0.0) return expr_new_real(creal(s));
+        if (cimag(c) == 0.0) return numeric_machine_real_or_promote(creal(s), creal(c), res);
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
     return NULL;
@@ -404,7 +404,7 @@ Expr* builtin_cosh(Expr* res) {
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
         double complex s = ccosh(c);
-        if (cimag(c) == 0.0) return expr_new_real(creal(s));
+        if (cimag(c) == 0.0) return numeric_machine_real_or_promote(creal(s), creal(c), res);
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
     return NULL;
@@ -524,7 +524,7 @@ Expr* builtin_sech(Expr* res) {
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
         double complex s = 1.0 / ccosh(c);
-        if (cimag(c) == 0.0) return expr_new_real(creal(s));
+        if (cimag(c) == 0.0) return numeric_machine_real_or_promote(creal(s), creal(c), res);
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
     return NULL;
@@ -561,7 +561,7 @@ Expr* builtin_csch(Expr* res) {
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
         double complex s = 1.0 / csinh(c);
-        if (cimag(c) == 0.0) return expr_new_real(creal(s));
+        if (cimag(c) == 0.0) return numeric_machine_real_or_promote(creal(s), creal(c), res);
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
     return NULL;

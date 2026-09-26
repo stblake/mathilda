@@ -28,6 +28,7 @@
  * Attributes: Listable, Protected.
  */
 #include "bernoullib.h"
+#include "numeric.h"
 #include "sym_names.h"
 
 #include <math.h>
@@ -281,8 +282,10 @@ Expr* builtin_bernoullib(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
-    if (argc == 1) return bern_one_arg(args[0]);
-    if (argc == 2) return bern_two_arg(args[0], args[1]);
+    /* BernoulliB[300.] is ~-2.15*10^375: mpq_get_d overflows a double, so a
+     * machine-real index promotes to an extended-exponent MPFR real. */
+    if (argc == 1) return numeric_promote_result_if_degenerate(bern_one_arg(args[0]), res);
+    if (argc == 2) return numeric_promote_result_if_degenerate(bern_two_arg(args[0], args[1]), res);
     return bern_emit_argt(argc);
 }
 

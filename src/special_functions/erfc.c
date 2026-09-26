@@ -432,7 +432,7 @@ Expr* builtin_erfc(Expr* res) {
     if (argc == 1 && is_interval(args[0])) {
         Expr* r = interval_apply_function("Erfc", args[0]); if (r) return r;
     }
-    if (argc == 1) return erfc_one_arg(args[0]);
+    if (argc == 1) return numeric_promote_result_if_degenerate(erfc_one_arg(args[0]), res);
     return erfc_emit_argx(argc);
 }
 

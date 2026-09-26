@@ -5,6 +5,7 @@
 #include "numbertheory.h"
 #include "numbertheory_internal.h"
 #include "arithmetic.h"
+#include "numeric.h"   /* numeric_machine_real_or_promote -- overflow promotion */
 #include "eval.h"
 #include "sym_names.h"
 #include "internal.h"
@@ -43,10 +44,11 @@ Expr* builtin_factorial(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
-    /* Machine Real: Factorial[x] = Gamma[x + 1] via libm tgamma. */
+    /* Machine Real: Factorial[x] = Gamma[x + 1] via libm tgamma. Factorial[171.]
+     * and up overflow a double; promote to an extended-exponent MPFR real. */
     if (arg->type == EXPR_REAL) {
         double v = arg->data.real;
-        return expr_new_real(tgamma(v + 1.0));
+        return numeric_machine_real_or_promote(tgamma(v + 1.0), v, res);
     }
 #ifdef USE_MPFR
     /* MPFR Real: same identity at full input precision. */
