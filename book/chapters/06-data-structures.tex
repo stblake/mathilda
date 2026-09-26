@@ -297,7 +297,8 @@ through one shared helper, which is why these operations compose predictably int
 data pipelines.}
 
 \mcode{Part} addresses an association by key exactly as it addresses a list by position,
-and a part that selects \emph{several} entries returns a \emph{sub-association}---the
+and a part that selects \emph{several} entries returns a
+\emph{sub-association}\index{association!slicing}---the
 chosen entries, keys and all, in their original order.
 
 \begin{codepairs}
@@ -314,7 +315,8 @@ sub-association---position and key are two names for one slot.}
 \label{ssec:ds-assoc-atoms}
 
 An association looks like a container, but to the structural machinery it is a single,
-indivisible object---an \emph{atom}. That is the rule that lets one travel safely through
+indivisible object---an \emph{atom}\index{association!atomicity}\index{atom!association}.
+That is the rule that lets one travel safely through
 code that knows nothing about associations. Traversal and testing see the \emph{values};
 the keys are addressing metadata, reached only through an explicit \B{Key}.
 
@@ -347,7 +349,8 @@ accepts directly.}
 
 Data work is a pipeline: filter the rows, sort them, pull a field, summarise. Associations
 are built for it, through two conveniences. A pure function can read a field by \emph{name}
-with a named slot, \texttt{\#field}, and most operators carry a \emph{curried} form that
+with a named slot\index{slot!named}, \texttt{\#field}, and most operators carry a
+\emph{curried} form\index{operator form}\index{association!operator form} that
 takes their data last, so stages compose left to right.
 
 \begin{codepairs}
@@ -403,7 +406,8 @@ because the result is an association it feeds straight into another aggregation-
 frequency table from \B{Counts} is exactly the empirical distribution the statistics
 chapter (\S\ref{sec:statistics}) builds its estimators on.
 
-\B{Merge} is one of a family that treats an association as a keyed \emph{set}. The keys
+\B{Merge} is one of a family that treats an association as a keyed
+\emph{set}\index{association!key-set algebra}. The keys
 can be intersected, subtracted, and unioned; entries can be dropped by a predicate on
 their values; and two tables can be joined on a shared field the way a database would.
 
