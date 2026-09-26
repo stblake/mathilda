@@ -21,6 +21,7 @@
 #include "reduce_qe.h"
 #include "reduce_form.h"
 #include "reduce_cad.h"
+#include "reduce_realfn.h"
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -114,15 +115,28 @@ static bool qe_add_boundvars(const Expr* spec, const char*** B, int* nb, int* bc
 
 /* Peel a maximal chain of SAME-kind quantifiers off `q` (an Exists/ForAll expr).
  * Fills (*B,*nb,*bcap) with the bound-variable names, sets *quant (0 = Exists,
- * 1 = ForAll), and returns a freshly-owned body Expr (with any 3-argument
- * condition folded in: Exists[x,c,g] -> c && g, ForAll[x,c,g] -> !c || g).  Sets
- * *ok=false on a malformed node.  If the remaining body is itself a
- * different-kind quantifier, *alternating is set (the caller declines). */
+ * 1 = ForAll), and returns a freshly-owned body Expr -- the first sub-expression
+ * that is NOT a same-kind quantifier.
+ *
+ * A restriction from a 3-argument quantifier (Exists[x,c,g] / ForAll[x,c,g]) is
+ * NOT folded into the body here.  Instead every peeled block's restrictions are
+ * conjoined into *out_cond (freshly-owned, or NULL when the whole block was
+ * 2-argument), and the CALLER combines that condition with the (possibly
+ * eliminated) body to build the block matrix -- ForAll: `!cond || M`, Exists:
+ * `cond && M` (qe_apply_condition).  The distinction matters precisely when the
+ * body is a different-kind quantifier: folding the condition in (the old
+ * behaviour) wrapped the inner quantifier under an And/Or, hiding it from the
+ * alternation check and forcing a decline; carrying it as a side-condition keeps
+ * it attached to THIS block's variables so the alternating prefix composes.  For
+ * a single-block problem this yields exactly the same matrix as the old fold.
+ *
+ * Sets *ok=false on a malformed node.  If the remaining body is itself a
+ * different-kind quantifier, *alternating is set. */
 static Expr* qe_normalize(const Expr* q, int* quant, const char*** B, int* nb,
-                          int* bcap, bool* alternating, bool* ok) {
-    *ok = true; *alternating = false; *quant = -1;
+                          int* bcap, Expr** out_cond, bool* alternating, bool* ok) {
+    *ok = true; *alternating = false; *quant = -1; *out_cond = NULL;
     const Expr* cur = q;
-    Expr* body_owned = NULL;   /* set when a 3-argument fold builds a new node */
+    Expr* cond = NULL;   /* accumulated block restriction (conjunction), owned */
 
     while (cur && is_quantifier(cur)) {
         int kind = is_head(cur, SYM_Exists) ? 0 : 1;
@@ -131,26 +145,17 @@ static Expr* qe_normalize(const Expr* q, int* quant, const char*** B, int* nb,
         size_t ac = cur->data.function.arg_count;
         if (ac != 2 && ac != 3) { *ok = false; break; }
         if (!qe_add_boundvars(cur->data.function.args[0], B, nb, bcap)) { *ok = false; break; }
-        const Expr* inner = cur->data.function.args[ac - 1];
-        if (ac == 3) {
-            const Expr* cond = cur->data.function.args[1];
-            Expr* folded = (kind == 0)
-                ? mkfun2(SYM_And, expr_copy((Expr*)cond), expr_copy((Expr*)inner))
-                : mkfun2(SYM_Or, mkfun1(SYM_Not, expr_copy((Expr*)cond)), expr_copy((Expr*)inner));
-            if (body_owned) expr_free(body_owned);
-            body_owned = folded;
-            cur = body_owned;                            /* And/Or: loop ends */
-        } else {
-            cur = inner;
+        if (ac == 3) {                                   /* conjoin the restriction */
+            Expr* c = expr_copy((Expr*)cur->data.function.args[1]);
+            cond = cond ? mkfun2(SYM_And, cond, c) : c;
         }
+        cur = cur->data.function.args[ac - 1];           /* descend into the body */
     }
-    if (!*ok || *quant < 0) { if (body_owned) expr_free(body_owned); return NULL; }
+    if (!*ok || *quant < 0) { if (cond) expr_free(cond); return NULL; }
     if (is_quantifier(cur)) *alternating = true;         /* different-kind remnant */
 
-    if (cur == body_owned) return body_owned;            /* transfer ownership */
-    Expr* result = expr_copy((Expr*)cur);
-    if (body_owned) expr_free(body_owned);
-    return result;
+    *out_cond = cond;
+    return expr_copy((Expr*)cur);
 }
 
 /* ------------------------------------------------------------------ *
@@ -175,19 +180,31 @@ static Expr* qe_call_reduce(const Expr* body, const char** names, int nv) {
     return eval_and_free(call);
 }
 
-/* Fully-quantified decision (nfree==0).  Exists[{B},g] is True unless the
- * solution set of g over the reals is empty; ForAll[{B},g] is True only when it
- * is all of R^|B|.  Declines (NULL) when Reduce leaves the sub-problem
+/* Fully-quantified decision (nfree==0).  Both directions ask the ROBUST
+ * emptiness question, so a tautological region that Reduce reports WITHOUT
+ * simplifying to the literal `True` (e.g. `a<=0 || b<=0 || b>-a`, which is in fact
+ * all of R^2) is still decided correctly -- checking `r === True` would misread it
+ * as False:
+ *   Exists[{B}, g]  is True  unless the solution set of g is EMPTY  -> Reduce[g]  is False.
+ *   ForAll[{B}, g]  is True  iff  !g is UNSATISFIABLE               -> Reduce[!g] is False.
+ * Declines (NULL) when Reduce leaves the (possibly negated) sub-problem
  * unevaluated. */
 static Expr* qe_decide(const Expr* body, int quant, const char** B, int nb) {
-    Expr* r = qe_call_reduce(body, B, nb);
-    if (!r) return NULL;
-    if (is_head(r, SYM_Reduce)) { expr_free(r); return NULL; }   /* engine declined */
-    bool r_true  = is_sym(r, SYM_True);
-    bool r_false = is_sym(r, SYM_False);
-    expr_free(r);
-    if (quant == 0) return expr_new_symbol(r_false ? SYM_False : SYM_True);  /* Exists */
-    return expr_new_symbol(r_true ? SYM_True : SYM_False);                    /* ForAll */
+    Expr* query;
+    if (quant == 0) {                                    /* Exists: is g satisfiable? */
+        query = qe_call_reduce(body, B, nb);
+    } else {                                             /* ForAll: is !g unsatisfiable? */
+        Expr* neg = mkfun1(SYM_Not, expr_copy((Expr*)body));
+        query = qe_call_reduce(neg, B, nb);
+        expr_free(neg);
+    }
+    if (!query) return NULL;
+    if (is_head(query, SYM_Reduce)) { expr_free(query); return NULL; }   /* engine declined */
+    bool empty = is_sym(query, SYM_False);               /* solution set of the query empty? */
+    expr_free(query);
+    /* Exists True iff g nonempty; ForAll True iff !g empty. */
+    bool verdict = (quant == 0) ? !empty : empty;
+    return expr_new_symbol(verdict ? SYM_True : SYM_False);
 }
 
 /* ------------------------------------------------------------------ *
@@ -201,17 +218,53 @@ static Expr* qe_parametric(const Expr* body, int quant, const char** FREE, int n
     for (int i = 0; i < nfree; i++) vall[i]         = expr_new_symbol(FREE[i]);
     for (int i = 0; i < nb; i++)    vall[nfree + i] = expr_new_symbol(B[i]);
 
+    /* Real-domain preprocessing, identical to the base Reduce engine's
+     * multivariate Reals policy (reduce.c): case-split every selector head
+     * (Abs / Min / Max / Piecewise / Sign / UnitStep / Ramp / Clip / ...) into
+     * polynomial branches and rationalise square-root radicals, so the CAD --
+     * which accepts only polynomial atoms -- is handed a semialgebraic body.
+     * The fully-quantified DECISION path gets this for free by re-entering
+     * Reduce[] (qe_call_reduce); the parametric path drives the CAD directly, so
+     * without this pass a body carrying an Abs (every eps-delta inner ForAll, and
+     * any real-function guard/conclusion) would reach reduce_form_from_expr raw
+     * and be declined.  qe_parametric is only ever called with nfree>=1 and
+     * nb>=1, so nvall>=2 -- exactly the branch reduce.c routes to
+     * reduce_piecewise_preprocess (the univariate Mod->Floor / integer-part
+     * extras are, by that same policy, not part of the multivariate path).
+     * reduce_piecewise_preprocess returns NULL when nothing fired, in which case
+     * the original body is used unchanged. */
+    Expr* pre = NULL;
+    if (reduce_stmt_has_piecewise(body, vall, nvall)
+     || reduce_stmt_has_radical(body, vall, nvall)) {
+        bool changed = false;
+        pre = reduce_piecewise_preprocess(body, vall, nvall, &changed);
+    }
+    const Expr* use = pre ? pre : body;
+
     bool ok = true;
-    RForm* F = reduce_form_from_expr(body, vall, nvall, &ok);
+    RForm* F = reduce_form_from_expr(use, vall, nvall, &ok);
     Expr* out = NULL;
     if (ok) {
         rform_simplify(F, vall, nvall);
         out = reduce_cad_qe(F, vall, nfree, &vall[nfree], nb, quant);
     }
     rform_free(F);
+    expr_free(pre);
     for (int i = 0; i < nvall; i++) expr_free(vall[i]);
     free(vall);
     return out;
+}
+
+/* Combine a peeled block's accumulated restriction `cond` (borrowed; may be NULL)
+ * with the block matrix `M` (CONSUMED).  This realises the meaning of a bounded
+ * quantifier over the block's variables: ForAll[x, cond, M] == `!cond || M`;
+ * Exists[x, cond, M] == `cond && M`.  Returns a freshly-owned matrix -- M itself,
+ * untouched, when there was no restriction. */
+static Expr* qe_apply_condition(int quant, const Expr* cond, Expr* M) {
+    if (!cond) return M;
+    if (quant == 0)                                        /* Exists: cond && M */
+        return mkfun2(SYM_And, expr_copy((Expr*)cond), M);
+    return mkfun2(SYM_Or, mkfun1(SYM_Not, expr_copy((Expr*)cond)), M);  /* ForAll */
 }
 
 /* Rebuild a single quantifier node `quant[{B...}, body]` (0 = Exists, 1 = ForAll).
@@ -246,47 +299,60 @@ Expr* reduce_qe_dispatch(const Expr* qexpr, const Expr* dom) {
     if (dom && !is_sym(dom, SYM_Reals)) return NULL;
 
     int quant = -1; const char** B = NULL; int nb = 0, bcap = 0;
+    Expr* cond = NULL;
     bool alternating = false, ok = true;
-    Expr* body = qe_normalize(qexpr, &quant, &B, &nb, &bcap, &alternating, &ok);
-    if (!ok || !body) { expr_free(body); free(B); return NULL; }
+    Expr* body = qe_normalize(qexpr, &quant, &B, &nb, &bcap, &cond, &alternating, &ok);
+    if (!ok || !body) { expr_free(body); expr_free(cond); free(B); return NULL; }
 
     /* Alternating prefix: `body` is the inner different-kind quantifier.  Eliminate
-     * it first to a quantifier-free formula psi, then re-eliminate the peeled outer
-     * block over psi (now non-alternating).  This composes to arbitrary alternation
-     * depth.  Any inner decline -- or an inner result still carrying a quantifier /
-     * unevaluated Reduce/Resolve -- declines the whole thing. */
+     * it first to a quantifier-free formula psi, fold in the peeled block's own
+     * restriction `cond` to form this block's matrix, then re-eliminate the peeled
+     * block over that matrix (now non-alternating).  Composes to arbitrary
+     * alternation depth AND to a bounded quantifier at every level, because the
+     * restriction stays attached to its own block's variables rather than being
+     * folded into -- and hiding -- the inner quantifier.  Any inner decline, or an
+     * inner result still carrying a quantifier / unevaluated Reduce/Resolve,
+     * declines the whole thing. */
     if (alternating) {
         Expr* psi = reduce_qe_dispatch(body, dom);
         expr_free(body);
         if (!psi || is_head(psi, SYM_Exists) || is_head(psi, SYM_ForAll)
                  || is_head(psi, SYM_Reduce) || is_head(psi, SYM_Resolve)) {
             if (psi) expr_free(psi);
-            free(B);
+            expr_free(cond); free(B);
             return NULL;
         }
-        Expr* q2 = qe_rebuild_quant(quant, B, nb, psi);   /* consumes psi */
+        Expr* M = qe_apply_condition(quant, cond, psi);   /* consumes psi */
+        expr_free(cond);
+        Expr* q2 = qe_rebuild_quant(quant, B, nb, M);     /* consumes M */
         Expr* r = reduce_qe_dispatch(q2, dom);            /* borrows q2 */
         expr_free(q2);
         free(B);
         return r;
     }
 
-    /* nbound==0: Exists[{},g] == ForAll[{},g] == g -- reduce g over its own
+    /* Non-alternating: `body` is quantifier-free.  Fold this block's restriction
+     * into the matrix, then decide / parametrically eliminate over the bound
+     * variables B. */
+    Expr* M = qe_apply_condition(quant, cond, body);      /* consumes body */
+    expr_free(cond);
+
+    /* nbound==0: Exists[{},M] == ForAll[{},M] == M -- reduce M over its own
      * variables (or evaluate it when it is a constant statement). */
     if (nb == 0) {
         const char** FV = NULL; int nfv = 0, fcap = 0;
-        qe_collect_symbols(body, &FV, &nfv, &fcap);
-        Expr* r = (nfv == 0) ? eval_and_free(expr_copy(body))
-                             : qe_call_reduce(body, FV, nfv);
-        free(FV); free(B); expr_free(body);
+        qe_collect_symbols(M, &FV, &nfv, &fcap);
+        Expr* r = (nfv == 0) ? eval_and_free(expr_copy(M))
+                             : qe_call_reduce(M, FV, nfv);
+        free(FV); free(B); expr_free(M);
         if (r && is_head(r, SYM_Reduce)) { expr_free(r); return NULL; }
         return r;
     }
 
-    /* Free vars = leaf symbols of the body minus the bound vars (a bound var
+    /* Free vars = leaf symbols of the matrix minus the bound vars (a bound var
      * that also appears free is shadowed by the binding). */
     const char** allsyms = NULL; int nas = 0, acap = 0;
-    qe_collect_symbols(body, &allsyms, &nas, &acap);
+    qe_collect_symbols(M, &allsyms, &nas, &acap);
     const char** FREE = malloc((size_t)(nas > 0 ? nas : 1) * sizeof(char*));
     int nfree = 0;
     for (int i = 0; i < nas; i++) {
@@ -298,15 +364,15 @@ Expr* reduce_qe_dispatch(const Expr* qexpr, const Expr* dom) {
 
     Expr* out;
     if (nfree == 0) {
-        out = qe_decide(body, quant, B, nb);                 /* Case A: decision */
+        out = qe_decide(M, quant, B, nb);                    /* Case A: decision */
     } else {
         /* Cases B (nfree==1) & C (nfree>=2): parametric QE over the free vars,
          * outermost in canonical (alphabetical) order so the answer is stable. */
         qe_sort_names(FREE, nfree);
-        out = qe_parametric(body, quant, FREE, nfree, B, nb);
+        out = qe_parametric(M, quant, FREE, nfree, B, nb);
     }
 
-    free(FREE); free(B); expr_free(body);
+    free(FREE); free(B); expr_free(M);
     return out;
 }
 

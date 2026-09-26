@@ -895,6 +895,28 @@ static void test_quantifiers_parametric(void) {
      * the complete description is the condition on the variable that appears. */
     run_test("Reduce[Exists[y, x^2 + y^2 < 1], {x, z}, Reals]",
              "Inequality[-1, Less, x, Less, 1]");
+
+    /* Real-function (selector) elimination on the PARAMETRIC path.  The
+     * fully-quantified decision path re-enters Reduce[] and gets the Abs/Min/Max/
+     * Piecewise/radical case-splitting for free; the parametric path drives the
+     * CAD directly, so it must run the same reduce_piecewise_preprocess pass or a
+     * body carrying an Abs is fed raw to the CAD and declined.  These would all be
+     * left UNEVALUATED without that pass.  (Abs in the guard, then in the
+     * conclusion.) */
+    run_test("Reduce[ForAll[x, Abs[x] < d, x^2 < 9], {d}, Reals]", "LessEqual[d, 3]");
+    run_test("Reduce[ForAll[x, x^2 < 1, Abs[x] < e], {e}, Reals]", "GreaterEqual[e, 1]");
+
+    /* Form-agnostic guard for the two-Abs body (the eps-delta inner ForAll shape):
+     * the emitted (d,e)-parametric formula, evaluated at a point, must agree with
+     * the engine's own decision of the same bounded ForAll there -- checked on
+     * both sides of the boundary.  Certifies the answer regardless of spelling and
+     * proves the parametric and decision paths now agree on Abs bodies. */
+    run_test("(Reduce[ForAll[x, Abs[x-2] < d, Abs[3 x - 6] < e], {d, e}, Reals] "
+             "/. {d -> 1, e -> 3}) === Resolve[ForAll[x, Abs[x-2] < 1, Abs[3 x - 6] < 3], Reals]",
+             "True");   /* on the boundary e == 3 d: holds */
+    run_test("(Reduce[ForAll[x, Abs[x-2] < d, Abs[3 x - 6] < e], {d, e}, Reals] "
+             "/. {d -> 1, e -> 2}) === Resolve[ForAll[x, Abs[x-2] < 1, Abs[3 x - 6] < 2], Reals]",
+             "True");   /* below it e < 3 d: fails, both agree False */
 }
 
 /* Case C -- >= 2 free variables, and alternating quantifier prefixes: the QE
@@ -948,6 +970,73 @@ static void test_quantifiers_decline(void) {
     /* Bare Exists / ForAll are inert (stay symbolic). */
     run_contains("Exists[x, x > 0]", "Exists[x,");
     run_contains("ForAll[x, x^2 >= 0]", "ForAll[x,");
+}
+
+/* Bounded ALTERNATING prefixes -- a 3-argument (restricted) quantifier whose body
+ * is a different-kind quantifier.  The restriction is carried as a side-condition
+ * on its own block and applied to that block's matrix, so the alternation still
+ * composes (before this the 3-arg fold buried the inner quantifier and forced a
+ * decline).  This is exactly the shape of an epsilon-delta limit. */
+static void test_quantifiers_bounded_alternation(void) {
+    /* The minimal witness: for every eps>0 there is a del>0 below it. */
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, del < eps]], Reals]", "True");
+    /* Restriction on the inner block only, and on both blocks. */
+    run_test("Resolve[ForAll[eps, Exists[del, del > 0, del < eps]], Reals]", "False");
+    /* A bounded chain of the SAME kind beyond the first quantifier (the second
+     * restriction used to be lost when the first 3-arg fold ended the peel). */
+    run_test("Resolve[ForAll[a, a > 0, ForAll[b, b > 0, a + b > 0]], Reals]", "True");
+    run_test("Resolve[Exists[a, a > 0, Exists[b, b > 0, a + b < 1]], Reals]", "True");
+}
+
+/* Epsilon-delta limit sentences decided end to end: the composition of parametric
+ * real-function elimination (Abs in guard + conclusion) with the bounded
+ * alternating prefix `ForAll[eps>0, Exists[del>0, ForAll[x, guard, concl]]]`.  A
+ * correct limit proves True; a wrong target is refuted False -- so this certifies
+ * soundness in both directions, not just that something is returned.
+ *
+ * The `0 < |x-a| < del` guard is written both as an explicit `&&` of two bounds
+ * AND in the natural CHAINED form `0 < Abs[x-a] < del`.  The chained spelling
+ * needs no extra machinery: on the decision path qe_decide tests the NEGATION, so
+ * the chained Inequality appears positively; on the parametric path the Abs is
+ * case-split by reduce_piecewise_preprocess first, leaving a polynomial chained
+ * Inequality (even under Not) that reduce_form already handles. */
+static void test_epsilon_delta(void) {
+    /* lim_{x->2} (3x - 1) = 5  (True), and the wrong target 6 (False). */
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x-2] && Abs[x-2] < del, Abs[(3 x - 1) - 5] < eps]]], Reals]", "True");
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x-2] && Abs[x-2] < del, Abs[(3 x - 1) - 6] < eps]]], Reals]", "False");
+    /* Same two, in the natural CHAINED guard spelling. */
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x-2] < del, Abs[(3 x - 1) - 5] < eps]]], Reals]", "True");
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x-2] < del, Abs[(3 x - 1) - 6] < eps]]], Reals]", "False");
+    /* lim_{x->0} x^2 = 0  (True). */
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x] && Abs[x] < del, Abs[x^2] < eps]]], Reals]", "True");
+    /* lim_{x->3} x^2 = 9  (True), and the wrong target 8 (False) -- chained guard. */
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x-3] < del, Abs[x^2 - 9] < eps]]], Reals]", "True");
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x-3] < del, Abs[x^2 - 8] < eps]]], Reals]", "False");
+    /* Soundness net: a transcendental limit has no polynomial CAD -- must DECLINE
+     * (stay unevaluated), never be guessed. */
+    run_contains("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+                 "ForAll[x, 0 < Abs[x] && Abs[x] < del, Abs[Sin[x]/x - 1] < eps]]], Reals]",
+                 "Resolve[ForAll[eps,");
+}
+
+/* Chained Inequality (`a < f < b`) carrying an Abs under a quantifier restriction:
+ * decided on every path (decision/parametric x ForAll/Exists).  Guards the
+ * interaction that used to decline before the parametric Abs pass (v0.206) and the
+ * negation-based decision (v0.207) -- neither adds Inequality-specific code, so
+ * this pins that the general machinery keeps covering the chained spelling. */
+static void test_chained_inequality_abs(void) {
+    run_test("Resolve[ForAll[x, 0 < Abs[x] < 1, x^2 < 4], Reals]", "True");
+    run_test("Resolve[ForAll[x, 0 < Abs[x] < 1, x^2 < 1/4], Reals]", "False");
+    run_test("Resolve[Exists[x, 0 < Abs[x] < 1, x^2 < 1/4], Reals]", "True");
+    run_test("Resolve[Exists[x, 0 < Abs[x] < 1, x^2 > 4], Reals]", "False");
+    run_test("Resolve[ForAll[x, -1 < Abs[x-1] <= 2, (x-1)^2 <= 4], Reals]", "True");
 }
 
 /* ------------------------------------------------------------------ *
@@ -1523,6 +1612,9 @@ int main(void) {
     TEST(test_quantifiers_parametric);
     TEST(test_quantifiers_multivar);
     TEST(test_quantifiers_decline);
+    TEST(test_quantifiers_bounded_alternation);
+    TEST(test_epsilon_delta);
+    TEST(test_chained_inequality_abs);
     TEST(test_logical_expand);
     TEST(test_find_instance);
     TEST(test_cylindrical_decomposition);

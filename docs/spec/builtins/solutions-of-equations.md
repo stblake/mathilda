@@ -1285,12 +1285,41 @@ the free variables' decomposition:
   not appear in the body is left unconstrained rather than making the call
   decline.
 
+  A parametric body carrying a **real-function selector** (`Abs`, `Min`, `Max`,
+  `Piecewise`, `Sign`, `UnitStep`, …) or a square-root radical is case-split into
+  polynomial branches by the *same* real-domain preprocessing the base `Reduce`
+  engine applies to a multivariate Reals problem, before the CAD sees it — so the
+  parametric path and the fully-quantified decision path agree on such bodies
+  rather than the parametric one declining. Examples:
+  `Reduce[ForAll[x, Abs[x] < d, x^2 < 9], {d}, Reals] -> d <= 3`;
+  `Reduce[ForAll[x, x^2 < 1, Abs[x] < e], {e}, Reals] -> e >= 1`;
+  `Reduce[ForAll[x, Abs[x-2] < d, Abs[3 x - 6] < e], {d, e}, Reals] ->
+  d < 0 || d == 0 || d > 0 && e >= 3 d` (the ε–δ inner-`∀x` shape).
+
 - **Alternating quantifiers** — a different-kind inner block is eliminated
   **inner-block-first** by recursive composition (the inner quantifier reduces to a
   quantifier-free body, then the outer block is eliminated over it), to arbitrary
-  alternation depth. Examples:
+  alternation depth. A **restricted (three-argument) quantifier** may sit at any
+  level of the alternation: each block's restriction is carried as a side-condition
+  on its own variables and combined with that block's matrix (`ForAll[x, c, M]`
+  ≡ `!c || M`, `Exists[x, c, M]` ≡ `c && M`) — it is *not* folded into the body,
+  which would hide an inner quantifier. Examples:
   `Resolve[ForAll[x, Exists[y, x + y == 0]], Reals] -> True`;
-  `Resolve[Exists[y, ForAll[x, x^2 + y >= 0]], Reals] -> True`.
+  `Resolve[Exists[y, ForAll[x, x^2 + y >= 0]], Reals] -> True`;
+  `Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, del < eps]], Reals] -> True`.
+
+  Composed with the parametric real-function elimination above, this decides
+  **ε–δ limit statements** for semialgebraic `f`. `lim_{x->2} (3x-1) = 5`:
+  `Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[x,
+  0 < Abs[x-2] < del, Abs[(3 x - 1) - 5] < eps]]], Reals] -> True`,
+  while the wrong target `6` returns `False`; likewise `lim_{x->3} x^2 = 9 -> True`.
+  A transcendental limit (`Sin[x]/x`) has no polynomial CAD and correctly
+  **declines** (stays unevaluated). The `0 < |x-a| < del` guard may be written as a
+  chained `Inequality` (as here) or as an explicit `&&` of two bounds -- both are
+  handled: on the decision path the negation makes the chained `Inequality` appear
+  positively, and on the parametric path the `Abs` is case-split before the CAD,
+  leaving a polynomial chained `Inequality` the sign-diagram engine already
+  handles, even under `Not`.
 
 Same-kind nested quantifiers flatten (`Exists[{y1}, Exists[{y2}, φ]]` ≡
 `Exists[{y1, y2}, φ]`). Preserving the soundness invariant, the engine **declines
