@@ -110,7 +110,27 @@ that defeats Stage 2/3. Alternatives worth weighing:
 
 ## 2. `Simplify` hangs on a sum of exponentials with widely-separated real rates
 
-**Status:** WORKED AROUND (2026-09-09, M27), core deficiency OPEN.
+**Status:** WORKED AROUND (2026-09-09, M27); the **`PossibleZeroQ` overflow-abort
+subset is now RESOLVED** (2026-09-26, v0.208); a residual `Simplify`-search
+deficiency remains OPEN.
+
+**Resolved (v0.208): the wrong/flaky `True` in `PossibleZeroQ`.** Investigation
+showed the "widely-separated rates" family was not only slow but produced a
+**wrong, draw-order-dependent `True`** for nowhere-zero sums like
+`E^(-10 t) + E^(-100 t)`: they reach the Schwartz–Zippel sampler (the Stage-0b
+certificate does not fire on a `Plus`), a sample at negative `t` overflows `E` to
+IEEE `±Inf`, and the sampler **aborted the whole test on that first `UNKNOWN`**
+→ `UNKNOWN` → `True`. Fix (`src/zero_test.c`): distinguish an IEEE overflow
+(`ok && !isfinite(mag)` in `evaluate_rung`) from a symbolic residue and **re-draw**
+the overflow point from a shrinking magnitude shell (`2^6 → … → 2^0`, `|value| >= 1`
+floor kept), skipping only if every shell overflows. `PossibleZeroQ[E^(-10 t) +
+E^(-100 t)]` and `PossibleZeroQ[Gamma[x+1] - x Gamma[x] + E^(x^2)]` now decide
+`False` at machine speed. Tests: `test_zero_test.c` Group 18. See the 2026-09-21
+changelog. **The M27 `dsolve_linsys_tidy` `Expand`-not-`Simplify` workaround stays**
+(harmless, and the underlying `Simplify` search — separate from `PossibleZeroQ`,
+which must never call `Simplify` — is unchanged).
+
+_Original report (retained for context):_
 
 **Minimal repro:** `Simplify[Exp[-10 t] + Exp[-100 t]]` does not return (an 8 s
 `TimeConstrained` aborts it); `Simplify[Exp[-t] + Exp[-2 t]]` returns instantly.
@@ -173,3 +193,69 @@ non-zero literal; a known non-zero constant; `Exp[_]`/`Power[E, _]`; `Power[b, _
 certified; `Times[…]` of certified factors. Sound and unconditional (holds under assumptions);
 it never fires on `Plus`, a possibly-zero/infinite base, or a bare symbol, so no identity is
 affected. Tests: `tests/test_zero_test.c` Group 17. See the 2026-09-21 changelog.
+
+---
+
+## 4. Special-function *magnitude-decline* residue defeats the sampler (`Gamma[x^2]+1` → `True`)
+
+**Status:** OPEN (deferred from the v0.208 overflow fix, which is scoped to the IEEE-overflow
+class only).
+
+**Minimal repro:** `PossibleZeroQ[Gamma[x^2] + 1]` returns `True`; `Gamma[x^2]+1` is nowhere
+zero. Same family as #2/#3 (a symbol-dependent magnitude defeats the numeric ladder), but the
+failure mode is different from the IEEE-overflow one the v0.208 fix cures.
+
+**Diagnosis.** At a sampled `x` with `x^2 > ~171`, `N[Gamma[x^2]]` does not overflow to `±Inf`
+— the machine/MPFR `Gamma` **declines and returns the unevaluated head** (`N[Gamma[256.0]]` →
+`Gamma[256.0]`). That surfaces as a **symbolic residue** (`is_pure_numeric == false`), which the
+sampler treats as "genuinely undecidable at this point" and aborts to `UNKNOWN` → `True`. The
+v0.208 overflow re-draw fires only on `ok && !isfinite(mag)` (a real numeric out-of-range value),
+so it deliberately does **not** re-draw this residue class.
+
+**Why not fixed in v0.208.** Making the shell ladder also re-draw magnitude-decline residues (so
+`Gamma[x^2]+1` shrinks to a resolvable small-argument point) is sound in isolation, but it makes
+the sampler *reach* points it used to abort before — which re-exposes deficiency #5 below (a true
+identity then returns a wrong `False`). The two must be fixed together.
+
+**Suggested direction (deferred).** Either (a) make `N[Gamma[big]]`, `N[Erf[I·big]]`, … overflow
+to `Infinity` rather than declining (turns this into the already-handled overflow class, but is a
+`src/numeric.c` change with wider blast radius), or (b) treat a *numeric-head-of-large-numeric-arg*
+residue as re-drawable in the sampler — but only alongside a fix for #5.
+
+### Cross-references (#4)
+
+- `src/zero_test.c` — `evaluate_rung` (the `is_pure_numeric` residue path), `sz_trial_shelled`.
+- `src/numeric.c` — the machine/MPFR `Gamma`/`Erf` decline path.
+
+---
+
+## 5. Machine-precision deep-cancellation false-negative in the Stage-3 *screen* phase
+
+**Status:** OPEN (pre-existing; surfaced while scoping the v0.208 fix).
+
+**Minimal repro:** the Weierstrass antiderivative round-trip
+`D[Integrate[Cosh[x] Cosh[2 x], x, Method -> "Weierstrass"] /. Floor[_] -> 0, x] -
+Cosh[x] Cosh[2 x]` is identically `0` (`Simplify` → `0`), but a thorough sampler can return
+`False`. (Today it still returns `True` — the sampler aborts on an earlier `Indeterminate` point
+before reaching the bad ones — but that is luck of draw order, not robustness.)
+
+**Diagnosis.** The Weierstrass form is a rational function of `Tanh[x/2]` whose
+`(1 - Tanh[x/2]^2)^k` denominators produce terms of magnitude `~10^15`–`10^22` at moderate
+samples (`x ≈ 11`–`18`). These huge terms must cancel to `0`, but machine-precision `Tanh` is not
+accurate enough for the cancellation to occur, so the residual is a *large* fraction of the
+operand scale (ratio `~0.4`, far above the `2^-12` "obvious non-zero" gate). The **screen** phase
+therefore reports a decisive `False` at machine precision, even though the confirm ladder (MPFR)
+would resolve it to `0`. The screen trusts a machine-precision `False`; deep cancellation
+(`> ~52` bits) breaks that trust.
+
+**Suggested direction (deferred).** Verify a screen `False` against catastrophic cancellation
+before trusting it — e.g. when the operand scale is huge (terms `≫ 2^40`), climb one MPFR rung and
+require the residual to *persist* (not shrink) before concluding `False`; a shrinking residual is a
+cancellation zero. This is a change to the core `decide_numeric` gate and must be weighed against
+the perf cost on the verify-reject path (a large non-zero would then climb before rejecting), so it
+was left out of the focused v0.208 overflow fix.
+
+### Cross-references (#5)
+
+- `src/zero_test.c` — `screen_point`, `decide_numeric` (the `ZT_OBVIOUS_NONZERO_BITS` gate).
+- `tests/test_zero_test.c` — `test_battery_weierstrass_cosh_product_roundtrip` (the fragile case).

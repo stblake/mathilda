@@ -123,6 +123,22 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
 #define ZT_NUMERATOR_BITS    6
 #define ZT_DENOMINATOR_BITS  16
 
+/* Magnitude-shell ladder for the Stage-3 overflow re-draw. When a sample point
+ * numericalizes out of the numeric range (E/Gamma/... overflowing to +/-Inf at
+ * the moderate |v| <= 2^ZT_NUMERATOR_BITS shell), the sampler retries the SAME
+ * trial from successively smaller |v| upper bounds (2^k). This rescues points
+ * that only overflow at the full range — a nowhere-zero function such as
+ * E^(-10 t)+E^(-100 t) then decides FALSE at a finite point instead of the whole
+ * test aborting to UNKNOWN -> True. Every shell keeps |v| >= 1 (the smallest,
+ * 2^0, draws whole part == 1), preserving the floor that guards against
+ * polynomial Schwartz-Zippel false positives (see sample_random_value). By the
+ * identity theorem an analytic identity holding on [1, 2^k) holds everywhere, so
+ * a smaller shell loses no decision power. The first rung is ZT_NUMERATOR_BITS so
+ * a non-overflowing input draws exactly as before (byte-for-byte stream). */
+static const int ZT_OVERFLOW_SHELL_BITS[] = { ZT_NUMERATOR_BITS, 4, 2, 1, 0 };
+#define ZT_OVERFLOW_SHELL_LEN \
+    ((int)(sizeof ZT_OVERFLOW_SHELL_BITS / sizeof ZT_OVERFLOW_SHELL_BITS[0]))
+
 /* For a precision-honoured ALGEBRAIC expression whose numeric residual never
  * shrinks across the ladder, a residual exceeding scale * 2^(-ZT_ALG_NONZERO_BITS)
  * is above the machine-noise floor (~2^-52) and is a genuine non-zero, not a
@@ -156,7 +172,7 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
 
 static ZeroTestResult decide_structural(const Expr* e);
 static ZeroTestResult decide_rational(const Expr* e);
-static ZeroTestResult decide_numeric(const Expr* e);
+static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow);
 static ZeroTestResult decide_schwartz_zippel(const Expr* e);
 static ZeroTestResult decide_schwartz_zippel_assuming(const Expr* e, const AssumeCtx* ctx);
 static bool           has_free_symbols(const Expr* e);
@@ -1011,14 +1027,19 @@ static double magnitude_scale_at(const Expr* e, NumericSpec spec) {
  * Pass a negative value to compute the scale at this rung's precision. */
 static ZeroTestResult evaluate_rung(const Expr* e, long bits,
                                     double* out_mag, double* out_scale,
-                                    double in_scale) {
+                                    double in_scale, bool* out_overflow) {
     *out_mag = 0.0;
     if (out_scale) *out_scale = 1.0;
+    if (out_overflow) *out_overflow = false;
     Expr* z = numericalize_at(e, bits);
     if (!z) return ZERO_TEST_UNKNOWN;
     if (expr_is_infinity(z)) {
         /* A pole: definitively non-zero. Report an infinite residual so every
-         * caller's "obvious non-zero" gate settles it FALSE. */
+         * caller's "obvious non-zero" gate settles it FALSE.  (A symbolic
+         * Infinity/ComplexInfinity is left decisive on purpose — it is NOT the
+         * IEEE-overflow class handled below.  A machine-precision rounding
+         * artifact that produces a *symbolic* pole is rare and out of scope for
+         * this overflow fix.) */
         expr_free(z);
         *out_mag = INFINITY;
         if (out_scale) *out_scale = 1.0;
@@ -1028,7 +1049,24 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
     double mag = 0.0;
     bool ok = expr_abs_double(z, &mag);
     expr_free(z);
-    if (!ok || !isfinite(mag)) return ZERO_TEST_UNKNOWN;
+    if (ok && !isfinite(mag)) {
+        /* Numeric but OUT OF RANGE: a symbol-dependent exponent drove E/Gamma/…
+         * past the IEEE/MPFR range (+/-Inf), or two independently-overflowing
+         * subterms produced a NaN. This POINT carries no information: it is a
+         * numeric coordinate the double/MPFR range cannot represent, not a
+         * symbolic residue (an unimplemented head is caught by is_pure_numeric
+         * above) and not a genuine pole (expr_is_infinity above). Flag it so the
+         * Stage-3 sampler re-draws from a smaller magnitude shell (or skips it)
+         * rather than aborting the whole test to UNKNOWN — which would collapse
+         * to a WRONG True for a nowhere-zero function such as E^(-10 t)+E^(-100 t).
+         * SOUND: an overflow is never a zero, and a tiny*huge cancellation lands
+         * here as NaN (or, when it cancels symbolically, as Indeterminate on the
+         * !is_pure_numeric path) — never a decisive FALSE — so re-drawing can
+         * neither invent a zero nor drop a genuine one. */
+        if (out_overflow) *out_overflow = true;
+        return ZERO_TEST_UNKNOWN;
+    }
+    if (!ok) return ZERO_TEST_UNKNOWN;
     *out_mag = mag;
 
     double scale = (in_scale >= 0.0) ? in_scale
@@ -1055,9 +1093,10 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
  *      NOT be rejected by a high rung's tiny threshold; they fall back to the
  *      lenient machine verdict. This is what stops the cancellation false
  *      negatives the previous absolute-threshold loop produced. */
-static ZeroTestResult decide_numeric(const Expr* e) {
+static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
     double mag = 0.0, scale = 1.0;
-    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0);
+    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0,
+                                     out_overflow);
     if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
 
     if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
@@ -1069,8 +1108,10 @@ static ZeroTestResult decide_numeric(const Expr* e) {
         double m = 0.0;
         /* Reuse the machine-precision operand scale (precision-independent) so
          * each higher rung numericalizes the tree ONCE, not twice. */
+        /* Higher rungs never overflow when rung 0 did not (MPFR's exponent range
+         * exceeds the double's), so no out_overflow is threaded here. */
         ZeroTestResult rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
-                                          scale > 0.0 ? scale : -1.0);
+                                          scale > 0.0 ? scale : -1.0, NULL);
         if (rr == ZERO_TEST_UNKNOWN) {
             /* MPFR path unavailable beyond here — accept the lenient machine
              * verdict (the rung-0 residual was below the non-zero gate). */
@@ -1122,9 +1163,10 @@ static ZeroTestResult decide_numeric(const Expr* e) {
  * cannot be reduced. A single machine-precision evaluation — the deep
  * cancellation check is deferred to the confirm phase's full ladder, so a
  * borderline-cancelling true-zero point is NOT falsely rejected by the screen. */
-static ZeroTestResult screen_point(const Expr* e) {
+static ZeroTestResult screen_point(const Expr* e, bool* out_overflow) {
     double mag = 0.0, scale = 1.0;
-    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0);
+    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0,
+                                     out_overflow);
     if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
     if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
         return ZERO_TEST_FALSE;
@@ -1155,8 +1197,8 @@ static int64_t draw_int_range(int64_t lo, int64_t hi) {
  * note): complex samples cross branch cuts and inflate special functions,
  * which manufactures cancellation/branch false negatives for genuine
  * real-line identities. */
-static Expr* sample_random_value(void) {
-    int64_t num_bound = (int64_t)1 << ZT_NUMERATOR_BITS;
+static Expr* sample_random_value(int num_bits) {
+    int64_t num_bound = (int64_t)1 << num_bits;
     int64_t den_bound = (int64_t)1 << ZT_DENOMINATOR_BITS;
 
     /* Sample magnitude is bounded BELOW by 1 (an integer part in [1, num_bound])
@@ -1237,8 +1279,12 @@ static double draw_unit(void) {
     return (double)draw_int_range(0, gran - 1) / (double)gran;
 }
 
-/* Draw one real value honouring `c`.  `integer` rounds to the integer grid. */
-static double sample_channel(const Channel* c, bool integer) {
+/* Draw one real value honouring `c`.  `integer` rounds to the integer grid.
+ * `num_bits` caps the unconstrained magnitude shell at 2^num_bits (the overflow
+ * re-draw shrinks it); it is IGNORED by the two-sided finite-range branch, whose
+ * magnitude is pinned by the assumed interval and cannot shrink without leaving
+ * the assumed region. */
+static double sample_channel(const Channel* c, bool integer, int num_bits) {
     if (c->has_lo && c->has_hi) {
         /* Two-sided finite range: sample inside it (shell dropped). */
         double lo = c->lo, hi = c->hi;
@@ -1252,7 +1298,7 @@ static double sample_channel(const Channel* c, bool integer) {
         return lo + (hi - lo) * draw_unit();
     }
     /* Unconstrained magnitude: |v| >= 1, moderate, sign-honoured. */
-    int64_t num_bound = (int64_t)1 << ZT_NUMERATOR_BITS;
+    int64_t num_bound = (int64_t)1 << num_bits;
     double v;
     if (integer) {
         v = (double)draw_int_range(1, num_bound);
@@ -1269,17 +1315,17 @@ static double sample_channel(const Channel* c, bool integer) {
 
 /* Draw a conforming sample value for one free symbol.  spec == NULL restores
  * the legacy real-only draw byte-for-byte (see sample_random_value). */
-static Expr* sample_random_value_spec(const SampleSpec* spec) {
-    if (!spec) return sample_random_value();
+static Expr* sample_random_value_spec(const SampleSpec* spec, int num_bits) {
+    if (!spec) return sample_random_value(num_bits);
     if (spec->domain == SDOM_INT)
-        return expr_new_integer((int64_t)sample_channel(&spec->val, true));
+        return expr_new_integer((int64_t)sample_channel(&spec->val, true, num_bits));
     if (spec->domain == SDOM_CPLX) {
-        double re = sample_channel(&spec->val, false);
-        double im = sample_channel(&spec->im, false);
+        double re = sample_channel(&spec->val, false, num_bits);
+        double im = sample_channel(&spec->im, false, num_bits);
         Expr* parts[2] = { expr_new_real(re), expr_new_real(im) };
         return expr_new_function(expr_new_symbol(SYM_Complex), parts, 2);
     }
-    return expr_new_real(sample_channel(&spec->val, false));
+    return expr_new_real(sample_channel(&spec->val, false, num_bits));
 }
 
 /* Which channel a fact's variable operand refers to, for free symbol `sym`:
@@ -1458,10 +1504,11 @@ static Expr* substitute_symbols(const Expr* e, const char** syms, Expr** vals, s
  *     reject cancellation-hidden small non-zeros. */
 static ZeroTestResult sz_trial(const Expr* e, const char** syms,
                                const SampleSpec* specs, size_t nsyms,
-                               bool screen) {
+                               bool screen, int num_bits, bool* out_overflow) {
+    if (out_overflow) *out_overflow = false;
     Expr** vals = malloc(sizeof(Expr*) * nsyms);
     for (size_t i = 0; i < nsyms; ++i)
-        vals[i] = sample_random_value_spec(specs ? &specs[i] : NULL);
+        vals[i] = sample_random_value_spec(specs ? &specs[i] : NULL, num_bits);
 
     Expr* sub = substitute_symbols(e, syms, vals, nsyms);
 
@@ -1470,10 +1517,10 @@ static ZeroTestResult sz_trial(const Expr* e, const char** syms,
         r = decide_structural(sub);
         if (r == ZERO_TEST_UNKNOWN) {
             if (screen) {
-                r = screen_point(sub);
-                if (r == ZERO_TEST_UNKNOWN) r = decide_numeric(sub);
+                r = screen_point(sub, out_overflow);
+                if (r == ZERO_TEST_UNKNOWN) r = decide_numeric(sub, out_overflow);
             } else {
-                r = decide_numeric(sub);
+                r = decide_numeric(sub, out_overflow);
             }
         }
         expr_free(sub);
@@ -1581,6 +1628,31 @@ static bool expr_shares_symbol(const Expr* e, const SymPtrSet* set) {
     return false;
 }
 
+/* Run one Stage-3 trial through the overflow-shell ladder. If the drawn point
+ * numericalizes OUT OF RANGE (a symbol-dependent exponent drove E/Gamma/… past
+ * the IEEE/MPFR range to +/-Inf, or two independently-overflowing subterms gave a
+ * NaN — evaluate_rung sets *overflow), re-draw the SAME trial from a successively
+ * smaller |value| shell so the point falls back into range and becomes
+ * informative. Returns the first DECISIVE (FALSE/TRUE) or non-overflow UNKNOWN
+ * (symbolic residue / Indeterminate — left to the caller to abort on, exactly as
+ * before this fix) verdict; if EVERY shell overflowed, returns UNKNOWN with
+ * *overflow == true so the caller can SKIP the uninformative point instead of
+ * aborting the whole test. Only the IEEE-overflow class is re-drawn — a symbolic
+ * residue is NOT, so the sampler's behaviour on non-overflowing inputs (and its
+ * draw stream) is byte-for-byte unchanged. */
+static ZeroTestResult sz_trial_shelled(const Expr* e, const char** syms,
+                                       const SampleSpec* specs, size_t nsyms,
+                                       bool screen, bool* overflow) {
+    ZeroTestResult r = ZERO_TEST_UNKNOWN;
+    for (int s = 0; s < ZT_OVERFLOW_SHELL_LEN; ++s) {
+        *overflow = false;
+        r = sz_trial(e, syms, specs, nsyms, screen,
+                     ZT_OVERFLOW_SHELL_BITS[s], overflow);
+        if (!(r == ZERO_TEST_UNKNOWN && *overflow)) return r;
+    }
+    return r;   /* all shells overflowed: UNKNOWN, *overflow == true */
+}
+
 /* Shared engine for the plain and assumption-aware samplers. When `ctx` is
  * non-NULL a per-symbol SampleSpec restricts each draw to the assumed region;
  * ctx == NULL reproduces the legacy unconstrained real-only draw exactly. */
@@ -1624,21 +1696,39 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
 
     /* Phase A — screen: many cheap machine-precision points catch
      * branch-dependent non-zeros. A single decisively non-zero point settles
-     * the whole test. */
+     * the whole test. An OVERFLOW point (out-of-range numeric coordinate) carries
+     * no information: it is re-drawn from a smaller shell and, failing that,
+     * SKIPPED — never allowed to abort the test (which would collapse to a wrong
+     * True). Only a symbolic-residue / Indeterminate UNKNOWN aborts. */
+    int screen_informative = 0;
     for (int trial = 0; trial < ZT_SCREEN_SAMPLES; ++trial) {
-        ZeroTestResult r = sz_trial(e, syms.items, specs, syms.count, true);
+        bool overflow = false;
+        ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, true, &overflow);
         if (r == ZERO_TEST_FALSE)   { verdict = false_untrusted ? ZERO_TEST_UNKNOWN : ZERO_TEST_FALSE; goto done; }
-        if (r == ZERO_TEST_UNKNOWN) { verdict = ZERO_TEST_UNKNOWN; goto done; }
-        /* r == TRUE: zero-ish at machine precision, keep screening. */
+        if (r == ZERO_TEST_UNKNOWN) {
+            if (overflow) continue;                       /* uninformative: skip */
+            verdict = ZERO_TEST_UNKNOWN; goto done;       /* residue: cannot decide */
+        }
+        ++screen_informative;                             /* TRUE: informative zero-ish point */
     }
+    /* Every screen point overflowed out of range — no informative evidence at
+     * all — so the identity cannot be affirmed: return UNKNOWN honestly. */
+    if (screen_informative == 0) { verdict = ZERO_TEST_UNKNOWN; goto done; }
 
     /* Phase B — confirm: every screened point looked zero. Climb the full
      * ladder on a few fresh points to reject cancellation-hidden small
-     * non-zeros before declaring a genuine identity. */
+     * non-zeros before declaring a genuine identity. Overflow points are again
+     * re-drawn / skipped; if all confirm points overflow, the screen phase has
+     * already established the finite points are zero-ish, so verdict stays TRUE
+     * (mirrors the MPFR-unavailable fallback in decide_numeric). */
     for (int trial = 0; trial < ZT_CONFIRM_SAMPLES; ++trial) {
-        ZeroTestResult r = sz_trial(e, syms.items, specs, syms.count, false);
+        bool overflow = false;
+        ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, false, &overflow);
         if (r == ZERO_TEST_FALSE)   { verdict = ZERO_TEST_FALSE;   goto done; }
-        if (r == ZERO_TEST_UNKNOWN) { verdict = ZERO_TEST_UNKNOWN; goto done; }
+        if (r == ZERO_TEST_UNKNOWN) {
+            if (overflow) continue;                       /* uninformative: skip */
+            verdict = ZERO_TEST_UNKNOWN; goto done;       /* residue: cannot decide */
+        }
     }
 
 done:
@@ -1713,7 +1803,10 @@ static ZeroTestResult zt_decide_core(const Expr* e) {
     }
 
     if (!has_free_symbols(e)) {
-        r = decide_numeric(e);
+        /* Closed-form: no re-draw is possible, so overflow is not tracked here.
+         * A symbol-free overflow (e.g. E^10000) is a genuine huge value that the
+         * pole path / lenient ladder already handle. */
+        r = decide_numeric(e, NULL);
         if (r != ZERO_TEST_UNKNOWN) return r;
         return ZERO_TEST_UNKNOWN;
     }
@@ -1767,8 +1860,9 @@ static ZeroTestResult zt_decide_assuming_core(const Expr* e, const struct Assume
     if (has_free_symbols(e))
         return decide_schwartz_zippel_assuming(e, ctx);
 
-    /* Closed-form constant: assumptions are irrelevant to a definite number. */
-    return decide_numeric(e);
+    /* Closed-form constant: assumptions are irrelevant to a definite number.
+     * No re-draw is possible for a symbol-free input, so overflow is not tracked. */
+    return decide_numeric(e, NULL);
 }
 
 /* Public entry (assumption-aware).  Same exponential-combining normalisation as

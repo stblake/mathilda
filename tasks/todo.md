@@ -1,80 +1,54 @@
-# Fix: `Integrate[Sqrt[t^7/(1-5t^2)] // PowerExpand, t]` Root::conv warning storm + 82 s grind
+# Task: overflow-robust Schwartz–Zippel sampler in PossibleZeroQ / zero_test
 
-## Symptom (reported)
-`Integrate[t^(7/2)/Sqrt[1-5 t^2], t]` (after PowerExpand) prints an endless stream of
-```
-Root::conv: refinement did not converge at 298 bits.
-Root::conv: refinement did not converge at 431 bits.
-Root::conv: refinement did not converge at 564 bits.
-```
+Fixes POSSIBLE_ZEROQ_IMPROVEMENTS.md #2 (wide dynamic range): overflow sample points
+made the sampler abort to UNKNOWN→True for nowhere-zero functions. Re-draw/skip overflow
+points instead. Scope: overflow-robust sampler only (item #1 residual out of scope).
 
-## Root-cause analysis (verified empirically)
-- The integrand is a mixed radical tower; the `Automatic` cascade engages
-  `Integrate`ParallelMixedTower` (PMT, `src/internal/mixed/ParallelMixed.m`).
-- PMT eventually **declines** (the integral is non-elementary — Mathematica returns a
-  `Hypergeometric2F1`; unevaluated is acceptable here) — but it takes **82 s** and prints
-  **1560** `Root::conv` lines before returning `Integrate[...]` unevaluated.
-- The 1560 warnings are `520` failed `N[Root[...], 80]` calls × 3 precision escalations
-  (266 → 399 → 532 bits). They resolve to **two** distinct monic degree-16, all-complex
-  (`sturm_real = 0`) minimal polynomials with constant term ≈ 1.55e27, roots `4.4385 ± I/√2`.
-- These are re-numericalized **260× each** because PMT's verify-gate samples the candidate
-  antiderivative (which contains these Root *constants*) at many points; the Root value is a
-  loop-invariant that is recomputed every sample.
-- Two genuine defects, both confirmed:
-  1. **`root_warn` (`src/root_numeric.c`) writes straight to `stderr`**, bypassing the
-     Message subsystem — so the `.m` code's `Quiet[...]` wrappers cannot suppress it and
-     there is no repeat-throttle. (Every other emission site uses
-     `mth_msg_note_fired(); if (mth_msg_suppressed()) return;` — e.g. `ops_msg` in
-     `assoc_ops.c`.)
-  2. **`root_numericalize` is not memoised**, so the same deterministic
-     `N[Root[p,k], bits]` is recomputed 260×. Verified deterministic: no global MPFR
-     state mutation, identical result across 50 isolated repeats.
-- NOT in scope (noted follow-up): the MPFR companion-QR solver genuinely fails to refine
-  these ill-scaled deg-16 polys where FLINT `qqbar` would succeed. Fixing `N[Root]` to use
-  FLINT is a larger, higher-risk change and is unnecessary for correct behaviour here.
+## Implementation (all src/zero_test.c unless noted)
+- [ ] Add `ZT_OVERFLOW_SHELL_BITS[]` ladder constant {6,4,2,1,0}
+- [ ] `evaluate_rung`: add `bool* out_overflow`; ok&&!isfinite(mag) → flag + UNKNOWN; !ok → plain UNKNOWN
+- [ ] `decide_numeric`: add `bool* out_overflow` (+ fwd decl :159); propagate from rung-0 call, NULL to higher rungs
+- [ ] `screen_point`: add `bool* out_overflow`; propagate
+- [ ] `sample_random_value(int num_bits)`; `sample_channel(...,int num_bits)`; `sample_random_value_spec(...,int num_bits)` (two-sided range branch ignores num_bits)
+- [ ] `sz_trial`: add `int num_bits`, `bool* out_overflow`; thread through draw + eval calls
+- [ ] `decide_schwartz_zippel_core`: shell-ladder retry on overflow-UNKNOWN in screen + confirm loops; skip if all shells overflow; screen returns UNKNOWN if zero informative points; confirm retains TRUE
+- [ ] `zt_decide_core` Stage 2 call (:1716): pass NULL
 
-## Plan
-- [ ] **A. Route `root_warn` through the Message subsystem.** `#include "message.h"`; in
-      `root_warn` call `mth_msg_note_fired()` then `if (mth_msg_suppressed()) return;`
-      before printing. Matches the established `ops_msg` pattern. → `Quiet[]` now suppresses
-      the storm and `Check[]` still sees the firing.
-- [ ] **B. Memoise `root_numericalize`.** Rename the MPFR body to
-      `root_numericalize_uncached`; add a bounded open-addressed cache (mirror `q2e_cache`)
-      keyed by `(expr_hash(root_expr), spec.mode, spec.bits)`, collision-verified by
-      `expr_eq`. Cache successes AND failures (NULL). Record whether the uncached call fired
-      a message; on a cache hit that recorded a firing, call `mth_msg_note_fired()` (so
-      `Check[]` semantics are preserved) but do not reprint. Collapses 1560 solves → 3.
-- [ ] Remove temporary `MATHILDA_ROOTDIAG` diagnostics.
-- [ ] Verify: repro returns `Integrate[...]` unevaluated, **quietly**, in ~1 s.
-- [ ] Regression: root/rootreduce/integrate unit suites; a Charlwood spot-check.
-- [ ] Bump `src/version.h` 0.204 → 0.205; changelog note in
-      `docs/spec/changelog/2026-09-21.md` (Monday of this ISO week).
+## Tests
+- [ ] Group 18 in tests/test_zero_test.c: E^(-10t)+E^(-100t), Gamma[x^2]+1, Gamma[x+1]-x Gamma[x]+E^(x^2) → False (timed + stable); overflow-prone identities stay True; matched non-identities stay False
+- [ ] Run zero_test_tests, trigexp_zero_tests, possiblezeroq_* (grep FAIL), + downstream: refine, comparisons/Equal, dsolve, solve, integrate, limit, interp, radical_simplify, nullspace
+- [ ] Inspect every True→False flip
 
-## Review — DONE (v0.205)
-- **A** `src/root_numeric.c` `root_warn`: added `#include "message.h"`; now
-  `mth_msg_note_fired(); if (mth_msg_suppressed()) return;` before printing.
-- **B** `src/root_numeric.c`: renamed the MPFR entry to `root_numericalize_uncached`; added a
-  256-slot open-addressed memo (`g_rnum_cache`) keyed by `(expr_hash(Root), mode, bits)`,
-  collision-verified by `expr_eq`, caching successes and failures, recording whether the
-  uncached call fired a message and re-noting it on hits (preserves `Check[]`).
-- **C (found mid-fix)** `src/linalg/inv.c`: the same integral produced a SECOND storm,
-  `Inverse::matsq: Argument {} …` (574 lines, present all along — PMT calls `Inverse[{}]` in a
-  loop inside `Quiet[]`), because inv.c's 5 `Inverse::sing`/`::matsq` sites also wrote bare to
-  `stderr`. Added `#include "message.h"` + a static `inv_warn` (note_fired + suppressed) and
-  routed all 5 through it.
-- Removed the temporary `MATHILDA_ROOTDIAG` diagnostics.
-- **Verified:** repro → `Integrate[t^(7/2)/Sqrt[1-5 t^2], t]` unevaluated, **0** warnings of
-  either kind, 82 s → 27 s. Profiling confirms 0 samples now in `root_numericalize`; the
-  residual is deg-16 `ToNumberField`/`qqbar` (pre-existing PMT gap, out of scope).
-- **Semantics:** unquieted `N[Root[bad-k]]` still prints; `Quiet[…]` suppresses; `Check[…]`
-  returns the fail-expr. `N[Root]` values unchanged (√2, plastic number, deg-16 pair).
-- **Regression:** `root_numeric`/`rootreduce`/`nroots`/`findroot`/`integrals`/
-  `parallelmixedtower`/`linalg`/`linearsolve` suites pass; Charlwood P2/P4/P8/A2/A3/P9 verify
-  (residual 0). `make check-c99` exit 0; no build warnings.
-- **Not done (noted):** (1) MPFR companion-QR can't refine ill-scaled deg-16 polys where FLINT
-  `qqbar` would — a larger, higher-risk `N[Root]` robustness change; unnecessary for correct
-  behaviour here. (2) ~70 other bare `fprintf(stderr,"Head::tag:…")` sites across `src/` share
-  the Quiet-bypass class (Det::matsq, MatrixPower::matsq, Dot::dotsh, …) — a systemic hygiene
-  sweep, not done here. (3) The escalation loop reprints an out-of-range-`k` message 3× within
-  one call (pre-existing, benign, now memoised across calls).
-- **Pending:** version bumped to 0.205 + changelog written; git commit/tag left to the user.
+## Docs / release
+- [ ] POSSIBLE_ZEROQ_IMPROVEMENTS.md #2 status
+- [ ] docs/spec/builtins/expression-information.md PossibleZeroQ note
+- [ ] docs/spec/changelog/2026-09-21.md entry
+- [ ] src/version.h → 0.206; tag v0.206
+- [ ] valgrind spot-check; rebuild code-review graph
+
+## Review (completed 2026-09-26, v0.208)
+
+**Outcome.** Fixed the wrong/flaky `True` in `PossibleZeroQ` for wide-dynamic-range
+exponential sums (POSSIBLE_ZEROQ_IMPROVEMENTS.md #2). Root cause: the Schwartz–Zippel
+sampler aborted the whole test on the first IEEE-overflow sample point (`E^(large) → ±Inf`),
+collapsing `UNKNOWN → True` for nowhere-zero functions, with the verdict decided by hash-seeded
+draw order. Fix (`src/zero_test.c`): `evaluate_rung` flags an overflow (`ok && !isfinite(mag)`)
+distinctly from a symbolic residue; `sz_trial_shelled` re-draws an overflow point through a
+shrinking magnitude-shell ladder (`2^6→2^4→2^2→2^1→2^0`, `|value|>=1` floor kept), skipping only
+if every shell overflows; a whole screen of overflow-only points returns an honest `UNKNOWN`.
+
+**Scope narrowed during implementation.** An initial broader version (re-drawing symbolic
+residues and sampled poles too) regressed `test_battery_weierstrass_cosh_product_roundtrip` by
+exposing a *separate* pre-existing deep-cancellation false-negative in the screen phase. Narrowed
+to the IEEE-overflow class only, which is byte-for-byte behaviour-preserving for non-overflowing
+inputs — so no regressions. `Gamma[x^2]+1` (special-function magnitude-decline residue) and the
+deep-cancellation screen weakness are logged as follow-ups #4/#5 in POSSIBLE_ZEROQ_IMPROVEMENTS.md.
+
+**Verification.** All green: `zero_test_tests` (incl. new Group 18) + `trigexp_zero_tests`,
+`possiblezeroq_{expcombine,assumptions,stress}`, `refine_tests`, `interp`/`nullspace`/
+`solve_radicals_reals`/`limit`, `integrate_goursat`/`integrate_jeffrey`, DSolve corpus §2.2.7
+(wide-spectrum systems, within baseline). Determinism confirmed (stable ×8). Clean GCC build
+(`-std=c99 -Wall -Wextra`, no warnings). No new heap allocations (leak risk nil). `$VersionNumber
+= 0.208`.
+
+**Not committed yet** — awaiting go-ahead to commit to main + tag `v0.208`.

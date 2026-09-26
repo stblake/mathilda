@@ -1010,6 +1010,44 @@ static void test_nonzero_cert_assuming(void) {
     assert_pzq("PossibleZeroQ[-E^(-a x), Assumptions -> a > 0]", "False");
 }
 
+/* Group 18 — overflow-robust Schwartz-Zippel sampler
+ * (POSSIBLE_ZEROQ_IMPROVEMENTS.md #2, wide dynamic range).  A Plus of widely-
+ * separated exponentials is not covered by the Stage-0b certificate and reaches
+ * the sampler.  At a sample where a symbol-dependent exponent is large, E over-
+ * flows to IEEE +/-Inf; the old sampler ABORTED on the first such UNKNOWN and
+ * collapsed the whole test to True — a wrong/flaky verdict for a nowhere-zero
+ * function, decided only by which hash-seeded draw came first.  The fix re-draws
+ * an overflow point from a smaller magnitude shell (or skips it), so the finite
+ * points decide FALSE.  Only the IEEE-overflow class is re-drawn, so identities
+ * and non-overflowing inputs are unchanged. */
+static void test_overflow_wide_exp_sum(void) {
+    /* Nowhere zero; both terms overflow at negative samples in the full shell. */
+    assert_pzq("PossibleZeroQ[E^(-10 t) + E^(-100 t)]", "False");
+    assert_pzq("PossibleZeroQ[E^(-t) + E^(-1000 t)]", "False");
+}
+static void test_overflow_gaussian_plus_recurrence(void) {
+    /* Gamma[x+1] - x Gamma[x] == 0, so this is E^(x^2) — nowhere zero; E^(x^2)
+     * overflows at the full shell and must re-draw to a finite point. */
+    assert_pzq("PossibleZeroQ[Gamma[x + 1] - x Gamma[x] + E^(x^2)]", "False");
+}
+static void test_overflow_verdict_stable(void) {
+    /* Deterministic: the overflow re-draw consumes a seeded stream, so the
+     * verdict is a pure function of the input (no draw-order flakiness). */
+    assert_pzq_stable("PossibleZeroQ[E^(-10 t) + E^(-100 t)]", "False", 8);
+}
+static void test_overflow_preserves_true_identities(void) {
+    /* Overflow-prone GENUINE identities must still decide True: the re-draw finds
+     * a finite shell where the residual resolves to zero. */
+    assert_pzq("PossibleZeroQ[Gamma[x + 1] - x Gamma[x]]", "True");
+    assert_pzq("PossibleZeroQ[E^(x^2) (Cos[x]^2 + Sin[x]^2 - 1)]", "True");
+    assert_pzq("PossibleZeroQ[D[Erfi[x], x] - 2/Sqrt[Pi] E^(x^2)]", "True");
+}
+static void test_overflow_unimplemented_head_unchanged(void) {
+    /* A genuinely unimplemented head is a symbolic residue (NOT overflow): it is
+     * not re-drawn, so the trip-wire UNKNOWN -> True behaviour is preserved. */
+    assert_pzq("PossibleZeroQ[UndefinedZQHead[x] + 1]", "True");
+}
+
 /* ============================================================== */
 /*  Main driver                                                   */
 /* ============================================================== */
@@ -1191,6 +1229,13 @@ int main(void) {
     TEST(test_nonzero_cert_complex);
     TEST(test_nonzero_cert_preserves_identities);
     TEST(test_nonzero_cert_assuming);
+
+    /* Group 18 — overflow-robust Schwartz-Zippel sampler */
+    TEST(test_overflow_wide_exp_sum);
+    TEST(test_overflow_gaussian_plus_recurrence);
+    TEST(test_overflow_verdict_stable);
+    TEST(test_overflow_preserves_true_identities);
+    TEST(test_overflow_unimplemented_head_unchanged);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

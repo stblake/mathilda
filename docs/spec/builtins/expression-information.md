@@ -231,6 +231,20 @@ Pipeline (each stage exits early on a definite verdict):
    on a few points to reject cancellation-hidden small non-zeros before
    declaring an identity.
 
+   A sample point can land where a symbol-dependent exponent overflows the
+   numeric range — `E^(-100 t)` at a negative `t`, or `E^(x^2)` at a moderate
+   `x`, evaluates to IEEE `±Inf`. Such a point carries no information, so it is
+   **re-drawn from a successively smaller magnitude shell** (`|value|` capped at
+   `2^6 → 2^4 → 2^2 → 2^1 → 2^0`, never below the `|value| >= 1` floor) until it
+   falls back into range; if every shell still overflows it is skipped. This is
+   what lets a nowhere-zero sum of widely-separated exponentials such as
+   `E^(-10 t) + E^(-100 t)` decide `False` at a finite point. Previously the first
+   overflowing sample aborted the whole test to `UNKNOWN` (→ `True`), so the
+   verdict was a wrong, draw-order-dependent `True`. Only the IEEE-overflow class
+   is re-drawn (a smaller shell can bring it back into range); a symbolic residue
+   from a genuinely unimplemented head still ends the test at `UNKNOWN` (→ `True`),
+   and the draw stream for non-overflowing inputs is unchanged.
+
    Sampling is on the real line by design: an analytic identity holding
    on a real interval holds on a complex neighbourhood (identity
    theorem), so real points confirm it, whereas complex samples cross
