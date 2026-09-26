@@ -296,6 +296,81 @@ the association exactly as before. The value-threading rule---that \B{Map}, \B{T
 through one shared helper, which is why these operations compose predictably into
 data pipelines.}
 
+\mcode{Part} addresses an association by key exactly as it addresses a list by position,
+and a part that selects \emph{several} entries returns a \emph{sub-association}---the
+chosen entries, keys and all, in their original order.
+
+\begin{codepairs}
+\pair{06-data-structures/assoc-part/1}{A small keyed record to slice.}
+\pair{06-data-structures/assoc-part/2}{A span selects a contiguous run of entries and
+keeps them keyed.}
+\pair{06-data-structures/assoc-part/3}{A list of keys picks exactly those, in the order
+requested.}
+\pair{06-data-structures/assoc-part/4}{Integer positions return the same
+sub-association---position and key are two names for one slot.}
+\end{codepairs}
+
+\subsection{Associations are atoms}
+\label{ssec:ds-assoc-atoms}
+
+An association looks like a container, but to the structural machinery it is a single,
+indivisible object---an \emph{atom}. That is the rule that lets one travel safely through
+code that knows nothing about associations. Traversal and testing see the \emph{values};
+the keys are addressing metadata, reached only through an explicit \B{Key}.
+
+\begin{codepairs}
+\pair{06-data-structures/assoc-atoms/1}{A three-entry association.}
+\pair{06-data-structures/assoc-atoms/2}{\B{AtomQ} reports \texttt{True}: structurally it
+is one node, not a compound of parts to be taken apart.}
+\pair{06-data-structures/assoc-atoms/3}{\mcode{Cases} scans the \emph{values}, so a
+pattern filter returns matching values, not entries.}
+\pair{06-data-structures/assoc-atoms/4}{\mcode{Position} likewise finds a value, and
+names where it lives by its key, wrapped in \B{Key}.}
+\pair{06-data-structures/assoc-atoms/5}{And \B{ReplaceAll} cannot touch a key: a rule
+that would rewrite \texttt{"y"} leaves the association unchanged, because the keys are not
+part of the expression it walks.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Atomicity is a deliberate---and recent---design choice.
+\mcode{AtomQ}, \mcode{Depth}, \mcode{LeafCount}, \mcode{Level}, \mcode{Cases},
+\mcode{Count}, \mcode{MemberQ}, \mcode{FreeQ}, \mcode{Position}, and the level
+specifications of \mcode{Map} and \mcode{Apply} all agree to see only an association's
+values. The pay-off is safety: because \texttt{/.} can never merge or rewrite keys, and a
+pattern scan can never mistake a key for a value, an association carried through a generic
+pipeline---as a rule set, a \mcode{Cases} filter, or a user-defined transformation---behaves
+predictably and cannot be silently corrupted. When you \emph{do} need to name a key
+structurally, \mcode{Position} hands back a \B{Key}$[\,k\,]$ wrapper that \mcode{Part}
+accepts directly.}
+
+\subsection{Operator forms, slots, and pipelines}
+\label{ssec:ds-assoc-pipeline}
+
+Data work is a pipeline: filter the rows, sort them, pull a field, summarise. Associations
+are built for it, through two conveniences. A pure function can read a field by \emph{name}
+with a named slot, \texttt{\#field}, and most operators carry a \emph{curried} form that
+takes their data last, so stages compose left to right.
+
+\begin{codepairs}
+\pair{06-data-structures/assoc-pipeline/2}{\B{Select} keeps the rows whose \texttt{qty}
+field---read by the named slot \texttt{\#qty}---exceeds two.}
+\pair{06-data-structures/assoc-pipeline/3}{\B{SortBy} orders the same rows by that field.}
+\pair{06-data-structures/assoc-pipeline/5}{\mcode{Lookup["pears"]} is an operator form:
+it waits for an association, then looks the key up.}
+\pair{06-data-structures/assoc-pipeline/6}{Listable heads thread over the values, so
+adding a scalar adds it to each value and keeps the keys aligned.}
+\pair{06-data-structures/assoc-pipeline/7}{And \mcode{Total} of a \emph{list} of
+associations sums them key by key---the reduction a table of records calls for.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{A named slot \texttt{\#field} parses as
+\B{Slot}\texttt{["field"]}, which on an association reads that key---so
+\texttt{\#qty\,>\,2\,\&} is an ordinary pure function that happens to index by name. The
+curried forms come from one table-driven mechanism (\texttt{src/opform.c}) that gives some
+forty-three heads---\mcode{Lookup}, \mcode{Select}, \mcode{Map}, \mcode{GroupBy},
+\mcode{SortBy}, and their kin---an operator form \texttt{f[args][data]} equivalent to
+\texttt{f[data, args]}. Together they let a data pipeline be written point-free, each stage
+a self-contained operator applied in turn.}
+
 \subsection{Aggregating: Counts, GroupBy, and Merge}
 \label{ssec:ds-aggregate}
 
@@ -327,6 +402,28 @@ each, \emph{combine} the summaries into one table. \B{GroupBy} does all three, a
 because the result is an association it feeds straight into another aggregation---the
 frequency table from \B{Counts} is exactly the empirical distribution the statistics
 chapter (\S\ref{sec:statistics}) builds its estimators on.
+
+\B{Merge} is one of a family that treats an association as a keyed \emph{set}. The keys
+can be intersected, subtracted, and unioned; entries can be dropped by a predicate on
+their values; and two tables can be joined on a shared field the way a database would.
+
+\begin{codepairs}
+\pair{06-data-structures/assoc-keyalgebra/1}{\B{KeyIntersection} restricts each
+association to the keys they all share---here only \texttt{"b"}, each keeping its own
+value.}
+\pair{06-data-structures/assoc-keyalgebra/2}{\B{KeyComplement} keeps the first
+association's keys that appear in no other.}
+\pair{06-data-structures/assoc-keyalgebra/3}{\B{KeyUnion} aligns several associations to
+their combined key set, filling a gap with a \mcode{Missing} marker.}
+\pair{06-data-structures/assoc-keyalgebra/4}{\B{Discard} is \mcode{Select}'s complement:
+it drops the entries whose value satisfies the test.}
+\pair{06-data-structures/assoc-keyalgebra/5}{\B{JoinAcross} joins two lists of records on
+a shared key, merging each matched pair into one row---a relational join.}
+\pair{06-data-structures/assoc-keyalgebra/6}{\B{PositionIndex} inverts a list into an
+association from each value to the positions it occupies.}
+\pair{06-data-structures/assoc-keyalgebra/7}{And \mcode{Merge} accepts a plain list of
+rules, collecting clashing keys before it reduces---so it doubles as a grouping tally.}
+\end{codepairs}
 
 \usagebox{Association}
 

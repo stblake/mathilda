@@ -1,41 +1,53 @@
-# Task: Stress-Testing `Refine`
+# Task: Document Refine + refresh Association in The Mathilda Book
 
-Plan: `/Users/user/.claude/plans/let-s-thoroughly-stress-test-sorted-rain.md`
+Plan: `/Users/user/.claude/plans/sparkling-marinating-whistle.md`
+Book-only change → no `$VersionNumber` bump, no git tag.
 
-## Phase A — Corpus (159 cases) ✅
-- [x] Verify harness mechanics (`./Mathilda -file`, timeout, SameQ probe)
-- [x] Build `corpus.py` — 12 categories, first-principles expected
-- [x] Sanity-check corpus (calibration probe surfaced gaps + wins)
+## Part A — Refine
+- [ ] `examples/algebra/refine.m` (5 inputs)
+- [ ] `examples/algebra/refine-relations.m` (3 inputs)
+- [ ] `examples/03-introduction/simplification-refine.m` (2 inputs)
+- [ ] Deep subsection "Simplifying under assumptions" in `chapters/math/algebra.tex` (+usagebox, revise closing para)
+- [ ] Brief mention + pairs in `chapters/03-introduction.tex` §Simplification
 
-## Phase B — Harness ✅
-- [x] `run_stress.py` — per-case isolated process + hard timeout
-- [x] Verdict logic: PASS / UNCHANGED / DIVERGENT / HANG / CRASH via SameQ
-- [x] Full run → results JSON
+## Part B — Association §6.3 (`chapters/06-data-structures.tex`)
+- [ ] `examples/06-data-structures/assoc-part.m`
+- [ ] `examples/06-data-structures/assoc-atoms.m`
+- [ ] `examples/06-data-structures/assoc-pipeline.m`
+- [ ] `examples/06-data-structures/assoc-keyalgebra.m`
+- [ ] B1 slicing paragraph + pairs
+- [ ] B2 subsection "Associations are atoms"
+- [ ] B3 subsection "Operator forms, slots, and pipelines"
+- [ ] B4 extend "Aggregating" with key-set algebra & joins
 
-## Phase C — Gap report ✅
-- [x] `tasks/refine_stress_report.md` — matrix + prioritized failures + code locations
+## Part C — Docs sync
+- [ ] `docs/spec/changelog/2026-09-21.md` — `## Book —` entry
+- [ ] `book/ROADMAP.md` — note updates
 
-## Phase D — Safe fixes ✅ (v0.203)
-- [x] G1 soundness: SZ sampler downgrades FALSE→UNKNOWN under coupling equality (zero_test.c) + Refine Equal TRUE via substitution (refine.c)
-- [x] G3 Element Positive/Negative/NonNegative/NonPositive domains (simp_builtins.c)
-- [x] G2 NonPositive rewrites, G4 Arg under sign, G6 Abs[complex], G5 symbol-set restriction, Log identities (simp_assume_rewrite.c)
-- [x] Regression tests: test_stress_fixes (24 assertions) in tests/test_refine.c
-- [x] Re-run corpus 137→151 PASS, 0 DIVERGENT, zero regressions in refine/simplify/pzq/element/assuming
-- [x] version.h 0.202→0.203 + changelog + spec updated
-- [x] Deep gaps catalogued as follow-up in the report
+## Verification
+- [ ] `make examples` + read generated transcripts
+- [ ] `make check-links` (0 unlinked)
+- [ ] `make pdf` (clean log, note page count)
 
-## Verification ✅
-- [x] `make -j` clean; `make check-c99` clean
-- [x] CMake test build + all shared-engine suites green
-- [x] valgrind: no leak attributable to changed files (only macOS objc/dyld baseline noise)
-- [ ] git tag v0.203 (pending user approval to commit)
+## Review (2026-09-26 — complete)
 
-## Review
-- Built a 159-case first-principles corpus (SameQ-based, printer-independent, per-case process
-  isolation). Baseline 137 PASS. Found and fixed one **soundness bug** (assumption-aware zero test
-  returned a wrong `False` under coupling equalities — poisoned both `Refine` and `PossibleZeroQ`)
-  and six missing-feature families; final **151/159 PASS, 0 wrong answers**. 8 open follow-ups all
-  return the input unchanged (never wrong): integer-linear trig, `Element[√2,Algebraics]`,
-  deep-positivity for non-strict/compound-real bases, the >6-var CAD ceiling, and `Sign` of an exact
-  algebraic zero. The methodology also caught two of my own wrong expected values and a harness
-  accumulator/data-symbol collision.
+**Done.** Book brought current with `Refine` (v0.197) and the `Association` overhaul
+(v0.198–v0.201). Book/docs-only → no `$VersionNumber` bump, no git tag.
+
+- **Refine, brief (§3):** paragraph + 2 pairs in the intro *Simplification* section,
+  forward-ref to §4.2.14.
+- **Refine, deep (§4.2.14 "Simplifying under assumptions", p.68):** motivation, 5-pair
+  rewrite block + 3-pair relational-decision block, two callouts (shared engine minus
+  Simplify's search; soundness), `\usagebox{Refine}` (p.69). Closing "arc of algebra"
+  paragraph revised so the "taken up later" promise is honest.
+- **Association §6.3:** slicing → sub-associations (assoc-part); new §6.3.1 "Associations
+  are atoms" (assoc-atoms); new §6.3.2 "Operator forms, slots, and pipelines"
+  (assoc-pipeline); key-set algebra + joins added to Aggregating (assoc-keyalgebra).
+- **7 new verified example files** under `book/examples/`; all transcripts build-verified.
+- **Docs sync:** changelog `## Book —` entry (2026-09-21.md); ROADMAP notes on §4.2 & Ch.6.
+
+**Verification:** `make examples` (229 transcripts), `make check-links` (1404 `\B{}`,
+all resolve), `make pdf` (exit 0, 274 pages, no undefined refs, no LaTeX warnings).
+
+Not committed (user did not request a commit). `generated/` is git-ignored; tracked
+changes are the 3 edited `.tex` chapters, 7 new `.m` files, changelog, ROADMAP.

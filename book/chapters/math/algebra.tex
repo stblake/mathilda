@@ -791,13 +791,71 @@ cubes. A bounded search that returns \texttt{\{\}} has proved something true and
 unconditionally are the ones resting on an obstruction or a theorem---the mod-$9$ argument
 for $4$, Wiles for $x^n+y^n=z^n$---not on an exhausted box.}
 
+\subsection{Simplifying under assumptions}
+\label{ssec:alg-refine}
+
+Many of the identities a computer algebra system knows hold only \emph{conditionally}.
+$\sqrt{x^2}$ equals $x$ when $x\ge0$ but $|x|$ in general; $\log(xy)$ splits into
+$\log x+\log y$ only when the factors are positive; $\sin(n\pi)$ vanishes only when $n$
+is an integer. Left to itself Mathilda will not assume what you have not told it, and so
+it keeps the general form. \B{Refine} is how you tell it: \texttt{Refine[expr, assum]}
+gives the form \(\mathit{expr}\) would take if its symbols satisfied the assumptions
+\(\mathit{assum}\)---an equation, an inequality, a domain membership through \B{Element},
+or any logical combination of these.
+
+\begin{codepairs}
+\pair{algebra/refine/1}{With $x>0$ the radical loses its absolute value: $\sqrt{x^2}=x$.}
+\pair{algebra/refine/2}{Knowing only that $x$ is real, the honest answer is $|x|$---the
+one form that holds for either sign.}
+\pair{algebra/refine/3}{\B{Abs} resolves the other way under $x<0$, where $|x|=-x$.}
+\pair{algebra/refine/4}{The logarithm of a product splits once a factor is known
+positive: $\B{Log}$ of $xy$ becomes $\log x+\log y$.}
+\pair{algebra/refine/5}{\B{Assuming} puts a fact into scope for everything inside it, so
+the two sign assumptions combine---$\sqrt{x^2y^2}=|x|\,|y|=-xy$ when $x>0$ and $y<0$.}
+\end{codepairs}
+
+Refine does more than rewrite. It will \emph{decide} a relation---an equation, an
+inequality, a membership---when the assumptions settle it, returning \texttt{True} or
+\texttt{False} in place of the relation itself.
+
+\begin{codepairs}
+\pair{algebra/refine-relations/1}{A square is nonnegative for every real $x$---a fact
+Refine proves rather than takes on faith.}
+\pair{algebra/refine-relations/2}{Equations fall to substitution and a zero test: $a=b$
+follows from $a-b=0$.}
+\pair{algebra/refine-relations/3}{And a genuinely nonlinear positivity holds---the
+quadratic form $x^2-xy+y^2+1$ is strictly positive over the reals, so its \B{Sign} is
+$1$.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Refine shares its assumption engine with \texttt{Simplify}
+(the internal \texttt{apply\_assumption\_rules} pass): every rewrite Refine performs is
+one Simplify would also perform. The difference is the search. \texttt{Simplify} wraps
+those rewrites in a complexity-minimising search over many candidate forms and keeps the
+smallest; Refine is the rewrite-and-decide pass \emph{without} that search, so it is
+faster and more predictable but will not, for instance, factor. Relational decisions run
+through the same \texttt{Reduce}/CAD entailment that produced the complete real solution
+sets earlier in this section: a predicate $P$ is \texttt{True} exactly when
+$\mathit{assum}\wedge\lnot P$ is unsatisfiable over the reals, and quantities appearing
+algebraically in an inequality are taken to be real.}
+
+\calloutnote{Pitfall}{Refine is \emph{sound}. When the assumptions do not settle a
+question it returns the expression or relation unchanged rather than guess a branch, and
+under a coupling assumption such as $a-b=0$ its zero test never reports a true identity as
+nonzero---it downgrades to undecided sooner than sample the very points the assumption
+forbids. An answer Refine does give can therefore be trusted.}
+
+\usagebox{Refine}
+
 That is the arc of algebra in Mathilda: from reading a polynomial's structure, through
 expanding and factoring it---over the rationals and over the number fields you choose to
 work in---through the GCDs, resultants, and Gr\"obner bases that eliminate variables, to
 solving single equations, systems, the complete real solution sets that \B{Reduce}
-describes, and the integer solutions that the Diophantine engines find or prove absent.
-The rational-function normal forms established here feed directly
-into the integration of \S\ref{sec:calculus}, and the more general art of coaxing an
-expression into its simplest form---\texttt{Simplify} and its relatives---builds on all
-of it, and is taken up later. As always, the exhaustive options for any function named
-here are one \texttt{?Name} away at the prompt.
+describes, the integer solutions that the Diophantine engines find or prove absent, and
+finally the refinement of an expression under whatever you know about its symbols. The
+rational-function normal forms established here feed directly into the integration of
+\S\ref{sec:calculus}. Coaxing an expression into its \emph{simplest} form is the more
+general art that builds on all of this: \texttt{Refine}, just seen, applies a set of
+assumptions directly, while \texttt{Simplify}'s complexity-minimising search over many
+candidate forms is taken up later. As always, the exhaustive options for any function
+named here are one \texttt{?Name} away at the prompt.

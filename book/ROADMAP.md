@@ -83,7 +83,9 @@ mathematical domains, each its own file under `chapters/math/` and its own campa
 **§4.2 Algebra scope.** Expand/Factor/Together/Cancel/Apart; polynomials over ℚ and
 over algebraic number fields; GCD/resultants; Gröbner bases; Solve for polynomial
 systems. Show the algorithms (square-free decomposition, Hensel lifting) in
-`underhood` boxes.
+`underhood` boxes. *(2026-09-26: added the closing subsection "Simplifying under
+assumptions" documenting `Refine` — assumption-driven rewrites and relational decisions
+via the Reduce/CAD entailment.)*
 
 **§4.3 Calculus scope** (Verified): 4.3.1 Derivatives (`D`/`Dt`/`Derivative` +
 `Grad`/`Div`/`Curl`/`Laplacian`), 4.3.2 Limits, 4.3.3 Series, 4.3.4 Residues,
@@ -152,7 +154,10 @@ capture and embed rendered figures (a new deliverable, not just prose).
 
 **Ch. 6 Data Structures scope.** Expression trees (everything is an expression);
 Lists; Associations; NDArrays and packed arrays — the substrate that makes numeric
-work fast. Heavy `underhood`/`performance` content.
+work fast. Heavy `underhood`/`performance` content. *(2026-09-26: §6.3 Associations
+refreshed for the v0.198–v0.201 overhaul — slicing to sub-associations, the new
+"Associations are atoms" and "Operator forms, slots, and pipelines" subsections, and
+key-set algebra + joins in Aggregating.)*
 
 **Ch. 7 Programming scope** (per outline): pattern matching, procedural programming,
 functional programming — the three paradigms Mathilda supports, and how they compose.
