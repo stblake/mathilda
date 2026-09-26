@@ -174,6 +174,45 @@ with growing amplitude, so no limit exists, and Mathilda proves this (via an
 oscillatory normal-form analysis) rather than returning a plausible-looking
 number. That refusal to guess is the through-line of the whole section.
 
+Computing a limit is one thing; \emph{proving} one from its definition is another,
+and Mathilda does both. The statement \(\lim_{x\to a} f(x) = L\) unfolds into the
+\(\varepsilon\)--\(\delta\) sentence\index{limit!epsilon-delta proof of@\(\varepsilon\)--\(\delta\) proof of}\index{epsilon-delta@\(\varepsilon\)--\(\delta\) definition}
+\[
+  \forall\,\varepsilon>0 \quad \exists\,\delta>0 \quad \forall x \quad
+  \bigl(0<\lvert x-a\rvert<\delta \;\Rightarrow\; \lvert f(x)-L\rvert<\varepsilon\bigr),
+\]
+a quantified formula over the reals---and \B{Resolve} decides quantified formulas
+over the reals. Transcribed verbatim, with \B{ForAll} and \B{Exists} carrying each
+bound variable and its restriction just as the quantifiers do on the page, the
+definition of \(\lim_{x\to2}(3x-1)=5\) is proved outright---and the same sentence
+with the limit misstated is \emph{disproved}, not merely left unconfirmed:
+
+\begin{codepairs}
+\pair{calculus/limits/10}{The \(\varepsilon\)--\(\delta\) definition of
+\(\lim_{x\to2}(3x-1)=5\), transcribed literally and returned \mcode{True}: a proof.}
+\pair{calculus/limits/11}{The identical sentence with \(5\) replaced by the wrong
+value \(6\)---\mcode{False}. The decision is two-sided.}
+\end{codepairs}
+
+Behind the verdict is quantifier elimination, not sampling.\calloutnote{Under the
+hood}{An \(\varepsilon\)--\(\delta\) statement is three alternating quantifiers over
+the reals, and settling it is \emph{quantifier
+elimination}\index{quantifier elimination}: \B{Resolve} eliminates the innermost
+block to a condition on the variables that remain, then the next, until only
+\mcode{True} or \mcode{False} is left. The engine underneath
+(\texttt{src/solve/reduce\_cad.c}) is a \emph{cylindrical algebraic
+decomposition}\index{cylindrical algebraic decomposition}---a complete decision
+procedure for the first-order theory of real-closed
+fields\index{real-closed field} (Tarski's theorem)---so for any
+\emph{semialgebraic} \(f\) (polynomial, rational, or algebraic) the answer is
+guaranteed, and each \(\lvert\cdot\rvert\) is absorbed by splitting the absolute
+value into its two sign branches. That completeness has a sharp boundary: a
+transcendental target such as \(\lim_{x\to0}\sin(x)/x = 1\) has no polynomial
+decomposition, so Mathilda \emph{declines}---returns the sentence
+unevaluated---rather than guess. \B{Limit} and \B{Resolve} are complementary:
+\B{Limit} reaches the transcendental limits a decision procedure cannot, while
+\B{Resolve} certifies the algebraic ones with a proof.}
+
 \usagebox{Limit}
 
 \subsection{Series}

@@ -639,6 +639,48 @@ returning to a decimal.}
 sum to \(0\).}
 \end{codepairs}
 
+\subsection{Deciding quantified statements}
+\label{ssec:alg-resolve}
+
+Tarski's theorem is more than a fact about solution sets: it makes the truth of a
+\emph{fully quantified} statement decidable, and Mathilda exposes that directly. \B{ForAll}
+and \B{Exists} write the quantifiers---\texttt{ForAll[x, cond, P]} and
+\texttt{Exists[x, cond, P]}, the middle argument optionally restricting the bound
+variable---and are inert on their own; \B{Resolve} eliminates them, returning
+\texttt{True}, \texttt{False}, or, when free variables remain, the quantifier-free
+condition on them.
+
+\begin{codepairs}
+\pair{algebra/resolve/1}{There \emph{is} a real square root of $2$---an existential
+decided \texttt{True}.}
+\pair{algebra/resolve/2}{But none of $-1$: \texttt{False}, with no complex root smuggled
+in. The domain is the reals.}
+\pair{algebra/resolve/3}{A universal: $x^2+1$ is positive for \emph{every} real $x$.}
+\pair{algebra/resolve/4}{With a free parameter the quantifier does not collapse to a
+Boolean---it eliminates to a \emph{condition}. That $x^2+bx+c$ has a real root exactly
+when $c\le b^2/4$ is the discriminant criterion, derived rather than recalled.}
+\pair{algebra/resolve/5}{Quantifiers may alternate: for every $x$ there is a $y$ summing
+to zero.}
+\pair{algebra/resolve/6}{And each block may be bounded---for every $\varepsilon>0$ there
+is a smaller $\delta>0$. This is the kernel of an $\varepsilon$--$\delta$ argument.}
+\end{codepairs}
+
+Pair~4 is the one to dwell on: quantifier elimination does not merely check a statement,
+it \emph{computes the condition} under which a parametric one holds---and here that
+condition is a theorem of elementary algebra. Pair~6 is the same alternating shape that,
+carried one quantifier deeper, \emph{proves a limit} from its definition:
+\S\ref{ssec:calc-limit} runs exactly this machine on the \(\varepsilon\)--\(\delta\)
+statement.\calloutnote{Under the hood}{\B{Resolve} is the pure quantifier-elimination
+front-end over the same CAD engine as \B{Reduce}: it eliminates the innermost quantifier
+block to a quantifier-free formula, folds in that block's restriction, and repeats
+outward, to any alternation depth. Because the decision procedure is complete only for
+\emph{real-closed fields}, the guarantee holds for semialgebraic statements (polynomial,
+rational, algebraic, and---by sign-splitting each absolute value---\B{Abs}); a
+transcendental body such as \(\sin x = a\) has no polynomial decomposition, so \B{Resolve}
+declines rather than guess, the same soundness contract \B{Reduce} keeps.}
+
+\usagebox{Resolve}
+
 Solving over the \emph{integers}---Diophantine equations---is a different world of methods
 again, and it is where we turn next.
 
