@@ -282,17 +282,10 @@ symbol---fast, and correct whenever the answer is structurally apparent, but bli
 to any zero that only appears after simplification. Passing a predicate---a body
 like \texttt{(Simplify[\#] === 0 \&)} or a head like \B{PossibleZeroQ}---replaces
 that test with a semantic one, and the elimination pivots on genuine, not merely
-apparent, non-zeros.
-
-\calloutnote{Theory}{There is no perfect \texttt{ZeroTest}, and this is a theorem,
-not a limitation of effort. \emph{Richardson's theorem}\index{Richardson's theorem}
-shows that for expressions built from the rationals, \(\pi\), \(\log\), \(\exp\),
-sines, and absolute values, deciding whether an expression is identically zero is
-\emph{undecidable}. Every computer algebra system therefore chooses a zero test
-that is sound but incomplete---it never calls a non-zero zero, but may fail to
-prove a genuine zero. Making that choice a user-supplied option is the honest
-design: you decide how hard to work at each pivot, trading speed against the
-strength of the test, with \B{Simplify} or \B{PossibleZeroQ} at the strong end.}
+apparent, non-zeros. There is no \emph{perfect} zero test---that this must be so is a
+theorem, not a shortfall of effort---so how hard to test at each pivot is a choice left to
+you; \S\ref{ssec:alg-possiblezeroq} takes up \mcode{PossibleZeroQ} and the undecidability
+theorem behind it.
 
 The same fault line runs through \emph{numeric} reduction, where the question
 becomes ``is this entry small enough to treat as zero?'' Here the answer depends on

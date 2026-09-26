@@ -83,9 +83,11 @@ mathematical domains, each its own file under `chapters/math/` and its own campa
 **§4.2 Algebra scope.** Expand/Factor/Together/Cancel/Apart; polynomials over ℚ and
 over algebraic number fields; GCD/resultants; Gröbner bases; Solve for polynomial
 systems. Show the algorithms (square-free decomposition, Hensel lifting) in
-`underhood` boxes. *(2026-09-26: added the closing subsection "Simplifying under
+`underhood` boxes. *(2026-09-26: added the closing subsections "Simplifying under
 assumptions" documenting `Refine` — assumption-driven rewrites and relational decisions
-via the Reduce/CAD entailment.)*
+via the Reduce/CAD entailment — and "Is it zero?" documenting `PossibleZeroQ` (features,
+the reliable-False/heuristic-True asymmetry, efficiency vs Simplify, Richardson's theorem
+moved here from the linear-algebra ZeroTest discussion).)*
 
 **§4.3 Calculus scope** (Verified): 4.3.1 Derivatives (`D`/`Dt`/`Derivative` +
 `Grad`/`Div`/`Curl`/`Laplacian`), 4.3.2 Limits, 4.3.3 Series, 4.3.4 Residues,

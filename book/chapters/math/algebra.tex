@@ -848,12 +848,108 @@ forbids. An answer Refine does give can therefore be trusted.}
 
 \usagebox{Refine}
 
+\subsection{Is it zero?}
+\label{ssec:alg-possiblezeroq}
+
+Beneath \B{Refine}, beneath \texttt{Simplify}, beneath every exact elimination in linear
+algebra sits one question, the simplest to ask and the hardest to answer: \emph{is this
+expression zero?} When the expression is a plain number it is trivial; when it is built
+from radicals, logarithms, exponentials, and trigonometric functions it is, in full
+generality, unanswerable. \B{PossibleZeroQ}\index{zero testing!PossibleZeroQ} is
+Mathilda's working answer---a fast, self-contained test that reports \texttt{True} when
+symbolic and numeric evidence agree an expression vanishes, and \texttt{False} otherwise.
+Its strength is that it sees through identities the evaluator leaves untouched.
+
+\begin{codepairs}
+\pair{algebra/possiblezeroq/1}{The Pythagorean identity does not auto-simplify, yet the
+zero test recognises it.}
+\pair{algebra/possiblezeroq/2}{So does a nested-radical identity: \(\sqrt{3+2\sqrt2}\) really
+is \(1+\sqrt2\).}
+\pair{algebra/possiblezeroq/3}{A logarithm identity, \(\log 6=\log 2+\log 3\).}
+\pair{algebra/possiblezeroq/4}{And Euler's identity \(e^{i\pi}=-1\).}
+\end{codepairs}
+
+The verdicts are not symmetric, and the asymmetry is the key to using the test well.
+
+\begin{codepairs}
+\pair{algebra/possiblezeroq/5}{A genuine non-zero is reported \texttt{False}\ldots}
+\pair{algebra/possiblezeroq/6}{\ldots as is a free symbol, which is not \emph{identically}
+zero.}
+\end{codepairs}
+
+Under the hood the test runs cheap exact stages first---structural, rational, and a
+trig/exponential normaliser---and, when those do not settle it, falls back to numeric
+sampling: it evaluates the expression at several points, at rising precision, in the
+spirit of the Schwartz--Zippel\index{Schwartz--Zippel} lemma. It deliberately never calls
+\texttt{Simplify} (which would be far more expensive, and itself relies on the zero test).
+That design fixes the meaning of the two answers. A \texttt{False} is backed by an
+explicit point at which the expression is plainly non-zero, so it is \emph{reliable}: the
+expression is not identically zero. A \texttt{True} is the heuristic verdict---strong
+evidence, not a proof---and, as we will see, it can be fooled. The same numeric machinery
+lets \mcode{Equal} and \mcode{Unequal} decide relations between numeric constants, and it
+is the strong setting for the \texttt{ZeroTest} option of \B{RowReduce} and \B{NullSpace}
+(\S\ref{ssec:la-zerotest}).
+
+Assumptions narrow the sampler to the region they describe, so an identity that holds only
+there is recognised.
+
+\begin{codepairs}
+\pair{algebra/possiblezeroq/7}{With nothing known, \(\sqrt{x^2}-x\) is not identically
+zero---it fails for negative \(x\).}
+\pair{algebra/possiblezeroq/8}{Told \(x>0\), the sampler draws only positive points and the
+identity stands.}
+\end{codepairs}
+
+\calloutnote{Performance}{The reason \mcode{PossibleZeroQ} is the first-line test, and not
+\texttt{Simplify}, is cost. Its work is \emph{bounded}---a fixed budget of samples at a few
+precisions---no matter how the expression is built, whereas \texttt{Simplify}'s symbolic
+search is open-ended and can explode. On the Machin-like identity below,
+\mcode{PossibleZeroQ} returns \texttt{True} in about \(0.3\) ms while \texttt{Simplify}
+spends some twenty times longer \emph{and does not reduce it at all}; on the nested radical
+above it is roughly four times faster. The trade is honest, though: on an easy identity
+such as the triple-angle formula the two are comparable, and \texttt{Simplify}, when it
+succeeds, hands back the \emph{proof}---the literal \(0\)---that \mcode{PossibleZeroQ} only
+makes probable. (Figures from this build, Apple M-series.)}
+
+\begin{codepairs}
+\pair{algebra/possiblezeroq-limits/2}{\(\arctan\tfrac13+\arctan\tfrac12=\tfrac\pi4\): the
+zero test decides it at once\ldots}
+\pair{algebra/possiblezeroq-limits/3}{\ldots where \texttt{Simplify}, after much more work,
+leaves it unreduced. Numeric evidence settles what the symbolic search does not recognise.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{\mcode{PossibleZeroQ} is a heuristic, and a \texttt{True} can be
+over-eager. \(-e^{-ax}\) is nowhere zero, yet the test reports \texttt{True}: its numeric
+probe samples at growing arguments, watches the magnitude decay toward \(0\), and mistakes
+that decay for an identity. So never let a \texttt{True} \emph{certify} a result---to accept
+a candidate antiderivative, say; when you need certainty, prove it by having
+\texttt{Simplify} reduce the difference to the literal \(0\). The reliable direction is the
+other one: a \texttt{False}, backed by a witness point, means genuinely non-zero.}
+
+\begin{codepairs}
+\pair{algebra/possiblezeroq-limits/1}{A false positive: \(-e^{-ax}\) never vanishes, but its
+decay toward zero fools the sampler.}
+\end{codepairs}
+
+\calloutnote{Theory}{That no zero test can be perfect is a theorem, not a shortfall of
+effort. \emph{Richardson's theorem}\index{Richardson's theorem} shows that for expressions
+built from the rationals, \(\pi\), \(\log\), \(\exp\), the sine, and absolute value,
+deciding whether an expression is identically zero is \emph{undecidable}. Every computer
+algebra system therefore settles for an incomplete test---one that may fail to recognise a
+genuine zero, and, when it leans on numeric evidence as \mcode{PossibleZeroQ} does, may
+occasionally over-report one. Making the choice of test explicit is the honest design: a
+structural default that is fast and never wrong but often blind, and \mcode{PossibleZeroQ}
+or \texttt{Simplify} at the stronger, dearer end.}
+
+\usagebox{PossibleZeroQ}
+
 That is the arc of algebra in Mathilda: from reading a polynomial's structure, through
 expanding and factoring it---over the rationals and over the number fields you choose to
 work in---through the GCDs, resultants, and Gr\"obner bases that eliminate variables, to
 solving single equations, systems, the complete real solution sets that \B{Reduce}
-describes, the integer solutions that the Diophantine engines find or prove absent, and
-finally the refinement of an expression under whatever you know about its symbols. The
+describes, the integer solutions that the Diophantine engines find or prove absent, the refinement of
+an expression under whatever you know about its symbols, and the zero test that quietly
+underlies every one of these decisions. The
 rational-function normal forms established here feed directly into the integration of
 \S\ref{sec:calculus}. Coaxing an expression into its \emph{simplest} form is the more
 general art that builds on all of this: \texttt{Refine}, just seen, applies a set of
