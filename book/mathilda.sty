@@ -17,6 +17,7 @@
 \RequirePackage{framed}
 \RequirePackage{paracol}
 \RequirePackage[most]{tcolorbox}
+\RequirePackage{multicol}   % three-column index (see index helpers below)
 
 % Footnotes and paracol: by default paracol glues a footnote made in the
 % single-column text *before* a paracol environment (our codepairs/codecomment)
@@ -230,6 +231,31 @@
 % Concept terms are indexed by hand with plain \index{...}.
 \newcommand{\bidx}[1]{\index{#1@\mcode{#1}}}
 \newcommand{\bidxmain}[1]{\index{#1@\mcode{#1}|textbf}}
+
+% Three-column, smaller-text index. memoir's stock `theindex' lays the index out
+% with the native \twocolumn and offers no three-column option, so we redefine it
+% over multicol: three balanced columns at \footnotesize, with a tighter hanging
+% indent than memoir's 40pt (right for narrow columns). Everything else follows
+% memoir's own definition -- the \indexname chapter head, the ToC entry, the
+% running-head \indexmark, the index page style, and the \@idxitem list format on
+% which \subitem/\subsubitem build -- so nothing else about the index changes.
+\renewenvironment{theindex}{%
+  \clearforchapter
+  \setlength{\columnsep}{1.5em}%
+  \setlength{\columnseprule}{\z@}%
+  \begin{multicols}{3}[\@makeschapterhead{\indexname}\preindexhook]%
+  \indexmark
+  \ifnoindexintoc\else
+    \phantomsection
+    \addcontentsline{toc}{chapter}{\indexname}%
+  \fi
+  \thispagestyle{indextitlepagestyle}%
+  \setlength{\parindent}{\z@}%
+  \setlength{\parskip}{\z@ \@plus .3\p@}%
+  \footnotesize
+  \renewcommand{\@idxitem}{\par\hangindent 1em\relax}%
+  \let\item\@idxitem}%
+  {\end{multicols}}
 
 % \Bnoidx{Name}: hyperlinked code when a reference page exists, else code + a log
 % note. The link-only core, WITHOUT an index entry -- for the rare fragile spot
