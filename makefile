@@ -606,6 +606,21 @@ check-nd-surfaces:
 check-compile-coverage:
 	python3 tools/compile_coverage.py
 
+# `make check-refine-stress` — the Refine assumption-engine stress suite.
+#
+# A 159-case first-principles corpus (tests/refine_stress/) covering every
+# documented Refine surface plus adversarial soundness/robustness probes. Each
+# case is decided by structural equality (SameQ) inside Mathilda, so printer
+# form never matters, and each runs in its own process under a timeout so a hang
+# or crash is contained. Complements tests/test_refine.c (which asserts the
+# PASSing subset in C) by ALSO holding the cases Refine cannot yet reduce.
+#
+# Ratchets against BASELINE_UNCHANGED in run_refine_stress.py: fails on a
+# soundness/hang/crash, on a reduction that regressed, and on a baseline gap
+# that started passing (so the baseline is kept honest). Needs ./Mathilda.
+check-refine-stress:
+	python3 tests/refine_stress/run_refine_stress.py
+
 # `make check-fastpath-sweep` — is every head that CAN take a machine array
 # actually reaching the buffer, measured rather than declared?
 #
@@ -676,6 +691,7 @@ print-cc:
 
 .PHONY: all clean install uninstall docs docs-build docs-serve check-c99 check-interval check-packed-aware \
         check-array-exactness check-nd-surfaces check-compile-coverage \
+        check-refine-stress \
         check-fastpath-sweep check-menu-ids bench-gap check-diophantine-heldout print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
