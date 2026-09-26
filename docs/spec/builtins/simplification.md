@@ -387,19 +387,30 @@ Gives the form an expression would take if its symbols satisfied the assumptions
   `apply_assumption_rules`): every rewrite `Refine` applies is one `Simplify`
   also applies. `Refine` is the rewrite-and-decide pass *without* `Simplify`'s
   complexity-minimising search, so it does not, e.g., factor.
-- Assumption-driven rewrites: `Sqrt[x^2] -> x / -x / Abs[x]`,
+- Assumption-driven rewrites: `Sqrt[x^2] -> x / -x / Abs[x]` (for `x > 0` /
+  `x < 0` or `x <= 0` / real), `Abs[x] -> -x` for `x <= 0`,
   `(x^m)^r -> x^(m r)` (for `x >= 0`), `(a^b)^c -> a^(b c)` (for `-1 < b < 1`),
-  `a^p b^p -> (a b)^p` (for `a, b > 0`), `Log[x] -> I Pi + Log[-x]` (`x < 0`),
-  `Log[x^p] -> p Log[x]` (`x > 0`), `Sin[k Pi] -> 0` and
+  `a^p b^p -> (a b)^p` (for `a, b > 0`), `Sign[x] -> ±1` and `Arg[x] -> 0 / Pi`
+  under sign facts, `Log[x] -> I Pi + Log[-x]` (`x < 0`), `Log[x^p] -> p Log[x]`
+  (`x > 0`), `Log[x^2] -> 2 Log[Abs[x]]` and `Log[E^x] -> x` (real `x`),
+  `Log[x rest] -> Log[x] + Log[rest]` (positive `x`), `Sin[k Pi] -> 0` and
   `Cos[x + k Pi] -> (-1)^k Cos[x]` (integer `k`), `ArcTan[Tan[x]] -> x` on the
-  principal domain, `Re`/`Im`/`Conjugate` of real-symbol expressions,
+  principal domain, `Re`/`Im`/`Conjugate`/`Arg`/`Abs` of real-symbol expressions
+  (e.g. `Abs[a + b I] -> Sqrt[a^2 + b^2]`),
   `Floor`/`Ceiling`/`Round`/`IntegerPart`/`FractionalPart` and `Mod` under
-  integer / interval / modular facts.
+  integer / interval / modular facts. The per-symbol rule synthesis is pruned to
+  the symbols the target actually uses, so a large assumption set does not
+  overflow the rule buffer.
 - Predicate decisions: `Element[x, dom]` via the assumption-aware domain
-  prover (including compound expressions); equations via the assumption-aware
-  zero test; inequalities and their logical combinations via the `Reduce`/CAD
-  entailment (`P` is `True` iff `assum && !P` is unsatisfiable over the reals).
-  Quantities appearing algebraically in inequalities are assumed real.
+  prover (including compound expressions, and the sign domains
+  `Positive`/`Negative`/`NonNegative`/`NonPositive`); equations via the
+  assumption-aware zero test **plus** equality-substitution
+  (`Refine[a == b, a - b == 0] -> True`); inequalities and their logical
+  combinations via the `Reduce`/CAD entailment (`P` is `True` iff `assum && !P`
+  is unsatisfiable over the reals). Quantities appearing algebraically in
+  inequalities are assumed real. The zero test is sound under coupling equality
+  assumptions: it never reports a genuine identity as non-zero (it downgrades to
+  undecided rather than sampling points the assumptions exclude).
 - Purely symbolic/structural: no packed/NDArray kernel and no `Compile[]`
   lowering (it returns symbolic expressions, not machine numbers).
 

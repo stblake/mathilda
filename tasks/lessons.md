@@ -3889,3 +3889,28 @@ harness memory `[[project_refine_string_rule_rhs_bare_name]]`.
 - Mistake: shipped ~120 graph heads with docstrings and grouped H3 spec prose, and called them documented. None had a refpage.
 - Rule: a builtin is documented only when `docs/spec/builtins/<cat>.md` has an H2 naming it (`## Name` or `## A / B`) with usage bullets, **Features** and fenced ```mathematica `In[n]:=`/`Out[n]=` examples. That is the only structure `site/generate.py` mines. Then run `make docs` and commit `site/docs`.
 - Check: `python3 -c "import sys; sys.path.insert(0,'site'); import generate as g; f=g.discover_builtins(); c,s=g.parse_spec_files(); print([n for n in f if n not in s])"` lists the builtins that have no section.
+
+## Refine stress test: soundness bug + methodology self-checks (2026-09-26, v0.203)
+- **Soundness lever found by an adversarial corpus, not by feature probes.** A 159-case
+  first-principles corpus (SameQ-based, per-case process isolation) exposed that the
+  assumption-aware zero test (`decide_schwartz_zippel_core`) samples each symbol
+  independently and so IGNORES coupling-equality facts (`a==b`, `a-b==0`), returning a WRONG
+  `False` — poisoning both `Refine` and `PossibleZeroQ`. Root-cause fix belonged in the shared
+  zero test (downgrade FALSE→UNKNOWN when an unenforceable fact touches e's symbols), not a
+  Refine-local band-aid. Rule: for a soundness bug in shared machinery, fix the source; audit the
+  blast radius (ran refine/simplify/pzq/element/assuming suites) before trusting it.
+- **Distinguish equality vs inequality when trusting a sampler FALSE.** Equalities restrict to a
+  lower-dimensional variety (identically-zero changes there → FALSE unsound). Inequalities carve a
+  full-measure region (identically-zero unchanged → FALSE sound). Over-downgrading inequalities
+  regressed `Refine[a==b, a>b]→False`. Get the dimension distinction right.
+- **The verdict harness caught my OWN wrong expected values.** Two "gaps" were my errors: I wrote
+  expected forms assuming a symbol was real when the assumptions didn't establish it
+  (`Refine[Sqrt[x^2 y^2], Assumptions->y<0]` keeps `Sqrt[x^2]`; `Refine[Sign[x^2+1]]` with no
+  assumption stays — x could be complex). First-principles derivation means re-deriving under the
+  EXACT assumptions given, not the intuitive ones.
+- **Accumulator/data-symbol collision (again).** `r = Refine[(x^2)^r, ...]` self-referenced into
+  the recursion limit (false HANG). Batch harnesses must use an accumulator name that cannot appear
+  in any test expression. See `[[feedback_benchmark_accumulator_variable_name_collision]]`.
+- **Elegant robustness fix beats raising a cap.** The 16-symbol rule-buffer overflow (which dropped
+  ALL rules) was fixed by pruning rule synthesis to symbols actually in the target expression — kills
+  the O(n²) pairwise blowup and is a general speedup — rather than enlarging `MAX_SYM`/the buffer.

@@ -334,9 +334,21 @@ static Expr* refine_decide_predicate(const Expr* P, const AssumeCtx* ctx,
                        expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ expr_new_integer(-1), expr_copy(rhs) }, 2) }, 2));
         ZeroTestResult z = zero_test_decide_assuming(diff, ctx);
+        if (z == ZERO_TEST_TRUE)  { expr_free(diff); return bool_sym(is_eq ? 1 : 0); }
+        if (z == ZERO_TEST_FALSE) { expr_free(diff); return bool_sym(is_eq ? 0 : 1); }
+        /* Undecided by the zero test: try to prove the difference is exactly
+         * zero by rewriting it under the (equality) assumptions -- the same
+         * substitution engine that turns Refine[a - b, a == b] into 0. Every
+         * rewrite is value-preserving under the assumptions, so if the reduced
+         * difference is unconditionally zero, the equation holds. */
+        Expr* red = apply_assumption_rules(diff, ctx);
+        if (red) {
+            Expr* redev = eval_and_free(red);
+            ZeroTestResult zr = zero_test_decide(redev);
+            expr_free(redev);
+            if (zr == ZERO_TEST_TRUE) { expr_free(diff); return bool_sym(is_eq ? 1 : 0); }
+        }
         expr_free(diff);
-        if (z == ZERO_TEST_TRUE)  return bool_sym(is_eq ? 1 : 0);
-        if (z == ZERO_TEST_FALSE) return bool_sym(is_eq ? 0 : 1);
         int r = reduce_entail_predicate(Aconj, P, "Complexes", b);
         if (r == 1) return bool_sym(1);
         if (r == 0) return bool_sym(0);

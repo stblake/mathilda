@@ -294,10 +294,14 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
             }
         }
 
-        /* Re/Im/Conjugate/Arg of an expression whose every free symbol is real:
-         * ComplexExpand assumes reality, so it yields the refined form. */
+        /* Re/Im/Conjugate/Arg/Abs of an expression whose every free symbol is
+         * real: ComplexExpand assumes reality, so it yields the refined form
+         * (e.g. Abs[a + b I] -> Sqrt[a^2 + b^2]). When ComplexExpand cannot
+         * reduce (unknown sign, as in Abs[x]) it returns the input unchanged,
+         * which the expr_eq guard below discards. */
         if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 ||
-             strcmp(h, "Conjugate") == 0 || strcmp(h, "Arg") == 0)) {
+             strcmp(h, "Conjugate") == 0 || strcmp(h, "Arg") == 0 ||
+             strcmp(h, "Abs") == 0)) {
             const Expr** syms = NULL; size_t ns = 0, cap = 0;
             sr_collect_syms(a0, &syms, &ns, &cap);
             bool all_real = (ns > 0);
@@ -361,6 +365,31 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
 /* Produce a rewritten expression by applying assumption-derived rules via
  * ReplaceRepeated. Returns a newly owned expression, or NULL if no rules
  * were generated. The input is not consumed. */
+/* True if `name` (an interned symbol pointer) occurs anywhere in `e`. */
+static bool ar_expr_has_symbol(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
+    if (e->type == EXPR_FUNCTION) {
+        if (ar_expr_has_symbol(e->data.function.head, name)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (ar_expr_has_symbol(e->data.function.args[i], name)) return true;
+    }
+    return false;
+}
+
+/* Compact a symbol bucket down to those symbols that actually appear in the
+ * target expression. A per-symbol rewrite rule for a symbol absent from `input`
+ * can never fire, so dropping it loses nothing -- and it keeps the O(n^2)
+ * pairwise positive rules and the 8192-byte rule buffer from overflowing when
+ * many symbols are assumed but few are used (e.g. Abs[a1] under 20 positivity
+ * facts, which otherwise dropped ALL rules on overflow). */
+static void ar_filter_to_input(char** arr, size_t* n, const Expr* input) {
+    size_t w = 0;
+    for (size_t i = 0; i < *n; i++)
+        if (ar_expr_has_symbol(input, arr[i])) arr[w++] = arr[i];
+    *n = w;
+}
+
 Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
     if (!ctx) return NULL;
 
@@ -375,10 +404,12 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
                           integers, &nint, negatives, &nneg,
                           evens, &neven, MAX_SYM);
 
-    /* Two further buckets not gathered by collect_known_symbols:
+    /* Three further buckets not gathered by collect_known_symbols:
      *   nonnegs -- x >= 0  (for (x^m)^r -> x^(m r) and Sqrt[x^2] -> x at x = 0)
+     *   nonpos  -- x <= 0  (for Sqrt[x^2] -> -x and Abs[x] -> -x at x = 0)
      *   abslt1  -- -1 < b < 1  (for (a^b)^c -> a^(b c)). */
     char* nonnegs[MAX_SYM]; size_t nnn = 0;
+    char* nonpos [MAX_SYM]; size_t nnp = 0;
     char* abslt1 [MAX_SYM]; size_t nab = 0;
     if (ctx) {
         Expr* neg1 = expr_new_integer(-1);
@@ -392,6 +423,8 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
                 const char* nm = a->data.symbol.name;
                 if (assume_known_nonneg(ctx, a) && nnn < MAX_SYM &&
                     !sym_already_listed(nonnegs, nnn, nm)) nonnegs[nnn++] = (char*)nm;
+                if (assume_known_nonpos(ctx, a) && nnp < MAX_SYM &&
+                    !sym_already_listed(nonpos, nnp, nm)) nonpos[nnp++] = (char*)nm;
                 if (assume_known_gt(ctx, a, neg1) && assume_known_lt(ctx, a, pos1) &&
                     nab < MAX_SYM && !sym_already_listed(abslt1, nab, nm)) abslt1[nab++] = (char*)nm;
             }
@@ -399,6 +432,17 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         expr_free(neg1);
         expr_free(pos1);
     }
+
+    /* Keep only symbols the target actually mentions: rules for the rest can
+     * never match, and pruning them bounds the rule-string size (see the helper). */
+    ar_filter_to_input(positives, &npos,  input);
+    ar_filter_to_input(reals,     &nreal, input);
+    ar_filter_to_input(integers,  &nint,  input);
+    ar_filter_to_input(negatives, &nneg,  input);
+    ar_filter_to_input(evens,     &neven, input);
+    ar_filter_to_input(nonnegs,   &nnn,   input);
+    ar_filter_to_input(nonpos,    &nnp,   input);
+    ar_filter_to_input(abslt1,    &nab,   input);
 
     /* Build a single rule list "{r1, r2, ...}" as a string, then parse. */
     char buf[8192];
@@ -431,10 +475,17 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Abs[%s] :> %s", x, x);
         /* Sign[x] -> 1  for x > 0 */
         SEP(); EMIT("Sign[%s] :> 1", x);
+        /* Arg[x] -> 0  for x > 0 (positive real) */
+        SEP(); EMIT("Arg[%s] :> 0", x);
         /* Conjugate[x] -> x  for x > 0 (x is real) */
         SEP(); EMIT("Conjugate[%s] :> %s", x, x);
         /* Log[x^p] -> p Log[x]  for x > 0 (any real p; v1 accepts symbolic p too) */
         SEP(); EMIT("Log[Power[%s, p_]] :> p Log[%s]", x, x);
+        /* Log[x rest] -> Log[x] + Log[rest]  for x > 0: a positive real factor
+         * never shifts the branch (arg[x rest] = arg[rest]), so it splits off
+         * exactly. Peels one positive factor at a time; Log[x] (bare) does not
+         * re-match this Times pattern, so it terminates. */
+        SEP(); EMIT("Log[Times[%s, rest___]] :> Log[%s] + Log[Times[rest]]", x, x);
         /* Inverse-trig sum identity: ArcTan[x] + ArcTan[1/x] -> Pi/2  for x > 0.
          * Mathilda's matcher does NOT perform orderless-Plus subset matching
          * out of the box (unlike Mathematica), so the rule must explicitly
@@ -467,6 +518,8 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Abs[%s] :> -%s", x, x);
         /* Sign[x] -> -1  for x < 0 */
         SEP(); EMIT("Sign[%s] :> -1", x);
+        /* Arg[x] -> Pi  for x < 0 (negative real, principal branch) */
+        SEP(); EMIT("Arg[%s] :> Pi", x);
         /* Conjugate[x] -> x  for x < 0 (x is real) */
         SEP(); EMIT("Conjugate[%s] :> %s", x, x);
         /* Sqrt[x^2] -> -x  for x < 0  (Power[Power[x,2], 1/2]) */
@@ -484,17 +537,38 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Log[%s] :> I Pi + Log[-%s]", x, x);
     }
 
+    /* Non-positive (x <= 0, but not proven strictly negative): Abs[x] -> -x,
+     * Sqrt[x^2] -> -x, (x^2)^r -> (-x)^(2r) all hold at x <= 0 including x = 0
+     * (where -x = 0 = |x|). Sign/Arg are NOT constant on x <= 0 (0 at x = 0),
+     * so they are deliberately omitted. Skip symbols already strictly negative. */
+    for (size_t i = 0; i < nnp; i++) {
+        const char* x = nonpos[i];
+        if (sym_already_listed(negatives, nneg, x)) continue;
+        if (sym_already_listed(positives, npos, x)) continue;   /* 0 only: handled by nonneg too */
+        SEP(); EMIT("Abs[%s] :> -%s", x, x);
+        SEP(); EMIT("Conjugate[%s] :> %s", x, x);
+        SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> -%s", x, x);
+        SEP(); EMIT("Power[Power[%s, 2], r_] :> Power[Times[-1, %s], 2 r]", x, x);
+        SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> -%s Power[Times[rest], Rational[1, 2]]", x, x);
+    }
+
     /* For real-but-unknown-sign, Sqrt[x^2] -> Abs[x]. Skip symbols already
-     * proven positive or negative (their stronger rule above wins). */
+     * proven positive, negative, or nonpositive (their stronger rule above wins). */
     for (size_t i = 0; i < nreal; i++) {
         const char* x = reals[i];
         if (sym_already_listed(positives, npos, x)) continue;
         if (sym_already_listed(negatives, nneg, x)) continue;
+        if (sym_already_listed(nonpos, nnp, x)) continue;
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> Abs[%s]", x, x);
         /* Sqrt[x^2 * rest] -> Abs[x] * Sqrt[rest] for real x. */
         SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> Abs[%s] Power[Times[rest], Rational[1, 2]]", x, x);
         /* Conjugate[x] -> x  for real x. */
         SEP(); EMIT("Conjugate[%s] :> %s", x, x);
+        /* Log[x^2] -> 2 Log[Abs[x]] for real x (|x| keeps the argument real
+         * and positive across the sign of x). */
+        SEP(); EMIT("Log[Power[%s, 2]] :> 2 Log[Abs[%s]]", x, x);
+        /* Log[E^x] -> x for real x (E^x is a positive real). */
+        SEP(); EMIT("Log[Power[E, %s]] :> %s", x, x);
     }
 
     /* Sin[n Pi] -> 0, Cos[n Pi] -> (-1)^n, Tan[n Pi] -> 0 for integer n.

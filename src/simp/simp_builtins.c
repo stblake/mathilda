@@ -173,6 +173,30 @@ int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) {
         return -1;
     }
 
+    /* Sign domains as *queried* membership, decided by the sign provers (which
+     * already fold numeric literals and assumption facts). Positive excludes 0;
+     * a provably nonpositive x is therefore definitely not Positive, etc. */
+    if (strcmp(dom, "Positive") == 0) {
+        if (prov_pos(ctx, x)) return 1;
+        if (prov_np(ctx, x))  return 0;   /* x <= 0 => not positive */
+        return -1;
+    }
+    if (strcmp(dom, "Negative") == 0) {
+        if (prov_neg(ctx, x)) return 1;
+        if (prov_nn(ctx, x))  return 0;   /* x >= 0 => not negative */
+        return -1;
+    }
+    if (strcmp(dom, "NonNegative") == 0) {
+        if (prov_nn(ctx, x))  return 1;
+        if (prov_neg(ctx, x)) return 0;   /* x < 0 => not nonnegative */
+        return -1;
+    }
+    if (strcmp(dom, "NonPositive") == 0) {
+        if (prov_np(ctx, x))  return 1;
+        if (prov_pos(ctx, x)) return 0;   /* x > 0 => not nonpositive */
+        return -1;
+    }
+
     return -1;
 }
 

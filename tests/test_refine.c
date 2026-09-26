@@ -120,6 +120,52 @@ static void test_errors_edges(void) {
     check("MemberQ[Options[Refine][[All, 1]], TimeConstraint]", "True");
 }
 
+/* Regressions from the first-principles stress corpus (v0.203). Each guards a
+ * gap the corpus surfaced; kept in SameQ form so printer-form drift never
+ * breaks them. */
+static void test_stress_fixes(void) {
+    /* Equal predicate under an equality fact: the assumption-aware zero test's
+     * Schwartz-Zippel sampler used to ignore coupling equalities and wrongly
+     * return False. Now decided by equality substitution; still False under an
+     * inequality fact (which does NOT force a==b). */
+    check("Refine[a == b, a - b == 0]", "True");
+    check("Refine[a == b, a == b]", "True");
+    check("Refine[a^2 == b^2, a == b]", "True");
+    check("Refine[a == b, a > b]", "False");
+    /* PossibleZeroQ shares the fixed zero test. */
+    check("PossibleZeroQ[a - b, Assumptions -> a - b == 0]", "True");
+    check("PossibleZeroQ[a, Assumptions -> a > 0]", "False");   /* sign FALSE preserved */
+
+    /* Sign domains as queried membership. */
+    check("Refine[Element[x, Positive], x > 0]", "True");
+    check("Refine[Element[x, Negative], x < 0]", "True");
+    check("Refine[Element[x, NonNegative], x >= 0]", "True");
+    check("Refine[Element[k^2, NonNegative], Element[k, Reals]]", "True");
+
+    /* NonPositive rewrites (x <= 0 => -x), not just strict x < 0. */
+    check("Refine[Sqrt[x^2], x <= 0]", "-x");
+    check("Refine[Abs[x], x <= 0]", "-x");
+
+    /* Arg under a sign fact. */
+    check("Refine[Arg[x], x > 0]", "0");
+    check("Refine[Arg[x], x < 0]", "Pi");
+
+    /* Abs of a complex expression with real parts -> magnitude. */
+    check("Refine[Abs[a + b I], Element[a | b, Reals]] === Sqrt[a^2 + b^2]", "True");
+
+    /* Log identities under reality / positivity. */
+    check("Refine[Log[x^2], Element[x, Reals]] === 2 Log[Abs[x]]", "True");
+    check("Refine[Log[E^x], Element[x, Reals]]", "x");
+    check("Refine[Log[a b], a > 0 && b > 0] === Log[a] + Log[b]", "True");
+
+    /* Many assumed symbols but few used: the per-symbol rule synthesis no
+     * longer overflows its buffer and drops every rule. */
+    check("Refine[Abs[a1], a1 > 0 && a2 > 0 && a3 > 0 && a4 > 0 && a5 > 0 && "
+          "a6 > 0 && a7 > 0 && a8 > 0 && a9 > 0 && a10 > 0 && a11 > 0 && a12 > 0 && "
+          "a13 > 0 && a14 > 0 && a15 > 0 && a16 > 0 && a17 > 0 && a18 > 0 && "
+          "a19 > 0 && a20 > 0]", "a1");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -132,6 +178,7 @@ int main(void) {
     test_predicates();
     test_options_scoping();
     test_errors_edges();
+    test_stress_fixes();
     printf("All Refine tests passed.\n");
     return 0;
 }

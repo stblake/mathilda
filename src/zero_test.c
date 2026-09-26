@@ -1424,6 +1424,99 @@ static ZeroTestResult sz_trial(const Expr* e, const char** syms,
  * re-tuned later (bump the salt) without colliding with any cached behaviour. */
 #define ZT_SEED_SALT 0x5A3D9E1Bull
 
+/* True if `op` denotes a single symbol's real value or its Re/Im channel: a
+ * bare symbol, or Re[sym] / Im[sym] with sym a bare symbol. These are exactly
+ * the operands extract_spec can fold into a per-symbol SampleSpec. */
+static bool is_single_symbol_operand(const Expr* op) {
+    if (!op) return false;
+    if (op->type == EXPR_SYMBOL) return true;
+    if (op->type == EXPR_FUNCTION && op->data.function.head &&
+        op->data.function.head->type == EXPR_SYMBOL &&
+        (op->data.function.head->data.symbol.name == SYM_Re ||
+         op->data.function.head->data.symbol.name == SYM_Im) &&
+        op->data.function.arg_count == 1 &&
+        op->data.function.args[0] &&
+        op->data.function.args[0]->type == EXPR_SYMBOL)
+        return true;
+    return false;
+}
+
+/* A ctx fact under which a sampler FALSE stays SOUND. The per-symbol sampler
+ * (extract_spec) can only draw from single-variable regions, so it silently
+ * ignores any fact that couples variables or constrains a compound. When such
+ * a fact is present, an unconstrained draw may land at a point the assumptions
+ * EXCLUDE, and a "found a non-zero point" FALSE is then unsound (this is the
+ * a==b / a-b==0 bug: the sampler drew independent a,b, saw a-b!=0, and wrongly
+ * returned FALSE). A fact keeps FALSE sound iff it is:
+ *   - True / an opaque symbol            (no restriction),
+ *   - Unequal[...]                       (excludes only a measure-zero set),
+ *   - Element[single-symbol, Dom], or Element[_, Reals/Rationals/Algebraics/
+ *     Complexes]                         (folded, or never excludes a draw),
+ *   - a binary relation (>,>=,<,<=,==) with a single-symbol channel on one
+ *     side and a numeric literal on the other  (folded into the channel), or
+ *   - Inequality[num, op, single-symbol, op, num]  (folded).
+ * Everything else — a coupling equality, an Equal/relation on a compound, a
+ * discrete-domain membership of a compound, Or/Implies/Not/Xor — restricts the
+ * space in a way the sampler cannot honour. TRUE is unaffected: an expression
+ * that samples zero everywhere is zero on any sub-region too. */
+static bool fact_keeps_false_sound(const Expr* f) {
+    if (!f) return true;
+    if (f->type != EXPR_FUNCTION || !f->data.function.head ||
+        f->data.function.head->type != EXPR_SYMBOL) return true;
+    const char* h = f->data.function.head->data.symbol.name;
+    size_t argc = f->data.function.arg_count;
+
+    if (strcmp(h, "Unequal") == 0) return true;
+
+    if (h == SYM_Element && argc == 2) {
+        const Expr* x = f->data.function.args[0];
+        const Expr* d = f->data.function.args[1];
+        if (is_single_symbol_operand(x)) return true;
+        if (d && d->type == EXPR_SYMBOL) {
+            const char* dn = d->data.symbol.name;
+            if (strcmp(dn, "Reals") == 0 || strcmp(dn, "Rationals") == 0 ||
+                strcmp(dn, "Algebraics") == 0 || strcmp(dn, "Complexes") == 0)
+                return true;   /* dense in the sampled space: never excludes */
+        }
+        return false;          /* Element[compound, discrete] restricts */
+    }
+
+    /* Inequalities carve out a full-measure region (half-space / interval), on
+     * which "identically zero" is the same property as everywhere: a FALSE
+     * ("not identically zero") stays sound even for a coupling bound (a > b)
+     * the per-symbol sampler ignores. Only EQUALITY drops to a lower dimension. */
+    if ((h == SYM_Greater || h == SYM_GreaterEqual || h == SYM_Less ||
+         h == SYM_LessEqual) && argc == 2) return true;
+    if (h == SYM_Inequality) return true;
+
+    /* Equality restricts to a lower-dimensional variety where an expression can
+     * be identically zero yet generically non-zero (a-b on a==b). Trust FALSE
+     * only when extract_spec pins and samples the exact point: a single-symbol
+     * channel == numeric literal. A coupling/compound equality is downgraded. */
+    if (h == SYM_Equal && argc == 2) {
+        const Expr* a = f->data.function.args[0];
+        const Expr* b = f->data.function.args[1];
+        double d;
+        if (is_single_symbol_operand(a) && bound_to_double(b, &d)) return true;
+        if (is_single_symbol_operand(b) && bound_to_double(a, &d)) return true;
+        return false;          /* a==b, a-b==0, f[..]==g[..] restrict to a variety */
+    }
+
+    return false;              /* Or / Implies / Not / Xor / ... downgrade */
+}
+
+/* True if `e` contains any free symbol present in `set`. */
+static bool expr_shares_symbol(const Expr* e, const SymPtrSet* set) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return sps_contains(set, e->data.symbol.name);
+    if (e->type == EXPR_FUNCTION) {
+        if (expr_shares_symbol(e->data.function.head, set)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; ++i)
+            if (expr_shares_symbol(e->data.function.args[i], set)) return true;
+    }
+    return false;
+}
+
 /* Shared engine for the plain and assumption-aware samplers. When `ctx` is
  * non-NULL a per-symbol SampleSpec restricts each draw to the assumed region;
  * ctx == NULL reproduces the legacy unconstrained real-only draw exactly. */
@@ -1443,6 +1536,20 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
                 specs[i] = extract_spec(ctx, syms.items[i]);
     }
 
+    /* Soundness: if any ctx fact touching e's symbols couples variables or
+     * constrains a compound (a==b, a-b==0, Element[a+b,Integers], Or[...]),
+     * the per-symbol sampler cannot honour it, so a FALSE verdict from an
+     * unconstrained draw is not sound (the point may violate the assumption).
+     * Downgrade FALSE -> UNKNOWN in that case; TRUE stays valid. */
+    bool false_untrusted = false;
+    if (ctx) {
+        for (size_t i = 0; i < ctx->count && !false_untrusted; ++i) {
+            const Expr* f = ctx->facts[i];
+            if (!fact_keeps_false_sound(f) && expr_shares_symbol(f, &syms))
+                false_untrusted = true;
+        }
+    }
+
     /* Seed the draw stream deterministically from the input's structural hash
      * so the verdict is a pure function of the input (no run-to-run flakiness).
      * The push/pop pair leaves the user's RandomInteger/SeedRandom stream
@@ -1456,7 +1563,7 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
      * the whole test. */
     for (int trial = 0; trial < ZT_SCREEN_SAMPLES; ++trial) {
         ZeroTestResult r = sz_trial(e, syms.items, specs, syms.count, true);
-        if (r == ZERO_TEST_FALSE)   { verdict = ZERO_TEST_FALSE;   goto done; }
+        if (r == ZERO_TEST_FALSE)   { verdict = false_untrusted ? ZERO_TEST_UNKNOWN : ZERO_TEST_FALSE; goto done; }
         if (r == ZERO_TEST_UNKNOWN) { verdict = ZERO_TEST_UNKNOWN; goto done; }
         /* r == TRUE: zero-ish at machine precision, keep screening. */
     }
