@@ -167,6 +167,19 @@ Pipeline (each stage exits early on a definite verdict):
    `E^(I x)`) stays representable and is deliberately left untouched.
 1. **Structural** — literal `0`, `Complex[0, 0]`, named non-zero
    constants like `Pi` are decided in O(1).
+1b. **Structural non-zero certificate** — a sound, unconditional proof that
+   `expr` is *not* identically zero, so it is decided `False` with no numeric
+   sampling. The lever is that the exponential is entire and has no zeros
+   (`E^z ≠ 0` for every complex `z`): a product of exponentials and finite
+   non-zero constants is non-zero. Certified are a finite non-zero literal,
+   a known non-zero constant, `Exp[_]` / `Power[E, _]`, `Power[b, _]` with `b`
+   itself certified (`b ≠ 0 ⇒ b^e ≠ 0`), and `Times[…]` of certified factors.
+   This closes a class the sampler cannot see — `c · E^f` with a symbol-
+   dependent exponent (e.g. `-E^(-a x)`): `−a x` reaches `~10^3` at the
+   sampler's moderate range, so `E` over/underflows at every point and the
+   residual was mistaken for an identity (a `True` false positive). The
+   certificate is unconditional, so its `False` also holds under any
+   `Assumptions`.
 2. **Rational normalisation** — `Together`, `Cancel`, `Expand` plus
    `is_zero_poly` decides every identity in `Q(x_1, …, x_n)` exactly.
    For a **pure rational function** of its free symbols (only exact

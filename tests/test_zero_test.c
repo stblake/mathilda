@@ -974,6 +974,42 @@ static void test_expcomb_stable(void) {
         "True", 5);
 }
 
+/* Group 17 — structural non-zero certificate (Stage 0b).  The exponential is
+ * entire and has no zeros, so any product of exponentials and finite non-zero
+ * constants is provably non-zero — decided FALSE with no numeric sampling.  The
+ * flagship case (-E^(-a x)) previously read as True: its exponent -a x reaches
+ * ~10^3 at the sampler's moderate range, so E over/underflows at every point
+ * and the residual is mistaken for an identity. */
+static void test_nonzero_cert_neg_exp(void) {
+    assert_pzq("PossibleZeroQ[-E^(-a x)]", "False");
+}
+static void test_nonzero_cert_bare_exp(void) {
+    assert_pzq("PossibleZeroQ[E^x]", "False");
+    assert_pzq("PossibleZeroQ[Exp[x]]", "False");
+}
+static void test_nonzero_cert_const_times_exp(void) {
+    assert_pzq("PossibleZeroQ[3 E^(x + y)]", "False");
+    assert_pzq("PossibleZeroQ[-1/E^(a x)]", "False");
+}
+static void test_nonzero_cert_nonE_base(void) {
+    assert_pzq("PossibleZeroQ[2^n]", "False");       /* non-zero constant base */
+    assert_pzq("PossibleZeroQ[(E^x)^y]", "False");   /* recursive: base non-zero */
+}
+static void test_nonzero_cert_complex(void) {
+    assert_pzq("PossibleZeroQ[3 + I y]", "False");   /* non-zero real part */
+}
+/* The certificate is sound: it never fires on something that can vanish, so
+ * genuine identities are unaffected and still decide TRUE. */
+static void test_nonzero_cert_preserves_identities(void) {
+    assert_pzq("PossibleZeroQ[E^x - E^x]", "True");
+    assert_pzq("PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]", "True");
+    assert_pzq("PossibleZeroQ[x^2]", "False");       /* not id. zero; cert abstains */
+}
+/* Unconditional, so it holds under assumptions too. */
+static void test_nonzero_cert_assuming(void) {
+    assert_pzq("PossibleZeroQ[-E^(-a x), Assumptions -> a > 0]", "False");
+}
+
 /* ============================================================== */
 /*  Main driver                                                   */
 /* ============================================================== */
@@ -1146,6 +1182,15 @@ int main(void) {
     TEST(test_expcomb_preserve_exp_nonzero);
     TEST(test_expcomb_preserve_trigexp);
     TEST(test_expcomb_stable);
+
+    /* Group 17 — structural non-zero certificate (Stage 0b) */
+    TEST(test_nonzero_cert_neg_exp);
+    TEST(test_nonzero_cert_bare_exp);
+    TEST(test_nonzero_cert_const_times_exp);
+    TEST(test_nonzero_cert_nonE_base);
+    TEST(test_nonzero_cert_complex);
+    TEST(test_nonzero_cert_preserves_identities);
+    TEST(test_nonzero_cert_assuming);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

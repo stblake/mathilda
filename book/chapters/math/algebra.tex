@@ -878,17 +878,27 @@ zero.}
 \end{codepairs}
 
 Under the hood the test runs cheap exact stages first---structural, rational, and a
-trig/exponential normaliser---and, when those do not settle it, falls back to numeric
-sampling: it evaluates the expression at several points, at rising precision, in the
-spirit of the Schwartz--Zippel\index{Schwartz--Zippel} lemma. It deliberately never calls
+trig/exponential normaliser. A \emph{structural non-zero
+certificate}\index{zero testing!non-zero certificate} then settles many non-vanishing forms
+outright, with no numeric work at all: the exponential is entire and has no zeros, so a
+product of exponentials and finite non-zero constants cannot be zero.
+
+\begin{codepairs}
+\pair{algebra/possiblezeroq-limits/1}{\(-e^{-ax}\) is never zero, and the certificate proves
+it \texttt{False} at once---undeceived by the decay toward \(0\) as \(ax\) grows, which a
+purely numeric probe (sampling at ever larger arguments) could mistake for an identity.}
+\end{codepairs}
+
+When the exact stages do not settle it, the test falls back to numeric sampling: it
+evaluates the expression at several points, at rising precision, in the spirit of the
+Schwartz--Zippel\index{Schwartz--Zippel} lemma. It deliberately never calls
 \texttt{Simplify} (which would be far more expensive, and itself relies on the zero test).
-That design fixes the meaning of the two answers. A \texttt{False} is backed by an
-explicit point at which the expression is plainly non-zero, so it is \emph{reliable}: the
-expression is not identically zero. A \texttt{True} is the heuristic verdict---strong
-evidence, not a proof---and, as we will see, it can be fooled. The same numeric machinery
-lets \mcode{Equal} and \mcode{Unequal} decide relations between numeric constants, and it
-is the strong setting for the \texttt{ZeroTest} option of \B{RowReduce} and \B{NullSpace}
-(\S\ref{ssec:la-zerotest}).
+This division fixes the meaning of the two answers. A \texttt{False} is backed by the
+certificate or by an explicit point at which the expression is plainly non-zero, so it is
+\emph{reliable}: the expression is not identically zero. A \texttt{True} is the heuristic
+verdict---strong evidence, not a proof. The same numeric machinery lets \mcode{Equal} and
+\mcode{Unequal} decide relations between numeric constants, and it is the strong setting for
+the \texttt{ZeroTest} option of \B{RowReduce} and \B{NullSpace} (\S\ref{ssec:la-zerotest}).
 
 Assumptions narrow the sampler to the region they describe, so an identity that holds only
 there is recognised.
@@ -918,18 +928,14 @@ zero test decides it at once\ldots}
 leaves it unreduced. Numeric evidence settles what the symbolic search does not recognise.}
 \end{codepairs}
 
-\calloutnote{Pitfall}{\mcode{PossibleZeroQ} is a heuristic, and a \texttt{True} can be
-over-eager. \(-e^{-ax}\) is nowhere zero, yet the test reports \texttt{True}: its numeric
-probe samples at growing arguments, watches the magnitude decay toward \(0\), and mistakes
-that decay for an identity. So never let a \texttt{True} \emph{certify} a result---to accept
-a candidate antiderivative, say; when you need certainty, prove it by having
-\texttt{Simplify} reduce the difference to the literal \(0\). The reliable direction is the
-other one: a \texttt{False}, backed by a witness point, means genuinely non-zero.}
-
-\begin{codepairs}
-\pair{algebra/possiblezeroq-limits/1}{A false positive: \(-e^{-ax}\) never vanishes, but its
-decay toward zero fools the sampler.}
-\end{codepairs}
+\calloutnote{Pitfall}{A \texttt{True} is evidence, not a proof. The structural certificate
+disposes of whole families of non-vanishing expressions exactly, but where the answer rests
+on numeric sampling the verdict is a strong probability, not a certainty---by Richardson's
+theorem (below) no test can be complete, and a sufficiently pathological non-zero can still
+slip past a finite set of samples. So never let a \texttt{True} \emph{certify} a result you
+need to be exact---to accept a candidate antiderivative, say; when you need certainty, prove
+it by having \texttt{Simplify} reduce the difference to the literal \(0\). A \texttt{False}
+is the reliable direction.}
 
 \calloutnote{Theory}{That no zero test can be perfect is a theorem, not a shortfall of
 effort. \emph{Richardson's theorem}\index{Richardson's theorem} shows that for expressions

@@ -147,3 +147,29 @@ when per-point dynamic range exceeds the working precision.
 - `src/calculus/dsolve_linsys.c` — `dsolve_linsys_tidy` (the `Expand`-not-`Simplify`
   workaround and its rationale comment).
 - DSolve §2.2.7 corpus systems 636, 650 (`DSolve_test_status/DE_examples_227.m`).
+
+---
+
+## 3. `PossibleZeroQ[-E^(-a x)]` false positive (`True` for a nowhere-zero function)
+
+**Status:** RESOLVED (2026-09-26, v0.204).
+
+**Minimal repro:** `PossibleZeroQ[-E^(-a x)]` returned `True`; `-e^{-ax}` is never zero.
+
+**Diagnosis.** The expression has free symbols, so it reached the Schwartz–Zippel sampler.
+The sampler draws each symbol with `|value| ∈ [1, 64]`, so the exponent `-a x` ranges over
+`±[1, 4096]`. At every sample `E^(-a x)` is therefore either an IEEE overflow (`Inf`) or an
+underflow (`0`) — the sampler never obtains a finite, moderate, obviously-non-zero value, and
+the near-zero points drove the "residual never shrank → lenient machine zero" branch to a
+`True`. Same family as #1/#2 (a symbol-dependent exponent defeats the numeric ladder), but
+here the outcome was a *wrong verdict*, not a hang.
+
+**Fix (core, sound).** A structural non-zero certificate `provably_nonzero` (Stage 0b in
+`src/zero_test.c`), run right after `decide_structural` and before the guards that route to
+sampling in both `zt_decide_core` and `zt_decide_assuming_core`. The exponential is entire and
+has no zeros (`E^z ≠ 0` for all complex `z`), so a product of exponentials and finite non-zero
+constants is provably non-zero and settles `FALSE` with no sampling. Certified: a finite
+non-zero literal; a known non-zero constant; `Exp[_]`/`Power[E, _]`; `Power[b, _]` with `b`
+certified; `Times[…]` of certified factors. Sound and unconditional (holds under assumptions);
+it never fires on `Plus`, a possibly-zero/infinite base, or a bare symbol, so no identity is
+affected. Tests: `tests/test_zero_test.c` Group 17. See the 2026-09-21 changelog.

@@ -523,6 +523,70 @@ static ZeroTestResult decide_structural(const Expr* e) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Stage 0b: structural NON-zero certificate                          */
+/* ------------------------------------------------------------------ */
+
+/* A SOUND, unconditional proof that `e` is NOT identically zero: returns true
+ * only when e is finite and non-vanishing for EVERY value of its free symbols,
+ * so a caller may answer ZERO_TEST_FALSE with no numeric sampling and the
+ * verdict holds under any assumption.  The lever is that the exponential is
+ * entire and has no zeros — E^z != 0 for every (complex) z — so any product of
+ * exponentials and finite non-zero constants is non-zero.  That is exactly the
+ * class the Schwartz–Zippel sampler mishandles (c * E^f, e.g. -E^(-a x)): its
+ * moderate |sample| range drives a symbol-dependent exponent into IEEE
+ * overflow/underflow, so every point evaluates to 0 or Inf and the residual is
+ * mistaken for an identity.
+ *
+ * Certified non-zero:
+ *   - a finite non-zero numeric literal (Integer/BigInt/Real/MPFR; Rational
+ *     with non-zero numerator; Complex with a finite non-zero component);
+ *   - a known non-zero constant (E, Pi, EulerGamma, …) — never Infinity, which
+ *     is excluded so it is safe as a power base below;
+ *   - Exp[_] and Power[E, _] — the exponential has no zeros;
+ *   - Power[b, _] with b itself certified non-zero (b finite, != 0  =>  b^e =
+ *     e^{e log b} != 0 for any finite e);
+ *   - Times[..] with every factor certified non-zero.
+ * Anything else returns false — a bare symbol, Plus (cancellation), a power
+ * with a possibly-zero or possibly-infinite base, any other head.  A false is
+ * always safe: it merely forgoes the shortcut and lets the later stages decide. */
+static bool provably_nonzero(const Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: return e->data.integer != 0;
+        case EXPR_BIGINT:  return mpz_sgn(e->data.bigint) != 0;
+        case EXPR_REAL:    return e->data.real != 0.0 && isfinite(e->data.real);
+#ifdef USE_MPFR
+        case EXPR_MPFR:    return mpfr_number_p(e->data.mpfr) != 0 &&
+                                  mpfr_zero_p(e->data.mpfr) == 0;
+#endif
+        case EXPR_SYMBOL:  return is_known_constant(e->data.symbol.name);
+        case EXPR_FUNCTION: {
+            /* Complex[re, im]: non-zero iff a component is a finite non-zero. */
+            Expr* re = NULL; Expr* im = NULL;
+            if (is_complex((Expr*)e, &re, &im))
+                return provably_nonzero(re) || provably_nonzero(im);
+            int64_t rn = 0, rd = 1;
+            if (is_rational(e, &rn, &rd)) return rn != 0;
+            const Expr* head = e->data.function.head;
+            if (!head || head->type != EXPR_SYMBOL) return false;
+            const char* hn = head->data.symbol.name;
+            size_t argc = e->data.function.arg_count;
+            if (hn == SYM_Exp && argc == 1) return true;
+            if (hn == SYM_Power && argc == 2)
+                return provably_nonzero(e->data.function.args[0]);
+            if (hn == SYM_Times && argc > 0) {
+                for (size_t i = 0; i < argc; ++i)
+                    if (!provably_nonzero(e->data.function.args[i]))
+                        return false;
+                return true;
+            }
+            return false;
+        }
+        default: return false;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Stage 1: rational normalization                                   */
 /* ------------------------------------------------------------------ */
 
@@ -1604,6 +1668,13 @@ static ZeroTestResult zt_decide_core(const Expr* e) {
     r = decide_structural(e);
     if (r != ZERO_TEST_UNKNOWN) return r;
 
+    /* Stage 0b: a structural non-zero certificate (c * E^f and the like).  Sound
+     * and unconditional, and it must run BEFORE the algebraic/symbolic-exponent
+     * guards below, which route straight to Schwartz–Zippel — the sampler cannot
+     * see these, since a symbol-dependent exponent overflows/underflows E at its
+     * moderate range so every point reads as 0/Inf (e.g. -E^(-a x)). */
+    if (provably_nonzero(e)) return ZERO_TEST_FALSE;
+
     /* Phase 2 (SIMPLIFY_IMPROVEMENT_PLAN): when the expression mixes free
      * symbols with an algebraic-number constant (radical / root of unity),
      * skip the Stage-1 Together ∘ Cancel — over an extension Q(α) it blows
@@ -1669,6 +1740,12 @@ static ZeroTestResult zt_decide_assuming_core(const Expr* e, const struct Assume
      * is unconditional, so its verdict holds under any assumption. */
     ZeroTestResult r = decide_structural(e);
     if (r != ZERO_TEST_UNKNOWN) return r;
+
+    /* Stage 0b: unconditional non-zero certificate.  E^z has no zeros for any z,
+     * so c * E^f is non-zero for every value the symbols may take — the FALSE is
+     * sound even with assumptions in scope, and it must precede the guards that
+     * route to constrained sampling (which cannot see these). */
+    if (provably_nonzero(e)) return ZERO_TEST_FALSE;
 
     /* Algebraic-constant guard (mirrors zero_test_decide): a Sqrt / rational
      * power over free symbols must skip Together ∘ Cancel and go straight to
