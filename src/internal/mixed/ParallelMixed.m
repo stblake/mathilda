@@ -1072,20 +1072,27 @@ ResidueClasses[T_, p_, tp_, Y_, verbose_: False] := Catch[Module[
          (RootSumLogand, in the caller); the gcd over Q(c) is not attempted (Mathilda's
          PolynomialGCD with Extension -> Automatic returns 1 for a Root object) *)
       If[Head[c] === Root, hasRoot = True; Continue[]];
-      pc = Monic[PolynomialGCD[p, tau0 - c, Extension -> Automatic], g];
-      If[Exponent[pc, g] >= 1, AppendTo[principal, {c, pc}]];
+      pc = Monic[PolynomialGCD[p, Collect[Expand[tau0 - c], g, RRad], Extension -> Automatic], g];
+      If[Exponent[pc, g] < 1, Throw[{"failed", "residue class lost: no places over the prime for a root of the residue polynomial", p, c}, "rc"]];
+      AppendTo[principal, {c, pc}];
       Continue[]];
     If[m >= 3,
-      pc = Monic[PolynomialGCD[p, charp /. z -> c, Extension -> Automatic], g];
-      If[Exponent[pc, g] < 1, Continue[]];
+      (* the substituted characteristic polynomial is expanded and its coefficients
+         reduced before the gcd: an unexpanded algebraic constant that equals 0 need
+         not be recognised by the extension gcd (MATHILDA_DIVERGENCES.md A16).  A root of the residue polynomial
+         always has places over p, so an empty gcd is a computational failure, never
+         a class to skip: skipping it would leave the residue divisor incomplete and
+         the holomorphic-remainder certificate unsound. *)
+      pc = Monic[PolynomialGCD[p, Collect[Expand[charp /. z -> c], g, RRad], Extension -> Automatic], g];
+      If[Exponent[pc, g] < 1, Throw[{"failed", "residue class lost: no places over the prime for a root of the residue polynomial", p, c}, "rc"]];
       Do[Which[sh[[2]] === None, Throw[{"failed", "residue class on several sheets over one root (m >= 3)", p, c}, "rc"],
                sh[[2]] === "all", AppendTo[principal, {c, sh[[1]]}],
                True, AppendTo[classes, {c, sh[[1]], sh[[2]]}]],
         {sh, SheetsOver[T, g, pc, taus, c]}];
       Continue[]];
-    EE = Expand[tau1^2 q - (c - tau0)^2];
+    EE = Collect[Expand[tau1^2 q - (c - tau0)^2], g, RRad];
     pc = Monic[PolynomialGCD[p, EE, Extension -> Automatic], g];
-    If[Exponent[pc, g] < 1, Continue[]];
+    If[Exponent[pc, g] < 1, Throw[{"failed", "residue class lost: no places over the prime for a root of the residue polynomial", p, c}, "rc"]];
     t1 = PolynomialRemainder[tau1, pc, g];
     p2 = Monic[PolynomialGCD[pc, t1, Extension -> Automatic], g];
     If[Exponent[p2, g] >= 1, AppendTo[principal, {c, p2}]; pc = Monic[PolynomialQuotient[pc, p2, g], g]];
@@ -1182,9 +1189,9 @@ RealiseClass[T_, g_, supp_, c_, mmax_: 12, verbose_: False] := Catch[Module[
         w = Unique["w"];
         Sw = Normal[Series[Sqrt[Expand[(q /. g -> 1/w) w^(2 h1)/lc]], {w, 0, Na - nsmall}]];
         sv = Table[RR[Coefficient[Sw, w, k]], {k, 0, Na - nsmall}];
-        Do[row = Table[If[! bs[[2]], If[bs[[1]] == e, 1, 0],
-                         With[{kk = bs[[1]] + h1 - e}, If[0 <= kk < Length[sv], eps sqrtlc sv[[kk + 1]], 0]]], {bs, basis}];
-          AppendTo[rows, row], {e, Na, nsmall + 1, -1}]];
+        Do[row = Table[If[! bs[[2]], If[bs[[1]] == ne, 1, 0],
+                         With[{kk = bs[[1]] + h1 - ne}, If[0 <= kk < Length[sv], eps sqrtlc sv[[kk + 1]], 0]]], {bs, basis}];
+          AppendTo[rows, row], {ne, Na, nsmall + 1, -1}]];
       If[rows === {}, Continue[]];
       ns = NullSpace[rows, ZeroTest -> (RootReduce[Together[#]] === 0 &)];
       If[ns === {}, Continue[]];
@@ -2649,10 +2656,14 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
   colFr = {#[[1]], NumDen /@ Take[#[[2]], nc]} & /@ cols;
   remFr = NumDen /@ Take[rem, nc];
   monoCols = {};
+  (* iterators named ma / ent, not a / e: a Do iterator inside the package
+     captures a caller's symbol of the same name on Mathilda
+     (MATHILDA_DIVERGENCES.md A18: Do, unlike Table, is not capture-avoiding), and a, b, e are the usual
+     parameter names of an integrand *)
   If[m >= 3,
-    Do[With[{col = TowerD[T, (Times @@ (gens^monos[[a]]))/denv TUnit[T, i - 1]]},
-        Do[AppendTo[monoCols, {css[[i, a]], j, NumDen[col[[j]]]}], {j, nc}]],
-      {i, nc}, {a, Length[monos]}]];
+    Do[With[{col = TowerD[T, (Times @@ (gens^monos[[ma]]))/denv TUnit[T, i - 1]]},
+        Do[AppendTo[monoCols, {css[[i, ma]], j, NumDen[col[[j]]]}], {j, nc}]],
+      {i, nc}, {ma, Length[monos]}]];
   densG = DeleteDuplicates[Flatten[Table[Denominator[Together[c]], {d, T["derivs"]}, {c, d}]]];
   Qh = If[q =!= None, Dhat[T, q], None];
   (* the field *)
@@ -2675,23 +2686,23 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
       Qs0 = Expand[Can[Qh[[1]] Dden] /. rules]; Qs1 = Expand[Can[Qh[[2]] Dden] /. rules];
       Lfix = Expand[denvF^2 DdenF 2 qF],
       Lfix = Expand[denvF^2 DdenF]];
-    Do[monoF = Times @@ (gens^monos[[a]]);
+    Do[monoF = Times @@ (gens^monos[[ma]]);
       cg = Table[Expand[D[monoF, gens[[k]]] denvF - monoF ddenv[[k]]], {k, Length[gens]}];
       n0 = Expand[cg . Dg0s]; n1 = Expand[cg . Dg1s];
       If[q =!= None, n0 = Expand[2 qF n0]; n1 = Expand[2 qF n1]];
-      AppendTo[parts[[1]], {css[[1, a]], {n0, Lfix}}];
-      If[nc > 1, AppendTo[parts[[2]], {css[[1, a]], {n1, Lfix}}]],
-      {a, Length[monos]}];
+      AppendTo[parts[[1]], {css[[1, ma]], {n0, Lfix}}];
+      If[nc > 1, AppendTo[parts[[2]], {css[[1, ma]], {n1, Lfix}}]],
+      {ma, Length[monos]}];
     If[q =!= None,
-      Do[monoF = Times @@ (gens^monos[[a]]);
+      Do[monoF = Times @@ (gens^monos[[ma]]);
         cg = Table[Expand[D[monoF, gens[[k]]] denvF - monoF ddenv[[k]]], {k, Length[gens]}];
         s0 = Expand[cg . Dg0s]; s1 = Expand[cg . Dg1s];
         (* D(m y/D_v) = c.(Dg0 + Dg1 y) y + (m/D_v)(Dy0 + Dy1 y),  y^2 = q *)
         n0 = Expand[2 qF qF s1 + monoF denvF Qs1 qF];
         n1 = Expand[2 qF s0 + monoF denvF Qs0];
-        AppendTo[parts[[1]], {css[[2, a]], {n0, Lfix}}];
-        AppendTo[parts[[2]], {css[[2, a]], {n1, Lfix}}],
-        {a, Length[monos]}]],
+        AppendTo[parts[[1]], {css[[2, ma]], {n0, Lfix}}];
+        AppendTo[parts[[2]], {css[[2, ma]], {n1, Lfix}}],
+        {ma, Length[monos]}]],
     Do[AppendTo[parts[[mc[[2]]]], {mc[[1]], Expand[mc[[3]] /. rules]}], {mc, monoCols}]];
   Do[AppendTo[parts[[i]], {cf[[1]], Expand[cf[[2, i]] /. rules]}], {cf, colFr}, {i, nc}];
   remFr = Expand[remFr /. rules];
@@ -2746,10 +2757,14 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
      {row, col} is written once by the construction above, so a plain
      overwrite matches the reference (rows[r][c] = coeff in parallel_mixed.py). *)
   aug = ConstantArray[0, {nrows, ncols + 1}];
-  Do[aug[[e[[1, 1]], e[[1, 2]]]] = e[[2]], {e, Join[entries, rhs]}];
+  Do[aug[[ent[[1, 1]], ent[[1, 2]]]] = ent[[2]], {ent, Join[entries, rhs]}];
   (* one-step row reduction: with AlgebraicNumber entries the default method
-     is two orders of magnitude slower on the systems of the split specials *)
-  red = RowReduce[aug, Method -> "OneStepRowReduction"];
+     is two orders of magnitude slower on the systems of the split specials;
+     with transcendental parameters the entries are rational functions of the
+     parameters and the default method is the one to use (Mathilda: the one-step
+     method does not finish on a 20 x 15 system whose entries are linear in two
+     parameters, MATHILDA_DIVERGENCES.md A17) *)
+  red = If[FreeQ[aug, _Symbol?(! NumericQ[#] &)], RowReduce[aug, Method -> "OneStepRowReduction"], RowReduce[aug]];
   (* with transcendental parameters the entries are rational functions of the parameters:
      their zero is not syntactic, so the pivot test below sees them through Together
      (exact; on rational and AlgebraicNumber entries a no-op) *)
