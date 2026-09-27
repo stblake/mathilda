@@ -374,6 +374,25 @@ void test_scoping_count_iterator() {
     assert_eval_eq("With[{n = 2}, Table[Table[0, {n}], {n}]]", "{{0, 0}, {0, 0}}", 0);
 }
 
+/* Regression: A11 -- pattern substitution must be capture-avoiding. When a rule
+ * RHS holds a scoping construct and the substituted value carries a free symbol
+ * whose name is one of the construct's bound locals, the local is alpha-renamed
+ * so the free symbol is not swallowed. g[e+1] gave 3 (want 2 + e). Also the
+ * mirror case: a local shadowing a pattern variable must not receive it. */
+void test_scoping_capture_avoid() {
+    assert_eval_eq("g[v_] := Module[{e = 1}, v + e]; g[e + 1]", "2 + e", 0);
+    assert_eval_eq("gw[v_] := With[{e = 1}, v + e]; gw[e + 1]", "2 + e", 0);
+    assert_eval_eq("gt[v_] := Table[v + e, {e, 1, 2}]; gt[e]", "{1 + e, 2 + e}", 0);
+    assert_eval_eq("gf[v_] := Function[e, v + e][1]; gf[e]", "1 + e", 0);
+    assert_eval_eq("gb[v_] := Block[{e = 1}, v + e]; gb[e + 1]", "2 + e", 0);
+    /* nested inner shadow: inner e (=2) wins; injected v = e stays free */
+    assert_eval_eq("gn[v_] := Module[{e = 1}, Module[{e = 2}, v + e]]; gn[e]", "2 + e", 0);
+    /* mirror case: local shadows the pattern variable of the same name */
+    assert_eval_eq("sh[e_] := Module[{e = 1}, e + 1]; sh[99]", "2", 0);
+    /* no name clash: unaffected */
+    assert_eval_eq("gc[v_] := Module[{q = 1}, v + q]; gc[e + 1]", "2 + e", 0);
+}
+
 /* Regression: A1 -- Do/Table/Sum/Product must iterate a PACKED (EXPR_NDARRAY)
  * list, not just an EXPR_FUNCTION List. A packed list reaches a HoldAll iterator
  * through a symbol or an unevaluated producer (Range/Select/Prime of >= 4
@@ -451,6 +470,7 @@ int main() {
     TEST(test_table_overcap_declines);
     TEST(test_iter_exactness_preserved);
     TEST(test_scoping_count_iterator);
+    TEST(test_scoping_capture_avoid);
     TEST(test_iter_packed_list);
 
     printf("All iter tests passed!\n");

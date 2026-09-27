@@ -1,6 +1,7 @@
 #include "match.h"
 #include <gmp.h>
 #include "part.h"
+#include "modular.h"
 #include "eval.h"
 #include "print.h"
 #include "symtab.h"
@@ -1533,18 +1534,78 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     return false;
 }
 
+/* Collect the distinct symbol names occurring in `e` into out[0..*n) (bounded by
+ * cap). Used to find which pattern-binding values carry a symbol that a scoping
+ * construct in the RHS could capture (see rb_rec / scoping_capture_avoid). */
+static void rb_collect_symbol_names(Expr* e, const char** out, size_t* n, size_t cap) {
+    if (!e || *n >= cap) return;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < *n; i++)
+            if (out[i] == e->data.symbol.name || strcmp(out[i], e->data.symbol.name) == 0) return;
+        out[(*n)++] = e->data.symbol.name;
+        return;
+    }
+    if (e->type == EXPR_FUNCTION) {
+        rb_collect_symbol_names(e->data.function.head, out, n, cap);
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            rb_collect_symbol_names(e->data.function.args[i], out, n, cap);
+    }
+}
+
+static Expr* rb_rec(Expr* expr, MatchEnv* env, const char** danger, size_t ndanger);
+
 Expr* replace_bindings(Expr* expr, MatchEnv* env) {
     if (!expr) return NULL;
-    
+
+    /* Names appearing in binding values: substituting any of these into a
+     * scoping construct's body could capture one of its locals. Collected once
+     * here (cheap -- the same values are about to be copied anyway) and consulted
+     * only when rb_rec meets a scoping construct. See MATHILDA_DIVERGENCES A11. */
+    const char* danger_buf[256];
+    size_t ndanger = 0;
+    if (env)
+        for (size_t i = 0; i < env->count && ndanger < 256; i++) {
+            /* Free symbols of the value -- a local of that name would CAPTURE it. */
+            rb_collect_symbol_names(env->values[i], danger_buf, &ndanger, 256);
+            /* The bound variable's own name -- a local of that name SHADOWS it, so
+             * the binding must not be substituted into the (renamed) body:
+             * sh[e_] := Module[{e = 1}, e + 1]; sh[99] must give 2, not 100. */
+            if (ndanger < 256 && env->symbols[i]) {
+                bool seen = false;
+                for (size_t k = 0; k < ndanger; k++)
+                    if (danger_buf[k] == env->symbols[i]
+                        || strcmp(danger_buf[k], env->symbols[i]) == 0) { seen = true; break; }
+                if (!seen) danger_buf[ndanger++] = env->symbols[i];
+            }
+        }
+
+    return rb_rec(expr, env, danger_buf, ndanger);
+}
+
+static Expr* rb_rec(Expr* expr, MatchEnv* env, const char** danger, size_t ndanger) {
+    if (!expr) return NULL;
+
     if (expr->type == EXPR_SYMBOL) {
         Expr* bound = env_get(env, expr->data.symbol.name);
         if (bound) {
             return expr_copy(bound);
         }
     }
-    
+
     if (expr->type == EXPR_FUNCTION) {
-        Expr* new_head = replace_bindings(expr->data.function.head, env);
+        /* Capture-avoiding substitution: if this is a scoping construct whose
+         * bound locals collide with a name in a value we are about to inject,
+         * alpha-rename those locals first, then substitute into the safe copy. */
+        if (ndanger > 0 && expr_is_binding_scope(expr)) {
+            Expr* safe = scoping_capture_avoid(expr, danger, ndanger);
+            if (safe) {
+                Expr* result = rb_rec(safe, env, danger, ndanger);
+                expr_free(safe);
+                return result;
+            }
+        }
+
+        Expr* new_head = rb_rec(expr->data.function.head, env, danger, ndanger);
         
         bool skip_flattening = false;
         if (new_head->type == EXPR_SYMBOL && (

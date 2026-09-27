@@ -327,6 +327,205 @@ Expr* builtin_unique(Expr* res) {
     return out[0];
 }
 
+/* ------------------------------------------------------------------------
+ * Capture-avoiding pattern substitution support (used by replace_bindings).
+ *
+ * A rule's RHS may hold a scoping construct (Module/Block/With/Function/Table).
+ * When a pattern binding carries a free symbol whose name equals one of that
+ * construct's bound locals, the naive substitution injects the symbol into the
+ * body, where the construct's later localization captures it:
+ *   g[v_] := Module[{e = 1}, v + e];  g[e + 1]   gave 3, must give 2 + e.
+ * The fix renames every colliding local to a fresh symbol *before* the binding
+ * is substituted, so the injected symbol and the (renamed) local stay distinct.
+ * See MATHILDA_DIVERGENCES.md A11.
+ * ------------------------------------------------------------------------ */
+
+/* True when `e` is a scoping construct that actually binds names. */
+bool expr_is_binding_scope(Expr* e) {
+    if (!is_scoping_construct(e)) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Table) return e->data.function.arg_count >= 2; /* body + iterator(s) */
+    return scoping_binds_in_arg0(e);
+}
+
+/* Collect the names `e` binds into out[0..*n) (bounded by cap). Mirrors the
+ * shadow-name collection in substitute_scoping. */
+static void scoping_collect_locals(Expr* e, const char** out, size_t* n, size_t cap) {
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Table) {
+        for (size_t k = 1; k < e->data.function.arg_count && *n < cap; k++) {
+            Expr* it = e->data.function.args[k];
+            if (it->type == EXPR_FUNCTION
+                && it->data.function.head->type == EXPR_SYMBOL
+                && it->data.function.head->data.symbol.name == SYM_List
+                && it->data.function.arg_count >= 2
+                && it->data.function.args[0]->type == EXPR_SYMBOL) {
+                out[(*n)++] = it->data.function.args[0]->data.symbol.name;
+            }
+        }
+        return;
+    }
+    Expr* vars = e->data.function.args[0];
+    if (vars->type == EXPR_SYMBOL) {                    /* Function[x, body] */
+        if (*n < cap) out[(*n)++] = vars->data.symbol.name;
+    } else if (vars->type == EXPR_FUNCTION
+               && vars->data.function.head->type == EXPR_SYMBOL
+               && vars->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < vars->data.function.arg_count && *n < cap; i++) {
+            Expr* v = vars->data.function.args[i];
+            if (v->type == EXPR_SYMBOL) out[(*n)++] = v->data.symbol.name;
+            else if (v->type == EXPR_FUNCTION
+                     && v->data.function.head->data.symbol.name == SYM_Set
+                     && v->data.function.arg_count == 2
+                     && v->data.function.args[0]->type == EXPR_SYMBOL)
+                out[(*n)++] = v->data.function.args[0]->data.symbol.name;
+        }
+    }
+}
+
+/* Rename a bare binding-occurrence symbol per the rename env, else copy it. */
+static Expr* rename_bound_symbol(Expr* sym, ScopingEnv* ren) {
+    if (sym->type == EXPR_SYMBOL)
+        for (ScopingEnv* c = ren; c; c = c->next)
+            if (strcmp(sym->data.symbol.name, c->old_name) == 0)
+                return expr_copy(c->replacement);
+    return expr_copy(sym);
+}
+
+/* One binding-list entry: bare `L`, or `Set[L, init]`/`SetDelayed[L, init]`.
+ * Rename L per `ren`; substitute `ren` into the init value (which sees the
+ * renamed locals). */
+static Expr* rename_binding_entry(Expr* b, ScopingEnv* ren) {
+    if (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL
+        && (b->data.function.head->data.symbol.name == SYM_Set
+            || b->data.function.head->data.symbol.name == SYM_SetDelayed)
+        && b->data.function.arg_count == 2
+        && b->data.function.args[0]->type == EXPR_SYMBOL) {
+        Expr* lhs = rename_bound_symbol(b->data.function.args[0], ren);
+        Expr* rhs = substitute_scoping(b->data.function.args[1], ren);
+        Expr* bargs[2] = { lhs, rhs };
+        return expr_new_function(expr_copy(b->data.function.head), bargs, 2);
+    }
+    return rename_bound_symbol(b, ren);
+}
+
+/* Rebuild `e` with its own bound locals alpha-renamed per `ren`. Bodies, init
+ * values and iterator limits are rewritten with substitute_scoping (which
+ * respects any inner scope that re-binds the same name); binding occurrences
+ * are renamed directly. */
+static Expr* scoping_apply_rename(Expr* e, ScopingEnv* ren) {
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t argc = e->data.function.arg_count;
+    Expr** na = malloc(sizeof(Expr*) * (argc > 0 ? argc : 1));
+
+    if (h == SYM_Table) {
+        na[0] = substitute_scoping(e->data.function.args[0], ren);   /* body */
+        for (size_t i = 1; i < argc; i++) {
+            Expr* it = e->data.function.args[i];
+            if (it->type == EXPR_FUNCTION
+                && it->data.function.head->type == EXPR_SYMBOL
+                && it->data.function.head->data.symbol.name == SYM_List
+                && it->data.function.arg_count >= 2
+                && it->data.function.args[0]->type == EXPR_SYMBOL) {
+                size_t nn = it->data.function.arg_count;
+                Expr** nb = malloc(sizeof(Expr*) * nn);
+                nb[0] = rename_bound_symbol(it->data.function.args[0], ren);
+                for (size_t j = 1; j < nn; j++)
+                    nb[j] = substitute_scoping(it->data.function.args[j], ren);
+                na[i] = expr_new_function(expr_copy(it->data.function.head), nb, nn);
+                free(nb);
+            } else {
+                na[i] = substitute_scoping(it, ren);
+            }
+        }
+    } else if (h == SYM_Function) {
+        Expr* params = e->data.function.args[0];
+        if (params->type == EXPR_FUNCTION
+            && params->data.function.head->type == EXPR_SYMBOL
+            && params->data.function.head->data.symbol.name == SYM_List) {
+            size_t nn = params->data.function.arg_count;
+            Expr** nb = malloc(sizeof(Expr*) * (nn > 0 ? nn : 1));
+            for (size_t j = 0; j < nn; j++)
+                nb[j] = rename_bound_symbol(params->data.function.args[j], ren);
+            na[0] = expr_new_function(expr_copy(params->data.function.head), nb, nn);
+            free(nb);
+        } else {
+            na[0] = rename_bound_symbol(params, ren);
+        }
+        for (size_t i = 1; i < argc; i++)
+            na[i] = substitute_scoping(e->data.function.args[i], ren);
+    } else {   /* Module / Block / With : args[0] = List[bindings], args[1] = body */
+        Expr* vars = e->data.function.args[0];
+        if (vars->type == EXPR_FUNCTION
+            && vars->data.function.head->type == EXPR_SYMBOL
+            && vars->data.function.head->data.symbol.name == SYM_List) {
+            size_t nn = vars->data.function.arg_count;
+            Expr** nb = malloc(sizeof(Expr*) * (nn > 0 ? nn : 1));
+            for (size_t j = 0; j < nn; j++)
+                nb[j] = rename_binding_entry(vars->data.function.args[j], ren);
+            na[0] = expr_new_function(expr_copy(vars->data.function.head), nb, nn);
+            free(nb);
+        } else {
+            na[0] = substitute_scoping(vars, ren);
+        }
+        for (size_t i = 1; i < argc; i++)
+            na[i] = substitute_scoping(e->data.function.args[i], ren);
+    }
+
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), na, argc);
+    free(na);
+    return r;
+}
+
+/* If substituting values carrying any name in danger[0..ndanger) into `e`'s body
+ * could capture one of e's bound locals, return a fresh copy of `e` with the
+ * colliding locals alpha-renamed; otherwise return NULL (caller keeps `e`). */
+Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger) {
+    if (ndanger == 0 || !expr_is_binding_scope(e)) return NULL;
+
+    const char* locals[64]; size_t nloc = 0;
+    scoping_collect_locals(e, locals, &nloc, 64);
+
+    const char* clash[64]; size_t nclash = 0;
+    for (size_t i = 0; i < nloc && nclash < 64; i++)
+        for (size_t d = 0; d < ndanger; d++)
+            if (strcmp(locals[i], danger[d]) == 0) { clash[nclash++] = locals[i]; break; }
+    if (nclash == 0) return NULL;
+
+    /* A fresh symbol per colliding local: prefix "L$" so unique_make_batch
+     * mints "L$<n>", matching Module's own naming. */
+    char* store[64]; const char* prefixes[64];
+    for (size_t i = 0; i < nclash; i++) {
+        size_t len = strlen(clash[i]);
+        char* p = malloc(len + 2);
+        memcpy(p, clash[i], len); p[len] = '$'; p[len + 1] = '\0';
+        store[i] = p; prefixes[i] = p;
+    }
+    Expr* fresh[64];
+    int made = unique_make_batch(prefixes, nclash, fresh);
+    for (size_t i = 0; i < nclash; i++) free(store[i]);
+    if (made < 0) return NULL;
+
+    ScopingEnv* ren = NULL;
+    for (size_t i = 0; i < nclash; i++) {
+        ScopingEnv* node = malloc(sizeof(ScopingEnv));
+        node->old_name = clash[i];
+        node->replacement = fresh[i];   /* freed with the env below */
+        node->next = ren;
+        ren = node;
+    }
+
+    Expr* result = scoping_apply_rename(e, ren);
+
+    while (ren) {
+        ScopingEnv* nx = ren->next;
+        expr_free(ren->replacement);
+        free(ren);
+        ren = nx;
+    }
+    return result;
+}
+
 Expr* builtin_module(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars = res->data.function.args[0];

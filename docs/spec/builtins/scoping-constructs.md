@@ -1,5 +1,14 @@
 # Scoping Constructs
 
+Pattern substitution into a scoping construct is **capture-avoiding**. When a
+rule's right-hand side holds a `Module`/`Block`/`With`/`Function`/`Table` and a
+substituted value carries a free symbol whose name equals one of the construct's
+bound locals, that local is alpha-renamed to a fresh symbol first, so the free
+symbol is not swallowed: `g[v_] := Module[{e = 1}, v + e]; g[e + 1]` gives
+`2 + e`. A bound local that shadows a pattern variable of the same name likewise
+does not receive that variable: `sh[e_] := Module[{e = 1}, e + 1]; sh[99]` gives
+`2`.
+
 ## Module
 Implements lexical scoping by creating unique local variables.
 - `Module[{x, y, ...}, expr]`
