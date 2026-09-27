@@ -734,6 +734,21 @@ static int qqbar_express_in_field_esc(fmpq_poly_t res, const qqbar_t alpha,
     return 0;
 }
 
+/* As qqbar_express_in_field_esc but escalates the working precision for EVERY
+ * degree, not only degree > 6.  Used by the ToNumberField builtin, where the
+ * caller has explicitly named the generator and a valid membership must not be
+ * declined merely because the relation's coefficients need > 64 bits to resolve
+ * (e.g. expressing Root[x^5-x-1] in Q(Root[2869 x^5 + ...]), MATHILDA_DIVERGENCES
+ * A14).  The dsolve-facing `in_field` path keeps the degree<=6 gate, which the
+ * ungated escalation regressed. */
+static int qqbar_express_in_field_esc_all(fmpq_poly_t res, const qqbar_t alpha,
+                                          const qqbar_t x) {
+    static const slong precs[4] = { 64, 256, 1024, 4096 };
+    for (int i = 0; i < 4; i++)
+        if (qqbar_express_in_field(res, alpha, x, 100000, 0, precs[i])) return 1;
+    return 0;
+}
+
 /* True if x is expressible in Q(alpha). */
 static int in_field(const qqbar_t x, const qqbar_t alpha) {
     fmpq_poly_t f; fmpq_poly_init(f);
@@ -1365,7 +1380,7 @@ Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* theta) {
 
     fmpq_poly_t f; fmpq_poly_init(f);
     Expr* result = NULL;
-    if (qqbar_express_in_field_retry(f, phi, av))
+    if (qqbar_express_in_field_esc_all(f, phi, av))   /* escalate for named generator (A14) */
         result = poly_to_algnum(phi, f, n);   /* NULL stays NULL when a not in Q(theta) */
     fmpq_poly_clear(f);
     qqbar_clear(phi); qqbar_clear(av); qqbar_clear(tv);

@@ -146,6 +146,16 @@ static void test_to_number_field(void) {
                "Sqrt[5]},All][[2]] - Sqrt[5]");
     /* ToNumberField[{a..}, theta]: express each in Q(theta). */
     check_zero("ToNumberField[{1, Sqrt[2]}, Sqrt[2]][[2]] - Sqrt[2]");
+    /* A14: a degree-5 Root generator whose membership relation needs > 64-bit
+     * precision. Q(Root[2869 x^5 + ...]) == Q(Root[x^5-x-1]); before the
+     * ToNumberField-path escalation this declined (unevaluated). Value-preserving
+     * both directions (MATHILDA_DIVERGENCES A14). */
+    check_zero("ToNumberField[Root[-1 + 15 #1 - 80 #1^2 + 160 #1^3 + 2869 #1^5 &, 1], "
+               "Root[-1 - #1 + #1^5 &, 1]] "
+               "- Root[-1 + 15 #1 - 80 #1^2 + 160 #1^3 + 2869 #1^5 &, 1]");
+    check_zero("ToNumberField[Root[-1 - #1 + #1^5 &, 1], "
+               "Root[-1 + 15 #1 - 80 #1^2 + 160 #1^3 + 2869 #1^5 &, 1]] "
+               "- Root[-1 - #1 + #1^5 &, 1]");
     /* Degree-8 nested-radical compositum: 64-bit field-membership precision is
      * too low, so ToNumberField escalates precision (degree-gated, only for
      * degree > 6).  Before the escalation this declined (unevaluated); the guard

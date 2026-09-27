@@ -284,7 +284,11 @@ in the common field is tested at 64-bit working precision, escalating to
 256/1024/4096 bits for a high-degree (> 6) compositum where 64 bits cannot
 resolve membership — so a high-degree conjugate-root or nested-radical compositum
 (e.g. `Q(√5, √(1+√5), √(1-√5))`, the splitting field of a quartic) constructs a
-single generator instead of declining.
+single generator instead of declining. The two-argument named-generator form
+`ToNumberField[a, theta]` escalates precision at every degree (not only > 6), so a
+low-degree `Root` field whose membership relation has large coefficients — e.g.
+expressing `Root[x^5-x-1]` in `Q(Root[2869 x^5 + …])`, the same degree-5 field — is
+no longer declined.
 
 ```
 In[1]:= ToNumberField[Sqrt[2], 2^(1/4)]
