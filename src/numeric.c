@@ -16,6 +16,7 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "root_numeric.h"
+#include "root.h"        /* rootsum_expand_over_roots: N over a RootSum */
 #include "ndarray.h"    /* ndt_get_i / ndarray_to_nested_list: N over a packed
                          * integer buffer widens it to float64 in place. */
 
@@ -601,6 +602,22 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         /* Failed (e.g. non-integer coefficients, out-of-range k).  Don't
          * descend into the held body — return the Root call verbatim. */
         return expr_copy((Expr*)e);
+    }
+
+    /* RootSum[Function[p], Function[body]] → numericalise the explicit sum of
+     * body over the roots of p.  RootSum is HoldAll and often has no closed
+     * rational form (a Log logand, an (x + t) denominator), so N sums it
+     * directly: expand to Plus[body[Root[p, k]], ...] and numericalise that,
+     * reusing the Root numeric backend.  (MATHILDA_DIVERGENCES.md A12.) */
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_RootSum) {
+        Expr* expanded = rootsum_expand_over_roots(e);
+        if (expanded) {
+            Expr* out = numericalize_rec(expanded, spec);
+            expr_free(expanded);
+            return out;
+        }
     }
 
     /* AlgebraicNumber[theta, {c0..cm}] → numericalize sum ci theta^i.  Runs

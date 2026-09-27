@@ -440,6 +440,13 @@ static void test_rootsum_reduction(void) {
     run_eq("CompoundExpression[Set[pf, Function[z, z^4 - 3 z + 3]], "
            "Together[RootSum[pf, Function[z, (1 + a z)/(x - z)]] "
            "- (-3 - 12 a + 9 a x + 4 x^3)/(3 - 3 x + x^4)]]", "0");
+    /* General linear denominator (x + z), not (x - z): the pole is z = -x. */
+    run_eq("Together[RootSum[Function[z, z^3 + z + 1], "
+           "Function[z, z (x + z^2)/(x + z)]] "
+           "- (2 - 5 x - x^2)/(x^3 + x - 1)]", "0");
+    /* Numeric N[RootSum]: sum body over the numeric roots (Log logand has no
+     * rational closed form; the numeric path handles it). */
+    run_eq("Round[N[RootSum[Function[z, z^2 - 2], Function[z, z^2]]]]", "4");
 }
 
 /* Numeric biquadratic — Phase 8d-bonus expands to an explicit

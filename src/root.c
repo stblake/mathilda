@@ -166,27 +166,70 @@ static Expr* rootsum_try_lagrange(Expr* poly_fn, Expr* body_fn) {
         return NULL;
     }
 
-    /* Find the variable x such that (x - #1) appears in the body. */
-    Expr* x = find_x_minus_slot1(body);
-    if (!x) { expr_free(poly); expr_free(body); return NULL; }
-
-    /* d_prime = D[poly, Slot[1]]. */
     Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot),
         (Expr*[]){ expr_new_integer(1) }, 1);
+
+    /* Determine the linear denominator factor L(#) of the body and the pole rho
+     * where L(rho) = 0.  For L(#) = c1 # + c0 the general Lagrange identity is
+     *   Σ_α N(α)/L(α) = -(1/c1) A(rho)/d(rho),   A = N d' mod d,  rho = -c0/c1.
+     * The classic body N(#)/(x - #) is the special case c1 = -1, rho = x,
+     * multiplier 1 (kept byte-for-byte via mult == NULL).  The general branch
+     * (fired only when the (x - #) match declines) handles e.g. an (x + #)
+     * denominator. */
+    Expr* x = find_x_minus_slot1(body);
+    Expr* lin_factor = NULL;   /* L(#), in Slot form */
+    Expr* pole = NULL;         /* rho, free of Slot */
+    Expr* mult = NULL;         /* -1/c1, or NULL meaning 1 (the x - # case) */
+
+    if (x) {
+        lin_factor = expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_copy(x),
+                       expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(-1), expr_copy(slot) }, 2) }, 2);
+        pole = x; x = NULL;    /* take ownership; multiplier stays 1 (NULL) */
+    } else {
+        Expr* den = internal_denominator((Expr*[]){ expr_copy(body) }, 1);
+        Expr* rv0 = expr_new_symbol("RootSum$sv");
+        Expr* den_rv = subst_slot1(den, rv0);
+        int den_deg = get_degree_poly(den_rv, rv0);
+        expr_free(den_rv); expr_free(rv0);
+        if (den_deg == 1) {
+            /* c0 = L(0),  c1 = L(1) - L(0);  rho = -c0/c1;  mult = -1/c1. */
+            Expr* zero = expr_new_integer(0);
+            Expr* one  = expr_new_integer(1);
+            Expr* c0 = eval_and_free(subst_slot1(den, zero));
+            Expr* L1 = eval_and_free(subst_slot1(den, one));
+            expr_free(zero); expr_free(one);
+            Expr* c1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                (Expr*[]){ L1, expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(c0) }, 2) }, 2));
+            Expr* inv_c1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ expr_copy(c1), expr_new_integer(-1) }, 2));
+            pole = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(c0), expr_copy(inv_c1) }, 3));
+            mult = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_integer(-1), inv_c1 }, 2));
+            lin_factor = den; den = NULL;
+            expr_free(c0); expr_free(c1);
+        }
+        if (den) expr_free(den);
+    }
+
+    if (!lin_factor) {
+        expr_free(slot); expr_free(poly); expr_free(body);
+        if (pole) expr_free(pole);
+        if (mult) expr_free(mult);
+        return NULL;
+    }
+
+    /* d_prime = D[poly, Slot[1]]. */
     Expr* d_call = expr_new_function(expr_new_symbol(SYM_D),
         (Expr*[]){ expr_copy(poly), expr_copy(slot) }, 2);
     Expr* d_prime = evaluate(d_call); expr_free(d_call);
 
-    /* a(#1) = body * (x - #1) * d'(#1).  Use the Lagrange / partial-fraction
-     * identity  Σ_α a(α)/(d'(α)(x-α)) = a(x)/d(x)  (valid for squarefree d
-     * and any a of #-degree < deg d). */
-    Expr* x_minus_slot = expr_new_function(expr_new_symbol(SYM_Plus),
-        (Expr*[]){ expr_copy(x),
-                   expr_new_function(expr_new_symbol(SYM_Times),
-                       (Expr*[]){ expr_new_integer(-1),
-                                  expr_copy(slot) }, 2) }, 2);
+    /* a(#1) = body * L(#1) * d'(#1). */
     Expr* prod_raw = expr_new_function(expr_new_symbol(SYM_Times),
-        (Expr*[]){ expr_copy(body), x_minus_slot, d_prime }, 3);
+        (Expr*[]){ expr_copy(body), expr_copy(lin_factor), d_prime }, 3);
     Expr* prod_eval = evaluate(prod_raw); expr_free(prod_raw);
     Expr* a_of_slot = simplify_rational(prod_eval); expr_free(prod_eval);
 
@@ -230,28 +273,33 @@ static Expr* rootsum_try_lagrange(Expr* poly_fn, Expr* body_fn) {
 
     if (!shape_ok) {
         expr_free(a_rv); expr_free(poly_rv); expr_free(rv);
-        expr_free(a_of_slot); expr_free(slot); expr_free(x);
+        expr_free(a_of_slot); expr_free(slot); expr_free(lin_factor);
+        expr_free(pole); if (mult) expr_free(mult);
         expr_free(poly); expr_free(body);
         return NULL;
     }
 
-    /* a(x) = a_rv[RootSum$sv -> x],  d(x) = poly[Slot[1] -> x].  a_rv is the
-     * (possibly reduced) numerator polynomial in the root variable. */
-    Expr* a_at_x = subst_symbol(a_rv, "RootSum$sv", x);
-    Expr* d_at_x = subst_slot1(poly, x);
+    /* A(rho) = a_rv[RootSum$sv -> rho],  d(rho) = poly[Slot[1] -> rho].  a_rv is
+     * the (possibly reduced) numerator polynomial in the root variable. */
+    Expr* a_at_p = subst_symbol(a_rv, "RootSum$sv", pole);
+    Expr* d_at_p = subst_slot1(poly, pole);
     expr_free(a_rv); expr_free(poly_rv); expr_free(rv);
-    expr_free(a_of_slot); expr_free(slot);
+    expr_free(a_of_slot); expr_free(slot); expr_free(lin_factor); expr_free(pole);
 
-    /* Build a(x)/d(x).  Run Together so the rational form prints
-     * canonically. */
+    /* result = mult * A(rho)/d(rho)  (mult == NULL means 1, the x - # case).
+     * Run Together so the rational form prints canonically. */
     Expr* quotient_raw = expr_new_function(expr_new_symbol(SYM_Times),
-        (Expr*[]){ a_at_x,
+        (Expr*[]){ a_at_p,
                    expr_new_function(expr_new_symbol(SYM_Power),
-                       (Expr*[]){ d_at_x, expr_new_integer(-1) }, 2) }, 2);
+                       (Expr*[]){ d_at_p, expr_new_integer(-1) }, 2) }, 2);
+    if (mult) {
+        quotient_raw = expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ mult, quotient_raw }, 2);
+    }
     Expr* quotient_eval = evaluate(quotient_raw); expr_free(quotient_raw);
     Expr* tg = internal_together((Expr*[]){ quotient_eval }, 1);
     Expr* result = evaluate(tg); expr_free(tg);
-    expr_free(x); expr_free(poly); expr_free(body);
+    expr_free(poly); expr_free(body);
     return result;
 }
 
@@ -352,6 +400,44 @@ Expr* root_make_rootsum(Expr* bvar, Expr* poly, Expr* body) {
 
     Expr* rs_args[2] = { fn1, fn2 };
     return expr_new_function(expr_new_symbol(SYM_RootSum), rs_args, 2);
+}
+
+/* Expand RootSum[Function[p], Function[body]] into the explicit Plus of
+ * body[Slot[1] -> Root[Function[p], k]] for k = 1..deg(p).  Returns NULL if
+ * `rs` is not a two-Function RootSum or the degree can't be read.  Used by N to
+ * sum a RootSum over its (numericalised) roots -- this is what makes
+ * N[RootSum[Function[z, z^3+z+1], Function[z, z Log[x-z]]] /. x->1/3, 30]
+ * evaluate (MATHILDA_DIVERGENCES.md A12, numeric path).  Caller owns the
+ * result. */
+Expr* rootsum_expand_over_roots(const Expr* rs) {
+    if (!rs || rs->type != EXPR_FUNCTION
+        || rs->data.function.head->type != EXPR_SYMBOL
+        || rs->data.function.head->data.symbol.name != SYM_RootSum
+        || rs->data.function.arg_count != 2) return NULL;
+    Expr* poly = rootsum_fn_body_slot(rs->data.function.args[0]);   /* Slot[1] form */
+    Expr* body = rootsum_fn_body_slot(rs->data.function.args[1]);
+    if (!poly || !body) { if (poly) expr_free(poly); if (body) expr_free(body); return NULL; }
+
+    Expr* rv = expr_new_symbol("RootSum$sv");
+    Expr* poly_rv = subst_slot1(poly, rv);
+    int deg = get_degree_poly(poly_rv, rv);
+    expr_free(poly_rv); expr_free(rv);
+    if (deg < 1) { expr_free(poly); expr_free(body); return NULL; }
+
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)deg);
+    for (int k = 1; k <= deg; k++) {
+        Expr* fn = expr_new_function(expr_new_symbol(SYM_Function),
+            (Expr*[]){ expr_copy(poly) }, 1);
+        Expr* rootk = expr_new_function(expr_new_symbol(SYM_Root),
+            (Expr*[]){ fn, expr_new_integer(k) }, 2);
+        terms[k - 1] = subst_slot1(body, rootk);
+        expr_free(rootk);
+    }
+    expr_free(poly); expr_free(body);
+    Expr* out = (deg == 1) ? terms[0]
+              : expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)deg);
+    free(terms);
+    return out;
 }
 
 void root_init(void) {

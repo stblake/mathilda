@@ -35,4 +35,10 @@ void root_init(void);
  * expressed in terms of bvar. */
 Expr* root_make_rootsum(Expr* bvar, Expr* poly, Expr* body);
 
+/* Expand RootSum[Function[p], Function[body]] to the explicit Plus of
+ * body evaluated at Root[Function[p], k], k = 1..deg(p); NULL if not a
+ * two-Function RootSum. Used by N (numeric.c) to sum a RootSum over its roots.
+ * Caller owns the result. */
+Expr* rootsum_expand_over_roots(const Expr* rs);
+
 #endif

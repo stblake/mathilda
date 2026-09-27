@@ -994,9 +994,11 @@ inputs (used by `DSolve`'s Green's-function solutions of impulse-forced ODEs).
   now also evaluates to the closed rational form `A(x)/d(x)` for a *general*
   rational body — by the Rothstein–Trager reduction `A = R d' mod d` (guarded on
   `d` squarefree), not only when the numerator is pre-divided by `d'` — and a
-  `Function`-valued symbol argument is resolved (MATHILDA_DIVERGENCES.md A12,
-  partial: `(x + t)` denominators, `Log` logands and a numeric `N[RootSum]` path
-  remain).
+  `Function`-valued symbol argument is resolved.  The closed form extends to any
+  linear denominator `L(t) = c₁ t + c₀` (pole `ρ = −c₀/c₁`), so an `(x + t)`
+  denominator closes too.  `N[RootSum[…]]` sums the body over the numericalized
+  roots, so a `Log` logand or other non-rational body evaluates numerically
+  (MATHILDA_DIVERGENCES.md A12).
 - **Phase 8c — NaiveLogPart wired as universal LogToReal fallback** —
   the closure preference becomes
     1. `IntRationalLogPart -> LogToReal` (real elementary form),
