@@ -13,9 +13,13 @@ Full plan: `/Users/user/.claude/plans/let-s-review-the-deficiencies-staged-prism
 - [x] Stage 1 — A15a: `{} . {}` segfault → scalar `0`. **v0.210, pushed.**
 - [x] Stage 2 — A15b: `Coefficient[…, x, i]` symbolic exponent → NULL. **v0.211, pushed.**
 - [x] Stage 3 — A11: capture-avoiding `replace_bindings` for scoping constructs. **v0.212, pushed.** (dsolve_tests SIGALRM confirmed pre-existing via A/B.)
-- [~] Stage 4 — A14: **A14a DONE** (v0.213, ToNumberField precision escalation). A14b (PolynomialGCD
-      Extension Root-tower) OPEN — needs a new algebraic-number generator KIND in the radical-centric
-      autodetect_walk/qa_resolve_extension/flint_extension_gcd. Large; deferred (reassess).
+- [x] Stage 4 — A14: **A14a DONE** (v0.213, ToNumberField precision escalation). **A14b DONE**
+      (v0.217): `qa_resolve_extension` recognises a `Root[]` object (new `qa_resolve_root_object` +
+      `GEN_ROOT` autodetect kind in `autodetect_walk`/`autodetect_build_tower`, src/poly/qafactor.c);
+      reused `qaext_from_q_expr`/`expr_qx_is_irreducible`. Far smaller than feared — the tower/GCD
+      machinery was already generic over the minpoly. Reducible Root defining polys declined to gcd
+      over Q. Verified: target case degree-1 gcd, divisibility over Q(c), numeric root, 9 C suites,
+      check-c99, no leak (1x==40x). Tests in test_extension_options.c + test_extension_auto_builtins.c.
 - [x] Stage 5 — A12: **DONE** — sub-steps 1+3 (v0.214: pf-resolution + Rothstein–Trager mod-d reduction),
       sub-steps 2+4 (v0.215: general linear denominator + numeric `N[RootSum]`). All five documented
       A12 cases evaluate; each verified against the explicit sum over roots.
@@ -69,3 +73,25 @@ effort (large, subsystem-wide risk, worked around in the `.m`). B-series items a
 behavioural/by-design.
 
 `make check-c99` passes. Six version tags pushed (v0.210–v0.215).
+
+### Review addendum (2026-09-27, late): the corpus on the v0.216 binary
+
+Re-ran the 371-integral review corpus on v0.216 (the core fixes above post-date the `.m` port).
+Raw: 285 correct but THREE false non-elementary certificates (cube-root `x^-1` binomials) and one
+120 s timeout where the port used to crash. Diagnosed to three new core divergences, each with a
+repro in MATHILDA_DIVERGENCES.md and a `.m` workaround (no C change, nothing committed):
+
+- A16 `PolynomialGCD[x, e, Extension -> Automatic]` = 1 for an unexpanded algebraic constant e = 0
+  -> residue classes silently lost -> unsound certificate. Fixed in the `.m` by expanding before the
+  gcd AND by making a lost class an honest failure (soundness guard, also in the research WL,
+  Python and Maxima ports).
+- A17 `Method -> "OneStepRowReduction"` never finishes on a 20 x 15 parametric matrix
+  (`mixed/rowreduce_onestep_repro.m`); the default method is instant. `.m`: default method with parameters.
+- A18 `Do` iterators inside a package capture a caller's same-named symbol (`Table` does not) --
+  the `{a, Length[monos]}` / `{e, ...}` loops of `AnsatzSystem` substituted loop indices for the
+  parameters a, e. `.m`: iterators renamed (`ma`, `ent`, `ne`). Core: make `Do` capture-avoiding
+  like `Table`; ~150 single-letter iterators in the `.m` remain exposed until then.
+
+Final: 304 correct / 67 gaps / 0 wrong / 0 false certificates (was 279 / 92 / 0 / 0), no regression,
+parameters 22/22. parallelmixedtower_tests pass. Changelog entry in docs/spec/changelog/2026-09-21.md;
+`mixed/review_mathilda.json` replaced.

@@ -117,6 +117,43 @@ static void test_pgcd_sqrt2_explicit_vs_auto(void) {
         "PolynomialGCD[x^2 - 2, x - Sqrt[2], Extension -> Sqrt[2]]");
 }
 
+/* A14b: PolynomialGCD over a Root[]-object extension.  Extension ->
+ * Automatic must detect the Root generator and equal the explicit
+ * Extension -> Root[...] form (MATHILDA_DIVERGENCES.md A14b).  Before the
+ * fix, a Root generator was unrecognised and the gcd collapsed to the
+ * trivial 1. */
+static void test_pgcd_root_extension_auto_vs_explicit(void) {
+    assert_eval_same(
+        "PolynomialGCD[x^5 - x + 1, "
+        "(256 - 625 x - 500 x^2 - 400 x^3 - 320 x^4)/2869 "
+        "- Root[-1 + 15 #1 - 80 #1^2 + 160 #1^3 + 2869 #1^5 &, 1], "
+        "Extension -> Automatic]",
+        "PolynomialGCD[x^5 - x + 1, "
+        "(256 - 625 x - 500 x^2 - 400 x^3 - 320 x^4)/2869 "
+        "- Root[-1 + 15 #1 - 80 #1^2 + 160 #1^3 + 2869 #1^5 &, 1], "
+        "Extension -> Root[-1 + 15 #1 - 80 #1^2 + 160 #1^3 + 2869 #1^5 &, 1]]");
+}
+
+/* The Root-extension gcd is genuinely linear in x (degree 1), not the
+ * trivial 1 the pre-fix code returned. */
+static void test_pgcd_root_extension_nontrivial(void) {
+    assert_eval_eq(
+        "Exponent[PolynomialGCD[x^5 - x + 1, "
+        "(256 - 625 x - 500 x^2 - 400 x^3 - 320 x^4)/2869 "
+        "- Root[-1 + 15 #1 - 80 #1^2 + 160 #1^3 + 2869 #1^5 &, 1], "
+        "Extension -> Automatic], x]", "1", 0);
+}
+
+/* A reducible Root defining polynomial is declined (irreducibility gate):
+ * the extension path falls back to the gcd over Q rather than risk a
+ * zero-divisor.  Must not crash; here x^2 - 4 and x - Root[...] share no
+ * factor over Q, so the gcd is 1. */
+static void test_pgcd_root_reducible_declines(void) {
+    assert_eval_eq(
+        "PolynomialGCD[x^2 - 4, x - Root[#1^2 - 4 &, 1], "
+        "Extension -> Automatic]", "1", 0);
+}
+
 /* =========================== PolynomialLCM =========================== */
 
 static void test_plcm_cbrt2_explicit_vs_auto(void) {
@@ -804,6 +841,9 @@ int main(void) {
     TEST(test_pgcd_no_extension);
     TEST(test_pgcd_cbrt2_explicit_vs_auto);
     TEST(test_pgcd_sqrt2_explicit_vs_auto);
+    TEST(test_pgcd_root_extension_auto_vs_explicit);
+    TEST(test_pgcd_root_extension_nontrivial);
+    TEST(test_pgcd_root_reducible_declines);
 
     TEST(test_plcm_cbrt2_explicit_vs_auto);
 

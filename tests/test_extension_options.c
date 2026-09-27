@@ -94,6 +94,15 @@ void test_polygcd_extension(void) {
     /* Three-arg form folds left-to-right. */
     run_eq("PolynomialGCD[x^4 - 4, x^2 - 2, x - Sqrt[2], "
            "Extension -> Sqrt[2]]", "-Sqrt[2] + x");
+
+    /* A14b: an explicit Root[] object as the extension generator.  The
+     * gcd is rendered in terms of the Root object (index preserved). */
+    run_eq("PolynomialGCD[x^2 - 2, x - Root[#^2 - 2 &, 2], "
+           "Extension -> Root[#^2 - 2 &, 2]]",
+           "-Root[#1^2 - 2 &, 2] + x");
+    run_eq("PolynomialGCD[x^2 - 2, x - Root[#^2 - 2 &, 1], "
+           "Extension -> Root[#^2 - 2 &, 1]]",
+           "-Root[#1^2 - 2 &, 1] + x");
 }
 
 /* ------------------------------------------------------------------ */

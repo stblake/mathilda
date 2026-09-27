@@ -37,6 +37,14 @@ extern Expr* internal_call_impl(const char* name,
 static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
                                         Expr** render_out);
 
+/* Forward decl: Root-object extension recogniser (A14b).  Defined next to
+ * qa_resolve_nested_radical (bottom of file) so that qaext_from_q_expr and
+ * expr_qx_is_irreducible are in scope; called from qa_resolve_extension when
+ * the surface form is a `Root[Function[...], k]` object.  Returns a fresh
+ * QAExt (caller owns) and writes `*render_out` on success; NULL otherwise. */
+static QAExt* qa_resolve_root_object(const Expr* alpha_expr,
+                                     Expr** render_out);
+
 /* ============================== mpq → Expr ============================== */
 
 /* Convert an mpq_t to a Mathilda Expr.  Returns Integer when the
@@ -691,6 +699,19 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
             *render_out = expr_copy((Expr*)alpha_expr);
             return ext;
         }
+    }
+
+    /* Root[Function[...], k]  →  its defining polynomial is the minimal
+     * polynomial of the abstract generator α = c; render = the whole Root
+     * object (index k preserved).  Delegated to qa_resolve_root_object,
+     * defined below near qa_resolve_nested_radical so the QAExt-from-Q[y]
+     * and irreducibility helpers are in scope. */
+    if (alpha_expr->type == EXPR_FUNCTION
+        && alpha_expr->data.function.head
+        && alpha_expr->data.function.head->type == EXPR_SYMBOL
+        && alpha_expr->data.function.head->data.symbol.name == SYM_Root) {
+        QAExt* ext = qa_resolve_root_object(alpha_expr, render_out);
+        if (ext) return ext;
     }
 
     /* Power[c, p/q]  →  natural generator β = c^(1/q_red) with minimal
@@ -3283,6 +3304,84 @@ static bool expr_qx_is_irreducible(const Expr* R, const char* z_name) {
 /* Phase G8 entry: resolve `Sqrt[base]` / `base^(1/n)` with non-rational
  * `base` to a (QAExt, render) pair via the algorithm in FACTOR_PLAN
  * §14 Phase G8. */
+/* qa_resolve_root_object (A14b): recognise a `Root[Function[...], k]` object
+ * as an algebraic generator α = c.  The Root's defining polynomial becomes the
+ * minimal polynomial of the abstract field Q(α).
+ *
+ * Both Function shapes are accepted:
+ *   Root[Function[t, body], k]   — named variable t (body a polynomial in t)
+ *   Root[Function[body], k]      — Slot form (body a polynomial in #1 = Slot[1])
+ * The body is lifted into Q[QA_Z_INTERNAL] by substituting the internal
+ * generator symbol for t / Slot[1], expanded, then required to be Q-irreducible:
+ * QAExt inversion needs a field, and a Root's defining polynomial is not
+ * guaranteed irreducible, so a reducible one is DECLINED (→ the caller computes
+ * the gcd over Q rather than returning a wrong answer).  `qaext_from_q_expr`
+ * makes it monic over Q.  The render is the whole Root object, so results are
+ * expressed in the user's `c` and the conjugate index k is preserved for
+ * numeric identity. */
+static QAExt* qa_resolve_root_object(const Expr* alpha_expr,
+                                     Expr** render_out) {
+    if (!alpha_expr || alpha_expr->type != EXPR_FUNCTION) return NULL;
+    if (!alpha_expr->data.function.head
+        || alpha_expr->data.function.head->type != EXPR_SYMBOL
+        || alpha_expr->data.function.head->data.symbol.name != SYM_Root
+        || alpha_expr->data.function.arg_count < 2) return NULL;
+
+    const Expr* fn  = alpha_expr->data.function.args[0];
+    const Expr* idx = alpha_expr->data.function.args[1];
+
+    /* Second argument: a positive integer root index k. */
+    if (!idx || idx->type != EXPR_INTEGER || idx->data.integer < 1) return NULL;
+
+    /* First argument: Function[t, body] or Function[body]. */
+    if (!fn || fn->type != EXPR_FUNCTION
+        || !fn->data.function.head
+        || fn->data.function.head->type != EXPR_SYMBOL
+        || fn->data.function.head->data.symbol.name != SYM_Function)
+        return NULL;
+
+    const Expr* body = NULL;
+    Expr* pattern = NULL;   /* the variable / slot replaced by QA_Z_INTERNAL */
+    if (fn->data.function.arg_count == 2
+        && fn->data.function.args[0]->type == EXPR_SYMBOL) {
+        /* Named form: Function[t, body]. */
+        pattern = expr_copy(fn->data.function.args[0]);
+        body = fn->data.function.args[1];
+    } else if (fn->data.function.arg_count == 1) {
+        /* Slot form: Function[body], body uses #1 = Slot[1]. */
+        Expr* one = expr_new_integer(1);
+        Expr* slot_args[1] = { one };
+        pattern = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
+        body = fn->data.function.args[0];
+    } else {
+        return NULL;
+    }
+
+    /* Lift the body into Q[QA_Z_INTERNAL]. */
+    Expr* w_sym = expr_new_symbol(QA_Z_INTERNAL);
+    Expr* body_in_w = expr_subst(body, pattern, w_sym);
+    expr_free(pattern);
+    expr_free(w_sym);
+    if (!body_in_w) return NULL;
+
+    Expr* P = expr_expand(body_in_w);
+    expr_free(body_in_w);
+    if (!P) return NULL;
+
+    /* QAExt inversion requires an irreducible minimal polynomial. */
+    if (!expr_qx_is_irreducible(P, QA_Z_INTERNAL)) {
+        expr_free(P);
+        return NULL;
+    }
+
+    QAExt* ext = qaext_from_q_expr(P, QA_Z_INTERNAL);   /* monic over Q */
+    expr_free(P);
+    if (!ext) return NULL;
+
+    *render_out = expr_copy((Expr*)alpha_expr);
+    return ext;
+}
+
 static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
                                         Expr** render_out) {
     if (!alpha_expr || alpha_expr->type != EXPR_FUNCTION) return NULL;
@@ -3458,6 +3557,7 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
 typedef enum {
     GEN_INT_BASE,    /* Power[integer, 1/q_lcm], represented compactly */
     GEN_NESTED,     /* Power[non-integer-base, 1/q]: stored by borrowed Expr */
+    GEN_ROOT,       /* Root[Function[...], k]: stored by borrowed Expr in .render */
     GEN_ABSORBED    /* Nested generator whose canonical surface simplified
                      * to a Times of existing-generator powers via the Power
                      * canonicaliser (e.g. Sqrt[1/3/2^(2/3)] -> 1/(2^(1/3)
@@ -3519,6 +3619,25 @@ static bool autodetect_add_nested(AutodetectGen* gens, size_t* n, size_t max,
     }
     if (*n >= max) { *bail = true; return false; }
     gens[*n].kind = GEN_NESTED;
+    gens[*n].base = 0;
+    gens[*n].q_lcm = 0;
+    gens[*n].render = surface;
+    (*n)++;
+    return true;
+}
+
+/* Merge a Root[...] object into the generator set (A14b).  Dedup is by
+ * structural Expr equality on the whole Root object (including its index). */
+static bool autodetect_add_root(AutodetectGen* gens, size_t* n, size_t max,
+                                const Expr* surface, bool* bail) {
+    for (size_t i = 0; i < *n; i++) {
+        if (gens[i].kind == GEN_ROOT && gens[i].render
+            && expr_eq((Expr*)gens[i].render, (Expr*)surface)) {
+            return true;
+        }
+    }
+    if (*n >= max) { *bail = true; return false; }
+    gens[*n].kind = GEN_ROOT;
     gens[*n].base = 0;
     gens[*n].q_lcm = 0;
     gens[*n].render = surface;
@@ -3667,6 +3786,15 @@ static void autodetect_walk(const Expr* e, AutodetectGen* gens,
                 return;
             }
         }
+        return;
+    }
+
+    /* Root[Function[...], k]: an algebraic generator (A14b).  Surface the
+     * whole Root object and do NOT recurse into it — its Slot/Function body
+     * would otherwise be mined for bogus sub-generators (mirrors
+     * collect_variables' deliberate Root-skip at poly.c). */
+    if (head == SYM_Root && e->data.function.arg_count >= 2) {
+        autodetect_add_root(gens, n, max, e, bail);
         return;
     }
 
@@ -4081,6 +4209,10 @@ static QATower* autodetect_build_tower(const AutodetectGen* gens, size_t n) {
             Expr* pow_args[2] = { base_e, exp_e };
             alpha_exprs[i] = expr_new_function(expr_new_symbol(SYM_Power),
                                                pow_args, 2);
+        } else if (gens[i].kind == GEN_ROOT) {
+            /* GEN_ROOT: surface form is the whole Root object, borrowed from
+             * the input; deep-copy for qa_resolve_extension_tower. */
+            alpha_exprs[i] = expr_copy((Expr*)gens[i].render);
         } else {
             /* GEN_NESTED: surface form is borrowed from the input.  Deep-
              * copy so qa_resolve_extension_tower can claim it (it borrows

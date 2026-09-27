@@ -31,16 +31,24 @@ historical record. Verified against the live binary, most of section A is now fi
 | A11 `Module`/pattern-var captures an arg-value symbol | **FIXED** | v0.212 — capture-avoiding `replace_bindings` |
 | A12 `RootSum` restricted / non-numeric | **FIXED** | v0.214/v0.215 — Rothstein–Trager reduction, general linear denominator, numeric `N[RootSum]`; all five documented cases evaluate |
 | A13 `Series` of a large radical quotient | **FIXED** | evaluates on the live binary |
-| A14 `PolynomialGCD[…, Extension]` / `ToNumberField[Root, gen]` | **PARTIAL** | `ToNumberField` half fixed v0.213; `PolynomialGCD` Root-tower still open (A14b) |
+| A14 `PolynomialGCD[…, Extension]` / `ToNumberField[Root, gen]` | **FIXED** | `ToNumberField` half v0.213 (A14a); `PolynomialGCD`/`Extension` Root generator v0.217 (A14b) |
 | A15a `{} . {}` segfault | **FIXED** | v0.210 |
 | A15b `Coefficient[…, x, i]` symbolic exponent | **FIXED** | v0.211 |
+| A16 `PolynomialGCD[p, e, Extension -> Automatic]`, `e` an unexpanded algebraic constant equal to 0 | **OPEN** | returns 1 (found on the v0.216 corpus re-run, 2026-09-27 late); `.m` expands and reduces before every extension gcd |
+| A17 `RowReduce[m, Method -> "OneStepRowReduction"]` with parametric entries | **OPEN** | does not finish on a 20 x 15 system linear in two parameters; `.m` uses the default method when parameters are present |
+| A18 a `Do` iterator inside a package captures a caller's same-named symbol | **OPEN** | `Table` is capture-avoiding, `Do` is not (the A11 fix does not cover it); `.m` iterators on the assembly path renamed |
 | B1 `ToNumberField` non-canonical primitive element | **OPEN** (behavioural, by design) | `.m` reads whatever theta comes back |
 | B2–B6 | behavioural; see each entry | mostly by-design / hard |
 
-Remaining core work: the **A14 `PolynomialGCD` Root-tower** half (A14b) — needs a new
-algebraic-number generator kind threaded through the radical-oriented autodetect/tower/extension-gcd
-pipeline; deferred to a dedicated effort. Everything else in section A is resolved; the section-D `.m`
-workarounds for the fixed items already delegate to the fixed builtins.
+Remaining core work: the three items found when the review corpus was re-run
+on v0.216 (2026-09-27, late): **A16** (extension gcd against an unexpanded zero constant, the cause of
+three FALSE non-elementary certificates on the raw run), **A17** (`OneStepRowReduction` on a parametric
+matrix) and **A18** (`Do` iterators capture a caller's symbol; `Table` does not). Each has a one-line
+repro below and a `.m` workaround (section D). The **A14 `PolynomialGCD` Root generator** half (A14b)
+is now **FIXED** in v0.217 — `qa_resolve_extension` recognises a `Root[]` object as an algebraic
+generator through the radical-oriented autodetect/tower/extension-gcd pipeline (a `GEN_ROOT`
+autodetect kind; reducible Root defining polynomials are declined to the gcd over Q). Everything
+else in section A is resolved.
 
 ## A. Correctness: wrong or missing results
 
@@ -202,16 +210,24 @@ certificate came out as `{0, 0}` instead of `{-2, 2}`). The `.m` computes every 
 infinity by polynomial arithmetic (`LaurentPolyTimes`, `InfLaurent`: truncated inverse modulo `t^(n+1)`,
 binomial series for `qsn^alpha`), and no longer calls `Series` there.
 
-### A14. `PolynomialGCD[p, q, Extension -> Automatic]` with a `Root` object returns 1; `ToNumberField[a, theta]` with a `Root` theta stays unevaluated
+### A14. `PolynomialGCD[p, q, Extension -> Automatic]` with a `Root` object returns 1; `ToNumberField[a, theta]` with a `Root` theta stays unevaluated  — **FIXED** (A14a v0.213, A14b v0.217)
 
 ```
 p = x^5 - x + 1; tau0 = 256/2869 - 625 x/2869 - 500 x^2/2869 - 400 x^3/2869 - 320 x^4/2869;
 c = Root[-1 + 15 #1 - 80 #1^2 + 160 #1^3 + 2869 #1^5 &, 1];
-PolynomialGCD[p, tau0 - c, Extension -> Automatic]         (* 1;  Mathematica: 256 + 625 x + 309 c + 21716 c^2 + 45904 c^3 + 183616 c^4 *)
-ToNumberField[Root[-1 - #1 + #1^5 &, 1], c]               (* unevaluated;  Mathematica: AlgebraicNumber[c, {...}] *)
+PolynomialGCD[p, tau0 - c, Extension -> Automatic]         (* was 1; now the degree-1 gcd over Q(c), Mathematica's answer up to the unit 625 *)
+ToNumberField[Root[-1 - #1 + #1^5 &, 1], c]               (* was unevaluated; now evaluates (A14a, v0.213) *)
 ```
-`ResidueClasses` therefore reports a `Root`-object residue value instead of taking that gcd (`hasRoot`), and
-the caller realises the whole logarithmic part over the prime as one RootSum (A12).
+Both halves are fixed. **A14a** (v0.213): `ToNumberField[a, theta]` with a `Root` theta escalates
+membership precision at every degree and evaluates. **A14b** (v0.217): `qa_resolve_extension`
+(`src/poly/qafactor.c`) recognises a `Root[Function[...], k]` object as an algebraic generator —
+its (monic-over-Q) defining polynomial becomes the minimal polynomial of `Q(c)`, rendered back in
+terms of the Root; a `GEN_ROOT` autodetect kind drives `Extension -> Automatic`. The fix flows to
+`Cancel`/`Together`/`PolynomialLCM`/`Quotient`/`Remainder`/`Factor`/`IrreduciblePolynomialQ` under
+`Extension`. A **reducible** Root defining polynomial is declined (falls back to the gcd over Q).
+The pre-fix inline comments above are kept as the historical snapshot. Consequently `ResidueClasses`
+can now take that gcd over `Q(c)` directly rather than realising the whole logarithmic part as one
+RootSum (the `hasRoot` workaround in the `.m` can be revisited).
 
 ### A15. `Sum` with a symbolic body, `Dot` with a symbolic vector, and `{} . {}`
 
@@ -223,6 +239,56 @@ Coefficient[t + 2 t^2, t, i]                            (* 1 for a symbolic i;  
 ```
 `Sum` evaluates the body with the iterator symbolic (`Coefficient[..., i]` -> 1) and then sums `t^i` in
 closed form. The `.m`'s truncation helper (`PMTruncate`) is an explicit `Do` loop over `CoefficientList`.
+
+### A16. `PolynomialGCD[p, e, Extension -> Automatic]` returns 1 when `e` is an unexpanded algebraic constant that equals 0
+
+```
+c = 1/2 (-1 - I Sqrt[3]); e = c^3 - 1;                (* e is 0: Expand, RootReduce, Together, Simplify all give 0 *)
+PolynomialGCD[x, e, Extension -> Automatic]           (* 1;  Mathematica: x *)
+PolynomialGCD[x, Expand[e], Extension -> Automatic]   (* x *)
+PolynomialGCD[x^2 + 1, e x + (c^2 + c + 1), Extension -> Automatic]   (* 1;  with Expand on the second argument: 1 + x^2 *)
+```
+`ResidueClasses` substitutes a residue value `c` into the characteristic polynomial of the residue and takes
+the gcd with the prime. For the cube-root binomials `x^-1 (1 + x^2)^(1/3)`, `1/(x (x^2 - 1)^(1/3))`, ... the
+quadratic factor `z^2 + z + 1` of the residue polynomial gave a trivial gcd, the two classes were dropped,
+and -- the package then skipping a class with no places -- the holomorphic-remainder certificate fired on an
+incomplete residue divisor: three FALSE "not elementary" verdicts (corpus R060, R131, R137) on the raw
+v0.216 run. On the old core the residue polynomial itself came out degenerate ("degenerate residue
+polynomial"), so this line was never reached. The `.m` now expands and reduces the coefficients
+(`Collect[Expand[..], g, RRad]`) before every extension gcd in `ResidueClasses`, and an empty gcd for a
+root of the residue polynomial -- mathematically impossible -- is an honest `{"failed", "residue class
+lost: ..."}`; the same guard is in the research WL, Python and Maxima ports.
+
+### A17. `RowReduce[m, Method -> "OneStepRowReduction"]` does not terminate on a small parametric matrix
+
+```
+Get["mixed/rowreduce_onestep_repro.m"]   (* aug: 20 x 15, entries linear in a, b -- the ansatz system of Exp[a x] Sin[b x] *)
+RowReduce[aug]                                        (* 0.0 s, rank 12, the same reduced matrix as Mathematica *)
+RowReduce[aug, Method -> "OneStepRowReduction"]       (* > 90 s, killed;  Mathematica: 1e-5 s *)
+RowReduce[aug, Method -> "DivisionFreeRowReduction"]  (* 0.0 s *)
+```
+`AnsatzSystem` used the one-step method for every system (two orders of magnitude faster than the default
+on AlgebraicNumber entries). With parameters present (`! FreeQ[aug, _Symbol?(! NumericQ[#] &)]`) the `.m`
+now uses the default method; `Exp[a x] Sin[b x]` went from "time budget exceeded" to 1 s.
+
+### A18. A `Do` iterator inside a package body captures a caller's symbol of the same name (`Table` does not)
+
+```
+BeginPackage["P`"]; g::usage = "g"; h::usage = "h"; Begin["`Private`"];
+g[v_] := Module[{s = 0}, Do[s += v, {a, 3}]; s];   h[v_] := Table[v, {a, 3}];
+End[]; EndPackage[];
+g[a]                    (* 6;         Mathematica: 3 a  (its iterator is P`Private`a) *)
+h[a]                    (* {a, a, a}: correct *)
+g[b]                    (* 3 b:       correct *)
+Names["P`Private`*"]    (* {P`Private`s$1}: no P`Private`a is ever created *)
+```
+The A11 fix (v0.212) covers `Module` locals and pattern variables; a `Do` iterator is still bound by name.
+`AnsatzSystem` iterated over the monomials with `{a, Length[monos]}` and over the matrix entries with
+`{e, ...}`, so every integrand with a parameter named `a` or `e` was assembled with the parameter replaced
+by loop indices: `Log[x + a]` "no solution within bounds", `x Exp[a x]`, `Exp[a x] Sin[b x]`, `Log[e + x]`,
+`x^a` a wrong surface, rejected by the verify gate (never a wrong answer). The `.m` renames those iterators
+(`ma`, `ent`, `ne`); the other single-letter iterators of the package (`i`, `k`, `c`, `n`, `p`, `g`, ...
+about 150 sites) stay exposed to a parameter of that name until `Do` is made capture-avoiding like `Table`.
 
 ## B. Behavioural differences (not wrong, but code written against Mathematica's output breaks)
 
@@ -300,8 +366,13 @@ return the certificate `{"not elementary", "residue divisor not torsion: reducti
 | `LaurentPolyTimes` / `InfLaurent` (exact expansions at infinity), `PMTruncate` as a `Do` loop | `Series`, `Sum` over a symbolic iterator | A13, A15 |
 | `Together` on the reduced matrix and on the residual with symbolic parameters (`AnsatzSystem`) | -- | A11 (partial) |
 | parameters substituted by fixed rationals in the verify gate | -- | A11 (partial) |
+| `Collect[Expand[..], g, RRad]` before every extension gcd in `ResidueClasses` (and the honest failure for a lost class) | -- | A16 |
+| the default `RowReduce` method when the ansatz matrix has parameters (`AnsatzSystem`) | `Method -> "OneStepRowReduction"` for every system | A17 |
+| iterators `ma`, `ent` in `AnsatzSystem` and `ne` in the realisation | `a`, `e` | A18 |
 
-The research copy `ParallelMixed.wl` (Mathematica) has none of these and is the reference for the intended code.
+The research copy `ParallelMixed.wl` (Mathematica) has none of these and is the reference for the intended
+code -- except that it carries the A16 expansion and honest failure (a soundness guard in every port), the
+A17 method choice and the A18 renames as well, all harmless there.
 
 <!-- charlwood-300 -->
 ## E. Charlwood's fifty integrals at the 300 s protocol (2026-09-23, build 0.175)
