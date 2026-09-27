@@ -33,4 +33,39 @@ Each behaviour-changing stage: unit test → build → audits (if numeric) → v
 
 ## Review
 
-(summary added at the end)
+Reconciled MATHILDA_DIVERGENCES.md (a snapshot from build 0.169) against the live
+v0.209 binary: A1–A10 and A13 were already fixed by commit 3c12c301. Fixed the
+genuinely-open items one-by-one, each verified and shipped (version bump + tag + push
++ changelog + doc-sync + regression test):
+
+- v0.210 — A15a: `{} . {}` segfault → scalar 0 (`src/linalg/dot.c`; R/S as products
+  of non-contracted dims, removing the divide-by-K special case).
+- v0.211 — A15b: `Coefficient[…, x, i]` with a non-integer exponent stays unevaluated
+  (`src/poly/poly.c`).
+- v0.212 — A11: capture-avoiding `replace_bindings` (`src/match.c` + new
+  `scoping_capture_avoid`/`expr_is_binding_scope` in `src/modular.c`) — scoping locals
+  no longer swallow a free parameter; also fixes the mirror shadow case. Highest impact
+  (silent-wrong on the integration hot path). dsolve_tests' pre-existing SIGALRM confirmed
+  unchanged by isolated A/B.
+- v0.213 — A14a: `ToNumberField[a, theta]` escalates membership precision at every degree
+  (`src/poly/flint_qqbar.c`), scoped to the builtin so the dsolve-facing gate is untouched.
+- v0.214 — A12 (part 1): RootSum general rational body via Rothstein–Trager reduction +
+  Function-valued-symbol resolution (`src/root.c`).
+- v0.215 — A12 (part 2): RootSum general linear denominator + numeric `N[RootSum]`
+  (`src/root.c`, `src/numeric.c`). All five documented A12 cases evaluate; each checked
+  against the explicit sum over roots.
+
+Doc-only (no bump): reconciled MATHILDA_DIVERGENCES.md STATUS.
+
+Workaround removal: the section-D mod-p/PadRows workarounds in the uncommitted `.m` already
+delegate to the fixed builtins (deliberate, "call sites unchanged"); nothing to remove
+without fighting that design. Certificate engine verified regression-free
+(parallelmixedtower_tests pass; A6/P1 answers byte-identical with/without A11).
+
+Remaining open: **A14b** — `PolynomialGCD[…, Extension->Automatic]` with a `Root` generator.
+Needs a new algebraic-number generator kind threaded through the radical-oriented
+autodetect_walk/qa_resolve_extension/flint_extension_gcd pipeline; deferred to a dedicated
+effort (large, subsystem-wide risk, worked around in the `.m`). B-series items are
+behavioural/by-design.
+
+`make check-c99` passes. Six version tags pushed (v0.210–v0.215).
