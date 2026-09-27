@@ -1115,6 +1115,8 @@ Gives the coefficient of a specific form in a polynomial.
 **Features**:
 - `Protected`, `Listable`.
 - `Coefficient[expr, form, 0]` picks out terms that do NOT contain `form`.
+- `Coefficient[expr, form, n]` stays unevaluated when `n` is not an explicit
+  integer (a symbol, `Real`, or `Rational`).
 - Works whether or not `expr` is explicitly given in expanded form (it automatically expands internally).
 - Treats distinct transcendental powers as algebraically unrelated (e.g., `x^s` is treated as a separate base from `x`).
 

@@ -453,7 +453,13 @@ Expr* builtin_coefficient(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count < 2 || res->data.function.arg_count > 3)) return NULL;
     Expr* original_expr = res->data.function.args[0];
     Expr* form = res->data.function.args[1];
-    int64_t n = (res->data.function.arg_count == 3 && res->data.function.args[2]->type == EXPR_INTEGER) ? res->data.function.args[2]->data.integer : 1;
+    /* A non-integer exponent (a symbol, Real, or Rational) has no determined
+     * coefficient: stay unevaluated rather than silently reading it as n = 1.
+     * Coefficient[t + 2 t^2, t, i] with symbolic i must NOT return 1 -- that
+     * poisoned Sum[Coefficient[...] t^i, {i, ...}] (MATHILDA_DIVERGENCES A15b). */
+    if (res->data.function.arg_count == 3 && res->data.function.args[2]->type != EXPR_INTEGER)
+        return NULL;
+    int64_t n = (res->data.function.arg_count == 3) ? res->data.function.args[2]->data.integer : 1;
 
     Expr* expanded = expr_expand(original_expr);
     if (!expanded) return NULL;

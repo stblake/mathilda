@@ -70,6 +70,9 @@ void test_expand_coeff() {
     run_test("Coefficient[x^s x, x^s]", "x");
     run_test("Coefficient[x^s x^t, x^s]", "Power[x, t]");
     run_test("Coefficient[(x+y)^4, x y^3]", "4");
+    /* A symbolic exponent stays unevaluated (was silently n = 1; A15b). */
+    run_test("Coefficient[t + 2 t^2, t, i]", "Coefficient[Plus[t, Times[2, Power[t, 2]]], t, i]");
+    run_test("Sum[Coefficient[t + 2 t^2, t, i] t^i, {i, 0, 1}]", "t");
 }
 
 void test_polynomialgcd() {
