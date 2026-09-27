@@ -29,16 +29,18 @@ historical record. Verified against the live binary, most of section A is now fi
 | A9 `OptionValue` under `OptionsPattern[other]` | **FIXED** (common case) | resolves against `other` |
 | A10 nested/stored `Function` closures | **FIXED** (common cases) | |
 | A11 `Module`/pattern-var captures an arg-value symbol | **FIXED** | v0.212 — capture-avoiding `replace_bindings` |
-| A12 `RootSum` restricted / non-numeric | **OPEN** | worked around in the `.m`; research-grade |
+| A12 `RootSum` restricted / non-numeric | **FIXED** | v0.214/v0.215 — Rothstein–Trager reduction, general linear denominator, numeric `N[RootSum]`; all five documented cases evaluate |
 | A13 `Series` of a large radical quotient | **FIXED** | evaluates on the live binary |
-| A14 `PolynomialGCD[…, Extension]` / `ToNumberField[Root, gen]` | **PARTIAL** | `ToNumberField` half fixed v0.213; `PolynomialGCD` Root-tower still open |
+| A14 `PolynomialGCD[…, Extension]` / `ToNumberField[Root, gen]` | **PARTIAL** | `ToNumberField` half fixed v0.213; `PolynomialGCD` Root-tower still open (A14b) |
 | A15a `{} . {}` segfault | **FIXED** | v0.210 |
 | A15b `Coefficient[…, x, i]` symbolic exponent | **FIXED** | v0.211 |
 | B1 `ToNumberField` non-canonical primitive element | **OPEN** (behavioural, by design) | `.m` reads whatever theta comes back |
 | B2–B6 | behavioural; see each entry | mostly by-design / hard |
 
-Remaining core work: **A12** (RootSum) and the **A14 `PolynomialGCD` Root-tower** half. Everything else
-in section A is resolved; the section-D `.m` workarounds for the fixed items can be removed.
+Remaining core work: the **A14 `PolynomialGCD` Root-tower** half (A14b) — needs a new
+algebraic-number generator kind threaded through the radical-oriented autodetect/tower/extension-gcd
+pipeline; deferred to a dedicated effort. Everything else in section A is resolved; the section-D `.m`
+workarounds for the fixed items already delegate to the fixed builtins.
 
 ## A. Correctness: wrong or missing results
 
