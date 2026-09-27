@@ -298,8 +298,15 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
     size_t idxA = 0; if (N_A > 0) flatten_tensor(a, flatA, &idxA);
     size_t idxB = 0; if (N_B > 0) flatten_tensor(b, flatB, &idxB);
 
-    int64_t R = K == 0 ? N_A : N_A / K;
-    int64_t S = K == 0 ? N_B : N_B / K;
+    /* Outer sizes: the product of the NON-contracted dimensions of each operand
+     * (all but A's last axis, all but B's first). Computed as an explicit product
+     * rather than N/K so that a zero contraction axis (K == 0, i.e. empty vectors)
+     * still gives R = S = 1 for the rank1.rank1 case: the empty inner product then
+     * fills the single result slot with the scalar 0 below, instead of leaving R
+     * and S at 0 -- which produced a NULL flatC and a rank-0 build_tensor deref
+     * (segfault on `{} . {}`). For K > 0 this is exactly N_A/K and N_B/K. */
+    int64_t R = 1; for (int i = 0; i < rankA - 1; i++) R *= dimsA[i];
+    int64_t S = 1; for (int i = 1; i < rankB; i++)     S *= dimsB[i];
 
     Expr** flatC = NULL;
     if (R * S > 0) flatC = malloc(sizeof(Expr*) * (R * S));

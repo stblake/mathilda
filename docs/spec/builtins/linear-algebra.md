@@ -526,7 +526,8 @@ Gives products of vectors, matrices, and tensors.
 - `Flat`, `OneIdentity`, `Protected`.
 - Contracts the last index in `a` with the first index in `b`.
 - Applying `Dot` to a rank `n` tensor and a rank `m` tensor gives a rank `m+n-2` tensor.
-- Scalar product of two vectors yields a scalar.
+- Scalar product of two vectors yields a scalar; the empty inner product
+  `{} . {}` is the empty sum `0`.
 - Product of a matrix and a vector yields a vector.
 - Product of two matrices yields a matrix.
 - When arguments are not lists, `Dot` remains unevaluated.

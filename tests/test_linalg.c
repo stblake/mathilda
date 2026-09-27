@@ -32,6 +32,8 @@ void run_test(const char* input, const char* expected) {
 void test_dot() {
     run_test("{a, b, c} . {x, y, z}", "Plus[Times[a, x], Times[b, y], Times[c, z]]");
     run_test("CompoundExpression[Set[u, List[1, 1]], Set[v, List[-1, 1]], Dot[u, v]]", "0");
+    /* Empty inner product: {} . {} is the empty sum = 0 (once segfaulted; A15a). */
+    run_test("{} . {}", "0");
     run_test("{{a, b}, {c, d}} . {x, y}", "List[Plus[Times[a, x], Times[b, y]], Plus[Times[c, x], Times[d, y]]]");
     run_test("{x, y} . {{a, b}, {c, d}}", "List[Plus[Times[a, x], Times[c, y]], Plus[Times[b, x], Times[d, y]]]");
     run_test("{x, y} . {{a, b}, {c, d}} . {r, s}", "Plus[Times[r, Plus[Times[a, x], Times[c, y]]], Times[s, Plus[Times[b, x], Times[d, y]]]]");
