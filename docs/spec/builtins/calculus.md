@@ -990,7 +990,13 @@ inputs (used by `DSolve`'s Green's-function solutions of impulse-forced ODEs).
   derivatives flowing through the body via the `D[RootSum, x]` rule
   in `src/calculus/deriv.c`.  See `src/root.c` for the held `Root` and
   `RootSum` constructs (HoldAll + Protected).  Direct port of
-  `IntegrateRational.m:1116-1124`.
+  `IntegrateRational.m:1116-1124`.  `RootSum[Function[t, d], Function[t, R(t)/(x - t)]]`
+  now also evaluates to the closed rational form `A(x)/d(x)` for a *general*
+  rational body — by the Rothstein–Trager reduction `A = R d' mod d` (guarded on
+  `d` squarefree), not only when the numerator is pre-divided by `d'` — and a
+  `Function`-valued symbol argument is resolved (MATHILDA_DIVERGENCES.md A12,
+  partial: `(x + t)` denominators, `Log` logands and a numeric `N[RootSum]` path
+  remain).
 - **Phase 8c — NaiveLogPart wired as universal LogToReal fallback** —
   the closure preference becomes
     1. `IntRationalLogPart -> LogToReal` (real elementary form),

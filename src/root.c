@@ -138,6 +138,8 @@ static Expr* simplify_rational(Expr* e) {
  * the 2-arg named form `Function[t, expr]`.  Returns NULL when `fn` is not a
  * Function of one or two arguments (with a symbol bound variable). */
 static Expr* substitute_bvar_with_slot(Expr* e, const char* bvar_name);   /* fwd */
+static Expr* subst_symbol(Expr* e, const char* name, Expr* repl);         /* fwd */
+static bool  rootsum_poly_squarefree(Expr* poly_var, Expr* var);          /* fwd */
 static Expr* rootsum_fn_body_slot(Expr* fn) {
     if (fn->type != EXPR_FUNCTION
         || fn->data.function.head->type != EXPR_SYMBOL
@@ -204,19 +206,40 @@ static Expr* rootsum_try_lagrange(Expr* poly_fn, Expr* body_fn) {
     bool a_is_poly = pq && pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True;
     int deg_a = a_is_poly ? get_degree_poly(a_rv, rv) : -1;
     int deg_d = get_degree_poly(poly_rv, rv);
-    bool shape_ok = a_is_poly && deg_a >= 0 && deg_d >= 1 && deg_a < deg_d;
     if (pq) expr_free(pq);
-    expr_free(a_rv); expr_free(poly_rv); expr_free(rv);
+
+    /* Rothstein-Trager reduction: only the VALUES a(alpha) at roots of d matter,
+     * so a(#) may be reduced modulo d(#).  When a is a polynomial of degree >=
+     * deg d, reduce it to the residue A = a mod d (degree < deg d); then the
+     * Lagrange identity gives A(x)/d(x).  This evaluates the general rational
+     * body R(#)/(x-#) (rational-constant or parametric numerators, and bodies
+     * not pre-divided by d'), matching Mathematica.  Valid only for squarefree
+     * d, so guard on it. */
+    if (a_is_poly && deg_d >= 1 && deg_a >= deg_d
+        && rootsum_poly_squarefree(poly_rv, rv)) {
+        Expr* rem = internal_polynomialremainder(
+            (Expr*[]){ expr_copy(a_rv), expr_copy(poly_rv), expr_copy(rv) }, 3);
+        if (rem) {
+            expr_free(a_rv);
+            a_rv = rem;
+            deg_a = get_degree_poly(a_rv, rv);
+        }
+    }
+
+    bool shape_ok = a_is_poly && deg_a >= 0 && deg_d >= 1 && deg_a < deg_d;
 
     if (!shape_ok) {
+        expr_free(a_rv); expr_free(poly_rv); expr_free(rv);
         expr_free(a_of_slot); expr_free(slot); expr_free(x);
         expr_free(poly); expr_free(body);
         return NULL;
     }
 
-    /* a(x) = a_of_slot[Slot[1] -> x],  d(x) = poly[Slot[1] -> x]. */
-    Expr* a_at_x = subst_slot1(a_of_slot, x);
+    /* a(x) = a_rv[RootSum$sv -> x],  d(x) = poly[Slot[1] -> x].  a_rv is the
+     * (possibly reduced) numerator polynomial in the root variable. */
+    Expr* a_at_x = subst_symbol(a_rv, "RootSum$sv", x);
     Expr* d_at_x = subst_slot1(poly, x);
+    expr_free(a_rv); expr_free(poly_rv); expr_free(rv);
     expr_free(a_of_slot); expr_free(slot);
 
     /* Build a(x)/d(x).  Run Together so the rational form prints
@@ -236,7 +259,14 @@ static Expr* builtin_rootsum(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* fn1 = res->data.function.args[0];
     Expr* fn2 = res->data.function.args[1];
-    Expr* simplified = rootsum_try_lagrange(fn1, fn2);
+    /* RootSum is HoldAll, so a Function-valued symbol (pf = Function[...];
+     * RootSum[pf, ...]) reaches here unevaluated.  Resolve such a symbol to its
+     * value so the Lagrange path sees a literal Function. */
+    Expr* ev1 = (fn1->type == EXPR_SYMBOL) ? evaluate(fn1) : NULL;
+    Expr* ev2 = (fn2->type == EXPR_SYMBOL) ? evaluate(fn2) : NULL;
+    Expr* simplified = rootsum_try_lagrange(ev1 ? ev1 : fn1, ev2 ? ev2 : fn2);
+    if (ev1) expr_free(ev1);
+    if (ev2) expr_free(ev2);
     if (simplified) return simplified;
     return NULL;
 }
@@ -259,6 +289,35 @@ static Expr* substitute_bvar_with_slot(Expr* e, const char* bvar_name) {
     Expr* out = expr_new_function(head, args, n);
     free(args);
     return out;
+}
+
+/* Replace every occurrence of the symbol named `name` in `e` with a copy of
+ * `repl` (used to turn the reduced root-variable polynomial back into a
+ * function of the external variable x). Returns a fresh copy. */
+static Expr* subst_symbol(Expr* e, const char* name, Expr* repl) {
+    if (!e) return NULL;
+    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0)
+        return expr_copy(repl);
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    Expr* head = subst_symbol(e->data.function.head, name, repl);
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        args[i] = subst_symbol(e->data.function.args[i], name, repl);
+    Expr* out = expr_new_function(head, args, n);
+    free(args);
+    return out;
+}
+
+/* True if the univariate polynomial `poly_var` (in variable `var`) is squarefree
+ * over Q -- required for the Rothstein-Trager reduction below to be valid. */
+static bool rootsum_poly_squarefree(Expr* poly_var, Expr* var) {
+    Expr* q = expr_new_function(expr_new_symbol("SquareFreeQ"),
+        (Expr*[]){ expr_copy(poly_var), expr_copy(var) }, 2);
+    Expr* r = evaluate(q);
+    bool sf = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    if (r) expr_free(r);
+    return sf;
 }
 
 Expr* root_make_rootsum(Expr* bvar, Expr* poly, Expr* body) {

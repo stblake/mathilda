@@ -419,6 +419,29 @@ static void test_naivelogpart_basic(void) {
     expr_free(r);
 }
 
+/* A12: RootSum evaluates a general rational body R(#)/(x-#) via the
+ * Rothstein-Trager reduction (a = R.d' reduced mod d), and resolves a
+ * Function-valued symbol.  A zero-check confirms the closed form equals the
+ * held sum without depending on the printed layout. */
+static void test_rootsum_reduction(void) {
+    /* Already-Lagrange-shaped (pre-divided by d'): unchanged. */
+    run_eq("Together[RootSum[Function[z, z^4 - 3 z + 3], "
+           "Function[z, ((z^2 + 1)/(4 z^3 - 3))/(x - z)]] "
+           "- (1 + x^2)/(3 - 3 x + x^4)]", "0");
+    /* Rational-constant numerator, not pre-divided: reduced mod d. */
+    run_eq("Together[RootSum[Function[z, z^3 - 2], "
+           "Function[z, (-284/625 + 571/11250 z + 1516/5625 z^2)/(x - z)]] "
+           "- (571 + 3032 x - 2556 x^2)/(1875 x^3 - 3750)]", "0");
+    /* Parametric numerator. */
+    run_eq("Together[RootSum[Function[z, z^3 + z + 1], "
+           "Function[z, (a z + 1)/(x - z)]] "
+           "- (1 - 3 a - 2 a x + 3 x^2)/(1 + x + x^3)]", "0");
+    /* Function-valued symbol (pf) + parametric numerator. */
+    run_eq("CompoundExpression[Set[pf, Function[z, z^4 - 3 z + 3]], "
+           "Together[RootSum[pf, Function[z, (1 + a z)/(x - z)]] "
+           "- (-3 - 12 a + 9 a x + 4 x^3)/(3 - 3 x + x^4)]]", "0");
+}
+
 /* Numeric biquadratic — Phase 8d-bonus expands to an explicit
  * 4-term Plus[Log[α±x],...]; the result must NOT be RootSum-headed. */
 static void test_naivelogpart_quartic_hard(void) {
@@ -733,6 +756,7 @@ int main(void) {
     TEST(test_options_accepted);
     TEST(test_integrate_quartic_factorable);
 
+    TEST(test_rootsum_reduction);
     TEST(test_naivelogpart_basic);
     TEST(test_naivelogpart_quartic_hard);
     TEST(test_naivelogpart_derivative_threads);
