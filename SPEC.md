@@ -396,6 +396,7 @@ for t in *_tests; do ./$t; done
 valgrind --leak-check=full ./Mathilda
 
 make check-c99               # portability gate; see §10
+make check-messages          # does every diagnostic support Quiet[] and Check[]?
 make check-packed-aware      # does every head with a buffer path opt in?
 make check-array-exactness   # does any head return a two-headed array?
 make check-nd-surfaces       # do the packed and NDArray surfaces agree?
@@ -411,6 +412,18 @@ symbols that glibc hides under `-std=c99`: `<math.h>` constants (`M_PI`, `M_E`,
 placed *after* the first `#include`, where it no longer has any effect. All of
 these compile fine on macOS and fail on Linux, so this is worth running before a
 release even though it is not part of `make all`.
+
+`make check-messages` runs `tools/check_message_routing.py`, which asks whether
+every user-facing diagnostic supports `Quiet[]` and `Check[]`. Those two are not
+a choke-point but a two-step convention (`mth_msg_note_fired()` for `Check`, a
+`mth_msg_suppressed()` guard for `Quiet`), so a raw `fprintf(stderr, "Head::tag:
+…")` bypasses **both** — `Quiet` leaks and `Check` returns the wrong branch, a
+wrong answer. The check reads the raw `Head::tag` stderr writes out of the
+source (comment-blanked, multi-line aware) and diffs them against a checked-in
+`EXEMPT` (permanent: the funnel body, parser errors, the REPL reporter, OOM
+aborts) plus `BASELINE`; the backlog is now empty, so it is **assert-empty** —
+any new bypassing site fails it. The fix is to route through
+`mth_message(head, tag, fmt, …)`; see [`docs/design/message_routing.md`](docs/design/message_routing.md).
 
 The definitive check is a real glibc compile, which
 [`.github/workflows/build.yml`](.github/workflows/build.yml) runs on every push

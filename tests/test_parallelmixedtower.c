@@ -50,10 +50,12 @@ static void assert_eval(const char* input, const char* expected) {
 }
 
 /* Evaluate `input` with stderr redirected to a temp file, and report whether
- * `needle` appears in what was written there.  The Integrate::nonelem warning is
- * a raw fprintf(stderr, ...) (deliberately not routed through Quiet[]/Check[],
- * matching RischTranscendental), so this is the only way to assert it fired.
- * dup/dup2 to a tmpfile (not freopen to /dev/tty) so the restore works in CI. */
+ * `needle` appears in what was written there.  Used to assert a diagnostic
+ * PRINTS on a bare (non-Quiet) call -- the print is what Quiet[] suppresses and
+ * a bare call still shows.  (Integrate::nonelem and the rest now route through
+ * the mth_message funnel, so Quiet[] silences them and Check[] catches them; see
+ * test_message_subsystem.)  dup/dup2 to a tmpfile (not freopen to /dev/tty) so
+ * the restore works in CI. */
 static int eval_stderr_contains(const char* input, const char* needle) {
     fflush(stderr);
     int saved = dup(fileno(stderr));
@@ -92,6 +94,31 @@ static void test_message_subsystem(void) {
     assert_eval("Check[Sqrt[-4], bad]", "2*I");   /* no message -> value */
     /* An explicit Message is caught by an enclosing Check. */
     assert_eval("foo::bar = \"m\"; Check[Message[foo::bar]; 99, CAUGHT]", "CAUGHT");
+
+    /* --- The migrated diagnostics all support Quiet[] and Check[] now. Every
+     * one of these was a raw fprintf(stderr, ...) that escaped both before the
+     * message-routing migration; a representative head per class. --- */
+    /* common.c builtin_arg_error (the argx/argt/... class shared by most heads). */
+    assert_eval("Check[Fourier[], CAUGHT]", "CAUGHT");
+    assert_eval("Check[IntegerDigits[1, 2, 3, 4], CAUGHT]", "CAUGHT");
+    /* power.c / matpow.c -- previously Check-blind / escaped both. */
+    assert_eval("Check[Power[0, -2], CAUGHT]", "CAUGHT");
+    assert_eval("Check[MatrixPower[{{1, 2}, {3, 4}}, 1/2], CAUGHT]", "CAUGHT");
+    /* linalg / eval / regex representatives. */
+    assert_eval("Check[Det[{{1, 2, 3}, {4, 5, 6}}], CAUGHT]", "CAUGHT");
+    assert_eval("Check[Sin = 5, CAUGHT]", "CAUGHT");   /* Set::wrsym (Protected) */
+
+    /* Quiet[] silences the print at these sites (no message-driven failure). */
+    assert_eval("Quiet[MatrixPower[{{1, 2}, {3, 4}}, 1/2]]",
+                "MatrixPower[{{1, 2}, {3, 4}}, 1/2]");
+    ASSERT(!eval_stderr_contains("Quiet[Det[{{1, 2, 3}, {4, 5, 6}}]]", "Det::"));
+
+    /* CRUCIAL: an INTERNAL probe mute (g_arith_warnings_muted) is invisible to
+     * Check, not merely silent -- Limit probes 0*ComplexInfinity while computing
+     * Sin[x]/x -> 1, firing Infinity::indet internally, and Check must NOT catch
+     * that sampling noise (it did, briefly, when the fix over-noted). */
+    assert_eval("Check[Limit[Sin[x]/x, x -> 0], CAUGHT]", "1");
+    assert_eval("Check[Limit[1/x, x -> 0], CAUGHT]", "ComplexInfinity");
 }
 
 /* --------------------------------------------- assoc[key]=val and Part fixes */
@@ -145,6 +172,39 @@ static void test_method_radical(void) {
         " {Head[r] =!= Integrate, FreeQ[r, Power[x, 1/4]],"
         "  Abs[N[(D[r, x] - Sqrt[x + Sqrt[x]]) /. x -> 2 + I, 25]] < 10^-15}",
         "{True, True, True}");
+}
+
+/* The real form of the logarithmic part (src/internal/mixed/logrewrite.m, Rioboo):
+ * conjugate pairs of logarithms come back as real logarithms, arctangents and
+ * hyperbolic arctangents, so a real integrand gets an answer free of I and, where
+ * the pairs cover the whole logarithmic part, free of Log as well. */
+static void test_method_real_form(void) {
+    /* a conjugate pair over a transcendental generator: ArcTan[Log[x]] */
+    assert_eval("Integrate`ParallelMixedTower[1/(x (Log[x]^2 + 1)), x]", "ArcTan[Log[x]]");
+    /* over the radical y^2 = x: the arctangent of the radical itself */
+    assert_eval("Integrate`ParallelMixedTower[Sqrt[x]/(x + 1), x]", "2 Sqrt[x] - 2 ArcTan[Sqrt[x]]");
+    /* a pair conjugate under Sqrt[2] -> -Sqrt[2]: a hyperbolic arctangent, no Log, no I */
+    assert_eval(
+        "r = Integrate`ParallelMixedTower[Sin[x]/(1 + Sin[x]^2), x];"
+        " {FreeQ[r, Complex], FreeQ[r, Log], ! FreeQ[r, ArcTanh],"
+        "  Abs[N[(D[r, x] - Sin[x]/(1 + Sin[x]^2)) /. x -> 2/3, 25]] < 10^-15}",
+        "{True, True, True, True}");
+    /* the arctangent argument is a polynomial in the radical (YQuot): the surface layer
+     * rewrites the positive powers of the radical only, and a radical in a denominator
+     * was read on the principal branch -- wrong wherever Tan[x] < 0 (Charlwood P5) */
+    assert_eval(
+        "f = Cos[x]^2/Sqrt[Cos[x]^4 + Cos[x]^2 + 1]; r = Integrate`ParallelMixedTower[f, x];"
+        " {FreeQ[r, Complex], Abs[N[(D[r, x] - f) /. x -> 2, 25]] < 10^-15,"
+        "  Abs[N[(D[r, x] - f) /. x -> 1/3, 25]] < 10^-15}",
+        "{True, True, True}");
+    /* two nested-radical fields in one session (Charlwood P4 then A40): the module
+     * canonicalises with CanRaw, not with the field detour of Can, whose back-conversion
+     * once returned a Dot[{}, Inverse[{}], {}] coefficient here */
+    assert_eval(
+        "Integrate`ParallelMixedTower[Log[x Sqrt[x^2 + 1] + 1], x];"
+        " f = ArcTan[x Sqrt[1 - x^2]]; r = Integrate`ParallelMixedTower[f, x];"
+        " {FreeQ[r, Complex | Dot | Inverse], Abs[N[(D[r, x] - f) /. x -> 1/2, 25]] < 10^-15}",
+        "{True, True}");
 }
 
 static void test_method_split_specials(void) {
@@ -204,6 +264,12 @@ static void test_nonelem_warning_emitted(void) {
      * nothing about elementarity. */
     ASSERT(!eval_stderr_contains(
         "Integrate[Exp[x^2], x, Method -> \"ParallelMixedTower\"]",
+        "Integrate::nonelem"));
+    /* Integrate::nonelem now routes through the funnel: Quiet[] suppresses the
+     * print (it was a deliberate raw fprintf before this migration). */
+    ASSERT(!eval_stderr_contains(
+        "Quiet[Integrate[1/(x Log[x + Sqrt[x^2 + 1]]), x, "
+        "Method -> \"ParallelMixedTower\"]]",
         "Integrate::nonelem"));
 }
 
@@ -324,6 +390,7 @@ void test_parallelmixedtower(void) {
     TEST(test_core_assignment_fixes);
     TEST(test_method_transcendental);
     TEST(test_method_radical);
+    TEST(test_method_real_form);
     TEST(test_method_split_specials);
     TEST(test_method_declines_cleanly);
     TEST(test_method_certifies_nonelementary);
