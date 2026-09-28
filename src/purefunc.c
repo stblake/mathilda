@@ -98,8 +98,7 @@ static void named_slot_message(Expr* fn, const char* name, Expr** args, size_t a
     char* fs = fn ? expr_to_string(fn) : NULL;
     if (arg_count >= 1 && is_association(args[0])) {
         char* as = expr_to_string(args[0]);
-        fprintf(stderr, "Function::slota: Named slot %s in %s cannot be filled from %s.\n",
-                name, fs ? fs : "Function[...]", as ? as : "<|...|>");
+        mth_message("Function", "slota", "Named slot %s in %s cannot be filled from %s.", name, fs ? fs : "Function[...]", as ? as : "<|...|>");
         free(as);
     } else {
         Expr** cp = malloc(sizeof(Expr*) * (arg_count ? arg_count : 1));
@@ -110,8 +109,7 @@ static void named_slot_message(Expr* fn, const char* name, Expr** args, size_t a
         expr_free(call);
         size_t cl = cs ? strlen(cs) : 0;
         if (cl >= 2) { cs[0] = '['; cs[cl - 1] = ']'; }
-        fprintf(stderr, "Function::slot1: (%s)%s is expected to have an Association "
-                "as the first argument.\n", fs ? fs : "Function[...]", cl >= 2 ? cs : "[]");
+        mth_message("Function", "slot1", "(%s)%s is expected to have an Association as the first argument.", fs ? fs : "Function[...]", cl >= 2 ? cs : "[]");
         free(cs);
     }
     free(fs);

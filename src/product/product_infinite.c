@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 int g_product_verify_convergence = 1;
 
@@ -44,7 +45,7 @@ static bool head_sym_is(const Expr* e, const char* name) {
 
 static void warn_div(void) {
     if (!arith_warnings_muted())
-        fprintf(stderr, "Product::div: Product does not converge.\n");
+        mth_message("Product", "div", "Product does not converge.");
 }
 
 /* Rational convergence classifier: 1 converges, 0 diverges, -1 unknown

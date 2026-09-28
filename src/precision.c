@@ -31,6 +31,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -282,9 +283,7 @@ static bool parse_prec_arg(const Expr* n, NumericSpec* out_spec) {
 #else
     static bool warned = false;
     if (!warned) {
-        fprintf(stderr,
-                "SetPrecision::prec: arbitrary precision unavailable "
-                "(USE_MPFR=0); using machine precision.\n");
+        mth_message("SetPrecision", "prec", "arbitrary precision unavailable (USE_MPFR=0); using machine precision.");
         warned = true;
     }
     *out_spec = numeric_machine_spec();

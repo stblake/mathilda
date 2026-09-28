@@ -63,6 +63,7 @@
 #include "ndarray.h"
 
 #include <gmp.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
@@ -80,12 +81,10 @@
  * ================================================================== */
 
 static void fit_warn(const char* head, const char* tag, const char* fmt, ...) {
-    fprintf(stderr, "%s::%s: ", head, tag);
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(0, head, tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* ================================================================== *

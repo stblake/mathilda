@@ -10,6 +10,7 @@
 #include "sym_names.h"
 #include <string.h>
 #include <stdio.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /*
  * srp_is_list:
@@ -29,10 +30,7 @@ static bool srp_is_list(Expr* e) {
  * count.
  */
 static Expr* srp_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "StringReplacePart::argt: StringReplacePart called with %zu "
-            "argument%s; 2 or 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("StringReplacePart", "argt", "StringReplacePart called with %zu argument%s; 2 or 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -44,10 +42,7 @@ static Expr* srp_emit_argt(size_t argc) {
  * negative-index resolution), matching Mathematica.
  */
 static void srp_emit_ovlp(int64_t m, int64_t n, const char* repl) {
-    fprintf(stderr,
-            "StringReplacePart::ovlp: Position {%lld,%lld} overlaps previous "
-            "positions; new string %s will not be inserted.\n",
-            (long long)m, (long long)n, repl);
+    mth_message("StringReplacePart", "ovlp", "Position {%lld,%lld} overlaps previous positions; new string %s will not be inserted.", (long long)m, (long long)n, repl);
 }
 
 /*

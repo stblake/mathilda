@@ -1,6 +1,7 @@
 #include "list_common.h"
 #include "matrixq.h"
 #include "ndarray.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* An NDArray is a distinct atomic node, so the List-based matrix predicates
  * below would otherwise answer False for a genuine packed matrix. Route any
@@ -347,10 +348,7 @@ Expr* builtin_square_matrix_q(Expr* res) {
     ND_MATRIXQ_DELIST(res);
     if (res->data.function.arg_count != 1) {
         size_t n = res->data.function.arg_count;
-        fprintf(stderr,
-                "SquareMatrixQ::argx: SquareMatrixQ called with %zu "
-                "argument%s; 1 argument is expected.\n",
-                n, n == 1 ? "" : "s");
+        mth_message("SquareMatrixQ", "argx", "SquareMatrixQ called with %zu argument%s; 1 argument is expected.", n, n == 1 ? "" : "s");
         return NULL;
     }
 
@@ -435,10 +433,7 @@ static bool diag_entry_under_tolerance(Expr* e, Expr* tol) {
  * evaluator leaves the call unevaluated, matching builtin_square_matrix_q
  * / builtin_conjugate's surface behaviour. */
 static Expr* diag_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "DiagonalMatrixQ::argt: DiagonalMatrixQ called with %zu "
-            "argument%s; 1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("DiagonalMatrixQ", "argt", "DiagonalMatrixQ called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -448,11 +443,7 @@ static Expr* diag_emit_argt(size_t argc) {
 static Expr* diag_emit_nonopt(Expr* bad, Expr* res) {
     char* bad_str = expr_to_string(bad);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "DiagonalMatrixQ::nonopt: Options expected (instead of %s) "
-            "beyond position 2 in %s. An option must be a rule or a list "
-            "of rules.\n",
-            bad_str ? bad_str : "?", call_str ? call_str : "?");
+    mth_message("DiagonalMatrixQ", "nonopt", "Options expected (instead of %s) beyond position 2 in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", call_str ? call_str : "?");
     free(bad_str);
     free(call_str);
     return NULL;
@@ -606,21 +597,14 @@ Expr* builtin_diagonal_matrix_q(Expr* res) {
  */
 
 static Expr* utri_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "UpperTriangularMatrixQ::argt: UpperTriangularMatrixQ called "
-            "with %zu argument%s; 1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("UpperTriangularMatrixQ", "argt", "UpperTriangularMatrixQ called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
 static Expr* utri_emit_nonopt(Expr* bad, Expr* res) {
     char* bad_str = expr_to_string(bad);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "UpperTriangularMatrixQ::nonopt: Options expected (instead of "
-            "%s) beyond position 2 in %s. An option must be a rule or a "
-            "list of rules.\n",
-            bad_str ? bad_str : "?", call_str ? call_str : "?");
+    mth_message("UpperTriangularMatrixQ", "nonopt", "Options expected (instead of %s) beyond position 2 in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", call_str ? call_str : "?");
     free(bad_str);
     free(call_str);
     return NULL;

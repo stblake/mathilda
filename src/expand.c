@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 static bool expr_contains_patt(Expr* e, Expr* patt) {
     if (!patt) return true; // NULL pattern matches everything
@@ -774,10 +775,7 @@ Expr* expr_expand_all(Expr* e) {
 /* Print `ExpandAll::argt: ExpandAll called with N arguments; 1 or 2 arguments
  * are expected.` to stderr, matching Mathematica's variable-arity diagnostic. */
 static Expr* expand_all_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "ExpandAll::argt: ExpandAll called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("ExpandAll", "argt", "ExpandAll called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

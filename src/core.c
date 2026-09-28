@@ -1172,7 +1172,7 @@ Expr* builtin_unset(Expr* res) {
      * mirroring Set's wrsym guard. */
     uint32_t attrs = get_attributes(symbol_name);
     if (attrs & (ATTR_PROTECTED | ATTR_LOCKED)) {
-        fprintf(stderr, "Unset::wrsym: Symbol %s is Protected.\n", symbol_name);
+        mth_message("Unset", "wrsym", "Symbol %s is Protected.", symbol_name);
         return expr_new_symbol(SYM_Null);
     }
 
@@ -2605,10 +2605,7 @@ static int numeric_real_sign(Expr* arg, int* sign) {
 Expr* builtin_positive(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         size_t n = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
-        fprintf(stderr,
-                "Positive::argx: Positive called with %zu argument%s; "
-                "1 argument is expected.\n",
-                n, n == 1 ? "" : "s");
+        mth_message("Positive", "argx", "Positive called with %zu argument%s; 1 argument is expected.", n, n == 1 ? "" : "s");
         return NULL;
     }
 
@@ -2638,10 +2635,7 @@ Expr* builtin_positive(Expr* res) {
 Expr* builtin_negative(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         size_t n = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
-        fprintf(stderr,
-                "Negative::argx: Negative called with %zu argument%s; "
-                "1 argument is expected.\n",
-                n, n == 1 ? "" : "s");
+        mth_message("Negative", "argx", "Negative called with %zu argument%s; 1 argument is expected.", n, n == 1 ? "" : "s");
         return NULL;
     }
 
@@ -2674,10 +2668,7 @@ Expr* builtin_negative(Expr* res) {
 Expr* builtin_nonnegative(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         size_t n = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
-        fprintf(stderr,
-                "NonNegative::argx: NonNegative called with %zu argument%s; "
-                "1 argument is expected.\n",
-                n, n == 1 ? "" : "s");
+        mth_message("NonNegative", "argx", "NonNegative called with %zu argument%s; 1 argument is expected.", n, n == 1 ? "" : "s");
         return NULL;
     }
 
@@ -2710,10 +2701,7 @@ Expr* builtin_nonnegative(Expr* res) {
 Expr* builtin_nonpositive(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         size_t n = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
-        fprintf(stderr,
-                "NonPositive::argx: NonPositive called with %zu argument%s; "
-                "1 argument is expected.\n",
-                n, n == 1 ? "" : "s");
+        mth_message("NonPositive", "argx", "NonPositive called with %zu argument%s; 1 argument is expected.", n, n == 1 ? "" : "s");
         return NULL;
     }
 
@@ -3653,9 +3641,9 @@ enum { IC_ADD = 0, IC_SUB, IC_MUL, IC_DIV };
 static Expr* increment_core(Expr* lhs, Expr* dx, int mode, bool pre, const char* op_name) {
     const char* sym = lvalue_symbol_name(lhs);
     if (!sym || symtab_get_own_values(sym) == NULL) {
-        fprintf(stderr,
-                "%s::rvalue: %s is not a variable with a value, so its value cannot be changed.\n",
-                op_name, sym ? sym : "argument");
+        mth_message(op_name, "rvalue",
+                "%s is not a variable with a value, so its value cannot be changed.",
+                sym ? sym : "argument");
         return NULL;
     }
 
@@ -3930,11 +3918,7 @@ Expr* builtin_symbol(Expr* res) {
 
     const char* name = arg->data.string;
     if (!symbol_name_is_valid(name)) {
-        fprintf(stderr,
-                "Symbol::symname: The string \"%s\" cannot be used for a symbol "
-                "name. A symbol name must start with a letter followed by "
-                "letters and numbers.\n",
-                name);
+        mth_message("Symbol", "symname", "The string \"%s\" cannot be used for a symbol name. A symbol name must start with a letter followed by letters and numbers.", name);
         return NULL;
     }
 

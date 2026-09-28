@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "rescale.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ====================================================================
  * Rescale[x, {min, max}]          -> (x - min)/(max - min)
@@ -32,10 +33,7 @@ static Expr* rescale_div(Expr* a, Expr* b) {
 /* `Rescale::argb: Rescale called with N argument(s); between 1 and 3
  * arguments are expected.` */
 static Expr* rescale_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "Rescale::argb: Rescale called with %zu argument%s; "
-            "between 1 and 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("Rescale", "argb", "Rescale called with %zu argument%s; between 1 and 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

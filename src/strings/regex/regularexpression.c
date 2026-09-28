@@ -15,6 +15,7 @@
 #include "regex_engine.h"
 
 #include <stdio.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 Expr* builtin_regularexpression(Expr* res) {
     if (res->type != EXPR_FUNCTION)
@@ -34,7 +35,7 @@ Expr* builtin_regularexpression(Expr* res) {
         char err[256];
         RegexProgram* prog = regex_compile(arg->data.string, err, sizeof err);
         if (!prog) {
-            fprintf(stderr, "RegularExpression::regex: %s\n", err);
+            mth_message("RegularExpression", "regex", "%s", err);
         } else {
             regex_free(prog);
         }

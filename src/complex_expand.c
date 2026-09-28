@@ -40,6 +40,7 @@
 #include "common.h"
 #include "sym_names.h"
 #include "match.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ *
  *  Expression-building shorthand.  mk_* take ownership of pointer      *
@@ -858,7 +859,7 @@ Expr* builtin_complex_expand(Expr* res) {
     }
 
     if (npos < 1 || npos > 2) {
-        fprintf(stderr, "General::argct: ComplexExpand called with %zu arguments.\n", argc);
+        mth_message("General", "argct", "ComplexExpand called with %zu arguments.", argc);
         return NULL;
     }
 

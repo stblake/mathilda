@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ---------- small option helpers ---------- */
 
@@ -170,7 +171,7 @@ Expr* builtin_setoptions(Expr* res) {
     const char* sym = sobj->data.symbol.name;
 
     if (get_attributes(sym) & ATTR_LOCKED) {
-        fprintf(stderr, "SetOptions::locked: Symbol %s is locked and cannot be modified.\n", sym);
+        mth_message("SetOptions", "locked", "Symbol %s is locked and cannot be modified.", sym);
         return NULL;
     }
 
@@ -195,8 +196,7 @@ Expr* builtin_setoptions(Expr* res) {
         }
         if (idx == (size_t)-1) {                  /* SetOptions can't add options */
             const char* nms = opt_name_text(nm);
-            fprintf(stderr, "SetOptions::optnf: %s is not a known option for %s.\n",
-                    nms ? nms : "?", sym);
+            mth_message("SetOptions", "optnf", "%s is not a known option for %s.", nms ? nms : "?", sym);
             for (size_t j = 0; j < wn; j++) expr_free(work[j]);
             free(work);
             return NULL;

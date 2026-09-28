@@ -46,6 +46,7 @@
 #include <limits.h>
 #include <math.h>
 #include <gmp.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -74,18 +75,13 @@
  * ----------------------------------------------------------------------- */
 
 static Expr* rd_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "RealDigits::argb: RealDigits called with %zu argument%s; "
-            "between 1 and 4 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("RealDigits", "argb", "RealDigits called with %zu argument%s; between 1 and 4 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
 static Expr* rd_emit_realx(Expr* res) {
     char* s = expr_to_string(res);
-    fprintf(stderr,
-            "RealDigits::realx: The number %s is not a real number.\n",
-            s ? s : "?");
+    mth_message("RealDigits", "realx", "The number %s is not a real number.", s ? s : "?");
     free(s);
     return NULL;
 }
@@ -93,10 +89,7 @@ static Expr* rd_emit_realx(Expr* res) {
 static Expr* rd_emit_ibase(Expr* b_expr, Expr* res) {
     char* bs = expr_to_string(b_expr);
     char* cs = expr_to_string(res);
-    fprintf(stderr,
-            "RealDigits::ibase: Base %s in %s is not a real number greater "
-            "than 1.\n",
-            bs ? bs : "?", cs ? cs : "?");
+    mth_message("RealDigits", "ibase", "Base %s in %s is not a real number greater than 1.", bs ? bs : "?", cs ? cs : "?");
     free(bs);
     free(cs);
     return NULL;
@@ -104,19 +97,14 @@ static Expr* rd_emit_ibase(Expr* b_expr, Expr* res) {
 
 static Expr* rd_emit_intnn(size_t pos, Expr* res) {
     char* cs = expr_to_string(res);
-    fprintf(stderr,
-            "RealDigits::intnn: Non-negative machine-sized integer expected "
-            "at position %zu in %s.\n",
-            pos, cs ? cs : "?");
+    mth_message("RealDigits", "intnn", "Non-negative machine-sized integer expected at position %zu in %s.", pos, cs ? cs : "?");
     free(cs);
     return NULL;
 }
 
 static Expr* rd_emit_int(size_t pos, Expr* res) {
     char* cs = expr_to_string(res);
-    fprintf(stderr,
-            "RealDigits::int: Integer expected at position %zu in %s.\n",
-            pos, cs ? cs : "?");
+    mth_message("RealDigits", "int", "Integer expected at position %zu in %s.", pos, cs ? cs : "?");
     free(cs);
     return NULL;
 }
@@ -748,8 +736,7 @@ Expr* builtin_realdigits(Expr* res) {
             /* Soft cap: bases that don't fit in unsigned long would
              * still work for `floor` but bog down the scaled-floor MPFR
              * shift.  Reject to keep the code paths uniform. */
-            fprintf(stderr,
-                "RealDigits::ibase: Base too large; use a base <= ULONG_MAX.\n");
+            mth_message("RealDigits", "ibase", "Base too large; use a base <= ULONG_MAX.");
             mpz_clear(base);
             return NULL;
         }
@@ -799,8 +786,7 @@ Expr* builtin_realdigits(Expr* res) {
         mpz_t nz;
         expr_to_mpz(n_expr, nz);
         if (!mpz_fits_slong_p(nz)) {
-            fprintf(stderr,
-                "RealDigits::int: Starting-position argument too large.\n");
+            mth_message("RealDigits", "int", "Starting-position argument too large.");
             mpz_clear(nz);
             mpz_clear(base);
             return NULL;
@@ -1009,9 +995,7 @@ Expr* builtin_realdigits(Expr* res) {
 
     /* Cap. */
     if (out_len > REAL_MAX_LEN) {
-        fprintf(stderr,
-            "RealDigits::ovfl: Requested length %zu exceeds cap %lu.\n",
-            out_len, (unsigned long)REAL_MAX_LEN);
+        mth_message("RealDigits", "ovfl", "Requested length %zu exceeds cap %lu.", out_len, (unsigned long)REAL_MAX_LEN);
         mpz_clear(base);
         if (x_owned) expr_free(x_owned);
         return NULL;
@@ -1040,9 +1024,7 @@ Expr* builtin_realdigits(Expr* res) {
                 free(out_args);
                 mpz_clear(base);
                 if (x_owned) expr_free(x_owned);
-                fprintf(stderr,
-                    "RealDigits::nrep: Internal error scaling input for "
-                    "digit extraction.\n");
+                mth_message("RealDigits", "nrep", "Internal error scaling input for digit extraction.");
                 return NULL;
             }
             mpz_t* lsd = NULL;
@@ -1199,28 +1181,20 @@ Expr* builtin_realdigits(Expr* res) {
  * ----------------------------------------------------------------------- */
 
 static Expr* me_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "MantissaExponent::argt: MantissaExponent called with %zu "
-            "argument%s; 1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("MantissaExponent", "argt", "MantissaExponent called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
 static Expr* me_emit_realx(Expr* x_expr) {
     char* s = expr_to_string(x_expr);
-    fprintf(stderr,
-            "MantissaExponent::realx: The value %s is not a real number.\n",
-            s ? s : "?");
+    mth_message("MantissaExponent", "realx", "The value %s is not a real number.", s ? s : "?");
     free(s);
     return NULL;
 }
 
 static Expr* me_emit_ibase(Expr* b_expr) {
     char* bs = expr_to_string(b_expr);
-    fprintf(stderr,
-            "MantissaExponent::ibase: Base %s is not an integer greater "
-            "than 1.\n",
-            bs ? bs : "?");
+    mth_message("MantissaExponent", "ibase", "Base %s is not an integer greater than 1.", bs ? bs : "?");
     free(bs);
     return NULL;
 }
@@ -1335,9 +1309,7 @@ Expr* builtin_mantissa_exponent(Expr* res) {
             return NULL;
         }
         if (!mpz_fits_ulong_p(base)) {
-            fprintf(stderr,
-                "MantissaExponent::ibase: Base too large; use a base "
-                "<= ULONG_MAX.\n");
+            mth_message("MantissaExponent", "ibase", "Base too large; use a base <= ULONG_MAX.");
             mpz_clear(base);
             return NULL;
         }
@@ -1534,28 +1506,20 @@ Expr* builtin_mantissa_exponent(Expr* res) {
  * ----------------------------------------------------------------------- */
 
 static Expr* re_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "RealExponent::argt: RealExponent called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("RealExponent", "argt", "RealExponent called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
 static Expr* re_emit_realx(Expr* x_expr) {
     char* s = expr_to_string(x_expr);
-    fprintf(stderr,
-            "RealExponent::realx: The value %s is not a real number.\n",
-            s ? s : "?");
+    mth_message("RealExponent", "realx", "The value %s is not a real number.", s ? s : "?");
     free(s);
     return NULL;
 }
 
 static Expr* re_emit_ibase(Expr* b_expr) {
     char* bs = expr_to_string(b_expr);
-    fprintf(stderr,
-            "RealExponent::ibase: Base %s is not a real number greater "
-            "than 1.\n",
-            bs ? bs : "?");
+    mth_message("RealExponent", "ibase", "Base %s is not a real number greater than 1.", bs ? bs : "?");
     free(bs);
     return NULL;
 }

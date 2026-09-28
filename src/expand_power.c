@@ -46,6 +46,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -772,9 +773,7 @@ Expr* builtin_powerexpand(Expr* res) {
     size_t argc = res->data.function.arg_count;
 
     if (argc < 1 || argc > 3) {
-        fprintf(stderr,
-                "PowerExpand::argt: PowerExpand called with %zu arguments; "
-                "1 or 2 arguments are expected.\n", argc);
+        mth_message("PowerExpand", "argt", "PowerExpand called with %zu arguments; 1 or 2 arguments are expected.", argc);
         return NULL;
     }
 

@@ -5,6 +5,7 @@
 #include "ndarray.h"     /* is_ndarray, ndarray_to_nested_list */
 #include "ndstruct.h"    /* ndstruct_arraypad */
 #include "arithmetic.h"  /* is_infinity_sym */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ArrayPad[array, m]            pad m elements of padding on every side/level.
  * ArrayPad[array, {m, n}]       m before, n after, on every dimension.
@@ -201,10 +202,7 @@ static Expr* ap_mindimsize(const Expr* scheme, const Expr* amounts, const Expr* 
     const char* sname = ss ? ss : scheme->data.string;
     char* as = expr_to_string((Expr*)amounts);
     char* xs = expr_to_string((Expr*)arr);
-    fprintf(stderr,
-            "ArrayPad::mindimsize: With padding %s, the padding amount %s should "
-            "specify positive padding only in dimensions of length at least 2 in "
-            "array %s.\n", sname, as, xs);
+    mth_message("ArrayPad", "mindimsize", "With padding %s, the padding amount %s should specify positive padding only in dimensions of length at least 2 in array %s.", sname, as, xs);
     free(ss); free(as); free(xs);
     return NULL;
 }

@@ -32,6 +32,7 @@
 #include "pack.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -92,9 +93,7 @@ static bool uv_parse_working_precision(const Expr* val,
     /* Without MPFR a digit count degrades to machine precision. */
     static bool warned = false;
     if (!warned) {
-        fprintf(stderr,
-                "UnitVector::wprec: arbitrary precision unavailable "
-                "(USE_MPFR=0); using machine precision.\n");
+        mth_message("UnitVector", "wprec", "arbitrary precision unavailable (USE_MPFR=0); using machine precision.");
         warned = true;
     }
     *mode = UV_PREC_MACHINE;
@@ -149,11 +148,7 @@ Expr* builtin_unit_vector(Expr* res) {
     if (last_bad != NULL) {
         char* bad_str = expr_to_string(last_bad);
         char* call_str = expr_to_string(res);
-        fprintf(stderr,
-                "UnitVector::nonopt: Options expected (instead of %s) beyond "
-                "position %zu in %s. An option must be a rule or a list of "
-                "rules.\n",
-                bad_str ? bad_str : "?", nreq, call_str ? call_str : "?");
+        mth_message("UnitVector", "nonopt", "Options expected (instead of %s) beyond position %zu in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", nreq, call_str ? call_str : "?");
         free(bad_str);
         free(call_str);
         return NULL;

@@ -35,6 +35,7 @@
 #include <limits.h>
 #include <math.h>
 #include <gmp.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
@@ -279,10 +280,7 @@ Expr* builtin_integerpartitions(Expr* res) {
     Expr** args = res->data.function.args;
 
     if (argc < 1 || argc > 4) {
-        fprintf(stderr,
-                "IntegerPartitions::argb: IntegerPartitions called with %zu "
-                "argument%s; between 1 and 4 arguments are expected.\n",
-                argc, argc == 1 ? "" : "s");
+        mth_message("IntegerPartitions", "argb", "IntegerPartitions called with %zu argument%s; between 1 and 4 arguments are expected.", argc, argc == 1 ? "" : "s");
         return NULL;
     }
 
@@ -400,10 +398,7 @@ Expr* builtin_integerpartitions(Expr* res) {
     /* --- infinite-result guard (::undef) --- */
     if (kmax_inf && (has_zero || (has_pos && has_neg))) {
         char* call = ip_call_str(res, argc);
-        fprintf(stderr,
-                "IntegerPartitions::undef: %s contains partitions that are "
-                "undefined because they are infinitely large.\n",
-                call ? call : "IntegerPartitions[...]");
+        mth_message("IntegerPartitions", "undef", "%s contains partitions that are undefined because they are infinitely large.", call ? call : "IntegerPartitions[...]");
         free(call);
         for (size_t i = 0; i < nparts; i++) mpq_clear(parts[i]);
         free(parts);
@@ -480,11 +475,7 @@ Expr* builtin_integerpartitions(Expr* res) {
     } else if (!m_all && m > 0) {
         if (total < (size_t)m) {
             char* call = ip_call_str(res, 3);
-            fprintf(stderr,
-                    "IntegerPartitions::take: Warning: not all elements were "
-                    "found when attempting to take the sequence {1,%ld,1} from "
-                    "%s, which has length %zu.\n",
-                    m, call ? call : "IntegerPartitions[...]", total);
+            mth_message("IntegerPartitions", "take", "Warning: not all elements were found when attempting to take the sequence {1,%ld,1} from %s, which has length %zu.", m, call ? call : "IntegerPartitions[...]", total);
             free(call);
         }
         /* out already holds the first min(m,total) in order */
@@ -493,11 +484,7 @@ Expr* builtin_integerpartitions(Expr* res) {
         if (want >= total) {
             if (want > total) {
                 char* call = ip_call_str(res, 3);
-                fprintf(stderr,
-                        "IntegerPartitions::take: Warning: not all elements were "
-                        "found when attempting to take the sequence {%ld,-1,1} "
-                        "from %s, which has length %zu.\n",
-                        m, call ? call : "IntegerPartitions[...]", total);
+                mth_message("IntegerPartitions", "take", "Warning: not all elements were found when attempting to take the sequence {%ld,-1,1} from %s, which has length %zu.", m, call ? call : "IntegerPartitions[...]", total);
                 free(call);
             }
         } else {
@@ -799,10 +786,7 @@ int partitionsp_hrr(unsigned long n, mpz_t out) {
 /* Emit `PartitionsP::argx: PartitionsP called with N arguments; 1 argument
  * is expected.` to stderr and return NULL. */
 static Expr* pp_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "PartitionsP::argx: PartitionsP called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("PartitionsP", "argx", "PartitionsP called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -1190,10 +1174,7 @@ int partitionsq_hrr(unsigned long n, mpz_t out) {
 /* Emit `PartitionsQ::argx: PartitionsQ called with N arguments; 1 argument
  * is expected.` to stderr and return NULL. */
 static Expr* qq_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "PartitionsQ::argx: PartitionsQ called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("PartitionsQ", "argx", "PartitionsQ called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

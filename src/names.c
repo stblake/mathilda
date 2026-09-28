@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ */
 /* String-pattern (glob) matcher for the * and @ metacharacters.      */
@@ -104,9 +105,7 @@ static int build_pat(Expr* e, NamePat* out) {
     }
     if (is_regular_expression(e, &re)) {
         if (!regex_available()) {
-            fprintf(stderr, "Names::regavail: regular-expression support is not "
-                            "available; rebuild Mathilda with PCRE2 "
-                            "(USE_REGEX=1).\n");
+            mth_message("Names", "regavail", "regular-expression support is not available; rebuild Mathilda with PCRE2 (USE_REGEX=1).");
             return -1;
         }
         /* Anchor for a whole-string match: \A(?:re)\z */
@@ -122,7 +121,7 @@ static int build_pat(Expr* e, NamePat* out) {
         RegexProgram* prog = regex_compile(wrapped, err, sizeof err);
         free(wrapped);
         if (!prog) {
-            fprintf(stderr, "Names::regex: %s\n", err);
+            mth_message("Names", "regex", "%s", err);
             return -1;
         }
         out->is_regex = 1;

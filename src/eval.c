@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <limits.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /*
  * The maximum number of evaluation steps to prevent infinite recursion
@@ -483,8 +484,8 @@ static bool eval_sync_sysflag(const char* name, Expr* value) {
         bool is_false = value && value->type == EXPR_SYMBOL &&
                         value->data.symbol.name == SYM_False;
         if (!is_true && !is_false) {
-            fprintf(stderr, "%s::flagset: %s can only be set to True or False.\n",
-                    EVAL_SYSFLAGS[i].name, EVAL_SYSFLAGS[i].name);
+            mth_message(EVAL_SYSFLAGS[i].name, "flagset",
+                    "%s can only be set to True or False.", EVAL_SYSFLAGS[i].name);
             Expr* sym  = expr_new_symbol(EVAL_SYSFLAGS[i].name);
             Expr* curr = expr_new_symbol(EVAL_SYSFLAGS[i].get() ? SYM_True : SYM_False);
             symtab_add_own_value(EVAL_SYSFLAGS[i].name, sym, curr);
@@ -561,9 +562,7 @@ static void sync_recursion_limit_from_value(Expr* value) {
     }
 
     if (n < MIN_RECURSION_LIMIT) {
-        fprintf(stderr,
-                "$RecursionLimit::limset: Cannot set $RecursionLimit to a value below %d.\n",
-                MIN_RECURSION_LIMIT);
+        mth_message("$RecursionLimit", "limset", "Cannot set $RecursionLimit to a value below %d.", MIN_RECURSION_LIMIT);
         /* Restore the OwnValue to the current C-side limit so the symbol
          * does not lie about the active value. */
         Expr* sym  = expr_new_symbol(SYM_DollarRecursionLimit);
@@ -1015,8 +1014,8 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     if (!lhs_is_list) {
         const char* target = assignment_target_symbol(lhs);
         if (target && (get_attributes(target) & ATTR_PROTECTED)) {
-            fprintf(stderr, "%s::wrsym: Symbol %s is Protected.\n",
-                    is_delayed ? "SetDelayed" : "Set", target);
+            mth_message(is_delayed ? "SetDelayed" : "Set", "wrsym",
+                    "Symbol %s is Protected.", target);
             return true;
         }
     }
@@ -2302,8 +2301,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
  * ownership of `thr`. */
 static Expr* eval_report_uncaught_throw(Expr* thr) {
     char* s = expr_to_string(thr);
-    fprintf(stderr, "Throw::nocatch: Uncaught %s returned to top level.\n",
-            s ? s : "Throw[...]");
+    mth_message("Throw", "nocatch", "Uncaught %s returned to top level.", s ? s : "Throw[...]");
     free(s);
     if (thr->data.function.arg_count == 3) {
         Expr* fa[2] = { expr_copy(thr->data.function.args[0]),
@@ -2325,8 +2323,7 @@ static Expr* eval_report_uncaught_throw(Expr* thr) {
  * ownership of and returns `g`. */
 static Expr* eval_report_uncaught_goto(Expr* g) {
     char* s = expr_to_string(g);
-    fprintf(stderr, "Goto::nolabel: %s found no matching Label.\n",
-            s ? s : "Goto[...]");
+    mth_message("Goto", "nolabel", "%s found no matching Label.", s ? s : "Goto[...]");
     free(s);
     return g;
 }
@@ -2339,9 +2336,9 @@ static Expr* eval_report_uncaught_goto(Expr* g) {
 static Expr* eval_report_uncaught_break_continue(Expr* e) {
     const char* h = e->data.function.head->data.symbol.name;  /* Break | Continue */
     char* s = expr_to_string(e);
-    fprintf(stderr,
-            "%s::nofwd: No enclosing For, While, Until or Do found for %s.\n",
-            h, s ? s : (h == SYM_Break ? "Break[]" : "Continue[]"));
+    mth_message(h, "nofwd",
+            "No enclosing For, While, Until or Do found for %s.",
+            s ? s : (h == SYM_Break ? "Break[]" : "Continue[]"));
     free(s);
     Expr* one[1] = { e };
     return expr_new_function(expr_new_symbol(SYM_Hold), one, 1);
@@ -2374,9 +2371,7 @@ Expr* evaluate(Expr* e) {
      * top-level evaluation. */
     if (eval_recursion_depth >= eval_recursion_limit) {
         if (!eval_overflow) {
-            fprintf(stderr,
-                    "$RecursionLimit::reclim: Recursion depth of %d exceeded.\n",
-                    eval_recursion_limit);
+            mth_message("$RecursionLimit", "reclim", "Recursion depth of %d exceeded.", eval_recursion_limit);
         }
         eval_overflow = true;
         Expr** wrap = malloc(sizeof(Expr*));

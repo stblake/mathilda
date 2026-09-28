@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* M_PI and M_E are POSIX/GNU extensions, not part of C99. glibc hides them
  * under -std=c99, so provide portable fallbacks here. */
@@ -1780,9 +1781,7 @@ static bool parse_precision_arg(const Expr* prec, NumericSpec* out_spec) {
     /* Phase 1 fallback: emit a one-shot warning, then use machine. */
     static bool warned = false;
     if (!warned) {
-        fprintf(stderr,
-                "N::prec: arbitrary precision unavailable in this build "
-                "(USE_MPFR=0); using machine precision.\n");
+        mth_message("N", "prec", "arbitrary precision unavailable in this build (USE_MPFR=0); using machine precision.");
         warned = true;
     }
     *out_spec = numeric_machine_spec();

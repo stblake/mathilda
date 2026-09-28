@@ -46,6 +46,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ---------------------------------------------------------------------- */
 /* Tiny expression builders (per-module convention; cf. deriv.c)           */
@@ -373,9 +374,9 @@ static bool resolve_chart(Expr* chart, Expr** vars, int n, const char* head,
     if (!chart_scale_factors(chart->data.string, vars, n, h, &known)) {
         free(h);
         if (!known)
-            fprintf(stderr,
-                    "%s::chart: \"%s\" is not a supported coordinate chart.\n",
-                    head, chart->data.string);
+            mth_message(head, "chart",
+                    "\"%s\" is not a supported coordinate chart.",
+                    chart->data.string);
         return false;
     }
     *h_out = h;

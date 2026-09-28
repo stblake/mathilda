@@ -9,6 +9,7 @@
 #include "sym_names.h"
 #include <string.h>
 #include <stdio.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /*
  * si_emit_argrx:
@@ -17,10 +18,7 @@
  * Matches Mathematica's diagnostic for a wrong argument count.
  */
 static Expr* si_emit_argrx(size_t argc) {
-    fprintf(stderr,
-            "StringInsert::argrx: StringInsert called with %zu argument%s; "
-            "3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("StringInsert", "argrx", "StringInsert called with %zu argument%s; 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

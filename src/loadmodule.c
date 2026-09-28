@@ -23,6 +23,7 @@
 #include "attr.h"
 #include "parse.h"
 #include "eval.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -244,9 +245,7 @@ int mathilda_load_module(const char* relpath) {
         if (opened) { lm_mark_loaded(relpath); return 1; }
     }
 
-    fprintf(stderr,
-        "LoadModule::nofile: cannot locate src/internal/%s on disk.\n",
-        relpath);
+    mth_message("LoadModule", "nofile", "cannot locate src/internal/%s on disk.", relpath);
     return 0;
 }
 

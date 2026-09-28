@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* -------------------- State -------------------- */
 
@@ -359,7 +360,7 @@ static Expr* builtin_context(Expr* res) {
     }
 
     if (a->type == EXPR_STRING) {
-        fprintf(stderr, "Context::notfound: Symbol %s not found.\n", name);
+        mth_message("Context", "notfound", "Symbol %s not found.", name);
         return NULL;
     }
 
@@ -376,7 +377,7 @@ static Expr* builtin_begin(Expr* res) {
     const char* ctx = string_arg(res->data.function.args[0]);
     if (!ctx) return NULL;
     if (!context_begin(ctx)) {
-        fprintf(stderr, "Begin::cxt: Context specification %s is not valid.\n", ctx);
+        mth_message("Begin", "cxt", "Context specification %s is not valid.", ctx);
         return NULL;
     }
     return expr_new_string(context_current());
@@ -409,7 +410,7 @@ static Expr* builtin_begin_package(Expr* res) {
     bool ok = context_begin_package(ctx, needs, needs_count);
     if (needs) free((void*)needs);
     if (!ok) {
-        fprintf(stderr, "BeginPackage::cxt: Context specification %s is not valid.\n", ctx);
+        mth_message("BeginPackage", "cxt", "Context specification %s is not valid.", ctx);
         return NULL;
     }
     return expr_new_string(context_current());
@@ -419,7 +420,7 @@ static Expr* builtin_end(Expr* res) {
     if (res->data.function.arg_count != 0) return NULL;
     char* closed = NULL;
     if (!context_end(&closed)) {
-        fprintf(stderr, "End::noctx: No previous context to revert to.\n");
+        mth_message("End", "noctx", "No previous context to revert to.");
         return NULL;
     }
     Expr* out = expr_new_string(closed ? closed : "");
@@ -431,7 +432,7 @@ static Expr* builtin_end_package(Expr* res) {
     if (res->data.function.arg_count != 0) return NULL;
     char* closed = NULL;
     if (!context_end_package(&closed)) {
-        fprintf(stderr, "EndPackage::noctx: No previous package to close.\n");
+        mth_message("EndPackage", "noctx", "No previous package to close.");
         return NULL;
     }
     free(closed);

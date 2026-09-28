@@ -70,8 +70,8 @@ double nc_combined_tol(double acc_digits, double prec_digits,
 }
 
 void nc_warn_goal(const char* head, double achieved_err, double tol) {
-    fprintf(stderr,
-            "%s::accgl: requested accuracy goal not met (estimated error %.3g "
-            "exceeds tolerance %.3g); returning the best approximation obtained.\n",
-            head ? head : "N", achieved_err, tol);
+    mth_message(head ? head : "N", "accgl",
+            "requested accuracy goal not met (estimated error %.3g "
+            "exceeds tolerance %.3g); returning the best approximation obtained.",
+            achieved_err, tol);
 }

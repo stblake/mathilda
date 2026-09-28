@@ -63,6 +63,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <gmp.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 void int_init(void) {
     symtab_add_builtin("IntegerDigits", builtin_integerdigits);
@@ -105,10 +106,7 @@ static Expr* expr_from_mpz_digit(const mpz_t d) {
  * evaluator leaves the call unevaluated, matching Mathematica's surface
  * behaviour. */
 static Expr* int_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "IntegerDigits::argb: IntegerDigits called with %zu argument%s; "
-            "between 1 and 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("IntegerDigits", "argb", "IntegerDigits called with %zu argument%s; between 1 and 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -117,9 +115,7 @@ static Expr* int_emit_argb(size_t argc) {
  * exact form they typed echoed back. */
 static Expr* int_emit_int(size_t pos, Expr* res) {
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "IntegerDigits::int: Integer expected at position %zu in %s.\n",
-            pos, call_str ? call_str : "?");
+    mth_message("IntegerDigits", "int", "Integer expected at position %zu in %s.", pos, call_str ? call_str : "?");
     free(call_str);
     return NULL;
 }
@@ -158,8 +154,7 @@ Expr* builtin_integerdigits(Expr* res) {
         }
         expr_to_mpz(b_expr, base);
         if (mpz_cmp_ui(base, 2) < 0) {
-            fprintf(stderr,
-                "IntegerDigits::ibase: Base argument must be an integer >= 2.\n");
+            mth_message("IntegerDigits", "ibase", "Base argument must be an integer >= 2.");
             mpz_clear(base);
             return NULL;
         }
@@ -180,9 +175,7 @@ Expr* builtin_integerdigits(Expr* res) {
         mpz_t l;
         expr_to_mpz(l_expr, l);
         if (mpz_sgn(l) < 0 || !mpz_fits_ulong_p(l)) {
-            fprintf(stderr,
-                "IntegerDigits::intnn: Non-negative machine-sized integer "
-                "expected at position 3.\n");
+            mth_message("IntegerDigits", "intnn", "Non-negative machine-sized integer expected at position 3.");
             mpz_clear(l);
             mpz_clear(base);
             return NULL;
@@ -296,10 +289,7 @@ Expr* builtin_integerdigits(Expr* res) {
  * 1 or 2 arguments are expected.` to stderr.  Mathematica uses `argt`
  * for the variable-arity case (1 OR 2 expected). */
 static Expr* intlen_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "IntegerLength::argt: IntegerLength called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("IntegerLength", "argt", "IntegerLength called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -307,9 +297,7 @@ static Expr* intlen_emit_argt(size_t argc) {
  * matching Mathematica's surface diagnostic. */
 static Expr* intlen_emit_int(size_t pos, Expr* res) {
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "IntegerLength::int: Integer expected at position %zu in %s.\n",
-            pos, call_str ? call_str : "?");
+    mth_message("IntegerLength", "int", "Integer expected at position %zu in %s.", pos, call_str ? call_str : "?");
     free(call_str);
     return NULL;
 }
@@ -388,8 +376,7 @@ Expr* builtin_integerlength(Expr* res) {
         }
         expr_to_mpz(b_expr, base);
         if (mpz_cmp_ui(base, 2) < 0) {
-            fprintf(stderr,
-                "IntegerLength::ibase: Base argument must be an integer >= 2.\n");
+            mth_message("IntegerLength", "ibase", "Base argument must be an integer >= 2.");
             mpz_clear(base);
             return NULL;
         }
@@ -424,19 +411,14 @@ Expr* builtin_integerlength(Expr* res) {
 /* `IntegerExponent::argt: IntegerExponent called with N argument(s);
  * 1 or 2 arguments are expected.` */
 static Expr* intexp_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "IntegerExponent::argt: IntegerExponent called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("IntegerExponent", "argt", "IntegerExponent called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
 /* `IntegerExponent::int: Integer expected at position <pos> in <call>.` */
 static Expr* intexp_emit_int(size_t pos, Expr* res) {
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "IntegerExponent::int: Integer expected at position %zu in %s.\n",
-            pos, call_str ? call_str : "?");
+    mth_message("IntegerExponent", "int", "Integer expected at position %zu in %s.", pos, call_str ? call_str : "?");
     free(call_str);
     return NULL;
 }
@@ -489,8 +471,7 @@ Expr* builtin_integerexponent(Expr* res) {
         }
         expr_to_mpz(b_expr, base);
         if (mpz_cmp_ui(base, 2) < 0) {
-            fprintf(stderr,
-                "IntegerExponent::ibase: Base argument must be an integer >= 2.\n");
+            mth_message("IntegerExponent", "ibase", "Base argument must be an integer >= 2.");
             mpz_clear(base);
             return NULL;
         }
@@ -525,10 +506,7 @@ Expr* builtin_integerexponent(Expr* res) {
  * between 1 and 3 arguments are expected.` matching Mathematica's
  * surface diagnostic exactly. */
 static Expr* dc_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "DigitCount::argb: DigitCount called with %zu argument%s; "
-            "between 1 and 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("DigitCount", "argb", "DigitCount called with %zu argument%s; between 1 and 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -537,9 +515,7 @@ static Expr* dc_emit_argb(size_t argc) {
  * through silently (returning NULL) without touching this path. */
 static Expr* dc_emit_int(size_t pos, Expr* res) {
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "DigitCount::int: Integer expected at position %zu in %s.\n",
-            pos, call_str ? call_str : "?");
+    mth_message("DigitCount", "int", "Integer expected at position %zu in %s.", pos, call_str ? call_str : "?");
     free(call_str);
     return NULL;
 }
@@ -551,11 +527,7 @@ static Expr* dc_emit_int(size_t pos, Expr* res) {
 static Expr* dc_emit_base(Expr* b_expr, Expr* res) {
     char* b_str = expr_to_string(b_expr);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "DigitCount::base: The base %s at position 2 of %s should be "
-            "an integer greater than 1.\n",
-            b_str ? b_str : "?",
-            call_str ? call_str : "?");
+    mth_message("DigitCount", "base", "The base %s at position 2 of %s should be an integer greater than 1.", b_str ? b_str : "?", call_str ? call_str : "?");
     free(b_str);
     free(call_str);
     return NULL;
@@ -567,11 +539,7 @@ static Expr* dc_emit_base(Expr* b_expr, Expr* res) {
 static Expr* dc_emit_digit(Expr* d_expr, Expr* res) {
     char* d_str = expr_to_string(d_expr);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "DigitCount::digit: The digit %s at position 3 of %s should "
-            "be a non-negative integer less than the base.\n",
-            d_str ? d_str : "?",
-            call_str ? call_str : "?");
+    mth_message("DigitCount", "digit", "The digit %s at position 3 of %s should be a non-negative integer less than the base.", d_str ? d_str : "?", call_str ? call_str : "?");
     free(d_str);
     free(call_str);
     return NULL;
@@ -730,11 +698,7 @@ Expr* builtin_digitcount(Expr* res) {
      * Mathematica-style diagnostic before bailing. */
     if (!mpz_fits_ulong_p(base) || mpz_get_ui(base) > DC_MAX_BASE_FOR_LIST) {
         char* call_str = expr_to_string(res);
-        fprintf(stderr,
-                "DigitCount::ovfl: Base too large for the list-returning "
-                "form in %s; use DigitCount[n, b, d] for a single digit "
-                "instead.\n",
-                call_str ? call_str : "?");
+        mth_message("DigitCount", "ovfl", "Base too large for the list-returning form in %s; use DigitCount[n, b, d] for a single digit instead.", call_str ? call_str : "?");
         free(call_str);
         mpz_clear(base);
         return NULL;
@@ -799,10 +763,7 @@ Expr* builtin_digitcount(Expr* res) {
  * arguments are expected.`  Print to stderr and return NULL so the
  * call is left unevaluated, matching Mathematica's surface behaviour. */
 static Expr* fd_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "FromDigits::argb: FromDigits called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("FromDigits", "argb", "FromDigits called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -814,11 +775,7 @@ static Expr* fd_emit_argb(size_t argc) {
 static Expr* fd_emit_nlst(Expr* arg, Expr* res) {
     char* arg_str = expr_to_string(arg);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "FromDigits::nlst: Argument %s at position 1 in %s should "
-            "be a list or a string.\n",
-            arg_str ? arg_str : "?",
-            call_str ? call_str : "?");
+    mth_message("FromDigits", "nlst", "Argument %s at position 1 in %s should be a list or a string.", arg_str ? arg_str : "?", call_str ? call_str : "?");
     free(arg_str);
     free(call_str);
     return NULL;
@@ -836,10 +793,7 @@ static Expr* fd_emit_char(int c, size_t pos, Expr* res) {
     } else {
         snprintf(buf, sizeof(buf), "\\x%02X", (unsigned)c & 0xFFu);
     }
-    fprintf(stderr,
-            "FromDigits::char: Invalid digit character %s in string at "
-            "position %zu in %s.\n",
-            buf, pos, call_str ? call_str : "?");
+    mth_message("FromDigits", "char", "Invalid digit character %s in string at position %zu in %s.", buf, pos, call_str ? call_str : "?");
     free(call_str);
     return NULL;
 }
@@ -1016,8 +970,7 @@ Expr* builtin_fromdigits(Expr* res) {
             expr_to_mpz(base_expr, base);
             base_owned = true;
             if (mpz_cmp_ui(base, 2) < 0) {
-                fprintf(stderr,
-                    "FromDigits::ibase: Base argument must be an integer >= 2.\n");
+                mth_message("FromDigits", "ibase", "Base argument must be an integer >= 2.");
                 mpz_clear(base);
                 return NULL;
             }
@@ -1052,9 +1005,7 @@ Expr* builtin_fromdigits(Expr* res) {
             } else {
                 expr_to_mpz(base_expr, base);
                 if (mpz_cmp_ui(base, 2) < 0) {
-                    fprintf(stderr,
-                        "FromDigits::ibase: Base argument must be an "
-                        "integer >= 2.\n");
+                    mth_message("FromDigits", "ibase", "Base argument must be an integer >= 2.");
                     mpz_clear(base);
                     return NULL;
                 }
@@ -1107,19 +1058,14 @@ Expr* builtin_fromdigits(Expr* res) {
 /* `IntegerString::argb: IntegerString called with N argument(s); between
  * 1 and 3 arguments are expected.` */
 static Expr* is_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "IntegerString::argb: IntegerString called with %zu argument%s; "
-            "between 1 and 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("IntegerString", "argb", "IntegerString called with %zu argument%s; between 1 and 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
 /* `IntegerString::int: Integer expected at position <pos> in <call>.` */
 static Expr* is_emit_int(size_t pos, Expr* res) {
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "IntegerString::int: Integer expected at position %zu in %s.\n",
-            pos, call_str ? call_str : "?");
+    mth_message("IntegerString", "int", "Integer expected at position %zu in %s.", pos, call_str ? call_str : "?");
     free(call_str);
     return NULL;
 }
@@ -1129,11 +1075,7 @@ static Expr* is_emit_int(size_t pos, Expr* res) {
 static Expr* is_emit_basf(Expr* b_expr, Expr* res) {
     char* b_str = expr_to_string(b_expr);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "IntegerString::basf: %s is not a valid base for IntegerString "
-            "in %s; the base must be an integer between 2 and 36.\n",
-            b_str ? b_str : "?",
-            call_str ? call_str : "?");
+    mth_message("IntegerString", "basf", "%s is not a valid base for IntegerString in %s; the base must be an integer between 2 and 36.", b_str ? b_str : "?", call_str ? call_str : "?");
     free(b_str);
     free(call_str);
     return NULL;
@@ -1142,9 +1084,7 @@ static Expr* is_emit_basf(Expr* b_expr, Expr* res) {
 /* `IntegerString::intnn: Non-negative machine-sized integer expected at
  * position 3.` */
 static Expr* is_emit_intnn(void) {
-    fprintf(stderr,
-            "IntegerString::intnn: Non-negative machine-sized integer "
-            "expected at position 3.\n");
+    mth_message("IntegerString", "intnn", "Non-negative machine-sized integer expected at position 3.");
     return NULL;
 }
 
@@ -1284,10 +1224,7 @@ Expr* builtin_digitsum(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) {
-        fprintf(stderr,
-                "DigitSum::argb: DigitSum called with %zu argument%s; "
-                "1 or 2 arguments are expected.\n",
-                argc, argc == 1 ? "" : "s");
+        mth_message("DigitSum", "argb", "DigitSum called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
         return NULL;
     }
 
@@ -1296,9 +1233,7 @@ Expr* builtin_digitsum(Expr* res) {
     if (!expr_is_integer_like(n_expr)) {
         if (expr_is_numeric_like(n_expr)) {
             char* call_str = expr_to_string(res);
-            fprintf(stderr,
-                    "DigitSum::int: Integer expected at position 1 in %s.\n",
-                    call_str ? call_str : "?");
+            mth_message("DigitSum", "int", "Integer expected at position 1 in %s.", call_str ? call_str : "?");
             free(call_str);
             return NULL;
         }
@@ -1314,11 +1249,7 @@ Expr* builtin_digitsum(Expr* res) {
             if (expr_is_numeric_like(b_expr)) {
                 char* b_str   = expr_to_string(b_expr);
                 char* call_str = expr_to_string(res);
-                fprintf(stderr,
-                        "DigitSum::base: The base %s at position 2 of %s "
-                        "should be an integer greater than 1.\n",
-                        b_str ? b_str : "?",
-                        call_str ? call_str : "?");
+                mth_message("DigitSum", "base", "The base %s at position 2 of %s should be an integer greater than 1.", b_str ? b_str : "?", call_str ? call_str : "?");
                 free(b_str);
                 free(call_str);
                 return NULL;
@@ -1329,11 +1260,7 @@ Expr* builtin_digitsum(Expr* res) {
         if (mpz_cmp_ui(base, 2) < 0) {
             char* b_str   = expr_to_string(b_expr);
             char* call_str = expr_to_string(res);
-            fprintf(stderr,
-                    "DigitSum::base: The base %s at position 2 of %s "
-                    "should be an integer greater than 1.\n",
-                    b_str ? b_str : "?",
-                    call_str ? call_str : "?");
+            mth_message("DigitSum", "base", "The base %s at position 2 of %s should be an integer greater than 1.", b_str ? b_str : "?", call_str ? call_str : "?");
             free(b_str);
             free(call_str);
             mpz_clear(base);

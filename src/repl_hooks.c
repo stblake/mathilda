@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "sym_names.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* Local strdup so the hook module does not depend on the POSIX
  * implementation; CLAUDE.md forbids unguarded strdup elsewhere but
@@ -128,9 +129,7 @@ char* repl_apply_pre_read(const char* input) {
     if (result && result->type == EXPR_STRING) {
         out = hooks_strdup(result->data.string);
     } else {
-        fprintf(stderr,
-                "$PreRead::strret: $PreRead returned a non-string value; "
-                "using original input.\n");
+        mth_message("$PreRead", "strret", "$PreRead returned a non-string value; using original input.");
         out = hooks_strdup(input);
     }
     if (result) expr_free(result);

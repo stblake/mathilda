@@ -12,6 +12,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
@@ -584,10 +585,7 @@ Expr* builtin_conjugate(Expr* res) {
     if (res->data.function.arg_count != 1) {
         /* Mathematica-compatible argx message; the call is left unevaluated. */
         size_t n = res->data.function.arg_count;
-        fprintf(stderr,
-                "Conjugate::argx: Conjugate called with %zu argument%s; "
-                "1 argument is expected.\n",
-                n, n == 1 ? "" : "s");
+        mth_message("Conjugate", "argx", "Conjugate called with %zu argument%s; 1 argument is expected.", n, n == 1 ? "" : "s");
         return NULL;
     }
     Expr* arg = res->data.function.args[0];

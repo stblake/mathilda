@@ -39,6 +39,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 static bool is_inf_sym(const Expr* e) {
     return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
@@ -46,7 +47,7 @@ static bool is_inf_sym(const Expr* e) {
 
 static void warn_div(void) {
     if (!arith_warnings_muted())
-        fprintf(stderr, "Product::div: Product does not converge.\n");
+        mth_message("Product", "div", "Product does not converge.");
 }
 
 /* evaluate(Head[a]) for a single copied arg. */

@@ -7,6 +7,7 @@
 #include "picostrings.h"
 #include <string.h>
 #include <stdio.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /*
  * sr_emit_argx:
@@ -15,10 +16,7 @@
  * unevaluated. Matches Mathematica's diagnostic for a wrong argument count.
  */
 static Expr* sr_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "StringReverse::argx: StringReverse called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("StringReverse", "argx", "StringReverse called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

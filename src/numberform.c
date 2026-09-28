@@ -30,6 +30,7 @@
 #include <string.h>
 #include <math.h>
 #include <gmp.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
@@ -387,8 +388,7 @@ static bool nf_format_parts(const Expr* e, const NumberFormCtx* ctx, NFParts* ou
 
     if (!sci && eff_exp10 >= 0 && (eff_exp10 + 1) > ndig && !g_nf_reqsigz_warned) {
         g_nf_reqsigz_warned = true;
-        fprintf(stderr, "NumberForm::reqsigz: Requested number precision is lower "
-                        "than number of digits shown; padding with zeros.\n");
+        mth_message("NumberForm", "reqsigz", "Requested number precision is lower than number of digits shown; padding with zeros.");
     }
 
     SB isb, fsb; sb_init(&isb); sb_init(&fsb);

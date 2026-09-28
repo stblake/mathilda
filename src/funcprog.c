@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>       /* isfinite — Outer's buffer path abandons on overflow */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 typedef struct {
     int64_t min;
@@ -651,13 +652,9 @@ static bool mi_check_options(Expr* res, size_t start) {
     char* call = expr_to_string(res);
     char* bad  = expr_to_string(bad_shape ? bad_shape : bad_name);
     if (bad_shape)
-        fprintf(stderr,
-                "MapIndexed::nonopt: Options expected (instead of %s) beyond "
-                "position %zu in %s. An option must be a rule or a list of "
-                "rules.\n", bad ? bad : "?", start, call ? call : "?");
+        mth_message("MapIndexed", "nonopt", "Options expected (instead of %s) beyond position %zu in %s. An option must be a rule or a list of rules.", bad ? bad : "?", start, call ? call : "?");
     else
-        fprintf(stderr, "MapIndexed::optx: Unknown option %s in %s.\n",
-                bad ? bad : "?", call ? call : "?");
+        mth_message("MapIndexed", "optx", "Unknown option %s in %s.", bad ? bad : "?", call ? call : "?");
     free(bad);
     free(call);
     return false;

@@ -244,6 +244,7 @@ Expr* builtin_nextprime(Expr* res) {
 }
 
 #include <gmp.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #ifndef NO_ECM
 #include "ecm.h"
 #endif
@@ -275,11 +276,7 @@ static void add_factor_mpz(FactorMpz* factors, int* num_factors, mpz_t p, int64_
 static void factint_warn_incomplete(const mpz_t n) {
     if (arith_warnings_muted()) return;
     char* s = mpz_get_str(NULL, 10, n);
-    fprintf(stderr,
-            "FactorInteger::nofac: %s is composite but no factor was found "
-            "within the search bounds; it is returned unfactored with "
-            "exponent 1.\n",
-            s ? s : "The argument");
+    mth_message("FactorInteger", "nofac", "%s is composite but no factor was found within the search bounds; it is returned unfactored with exponent 1.", s ? s : "The argument");
     free(s);
 }
 

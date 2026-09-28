@@ -2,6 +2,7 @@
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_pad / ndstruct_delist_repack */
 #include "pad.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* =====================================================================
  * PadRight / PadLeft  --  pad a (possibly ragged, possibly nested) array
@@ -163,10 +164,10 @@ static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
 /* `<name>::argb: <name> called with N arguments; between 1 and 4 arguments
  * are expected.` */
 static Expr* pad_emit_argb(const char* name, size_t argc) {
-    fprintf(stderr,
-            "%s::argb: %s called with %zu argument%s; "
-            "between 1 and 4 arguments are expected.\n",
-            name, name, argc, argc == 1 ? "" : "s");
+    mth_message(name, "argb",
+            "%s called with %zu argument%s; "
+            "between 1 and 4 arguments are expected.",
+            name, argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

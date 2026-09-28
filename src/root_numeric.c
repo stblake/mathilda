@@ -62,14 +62,10 @@ static void root_warn(const char* tag, const char* fmt, ...) {
      * .m integrators (ParallelMixedTower, ...) run these root numericalisations
      * inside Quiet[] and expect the messages suppressed exactly as Mathematica
      * suppresses its own internals.  Matches the ops_msg pattern in assoc_ops.c. */
-    mth_msg_note_fired();
-    if (mth_msg_suppressed()) return;
     va_list ap;
-    fprintf(stderr, "Root::%s: ", tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(0, "Root", tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* ====================================================================

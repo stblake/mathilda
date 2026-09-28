@@ -50,6 +50,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 static int head_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
@@ -191,13 +192,11 @@ Expr* builtin_rootreduce(Expr* res) {
     int method_bad = 0;
     QQBarMethod method = parse_method(res, &method_bad);
     if (method_bad) {
-        fprintf(stderr, "RootReduce::mtd: the Method option must be one of "
-                        "\"Automatic\", \"NumberField\" or \"Recursive\".\n");
+        mth_message("RootReduce", "mtd", "the Method option must be one of \"Automatic\", \"NumberField\" or \"Recursive\".");
         return NULL;
     }
     if (npos != 1) {
-        fprintf(stderr, "RootReduce::argx: RootReduce called with %zu argument%s; "
-                        "1 argument is expected.\n", npos, npos == 1 ? "" : "s");
+        mth_message("RootReduce", "argx", "RootReduce called with %zu argument%s; 1 argument is expected.", npos, npos == 1 ? "" : "s");
         return NULL;
     }
 

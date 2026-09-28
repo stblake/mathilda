@@ -10,6 +10,7 @@
 #include "sym_names.h"
 #include <string.h>
 #include <stdio.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /*
  * sd_emit_argrx:
@@ -18,10 +19,7 @@
  * Matches Mathematica's diagnostic for a wrong argument count.
  */
 static Expr* sd_emit_argrx(size_t argc) {
-    fprintf(stderr,
-            "StringDrop::argrx: StringDrop called with %zu argument%s; "
-            "2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("StringDrop", "argrx", "StringDrop called with %zu argument%s; 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

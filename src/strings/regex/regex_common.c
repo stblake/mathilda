@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ */
 /* Growable byte buffer                                               */
@@ -106,7 +107,7 @@ static int build_one(Expr* e, int anchored, int caseless, RegexRule* out,
     RegexProgram* prog = regex_compile(src, err, sizeof err);
     free(src);
     if (!prog) {
-        fprintf(stderr, "%s::regex: %s\n", head, err);
+        mth_message(head, "regex", "%s", err);
         return -1;
     }
     out->prog = prog;
@@ -126,9 +127,9 @@ int regex_rules_build(Expr* patt, int anchored, RegexRule** out, const char* hea
 int regex_rules_build_ex(Expr* patt, int anchored, int caseless,
                          RegexRule** out, const char* head) {
     if (!regex_available()) {
-        fprintf(stderr,
-                "%s::regavail: regular-expression support is not available; "
-                "rebuild Mathilda with PCRE2 (USE_REGEX=1).\n", head);
+        mth_message(head, "regavail",
+                "regular-expression support is not available; "
+                "rebuild Mathilda with PCRE2 (USE_REGEX=1).");
         return -1;
     }
 

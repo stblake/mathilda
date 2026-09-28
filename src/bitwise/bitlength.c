@@ -21,14 +21,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <gmp.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* `BitLength::argx: BitLength called with N arguments; 1 argument is
  * expected.`  argx never fires at N == 1, so the count is always plural. */
 static Expr* bitlen_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "BitLength::argx: BitLength called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("BitLength", "argx", "BitLength called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -36,9 +34,7 @@ static Expr* bitlen_emit_argx(size_t argc) {
  * IntegerLength::int surface diagnostic. */
 static Expr* bitlen_emit_int(size_t pos, Expr* res) {
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "BitLength::int: Integer expected at position %zu in %s.\n",
-            pos, call_str ? call_str : "?");
+    mth_message("BitLength", "int", "Integer expected at position %zu in %s.", pos, call_str ? call_str : "?");
     free(call_str);
     return NULL;
 }

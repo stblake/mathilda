@@ -59,6 +59,7 @@
 #include "common.h"       /* builtin_arg_error */
 #include "print.h"        /* expr_to_string (::poised message) */
 #include <gmp.h>          /* Modulus path: exact modular linear solve */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #ifdef USE_MPFR
 #include "numeric.h"
 #endif
@@ -1188,10 +1189,7 @@ static Expr* interp_eval_double(Expr* domain, Expr* table, size_t m,
             if (u < x0) u += P;
             p[k] = u;
         } else if (f->has_range[k] && (p[k] < f->dmin[k] || p[k] > f->dmax[k])) {
-            fprintf(stderr,
-                    "InterpolatingFunction::dmval: Input value %g lies outside "
-                    "the range of data in the interpolating function. "
-                    "Extrapolation will be used.\n", p[k]);
+            mth_message("InterpolatingFunction", "dmval", "Input value %g lies outside the range of data in the interpolating function. Extrapolation will be used.", p[k]);
         }
     }
 
@@ -1490,9 +1488,7 @@ static Expr* interp_vector_1d(Expr* domain, Expr* table, const Expr* arg, size_t
         if (ranged) {
             for (size_t i = 0; i < n; i++)
                 if (q[i] < dmin || q[i] > dmax) {
-                    fprintf(stderr, "InterpolatingFunction::dmval: Input value %g lies "
-                            "outside the range of data in the interpolating function. "
-                            "Extrapolation will be used.\n", q[i]);
+                    mth_message("InterpolatingFunction", "dmval", "Input value %g lies outside the range of data in the interpolating function. Extrapolation will be used.", q[i]);
                     break;
                 }
         }
@@ -3114,8 +3110,7 @@ static Expr* ip_solve_degree(IPData* D, int d, Expr** vars, bool* consistent) {
 /* Emit the ::poised / ::noipf diagnostic and return NULL (unevaluated). */
 static Expr* ip_fail(IPData* D, int d_sq) {
     if (D->m == 1) {
-        fprintf(stderr, "InterpolatingPolynomial::noipf: Unable to find an "
-                        "interpolating polynomial of total degree %d.\n", d_sq);
+        mth_message("InterpolatingPolynomial", "noipf", "Unable to find an interpolating polynomial of total degree %d.", d_sq);
         return NULL;
     }
     /* Distinct abscissae in input order, for the message. */
@@ -3138,9 +3133,7 @@ static Expr* ip_fail(IPData* D, int d_sq) {
     free(pts);
     char* s = expr_to_string(lst);
     expr_free(lst);
-    fprintf(stderr, "InterpolatingPolynomial::poised: The interpolation points %s "
-                    "are not poised, so an interpolating polynomial of total "
-                    "degree %d could not be found.\n", s ? s : "{}", d_sq);
+    mth_message("InterpolatingPolynomial", "poised", "The interpolation points %s are not poised, so an interpolating polynomial of total degree %d could not be found.", s ? s : "{}", d_sq);
     free(s);
     return NULL;
 }

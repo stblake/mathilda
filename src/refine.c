@@ -61,6 +61,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* Default TimeConstraint (seconds) for a single condition check, matching
  * Mathematica's Refine default. */
@@ -506,13 +507,11 @@ Expr* builtin_refine(Expr* res) {
     }
 
     if (npos == 0) {
-        fprintf(stderr, "Refine::argt: Refine called with 0 arguments; "
-                        "1 or 2 arguments are expected.\n");
+        mth_message("Refine", "argt", "Refine called with 0 arguments; 1 or 2 arguments are expected.");
         return NULL;
     }
     if (npos > 2) {
-        fprintf(stderr, "Refine::argx: Refine called with %zu arguments; "
-                        "1 or 2 arguments are expected.\n", npos);
+        mth_message("Refine", "argx", "Refine called with %zu arguments; 1 or 2 arguments are expected.", npos);
         return NULL;
     }
 
