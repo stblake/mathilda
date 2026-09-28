@@ -67,11 +67,9 @@ typedef struct {
 
 static void nr_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
-    fprintf(stderr, "NResidue::%s: ", tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(0, "NResidue", tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* ------------------------------------------------------------------ *

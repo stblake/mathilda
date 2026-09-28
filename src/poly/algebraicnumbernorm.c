@@ -16,6 +16,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "print.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,18 +38,14 @@ Expr* builtin_algebraicnumbernorm(Expr* res) {
 
     if (r == 2) {                             /* a is not an element of Q(theta) */
         char* s = expr_to_string((Expr*)a);
-        fprintf(stderr,
-                "AlgebraicNumberNorm::ext: %s is not an element of the field "
-                "extension specified by the Extension option.\n", s ? s : "?");
+        mth_message("AlgebraicNumberNorm", "ext", "%s is not an element of the field extension specified by the Extension option.", s ? s : "?");
         free(s);
         return NULL;
     }
 
     /* r == 0: not a constant algebraic number — report and stay unevaluated. */
     char* s = expr_to_string((Expr*)a);
-    fprintf(stderr,
-            "AlgebraicNumberNorm::nalg: %s is not an explicit algebraic number.\n",
-            s ? s : "?");
+    mth_message("AlgebraicNumberNorm", "nalg", "%s is not an explicit algebraic number.", s ? s : "?");
     free(s);
     return NULL;
 }

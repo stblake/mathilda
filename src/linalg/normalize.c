@@ -25,6 +25,7 @@
 #include "sym_names.h"
 #include "eval.h"
 #include "expr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -59,10 +60,7 @@ Expr* builtin_normalize(Expr* res) {
     if (linalg_call_has_ndarray(res)) return ndla_normalize(res);
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) {
-        fprintf(stderr,
-                "Normalize::argt: Normalize called with %zu argument%s; "
-                "1 or 2 arguments are expected.\n",
-                argc, argc == 1 ? "" : "s");
+        mth_message("Normalize", "argt", "Normalize called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
         return NULL;
     }
 

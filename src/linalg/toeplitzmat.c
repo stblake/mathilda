@@ -28,6 +28,7 @@
 #include "ndlinalg.h"
 #include "sym_names.h"
 #include "print.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -153,9 +154,7 @@ Expr* builtin_toeplitzmatrix(Expr* res) {
     size_t argc = res->data.function.arg_count;
 
     if (argc == 0) {
-        fprintf(stderr,
-                "ToeplitzMatrix::argb: ToeplitzMatrix called with 0 arguments; "
-                "between 1 and 3 arguments are expected.\n");
+        mth_message("ToeplitzMatrix", "argb", "ToeplitzMatrix called with 0 arguments; between 1 and 3 arguments are expected.");
         return NULL;
     }
 
@@ -193,11 +192,7 @@ Expr* builtin_toeplitzmatrix(Expr* res) {
         if (!expr_eq(cfirst, rfirst)) {
             char* cs = expr_to_string(cfirst);
             char* rs = expr_to_string(rfirst);
-            fprintf(stderr,
-                    "ToeplitzMatrix::crs: Warning: the column element %s and row "
-                    "element %s at positions 1 and 1 are not the same. "
-                    "Using column element.\n",
-                    cs ? cs : "?", rs ? rs : "?");
+            mth_message("ToeplitzMatrix", "crs", "Warning: the column element %s and row element %s at positions 1 and 1 are not the same. Using column element.", cs ? cs : "?", rs ? rs : "?");
             free(cs);
             free(rs);
         }

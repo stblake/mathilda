@@ -59,6 +59,7 @@
 #include "common.h"
 #include "sym_names.h"
 #include "numeric.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -1023,11 +1024,7 @@ Expr* svd_mpfr_dispatch(const SvdArgs* args, int n, int p, int n_a)
         static uint64_t gmpfr_warn = 0;
         if (!gmpfr_warn) {
             gmpfr_warn = 1;
-            fprintf(stderr,
-                "SingularValueDecomposition::gmpdwn: Generalized SVD of "
-                "high-precision MPFR input is computed at machine "
-                "precision via LAPACK -- a native MPFR generalized "
-                "kernel is not yet implemented.\n");
+            mth_message("SingularValueDecomposition", "gmpdwn", "Generalized SVD of high-precision MPFR input is computed at machine precision via LAPACK -- a native MPFR generalized kernel is not yet implemented.");
         }
         (void)n_a;
         return NULL;   /* falls through to svd_symbolic_dispatch */

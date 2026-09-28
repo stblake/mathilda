@@ -84,6 +84,7 @@
 #include "expand.h"
 #include "sym_names.h"
 #include "common.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #include <stdbool.h>
@@ -786,9 +787,7 @@ Expr* builtin_qrdecomposition(Expr* res) {
     int trank = get_tensor_dims(m, dims);
     if (trank != 2 || dims[0] == 0 || dims[1] == 0) {
         char* s = expr_to_string(m);
-        fprintf(stderr,
-                "QRDecomposition::matrix: Argument %s at position 1 is "
-                "not a non-empty rectangular matrix.\n", s);
+        mth_message("QRDecomposition", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
         free(s);
         return NULL;
     }

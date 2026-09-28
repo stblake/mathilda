@@ -28,13 +28,14 @@
 #include "rationalize.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ */
 /*  Diagnostic helpers                                                 */
 /* ------------------------------------------------------------------ */
 
 static void warn_once(const char* tag, const char* msg) {
-    fprintf(stderr, "GroebnerBasis::%s: %s\n", tag, msg);
+    mth_message("GroebnerBasis", tag, "%s", msg);
 }
 
 /* ------------------------------------------------------------------ */
@@ -476,8 +477,7 @@ Expr* builtin_groebner_basis(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc == 0) {
-        fprintf(stderr, "GroebnerBasis::argt: GroebnerBasis called with "
-                        "0 arguments; 2 or 3 expected.\n");
+        mth_message("GroebnerBasis", "argt", "GroebnerBasis called with 0 arguments; 2 or 3 expected.");
         return NULL;
     }
 
@@ -490,14 +490,11 @@ Expr* builtin_groebner_basis(Expr* res) {
      * polynomials below.  Otherwise we want at least the (polys, vars)
      * pair.  3-arg = (polys, vars, elim_vars). */
     if (n_pos < 1 || n_pos > 3) {
-        fprintf(stderr, "GroebnerBasis::argt: GroebnerBasis takes 2 or 3 "
-                        "positional arguments.\n");
+        mth_message("GroebnerBasis", "argt", "GroebnerBasis takes 2 or 3 positional arguments.");
         return NULL;
     }
     if (n_pos == 1 && !opt.parameter_vars_given) {
-        fprintf(stderr, "GroebnerBasis::argt: GroebnerBasis called with "
-                        "1 argument; 2 or 3 expected (or pass "
-                        "ParameterVariables -> ...).\n");
+        mth_message("GroebnerBasis", "argt", "GroebnerBasis called with 1 argument; 2 or 3 expected (or pass ParameterVariables -> ...).");
         return NULL;
     }
 

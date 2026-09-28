@@ -947,10 +947,7 @@ Expr* builtin_pseudoinverse(Expr* res) {
     int trank = get_tensor_dims(arg, dims);
     if (trank != 2 || dims[0] == 0 || dims[1] == 0) {
         char* arg_str = expr_to_string(arg);
-        fprintf(stderr,
-                "PseudoInverse::matrix: Argument %s at position 1 is not a "
-                "non-empty rectangular matrix.\n",
-                arg_str);
+        mth_message("PseudoInverse", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", arg_str);
         free(arg_str);
         return NULL;
     }

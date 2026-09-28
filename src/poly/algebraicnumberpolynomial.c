@@ -14,6 +14,7 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "print.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,9 +87,7 @@ Expr* builtin_algebraicnumberpolynomial(Expr* res) {
 
     /* Not a valid AlgebraicNumber object or rational: warn and decline. */
     char* s = expr_to_string((Expr*)a);
-    fprintf(stderr,
-            "AlgebraicNumberPolynomial::naobj: %s is not a valid "
-            "AlgebraicNumber object.\n", s ? s : "?");
+    mth_message("AlgebraicNumberPolynomial", "naobj", "%s is not a valid AlgebraicNumber object.", s ? s : "?");
     free(s);
     return NULL;
 }

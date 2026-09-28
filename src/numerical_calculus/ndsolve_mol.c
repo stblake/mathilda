@@ -37,6 +37,7 @@
 #include "../eval.h"
 #include "../common.h"
 #include "../numeric.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -45,7 +46,7 @@
 #define ND_MAX_SORDER 8    /* highest spatial derivative order handled */
 
 static void nd_mol_warn(const char* tag, const char* msg) {
-    fprintf(stderr, "NDSolve::%s: %s\n", tag, msg);
+    mth_message("NDSolve", tag, "%s", msg);
 }
 
 static Expr* nd_mol_solve_2d(Expr* res, const NdOpts* o0, const char* forced_method);

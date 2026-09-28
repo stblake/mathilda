@@ -44,6 +44,7 @@
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
 #include "flint_qqbar.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -813,9 +814,7 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
         }
     }
     if (inconsistent) {
-        fprintf(stderr,
-                "LinearSolve::nosol: Linear equation encountered "
-                "that has no solution.\n");
+        mth_message("LinearSolve", "nosol", "Linear equation encountered that has no solution.");
         for (int i = 0; i < r * cols; i++) expr_free(matrix[i]);
         free(matrix);
         free(pivot_col_for_row);
@@ -1011,9 +1010,7 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b,
         }
     }
     if (inconsistent) {
-        fprintf(stderr,
-                "LinearSolve::nosol: Linear equation encountered "
-                "that has no solution.\n");
+        mth_message("LinearSolve", "nosol", "Linear equation encountered that has no solution.");
         for (int i = 0; i < r * cols; i++) expr_free(matrix[i]);
         free(matrix);
         free(pivot_col_for_row);
@@ -1290,20 +1287,14 @@ Expr* builtin_linearsolve(Expr* res) {
     int m_rank = get_tensor_dims(m, m_dims);
     if (m_rank < 2) {
         char* m_str = expr_to_string(m);
-        fprintf(stderr,
-                "LinearSolve::matrix: Argument %s at position 1 is "
-                "not a non-empty rectangular matrix.\n",
-                m_str);
+        mth_message("LinearSolve", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", m_str);
         free(m_str);
         return NULL;
     }
     for (int i = 0; i < m_rank; i++) {
         if (m_dims[i] == 0) {
             char* m_str = expr_to_string(m);
-            fprintf(stderr,
-                    "LinearSolve::matrix: Argument %s at position 1 is "
-                    "not a non-empty rectangular matrix.\n",
-                    m_str);
+            mth_message("LinearSolve", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", m_str);
             free(m_str);
             return NULL;
         }
@@ -1318,9 +1309,7 @@ Expr* builtin_linearsolve(Expr* res) {
     int b_rank = get_tensor_dims(b, b_dims);
     if (b_rank < lead) {
         char* b_str = expr_to_string(b);
-        fprintf(stderr,
-                "LinearSolve::lvec: %s is neither a vector nor a matrix.\n",
-                b_str);
+        mth_message("LinearSolve", "lvec", "%s is neither a vector nor a matrix.", b_str);
         free(b_str);
         return NULL;
     }
@@ -1328,10 +1317,7 @@ Expr* builtin_linearsolve(Expr* res) {
         if (b_dims[i] != m_dims[i]) {
             char* m_str = expr_to_string(m);
             char* b_str = expr_to_string(b);
-            fprintf(stderr,
-                    "LinearSolve::lvec1: Coefficient matrix and target "
-                    "vector %s . x == %s do not have the same dimensions.\n",
-                    m_str, b_str);
+            mth_message("LinearSolve", "lvec1", "Coefficient matrix and target vector %s . x == %s do not have the same dimensions.", m_str, b_str);
             free(m_str);
             free(b_str);
             return NULL;

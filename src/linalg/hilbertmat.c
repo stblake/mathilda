@@ -25,6 +25,7 @@
 #include "numeric.h"
 #include "sym_names.h"
 #include "print.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -110,9 +111,7 @@ static bool hm_parse_working_precision(const Expr* val,
     /* Without MPFR a digit count degrades to machine precision. */
     static bool warned = false;
     if (!warned) {
-        fprintf(stderr,
-                "HilbertMatrix::wprec: arbitrary precision unavailable "
-                "(USE_MPFR=0); using machine precision.\n");
+        mth_message("HilbertMatrix", "wprec", "arbitrary precision unavailable (USE_MPFR=0); using machine precision.");
         warned = true;
     }
     *mode = HM_PREC_MACHINE;
@@ -150,9 +149,7 @@ Expr* builtin_hilbertmatrix(Expr* res) {
     size_t argc = res->data.function.arg_count;
 
     if (argc == 0) {
-        fprintf(stderr,
-                "HilbertMatrix::argx: HilbertMatrix called with 0 arguments; "
-                "1 argument is expected.\n");
+        mth_message("HilbertMatrix", "argx", "HilbertMatrix called with 0 arguments; 1 argument is expected.");
         return NULL;
     }
 
@@ -160,11 +157,7 @@ Expr* builtin_hilbertmatrix(Expr* res) {
     int64_t m = 0, n = 0;
     if (!hm_parse_dims(res->data.function.args[0], &m, &n)) {
         char* s = expr_to_string(res->data.function.args[0]);
-        fprintf(stderr,
-                "HilbertMatrix::dims: Dimension specification %s should be a "
-                "positive machine integer or a pair of positive machine "
-                "integers.\n",
-                s ? s : "?");
+        mth_message("HilbertMatrix", "dims", "Dimension specification %s should be a positive machine integer or a pair of positive machine integers.", s ? s : "?");
         free(s);
         return NULL;
     }
@@ -197,11 +190,7 @@ Expr* builtin_hilbertmatrix(Expr* res) {
     if (last_bad != NULL) {
         char* bad_str = expr_to_string(last_bad);
         char* call_str = expr_to_string(res);
-        fprintf(stderr,
-                "HilbertMatrix::nonopt: Options expected (instead of %s) "
-                "beyond position 1 in %s. An option must be a rule or a list "
-                "of rules.\n",
-                bad_str ? bad_str : "?", call_str ? call_str : "?");
+        mth_message("HilbertMatrix", "nonopt", "Options expected (instead of %s) beyond position 1 in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", call_str ? call_str : "?");
         free(bad_str);
         free(call_str);
         return NULL;

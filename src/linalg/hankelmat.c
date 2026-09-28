@@ -27,6 +27,7 @@
 #include "ndlinalg.h"
 #include "sym_names.h"
 #include "print.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -163,9 +164,7 @@ Expr* builtin_hankelmatrix(Expr* res) {
     size_t argc = res->data.function.arg_count;
 
     if (argc == 0) {
-        fprintf(stderr,
-                "HankelMatrix::argb: HankelMatrix called with 0 arguments; "
-                "between 1 and 3 arguments are expected.\n");
+        mth_message("HankelMatrix", "argb", "HankelMatrix called with 0 arguments; between 1 and 3 arguments are expected.");
         return NULL;
     }
 
@@ -202,11 +201,7 @@ Expr* builtin_hankelmatrix(Expr* res) {
         if (!expr_eq(clast, rfirst)) {
             char* cs = expr_to_string(clast);
             char* rs = expr_to_string(rfirst);
-            fprintf(stderr,
-                    "HankelMatrix::crs: Warning: the column element %s and row "
-                    "element %s at positions %lld and 1 are not the same. "
-                    "Using column element.\n",
-                    cs ? cs : "?", rs ? rs : "?", (long long)mm);
+            mth_message("HankelMatrix", "crs", "Warning: the column element %s and row element %s at positions %lld and 1 are not the same. Using column element.", cs ? cs : "?", rs ? rs : "?", (long long)mm);
             free(cs);
             free(rs);
         }

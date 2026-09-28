@@ -45,6 +45,7 @@
 #include "sym_names.h"
 #include "common.h"
 #include "print.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -301,13 +302,7 @@ static Expr* subrespoly_emit_npolys(Expr* p1, Expr* p2, Expr* var) {
     char* s1 = expr_to_string(p1);
     char* s2 = expr_to_string(p2);
     char* sv = expr_to_string(var);
-    fprintf(stderr,
-            "SubresultantPolynomials::npolys: %s and %s should be polynomials "
-            "with exact coefficients and the degree of %s in %s should not be "
-            "less than the degree of %s in %s.\n",
-            s1 ? s1 : "?", s2 ? s2 : "?",
-            s1 ? s1 : "?", sv ? sv : "?",
-            s2 ? s2 : "?", sv ? sv : "?");
+    mth_message("SubresultantPolynomials", "npolys", "%s and %s should be polynomials with exact coefficients and the degree of %s in %s should not be less than the degree of %s in %s.", s1 ? s1 : "?", s2 ? s2 : "?", s1 ? s1 : "?", sv ? sv : "?", s2 ? s2 : "?", sv ? sv : "?");
     free(s1);
     free(s2);
     free(sv);

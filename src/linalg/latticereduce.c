@@ -55,6 +55,7 @@
 #include "eval.h"
 #include "numeric.h"
 #include "zero_test.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #include <stdbool.h>
@@ -463,10 +464,7 @@ Expr* builtin_latticereduce(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) {
-        fprintf(stderr,
-                "LatticeReduce::argx: LatticeReduce called with %zu "
-                "argument%s; 1 argument is expected.\n",
-                argc, argc == 1 ? "" : "s");
+        mth_message("LatticeReduce", "argx", "LatticeReduce called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
         return NULL;
     }
 
@@ -475,9 +473,7 @@ Expr* builtin_latticereduce(Expr* res) {
     int rank = get_tensor_dims(m, dims);
     if (rank != 2 || dims[0] == 0 || dims[1] == 0) {
         char* s = expr_to_string_fullform(m);
-        fprintf(stderr,
-                "LatticeReduce::matrix: Argument %s at position 1 is not a "
-                "non-empty rectangular matrix.\n", s);
+        mth_message("LatticeReduce", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
         free(s);
         return NULL;
     }
@@ -502,9 +498,7 @@ Expr* builtin_latticereduce(Expr* res) {
     free(flat);
 
     if (!ok) {
-        fprintf(stderr,
-                "LatticeReduce::latm: Matrix contains an entry that is not "
-                "rational.\n");
+        mth_message("LatticeReduce", "latm", "Matrix contains an entry that is not rational.");
         for (int i = 0; i < n * d; i++) gr_clear(&B[i]);
         free(B);
         return NULL;
@@ -512,10 +506,7 @@ Expr* builtin_latticereduce(Expr* res) {
 
     int dependent = lll_reduce(B, n, d, NULL);
     if (dependent) {
-        fprintf(stderr,
-                "LatticeReduce::dep: The rows of the argument are linearly "
-                "dependent; a basis (linearly independent generating set) is "
-                "expected.\n");
+        mth_message("LatticeReduce", "dep", "The rows of the argument are linearly dependent; a basis (linearly independent generating set) is expected.");
         for (int i = 0; i < n * d; i++) gr_clear(&B[i]);
         free(B);
         return NULL;
@@ -704,7 +695,7 @@ static int finv_user_zerotest(Expr* fn, Expr* residual) {
 /* Emit a FindIntegerNullVector::tag diagnostic naming the input list. */
 static void finv_msg(const char* tag, const char* body, Expr* list) {
     char* s = expr_to_string_fullform(list);
-    fprintf(stderr, "FindIntegerNullVector::%s: %s %s.\n", tag, body, s);
+    mth_message("FindIntegerNullVector", tag, "%s %s.", body, s);
     free(s);
 }
 
@@ -916,8 +907,7 @@ Expr* builtin_findintegernullvector(Expr* res) {
     if (accepted) {
         if (!has_bound || a2 <= d2 * (1.0 + 1e-12)) {
             if (ztest1)
-                fprintf(stderr, "FindIntegerNullVector::ztest1: Unable to decide "
-                        "whether the residual is zero; assuming it is.\n");
+                mth_message("FindIntegerNullVector", "ztest1", "Unable to decide whether the residual is zero; assuming it is.");
             return result;                                  /* success */
         }
         /* a relation was found but it exceeds the norm bound d */

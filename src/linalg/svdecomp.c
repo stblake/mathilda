@@ -43,6 +43,7 @@
 #include "common.h"
 #include "linsolve.h"
 #include "poly.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -1116,11 +1117,7 @@ Expr* svd_symbolic_dispatch(const SvdArgs* args, int n, int p, int n_a) {
             static uint64_t nogsymb_warn = 0;
             if (!nogsymb_warn) {
                 nogsymb_warn = 1;
-                fprintf(stderr,
-                    "SingularValueDecomposition::nogsymb: Generalized "
-                    "SingularValueDecomposition does not support free "
-                    "symbolic content; numericalize the inputs (e.g. "
-                    "with N) to invoke the LAPACK / MPFR kernel.\n");
+                mth_message("SingularValueDecomposition", "nogsymb", "Generalized SingularValueDecomposition does not support free symbolic content; numericalize the inputs (e.g. with N) to invoke the LAPACK / MPFR kernel.");
             }
             return NULL;
         }
@@ -1550,9 +1547,7 @@ Expr* builtin_singularvaluedecomposition(Expr* res) {
     int n = 0, p = 0;
     if (!probe_matrix(args.m, &n, &p)) {
         char* s = expr_to_string(args.m);
-        fprintf(stderr,
-                "SingularValueDecomposition::matrix: Argument %s at "
-                "position 1 is not a non-empty rectangular matrix.\n", s);
+        mth_message("SingularValueDecomposition", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
         free(s);
         return NULL;
     }
@@ -1561,19 +1556,12 @@ Expr* builtin_singularvaluedecomposition(Expr* res) {
         int p_a = 0;
         if (!probe_matrix(args.a, &n_a, &p_a)) {
             char* s = expr_to_string(args.a);
-            fprintf(stderr,
-                    "SingularValueDecomposition::matdims: Second matrix %s "
-                    "in the generalized form is not a non-empty rectangular "
-                    "matrix.\n", s);
+            mth_message("SingularValueDecomposition", "matdims", "Second matrix %s in the generalized form is not a non-empty rectangular matrix.", s);
             free(s);
             return NULL;
         }
         if (p != p_a) {
-            fprintf(stderr,
-                    "SingularValueDecomposition::matdims: Generalized "
-                    "SingularValueDecomposition requires both matrices to "
-                    "have the same number of columns; got %d and %d.\n",
-                    p, p_a);
+            mth_message("SingularValueDecomposition", "matdims", "Generalized SingularValueDecomposition requires both matrices to have the same number of columns; got %d and %d.", p, p_a);
             return NULL;
         }
     }
@@ -1586,18 +1574,12 @@ Expr* builtin_singularvaluedecomposition(Expr* res) {
     if (args.k_form == SVD_FORM_K) {
         int absk = args.k_value < 0 ? -args.k_value : args.k_value;
         if (args.k_value == 0 || absk > mn) {
-            fprintf(stderr,
-                    "SingularValueDecomposition::sval: k = %d is out of "
-                    "range; expected a non-zero integer with |k| <= %d "
-                    "(min of matrix dimensions).\n",
-                    args.k_value, mn);
+            mth_message("SingularValueDecomposition", "sval", "k = %d is out of range; expected a non-zero integer with |k| <= %d (min of matrix dimensions).", args.k_value, mn);
             return NULL;
         }
     } else if (args.k_form == SVD_FORM_UPTO) {
         if (args.k_value < 0) {
-            fprintf(stderr,
-                    "SingularValueDecomposition::sval: UpTo[k] requires "
-                    "k >= 0; got %d.\n", args.k_value);
+            mth_message("SingularValueDecomposition", "sval", "UpTo[k] requires k >= 0; got %d.", args.k_value);
             return NULL;
         }
     }

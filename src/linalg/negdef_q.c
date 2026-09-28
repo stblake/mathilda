@@ -32,6 +32,7 @@
 #include "lapack.h"
 #include "expr.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -175,10 +176,7 @@ Expr* builtin_negative_definite_matrix_q(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) {
-        fprintf(stderr,
-                "NegativeDefiniteMatrixQ::argx: NegativeDefiniteMatrixQ "
-                "called with %zu argument%s; 1 argument is expected.\n",
-                argc, argc == 1 ? "" : "s");
+        mth_message("NegativeDefiniteMatrixQ", "argx", "NegativeDefiniteMatrixQ called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
         return NULL;
     }
 

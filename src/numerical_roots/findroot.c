@@ -126,11 +126,9 @@ typedef struct {
 
 static void fr_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
-    fprintf(stderr, "FindRoot::%s: ", tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(0, "FindRoot", tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* ------------------------------------------------------------------ *

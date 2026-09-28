@@ -36,6 +36,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "expr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -78,20 +79,14 @@ static bool expr_is_zero_number(const Expr* e) {
 /* ===================================================================== */
 
 static Expr* exponent_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "Exponent::argt: Exponent called with %zu argument%s; "
-            "2 or 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("Exponent", "argt", "Exponent called with %zu argument%s; 2 or 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
 static Expr* exponent_emit_nonopt(Expr* bad, size_t pos, Expr* res) {
     char* bad_str = expr_to_string(bad);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "Exponent::nonopt: Options expected (instead of %s) beyond "
-            "position %zu in %s. An option must be a rule or a list of rules.\n",
-            bad_str ? bad_str : "?", pos, call_str ? call_str : "?");
+    mth_message("Exponent", "nonopt", "Options expected (instead of %s) beyond position %zu in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", pos, call_str ? call_str : "?");
     free(bad_str);
     free(call_str);
     return NULL;

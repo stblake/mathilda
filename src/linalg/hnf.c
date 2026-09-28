@@ -21,6 +21,7 @@
 #include "print.h"
 #include "sym_names.h"
 #include "eval.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #include <stdbool.h>
@@ -150,9 +151,7 @@ Expr* builtin_hermite_decomposition(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) {
-        fprintf(stderr,
-                "HermiteDecomposition::argx: HermiteDecomposition called with "
-                "%zu arguments; 1 argument is expected.\n", argc);
+        mth_message("HermiteDecomposition", "argx", "HermiteDecomposition called with %zu arguments; 1 argument is expected.", argc);
         return NULL;
     }
 
@@ -161,9 +160,7 @@ Expr* builtin_hermite_decomposition(Expr* res) {
     int rank = get_tensor_dims(mexpr, dims);
     if (rank != 2 || dims[0] == 0 || dims[1] == 0) {
         char* s = expr_to_string_fullform(mexpr);
-        fprintf(stderr,
-                "HermiteDecomposition::matrix: Argument %s at position 1 is "
-                "not a non-empty rectangular matrix.\n", s);
+        mth_message("HermiteDecomposition", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
         free(s);
         return NULL;
     }
@@ -183,9 +180,7 @@ Expr* builtin_hermite_decomposition(Expr* res) {
     free(flat);
 
     if (!ok) {
-        fprintf(stderr,
-                "HermiteDecomposition::intm: The matrix must have integer "
-                "entries.\n");
+        mth_message("HermiteDecomposition", "intm", "The matrix must have integer entries.");
         linalg_hnf_free(A, m * n);
         return NULL;
     }

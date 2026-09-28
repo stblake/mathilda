@@ -11,6 +11,7 @@
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
 #include "ludecomp_internal.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -61,7 +62,7 @@ Expr* builtin_det(Expr* res) {
 
     if (rank != 2 || dims[0] != dims[1] || dims[0] == 0) {
         char* arg_str = expr_to_string_fullform(arg);
-        fprintf(stderr, "Det::matsq: Argument %s at position 1 is not a non-empty square matrix.\n", arg_str);
+        mth_message("Det", "matsq", "Argument %s at position 1 is not a non-empty square matrix.", arg_str);
         free(arg_str);
         return NULL;
     }

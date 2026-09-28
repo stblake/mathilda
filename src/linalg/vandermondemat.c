@@ -31,6 +31,7 @@
 #include "ndlinalg.h"
 #include "sym_names.h"
 #include "checked_int.h"   /* ci_powi_i64 — exact integer powers, overflow flag */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <math.h>          /* pow — matches power.c's real^integer branch */
 #include <stdio.h>
 #include <stdlib.h>
@@ -169,9 +170,7 @@ Expr* builtin_vandermondematrix(Expr* res) {
     size_t argc = res->data.function.arg_count;
 
     if (argc == 0) {
-        fprintf(stderr,
-                "VandermondeMatrix::argt: VandermondeMatrix called with 0 "
-                "arguments; 1 or 2 arguments are expected.\n");
+        mth_message("VandermondeMatrix", "argt", "VandermondeMatrix called with 0 arguments; 1 or 2 arguments are expected.");
         return NULL;
     }
 

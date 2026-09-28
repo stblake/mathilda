@@ -52,6 +52,7 @@
 #include "expand.h"
 #include "sym_names.h"
 #include "common.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #include <stdbool.h>
@@ -363,8 +364,7 @@ static void lu_warn_singular_once(uint64_t* counter, Expr* m)
     if (*counter) return;
     *counter = 1;
     char* s = expr_to_string(m);
-    fprintf(stderr,
-        "LUDecomposition::sing: Matrix %s is singular.\n", s);
+    mth_message("LUDecomposition", "sing", "Matrix %s is singular.", s);
     free(s);
 }
 
@@ -495,9 +495,7 @@ Expr* builtin_ludecomposition(Expr* res)
     int trank = get_tensor_dims(m, dims);
     if (trank != 2 || dims[0] == 0 || dims[1] == 0) {
         char* s = expr_to_string(m);
-        fprintf(stderr,
-                "LUDecomposition::matsq: Argument %s at position 1 is "
-                "not a non-empty rectangular matrix.\n", s);
+        mth_message("LUDecomposition", "matsq", "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
         free(s);
         return NULL;
     }

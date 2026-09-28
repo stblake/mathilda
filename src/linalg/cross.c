@@ -10,6 +10,7 @@
 #include "ndlinalg.h"
 #include "eval.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -34,7 +35,7 @@ Expr* builtin_cross(Expr* res) {
     }
 
     if (!valid) {
-        fprintf(stderr, "Cross::nonn1: The arguments are expected to be vectors of equal length, and the number of arguments is expected to be 1 less than their length.\n");
+        mth_message("Cross", "nonn1", "The arguments are expected to be vectors of equal length, and the number of arguments is expected to be 1 less than their length.");
         return NULL;
     }
 

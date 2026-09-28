@@ -31,6 +31,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "expr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -92,19 +93,14 @@ static bool is_integer_literal(const Expr* e) {
 /* ===================================================================== */
 
 static Expr* factorlist_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "FactorList::argx: FactorList called with %zu arguments; "
-            "1 argument is expected.\n", argc);
+    mth_message("FactorList", "argx", "FactorList called with %zu arguments; 1 argument is expected.", argc);
     return NULL;
 }
 
 static Expr* factorlist_emit_nonopt(Expr* bad, size_t pos, Expr* res) {
     char* bad_str = expr_to_string(bad);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "FactorList::nonopt: Options expected (instead of %s) beyond "
-            "position %zu in %s. An option must be a rule or a list of rules.\n",
-            bad_str ? bad_str : "?", pos, call_str ? call_str : "?");
+    mth_message("FactorList", "nonopt", "Options expected (instead of %s) beyond position %zu in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", pos, call_str ? call_str : "?");
     free(bad_str);
     free(call_str);
     return NULL;

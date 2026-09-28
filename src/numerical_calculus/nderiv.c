@@ -87,11 +87,9 @@
 
 static void nd_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
-    fprintf(stderr, "ND::%s: ", tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(0, "ND", tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* ------------------------------------------------------------------ *

@@ -9,6 +9,7 @@
 #include "sym_intern.h"
 #include "common.h"
 #include "numeric.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -210,10 +211,7 @@ static void feast_warn_fallback(const char* reason) {
     static bool warned = false;
     if (warned) return;
     warned = true;
-    fprintf(stderr,
-        "Eigenvalues::feast: FEAST machine kernel could not converge "
-        "(%s); falling back to the Direct method.\n",
-        reason ? reason : "unknown");
+    mth_message("Eigenvalues", "feast", "FEAST machine kernel could not converge (%s); falling back to the Direct method.", reason ? reason : "unknown");
 }
 
 /* --------- Complex LU factor / solve on paired re/im arrays --------- *

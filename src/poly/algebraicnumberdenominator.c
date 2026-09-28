@@ -14,6 +14,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "print.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,9 +31,7 @@ Expr* builtin_algebraicnumberdenominator(Expr* res) {
 
     /* r == 0: not a constant algebraic number — report and stay unevaluated. */
     char* s = expr_to_string((Expr*)a);
-    fprintf(stderr,
-            "AlgebraicNumberDenominator::nalg: %s is not an explicit "
-            "algebraic number.\n", s ? s : "?");
+    mth_message("AlgebraicNumberDenominator", "nalg", "%s is not an explicit algebraic number.", s ? s : "?");
     free(s);
     return NULL;
 }

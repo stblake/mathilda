@@ -50,6 +50,7 @@
 #include "print.h"
 #include "poly.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #include <stdbool.h>
@@ -247,10 +248,7 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method, Expr* zt) {
 
     if (rank != 2 || dims[0] == 0 || dims[1] == 0) {
         char* m_str = expr_to_string(m);
-        fprintf(stderr,
-                "NullSpace::matrix: Argument %s at position 1 is not a "
-                "non-empty rectangular matrix.\n",
-                m_str);
+        mth_message("NullSpace", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", m_str);
         free(m_str);
         return NULL;
     }

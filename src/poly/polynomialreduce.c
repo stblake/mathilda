@@ -49,6 +49,7 @@
 #include "gbmod.h"
 #include "flint_bridge.h"
 #include "rationalize.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdlib.h>
 #include <string.h>
@@ -72,7 +73,7 @@ static bool pr_is_rule(const Expr* e) {
 }
 
 static void pr_warn(const char* tag, const char* msg) {
-    fprintf(stderr, "PolynomialReduce::%s: %s\n", tag, msg);
+    mth_message("PolynomialReduce", tag, "%s", msg);
 }
 
 /* ------------------------------------------------------------------ */

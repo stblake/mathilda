@@ -50,6 +50,7 @@
 #include "print.h"
 #include "sym_names.h"
 #include "common.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -330,8 +331,7 @@ Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
         if (!sing_warn_counter) {
             sing_warn_counter = 1;
             char* s = expr_to_string(m);
-            fprintf(stderr,
-                "LUDecomposition::sing: Matrix %s is singular.\n", s);
+            mth_message("LUDecomposition", "sing", "Matrix %s is singular.", s);
             free(s);
         }
     }
@@ -371,10 +371,7 @@ Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
                       && !luc_warn_counter) {
             luc_warn_counter = 1;
             char* s = expr_to_string(m);
-            fprintf(stderr,
-                "LUDecomposition::luc: Result for LUDecomposition of "
-                "badly conditioned matrix %s may contain significant "
-                "numerical errors.\n", s);
+            mth_message("LUDecomposition", "luc", "Result for LUDecomposition of badly conditioned matrix %s may contain significant numerical errors.", s);
             free(s);
         }
         c = expr_new_real(cond_est);
@@ -443,7 +440,7 @@ Expr* ndla_ludecomposition(Expr* res)
     if (info > 0 && !sing_warn) {
         sing_warn = 1;
         char* s = expr_to_string(arg);
-        fprintf(stderr, "LUDecomposition::sing: Matrix %s is singular.\n", s);
+        mth_message("LUDecomposition", "sing", "Matrix %s is singular.", s);
         free(s);
     }
 
@@ -455,10 +452,7 @@ Expr* ndla_ludecomposition(Expr* res)
         if (cond_est > 1.0 / DBL_EPSILON && !luc_warn) {
             luc_warn = 1;
             char* s = expr_to_string(arg);
-            fprintf(stderr,
-                "LUDecomposition::luc: Result for LUDecomposition of badly "
-                "conditioned matrix %s may contain significant numerical "
-                "errors.\n", s);
+            mth_message("LUDecomposition", "luc", "Result for LUDecomposition of badly conditioned matrix %s may contain significant numerical errors.", s);
             free(s);
         }
     } else {

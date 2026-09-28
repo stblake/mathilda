@@ -96,6 +96,7 @@
 #include "attr.h"
 #include "print.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #include <math.h>
@@ -1093,9 +1094,7 @@ Expr* builtin_leastsquares(Expr* res) {
     int m_rank = get_tensor_dims(m, m_dims);
     if (m_rank != 2 || m_dims[0] == 0 || m_dims[1] == 0) {
         char* s = expr_to_string(m);
-        fprintf(stderr,
-                "LeastSquares::matrix: Argument %s at position 1 is "
-                "not a non-empty rectangular matrix.\n", s);
+        mth_message("LeastSquares", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
         free(s);
         return NULL;
     }
@@ -1105,19 +1104,14 @@ Expr* builtin_leastsquares(Expr* res) {
     int b_rank = get_tensor_dims(b, b_dims);
     if (b_rank != 1 && b_rank != 2) {
         char* s = expr_to_string(b);
-        fprintf(stderr,
-                "LeastSquares::lvec: %s is neither a vector nor a matrix.\n",
-                s);
+        mth_message("LeastSquares", "lvec", "%s is neither a vector nor a matrix.", s);
         free(s);
         return NULL;
     }
     if (b_dims[0] != rows) {
         char* ms = expr_to_string(m);
         char* bs = expr_to_string(b);
-        fprintf(stderr,
-                "LeastSquares::lvec1: Coefficient matrix and target "
-                "vector %s . x == %s do not have the same dimensions.\n",
-                ms, bs);
+        mth_message("LeastSquares", "lvec1", "Coefficient matrix and target vector %s . x == %s do not have the same dimensions.", ms, bs);
         free(ms);
         free(bs);
         return NULL;
@@ -1128,9 +1122,7 @@ Expr* builtin_leastsquares(Expr* res) {
      * leading-dim check above. */
     if (b_rank == 2 && b_dims[1] == 0) {
         char* s = expr_to_string(b);
-        fprintf(stderr,
-                "LeastSquares::lvec: %s is neither a vector nor a matrix.\n",
-                s);
+        mth_message("LeastSquares", "lvec", "%s is neither a vector nor a matrix.", s);
         free(s);
         return NULL;
     }

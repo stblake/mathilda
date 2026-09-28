@@ -10,6 +10,7 @@
 #include "sym_intern.h"
 #include "common.h"
 #include "numeric.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,9 +41,7 @@ static void eigen_warn_unimplemented_method(MateigenMethod m) {
         case MATEIGEN_METHOD_UNKNOWN:  name = "<unknown>"; break;
         default:                       return;
     }
-    fprintf(stderr,
-        "Eigenvalues::method: Method -> \"%s\" is not yet implemented; "
-        "using the symbolic characteristic-polynomial pipeline.\n", name);
+    mth_message("Eigenvalues", "method", "Method -> \"%s\" is not yet implemented; using the symbolic characteristic-polynomial pipeline.", name);
 }
 
 /* Apply k-spec (Integer k, -k, or UpTo[k]) to vals[0..count].  Returns a

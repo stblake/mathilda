@@ -35,6 +35,7 @@
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ */
 /*  Small shape predicates                                             */
@@ -1490,27 +1491,22 @@ int eliminate_suppress_messages = 0;
 
 static void emit_argt(size_t argc) {
     if (eliminate_suppress_messages) return;
-    fprintf(stderr, "Eliminate::argt: Eliminate called with %zu argument(s); "
-                    "2 expected.\n", argc);
+    mth_message("Eliminate", "argt", "Eliminate called with %zu argument(s); 2 expected.", argc);
 }
 
 static void emit_eqf(void) {
     if (eliminate_suppress_messages) return;
-    fprintf(stderr, "Eliminate::eqf: equations must be given as Equal[lhs, rhs] "
-                    "(==) or a list/And of such.\n");
+    mth_message("Eliminate", "eqf", "equations must be given as Equal[lhs, rhs] (==) or a list/And of such.");
 }
 
 static void emit_nlin(void) {
     if (eliminate_suppress_messages) return;
-    fprintf(stderr, "Eliminate::nlin: system is not polynomial in the given "
-                    "variables.\n");
+    mth_message("Eliminate", "nlin", "system is not polynomial in the given variables.");
 }
 
 static void emit_ifun(void) {
     if (eliminate_suppress_messages) return;
-    fprintf(stderr, "Eliminate::ifun: Inverse functions are being used by "
-                    "Eliminate, so some solutions may not be found; use Reduce "
-                    "for complete solution information.\n");
+    mth_message("Eliminate", "ifun", "Inverse functions are being used by Eliminate, so some solutions may not be found; use Reduce for complete solution information.");
 }
 
 /* Emit at most once per distinct input expression.  `RepeatedTiming`,
@@ -1523,10 +1519,7 @@ static void emit_alg(const Expr* res) {
     uint64_t h = res ? expr_hash((Expr*)res) : 0;
     if (h == last_warned_hash) return;
     last_warned_hash = h;
-    fprintf(stderr, "Eliminate::alg: Radical (rational-power) subexpressions "
-                    "were replaced by auxiliary variables; the returned "
-                    "polynomial relation is the cross-multiplied generic "
-                    "consequence (sign / branch information may be lost).\n");
+    mth_message("Eliminate", "alg", "Radical (rational-power) subexpressions were replaced by auxiliary variables; the returned polynomial relation is the cross-multiplied generic consequence (sign / branch information may be lost).");
 }
 
 /* ------------------------------------------------------------------ */

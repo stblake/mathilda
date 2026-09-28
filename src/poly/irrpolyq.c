@@ -52,6 +52,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "expr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -137,20 +138,14 @@ static Expr* expand_complex_to_i(const Expr* e) {
 /* ===================================================================== */
 
 static Expr* irrpolyq_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "IrreduciblePolynomialQ::argx: IrreduciblePolynomialQ called with "
-            "%zu arguments; 1 argument is expected.\n", argc);
+    mth_message("IrreduciblePolynomialQ", "argx", "IrreduciblePolynomialQ called with %zu arguments; 1 argument is expected.", argc);
     return NULL;
 }
 
 static Expr* irrpolyq_emit_nonopt(Expr* bad, size_t pos, Expr* res) {
     char* bad_str = expr_to_string(bad);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "IrreduciblePolynomialQ::nonopt: Options expected (instead of %s) "
-            "beyond position %zu in %s. An option must be a rule or a list "
-            "of rules.\n",
-            bad_str ? bad_str : "?", pos, call_str ? call_str : "?");
+    mth_message("IrreduciblePolynomialQ", "nonopt", "Options expected (instead of %s) beyond position %zu in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", pos, call_str ? call_str : "?");
     free(bad_str);
     free(call_str);
     return NULL;

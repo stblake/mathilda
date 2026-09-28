@@ -191,11 +191,9 @@ static bool nl_accept(double result_mag, double step, double maxsample) {
 
 static void nl_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
-    fprintf(stderr, "NLimit::%s: ", tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(0, "NLimit", tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* ------------------------------------------------------------------ *

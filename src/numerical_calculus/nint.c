@@ -62,13 +62,10 @@ static void ni_warn(const char* tag, const char* fmt, ...) {
      * *inner* NIntegrate over the remaining variables; the inner integral's
      * convergence diagnostics are sampling noise — only the outer integral's
      * verdict should reach the user. */
-    if (arith_warnings_muted()) return;
     va_list ap;
-    fprintf(stderr, "NIntegrate::%s: ", tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(g_arith_warnings_muted, "NIntegrate", tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* ------------------------------------------------------------------ *

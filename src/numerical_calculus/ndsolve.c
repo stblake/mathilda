@@ -13,6 +13,7 @@
 #include "../common.h"
 #include "../numeric.h"
 #include "../nc_accuracy.h"   /* shared AccuracyGoal/PrecisionGoal handling */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -195,7 +196,7 @@ static void nd_problem_free(NdProblem* P) {
  *  Core solver                                                        *
  * ------------------------------------------------------------------ */
 static void nd_warn(const char* tag, const char* msg) {
-    fprintf(stderr, "NDSolve::%s: %s\n", tag, msg);
+    mth_message("NDSolve", tag, "%s", msg);
 }
 
 static Expr* ndsolve_core(Expr* res, const char* forced_method) {

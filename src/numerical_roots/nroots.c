@@ -54,13 +54,10 @@
  *  Diagnostics                                                        *
  * ------------------------------------------------------------------ */
 static void nr_warn(const char* tag, const char* fmt, ...) {
-    if (arith_warnings_muted()) return;
     va_list ap;
-    fprintf(stderr, "NRoots::%s: ", tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(g_arith_warnings_muted, "NRoots", tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* Method selector. */

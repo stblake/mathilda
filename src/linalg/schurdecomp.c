@@ -35,6 +35,7 @@
 #include "ndarray.h"
 #include "numarray.h"
 #include "lapack.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -166,9 +167,7 @@ Expr* builtin_schurdecomposition(Expr* res) {
 
     size_t argc = res->data.function.arg_count;
     if (argc < 1) {
-        fprintf(stderr,
-                "SchurDecomposition::argx: SchurDecomposition called with 0 "
-                "arguments; 1 argument is expected.\n");
+        mth_message("SchurDecomposition", "argx", "SchurDecomposition called with 0 arguments; 1 argument is expected.");
         return NULL;
     }
 
@@ -185,10 +184,7 @@ Expr* builtin_schurdecomposition(Expr* res) {
         n = schur_matrix_order(arg0);
         if (n < 1) {
             char* s = expr_to_string_fullform((Expr*)arg0);
-            fprintf(stderr,
-                    "SchurDecomposition::sqma: Argument %s at position 1 is not "
-                    "a non-empty square matrix or a pair of square matrices.\n",
-                    s ? s : "?");
+            mth_message("SchurDecomposition", "sqma", "Argument %s at position 1 is not a non-empty square matrix or a pair of square matrices.", s ? s : "?");
             free(s);
             return NULL;
         }

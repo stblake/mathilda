@@ -65,11 +65,9 @@
 
 static void ns_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
-    fprintf(stderr, "NSum::%s: ", tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(0, "NSum", tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* ------------------------------------------------------------------ *

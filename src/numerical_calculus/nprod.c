@@ -40,6 +40,7 @@
 #include "numeric.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* Extra digits carried on the MPFR path before the final Exp/round. */
 #define NP_GUARD_DIGITS 10.0
@@ -50,11 +51,9 @@
 
 static void np_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
-    fprintf(stderr, "NProduct::%s: ", tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(0, "NProduct", tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* ------------------------------------------------------------------ *

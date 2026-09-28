@@ -52,6 +52,7 @@
 #include "poly.h"
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <float.h>
 #include <gmp.h>
@@ -400,9 +401,7 @@ Expr* builtin_matrixrank(Expr* res) {
     int rank2 = get_tensor_dims(m, dims);
     if (rank2 != 2 || dims[0] == 0 || dims[1] == 0) {
         char* s = expr_to_string(m);
-        fprintf(stderr,
-                "MatrixRank::matrix: Argument %s at position 1 is not a "
-                "non-empty rectangular matrix.\n", s);
+        mth_message("MatrixRank", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
         free(s);
         return NULL;
     }

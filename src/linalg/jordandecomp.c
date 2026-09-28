@@ -61,6 +61,7 @@
 #include "numarray.h"
 #ifdef USE_LAPACK
 #include "lapack.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #endif
 
 #include <stdio.h>
@@ -853,10 +854,7 @@ Expr* builtin_jordandecomposition(Expr* res) {
 
     size_t argc = res->data.function.arg_count;
     if (argc != 1) {
-        fprintf(stderr,
-                "JordanDecomposition::argx: JordanDecomposition called with "
-                "%zu argument%s; 1 argument is expected.\n",
-                argc, argc == 1 ? "" : "s");
+        mth_message("JordanDecomposition", "argx", "JordanDecomposition called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
         return NULL;
     }
 
@@ -864,9 +862,7 @@ Expr* builtin_jordandecomposition(Expr* res) {
     int n = jd_matrix_order(arg);
     if (n < 0) {
         char* s = expr_to_string_fullform(arg);
-        fprintf(stderr,
-                "JordanDecomposition::matsq: Argument %s at position 1 is not "
-                "a non-empty square matrix.\n", s);
+        mth_message("JordanDecomposition", "matsq", "Argument %s at position 1 is not a non-empty square matrix.", s);
         free(s);
         return NULL;
     }

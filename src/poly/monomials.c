@@ -41,6 +41,7 @@
 #include "attr.h"
 #include "groebner.h"   /* gb_build_order_matrix, gb_classify_named_order */
 #include "flint_bridge.h" /* flint_field_monomials — field-coefficient fast path */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdlib.h>
 #include <string.h>
@@ -562,9 +563,7 @@ Expr* builtin_fromcoefficientrules(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2) {
-        fprintf(stderr,
-                "FromCoefficientRules::argrx: FromCoefficientRules called with "
-                "%zu arguments; 2 arguments are expected.\n", argc);
+        mth_message("FromCoefficientRules", "argrx", "FromCoefficientRules called with %zu arguments; 2 arguments are expected.", argc);
         return NULL;
     }
     Expr* rules    = res->data.function.args[0];

@@ -61,6 +61,7 @@
 #include "poly/poly.h"       /* is_polynomial */
 #include "nsolve_system.h"   /* nsolve_polynomial_system */
 #include "findroot.h"        /* builtin_findroot */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <math.h>
 #include <gmp.h>
@@ -881,9 +882,7 @@ Expr* builtin_nsolve(Expr* res) {
          * paths regardless of MaxRoots.  Bail cheaply, leaving NSolve
          * unevaluated, before either path is entered. */
         if (has_huge_power(expr, var, NSOLVE_MAX_POLY_DEGREE)) {
-            fprintf(stderr,
-                    "NSolve::deg: the polynomial degree exceeds the supported "
-                    "limit (%d); leaving unevaluated.\n", NSOLVE_MAX_POLY_DEGREE);
+            mth_message("NSolve", "deg", "the polynomial degree exceeds the supported limit (%d); leaving unevaluated.", NSOLVE_MAX_POLY_DEGREE);
             expr_free(varlist);
             return NULL;
         }

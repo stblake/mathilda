@@ -37,6 +37,7 @@
 #include "sym_names.h"
 #include "common.h"
 #include "numeric.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -796,8 +797,7 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
         if (!sing_warn_counter) {
             sing_warn_counter = 1;
             char* s = expr_to_string(m);
-            fprintf(stderr,
-                "LUDecomposition::sing: Matrix %s is singular.\n", s);
+            mth_message("LUDecomposition", "sing", "Matrix %s is singular.", s);
             free(s);
         }
     }
@@ -847,10 +847,7 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
             if (mpfr_cmp(cond, threshold) > 0) {
                 luc_warn_counter = 1;
                 char* s = expr_to_string(m);
-                fprintf(stderr,
-                    "LUDecomposition::luc: Result for LUDecomposition of "
-                    "badly conditioned matrix %s may contain significant "
-                    "numerical errors.\n", s);
+                mth_message("LUDecomposition", "luc", "Result for LUDecomposition of badly conditioned matrix %s may contain significant numerical errors.", s);
                 free(s);
             }
             mpfr_clear(threshold);

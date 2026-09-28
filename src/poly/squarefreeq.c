@@ -35,6 +35,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "expr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -108,21 +109,14 @@ static bool is_complex_integer(const Expr* e, mpz_t a_out, mpz_t b_out) {
 /* ===================================================================== */
 
 static Expr* sqfree_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "SquareFreeQ::argb: SquareFreeQ called with %zu argument%s; "
-            "between 1 and 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("SquareFreeQ", "argb", "SquareFreeQ called with %zu argument%s; between 1 and 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
 static Expr* sqfree_emit_nonopt(Expr* bad, size_t pos, Expr* res) {
     char* bad_str = expr_to_string(bad);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "SquareFreeQ::nonopt: Options expected (instead of %s) beyond "
-            "position %zu in %s. An option must be a rule or a list of "
-            "rules.\n",
-            bad_str ? bad_str : "?", pos, call_str ? call_str : "?");
+    mth_message("SquareFreeQ", "nonopt", "Options expected (instead of %s) beyond position %zu in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", pos, call_str ? call_str : "?");
     free(bad_str);
     free(call_str);
     return NULL;
@@ -133,11 +127,7 @@ static Expr* sqfree_emit_nonopt(Expr* bad, size_t pos, Expr* res) {
  * returning NULL so the surface call stays visible to the user. */
 static Expr* sqfree_emit_modnotimpl(Expr* val) {
     char* val_str = expr_to_string(val);
-    fprintf(stderr,
-            "SquareFreeQ::modnotimpl: Modulus -> %s is not yet supported; "
-            "only Modulus -> 0 (the default integer ring) is currently "
-            "implemented.\n",
-            val_str ? val_str : "?");
+    mth_message("SquareFreeQ", "modnotimpl", "Modulus -> %s is not yet supported; only Modulus -> 0 (the default integer ring) is currently implemented.", val_str ? val_str : "?");
     free(val_str);
     return NULL;
 }
