@@ -37,8 +37,20 @@ historical record. Verified against the live binary, most of section A is now fi
 | A16 `PolynomialGCD[p, e, Extension -> Automatic]`, `e` an unexpanded algebraic constant equal to 0 | **OPEN** | returns 1 (found on the v0.216 corpus re-run, 2026-09-27 late); `.m` expands and reduces before every extension gcd |
 | A17 `RowReduce[m, Method -> "OneStepRowReduction"]` with parametric entries | **OPEN** | does not finish on a 20 x 15 system linear in two parameters; `.m` uses the default method when parameters are present |
 | A18 a `Do` iterator inside a package captures a caller's same-named symbol | **OPEN** | `Table` is capture-avoiding, `Do` is not (the A11 fix does not cover it); `.m` iterators on the assembly path renamed |
+| A19 `FreeQ[e, Complex]` is True on a complex atom | **OPEN** | found 2026-09-28 porting logrewrite; `logrewrite.m` tests `_Complex` everywhere |
+| A20 `ComplexExpand` writes a real nested radical as `Cos[Arg[...]]`, `Arg[1 - Sqrt[5]]` unevaluated | **OPEN** | `logrewrite.m` puts constants in rectangular form by rules (`RectPow`); `RRad` of the package inherits the hazard |
+| A21 `CountRoots` not implemented | **OPEN** | `SturmCount` in `logrewrite.m` |
+| A22 `$InputFileName`, `DirectoryName` not implemented | **OPEN** | a package cannot `Get` a sibling file; `LoadModule["mixed/logrewrite.m"]` instead |
+| A23 `NumericQ[Root[...]]` is False; `ToRadicals` gives the Ferrari form for every quartic | **OPEN** | `RootRadicals` in `logrewrite.m` (biquadratic / palindromic forms, root picked numerically) |
+| A24 `Can`'s field detour returned a `Dot[{}, Inverse[{}], {}]` coefficient | **OPEN** (state-dependent, no standalone repro) | `logrewrite.m` canonicalises with `CanRaw` |
+| A18 (re-checked on v0.221) | still **OPEN** | `g[v_] := Module[{s = 0}, Do[s += v, {k, 2}]; s]; g[k]` gives 3 |
+| B7 an outer `TimeConstrained` cannot interrupt an inner one | **OPEN** (behavioural) | the package budget cannot cut the rewrite's own `TimeConstrained` short |
 | B1 `ToNumberField` non-canonical primitive element | **OPEN** (behavioural, by design) | `.m` reads whatever theta comes back |
 | B2–B6 | behavioural; see each entry | mostly by-design / hard |
+
+Items A19-A24 and B7 were found on 2026-09-28 (builds 0.221/0.222) while porting the real form of
+the logarithmic part (`src/internal/mixed/logrewrite.m`); each has a one-line repro below and a
+workaround in that module (section D).
 
 Remaining core work: the three items found when the review corpus was re-run
 on v0.216 (2026-09-27, late): **A16** (extension gcd against an unexpanded zero constant, the cause of
@@ -290,6 +302,75 @@ by loop indices: `Log[x + a]` "no solution within bounds", `x Exp[a x]`, `Exp[a 
 (`ma`, `ent`, `ne`); the other single-letter iterators of the package (`i`, `k`, `c`, `n`, `p`, `g`, ...
 about 150 sites) stay exposed to a parameter of that name until `Do` is made capture-avoiding like `Table`.
 
+### A19. `FreeQ[e, Complex]` is True on a complex atom
+
+```
+FreeQ[1 + 2 I, Complex]           (* True;  Mathematica: False *)
+FreeQ[1 + 2 I, _Complex]          (* False: correct *)
+MatchQ[1 + 2 I, Complex[_Integer | _Rational, _Integer | _Rational]]   (* True: correct *)
+(3 + 2 I) x /. Complex[a_, b_] :> a + b ii                              (* (3 + 2 ii) x: correct *)
+```
+A bare symbol as the second argument of `FreeQ` matches compound heads (`FreeQ[Log[x] + 1, Log]` is False)
+but not the type of an atom. `logrewrite.m` writes every test for I with `_Complex` (and `_Root`, `_Re`,
+... for the heads); found 2026-09-28 when the rule `Power[b_, 1/2] /; ! FreeQ[ComplexExpand[b], Complex]`
+of `logrewrite.wl` never fired.
+
+### A20. `ComplexExpand` writes a real nested radical as `Cos[Arg[...]]` terms; `Arg[1 - Sqrt[5]]` stays unevaluated
+
+```
+ComplexExpand[Sqrt[2 + Sqrt[3]]]      (* (7 + 4 Sqrt[3])^(1/4) Cos[1/2 Arg[2 + Sqrt[3]]] + I (...) Sin[...];  Mathematica: Sqrt[2 + Sqrt[3]] *)
+ComplexExpand[Sqrt[1 - Sqrt[5]]]      (* (6 - 2 Sqrt[5])^(1/4) Cos[1/2 Arg[1 - Sqrt[5]]] + ...;          Mathematica: I Sqrt[-1 + Sqrt[5]] *)
+Arg[1 - Sqrt[5]]                      (* unevaluated;  Mathematica: Pi *)
+ComplexExpand[(-1)^(1/3)]             (* 1/2 + (I/2) Sqrt[3]: correct *)
+```
+The sign of a real algebraic number under a radical is not decided. `logrewrite.m` puts a constant in
+rectangular form by rules (`RectConst`/`RectPow`: the sign of a real base from 30 digits, the principal
+square root of a non-real base written by hand) and applies `ComplexExpand` to `(-1)^k` only. The
+package's `RRad` (`ComplexExpand[ToRadicals[RootReduce[e]]]`) inherits the hazard on nested radicals.
+
+### A21. `CountRoots` is not implemented
+
+```
+CountRoots[x^4 + 1, x]                (* unevaluated;  Mathematica: 0 *)
+```
+`logrewrite.m` counts the real roots with Sturm's theorem (`SturmCount`, the squarefree part and a
+remainder sequence with `RootReduce`-canonical coefficients).
+
+### A22. `$InputFileName` and `DirectoryName` are not implemented
+
+```
+$InputFileName                        (* unevaluated inside a file run with -file;  Mathematica: the file's path *)
+DirectoryName["/a/b/c.m"]             (* unevaluated;  Mathematica: "/a/b/" *)
+```
+A package cannot `Get` a file beside itself the way `ParallelMixed.wl` reads `logrewrite.wl`;
+`ParallelMixed.m` uses `LoadModule["mixed/logrewrite.m"]`, which resolves `src/internal/` like the lazy
+load and evaluates the file in the current (private) context.
+
+### A23. `NumericQ` is False on a `Root` object; `ToRadicals` gives the Ferrari form for every quartic root
+
+```
+NumericQ[Root[1 + #^4 &, 2]]                          (* False;  Mathematica: True *)
+ToRadicals[Root[1 + 2 # - 2 #^2 + 2 #^3 + #^4 &, 4]]  (* -1/2 + 1/2 (Sqrt[-4 (-7/4 - 1/6 (-7 + (1/2 (-416 + 240 Sqrt[3]))^(1/3) + ...;
+                                                         Mathematica: (-1 + Sqrt[5] + I Sqrt[2 (-1 + Sqrt[5])])/2 *)
+ToRadicals[Root[1 + #^4 &, 2]]                        (* (-1 + I)/Sqrt[2]: correct *)
+```
+`N[Root[...], 30]` and `ToRadicals` of biquadratic roots are correct. `logrewrite.m` replaces every Root
+object before a `NumericQ` test (`RootFree`) and writes a quartic root through its quadratic-in-disguise
+form when the kernel's radical form is not tame (`RootRadicals`: biquadratic, palindromic and
+antipalindromic quartics, the root picked by its 30-digit value). Charlwood P4's constants are the
+roots of the palindromic `1 + 2 z - 2 z^2 + 2 z^3 + z^4`.
+
+### A24. The field detour of `Can` returned a `Dot[{}, Inverse[{}], {}]` coefficient
+
+Observed 2026-09-28 in one kernel that had integrated Charlwood P4 (`Log[1 + x Sqrt[1 + x^2]]`) and
+then A40 (`ArcTan[x Sqrt[1 - x^2]]`): a logand of the rewritten logarithmic part came out as
+`Log[Dot[{}, Inverse[{}], {}] + x^2 + 2 Dot[{}, Inverse[{}], {}] Sqrt[1 - x^2]]`, the back-conversion
+`(v . Binv) . basisRad` of `FieldData` applied to an empty coordinate vector; the verify gate rejected
+the surface. State-dependent (A40 alone spent its 30 s rewrite budget instead), no standalone repro
+yet. `logrewrite.m` canonicalises with `CanRaw` (Cancel over the extension, which is what `Can` is in
+`ParallelMixed.wl`) and writes the m = 2 quotient of `YQuot` with the conjugate formula instead of
+`Pdiv`.
+
 ## B. Behavioural differences (not wrong, but code written against Mathematica's output breaks)
 
 ### B1. `ToNumberField` chooses a non-canonical primitive element, and a different one per call
@@ -325,6 +406,14 @@ is affected.
 ### B6. `Exp[c Log[x]]` and `Exp[x Log[2]]` evaluate back to `x^c`, `2^x` (as Mathematica does)
 The tower builder holds such exponentials as `PMExp[c Log[x]]` until the generator is created (same in
 the research `ParallelMixed.wl`).
+
+### B7. An outer `TimeConstrained` cannot interrupt an inner one
+```
+TimeConstrained[TimeConstrained[While[True, 1], 0.3, "inner"], 5, "outer"]   (* "inner": correct *)
+TimeConstrained[TimeConstrained[While[True, 1], 5, "inner"], 0.3, "outer"]   (* "inner" after 5 s;  Mathematica: "outer" after 0.3 s *)
+```
+The 45 s budget of `ParallelIntegrateMixed` therefore cannot cut short the rewrite of the logarithmic
+part, which runs under its own `$RewriteBudget` (30 s) inside it.
 
 ## C. Performance of polynomial arithmetic over GF(p) (the reason the new certificate exceeds the 45 s budget)
 
@@ -369,6 +458,7 @@ return the certificate `{"not elementary", "residue divisor not torsion: reducti
 | `Collect[Expand[..], g, RRad]` before every extension gcd in `ResidueClasses` (and the honest failure for a lost class) | -- | A16 |
 | the default `RowReduce` method when the ansatz matrix has parameters (`AnsatzSystem`) | `Method -> "OneStepRowReduction"` for every system | A17 |
 | iterators `ma`, `ent` in `AnsatzSystem` and `ne` in the realisation | `a`, `e` | A18 |
+| `logrewrite.m` (the real form of the logarithmic part): `_Complex` tests; `RectConst`/`RectPow` by rules; `SturmCount`; `RootFree`/`RootRadicals`; `CanRaw` and the conjugate formula in `YQuot`; lr-prefixed `Do` iterators; `LoadModule["mixed/logrewrite.m"]` from `ParallelMixed.m` with a default `LogToReal` when the file is missing | `FreeQ[.., Complex]`, `ComplexExpand`, `CountRoots`, `ToRadicals`/`NumericQ` on Root objects, `Can`, `Get` of a sibling file | A18-A24 |
 
 The research copy `ParallelMixed.wl` (Mathematica) has none of these and is the reference for the intended
 code -- except that it carries the A16 expansion and honest failure (a soundness guard in every port), the

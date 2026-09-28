@@ -2369,6 +2369,7 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
                                 "SplitSpecials" -> OptionValue["SplitSpecials"]];
   If[ListQ[res], Return[res //. back]];
   surf = res //. back;
+  If[TrueQ[$PMDebug], Print["  surface: ", InputForm[surf]]];
   (* Verify-or-decline soundness gate, with branch resolution.  A returned
      antiderivative MUST satisfy D[surf] == integrand on the integrand's real
      domain, checked numerically at REAL in-domain points (the discipline of the
@@ -2800,7 +2801,7 @@ iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
    Y, f, dlcm, detLogs = {}, unkLogs = {}, rootLogs = {}, pfParts = {}, denv = 1, fl, p, mult, branch, eta, delta, special,
    eP, vP, Dp, tp, texpr, pts, taus, cert, done, seen, cand, rem, ld, nb, db, monos, cs0, cs1,
    V, EE, betas, eqs, unks, sol, sub, frees, y, surf, I0, split = OptionValue["SplitSpecials"], splittable, newLogs, PP, rts, torsion = {}, got, tinf, lower, nonconst, units = {}, unitsComplete = True, uu0, certd, gammas, B, r2, g0, sunits, sols, uuS, sexp = OptionValue["SpecialExponent"], gstar, a2, b2, c2, disc, s2, s, ok, pend, uu, tv,
-   pendingClasses = {}, rc, gDir, classes, principal, groups, found, unrealised, sysK, neq, A, key, unitsBase, sunitsAll, spec, tau, cv, tauHi, exps, proved = False, curve, typeE, T0, Dp0, infd},
+   pendingClasses = {}, rc, gDir, classes, principal, groups, found, unrealised, sysK, neq, A, key, unitsBase, sunitsAll, spec, tau, cv, tauHi, exps, proved = False, curve, typeE, T0, Dp0, infd, lrTerms, lrL, lrRat},
   Y = Unique["y"];
   nc = If[q === None, 1, T["n"]];                      (* coordinates carrying the integrand *)
   f = TPad[T, f0]; f = Table[If[i > nc, 0, Can[f[[i]]]], {i, T["n"]}];
@@ -3200,11 +3201,22 @@ iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
 
   y = If[q =!= None, q^(1/m), None];
   surf[u_] := If[q === None, u[[1]], Sum[TPad[T, u][[i + 1]] y^i/T["E"][[i + 1]], {i, 0, T["n"] - 1}]];
-  I0 = surf[Can /@ (V /. sub)]
-       + Total[#[[1]] Log[surf[#[[2]]]] & /@ detLogs] + Total[rootLogs]
-       + Total[Table[(gammas[[i]] /. sub) Log[surf[units[[i, 1]]]], {i, Length[units]}]]
-       + Total[Table[(betas[[i]] /. sub) Log[unkLogs[[i, 1]]], {i, Length[unkLogs]}]];
+  (* the logarithmic part, its conjugate pairs collapsed to real logarithms, arctangents
+     and hyperbolic arctangents (logrewrite.m, Rioboo), then y for Y; the RootSums stay *)
+  lrTerms = Join[{#[[1]], ToY[T, #[[2]], Y]} & /@ detLogs,
+    Table[{gammas[[i]] /. sub, ToY[T, units[[i, 1]], Y]}, {i, Length[units]}],
+    Table[{betas[[i]] /. sub, unkLogs[[i, 1]]}, {i, Length[unkLogs]}]];
+  {lrL, lrRat} = LogToReal[lrTerms, Can /@ (V /. sub), f, T, Y, verbose];
+  I0 = surf[lrRat] + If[q === None, lrL, lrL /. Y -> y] + Total[rootLogs];
   I0];
+
+(* the real form of the logarithmic part (Rioboo): a post-processing layer in its own file,
+   read into this context (LoadModule resolves src/internal/ like the lazy load of this file).
+   When the file is not found the logarithms are kept as they come (this default LogToReal)
+   and a line says so *)
+LogToReal[terms_, rat_, f_, T_, Y_, verbose_] := {Total[#[[1]] Log[#[[2]]] & /@ terms], rat};
+If[! TrueQ[LoadModule["mixed/logrewrite.m"]],
+  Print["ParallelMixed: mixed/logrewrite.m not found under src/internal; the logarithmic part is left in its complex form"]];
 
 End[];
 EndPackage[];
