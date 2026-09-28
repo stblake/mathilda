@@ -1,43 +1,62 @@
-# Task: Implement `Pause[n]` (+ `$TimeUnit`, `SessionTime`, `TimeUsed`)
+# Task: Implement `DateList`
 
 ## Plan
-Implement `Pause[n]` (wall-clock sleep, returns Null, no CPU) plus the three
-symbols its docstring references: `$TimeUnit`, `SessionTime[]`, `TimeUsed[]`.
-Semantics fall out of the existing two-clock design (clock() vs
-clock_gettime(CLOCK_MONOTONIC)).
+- [x] 1. `src/datetime.c`: add `#include "message.h"`, `<stdarg.h>`; `dt_msg()` helper
+- [x] 2. `src/datetime.c`: `gregorian_from_abstime()` inverse (JDN→Gregorian + intraday split)
+- [x] 3. `src/datetime.c`: extract `datelist_parts_to_abstime()`, refactor `builtin_absolute_time` to use it
+- [x] 4. `src/datetime.c`: string helpers — month/day-name tables, tokenizer, bare + format-form parse
+- [x] 5. `src/datetime.c`: `builtin_date_list()` dispatcher (all forms)
+- [x] 6. `src/datetime.c` `datetime_init()`: register + `ATTR_PROTECTED`
+- [x] 7. `src/datetime.h`: prototype
+- [x] 8. `src/sym_names.{h,c}`: `SYM_DateList` (decl + def + intern)
+- [x] 9. `src/info.c`: docstring under `// Time and Date`
+- [x] 10. `src/version.h`: bump 0.218 → 0.219 (number + string)
+- [x] 11. `tests/test_datetime.c`: extend with DateList cases; `tests/CMakeLists.txt`: add `add_test(NAME datetime_tests ...)`
+- [x] 12. `docs/spec/builtins/time-and-date.md` + `docs/spec/changelog/2026-09-28.md`
+- [x] 13. Build main + tests; run all pasted examples; ctest; check-c99; leaks
 
-## Checklist
-- [x] `src/datetime.c`: add `<errno.h>`, `g_session_start`, `builtin_pause`,
-      `builtin_session_time`, `builtin_time_used`; register + Protected in init
-- [x] `src/datetime.h`: declare the three builtins
-- [x] `src/sym_names.h` / `.c`: add `SYM_Pause` (extern, def, intern)
-- [x] `src/core.c`: register `$TimeUnit` in system_constants_init
-- [x] `src/info.c`: 4 docstrings (Pause, SessionTime, TimeUsed, $TimeUnit)
-- [x] `tests/test_datetime.c`: feature-test macro, now_seconds, test fns + main
-- [x] `src/version.h`: 0.217 -> 0.218 (number + string)
-- [x] Docs: time-and-date.md, changelog 2026-09-28.md, Mathilda_spec.md table row
-- [x] Build clean (`make`), `make check-c99` (exit 0)
-- [x] Run `datetime_tests` (all pass); leak-audited (macOS valgrind = baseline noise)
-- [x] Refresh code-review graph
+## Decisions (from user)
+- String parsing: **Full** (all pasted examples + common formats)
+- TimeZone: **Defer** (local time, no TZ/DST correction — like AbsoluteTime)
+- DateObject specs: out of scope (DateObject unimplemented)
 
 ## Review
-Implemented `Pause[n]` plus `$TimeUnit`, `SessionTime[]`, `TimeUsed[]` (v0.218).
 
-Key design point: the "counted by AbsoluteTiming/SessionTime, not Timing/TimeUsed"
-semantic is free — `nanosleep` burns no CPU, so the existing `clock()` (CPU) vs
-`clock_gettime(CLOCK_MONOTONIC)` (wall) split does the accounting with no
-special-casing.
+Done. `DateList` implemented in `src/datetime.c`, v0.219.
 
-Deviation from plan (improvement): `Pause` uses a robust `pause_seconds` coercion
-(mirrors `clip_to_double_value` in core.c) instead of the strict
-`expr_to_double_strict`, so `Pause[1/4]` and `Pause[Pi]` work like Mathematica.
-Left `expr_to_double_strict` untouched so `AbsoluteTime`'s behavior is unchanged.
+**Design.** One backend: every form (now / absolute-time number / {y,m,...} spec /
+"string" / {"string",{elems}}) builds a `parts[6]` array, converts to
+seconds-since-1900 via the shared `datelist_parts_to_abstime` (factored out of
+`builtin_absolute_time`, reusing `days_since_1900`), then inverts with the new
+`gregorian_from_abstime` (inverse Fliegel & Van Flandern + intraday split). This
+makes out-of-range/fractional fields normalize identically to AbsoluteTime and
+Mathematica. Strings: `dt_tokenize` on non-alnum runs; bare parse handles month
+names + 4-digit year + AM/PM, with US M/D/Y default + `DateList::ambig` for
+order-ambiguous numeric strings and ISO for a leading 4-digit token; format form
+ignores separator entries and assigns tokens to element entries in order.
 
-Verified: `make` clean; `make check-c99` exit 0; `datetime_tests` all pass;
-REPL smoke tests (`Timing[Pause[1]]`≈{0,Null}, `AbsoluteTiming[Pause[1]]`≈{1,Null},
-rational/Pi/symbolic args, docstrings, `$VersionNumber`=0.218). No leaks from the
-new code (valgrind output was macOS Objective-C/Foundation baseline noise plus
-libsystem `nanosleep` uninitialised-value warnings; no `builtin_pause` /
-`pause_seconds` / helper appears in any leak stack).
+**Verification.**
+- All 18 pasted acceptance examples reproduce the expected Mathematica output
+  (the {…8.1} residue lands on 8h 6m 0s vs MMA's 8h 6m 4.77e-7s — same minute, a
+  harmless last-ULP difference).
+- `datetime_tests`: all pass; now registered with ctest (`ctest -R datetime` →
+  1/1 passed). It previously built but was never run.
+- macOS `leaks --atExit`: **0 leaks / 0 bytes**.
+- `make check-c99`: exit 0. Main build + relink clean under
+  `gcc -std=c99 -Wall -Wextra` (+ the `-Werror=` set).
+- `$VersionNumber` → 0.219; `Attributes[DateList]` → {Protected};
+  `Information[DateList]` prints the docstring.
 
-Not committed/tagged — awaiting explicit request. When asked: tag `v0.218`.
+**Notes.**
+- Removed a `NumericalOrder` mention from the docstring/spec: `NumericalOrder`
+  is not a registered builtin in Mathilda (only referenced in an info.c
+  docstring), so the claim would have been inaccurate.
+- Packed/Compile surfaces: `DateList` is a structural date head taking a single
+  spec (not an element-wise numeric kernel), so it is deliberately un-vectorized,
+  exactly like its sibling `AbsoluteTime` (neither is on `AWARE`). It adds no
+  NDArray dispatch site, so `check-packed-aware` and the curated-probe audits
+  cannot newly flag it.
+- Deferred (per user): `TimeZone`/`$TimeZone`; `DateObject` specs
+  (`DateObject` unimplemented) are left unevaluated.
+- Not yet committed/tagged — per project convention this substantive change
+  should be committed with `; v0.219` and tagged `v0.219` when the user is ready.

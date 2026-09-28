@@ -114,6 +114,7 @@ const char* SYM_Csch = NULL;
 const char* SYM_Cubics = NULL;
 const char* SYM_DampingFactor = NULL;
 const char* SYM_DataType = NULL;
+const char* SYM_DateList = NULL;
 const char* SYM_DistanceFunction = NULL;
 const char* SYM_CriterionFunction = NULL;
 const char* SYM_PerformanceGoal = NULL;
@@ -1057,6 +1058,7 @@ void sym_names_init(void) {
     SYM_Cubics                     = intern_symbol("Cubics");
     SYM_DampingFactor              = intern_symbol("DampingFactor");
     SYM_DataType                   = intern_symbol("DataType");
+    SYM_DateList                   = intern_symbol("DateList");
     SYM_Degree                     = intern_symbol("Degree");
     SYM_DesignMatrix               = intern_symbol("DesignMatrix");
     SYM_DegreeLexicographic        = intern_symbol("DegreeLexicographic");

@@ -1887,6 +1887,7 @@ add_test(NAME quantile_family_tests COMMAND quantile_family_tests)
 
 add_executable(datetime_tests test_datetime.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(datetime_tests PRIVATE ../src)
+add_test(NAME datetime_tests COMMAND datetime_tests)
 
 add_executable(facpoly_tests test_facpoly.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(facpoly_tests PRIVATE ../src)

@@ -4465,6 +4465,31 @@ void info_init(void) {
         "\n"
         "AbsoluteTime[] uses whatever date and time have been set on your computer system. It\n"
         "performs no corrections for time zones, daylight saving time, or leap seconds.");
+    symtab_set_docstring("DateList",
+        "DateList[]\n"
+        "\tgives the current local date and time in the form {y, m, d, h, m, s}.\n"
+        "DateList[date]\n"
+        "\tgives a date list corresponding to the given date specification.\n"
+        "\n"
+        "The supported date specifications are:\n"
+        "\t{y, m, d, h, m, s}\tDateList specification\n"
+        "\ttime\t\t\tAbsoluteTime specification (a number of seconds since 1900)\n"
+        "\t\"string\"\t\tDateString specification\n"
+        "\t{\"string\", {e1, ...}}\tdate string parsed with the given format elements\n"
+        "\n"
+        "In {y, m, ...} entries may be elided from the right: {y} is {y,1,1,0,0,0}, {y,m} is\n"
+        "{y,m,1,0,0,0}, and so on. Values of m, d, h, m, s outside their normal ranges are\n"
+        "reduced (m=0 is the previous December, d=0 the last day of the previous month); d, h,\n"
+        "m, s may be noninteger, but the year and month must be integers.\n"
+        "\n"
+        "The format elements are \"Year\", \"YearShort\", \"Quarter\", \"Month\", \"MonthName\",\n"
+        "\"Day\", \"DayName\", \"Hour\", \"Hour12\", \"AMPM\", \"Minute\", \"Second\", and\n"
+        "\"Millisecond\". Elements are read from the string in the order given, separated by any\n"
+        "non-alphanumeric characters (or by explicit separator strings placed between them).\n"
+        "Fields not filled default to {current year, 1, 1, 0, 0, 0}.\n"
+        "\n"
+        "DateList uses the local date and time with no correction for time zones, daylight\n"
+        "saving time, or leap seconds.");
 
     // Comparisons
     symtab_set_docstring("SameQ",

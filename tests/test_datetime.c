@@ -161,6 +161,136 @@ void test_absolute_time_attributes() {
     expr_free(e);
 }
 
+/* Evaluate a DateList expression and assert the result is {y,m,d,h,mi,s} with
+ * the given integer y..mi and second within tol of `sec`. Structural, so it does
+ * not couple to the printer's Real formatting. */
+static void assert_datelist(const char* input,
+                            int64_t y, int64_t mo, int64_t d,
+                            int64_t h, int64_t mi, double sec, double tol) {
+    Expr* p = parse_expression(input);
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION);
+    assert(strcmp(e->data.function.head->data.symbol.name, "List") == 0);
+    assert(e->data.function.arg_count == 6);
+    Expr** a = e->data.function.args;
+    assert(a[0]->type == EXPR_INTEGER && a[0]->data.integer == y);
+    assert(a[1]->type == EXPR_INTEGER && a[1]->data.integer == mo);
+    assert(a[2]->type == EXPR_INTEGER && a[2]->data.integer == d);
+    assert(a[3]->type == EXPR_INTEGER && a[3]->data.integer == h);
+    assert(a[4]->type == EXPR_INTEGER && a[4]->data.integer == mi);
+    assert(a[5]->type == EXPR_REAL);
+    assert(a[5]->data.real >= sec - tol && a[5]->data.real <= sec + tol);
+    expr_free(e);
+}
+
+void test_datelist_absolute_time() {
+    /* Invert an AbsoluteTime number; round-trips the existing AbsoluteTime anchor
+     * (AbsoluteTime[{2022,1,1,0,0,0}] == 3849984000). */
+    assert_datelist("DateList[3849984000]", 2022, 1, 1, 0, 0, 0.0, 0.0);
+    assert_datelist("DateList[3957775000]", 2025, 6, 1, 13, 56, 40.0, 1e-6);
+}
+
+void test_datelist_elision() {
+    /* Trailing fields default to {_,1,1,0,0,0}; a Real day still yields 0 h/m/s. */
+    assert_datelist("DateList[{2026,9}]",    2026, 9, 1, 0, 0, 0.0, 0.0);
+    assert_datelist("DateList[{2026,9,28.}]", 2026, 9, 28, 0, 0, 0.0, 1e-6);
+}
+
+void test_datelist_normalization() {
+    /* Out-of-range and fractional fields reduce, exactly like AbsoluteTime. */
+    assert_datelist("DateList[{2022,3,15.5}]", 2022, 3, 15, 12, 0, 0.0, 1e-6);
+    assert_datelist("DateList[{2022,0}]",      2021, 12, 1, 0, 0, 0.0, 0.0);
+    assert_datelist("DateList[{2022,1,0}]",    2021, 12, 31, 0, 0, 0.0, 0.0);
+}
+
+void test_datelist_fractional_hour() {
+    /* {2026,9,28,8.1}: date exact, and the intraday split reconstructs to
+     * 8.1 hours (29160 s) within a loose tolerance regardless of the last-ULP
+     * residue (Mathematica shows 8h 6m 4.77e-7 s; we land on 8h 6m 0s). */
+    Expr* p = parse_expression("DateList[{2026,9,28,8.1}]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION && e->data.function.arg_count == 6);
+    Expr** a = e->data.function.args;
+    assert(a[0]->data.integer == 2026 && a[1]->data.integer == 9 && a[2]->data.integer == 28);
+    double intraday = (double)a[3]->data.integer * 3600.0
+                    + (double)a[4]->data.integer * 60.0
+                    + a[5]->data.real;
+    assert(intraday >= 29160.0 - 1e-3 && intraday <= 29160.0 + 1e-3);
+    expr_free(e);
+}
+
+void test_datelist_roundtrip() {
+    /* DateList[] is the inverse of AbsoluteTime for an exact spec. */
+    assert(eval_to_int("AbsoluteTime[DateList[3849984000]]") == 3849984000LL);
+}
+
+void test_datelist_strings() {
+    assert_datelist("DateList[\"28 Sep, 2026\"]", 2026, 9, 28, 0, 0, 0.0, 0.0);
+    assert_datelist("DateList[\"30 Oct 2026\"]",  2026, 10, 30, 0, 0, 0.0, 0.0);
+    /* Ambiguous numeric string: US M/D/Y default, YearShort 1 -> 2001. */
+    assert_datelist("DateList[\"05/10/1\"]",      2001, 5, 10, 0, 0, 0.0, 0.0);
+}
+
+void test_datelist_format() {
+    assert_datelist("DateList[{\"09/28/26\",{\"Day\",\"Month\",\"YearShort\"}}]",
+                    2028, 4, 9, 0, 0, 0.0, 0.0);
+    assert_datelist("DateList[{\"9/28/2026\",{\"Month\",\"Day\",\"Year\"}}]",
+                    2026, 9, 28, 0, 0, 0.0, 0.0);
+    /* Explicit separators between elements. */
+    assert_datelist("DateList[{\"9/28/2026\",{\"Month\",\"/\",\"Day\",\"/\",\"Year\"}}]",
+                    2026, 9, 28, 0, 0, 0.0, 0.0);
+    /* YearShort 05 -> 2005. */
+    assert_datelist("DateList[{\"05/10/1\",{\"YearShort\",\"Day\",\"Month\"}}]",
+                    2005, 1, 10, 0, 0, 0.0, 0.0);
+}
+
+void test_datelist_current_year_fill() {
+    /* A string spec with no year fills the current calendar year. */
+    time_t now = time(NULL);
+    struct tm* lp = localtime(&now);
+    int64_t cur_year = (int64_t)lp->tm_year + 1900;
+    assert_datelist("DateList[{\"2/15\",{\"Month\",\"Day\"}}]",
+                    cur_year, 2, 15, 0, 0, 0.0, 0.0);
+}
+
+void test_datelist_bad_month_unevaluated() {
+    /* Non-integer month cannot be a date (DateList::arg): stays unevaluated. */
+    Expr* p = parse_expression("DateList[{2022,3.5}]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION);
+    assert(strcmp(e->data.function.head->data.symbol.name, "DateList") == 0);
+    assert(e->data.function.arg_count == 1);
+    expr_free(e);
+}
+
+void test_datelist_now_shape() {
+    /* DateList[] is a 6-element list: five integers plus a Real second. */
+    Expr* p = parse_expression("DateList[]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION);
+    assert(strcmp(e->data.function.head->data.symbol.name, "List") == 0);
+    assert(e->data.function.arg_count == 6);
+    for (int i = 0; i < 5; i++) assert(e->data.function.args[i]->type == EXPR_INTEGER);
+    assert(e->data.function.args[5]->type == EXPR_REAL);
+    /* Plausible 21st-century year. */
+    assert(e->data.function.args[0]->data.integer >= 2020);
+    assert(e->data.function.args[0]->data.integer <= 2200);
+    expr_free(e);
+}
+
+void test_datelist_attributes() {
+    Expr* p = parse_expression("MemberQ[Attributes[DateList], Protected]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_SYMBOL);
+    assert(strcmp(e->data.symbol.name, "True") == 0);
+    expr_free(e);
+}
+
 void test_pause_null() {
     /* Pause returns Null; zero and negative durations return immediately. */
     assert_evals_to_null("Pause[0]");
@@ -264,6 +394,17 @@ int main() {
     test_absolute_time_passthrough();
     test_absolute_time_now();
     test_absolute_time_attributes();
+    test_datelist_absolute_time();
+    test_datelist_elision();
+    test_datelist_normalization();
+    test_datelist_fractional_hour();
+    test_datelist_roundtrip();
+    test_datelist_strings();
+    test_datelist_format();
+    test_datelist_current_year_fill();
+    test_datelist_bad_month_unevaluated();
+    test_datelist_now_shape();
+    test_datelist_attributes();
     test_pause_null();
     test_pause_waits();
     test_pause_symbolic_unevaluated();
