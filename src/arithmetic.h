@@ -68,12 +68,16 @@ static inline void arith_warnings_mute_pop(void)    { if (g_arith_warnings_muted
  * arithmetic diagnostics too. */
 static inline int  arith_warnings_muted(void)       { return g_arith_warnings_muted || mth_msg_suppressed(); }
 
-/* Emit an arithmetic diagnostic: note that a message fired -- so an enclosing
- * Check[] sees it even while the print is suppressed -- then print it unless
- * muted.  Consolidates the note+guard so the two never drift apart. */
+/* Emit an arithmetic diagnostic, matching the mth_message contract exactly (see
+ * message.h): the internal-probe mute g_arith_warnings_muted suppresses it
+ * ENTIRELY (neither printed nor noted -- it is sampling noise a probe like Limit
+ * expects, so an enclosing Check[] must not catch it), while Quiet silences only
+ * the print and the firing is still noted so Check[] sees it. */
 static inline void arith_warn(const char* msg) {
-    mth_msg_note_fired();
-    if (!arith_warnings_muted()) fputs(msg, stderr);
+    if (g_arith_warnings_muted) return;   /* internal probe: not a user event */
+    mth_msg_note_fired();                 /* Check sees it, even under Quiet */
+    if (mth_msg_suppressed()) return;     /* Quiet: silence the print only */
+    fputs(msg, stderr);
 }
 
 Expr* builtin_divide(Expr* res);

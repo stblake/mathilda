@@ -86,10 +86,13 @@ void mth_message(const char* head, const char* tag, const char* fmt, ...)
     MTH_PRINTF_FMT(3, 4);
 
 /*
- * As mth_message, but an EXTRA subsystem-local mute also silences the PRINT
- * (the firing is still noted regardless).  Pass the RAW local flag --
- * g_arith_warnings_muted for Power/Plus/Times, g_fm_quiet for FindMinimum --
- * NOT `flag || suppressed`: the core already ORs mth_msg_suppressed() in.
+ * As mth_message, but with an EXTRA subsystem-local *probe* mute -- pass the RAW
+ * local flag (g_arith_warnings_muted for Power/Plus/Times, g_fm_quiet for
+ * FindMinimum), NOT `flag || suppressed`.  When that flag is set an internal
+ * probe is poking at divergent forms and the diagnostic is sampling noise, not a
+ * user-facing event, so it is suppressed ENTIRELY: neither printed NOR noted, so
+ * an enclosing Check[] does not catch the noise.  (Quiet, by contrast, silences
+ * only the print and is still seen by Check.)
  */
 void mth_message_gated(int extra_mute, const char* head, const char* tag,
                        const char* fmt, ...) MTH_PRINTF_FMT(4, 5);

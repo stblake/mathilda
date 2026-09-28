@@ -52,8 +52,18 @@ unsigned long mth_msg_fired_count(void) { return g_msg_fired; }
  * active.  See message.h. */
 void mth_message_v(int extra_mute, const char* head, const char* tag,
                    const char* fmt, va_list ap) {
-    mth_msg_note_fired();                              /* (1) Check sees it */
-    if (extra_mute || mth_msg_suppressed()) return;    /* (2) Quiet silences */
+    /* extra_mute is a subsystem-local *probe* mute (g_arith_warnings_muted,
+     * g_fm_quiet): an internal probe that pokes at divergent forms and treats
+     * the diagnostic as sampling noise, NOT a user-facing event.  So it is
+     * suppressed ENTIRELY -- neither printed nor noted -- otherwise an enclosing
+     * Check would catch the noise (e.g. Check[Limit[Sin[x]/x, x -> 0], bad]
+     * must return 1, not bad, though the 0*ComplexInfinity probe fires
+     * Infinity::indet internally).  Quiet is different: it is a USER request to
+     * silence the print of a real message, so the firing is still noted and an
+     * enclosing Check[] still sees it (the Quiet[Check[...]] idiom). */
+    if (extra_mute) return;
+    mth_msg_note_fired();                 /* Check sees it, even under Quiet */
+    if (mth_msg_suppressed()) return;     /* Quiet: silence the print only */
     fprintf(stderr, "%s::%s: ", head, tag);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
