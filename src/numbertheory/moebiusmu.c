@@ -9,6 +9,7 @@
 #include "internal.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -20,10 +21,7 @@
  * call is left unevaluated.  WL expects exactly one argument. */
 static Expr* moebiusmu_emit_argx(size_t argc) {
     if (!arith_warnings_muted()) {
-        fprintf(stderr,
-                "MoebiusMu::argx: MoebiusMu called with %zu argument%s; "
-                "1 argument is expected.\n",
-                argc, argc == 1 ? "" : "s");
+        mth_message("MoebiusMu", "argx", "MoebiusMu called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     }
     return NULL;
 }

@@ -30,6 +30,7 @@
 #include <math.h>
 #include <gmp.h>
 #include "../gmp_compat.h"   /* mpz_prevprime fallback for GMP < 6.3.0 */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* During the Newton search for p_n, stop iterating once pi(x) is within this
  * many primes of n, then finish with a nextprime/prevprime walk. */
@@ -78,9 +79,7 @@ Expr* builtin_primepi(Expr* res) {
                 if (!prime_parse_method(rhs, &method)) {
                     if (!arith_warnings_muted()) {
                         char* s = expr_to_string(rhs);
-                        fprintf(stderr,
-                                "PrimePi::method: %s is not a recognised setting "
-                                "for Method.\n", s ? s : "?");
+                        mth_message("PrimePi", "method", "%s is not a recognised setting for Method.", s ? s : "?");
                         free(s);
                     }
                     return NULL;
@@ -167,9 +166,7 @@ static Expr* prime_walk(int64_t x, int64_t c, int64_t n) {
 static Expr* prime_emit_intpp(Expr* res) {
     if (!arith_warnings_muted()) {
         char* call = expr_to_string(res);
-        fprintf(stderr,
-                "Prime::intpp: Positive integer argument expected in %s.\n",
-                call ? call : "?");
+        mth_message("Prime", "intpp", "Positive integer argument expected in %s.", call ? call : "?");
         free(call);
     }
     return NULL;
@@ -192,10 +189,7 @@ Expr* builtin_prime(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1) {
         if (!arith_warnings_muted()) {
-            fprintf(stderr,
-                    "Prime::argx: Prime called with %zu argument%s; "
-                    "1 argument is expected.\n",
-                    argc, argc == 1 ? "" : "s");
+            mth_message("Prime", "argx", "Prime called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
         }
         return NULL;
     }

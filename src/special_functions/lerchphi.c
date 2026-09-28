@@ -47,6 +47,7 @@
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -800,10 +801,7 @@ static Expr* lerchphi_core(Expr* z, Expr* s, Expr* a,
 /* ------------------------------------------------------------------ */
 
 static Expr* lp_emit_argrx(size_t argc) {
-    fprintf(stderr,
-            "LerchPhi::argrx: LerchPhi called with %zu argument%s; "
-            "3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("LerchPhi", "argrx", "LerchPhi called with %zu argument%s; 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -811,10 +809,7 @@ static Expr* lp_emit_argrx(size_t argc) {
 static Expr* lp_emit_nonopt(Expr* bad, Expr* res) {
     char* bad_str  = expr_to_string(bad);
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "LerchPhi::nonopt: Options expected (instead of %s) beyond position 3 "
-            "in %s. An option must be a rule or a list of rules.\n",
-            bad_str ? bad_str : "?", call_str ? call_str : "?");
+    mth_message("LerchPhi", "nonopt", "Options expected (instead of %s) beyond position 3 in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", call_str ? call_str : "?");
     free(bad_str);
     free(call_str);
     return NULL;

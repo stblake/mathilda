@@ -50,6 +50,7 @@
 #include "eval.h"         /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -423,10 +424,7 @@ static Expr* productlog_eval(long k, Expr* z) {
 /* Mathematica-style diagnostic for a wrong argument count; returns NULL so the
  * evaluator leaves the call unevaluated. */
 static Expr* productlog_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "ProductLog::argt: ProductLog called with %zu arguments; "
-            "1 or 2 arguments are expected.\n",
-            argc);
+    mth_message("ProductLog", "argt", "ProductLog called with %zu arguments; 1 or 2 arguments are expected.", argc);
     return NULL;
 }
 

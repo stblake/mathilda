@@ -47,6 +47,7 @@
 #include "eval.h"
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -417,10 +418,7 @@ static Expr* erfc_one_arg(Expr* arg) {
 /* Mathematica-compatible argx diagnostic; returns NULL so the evaluator
  * leaves the call unevaluated. */
 static Expr* erfc_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "Erfc::argx: Erfc called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("Erfc", "argx", "Erfc called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

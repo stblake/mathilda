@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,10 +22,7 @@
  * call is left unevaluated. */
 static Expr* divisors_emit_argx(size_t npos) {
     if (!arith_warnings_muted()) {
-        fprintf(stderr,
-                "Divisors::argx: Divisors called with %zu argument%s; "
-                "1 argument is expected.\n",
-                npos, npos == 1 ? "" : "s");
+        mth_message("Divisors", "argx", "Divisors called with %zu argument%s; 1 argument is expected.", npos, npos == 1 ? "" : "s");
     }
     return NULL;
 }

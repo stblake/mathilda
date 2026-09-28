@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,10 +24,7 @@
  * the call is left unevaluated. */
 static Expr* divisorsigma_emit_argrx(size_t npos) {
     if (!arith_warnings_muted()) {
-        fprintf(stderr,
-                "DivisorSigma::argrx: DivisorSigma called with %zu argument%s; "
-                "2 arguments are expected.\n",
-                npos, npos == 1 ? "" : "s");
+        mth_message("DivisorSigma", "argrx", "DivisorSigma called with %zu argument%s; 2 arguments are expected.", npos, npos == 1 ? "" : "s");
     }
     return NULL;
 }

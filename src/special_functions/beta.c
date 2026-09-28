@@ -39,6 +39,7 @@
 #include "eval.h"          /* eval_and_free */
 #include "expr.h"          /* expr_is_integer_like, expr_to_mpz, expr_is_numeric_like */
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ */
 /* Small symbolic builders                                            */
@@ -267,10 +268,7 @@ static Expr* beta_four_arg(Expr* z0, Expr* z1, Expr* a, Expr* b) {
 
 /* Wolfram-compatible argb diagnostic for a wrong argument count. */
 static Expr* beta_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "Beta::argb: Beta called with %zu argument%s; "
-            "between 2 and 4 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("Beta", "argb", "Beta called with %zu argument%s; between 2 and 4 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

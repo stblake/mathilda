@@ -30,6 +30,7 @@
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ *
  *  Expression-building shorthand.  The mk_* helpers take ownership of *
@@ -716,9 +717,7 @@ Expr* solverad_solve_radicals_equality(Expr* equation, Expr* var, Expr* dom) {
     }
 
     if (any_nongen) {
-        fprintf(stderr,
-            "Solve::nongen: There may be values of the parameters for which "
-            "some or all solutions are not valid.\n");
+        mth_message("Solve", "nongen", "There may be values of the parameters for which some or all solutions are not valid.");
     }
 
     expr_free(candidates);

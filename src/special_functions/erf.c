@@ -43,6 +43,7 @@
 #include "eval.h"         /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -465,10 +466,7 @@ static Expr* erf_two_arg(Expr* z0, Expr* z1) {
 /* Mathematica-compatible argt diagnostic; returns NULL so the evaluator
  * leaves the call unevaluated. */
 static Expr* erf_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "Erf::argt: Erf called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("Erf", "argt", "Erf called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

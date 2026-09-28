@@ -515,9 +515,8 @@ static void crc_lazy_load(void) {
     char path[2048];
     if (!mathilda_resolve_internal("CRCMathTablesIntegrals.m",
                                    path, sizeof(path))) {
-        fprintf(stderr,
-            "Integrate`CRCTable::nofile: cannot locate "
-            "src/internal/CRCMathTablesIntegrals.m on disk.\n");
+        mth_message("Integrate`CRCTable", "nofile",
+            "cannot locate src/internal/CRCMathTablesIntegrals.m on disk.");
         return;
     }
 
@@ -534,9 +533,9 @@ static Expr* try_crctable(Expr* f, Expr* x) {
     if (!crc_load_succeeded) return NULL;
 
     if (crc_depth >= MAX_CRC_DEPTH) {
-        fprintf(stderr,
-            "Integrate`CRCTable::depth: rule recursion exceeded %d levels; "
-            "the table has a divergent rule for this integrand.\n",
+        mth_message("Integrate`CRCTable", "depth",
+            "rule recursion exceeded %d levels; "
+            "the table has a divergent rule for this integrand.",
             MAX_CRC_DEPTH);
         return NULL;
     }
@@ -583,9 +582,8 @@ static void pmt_lazy_load(void) {
 
     char path[2048];
     if (!mathilda_resolve_internal("mixed/ParallelMixed.m", path, sizeof(path))) {
-        fprintf(stderr,
-            "Integrate`ParallelMixedTower::nofile: cannot locate "
-            "src/internal/mixed/ParallelMixed.m on disk.\n");
+        mth_message("Integrate`ParallelMixedTower", "nofile",
+            "cannot locate src/internal/mixed/ParallelMixed.m on disk.");
         return;
     }
 
@@ -963,9 +961,7 @@ static Expr* integrate_definite(Expr* res) {
         static uint64_t last_warned_hash = 0;
         uint64_t h = expr_hash(res);
         if (h != last_warned_hash) {
-            fprintf(stderr,
-                "Integrate::method: Method option value is not a "
-                "recognised integration method name.\n");
+            mth_message("Integrate", "method", "Method option value is not a recognised integration method name.");
             last_warned_hash = h;
         }
         return NULL;
@@ -1109,9 +1105,7 @@ void integrate_announce_nonelementary(Expr* f, Expr* x) {
     }
     char* fs = expr_to_string(f);
     char* xs = expr_to_string(x);
-    fprintf(stderr,
-        "Integrate::nonelem: The integrand %s has no antiderivative "
-        "elementary in %s.\n", fs ? fs : "?", xs ? xs : "?");
+    mth_message("Integrate", "nonelem", "The integrand %s has no antiderivative elementary in %s.", fs ? fs : "?", xs ? xs : "?");
     free(fs); free(xs);
 }
 
@@ -1243,15 +1237,7 @@ Expr* builtin_integrate(Expr* res) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
             if (h != last_warned_hash) {
-                fprintf(stderr,
-                    "Integrate::method: Method option value is not one of "
-                    "\"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", "
-                    "\"LinearRadicals\", \"QuadraticRadicals\", "
-                    "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
-                    "\"GoursatAlgebraic\", "
-                    "\"Weierstrass\", "
-                    "\"RischTranscendental\", "
-                    "\"CRCTable\", \"NewtonLeibniz\", \"LineIntegral\".\n");
+                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"NewtonLeibniz\", \"LineIntegral\".");
                 last_warned_hash = h;
             }
             return NULL;

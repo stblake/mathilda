@@ -2345,7 +2345,7 @@ static void fi_warn_optx(const Expr* opt) {
     const Expr* lhs = (opt && opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2)
         ? opt->data.function.args[0] : NULL;
     const char* name = (lhs && lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : "?";
-    fprintf(stderr, "FindInstance::optx: Unknown option %s in FindInstance.\n", name);
+    mth_message("FindInstance", "optx", "Unknown option %s in FindInstance.", name);
 }
 
 /* The search cascade, run under message suppression.  Takes ownership of V. */

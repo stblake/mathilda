@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,10 +170,7 @@ static bool mo_search_residues(const mpz_t k_in, const mpz_t n,
 }
 
 static Expr* mo_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "MultiplicativeOrder::argt: MultiplicativeOrder called with %zu "
-            "argument%s; 2 or 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("MultiplicativeOrder", "argt", "MultiplicativeOrder called with %zu argument%s; 2 or 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

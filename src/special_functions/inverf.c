@@ -41,6 +41,7 @@
 #include "eval.h"         /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -264,10 +265,7 @@ static Expr* inverf_two_arg(Expr* z0, Expr* s) {
 /* Mathematica-compatible argt diagnostic; returns NULL so the evaluator
  * leaves the call unevaluated. */
 static Expr* inverf_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "InverseErf::argt: InverseErf called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("InverseErf", "argt", "InverseErf called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

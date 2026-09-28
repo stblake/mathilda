@@ -40,6 +40,7 @@
 #include "eval.h"         /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ */
 /* Small leaf helpers                                                 */
@@ -125,10 +126,7 @@ static Expr* li_one_arg(Expr* arg) {
 /* Mathematica-compatible argx diagnostic; returns NULL so the evaluator
  * leaves the call unevaluated. */
 static Expr* li_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "LogIntegral::argx: LogIntegral called with %zu arguments; "
-            "1 argument is expected.\n",
-            argc);
+    mth_message("LogIntegral", "argx", "LogIntegral called with %zu arguments; 1 argument is expected.", argc);
     return NULL;
 }
 

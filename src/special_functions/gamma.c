@@ -39,6 +39,7 @@
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -860,10 +861,7 @@ static Expr* gamma_three_arg(Expr* a, Expr* z0, Expr* z1) {
 /* Print a Mathematica-compatible argt diagnostic for a wrong argument count
  * and return NULL so the evaluator leaves the call unevaluated. */
 static Expr* gamma_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "Gamma::argt: Gamma called with %zu argument%s; "
-            "1 or 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("Gamma", "argt", "Gamma called with %zu argument%s; 1 or 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

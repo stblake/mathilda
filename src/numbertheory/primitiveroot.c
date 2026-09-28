@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -353,10 +354,7 @@ static bool pr_smallest_primitive_root(mpz_t g_out, const mpz_t n, const mpz_t p
 /* Emit `PrimitiveRoot::argt: PrimitiveRoot called with N arguments; 1 or
  * 2 arguments are expected.` to stderr and return NULL. */
 static Expr* pr_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "PrimitiveRoot::argt: PrimitiveRoot called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("PrimitiveRoot", "argt", "PrimitiveRoot called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -364,10 +362,7 @@ static Expr* pr_emit_argt(size_t argc) {
  * <pos> in <call>.` */
 static Expr* pr_emit_intg(size_t pos, Expr* res) {
     char* call_str = expr_to_string(res);
-    fprintf(stderr,
-            "PrimitiveRoot::intg: Integer greater than 1 expected at position "
-            "%zu in %s.\n",
-            pos, call_str ? call_str : "?");
+    mth_message("PrimitiveRoot", "intg", "Integer greater than 1 expected at position %zu in %s.", pos, call_str ? call_str : "?");
     free(call_str);
     return NULL;
 }
@@ -375,10 +370,7 @@ static Expr* pr_emit_intg(size_t pos, Expr* res) {
 /* Emit `PrimitiveRootList::argx: PrimitiveRootList called with N arguments;
  * 1 argument is expected.` */
 static Expr* prl_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "PrimitiveRootList::argx: PrimitiveRootList called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("PrimitiveRootList", "argx", "PrimitiveRootList called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

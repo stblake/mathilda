@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,9 +41,7 @@ static Expr* egcd_emit_exact(Expr* arg, Expr* res) {
     if (!arith_warnings_muted()) {
         char* arg_str = expr_to_string(arg);
         char* call_str = expr_to_string(res);
-        fprintf(stderr,
-                "ExtendedGCD::exact: Argument %s in %s is not an exact number.\n",
-                arg_str ? arg_str : "?", call_str ? call_str : "?");
+        mth_message("ExtendedGCD", "exact", "Argument %s in %s is not an exact number.", arg_str ? arg_str : "?", call_str ? call_str : "?");
         free(arg_str);
         free(call_str);
     }
@@ -54,9 +53,7 @@ static Expr* egcd_emit_exact(Expr* arg, Expr* res) {
 static Expr* egcd_emit_egcd(Expr* res) {
     if (!arith_warnings_muted()) {
         char* call_str = expr_to_string(res);
-        fprintf(stderr,
-                "ExtendedGCD::egcd: Arguments in %s should be integers.\n",
-                call_str ? call_str : "?");
+        mth_message("ExtendedGCD", "egcd", "Arguments in %s should be integers.", call_str ? call_str : "?");
         free(call_str);
     }
     return NULL;

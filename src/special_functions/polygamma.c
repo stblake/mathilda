@@ -50,6 +50,7 @@
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -731,10 +732,7 @@ static Expr* polygamma_two_arg(Expr* order, Expr* z) {
 }
 
 static Expr* pg_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "PolyGamma::argt: PolyGamma called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("PolyGamma", "argt", "PolyGamma called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

@@ -49,6 +49,7 @@
                           * Assumptions -> n > 0], ambient Assuming[]/$Assumptions) */
 #include "gruntz.h"       /* Gruntz mrv-algorithm limit engine (layer_gruntz) */
 #include "limit_osc.h"    /* oscillatory normal form (layer_oscillatory)     */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 /* Note: Series and D are invoked symbolically (through the evaluator),
  * not via direct C calls, so series.h / deriv.h are intentionally not
  * included here. Adding the Series and Derivative symbols to the symbol
@@ -4112,9 +4113,7 @@ static Expr* builtin_limit_impl(Expr* res) {
     int method = LIMIT_M_AUTOMATIC;
     if (method_opt && !parse_method(method_opt, &method)) {
         char* s = expr_to_string(method_opt);
-        fprintf(stderr,
-                "Limit::method: %s is not a recognised setting for Method.\n",
-                s ? s : "?");
+        mth_message("Limit", "method", "%s is not a recognised setting for Method.", s ? s : "?");
         free(s);
         return NULL;
     }

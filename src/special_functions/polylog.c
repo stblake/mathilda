@@ -48,6 +48,7 @@
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -893,10 +894,7 @@ static Expr* polylog_two_arg(Expr* n, Expr* z) {
 /* ------------------------------------------------------------------ */
 
 static Expr* polylog_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "PolyLog::argt: PolyLog called with %zu argument%s; "
-            "2 or 3 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("PolyLog", "argt", "PolyLog called with %zu argument%s; 2 or 3 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

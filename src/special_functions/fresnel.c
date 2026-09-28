@@ -55,6 +55,7 @@
 #include "eval.h"              /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"           /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -641,9 +642,8 @@ static Expr* fresnel_one_arg(Expr* arg, int want_S) {
 /* ------------------------------------------------------------------ */
 
 static Expr* fresnel_emit_argx(const char* name, size_t argc) {
-    fprintf(stderr,
-            "%s::argx: %s called with %zu arguments; 1 argument is expected.\n",
-            name, name, argc);
+    mth_message(name, "argx",
+            "%s called with %zu arguments; 1 argument is expected.", name, argc);
     return NULL;
 }
 

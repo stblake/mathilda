@@ -27,6 +27,7 @@
 #include "linalg/hnf.h"
 #include "solvethue.h"
 #include "solveint_internal.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 
 /* Evaluate an MPoly at an integer assignment `vals` into `out` (pre-init'd).
@@ -843,8 +844,7 @@ void si_warn_free_symbols(const SICtx* c, Expr** conj, int ncj) {
         uint64_t h = expr_hash(c->original);
         if (have_last && h == last_hash) return;
         last_hash = h; have_last = true;
-        fprintf(stderr, "Solve::svars: Equations may not give solutions for "
-                        "all \"solve\" variables.\n");
+        mth_message("Solve", "svars", "Equations may not give solutions for all \"solve\" variables.");
         return;                                              /* emit only once */
     }
 }

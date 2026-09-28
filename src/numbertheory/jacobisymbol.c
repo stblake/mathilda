@@ -6,6 +6,7 @@
 #include "numbertheory_internal.h"
 #include "arithmetic.h"
 #include "expr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <gmp.h>
 
@@ -15,10 +16,7 @@
  * the call is left unevaluated. */
 static Expr* jacobisymbol_emit_argrx(size_t npos) {
     if (!arith_warnings_muted()) {
-        fprintf(stderr,
-                "JacobiSymbol::argrx: JacobiSymbol called with %zu argument%s; "
-                "2 arguments are expected.\n",
-                npos, npos == 1 ? "" : "s");
+        mth_message("JacobiSymbol", "argrx", "JacobiSymbol called with %zu argument%s; 2 arguments are expected.", npos, npos == 1 ? "" : "s");
     }
     return NULL;
 }

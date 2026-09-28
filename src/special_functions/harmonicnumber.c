@@ -34,6 +34,7 @@
 #include "attr.h"
 #include "arithmetic.h"    /* is_infinity_sym */
 #include "numeric.h"       /* numeric_min_inexact_bits, numeric_bits_to_digits */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdbool.h>
 #include <string.h>
@@ -70,10 +71,7 @@ static Expr* hn_fn2(const char* head, Expr* a, Expr* b) {
 /* Print `HarmonicNumber::argt: HarmonicNumber called with N arguments; 1 or 2
  * arguments are expected.` (Mathematica uses `argt` for the 1-OR-2 case). */
 static Expr* hn_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "HarmonicNumber::argt: HarmonicNumber called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("HarmonicNumber", "argt", "HarmonicNumber called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

@@ -58,6 +58,7 @@
 #include "numeric.h"         /* numeric_min_inexact_bits, get_approx_mpfr */
 #include "numeric_complex.h" /* ncpx toolkit */
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -922,10 +923,7 @@ static Expr* legendre_q_assoc(Expr* n_e, Expr* m_e, int type, Expr* x_e) {
 /* Mathematica-style diagnostic for a wrong argument count; returns NULL so the
  * evaluator leaves the call unevaluated. */
 static Expr* legendre_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "LegendreP::argb: LegendreP called with %zu argument%s; "
-            "between 2 and 4 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("LegendreP", "argb", "LegendreP called with %zu argument%s; between 2 and 4 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -947,10 +945,7 @@ Expr* builtin_legendre_p(Expr* res) {
 
 /* Mathematica-style diagnostic for a wrong LegendreQ argument count. */
 static Expr* legendre_q_emit_argb(size_t argc) {
-    fprintf(stderr,
-            "LegendreQ::argb: LegendreQ called with %zu argument%s; "
-            "between 2 and 4 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("LegendreQ", "argb", "LegendreQ called with %zu argument%s; between 2 and 4 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

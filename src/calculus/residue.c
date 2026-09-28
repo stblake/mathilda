@@ -31,16 +31,14 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "internal.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 
 /* Emit the too-few-arguments diagnostic and leave the call unevaluated. */
 static Expr* residue_emit_argcount(size_t argc) {
-    fprintf(stderr,
-            "Residue::argm: Residue called with %zu argument%s; "
-            "2 or more arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("Residue", "argm", "Residue called with %zu argument%s; 2 or more arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

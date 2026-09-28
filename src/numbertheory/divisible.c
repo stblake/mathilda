@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,15 +26,9 @@
  * tag; too many use `argt`. */
 static Expr* divisible_emit_argcount(size_t argc) {
     if (argc < 2) {
-        fprintf(stderr,
-                "Divisible::argm: Divisible called with %zu argument%s; "
-                "2 or more arguments are expected.\n",
-                argc, argc == 1 ? "" : "s");
+        mth_message("Divisible", "argm", "Divisible called with %zu argument%s; 2 or more arguments are expected.", argc, argc == 1 ? "" : "s");
     } else {
-        fprintf(stderr,
-                "Divisible::argt: Divisible called with %zu arguments; "
-                "2 arguments are expected.\n",
-                argc);
+        mth_message("Divisible", "argt", "Divisible called with %zu arguments; 2 arguments are expected.", argc);
     }
     return NULL;
 }

@@ -66,6 +66,7 @@
 #include "eval.h"         /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -708,10 +709,7 @@ static Expr* airyaiprime_one_arg(Expr* arg) {
 /* Mathematica-compatible argx diagnostic; returns NULL so the evaluator
  * leaves the call unevaluated. */
 static Expr* airyai_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "AiryAi::argx: AiryAi called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("AiryAi", "argx", "AiryAi called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -724,10 +722,7 @@ Expr* builtin_airyai(Expr* res) {
 
 /* Mathematica-compatible argx diagnostic for AiryAiPrime. */
 static Expr* airyaiprime_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "AiryAiPrime::argx: AiryAiPrime called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("AiryAiPrime", "argx", "AiryAiPrime called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

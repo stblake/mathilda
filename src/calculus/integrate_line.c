@@ -41,6 +41,7 @@
 #include "numeric.h"
 #include "sym_names.h"
 #include "print.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -621,9 +622,7 @@ static void line_emit_idiv(Expr* f, Expr* a, Expr* b) {
     char* fs = expr_to_string(f);
     char* as = expr_to_string(a);
     char* bs = expr_to_string(b);
-    fprintf(stderr,
-            "Integrate::idiv: Integral of %s does not converge on the contour "
-            "{%s, %s}.\n", fs ? fs : "?", as ? as : "?", bs ? bs : "?");
+    mth_message("Integrate", "idiv", "Integral of %s does not converge on the contour {%s, %s}.", fs ? fs : "?", as ? as : "?", bs ? bs : "?");
     free(fs); free(as); free(bs);
 }
 

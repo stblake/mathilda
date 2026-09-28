@@ -78,6 +78,7 @@
 #include "eval.h"         /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -899,10 +900,7 @@ static Expr* airybiprime_one_arg(Expr* arg) {
 /* Mathematica-compatible argx diagnostic; returns NULL so the evaluator
  * leaves the call unevaluated. */
 static Expr* airybi_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "AiryBi::argx: AiryBi called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("AiryBi", "argx", "AiryBi called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -915,10 +913,7 @@ Expr* builtin_airybi(Expr* res) {
 
 /* Mathematica-compatible argx diagnostic for AiryBiPrime. */
 static Expr* airybiprime_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "AiryBiPrime::argx: AiryBiPrime called with %zu argument%s; "
-            "1 argument is expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("AiryBiPrime", "argx", "AiryBiPrime called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

@@ -48,6 +48,7 @@
 #include "eval.h"          /* eval_and_free */
 #include "sym_names.h"     /* SYM_Rational */
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -320,10 +321,7 @@ static Expr* euler_two_arg(Expr* nexpr, Expr* x) {
 /* Print a Mathematica-compatible argt diagnostic for a wrong argument count
  * and return NULL so the evaluator leaves the call unevaluated. */
 static Expr* euler_emit_argt(size_t argc) {
-    fprintf(stderr,
-            "EulerE::argt: EulerE called with %zu argument%s; "
-            "1 or 2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("EulerE", "argt", "EulerE called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

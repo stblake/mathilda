@@ -44,6 +44,7 @@
 #include "eval.h"         /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -695,10 +696,7 @@ static Expr* ei_one_arg(Expr* arg) {
 /* Mathematica-compatible argx diagnostic; returns NULL so the evaluator
  * leaves the call unevaluated. */
 static Expr* ei_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "ExpIntegralEi::argx: ExpIntegralEi called with %zu arguments; "
-            "1 argument is expected.\n",
-            argc);
+    mth_message("ExpIntegralEi", "argx", "ExpIntegralEi called with %zu arguments; 1 argument is expected.", argc);
     return NULL;
 }
 

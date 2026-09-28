@@ -365,7 +365,7 @@ static void warn_reduce_bad_option(const Expr* res, const Expr* opt) {
         ? opt->data.function.args[0] : NULL;
     const char* name = (lhs && lhs->type == EXPR_SYMBOL)
         ? lhs->data.symbol.name : "?";
-    fprintf(stderr, "Reduce::optx: Unknown option %s in Reduce.\n", name);
+    mth_message("Reduce", "optx", "Unknown option %s in Reduce.", name);
 }
 
 /* Warn once per distinct form that the variable spec is invalid.  Mirrors
@@ -377,8 +377,7 @@ static void warn_reduce_ivar(const Expr* vars) {
     if (h == last_warned_hash) return;
     last_warned_hash = h;
     char* shown = expr_to_string((Expr*)vars);
-    fprintf(stderr, "Reduce::ivar: %s is not a valid variable.\n",
-            shown ? shown : "?");
+    mth_message("Reduce", "ivar", "%s is not a valid variable.", shown ? shown : "?");
     free(shown);
 }
 

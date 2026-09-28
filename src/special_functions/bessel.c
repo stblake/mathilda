@@ -63,6 +63,7 @@
 #include "eval.h"            /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -1637,10 +1638,7 @@ static Expr* besselj_two_arg(Expr* order, Expr* z) {
 /* Mathematica-compatible argx diagnostic; returns NULL so the evaluator
  * leaves the call unevaluated. */
 static Expr* besselj_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "BesselJ::argrx: BesselJ called with %zu argument%s; "
-            "2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("BesselJ", "argrx", "BesselJ called with %zu argument%s; 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -1674,10 +1672,7 @@ static Expr* besselk_two_arg(Expr* order, Expr* z) {
 }
 
 static Expr* besselk_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "BesselK::argrx: BesselK called with %zu argument%s; "
-            "2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("BesselK", "argrx", "BesselK called with %zu argument%s; 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -1718,10 +1713,7 @@ static Expr* besseli_two_arg(Expr* order, Expr* z) {
 }
 
 static Expr* besseli_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "BesselI::argrx: BesselI called with %zu argument%s; "
-            "2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("BesselI", "argrx", "BesselI called with %zu argument%s; 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
@@ -1758,10 +1750,7 @@ static Expr* bessely_two_arg(Expr* order, Expr* z) {
 }
 
 static Expr* bessely_emit_argx(size_t argc) {
-    fprintf(stderr,
-            "BesselY::argrx: BesselY called with %zu argument%s; "
-            "2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("BesselY", "argrx", "BesselY called with %zu argument%s; 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

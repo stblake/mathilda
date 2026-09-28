@@ -32,6 +32,7 @@
 #include "poly/poly.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ */
 /*  Tiny utilities                                                     */
@@ -61,15 +62,11 @@ static bool is_syntactic_zero(const Expr* e) {
 /* ------------------------------------------------------------------ */
 
 static void emit_argt(size_t argc) {
-    fprintf(stderr,
-        "SolveAlways::argt: SolveAlways called with %zu argument(s); "
-        "2 expected.\n", argc);
+    mth_message("SolveAlways", "argt", "SolveAlways called with %zu argument(s); 2 expected.", argc);
 }
 
 static void emit_eqf(void) {
-    fprintf(stderr,
-        "SolveAlways::eqf: equations must be Equal[lhs, rhs] (==) or a "
-        "list/And of such.\n");
+    mth_message("SolveAlways", "eqf", "equations must be Equal[lhs, rhs] (==) or a list/And of such.");
 }
 
 static void emit_ivar(const Expr* vars) {
@@ -78,9 +75,7 @@ static void emit_ivar(const Expr* vars) {
     uint64_t h = expr_hash((Expr*)vars);
     if (h == last_warned_hash) return;
     last_warned_hash = h;
-    fprintf(stderr,
-        "SolveAlways::ivar: variable list must be a non-empty symbol or "
-        "List of symbols.\n");
+    mth_message("SolveAlways", "ivar", "variable list must be a non-empty symbol or List of symbols.");
 }
 
 /* ------------------------------------------------------------------ */

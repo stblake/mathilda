@@ -56,6 +56,7 @@
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -594,10 +595,7 @@ static Expr* hz_two_arg(Expr* s, Expr* a) {
 /* ------------------------------------------------------------------ */
 
 static Expr* hz_emit_argrx(size_t argc) {
-    fprintf(stderr,
-            "HurwitzZeta::argrx: HurwitzZeta called with %zu argument%s; "
-            "2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("HurwitzZeta", "argrx", "HurwitzZeta called with %zu argument%s; 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

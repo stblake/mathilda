@@ -44,6 +44,7 @@
 #include "sym_names.h"
 #include "symtab.h"
 #include "zero_test.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ *
  *  Option parsing.                                                    *
@@ -143,9 +144,7 @@ static void warn_ivar(const Expr* vars) {
     if (h == last_warned_hash) return;
     last_warned_hash = h;
     char* shown = expr_to_string((Expr*)vars);
-    fprintf(stderr,
-        "Solve::ivar: %s is not a valid variable.\n",
-        shown ? shown : "?");
+    mth_message("Solve", "ivar", "%s is not a valid variable.", shown ? shown : "?");
     free(shown);
 }
 
@@ -161,9 +160,7 @@ static void warn_bad_option(const Expr* res, const Expr* opt) {
         ? opt->data.function.args[0] : NULL;
     const char* name = (lhs && lhs->type == EXPR_SYMBOL)
         ? lhs->data.symbol.name : "?";
-    fprintf(stderr,
-        "Solve::optx: Unknown option %s in Solve.\n",
-        name);
+    mth_message("Solve", "optx", "Unknown option %s in Solve.", name);
 }
 
 /* ------------------------------------------------------------------ *

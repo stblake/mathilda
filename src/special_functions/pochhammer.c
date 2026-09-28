@@ -34,6 +34,7 @@
 #include "eval.h"          /* eval_and_free */
 #include "expr.h"          /* expr_is_numeric_like */
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* Largest |n| for which Pochhammer[a, n] is expanded into its explicit
  * product of n linear factors. Beyond this the tree is more noise than help;
@@ -175,10 +176,7 @@ static Expr* pochhammer_two_arg(Expr* a, Expr* n) {
 /* Mathematica-compatible argrx diagnostic for a wrong argument count;
  * returns NULL so the evaluator leaves the call unevaluated. */
 static Expr* poch_emit_argrx(size_t argc) {
-    fprintf(stderr,
-            "Pochhammer::argrx: Pochhammer called with %zu argument%s; "
-            "2 arguments are expected.\n",
-            argc, argc == 1 ? "" : "s");
+    mth_message("Pochhammer", "argrx", "Pochhammer called with %zu argument%s; 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     return NULL;
 }
 

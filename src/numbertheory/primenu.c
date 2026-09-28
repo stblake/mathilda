@@ -17,6 +17,7 @@
 #include "internal.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -28,10 +29,7 @@
  * call is left unevaluated. */
 static Expr* primenu_emit_argt(size_t argc) {
     if (!arith_warnings_muted()) {
-        fprintf(stderr,
-                "PrimeNu::argt: PrimeNu called with %zu "
-                "argument%s; 1 or 2 arguments are expected.\n",
-                argc, argc == 1 ? "" : "s");
+        mth_message("PrimeNu", "argt", "PrimeNu called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     }
     return NULL;
 }

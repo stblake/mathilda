@@ -71,6 +71,7 @@
 #include "poly.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* ------------------------------------------------------------------ *
  *  Expression-building shorthand (same conventions as solvepoly.c).   *
@@ -364,9 +365,7 @@ static void warn_svars(uint64_t input_hash) {
     static uint64_t last_warned_hash = 0;
     if (input_hash == last_warned_hash) return;
     last_warned_hash = input_hash;
-    fprintf(stderr,
-        "Solve::svars: Equations may not give solutions for all "
-        "\"solve\" variables.\n");
+    mth_message("Solve", "svars", "Equations may not give solutions for all \"solve\" variables.");
 }
 
 /* ------------------------------------------------------------------ *
