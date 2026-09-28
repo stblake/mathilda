@@ -3870,6 +3870,14 @@ void info_init(void) {
         "\tto walk the range backwards.\n"
         "FilePrint returns Null on success and $Failed if the file cannot be opened.\n"
         "Negative indices inside the Span count from the end of the file (-1 is the last line).");
+    symtab_set_docstring("FileSize",
+        "FileSize[\"name\"]\n"
+        "\tgives the number of bytes in the file with the specified name.\n"
+        "In FileSize[\"name\"], name is interpreted relative to your current directory.\n"
+        "FileSize does not search $Path.\n"
+        "FileSize follows symbolic links, reporting the size of the target file.\n"
+        "FileSize gives the size as an integer count of bytes, not a Quantity.\n"
+        "FileSize returns $Failed and prints a message if the file cannot be found.");
 
     symtab_set_docstring("InputForm",
         "InputForm[expr]\n"

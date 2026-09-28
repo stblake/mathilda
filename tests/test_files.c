@@ -6,6 +6,10 @@
  *   FileExistsQ  — true/false on a freshly created scratch file,
  *                  on directories, on dangling symlinks, plus the
  *                  unevaluated-on-bad-args contract.
+ *   FileSize     — exact byte count of a scratch file, zero for an
+ *                  empty file, an Integer (not a Quantity) head, the
+ *                  $Failed / Quiet[] / Check[] behaviour on a missing
+ *                  file, plus the unevaluated-on-bad-args contract.
  *   FileExtension — every Mathematica edge case from the docstring
  *                   (no extension, ends-with-dot, leading-dot,
  *                   nested extensions, directory specifications,
@@ -130,6 +134,100 @@ void test_fileexistsq_unevaluated_on_bad_args(void) {
 
 void test_fileexistsq_protected(void) {
     assert_eval_eq("MemberQ[Attributes[FileExistsQ], Protected]", "True", 0);
+}
+
+/* ===== FileSize ===== */
+
+/* Exact byte count of a scratch file whose contents we control. */
+void test_filesize_matches_written_bytes(void) {
+    char path[256];
+    scratch_path(path, sizeof(path), "size");
+
+    FILE* fp = fopen(path, "wb");
+    ASSERT(fp != NULL);
+    /* Write exactly 11 bytes — no trailing newline from fputs. */
+    ASSERT(fwrite("hello world", 1, 11, fp) == 11);
+    fclose(fp);
+
+    char input[512];
+    snprintf(input, sizeof(input), "FileSize[\"%s\"]", path);
+    assert_eval_eq(input, "11", 0);
+
+    unlink(path);
+}
+
+/* An empty file has size zero. */
+void test_filesize_zero_for_empty_file(void) {
+    char path[256];
+    scratch_path(path, sizeof(path), "size_empty");
+
+    FILE* fp = fopen(path, "wb");
+    ASSERT(fp != NULL);
+    fclose(fp);
+
+    char input[512];
+    snprintf(input, sizeof(input), "FileSize[\"%s\"]", path);
+    assert_eval_eq(input, "0", 0);
+
+    unlink(path);
+}
+
+/* The result is a plain Integer, not a Quantity. */
+void test_filesize_head_is_integer(void) {
+    char path[256];
+    scratch_path(path, sizeof(path), "size_head");
+
+    FILE* fp = fopen(path, "wb");
+    ASSERT(fp != NULL);
+    ASSERT(fwrite("abc", 1, 3, fp) == 3);
+    fclose(fp);
+
+    char input[512];
+    snprintf(input, sizeof(input), "Head[FileSize[\"%s\"]]", path);
+    assert_eval_eq(input, "Integer", 0);
+
+    unlink(path);
+}
+
+/* A missing file yields $Failed.  Wrapped in Quiet[] so the
+ * FileSize::nffil diagnostic is suppressed — which also verifies the
+ * Quiet-aware message helper actually silences it. */
+void test_filesize_missing_returns_failed(void) {
+    char missing[256];
+    scratch_path(missing, sizeof(missing), "size_missing");
+    /* scratch_path already unlinks it. */
+
+    char input[512];
+    snprintf(input, sizeof(input), "Quiet[FileSize[\"%s\"]]", missing);
+    assert_eval_eq(input, "$Failed", 0);
+}
+
+/* Check[] must see that FileSize fired a message on the missing file
+ * (mth_msg_note_fired wiring) and return the failure expression.  The
+ * outer Quiet[] keeps the message off stderr while Check[] still detects
+ * it — the idiomatic Quiet[Check[...]] pairing. */
+void test_filesize_check_sees_message(void) {
+    char missing[256];
+    scratch_path(missing, sizeof(missing), "size_check");
+
+    char input[512];
+    snprintf(input, sizeof(input),
+             "Quiet[Check[FileSize[\"%s\"], \"caught\"]]", missing);
+    assert_eval_eq(input, "\"caught\"", 0);
+}
+
+/* Bad-args contract: wrong arity or non-string argument leaves the call
+ * unevaluated (NULL return, res not freed), and a symbolic argument flows
+ * through so callers can build FileSize[x] before x is bound. */
+void test_filesize_unevaluated_on_bad_args(void) {
+    assert_eval_eq("FileSize[]",     "FileSize[]",     0);
+    assert_eval_eq("FileSize[42]",   "FileSize[42]",   0);
+    assert_eval_eq("FileSize[a, b]", "FileSize[a, b]", 0);
+    assert_eval_eq("FileSize[x]",    "FileSize[x]",    0);
+}
+
+void test_filesize_protected(void) {
+    assert_eval_eq("MemberQ[Attributes[FileSize], Protected]", "True", 0);
 }
 
 /* ===== FileExtension ===== */
@@ -707,6 +805,15 @@ int main(void) {
     TEST(test_fileexistsq_empty_string);
     TEST(test_fileexistsq_unevaluated_on_bad_args);
     TEST(test_fileexistsq_protected);
+
+    /* FileSize */
+    TEST(test_filesize_matches_written_bytes);
+    TEST(test_filesize_zero_for_empty_file);
+    TEST(test_filesize_head_is_integer);
+    TEST(test_filesize_missing_returns_failed);
+    TEST(test_filesize_check_sees_message);
+    TEST(test_filesize_unevaluated_on_bad_args);
+    TEST(test_filesize_protected);
 
     /* FileExtension */
     TEST(test_fileextension_simple);

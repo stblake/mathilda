@@ -11,6 +11,14 @@
  *                          Interpreted relative to the current working
  *                          directory; $Path is not searched.
  *
+ *   FileSize["name"]       The size of the file "name", in bytes, as an
+ *                          integer (not a Quantity).  Symbolic links are
+ *                          followed to their target.  Interpreted relative
+ *                          to the current working directory; $Path is not
+ *                          searched.  Returns $Failed and prints a
+ *                          FileSize::nffil message if the file cannot be
+ *                          found.
+ *
  *   FileExtension["name"]  The substring after the last `.` in the
  *                          file-name component of "name", excluding
  *                          the dot.  "" when there is no extension,
@@ -57,6 +65,7 @@
 void files_init(void);
 
 Expr* builtin_fileexistsq(Expr* res);
+Expr* builtin_filesize(Expr* res);
 Expr* builtin_fileextension(Expr* res);
 Expr* builtin_filebasename(Expr* res);
 Expr* builtin_fileprint(Expr* res);

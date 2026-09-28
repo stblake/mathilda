@@ -209,6 +209,7 @@ extern const char* SYM_FileExtension;
 extern const char* SYM_FileNameJoin;
 extern const char* SYM_FileNameSplit;
 extern const char* SYM_FilePrint;
+extern const char* SYM_FileSize;
 extern const char* SYM_Fermat;
 extern const char* SYM_Fibonacci;
 extern const char* SYM_LucasL;

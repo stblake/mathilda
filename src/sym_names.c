@@ -209,6 +209,7 @@ const char* SYM_FileExtension = NULL;
 const char* SYM_FileNameJoin = NULL;
 const char* SYM_FileNameSplit = NULL;
 const char* SYM_FilePrint = NULL;
+const char* SYM_FileSize = NULL;
 const char* SYM_Fermat = NULL;
 const char* SYM_Fibonacci = NULL;
 const char* SYM_LucasL = NULL;
@@ -1151,6 +1152,7 @@ void sym_names_init(void) {
     SYM_FileNameJoin               = intern_symbol("FileNameJoin");
     SYM_FileNameSplit              = intern_symbol("FileNameSplit");
     SYM_FilePrint                  = intern_symbol("FilePrint");
+    SYM_FileSize                   = intern_symbol("FileSize");
     SYM_Fermat                     = intern_symbol("Fermat");
     SYM_Fibonacci                  = intern_symbol("Fibonacci");
     SYM_LegendreP                  = intern_symbol("LegendreP");

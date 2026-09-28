@@ -1,50 +1,49 @@
-# Task: Implement `UnixTime`
+# Task: Implement `FileSize`
 
 ## Plan
-- [x] 1. `src/datetime.c`: `datelist_result_to_abstime()` helper (list → seconds-since-1900)
-- [x] 2. `src/datetime.c`: `builtin_unix_time()` dispatcher (now / number / {y,m,...} / "string" / {"string",{elems}})
-- [x] 3. `src/datetime.c` `datetime_init()`: register + `ATTR_PROTECTED`
-- [x] 4. `src/datetime.h`: prototype
-- [x] 5. `src/sym_names.{h,c}`: `SYM_UnixTime` (decl + def + intern)
-- [x] 6. `src/info.c`: docstring under `// Time and Date`
-- [x] 7. `src/version.h`: bump 0.219 → 0.220 (number + string)
-- [x] 8. `tests/test_datetime.c`: extend with UnixTime cases (no CMake change needed)
-- [x] 9. `docs/spec/builtins/time-and-date.md` + `docs/spec/changelog/2026-09-28.md`
-- [x] 10. Build main + tests; run datetime_tests; REPL smoke; check-c99; leaks
+- [x] 1. `src/files.c`: add `#include "message.h"` + `<stdarg.h>`
+- [x] 2. `src/files.c`: static `fs_msg()` Quiet/Check-aware message helper (mirror `dt_msg`)
+- [x] 3. `src/files.c`: `builtin_filesize()` — stat → st_size Integer; missing → msg + $Failed
+- [x] 4. `src/files.c` `files_init()`: register `FileSize` + `ATTR_PROTECTED`
+- [x] 5. `src/files.c` / `src/files.h`: update header comment; add prototype
+- [x] 6. `src/sym_names.{h,c}`: `SYM_FileSize` (decl + def + intern)
+- [x] 7. `src/info.c`: docstring after `FilePrint` (no examples)
+- [x] 8. `src/version.h`: bump 0.220 → 0.221 (number + string)
+- [x] 9. `docs/spec/builtins/file-io.md` (inventory + section) + `docs/spec/changelog/2026-09-28.md`
+- [x] 10. Build main; check-c99; REPL smoke; `tests/test_files.c` (7 cases); rebuild graph
 
 ## Decisions (from user + module conventions)
-- `UnixTime[]`: **true POSIX `time(NULL)`** (real GMT epoch second, matches `date +%s`)
-- Epoch offset: `days_since_1900(1970,1,1) * 86400 = 2208988800`
-- Return type: **always an Integer** (nearest whole second, `floor(unix+0.5)`),
-  MMA-faithful; Real only as an int64 overflow fallback. Differs from AbsoluteTime.
-- Numeric arg = AbsoluteTime spec (seconds since 1900): `UnixTime[t] = t - offset`
-- String forms reuse DateList's parser verbatim (via new list→abstime helper)
-- No NDArray/packed/Compile surfaces (scalar date head, like AbsoluteTime/DateList)
+- Returns a plain **Integer** byte count — explicitly NOT a Quantity
+- Missing file → `FileSize::nffil` via **Quiet/Check-aware** helper (user choice), return `$Failed`
+- Uses `stat()` (follows symlinks); non-string / wrong arity → `NULL` (unevaluated), like `FileExistsQ`
+- No NDArray/packed/Compile surfaces (structural IO head, scalar result)
 
 ## Review
 
-Done. `UnixTime` implemented in `src/datetime.c`, v0.220.
+Done. `FileSize` implemented in `src/files.c`, v0.221.
 
-**Design.** `UnixTime` is `AbsoluteTime` shifted by the fixed 1900→1970 epoch
-offset (`2208988800`), always rounded to a whole-second integer. `UnixTime[]`
-uses `time(NULL)` (true POSIX GMT second, matching `date +%s`); the numeric /
-date-list / string forms reuse the DateList backend so the two heads agree on
-interpretation. One new helper `datelist_result_to_abstime` reads a DateList
-result list back to seconds-since-1900, letting the string/format forms reuse
-the existing (tested) parser verbatim with no refactor.
+**Design.** `FileSize["name"]` mirrors its sibling `FileExistsQ`: one string arg,
+`stat()` (follows symlinks), returns `expr_new_integer((int64_t)st.st_size)` — a
+plain Integer, deliberately not a Quantity. A path that cannot be stat'd emits
+`FileSize::nffil` through a new static `fs_msg` helper (copied from datetime.c's
+`dt_msg`: `mth_msg_note_fired()` then early-return on `mth_msg_suppressed()`) and
+returns `$Failed`, so the message respects `Quiet[]` and is visible to `Check[]`.
+Wrong arity / non-string arg → `NULL` (unevaluated), so symbolic args flow
+through. Not a numeric array kernel, so no packed/NDArray/`Compile[]` surfaces
+(consistent with the other `File*` heads).
 
 **Verification.**
-- `make` — main binary links cleanly with `datetime.o`; banner reports 0.220.
-- REPL smoke (`-file`): epoch-zero=0, 2022=1640995200, elision, numeric arg,
-  AbsoluteTime relation=True, string/format parity, fractional rounding
-  (.4→…200, .6→…201), normalization, unevaluated `UnixTime[x]`, `{Protected}`.
-- `datetime_tests` — all pass (12 new UnixTime cases).
-- `make check-c99` — PASS (no new POSIX symbols; `time()` is C89).
-- valgrind — no leak/error stack touches `builtin_unix_time`,
-  `unixtime_from_abstime`, or `datelist_result_to_abstime`. Datetime-adjacent
-  valgrind chatter is pre-existing macOS `libsystem` noise (`localtime` tz init
-  in `AbsoluteTime`, `nanosleep` in `Pause`) plus ObjC/dispatch baseline —
-  documented macOS valgrind behaviour, not real leaks.
+- `make` — links cleanly with GCC 16; banner reports 0.221.
+- REPL smoke (`-file`): `FileSize["src/files.c"]` = 32130 = `wc -c` exactly;
+  `Head` → `Integer`; `Attributes` → `{Protected}`; missing → message + `$Failed`;
+  `Quiet[...]` → `$Failed` with no message; `Check[...]` → caught; symbolic and
+  wrong-arity left unevaluated.
+- `make check-c99` — PASS (stat already guarded by `_POSIX_C_SOURCE`; no new
+  POSIX symbol).
+- `tests/test_files.c` — 7 new `FileSize` cases (exact bytes, empty→0, Integer
+  head, missing→`$Failed` under Quiet, Check detection, bad-args, Protected); all
+  85 tests pass, no `FileSize::nffil` leak to stderr (confirms Quiet path).
+- Code-review graph rebuilt after edits.
 
-**Not committed** — left for the user. Suggested: commit ending `; v0.220` and
-tag `v0.220` (`git tag v0.220 && git push --follow-tags`).
+**Not committed** — left for the user. Suggested: commit ending `; v0.221` and
+tag `v0.221` (`git tag v0.221 && git push --follow-tags`).

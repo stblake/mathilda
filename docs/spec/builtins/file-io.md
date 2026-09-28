@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -422,6 +422,24 @@ Tests for the existence of a filesystem object at the given path.
 - `"name"` is interpreted relative to the current working directory. `$Path` is not searched.
 - Implemented with `lstat()`, so dangling symlinks count as existing.
 - Leaves the call unevaluated when given the wrong arity, a symbolic argument, or any non-string atom.
+
+## FileSize
+Gives the size of a file, in bytes, as an integer.
+- `FileSize["name"]` — number of bytes in the file `"name"`, as an `Integer` (not a `Quantity`).
+
+**Features**:
+- `Protected`.
+- `"name"` is interpreted relative to the current working directory. `$Path` is not searched.
+- Implemented with `stat()`, so symbolic links are followed and the target file's size is reported.
+- Returns `$Failed` and prints a `FileSize::nffil` message when the file cannot be found. The message respects `Quiet[]` and is visible to `Check[]`.
+- Leaves the call unevaluated when given the wrong arity, a symbolic argument, or any non-string atom.
+
+**Example**:
+```
+FileSize["/etc/hosts"]              (* 213 *)
+Head[FileSize["/etc/hosts"]]        (* Integer *)
+Quiet[FileSize["no-such-file"]]     (* $Failed *)
+```
 
 ## FileExtension
 Returns the trailing file extension of a path's leaf component.

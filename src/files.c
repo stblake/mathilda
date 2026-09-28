@@ -3,6 +3,7 @@
  *
  * Builtins:
  *   FileExistsQ["name"]    — touches the filesystem (lstat).
+ *   FileSize["name"]       — touches the filesystem (stat); byte count.
  *   FileExtension["name"]  — pure string manipulation.
  *   FileBaseName["name"]   — pure string manipulation.
  *   FilePrint["name", ...] — streams file contents to stdout.
@@ -33,8 +34,10 @@
 #include "sym_names.h"
 #include "attr.h"
 #include "common.h"
+#include "message.h"
 
 #include <sys/stat.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -48,6 +51,19 @@
 #else
 #define HOST_SEP '/'
 #endif
+
+/* Emit a Wolfram-style diagnostic ("Head::tag: text") unless Quiet is active.
+ * The firing is always noted so Check[] sees it. Mirrors dt_msg in
+ * src/datetime.c. */
+static void fs_msg(const char* fmt, ...) {
+    mth_msg_note_fired();
+    if (mth_msg_suppressed()) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+}
 
 /* FileExistsQ["name"]
  *
@@ -69,6 +85,35 @@ Expr* builtin_fileexistsq(Expr* res) {
     struct stat st;
     int exists = (lstat(arg->data.string, &st) == 0);
     return expr_new_symbol(exists ? "True" : "False");
+}
+
+/* FileSize["name"]
+ *
+ * Returns the size of the file at the given path, in bytes, as an Integer
+ * (not a Quantity).  Uses stat() rather than lstat() so a symbolic link is
+ * followed to its target — the size reported is the target file's size.
+ *
+ * If the path cannot be stat'd (most commonly because no such file exists),
+ * a FileSize::nffil message is emitted through the Quiet[]/Check[]-aware
+ * helper and $Failed is returned.
+ *
+ * Anything other than a single EXPR_STRING argument leaves the call
+ * unevaluated (NULL return), so symbolic arguments flow through unchanged.
+ * The evaluator owns `res`: return a fresh Expr* on rewrite and it frees the
+ * input itself; we must NOT free it here. */
+Expr* builtin_filesize(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1) return NULL;
+
+    Expr* arg = res->data.function.args[0];
+    if (arg->type != EXPR_STRING) return NULL;
+
+    struct stat st;
+    if (stat(arg->data.string, &st) != 0) {
+        fs_msg("FileSize::nffil: Cannot find file %s.", arg->data.string);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
+    return expr_new_integer((int64_t)st.st_size);
 }
 
 /* Split "path" into (directory-prefix-length, filename-component).
@@ -758,6 +803,9 @@ void files_init(void) {
      * unevaluated. */
     symtab_add_builtin("FileExistsQ", builtin_fileexistsq);
     symtab_get_def("FileExistsQ")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("FileSize", builtin_filesize);
+    symtab_get_def("FileSize")->attributes |= ATTR_PROTECTED;
 
     symtab_add_builtin("FileExtension", builtin_fileextension);
     symtab_get_def("FileExtension")->attributes |= ATTR_PROTECTED;
