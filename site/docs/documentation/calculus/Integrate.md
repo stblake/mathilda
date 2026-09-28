@@ -1678,7 +1678,7 @@ no multivariate integration, no constant of integration.
 
 ## References
 
-**See also:** [DSolve](../../calculus/DSolve/), [PolynomialQuotientRemainder](../../calculus/PolynomialQuotientRemainder/), [Apart](../../algebra/Apart/), [Log](../../elementary-functions/Log/), [ToRadicals](../../solutions-of-equations/ToRadicals/), [Root](../../solutions-of-equations/Root/), [RootSum](../../solutions-of-equations/RootSum/), [Plus](../../arithmetic/Plus/)
+**See also:** [DSolve](../../calculus/DSolve/), [PolynomialQuotientRemainder](../../calculus/PolynomialQuotientRemainder/), [Apart](../../algebra/Apart/), [Log](../../elementary-functions/Log/), [ToRadicals](../../solutions-of-equations/ToRadicals/), [Root](../../solutions-of-equations/Root/), [RootSum](../../solutions-of-equations/RootSum/), [Function](../../functional-programming/Function/)
 
 - Bronstein, "Symbolic Integration I: Transcendental Functions", 2nd ed. (Springer, 2005).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 11–12.

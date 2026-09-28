@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_1068 functions across 38 categories. Use the search box (press `/`) to jump to any function._
+_1072 functions across 38 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -148,7 +148,7 @@ _1068 functions across 38 categories. Use the search box (press `/`) to jump to 
 
 ### [Time and Date](time-and-date/index.md)
 
-[`AbsoluteTime`](time-and-date/AbsoluteTime.md)  [`AbsoluteTiming`](time-and-date/AbsoluteTiming.md)  [`RepeatedTiming`](time-and-date/RepeatedTiming.md)  [`TimeConstrained`](time-and-date/TimeConstrained.md)  [`Timing`](time-and-date/Timing.md)
+[`$TimeUnit`](time-and-date/$TimeUnit.md)  [`AbsoluteTime`](time-and-date/AbsoluteTime.md)  [`AbsoluteTiming`](time-and-date/AbsoluteTiming.md)  [`Pause`](time-and-date/Pause.md)  [`RepeatedTiming`](time-and-date/RepeatedTiming.md)  [`SessionTime`](time-and-date/SessionTime.md)  [`TimeConstrained`](time-and-date/TimeConstrained.md)  [`TimeUsed`](time-and-date/TimeUsed.md)  [`Timing`](time-and-date/Timing.md)
 
 ### [Other & Advanced](other-advanced/index.md)
 
@@ -182,6 +182,7 @@ _1068 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`$RecursionLimit`](control-flow/$RecursionLimit.md)
 - [`$SimplifyDebug`](simplification/$SimplifyDebug.md)
 - [`$StreamColorBar`](other-advanced/$StreamColorBar.md)
+- [`$TimeUnit`](time-and-date/$TimeUnit.md)
 - [`$Version`](expression-information/$Version.md)
 - [`$VersionNumber`](expression-information/$VersionNumber.md)
 - [`Abs`](arithmetic/Abs.md)
@@ -896,6 +897,7 @@ _1068 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`PathGraph`](graphs/PathGraph.md)
 - [`PathGraphQ`](graphs/PathGraphQ.md)
 - [`PatternSequence`](other-advanced/PatternSequence.md)
+- [`Pause`](time-and-date/Pause.md)
 - [`Perimeter`](geometry/Perimeter.md)
 - [`Permutations`](lists-and-iteration/Permutations.md)
 - [`PetersenGraph`](graphs/PetersenGraph.md)
@@ -1042,6 +1044,7 @@ _1068 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Series`](power-series/Series.md)
 - [`SeriesCoefficient`](power-series/SeriesCoefficient.md)
 - [`SeriesData`](power-series/SeriesData.md)
+- [`SessionTime`](time-and-date/SessionTime.md)
 - [`Set`](assignment-and-rules/Set.md)
 - [`SetAccuracy`](arithmetic/SetAccuracy.md)
 - [`SetAlphaChannel`](image-processing/SetAlphaChannel.md)
@@ -1145,6 +1148,7 @@ _1068 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Through`](functional-programming/Through.md)
 - [`Throw`](control-flow/Throw.md)
 - [`TimeConstrained`](time-and-date/TimeConstrained.md)
+- [`TimeUsed`](time-and-date/TimeUsed.md)
 - [`Times`](arithmetic/Times.md)
 - [`TimesBy`](assignment-and-rules/TimesBy.md)
 - [`Timing`](time-and-date/Timing.md)

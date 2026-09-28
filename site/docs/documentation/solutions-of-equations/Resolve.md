@@ -43,7 +43,7 @@ Hard invariant: any decline (a malformed node, a non-Reals domain, or an undecid
 
 ## References
 
-**See also:** [Exists](../../solutions-of-equations/Exists/), [ForAll](../../solutions-of-equations/ForAll/)
+**See also:** [Exists](../../solutions-of-equations/Exists/), [ForAll](../../solutions-of-equations/ForAll/), [Abs](../../arithmetic/Abs/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/), [Piecewise](../../control-flow/Piecewise/), [Sign](../../arithmetic/Sign/), [UnitStep](../../elementary-functions/UnitStep/)
 
 - Source: [`src/solve/reduce_qe.c`](https://github.com/stblake/mathilda/blob/main/src/solve/reduce_qe.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)

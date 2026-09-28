@@ -20,11 +20,35 @@ Mathilda is a small computer algebra system that recreates the **core
 architecture and evaluation semantics of a modern symbolic programming language** — a recursive
 expression model, attribute-driven evaluation, structural pattern matching with
 backtracking, and a rewrite-rule engine — together with an extensive library of
-**~695 built-in functions**.
+**more than 1,000 built-in functions**.
 
-It spans roughly **294,000 lines of C99**, uses **GMP** for arbitrary-precision
+It spans roughly **480,000 lines of C99**, uses **GMP** for arbitrary-precision
 integers and **MPFR** for arbitrary-precision reals, and is licensed under
 **GPLv3**.
+
+---
+
+## The function universe
+
+Every built-in function in Mathilda, laid out as one network: each node is a
+function, **coloured by category**, and edges join functions that reference one
+another in the docs. Hover a node for a summary, **click it to open that
+function's page**, toggle categories in the legend, or search for a name and
+press <kbd>Enter</kbd> to fly to it.
+
+<div class="bg-figure">
+  <div class="bg-toolbar">
+    <input id="bg-search" class="bg-search" type="search" placeholder="Search functions… (Enter to jump to one)" aria-label="Search built-in functions">
+    <button id="bg-reset" class="bg-reset" type="button">Reset view</button>
+    <span id="bg-count" class="bg-count"></span>
+  </div>
+  <div class="bg-stage">
+    <div id="builtin-graph"></div>
+    <div id="bg-tooltip" class="bg-tooltip"></div>
+    <div id="bg-loading" class="bg-loading">Building the function map…</div>
+  </div>
+  <div id="bg-legend" class="bg-legend"></div>
+</div>
 
 ---
 

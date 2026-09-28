@@ -152,7 +152,7 @@ See ZERO_RECOGNISE_PLAN.md for design notes and references.
 
 ## References
 
-**See also:** [ExpandAll](../../structural-manipulation/ExpandAll/), [Times](../../arithmetic/Times/), [Erf](../../special-functions/Erf/), [Pi](../../mathematical-constants/Pi/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/), [Expand](../../algebra/Expand/), [Plus](../../arithmetic/Plus/)
+**See also:** [ExpandAll](../../structural-manipulation/ExpandAll/), [Times](../../arithmetic/Times/), [Erf](../../special-functions/Erf/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/), [Expand](../../algebra/Expand/)
 
 - J. T. Schwartz, "Fast probabilistic algorithms for verification of polynomial identities", JACM 27 (1980).
 - R. Zippel, "Probabilistic algorithms for sparse polynomials", EUROSAM 1979.

@@ -33,10 +33,10 @@ Out[2]= 11
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_intrat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_intrat.c)
 - Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
 - Tests: [`tests/test_linearsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linearsolve.c)
 - Tests: [`tests/test_matinv_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matinv_methods.c)
-- Tests: [`tests/test_matsol_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matsol_methods.c)
 
 ## Notes & additional examples
 

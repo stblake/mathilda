@@ -176,6 +176,14 @@
     "url": "documentation/other-advanced/$StreamColorBar/"
   },
   {
+    "name": "$TimeUnit",
+    "category": "Time and Date",
+    "slug": "time-and-date",
+    "status": "Stable",
+    "summary": "$TimeUnit gives the minimum time interval in seconds recorded on the computer system.",
+    "url": "documentation/time-and-date/$TimeUnit/"
+  },
+  {
     "name": "$Version",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -211,7 +219,7 @@
     "name": "AbsoluteTiming",
     "category": "Time and Date",
     "slug": "time-and-date",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "AbsoluteTiming[expr] evaluates expr, and returns a list of the absolute number of seconds of elapsed wall-clock time, together with the result obtained.",
     "url": "documentation/time-and-date/AbsoluteTiming/"
   },
@@ -5888,6 +5896,14 @@
     "url": "documentation/other-advanced/PatternSequence/"
   },
   {
+    "name": "Pause",
+    "category": "Time and Date",
+    "slug": "time-and-date",
+    "status": "Stable",
+    "summary": "Pause[n] pauses for at least n seconds.",
+    "url": "documentation/time-and-date/Pause/"
+  },
+  {
     "name": "Perimeter",
     "category": "Computational geometry",
     "slug": "geometry",
@@ -7056,6 +7072,14 @@
     "url": "documentation/power-series/SeriesData/"
   },
   {
+    "name": "SessionTime",
+    "category": "Time and Date",
+    "slug": "time-and-date",
+    "status": "Stable",
+    "summary": "SessionTime[] gives the total number of seconds of wall-clock time elapsed since the beginning of the current Mathilda session.",
+    "url": "documentation/time-and-date/SessionTime/"
+  },
+  {
     "name": "Set",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -7878,6 +7902,14 @@
     "status": "Stable",
     "summary": "TimeConstrained[expr, t]",
     "url": "documentation/time-and-date/TimeConstrained/"
+  },
+  {
+    "name": "TimeUsed",
+    "category": "Time and Date",
+    "slug": "time-and-date",
+    "status": "Stable",
+    "summary": "TimeUsed[] gives the total number of seconds of CPU time used so far in the current Mathilda session.",
+    "url": "documentation/time-and-date/TimeUsed/"
   },
   {
     "name": "Times",
