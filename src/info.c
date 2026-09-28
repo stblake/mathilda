@@ -4490,6 +4490,27 @@ void info_init(void) {
         "\n"
         "DateList uses the local date and time with no correction for time zones, daylight\n"
         "saving time, or leap seconds.");
+    symtab_set_docstring("UnixTime",
+        "UnixTime[]\n"
+        "\tgives the total number of seconds since the beginning of January 1, 1970, GMT.\n"
+        "UnixTime[date]\n"
+        "\tgives the Unix time corresponding to the given date specification.\n"
+        "\n"
+        "The supported date specifications are:\n"
+        "\t{y, m, d, h, m, s}\tDateList specification\n"
+        "\ttime\t\t\tAbsoluteTime specification (a number of seconds since 1900)\n"
+        "\t\"string\"\t\tDateString specification\n"
+        "\t{\"string\", {e1, ...}}\tdate string parsed with the given format elements\n"
+        "\n"
+        "UnixTime[] gives the number of seconds elapsed since {1970, 1, 1, 0, 0, 0} GMT, not\n"
+        "counting leap seconds, and always returns the nearest whole second as an integer. In\n"
+        "{y, m, ...} entries may be elided from the right ({y} is {y,1,1,0,0,0}, {y,m} is\n"
+        "{y,m,1,0,0,0}, and so on); values outside their normal ranges are reduced and the\n"
+        "result is rounded to the nearest second. The year and month must be integers.\n"
+        "\n"
+        "UnixTime interprets a date the same way DateList does and applies no correction for\n"
+        "time zones, daylight saving time, or leap seconds; it is AbsoluteTime shifted by the\n"
+        "fixed 1900-to-1970 epoch offset of 2208988800 seconds.");
 
     // Comparisons
     symtab_set_docstring("SameQ",

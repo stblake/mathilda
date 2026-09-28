@@ -634,6 +634,7 @@ extern const char* SYM_UnitStep;
 extern const char* SYM_UnitBox;
 extern const char* SYM_Ramp;
 extern const char* SYM_UnitVector;
+extern const char* SYM_UnixTime;
 extern const char* SYM_UnsameQ;
 extern const char* SYM_Unset;
 extern const char* SYM_UpTo;

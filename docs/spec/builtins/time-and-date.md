@@ -90,6 +90,26 @@ Gives a broken-down date/time as `{year, month, day, hour, minute, second}`.
 - **Format elements**: `"Year"`, `"YearShort"`, `"Quarter"`, `"Month"`, `"MonthName"`, `"Day"`, `"DayName"`, `"Hour"`, `"Hour12"`, `"AMPM"`, `"Minute"`, `"Second"`, `"Millisecond"`. They are read in the order given; any non-element string between them is treated as a separator. Unfilled fields default to `{current year, 1, 1, 0, 0, 0}`. E.g. `DateList[{"09/28/26",{"Day","Month","YearShort"}}] == {2028,4,9,0,0,0.}` (month `28` reduces to April 2028), `DateList[{"9/28/2026",{"Month","/","Day","/","Year"}}] == {2026,9,28,0,0,0.}`, `DateList[{"2/15",{"Month","Day"}}]` fills the current year.
 - Performs no corrections for time zones, daylight saving time, or leap seconds.
 
+## UnixTime
+Gives the total number of seconds since the Unix epoch, 1970-01-01 00:00:00 GMT.
+- `UnixTime[]` -- current time, the true POSIX epoch second.
+- `UnixTime[date]` -- Unix time corresponding to the given date specification.
+
+**Supported date specifications**:
+- `{y, m, d, h, m, s}` -- a `DateList` specification. Trailing entries may be elided; missing fields default to `{_, 1, 1, 0, 0, 0}`.
+- `time` -- a number, taken as an `AbsoluteTime` (seconds since 1900).
+- `"string"` -- a `DateString` specification, parsed heuristically.
+- `{"string", {e1, ...}}` -- a date string parsed with explicit format elements.
+
+**Features**:
+- `Protected`.
+- `AbsoluteTime` shifted by the fixed 1900→1970 epoch offset `days_since_1900[1970,1,1] * 86400 == 2208988800`: `UnixTime[spec] == AbsoluteTime[spec] - 2208988800`, so `UnixTime[{1970,1,1,0,0,0}] == 0` and `UnixTime[{2022,1,1,0,0,0}] == 1640995200`.
+- **Always returns an integer**, the nearest whole second — a fractional-second spec is rounded rather than kept as a real (a deliberate difference from `AbsoluteTime`).
+- `UnixTime[]` reports the true POSIX second (GMT), matching the operating system clock (`date +%s`); the date-list and string forms are timezone-free calendar arithmetic and interpret a spec exactly as `DateList` does.
+- Year and month must be integer-valued; a non-integer month gives `UnixTime::arg` and leaves the input unevaluated. Day, hour, minute, and second may be noninteger.
+- Out-of-range date components are reduced to standard normalized form before rounding, e.g. `UnixTime[{2022, 2, 31}] == UnixTime[{2022, 3, 3}] == 1646265600`.
+- Performs no corrections for time zones, daylight saving time, or leap seconds.
+
 ## Pause
 Pauses for at least `n` seconds, then returns `Null`.
 - `Pause[n]`

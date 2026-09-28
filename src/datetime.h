@@ -8,6 +8,7 @@ Expr* builtin_absolute_timing(Expr* res);
 Expr* builtin_repeated_timing(Expr* res);
 Expr* builtin_absolute_time(Expr* res);
 Expr* builtin_date_list(Expr* res);
+Expr* builtin_unix_time(Expr* res);
 Expr* builtin_pause(Expr* res);
 Expr* builtin_session_time(Expr* res);
 Expr* builtin_time_used(Expr* res);

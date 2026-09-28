@@ -630,6 +630,7 @@ const char* SYM_UnitStep = NULL;
 const char* SYM_UnitBox = NULL;
 const char* SYM_Ramp = NULL;
 const char* SYM_UnitVector = NULL;
+const char* SYM_UnixTime = NULL;
 const char* SYM_UnsameQ = NULL;
 const char* SYM_Unset = NULL;
 const char* SYM_UpTo = NULL;
@@ -1575,6 +1576,7 @@ void sym_names_init(void) {
     SYM_UnitBox                    = intern_symbol("UnitBox");
     SYM_Ramp                       = intern_symbol("Ramp");
     SYM_UnitVector                 = intern_symbol("UnitVector");
+    SYM_UnixTime                   = intern_symbol("UnixTime");
     SYM_UnsameQ                    = intern_symbol("UnsameQ");
     SYM_Unset                      = intern_symbol("Unset");
     SYM_UpTo                       = intern_symbol("UpTo");

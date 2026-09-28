@@ -380,6 +380,107 @@ void test_time_used_excludes_pause() {
     assert(after - before < 0.03);
 }
 
+/* --- UnixTime ---
+ * UnixTime is AbsoluteTime shifted by the fixed 1900->1970 epoch offset of
+ * 2208988800 seconds, and always rounds to a whole-second integer. So
+ * AbsoluteTime[{2022,1,1,0,0,0}] == 3849984000 gives UnixTime 1640995200, and
+ * {1970,1,1,0,0,0} gives 0. The date-list/string forms are timezone-free
+ * calendar arithmetic, so these exact values do not depend on the test machine's
+ * time zone. */
+
+void test_unixtime_epoch_zero() {
+    assert(eval_to_int("UnixTime[{1970,1,1,0,0,0}]") == 0LL);
+}
+
+void test_unixtime_known_instant() {
+    /* 2022-01-01 00:00:00 GMT = 1640995200 Unix seconds. */
+    assert(eval_to_int("UnixTime[{2022,1,1,0,0,0}]") == 1640995200LL);
+}
+
+void test_unixtime_elision() {
+    /* {2022} and {2022,1} both elide to {2022,1,1,0,0,0}. */
+    assert(eval_to_int("UnixTime[{2022}]")   == 1640995200LL);
+    assert(eval_to_int("UnixTime[{2022,1}]") == 1640995200LL);
+}
+
+void test_unixtime_normalization() {
+    /* {2022,2,31} normalizes to {2022,3,3}; 3855254400 - 2208988800 = 1646265600. */
+    int64_t a = eval_to_int("UnixTime[{2022,2,31}]");
+    int64_t b = eval_to_int("UnixTime[{2022,3,3}]");
+    assert(a == 1646265600LL);
+    assert(a == b);
+}
+
+void test_unixtime_numeric_arg() {
+    /* A bare number is an AbsoluteTime (seconds since 1900): shift by the offset. */
+    assert(eval_to_int("UnixTime[3849984000]") == 1640995200LL);
+}
+
+void test_unixtime_absolute_time_relation() {
+    /* UnixTime[spec] == AbsoluteTime[spec] - 2208988800, for any spec. */
+    int64_t u = eval_to_int("UnixTime[{2022,1,1,0,0,0}]");
+    int64_t a = eval_to_int("AbsoluteTime[{2022,1,1,0,0,0}]");
+    assert(u == a - 2208988800LL);
+}
+
+void test_unixtime_string_parity() {
+    /* String and format specs interpret exactly as DateList's parser does, so
+     * they agree with the equivalent numeric spec. Compared as two evaluations so
+     * the assertion never hardcodes a parser-format-dependent constant. */
+    int64_t ref = eval_to_int("UnixTime[{2026,9,28}]");
+    assert(eval_to_int("UnixTime[\"28 Sep, 2026\"]") == ref);
+    assert(eval_to_int("UnixTime[{\"9/28/2026\",{\"Month\",\"/\",\"Day\",\"/\",\"Year\"}}]") == ref);
+}
+
+void test_unixtime_fractional_rounds() {
+    /* Fractional seconds round to the nearest whole second (integer result). */
+    assert(eval_to_int("UnixTime[{2022,1,1,0,0,0.4}]") == 1640995200LL);
+    assert(eval_to_int("UnixTime[{2022,1,1,0,0,0.6}]") == 1640995201LL);
+}
+
+void test_unixtime_now() {
+    /* UnixTime[] is the current POSIX second: an integer in a plausible range. */
+    Expr* p = parse_expression("UnixTime[]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_INTEGER);
+    assert(e->data.integer > 1577836800LL);   /* > 2020-01-01 */
+    assert(e->data.integer < 4102444800LL);   /* < 2100-01-01 */
+    expr_free(e);
+}
+
+void test_unixtime_symbolic_unevaluated() {
+    /* A non-date argument leaves UnixTime[x] unevaluated. */
+    Expr* p = parse_expression("UnixTime[x]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION);
+    assert(strcmp(e->data.function.head->data.symbol.name, "UnixTime") == 0);
+    assert(e->data.function.arg_count == 1);
+    expr_free(e);
+}
+
+void test_unixtime_bad_month_unevaluated() {
+    /* Non-integer month cannot be a date (UnixTime::arg): stays unevaluated. */
+    Expr* p = parse_expression("UnixTime[{2022,3.5}]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION);
+    assert(strcmp(e->data.function.head->data.symbol.name, "UnixTime") == 0);
+    assert(e->data.function.arg_count == 1);
+    expr_free(e);
+}
+
+void test_unixtime_attributes() {
+    /* Must be Protected per the spec. */
+    Expr* p = parse_expression("MemberQ[Attributes[UnixTime], Protected]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_SYMBOL);
+    assert(strcmp(e->data.symbol.name, "True") == 0);
+    expr_free(e);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -405,6 +506,18 @@ int main() {
     test_datelist_bad_month_unevaluated();
     test_datelist_now_shape();
     test_datelist_attributes();
+    test_unixtime_epoch_zero();
+    test_unixtime_known_instant();
+    test_unixtime_elision();
+    test_unixtime_normalization();
+    test_unixtime_numeric_arg();
+    test_unixtime_absolute_time_relation();
+    test_unixtime_string_parity();
+    test_unixtime_fractional_rounds();
+    test_unixtime_now();
+    test_unixtime_symbolic_unevaluated();
+    test_unixtime_bad_month_unevaluated();
+    test_unixtime_attributes();
     test_pause_null();
     test_pause_waits();
     test_pause_symbolic_unevaluated();

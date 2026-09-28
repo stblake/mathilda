@@ -330,6 +330,23 @@ static Expr* datelist_make_result(int64_t y, int64_t mo, int64_t d,
     return out;
 }
 
+/*
+ * Read a {y, m, d, h, mi, s} list (as built by datelist_make_result, or any
+ * DateList result) back into absolute seconds since 1900-01-01 -- the exact
+ * inverse of datelist_make_result for normalised fields. Returns 0 (leaving
+ * *total untouched) unless the argument is a List of six numeric elements. Lets
+ * UnixTime reuse the DateList string/format parsers verbatim without re-deriving
+ * the calendar arithmetic.
+ */
+static int datelist_result_to_abstime(const Expr* list, double* total) {
+    if (!head_is(list, SYM_List) || list->data.function.arg_count != 6) return 0;
+    double parts[6];
+    for (int i = 0; i < 6; i++) {
+        if (!expr_to_double_strict(list->data.function.args[i], &parts[i])) return 0;
+    }
+    return datelist_parts_to_abstime(parts, total);
+}
+
 Expr* builtin_absolute_time(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -749,6 +766,114 @@ Expr* builtin_date_list(Expr* res) {
 }
 
 /*
+ * Seconds from 1900-01-01 to 1970-01-01: days_since_1900(1970, 1, 1) * 86400 =
+ * 25567 * 86400. The fixed offset between an AbsoluteTime (seconds since 1900)
+ * and a Unix time (seconds since 1970). No timezone / DST / leap-second
+ * correction is applied, matching the rest of this module.
+ */
+#define DT_UNIX_EPOCH_OFFSET 2208988800.0
+
+/*
+ * Turn absolute seconds-since-1900 into a Unix time: subtract the epoch offset
+ * and round to the nearest whole second. UnixTime always yields an Integer -- the
+ * nearest whole second, as Mathematica does -- so a fractional-second spec rounds
+ * rather than returning a Real (this is a deliberate difference from
+ * AbsoluteTime). A Real is returned only in the corner case where the value does
+ * not fit an int64.
+ */
+static Expr* unixtime_from_abstime(double total_1900) {
+    double unix_secs = total_1900 - DT_UNIX_EPOCH_OFFSET;
+    double rounded = floor(unix_secs + 0.5);
+    if (rounded >= (double)INT64_MIN && rounded <= (double)INT64_MAX) {
+        return expr_new_integer((int64_t)rounded);
+    }
+    return expr_new_real(unix_secs);
+}
+
+/*
+ * UnixTime[] / UnixTime[date] -- seconds since 1970-01-01 00:00:00 GMT.
+ *
+ *   UnixTime[]                     current time, the true POSIX epoch second.
+ *   UnixTime[t]                    t taken as an AbsoluteTime (seconds since
+ *                                  1900), shifted to the Unix epoch.
+ *   UnixTime[{y, m, d, h, mi, s}]  a DateList spec (elided from the right,
+ *                                  fields normalised), shifted to the epoch.
+ *   UnixTime["string"]             a DateString spec.
+ *   UnixTime[{"string", {e, ...}}] a date string with explicit format elements.
+ *
+ * The date-list and string forms share the DateList backend, so UnixTime and
+ * DateList agree on how any spec is interpreted; UnixTime just reports the shifted
+ * epoch second instead of the broken-down list.
+ */
+Expr* builtin_unix_time(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+
+    /* UnixTime[] -- the true POSIX epoch second (GMT), not the local clock. */
+    if (argc == 0) {
+        time_t now = time(NULL);
+        if (now == (time_t)-1) return NULL;
+        return expr_new_integer((int64_t)now);
+    }
+
+    if (argc != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+
+    /* UnixTime[t] -- a number is an AbsoluteTime spec (seconds since 1900). */
+    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || arg->type == EXPR_BIGINT) {
+        double total;
+        expr_to_double_strict(arg, &total);
+        return unixtime_from_abstime(total);
+    }
+
+    /* UnixTime["string"] -- reuse the DateList free-form parser. */
+    if (arg->type == EXPR_STRING) {
+        Expr* dl = datelist_from_string(arg->data.string);
+        if (!dl) return NULL;
+        double total;
+        int ok = datelist_result_to_abstime(dl, &total);
+        expr_free(dl);
+        return ok ? unixtime_from_abstime(total) : NULL;
+    }
+
+    if (head_is(arg, SYM_List)) {
+        size_t n = arg->data.function.arg_count;
+
+        /* {"string", ...} -- reuse the DateList format-element parser. */
+        if (n >= 1 && arg->data.function.args[0]->type == EXPR_STRING) {
+            Expr* dl = datelist_from_format(arg);
+            if (!dl) return NULL;
+            double total;
+            int ok = datelist_result_to_abstime(dl, &total);
+            expr_free(dl);
+            return ok ? unixtime_from_abstime(total) : NULL;
+        }
+
+        /* {y, m, d, h, mi, s} numeric spec, elided from the right. */
+        if (n < 1 || n > 6) return NULL;
+        double parts[6] = {0.0, 1.0, 1.0, 0.0, 0.0, 0.0};
+        for (size_t i = 0; i < n; i++) {
+            if (!expr_to_double_strict(arg->data.function.args[i], &parts[i])) {
+                return NULL;   /* non-numeric element: leave unevaluated */
+            }
+        }
+        double total;
+        if (!datelist_parts_to_abstime(parts, &total)) {
+            /* Year or month not integer-valued: the lengths of years and months
+             * vary, so those fields cannot be fractional. */
+            char* str = expr_to_string(arg);
+            dt_msg("UnixTime::arg: Argument %s cannot be interpreted as a date "
+                   "or time input.", str ? str : "?");
+            free(str);
+            return NULL;
+        }
+        return unixtime_from_abstime(total);
+    }
+
+    return NULL;
+}
+
+/*
  * Coerce a Pause argument to a machine double. Accepts integers, reals,
  * bignums, rationals, MPFR reals, and any NumericQ symbolic form (Pi, Sqrt[2],
  * ...) via numericalize -- so Pause[1/4] and Pause[Pi] behave like Mathematica.
@@ -843,12 +968,14 @@ void datetime_init(void) {
     symtab_add_builtin("RepeatedTiming", builtin_repeated_timing);
     symtab_add_builtin("AbsoluteTime", builtin_absolute_time);
     symtab_add_builtin("DateList", builtin_date_list);
+    symtab_add_builtin("UnixTime", builtin_unix_time);
     symtab_add_builtin("Pause", builtin_pause);
     symtab_add_builtin("SessionTime", builtin_session_time);
     symtab_add_builtin("TimeUsed", builtin_time_used);
 
     symtab_get_def("AbsoluteTime")->attributes |= ATTR_PROTECTED;
     symtab_get_def("DateList")->attributes      |= ATTR_PROTECTED;
+    symtab_get_def("UnixTime")->attributes      |= ATTR_PROTECTED;
     symtab_get_def("Pause")->attributes         |= ATTR_PROTECTED;
     symtab_get_def("SessionTime")->attributes   |= ATTR_PROTECTED;
     symtab_get_def("TimeUsed")->attributes      |= ATTR_PROTECTED;
