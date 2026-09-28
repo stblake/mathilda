@@ -619,6 +619,35 @@ void collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capacit
 
 int compare_expr_ptrs(const void* a, const void* b) { return expr_compare(*(Expr**)a, *(Expr**)b); }
 
+/*
+ * Does `e` carry a constant of an algebraic number field that get_int_content
+ * cannot see?  Exactly the heads collect_variables refuses to enrol as
+ * variables — Root objects, AlgebraicNumber coordinates, and a rational power
+ * of a numeric base (Sqrt[2], 2^(1/3)).  Each is a CONSTANT of K, so
+ * get_int_content returns 1 for it and the multivariate pseudo-remainder
+ * sequence runs over a ring whose content it never strips.
+ *
+ * Complex is deliberately NOT in this set: get_int_content does understand
+ * Gaussian integers, so Q(i) content is stripped and that path stays sound.
+ */
+static bool expr_has_field_constant(const Expr* e) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return false;
+    const char* head = (e->data.function.head->type == EXPR_SYMBOL)
+                     ? e->data.function.head->data.symbol.name : "";
+    if (strcmp(head, "Root") == 0 || strcmp(head, "AlgebraicNumber") == 0) return true;
+    if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* ex   = e->data.function.args[1];
+        if (is_number((Expr*)base) && ex->type != EXPR_INTEGER &&
+            is_rational((Expr*)ex, NULL, NULL))
+            return true;                          /* Sqrt[2], 2^(1/3), ... */
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_has_field_constant(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* ====================================================================
  * Algebraic-generator substitution
  *
@@ -2183,7 +2212,27 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
         Expr* fg = flint_multivariate_gcd_normalized(A, B);
         if (fg) return fg;
     }
+    /* Number-field coefficients (radicals, Root objects, AlgebraicNumber): the
+     * PRS below computes its content with get_int_content, which is INTEGER
+     * content — a coefficient in K contributes 1, so both operands stay
+     * non-primitive over K and the first pseudo-remainder lc(B)*A - lc(A)*B
+     * vanishes identically whenever they share a factor and agree in degree.
+     * The loop then returns the SECOND OPERAND, which is not a common divisor
+     * (MATHILDA_DIVERGENCES A26).  flint_field_gcd is the certified answer; it
+     * declines instantly when no algebraic constant is present, so a plain
+     * rational input pays only the scan.  Placed here rather than only in
+     * builtin_polynomialgcd so Factor, SquareFreeQ, FactorTerms and
+     * PolynomialLCM — which call poly_gcd_internal directly — are covered too. */
+    {
+        Expr* fg = flint_field_gcd(A, B);
+        if (fg) return fg;
+    }
 #endif
+
+    /* Whether the PRS below needs its answer checked before it is trusted: see
+     * the post-check at the end of this function. */
+    bool verify_result = (var_count > 1 &&
+                          (expr_has_field_constant(A) || expr_has_field_constant(B)));
 
     Expr* x = vars[var_count - 1];
 
@@ -2301,6 +2350,33 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
     expr_free(contGCD); expr_free(U);
     Expr* expanded_res = expr_expand(res);
     expr_free(res);
+
+    /* Safety net for everything flint_field_gcd declined — a build without
+     * FLINT, a generator qqbar does not model, or an input that never
+     * certified.  With K-coefficients in more than one variable this loop can
+     * return a NON-DIVISOR (see the note at the FLINT fast path above: the
+     * K-content is never stripped, so the first pseudo-remainder vanishes
+     * identically and the loop hands back an operand).  That is a WRONG answer,
+     * strictly worse than a weak one, so the result is checked and replaced by
+     * 1 when it fails — always a valid common divisor, and what Mathematica
+     * returns for such inputs under its default Extension -> None.
+     *
+     * Checked rather than pre-empted: the PRS is still RIGHT for most inputs
+     * that merely happen to carry an algebraic constant, and refusing them all
+     * up front cost a DSolve case whose answer runs through Q(Sqrt[17]).
+     * Univariate is never checked — with a single variable the un-stripped
+     * K-content only scales the answer, so the PRS lands on the true gcd — and
+     * neither is Q(i), whose content get_int_content does strip. */
+    if (verify_result && !is_zero_poly(expanded_res)) {
+        Expr* qa = exact_poly_div(A, expanded_res, vars, var_count);
+        Expr* qb = qa ? exact_poly_div(B, expanded_res, vars, var_count) : NULL;
+        if (qa) expr_free(qa);
+        if (qb) expr_free(qb);
+        if (!qa || !qb) {
+            expr_free(expanded_res);
+            return expr_new_integer(1);
+        }
+    }
     return expanded_res;
 }
 
@@ -2565,6 +2641,22 @@ Expr* builtin_polynomialgcd(Expr* res) {
             if (alpha_auto) expr_free(alpha_auto);
             if (auto_tower) qa_tower_free(auto_tower);
             return fg;
+        }
+        /* Everything above is univariate (gr_poly over an antic nf_t).  The
+         * MULTIVARIATE number-field GCD — and every AlgebraicNumber-spelled one,
+         * which those detectors reject outright — is this one.  It must come
+         * before the Phase C/D tower paths below: Phase D computes the
+         * Q[gamma, x, y]-GCD rather than the Q(gamma)[x, y]-GCD (its own comment
+         * says so at qafactor.c:2798), which is right only while the cofactors
+         * carry no algebraic constants and silently returns 1 when they do. */
+        {
+            Expr* fgf = flint_field_gcd(res->data.function.args[0],
+                                        res->data.function.args[1]);
+            if (fgf) {
+                if (alpha_auto) expr_free(alpha_auto);
+                if (auto_tower) qa_tower_free(auto_tower);
+                return fgf;
+            }
         }
         /* Plain rational Q[x_1..x_n] GCD via FLINT fmpq_mpoly_gcd — the exact,
          * fast primitive, used unconditionally for every rational input (no degree

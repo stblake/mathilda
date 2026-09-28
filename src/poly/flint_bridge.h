@@ -224,6 +224,39 @@ Expr* flint_extension_gcd(const Expr* a, const Expr* b);
 Expr* flint_polynomial_gcd(const Expr* a, const Expr* b);
 
 /*
+ * flint_field_gcd: GCD over a number field K = Q(theta) in ANY number of
+ * polynomial variables — the case every engine above declines, because they are
+ * all built on gr_poly over an antic nf_t and that is K[x] only.  Multivariate
+ * input therefore reached the classical pseudo-remainder PRS in poly.c, whose
+ * content is INTEGER content: a coefficient in K contributes content 1, both
+ * operands stay non-primitive over K, and the first pseudo-remainder
+ * lc(B)*A - lc(A)*B vanishes identically whenever the two share a factor and
+ * agree in degree — so the loop handed back the SECOND OPERAND, which is not a
+ * common divisor (MATHILDA_DIVERGENCES A26).
+ *
+ * Both coefficient spellings are accepted: the canonical
+ * AlgebraicNumber[theta, {..}] form, and raw radicals / Root objects (mapped
+ * into one common field first and rendered back in the caller's own spelling).
+ *
+ * The algorithm is the classical modular (Encarnacion) one: reduce modulo a
+ * prime, split M mod p into its distinct irreducible factors, run
+ * fq_nmod_mpoly_gcd in each residue field, CRT the components back into
+ * F_p[t]/(M), then CRT across primes and reconstruct the rationals.  Splitting
+ * is not an optimisation but a necessity — for a non-cyclic Galois group such
+ * as Q(sqrt2, sqrt3) no prime keeps M irreducible at all.
+ *
+ * Every result is CERTIFIED before it is returned: the candidate is monic, so
+ * its leading monomial is tau-free while M's is tau^n, the two are coprime,
+ * {G, M} is therefore a Groebner basis by Buchberger's first criterion, and
+ * fmpq_mpoly_divrem_ideal decides "G divides the operand over K" exactly.  An
+ * unlucky prime or a premature reconstruction costs an iteration, never a wrong
+ * answer.  NULL on any decline (no algebraic content, incompatible generators,
+ * a non-polynomial operand, or nothing certified within the prime budget), so
+ * the caller keeps its existing path.  Set MATHILDA_NO_FIELD_GCD=1 to A/B it.
+ */
+Expr* flint_field_gcd(const Expr* a, const Expr* b);
+
+/*
  * Plain multivariate polynomial operations over Q[x_1..x_n] (no algebraic
  * extension): the rational analogues of the extension helpers above, exposed
  * for the System` builtins (PolynomialGCD/Resultant/Factor) and the FLINT`

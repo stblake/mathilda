@@ -4051,10 +4051,10 @@ void info_init(void) {
         "exponents for each fi.");
     symtab_set_docstring("PolynomialGCD",
         "PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.\n"
-        "Option Extension -> alpha computes the GCD over Q(alpha), where alpha is an\n"
-        "algebraic number recognised by qa_resolve_extension (Sqrt[c], c^(1/n), or I).\n"
-        "Default Extension -> None and Extension -> Automatic compute over the rationals,\n"
-        "treating any algebraic numbers in the input as independent variables.");
+        "Option Extension -> alpha computes the GCD over Q(alpha); Extension -> Automatic\n"
+        "detects the extension from the operands. Coefficients in a number field are\n"
+        "handled in either spelling, radical or AlgebraicNumber, in any number of\n"
+        "variables. The result is determined only up to a constant of the field.");
     symtab_set_docstring("PolynomialLCM",
         "PolynomialLCM[poly1, poly2, ...] gives the least common multiple of the polynomials.\n"
         "Option Extension -> alpha computes the LCM over Q(alpha) via\n"

@@ -252,6 +252,119 @@ static void test_not_a_polynomial_variable(void) {
           "AlgebraicNumber[Sqrt[2], {0, 1}] + x");
 }
 
+/* Assert that PolynomialGCD[f, g] really is the gcd, given a known answer `d`.
+ *
+ * Asserting the PRINTED form would be asserting an associate: a gcd over a
+ * field is defined only up to a constant of that field, and the paths here
+ * disagree on which one they pick (flint_field_gcd is monic, the classical PRS
+ * is not).  So assert the two facts that actually matter — the result divides
+ * both operands, and the known answer divides the result.  Together those pin
+ * it to `d` up to a field constant, which is the whole of the specification.
+ *
+ * Division is exact polynomial division in x rather than Cancel, because Cancel
+ * deliberately declines on AlgebraicNumber coefficients under its default
+ * Extension -> None (as Mathematica's does). */
+static void check_gcd(const char* f, const char* g, const char* d) {
+    char buf[2048];
+    snprintf(buf, sizeof buf,
+        "Module[{gg = PolynomialGCD[%s, %s], dv},"
+        " dv = Function[{p, q}, Expand[p - PolynomialQuotient[p, q, x] q] === 0];"
+        " dv[%s, gg] && dv[%s, gg] && dv[gg, %s]]", f, g, f, g, d);
+    Expr* e = eval_str(buf);
+    char* s = expr_to_string(e);
+    if (strcmp(s, "True") != 0) {
+        Expr* got = eval_str((snprintf(buf, sizeof buf, "PolynomialGCD[%s, %s]", f, g), buf));
+        char* gs = expr_to_string(got);
+        fprintf(stderr, "FAIL(gcd): PolynomialGCD[%s, %s]\n"
+                        "  expected an associate of: %s\n  got: %s\n", f, g, d, gs);
+        free(gs); expr_free(got);
+        exit(1);
+    }
+    free(s);
+    expr_free(e);
+}
+
+/* MULTIVARIATE gcd over a number field — MATHILDA_DIVERGENCES A26.
+ *
+ * Every engine other than flint_field_gcd is univariate (gr_poly over an antic
+ * nf_t), so these fell through to the classical pseudo-remainder PRS, whose
+ * content is INTEGER content.  A coefficient in K contributes content 1, both
+ * operands stay non-primitive over K, and the first pseudo-remainder
+ * lc(B)*A - lc(A)*B vanishes identically whenever the two share a factor and
+ * agree in degree -- so the loop returned the SECOND OPERAND, which is not a
+ * common divisor at all.  There was no multivariate test here, which is exactly
+ * how it went unnoticed. */
+static void test_multivariate_number_field_gcd(void) {
+    /* the two A26 repros: both answered (x + a y)(x + 2) before */
+    check_gcd("Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}] y) (x + 1)]",
+              "Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}] y) (x + 2)]",
+              "x + AlgebraicNumber[Sqrt[2], {0, 1}] y");
+    check_gcd("x + AlgebraicNumber[Sqrt[2], {0, 1}] y",
+              "Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}] y) (x + 2)]",
+              "x + AlgebraicNumber[Sqrt[2], {0, 1}] y");
+    /* operand order must not matter (it returned whichever was second) */
+    check_gcd("Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}] y) (x + 2)]",
+              "Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}] y) (x + 1)]",
+              "x + AlgebraicNumber[Sqrt[2], {0, 1}] y");
+    /* the same in the radical spelling, with and without the option */
+    check_gcd("Expand[(x + Sqrt[2] y) (x + 1)]", "Expand[(x + Sqrt[2] y) (x + 2)]",
+              "x + Sqrt[2] y");
+
+    /* Cofactors that themselves carry algebraic constants.  This is the shape
+     * the Phase D tower path gets wrong in the other direction -- it computes
+     * the Q[gamma, x, y]-GCD rather than the Q(gamma)[x, y]-GCD and answered 1. */
+    check_gcd("Expand[(x^3 + Sqrt[2] x y + y^2 + 1) (x^2 + Sqrt[2] y + 3)]",
+              "Expand[(x^3 + Sqrt[2] x y + y^2 + 1) (x^2 + 2 Sqrt[2] y - 1)]",
+              "x^3 + Sqrt[2] x y + y^2 + 1");
+    check_gcd("Expand[(x^3 + AlgebraicNumber[Sqrt[2], {0, 1}] x y + y^2 + 1) "
+              "(x^2 + AlgebraicNumber[Sqrt[2], {0, 1}] y + 3)]",
+              "Expand[(x^3 + AlgebraicNumber[Sqrt[2], {0, 1}] x y + y^2 + 1) "
+              "(x^2 + 2 AlgebraicNumber[Sqrt[2], {0, 1}] y - 1)]",
+              "x^3 + AlgebraicNumber[Sqrt[2], {0, 1}] x y + y^2 + 1");
+
+    /* a compositum (no prime keeps its minpoly irreducible -- the residue field
+     * has to be SPLIT and the components CRT'd back), a degree-3 and a degree-4
+     * field, a Root generator, Q(i), and three variables */
+    check_gcd("Expand[(x + Sqrt[2] y + Sqrt[3]) (x + 1)]",
+              "Expand[(x + Sqrt[2] y + Sqrt[3]) (x + 2)]", "x + Sqrt[2] y + Sqrt[3]");
+    check_gcd("Expand[(x + 2^(1/3) y) (x + 1)]", "Expand[(x + 2^(1/3) y) (x + 2)]",
+              "x + 2^(1/3) y");
+    check_gcd("Expand[(x + 2^(1/4) y) (x + 1)]", "Expand[(x + 2^(1/4) y) (x + 2)]",
+              "x + 2^(1/4) y");
+    check_gcd("Expand[(x + Root[#^3 - # - 1 &, 1] y) (x + 1)]",
+              "Expand[(x + Root[#^3 - # - 1 &, 1] y) (x + 2)]",
+              "x + Root[#^3 - # - 1 &, 1] y");
+    check_gcd("Expand[(x + I y) (x + 1)]", "Expand[(x + I y) (x + 2)]", "x + I y");
+    check_gcd("Expand[(x + Sqrt[2] y + z) (x + 1)]",
+              "Expand[(x + Sqrt[2] y + z) (x + 2)]", "x + Sqrt[2] y + z");
+    /* a NESTED radical: its base is itself a Plus, which the constant/parametric
+     * pre-filter has to accept (the head symbol `Plus` is not a free variable) */
+    check_gcd("Expand[(x + Sqrt[1 + Sqrt[2]] y) (x + 1)]",
+              "Expand[(x + Sqrt[1 + Sqrt[2]] y) (x + 2)]", "x + Sqrt[1 + Sqrt[2]] y");
+    check_gcd("Expand[(x + 2^(1/6) y) (x + 1)]", "Expand[(x + 2^(1/6) y) (x + 2)]",
+              "x + 2^(1/6) y");
+
+    /* A PARAMETRIC radical is a rational function field, not a number field: it
+     * must keep going to flint_parametric_sqrt_gcd rather than being swallowed
+     * here (and must not be caught by the classical path's 1-guard either). */
+    check_gcd("Expand[(x + Sqrt[k] y) (x + 1)]", "Expand[(x + Sqrt[k] y) (x + 2)]",
+              "x + Sqrt[k] y");
+
+    /* Coprime operands must still answer 1 -- the certificate has to reject a
+     * spurious common factor, not just confirm a real one. */
+    check("PolynomialGCD[Expand[(x + Sqrt[2] y) (x + 1)], Expand[(x + Sqrt[3] y) (x + 2)]]", "1");
+    check("PolynomialGCD[Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}] y) (x + 1)], "
+          "Expand[(x + AlgebraicNumber[Sqrt[2], {0, 3}] y) (x + 2)]]", "1");
+
+    /* The radical spelling must come back in radicals, not in qqbar's Root
+     * spelling of the primitive element (the answer is mapped through the
+     * product basis of the caller's own atoms to keep this true). */
+    check("PolynomialGCD[Expand[(x + 2^(1/3) y) (x + 1)], Expand[(x + 2^(1/3) y) (x + 2)]]",
+          "x + 2^(1/3) y");
+    check("PolynomialGCD[Expand[(x + Sqrt[2] y + Sqrt[3]) (x + 1)], "
+          "Expand[(x + Sqrt[2] y + Sqrt[3]) (x + 2)]]", "Sqrt[3] + x + Sqrt[2] y");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -266,6 +379,7 @@ int main(void) {
     test_numeric_and_operations();
     test_declines();
     test_not_a_polynomial_variable();
+    test_multivariate_number_field_gcd();
     printf("test_algebraicnumber: all passed\n");
     return 0;
 }

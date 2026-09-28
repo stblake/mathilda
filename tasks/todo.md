@@ -449,3 +449,129 @@ case (`tests/test_series.c`) and `AlgebraicNumber` as a constant rather than a p
   PRE-EXISTING (the assertion is stale, not a regression).
 - `dsolve_corpus_tests` needs more than the 20 min cap this run gave it (1204 cases, ~500 in
   17 min); re-run it with `timeout 3600` for a verdict.
+
+---
+
+# `PolynomialGCD` — a native multivariate GCD over a number field (plan, 2026-09-29)
+
+Plan: `/Users/user/.claude/plans/cheeky-seeking-flute.md`.  Target: the `flint_field_gcd`
+named as the fix in `MATHILDA_DIVERGENCES.md` A26.
+
+- [x] Spike the FLINT call sequence before building on it (`fq_nmod_mpoly_gcd` in each residue
+      field of `M mod p`, CRT back) — verified on the A26 pair for an INERT prime (p = 5, 11)
+      and a SPLIT one (p = 7, 17); both reconstruct `x + sqrt2 y` exactly
+- [x] `flint_field_gcd` — modular (Encarnación) multivariate GCD over `K = Q(theta)`, with the
+      `{G, M}` Gröbner certificate and a `MATHILDA_NO_FIELD_GCD=1` A/B gate
+- [x] Radical / `Root` input normalised to one common field and rendered back through the
+      PRODUCT BASIS of the caller's own atoms (radicals in, radicals out)
+- [x] Two hooks: `poly_gcd_internal`'s inner FLINT fast path (covers `Factor`, `SquareFreeQ`,
+      `FactorTerms`, `PolynomialLCM`, `Cancel`/`Together`, Risch/DSolve) and
+      `builtin_polynomialgcd`'s FLINT block, ahead of the Phase C/D tower paths
+- [x] Safety net: the multivariate classical path CHECKS its answer and returns `1` when it
+      does not divide both operands (a pre-emptive refusal was too blunt — see below)
+- [x] `KGcd` (`logrewrite.m`) drops its multivariate A26 workaround
+- [x] Tests, docs (A26 rewritten, `algebra.md`, changelog, docstring), version `0.230`
+- [ ] `flint_field_reduce_core`'s univariate-only restriction — **dropped, not needed**: see below
+
+## Review
+
+**What was actually wrong.** Three defects, of which A26 recorded only the first.
+
+1. *A wrong answer.* `PolynomialGCD[f, g]` returned `g`; `PolynomialGCD[g, f]` returned `f` —
+   always the second operand, never a common divisor. `PolynomialGCD[x + a y, (x+a y)(x+2)]`
+   returned something of higher degree than its own first operand. Mechanism, traced to source:
+   `poly_content` bottoms out in `my_number_gcd` → `get_int_content` (`poly.c:1251-1291`), which
+   is INTEGER content and answers 1 for any `K`-coefficient, so both operands enter the PRS
+   non-primitive over `K` and the first `pseudo_rem` (`lc(B)*A - lc(A)*B`) vanishes identically.
+2. *A missed factor.* `Extension -> Automatic` on RADICAL input reached the Phase D tower path,
+   which computes the `Q[gamma,x,y]`-GCD, not the `Q(gamma)[x,y]`-GCD (`qafactor.c:2798` says so
+   itself). Correct only while the cofactors are free of algebraic constants; returns 1 otherwise.
+   Not recorded in A26 — found by probing, not by reading.
+3. *An unreachable engine.* Every explicit `Extension -> <value>` form (a value, a list, `All`,
+   `None`) went to the classical path. Only `Extension -> Automatic` reached a field engine.
+
+**Verified against Mathematica 13.2** rather than assumed. That mattered: Mathematica's default
+`PolynomialGCD` on `AlgebraicNumber` coefficients returns **1**, not the gcd — so "what the right
+answer is" was a question with a surprising answer, and the safety net was designed to match it.
+
+**Why modular/`fq_nmod`.** FLINT has no multivariate gcd over a number field — `gr_mpoly.h`
+declares no arithmetic at all (a skeleton: no add, no mul, no gcd) and there is no
+`nf_elem_mpoly`. `fq_nmod_mpoly_gcd` is the only multivariate gcd with characteristic-p
+coefficients, so Encarnación is both the textbook answer and the *least* code: FLINT does the
+multivariate work, this writes reduction, CRT, reconstruction and certification.
+`flint_bridge.h:358` already advertised "multivariate via a modular fq_nmod GCD" — that comment
+had been aspirational since it was written; it is now true.
+
+**Splitting the residue ring is mandatory, not an optimisation.** For a non-cyclic Galois group —
+`Q(sqrt2, sqrt3)`, group `(Z/2)^2` — *no* prime keeps `M` irreducible, since the group has no
+element of order 4. Any design that requires an inert prime fails on exactly the compositum
+fields this work needs. The spike deliberately exercised both an inert and a split prime before
+a line of the engine was written.
+
+**The certificate is one call.** `G` is monic ⇒ its leading monomial is tau-free; `M`'s is
+`tau^n`; coprime leading monomials ⇒ `{G, M}` is a Gröbner basis by Buchberger's first criterion
+⇒ `fmpq_mpoly_divrem_ideal` *decides* divisibility over `K`. No cofactor reconstruction. So an
+unlucky prime or a premature reconstruction costs an iteration and can never produce a wrong
+answer.
+
+**Results** (all now correct; previously the first two were non-divisors and the third missed the
+factor):
+
+| input | before | after |
+|---|---|---|
+| `PolynomialGCD[(x+a y)(x+1), (x+a y)(x+2)]` | `(x+a y)(x+2)` | `x + a y` |
+| `PolynomialGCD[g, f]` (order swapped) | `f` | `x + a y` |
+| `d(x^2+√2y+3), d(x^2+2√2y−1)`, `Ext → Automatic` | `1` | `d` |
+| explicit `Extension -> Sqrt[2]`, multivariate | second operand | `x + √2 y` |
+
+`Cancel`/`Together` now match Mathematica in all five option forms — which is why the planned
+lift of `flint_field_reduce_core`'s `gens.count != 1` restriction was **dropped**: the
+`poly_gcd_internal` hook already reaches `Cancel`, and Mathematica also leaves the default
+`AlgebraicNumber` case uncancelled, so there was nothing left to fix. Less code than planned.
+
+**Two bugs found in my own work, both worth recording.**
+
+- *Use-after-free.* On the radical path `theta` is borrowed from the normalised operand, which I
+  freed before rendering — the result came back as `x`, a clean-looking non-divisor that the
+  certificate had already passed on the *correct* value. Fixed by a single cleanup at the bottom.
+- *A safety net that was too blunt.* The first version refused the classical PRS outright
+  whenever an algebraic constant was present with more than one variable. That is sound but
+  over-broad: it broke `dsolve_m12_stress`, whose answer runs through `Q(Sqrt[17])` and whose
+  gcds the PRS was handling correctly. Replaced by a post-check — run the PRS, then verify the
+  answer divides both operands and fall back to 1 only when it does not. Precise, and it only
+  ever replaces a genuinely wrong answer. Caught by the full suite, not by the targeted tests.
+- *Normalising in the wrong basis.* Clearing denominators in `theta`'s power basis and then
+  rendering in the caller's radicals injected a junk constant: `x + I y` came back as
+  `3 x + 3 I y`, because `Expand` folds `2*I` into `Complex[0,2]`, so the atom set is `{I, 2I}`
+  and the primitive element is `theta = 3I`. The compositum did the same via
+  `sqrt2 = (theta^3 − 9 theta)/2` → a factor 2. Both are correct *associates*, which is exactly
+  what makes them easy to ship. Fix: stay monic (canonical and basis-independent, and already
+  what the modular reconstruction produces). Recorded as a memory.
+
+**Performance — the interesting part.** The engine is called from `poly_gcd_internal` on every
+gcd and declines on almost all of them, so the decline path is a hot path. Three rounds:
+
+1. First cut: Charlwood 13.1 → **18.0 s** (A40 alone 1.13 → 3.06). Fixed by two cheap gates — a
+   structural `fg_has_algebraic` scan before anything expensive, and declining below two
+   polynomial variables (univariate is already correct and faster elsewhere; this engine exists
+   for the multivariate case nothing else can do). → **13.4 s**.
+2. Adding nested-radical support put A40 back to 2.13 s. The obvious suspect was the qqbar
+   minpoly lookup in atom collection, so I memoised it: 496 constructions → **19**, and the time
+   **did not move at all**. Worth recording — the cheap-looking thing was not the cost.
+3. Instrumenting properly settled it: `flint_qqbar_to_number_field_common` was **113 calls
+   costing 1.065 s**, while all 43 modular GCDs those calls enabled cost **0.003 s** together.
+   Building the field, not computing in it. Caching it by atom set (the C analogue of the .m
+   layer's `FieldDataMemo`) → 0.180 s, A40 → **1.247 s**.
+
+Final: **12.5 s**, 49/50, 0 wrong — *faster than the 13.10 s baseline* while fixing the wrong
+answers. P8 0.64 → 0.557, P4 1.24 → 1.18, A27 0.96 → 0.888, A28 0.23 → 0.212, A40 1.13 → 1.247.
+Both memos were kept: the atom memo does not show on this benchmark but removes an obvious
+repeated cost, and the field memo is the whole of the win.
+
+**Also found, left alone** (recorded in the plan, not fixed — out of scope):
+- `qafactor.c:4770` builds a three-argument `PolynomialGCD[num, den, S]` intending `S` as the
+  variable. `PolynomialGCD` is variadic over *polynomials*, so it computes `gcd(num, den, S)` —
+  almost always 1.
+- `Modulus` is advertised in `Options[PolynomialGCD]` (`options_builtin.c:607`) but
+  `builtin_polynomialgcd` never parses it, so `PolynomialGCD[a, b, Modulus -> 5]` returns
+  unevaluated.

@@ -46,6 +46,9 @@
 #include <flint/gr_mat.h>
 #include <flint/nmod.h>          /* nmod_mul */
 #include <flint/nmod_poly.h>     /* modular univariate polynomials over F_p */
+#include <flint/nmod_poly_factor.h> /* splitting M mod p into residue fields */
+#include <flint/fq_nmod.h>          /* F_p[t]/(m) -- one residue field        */
+#include <flint/fq_nmod_mpoly.h>    /* the multivariate GCD workhorse         */
 #include <flint/ulong_extras.h>  /* n_is_prime, n_invmod */
 
 /* Process-lifetime fmpq_mpoly context cache, keyed by variable count, for the
@@ -5231,6 +5234,1039 @@ Expr* flint_algebraic_field_together(const Expr* e) {
     return out;
 }
 
+/* ================================================================== */
+/*  Native MULTIVARIATE GCD over a number field K = Q(theta).          */
+/*                                                                     */
+/*  The engines above are all univariate: absfield_op_core runs        */
+/*  gr_poly_gcd over an antic nf_t, which is K[x] and nothing wider.   */
+/*  Multivariate input therefore fell through to the classical         */
+/*  pseudo-remainder PRS in poly.c, which computes its content with    */
+/*  get_int_content -- INTEGER content.  A coefficient in K contributes*/
+/*  content 1, so both operands enter the PRS non-primitive over K,    */
+/*  and when they share a factor and have equal degree in the main     */
+/*  variable the very first pseudo-remainder                           */
+/*      lc(B)*A - lc(A)*B                                              */
+/*  vanishes identically.  The loop then returns the SECOND OPERAND,   */
+/*  which is not a common divisor at all (MATHILDA_DIVERGENCES A26).   */
+/*                                                                     */
+/*  FLINT has no multivariate GCD over a number field -- gr_mpoly.h    */
+/*  declares no arithmetic whatsoever and there is no nf_elem_mpoly.   */
+/*  What it does have is fq_nmod_mpoly_gcd, multivariate over a FINITE */
+/*  field.  So this is the classical modular (Encarnacion) algorithm:  */
+/*  reduce K[x_1..x_n] modulo a prime, let FLINT do the multivariate   */
+/*  work in the residue fields, and rebuild the answer by CRT and      */
+/*  rational reconstruction.                                           */
+/*                                                                     */
+/*  Representation: the tau lift shared with Expand / CoefficientRules */
+/*  -- K[gens] is Q[gens, tau]/(M(tau)) with tau LAST under ORD_LEX,   */
+/*  so the terms of one K-coefficient are adjacent.                    */
+/*                                                                     */
+/*  Reducing mod p does NOT in general leave a field: M mod p need not */
+/*  stay irreducible, and for a non-cyclic Galois group (Q(sqrt2,      */
+/*  sqrt3), say) NO prime keeps it irreducible.  So M mod p is split   */
+/*  into its distinct irreducible factors m_1..m_r, the gcd is taken   */
+/*  in each residue field F_p[t]/(m_i) separately, and the results are */
+/*  CRT'd back into F_p[t]/(M) before they mean anything.              */
+/*                                                                     */
+/*  Every answer is CERTIFIED before it is returned, so an unlucky     */
+/*  prime or a premature reconstruction costs an iteration and never a */
+/*  wrong answer.  The certificate is one call: the candidate G is     */
+/*  monic, so its leading monomial is tau-free, while M's is tau^n --  */
+/*  coprime leading monomials, so {G, M} is a Groebner basis by        */
+/*  Buchberger's first criterion and fmpq_mpoly_divrem_ideal is an     */
+/*  exact DECISION procedure for "G divides A over K".                 */
+/* ================================================================== */
+
+#define FG_MAX_PRIMES   64      /* give up rather than grind */
+#define FG_PRIME_START  (UWORD(1) << 29)
+
+/* One CRT accumulator: the candidate gcd's monomial support plus, per monomial,
+ * its n power-basis coordinates accumulated modulo `modulus`. */
+typedef struct {
+    slong  nmon;     /* monomials in the candidate                     */
+    slong  ngens;    /* exponent-vector length (tau excluded)          */
+    slong  n;        /* [K:Q]                                          */
+    ulong* mons;     /* nmon * ngens exponents, LEX-descending         */
+    fmpz*  co;       /* nmon * n residues                              */
+} FgAcc;
+
+/* flint_free is guarded rather than relying on free(NULL): FLINT's allocator is
+ * replaceable (flint_set_memory_functions), so a NULL is not guaranteed safe. */
+static void fg_acc_clear(FgAcc* A) {
+    if (A->co) { for (slong i = 0; i < A->nmon * A->n; i++) fmpz_clear(A->co + i); flint_free(A->co); }
+    if (A->mons) flint_free(A->mons);
+    A->mons = NULL; A->co = NULL; A->nmon = 0;
+}
+
+/* Reset `A` to the support (mons, nmon) with residues `res` taken mod p. */
+static int fg_acc_reset(FgAcc* A, const ulong* mons, slong nmon,
+                        const ulong* res, slong ngens, slong n) {
+    fg_acc_clear(A);
+    A->nmon = nmon; A->ngens = ngens; A->n = n;
+    slong ne = nmon * ngens, nc = nmon * n;      /* never ask malloc for 0 bytes */
+    A->mons = flint_malloc(sizeof(ulong) * (size_t)(ne > 0 ? ne : 1));
+    A->co   = flint_malloc(sizeof(fmpz)  * (size_t)(nc > 0 ? nc : 1));
+    if (!A->mons || !A->co) return 0;
+    memcpy(A->mons, mons, sizeof(ulong) * (size_t)(nmon * ngens));
+    for (slong i = 0; i < nmon * n; i++) { fmpz_init(A->co + i); fmpz_set_ui(A->co + i, res[i]); }
+    return 1;
+}
+
+/* LEX comparison of the leading monomials: <0 if `a` is LEX-smaller. */
+static int fg_lead_cmp(const ulong* a, const ulong* b, slong ngens) {
+    for (slong i = 0; i < ngens; i++) {
+        if (a[i] != b[i]) return a[i] < b[i] ? -1 : 1;
+    }
+    return 0;
+}
+
+/* c mod p, as numerator * denominator^-1.  0 when p divides the denominator
+ * (the prime is unusable for this input). */
+static int fg_fmpq_mod(const fmpq_t c, ulong p, ulong* out) {
+    ulong d = fmpz_fdiv_ui(fmpq_denref(c), p);
+    if (d == 0) return 0;
+    ulong nnum = fmpz_fdiv_ui(fmpq_numref(c), p);
+    nmod_t mod; nmod_init(&mod, p);
+    *out = nmod_mul(nnum, n_invmod(d, p), mod);
+    return 1;
+}
+
+/* P (in Q[gens, tau]) -> fq_nmod_mpoly over F_p[t]/(m), in `gens` variables.
+ * LEX with tau last makes the terms of one K-coefficient adjacent, so one pass
+ * groups them.  Returns 0 when a coefficient's denominator vanishes mod p. */
+static int fg_lift(fq_nmod_mpoly_t out, const fmpq_mpoly_t P,
+                   const fmpq_mpoly_ctx_struct* qctx, slong ngens, slong tau_idx,
+                   const fq_nmod_mpoly_ctx_t fctx, const fq_nmod_ctx_t fq, ulong p) {
+    fq_nmod_mpoly_zero(out, fctx);
+    slong len = fmpq_mpoly_length(P, qctx);
+    if (len == 0) return 1;
+
+    slong nvars = ngens + 1;
+    ulong* e   = flint_malloc(sizeof(ulong) * (size_t)nvars);
+    ulong* cur = flint_malloc(sizeof(ulong) * (size_t)nvars);
+    fq_nmod_t c; fq_nmod_init(c, fq);
+    nmod_poly_t acc; nmod_poly_init(acc, p);
+    fmpq_t co; fmpq_init(co);
+    int ok = 1, have = 0;
+
+    for (slong i = 0; i < len && ok; i++) {
+        fmpq_mpoly_get_term_coeff_fmpq(co, P, i, qctx);
+        fmpq_mpoly_get_term_exp_ui(e, P, i, qctx);
+        int same = have;
+        if (have) {
+            for (slong v = 0; v < ngens; v++)
+                if (e[v] != cur[v]) { same = 0; break; }
+        }
+        if (!same) {
+            if (have) {
+                fq_nmod_set_nmod_poly(c, acc, fq);
+                if (!fq_nmod_is_zero(c, fq))
+                    fq_nmod_mpoly_set_coeff_fq_nmod_ui(out, c, cur, fctx);
+                nmod_poly_zero(acc);
+            }
+            memcpy(cur, e, (size_t)nvars * sizeof(ulong));
+            have = 1;
+        }
+        ulong v;
+        if (!fg_fmpq_mod(co, p, &v)) { ok = 0; break; }
+        nmod_poly_set_coeff_ui(acc, (slong)e[tau_idx], v);
+    }
+    if (ok && have) {
+        fq_nmod_set_nmod_poly(c, acc, fq);
+        if (!fq_nmod_is_zero(c, fq))
+            fq_nmod_mpoly_set_coeff_fq_nmod_ui(out, c, cur, fctx);
+    }
+    fmpq_clear(co); nmod_poly_clear(acc); fq_nmod_clear(c, fq);
+    flint_free(e); flint_free(cur);
+    return ok;
+}
+
+/* The leading gens-monomial of P (term 0 under LEX), tau entry dropped. */
+static void fg_lead_mon(ulong* out, const fmpq_mpoly_t P,
+                        const fmpq_mpoly_ctx_struct* qctx, slong ngens) {
+    ulong* e = flint_malloc(sizeof(ulong) * (size_t)(ngens + 1));
+    fmpq_mpoly_get_term_exp_ui(e, P, 0, qctx);
+    memcpy(out, e, (size_t)ngens * sizeof(ulong));
+    flint_free(e);
+}
+
+/* One prime: split M mod p, gcd in each residue field, CRT the components back
+ * into F_p[t]/(M).  Fills *mons_out (nmon*ngens) and *res_out (nmon*n).
+ * Returns 1 on success, 0 when the prime is unusable (denominator vanishes,
+ * degree collapse, component supports disagree). */
+static int fg_gcd_mod_p(ulong p, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
+                        const fmpq_mpoly_ctx_struct* qctx, slong ngens, slong tau_idx,
+                        const nmod_poly_t Mp, slong n,
+                        const ulong* leadA, const ulong* leadB,
+                        ulong** mons_out, ulong** res_out, slong* nmon_out) {
+    *mons_out = NULL; *res_out = NULL; *nmon_out = 0;
+
+    /* M must stay squarefree mod p, else the residue "fields" overlap. */
+    {
+        nmod_poly_t d, dm; nmod_poly_init(d, p); nmod_poly_init(dm, p);
+        nmod_poly_derivative(dm, Mp);
+        nmod_poly_gcd(d, Mp, dm);
+        int sqfree = (nmod_poly_degree(d) == 0) && (nmod_poly_degree(Mp) == n);
+        nmod_poly_clear(d); nmod_poly_clear(dm);
+        if (!sqfree) return 0;
+    }
+
+    nmod_poly_factor_t fac; nmod_poly_factor_init(fac);
+    nmod_poly_factor(fac, Mp);
+    slong r = fac->num;
+
+    slong nmon = -1;
+    ulong* mons = NULL;
+    nmod_poly_struct** cc = flint_calloc((size_t)r, sizeof(nmod_poly_struct*));
+    int ok = 1;
+
+    for (slong k = 0; k < r && ok; k++) {
+        fq_nmod_ctx_t fq;
+        fq_nmod_ctx_init_modulus(fq, fac->p + k, "t");
+        fq_nmod_mpoly_ctx_t fctx;
+        fq_nmod_mpoly_ctx_init(fctx, ngens, ORD_LEX, fq);
+
+        fq_nmod_mpoly_t a, b, g;
+        fq_nmod_mpoly_init(a, fctx); fq_nmod_mpoly_init(b, fctx); fq_nmod_mpoly_init(g, fctx);
+
+        if (!fg_lift(a, A, qctx, ngens, tau_idx, fctx, fq, p) ||
+            !fg_lift(b, B, qctx, ngens, tau_idx, fctx, fq, p)) {
+            ok = 0;
+        }
+        /* A degree collapse mod p invalidates the image gcd. */
+        if (ok) {
+            ulong* e = flint_malloc(sizeof(ulong) * (size_t)ngens);
+            if (fq_nmod_mpoly_is_zero(a, fctx) || fq_nmod_mpoly_is_zero(b, fctx)) ok = 0;
+            if (ok) {
+                fq_nmod_mpoly_get_term_exp_ui(e, a, 0, fctx);
+                if (fg_lead_cmp(e, leadA, ngens) != 0) ok = 0;
+            }
+            if (ok) {
+                fq_nmod_mpoly_get_term_exp_ui(e, b, 0, fctx);
+                if (fg_lead_cmp(e, leadB, ngens) != 0) ok = 0;
+            }
+            flint_free(e);
+        }
+        if (ok && !fq_nmod_mpoly_gcd(g, a, b, fctx)) ok = 0;
+        if (ok) {
+            fq_nmod_mpoly_make_monic(g, g, fctx);
+            slong ng = fq_nmod_mpoly_length(g, fctx);
+            if (nmon < 0) {
+                nmon = ng;
+                slong ne = ng * ngens;
+                mons = flint_malloc(sizeof(ulong) * (size_t)(ne > 0 ? ne : 1));
+                for (slong i = 0; i < ng; i++)
+                    fq_nmod_mpoly_get_term_exp_ui(mons + i * ngens, g, i, fctx);
+            } else if (ng != nmon) {
+                ok = 0;                      /* components disagree: unlucky p */
+            } else {
+                ulong* e = flint_malloc(sizeof(ulong) * (size_t)ngens);
+                for (slong i = 0; i < ng && ok; i++) {
+                    fq_nmod_mpoly_get_term_exp_ui(e, g, i, fctx);
+                    if (fg_lead_cmp(e, mons + i * ngens, ngens) != 0) ok = 0;
+                }
+                flint_free(e);
+            }
+        }
+        if (ok) {
+            cc[k] = flint_malloc(sizeof(nmod_poly_struct) * (size_t)(nmon ? nmon : 1));
+            for (slong i = 0; i < nmon; i++) {
+                fq_nmod_t c; fq_nmod_init(c, fq);
+                fq_nmod_mpoly_get_term_coeff_fq_nmod(c, g, i, fctx);
+                nmod_poly_init(cc[k] + i, p);
+                nmod_poly_set(cc[k] + i, c);        /* fq_nmod_t IS nmod_poly_t */
+                fq_nmod_clear(c, fq);
+            }
+        }
+        fq_nmod_mpoly_clear(a, fctx); fq_nmod_mpoly_clear(b, fctx); fq_nmod_mpoly_clear(g, fctx);
+        fq_nmod_mpoly_ctx_clear(fctx);
+        fq_nmod_ctx_clear(fq);
+    }
+
+    ulong* res = NULL;
+    if (ok && nmon >= 0) {
+        slong nc = nmon * n;
+        res = flint_calloc((size_t)(nc > 0 ? nc : 1), sizeof(ulong));
+        nmod_poly_t acc, accmod, u, v, d, diff, tmp, m2;
+        nmod_poly_init(acc, p); nmod_poly_init(accmod, p); nmod_poly_init(u, p);
+        nmod_poly_init(v, p); nmod_poly_init(d, p); nmod_poly_init(diff, p);
+        nmod_poly_init(tmp, p); nmod_poly_init(m2, p);
+        for (slong i = 0; i < nmon; i++) {
+            nmod_poly_set(acc, cc[0] + i);
+            nmod_poly_set(accmod, fac->p + 0);
+            for (slong k = 1; k < r; k++) {
+                /* z = acc (mod accmod), z = cc[k][i] (mod m_k) */
+                nmod_poly_xgcd(d, u, v, accmod, fac->p + k);
+                nmod_poly_sub(diff, cc[k] + i, acc);
+                nmod_poly_mulmod(tmp, diff, u, fac->p + k);
+                nmod_poly_mul(tmp, tmp, accmod);
+                nmod_poly_add(acc, acc, tmp);
+                nmod_poly_mul(m2, accmod, fac->p + k);
+                nmod_poly_set(accmod, m2);
+                nmod_poly_rem(acc, acc, accmod);
+            }
+            for (slong j = 0; j < n; j++)
+                res[i * n + j] = nmod_poly_get_coeff_ui(acc, j);
+        }
+        nmod_poly_clear(acc); nmod_poly_clear(accmod); nmod_poly_clear(u);
+        nmod_poly_clear(v); nmod_poly_clear(d); nmod_poly_clear(diff);
+        nmod_poly_clear(tmp); nmod_poly_clear(m2);
+    }
+
+    for (slong k = 0; k < r; k++)
+        if (cc[k]) {
+            for (slong i = 0; i < nmon; i++) nmod_poly_clear(cc[k] + i);
+            flint_free(cc[k]);
+        }
+    flint_free(cc);
+    nmod_poly_factor_clear(fac);
+
+    if (!ok || nmon < 0) {
+        if (mons) flint_free(mons);
+        if (res) flint_free(res);
+        return 0;
+    }
+    *mons_out = mons; *res_out = res; *nmon_out = nmon;
+    return 1;
+}
+
+/* Does G divide A over K?  {G, M} is a Groebner basis (coprime leading
+ * monomials: G is monic so its lead is tau-free, M's is tau^n), so the ideal
+ * remainder is zero exactly when A is in (G, M), i.e. G | A modulo M. */
+static int fg_divides(const fmpq_mpoly_t A, const fmpq_mpoly_t G, const fmpq_mpoly_t M,
+                      const fmpq_mpoly_ctx_struct* ctx) {
+    fmpq_mpoly_t q0, q1, rem;
+    fmpq_mpoly_init(q0, ctx); fmpq_mpoly_init(q1, ctx); fmpq_mpoly_init(rem, ctx);
+    fmpq_mpoly_struct* gens[2]; gens[0] = (fmpq_mpoly_struct*)G; gens[1] = (fmpq_mpoly_struct*)M;
+    fmpq_mpoly_struct* qs[2];   qs[0] = q0; qs[1] = q1;
+    fmpq_mpoly_divrem_ideal(qs, rem, A, gens, 2, ctx);
+    int z = fmpq_mpoly_is_zero(rem, ctx);
+    fmpq_mpoly_clear(q0, ctx); fmpq_mpoly_clear(q1, ctx); fmpq_mpoly_clear(rem, ctx);
+    return z;
+}
+
+/* NOTE on normalisation.  The answer is left MONIC and is deliberately not
+ * rescaled to a primitive integral associate the way the plain-Q kernel is.
+ * Clearing denominators would happen in theta's power basis, which is the wrong
+ * basis whenever the result is rendered in another one, and the spurious
+ * content that introduces is visible: `Expand` folds 2*I into Complex[0, 2], so
+ * the atom set of (x + I y)(x + 1) is {I, 2 I} and the primitive element comes
+ * back as theta = 3 I — clearing denominators there turned x + I y into
+ * 3 x + 3 I y.  The compositum does the same through sqrt2 = (theta^3 - 9 theta)/2.
+ * Monic is canonical, is what the residue-field gcds already are, and is what
+ * makes {G, M} a Groebner basis for the certificate. */
+
+/* The modular loop: certified gcd of A and B (both already reduced mod M) in
+ * Q[gens, tau]/(M).  Returns 1 with G set, 0 on decline. */
+static int fg_modular_gcd(fmpq_mpoly_t G, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
+                          const fmpq_mpoly_t M, const fmpq_mpoly_ctx_struct* ctx,
+                          const Expr* mp, slong ngens, slong tau_idx, slong n) {
+    slong nvars = ngens + 1;
+    ulong* leadA = flint_malloc(sizeof(ulong) * (size_t)ngens);
+    ulong* leadB = flint_malloc(sizeof(ulong) * (size_t)ngens);
+    fg_lead_mon(leadA, A, ctx, ngens);
+    fg_lead_mon(leadB, B, ctx, ngens);
+
+    FgAcc acc; memset(&acc, 0, sizeof acc);
+    fmpz_t modulus; fmpz_init_set_ui(modulus, 1);
+    int done = 0;
+    ulong p = FG_PRIME_START;
+
+    for (int it = 0; it < FG_MAX_PRIMES && !done; it++) {
+        p = n_nextprime(p, 0);
+
+        /* M mod p */
+        nmod_poly_t Mp; nmod_poly_init(Mp, p);
+        {
+            size_t nc = mp->data.function.arg_count;
+            fmpz_t z; fmpz_init(z);
+            int bad = 0;
+            for (size_t i = 0; i < nc; i++) {
+                if (!fmpz_from_int_expr(z, mp->data.function.args[i])) { bad = 1; break; }
+                nmod_poly_set_coeff_ui(Mp, (slong)i, fmpz_fdiv_ui(z, p));
+            }
+            fmpz_clear(z);
+            if (bad) { nmod_poly_clear(Mp); break; }
+        }
+
+        ulong *mons = NULL, *res = NULL; slong nmon = 0;
+        int got = fg_gcd_mod_p(p, A, B, ctx, ngens, tau_idx, Mp, n, leadA, leadB,
+                               &mons, &res, &nmon);
+        nmod_poly_clear(Mp);
+        if (!got) continue;
+
+        if (acc.nmon == 0 && acc.mons == NULL) {
+            if (!fg_acc_reset(&acc, mons, nmon, res, ngens, n)) { if (mons) flint_free(mons); if (res) flint_free(res); break; }
+            fmpz_set_ui(modulus, p);
+        } else {
+            int same = (nmon == acc.nmon);
+            if (same)
+                for (slong i = 0; i < nmon * ngens; i++)
+                    if (mons[i] != acc.mons[i]) { same = 0; break; }
+            if (!same) {
+                /* An unlucky prime can only make the image gcd BIGGER, so the
+                 * LEX-smaller leading monomial is the trustworthy one. */
+                int c = fg_lead_cmp(mons, acc.mons, ngens);
+                if (c <= 0) {
+                    if (!fg_acc_reset(&acc, mons, nmon, res, ngens, n)) { if (mons) flint_free(mons); if (res) flint_free(res); break; }
+                    fmpz_set_ui(modulus, p);
+                } else {
+                    if (mons) flint_free(mons);
+                    if (res) flint_free(res);
+                    continue;                      /* this prime is the unlucky one */
+                }
+            } else {
+                for (slong i = 0; i < nmon * n; i++)
+                    fmpz_CRT_ui(acc.co + i, acc.co + i, modulus, res[i], p, 0);
+                fmpz_mul_ui(modulus, modulus, p);
+            }
+        }
+        if (mons) flint_free(mons);
+        if (res) flint_free(res);
+
+        /* Try to reconstruct, then certify.  Both may fail early; that just
+         * means another prime is needed. */
+        fmpq_mpoly_zero(G, ctx);
+        int recon = 1;
+        {
+            fmpq_t q; fmpq_init(q);
+            ulong* e = flint_calloc((size_t)nvars, sizeof(ulong));
+            for (slong i = 0; i < acc.nmon && recon; i++) {
+                for (slong j = 0; j < n; j++) {
+                    if (!fmpq_reconstruct_fmpz(q, acc.co + i * n + j, modulus)) { recon = 0; break; }
+                    if (fmpq_is_zero(q)) continue;
+                    memcpy(e, acc.mons + i * ngens, (size_t)ngens * sizeof(ulong));
+                    e[tau_idx] = (ulong)j;
+                    fmpq_mpoly_set_coeff_fmpq_ui(G, q, e, ctx);
+                }
+            }
+            flint_free(e); fmpq_clear(q);
+        }
+        if (!recon || fmpq_mpoly_is_zero(G, ctx)) continue;
+        if (fg_divides(A, G, M, ctx) && fg_divides(B, G, M, ctx)) done = 1;
+    }
+
+    fg_acc_clear(&acc);
+    fmpz_clear(modulus);
+    flint_free(leadA); flint_free(leadB);
+    return done;
+}
+
+/* ---- surface normalisation: radicals / Root objects -> one number field ---- */
+
+/* Does `e` contain no free symbol?  Separates a CONSTANT radical (Sqrt[2],
+ * Sqrt[1 + Sqrt[2]]) from a PARAMETRIC one (Sqrt[k]) — the latter is a rational
+ * function field, not a number field, and belongs to flint_parametric_sqrt_gcd. */
+static int fg_symbol_free(const Expr* e) {
+    if (!e) return 1;
+    if (e->type == EXPR_SYMBOL) return 0;
+    if (e->type != EXPR_FUNCTION) return 1;
+    /* A symbolic head NAMES an operation (the Plus of Sqrt[1 + Sqrt[2]]); only a
+     * compound head could itself carry a variable. */
+    const Expr* h = e->data.function.head;
+    if (h && h->type != EXPR_SYMBOL && !fg_symbol_free(h)) return 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!fg_symbol_free(e->data.function.args[i])) return 0;
+    return 1;
+}
+
+/* Could `e` be an algebraic CONSTANT?  A cheap structural pre-filter, so the
+ * common decline costs a tree walk and not a qqbar construction per node. */
+static int fg_maybe_algebraic(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    const char* h = fn_head_name(e);
+    if (!h) return 0;
+    if (strcmp(h, "Root") == 0 || strcmp(h, "AlgebraicNumber") == 0 ||
+        strcmp(h, "Complex") == 0) return 1;
+    if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* x = e->data.function.args[1];
+        int xrat = (x->type == EXPR_FUNCTION && fn_head_name(x) &&
+                    strcmp(fn_head_name(x), "Rational") == 0);
+        /* Sqrt[2], 2^(1/3), and the nested Sqrt[1 + Sqrt[2]] — but NOT Sqrt[k],
+         * whose base carries a symbol and which is a parametric regime. */
+        return xrat && fg_symbol_free(b);
+    }
+    return 0;
+}
+
+/* Does `e` carry any algebraic constant at all?  The whole engine declines when
+ * this is false, and it is by far the most common case, so it runs first. */
+static int fg_has_algebraic(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    if (fg_maybe_algebraic(e)) return 1;
+    if (fg_has_algebraic(e->data.function.head)) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (fg_has_algebraic(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/* Count distinct free symbols, stopping at `want`.  The engine only exists for
+ * the MULTIVARIATE case, so a univariate operand can decline before any of the
+ * expensive normalisation runs. */
+static void fg_count_syms(const Expr* e, const char** seen, size_t* n, size_t want) {
+    if (!e || *n >= want) return;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < *n; i++)
+            if (strcmp(seen[i], e->data.symbol.name) == 0) return;
+        seen[(*n)++] = e->data.symbol.name;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    const char* h = fn_head_name(e);
+    /* theta is the field's label and the coordinates are rationals: neither
+     * contributes a polynomial variable (mirrors collect_variables). */
+    if (h && (strcmp(h, "AlgebraicNumber") == 0 || strcmp(h, "Root") == 0)) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        fg_count_syms(e->data.function.args[i], seen, n, want);
+}
+
+/* Memo for "is this Expr an algebraic-constant atom?".  Bounded and process
+ * lifetime, in the style of flint_qqbar.c's generator cache; a hash match is
+ * confirmed with expr_eq so a collision cannot give a wrong verdict. */
+#define FG_ATOM_NO       0
+#define FG_ATOM_RATIONAL 1
+#define FG_ATOM_YES      2
+#define FG_ATOM_CACHE    512
+typedef struct { uint64_t hash; Expr* key; int verdict; } FgAtomSlot;
+static FgAtomSlot g_fg_atom_cache[FG_ATOM_CACHE];
+
+static int fg_atom_memo_get(const Expr* e) {
+    uint64_t h = expr_hash(e);
+    FgAtomSlot* s = &g_fg_atom_cache[h % FG_ATOM_CACHE];
+    if (s->key && s->hash == h && expr_eq(s->key, (Expr*)e)) return s->verdict;
+    return -1;
+}
+
+static void fg_atom_memo_put(const Expr* e, int verdict) {
+    uint64_t h = expr_hash(e);
+    FgAtomSlot* s = &g_fg_atom_cache[h % FG_ATOM_CACHE];
+    Expr* copy = expr_copy((Expr*)e);
+    if (!copy) return;
+    if (s->key) expr_free(s->key);
+    s->key = copy; s->hash = h; s->verdict = verdict;
+}
+
+/* Collect the distinct non-rational algebraic CONSTANTS of `e` (Sqrt[2],
+ * 2^(1/3), Root[..], Complex, ...).  Returns 0 for anything that is not a
+ * polynomial over such constants. */
+static int fg_collect_atoms(const Expr* e, Expr*** atoms, size_t* na, size_t* cap) {
+    if (!e) return 0;
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: case EXPR_SYMBOL: return 1;
+        case EXPR_FUNCTION: break;
+        default: return 0;                       /* inexact: not exact over Q */
+    }
+    const char* h = fn_head_name(e);
+    if (!h) return 0;
+    if (strcmp(h, "Rational") == 0) return 1;
+    if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!fg_collect_atoms(e->data.function.args[i], atoms, na, cap)) return 0;
+        return 1;
+    }
+    if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type == EXPR_INTEGER && ex->data.integer >= 0)
+            return fg_collect_atoms(e->data.function.args[0], atoms, na, cap);
+        /* a rational power of an integer is an algebraic constant: fall through */
+    }
+    if (!fg_maybe_algebraic(e)) return 0;        /* not a shape qqbar can use */
+    /* An algebraic constant iff qqbar accepts it and it is not already rational.
+     * Memoised because this runs per candidate node per gcd and the same handful
+     * of constants recur across thousands of calls, while qqbar's own genfd
+     * cache only remembers SUCCESSES — a node that is not an algebraic atom
+     * (qqbar declines, or it is really a rational) paid a fresh construction
+     * every time.  On the A40 antiderivative that was 496 constructions. */
+    int verdict = fg_atom_memo_get(e);
+    if (verdict < 0) {
+            Expr* mpc = flint_qqbar_gen_minpoly_coeffs(e);
+        int deg1 = (mpc && mpc->type == EXPR_FUNCTION &&
+                    mpc->data.function.arg_count <= 2);
+        verdict = !mpc ? FG_ATOM_NO : (deg1 ? FG_ATOM_RATIONAL : FG_ATOM_YES);
+        if (mpc) expr_free(mpc);
+        fg_atom_memo_put(e, verdict);
+    }
+    if (verdict == FG_ATOM_NO) return 0;
+    if (verdict == FG_ATOM_RATIONAL) return 1;   /* degree <= 1: a rational */
+    for (size_t i = 0; i < *na; i++)
+        if (expr_eq((*atoms)[i], e)) return 1;
+    if (*na == *cap) {
+        size_t nc = *cap ? *cap * 2 : 4;
+        Expr** np = realloc(*atoms, nc * sizeof(Expr*));
+        if (!np) return 0;
+        *atoms = np; *cap = nc;
+    }
+    (*atoms)[(*na)++] = expr_copy((Expr*)e);
+    return 1;
+}
+
+/* Memo for the primitive-element normalisation.  Building the common field of a
+ * set of radicals is a qqbar primitive-element search with precision escalation
+ * — on the A40 antiderivative it was 113 calls costing 1.065 s, against 0.003 s
+ * for all 43 modular GCDs those calls enabled.  The atom set repeats constantly
+ * (it is a property of the tower, not of the operands), so it is cached by atom
+ * list, the same way the .m layer's FieldDataMemo caches FieldData. */
+#define FG_FIELD_CACHE 64
+typedef struct { uint64_t hash; Expr* key; Expr* imgs; } FgFieldSlot;
+static FgFieldSlot g_fg_field_cache[FG_FIELD_CACHE];
+
+/* The common-field images of `atoms`, cached.  Returns a borrowed Expr (a List
+ * parallel to atoms), or NULL when the field could not be built. */
+static const Expr* fg_field_images(Expr* const* atoms, size_t na) {
+    Expr** keyargs = malloc(sizeof(Expr*) * (na ? na : 1));
+    if (!keyargs) return NULL;
+    for (size_t i = 0; i < na; i++) keyargs[i] = expr_copy(atoms[i]);
+    Expr* key = expr_new_function(expr_new_symbol("List"), keyargs, na);
+    free(keyargs);
+    if (!key) return NULL;
+
+    uint64_t h = expr_hash(key);
+    FgFieldSlot* sl = &g_fg_field_cache[h % FG_FIELD_CACHE];
+    if (sl->key && sl->hash == h && expr_eq(sl->key, key)) {
+        expr_free(key);
+        return sl->imgs;                         /* may be NULL: a cached decline */
+    }
+    Expr* imgs = flint_qqbar_to_number_field_common((const Expr* const*)atoms, na, 0);
+    if (imgs && (imgs->type != EXPR_FUNCTION ||
+                 imgs->data.function.arg_count != na)) {
+        expr_free(imgs); imgs = NULL;
+    }
+    if (sl->key) expr_free(sl->key);
+    if (sl->imgs) expr_free(sl->imgs);
+    sl->key = key; sl->hash = h; sl->imgs = imgs;
+    return imgs;
+}
+
+/* Replace each atom by its image; every other node copied structurally. */
+static Expr* fg_subst_atoms(const Expr* e, Expr* const* atoms, Expr* const* imgs, size_t na) {
+    if (!e) return NULL;
+    for (size_t i = 0; i < na; i++)
+        if (expr_eq((Expr*)e, atoms[i])) return expr_copy(imgs[i]);
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    if (!args) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        args[i] = fg_subst_atoms(e->data.function.args[i], atoms, imgs, na);
+        if (!args[i]) { for (size_t j = 0; j < i; j++) expr_free(args[j]); free(args); return NULL; }
+    }
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return r;
+}
+
+/* ---- rendering a K-element back in the caller's own surface spelling ----
+ *
+ * The engine computes in the canonical representation, where theta is the
+ * qqbar primitive element -- and qqbar_to_expr spells anything of degree >= 3
+ * as a Root object.  Handing that back would turn a perfectly good
+ * `x + 2^(1/3) y` into `x + Root[-2 + #1^3 &, 1] y`, and a Q(sqrt2, sqrt3)
+ * answer into a degree-4 Root, which is correct but unreadable and a
+ * regression on input that was already spelled in radicals.
+ *
+ * So the answer is mapped back into the PRODUCT BASIS of the caller's own
+ * atoms: the monomials alpha_1^e1 ... alpha_k^ek with e_i < deg(alpha_i).
+ * When there are prod(deg alpha_i) == [K:Q] of them they are a Q-basis of K,
+ * so the matrix P whose columns are their theta-coordinates is invertible;
+ * P^-1 turns theta-coordinates into coordinates over products of the original
+ * radicals.  (k == 1 is the same construction with basis {1, a, a^2, ...},
+ * which is why a single cube root comes back as a cube root.)  If the atoms
+ * do not span -- a dependent or non-maximal set -- the struct stays `ready`
+ * == 0 and the caller falls back to expanding in theta, still correct. */
+typedef struct {
+    int      ready;
+    slong    n;              /* [K:Q]                                     */
+    slong    nprod;          /* product-basis size (== n when usable)     */
+    fmpq_mat_t Pinv;         /* theta-coords -> product-basis coords      */
+    Expr**   prod;           /* nprod surface Exprs for the basis members */
+} FgRender;
+
+static void fg_render_clear(FgRender* R) {
+    if (!R) return;
+    if (R->prod) { for (slong i = 0; i < R->nprod; i++) expr_free(R->prod[i]); free(R->prod); }
+    if (R->ready) fmpq_mat_clear(R->Pinv);
+    R->prod = NULL; R->ready = 0;
+}
+
+/* alpha_1^e1 ... alpha_k^ek as a surface Expr (1 when every e_i is 0). */
+static Expr* fg_prod_expr(Expr* const* atoms, const slong* e, size_t k) {
+    Expr** f = malloc(sizeof(Expr*) * (k ? k : 1));
+    size_t nf = 0;
+    for (size_t i = 0; i < k; i++) {
+        if (e[i] == 0) continue;
+        Expr* a = expr_copy(atoms[i]);
+        if (e[i] > 1) {
+            Expr* pw[2] = { a, expr_new_integer((int64_t)e[i]) };
+            a = expr_new_function(expr_new_symbol("Power"), pw, 2);
+        }
+        f[nf++] = a;
+    }
+    Expr* r = (nf == 0) ? expr_new_integer(1)
+            : (nf == 1) ? f[0]
+            : expr_new_function(expr_new_symbol("Times"), f, nf);
+    free(f);
+    return r;
+}
+
+/* Build the product basis of `atoms` (with images `imgs` in Q(theta)) and the
+ * change-of-basis inverse.  Leaves R->ready == 0 when it does not span. */
+static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
+                           size_t k, const Expr* theta, slong n) {
+    memset(R, 0, sizeof *R);
+    R->n = n;
+    if (k == 0 || k > 8) return;
+
+    fmpq_poly_t mpq; fmpq_poly_init(mpq);
+    if (!field_theta_minpoly(theta, mpq)) { fmpq_poly_clear(mpq); return; }
+    nf_t nf; nf_init(nf, mpq); fmpq_poly_clear(mpq);
+
+    /* per-atom degree and its nf_elem image.  `nav` counts how many of av[] are
+     * live, so every exit clears exactly those and no more. */
+    slong deg[8]; nf_elem_t av[8];
+    size_t nav = 0;
+    slong total = 1;
+    int ok = 1;
+    for (size_t i = 0; i < k; i++) {
+        Expr* am = flint_qqbar_gen_minpoly_coeffs(atoms[i]);
+        if (!am || am->type != EXPR_FUNCTION || am->data.function.arg_count < 2) {
+            expr_free(am);
+            ok = 0;
+            break;
+        }
+        deg[i] = (slong)am->data.function.arg_count - 1;
+        expr_free(am);
+        nf_elem_init(av[i], nf); nav = i + 1;
+        fmpq_poly_t p; fmpq_poly_init(p);
+        const Expr* im = imgs[i];
+        if (im->type == EXPR_FUNCTION && fn_head_name(im) &&
+            strcmp(fn_head_name(im), "AlgebraicNumber") == 0 &&
+            im->data.function.arg_count == 2) {
+            const Expr* co = im->data.function.args[1];
+            for (size_t j = 0; j < co->data.function.arg_count; j++) {
+                fmpq_t c; fmpq_init(c);
+                if (field_expr_to_fmpq(co->data.function.args[j], c))
+                    fmpq_poly_set_coeff_fmpq(p, (slong)j, c);
+                else ok = 0;
+                fmpq_clear(c);
+            }
+        } else {
+            fmpq_t c; fmpq_init(c);
+            if (field_expr_to_fmpq(im, c)) fmpq_poly_set_coeff_fmpq(p, 0, c);
+            else ok = 0;
+            fmpq_clear(c);
+        }
+        nf_elem_set_fmpq_poly(av[i], p, nf);
+        fmpq_poly_clear(p);
+        if (!ok) break;
+        total *= deg[i];
+        if (total > n) { ok = 0; break; }
+    }
+    /* total != n with ok still set means the atoms do not span K (a dependent or
+     * non-maximal set); the caller then falls back to expanding in theta. */
+    if (!ok || total != n) {
+        for (size_t j = 0; j < nav; j++) nf_elem_clear(av[j], nf);
+        nf_clear(nf);
+        return;
+    }
+
+    /* columns of P: the theta-coordinates of each product-basis member */
+    fmpq_mat_t P; fmpq_mat_init(P, n, n);
+    R->prod = calloc((size_t)n, sizeof(Expr*));
+    slong e[8]; memset(e, 0, sizeof e);
+    nf_elem_t acc; nf_elem_init(acc, nf);
+    fmpq_poly_t co; fmpq_poly_init(co);
+    for (slong m = 0; m < n; m++) {
+        nf_elem_one(acc, nf);
+        for (size_t i = 0; i < k; i++)
+            for (slong t = 0; t < e[i]; t++) nf_elem_mul(acc, acc, av[i], nf);
+        nf_elem_get_fmpq_poly(co, acc, nf);
+        for (slong j = 0; j < n; j++) {
+            fmpq_t c; fmpq_init(c);
+            fmpq_poly_get_coeff_fmpq(c, co, j);
+            fmpq_set(fmpq_mat_entry(P, j, m), c);
+            fmpq_clear(c);
+        }
+        R->prod[m] = fg_prod_expr(atoms, e, k);
+        for (size_t i = 0; i < k; i++) {          /* odometer over the exponents */
+            if (++e[i] < deg[i]) break;
+            e[i] = 0;
+        }
+    }
+    fmpq_poly_clear(co); nf_elem_clear(acc, nf);
+    for (size_t i = 0; i < k; i++) nf_elem_clear(av[i], nf);
+    nf_clear(nf);
+
+    fmpq_mat_init(R->Pinv, n, n);
+    if (fmpq_mat_inv(R->Pinv, P)) { R->ready = 1; R->nprod = n; }
+    else { fmpq_mat_clear(R->Pinv); for (slong i = 0; i < n; i++) expr_free(R->prod[i]);
+           free(R->prod); R->prod = NULL; }
+    fmpq_mat_clear(P);
+}
+
+/* theta-coordinate list -> sum over the product basis, or NULL when unusable. */
+static Expr* fg_render_coords(const FgRender* R, const Expr* coords) {
+    if (!R->ready || coords->type != EXPR_FUNCTION) return NULL;
+    slong n = R->n;
+    fmpq_mat_t v, w; fmpq_mat_init(v, n, 1); fmpq_mat_init(w, n, 1);
+    int ok = 1;
+    for (slong j = 0; j < n; j++) {
+        if (j >= (slong)coords->data.function.arg_count) break;
+        if (!field_expr_to_fmpq(coords->data.function.args[j], fmpq_mat_entry(v, j, 0))) { ok = 0; break; }
+    }
+    Expr* out = NULL;
+    if (ok) {
+        fmpq_mat_mul(w, R->Pinv, v);
+        Expr** terms = malloc(sizeof(Expr*) * (size_t)n);
+        size_t nt = 0;
+        for (slong m = 0; m < n; m++) {
+            if (fmpq_is_zero(fmpq_mat_entry(w, m, 0))) continue;
+            Expr* c = expr_from_fmpq_local(fmpq_mat_entry(w, m, 0));
+            if (fmpq_is_one(fmpq_mat_entry(w, m, 0)) &&
+                !(R->prod[m]->type == EXPR_INTEGER && R->prod[m]->data.integer == 1)) {
+                expr_free(c);
+                terms[nt++] = expr_copy(R->prod[m]);
+            } else if (R->prod[m]->type == EXPR_INTEGER && R->prod[m]->data.integer == 1) {
+                terms[nt++] = c;
+            } else {
+                Expr* mt[2] = { c, expr_copy(R->prod[m]) };
+                terms[nt++] = expr_new_function(expr_new_symbol("Times"), mt, 2);
+            }
+        }
+        out = (nt == 0) ? expr_new_integer(0)
+            : (nt == 1) ? terms[0]
+            : expr_new_function(expr_new_symbol("Plus"), terms, nt);
+        free(terms);
+    }
+    fmpq_mat_clear(v); fmpq_mat_clear(w);
+    return out;
+}
+
+/* Rewrite every AlgebraicNumber[theta, {..}] of `e` through the product basis. */
+static Expr* fg_render_tree(const Expr* e, const FgRender* R) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2) {
+        Expr* r = fg_render_coords(R, e->data.function.args[1]);
+        if (r) return r;
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = fg_render_tree(e->data.function.args[i], R);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return r;
+}
+
+/* AlgebraicNumber[theta, {c0..ck}] -> c0 + c1 theta + ... + ck theta^k.  The
+ * fallback spelling when the caller's atoms do not form a product basis. */
+static Expr* fg_expand_algnum(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2) {
+        const Expr* th = e->data.function.args[0];
+        const Expr* co = e->data.function.args[1];
+        if (co->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+        size_t k = co->data.function.arg_count;
+        if (k == 0) return expr_new_integer(0);
+        Expr** terms = malloc(sizeof(Expr*) * k);
+        size_t nt = 0;
+        for (size_t i = 0; i < k; i++) {
+            const Expr* ci = co->data.function.args[i];
+            if (ci->type == EXPR_INTEGER && ci->data.integer == 0) continue;
+            if (i == 0) { terms[nt++] = expr_copy((Expr*)ci); continue; }
+            Expr* tp = expr_copy((Expr*)th);
+            if (i > 1) {
+                Expr* pw[2] = { tp, expr_new_integer((int64_t)i) };
+                tp = expr_new_function(expr_new_symbol("Power"), pw, 2);
+            }
+            Expr* mt[2] = { expr_copy((Expr*)ci), tp };
+            terms[nt++] = expr_new_function(expr_new_symbol("Times"), mt, 2);
+        }
+        Expr* r = (nt == 0) ? expr_new_integer(0)
+                : (nt == 1) ? terms[0]
+                : expr_new_function(expr_new_symbol("Plus"), terms, nt);
+        free(terms);
+        return r;
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = fg_expand_algnum(e->data.function.args[i]);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return r;
+}
+
+static int field_gcd_disabled(void) {
+    static int cached = -1;
+    if (cached < 0) {
+        const char* v = getenv("MATHILDA_NO_FIELD_GCD");
+        cached = (v && *v && strcmp(v, "0") != 0) ? 1 : 0;
+    }
+    return cached;
+}
+
+/*
+ * GCD over a number field K = Q(theta), any number of polynomial variables.
+ * Accepts both coefficient spellings: the canonical AlgebraicNumber[theta,{..}]
+ * form, and raw radicals / Root objects (which are first mapped into one common
+ * field and rendered back in the caller's own spelling).  NULL on any decline —
+ * no algebraic content, more than one incompatible generator, a non-polynomial
+ * operand, or a candidate that failed to certify.
+ */
+Expr* flint_field_gcd(const Expr* a, const Expr* b) {
+    if (!a || !b || field_gcd_disabled()) return NULL;
+
+    /* 0. Two cheap gates before anything expensive, because this is called from
+     * poly_gcd_internal on EVERY gcd and declines on almost all of them.
+     *   - no algebraic constant anywhere: not our case at all;
+     *   - fewer than two polynomial variables: the univariate case is already
+     *     correct and faster elsewhere (gr_poly over antic for radicals, and the
+     *     classical PRS for AlgebraicNumber, where a single variable means the
+     *     un-stripped K-content only scales the answer).  This engine exists for
+     *     the multivariate case nothing else can do. */
+    if (!fg_has_algebraic(a) && !fg_has_algebraic(b)) return NULL;
+    {
+        const char* seen[2]; size_t ns = 0;
+        fg_count_syms(a, seen, &ns, 2);
+        fg_count_syms(b, seen, &ns, 2);
+        if (ns < 2) return NULL;
+    }
+
+    /* 1. Find the field.  Already-canonical input needs no normalisation; raw
+     * radicals are mapped into a common field first. */
+    Expr *na_ = NULL, *nb_ = NULL;
+    Expr** atoms = NULL; size_t natoms = 0;      /* the caller's own spelling */
+    const Expr* cimgs = NULL;                    /* borrowed from the field cache */
+    int radical_in = 0;
+
+#define FG_BAIL() do { \
+        for (size_t i_ = 0; i_ < natoms; i_++) expr_free(atoms[i_]); \
+        free(atoms); expr_free(na_); expr_free(nb_); \
+        return NULL; \
+    } while (0)
+
+    {
+        FieldScan fs; memset(&fs, 0, sizeof fs);
+        field_scan(a, &fs); field_scan(b, &fs);
+        if (fs.conflict) return NULL;
+        if (!fs.have_alg) {
+            /* No AlgebraicNumber: look for radicals/Root objects to normalise. */
+            size_t cap = 0;
+            if (!fg_collect_atoms(a, &atoms, &natoms, &cap) ||
+                !fg_collect_atoms(b, &atoms, &natoms, &cap) || natoms == 0) FG_BAIL();
+            cimgs = fg_field_images(atoms, natoms);
+            if (!cimgs) FG_BAIL();
+            na_ = fg_subst_atoms(a, atoms, cimgs->data.function.args, natoms);
+            nb_ = fg_subst_atoms(b, atoms, cimgs->data.function.args, natoms);
+            if (!na_ || !nb_) FG_BAIL();
+            radical_in = 1;
+        }
+    }
+    const Expr* A0 = radical_in ? na_ : a;
+    const Expr* B0 = radical_in ? nb_ : b;
+
+    FieldScan fs; memset(&fs, 0, sizeof fs);
+    field_scan(A0, &fs); field_scan(B0, &fs);
+    if (fs.conflict || !fs.have_alg) FG_BAIL();
+    const Expr* theta = fs.theta;
+    int gaussian = expr_is_imag_unit(theta);
+    if (fs.have_complex && !gaussian) FG_BAIL();
+
+    Expr* mp = flint_qqbar_gen_minpoly_coeffs(theta);
+    if (!mp || mp->type != EXPR_FUNCTION || mp->data.function.arg_count < 3) {
+        expr_free(mp); FG_BAIL();                /* degree < 2: nothing to do */
+    }
+    slong n = (slong)mp->data.function.arg_count - 1;
+    {   /* theta must be an algebraic INTEGER: the modular reduction of a monic
+         * M is what makes F_p[t]/(M) meaningful. */
+        const Expr* lc = mp->data.function.args[n];
+        if (!(lc->type == EXPR_INTEGER && lc->data.integer == 1)) {
+            expr_free(mp); FG_BAIL();
+        }
+    }
+#undef FG_BAIL
+
+    /* 2. tau lift, shared variable set (gens sorted, tau last).
+     * NOTE: `theta` is borrowed from A0/B0, so on the normalised path na_/nb_
+     * must stay alive until the result has been rendered — everything is freed
+     * in the single cleanup at the bottom. */
+    Expr* ea = field_subst_tau(A0, gaussian);
+    Expr* eb = field_subst_tau(B0, gaussian);
+    VarSet vs; memset(&vs, 0, sizeof vs);
+    const fmpq_mpoly_ctx_struct* ctx = NULL;
+    fmpq_mpoly_t A, B, M, G, Qd;
+    int mpoly_live = 0;
+    Expr* out = NULL;
+
+    if (!ea || !eb) goto cleanup;
+    if (!collect_vars(ea, &vs) || !collect_vars(eb, &vs)) goto cleanup;
+
+    char* tau_ptr = NULL;
+    for (size_t i = 0; i < vs.count; i++)
+        if (strcmp(vs.names[i], FIELD_TAU_NAME) == 0) { tau_ptr = vs.names[i]; break; }
+    if (!tau_ptr || vs.count < 2) goto cleanup;  /* no field content, or no variable */
+    {
+        char** tmp = malloc(sizeof(char*) * vs.count);
+        size_t k = 0;
+        for (size_t i = 0; i < vs.count; i++)
+            if (vs.names[i] != tau_ptr) tmp[k++] = vs.names[i];
+        qsort(tmp, k, sizeof(char*), cmp_str);
+        for (size_t i = 0; i < k; i++) vs.names[i] = tmp[i];
+        vs.names[k] = tau_ptr;
+        free(tmp);
+    }
+    {
+    slong nvars = (slong)vs.count;
+    slong tau_idx = nvars - 1;
+    slong ngens = nvars - 1;
+
+    ctx = bridge_ctx_lex(nvars);
+    fmpq_mpoly_init(A, ctx); fmpq_mpoly_init(B, ctx); fmpq_mpoly_init(M, ctx);
+    fmpq_mpoly_init(G, ctx); fmpq_mpoly_init(Qd, ctx);
+    mpoly_live = 1;
+
+    if (to_mpoly(ea, A, ctx, &vs) && to_mpoly(eb, B, ctx, &vs) &&
+        field_build_minpoly(M, mp, ctx, nvars, tau_idx) &&
+        !fmpq_mpoly_is_zero(M, ctx) &&
+        !fmpq_mpoly_is_zero(A, ctx) && !fmpq_mpoly_is_zero(B, ctx)) {
+        /* Reduce both operands into the power basis before anything else.
+         * Through a temporary: aliasing the remainder to the dividend is not a
+         * documented guarantee of fmpq_mpoly_divrem. */
+        fmpq_mpoly_t T; fmpq_mpoly_init(T, ctx);
+        fmpq_mpoly_divrem(Qd, T, A, M, ctx); fmpq_mpoly_swap(A, T, ctx);
+        fmpq_mpoly_divrem(Qd, T, B, M, ctx); fmpq_mpoly_swap(B, T, ctx);
+        fmpq_mpoly_clear(T, ctx);
+        if (!fmpq_mpoly_is_zero(A, ctx) && !fmpq_mpoly_is_zero(B, ctx) &&
+            fg_modular_gcd(G, A, B, M, ctx, mp, ngens, tau_idx, n)) {
+            out = field_mpoly_to_expr(G, ctx, &vs, tau_idx, n, theta);
+            if (out && radical_in) {
+                /* Hand the answer back in the caller's own radicals, not in
+                 * qqbar's Root spelling of the primitive element. */
+                FgRender R;
+                fg_render_init(&R, atoms, cimgs->data.function.args, natoms, theta, n);
+                Expr* sp = R.ready ? fg_render_tree(out, &R) : fg_expand_algnum(out);
+                fg_render_clear(&R);
+                expr_free(out);
+                out = sp;
+            }
+            if (out) out = eval_and_free(out);
+        }
+    }
+    }
+
+cleanup:
+    if (mpoly_live) {
+        fmpq_mpoly_clear(A, ctx); fmpq_mpoly_clear(B, ctx); fmpq_mpoly_clear(M, ctx);
+        fmpq_mpoly_clear(G, ctx); fmpq_mpoly_clear(Qd, ctx);
+    }
+    varset_free(&vs); expr_free(ea); expr_free(eb); expr_free(mp);
+    for (size_t i = 0; i < natoms; i++) expr_free(atoms[i]);
+    free(atoms);
+    expr_free(na_); expr_free(nb_);       /* theta borrowed from these: free last */
+    return out;
+}
+
 /* Algebraic-extension GCD only: Q(sqrt d) -> Q(zeta_n) -> radical tower. Returns
  * NULL when no algebraic generator is present (plain Q[x] / parametric), so a
  * caller can keep its existing path for those. This is the entry consumers like
@@ -5717,6 +6753,7 @@ Expr* flint_rational_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_cancel(const Expr* e) { (void)e; return NULL; }
 Expr* flint_field_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_field_cancel(const Expr* e) { (void)e; return NULL; }
+Expr* flint_field_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_tower_reduce(const Expr* frac, const char* const* alg_syms,
                          const Expr* const* relations, int n_alg,
                          const char* const* elim_vars, int n_elim) {

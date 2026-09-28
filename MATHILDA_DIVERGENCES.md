@@ -390,29 +390,72 @@ EXPRESSION value is treated as a variable the input is constant in; both are mat
 unbalanced configuration at infinity was solved against a matrix carrying a square root of a
 polynomial where a rational belonged. Fixing it took the review corpus from 304 to 329 correct.
 
-### A26. Multivariate `PolynomialGCD` with `AlgebraicNumber` coefficients is wrong
+### A26. Multivariate `PolynomialGCD` over a number field was wrong  (FIXED, v0.230)
 
 ```
-a = AlgebraicNumber[Sqrt[2], {0, 1}];
-PolynomialGCD[Expand[(x + a y) (x + 1)], Expand[(x + a y) (x + 2)]]
-  Mathematica   x + Sqrt[2] y            (on the radical form)
-  Mathilda      (x + a y) (x + 2)        -- the second operand, not a common divisor
-PolynomialGCD[x + a y, Expand[(x + a y) (x + 2)]]
-  Mathilda      (x + a y) (x + 2)        -- a gcd of higher degree than an operand
+a = AlgebraicNumber[Sqrt[2], {0, 1}];   d = x^3 + Sqrt[2] x y + y^2 + 1;
+                                                    Mathematica        Mathilda (v0.229)
+PolynomialGCD[(x+a y)(x+1), (x+a y)(x+2)]              1              (x+a y)(x+2)  NOT A DIVISOR
+  ... , Extension -> Automatic]               2y + x AlgebraicNumber  (x+a y)(x+2)  NOT A DIVISOR
+PolynomialGCD[x + a y, (x+a y)(x+2)]                   1              (x+a y)(x+2)  degree > operand
+PolynomialGCD[d(x^2+Sqrt[2]y+3), d(x^2+2Sqrt[2]y-1), Extension -> Automatic]
+                                                       d                     1      factor missed
 ```
 
-Univariate is correct, and so is `Extension -> Automatic` since v0.229 (`autodetect_walk` no
-longer mines the field label `theta` out of an `AlgebraicNumber`, which used to answer `1`).
-`collect_variables` no longer enrols an `AlgebraicNumber` as a polynomial VARIABLE (v0.229 --
-`Variables[a + x]` is `{x}` now, as in Mathematica), which removes the inconsistent-ring hazard
-of two Q-linearly dependent "variables" (`Plus`/`Times` fold a rational scalar into the
-coordinate vector, so `2 a` is a structurally distinct atom). What remains is the classical
-path's content computation over `K`: with equal degree in the main variable the pseudo-remainder
-vanishes and the loop returns the second operand. `Cancel`/`Together` of such a fraction decline
-rather than return garbage. The fix is a native `flint_field_gcd` over `K[x_1..x_n]` -- every
-component exists (`kx_ctx_init`, `kx_scalar`, `field_subst_tau`, `field_mpoly_to_expr`), none is
-wired to `PolynomialGCD`. `logrewrite.m`'s `KGcd` keeps the radical + `Extension` route for
-multivariate input because of this.
+**Three separate defects, only the first of which this entry originally recorded.**
+
+*The wrong answer.* `collect_variables` correctly treats an `AlgebraicNumber` as a CONSTANT
+(v0.229), so the coefficient ring is `K`. But `poly_content` bottoms out in `my_number_gcd` →
+`get_int_content` (`src/poly/poly.c:1251-1291`), which is INTEGER content and returns 1 for any
+`K`-coefficient. Both operands therefore enter the pseudo-remainder sequence non-primitive over
+`K`, and on the FIRST iteration `pseudo_rem` computes `lc(B)*A - lc(A)*B`, which vanishes
+identically whenever the two share a factor and have equal degree in the main variable. The loop
+then does `U = V`, breaks, and returns `contGCD * U` — **the second operand**, which is not a
+common divisor at all. `PolynomialGCD[f, g]` returned `g` and `PolynomialGCD[g, f]` returned `f`.
+
+*The missed factor.* `Extension -> Automatic` on RADICAL input reached the Phase D tower path,
+which computes the `Q[gamma, x, y]`-GCD rather than the `Q(gamma)[x, y]`-GCD (its own comment
+says so at `qafactor.c:2798`). That is right only while the cofactors carry no algebraic
+constants, and silently answers 1 when they do.
+
+*The unreached engine.* Every explicit `Extension -> <value>` form (a value, a list, `All`,
+`None`) went to the classical path too — only `Extension -> Automatic` reached any field engine.
+
+**The fix** is the native `flint_field_gcd` named here (`src/poly/flint_bridge.c`), hooked into
+both `poly_gcd_internal` and `builtin_polynomialgcd` so `Factor`, `SquareFreeQ`, `FactorTerms`,
+`PolynomialLCM`, `Cancel`/`Together` and the Risch consumers are covered too. FLINT has no
+multivariate GCD over a number field (`gr_mpoly.h` declares no arithmetic at all), so it is the
+classical modular (Encarnación) algorithm over `fq_nmod_mpoly_gcd`, CRT and rational
+reconstruction; the residue ring has to be SPLIT into `M mod p`'s irreducible factors and the
+component gcds CRT'd back, because for a non-cyclic Galois group such as `Q(sqrt2, sqrt3)` no
+prime keeps `M` irreducible. Every answer is certified before return — the candidate is monic so
+its leading monomial is tau-free while `M`'s is `tau^n`, making `{G, M}` a Gröbner basis by
+Buchberger's first criterion, so `fmpq_mpoly_divrem_ideal` decides divisibility over `K` exactly.
+Radical input is mapped into one common field and rendered back through the PRODUCT BASIS of the
+caller's own atoms, so radicals in gives radicals out rather than qqbar's `Root` spelling of the
+primitive element. `MATHILDA_NO_FIELD_GCD=1` A/Bs it.
+
+Anything the engine still declines (a build without FLINT, a generator qqbar does not model, an
+input that never certified) is **checked** at the end of the classical multivariate path: if the
+PRS answer does not divide both operands it is replaced by **1** — always a common divisor, and
+what Mathematica returns for these inputs under its default `Extension -> None`. Checked rather
+than pre-empted: refusing every multivariate input that merely carries an algebraic constant is
+too blunt, and cost a `DSolve` case whose answer runs through `Q(Sqrt[17])`. Univariate is never
+checked (one variable means the un-stripped `K`-content only scales the answer, so the PRS lands
+on the true gcd) and neither is `Q(i)`, whose content `get_int_content` does strip.
+
+Remaining, deliberate: the gcd over a field is defined only up to a constant of that field, and
+Mathilda returns the MONIC associate where Mathematica returns another (`x + Sqrt[2] y` against
+Mathematica's `Sqrt[2] x + 2 y`). Both are correct; tests assert by divisibility, not by printed
+form. `logrewrite.m`'s `KGcd` no longer needs its multivariate workaround.
+
+Still declined, and still answering 1: an expression that MIXES spellings of the same field
+(`AlgebraicNumber[Sqrt[2], ..]` alongside a bare `Sqrt[3]`), or carries two structurally distinct
+`AlgebraicNumber` generators. `field_scan` reports a conflict and the engine declines rather than
+building the compositum. Pre-existing and unchanged: before v0.230 the mixed case answered with
+an unsimplified **zero** (`Sqrt[3] AlgebraicNumber[Sqrt[2], {0, -4}] + Sqrt[3]
+AlgebraicNumber[Sqrt[2], {0, 4}] + ...`), which the divisibility check does not catch because it
+is not structurally zero.
 
 ### A27. `SparseArray` is not implemented
 

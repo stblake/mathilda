@@ -201,22 +201,19 @@ MonicIn[u_, vars_] := CanL[u/First[CoefficientRules[u, vars]][[2]]];
 TotalDegree[p_, vars_] := Max[0, Total /@ Keys[CoefficientRules[p, vars]]];
 
 (* KGcd[f, g]: the gcd of two polynomials over the number field of their constants.
-   With ONE polynomial variable the constants are mapped into a single number field
-   first (FieldDataMemo, built once per atom set) and the plain two-argument
-   PolynomialGCD is the field gcd there -- exact, and without Extension -> Automatic,
-   which re-derives the splitting field from the raw radicals on every call.  The gcd
-   comes back up to a constant factor of the field, which is all any caller here needs
-   (a logand is used up to a constant; SturmCount is scale-free).
-   MULTIVARIATE input keeps the radical + Extension route: this kernel's plain
-   PolynomialGCD is WRONG on multivariate AlgebraicNumber input -- it enrols each
-   distinct AlgebraicNumber atom as an independent polynomial variable, so two
-   Q-linearly dependent atoms make the content computation run over an inconsistent
-   ring and the answer comes back as the gcd times a spurious factor.  (Repro:
-   PolynomialGCD[Expand[(x + a y)(x + 1)], Expand[(x + a y)(x + 2)]] with
-   a = AlgebraicNumber[Sqrt[2], {0, 1}] returns (x + a y)(x + 2).) *)
-KGcd[f_, g_] := Module[{vars, atoms, fd},
-  vars = Select[DeleteDuplicates[Join[Variables[f], Variables[g]]], ! NumericQ[#] &];
-  If[Length[vars] != 1, Return[PolynomialGCD[f, g, Extension -> Automatic]]];
+   The constants are mapped into a single number field first (FieldDataMemo, built
+   once per atom set) and the plain two-argument PolynomialGCD is the field gcd
+   there -- exact, and without Extension -> Automatic, which re-derives the
+   splitting field from the raw radicals on every call.  The gcd comes back up to a
+   constant factor of the field, which is all any caller here needs (a logand is
+   used up to a constant; SturmCount is scale-free).
+   This used to restrict itself to ONE polynomial variable and route multivariate
+   input back through Extension -> Automatic, because the kernel's plain
+   PolynomialGCD was wrong on multivariate AlgebraicNumber input -- the classical
+   pseudo-remainder path computes INTEGER content, so the K-content was never
+   stripped and the answer came back as the second operand.  flint_field_gcd
+   (v0.230) is the certified multivariate field gcd, so the restriction is gone. *)
+KGcd[f_, g_] := Module[{atoms, fd},
   atoms = AlgAtoms[{f, g}];
   If[atoms === {}, Return[PolynomialGCD[f, g]]];
   fd = FieldDataMemo[atoms];
