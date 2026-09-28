@@ -12,7 +12,10 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "arithmetic.h"
+#include "numeric.h"
 #include <time.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -38,6 +41,11 @@ static double dt_wall_seconds(void) {
      * Over-reports threaded work, exactly as Timing[] does. */
     return (double)clock() / (double)CLOCKS_PER_SEC;
 }
+
+/* Wall-clock reading captured at datetime_init(), i.e. kernel start-up. It is
+ * the zero point SessionTime[] measures from -- the same monotonic source as
+ * AbsoluteTiming, so time spent inside Pause[] is counted here too. */
+static double g_session_start = 0.0;
 
 Expr* builtin_absolute_timing(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
@@ -297,10 +305,106 @@ Expr* builtin_absolute_time(Expr* res) {
     return NULL;
 }
 
+/*
+ * Coerce a Pause argument to a machine double. Accepts integers, reals,
+ * bignums, rationals, MPFR reals, and any NumericQ symbolic form (Pi, Sqrt[2],
+ * ...) via numericalize -- so Pause[1/4] and Pause[Pi] behave like Mathematica.
+ * Returns 0 for a genuinely non-numeric argument, leaving Pause[x] unevaluated.
+ * Mirrors clip_to_double_value in core.c. */
+static int pause_seconds(const Expr* e, double* out) {
+    if (!e) return 0;
+    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer;  return 1; }
+    if (e->type == EXPR_REAL)    { *out = e->data.real;             return 1; }
+    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return 1; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR)    { *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return 1; }
+#endif
+    int64_t n, d;
+    if (is_rational(e, &n, &d) && d != 0) { *out = (double)n / (double)d; return 1; }
+
+    /* Symbolic numeric forms (Pi, E, Sqrt[2], ...) -- ask numericalize. */
+    Expr* approx = numericalize(e, numeric_machine_spec());
+    if (!approx) return 0;
+    int ok = 0;
+    if (approx->type == EXPR_INTEGER)      { *out = (double)approx->data.integer; ok = 1; }
+    else if (approx->type == EXPR_REAL)    { *out = approx->data.real; ok = isfinite(*out); }
+    else if (approx->type == EXPR_BIGINT)  { *out = mpz_get_d(approx->data.bigint); ok = 1; }
+#ifdef USE_MPFR
+    else if (approx->type == EXPR_MPFR)    { *out = mpfr_get_d(approx->data.mpfr, MPFR_RNDN); ok = isfinite(*out); }
+#endif
+    else if (is_rational(approx, &n, &d) && d != 0) { *out = (double)n / (double)d; ok = 1; }
+    expr_free(approx);
+    return ok;
+}
+
+/*
+ * Pause[n] blocks for at least n seconds of wall-clock time, then returns Null.
+ *
+ * It sleeps with nanosleep, which consumes no CPU, so the elapsed time is
+ * counted by the wall clocks (AbsoluteTiming, SessionTime) but is invisible to
+ * the CPU clocks (Timing, TimeUsed) -- no special-casing is needed; the two
+ * clock sources do it for free.  nanosleep can return early on a signal, so we
+ * resume with the reported remainder until the full duration has elapsed,
+ * honouring the "at least n seconds" contract.
+ */
+Expr* builtin_pause(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        return NULL;
+    }
+
+    double seconds;
+    if (!pause_seconds(res->data.function.args[0], &seconds)) {
+        /* Symbolic / non-numeric argument: leave Pause[x] unevaluated. */
+        return NULL;
+    }
+
+    if (seconds > 0.0 && isfinite(seconds)) {
+        double whole = floor(seconds);
+        long   nsec  = (long)((seconds - whole) * 1e9);
+        if (nsec < 0)         nsec = 0;
+        if (nsec > 999999999L) nsec = 999999999L;
+
+        struct timespec req = { (time_t)whole, nsec };
+        struct timespec rem;
+        while (nanosleep(&req, &rem) != 0 && errno == EINTR) {
+            req = rem;
+        }
+    }
+
+    /* seconds <= 0 (or non-finite) means no wait, matching Pause[0]. */
+    return expr_new_symbol(SYM_Null);
+}
+
+/* SessionTime[] -- wall-clock seconds since kernel start-up (see g_session_start). */
+Expr* builtin_session_time(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 0) {
+        return NULL;
+    }
+    return expr_new_real(dt_wall_seconds() - g_session_start);
+}
+
+/* TimeUsed[] -- total CPU seconds used so far this session, via clock(). Does
+ * not advance during Pause[], exactly as Timing does not. */
+Expr* builtin_time_used(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 0) {
+        return NULL;
+    }
+    return expr_new_real((double)clock() / (double)CLOCKS_PER_SEC);
+}
+
 void datetime_init(void) {
+    g_session_start = dt_wall_seconds();
+
     symtab_add_builtin("Timing", builtin_timing);
     symtab_add_builtin("AbsoluteTiming", builtin_absolute_timing);
     symtab_add_builtin("RepeatedTiming", builtin_repeated_timing);
     symtab_add_builtin("AbsoluteTime", builtin_absolute_time);
+    symtab_add_builtin("Pause", builtin_pause);
+    symtab_add_builtin("SessionTime", builtin_session_time);
+    symtab_add_builtin("TimeUsed", builtin_time_used);
+
     symtab_get_def("AbsoluteTime")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Pause")->attributes         |= ATTR_PROTECTED;
+    symtab_get_def("SessionTime")->attributes   |= ATTR_PROTECTED;
+    symtab_get_def("TimeUsed")->attributes      |= ATTR_PROTECTED;
 }

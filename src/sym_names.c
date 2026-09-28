@@ -455,6 +455,7 @@ const char* SYM_PadRight = NULL;
 const char* SYM_PadLeft = NULL;
 const char* SYM_Pattern = NULL;
 const char* SYM_PatternTest = NULL;
+const char* SYM_Pause = NULL;
 const char* SYM_Pi = NULL;
 const char* SYM_Piecewise = NULL;
 const char* SYM_Pivoting = NULL;
@@ -1398,6 +1399,7 @@ void sym_names_init(void) {
     SYM_PadLeft                    = intern_symbol("PadLeft");
     SYM_Pattern                    = intern_symbol("Pattern");
     SYM_PatternTest                = intern_symbol("PatternTest");
+    SYM_Pause                      = intern_symbol("Pause");
     SYM_Pi                         = intern_symbol("Pi");
     SYM_Piecewise                  = intern_symbol("Piecewise");
     SYM_Pivoting                   = intern_symbol("Pivoting");

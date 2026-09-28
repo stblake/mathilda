@@ -1,13 +1,38 @@
+/* clock_gettime(CLOCK_MONOTONIC) is POSIX, not C99; glibc hides it under
+ * -std=c99 unless this macro precedes every #include. Matches src/datetime.c. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 #include "expr.h"
 #include "parse.h"
 #include "eval.h"
 #include "symtab.h"
 #include "core.h"
 #include "print.h"
+
+/* Wall-clock seconds from a monotonic source, for verifying Pause actually
+ * waited and that SessionTime tracks elapsed time. */
+static double now_seconds(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+}
+
+/* Evaluate `input`, assert the result is the symbol Null, and free it. */
+static void assert_evals_to_null(const char* input) {
+    Expr* p = parse_expression(input);
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_SYMBOL);
+    assert(strcmp(e->data.symbol.name, "Null") == 0);
+    expr_free(e);
+}
 
 void run_test(const char* input) {
     Expr* e = parse_expression(input);
@@ -136,6 +161,95 @@ void test_absolute_time_attributes() {
     expr_free(e);
 }
 
+void test_pause_null() {
+    /* Pause returns Null; zero and negative durations return immediately. */
+    assert_evals_to_null("Pause[0]");
+    assert_evals_to_null("Pause[-1]");
+    assert_evals_to_null("Pause[0.05]");
+}
+
+void test_pause_waits() {
+    /* Pause[t] blocks for at least t seconds of wall-clock time. */
+    double t0 = now_seconds();
+    assert_evals_to_null("Pause[0.05]");
+    double elapsed = now_seconds() - t0;
+    assert(elapsed >= 0.045);   /* nanosleep guarantees >= t; small slack */
+}
+
+void test_pause_symbolic_unevaluated() {
+    /* Pause[x] with a non-numeric argument stays unevaluated. */
+    Expr* p = parse_expression("Pause[x]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION);
+    assert(strcmp(e->data.function.head->data.symbol.name, "Pause") == 0);
+    assert(e->data.function.arg_count == 1);
+    expr_free(e);
+}
+
+void test_pause_attributes() {
+    /* Must be Protected per the spec. */
+    Expr* p = parse_expression("MemberQ[Attributes[Pause], Protected]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_SYMBOL);
+    assert(strcmp(e->data.symbol.name, "True") == 0);
+    expr_free(e);
+}
+
+void test_pause_timing_cpu_zero() {
+    /* Timing (CPU clock) must NOT count Pause: near-zero CPU, result Null. */
+    Expr* p = parse_expression("Timing[Pause[0.05]]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION);
+    assert(strcmp(e->data.function.head->data.symbol.name, "List") == 0);
+    assert(e->data.function.arg_count == 2);
+    assert(e->data.function.args[0]->type == EXPR_REAL);
+    assert(e->data.function.args[0]->data.real < 0.03);   /* no CPU burned */
+    assert(e->data.function.args[1]->type == EXPR_SYMBOL);
+    assert(strcmp(e->data.function.args[1]->data.symbol.name, "Null") == 0);
+    expr_free(e);
+}
+
+void test_pause_absolute_timing_wall() {
+    /* AbsoluteTiming (wall clock) MUST count Pause: >= requested, result Null. */
+    Expr* p = parse_expression("AbsoluteTiming[Pause[0.05]]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION);
+    assert(e->data.function.arg_count == 2);
+    assert(e->data.function.args[0]->type == EXPR_REAL);
+    assert(e->data.function.args[0]->data.real >= 0.045);
+    assert(e->data.function.args[1]->type == EXPR_SYMBOL);
+    assert(strcmp(e->data.function.args[1]->data.symbol.name, "Null") == 0);
+    expr_free(e);
+}
+
+void test_time_unit() {
+    double u = eval_to_real("$TimeUnit");
+    assert(u > 0.0);
+    assert(u <= 0.01);   /* a small fraction of a second */
+}
+
+void test_session_time_counts_pause() {
+    /* SessionTime is wall-clock: it advances across a Pause. */
+    double before = eval_to_real("SessionTime[]");
+    assert(before >= 0.0);
+    assert_evals_to_null("Pause[0.05]");
+    double after = eval_to_real("SessionTime[]");
+    assert(after - before >= 0.045);
+}
+
+void test_time_used_excludes_pause() {
+    /* TimeUsed is CPU time: it barely moves across a Pause. */
+    double before = eval_to_real("TimeUsed[]");
+    assert(before >= 0.0);
+    assert_evals_to_null("Pause[0.05]");
+    double after = eval_to_real("TimeUsed[]");
+    assert(after - before < 0.03);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -150,6 +264,15 @@ int main() {
     test_absolute_time_passthrough();
     test_absolute_time_now();
     test_absolute_time_attributes();
+    test_pause_null();
+    test_pause_waits();
+    test_pause_symbolic_unevaluated();
+    test_pause_attributes();
+    test_pause_timing_cpu_zero();
+    test_pause_absolute_timing_wall();
+    test_time_unit();
+    test_session_time_counts_pause();
+    test_time_used_excludes_pause();
     printf("All datetime tests passed!\n");
     symtab_clear();
     return 0;

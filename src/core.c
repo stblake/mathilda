@@ -223,6 +223,12 @@ static void system_constants_init(void) {
      * are read-only (Protected via register_system_constant). */
     register_system_constant("$Version", expr_new_string(mathilda_version()));
     register_system_constant("$VersionNumber", expr_new_real(MATHILDA_VERSION_NUMBER));
+
+    /* $TimeUnit -- the minimum time interval the system records, in seconds.
+     * Tied to the resolution of the clock()-based timers (Timing/TimeUsed),
+     * which is CLOCKS_PER_SEC ticks per second. Also the granularity Pause
+     * documents itself against. */
+    register_system_constant("$TimeUnit", expr_new_real(1.0 / (double)CLOCKS_PER_SEC));
     symtab_set_docstring("$Version",
         "$Version\n\tgives a string describing the version of Mathilda, "
         "including the versions of the libraries it was built against.");

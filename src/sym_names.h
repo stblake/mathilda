@@ -459,6 +459,7 @@ extern const char* SYM_PadRight;
 extern const char* SYM_PadLeft;
 extern const char* SYM_Pattern;
 extern const char* SYM_PatternTest;
+extern const char* SYM_Pause;
 extern const char* SYM_Pi;
 extern const char* SYM_Piecewise;
 extern const char* SYM_Pivoting;

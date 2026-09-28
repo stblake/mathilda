@@ -71,3 +71,47 @@ Gives the total number of seconds since the beginning of January 1, 1900.
 - Performs no corrections for time zones, daylight saving time, or leap seconds.
 - Returns an integer when every component is integer-valued and the total is exact; otherwise returns a real.
 
+## Pause
+Pauses for at least `n` seconds, then returns `Null`.
+- `Pause[n]`
+
+**Features**:
+- `Protected`.
+- Sleeps on a wall-clock timer (`nanosleep`) that consumes no CPU, so the elapsed
+  time is counted by `AbsoluteTiming` and `SessionTime` but **not** by `Timing`
+  or `TimeUsed`. `Timing[Pause[1]]` reports ≈ 0; `AbsoluteTiming[Pause[1]]`
+  reports ≈ 1.
+- Accurate down to a granularity of at least `$TimeUnit` seconds.
+- The sleep resumes across signal interruptions, so the full duration is always
+  observed ("at least `n` seconds").
+- `n` may be any non-negative number: an integer, real, rational (`Pause[1/4]`),
+  or a `NumericQ` symbolic form (`Pause[Pi]`). Zero or negative `n` returns
+  immediately. A non-numeric argument leaves `Pause[x]` unevaluated.
+
+## SessionTime
+Gives the total number of seconds of wall-clock time elapsed since the beginning
+of the current Mathilda session.
+- `SessionTime[]`
+
+**Features**:
+- `Protected`.
+- Measured from a monotonic clock captured at kernel start-up; includes time
+  spent in `Pause`.
+
+## TimeUsed
+Gives the total number of seconds of CPU time used so far in the current Mathilda
+session.
+- `TimeUsed[]`
+
+**Features**:
+- `Protected`.
+- CPU time via `clock()`; does not advance during `Pause` or other idle waits.
+
+## $TimeUnit
+Gives the minimum time interval in seconds recorded on the computer system.
+
+**Features**:
+- `Protected` (read-only system constant).
+- A real equal to the resolution of the `clock()`-based timers
+  (`1 / CLOCKS_PER_SEC`), the granularity `Pause` documents itself against.
+

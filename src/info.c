@@ -4425,6 +4425,10 @@ void info_init(void) {
     symtab_set_docstring("Timing", "Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.\nTiming reports CPU time summed over threads; use AbsoluteTiming to measure elapsed time.");
     symtab_set_docstring("AbsoluteTiming", "AbsoluteTiming[expr] evaluates expr, and returns a list of the absolute number of seconds of elapsed wall-clock time, together with the result obtained.");
     symtab_set_docstring("RepeatedTiming", "RepeatedTiming[expr] evaluates expr repeatedly and returns a list of the average time in seconds used, together with the result obtained.\nRepeatedTiming[expr, t] does repeated evaluation for at least t seconds.");
+    symtab_set_docstring("Pause", "Pause[n] pauses for at least n seconds.\nPause is accurate only down to a granularity of at least $TimeUnit seconds.\nThe time elapsed during the execution of Pause is counted in SessionTime and AbsoluteTiming, but not in TimeUsed or Timing.");
+    symtab_set_docstring("SessionTime", "SessionTime[] gives the total number of seconds of wall-clock time elapsed since the beginning of the current Mathilda session.");
+    symtab_set_docstring("TimeUsed", "TimeUsed[] gives the total number of seconds of CPU time used so far in the current Mathilda session.");
+    symtab_set_docstring("$TimeUnit", "$TimeUnit gives the minimum time interval in seconds recorded on the computer system.");
     symtab_set_docstring("TimeConstrained",
         "TimeConstrained[expr, t]\n"
         "\tevaluates expr, stopping after t seconds.\n"
