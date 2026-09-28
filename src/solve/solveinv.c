@@ -145,14 +145,18 @@ static void branches_free(Branch* arr, size_t n) {
  * ------------------------------------------------------------------ */
 
 static void emit_ifun(SolveInvCtx* ctx) {
-    if (!ctx || ctx->ifun_warned) return;
-    if (mth_msg_suppressed()) return;   /* quiet internal probe (e.g. FindInstance) */
-    if (mth_msg_ifun_suppressed()) return;  /* caller is Reduce -- "use Reduce" is moot */
-    fprintf(stderr,
-        "Solve::ifun: Inverse functions are being used by Solve, "
-        "so some solutions may not be found; "
-        "use Reduce for complete solution information.\n");
+    if (!ctx || ctx->ifun_warned) return;   /* one-shot per builtin_solve call */
+    /* Reduce on the stack: the "use Reduce" advice is self-contradictory and is
+     * genuinely NOT a message in that context, so return before noting -- an
+     * enclosing Check[Reduce[...]] must not see it either. */
+    if (mth_msg_ifun_suppressed()) return;
     ctx->ifun_warned = true;
+    /* mth_message notes the firing (so Check sees it, even under Quiet) then
+     * prints unless a quiet internal probe (e.g. FindInstance) suppressed it. */
+    mth_message("Solve", "ifun",
+        "Inverse functions are being used by Solve, "
+        "so some solutions may not be found; "
+        "use Reduce for complete solution information.");
 }
 
 /* ------------------------------------------------------------------ *

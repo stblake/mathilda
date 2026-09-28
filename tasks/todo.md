@@ -14,11 +14,12 @@ Plan: `/Users/user/.claude/plans/we-need-to-do-misty-boot.md`
 - [x] Migrate `common.c:builtin_arg_error` (4 fprintf) → dropped common.c from BASELINE (290 left)
 - [x] Build clean, check-messages ratchets, check-c99, behavior verified (Check[Fourier[],CAUGHT]→CAUGHT, Quiet suppresses)
 
-## Commit 2 — confirmed correctness bugs (bump+tag)
-- [ ] power.c (6), plus.c (2), times.c (1) → mth_message_gated(g_arith_warnings_muted,...)
-- [ ] linalg/matpow.c (3) → expr_to_string + mth_message
-- [ ] solve/solvenlsys.c:139, solve/solveinv.c:149
-- [ ] findmin_common.c fm_warn note
+## Commit 2 — confirmed correctness bugs (bump+tag v0.223)  ✅ DONE
+- [x] power.c (6), plus.c (2), times.c (1) → mth_message_gated(g_arith_warnings_muted,...)
+- [x] linalg/matpow.c (3) → expr_to_string + mth_message
+- [x] solve/solvenlsys.c warn_nsdim, solve/solveinv.c emit_ifun (note; ifun-suppress stays moot)
+- [x] findmin_common.c fm_warn → mth_message_v(g_fm_quiet,...) (adds note)
+- [x] Verified: Check[MatrixPower[..,1/2]]→CAUGHT, Check[Power[0,-2]]→CAUGHT, Quiet suppresses, Quiet[Check]→FAILED. BASELINE 290→279.
 
 ## Commit 3 — subsystem helpers → wrappers (bump+tag)
 - [ ] fit_warn, fm_warn, DRY re-body fs_msg/dt_msg/ops_msg/root_warn/inv_warn/purefunc

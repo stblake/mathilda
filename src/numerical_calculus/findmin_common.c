@@ -34,13 +34,13 @@ const double* g_fm_al_lambda = NULL;
 const FmGenCon* g_fm_al_gens = NULL;
 
 void fm_warn(const char* fn, const char* tag, const char* fmt, ...) {
-    if (g_fm_quiet || mth_msg_suppressed()) return;
+    /* Delegate to the funnel: it notes the firing (so an enclosing Check[] sees
+     * it, which a raw fprintf here did not) then prints unless g_fm_quiet (the
+     * NMinimize internal-solver mute) or Quiet[] is active. */
     va_list ap;
-    fprintf(stderr, "%s::%s: ", fn, tag);
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_v(g_fm_quiet, fn, tag, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 /* The driver function name is captured by the outer call (FindMinimum vs

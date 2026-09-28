@@ -657,15 +657,13 @@ Expr* builtin_plus(Expr* res) {
         }
         if (has_indet) return expr_new_symbol(SYM_Indeterminate);
         if (pos_inf > 0 && neg_inf > 0) {
-            if (!arith_warnings_muted())
-                fprintf(stderr,
-                    "Infinity::indet: Indeterminate expression -Infinity + Infinity encountered.\n");
+            mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+                    "Indeterminate expression -Infinity + Infinity encountered.");
             return expr_new_symbol(SYM_Indeterminate);
         }
         if (cinf > 1 || (cinf > 0 && (pos_inf > 0 || neg_inf > 0))) {
-            if (!arith_warnings_muted())
-                fprintf(stderr,
-                    "Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.\n");
+            mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+                    "Indeterminate expression involving ComplexInfinity encountered.");
             return expr_new_symbol(SYM_Indeterminate);
         }
         if (cinf == 1) return expr_new_symbol(SYM_ComplexInfinity);

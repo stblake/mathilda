@@ -751,24 +751,21 @@ Expr* builtin_power(Expr* res) {
 
         if (base_is_one && exp_is_inf) {
             const char* what = e_inf ? "Infinity" : (e_ninf ? "-Infinity" : "ComplexInfinity");
-            if (!arith_warnings_muted())
-                fprintf(stderr,
-                    "Infinity::indet: Indeterminate expression 1^%s encountered.\n", what);
+            mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+                    "Indeterminate expression 1^%s encountered.", what);
             return expr_new_symbol(SYM_Indeterminate);
         }
 
         if (base_is_inf && exp_is_zero_lit) {
             const char* what = b_inf ? "Infinity" : (b_ninf ? "-Infinity" : "ComplexInfinity");
-            if (!arith_warnings_muted())
-                fprintf(stderr,
-                    "Infinity::indet: Indeterminate expression %s^0 encountered.\n", what);
+            mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+                    "Indeterminate expression %s^0 encountered.", what);
             return expr_new_symbol(SYM_Indeterminate);
         }
 
         if (base_is_zero_lit && e_cinf) {
-            if (!arith_warnings_muted())
-                fprintf(stderr,
-                    "Infinity::indet: Indeterminate expression 0^ComplexInfinity encountered.\n");
+            mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+                    "Indeterminate expression 0^ComplexInfinity encountered.");
             return expr_new_symbol(SYM_Indeterminate);
         }
 
@@ -777,8 +774,8 @@ Expr* builtin_power(Expr* res) {
         }
 
         if (base_is_zero_lit && e_ninf) {
-            if (!arith_warnings_muted())
-                fprintf(stderr, "Power::infy: Infinite expression 1/0 encountered.\n");
+            mth_message_gated(g_arith_warnings_muted, "Power", "infy",
+                    "Infinite expression 1/0 encountered.");
             return expr_new_symbol(SYM_ComplexInfinity);
         }
 
@@ -809,9 +806,8 @@ Expr* builtin_power(Expr* res) {
         bool e_zero_lit = (exp->type == EXPR_INTEGER && exp->data.integer == 0)
                        || (exp->type == EXPR_REAL    && exp->data.real == 0.0);
         if (b_zero_lit && e_zero_lit) {
-            if (!arith_warnings_muted())
-                fprintf(stderr,
-                    "Power::indet: Indeterminate expression 0^0 encountered.\n");
+            mth_message_gated(g_arith_warnings_muted, "Power", "indet",
+                    "Indeterminate expression 0^0 encountered.");
             return expr_new_symbol(SYM_Indeterminate);
         }
     }
@@ -849,8 +845,8 @@ Expr* builtin_power(Expr* res) {
     }
 
     if (base_is_zero && exp_is_negative) {
-        if (!arith_warnings_muted())
-            fprintf(stderr, "Power::infy: Infinite expression 1/0 encountered.\n");
+        mth_message_gated(g_arith_warnings_muted, "Power", "infy",
+                "Infinite expression 1/0 encountered.");
         return expr_new_symbol(SYM_ComplexInfinity);
     }
     /* 0^positive -> 0 (includes 0^(1/2) = Sqrt[0] = 0, 0^0.5 = 0, etc.).

@@ -13,6 +13,7 @@
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_message: route MatrixPower diagnostics through Quiet/Check */
 #include <stdio.h>
 #include <stdlib.h>
 #include <gmp.h>
@@ -59,7 +60,8 @@ Expr* builtin_matrixpower(Expr* res) {
     if (rank != 2 || dims[0] != dims[1] || dims[0] == 0) {
         if (rank >= 0) {
             char* m_str = expr_to_string(m);
-            fprintf(stderr, "MatrixPower::matsq: Argument %s at position 1 is not a non-empty square matrix.\n", m_str);
+            mth_message("MatrixPower", "matsq",
+                    "Argument %s at position 1 is not a non-empty square matrix.", m_str);
             free(m_str);
         }
         return NULL;
@@ -80,7 +82,9 @@ Expr* builtin_matrixpower(Expr* res) {
     /* Fractional powers: warn and return unevaluated */
     if (is_rational || is_real) {
         char* exp_str = expr_to_string(exp_arg);
-        fprintf(stderr, "MatrixPower::fract: Fractional matrix powers are not currently supported. Exponent %s is not an integer.\n", exp_str);
+        mth_message("MatrixPower", "fract",
+                "Fractional matrix powers are not currently supported. "
+                "Exponent %s is not an integer.", exp_str);
         free(exp_str);
         return NULL;
     }
@@ -116,7 +120,8 @@ Expr* builtin_matrixpower(Expr* res) {
         }
         if (vrank != 1 || vdims[0] != n) {
             char* v_str = expr_to_string(vec);
-            fprintf(stderr, "MatrixPower::vecsh: Vector %s has incompatible length for matrix of size %d.\n", v_str, n);
+            mth_message("MatrixPower", "vecsh",
+                    "Vector %s has incompatible length for matrix of size %d.", v_str, n);
             free(v_str);
             return NULL;
         }
