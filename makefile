@@ -538,6 +538,18 @@ check-interval:
 check-packed-aware:
 	python3 tools/check_packed_aware.py
 
+# `make check-messages` — does every user-facing message support Quiet[] and
+# Check[]? Those two are a two-step convention (mth_msg_note_fired for Check,
+# mth_msg_suppressed for Quiet), not a choke-point, so a raw
+# `fprintf(stderr, "Head::tag: ...")` bypasses BOTH — Check silently returns the
+# wrong branch and Quiet leaks. This reads the raw Head::tag stderr writes out of
+# the source and diffs them against a checked-in EXEMPT (permanent) + BASELINE
+# (the shrinking migration backlog); it ratchets, failing on a new bypassing site
+# and on a migrated entry left stale. Source-level, so same "needs python3, not
+# part of `all`" status as check-c99.
+check-messages:
+	python3 tools/check_message_routing.py
+
 # `make check-array-exactness` — does any routine hand back a TWO-HEADED array
 # from a machine input? A routine given a packed array must answer with a scalar
 # or an array of one element head; an exact 0 invented inside a machine-real
@@ -690,6 +702,7 @@ print-cc:
 	@$(CC) --version 2>/dev/null | head -1
 
 .PHONY: all clean install uninstall docs docs-build docs-serve check-c99 check-interval check-packed-aware \
+        check-messages \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \
         check-fastpath-sweep check-menu-ids bench-gap check-diophantine-heldout print-cc

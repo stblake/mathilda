@@ -77,6 +77,13 @@ jobs:
       - name: Packed-array opt-in audit (make check-packed-aware)
         run: make check-packed-aware
 
+      # A raw fprintf(stderr, "Head::tag: ...") bypasses BOTH Quiet[] and Check[]
+      # (they are a two-step convention, not a choke-point), so Check returns the
+      # wrong branch and Quiet leaks. Source-level ratchet against a checked-in
+      # EXEMPT + BASELINE, so it needs no build.
+      - name: Message-routing audit (make check-messages)
+        run: make check-messages
+
       # The definitive check — glibc headers, -std=c99, the real flag set. This
       # runs the EXACT command a user runs (plain `make`, no EXTRA_LIBS): the
       # makefile now supplies the LAPACK/BLAS transitive libs (-llapack -lblas)
