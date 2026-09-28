@@ -59,9 +59,9 @@
 #include "pack.h"
 #include "ndarray.h"
 #include "numarray.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #ifdef USE_LAPACK
 #include "lapack.h"
-#include "message.h"   /* mth_message: Quiet/Check funnel */
 #endif
 
 #include <stdio.h>

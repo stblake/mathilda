@@ -13,11 +13,11 @@
 #include "pack.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_LAPACK
 #include "lapack.h"   /* pulls in Accelerate.h / cblas.h (CBLAS declarations) */
 #include "ndarray_internal.h"   /* nd_parallel_reduce — threaded inner product */
-#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 /* Threaded inner product: each chunk is its own cblas_ddot, the partials are
  * summed afterwards.
