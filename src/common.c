@@ -5,6 +5,7 @@
 #include "numeric.h"
 #include "rationalize.h"
 #include "sym_names.h"   /* SYM_Rule / SYM_RuleDelayed / SYM_Method */
+#include "message.h"     /* mth_message: route arg-count errors through Quiet/Check */
 
 #include <stdio.h>
 #include <stdint.h>
@@ -28,26 +29,22 @@ Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max) {
     if (min == max) {
         /* Fixed arity. Mathematica tags the one-argument case `argx`. */
         const char* tag = (min == 1) ? "argx" : "argrx";
-        fprintf(stderr,
-                "%s::%s: %s called with %zu argument%s; "
-                "%zu argument%s %s expected.\n",
-                head, tag, head, got, got_s,
+        mth_message(head, tag,
+                "%s called with %zu argument%s; %zu argument%s %s expected.",
+                head, got, got_s,
                 min, (min == 1) ? "" : "s", (min == 1) ? "is" : "are");
     } else if (max == SIZE_MAX) {
-        fprintf(stderr,
-                "%s::argm: %s called with %zu argument%s; "
-                "%zu or more arguments are expected.\n",
-                head, head, got, got_s, min);
+        mth_message(head, "argm",
+                "%s called with %zu argument%s; %zu or more arguments are expected.",
+                head, got, got_s, min);
     } else if (max == min + 1) {
-        fprintf(stderr,
-                "%s::argt: %s called with %zu argument%s; "
-                "%zu or %zu arguments are expected.\n",
-                head, head, got, got_s, min, max);
+        mth_message(head, "argt",
+                "%s called with %zu argument%s; %zu or %zu arguments are expected.",
+                head, got, got_s, min, max);
     } else {
-        fprintf(stderr,
-                "%s::argb: %s called with %zu argument%s; "
-                "between %zu and %zu arguments are expected.\n",
-                head, head, got, got_s, min, max);
+        mth_message(head, "argb",
+                "%s called with %zu argument%s; between %zu and %zu arguments are expected.",
+                head, got, got_s, min, max);
     }
     return NULL;
 }

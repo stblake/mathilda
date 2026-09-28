@@ -2,17 +2,17 @@
 
 Plan: `/Users/user/.claude/plans/we-need-to-do-misty-boot.md`
 
-## Commit 0 — tooling (no version bump)
-- [ ] `tools/check_message_routing.py` — multi-line-aware detection, EXEMPT + BASELINE, ratchet
-- [ ] Seed BASELINE with the full current backlog (run tool, capture, paste)
-- [ ] `make check-messages` target + `.PHONY`
-- [ ] Wire into `.github/workflows/build.yml`
-- [ ] Verify: gate green on unchanged tree
+## Commit 0 — tooling (no version bump)  ✅ DONE (22bbd3da)
+- [x] `tools/check_message_routing.py` — multi-line-aware detection, EXEMPT + BASELINE, ratchet
+- [x] Seed BASELINE with the full current backlog (294)
+- [x] `make check-messages` target + `.PHONY`
+- [x] Wire into `.github/workflows/build.yml`
+- [x] Verify: gate green on unchanged tree
 
-## Commit 1 — funnel + highest leverage (bump+tag)
-- [ ] `mth_message` / `mth_message_gated` / `mth_message_v` / `mth_message_cont` in message.h/.c (guarded printf attr)
-- [ ] Migrate `common.c:builtin_arg_error` (4 fprintf) → drop common.c from BASELINE
-- [ ] Build clean, check-messages ratchets, check-c99
+## Commit 1 — funnel + highest leverage (bump+tag v0.222)  ✅ DONE
+- [x] `mth_message` / `mth_message_gated` / `mth_message_v` / `mth_message_cont` in message.h/.c (guarded printf attr)
+- [x] Migrate `common.c:builtin_arg_error` (4 fprintf) → dropped common.c from BASELINE (290 left)
+- [x] Build clean, check-messages ratchets, check-c99, behavior verified (Check[Fourier[],CAUGHT]→CAUGHT, Quiet suppresses)
 
 ## Commit 2 — confirmed correctness bugs (bump+tag)
 - [ ] power.c (6), plus.c (2), times.c (1) → mth_message_gated(g_arith_warnings_muted,...)

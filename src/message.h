@@ -20,6 +20,17 @@
 #ifndef MATHILDA_MESSAGE_H
 #define MATHILDA_MESSAGE_H
 
+#include <stdarg.h>
+
+/* printf-style format checking for the emit funnel below. GUARDED: CLAUDE.md
+ * bans an unguarded __attribute__ (breaks strict C99 on a non-GCC compiler and
+ * trips make check-c99); it is a no-op everywhere but GCC/Clang. */
+#if defined(__GNUC__)
+#  define MTH_PRINTF_FMT(a, b) __attribute__((format(printf, a, b)))
+#else
+#  define MTH_PRINTF_FMT(a, b)
+#endif
+
 /* Enter a quiet region (increment the suppression depth). */
 void mth_msg_suppress_push(void);
 /* Leave a quiet region (decrement; saturates at zero). */
@@ -59,6 +70,40 @@ int  mth_msg_ifun_suppressed(void);
  */
 void          mth_msg_note_fired(void);
 unsigned long mth_msg_fired_count(void);
+
+/* ------------------------------------------------------------- The funnel */
+/*
+ * mth_message is the ONE place the two-step Quiet/Check contract lives: it
+ * notes the firing (so an enclosing Check[] sees it, ALWAYS) and then prints
+ * "Head::tag: <formatted>\n" to stderr UNLESS Quiet[] is active.  Every
+ * user-facing diagnostic routes through it (or through a subsystem helper that
+ * delegates to it); a raw fprintf(stderr, "Head::tag: ...") bypasses both
+ * Quiet[] and Check[] and is a bug.  `head` and `tag` are separate arguments,
+ * so no "::"-bearing literal ever reaches an fprintf -- which is what lets
+ * make check-messages tell a routed site from a bypassing one.
+ */
+void mth_message(const char* head, const char* tag, const char* fmt, ...)
+    MTH_PRINTF_FMT(3, 4);
+
+/*
+ * As mth_message, but an EXTRA subsystem-local mute also silences the PRINT
+ * (the firing is still noted regardless).  Pass the RAW local flag --
+ * g_arith_warnings_muted for Power/Plus/Times, g_fm_quiet for FindMinimum --
+ * NOT `flag || suppressed`: the core already ORs mth_msg_suppressed() in.
+ */
+void mth_message_gated(int extra_mute, const char* head, const char* tag,
+                       const char* fmt, ...) MTH_PRINTF_FMT(4, 5);
+
+/* va_list core, exported so subsystem helpers (fit_warn, fm_warn, ...) delegate
+ * to the funnel rather than re-implement note+guard.  extra_mute as above. */
+void mth_message_v(int extra_mute, const char* head, const char* tag,
+                   const char* fmt, va_list ap);
+
+/* A continuation line under a diagnostic already emitted this call: prints an
+ * extra line with NO "Head::tag:" prefix, honours the same mute, and does NOT
+ * note again (the diagnostic already fired).  For the few messages a single
+ * fmt cannot express (built across a loop). */
+void mth_message_cont(int extra_mute, const char* fmt, ...) MTH_PRINTF_FMT(2, 3);
 
 /* Registers the Quiet / Check / Message builtins.  Called from core_init(). */
 void message_init(void);

@@ -46,6 +46,43 @@ static unsigned long g_msg_fired = 0;
 void          mth_msg_note_fired(void)  { g_msg_fired++; }
 unsigned long mth_msg_fired_count(void) { return g_msg_fired; }
 
+/* ------------------------------------------------------------- The funnel */
+/* The single choke-point for user-facing diagnostics: note (always), then
+ * print "Head::tag: <formatted>\n" unless Quiet[] (or an extra local mute) is
+ * active.  See message.h. */
+void mth_message_v(int extra_mute, const char* head, const char* tag,
+                   const char* fmt, va_list ap) {
+    mth_msg_note_fired();                              /* (1) Check sees it */
+    if (extra_mute || mth_msg_suppressed()) return;    /* (2) Quiet silences */
+    fprintf(stderr, "%s::%s: ", head, tag);
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+}
+
+void mth_message(const char* head, const char* tag, const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    mth_message_v(0, head, tag, fmt, ap);
+    va_end(ap);
+}
+
+void mth_message_gated(int extra_mute, const char* head, const char* tag,
+                       const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    mth_message_v(extra_mute != 0, head, tag, fmt, ap);
+    va_end(ap);
+}
+
+void mth_message_cont(int extra_mute, const char* fmt, ...) {
+    if (extra_mute || mth_msg_suppressed()) return;    /* no note: already fired */
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+}
+
 /* ------------------------------------------------- Quiet / Check / Message */
 
 /* Quiet[expr] / Quiet[expr, spec]: evaluate expr with diagnostics suppressed
