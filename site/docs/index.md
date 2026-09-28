@@ -28,30 +28,6 @@ integers and **MPFR** for arbitrary-precision reals, and is licensed under
 
 ---
 
-## The function universe
-
-Every built-in function in Mathilda, laid out as one network: each node is a
-function, **coloured by category**, and edges join functions that reference one
-another in the docs. Hover a node for a summary, **click it to open that
-function's page**, toggle categories in the legend, or search for a name and
-press <kbd>Enter</kbd> to fly to it.
-
-<div class="bg-figure">
-  <div class="bg-toolbar">
-    <input id="bg-search" class="bg-search" type="search" placeholder="Search functions… (Enter to jump to one)" aria-label="Search built-in functions">
-    <button id="bg-reset" class="bg-reset" type="button">Reset view</button>
-    <span id="bg-count" class="bg-count"></span>
-  </div>
-  <div class="bg-stage">
-    <div id="builtin-graph"></div>
-    <div id="bg-tooltip" class="bg-tooltip"></div>
-    <div id="bg-loading" class="bg-loading">Building the function map…</div>
-  </div>
-  <div id="bg-legend" class="bg-legend"></div>
-</div>
-
----
-
 ## See it in action
 
 Every example on this site — including the ones below — is run through the

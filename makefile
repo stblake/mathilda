@@ -504,7 +504,6 @@ uninstall:
 # the MkDocs site from it.
 docs: $(TARGET)
 	python3 site/generate.py
-	python3 site/graph_data.py
 
 # Build the static site locally (needs `pip install -r site/requirements.txt`).
 docs-build:
