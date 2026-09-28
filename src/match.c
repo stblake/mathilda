@@ -1540,8 +1540,10 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
 static void rb_collect_symbol_names(Expr* e, const char** out, size_t* n, size_t cap) {
     if (!e || *n >= cap) return;
     if (e->type == EXPR_SYMBOL) {
+        /* Symbol names are interned (see intern_symbol in symtab.c), so the
+         * canonical pointer IS the identity -- no strcmp fallback needed. */
         for (size_t i = 0; i < *n; i++)
-            if (out[i] == e->data.symbol.name || strcmp(out[i], e->data.symbol.name) == 0) return;
+            if (out[i] == e->data.symbol.name) return;
         out[(*n)++] = e->data.symbol.name;
         return;
     }
@@ -1552,37 +1554,56 @@ static void rb_collect_symbol_names(Expr* e, const char** out, size_t* n, size_t
     }
 }
 
-static Expr* rb_rec(Expr* expr, MatchEnv* env, const char** danger, size_t ndanger);
+/* The capture-avoidance "danger set" of one replace_bindings call: the names a
+ * scoping construct in the RHS could capture if a binding value carrying them
+ * were substituted into its body (MATHILDA_DIVERGENCES A11).
+ *
+ * It is built LAZILY and at most ONCE per top-level call.  Building it walks
+ * every binding value, and the overwhelming majority of rule applications have
+ * no scoping construct in the RHS at all, so the walk is pure cost there; the
+ * set is materialised only when rb_rec actually meets a Module/With/Block/
+ * Function/Table-style binder.  (Before this, it was rebuilt on every NODE of
+ * the RHS -- rb_rec recursed into arguments through the public entry point --
+ * which is what made the small Charlwood rows double in cost when the A11 fix
+ * landed in v0.212.) */
+#define RB_DANGER_CAP 256
+typedef struct {
+    MatchEnv* env;
+    const char* buf[RB_DANGER_CAP];
+    size_t n;
+    bool built;
+} RbDanger;
+
+static void rb_danger_build(RbDanger* d) {
+    if (d->built) return;
+    d->built = true;
+    MatchEnv* env = d->env;
+    if (!env) return;
+    for (size_t i = 0; i < env->count && d->n < RB_DANGER_CAP; i++) {
+        /* Free symbols of the value -- a local of that name would CAPTURE it. */
+        rb_collect_symbol_names(env->values[i], d->buf, &d->n, RB_DANGER_CAP);
+        /* The bound variable's own name -- a local of that name SHADOWS it, so
+         * the binding must not be substituted into the (renamed) body:
+         * sh[e_] := Module[{e = 1}, e + 1]; sh[99] must give 2, not 100. */
+        if (d->n < RB_DANGER_CAP && env->symbols[i]) {
+            bool seen = false;
+            for (size_t k = 0; k < d->n; k++)
+                if (d->buf[k] == env->symbols[i]) { seen = true; break; }
+            if (!seen) d->buf[d->n++] = env->symbols[i];
+        }
+    }
+}
+
+static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger);
 
 Expr* replace_bindings(Expr* expr, MatchEnv* env) {
     if (!expr) return NULL;
-
-    /* Names appearing in binding values: substituting any of these into a
-     * scoping construct's body could capture one of its locals. Collected once
-     * here (cheap -- the same values are about to be copied anyway) and consulted
-     * only when rb_rec meets a scoping construct. See MATHILDA_DIVERGENCES A11. */
-    const char* danger_buf[256];
-    size_t ndanger = 0;
-    if (env)
-        for (size_t i = 0; i < env->count && ndanger < 256; i++) {
-            /* Free symbols of the value -- a local of that name would CAPTURE it. */
-            rb_collect_symbol_names(env->values[i], danger_buf, &ndanger, 256);
-            /* The bound variable's own name -- a local of that name SHADOWS it, so
-             * the binding must not be substituted into the (renamed) body:
-             * sh[e_] := Module[{e = 1}, e + 1]; sh[99] must give 2, not 100. */
-            if (ndanger < 256 && env->symbols[i]) {
-                bool seen = false;
-                for (size_t k = 0; k < ndanger; k++)
-                    if (danger_buf[k] == env->symbols[i]
-                        || strcmp(danger_buf[k], env->symbols[i]) == 0) { seen = true; break; }
-                if (!seen) danger_buf[ndanger++] = env->symbols[i];
-            }
-        }
-
-    return rb_rec(expr, env, danger_buf, ndanger);
+    RbDanger danger;
+    danger.env = env; danger.n = 0; danger.built = false;
+    return rb_rec(expr, env, &danger);
 }
 
-static Expr* rb_rec(Expr* expr, MatchEnv* env, const char** danger, size_t ndanger) {
+static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
     if (!expr) return NULL;
 
     if (expr->type == EXPR_SYMBOL) {
@@ -1596,16 +1617,19 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, const char** danger, size_t ndang
         /* Capture-avoiding substitution: if this is a scoping construct whose
          * bound locals collide with a name in a value we are about to inject,
          * alpha-rename those locals first, then substitute into the safe copy. */
-        if (ndanger > 0 && expr_is_binding_scope(expr)) {
-            Expr* safe = scoping_capture_avoid(expr, danger, ndanger);
-            if (safe) {
-                Expr* result = rb_rec(safe, env, danger, ndanger);
-                expr_free(safe);
-                return result;
+        if (expr_is_binding_scope(expr)) {
+            rb_danger_build(danger);                 /* only now is the set needed */
+            if (danger->n > 0) {
+                Expr* safe = scoping_capture_avoid(expr, danger->buf, danger->n);
+                if (safe) {
+                    Expr* result = rb_rec(safe, env, danger);
+                    expr_free(safe);
+                    return result;
+                }
             }
         }
 
-        Expr* new_head = rb_rec(expr->data.function.head, env, danger, ndanger);
+        Expr* new_head = rb_rec(expr->data.function.head, env, danger);
         
         bool skip_flattening = false;
         if (new_head->type == EXPR_SYMBOL && (
@@ -1620,7 +1644,9 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, const char** danger, size_t ndang
         Expr** temp_args = malloc(sizeof(Expr*) * expr->data.function.arg_count);
         size_t new_count = 0;
         for (size_t i = 0; i < expr->data.function.arg_count; i++) {
-            temp_args[i] = replace_bindings(expr->data.function.args[i], env);
+            /* rb_rec, not replace_bindings: the danger set belongs to the whole
+             * substitution and must not be rebuilt once per argument node. */
+            temp_args[i] = rb_rec(expr->data.function.args[i], env, danger);
             if (!skip_flattening && temp_args[i]->type == EXPR_FUNCTION && 
                 temp_args[i]->data.function.head->type == EXPR_SYMBOL &&
                 temp_args[i]->data.function.head->data.symbol.name == SYM_Sequence) {

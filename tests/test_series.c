@@ -1956,6 +1956,29 @@ static void test_series_divide(void) {
         "SeriesData[x, 0, List[1, 0, 0, 0], -2, 2, 1]");
 }
 
+/* HoldAll keeps the series variable unevaluated, but a variable whose OwnValue
+ * names another SYMBOL is resolved to it before the expansion, as in
+ * Mathematica.  Without this a .m routine that expands in a Unique[] symbol
+ * gets its INPUT back silently: the held symbol does not occur in the evaluated
+ * expression, so the expression is constant in it (MATHILDA_DIVERGENCES A25 --
+ * this is what left ParallelMixed.m's RealiseClass solving its linear algebra
+ * against a non-series).  A value that is not a symbol is left alone. */
+static void test_series_held_symbol_valued_variable(void) {
+    setup_full();
+    assert_fullform(
+        "Block[{v, u}, v = u; Normal[Series[Sqrt[1 + u^4], {v, 0, 4}]]]",
+        "Plus[1, Times[Rational[1, 2], Power[u, 4]]]");
+    /* the same through SeriesCoefficient */
+    assert_fullform(
+        "Block[{v, u}, v = u; SeriesCoefficient[Sqrt[1 + u^4], {v, 0, 4}]]",
+        "Rational[1, 2]");
+    /* a NON-symbol value is not resolved: the expression is constant in it and
+     * the leading coefficient is the expression itself (Mathematica agrees) */
+    assert_fullform(
+        "Block[{v, u}, v = u + 1; Normal[Series[Sqrt[1 + u^4], {v, 0, 2}]]]",
+        "Power[Plus[1, Power[u, 4]], Rational[1, 2]]");
+}
+
 /* Subtraction composes Plus[a, Times[-1,b]]; identical series cancel to 0. */
 static void test_series_subtract(void) {
     setup_full();
@@ -2479,6 +2502,7 @@ int main(void) {
     TEST(test_series_power_scalar_base);
     TEST(test_series_power_series_exponent);
     TEST(test_series_divide);
+    TEST(test_series_held_symbol_valued_variable);
     TEST(test_series_subtract);
     TEST(test_series_plus_real_contagion);
     TEST(test_series_plus_mpfr);

@@ -588,6 +588,18 @@ void collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capacit
          * which would mine 1+#1^4 for a bogus variable). The Root stays inside
          * coefficients, where field arithmetic handles it. */
         if (strcmp(head, "Root") == 0) return;
+        /* AlgebraicNumber[theta, {c0, c1, ...}] is the same thing in coordinate
+         * form: a CONSTANT of the number field Q(theta), not a variable. The
+         * Root rationale applies verbatim, and one worse besides -- Plus/Times
+         * fold a rational scalar INTO the coordinate vector (algnum_times_combine,
+         * times.c), so 2*AlgebraicNumber[t,{0,1}] is the structurally distinct
+         * atom AlgebraicNumber[t,{0,2}]. Enrolled as variables, those two are
+         * "independent" while being Q-linearly dependent, and poly_content then
+         * computes a content over an inconsistent ring: PolynomialGCD of
+         * (x + a y)(x + 1) and (x + a y)(x + 2) came back as the SECOND OPERAND.
+         * Do not recurse into theta either -- it is the field's label, not a
+         * subexpression of the coefficient. */
+        if (strcmp(head, "AlgebraicNumber") == 0) return;
         if (strcmp(head, "Plus") == 0 || strcmp(head, "Times") == 0 || strcmp(head, "List") == 0) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) collect_variables(e->data.function.args[i], vars_ptr, count, capacity);
             return;

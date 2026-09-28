@@ -236,6 +236,22 @@ static void test_declines(void) {
     check("AlgebraicNumber[Pi, {1,2}]", "AlgebraicNumber[Pi, {1, 2}]");
 }
 
+/* An AlgebraicNumber is a CONSTANT of its number field, not a polynomial
+ * variable: Variables[] must not surface it, and the extension machinery must
+ * not mine the field's label theta out of it as a tower generator (which made
+ * PolynomialGCD[.., Extension -> Automatic] answer 1 on a pair with a common
+ * factor). See MATHILDA_DIVERGENCES A26. */
+static void test_not_a_polynomial_variable(void) {
+    check("Variables[AlgebraicNumber[Sqrt[2], {0, 1}] + x]", "{x}");
+    check("Variables[AlgebraicNumber[Sqrt[2], {0, 1}] x^2 + 3]", "{x}");
+    check("PolynomialGCD[Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}]) (x + 1)], "
+          "Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}]) (x + 2)]]",
+          "AlgebraicNumber[Sqrt[2], {0, 1}] + x");
+    check("PolynomialGCD[Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}]) (x + 1)], "
+          "Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}]) (x + 2)], Extension -> Automatic]",
+          "AlgebraicNumber[Sqrt[2], {0, 1}] + x");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -249,6 +265,7 @@ int main(void) {
     test_arithmetic();
     test_numeric_and_operations();
     test_declines();
+    test_not_a_polynomial_variable();
     printf("test_algebraicnumber: all passed\n");
     return 0;
 }

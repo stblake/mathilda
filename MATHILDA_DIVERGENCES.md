@@ -371,6 +371,62 @@ yet. `logrewrite.m` canonicalises with `CanRaw` (Cancel over the extension, whic
 `ParallelMixed.wl`) and writes the m = 2 quotient of `YQuot` with the conjugate formula instead of
 `Pdiv`.
 
+### A25. `Series` did not resolve a series variable that carries an OwnValue  (FIXED, v0.229)
+
+`Series` and `SeriesCoefficient` are `HoldAll`, so the series variable arrives unevaluated.
+Mathematica resolves one whose OwnValue names another SYMBOL; Mathilda treated the held symbol
+literally, so an expression that does not contain it is constant in it and the "series" is the
+input itself -- returned silently, with no message:
+
+```
+Module[{w}, w = Unique["w"]; Normal[Series[Sqrt[1 + w^4], {w, 0, 4}]]]
+  Mathematica  1 + w11^4/2
+  Mathilda     Sqrt[1 + w11^4]        (* before v0.229 *)
+```
+
+A NUMERIC value leaves the call unevaluated in Mathematica (`Series[f, {5, 0, 4}]`) and an
+EXPRESSION value is treated as a variable the input is constant in; both are matched.
+`ParallelMixed.m`'s `RealiseClass` expands `Sqrt[q(1/w) w^(2h)/lc]` in a `Unique["w"]`, so every
+unbalanced configuration at infinity was solved against a matrix carrying a square root of a
+polynomial where a rational belonged. Fixing it took the review corpus from 304 to 329 correct.
+
+### A26. Multivariate `PolynomialGCD` with `AlgebraicNumber` coefficients is wrong
+
+```
+a = AlgebraicNumber[Sqrt[2], {0, 1}];
+PolynomialGCD[Expand[(x + a y) (x + 1)], Expand[(x + a y) (x + 2)]]
+  Mathematica   x + Sqrt[2] y            (on the radical form)
+  Mathilda      (x + a y) (x + 2)        -- the second operand, not a common divisor
+PolynomialGCD[x + a y, Expand[(x + a y) (x + 2)]]
+  Mathilda      (x + a y) (x + 2)        -- a gcd of higher degree than an operand
+```
+
+Univariate is correct, and so is `Extension -> Automatic` since v0.229 (`autodetect_walk` no
+longer mines the field label `theta` out of an `AlgebraicNumber`, which used to answer `1`).
+`collect_variables` no longer enrols an `AlgebraicNumber` as a polynomial VARIABLE (v0.229 --
+`Variables[a + x]` is `{x}` now, as in Mathematica), which removes the inconsistent-ring hazard
+of two Q-linearly dependent "variables" (`Plus`/`Times` fold a rational scalar into the
+coordinate vector, so `2 a` is a structurally distinct atom). What remains is the classical
+path's content computation over `K`: with equal degree in the main variable the pseudo-remainder
+vanishes and the loop returns the second operand. `Cancel`/`Together` of such a fraction decline
+rather than return garbage. The fix is a native `flint_field_gcd` over `K[x_1..x_n]` -- every
+component exists (`kx_ctx_init`, `kx_scalar`, `field_subst_tau`, `field_mpoly_to_expr`), none is
+wired to `PolynomialGCD`. `logrewrite.m`'s `KGcd` keeps the radical + `Extension` route for
+multivariate input because of this.
+
+### A27. `SparseArray` is not implemented
+
+```
+Normal[SparseArray[{{1, 2} -> 5, {2, 1} -> 7}, {2, 3}]]
+  Mathematica   {{0, 5, 0}, {7, 0, 0}}
+  Mathilda      SparseArray[{{1, 2} -> 5, {2, 1} -> 7}, {2, 3}]   (* unevaluated *)
+```
+
+`Normal` of the unevaluated head hands the `SparseArray[...]` expression straight back, so a
+caller that assembles a matrix this way gets a non-matrix with no message and no error -- the
+downstream `RowReduce` then "solves" it. Found while rewriting the ansatz assembly, which builds
+its augmented matrix row by row instead.
+
 ## B. Behavioural differences (not wrong, but code written against Mathematica's output breaks)
 
 ### B1. `ToNumberField` chooses a non-canonical primitive element, and a different one per call

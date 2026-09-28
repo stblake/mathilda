@@ -3314,6 +3314,56 @@ static AssumeCtx* series_effective_assumptions(Expr* assm_option) {
     return ctx;
 }
 
+/* Series and SeriesCoefficient are HoldAll, so the series VARIABLE arrives
+ * unevaluated.  Mathematica nevertheless resolves a variable that carries an
+ * OwnValue naming another symbol:
+ *
+ *     w = Unique["w"];  Series[Sqrt[1 + w^4], {w, 0, 4}]   ->   1 + w11^4/2
+ *
+ * A .m routine that expands in a freshly generated symbol does exactly that,
+ * and without the resolution the held symbol does not occur in the (evaluated)
+ * expression at all, which is therefore CONSTANT in it -- so the "series" is
+ * the input itself, returned silently with no message.  ParallelMixed.m's
+ * RealiseClass built a linear-algebra row out of such a non-series, which then
+ * carried a square root of a polynomial where a rational number belonged.
+ *
+ * A value that is not a symbol is left alone, matching Mathematica: a numeric
+ * value leaves the call unevaluated (`Series[f, {5, 0, 4}]`), an expression
+ * value is treated as a variable the input is constant in.
+ *
+ * Returns a rebuilt call with every such spec variable replaced, or NULL when
+ * there is nothing to resolve (the common case).  The rebuilt call's own spec
+ * variables have no OwnValues, so one pass always suffices. */
+static Expr* series_resolve_spec_vars(const Expr* res, size_t first_spec) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    Expr** newargs = NULL;
+    for (size_t i = first_spec; i < n; i++) {
+        Expr* s = res->data.function.args[i];
+        if (s->type != EXPR_FUNCTION || s->data.function.arg_count < 2) continue;
+        if (!has_symbol_head(s, "List") && !has_symbol_head(s, "Rule")) continue;
+        Expr* x = s->data.function.args[0];
+        if (x->type != EXPR_SYMBOL) continue;
+        Expr* ev = eval_and_free(expr_copy(x));
+        if (!ev) continue;
+        if (ev->type != EXPR_SYMBOL || ev->data.symbol.name == x->data.symbol.name) {
+            expr_free(ev);
+            continue;
+        }
+        if (!newargs) {
+            newargs = calloc(n, sizeof(Expr*));
+            if (!newargs) { expr_free(ev); return NULL; }
+            for (size_t j = 0; j < n; j++) newargs[j] = expr_copy(res->data.function.args[j]);
+        }
+        expr_free(newargs[i]->data.function.args[0]);
+        newargs[i]->data.function.args[0] = ev;              /* ownership moves */
+    }
+    if (!newargs) return NULL;
+    Expr* call = expr_new_function(expr_copy(res->data.function.head), newargs, n);
+    free(newargs);
+    return call;
+}
+
 /* Parse a single spec argument, accepting either `{x, x0, n}` (full form)
  * or `x -> x0` (leading-term form). Returns true on success and populates
  * *x_out / *x0_out / *n_out (borrowed Expr pointers into the spec) and
@@ -6114,6 +6164,17 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
 Expr* builtin_series(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
 
+    /* A held series variable that names another symbol (see
+     * series_resolve_spec_vars). */
+    {
+        Expr* rr = series_resolve_spec_vars(res, 1);
+        if (rr) {
+            Expr* out = builtin_series(rr);
+            expr_free(rr);
+            return out;
+        }
+    }
+
     /* Series uses PolynomialQuotient/Remainder, GCD and Together while
      * extracting the leading-term expansion — coefficients must be
      * rational. Convert inexact inputs, run, and numericalise the
@@ -6239,6 +6300,16 @@ Expr* builtin_series(Expr* res) {
  * is not produced. */
 Expr* builtin_seriescoefficient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+
+    /* Same held-variable resolution as Series (series_resolve_spec_vars). */
+    {
+        Expr* rr = series_resolve_spec_vars(res, 1);
+        if (rr) {
+            Expr* out = builtin_seriescoefficient(rr);
+            expr_free(rr);
+            return out;
+        }
+    }
 
     /* General term SeriesCoefficient[ProductLog[x], {x, 0, n}] with symbolic n:
      *   Piecewise[{{(-n)^(n-1)/n!, n >= 1}}, 0]. */

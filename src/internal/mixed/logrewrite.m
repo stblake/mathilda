@@ -66,7 +66,11 @@
    kernel's Can (FieldData) is bypassed here: on the nested-radical constants of the rewrite it
    is slow and it has returned a Dot[{}, Inverse[{}], {}] coefficient (A40 after P4) -- with
    any Root object written back in radicals, so that the formal split I -> -I can read the
-   constants *)
+   constants.  Re-measured 2026-09-28 with FieldData's span guard in place: the detour is
+   now SAFE here but still a large net LOSS -- the constants of the rewrite change from pair
+   to pair, so almost every call builds a fresh number field (Charlwood A40 1.44 s -> 8.07 s,
+   P8 1.64 -> 3.42, the suite 14.9 -> 23.5), where the package's own Can sees the same few
+   atom sets over and over.  CanRaw it stays. *)
 CanL[e_] := With[{r = CanRaw[e]}, If[FreeQ[r, _Root], r, RootFree[r]]];
 
 (* RootFree[e]: e with every Root object in radicals where it has a usable radical form *)
@@ -80,7 +84,9 @@ QRoots[a_, b_, c_] := With[{dd = Sqrt[Expand[b^2 - 4 a c]]}, {(-b + dd)/(2 a), (
    palindromic (w = z + 1/z) and antipalindromic (w = z - 1/z) -- with the root picked by its
    30-digit value (Mathematica's ToRadicals finds these forms itself; the kernel's gives the
    Ferrari form, which is not tame); the Root object itself when nothing applies *)
-RootRadicals[r_Root] := Module[{tr, z, pol, cl, cands = {}, num},
+(* memoised: the same Root object is asked for again by every CanL of the rewrite,
+   and the answer is a pure function of it *)
+RootRadicals[r_Root] := RootRadicals[r] = Module[{tr, z, pol, cl, cands = {}, num},
   tr = ToRadicals[r];
   If[FreeQ[tr, _Root] && RadicalsTameQ[tr], Return[tr]];
   pol = Expand[r[[1]][z]];
@@ -194,8 +200,28 @@ MonicIn[u_, vars_] := CanL[u/First[CoefficientRules[u, vars]][[2]]];
 (* TotalDegree[p, vars]: the total degree of a polynomial in vars *)
 TotalDegree[p_, vars_] := Max[0, Total /@ Keys[CoefficientRules[p, vars]]];
 
-(* KGcd[f, g]: the gcd of two polynomials over the number field of their constants *)
-KGcd[f_, g_] := PolynomialGCD[f, g, Extension -> Automatic];
+(* KGcd[f, g]: the gcd of two polynomials over the number field of their constants.
+   With ONE polynomial variable the constants are mapped into a single number field
+   first (FieldDataMemo, built once per atom set) and the plain two-argument
+   PolynomialGCD is the field gcd there -- exact, and without Extension -> Automatic,
+   which re-derives the splitting field from the raw radicals on every call.  The gcd
+   comes back up to a constant factor of the field, which is all any caller here needs
+   (a logand is used up to a constant; SturmCount is scale-free).
+   MULTIVARIATE input keeps the radical + Extension route: this kernel's plain
+   PolynomialGCD is WRONG on multivariate AlgebraicNumber input -- it enrols each
+   distinct AlgebraicNumber atom as an independent polynomial variable, so two
+   Q-linearly dependent atoms make the content computation run over an inconsistent
+   ring and the answer comes back as the gcd times a spurious factor.  (Repro:
+   PolynomialGCD[Expand[(x + a y)(x + 1)], Expand[(x + a y)(x + 2)]] with
+   a = AlgebraicNumber[Sqrt[2], {0, 1}] returns (x + a y)(x + 2).) *)
+KGcd[f_, g_] := Module[{vars, atoms, fd},
+  vars = Select[DeleteDuplicates[Join[Variables[f], Variables[g]]], ! NumericQ[#] &];
+  If[Length[vars] != 1, Return[PolynomialGCD[f, g, Extension -> Automatic]]];
+  atoms = AlgAtoms[{f, g}];
+  If[atoms === {}, Return[PolynomialGCD[f, g]]];
+  fd = FieldDataMemo[atoms];
+  If[! MatchQ[fd, {_, _}], Return[PolynomialGCD[f, g, Extension -> Automatic]]];
+  RootFree[PolynomialGCD[f /. fd[[1]], g /. fd[[1]]] /. aa_AlgebraicNumber :> fd[[2]][aa]]];
 
 (* RiobooAtan[A, B, g]: LogToAtan of Bronstein (Rioboo): A, B polynomials in g over a field
    (the constants and the other generators), B != 0; a sum of arctangents of polynomials in
@@ -218,7 +244,7 @@ SturmCount[P0_, g_] := Module[{P, canon, seq, r, lc, sgn, changes},
   P = canon[P0];
   If[! AllTrue[CoefficientList[P, g], NumericQ[#] && FreeQ[#, _Complex] &], Return[None]];
   If[Exponent[P, g] <= 0, Return[0]];
-  P = canon[PolynomialQuotient[P, PolynomialGCD[P, D[P, g], Extension -> Automatic], g]];
+  P = canon[PolynomialQuotient[P, KGcd[P, D[P, g]], g]];   (* univariate: the field gcd *)
   seq = {P, canon[D[P, g]]};
   While[Exponent[Last[seq], g] > 0,
     r = canon[-PolynomialRemainder[seq[[-2]], seq[[-1]], g]];
@@ -234,7 +260,10 @@ SturmCount[P0_, g_] := Module[{P, canon, seq, r, lc, sgn, changes},
    have no zero on the real locus of the curve: its norm, a polynomial in the curve variable
    alone with numeric coefficients, has no real root (SturmCount) apart from the roots of q
    for even m, which bound the real locus; None when undecided *)
-RealZeroFreeQ[P_, T_, Y_] := Module[{gq, g, NN, h, m = T["m"], q = T["q"], cnt},
+$lrRZF = <||>;      (* RealZeroFreeQ is asked for A and for B of every pair *)
+RealZeroFreeQ[P_, T_, Y_] := With[{lrkey = Hash[{P, T["q"], T["m"], T["gens"], Y}]},
+  If[KeyExistsQ[$lrRZF, lrkey], $lrRZF[lrkey], $lrRZF[lrkey] = RealZeroFreeQ0[P, T, Y]]];
+RealZeroFreeQ0[P_, T_, Y_] := Module[{gq, g, NN, h, m = T["m"], q = T["q"], cnt},
   gq = Select[T["gens"], SubsetQ[{#}, Variables[q]] &];
   If[Length[gq] != 1, Return[None]];
   g = First[gq];

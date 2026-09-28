@@ -459,6 +459,34 @@ static bool symmemo_lookup(const Expr* e, const char*** out_syms, size_t* out_n)
     return true;
 }
 
+/* Union the symbol set of one operand into vs, through the PERSISTENT per-node
+ * cache: a hit costs a pointer read, a miss walks the node once and populates
+ * the cache for every later comparison of it.
+ *
+ * The cache was previously consulted only from symmemo_lookup, i.e. only while
+ * an Orderless sort was in flight.  A BARE expr_compare -- Plus's and Times'
+ * already-sorted pre-check on every re-evaluation, a Sort, an ordering test --
+ * therefore re-walked both whole subtrees on EVERY comparison, which is the
+ * collect_symbols_in hot spot that the Charlwood profiles showed dominating the
+ * large algebraic sums (68 % of A28 under builtin_plus -> expr_compare ->
+ * collect_symbols_in).  symset_add dedups, so the union -- and therefore the
+ * canonical order -- is identical to the direct walk. */
+static void symset_add_cached(const Expr* e, SymSet* vs) {
+    if (!e) return;
+    if (e->type != EXPR_FUNCTION || symset_cache_off()) { collect_symbols_in(e, vs); return; }
+    const char* const* cs; uint32_t cn;
+    if (expr_symset_cache_get(e, &cs, &cn)) {
+        for (uint32_t i = 0; i < cn; i++) symset_add(vs, cs[i]);
+        return;
+    }
+    SymSet tmp; symset_init(&tmp);
+    collect_symbols_in(e, &tmp);
+    if (!tmp.ok) { symset_free(&tmp); collect_symbols_in(e, vs); return; }
+    expr_symset_cache_put(e, tmp.items, tmp.count);
+    for (size_t i = 0; i < tmp.count; i++) symset_add(vs, tmp.items[i]);
+    symset_free(&tmp);
+}
+
 /* Compare two packed lists straight off their buffers. Valid ONLY when the
  * shapes match exactly and the elements materialise to the same head class,
  * because the List order is elementwise while a buffer scan would otherwise
@@ -650,8 +678,8 @@ int expr_compare(const Expr* a, const Expr* b) {
             collect_symbols_in(b, &vs);
         }
     } else {
-        collect_symbols_in(a, &vs);
-        collect_symbols_in(b, &vs);
+        symset_add_cached(a, &vs);
+        symset_add_cached(b, &vs);
     }
 
     qsort((void*)vs.items, vs.count, sizeof(const char*), symbol_reverse_cmp);

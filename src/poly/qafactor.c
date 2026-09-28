@@ -3798,6 +3798,18 @@ static void autodetect_walk(const Expr* e, AutodetectGen* gens,
         return;
     }
 
+    /* AlgebraicNumber[theta, {c0, c1, ...}]: the coefficient is ALREADY in a
+     * number field, given by coordinates in the power basis of theta. theta is
+     * the field's label, not a subexpression of the value, so the generic
+     * recursion below would surface it as a tower generator and the consumers
+     * would then substitute a gamma-polynomial into that label slot -- leaving
+     * an AlgebraicNumber whose generator no longer matches anything, for which
+     * the field arithmetic of plus.c/times.c/power.c silently stops folding
+     * (PolynomialGCD[(x+a)(x+1), (x+a)(x+2), Extension -> Automatic] answered 1).
+     * Nothing here needs detecting: a coefficient in canonical field form is
+     * exactly what the extension machinery is trying to produce. */
+    if (head == SYM_AlgebraicNumber) return;
+
     /* Generic recursion: walk head (unusual) and every argument. */
     autodetect_walk(e->data.function.head, gens, n, max, bail);
     for (size_t i = 0; i < e->data.function.arg_count && !*bail; i++) {
