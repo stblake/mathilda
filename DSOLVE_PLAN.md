@@ -2163,6 +2163,99 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     `separable`/`fos`/`chini`/`exact` implicit paths to emit inert first integrals for their own
     non-elementary quadratures (they currently decline), now that the mechanism exists.
 
+- **M60 — higher-order linear: reducibility completion + generalised-Airy recogniser.** ✅ DONE.
+  Gap-driven wave on the largest measured §2.1.2 bucket, `3rd_high_linear` (142 total, 41 PASS,
+  101 UNEVAL). Probing the binary against the real corpus equations split that bucket into three
+  independently addressable mechanisms plus one outright defect, and M60 lands all of them. Every
+  new branch is gated by an in-method numeric back-substitution **and** the substrate's own verify,
+  so the 0-FAIL invariant holds by construction.
+  - **`DSolve\`GeneralizedAiry`** (new `dsolve_genairy.c`) — the n-th order **pure-power
+    potential** `u^(n) == A x^m u`, the higher-order analogue of Airy's equation, whose fundamental
+    set is `x^j ₀F_{n−1}(; {1 + (j−i)/p : i ≠ j}; A x^p/pⁿ)` for `j = 0..n−1`, `p = m + n`. Derived
+    from the balance `x^{j+pk−n}` against `A x^{m+j+p(k−1)}`: the `i == j` factor of the recurrence
+    is exactly the `k!` of a `₀F_{n−1}` and the other `n−1` are its lower parameters. The equation
+    reaches that shape through a **depression (gauge) pre-pass** generalising `SymmetricSquare`'s
+    order-3 gauge to arbitrary `n`: with `v = −c_{n−1}/n` and `W_0 = 1, W_{i+1} = W_i' + v W_i`
+    (Bell polynomials in `v`, so no `Exp` ever has to cancel), `L[w u]/w = Σ_j d_j u^(j)` with
+    `d_j = Σ_{k≥j} c_k C(k,j) W_{k−j}`; `d_n == 1` and `d_{n−1} == 0` by construction, and when
+    every remaining intermediate `d_j` vanishes the potential is read off `−d_0` by the M55
+    `m = x T'/T` extraction (so a **symbolic** `A` and `m` work — 2.1.2-595 is `y''' == a x^b y`).
+    Forcing is added by variation of parameters. Declines `p == 0` (Euler), a lower parameter that
+    is a non-positive integer (exponents differing by a multiple of `p` — the logarithmic Frobenius
+    case, which is why `x w''' + w == 0` and `x² y'''' == A y` correctly fall through), and any
+    non-power potential. Cascade slot: after `SpecialFunctionForm`, before `SymmetricSquare`, gated
+    to order ≥ 3. *Solves* 2.1.2-230/292/311/1201 (`y''' == x y` → `₀F₂({},{1/2,3/4},x⁴/64)` and its
+    `x`, `x²` partners), -1073, -595 (symbolic), and -241/-604 through the gauge (`w = 1/x`).
+  - **`OperatorFactor` at order 2 + forcing.** The method was gated to order ≥ 3 and homogeneous.
+    Both gates are lifted. Order 2 matters because `Kovacic` runs first and *owns* the tidy answers
+    there, so what reaches `OperatorFactor` is the rational-Riccati Case-1 residue Kovacic declined —
+    and a closed form from it beats the truncated Frobenius series that was winning. That is exactly
+    what unblocks the order-3 peel: 2.1.2-253's quotient `x²(1+x)u'' + 2x(2+x)u' + 2u == 0` has the
+    hyperexponential solution `u = 1/x`, which `DSolve\`DFactor` found all along while `DSolve`
+    returned `O[x]^6`. Forcing is carried by handing the monic-normalised right-hand side to the
+    recursive quotient solve, so the `_linear,_nonhomogeneous` members ride along.
+  - **Adjoint (left-factor) peel = the "Beke / 2nd-order right factor" target.** When no first-order
+    RIGHT factor exists, the same search runs on the adjoint `L* = Σ (−1)^k D^k ∘ a_k`. Since
+    `(A∘B)* = B*∘A*` and `(D − s)* = −(D + s)`, a first-order right factor of `L*` is a first-order
+    LEFT factor `(D + s)` of `L`, i.e. an order-(n−1) RIGHT factor `Q` — the classical case for
+    `n = 3`, reached **without exterior powers**. Left division `q_{n−1} = a_n`,
+    `q_{m−1} = a_m − q_m' − s q_m`, remainder `a_0 − q_0' − s q_0`, is the exact acceptance test, so
+    a mis-found `s` can only decline. `Q[z] == 0` is solved by recursion and `L[y] == g` closed by
+    variation of parameters over `Q`'s basis for `W = Exp[−∫s](∫ g Exp[∫s] dx + C[n])`.
+    `DSolve\`DFactor` reports the left factor too, emitted **last** (the list is innermost-first) —
+    e.g. `(D + 1/x) ∘ (D² − x)` → `{Dx² − x, Dx + 1/x}`, an order-2 right factor of an operator with
+    no first-order right factor at all. **Measurement corrected the roadmap here:** a `Q` reachable
+    only through the adjoint is by definition free of hyperexponential solutions, so its basis is
+    Kovacic-case-2 / special-function, and the VoP particular is then essentially never elementary —
+    2.1.2-294's quotient is `Sqrt[x] BesselJ[I Sqrt[3], 2 Sqrt[x]]` and the integrals do not close.
+    So the left peel's *factorisation* is the real capability and its *solve* yield is small; the
+    named next step is to emit the particular with M59's `Inactive[Integrate]` instead of declining.
+  - **Generalised Bessel row** (`dsolve_specialform.c`) — `Q = A x^m + B x^(−2)` →
+    `Sqrt[x] Z_ν(κ x^((m+2)/2))`, `ν = Sqrt[1−4B]/(m+2)`, `κ = 2 Sqrt[A]/(m+2)`. A strict
+    generalisation of the single-power row (`B == 0` gives the same `ν = 1/(m+2)`) that also reaches
+    the inverse-power pair `{−1,−2}` the Whittaker condition `P_big − 2 P_sm == 2` misses. Complex
+    `ν` is admissible: `BesselJ`/`BesselY` numericize there, so `sf_num_ok` stays genuine.
+  - **Three latency root-causes, all pre-existing but newly exposed by the wider reach.** (1) The
+    trailing integrand was built as a raw `Exp[−(Log[x] + Log[1+x²]/2)]`, which sends `Integrate`
+    down the transcendental-tower path: 3.98 s **and it fails**, where the same integrand simplified
+    to `1/(x Sqrt[1+x²])` is algebraic, closes, and costs 0.015 s. The gauge factor is now simplified
+    — and then *checked* (`w' == r w`) rather than trusted, falling back to the raw form if the
+    simplifier picks a branch that breaks it. (2) The algebraic integrator is two orders of magnitude
+    slower on an integrand carrying symbolic `C[k]` coefficients (2.06 s vs 0.011 s), so the trailing
+    integral and the left peel's VoP are now split along the constants by linearity. (3)
+    `of_find_factor` bounded the pole *count* but not the ansatz *width*: two double poles plus a
+    degree-2 polynomial part is 11 unknowns in a cubic determining system, which does not return.
+    New `OF_MAX_UNKNOWNS` bound (every factor the search has ever found needed ≤ 4), and the ansatz
+    pole order is capped at 1: a DOUBLE pole in `r` is an irregular singularity, which the file's
+    documented scope already defers, so searching for one only doubled the width of every
+    combination — it earned nothing on the corpus (all 30 gains verified individually at pole order
+    1) while costing the most (a failing search on a two-pole order-3 operator: **60.2 s → 0.72 s**).
+    Together these took 2.1.2-250 from a >120 s non-answer to a **2.6 s solve**. A structural gate also declines the
+    left peel when the quotient basis is a series or a special function, where the VoP integrals
+    churn for seconds without closing (2.1.2-294: 11.9 s → 0.37 s).
+  - *Tests:* `tests/test_dsolve_m60_stress.c` — eight forward-generator families (pure power over an
+    (n, m, a) grid; the gauge family `D[x^k y, {x,n}] == a x^(m+k) y`; symbolic exponent with a
+    post-instantiation numeric check; order-2 and order-3 factorable operators over a rational `r`
+    grid, requiring a closed form and not a `SeriesData`; the adjoint family, whose returned
+    factorisation is **reconstructed and compared against the original operator**; forcing; and
+    bounded declines). Units `t_m60_*` in `tests/test_dsolve.c`.
+  - §2.1.2: **605 → 634 PASS (+30 gained, 1 lost, net +29), 570 non-PASS, 0 FAIL**, measured against
+    a fresh same-day baseline on the same tree (the checked-in M59 row of 595 had drifted +10 on
+    intervening non-DSolve work, so it is not a valid comparator) and **deterministic across two full
+    runs**. Bucket attribution: the targeted **`3rd_high_linear` 42 → 64 (+22)** (29.6% → 45.1%),
+    `2nd_linear` 243 → 249 (+6), `1st_solvable_for_yx` +1, `Emden_Fowler` +1; the one loss (342) is a
+    first-order *nonlinear* ODE `OperatorFactor` declines in 0.4 ms and which solves in 5.25 s
+    standalone — the documented 8 s timing cluster. Gate baseline **619 → 580**. All 14 DSolve ctest
+    stress suites pass (including the new `dsolve_m60_stress_tests`, 19 s) and `make check-c99` is
+    green. *Note:* `dsolve_tests` (the unit suite) is **pre-existing red** on this machine — it hits
+    the `alarm(120)` self-kill in `test_utils.h` at test 48 of 266, so the `t_m60_*` group registered
+    at the end never executes there; all 16 of its assertions were verified by direct evaluation, and
+    the coverage that actually runs is the stress binary. *Future:* emit the left peel's
+    variation-of-parameters particular with M59's `Inactive[Integrate]` when it is non-elementary
+    (2.1.2-294/296 factor correctly but their `Sqrt[x] BesselJ[I Sqrt[3], 2 Sqrt[x]]` quotient basis
+    gives no elementary particular), and the genuine `m`-th exterior power for right factors of order
+    `2 ≤ m ≤ n−2`.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -2452,17 +2545,32 @@ recursive sub-solves.
   (`dsolve_frobenius.c`, `dsolve_first_order_series_try`; a₀=C[1], one Taylor read
   per order). Pinned-only (not auto — opt-in, matching SymPy/MMA). Solves nonlinear
   `y'==x+y²` etc. (SymPy `1st_power_series`.)
-- `[✓] OperatorFactor` (`DSolve`DFactor`) — factor a homogeneous linear operator
-  (order ≥ 3) by finding a first-order right factor `(D − r)`, `r ∈ C(x)` (a
-  hyperexponential solution `Exp[∫r]`, via a rational Riccati `Σ a_k P_k(r) == 0`
-  undetermined-coefficient search); peel via operator right-division, recurse `DSolve`
-  on the order-(n−1) quotient, close with the trailing first-order solve. Reaches
-  reducible variable-coefficient operators the earlier methods miss (shifted-Euler at
-  a pole ≠ 0). `DSolve`DFactor[eqn,y,x]` returns `{Dx − r1, Dx − r2, …}`. Runs after
-  Kovacic (order 2), before the reduction/series methods. First cut: first-order
-  **right** factors, homogeneous, rational coefficients; irregular-singular / 2nd-order
-  right factors (Beke) are future. `dsolve_operator_factor.c` (self-contained; no
-  changes to the Kovacic engine).
+- `[✓] OperatorFactor` (`DSolve`DFactor`) — factor a linear operator of order ≥ 2,
+  homogeneous **or forced**, two ways (M60). **Right factor:** find a first-order
+  `(D − r)`, `r ∈ C(x)` (a hyperexponential solution `Exp[∫r]`, via a rational Riccati
+  `Σ a_k P_k(r) == 0` undetermined-coefficient search); peel via operator
+  right-division, recurse `DSolve` on the order-(n−1) quotient (which keeps the
+  forcing), close with the trailing first-order solve. Order 2 is admitted because
+  Kovacic runs first and owns the tidy answers there — the residue it declines is
+  reached here, and a closed form beats the Frobenius series that would otherwise win
+  (this is also what lets the order-3 peel's own order-2 quotient close).
+  **Left factor (Beke):** failing that, run the same search on the adjoint
+  `L* = Σ (−1)^k D^k ∘ a_k`; a first-order right factor of `L*` is a first-order LEFT
+  factor `(D + s)` of `L`, i.e. an order-(n−1) RIGHT factor `Q`, solved by recursion
+  and closed by variation of parameters. `DSolve`DFactor[eqn,y,x]` returns
+  `{Dx − r1, Dx − r2, …}` **innermost first**, with any left factor emitted last.
+  Runs after Kovacic, before the reduction/series methods. Still future: the
+  irregular-singular (double-pole) `r`, symbolic parameters in the coefficients, and
+  right factors of order `m` with `2 ≤ m ≤ n−2` (which genuinely need the `m`-th
+  exterior power). `dsolve_operator_factor.c` (self-contained; no changes to the
+  Kovacic engine).
+- `[✓] GeneralizedAiry` — linear of order n ≥ 3 that becomes the pure-power potential
+  `u^(n) == A x^m u` after the depression `y = w u`, `w = Exp[−∫c_{n−1}/n]`: the
+  fundamental set is `x^j ₀F_{n−1}(; {1 + (j−i)/p : i ≠ j}; A x^p/pⁿ)`, `p = m + n`.
+  Symbolic `A` and `m` supported; forcing by variation of parameters; numeric
+  self-verify gate. Declines `p == 0`, a non-positive-integer lower parameter (the
+  logarithmic Frobenius case), and any non-power potential. See M60.
+  `dsolve_genairy.c`.
 
 ### 1d. Nonlinear higher-order
 - `[✓] ReductionOfOrder` — `y''==F(x,y')` missing y: reduce to first order in

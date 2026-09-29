@@ -46,6 +46,7 @@ typedef enum {
     DS_EXACTODE,
     DS_SPECIALFORM,
     DS_KOVACIC,
+    DS_GENAIRY,
     DS_OPERFACTOR,
     DS_SYMSQUARE,
     DS_REDUCEORDER,
@@ -92,6 +93,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "ExactODE")         == 0) return DS_EXACTODE;
     if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
     if (strcmp(s, "Kovacic")            == 0) return DS_KOVACIC;
+    if (strcmp(s, "GeneralizedAiry")    == 0) return DS_GENAIRY;
     if (strcmp(s, "OperatorFactor")     == 0) return DS_OPERFACTOR;
     if (strcmp(s, "SymmetricSquare") == 0) return DS_SYMSQUARE;
     if (strcmp(s, "ReductionOfOrder") == 0) return DS_REDUCEORDER;
@@ -140,6 +142,7 @@ extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_genairy_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_operfactor_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_symsquare_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch);
@@ -187,6 +190,7 @@ extern void dsolve_euler_init(void);
 extern void dsolve_exactode_init(void);
 extern void dsolve_specialform_init(void);
 extern void dsolve_kovacic_init(void);
+extern void dsolve_genairy_init(void);
 extern void dsolve_operfactor_init(void);
 extern void dsolve_symsquare_init(void);
 extern void dsolve_reduce_order_init(void);
@@ -428,6 +432,11 @@ Expr* builtin_dsolve(Expr* res) {
              * second-order basis: Airy^2, Bessel products, ...).  Before
              * operfactor, which would otherwise churn on the non-factorable
              * symmetric-square operator. */
+            /* Pure-power potential at order >= 3: after the depression y = w u the
+             * equation is u^(n) == A x^m u, whose fundamental set is the generalized
+             * Airy family x^j 0F_{n-1}.  A recogniser, so it runs before the
+             * symmetric-square / factoring searches it would otherwise burn. */
+            if (!result) result = dsolve_run(&P, dsolve_genairy_try);
             if (!result) result = dsolve_run(&P, dsolve_symsquare_try);
             /* Higher-order (>=3) reducible linear operators: factor out a first-order
              * right factor (D-r) and recurse.  After Kovacic (owns order 2), before
@@ -545,6 +554,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_EXACTODE:     result = dsolve_run(&P, dsolve_exactode_try);    break;
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
         case DS_KOVACIC:      result = dsolve_run(&P, dsolve_kovacic_try);     break;
+        case DS_GENAIRY:      result = dsolve_run(&P, dsolve_genairy_try);     break;
         case DS_OPERFACTOR:   result = dsolve_run(&P, dsolve_operfactor_try);  break;
         case DS_SYMSQUARE:    result = dsolve_run(&P, dsolve_symsquare_try);   break;
         case DS_REDUCEORDER:  result = dsolve_run(&P, dsolve_reduce_order_try); break;
@@ -620,6 +630,7 @@ void dsolve_init(void) {
     dsolve_exactode_init();
     dsolve_specialform_init();
     dsolve_kovacic_init();
+    dsolve_genairy_init();
     dsolve_operfactor_init();
     dsolve_symsquare_init();
     dsolve_reduce_order_init();

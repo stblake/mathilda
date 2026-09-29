@@ -650,6 +650,54 @@ static Expr* specialform_power_potential(Expr* Qc, const char* xvar) {
             }
             expr_free(d);
         }
+        if (!general) {
+            /* General Bessel row:  Q = A x^m + B x^(-2)
+             *    ->  y = Sqrt[x] Z_nu(kappa x^((m+2)/2)),
+             *        nu = Sqrt[1 - 4B]/(m+2),  kappa = 2 Sqrt[A]/(m+2),  Z = BesselJ/Y.
+             * This strictly generalises the single-power row above (B == 0 gives the
+             * same nu = 1/(m+2)) and reaches the inverse-power pair {-1, -2} that the
+             * Whittaker condition P_big - 2 P_sm == 2 misses -- the shape that the
+             * OperatorFactor adjoint peel hands back as its order-2 right factor
+             * (2.1.2-294/296: z'' + (1/x + 1/x^2) z == 0 -> Sqrt[x] Z_{I Sqrt[3]}(2 Sqrt[x]),
+             * verified to 1e-39).  A complex nu is fine: BesselJ/BesselY numericize
+             * there, so the caller's sf_num_ok gate is genuine. */
+            int im2 = -1;
+            for (int gi = 0; gi < 2; gi++) {
+                Expr* t = ds_simplify(ds_call2(SYM_Plus, expr_copy(exps[gi]), expr_new_integer(2)));
+                bool is = ds_is_zero(t); expr_free(t);
+                if (is) { im2 = gi; break; }
+            }
+            if (im2 >= 0) {
+                Expr* B = coefs[im2], *m = exps[1 - im2], *A = coefs[1 - im2];
+                Expr* mp2 = ds_simplify(ds_call2(SYM_Plus, expr_copy(m), expr_new_integer(2)));
+                if (!ds_is_zero(mp2) && !ds_is_zero(A)) {
+                    Expr* invp = ds_call2(SYM_Power, expr_copy(mp2), expr_new_integer(-1));
+                    Expr* nu = ds_simplify(ds_call2(SYM_Times,                    /* Sqrt[1-4B]/(m+2) */
+                                   ds_call1("Sqrt", ds_call2(SYM_Subtract, expr_new_integer(1),
+                                       ds_call2(SYM_Times, expr_new_integer(4), expr_copy(B)))),
+                                   expr_copy(invp)));
+                    Expr* kappa = ds_simplify(ds_call2(SYM_Times,                 /* 2 Sqrt[A]/(m+2) */
+                                      ds_call2(SYM_Times, expr_new_integer(2),
+                                          ds_call1("Sqrt", expr_copy(A))),
+                                      expr_copy(invp)));
+                    Expr* halfp = ds_simplify(ds_call2(SYM_Times, expr_copy(mp2), /* (m+2)/2 */
+                                      ds_call2(SYM_Power, expr_new_integer(2), expr_new_integer(-1))));
+                    Expr* arg = ds_simplify(ds_call2(SYM_Times, expr_copy(kappa),
+                                    ds_call2(SYM_Power, expr_copy(x), expr_copy(halfp))));
+                    Expr* sqrtx = powrat(x, 1, 2);
+                    general = combo(
+                        ds_call2(SYM_Times, expr_copy(sqrtx),
+                            expr_new_function(expr_new_symbol("BesselJ"),
+                                (Expr*[]){ expr_copy(nu), expr_copy(arg) }, 2)),
+                        ds_call2(SYM_Times, expr_copy(sqrtx),
+                            expr_new_function(expr_new_symbol("BesselY"),
+                                (Expr*[]){ expr_copy(nu), expr_copy(arg) }, 2)));
+                    expr_free(sqrtx); expr_free(arg); expr_free(halfp);
+                    expr_free(kappa); expr_free(nu); expr_free(invp);
+                }
+                expr_free(mp2);
+            }
+        }
     }
 
     for (int g = 0; g < ng; g++) { expr_free(exps[g]); expr_free(coefs[g]); }

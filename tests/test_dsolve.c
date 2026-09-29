@@ -2820,6 +2820,109 @@ static void t_m57_solvableforx(void) {
                "/. C[1] -> 3/5, 20]], {t0, {8/10, 13/10, 2}}]] < 10^-5)]");
 }
 
+/* ---- M60: GeneralizedAiry + OperatorFactor at order 2 + the adjoint peel ---- */
+
+/* y''' == x y (2.1.2-230/292/311/1201): the n-th order pure-power potential, whose
+ * fundamental set is x^j 0F_{n-1}(; {1+(j-i)/p}; A x^p/p^n), p = m+n. */
+static void t_m60_generalized_airy(void) {
+    check_true("Module[{s = DSolve`GeneralizedAiry[y'''[x] == x y[x], y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && !FreeQ[s, HypergeometricPFQ]]");
+    check_true("Module[{s = DSolve[y'''[x] == x y[x], y, x], f}, "
+               "Head[s] === List && (f = y /. s[[1]]; "
+               "Max[Table[Abs[N[(D[f[x], {x, 3}] - x f[x]) /. "
+               "{C[1] -> 6/10, C[2] -> 13/10, C[3] -> 7/10} /. x -> xv, 25]], "
+               "{xv, {6/10, 11/10, 17/10}}]] < 10^-8)]");
+}
+
+/* The depression gauge y = w u, w = Exp[-Integrate[c[n-1]/n]]: 2.1.2-241/604
+ * x y''' + 3 y'' == A x^2 y  is  u''' == A x u  under w = 1/x. */
+static void t_m60_genairy_gauge(void) {
+    check_true("Module[{s = DSolve[x y'''[x] + 3 y''[x] - x^2 y[x] == 0, y, x], f}, "
+               "Head[s] === List && (f = y /. s[[1]]; "
+               "Max[Table[Abs[N[(x D[f[x], {x, 3}] + 3 D[f[x], {x, 2}] - x^2 f[x]) /. "
+               "{C[1] -> 3/5, C[2] -> 7/10, C[3] -> 9/10} /. x -> xv, 25]], "
+               "{xv, {6/10, 11/10, 17/10}}]] < 10^-8)]");
+}
+
+/* 2.1.2-595: SYMBOLIC coefficient and exponent, y''' == a x^b y. */
+static void t_m60_genairy_symbolic(void) {
+    check_true("Module[{s = DSolve[y'''[x] - a x^b y[x] == 0, y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && !FreeQ[s, HypergeometricPFQ]]");
+}
+
+/* Gates: a non-power potential, a degenerate (logarithmic) exponent pattern where the
+ * 0F_{n-1} lower parameter would be a non-positive integer (2.1.2-1204), and order 2. */
+static void t_m60_genairy_gates(void) {
+    check_form("Head[DSolve`GeneralizedAiry[y'''[x] - Sin[x] y[x] == 0, y, x]]",
+               "DSolve`GeneralizedAiry");
+    check_form("Head[DSolve`GeneralizedAiry[x y'''[x] + y[x] == 0, y, x]]",
+               "DSolve`GeneralizedAiry");
+    check_form("Head[DSolve`GeneralizedAiry[y''[x] - x y[x] == 0, y, x]]",
+               "DSolve`GeneralizedAiry");
+}
+
+/* OperatorFactor now runs at order 2 (after Kovacic declines), so a rational
+ * first-order right factor gives a CLOSED FORM where the cascade used to emit a
+ * truncated Frobenius series.  This is the 2.1.2-253 quotient. */
+static void t_m60_operfactor_order2(void) {
+    check_true("Module[{s = DSolve`OperatorFactor["
+               "x^2 (1+x) y''[x] + 2 x (2+x) y'[x] + 2 y[x] == 0, y, x]}, "
+               "Head[s] === List && Length[s] >= 1]");
+    check_true("FreeQ[DSolve[x^2 (1+x) y''[x] + 2 x (2+x) y'[x] + 2 y[x] == 0, y, x], "
+               "SeriesData]");
+}
+
+/* Consequence at order 3: 2.1.2-250 and -253, fully factorable operators whose peel
+ * previously stalled on a series quotient. */
+static void t_m60_operfactor_order3(void) {
+    check_true("Module[{s = DSolve[-12 y[x] + 3 (2 x^2+1) y''[x] + x (x^2+1) y'''[x] == 0, y, x], f}, "
+               "Head[s] === List && (f = y /. s[[1]]; "
+               "Max[Table[Abs[N[(-12 f[x] + 3 (2 x^2+1) D[f[x], {x, 2}] "
+               "+ x (x^2+1) D[f[x], {x, 3}]) /. {C[1] -> 3/5, C[2] -> 7/10, C[3] -> 9/10} "
+               "/. x -> xv, 25]], {xv, {6/10, 11/10, 17/10}}]] < 10^-8)]");
+}
+
+/* The adjoint (left-factor) peel: L = (D + 1/x) o (D^2 - x) has no first-order RIGHT
+ * factor (Airy is irreducible), so DFactor reaches it only through the adjoint and
+ * reports the order-2 right factor plus the first-order left factor (emitted last). */
+static void t_m60_dfactor_left(void) {
+    check_true("Module[{lhs = D[D[y[x], {x, 2}] - x y[x], x] "
+               "+ (1/x) (D[y[x], {x, 2}] - x y[x]), f, q, sf, qy}, "
+               "f = DSolve`DFactor[lhs == 0, y[x], x]; "
+               "Head[f] === List && Length[f] == 2 && !FreeQ[f[[1]], Dx^2] && "
+               "(q = f[[1]]; sf = Simplify[f[[2]] - Dx]; "
+               "qy = Sum[Coefficient[q, Dx, k] D[y[x], {x, k}], {k, 0, 2}]; "
+               "TrueQ[Simplify[D[qy, x] + sf qy - lhs] == 0])]");
+    /* an operator irreducible both ways stays a single inert remainder */
+    check_true("Module[{f = DSolve`DFactor[y'''[x] + x y[x] == 0, y[x], x]}, "
+               "Head[f] === List && Length[f] == 1]");
+}
+
+/* The peel carries forcing (OperatorFactor used to decline every inhomogeneous ODE). */
+static void t_m60_operfactor_forced(void) {
+    check_true("Module[{s = DSolve[D[y'[x] - (2/x) y[x], x] - (1/x) (y'[x] - (2/x) y[x]) == x, "
+               "y, x], f}, Head[s] === List && (f = y /. s[[1]]; "
+               "Max[Table[Abs[N[(D[D[f[x], x] - (2/x) f[x], x] "
+               "- (1/x) (D[f[x], x] - (2/x) f[x]) - x) /. {C[1] -> 3/5, C[2] -> 7/10} "
+               "/. x -> xv, 25]], {xv, {6/10, 11/10, 17/10}}]] < 10^-8)]");
+}
+
+/* The generalised Bessel row Q = A x^m + B x^(-2) -> Sqrt[x] Z_nu(kappa x^((m+2)/2)),
+ * nu = Sqrt[1-4B]/(m+2) — the shape the adjoint peel hands back (2.1.2-294's quotient),
+ * which the Whittaker two-term condition misses.  Complex nu is admissible. */
+static void t_m60_bessel_inverse_power(void) {
+    check_true("Module[{s = DSolve[y''[x] + (1 + x)/x^2 y[x] == 0, y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && !FreeQ[s, BesselJ]]");
+    check_true("Module[{s = DSolve[y''[x] + (1 + x)/x^2 y[x] == 0, y, x], f}, "
+               "Head[s] === List && (f = y /. s[[1]]; "
+               "Max[Table[Abs[N[(D[f[x], {x, 2}] + (1 + x)/x^2 f[x]) /. "
+               "{C[1] -> 3/5, C[2] -> 7/10} /. x -> xv, 25]], "
+               "{xv, {6/10, 11/10, 17/10}}]] < 10^-8)]");
+    /* the classical Bessel equation is unchanged */
+    check_true("Module[{s = DSolve[y''[x] + y'[x]/x + (1 - 4/x^2) y[x] == 0, y, x]}, "
+               "Head[s] === List && !FreeQ[s, BesselJ]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -3091,6 +3194,17 @@ int main(void) {
     TEST(t_m57_solvablefory);
     TEST(t_m57_gates);
     TEST(t_m57_solvableforx);
+
+    /* M60: GeneralizedAiry + OperatorFactor order 2 / adjoint peel */
+    TEST(t_m60_generalized_airy);
+    TEST(t_m60_genairy_gauge);
+    TEST(t_m60_genairy_symbolic);
+    TEST(t_m60_genairy_gates);
+    TEST(t_m60_operfactor_order2);
+    TEST(t_m60_operfactor_order3);
+    TEST(t_m60_dfactor_left);
+    TEST(t_m60_operfactor_forced);
+    TEST(t_m60_bessel_inverse_power);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

@@ -671,3 +671,39 @@ is now documented rather than guarded with dead code.
   pure-float case is correct, so it is specifically the mixture.
 - Mixed spellings of one field, and two distinct `AlgebraicNumber` generators, still answer 1
   (`field_scan` reports a conflict rather than building the compositum).
+
+## DSolve M60 — higher-order linear: reducibility + generalised-Airy (2026-09-29)
+
+Plan: `/Users/user/.claude/plans/melodic-mapping-clarke.md`. Targets the largest measured
+§2.1.2 gap bucket (`3rd_high_linear`, 101 UNEVAL).
+
+- [x] Pre-change §2.1.2 baseline measured: **605 PASS / 599 non-PASS / 0 FAIL**
+      (the checked-in M59 row read 595/609 — the tree had drifted +10 on other work)
+- [x] Stage A — `DSolve`GeneralizedAiry` (`src/calculus/dsolve_genairy.c`): depression
+      gauge `y = w u` + pure-power potential `u^(n) == A x^m u` → `x^j 0F_{n-1}` basis;
+      symbolic `A`/`m`; forcing via VoP; numeric self-verify; cascade + pinned builtin
+- [x] Stage B — `OperatorFactor` at order 2 + forcing carried through the peel
+- [x] Stage C — adjoint (left-factor) peel = Beke order-(n−1) right factors; `DFactor`
+      reports the left factor (emitted last, list is innermost-first)
+- [x] Latency root-causes found and fixed, all pre-existing but newly exposed:
+      unsimplified `Exp[-(Log[x]+…)]` trailing integrand (3.98 s **and fails** vs
+      0.015 s simplified); symbolic `C[k]` inside the algebraic integrator (2.06 s vs
+      0.011 s — fixed by integrating per constant); unbounded ansatz width in
+      `of_find_factor` (new `OF_MAX_UNKNOWNS`)
+- [x] Generalised Bessel row `Q = A x^m + B x^(-2)` in `dsolve_specialform.c`
+- [x] `tests/test_dsolve_m60_stress.c` (8 forward-generator families) + `t_m60_*` units
+- [x] Post-change §2.1.2: **605 → 634 PASS (+30 / −1, net +29), 570 non-PASS, 0 FAIL**,
+      deterministic across two full runs. Bucket: **3rd_high_linear 42 → 64 (+22)**,
+      2nd_linear 243 → 249 (+6). STATUS.md row + bucket table updated; ctest gate 619 → 580
+- [x] DSOLVE_PLAN.md M60 entry + §1c catalog + weekly changelog
+- [x] All 14 DSolve ctest stress suites pass (incl. new `dsolve_m60_stress_tests`, 19 s);
+      `make check-c99` green. `dsolve_tests` is PRE-EXISTING red (hits the `alarm(120)` in
+      test_utils.h at test 48 of 266, so the `t_m60_*` group never executes there) — all 16
+      of its assertions verified by direct evaluation instead
+- [x] valgrind: pinned `DSolve\`GeneralizedAiry` and `DSolve\`OperatorFactor` are **leak-flat**
+      vs the `1+1` baseline (13,440 B / 420 blocks); so is `DSolve\`DFactor`. The +320 B / 5
+      blocks seen on the automatic `DSolve` route is Kovacic's declining attempt, which leaks
+      MORE on its own (13,824 B / 426 blocks) — pre-existing, not M60
+- [ ] Commit (M60 paths only; no version bump, no tag). NOTE: `tasks/todo.md` and
+      `docs/spec/changelog/2026-09-28.md` also carry a concurrent session's uncommitted
+      notebook work, so they are deliberately left OUT of the commit

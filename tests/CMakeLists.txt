@@ -767,6 +767,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_eigenvalue.c
     ../src/calculus/dsolve_normalform.c
     ../src/calculus/dsolve_frobenius.c
+    ../src/calculus/dsolve_genairy.c
     ../src/calculus/dsolve_kovacic.c
     ../src/calculus/dsolve_operator_factor.c
     ../src/sum/sum.c
@@ -3315,6 +3316,10 @@ add_executable(dsolve_m58_stress_tests test_dsolve_m58_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m58_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m58_stress_tests COMMAND dsolve_m58_stress_tests)
 
+add_executable(dsolve_m60_stress_tests test_dsolve_m60_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m60_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m60_stress_tests COMMAND dsolve_m60_stress_tests)
+
 add_executable(inactive_tests test_inactive.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(inactive_tests PRIVATE ../src ../src/calculus)
 add_test(NAME inactive_tests COMMAND inactive_tests)
@@ -3896,19 +3901,21 @@ else()
 endif()
 # Per-section dashboards.  argv = <corpus> <prelude> <baseline>.  Baselines are
 # the checked-in high-water marks recorded in DSolve_test_status/STATUS.md.
-# Baseline 619 (M59 Inactive primitive + implicit-first-integral autonomous companion).  Clean
-# re-run 595 PASS / 609 non-PASS, 0 FAIL (up from 591/613).  DETERMINISTIC M59 gain is +9: the
-# whole order-3 autonomous residue 263/264/267/268/1167/1168 (+ dups 710/711/712) now returns a
-# verified inert first integral Inactive[Integrate][1/p, y[x]] - x == C[1] instead of declining
-# (3rd_high_reducible bucket 8 -> 17 PASS).  Net movements (58/161 gained, 375/439/592/799/877/
-# 983/1153 lost) are all the _with_linear_symmetries timing cluster (2nd/high-order, x-dependent
-# -- M59's autonomous companion never touches them) oscillating; the 1 crash (1153) is the known
-# intermittent fork-layout SIGSEGV (solves clean in isolation), not reproducible.  Baseline
-# lowered by the +9 deterministic gain; margin kept for the timing cluster that flips P<->U.
+# Baseline 580 (M60 generalised Airy + operator-factor reducibility).  Measured 634 PASS /
+# 570 non-PASS / 0 FAIL, against a fresh same-day baseline of 605/599 taken on the SAME tree
+# before the change (the previously checked-in 595 had drifted +10 on intervening non-DSolve
+# work, so it is not a valid comparator).  +30 gained, 1 lost, net +29, and the measurement is
+# deterministic across two full runs.  Bucket attribution: 3rd_high_linear 42 -> 64 (+22) --
+# the targeted bucket -- 2nd_linear 243 -> 249 (+6), 1st_solvable_for_yx +1, Emden_Fowler +1.
+# The single loss (342) is a first-order NONLINEAR ODE that OperatorFactor declines in 0.4 ms
+# and that solves in 5.25 s standalone: the documented 8 s timing cluster, not a regression.
+# Baseline = 570 measured + 10 margin for that cluster.
+# (M59 was baseline 619: 595 PASS / 609 non-PASS, the order-3 autonomous residue returning
+# verified inert first integrals.)
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 619)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 580)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
 # verifies the ODE residual AND every initial condition (M21).  Baseline 2
