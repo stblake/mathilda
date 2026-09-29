@@ -457,10 +457,10 @@ export function addNotebook(title?: string) {
   });
 }
 
-/** Add a notebook holding `cells` (a `.mathilda` file's contents) and bring it
+/** Add a notebook holding `cells` (a `.mnb` file's contents) and bring it
  *  up in focused mode. Returns its id.
  *
- *  Added to the canvas rather than replacing it: a `.mathilda` file is ONE
+ *  Added to the canvas rather than replacing it: a `.mnb` file is ONE
  *  notebook, where a `.lb` library is the whole canvas, so opening one must not
  *  throw away the notebooks already open. */
 export function openNotebookCells(title: string,
@@ -474,7 +474,7 @@ export function openNotebookCells(title: string,
   return nb.id;
 }
 
-/** The notebook a single-notebook command (Save As `.mathilda`) acts on: the
+/** The notebook a single-notebook command (Save As `.mnb`) acts on: the
  *  active pane in focused mode, else the card on top of the canvas. */
 export function currentNotebook(): CanvasNotebook | null {
   const s = get(canvasState);

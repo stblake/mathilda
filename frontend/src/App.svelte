@@ -100,20 +100,24 @@
   // File I/O — library-level (whole canvas)
 
   /* Two formats, told apart by extension:
-       .lb        a LIBRARY -- the whole canvas as JSON; opening one replaces it.
-       .mathilda  ONE notebook in the plain-text stanza format (src-tauri's
-                  notebook_format.rs); opening one adds it to the canvas.
-     The dialog offered .mathilda for a long time while every file went through
-     the JSON library loader, so a .mathilda file could never open. */
-  const isNotebookFile = (p: string) => /\.mathilda$/i.test(p);
+       .lb   a LIBRARY -- the whole canvas as JSON; opening one replaces it.
+       .mnb  ONE notebook ("Mathilda notebook") in the plain-text stanza format
+             (src-tauri's notebook_format.rs); opening one adds it to the canvas.
+     The dialog offered the notebook extension for a long time while every file
+     went through the JSON library loader, so a notebook file could never open.
+
+     `.mathilda` is what a notebook was written as before v0.235. It is still
+     opened -- a file on disk outlives the decision to rename the format -- but
+     never written, so Save As produces only `.mnb` from here on. */
+  const isNotebookFile = (p: string) => /\.(mnb|mathilda)$/i.test(p);
   const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
   async function openFile() {
     const sel = await open({
       filters: [
-        { name: 'Mathilda Library or Notebook', extensions: ['lb', 'mathilda'] },
+        { name: 'Mathilda Library or Notebook', extensions: ['lb', 'mnb', 'mathilda'] },
         { name: 'Mathilda Library', extensions: ['lb'] },
-        { name: 'Mathilda Notebook', extensions: ['mathilda'] },
+        { name: 'Mathilda Notebook', extensions: ['mnb', 'mathilda'] },
       ],
     });
     if (!sel) return;
@@ -121,7 +125,7 @@
     if (isNotebookFile(path)) {
       try {
         const cells = await loadNotebook(path);
-        openNotebookCells(baseName(path).replace(/\.mathilda$/i, ''), cells);
+        openNotebookCells(baseName(path).replace(/\.(mnb|mathilda)$/i, ''), cells);
       } catch (e) { console.error('Open failed:', e); }
       return;
     }
@@ -140,7 +144,7 @@
     if (libraryPath) doSave(libraryPath); else saveFileAs();
   }
 
-  /* Save As offers both formats. Choosing .mathilda EXPORTS the current notebook
+  /* Save As offers both formats. Choosing .mnb EXPORTS the current notebook
      (the active pane, else the top card) as sources only; it does not become the
      library's path, so a later Cmd+S still saves the whole canvas as .lb rather
      than overwriting the notebook file with something else. */
@@ -149,7 +153,7 @@
       defaultPath: (libraryTitle || 'library') + '.lb',
       filters: [
         { name: 'Mathilda Library', extensions: ['lb'] },
-        { name: 'Mathilda Notebook (current notebook, no outputs)', extensions: ['mathilda'] },
+        { name: 'Mathilda Notebook (current notebook, no outputs)', extensions: ['mnb'] },
       ],
     });
     if (!path) return;

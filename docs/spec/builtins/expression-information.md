@@ -933,6 +933,11 @@ function are **not** automatically flattened out.
 
 ## InputForm
 - `InputForm[expr]` causes `expr` to be printed in a form suitable for input (standard form in Mathilda).
+- In the notebook front end, `InputForm` (and `FullForm`, `TeXForm`, `NumberForm`) suppresses
+  typesetting and shows the printed text as code. Typesetting *is* StandardForm, so it has no
+  second notation to render these in; the kernel sends no LaTeX for a result carrying one of
+  these heads, anywhere in the tree. `HoldForm` is the exception — it is transparent to both
+  printers and its argument typesets as usual.
 
 ## NumberForm
 - `NumberForm[expr, n]` prints the approximate real numbers in `expr` to `n`-digit precision.

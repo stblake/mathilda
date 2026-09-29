@@ -1,4 +1,4 @@
-//! notebook_format.rs — the plain-text `.mathilda` notebook format.
+//! notebook_format.rs — the plain-text `.mnb` notebook format.
 //!
 //! One notebook, no stored outputs, one stanza per cell:
 //!

@@ -22,7 +22,7 @@ export interface CellStyle {
  *
  *  ONE list, because four surfaces present these and each of them fails differently and quietly
  *  when they disagree: the cell's own type picker, the toolbar's Cell Style control, the native
- *  Cell > Convert to items, and -- the one that loses work -- the `.mathilda` file format, whose
+ *  Cell > Convert to items, and -- the one that loses work -- the `.mnb` file format, whose
  *  Rust `KNOWN_TYPES` rewrites any type it does not recognise to `code` on SAVE as well as on load.
  *  A style added to the UI and not to that list is a cell that silently becomes code the first time
  *  the notebook is saved and reopened. `npm run check:notebook` diffs the two.
@@ -345,7 +345,7 @@ export function createNotebook() {
       selectedCells.set(new Set());
     },
 
-    // Legacy single-cell serialization (for .mathilda files without row structure)
+    // Legacy single-cell serialization (for .mnb files without row structure)
     serializeLegacy() {
       return get({ subscribe }).flatMap(row =>
         row.cells.map(c => ({ type: c.type, source: c.source }))

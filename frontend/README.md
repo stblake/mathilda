@@ -94,12 +94,15 @@ writes either.
 | Extension | Holds | Open | Save As |
 |---|---|---|---|
 | `.lb` | the whole canvas (every notebook, positions, sources) as JSON | replaces the canvas | the library; Cmd+S then saves back to it |
-| `.mathilda` | **one** notebook, plain text | adds it to the canvas and focuses it | exports the current notebook (active pane, else the top card) |
+| `.mnb` | **one** notebook ("Mathilda notebook"), plain text | adds it to the canvas and focuses it | exports the current notebook (active pane, else the top card) |
 
 Neither stores outputs: a result is what the kernel computed this session, and a
 file that carried one would claim a computation the reader's kernel never did.
 
-### The `.mathilda` stanza format
+`.mathilda` is the extension a notebook was written under before v0.235. Open
+still accepts it, so no file on disk stops working; Save As offers only `.mnb`.
+
+### The `.mnb` stanza format
 
 Each cell is a stanza, one blank line between them:
 
@@ -120,7 +123,7 @@ opens as a notebook. Side-by-side cells are written as consecutive stanzas.
 
 The format is Git-diffable, and because the marker is a Mathilda comment, a
 notebook whose cells are all code is also a script: `./Mathilda -file
-notebook.mathilda`. (Piping it to stdin does not work: a non-tty stdin selects the
+notebook.mnb`. (Piping it to stdin does not work: a non-tty stdin selects the
 NDJSON protocol below.)
 
 ## Keyboard Shortcuts
@@ -145,7 +148,7 @@ an editor.
 Eight styles, offered by the toolbar's style control and by Cell > Convert to…:
 `code`, `text`, and the heading ladder `title`, `subtitle`, `chapter`, `section`,
 `subsection`, `subsubsection`. `CELL_STYLES` in `src/lib/notebook.ts` is the
-single source of truth — the toolbar, the menu and the Rust `.mathilda` writer's
+single source of truth — the toolbar, the menu and the Rust `.mnb` writer's
 `KNOWN_TYPES` are all checked against it, because `normalise_type` runs on
 **serialize** as well as parse, so a style the Rust side does not know would be
 written out as `code` and the heading destroyed.

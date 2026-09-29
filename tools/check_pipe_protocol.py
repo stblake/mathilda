@@ -206,6 +206,36 @@ def main():
     check("latex: True is a word, not a product of italic letters",
           latex(by_id.get(7, [])) == ["\\text{True}"], by_id.get(7))
 
+    # ---- the printer directives: no latex at all ----------------------------
+    #
+    # InputForm, FullForm, TeXForm and NumberForm ask for a notation that is not
+    # StandardForm, and typesetting has only StandardForm to give. The kernel
+    # must therefore send NO `latex` field, which is how the front end knows to
+    # show the payload as text. Sending one is not a cosmetic slip: the notebook
+    # prefers `latex` whenever it is there, so `expr // InputForm` typeset the
+    # StandardForm the reader had just asked not to see, and the directive did
+    # nothing outside the terminal REPL. A directive nested inside the result
+    # counts too -- the check is over the whole tree, not the outer head.
+    by_id, raw, err = session([
+        {"id": 1, "expr": "D[Log[1 - Sqrt[x]] Sqrt[x], x] // InputForm", "cell": True},
+        {"id": 2, "expr": "FullForm[a + b]", "cell": True},
+        {"id": 3, "expr": "TeXForm[a/b]", "cell": True},
+        {"id": 4, "expr": "NumberForm[1.23456789, 4]", "cell": True},
+        {"id": 5, "expr": "Hold[InputForm[x + y]]", "cell": True},
+        {"id": 6, "expr": "D[Log[1 - Sqrt[x]] Sqrt[x], x]", "cell": True},
+    ])
+    for i, name in ((1, "InputForm"), (2, "FullForm"), (3, "TeXForm"),
+                    (4, "NumberForm"), (5, "a nested InputForm")):
+        check(f"latex: {name} sends no latex, so the payload is shown as text",
+              latex(by_id.get(i, [])) == [None], by_id.get(i))
+    check("latex: InputForm's payload is the input form, not StandardForm",
+          payloads(by_id.get(1, [])) == ["-1/2/(1 - Sqrt[x]) + 1/2 Log[1 - Sqrt[x]]/Sqrt[x]"],
+          by_id.get(1))
+    # The same derivative WITHOUT the directive still typesets: the scan for a
+    # directive must not cost an ordinary result its LaTeX.
+    check("latex: the undirected result still typesets",
+          latex(by_id.get(6, [])) not in ([None], []), by_id.get(6))
+
     # ---- request reader: length and escapes ---------------------------------
     big = "Length[{" + ",".join(["1"] * 20000) + "}]"          # ~40 KB, past the old 10 KB buffer
     by_id, raw, err = session([

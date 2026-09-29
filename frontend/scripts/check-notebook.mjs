@@ -168,7 +168,7 @@ ok('kernel text is escaped before reaching {@html}',
    /replace\(\/</.test(outSrc) && /\$\{esc\(/.test(outSrc), 'unescaped');
 
 /* ---- 1d. Cell styles ---------------------------------------------------------
-   The lossy failure is the front end offering a style that the Rust `.mathilda`
+   The lossy failure is the front end offering a style that the Rust `.mnb`
    writer does not know: normalise_type runs on SERIALIZE too, so the heading is
    written out as `code` and destroyed by a save-and-reload rather than merely
    misread. That is what this diff is for. */
@@ -181,7 +181,7 @@ const rustTypes = [...knownSeg.matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
 
 /* `ref` is generated, never chosen, so it is in the Rust list and not in CELL_STYLES. */
 const missingInRust = styleIds.filter((id) => !rustTypes.includes(id));
-ok('every cell style survives a .mathilda save (present in Rust KNOWN_TYPES)',
+ok('every cell style survives a .mnb save (present in Rust KNOWN_TYPES)',
    missingInRust.length === 0, missingInRust);
 const strayInRust = rustTypes.filter((t) => t !== 'ref' && !styleIds.includes(t));
 ok('Rust knows no type the front end cannot produce', strayInRust.length === 0, strayInRust);

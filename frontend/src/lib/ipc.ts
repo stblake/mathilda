@@ -30,7 +30,7 @@ export type OutputMessage =
                                              data: string; depth?: number; slice?: number ; faces?: Record<string, { w: number; h: number; data: string }>} }
   | { id: number; type: 'html';   payload: string };
 
-/** One cell as a `.mathilda` file stores it: its type and source, no output.
+/** One cell as a `.mnb` file stores it: its type and source, no output.
  *  The Rust side normalises unknown types to 'code' (notebook_format.rs). */
 export type CellData = {
   type: CellType;

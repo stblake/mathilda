@@ -158,6 +158,62 @@ void test_operator_latex() {
     expr_free(f);
 }
 
+void test_printer_directive_has_no_latex() {
+    /* InputForm, FullForm, TeXForm and NumberForm ask the printer for a
+     * notation that is NOT StandardForm, and typesetting has only StandardForm
+     * to offer. expr_to_latex must therefore answer with the empty string, the
+     * signal both the notebook and the FFI read as "use the text payload".
+     *
+     * Before this, the wrapper leaked into the LaTeX -- `InputForm[\frac{1}
+     * {2}]` -- and because the notebook prefers `latex` over the payload
+     * whenever it is non-empty, `expr // InputForm` typeset the StandardForm
+     * the reader had just asked not to see. The directive was, in effect,
+     * ignored everywhere except the terminal REPL.
+     *
+     * Each case is checked BOTH ways: the plain printer still honours the
+     * directive (that half always worked and must stay working), and the LaTeX
+     * writer declines. The nested cases are the reason the check is a scan of
+     * the whole tree rather than a look at the outermost head. */
+    static const struct { const char* in; const char* text; } cases[] = {
+        {"InputForm[1/2]",        "1/2"},
+        {"FullForm[a + b]",       "Plus[a, b]"},
+        {"TeXForm[a/b]",          "\\frac{a}{b}"},
+        {"NumberForm[1.5, 2]",    "1.5"},
+        {"Hold[InputForm[x]]",    "Hold[x]"},      /* nested, not at the top */
+        {"{InputForm[1/2], 3}",   "{1/2, 3}"},     /* one directive in a list  */
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        Expr* e   = parse_expression(cases[i].in);
+        ASSERT(e != NULL);
+        Expr* res = evaluate(e);
+
+        char* str = expr_to_string(res);
+        if (!str || strcmp(str, cases[i].text) != 0)
+            printf("  %s -> text \"%s\", expected \"%s\"\n",
+                   cases[i].in, str ? str : "(null)", cases[i].text);
+        ASSERT(str && strcmp(str, cases[i].text) == 0);
+        free(str);
+
+        char* tex = expr_to_latex(res);
+        if (!tex || tex[0] != '\0')
+            printf("  %s -> latex \"%s\", expected \"\"\n",
+                   cases[i].in, tex ? tex : "(null)");
+        ASSERT(tex && tex[0] == '\0');
+        free(tex);
+
+        expr_free(e);
+        expr_free(res);
+    }
+
+    /* The scan must not cost an ordinary expression its typesetting: a result
+     * with no directive anywhere still renders. */
+    Expr* plain = parse_expression("{1/2, Sqrt[x]}");
+    char* ptex = expr_to_latex(plain);
+    ASSERT(ptex && ptex[0] != '\0');
+    free(ptex);
+    expr_free(plain);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -169,6 +225,7 @@ int main() {
     TEST(test_holdform);
     TEST(test_series_latex);
     TEST(test_operator_latex);
+    TEST(test_printer_directive_has_no_latex);
 
     printf("All print tests passed!\n");
     return 0;

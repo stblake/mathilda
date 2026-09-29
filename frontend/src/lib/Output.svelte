@@ -170,11 +170,18 @@
         return katex.renderToString(latex, { throwOnError: false, displayMode: false });
       } catch { /* fall through */ }
     }
-    try {
-      return katex.renderToString(text, { throwOnError: false, displayMode: false });
-    } catch {
-      return `<code class="out-code-wrap">${esc(text)}</code>`;
-    }
+    /* No `latex` field means the kernel is telling us this payload has no typeset form -- it is
+       returned empty for the printer directives (InputForm, FullForm, TeXForm, NumberForm), whose
+       whole point is a notation OTHER than StandardForm. The payload is then plain Mathilda text,
+       not LaTeX, so it goes out as code.
+
+       This used to try KaTeX on the payload first, which is what made `expr // InputForm` ignore
+       the directive: with throwOnError off, `Sqrt[x]` does not fail, it silently typesets as the
+       juxtaposed letters S q r t and a bracketed x -- neither the input form asked for nor the
+       StandardForm it replaced. There is no case where an un-typeset payload is secretly LaTeX:
+       `latex` is set by the kernel and nothing else (NotebookCard's msg.latex), so its absence is
+       a statement, not a gap. */
+    return `<code class="out-code-wrap">${esc(text)}</code>`;
   }
 
   /* Draw a base64-RGBA payload onto a canvas.

@@ -35,7 +35,7 @@ pub async fn ping_kernel(kernel: State<'_, MathildaKernel>) -> Result<(), String
     kernel.ping().await
 }
 
-/// Save one notebook to a `.mathilda` file (see `notebook_format.rs`).
+/// Save one notebook to a `.mnb` file (see `notebook_format.rs`).
 /// `cells` is a JSON array of objects: [{type, source}, ...].
 /// Only type and source are written; outputs are ephemeral.
 #[tauri::command]
@@ -43,7 +43,7 @@ pub async fn save_notebook(path: String, cells: Vec<Value>) -> Result<(), String
     std::fs::write(&path, serialize_stanzas(&cells)).map_err(|e| format!("save: {e}"))
 }
 
-/// Load a notebook from a `.mathilda` file.
+/// Load a notebook from a `.mnb` file.
 /// Returns a JSON array of cell objects: [{type, source}, ...].
 #[tauri::command]
 pub async fn load_notebook(path: String) -> Result<Vec<Value>, String> {

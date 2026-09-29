@@ -928,10 +928,59 @@ static void render_times(LBuf* b, const Expr* e, int ctx_prec) {
 }
 
 /* =========================================================================
+ * Printer directives: the expressions that have no typeset form
+ *
+ * InputForm, FullForm, TeXForm and NumberForm are instructions to the
+ * PRINTER, not mathematics. The plain printer (print.c) consumes each one and
+ * renders its argument in the notation asked for, so `expr // InputForm` comes
+ * out of expr_to_string already in exactly the form the user requested.
+ *
+ * The LaTeX writer has no such notation to offer — typesetting *is*
+ * StandardForm — so whatever it produced for these heads was wrong twice over:
+ * the wrapper leaked into the output (`InputForm[\frac{1}{2}]`, which KaTeX
+ * renders as an upright product) and what it wrapped was the StandardForm the
+ * user had just asked NOT to see. Because both the notebook and the FFI prefer
+ * the `latex` field whenever it is non-empty, that leak was the entire visible
+ * result: `D[Log[1 - Sqrt[x]] Sqrt[x], x] // InputForm` typeset the derivative
+ * and ignored the directive.
+ *
+ * Emitting no LaTeX is the answer rather than some fallback rendering: it hands
+ * the consumer back to the plain-text payload, which is precisely the form the
+ * directive asked for. The scan covers the whole tree rather than the outermost
+ * head alone, so a directive nested anywhere (`Hold[InputForm[x]]`,
+ * `{InputForm[1/2], 3}`) cannot leak either — there is no partial typesetting
+ * that would be more faithful than the text the printer has already produced.
+ * HoldForm is absent on purpose: it is transparent to both printers, and
+ * to_latex_prec renders through it above.
+ * ======================================================================== */
+static int has_print_directive(const Expr* e) {
+    /* Atoms carry none, and an EXPR_NDARRAY holds machine numbers, not heads. */
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+
+    const Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL) {
+        const char* h = head->data.symbol.name;   /* interned: compare by pointer */
+        if (h == SYM_InputForm || h == SYM_FullForm
+            || h == SYM_TeXForm || h == SYM_NumberForm)
+            return 1;
+    }
+    if (has_print_directive(head)) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_print_directive(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/* =========================================================================
  * Public entry point
  * ======================================================================== */
 
 char* expr_to_latex(const Expr* e) {
+    if (has_print_directive(e)) {
+        char* none = malloc(1);          /* "": no typeset form — use the text */
+        if (none) none[0] = '\0';
+        return none;
+    }
+
     LBuf b;
     lb_init(&b);
     if (!b.s) return NULL;

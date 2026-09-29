@@ -910,3 +910,43 @@ Plan: `/Users/user/.claude/plans/melodic-mapping-clarke.md`. Targets the largest
 - [ ] Commit (M60 paths only; no version bump, no tag). NOTE: `tasks/todo.md` and
       `docs/spec/changelog/2026-09-28.md` also carry a concurrent session's uncommitted
       notebook work, so they are deliberately left OUT of the commit
+
+---
+
+## Notebook: printer directives + the `.mnb` extension (v0.235)
+
+Two reports, one session.
+
+### 1. `D[Log[1-Sqrt[x]] Sqrt[x], x] // InputForm` did not print in InputForm
+
+- [x] Reproduced at the protocol boundary, which is where it lives:
+      `{"latex":"InputForm[\\frac{\\frac{-1}{2}}{(1-\\sqrt{x})}+..."}` — the payload was
+      already correct, the `latex` field was not, and the front end prefers `latex`
+- [x] Root cause, kernel half: `print.c` consumes InputForm/FullForm/TeXForm/NumberForm;
+      `print_latex.c` knew only `HoldForm`, so the wrapper fell through its generic
+      `Head[a, b]` arm. Typesetting *is* StandardForm — there is no second notation to
+      render these in, so `expr_to_latex` now returns the **empty string** (the existing
+      "use the payload" signal in both repl.c and mathilda_ffi.c). Whole-tree scan, so
+      `Hold[InputForm[x]]` and `{InputForm[1/2], 3}` cannot leak either
+- [x] Root cause, front-end half: with no `latex`, `renderOutput` fell back to running the
+      PAYLOAD through KaTeX. With `throwOnError` off `Sqrt[x]` does not fail — it typesets
+      as the letters S q r t beside a bracketed x. The kernel fix alone would have traded
+      one wrong rendering for another; an un-typeset payload now goes out as `<code>`
+- [x] Tests, both sides of the seam: `test_printer_directive_has_no_latex` in
+      `tests/test_print.c` (each directive empty, each text form intact, an undirected
+      expression still rendering) and six new cases in `tools/check_pipe_protocol.py`
+- [x] Verified: `print_tests`, `packed_list_tests`, `check_pipe_protocol.py`, `make
+      check-c99`, `npm run check` (0 errors), `npm run check:notebook`, `npm run build`.
+      REPL output for the reported expression is unchanged
+
+### 2. Notebook files save as `.mnb`
+
+- [x] Save As writes `.mnb` ("Mathilda notebook"); the stanza format itself is untouched
+- [x] Open still accepts `.mathilda` — a file on disk should not stop opening because the
+      extension was renamed — but it is never written again
+- [x] Doc comments in `App.svelte`, `canvas.ts`, `ipc.ts`, `notebook.ts`, `commands.rs`,
+      `notebook_format.rs`, `check-notebook.mjs` and `frontend/README.md` follow
+
+Version bumped to **v0.235** (substantive: behaviour change), changelog under
+`docs/spec/changelog/2026-09-28.md`, `InputForm` entry in
+`docs/spec/builtins/expression-information.md` notes the notebook rule.
