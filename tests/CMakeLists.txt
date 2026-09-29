@@ -1429,6 +1429,16 @@ target_link_libraries(bench_pack m)
 target_include_directories(bench_pack PRIVATE ../src)
 add_test(NAME bench_pack COMMAND bench_pack)
 
+# Stress + scaling gate for flint_field_gcd.  Guards the two failure modes a
+# timing bench cannot see: a silent DECLINE (which makes the caller answer 1) and
+# a return to O(L^2) image construction.  flint_field_gcd always links -- there is
+# a no-FLINT stub -- so no if(USE_FLINT) wrapper is needed; it skips at runtime
+# via flint_bridge_available().
+add_executable(bench_field_gcd bench_field_gcd.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(bench_field_gcd m)
+target_include_directories(bench_field_gcd PRIVATE ../src)
+add_test(NAME bench_field_gcd COMMAND bench_field_gcd)
+
 # Pattern-matcher scaling gate: fails if a per-element matcher path (Cases,
 # Count, Position, ReplaceAll, DownValue dispatch) scales worse than O(n)
 # (doubling-ratio check; machine-independent).

@@ -25,6 +25,7 @@
 #ifdef USE_FLINT
 
 #include <math.h>
+#include <time.h>          /* clock(), for the MATHILDA_FIELD_GCD_STATS profile */
 #include <gmp.h>
 #include <flint/flint.h>
 #include <flint/fmpz.h>
@@ -5277,8 +5278,93 @@ Expr* flint_algebraic_field_together(const Expr* e) {
 /*  exact DECISION procedure for "G divides A over K".                 */
 /* ================================================================== */
 
-#define FG_MAX_PRIMES   64      /* give up rather than grind */
-#define FG_PRIME_START  (UWORD(1) << 29)
+/* Prime size and budget.  Both of these were originally chosen far too small.
+ *
+ * FG_PRIME_START was 1<<29, which gathers only 29 bits per prime; nmod and
+ * fq_nmod are happy with any word-size modulus, so a 62-bit prime more than
+ * doubles the bits per prime at identical per-prime cost.
+ *
+ * FG_MAX_PRIMES was 64, i.e. 64*29 = 1856 bits of modulus.  Rational
+ * reconstruction needs roughly twice the coefficient size, so the engine
+ * silently declined on any gcd whose coefficients exceeded ~900 bits -- and a
+ * decline here is not a slow answer but a WORSE one, because poly_gcd_internal's
+ * post-check then returns 1.  Measured, the old ceiling was ~831 bits.
+ *
+ * The cap can be raised freely because the certificate, not the budget, is what
+ * makes the answer correct: extra primes only ever cost time.  What made 64
+ * expensive was certifying after every one of them; now that the certificate is
+ * gated on a stabilised reconstruction (see fg_modular_gcd), an unused prime
+ * costs one cheap residue-field gcd, so the cap is a genuine backstop against
+ * grinding rather than a correctness-relevant limit. */
+#define FG_MAX_PRIMES   512
+#define FG_PRIME_START  (UWORD(1) << 62)
+
+/* How many candidate primes to examine before committing to one.  See the prime
+ * choice in fg_modular_gcd: the cost of a prime is the number of irreducible
+ * factors M has modulo it, so it is worth a few cheap degree-n factorisations to
+ * avoid a totally split prime. */
+#define FG_PRIME_SCAN   8
+
+/* The prime sequence is a constant of the algorithm -- every call walks the same
+ * primes upward from FG_PRIME_START -- so it is generated once and shared.
+ *
+ * This is not a micro-optimisation.  n_nextprime near 2^62 costs several strong
+ * pseudoprime tests on a 62-bit word, and the scan above asks for up to 8 primes
+ * per iteration where the old code asked for 1.  Re-deriving them per call made
+ * the small cases 4x SLOWER even though the residue-field gcds they were
+ * choosing between got 2.6x faster -- the prime generation had become the
+ * dominant cost.  Cached, it is paid once per process. */
+#define FG_PRIME_POOL   4096            /* FG_MAX_PRIMES * FG_PRIME_SCAN */
+static ulong g_fg_primes[FG_PRIME_POOL];
+static int   g_fg_nprimes = 0;
+
+/* The i'th prime of the sequence, or 0 when the pool is exhausted. */
+static ulong fg_prime(int i) {
+    if (i < 0 || i >= FG_PRIME_POOL) return 0;
+    while (g_fg_nprimes <= i) {
+        ulong prev = g_fg_nprimes ? g_fg_primes[g_fg_nprimes - 1] : FG_PRIME_START;
+        g_fg_primes[g_fg_nprimes++] = n_nextprime(prev, 0);
+    }
+    return g_fg_primes[i];
+}
+
+/* ---- optional profile, MATHILDA_FIELD_GCD_STATS=1 ----
+ * The engine is a pipeline of six stages with wildly different costs, and the
+ * previous round of tuning established that guessing which one dominates is
+ * unreliable: the obvious suspect (a per-node qqbar lookup) turned out to cost
+ * nothing, while BUILDING the field cost 350x what computing in it did.  So the
+ * stages are timed rather than reasoned about.  clock() is used because it is
+ * C99 and needs no feature-test macro, unlike clock_gettime. */
+typedef struct {
+    long calls, declines, primes_tried, primes_used, certs, cert_pass;
+    clock_t t_lift, t_resgcd, t_crt, t_recon, t_cert;
+} FgStats;
+static FgStats g_fg_stats;
+static int g_fg_stats_on = -1;          /* -1 = not yet read from the env */
+
+static void fg_stats_dump(void) {
+    const FgStats* s = &g_fg_stats;
+    double c = (double)CLOCKS_PER_SEC;
+    fprintf(stderr, "[field-gcd] calls=%ld declines=%ld primes=%ld/%ld "
+                    "certs=%ld/%ld\n", s->calls, s->declines,
+            s->primes_used, s->primes_tried, s->cert_pass, s->certs);
+    fprintf(stderr, "[field-gcd] lift=%.3fs resgcd=%.3fs crt=%.3fs "
+                    "recon=%.3fs cert=%.3fs\n",
+            s->t_lift / c, s->t_resgcd / c, s->t_crt / c,
+            s->t_recon / c, s->t_cert / c);
+}
+
+static int fg_stats_on(void) {
+    if (g_fg_stats_on < 0) {
+        const char* v = getenv("MATHILDA_FIELD_GCD_STATS");
+        g_fg_stats_on = (v && *v && strcmp(v, "0") != 0);
+        if (g_fg_stats_on) atexit(fg_stats_dump);
+    }
+    return g_fg_stats_on;
+}
+
+#define FG_TICK(field, t0) do { if (g_fg_stats_on > 0) \
+        g_fg_stats.field += clock() - (t0); } while (0)
 
 /* One CRT accumulator: the candidate gcd's monomial support plus, per monomial,
  * its n power-basis coordinates accumulated modulo `modulus`. */
@@ -5361,7 +5447,7 @@ static int fg_lift(fq_nmod_mpoly_t out, const fmpq_mpoly_t P,
             if (have) {
                 fq_nmod_set_nmod_poly(c, acc, fq);
                 if (!fq_nmod_is_zero(c, fq))
-                    fq_nmod_mpoly_set_coeff_fq_nmod_ui(out, c, cur, fctx);
+                    fq_nmod_mpoly_push_term_fq_nmod_ui(out, c, cur, fctx);
                 nmod_poly_zero(acc);
             }
             memcpy(cur, e, (size_t)nvars * sizeof(ulong));
@@ -5374,11 +5460,52 @@ static int fg_lift(fq_nmod_mpoly_t out, const fmpq_mpoly_t P,
     if (ok && have) {
         fq_nmod_set_nmod_poly(c, acc, fq);
         if (!fq_nmod_is_zero(c, fq))
-            fq_nmod_mpoly_set_coeff_fq_nmod_ui(out, c, cur, fctx);
+            fq_nmod_mpoly_push_term_fq_nmod_ui(out, c, cur, fctx);
     }
+    /* Pushed rather than keyed-inserted: set_coeff binary-searches and memmoves
+     * per term, which is O(L^2) across the image, and P's terms already arrive
+     * grouped by gens-monomial in LEX-descending order (tau is the last
+     * variable, so it varies fastest).  sort_terms then costs one pass. */
+    if (ok) fq_nmod_mpoly_sort_terms(out, fctx);
     fmpq_clear(co); nmod_poly_clear(acc); fq_nmod_clear(c, fq);
     flint_free(e); flint_free(cur);
     return ok;
+}
+
+/* M mod p, read off the minimal-polynomial coefficient list.  0 when some
+ * coefficient is not an integer Expr (then no prime will work). */
+static int fg_minpoly_mod(nmod_poly_t Mp, const Expr* mp, ulong p) {
+    size_t nc = mp->data.function.arg_count;
+    fmpz_t z; fmpz_init(z);
+    int ok = 1;
+    for (size_t i = 0; i < nc; i++) {
+        if (!fmpz_from_int_expr(z, mp->data.function.args[i])) { ok = 0; break; }
+        nmod_poly_set_coeff_ui(Mp, (slong)i, fmpz_fdiv_ui(z, p));
+    }
+    fmpz_clear(z);
+    return ok;
+}
+
+/* How many distinct irreducible factors M has mod p; 0 when p is unusable
+ * (degree collapse, or M mod p not squarefree, which would make the residue
+ * "fields" overlap).  This is the per-prime COST in disguise -- see the prime
+ * choice in fg_modular_gcd. */
+static slong fg_split_count(const nmod_poly_t Mp, slong n) {
+    if (nmod_poly_degree(Mp) != n) return 0;
+    nmod_poly_t d, dm;
+    nmod_poly_init(d, nmod_poly_modulus(Mp));
+    nmod_poly_init(dm, nmod_poly_modulus(Mp));
+    nmod_poly_derivative(dm, Mp);
+    nmod_poly_gcd(d, Mp, dm);
+    int sqfree = (nmod_poly_degree(d) == 0);
+    nmod_poly_clear(d); nmod_poly_clear(dm);
+    if (!sqfree) return 0;
+
+    nmod_poly_factor_t fac; nmod_poly_factor_init(fac);
+    nmod_poly_factor(fac, Mp);
+    slong r = fac->num;
+    nmod_poly_factor_clear(fac);
+    return r;
 }
 
 /* The leading gens-monomial of P (term 0 under LEX), tau entry dropped. */
@@ -5429,10 +5556,12 @@ static int fg_gcd_mod_p(ulong p, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
         fq_nmod_mpoly_t a, b, g;
         fq_nmod_mpoly_init(a, fctx); fq_nmod_mpoly_init(b, fctx); fq_nmod_mpoly_init(g, fctx);
 
+        clock_t t_l = clock();
         if (!fg_lift(a, A, qctx, ngens, tau_idx, fctx, fq, p) ||
             !fg_lift(b, B, qctx, ngens, tau_idx, fctx, fq, p)) {
             ok = 0;
         }
+        FG_TICK(t_lift, t_l);
         /* A degree collapse mod p invalidates the image gcd. */
         if (ok) {
             ulong* e = flint_malloc(sizeof(ulong) * (size_t)ngens);
@@ -5447,7 +5576,9 @@ static int fg_gcd_mod_p(ulong p, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
             }
             flint_free(e);
         }
+        clock_t t_g = clock();
         if (ok && !fq_nmod_mpoly_gcd(g, a, b, fctx)) ok = 0;
+        FG_TICK(t_resgcd, t_g);
         if (ok) {
             fq_nmod_mpoly_make_monic(g, g, fctx);
             slong ng = fq_nmod_mpoly_length(g, fctx);
@@ -5483,35 +5614,37 @@ static int fg_gcd_mod_p(ulong p, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
         fq_nmod_ctx_clear(fq);
     }
 
+    /* Lift the r component coefficients of each monomial back into F_p[t]/(M).
+     *
+     * The moduli m_1..m_r do not depend on the monomial, so the CRT is
+     * precomputed ONCE per prime as a straight-line program and then run per
+     * monomial.  The previous form recomputed nmod_poly_xgcd(accmod, m_k) inside
+     * the monomial loop -- nmon*(r-1) extended gcds where r-1 suffice, on the
+     * single most expensive operation in the loop. */
     ulong* res = NULL;
+    clock_t t_c = clock();
     if (ok && nmon >= 0) {
         slong nc = nmon * n;
         res = flint_calloc((size_t)(nc > 0 ? nc : 1), sizeof(ulong));
-        nmod_poly_t acc, accmod, u, v, d, diff, tmp, m2;
-        nmod_poly_init(acc, p); nmod_poly_init(accmod, p); nmod_poly_init(u, p);
-        nmod_poly_init(v, p); nmod_poly_init(d, p); nmod_poly_init(diff, p);
-        nmod_poly_init(tmp, p); nmod_poly_init(m2, p);
-        for (slong i = 0; i < nmon; i++) {
-            nmod_poly_set(acc, cc[0] + i);
-            nmod_poly_set(accmod, fac->p + 0);
-            for (slong k = 1; k < r; k++) {
-                /* z = acc (mod accmod), z = cc[k][i] (mod m_k) */
-                nmod_poly_xgcd(d, u, v, accmod, fac->p + k);
-                nmod_poly_sub(diff, cc[k] + i, acc);
-                nmod_poly_mulmod(tmp, diff, u, fac->p + k);
-                nmod_poly_mul(tmp, tmp, accmod);
-                nmod_poly_add(acc, acc, tmp);
-                nmod_poly_mul(m2, accmod, fac->p + k);
-                nmod_poly_set(accmod, m2);
-                nmod_poly_rem(acc, acc, accmod);
+        nmod_poly_multi_crt_t CRT;
+        nmod_poly_multi_crt_init(CRT);
+        if (!nmod_poly_multi_crt_precompute(CRT, fac->p, r)) {
+            ok = 0;                          /* moduli not coprime: unlucky p */
+        } else {
+            nmod_poly_t acc; nmod_poly_init(acc, p);
+            nmod_poly_struct* vals = flint_malloc(sizeof(nmod_poly_struct) * (size_t)(r > 0 ? r : 1));
+            for (slong i = 0; i < nmon; i++) {
+                for (slong k = 0; k < r; k++) vals[k] = cc[k][i];
+                nmod_poly_multi_crt_precomp(acc, CRT, vals);
+                for (slong j = 0; j < n; j++)
+                    res[i * n + j] = nmod_poly_get_coeff_ui(acc, j);
             }
-            for (slong j = 0; j < n; j++)
-                res[i * n + j] = nmod_poly_get_coeff_ui(acc, j);
+            flint_free(vals);
+            nmod_poly_clear(acc);
         }
-        nmod_poly_clear(acc); nmod_poly_clear(accmod); nmod_poly_clear(u);
-        nmod_poly_clear(v); nmod_poly_clear(d); nmod_poly_clear(diff);
-        nmod_poly_clear(tmp); nmod_poly_clear(m2);
+        nmod_poly_multi_crt_clear(CRT);
     }
+    FG_TICK(t_crt, t_c);
 
     for (slong k = 0; k < r; k++)
         if (cc[k]) {
@@ -5569,35 +5702,72 @@ static int fg_modular_gcd(fmpq_mpoly_t G, const fmpq_mpoly_t A, const fmpq_mpoly
 
     FgAcc acc; memset(&acc, 0, sizeof acc);
     fmpz_t modulus; fmpz_init_set_ui(modulus, 1);
+    /* The last candidate certified, so an unchanged one is not re-certified. */
+    fmpq_mpoly_t Gprev; fmpq_mpoly_init(Gprev, ctx);
+    int have_prev = 0;
     int done = 0;
-    ulong p = FG_PRIME_START;
 
-    for (int it = 0; it < FG_MAX_PRIMES && !done; it++) {
-        p = n_nextprime(p, 0);
+    /* The fewest irreducible factors any prime has yet given M.  The prime is
+     * chosen to MINIMISE that count, because fg_gcd_mod_p runs one multivariate
+     * gcd per factor and profiling says those gcds are essentially the whole cost
+     * of the algorithm: over 200 small calls they were 0.062s against 0.008s for
+     * lift, CRT, reconstruction and the certificate combined.
+     *
+     * The direction is not obvious and was measured rather than assumed.  A
+     * totally split prime gives n components over F_p, where coefficient
+     * arithmetic is a single word; an inert one gives a single component over
+     * F_p^n, where it is degree-n polynomial arithmetic.  Trading n cheap gcds
+     * for one expensive gcd is therefore only a win if the per-call cost of
+     * fq_nmod_mpoly_gcd -- its context setup, allocation and Zippel/Brown
+     * machinery -- outweighs the more expensive coefficients, and at the sizes
+     * this engine sees it does, comfortably: choosing the most-split prime
+     * instead made the residue work 1.6x slower at n=2 and 2.6x slower at n=8.
+     * Should this ever be run on much larger operands, where the coefficient
+     * arithmetic could come to dominate the per-call overhead, that balance is
+     * worth re-measuring.
+     *
+     * rmin is learned on the first pass and then stops the scan as soon as a
+     * prime matches the best seen.  That matters because the achievable minimum
+     * is a property of the Galois group, not a constant: for a non-cyclic group
+     * such as Q(sqrt2, sqrt3) no prime is inert at all, so scanning for r == 1
+     * would reject every candidate and spend the whole budget. */
+    slong rmin = 0;
+    int out_of_primes = 0;
+    int pi = 0;                          /* index into the shared prime pool */
 
-        /* M mod p */
-        nmod_poly_t Mp; nmod_poly_init(Mp, p);
-        {
-            size_t nc = mp->data.function.arg_count;
-            fmpz_t z; fmpz_init(z);
-            int bad = 0;
-            for (size_t i = 0; i < nc; i++) {
-                if (!fmpz_from_int_expr(z, mp->data.function.args[i])) { bad = 1; break; }
-                nmod_poly_set_coeff_ui(Mp, (slong)i, fmpz_fdiv_ui(z, p));
-            }
-            fmpz_clear(z);
-            if (bad) { nmod_poly_clear(Mp); break; }
+    for (int it = 0; it < FG_MAX_PRIMES && !done && !out_of_primes; it++) {
+        ulong bestp = 0; slong bestr = 0;
+        nmod_poly_t Mp;
+        for (int s = 0; s < FG_PRIME_SCAN; s++) {
+            ulong q = fg_prime(pi++);
+            if (q == 0) { out_of_primes = 1; break; }
+            if (g_fg_stats_on > 0) g_fg_stats.primes_tried++;
+            nmod_poly_t Mc; nmod_poly_init(Mc, q);
+            if (!fg_minpoly_mod(Mc, mp, q)) { nmod_poly_clear(Mc); out_of_primes = 1; break; }
+            slong r = fg_split_count(Mc, n);
+            nmod_poly_clear(Mc);
+            if (r > 0 && (bestr == 0 || r < bestr)) { bestr = r; bestp = q; }
+            if (bestr == 1 || (rmin > 0 && bestr == rmin)) break;
         }
+        if (out_of_primes) break;
+        if (bestr == 0) continue;            /* none of the scanned primes usable */
+        if (rmin == 0 || bestr < rmin) rmin = bestr;
+
+        /* Every prime the scan looked at is spent: pi only ever advances, because
+         * the CRT is valid only over DISTINCT primes. */
+        nmod_poly_init(Mp, bestp);
+        if (!fg_minpoly_mod(Mp, mp, bestp)) { nmod_poly_clear(Mp); break; }
 
         ulong *mons = NULL, *res = NULL; slong nmon = 0;
-        int got = fg_gcd_mod_p(p, A, B, ctx, ngens, tau_idx, Mp, n, leadA, leadB,
+        int got = fg_gcd_mod_p(bestp, A, B, ctx, ngens, tau_idx, Mp, n, leadA, leadB,
                                &mons, &res, &nmon);
         nmod_poly_clear(Mp);
         if (!got) continue;
+        if (g_fg_stats_on > 0) g_fg_stats.primes_used++;
 
         if (acc.nmon == 0 && acc.mons == NULL) {
             if (!fg_acc_reset(&acc, mons, nmon, res, ngens, n)) { if (mons) flint_free(mons); if (res) flint_free(res); break; }
-            fmpz_set_ui(modulus, p);
+            fmpz_set_ui(modulus, bestp);
         } else {
             int same = (nmon == acc.nmon);
             if (same)
@@ -5609,7 +5779,7 @@ static int fg_modular_gcd(fmpq_mpoly_t G, const fmpq_mpoly_t A, const fmpq_mpoly
                 int c = fg_lead_cmp(mons, acc.mons, ngens);
                 if (c <= 0) {
                     if (!fg_acc_reset(&acc, mons, nmon, res, ngens, n)) { if (mons) flint_free(mons); if (res) flint_free(res); break; }
-                    fmpz_set_ui(modulus, p);
+                    fmpz_set_ui(modulus, bestp);
                 } else {
                     if (mons) flint_free(mons);
                     if (res) flint_free(res);
@@ -5617,15 +5787,24 @@ static int fg_modular_gcd(fmpq_mpoly_t G, const fmpq_mpoly_t A, const fmpq_mpoly
                 }
             } else {
                 for (slong i = 0; i < nmon * n; i++)
-                    fmpz_CRT_ui(acc.co + i, acc.co + i, modulus, res[i], p, 0);
-                fmpz_mul_ui(modulus, modulus, p);
+                    fmpz_CRT_ui(acc.co + i, acc.co + i, modulus, res[i], bestp, 0);
+                fmpz_mul_ui(modulus, modulus, bestp);
             }
         }
         if (mons) flint_free(mons);
         if (res) flint_free(res);
 
         /* Try to reconstruct, then certify.  Both may fail early; that just
-         * means another prime is needed. */
+         * means another prime is needed.
+         *
+         * Terms are pushed rather than keyed-inserted: set_coeff does a binary
+         * search and a memmove per term, which is O(L^2) over the whole
+         * candidate, and the monomials arrive in LEX-descending order already
+         * (acc.mons is in that order and tau ascends within a monomial, which is
+         * LEX-descending on the full vector because tau is the LAST variable).
+         * sort_terms is kept as the cheap guarantee of the invariant rather than
+         * trusting that reasoning at every future edit. */
+        clock_t t_r = clock();
         fmpq_mpoly_zero(G, ctx);
         int recon = 1;
         {
@@ -5637,16 +5816,52 @@ static int fg_modular_gcd(fmpq_mpoly_t G, const fmpq_mpoly_t A, const fmpq_mpoly
                     if (fmpq_is_zero(q)) continue;
                     memcpy(e, acc.mons + i * ngens, (size_t)ngens * sizeof(ulong));
                     e[tau_idx] = (ulong)j;
-                    fmpq_mpoly_set_coeff_fmpq_ui(G, q, e, ctx);
+                    fmpq_mpoly_push_term_fmpq_ui(G, q, e, ctx);
                 }
             }
             flint_free(e); fmpq_clear(q);
+            if (recon) fmpq_mpoly_sort_terms(G, ctx);
         }
+        FG_TICK(t_recon, t_r);
         if (!recon || fmpq_mpoly_is_zero(G, ctx)) continue;
-        if (fg_divides(A, G, M, ctx) && fg_divides(B, G, M, ctx)) done = 1;
+
+        /* A constant candidate needs no certificate at all: a nonzero element of
+         * K is a unit, so it divides both operands trivially and the gcd is 1 up
+         * to that unit.  This is the commonest case in practice -- most gcds
+         * asked of this engine are of coprime operands -- and taking it here
+         * skips the ideal division entirely. */
+        if (fmpq_mpoly_is_fmpq(G, ctx)) { done = 1; break; }
+
+        /* Certify each DISTINCT candidate exactly once.
+         *
+         * Not "once the candidate has stabilised over two primes": measured, the
+         * certificate costs ~5us while one prime's residue-field gcds cost
+         * ~150us, so waiting for a second prime before certifying doubles the
+         * dominant cost to save a negligible one -- it made the small cases 2x
+         * slower.  Certifying immediately means an easy input finishes on the
+         * FIRST prime.
+         *
+         * Re-certifying an unchanged candidate is the only thing worth skipping,
+         * and it is skippable because fg_divides is exact and deterministic: a G
+         * that does not divide A never will, however many primes are added.  A
+         * candidate that is still wrong because the modulus is too small does not
+         * reach here at all -- fmpq_reconstruct_fmpz fails outright and the loop
+         * has already continued. */
+        if (!have_prev || !fmpq_mpoly_equal(G, Gprev, ctx)) {
+            fmpq_mpoly_set(Gprev, G, ctx);
+            have_prev = 1;
+            clock_t t_c = clock();
+            if (g_fg_stats_on > 0) g_fg_stats.certs++;
+            if (fg_divides(A, G, M, ctx) && fg_divides(B, G, M, ctx)) {
+                done = 1;
+                if (g_fg_stats_on > 0) g_fg_stats.cert_pass++;
+            }
+            FG_TICK(t_cert, t_c);
+        }
     }
 
     fg_acc_clear(&acc);
+    fmpq_mpoly_clear(Gprev, ctx);
     fmpz_clear(modulus);
     flint_free(leadA); flint_free(leadB);
     return done;
@@ -5818,8 +6033,14 @@ static const Expr* fg_field_images(Expr* const* atoms, size_t na) {
     if (!keyargs) return NULL;
     for (size_t i = 0; i < na; i++) keyargs[i] = expr_copy(atoms[i]);
     Expr* key = expr_new_function(expr_new_symbol("List"), keyargs, na);
+    /* expr_new_function consumes keyargs' elements on success only, so a failure
+     * here still owns the na copies made above. */
+    if (!key) {
+        for (size_t i = 0; i < na; i++) expr_free(keyargs[i]);
+        free(keyargs);
+        return NULL;
+    }
     free(keyargs);
-    if (!key) return NULL;
 
     uint64_t h = expr_hash(key);
     FgFieldSlot* sl = &g_fg_field_cache[h % FG_FIELD_CACHE];
@@ -5922,21 +6143,57 @@ static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
     nf_t nf; nf_init(nf, mpq); fmpq_poly_clear(mpq);
 
     /* per-atom degree and its nf_elem image.  `nav` counts how many of av[] are
-     * live, so every exit clears exactly those and no more. */
+     * live, so every exit clears exactly those and no more.
+     *
+     * SELECTION.  The atom set is whatever the operands mention, and that is
+     * routinely larger than a basis: Expand folds Sqrt[2] Sqrt[3] into Sqrt[6],
+     * so the atoms of a Q(sqrt2, sqrt3) problem are {sqrt2, sqrt3, sqrt6} whose
+     * product basis would have 8 members against [K:Q] = 4.  Taking every atom
+     * therefore overshot and the render-back was abandoned for exactly the
+     * compositum it exists to serve -- the answer came back as a degree-4 Root
+     * per coefficient.  So atoms are taken GREEDILY, largest degree first,
+     * skipping any that would overshoot, and stopping once the running product
+     * reaches n.  Whether the chosen set really spans is not assumed: the
+     * invertibility of P below is the test, and it already handles failure. */
     slong deg[8]; nf_elem_t av[8];
     size_t nav = 0;
     slong total = 1;
     int ok = 1;
+
+    size_t ord[8];
+    slong adeg[8];
+    size_t nord = 0;
     for (size_t i = 0; i < k; i++) {
         Expr* am = flint_qqbar_gen_minpoly_coeffs(atoms[i]);
         if (!am || am->type != EXPR_FUNCTION || am->data.function.arg_count < 2) {
             expr_free(am);
-            ok = 0;
-            break;
+            nf_clear(nf);
+            return;
         }
-        deg[i] = (slong)am->data.function.arg_count - 1;
+        adeg[i] = (slong)am->data.function.arg_count - 1;
         expr_free(am);
-        nf_elem_init(av[i], nf); nav = i + 1;
+        ord[nord++] = i;
+    }
+    for (size_t i = 0; i + 1 < nord; i++)          /* insertion sort, k <= 8 */
+        for (size_t j = i + 1; j < nord; j++)
+            if (adeg[ord[j]] > adeg[ord[i]]) { size_t t = ord[i]; ord[i] = ord[j]; ord[j] = t; }
+
+    size_t sel[8], nsel = 0;
+    for (size_t t = 0; t < nord && total < n; t++) {
+        size_t i = ord[t];
+        if (adeg[i] < 2 || total * adeg[i] > n) continue;
+        sel[nsel++] = i;
+        total *= adeg[i];
+    }
+    if (total != n) { nf_clear(nf); return; }      /* the atoms do not span K */
+
+    /* Re-express the selection as the dense arrays the basis walk below uses. */
+    Expr* satoms[8];
+    for (size_t s = 0; s < nsel; s++) {
+        size_t i = sel[s];
+        deg[s] = adeg[i];
+        satoms[s] = atoms[i];
+        nf_elem_init(av[s], nf); nav = s + 1;
         fmpq_poly_t p; fmpq_poly_init(p);
         const Expr* im = imgs[i];
         if (im->type == EXPR_FUNCTION && fn_head_name(im) &&
@@ -5956,19 +6213,17 @@ static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
             else ok = 0;
             fmpq_clear(c);
         }
-        nf_elem_set_fmpq_poly(av[i], p, nf);
+        nf_elem_set_fmpq_poly(av[s], p, nf);
         fmpq_poly_clear(p);
         if (!ok) break;
-        total *= deg[i];
-        if (total > n) { ok = 0; break; }
     }
-    /* total != n with ok still set means the atoms do not span K (a dependent or
-     * non-maximal set); the caller then falls back to expanding in theta. */
-    if (!ok || total != n) {
+    if (!ok) {
         for (size_t j = 0; j < nav; j++) nf_elem_clear(av[j], nf);
         nf_clear(nf);
         return;
     }
+    k = nsel;                       /* the basis walk runs over the SELECTION */
+    atoms = satoms;
 
     /* columns of P: the theta-coordinates of each product-basis member */
     fmpq_mat_t P; fmpq_mat_init(P, n, n);
@@ -6133,6 +6388,12 @@ Expr* flint_field_gcd(const Expr* a, const Expr* b) {
         if (ns < 2) return NULL;
     }
 
+    /* Past the cheap gates this input really is ours, so from here a NULL return
+     * is a DECLINE worth counting: the caller then falls back to the classical
+     * path, whose post-check answers 1.  Counting calls before the gates would
+     * drown that in the millions of unrelated gcds that reach this entry. */
+    if (fg_stats_on()) g_fg_stats.calls++;
+
     /* 1. Find the field.  Already-canonical input needs no normalisation; raw
      * radicals are mapped into a common field first. */
     Expr *na_ = NULL, *nb_ = NULL;
@@ -6143,6 +6404,7 @@ Expr* flint_field_gcd(const Expr* a, const Expr* b) {
 #define FG_BAIL() do { \
         for (size_t i_ = 0; i_ < natoms; i_++) expr_free(atoms[i_]); \
         free(atoms); expr_free(na_); expr_free(nb_); \
+        if (g_fg_stats_on > 0) g_fg_stats.declines++; \
         return NULL; \
     } while (0)
 
@@ -6264,6 +6526,7 @@ cleanup:
     for (size_t i = 0; i < natoms; i++) expr_free(atoms[i]);
     free(atoms);
     expr_free(na_); expr_free(nb_);       /* theta borrowed from these: free last */
+    if (!out && g_fg_stats_on > 0) g_fg_stats.declines++;
     return out;
 }
 

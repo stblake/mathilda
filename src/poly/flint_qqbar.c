@@ -1361,9 +1361,16 @@ Expr* flint_qqbar_algebraic_number(const Expr* gen, const Expr* coeffs) {
 
 /* Express x = res(alpha) exactly, escalating the working precision for a
  * high-degree compositum (see qqbar_express_in_field_esc). */
+/* Membership used by flint_qqbar_to_number_field_common AFTER it has chosen a
+ * primitive element by degree.  At that point every atom provably lies in
+ * Q(alpha), so a failure can only be insufficient working precision and
+ * escalating for every degree is right -- the same reasoning that justifies
+ * _esc_all for an explicitly named generator (A14).  The shared `in_field` keeps
+ * its degree<=6 fast path, since the dsolve-facing callers ask about membership
+ * they have no reason to expect and the ungated escalation regressed them. */
 static int qqbar_express_in_field_retry(fmpq_poly_t res, const qqbar_t alpha,
                                         const qqbar_t x) {
-    return qqbar_express_in_field_esc(res, alpha, x);
+    return qqbar_express_in_field_esc_all(res, alpha, x);
 }
 
 Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* theta) {
@@ -1401,19 +1408,40 @@ Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
     for (size_t i = 0; i < n && ok; i++)
         if (!to_qqbar(as[i], vals + i)) ok = 0;
 
+    /* Primitive element of Q(alpha, b), chosen by DEGREE rather than by trial
+     * membership.
+     *
+     * alpha + c*b lies in Q(alpha, b) for every c, so Q(alpha + c*b) is always a
+     * subfield of the compositum and equals it exactly when the degrees agree.
+     * The largest deg(alpha + c*b) over a range of c is therefore the compositum
+     * degree (all but finitely many c give a primitive element), so the best c
+     * follows from degrees alone -- cheaply, and with no membership test that
+     * could fail for a reason other than non-membership.
+     *
+     * That last point was a real defect, not a tidy-up.  The previous form took
+     * the first c for which in_field(b, cand) && in_field(alpha, cand) held; those
+     * run at 64 bits of working precision, and qqbar_express_in_field_esc
+     * deliberately does not escalate when the generator has degree <= 6 (its
+     * "common path" gate).  A relation needing more than 64 bits was therefore
+     * read as non-membership, every c was rejected, and the whole compositum
+     * failed -- for degree 6 SPECIFICALLY, since degrees 2-5 resolve inside 64
+     * bits and degrees 7+ are allowed to escalate.  ToNumberField[{2^(1/6),
+     * 2^(1/3)}] came back unevaluated and with it every multivariate gcd over a
+     * degree-6 radical field, which silently answered 1. */
     qqbar_t alpha, cand, ca; qqbar_init(alpha); qqbar_init(cand); qqbar_init(ca);
     if (ok) qqbar_set(alpha, vals + 0);
     for (size_t i = 1; i < n && ok; i++) {
-        int found = 0;
-        for (slong c = 1; c <= 16 && !found; c++) {   /* primitive element a + c*b */
+        slong bestdeg = 0, bestc = 0;
+        for (slong c = 1; c <= 16; c++) {
             qqbar_mul_si(ca, vals + i, c);
             qqbar_add(cand, alpha, ca);
-            if (qqbar_degree(cand) <= QQBAR_DEGREE_CAP &&
-                in_field(vals + i, cand) && in_field(alpha, cand)) {
-                qqbar_set(alpha, cand); found = 1;
-            }
+            slong d = qqbar_degree(cand);
+            if (d > bestdeg && d <= QQBAR_DEGREE_CAP) { bestdeg = d; bestc = c; }
         }
-        if (!found) ok = 0;
+        if (bestc == 0) { ok = 0; break; }
+        qqbar_mul_si(ca, vals + i, bestc);
+        qqbar_add(cand, alpha, ca);
+        qqbar_set(alpha, cand);
     }
     qqbar_clear(cand); qqbar_clear(ca);
 

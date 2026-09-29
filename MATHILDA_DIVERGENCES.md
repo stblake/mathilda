@@ -457,6 +457,58 @@ an unsimplified **zero** (`Sqrt[3] AlgebraicNumber[Sqrt[2], {0, -4}] + Sqrt[3]
 AlgebraicNumber[Sqrt[2], {0, 4}] + ...`), which the divisibility check does not catch because it
 is not structurally zero.
 
+#### A26a. What the v0.231 stress pass found  (FIXED, v0.231)
+
+The engine shipped at v0.230 correct on its tests and faster than the baseline on Charlwood, but
+its tests were all a handful of terms in a degree 2–4 field. Pushed on coefficient size, field
+degree, term count and variable count it turned out to have three silent failures — all of which
+**answered**, which is why none had been noticed. `tests/bench_field_gcd.c` is the harness, and it
+treats a decline as a failure rather than a slow row precisely because that is the failure mode.
+
+| | v0.230 | v0.231 |
+|---|---|---|
+| coefficient ceiling | declines past **~831 bits**, so the caller answers 1 | no decline at 13,288 bits |
+| `[K:Q] = 6` via radicals | declines for **every** generator | works |
+| compositum `{Sqrt[2], Sqrt[3]}` | correct but spelled as a degree-4 `Root` per coefficient | `1 + x^3 + Sqrt[2] x y + y^2` |
+| 628-term operands | 63 ms | 30 ms |
+| residue-field work | — | 2.4–2.6× less |
+
+*The ceiling* was arithmetic, not subtlety: `FG_MAX_PRIMES 64` × 29-bit primes is 1856 bits of
+modulus and rational reconstruction needs about twice the coefficient size. Primes are now 62-bit
+and the cap is a backstop rather than a limit, which is safe because the certificate — not the
+budget — is what makes the answer correct, so extra primes only ever cost time.
+
+*The degree-6 decline* was upstream, in the qqbar compositum. It chose a primitive element by
+TRIAL membership, and `qqbar_express_in_field_esc` deliberately does not escalate past 64 bits of
+working precision when the generator has degree `<= 6`. Degrees 2–5 resolve inside 64 bits and 7+
+are allowed to escalate, so **degree 6 alone** failed — for every candidate `c`, hence the whole
+field, hence `ToNumberField[{2^(1/6), 2^(1/3)}]` unevaluated and every degree-6 radical gcd
+answering 1. The primitive element is now chosen by DEGREE: `alpha + c*b` always lies in
+`Q(alpha, b)`, so `Q(alpha + c*b)` equals the compositum exactly when their degrees agree, and no
+membership test that could fail for an unrelated reason is needed.
+
+*The render-back* gave up whenever the operands mentioned more atoms than a basis needs — and they
+routinely do, because `Expand` folds `Sqrt[2] Sqrt[3]` into `Sqrt[6]`, making the atom set of a
+`Q(sqrt2, sqrt3)` problem `{sqrt2, sqrt3, sqrt6}` with a product basis of 8 against `[K:Q] = 4`.
+The overshoot was read as "these atoms do not span". Atoms are now taken greedily, largest degree
+first, until the product reaches `n`; the invertibility of the change-of-basis matrix is the test
+that they really span, so nothing is assumed.
+
+The speed came from choosing primes that split LEAST, since `fg_gcd_mod_p` runs one multivariate
+gcd per irreducible factor of `M mod p` and those gcds are essentially the entire cost (0.062 s
+against 0.008 s for everything else combined, over 200 calls). The direction was measured, not
+assumed — a split prime has cheaper coefficient arithmetic but pays FLINT's per-call cost `r`
+times, and choosing the most-split prime instead was 1.6× slower at `n = 2` and 2.6× slower at
+`n = 8`. `MATHILDA_FIELD_GCD_STATS=1` prints the per-stage profile.
+
+Two further findings, both **pre-existing and outside this engine** (identical at v0.230 and with
+`MATHILDA_NO_FIELD_GCD=1`), recorded here rather than fixed: `PolynomialGCD[0, f]` with algebraic
+coefficients answers 1 where Mathematica answers `f`; and a coefficient mixing an inexact real
+with an algebraic constant returns a garbage near-zero float
+(`PolynomialGCD[Expand[(x + 1.5 Sqrt[2] y)(x+1)], Expand[(x + 1.5 Sqrt[2] y)(x+2)]]` →
+`3.71618e-16`) rather than declining. The pure-float case is fine, so it is specifically the
+mixture.
+
 ### A27. `SparseArray` is not implemented
 
 ```

@@ -253,6 +253,21 @@ Expr* flint_polynomial_gcd(const Expr* a, const Expr* b);
  * answer.  NULL on any decline (no algebraic content, incompatible generators,
  * a non-polynomial operand, or nothing certified within the prime budget), so
  * the caller keeps its existing path.  Set MATHILDA_NO_FIELD_GCD=1 to A/B it.
+ *
+ * A DECLINE IS THE FAILURE MODE TO WATCH.  It is not a slow answer: the caller's
+ * post-check in poly_gcd_internal then returns 1, which is a valid common divisor
+ * and so passes every downstream check while the real gcd is simply lost.  At
+ * v0.230 that happened above ~831 bits of coefficient and for every degree-6
+ * radical field, unnoticed because both answered.  tests/bench_field_gcd.c is the
+ * standing guard: every case is built as d*u and d*v and must come back an
+ * associate of d, with a decline counted as a failure.
+ *
+ * Costs, measured (MATHILDA_FIELD_GCD_STATS=1 prints the per-stage profile): the
+ * residue-field gcds are essentially the whole of it, ~90% against everything
+ * else combined, so the prime is chosen to minimise how far M splits -- one
+ * multivariate gcd runs per irreducible factor.  Coefficients are linear-ish in
+ * size (997 bits 7 ms, 13,288 bits 136 ms) and term count is sub-quadratic
+ * (1.94x the terms for 2.33x the time).
  */
 Expr* flint_field_gcd(const Expr* a, const Expr* b);
 

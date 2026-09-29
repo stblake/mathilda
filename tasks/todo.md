@@ -575,3 +575,99 @@ repeated cost, and the field memo is the whole of the win.
 - `Modulus` is advertised in `Options[PolynomialGCD]` (`options_builtin.c:607`) but
   `builtin_polynomialgcd` never parses it, so `PolynomialGCD[a, b, Modulus -> 5]` returns
   unevaluated.
+
+# `flint_field_gcd` — stress test and harden to library standard (plan, 2026-09-29)
+
+Plan: `/Users/user/.claude/plans/cheeky-seeking-flute.md`
+
+- [x] Instrument first (`MATHILDA_FIELD_GCD_STATS=1`): per-stage timers + prime/certificate counters
+- [x] Raise the coefficient ceiling (62-bit primes, bit budget not prime count)
+- [x] Fix the degree-6 decline (upstream, qqbar compositum primitive-element choice)
+- [x] Fix the compositum render-back (greedy spanning atom selection)
+- [x] Fix the `fg_field_images` allocation-failure leak
+- [x] `tests/bench_field_gcd.c` — 22 self-certifying cases + 2 gates, in ctest
+- [x] `test_field_gcd_stress_regressions` in `tests/test_algebraicnumber.c`
+- [x] Optimise only what the profile condemned (prime choice, prime pool, push_term)
+- [x] Adversarial pass (zero/constant operands, deep towers, huge exponents, mixed spellings)
+- [x] Docs: A26a, `algebra.md`, changelog, `flint_bridge.h` contract; v0.231 + tag
+
+## Review
+
+**The bar was "would a FLINT developer accept this", so the question asked was not "does it answer
+the A26 repros" but "what is its cost curve, where does it silently give up, and can it be made to
+crash". Three of the four things found were silent — they all ANSWERED.**
+
+A decline is the failure mode that matters here and it is not a slow answer: the engine returns
+NULL, `poly_gcd_internal`'s post-check answers 1, that is a valid common divisor, nothing
+downstream complains, and the real gcd is gone. Two whole classes were doing this.
+
+| | v0.230 | v0.231 |
+|---|---|---|
+| coefficient ceiling | declines past **~831 bits** | no decline at 13,288 bits |
+| `[K:Q] = 6` via radicals | declines for **every** generator tried | works |
+| compositum `{√2, √3}` | correct but a degree-4 `Root` per coefficient | `1 + x^3 + Sqrt[2] x y + y^2` |
+| 628-term operands | 63 ms | 30 ms |
+| residue-field work | — | 2.4–2.6× less |
+| Charlwood 50 | 12.5 s, 49/50 | 12.5 s, 49/50 |
+
+**The ceiling was arithmetic.** 64 primes × 29 bits = 1856 bits of modulus, and rational
+reconstruction needs about twice the coefficient size; measured, 10^250 passed and 10^300 did not.
+62-bit primes plus a cap demoted to a grind-backstop fixed it. This is only safe because the
+certificate rather than the budget is what makes the answer correct — extra primes cost time, never
+correctness.
+
+**The degree-6 decline was upstream and beautifully specific.** `qqbar_express_in_field_esc` tries
+64 bits and then refuses to escalate when the generator has degree `<= 6`. Degrees 2–5 resolve
+inside 64 bits; 7+ escalate; **6 alone** needs more than 64 bits and is denied. So the compositum's
+trial-membership search rejected every candidate multiplier and the whole field failed. Fixed by
+choosing the primitive element from DEGREES — `alpha + c*b` always lies in `Q(alpha, b)`, so it
+generates the compositum exactly when the degrees agree — which removes the membership test rather
+than tuning it. The shared `in_field` was left alone: its degree gate exists because ungated
+escalation had regressed the DSolve callers.
+
+**Two suspects from reading the code that measurement cleared.** Recording these because the
+reading was persuasive and wrong both times, which is the same lesson this engine taught last round:
+- the *certificate* looked like the expensive step — an exact multivariate ideal division over Q run
+  after every prime, up to 64 times. It is ~5 µs against ~150 µs for one prime's residue gcds.
+  Gating it on a stabilised reconstruction therefore **cost an extra prime of the dominant work**
+  and made the small cases 2× slower; reverted to certifying each distinct candidate once,
+  immediately, so an easy input finishes on the first prime.
+- hoisting the per-component input reduction (`fg_lift` runs once per irreducible factor) looked
+  like an `r`× saving. Lift is 8% of the time. Dropped, deliberately, unimplemented.
+
+Only the `O(L²)` keyed-insert image construction was worth replacing (`push_term` + `sort_terms`).
+
+**The win came from somewhere the plan had not listed at all**: `fg_gcd_mod_p` runs one multivariate
+gcd per irreducible factor of `M mod p`, so the per-prime cost *is* how far the prime splits.
+Choosing least-split primes cut the residue work 2.4–2.6×. The direction was A/B'd rather than
+assumed, because it is genuinely not obvious — a split prime has single-word coefficient arithmetic
+where an inert one does degree-`n` polynomial arithmetic, so this only wins if FLINT's per-call cost
+dominates. It does, at these sizes: choosing the *most*-split prime was 1.6× slower at `n = 2` and
+2.6× slower at `n = 8`. Noted in the code that the balance is worth re-measuring on much larger
+operands.
+
+**One self-inflicted trap, caught by the harness abort-trapping on its own 903-digit row:**
+`is_associate` interpolated each operand twice into a buffer sized for one copy each. My bug, in the
+test code, and a useful reminder that a fixed `char buf[2048]` in `check_gcd` would have silently
+truncated the large-coefficient assertions into something that no longer tested what it named — both
+are now sized from the strings.
+
+**Plan item 1 was wrong and is dropped.** I expected a reachable hard abort: nothing on the `fg_`
+path guards `_get_term_exp_ui`, and FLINT's failure there is `flint_throw`, which is `FLINT_NORETURN`.
+It is unreachable — `to_mpoly` gates exponents on `EXPR_INTEGER`, i.e. `int64`, and every
+non-negative `int64` fits a `ulong`; `x^(2^63)` becomes a bigint and is refused before FLINT sees
+it. Verified against four adversarial exponent shapes, all of which decline cleanly. The invariant
+is now documented rather than guarded with dead code.
+
+**Verification.** 22/22 harness cases certify with the scaling ratio at 2.33 for 1.94× the terms
+(limit 3.0); `algebraicnumber_tests`, `numberfield_tests`, `flint_bridge_tests` pass; Charlwood
+49/50 at 12.5 s, unchanged; `make check-c99` and `make check-messages` green.
+
+**Also found, pre-existing, recorded not fixed** (identical at v0.230 and with
+`MATHILDA_NO_FIELD_GCD=1`, so outside this engine):
+- `PolynomialGCD[0, f]` with algebraic coefficients answers 1; Mathematica answers `f`.
+- A coefficient mixing an inexact real with an algebraic constant returns a garbage near-zero float
+  instead of declining: `PolynomialGCD[Expand[(x + 1.5 Sqrt[2] y)(x+1)], ...]` → `3.71618e-16`. The
+  pure-float case is correct, so it is specifically the mixture.
+- Mixed spellings of one field, and two distinct `AlgebraicNumber` generators, still answer 1
+  (`field_scan` reports a conflict rather than building the compositum).

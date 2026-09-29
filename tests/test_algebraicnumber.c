@@ -265,15 +265,22 @@ static void test_not_a_polynomial_variable(void) {
  * deliberately declines on AlgebraicNumber coefficients under its default
  * Extension -> None (as Mathematica's does). */
 static void check_gcd(const char* f, const char* g, const char* d) {
-    char buf[2048];
-    snprintf(buf, sizeof buf,
+    /* Sized from the operands rather than fixed: f and g each appear TWICE in the
+     * template, and the large-coefficient cases carry a ~900-digit literal, so a
+     * fixed buffer would truncate the assertion into something that no longer
+     * tests what it names. */
+    size_t need = 2 * (strlen(f) + strlen(g)) + strlen(d) + 512;
+    char* buf = malloc(need);
+    ASSERT(buf != NULL);
+    snprintf(buf, need,
         "Module[{gg = PolynomialGCD[%s, %s], dv},"
         " dv = Function[{p, q}, Expand[p - PolynomialQuotient[p, q, x] q] === 0];"
         " dv[%s, gg] && dv[%s, gg] && dv[gg, %s]]", f, g, f, g, d);
     Expr* e = eval_str(buf);
     char* s = expr_to_string(e);
     if (strcmp(s, "True") != 0) {
-        Expr* got = eval_str((snprintf(buf, sizeof buf, "PolynomialGCD[%s, %s]", f, g), buf));
+        snprintf(buf, need, "PolynomialGCD[%s, %s]", f, g);
+        Expr* got = eval_str(buf);
         char* gs = expr_to_string(got);
         fprintf(stderr, "FAIL(gcd): PolynomialGCD[%s, %s]\n"
                         "  expected an associate of: %s\n  got: %s\n", f, g, d, gs);
@@ -282,6 +289,7 @@ static void check_gcd(const char* f, const char* g, const char* d) {
     }
     free(s);
     expr_free(e);
+    free(buf);
 }
 
 /* MULTIVARIATE gcd over a number field — MATHILDA_DIVERGENCES A26.
@@ -365,6 +373,53 @@ static void test_multivariate_number_field_gcd(void) {
           "Expand[(x + Sqrt[2] y + Sqrt[3]) (x + 2)]]", "Sqrt[3] + x + Sqrt[2] y");
 }
 
+/* The defects the v0.231 stress pass turned up.  Each of these ANSWERED -- with 1,
+ * or with an unreadable spelling -- rather than failing visibly, which is why none
+ * was caught by the v0.230 tests. */
+static void test_field_gcd_stress_regressions(void) {
+    /* 1. DEGREE 6 declined for every radical generator, so the gcd was lost and
+     * the caller's post-check answered 1.  The cause was upstream in the qqbar
+     * compositum: it picked a primitive element by TRIAL membership, and
+     * qqbar_express_in_field_esc refuses to escalate past 64 bits of working
+     * precision when the generator has degree <= 6.  Degrees 2-5 resolve inside
+     * 64 bits and 7+ are allowed to escalate, so 6 alone failed -- for every c in
+     * the search, hence the whole field.  The primitive element is now chosen by
+     * degree, which needs no membership test at all. */
+    check_gcd("Expand[(x^3 + 2^(1/6) x y + y^2 + 1) (x^2 + 2^(1/6) y + 3)]",
+              "Expand[(x^3 + 2^(1/6) x y + y^2 + 1) (x^2 + 2 2^(1/6) y - 1)]",
+              "x^3 + 2^(1/6) x y + y^2 + 1");
+    check_gcd("Expand[(x^3 + 3^(1/6) x y + y^2 + 1) (x^2 + 3^(1/6) y + 3)]",
+              "Expand[(x^3 + 3^(1/6) x y + y^2 + 1) (x^2 + 2 3^(1/6) y - 1)]",
+              "x^3 + 3^(1/6) x y + y^2 + 1");
+    /* the same degree 6 reached as a genuine compositum of two generators */
+    check_gcd("Expand[(x^2 + (Sqrt[2] + 2^(1/3)) y + 1) (x + y + 1)]",
+              "Expand[(x^2 + (Sqrt[2] + 2^(1/3)) y + 1) (x - y + 2)]",
+              "x^2 + (Sqrt[2] + 2^(1/3)) y + 1");
+    /* and ToNumberField itself, which returned unevaluated for this atom set */
+    check("Head[ToNumberField[{2^(1/6), 2^(1/3)}]]", "List");
+
+    /* 2. The COMPOSITUM render-back was abandoned whenever the operands mentioned
+     * more atoms than a basis needs.  Expand folds Sqrt[2] Sqrt[3] into Sqrt[6],
+     * so a Q(sqrt2, sqrt3) problem has atoms {sqrt2, sqrt3, sqrt6} whose product
+     * basis would hold 8 members against [K:Q] = 4; the overshoot was read as
+     * "these atoms do not span" and the answer came back as a degree-4 Root per
+     * coefficient.  Atoms are now selected greedily until the product reaches n. */
+    check("PolynomialGCD[Expand[(x^3 + Sqrt[2] x y + y^2 + 1) (x^2 + Sqrt[3] y + 3)], "
+          "Expand[(x^3 + Sqrt[2] x y + y^2 + 1) (x^2 + Sqrt[2] y - 1)]]",
+          "1 + x^3 + Sqrt[2] x y + y^2");
+
+    /* 3. The COEFFICIENT CEILING.  64 primes of 29 bits is 1856 bits of modulus,
+     * and rational reconstruction needs about twice the coefficient size, so the
+     * engine declined -- and the caller answered 1 -- above ~831 bits.  Measured,
+     * 10^250 passed and 10^300 did not.  Both must now hold, and well beyond. */
+    check_gcd("Expand[(x^3 + 10^301 Sqrt[2] x y + y^2 + 1) (x^2 + Sqrt[2] y + 3)]",
+              "Expand[(x^3 + 10^301 Sqrt[2] x y + y^2 + 1) (x^2 + 2 Sqrt[2] y - 1)]",
+              "x^3 + 10^301 Sqrt[2] x y + y^2 + 1");
+    check_gcd("Expand[(x^3 + 10^903 Sqrt[2] x y + y^2 + 1) (x^2 + Sqrt[2] y + 3)]",
+              "Expand[(x^3 + 10^903 Sqrt[2] x y + y^2 + 1) (x^2 + 2 Sqrt[2] y - 1)]",
+              "x^3 + 10^903 Sqrt[2] x y + y^2 + 1");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -380,6 +435,7 @@ int main(void) {
     test_declines();
     test_not_a_polynomial_variable();
     test_multivariate_number_field_gcd();
+    test_field_gcd_stress_regressions();
     printf("test_algebraicnumber: all passed\n");
     return 0;
 }
