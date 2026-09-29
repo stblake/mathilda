@@ -287,9 +287,15 @@ Writes an `Image` to a raster image file, or a `Graphics` object to an image fil
   emitter — no external library, no display, so it works headless and in every build. It
   walks the graphics primitives directly (`Line`, `Point`, `Polygon`, `Disk`/`Circle`,
   `Rectangle`, `Arrow`, `Text`) with the `RGBColor`/`GrayLevel`/`Hue`/`CMYKColor`,
-  `Opacity`, `Thickness` and `PointSize` directives, and draws a framed set of axes with
-  "nice" ticks and numeric labels. Text uses the PDF base-14 Helvetica, so no font is
-  embedded. This is the recommended format for print and for the book.
+  `Opacity`, `Thickness`/`AbsoluteThickness`, `PointSize`/`AbsolutePointSize`,
+  `Dashing`/`AbsoluteDashing` (`Dashed`, `Dotted`, `DotDashed`) and `Directive`
+  directives, each `{...}` list scoping the directives set inside it, and draws a framed
+  set of axes with "nice" ticks and numeric labels. It honours `PlotStyle` (the style a
+  single-curve `Plot`/`ListPlot`/`ParametricPlot` is drawn in), `Prolog`/`Epilog`,
+  `PlotLabel`, `AxesLabel` and `PlotLegends` (a swatch-and-label legend to the right of the
+  plot). Coordinates may be exact (`1/2`, `Pi/4`, `Sqrt[2]`): they are converted the same
+  way the on-screen renderer converts them. Text uses the PDF base-14 Helvetica, so no font
+  is embedded. This is the recommended format for print and for the book.
 - **PNG** and **JPEG** render through the graphics backend into an offscreen buffer, so the
   file is pixel-identical to the on-screen plot (the same axes, ticks, labels and text).
   They therefore need graphics support compiled in (`USE_GRAPHICS`) **and** a usable GUI
@@ -300,7 +306,9 @@ Writes an `Image` to a raster image file, or a `Graphics` object to an image fil
   …) fills its frame edge-to-edge instead of letterboxing inside a fixed canvas;
   `ImageSize -> {w, h}` pins both dimensions (then `AspectRatio` shapes the data inside that
   box). The pixels are encoded by the vendored `stb_image_write`, so JPEG output does not
-  depend on which formats the Raylib build happens to support.
+  depend on which formats the Raylib build happens to support. Directive sizes mean the
+  same thing in both formats: `Thickness`/`PointSize`/`Dashing` are fractions of the plot
+  width and the `Absolute*` forms are printer's points (one pixel in a raster).
 - A `Graphics3D` object (`Plot3D`, `ParametricPlot3D`, `ComplexPlot3D`, ...) exports to
   **PNG or JPEG** through the 3D renderer, with the same graphics-support/display
   requirement; it has no vector-PDF form (PDF of a 3D scene returns `$Failed`).

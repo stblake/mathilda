@@ -57,6 +57,40 @@ static Expr* gray_color(double g) {
     return expr_new_function(expr_new_symbol(SYM_GrayLevel), a, 1);
 }
 
+/* Named style directives (Dashed, Thick, ...) are OwnValues evaluating to
+ * the directive they abbreviate, exactly like Mathematica's, so
+ * `InputForm[Dashed]` is `Dashing[{Small, Small}]` and every back end only
+ * has to understand the long forms. */
+static void register_directive(const char* name, Expr* value, const char* doc) {
+    Expr* sym = expr_new_symbol(name);
+    symtab_add_own_value(name, sym, value);
+    expr_free(sym);
+    expr_free(value);
+    symtab_get_def(name)->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring(name, doc);
+}
+
+/* head[size] -- e.g. Thickness[Large]. */
+static Expr* sized(const char* head, const char* size) {
+    Expr* a[1] = { expr_new_symbol(size) };
+    return expr_new_function(expr_new_symbol(head), a, 1);
+}
+
+/* Dashing[{...}] over up to four named lengths; a NULL entry in the first
+ * two slots is the literal 0 (a dot), and trailing NULLs end the list. */
+static Expr* dashing2(const char* a, const char* b, const char* c, const char* d) {
+    const char* names[4] = { a, b, c, d };
+    Expr* items[4];
+    size_t n = 0;
+    for (size_t i = 0; i < 4; i++) {
+        if (names[i]) items[n++] = expr_new_symbol(names[i]);
+        else if (i < 2) items[n++] = expr_new_integer(0);
+    }
+    Expr* lst = expr_new_function(expr_new_symbol(SYM_List), items, n);
+    Expr* arg[1] = { lst };
+    return expr_new_function(expr_new_symbol(SYM_Dashing), arg, 1);
+}
+
 void graphics_init(void) {
     register_inert("Point",
         "Point[{x, y}]\n\tA graphics primitive: a single point.\n"
@@ -100,8 +134,43 @@ void graphics_init(void) {
      * its docstring is set centrally in info.c (info_init). */
     symtab_get_def("CMYKColor")->attributes |= ATTR_PROTECTED;
     register_inert("Thickness",
-        "Thickness[t]\n\tA style directive: sets the line thickness (in "
-        "plot coordinates) of subsequent Line/Circle primitives.");
+        "Thickness[r]\n\tA style directive: draws subsequent lines r times "
+        "the plot width thick. Thickness[Tiny|Small|Medium|Large] gives fixed "
+        "widths; Thick is Thickness[Large] and Thin is Thickness[Tiny].");
+    register_inert("AbsoluteThickness",
+        "AbsoluteThickness[d]\n\tA style directive: draws subsequent lines d "
+        "printer's points thick (one point is one pixel in a raster export).");
+    register_inert("Dashing",
+        "Dashing[{r1, r2, ...}]\n\tA style directive: draws subsequent lines "
+        "dashed, alternating drawn and blank segments of lengths r1, r2, ... "
+        "as fractions of the plot width (repeating cyclically).\n"
+        "Dashing[r]\n\tEqual dashes and gaps of length r.\n"
+        "Dashing[{}]\n\tSolid lines. The lengths may also be Tiny, Small, "
+        "Medium or Large; Dashed, Dotted and DotDashed are shorthands.");
+    register_inert("AbsoluteDashing",
+        "AbsoluteDashing[{d1, d2, ...}]\n\tA style directive: like Dashing "
+        "but with segment lengths in printer's points.");
+    register_inert("AbsolutePointSize",
+        "AbsolutePointSize[d]\n\tA style directive: draws subsequent points "
+        "with diameter d printer's points.");
+    register_inert("Directive",
+        "Directive[g1, g2, ...]\n\tA single graphics directive combining the "
+        "directives gi, e.g. PlotStyle -> Directive[Red, Dashed, Thick].");
+    register_inert("Tiny",   "Tiny\n\tThe smallest named size, as in Thickness[Tiny] or PointSize[Tiny].");
+    register_inert("Small",  "Small\n\tA small named size, as in Dashing[{Small, Small}] or PointSize[Small].");
+    register_inert("Medium", "Medium\n\tA medium named size, as in Thickness[Medium] or PointSize[Medium].");
+    register_inert("Large",  "Large\n\tA large named size, as in Thickness[Large] or PointSize[Large].");
+    register_directive("Dashed", dashing2(SYM_Small, SYM_Small, NULL, NULL),
+        "Dashed\n\tA graphics directive for dashed lines: Dashing[{Small, Small}].");
+    register_directive("Dotted", dashing2(NULL, SYM_Small, NULL, NULL),
+        "Dotted\n\tA graphics directive for dotted lines: Dashing[{0, Small}].");
+    register_directive("DotDashed", dashing2(NULL, SYM_Small, SYM_Small, SYM_Small),
+        "DotDashed\n\tA graphics directive for dot-dashed lines: "
+        "Dashing[{0, Small, Small, Small}].");
+    register_directive("Thick", sized(SYM_Thickness, SYM_Large),
+        "Thick\n\tA graphics directive for thick lines: Thickness[Large].");
+    register_directive("Thin", sized(SYM_Thickness, SYM_Tiny),
+        "Thin\n\tA graphics directive for thin lines: Thickness[Tiny].");
 
     /* Named colour constants -> RGBColor[...]/GrayLevel[...] literals.
      * Black/White/Gray and the grey LightGray use GrayLevel; the rest use
@@ -131,8 +200,9 @@ void graphics_init(void) {
     register_color("LightPink",    rgb_color(1, 0.925, 0.925));
     register_color("LightPurple",  rgb_color(0.94, 0.88, 0.94));
     register_inert("PointSize",
-        "PointSize[s]\n\tA style directive: sets the radius (in plot "
-        "coordinates) of subsequent Point primitives.");
+        "PointSize[d]\n\tA style directive: draws subsequent points as dots "
+        "whose diameter is d times the plot width. PointSize[Tiny|Small|"
+        "Medium|Large] gives fixed sizes.");
 
     register_inert("Graphics",
         "Graphics[primitives, opts...]\n\tA symbolic 2D graphics object. "
@@ -184,8 +254,12 @@ void graphics_init(void) {
     symtab_get_def("Show")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Show",
         "Show[graphics, opts...]\n\tDisplays graphics (a Graphics[...] "
-        "object) in an interactive window and returns it, merging any "
-        "given options into its option list.");
+        "object) and returns it, with the options opts overriding its own.\n"
+        "Show[g1, g2, ..., opts...]\n\tCombines several graphics (Plot, "
+        "ListPlot, Graphics, ... outputs) into one: their primitives are "
+        "overlaid, each in its own style scope; options come from g1 unless "
+        "given in opts; the plot range is the union of the inputs' ranges.\n"
+        "Show[{g1, g2, ...}, opts...]\n\tThe same, for a list of graphics.");
 
     /* ListPlot's data must evaluate (ListPlot[Range[10]] / Table[...]), so —
      * unlike Plot — it is a plain protected builtin, not HoldAll. The option

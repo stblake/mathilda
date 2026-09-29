@@ -259,6 +259,7 @@ typedef struct {
     RGBA8 grid_color;         /* GridLinesStyle */
     const Expr* prolog;       /* borrowed; drawn first, in data space */
     const Expr* epilog;       /* borrowed; drawn last, in data space */
+    const Expr* plot_style;   /* borrowed PlotStyle value (see apply_plot_style) */
     ScaleFnType sf_x, sf_y;  /* ScalingFunctions; SF_NONE = linear (default) */
 } GfxOptions;
 
@@ -323,6 +324,7 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
     o->grid_color = (RGBA8){ 210, 210, 210, 255 };
     o->prolog = NULL;
     o->epilog = NULL;
+    o->plot_style = NULL;
     o->sf_x = SF_NONE;
     o->sf_y = SF_NONE;
 
@@ -401,6 +403,7 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
             }
         } else if (name == SYM_PlotStyle) {
             resolve_color(rhs, &o->style_color);
+            o->plot_style = rhs;
         } else if (name == SYM_Background) {
             resolve_color(rhs, &o->background);
         } else if (name == SYM_ImageSize) {
@@ -915,19 +918,75 @@ typedef struct {
     float point_size; /* world units (radius) */
     float text_scale; /* world units per label cap-height unit, for Text[] */
     float yscale;     /* data-y -> render-y factor (non-uniform PlotRange/AspectRatio) */
+    /* Size bases for the style directives, fixed at the home view so a
+     * directive means the same on screen, in a PNG and in the PDF writer:
+     * Thickness/PointSize/Dashing fractions are of the plot-region width in
+     * pixels (plot_w_px), and a pixel is px world units. */
+    float plot_w_px;
+    float px;
+    float dash[GFX_MAX_DASH]; /* Dashing pattern, world units; ndash 0 = solid */
+    int   ndash;
 } DrawState;
+
+static void stroke_segment(Vector2 a, Vector2 b, const DrawState* state) {
+    if (state->thickness > 0.0001f) DrawLineEx(a, b, state->thickness, state->color);
+    else DrawLineV(a, b, state->color);
+}
+
+/* Dash-pattern cursor carried along a polyline so the pattern runs on
+ * across vertices (as a PDF dash does) instead of restarting per segment. */
+typedef struct { int idx; float rem; } DashCursor;
+
+/* Step to the next pattern element(s). A zero-length "on" element is a dot
+ * (a round cap of the line's width), drawn at `at`. */
+static void dash_advance(DashCursor* dc, const DrawState* st, Vector2 at) {
+    for (int guard = 0; dc->rem <= 1e-9f && guard < 2 * GFX_MAX_DASH; guard++) {
+        if (dc->idx % 2 == 0 && st->dash[dc->idx] <= 0.0f) {
+            float r = st->thickness * 0.5f;
+            if (r < st->px) r = st->px;
+            DrawCircleV(at, r, st->color);
+        }
+        dc->idx = (dc->idx + 1) % st->ndash;
+        dc->rem = st->dash[dc->idx];
+    }
+}
+
+static void dashed_segment(Vector2 a, Vector2 b, const DrawState* st, DashCursor* dc) {
+    float dx = b.x - a.x, dy = b.y - a.y;
+    float len = sqrtf(dx * dx + dy * dy);
+    if (len <= 0.0f) return;
+    float t = 0.0f;
+    while (t < len) {
+        float step = fminf(dc->rem, len - t);
+        if (dc->idx % 2 == 0 && step > 0.0f) {
+            Vector2 p = { a.x + dx * (t / len), a.y + dy * (t / len) };
+            Vector2 q = { a.x + dx * ((t + step) / len), a.y + dy * ((t + step) / len) };
+            stroke_segment(p, q, st);
+        }
+        t += step;
+        dc->rem -= step;
+        if (dc->rem <= 1e-9f)
+            dash_advance(dc, st, (Vector2){ a.x + dx * (t / len), a.y + dy * (t / len) });
+    }
+}
 
 static void draw_polyline(const Expr* pts_list, const DrawState* state) {
     size_t n = pts_list->data.function.arg_count;
     Vector2 prev = { 0, 0 };
     bool have_prev = false;
+    DashCursor dc = { 0, state->ndash > 0 ? state->dash[0] : 0.0f };
     for (size_t i = 0; i < n; i++) {
         double x, y;
         if (!expr_point(pts_list->data.function.args[i], &x, &y)) { have_prev = false; continue; }
         Vector2 cur = { (float)x, (float)(-y * state->yscale) };
+        if (state->ndash > 0 && !have_prev) {
+            /* Each run restarts the pattern (a leading dot included). */
+            dc.idx = 0; dc.rem = state->dash[0];
+            dash_advance(&dc, state, cur);
+        }
         if (have_prev) {
-            if (state->thickness > 0.0001f) DrawLineEx(prev, cur, state->thickness, state->color);
-            else DrawLineV(prev, cur, state->color);
+            if (state->ndash > 0) dashed_segment(prev, cur, state, &dc);
+            else stroke_segment(prev, cur, state);
         }
         prev = cur;
         have_prev = true;
@@ -994,6 +1053,15 @@ static void draw_primitive(const Expr* node, DrawState* state) {
     size_t n = node->data.function.arg_count;
 
     if (name == SYM_List) {
+        /* A List is a directive scope, as in Mathematica: styles set inside
+         * {...} do not leak past it (Show[g1, g2]'s inputs, a dashed curve
+         * among several). The PDF writer scopes identically. */
+        DrawState saved = *state;
+        for (size_t i = 0; i < n; i++) draw_primitive(node->data.function.args[i], state);
+        *state = saved;
+        return;
+    }
+    if (name == SYM_Directive) {
         for (size_t i = 0; i < n; i++) draw_primitive(node->data.function.args[i], state);
         return;
     }
@@ -1001,19 +1069,32 @@ static void draw_primitive(const Expr* node, DrawState* state) {
         RGBA8 c;
         if (resolve_color(node, &c)) { state->color = to_raylib(c); return; }
     }
+    {
+        /* Thickness/AbsoluteThickness, PointSize/AbsolutePointSize and
+         * Dashing/AbsoluteDashing, resolved by the helpers the PDF writer
+         * shares: points -> pixels -> world units. */
+        double v, d[GFX_MAX_DASH];
+        int nd;
+        if (gfx_thickness_pts(node, state->plot_w_px, &v)) {
+            state->thickness = (float)(v * state->px);
+            return;
+        }
+        if (gfx_point_radius_pts(node, state->plot_w_px, &v)) {
+            state->point_size = (float)(v * state->px);
+            return;
+        }
+        if (gfx_dash_pts(node, state->plot_w_px, d, GFX_MAX_DASH, &nd)) {
+            state->ndash = nd;
+            /* Floor a positive length at a quarter pixel so a vanishingly
+             * small Dashing cannot turn one segment into millions of draws. */
+            for (int i = 0; i < nd; i++)
+                state->dash[i] = (float)((d[i] > 0.0 && d[i] < 0.25 ? 0.25 : d[i]) * state->px);
+            return;
+        }
+    }
     if (name == SYM_Opacity) {
         double a;
         if (n >= 1 && expr_to_d(node->data.function.args[0], &a)) state->color.a = (unsigned char)(a * 255);
-        return;
-    }
-    if (name == SYM_Thickness) {
-        double t;
-        if (n >= 1 && expr_to_d(node->data.function.args[0], &t)) state->thickness = (float)t;
-        return;
-    }
-    if (name == SYM_PointSize) {
-        double s;
-        if (n >= 1 && expr_to_d(node->data.function.args[0], &s)) state->point_size = (float)s;
         return;
     }
     if (name == SYM_Point && n >= 1) {
@@ -1071,6 +1152,11 @@ static void draw_primitive(const Expr* node, DrawState* state) {
         if (circle_params(node, &cx, &cy, &r)) {
             Vector2 center = { (float)cx, (float)(-cy * state->yscale) };
             if (name == SYM_Disk) DrawCircleV(center, (float)r, state->color);
+            else if (state->thickness > 1.5f * state->px) {
+                /* An explicit Thickness/Thick outline, as the PDF strokes it. */
+                float h = state->thickness * 0.5f;
+                DrawRing(center, (float)r - h, (float)r + h, 0.0f, 360.0f, 96, state->color);
+            }
             else DrawCircleLinesV(center, (float)r, state->color);
         }
         return;
@@ -1176,6 +1262,32 @@ static void draw_primitive(const Expr* node, DrawState* state) {
         if (owned) free(owned);
         return;
     }
+}
+
+/* Apply a style spec without opening a scope (a List's members all apply). */
+static void apply_style_spec(const Expr* s, DrawState* st) {
+    if (s && s->type == EXPR_FUNCTION && s->data.function.head->type == EXPR_SYMBOL
+        && s->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < s->data.function.arg_count; i++)
+            apply_style_spec(s->data.function.args[i], st);
+        return;
+    }
+    draw_primitive(s, st);
+}
+
+/* The starting style of the plot's own primitives from its PlotStyle option:
+ * a single-curve Plot/ListPlot/ParametricPlot is drawn in it (Directive,
+ * Dashed, Thick, PointSize, ... as well as a plain colour). A List of styles
+ * is per curve -- the multi-curve builders bake those into the primitives --
+ * so only its first entry applies here. Mirrors the PDF writer. */
+static void apply_plot_style(const Expr* ps, DrawState* st) {
+    if (!ps) return;
+    if (ps->type == EXPR_FUNCTION && ps->data.function.head->type == EXPR_SYMBOL
+        && ps->data.function.head->data.symbol.name == SYM_List) {
+        if (ps->data.function.arg_count == 0) return;
+        ps = ps->data.function.args[0];
+    }
+    apply_style_spec(ps, st);
 }
 
 /* ---------------- Axes ---------------- */
@@ -2428,6 +2540,14 @@ void graphics_show(const Expr* graphics_expr) {
     init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
     init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / LABEL_FONT_CAP_HEIGHT);
     init_state.yscale = (float)ysc;
+    init_state.plot_w_px = reg_w;
+    init_state.px = 1.0f / base_zoom;
+    init_state.ndash = 0;
+    /* Prolog/Epilog start from black at default sizes (Mathematica's
+     * defaults), not from the plot's style. */
+    DrawState extra_state = init_state;
+    extra_state.color = BLACK;
+    apply_plot_style(opts.plot_style, &init_state);
 
     int tool = TOOL_PAN;          /* active left-drag tool (toolbar-selected) */
     bool annotate = false;        /* roots/extrema/inflection toggle (toolbar) */
@@ -2603,12 +2723,12 @@ void graphics_show(const Expr* graphics_expr) {
          * spills past the box; the frame, labels and chrome draw unclipped. */
         if (opts.frame) BeginScissorMode((int)reg_x, (int)reg_y, (int)reg_w, (int)reg_h);
         BeginMode2D(camera);
-        if (opts.prolog) { DrawState ps = init_state; draw_primitive(opts.prolog, &ps); }
+        if (opts.prolog) { DrawState ps = extra_state; draw_primitive(opts.prolog, &ps); }
         draw_gridlines(&visible, ysc, camera.zoom, &opts);
         if (opts.axes) draw_axes_lines(&visible, &range, ysc, camera.zoom, &opts);
         DrawState state = init_state;
         draw_primitive(draw_prims, &state);
-        if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
+        if (opts.epilog) { DrawState es = extra_state; draw_primitive(opts.epilog, &es); }
         if (hv_found) {
             Vector2 mk = { (float)hv_wx, (float)(-hv_wy * ysc) };
             float r = 4.0f / camera.zoom;
@@ -2785,6 +2905,12 @@ void graphics_render_in_region(const Expr* graphics_expr,
     init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
     init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / LABEL_FONT_CAP_HEIGHT);
     init_state.yscale     = (float)ysc;
+    init_state.plot_w_px  = preg_w;
+    init_state.px         = 1.0f / base_zoom;
+    init_state.ndash      = 0;
+    DrawState extra_state = init_state;   /* Prolog/Epilog: see graphics_show */
+    extra_state.color     = BLACK;
+    apply_plot_style(opts.plot_style, &init_state);
 
     PlotRange2D visible = { range.xmin, range.xmax, range.ymin * ysc, range.ymax * ysc };
 
@@ -2800,12 +2926,12 @@ void graphics_render_in_region(const Expr* graphics_expr,
 
     if (opts.frame) BeginScissorMode((int)preg_x, (int)preg_y, (int)preg_w, (int)preg_h);
     BeginMode2D(camera);
-    if (opts.prolog) { DrawState ps = init_state; draw_primitive(opts.prolog, &ps); }
+    if (opts.prolog) { DrawState ps = extra_state; draw_primitive(opts.prolog, &ps); }
     draw_gridlines(&visible, ysc, camera.zoom, &opts);
     if (opts.axes) draw_axes_lines(&visible, &range, ysc, camera.zoom, &opts);
     DrawState state = init_state;
     draw_primitive(prims, &state);
-    if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
+    if (opts.epilog) { DrawState es = extra_state; draw_primitive(opts.epilog, &es); }
     if (hv_found) {
         Vector2 mk = { (float)hv_wx, (float)(-hv_wy * ysc) };
         float r = 4.0f / camera.zoom;

@@ -353,7 +353,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
         } else if (name == SYM_PlotStyle) {
             have_style = true;
             if (*single_color_out) expr_free(*single_color_out);
-            *single_color_out = evaluate(expr_copy(rhs));
+            *single_color_out = evaluate(rhs);   /* evaluate() borrows its argument */
             Expr* a[2] = { expr_copy(lhs), expr_copy(*single_color_out) };
             pass[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         } else if (name == SYM_AspectRatio) {
@@ -375,7 +375,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
                       && (rhs->data.symbol.name == SYM_False || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
-            Expr* val = evaluate(expr_copy(rhs));
+            Expr* val = evaluate(rhs);   /* borrows: no copy to leak */
             Expr* a[2] = { expr_copy(lhs), val };
             pass[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         }
@@ -469,16 +469,8 @@ static Expr** build_param_curve(Expr* body, Expr* var1,
 
     if (sopts->mesh && npts > 0) {
         if (curve_color && !sopts->color_function) prims[pc++] = expr_copy(curve_color);
-        double xlo = pts[0].x, xhi = pts[0].x, ylo = pts[0].y, yhi = pts[0].y;
-        for (size_t j = 1; j < npts; j++) {
-            if (pts[j].x < xlo) xlo = pts[j].x;
-            if (pts[j].x > xhi) xhi = pts[j].x;
-            if (pts[j].y < ylo) ylo = pts[j].y;
-            if (pts[j].y > yhi) yhi = pts[j].y;
-        }
-        double diag = sqrt((xhi-xlo)*(xhi-xlo) + (yhi-ylo)*(yhi-ylo));
-        double msize = (diag > 0) ? diag * 0.0025 : 0.005;
-        Expr* ps_arg[1] = { expr_new_real(msize) };
+        /* PointSize is a diameter as a fraction of the plot width. */
+        Expr* ps_arg[1] = { expr_new_real(0.005) };
         prims[pc++] = expr_new_function(expr_new_symbol(SYM_PointSize), ps_arg, 1);
         Expr** dots = malloc(sizeof(Expr*) * npts);
         for (size_t j = 0; j < npts; j++) {
@@ -627,6 +619,37 @@ static bool is_iterator(const Expr* e) {
 
 /* ---- Helpers ---- */
 
+/* True when the call gave PlotStyle explicitly (split_options_param also
+ * injects a default one, which must not be read as a per-curve style). */
+static bool has_explicit_style(Expr* res, size_t opts_start) {
+    for (size_t i = opts_start; i < res->data.function.arg_count; i++) {
+        Expr* arg = res->data.function.args[i];
+        if (is_rule_arg(arg) && arg->data.function.args[0]->type == EXPR_SYMBOL
+            && arg->data.function.args[0]->data.symbol.name == SYM_PlotStyle)
+            return true;
+    }
+    return false;
+}
+
+/* Style for curve/region i of a multi-body plot (see plot_curve_style). */
+static Expr* multi_style(const Expr* style, size_t i, bool* scoped) {
+    Expr* base = palette_color(i);
+    Expr* st = plot_curve_style(style, i, base, scoped);
+    expr_free(base);
+    return st;
+}
+
+/* Append n prims to out[*pc], wrapped in their own List scope when the
+ * curve's style carries non-colour directives. Takes the prims array. */
+static void append_curve(Expr** out, size_t* pc, Expr** prims, size_t n, bool scoped) {
+    if (scoped && n > 0) {
+        out[(*pc)++] = expr_new_function(expr_new_symbol(SYM_List), prims, n);
+    } else {
+        for (size_t j = 0; j < n; j++) out[(*pc)++] = prims[j];
+    }
+    free(prims);
+}
+
 /* Pre-scan trailing Rule args starting at `opts_start` for PlotLegends.
  * Returns the evaluated value (caller owns), or NULL if absent. */
 static Expr* prescan_plotlegends(Expr* res, size_t opts_start) {
@@ -728,11 +751,13 @@ Expr* builtin_parametricplot(Expr* res) {
         size_t* per_counts = malloc(sizeof(size_t)  * nsub);
         bool any = false;
 
+        const Expr* style2 = has_explicit_style(res, 3) ? color : NULL;
+        bool* scoped2 = calloc(nsub, sizeof(bool));
         for (size_t si = 0; si < nsub; si++) {
-            /* build_param_region prepends the color directive internally, so
-             * just pass palette_color(si) for multi or the single color for
-             * single-surface -- no external prepend needed. */
-            Expr* sc = multi2 ? palette_color(si) : color;
+            /* build_param_region prepends the style directive internally, so
+             * just pass region si's style (palette colour or PlotStyle entry)
+             * for multi or the single color for single-surface. */
+            Expr* sc = multi2 ? multi_style(style2, si, &scoped2[si]) : color;
             per_prims[si] = build_param_region(sub_bodies[si], var1, var2,
                                                 t1min, t1max, t2min, t2max,
                                                 &sopts, sc, &per_counts[si]);
@@ -746,23 +771,23 @@ Expr* builtin_parametricplot(Expr* res) {
 
         if (!any) {
             for (size_t si = 0; si < nsub; si++) free(per_prims[si]);
-            free(per_prims); free(per_counts);
+            free(per_prims); free(per_counts); free(scoped2);
             free(pass); expr_free(color); expr_free(legends);
             return NULL;
         }
 
-        Expr** prims = malloc(sizeof(Expr*) * total);
+        Expr** prims = malloc(sizeof(Expr*) * (total ? total : 1));
         size_t pc = 0;
-        for (size_t si = 0; si < nsub; si++) {
-            for (size_t j = 0; j < per_counts[si]; j++) prims[pc++] = per_prims[si][j];
-            free(per_prims[si]);
-        }
-        free(per_prims); free(per_counts);
+        for (size_t si = 0; si < nsub; si++)
+            append_curve(prims, &pc, per_prims[si], per_counts[si], scoped2[si]);
+        free(per_prims); free(per_counts); free(scoped2);
 
         Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, pc);
         free(prims);
 
-        Expr* legend_meta = build_legend_meta(legends, sub_bodies, nsub, color);
+        Expr* legend_meta = (multi2 && style2)
+            ? build_legend_meta_styled(legends, sub_bodies, nsub, color, style2)
+            : build_legend_meta(legends, sub_bodies, nsub, color);
         expr_free(legends);
 
         /* legend_meta ownership transfers into make_graphics → Graphics[...] */
@@ -813,11 +838,16 @@ Expr* builtin_parametricplot(Expr* res) {
         size_t* per_counts = malloc(sizeof(size_t)  * nbodies);
         bool any = false;
 
+        const Expr* style1 = has_explicit_style(res, 2) ? single_color : NULL;
+        Expr** styles1 = calloc(nbodies, sizeof(Expr*));   /* multi only */
+        bool* scoped1 = calloc(nbodies, sizeof(bool));
         for (size_t ci = 0; ci < nbodies; ci++) {
-            Expr* cc = multi ? palette_color(ci) : single_color;
+            /* Curve ci's style: palette colour or PlotStyle entry (multi);
+             * a single curve is styled from the PlotStyle option. */
+            if (multi) styles1[ci] = multi_style(style1, ci, &scoped1[ci]);
+            Expr* cc = multi ? styles1[ci] : single_color;
             per_prims[ci] = build_param_curve(bodies[ci], var1, t1min, t1max,
                                                &sopts, cc, &per_counts[ci]);
-            if (multi) expr_free(cc);
             if (per_counts[ci] > 0) any = true;
             total += per_counts[ci];
         }
@@ -825,8 +855,8 @@ Expr* builtin_parametricplot(Expr* res) {
         iter_spec_restore(var1, old1);
 
         if (!any) {
-            for (size_t ci = 0; ci < nbodies; ci++) free(per_prims[ci]);
-            free(per_prims); free(per_counts);
+            for (size_t ci = 0; ci < nbodies; ci++) { free(per_prims[ci]); expr_free(styles1[ci]); }
+            free(per_prims); free(per_counts); free(styles1); free(scoped1);
             free(pass); expr_free(single_color); expr_free(legends);
             return NULL;
         }
@@ -835,16 +865,28 @@ Expr* builtin_parametricplot(Expr* res) {
         Expr** prims = malloc(sizeof(Expr*) * cap);
         size_t pc = 0;
         for (size_t ci = 0; ci < nbodies; ci++) {
-            if (multi) prims[pc++] = palette_color(ci);
-            for (size_t j = 0; j < per_counts[ci]; j++) prims[pc++] = per_prims[ci][j];
+            if (multi && scoped1[ci]) {
+                /* {Directive[...], lines...}: the directive's scope. */
+                Expr** sub = malloc(sizeof(Expr*) * (per_counts[ci] + 1));
+                sub[0] = styles1[ci]; styles1[ci] = NULL;
+                for (size_t j = 0; j < per_counts[ci]; j++) sub[1 + j] = per_prims[ci][j];
+                prims[pc++] = expr_new_function(expr_new_symbol(SYM_List), sub, per_counts[ci] + 1);
+                free(sub);
+            } else {
+                if (multi) { prims[pc++] = styles1[ci]; styles1[ci] = NULL; }
+                for (size_t j = 0; j < per_counts[ci]; j++) prims[pc++] = per_prims[ci][j];
+            }
+            expr_free(styles1[ci]);
             free(per_prims[ci]);
         }
-        free(per_prims); free(per_counts);
+        free(per_prims); free(per_counts); free(styles1); free(scoped1);
 
         Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, pc);
         free(prims);
 
-        Expr* legend_meta = build_legend_meta(legends, bodies, nbodies, single_color);
+        Expr* legend_meta = (multi && style1)
+            ? build_legend_meta_styled(legends, bodies, nbodies, single_color, style1)
+            : build_legend_meta(legends, bodies, nbodies, single_color);
         expr_free(legends);
 
         /* legend_meta ownership transfers into make_graphics → Graphics[...] */

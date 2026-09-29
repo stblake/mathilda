@@ -101,8 +101,10 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | `Hue[h]` / `Hue[h,s,b]` / `Hue[h,s,b,a]` | HSB color |
 | `CMYKColor[c,m,y,k]` | CMYK color |
 | `Opacity[a]` | Fill opacity `[0,1]` |
-| `Thickness[t]` | Line thickness (plot coords) |
-| `PointSize[s]` | Point radius (plot coords) |
+| `Thickness[r]` / `AbsoluteThickness[d]` / `Thick` / `Thin` | Line width: fraction of the plot width / points |
+| `PointSize[d]` / `AbsolutePointSize[d]` | Point diameter: fraction of the plot width / points |
+| `Dashing[{r1, r2, ...}]` / `AbsoluteDashing[...]` / `Dashed` / `Dotted` / `DotDashed` | Dashed lines |
+| `Directive[g1, g2, ...]` | Several directives as one (e.g. a `PlotStyle`) |
 | 24 named constants | `Red`, `Blue`, `Green`, `Black`, `White`, `Gray`, `Orange`, `Purple`, … |
 
 ### ColorFunction ramps (built-in named strings)
@@ -221,17 +223,24 @@ this same font.
 
 ## RGBColor / GrayLevel / Opacity / Thickness / PointSize
 Style directives. Placed alongside primitives in a `Graphics[]` primitive
-list, each affects every primitive that follows it (left to right), exactly
-like Mathematica's directive semantics. See also `Hue` and `CMYKColor` below,
-and the **Named color constants** section above for the 24 pre-defined color
-symbols.
+list, each affects every primitive that follows it (left to right) up to the
+end of the enclosing `{...}` list, exactly like Mathematica's directive
+semantics: a list is a directive scope, so `{{Red, Line[a]}, Line[b]}` draws
+only the first line red. See also `Hue` and `CMYKColor` below, the
+**Named color constants** section above for the 24 pre-defined color
+symbols, and `Dashing` / `AbsoluteThickness` / `Directive` below.
 
 - `RGBColor[r, g, b]` / `RGBColor[r, g, b, a]`: color, components in `[0,1]`.
 - `GrayLevel[g]` / `GrayLevel[g, a]`: a shade of gray (0 = black, 1 = white).
 - `Opacity[a]`: fill opacity in `[0,1]` (does not affect line alpha; use the
   4-argument `RGBColor`/`GrayLevel`/`Hue` forms for full RGBA control).
-- `Thickness[t]`: line thickness (plot coordinates) for `Line`/`Circle`.
-- `PointSize[s]`: point radius (plot coordinates) for `Point`.
+- `Thickness[r]`: lines (and `Circle` outlines) `r` times the plot width
+  thick. `Thickness[Tiny|Small|Medium|Large]` are fixed widths.
+- `PointSize[d]`: points whose **diameter** is `d` times the plot width, so a
+  point keeps its on-page size whatever the coordinate range (a
+  `PointSize[0.05]` dot over `0..2000` is as big as over `0..1`).
+  `PointSize[Tiny|Small|Medium|Large]` are fixed sizes.
+- The screen, PNG/JPEG and PDF back ends resolve these identically.
 
 ```mathematica
 In[1]:= Graphics[{RGBColor[1, 0, 0], Point[{0, 0}], Line[{{0,0},{1,1}}]}]
@@ -243,6 +252,75 @@ Out[2]= -Graphics-
 In[3]:= Graphics[{Blue, Opacity[0.5], Polygon[{{0,0},{1,0},{0.5,1}}],
                   Red,  Opacity[0.5], Polygon[{{0.5,0},{1.5,0},{1,1}}]}]
 Out[3]= -Graphics-  (* two overlapping semi-transparent triangles *)
+```
+
+## Dashing / AbsoluteDashing / Dashed / Dotted / DotDashed
+Line-dash directives, honoured for `Line` (and the curves of `Plot`,
+`ListLinePlot`, `ParametricPlot`, ...) on screen, in PNG/JPEG and in PDF.
+- `Dashing[{r1, r2, ...}]`: alternate drawn and blank segments of lengths
+  `r1, r2, ...` (fractions of the plot width), repeating along the whole
+  polyline. `Dashing[r]` is `Dashing[{r, r}]`; `Dashing[{}]` is solid.
+- `AbsoluteDashing[{d1, d2, ...}]`: the same with lengths in printer's points.
+- The lengths may also be `Tiny`, `Small`, `Medium` or `Large`; a zero length
+  draws a dot.
+- `Dashed`, `Dotted` and `DotDashed` evaluate to `Dashing[{Small, Small}]`,
+  `Dashing[{0, Small}]` and `Dashing[{0, Small, Small, Small}]`.
+
+**Features**:
+- Inert, `Protected` heads; `Dashed`/`Dotted`/`DotDashed` are `Protected`
+  OwnValues, as in Mathematica.
+
+```mathematica
+In[1]:= Dashed
+Out[1]= Dashing[{Small, Small}]
+
+In[2]:= Dotted
+Out[2]= Dashing[{0, Small}]
+
+In[3]:= Graphics[{Dashed, Line[{{0, 0}, {1, 1}}]}]
+Out[3]= -Graphics-
+```
+
+## AbsoluteThickness / AbsolutePointSize / Thick / Thin
+Absolute-size style directives.
+- `AbsoluteThickness[d]`: lines `d` printer's points thick (one point is one
+  pixel in a raster export).
+- `AbsolutePointSize[d]`: points of diameter `d` printer's points.
+- `Thick` and `Thin` evaluate to `Thickness[Large]` and `Thickness[Tiny]`.
+
+**Features**:
+- Inert, `Protected` heads; `Thick`/`Thin` are `Protected` OwnValues.
+
+```mathematica
+In[1]:= Thick
+Out[1]= Thickness[Large]
+
+In[2]:= Thin
+Out[2]= Thickness[Tiny]
+```
+
+## Directive
+- `Directive[g1, g2, ...]`: a single graphics directive combining the
+  directives `gi` -- the usual way to give one curve several styles, e.g.
+  `PlotStyle -> Directive[Red, Dashed, Thick]`.
+
+**Features**:
+- Inert, `Protected` head; its arguments evaluate (so `Red` becomes
+  `RGBColor[1, 0, 0]`).
+
+```mathematica
+In[1]:= Directive[Red, Dashed]
+Out[1]= Directive[RGBColor[1, 0, 0], Dashing[{Small, Small}]]
+```
+
+## Tiny / Small / Medium / Large
+Named sizes for the size directives: `Thickness[Large]`, `PointSize[Small]`,
+`Dashing[{Small, Small}]`, ... Each back end maps them to fixed point sizes
+(thickness 0.5/1/2/3 pt, point diameter 2/3/5/8 pt, dash length 2/4/7/12 pt).
+
+```mathematica
+In[1]:= Thickness[Large]
+Out[1]= Thickness[Large]
 ```
 
 ## Named color constants
@@ -492,6 +570,28 @@ log through. Only `True`/`False` accepted; no effect in a `USE_GRAPHICS=0` build
 - `Show[graphics, opt -> val, ...]`: merges the given options into
   `graphics`'s option list (a later/explicit option overrides one already
   present) and returns the merged `Graphics[...]`.
+- `Show[g1, g2, ..., opts]`: combines several graphics -- `Plot`, `ListPlot`,
+  `ParametricPlot`, plain `Graphics`, ... outputs -- into one, overlaying
+  their primitives. Each input becomes its own `{...}` directive scope, so a
+  colour or `Dashing` in one never restyles another, and an input's own
+  `PlotStyle` (the style a single-curve plot is drawn in) is baked into its
+  scope. Options are taken from `g1` unless `opts` override them. `PlotRange`
+  is the union of the inputs' ranges -- an input without an explicit range
+  contributes the extent of its primitives -- and stays automatic when no
+  input fixes one. Legends (`PlotLegends`) are concatenated.
+- `Show[{g1, g2, ...}, opts]`: the same, for a (possibly nested) list.
+- 2D and 3D graphics cannot be mixed; `Show` then stays unevaluated.
+
+```mathematica
+In[1]:= Show[Graphics[{Red, Line[{{0, 0}, {1, 1}}]}], Graphics[Point[{2, 2}]]][[1]]
+Out[1]= {{RGBColor[1, 0, 0], Line[{{0, 0}, {1, 1}}]}, {Point[{2, 2}]}}
+
+In[2]:= Head[Show[Plot[Sin[x], {x, 0, 1}], Plot[Cos[x], {x, 0, 1}]]]
+Out[2]= Graphics
+
+In[3]:= Cases[Show[Graphics[Line[{{0, 0}, {1, 1}}], PlotRange -> {{0, 1}, {0, 1}}], Graphics[Point[{2, 3}]]], (PlotRange -> v_) :> v]
+Out[3]= {{{0.0, 2.0}, {0.0, 3.0}}}
+```
 
 ### Interactive window controls
 

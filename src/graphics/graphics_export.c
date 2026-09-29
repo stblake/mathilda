@@ -33,7 +33,9 @@
 
 #include "expr.h"
 #include "sym_names.h"
+#include "print.h"          /* expr_to_string, for non-string labels */
 #include "graphics_export.h"
+#include "plot_common.h"    /* gfx_coerce_double + shared style directives */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -86,12 +88,15 @@ static int head_is(const Expr* e, const char* sym) {
         && e->data.function.head->data.symbol.name == sym;
 }
 
+/* Every coordinate, radius and directive argument is read through here, so
+ * exact values (1/2, Pi/4, Sqrt[2]) are drawn exactly where the Raylib
+ * renderer draws them instead of being skipped: literals convert directly
+ * and exact symbolic numbers go through N[]. */
 static int to_double(const Expr* e, double* out) {
-    if (!e) return 0;
-    if (e->type == EXPR_REAL)    { *out = e->data.real;              return 1; }
-    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer;   return 1; }
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return 1; }
-    return 0;
+    double v;
+    if (!gfx_coerce_double(e, &v)) return 0;
+    *out = v;
+    return 1;
 }
 
 static double clip01(double v) { return v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v); }
@@ -198,10 +203,9 @@ static void bbox_walk(const Expr* p, Range* r) {
                 if (get_pt(a->data.function.args[i], &x, &y)) bb_pt(r, x, y);
         return;
     }
-    if ((head_is(p, SYM_Disk) || head_is(p, SYM_Circle))
-        && p->data.function.arg_count >= 1) {
-        double cx = 0, cy = 0, rad = 1;
-        get_pt(p->data.function.args[0], &cx, &cy);
+    if (head_is(p, SYM_Disk) || head_is(p, SYM_Circle)) {
+        double cx = 0, cy = 0, rad = 1;     /* Circle[] is the unit circle */
+        if (p->data.function.arg_count >= 1) get_pt(p->data.function.args[0], &cx, &cy);
         if (p->data.function.arg_count >= 2) to_double(p->data.function.args[1], &rad);
         bb_pt(r, cx - rad, cy - rad); bb_pt(r, cx + rad, cy + rad);
         return;
@@ -321,8 +325,12 @@ typedef struct {
     double alphas[MAX_ALPHA];
     int    nalpha;
     int    used_text;             /* did we emit any text? (font resource) */
-    /* current graphics state */
+    /* current graphics state; thickness and point_size (a radius) are in
+     * points, <= 0 meaning the default; dash is the Dashing pattern */
     double r, g, b, opacity, thickness, point_size;
+    double dash[GFX_MAX_DASH];
+    int    ndash;
+    int    dash_emitted;          /* a non-solid dash pattern is in force */
     /* world->page transform */
     double ox, oy, sx, sy;
 } Emit;
@@ -338,11 +346,30 @@ static int gs_for_alpha(Emit* e, double a) {
 }
 
 static void set_fill(Emit* e)   { buf_catf(e->c, "%.4f %.4f %.4f rg\n", e->r, e->g, e->b); }
-static void set_stroke(Emit* e) { buf_catf(e->c, "%.4f %.4f %.4f RG\n", e->r, e->g, e->b); }
+static void set_stroke(Emit* e) {
+    buf_catf(e->c, "%.4f %.4f %.4f RG\n", e->r, e->g, e->b);
+    /* Dash pattern (Dashing/Dashed/Dotted...). A zero-length dash is a dot,
+     * which only shows with round caps, so those patterns switch caps too. */
+    if (e->ndash > 0) {
+        int dots = 0;
+        buf_cat(e->c, "[");
+        for (int i = 0; i < e->ndash; i++) {
+            buf_catf(e->c, i ? " %.3f" : "%.3f", e->dash[i]);
+            if (e->dash[i] <= 0.0) dots = 1;
+        }
+        buf_catf(e->c, "] 0 d %d J\n", dots ? 1 : 0);
+        e->dash_emitted = 1;
+    } else if (e->dash_emitted) {
+        buf_cat(e->c, "[] 0 d 0 J\n");
+        e->dash_emitted = 0;
+    }
+}
 
-/* Stroke width in points: Thickness is a fraction of the plot width. */
+/* Stroke width in points (Thickness was resolved against the plot width
+ * when the directive was read, see apply_directive). */
 static double stroke_w(const Emit* e, double plot_w) {
-    double w = e->thickness > 0 ? e->thickness * plot_w : 1.0;
+    (void)plot_w;
+    double w = e->thickness > 0 ? e->thickness : 1.0;
     if (w < 0.4) w = 0.4;
     return w;
 }
@@ -385,10 +412,54 @@ static char* text_string(const Expr* e) {
 
 static void draw_prim(Emit* e, const Expr* p, double plot_w);
 
+/* A List is a directive scope, as in Mathematica: a colour, Thickness or
+ * Dashing set inside {...} does not leak to the primitives after it. That
+ * is what keeps Show[g1, g2]'s inputs, and a dashed curve among several,
+ * from restyling each other. */
+typedef struct {
+    double r, g, b, opacity, thickness, point_size;
+    double dash[GFX_MAX_DASH];
+    int    ndash;
+} StyleState;
+
+static void style_save(const Emit* e, StyleState* s) {
+    s->r = e->r; s->g = e->g; s->b = e->b; s->opacity = e->opacity;
+    s->thickness = e->thickness; s->point_size = e->point_size;
+    s->ndash = e->ndash; memcpy(s->dash, e->dash, sizeof(s->dash));
+}
+
+static void style_restore(Emit* e, const StyleState* s) {
+    e->r = s->r; e->g = s->g; e->b = s->b; e->opacity = s->opacity;
+    e->thickness = s->thickness; e->point_size = s->point_size;
+    e->ndash = s->ndash; memcpy(e->dash, s->dash, sizeof(s->dash));
+}
+
 static void draw_list(Emit* e, const Expr* lst, double plot_w) {
     if (!head_is(lst, SYM_List)) return;
+    StyleState saved;
+    style_save(e, &saved);
     for (size_t i = 0; i < lst->data.function.arg_count; i++)
         draw_prim(e, lst->data.function.args[i], plot_w);
+    style_restore(e, &saved);
+}
+
+/* Apply a style directive to the state. Returns 1 if `p` was one. */
+static int apply_directive(Emit* e, const Expr* p, double plot_w) {
+    double v;
+    int nd;
+    double dash[GFX_MAX_DASH];
+    if (head_is(p, SYM_Directive)) {
+        for (size_t i = 0; i < p->data.function.arg_count; i++)
+            draw_prim(e, p->data.function.args[i], plot_w);   /* colours too */
+        return 1;
+    }
+    if (gfx_thickness_pts(p, plot_w, &v))    { e->thickness = v;  return 1; }
+    if (gfx_point_radius_pts(p, plot_w, &v)) { e->point_size = v; return 1; }
+    if (gfx_dash_pts(p, plot_w, dash, GFX_MAX_DASH, &nd)) {
+        e->ndash = nd; memcpy(e->dash, dash, sizeof(dash));
+        return 1;
+    }
+    return 0;
 }
 
 static void draw_prim(Emit* e, const Expr* p, double plot_w) {
@@ -407,14 +478,7 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
         double o; if (to_double(p->data.function.args[0], &o)) e->opacity = clip01(o);
         return;
     }
-    if (head_is(p, SYM_Thickness) && p->data.function.arg_count >= 1) {
-        double t; if (to_double(p->data.function.args[0], &t)) e->thickness = t;
-        return;
-    }
-    if (head_is(p, SYM_PointSize) && p->data.function.arg_count >= 1) {
-        double s; if (to_double(p->data.function.args[0], &s)) e->point_size = s;
-        return;
-    }
+    if (apply_directive(e, p, plot_w)) return;   /* Thickness/PointSize/Dashing/Directive */
 
     /* Line -------------------------------------------------------------- */
     if (head_is(p, SYM_Line) && p->data.function.arg_count >= 1) {
@@ -453,10 +517,9 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
     }
 
     /* Disk / Circle ----------------------------------------------------- */
-    if ((head_is(p, SYM_Disk) || head_is(p, SYM_Circle))
-        && p->data.function.arg_count >= 1) {
-        double cx = 0, cy = 0, rad = 1;
-        get_pt(p->data.function.args[0], &cx, &cy);
+    if (head_is(p, SYM_Disk) || head_is(p, SYM_Circle)) {
+        double cx = 0, cy = 0, rad = 1;     /* Circle[] is the unit circle */
+        if (p->data.function.arg_count >= 1) get_pt(p->data.function.args[0], &cx, &cy);
         if (p->data.function.arg_count >= 2) to_double(p->data.function.args[1], &rad);
         double rp = rad * fabs(e->sx); /* radius in page units (x scale) */
         int filled = head_is(p, SYM_Disk);
@@ -472,7 +535,7 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
     /* Point(s) ---------------------------------------------------------- */
     if (head_is(p, SYM_Point) && p->data.function.arg_count >= 1) {
         const Expr* a = p->data.function.args[0];
-        double ps = (e->point_size > 0 ? e->point_size : 0.008) * plot_w;
+        double ps = e->point_size > 0 ? e->point_size : 0.008 * plot_w;
         if (ps < 1.0) ps = 1.0;
         set_fill(e);
         double x, y;
@@ -590,6 +653,128 @@ static void draw_axes_frame(Emit* e, const Range* r, double rx, double ry,
     }
 }
 
+/* ------------------------------------------ labels, legend, style opts ---- */
+
+/* Display text for a label option value (PlotLabel, AxesLabel entries,
+ * legend labels): a String verbatim, Style[x, ...] by its content, None or
+ * an empty value as NULL, anything else in its printed form (so
+ * AxesLabel -> {x, y} reads "x" and "y"). Caller frees. */
+static char* label_string(const Expr* v) {
+    if (!v) return NULL;
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_None) return NULL;
+    if (v->type == EXPR_STRING) {
+        if (!v->data.string[0]) return NULL;
+        size_t n = strlen(v->data.string) + 1;
+        char* s = (char*)malloc(n); if (s) memcpy(s, v->data.string, n); return s;
+    }
+    /* Style[x, ...]: compared by name, since Style has no SYM_ constant. */
+    if (v->type == EXPR_FUNCTION && v->data.function.arg_count >= 1
+        && v->data.function.head->type == EXPR_SYMBOL
+        && strcmp(v->data.function.head->data.symbol.name, "Style") == 0)
+        return label_string(v->data.function.args[0]);
+    return expr_to_string((Expr*)v);
+}
+
+/* Approximate Helvetica advance: half the font size per character. */
+static double text_w(const char* s, double fs) { return 0.5 * fs * (double)strlen(s); }
+
+/* Black text with its baseline-left at page (x, y). */
+static void emit_label(Emit* e, double x, double y, double fs, const char* s) {
+    buf_catf(e->c, "0 0 0 rg\nBT /F1 %.1f Tf %.3f %.3f Td ", fs, x, y);
+    emit_pdf_string(e->c, s);
+    buf_cat(e->c, " Tj ET\n");
+    e->used_text = 1;
+}
+
+/* The decorations drawn outside the plot region, and the margin each needs. */
+typedef struct {
+    char* plot_label;               /* PlotLabel, centred above the plot     */
+    char* xlabel, *ylabel;          /* AxesLabel -> {x, y} (or just x)       */
+    const Expr* legend;             /* $PlotLegendData[{colour, label}, ...] */
+    double extra_top, extra_right;  /* margins they need, in points          */
+} Deco;
+
+static void deco_parse(const Expr* g, int draw_axes, Deco* d) {
+    memset(d, 0, sizeof(*d));
+    const Expr* v;
+    if ((v = find_option(g, SYM_PlotLabel))) d->plot_label = label_string(v);
+    if (draw_axes && (v = find_option(g, SYM_AxesLabel))) {
+        if (head_is(v, SYM_List) && v->data.function.arg_count == 2) {
+            d->xlabel = label_string(v->data.function.args[0]);
+            d->ylabel = label_string(v->data.function.args[1]);
+        } else {
+            d->xlabel = label_string(v);     /* a single label names the x axis */
+        }
+    }
+    for (size_t i = 1; i < g->data.function.arg_count; i++)
+        if (head_is(g->data.function.args[i], SYM_PlotLegendData)
+            && g->data.function.args[i]->data.function.arg_count > 0)
+            d->legend = g->data.function.args[i];
+
+    if (d->plot_label) d->extra_top += 18.0;
+    if (d->ylabel)     d->extra_top += 12.0;
+    if (d->xlabel)     d->extra_right += text_w(d->xlabel, 10.0) + 8.0;
+    if (d->legend) {
+        double widest = 0.0;
+        for (size_t i = 0; i < d->legend->data.function.arg_count; i++) {
+            const Expr* ent = d->legend->data.function.args[i];
+            if (!head_is(ent, SYM_List) || ent->data.function.arg_count < 2) continue;
+            char* s = label_string(ent->data.function.args[1]);
+            if (s) { double w = text_w(s, 9.0); if (w > widest) widest = w; free(s); }
+        }
+        d->extra_right += 12.0 + 22.0 + widest + 8.0;   /* gap, swatch, text, pad */
+    }
+}
+
+static void deco_free(Deco* d) { free(d->plot_label); free(d->xlabel); free(d->ylabel); }
+
+/* Draw the decorations around the plot region [rx, ry, rw, rh] of a W x H page. */
+static void deco_draw(Emit* e, const Deco* d, double W, double H,
+                      double rx, double ry, double rw, double rh) {
+    if (d->plot_label)
+        emit_label(e, 0.5 * W - 0.5 * text_w(d->plot_label, 11.0), H - 16.0, 11.0, d->plot_label);
+    if (d->ylabel) emit_label(e, rx, ry + rh + 5.0, 10.0, d->ylabel);
+    if (d->xlabel) emit_label(e, rx + rw + 5.0, ry - 3.0, 10.0, d->xlabel);
+    if (d->legend) {
+        double lx = rx + rw + 12.0 + (d->xlabel ? text_w(d->xlabel, 10.0) + 8.0 : 0.0);
+        double ly = ry + rh - 10.0;
+        for (size_t i = 0; i < d->legend->data.function.arg_count; i++, ly -= 14.0) {
+            const Expr* ent = d->legend->data.function.args[i];
+            if (!head_is(ent, SYM_List) || ent->data.function.arg_count < 2) continue;
+            double r = 0, g = 0, b = 0, a = 1;
+            if (!resolve_color(ent->data.function.args[0], &r, &g, &b, &a)) { r = 0.368; g = 0.507; b = 0.71; }
+            buf_catf(e->c, "%.4f %.4f %.4f RG 1.5 w %.3f %.3f m %.3f %.3f l S\n",
+                     r, g, b, lx, ly + 3.0, lx + 18.0, ly + 3.0);
+            char* s = label_string(ent->data.function.args[1]);
+            if (s) { emit_label(e, lx + 22.0, ly, 9.0, s); free(s); }
+        }
+    }
+}
+
+/* Apply a style spec without opening a scope: a List's members all apply
+ * (so PlotStyle -> {{Red, Thick}} styles the first curve with both). */
+static void apply_style(Emit* e, const Expr* s, double plot_w) {
+    if (head_is(s, SYM_List)) {
+        for (size_t i = 0; i < s->data.function.arg_count; i++)
+            apply_style(e, s->data.function.args[i], plot_w);
+        return;
+    }
+    draw_prim(e, s, plot_w);
+}
+
+/* Draw Prolog/Epilog content in its own scope, starting from black with
+ * default sizes (Mathematica's defaults for these options), so neither the
+ * plot's style nor the epilog's own directives leak. */
+static void draw_extra(Emit* e, const Expr* p, double plot_w) {
+    if (!p) return;
+    StyleState saved;
+    style_save(e, &saved);
+    e->r = e->g = e->b = 0.0; e->opacity = 1.0;
+    e->thickness = 0.0; e->point_size = 0.0; e->ndash = 0;
+    draw_prim(e, p, plot_w);
+    style_restore(e, &saved);
+}
+
 /* ------------------------------------------------------- PDF assembly ----- */
 
 int graphics_export_pdf(const Expr* g, const char* path) {
@@ -624,6 +809,8 @@ int graphics_export_pdf(const Expr* g, const char* path) {
     double W = o.width, H = o.height;
     double mL = draw_axes ? 44.0 : 8.0, mR = 12.0;
     double mT = 12.0, mB = draw_axes ? 30.0 : 8.0;
+    Deco deco; deco_parse(g, draw_axes, &deco);
+    mT += deco.extra_top; mR += deco.extra_right;
     double rx = mL, ry = mB, rw = W - mL - mR, rh = H - mT - mB;
     if (rw < 20) rw = 20;
     if (rh < 20) rh = 20;
@@ -641,12 +828,30 @@ int graphics_export_pdf(const Expr* g, const char* path) {
     if (o.have_bg)
         buf_catf(&content, "%.4f %.4f %.4f rg 0 0 %.3f %.3f re f\n", o.bg_r, o.bg_g, o.bg_b, W, H);
 
-    /* Clip the primitives to the plot region so nothing spills into margins. */
+    /* Clip the primitives to the plot region so nothing spills into margins.
+     * Prolog draws beneath the plot and Epilog over it; PlotStyle sets the
+     * starting style of the plot's own primitives (a single-curve Plot or
+     * ListPlot draws its curve in it; a List of styles is per curve, and the
+     * multi-curve builders already bake those into the primitives). */
     buf_catf(&content, "q %.3f %.3f %.3f %.3f re W n\n", rx, ry, rw, rh);
-    draw_prim(&e, prims, rw);
+    draw_extra(&e, find_option(g, SYM_Prolog), rw);
+    {
+        StyleState saved;
+        style_save(&e, &saved);
+        const Expr* ps = find_option(g, SYM_PlotStyle);
+        if (head_is(ps, SYM_List))
+            ps = ps->data.function.arg_count ? ps->data.function.args[0] : NULL;
+        if (ps) apply_style(&e, ps, rw);
+        draw_prim(&e, prims, rw);
+        style_restore(&e, &saved);
+    }
+    draw_extra(&e, find_option(g, SYM_Epilog), rw);
     buf_cat(&content, "Q\n");
+    e.dash_emitted = 0;        /* Q restored the solid dash of the outer state */
 
     if (draw_axes) draw_axes_frame(&e, &r, rx, ry, rw, rh);
+    deco_draw(&e, &deco, W, H, rx, ry, rw, rh);
+    deco_free(&deco);
 
     /* ---- Assemble the PDF objects. --------------------------------------
      * 1 Catalog, 2 Pages, 3 Page, 4 Font, 5..(4+nalpha) ExtGState,
