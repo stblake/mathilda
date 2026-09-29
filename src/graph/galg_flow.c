@@ -527,6 +527,9 @@ Expr* builtin_find_maximum_flow(Expr* res) {
     if (!galg_split_options(res, nopt, names, ov)) return NULL;
     if (ov[0] && galg_is_symbol(ov[0], "Automatic")) ov[0] = NULL;
     if (ov[1] && galg_is_symbol(ov[1], "Automatic")) ov[1] = NULL;
+    /* EdgeCapacity -> Automatic (or absent) means the graph's own EdgeCapacity
+     * property when it carries one, else 1 -- as Mathematica documents. */
+    if (!ov[0]) ov[0] = graph_edge_capacity_list(g);
 
     int n = galg_nv(g);
     long m = galg_ne(g);
@@ -687,7 +690,7 @@ done:
 
 /* Cut-family capacities: EdgeWeight when present, else 1. */
 static int gf_weight_caps(const Expr* g, GfCap* cap) {
-    if (g->data.function.arg_count == 3) {
+    if (graph_edge_weight_list(g)) {
         Expr* w = graph_resolve_edge_weights(g);
         if (!w) return 0;
         int ok = gf_caps_parse(w, galg_ne(g), cap);

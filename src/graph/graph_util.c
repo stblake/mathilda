@@ -191,39 +191,84 @@ int graph_vertex_index(const Expr* verts, const Expr* v) {
     return -1;
 }
 
-/* True iff `opt` is a well-formed EdgeWeight -> List[n] rule, where n equals
- * `edge_count`. Shape only -- does not inspect the individual weight values,
- * which may be any expression (numeric weights are the expected case, but
- * nothing here requires it, matching how vertices are already arbitrary
- * expressions). */
-static int graph_edge_weight_rule_ok(const Expr* opt, size_t edge_count) {
-    if (!head_is_sym(opt, SYM_Rule) || opt->data.function.arg_count != 2) return 0;
-    const Expr* key = opt->data.function.args[0];
-    const Expr* val = opt->data.function.args[1];
-    if (!key || key->type != EXPR_SYMBOL || key->data.symbol.name != SYM_EdgeWeight)
-        return 0;
-    if (!graph_is_list(val)) return 0;
-    return val->data.function.arg_count == edge_count;
+/* ---- Stored per-edge options ---------------------------------------------- *
+ * A canonical graph may carry per-edge property lists after its vertex and edge
+ * Lists, each a Rule[key, List[n]] with n == |edges|, matched to the edges by
+ * position. graph_edge_option_key lists the keys in their CANONICAL order; the
+ * constructor emits them in that order and at most once each, so a canonical
+ * graph has a unique spelling and the fixed-point check (expr_eq against a
+ * rebuilt copy) is sound. */
+const char* graph_edge_option_key(int i) {
+    switch (i) {
+        case 0: return SYM_EdgeWeight;
+        case 1: return SYM_EdgeCapacity;
+        default: return NULL;
+    }
 }
 
-/* True iff g's shape is Graph[verts, edges] (unweighted) or
- * Graph[verts, edges, EdgeWeight -> List[n]] with n == |edges| (weighted).
- * Both `graph_is_valid` and `graph_build_adj` route through this instead of
- * duplicating an `arg_count != 2` literal -- they are two independent choke
- * points (a plan-reviewer-caught defect: widening only one left the other's
- * 8 downstream builtins rejecting every weighted graph even though GraphQ
- * reported it valid), so the arity/shape check itself must be shared, not
- * just widened identically by hand in both places. Structural shape only --
- * self-loops, parallel edges, etc. are still each caller's own job. */
+int graph_edge_option_rank(const char* key) {
+    for (int i = 0; graph_edge_option_key(i); i++)
+        if (graph_edge_option_key(i) == key) return i;
+    return -1;
+}
+
+/* Canonical rank of `opt` if it is Rule[key, List[edge_count]] for a known
+ * per-edge key, else -1. Shape only -- the individual values may be any
+ * expression (numeric is the expected case, but, as with vertices, nothing
+ * here requires it). */
+static int graph_edge_option_rule_rank(const Expr* opt, size_t edge_count) {
+    if (!head_is_sym(opt, SYM_Rule) || opt->data.function.arg_count != 2) return -1;
+    const Expr* key = opt->data.function.args[0];
+    const Expr* val = opt->data.function.args[1];
+    if (!key || key->type != EXPR_SYMBOL) return -1;
+    int rank = graph_edge_option_rank(key->data.symbol.name);
+    if (rank < 0 || !graph_is_list(val) || val->data.function.arg_count != edge_count)
+        return -1;
+    return rank;
+}
+
+/* True iff g's shape is Graph[verts, edges, opt...] where every opt is a
+ * well-formed per-edge option (see above) and the options appear in strictly
+ * increasing canonical order (so none repeats). Both `graph_is_valid` and the
+ * memo route through this, so the two can never disagree on which shapes are
+ * graphs. Structural shape only -- self-loops, parallel edges, etc. are still
+ * each caller's own job. */
 static int graph_shape_ok(const Expr* g) {
     if (!head_is_sym(g, SYM_Graph)) return 0;
     size_t argc = g->data.function.arg_count;
+    if (argc < 2) return 0;
     if (argc == 2) return 1;
-    if (argc != 3) return 0;
     const Expr* edges = g->data.function.args[1];
     if (!graph_is_list(edges)) return 0;
-    return graph_edge_weight_rule_ok(g->data.function.args[2],
-                                      edges->data.function.arg_count);
+    size_t ne = edges->data.function.arg_count;
+    int last = -1;
+    for (size_t i = 2; i < argc; i++) {
+        int rank = graph_edge_option_rule_rank(g->data.function.args[i], ne);
+        if (rank <= last) return 0;       /* unknown, malformed, repeated, or out of order */
+        last = rank;
+    }
+    return 1;
+}
+
+const Expr* graph_edge_option_list(const Expr* g, const char* key) {
+    if (!head_is_sym(g, SYM_Graph)) return NULL;
+    for (size_t i = 2; i < g->data.function.arg_count; i++) {
+        const Expr* opt = g->data.function.args[i];
+        if (head_is_sym(opt, SYM_Rule) && opt->data.function.arg_count == 2
+            && opt->data.function.args[0]->type == EXPR_SYMBOL
+            && opt->data.function.args[0]->data.symbol.name == key
+            && graph_is_list(opt->data.function.args[1]))
+            return opt->data.function.args[1];
+    }
+    return NULL;
+}
+
+const Expr* graph_edge_weight_list(const Expr* g) {
+    return graph_edge_option_list(g, SYM_EdgeWeight);
+}
+
+const Expr* graph_edge_capacity_list(const Expr* g) {
+    return graph_edge_option_list(g, SYM_EdgeCapacity);
 }
 
 /* ---- Phase 5: adjacency scaffolding --------------------------------------- */
@@ -598,8 +643,8 @@ Expr* graph_resolve_edge_weights(const Expr* g) {
     if (!graph_is_valid(g)) return NULL;
     size_t ne = g->data.function.args[1]->data.function.arg_count;
 
-    if (g->data.function.arg_count == 3) {
-        const Expr* wlist = g->data.function.args[2]->data.function.args[1];
+    const Expr* wlist = graph_edge_weight_list(g);
+    if (wlist) {
         Expr** ws = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
         if (ne > 0 && !ws) return NULL;
         for (size_t i = 0; i < ne; i++) ws[i] = expr_copy(wlist->data.function.args[i]);
@@ -647,7 +692,7 @@ double graph_weight_to_double(const Expr* w) {
 }
 
 int graph_weights_usable(const Expr* g) {
-    if (!graph_is_valid(g) || g->data.function.arg_count != 3) return 0;
+    if (!graph_is_valid(g) || !graph_edge_weight_list(g)) return 0;
     Expr* weights = graph_resolve_edge_weights(g);
     if (!weights) return 0;
 

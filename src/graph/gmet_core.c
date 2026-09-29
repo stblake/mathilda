@@ -63,8 +63,8 @@ int gmet_graph_kind(const Expr* g) {
 
 int gmet_edge_weights(const Expr* g, double** w_out) {
     *w_out = NULL;
-    if (g->data.function.arg_count != 3) return 0;
-    const Expr* wl = g->data.function.args[2]->data.function.args[1];
+    const Expr* wl = graph_edge_weight_list(g);
+    if (!wl) return 0;
     size_t ne = wl->data.function.arg_count;
     double* w = malloc((ne ? ne : 1) * sizeof(double));
     if (!w) return -1;

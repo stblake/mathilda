@@ -315,20 +315,73 @@ static void test_shortest_path(void) {
 }
 
 static void test_components(void) {
-    /* Directed 4-cycle: one weak and one strong component. */
+    /* Directed 4-cycle: one strong component. */
     assert_eval_eq("ConnectedComponents[Graph[{1,2,3,4},{1->2,2->3,3->4,4->1}]]",
                    "{{1, 2, 3, 4}}", 0);
-    /* Two disjoint directed pieces -> two weak components. */
+    /* On a directed graph ConnectedComponents gives the STRONG components, as
+     * Mathematica does -- two disjoint arcs are four singletons, sinks first. */
     assert_eval_eq("ConnectedComponents[Graph[{1,2,3,4},{1->2,3->4}]]",
-                   "{{1, 2}, {3, 4}}", 0);
-    /* Directed chain 1->2->3: weak = all together, strong = singletons. */
+                   "{{2}, {1}, {4}, {3}}", 0);
+    /* Directed chain 1->2->3: weak = all together, strong = singletons, listed
+     * with no edge from an earlier component to a later one. */
     assert_eval_eq("WeaklyConnectedComponents[Graph[{1,2,3},{1->2,2->3}]]",
                    "{{1, 2, 3}}", 0);
     assert_eval_eq("StronglyConnectedComponents[Graph[{1,2,3},{1->2,2->3}]]",
-                   "{{1}, {2}, {3}}", 0);
+                   "{{3}, {2}, {1}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{1,2,3},{1->2,2->3}]]",
+                   "{{3}, {2}, {1}}", 0);
     /* A directed cycle is one strong component. */
     assert_eval_eq("StronglyConnectedComponents[Graph[{1,2,3},{1->2,2->3,3->1}]]",
                    "{{1, 2, 3}}", 0);
+}
+
+/* ConnectedComponents / ConnectedGraphQ against Mathematica 15, output for
+ * output. Directed (and mixed) graphs: strong components in Tarjan completion
+ * order, members in VertexList order. Undirected: largest component first. */
+static void test_components_mathematica_order(void) {
+    assert_eval_eq("ConnectedComponents[Graph[{3->1, 1->5, 2->4, 2->6, 3->5, 4->6}]]",
+                   "{{5}, {1}, {3}, {6}, {4}, {2}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{1->2,2->3,3->1,3->4}]]",
+                   "{{4}, {1, 2, 3}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{1->2,2->3,3->1,3->4,4->5,5->4,6->1}]]",
+                   "{{4, 5}, {1, 2, 3}, {6}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{a,b,c,d,e,f},{a->b,b->a,c->d,e<->f}]]",
+                   "{{a, b}, {d}, {c}, {e, f}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{5->1, 1->3, 3->5, 2->4, 3->7}]]",
+                   "{{7}, {5, 1, 3}, {4}, {2}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{1->2,2->3,3->1,1->4,4->1,2->5}]]",
+                   "{{5}, {1, 2, 3, 4}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{1,2,3},{1->3,3->2,2->1}]]",
+                   "{{1, 2, 3}}", 0);
+    /* Mixed: an undirected edge links both ways. */
+    assert_eval_eq("ConnectedComponents[Graph[{1->2, 2<->3, 3->1, 3->4}]]",
+                   "{{4}, {1, 2, 3}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{1,2,3,4},{1->2,2->1,3->4,1<->3}]]",
+                   "{{4}, {1, 2, 3}}", 0);
+    /* Undirected: largest first, ties by first appearance. */
+    assert_eval_eq("Map[Sort, ConnectedComponents[Graph[{1,2,3,4,5,6,7,8},"
+                   "{1<->2, 3<->4, 4<->5, 6<->7}]]]",
+                   "{{3, 4, 5}, {1, 2}, {6, 7}, {8}}", 0);
+    assert_eval_eq("Map[Sort, ConnectedComponents[Graph[{5<->1, 1<->3, 2<->4, 3<->7}]]]",
+                   "{{1, 3, 5, 7}, {2, 4}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{a,b,c,d},{}]]", "{{a}, {b}, {c}, {d}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{}, {}]]", "{}", 0);
+    /* WeaklyConnectedComponents stays weak, and is ordered largest first. */
+    assert_eval_eq("Map[Sort, WeaklyConnectedComponents[Graph[{5->6, 1->2,2->3,4->3}]]]",
+                   "{{1, 2, 3, 4}, {5, 6}}", 0);
+    assert_eval_eq("Map[Sort, WeaklyConnectedComponents[Graph[{1<->2, 3<->4, 4<->5, 6<->7}]]]",
+                   "{{3, 4, 5}, {1, 2}, {6, 7}}", 0);
+    /* The {v...} form keeps the components that contain a listed vertex. */
+    assert_eval_eq("ConnectedComponents[Graph[{1->2,2->3,3->1,3->4}], {4}]", "{{4}}", 0);
+    assert_eval_eq("Map[Sort, ConnectedComponents[Graph[{1<->2, 3<->4, 4<->5, 6<->7}], {1, 6}]]",
+                   "{{1, 2}, {6, 7}}", 0);
+    assert_eval_eq("ConnectedComponents[Graph[{1<->2}], {9}]", "{}", 0);
+    /* ConnectedGraphQ: a directed graph must be STRONGLY connected. */
+    assert_eval_eq("{ConnectedGraphQ[Graph[{1->2,2->3}]], ConnectedGraphQ[Graph[{1->2,2->3,3->1}]],"
+                   " ConnectedGraphQ[Graph[{1->2,2<->3}]], ConnectedGraphQ[Graph[{1->2,2->1}]]}",
+                   "{False, True, False, True}", 0);
+    assert_eval_eq("ConnectedGraphQ[Graph[{1<->2, 2<->3}]]", "True", 0);
+    assert_eval_eq("ConnectedGraphQ[Graph[{}, {}]]", "False", 0);
 }
 
 static void test_spanning_and_connectivity(void) {
@@ -614,7 +667,7 @@ static void test_edge_weights(void) {
     snprintf(buf, sizeof(buf), "GraphDistance[%s,1,3]", wg);
     assert_eval_eq(buf, "12.0", 0);
     snprintf(buf, sizeof(buf), "ConnectedComponents[%s]", wg);
-    assert_eval_eq(buf, "{{1, 2, 3}}", 0);
+    assert_eval_eq(buf, "{{3}, {2}, {1}}", 0);          /* directed: strong */
     snprintf(buf, sizeof(buf), "WeaklyConnectedComponents[%s]", wg);
     assert_eval_eq(buf, "{{1, 2, 3}}", 0);
     snprintf(buf, sizeof(buf), "Head[FindSpanningTree[%s]]", wg);
@@ -625,10 +678,10 @@ static void test_edge_weights(void) {
     snprintf(buf, sizeof(buf), "VertexConnectivity[%s]", wug);
     assert_eval_eq(buf, "1", 0);
 
-    /* Non-goal, regression-tested: derived-vertex weighted construction
-     * (Graph[e, EdgeWeight->w], no explicit vertex list) is not accepted --
-     * fails safe (unevaluated), not silently. */
-    assert_eval_eq("Head[Graph[{1->2,2->3},EdgeWeight->{1,1}]]", "Graph", 0);
+    /* Derived-vertex weighted construction (Graph[e, EdgeWeight->w], no
+     * explicit vertex list) is accepted, as in Mathematica; see
+     * test_edges_only_options. */
+    assert_eval_eq("GraphQ[Graph[{1->2,2->3},EdgeWeight->{1,1}]]", "True", 0);
 
     /* Regression: unweighted graphs and existing builtins are unaffected. */
     assert_eval_eq("EdgeCount[CompleteGraph[5]]", "10", 0);
@@ -866,6 +919,196 @@ static void test_graph_memo(void) {
     assert_eval_eq("CompleteGraphQ[Graph[{1,2,3,4},{1<->2,1<->3,2<->3}]]", "False", 0);
 }
 
+/* ---- FindSpanningTree: weights, direction, rooted form -------------------- *
+ * Every expected value below is Mathematica 15's output for the same input. */
+#define FST_SHOW(t) "Module[{t = " t "}, {EdgeList[t], If[WeightedGraphQ[t], " \
+                    "EdgeWeight[t], None], VertexList[t]}]"
+static void test_spanning_tree_weighted(void) {
+    /* The reported case: BFS gave total 13, the minimum is 11. */
+    const char* g = "Graph[{a,b,c,d,e}, {a<->b, a<->c, b<->c, b<->d, c<->d, d<->e}, "
+                    "EdgeWeight -> {4,1,2,5,8,3}]";
+    char buf[512];
+    snprintf(buf, sizeof(buf), FST_SHOW("FindSpanningTree[%s]"), g);
+    assert_eval_eq(buf, "{{a <-> c, b <-> c, b <-> d, d <-> e}, {1, 2, 5, 3}, {a, b, c, d, e}}", 0);
+    snprintf(buf, sizeof(buf), "Total[EdgeWeight[FindSpanningTree[%s]]]", g);
+    assert_eval_eq(buf, "11", 0);
+    /* Rooted form and options give the same tree. */
+    snprintf(buf, sizeof(buf), "EdgeList[FindSpanningTree[{%s, c}]]", g);
+    assert_eval_eq(buf, "{a <-> c, b <-> c, b <-> d, d <-> e}", 0);
+    snprintf(buf, sizeof(buf), "EdgeList[FindSpanningTree[%s, Method -> \"Kruskal\"]]", g);
+    assert_eval_eq(buf, "{a <-> c, b <-> c, b <-> d, d <-> e}", 0);
+
+    /* A disconnected weighted graph gives a minimum spanning forest; exact
+     * Rational weights are carried over unchanged. */
+    assert_eval_eq(FST_SHOW("FindSpanningTree[Graph[{1,2,3,4,5,6}, {1<->2, 2<->3, 1<->3, "
+                            "4<->5, 5<->6, 4<->6}, EdgeWeight -> {3, 1, 2, 5, 1/2, 7}]]"),
+                   "{{1 <-> 3, 2 <-> 3, 4 <-> 5, 5 <-> 6}, {2, 1, 5, 1/2}, {1, 2, 3, 4, 5, 6}}", 0);
+    /* Negative weights. */
+    assert_eval_eq("EdgeList[FindSpanningTree[Graph[{1<->2, 2<->3, 1<->3}, "
+                   "EdgeWeight -> {-1, 5, 3}]]]", "{1 <-> 2, 1 <-> 3}", 0);
+    /* Exact comparison: 0.3333333333333333 is below 1/3, 1/2 is the heaviest. */
+    assert_eval_eq(FST_SHOW("FindSpanningTree[Graph[{1,2,3},{1<->2, 2<->3, 1<->3}, "
+                            "EdgeWeight->{1/3, 0.3333333333333333, 1/2}]]"),
+                   "{{1 <-> 2, 2 <-> 3}, {1/3, 0.333333}, {1, 2, 3}}", 0);
+    /* Symbolic numeric weights are compared numerically. */
+    assert_eval_eq("EdgeWeight[FindSpanningTree[Graph[{1,2,3},{1<->2, 2<->3, 1<->3}, "
+                   "EdgeWeight->{Sqrt[2], 3/2, 1.4}]]]", "{Sqrt[2], 1.4}", 0);
+    assert_eval_eq("EdgeWeight[FindSpanningTree[Graph[{1,2,3},{1<->2, 2<->3, 1<->3}, "
+                   "EdgeWeight->{Pi, 3, 3.2}]]]", "{Pi, 3}", 0);
+    /* Ties: broken by vertex positions, as Mathematica breaks them. */
+    assert_eval_eq("EdgeList[FindSpanningTree[Graph[{1,2,3,4,5}, {1<->2, 2<->3, 3<->4, "
+                   "4<->5, 5<->1}, EdgeWeight -> {1,1,1,1,1}]]]",
+                   "{1 <-> 2, 1 <-> 5, 2 <-> 3, 3 <-> 4}", 0);
+    /* An edge written higher position first is re-emitted lower first, and
+     * the tree's edges are sorted by position. */
+    assert_eval_eq(FST_SHOW("FindSpanningTree[Graph[{c,a,b},{b<->c, a<->b, c<->a}, "
+                            "EdgeWeight->{3,2,1}]]"),
+                   "{{c <-> a, a <-> b}, {1, 2}, {c, a, b}}", 0);
+    /* A weight that is not a real number leaves the call unevaluated. */
+    assert_eval_eq("Head[FindSpanningTree[Graph[{a,b,c,d}, {a<->b, b<->c, c<->d, a<->d}, "
+                   "EdgeWeight->{x,1,2,3}]]]", "FindSpanningTree", 0);
+
+    /* Directed + weighted: a minimum spanning arborescence (8, rooted at 2;
+     * rooted at 1 the best is 9). */
+    const char* gd = "Graph[{1,2,3,4}, {1->2, 2->3, 1->3, 3->4, 4->1}, EdgeWeight -> {5,1,2,3,4}]";
+    snprintf(buf, sizeof(buf), FST_SHOW("FindSpanningTree[%s]"), gd);
+    assert_eval_eq(buf, "{{2 -> 3, 3 -> 4, 4 -> 1}, {1, 3, 4}, {1, 2, 3, 4}}", 0);
+    snprintf(buf, sizeof(buf), FST_SHOW("FindSpanningTree[{%s, 1}]"), gd);
+    assert_eval_eq(buf, "{{1 -> 2, 2 -> 3, 3 -> 4}, {5, 1, 3}, {1, 2, 3, 4}}", 0);
+    /* The heaviest arc of a cycle is the one dropped. */
+    assert_eval_eq(FST_SHOW("FindSpanningTree[Graph[{1,2,3,4},{2->1, 3->4, 1->3, 4->2}, "
+                            "EdgeWeight->{1,1,5,1}]]"),
+                   "{{2 -> 1, 3 -> 4, 4 -> 2}, {1, 1, 1}, {1, 2, 3, 4}}", 0);
+    /* Fewest roots beats lighter weight: 17 via the 10-arc, not a 7 forest. */
+    assert_eval_eq(FST_SHOW("FindSpanningTree[Graph[{1,2,3,4,5},{1->2, 2->3, 3->1, 4->5, "
+                            "5->4, 3->4}, EdgeWeight->{1,2,3,4,5,10}]]"),
+                   "{{1 -> 2, 2 -> 3, 3 -> 4, 4 -> 5}, {1, 2, 10, 4}, {1, 2, 3, 4, 5}}", 0);
+    /* No single root reaches everything: a spanning branching (forest). */
+    assert_eval_eq(FST_SHOW("FindSpanningTree[Graph[{1,2,3,4},{1->2, 3->2, 3->4}, "
+                            "EdgeWeight->{1,1,2}]]"),
+                   "{{3 -> 2, 3 -> 4}, {1, 2}, {1, 2, 3, 4}}", 0);
+    assert_eval_eq(FST_SHOW("FindSpanningTree[Graph[{1,2,3,4},{1->2, 3->4}, EdgeWeight->{3,1}]]"),
+                   "{{1 -> 2, 3 -> 4}, {3, 1}, {1, 2, 3, 4}}", 0);
+    /* Tied weights inside cycles: Mathematica's choices. */
+    assert_eval_eq("EdgeList[FindSpanningTree[Graph[{1,2,3,4},{1->2, 2->3, 3->4, 4->1, 1->3}, "
+                   "EdgeWeight->{1,1,1,1,1}]]]", "{2 -> 3, 3 -> 4, 4 -> 1}", 0);
+    assert_eval_eq("EdgeList[FindSpanningTree[Graph[{1,2,3,4},{2->1, 2->3, 3->4, 4->2}, "
+                   "EdgeWeight->{1,1,1,1}]]]", "{2 -> 1, 3 -> 4, 4 -> 2}", 0);
+    /* Rooted directed: only what the root reaches. */
+    assert_eval_eq(FST_SHOW("FindSpanningTree[{Graph[{1,2,3,4},{1->2, 3->2, 3->4}, "
+                            "EdgeWeight->{1,1,2}], 3}]"),
+                   "{{3 -> 2, 3 -> 4}, {1, 2}, {2, 3, 4}}", 0);
+    assert_eval_eq("EdgeList[FindSpanningTree[{Graph[{1,2,3,4},{1->2, 2->3, 3->4, 4->1}, "
+                   "EdgeWeight->{1,1,1,1}], 3}]]", "{1 -> 2, 3 -> 4, 4 -> 1}", 0);
+
+    /* Unweighted: BFS forest (undirected) / branching (directed). */
+    assert_eval_eq("EdgeList[FindSpanningTree[Graph[{1,2,3,4}, {1<->2, 2<->3, 3<->4, 4<->1, 1<->3}]]]",
+                   "{1 <-> 2, 1 <-> 3, 1 <-> 4}", 0);
+    assert_eval_eq("EdgeList[FindSpanningTree[{Graph[{1,2,3,4}, {1<->2, 2<->3, 3<->4, 4<->1, "
+                   "1<->3}], 3}]]", "{1 <-> 3, 2 <-> 3, 3 <-> 4}", 0);
+    assert_eval_eq("EdgeList[FindSpanningTree[CycleGraph[4]]]", "{1 <-> 2, 1 <-> 4, 2 <-> 3}", 0);
+    assert_eval_eq("EdgeList[FindSpanningTree[Graph[{1,2,3,4},{1->2,2->3,3->1}]]]",
+                   "{1 -> 2, 2 -> 3}", 0);
+    assert_eval_eq("EdgeList[FindSpanningTree[Graph[{1,2,3,4},{1->2, 3->2, 3->4}]]]",
+                   "{3 -> 2, 3 -> 4}", 0);
+    assert_eval_eq("EdgeList[FindSpanningTree[Graph[{1,2,3,4},{2->1, 2->3, 3->4, 4->2}]]]",
+                   "{2 -> 1, 2 -> 3, 3 -> 4}", 0);
+    assert_eval_eq("EdgeList[FindSpanningTree[Graph[{1,2,3,4,5},{1->2, 2->1, 3->2, 4->5}]]]",
+                   "{2 -> 1, 3 -> 2, 4 -> 5}", 0);
+    assert_eval_eq(FST_SHOW("FindSpanningTree[{Graph[{1,2,3},{1->2, 2->3}], 2}]"),
+                   "{{2 -> 3}, None, {2, 3}}", 0);
+    assert_eval_eq(FST_SHOW("FindSpanningTree[{Graph[{1,2,3,4},{1<->2, 3<->4}], 4}]"),
+                   "{{3 <-> 4}, None, {3, 4}}", 0);
+    assert_eval_eq(FST_SHOW("FindSpanningTree[Graph[{1,2,3,4},{}]]"),
+                   "{{}, None, {1, 2, 3, 4}}", 0);
+    /* Mixed graphs are not implemented in Mathematica either. */
+    assert_eval_eq("Head[FindSpanningTree[Graph[{1,2,3,4},{1->2, 2<->3, 3->4, 1<->4}]]]",
+                   "FindSpanningTree", 0);
+    /* A root that is not a vertex: FindSpanningTree::inv, unevaluated. */
+    assert_eval_eq("Quiet[Head[FindSpanningTree[{Graph[{1,2,3},{1<->2, 2<->3}], 5}]]]",
+                   "FindSpanningTree", 0);
+    /* The result is a valid graph that carries EdgeCapacity along too. */
+    assert_eval_eq("InputForm[FindSpanningTree[Graph[{1<->2, 2<->3, 1<->3}, "
+                   "EdgeWeight -> {2, 3, 1}, EdgeCapacity -> {7, 8, 9}]]]",
+                   "Graph[{1, 2, 3}, {1 <-> 2, 1 <-> 3}, EdgeWeight -> {2, 1}, "
+                   "EdgeCapacity -> {7, 9}]", 0);
+    /* Scale: a 2000-vertex weighted graph gives a forest with n - c edges. */
+    assert_eval_eq("Module[{g0, g}, SeedRandom[5]; g0 = RandomGraph[{2000, 6000}];"
+                   " g = Graph[VertexList[g0], EdgeList[g0], EdgeWeight -> "
+                   "RandomInteger[{1, 50}, 6000]];"
+                   " EdgeCount[FindSpanningTree[g]] == 2000 - Length[ConnectedComponents[g]]]",
+                   "True", 0);
+}
+
+/* ---- Graph[edges, opts]: the edges-only form takes options ---------------- */
+static void test_edges_only_options(void) {
+    /* Both forms accept EdgeWeight and build the same canonical graph. */
+    assert_eval_eq("InputForm[Graph[{a<->b, b<->c, a<->c}, EdgeWeight -> {1.5, 2, 1}]]",
+                   "Graph[{a, b, c}, {a <-> b, b <-> c, a <-> c}, EdgeWeight -> {1.5, 2, 1}]", 0);
+    assert_eval_eq("Graph[{a<->b, b<->c}, EdgeWeight -> {1, 2}] === "
+                   "Graph[{a, b, c}, {a<->b, b<->c}, EdgeWeight -> {1, 2}]", "True", 0);
+    /* Every consumer sees the weights. */
+    const char* gw = "Graph[{a<->b, b<->c, a<->c}, EdgeWeight -> {1.5, 2, 1}]";
+    char buf[256];
+    snprintf(buf, sizeof(buf), "{GraphQ[%s], WeightedGraphQ[%s]}", gw, gw);
+    assert_eval_eq(buf, "{True, True}", 0);
+    snprintf(buf, sizeof(buf), "EdgeWeight[%s]", gw);
+    assert_eval_eq(buf, "{1.5, 2, 1}", 0);
+    snprintf(buf, sizeof(buf), "{GraphDistance[%s, a, b], FindShortestPath[%s, b, a]}", gw, gw);
+    assert_eval_eq(buf, "{1.5, {b, a}}", 0);
+    assert_eval_eq("GraphDistance[Graph[{1->2, 2->3, 1->3}, EdgeWeight -> {1, 1, 5}], 1, 3]",
+                   "2.0", 0);
+    assert_eval_eq("FindShortestPath[Graph[{1->2, 2->3, 1->3}, EdgeWeight -> {1, 1, 5}], 1, 3]",
+                   "{1, 2, 3}", 0);
+    snprintf(buf, sizeof(buf), "Normal[WeightedAdjacencyMatrix[%s]]", gw);
+    assert_eval_eq(buf, "{{0, 1.5, 1}, {1.5, 0, 2}, {1, 2, 0}}", 0);
+    assert_eval_eq("Total[EdgeWeight[FindSpanningTree[Graph[{a<->b, a<->c, b<->c, b<->d, c<->d, "
+                   "d<->e}, EdgeWeight -> {4,1,2,5,8,3}]]]]", "11", 0);
+    /* The summary printer. */
+    assert_eval_eq(gw, "Graph[<3 vertices, 3 edges>]", 0);
+    /* The cut family reads EdgeWeight as capacities. */
+    assert_eval_eq("EdgeConnectivity[Graph[{1<->2, 2<->3, 3<->1}, EdgeWeight -> {5, 5, 5}]] =="
+                   " EdgeConnectivity[Graph[{1,2,3}, {1<->2, 2<->3, 3<->1}, EdgeWeight -> {5, 5, 5}]]",
+                   "True", 0);
+
+    /* EdgeCapacity is a stored graph option too (either form), and it is what
+     * FindMaximumFlow uses when no explicit EdgeCapacity is given. */
+    assert_eval_eq("InputForm[Graph[{1->2, 2->3, 1->3}, EdgeCapacity -> {2, 3, 4}]]",
+                   "Graph[{1, 2, 3}, {1 -> 2, 2 -> 3, 1 -> 3}, EdgeCapacity -> {2, 3, 4}]", 0);
+    assert_eval_eq("FindMaximumFlow[Graph[{1->2, 2->3, 1->3}, EdgeCapacity -> {2, 3, 4}], 1, 3]",
+                   "6", 0);
+    assert_eval_eq("FindMaximumFlow[Graph[{1,2,3}, {1->2, 2->3, 1->3}, EdgeCapacity -> {2, 3, 4}], 1, 3]",
+                   "6", 0);
+    /* An explicit option still wins over the stored one. */
+    assert_eval_eq("FindMaximumFlow[Graph[{1->2, 2->3, 1->3}, EdgeCapacity -> {2, 3, 4}], 1, 3, "
+                   "EdgeCapacity -> {1, 1, 1}]", "2", 0);
+    /* EdgeCapacity alone is not a weighting. */
+    assert_eval_eq("WeightedGraphQ[Graph[{1->2}, EdgeCapacity -> {3}]]", "False", 0);
+    assert_eval_eq("EdgeWeight[Graph[{1->2}, EdgeCapacity -> {3}]]", "{1}", 0);
+    /* Both options, in either order, canonicalize to EdgeWeight first. */
+    assert_eval_eq("InputForm[Graph[{1<->2, 2<->3}, EdgeCapacity -> {5, 6}, EdgeWeight -> {2, 3}]]",
+                   "Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}, EdgeWeight -> {2, 3}, "
+                   "EdgeCapacity -> {5, 6}]", 0);
+    assert_eval_eq("Graph[{1<->2, 2<->3}, EdgeCapacity -> {5, 6}, EdgeWeight -> {2, 3}] === "
+                   "Graph[{1, 2, 3}, {1<->2, 2<->3}, EdgeWeight -> {2, 3}, EdgeCapacity -> {5, 6}]",
+                   "True", 0);
+    /* Round trip through InputForm. */
+    assert_eval_eq("Module[{g = Graph[{1<->2, 2<->3}, EdgeWeight -> {2, 3}, EdgeCapacity -> {5, 6}]},"
+                   " ToExpression[ToString[InputForm[g]]] === g]", "True", 0);
+    /* Malformed options leave Graph unevaluated: wrong length, repeated, or
+     * unknown; and a hand-written non-canonical order is not a valid graph. */
+    assert_eval_eq("GraphQ[Graph[{1<->2, 2<->3}, EdgeWeight -> {2}]]", "False", 0);
+    assert_eval_eq("GraphQ[Graph[{1<->2}, EdgeWeight -> {2}, EdgeWeight -> {3}]]", "False", 0);
+    assert_eval_eq("GraphQ[Graph[{1<->2}, Foo -> {2}]]", "False", 0);
+    assert_eval_eq("GraphQ[Graph[{1<->2}, EdgeWeight -> 2]]", "False", 0);
+    assert_eval_eq("GraphQ[Graph[{1<->2}, x]]", "False", 0);
+    assert_eval_eq("GraphQ[Unevaluated[Graph[{1, 2}, {1<->2}, EdgeCapacity -> {1}, "
+                   "EdgeWeight -> {2}]]]", "False", 0);
+    /* Edits keep EdgeWeight on an edges-only weighted graph. */
+    assert_eval_eq("EdgeWeight[EdgeDelete[Graph[{1<->2, 2<->3}, EdgeWeight -> {2, 3}], 1<->2]]",
+                   "{3}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -883,7 +1126,10 @@ int main(void) {
     TEST(test_random_graph);
     TEST(test_shortest_path);
     TEST(test_components);
+    TEST(test_components_mathematica_order);
     TEST(test_spanning_and_connectivity);
+    TEST(test_spanning_tree_weighted);
+    TEST(test_edges_only_options);
     TEST(test_graphplot);
     TEST(test_vertex_coloring_internals);
     TEST(test_vertex_coloring);

@@ -59,8 +59,8 @@ int gops_view(const Expr* g, GopsView* v) {
     v->nv = verts->data.function.arg_count;
     v->edges = edges->data.function.args;
     v->ne = edges->data.function.arg_count;
-    if (g->data.function.arg_count == 3)
-        v->weights = g->data.function.args[2]->data.function.args[1]->data.function.args;
+    const Expr* wl = graph_edge_weight_list(g);
+    if (wl) v->weights = wl->data.function.args;
     v->eu = eu; v->ev = ev; v->edir = edir;
     v->ndir = (size_t)graph_directed_edge_count(g);
     return 1;

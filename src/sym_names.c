@@ -948,6 +948,7 @@ const char* SYM_VertexConnectivity = NULL;
 const char* SYM_GraphPlot = NULL;
 const char* SYM_FindVertexColoring = NULL;
 const char* SYM_EdgeWeight = NULL;
+const char* SYM_EdgeCapacity = NULL;
 const char* SYM_WeightedAdjacencyMatrix = NULL;
 
 /* NumberForm + Row (numeric-display formatting) and NumberForm's options. */
@@ -1891,6 +1892,7 @@ void sym_names_init(void) {
     SYM_GraphPlot                  = intern_symbol("GraphPlot");
     SYM_FindVertexColoring         = intern_symbol("FindVertexColoring");
     SYM_EdgeWeight                 = intern_symbol("EdgeWeight");
+    SYM_EdgeCapacity               = intern_symbol("EdgeCapacity");
     SYM_WeightedAdjacencyMatrix    = intern_symbol("WeightedAdjacencyMatrix");
 
     /* System symbols that have no kernel implementation and no cached SYM_*

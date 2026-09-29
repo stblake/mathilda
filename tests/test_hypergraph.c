@@ -242,6 +242,23 @@ static void test_memo(void) {
     assert_eval_eq("VertexDegree /@ Take[hs, 3]", "{{1}, {1, 1}, {1, 1, 1}}", 0);
 }
 
+/* Graph <-> Hypergraph across the graph-side fixes: a graph built by the
+ * edges-only weighted form converts like any other, and the directed graph
+ * HypergraphToGraph returns now has STRONG ConnectedComponents (Mathematica's
+ * rule) while WeaklyConnectedComponents still matches the hypergraph's own. */
+static void test_graph_interop(void) {
+    assert_eval_eq("EdgeList[Hypergraph[Graph[{1<->2, 2<->3}, EdgeWeight -> {5, 7}]]]",
+                   "{{1, 2}, {2, 3}}", 0);
+    assert_eval_eq("EdgeList[Hypergraph[Graph[{1->2}, EdgeCapacity -> {3}]]]", "{{1, 2}}", 0);
+    assert_eval_eq("ConnectedComponents[HypergraphToGraph[{{1,2,3},{3,4}}]]",
+                   "{{4}, {3}, {2}, {1}}", 0);
+    assert_eval_eq("Sort[Map[Sort, WeaklyConnectedComponents[HypergraphToGraph[{{1,2},{3,4,5}}]]]] === "
+                   "Sort[Map[Sort, HypergraphConnectedComponents[Hypergraph[{{1,2},{3,4,5}}]]]]",
+                   "True", 0);
+    assert_eval_eq("ConnectedComponents[HypergraphLineGraph[Hypergraph[{{1,2},{2,3},{7,8}}]]]",
+                   "{{1, 2}, {3}}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -256,6 +273,7 @@ int main(void) {
     TEST(test_random);
     TEST(test_transversals);
     TEST(test_memo);
+    TEST(test_graph_interop);
 
     printf("All hypergraph tests passed!\n");
     return 0;

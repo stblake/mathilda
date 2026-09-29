@@ -17,7 +17,7 @@ static void galg_reg(const char* name, Expr* (*fn)(Expr*), const char* doc) {
 
 void graph_algos_init(void) {
     galg_reg("FindMaximumFlow", builtin_find_maximum_flow,
-        "FindMaximumFlow[g, s, t] gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow[g, s, t, \"prop\"] gives \"FlowValue\", \"FlowMatrix\" (dense n x n matrix of edge flows) or \"EdgeList\" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -> {c1, ...} option (EdgeList order; default 1, EdgeWeight is ignored); VertexCapacity -> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.");
+        "FindMaximumFlow[g, s, t] gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow[g, s, t, \"prop\"] gives \"FlowValue\", \"FlowMatrix\" (dense n x n matrix of edge flows) or \"EdgeList\" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -> {c1, ...} option (EdgeList order), else from g's own EdgeCapacity, else 1; EdgeWeight is ignored; VertexCapacity -> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.");
     galg_reg("FindMinimumCut", builtin_find_minimum_cut,
         "FindMinimumCut[g] gives {value, {part1, part2}}: a partition of the vertices minimizing the total weight of the edges from part1 to part2 (EdgeWeight when present, else 1). For directed graphs part1 is the source side. Nagamochi-Ibaraki for undirected graphs, max flows for directed ones.");
     galg_reg("FindEdgeCut", builtin_find_edge_cut,

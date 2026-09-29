@@ -1,8 +1,9 @@
 /* connectivity.c - ConnectedGraphQ[g] and VertexConnectivity[g].
  *
- * Both operate on the underlying undirected graph.
  *   ConnectedGraphQ[g]    True iff g has >= 1 vertex and forms a single
- *                         connected component.
+ *                         connected component: strongly connected when g has
+ *                         a directed edge (Mathematica's rule), connected
+ *                         otherwise.
  *   VertexConnectivity[g] the least number of vertices whose removal
  *                         disconnects g (n-1 for a complete graph, 0 if already
  *                         disconnected or trivial). Computed by brute-force
@@ -20,9 +21,21 @@
 
 Expr* builtin_connected_graph_q(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
-    GraphAdj* a = graph_build_adj(res->data.function.args[0]);
+    const Expr* g = res->data.function.args[0];
+    GraphAdj* a = graph_build_adj(g);
     if (!a) return NULL;
-    int comps = graph_count_components(a, NULL, NULL);
+    int comps;
+    if (graph_directed_edge_count(g) > 0) {
+        /* As Mathematica: a graph with directed edges is connected only when
+         * STRONGLY connected (every vertex reaches every other along the
+         * edges' directions; an undirected edge goes both ways). */
+        int* comp = malloc((size_t)(a->n > 0 ? a->n : 1) * sizeof(int));
+        comps = comp ? graph_strong_label(a, comp) : -1;
+        free(comp);
+        if (comps < 0) { graph_adj_free(a); return NULL; }
+    } else {
+        comps = graph_count_components(a, NULL, NULL);
+    }
     int connected = (a->n >= 1 && comps == 1);
     graph_adj_free(a);
     return expr_new_symbol(connected ? SYM_True : SYM_False);

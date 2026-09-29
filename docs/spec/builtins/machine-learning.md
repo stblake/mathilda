@@ -400,6 +400,17 @@ nearest-neighbour distance says the honest thing instead: structure finer than t
 between samples is not resolvable. The *median* rather than the mean, so one tight pair
 cannot drag the floor toward zero and reopen the same hole.
 
+**The spacing is measured between *distinct* points**, because a repeated value is not a
+sample spacing of zero. Rounded data repeats most of its values — the first 15 iris petal
+lengths per species, to 0.1 cm, have 45 values but only 28 distinct ones — and counting a
+duplicate's zero distance to its twin put the median at 0, the floor at `1e-300`, and the
+fit at nine components, two of them a single point with weight 1/45. Measured between
+distinct values the floor is the data's real resolution (0.1² here) and BIC picks two
+components, weights `{1/3, 2/3}` with means 1.42 and 4.91 — the same model Mathematica 15
+learns. The floor is also held to at least `1e-4` of the average per-coordinate variance
+(a component standard deviation of 1% of the data's), and the component count is capped
+by the number of distinct points, as `FindClusters`' mixture path caps it.
+
 **A one-component mixture relates to the Multinormal fit exactly**, not approximately, and
 the relationship is worth stating because it looks like a discrepancy:
 
@@ -431,6 +442,9 @@ Out[2]= {0.213244, 0.213244}
 In[3]:= PDF[LearnDistribution[{{1.,2.},{2.,3.},{3.,5.},{4.,4.},{5.,7.},{6.,8.}}],
             {{3.5, 4.8}, {50., 50.}}]
 Out[3]= {0.113186, 3.6193e-169}
+
+In[4]:= Last[LearnDistribution[{1.4, 1.4, 1.3, 1.5, 1.4, 1.7, 1.4, 1.5, 1.4, 1.5, 1.5, 1.6, 1.4, 1.1, 1.2, 4.7, 4.5, 4.9, 4., 4.6, 4.5, 4.7, 3.3, 4.6, 3.9, 3.5, 4.2, 4., 4.7, 3.6, 6., 5.1, 5.9, 5.6, 5.8, 6.6, 4.5, 6.3, 5.8, 6.1, 5.1, 5.3, 5.5, 5., 5.1}, Method -> "GaussianMixture"]]
+Out[4]= 2
 ```
 
 ## SmoothKernelDistribution

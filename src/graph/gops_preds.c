@@ -52,7 +52,7 @@ Expr* builtin_mixed_graph_q(Expr* res) {
 Expr* builtin_weighted_graph_q(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     const Expr* g = res->data.function.args[0];
-    return gops_truth(graph_is_valid(g) && g->data.function.arg_count == 3);
+    return gops_truth(graph_is_valid(g) && graph_edge_weight_list(g) != NULL);
 }
 
 Expr* builtin_edge_weighted_graph_q(Expr* res) {

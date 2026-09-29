@@ -8,14 +8,18 @@
  * Graphs are represented as ordinary Expr trees -- no new EXPR_* tag:
  *
  *     Graph[ List[v1, v2, ...], List[edge1, edge2, ...] ]
- *     Graph[ List[v1, v2, ...], List[edge1, edge2, ...], EdgeWeight -> List[w1, ...] ]
+ *     Graph[ List[v1, v2, ...], List[edge1, edge2, ...], opt... ]
  *
  * where each edge is DirectedEdge[u, v] or UndirectedEdge[u, v]. Rule/->
  * and TwoWayRule/<-> are accepted as parse-time sugar and normalized on
- * construction. Vertices are arbitrary expressions. The optional 3rd argument
- * attaches a weight to each edge, matched by position (weights[i] belongs to
- * edges[i]); a graph without it is unweighted, and every accessor treats an
- * unweighted edge's weight as 1 (see graph_resolve_edge_weights).
+ * construction. Vertices are arbitrary expressions. The optional trailing
+ * `opt`s are per-edge property lists, EdgeWeight -> List[w1, ...] and then
+ * EdgeCapacity -> List[c1, ...], each at most once and in that canonical order,
+ * matched to the edges by position (weights[i] belongs to edges[i]). A graph
+ * without EdgeWeight is unweighted, and every accessor treats an unweighted
+ * edge's weight as 1 (see graph_resolve_edge_weights). Read the lists through
+ * graph_edge_weight_list / graph_edge_capacity_list, never by argument
+ * position: which options are present decides where each one sits.
  *
  * This mirrors the src/linalg/ layout: one builtin per translation unit,
  * with the builtin_* prototypes declared here and registered in graph.c.
@@ -56,6 +60,19 @@ const char* graph_edge_kind(const Expr* e);
  * every edge is a 2-arg DirectedEdge/UndirectedEdge, there are no self-loops,
  * no parallel/duplicate edges, and every edge endpoint appears in verts. */
 int graph_is_valid(const Expr* g);
+
+/* The per-edge option lists a canonical graph may carry (see the top of this
+ * file). Each returns a BORROWED pointer to the List inside g, or NULL when g
+ * does not carry that option. Shape-only: call on a graph already known to be
+ * valid. graph_edge_option_rank gives a key's canonical position (0 for
+ * EdgeWeight, 1 for EdgeCapacity), or -1 if it is not a per-edge option. */
+const Expr* graph_edge_weight_list(const Expr* g);
+const Expr* graph_edge_capacity_list(const Expr* g);
+const Expr* graph_edge_option_list(const Expr* g, const char* key);
+int         graph_edge_option_rank(const char* key);
+/* The option key of canonical rank i (the inverse of graph_edge_option_rank),
+ * or NULL past the last one -- so a loop from 0 enumerates every option. */
+const char* graph_edge_option_key(int i);
 
 /* Index of vertex v within List `verts` (linear expr_eq scan), or -1. Fine for a
  * single lookup; for a whole pass over the edges, build a GraphVIdx instead. */
@@ -205,6 +222,13 @@ void      graph_adj_free(GraphAdj* a);
  * only vertices with removed[i]==0 (removed may be NULL = none removed). Writes
  * the number of active vertices to *active_out when non-NULL. */
 int graph_count_components(const GraphAdj* a, const char* removed, int* active_out);
+
+/* Strongly connected components (iterative Tarjan over the out-adjacency, so an
+ * undirected edge links both ways). Writes comp[i] in 0..k-1 and returns k, or
+ * -1 on allocation failure. Components are numbered in completion order, a
+ * reverse topological order of the condensation (no edge from component i to
+ * any j > i) -- the order Mathematica's ConnectedComponents lists them in. */
+int graph_strong_label(const GraphAdj* a, int* comp);
 
 /* ---- Phase 5: search & computation builtins ------------------------------- */
 Expr* builtin_find_shortest_path(Expr* res); /* FindShortestPath[g,s,t]        */

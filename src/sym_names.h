@@ -1006,6 +1006,7 @@ extern const char* SYM_VertexConnectivity;
 extern const char* SYM_GraphPlot;
 extern const char* SYM_FindVertexColoring;
 extern const char* SYM_EdgeWeight;
+extern const char* SYM_EdgeCapacity;
 extern const char* SYM_WeightedAdjacencyMatrix;
 
 /* NumberForm + Row (numeric-display formatting) and NumberForm's option

@@ -246,6 +246,35 @@ static void test_the_mixture_density_is_bimodal_and_normalised(void) {
                    " Abs[h Total[Map[PDF[g, {#}] &, gr]] - 1.] < 0.001]", "True", 0);
 }
 
+/* Rounded data with more than half the values duplicated. The first 15 petal lengths
+ * (cm, to 0.1) of each species in Fisher's iris data. Counting a duplicate's zero
+ * distance to its twin put the median nearest-neighbour distance -- the variance floor --
+ * at 0, and BIC then bought nine components, two of them a single point at weight 1/45.
+ * Mathematica 15's LearnDistribution[..., Method -> "GaussianMixture"] finds two:
+ * weights {0.667, 0.333} with means 4.91 and 1.42 (setosa apart from the rest). */
+#define IRIS_PETALS "{1.4, 1.4, 1.3, 1.5, 1.4, 1.7, 1.4, 1.5, 1.4, 1.5, 1.5, 1.6, 1.4, " \
+    "1.1, 1.2, 4.7, 4.5, 4.9, 4., 4.6, 4.5, 4.7, 3.3, 4.6, 3.9, 3.5, 4.2, 4., 4.7, " \
+    "3.6, 6., 5.1, 5.9, 5.6, 5.8, 6.6, 4.5, 6.3, 5.8, 6.1, 5.1, 5.3, 5.5, 5., 5.1}"
+
+static void test_mixture_floor_survives_duplicates(void) {
+    /* The component count, and no component collapsed onto one point. */
+    assert_eval_eq("Last[LearnDistribution[" IRIS_PETALS ", Method -> \"GaussianMixture\"]]",
+                   "2", 0);
+    assert_eval_eq("Module[{p = LearnDistribution[" IRIS_PETALS ", "
+                   "Method -> \"GaussianMixture\"][[2]]},"
+                   " {Round[Sort[p[[1]]], 0.01], Round[Sort[{p[[2, 1]], p[[4, 1]]}], 0.01],"
+                   "  Min[p[[3, 1]], p[[5, 1]]] > 0.01}]",
+                   "{{0.33, 0.67}, {1.42, 4.91}, True}", 0);
+    /* Doubling every point changes nothing: duplicates are not new locations. */
+    assert_eval_eq("Last[LearnDistribution[Join[" IRIS_PETALS ", " IRIS_PETALS "], "
+                   "Method -> \"GaussianMixture\"]]", "2", 0);
+    /* FindClusters' mixture path agrees on the count. */
+    assert_eval_eq("Length[FindClusters[" IRIS_PETALS ", Method -> \"GaussianMixture\"]]", "2", 0);
+    /* Two distinct values, one of them repeated: no spike at each value. */
+    assert_eval_eq("Last[LearnDistribution[{1., 1., 1., 2.}, Method -> \"GaussianMixture\"]]",
+                   "1", 0);
+}
+
 static void test_mixture_declines_like_the_multinormal(void) {
     assert_eval_eq("Head[LearnDistribution[" UNI ", Method -> \"Poisson\"]]",
                    "LearnDistribution", 0);
@@ -429,6 +458,7 @@ int main(void) {
     TEST(test_bic_picks_the_component_count_from_the_data);
     TEST(test_one_component_mixture_relates_exactly_to_the_multinormal);
     TEST(test_the_mixture_density_is_bimodal_and_normalised);
+    TEST(test_mixture_floor_survives_duplicates);
     TEST(test_mixture_declines_like_the_multinormal);
     TEST(test_kde_variance_identity_is_exact);
     TEST(test_kde_density_integrates_to_one);
