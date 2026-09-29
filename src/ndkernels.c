@@ -120,6 +120,30 @@ UK_CLOSED(Csch, 1.0 / sinh(x), 1.0 / csinh(z));
 UK_CLOSED(Exp, exp(x), cexp(z));
 UK_ESC(Log, clog(z));
 
+/* Log10 / Log2: escaping like Log (a negative real lands off the real axis),
+ * but a positive real goes through libm's log10 / log2 rather than
+ * clog(z)/ln(b), so exact powers of the base are exact -- Log10[1000.] is 3.,
+ * where log(1000.)/log(10.) is 2.9999999999999996 -- and every element agrees
+ * with builtin_log10 / builtin_log2, which take the same libm path. The real
+ * arm is the Compile[] scalar path; it declines off the positive axis so the
+ * VM bails to the interpreter instead of inventing a real answer. */
+#define ND_LN10 2.302585092994045684017991454684364208
+#define ND_LN2  0.693147180559945309417232121458176568
+#define UK_FIXED_LOG(NAME, RFN, LNB)                                            \
+    static bool ndk_##NAME##_c(double ar, double ai, double* rr, double* ri) { \
+        if (ai == 0.0 && ar > 0.0) {                                           \
+            *rr = RFN(ar); *ri = 0.0; return isfinite(*rr); }                  \
+        double complex w = clog(ar + ai * I) / (LNB);                          \
+        *rr = creal(w); *ri = cimag(w);                                        \
+        return isfinite(*rr) && isfinite(*ri); }                               \
+    static bool ndk_##NAME##_r(double x, double* o) {                          \
+        if (!(x > 0.0)) return false;                                          \
+        *o = RFN(x); return isfinite(*o); }                                    \
+    static const NDUnaryKernel NDKU_##NAME =                                   \
+        { ndk_##NAME##_c, ndk_##NAME##_r, false, false, NULL, NULL, false }
+UK_FIXED_LOG(Log10, log10, ND_LN10);
+UK_FIXED_LOG(Log2,  log2,  ND_LN2);
+
 /* ---- inverse trig ------------------------------------------------------- */
 UK_CLOSED(ArcTan, atan(x),       catan(z));
 UK_CLOSED(ArcCot, atan(1.0 / x), catan(1.0 / z));
@@ -683,7 +707,7 @@ void ndkernels_init(void) {
     REG_U(Cot);  REG_U(Sec);  REG_U(Csc);
     REG_U(Sinh); REG_U(Cosh); REG_U(Tanh);
     REG_U(Coth); REG_U(Sech); REG_U(Csch);
-    REG_U(Exp);  REG_U(Log);
+    REG_U(Exp);  REG_U(Log);  REG_U(Log10);  REG_U(Log2);
     REG_U(ArcSin); REG_U(ArcCos); REG_U(ArcTan);
     REG_U(ArcCot); REG_U(ArcSec); REG_U(ArcCsc);
     REG_U(ArcSinh); REG_U(ArcCosh); REG_U(ArcTanh);

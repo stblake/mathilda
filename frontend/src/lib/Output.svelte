@@ -557,6 +557,10 @@
         </div>
       {:else if item.kind === 'error'}
         <div class="out-error">{item.text}</div>
+      {:else if item.kind === 'message'}
+        <!-- A kernel warning (Head::tag: text). It does not stop the evaluation,
+             so it reads as a caution, not as the red of an error. -->
+        <div class="out-message">{item.text}</div>
       {:else if item.kind === 'stream'}
         <div class="out-collapsible" use:measureOverflow={idx}>
           <pre class="out-stream">{item.text}</pre>
@@ -723,9 +727,24 @@
     overflow-x: auto;
   }
 
-  /* Stream (print) output */
+  /* Kernel message (warning): amber rule, same shape as .out-error. */
+  .out-message {
+    color: var(--warn, #fab387);
+    font-family: 'SF Mono', monospace;
+    font-size: 0.84em;
+    background: rgba(250, 179, 135, 0.08);
+    border-left: 3px solid var(--warn, #fab387);
+    padding: 0.3rem 0.8rem;
+    border-radius: 3px;
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+
+  /* Stream (Print) output. Ordinary output text, not --text-muted: in the dark
+     palette that is #45475a on a near-black card, and Print output is content. */
   .out-stream {
-    color: var(--text-muted);
+    color: var(--out-text, var(--text));
     font-size: 0.84em;
     margin: 0;
     white-space: pre-wrap;

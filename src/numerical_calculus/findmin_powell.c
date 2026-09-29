@@ -205,6 +205,41 @@ static bool fm_powell_line_min(Expr* f, FmVarBind* binds, size_t n,
     return false;
 }
 
+/* Overwrite the n x n direction set with a pseudo-random orthonormal basis:
+ * rows drawn uniformly from [-1, 1]^n by a 64-bit LCG (state carried across
+ * restarts, so each restart gets a new rotation), then orthonormalised by
+ * modified Gram-Schmidt. A row that degenerates (norm below 1e-8 after
+ * projection -- vanishingly unlikely) falls back to the matching unit vector,
+ * re-orthogonalised the same way. */
+static void fm_powell_rotated_basis(double* direc, size_t n, uint64_t* state) {
+    for (size_t r = 0; r < n; r++) {
+        double* row = &direc[r * n];
+        for (int attempt = 0; attempt < 2; attempt++) {
+            for (size_t i = 0; i < n; i++) {
+                if (attempt == 0) {
+                    *state = *state * 6364136223846793005ULL + 1442695040888963407ULL;
+                    row[i] = (double)(*state >> 11) * (2.0 / 9007199254740992.0) - 1.0;
+                } else {
+                    row[i] = (i == r) ? 1.0 : 0.0;
+                }
+            }
+            for (size_t q = 0; q < r; q++) {
+                const double* prev = &direc[q * n];
+                double dp = 0.0;
+                for (size_t i = 0; i < n; i++) dp += row[i] * prev[i];
+                for (size_t i = 0; i < n; i++) row[i] -= dp * prev[i];
+            }
+            double nrm = 0.0;
+            for (size_t i = 0; i < n; i++) nrm += row[i] * row[i];
+            nrm = sqrt(nrm);
+            if (nrm > 1e-8) {
+                for (size_t i = 0; i < n; i++) row[i] /= nrm;
+                break;
+            }
+        }
+    }
+}
+
 bool fm_run_powell(Expr* f, Expr** vars, size_t n,
                           FmVarBind* binds, Expr** g_exprs,
                           double* x, /* in/out */
@@ -254,6 +289,23 @@ bool fm_run_powell(Expr* f, Expr** vars, size_t n,
     double ftol     = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
 
+    /* Restart-on-stall (the escape Brent's PRAXIS uses): when a cycle makes no
+     * progress the direction set is replaced by a fresh ROTATED orthonormal
+     * basis and one more cycle is run; only a cycle that also fails in the new
+     * basis is accepted as convergence. On a smooth objective this costs one
+     * confirming sweep. On a non-smooth one it is what lets the method leave a
+     * kink: at a corner of Max[|x-a|, |y|] or of a sum of |.| terms every
+     * axis-aligned direction is flat or uphill (the descent cone is bounded by
+     * the axes), so the plain method stopped where it started, while a basis
+     * rotated by a generic angle has a +/- ray strictly inside that cone. The
+     * rotation is deterministic (fixed-seed LCG + Gram-Schmidt), so the solver
+     * stays reproducible. */
+    const int max_restarts = 10 + 2 * (int)n;
+    int restarts = 0;
+    bool just_restarted = false;
+    bool converged = false;
+    uint64_t rot_state = 0x9E3779B97F4A7C15ULL;
+
     for (int64_t k = 0; k < opts->max_iter; k++) {
         for (size_t i = 0; i < n; i++) x_start[i] = x[i];
         double f_start = f_cur;
@@ -272,16 +324,28 @@ bool fm_run_powell(Expr* f, Expr** vars, size_t n,
 
         /* Convergence: relative function decrease over a full cycle (scipy's
          * Powell test), or a PrecisionGoal step-size floor. */
-        if (2.0 * (f_start - f_cur) <= ftol * (fabs(f_start) + fabs(f_cur)) + 1e-20) {
-            ok = true; break;
+        bool stalled =
+            2.0 * (f_start - f_cur) <= ftol * (fabs(f_start) + fabs(f_cur)) + 1e-20;
+        if (!stalled) {
+            double max_step = 0.0, max_x = 0.0;
+            for (size_t i = 0; i < n; i++) {
+                double ds = fabs(x[i] - x_start[i]);
+                if (ds > max_step) max_step = ds;
+                if (fabs(x[i]) > max_x) max_x = fabs(x[i]);
+            }
+            stalled = (max_step < tol_prec * (max_x + 1e-300));
         }
-        double max_step = 0.0, max_x = 0.0;
-        for (size_t i = 0; i < n; i++) {
-            double ds = fabs(x[i] - x_start[i]);
-            if (ds > max_step) max_step = ds;
-            if (fabs(x[i]) > max_x) max_x = fabs(x[i]);
+        if (stalled) {
+            if (just_restarted || restarts >= max_restarts) {
+                converged = true; break;
+            }
+            fm_powell_rotated_basis(direc, n, &rot_state);
+            restarts++;
+            just_restarted = true;
+            fm_fire_monitor(opts->step_monitor);
+            continue;
         }
-        if (max_step < tol_prec * (max_x + 1e-300)) { ok = true; break; }
+        just_restarted = false;
 
         /* Averaged direction d_avg = x - x_start and extrapolated point
          * x_e = 2x - x_start (== x + d_avg). */
@@ -318,6 +382,7 @@ bool fm_run_powell(Expr* f, Expr** vars, size_t n,
         }
         fm_fire_monitor(opts->step_monitor);
     }
+    if (!converged) fm_warn_maxit(opts);
 
     *fx_out = f_cur;
     ok = true;

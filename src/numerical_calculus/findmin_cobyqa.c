@@ -194,7 +194,8 @@ bool fm_run_cobyqa(Expr* f, Expr** vars, size_t n,
     double Delta = dbeg;
     double Delta_max = 10.0 * dbeg;
 
-    for (int64_t it = 0; it < opts->max_iter; it++) {
+    int64_t it;
+    for (it = 0; it < opts->max_iter; it++) {
         /* Build quadratic models by finite differences on the stencil of side
          * Delta.  Samples are not forced inside the box (algebraic objectives are
          * defined everywhere); a non-numeric sample shrinks Delta and retries. */
@@ -328,6 +329,8 @@ bool fm_run_cobyqa(Expr* f, Expr** vars, size_t n,
             Delta *= 0.5; if (Delta <= 1.5 * dend) Delta = dend;
         }
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (it >= opts->max_iter) fm_warn_maxit(opts);
 
     {
         double base_viol = fm_cobyqa_viol(gbase, gens, ngens);

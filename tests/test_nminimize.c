@@ -1537,10 +1537,29 @@ static void test_fixed_charge_flow(void) {
         "   Flatten@Table[0 <= yVars[[i, j]] <= 1, {i, nodes}, {j, nodes}],"
         "   {Element[Flatten[yVars], Integers]}];"
         " r = NMinimize[{obj, cons}, Flatten[{xVars, yVars}]];"
-        " First[r] === Infinity]");
+        " o = First[r]; sol = Last[r]; xm = xVars /. sol; ym = yVars /. sol;"
+        " NumberQ[o] && o < 877.4 &&"
+        " Max[Abs[Table[Sum[xm[[k, i]], {k, nodes}] - Sum[xm[[i, j]], {j, nodes}] - demand[[i]],"
+        "   {i, nodes}]]] < 1*^-5 &&"
+        " Max[xm - 100 ym] <= 1*^-6 && Min[xm] >= -1*^-6 &&"
+        " AllTrue[Flatten[ym], MemberQ[{0, 1}, #] &]]");
 }
 
-/* WHY THE ASSERTION ABOVE CHANGED (2026-08-21, DEMO-2).
+/* 2026-09-28: THE ASSERTION ABOVE IS BACK TO A FINITE, FEASIBLE OPTIMUM.
+ *
+ * The regression described below was in the local polish, not the gate: the
+ * projected BFGS inner solver of the augmented-Lagrangian polish had no active
+ * set, so with flows pinned at x >= 0 every step whose quasi-Newton direction
+ * pointed into a bound was clipped to almost nothing in the free coordinates,
+ * the line search stalled, and the rounds "converged" at an infeasible point.
+ * With binding bounds held fixed (fm_box_binding_mask in fm_run_bfgs) the
+ * polish now returns a flow with conservation residual ~5e-8 and objective
+ * 724.4 -- below the pre-DEMO-2 877.38 -- so the test asserts that honestly:
+ * finite, every equality within NM_FEAS_RETURN_VIOL, the Big-M coupling,
+ * non-negative flows and binary arcs. The milp optimum (191.72) remains out
+ * of reach, as the header notes. The history is kept for context:
+ *
+ * WHY THE ASSERTION ABOVE CHANGED (2026-08-21, DEMO-2).
  *
  * This test previously asserted a finite objective plus flow-conservation
  * residuals within 1e-2 — i.e. it accepted a point violating its own equality
@@ -1575,6 +1594,35 @@ static void test_fixed_charge_flow(void) {
  * ~4e-12 for purely continuous problems — is real, is unchanged by this ticket,
  * and is recorded as follow-up in NMINIMIZE_FEASIBILITY_BUG.md. When that path
  * improves, this assertion should flip back to checking a finite optimum. */
+
+/* 2026-09-28 regressions. */
+static void test_nmaximize_constraint_list(void) {
+    /* {f, c1, c2}: NMaximize negated the whole list, threading Times[-1, ...]
+     * over the constraints and returning {-1e+300, garbage}. */
+    check_true("With[{r = NMaximize[{x + y, x^2 + y^2 <= 1, x >= 0}, {x, y}]}, "
+               "Abs[First[r] - Sqrt[2.]] < 1.*^-6 && "
+               "Abs[(x /. Last[r]) - 1/Sqrt[2.]] + Abs[(y /. Last[r]) - 1/Sqrt[2.]] < 1.*^-4]");
+    check_true("Abs[First[NMaximize[{x y, x + y <= 4, x >= 0, y >= 0}, {x, y}]] - 4] < 1.*^-6");
+    /* Matches the NMinimize of the negated objective. */
+    check_true("Abs[First[NMaximize[{x + y, x^2 + y^2 <= 1, x >= 0}, {x, y}]] + "
+               "First[NMinimize[{-(x + y), x^2 + y^2 <= 1, x >= 0}, {x, y}]]] < 1.*^-6");
+}
+
+static void test_neldermead_feasibility(void) {
+    /* NelderMead's restart polish kept the raw fixed-penalty simplex vertex
+     * (violation ~1e-6) over the polished point; it now reaches the ~1e-11
+     * feasibility of the other methods. */
+    check_true("With[{r = NMinimize[{x^2 + y^2, x + y >= 2}, {x, y}, Method -> \"NelderMead\"]}, "
+               "Max[0, 2 - (x + y) /. Last[r]] < 1.*^-9 && Abs[First[r] - 2] < 1.*^-8]");
+}
+
+static void test_ranges_evaluated_in_table(void) {
+    /* NMinimize is not HoldAll, so iterator-bound bounds/ranges evaluate. */
+    check_true("With[{r = Table[x /. Last[NMinimize[{(x - a)^2, -5 <= x <= 5}, x]], {a, {1, 2}}]}, "
+               "Max[Abs[r - {1, 2}]] < 1.*^-6]");
+    check_true("With[{r = Table[x /. Last[NMinimize[(x - a)^2, {x, a - 1, a + 1}]], {a, {3}}]}, "
+               "Abs[First[r] - 3] < 1.*^-6]");
+}
 
 int main(void) {
     symtab_init();
@@ -1696,6 +1744,11 @@ int main(void) {
     TEST(test_cardinality_portfolio);
     TEST(test_txncost_portfolio);
     TEST(test_fixed_charge_flow);
+
+    /* 16. Regressions (2026-09-28) */
+    TEST(test_nmaximize_constraint_list);
+    TEST(test_neldermead_feasibility);
+    TEST(test_ranges_evaluated_in_table);
 
     printf("All NMinimize tests passed.\n");
     return 0;

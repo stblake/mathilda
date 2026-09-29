@@ -1015,7 +1015,7 @@
 
     /* Use card-bg so light mode doesn't show dark canvas edges */
     background: var(--card-bg, #050810);
-    z-index: 50;
+    z-index: var(--z-focused-view);
     /* A grid of panes. overflow:hidden is load-bearing, not tidiness: while the
        WINDOW was the scroller, dragging a divider scrolled the page and no pane
        could scroll on its own. Each .focused-pane is now its own scroller, which
@@ -1142,7 +1142,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 60;   /* above .focused-view (50), below the app bar (200) */
+    z-index: var(--z-status-dock);   /* see the scale in app.css */
   }
 
   .focused-view-inner {

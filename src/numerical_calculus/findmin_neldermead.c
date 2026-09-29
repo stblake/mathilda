@@ -67,7 +67,8 @@ bool fm_run_neldermead(Expr* f, Expr** vars, size_t n,
     double fatol = pow(10.0, -opts->acc_goal_digits);
     double xatol = pow(10.0, -opts->prec_goal_digits);
 
-    for (int64_t it = 0; it < opts->max_iter; it++) {
+    int64_t it;
+    for (it = 0; it < opts->max_iter; it++) {
         size_t best = idx[0], worst = idx[n], second = idx[n - 1];
 
         /* Convergence: worst-to-best spread in both f and x below tolerance.
@@ -158,6 +159,8 @@ bool fm_run_neldermead(Expr* f, Expr** vars, size_t n,
         fm_nm_sort_idx(idx, fsim, np);
         fm_fire_monitor(opts->step_monitor);
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (it >= opts->max_iter) fm_warn_maxit(opts);
 
     {
         size_t best = idx[0];

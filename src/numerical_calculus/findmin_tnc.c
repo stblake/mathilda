@@ -159,7 +159,8 @@ bool fm_run_tnc(Expr* f, Expr** vars, size_t n,
 
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
 
-    for (int64_t k = 0; k < opts->max_iter; k++) {
+    int64_t k;
+    for (k = 0; k < opts->max_iter; k++) {
         /* Active set + masked gradient + projected-gradient KKT norm
          * (identical to fm_run_lbfgsb). */
         double pgnorm = 0.0;
@@ -245,6 +246,8 @@ bool fm_run_tnc(Expr* f, Expr** vars, size_t n,
         fx = fx_new;
         if (f_rel >= 0.0 && f_rel < 1e-14) { ok = true; break; }
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (k >= opts->max_iter && !ctx.augmented) fm_warn_maxit(opts);
     *fx_out = fx;
     ok = true;
 cleanup:

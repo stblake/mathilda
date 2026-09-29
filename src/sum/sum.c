@@ -286,14 +286,10 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
         expr_free(nexpr);
         expr_free(curr_e);
         curr_e = next_e;
-        if (!is_real) {
-            int64_t n, d;
-            if (curr_e->type == EXPR_INTEGER)      val = (double)curr_e->data.integer;
-            else if (curr_e->type == EXPR_REAL)    val = curr_e->data.real;
-            else if (is_rational(curr_e, &n, &d))  val = (double)n / d;
-        } else {
-            val += di_val;
-        }
+        /* Refresh `val` from the exact value -- a symbolic one (Pi + 1) through
+         * its machine value -- or, failing that, by the double recurrence, so
+         * the loop always advances. */
+        if (is_real || !iter_real_value(curr_e, &val)) val += di_val;
     }
     expr_free(curr_e);
     iter_spec_restore(var, saved);
@@ -545,7 +541,7 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
     }
 
     IterSpec s;
-    if (!iter_spec_parse(spec, &s)) return NULL;
+    if (!iter_spec_parse_lattice(spec, &s)) return NULL;
 
     /* Sum needs a named iterator; a bare-count {n} is not a valid Sum spec. */
     if (s.kind == ITER_KIND_COUNT) { iter_spec_free(&s); return NULL; }
@@ -590,8 +586,15 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
         bool index_pred_body =
             sum_body_has_index_predicate(f, s.var->data.symbol.name);
 
+        /* A range whose end points are symbolic lattice points (Pi .. 3 + Pi,
+         * from iter_normalize_bounds) is enumerated when short, as Mathematica
+         * does: the closed form is equally exact but hands back a factored
+         * 2 (3 + 2 Pi) where the term-by-term sum is 6 + 4 Pi. */
+        bool short_symbolic_lattice =
+            nterms <= (double)SUM_ARRAY_EXPAND_MAX
+            && (!expr_is_integer_like(s.imin) || !expr_is_integer_like(s.imax));
         if (!is_real && di_val == 1.0 && min_val <= max_val
-            && !short_expensive_body && !index_pred_body) {
+            && !short_expensive_body && !index_pred_body && !short_symbolic_lattice) {
             Rule* saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);

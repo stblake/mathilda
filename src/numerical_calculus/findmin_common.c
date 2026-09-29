@@ -43,6 +43,19 @@ void fm_warn(const char* fn, const char* tag, const char* fmt, ...) {
     va_end(ap);
 }
 
+/* The MaxIterations diagnostic every local solver emits when its main loop
+ * runs out of iterations before meeting AccuracyGoal / PrecisionGoal. Worded
+ * as Mathematica's FindMinimum::cvmit. The best iterate is still returned; the
+ * message is what keeps an unconverged answer from passing as a converged one.
+ * Callers inside the augmented-Lagrangian wrapper skip it (the outer schedule's
+ * feasibility check is authoritative there), and NMinimize's internal polish
+ * runs under g_fm_quiet, so it never leaks from a global search. */
+void fm_warn_maxit(const FmOpts* opts) {
+    fm_warn(g_fm_name, "cvmit",
+            "Failed to converge to the requested accuracy or precision within "
+            "%lld iterations.", (long long)opts->max_iter);
+}
+
 /* The driver function name is captured by the outer call (FindMinimum vs
  * FindMaximum) and threaded through so all diagnostics carry the right
  * tag. */
@@ -146,10 +159,31 @@ bool fm_parse_goal(Expr* val, double* digits_out) {
     return fm_expr_to_double_real(val, digits_out);
 }
 
+static bool fm_apply_option_value(const char* name, Expr* rhs, FmOpts* opts);
+
 bool fm_apply_option(Expr* rule, FmOpts* opts) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
     const char* name = lhs->data.symbol.name;
+    /* FindMinimum is HoldAll, so option values arrive unevaluated. The scalar
+     * settings (Method, WorkingPrecision, MaxIterations, AccuracyGoal,
+     * PrecisionGoal) are evaluated first, as Mathematica does -- otherwise
+     * MaxIterations -> n inside a Table/Do/With arrived as the bare symbol n
+     * and was rejected. Gradient and the monitors stay held: they are
+     * expressions in the optimization variables, evaluated per point. */
+    if (name == SYM_Gradient || name == SYM_StepMonitor || name == SYM_EvaluationMonitor)
+        return fm_apply_option_value(name, rhs, opts);
+    Expr* val = eval_and_free(expr_copy(rhs));
+    if (!val) return false;
+    bool ok = fm_apply_option_value(name, val, opts);
+    expr_free(val);
+    return ok;
+}
+
+/* Apply one option whose value is already in final form (see fm_apply_option).
+ * Every scalar setting is copied into opts; only the held Gradient / monitor
+ * expressions are borrowed, from the caller's still-live rule. */
+static bool fm_apply_option_value(const char* name, Expr* rhs, FmOpts* opts) {
 
     if (name == SYM_Method) {
         if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
@@ -209,8 +243,14 @@ bool fm_apply_option(Expr* rule, FmOpts* opts) {
         fm_warn(g_fm_name, "badopt", "MaxIterations must be a positive integer");
         return false;
     }
-    if (name == SYM_AccuracyGoal)  return fm_parse_goal(rhs, &opts->acc_goal_digits);
-    if (name == SYM_PrecisionGoal) return fm_parse_goal(rhs, &opts->prec_goal_digits);
+    if (name == SYM_AccuracyGoal || name == SYM_PrecisionGoal) {
+        double* dst = (name == SYM_AccuracyGoal) ? &opts->acc_goal_digits
+                                                 : &opts->prec_goal_digits;
+        if (fm_parse_goal(rhs, dst)) return true;
+        fm_warn(g_fm_name, "badopt", "%s must be a number, Automatic or Infinity",
+                name == SYM_AccuracyGoal ? "AccuracyGoal" : "PrecisionGoal");
+        return false;
+    }
     if (name == SYM_Gradient) {
         if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
             opts->gradient = NULL; return true;
@@ -1020,6 +1060,30 @@ cleanup:
  *  Variable spec parsing                                              *
  * ------------------------------------------------------------------ */
 
+size_t fm_box_binding_mask(const double* x, const double* g, size_t n,
+                           const FmBox* boxes, bool* act) {
+    size_t cnt = 0;
+    for (size_t i = 0; i < n; i++) {
+        act[i] = false;
+        if (!boxes) continue;
+        if (boxes[i].has_lo && g[i] > 0.0
+            && x[i] <= boxes[i].lo + 1e-12 * (1.0 + fabs(boxes[i].lo))) act[i] = true;
+        if (boxes[i].has_hi && g[i] < 0.0
+            && x[i] >= boxes[i].hi - 1e-12 * (1.0 + fabs(boxes[i].hi))) act[i] = true;
+        if (act[i]) cnt++;
+    }
+    return cnt;
+}
+
+bool fm_symbol_is_free(Expr* s) {
+    if (!s || s->type != EXPR_SYMBOL) return false;
+    if (expr_is_numeric_quantity(s)) return false;       /* Pi, E, Degree, ... */
+    Expr* ev = eval_and_free(expr_copy(s));
+    bool is_free = ev && expr_eq(ev, s);
+    expr_free(ev);
+    return is_free;
+}
+
 FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
                                     Expr** x0_out, Expr** x1_out,
                                     Expr** xmin_out, Expr** xmax_out) {
@@ -1497,18 +1561,30 @@ bool fm_line_search(Expr* f, FmVarBind* binds, size_t n,
  *  1D bracketing (mnbrak-style)                                        *
  * ------------------------------------------------------------------ */
 
-/* Given a single start x0, find a, b, c with f(a) > f(b) and f(c) > f(b),
- * bracketing a local minimum. Honors optional box constraints. */
-bool fm_bracket(Expr* f, FmVarBind* binds, const FmOpts* opts,
-                       double x0, const FmBox* box1,
-                       double* a_out, double* b_out, double* c_out) {
-    double a = x0, b, fa, fb;
+/* Evaluate f at *c; when that fails (the expansion stepped outside the
+ * objective's real domain, e.g. Log of a negative number), pull *c back toward
+ * the last good abscissa b by halving until it evaluates. Without this the
+ * golden-ratio expansion of a bracket aimed at a minimum near a domain edge
+ * (x^2 - 2 Log[x] from x = 3 steps to x < 0) aborted the whole solve. */
+static bool fm_eval_backoff(Expr* f, FmVarBind* binds, const FmOpts* opts,
+                            double b, double* c, double* fc) {
+    for (int k = 0; k < 60; k++) {
+        if (fm_eval_scalar(f, binds, c, 1, opts, fc)) return true;
+        double nc = b + 0.5 * (*c - b);
+        if (nc == *c || nc == b) return false;
+        *c = nc;
+    }
+    return false;
+}
+
+/* Shared body of fm_bracket / fm_bracket2: a is the first point, b the second
+ * (already clamped into the box). */
+static bool fm_bracket_from(Expr* f, FmVarBind* binds, const FmOpts* opts,
+                            double a, double b, const FmBox* box1,
+                            double* a_out, double* b_out, double* c_out) {
+    double fa, fb;
     if (!fm_eval_scalar(f, binds, &a, 1, opts, &fa)) return false;
-    double h = (fabs(a) > 1.0 ? fabs(a) : 1.0) * 1e-2;
-    b = a + h;
-    if (box1 && box1->has_hi && b > box1->hi) b = (a + box1->hi) * 0.5;
-    if (box1 && box1->has_lo && b < box1->lo) b = (a + box1->lo) * 0.5;
-    if (!fm_eval_scalar(f, binds, &b, 1, opts, &fb)) return false;
+    if (!fm_eval_backoff(f, binds, opts, a, &b, &fb)) return false;
     if (fb > fa) {
         /* Step the other way. */
         double t = a; a = b; b = t;
@@ -1518,22 +1594,22 @@ bool fm_bracket(Expr* f, FmVarBind* binds, const FmOpts* opts,
     if (box1 && box1->has_hi && c > box1->hi) c = box1->hi;
     if (box1 && box1->has_lo && c < box1->lo) c = box1->lo;
     double fc;
-    if (!fm_eval_scalar(f, binds, &c, 1, opts, &fc)) return false;
+    if (!fm_eval_backoff(f, binds, opts, b, &c, &fc)) return false;
     for (int k = 0; k < 100 && fc <= fb; k++) {
         a = b; fa = fb;
         b = c; fb = fc;
         c = b + 1.618 * (b - a);
         if (box1 && box1->has_hi && c >= box1->hi) {
             c = box1->hi;
-            if (!fm_eval_scalar(f, binds, &c, 1, opts, &fc)) return false;
+            if (!fm_eval_backoff(f, binds, opts, b, &c, &fc)) return false;
             break;
         }
         if (box1 && box1->has_lo && c <= box1->lo) {
             c = box1->lo;
-            if (!fm_eval_scalar(f, binds, &c, 1, opts, &fc)) return false;
+            if (!fm_eval_backoff(f, binds, opts, b, &c, &fc)) return false;
             break;
         }
-        if (!fm_eval_scalar(f, binds, &c, 1, opts, &fc)) return false;
+        if (!fm_eval_backoff(f, binds, opts, b, &c, &fc)) return false;
     }
     if (a > c) {
         double t = a; a = c; c = t;
@@ -1542,7 +1618,64 @@ bool fm_bracket(Expr* f, FmVarBind* binds, const FmOpts* opts,
     return true;
 }
 
+/* Given a single start x0, find a, b, c with f(a) > f(b) and f(c) > f(b),
+ * bracketing a local minimum. Honors optional box constraints. */
+bool fm_bracket(Expr* f, FmVarBind* binds, const FmOpts* opts,
+                       double x0, const FmBox* box1,
+                       double* a_out, double* b_out, double* c_out) {
+    double h = (fabs(x0) > 1.0 ? fabs(x0) : 1.0) * 1e-2;
+    double b = x0 + h;
+    if (box1 && box1->has_hi && b > box1->hi) b = (x0 + box1->hi) * 0.5;
+    if (box1 && box1->has_lo && b < box1->lo) b = (x0 + box1->lo) * 0.5;
+    return fm_bracket_from(f, binds, opts, x0, b, box1, a_out, b_out, c_out);
+}
+
+bool fm_bracket2(Expr* f, FmVarBind* binds, const FmOpts* opts,
+                        double x0, double x1, const FmBox* box1,
+                        double* a_out, double* b_out, double* c_out) {
+    if (x1 == x0) return fm_bracket(f, binds, opts, x0, box1, a_out, b_out, c_out);
+    if (box1 && box1->has_hi && x1 > box1->hi) x1 = box1->hi;
+    if (box1 && box1->has_lo && x1 < box1->lo) x1 = box1->lo;
+    /* If [x0, x1] already brackets a minimum -- an interior golden-section
+     * point lies below both ends -- search there (FindMinimum[x Cos[x],
+     * {x, 8, 11}] -> 9.529). Otherwise expand downhill from the lower end,
+     * which may leave the interval ({x, 5, 8} -> 9.529 as well). */
+    double f0v, f1v, fmv;
+    if (fm_eval_scalar(f, binds, &x0, 1, opts, &f0v)
+        && fm_eval_scalar(f, binds, &x1, 1, opts, &f1v)) {
+        double from = (f0v <= f1v) ? x0 : x1, to = (f0v <= f1v) ? x1 : x0;
+        double m = from + 0.381966011250105 * (to - from);
+        if (fm_eval_scalar(f, binds, &m, 1, opts, &fmv) && fmv < f0v && fmv < f1v) {
+            *a_out = (x0 < x1) ? x0 : x1;
+            *c_out = (x0 < x1) ? x1 : x0;
+            *b_out = m;
+            return true;
+        }
+    }
+    return fm_bracket_from(f, binds, opts, x0, x1, box1, a_out, b_out, c_out);
+}
+
 #ifdef USE_MPFR
+/* MPFR twin of fm_eval_backoff: evaluate f at c, halving c toward b while the
+ * evaluation fails (c outside the objective's real domain). */
+static bool fm_eval_backoff_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
+                                 const mpfr_t b, mpfr_t c, mpfr_t fc) {
+    long bits = opts->wp_bits;
+    bool ok = false;
+    mpfr_t nc;
+    mpfr_init2(nc, bits);
+    for (int k = 0; k < 60; k++) {
+        if (fm_eval_scalar_mpfr_1d(f, bind, c, opts, fc)) { ok = true; break; }
+        mpfr_sub(nc, c, b, MPFR_RNDN);
+        mpfr_div_ui(nc, nc, 2, MPFR_RNDN);
+        mpfr_add(nc, b, nc, MPFR_RNDN);
+        if (mpfr_equal_p(nc, c) || mpfr_equal_p(nc, b)) break;
+        mpfr_set(c, nc, MPFR_RNDN);
+    }
+    mpfr_clear(nc);
+    return ok;
+}
+
 /* ------------------------------------------------------------------ *
  *  Brent's minimisation (1D, MPFR)                                    *
  * ------------------------------------------------------------------ *
@@ -1554,24 +1687,45 @@ bool fm_bracket(Expr* f, FmVarBind* binds, const FmOpts* opts,
  * machine-precision doubles, which is fine: the user's input box
  * already lives at that resolution). */
 bool fm_bracket_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
-                            const mpfr_t x0, const FmBox* box1,
+                            const mpfr_t x0, bool has_x1, double x1,
+                            const FmBox* box1,
                             mpfr_t a, mpfr_t b, mpfr_t c,
                             mpfr_t fa, mpfr_t fb, mpfr_t fc) {
     long bits = opts->wp_bits;
     mpfr_set(a, x0, MPFR_RNDN);
     if (!fm_eval_scalar_mpfr_1d(f, bind, a, opts, fa)) return false;
-    /* h = max(|a|, 1) * 1e-2 */
-    mpfr_t h;
-    mpfr_init2(h, bits);
-    mpfr_abs(h, a, MPFR_RNDN);
-    {
-        mpfr_t one; mpfr_init2(one, bits); mpfr_set_ui(one, 1, MPFR_RNDN);
-        if (mpfr_cmp(h, one) < 0) mpfr_set(h, one, MPFR_RNDN);
-        mpfr_clear(one);
+    if (has_x1 && mpfr_cmp_d(a, x1) != 0) {
+        /* Two-start form: the user's second point is the first step. As in
+         * fm_bracket2, an interior golden-section point below both ends means
+         * [x0, x1] already brackets a minimum. */
+        mpfr_set_d(b, x1, MPFR_RNDN);
+        if (fm_eval_scalar_mpfr_1d(f, bind, b, opts, fb)) {
+            bool a_low = mpfr_cmp(fa, fb) <= 0;
+            mpfr_sub(c, a_low ? b : a, a_low ? a : b, MPFR_RNDN);   /* to - from */
+            mpfr_mul_d(c, c, 0.381966011250105, MPFR_RNDN);
+            mpfr_add(c, c, a_low ? a : b, MPFR_RNDN);              /* m */
+            if (fm_eval_scalar_mpfr_1d(f, bind, c, opts, fc)
+                && mpfr_cmp(fc, fa) < 0 && mpfr_cmp(fc, fb) < 0) {
+                /* (a, m, b) with a < b after ordering: swap m into b. */
+                mpfr_swap(b, c); mpfr_swap(fb, fc);                 /* b = m, c = x1 */
+                if (mpfr_cmp(a, c) > 0) { mpfr_swap(a, c); mpfr_swap(fa, fc); }
+                return true;
+            }
+        }
+    } else {
+        /* h = max(|a|, 1) * 1e-2 */
+        mpfr_t h;
+        mpfr_init2(h, bits);
+        mpfr_abs(h, a, MPFR_RNDN);
+        {
+            mpfr_t one; mpfr_init2(one, bits); mpfr_set_ui(one, 1, MPFR_RNDN);
+            if (mpfr_cmp(h, one) < 0) mpfr_set(h, one, MPFR_RNDN);
+            mpfr_clear(one);
+        }
+        mpfr_mul_d(h, h, 1e-2, MPFR_RNDN);
+        mpfr_add(b, a, h, MPFR_RNDN);
+        mpfr_clear(h);
     }
-    mpfr_mul_d(h, h, 1e-2, MPFR_RNDN);
-    mpfr_add(b, a, h, MPFR_RNDN);
-    mpfr_clear(h);
     if (box1 && box1->has_hi) {
         mpfr_t bhi; mpfr_init2(bhi, bits); mpfr_set_d(bhi, box1->hi, MPFR_RNDN);
         if (mpfr_cmp(b, bhi) > 0) {
@@ -1588,7 +1742,7 @@ bool fm_bracket_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
         }
         mpfr_clear(blo);
     }
-    if (!fm_eval_scalar_mpfr_1d(f, bind, b, opts, fb)) return false;
+    if (!fm_eval_backoff_mpfr(f, bind, opts, a, b, fb)) return false;
     if (mpfr_cmp(fb, fa) > 0) { mpfr_swap(a, b); mpfr_swap(fa, fb); }
     /* c = b + 1.618 * (b - a) */
     mpfr_t diff; mpfr_init2(diff, bits);
@@ -1606,7 +1760,7 @@ bool fm_bracket_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
         if (mpfr_cmp(c, blo) < 0) mpfr_set(c, blo, MPFR_RNDN);
         mpfr_clear(blo);
     }
-    if (!fm_eval_scalar_mpfr_1d(f, bind, c, opts, fc)) return false;
+    if (!fm_eval_backoff_mpfr(f, bind, opts, b, c, fc)) return false;
     for (int k = 0; k < 100 && mpfr_cmp(fc, fb) <= 0; k++) {
         mpfr_swap(a, b); mpfr_swap(fa, fb);
         mpfr_swap(b, c); mpfr_swap(fb, fc);
@@ -1626,7 +1780,7 @@ bool fm_bracket_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
             if (mpfr_cmp(c, blo) <= 0) { mpfr_set(c, blo, MPFR_RNDN); hit_bound = true; }
             mpfr_clear(blo);
         }
-        if (!fm_eval_scalar_mpfr_1d(f, bind, c, opts, fc)) return false;
+        if (!fm_eval_backoff_mpfr(f, bind, opts, b, c, fc)) return false;
         if (hit_bound) break;
     }
     if (mpfr_cmp(a, c) > 0) { mpfr_swap(a, c); mpfr_swap(fa, fc); }

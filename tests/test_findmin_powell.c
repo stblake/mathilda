@@ -227,6 +227,24 @@ static void test_no_leak_many_calls(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* P7. Non-smooth kinks (restart-on-stall, 2026-09-28)                 */
+/* ------------------------------------------------------------------ */
+
+static void test_nonsmooth_kink_escape(void) {
+    /* From (3, 3) every axis direction of this sum of |.| terms is flat or
+     * uphill (the descent cone is bounded by the axes), so the plain direction
+     * set stopped at the start with f = 7. Minimum 3 (triangle inequality). */
+    check_true("Abs[First[FindMinimum[Abs[x-1] + Abs[y+2] + Abs[x-y], {{x,3},{y,3}}, "
+               "Method->\"Powell\"]] - 3] < 1.*^-6");
+    /* Max/Abs corner at (1, 1): stopped at 1.3; minimum 0.3 at the origin. */
+    check_true("Abs[First[FindMinimum[Max[Abs[x], Abs[y]] + 0.3 Abs[x - y] + 0.3, "
+               "{{x,1},{y,1}}, Method->\"Powell\"]] - 0.3] < 1.*^-6");
+    /* A smooth problem is unaffected (one confirming sweep only). */
+    check_true("Abs[First[FindMinimum[(x-1)^2 + 10 (y-2)^2, {{x,0},{y,0}}, "
+               "Method->\"Powell\"]]] < 1.*^-7");
+}
+
+/* ------------------------------------------------------------------ */
 
 int main(void) {
     symtab_init();
@@ -262,6 +280,9 @@ int main(void) {
 
     /* P6 memory */
     TEST(test_no_leak_many_calls);
+
+    /* P7 non-smooth kinks */
+    TEST(test_nonsmooth_kink_escape);
 
     printf("All Powell tests passed!\n");
     return 0;

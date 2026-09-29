@@ -1,4 +1,5 @@
 mod commands;
+mod notebook_format;
 
 // Kernel backend is chosen at compile time:
 //   * desktop  -> `kernel.rs`: spawns the `mathilda` sidecar over stdio.

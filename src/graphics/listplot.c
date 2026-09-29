@@ -153,6 +153,8 @@ typedef struct {
     bool   have_markers;    /* PlotMarkers given (accepted; glyphs not yet drawn) */
     DataRange dr;
     ScaleFnType sf_x, sf_y; /* ScalingFunctions per-axis */
+    const Expr* plot_style; /* borrowed explicit PlotStyle (the owned
+                             * single_color); NULL when not given */
 } ListPlotOpts;
 
 static double stem_baseline(Expr* filling, double ymin, double ymax) {
@@ -185,6 +187,7 @@ static bool split_options(Expr* res, ListPlotOpts* o,
     o->dr.force_multi = false;
     o->sf_x = SF_NONE;
     o->sf_y = SF_NONE;
+    o->plot_style = NULL;
     *single_color_out = NULL;
     *legends_out = NULL;
 
@@ -281,6 +284,8 @@ static bool split_options(Expr* res, ListPlotOpts* o,
         Expr* a[2] = { expr_new_symbol(SYM_PlotStyle), expr_copy(rgb) };
         passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         *single_color_out = rgb;
+    } else {
+        o->plot_style = *single_color_out;
     }
 
     *passthrough_out = passthrough;
@@ -303,15 +308,15 @@ static Expr* coords_list(const PointSet* ps) {
     return list;
 }
 
-/* Append this dataset's primitives to prims[*pc]: an optional palette colour
- * (multi-dataset only), optional Filling stems, then either a Line polyline
- * (Joined) or a Point[...] cloud (markers use render.c's data-scaled default
- * point size, matching every other Point primitive). `single_color`
- * (borrowed, may be NULL) restores the curve colour after a single-curve
- * Filling block. */
-static void emit_dataset(Expr** prims, size_t* pc, const PointSet* ps, size_t idx,
-                         bool multi, const ListPlotOpts* o, Expr* single_color) {
-    if (multi) prims[(*pc)++] = palette_color(idx);
+/* Append this dataset's primitives to prims[*pc]: its style (multi-dataset
+ * only), optional Filling stems, then either a Line polyline (Joined) or a
+ * Point[...] cloud (markers use render.c's data-scaled default point size,
+ * matching every other Point primitive). `style` (borrowed, may be NULL) is
+ * the dataset's colour or Directive -- its palette entry or PlotStyle entry;
+ * it also restores the style after a Filling block. */
+static void emit_dataset(Expr** prims, size_t* pc, const PointSet* ps,
+                         bool multi, const ListPlotOpts* o, Expr* style) {
+    if (multi && style) prims[(*pc)++] = expr_copy(style);
 
     if (o->filling && ps->n > 0) {
         double ymin = ps->ys[0], ymax = ps->ys[0];
@@ -354,8 +359,7 @@ static void emit_dataset(Expr** prims, size_t* pc, const PointSet* ps, size_t id
             prims[(*pc)++] = expr_new_function(expr_new_symbol(SYM_Opacity), op2, 1);
         }
         /* Restore the curve colour the markers/line should draw in. */
-        if (multi) prims[(*pc)++] = palette_color(idx);
-        else if (single_color) prims[(*pc)++] = expr_copy(single_color);
+        if (style) prims[(*pc)++] = expr_copy(style);
     }
 
     Expr* coords = coords_list(ps);
@@ -368,7 +372,8 @@ static void emit_dataset(Expr** prims, size_t* pc, const PointSet* ps, size_t id
  * renderer's draw_legend(), mirroring plot.c. `legends` (the evaluated option
  * value) is an explicit {labels...} list or Automatic; Automatic labels each
  * dataset with its 1-based index. Returns NULL if legends is None/absent. */
-static Expr* build_listplot_legend_meta(Expr* legends, size_t nsets, Expr* single_color) {
+static Expr* build_listplot_legend_meta(Expr* legends, size_t nsets, Expr* single_color,
+                                        const Expr* style) {
     if (!legends) return NULL;
     if (legends->type == EXPR_SYMBOL && legends->data.symbol.name == SYM_None) return NULL;
 
@@ -378,7 +383,16 @@ static Expr* build_listplot_legend_meta(Expr* legends, size_t nsets, Expr* singl
     Expr** entries = malloc(sizeof(Expr*) * (nsets ? nsets : 1));
     for (size_t i = 0; i < nsets; i++) {
         Expr* color = multi ? palette_color(i)
-                     : (single_color ? expr_copy(single_color) : palette_color(0));
+                     : (single_color && !style ? expr_copy(single_color) : palette_color(0));
+        if (style) {
+            /* The swatch shows the colour the dataset is drawn in. */
+            bool scoped;
+            Expr* cs = plot_curve_style(style, i, color, &scoped);
+            Expr* c2 = plot_style_color(cs, color);
+            expr_free(cs);
+            expr_free(color);
+            color = c2;
+        }
         Expr* label;
         if (explicit_list && i < legends->data.function.arg_count) {
             label = expr_copy(legends->data.function.args[i]);
@@ -443,8 +457,37 @@ Expr* builtin_listplot(Expr* res) {
     for (size_t i = 0; i < live; i++) cap += 2 * psets[i].n + 8;
     Expr** prims = malloc(sizeof(Expr*) * (cap ? cap : 1));
     size_t pc = 0;
-    for (size_t i = 0; i < live; i++)
-        emit_dataset(prims, &pc, &psets[i], i, multi, &o, single_color);
+    for (size_t i = 0; i < live; i++) {
+        /* Dataset i's style: its palette colour, or its PlotStyle entry (a
+         * List of styles cycles). A single dataset draws in the PlotStyle
+         * option at render time; its resolved style is only needed to
+         * restore after Filling. */
+        Expr* style = single_color;
+        Expr* owned = NULL;
+        bool scoped = false;
+        if (multi || o.plot_style) {
+            Expr* base = multi ? palette_color(i) : NULL;
+            if (!base) {
+                Expr* rgb_args[3] = { expr_new_real(0.2), expr_new_real(0.4), expr_new_real(0.8) };
+                base = expr_new_function(expr_new_symbol(SYM_RGBColor), rgb_args, 3);
+            }
+            owned = plot_curve_style(o.plot_style, i, base, &scoped);
+            expr_free(base);
+            style = owned;
+        }
+        if (multi && scoped) {
+            /* Non-colour directives (PointSize, Dashed, ...) get their own
+             * List scope so they cannot restyle the next dataset. */
+            Expr** sub = malloc(sizeof(Expr*) * (2 * psets[i].n + 8));
+            size_t sc = 0;
+            emit_dataset(sub, &sc, &psets[i], multi, &o, style);
+            prims[pc++] = expr_new_function(expr_new_symbol(SYM_List), sub, sc);
+            free(sub);
+        } else {
+            emit_dataset(prims, &pc, &psets[i], multi, &o, style);
+        }
+        expr_free(owned);
+    }
 
     for (size_t i = 0; i < live; i++) pointset_free(&psets[i]);
     free(psets);
@@ -454,7 +497,7 @@ Expr* builtin_listplot(Expr* res) {
 
     emit_scaling_meta(o.sf_x, o.sf_y, &passthrough, &passthrough_count);
 
-    Expr* legend_meta = build_listplot_legend_meta(legends, live, single_color);
+    Expr* legend_meta = build_listplot_legend_meta(legends, live, single_color, o.plot_style);
     expr_free(legends);
     expr_free(single_color);
 

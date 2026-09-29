@@ -249,6 +249,8 @@ Converts a `SeriesData` back into an ordinary expression by dropping its O-term.
 **Features**:
 - `Protected`.
 - Returns the Plus of the coefficient-times-power terms (zero coefficients skipped). For non-`SeriesData` input, `Normal` is the identity.
+- `Normal[SparseArray[...]]` gives the dense nested List the specification
+  denotes (see [SparseArray](data-structures.md#sparsearray)), at any depth.
 - Recurses through the whole expression, dropping the O-term of **every** `SeriesData` at any depth. This matters for expansions around `+-Infinity`, whose `SeriesData` is wrapped inside `Plus`/`Times` (e.g. the trig- or exponential-prefactored asymptotic forms of `BesselJ`, `BesselY`, `BesselK`, `BesselI`, `AiryAi`, `AiryBiPrime`); the surrounding factors are preserved and recombined by the evaluator.
 
 ```mathematica
@@ -260,6 +262,9 @@ Out[2]= a + b
 
 In[3]:= Normal[Series[BesselJ[0, x], {x, Infinity, 2}]]
 Out[3]= Sqrt[2/Pi] Sqrt[1/x] Cos[1/4 Pi - x] - 1/8 Sqrt[2/Pi] (1/x)^(3/2) Sin[1/4 Pi - x]
+
+In[4]:= Normal[SparseArray[{1 -> a, 3 -> b}, 4]]
+Out[4]= {a, 0, b, 0}
 ```
 
 ## SeriesCoefficient

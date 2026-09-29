@@ -19,9 +19,11 @@
   import { kernelStatus } from './lib/notebook';
   import { darkMode } from './lib/theme';
   import { kernelMemory } from './lib/status';
-  import { pingKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
+  import { pingKernel, saveLibrary, loadLibrary, loadNotebook, saveNotebook,
+           setWindowTitle as setTitleCmd } from './lib/ipc';
   import { restart, abortEvaluation } from './lib/kernelActions';
-  import { serializeLibrary, loadLibraryData, canvasState, activeActions, activeFlags, setFocused } from './lib/canvas';
+  import { serializeLibrary, loadLibraryData, canvasState, activeActions, activeFlags, setFocused,
+           openNotebookCells, currentNotebook } from './lib/canvas';
   /* Imported for its side effect: installs the document-level Cmd+click
      handler that opens a symbol's reference page. Importing it here rather
      than relying on a cell to pull it in means the gesture works from the
@@ -90,12 +92,32 @@
   // ---------------------------------------------------------------------------
   // File I/O — library-level (whole canvas)
 
+  /* Two formats, told apart by extension:
+       .lb        a LIBRARY -- the whole canvas as JSON; opening one replaces it.
+       .mathilda  ONE notebook in the plain-text stanza format (src-tauri's
+                  notebook_format.rs); opening one adds it to the canvas.
+     The dialog offered .mathilda for a long time while every file went through
+     the JSON library loader, so a .mathilda file could never open. */
+  const isNotebookFile = (p: string) => /\.mathilda$/i.test(p);
+  const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
+
   async function openFile() {
     const sel = await open({
-      filters: [{ name: 'Mathilda Library', extensions: ['lb', 'mathilda'] }],
+      filters: [
+        { name: 'Mathilda Library or Notebook', extensions: ['lb', 'mathilda'] },
+        { name: 'Mathilda Library', extensions: ['lb'] },
+        { name: 'Mathilda Notebook', extensions: ['mathilda'] },
+      ],
     });
     if (!sel) return;
     const path = typeof sel === 'string' ? sel : (sel as string[])[0];
+    if (isNotebookFile(path)) {
+      try {
+        const cells = await loadNotebook(path);
+        openNotebookCells(baseName(path).replace(/\.mathilda$/i, ''), cells);
+      } catch (e) { console.error('Open failed:', e); }
+      return;
+    }
     try {
       // Use loadLibrary (returns raw JSON string) not loadNotebook (parses as cells)
       const json = await loadLibrary(path);
@@ -111,12 +133,26 @@
     if (libraryPath) doSave(libraryPath); else saveFileAs();
   }
 
+  /* Save As offers both formats. Choosing .mathilda EXPORTS the current notebook
+     (the active pane, else the top card) as sources only; it does not become the
+     library's path, so a later Cmd+S still saves the whole canvas as .lb rather
+     than overwriting the notebook file with something else. */
   async function saveFileAs() {
     const path = await save({
       defaultPath: (libraryTitle || 'library') + '.lb',
-      filters: [{ name: 'Mathilda Library', extensions: ['lb'] }],
+      filters: [
+        { name: 'Mathilda Library', extensions: ['lb'] },
+        { name: 'Mathilda Notebook (current notebook, no outputs)', extensions: ['mathilda'] },
+      ],
     });
     if (!path) return;
+    if (isNotebookFile(path)) {
+      const nb = currentNotebook();
+      if (!nb) { console.error('Save failed: no notebook to save'); return; }
+      try { await saveNotebook(path, nb.store.serializeLegacy()); }
+      catch (e) { console.error('Save failed:', e); }
+      return;
+    }
     libraryPath = path;
     doSave(path);
   }
@@ -308,7 +344,7 @@
     padding: 0 0.75rem;
     background: var(--bg);
     border-bottom: 1px solid var(--border);
-    z-index: 200;
+    z-index: var(--z-appbar);
     /* The toolbar is a row of fixed-height groups; nothing here may wrap. */
     overflow: hidden;
     /* Nothing here should swallow a drag meant for the window chrome. */
@@ -368,7 +404,7 @@
     align-items: center;
     gap: 0.6rem;
     box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    z-index: 300;
+    z-index: var(--z-banner);
   }
   .kernel-banner button {
     background: rgba(255,255,255,0.2);

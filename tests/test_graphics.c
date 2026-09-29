@@ -9,9 +9,11 @@
 #include "symtab.h"
 #include "core.h"
 #include "test_utils.h"
+#include "plot_common.h"     /* gfx_*: the style sizes both back ends share */
 #ifdef USE_GRAPHICS
 #include "render.h"
 #include "render_common.h"   /* frame_minor_divs: shared tick-spacing policy */
+#include "graphics_export.h" /* graphics_render_rgba: offscreen raster */
 #endif
 #include <stdlib.h>
 #include <stdio.h>
@@ -66,6 +68,219 @@ void test_export_graphics_pdf(void) {
     assert_eval_eq(
         "Export[\"/tmp/mathilda_test_gx3.pdf\", Graphics3D[{Point[{0, 0, 0}]}]]",
         "$Failed", 0);
+}
+
+/* ---- Show[g1, g2, ...] and the export option/directive fixes ---------- */
+
+/* Read a whole file into a NUL-terminated buffer (caller frees). The PDF
+ * writer emits an uncompressed ASCII content stream, so its drawing
+ * operators can be asserted on directly. */
+static char* slurp_file(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char* buf = malloc((size_t)n + 1);
+    size_t got = fread(buf, 1, (size_t)n, f);
+    buf[got] = '\0';
+    fclose(f);
+    return buf;
+}
+
+static size_t count_substr(const char* hay, const char* needle) {
+    size_t c = 0, n = strlen(needle);
+    for (const char* p = strstr(hay, needle); p; p = strstr(p + n, needle)) c++;
+    return c;
+}
+
+/* Export `expr_src` (a Graphics expression) to `path` and return the PDF
+ * text (caller frees). */
+static char* export_pdf_text(const char* expr_src, const char* path) {
+    char cmd[2048];
+    snprintf(cmd, sizeof(cmd), "Export[\"%s\", %s]", path, expr_src);
+    struct Expr* parsed = parse_expression(cmd);
+    ASSERT(parsed != NULL);
+    Expr* r = evaluate(parsed);
+    expr_free(parsed);
+    ASSERT(r && r->type == EXPR_STRING);
+    expr_free(r);
+    char* text = slurp_file(path);
+    ASSERT(text != NULL);
+    return text;
+}
+
+/* Bug: Show[g1, g2] stayed unevaluated -- Show accepted only one graphic. */
+void test_show_combines_graphics(void) {
+    assert_eval_eq("Show[Graphics[Line[{{0,0},{1,1}}]], Graphics[Point[{2,2}]]]",
+                   "-Graphics-", 0);
+    /* One List scope per input, so directives cannot leak between them. */
+    assert_eval_eq("Show[Graphics[{Red, Line[{{0,0},{1,1}}]}], Graphics[Point[{2,2}]]][[1]]",
+                   "{{RGBColor[1, 0, 0], Line[{{0, 0}, {1, 1}}]}, {Point[{2, 2}]}}", 0);
+    /* The list form, nested lists included, is the same call. */
+    assert_eval_eq("Show[{Graphics[Point[{0,0}]], {Graphics[Point[{1,1}]]}}] === "
+                   "Show[Graphics[Point[{0,0}]], Graphics[Point[{1,1}]]]", "True", 0);
+    assert_eval_eq("Show[{Graphics[Point[{0,0}]]}] === Graphics[Point[{0,0}]]", "True", 0);
+    /* Options come from the first graphic... */
+    assert_eval_eq("Cases[Show[Graphics[{}, Axes -> True], Graphics[{}, Frame -> True]],"
+                   " (h:Axes|Frame -> v_) :> {h, v}]", "{{Axes, True}}", 0);
+    /* ...unless Show overrides them. */
+    assert_eval_eq("Cases[Show[Graphics[{}, Axes -> True], Graphics[{}], Axes -> False],"
+                   " (Axes -> v_) :> v]", "{False}", 0);
+    /* Two Plot outputs combine too (the reported case). */
+    assert_eval_eq("Head[Show[Plot[Sin[x], {x, 0, 1}], Plot[Cos[x], {x, 0, 1}]]]",
+                   "Graphics", 0);
+    /* 2D and 3D do not mix; non-graphics arguments are rejected. */
+    assert_eval_eq("Head[Show[Graphics[Point[{0,0}]], Graphics3D[Point[{0,0,0}]]]]",
+                   "Show", 0);
+    assert_eval_eq("Head[Show[Graphics[Point[{0,0}]], 5]]", "Show", 0);
+    assert_eval_eq("Head[Show[Axes -> True]]", "Show", 0);
+}
+
+void test_show_merges_plot_range(void) {
+    /* Union of an explicit range with another input's extent. */
+    assert_eval_eq("Cases[Show[Graphics[Line[{{0,0},{1,1}}], PlotRange -> {{0,1},{0,1}}],"
+                   " Graphics[Point[{2,3}]]], (PlotRange -> v_) :> v]",
+                   "{{{0.0, 2.0}, {0.0, 3.0}}}", 0);
+    /* Circle[] (unit circle by default) contributes its extent. */
+    assert_eval_eq("Cases[Show[Graphics[Circle[]], Graphics[Disk[{3, 0}],"
+                   " PlotRange -> {{2, 4}, {-1, 1}}]], (PlotRange -> v_) :> v]",
+                   "{{{-1.0, 4.0}, {-1.0, 1.0}}}", 0);
+    /* No input fixes a range: stays automatic (no PlotRange option). */
+    assert_eval_eq("Cases[Show[Graphics[Point[{0,0}]], Graphics[Point[{1,1}]]],"
+                   " (PlotRange -> _)]", "{}", 0);
+    /* An explicit PlotRange in Show wins. */
+    assert_eval_eq("Cases[Show[Graphics[Point[{0,0}]], Graphics[Point[{1,1}]],"
+                   " PlotRange -> {{0, 5}, {0, 5}}], (PlotRange -> v_) :> v]",
+                   "{{{0, 5}, {0, 5}}}", 0);
+}
+
+void test_show_keeps_each_plot_style(void) {
+    /* A single-curve Plot is drawn in its PlotStyle option; Show keeps only
+     * g1's options, so each input's style is baked into its own scope. */
+    assert_eval_eq("g = Show[Plot[x, {x, 0, 1}, PlotStyle -> Red, PlotPoints -> 2,"
+                   " MaxRecursion -> 0], Plot[x^2, {x, 0, 1}, PlotStyle -> Blue,"
+                   " PlotPoints -> 2, MaxRecursion -> 0]]; {g[[1, 1, 1]], g[[1, 2, 1]]}",
+                   "{RGBColor[1, 0, 0], RGBColor[0, 0, 1]}", 0);
+    assert_eval_eq("Cases[g, (PlotStyle -> _)]", "{}", 0);
+    /* $PlotResample would re-sample only g1's curves; it is dropped. */
+    assert_eval_eq("FreeQ[g, $PlotResample]", "True", 0);
+    /* Legends are concatenated. */
+    assert_eval_eq("List @@ Select[List @@ Show[Plot[x, {x, 0, 1}, PlotLegends -> {\"a\"}],"
+                   " Plot[x^2, {x, 0, 1}, PlotLegends -> {\"b\"}]],"
+                   " Head[#] === $PlotLegendData &][[1, All, 2]]", "{\"a\", \"b\"}", 0);
+}
+
+void test_style_directive_symbols(void) {
+    assert_eval_eq("Dashed", "Dashing[{Small, Small}]", 0);
+    assert_eval_eq("Dotted", "Dashing[{0, Small}]", 0);
+    assert_eval_eq("DotDashed", "Dashing[{0, Small, Small, Small}]", 0);
+    assert_eval_eq("Thick", "Thickness[Large]", 0);
+    assert_eval_eq("Thin", "Thickness[Tiny]", 0);
+    assert_eval_eq("Directive[Red, Dashed]", "Directive[RGBColor[1, 0, 0], Dashing[{Small, Small}]]", 0);
+
+    /* The shared size resolution both back ends use (plot width 500). */
+    double v, d[GFX_MAX_DASH];
+    int nd;
+    Expr* e = evaluate(parse_expression("PointSize[0.1]"));
+    ASSERT(gfx_point_radius_pts(e, 500.0, &v) && fabs(v - 25.0) < 1e-9);  /* diameter 50 */
+    expr_free(e);
+    e = evaluate(parse_expression("Thickness[0.01]"));
+    ASSERT(gfx_thickness_pts(e, 500.0, &v) && fabs(v - 5.0) < 1e-9);
+    expr_free(e);
+    e = evaluate(parse_expression("AbsoluteThickness[2]"));
+    ASSERT(gfx_thickness_pts(e, 500.0, &v) && fabs(v - 2.0) < 1e-9);
+    expr_free(e);
+    e = evaluate(parse_expression("Dashing[{1/100, 1/50}]"));
+    ASSERT(gfx_dash_pts(e, 500.0, d, GFX_MAX_DASH, &nd) && nd == 2
+           && fabs(d[0] - 5.0) < 1e-9 && fabs(d[1] - 10.0) < 1e-9);
+    expr_free(e);
+    e = evaluate(parse_expression("Dashing[{}]"));
+    ASSERT(gfx_dash_pts(e, 500.0, d, GFX_MAX_DASH, &nd) && nd == 0);
+    expr_free(e);
+}
+
+/* PlotStyle -> {s1, s2, ...} was ignored for multi-curve plots (palette
+ * colours only); each style is now baked into its curve, non-colour styles in
+ * their own List scope, and legends show the styled colours. */
+void test_plot_style_per_curve(void) {
+    assert_eval_eq("g = Plot[{x, 2 x}, {x, 0, 1}, PlotPoints -> 2, MaxRecursion -> 0,"
+                   " PlotStyle -> {Red, Directive[Blue, Dashed]}]; g[[1, 1]]",
+                   "RGBColor[1, 0, 0]", 0);
+    assert_eval_eq("g[[1, 3, 1]]", "Directive[RGBColor[0, 0, 1], Dashing[{Small, Small}]]", 0);
+    assert_eval_eq("Head[g[[1, 3, 2]]]", "Line", 0);
+    /* A style without a colour keeps the curve's palette colour. */
+    assert_eval_eq("Head[Plot[{x, 2 x}, {x, 0, 1}, PlotStyle -> {Thick, Dashed}][[1, 1, 1, 1]]]",
+                   "RGBColor", 0);
+    assert_eval_eq("List @@ Plot[{x, 2 x}, {x, 0, 1}, PlotStyle -> {Red, Blue},"
+                   " PlotLegends -> {\"a\", \"b\"}][[-1, All, 1]]",
+                   "{RGBColor[1, 0, 0], RGBColor[0, 0, 1]}", 0);
+    assert_eval_eq("ListPlot[{{1, 2, 3}, {3, 4, 5}}, PlotStyle -> {Red, Blue}][[1, {1, 3}]]",
+                   "{RGBColor[1, 0, 0], RGBColor[0, 0, 1]}", 0);
+    assert_eval_eq("ListPlot[{{1, 2, 3}, {3, 4, 5}}, PlotStyle -> {Red, PointSize[Large]}][[1, 3, 1]]",
+                   "Directive[RGBColor[0.880722, 0.611041, 0.142051], PointSize[Large]]", 0);
+    assert_eval_eq("ParametricPlot[{{t, t}, {t, 2 t}}, {t, 0, 1},"
+                   " PlotStyle -> {Green, Red}][[1, 1]]", "RGBColor[0, 1, 0]", 0);
+}
+
+/* Bug: Line[{{0,0},{1/2,1}}] was dropped from the PDF (the writer read only
+ * Integer/Real coordinates). Every primitive now reads exact values too. */
+void test_export_pdf_exact_coordinates(void) {
+    char* t = export_pdf_text("Graphics[Line[{{0, 0}, {1/2, 1}}]]", "/tmp/mathilda_test_rat.pdf");
+    ASSERT(count_substr(t, " m\n") == 1 && count_substr(t, " l\n") >= 1);
+    free(t);
+    /* Point/Disk/Circle/Polygon/Arrow/Text with Rational and Pi/Sqrt coordinates. */
+    t = export_pdf_text("Graphics[{Point[{1/3, 2/3}], Disk[{Pi/4, 1/4}, 1/10],"
+                        " Circle[{3/4, 3/4}, 1/8], Polygon[{{0, 1/2}, {1/4, 1/2}, {1/8, 3/4}}],"
+                        " Arrow[{{0, 0}, {Sqrt[2]/2, 1/2}}], Text[\"hi\", {Pi/4, 1/2}]}]",
+                        "/tmp/mathilda_test_rat2.pdf");
+    ASSERT(count_substr(t, " c\n") >= 12);          /* point + disk + circle: 3 x 4 Beziers */
+    ASSERT(count_substr(t, "h f\n") >= 2);          /* polygon + arrowhead */
+    ASSERT(strstr(t, "(hi) Tj") != NULL);
+    free(t);
+    /* Circle[] is the unit circle. */
+    t = export_pdf_text("Graphics[Circle[]]", "/tmp/mathilda_test_circ.pdf");
+    ASSERT(count_substr(t, " c\n") == 4);
+    free(t);
+}
+
+/* Bug: the PDF ignored PlotStyle, Epilog/Prolog, AxesLabel, PlotLabel,
+ * PlotLegends and Dashing. */
+void test_export_pdf_options_and_directives(void) {
+    char* t = export_pdf_text("Plot[x, {x, 0, 1}, PlotStyle -> Red]", "/tmp/mathilda_test_ps.pdf");
+    ASSERT(strstr(t, "1.0000 0.0000 0.0000 RG") != NULL);
+    free(t);
+    t = export_pdf_text("Plot[x, {x, 0, 1}, PlotStyle -> Directive[Dashed, AbsoluteThickness[3]]]",
+                        "/tmp/mathilda_test_dash.pdf");
+    ASSERT(strstr(t, "[4.000 4.000] 0 d") != NULL);
+    ASSERT(strstr(t, "3.000 w") != NULL);
+    free(t);
+    t = export_pdf_text("Graphics[{Dotted, Line[{{0, 0}, {1, 1}}]}]", "/tmp/mathilda_test_dot.pdf");
+    ASSERT(strstr(t, "[0.000 4.000] 0 d 1 J") != NULL);   /* dots need round caps */
+    free(t);
+    t = export_pdf_text("Graphics[{Line[{{0, 0}, {1, 1}}]}, Epilog -> {Green, Line[{{0, 1}, {1, 0}}]},"
+                        " Prolog -> {Blue, Rectangle[{0, 0}, {1, 1}]}]", "/tmp/mathilda_test_epi.pdf");
+    ASSERT(strstr(t, "0.0000 1.0000 0.0000 RG") != NULL);
+    ASSERT(strstr(t, "0.0000 0.0000 1.0000 rg") != NULL);
+    /* Prolog draws beneath the primitives, Epilog over them. */
+    ASSERT(strstr(t, "0.0000 0.0000 1.0000 rg") < strstr(t, "0.0000 1.0000 0.0000 RG"));
+    free(t);
+    t = export_pdf_text("Plot[{x, x^2}, {x, 0, 1}, AxesLabel -> {\"xlab\", \"ylab\"},"
+                        " PlotLabel -> \"Title\", PlotLegends -> {\"alpha\", \"beta\"}]",
+                        "/tmp/mathilda_test_lbl.pdf");
+    ASSERT(strstr(t, "(xlab) Tj") && strstr(t, "(ylab) Tj") && strstr(t, "(Title) Tj"));
+    ASSERT(strstr(t, "(alpha) Tj") && strstr(t, "(beta) Tj"));
+    free(t);
+    /* A directive set inside a List does not leak past it. */
+    t = export_pdf_text("Graphics[{{Dashed, Line[{{0, 0}, {1, 1}}]}, Line[{{0, 1}, {1, 0}}]}]",
+                        "/tmp/mathilda_test_scope.pdf");
+    ASSERT(strstr(t, "[] 0 d") != NULL);
+    free(t);
+    /* Show[g1, g2] exports both inputs, each in its own style. */
+    t = export_pdf_text("Show[Plot[x, {x, 0, 1}, PlotStyle -> Red], Plot[1 - x, {x, 0, 1}, PlotStyle -> Green]]",
+                        "/tmp/mathilda_test_show.pdf");
+    ASSERT(strstr(t, "1.0000 0.0000 0.0000 RG") && strstr(t, "0.0000 1.0000 0.0000 RG"));
+    free(t);
 }
 
 void test_graphics_options_registered(void) {
@@ -793,6 +1008,60 @@ void test_cmyk_to_rgb_conversion(void) {
     cmyk_to_rgb(0, 0, 0, 2, &r, &g, &b);
     ASSERT(r == 0.0 && g == 0.0 && b == 0.0);
 }
+
+/* Render `src` offscreen at w x h; NULL (test skipped) unless opted in.
+ * Opt-in (MATHILDA_TEST_RASTER=1) rather than automatic: Raylib's InitWindow
+ * segfaults inside GLFW when the session exists but no monitor is usable
+ * (display asleep or locked), which gui_session_available() cannot detect,
+ * and that would take the whole suite down on such a machine. */
+static unsigned char* render_src(const char* src, int w, int h, int* ow, int* oh) {
+    const char* opt = getenv("MATHILDA_TEST_RASTER");
+    if (!opt || !opt[0] || !gui_session_available()) return NULL;
+    struct Expr* parsed = parse_expression(src);
+    ASSERT(parsed != NULL);
+    Expr* g = evaluate(parsed);
+    expr_free(parsed);
+    unsigned char* px = graphics_render_rgba(g, w, h, ow, oh);
+    expr_free(g);
+    return px;
+}
+
+/* Bug: the raster renderer read PointSize[d] as a RADIUS IN PLOT
+ * COORDINATES, so over a large coordinate range (0..2000 here) PointSize[0.1]
+ * was a 0.02-pixel dot and vanished from PNG exports, while the PDF (reading
+ * it as a fraction of the plot width) drew it. Both now use Mathematica's
+ * meaning: the diameter as a fraction of the plot width. */
+void test_raster_point_size_fraction_of_width(void) {
+    int w = 0, h = 0;
+    unsigned char* px = render_src(
+        "Graphics[{Red, PointSize[0.1], Point[{1000, 1000}]},"
+        " PlotRange -> {{0, 2000}, {0, 2000}}]", 200, 200, &w, &h);
+    if (!px) { printf("  (skipped: set MATHILDA_TEST_RASTER=1 with a live display)\n"); return; }
+    /* Diameter 0.1 x 200 px = 20 px: the centre and a point 6 px off it are red. */
+    const unsigned char* c = px + ((size_t)(h / 2) * w + w / 2) * 4;
+    ASSERT(c[0] > 200 && c[1] < 80 && c[2] < 80);
+    c = px + ((size_t)(h / 2) * w + w / 2 + 6) * 4;
+    ASSERT(c[0] > 200 && c[1] < 80 && c[2] < 80);
+    free(px);
+}
+
+/* Dashing reaches the raster renderer: a dashed horizontal line alternates
+ * ink and paper along its row. */
+void test_raster_dashing(void) {
+    int w = 0, h = 0;
+    unsigned char* px = render_src(
+        "Graphics[{Black, AbsoluteThickness[3], AbsoluteDashing[{10, 10}],"
+        " Line[{{0, 1}, {10, 1}}]}, PlotRange -> {{0, 10}, {0, 2}}]", 300, 100, &w, &h);
+    if (!px) { printf("  (skipped: set MATHILDA_TEST_RASTER=1 with a live display)\n"); return; }
+    int runs = 0, prev = -1;
+    for (int x = 10; x < w - 10; x++) {
+        const unsigned char* c = px + ((size_t)(h / 2) * w + x) * 4;
+        int ink = c[0] < 128;
+        if (ink != prev) { runs++; prev = ink; }
+    }
+    ASSERT(runs >= 10);            /* ~14 dashes + gaps across 280 px */
+    free(px);
+}
 #endif
 
 int main(void) {
@@ -806,6 +1075,13 @@ int main(void) {
     TEST(test_plot_honors_plot_points_option);
     TEST(test_show_requires_graphics_argument);
     TEST(test_export_graphics_pdf);
+    TEST(test_show_combines_graphics);
+    TEST(test_show_merges_plot_range);
+    TEST(test_show_keeps_each_plot_style);
+    TEST(test_style_directive_symbols);
+    TEST(test_plot_style_per_curve);
+    TEST(test_export_pdf_exact_coordinates);
+    TEST(test_export_pdf_options_and_directives);
     TEST(test_graphics_options_registered);
     TEST(test_show_merges_options);
     TEST(test_show_merges_frame_option);
@@ -858,6 +1134,8 @@ int main(void) {
     TEST(test_raster_dims_no_letterbox);
     TEST(test_polygon_signed_area_winding_detection);
     TEST(test_cmyk_to_rgb_conversion);
+    TEST(test_raster_point_size_fraction_of_width);
+    TEST(test_raster_dashing);
 #endif
 
     printf("All graphics tests passed!\n");

@@ -3,13 +3,21 @@
  * Accepts:
  *   Graph[edges]                        -- vertices derived from the edges (directed default)
  *   Graph[verts, edges]                 -- explicit vertex list
- *   Graph[verts, edges, EdgeWeight -> {w1, ..., wm}]
- *                                        -- explicit vertex list + per-edge weights, matched
- *                                           to `edges` by position; wrong length is malformed
- *                                           (left unevaluated), same as any other rejection
- *                                           below. Weighted graphs require the explicit-vertex
- *                                           form -- Graph[edges, EdgeWeight -> {...}] is not
- *                                           accepted (deliberately out of scope; see the plan).
+ *   Graph[edges, opt...]
+ *   Graph[verts, edges, opt...]         -- either form followed by per-edge options:
+ *                                            EdgeWeight   -> {w1, ..., wm}
+ *                                            EdgeCapacity -> {c1, ..., cm}
+ *                                          each matched to `edges` by position. A list of
+ *                                          the wrong length, a repeated option, or any
+ *                                          other option leaves Graph[...] unevaluated,
+ *                                          like every other rejection below.
+ *
+ * The two forms are told apart by the second argument: a List is the edge list
+ * of the explicit-vertex form, a Rule the first option of the edges-only form.
+ * The canonical result stores the options after the edge list in their
+ * canonical order (EdgeWeight, then EdgeCapacity; see graph.h), whatever order
+ * they were given in, so every spelling of one graph canonicalizes to the same
+ * tree.
  *
  * Edge sugar is normalized on construction:
  *   Rule[u,v]        / u -> v    ->  DirectedEdge[u, v]
@@ -69,44 +77,56 @@ static Expr* normalize_edge(const Expr* e, Expr* heads[2]) {
     return expr_new_function(expr_copy(heads[which]), args, 2);
 }
 
-/* True iff `opt` is Rule[EdgeWeight, List[...]] -- shape only, length is
- * checked by the caller once the edge count is known. */
-static int is_edge_weight_rule(const Expr* opt) {
+/* Maximum number of per-edge options (graph_edge_option_rank's range). */
+#define GRAPH_EDGE_OPTS 2
+
+/* Canonical rank of `opt` if it is Rule[key, List[...]] for a per-edge option
+ * key (see graph_edge_option_rank), else -1. Shape only -- the length is checked
+ * by the caller once the edge count is known. */
+static int edge_option_rank(const Expr* opt) {
     if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2)
-        return 0;
-    const char* h = fn_head(opt);
-    if (h != SYM_Rule) return 0;
+        return -1;
+    if (fn_head(opt) != SYM_Rule) return -1;
     const Expr* key = opt->data.function.args[0];
-    return key && key->type == EXPR_SYMBOL && key->data.symbol.name == SYM_EdgeWeight
-        && graph_is_list(opt->data.function.args[1]);
+    if (!key || key->type != EXPR_SYMBOL || !graph_is_list(opt->data.function.args[1]))
+        return -1;
+    return graph_edge_option_rank(key->data.symbol.name);
 }
 
 /* Assemble the canonical Graph from `res`, or NULL if the shape is wrong or the
  * result would be invalid. */
 static Expr* try_build_canonical(Expr* res) {
     size_t argc = res->data.function.arg_count;
+    if (argc < 1) return NULL;
     const Expr* verts_in = NULL;
     const Expr* edges_in = NULL;
-    const Expr* weight_opt = NULL;
+    size_t first_opt;
 
-    if (argc == 1) {
-        edges_in = res->data.function.args[0];
-    } else if (argc == 2) {
+    /* Graph[edges, opt...] vs Graph[verts, edges, opt...]: decided by whether
+     * the second argument is a List (an edge list) or not (an option). */
+    if (argc >= 2 && graph_is_list(res->data.function.args[1])) {
         verts_in = res->data.function.args[0];
         edges_in = res->data.function.args[1];
-    } else if (argc == 3) {
-        verts_in = res->data.function.args[0];
-        edges_in = res->data.function.args[1];
-        weight_opt = res->data.function.args[2];
-        if (!is_edge_weight_rule(weight_opt)) return NULL;
+        first_opt = 2;
     } else {
-        return NULL;
+        edges_in = res->data.function.args[0];
+        first_opt = 1;
     }
     if (!graph_is_list(edges_in)) return NULL;
     if (verts_in && !graph_is_list(verts_in)) return NULL;
-    if (weight_opt && weight_opt->data.function.args[1]->data.function.arg_count
-                       != edges_in->data.function.arg_count)
-        return NULL;                          /* weight/edge count mismatch */
+    size_t ne_in = edges_in->data.function.arg_count;
+
+    /* Options, slotted by canonical rank: unknown, repeated, or wrong-length
+     * options are malformed. */
+    const Expr* opt_list[GRAPH_EDGE_OPTS] = { NULL, NULL };
+    for (size_t i = first_opt; i < argc; i++) {
+        const Expr* opt = res->data.function.args[i];
+        int rank = edge_option_rank(opt);
+        if (rank < 0 || rank >= GRAPH_EDGE_OPTS || opt_list[rank]) return NULL;
+        const Expr* val = opt->data.function.args[1];
+        if (val->data.function.arg_count != ne_in) return NULL;   /* count mismatch */
+        opt_list[rank] = val;
+    }
 
     size_t ne = edges_in->data.function.arg_count;
 
@@ -181,34 +201,26 @@ static Expr* try_build_canonical(Expr* res) {
     for (size_t i = 0; i < ne; i++)
         edir[i] = (unsigned char)(fn_head(edges[i]) == SYM_DirectedEdge);
 
-    /* 3. Assemble candidate Graph[List verts, List edges(, EdgeWeight -> List w)]
+    /* 3. Assemble candidate Graph[List verts, List edges, opt...]
      * (moves ownership). */
     Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), verts, nv);
     Expr* elist = expr_new_function(expr_new_symbol(SYM_List), edges, ne);
     free(verts);
     free(edges);
-    Expr* g;
-    if (weight_opt) {
-        const Expr* win = weight_opt->data.function.args[1];
-        size_t nw = win->data.function.arg_count;
-        Expr** weights = (nw > 0) ? calloc(nw, sizeof(Expr*)) : NULL;
-        if (nw > 0 && !weights) {
-            expr_free(vlist); expr_free(elist);
-            graph_vidx_free(ix); free(eu); free(ev); free(edir);
-            return NULL;
-        }
-        for (size_t i = 0; i < nw; i++)
-            weights[i] = expr_copy(win->data.function.args[i]);
-        Expr* wlist = expr_new_function(expr_new_symbol(SYM_List), weights, nw);
-        free(weights);
-        Expr* wargs[2] = { expr_new_symbol(SYM_EdgeWeight), wlist };
-        Expr* wrule = expr_new_function(expr_new_symbol(SYM_Rule), wargs, 2);
-        Expr* gargs[3] = { vlist, elist, wrule };
-        g = expr_new_function(expr_new_symbol(SYM_Graph), gargs, 3);
-    } else {
-        Expr* gargs[2] = { vlist, elist };
-        g = expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
+    Expr* gargs[2 + GRAPH_EDGE_OPTS];
+    size_t gargc = 0;
+    gargs[gargc++] = vlist;
+    gargs[gargc++] = elist;
+    for (int r = 0; r < GRAPH_EDGE_OPTS; r++) {
+        if (!opt_list[r]) continue;
+        /* Share the (already evaluated, hence immutable) value List; only the
+         * Rule wrapper is new, so its key is the canonical symbol. */
+        Expr* rargs[2];
+        rargs[0] = expr_new_symbol(graph_edge_option_key(r));
+        rargs[1] = expr_copy((Expr*)opt_list[r]);
+        gargs[gargc++] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
     }
+    Expr* g = expr_new_function(expr_new_symbol(SYM_Graph), gargs, gargc);
 
     /* 4. Validate the rest (self-loops, parallel edges) and memoize g with the
      *    index/endpoints built above; graph_memo_seed owns them from here. */

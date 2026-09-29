@@ -426,9 +426,10 @@ Out[4]= HypergraphLineGraph[Hypergraph[<5 vertices, 4 hyperedges>], 0]
   one component.
 
 **Features**:
-- Components are ordered by their first vertex (Mathilda's
-  `ConnectedComponents` convention), vertices within a component in VertexList
-  order. Isolated vertices are singleton components.
+- Components are ordered by their first vertex, vertices within a component in
+  VertexList order. (Graph `ConnectedComponents` instead follows Mathematica:
+  largest first when undirected, strong components when directed.) Isolated
+  vertices are singleton components.
 - Union–find, near-linear in the total incidence.
 - `ConnectedHypergraphQ` is the Wolfram Function Repository name. It accepts a
   bare List of hyperedges; the FR function leaves `{}` unevaluated, Mathilda

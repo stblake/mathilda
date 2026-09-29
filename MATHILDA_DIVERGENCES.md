@@ -509,18 +509,32 @@ with an algebraic constant returns a garbage near-zero float
 `3.71618e-16`) rather than declining. The pure-float case is fine, so it is specifically the
 mixture.
 
-### A27. `SparseArray` is not implemented
+### A27. `SparseArray` densifies but is still not an array  (PARTLY FIXED, v0.233)
 
 ```
-Normal[SparseArray[{{1, 2} -> 5, {2, 1} -> 7}, {2, 3}]]
-  Mathematica   {{0, 5, 0}, {7, 0, 0}}
-  Mathilda      SparseArray[{{1, 2} -> 5, {2, 1} -> 7}, {2, 3}]   (* unevaluated *)
+Normal[SparseArray[{{1, 2} -> 5, {2, 1} -> 7}, {2, 3}]]                {{0, 5, 0}, {7, 0, 0}}   (* fixed *)
+Normal[SparseArray[Automatic, {2, 2}, 0, {1, {{0, 1, 2}, {{1}, {2}}}, {9, 8}}]]  {{9, 0}, {0, 8}}   (* fixed *)
+
+s = SparseArray[{{1, 2} -> 5, {2, 1} -> 7}, {2, 3}];
+                  Mathilda                Mathematica
+Dimensions[s]     {2}                     {2, 3}
+s[[1, 2]]         {2, 1} -> 7             5
+MatrixQ[s]        False                   True
+ArrayRules[s]     unevaluated             {{1, 2} -> 5, {2, 1} -> 7, {_, _} -> 0}
+s . {1, 2, 3}     unevaluated             {10, 7}
 ```
 
-`Normal` of the unevaluated head hands the `SparseArray[...]` expression straight back, so a
-caller that assembles a matrix this way gets a non-matrix with no message and no error -- the
-downstream `RowReduce` then "solves" it. Found while rewriting the ansatz assembly, which builds
-its augmented matrix row by row instead.
+`Normal` was taught to densify by the worked-example sweep (`src/sparsearray.c`, v0.231, merged at
+v0.233) — both the rule-list spelling and the `Automatic` CSR one — so the repro this entry was
+written for now matches Mathematica. The head itself is still inert: it registers no builtin, so
+every *other* operation reads `SparseArray[rules, dims]` as an ordinary two-argument expression.
+
+`Dimensions[s]` answering `{2}` is the case to watch, because it is the argument count wearing the
+shape of an answer rather than an unevaluated form a caller would notice; `s[[1, 2]]` returning the
+second rule is the same failure. So the original warning stands for everything except `Normal`: a
+caller that assembles a matrix this way still gets a non-matrix with no message and no error, and
+the downstream `RowReduce` still "solves" it. Found while rewriting the ansatz assembly, which
+builds its augmented matrix row by row instead.
 
 ## B. Behavioural differences (not wrong, but code written against Mathematica's output breaks)
 

@@ -2,6 +2,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { Channel } from '@tauri-apps/api/core';
+import type { CellType } from './notebook';
 
 export type OutputMessage =
   | { id: number; type: 'expr';   payload: string }
@@ -10,7 +11,10 @@ export type OutputMessage =
   | { id: number; type: 'usage';  payload: string; symbol?: string }
   | { id: number; type: 'names';  payload: string[] }
   | { id: number; type: 'error';  message: string }
+  /* Print output of the statement being evaluated, sent before its result. */
   | { id: number; type: 'stream'; text: string }
+  /* A kernel message (warning) such as `Power::infy: ...`, sent before the result. */
+  | { id: number; type: 'message'; text: string }
   | { id: number; type: 'plot';   payload: object }
   /* A raster result: base64 RGBA plus its shape. A volume also carries `depth` and the 1-based
      `slice` it sent, which is the middle one. */
@@ -18,8 +22,10 @@ export type OutputMessage =
                                              data: string; depth?: number; slice?: number ; faces?: Record<string, { w: number; h: number; data: string }>} }
   | { id: number; type: 'html';   payload: string };
 
+/** One cell as a `.mathilda` file stores it: its type and source, no output.
+ *  The Rust side normalises unknown types to 'code' (notebook_format.rs). */
 export type CellData = {
-  type: 'code' | 'prose';
+  type: CellType;
   source: string;
 };
 

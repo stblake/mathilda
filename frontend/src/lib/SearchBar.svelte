@@ -5,11 +5,13 @@
   notebook rather than the focused cell. See search.ts for why this is not
   @codemirror/search.
 
-  Navigation drives whichever editor owns the match: a code cell gets a real
-  CodeMirror selection and scroll, a prose cell is opened for editing and its
-  range selected. What it does NOT do is highlight every match at once -- that
-  needs a CodeMirror decoration extension per cell, which is its own change; the
-  count tells you how many there are and Enter walks them.
+  Navigation MARKS the current match in whichever cell owns it and scrolls it
+  into view, and the find field keeps focus throughout, so Enter / Shift+Enter
+  keep walking. It used to select the match and focus the cell's editor; the
+  second Enter then went to the cell and replaced the match with a newline.
+  Closing the bar (Escape, or the close button) is what finally puts the caret
+  on the current match, as every editor's find does. It does not highlight every
+  match at once; the count says how many there are and Enter walks them.
 -->
 <script lang="ts">
   import { tick } from 'svelte';
@@ -17,9 +19,10 @@
   import Icon from './Icon.svelte';
   import { activeActions } from './canvas';
   import { getHandle } from './active';
+  import { rangeForOffsets } from './searchHighlight';
   import type { Cell, NotebookRow } from './notebook';
   import { searchOpen, searchQuery, searchCaseSensitive, searchIndex,
-           findMatches, stepIndex } from './search';
+           findMatches, nextIndex } from './search';
   import type { SearchMatch } from './search';
 
   let inputEl: HTMLInputElement | undefined;
@@ -56,19 +59,60 @@
     inputEl?.select();
   }
 
-  function close() {
-    searchOpen.set(false);
+  /* The match currently painted, if any. Tracked so the old mark is cleared
+     BEFORE the next one is painted (a prose mark is one document-wide highlight,
+     so clearing after would erase the new one), and so closing knows where to put
+     the caret. */
+  let marked: SearchMatch | null = null;
+
+  function clearMark() {
+    if (marked) getHandle(marked.cellId)?.mark?.(null);
+    marked = null;
   }
+
+  /* A new query or case setting makes the painted match stale; the count updates
+     as you type but nothing jumps until Enter. */
+  $: $searchQuery, $searchCaseSensitive, clearMark();
+
+  /* Leaving focused mode unmounts the bar; do not leave a mark behind. */
+  onDestroy(clearMark);
+
+  /** Close the bar. `placeCaret` puts the caret on the current match -- the
+   *  handoff from finding to editing -- and is what Escape and the close button
+   *  do. */
+  function close(placeCaret = true) {
+    const m = marked;
+    clearMark();
+    searchOpen.set(false);
+    if (placeCaret && m) void selectInCell(m);
+  }
+
+  /* Closed from outside (Cmd+F toggling, a view switch): just drop the mark. */
+  $: if (!$searchOpen && marked) clearMark();
 
   function go(delta: number) {
     if (!matches.length) return;
-    const next = stepIndex(current, delta, matches.length);
+    /* The first Enter lands on the match the count already shows; later ones
+       step from it. Without this the first press skipped match 1. */
+    const next = nextIndex(current, delta, matches.length, marked !== null);
     searchIndex.set(next);
-    void reveal(matches[next]);
+    reveal(matches[next]);
   }
 
-  /** Put the match on screen and select it in whichever editor owns it. */
-  async function reveal(m: SearchMatch) {
+  /** Paint the match and scroll it into view WITHOUT moving focus out of the
+   *  find field. */
+  function reveal(m: SearchMatch) {
+    clearMark();
+    const h = getHandle(m.cellId);
+    if (!h?.mark) return;
+    h.mark({ start: m.start, end: m.end });
+    marked = m;
+    inputEl?.focus();
+  }
+
+  /** Put the caret (a real selection) on the match in whichever editor owns it.
+   *  Only on close: this moves focus into the cell. */
+  async function selectInCell(m: SearchMatch) {
     const h = getHandle(m.cellId);
     if (!h) return;
     if (h.view) {
@@ -83,28 +127,22 @@
     }
     /* A prose cell. focus() opens the editor if the cell was showing rendered
        Markdown, and that is asynchronous, so the range is selected after the
-       flush. Selecting is only attempted when the element holds exactly one text
-       node, which is what the editor paints into it; anything else means the DOM
-       is not what this assumes and leaving the caret alone beats guessing. */
+       flush. rangeForOffsets maps source offsets through the text nodes and <br>s
+       the editor paints, and declines rather than guessing when they do not fit. */
     h.focus();
     await tick();
     const el = h.el;
     if (!el) return;
     el.scrollIntoView({ block: 'nearest' });
-    const node = el.firstChild;
-    if (!node || node.nodeType !== Node.TEXT_NODE || el.childNodes.length !== 1) return;
-    const len = node.textContent?.length ?? 0;
-    if (m.end > len) return;
-    const range = document.createRange();
-    range.setStart(node, m.start);
-    range.setEnd(node, m.end);
+    const range = rangeForOffsets(el, m.start, m.end);
+    if (!range) return;
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
     if (e.key === 'Enter')  { e.preventDefault(); go(e.shiftKey ? -1 : 1); return; }
   }
 
@@ -153,7 +191,7 @@
     ><Icon name="caret" /></button>
 
     <button class="search-btn" title="Close (Escape)"
-            on:pointerdown|preventDefault on:click={close}
+            on:pointerdown|preventDefault on:click={() => close(true)}
     ><Icon name="close" /></button>
   </div>
 {/if}
@@ -166,7 +204,7 @@
     position: absolute;
     top: var(--toolbar-h, 46px);
     right: 12px;
-    z-index: 45;
+    z-index: var(--z-overlay-top);
     display: flex;
     align-items: center;
     gap: 6px;

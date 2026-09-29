@@ -15,7 +15,8 @@ export type OutputItem =
                                                       // shown until the cell is run
   | { kind: 'names';  names: string[] }               // ?pat* symbol search: laid out as a grid
   | { kind: 'error';  text: string }
-  | { kind: 'stream'; text: string }
+  | { kind: 'stream'; text: string }                 // Print output
+  | { kind: 'message'; text: string }                // kernel warning, Head::tag: ...
   | { kind: 'plot';   data: object }
   /* A raster result. `data` is base64 RGBA, w*h*4 bytes, ready for putImageData -- so the
      browser does no per-pixel work. A volume sends ONE slice (the middle) and carries `depth`

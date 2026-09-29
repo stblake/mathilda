@@ -5,6 +5,8 @@
 
 Expr* builtin_log(Expr* res);
 Expr* builtin_exp(Expr* res);
+Expr* builtin_log10(Expr* res);
+Expr* builtin_log2(Expr* res);
 
 void logexp_init(void);
 

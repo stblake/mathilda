@@ -1447,3 +1447,45 @@ Out[1]= {{"a" -> 1}, f[{"b" -> 2}]}
 In[2]:= Normal[<|"a" -> <|"b" -> 1|>|>]
 Out[2]= {"a" -> <|"b" -> 1|>}
 ```
+
+## SparseArray
+
+- `SparseArray[{pos1 -> v1, pos2 -> v2, ...}]` specifies an array whose listed
+  positions hold the `vi` and whose other entries are `0`.
+- `SparseArray[rules, dims]` and `SparseArray[rules, dims, default]` fix the
+  dimensions and the fill value.
+- `SparseArray[list]` and `SparseArray[list, dims, default]` take a dense array.
+
+**Features**:
+- Mathilda has **no sparse storage**: a `SparseArray[...]` expression stays
+  inert, exactly as written. `Normal` converts it to the dense nested List it
+  denotes; that is the conversion Mathematica code relies on, and until
+  2026-09-28 `Normal` handed the `SparseArray` back unchanged.
+- Positions are Integer lists (an Integer for a vector); without `dims` the
+  size is the per-coordinate maximum of the positions. Negative indices count
+  from the end once `dims` are known. When several rules name one position the
+  **first** wins, as in Mathematica.
+- Rule forms: `{p1, p2, ...} -> {v1, v2, ...}`; pattern rules
+  (`{i_, i_} -> 1`, `{i_, j_} :> i + j`, conditions allowed), which need `dims`;
+  and `Band[start] -> v`, `Band[start, end]`, `Band[start, end, step]`, with `v`
+  a scalar or a List of successive values.
+- The InputForm of Mathematica's own representation,
+  `SparseArray[Automatic, dims, default, {1, {rowptr, colidx}, vals}]`, is
+  accepted, so a value pasted out of Mathematica round-trips through `Normal`.
+- A specification Mathilda cannot densify (pattern rules without `dims`, a
+  position outside `dims`, a result over 2^27 entries) leaves `Normal[...]`
+  unevaluated.
+
+```mathematica
+In[1]:= Normal[SparseArray[{1 -> 1, 3 -> 2}]]
+Out[1]= {1, 0, 2}
+
+In[2]:= Normal[SparseArray[{{i_, i_} -> 1}, {3, 3}]]
+Out[2]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
+
+In[3]:= Normal[SparseArray[{{1, 1} -> a, {2, 3} -> b}, {2, 3}, x]]
+Out[3]= {{a, x, x}, {x, x, b}}
+
+In[4]:= Normal[SparseArray[Band[{1, 2}] -> {p, q}, {3, 3}]]
+Out[4]= {{0, p, 0}, {0, 0, q}, {0, 0, 0}}
+```

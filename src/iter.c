@@ -49,6 +49,8 @@
 #include "ndarray.h"
 #include "checked_int.h"
 #include "numloop.h"
+#include "numeric.h"
+#include <math.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -74,6 +76,77 @@ static bool is_list_expr(const Expr* e) {
     return e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* An explicit number: the bound forms the range machinery reads without
+ * numericalising anything (Integer, BigInt, Real, Rational). */
+static bool iter_is_explicit_number(const Expr* e) {
+    int64_t n, d;
+    return e->type == EXPR_INTEGER || e->type == EXPR_BIGINT
+        || e->type == EXPR_REAL || is_rational((Expr*)e, &n, &d);
+}
+
+bool iter_real_value(const Expr* e, double* out) {
+    int64_t n, d;
+    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
+    if (e->type == EXPR_REAL)    { *out = e->data.real; return true; }
+    if (is_rational((Expr*)e, &n, &d)) { *out = (double)n / d; return true; }
+    /* A NumericQ bound (Pi, 2 Pi, Sqrt[2], a BigInt, an MPFR number) has a
+     * machine value; a free symbol numericalises to itself and is refused. */
+    Expr* approx = numericalize(e, numeric_machine_spec());
+    if (!approx) return false;
+    bool ok = false;
+    if (approx->type == EXPR_REAL) { *out = approx->data.real; ok = true; }
+    else if (approx->type == EXPR_INTEGER) { *out = (double)approx->data.integer; ok = true; }
+    else if (is_rational(approx, &n, &d)) { *out = (double)n / d; ok = true; }
+    expr_free(approx);
+    return ok && isfinite(*out);
+}
+
+bool iter_normalize_bounds(const Expr* imin, Expr** imax, const Expr* di) {
+    if (!imin || !imax || !*imax || !di) return false;
+    if (iter_is_explicit_number(imin) && iter_is_explicit_number(*imax)
+        && iter_is_explicit_number(di)) return false;
+    double lo, hi, st;
+    if (!iter_real_value(imin, &lo) || !iter_real_value(*imax, &hi)
+        || !iter_real_value(di, &st) || st == 0.0) return false;
+
+    /* n = Floor[(imax - imin)/di], exactly when the ratio is exact (2 Pi over
+     * Pi/2 is the Integer 4), otherwise from its machine value with a
+     * relative slack so a ratio that is an integer up to rounding -- Log[8]/Log[2]
+     * -- still counts its last point. */
+    Expr* neg[2]  = { expr_new_integer(-1), expr_copy((Expr*)imin) };
+    Expr* span[2] = { expr_copy(*imax), expr_new_function(expr_new_symbol(SYM_Times), neg, 2) };
+    Expr* inv[2]  = { expr_copy((Expr*)di), expr_new_integer(-1) };
+    Expr* quo[2]  = { expr_new_function(expr_new_symbol(SYM_Plus), span, 2),
+                      expr_new_function(expr_new_symbol(SYM_Power), inv, 2) };
+    Expr* ratio = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), quo, 2));
+    if (!ratio) return false;
+    int64_t num, den;
+    double r;
+    int64_t n;
+    bool ok = true;
+    if (ratio->type == EXPR_INTEGER) {
+        n = ratio->data.integer;
+    } else if (ratio->type != EXPR_REAL && is_rational(ratio, &num, &den)) {
+        n = num / den;
+        if ((num % den != 0) && ((num < 0) != (den < 0))) n--;   /* floor */
+    } else if (iter_real_value(ratio, &r) && fabs(r) < 9.0e15) {
+        n = (int64_t)floor(r + 1e-12 * (fabs(r) > 1.0 ? fabs(r) : 1.0));
+    } else {
+        ok = false;
+    }
+    expr_free(ratio);
+    if (!ok) return false;
+    if (n < 0) n = -1;          /* empty range: one step before imin */
+
+    Expr* step[2] = { expr_new_integer(n), expr_copy((Expr*)di) };
+    Expr* last[2] = { expr_copy((Expr*)imin), expr_new_function(expr_new_symbol(SYM_Times), step, 2) };
+    Expr* hi_e = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), last, 2));
+    if (!hi_e) return false;
+    expr_free(*imax);
+    *imax = hi_e;
+    return true;
 }
 
 bool iter_spec_parse(Expr* spec, IterSpec* out) {
@@ -152,12 +225,18 @@ bool iter_spec_parse(Expr* spec, IterSpec* out) {
     return true;
 }
 
+bool iter_spec_parse_lattice(Expr* spec, IterSpec* out) {
+    if (!iter_spec_parse(spec, out)) return false;
+    if (out->kind == ITER_KIND_RANGE)
+        iter_normalize_bounds(out->imin, &out->imax, out->di);
+    return true;
+}
+
 bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
                                double* min_val, double* max_val,
                                double* di_val, bool* is_real, bool* is_inf) {
     *min_val = 0; *max_val = 0; *di_val = 0;
     *is_real = false; *is_inf = false;
-    int64_t n, d;
 
     if (s->kind == ITER_KIND_COUNT) {
         if (allow_inf && s->imax->type == EXPR_SYMBOL
@@ -180,24 +259,22 @@ bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
         *is_real = true;
     }
 
-    if (s->imin->type == EXPR_INTEGER)      *min_val = (double)s->imin->data.integer;
-    else if (s->imin->type == EXPR_REAL)    *min_val = s->imin->data.real;
-    else if (is_rational(s->imin, &n, &d))  *min_val = (double)n / d;
-    else return false;
-
-    if (!*is_inf) {
-        if (s->imax->type == EXPR_INTEGER)      *max_val = (double)s->imax->data.integer;
-        else if (s->imax->type == EXPR_REAL)    *max_val = s->imax->data.real;
-        else if (is_rational(s->imax, &n, &d))  *max_val = (double)n / d;
-        else return false;
-    }
-
-    if (s->di->type == EXPR_INTEGER)      *di_val = (double)s->di->data.integer;
-    else if (s->di->type == EXPR_REAL)    *di_val = s->di->data.real;
-    else if (is_rational(s->di, &n, &d))  *di_val = (double)n / d;
-    else return false;
+    /* Explicit numbers are read directly; a NumericQ bound (Pi, 2 Pi, a
+     * BigInt) through its machine value. Every caller parsed the spec with
+     * iter_spec_parse_lattice, which has already normalised a range with such
+     * a bound (iter_normalize_bounds). */
+    if (!iter_real_value(s->imin, min_val)) return false;
+    if (!*is_inf && !iter_real_value(s->imax, max_val)) return false;
+    if (!iter_real_value(s->di, di_val)) return false;
 
     if (*di_val == 0) return false;        /* zero step never terminates */
+
+    /* A normalised symbolic bound IS the last point of the lattice imin + k di,
+     * so any running value within half a step of it is that point. Widening
+     * the double bound by half a step keeps the loops' accumulated `val += di`
+     * from dropping the last element to rounding over a long symbolic range
+     * (Table[x, {x, 0, 100 Pi, Pi}]), where the fixed 1e-14 slack would not. */
+    if (!*is_inf && !iter_is_explicit_number(s->imax)) *max_val += 0.5 * *di_val;
     return true;
 }
 
@@ -403,7 +480,7 @@ Expr* builtin_do(Expr* res) {
 
     /* ---- Parse the iterator spec (shared helper) ---- */
     IterSpec s;
-    if (!iter_spec_parse(spec, &s)) return NULL;
+    if (!iter_spec_parse_lattice(spec, &s)) return NULL;
 
     int is_n_times   = (s.kind == ITER_KIND_COUNT);
     int is_list_iter = (s.kind == ITER_KIND_LIST);
@@ -518,14 +595,10 @@ Expr* builtin_do(Expr* res) {
                 }
                 expr_free(curr_e);
                 curr_e = next_e;
-                if (!is_real) {
-                    int64_t n, d;
-                    if (curr_e->type == EXPR_INTEGER) val = (double)curr_e->data.integer;
-                    else if (curr_e->type == EXPR_REAL) val = curr_e->data.real;
-                    else if (is_rational(curr_e, &n, &d)) val = (double)n / d;
-                } else {
-                    val += di_val;
-                }
+                /* Refresh `val` from the exact value; a symbolic one (Pi + 1)
+                 * goes through its machine value, and if even that fails the
+                 * double recurrence keeps the loop advancing. */
+                if (is_real || !iter_real_value(curr_e, &val)) val += di_val;
                 continue;
             }
             expr_free(eval_expr);
@@ -541,14 +614,7 @@ Expr* builtin_do(Expr* res) {
             expr_free(curr_e);
             curr_e = next_e;
 
-            if (!is_real) {
-                int64_t n, d;
-                if (curr_e->type == EXPR_INTEGER) val = (double)curr_e->data.integer;
-                else if (curr_e->type == EXPR_REAL) val = curr_e->data.real;
-                else if (is_rational(curr_e, &n, &d)) val = (double)n / d;
-            } else {
-                val += di_val;
-            }
+            if (is_real || !iter_real_value(curr_e, &val)) val += di_val;
         }
         if (curr_e) expr_free(curr_e);
     }

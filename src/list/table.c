@@ -41,7 +41,7 @@ Expr* builtin_table(Expr* res) {
 
     /* ---- Parse the iterator spec (shared helper) ---- */
     IterSpec s;
-    if (!iter_spec_parse(spec, &s)) return NULL;
+    if (!iter_spec_parse_lattice(spec, &s)) return NULL;
 
     int is_n_times   = (s.kind == ITER_KIND_COUNT);
     int is_list_iter = (s.kind == ITER_KIND_LIST);

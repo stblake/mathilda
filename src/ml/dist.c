@@ -498,7 +498,7 @@ static Expr* builtin_randomvariate(Expr* res) {
  * ml_gmm_fit / ml_gmm_logpdf, which were extracted for exactly that.
  */
 /* The variance floor for a standalone mixture fit: the SQUARED MEDIAN NEAREST-NEIGHBOUR
- * DISTANCE.
+ * DISTANCE BETWEEN DISTINCT POINTS.
  *
  * This is load-bearing, not defensive. A Gaussian mixture's likelihood is unbounded
  * above -- a component collapsing onto a single point drives its density, and hence the
@@ -510,27 +510,74 @@ static Expr* builtin_randomvariate(Expr* res) {
  * spanning-tree edge weight that fc_gmm_ndim uses, and it says the same honest thing:
  * structure finer than the spacing between samples is not resolvable from this data. The
  * MEDIAN rather than the mean, so one tight pair cannot drag the floor to nearly zero
- * and reopen the same hole. */
-static double ml_nn_floor(const double* x, size_t n, size_t dim) {
+ * and reopen the same hole.
+ *
+ * DISTINCT points, because a repeated value is not a sample spacing of zero. Rounded or
+ * otherwise discretised data -- iris petal lengths to 0.1 cm -- repeats most values, and
+ * counting a duplicate's zero distance to its twin put the median at 0 once more than
+ * half the points had one; the floor then fell to the 1e-300 fallback, and the BIC search
+ * bought a component per stack of duplicates (nine for 45 petal lengths, several of them
+ * a single point at weight 1/45). The spacing between distinct values is the data's real
+ * resolution. That is also exactly the tie problem fc_scale_ndim meets, which it answers
+ * by falling back to the mean spanning-tree edge.
+ *
+ * A second guard makes the floor scale-aware as well: it is at least a small fraction of
+ * the average per-coordinate variance, so a single anomalously tight pair of distinct
+ * points among otherwise coarse data cannot reopen the hole either. With fewer than two
+ * distinct points there is no spread at all, and the floor is left to the caller.
+ *
+ * *n_distinct receives the number of distinct points, which also bounds k: a component
+ * needs a location of its own. */
+static double ml_nn_floor(const double* x, size_t n, size_t dim, size_t* n_distinct) {
+    *n_distinct = n;
     if (n < 2) return 0.0;
+    size_t* rep = malloc(sizeof(size_t) * n);           /* indices of distinct points */
     double* nn = malloc(sizeof(double) * n);
-    if (!nn) return 0.0;
-    for (size_t i = 0; i < n; i++) {
-        double best = -1.0;
-        for (size_t j = 0; j < n; j++) {
-            if (j == i) continue;
-            double d2 = ml_sqdist(x + i * dim, x + j * dim, dim);
-            if (best < 0.0 || d2 < best) best = d2;
+    if (!rep || !nn) { free(rep); free(nn); return 0.0; }
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++) {                     /* O(n^2), as the search below */
+        bool dup = false;
+        for (size_t r = 0; r < m && !dup; r++)
+            dup = memcmp(x + i * dim, x + rep[r] * dim, sizeof(double) * dim) == 0
+                  || ml_sqdist(x + i * dim, x + rep[r] * dim, dim) == 0.0;
+        if (!dup) rep[m++] = i;
+    }
+    *n_distinct = m;
+    double med = 0.0;
+    if (m >= 2) {
+        for (size_t a = 0; a < m; a++) {
+            double best = -1.0;
+            for (size_t b = 0; b < m; b++) {
+                if (b == a) continue;
+                double d2 = ml_sqdist(x + rep[a] * dim, x + rep[b] * dim, dim);
+                if (best < 0.0 || d2 < best) best = d2;
+            }
+            nn[a] = best;
         }
-        nn[i] = (best > 0.0) ? best : 0.0;
+        for (size_t a = 1; a < m; a++) {                /* insertion sort, n is bounded */
+            double v = nn[a]; size_t b = a;
+            while (b > 0 && nn[b - 1] > v) { nn[b] = nn[b - 1]; b--; }
+            nn[b] = v;
+        }
+        med = (m % 2) ? nn[m / 2] : 0.5 * (nn[m / 2 - 1] + nn[m / 2]);
+
+        /* Scale guard: 1e-4 of the mean per-coordinate variance, i.e. a component
+         * standard deviation of at least 1% of the data's. */
+        double var = 0.0;
+        for (size_t a = 0; a < dim; a++) {
+            double mu = 0.0, ss = 0.0;
+            for (size_t i = 0; i < n; i++) mu += x[i * dim + a];
+            mu /= (double)n;
+            for (size_t i = 0; i < n; i++) {
+                double d = x[i * dim + a] - mu;
+                ss += d * d;
+            }
+            var += ss / (double)n;
+        }
+        var /= (double)dim;
+        if (med < 1e-4 * var) med = 1e-4 * var;
     }
-    for (size_t a = 1; a < n; a++) {                    /* insertion sort, n is bounded */
-        double v = nn[a]; size_t b = a;
-        while (b > 0 && nn[b - 1] > v) { nn[b] = nn[b - 1]; b--; }
-        nn[b] = v;
-    }
-    double med = (n % 2) ? nn[n / 2] : 0.5 * (nn[n / 2 - 1] + nn[n / 2]);
-    free(nn);
+    free(rep); free(nn);
     return med;                                          /* already a SQUARED distance */
 }
 
@@ -652,9 +699,11 @@ static Expr* builtin_learn_distribution(Expr* res) {
          * the PARAMETER COUNT rather than the point count: a full covariance costs
          * dim*(dim+1)/2 numbers per component, so a component needs more points than
          * dimensions before it means anything. */
-        double vfloor = ml_nn_floor(x, n, dim);
-        if (!(vfloor > 0.0)) vfloor = 1e-300;
+        size_t n_distinct = n;
+        double vfloor = ml_nn_floor(x, n, dim, &n_distinct);
+        if (!(vfloor > 0.0)) vfloor = 1e-300;           /* all points identical: k = 1 */
         size_t kmax = n / (dim + 1);
+        if (kmax > n_distinct) kmax = n_distinct;       /* as FindClusters caps it */
         if (kmax > 10) kmax = 10;
         if (kmax < 1) kmax = 1;
 

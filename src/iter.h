@@ -50,6 +50,16 @@ typedef struct {
  */
 bool iter_spec_parse(Expr* spec, IterSpec* out);
 
+/*
+ * iter_spec_parse for a DISCRETE iterator (Table, Do, Sum, Product): as above,
+ * then a RANGE whose bounds are real NumericQ but not explicit numbers is
+ * normalised by iter_normalize_bounds, so {x, 0, 2 Pi, Pi/2} iterates the
+ * lattice 0, Pi/2, ..., 2 Pi. The plotters keep plain iter_spec_parse: their
+ * {x, 0, 2 Pi} is a continuous interval, and normalising it would clip the
+ * plot at 6.
+ */
+bool iter_spec_parse_lattice(Expr* spec, IterSpec* out);
+
 /* Free every Expr* owned by `s` and zero it.  NULL-safe. */
 void iter_spec_free(IterSpec* s);
 
@@ -58,10 +68,33 @@ void iter_spec_free(IterSpec* s);
  * `allow_inf` permits an Infinity upper bound (Do/Sum: true; Table: false).
  * Returns false when a bound is non-numeric (and not an allowed Infinity),
  * or the step is zero.  LIST specs are not numeric and return false.
+ * Expects a spec from iter_spec_parse_lattice: a non-explicit upper bound is
+ * taken to be a lattice point and widened by half a step (see iter.c).
  */
 bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
                                double* min_val, double* max_val,
                                double* di_val, bool* is_real, bool* is_inf);
+
+/*
+ * Machine value of a real numeric bound: an explicit Integer / Real /
+ * Rational, or any NumericQ expression whose machine value is a finite real
+ * (Pi, 2 Pi, Sqrt[2], a BigInt). False for a free symbol, a complex value or
+ * a non-finite one. Borrows `e`.
+ */
+bool iter_real_value(const Expr* e, double* out);
+
+/*
+ * Normalise a range {imin, imax, di} whose bounds are not all explicit numbers
+ * but are all real numeric (Table[x, {x, 0, 2 Pi, 1.}], {x, Pi, 5},
+ * {x, 0, 2 Pi, Pi/2}): replace *imax with the exact last point reached,
+ * imin + n di with n = Floor[(imax - imin)/di], as Mathematica iterates.
+ * Afterwards the bound lies on the lattice, so exact loops and closed forms
+ * (Sum's F(imax + 1) - F(imin)) see the range they actually iterate -- a
+ * closed form over the raw Pi bound would be a wrong answer. An empty range
+ * gets imin - di. Returns true when *imax was replaced (the old one freed);
+ * false, leaving everything untouched, for explicit or non-numeric bounds.
+ */
+bool iter_normalize_bounds(const Expr* imin, Expr** imax, const Expr* di);
 
 /*
  * Block-style localization of the iterator variable.  shadow() saves and

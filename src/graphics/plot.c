@@ -128,7 +128,17 @@ typedef struct {
      * band (lo >= hi) means "no explicit PlotRange y" -> sample full extent. */
     double yclip_lo, yclip_hi;
     ScaleFnType sf_x, sf_y;  /* ScalingFunctions: world = scale_apply(sf, data) */
+    /* Explicit (evaluated) PlotStyle, borrowed; NULL when not given. The
+     * per-curve styles of a multi-curve plot are baked from it (see
+     * build_plot_primitives); a single curve is styled from the option. */
+    const Expr* plot_style;
 } PlotSampleOpts;
+
+/* The colour a single curve is drawn in when no PlotStyle is given. */
+static Expr* plot_default_color(void) {
+    Expr* rgb_args[3] = { expr_new_real(0.2), expr_new_real(0.4), expr_new_real(0.8) };
+    return expr_new_function(expr_new_symbol(SYM_RGBColor), rgb_args, 3);
+}
 
 /* Splits res's trailing Rule args (starting at index 2) into the sampler
  * options above and a passthrough list of borrowed-then-copied Rule
@@ -155,6 +165,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
     sopts->yclip_hi = -1.0; /* degenerate => no clip until an explicit PlotRange y is seen */
     sopts->sf_x = SF_NONE;
     sopts->sf_y = SF_NONE;
+    sopts->plot_style = NULL;
     *single_color_out = NULL;
 
     size_t argc = res->data.function.arg_count;
@@ -225,7 +236,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
         } else if (name == SYM_PlotStyle) {
             have_style = true;
             if (*single_color_out) expr_free(*single_color_out);
-            *single_color_out = evaluate(expr_copy(rhs));
+            *single_color_out = evaluate(rhs);   /* evaluate() borrows its argument */
             Expr* a[2] = { expr_copy(lhs), expr_copy(*single_color_out) };
             passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         } else if (name == SYM_AspectRatio) {
@@ -268,7 +279,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
              * named color constant like Red (an OwnValue -> RGBColor[...])
              * would never resolve. Evaluate it here, once, exactly as a
              * non-held Graphics[]'s own arguments already would. */
-            Expr* val = evaluate(expr_copy(rhs));
+            Expr* val = evaluate(rhs);   /* borrows: no copy to leak */
             Expr* a[2] = { expr_copy(lhs), val };
             passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         }
@@ -287,12 +298,13 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
         passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
     }
     if (!have_style) {
-        Expr* rgb_args[3] = { expr_new_real(0.2), expr_new_real(0.4), expr_new_real(0.8) };
-        Expr* rgb = expr_new_function(expr_new_symbol(SYM_RGBColor), rgb_args, 3);
+        Expr* rgb = plot_default_color();
         Expr* a[2] = { expr_new_symbol(SYM_PlotStyle), expr_copy(rgb) };
         passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         *single_color_out = rgb;
     }
+
+    if (have_style) sopts->plot_style = *single_color_out;
 
     *passthrough_out = passthrough;
     *passthrough_count_out = n;
@@ -610,8 +622,8 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
      * fraction of the x-span, which render scales by the same zoom as the
      * curve, so dots stay ~constant on screen regardless of the plot range. */
     if (sopts->mesh && npts > 0) {
-        double msize = (xmax - xmin) * 0.0025;
-        Expr* ps_arg[1] = { expr_new_real(msize > 0 ? msize : 0.005) };
+        /* PointSize is a diameter as a fraction of the plot width. */
+        Expr* ps_arg[1] = { expr_new_real(0.005) };
         prims[prim_count++] = expr_new_function(expr_new_symbol(SYM_PointSize), ps_arg, 1);
 
         Expr** dots = malloc(sizeof(Expr*) * npts);
@@ -647,29 +659,58 @@ static Expr* build_plot_primitives(Expr** bodies, size_t nfun, Expr* var,
     Rule* old_own = iter_spec_shadow(var);
     Expr*** per = malloc(sizeof(Expr**) * nfun);
     size_t* per_count = malloc(sizeof(size_t) * nfun);
+    Expr** styles = malloc(sizeof(Expr*) * nfun);   /* owned; NULL = none */
+    bool* scoped = malloc(sizeof(bool) * nfun);
     size_t total = 0;
     bool any = false;
     bool multi = (nfun > 1);
     for (size_t fi = 0; fi < nfun; fi++) {
-        Expr* curve_color = multi ? palette_color(fi) : single_color;
+        /* Curve fi's style: the palette colour, or its PlotStyle entry (a
+         * List of styles cycles). A style with non-colour directives
+         * (Dashed, Thick, ...) gets its own List scope below so it cannot
+         * restyle the next curve. A single curve's style comes from the
+         * PlotStyle option at render time; it is only needed here to
+         * restore the colour after a Filling polygon. */
+        scoped[fi] = false;
+        styles[fi] = NULL;
+        Expr* curve_color = single_color;
+        if (multi || sopts->plot_style) {
+            Expr* base = multi ? palette_color(fi) : plot_default_color();
+            styles[fi] = plot_curve_style(sopts->plot_style, fi, base, &scoped[fi]);
+            expr_free(base);
+            curve_color = styles[fi];
+        }
         per[fi] = sample_lines(bodies[fi], var, xmin, xmax, sopts, curve_color, &per_count[fi]);
-        if (multi) expr_free(curve_color);
         total += per_count[fi];
         if (per_count[fi] > 0) any = true;
     }
     iter_spec_restore(var, old_own);
 
-    if (!any) { free(per); free(per_count); return NULL; }
+    if (!any) {
+        for (size_t fi = 0; fi < nfun; fi++) { expr_free(styles[fi]); free(per[fi]); }
+        free(styles); free(scoped); free(per); free(per_count);
+        return NULL;
+    }
 
     size_t cap = total + (multi ? nfun : 0);
     Expr** prims = malloc(sizeof(Expr*) * (cap > 0 ? cap : 1));
     size_t prim_count = 0;
     for (size_t fi = 0; fi < nfun; fi++) {
-        if (multi) prims[prim_count++] = palette_color(fi);
-        for (size_t j = 0; j < per_count[fi]; j++) prims[prim_count++] = per[fi][j];
+        if (multi && scoped[fi]) {
+            /* {Directive[...], lines...}: the directive's scope ends here. */
+            Expr** sub = malloc(sizeof(Expr*) * (per_count[fi] + 1));
+            sub[0] = styles[fi]; styles[fi] = NULL;
+            for (size_t j = 0; j < per_count[fi]; j++) sub[1 + j] = per[fi][j];
+            prims[prim_count++] = expr_new_function(expr_new_symbol(SYM_List), sub, per_count[fi] + 1);
+            free(sub);
+        } else {
+            if (multi) { prims[prim_count++] = styles[fi]; styles[fi] = NULL; }
+            for (size_t j = 0; j < per_count[fi]; j++) prims[prim_count++] = per[fi][j];
+        }
+        expr_free(styles[fi]);
         free(per[fi]);
     }
-    free(per); free(per_count);
+    free(styles); free(scoped); free(per); free(per_count);
 
     Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, prim_count);
     free(prims);
@@ -746,6 +787,15 @@ Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax,
          * what's on screen (a degenerate band from the caller disables it). */
         .yclip_lo = yclip_lo, .yclip_hi = yclip_hi,
     };
+    /* The Graphics' PlotStyle is the one the original draw was styled with. */
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = graphics_expr->data.function.args[i];
+        if (is_rule_arg((Expr*)a) && a->data.function.args[0]->type == EXPR_SYMBOL
+            && a->data.function.args[0]->data.symbol.name == SYM_PlotStyle) {
+            sopts.plot_style = a->data.function.args[1];
+            break;
+        }
+    }
     Expr** o = olist->data.function.args;
     if (o[0]->type == EXPR_INTEGER && o[0]->data.integer >= 2) sopts.plot_points = (long)o[0]->data.integer;
     if (o[1]->type == EXPR_INTEGER && o[1]->data.integer >= 0) sopts.max_recursion = (int)o[1]->data.integer;
@@ -843,7 +893,14 @@ Expr* builtin_plot(Expr* res) {
         return NULL;
     }
 
-    Expr* legend_meta = build_legend_meta(legends, bodies, nfun, single_color);
+    Expr* legend_meta = NULL;
+    if (sopts.plot_style) {
+        Expr* base = plot_default_color();
+        legend_meta = build_legend_meta_styled(legends, bodies, nfun, base, sopts.plot_style);
+        expr_free(base);
+    } else {
+        legend_meta = build_legend_meta(legends, bodies, nfun, single_color);
+    }
     expr_free(legends);
     expr_free(single_color);
 

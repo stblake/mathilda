@@ -70,9 +70,10 @@ static bool prepend_flat_head(Expr* left, const char* head_name, Expr* right) {
 }
 
 /* Heads that participate in Mathematica-style chained comparisons. WL
- * collapses `a < b <= c == d > e` into one Inequality[...] node; Unequal
- * (`!=`) is intentionally excluded — its WL semantics ("all distinct")
- * differ from a pairwise chain. */
+ * collapses `a < b <= c == d > e` into one Inequality[...] node. Unequal
+ * (`!=`) is handled separately: a run of `!=` alone is the variadic
+ * Unequal[a, b, c] ("all distinct"), and it joins an Inequality only when
+ * mixed with these heads (see fold_into_inequality). */
 static bool is_chain_compare_head(const char* head_name) {
     return strcmp(head_name, "Less") == 0
         || strcmp(head_name, "LessEqual") == 0
@@ -94,6 +95,44 @@ static bool extend_inequality(Expr* ineq, const char* new_op_name, Expr* new_val
     new_args[old_count + 1] = new_val;
     ineq->data.function.args = new_args;
     ineq->data.function.arg_count = old_count + 2;
+    return true;
+}
+
+/* Comparison heads that are variadic predicates rather than pairwise chains:
+ * a run of the SAME operator collects into one call, SameQ[a, b, c]. */
+static bool is_nary_compare_head(const char* head_name) {
+    return strcmp(head_name, "SameQ") == 0
+        || strcmp(head_name, "UnsameQ") == 0
+        || strcmp(head_name, "Unequal") == 0;
+}
+
+/* Fold `left op right` into an Inequality, taking ownership of `right` and
+ * possibly replacing *left. `left` is either an Inequality (extended in place)
+ * or a bare comparison H[x1, ..., xk] with H a chain head or Unequal, which
+ * becomes Inequality[x1, H, x2, ..., H, xk, op, right]. Returns false, leaving
+ * both untouched, when `left` is neither. */
+static bool fold_into_inequality(Expr** left, const char* op_name, Expr* right) {
+    Expr* l = *left;
+    if (extend_inequality(l, op_name, right)) return true;
+    if (l->type != EXPR_FUNCTION || l->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* inner = l->data.function.head->data.symbol.name;
+    if (!is_chain_compare_head(inner) && strcmp(inner, "Unequal") != 0) return false;
+    size_t k = l->data.function.arg_count;
+    if (k < 2) return false;
+    size_t n = 2 * k + 1;
+    Expr** args = malloc(sizeof(Expr*) * n);
+    if (!args) return false;
+    size_t j = 0;
+    for (size_t i = 0; i < k; i++) {
+        if (i > 0) args[j++] = expr_new_symbol(inner);
+        args[j++] = l->data.function.args[i];
+        l->data.function.args[i] = NULL;    /* stolen */
+    }
+    args[j++] = expr_new_symbol(op_name);
+    args[j++] = right;
+    expr_free(l);
+    *left = expr_new_function(expr_new_symbol(SYM_Inequality), args, n);
+    free(args);
     return true;
 }
 
@@ -1606,47 +1645,31 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 left = expr_new_function(expr_new_symbol(op_def.head_name), args, 2);
             }
         } else {
-            /* Chained comparisons. `a < b <= c == d > e` is left-associated
-             * by the parser, but Mathematica's intended shape is a single
-             * variadic Inequality[a, Less, b, LessEqual, c, Equal, d,
-             * Greater, e]. We rewrite at construction time:
+            /* Comparison chains. The parser associates left, so each operator
+             * sees the already-built chain as `left`; the node is rewritten at
+             * construction time into the shape Mathematica produces:
              *
-             *   - If `left` is already an Inequality node and op is a
-             *     chainable comparison, append (op, right).
-             *   - If `left` is a binary chainable comparison OP_inner[a, b]
-             *     and op is also chainable, fold both into a fresh
-             *     Inequality[a, OP_inner, b, op, right] and discard the
-             *     intermediate node.
+             *   - SameQ, UnsameQ and Unequal are VARIADIC predicates, not
+             *     pairwise chains: `a === b === c` is SameQ[a, b, c] ("all
+             *     identical"), `a =!= b =!= c` is UnsameQ[a, b, c] and
+             *     `a != b != c` is Unequal[a, b, c] ("all distinct"). Nesting
+             *     them instead (SameQ[SameQ[a, b], c]) compared a Boolean with
+             *     `c`, so `1 === 1 === 1` answered False.
+             *   - Less, LessEqual, Greater, GreaterEqual and Equal fold into
+             *     one Inequality[a, Less, b, LessEqual, c, ...]. Unequal joins
+             *     such a chain when mixed with them (`a < b != c` is
+             *     Inequality[a, Less, b, Unequal, c]).
              *
-             * Unequal is left out — `a != b != c` means "all distinct" in
-             * WL, not a pairwise chain. */
-            if (op_def.head_name
-                && is_chain_compare_head(op_def.head_name)
-                && prev_bare_compare
-                && extend_inequality(left, op_def.head_name, right)) {
+             * Only an operand built BARE at this level is extended
+             * (prev_bare_compare): a parenthesised `(a === b) === c` stays
+             * SameQ[SameQ[a, b], c]. */
+            const char* hn = op_def.head_name;
+            if (hn && prev_bare_compare && is_nary_compare_head(hn)
+                && extend_flat_head(left, hn, right)) {
                 left_bare_compare = true;      /* still a bare chain */
-            } else if (op_def.head_name
-                       && is_chain_compare_head(op_def.head_name)
-                       && prev_bare_compare
-                       && left->type == EXPR_FUNCTION
-                       && left->data.function.head->type == EXPR_SYMBOL
-                       && left->data.function.arg_count == 2
-                       && is_chain_compare_head(left->data.function.head->data.symbol.name)) {
-                const char* inner_head = left->data.function.head->data.symbol.name;
-                Expr* a = left->data.function.args[0];
-                Expr* b = left->data.function.args[1];
-                /* Steal a and b out of `left`, then free the now-empty shell. */
-                left->data.function.args[0] = NULL;
-                left->data.function.args[1] = NULL;
-                expr_free(left);
-                Expr* args[5] = {
-                    a,
-                    expr_new_symbol(inner_head),
-                    b,
-                    expr_new_symbol(op_def.head_name),
-                    right
-                };
-                left = expr_new_function(expr_new_symbol(SYM_Inequality), args, 5);
+            } else if (hn && prev_bare_compare
+                       && (is_chain_compare_head(hn) || strcmp(hn, "Unequal") == 0)
+                       && fold_into_inequality(&left, hn, right)) {
                 left_bare_compare = true;
             }
             /* Flatten repeated Plus/Times at parse time so that held
@@ -1663,7 +1686,8 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                  * next comparison at this level may fold it into a chain. This is the provenance the
                  * fold above needs and could not previously obtain, since by the time it looks the
                  * node is indistinguishable from a parenthesised one. */
-                if (op_def.head_name && is_chain_compare_head(op_def.head_name))
+                if (op_def.head_name && (is_chain_compare_head(op_def.head_name)
+                                         || is_nary_compare_head(op_def.head_name)))
                     left_bare_compare = true;
             }
         }

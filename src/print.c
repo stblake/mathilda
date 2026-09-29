@@ -378,11 +378,10 @@ static void print_standard(Expr* e, int parent_prec) {
             print_standard(e->data.function.args[1], my_prec);
         }
         else if (head == SYM_Graph && g_inputform_depth == 0 && graph_is_valid(e)) {
-            /* Terse summary in standard output (unweighted 2-arg form, or
-             * weighted 3-arg Graph[verts, edges, EdgeWeight -> {...}]); the
-             * weight list is not shown here. InputForm/FullForm fall through
-             * to the literal Graph[{...}, {...}(, EdgeWeight -> {...})]
-             * constructor (round-trippable). */
+            /* Terse summary in standard output (Graph[verts, edges] plus any
+             * EdgeWeight / EdgeCapacity options); the option lists are not
+             * shown here. InputForm/FullForm fall through to the literal
+             * Graph[{...}, {...}, opts...] constructor (round-trippable). */
             unsigned long nv = (unsigned long)e->data.function.args[0]->data.function.arg_count;
             unsigned long ne = (unsigned long)e->data.function.args[1]->data.function.arg_count;
             printf("Graph[<%lu %s, %lu %s>]",
@@ -659,6 +658,7 @@ static void print_standard(Expr* e, int parent_prec) {
                         else if (s == SYM_Greater)      op = " > ";
                         else if (s == SYM_LessEqual)    op = " <= ";
                         else if (s == SYM_GreaterEqual) op = " >= ";
+                        else if (s == SYM_Unequal)      op = " != ";
                     }
                     printf("%s", op);
                 }
@@ -1792,6 +1792,7 @@ static void print_tex(Expr* e, int parent_prec) {
                         else if (s == SYM_Greater)      op = ">";
                         else if (s == SYM_LessEqual)    op = "\\leq ";
                         else if (s == SYM_GreaterEqual) op = "\\geq ";
+                        else if (s == SYM_Unequal)      op = "\\neq ";
                     }
                     printf("%s", op);
                 }

@@ -237,6 +237,55 @@ void test_exp_log_mpfr_complex(void) {
     free(s4p); expr_free(e4p); expr_free(r4p);
 }
 
+/* Log10 and Log2 are Log[10, z] and Log[2, z]; exact powers are exact, and a
+ * positive machine real goes through libm's log10/log2 (exact at powers). */
+static void test_log10_log2(void) {
+    assert_eval_eq("Log10[100]", "2", 0);
+    assert_eval_eq("Log10[1000]", "3", 0);
+    assert_eval_eq("Log10[1/100]", "-2", 0);
+    assert_eval_eq("Log10[10^30]", "30", 0);
+    assert_eval_eq("Log10[2.]", "0.30103", 0);
+    assert_eval_eq("Log10[1000.] == 3", "True", 0);
+    assert_eval_eq("Log10[1000.] - 3", "0.0", 0);
+    assert_eval_eq("Log10[x]", "Times[Power[Log[10], -1], Log[x]]", 1);
+    assert_eval_eq("Log10[2]", "Times[Log[2], Power[Log[10], -1]]", 1);
+    assert_eval_eq("Log10[0]", "-Infinity", 0);
+    assert_eval_eq("Log10[-1.]", "0.0 + 1.36438*I", 0);
+    assert_eval_eq("Log10[{10, 100., x}]", "{1, 2.0, Log[x]/Log[10]}", 0);
+    assert_eval_eq("Log2[8]", "3", 0);
+    assert_eval_eq("Log2[1024]", "10", 0);
+    assert_eval_eq("Log2[1/8]", "-3", 0);
+    assert_eval_eq("Log2[8.] - 3", "0.0", 0);
+    assert_eval_eq("Log2[x]", "Times[Power[Log[2], -1], Log[x]]", 1);
+    assert_eval_eq("Attributes[Log10]", "{Listable, NumericFunction, Protected}", 0);
+    assert_eval_eq("Attributes[Log2]", "{Listable, NumericFunction, Protected}", 0);
+    assert_eval_eq("D[Log10[x], x]", "1/(Log[10] x)", 0);
+    /* packed and visible-NDArray surfaces */
+    assert_eval_eq("Log10[Range[1., 4.]]", "{0.0, 0.30103, 0.477121, 0.60206}", 0);
+    assert_eval_eq("PackedArrayQ[Log10[Range[1., 4.]]]", "True", 0);
+    assert_eval_eq("Log10[NDArray[{1., 10., 100.}]]", "NDArray[{0.0, 1.0, 2.0}]", 0);
+    assert_eval_eq("Log2[NDArray[{1., 2., 8.}]]", "NDArray[{0.0, 1.0, 3.0}]", 0);
+    /* Compile[]: scalar and rank-1 array, both lowered */
+    assert_eval_eq("CompileDiagnostics[{{x, _Real}}, Log10[x]][[1, 2]]", "True", 0);
+    assert_eval_eq("CompileDiagnostics[{{v, _Real, 1}}, Log10[v]][[1, 2]]", "True", 0);
+    assert_eval_eq("CompileDiagnostics[{{x, _Real}}, Log2[x]][[1, 2]]", "True", 0);
+    assert_eval_eq("CompileDiagnostics[{{v, _Real, 1}}, Log2[v]][[1, 2]]", "True", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, Log10[x]][1000.] - 3", "0.0", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Log2[v]][{1., 2., 8.}]", "{0.0, 1.0, 3.0}", 0);
+}
+
+/* Log[b, z] for exact rationals that are powers of one common base. */
+static void test_log_base_exact_rational(void) {
+    assert_eval_eq("Log[2, 8]", "3", 0);
+    assert_eval_eq("Log[4, 8]", "3/2", 0);
+    assert_eval_eq("Log[8, 2]", "1/3", 0);
+    assert_eval_eq("Log[1/2, 8]", "-3", 0);
+    assert_eval_eq("Log[2/3, 4/9]", "2", 0);
+    assert_eval_eq("Log[10, 1]", "0", 0);
+    assert_eval_eq("Log[2, 3]", "Times[Log[3], Power[Log[2], -1]]", 1);
+    assert_eval_eq("Log[6, 12]", "Times[Log[12], Power[Log[6], -1]]", 1);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -244,6 +293,9 @@ int main() {
     TEST(test_logexp_forward);
     TEST(test_log_argt);
     TEST(test_exp_log_mpfr_complex);
+    TEST(test_log10_log2);
+    TEST(test_log_base_exact_rational);
+    printf("All logexp tests passed!\n");
 
     return 0;
 }

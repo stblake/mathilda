@@ -435,9 +435,15 @@ static void rot90_run(const double* src, double* dst, size_t w, size_t h, size_t
         for (size_t x = 0; x < w; x++)
             for (size_t k = 0; k < c; k++) {
                 size_t dx, dy, dw;
-                if (quarters == 1)      { dx = h - 1 - y; dy = x;         dw = h; }
+                /* COUNTERCLOCKWISE, as Mathematica turns a positive angle. Row 0 is the TOP of
+                 * the picture, so a quarter turn to the left carries the top-right pixel (x = w-1,
+                 * y = 0) to the top-left corner and the top row down the left edge -- source
+                 * (x, y) lands at column y, row w-1-x. The first version had the odd turns swapped
+                 * and so rotated clockwise, which no test caught because every assertion was a
+                 * composition (four turns, two turns vs a half turn) that is blind to direction. */
+                if (quarters == 1)      { dx = y;         dy = w - 1 - x; dw = h; }
                 else if (quarters == 2) { dx = w - 1 - x; dy = h - 1 - y; dw = w; }
-                else                    { dx = y;         dy = w - 1 - x; dw = h; }
+                else                    { dx = h - 1 - y; dy = x;         dw = h; }
                 dst[(dy * dw + dx) * c + k] = src[(y * w + x) * c + k];
             }
 }
@@ -454,9 +460,13 @@ static void rot_free_run(const double* src, double* dst, size_t w, size_t h, siz
     for (size_t y = 0; y < h; y++)
         for (size_t x = 0; x < w; x++) {
             double dx = (double)x - cx, dy = (double)y - cy;
-            /* Rotate the destination offset BACKWARDS to find the source point. */
-            double sxf =  ca * dx + sa * dy + cx;
-            double syf = -sa * dx + ca * dy + cy;
+            /* Rotate the destination offset BACKWARDS to find the source point. The picture turns
+             * COUNTERCLOCKWISE for a positive angle, but image rows run DOWN, so in (x, y-down)
+             * coordinates the inverse map is [[c, -s], [s, c]] -- the transpose of the textbook
+             * y-up matrix. Getting that sign backwards mirrors the rotation; it is what the first
+             * version did, and it agreed with the (equally mirrored) quarter-turn path. */
+            double sxf = ca * dx - sa * dy + cx;
+            double syf = sa * dx + ca * dy + cy;
             int64_t x0 = (int64_t)floor(sxf), y0 = (int64_t)floor(syf);
             double fx = sxf - (double)x0, fy = syf - (double)y0;
             for (size_t k = 0; k < c; k++) {
@@ -477,13 +487,46 @@ static void rot_free_run(const double* src, double* dst, size_t w, size_t h, siz
         }
 }
 
-/* ImageRotate[image] (a quarter turn) / [image, angle] / [image, n Degree] */
+/* The direction a side faces, as a counterclockwise angle from Right. -1 for a non-side. */
+static double rot_side_angle(const Expr* e) {
+    if (!e || e->type != EXPR_SYMBOL || !e->data.symbol.name) return -1.0;
+    const char* n = e->data.symbol.name;
+    if (strcmp(n, "Right") == 0)  return 0.0;
+    if (strcmp(n, "Top") == 0)    return M_PI / 2.0;
+    if (strcmp(n, "Left") == 0)   return M_PI;
+    if (strcmp(n, "Bottom") == 0) return 1.5 * M_PI;
+    return -1.0;
+}
+
+/* ImageRotate[image, side] / [image, side1 -> side2]: the SIDE form, Mathematica's own. `side` means
+ * Top -> side (the top of the picture ends up facing `side`), and side1 -> side2 turns side1 onto side2
+ * counterclockwise by the difference of their directions. Always a multiple of a quarter turn, so it
+ * lands on the exact permutation path. Returns false for anything that is not a side form. */
+static bool rot_side_spec(const Expr* e, double* rad) {
+    double to = rot_side_angle(e);
+    if (to >= 0.0) { *rad = to - M_PI / 2.0; return true; }
+    if (e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Rule) {
+        double a = rot_side_angle(e->data.function.args[0]);
+        double b = rot_side_angle(e->data.function.args[1]);
+        if (a < 0.0 || b < 0.0) return false;
+        *rad = b - a;
+        return true;
+    }
+    return false;
+}
+
+/* ImageRotate[image] (a quarter turn) / [image, angle] / [image, n Degree] / [image, side] /
+ * [image, side1 -> side2]. Positive angles turn the picture COUNTERCLOCKWISE, as in Mathematica. */
 static Expr* builtin_imagerotate(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
 
     double rad = M_PI / 2.0;               /* Mathematica's default is a quarter turn */
-    if (argc == 2) {
+    if (argc == 2 && rot_side_spec(res->data.function.args[1], &rad)) {
+        /* a side form: rad already set */
+    } else if (argc == 2) {
         /* NUMERICALISE the angle before reading it. `Pi`, `Pi/2` and `90 Degree` are exact symbolic
          * values, not machine reals, so na_read_scalar refuses them -- ImageRotate[img, Pi] declined
          * outright until this was added, which is a poor answer to the most natural way of writing a
@@ -495,6 +538,7 @@ static Expr* builtin_imagerotate(Expr* res) {
         Expr* nexpr = expr_new_function(expr_new_symbol("N"), one, 1);
         if (!nexpr) { expr_free(one[0]); return NULL; }
         Expr* num = evaluate(nexpr);
+        expr_free(nexpr);                  /* evaluate() does not consume its argument */
         double v = 0.0, im = 0.0;
         bool ok = num && na_read_scalar(num, &v, &im) && im == 0.0;
         expr_free(num);
@@ -1051,14 +1095,17 @@ void imagegeom_init(void) {
     symtab_get_def("ImageRotate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageRotate",
         "ImageRotate[image] rotates a quarter turn counterclockwise; ImageRotate[image, angle] rotates "
-        "by angle in radians (use n Degree for degrees). A multiple of a right angle takes an EXACT "
+        "by angle in radians counterclockwise (use n Degree for degrees; a negative angle turns "
+        "clockwise); ImageRotate[image, side] turns the top of the image to face side (Left, Right, "
+        "Top or Bottom) and ImageRotate[image, side1 -> side2] turns side1 onto side2. A multiple of a right angle takes an EXACT "
         "index-permutation path -- every pixel lands on another pixel's position, nothing is "
         "interpolated, and four quarter turns are exactly the identity. An odd number of quarter turns "
         "swaps the dimensions. Any other angle interpolates bilinearly, sampling the source per "
         "destination pixel (inverse mapping, so every output is filled exactly once; forward mapping "
         "leaves holes wherever the rotation stretches). Area rotated in from outside reads as 0 rather "
         "than the replicated edge, because that area was never photographed and smearing the border "
-        "across it would invent content.");
+        "across it would invent content. Unlike Mathematica, a free angle keeps the input's "
+        "dimensions (Mathematica's size Full) rather than enlarging to enclose the rotated image.");
 
     symtab_add_builtin("ImageReflect", builtin_imagereflect);
     symtab_get_def("ImageReflect")->attributes |= ATTR_PROTECTED;

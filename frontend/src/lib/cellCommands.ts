@@ -73,18 +73,26 @@ export function deleteCell(store: Store, cellId: string) {
   store.removeCell(cellId);
 }
 
-/** Retype a cell, preserving its output unless the type change makes the output
- *  meaningless.
+/** Convert a cell to another style, keeping its source and its output.
  *
- *  store.setCellType clears output and execIdx unconditionally, so retyping a
- *  code cell to Text and back silently discarded a result the user could see on
- *  screen. Only a code cell HAS output, so clearing is right when leaving 'code'
- *  and gratuitous otherwise. */
-export function retypeCell(store: Store, cellId: string, type: CellType) {
+ *  The ONE implementation behind every "convert" control -- the toolbar's
+ *  cell-style combo, the native Cell > Convert to ... items, and anything later.
+ *  Two routes used to exist and only one of them touched the store: the menu
+ *  called retypeActiveCell, which updates the toolbar's record of the active
+ *  cell and nothing else, so Convert to Text changed the combo's label while the
+ *  cell stayed code.
+ *
+ *  Returns true when the cell's type actually changed. A reference-page cell is
+ *  generated documentation, not the reader's to retype, so it is refused (as the
+ *  toolbar's locked combo already did); an unknown id or a no-op conversion also
+ *  returns false. store.setCellType keeps the output, so code -> text -> code
+ *  restores the result rather than discarding it. */
+export function convertCell(store: Store, cellId: string, type: CellType): boolean {
   const found = store.findCell(cellId);
   const cell = found?.row.cells[found.cellIdx];
-  if (!cell || cell.type === type) return;
+  if (!cell || cell.type === type || cell.type === 'ref' || type === 'ref') return false;
   store.setCellType(cellId, type);
+  return true;
 }
 
 // ---------------------------------------------------------------------------

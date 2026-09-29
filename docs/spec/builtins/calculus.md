@@ -2872,6 +2872,12 @@ each algorithm also exposed as a context-qualified builtin
 - `Sum[f, i]` — the indefinite sum (antidifference): the `F` with
   `DifferenceDelta[F, i] == f`.
 
+A numeric symbolic bound iterates the lattice up to it, as `Table` does:
+`Sum[i, {i, 1, Pi}]` is `6` and `Sum[i, {i, Pi, 2 Pi}]` is `6 + 4 Pi`. The
+bound is normalised to the last lattice point first, so the closed-form stage
+never sees the raw `Pi` (whose `F(imax + 1) - F(imin)` would be a wrong
+answer); `Product` shares the same iterator.
+
 For a finite, unit-step, integer range with a summable body, `Sum` first
 tries the closed-form method cascade below — its cost is independent of
 the span width, so `Sum[i^2, {i, 1, 100000}]` is as cheap as the

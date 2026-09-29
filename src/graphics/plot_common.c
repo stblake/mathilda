@@ -10,6 +10,7 @@
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #ifndef M_PI
@@ -200,6 +201,11 @@ Expr* eval_color_function3(Expr* color_fn,
  * Returns a fresh $PlotLegendData[{color1,label1}, ...] node, or NULL.
  * The renderer (render.c: draw_legend) reads it at display time. */
 Expr* build_legend_meta(Expr* legends, Expr** bodies, size_t nfun, Expr* single_color) {
+    return build_legend_meta_styled(legends, bodies, nfun, single_color, NULL);
+}
+
+Expr* build_legend_meta_styled(Expr* legends, Expr** bodies, size_t nfun,
+                               Expr* single_color, const Expr* style) {
     if (!legends) return NULL;
     if (legends->type == EXPR_SYMBOL && legends->data.symbol.name == SYM_None) return NULL;
     if (nfun == 0) return NULL;
@@ -213,6 +219,15 @@ Expr* build_legend_meta(Expr* legends, Expr** bodies, size_t nfun, Expr* single_
     for (size_t i = 0; i < nfun; i++) {
         Expr* color = multi ? palette_color(i)
                             : (single_color ? expr_copy(single_color) : palette_color(0));
+        if (style) {
+            /* The swatch shows the colour the curve is actually drawn in. */
+            bool scoped;
+            Expr* cs = plot_curve_style(style, i, color, &scoped);
+            Expr* c2 = plot_style_color(cs, color);
+            expr_free(cs);
+            expr_free(color);
+            color = c2;
+        }
         Expr* label;
         if (explicit_list && i < legends->data.function.arg_count) {
             label = expr_copy(legends->data.function.args[i]);
@@ -731,4 +746,176 @@ void emit_scaling_meta(ScaleFnType sf_x, ScaleFnType sf_y,
     Expr* sm_args[2] = { expr_new_integer((int64_t)sf_x),
                          expr_new_integer((int64_t)sf_y) };
     (*pt)[(*pt_n)++] = expr_new_function(expr_new_symbol(SYM_ScalingMeta), sm_args, 2);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Style directives shared by the Raylib and PDF back ends (see header).  */
+
+static bool head_named(const Expr* e, const char* sym) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == sym;
+}
+
+static bool sym_named(const Expr* e, const char* sym) {
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == sym;
+}
+
+bool gfx_coerce_double(const Expr* e, double* out) {
+    if (!e) return false;
+    if (expr_to_real_double(e, out)) return isfinite(*out);
+    /* Only a symbol or a non-List compound can be an exact numeric value
+     * (Pi, Sqrt[2], Rational with bigint parts, 3/4 Pi, ...); anything else
+     * is skipped without paying for an evaluation. */
+    if (e->type != EXPR_SYMBOL && e->type != EXPR_FUNCTION) return false;
+    if (head_named(e, SYM_List)) return false;
+    Expr* n_arg[1] = { expr_copy((Expr*)e) };
+    Expr* n_call = expr_new_function(expr_new_symbol("N"), n_arg, 1);
+    Expr* result = evaluate(n_call);
+    expr_free(n_call);
+    bool ok = expr_to_real_double(result, out) && isfinite(*out);
+    expr_free(result);
+    return ok;
+}
+
+bool gfx_named_size(const Expr* e, GfxSizeKind kind, double* pts) {
+    if (!e || e->type != EXPR_SYMBOL) return false;
+    /* Tiny, Small, Medium, Large. Thickness in points; PointSize as a
+     * DIAMETER in points; Dashing segment lengths in points. */
+    static const double thick[4] = { 0.5, 1.0, 2.0, 3.0 };
+    static const double point[4] = { 2.0, 3.0, 5.0, 8.0 };
+    static const double dash[4]  = { 2.0, 4.0, 7.0, 12.0 };
+    const double* t = kind == GFX_SIZE_THICKNESS ? thick
+                    : kind == GFX_SIZE_POINT ? point : dash;
+    const char* n = e->data.symbol.name;
+    if (n == SYM_Tiny)   { *pts = t[0]; return true; }
+    if (n == SYM_Small)  { *pts = t[1]; return true; }
+    if (n == SYM_Medium) { *pts = t[2]; return true; }
+    if (n == SYM_Large)  { *pts = t[3]; return true; }
+    return false;
+}
+
+bool gfx_thickness_pts(const Expr* d, double plot_w, double* pts) {
+    double v;
+    /* The bare named directives, should they reach a back end unevaluated. */
+    if (sym_named(d, SYM_Thick)) { *pts = 3.0; return true; }   /* Thickness[Large] */
+    if (sym_named(d, SYM_Thin))  { *pts = 0.5; return true; }   /* Thickness[Tiny] */
+    bool rel = head_named(d, SYM_Thickness), abs_ = head_named(d, SYM_AbsoluteThickness);
+    if ((!rel && !abs_) || d->data.function.arg_count < 1) return false;
+    const Expr* a = d->data.function.args[0];
+    if (gfx_named_size(a, GFX_SIZE_THICKNESS, pts)) return true;
+    if (!gfx_coerce_double(a, &v) || v < 0) return false;
+    *pts = rel ? v * plot_w : v;
+    return true;
+}
+
+bool gfx_point_radius_pts(const Expr* d, double plot_w, double* pts) {
+    double v;
+    bool rel = head_named(d, SYM_PointSize), abs_ = head_named(d, SYM_AbsolutePointSize);
+    if ((!rel && !abs_) || d->data.function.arg_count < 1) return false;
+    const Expr* a = d->data.function.args[0];
+    if (gfx_named_size(a, GFX_SIZE_POINT, &v)) { *pts = 0.5 * v; return true; }
+    if (!gfx_coerce_double(a, &v) || v < 0) return false;
+    *pts = 0.5 * (rel ? v * plot_w : v);
+    return true;
+}
+
+bool gfx_dash_pts(const Expr* d, double plot_w, double* out, int max, int* n) {
+    *n = 0;
+    /* Dashed / Dotted / DotDashed, should they reach a back end unevaluated:
+     * the same patterns their OwnValues evaluate to. */
+    if (sym_named(d, SYM_Dashed))    { if (max >= 2) { out[0] = out[1] = 4.0; *n = 2; } return true; }
+    if (sym_named(d, SYM_Dotted))    { if (max >= 2) { out[0] = 0.0; out[1] = 4.0; *n = 2; } return true; }
+    if (sym_named(d, SYM_DotDashed)) {
+        if (max >= 4) { out[0] = 0.0; out[1] = 4.0; out[2] = 4.0; out[3] = 4.0; *n = 4; }
+        return true;
+    }
+    bool rel = head_named(d, SYM_Dashing), abs_ = head_named(d, SYM_AbsoluteDashing);
+    if (!rel && !abs_) return false;
+    if (d->data.function.arg_count < 1) return true;             /* Dashing[] = solid */
+    const Expr* spec = d->data.function.args[0];
+    if (sym_named(spec, SYM_None)) return true;
+    const Expr* const* items = (const Expr* const*)&spec;
+    size_t cnt = 1;
+    bool single = true;
+    if (head_named(spec, SYM_List)) {
+        items = (const Expr* const*)spec->data.function.args;
+        cnt = spec->data.function.arg_count;
+        single = false;
+    }
+    int k = 0;
+    for (size_t i = 0; i < cnt && k < max; i++) {
+        double v;
+        if (gfx_named_size(items[i], GFX_SIZE_DASH, &v)) out[k++] = v;
+        else if (gfx_coerce_double(items[i], &v) && v >= 0) out[k++] = rel ? v * plot_w : v;
+        else return false;
+    }
+    /* Dashing[r] is Dashing[{r, r}]; an odd-length list repeats, as in
+     * PostScript, so it is doubled to keep on/off phases alternating. */
+    if (single && k == 1 && max >= 2) out[k++] = out[0];
+    else if (k % 2 == 1 && 2 * k <= max) { for (int i = 0; i < k; i++) out[k + i] = out[i]; k *= 2; }
+    /* All-zero pattern is degenerate (nothing would ever be drawn). */
+    double sum = 0.0;
+    for (int i = 0; i < k; i++) sum += out[i];
+    *n = sum > 0.0 ? k : 0;
+    return true;
+}
+
+/* Append style `s` to the directive list, flattening List/Directive. */
+static void style_collect(const Expr* s, Expr*** items, size_t* n, size_t* cap,
+                          bool* has_color, bool* has_other) {
+    if (!s) return;
+    if (head_named(s, SYM_List) || head_named(s, SYM_Directive)) {
+        for (size_t i = 0; i < s->data.function.arg_count; i++)
+            style_collect(s->data.function.args[i], items, n, cap, has_color, has_other);
+        return;
+    }
+    if (sym_named(s, SYM_None) || sym_named(s, SYM_Automatic)) return;
+    if (*n == *cap) {
+        *cap = *cap ? *cap * 2 : 4;
+        *items = realloc(*items, sizeof(Expr*) * *cap);
+    }
+    (*items)[(*n)++] = expr_copy((Expr*)s);
+    if (is_color_head(s)) *has_color = true; else *has_other = true;
+}
+
+Expr* plot_curve_style(const Expr* style, size_t i, const Expr* base, bool* scoped) {
+    *scoped = false;
+    const Expr* s = style;
+    if (head_named(s, SYM_List)) {
+        size_t len = s->data.function.arg_count;
+        s = len ? s->data.function.args[i % len] : NULL;
+    }
+    if (!s || sym_named(s, SYM_None) || sym_named(s, SYM_Automatic))
+        return expr_copy((Expr*)base);
+    if (is_color_head(s)) return expr_copy((Expr*)s);
+
+    Expr** items = NULL;
+    size_t n = 0, cap = 0;
+    bool has_color = false, has_other = false;
+    style_collect(s, &items, &n, &cap, &has_color, &has_other);
+    if (n == 0) { free(items); return expr_copy((Expr*)base); }
+    if (!has_other && n == 1) { Expr* only = items[0]; free(items); return only; }
+
+    size_t m = n + (has_color ? 0 : 1);
+    Expr** args = malloc(sizeof(Expr*) * m);
+    size_t k = 0;
+    if (!has_color) args[k++] = expr_copy((Expr*)base);
+    for (size_t j = 0; j < n; j++) args[k++] = items[j];
+    free(items);
+    Expr* d = expr_new_function(expr_new_symbol(SYM_Directive), args, m);
+    free(args);
+    *scoped = has_other;
+    return d;
+}
+
+Expr* plot_style_color(const Expr* directive, const Expr* base) {
+    if (is_color_head(directive)) return expr_copy((Expr*)directive);
+    if (head_named(directive, SYM_Directive) || head_named(directive, SYM_List)) {
+        for (size_t i = 0; i < directive->data.function.arg_count; i++) {
+            const Expr* a = directive->data.function.args[i];
+            if (is_color_head(a)) return expr_copy((Expr*)a);
+        }
+    }
+    return expr_copy((Expr*)base);
 }

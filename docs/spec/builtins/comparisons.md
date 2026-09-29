@@ -64,8 +64,25 @@ Tests whether two (or more) expressions are mathematically equal.
   `<|a -> 1, b -> 2|> == <|b -> 2, a -> 1|>` is `False`. `Unequal` uses the
   same test (see
   [Association atomicity](data-structures.md#association-atomicity-structural-functions)).
+- Two Lists are compared element by element with `Equal` itself, recursively
+  through nested lists, so the machine-real tolerance applies inside them:
+  `{0.1 + 0.2, 1.} == {0.3, 1.}` is `True`. Lists of different lengths are
+  `False`, one decidably unequal position makes the whole comparison `False`
+  (`{x, 1} == {y, 2}`), and otherwise it stays symbolic (`{x} == {y}`).
+  `Unequal` uses the same test.
 - `Equal` is `Orderless` for the equality test but preserves Mathematica's
   printed form.
+
+```mathematica
+In[1]:= {0.1 + 0.2} == {0.3}
+Out[1]= True
+
+In[2]:= {1, 2} == {1, 2, 3}
+Out[2]= False
+
+In[3]:= {x, 1} == {y, 2}
+Out[3]= False
+```
 - An `Indeterminate` argument gives `False`, per IEEE 754 — see
   [Indeterminate and IEEE unordered comparison](#indeterminate-and-ieee-unordered-comparison).
 
@@ -73,7 +90,10 @@ Tests whether two (or more) expressions are mathematically equal.
 Tests whether expressions are unequal.
 - `Unequal[x, y]` (written `x != y`): `True` if `x` and `y` are provably
   unequal, `False` if equal, otherwise stays symbolic.
-- `Unequal[x, y, z, ...]`: `True` only if all arguments are pairwise distinct.
+- `Unequal[x, y, z, ...]` (written `x != y != z`): `True` only if all
+  arguments are pairwise distinct. A run of `!=` parses to this one variadic
+  call, as in Mathematica (`1 != 2 != 1` is `False`); mixed with an ordering
+  operator it joins an `Inequality` instead (`a < b != c`).
 
 **Features**:
 - A pair containing `Indeterminate` counts as unequal, so
@@ -109,6 +129,9 @@ Tests non-strict descending order.
 Tests structural identity.
 - `SameQ[x, y]` (written `x === y`): `True` if `x` and `y` are structurally
   identical, `False` otherwise. Always returns a boolean.
+- `SameQ[x, y, z, ...]` (written `x === y === z`): `True` if all arguments are
+  identical. A run of `===` parses to this one variadic call, as in
+  Mathematica, so `1 === 1 === 1` is `True`; `(a === b) === c` stays nested.
 
 **Features**:
 - Unlike `Equal`, `SameQ` never stays symbolic and does not coerce numeric
@@ -119,12 +142,28 @@ Tests structural identity.
 ## UnsameQ
 Tests structural non-identity.
 - `UnsameQ[x, y]` (written `x =!= y`): the logical negation of `SameQ`.
+- `UnsameQ[x, y, z, ...]` (written `x =!= y =!= z`): `True` if no two
+  arguments are identical.
+
+```mathematica
+In[1]:= 1 === 1 === 1
+Out[1]= True
+
+In[2]:= FullForm[Hold[a =!= b =!= c]]
+Out[2]= Hold[UnsameQ[a, b, c]]
+
+In[3]:= 1 =!= 2 =!= 1
+Out[3]= False
+```
 
 ## Inequality
 The canonical internal form for chained comparisons.
 - `Inequality[e1, op1, e2, op2, e3, ...]`: produced by the parser for
-  expressions such as `a < b <= c`. Each `opk` is one of the relational heads
-  above. The chain is `True` only when every adjacent comparison holds.
+  expressions such as `a < b <= c`. Each `opk` is one of `Less`, `LessEqual`,
+  `Greater`, `GreaterEqual`, `Equal` or `Unequal` (the last only when mixed with
+  the others, `a < b != c`). The chain is `True` only when every adjacent
+  comparison holds; an `Equal`/`Unequal` pair is decided by that builtin, list
+  tolerance and exact zero-test included.
 
 **Features**:
 - Adjacent comparisons that evaluate to `True` are dropped; the result collapses

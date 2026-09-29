@@ -380,56 +380,145 @@ void repl_loop(void) {
  * sidecar), switch from the readline REPL to a simple line-based
  * protocol over stdio.
  *
- * Request  (one line on stdin):
- *   {"id": N, "expr": "1+1"}    -- evaluate expression
- *   {"type": "ping"}             -- readiness probe
- *   {"type": "quit"}             -- graceful shutdown
+ * Request  (one line on stdin, any length):
+ *   {"id": N, "expr": "1+1"}               -- evaluate one expression
+ *   {"id": N, "expr": "...", "cell": true} -- evaluate a notebook cell
+ *   {"type": "ping"}                        -- readiness probe
+ *   {"type": "quit"}                        -- graceful shutdown
  *
- * Response (one JSON object per line on stdout):
- *   {"id": N, "type": "expr",  "payload": "2"}
- *   {"id": N, "type": "error", "message": "Parse error"}
- *   {"id": N, "type": "done"}
+ * Response (one JSON object per line on stdout), for each request:
+ *   {"id": N, "type": "stream",  "text": "hello\n"}          (cell only)
+ *   {"id": N, "type": "message", "text": "Power::infy: ..."} (cell only)
+ *   {"id": N, "type": "expr",  "payload": "2", "latex": "2"}
+ *   {"id": N, "type": "error", "message": "Parse error: ..."}
+ *   ... (usage / names / image / plot, see pipe_eval_statement)
+ *   {"id": N, "type": "done", "memory": BYTES}               -- always last
  *   {"type": "pong"}
  *
- * stdout is set to unbuffered at startup so every response line is
- * delivered to the pipe immediately.
+ * A plain request is one expression, and its behaviour is unchanged from
+ * the protocol's first version: Print text goes to stdout raw, between
+ * protocol lines; messages go to stderr; a Null result is sent as the
+ * payload "Null". Tools depend on all three (site/generate.py keeps a
+ * `x = ...;` setup line BECAUSE it sees "Null"; the audit tools and
+ * book/tools/gen_compileprint.py read raw Print lines), so the notebook's
+ * semantics are opt-in rather than a change under them.
+ *
+ * With "cell": true the request is a notebook input cell:
+ *   - it may hold several statements, one per line or separated by ';',
+ *     exactly as a Mathematica input cell does, each evaluated in turn;
+ *   - each statement's Print output and messages are captured and sent as
+ *     "stream" and "message" lines BEFORE its result, so they reach the
+ *     cell instead of being dropped (stdout) or only logged (stderr);
+ *   - a statement ending in ';', or evaluating to Null, sends no result.
+ * An older kernel ignores the unknown "cell" key and answers as before,
+ * and an older front end never sends it, so either side can be upgraded
+ * alone.
+ *
+ * Protocol lines are written to the stdout the process started with
+ * (g_pipe_out), never to whatever `stdout` names at the time: during an
+ * evaluation `stdout` and `stderr` are pointed at in-memory streams to
+ * capture Print output and messages (see PipeCapture).
  * ===================================================================*/
 
+/* The real stdout, captured before any evaluation can redirect `stdout`. */
+static FILE* g_pipe_out = NULL;
+
 static void pipe_emit(const char* line) {
-    puts(line);
-    fflush(stdout);
+    FILE* out = g_pipe_out ? g_pipe_out : stdout;
+    fputs(line, out);
+    fputc('\n', out);
+    fflush(out);
 }
 
-static int json_get_string(const char* json, const char* key,
-                           char* buf, size_t buflen) {
+/* Append the UTF-8 encoding of code point `cp` to `buf` at `*i`. */
+static void utf8_append(char* buf, size_t* i, unsigned long cp) {
+    if (cp < 0x80) {
+        buf[(*i)++] = (char)cp;
+    } else if (cp < 0x800) {
+        buf[(*i)++] = (char)(0xC0 | (cp >> 6));
+        buf[(*i)++] = (char)(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+        buf[(*i)++] = (char)(0xE0 | (cp >> 12));
+        buf[(*i)++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        buf[(*i)++] = (char)(0x80 | (cp & 0x3F));
+    } else {
+        buf[(*i)++] = (char)(0xF0 | (cp >> 18));
+        buf[(*i)++] = (char)(0x80 | ((cp >> 12) & 0x3F));
+        buf[(*i)++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        buf[(*i)++] = (char)(0x80 | (cp & 0x3F));
+    }
+}
+
+/* Four hex digits at `p` as a number, or -1. */
+static long hex4(const char* p) {
+    long v = 0;
+    for (int k = 0; k < 4; k++) {
+        char c = p[k];
+        v <<= 4;
+        if (c >= '0' && c <= '9')      v |= c - '0';
+        else if (c >= 'a' && c <= 'f') v |= c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') v |= c - 'A' + 10;
+        else return -1;
+    }
+    return v;
+}
+
+/* The decoded string value of `key` in the one-line JSON object `json`, as a
+ * fresh malloc'd string (caller frees), or NULL if absent or not a string.
+ *
+ * Heap-allocated to the input's own length -- a decoded JSON string is never
+ * longer than its encoding -- so a cell is not cut off at a fixed buffer size.
+ * (It was: request and value both lived in 10 KB stack buffers.) Decodes every
+ * JSON escape, including \b, \f and \uXXXX with surrogate pairs, since serde
+ * writes control characters as \u00XX. */
+static char* json_get_string_dup(const char* json, const char* key) {
     char search[256];
     snprintf(search, sizeof(search), "\"%s\"", key);
     const char* p = strstr(json, search);
-    if (!p) return 0;
+    if (!p) return NULL;
     p += strlen(search);
     while (*p == ' ' || *p == '\t' || *p == ':') p++;
-    if (*p != '"') return 0;
+    if (*p != '"') return NULL;
     p++;
+    char* buf = malloc(strlen(p) + 1);
+    if (!buf) return NULL;
     size_t i = 0;
-    while (*p && *p != '"' && i + 1 < buflen) {
+    while (*p && *p != '"') {
         if (*p == '\\' && *(p + 1)) {
             p++;
             switch (*p) {
                 case '"':  buf[i++] = '"';  break;
                 case '\\': buf[i++] = '\\'; break;
                 case '/':  buf[i++] = '/';  break;
+                case 'b':  buf[i++] = '\b'; break;
+                case 'f':  buf[i++] = '\f'; break;
                 case 'n':  buf[i++] = '\n'; break;
                 case 'r':  buf[i++] = '\r'; break;
                 case 't':  buf[i++] = '\t'; break;
+                case 'u': {
+                    long cp = hex4(p + 1);
+                    if (cp < 0) { buf[i++] = 'u'; break; }
+                    p += 4;
+                    if (cp >= 0xD800 && cp <= 0xDBFF && p[1] == '\\' && p[2] == 'u') {
+                        long lo = hex4(p + 3);
+                        if (lo >= 0xDC00 && lo <= 0xDFFF) {
+                            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                            p += 6;
+                        }
+                    }
+                    if (cp == 0) cp = 0xFFFD;  /* an embedded NUL would end the C string */
+                    utf8_append(buf, &i, (unsigned long)cp);
+                    break;
+                }
                 default:   buf[i++] = *p;   break;
             }
         } else {
-            buf[i++] = (char)*p;
+            buf[i++] = *p;
         }
         p++;
     }
     buf[i] = '\0';
-    return 1;
+    return buf;
 }
 
 static int json_get_int(const char* json, const char* key, int* out) {
@@ -442,6 +531,18 @@ static int json_get_int(const char* json, const char* key, int* out) {
     if (!(*p == '-' || isdigit((unsigned char)*p))) return 0;
     *out = (int)strtol(p, NULL, 10);
     return 1;
+}
+
+/* True when `key` is present in the one-line JSON object `json` with the
+ * literal value true. */
+static bool json_get_true(const char* json, const char* key) {
+    char search[256];
+    snprintf(search, sizeof(search), "\"%s\"", key);
+    const char* p = strstr(json, search);
+    if (!p) return false;
+    p += strlen(search);
+    while (*p == ' ' || *p == '\t' || *p == ':') p++;
+    return strncmp(p, "true", 4) == 0;
 }
 
 static void json_escape(const char* s, char* out, size_t outlen) {
@@ -515,54 +616,187 @@ static bool pipe_is_info_query(Expr* parsed) {
         && e->data.function.head->data.symbol.name == SYM_Information;
 }
 
-static void pipe_process_input(const char* input, int id) {
-    Expr* parsed = parse_expression(input);
-    if (!parsed) {
-        /* Echo the exact received input in the error so a stray/invisible
-         * character or bracket mismatch in the caller's text is diagnosable
-         * rather than an opaque "Parse error". */
-        size_t esc_cap = strlen(input) * 6 + 8;
-        char* esc = malloc(esc_cap);
-        char* buf = NULL;
-        if (esc) {
-            json_escape(input, esc, esc_cap);
-            size_t bcap = esc_cap + 128;
-            buf = malloc(bcap);
-            if (buf)
-                snprintf(buf, bcap,
-                    "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error: %s\"}",
-                    id, esc);
-        }
-        if (buf) {
-            pipe_emit(buf);
-        } else {
-            char sbuf[128];
-            snprintf(sbuf, sizeof(sbuf),
-                "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error\"}", id);
-            pipe_emit(sbuf);
-        }
-        free(esc);
-        free(buf);
-        char dbuf[64];
-        snprintf(dbuf, sizeof(dbuf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
-        pipe_emit(dbuf);
+static void pipe_emit_done(int id) {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+             id, (unsigned long long)pipe_memory_bytes());
+    pipe_emit(buf);
+}
+
+/* {"id":N,"type":<kind>,"<field>":"<escaped text>"} for `len` bytes of `text`. */
+static void pipe_emit_text(int id, const char* kind, const char* field,
+                           const char* text, size_t len) {
+    char* raw = malloc(len + 1);
+    if (!raw) return;
+    memcpy(raw, text, len);
+    raw[len] = '\0';
+    size_t ecap = len * 6 + 8;
+    char* esc = malloc(ecap);
+    size_t lcap = ecap + strlen(kind) + strlen(field) + 64;
+    char* line = esc ? malloc(lcap) : NULL;
+    if (esc && line) {
+        json_escape(raw, esc, ecap);
+        snprintf(line, lcap, "{\"id\":%d,\"type\":\"%s\",\"%s\":\"%s\"}", id, kind, field, esc);
+        pipe_emit(line);
+    }
+    free(line);
+    free(esc);
+    free(raw);
+}
+
+/* ---------------------------------------------------------------------
+ * Capturing Print output and messages during one statement.
+ *
+ * Print writes to `stdout` and every message funnels through
+ * mth_message_v to `stderr`. In pipe mode stdout IS the protocol channel,
+ * so a Print used to land between protocol lines as raw text that the
+ * front end discarded, and messages went to stderr, which it only logged.
+ * For the length of each evaluation both streams are pointed at in-memory
+ * buffers; afterwards the buffers are sent as "stream" and "message" lines
+ * ahead of the statement's result. Pointing `stdout` elsewhere and back is
+ * the same technique print.c already uses to render into a string.
+ *
+ * The cost is that output arrives when the statement finishes rather than
+ * as it is printed, and that Print text and messages of ONE statement are
+ * not interleaved with each other (Print text first). Streaming would need
+ * a writer thread on a pipe, which is not worth it for a notebook that
+ * shows the cell's output at the end anyway.
+ *
+ * Windows has no open_memstream; there the streams are left alone.
+ * --------------------------------------------------------------------- */
+typedef struct {
+    FILE*  saved_out;
+    FILE*  saved_err;
+    FILE*  out;
+    FILE*  err;
+    char*  out_buf;
+    size_t out_len;
+    char*  err_buf;
+    size_t err_len;
+} PipeCapture;
+
+static void pipe_capture_begin(PipeCapture* c) {
+    memset(c, 0, sizeof(*c));
+#ifndef _WIN32
+    fflush(stdout);
+    fflush(stderr);
+    c->out = open_memstream(&c->out_buf, &c->out_len);
+    c->err = open_memstream(&c->err_buf, &c->err_len);
+    if (!c->out || !c->err) {
+        if (c->out) fclose(c->out);
+        if (c->err) fclose(c->err);
+        free(c->out_buf);
+        free(c->err_buf);
+        memset(c, 0, sizeof(*c));
         return;
     }
+    c->saved_out = stdout;
+    c->saved_err = stderr;
+    stdout = c->out;
+    stderr = c->err;
+#endif
+}
 
+#ifndef _WIN32
+/* Send captured messages, one "message" line each. A message starts on a line
+ * that begins with a non-blank character and contains "::" (the Head::tag
+ * form every funnelled message has); any other line continues the one before
+ * it, which is how mth_message_cont writes a multi-line message. */
+static void pipe_emit_messages(int id, const char* text) {
+    const char* msg_start = NULL;
+    const char* p = text;
+    while (*p) {
+        const char* eol = strchr(p, '\n');
+        const char* next = eol ? eol + 1 : p + strlen(p);
+        size_t len = (size_t)((eol ? eol : next) - p);
+        bool starts = len > 0 && !isspace((unsigned char)*p);
+        if (starts) {
+            const char* dc = strstr(p, "::");
+            starts = dc && dc < p + len;
+        }
+        if (starts && msg_start) {
+            size_t mlen = (size_t)(p - msg_start);
+            while (mlen > 0 && (msg_start[mlen - 1] == '\n' || msg_start[mlen - 1] == '\r')) mlen--;
+            if (mlen) pipe_emit_text(id, "message", "text", msg_start, mlen);
+            msg_start = NULL;
+        }
+        if (!msg_start && len > 0) msg_start = p;
+        p = next;
+    }
+    if (msg_start) {
+        size_t mlen = strlen(msg_start);
+        while (mlen > 0 && (msg_start[mlen - 1] == '\n' || msg_start[mlen - 1] == '\r')) mlen--;
+        if (mlen) pipe_emit_text(id, "message", "text", msg_start, mlen);
+    }
+}
+
+#endif /* !_WIN32 */
+
+/* Restore the streams and send what was captured: Print text, then messages. */
+static void pipe_capture_end(PipeCapture* c, int id) {
+#ifndef _WIN32
+    if (!c->out) return;
+    stdout = c->saved_out;
+    stderr = c->saved_err;
+    fclose(c->out);   /* finalises out_buf / out_len */
+    fclose(c->err);
+    if (c->out_buf && c->out_len > 0)
+        pipe_emit_text(id, "stream", "text", c->out_buf, c->out_len);
+    if (c->err_buf && c->err_len > 0)
+        pipe_emit_messages(id, c->err_buf);
+    free(c->out_buf);
+    free(c->err_buf);
+    memset(c, 0, sizeof(*c));
+#else
+    (void)c; (void)id;
+#endif
+}
+
+static void pipe_emit_parse_error(const char* input, int id) {
+    /* Echo the exact received input in the error so a stray/invisible
+     * character or bracket mismatch in the caller's text is diagnosable
+     * rather than an opaque "Parse error". */
+    size_t esc_cap = strlen(input) * 6 + 8;
+    char* esc = malloc(esc_cap);
+    char* buf = NULL;
+    if (esc) {
+        json_escape(input, esc, esc_cap);
+        size_t bcap = esc_cap + 128;
+        buf = malloc(bcap);
+        if (buf)
+            snprintf(buf, bcap,
+                "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error: %s\"}",
+                id, esc);
+    }
+    if (buf) {
+        pipe_emit(buf);
+    } else {
+        char sbuf[128];
+        snprintf(sbuf, sizeof(sbuf),
+            "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error\"}", id);
+        pipe_emit(sbuf);
+    }
+    free(esc);
+    free(buf);
+}
+
+/* Evaluate ONE statement and send its output. Borrows `parsed`; sends no
+ * "done" -- pipe_process_input does, once per request.
+ *
+ * In a notebook cell (`cell`), Print text and messages are captured and sent
+ * first, and no result is sent when `show_result` is false (the statement
+ * ended in ';') or the value is Null. A plain request keeps the original
+ * behaviour: nothing captured, and Null sent as a payload like any value. */
+static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cell) {
     /* `?sym` / Information[sym] yields the raw docstring as a String, and a
      * usage message is not an expression: it must not be quoted, InputForm
      * escaped, or handed to the front end's math renderer. Captured from the
-     * *input* head before `parsed` is freed, exactly as the interactive REPL
-     * does above, so only help queries take this path and an ordinary string
-     * result still comes back quoted. */
+     * *input* head, exactly as the interactive REPL does above, so only help
+     * queries take this path and an ordinary string result still comes back
+     * quoted. */
     bool info_query = pipe_is_info_query(parsed);
-    /* Captured BEFORE evaluate/expr_free, into a buffer rather than as a borrowed pointer.
-     *
-     * The first version read it after the free, which is undefined behaviour that happened to yield
-     * nothing -- the notebook received no symbol and could not offer a documentation link. A symbol
-     * name is interned and would have survived, but `?"name"` gives a STRING whose storage dies with
-     * the tree, so the copy covers both. */
+    /* Copied into a buffer rather than kept as a borrowed pointer: `?"name"`
+     * gives a STRING whose storage dies with the tree. */
     char info_sym[128];
     info_sym[0] = '\0';
     if (info_query) {
@@ -573,14 +807,18 @@ static void pipe_process_input(const char* input, int id) {
         }
     }
 
+    PipeCapture cap;
+    if (cell) pipe_capture_begin(&cap);
     Expr* evaluated = evaluate(parsed);
-    expr_free(parsed);
+    if (cell) pipe_capture_end(&cap, id);
 
-    if (!evaluated) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
-        pipe_emit(buf);
+    if (!evaluated) return;
+
+    /* Mathematica shows no Out[] for a statement ending in ';' or for a Null
+     * value -- `x = 5;`, `Print["hi"]` -- so in a cell neither sends a result. */
+    if (cell && (!show_result
+        || (evaluated->type == EXPR_SYMBOL && evaluated->data.symbol.name == SYM_Null))) {
+        expr_free(evaluated);
         return;
     }
 
@@ -592,53 +830,48 @@ static void pipe_process_input(const char* input, int id) {
         && evaluated->data.function.head->type == EXPR_SYMBOL
         && evaluated->data.function.head->data.symbol.name == SYM_List) {
         size_t n = evaluated->data.function.arg_count;
-        size_t cap = 64;
+        size_t cap_n = 64;
         for (size_t i = 0; i < n; i++) {
             Expr* e = evaluated->data.function.args[i];
-            if (e->type == EXPR_STRING) cap += strlen(e->data.string) * 6 + 8;
+            if (e->type == EXPR_STRING) cap_n += strlen(e->data.string) * 6 + 8;
         }
-        char* buf = malloc(cap);
+        char* buf = malloc(cap_n);
         if (buf) {
-            int off = snprintf(buf, cap, "{\"id\":%d,\"type\":\"names\",\"payload\":[", id);
+            int off = snprintf(buf, cap_n, "{\"id\":%d,\"type\":\"names\",\"payload\":[", id);
             bool first = true;
-            for (size_t i = 0; i < n && off > 0 && (size_t)off < cap; i++) {
+            for (size_t i = 0; i < n && off > 0 && (size_t)off < cap_n; i++) {
                 Expr* e = evaluated->data.function.args[i];
                 if (e->type != EXPR_STRING) continue;
                 size_t ecap = strlen(e->data.string) * 6 + 8;
                 char* esc = malloc(ecap);
                 if (!esc) break;
                 json_escape(e->data.string, esc, ecap);
-                off += snprintf(buf + off, cap - (size_t)off, "%s\"%s\"",
+                off += snprintf(buf + off, cap_n - (size_t)off, "%s\"%s\"",
                                 first ? "" : ",", esc);
                 free(esc);
                 first = false;
             }
-            if (off > 0 && (size_t)off < cap) snprintf(buf + off, cap - (size_t)off, "]}");
+            if (off > 0 && (size_t)off < cap_n) snprintf(buf + off, cap_n - (size_t)off, "]}");
             pipe_emit(buf);
             free(buf);
         }
         expr_free(evaluated);
-        char done[64];
-        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
-        pipe_emit(done);
         return;
     }
 
     if (info_query && evaluated->type == EXPR_STRING) {
         const char* doc = evaluated->data.string;
-        size_t cap = strlen(doc) * 6 + 8;
-        char* esc = malloc(cap);
+        size_t dcap = strlen(doc) * 6 + 8;
+        char* esc = malloc(dcap);
         if (esc) {
-            json_escape(doc, esc, cap);
-            size_t bcap = cap + 64;
+            json_escape(doc, esc, dcap);
+            size_t bcap = dcap + 256;
             char* buf = malloc(bcap);
             if (buf) {
-                const char* isym = info_sym[0] ? info_sym : NULL;
-                if (isym)
+                if (info_sym[0])
                     snprintf(buf, bcap,
                         "{\"id\":%d,\"type\":\"usage\",\"payload\":\"%s\","
-                        "\"symbol\":\"%s\"}", id, esc, isym);
+                        "\"symbol\":\"%s\"}", id, esc, info_sym);
                 else
                     snprintf(buf, bcap,
                         "{\"id\":%d,\"type\":\"usage\",\"payload\":\"%s\"}", id, esc);
@@ -648,10 +881,6 @@ static void pipe_process_input(const char* input, int id) {
             free(esc);
         }
         expr_free(evaluated);
-        char done[64];
-        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
-        pipe_emit(done);
         return;
     }
 
@@ -677,10 +906,6 @@ static void pipe_process_input(const char* input, int id) {
                     free(jline);
                 }
                 free(ijson);
-                char idone[64];
-                snprintf(idone, sizeof(idone), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
-                pipe_emit(idone);
                 return;
             }
             /* Not a well-formed image after all: fall through and print it as text. */
@@ -702,29 +927,17 @@ static void pipe_process_input(const char* input, int id) {
             size_t json_len = strlen(plotly) + 64;
             char* json_line = malloc(json_len);
             if (json_line) {
-                strcpy(json_line, "{\"id\":");
-                char id_buf[32]; snprintf(id_buf, sizeof(id_buf), "%d", id);
-                strcat(json_line, id_buf);
-                strcat(json_line, ",\"type\":\"plot\",\"payload\":");
-                strcat(json_line, plotly);
-                strcat(json_line, "}");
+                snprintf(json_line, json_len, "{\"id\":%d,\"type\":\"plot\",\"payload\":%s}",
+                         id, plotly);
                 pipe_emit(json_line);
                 free(json_line);
             }
             free(plotly);
-            char done[64];
-            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
-            pipe_emit(done);
             return;
         }
-        /* plotly == NULL (e.g. empty Graphics3D): fall through to text. */
+        /* plotly == NULL (e.g. empty Graphics3D): nothing to draw. */
         if (head_sym == SYM_Graphics || head_sym == SYM_Graphics3D) {
             expr_free(evaluated);
-            char done[64];
-            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
-            pipe_emit(done);
             return;
         }
     }
@@ -734,12 +947,10 @@ static void pipe_process_input(const char* input, int id) {
     expr_free(evaluated);
 
     if (!result_str) {
-        char buf[256];
+        free(latex_raw);
+        char buf[128];
         snprintf(buf, sizeof(buf),
                  "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
-        pipe_emit(buf);
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(buf);
         return;
     }
@@ -748,12 +959,10 @@ static void pipe_process_input(const char* input, int id) {
     char* escaped = malloc(escaped_len);
     if (!escaped) {
         free(result_str);
-        char buf[256];
+        free(latex_raw);
+        char buf[128];
         snprintf(buf, sizeof(buf),
                  "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
-        pipe_emit(buf);
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(buf);
         return;
     }
@@ -785,37 +994,127 @@ static void pipe_process_input(const char* input, int id) {
     }
     free(escaped);
     free(latex_esc);
+}
 
-    char done[64];
-    snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
-                 id, (unsigned long long)pipe_memory_bytes());
-    pipe_emit(done);
+/* Evaluate one request, then send "done".
+ *
+ * A plain request is ONE expression, read with parse_expression as it always
+ * was. A notebook cell (`cell`) may hold several statements: it is split with
+ * parse_next_expression -- the statement reader
+ * `-file` scripts use -- so statements on separate lines are separate
+ * statements, as in a Mathematica input cell. parse_expression, used before,
+ * reads exactly ONE expression and rejected `a = 1` NEWLINE `b = 2` as a parse
+ * error, because the parser ends a statement at a top-level newline and the
+ * second line was left over.
+ *
+ * The whole cell is parsed before anything is evaluated, so a syntax error
+ * anywhere evaluates nothing (Mathematica checks a cell's syntax first too).
+ * A ';' that ended a statement suppresses that statement's result; the reader
+ * consumes it, so it is recognised as the character just before the cursor. */
+static void pipe_process_input(const char* input, int id, bool cell) {
+    if (!cell) {
+        Expr* parsed = parse_expression(input);
+        if (!parsed) {
+            pipe_emit_parse_error(input, id);
+        } else {
+            pipe_eval_statement(parsed, id, true, false);
+            expr_free(parsed);
+        }
+        pipe_emit_done(id);
+        return;
+    }
+
+    size_t n = 0, cap = 8;
+    Expr** stmts = malloc(cap * sizeof(Expr*));
+    bool* shown = malloc(cap * sizeof(bool));
+    bool failed = (stmts == NULL || shown == NULL);
+
+    const char* p = input;
+    while (!failed) {
+        const char* start = p;
+        Expr* e = parse_next_expression(&p);
+        if (!e) {
+            /* NULL is both end of input and a syntax error: anything but blanks
+             * and comments left over is the error. */
+            if (*skip_blanks_and_comments(start) != '\0') failed = true;
+            break;
+        }
+        if (n == cap) {
+            size_t ncap = cap * 2;
+            Expr** ns = realloc(stmts, ncap * sizeof(Expr*));
+            if (ns) stmts = ns;
+            bool* nb = realloc(shown, ncap * sizeof(bool));
+            if (nb) shown = nb;
+            if (!ns || !nb) { expr_free(e); failed = true; break; }
+            cap = ncap;
+        }
+        stmts[n] = e;
+        shown[n] = !(p > start && p[-1] == ';');
+        n++;
+    }
+
+    if (failed) {
+        pipe_emit_parse_error(input, id);
+    } else {
+        for (size_t i = 0; i < n; i++) pipe_eval_statement(stmts[i], id, shown[i], true);
+    }
+    for (size_t i = 0; i < n; i++) expr_free(stmts[i]);
+    free(stmts);
+    free(shown);
+    pipe_emit_done(id);
+}
+
+/* Read one line of any length from `in` into a fresh malloc'd buffer, without
+ * its line terminator. NULL at end of input. A request line used to be read
+ * into a 10 KB stack buffer, and fgets silently split anything longer: the
+ * first 10 KB went out as a truncated cell, the rest as garbage requests. */
+static char* pipe_read_line(FILE* in) {
+    size_t cap = 4096, len = 0;
+    char* buf = malloc(cap);
+    if (!buf) return NULL;
+    int c;
+    while ((c = getc(in)) != EOF && c != '\n') {
+        if (len + 1 >= cap) {
+            char* nb = realloc(buf, cap * 2);
+            if (!nb) { free(buf); return NULL; }
+            buf = nb;
+            cap *= 2;
+        }
+        buf[len++] = (char)c;
+    }
+    if (c == EOF && len == 0) { free(buf); return NULL; }
+    while (len > 0 && buf[len - 1] == '\r') len--;
+    buf[len] = '\0';
+    return buf;
 }
 
 static void pipe_mode_loop(void) {
-    char line[MAX_INPUT_LEN];
-    while (fgets(line, sizeof(line), stdin)) {
-        size_t len = strlen(line);
-        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
-            line[--len] = '\0';
-        if (len == 0) continue;
+    g_pipe_out = stdout;
+    char* line;
+    while ((line = pipe_read_line(stdin)) != NULL) {
+        if (line[0] == '\0') { free(line); continue; }
 
-        if (strstr(line, "\"ping\"")) {
+        /* Control messages carry no "expr", which keeps an expression that
+         * merely mentions "ping" or "quit" from being mistaken for one. */
+        bool has_expr = strstr(line, "\"expr\"") != NULL;
+        if (!has_expr && strstr(line, "\"ping\"")) {
             pipe_emit("{\"type\":\"pong\"}");
+            free(line);
             continue;
         }
-        if (strstr(line, "\"quit\"")) {
+        if (!has_expr && strstr(line, "\"quit\"")) {
+            free(line);
             fflush(stdout);
             break;
         }
 
         int id = 0;
-        char expr_buf[MAX_INPUT_LEN];
-        if (!json_get_int(line, "id", &id) ||
-            !json_get_string(line, "expr", expr_buf, sizeof(expr_buf))) {
-            continue;
-        }
-        pipe_process_input(expr_buf, id);
+        char* expr = NULL;
+        if (json_get_int(line, "id", &id))
+            expr = json_get_string_dup(line, "expr");
+        if (expr) pipe_process_input(expr, id, json_get_true(line, "cell"));
+        free(expr);
+        free(line);
     }
 }
 

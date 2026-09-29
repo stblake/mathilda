@@ -27,7 +27,10 @@ void graph_init(void) {
         "Graph[v, e] represents a graph with vertices v and edges e. "
         "Graph[e] derives the vertices from the edge list. Edges are "
         "DirectedEdge[u,v] or UndirectedEdge[u,v]; u->v and u<->v are accepted "
-        "as shorthand. Simple graphs only: no self-loops or parallel edges.");
+        "as shorthand. Graph[e, opts] and Graph[v, e, opts] attach per-edge "
+        "lists, matched to e by position: EdgeWeight -> {w1, ...} and "
+        "EdgeCapacity -> {c1, ...}. Simple graphs only: no self-loops or "
+        "parallel edges.");
 
     /* GraphQ -- validity predicate (graphq.c). */
     symtab_add_builtin("GraphQ", builtin_graph_q);
@@ -164,29 +167,40 @@ void graph_init(void) {
     symtab_add_builtin("ConnectedComponents", builtin_connected_components);
     symtab_get_def("ConnectedComponents")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ConnectedComponents",
-        "ConnectedComponents[g] gives the connected components of g (weak, on "
-        "the underlying undirected graph).");
+        "ConnectedComponents[g] gives the connected components of g: the "
+        "strongly connected components when g has directed edges (listed with "
+        "no edge from a component to a later one), else the components, "
+        "largest first. ConnectedComponents[g, {v1, ...}] keeps only those "
+        "containing some vi.");
 
     symtab_add_builtin("WeaklyConnectedComponents", builtin_weakly_connected_components);
     symtab_get_def("WeaklyConnectedComponents")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("WeaklyConnectedComponents",
-        "WeaklyConnectedComponents[g] gives the weakly connected components of g.");
+        "WeaklyConnectedComponents[g] gives the weakly connected components of g "
+        "(edge directions ignored), largest first. "
+        "WeaklyConnectedComponents[g, {v1, ...}] keeps only those containing "
+        "some vi.");
 
     symtab_add_builtin("StronglyConnectedComponents", builtin_strongly_connected_components);
     symtab_get_def("StronglyConnectedComponents")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("StronglyConnectedComponents",
         "StronglyConnectedComponents[g] gives the strongly connected components "
-        "of g (following edge directions).");
+        "of g (following edge directions), in the same order as "
+        "ConnectedComponents on a directed graph.");
 
     symtab_add_builtin("FindSpanningTree", builtin_find_spanning_tree);
     symtab_get_def("FindSpanningTree")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("FindSpanningTree",
-        "FindSpanningTree[g] gives a spanning tree (forest) of g as a graph.");
+        "FindSpanningTree[g] gives a spanning tree (forest) of g as a graph: a "
+        "minimum spanning tree when g has EdgeWeight (an arborescence for a "
+        "directed graph), else a breadth-first one. FindSpanningTree[{g, v}] "
+        "gives the tree grown from vertex v.");
 
     symtab_add_builtin("ConnectedGraphQ", builtin_connected_graph_q);
     symtab_get_def("ConnectedGraphQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ConnectedGraphQ",
-        "ConnectedGraphQ[g] gives True if g is connected.");
+        "ConnectedGraphQ[g] gives True if g is connected (strongly connected "
+        "when g has directed edges).");
 
     symtab_add_builtin("VertexConnectivity", builtin_vertex_connectivity);
     symtab_get_def("VertexConnectivity")->attributes |= ATTR_PROTECTED;

@@ -54,17 +54,46 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     if (opts.acc_goal_digits  < 0.0) opts.acc_goal_digits  = wp_digits / 2.0;
     if (opts.prec_goal_digits < 0.0) opts.prec_goal_digits = wp_digits / 2.0;
 
-    /* Detect {f, cons} form. */
+    /* Detect the {f, cons} form, and {f, c1, c2, ...}, whose trailing elements
+     * are implicitly And-ed constraints (the same reading NMinimize gives it). */
     Expr* f_arg = res->data.function.args[0];
     Expr* var_arg = res->data.function.args[1];
     Expr* f_raw = f_arg;
     Expr* cons = NULL;
+    Expr* cons_built = NULL;   /* owned And[c1, c2, ...] for the >= 3-element form */
+    Expr* var_eval = NULL;     /* owned evaluated variable spec, when resolved    */
     if (f_arg->type == EXPR_FUNCTION
         && f_arg->data.function.head->type == EXPR_SYMBOL
         && f_arg->data.function.head->data.symbol.name == SYM_List
-        && f_arg->data.function.arg_count == 2) {
+        && f_arg->data.function.arg_count >= 2) {
+        size_t m = f_arg->data.function.arg_count;
         f_raw = f_arg->data.function.args[0];
-        cons = f_arg->data.function.args[1];
+        if (m == 2) {
+            cons = f_arg->data.function.args[1];
+        } else {
+            Expr** cc = (Expr**)malloc(sizeof(Expr*) * (m - 1));
+            for (size_t i = 1; i < m; i++) cc[i - 1] = expr_copy(f_arg->data.function.args[i]);
+            cons_built = expr_new_function(expr_new_symbol(SYM_And), cc, m - 1);
+            free(cc);
+            cons = cons_built;
+        }
+    }
+
+    /* The variable argument is held (HoldAll), but a symbol that names a
+     * variable-spec list (vars = {{x, 1}, {y, 2}}; FindMinimum[f, vars]) must
+     * be resolved, as Mathematica does. Evaluate a bare symbol once and use
+     * the result only if it is a List; an unbound symbol, or one bound to a
+     * number (FindMinimum[f, x] with x = 5), stays the single variable. */
+    if (var_arg->type == EXPR_SYMBOL) {
+        Expr* ev = eval_and_free(expr_copy(var_arg));
+        if (ev && ev->type == EXPR_FUNCTION
+            && ev->data.function.head->type == EXPR_SYMBOL
+            && ev->data.function.head->data.symbol.name == SYM_List) {
+            var_eval = ev;
+            var_arg = ev;
+        } else {
+            expr_free(ev);
+        }
     }
 
     /* Parse variables. var_arg may be:
@@ -93,14 +122,21 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
             /* Could be either {x, x0} (scalar) or {x, y} (multi-symbol). Check 2nd arg. */
             Expr* a1 = var_arg->data.function.args[1];
             if (a1->type == EXPR_SYMBOL && na > 1) {
-                /* {x, y, ...}: all bare symbols → multi-var auto-start. */
-                bool all_sym = true;
+                /* {x, y, ...}: all bare, UNBOUND symbols → multi-var
+                 * auto-start. A trailing symbol that carries a value is a
+                 * starting value, not a variable: in
+                 * Table[FindMinimum[f, {x, s}], {s, {2, 7}}] the held spec
+                 * reaches us as {x, s} with s bound by the iterator, and must
+                 * read as {x, 2}, not as the two variables x and s. */
+                bool all_free_sym = true;
                 for (size_t i = 0; i < na; i++) {
-                    if (var_arg->data.function.args[i]->type != EXPR_SYMBOL) {
-                        all_sym = false; break;
+                    Expr* ai = var_arg->data.function.args[i];
+                    if (ai->type != EXPR_SYMBOL
+                        || (i > 0 && !fm_symbol_is_free(ai))) {
+                        all_free_sym = false; break;
                     }
                 }
-                if (all_sym) is_system = true;
+                if (all_free_sym) is_system = true;
             }
         }
     }
@@ -117,6 +153,8 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     CompiledProgram*  f_prog = NULL;      /* machine-precision compiled objective */
     CompiledProgram** grad_progs = NULL;  /* per-component compiled exact gradient */
     size_t n = 0;
+    bool two_start = false;       /* scalar {x, x0, x1} form */
+    double two_start_x1 = 0.0;
 
     if (is_system) {
         n = var_arg->data.function.arg_count;
@@ -164,17 +202,17 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
                 boxes[0].has_hi = true; boxes[0].hi = hi;
             }
         }
-        /* Smuggle TWO_START into method selection via custom path: we
-         * encode this by using boxes (lo=x0, hi=x1) if Brent and the
-         * caller gave {var, x0, x1}. We'll handle it during method
-         * dispatch below by detecting TWO_START separately. */
+        /* {x, x0, x1}: x0 and x1 are the first two values of x (Mathematica's
+         * derivative-free two-start form), NOT bounds. They seed the
+         * downhill bracket search, which is then free to leave [x0, x1] --
+         * FindMinimum[x Cos[x], {x, 5, 8}] reaches the minimum at 9.529.
+         * (Treating them as a box pinned the search inside the interval and
+         * handed back an endpoint.) */
         if (k == FM_SPEC_TWO_START) {
-            double a, b;
-            if (fm_expr_to_double_real(x0e, &a) && fm_expr_to_double_real(x1e, &b)) {
-                if (a > b) { double t = a; a = b; b = t; }
-                boxes[0].has_lo = true; boxes[0].lo = a;
-                boxes[0].has_hi = true; boxes[0].hi = b;
-                /* For TWO_START with Automatic method we want Brent. */
+            double b;
+            if (fm_expr_to_double_real(x1e, &b) && isfinite(b)) {
+                two_start = true;
+                two_start_x1 = b;
                 if (opts.method == FM_METHOD_AUTOMATIC) opts.method = FM_METHOD_BRENT;
             }
         }
@@ -330,6 +368,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
                 bracketed = true;
             } else {
                 bracketed = fm_bracket_mpfr(f_raw, binds, &opts, x_vec_mpfr[0],
+                                            two_start, two_start_x1,
                                             &boxes[0], a_m, b_m, c_m, fa_m, fb_m, fc_m);
                 if (!bracketed) fm_warn(fn_name, "nlnum", "MPFR bracket-finding failed");
             }
@@ -397,7 +436,10 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
             /* If user gave a starting point inside, use it. */
             if (x_vec[0] > a && x_vec[0] < c) b = x_vec[0];
         } else {
-            if (!fm_bracket(f_raw, binds, &opts, x_vec[0], &boxes[0], &a, &b, &c)) {
+            bool br = two_start
+                ? fm_bracket2(f_raw, binds, &opts, x_vec[0], two_start_x1, &boxes[0], &a, &b, &c)
+                : fm_bracket(f_raw, binds, &opts, x_vec[0], &boxes[0], &a, &b, &c);
+            if (!br) {
                 fm_warn(fn_name, "nlnum", "bracket-finding failed");
                 ok = false; goto run_done;
             }
@@ -592,6 +634,8 @@ cleanup:
     free(vars);
     free(x_vec);
     free(boxes);
+    expr_free(cons_built);
+    expr_free(var_eval);   /* vars[] borrowed from it; freed last */
     return result_out;
 }
 
@@ -614,14 +658,20 @@ Expr* builtin_findmaximum(Expr* res) {
     if (f_orig->type == EXPR_FUNCTION
         && f_orig->data.function.head->type == EXPR_SYMBOL
         && f_orig->data.function.head->data.symbol.name == SYM_List
-        && f_orig->data.function.arg_count == 2) {
-        /* Wrap inner f only. */
-        Expr* inner_f = f_orig->data.function.args[0];
-        Expr* cons = f_orig->data.function.args[1];
-        Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(inner_f) };
+        && f_orig->data.function.arg_count >= 2) {
+        /* {f, cons} or {f, c1, c2, ...}: wrap the inner f only and carry the
+         * constraint elements across unchanged (negating the whole list would
+         * thread Times[-1, ...] over the constraints). */
+        size_t m = f_orig->data.function.arg_count;
+        Expr** list_args = (Expr**)malloc(sizeof(Expr*) * m);
+        Expr* neg_args[2] = { expr_new_integer(-1),
+                              expr_copy(f_orig->data.function.args[0]) };
         neg_f = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
-        Expr* list_args[2] = { neg_f, expr_copy(cons) };
-        new_first = expr_new_function(expr_new_symbol(SYM_List), list_args, 2);
+        list_args[0] = neg_f;
+        for (size_t i = 1; i < m; i++)
+            list_args[i] = expr_copy(f_orig->data.function.args[i]);
+        new_first = expr_new_function(expr_new_symbol(SYM_List), list_args, m);
+        free(list_args);
     } else {
         Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(f_orig) };
         neg_f = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);

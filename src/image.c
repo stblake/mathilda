@@ -47,6 +47,9 @@ static bool img_is_list(const Expr* e) {
 
 /* Defined below; img_shape needs it for the packed case. */
 static bool img_shape_fast(const Expr* d, size_t* h, size_t* w, size_t* c);
+/* Defined with the volumetric code below; the shared constructor needs it. */
+static bool img3_shape(const Expr* d, size_t* dp, size_t* h, size_t* w, size_t* c,
+                       bool* all_int, double* lo, double* hi);
 
 /* Walk a rank-2 or rank-3 numeric array, checking it is RECTANGULAR and collecting its shape.
  *
@@ -121,17 +124,59 @@ static bool img_shape(const Expr* d, size_t* h, size_t* w, size_t* c,
 
 static const char* img_type_name(ImgType t) {
     switch (t) {
-        case IMG_BIT:  return "Bit";
-        case IMG_BYTE: return "Byte";
-        default:       return "Real";
+        case IMG_BIT:   return "Bit";
+        case IMG_BYTE:  return "Byte";
+        case IMG_BIT16: return "Bit16";
+        default:        return "Real";
     }
 }
 
+/* The CANONICAL type names -- the only ones a canonical Image[data, type] carries, so the only ones
+ * image_info accepts. */
 static bool img_type_from_name(const char* s, ImgType* out) {
-    if (strcmp(s, "Bit") == 0)  { *out = IMG_BIT;  return true; }
-    if (strcmp(s, "Byte") == 0) { *out = IMG_BYTE; return true; }
-    if (strcmp(s, "Real") == 0) { *out = IMG_REAL; return true; }
+    if (strcmp(s, "Bit") == 0)   { *out = IMG_BIT;   return true; }
+    if (strcmp(s, "Byte") == 0)  { *out = IMG_BYTE;  return true; }
+    if (strcmp(s, "Bit16") == 0) { *out = IMG_BIT16; return true; }
+    if (strcmp(s, "Real") == 0)  { *out = IMG_REAL;  return true; }
     return false;
+}
+
+/* A type as a CALLER may state it: the canonical names plus Mathematica's "Real32" and "Real64", which
+ * both mean Mathilda's one real type (stored in double precision either way) and normalise to "Real". */
+static bool img_type_parse(const Expr* ty, ImgType* out) {
+    if (!ty || ty->type != EXPR_STRING || !ty->data.string) return false;
+    if (img_type_from_name(ty->data.string, out)) return true;
+    if (strcmp(ty->data.string, "Real32") == 0 || strcmp(ty->data.string, "Real64") == 0) {
+        *out = IMG_REAL;
+        return true;
+    }
+    return false;
+}
+
+/* Largest stored value of an integer type; 0 for "Real", which has no range. */
+static double img_type_max(ImgType t) {
+    switch (t) {
+        case IMG_BIT:   return 1.0;
+        case IMG_BYTE:  return 255.0;
+        case IMG_BIT16: return 65535.0;
+        default:        return 0.0;
+    }
+}
+
+/* Coerce one value, given in the type's OWN range, to a storable value of that type.
+ *
+ * Mathematica: "values in data are coerced to the specified type by rounding or clipping". An integer
+ * type rounds to the nearest integer (halves round up) and clips to [0, max], so Image[{{0, 300}},
+ * "Byte"] stores {0, 255} and Image[{{0.5, 2}}, "Bit"] stores {1, 1}. NaN has no nearest integer and
+ * reads as 0, Mathematica's default "IndeterminateValue". "Real" stores any real unchanged, because
+ * Mathematica's real images allow any value and only DISPLAY the unit interval. */
+static double img_coerce(double v, ImgType t) {
+    if (t == IMG_REAL) return v;
+    if (v != v) return 0.0;
+    double mx = img_type_max(t);
+    if (!(v > 0.0)) return 0.0;
+    if (v >= mx) return mx;
+    return floor(v + 0.5);
 }
 
 /* Shape of a canonical image WITHOUT walking every pixel.
@@ -178,6 +223,56 @@ static bool img_shape_fast(const Expr* d, size_t* h, size_t* w, size_t* c) {
     return true;
 }
 
+/* Can this data sit in a canonical image of type t?
+ *
+ * A BUFFER answers in O(1): only complex storage is refused. Buffers come from the constructor or a
+ * filter, both of which coerce, so re-scanning every pixel here would repeat work already done -- the
+ * reason img_shape_fast exists at all.
+ *
+ * NESTED data gets the full per-leaf check, and that check is the fix for a real bug. The constructor
+ * declines by returning NULL, which leaves Image[data, type] unevaluated -- and an unevaluated
+ * Image[{{0, 300}}, "Byte"] has exactly the canonical SHAPE. With only a shape check, ImageQ said True
+ * for it and ImageData divided 300 by 255. Nested storage is the slow path anyway (packing disabled,
+ * or data the constructor could not coerce), so O(pixels) here costs nothing the path was not already
+ * paying. */
+static bool img_leaves_storable(const Expr* e, ImgType t) {
+    if (img_is_list(e)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!img_leaves_storable(e->data.function.args[i], t)) return false;
+        return true;
+    }
+    double re = 0.0, im = 0.0;
+    if (!na_read_scalar(e, &re, &im) || im != 0.0) return false;
+    if (t == IMG_REAL) return true;
+    return e->type == EXPR_INTEGER && re >= 0.0 && re <= img_type_max(t);
+}
+
+static bool img_data_storable(const Expr* d, ImgType t) {
+    if (is_ndarray(d))
+        return d->data.ndarray.dtype != NDT_COMPLEX64 && d->data.ndarray.dtype != NDT_COMPLEX32;
+    return img_leaves_storable(d, t);
+}
+
+/* Is this data ALREADY the canonical storage for type t -- a visible NDArray of the right dtype whose
+ * every value is storable? That is the constructor's fixed point, and it must check the VALUES of an
+ * integer buffer: a literal Image[{{0, 300, ...}}, "Byte"] large enough to auto-pack arrives here as an
+ * int64 buffer, and a dtype-only check waved it through uncoerced. A "Real" buffer has no range, so it
+ * is O(1); only integer types pay the (vectorisable) scan. */
+static bool img_buffer_canonical(const Expr* d, ImgType t) {
+    if (!is_ndarray(d)) return false;
+    const NDArrayData* a = &d->data.ndarray;
+    if (a->present_as != NDA_HEAD_NDARRAY) return false;
+    if (t == IMG_REAL) return a->dtype == NDT_FLOAT64;
+    if (a->dtype != NDT_INT64) return false;
+    size_t n = 1;
+    for (int i = 0; i < a->rank; i++) n *= (size_t)a->dims[i];
+    const int64_t* p = (const int64_t*)a->data;
+    int64_t mx = (int64_t)img_type_max(t);
+    for (size_t i = 0; i < n; i++)
+        if (p[i] < 0 || p[i] > mx) return false;
+    return true;
+}
+
 bool image_info(const Expr* e, size_t* width, size_t* height,
                 size_t* channels, ImgType* type) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return false;
@@ -191,6 +286,7 @@ bool image_info(const Expr* e, size_t* width, size_t* height,
 
     size_t h = 0, w = 0, c = 0;
     if (!img_shape_fast(e->data.function.args[0], &h, &w, &c)) return false;
+    if (!img_data_storable(e->data.function.args[0], t)) return false;
     if (width) *width = w;
     if (height) *height = h;
     if (channels) *channels = c;
@@ -223,90 +319,218 @@ bool image_info(const Expr* e, size_t* width, size_t* height,
  * The fill is a recursive row-major walk rather than indexed loops, which is what lets one function
  * serve both ranks -- the alternative was a 2-D version and a 3-D copy of it, and a dropped detail
  * between the two is this subsystem's most repeated bug. */
-static bool img_fill_nested(const Expr* e, void* raw, NDType dt, size_t total, size_t* at) {
+static bool img_fill_nested(const Expr* e, double* out, size_t total, size_t* at) {
     if (!e) return false;
-    if (e->type == EXPR_FUNCTION && e->data.function.head
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol.name == SYM_List) {
+    if (img_is_list(e)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
-            if (!img_fill_nested(e->data.function.args[i], raw, dt, total, at)) return false;
+            if (!img_fill_nested(e->data.function.args[i], out, total, at)) return false;
         return true;
     }
     double re = 0.0, im = 0.0;
     if (*at >= total) return false;
     if (!na_read_scalar(e, &re, &im) || im != 0.0) return false;
-    if (dt == NDT_INT64) ((int64_t*)raw)[*at] = (int64_t)re;
-    else                 ((double*)raw)[*at]  = re;
-    (*at)++;
+    out[(*at)++] = re;
     return true;
 }
 
-static Expr* img_canonical_data(const Expr* data, const int64_t* dims, int rank, ImgType t) {
-    if (!data) return NULL;
-    /* expr_copy takes a mutable pointer and does not mutate; the cast is the tree's convention. */
-    if (is_ndarray(data)) return expr_copy((Expr*)data);
+/* The stated values of `data` (nested or a buffer) as a flat row-major double array. Caller frees.
+ * A short count means the data was ragged in a way the shape check accepted; refusing is the only safe
+ * answer, since the tail would otherwise be uninitialised memory read as pixels. */
+static double* img_values(const Expr* data, size_t total) {
+    double* v = malloc(sizeof(double) * (total ? total : 1));
+    if (!v) return NULL;
+    if (is_ndarray(data)) {
+        const NDArrayData* a = &data->data.ndarray;
+        size_t n = 1;
+        for (int i = 0; i < a->rank; i++) n *= (size_t)a->dims[i];
+        if (n != total) { free(v); return NULL; }
+        for (size_t i = 0; i < n; i++) {
+            double re = 0.0, imv = 0.0;
+            ndt_get(a->data, i, a->dtype, &re, &imv);
+            if (imv != 0.0) { free(v); return NULL; }
+            v[i] = re;
+        }
+        return v;
+    }
+    size_t at = 0;
+    if (!img_fill_nested(data, v, total, &at) || at != total) { free(v); return NULL; }
+    return v;
+}
 
+/* Nested Lists of a flat buffer, reals or (for the integer types) integers. */
+static Expr* img_nest_typed(const double* buf, const int64_t* dims, int rank, size_t offset,
+                            bool ints) {
+    size_t n = (size_t)dims[0];
+    Expr** kids = malloc(sizeof(Expr*) * n);
+    if (!kids) return NULL;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) kids[i] = NULL;
+    size_t stride = 1;
+    for (int r = 1; r < rank; r++) stride *= (size_t)dims[r];
+    for (size_t i = 0; i < n && ok; i++) {
+        if (rank == 1)
+            kids[i] = ints ? expr_new_integer((int64_t)buf[offset + i])
+                           : expr_new_real(buf[offset + i]);
+        else
+            kids[i] = img_nest_typed(buf, dims + 1, rank - 1, offset + i * stride, ints);
+        if (!kids[i]) ok = false;
+    }
+    if (!ok) {
+        for (size_t i = 0; i < n; i++) expr_free(kids[i]);
+        free(kids);
+        return NULL;
+    }
+    Expr* o = expr_new_function(expr_new_symbol(SYM_List), kids, n);
+    free(kids);
+    return o;
+}
+
+/* Canonical storage for type t from a flat buffer of values, COERCED on the way in.
+ *
+ * `unit` says what the values are: false means they are in the type's own range (the data of
+ * Image[data, type]), true means they are unit-interval brightnesses (an existing image being
+ * converted by Image[image, type]), which are scaled by the type's maximum before coercion.
+ *
+ * The result is a VISIBLE NDArray -- the surface the evaluator's post-gate leaves alone, for the
+ * reason image_build_real documents -- whose dtype follows the type: "Bit", "Byte" and "Bit16" hold
+ * integers, since ImageData reports stored values and a byte 200 must print as `200`, not `200.`.
+ * When a buffer cannot be built (packing disabled) it is the equivalent nested List; a nested image is
+ * still a valid one, merely slower. */
+static Expr* img_typed_storage(double* vals, const int64_t* dims, int rank, ImgType t, bool unit) {
     size_t total = 1;
     for (int i = 0; i < rank; i++) total *= (size_t)dims[i];
+    double mx = img_type_max(t);
+    for (size_t i = 0; i < total; i++)
+        vals[i] = img_coerce((unit && t != IMG_REAL) ? vals[i] * mx : vals[i], t);
 
     NDType dt = (t == IMG_REAL) ? NDT_FLOAT64 : NDT_INT64;
     void* raw = NULL;
     Expr* nd = ndbuild_open(rank, dims, dt, &raw);
-    if (!nd || !raw) { expr_free(nd); return NULL; }
-
-    size_t at = 0;
-    /* A short count means the data was ragged in a way the shape check accepted; refusing is the only
-     * safe answer, since the tail of the buffer would otherwise be uninitialised memory read as
-     * pixels. */
-    if (!img_fill_nested(data, raw, dt, total, &at) || at != total) { expr_free(nd); return NULL; }
-    nd->data.ndarray.present_as = NDA_HEAD_NDARRAY;
-    return nd;
+    if (nd && raw) {
+        if (dt == NDT_INT64) {
+            int64_t* p = (int64_t*)raw;
+            for (size_t i = 0; i < total; i++) p[i] = (int64_t)vals[i];
+        } else {
+            memcpy(raw, vals, sizeof(double) * total);
+        }
+        nd->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+        return nd;
+    }
+    if (nd) expr_free(nd);
+    return img_nest_typed(vals, dims, rank, 0, t != IMG_REAL);
 }
 
-static Expr* builtin_image(Expr* res) {
+/* The shared constructor body for Image (planar) and Image3D (volumetric).
+ *
+ * Image[data] infers the type; Image[data, type] states it and COERCES the data to it -- rounding and
+ * clipping for the integer types, as Mathematica does -- rather than declining, so the only data left
+ * unevaluated is data that is not a rectangular array of real numbers at all. Image[image, type]
+ * converts an existing image, and Image[image] is the image itself. */
+static Expr* img_construct(Expr* res, const char* head, bool vol) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
-
-    /* Already canonical AND already on the NDArray surface: leave it alone, or the evaluator would
-     * never reach a fixed point. Canonical-but-nested falls through to be converted below, which is
-     * what makes two images with equal pixels SameQ regardless of how each was made. The fixed point
-     * still holds: after conversion the data IS an NDArray, so the next pass stops here. */
-    if (argc == 2 && image_info(res, NULL, NULL, NULL, NULL)
-        && is_ndarray(res->data.function.args[0])) return NULL;
-
     Expr* data = res->data.function.args[0];
-    size_t h = 0, w = 0, c = 0; bool all_int = false; double lo = 0.0, hi = 0.0;
-    if (!img_shape(data, &h, &w, &c, &all_int, &lo, &hi)) return NULL;
 
-    ImgType t;
+    ImgType t = IMG_REAL;
+    bool stated = false;
     if (argc == 2) {
-        Expr* ty = res->data.function.args[1];
-        if (!ty || ty->type != EXPR_STRING || !img_type_from_name(ty->data.string, &t))
-            return NULL;
-        /* A stated type must be consistent with the data. Silently reinterpreting 300 as a byte
-         * would corrupt every later scaling, so it declines instead. */
-        if (t == IMG_BIT && !(all_int && lo >= 0.0 && hi <= 1.0)) return NULL;
-        if (t == IMG_BYTE && !(all_int && lo >= 0.0 && hi <= 255.0)) return NULL;
-    } else {
+        if (!img_type_parse(res->data.function.args[1], &t)) return NULL;
+        stated = true;
+    }
+    const Expr* ty = (argc == 2) ? res->data.function.args[1] : NULL;
+    bool canonical_name = ty && strcmp(ty->data.string, img_type_name(t)) == 0;
+
+    /* Already canonical AND already on the NDArray surface with storable values: leave it alone, or the
+     * evaluator would never reach a fixed point. */
+    if (stated && canonical_name && img_buffer_canonical(data, t)) return NULL;
+
+    /* Image[image] / Image[image, type]: a CONVERSION between types. Brightness is what is preserved:
+     * the source is read in unit scale and re-quantised to the target type. */
+    size_t w = 0, h = 0, dp = 1, c = 0; ImgType t0;
+    bool is_img = vol ? image3d_info(data, &w, &h, &dp, &c, &t0)
+                      : image_info(data, &w, &h, &c, &t0);
+    if (is_img) {
+        if (!stated || t == t0) return expr_copy(data);
+        double* buf = NULL;
+        bool ok = vol ? image3d_load(data, &w, &h, &dp, &c, &buf)
+                      : image_load(data, &w, &h, &c, &buf);
+        if (!ok) return NULL;
+        int64_t dims[4]; int rank = 0;
+        if (vol) dims[rank++] = (int64_t)dp;
+        dims[rank++] = (int64_t)h; dims[rank++] = (int64_t)w;
+        if (c > 1) dims[rank++] = (int64_t)c;
+        Expr* two[2];
+        two[0] = img_typed_storage(buf, dims, rank, t, true);
+        free(buf);
+        two[1] = expr_new_string(img_type_name(t));
+        if (!two[0] || !two[1]) { expr_free(two[0]); expr_free(two[1]); return NULL; }
+        return expr_new_function(expr_new_symbol(head), two, 2);
+    }
+
+    bool all_int = false; double lo = 0.0, hi = 0.0;
+    bool shaped = vol ? img3_shape(data, &dp, &h, &w, &c, &all_int, &lo, &hi)
+                      : img_shape(data, &h, &w, &c, &all_int, &lo, &hi);
+    if (!shaped) return NULL;
+    if (!stated) {
         if (all_int && lo >= 0.0 && hi <= 1.0)        t = IMG_BIT;
         else if (all_int && lo >= 0.0 && hi <= 255.0) t = IMG_BYTE;
         else                                          t = IMG_REAL;
     }
 
+    int64_t dims[4]; int rank = 0;
+    if (vol) dims[rank++] = (int64_t)dp;
+    dims[rank++] = (int64_t)h; dims[rank++] = (int64_t)w;
+    if (c > 1) dims[rank++] = (int64_t)c;
+    size_t total = dp * h * w * c;
+    double* vals = img_values(data, total);
+    if (!vals) return NULL;
     Expr* two[2];
-    int64_t cdims[3]; int crank;
-    if (c == 1) { crank = 2; cdims[0] = (int64_t)h; cdims[1] = (int64_t)w; }
-    else        { crank = 3; cdims[0] = (int64_t)h; cdims[1] = (int64_t)w; cdims[2] = (int64_t)c; }
-    /* Canonical storage, so representation never depends on provenance. Falls back to the tree when
-     * the buffer cannot be built -- a nested image is still a valid one, merely slower. */
-    two[0] = img_canonical_data(data, cdims, crank, t);
-    if (!two[0]) {
-        if (argc == 2) return NULL;      /* already canonical; declining keeps the fixed point */
-        two[0] = expr_copy(data);
+    two[0] = img_typed_storage(vals, dims, rank, t, false);
+    free(vals);
+    if (!two[0]) return NULL;
+    /* Nested fallback that changed nothing: this IS the canonical form, so decline to keep the
+     * fixed point. */
+    if (stated && canonical_name && !is_ndarray(two[0]) && expr_eq(two[0], data)) {
+        expr_free(two[0]);
+        return NULL;
     }
     two[1] = expr_new_string(img_type_name(t));
+    if (!two[1]) { expr_free(two[0]); return NULL; }
+    return expr_new_function(expr_new_symbol(head), two, 2);
+}
+
+static Expr* builtin_image(Expr* res) { return img_construct(res, "Image", false); }
+
+/* Build a canonical image of type t from a UNIT-SCALE buffer (see image.h). Shared by both ranks:
+ * `depth` is 0 for a plane. */
+static Expr* img_build_typed(const double* buf, size_t width, size_t height, size_t depth,
+                             size_t channels, ImgType t) {
+    if (!buf || width == 0 || height == 0 || channels == 0) return NULL;
+    int64_t dims[4]; int rank = 0;
+    if (depth) dims[rank++] = (int64_t)depth;
+    dims[rank++] = (int64_t)height; dims[rank++] = (int64_t)width;
+    if (channels > 1) dims[rank++] = (int64_t)channels;
+    size_t n = (depth ? depth : 1) * height * width * channels;
+    double* v = malloc(sizeof(double) * n);
+    if (!v) return NULL;
+    memcpy(v, buf, sizeof(double) * n);
+    Expr* two[2];
+    two[0] = img_typed_storage(v, dims, rank, t, true);
+    free(v);
+    two[1] = expr_new_string(img_type_name(t));
     if (!two[0] || !two[1]) { expr_free(two[0]); expr_free(two[1]); return NULL; }
-    return expr_new_function(expr_new_symbol("Image"), two, 2);
+    return expr_new_function(expr_new_symbol(depth ? "Image3D" : "Image"), two, 2);
+}
+
+Expr* image_build_typed(const double* buf, size_t width, size_t height, size_t channels,
+                        ImgType t) {
+    return img_build_typed(buf, width, height, 0, channels, t);
+}
+
+Expr* image3d_build_typed(const double* buf, size_t width, size_t height, size_t depth,
+                          size_t channels, ImgType t) {
+    if (depth == 0) return NULL;
+    return img_build_typed(buf, width, height, depth, channels, t);
 }
 
 static Expr* builtin_imageq(Expr* res) {
@@ -360,7 +584,8 @@ static Expr* builtin_imagetype(Expr* res) {
 
 /* Scale one stored value into the unit interval according to the image's type. */
 static double img_to_unit(double v, ImgType t) {
-    if (t == IMG_BYTE) return v / 255.0;
+    if (t == IMG_BYTE)  return v / 255.0;
+    if (t == IMG_BIT16) return v / 65535.0;
     return v;                       /* Bit is already 0 or 1; Real is already unit-scaled */
 }
 
@@ -519,8 +744,7 @@ static Expr* builtin_imagedata(Expr* res) {
     if (argc == 2) {
         Expr* ty = res->data.function.args[1];
         ImgType want;
-        if (!ty || ty->type != EXPR_STRING || !img_type_from_name(ty->data.string, &want))
-            return NULL;
+        if (!img_type_parse(ty, &want)) return NULL;
         /* Only the image's OWN type may be requested. Converting between types is a separate
          * operation with its own rounding decisions, and quietly doing it here would hide them. */
         if (want != t) return NULL;
@@ -794,6 +1018,7 @@ bool image3d_info(const Expr* e, size_t* width, size_t* height, size_t* depth,
     if (!img_type_from_name(ty->data.string, &t)) return false;
     size_t dp = 0, h = 0, w = 0, c = 0;
     if (!img3_shape_fast(e->data.function.args[0], &dp, &h, &w, &c)) return false;
+    if (!img_data_storable(e->data.function.args[0], t)) return false;
     if (width) *width = w;
     if (height) *height = h;
     if (depth) *depth = dp;
@@ -929,49 +1154,9 @@ Expr* image3d_build_real(const double* buf, size_t width, size_t height, size_t 
     return expr_new_function(expr_new_symbol("Image3D"), two, 2);
 }
 
-/* Image3D[data] / Image3D[data, type] -- same normalisation and inference as Image. */
-static Expr* builtin_image3d(Expr* res) {
-    size_t argc = res->data.function.arg_count;
-    if (argc != 1 && argc != 2) return NULL;
-    /* Already canonical AND already on the NDArray surface: leave it alone, or the evaluator would
-     * never reach a fixed point. Canonical-but-nested falls through to be converted below, which is
-     * what makes two images with equal pixels SameQ regardless of how each was made. The fixed point
-     * still holds: after conversion the data IS an NDArray, so the next pass stops here. */
-    if (argc == 2 && image3d_info(res, NULL, NULL, NULL, NULL, NULL)
-        && is_ndarray(res->data.function.args[0])) return NULL;
-
-    Expr* data = res->data.function.args[0];
-    size_t dp = 0, h = 0, w = 0, c = 0; bool all_int = false; double lo = 0.0, hi = 0.0;
-    if (!img3_shape(data, &dp, &h, &w, &c, &all_int, &lo, &hi)) return NULL;
-
-    ImgType t;
-    if (argc == 2) {
-        Expr* ty = res->data.function.args[1];
-        if (!ty || ty->type != EXPR_STRING || !img_type_from_name(ty->data.string, &t))
-            return NULL;
-        if (t == IMG_BIT && !(all_int && lo >= 0.0 && hi <= 1.0)) return NULL;
-        if (t == IMG_BYTE && !(all_int && lo >= 0.0 && hi <= 255.0)) return NULL;
-    } else {
-        if (all_int && lo >= 0.0 && hi <= 1.0)        t = IMG_BIT;
-        else if (all_int && lo >= 0.0 && hi <= 255.0) t = IMG_BYTE;
-        else                                          t = IMG_REAL;
-    }
-    Expr* two[2];
-    int64_t cdims[4]; int crank;
-    if (c == 1) { crank = 3; cdims[0] = (int64_t)dp; cdims[1] = (int64_t)h; cdims[2] = (int64_t)w; }
-    else        { crank = 4; cdims[0] = (int64_t)dp; cdims[1] = (int64_t)h; cdims[2] = (int64_t)w;
-                  cdims[3] = (int64_t)c; }
-    /* Canonical storage, so representation never depends on provenance. Falls back to the tree when
-     * the buffer cannot be built -- a nested image is still a valid one, merely slower. */
-    two[0] = img_canonical_data(data, cdims, crank, t);
-    if (!two[0]) {
-        if (argc == 2) return NULL;      /* already canonical; declining keeps the fixed point */
-        two[0] = expr_copy(data);
-    }
-    two[1] = expr_new_string(img_type_name(t));
-    if (!two[0] || !two[1]) { expr_free(two[0]); expr_free(two[1]); return NULL; }
-    return expr_new_function(expr_new_symbol("Image3D"), two, 2);
-}
+/* Image3D[data] / Image3D[data, type] / Image3D[volume, type] -- same normalisation, inference,
+ * coercion and conversion as Image. */
+static Expr* builtin_image3d(Expr* res) { return img_construct(res, "Image3D", true); }
 
 static Expr* builtin_image3dq(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
@@ -1018,8 +1203,13 @@ void image_init(void) {
         "rows running down the image -- note that ImageDimensions reports {width, height}, "
         "transposed relative to this. The type is inferred from the values: all-integer data "
         "in {0, 1} is \"Bit\", all-integer in 0..255 is \"Byte\", anything else is \"Real\". "
-        "Image[data, type] states the type instead, and declines if the data does not fit it. "
-        "Ragged data declines rather than being padded.");
+        "Image[data, type] states the type instead -- \"Bit\" (0 or 1), \"Byte\" (0..255), "
+        "\"Bit16\" (0..65535) or \"Real\" (\"Real32\" and \"Real64\" are accepted as synonyms) -- "
+        "and, as in Mathematica, COERCES the data to it: an integer type rounds each value to the "
+        "nearest integer and clips it to the type's range, so Image[{{0, 300}}, \"Byte\"] stores "
+        "{0, 255}; \"Real\" keeps any real value. Image[image, type] converts an image between "
+        "types, preserving brightness. Data that is not a rectangular array of real numbers (ragged, "
+        "non-numeric or complex) is left unevaluated.");
 
     symtab_add_builtin("ImageQ", builtin_imageq);
     symtab_get_def("ImageQ")->attributes |= ATTR_PROTECTED;
@@ -1045,7 +1235,7 @@ void image_init(void) {
     symtab_add_builtin("ImageType", builtin_imagetype);
     symtab_get_def("ImageType")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageType",
-        "ImageType[image] gives the pixel type as \"Bit\", \"Byte\" or \"Real\". The type "
+        "ImageType[image] gives the pixel type as \"Bit\", \"Byte\", \"Bit16\" or \"Real\". The type "
         "fixes the range of a stored value, which is what makes ImageData's scaling to the "
         "unit interval well defined.");
 

@@ -30,7 +30,8 @@
   import type { FocusLayout } from './canvas';
   import { activeCell, retypeActiveCell, activeHandle } from './active';
   import { splitCell, mergeCellDown, duplicateCell, deleteCell,
-           indentCode, outdentCode, commentCode, duplicateLine } from './cellCommands';
+           indentCode, outdentCode, commentCode, duplicateLine,
+           convertCell } from './cellCommands';
   import { darkMode } from './theme';
   import { symbolAtSelection } from './refpages';
   import { kernelStatus } from './notebook';
@@ -181,9 +182,9 @@
     const pane = $activeActions;
     if (!pane) return;
     if (activeCellObj) {
-      if (activeCellObj.type === 'ref') return;
-      pane.store.setCellType(activeCellObj.id, type);
-      retypeActiveCell(type);
+      /* convertCell refuses a reference-page cell and is the same call the
+         native Cell > Convert to ... items make. */
+      if (convertCell(pane.store, activeCellObj.id, type)) retypeActiveCell(type);
     } else {
       /* Nothing is active, so the control reads "Insert Cell…" and this INSERTS
          rather than retypes -- which is what the label promises. */

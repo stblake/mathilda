@@ -23,6 +23,7 @@ bool fm_run_newton(Expr* f, Expr** vars, size_t n,
     double* H = (double*)malloc(sizeof(double) * n * n);
     double* Hcopy = (double*)malloc(sizeof(double) * n * n);
     double* neg_g = (double*)malloc(sizeof(double) * n);
+    bool* act = boxes ? (bool*)calloc(n ? n : 1, sizeof(bool)) : NULL;
     bool ok = false;
     bool augmented = (mu > 0.0 && gens && ngens > 0);
     if (boxes) fm_project_box(x, n, boxes);
@@ -37,7 +38,8 @@ bool fm_run_newton(Expr* f, Expr** vars, size_t n,
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
 
-    for (int64_t k = 0; k < opts->max_iter; k++) {
+    int64_t k;
+    for (k = 0; k < opts->max_iter; k++) {
         bool gok;
         if (augmented) {
             gok = fm_eval_aug_gradient(f, g_exprs, gens, ngens, mu,
@@ -50,15 +52,25 @@ bool fm_run_newton(Expr* f, Expr** vars, size_t n,
             fm_warn(g_fm_name, "nlnum", "gradient failed during Newton");
             goto cleanup;
         }
+        /* Binding box bounds are held fixed (d_A = 0) and excluded from the
+         * gradient test -- the same projected active set as fm_run_bfgs. */
+        size_t nact = act ? fm_box_binding_mask(x, g, n, boxes, act) : 0;
         double gnorm = 0.0;
-        for (size_t i = 0; i < n; i++) gnorm += g[i] * g[i];
+        for (size_t i = 0; i < n; i++) if (!nact || !act[i]) gnorm += g[i] * g[i];
         gnorm = sqrt(gnorm);
         if (gnorm < tol_acc) { ok = true; break; }
 
         bool Hok = H_exprs && fm_eval_hessian(H_exprs, binds, x, n, opts, H);
+        if (Hok && nact) {
+            /* Reduced Newton system: decouple each held coordinate. */
+            for (size_t i = 0; i < n; i++) if (act[i]) {
+                for (size_t j = 0; j < n; j++) { H[i*n + j] = 0.0; H[j*n + i] = 0.0; }
+                H[i*n + i] = 1.0;
+            }
+        }
         if (!Hok) {
             /* Fall back to BFGS-style steepest. */
-            for (size_t i = 0; i < n; i++) d[i] = -g[i];
+            for (size_t i = 0; i < n; i++) d[i] = (nact && act[i]) ? 0.0 : -g[i];
         } else {
             /* Try Cholesky with increasing τ. */
             double tau = 0.0;
@@ -70,15 +82,15 @@ bool fm_run_newton(Expr* f, Expr** vars, size_t n,
             }
             if (!factored) {
                 fm_warn(g_fm_name, "dsing", "Hessian not positive definite");
-                for (size_t i = 0; i < n; i++) d[i] = -g[i];
+                for (size_t i = 0; i < n; i++) d[i] = (nact && act[i]) ? 0.0 : -g[i];
             } else {
-                for (size_t i = 0; i < n; i++) neg_g[i] = -g[i];
+                for (size_t i = 0; i < n; i++) neg_g[i] = (nact && act[i]) ? 0.0 : -g[i];
                 fm_chol_solve(Hcopy, n, neg_g, d);
             }
         }
         double g_dot_d = 0.0;
         for (size_t i = 0; i < n; i++) g_dot_d += g[i] * d[i];
-        if (g_dot_d >= 0.0) { for (size_t i = 0; i < n; i++) d[i] = -g[i];
+        if (g_dot_d >= 0.0) { for (size_t i = 0; i < n; i++) d[i] = (nact && act[i]) ? 0.0 : -g[i];
                               g_dot_d = 0.0;
                               for (size_t i = 0; i < n; i++) g_dot_d += g[i]*d[i]; }
         double alpha, fx_new;
@@ -102,9 +114,11 @@ bool fm_run_newton(Expr* f, Expr** vars, size_t n,
         fx = fx_new;
         if (max_step < tol_prec * (max_x + 1e-300)) { ok = true; break; }
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (k >= opts->max_iter && !augmented) fm_warn_maxit(opts);
     *fx_out = fx;
     ok = true;
 cleanup:
-    free(g); free(d); free(x_new); free(H); free(Hcopy); free(neg_g);
+    free(g); free(d); free(x_new); free(H); free(Hcopy); free(neg_g); free(act);
     return ok;
 }

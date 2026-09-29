@@ -72,7 +72,11 @@ Out[4]= 1/4*Pi
 ## Exponential and Logarithmic Functions
 - `Exp[z]`: Natural exponential. Canonicalizes `Exp[I*q*Pi]` (rational `q`) to `(-1)^q`, matching Mathematica — e.g. `Exp[I Pi/5] -> (-1)^(1/5)`, `Exp[I Pi] -> -1`, `Exp[I Pi/2] -> I`. `Power[-1, q]` reduces the half/integer cases itself and leaves irreducible roots intact instead of over-eagerly expanding into trig radicals.
 - `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For an exact pure-imaginary argument `Complex[0, b]` with `b` a real numeric, rewrites `Log[b I]` as `Log[Abs[b]] + Sign[b] (I Pi)/2` on the principal branch (e.g. `Log[I] = (I Pi)/2`, `Log[-3 I] = -((I Pi)/2) + Log[3]`); inexact imaginaries fall through to the numeric path. For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
-- `Log[b, z]`: Logarithm to base `b`.
+- `Log[b, z]`: Logarithm to base `b`. When `b` and `z` are exact positive
+  rationals that are integer powers of one common rational, the result is the
+  exact rational ratio of those powers: `Log[2, 8] = 3`, `Log[4, 8] = 3/2`,
+  `Log[8, 2] = 1/3`, `Log[10, 1/100] = -2`, `Log[1/2, 8] = -3`,
+  `Log[10, 10^30] = 30` (BigInts included). Otherwise `Log[z]/Log[b]`.
 
 **Zero arguments.** `Log` distinguishes exact zero (a directed limit) from
 inexact zero (ambiguous direction in floating point), matching Mathematica:
@@ -139,6 +143,49 @@ Out[7]= 1/3
 
 In[8]:= Log[2, 2^(1/3)]
 Out[8]= 1/3
+```
+
+## Log10 / Log2
+
+- `Log10[z]` gives the base-10 logarithm of `z`, `Log[10, z]`.
+- `Log2[z]` gives the base-2 logarithm of `z`, `Log[2, z]`.
+
+**Features**:
+- `Listable`, `NumericFunction`, `Protected`, matching Mathematica.
+- Defined as `Log[10, z]` / `Log[2, z]`, so exact powers of the base are
+  exact (`Log10[1000] = 3`, `Log10[1/100] = -2`, `Log2[1/8] = -3`) and a
+  symbolic or non-power argument gives Mathematica's `Log[z]/Log[10]` form.
+  Zero, the negative axis, complex and arbitrary-precision arguments follow
+  `Log[b, z]` (`Log10[0] = -Infinity`, `Log10[0.] = Indeterminate`,
+  `Log10[-1.] = 0. + 1.36438 I`).
+- A positive machine real is evaluated with libm `log10` / `log2` rather than
+  `log(z)/log(b)`, so an exact power stays exact: `Log10[1000.]` is `3.`, not
+  `2.9999999999999996`.
+- **Fast paths.** Each has an escaping NDArray kernel (libm `log10`/`log2` on
+  the positive axis, `clog(z)/Log[b]` elsewhere, promoting to complex only
+  when an element leaves the real axis), so `Log10` threads over a visible
+  `NDArray[...]` and a packed real array stays packed. Both lower in
+  `Compile[]` (hence auto-compile) at scalar and rank-1 array shape; the
+  scalar lowering bails to the interpreter off the positive axis.
+
+```mathematica
+In[1]:= Log10[100]
+Out[1]= 2
+
+In[2]:= Log10[2.]
+Out[2]= 0.30103
+
+In[3]:= Log10[x]
+Out[3]= Log[x]/Log[10]
+
+In[4]:= Log10[1/1000]
+Out[4]= -3
+
+In[5]:= Log2[1024]
+Out[5]= 10
+
+In[6]:= Log2[{1., 2., 8.}]
+Out[6]= {0.0, 1.0, 3.0}
 ```
 
 ## Trig / inverse-trig and hyperbolic / inverse-hyperbolic cancellation

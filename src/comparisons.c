@@ -320,6 +320,57 @@ static int assoc_equal_verdict(Expr* a, Expr* b) {
     return verdict;
 }
 
+/* Equal on one pair (a, b), borrowing both operands: builds a transient
+ * Equal[a, b] that shares a and b, runs builtin_equal on it, and detaches them
+ * again before freeing the wrapper. ASSOC_EQ_TRUE / _FALSE / _UNKNOWN. */
+static int equal_pair_verdict(Expr* a, Expr* b) {
+    Expr* pair[2] = { a, b };
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Equal), pair, 2);
+    Expr* r = builtin_equal(call);
+    call->data.function.args[0] = NULL;
+    call->data.function.args[1] = NULL;
+    expr_free(call);
+    int v = ASSOC_EQ_UNKNOWN;
+    if (r && r->type == EXPR_SYMBOL) {
+        if (r->data.symbol.name == SYM_True) v = ASSOC_EQ_TRUE;
+        else if (r->data.symbol.name == SYM_False) v = ASSOC_EQ_FALSE;
+    }
+    if (r) expr_free(r);
+    return v;
+}
+
+static bool is_list_head(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* Equality of two lists, as Mathematica decides it: element by element with
+ * Equal itself, so the machine-real tolerance and every other scalar rule
+ * apply at each position, recursively through nested lists.
+ *
+ *     {0.1 + 0.2, 1.} == {0.3, 1.}     True   (tolerance, elementwise)
+ *     {1, 2} == {1, 2, 3}              False  (lengths differ)
+ *     {x, 1} == {y, 2}                 False  (one position decidably False)
+ *     {x} == {y}                       stays unevaluated
+ *
+ * Returns ASSOC_EQ_NA unless both a and b are Lists (a structurally identical
+ * pair never gets here: the caller's expr_eq shortcut answers it first). */
+static int list_equal_verdict(Expr* a, Expr* b) {
+    if (!is_list_head(a) || !is_list_head(b)) return ASSOC_EQ_NA;
+    size_t n = a->data.function.arg_count;
+    if (n != b->data.function.arg_count) return ASSOC_EQ_FALSE;
+    int verdict = ASSOC_EQ_TRUE;
+    for (size_t i = 0; i < n; i++) {
+        Expr* ea = a->data.function.args[i];
+        Expr* eb = b->data.function.args[i];
+        if (expr_eq(ea, eb)) continue;
+        int v = equal_pair_verdict(ea, eb);
+        if (v == ASSOC_EQ_FALSE) return ASSOC_EQ_FALSE;
+        if (v != ASSOC_EQ_TRUE) verdict = ASSOC_EQ_UNKNOWN;
+    }
+    return verdict;
+}
+
 /*
  * builtin_equal: Implements Equal[lhs, rhs, ...].
  * Equal returns True if its arguments are identical (SameQ) or numerically equal (2 == 2.0).
@@ -351,7 +402,8 @@ Expr* builtin_equal(Expr* res) {
         int av;
         if (expr_eq(a, b)) {
             equal = true;
-        } else if ((av = assoc_equal_verdict(a, b)) != ASSOC_EQ_NA) {
+        } else if ((av = assoc_equal_verdict(a, b)) != ASSOC_EQ_NA
+                   || (av = list_equal_verdict(a, b)) != ASSOC_EQ_NA) {
             if (av == ASSOC_EQ_FALSE) return expr_new_symbol(SYM_False);
             if (av == ASSOC_EQ_TRUE) equal = true;
             else all_equal = false;
@@ -438,9 +490,13 @@ Expr* builtin_unequal(Expr* res) {
             } else if (expr_eq(a, b)) {
                 // Structural identity
                 equal = true;
-            } else if (assoc_is_wellformed(a) && assoc_is_wellformed(b)) {
-                /* Entry-wise, as Equal decides it (assoc_equal_verdict). */
-                int av = assoc_equal_verdict(a, b);
+            } else if ((assoc_is_wellformed(a) && assoc_is_wellformed(b))
+                       || (is_list_head(a) && is_list_head(b))) {
+                /* Entry-/element-wise, as Equal decides it (assoc_equal_verdict,
+                 * list_equal_verdict): {1, 2} != {1, 3} is True and
+                 * {0.1 + 0.2} != {0.3} False. */
+                int av = is_list_head(a) ? list_equal_verdict(a, b)
+                                         : assoc_equal_verdict(a, b);
                 if (av == ASSOC_EQ_TRUE) equal = true;
                 else if (av == ASSOC_EQ_FALSE) definitely_unequal = true;
             } else {
@@ -522,26 +578,41 @@ Expr* builtin_greaterequal(Expr* res) {
     return evaluate_inequality(res, 1, 0);
 }
 
-/* Map an operator-symbol head (Less/LessEqual/Greater/GreaterEqual/Equal)
+/* Map an operator-symbol head (Less/LessEqual/Greater/GreaterEqual/Equal/Unequal)
  * to a pairwise decision. Returns:
  *    1  if `a OP b` is definitely True,
  *    0  if it is definitely False,
  *   -1  if the comparison is not decidable (operand non-numeric or the
  *       op is not a recognised chain head).
- * Equal/Unequal share a small fast path so that, e.g., x == x is True
- * even when x has no numeric value. */
+ * Equal/Unequal defer to their builtins, so x == x is True even when x has
+ * no numeric value and {0.1 + 0.2} == {0.3} applies the list tolerance. */
+/* Run the Equal / Unequal builtin on the pair (a, b) without consuming
+ * either: 1 for True, 0 for False, -1 when it stays unevaluated. Routing a
+ * chained `==` / `!=` through the builtin keeps a chain's pairwise verdict
+ * identical to the binary head's -- the list tolerance, association rules and
+ * exact zero test included -- instead of a weaker private copy of it. */
+static int decide_via_builtin(Expr* (*fn)(Expr*), const char* head, Expr* a, Expr* b) {
+    Expr* pair[2] = { expr_copy(a), expr_copy(b) };
+    Expr* call = expr_new_function(expr_new_symbol(head), pair, 2);
+    Expr* r = fn(call);
+    expr_free(call);
+    int d = -1;
+    if (r && r->type == EXPR_SYMBOL) {
+        if (r->data.symbol.name == SYM_True) d = 1;
+        else if (r->data.symbol.name == SYM_False) d = 0;
+    }
+    if (r) expr_free(r);
+    return d;
+}
+
 static int decide_pair(const char* op, Expr* a, Expr* b) {
-    /* IEEE unordered: all five chain heads are False against a NaN operand. */
+    if (op == SYM_Equal)   return decide_via_builtin(builtin_equal, SYM_Equal, a, b);
+    if (op == SYM_Unequal) return decide_via_builtin(builtin_unequal, SYM_Unequal, a, b);
+    /* IEEE unordered: every ordering head is False against a NaN operand. */
     if (is_nan_operand(a) || is_nan_operand(b)) {
-        if (op == SYM_Equal || op == SYM_Less || op == SYM_LessEqual
+        if (op == SYM_Less || op == SYM_LessEqual
          || op == SYM_Greater || op == SYM_GreaterEqual) return 0;
         return -1;
-    }
-    if (op == SYM_Equal) {
-        if (expr_eq(a, b)) return 1;
-        bool can; int cmp = compare_numeric(a, b, &can);
-        if (!can) return -1;
-        return cmp == 0 ? 1 : 0;
     }
     if (op == SYM_Less || op == SYM_LessEqual
      || op == SYM_Greater || op == SYM_GreaterEqual) {
@@ -575,14 +646,14 @@ Expr* builtin_inequality(Expr* res) {
     if ((n & 1u) == 0) return NULL;              /* must be 2k+1 */
 
     /* Validate operator slots upfront — every odd index must be one of the
-     * five chain heads. */
+     * five chain heads or Unequal (`a < b != c`). */
     for (size_t i = 1; i < n; i += 2) {
         Expr* op = res->data.function.args[i];
         if (op->type != EXPR_SYMBOL) return NULL;
         const char* s = op->data.symbol.name;
         if (s != SYM_Less && s != SYM_LessEqual
          && s != SYM_Greater && s != SYM_GreaterEqual
-         && s != SYM_Equal) return NULL;
+         && s != SYM_Equal && s != SYM_Unequal) return NULL;
     }
 
     /* Decide each pair; any False short-circuits the whole chain. We also

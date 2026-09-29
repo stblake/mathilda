@@ -24,6 +24,7 @@
  */
 
 #include "series.h"
+#include "../sparsearray.h"
 #include "expr.h"
 #include "symtab.h"
 #include "attr.h"
@@ -3237,6 +3238,10 @@ static Expr* normal_recurse(Expr* e) {
         /* Malformed SeriesData: fall through to a structural copy. */
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (is_sparse_array(e)) {
+        Expr* dense = sparse_array_to_dense(e);
+        if (dense) return dense;
+    }
 
     Expr* head = normal_recurse(e->data.function.head);
     size_t n = e->data.function.arg_count;
@@ -3252,6 +3257,13 @@ static Expr* normal_recurse(Expr* e) {
 Expr* builtin_normal(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+
+    /* Normal[SparseArray[...]] is the dense nested List it denotes. */
+    if (is_sparse_array(arg)) {
+        Expr* dense = sparse_array_to_dense(arg);
+        if (dense) return dense;
+        return NULL;                  /* unsupported spec: leave it alone */
+    }
 
     /* Normal[ndarray] converts an NDArray back to its equivalent nested List. */
     if (arg->type == EXPR_NDARRAY) {

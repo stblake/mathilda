@@ -160,4 +160,62 @@ void emit_scaling_meta(ScaleFnType sf_x, ScaleFnType sf_y,
  * Returns NULL if no legend should be drawn (legends is NULL or None). */
 Expr* build_legend_meta(Expr* legends, Expr** bodies, size_t nfun, Expr* single_color);
 
+/* ---------------------------------------------------------------------- */
+/* Style directives shared by every 2D back end (the Raylib renderer, which
+ * draws the on-screen window and the PNG/JPEG export, and the headless PDF
+ * writer), so the two resolve Thickness/PointSize/Dashing identically.
+ *
+ * Sizes follow Mathematica: Thickness[r] and PointSize[d] are fractions of
+ * the plot width (d is the point's DIAMETER); AbsoluteThickness[p],
+ * AbsolutePointSize[p] and AbsoluteDashing[{...}] are printer's points. The
+ * named sizes Tiny/Small/Medium/Large (as in Thick = Thickness[Large] and
+ * Dashed = Dashing[{Small, Small}]) resolve to fixed point sizes. */
+
+/* Coerce a numeric Expr to a double: the literal forms of
+ * expr_to_real_double first (no evaluation), then N[] for an exact
+ * symbolic-but-numeric value (Pi/2, Sqrt[2], 1/3 with bigint parts, ...).
+ * Returns false for anything that is not a finite real. */
+bool gfx_coerce_double(const Expr* e, double* out);
+
+typedef enum { GFX_SIZE_THICKNESS, GFX_SIZE_POINT, GFX_SIZE_DASH } GfxSizeKind;
+
+/* Tiny/Small/Medium/Large -> printer's points for the given kind. */
+bool gfx_named_size(const Expr* e, GfxSizeKind kind, double* pts);
+
+/* Line width in points for Thickness[..] / AbsoluteThickness[..] (plot_w is
+ * the plot width in points, or pixels for a raster). False if `d` is not
+ * one of those two directives or its argument is unreadable. */
+bool gfx_thickness_pts(const Expr* d, double plot_w, double* pts);
+
+/* Point RADIUS in points for PointSize[..] / AbsolutePointSize[..]. */
+bool gfx_point_radius_pts(const Expr* d, double plot_w, double* pts);
+
+/* Dash pattern in points for Dashing[..] / AbsoluteDashing[..]: writes up to
+ * `max` alternating on/off lengths to out[] and sets *n (0 = solid, as in
+ * Dashing[{}] or Dashing[None]). Returns false if `d` is not a dashing
+ * directive. */
+#define GFX_MAX_DASH 8
+bool gfx_dash_pts(const Expr* d, double plot_w, double* out, int max, int* n);
+
+/* PlotStyle resolution for curve/dataset i of a plot. `style` is the
+ * evaluated PlotStyle value (NULL, None or Automatic mean "unstyled"); a
+ * List of styles is cycled, Mathematica's rule, so for a single curve
+ * PlotStyle -> {Red, Thick} uses Red alone. `base` (borrowed) is the colour
+ * the curve would otherwise get (the palette entry). Returns an owned
+ * directive: a plain colour when the style is just a colour, else
+ * Directive[base?, s...] (base is omitted when the style names its own
+ * colour). *scoped is set when that directive carries non-colour state
+ * (dashing, thickness, point size, opacity) which must be confined to the
+ * curve with its own List scope. */
+Expr* plot_curve_style(const Expr* style, size_t i, const Expr* base, bool* scoped);
+
+/* The colour a curve style draws in (the first colour inside a Directive),
+ * else a copy of `base`. Owned. Used for legend swatches. */
+Expr* plot_style_color(const Expr* directive, const Expr* base);
+
+/* build_legend_meta with PlotStyle-aware swatch colours: entry i takes the
+ * colour of plot_curve_style(style, i, base_i). style may be NULL. */
+Expr* build_legend_meta_styled(Expr* legends, Expr** bodies, size_t nfun,
+                               Expr* single_color, const Expr* style);
+
 #endif /* MATHILDA_GRAPHICS_PLOT_COMMON_H */

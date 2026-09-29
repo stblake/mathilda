@@ -1374,14 +1374,31 @@ objective value before returning.
 ### Forms
 
 - `FindMinimum[f, {x, x0}]` -- 1D from a single start (default Brent).
-- `FindMinimum[f, {x, x0, x1}]` -- bracket Brent on `[x0, x1]`.
+- `FindMinimum[f, {x, x0, x1}]` -- derivative-free Brent using `x0` and `x1`
+  as the **first two values** of `x` (Mathematica's two-start form), not as
+  bounds: if an interior golden-section point of `[x0, x1]` lies below both
+  ends the interval is the initial bracket, otherwise the bracket is expanded
+  downhill from the lower end and the search may leave the interval
+  (`FindMinimum[x Cos[x], {x, 5, 8}]` returns `{-9.47729, {x -> 9.52933}}`).
 - `FindMinimum[f, {x, xstart, xmin, xmax}]` -- bracket Brent on `[xmin, xmax]`.
 - `FindMinimum[f, {{x, x0}, {y, y0}, ...}]` -- n-D from a user start.
 - `FindMinimum[f, {x, y, ...}]` -- n-D auto-start at 1 for each variable
   (matches Mathematica; avoids the common saddle-at-origin trap for
   oscillatory objectives like `Sin[x] Sin[2 y]` whose gradient vanishes
   at the origin).
-- `FindMinimum[{f, cons}, vars]` -- constrained minimisation.
+- `FindMinimum[{f, cons}, vars]` -- constrained minimisation; as with
+  `NMinimize`, `{f, c1, c2, ...}` treats every trailing element as a
+  constraint (implicitly `And`-ed).
+
+Although `FindMinimum` is `HoldAll`, only the **variables** stay held: the
+starting values, the bounds of `{x, xstart, xmin, xmax}`, and the values of
+`Method`, `WorkingPrecision`, `MaxIterations`, `AccuracyGoal` and
+`PrecisionGoal` are evaluated, as in Mathematica. So
+`Table[FindMinimum[x Cos[x], {x, s}], {s, {2, 7}}]` starts from `x = 2` and
+`x = 7` (a symbol in the second slot that carries a value, or a numeric
+constant such as `Pi`, is a starting value, never a second variable), and a
+symbol bound to a whole spec list (`vars = {{x, 1}, {y, 2}}`) is resolved.
+`Gradient` and the monitors stay held.
 - `FindMaximum[...]` -- same forms; maximises `f` (equivalent to negating
   the objective and the f-value of the result).
 
@@ -1397,7 +1414,7 @@ optimising variable assignments.
 |-----------------------|----------------|
 | n = 1                 | Brent          |
 | n >= 2                | QuasiNewton (BFGS) |
-| `{x, x0, x1}` (1D)    | Brent (bracket) |
+| `{x, x0, x1}` (1D)    | Brent (two-start bracket search) |
 
 Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
 | "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead" | "TNC" | "SLSQP"
@@ -1405,7 +1422,9 @@ Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
 | "TrustKrylov"`.  Brent
 is golden-section search with parabolic interpolation (derivative-free),
 QuasiNewton is BFGS with Armijo backtracking line search, ConjugateGradient
-is Polak-Ribière+ with restart, Newton uses the symbolic Hessian (via
+is Polak-Ribière+ with a strong-Wolfe line search (`c2 = 0.1`, seeded by the
+Nocedal-Wright initial step) and Powell's orthogonality restart (the
+penalty-wrapped and box-bounded solves keep the projected Armijo search), Newton uses the symbolic Hessian (via
 repeated `D[]`) with modified-Cholesky safeguarding, TNC is a Hessian-free
 truncated Newton (see below), and Powell and NelderMead are the two
 derivative-free multivariate methods (see below).  The gradient methods
@@ -1436,7 +1455,20 @@ parabolic-interpolation line search as `"Brent"`, restricted to
 `phi(t) = f(p + t d)`) along each of `n` directions, then replaces the
 direction of largest decrease with the averaged cycle step when Powell's
 parabolic test accepts it — building up conjugate directions so that
-successive cycles converge super-linearly on smooth quadratics.  The
+successive cycles converge super-linearly on smooth quadratics.  When a cycle
+makes no progress the direction set is replaced by a deterministic
+pseudo-random **rotated orthonormal basis** and one more cycle is run
+(the restart Brent's PRAXIS uses); only a cycle that also fails in the new
+basis is accepted as convergence.  On a smooth objective that costs one
+confirming sweep; on a **non-smooth** one it is what lets the method leave a
+kink, where every axis-aligned direction is flat or uphill:
+`FindMinimum[Abs[x-1] + Abs[y+2] + Abs[x-y], {{x,3},{y,3}}, Method -> "Powell"]`
+now reaches the minimum `3` instead of stopping at the start (`7`), and
+`Max[Abs[x], Abs[y]] + 0.3 Abs[x-y] + 0.3` from `(1, 1)` reaches `0.3`.
+Direction-set methods carry no convergence guarantee on non-smooth problems
+(a kink whose descent cone is narrower than every ray of several rotated bases
+can still stop it), so treat the result as a good local estimate, and
+`"COBYLA"` as the alternative when constraints are involved.  The
 replace-direction test, direction cycling, and extrapolated point match
 SciPy's `minimize(method="Powell")`, so the two agree on the minimiser to
 rounding.  **Box bounds** are honoured by clamping each line search to the
@@ -1538,16 +1570,30 @@ holding that minimum violation.  Here the linear models are recovered by
 central (not forward) differences are what let it handle a **kink**, where the
 two-sided slope of `|t|` at `t=0` reads `0` (correct) rather than a spurious
 `±1` -- and the two-stage LP is solved by the same dual active-set QP as
-`"SLSQP"` (`fm_slsqp_activeset`) with an inf-norm trust box, reaching the same
-constrained optimum as reference COBYLA.  Step acceptance uses Powell's
+`"SLSQP"` (`fm_slsqp_activeset`).  Stage 2 carries the regulariser
+`(sigma/2)||d||^2` with `sigma = ||a_f|| / Delta`, re-scaled until the step
+reaches the radius, which makes the unconstrained step the **Euclidean**
+trust-region step `-Delta a_f/||a_f||` of Powell's method (a pure LP put every
+step on a corner of the inf-norm box -- sign descent -- and zigzagged across
+curved valleys).  As in Powell's later codes and PRIMA, two radii are kept:
+the **resolution** `rho` (difference spacing and step floor), which only
+decreases toward `rhoend`, and the **trust radius** `Delta >= rho`, updated from
+the ratio of actual to predicted merit reduction (`0.1 / 0.7` thresholds,
+`x0.5 / x2` factors); `rho` is refined only when a step fails with
+`Delta = rho`.  (A single radius halved on every rejected trial used to cut the
+step to `2e-3` within 15 iterations on Rosenbrock, which then stopped at
+`f = 2.02` after 500 iterations.)  It reaches the same constrained optimum as
+reference COBYLA.  Step acceptance uses Powell's
 L-infinity exact-penalty merit `Phi = f + mu*max_i max(0, c_i)` with his PARMU
 update.  **Equalities** `h==0` are handled by splitting into `h<=0` and `-h<=0`
 (so this is strictly more capable than SciPy's inequality-only COBYLA); **box
 bounds** enter as ordinary linear inequalities.  It converges to `~rhoend =
 10^-PrecisionGoal` accuracy (a trust radius, not a gradient test), and its
-**linear** models cannot navigate a strongly curved valley to machine precision
-(Rosenbrock stalls near `f ~ 10^-3`) -- that limitation is exactly what
-`"COBYQA"` addresses with quadratic models.  The objective and constraints ride
+**linear** models make it a first-order method: on a strongly curved valley it
+is slow (Rosenbrock from `(-1.2, 1)`: `f = 0.077` at the default 500
+iterations, `1e-8` after 10000) and reports `FindMinimum::cvmit` when the
+iteration budget runs out -- that limitation is exactly what `"COBYQA"`
+addresses with quadratic models.  The objective and constraints ride
 the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
 `QuasiNewton`; `n == 1` with no general constraints delegates to `"Brent"`.
 Matches SciPy's `minimize(method="COBYLA")` on the optimiser (experiment
@@ -1669,7 +1715,7 @@ constraint tolerance (1e-12).
 |---------------------|----------------|--------|
 | `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, `"LBFGSB"`, `"Powell"` (alias `"PrincipalAxis"`), `"NelderMead"`, `"TNC"` (alias `"TruncatedNewton"`), or `Automatic`. |
 | `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints at MPFR fall back to machine precision similarly. |
-| `MaxIterations`     | `500`          | Iteration limit on the inner loop. |
+| `MaxIterations`     | `500`          | Iteration limit on the inner loop. Every local method emits `FindMinimum::cvmit` ("Failed to converge to the requested accuracy or precision within n iterations.") when its main loop reaches the limit before meeting the goals, and still returns the best iterate; the message routes through the funnel, so `Quiet` silences it and `Check` sees it.  Inner solves of the penalty wrapper and of `NMinimize`'s polish stay silent. |
 | `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `\|grad\| < 10^{-n}`. `Infinity` disables. `Automatic` resolves to `WorkingPrecision/2`. |
 | `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `\|step\| < \|x\| * 10^{-n}`. |
 | `Gradient`          | `Automatic`    | Explicit `{dfdx1, ..., dfdxN}` overrides the symbolic gradient. |
@@ -1783,11 +1829,14 @@ then polishes the best point with the exact local solver.
 Variables may be given bare (`x`), as a starting interval (`{x, xmin, xmax}`,
 used to seed the search region), with an integer domain
 (`Element[x, Integers]`, in the variable list or the constraints), or as
-**indexed variables** `x[i]`.  Because both arguments are held (`HoldAll`), a
-generator that produces the variable list — `Table[x[i], {i, 1, n}]`,
-`Array[x, n]` — is evaluated once (with the variable head localized) so it
-expands to the concrete list `{x[1], ..., x[n]}`; a held `Table[...]`
-constraint list is expanded the same way and treated as an implicit `And`.
+**indexed variables** `x[i]`.  Because the arguments are evaluated normally
+(`NMinimize` is not `HoldAll`), a generator that produces the variable list —
+`Table[x[i], {i, 1, n}]`, `Array[x, n]` — has already expanded to the concrete
+list `{x[1], ..., x[n]}` when the driver runs (an unevaluated generator that
+still reaches it is expanded once with the variable head localized); a
+`Table[...]` constraint list is treated as an implicit `And`.  For the same
+reason starting intervals and bounds written with iterator variables
+(`Table[NMinimize[{(x-a)^2, -5 <= x <= 5}, x], {a, {1, 2}}]`) evaluate.
 Indexed variables are internally rewritten to fresh scalar symbols for the
 search and mapped back in the result, so `Rule`s come back keyed by the
 original `x[i]`.  This makes the standard `n`-dimensional benchmarks (e.g. the
@@ -1795,11 +1844,13 @@ Rosenbrock valley `Sum[100 (x[i+1]-x[i]^2)^2 + (1-x[i])^2, {i, 1, n-1}]` over
 `Table[x[i], {i, 1, n}]`) express directly.
 
 The problem and the variable spec may also be supplied through a bound symbol —
-`prob = {f, cons}; vars = Table[x[i], {i, 1, n}]; NMinimize[prob, vars]`. Since
-both arguments are held, such a symbol is resolved (with the variable heads
-localized) so its `{f, cons}` list or variable list is exposed and then handled
+`prob = {f, cons}; vars = Table[x[i], {i, 1, n}]; NMinimize[prob, vars]`. Such
+a symbol is resolved (with the variable heads localized) so its `{f, cons}`
+list or variable list is exposed and then handled
 exactly as if written inline; a genuinely unbound symbol stays a single
-optimization variable (`NMinimize[f, x]`).
+optimization variable (`NMinimize[f, x]`).  (Ordinary evaluation already
+resolves such symbols before the driver runs; the driver's own resolution is a
+defensive fallback for a symbol that reaches it unevaluated.)
 
 ### Output
 
@@ -1882,7 +1933,7 @@ textbook physical optimum until the standard bounds
 
 Not yet supported (emit `NMinimize::nimpl` and abstain / fall back): vector and
 matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
-`VectorGreaterEqual`, `Or[...]` (disjunctive) constraints, domains other than
+`VectorGreaterEqual`, domains other than
 `Integers`/`Reals`, and general (non-box) constraints at
 `WorkingPrecision > MachinePrecision`.
 

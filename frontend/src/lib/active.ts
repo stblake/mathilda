@@ -47,6 +47,10 @@ export type CellHandle = {
   /** The contenteditable of a text/section/subsection cell. */
   el: HTMLElement | null;
   focus: () => void;
+  /** Paint [start, end) of the cell's SOURCE as the find bar's current match
+   *  and scroll it into view, WITHOUT taking focus (null clears). A prose cell
+   *  shows its raw source while marked, since the offsets are source offsets. */
+  mark?: (range: { start: number; end: number } | null) => void;
 };
 
 const handles = new Map<string, CellHandle>();

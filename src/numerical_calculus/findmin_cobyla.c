@@ -32,13 +32,14 @@
  * MachinePrecision falls back to QuasiNewton). Exposed as Method -> "COBYLA".
  * Reference: Powell 1994. */
 
-/* Two-stage inf-norm trust-region LP for the COBYLA step, solved as a pair of
- * strictly-convex QPs by fm_slsqp_activeset (B = eps*I, so the quadratic term is
- * negligible and each solve is an LP to rounding). The mcon internal constraints
- * are in Mathilda's `c <= 0` feasible convention: row j is the affine model
- * `cval0[j] + Amod[j,:]*d`. Stage 1 finds t* = min over ||d||_inf <= rho of the
- * worst model violation max_j (cval0[j]+Amod[j]*d); stage 2 minimises af*d subject
- * to every model constraint staying <= max(t*,0). Writes the step into d. */
+/* Two-stage trust-region subproblem for the COBYLA step, solved as a pair of
+ * strictly-convex QPs by fm_slsqp_activeset. The mcon internal constraints are
+ * in Mathilda's `c <= 0` feasible convention: row j is the affine model
+ * `cval0[j] + Amod[j,:]*d`. Stage 1 (B = eps*I, an LP to rounding) finds
+ * t* = min over ||d||_inf <= rho of the worst model violation
+ * max_j (cval0[j]+Amod[j]*d); stage 2 minimises af*d, with the Euclidean
+ * trust-region term described below, subject to every model constraint staying
+ * <= max(t*,0). `rho` here is the trust radius. Writes the step into d. */
 static bool fm_cobyla_subproblem(size_t n, size_t mcon, const double* Amod,
                                  const double* cval0, const double* af,
                                  double rho, double* d) {
@@ -82,8 +83,23 @@ static bool fm_cobyla_subproblem(size_t n, size_t mcon, const double* Amod,
     double tstar = y1[n];
     double tcap = (tstar > 0.0) ? tstar : 0.0;
 
-    /* Stage 2: min af*d + eps/2*||d||^2 s.t. cval0_j + Amod_j*d <= tcap. */
-    for (size_t i = 0; i < n; i++) L2[i * n + i] = sqrt(eps);
+    /* Stage 2: min af*d + sigma/2*||d||^2 s.t. cval0_j + Amod_j*d <= tcap and
+     * the inf-norm box. sigma = ||af||_2 / rho makes the unconstrained
+     * minimiser -rho*af/||af||, the EUCLIDEAN trust-region step of Powell's
+     * COBYLA (a ball, not a box). With a vanishing regulariser the LP optimum
+     * sat on a corner of the box, i.e. every unconstrained step was
+     * rho*sign(-af) -- sign descent, which zigzags across a curved valley
+     * (Rosenbrock stalled at f = 2.02 after 500 iterations). Where constraints
+     * are active the same term is the Lagrangian (Levenberg) form of the ball
+     * constraint, so the step is the ball-limited projection onto the
+     * linearised feasible set. Along an active constraint the projected
+     * gradient is shorter than af, so sigma is then re-scaled (a secant step
+     * on ||d(sigma)|| = rho, at most a few passes) until the step reaches the
+     * radius or sigma bottoms out at the LP limit -- otherwise a merely oblique
+     * constraint would read as a "short step" and collapse rho prematurely. */
+    double afn = sqrt(fm_dot(af, af, n));
+    double sigma = (rho > 0.0) ? afn / rho : 0.0;
+    if (!(sigma > eps) || !isfinite(sigma)) sigma = eps;
     for (size_t j = 0; j < mcon; j++) {
         double* row = &Nrm2[j * n];
         for (size_t i = 0; i < n; i++) row[i] = -Amod[j * n + i];
@@ -95,7 +111,15 @@ static bool fm_cobyla_subproblem(size_t n, size_t mcon, const double* Amod,
         rlo[i] = 1.0;  b2[mcon + 2 * i]     = -rho;
         rhi[i] = -1.0; b2[mcon + 2 * i + 1] = -rho;
     }
-    (void)fm_slsqp_activeset(L2, n, af, Nrm2, b2, ie2, mcon + 2 * n, d, mul2);
+    for (int pass = 0; pass < 4; pass++) {
+        for (size_t i = 0; i < n; i++) L2[i * n + i] = sqrt(sigma);
+        (void)fm_slsqp_activeset(L2, n, af, Nrm2, b2, ie2, mcon + 2 * n, d, mul2);
+        if (sigma <= eps) break;                     /* already the LP step */
+        double dn = sqrt(fm_dot(d, d, n));
+        if (dn >= 0.9 * rho) break;                  /* reached the radius  */
+        sigma = (dn > 1e-3 * rho) ? sigma * dn / rho : eps;
+        if (sigma < eps) sigma = eps;
+    }
     ok = true;
 done:
     free(L1); free(g1); free(Nrm1); free(b1); free(ie1); free(mul1); free(y1);
@@ -226,10 +250,21 @@ bool fm_run_cobyla(Expr* f, Expr** vars, size_t n,
             if (half > 0.0 && half < rhobeg) rhobeg = half;
         }
     if (rhobeg < 4.0 * rhoend) rhobeg = 4.0 * rhoend;
+    /* Two radii, as in Powell's later trust-region codes and the PRIMA COBYLA:
+     * rho is the RESOLUTION (the finite-difference model spacing and the lower
+     * bound of the step size), reduced monotonically toward rhoend; delta >= rho
+     * is the TRUST RADIUS, grown after a step the linear model predicts well and
+     * shrunk after a poor one. The original code had a single rho doing both
+     * jobs and halved it after every rejected trial, so one bad step early on a
+     * curved valley permanently cut the step length (Rosenbrock from (-1.2, 1):
+     * rho hit 2e-3 within 15 iterations, after which progress was ~2e-3 per
+     * iteration and the solve stopped at f = 2.02 when MaxIterations ran out). */
     double rho = rhobeg;
+    double delta = rhobeg;
     double parmu = 0.0;
 
-    for (int64_t it = 0; it < opts->max_iter; it++) {
+    int64_t it;
+    for (it = 0; it < opts->max_iter; it++) {
         /* Linear models by CENTRAL differences on a coordinate cross of side rho.
          * Central (vs forward) differences are essential for the non-smooth
          * objectives COBYLA targets: at a kink the two-sided slope averages the
@@ -268,6 +303,7 @@ bool fm_run_cobyla(Expr* f, Expr** vars, size_t n,
             /* A non-numeric sample: shrink rho and retry, or stop. */
             if (rho <= rhoend) { ok = true; break; }
             rho *= 0.5; if (rho <= 1.5 * rhoend) rho = rhoend;
+            delta = 0.5 * delta; if (delta < rho) delta = rho;
             continue;
         }
 
@@ -286,14 +322,16 @@ bool fm_run_cobyla(Expr* f, Expr** vars, size_t n,
             else            { row[i] =  1.0; cval0[ng + bi] = base[i] - boxes[i].hi; }
         }
 
-        if (!fm_cobyla_subproblem(n, mcon, Amod, cval0, af, rho, dstep)) goto cleanup;
+        if (!fm_cobyla_subproblem(n, mcon, Amod, cval0, af, delta, dstep)) goto cleanup;
         double dnorm = 0.0;
         for (size_t i = 0; i < n; i++) if (fabs(dstep[i]) > dnorm) dnorm = fabs(dstep[i]);
+        double dnorm2 = sqrt(fm_dot(dstep, dstep, n));
 
-        /* Short step at this rho -> reduce rho (or converge). */
+        /* Short step at this resolution -> reduce rho (or converge). */
         if (dnorm < 0.5 * rho) {
             if (rho <= rhoend) { ok = true; break; }
             rho *= 0.5; if (rho <= 1.5 * rhoend) rho = rhoend;
+            delta = 0.5 * delta; if (delta < rho) delta = rho;
             continue;
         }
 
@@ -335,17 +373,34 @@ bool fm_run_cobyla(Expr* f, Expr** vars, size_t n,
             best_f = ftrial; have_best = true;
         }
 
+        /* Trust-radius update from the ratio of actual to predicted merit
+         * reduction (Powell's / PRIMA's trrad rule: eta1 = 0.1, eta2 = 0.7,
+         * gamma1 = 0.5, gamma2 = 2), never below the resolution rho. */
+        double pred = base_merit - (fbase + afd + parmu * lin_viol);
+        double ratio = (pred > 0.0) ? (base_merit - trial_merit) / pred : -1.0;
+        bool at_floor = (delta <= rho);
+        if (ratio <= 0.1)      delta = 0.5 * dnorm2;
+        else if (ratio <= 0.7) delta = (0.5 * delta > dnorm2) ? 0.5 * delta : dnorm2;
+        else                   delta = (0.5 * delta > 2.0 * dnorm2) ? 0.5 * delta : 2.0 * dnorm2;
+        if (delta <= 1.5 * rho) delta = rho;
+        if (delta > 1e10) delta = 1e10;
+
         if (trial_merit < base_merit - 1e-12 * (1.0 + fabs(base_merit))) {
             /* Accept: move the base to the trial point. */
             for (size_t i = 0; i < n; i++) base[i] = xtrial[i];
             fbase = ftrial;
             for (size_t k = 0; k < ngens; k++) gbase[k] = gtrial[k];
-        } else {
-            /* No improvement at this rho -> shrink (or converge). */
+        } else if (at_floor) {
+            /* No improvement with the radius already at the resolution ->
+             * refine the resolution (or converge). A rejection at a larger
+             * radius only shrinks delta (above) and retries. */
             if (rho <= rhoend) { ok = true; break; }
             rho *= 0.5; if (rho <= 1.5 * rhoend) rho = rhoend;
+            delta = 0.5 * delta; if (delta < rho) delta = rho;
         }
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (it >= opts->max_iter) fm_warn_maxit(opts);
 
     /* Report the base (best-by-merit) iterate, or the best strictly-feasible
      * point if the base ended infeasible. */

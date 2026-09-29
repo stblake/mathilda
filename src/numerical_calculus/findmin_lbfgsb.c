@@ -236,7 +236,8 @@ bool fm_run_lbfgsb(Expr* f, Expr** vars, size_t n,
 
     double tol_acc = pow(10.0, -opts->acc_goal_digits);   /* projected-grad tol */
 
-    for (int64_t k = 0; k < opts->max_iter; k++) {
+    int64_t k;
+    for (k = 0; k < opts->max_iter; k++) {
         /* Projected-gradient infinity-norm convergence, and the active-set /
          * masked gradient. A coordinate at a box face with the gradient
          * pushing outward is "active": it satisfies its KKT condition, so it
@@ -338,6 +339,8 @@ bool fm_run_lbfgsb(Expr* f, Expr** vars, size_t n,
          * projected-gradient test on a slowly-improving valley. */
         if (f_rel >= 0.0 && f_rel < 1e-14) { ok = true; break; }
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (k >= opts->max_iter && !ctx.augmented) fm_warn_maxit(opts);
     *fx_out = fx;
     ok = true;
 cleanup:

@@ -582,6 +582,14 @@ check-image-packing:
 check-menu-ids:
 	python3 tools/check_menu_ids.py
 
+# `make check-pipe-protocol` — does the NDJSON pipe protocol answer as documented in src/repl.c?
+#
+# Two request modes share one process: plain requests (the site generator and audit tools, whose
+# behaviour must not move) and notebook cells (several statements, Print output and messages as
+# "stream"/"message" lines). Needs the built ./Mathilda; SKIPs without it.
+check-pipe-protocol:
+	python3 tools/check_pipe_protocol.py
+
 # `make check-nd-surfaces` — does every head reach the SAME fast path from a
 # packed List and from a visible NDArray, and agree on the answer?
 #
@@ -705,7 +713,7 @@ print-cc:
         check-messages \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \
-        check-fastpath-sweep check-menu-ids bench-gap check-diophantine-heldout print-cc
+        check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap check-diophantine-heldout print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

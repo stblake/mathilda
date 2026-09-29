@@ -16,9 +16,9 @@ void imagefilter_init(void);
 void imagegeom_init(void);
 
 /* Pixel types, in Wolfram's names. The type fixes the RANGE of a stored value, which is what
- * makes ImageData's scaling well defined: "Bit" is {0, 1}, "Byte" is 0..255, "Real" is already
- * the unit interval. */
-typedef enum { IMG_BIT, IMG_BYTE, IMG_REAL } ImgType;
+ * makes ImageData's scaling well defined: "Bit" is {0, 1}, "Byte" is 0..255, "Bit16" is 0..65535,
+ * "Real" is already the unit interval. */
+typedef enum { IMG_BIT, IMG_BYTE, IMG_REAL, IMG_BIT16 } ImgType;
 
 /* Read the canonical form Image[data, type] -- dimensions, channels and type, without copying
  * the pixels. `channels` is 1 for a rank-2 (grey) image, otherwise the last dimension.
@@ -59,6 +59,17 @@ Expr* image_build_real(const double* buf, size_t width, size_t height, size_t ch
  * unused code is worse than absent code. */
 Expr* image3d_build_real(const double* buf, size_t width, size_t height, size_t depth,
                          size_t channels);
+
+/* Build a canonical Image[data, type] / Image3D[data, type] from a UNIT-SCALE buffer, quantising to
+ * the type exactly as Image[image, type] converts: scaled by the type's maximum, rounded, clipped.
+ *
+ * For operators that must PRESERVE the input's type rather than widen to "Real" -- flat morphology
+ * (a max or min of stored values is itself a stored value, so Dilation of a "Bit" image is a "Bit"
+ * image, as in Mathematica). `depth` is the number of slices of the volumetric variant. */
+Expr* image_build_typed(const double* buf, size_t width, size_t height, size_t channels,
+                        ImgType t);
+Expr* image3d_build_typed(const double* buf, size_t width, size_t height, size_t depth,
+                          size_t channels, ImgType t);
 
 /* Build a canonical Image[data, "Bit"] from a 0/1 mask, packed.
  *

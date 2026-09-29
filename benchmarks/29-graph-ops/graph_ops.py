@@ -45,9 +45,9 @@ check("VertexDegree, 20000 vertices", sum(d for _, d in tri.degree()))
 bench("EdgeCount", lambda: g.number_of_edges())
 check("EdgeCount", tri.number_of_edges())
 
-# Wolfram's ConnectedComponents on a directed graph gives WEAKLY connected ones.
+# Wolfram's ConnectedComponents on a directed graph gives STRONGLY connected ones.
 bench("ConnectedComponents",
-      lambda: list(nx.weakly_connected_components(g)), reps=1)
+      lambda: list(nx.strongly_connected_components(g)), reps=1)
 check("ConnectedComponents",
       nx.number_connected_components(nx.Graph([(1, 2), (3, 4)])))
 

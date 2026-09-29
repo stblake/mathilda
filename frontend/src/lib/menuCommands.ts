@@ -18,7 +18,7 @@
 import { get } from 'svelte/store';
 import { canvasState, activeActions, addNotebook, openRefpage } from './canvas';
 import { activeCell, activeHandle, retypeActiveCell } from './active';
-import { splitCell, mergeCellDown, duplicateCell, deleteCell,
+import { splitCell, mergeCellDown, duplicateCell, deleteCell, convertCell,
          indentCode, outdentCode, commentCode, duplicateLine } from './cellCommands';
 import { restart, abortEvaluation } from './kernelActions';
 import { darkMode } from './theme';
@@ -67,6 +67,18 @@ function insertCell(type: 'code' | 'text' | 'section') {
   if (newId) act.focusCell(newId);
 }
 
+/* Convert the cell the caret is in. The record in `activeCell` only says WHICH cell; the
+   conversion itself is convertCell on the pane's store, exactly what the toolbar's cell-style
+   control calls. Calling retypeActiveCell alone -- as these items once did -- relabelled the
+   toolbar and left the cell untouched. The notebook-id check is the toolbar's own: in split mode
+   a remembered cell from another pane is not this pane's to convert. */
+export function convertActiveCell(type: 'code' | 'text' | 'section') {
+  const act = get(activeActions);
+  const cell = get(activeCell);
+  if (!act || !cell || cell.notebookId !== act.notebookId) return;
+  if (convertCell(act.store, cell.cellId, type)) retypeActiveCell(type);
+}
+
 export function runMenuCommand(id: string, hooks: MenuHooks) {
   const act = get(activeActions);
   const cell = get(activeCell);
@@ -107,9 +119,9 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
     case 'insert.section': insertCell('section'); break;
 
     /* ---- Cell ---- */
-    case 'cell.toInput':   retypeActiveCell('code'); break;
-    case 'cell.toText':    retypeActiveCell('text'); break;
-    case 'cell.toSection': retypeActiveCell('section'); break;
+    case 'cell.toInput':   convertActiveCell('code'); break;
+    case 'cell.toText':    convertActiveCell('text'); break;
+    case 'cell.toSection': convertActiveCell('section'); break;
     case 'cell.divide': {
       if (!act || !cell) break;
       /* The caret offset exists only while the editor holds focus; splitting at the end beats

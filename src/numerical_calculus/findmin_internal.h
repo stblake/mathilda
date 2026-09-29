@@ -493,6 +493,17 @@ typedef struct {
  *   continuous, all 8 methods   ~4e-12 .. 7.5e-12   (measured)
  *   mixed-integer + continuous  ~6e-6               (measured)
  *
+ * Units and provenance: these are the max constraint VIOLATION of the returned
+ * point (not the squared penalty NM_FEAS_RETURN is compared against), measured
+ * on NMinimize[{x^2 + y^2, x + y >= 2}, {x, y}] with each of the 8 Method
+ * settings (DifferentialEvolution, NelderMead, RandomSearch,
+ * SimulatedAnnealing, SHGO, DualAnnealing, DIRECT, BasinHopping). An equality
+ * such as x^2 + y^2 == 1 lands at ~7e-9 (penalty ~5e-17). Until 2026-09-28
+ * NelderMead was the exception at ~1e-6 (penalty ~1e-12, inside the gate but
+ * six orders looser): its per-restart polish guard kept the raw fixed-penalty
+ * simplex vertex over the polished feasible point; see nm_neldermead. Re-measured
+ * after that fix: 4.0e-12 for NelderMead as well.
+ *
  * The mixed-integer path refines continuous coordinates through the penalty
  * solver with integers pinned, and that solve converges to ~6e-6, not to the
  * ~1e-12 the purely-continuous path reaches. A guarantee tighter than the
@@ -592,6 +603,8 @@ extern size_t g_fm_grad_n;
 /* ============ cross-file function prototypes ============ */
 
 void fm_warn(const char* fn, const char* tag, const char* fmt, ...);
+/* g_fm_name::cvmit -- the main iteration loop hit MaxIterations. */
+void fm_warn_maxit(const FmOpts* opts);
 bool fm_expr_to_double_real(Expr* e, double* out);
 bool fm_is_option_arg(Expr* e);
 bool fm_parse_working_precision(Expr* val,
@@ -637,6 +650,17 @@ bool fm_run_bfgs_mpfr(Expr* f, Expr** vars, size_t n,
 FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
                                     Expr** x0_out, Expr** x1_out,
                                     Expr** xmin_out, Expr** xmax_out);
+/* True when the symbol `s` can serve as an optimization variable: it evaluates
+ * to itself (no OwnValue, e.g. not an active Table/Do iterator) and is not a
+ * numeric constant such as Pi or E. Used to tell the variable list {x, y} from
+ * the scalar spec {x, x0} when x0 is written as a symbol carrying a value. */
+bool fm_symbol_is_free(Expr* s);
+/* Mark in act[i] the BINDING box bounds at x: coordinate i sits on (within
+ * 1e-12 relative of) a bound and the gradient g pushes it outward, so a
+ * projected descent step must hold it fixed. Returns the number marked; with
+ * boxes == NULL clears act and returns 0. */
+size_t fm_box_binding_mask(const double* x, const double* g, size_t n,
+                           const FmBox* boxes, bool* act);
 bool fm_constraint_to_g(Expr* cmp, Expr** expr_out, bool* equality_out);
 bool fm_bool_supported(Expr* c);
 bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
@@ -668,9 +692,18 @@ bool fm_line_search(Expr* f, FmVarBind* binds, size_t n,
 bool fm_bracket(Expr* f, FmVarBind* binds, const FmOpts* opts,
                        double x0, const FmBox* box1,
                        double* a_out, double* b_out, double* c_out);
+/* As fm_bracket, but the downhill search starts from the TWO user-supplied
+ * points x0 and x1 (the FindMinimum[f, {x, x0, x1}] form) instead of x0 and
+ * an automatic step. */
+bool fm_bracket2(Expr* f, FmVarBind* binds, const FmOpts* opts,
+                        double x0, double x1, const FmBox* box1,
+                        double* a_out, double* b_out, double* c_out);
 #ifdef USE_MPFR
+/* MPFR bracket. When has_x1, the search starts from x0 and x1 (two-start
+ * form); otherwise from x0 and an automatic step. */
 bool fm_bracket_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
-                            const mpfr_t x0, const FmBox* box1,
+                            const mpfr_t x0, bool has_x1, double x1,
+                            const FmBox* box1,
                             mpfr_t a, mpfr_t b, mpfr_t c,
                             mpfr_t fa, mpfr_t fb, mpfr_t fc);
 bool fm_brent_min_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,

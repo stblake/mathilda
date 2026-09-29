@@ -16,15 +16,15 @@ expressions. Because graphs are plain expressions, generic tools (`Part`,
 `Map`, `ReplaceAll`, …) work on them, and `AdjacencyMatrix[g]` returns a dense
 `List`-of-`List`s consumable directly by `Det`, `Tr`, and `Eigenvalues`.
 
-A graph may optionally carry per-edge weights via a third constructor
-argument, `Graph[v, e, EdgeWeight -> {w1, ..., wm}]` — see `EdgeWeight` and
+A graph may optionally carry per-edge lists given as options after the edges,
+in either constructor form: `Graph[e, EdgeWeight -> {w1, ..., wm}]` or
+`Graph[v, e, EdgeWeight -> {...}]`, and likewise `EdgeCapacity -> {c1, ..., cm}`
+(the capacities `FindMaximumFlow` uses) — see `EdgeWeight` and
 `WeightedAdjacencyMatrix` below.
 
-**MVP scope (locked):** simple graphs only — no parallel edges, no self-loops,
-no edge tags beyond `EdgeWeight`, no multigraphs, no hypergraphs, and no
-vertex weights. Weighted shortest-path/distance and derived-vertex weighted
-construction (`Graph[e, EdgeWeight -> {...}]`, no explicit vertex list) remain
-out of scope.
+**Scope:** simple graphs only — no parallel edges, no self-loops, no edge tags
+beyond `EdgeWeight` and `EdgeCapacity`, no multigraphs, and no vertex weights
+(hypergraphs are a separate type, see `hypergraphs.md`).
 
 ### Performance model: the validated-graph memo
 
@@ -58,25 +58,33 @@ slot is reused. A fresh wrapper node around a memoized graph's own argument List
 - `Graph[v, e]`: a graph with vertex list `v` and edge list `e`.
 - `Graph[e]`: derives the vertex set from the edges, in first-appearance order
   (directed by default).
-- `Graph[v, e, EdgeWeight -> {w1, ..., wm}]`: a weighted graph — `wi` is the
-  weight of `e[[i]]`, matched by position.
+- `Graph[e, EdgeWeight -> {w1, ..., wm}]`, `Graph[v, e, EdgeWeight -> {w1, ..., wm}]`:
+  a weighted graph — `wi` is the weight of `e[[i]]`, matched by position.
+- `Graph[e, EdgeCapacity -> {c1, ..., cm}]`, `Graph[v, e, EdgeCapacity -> {...}]`:
+  per-edge capacities, read by `FindMaximumFlow`. Both options may be given
+  together, in either order.
 
 **Features**:
 - `Protected`. A graph is a value: the constructor normalizes and validates its
-  input and returns the canonical `Graph[List[verts], List[edges]]` (or, when
-  weighted, `Graph[List[verts], List[edges], EdgeWeight -> List[weights]]`).
+  input and returns the canonical `Graph[List[verts], List[edges]]`, followed
+  by `EdgeWeight -> List[weights]` and then `EdgeCapacity -> List[caps]` when
+  given (always in that order, so every spelling of one graph is the same
+  expression).
 - Edge normalization: `u -> v` (`Rule`) and `DirectedEdge[u, v]` become
   `DirectedEdge[u, v]`; `u <-> v` (`TwoWayRule`) and `UndirectedEdge[u, v]`
   become `UndirectedEdge[u, v]`. Directed and undirected edges may be mixed.
 - Malformed input is left unevaluated: self-loops, parallel/duplicate edges,
-  3-argument edges, an edge endpoint absent from an explicit vertex list, or
-  (for a weighted graph) an `EdgeWeight` list whose length doesn't match the
-  edge list. Anti-parallel directed edges `u -> v` and `v -> u` are distinct and
+  3-argument edges, an edge endpoint absent from an explicit vertex list, an
+  `EdgeWeight`/`EdgeCapacity` list whose length doesn't match the edge list, a
+  repeated option, or any other option. Anti-parallel directed edges `u -> v` and `v -> u` are distinct and
   allowed.
-- The weighted form requires the explicit-vertex form;
-  `Graph[e, EdgeWeight -> {...}]` (derived vertices) is not accepted and stays
-  unevaluated. A weight list whose length doesn't match `e` is malformed, like
-  any other rejection above. Read the weights back with `EdgeWeight`.
+- The two forms are told apart by the second argument: a `List` is the edge list
+  of `Graph[v, e, ...]`, a rule the first option of `Graph[e, ...]`. Read the
+  weights back with `EdgeWeight`; every weight-aware head (`GraphDistance`,
+  `FindShortestPath`, `FindSpanningTree`, the cut family, ...) sees them the
+  same way whichever form built the graph.
+- Graph-editing heads (`EdgeDelete`, `Subgraph`, ...) carry `EdgeWeight` over;
+  they do not yet carry `EdgeCapacity`.
 - Printing: in standard output a graph shows a terse summary,
   `Graph[<n vertices, m edges>]`. `InputForm` and `FullForm` print the literal
   constructor, which round-trips through the parser.
@@ -108,23 +116,29 @@ Out[5]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3}, EdgeWeight -> {5, 7}]
 
 In[6]:= FullForm[Graph[{1,2},{1<->2}]]
 Out[6]= Graph[List[1, 2], List[UndirectedEdge[1, 2]]]
+
+In[7]:= InputForm[Graph[{a<->b, b<->c, a<->c}, EdgeWeight -> {1.5, 2, 1}]]
+Out[7]= Graph[{a, b, c}, {a <-> b, b <-> c, a <-> c}, EdgeWeight -> {1.5, 2, 1}]
+
+In[8]:= InputForm[Graph[{1->2, 2->3}, EdgeCapacity -> {4, 5}, EdgeWeight -> {1, 2}]]
+Out[8]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3}, EdgeWeight -> {1, 2}, EdgeCapacity -> {4, 5}]
 ```
 
 **Malformed input** is returned unevaluated (a self-loop, a duplicate edge, an
 endpoint missing from the vertex list, a weight list of the wrong length):
 
 ```mathematica
-In[7]:= Graph[{1,2}, {1->1}]
-Out[7]= Graph[{1, 2}, {1 -> 1}]
+In[9]:= Graph[{1,2}, {1->1}]
+Out[9]= Graph[{1, 2}, {1 -> 1}]
 
-In[8]:= Graph[{1,2}, {1->2, 1->2}]
-Out[8]= Graph[{1, 2}, {1 -> 2, 1 -> 2}]
+In[10]:= Graph[{1,2}, {1->2, 1->2}]
+Out[10]= Graph[{1, 2}, {1 -> 2, 1 -> 2}]
 
-In[9]:= Graph[{1,2}, {1->3}]
-Out[9]= Graph[{1, 2}, {1 -> 3}]
+In[11]:= Graph[{1,2}, {1->3}]
+Out[11]= Graph[{1, 2}, {1 -> 3}]
 
-In[10]:= Graph[{1,2,3}, {1->2, 2->3}, EdgeWeight -> {5}]
-Out[10]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3}, EdgeWeight -> {5}]
+In[12]:= Graph[{1,2,3}, {1->2, 2->3}, EdgeWeight -> {5}]
+Out[12]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3}, EdgeWeight -> {5}]
 ```
 
 ## GraphQ
@@ -386,8 +400,9 @@ Out[4]= False
   option. Weights may be symbolic or exact; they are returned as given.
 - Unevaluated on a non-graph (see `VertexList`).
 - Weight-aware consumers: `WeightedAdjacencyMatrix`, `FindShortestPath` and
-  `GraphDistance` (see `FindShortestPath`). The other search/computation heads
-  in this section ignore weights.
+  `GraphDistance` (see `FindShortestPath`), `FindSpanningTree` (a minimum
+  spanning tree), and the cut family. The option is accepted by both
+  `Graph[e, EdgeWeight -> w]` and `Graph[v, e, EdgeWeight -> w]`.
 
 ```mathematica
 In[1]:= EdgeWeight[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]]
@@ -402,8 +417,11 @@ Out[3]= {a, 1/2}
 In[4]:= EdgeWeight[Graph[{1,2},{}]]
 Out[4]= {}
 
-In[5]:= EdgeWeight[5]
-Out[5]= EdgeWeight[5]
+In[5]:= EdgeWeight[Graph[{1->2, 2->3}, EdgeWeight -> {5, 7}]]
+Out[5]= {5, 7}
+
+In[6]:= EdgeWeight[5]
+Out[6]= EdgeWeight[5]
 ```
 
 ## AdjacencyMatrix
@@ -701,33 +719,50 @@ Out[7]= Infinity
 
 ## ConnectedComponents / WeaklyConnectedComponents
 
-- `ConnectedComponents[g]`: the connected components of the underlying
-  undirected graph, as lists of vertices.
-- `WeaklyConnectedComponents[g]`: the same components.
+- `ConnectedComponents[g]`: the connected components of `g`, as lists of
+  vertices. On a graph with a directed edge these are the **strongly**
+  connected components (as in Mathematica); on an undirected graph, the
+  ordinary components.
+- `ConnectedComponents[g, {v1, v2, ...}]`: only the components that contain at
+  least one of the `vi`.
+- `WeaklyConnectedComponents[g]`, `WeaklyConnectedComponents[g, {v1, ...}]`: the
+  components of the underlying undirected graph (edge direction ignored).
 
 **Features**:
-- `Protected`. Edge direction is ignored, so both heads agree on every graph.
-  Unweighted; see `FindShortestPath` for the shared search machinery.
-- Mathematica's `ConnectedComponents` on a directed graph gives the *strongly*
-  connected components; Mathilda's gives the weak ones (use
-  `StronglyConnectedComponents` for the directed notion).
-- The null graph has no components; unevaluated on a non-graph.
+- `Protected`. Directed and mixed graphs: Tarjan's algorithm, the components
+  listed so that no edge runs from a component to a later one (sinks first) —
+  exactly Mathematica's order, e.g. `ConnectedComponents[Graph[{3->1, 1->5,
+  2->4, 2->6, 3->5, 4->6}]]` is `{{5}, {1}, {3}, {6}, {4}, {2}}` in both. An
+  undirected edge links its endpoints both ways.
+- Undirected graphs, and `WeaklyConnectedComponents` always: the largest
+  component first, as Mathematica documents; equal-sized components keep
+  first-appearance order.
+- Vertices within a component are in `VertexList` order. (Mathematica's order
+  inside an undirected component, and between equal-sized ones, follows no
+  documented rule and is not reproduced.)
+- Linear time. The null graph has no components; unevaluated on a non-graph.
 
 ```mathematica
-In[1]:= ConnectedComponents[Graph[{1,2,3,4,5},{1<->2,3<->4}]]
-Out[1]= {{1, 2}, {3, 4}, {5}}
+In[1]:= ConnectedComponents[Graph[{1,2,3,4,5},{1<->2,3<->4,4<->5}]]
+Out[1]= {{3, 4, 5}, {1, 2}}
 
-In[2]:= ConnectedComponents[Graph[{1,2,3},{1->2,3->2}]]
-Out[2]= {{1, 2, 3}}
+In[2]:= ConnectedComponents[Graph[{1->2,2->3,3->1,3->4}]]
+Out[2]= {{4}, {1, 2, 3}}
 
-In[3]:= WeaklyConnectedComponents[Graph[{1,2,3,4},{1->2,3->2}]]
-Out[3]= {{1, 2, 3}, {4}}
+In[3]:= ConnectedComponents[Graph[{3->1, 1->5, 2->4, 2->6, 3->5, 4->6}]]
+Out[3]= {{5}, {1}, {3}, {6}, {4}, {2}}
 
-In[4]:= ConnectedComponents[Graph[{},{}]]
-Out[4]= {}
+In[4]:= ConnectedComponents[Graph[{1->2,2->3,3->1,3->4}], {4}]
+Out[4]= {{4}}
 
-In[5]:= ConnectedComponents[5]
-Out[5]= ConnectedComponents[5]
+In[5]:= WeaklyConnectedComponents[Graph[{1,2,3,4},{1->2,3->2}]]
+Out[5]= {{1, 2, 3}, {4}}
+
+In[6]:= ConnectedComponents[Graph[{},{}]]
+Out[6]= {}
+
+In[7]:= ConnectedComponents[5]
+Out[7]= ConnectedComponents[5]
 ```
 
 ## StronglyConnectedComponents
@@ -736,16 +771,18 @@ Out[5]= ConnectedComponents[5]
   directions.
 
 **Features**:
-- `Protected`. Tarjan's algorithm. For undirected graphs this coincides with the
-  weak components (see `ConnectedComponents`).
+- `Protected`. Tarjan's algorithm, listed in the same sinks-first order as
+  `ConnectedComponents` on a directed graph (Mathematica has no separate head:
+  there `ConnectedComponents` is the strong notion). On an undirected graph the
+  strong components are the ordinary ones.
 - Unevaluated on a non-graph.
 
 ```mathematica
 In[1]:= StronglyConnectedComponents[Graph[{1,2,3},{1->2,2->3}]]
-Out[1]= {{1}, {2}, {3}}
+Out[1]= {{3}, {2}, {1}}
 
 In[2]:= StronglyConnectedComponents[Graph[{1,2,3,4},{1->2,2->1,2->3,3->4,4->3}]]
-Out[2]= {{1, 2}, {3, 4}}
+Out[2]= {{3, 4}, {1, 2}}
 
 In[3]:= StronglyConnectedComponents[PathGraph[3]]
 Out[3]= {{1, 2, 3}}
@@ -753,27 +790,58 @@ Out[3]= {{1, 2, 3}}
 
 ## FindSpanningTree
 
-- `FindSpanningTree[g]`: a spanning tree (or forest) of `g`, as a graph.
+- `FindSpanningTree[g]`: a spanning tree (or forest) of `g`, as a graph —
+  a **minimum** spanning tree when `g` carries `EdgeWeight`.
+- `FindSpanningTree[{g, v}]`: the tree grown from vertex `v`: its component
+  (undirected) or the vertices it reaches (directed), rooted at `v`.
+- `FindSpanningTree[g, opts]`: `Method -> ...` and other options are accepted
+  and ignored (every method gives the same optimum).
 
 **Features**:
-- `Protected`. Has `VertexCount - 1` edges when `g` is connected; a
-  disconnected graph gives a spanning forest. Tree edges keep their original
-  direction. Unweighted (not a minimum-weight tree); see `FindShortestPath` for
-  the shared machinery.
-- Unevaluated on a non-graph.
+- `Protected`. Matches Mathematica case by case:
+  - undirected, unweighted: a BFS spanning forest;
+  - undirected, weighted: a minimum spanning forest (Kruskal with union-find),
+    ties between equal weights broken by the edge's vertex positions, lowest
+    first — which reproduces Mathematica's choice on tied inputs;
+  - directed, unweighted: a BFS *branching* (edges followed forwards), roots
+    taken in decreasing DFS finishing time so as few roots as possible are used;
+  - directed, weighted: a minimum-weight spanning branching (Chu–Liu/Edmonds,
+    `O(E log V)`) among those with the fewest roots — the minimum spanning
+    arborescence whenever some vertex reaches all;
+  - mixed graphs are left unevaluated, as in Mathematica.
+- Weights are compared **exactly**: integers, rationals and reals become GMP
+  rationals (a real's exact binary value), so `1/3` and `0.3333333333333333`
+  are told apart; other numeric weights (`Sqrt[2]`, `Pi`) are compared via
+  `N[w, 40]`. A weight that is not a real number (a symbol, a complex number)
+  leaves the call unevaluated. Negative weights are fine.
+- The result carries each tree edge's own `EdgeWeight` (and `EdgeCapacity`).
+  As in Mathematica, an undirected tree edge is written lower vertex position
+  first, and the edges are sorted by their endpoints' positions. The result's
+  `VertexList` is `g`'s, or for `{g, v}` just the vertices of `v`'s tree.
+- A `v` that is not a vertex of `g` emits `FindSpanningTree::inv` and leaves the
+  call unevaluated; so does a non-graph.
 
 ```mathematica
-In[1]:= EdgeList[FindSpanningTree[CycleGraph[4]]]
-Out[1]= {1 <-> 2, 4 <-> 1, 2 <-> 3}
+In[1]:= InputForm[FindSpanningTree[Graph[{a<->b, a<->c, b<->c, b<->d, c<->d, d<->e}, EdgeWeight -> {4,1,2,5,8,3}]]]
+Out[1]= Graph[{a, b, c, d, e}, {a <-> c, b <-> c, b <-> d, d <-> e}, EdgeWeight -> {1, 2, 5, 3}]
 
-In[2]:= EdgeCount[FindSpanningTree[CompleteGraph[6]]]
-Out[2]= 5
+In[2]:= InputForm[FindSpanningTree[Graph[{1->2, 2->3, 1->3, 3->4, 4->1}, EdgeWeight -> {5,1,2,3,4}]]]
+Out[2]= Graph[{1, 2, 3, 4}, {2 -> 3, 3 -> 4, 4 -> 1}, EdgeWeight -> {1, 3, 4}]
 
-In[3]:= EdgeList[FindSpanningTree[Graph[{1,2,3,4},{1->2,2->3,3->1}]]]
-Out[3]= {1 -> 2, 3 -> 1}
+In[3]:= InputForm[FindSpanningTree[{Graph[{1->2, 2->3, 1->3, 3->4, 4->1}, EdgeWeight -> {5,1,2,3,4}], 1}]]
+Out[3]= Graph[{1, 2, 3, 4}, {1 -> 2, 2 -> 3, 3 -> 4}, EdgeWeight -> {5, 1, 3}]
 
-In[4]:= EdgeList[FindSpanningTree[Graph[{1,2,3,4},{1<->2,3<->4}]]]
-Out[4]= {1 <-> 2, 3 <-> 4}
+In[4]:= EdgeList[FindSpanningTree[CycleGraph[4]]]
+Out[4]= {1 <-> 2, 1 <-> 4, 2 <-> 3}
+
+In[5]:= EdgeCount[FindSpanningTree[CompleteGraph[6]]]
+Out[5]= 5
+
+In[6]:= EdgeList[FindSpanningTree[Graph[{1,2,3,4},{1->2,2->3,3->1}]]]
+Out[6]= {1 -> 2, 2 -> 3}
+
+In[7]:= InputForm[FindSpanningTree[{Graph[{1,2,3,4},{1<->2,3<->4}], 4}]]
+Out[7]= Graph[{3, 4}, {3 <-> 4}]
 ```
 
 ## ConnectedGraphQ
@@ -781,8 +849,10 @@ Out[4]= {1 <-> 2, 3 <-> 4}
 - `ConnectedGraphQ[g]`: `True` iff `g` is a single connected component.
 
 **Features**:
-- `Protected`. Connectivity of the underlying undirected graph (weak
-  connectivity for directed graphs), matching `ConnectedComponents`.
+- `Protected`. As in Mathematica, a graph with a directed edge must be
+  **strongly** connected (every vertex reaches every other along the edges'
+  directions; an undirected edge goes both ways); an undirected graph must be
+  connected. So it agrees with `Length[ConnectedComponents[g]] == 1`.
 - The null graph is not connected.
 - Unlike the `*Q` structural predicates (see `UndirectedGraphQ`), a non-graph
   argument leaves `ConnectedGraphQ` unevaluated; Mathematica gives `False`.
@@ -795,13 +865,16 @@ In[2]:= ConnectedGraphQ[Graph[{1,2,3},{1<->2}]]
 Out[2]= False
 
 In[3]:= ConnectedGraphQ[Graph[{1,2,3},{1->2,3->2}]]
-Out[3]= True
+Out[3]= False
 
-In[4]:= ConnectedGraphQ[Graph[{},{}]]
-Out[4]= False
+In[4]:= ConnectedGraphQ[Graph[{1,2,3},{1->2,2->3,3->1}]]
+Out[4]= True
 
-In[5]:= ConnectedGraphQ[5]
-Out[5]= ConnectedGraphQ[5]
+In[5]:= ConnectedGraphQ[Graph[{},{}]]
+Out[5]= False
+
+In[6]:= ConnectedGraphQ[5]
+Out[6]= ConnectedGraphQ[5]
 ```
 
 ## VertexConnectivity
@@ -2775,9 +2848,12 @@ Out[5]= HararyGraph[4, 4]
   undirected). Where every capacity on the source side is `Infinity`,
   Mathematica 15 answers `0`; Mathilda gives the true value (`Infinity`, or the
   finite bottleneck).
-- **Capacities ignore `EdgeWeight`**, exactly as Mathematica does; without
-  `EdgeCapacity` every edge has capacity 1. An undirected edge carries flow
-  either way.
+- **Capacities ignore `EdgeWeight`**, exactly as Mathematica does. With no
+  `EdgeCapacity` option (or `EdgeCapacity -> Automatic`) the capacities are the
+  graph's own `EdgeCapacity` when it was built with one
+  (`Graph[e, EdgeCapacity -> {...}]`), else 1 for every edge — Mathematica's
+  documented rule. An explicit option wins over the stored list. An undirected
+  edge carries flow either way.
 - Numbers (shared by the whole flow/cut family): integer capacities/weights give
   exact Integers; Rational or Real ones give a Real (as Mathematica); `Infinity`
   is an allowed capacity; a negative or symbolic one leaves the call
@@ -2804,6 +2880,9 @@ Out[5]= 1.5
 
 In[6]:= FindMaximumFlow[CycleGraph[6], {1, 2}, {4, 5}]
 Out[6]= 2
+
+In[7]:= FindMaximumFlow[Graph[{1->2, 2->3, 1->3}, EdgeCapacity -> {2, 3, 4}], 1, 3]
+Out[7]= 6
 ```
 
 `EdgeWeight` is not a capacity, an infinite capacity is allowed, `s == t` gives
