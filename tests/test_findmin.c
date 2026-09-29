@@ -479,6 +479,111 @@ static void test_no_leak_many_calls(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 14. Regressions (2026-09-28 optimization fixes)                     */
+/* ------------------------------------------------------------------ */
+
+static void test_two_start_searches(void) {
+    /* {x, x0, x1} are two starting values, not bounds: the search leaves
+     * [5, 8] and reaches the minimum at 9.5293 (it used to hand back x0 = 5,
+     * the minimum of the clamped interval). */
+    check_true("With[{r = FindMinimum[x Cos[x], {x, 5, 8}]}, "
+               "Abs[(x /. Last[r]) - 9.5293344054] < 1.*^-4 && "
+               "Abs[First[r] - (-9.4772942595)] < 1.*^-6]");
+    /* The order of the two starts does not matter. */
+    check_true("Abs[(x /. Last[FindMinimum[x Cos[x], {x, 8, 5}]]) - 9.5293344054] < 1.*^-4");
+    /* MPFR two-start path. */
+    check_true("Abs[(x /. Last[FindMinimum[x Cos[x], {x, 5, 8}, WorkingPrecision -> 30]]) "
+               "- 9.5293344054] < 1.*^-8");
+    /* FindMaximum shares the spec parser. */
+    check_true("Abs[(x /. Last[FindMaximum[-x Cos[x], {x, 5, 8}]]) - 9.5293344054] < 1.*^-4");
+}
+
+static void test_start_values_evaluated(void) {
+    /* HoldAll keeps the variable, but the starting value must evaluate: in a
+     * Table the held spec is {x, s} with s bound by the iterator, which used
+     * to be read as the two variables x and s (rules like 2 -> 1.0). */
+    check_true("With[{r = Table[FindMinimum[x Cos[x], {x, s}], {s, {2, 7}}]}, "
+               "Abs[(x /. r[[1, 2]]) - 3.4256184595] < 1.*^-4 && "
+               "Abs[(x /. r[[2, 2]]) - 9.5293344054] < 1.*^-4 && "
+               "r[[1, 2, All, 1]] === {x}]");
+    check_true("Abs[(x /. Last[Module[{s0 = 7}, FindMinimum[x Cos[x], {x, s0}]]]) "
+               "- 9.5293344054] < 1.*^-4");
+    /* Bounds of the 4-element spec and entries of the multivariate spec too. */
+    check_true("With[{r = Block[{lo = 0, hi = 1}, FindMinimum[(x - 3)^2, {x, 0.5, lo, hi}]]}, "
+               "Abs[(x /. Last[r]) - 1] < 1.*^-6]");
+    check_true("With[{r = Table[FindMinimum[(x - a)^2 + (y + a)^2, {{x, a}, {y, 0}}], "
+               "{a, {1, 2}}]}, Abs[(x /. r[[2, 2]]) - 2] + Abs[(y /. r[[2, 2]]) + 2] < 1.*^-6]");
+    /* A numeric constant is a start value, never a second variable. */
+    check_true("Abs[First[FindMinimum[Sin[x], {x, Pi}]] + 1] < 1.*^-8");
+    /* A symbol naming a whole variable spec is resolved. */
+    check_true("Block[{vspec = {{x, 1}, {y, 2}}}, "
+               "With[{r = FindMinimum[(x - 3)^2 + (y + 1)^2, vspec]}, "
+               "Abs[(x /. Last[r]) - 3] + Abs[(y /. Last[r]) + 1] < 1.*^-6]]");
+    /* FindMaximum and FindRoot (separate parser) in a Table. */
+    check_true("Abs[(x /. Last[Table[FindMaximum[-(x - s)^2, {x, 0}], {s, {4}}][[1]]]) - 4] < 1.*^-6");
+    check_true("With[{r = Table[FindRoot[Cos[x] == x, {x, s}], {s, {0, 1}}]}, "
+               "Max[Abs[(x /. r) - 0.7390851332]] < 1.*^-8]");
+}
+
+static void test_option_values_evaluated(void) {
+    /* Option values are evaluated (FindMinimum is HoldAll): a symbol-valued
+     * MaxIterations / Method used to be rejected as badopt/badmeth. */
+    check_true("Module[{m = 50}, Head[FindMinimum[(x - 1)^2, {x, 0}, MaxIterations -> m]] === List]");
+    check_true("With[{r = Table[FindMinimum[(x - 1)^2 + (y - 2)^2, {{x, 0}, {y, 0}}, Method -> m], "
+               "{m, {\"QuasiNewton\", \"Powell\", \"ConjugateGradient\"}}]}, "
+               "Max[Abs[First /@ r]] < 1.*^-8]");
+}
+
+static void test_constraint_list_form(void) {
+    /* {f, c1, c2, ...}: every trailing element is a constraint (And-ed). */
+    check_true("Abs[First[FindMinimum[{x + y, x >= 1, y >= 2}, {{x, 3}, {y, 3}}]] - 3] < 1.*^-5");
+    check_true("Abs[First[FindMaximum[{x + y, x^2 + y^2 <= 1, x >= 0}, {{x, 0.5}, {y, 0.5}}]] "
+               "- Sqrt[2.]] < 1.*^-5");
+}
+
+static void test_mpfr_bracket_domain_edge(void) {
+    /* The downhill bracket expansion from x = 3 steps past x = 0, where
+     * Log[x] is complex; it now backs off instead of failing ("MPFR
+     * bracket-finding failed"). Minimum f = 1 at x = 1. */
+    check_true("With[{r = FindMinimum[x^2 - 2 Log[x], {x, 3}, WorkingPrecision -> 30]}, "
+               "Abs[First[r] - 1] < 1.*^-25 && Abs[(x /. Last[r]) - 1] < 1.*^-12 && "
+               "Precision[First[r]] > 25]");
+    check_true("Abs[(x /. Last[FindMinimum[x^2 - 2 Log[x], {x, 3}]]) - 1] < 1.*^-6");
+}
+
+static void test_cvmit_warning(void) {
+    /* Hitting MaxIterations is reported (FindMinimum::cvmit) instead of
+     * returning an unconverged iterate silently; a converged solve is quiet. */
+    mute_stderr_once();
+    check_true("Check[FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1.2}, {y, 1}}, "
+               "Method -> \"ConjugateGradient\", MaxIterations -> 5], \"warned\"] === \"warned\"");
+    check_true("Check[FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1.2}, {y, 1}}, "
+               "MaxIterations -> 5], \"warned\"] === \"warned\"");
+    check_true("Check[FindMinimum[(x - 1)^2 + (y - 2)^2, {{x, 0}, {y, 0}}, "
+               "Method -> \"ConjugateGradient\"], \"warned\"] =!= \"warned\"");
+}
+
+static void test_cg_rosenbrock_converges(void) {
+    /* Strong-Wolfe line search: CG now converges on Rosenbrock (it stopped at
+     * f = 6e-4 after 500 iterations with the Armijo backtracking search). */
+    check_true("Check[First[FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1.2}, {y, 1}}, "
+               "Method -> \"ConjugateGradient\"]] < 1.*^-12, False]");
+}
+
+static void test_hs071_default_method(void) {
+    /* Hock-Schittkowski 71: the default QuasiNewton penalty path stalled at
+     * 19.84 because the projected BFGS had no active set on the bound x1 = 1.
+     * Published optimum 17.0140173. */
+    check_true("Abs[First[FindMinimum[{a d (a + b + c) + c, a b c d >= 25 && "
+               "a^2 + b^2 + c^2 + d^2 == 40 && 1 <= a <= 5 && 1 <= b <= 5 && 1 <= c <= 5 && "
+               "1 <= d <= 5}, {{a, 1}, {b, 5}, {c, 5}, {d, 1}}]] - 17.0140173] < 1.*^-4");
+    /* Plain box-bounded BFGS reaching a corner. */
+    check_true("With[{r = FindMinimum[{(x - 2)^2 + (y + 1)^2, 0 <= x <= 1 && 0 <= y <= 1}, "
+               "{{x, 0.5}, {y, 0.5}}]}, Abs[First[r] - 2] < 1.*^-8 && "
+               "Abs[(x /. Last[r]) - 1] + Abs[y /. Last[r]] < 1.*^-6]");
+}
+
+/* ------------------------------------------------------------------ */
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -558,6 +663,16 @@ int main(void) {
     /* 12. Stress */
     TEST(test_stress_rosenbrock_origin);
     TEST(test_stress_rosenbrock_negative);
+
+    /* 14. Regressions (2026-09-28) */
+    TEST(test_two_start_searches);
+    TEST(test_start_values_evaluated);
+    TEST(test_option_values_evaluated);
+    TEST(test_constraint_list_form);
+    TEST(test_mpfr_bracket_domain_edge);
+    TEST(test_cvmit_warning);
+    TEST(test_cg_rosenbrock_converges);
+    TEST(test_hs071_default_method);
     TEST(test_stress_beale);
 
     /* 13. Memory */

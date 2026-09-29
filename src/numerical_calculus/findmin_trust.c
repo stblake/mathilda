@@ -384,7 +384,8 @@ bool fm_run_trust_region(Expr* f, Expr** vars, size_t n,
     FmQuad q; q.n = n; q.B = B; q.c = &ctx; q.xbase = x; q.gbase = g;
     q.xpert = xpert; q.gpert = gpert; q.active0 = act0;
 
-    for (int64_t k = 0; k < opts->max_iter; k++) {
+    int64_t k;
+    for (k = 0; k < opts->max_iter; k++) {
         double gnorm = sqrt(fm_dot(g, g, n));
         if (gnorm < tol_acc) break;
         if (needs_dense_B) {
@@ -432,6 +433,8 @@ bool fm_run_trust_region(Expr* f, Expr** vars, size_t n,
         for (size_t i = 0; i < n; i++) { double ax = fabs(x[i]); if (ax > xinf) xinf = ax; }
         if (Delta < tol_prec * (xinf + 1e-300)) break;   /* radius underflow      */
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (k >= opts->max_iter) fm_warn_maxit(opts);
     *fx_out = fx;
 cleanup:
     free(g); free(p); free(x_new); free(Bp); free(xpert); free(gpert); free(act0);
@@ -481,7 +484,8 @@ bool fm_run_newton_cg(Expr* f, Expr** vars, size_t n, FmVarBind* binds,
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
 
-    for (int64_t k = 0; k < opts->max_iter; k++) {
+    int64_t k;
+    for (k = 0; k < opts->max_iter; k++) {
         double gnorm = sqrt(fm_dot(g, g, n));
         if (gnorm < tol_acc) break;
         fm_tnc_cg(&ctx, x, g, g, act0, p, r, d, Hd, xpert, gpert);   /* gm = g */
@@ -507,6 +511,8 @@ bool fm_run_newton_cg(Expr* f, Expr** vars, size_t n, FmVarBind* binds,
         fx = fx_new;
         if (max_step < tol_prec * (max_x + 1e-300)) break;
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (k >= opts->max_iter) fm_warn_maxit(opts);
     *fx_out = fx;
 cleanup:
     free(g); free(p); free(r); free(d); free(Hd);

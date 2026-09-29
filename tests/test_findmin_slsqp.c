@@ -269,6 +269,27 @@ static void test_no_leak_many_calls(void) {
                "{{x,0},{y,0}}, Method->\"SLSQP\"]], {50}]; Abs[s - 25.] < 1.*^-4]");
 }
 
+/* S8 many coupled equalities from an infeasible start (2026-09-28). A
+ * 10-link hanging chain between (0,0) and (1,0), links of length 0.15, 18
+ * free coordinates, 10 equalities. SLSQP quit after 8 consecutive infeasible
+ * iterations (violation still falling) with an `infeas` warning at a point
+ * violating the links by 2e-2; it now converges to the feasible optimum the
+ * penalty path also reaches (potential -3.015326). */
+static void test_hanging_chain(void) {
+    check_true(
+        "Module[{nL = 10, len = 0.15, xv, yv, xs, ys, cons, obj, vars, r},"
+        " xv = Table[Symbol[\"chx\" <> ToString[i]], {i, nL - 1}];"
+        " yv = Table[Symbol[\"chy\" <> ToString[i]], {i, nL - 1}];"
+        " xs = Join[{0}, xv, {1}]; ys = Join[{0}, yv, {0}];"
+        " cons = Table[(xs[[i+1]] - xs[[i]])^2 + (ys[[i+1]] - ys[[i]])^2 == len^2, {i, nL}];"
+        " obj = Total[ys];"
+        " vars = Join[Table[{xv[[i]], i/nL}, {i, nL - 1}],"
+        "             Table[{yv[[i]], -0.3 Sin[Pi i/nL]}, {i, nL - 1}]];"
+        " r = Check[FindMinimum[Evaluate[{obj, And @@ cons}], Evaluate[vars], Method -> \"SLSQP\"], $Failed];"
+        " r =!= $Failed && Abs[First[r] + 3.015326] < 1.*^-4 &&"
+        " Max[Abs[(cons /. Equal -> Subtract) /. Last[r]]] < 1.*^-8]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -312,6 +333,9 @@ int main(void) {
     TEST(test_inconsistent_no_crash);
     TEST(test_shape);
     TEST(test_no_leak_many_calls);
+
+    /* S8 coupled equalities, infeasible start */
+    TEST(test_hanging_chain);
 
     printf("All SLSQP tests passed!\n");
     return 0;

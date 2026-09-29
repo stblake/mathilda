@@ -569,13 +569,21 @@ Expr* builtin_nmaximize(Expr* res) {
     }
     Expr* f_orig = res->data.function.args[0];
     Expr* new_first;
-    if (nm_is_head(f_orig, SYM_List) && f_orig->data.function.arg_count == 2) {
-        Expr* inner_f = f_orig->data.function.args[0];
-        Expr* cons = f_orig->data.function.args[1];
-        Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(inner_f) };
-        Expr* neg_f = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
-        Expr* list_args[2] = { neg_f, expr_copy(cons) };
-        new_first = expr_new_function(expr_new_symbol(SYM_List), list_args, 2);
+    if (nm_is_head(f_orig, SYM_List) && f_orig->data.function.arg_count >= 2) {
+        /* {f, cons} or {f, c1, c2, ...}: negate ONLY the objective and carry
+         * every constraint element across unchanged. Negating the whole list
+         * (the old fallback for three or more elements) made Times[-1, {...}]
+         * thread over the constraints, turning c1, c2 into -c1, -c2 garbage and
+         * the objective into a list. */
+        size_t m = f_orig->data.function.arg_count;
+        Expr** list_args = (Expr**)malloc(sizeof(Expr*) * m);
+        Expr* neg_args[2] = { expr_new_integer(-1),
+                              expr_copy(f_orig->data.function.args[0]) };
+        list_args[0] = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
+        for (size_t i = 1; i < m; i++)
+            list_args[i] = expr_copy(f_orig->data.function.args[i]);
+        new_first = expr_new_function(expr_new_symbol(SYM_List), list_args, m);
+        free(list_args);
     } else {
         Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(f_orig) };
         new_first = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);

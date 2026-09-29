@@ -199,6 +199,26 @@ static void test_no_leak_many_calls(void) {
                "Abs[s - 40*7/3] < 1.*^-2]");
 }
 
+/* C8 trust radius / Euclidean step (2026-09-28). One rho doubled as model
+ * spacing and trust radius and was halved on every rejected trial, and the
+ * inf-norm LP step was always a box corner (sign descent): Rosenbrock stopped
+ * at f = 2.02 after 500 iterations with no warning. */
+static void test_rosenbrock_progress_and_cvmit(void) {
+    check_true("First[FindMinimum[(1-x)^2 + 100 (y-x^2)^2, {{x,-1.2},{y,1}}, "
+               "Method->\"COBYLA\"]] < 0.1");
+    check_true("Check[FindMinimum[(1-x)^2 + 100 (y-x^2)^2, {{x,-1.2},{y,1}}, "
+               "Method->\"COBYLA\"], \"warned\"] === \"warned\"");
+    check_true("First[FindMinimum[(1-x)^2 + 100 (y-x^2)^2, {{x,-1.2},{y,1}}, "
+               "Method->\"COBYLA\", MaxIterations -> 10000]] < 1.*^-6");
+}
+
+static void test_hs071(void) {
+    check_true("Abs[First[FindMinimum[{a d (a + b + c) + c, a b c d >= 25 && "
+               "a^2 + b^2 + c^2 + d^2 == 40 && 1 <= a <= 5 && 1 <= b <= 5 && 1 <= c <= 5 && "
+               "1 <= d <= 5}, {{a, 1}, {b, 5}, {c, 5}, {d, 1}}, Method->\"COBYLA\"]] "
+               "- 17.0140173] < 1.*^-3");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -233,6 +253,10 @@ int main(void) {
     TEST(test_inconsistent_no_crash);
     TEST(test_shape);
     TEST(test_no_leak_many_calls);
+
+    /* C8 trust radius / Euclidean step */
+    TEST(test_rosenbrock_progress_and_cvmit);
+    TEST(test_hs071);
 
     printf("All COBYLA tests passed!\n");
     return 0;

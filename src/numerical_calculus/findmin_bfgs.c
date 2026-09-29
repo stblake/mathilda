@@ -26,6 +26,7 @@ bool fm_run_bfgs(Expr* f, Expr** vars, size_t n,
     double* s = (double*)malloc(sizeof(double) * n);
     double* y = (double*)malloc(sizeof(double) * n);
     double* Hy = (double*)malloc(sizeof(double) * n);
+    bool* act = boxes ? (bool*)calloc(n ? n : 1, sizeof(bool)) : NULL;
     bool ok = false;
 
     for (size_t i = 0; i < n; i++) H[i*n + i] = 1.0;
@@ -55,17 +56,31 @@ bool fm_run_bfgs(Expr* f, Expr** vars, size_t n,
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
 
-    for (int64_t k = 0; k < opts->max_iter; k++) {
-        /* Gradient norm convergence. */
+    int64_t k;
+    for (k = 0; k < opts->max_iter; k++) {
+        /* Binding box bounds (at a bound with the gradient pushing outward).
+         * Those coordinates are held fixed for this step and excluded from
+         * the gradient test -- the projected-quasi-Newton active set. With no
+         * binding bound (every unboxed problem) nact == 0 and the step below
+         * is the plain d = -H g. */
+        size_t nact = act ? fm_box_binding_mask(x, g, n, boxes, act) : 0;
+
+        /* Projected-gradient norm convergence. */
         double gnorm = 0.0;
-        for (size_t i = 0; i < n; i++) gnorm += g[i] * g[i];
+        for (size_t i = 0; i < n; i++) if (!nact || !act[i]) gnorm += g[i] * g[i];
         gnorm = sqrt(gnorm);
         if (gnorm < tol_acc) { ok = true; break; }
 
-        /* d = -H g. */
+        /* d = -H g over the free coordinates (d_A = 0). Without this a
+         * projected step whose H-direction pointed into an active bound was
+         * clipped to (almost) nothing in the free coordinates too, the line
+         * search stalled, and the augmented-Lagrangian rounds "stabilised" at
+         * a non-stationary point (HS071 stopped at 19.84, not 17.014). */
         for (size_t i = 0; i < n; i++) {
+            if (nact && act[i]) { d[i] = 0.0; continue; }
             double s_ = 0.0;
-            for (size_t j = 0; j < n; j++) s_ += H[i*n + j] * g[j];
+            for (size_t j = 0; j < n; j++)
+                if (!nact || !act[j]) s_ += H[i*n + j] * g[j];
             d[i] = -s_;
         }
         double g_dot_d = 0.0;
@@ -73,7 +88,10 @@ bool fm_run_bfgs(Expr* f, Expr** vars, size_t n,
         if (g_dot_d >= 0.0) {
             /* Not a descent direction — reset H to I and use steepest. */
             for (size_t i = 0; i < n*n; i++) H[i] = 0.0;
-            for (size_t i = 0; i < n; i++) { H[i*n + i] = 1.0; d[i] = -g[i]; }
+            for (size_t i = 0; i < n; i++) {
+                H[i*n + i] = 1.0;
+                d[i] = (nact && act[i]) ? 0.0 : -g[i];
+            }
             g_dot_d = 0.0; for (size_t i = 0; i < n; i++) g_dot_d += g[i] * d[i];
         }
 
@@ -129,6 +147,10 @@ bool fm_run_bfgs(Expr* f, Expr** vars, size_t n,
 
         /* BFGS update: s = x_new - x; y = g_new - g; ρ = 1 / (y . s). */
         for (size_t i = 0; i < n; i++) { s[i] = x_new[i] - x[i]; y[i] = g_new[i] - g[i]; }
+        /* Held (binding-bound) coordinates did not move, so their gradient
+         * change carries no curvature information about the free subspace:
+         * keep the pair in the free subspace only. */
+        if (nact) for (size_t i = 0; i < n; i++) if (act[i]) { s[i] = 0.0; y[i] = 0.0; }
         double sy = 0.0;
         for (size_t i = 0; i < n; i++) sy += s[i] * y[i];
         if (sy > 1e-12) {
@@ -155,6 +177,8 @@ bool fm_run_bfgs(Expr* f, Expr** vars, size_t n,
         fx = fx_new;
         if (max_step < tol_prec * (max_x + 1e-300)) { ok = true; break; }
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (k >= opts->max_iter && !augmented) fm_warn_maxit(opts);
     if (!ok) {
         /* Either max iters or line search exhausted — still report best. */
     }
@@ -164,6 +188,6 @@ bool fm_run_bfgs(Expr* f, Expr** vars, size_t n,
     ok = true;
 cleanup:
     free(H); free(g); free(g_new); free(d); free(x_new);
-    free(s); free(y); free(Hy);
+    free(s); free(y); free(Hy); free(act);
     return ok;
 }

@@ -277,6 +277,10 @@ bool fm_slsqp_qp(const double* L, size_t n, const double* g,
     return true;
 }
 
+/* Consecutive non-improving infeasible iterations before SLSQP reports
+ * FindMinimum::infeas and stops (see the stall test in the main loop). */
+#define FM_SLSQP_STALL 30
+
 bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
                          FmVarBind* binds, Expr** g_exprs,
                          double* x, /* in/out */
@@ -331,9 +335,11 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
     int    infeas_streak = 0;
+    double best_viol = HUGE_VAL;       /* smallest max-violation seen so far */
     int    zero_streak = 0;
 
-    for (int64_t it = 0; it < opts->max_iter; it++) {
+    int64_t it;
+    for (it = 0; it < opts->max_iter; it++) {
         /* Factor a COPY of B (tau-retry); reset B=I if it is not SPD. */
         bool fac = false; double tau = 0.0;
         for (int attempt = 0; attempt < 6 && !fac; attempt++) {
@@ -499,14 +505,24 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
         bool small_step = (alpha * dnorm < tol_prec * (xnorm + 1.0));
         if (feas && (small_step || gLnorm < tol_acc)) { ok = true; break; }
 
+        /* Give up on feasibility only when the violation has STALLED: no 1%
+         * improvement on the best violation seen for FM_SLSQP_STALL straight
+         * iterations. The old rule quit after any 8 consecutive infeasible
+         * iterations, even while the violation was still falling -- so an
+         * infeasible start on a problem with many coupled equalities (a
+         * 10-link hanging chain) was abandoned mid-approach at a point
+         * violating its constraints by 2e-2. */
         if (viol > 1e-6) {
-            if (++infeas_streak >= 8) {
+            if (viol < 0.99 * best_viol) { best_viol = viol; infeas_streak = 0; }
+            else if (++infeas_streak >= FM_SLSQP_STALL) {
                 fm_warn(g_fm_name, "infeas",
                         "could not satisfy constraints to tolerance");
                 break;
             }
-        } else infeas_streak = 0;
+        } else { infeas_streak = 0; if (viol < best_viol) best_viol = viol; }
     }
+    /* Loop exhausted without meeting the goals: say so (cvmit). */
+    if (it >= opts->max_iter) fm_warn_maxit(opts);
 
     /* If we ended infeasible but saw a feasible iterate, return the best. */
     {

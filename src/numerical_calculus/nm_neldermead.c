@@ -175,7 +175,21 @@ void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
         if (nc->post_process != 0) {
             double fr = f, pr = p;
             nm_local_polish(D, xr, &fr, &pr);
-            if (nm_better(f, p, fr, pr)) {
+            /* Keep the raw vertex only when it is better AND the polish did
+             * not simply buy feasibility. The simplex runs on a fixed-weight
+             * penalty (NM_PENALTY_MU), so its best vertex sits ~1e-6 OUTSIDE an
+             * active constraint with an objective ~1e-6 below the constrained
+             * optimum. Both points fall inside the ranking tolerance, so Deb's
+             * rule alone preferred the raw vertex and NelderMead returned
+             * 1e-6-violating answers where every other method returns ~4e-12.
+             * A polish that reduces the violation is adopted unless it costs
+             * more objective than an exact-penalty weight of 1e3 (1 + |f|) per
+             * unit of violation removed -- a genuine overshoot into a worse
+             * basin still loses. */
+            double gain = sqrt(p > 0.0 ? p : 0.0) - sqrt(pr > 0.0 ? pr : 0.0);
+            bool bought_feasibility =
+                gain > 0.0 && fr <= f + 1e3 * (1.0 + fabs(f)) * gain;
+            if (nm_better(f, p, fr, pr) && !bought_feasibility) {
                 for (size_t j = 0; j < n; j++) xr[j] = V[lo * n + j];
             } else { f = fr; p = pr; }
         }
