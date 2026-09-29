@@ -2178,20 +2178,25 @@ static Expr* morph3_builtin(Expr* res, MorphOp first, bool two_pass) {
     size_t k = 2 * (size_t)r + 1;
 
     size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
+    ImgType t = IMG_REAL;
+    image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, &t);
     if (!image3d_load(res->data.function.args[0], &w, &h, &d, &c, &src)) return NULL;
+    bool keep_bit = (t == IMG_BIT);     /* see morph_builtin */
     size_t n = w * h * d * c;
     double* a = malloc(sizeof(double) * n);
     Expr* out = NULL;
     if (a && morph3_separable(src, a, w, h, d, c, k, first)) {
         if (!two_pass) {
-            out = image3d_build_real(a, w, h, d, c);
+            out = keep_bit ? image3d_build_typed(a, w, h, d, c, IMG_BIT)
+                           : image3d_build_real(a, w, h, d, c);
         } else {
             /* The SAME element both times, which is what makes the pair idempotent: a different
              * second element would still smooth but would no longer be an opening. */
             double* b = malloc(sizeof(double) * n);
             MorphOp second = (first == MORPH_ERODE) ? MORPH_DILATE : MORPH_ERODE;
             if (b && morph3_separable(a, b, w, h, d, c, k, second))
-                out = image3d_build_real(b, w, h, d, c);
+                out = keep_bit ? image3d_build_typed(b, w, h, d, c, IMG_BIT)
+                               : image3d_build_real(b, w, h, d, c);
             free(b);
         }
     }
@@ -2209,14 +2214,21 @@ static Expr* morph_builtin(Expr* res, MorphOp first, bool two_pass) {
     if (!morph_element(res->data.function.args[1], &kh, &kw, &sup, &full)) return NULL;
 
     size_t w = 0, h = 0, c = 0; double* src = NULL;
+    ImgType t = IMG_REAL;
+    image_info(res->data.function.args[0], NULL, NULL, NULL, &t);
     if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) { free(sup); return NULL; }
+    /* A "Bit" image STAYS "Bit", as in Mathematica. Flat morphology takes a max or min of stored
+     * values, so every output of a binary image is exactly 0 or 1 already; widening it to "Real" (as
+     * the first version did) lost the binary type for no numerical reason, and ImageData then printed
+     * 1. where Mathematica prints 1. */
+    bool keep_bit = (t == IMG_BIT);
     size_t n = w * h * c;
     double* a = malloc(sizeof(double) * n);
     Expr* out = NULL;
     if (a) {
         morph_run(src, a, w, h, c, sup, kh, kw, full, first);
         if (!two_pass) {
-            out = image_build_real(a, w, h, c);
+            out = keep_bit ? image_build_typed(a, w, h, c, IMG_BIT) : image_build_real(a, w, h, c);
         } else {
             /* Opening is erode-then-dilate, closing dilate-then-erode: the SAME element both
              * times, which is what makes the pair idempotent. Using a different element for the
@@ -2225,7 +2237,8 @@ static Expr* morph_builtin(Expr* res, MorphOp first, bool two_pass) {
             if (b) {
                 MorphOp second = (first == MORPH_ERODE) ? MORPH_DILATE : MORPH_ERODE;
                 morph_run(a, b, w, h, c, sup, kh, kw, full, second);
-                out = image_build_real(b, w, h, c);
+                out = keep_bit ? image_build_typed(b, w, h, c, IMG_BIT)
+                               : image_build_real(b, w, h, c);
                 free(b);
             }
         }
@@ -3664,8 +3677,20 @@ static Expr* builtin_imagecorrelate(Expr* res) {
         else return NULL;
     }
 
+    /* The template is a matrix or, as in Mathematica, an IMAGE -- the natural way to hand over a patch
+     * cut from another picture. A single-channel image template is its unit-scale pixel array, so
+     * ImageCorrelate[img, Image[m]] equals ImageCorrelate[img, m] for a real m. A multichannel template
+     * declines: whether it should correlate channel against channel or be reduced to luminance is a
+     * choice the matrix form never had to make, and guessing would be silently wrong for one reading. */
     size_t kw = 0, kh = 0; double* k = NULL;
-    if (!ker_load(res->data.function.args[1], &kh, &kw, &k)) return NULL;
+    Expr* tpl = res->data.function.args[1];
+    if (image_info(tpl, NULL, NULL, NULL, NULL)) {
+        size_t tc = 0;
+        if (!image_load(tpl, &kw, &kh, &tc, &k)) return NULL;
+        if (tc != 1) { free(k); return NULL; }
+    } else if (!ker_load(tpl, &kh, &kw, &k)) {
+        return NULL;
+    }
 
     Expr* out = NULL;
     if (ncc) {
@@ -3750,7 +3775,8 @@ void imagefilter_init(void) {
         "is the only difference from ImageConvolve. The two are related exactly -- correlation equals "
         "convolution with the kernel reversed on both axes -- and they agree on any symmetric kernel, "
         "so the distinction only shows on an asymmetric one, where a delta with {{1,2,3}} gives "
-        "{3,2,1} here and {1,2,3} convolved. "
+        "{3,2,1} here and {1,2,3} convolved. The kernel may also be a single-channel Image, whose "
+        "unit-scale pixels are used as the matrix. "
         "ImageCorrelate[image, template, \"NormalizedCrossCorrelation\"] is template matching: it "
         "subtracts the local mean and divides by the local standard deviation, so it measures SHAPE and "
         "is invariant to brightness offset and contrast scale. Plain correlation is maximised by "
@@ -3838,7 +3864,8 @@ void imagefilter_init(void) {
         "maximum, which is what keeps Dilation[img, BoxMatrix[1]] and Dilation[img, 1] the same "
         "operation. Padding replicates the border, the same rule the convolutions use, which is "
         "what makes Dilation >= image hold at the edges too. A full rectangle is separable for the "
-        "maximum exactly as for a sum, so it costs kw + kh comparisons rather than kw * kh.");
+        "maximum exactly as for a sum, so it costs kw + kh comparisons rather than kw * kh. "
+        "A \"Bit\" image gives a \"Bit\" image; other types give \"Real\".");
 
     symtab_add_builtin("Erosion", builtin_erosion);
     symtab_get_def("Erosion")->attributes |= ATTR_PROTECTED;
@@ -3846,7 +3873,7 @@ void imagefilter_init(void) {
         "Erosion[image, r] gives the minimum over a (2r+1) x (2r+1) square neighbourhood; "
         "Erosion[image, elem] uses the support of elem. Dual to Dilation: for a symmetric element, "
         "Erosion[f, k] equals 1 - Dilation[1 - f, k] exactly, which holds at the border only "
-        "because the replicate padding is itself self-dual.");
+        "because the replicate padding is itself self-dual A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
 
     symtab_add_builtin("Opening", builtin_opening);
     symtab_get_def("Opening")->attributes |= ATTR_PROTECTED;
@@ -3854,14 +3881,14 @@ void imagefilter_init(void) {
         "Opening[image, r] erodes then dilates with the same element, removing bright features "
         "smaller than it while leaving larger ones close to their original size. IDEMPOTENT: "
         "Opening[Opening[f]] equals Opening[f], which is the defining property and the reason "
-        "opening twice is not a sharpening loop.");
+        "opening twice is not a sharpening loop A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
 
     symtab_add_builtin("Closing", builtin_closing);
     symtab_get_def("Closing")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Closing",
         "Closing[image, r] dilates then erodes with the same element, filling dark features "
         "smaller than it. Idempotent, like Opening, and the two bracket the image: "
-        "Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere.");
+        "Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
     symtab_add_builtin("EdgeDetect", builtin_edgedetect);
     symtab_get_def("EdgeDetect")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("EdgeDetect",

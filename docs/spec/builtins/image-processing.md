@@ -10,7 +10,10 @@ these and land separately.
 Attributes: `Protected`.
 
 - `Image[data]` — type inferred from the values
-- `Image[data, "Bit" | "Byte" | "Real"]` — type stated, and validated against the data
+- `Image[data, "Bit" | "Byte" | "Bit16" | "Real"]` — type stated; the data is **coerced** to it
+  (`"Real32"` and `"Real64"` are accepted as synonyms for `"Real"`)
+- `Image[image, type]` — converts an existing image between types, preserving brightness;
+  `Image[image]` is the image itself
 
 **The canonical form is `Image[data, type]`, which is also real Wolfram syntax.** Normalising to
 it is what makes validity *decidable*: a builtin that returns `NULL` leaves its expression alone,
@@ -37,8 +40,39 @@ alone:
 So `Image[{{0, 1}, {1, 0}}]` is a bit image while `Image[{{0., 1.}, {1., 0.}}]` is a real one —
 the same numbers written differently, and a distinction a caller can rely on.
 
-A **stated** type is refused where the data does not fit it: `Image[{{0, 300}}, "Byte"]` stays
-unevaluated rather than reinterpreting 300, which would corrupt every later scaling.
+**A stated type coerces the data, as in Mathematica.** Mathematica's documentation says of
+`Image[data, "type"]` that "values in data are coerced to the specified type by rounding or
+clipping", and Mathilda follows it. The data of `Image[data, type]` is read in the type's *own*
+range (not the unit interval), then:
+
+| type | stored values | coercion |
+|---|---|---|
+| `"Bit"` | integers `0`, `1` | round to nearest (halves up), clip to `[0, 1]` |
+| `"Byte"` | integers `0..255` | round to nearest (halves up), clip to `[0, 255]` |
+| `"Bit16"` | integers `0..65535` | round to nearest (halves up), clip to `[0, 65535]` |
+| `"Real"` (`"Real32"`, `"Real64"`) | any real | none — stored as given |
+
+So `Image[{{0, 300}}, "Byte"]` stores `{{0, 255}}` (and `ImageData` gives `{{0., 1.}}`),
+`Image[{{-5, 3.4, 3.6}}, "Byte"]` stores `{{0, 3, 4}}`, and `Image[{{0.5, 2}}, "Bit"]` stores
+`{{1, 1}}`. A NaN value stores as `0`, Mathematica's default `"IndeterminateValue"`. The tie rule
+(halves up) is Mathilda's choice: Mathematica documents rounding but not its tie-breaking.
+`"Real"` is not clipped because Mathematica's real images allow any value and only *display* the
+unit interval. `"Real32"` and `"Real64"` both name Mathilda's one real type (double precision) and
+normalise to `"Real"`, so `ImageType` reports `"Real"` for them.
+
+Data that cannot be represented in *any* type — non-numeric, complex, ragged — is **rejected**:
+the call stays unevaluated and `ImageQ` gives `False` for it.
+
+This replaced a bug, not a design. The first version meant to *decline* out-of-range data, but a
+declined `Image[{{0, 300}}, "Byte"]` is left unevaluated in exactly the canonical shape, and the
+validity check read only the shape — so `ImageQ` said `True` and `ImageData` returned
+`300/255 = 1.17647`. A large literal array also slipped through the other way: it auto-packs into
+an integer buffer, and the fixed-point early return accepted any buffer without looking at the
+values. Coercion removes the first case, and the fixed point now checks an integer buffer's range.
+
+`Image[image, type]` **converts**: the source is read as unit-interval brightnesses, scaled by the
+target type's maximum, and coerced by the same rule — `Image[Image[{{0., 0.5, 1.}}], "Byte"]`
+stores `{{0, 128, 255}}`.
 
 **Ragged data declines** rather than being padded or truncated. A ragged array is not an image,
 and every filter downstream indexes it as rectangular — so a clear refusal here beats an
@@ -61,8 +95,8 @@ In[6]:= ImageData[Image[{{0., 1.}, {1., 0.}}]]
 In[1]:= (* the type is inferred from the values *) ImageType[Image[{{0, 1}, {1, 0}}]]
 In[2]:= ImageType[Image[{{0, 128}, {255, 7}}]]
 In[3]:= ImageType[Image[{{0., 0.5}}]]
-In[4]:= (* a stated type must fit the data, or the call declines *) Head[Image[{{0, 300}}, "Byte"]]
-In[5]:= Head[Image[{{0, 2}}, "Bit"]]
+In[4]:= (* a stated type coerces the data: 300 clips to 255 *) ImageData[Image[{{0, 300}}, "Byte"], "Byte"]
+In[5]:= ImageData[Image[{{0.5, 2, 0.4}}, "Bit"], "Bit"]
 In[6]:= ImageType[Image[{{0, 1}, {1, 0}}, "Byte"]]
 In[7]:= (* ragged data declines rather than being padded *) Head[Image[{{1., 2.}, {3.}}]]
 In[8]:= Head[Image[{}]]
@@ -445,7 +479,8 @@ Out[2]= 1
 
 ## ImageType
 
-`ImageType[image]` gives `"Bit"`, `"Byte"` or `"Real"`. Attributes: `Protected`.
+`ImageType[image]` gives `"Bit"`, `"Byte"`, `"Bit16"` or `"Real"`. Attributes: `Protected`.
+An image built with `"Real32"` or `"Real64"` reports `"Real"`, Mathilda's single real type.
 
 The type is not decoration: it fixes the **range** of a stored value, which is what makes
 `ImageData`'s scaling well defined.
@@ -579,8 +614,10 @@ property spread across two. Real data passes through untouched, *including* valu
 `[0, 1]`: storing faithfully beats clamping silently, which would destroy data the caller may
 want back.
 
-`ImageData[image, type]` accepts only the image's **own** type. Converting between types has its
-own rounding decisions, and an accessor should not make them silently.
+`ImageData[image, type]` accepts only the image's **own** type (`"Real32"` and `"Real64"` name the
+real type). Converting between types has its own rounding decisions, and an accessor should not
+make them silently — `Image[image, type]` is the conversion, and it rounds and clips as the
+constructor does.
 
 ## Performance
 
@@ -2446,7 +2483,8 @@ pass with two axes swapped:
 silently and index it wrongly.
 
 Everything else is shared with `Image`: type inference (`"Bit"`/`"Byte"`/`"Real"` from the values), the
-refusal of a stated type the data does not fit, ragged rejection, the canonical form as a fixed point,
+coercion of data to a stated type (rounding and clipping, so `Image3D[{{{0, 300}}}, "Byte"]` stores
+`{{{0, 255}}}`), conversion by `Image3D[volume, type]`, ragged rejection, the canonical form as a fixed point,
 and `ImageData`'s scaling — a byte volume returns 255 as exactly `1.0`, the same code path as a byte
 plane. `ImageDimensions`, `ImageChannels`, `ImageType` and `ImageData` all accept either rank.
 
@@ -3181,6 +3219,17 @@ Out[2]= -Image-
 `ImageCorrelate[image, kernel]` correlates — the kernel is **not** reflected, which is the only
 difference from `ImageConvolve`. `ImageCorrelate[image, template, "NormalizedCrossCorrelation"]` is
 template matching. Attributes: `Protected`.
+
+The kernel (or template) is a matrix or, as in Mathematica, a **single-channel `Image`**, whose
+unit-scale pixels are used as the matrix — so a patch cut from one picture can be matched against
+another directly. `ImageCorrelate[img, Image[m]]` equals `ImageCorrelate[img, m]` for a real `m`. A
+multichannel template declines: whether it should correlate channel against channel or be reduced to
+luminance is a choice the matrix form never had to make.
+
+```mathematica
+In[1]:= ImageData[ImageCorrelate[Image[{{0., 1., 0.}}], Image[{{0.5, 1.}}]]] === ImageData[ImageCorrelate[Image[{{0., 1., 0.}}], {{0.5, 1.}}]]
+Out[1]= True
+```
 
 **Correlation is convolution with the kernel reversed on both axes**, and the identity is asserted rather
 than assumed:
@@ -4783,6 +4832,15 @@ Morphological dilation: the maximum over a structuring element.
 - `Dilation[image, r]`: a `(2r+1)` square, or a cube for an `Image3D`.
 - `Dilation[image, elem]`: an explicit element (planar only).
 - Cost is independent of the radius: a full box separates into one pass per axis.
+- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in Mathematica: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
+
+```mathematica
+In[1]:= ImageData[Dilation[Image[{{0, 1, 0, 0}, {0, 0, 0, 0}}], 1], "Bit"]
+Out[1]= {{1, 1, 1, 0}, {1, 1, 1, 0}}
+
+In[2]:= ImageType[Dilation[Image[{{0, 1, 0}, {0, 0, 0}}], 1]]
+Out[2]= Bit
+```
 
 #### Basic Examples
 
@@ -4911,6 +4969,7 @@ Morphological erosion: the minimum over a structuring element.
 
 - `Erosion[image, r]`, the dual of `Dilation` under negation.
 - Accepts an `Image3D` with an integer radius.
+- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in Mathematica: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
 
 #### Basic Examples
 
@@ -5039,6 +5098,7 @@ Erosion then dilation with the same element. Idempotent.
 
 - `Opening[image, r]`: removes bright detail smaller than the element.
 - `Opening[Opening[x, r], r]` equals `Opening[x, r]` **exactly**, which is what makes it an opening rather than merely a smoother, and holds only because both passes use the same element.
+- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in Mathematica: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
 
 #### Properties & Relations
 
@@ -5164,6 +5224,7 @@ Dilation then erosion with the same element. Idempotent.
 
 - `Closing[image, r]`: fills dark detail smaller than the element.
 - `Opening[x] <= x <= Closing[x]` pointwise.
+- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in Mathematica: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
 
 #### Basic Examples
 
@@ -5826,10 +5887,29 @@ Out[2]= -Image-
 ```
 
 ## ImageRotate
-Rotates an image. Right angles are exact index permutations.
+Rotates an image **counterclockwise** by a positive angle, as Mathematica does. Right angles are exact index permutations.
 
-- `ImageRotate[image]`: a quarter turn.
-- `ImageRotate[image, angle]`: bilinear inverse mapping for a free angle, reading out of frame as 0 rather than replicating the edge.
+- `ImageRotate[image]`: a quarter turn counterclockwise.
+- `ImageRotate[image, angle]`: `angle` in radians (`n Degree` for degrees); negative turns clockwise. A free angle uses bilinear inverse mapping, reading out of frame as 0 rather than replicating the edge.
+- `ImageRotate[image, side]`: turns the top of the image to face `side` (`Left`, `Right`, `Top`, `Bottom`) — Mathematica's `Top -> side`. `Left` is a counterclockwise quarter turn, `Right` a clockwise one, `Bottom` a half turn.
+- `ImageRotate[image, side1 -> side2]`: turns `side1` onto `side2`, e.g. `Top -> Bottom` is a half turn.
+- **Deviation:** a free angle keeps the input's dimensions — Mathematica's size `Full` — where Mathematica's default (`Automatic`) enlarges the canvas to enclose the whole rotated image. The size argument (`ImageRotate[image, angle, size]`) and the `Background` option are not supported.
+
+The first version turned **clockwise**, on both the quarter-turn and the free-angle path, while its
+docstring said counterclockwise. No test caught it because every assertion was a composition — four
+turns, two turns against a half turn, the dimension swap — and all of those hold in either direction.
+The rotation of a non-square image is now pinned pixel for pixel:
+
+```mathematica
+In[1]:= ImageData[ImageRotate[Image[{{1., 2., 3.}, {4., 5., 6.}}]]]
+Out[1]= {{3.0, 6.0}, {2.0, 5.0}, {1.0, 4.0}}
+
+In[2]:= ImageData[ImageRotate[Image[{{1., 2., 3.}, {4., 5., 6.}}], -Pi/2]]
+Out[2]= {{4.0, 1.0}, {5.0, 2.0}, {6.0, 3.0}}
+
+In[3]:= ImageData[ImageRotate[Image[{{1., 2., 3.}, {4., 5., 6.}}], Right]]
+Out[3]= {{4.0, 1.0}, {5.0, 2.0}, {6.0, 3.0}}
+```
 - Four quarter turns are **exactly** the identity, and an odd number swaps the dimensions.
 - Volumes are not yet rotatable: a rotation in three dimensions needs an axis, which is a design decision rather than an extension.
 

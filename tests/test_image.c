@@ -71,12 +71,54 @@ static void test_type_is_inferred_from_the_values(void) {
     assert_eval_eq("ImageType[Image[{{0, 2}}]]", "\"Byte\"", 0);
     assert_eval_eq("ImageType[Image[{{0, 256}}]]", "\"Real\"", 0);
     assert_eval_eq("ImageType[Image[{{-1, 1}}]]", "\"Real\"", 0);
-    /* A stated type is honoured where the data fits it, and refused where it does not --
-     * reinterpreting 300 as a byte would corrupt every later scaling. */
     assert_eval_eq("ImageType[Image[{{0, 1}}, \"Byte\"]]", "\"Byte\"", 0);
-    assert_eval_eq("Head[Image[{{0, 300}}, \"Byte\"]]", "Image", 0);
-    assert_eval_eq("Head[Image[{{0, 5}}, \"Bit\"]]", "Image", 0);
-    assert_eval_eq("Head[Image[{{0, 1}}, \"Nonsense\"]]", "Image", 0);
+    assert_eval_eq("ImageQ[Image[{{0, 1}}, \"Nonsense\"]]", "False", 0);
+}
+
+static void test_stated_type_coerces_like_mathematica(void) {
+    /* A stated type COERCES the data, as Mathematica documents: "values in data are coerced to the
+     * specified type by rounding or clipping". The first version meant to decline instead, but a
+     * declined Image[data, type] is left unevaluated in exactly the canonical shape, and image_info
+     * checked only the shape -- so ImageQ said True for Image[{{0, 300}}, "Byte"] and ImageData
+     * divided 300 by 255 to give 1.17647. These rows pin the clip, the rounding, and that the
+     * result is a genuine image whose scaled data stays in the unit interval. */
+    assert_eval_eq("ImageData[Image[{{0, 300}}, \"Byte\"], \"Byte\"]", "{{0, 255}}", 0);
+    assert_eval_eq("ImageData[Image[{{0, 300}}, \"Byte\"]]", "{{0.0, 1.0}}", 0);
+    assert_eval_eq("ImageQ[Image[{{0, 300}}, \"Byte\"]]", "True", 0);
+    assert_eval_eq("ImageData[Image[{{-5, 3.4, 3.6, 254.5}}, \"Byte\"], \"Byte\"]",
+                   "{{0, 3, 4, 255}}", 0);
+    assert_eval_eq("ImageData[Image[{{0.5, 2, 0.49, -1}}, \"Bit\"], \"Bit\"]", "{{1, 1, 0, 0}}", 0);
+    assert_eval_eq("ImageType[Image[{{0.5, 2}}, \"Bit\"]]", "\"Bit\"", 0);
+    /* "Bit16" is a real type now, 0..65535, scaled by 65535. */
+    assert_eval_eq("ImageData[Image[{{0, 70000, 65535, 1.4}}, \"Bit16\"], \"Bit16\"]",
+                   "{{0, 65535, 65535, 1}}", 0);
+    assert_eval_eq("{ImageType[Image[{{1}}, \"Bit16\"]], ImageData[Image[{{0, 65535}}, \"Bit16\"]]}",
+                   "{\"Bit16\", {{0.0, 1.0}}}", 0);
+    /* "Real32" and "Real64" mean the one real type; a real image keeps any real, unclipped. */
+    assert_eval_eq("{ImageType[Image[{{0.2, 3.5}}, \"Real32\"]], ImageData[Image[{{0.2, 3.5}}, \"Real64\"]]}",
+                   "{\"Real\", {{0.2, 3.5}}}", 0);
+    assert_eval_eq("ImageData[Image[{{2, 3}}, \"Real\"], \"Real32\"]", "{{2.0, 3.0}}", 0);
+    /* The same holds on the PACKED path, which is where the other half of the bug lived: a large
+     * literal integer array auto-packs, and the fixed-point early return accepted any buffer. */
+    assert_eval_eq("Module[{b = Image[Table[Mod[i j, 400], {i, 30}, {j, 30}], \"Byte\"]},"
+                   " {ImageQ[b], Max[ImageData[b, \"Byte\"]], Max[ImageData[b]]}]",
+                   "{True, 255, 1.0}", 0);
+    assert_eval_eq("Head[ImageData[Image[Table[i j, {i, 30}, {j, 30}], \"Real\"], \"Real\"][[1, 1]]]",
+                   "Real", 0);
+    /* Data that cannot be represented at all stays unevaluated, and is not an image. */
+    assert_eval_eq("ImageQ[Image[{{\"a\", 1}}, \"Byte\"]]", "False", 0);
+    assert_eval_eq("ImageQ[Image[{{1 + I, 1}}, \"Byte\"]]", "False", 0);
+    assert_eval_eq("ImageQ[Image[{{1, x}}, \"Real\"]]", "False", 0);
+    /* Image[image, type] converts, preserving brightness; Image[image] is the image. */
+    assert_eval_eq("ImageData[Image[Image[{{0., 0.5, 1.}}], \"Byte\"], \"Byte\"]", "{{0, 128, 255}}", 0);
+    assert_eval_eq("ImageData[Image[Image[{{0, 255}}, \"Byte\"], \"Bit16\"], \"Bit16\"]",
+                   "{{0, 65535}}", 0);
+    assert_eval_eq("ImageData[Image[Image[{{0.2, 0.7}}], \"Bit\"], \"Bit\"]", "{{0, 1}}", 0);
+    assert_eval_eq("Image[Image[{{0, 1}}]] === Image[{{0, 1}}]", "True", 0);
+    /* Volumes share the rule. */
+    assert_eval_eq("ImageData[Image3D[{{{0, 300}}, {{2, 3}}}, \"Byte\"], \"Byte\"]",
+                   "{{{0, 255}}, {{2, 3}}}", 0);
+    assert_eval_eq("Image3DQ[Image3D[{{{\"x\"}}}, \"Byte\"]]", "False", 0);
 }
 
 static void test_canonical_form_is_a_fixed_point(void) {
@@ -695,8 +737,8 @@ static void test_image3d_shares_the_type_rules(void) {
                    "True", 0);
     assert_eval_eq("ImageType[Image3D[{{{0, 1}}, {{1, 0}}}]]", "\"Bit\"", 0);
     assert_eval_eq("ImageType[Image3D[{{{0., 0.5}}}]]", "\"Real\"", 0);
-    /* A stated type inconsistent with the data declines, as in 2-D. */
-    assert_eval_eq("Head[Image3D[{{{0, 300}}}, \"Byte\"]]", "Image3D", 0);
+    /* A stated type COERCES the data, as in 2-D: 300 clips to 255. */
+    assert_eval_eq("ImageData[Image3D[{{{0, 300}}}, \"Byte\"], \"Byte\"]", "{{{0, 255}}}", 0);
     /* Canonical form is a fixed point. */
     assert_eval_eq("Length[Image3D[{{{0, 1}}}]]", "2", 0);
 }
@@ -805,6 +847,21 @@ static void test_opening_and_closing_are_idempotent(void) {
                    " Chop[Max[Abs[Flatten[o - ImageData[Opening[Image[o], 1]]]]]]]", "0", 0);
     assert_eval_eq("Module[{c = ImageData[Closing[" MIMG ", 1]]},"
                    " Chop[Max[Abs[Flatten[c - ImageData[Closing[Image[c], 1]]]]]]]", "0", 0);
+}
+
+static void test_morphology_keeps_a_bit_image_bit(void) {
+    /* Flat morphology takes a max or min of stored values, so a binary image stays binary -- and as
+     * in Mathematica it stays typed "Bit". The first version widened every result to "Real". */
+    assert_eval_eq("Map[ImageType, {Dilation[Image[{{0, 1, 0}, {0, 0, 0}}], 1],"
+                   " Erosion[Image[{{0, 1, 0}, {0, 0, 0}}], 1], Opening[Image[{{0, 1, 0}, {0, 0, 0}}], 1],"
+                   " Closing[Image[{{0, 1, 0}, {0, 0, 0}}], 1]}]",
+                   "{\"Bit\", \"Bit\", \"Bit\", \"Bit\"}", 0);
+    assert_eval_eq("ImageData[Dilation[Image[{{0, 1, 0, 0}, {0, 0, 0, 0}}], 1], \"Bit\"]",
+                   "{{1, 1, 1, 0}, {1, 1, 1, 0}}", 0);
+    /* Other types still give "Real", and a Bit volume stays Bit too. */
+    assert_eval_eq("ImageType[Erosion[Image[{{0, 200, 0}, {0, 0, 0}}], 1]]", "\"Real\"", 0);
+    assert_eval_eq("ImageType[Dilation[Image3D[{{{0, 1}, {1, 0}}, {{0, 0}, {0, 1}}}], 1]]",
+                   "\"Bit\"", 0);
 }
 
 static void test_dilating_a_point_gives_the_element(void) {
@@ -1221,6 +1278,20 @@ static void test_correlation_is_convolution_reflected(void) {
                    " - ImageData[ImageConvolve[img, GaussianMatrix[1]]]]]]]]", "0", 0);
 }
 
+static void test_correlate_accepts_an_image_template(void) {
+    /* As in Mathematica, the template may be an Image: its unit-scale pixels are the matrix. */
+    assert_eval_eq("Module[{img = Image[Table[N[Mod[x*3 + y*5, 7]/7.], {y, 6}, {x, 7}]]},"
+                   " ImageData[ImageCorrelate[img, Image[{{0.5, 1.}, {0.25, 0.}}]]]"
+                   " === ImageData[ImageCorrelate[img, {{0.5, 1.}, {0.25, 0.}}]]]", "True", 0);
+    assert_eval_eq("Module[{img = Image[Table[N[Mod[i*i*13 + j*7, 97]]/97, {i, 1, 12}, {j, 1, 14}]], t},"
+                   " t = Image[ImageData[img][[4 ;; 6, 5 ;; 7]]];"
+                   " ImageData[ImageCorrelate[img, t, \"NormalizedCrossCorrelation\"]][[5, 6]] > 1 - 1.*^-12]",
+                   "True", 0);
+    /* A multichannel template has no single reading, so it declines. */
+    assert_eval_eq("Head[ImageCorrelate[Image[{{0., 1., 0.}}], Image[{{{1., 0., 0.}}}]]]",
+                   "ImageCorrelate", 0);
+}
+
 static void test_ncc_scores_exactly_one_at_an_exact_match(void) {
     /* NCC's defining properties, and the bound is the strong one: |NCC| <= 1 by Cauchy-Schwarz, with
      * equality exactly when the window is an affine image of the template. So where the template is a
@@ -1279,6 +1350,60 @@ static void test_right_angle_rotation_is_exact(void) {
     assert_eval_eq("ImageData[ImageRotate[" RIMG ", 2 Pi]] === ImageData[" RIMG "]", "True", 0);
     assert_eval_eq("ImageData[ImageRotate[" RIMG ", 90 Degree]] === ImageData[ImageRotate[" RIMG "]]",
                    "True", 0);
+}
+
+static void test_rotation_turns_counterclockwise(void) {
+    /* THE DIRECTION, which every row above is blind to: four turns, two turns against a half turn
+     * and the dimension swap all hold for a clockwise rotation too, and that is how the first
+     * version shipped rotating clockwise while its docstring (and Mathematica) said
+     * counterclockwise. A positive angle turns the picture to the LEFT, so the top-right pixel
+     * lands top-left and the top row runs down the left edge. */
+    assert_eval_eq("ImageData[ImageRotate[Image[{{1., 2., 3.}, {4., 5., 6.}}]]]",
+                   "{{3.0, 6.0}, {2.0, 5.0}, {1.0, 4.0}}", 0);
+    assert_eval_eq("ImageData[ImageRotate[Image[{{1., 2., 3.}, {4., 5., 6.}}], Pi/2]]",
+                   "{{3.0, 6.0}, {2.0, 5.0}, {1.0, 4.0}}", 0);
+    assert_eval_eq("ImageData[ImageRotate[Image[{{1., 2., 3.}, {4., 5., 6.}}], -Pi/2]]",
+                   "{{4.0, 1.0}, {5.0, 2.0}, {6.0, 3.0}}", 0);
+    assert_eval_eq("ImageData[ImageRotate[Image[{{1., 2., 3.}, {4., 5., 6.}}], 270 Degree]]",
+                   "{{4.0, 1.0}, {5.0, 2.0}, {6.0, 3.0}}", 0);
+    /* Integer data keeps its type through the permutation path; the direction is the same. */
+    assert_eval_eq("ImageData[ImageRotate[Image[{{1, 2, 3}, {4, 5, 6}}]]] * 255",
+                   "{{3.0, 6.0}, {2.0, 5.0}, {1.0, 4.0}}", 0);
+    /* Colour: whole pixels move, channels stay together. */
+    assert_eval_eq("ImageData[ImageRotate[Image[{{{1., 0., 0.}, {0., 1., 0.}},"
+                   " {{0., 0., 1.}, {1., 1., 1.}}}]]]",
+                   "{{{0.0, 1.0, 0.0}, {1.0, 1.0, 1.0}}, {{1.0, 0.0, 0.0}, {0.0, 0.0, 1.0}}}", 0);
+    /* Mathematica's SIDE forms: `side` puts the top on that side, side1 -> side2 turns one onto the
+     * other. Left is a counterclockwise quarter turn, Right a clockwise one. */
+    assert_eval_eq("ImageData[ImageRotate[" RIMG ", Left]] === ImageData[ImageRotate[" RIMG "]]",
+                   "True", 0);
+    assert_eval_eq("ImageData[ImageRotate[" RIMG ", Right]] === ImageData[ImageRotate[" RIMG ", -Pi/2]]",
+                   "True", 0);
+    assert_eval_eq("ImageData[ImageRotate[" RIMG ", Bottom]] === ImageData[ImageRotate[" RIMG ", Pi]]",
+                   "True", 0);
+    assert_eval_eq("ImageData[ImageRotate[" RIMG ", Top]] === ImageData[" RIMG "]", "True", 0);
+    assert_eval_eq("ImageData[ImageRotate[" RIMG ", Top -> Bottom]] === ImageData[ImageRotate[" RIMG ", Pi]]",
+                   "True", 0);
+    assert_eval_eq("ImageData[ImageRotate[" RIMG ", Left -> Top]] === ImageData[ImageRotate[" RIMG ", Right]]",
+                   "True", 0);
+    assert_eval_eq("Head[ImageRotate[" RIMG ", Top -> Sideways]]", "ImageRotate", 0);
+    /* The FREE-ANGLE path turns the same way. A bright pixel right of centre, turned by an angle a
+     * hair off a right angle (so it takes the resampler, not the permutation), ends up above
+     * centre; and the two paths agree on a large packed image to rounding. */
+    assert_eval_eq("Round[ImageData[ImageRotate[Image[Table[If[i == 3 && j == 5, 1., 0.],"
+                   " {i, 5}, {j, 5}]], 1.5707963]]]",
+                   "{{0, 0, 1, 0, 0}, {0, 0, 0, 0, 0}, {0, 0, 0, 0, 0}, {0, 0, 0, 0, 0}, {0, 0, 0, 0, 0}}", 0);
+    /* Pi/4: the pixel right of centre swings up and to the right, so everything it contributes
+     * sits in the upper-right corner and nothing lands anywhere else (a clockwise turn would put it
+     * lower right). */
+    assert_eval_eq("Module[{r = ImageData[ImageRotate[Image[Table[If[i == 3 && j == 5, 1., 0.],"
+                   " {i, 5}, {j, 5}]], Pi/4]]},"
+                   " {Total[Flatten[r[[1 ;; 2, 4 ;; 5]]]] > 0.99,"
+                   "  Total[Flatten[r]] == Total[Flatten[r[[1 ;; 2, 4 ;; 5]]]]}]",
+                   "{True, True}", 0);
+    assert_eval_eq("Module[{b = Image[Table[N[Sin[i/5.] + Cos[j/7.]], {i, 40}, {j, 40}]]},"
+                   " Max[Abs[Flatten[ImageData[ImageRotate[b, 1.5707963267948]]"
+                   " - ImageData[ImageRotate[b]]]]] < 1.*^-9]", "True", 0);
 }
 
 static void test_reflection_is_exact_and_self_inverse(void) {
@@ -1476,11 +1601,16 @@ static void test_volume_pad_fill_modes(void) {
 
 static void test_ncc_finds_the_patch_it_was_given(void) {
     /* A patch OF THE IMAGE, so the correct answer is known: the score peaks where the patch came
-     * from. The argmax is asserted exactly -- it is the property template matching rests on. */
-    assert_eval_eq("Module[{img = " NIMG ", t, r},"
+     * from. The argmax is asserted to within the 1e-12 the next row allows -- it is the property
+     * template matching rests on. Not a bare Position[r, Max[r]]: NIMG is Mod[13 i + 7 j, 97]/97,
+     * and the window shifted by (6, 3) is the SAME patch plus the constant 2/97 (13*6 + 7*3 = 99), so
+     * it also scores exactly 1 under NCC's offset invariance and floating-point order decided which
+     * of the two tied peaks Position reported. The true location must be among the maxima. */
+    assert_eval_eq("Module[{img = " NIMG ", t, r, m},"
                    " t = ImageData[img][[4 ;; 6, 5 ;; 7]];"
                    " r = ImageData[ImageCorrelate[img, t, \"NormalizedCrossCorrelation\"]];"
-                   " Position[r, Max[Flatten[r]]]]", "{{5, 6}}", 0);
+                   " m = Max[Flatten[r]];"
+                   " {r[[5, 6]] > m - 1.*^-12, r[[11, 9]] > m - 1.*^-12}]", "{True, True}", 0);
     /* And the peak is 1 to within 1e-12. Not exactly 1: the numerator comes from the correlation and
      * the variance from the tables, so they no longer share a summation order. */
     assert_eval_eq("Module[{img = " NIMG ", t, r},"
@@ -2681,6 +2811,7 @@ int main(void) {
     TEST(test_byte_scaling_is_exact);
     TEST(test_stored_values_round_trip);
     TEST(test_type_is_inferred_from_the_values);
+    TEST(test_stated_type_coerces_like_mathematica);
     TEST(test_canonical_form_is_a_fixed_point);
     TEST(test_channels);
     TEST(test_malformed_input_declines);
@@ -2724,12 +2855,15 @@ int main(void) {
     TEST(test_morphology_ordering_chain);
     TEST(test_morphology_duality_is_exact);
     TEST(test_opening_and_closing_are_idempotent);
+    TEST(test_morphology_keeps_a_bit_image_bit);
     TEST(test_dilating_a_point_gives_the_element);
     TEST(test_element_forms_and_declines);
     TEST(test_vanherk_agrees_with_an_independent_reference);
     TEST(test_correlation_is_convolution_reflected);
+    TEST(test_correlate_accepts_an_image_template);
     TEST(test_ncc_scores_exactly_one_at_an_exact_match);
     TEST(test_right_angle_rotation_is_exact);
+    TEST(test_rotation_turns_counterclockwise);
     TEST(test_reflection_is_exact_and_self_inverse);
     TEST(test_arbitrary_angle_rotation_round_trips_smooth_content);
     TEST(test_connectivity_is_the_discriminating_property);
