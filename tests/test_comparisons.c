@@ -557,6 +557,48 @@ void test_or_basic() {
     expr_free(t); expr_free(f);
 }
 
+/* `a === b === c` is SameQ[a, b, c], not SameQ[SameQ[a, b], c]: the nested
+ * form compared the Boolean True with c, so 1 === 1 === 1 answered False.
+ * The same held for UnsameQ and Unequal ("all distinct"). */
+void test_variadic_comparison_chains() {
+    assert_eval_eq("1 === 1 === 1", "True", 0);
+    assert_eval_eq("1 === 1 === 2", "False", 0);
+    assert_eval_eq("x === x === x", "True", 0);
+    assert_eval_eq("1 =!= 2 =!= 3", "True", 0);
+    assert_eval_eq("1 =!= 2 =!= 1", "False", 0);
+    assert_eval_eq("1 != 2 != 3", "True", 0);
+    assert_eval_eq("1 != 2 != 1", "False", 0);
+    /* A parenthesised operand is a Boolean, compared as such. */
+    assert_eval_eq("(1 === 1) === 1", "False", 0);
+    assert_eval_eq("(1 === 1) === True", "True", 0);
+    /* Unequal mixed into an ordering chain joins its Inequality. */
+    assert_eval_eq("1 < 2 != 3", "True", 0);
+    assert_eval_eq("1 < 2 != 2", "False", 0);
+    assert_eval_eq("1 != 2 < 3", "True", 0);
+    assert_eval_eq("Inequality[1, Unequal, 2, Less, 3]", "True", 0);
+    assert_eval_eq("Inequality[1, Less, x, Unequal, 3]", "Inequality[1, Less, x, Unequal, 3]", 1);
+}
+
+/* Equal on Lists applies Equal elementwise, recursively, so the machine
+ * tolerance that makes 0.1 + 0.2 == 0.3 True holds inside lists too. */
+void test_equal_lists_tolerance() {
+    assert_eval_eq("0.1 + 0.2 == 0.3", "True", 0);
+    assert_eval_eq("{0.1 + 0.2} == {0.3}", "True", 0);
+    assert_eval_eq("{0.1 + 0.2, 1.} == {0.3, 1.}", "True", 0);
+    assert_eval_eq("{{0.1 + 0.2}, {1}} == {{0.3}, {1.}}", "True", 0);
+    assert_eval_eq("{1, 2} == {1, 3}", "False", 0);
+    assert_eval_eq("{1, 2} == {1, 2, 3}", "False", 0);
+    assert_eval_eq("{x, 1} == {y, 2}", "False", 0);
+    assert_eval_eq("{x} == {y}", "Equal[List[x], List[y]]", 1);
+    assert_eval_eq("{x, 1} == {x, 1.}", "True", 0);
+    assert_eval_eq("{Sqrt[2]^2} == {2}", "True", 0);
+    assert_eval_eq("{1, 2} != {1, 3}", "True", 0);
+    assert_eval_eq("{0.1 + 0.2} != {0.3}", "False", 0);
+    assert_eval_eq("{x} != {y}", "Unequal[List[x], List[y]]", 1);
+    /* ...and inside a chain, which decides each == pair with Equal itself. */
+    assert_eval_eq("{0.1 + 0.2} == {0.3} == {0.3}", "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -591,6 +633,8 @@ int main() {
     TEST(test_greater_unevaluated);
     TEST(test_compare_bigint_adjacent);
     TEST(test_indeterminate_ieee_unordered);
+    TEST(test_variadic_comparison_chains);
+    TEST(test_equal_lists_tolerance);
     TEST(test_not_basic);
     TEST(test_and_basic);
     TEST(test_or_basic);

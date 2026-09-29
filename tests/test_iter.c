@@ -427,6 +427,48 @@ void test_iter_packed_list() {
     assert_eval_eq("Table[d, {d, Divisors[175]}]", "{1, 5, 7, 25, 35, 175}", 0);
 }
 
+/* A numeric but non-explicit bound (Pi, 2 Pi, Pi/2) iterates the lattice
+ * imin + k di up to the bound, as Mathematica does; these all stayed
+ * unevaluated, and Do/Sum/Product spun forever on a symbolic running value. */
+static void test_iter_symbolic_numeric_bounds(void) {
+    assert_eval_eq("Table[x, {x, 0., 2 Pi, 1.}]", "{0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0}", 0);
+    assert_eval_eq("Table[x, {x, 0, Pi, 0.5}]", "{0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0}", 0);
+    assert_eval_eq("Table[x, {x, 0, Pi}]", "{0, 1, 2, 3}", 0);
+    assert_eval_eq("Table[x, {x, Pi}]", "{1, 2, 3}", 0);
+    assert_eval_eq("Table[x, {x, 0, 2 Pi, Pi/2}]", "{0, 1/2 Pi, Pi, 3/2 Pi, 2 Pi}", 0);
+    assert_eval_eq("Table[x, {x, Pi, 2 Pi}]", "{Pi, 1 + Pi, 2 + Pi, 3 + Pi}", 0);
+    assert_eval_eq("Table[x, {x, Pi, 5}]", "{Pi, 1 + Pi}", 0);
+    assert_eval_eq("Table[x, {x, 0, -Pi}]", "{}", 0);
+    assert_eval_eq("Table[x, {x, 0, Log[8]/Log[2]}]", "{0, 1, 2, 3}", 0);
+    /* A long symbolic range keeps its last point (no accumulated drift). */
+    assert_eval_eq("Length[Table[x, {x, 0, 100 Pi, Pi}]]", "101", 0);
+    assert_eval_eq("Length[Table[x, {x, 0., 1000 Pi, Pi}]]", "1001", 0);
+    /* A free symbol is still not a bound. */
+    assert_eval_eq("Table[x, {x, 1, freeBoundSym}]", "Table[x, List[x, 1, freeBoundSym]]", 1);
+
+    assert_eval_eq("Range[0, Pi]", "{0, 1, 2, 3}", 0);
+    assert_eval_eq("Range[Pi]", "{1, 2, 3}", 0);
+    assert_eval_eq("Range[0, 2 Pi, 1.]", "{0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0}", 0);
+    assert_eval_eq("Range[0, 2 Pi, Pi/2]", "{0, 1/2 Pi, Pi, 3/2 Pi, 2 Pi}", 0);
+    assert_eval_eq("Range[Pi, 5]", "{Pi, 1 + Pi}", 0);
+    assert_eval_eq("Length[Range[0, 100 Pi, Pi]]", "101", 0);
+    assert_eval_eq("Range[10^20, 10^20 + 2]",
+                   "{100000000000000000000, 100000000000000000001, 100000000000000000002}", 0);
+
+    assert_eval_eq("Module[{s = 0}, Do[s += x, {x, 0, 2 Pi, Pi/2}]; s]", "5 Pi", 0);
+    assert_eval_eq("Module[{s = 0}, Do[s += 1, {x, 0., 2 Pi, 0.1}]; s]", "63", 0);
+    assert_eval_eq("Module[{s = 0}, Do[s += 1, {x, Pi, 10}]; s]", "7", 0);
+
+    /* Sum's closed form must see the normalised bound: F(Pi + 1) - F(1) would
+     * be Pi (1 + Pi)/2, where the sum over {1, 2, 3} is 6. */
+    assert_eval_eq("Sum[i, {i, 1, Pi}]", "6", 0);
+    assert_eval_eq("Sum[i, {i, Pi, 2 Pi}]", "6 + 4 Pi", 0);
+    assert_eval_eq("Sum[i^2, {i, 0, 2 Pi, 1/2}]", "325/2", 0);
+    assert_eval_eq("Sum[If[EvenQ[i], i, 0], {i, 1, 3 Pi}]", "20", 0);
+    assert_eval_eq("Product[i, {i, 1, Pi}]", "6", 0);
+    assert_eval_eq("Product[i, {i, 1, E}]", "2", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -461,6 +503,7 @@ int main() {
     TEST(test_while_test_becomes_false);
     TEST(test_while_return_escapes_innermost_loop);
     TEST(test_while_has_docstring);
+    TEST(test_iter_symbolic_numeric_bounds);
 
     /* Issue #52: int64-boundary termination + past-the-old-cap ranges. */
     TEST(test_iter_int64_boundary_ascending);

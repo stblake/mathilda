@@ -2921,6 +2921,16 @@ void info_init(void) {
         "\tgives the logarithm to base b, i.e. Log[z] / Log[b].\n"
         "Log is Listable. Log[1] = 0, Log[E] = 1, Log[E^n] = n for symbolic n.\n"
         "Numeric inputs route to libm / MPFR; negative reals yield I Pi + Log[|z|].");
+    symtab_set_docstring("Log10",
+        "Log10[z]\n"
+        "\tgives the base-10 logarithm of z, Log[10, z] = Log[z] / Log[10].\n"
+        "Exact powers of 10 give exact results (Log10[1000] = 3); a symbolic z\n"
+        "gives Log[z]/Log[10]. Listable; maps packed arrays and compiles.");
+    symtab_set_docstring("Log2",
+        "Log2[z]\n"
+        "\tgives the base-2 logarithm of z, Log[2, z] = Log[z] / Log[2].\n"
+        "Exact powers of 2 give exact results (Log2[1024] = 10); a symbolic z\n"
+        "gives Log[z]/Log[2]. Listable; maps packed arrays and compiles.");
     symtab_set_docstring("Exp",
         "Exp[z]\n"
         "\tgives the exponential E^z.\n"
@@ -3974,7 +3984,18 @@ void info_init(void) {
         "Normal[expr]\n"
         "\tconverts expr to a normal expression. If expr is a SeriesData object, the\n"
         "\tO-term is dropped and the truncated polynomial (or Laurent/Puiseux sum) is\n"
-        "\treturned. Other expressions pass through unchanged.");
+        "\treturned. Normal[SparseArray[...]] gives the dense nested List the sparse\n"
+        "\tspecification denotes, Normal[assoc] its list of rules and Normal[ndarray]\n"
+        "\tits nested List. Other expressions pass through unchanged.");
+    symtab_set_docstring("SparseArray",
+        "SparseArray[{pos1 -> v1, ...}], SparseArray[rules, dims], SparseArray[rules, dims, default]\n"
+        "\tspecify an array whose listed positions hold vi and whose other entries are\n"
+        "\tthe default (0). Positions are Integer lists (an Integer for a vector);\n"
+        "\trules may be {p1, p2} -> {v1, v2}, patterns ({i_, i_} -> 1, needing dims) or\n"
+        "\tBand[start] -> v. SparseArray[list] and the internal form\n"
+        "\tSparseArray[Automatic, dims, default, {1, {rowptr, colidx}, vals}] are accepted.\n"
+        "Mathilda has no sparse storage: SparseArray stays inert, and Normal converts\n"
+        "\tit to the dense List.");
     symtab_set_docstring("SeriesData",
         "SeriesData[x, x0, {a0, a1, ...}, nmin, nmax, den]\n"
         "\trepresents a power series in the variable x about the point x0.\n"

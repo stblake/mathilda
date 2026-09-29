@@ -22,6 +22,8 @@
 void logexp_init(void) {
     symtab_add_builtin("Log", builtin_log);
     symtab_add_builtin("Exp", builtin_exp);
+    symtab_add_builtin(SYM_Log10, builtin_log10);
+    symtab_add_builtin(SYM_Log2, builtin_log2);
     symtab_get_def("E")->attributes |= ATTR_PROTECTED;
 }
 
@@ -135,6 +137,84 @@ static bool is_power_call(Expr* e) {
            e->data.function.head->type == EXPR_SYMBOL &&
            e->data.function.head->data.symbol.name == SYM_Power &&
            e->data.function.arg_count == 2;
+}
+
+/* Numerator and denominator of an exact rational (Integer, BigInt or
+ * Rational[n, d] with integer-like parts) into n, d (d > 0). */
+static bool exact_rational_parts(const Expr* e, mpz_t n, mpz_t d) {
+    if (expr_is_integer_like(e)) {
+        expr_to_mpz(e, n);
+        mpz_set_ui(d, 1);
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Rational
+        && e->data.function.arg_count == 2
+        && expr_is_integer_like(e->data.function.args[0])
+        && expr_is_integer_like(e->data.function.args[1])) {
+        expr_to_mpz(e->data.function.args[0], n);
+        expr_to_mpz(e->data.function.args[1], d);
+        return mpz_sgn(d) > 0;
+    }
+    return false;
+}
+
+/* Reduce the positive rational n/d (in place) to its primitive root: the
+ * rational rho, not itself a perfect power, with n/d = rho^m. Returns m. Only
+ * prime root orders need trying -- a composite one is a sequence of primes --
+ * and none beyond the bit length of the larger part. */
+static unsigned long primitive_rational_root(mpz_t n, mpz_t d) {
+    unsigned long m = 1;
+    mpz_t rn, rd;
+    mpz_inits(rn, rd, NULL);
+    bool again = true;
+    while (again) {
+        again = false;
+        if (!mpz_perfect_power_p(n) || !mpz_perfect_power_p(d)) break;
+        size_t bits = mpz_sizeinbase(mpz_cmp(n, d) > 0 ? n : d, 2);
+        for (unsigned long p = 2; p <= bits; p++) {
+            bool prime = true;
+            for (unsigned long q = 2; q * q <= p; q++) if (p % q == 0) { prime = false; break; }
+            if (!prime) continue;
+            if (mpz_root(rn, n, p) && mpz_root(rd, d, p)) {
+                mpz_set(n, rn); mpz_set(d, rd);
+                m *= p;
+                again = true;
+                break;
+            }
+        }
+    }
+    mpz_clears(rn, rd, NULL);
+    return m;
+}
+
+/* Log[b, z] for exact positive rationals b != 1 and z that are integer powers
+ * of one common rational: b = rho^m and z = rho^(+-k), giving +-k/m. NULL when
+ * they are not (Log[2, 3]) or either is not a positive exact rational. */
+static Expr* log_exact_rational_power(const Expr* b, const Expr* z) {
+    mpz_t bn, bd, zn, zd;
+    mpz_inits(bn, bd, zn, zd, NULL);
+    Expr* out = NULL;
+    if (exact_rational_parts(b, bn, bd) && exact_rational_parts(z, zn, zd)
+        && mpz_sgn(bn) > 0 && mpz_sgn(zn) > 0 && mpz_cmp(bn, bd) != 0) {
+        if (mpz_cmp(zn, zd) == 0) {
+            out = expr_new_integer(0);                 /* Log[b, 1] = 0 */
+        } else {
+            unsigned long mb = primitive_rational_root(bn, bd);
+            unsigned long mz = primitive_rational_root(zn, zd);
+            int sign = 0;
+            if (mpz_cmp(bn, zn) == 0 && mpz_cmp(bd, zd) == 0) sign = 1;
+            else if (mpz_cmp(bn, zd) == 0 && mpz_cmp(bd, zn) == 0) sign = -1;
+            if (sign) {
+                Expr* pw[2] = { expr_new_integer((int64_t)mb), expr_new_integer(-1) };
+                Expr* tm[2] = { expr_new_integer(sign * (int64_t)mz),
+                                expr_new_function(expr_new_symbol(SYM_Power), pw, 2) };
+                out = expr_new_function(expr_new_symbol(SYM_Times), tm, 2);
+            }
+        }
+    }
+    mpz_clears(bn, bd, zn, zd, NULL);
+    return out;
 }
 
 /*
@@ -357,22 +437,12 @@ Expr* builtin_log(Expr* res) {
             }
         }
 
-        // Attempt to return exact rational results for integer bases and arguments (e.g. Log[2, 8] = 3)
-        if (b->type == EXPR_INTEGER && z->type == EXPR_INTEGER) {
-            int64_t bv = b->data.integer;
-            int64_t zv = z->data.integer;
-            if (bv > 1 && zv > 0) {
-                int64_t temp = zv;
-                int64_t p = 0;
-                while (temp > 1 && temp % bv == 0) {
-                    temp /= bv;
-                    p++;
-                }
-                if (temp == 1) {
-                    Expr* ret = expr_new_integer(p);
-                    return ret;
-                }
-            }
+        // Exact rational results when b and z are powers of one common
+        // positive rational: Log[2, 8] = 3, Log[10, 1/100] = -2,
+        // Log[4, 8] = 3/2, Log[1/2, 8] = -3, Log[10, 10^30] = 30.
+        {
+            Expr* k = log_exact_rational_power(b, z);
+            if (k) return k;
         }
 
         // Default rewrite: Log[b, z] -> Log[z] / Log[b]
@@ -487,3 +557,34 @@ Expr* builtin_exp(Expr* res) {
     // Remains unevaluated if it doesn't match above rules
     return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_new_symbol(SYM_E), expr_copy(z)}, 2);
 }
+
+/*
+ * Log10[z] and Log2[z]: fixed-base logarithms, defined -- as in Mathematica --
+ * as Log[10, z] and Log[2, z].
+ *
+ *   Log10[100]  -> 2         (exact, via Log[b, z]'s exact power detection)
+ *   Log10[x]    -> Log[x]/Log[10]
+ *   Log10[2.]   -> 0.30103
+ *   Log10[-1.]  -> 0. + 1.36438 I
+ *
+ * A positive machine real is answered with libm's log10 / log2 directly rather
+ * than as log(z)/log(b): the quotient of two rounded logarithms is off by an
+ * ulp at exact powers (log(1000.)/log(10.) is 2.9999999999999996), whereas
+ * log10(1000.) is exactly 3. Everything else -- exact, symbolic, complex,
+ * arbitrary precision, zero and the negative axis -- is Log[b, z]'s business,
+ * so the two spellings cannot disagree.
+ */
+static Expr* fixed_base_log(Expr* res, const char* name, int64_t base,
+                            double (*machine)(double)) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return builtin_arg_error(name, argc, 1, 1);
+    Expr* z = res->data.function.args[0];
+    if (z->type == EXPR_REAL && z->data.real > 0.0 && isfinite(z->data.real))
+        return expr_new_real(machine(z->data.real));
+    Expr* args[2] = { expr_new_integer(base), expr_copy(z) };
+    return expr_new_function(expr_new_symbol(SYM_Log), args, 2);
+}
+
+Expr* builtin_log10(Expr* res) { return fixed_base_log(res, "Log10", 10, log10); }
+Expr* builtin_log2(Expr* res)  { return fixed_base_log(res, "Log2", 2, log2); }

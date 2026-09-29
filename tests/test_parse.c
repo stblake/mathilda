@@ -580,6 +580,25 @@ static void test_unparenthesised_chains_still_chain(void) {
                    "{True, False, True, True}", 0);
 }
 
+static void test_variadic_comparison_heads(void) {
+    /* SameQ, UnsameQ and Unequal are variadic predicates: a run of one of them
+     * collects into a single call, as in Mathematica. Parenthesising still
+     * nests, and a different operator does not join. */
+    assert_eval_eq("FullForm[Hold[a === b === c]]", "Hold[SameQ[a, b, c]]", 0);
+    assert_eval_eq("FullForm[Hold[a === b === c === d]]", "Hold[SameQ[a, b, c, d]]", 0);
+    assert_eval_eq("FullForm[Hold[a =!= b =!= c]]", "Hold[UnsameQ[a, b, c]]", 0);
+    assert_eval_eq("FullForm[Hold[a != b != c]]", "Hold[Unequal[a, b, c]]", 0);
+    assert_eval_eq("FullForm[Hold[(a === b) === c]]", "Hold[SameQ[SameQ[a, b], c]]", 0);
+    assert_eval_eq("FullForm[Hold[a === (b === c)]]", "Hold[SameQ[a, SameQ[b, c]]]", 0);
+    assert_eval_eq("FullForm[Hold[a === b =!= c]]", "Hold[UnsameQ[SameQ[a, b], c]]", 0);
+    /* Unequal mixed with an ordering head joins the Inequality. */
+    assert_eval_eq("FullForm[Hold[a < b != c]]", "Hold[Inequality[a, Less, b, Unequal, c]]", 0);
+    assert_eval_eq("FullForm[Hold[a != b < c]]", "Hold[Inequality[a, Unequal, b, Less, c]]", 0);
+    assert_eval_eq("FullForm[Hold[a != b != c < d]]",
+                   "Hold[Inequality[a, Unequal, b, Unequal, c, Less, d]]", 0);
+    assert_eval_eq("FullForm[Hold[(a != b) < c]]", "Hold[Less[Unequal[a, b], c]]", 0);
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -587,6 +606,7 @@ int main() {
      * system before exercising the parser. */
     symtab_init(); core_init();
     TEST(test_parse_atomics);
+    TEST(test_variadic_comparison_heads);
     TEST(test_negative_numbers);
     TEST(test_implicit_multiplication);
     TEST(test_parentheses);

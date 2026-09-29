@@ -3,6 +3,7 @@
 #include "../pack.h"
 #include "../checked_int.h"
 #include "../ndarray.h"   /* ndarray_warn_once */
+#include "../iter.h"      /* iter_normalize_bounds, iter_real_value */
 
 /* Range[] is the system's most-used list producer, so it is the first place
  * automatic packing pays for itself. Both branches below now decide the element
@@ -64,6 +65,44 @@ static void range_too_large(double count) {
     (((di_val) > 0 && (val) <= (max_val) + 1e-14) || \
      ((di_val) < 0 && (val) >= (max_val) - 1e-14))
 
+/* Range over exact integers where some bound is a BigInt. NULL (after
+ * reporting) when the count exceeds the ceiling or the step is zero. */
+static Expr* range_bigint(const Expr* imin_e, const Expr* imax_e, const Expr* di_e) {
+    mpz_t a, b, s, span;
+    mpz_inits(a, b, s, span, NULL);
+    expr_to_mpz((Expr*)imin_e, a);
+    expr_to_mpz((Expr*)imax_e, b);
+    expr_to_mpz((Expr*)di_e, s);
+    Expr* out = NULL;
+    if (mpz_sgn(s) != 0) {
+        mpz_sub(span, b, a);
+        if (mpz_sgn(span) != 0 && mpz_sgn(span) != mpz_sgn(s)) {
+            out = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        } else {
+            mpz_tdiv_q(span, span, s);          /* same signs: floor */
+            if (mpz_cmp_si(span, (long)(RANGE_MAX_ELEMENTS - 1)) >= 0) {
+                range_too_large(mpz_get_d(span) + 1.0);
+            } else {
+                size_t count = (size_t)mpz_get_si(span) + 1;
+                Expr** items = malloc(sizeof(Expr*) * count);
+                if (items) {
+                    for (size_t i = 0; i < count; i++) {
+                        /* expr_new_bigint_from_mpz copies its operand */
+                        items[i] = expr_bigint_normalize(expr_new_bigint_from_mpz(a));
+                        mpz_add(a, a, s);
+                    }
+                    out = expr_new_function(expr_new_symbol(SYM_List), items, count);
+                    free(items);
+                } else {
+                    range_too_large((double)count);
+                }
+            }
+        }
+    }
+    mpz_clears(a, b, s, span, NULL);
+    return out;
+}
+
 Expr* builtin_range(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 3) return NULL;
 
@@ -88,7 +127,13 @@ Expr* builtin_range(Expr* res) {
 
     bool is_real = false;
     double min_val = 0, max_val = 0, di_val = 0;
-    int64_t n, d;
+
+    /* A NumericQ bound that is not an explicit number -- Range[0, 2 Pi, 1.],
+     * Range[Pi], Range[0, 2 Pi, Pi/2] -- is replaced by the last lattice point
+     * imin + n di it actually reaches, the same normalisation Table / Do / Sum
+     * apply to their iterators, so the rest of this function sees either all
+     * explicit numbers or an exact symbolic end point. */
+    bool normalised = iter_normalize_bounds(imin_e, &imax_e, di_e);
 
     if (imin_e->type == EXPR_REAL || imax_e->type == EXPR_REAL || di_e->type == EXPR_REAL) is_real = true;
 
@@ -99,20 +144,26 @@ Expr* builtin_range(Expr* res) {
                     imax_e->type == EXPR_INTEGER &&
                     di_e->type == EXPR_INTEGER);
 
-    if (imin_e->type == EXPR_INTEGER) min_val = (double)imin_e->data.integer;
-    else if (imin_e->type == EXPR_REAL) min_val = imin_e->data.real;
-    else if (is_rational(imin_e, &n, &d)) min_val = (double)n / d;
-    else goto L_fail_range;
+    /* Integer bounds of which at least one is a BigInt: count and fill in GMP.
+     * The double shadow cannot even advance at 10^20 (one ulp is 16384), so
+     * the generic branch below would miscount; before iter_real_value accepted
+     * a BigInt it refused such a Range outright. */
+    if (!all_int && expr_is_integer_like(imin_e) && expr_is_integer_like(imax_e)
+        && expr_is_integer_like(di_e)) {
+        Expr* out = range_bigint(imin_e, imax_e, di_e);
+        if (!out) goto L_fail_range;
+        expr_free(imin_e); expr_free(imax_e); expr_free(di_e);
+        return out;
+    }
 
-    if (imax_e->type == EXPR_INTEGER) max_val = (double)imax_e->data.integer;
-    else if (imax_e->type == EXPR_REAL) max_val = imax_e->data.real;
-    else if (is_rational(imax_e, &n, &d)) max_val = (double)n / d;
-    else goto L_fail_range;
-
-    if (di_e->type == EXPR_INTEGER) di_val = (double)di_e->data.integer;
-    else if (di_e->type == EXPR_REAL) di_val = di_e->data.real;
-    else if (is_rational(di_e, &n, &d)) di_val = (double)n / d;
-    else goto L_fail_range;
+    if (!iter_real_value(imin_e, &min_val)) goto L_fail_range;
+    if (!iter_real_value(imax_e, &max_val)) goto L_fail_range;
+    if (!iter_real_value(di_e, &di_val)) goto L_fail_range;
+    /* A normalised end point lies ON the lattice, so half a step of slack is
+     * exact and keeps the accumulated `val += di` below from rounding the last
+     * element away over a long symbolic range. */
+    if (normalised && imax_e->type != EXPR_INTEGER && imax_e->type != EXPR_REAL)
+        max_val += 0.5 * di_val;
 
     if (all_int) {
         int64_t a = imin_e->data.integer;

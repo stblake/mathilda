@@ -658,6 +658,7 @@ static void print_standard(Expr* e, int parent_prec) {
                         else if (s == SYM_Greater)      op = " > ";
                         else if (s == SYM_LessEqual)    op = " <= ";
                         else if (s == SYM_GreaterEqual) op = " >= ";
+                        else if (s == SYM_Unequal)      op = " != ";
                     }
                     printf("%s", op);
                 }
@@ -1791,6 +1792,7 @@ static void print_tex(Expr* e, int parent_prec) {
                         else if (s == SYM_Greater)      op = ">";
                         else if (s == SYM_LessEqual)    op = "\\leq ";
                         else if (s == SYM_GreaterEqual) op = "\\geq ";
+                        else if (s == SYM_Unequal)      op = "\\neq ";
                     }
                     printf("%s", op);
                 }

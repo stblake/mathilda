@@ -126,9 +126,25 @@ Generates a list of expressions.
   rather than silently truncating; an exact-integer range is rejected up front,
   before any element is allocated.
 
+- **Numeric symbolic bounds.** A bound or step that is not an explicit number
+  but has a real value (`Pi`, `2 Pi`, `Pi/2`, `Sqrt[2]`) iterates the lattice
+  `imin + k di`, `k = 0, ..., Floor[(imax - imin)/di]`, as in Mathematica:
+  `Table[x, {x, 0., 2 Pi, 1.}]` has seven elements and
+  `Table[x, {x, 0, 2 Pi, Pi/2}]` is `{0, Pi/2, Pi, 3 Pi/2, 2 Pi}`. The shared
+  iterator parser (`iter_normalize_bounds`, `src/iter.c`) replaces such an
+  upper bound by the exact last lattice point, so `Do`, `Sum`, `Product` and
+  `Range` agree; these all used to stay unevaluated (`Do` looped forever on a
+  symbolic running value). A free symbol (`{x, 1, n}`) is still not a bound.
+
 ```mathematica
 In[1]:= Table[i^2, {i, 4}]
 Out[1]= {1, 4, 9, 16}
+
+In[2]:= Table[x, {x, 0, Pi, 0.5}]
+Out[2]= {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0}
+
+In[3]:= Table[x, {x, 0, 2 Pi, Pi/2}]
+Out[3]= {0, 1/2 Pi, Pi, 3/2 Pi, 2 Pi}
 ```
 
 ## Nothing
@@ -172,6 +188,19 @@ a limit, it is a wrong answer.
   dense buffer, distinguishable only by `NDArrayQ`. Both branches write the buffer directly rather
 than building the elements and packing afterwards, which is worth ~135x at
 n = 10^6.
+- **Numeric symbolic bounds** (`Range[Pi]`, `Range[0, 2 Pi, 1.]`,
+  `Range[0, 2 Pi, Pi/2]`) run over the lattice up to the bound, exactly as
+  `Table` does (see above); they used to stay unevaluated.
+- **BigInt bounds** are counted and filled in GMP:
+  `Range[10^20, 10^20 + 2]` is the three BigInts.
+
+```mathematica
+In[1]:= Range[0, 2 Pi, Pi/2]
+Out[1]= {0, 1/2 Pi, Pi, 3/2 Pi, 2 Pi}
+
+In[2]:= Range[Pi]
+Out[2]= {1, 2, 3}
+```
 
 ## Subdivide
 Generates equally spaced points spanning an interval, **including both

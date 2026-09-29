@@ -282,14 +282,10 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
         expr_free(nexpr);
         expr_free(curr_e);
         curr_e = next_e;
-        if (!is_real) {
-            int64_t n, d;
-            if (curr_e->type == EXPR_INTEGER)      val = (double)curr_e->data.integer;
-            else if (curr_e->type == EXPR_REAL)    val = curr_e->data.real;
-            else if (is_rational(curr_e, &n, &d))  val = (double)n / d;
-        } else {
-            val += di_val;
-        }
+        /* Refresh `val` from the exact value -- a symbolic one (Pi + 1) through
+         * its machine value -- or, failing that, by the double recurrence, so
+         * the loop always advances. */
+        if (is_real || !iter_real_value(curr_e, &val)) val += di_val;
     }
     expr_free(curr_e);
     iter_spec_restore(var, saved);
@@ -447,7 +443,7 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
     }
 
     IterSpec s;
-    if (!iter_spec_parse(spec, &s)) return NULL;
+    if (!iter_spec_parse_lattice(spec, &s)) return NULL;
 
     /* Product needs a named iterator; a bare-count {n} is not a valid spec. */
     if (s.kind == ITER_KIND_COUNT) { iter_spec_free(&s); return NULL; }

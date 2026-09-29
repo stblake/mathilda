@@ -294,6 +294,7 @@ set(COMMON_SRC
     ../src/real.c
     ../src/numberform.c
     ../src/comparisons.c
+    ../src/sparsearray.c
     ../src/symtab.c
     ../src/match.c
     ../src/part.c
@@ -1598,6 +1599,10 @@ target_include_directories(hyperbolic_tests PRIVATE ../src)
 
 add_executable(logexp_tests test_logexp.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(logexp_tests PRIVATE ../src)
+
+add_executable(sparsearray_tests test_sparsearray.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(sparsearray_tests PRIVATE ../src)
+add_test(NAME sparsearray_tests COMMAND sparsearray_tests)
 
 add_executable(piecewise_tests test_piecewise.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(piecewise_tests PRIVATE ../src)
@@ -3584,6 +3589,7 @@ if(USE_ECM)
     add_dependencies(trig_canon_tests build_ecm)
     add_dependencies(hyperbolic_tests build_ecm)
     add_dependencies(logexp_tests build_ecm)
+    add_dependencies(sparsearray_tests build_ecm)
     add_dependencies(piecewise_tests build_ecm)
     add_dependencies(purefunc_tests build_ecm)
     add_dependencies(modular_tests build_ecm)
