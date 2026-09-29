@@ -84,6 +84,14 @@ jobs:
       - name: Message-routing audit (make check-messages)
         run: make check-messages
 
+      # The notebook's native menu bar is built in Rust and handled in TypeScript, joined only by a
+      # string id. Both failure directions are silent (a dead command, or dead code that reads like
+      # wiring), and so is an id that is legal in neither language but illegal as a Tauri EVENT name
+      # -- which is how every menu item shipped dead: all three sets agreed on `file.new`, and
+      # `listen()` threw on the dot. Source-level, no build and no Node needed.
+      - name: Notebook menu wiring (make check-menu-ids)
+        run: make check-menu-ids
+
       # The definitive check — glibc headers, -std=c99, the real flag set. This
       # runs the EXACT command a user runs (plain `make`, no EXTRA_LIBS): the
       # makefile now supplies the LAPACK/BLAS transitive libs (-llapack -lblas)
@@ -117,6 +125,13 @@ jobs:
             echo "::error::PolynomialExtendedGCD wrong — check the FLINT xgcd compat shim"
             exit 1
           }
+
+      # The same protocol, exhaustively: both request modes, the per-statement
+      # session history that makes `%` work, and the LaTeX the notebook renders.
+      # Needs the built binary, so it runs after Build rather than with the
+      # source-level gates above.
+      - name: Pipe protocol (make check-pipe-protocol)
+        run: make check-pipe-protocol
 
   # MPFR is on by default (USE_MPFR=1) and arbitrary-precision reals (EXPR_MPFR)
   # are used across ~130 files, so the `make USE_MPFR=0` graceful-degrade config

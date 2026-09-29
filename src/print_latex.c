@@ -66,6 +66,16 @@ static void lb_catf(LBuf* b, const char* fmt, ...) {
  * Operator precedence for parenthesisation
  * ======================================================================== */
 
+/* Below PREC_ADD, in the parser's own order (docs/spec/operators.md): the
+ * assignment/rule arrows bind loosest, then Or, And, Not, then the relations,
+ * and only then arithmetic. Numeric values are otherwise arbitrary — only the
+ * ordering is load-bearing, since it is what decides parenthesisation. */
+#define PREC_SET    1   /* Set, SetDelayed */
+#define PREC_RULE   2   /* Rule, RuleDelayed */
+#define PREC_OR     4   /* Or */
+#define PREC_AND    5   /* And */
+#define PREC_NOT    6   /* Not */
+#define PREC_REL    8   /* Equal, Less, ... and the Inequality chain */
 #define PREC_ADD   10   /* Plus */
 #define PREC_MUL   20   /* Times */
 #define PREC_NEG   15   /* unary minus (between add and mul) */
@@ -79,6 +89,46 @@ static int head_is(const Expr* e, const char* sym) {
         && e->data.function.head->data.symbol.name == sym;
 }
 
+/* =========================================================================
+ * Heads that print INFIX.
+ *
+ * Without this table every one of them fell through to the generic
+ * `Head[a, b]` arm, so the notebook typeset a rule as `Rule[y[x], ...]` —
+ * FullForm dressed up as mathematics. That is what every Solve and DSolve
+ * result is made of, so it was the most visible output in the application.
+ * The CLI's own TeX renderer (print.c) already had the same list; keeping the
+ * two in step is why the operators and spellings here match it exactly.
+ * ======================================================================== */
+
+typedef struct { const char* sym; const char* tex; int prec; } InfixTeX;
+
+static const InfixTeX INFIX_MAP[] = {
+    {"Set",          "=",             PREC_SET},
+    {"SetDelayed",   ":=",            PREC_SET},
+    {"Rule",         "\\to ",         PREC_RULE},
+    /* `:\to`, not `\to`: a delayed rule is a different object from an immediate
+     * one, and rendering both the same way makes two different results
+     * indistinguishable on screen. Mirrors SetDelayed's `:=`. */
+    {"RuleDelayed",  ":\\to ",        PREC_RULE},
+    {"Or",           "\\lor ",        PREC_OR},
+    {"And",          "\\land ",       PREC_AND},
+    {"Equal",        "=",             PREC_REL},
+    {"Unequal",      "\\neq ",        PREC_REL},
+    {"Less",         "<",             PREC_REL},
+    {"Greater",      ">",             PREC_REL},
+    {"LessEqual",    "\\leq ",        PREC_REL},
+    {"GreaterEqual", "\\geq ",        PREC_REL},
+    {"SameQ",        "\\equiv ",      PREC_REL},
+    {"UnsameQ",      "\\not\\equiv ", PREC_REL},
+    {NULL, NULL, 0}
+};
+
+static const InfixTeX* find_infix(const char* name) {
+    for (int i = 0; INFIX_MAP[i].sym; i++)
+        if (strcmp(name, INFIX_MAP[i].sym) == 0) return &INFIX_MAP[i];
+    return NULL;
+}
+
 static int expr_prec(const Expr* e) {
     if (!e) return PREC_ATOM;
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL ||
@@ -87,6 +137,16 @@ static int expr_prec(const Expr* e) {
     if (head_is(e, SYM_Plus))    return PREC_ADD;
     if (head_is(e, SYM_Times))   return PREC_MUL;
     if (head_is(e, SYM_Power))   return PREC_POW;
+    /* The infix heads must report their level too, or a nested one never gets
+     * parenthesised: `Or[And[a, b], c]` would print as `a \land b \lor c`. */
+    if (e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_Not && e->data.function.arg_count == 1) return PREC_NOT;
+        if (h == SYM_Inequality) return PREC_REL;
+        const InfixTeX* op = find_infix(h);
+        if (op && e->data.function.arg_count >= 2) return op->prec;
+    }
     return PREC_ATOM;
 }
 
@@ -106,6 +166,12 @@ static const SymTeX SYM_MAP[] = {
     {"EulerGamma",  "\\gamma"},
     {"GoldenRatio", "\\varphi"},
     {"Catalan",     "G"},          /* Catalan's constant */
+    /* Upright, not italic: these are words, and math mode would set `False` as
+     * a product of five variables. Matches the CLI TeX renderer (print.c). */
+    {"True",          "\\text{True}"},
+    {"False",         "\\text{False}"},
+    {"Null",          "\\text{Null}"},
+    {"Indeterminate", "\\text{Indeterminate}"},
     /* Greek uppercase */
     {"Alpha","\\alpha"},{"Beta","\\beta"},{"Gamma","\\Gamma"},
     {"Delta","\\Delta"},{"Epsilon","\\epsilon"},{"Zeta","\\zeta"},
@@ -136,6 +202,20 @@ static void to_latex_maybe_paren(LBuf* b, const Expr* e, int ctx_prec) {
     if (need) lb_cat(b, "(");
     to_latex_prec(b, e, p);
     if (need) lb_cat(b, ")");
+}
+
+/* An operand of one of the loose infix operators (=, ->, &&, <, ...).
+ *
+ * Not to_latex_maybe_paren: that one hands the operand its OWN precedence as the
+ * context, which for an atom is PREC_ATOM, and a negative integer parenthesises
+ * itself above PREC_ADD -- right for `(-2)^n`, wrong for `x = (-1)`. Here the
+ * inner context is PREC_ADD, so a bare `-1` stays bare and only a genuinely
+ * looser operator gets brackets. */
+static void to_latex_operand(LBuf* b, const Expr* e, int need_prec) {
+    int paren = (expr_prec(e) < need_prec);
+    if (paren) lb_cat(b, "\\left(");
+    to_latex_prec(b, e, PREC_ADD);
+    if (paren) lb_cat(b, "\\right)");
 }
 
 /* =========================================================================
@@ -389,6 +469,47 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         if (!bare) lb_cat(b, "{");
         to_latex_prec(b, sub, PREC_ATOM);
         if (!bare) lb_cat(b, "}");
+        return;
+    }
+
+    /* ---- The loose infix operators: a -> b, x == 1, a && b, ... ----
+     * Above Plus so the whole ladder reads loosest-first. Each operand is
+     * bracketed only when it is looser than the operator holding it. */
+    {
+        const InfixTeX* op = find_infix(hname);
+        if (op && argc >= 2) {
+            for (size_t i = 0; i < argc; i++) {
+                if (i) lb_cat(b, op->tex);
+                to_latex_operand(b, args[i], op->prec + 1);
+            }
+            return;
+        }
+    }
+
+    /* ---- Not[a] → \neg a ---- */
+    if (hname == SYM_Not && argc == 1) {
+        lb_cat(b, "\\neg ");
+        to_latex_operand(b, args[0], PREC_NOT + 1);
+        return;
+    }
+
+    /* ---- Inequality[v0, op0, v1, op1, v2, ...] → a < b <= c ----
+     * The chained form `1 < x < 2` parses to this rather than to nested Less,
+     * and Reduce returns it, so without this arm an interval printed as
+     * `Inequality[1, Less, x, Less, 2]`. The odd positions are operator SYMBOLS,
+     * looked up in the same table as the two-argument heads. */
+    if (hname == SYM_Inequality && argc >= 3 && (argc % 2) == 1) {
+        for (size_t i = 0; i < argc; i++) {
+            if (i % 2 == 0) {
+                to_latex_operand(b, args[i], PREC_REL + 1);
+            } else {
+                const InfixTeX* rel = args[i]->type == EXPR_SYMBOL
+                    ? find_infix(args[i]->data.symbol.name) : NULL;
+                /* An unrecognised relation is still better spelled out than
+                   dropped, which would invert the meaning of the chain. */
+                lb_cat(b, rel ? rel->tex : "\\,?\\,");
+            }
+        }
         return;
     }
 

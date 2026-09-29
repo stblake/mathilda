@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "tauri": "tauri",
+    "build:app": "./build-app.sh",
     "ios:libs": "./build-ios-lib.sh sim",
     "ios:init": "tauri ios init",
     "ios:dev": "tauri ios dev",

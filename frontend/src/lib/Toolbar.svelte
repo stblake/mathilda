@@ -34,7 +34,7 @@
            convertCell } from './cellCommands';
   import { darkMode } from './theme';
   import { symbolAtSelection } from './refpages';
-  import { kernelStatus } from './notebook';
+  import { kernelStatus, CELL_STYLES } from './notebook';
   import { restart, abortEvaluation } from './kernelActions';
   import { showStatusBar, resetSessionStats } from './status';
   import { propertiesOpen } from './properties';
@@ -152,12 +152,9 @@
   // ---------------------------------------------------------------------------
   // Cell Style
 
-  const STYLES: { id: CellType; label: string }[] = [
-    { id: 'code',       label: 'Code' },
-    { id: 'text',       label: 'Text' },
-    { id: 'section',    label: 'Section' },
-    { id: 'subsection', label: 'Subsection' },
-  ];
+  /* CELL_STYLES, not a copy: this and the cell's own type picker were two hand-written arrays that
+     happened to agree. See the note on CELL_STYLES in notebook.ts. */
+  const STYLES = CELL_STYLES;
 
   /* A reference page's cells are generated documentation structure, not the
      reader's to retype. Shown, so the control still says what the cell IS. */

@@ -420,6 +420,10 @@ Expr* builtin_factor(Expr* res) {
         free(den_vars);
     }
 
+    /* Whether anything had to go over a common denominator; read before `den` is
+     * freed, and used by the product guard below. */
+    bool no_denominator = (den->type == EXPR_INTEGER && den->data.integer == 1);
+
     Expr* result;
     if (f_den->type == EXPR_INTEGER && f_den->data.integer == 1) {
         result = f_num;
@@ -432,6 +436,53 @@ Expr* builtin_factor(Expr* res) {
     expr_free(together);
     expr_free(num);
     expr_free(den);
+
+    /* A PRODUCT MUST NOT COME BACK AS A SUM.
+     *
+     * The classical path normalises through Together, and Together expands a
+     * multivariate product: Together[E^x (x^2 - 1)] is -E^x + x^2 E^x. The
+     * expansion is then not a polynomial in the single variable
+     * collect_variables finds (x) — its coefficients carry E^x — so
+     * bz_factor_to_expr has nothing to work with and hands the expansion straight
+     * back. Factor[E^x (x^2 - 1)] returned -E^x + x^2 E^x: LESS factored than the
+     * input it was given, which no call to Factor should ever be.
+     *
+     * Factoring is multiplicative, so a product's answer is the product of its
+     * factors' answers. That rewrite is only valid when nothing had to be put
+     * over a common denominator: Factor[(x^2 - 1)/(x - 1)] is legitimately the
+     * sum 1 + x, and threading over that Times would hand back an uncancelled
+     * (x - 1)(x + 1)/(x - 1) — hence no_denominator. Under that guard this fires
+     * ONLY where the classical path has already failed to factor, so nothing
+     * that factors today takes this route.
+     *
+     * The root defect is Together's expansion, which is deliberately left alone:
+     * a great deal of the integrator, DSolve and Simplify is tuned around the
+     * shape it returns, so changing it is its own piece of work with its own
+     * corpus runs, not a rider on this one. */
+    if (no_denominator
+        && arg->type == EXPR_FUNCTION && arg->data.function.head
+        && arg->data.function.head->type == EXPR_SYMBOL
+        && arg->data.function.head->data.symbol.name == SYM_Times
+        && arg->data.function.arg_count >= 2
+        && result->type == EXPR_FUNCTION && result->data.function.head
+        && result->data.function.head->type == EXPR_SYMBOL
+        && result->data.function.head->data.symbol.name == SYM_Plus) {
+        size_t nf = arg->data.function.arg_count;
+        Expr** parts = (Expr**)malloc(sizeof(Expr*) * nf);
+        if (parts) {
+            for (size_t i = 0; i < nf; i++) {
+                /* Each factor is a strict sub-expression and cannot itself be a
+                 * Times (Times is Flat), so this recursion is one level deep. */
+                parts[i] = eval_and_free(expr_new_function(expr_new_symbol("Factor"),
+                             (Expr*[]){expr_copy(arg->data.function.args[i])}, 1));
+            }
+            Expr* threaded = eval_and_free(
+                expr_new_function(expr_new_symbol("Times"), parts, nf));
+            free(parts);
+            expr_free(result);
+            result = threaded;
+        }
+    }
 
     /* Cache the (input, output) pair for the duration of the current
      * Simplify call.  memo_key holds a deep copy of the original input

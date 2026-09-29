@@ -73,6 +73,25 @@ export function deleteCell(store: Store, cellId: string) {
   store.removeCell(cellId);
 }
 
+/** Leave a fresh input cell below the last row, so evaluating the bottom cell of a notebook does not
+ *  leave the caret with nowhere to go. Returns the new cell's id, or null when nothing should be
+ *  added -- which is the caller's cue to leave the caret where it is.
+ *
+ *  ROWS, not cells: a row can hold several cells side by side, and a sibling beside the evaluated
+ *  cell is not BELOW it, so the test is "is this the last row" rather than "is this the last cell".
+ *
+ *  Refused for anything but a non-empty code cell, which is deliberately the SAME condition runCell
+ *  uses to decide whether to evaluate at all. Otherwise Shift+Enter on the empty cell this just
+ *  created would append another, and holding the key would fill the notebook. */
+export function appendCellIfLast(store: Store, cellId: string): string | null {
+  const found = store.findCell(cellId);
+  if (!found) return null;
+  const cell = found.row.cells[found.cellIdx];
+  if (!cell || cell.type !== 'code' || !cell.source.trim()) return null;
+  if (found.rowIdx !== store.getRows().length - 1) return null;
+  return store.addRow('code');
+}
+
 /** Convert a cell to another style, keeping its source and its output.
  *
  *  The ONE implementation behind every "convert" control -- the toolbar's
@@ -99,6 +118,40 @@ export function convertCell(store: Store, cellId: string, type: CellType): boole
 // Text edits inside a code cell. These act on a live EditorView, so they need
 // the caret to still be in the editor -- which is why every toolbar button
 // suppresses pointerdown's default and never lets the editor blur.
+
+/** The source of the nearest code cell ABOVE `cellId` that has any, or null when there is none.
+ *
+ *  Document order across rows, so a side-by-side row is searched right-to-left before moving up, and
+ *  empty cells are skipped -- "the input above" means the last thing you actually typed, and the
+ *  freshly appended empty cell that evaluating the last cell leaves behind would otherwise always be
+ *  the answer. Split out from copyInputFromAbove so the lookup is testable without an editor. */
+export function previousInputSource(store: Store, cellId: string): string | null {
+  const cells = store.allCells();
+  const i = cells.findIndex(c => c.id === cellId);
+  if (i <= 0) return null;
+  for (let k = i - 1; k >= 0; k--) {
+    if (cells[k].type === 'code' && cells[k].source.trim()) return cells[k].source;
+  }
+  return null;
+}
+
+/** Mathematica's Edit > Copy Input from Above (Cmd+L): put the previous input at the caret.
+ *
+ *  Inserted at the insertion point, replacing the selection, rather than replacing the cell: on the
+ *  empty cell this is nearly always used from the two are identical, and on a cell you have started
+ *  typing in, replacing the lot would destroy work. Returns false when there is no input above, so
+ *  the caller can leave the keystroke alone instead of clearing the cell. */
+export function copyInputFromAbove(store: Store, cellId: string, view: EditorView): boolean {
+  const src = previousInputSource(store, cellId);
+  if (src === null) return false;
+  const sel = view.state.selection.main;
+  view.dispatch({
+    changes: { from: sel.from, to: sel.to, insert: src },
+    selection: { anchor: sel.from + src.length },
+  });
+  view.focus();
+  return true;
+}
 
 export function indentCode(view: EditorView) { indentMore(view); view.focus(); }
 export function outdentCode(view: EditorView) { indentLess(view); view.focus(); }

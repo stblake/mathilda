@@ -672,6 +672,209 @@ is now documented rather than guarded with dead code.
 - Mixed spellings of one field, and two distinct `AlgebraicNumber` generators, still answer 1
   (`field_scan` reports a conflict rather than building the compositum).
 
+---
+
+# Notebook front end: dead menu bar, auto-append cell, wrapped output
+
+Three items, all in `frontend/`. No `src/version.h` bump and no tag: 25 of the last 25
+frontend-only commits leave it alone — `$VersionNumber` is the KERNEL's version and the
+notebook app is versioned separately (`src-tauri` 0.1.0). No `docs/spec/changelog/` entry
+either, for the same reason: that tree documents builtins.
+
+## 1. The native menu bar is entirely dead  (bug)
+
+`listen('menu:file.new')` throws — Tauri event names allow only `[A-Za-z0-9\-/:_]`, and `.`
+is not in the set. `App.svelte:84-87` subscribes all 32 ids in ONE `try`, so the first
+throw aborts the loop: `open`, `save`, `save-as`, `run-all`, `interrupt`, `restart` and
+`toggle-dark` are legal names that are never reached either. Nothing is wired.
+
+- [ ] `src-tauri/src/lib.rs` — 25 dotted ids → hyphens (`file.new` → `file-new`, …)
+- [ ] `src/lib/menuCommands.ts` — same in `MENU_IDS` and the switch cases
+- [ ] `src/App.svelte` — per-id `try`, so one bad id degrades to one dead item, not 32
+- [ ] `tools/check_menu_ids.py` — add the grammar check that was missing (see below)
+- [ ] `scripts/check-notebook.mjs` — its three `cell.toX` regexes carry the old ids
+
+**Why the existing gate missed it.** `check_menu_ids.py` joins three sets (native ids,
+`MENU_IDS`, dispatcher cases) and reports any asymmetry. It proved the two sides AGREED;
+it never asked whether what they agreed on was a legal event name. Its `ID_CHARS` admits
+`.` on purpose ("alphanumeric with dots and dashes"). Fix: keep the permissive pattern for
+*discovery* — tightening it would make a dotted id invisible rather than reported — and
+validate each discovered id against Tauri's grammar. Also add it to CI, where it is absent.
+
+## 2. Evaluating the last cell appends a new code cell
+
+- [ ] `src/lib/NotebookCard.svelte` — after a SINGLE-cell run, if the evaluated cell's row
+      is the last row, `addRow('code')` and focus it.
+
+Decisions: the single-cell entry points only (`handleRun` for Shift+Enter, `runCellById`
+for the toolbar and `eval-cell`), NOT `runAll`/`runRange` — "Evaluate Notebook" ending by
+appending a stray empty cell is not what either Mathematica or Jupyter does. Fires
+immediately rather than awaiting the result, so a slow evaluation does not hold the new
+cell back. Focus moves to it (Mathematica puts the caret in the new input cell); there is
+nowhere else for it to go, since the evaluated cell was last. Rows, not cells, because a
+row can hold cells side by side and a sibling is not "below". Gated on the same
+non-empty-source condition as `runCell`, so repeated Shift+Enter cannot run away.
+
+## 3. Output wraps instead of scrolling right
+
+- [ ] `src/lib/Output.svelte` — `.out-error` gets `white-space: pre-wrap` plus `overflow-wrap`
+      and loses `overflow-x: auto`. (Planned `.out-expected` too; reading the CSS showed it
+      already had `pre-wrap` + `word-break`, so only `.out-error` actually needed the fix.)
+- [ ] `src/lib/Output.svelte` — expression output: measure whether the KaTeX render
+      overflows its container and fall back to the wrapping `.out-code-wrap` when it does
+
+KaTeX cannot line-break — it lays math out as unbreakable inline-block boxes — so wide
+typeset output can only scroll. `isListOutput` already diverts >4 commas or >200 chars to
+wrapping code, which is why long lists wrap today and a wide 150-char polynomial with no
+commas does not. Measuring beats tuning that threshold: typeset math where it fits, wrapped
+text where it does not, decided by the layout rather than guessed from the string. The
+decision is sticky per item to avoid oscillating (swapping to wrapped code removes the
+overflow that caused the swap) and is reset on resize, so widening the card restores the
+typeset form. `overflow-x: auto` stays on `.out-collapsible` as the escape for what still
+cannot wrap — a wide image, a short unbreakable math run.
+
+## Verification
+
+- [ ] `make check-menu-ids` — fails on the current tree, passes after
+- [ ] `npm run check:notebook`, `npm run check:search`, `npm run check` (svelte-check)
+- [ ] rebuild, relaunch, and exercise by hand: a menu item from each submenu; Shift+Enter
+      on the last cell and on a middle cell; a wide polynomial and a long `Print` string
+
+## 4. Cell styles: Title, Subtitle, Chapter, Subsubsection
+
+- [x] `src/lib/notebook.ts` — `CellType` widened to 9; `CELL_STYLES` becomes the single
+      source of truth (id, label, tag, icon, desc) with `isHeading` / `headingTag` beside it
+- [x] `src/lib/Toolbar.svelte` — its hand-written copy of the style list deleted, reads
+      `CELL_STYLES`
+- [x] `src/lib/CellShell.svelte` — the two duplicated heading branches collapse into one
+      `<svelte:element this={headingTag(...)}>`; six id-keyed CSS rules replace the
+      tag-keyed pair
+- [x] `src-tauri/src/notebook_format.rs` — `KNOWN_TYPES` extended to all nine
+- [x] `src-tauri/src/lib.rs` + `menuCommands.ts` — six Convert-to items, in outline order
+
+The tags are deliberately NON-monotonic: `section` stays `h1` and `subsection` stays `h2`,
+because every generated reference page is built from them and their anchors are linked. The
+visual ladder is carried by id-keyed CSS instead. The Rust list matters more than it looks:
+`normalise_type` runs on **serialize** as well as parse, so a style Rust does not know would
+be written out as `code` and the heading destroyed — checked against `CELL_STYLES`.
+
+## 5. Cmd+L — copy input from above  ·  6. Empty notebook on open
+
+- [x] `cellCommands.ts` — `previousInputSource` (testable without an editor) and
+      `copyInputFromAbove`; bound as `Mod-l` before `defaultKeymap`, and as Edit > Copy
+      Input from Above (`edit-copyInputAbove`)
+- [x] `canvas.ts` — one untitled card; the nine `_nb1.._nb9` consts become a
+      `STARTER_LAYOUT` table plus `ensureStarterCards()`, so both tours still work
+- [x] `Canvas.svelte` — the `setTimeout(loadStartupContent)` on mount removed
+
+## 7. `%`, `%%`, `%n` did nothing in a notebook  (bug, kernel — bump+tag v0.234)
+
+`Integrate[x^5 E^x, x]` then `% // Factor` printed a literal `Out[-1]`.
+
+- [x] `src/repl.c` — `repl_set_line` / `repl_store_in` / `repl_store_out` factored out of
+      `process_input` and called from `pipe_eval_statement` too, one line per STATEMENT
+- [x] `src/repl.c` — new `{"type":"line","line":L}` message per statement
+- [x] `ipc.ts` / `notebook.ts` / `NotebookCard.svelte` — `In[n]` reconciled from it
+
+Cells only. A plain (non-`cell`) request is a one-shot from a batch tool and has no history;
+holding every result of a 10^7-element sweep alive in `Out[n]` would grow without bound.
+
+## 8. `Rule[a, b]` typeset as FullForm  (bug, kernel — same bump)
+
+`DSolve[y''[x] - 3 y'[x] == y[x], y[x], x]` came back as `\{\{Rule[y[x], ...]\}\}`.
+
+- [x] `src/print_latex.c` — an `INFIX_MAP` table (Rule, RuleDelayed, Set, SetDelayed,
+      And, Or, the six relations, SameQ/UnsameQ) plus `Not` and the chained `Inequality`,
+      with precedence levels below `Plus` so nesting parenthesises correctly
+- [x] `src/print_latex.c` — `True`/`False`/`Null`/`Indeterminate` set upright
+- [x] `src/print.c` — `RuleDelayed` becomes `:\to` there too (both renderers printed `\to`
+      for it, making `a -> b` and `a :> b` indistinguishable once typeset)
+
+## Correction to the note at the top of this plan
+
+Items 1–6 are frontend-only and take no bump, as stated. Items 7–8 are **kernel** changes
+(`src/repl.c`, `src/print_latex.c`, `src/print.c`) and therefore DO bump `src/version.h`
+(v0.234), carry a `docs/spec/changelog/2026-09-28.md` entry, and are tagged. The earlier
+claim that the menu fix "would carry a version bump and a changelog note" was wrong for the
+frontend work and right only for this kernel work.
+
+## Review
+
+All eight items done. Gates, all green:
+
+| Gate | Result |
+|---|---|
+| `make check-menu-ids` | 38 ids, three-way complete (was 32, all dead) |
+| `make check-pipe-protocol` | OK — grew the history + LaTeX sections |
+| `npm run check` (svelte-check) | 0 errors, 7 pre-existing warnings |
+| `npm run check:notebook` | all pass — grew sections 1b–1g (26 → ~115 checks) |
+| `check:search` / `check:prose` / `check:snippets` | all pass |
+| `cargo test` (src-tauri) | 17 pass, including a real-kernel cell round trip |
+| `print_tests` | pass — new `test_operator_latex` |
+| `repl_hooks_tests` | pass (guards the `process_input` refactor) |
+
+Two things found along the way and left alone, because neither is what was reported:
+
+- **`Factor` expands `E^x (-120 + 120 x - ...)`** into a sum instead of leaving the product
+  alone. Identical with and without `%` (`Factor[E^x (...)]` typed directly does the same),
+  so it is a pre-existing `Factor` issue, not a `%` one.
+- **`render_plus` brackets a leading negative integer** — `(-120)\,e^{x}` where the plain
+  printer gives `-120 E^x` — and over-groups a `Times` inside a sum. Cosmetic, pre-existing,
+  in a different function from the one this change touched.
+
+## 9. `Factor` multiplied a product out  (bug, kernel — same bump; found while verifying 7)
+
+With `%` working, the reported cell became `Integrate[x^5 E^x, x] // Factor` — and
+came back EXPANDED. Root cause: `Together[E^x (x^2 - 1)]` is `-E^x + x^2 E^x`, and that
+expansion is not a polynomial in the one variable `collect_variables` finds (`x`), so
+`bz_factor_to_expr` handed it straight back.
+
+- [x] `src/poly/facpoly_factor_builtin.inc` — a denominator-free `Times` whose result came
+      back as a `Plus` is factored factor by factor instead (factoring is multiplicative).
+      The denominator case is excluded: `Factor[(x^2-1)/(x-1)]` is legitimately `1 + x`.
+- [x] `tests/test_factor_baseline.c` — `test_factor_of_a_product_stays_a_product`, pinning
+      both sides of the guard
+
+`Together`'s expansion is the ROOT defect and is deliberately untouched: the integrator,
+DSolve and Simplify are tuned around the shape it returns, so that is its own piece of
+work with its own corpus runs. A/B builds confirm no regression: `crc_corpus_tests` fails
+identically with and without the change (same 6 cases, pre-existing red vs a baseline of
+3), and `dsolve_tests` reaches the same 48th test and stalls at the same
+`t_m39_nonhomog_vop` either way.
+
+## 10. `./build-sidecar.sh` could not build after a plain `make`  (blocker, found while launching)
+
+`make USE_ECM=0` does not recompile the two sources that read `-DNO_ECM`, because object
+files do not record their flags — so after the default `make USE_ECM=1` the link failed on
+a missing `_ecm_init`.
+
+- [x] `frontend/build-sidecar.sh` — `touch src/facint.c src/version.c` before the build
+
+## 11. A clickable launcher, wired into the front-end build
+
+- [x] `MathildaNotebook.command` (repo root, beside the makefile) — double-click in
+      Finder to open the notebook.
+      The `.command` suffix is what makes it clickable at all (Finder runs those in
+      Terminal; an extensionless executable opens in a text editor). Builds the
+      release bundle if it is missing, warns — and still opens — if any
+      `.c`/`.h`/`.rs`/`.ts`/`.svelte` source is newer than the bundle's executable.
+- [x] `frontend/build-app.sh` + `npm run build:app` — ONE build path: sidecar, JS
+      deps, `tauri build --bundles app`, re-apply the launcher's exec bit, print the
+      clickable path. The launcher calls this rather than reimplementing it.
+- [x] `frontend/README.md` — Production Build section rewritten around it.
+
+A script, not a symlink: the bundle lives under `frontend/src-tauri/target/`, which
+`cargo clean` and a fresh clone both remove, and a symlink would then be a dead file
+that reports nothing when clicked.
+
+Contributor-facing build tooling, so no bump of its own; it rides the v0.234 commit.
+
+Also surfaced: `build-sidecar.sh` REPLACES the repo's `./Mathilda` with the
+`USE_ECM=0` build, because the makefile writes one output path. Pre-existing and left
+as is, but it now says so on the way past (`make -j` restores the default) — silently
+degrading the binary a developer then uses for factorisation is the kind of thing
+only `$Version` would reveal.
+
 ## DSolve M60 — higher-order linear: reducibility + generalised-Airy (2026-09-29)
 
 Plan: `/Users/user/.claude/plans/melodic-mapping-clarke.md`. Targets the largest measured

@@ -16,6 +16,14 @@ nobody exercises item by item, so the check belongs in a script rather than in a
 
 It also checks MENU_IDS, the list App.svelte subscribes to: an id that is handled but not listed is
 never subscribed, so the handler still never runs.
+
+AND IT CHECKS THE NAME ITSELF, which is the hole that let a dead menu bar ship. Comparing the two
+sides against each other proves only that they AGREE; it says nothing about whether what they agreed
+on works. Every id becomes the Tauri event name `menu:<id>`, and Tauri accepts only
+`[A-Za-z0-9-/:_]` there. Every id was once dotted (`file.new`), so all three sets agreed perfectly,
+this check passed, and `listen()` threw at runtime for all of them -- and because App.svelte
+subscribed in a single try block, the first throw took the whole menu with it. A gate that can only
+see disagreement is blind to both sides being wrong in the same way.
 """
 
 import re
@@ -26,9 +34,16 @@ ROOT = Path(__file__).resolve().parent.parent
 RUST = ROOT / "frontend" / "src-tauri" / "src" / "lib.rs"
 TS = ROOT / "frontend" / "src" / "lib" / "menuCommands.ts"
 
-# Ids are alphanumeric with dots and dashes; DIGITS MATTER -- a pattern of [a-zA-Z.-] only silently
-# skipped `gfx.image3d` and reported it as missing from a list it was in.
-ID_CHARS = r"[A-Za-z0-9.\-]+"
+# DISCOVERY pattern, deliberately WIDER than what Tauri accepts: it must still match an illegal id
+# so the grammar check below can report it. Tightening this instead would make a dotted id invisible
+# -- it would drop out of all three sets at once and be reported, if at all, as a mismatch somewhere
+# else. DIGITS MATTER -- a pattern of [a-zA-Z.-] only silently skipped `gfx-image3d` and reported it
+# as missing from a list it was in.
+ID_CHARS = r"[A-Za-z0-9.\-/:_]+"
+
+# What Tauri actually allows in an event name, and therefore in a menu id. Enforced, not assumed:
+# see the module docstring.
+LEGAL_ID = re.compile(r"^[A-Za-z0-9\-/:_]+$")
 
 
 def main():
@@ -58,6 +73,19 @@ def main():
         return 1
 
     problems = []
+
+    # The grammar, checked FIRST: an illegal id is broken even when all three sets agree on it, and
+    # saying so before the set differences keeps the real cause at the top of the output.
+    illegal = sorted(i for i in (native | listed | cases) if not LEGAL_ID.match(i))
+    if illegal:
+        problems.append(
+            (
+                "not a legal Tauri event name",
+                illegal,
+                "listen('menu:<id>') THROWS; allowed characters are A-Za-z0-9 - / : _",
+            )
+        )
+
     for label, missing, why in [
         ("native item with no handler", native - cases, "clicking it does nothing"),
         (

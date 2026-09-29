@@ -50,6 +50,61 @@
     };
   }
 
+  /* Expression outputs whose TYPESET form is wider than the card, and must fall back to wrapping
+     text. KaTeX cannot line-break -- it lays math out as inline-block boxes -- so a wide typeset
+     result can only ever be scrolled sideways, which is what this replaces.
+
+     Measured rather than guessed. isListOutput already diverts >4 commas or >200 chars to wrapping
+     code, which is why a long list wraps today and a 150-char polynomial with no commas in it does
+     not; asking the layout whether it actually overflowed covers both without a threshold to tune,
+     and keeps typeset maths for everything that genuinely fits.
+
+     Two subtleties, both about not fighting ourselves:
+
+     STICKY. Swapping to wrapped code removes the very overflow that triggered the swap, so a check
+     that re-ran freely would flip back, overflow again, and oscillate forever.
+
+     RECONSIDERED ONLY ON A WIDTH CHANGE. The width the decision was taken at is recorded, and the
+     item is given another chance at typesetting only when the box is genuinely wider than that.
+     Resetting on any resize would loop, because the swap itself changes the element's HEIGHT and so
+     retriggers the very ResizeObserver that reset it. Widening the card does restore typeset maths;
+     that is the case worth having, and it converges in one extra pass. */
+  let wideExpr: Record<number, boolean> = {};
+  const wideAt: Record<number, number> = {};
+
+  function measureExprWidth(node: HTMLElement, idx: number) {
+    function check() {
+      const w = node.clientWidth;
+      if (!w) return;                       // not laid out yet; a 0-width box overflows everything
+      if (wideExpr[idx]) {
+        if (w > (wideAt[idx] ?? 0) + 1) {    // genuinely wider now: let KaTeX try again
+          delete wideAt[idx];
+          wideExpr[idx] = false;
+          wideExpr = { ...wideExpr };
+        }
+        return;
+      }
+      if (node.scrollWidth > w + 1) {        // i.e. the reader would have to scroll right
+        wideAt[idx] = w;
+        wideExpr[idx] = true;
+        wideExpr = { ...wideExpr };
+      }
+    }
+    /* Twice, like measureOverflow: KaTeX's web fonts land after first paint and change the measured
+       width, so a single check at mount decides on the fallback metrics. */
+    requestAnimationFrame(check);
+    const t = setTimeout(check, 150);
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => check());
+      ro.observe(node);
+    }
+    return {
+      update() { check(); },
+      destroy() { clearTimeout(t); ro?.disconnect(); delete wideAt[idx]; }
+    };
+  }
+
   /* A usage message is structured, not a blob: alternating signature lines
      (flush left) and their descriptions (indented, hard-wrapped at ~70 columns
      for the terminal REPL). Rendering it as one <pre> loses all of that -- the
@@ -90,13 +145,24 @@
     return commas > 4 || text.length > 200;
   }
 
-  function renderOutput(text: string, latex?: string): string {
+  /* Kernel text goes into {@html}, so the three characters that would otherwise be read as markup
+     have to be escaped. Not theoretical for a CAS: `a < b`, `f[x] -> {1, 2}` and any output holding
+     a comparison all contain one, and unescaped they are silently swallowed as a bogus tag rather
+     than shown. The KaTeX branch needs none of this -- renderToString builds its own markup from a
+     parsed tree -- but every branch that interpolates raw text does. */
+  function esc(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* `forcePlain` is set by measureExprWidth when the typeset form turned out to be wider than the
+     card. See the note there for why the measurement, not a longer string heuristic, is what decides. */
+  function renderOutput(text: string, latex?: string, forcePlain = false): string {
     // Long lists: always use wrapping code regardless of latex field.
     // KaTeX renders math spans without line-breaking, so even \{1,2,...\}
     // produces a single wide unbreakable line.
-    if (isListOutput(text)) {
+    if (forcePlain || isListOutput(text)) {
       const wrapped = text.replace(/,\s+/g, ', ');
-      return `<code class="out-code-wrap">${wrapped}</code>`;
+      return `<code class="out-code-wrap">${esc(wrapped)}</code>`;
     }
     // Short expressions: prefer LaTeX from the kernel (StandardForm)
     if (latex && latex.length > 0) {
@@ -107,7 +173,7 @@
     try {
       return katex.renderToString(text, { throwOnError: false, displayMode: false });
     } catch {
-      return `<code>${text}</code>`;
+      return `<code class="out-code-wrap">${esc(text)}</code>`;
     }
   }
 
@@ -502,8 +568,8 @@
   {#each items as item, idx (idx)}
     <div class="out-item" class:expanded={expanded[idx]} class:overflowing={overflows[idx]}>
       {#if item.kind === 'expr'}
-        <div class="out-collapsible" use:measureOverflow={idx}>
-          <div class="out-expr">{@html renderOutput(item.text, item.latex)}</div>
+        <div class="out-collapsible" use:measureOverflow={idx} use:measureExprWidth={idx}>
+          <div class="out-expr">{@html renderOutput(item.text, item.latex, wideExpr[idx])}</div>
         </div>
       {:else if item.kind === 'expected'}
         <!-- A reference-page example that has not been run yet. Shown as plain
@@ -714,7 +780,9 @@
     padding: 0.15rem 0;
   }
 
-  /* Error output */
+  /* Error output. Wraps rather than scrolling: an error is a sentence, and the interesting half of
+     a long one is often at the END (the offending argument), which a horizontal scroll hides by
+     default. `.out-message` beside it already had pre-wrap; this was the odd one out. */
   .out-error {
     color: #e74c3c;
     font-family: 'SF Mono', monospace;
@@ -724,7 +792,8 @@
     padding: 0.4rem 0.8rem;
     border-radius: 3px;
     text-align: left;
-    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   /* Kernel message (warning): amber rule, same shape as .out-error. */

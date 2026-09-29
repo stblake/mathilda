@@ -4,7 +4,57 @@ import { writable, get } from 'svelte/store';
 
 /* 'ref' renders a symbol's generated reference page read-only; its `source` is
    the symbol name, not code, and it never goes to the kernel. */
-export type CellType = 'code' | 'text' | 'section' | 'subsection' | 'ref';
+export type CellType = 'code' | 'text' | 'title' | 'subtitle' | 'chapter'
+                     | 'section' | 'subsection' | 'subsubsection' | 'ref';
+
+export interface CellStyle {
+  id: CellType;
+  label: string;
+  /** The heading element to render, or null for a style that is not a heading. Doubles as the
+   *  isHeading test, so there is no second list to keep in step. */
+  tag: 'h1' | 'h2' | 'h3' | null;
+  /** Badge glyph in the cell's type picker. */
+  icon: string;
+  desc: string;
+}
+
+/** Every style a reader can put a cell into, in OUTLINE ORDER.
+ *
+ *  ONE list, because four surfaces present these and each of them fails differently and quietly
+ *  when they disagree: the cell's own type picker, the toolbar's Cell Style control, the native
+ *  Cell > Convert to items, and -- the one that loses work -- the `.mathilda` file format, whose
+ *  Rust `KNOWN_TYPES` rewrites any type it does not recognise to `code` on SAVE as well as on load.
+ *  A style added to the UI and not to that list is a cell that silently becomes code the first time
+ *  the notebook is saved and reopened. `npm run check:notebook` diffs the two.
+ *
+ *  `ref` is deliberately absent: a reference-page cell is generated documentation, not a style
+ *  anyone chooses, and every control that offers these already refuses to retype one.
+ *
+ *  ON THE TAGS. They give the DOM a real heading element; they are NOT the visual ladder, which is
+ *  carried by CSS keyed on the style id (`.heading-title`, ...). So the tags need not be monotonic
+ *  and are not: `section` stays h1 and `subsection` stays h2, exactly as before this list existed,
+ *  because every generated reference page is built from those two and re-tagging them would silently
+ *  restyle all of them. */
+export const CELL_STYLES: CellStyle[] = [
+  { id: 'code',          label: 'Code',          tag: null, icon: '▶',   desc: 'Evaluate Mathilda expressions' },
+  { id: 'text',          label: 'Text',          tag: null, icon: 'T',   desc: 'Prose / markdown' },
+  { id: 'title',         label: 'Title',         tag: 'h1', icon: 'T',   desc: "The notebook's title" },
+  { id: 'subtitle',      label: 'Subtitle',      tag: 'h2', icon: 't',   desc: 'Sits under the title' },
+  { id: 'chapter',       label: 'Chapter',       tag: 'h2', icon: 'C',   desc: 'Top-level division' },
+  { id: 'section',       label: 'Section',       tag: 'h1', icon: '#',   desc: 'Heading' },
+  { id: 'subsection',    label: 'Subsection',    tag: 'h2', icon: '##',  desc: 'Inside a section' },
+  { id: 'subsubsection', label: 'Subsubsection', tag: 'h3', icon: '###', desc: 'Inside a subsection' },
+];
+
+/** True for the styles rendered as a one-line editable heading rather than as code or prose. */
+export function isHeading(type: CellType): boolean {
+  return CELL_STYLES.some(s => s.id === type && s.tag !== null);
+}
+
+/** The heading element for a style, or null when it is not a heading. */
+export function headingTag(type: CellType): 'h1' | 'h2' | 'h3' | null {
+  return CELL_STYLES.find(s => s.id === type)?.tag ?? null;
+}
 export type CellStatus = 'idle' | 'running' | 'done' | 'error';
 
 export type OutputItem =
@@ -253,6 +303,20 @@ export function createNotebook() {
         cells: row.cells.map(c => c.id === id ? { ...c, execIdx: n } : c),
       })));
       return n;
+    },
+
+    /** Replace a cell's In[n] with the line the KERNEL used.
+     *
+     *  stampExec's counter is a placeholder that appears the instant you press
+     *  Shift+Enter; this is the real number. It has to come from the kernel
+     *  because `%3` / `In[3]` / `Out[3]` resolve against the kernel's $Line, and
+     *  one kernel serves every notebook on the canvas -- a local counter would
+     *  label a cell In[2] while `%2` addressed a line typed in another pane. */
+    setExec(id: string, n: number) {
+      update(rows => rows.map(row => ({
+        ...row,
+        cells: row.cells.map(c => c.id === id ? { ...c, execIdx: n } : c),
+      })));
     },
 
     resetExecCounter() {

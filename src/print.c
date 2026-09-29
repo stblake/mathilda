@@ -1814,7 +1814,11 @@ static void print_tex(Expr* e, int parent_prec) {
             else if (head == SYM_GreaterEqual) op = "\\geq ";
             else if (head == SYM_SameQ) op = "\\equiv ";
             else if (head == SYM_UnsameQ) op = "\\not\\equiv ";
-            else if (head == SYM_Rule || head == SYM_RuleDelayed) op = "\\to ";
+            else if (head == SYM_Rule) op = "\\to ";
+            /* `:\to`, not `\to`: a delayed rule is a different object from an
+             * immediate one, and one glyph for both makes `a -> b` and `a :> b`
+             * indistinguishable once typeset. Mirrors SetDelayed's `:=`. */
+            else if (head == SYM_RuleDelayed) op = ":\\to ";
             else if (head == SYM_Set) op = "=";
             else if (head == SYM_SetDelayed) op = ":=";
             else if (head == SYM_And) op = "\\land ";

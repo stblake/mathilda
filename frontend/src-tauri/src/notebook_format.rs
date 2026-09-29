@@ -23,7 +23,23 @@ use serde_json::{json, Value};
 /// Cell types the notebook model knows. Anything else read from a file becomes
 /// `code`, so a hand-edited or future file never produces a cell the UI cannot
 /// render.
-const KNOWN_TYPES: &[&str] = &["code", "text", "section", "subsection", "ref"];
+///
+/// MUST match `CELL_STYLES` in `frontend/src/lib/notebook.ts` (plus `ref`, which is generated rather
+/// than chosen). The fallback runs on SERIALIZE as well as on parse, so a style the front end offers
+/// and this list omits is not merely unrecognised on load -- it is written to the file as `code` and
+/// the reader's heading is gone. `npm run check:notebook` diffs the two lists for exactly that
+/// reason.
+const KNOWN_TYPES: &[&str] = &[
+    "code",
+    "text",
+    "title",
+    "subtitle",
+    "chapter",
+    "section",
+    "subsection",
+    "subsubsection",
+    "ref",
+];
 
 /// Normalise a cell type read from a file or handed over by the front end.
 /// `prose` is the pre-Markdown name for a text cell.
@@ -141,7 +157,7 @@ mod tests {
     #[test]
     fn round_trips_every_cell_type_and_multiline_source() {
         let cells = vec![
-            cell("section", "Title"),
+            cell("section", "A section"),
             cell("text", "Some **prose**\n\nwith a blank line"),
             cell("code", "a = 1\nb = 2\na + b"),
             cell("subsection", "Sub"),
@@ -149,6 +165,22 @@ mod tests {
             cell("ref", "Sin"),
         ];
         assert_eq!(parse_stanzas(&serialize_stanzas(&cells)), cells);
+    }
+
+    /// Every heading style survives a save and a reload. Worth its own test because the failure is
+    /// silent and lossy in the same direction for all of them: normalise_type runs on serialize too,
+    /// so a style missing from KNOWN_TYPES is written out as `code` and the heading is destroyed by
+    /// the round trip rather than merely misread.
+    #[test]
+    fn round_trips_every_heading_style() {
+        for style in ["title", "subtitle", "chapter", "section", "subsection", "subsubsection"] {
+            let cells = vec![cell(style, "Heading text"), cell("code", "1 + 1")];
+            assert_eq!(
+                parse_stanzas(&serialize_stanzas(&cells)),
+                cells,
+                "{style} did not survive the round trip"
+            );
+        }
     }
 
     #[test]

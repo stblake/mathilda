@@ -38,11 +38,53 @@ cargo tauri dev
 ## Production Build
 
 ```bash
-./build-sidecar.sh
-cargo tauri build
+npm run build:app      # kernel sidecar + JS deps + release .app, one command
 ```
 
-The bundled `.app` (macOS) / `.deb` / `.msi` will be in `src-tauri/target/release/bundle/`.
+That is `build-app.sh`: it runs `build-sidecar.sh`, installs the JS dependencies
+if they are missing, then `tauri build --bundles app` (the `.app` only — the
+`.dmg` is for shipping to someone else and costs minutes more). The bundle lands
+in `src-tauri/target/release/bundle/`. For every target, including `.dmg` /
+`.deb` / `.msi`, run `npm run tauri build` with no flags.
+
+One side effect worth knowing: `build-sidecar.sh` builds the kernel with
+`USE_ECM=0` (the bundled app must not need a `libecm` the user has not installed),
+and the makefile writes one output path — so it **replaces the repo's
+`./Mathilda`** with that degraded build. The script now says so on the way past;
+restore the default with `make -j` at the repo root.
+
+### The clickable launcher
+
+**`MathildaNotebook.command`**, at the repository root beside the makefile —
+double-click it in Finder to open the notebook. It is the one-click entry point for someone who does not want a
+terminal:
+
+- if the release bundle is missing, it runs `build-app.sh` (the same path
+  `npm run build:app` takes, not a second copy of it) and reports progress while
+  it builds, then opens the app;
+- if the bundle is there but any `.c`/`.h`/`.rs`/`.ts`/`.svelte` source is newer
+  than it, it names one of them, prints the refresh command, and opens the app
+  anyway — a click means "open it", but a notebook run from a stale bundle
+  answers with a stale kernel, and every result then looks like a bug in code that
+  has since changed;
+- it launches the **release** bundle, which carries its own kernel sidecar. For
+  hot reload use `npm run tauri dev` instead.
+
+The `.command` suffix is what makes it clickable at all: Finder runs a `.command`
+file in Terminal, where an extensionless executable would open in a text editor.
+Finder hides the suffix unless you have asked it to show all extensions, so it
+reads as `MathildaNotebook` in the folder. `build-app.sh` re-applies the
+executable bit on every build, because losing that bit is exactly what turns a
+double-click into "open in TextEdit".
+
+## Opening the app
+
+It opens on an empty, untitled notebook — the same thing File > New gives you.
+The two guided canvases still exist as opt-in calls, `loadStartupContent()` (the
+tour) and `loadDemoContent()` (the demo) in `src/lib/canvas.ts`; neither runs on
+mount. Each builds the cards it needs rather than assuming the nine the canvas
+once shipped with (`ensureStarterCards`), so seeding one notebook did not break
+them.
 
 ## File Formats
 
@@ -87,6 +129,48 @@ NDJSON protocol below.)
 |---|---|
 | Shift+Enter | Run current cell |
 | Ctrl/Cmd+Enter | Run current cell and insert new cell below |
+| Ctrl/Cmd+L | Copy the input from above into the caret (Mathematica's Copy Input from Above) |
+
+Cmd+L inserts the nearest **non-empty code cell** above, in document order, at the
+insertion point — replacing the selection, not the cell, so a cell you have
+started typing in keeps what you wrote. Empty cells are skipped: "the input
+above" means the last thing you actually typed, and the fresh cell that
+evaluating the last cell leaves behind would otherwise always be the answer. It
+is also Edit > Copy Input from Above in the native menu. The lookup is
+`previousInputSource` in `cellCommands.ts`, split out so it is testable without
+an editor.
+
+### Cell styles
+
+Eight styles, offered by the toolbar's style control and by Cell > Convert to…:
+`code`, `text`, and the heading ladder `title`, `subtitle`, `chapter`, `section`,
+`subsection`, `subsubsection`. `CELL_STYLES` in `src/lib/notebook.ts` is the
+single source of truth — the toolbar, the menu and the Rust `.mathilda` writer's
+`KNOWN_TYPES` are all checked against it, because `normalise_type` runs on
+**serialize** as well as parse, so a style the Rust side does not know would be
+written out as `code` and the heading destroyed.
+
+The HTML tag and the visual size are deliberately decoupled: `section` stays `h1`
+and `subsection` stays `h2` because every generated reference page is built from
+them and their anchors are linked. The size ladder is carried by per-style CSS
+(`.heading-title` … `.heading-subsubsection`) instead.
+
+### What happens after you evaluate
+
+- **A fresh cell below, when there was none.** Evaluating the last cell of a
+  notebook leaves an empty code cell under it with the caret in it, as Mathematica
+  and Jupyter both do. Only the single-cell paths do this; "Evaluate Notebook"
+  does not, or it would end by appending a stray cell every time. Refused for
+  anything but a non-empty code cell — the same condition that decides whether to
+  evaluate at all — so holding Shift+Enter cannot fill the notebook. Rows, not
+  cells: a sibling *beside* the evaluated cell is not below it.
+- **`In[n]` is the kernel's line number.** `%`, `%%`, `%n`, `In[n]` and `Out[n]`
+  all resolve against the kernel's `$Line`, and one kernel serves every notebook
+  on the canvas — so the label cannot be a counter the front end keeps, or a cell
+  would read `In[2]` while `%2` addressed a line typed in another pane. The kernel
+  reports the line it used (a `line` protocol message per statement) and the cell
+  is labelled with the first one it reports. The local counter survives only as
+  the placeholder that appears the instant you press Shift+Enter.
 
 ## Architecture
 
@@ -116,6 +200,14 @@ The `cell` flag gives the request a notebook input cell's semantics:
   as an amber warning block respectively.
 - **No length limit.** Requests are read at any length (the kernel used to read
   them into a 10 KB buffer and cut a larger cell off).
+- **A numbered session history.** One `$Line` per *statement*, with `In[n]` and
+  `Out[n]` recorded, reported to the front end as a `line` message before that
+  statement's output. This is what makes `%` work: the parser turns `%` into
+  `Out[-1]` and `builtin_out` resolves it against `$Line`, so before this the
+  notebook printed a literal `Out[-1]`. Per statement rather than per cell, so `%`
+  means "the previous result" whether it came from the cell above or the line
+  above inside the same cell; and recorded even for a result suppressed by `;` or
+  equal to `Null`, because `x = 5;` then `%` is 5.
 
 Plain requests without the flag behave exactly as before, which is what the site
 generator and the audit tools depend on (`make check-pipe-protocol` pins both
@@ -123,6 +215,26 @@ modes). As a fallback for an older kernel, the Rust side also forwards any
 non-JSON stdout line as `stream` text and stderr as a `message`, instead of
 dropping and logging them. `kernel.rs`'s routing and the request line are unit
 tested, including one round trip through the real binary when it is built.
+
+### Output rendering
+
+Output wraps rather than scrolling sideways: a long result reflows onto the next
+line where it used to run off to the right with a horizontal scrollbar. Plain
+text, errors and messages get `pre-wrap` plus `overflow-wrap: anywhere`, so even
+an unbroken 400-character symbol name wraps.
+
+Typeset math is the case that needs more than CSS. KaTeX lays an expression out as
+inline-block boxes and **cannot** line-break, so a formula wider than the cell
+would still overflow. `Output.svelte` therefore measures the rendered element
+against its container (a `ResizeObserver` action) and, when the math genuinely
+does not fit, re-renders that item as wrapped plain text — the re-parseable form
+the kernel also sends. The decision is sticky and is reconsidered only when the
+container's measured width actually *increases*: the swap changes the element's
+height, so a symmetric rule would oscillate. Measured, never guessed from a
+character count.
+
+Tables, diagrams and code blocks keep their own `overflow-x: auto` container; the
+page body never scrolls horizontally.
 
 ### Stacking order
 

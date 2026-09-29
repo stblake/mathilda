@@ -37,6 +37,7 @@
     clearSelection,
   } from './notebook';
   import { recordOp } from './status';
+  import { appendCellIfLast } from './cellCommands';
   import type { OutputItem, CellType, NotebookRow } from './notebook';
   import {
     evaluateCell,
@@ -508,7 +509,24 @@
   /** Run one cell by id — the toolbar has an id, not a source string. */
   async function runCellById(cellId: string) {
     const cell = nb.store.allCells().find((c: any) => c.id === cellId);
-    if (cell) await runCell(cell.id, cell.source);
+    if (cell) { continueBelowIfLast(cell.id); await runCell(cell.id, cell.source); }
+  }
+
+  /** Evaluating the LAST cell leaves a fresh input cell below it, with the caret in it — what
+   *  Mathematica and Jupyter both do, and the only place the caret can usefully go when the cell
+   *  just evaluated was the last one. The decision itself is appendCellIfLast in cellCommands.ts,
+   *  beside the other store operations and checked there; this only moves the caret.
+   *
+   *  Only the SINGLE-cell entry points call this. runAll/runRange deliberately do not: they iterate a
+   *  snapshot that ends at the last cell, so they would each finish by appending a stray empty cell,
+   *  which is not what "Evaluate Notebook" does in either application.
+   *
+   *  Called BEFORE the await on the kernel, so the cell appears at once — the point is to be able to
+   *  keep typing while a long evaluation is still running. */
+  async function continueBelowIfLast(cellId: string) {
+    const id = appendCellIfLast(nb.store, cellId);
+    if (!id) return;
+    await tick(); cellFocusFns[id]?.();
   }
 
   async function runCell(cellId: string, source: string) {
@@ -521,8 +539,17 @@
        adjustment mid-evaluation cannot produce a negative duration. */
     const t0 = performance.now();
     let ok = true;
+    /* The kernel's $Line for this cell, which is what `%3` / In[3] / Out[3]
+       address. The FIRST line the cell reports is its label: a cell holding
+       several statements takes several lines, and the input is labelled with the
+       one it started at, as in Mathematica. */
+    let kernelLine: number | null = null;
     try {
       await evaluateCell(source, (msg: OutputMessage) => {
+        if (msg.type === 'line') {
+          if (kernelLine === null) { kernelLine = msg.line; nb.store.setExec(cellId, msg.line); }
+          return;
+        }
         const item = msgToOutputItem(msg);
         if (!item) return;
         if (msg.type === 'stream') nb.store.appendStream(cellId, (msg as any).text ?? '');
@@ -538,14 +565,16 @@
       /* Measured around the whole request, which is what a user means by "how
          long did that take" -- it includes the wait for the single kernel mutex
          when another pane is already running something. */
-      recordOp({ label: `In[${execIdx}]`, ms: performance.now() - t0, ok, source });
+      recordOp({ label: `In[${kernelLine ?? execIdx}]`, ms: performance.now() - t0, ok, source });
       if (get(kernelStatus) !== 'dead') kernelStatus.set('ready');
     }
   }
 
   function msgToOutputItem(msg: OutputMessage): OutputItem | null {
     switch (msg.type) {
-      case 'expr':   return { kind: 'expr', text: msg.payload, latex: (msg as any).latex };
+      case 'expr':   return { kind: 'expr', text: msg.payload, latex: msg.latex };
+      /* Bookkeeping, not output: runCell reads it for the In[n] label. */
+      case 'line':   return null;
       case 'usage':  return { kind: 'usage',  text: msg.payload,
                               symbol: (msg as any).symbol };
       case 'names':  return { kind: 'names',  names: (msg as any).payload ?? [] };
@@ -571,7 +600,7 @@
 
   function handleRun(e: CustomEvent<{ id: string }>) {
     const cell = nb.store.allCells().find((c: any) => c.id === e.detail.id);
-    if (cell) runCell(cell.id, cell.source);
+    if (cell) { continueBelowIfLast(cell.id); runCell(cell.id, cell.source); }
   }
 
   function handleChange(e: CustomEvent<{ id: string; source: string }>) {

@@ -160,6 +160,38 @@ static void test_factor_denominator_with_extra_vars(void) {
                150.0);
 }
 
+/* A PRODUCT MUST NOT COME BACK AS A SUM.
+ *
+ * Factor normalises through Together, and Together expands a multivariate
+ * product: Together[E^x (x^2 - 1)] is -E^x + x^2 E^x. That expansion is not a
+ * polynomial in the one variable collect_variables finds (x) -- its coefficients
+ * carry E^x -- so there was nothing to factor and the expansion came straight
+ * back: Factor[E^x (x^2 - 1)] returned -E^x + x^2 E^x, LESS factored than its
+ * own input. Reported from the notebook as `Integrate[x^5 E^x, x] // Factor`.
+ *
+ * Factoring is multiplicative, so a denominator-free product is factored factor
+ * by factor. The denominator case must NOT take that route, which the last case
+ * pins: Factor[(x^2 - 1)/(x - 1)] is legitimately the sum 1 + x, and threading
+ * over that Times would hand back an uncancelled (x - 1)(x + 1)/(x - 1). */
+static void test_factor_of_a_product_stays_a_product(void) {
+    eval_check("Factor[E^x (x^2 - 1)]",
+               "Times[Power[E, x], Plus[-1, x], Plus[1, x]]", 200.0);
+    /* The reported case: the quintic is irreducible over Q, so the answer is the
+       input -- but it must be the input, not the input multiplied out. */
+    eval_check("Factor[E^x (x^5 - 5 x^4 + 20 x^3 - 60 x^2 + 120 x - 120)]",
+               "Times[Power[E, x], Plus[-120, Times[120, x], Times[-60, Power[x, 2]], "
+               "Times[20, Power[x, 3]], Times[-5, Power[x, 4]], Power[x, 5]]]", 200.0);
+    eval_check("Factor[E^x (x^2 + 2 x + 1)]",
+               "Times[Power[E, x], Power[Plus[1, x], 2]]", 200.0);
+    /* Not exponential-specific: any factor the polynomial path cannot see. */
+    eval_check("Factor[Log[x] (x^2 - 1)]",
+               "Times[Log[x], Plus[-1, x], Plus[1, x]]", 200.0);
+    eval_check("Factor[y (x^2 - 1)]",
+               "Times[Plus[-1, x], Plus[1, x], y]", 200.0);
+    /* A denominator is the excluded case: a sum here is the right answer. */
+    eval_check("Factor[(x^2 - 1)/(x - 1)]", "Plus[1, x]", 200.0);
+}
+
 /* ====================================================================== */
 /*  (2) Simplify integration -- the user-reported workloads               */
 /* ====================================================================== */
@@ -286,6 +318,7 @@ int main(void) {
     TEST(test_irreducibility_short_circuit);
     TEST(test_factor_threads_over_logic_heads);
     TEST(test_factor_denominator_with_extra_vars);
+    TEST(test_factor_of_a_product_stays_a_product);
 
     /* Simplify integration */
     TEST(test_simplify_user_case);

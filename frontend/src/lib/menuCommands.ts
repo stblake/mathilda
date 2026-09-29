@@ -19,9 +19,11 @@ import { get } from 'svelte/store';
 import { canvasState, activeActions, addNotebook, openRefpage } from './canvas';
 import { activeCell, activeHandle, retypeActiveCell } from './active';
 import { splitCell, mergeCellDown, duplicateCell, deleteCell, convertCell,
-         indentCode, outdentCode, commentCode, duplicateLine } from './cellCommands';
+         indentCode, outdentCode, commentCode, duplicateLine,
+         copyInputFromAbove } from './cellCommands';
 import { restart, abortEvaluation } from './kernelActions';
 import { darkMode } from './theme';
+import type { CellType } from './notebook';
 
 /** What App.svelte lends the dispatcher: the library-level file operations it owns. */
 export interface MenuHooks {
@@ -30,16 +32,26 @@ export interface MenuHooks {
   saveFileAs: () => void;
 }
 
-/* Every id the native menu can emit. App.svelte subscribes to `menu:<id>` for each. */
+/* Every id the native menu can emit. App.svelte subscribes to `menu:<id>` for each.
+ *
+ * HYPHENS, NOT DOTS. An id becomes the Tauri event name `menu:<id>`, and Tauri accepts only
+ * `[A-Za-z0-9-/:_]` there -- a `.` makes `listen()` THROW. Every id here was once dotted
+ * (`file.new`), which killed the whole menu bar: App.svelte subscribed in one loop, so the first
+ * throw aborted it and the legal ids after it were never reached either. `make check-menu-ids`
+ * now validates the grammar as well as the two-sided contract, because the old check compared the
+ * Rust and TypeScript sides against each other and both agreed on a name Tauri rejects. */
 export const MENU_IDS = [
-  'file.new', 'open', 'save', 'save-as', 'file.close', 'file.print',
-  'edit.comment', 'edit.indent', 'edit.outdent', 'edit.dupLine', 'edit.findDoc',
-  'insert.code', 'insert.text', 'insert.section',
-  'cell.toInput', 'cell.toText', 'cell.toSection',
-  'cell.divide', 'cell.merge', 'cell.duplicate', 'cell.delete',
-  'cell.clearOutput', 'cell.clearAllOutput',
-  'eval.cell', 'run-all', 'interrupt', 'restart',
-  'gfx.plot', 'gfx.image', 'gfx.image3d', 'gfx.graphics',
+  'file-new', 'open', 'save', 'save-as', 'file-close', 'file-print',
+  'edit-comment', 'edit-indent', 'edit-outdent', 'edit-dupLine', 'edit-findDoc',
+  'edit-copyInputAbove',
+  'insert-code', 'insert-text', 'insert-section',
+  'cell-toInput', 'cell-toText',
+  'cell-toTitle', 'cell-toSubtitle', 'cell-toChapter',
+  'cell-toSection', 'cell-toSubsection', 'cell-toSubsubsection',
+  'cell-divide', 'cell-merge', 'cell-duplicate', 'cell-delete',
+  'cell-clearOutput', 'cell-clearAllOutput',
+  'eval-cell', 'run-all', 'interrupt', 'restart',
+  'gfx-plot', 'gfx-image', 'gfx-image3d', 'gfx-graphics',
   'toggle-dark',
 ] as const;
 
@@ -72,7 +84,7 @@ function insertCell(type: 'code' | 'text' | 'section') {
    control calls. Calling retypeActiveCell alone -- as these items once did -- relabelled the
    toolbar and left the cell untouched. The notebook-id check is the toolbar's own: in split mode
    a remembered cell from another pane is not this pane's to convert. */
-export function convertActiveCell(type: 'code' | 'text' | 'section') {
+export function convertActiveCell(type: CellType) {
   const act = get(activeActions);
   const cell = get(activeCell);
   if (!act || !cell || cell.notebookId !== act.notebookId) return;
@@ -86,12 +98,12 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
 
   switch (id) {
     /* ---- File ---- */
-    case 'file.new':    addNotebook(); break;
+    case 'file-new':    addNotebook(); break;
     case 'open':        hooks.openFile(); break;
     case 'save':        hooks.saveFile(); break;
     case 'save-as':     hooks.saveFileAs(); break;
-    case 'file.close':  act?.close(); break;
-    case 'file.print':  window.print(); break;
+    case 'file-close':  act?.close(); break;
+    case 'file-print':  window.print(); break;
 
     /* ---- Edit ----
        Undo, redo, cut, copy, paste and select-all are PREDEFINED native items with no id: they
@@ -99,11 +111,15 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
        binds. Handling them here as well would be dead code pretending to be wiring -- the events
        never arrive, because the items do not emit any. Only the commands with no native
        equivalent live below. */
-    case 'edit.comment':  if (view) commentCode(view); break;
-    case 'edit.indent':   if (view) indentCode(view); break;
-    case 'edit.outdent':  if (view) outdentCode(view); break;
-    case 'edit.dupLine':  if (view) duplicateLine(view); break;
-    case 'edit.findDoc': {
+    case 'edit-comment':  if (view) commentCode(view); break;
+    case 'edit-indent':   if (view) indentCode(view); break;
+    case 'edit-outdent':  if (view) outdentCode(view); break;
+    case 'edit-dupLine':  if (view) duplicateLine(view); break;
+    /* Needs the store as well as the view — it reads the cell above, not the selection. */
+    case 'edit-copyInputAbove':
+      if (act && cell && view) copyInputFromAbove(act.store, cell.cellId, view);
+      break;
+    case 'edit-findDoc': {
       /* The selected word, or the symbol the caret sits in, opened as its own reference page. */
       const sel = view
         ? view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to).trim()
@@ -114,15 +130,20 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
     }
 
     /* ---- Insert ---- */
-    case 'insert.code':    insertCell('code'); break;
-    case 'insert.text':    insertCell('text'); break;
-    case 'insert.section': insertCell('section'); break;
+    case 'insert-code':    insertCell('code'); break;
+    case 'insert-text':    insertCell('text'); break;
+    case 'insert-section': insertCell('section'); break;
 
     /* ---- Cell ---- */
-    case 'cell.toInput':   convertActiveCell('code'); break;
-    case 'cell.toText':    convertActiveCell('text'); break;
-    case 'cell.toSection': convertActiveCell('section'); break;
-    case 'cell.divide': {
+    case 'cell-toInput':          convertActiveCell('code'); break;
+    case 'cell-toText':           convertActiveCell('text'); break;
+    case 'cell-toTitle':          convertActiveCell('title'); break;
+    case 'cell-toSubtitle':       convertActiveCell('subtitle'); break;
+    case 'cell-toChapter':        convertActiveCell('chapter'); break;
+    case 'cell-toSection':        convertActiveCell('section'); break;
+    case 'cell-toSubsection':     convertActiveCell('subsection'); break;
+    case 'cell-toSubsubsection':  convertActiveCell('subsubsection'); break;
+    case 'cell-divide': {
       if (!act || !cell) break;
       /* The caret offset exists only while the editor holds focus; splitting at the end beats
          refusing when a native menu has just taken it. */
@@ -132,25 +153,25 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
       if (nid) act.focusCell(nid);
       break;
     }
-    case 'cell.merge':     if (act && cell) mergeCellDown(act.store, cell.cellId); break;
-    case 'cell.duplicate': if (act && cell) duplicateCell(act.store, cell.cellId); break;
-    case 'cell.delete':    if (act && cell) deleteCell(act.store, cell.cellId); break;
-    case 'cell.clearOutput': if (act && cell) act.store.clearOutput(cell.cellId); break;
-    case 'cell.clearAllOutput':
+    case 'cell-merge':     if (act && cell) mergeCellDown(act.store, cell.cellId); break;
+    case 'cell-duplicate': if (act && cell) duplicateCell(act.store, cell.cellId); break;
+    case 'cell-delete':    if (act && cell) deleteCell(act.store, cell.cellId); break;
+    case 'cell-clearOutput': if (act && cell) act.store.clearOutput(cell.cellId); break;
+    case 'cell-clearAllOutput':
       if (act) for (const c of act.store.allCells()) act.store.clearOutput(c.id);
       break;
 
     /* ---- Evaluation ---- */
-    case 'eval.cell':   if (act && cell) act.runCell(cell.cellId); break;
+    case 'eval-cell':   if (act && cell) act.runCell(cell.cellId); break;
     case 'run-all':     act?.runAll(); break;
     case 'interrupt':   abortEvaluation(); break;
     case 'restart':     restart(); break;
 
     /* ---- Graphics: documentation entry points. Mathilda's own pages, never an external site. */
-    case 'gfx.plot':     docFor('Plot'); break;
-    case 'gfx.image':    docFor('Image'); break;
-    case 'gfx.image3d':  docFor('Image3D'); break;
-    case 'gfx.graphics': docFor('Graphics'); break;
+    case 'gfx-plot':     docFor('Plot'); break;
+    case 'gfx-image':    docFor('Image'); break;
+    case 'gfx-image3d':  docFor('Image3D'); break;
+    case 'gfx-graphics': docFor('Graphics'); break;
 
     /* ---- View ---- */
     case 'toggle-dark': darkMode.update(v => !v); break;

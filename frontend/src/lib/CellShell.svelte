@@ -26,7 +26,9 @@
      import would leave prose unstyled the day that one changed. It cannot live in
      prose.ts, where a CSS import would break the node-run checks. */
   import 'katex/dist/katex.min.css';
-  import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
+  import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection,
+           CELL_STYLES, isHeading, headingTag } from './notebook';
+  import { copyInputFromAbove } from './cellCommands';
   import { registerHandle, unregisterHandle, setActiveCell, markBlurred } from './active';
   import { searchMarkExtension, markInEditor, rangeForOffsets, paintDomRange } from './searchHighlight';
   import type { MarkRange } from './searchHighlight';
@@ -82,7 +84,7 @@
 
   /* Anchor for a reference page's table of contents. Must match slug() in
      RefPage.svelte and tocSlug() in refpages.ts. */
-  $: headingId = (cell.type === 'section' || cell.type === 'subsection')
+  $: headingId = isHeading(cell.type)
     ? 'ref-' + cell.source.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     : undefined;
 
@@ -144,7 +146,17 @@
           ]),
           keymap.of([
             { key: 'Shift-Enter', run() { dispatch('run', { id: cell.id }); return true; } },
-            { key: 'Mod-Enter',   run() { dispatch('run', { id: cell.id }); dispatch('addBelow', { rowId }); return true; } },
+            /* Cmd+L — Mathematica's Copy Input from Above. Bound before defaultKeymap so it wins,
+               and it returns the command's own result: with no input above, `false` lets the key
+               fall through rather than swallowing it silently. */
+            { key: 'Mod-l', run(v) { return copyInputFromAbove(store, cell.id, v); } },
+            /* addBelow BEFORE run, and the order is load-bearing. `run` now appends a cell of its
+               own when the evaluated cell is the last one (appendCellIfLast in NotebookCard), so
+               running first would make Mod-Enter on the last cell produce TWO empty cells. Inserting
+               first means the row is no longer last by the time `run` looks, so that append correctly
+               declines and Mod-Enter keeps inserting exactly one. Both dispatches are synchronous and
+               the store updates synchronously, so `run` does see the new row. */
+            { key: 'Mod-Enter',   run() { dispatch('addBelow', { rowId }); dispatch('run', { id: cell.id }); return true; } },
             { key: 'ArrowUp',     run(v) {
               const sel = v.state.selection.main;
               if (sel.head <= v.state.doc.lineAt(0).to) {
@@ -219,12 +231,9 @@
 
   // ---- Type picker ----
   let showTypePicker = false;
-  const TYPES: { id: CellType; label: string; icon: string; desc: string }[] = [
-    { id: 'code',       icon: '▶',  label: 'Code',       desc: 'Evaluate Mathilda expressions' },
-    { id: 'text',       icon: 'T',  label: 'Text',       desc: 'Prose / markdown' },
-    { id: 'section',    icon: '#',  label: 'Section',    desc: 'H1 heading' },
-    { id: 'subsection', icon: '##', label: 'Subsection', desc: 'H2 heading' },
-  ];
+  /* CELL_STYLES, not a copy of it: this list and the toolbar's used to be two hand-written arrays
+     that happened to agree. See the note on CELL_STYLES in notebook.ts. */
+  const TYPES = CELL_STYLES;
 
   function setType(t: CellType) {
     showTypePicker = false;
@@ -250,13 +259,13 @@
     dispatch('change', { id: cell.id, source: (e.target as HTMLElement).innerText });
   }
 
-  // Arrow navigation for contenteditable cells (section/subsection/text).
+  // Arrow navigation for contenteditable cells (headings and text).
   // Dispatches focusPrev/focusNext so the notebook can show the insertion cursor.
   function onProseKeydown(e: KeyboardEvent) {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
 
-    // Section/subsection headings are always single-line → navigate immediately.
-    if (cell.type === 'section' || cell.type === 'subsection') {
+    // Headings are always single-line → navigate immediately.
+    if (isHeading(cell.type)) {
       e.preventDefault();
       dispatch(e.key === 'ArrowUp' ? 'focusPrev' : 'focusNext', { id: cell.id });
       return;
@@ -408,16 +417,14 @@
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+<!-- `type-{cell.type}` as one interpolated class, not one `class:type-x` directive per style: it
+     produces exactly the same class names, so the CSS below is untouched, but a new cell style needs
+     no line added here. -->
 <div
   bind:this={shellEl}
-  class="cell-shell"
+  class="cell-shell type-{cell.type}"
   class:selected
   class:running={cell.status === 'running'}
-  class:type-code={cell.type === 'code'}
-  class:type-text={cell.type === 'text'}
-  class:type-section={cell.type === 'section'}
-  class:type-subsection={cell.type === 'subsection'}
-  class:type-ref={cell.type === 'ref'}
   on:click={onBodyClick}
 >
 
@@ -504,33 +511,21 @@
         on:click|stopPropagation={() => enterProseEdit()}
       ></div>
 
-    {:else if cell.type === 'section'}
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <!-- The id lets a reference page's table of contents scroll here. Headings
-           are cells now (so they fold the rows beneath them), so they are no
-           longer rendered by RefPage and cannot carry ids from the Markdown. -->
-      <h1
-        id={headingId}
-        class="heading-cell"
-        class:heading-static={headingReadonly}
-        contenteditable={!headingReadonly}
-        bind:this={proseEl}
-        on:input={onTextInput}
-        on:keydown={onProseKeydown}
-        on:focus={onProseFocus}
-        on:blur={onProseBlur}
-        on:click|stopPropagation={() => headingReadonly && dispatch('headingClick', { rowId })}
-      ></h1>
-
     {:else if cell.type === 'ref'}
       <!-- Read-only generated reference page; `source` is the symbol name. -->
       <RefPage markdown={cell.source} onOpen={(n) => openRefpage(notebookId, n)} />
 
-    {:else if cell.type === 'subsection'}
+    {:else if isHeading(cell.type)}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <h2
+      <!-- ONE branch for every heading level. This was two identical blocks differing only in the
+           tag, which is why six levels would have been six copies of the same eight handlers; the
+           element name comes from CELL_STYLES instead. The id lets a reference page's table of
+           contents scroll here: headings are cells (so they fold the rows beneath them), so they are
+           no longer rendered by RefPage and cannot carry ids from the Markdown. -->
+      <svelte:element
+        this={headingTag(cell.type)}
         id={headingId}
-        class="heading-cell"
+        class="heading-cell heading-{cell.type}"
         class:heading-static={headingReadonly}
         contenteditable={!headingReadonly}
         bind:this={proseEl}
@@ -539,7 +534,7 @@
         on:focus={onProseFocus}
         on:blur={onProseBlur}
         on:click|stopPropagation={() => headingReadonly && dispatch('headingClick', { rowId })}
-      ></h2>
+      ></svelte:element>
     {/if}
   </div>
 
@@ -790,15 +785,44 @@
     background: transparent;
     width: 100%;
   }
-  /* Section and subsection have to read as different levels, not as two sizes
-     of the same thing: a section is a full-strength heading with a rule under
-     it, a subsection is smaller, lighter and dimmer so it clearly sits inside
-     one. They previously differed by 0.15rem and nothing else. */
-  /* BOTH LEVELS OUTRANK BODY TEXT. Body prose is 0.98rem, so a subsection at 0.92rem was
-     literally smaller than the sentences it was meant to be heading -- the heading read as a
-     caption. A heading has to win on size before it can win on weight or colour, so the section
-     leads clearly and the subsection still sits above the prose beneath it. */
-  h1.heading-cell {
+  /* The heading ladder, keyed on the STYLE and not on the tag. It was `h1.heading-cell` /
+     `h2.heading-cell`, which cannot express six levels at all: Title and Section are both <h1>
+     (Section keeps its tag because every generated reference page is built from it), so a tag-keyed
+     rule would render them identically.
+
+     Each level has to read as a different LEVEL, not as another size of the same thing, and every
+     one of them has to outrank body prose at 0.98rem -- a subsection was once 0.92rem, literally
+     smaller than the sentences it was heading, so it read as a caption. Size leads, then weight,
+     then colour, and a rule marks the two levels that divide a document (chapter and section).
+     Section and subsection keep their exact previous values, so existing notebooks and every
+     reference page look unchanged. */
+  .heading-title {
+    font-size: 2.05rem;
+    font-weight: 800;
+    color: var(--text-h, #cdd6f4);
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    padding-bottom: 0.1rem;
+  }
+  /* A subtitle belongs to the title above it, so it is large but LIGHT -- weight and colour carry
+     the subordination, which is why it may sit above Chapter in the outline while being visually
+     quieter than one. */
+  .heading-subtitle {
+    font-size: 1.52rem;
+    font-weight: 400;
+    color: var(--text-muted, #9399b2);
+    line-height: 1.25;
+    padding-top: 0;
+  }
+  .heading-chapter {
+    font-size: 1.68rem;
+    font-weight: 750;
+    color: var(--text-h, #cdd6f4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding-bottom: 0.3rem;
+    line-height: 1.2;
+  }
+  .heading-section {
     font-size: 1.42rem;
     font-weight: 700;
     color: var(--text-h, #cdd6f4);
@@ -806,13 +830,23 @@
     padding-bottom: 0.32rem;
     line-height: 1.25;
   }
-  h2.heading-cell {
+  .heading-subsection {
     font-size: 1.14rem;
     font-weight: 650;
     color: var(--text, #cdd6f4);
     letter-spacing: 0.01em;
     padding-top: 4px;
     line-height: 1.3;
+  }
+  /* The narrowest margin in the ladder: 1.04rem against body prose at 0.98rem. It wins on weight
+     and tracking rather than on size, because anything larger would crowd the subsection above it. */
+  .heading-subsubsection {
+    font-size: 1.04rem;
+    font-weight: 600;
+    color: var(--text, #cdd6f4);
+    letter-spacing: 0.02em;
+    padding-top: 4px;
+    line-height: 1.35;
   }
 
   .out-label {

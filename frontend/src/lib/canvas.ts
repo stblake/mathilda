@@ -49,19 +49,30 @@ function makeCard(title: string, x: number, y: number): CanvasNotebook {
   };
 }
 
-// 8 starter notebooks in 3 clusters (loadStartupContent fills them)
-// Cluster 1 — Calculus (left)
-const _nb1 = makeCard('Derivatives',        50,  50);
-const _nb2 = makeCard('Integration',       760,  50);
-const _nb3 = makeCard('Function Plots',     50, 720);
-// Cluster 2 — Algebra & Numbers (right)
-const _nb4 = makeCard('Polynomial Algebra',1620,  50);
-const _nb5 = makeCard('Number Theory',     1620, 720);
-const _nb6 = makeCard('Linear Algebra',    2290,  50);
-// Cluster 3 — Special Topics (bottom center)
-const _nb7 = makeCard('Special Functions',  750,1650);
-const _nb8 = makeCard('Applied Math',      1430,1650);
-const _nb9 = makeCard('Associations',      2110,1650);
+/* The 3x3 starter grid, as data. The canvas no longer opens on it -- see the empty notebook below --
+   but both content loaders still lay their cards out here, so the arrangement that reads as a grid
+   outlives the decision to stop showing it unasked. Three clusters: calculus, algebra & numbers,
+   special topics. */
+const STARTER_LAYOUT: Array<[string, number, number]> = [
+  ['Derivatives',         50,   50],
+  ['Integration',        760,   50],
+  ['Function Plots',      50,  720],
+  ['Polynomial Algebra', 1620,  50],
+  ['Number Theory',      1620, 720],
+  ['Linear Algebra',     2290,  50],
+  ['Special Functions',   750, 1650],
+  ['Applied Math',       1430, 1650],
+  ['Associations',       2110, 1650],
+];
+
+/* WHAT THE CANVAS OPENS WITH: one empty notebook, identical to what File > New produces.
+ *
+ * It used to open with nine cards, filled on mount with reference pages for the image subsystem --
+ * useful while that subsystem was being built, and nine cards to read, move or close before you can
+ * type anything. A tour is something you ask for. Both tours are still exactly one call away
+ * (`loadStartupContent` and `loadDemoContent` below), and each now BUILDS the cards it needs rather
+ * than assuming nine already sit on the canvas. */
+const _nb1 = makeCard('', 50, 50);
 
 /* ---------------------------------------------------------------------------
  * Pane registries
@@ -183,7 +194,7 @@ function initialFocus() {
 }
 
 export const canvasState = writable({
-  notebooks:    [_nb1,_nb2,_nb3,_nb4,_nb5,_nb6,_nb7,_nb8,_nb9] as CanvasNotebook[],
+  notebooks:    [_nb1] as CanvasNotebook[],
   panX:         0,
   panY:         0,
   zoom:         1.0,
@@ -210,13 +221,26 @@ export const activeFlags = derived(
 /** True while any notebook fills the window. */
 export const isFocused = derived(canvasState, s => s.focusedIds.length > 0);
 
-/** Pre-fill the starter notebooks with rich example cells. Call from onMount. */
-/* What the canvas opens with.
+/** Lay out the 3x3 starter grid and return its cards, so a content loader has somewhere to put
+ *  things. Reuses the notebooks already on the canvas before creating any -- which is what stops the
+ *  empty card the canvas opened with from being stranded behind the grid -- and moves each into its
+ *  grid position, since that arrangement is the only reason the result reads as a grid.
  *
- * The image subsystem is what is being built and read right now, so the canvas opens on its
- * documentation: nine reference pages, each a real notebook whose examples are live cells that
- * can be edited and re-run. `loadDemoContent` below is the previous tour (calculus, plots,
- * linear algebra) and is one call away -- swap the call in Canvas.svelte's mount. */
+ *  Exists because the canvas no longer opens with nine cards: both loaders used to index into a
+ *  `notebooks` array that was guaranteed to hold nine, and would now quietly fill only the first. */
+function ensureStarterCards(): CanvasNotebook[] {
+  const cards = [...get(canvasState).notebooks];
+  STARTER_LAYOUT.forEach(([title, x, y], i) => {
+    if (cards[i]) { cards[i].x = x; cards[i].y = y; }
+    else cards[i] = makeCard(title, x, y);
+  });
+  canvasState.update(st => ({ ...st, notebooks: cards }));
+  return cards;
+}
+
+/** A tour of the image subsystem: nine reference pages, each a real notebook whose examples are live
+ *  cells that can be edited and re-run. Not called at startup -- the canvas opens with one empty
+ *  notebook -- so this is the opt-in tour, alongside `loadDemoContent` below. */
 const STARTUP_DOCS = [
   'Image', 'Image3D', 'ImageConvolve',
   'GaussianFilter', 'EdgeDetect', 'Binarize',
@@ -224,12 +248,9 @@ const STARTUP_DOCS = [
 ];
 
 export function loadStartupContent() {
-  const s = get(canvasState);
-  /* Retitle the starter cards in place and mark them as reference pages. Mutating the existing
-     cards rather than creating new ones keeps their laid-out positions, which is the whole
-     reason the 3x3 arrangement reads as a grid. */
+  const cards = ensureStarterCards();
   STARTUP_DOCS.forEach((name, i) => {
-    const nb = s.notebooks[i];
+    const nb = cards[i];
     if (!nb) return;
     nb.title = name;
     nb.refpage = true;
@@ -241,9 +262,7 @@ export function loadStartupContent() {
 }
 
 export function loadDemoContent() {
-  const s = get(canvasState);
-
-  const [nb1,nb2,nb3,nb4,nb5,nb6,nb7,nb8,nb9] = s.notebooks;
+  const [nb1,nb2,nb3,nb4,nb5,nb6,nb7,nb8,nb9] = ensureStarterCards();
 
   // Cluster 1 — Calculus
   if (nb1) nb1.store.load([
@@ -542,9 +561,10 @@ export async function fillRefpage(store: NotebookStore | undefined, name: string
   let first = true;
   for (const seg of segments) {
     if (seg.kind === 'heading') {
-      /* 'section' for H2, 'subsection' for H3 -- the notebook folds the rows
-         under each, so every part of the page collapses independently. */
-      const type = seg.level === 2 ? 'section' : 'subsection';
+      /* 'section' for H2, 'subsection' for H3, 'subsubsection' for H4 and deeper -- the notebook
+         folds the rows under each, so every part of the page collapses independently. H4 used to
+         land on 'subsection' alongside H3, flattening two levels of a reference page into one. */
+      const type = seg.level === 2 ? 'section' : seg.level === 3 ? 'subsection' : 'subsubsection';
       if (first) target.setCellSourceAndType(seg.text, type);
       else target.addRow(type, seg.text);
     } else if (seg.kind === 'md') {

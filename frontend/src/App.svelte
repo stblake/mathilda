@@ -81,8 +81,15 @@
                                          (e) => kernelMemory.set(e.payload)));
 
       const hooks = { openFile, saveFile, saveFileAs };
+      /* One try PER ID, not one around the loop. `listen` throws on a name Tauri's event grammar
+         rejects, and with a single try that first throw aborted the whole loop -- so one bad id
+         (`file.new`, back when they were dotted) left the ENTIRE menu bar unsubscribed, including
+         every legal id after it. Isolated, a bad id costs exactly its own menu item, and the
+         warning names it instead of naming whichever happened to be first. */
       for (const id of MENU_IDS) {
-        unlisten.push(await listen(`menu:${id}`, () => runMenuCommand(id, hooks)));
+        try {
+          unlisten.push(await listen(`menu:${id}`, () => runMenuCommand(id, hooks)));
+        } catch (e) { console.warn(`menu id "${id}" could not be subscribed:`, e); }
       }
     } catch (e) { console.warn('Menu listen error:', e); }
   });

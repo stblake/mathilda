@@ -110,6 +110,54 @@ void test_series_latex() {
     expr_free(res);
 }
 
+void test_operator_latex() {
+    /* Every infix head used to fall through the LaTeX printer's generic
+     * `Head[a, b]` arm, so the notebook typeset a DSolve answer as
+     * `Rule[y[x], ...]` -- FullForm dressed up as mathematics, and the most
+     * visible output in the application, since every Solve/DSolve/Reduce result
+     * is built from these heads.
+     *
+     * Parsed and NOT evaluated: the printer is what is under test, and
+     * evaluation would answer the comparisons instead of printing them. */
+    static const struct { const char* in; const char* tex; } cases[] = {
+        {"a -> b",        "a\\to b"},
+        /* A delayed rule is a different object; one glyph for both would make
+           `a -> b` and `a :> b` indistinguishable once typeset. */
+        {"a :> b",        "a:\\to b"},
+        {"x == 1",        "x=1"},
+        {"x == -1",       "x=-1"},                 /* an atom stays bare: not (-1) */
+        {"a != b",        "a\\neq b"},
+        {"a <= b",        "a\\leq b"},
+        {"a >= b",        "a\\geq b"},
+        {"a && b",        "a\\land b"},
+        {"a && b || c",   "a\\land b\\lor c"},      /* && binds tighter: no parens */
+        {"(a || b) && c", "\\left(a\\lor b\\right)\\land c"},
+        {"!a",            "\\neg a"},
+        {"1 < x < 2",     "1<x<2"},                 /* the Inequality chain */
+        {"{a -> 1}",      "\\{a\\to 1\\}"},
+        {"(a -> b)^2",    "(a\\to b)^{2}"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        Expr* e = parse_expression(cases[i].in);
+        ASSERT(e != NULL);
+        char* tex = expr_to_latex(e);
+        if (!tex || strcmp(tex, cases[i].tex) != 0)
+            printf("  %s -> \"%s\", expected \"%s\"\n",
+                   cases[i].in, tex ? tex : "(null)", cases[i].tex);
+        ASSERT(tex && strcmp(tex, cases[i].tex) == 0);
+        free(tex);
+        expr_free(e);
+    }
+
+    /* True/False/Null are words: math mode would set `False` as a product of
+     * five italic variables. */
+    Expr* f = parse_expression("False");
+    char* tex = expr_to_latex(f);
+    ASSERT(tex && strcmp(tex, "\\text{False}") == 0);
+    free(tex);
+    expr_free(f);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -120,6 +168,7 @@ int main() {
     TEST(test_negative_bigint_in_plus);
     TEST(test_holdform);
     TEST(test_series_latex);
+    TEST(test_operator_latex);
 
     printf("All print tests passed!\n");
     return 0;

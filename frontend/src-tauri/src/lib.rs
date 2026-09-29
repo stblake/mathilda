@@ -35,18 +35,18 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         "File",
         true,
         &[
-            &MenuItem::with_id(app, "file.new",  "New Notebook", true, Some("CmdOrCtrl+N"))?,
+            &MenuItem::with_id(app, "file-new",  "New Notebook", true, Some("CmdOrCtrl+N"))?,
             &MenuItem::with_id(app, "open",      "Open…",        true, Some("CmdOrCtrl+O"))?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "save",      "Save",         true, Some("CmdOrCtrl+S"))?,
             &MenuItem::with_id(app, "save-as",   "Save As…",     true, Some("CmdOrCtrl+Shift+S"))?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "file.print", "Print…",      true, Some("CmdOrCtrl+P"))?,
+            &MenuItem::with_id(app, "file-print", "Print…",      true, Some("CmdOrCtrl+P"))?,
             &PredefinedMenuItem::separator(app)?,
             // Two different closes, deliberately both present: one closes the focused NOTEBOOK,
             // the other the window. Cmd+W goes to the notebook because that is the one a reader
             // reaches for repeatedly.
-            &MenuItem::with_id(app, "file.close", "Close Notebook", true, Some("CmdOrCtrl+W"))?,
+            &MenuItem::with_id(app, "file-close", "Close Notebook", true, Some("CmdOrCtrl+W"))?,
             &PredefinedMenuItem::close_window(app, Some("Close Window"))?,
         ],
     )?;
@@ -68,14 +68,17 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::paste(app, None)?,
             &PredefinedMenuItem::select_all(app, None)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "edit.comment", "Un/Comment Selection", true,
+            &MenuItem::with_id(app, "edit-comment", "Un/Comment Selection", true,
                                Some("CmdOrCtrl+/"))?,
-            &MenuItem::with_id(app, "edit.indent",  "Indent Selected Lines",  true, None::<&str>)?,
-            &MenuItem::with_id(app, "edit.outdent", "Outdent Selected Lines", true, None::<&str>)?,
-            &MenuItem::with_id(app, "edit.dupLine", "Duplicate Line", true,
+            &MenuItem::with_id(app, "edit-indent",  "Indent Selected Lines",  true, None::<&str>)?,
+            &MenuItem::with_id(app, "edit-outdent", "Outdent Selected Lines", true, None::<&str>)?,
+            &MenuItem::with_id(app, "edit-dupLine", "Duplicate Line", true,
                                Some("CmdOrCtrl+Shift+L"))?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "edit.findDoc", "Documentation for Selection", true,
+            &MenuItem::with_id(app, "edit-copyInputAbove", "Copy Input from Above", true,
+                               Some("CmdOrCtrl+L"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "edit-findDoc", "Documentation for Selection", true,
                                Some("CmdOrCtrl+Shift+F"))?,
         ],
     )?;
@@ -85,32 +88,44 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         "Insert",
         true,
         &[
-            &MenuItem::with_id(app, "insert.code",    "Input Cell",   true, Some("CmdOrCtrl+B"))?,
-            &MenuItem::with_id(app, "insert.text",    "Text Cell",    true, None::<&str>)?,
-            &MenuItem::with_id(app, "insert.section", "Section Cell", true, None::<&str>)?,
+            &MenuItem::with_id(app, "insert-code",    "Input Cell",   true, Some("CmdOrCtrl+B"))?,
+            &MenuItem::with_id(app, "insert-text",    "Text Cell",    true, None::<&str>)?,
+            &MenuItem::with_id(app, "insert-section", "Section Cell", true, None::<&str>)?,
         ],
     )?;
 
-    // Convert To is flat rather than a nested submenu: three items read better than a submenu
-    // holding three, and macOS submenus cost a second gesture to reach.
+    // Convert To is flat rather than a nested submenu: a style is a one-gesture choice, and macOS
+    // submenus cost a second gesture to reach. The heading levels are grouped after a separator and
+    // run in outline order, so the block reads as the document structure it sets.
     let cell = Submenu::with_items(
         app,
         "Cell",
         true,
         &[
-            &MenuItem::with_id(app, "cell.toInput",   "Convert to Input",   true, None::<&str>)?,
-            &MenuItem::with_id(app, "cell.toText",    "Convert to Text",    true, None::<&str>)?,
-            &MenuItem::with_id(app, "cell.toSection", "Convert to Section", true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-toInput",   "Convert to Input",   true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-toText",    "Convert to Text",    true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "cell.divide",    "Divide Cell", true,
+            // The heading ladder, in outline order, so the menu reads as the document structure it
+            // sets. Still flat rather than a nested submenu: a style is a one-gesture choice, and
+            // macOS submenus cost a second gesture to reach.
+            &MenuItem::with_id(app, "cell-toTitle",    "Convert to Title",    true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-toSubtitle", "Convert to Subtitle", true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-toChapter",  "Convert to Chapter",  true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-toSection",  "Convert to Section",  true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-toSubsection", "Convert to Subsection", true,
+                               None::<&str>)?,
+            &MenuItem::with_id(app, "cell-toSubsubsection", "Convert to Subsubsection", true,
+                               None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "cell-divide",    "Divide Cell", true,
                                Some("CmdOrCtrl+Shift+D"))?,
-            &MenuItem::with_id(app, "cell.merge",     "Merge Cells", true,
+            &MenuItem::with_id(app, "cell-merge",     "Merge Cells", true,
                                Some("CmdOrCtrl+Shift+M"))?,
-            &MenuItem::with_id(app, "cell.duplicate", "Duplicate Cell", true, None::<&str>)?,
-            &MenuItem::with_id(app, "cell.delete",    "Delete Cell",    true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-duplicate", "Duplicate Cell", true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-delete",    "Delete Cell",    true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "cell.clearOutput",    "Delete Output",     true, None::<&str>)?,
-            &MenuItem::with_id(app, "cell.clearAllOutput", "Delete All Output", true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-clearOutput",    "Delete Output",     true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell-clearAllOutput", "Delete All Output", true, None::<&str>)?,
         ],
     )?;
 
@@ -119,7 +134,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         "Evaluation",
         true,
         &[
-            &MenuItem::with_id(app, "eval.cell", "Evaluate Cell", true,
+            &MenuItem::with_id(app, "eval-cell", "Evaluate Cell", true,
                                Some("CmdOrCtrl+Return"))?,
             &MenuItem::with_id(app, "run-all",   "Evaluate Notebook", true,
                                Some("CmdOrCtrl+Shift+Return"))?,
@@ -138,11 +153,11 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         "Graphics",
         true,
         &[
-            &MenuItem::with_id(app, "gfx.plot",     "Plot Documentation",     true, None::<&str>)?,
-            &MenuItem::with_id(app, "gfx.image",    "Image Documentation",    true, None::<&str>)?,
-            &MenuItem::with_id(app, "gfx.image3d",  "Image3D Documentation",  true, None::<&str>)?,
+            &MenuItem::with_id(app, "gfx-plot",     "Plot Documentation",     true, None::<&str>)?,
+            &MenuItem::with_id(app, "gfx-image",    "Image Documentation",    true, None::<&str>)?,
+            &MenuItem::with_id(app, "gfx-image3d",  "Image3D Documentation",  true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "gfx.graphics", "Graphics Documentation", true, None::<&str>)?,
+            &MenuItem::with_id(app, "gfx-graphics", "Graphics Documentation", true, None::<&str>)?,
         ],
     )?;
 

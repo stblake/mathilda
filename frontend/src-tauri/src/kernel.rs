@@ -405,10 +405,36 @@ mod tests {
             .iter()
             .map(|m| m["type"].as_str().unwrap_or(""))
             .collect();
-        assert_eq!(kinds, ["stream", "message", "expr", "expr"], "{seen:?}");
-        assert_eq!(seen[0]["text"], "hi\n");
-        assert!(seen[1]["text"].as_str().unwrap().starts_with("Power::infy"));
-        assert_eq!(seen[3]["payload"], "3");
+        // A "line" line precedes each of the four statements: it carries the
+        // kernel's $Line, which is what `%` / In[n] / Out[n] resolve against and
+        // what the front end labels the cell with (see src/repl.c).
+        assert_eq!(
+            kinds,
+            [
+                "line", // x = 2;   -- suppressed, but still a numbered line
+                "line", "stream", // Print["hi"]
+                "line", "message", "expr", // 1/0
+                "line", "expr",   // x + 1
+            ],
+            "{seen:?}"
+        );
+        let of_type = |t: &str| -> Vec<&Value> {
+            seen.iter().filter(|m| m["type"] == t).collect()
+        };
+        assert_eq!(of_type("stream")[0]["text"], "hi\n");
+        assert!(of_type("message")[0]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("Power::infy"));
+        assert_eq!(of_type("expr")[1]["payload"], "3");
+        /* The lines are consecutive and start at 1: one per statement, which is
+         * how `%` means "the previous result" inside a cell as well as across
+         * cells. */
+        let lines: Vec<u64> = of_type("line")
+            .iter()
+            .map(|m| m["line"].as_u64().unwrap())
+            .collect();
+        assert_eq!(lines, [1, 2, 3, 4], "{seen:?}");
     }
 
     #[test]

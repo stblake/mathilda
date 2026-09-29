@@ -93,16 +93,61 @@ static Expr* out_value_unwrapped(Expr* e) {
     return e;
 }
 
+/* ---------------------------------------------------------------------------
+ * Session history: $Line, In[n], Out[n].
+ *
+ * `%` is not a REPL feature, it is a KERNEL one. The parser turns it into
+ * Out[-1] (parse.c) and builtin_out resolves the negative index against $Line,
+ * so a front end that evaluates without recording this bookkeeping leaves `%`
+ * sitting in its output unevaluated. The notebook did exactly that -- pipe mode
+ * evaluated statements and recorded none of them, so `Integrate[x^5 E^x, x]`
+ * followed by `% // Factor` printed a literal `Out[-1]`.
+ *
+ * Both front ends go through these three helpers, so the history cannot drift
+ * between them again.
+ * ------------------------------------------------------------------------- */
+
+/* Set $Line = line. Must run BEFORE evaluation: a `%` in the input is
+ * Out[$Line - 1], so $Line has to already name the line being evaluated for
+ * `%` to mean "the previous result". */
+static void repl_set_line(int line) {
+    Expr* line_sym = expr_new_symbol(SYM_DollarLine);
+    Expr* line_val = expr_new_integer(line);
+    symtab_add_own_value("$Line", line_sym, line_val);
+    expr_free(line_sym);
+    expr_free(line_val);
+}
+
+/* Store In[line] = parsed. Called before any $Pre hook runs, so In[n] reflects
+ * what the user typed rather than whatever a hook made of it. Borrows `parsed`
+ * (add_down_value copies it); expr_new_function consumes the head and arg it is
+ * given, so only the pattern is ours to free. */
+static void repl_store_in(int line, Expr* parsed) {
+    Expr* in_arg = expr_new_integer(line);
+    Expr* in_pattern = expr_new_function(expr_new_symbol(SYM_In), &in_arg, 1);
+    symtab_add_down_value("In", in_pattern, parsed);
+    expr_free(in_pattern);
+}
+
+/* Store Out[line] = evaluated, with a top-level NumberForm stripped. Borrows
+ * `evaluated`; a NULL value (nothing displayable) stores nothing.
+ *
+ * Stored for EVERY statement, including one ending in ';' and one that
+ * evaluated to Null, because `x = 5;` followed by `%` is 5 in Mathematica: a
+ * suppressed result is still the session's previous result. */
+static void repl_store_out(int line, Expr* evaluated) {
+    if (!evaluated) return;
+    Expr* out_arg = expr_new_integer(line);
+    Expr* out_pattern = expr_new_function(expr_new_symbol(SYM_Out), &out_arg, 1);
+    symtab_add_down_value("Out", out_pattern, out_value_unwrapped(evaluated));
+    expr_free(out_pattern);
+}
+
 void process_input(const char* input, int line_number) {
     if (strlen(input) == 0) return;
     if (is_blank_or_comment_only(input)) return;
 
-    // Update $Line
-    Expr* line_sym = expr_new_symbol(SYM_DollarLine);
-    Expr* line_val = expr_new_integer(line_number);
-    symtab_add_own_value("$Line", line_sym, line_val);
-    expr_free(line_sym);
-    expr_free(line_val);
+    repl_set_line(line_number);
 
     /* $PreRead: text-level hook applied to the raw input string
      * before parsing. Pass-through (a strdup of `input`) when unset. */
@@ -120,14 +165,7 @@ void process_input(const char* input, int line_number) {
         return;
     }
 
-    /* Store In[line_number] = parsed BEFORE running $Pre/$Post so that
-     * In[n] reflects what the user typed, not whatever a hook did. */
-    Expr* in_sym = expr_new_symbol(SYM_In);
-    Expr* in_arg = expr_new_integer(line_number);
-    Expr* in_args[] = {in_arg};
-    Expr* in_pattern = expr_new_function(in_sym, in_args, 1);
-    symtab_add_down_value("In", in_pattern, parsed);
-    expr_free(in_pattern);
+    repl_store_in(line_number, parsed);
 
     /* $Pre: applied to the parsed expression. Consumes our reference
      * to `parsed`; we treat the result as the new input to evaluate. */
@@ -148,15 +186,9 @@ void process_input(const char* input, int line_number) {
     }
 
     /* Store Out[line_number] = evaluated (post-$Post, pre-$PrePrint:
-     * Mathematica's documented ordering). */
-    Expr* out_sym = expr_new_symbol(SYM_Out);
-    Expr* out_arg = expr_new_integer(line_number);
-    Expr* out_args[] = {out_arg};
-    Expr* out_pattern = expr_new_function(out_sym, out_args, 1);
-    /* Store the unwrapped value (add_down_value copies its argument); the full
-     * `evaluated` is kept for the formatted display below. */
-    symtab_add_down_value("Out", out_pattern, out_value_unwrapped(evaluated));
-    expr_free(out_pattern);
+     * Mathematica's documented ordering). The full `evaluated` is kept for the
+     * formatted display below. */
+    repl_store_out(line_number, evaluated);
 
     /* $PrePrint: applied only for display. Out[n] keeps the
      * pre-$PrePrint value above; here we render a possibly modified
@@ -423,6 +455,12 @@ void repl_loop(void) {
 /* The real stdout, captured before any evaluation can redirect `stdout`. */
 static FILE* g_pipe_out = NULL;
 
+/* $Line for this session: the interactive loop's `line_number`, for a front end
+ * that does not own a prompt. One per statement evaluated, never reset -- the
+ * front end restarts the kernel to clear the session, which starts a fresh
+ * process and with it a fresh counter. */
+static int g_pipe_line = 0;
+
 static void pipe_emit(const char* line) {
     FILE* out = g_pipe_out ? g_pipe_out : stdout;
     fputs(line, out);
@@ -623,6 +661,23 @@ static void pipe_emit_done(int id) {
     pipe_emit(buf);
 }
 
+/* The session line this statement took, sent before its output.
+ *
+ * The notebook labels the cell In[n] with it. That label has to be the KERNEL's
+ * $Line and not a count the front end keeps: `%3`, `In[3]` and `Out[3]` all
+ * resolve against $Line, and one kernel serves every notebook on the canvas, so
+ * a per-notebook counter would label a cell In[2] while `%2` addressed a line
+ * from a different notebook entirely.
+ *
+ * Its own message rather than a field on the result, because a statement need
+ * not produce one: `x = 5;` and a bare Print[] send no result at all, and their
+ * lines count just the same. */
+static void pipe_emit_line(int id, int line) {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"line\",\"line\":%d}", id, line);
+    pipe_emit(buf);
+}
+
 /* {"id":N,"type":<kind>,"<field>":"<escaped text>"} for `len` bytes of `text`. */
 static void pipe_emit_text(int id, const char* kind, const char* field,
                            const char* text, size_t len) {
@@ -807,10 +862,37 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
         }
     }
 
+    /* Session history, so `%` / `%%` / `%n` / In[n] / Out[n] work in a notebook
+     * as they do in the interactive REPL.
+     *
+     * ONE LINE PER STATEMENT, which is how the REPL numbers them too: `%` then
+     * means "the previous result" whether that came from the cell above or from
+     * the line above inside this cell. Numbered before evaluating, because `%`
+     * in this statement is Out[$Line - 1].
+     *
+     * Cells only, deliberately. A plain request is a one-shot evaluation from a
+     * batch tool (the site generator, the audit sweeps, the book tools), which
+     * has no numbered history to refer back to -- and holding every result alive
+     * in Out[n] would grow a sweep of 10^7-element arrays without bound. `cell`
+     * already draws exactly this line: notebook semantics on one side, one
+     * expression in and one result out on the other. */
+    int line = 0;
+    if (cell) {
+        line = ++g_pipe_line;
+        repl_set_line(line);
+        repl_store_in(line, parsed);
+        pipe_emit_line(id, line);
+    }
+
     PipeCapture cap;
     if (cell) pipe_capture_begin(&cap);
     Expr* evaluated = evaluate(parsed);
     if (cell) pipe_capture_end(&cap, id);
+
+    /* Out[line] BEFORE every early return below: a result that is suppressed by
+     * ';', is Null, or is a picture rather than an expression is still the
+     * session's previous result, and `%` must find it. */
+    if (cell) repl_store_out(line, evaluated);
 
     if (!evaluated) return;
 

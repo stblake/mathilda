@@ -5,7 +5,15 @@ import { Channel } from '@tauri-apps/api/core';
 import type { CellType } from './notebook';
 
 export type OutputMessage =
-  | { id: number; type: 'expr';   payload: string }
+  | { id: number; type: 'expr';   payload: string; latex?: string }
+  /* Which kernel line this statement took, sent before its output.
+     NOT decorative and not something the front end can count for itself: `%`,
+     `%%`, `%3`, `In[3]` and `Out[3]` all resolve against the KERNEL's $Line, and
+     one kernel serves every notebook on the canvas, so a per-notebook counter
+     would label a cell In[2] while `%2` addressed a line from another notebook.
+     Arrives even for a statement that produces no result (`x = 5;`), which is
+     why it is its own message rather than a field on the result. */
+  | { id: number; type: 'line';   line: number }
   /* `symbol` is the name `?name` asked about, so the notebook can offer that symbol's
      documentation page. */
   | { id: number; type: 'usage';  payload: string; symbol?: string }

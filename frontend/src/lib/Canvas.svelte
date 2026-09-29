@@ -23,7 +23,6 @@
     addNotebook,
     addNotebookAt,
     setFocused,
-    loadStartupContent,
     setStageOrigin,
     removePane,
     addPaneToFocus,
@@ -183,10 +182,10 @@
     publishStageOrigin();
     window.addEventListener('resize', publishStageOrigin);
     rafId = requestAnimationFrame(animate);
-    // Load startup content after a tick to ensure all stores are ready
-    setTimeout(() => {
-      try { loadStartupContent(); } catch (e) { console.error('startup load failed:', e); }
-    }, 100);
+    /* No startup content. The canvas opens with the one empty notebook canvasState is seeded with,
+       which is what File > New produces, so the app starts where you would start anyway. The two
+       tours are still one call away here -- loadStartupContent() for the image reference pages,
+       loadDemoContent() for the calculus/plots/algebra tour. */
   });
 
   onDestroy(() => {
