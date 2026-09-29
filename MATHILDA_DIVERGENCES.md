@@ -457,7 +457,7 @@ an unsimplified **zero** (`Sqrt[3] AlgebraicNumber[Sqrt[2], {0, -4}] + Sqrt[3]
 AlgebraicNumber[Sqrt[2], {0, 4}] + ...`), which the divisibility check does not catch because it
 is not structurally zero.
 
-#### A26a. What the v0.231 stress pass found  (FIXED, v0.231)
+#### A26a. What the v0.232 stress pass found  (FIXED, v0.232)
 
 The engine shipped at v0.230 correct on its tests and faster than the baseline on Charlwood, but
 its tests were all a handful of terms in a degree 2–4 field. Pushed on coefficient size, field
@@ -465,7 +465,7 @@ degree, term count and variable count it turned out to have three silent failure
 **answered**, which is why none had been noticed. `tests/bench_field_gcd.c` is the harness, and it
 treats a decline as a failure rather than a slow row precisely because that is the failure mode.
 
-| | v0.230 | v0.231 |
+| | v0.230 | v0.232 |
 |---|---|---|
 | coefficient ceiling | declines past **~831 bits**, so the caller answers 1 | no decline at 13,288 bits |
 | `[K:Q] = 6` via radicals | declines for **every** generator | works |

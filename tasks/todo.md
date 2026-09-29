@@ -589,7 +589,7 @@ Plan: `/Users/user/.claude/plans/cheeky-seeking-flute.md`
 - [x] `test_field_gcd_stress_regressions` in `tests/test_algebraicnumber.c`
 - [x] Optimise only what the profile condemned (prime choice, prime pool, push_term)
 - [x] Adversarial pass (zero/constant operands, deep towers, huge exponents, mixed spellings)
-- [x] Docs: A26a, `algebra.md`, changelog, `flint_bridge.h` contract; v0.231 + tag
+- [x] Docs: A26a, `algebra.md`, changelog, `flint_bridge.h` contract; v0.232 + tag
 
 ## Review
 
@@ -601,7 +601,7 @@ A decline is the failure mode that matters here and it is not a slow answer: the
 NULL, `poly_gcd_internal`'s post-check answers 1, that is a valid common divisor, nothing
 downstream complains, and the real gcd is gone. Two whole classes were doing this.
 
-| | v0.230 | v0.231 |
+| | v0.230 | v0.232 |
 |---|---|---|
 | coefficient ceiling | declines past **~831 bits** | no decline at 13,288 bits |
 | `[K:Q] = 6` via radicals | declines for **every** generator tried | works |

@@ -373,7 +373,7 @@ static void test_multivariate_number_field_gcd(void) {
           "Expand[(x + Sqrt[2] y + Sqrt[3]) (x + 2)]]", "Sqrt[3] + x + Sqrt[2] y");
 }
 
-/* The defects the v0.231 stress pass turned up.  Each of these ANSWERED -- with 1,
+/* The defects the v0.232 stress pass turned up.  Each of these ANSWERED -- with 1,
  * or with an unreadable spelling -- rather than failing visibly, which is why none
  * was caught by the v0.230 tests. */
 static void test_field_gcd_stress_regressions(void) {

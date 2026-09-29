@@ -9,7 +9,7 @@
  * cannot certify a candidate within its prime budget it returns NULL, and
  * poly_gcd_internal's post-check then answers 1 -- a valid common divisor, so
  * nothing downstream complains, and the real gcd is simply lost.  A harness that
- * measured only time would have reported the pre-v0.231 engine as healthy while
+ * measured only time would have reported the pre-v0.232 engine as healthy while
  * it silently gave up on every gcd whose coefficients exceeded ~831 bits and on
  * every degree-6 radical field.  So every case here is SELF-CERTIFYING: the
  * operands are built as d*u and d*v with u, v coprime by construction, and the
