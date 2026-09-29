@@ -740,6 +740,83 @@ to the symbol's rules---they change how the evaluator \emph{prepares} the call
 before any rule is consulted. The mechanism lives in \texttt{src/eval.c} and
 \texttt{src/attr.c}.}
 
+\section{Timing and pausing}
+\label{sec:prog-timing}
+
+Programs eventually need to know how long something took, or to wait before doing
+the next thing. Mathilda keeps two separate clocks for the first question and a
+single primitive for the second---and the pair of clocks turns out to teach
+something about what ``time'' even means for a computation.
+
+\subsection{Two clocks: CPU time and wall-clock time}
+\label{ssec:prog-two-clocks}
+
+\B{Timing}\texttt{[expr]} evaluates \texttt{expr} and returns
+\texttt{\{seconds, result\}}, where \texttt{seconds} is the \emph{CPU time}---the
+processor time the kernel actually spent. \B{AbsoluteTiming} has the same shape but
+measures \emph{wall-clock time}, the elapsed real time you would read off a clock
+on the wall. On a quick single-threaded calculation the two nearly agree, but they
+answer different questions, and the gap is not rounding error: CPU time counts work
+\emph{done}, wall-clock time counts time \emph{passed}.
+
+Two cumulative readings complete the picture. \mcode{TimeUsed}\texttt{[]} gives the
+total CPU seconds the kernel has spent since the session began, and
+\mcode{SessionTime}\texttt{[]} gives the total wall-clock seconds since that same
+moment. \mcode{TimeUsed} is to \mcode{Timing} what a car's cumulative
+engine-hours meter is to a stopwatch on one trip; \mcode{SessionTime} is the same
+for \mcode{AbsoluteTiming}.\index{timing!CPU vs wall-clock}\index{TimeUsed@\mcode{TimeUsed}}\index{SessionTime@\mcode{SessionTime}}
+
+\subsection{Pausing, and what it reveals}
+\label{ssec:prog-pause}
+
+\mcode{Pause}\texttt{[n]} does nothing for at least \(n\) seconds, then returns
+\texttt{Null}. It is how you throttle a loop, space out polling, or simply wait.
+The argument may be any non-negative number---an integer, a real, a rational such
+as \texttt{1/4}, or a symbolic constant like \texttt{Pi}; a non-numeric
+\texttt{Pause[x]} is left unevaluated, and a zero or negative duration returns at
+once.\index{Pause@\mcode{Pause}}
+
+More instructive is \emph{which} clock notices a pause. A pause consumes no
+processor time---the kernel is asleep, not working---so it is invisible to the CPU
+clocks and fully counted by the wall clocks:
+
+\begin{codepairs}
+\pair{07-programming/timing/1}{\mcode{\$TimeUnit} is the finest interval the
+system's timers resolve---the granularity every timing here is quoted to.}
+\pair{07-programming/timing/2}{\B{AbsoluteTiming} sees the pause: about three-tenths
+of a wall-clock second elapse, and the result is \texttt{Null}.}
+\pair{07-programming/timing/3}{\B{Timing} does \emph{not}: the CPU did essentially
+no work while asleep, so it reports a time near zero.}
+\pair{07-programming/timing/4}{The duration can be exact---a rational quarter of a
+second pauses for \(0.25\)\,s.}
+\pair{07-programming/timing/5}{By now the session has spent nearly a second
+\emph{waiting}, and \mcode{SessionTime} counts all of it\ldots}
+\pair{07-programming/timing/6}{\ldots while \mcode{TimeUsed}, the CPU meter, has
+barely moved---the pauses cost time, not computation.}
+\end{codepairs}
+
+Pairs~2 and~3 are the reveal, and pairs~5 and~6 make it cumulative: the same
+\texttt{Pause} that adds three-tenths of a second to \mcode{AbsoluteTiming} and to
+\mcode{SessionTime} adds almost nothing to \mcode{Timing} or \mcode{TimeUsed}. If
+you only ever measured with \mcode{Timing}, a program that spent its afternoon
+sleeping would look instantaneous.\index{timing!granularity}\index{TimeUnit@\mcode{\$TimeUnit}}
+
+\calloutnote{Under the hood}{The split is not special-cased---it falls out of using
+two different operating-system clocks. \mcode{Timing} and \mcode{TimeUsed} read
+\texttt{clock()}, the process CPU timer, which does not advance while a thread
+sleeps. \mcode{AbsoluteTiming} and \mcode{SessionTime} read a monotonic wall clock,
+\texttt{clock\_gettime(CLOCK\_MONOTONIC)}. \mcode{Pause} sleeps with
+\texttt{nanosleep}, which burns no CPU and resumes across signal interruptions so
+the full duration is always observed---so a pause is counted by the wall clocks and
+ignored by the CPU clocks with no code that knows anything about pausing. The same
+distinction has a sharper edge on parallel work: a threaded kernel sums CPU time
+across cores, so \mcode{Timing} can \emph{exceed} \mcode{AbsoluteTiming}---which is
+why Chapter~\ref{ch:compilation} benchmarks with \mcode{AbsoluteTiming}.}
+
+To \emph{bound} how long a computation may run, rather than measure it after the
+fact, wrap it in \B{TimeConstrained}, which aborts an evaluation that overruns its
+budget.
+
 \section*{Where this connects}
 
 Programming in Mathilda is not a layer on top of the algebra system; it is the
