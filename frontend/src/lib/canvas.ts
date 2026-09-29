@@ -438,6 +438,31 @@ export function addNotebook(title?: string) {
   });
 }
 
+/** Add a notebook holding `cells` (a `.mathilda` file's contents) and bring it
+ *  up in focused mode. Returns its id.
+ *
+ *  Added to the canvas rather than replacing it: a `.mathilda` file is ONE
+ *  notebook, where a `.lb` library is the whole canvas, so opening one must not
+ *  throw away the notebooks already open. */
+export function openNotebookCells(title: string,
+                                  cells: Array<{ type: string; source: string }>): string {
+  const s0 = get(canvasState);
+  const n  = s0.notebooks.length;
+  const nb = makeCard(title, 80 + (n % 4) * 680, 60 + Math.floor(n / 4) * 500);
+  nb.store.loadLegacy(cells.length ? cells : [{ type: 'code', source: '' }]);
+  canvasState.update(s => ({ ...s, notebooks: [...s.notebooks, nb], activeId: nb.id }));
+  setFocused(nb.id);
+  return nb.id;
+}
+
+/** The notebook a single-notebook command (Save As `.mathilda`) acts on: the
+ *  active pane in focused mode, else the card on top of the canvas. */
+export function currentNotebook(): CanvasNotebook | null {
+  const s = get(canvasState);
+  const id = s.focusedActiveId ?? s.activeId;
+  return s.notebooks.find(nb => nb.id === id) ?? null;
+}
+
 /** Add a notebook at specific world coordinates — single atomic update. */
 export function addNotebookAt(worldX: number, worldY: number, title?: string) {
   const nb = makeCard(title ?? '', worldX, worldY);

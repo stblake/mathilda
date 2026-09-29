@@ -27,7 +27,7 @@ try {
   process.exit(1);
 }
 
-const { findMatches, stepIndex } = await import(pathToFileURL(join(out, 'search.js')).href);
+const { findMatches, stepIndex, nextIndex } = await import(pathToFileURL(join(out, 'search.js')).href);
 
 let fail = 0;
 const ok = (name, cond, got) => {
@@ -99,6 +99,15 @@ let i = 0; for (let k = 0; k < 7; k++) i = stepIndex(i, 1, 7);
 eq('a full forward cycle returns to the start', i, 0);
 let j = 0; for (let k = 0; k < 7; k++) j = stepIndex(j, -1, 7);
 eq('a full backward cycle returns to the start', j, 0);
+
+// nextIndex: the first Enter lands ON the match the count shows ("1 of 3"), not
+// past it; after that, and for Shift+Enter, it steps.
+eq('first Enter lands on the shown match', nextIndex(0, 1, 3, false), 0);
+eq('first Enter after the query narrowed lands on the clamped match', nextIndex(2, 1, 3, false), 2);
+eq('Enter after a reveal steps forward', nextIndex(0, 1, 3, true), 1);
+eq('first Shift+Enter steps back (wrapping)', nextIndex(0, -1, 3, false), 2);
+eq('Shift+Enter after a reveal steps back', nextIndex(1, -1, 3, true), 0);
+eq('nextIndex with no matches is 0', nextIndex(0, 1, 0, false), 0);
 
 rmSync(out, { recursive: true, force: true });
 console.log(fail === 0 ? '\nall search checks passed' : `\n${fail} FAILED`);

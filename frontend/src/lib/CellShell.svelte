@@ -28,6 +28,8 @@
   import 'katex/dist/katex.min.css';
   import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
   import { registerHandle, unregisterHandle, setActiveCell, markBlurred } from './active';
+  import { searchMarkExtension, markInEditor, rangeForOffsets, paintDomRange } from './searchHighlight';
+  import type { MarkRange } from './searchHighlight';
 
   export let cell: Cell;
   export let rowId: string;
@@ -127,6 +129,9 @@
         extensions: [
           history(),
           syntaxHighlighting(defaultHighlightStyle),
+          /* The find bar's current-match mark: painted, not selected, so the
+             find bar keeps focus (see searchHighlight.ts). */
+          searchMarkExtension,
           /* Mathilda's only comment form is the nested block comment (* ... *).
              This is not cosmetic metadata: every comment command in
              @codemirror/commands (toggleComment, toggleLineComment, ...) reads
@@ -200,7 +205,10 @@
        arrow-key navigation. This one hands the toolbar a live EditorView so
        commands can read the selection and dispatch changes -- something the
        toolbar cannot get by any prop path, since it lives in App.svelte. */
-    registerHandle(cell.id, { view, el: null, focus: () => view.focus() });
+    registerHandle(cell.id, {
+      view, el: null, focus: () => view.focus(),
+      mark: (r: MarkRange) => { if (r) revealSelf(); if (view) markInEditor(view, r); },
+    });
   }
 
   onDestroy(() => { view?.destroy(); unregisterHandle(cell.id); });
@@ -284,20 +292,45 @@
   let textEditing = cell.type === 'text' ? cell.source.trim() === '' : false;
   $: renderedProse = cell.type === 'text' ? renderProse(cell.source) : '';
 
+  /* The find bar has marked a match in this cell. Its offsets are SOURCE
+     offsets, so a rendered text cell shows its raw source while marked -- not
+     editable and not focused, so the find bar keeps the keyboard. */
+  let searchSource = false;
+
   function paintProse() {
     if (!proseEl) return;
-    if (cell.type !== 'text' || textEditing) proseEl.innerText = cell.source;
+    if (cell.type !== 'text' || textEditing || searchSource) proseEl.innerText = cell.source;
     else proseEl.innerHTML = renderedProse;
   }
 
   /* Safe to repaint on every source change here, unlike the identity block below:
      while NOT editing there is no caret in the element to clobber. */
-  $: if (proseEl && cell.type === 'text' && !textEditing) proseEl.innerHTML = renderedProse;
+  $: if (proseEl && cell.type === 'text' && !textEditing && !searchSource) proseEl.innerHTML = renderedProse;
+
+  /** The handle's mark(): paint (or clear) the find bar's current match. */
+  function markProse(r: MarkRange) {
+    if (!proseEl) return;
+    if (!r) {
+      paintDomRange(null);
+      if (searchSource) {
+        searchSource = false;
+        if (cell.type === 'text' && !textEditing) proseEl.innerHTML = renderedProse;
+      }
+      return;
+    }
+    if (cell.type === 'text' && !textEditing && !searchSource) {
+      searchSource = true;
+      proseEl.innerText = cell.source;
+    }
+    revealSelf();
+    paintDomRange(rangeForOffsets(proseEl, r.start, r.end));
+  }
 
   /* Entering edit mode has to wait a tick: `contenteditable` is still false in
      the DOM until Svelte flushes, and focusing a non-editable div does nothing. */
   async function enterProseEdit() {
     if (cell.type !== 'text' || textEditing) return;
+    searchSource = false;
     textEditing = true;
     await tick();
     if (!proseEl) return;
@@ -329,6 +362,7 @@
     /* A different cell arrived in this component: it gets its own edit state, or
        a rendered cell would inherit the previous one's open editor. */
     textEditing = cell.type === 'text' ? cell.source.trim() === '' : false;
+    searchSource = false;
     paintProse();
     _lastCellId = cell.id;
     /* REGISTER ONLY IF FOCUS WOULD ACTUALLY WORK. On a reference page `headingReadonly` is true,
@@ -347,7 +381,8 @@
         id: cell.id,
         fn: () => { focusProse(); revealSelf(); },
       });
-      registerHandle(cell.id, { view: null, el: proseEl, focus: () => focusProse() });
+      registerHandle(cell.id, { view: null, el: proseEl, focus: () => focusProse(),
+                                mark: markProse });
     }
   }
 
@@ -458,7 +493,7 @@
       <!-- Content set via JS ($: proseEl update) to avoid contenteditable doubling -->
       <div
         class="prose-cell"
-        class:prose-rendered={!textEditing}
+        class:prose-rendered={!textEditing && !searchSource}
         class:prose-empty={!textEditing && !renderedProse}
         contenteditable={textEditing}
         bind:this={proseEl}
@@ -513,7 +548,7 @@
 <!-- Close type picker when clicking outside -->
 {#if showTypePicker}
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div style="position:fixed;inset:0;z-index:199;" on:click={() => showTypePicker = false}></div>
+  <div style="position:fixed;inset:0;z-index:var(--z-popover-backdrop);" on:click={() => showTypePicker = false}></div>
 {/if}
 
 <style>
@@ -614,7 +649,7 @@
     border: 1px solid var(--menu-border);
     border-radius: 7px;
     padding: 4px;
-    z-index: 200;
+    z-index: var(--z-popover);
     box-shadow: var(--menu-shadow);
     white-space: nowrap;
   }

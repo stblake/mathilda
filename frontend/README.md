@@ -44,20 +44,42 @@ cargo tauri build
 
 The bundled `.app` (macOS) / `.deb` / `.msi` will be in `src-tauri/target/release/bundle/`.
 
-## File Format (.mathilda)
+## File Formats
 
-Notebooks are plain-text files with no stored outputs. Each cell is a stanza:
+**File > Open** reads either format, told apart by extension; **File > Save As**
+writes either.
+
+| Extension | Holds | Open | Save As |
+|---|---|---|---|
+| `.lb` | the whole canvas (every notebook, positions, sources) as JSON | replaces the canvas | the library; Cmd+S then saves back to it |
+| `.mathilda` | **one** notebook, plain text | adds it to the canvas and focuses it | exports the current notebook (active pane, else the top card) |
+
+Neither stores outputs: a result is what the kernel computed this session, and a
+file that carried one would claim a computation the reader's kernel never did.
+
+### The `.mathilda` stanza format
+
+Each cell is a stanza, one blank line between them:
 
 ```
 (* cell: code *)
 Integrate[x^2, {x, 0, 1}]
 
-(* cell: code *)
-Factor[x^4 - 1]
+(* cell: text *)
+Some **Markdown** prose.
 ```
 
-This format is fully Git-diffable and can also be loaded directly into the
-Mathilda terminal REPL (`./Mathilda < notebook.mathilda`).
+Parsing and writing live in Rust (`src-tauri/src/notebook_format.rs`, behind the
+`load_notebook` / `save_notebook` commands) with unit tests. A marker must be the
+whole line, so a comment that merely begins `(* cell:` stays in the cell; an
+unknown type reads as `code`; text before the first marker becomes a leading code
+cell; a file with no markers at all is one code cell, so an ordinary `.m` script
+opens as a notebook. Side-by-side cells are written as consecutive stanzas.
+
+The format is Git-diffable, and because the marker is a Mathilda comment, a
+notebook whose cells are all code is also a script: `./Mathilda -file
+notebook.mathilda`. (Piping it to stdin does not work: a non-tty stdin selects the
+NDJSON protocol below.)
 
 ## Keyboard Shortcuts
 
@@ -77,6 +99,43 @@ Mathilda C binary (../Mathilda)
 ```
 
 See docs/frontend-research.md for the full design rationale.
+
+### Evaluating a cell
+
+The Rust side sends each cell as `{"id": N, "expr": "...", "cell": true}`; the
+protocol is documented at the top of `pipe_mode_loop`'s section in `src/repl.c`.
+The `cell` flag gives the request a notebook input cell's semantics:
+
+- **Several statements.** One per line, or separated by `;`, each evaluated in
+  turn and each non-Null result shown, as in a Mathematica input cell. A statement
+  ending in `;` shows no result. The whole cell is syntax-checked first, so an
+  error anywhere evaluates nothing.
+- **Print output and messages reach the cell.** The kernel captures each
+  statement's `Print` text and its messages and sends them as `stream` and
+  `message` lines before that statement's result. They render as plain text and
+  as an amber warning block respectively.
+- **No length limit.** Requests are read at any length (the kernel used to read
+  them into a 10 KB buffer and cut a larger cell off).
+
+Plain requests without the flag behave exactly as before, which is what the site
+generator and the audit tools depend on (`make check-pipe-protocol` pins both
+modes). As a fallback for an older kernel, the Rust side also forwards any
+non-JSON stdout line as `stream` text and stderr as a `message`, instead of
+dropping and logging them. `kernel.rs`'s routing and the request line are unit
+tested, including one round trip through the real binary when it is built.
+
+### Stacking order
+
+Every surface positioned against the window takes its `z-index` from one scale of
+`--z-*` tokens at the top of `app.css` (canvas, focused view, status dock,
+overlays, minimap, app bar, popovers, banner, menus, lowest first). The properties
+panel and the find bar were once 40 and 45 against the focused view's 50, so they
+opened *behind* the notebook they act on; on the shared scale they sit above it.
+Numbers inside one component's own stacking context stay local.
+
+`npm run check:notebook` pins that order, the Cell menu's Convert to items (which
+now convert the cell through the same `convertCell` the toolbar's cell-style
+control uses, instead of only relabelling the toolbar), and the find bar's mark.
 
 ### Focused-mode surfaces
 
@@ -140,22 +199,27 @@ notebook in the active pane. It is deliberately not `@codemirror/search`: that
 package's `openSearchPanel` searches one editor — whichever cell holds focus — and
 a bar that silently ignores the other forty cells while calling itself notebook
 search is worse than no bar, because you would believe its "No matches". So
-`lib/search.ts` matches over the notebook's own model via `store.allCells()`, and
-navigation then drives whichever editor owns the match it landed on: a code cell
-gets a real CodeMirror selection and scroll, a prose cell is opened for editing
-(which un-renders it) and its range selected.
+`lib/search.ts` matches over the notebook's own model via `store.allCells()`.
 
 `Cmd+F` is free because `@codemirror/search` is *not* installed, so no editor
-claims the binding. Enter and Shift+Enter walk the matches, wrapping both ways;
-typing only updates the count, since jumping per keystroke would scroll the
-notebook out from under someone still typing.
+claims the binding. Enter and Shift+Enter walk the matches, wrapping both ways
+(the first Enter lands on the match the count shows); typing only updates the
+count, since jumping per keystroke would scroll the notebook out from under
+someone still typing.
 
-What it does not do is highlight every match at once — that needs a CodeMirror
-decoration extension per cell, which is its own change. The count says how many
-there are and Enter walks them.
+**The find field keeps focus.** Each jump *marks* the current match and scrolls it
+into view without focusing its cell (`lib/searchHighlight.ts`): a code cell gets a
+CodeMirror mark decoration held in its own state, a prose cell shows its source
+and the range is painted with the CSS Custom Highlight API. It used to select the
+match and focus the cell's editor, so the second Enter went to the cell and
+replaced the match with a newline. Escape (or the close button) is what puts the
+caret on the current match, as every editor's find does.
+
+It still does not highlight every match at once, only the current one; the count
+says how many there are.
 
 `npm run check:search` compiles `lib/search.ts` with the project's own `tsc` and
-imports the result, so its 18 checks exercise the shipped functions rather than a
+imports the result, so its 24 checks exercise the shipped functions rather than a
 paraphrase. Two properties carry it: matches are **non-overlapping** (`"aa"` in
 `"aaaa"` is two matches, not three, which is what separates the loop from the
 naive `from = at + 1`), and stepping wraps in **both** directions — in JavaScript

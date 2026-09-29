@@ -226,7 +226,7 @@
     left: 0;
     bottom: 0;
     width: 232px;
-    z-index: 40;
+    z-index: var(--z-overlay);
     display: flex;
     flex-direction: column;
     gap: 2px;

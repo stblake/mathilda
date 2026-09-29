@@ -182,11 +182,11 @@
 
 <style>
   /* Above .app-bar (200) and .kernel-banner (300). */
-  .menu-backdrop { position: fixed; inset: 0; z-index: 399; }
+  .menu-backdrop { position: fixed; inset: 0; z-index: var(--z-menu-backdrop); }
 
   .menu {
     position: fixed;
-    z-index: 400;
+    z-index: var(--z-menu);
     min-width: 180px;
     padding: 4px;
     border-radius: 8px;

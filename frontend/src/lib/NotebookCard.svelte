@@ -222,7 +222,7 @@
   // Inline rename
 
   let renaming = false;
-  let renameInput: HTMLInputElement;
+  let renameInput: HTMLElement;   /* a contenteditable <span>, not an <input> */
   let renameValue = '';
 
   function startRename() {
@@ -551,6 +551,7 @@
       case 'names':  return { kind: 'names',  names: (msg as any).payload ?? [] };
       case 'error':  return { kind: 'error',  text: msg.message };
       case 'stream': return { kind: 'stream', text: (msg as any).text ?? '' };
+      case 'message': return { kind: 'message', text: (msg as any).text ?? '' };
       case 'plot':   return { kind: 'plot',   data: msg.payload };
       case 'image':  return { kind: 'image',
                               w: (msg as any).payload?.w ?? 0,

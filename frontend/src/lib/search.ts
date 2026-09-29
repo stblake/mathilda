@@ -74,3 +74,16 @@ export function stepIndex(index: number, delta: number, count: number): number {
   if (count <= 0) return 0;
   return ((index + delta) % count + count) % count;
 }
+
+/** The match Enter (delta 1) or Shift+Enter (delta -1) goes to.
+ *
+ *  `revealed` says whether the match at `index` is already on screen. Before the
+ *  first jump the bar shows "1 of n" without having shown match 1, so the first
+ *  Enter lands ON it rather than stepping past it to match 2; Shift+Enter, and
+ *  every press after the first, steps. */
+export function nextIndex(index: number, delta: number, count: number,
+                          revealed: boolean): number {
+  if (count <= 0) return 0;
+  if (!revealed && delta > 0) return Math.min(Math.max(index, 0), count - 1);
+  return stepIndex(index, delta, count);
+}

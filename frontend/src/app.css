@@ -17,6 +17,36 @@
   /* The optional status bar along the bottom of the focused view. .focused-view
      insets its bottom by this when the bar is shown. */
   --statusbar-h: 22px;
+
+  /* THE window-level stacking scale. Every surface positioned against the
+     viewport (App.svelte's bar, banner and overlays, Canvas.svelte's views, the
+     menus) takes its z-index from here and nowhere else, so "does X sit above
+     Y" is answered by reading one list rather than grepping numbers out of
+     eight components.
+
+     Lowest first: the canvas and its cards, the focused-mode notebook view,
+     the status strip docked under it, the focused-mode overlays that slide over
+     the notebook (properties panel, find bar), the minimap, the app bar /
+     toolbar, popovers anchored to a cell, the kernel banner, and menus on top
+     of everything. The overlays were once 40 and 45 against the focused view's
+     50 -- BEHIND the notebook they were opened to act on -- which is the failure
+     a single scale exists to make impossible.
+
+     Numbers inside one component's own stacking context (a card's header over
+     its body, a pane divider over its pane) are local and stay local; they do
+     not compete with these. */
+  --z-canvas: 0;
+  --z-focused-view: 50;
+  --z-status-dock: 60;
+  --z-overlay: 70;          /* properties panel */
+  --z-overlay-top: 75;      /* find bar: above the panel when both are open */
+  --z-minimap: 90;
+  --z-appbar: 200;
+  --z-popover-backdrop: 249;
+  --z-popover: 250;         /* cell-type picker */
+  --z-banner: 300;
+  --z-menu-backdrop: 399;
+  --z-menu: 400;
   --text: #6b6375;
   --text-h: #08060d;
   /* Subordinate text: subsection headings, captions, recorded output. */
@@ -341,4 +371,12 @@ code {
     right: 0;
     border-right-color: var(--border);
   }
+}
+
+/* The find bar's current match inside a prose cell (CSS Custom Highlight API;
+   see lib/searchHighlight.ts). Code cells paint theirs with a CodeMirror mark
+   in the same colour. */
+::highlight(mathilda-search) {
+  background-color: rgba(250, 179, 135, 0.45);
+  color: inherit;
 }

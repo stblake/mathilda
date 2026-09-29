@@ -151,7 +151,7 @@
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 8px;
     overflow: hidden;
-    z-index: 90;
+    z-index: var(--z-minimap);
     box-shadow: 0 4px 20px rgba(0,0,0,0.45);
     /* pointer-events: auto so clicks reach the SVG */
     pointer-events: auto;
