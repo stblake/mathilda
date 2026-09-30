@@ -301,6 +301,8 @@ set(COMMON_SRC
     ../src/vectoranal.c
     ../src/assoc.c
     ../src/assoc_index.c
+    ../src/assoc_query.c
+    ../src/json.c
     ../src/ndarray.c
     ../src/ndinteger.c
     ../src/ndkernels.c
@@ -1330,6 +1332,16 @@ add_executable(association_tests test_association.c $<TARGET_OBJECTS:mathilda_co
 target_link_libraries(association_tests m)
 target_include_directories(association_tests PRIVATE ../src)
 add_test(NAME association_tests COMMAND association_tests)
+
+add_executable(assoc_query_tests test_assoc_query.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(assoc_query_tests m)
+target_include_directories(assoc_query_tests PRIVATE ../src)
+add_test(NAME assoc_query_tests COMMAND assoc_query_tests)
+
+add_executable(json_tests test_json.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(json_tests m)
+target_include_directories(json_tests PRIVATE ../src)
+add_test(NAME json_tests COMMAND json_tests)
 
 # Association performance regression gate: fails if a hash-backed op scales
 # worse than O(n) (doubling-ratio check; machine-independent).
@@ -3487,6 +3499,8 @@ if(USE_ECM)
     add_dependencies(boolean_tests build_ecm)
     add_dependencies(names_tests build_ecm)
     add_dependencies(association_tests build_ecm)
+    add_dependencies(assoc_query_tests build_ecm)
+    add_dependencies(json_tests build_ecm)
     add_dependencies(bench_assoc build_ecm)
     add_dependencies(bench_ndarray_linalg build_ecm)
     add_dependencies(bench_compile build_ecm)

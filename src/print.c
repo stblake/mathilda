@@ -16,6 +16,7 @@
 #include "ndarray.h"
 #include "compile/compiled_function.h"
 #include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
+#include "assoc_query.h"   /* dataset_format, for the Dataset[...] table form */
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -362,6 +363,13 @@ static void print_standard(Expr* e, int parent_prec) {
         }
         else if (head == SYM_Graphics && e->data.function.arg_count >= 1 && g_inputform_depth == 0) {
             printf("-Graphics-");
+        }
+        else if (head == SYM_Dataset && e->data.function.arg_count == 1 && g_inputform_depth == 0) {
+            /* Dataset[data]: a text table (src/assoc_query.c); InputForm and
+             * FullForm keep the literal Dataset[...] constructor. */
+            char* table = dataset_format(e);
+            if (table) { fputs(table, stdout); free(table); }
+            else printf("Dataset[]");
         }
         else if (head == SYM_Graphics3D && e->data.function.arg_count >= 1 && g_inputform_depth == 0) {
             printf("-Graphics3D-");

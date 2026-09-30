@@ -166,7 +166,9 @@ the current working directory.
   tables; `Get` (above) shares its file-reading core.
 
 ## Import
-Reads a raster image file and returns an `Image`.
+Reads a raster image file and returns an `Image`; `.json` files and the
+`"JSON"` / `"RawJSON"` formats are read as JSON (see
+[ImportString, ExportString (JSON)](#importstring-exportstring-json)).
 - `Import["file"]` — decodes PNG, JPEG, BMP, GIF, TGA, PSD, HDR or PNM by content.
 - `Import["file", "Image"]` — the same, stated explicitly.
 
@@ -269,7 +271,9 @@ Out[3]= {32, 24}
 ```
 
 ## Export
-Writes an `Image` to a raster image file, or a `Graphics` object to an image file.
+Writes an `Image` to a raster image file, or a `Graphics` object to an image file;
+`.json` files and the `"JSON"` / `"RawJSON"` formats are written as JSON (see
+[ImportString, ExportString (JSON)](#importstring-exportstring-json)).
 - `Export["file", image]` — the format comes from the file extension (PNG, JPEG, BMP, TGA).
 - `Export["file", image, "PNG"]` — the format stated explicitly, for a name that does not
   carry one.
@@ -373,6 +377,108 @@ Out[1]= {{1.0, 0.0}, {1.0, 0.0}}
 In[2]:= (* a volume is declined rather than silently reduced to a slice *)
 Head[Export["/tmp/mathilda_doc_vol.png", Image3D[Table[0.5, {z, 1, 2}, {y, 1, 2}, {x, 1, 2}], "Real"]]]
 Out[2]= Export
+```
+
+## ImportString, ExportString (JSON)
+Read and write JSON text (`src/json.c`), in Mathematica's two mappings.
+- `ImportString["json", "RawJSON"]` — objects become associations, arrays lists,
+  strings strings, `true`/`false`/`null` become `True`/`False`/`Null`.
+- `ImportString["json", "JSON"]` — the same, with objects as lists of rules.
+- `ExportString[expr, "RawJSON"]` — associations (string keys) as objects, lists as
+  arrays; `ExportString[expr, "JSON"]` also writes lists of rules as objects.
+- `"Compact" -> True` drops all whitespace; the default (`"Compact" -> False`)
+  uses Mathematica's layout: one element per line, tab indentation, `"key":value`,
+  empty containers inline.
+- `Import["file.json"]` reads the `"JSON"` form and `Import["file", "RawJSON"]` the
+  association form; `Export["file.json", expr]` writes `"JSON"`, and
+  `Export["file", expr, "RawJSON" | "JSON", "Compact" -> ...]` states the format.
+  Other formats fall through to the image/graphics `Import` / `Export`.
+- `ImportString["text"]` (no format) gives the text itself.
+
+**Features**:
+- `Protected`.
+- Numbers as Mathematica reads them: an integer of any size is an `Integer`; a
+  number with a fraction part (`2.5`, `1.5e3`) is a machine `Real` (an
+  arbitrary-precision real when it overflows a double); a number with an exponent
+  and no fraction (`1e-2`, `3E2`) is the exact `Integer` or `Rational` it denotes.
+  Leading zeros (`01`) are accepted, as Mathematica does.
+- Strings: every escape, including `\uXXXX` and UTF-16 surrogate pairs, decodes to
+  UTF-8; a stray surrogate is an error. `\u0000` is kept (stored as the two-byte
+  sequence `C0 80`, since Mathilda strings are NUL-terminated) and written back as
+  `\u0000`.
+- Duplicate object keys: last value wins, first position kept (`"RawJSON"`); the
+  `"JSON"` rule list keeps every entry.
+- Reals are written in shortest round-trip form in Mathematica's JSON style —
+  fixed notation only for decimal exponents 0 and -1 (`0.5`, `3.14`, `0.12`),
+  otherwise `d.ddde±n` (`2.5e1`, `5.0e-2`, `1.0e5`); rationals are written as
+  reals. Strings escape `"`, `\`, `/` (as `\/`), the named control escapes and other
+  control bytes as `\u00XX`; non-ASCII UTF-8 is written as is.
+- Invalid JSON gives `$Failed` with Mathematica's message
+  (`Import::jsoninvalidtoken`, `::jsonkvsep`, `::jsonkeynstr`,
+  `::jsonarraymissingsep`, `::jsoninvalidnum`, `::jsoninvescchar`,
+  `::jsonsurrogate`, `::jsoninvcodepoint`, `::jsonfoundendofinput`,
+  `::jsonexpendofinput`, `::jsonnullinput`) followed by
+  `Import::jsonhintposandchar` with the line and column; an expression with no
+  JSON form gives `$Failed` with `Export::jsonstrictencoding`,
+  `::jsonassockeynstr`, `::jsonrulelistkeynstr` or `::jsonrulelistnonrule`. The
+  messages respect `Quiet` and trigger `Check`. The reported column can differ by
+  one or two from Mathematica's.
+- **Performance.** The reader is a single O(n) pass with one value stack; the
+  writer appends to one buffer. On a 16.5 MB file of 100 000 records (Apple
+  M-series), `Import[f, "RawJSON"]` takes 0.27–0.34 s against Mathematica 15's
+  0.47 s, `ImportString` 0.27 s against 0.71 s, and compact `ExportString` 0.14 s
+  against 0.15 s (pretty-printed: 0.22 s against 0.15 s). The output bytes are
+  identical to Mathematica's in both layouts.
+- Nesting deeper than 2000 levels is rejected (`::jsondepth`).
+
+```mathematica
+In[1]:= ImportString["{\"a\": [1, 2.5, true, null], \"b\": {\"c\": \"\\u00e9\"}}", "RawJSON"]
+Out[1]= <|"a" -> {1, 2.5, True, Null}, "b" -> <|"c" -> "é"|>|>
+
+In[2]:= ImportString["[1e-2, 3E2, 1.5e3, 123456789012345678901234567890]", "RawJSON"]
+Out[2]= {1/100, 300, 1500.0, 123456789012345678901234567890}
+
+In[3]:= ImportString["{\"a\": 1, \"b\": {\"c\": 2}}", "JSON"]
+Out[3]= {"a" -> 1, "b" -> {"c" -> 2}}
+
+In[4]:= ImportString["[1,]", "RawJSON"]
+Import::jsoninvalidtoken: Invalid token found.
+Import::jsonhintposandchar: An error occurred near character ']', at line 1:4.
+Out[4]= $Failed
+
+In[5]:= Print[ExportString[<|"a" -> {1, 2.5}, "b" -> <|"c" -> Null|>, "d" -> {}|>, "RawJSON"]]
+{
+	"a":[
+		1,
+		2.5
+	],
+	"b":{
+		"c":null
+	},
+	"d":[]
+}
+
+In[6]:= ExportString[<|"a" -> {1, 2.5}, "b" -> True|>, "RawJSON", "Compact" -> True]
+Out[6]= "{"a":[1,2.5],"b":true}"
+
+In[7]:= ExportString[{0.05, 25., 1/3, 10^20}, "RawJSON", "Compact" -> True]
+Out[7]= "[5.0e-2,2.5e1,0.3333333333333333,100000000000000000000]"
+
+In[8]:= ExportString[{"a" -> 1, "b" -> {"c" -> 2}}, "JSON", "Compact" -> True]
+Out[8]= "{"a":1,"b":{"c":2}}"
+
+In[9]:= ExportString[<|1 -> 2|>, "RawJSON"]
+Export::jsonassockeynstr: Association contains a non-string key.
+Out[9]= $Failed
+
+In[10]:= Export["/tmp/points.json", <|"x" -> {1, 2}, "y" -> "z"|>]
+Out[10]= "/tmp/points.json"
+
+In[11]:= Import["/tmp/points.json"]
+Out[11]= {"x" -> {1, 2}, "y" -> "z"}
+
+In[12]:= Import["/tmp/points.json", "RawJSON"]
+Out[12]= <|"x" -> {1, 2}, "y" -> "z"|>
 ```
 
 ## Put

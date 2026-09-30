@@ -1016,6 +1016,11 @@ extern const char* SYM_ScientificNotationThreshold;
 extern const char* SYM_SignPadding;
 extern const char* SYM_DefaultPrintPrecision;
 
+/* Query / Dataset (src/assoc_query.c): the callable-object heads the
+ * evaluator dispatches on and the printer formats. */
+extern const char* SYM_Query;
+extern const char* SYM_Dataset;
+
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*
  * pointer; in practice it is called from core_init(). */

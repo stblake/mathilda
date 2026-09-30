@@ -34,6 +34,7 @@ evaluator's rule-epoch / GROUND-flag mechanism in `src/eval.c`).
 | **Iterate / reduce** | `Table`/`Do`/`Sum`/`Product` (`{v, assoc}`), `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `Position`, `FirstPosition`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
 | **Structural** | `First`, `Last`, `Rest`, `Most`, `Take`, `Drop`, `Length` |
 | **Patterns** | `KeyValuePattern` (destructure/match, incl. in function definitions) |
+| **Query** | `Query` (descending / ascending operators, `Missing` propagation), `Dataset` |
 
 Functions that consume or reduce a collection operate on an association's
 **values**, keeping keys aligned (see *Design notes: value threading* below).
@@ -768,4 +769,146 @@ Out[2]= <|"b" -> 20, "c" -> 30|>
 
 In[3]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
 Out[3]= <|"a" -> 1, "b" -> 2|>
+```
+
+## Query
+`Query[op1, op2, ...]` is Mathematica's query language: applied to data it
+applies `op1` at level 1, `op2` at level 2, and so on (`src/assoc_query.c`).
+- `Query["key"][assoc]`, `Query[Key[k]]`, `Query[i]` (negative from the end) —
+  one part; the next operator applies to that part directly.
+- `Query[All, "col"][records]` — a column of a list (or association) of records;
+  `Query[i ;; j]`, `Query[{p1, p2, ...}]`, `Query[All, {"a", "b"}]` — several parts,
+  keeping the container type (a key list on an association gives an association).
+- `Query[Select[p]]`, `Query[SortBy[f]]`, `Query[GroupBy[f]]`, `Query[MaximalBy[f]]`,
+  ... — filtering and reordering operators; `Query[Total]`, `Query[Length]`,
+  `Query[Counts]`, `Query[f]` — aggregations and arbitrary functions.
+- `{f, g}` applies each operator to the same data; `<|"k" -> op, ...|>` builds an
+  association of results; `{"key" -> f}` updates one part in place;
+  `RightComposition[f, g]` (`f /* g`) chains operators at one level.
+- `Normal[Query[...]]` gives the equivalent composition of
+  `GeneralUtilities`Slice`, `Map` and operator pieces, as in Mathematica.
+
+**Features**:
+- `Protected`. Inert until applied; prints as `Query[...]`.
+- **Descending vs ascending.** Part specifications and `All`, and the operators
+  `Select`, `SortBy`, `ReverseSortBy`, `GroupBy`, `MaximalBy`, `MinimalBy`,
+  `DeleteDuplicatesBy`, `KeySortBy`, `KeySelect`, `KeyMap`, `TakeLargestBy`,
+  `TakeSmallestBy`, `SelectFirst`, `Lookup[k]`, `Reverse`, `Sort`, `ReverseSort`,
+  `Keys`, `Values` and `DeleteMissing` are **descending**: they run on the original
+  data at their level *before* the deeper operators, so the deeper operators still
+  see records. Every other operator is **ascending**: it runs *after* the deeper
+  operators, on their results. So `Query[Total, "a"]` extracts `"a"` from every
+  record and then totals, while `Query[Select[p], "a"]` filters the records and
+  then extracts `"a"`. The table was read off Mathematica 15's own compiled form
+  (`Normal[Query[op, h]]` is `op /* Map[h]` for a descending `op`, `Map[h] /* op`
+  for an ascending one).
+- **Missing propagation.** An absent key gives `Missing["KeyAbsent", k]`, an index
+  out of range `Missing["PartAbsent", i]`, a key of a list or a part of an atom
+  `Missing["PartInvalid", p]`. A `Missing` passes through later part
+  specifications unchanged; `Total`, `Mean`, `Max`, `Min`, `Median`, `Variance`
+  and `StandardDeviation` skip `Missing` values (`Length`, `Counts` and other
+  functions see them), as Mathematica's default `MissingBehavior` does.
+- Query applies operator forms itself (`Select[p]` on `x` is `Select[x, p]`,
+  `Map[f]` is `Map[f, x]`, a key criterion like `SortBy["c"]` means the value at
+  `"c"`), so it does not rely on curried forms in the evaluator; an operator it
+  does not know is applied as `op[x]`.
+- `Query[...][Dataset[d]]` returns a `Dataset`.
+- Not supported: the `FailureAction` / `MissingBehavior` / `PartBehavior`
+  options.
+
+```mathematica
+In[1]:= data = {<|"a" -> 1, "b" -> "x", "c" -> 3.5|>, <|"a" -> 2, "b" -> "y", "c" -> 1.5|>, <|"a" -> 3, "b" -> "z", "c" -> 2.5|>};
+
+In[2]:= Query[All, "a"][data]
+Out[2]= {1, 2, 3}
+
+In[3]:= Query[2, "b"][data]
+Out[3]= "y"
+
+In[4]:= Query[Select[#["a"] > 1 &], "b"][data]
+Out[4]= {"y", "z"}
+
+In[5]:= Query[SortBy["c"], "a"][data]
+Out[5]= {2, 3, 1}
+
+In[6]:= Query[Total, "a"][data]
+Out[6]= 6
+
+In[7]:= Query[GroupBy[#["a"] > 1 &], Total, "a"][data]
+Out[7]= <|False -> 1, True -> 5|>
+
+In[8]:= Query[All, {"a", "c"}][data]
+Out[8]= {<|"a" -> 1, "c" -> 3.5|>, <|"a" -> 2, "c" -> 1.5|>, <|"a" -> 3, "c" -> 2.5|>}
+
+In[9]:= Query[All, <|"id" -> "a", "twice" -> Query["c", 2 # &]|>][data]
+Out[9]= {<|"id" -> 1, "twice" -> 7.0|>, <|"id" -> 2, "twice" -> 3.0|>, <|"id" -> 3, "twice" -> 5.0|>}
+
+In[10]:= Query[All, "z"][data]
+Out[10]= {Missing["KeyAbsent", "z"], Missing["KeyAbsent", "z"], Missing["KeyAbsent", "z"]}
+
+In[11]:= Query[Mean, "a"][{<|"a" -> 1|>, <|"b" -> 2|>, <|"a" -> 5|>}]
+Out[11]= 3
+
+In[12]:= Normal[Query[Select[s], Total, "a"]]
+Out[12]= RightComposition[Select[s], Map[RightComposition[GeneralUtilities`Slice[All, "a"], Total]]]
+```
+
+## Dataset
+`Dataset[data]` wraps structured data — a list, an association, a list of
+associations (records) or an association of associations — for querying.
+- `ds[op1, op2, ...]` runs `Query[op1, op2, ...]` on the data. A `List` or
+  `Association` result comes back as a `Dataset`; a scalar, string or `Missing`
+  comes back bare, as in Mathematica.
+- `ds[[parts]]` is the same as `ds[parts]`.
+- `Normal[ds]` gives the data. `Length`, `Dimensions`, `Keys`, `Values`,
+  `Select`, `SortBy`, `Map`, `First`, `Last`, `Take` and `Reverse` accept a
+  `Dataset` and re-wrap a structured result.
+
+**Features**:
+- `Protected`. `Dataset[Dataset[d]]` is `Dataset[d]`.
+- `Dimensions` counts an association like the list of its values, so a list of
+  `n` records with `k` fields is `{n, k}` (as in Mathematica).
+- **Print form.** Mathematica's formatted `Dataset` is a graphical grid; Mathilda
+  prints a text table in the REPL: a `Dataset <rows x cols>` header line, then the
+  field names over a rule and one row per record (row labels for an association of
+  records, `-` for a missing field, `key | value` rows for an association of
+  scalars). At most 20 rows and 12 columns are shown, with a `rows 1-20 of n`
+  footer; cells are clipped at 24 characters. `InputForm`/`FullForm` show the
+  literal `Dataset[data]`.
+- **Differences.** Mathematica stores a type and metadata
+  (`Dataset[data, type, meta]`); Mathilda keeps only the data (extra arguments are
+  dropped). A query that fails a type check (`ds[5]` on three rows) gives a
+  `Failure` in Mathematica and the corresponding `Missing[...]` here.
+
+```mathematica
+In[1]:= ds = Dataset[data]
+Out[1]= Dataset <3 x 3>
+a | b | c
+--+---+----
+1 | x | 3.5
+2 | y | 1.5
+3 | z | 2.5
+
+In[2]:= ds[Total, "c"]
+Out[2]= 7.5
+
+In[3]:= ds[Select[#["c"] > 2 &], {"a", "b"}]
+Out[3]= Dataset <2 x 2>
+a | b
+--+--
+1 | x
+3 | z
+
+In[4]:= Normal[ds[SortBy["c"], "b"]]
+Out[4]= {"y", "z", "x"}
+
+In[5]:= Dimensions[ds]
+Out[5]= {3, 3}
+
+In[6]:= Dataset[<|"x" -> <|"a" -> 1, "b" -> 2|>, "y" -> <|"a" -> 3, "b" -> 4|>|>]
+Out[6]= Dataset <2 x 2>
+  | a | b
+--+---+--
+x | 1 | 2
+y | 3 | 4
 ```

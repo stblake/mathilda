@@ -1000,6 +1000,15 @@ void core_init(void) {
     void compiled_function_init(void);   /* registers Compile[] / CompiledFunction */
     compiled_function_init();
 
+    /* Query / Dataset and RawJSON / JSON import-export. Late on purpose: both
+     * wrap builtins registered above (Normal, Length, Map, ..., Import,
+     * Export) to make them Dataset- / JSON-aware, delegating everything else
+     * to the original. */
+    void assoc_query_init(void);
+    assoc_query_init();
+    void json_init(void);
+    json_init();
+
     /* Options/SetOptions/OptionValue + the default-options registry. Runs last
      * so every option-name symbol used by the registry is already interned. */
     void options_builtin_init(void);

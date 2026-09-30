@@ -956,6 +956,8 @@ const char* SYM_NumberSigns = NULL;
 const char* SYM_ScientificNotationThreshold = NULL;
 const char* SYM_SignPadding = NULL;
 const char* SYM_DefaultPrintPrecision = NULL;
+const char* SYM_Query = NULL;
+const char* SYM_Dataset = NULL;
 
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
@@ -1919,4 +1921,8 @@ void sym_names_init(void) {
     SYM_ScientificNotationThreshold = intern_symbol("ScientificNotationThreshold");
     SYM_SignPadding                = intern_symbol("SignPadding");
     SYM_DefaultPrintPrecision      = intern_symbol("DefaultPrintPrecision");
+
+    /* Query / Dataset callable heads (src/assoc_query.c). */
+    SYM_Query                      = intern_symbol("Query");
+    SYM_Dataset                    = intern_symbol("Dataset");
 }

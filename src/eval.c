@@ -19,6 +19,7 @@
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "assoc.h"                  /* assoc_lookup_value — O(1) <|...|>[key] */
+#include "assoc_query.h"            /* Query[...][data], Dataset[data][...] */
 #include "interp.h"
 #include "interval.h"                /* interval_thread_call — Interval[...] threading */
 #include "compile/compiled_function.h"
@@ -2021,6 +2022,17 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * than a new node type. */
                 Expr* applied = ml_model_apply(head, res->data.function.args,
                                                res->data.function.arg_count);
+                if (applied) {
+                    expr_free(res);
+                    *changed = true;
+                    return applied;
+                }
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       query_callable_probe(head)) {
+                /* 7a-query. Query[ops...][data] and Dataset[data][ops...] --
+                 * the query language as callable objects (src/assoc_query.c). */
+                Expr* applied = query_callable_apply(head, res->data.function.args,
+                                                     res->data.function.arg_count);
                 if (applied) {
                     expr_free(res);
                     *changed = true;
