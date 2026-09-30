@@ -34,6 +34,7 @@ Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
 | 2026-09-23 (**M58**) | **591 / 1204 total** | — | **613** | **+1 (590 → 591), 0 FAIL.** Higher-order autonomous reduction — `DSolve\`AutonomousReduction` lifted from order-2-only to any order n≥2 (derivative chain `D_{k+1}=p·d/dy(D_k)` → order-(n−1) ODE in `p(y)` → separable `y'==p`). **Deterministic +1**: 1143 (`_3rd_order, _missing_x`, `y y'''==y'y''`) now solves (`p=Sqrt[C₁y²+C₂]` → elementary stage-2 quadrature). The other order-3 autonomous cases (263/264/267/268/1167/1168) reduce correctly but their stage-2 quadrature is non-elementary and decline (a **stage-2 spin-guard** declines a `Log`/y-denominator radicand *before* Integrate spins uninterruptibly — 1167/264 went 45 s → 0.1 s). Order-2 unchanged (exp/Tan-Tanh solve, elliptic declines). Net P↔U (79/80/94 gained, 58/161/1001 lost) = `_with_linear_symmetries` timing cluster oscillating. Zero cascade/wiring changes. Gate baseline **629 → 628**. *Future (big lever): implicit first integral `∫dy/p==x+C` for non-elementary stage-2 → the full order-3 autonomous set.* |
 | 2026-09-23 (**M57**) | **590 / 1204 total** | — | **614** | **+5 (585 → 590), 0 FAIL.** `SolvableForY` / `SolvableForX` — the `y=G(x,y')` "dp" differentiation method (Maple's `dp`), generalising `DSolve\`Lagrange` (its linear-induced-ODE special case): isolate `y` (resp. `x`), differentiate, recurse the cascade on the induced first-order ODE, return the **parametric** solution. **Deterministic gain +2**: 347 (`y=_G(x,y')`) and 352 (`_with_symmetry_[F(x),G(y)]`) now solve via `SolvableForY` (both verified — it returns them, the M56 ref did not; `1st_solvable_for_yx` 22 → 23, `1st_with_symmetry` +352). The other +3 is the documented `_with_linear_symmetries` timing cluster (2nd/high-order — 58/375/592/799/983/1001 gained, 79/80/94 lost; all declined instantly by `SolvableForY`) oscillating with machine load. 350/351 solve but exceed the 8 s forked budget. `SolvableForX` is **pinned-only** (auto yield ~0 + slow cubic-denominator verify). A `PolynomialQ` pre-gate kills the transcendental time-burners (`Sin[xy]` 20 s → 0.24 s). Gate baseline **631 → 629** (614 + margin for the timing cluster; lowered by the +2 deterministic gain). |
 | 2026-09-30 (**M60**) | **634 / 1204 total** | — | **570** | **+29 net (605 → 634), 0 FAIL** — measured against a fresh same-day baseline of 605/599 (the checked-in M59 row of 595 had drifted +10 on intervening non-DSolve work). **+30 gained, 1 lost.** Three mechanisms: new `DSolve\`GeneralizedAiry` (the n-th order pure-power potential `u^(n) == A x^m u` → `x^j ₀F_{n−1}`, reached through a depression gauge, symbolic `A`/`m` supported); `OperatorFactor` lifted to **order 2 + forcing** (Kovacic owns order 2's tidy answers, but its Case-1 residue was falling through to a truncated Frobenius series even when `DFactor` could find the factor — which is also what unblocks the order-3 peel's own quotient); and the **adjoint/left-factor peel**, the classical Beke order-(n−1) right factor, plus a generalised Bessel row `Q = A x^m + B x^(-2)`. Bucket attribution: **`3rd_high_linear` 42 → 64 (+22)**, `2nd_linear` 243 → 249 (+6), `1st_solvable_for_yx` +1, `Emden_Fowler` +1; the single loss (342) is a first-order *nonlinear* ODE that `OperatorFactor` declines in 0.4 ms and which solves in 5.25 s standalone — the documented 8 s timing cluster. Also three pre-existing latency root-causes fixed (unsimplified `Exp[-(Log[x]+…)]` trailing integrand: 3.98 s **and a failure** vs 0.015 s; symbolic `C[k]` in the algebraic integrator: 2.06 s vs 0.011 s; unbounded ansatz width and a speculative double-pole order: a failing search 60.2 s → 0.72 s) — 2.1.2-250 went from a >120 s non-answer to a 2.6 s solve. Measurement deterministic across two full runs. Gate baseline **619 → 580** (570 + 10 margin). |
+| 2026-09-30 (**M61**) | **621 / 1204 total** | — | **583** | **+5 net vs HEAD on the same machine** (616 → 621 PASS; 9 gained, 4 lost), **0 FAIL**, crashes 3 → 1. Not a §2.1.2-targeted wave — these are side-effects of the M61 §2.2.34 fixes (the inert VoP particular, the nonlinear-in-`y` Clairaut, the `NthAlgebraic` bound, the parametric-verify cancellation). The 4 losses (233/342/591/856) all solve in **3–5 s on BOTH binaries**, i.e. the documented 8 s timing-boundary cluster flipping under fork load — verified by an isolated A/B, and M61 is not the slower of the two on any of them. **Gate left at 580, deliberately:** it is **already red on main** (HEAD measures **588** non-PASS on this machine), so M61 reduces the overshoot from 8 to 3 but cannot honestly claim 580. Raising it would hide pre-existing drift. This wave also found and fixed one real regression of its own before landing — an ungated `Together` in the parametric verify cost 2.1.2-980 6 s → 51 s; the master run was the only thing that caught it. |
 
 ### Gap by bucket (baseline, ranked)
 
@@ -1572,6 +1573,78 @@ the reducible-μ class) + quadrature / rational / dAlembert + small linear syste
 
 Full per-case results: `reports/2.2.33.tsv`; bucketed report: `reports/2.2.33.md`.
 
+**M61 note:** the corpus was regenerated with the fixed converter, repairing the standing
+**3296** miss (`y(1+y'²)==2`, a whole-LHS product misread as a point condition). Re-measured
+on the M61 tree: **88/100, 0 FAIL, 12 non-PASS** — against **18** for the same section on a
+HEAD binary built in an isolated worktree, i.e. the gate baseline of 22 is comfortable and the
+apparent movement since M54 is pre-existing drift, not this wave.
+
+---
+
+## Section 2.2.34 — "Problems 3301 to 3400" (Nasser Abbasi)
+
+Corpus: `DE_examples_2234.m` — 100 records, **100 scalar (16 IVP) + 0 systems**.
+Converted with `tools/latex_ode_to_mathilda.py`. Three sub-blocks: **3301–3333**
+first-order nonlinear solvable-for-`y'` (18 dAlembert, 9 Clairaut, 16 homogeneous class
+A/C/G, rational/quadrature/separable); **3334–3349** genuine IVPs tagged "series expansion
+around `x=x0`", several with no closed form at all; **3350–3400** second-order linear
+variable-coefficient at a regular singular point, homogeneous (3350–3386) and
+nonhomogeneous (3387–3400). 39 of the 100 are `sympy=✗`.
+`ctest -R dsolve_corpus_2_2_34_tests` · gate baseline **9**.
+
+**Upstream renumbering:** 12000.org regenerated on 2026-09-28 and moved the sequential
+pages from §2.2.N to **§2.1.N** (`Ch2.S1.SSN.htm`); this section is upstream §2.1.34. The
+internal `2.2.34` name is kept for continuity — see `README.md`.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-09-30 (M61 baseline) | 80 / 100 | 80.0% | 20 | 0 FAIL, 0 crash. Gap by root cause: 7 nonhomogeneous-at-a-singular-point, 3 autonomous IVP constant unfitted, 2 series-basis particular, 1 converter miss, 1 separable singular solution, 2 budget burners, 6 with no closed form. |
+| 2026-09-30 (**M61**) | **91 / 100** | **91.0%** | **9** | **+11, 0 FAIL, 0 crash, 0 regressions**, deterministic (two runs per-case identical). Gains: 3313 (converter), 3387/3388/3389/3392/3395 (inert VoP particular), 3345/3347 (autonomous stage-1 fit), 3336 (separable singular), 3312/3331 (latency root causes + nonlinear-in-`y` Clairaut). Gate baseline **9**. |
+
+**M61 — five root-cause fixes.** Full prose in the changelog
+(`docs/spec/changelog/2026-09-28.md`); in brief:
+
+- **Converter (3313).** `is_condition_row` accepted a whole-LHS *product* written
+  `y\left(1+{y'}^2\right)` as the point condition `y(P)=V`, so the ODE row vanished and the
+  record degenerated to a `NO ODE ROW` placeholder. The argument must also be free of
+  `\prime`, of the dependent functions, and of the independent variable. Measured across all
+  33 sections: **no-op on 31**, repairs 3313, **2.2.33-3296** and **2.2.16-1593**.
+- **Inert variation-of-parameters particular (3387/3388/3389/3392/3395).** The homogeneous
+  part solves to a Bessel/hypergeometric set but the VoP quadratures are not elementary, and
+  `SpecialFunctionForm` is homogeneous-only by construction, so the fundamental set was found
+  and discarded. A second `DSolve`VariationOfParameters` mode in the **last** cascade slot
+  returns the particular with those quadratures held inert. Correctness rests on an in-method
+  gate — every other verifier keeps a residual containing an integral — which splits the
+  residual by its inert integrals and tests each coefficient at exact rationals; measured
+  margin 5.4e-51 (correct) against 0.18–0.49 (three planted-wrong bases). An IVP declines.
+- **Autonomous stage-1 constant fit (3345/3347).** The point conditions determine the
+  reduction constants exactly and independently of the quadrature; fitting them first turns a
+  symbolic-parameter `ArcTanh` the spin guard rejects into `ArcTanh[y]`, so
+  `y''+2yy'==0, y(0)=0, y'(0)=1` now returns `Tanh[x]`. Where the quadrature stays
+  non-elementary the relation is fitted in **definite** form — the indefinite form could not
+  be fitted at all, because `y[x] -> y0` also rewrote the integration variable and produced a
+  meaningless `Inactive[Integrate][1, 0]` that, with no free constant left, looked solved.
+- **Separable singular solution (3336).** `y'==x²y², y(1)=0` shipped the family with its
+  constant unfitted; the equilibrium `y == 0` is the answer. Keyed on the fitter's empty-`Solve`
+  state, not on `h(y0)==0` (which also holds for three cases that are already correct).
+- **Two latency root causes + nonlinear Clairaut (3312/3331).** The parametric verify
+  substituted an uncancelled `dY/dX` into a residual that cubes it (>120 s hang, reach across
+  every parametric answer); `NthAlgebraic`, the second method tried on every scalar ODE,
+  recursed a full `DSolve` without a bound and discarded the result (~25 s on an equation
+  `Clairaut` answers in 0.01 s); and a Clairaut equation written **nonlinearly** in `y` was
+  owned by no method. *Caveat found and fixed during the wave:* the `Together` cancellation
+  must be gated to a quotient rational in the parameter — ungated it is itself the expensive
+  step on a radical-carrying candidate (2.1.2-980: 6 s → 51 s).
+
+**Residue 9, honestly classified.** Six have no closed form (3319/3338/3341/3342/3348/3349 —
+Maple/Mathematica answer with a Taylor series; a nonlinear Taylor-series method would close
+all six but as **pass-on-trust**, since the verifier samples far from `x0`, so it is deferred
+to its own milestone with a proper `O[(x−x0)^N]` gate); 3393/3394 need a series *particular*
+(`FrobeniusSeries`/`PowerSeries` decline all forcing — the named next step); 3346's stage-2
+quadrature is elliptic.
+
+Full per-case results: `reports/2.2.34.tsv`; bucketed report: `reports/2.2.34.md`.
+
 ---
 
 ## Section 2.1.3
@@ -1995,3 +2068,23 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   (`src/calculus/dsolve_kovacic.c`): decline immediately when `Q≡0`. 3256 flips UNEVAL → PASS;
   §2.2.33 **78/100, 0 FAIL** (gate baseline 23 → 22); genuine Kovacic cases (nonzero y-term)
   untouched; §2.1.2 re-run within baseline. New unit `t_m54_kovacic_missing_y_no_churn`. v0.151→0.152.
+
+- **M61 (2026-09-30)** — §2.2.34 (Problems 3301–3400) corpus wave, **80 → 91/100, +11, 0 FAIL,
+  0 crash**, deterministic across two per-case-identical runs. Five root-cause fixes, each general:
+  a **converter** gate (a whole-LHS product read as a point condition — no-op on 31 of 33 sections,
+  repairs 3313 plus the standing §2.2.33-3296 and §2.2.16-1593); an **inert
+  `Inactive[Integrate]` variation-of-parameters particular** in a new LAST cascade slot for the
+  regular-singular Bessel/hypergeometric family, with an in-method gate that is the only barrier
+  (every other verifier keeps a residual containing an integral) and a measured accept/reject
+  margin of 5.4e-51 against 0.18–0.49; the **autonomous stage-1 constant fitted from the point
+  conditions** before the stage-2 quadrature is judged, plus the **definite** inert form (the
+  indefinite one could not be fitted — substitution corrupted the integration variable) and the
+  Leibniz rule for the inert definite head in `deriv.c`; the **separable singular solution** for an
+  IVP whose family provably cannot reach the initial point; and two **latency root causes with
+  reach beyond this corpus** (an uncancelled `dY/dX` in the parametric verify, >120 s hang, gated
+  to rational quotients after it proved expensive on a radical candidate; `NthAlgebraic`'s
+  unbounded per-root recursion, ~25 s discarded) together with a **Clairaut equation written
+  nonlinearly in `y`**, which no method owned. Regression measured as a **same-machine A/B against
+  a HEAD binary in an isolated worktree** over 11 exposed sections: M61 better on 6, equal on 5,
+  0 FAIL in all 22 runs. New: 6 `t_m61_*` units + `tests/test_dsolve_m61_stress.c` (7 families,
+  18-member forward generator, latency bound, gate-margin controls). v0.236→0.237.

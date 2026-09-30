@@ -3914,3 +3914,64 @@ harness memory `[[project_refine_string_rule_rhs_bare_name]]`.
 - **Elegant robustness fix beats raising a cap.** The 16-symbol rule-buffer overflow (which dropped
   ALL rules) was fixed by pruning rule synthesis to symbols actually in the target expression — kills
   the O(n²) pairwise blowup and is a general speedup — rather than enlarging `MAX_SYM`/the buffer.
+
+## A `Together` that fixes one shape can be the expensive step on another (M61, 2026-09-30)
+
+`dsolve_verify_parametric` substituted an **uncancelled** `dY/dX` into a residual that raises
+it to a power (`x y'³ == y y' + 1` cubes it), and `zero_test`'s canonicalisation of the
+degree-exploded rational never returned — a >120 s hang reachable from every parametric answer.
+`Together` on the quotient before substitution collapses it to `t` in 0.05 s. The fix was real
+and the reasoning for it was right.
+
+**But ungated it was itself a regression.** On a parametric candidate carrying radicals —
+2.1.2-980's `(x²+y²)^(3/2)` — `Together` is the slow step: 6 s → **51 s**, plus a
+`$RecursionLimit` blowup, and it also pushed 2.1.2-702 from 8 s to 56 s. Nothing in the
+section corpus or the fifteen unit/stress suites caught it; only the **full §2.1.2 master run**
+did, via 3 SIGILL crashes and a non-PASS count 3 over baseline. The fix is
+`if (ds_is_rational_in(yprime, tname))` — apply the cancellation exactly where it pays.
+
+Two rules out of this:
+
+- **A normalisation is not free.** `Together`/`Simplify`/`Expand` inserted to make one class
+  cheap must be gated to the class it helps, because the generic path will meet inputs where the
+  normaliser is the dominant cost. This repo already has the pattern in several places
+  (`ds_has_fractional_power` guards, `nh_norm`'s placement) — follow it by default.
+- **Run the master corpus before claiming a latency fix is free.** A cheap per-case probe and
+  the curated suites both said the change was pure gain. The 1204-case run is the only thing
+  that samples enough shapes to find the counter-case. See
+  `[[feedback_dsolve_corpus_regression_check_isolated_ab]]`.
+
+## An "assert it rather than assume it" check rejected the IDEAL case (M61, 2026-09-30)
+
+The inert-VoP gate splits the residual by its inert integrals and checks each coefficient. I
+asserted `Exponent[resid, Z_i] == 1` — "degree 1 is guaranteed by the construction, so assert it
+so a future consumer fails loudly". Three of the four target cases then failed the gate, and the
+reason was the opposite of a defect: the coefficient `L[basis_i]` had **cancelled exactly**, so
+`Z_i` did not appear at all and `Exponent` returned 0. Degree 0 is the *best* outcome — the piece
+is verified symbolically and needs no sampling.
+
+The lesson is not "don't assert"; it is that an assertion on a *derived* quantity must enumerate
+every value the derivation can legitimately produce, including the degenerate-because-perfect
+one. Writing the check as `absent → continue; linear → sample; higher → reject` is both stricter
+(a degree ≥ 2 still fails loudly) and correct.
+
+## Never `git checkout-index` on a tree a concurrent session is using (M61, 2026-09-30)
+
+To commit only my own hunk of a changelog a peer session was also editing, I staged my hunk
+with `git apply --cached`, then reached for `git checkout-index -f <file>` to re-sync the working
+tree — which writes the INDEX over the working tree and **silently destroyed the peer's 55
+unstaged lines**. It was recoverable only because I still had `git diff > patch` from before.
+
+The safe primitives for this job, on a shared tree:
+
+- stage a subset: `git diff -- <file> > p; <filter hunks>; git apply --cached p`
+- undo a working-tree hunk: `git apply -R <that-hunk>.patch` — never `checkout`,
+  `checkout-index`, `restore`, `reset --hard`, or `stash`, all of which discard by file, not by
+  hunk, and take the other session's work with them.
+- and **save `git diff` of any shared file before touching the index**, so a mistake is a
+  re-apply rather than a loss.
+
+Reinforces `[[feedback_shared_tree_no_destructive_git]]` and
+`[[feedback_shared_tree_concurrent_session_files]]`: the rule is not just "don't reset" — it is
+that any command whose unit of work is the *file* is destructive when someone else owns part of
+that file.

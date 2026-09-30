@@ -20,14 +20,44 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include <stdlib.h>
+#include <time.h>
+
+/* This method sits SECOND in the scalar cascade and its per-root recursion is a full
+ * `DSolve`, so an unbounded one lets any degree->=2-in-y' equation burn arbitrary time
+ * before the specialists downstream are ever reached.  Measured on
+ * (y - x y')^2 == 1 + y'^2: the two roots each cost ~5.9 s and each returns an
+ * IMPLICIT relation, which `dsolve_extract_applied_bodies` (explicit bodies only) then
+ * discards -- 11.5 s of work, all of it thrown away -- and, with no decline memo, the
+ * evaluator's fixed-point re-invocation repeated it, for ~25 s in total on an equation
+ * `Clairaut` answers in 0.01 s.  Hence the standard kit: a wall-clock deadline, a
+ * per-branch TimeConstrained, and a per-top-level decline memo. */
+#define NA_TOTAL_BUDGET_SEC   6
+#define NA_BRANCH_BUDGET_SEC  4
+static time_t g_na_deadline;
+static bool na_expired(void) { return time(NULL) >= g_na_deadline; }
+
+#define NA_MEMO_SLOTS 32
+static uint64_t na_epoch = 0;
+static int na_memo_n = 0;
+static uint64_t na_memo[NA_MEMO_SLOTS];
+static void na_memo_sync(uint64_t tid){ if(tid!=na_epoch){na_epoch=tid;na_memo_n=0;} }
+static bool na_memo_seen(uint64_t h){ for(int i=0;i<na_memo_n;i++) if(na_memo[i]==h) return true; return false; }
+static void na_memo_add(uint64_t h){ if(na_memo_n<NA_MEMO_SLOTS && !na_memo_seen(h)) na_memo[na_memo_n++]=h; }
 
 /* Recurse DSolve[subeqn, y[x], x] (applied form) and append every explicit body
  * to *acc (grown by realloc).  `subeqn` is consumed. */
 static void recurse_collect(Expr* subeqn, const char* yname, const char* xvar,
                             Expr*** acc, size_t* nacc) {
+    if (na_expired()) { expr_free(subeqn); return; }
     Expr* call = expr_new_function(expr_new_symbol(SYM_DSolve),
                      (Expr*[]){ subeqn, ds_make_funcapp(yname, 0, xvar),
                                 expr_new_symbol(xvar) }, 3);
+    long left = (long)(g_na_deadline - time(NULL));
+    if (left > NA_BRANCH_BUDGET_SEC) left = NA_BRANCH_BUDGET_SEC;
+    if (left < 1) left = 1;
+    call = expr_new_function(expr_new_symbol(intern_symbol("TimeConstrained")),
+               (Expr*[]){ call, expr_new_integer(left),
+                          expr_new_symbol(intern_symbol("$Aborted")) }, 3);
     Expr* r = eval_and_free(call);
     size_t nb = 0;
     Expr** bodies = dsolve_extract_applied_bodies(r, yname, &nb);
@@ -45,6 +75,11 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
     const char* xvar  = P->ind_names[0];
     int n = P->max_order[0];
     Expr* R = P->eq_residuals[0];
+
+    uint64_t memo_h = expr_hash(R);
+    na_memo_sync(eval_toplevel_id());
+    if (na_memo_seen(memo_h)) return NULL;
+    g_na_deadline = time(NULL) + NA_TOTAL_BUDGET_SEC;
 
     Expr** acc = NULL; size_t nacc = 0;
 
@@ -148,7 +183,7 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
         expr_free(topLit);
     }
 
-    if (nacc == 0) { if (acc) free(acc); return NULL; }
+    if (nacc == 0) { if (acc) free(acc); na_memo_add(memo_h); return NULL; }
     *nbranch = nacc;
     return acc;
 }

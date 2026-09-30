@@ -100,16 +100,56 @@ static Expr* nh_solve_homog(Expr* homeq, const char* yname, const char* xv){
     return body;
 }
 
-Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch){
+/* Solve the homogeneous part with the PINNED `DSolve`SpecialFunctionForm` rather than
+ * the whole cascade.  Two reasons, both load-bearing for the inert mode:
+ *   - it is cheaper (measured 0.05 .. 0.81 s to solve, 0.014 s to self-decline);
+ *   - it STRUCTURALLY guarantees a closed-form special-function fundamental set, so a
+ *     truncated Frobenius/log series basis — over which an inert integral would be
+ *     meaningless — can never reach the variation-of-parameters step.  That is the
+ *     gate for the §2.2.34-3393/3394 class, held by construction rather than by a
+ *     post-hoc SeriesData check (which is kept below as cheap redundancy).
+ * `homeq` consumed. */
+static Expr* nh_solve_homog_specialform(Expr* homeq, const char* yname, const char* xv){
+    Expr* lhs = ds_call1(yname, expr_new_symbol(xv));
+    Expr* call = expr_new_function(expr_new_symbol(intern_symbol("DSolve`SpecialFunctionForm")),
+                     (Expr*[]){ homeq, lhs, expr_new_symbol(xv) }, 3);
+    Expr* r = eval_and_free(call);
+    Expr* body = NULL;
+    if (head_is(r, SYM_List) && r->data.function.arg_count >= 1){
+        Expr* inner = r->data.function.args[0];
+        if (head_is(inner, SYM_List))
+            for (size_t k=0;k<inner->data.function.arg_count && !body;k++){
+                Expr* rule = inner->data.function.args[k];
+                if (head_is(rule, SYM_Rule) && rule->data.function.arg_count==2){
+                    Expr* rl = rule->data.function.args[0];
+                    if (rl->type==EXPR_FUNCTION && rl->data.function.head->type==EXPR_SYMBOL
+                        && rl->data.function.head->data.symbol.name==yname)
+                        body = expr_copy(rule->data.function.args[1]);
+                }
+            }
+    }
+    expr_free(r);
+    return body;
+}
+
+/* Shared core of the two try-fns.  `inert` selects the M61 mode: see
+ * dsolve_nonhomog_vop_inert_try below for what it changes and why. */
+static Expr** nh_try_core(DSolveProblem* P, size_t* nbranch, bool inert){
     if (P->nfun!=1 || P->neq!=1) return NULL;
     if (P->max_order[0] < 2) return NULL;
     if (g_nh_active) return NULL;                    /* no self-recursion */
+    /* An inert particular has no computable value at a point, so its constants cannot
+     * be fitted.  Returning an unfitted general solution for an IVP would score as a
+     * corpus PASS while being unsolved (the prelude reads the inert residual as UNK),
+     * so decline -- the same discipline dsolve_run_parametric applies. */
+    if (inert && P->ncond > 0) return NULL;
     const char* xv = P->ind_names[0];
     const char* yname = P->fun_names[0];
 
     Expr** c = NULL; Expr* g = NULL; int n = 0;
     if (!dsolve_linear_coeffs(P, &c, &g, &n)) return NULL;   /* nonlinear -> decline */
     if (n < 2) { for (int k=0;k<=n;k++) expr_free(c[k]); free(c); expr_free(g); return NULL; }
+    if (inert && n != 2) { for (int k=0;k<=n;k++) expr_free(c[k]); free(c); expr_free(g); return NULL; }
 
     /* Homogeneous, or distributional forcing -> owned by other methods. */
     bool skip = ds_is_structural_zero(g)
@@ -118,22 +158,39 @@ Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch){
              || ds_has_head(g, intern_symbol("Piecewise"));
     if (skip) { for (int k=0;k<=n;k++) expr_free(c[k]); free(c); expr_free(g); return NULL; }
 
-    /* Fire ONLY for TRANSCENDENTAL (trigonometric) coefficients — the ChangeOfVariable
-     * family, whose homogeneous set is found by a method that does not carry forcing.
-     * A rational-coefficient nonhomogeneous equation is Kovacic's / Euler's domain
-     * (each with its own forcing closure), so restricting to transcendental
-     * coefficients keeps the one class this backstop uniquely reaches (e.g. §2.2.19-1822
-     * Sin[x] y'' + ... == E^-x) while sparing every rational case a redundant
-     * (and, on the large corpus, expensive) recursive homogeneous re-solve. */
-    {
+    if (!inert) {
+        /* Fire ONLY for TRANSCENDENTAL (trigonometric) coefficients — the ChangeOfVariable
+         * family, whose homogeneous set is found by a method that does not carry forcing.
+         * A rational-coefficient nonhomogeneous equation is Kovacic's / Euler's domain
+         * (each with its own forcing closure), so restricting to transcendental
+         * coefficients keeps the one class this backstop uniquely reaches (e.g. §2.2.19-1822
+         * Sin[x] y'' + ... == E^-x) while sparing every rational case a redundant
+         * (and, on the large corpus, expensive) recursive homogeneous re-solve. */
         bool transc = false;
         for (int k=0;k<=n && !transc;k++)
             transc = ds_has_head(c[k],SYM_Sin)||ds_has_head(c[k],SYM_Cos)||ds_has_head(c[k],SYM_Tan)||
                      ds_has_head(c[k],SYM_Cot)||ds_has_head(c[k],SYM_Sec)||ds_has_head(c[k],SYM_Csc);
         if (!transc) { for (int k=0;k<=n;k++) expr_free(c[k]); free(c); expr_free(g); return NULL; }
+    } else {
+        /* The inert mode's class: a RATIONAL-coefficient second-order equation with a
+         * SINGULAR point (leading coefficient vanishing in x) and POLYNOMIAL forcing.
+         * That is the regular-singular "series expansion" family whose homogeneous set
+         * is Bessel / hypergeometric and whose VoP integrals therefore do not close.
+         * Every other forcing shape (arbitrary f[x], transcendental, distributional) is
+         * owned elsewhere and is excluded here, so this mode adds nothing to their cost. */
+        bool ok = true;
+        for (int k=0;k<=n && ok;k++) ok = ds_is_rational_in(c[k], xv);
+        if (ok) {
+            Expr* pq = eval_and_free(ds_call2(intern_symbol("PolynomialQ"),
+                                              expr_copy(g), expr_new_symbol(xv)));
+            ok = (pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True);
+            expr_free(pq);
+        }
+        if (ok) ok = !ds_free_of(c[n], xv);          /* a singular point must exist */
+        if (!ok) { for (int k=0;k<=n;k++) expr_free(c[k]); free(c); expr_free(g); return NULL; }
     }
 
-    uint64_t h = expr_hash(P->eq_residuals[0]);
+    uint64_t h = expr_hash(P->eq_residuals[0]) ^ (inert ? 0x9e3779b97f4a7c15ULL : 0ULL);
     nh_memo_sync(eval_toplevel_id());
     if (nh_memo_seen(h)) { for (int k=0;k<=n;k++) expr_free(c[k]); free(c); expr_free(g); return NULL; }
 
@@ -148,8 +205,12 @@ Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch){
     Expr* homeq = expr_new_function(expr_new_symbol(SYM_Equal),
                       (Expr*[]){ homlhs, expr_new_integer(0) }, 2);
 
+    /* g_nh_active brackets the sub-solve in BOTH modes: it is also read by
+     * dsolve_specialform.c to let its normal-form pre-pass (the Bessel/Airy
+     * recogniser for an equation carrying a y' term) fire below recursion depth 1. */
     g_nh_active++;
-    Expr* hb = nh_solve_homog(homeq, yname, xv);
+    Expr* hb = inert ? nh_solve_homog_specialform(homeq, yname, xv)
+                     : nh_solve_homog(homeq, yname, xv);
     g_nh_active--;
 
     Expr* body = NULL;
@@ -165,13 +226,27 @@ Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch){
             else basis[k-1] = bk;
         }
         if (okbasis && !nh_expired()){
-            Expr* yp = dsolve_variation_of_parameters(basis, (size_t)n, g, c[n], xv);
-            if (yp && !ds_has_head(yp, SYM_Integrate)){
+            bool was_inert = false;
+            Expr* yp = dsolve_variation_of_parameters_mode(basis, (size_t)n, g, c[n], xv,
+                           inert ? VP_ALLOW_INERT : VP_ELEMENTARY,
+                           inert ? &was_inert : NULL);
+            if (!inert) {
+                if (yp && !ds_has_head(yp, SYM_Integrate)){
+                    Expr* full = eval_and_free(ds_call2(SYM_Plus, expr_copy(hb), yp));
+                    if (!ds_has_head(full, SYM_Integrate) && ds_branch_num_ok(P, full))
+                        body = full;
+                    else expr_free(full);
+                } else if (yp) expr_free(yp);
+            } else if (yp) {
                 Expr* full = eval_and_free(ds_call2(SYM_Plus, expr_copy(hb), yp));
-                if (!ds_has_head(full, SYM_Integrate) && ds_branch_num_ok(P, full))
-                    body = full;
-                else expr_free(full);
-            } else if (yp) expr_free(yp);
+                /* A raw ACTIVE Integrate must never survive: it re-enters the
+                 * integration cascade on every later re-evaluation (~1.7 s a pass). */
+                if (ds_has_active_integrate(full)) full = ds_inactivate_integrate(full);
+                bool has_inert = was_inert || ds_has_inactive_integrate(full);
+                bool good = has_inert ? ds_inert_vop_verified(P, full)  /* the only barrier */
+                                      : ds_branch_num_ok(P, full);      /* it closed after all */
+                if (good) body = full; else expr_free(full);
+            }
         }
         for (int k=0;k<n;k++) if (basis[k]) expr_free(basis[k]);
         free(basis);
@@ -186,8 +261,41 @@ Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch){
     return out;
 }
 
+Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch){
+    return nh_try_core(P, nbranch, false);
+}
+
+/* M61 — the inert variation-of-parameters particular.
+ *
+ * For a second-order linear ODE with rational coefficients, a singular point and
+ * polynomial forcing, the homogeneous fundamental set is a Bessel / hypergeometric
+ * pair and the variation-of-parameters integrals do not close in elementary form.
+ * Until now the case was simply lost: the homogeneous answer was found (by
+ * `SpecialFunctionForm`) and thrown away because the equation had a right-hand side.
+ * This returns the particular with its non-closing quadratures held INERT as
+ * `Inactive[Integrate]` — Mathematica's own answer shape for this family.
+ *
+ * It occupies the LAST slot in the scalar cascade, after every other method
+ * (including both Frobenius fallbacks) has declined.  That is a deliberate
+ * correctness property, not a convenience: the slot can only convert UNEVAL into a
+ * solution, so no case that already passes can be lost to it and its latency lands
+ * only on equations that were returning nothing.
+ *
+ * Correctness rests entirely on `ds_inert_vop_verified`: the substrate's own
+ * verifiers all KEEP a residual containing an integral, and `PossibleZeroQ` answers
+ * True for one, so nothing downstream can catch a wrong inert answer.  See the gate's
+ * comment in dsolve_common.h. */
+Expr** dsolve_nonhomog_vop_inert_try(DSolveProblem* P, size_t* nbranch){
+    return nh_try_core(P, nbranch, true);
+}
+
 static Expr* builtin_dsolve_nonhomog_vop(Expr* res){
-    return dsolve_method_builtin(res, dsolve_nonhomog_vop_try);
+    /* Pinned entry: try the elementary particular first, then the inert one — the
+     * same explicit-then-implicit shape builtin_dsolve_autonomous uses (a declining
+     * dsolve_method_builtin leaves `res` intact, so it is reused, not copied). */
+    Expr* r = dsolve_method_builtin(res, dsolve_nonhomog_vop_try);
+    if (!r) r = dsolve_method_builtin(res, dsolve_nonhomog_vop_inert_try);
+    return r;
 }
 
 void dsolve_nonhomog_vop_init(void){
@@ -198,5 +306,9 @@ void dsolve_nonhomog_vop_init(void){
         "L[y] == g(x) whose homogeneous part is solvable by a special-function / "
         "change-of-variable method that does not carry forcing: it solves L[y] == 0, "
         "forms the fundamental set, and builds the particular by variation of "
-        "parameters (e.g. 4 x^2 y'' - 4 x y' + (3 - 16 x^2) y == 8 x^(5/2)).");
+        "parameters (e.g. 4 x^2 y'' - 4 x y' + (3 - 16 x^2) y == 8 x^(5/2)).  When the "
+        "variation-of-parameters quadratures are not elementary -- a second-order "
+        "equation with rational coefficients, a singular point and polynomial forcing, "
+        "whose homogeneous set is Bessel or hypergeometric -- the particular is returned "
+        "with those quadratures held inert as Inactive[Integrate].");
 }

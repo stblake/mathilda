@@ -2080,12 +2080,59 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
          * A different differentiation variable is already handled by the free-of-x
          * short-circuit above (an x-free inactive integral -> 0). */
         Expr* ih = head->data.function.head;
-        if (x && head->data.function.arg_count == 1
+        bool inact_int = (head->data.function.arg_count == 1
             && ih->type == EXPR_SYMBOL && ih->data.symbol.name == SYM_Inactive
             && head->data.function.args[0]->type == EXPR_SYMBOL
-            && head->data.function.args[0]->data.symbol.name == SYM_Integrate
-            && n == 2 && expr_eq(args[1], x))
+            && head->data.function.args[0]->data.symbol.name == SYM_Integrate);
+        if (x && inact_int && n == 2 && expr_eq(args[1], x))
             return expr_copy(args[0]);
+        /* The DEFINITE companion — the same Leibniz rule the ACTIVE head gets above,
+         * for Inactive[Integrate][e, {u, a, b}].  It is what lets a first integral
+         * whose constant has been fitted at a point be written in the honest definite
+         * form Integrate[1/p, {t, y0, y[x]}] == x - x0 and still verify through the
+         * implicit-function rule; without it the fitted relation had to be built by
+         * substituting y[x] -> y0 across the whole expression, which also rewrote the
+         * integration-variable slot and produced a corrupt answer.  The inner
+         * Integrate[D[e,x], ...] term stays INERT, so no integration is attempted. */
+        if (x && inact_int && n == 2
+            && args[1]->type == EXPR_FUNCTION
+            && args[1]->data.function.head->type == EXPR_SYMBOL
+            && args[1]->data.function.head->data.symbol.name == SYM_List
+            && args[1]->data.function.arg_count == 3
+            && args[1]->data.function.args[0]->type == EXPR_SYMBOL
+            && !expr_eq(args[1]->data.function.args[0], x)) {
+            Expr* e  = args[0];
+            Expr* u  = args[1]->data.function.args[0];
+            Expr* lo = args[1]->data.function.args[1];
+            Expr* hi = args[1]->data.function.args[2];
+            Expr* e_hi = eval_and_free(mk_fn2("ReplaceAll", expr_copy(e),
+                             mk_fn2("Rule", expr_copy(u), expr_copy(hi))));
+            Expr* e_lo = eval_and_free(mk_fn2("ReplaceAll", expr_copy(e),
+                             mk_fn2("Rule", expr_copy(u), expr_copy(lo))));
+            Expr* dhi = eval_and_free(deriv_of(hi, x, nonconsts));
+            Expr* dlo = eval_and_free(deriv_of(lo, x, nonconsts));
+            Expr* de  = eval_and_free(deriv_of(e, x, nonconsts));
+            Expr** listitems = malloc(3 * sizeof(Expr*));
+            listitems[0] = expr_copy(u);
+            listitems[1] = expr_copy(lo);
+            listitems[2] = expr_copy(hi);
+            Expr* newspec = mk_fnN_adopt(SYM_List, listitems, 3);
+            /* An x-free integrand contributes nothing; dropping the term keeps the
+             * common case exactly f[b] b' instead of trailing an inert
+             * Inactive[Integrate][0, ...] that no simplifier will remove. */
+            bool de_zero = (de->type == EXPR_INTEGER && de->data.integer == 0);
+            Expr** terms = malloc(3 * sizeof(Expr*));
+            size_t nt = 0;
+            terms[nt++] = mk_fn2("Times", e_hi, dhi);
+            terms[nt++] = mk_neg(mk_fn2("Times", e_lo, dlo));
+            if (de_zero) { expr_free(de); expr_free(newspec); }
+            else {
+                Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
+                                  (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+                terms[nt++] = expr_new_function(inact, (Expr*[]){ de, newspec }, 2);
+            }
+            return mk_fnN_adopt(SYM_Plus, terms, nt);
+        }
 
         Expr* r = deriv_of_derivative_form(f, x, nonconsts);
         if (r) return r;

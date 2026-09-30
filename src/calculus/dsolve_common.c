@@ -633,6 +633,160 @@ bool ds_branch_num_ok(const DSolveProblem* P, const Expr* body) {
     return true;
 }
 
+/* ---- the inert-particular correctness gate (see dsolve_common.h) ----------- */
+
+static bool ds_is_inactive_integrate_node(const Expr* e);   /* defined with the VoP code */
+
+/* Collect the DISTINCT Inactive[Integrate][...] subexpressions of `e` into `out`
+ * (copies, caller frees), up to `cap`. */
+static void ds_collect_inactive_integrals(const Expr* e, Expr** out, int* n, int cap) {
+    if (!e || e->type != EXPR_FUNCTION || *n >= cap) return;
+    if (ds_is_inactive_integrate_node(e)) {
+        for (int i = 0; i < *n; i++) if (expr_eq(out[i], (Expr*)e)) return;
+        out[(*n)++] = expr_copy((Expr*)e);
+        return;                                /* do not descend into its own body */
+    }
+    ds_collect_inactive_integrals(e->data.function.head, out, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ds_collect_inactive_integrals(e->data.function.args[i], out, n, cap);
+}
+
+/* p/q as an exact Rational. */
+static Expr* ds_rat(long p, long q) {
+    return eval_and_free(ds_call2(SYM_Times, expr_new_integer(p),
+               expr_new_function(expr_new_symbol(SYM_Power),
+                   (Expr*[]){ expr_new_integer(q), expr_new_integer(-1) }, 2)));
+}
+
+/* As ds_subst_generics, but instantiates at EXACT RATIONALS.  A Bessel residual
+ * cancels exactly before numericization this way (measured 4.6e-28 against 5.5e-7
+ * for the identical expression at machine reals, where twelve digits are lost to
+ * the cancellation of 1e4-magnitude terms).  Consumes `R`. */
+static Expr* ds_subst_generics_exact(Expr* R, const char* xv) {
+    for (int k = 1; k <= 8; k++)
+        R = ds_subst(R, ds_const(k), ds_rat(31 + 17 * k, 100));
+    const char* skip[] = { xv, intern_symbol("E"), intern_symbol("Pi"),
+        intern_symbol("I"), intern_symbol("EulerGamma"), intern_symbol("Degree"),
+        intern_symbol("GoldenRatio"), intern_symbol("Catalan"),
+        intern_symbol("Infinity") };
+    const int nskip = (int)(sizeof(skip)/sizeof(skip[0]));
+    const char* syms[64]; int ns = 0;
+    ds_collect_arg_syms(R, syms, &ns, 64);
+    int pi = 0;
+    for (int i = 0; i < ns; i++) {
+        bool sk = false;
+        for (int j = 0; j < nskip; j++) if (syms[i] == skip[j]) { sk = true; break; }
+        if (sk) continue;
+        R = ds_subst(R, expr_new_symbol(syms[i]), ds_rat(37 + 11 * pi, 100));
+        pi++;
+    }
+    return R;
+}
+
+static double ds_num_mag(Expr* e) {   /* Abs[N[e]] as a double; NAN if not numeric */
+    Expr* mg = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", e))));
+    double m = (mg && mg->type == EXPR_REAL)    ? mg->data.real
+             : (mg && mg->type == EXPR_INTEGER) ? (double)mg->data.integer : NAN;
+    expr_free(mg);
+    return m;
+}
+
+/* Is `e` zero as a function of xvar, judged RELATIVE to the size of its own terms?
+ * An absolute tolerance is useless here: the terms of a Bessel residual are of
+ * magnitude 1e4 and cancel to 1e-28, while a genuinely wrong basis leaves a residual
+ * of relative size 1e-2 .. 1e-5 — so the scale must come from the expression itself.
+ * `e` borrowed. */
+static bool ds_expr_rel_zero(const Expr* e, const char* xvar) {
+    static const long xs_p[] = { 31, 74, 113, 192, 268 };
+    int nnum = 0, nsmall = 0, nbig = 0;
+    for (int i = 0; i < 5; i++) {
+        Expr* at = ds_subst_generics_exact(expr_copy((Expr*)e), xvar);
+        at = ds_subst(at, expr_new_symbol(xvar), ds_rat(xs_p[i], 100));
+        /* scale = sum of the magnitudes of the top-level summands */
+        Expr* ex = eval_and_free(ds_call1("Expand", expr_copy(at)));
+        double scale = 0.0;
+        if (head_is(ex, SYM_Plus)) {
+            for (size_t j = 0; j < ex->data.function.arg_count; j++) {
+                double t = ds_num_mag(expr_copy(ex->data.function.args[j]));
+                if (isfinite(t)) scale += t;
+            }
+        }
+        expr_free(ex);
+        double v = ds_num_mag(at);
+        if (isnan(v) || !isfinite(v)) continue;
+        nnum++;
+        double ref = (isfinite(scale) && scale > 1.0) ? scale : 1.0;
+        if (v < 1e-10 * ref) nsmall++; else nbig++;
+    }
+    return nnum >= 3 && nsmall >= 3 && nbig == 0;
+}
+
+bool ds_inert_vop_verified(const DSolveProblem* P, const Expr* body) {
+    if (P->nfun != 1) return false;
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    int maxord = P->max_order[0];
+    bool saw_any = false;
+    for (size_t e = 0; e < P->neq; e++) {
+        Expr* sub = expr_copy(P->eq_residuals[e]);
+        for (int k = maxord; k >= 1; k--) {
+            Expr* dk = expr_copy((Expr*)body);
+            for (int i = 0; i < k; i++) dk = ds_d(dk, expr_new_symbol(xvar));
+            sub = ds_subst(sub, ds_make_funcapp(yname, k, xvar), dk);
+        }
+        sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
+
+        /* Replace each distinct Inactive[Integrate][...] by a fresh opaque symbol, so
+         * the residual becomes a polynomial (degree 1, by the construction of variation
+         * of parameters) in those symbols. */
+        Expr* zs[8]; int nz = 0;
+        ds_collect_inactive_integrals(sub, zs, &nz, 8);
+        if (nz == 0) { expr_free(sub); continue; }
+        saw_any = true;
+        const char* znames[8];
+        for (int i = 0; i < nz; i++) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "DSolve`vpZ%d", i);
+            znames[i] = intern_symbol(buf);
+            sub = ds_subst(sub, expr_copy(zs[i]), expr_new_symbol(znames[i]));
+        }
+        for (int i = 0; i < nz; i++) expr_free(zs[i]);
+        if (ds_has_inactive_integrate(sub) || ds_has_active_integrate(sub)) {
+            expr_free(sub); return false;      /* an integral we could not isolate */
+        }
+
+        /* Piece 0 is the FTC part, which must cancel the forcing; piece i+1 is
+         * L[basis_i], which must vanish because the basis solves L[y] == 0. */
+        Expr* p0 = expr_copy(sub);
+        for (int i = 0; i < nz; i++)
+            p0 = ds_subst(p0, expr_new_symbol(znames[i]), expr_new_integer(0));
+        bool ok = ds_expr_rel_zero(p0, xvar);
+        expr_free(p0);
+        for (int i = 0; i < nz && ok; i++) {
+            /* The residual is linear in each Z by the variation-of-parameters
+             * construction.  Degree 0 (or -Infinity, i.e. absent) is the BEST case, not a
+             * failure: it means this Z's coefficient L[basis_i] cancelled exactly, so the
+             * piece is verified symbolically and needs no sampling.  Degree >= 2 is
+             * impossible for this construction, so reject loudly rather than sample a
+             * shape the gate was not designed for. */
+            Expr* deg = eval_and_free(ds_call2(SYM_Exponent, expr_copy(sub),
+                                               expr_new_symbol(znames[i])));
+            bool absent = !(deg->type == EXPR_INTEGER) || deg->data.integer <= 0;
+            bool linear = (deg->type == EXPR_INTEGER && deg->data.integer == 1);
+            expr_free(deg);
+            if (absent) continue;                      /* exactly zero coefficient */
+            if (!linear) { ok = false; break; }
+            Expr* ci = eval_and_free(ds_call2(SYM_Coefficient, expr_copy(sub),
+                                              expr_new_symbol(znames[i])));
+            ok = ds_expr_rel_zero(ci, xvar);
+            expr_free(ci);
+        }
+        expr_free(sub);
+        if (!ok) return false;
+    }
+    return saw_any;
+}
+
 /* Would the corpus harness (DSolve_test_status/dsolve_corpus_prelude.m) score this
  * FITTED first-order scalar body as verifying?  Samples the residual at the prelude's
  * own grid (11/10 + k*5/13, k=0..5) and applies its majority rule (OK iff the residual
@@ -1474,8 +1628,111 @@ static bool ds_has_var_fractional_power(const Expr* e, const char* xvar) {
     return false;
 }
 
+/* ---- inert (Inactive[Integrate]) variation of parameters ------------------- */
+
+/* Heads whose presence in the DENOMINATOR of a Wronskian-quotient integrand means
+ * the antiderivative will not be found.  This must NOT be a blanket "contains a
+ * Bessel head" test: Integrate CLOSES a special function in the NUMERATOR
+ * (Integrate[BesselJ[1,x],x] -> -BesselJ[0,x]), so screening on presence alone
+ * would throw away real closures.  It is the reciprocal that is hopeless. */
+static bool vp_special_head(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) {
+        const char* s = e->data.symbol.name;
+        static const char* const names[] = {
+            "BesselJ", "BesselY", "BesselI", "BesselK", "AiryAi", "AiryBi",
+            "AiryAiPrime", "AiryBiPrime", "Hypergeometric2F1", "Hypergeometric1F1",
+            "HypergeometricPFQ", "HypergeometricU", "WhittakerM", "WhittakerW",
+            "LegendreP", "LegendreQ", "StruveH", "StruveL", "KelvinBer", "KelvinBei",
+            "CoulombF", "CoulombG", "MathieuC", "MathieuS", "SpheroidalPS",
+            "ParabolicCylinderD", "HeunC", "HeunG", "GegenbauerC", "JacobiP",
+            "LaguerreL", "HermiteH", "SphericalBesselJ", "SphericalBesselY" };
+        for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+            if (s == intern_symbol(names[i])) return true;
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (vp_special_head(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (vp_special_head(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* True when `Integrate[integrand, x]` provably will not close: a special function
+ * survives in `Denominator[Together[integrand]]`.  Microseconds; `integrand`
+ * borrowed. */
+static bool vp_integral_hopeless(const Expr* integrand) {
+    Expr* tog = eval_and_free(ds_call1(SYM_Together, expr_copy((Expr*)integrand)));
+    Expr* den = eval_and_free(ds_call1(SYM_Denominator, tog));
+    bool bad = vp_special_head(den);
+    expr_free(den);
+    return bad;
+}
+
+Expr* ds_inactivate_integrate(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Integrate
+        && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_SYMBOL) {
+        /* Integrate[f, v] -> Inactive[Integrate][f, v].  Steal the args; a 3-arg
+         * (definite) integral and the Green's-function convolution path fall
+         * through untouched. */
+        Expr* f = e->data.function.args[0];
+        Expr* v = e->data.function.args[1];
+        e->data.function.args[0] = NULL;
+        e->data.function.args[1] = NULL;
+        expr_free(e);
+        Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
+                          (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+        return expr_new_function(inact, (Expr*[]){ ds_inactivate_integrate(f), v }, 2);
+    }
+    e->data.function.head = ds_inactivate_integrate(h);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        e->data.function.args[i] = ds_inactivate_integrate(e->data.function.args[i]);
+    return e;
+}
+
+/* Inactive[Integrate][...] — a FUNCTION head Inactive[Integrate]. */
+static bool ds_is_inactive_integrate_node(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    return h && h->type == EXPR_FUNCTION && h->data.function.arg_count == 1
+        && h->data.function.head && h->data.function.head->type == EXPR_SYMBOL
+        && h->data.function.head->data.symbol.name == SYM_Inactive
+        && h->data.function.args[0]->type == EXPR_SYMBOL
+        && h->data.function.args[0]->data.symbol.name == SYM_Integrate;
+}
+
+bool ds_has_inactive_integrate(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (ds_is_inactive_integrate_node(e)) return true;
+    if (ds_has_inactive_integrate(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_inactive_integrate(e->data.function.args[i])) return true;
+    return false;
+}
+
+bool ds_has_active_integrate(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Integrate) return true;
+    if (!ds_is_inactive_integrate_node(e) && ds_has_active_integrate(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_active_integrate(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
                                      const Expr* leadcoef, const char* xvar) {
+    return dsolve_variation_of_parameters_mode(basis, n, g, leadcoef, xvar,
+                                               VP_ELEMENTARY, NULL);
+}
+
+Expr* dsolve_variation_of_parameters_mode(Expr** basis, size_t n, const Expr* g,
+                                          const Expr* leadcoef, const char* xvar,
+                                          DSolveVPMode mode, bool* inert_out) {
+    if (inert_out) *inert_out = false;
     Expr*** dv = malloc(n * sizeof(Expr**));
     for (size_t k = 0; k < n; k++) {
         dv[k] = malloc(n * sizeof(Expr*));
@@ -1531,7 +1788,18 @@ Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
                  * (§2.2.25-2406) is left untouched (documented Simplify hang). */
                 if (ds_has_fractional_power(uip) && !ds_has_var_fractional_power(uip, xvar))
                     uip = ds_simplify(uip);
-                Expr* ui = ds_integrate(uip, expr_new_symbol(xvar));
+                Expr* ui;
+                if (mode == VP_ALLOW_INERT && vp_integral_hopeless(uip)) {
+                    /* Do not even attempt it: measured 47.8 s to fail on a Bessel
+                     * Wronskian quotient, which blows every solve budget. */
+                    Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
+                                      (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+                    ui = expr_new_function(inact, (Expr*[]){ uip, expr_new_symbol(xvar) }, 2);
+                } else {
+                    ui = ds_integrate(uip, expr_new_symbol(xvar));
+                    if (mode == VP_ALLOW_INERT && ds_has_active_integrate(ui))
+                        ui = ds_inactivate_integrate(ui);
+                }
                 if (ds_has_head(ui, SYM_Integrate)) any_inert = true;
                 ut[i] = eval_and_free(ds_call2(SYM_Times, expr_copy(basis[i]), ui));
             }
@@ -1544,6 +1812,7 @@ Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
              * a fractional-power answer: it is already clean from auto-evaluation and
              * Simplify hangs on the t^(p/q) E^(a t) form (see ds_has_fractional_power). */
             if (!any_inert && !ds_has_fractional_power(yp)) yp = ds_simplify(yp);
+            if (inert_out) *inert_out = any_inert;
         }
     }
     expr_free(detW);
@@ -1610,6 +1879,35 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
             free(finals); free(fstate);
             return NULL;
         }
+    }
+    /* SINGULAR (equilibrium) solution of a first-order scalar IVP.  When EVERY
+     * surviving branch is FIT_EMPTY, `Solve` has PROVED that the one-parameter family
+     * cannot meet y(x0) == y0 — the constant would have to be infinite.  That happens
+     * exactly when the method divided out a root of h(y): y' == x^2 y^2 with y(1) == 0
+     * gives the family 1/(C[1] - x^3/3), and no finite C[1] makes it vanish
+     * (§2.2.34-3336).  The constant solution y == y0 is then the answer, and today we
+     * instead ship the family with C[1] unfitted — a wrong answer that only escapes a
+     * FAIL verdict because the corpus verifier charitably reads an unfitted branch as
+     * "unsolved".
+     *
+     * Deliberately keyed on FIT_EMPTY rather than on h(y0) == 0: that condition is also
+     * true for y' == y with y(0) == 0, for y' == y(1-y) with y(0) == 1 and for
+     * y' == Sqrt[y] with y(0) == 0 — all three of which already return Mathematica's
+     * answer today, so testing it would emit a duplicate branch on two of them and a
+     * Mathematica-divergent extra branch on the third.  "The regular family provably
+     * cannot reach the initial point" is the condition that fires exactly when needed.
+     * With no conditions this is skipped entirely, so every general solution is
+     * byte-identical, and the equilibrium is accepted only if it VERIFIES. */
+    if (n_ok == 0 && nf > 0 && P->ncond == 1 && P->nfun == 1 && P->max_order[0] == 1
+        && P->conds[0].fi == 0 && P->conds[0].order == 0) {
+        bool all_empty = true;
+        for (size_t b = 0; b < nf; b++) if (fstate[b] != FIT_EMPTY) all_empty = false;
+        Expr* eq = all_empty ? expr_copy(P->conds[0].value) : NULL;
+        if (eq && ds_free_of(eq, P->ind_names[0]) && ds_free_of(eq, intern_symbol("C"))
+               && dsolve_verify_body(P, eq)) {
+            for (size_t b = 0; b < nf; b++) expr_free(finals[b]);
+            finals[0] = eq; fstate[0] = FIT_OK; nf = 1; n_ok = 1;
+        } else if (eq) expr_free(eq);
     }
     if (n_ok > 0) {                 /* a sibling fit: drop the unsatisfiable branches */
         size_t keep = 0;
@@ -1683,6 +1981,67 @@ static bool dsolve_verify_implicit(const DSolveProblem* P, const Expr* G) {
 
 /* The constant for the relation G == C: fitted to a first-order initial
  * condition y[x0]==y0 when one is present (C = G(x0, y0)), else C[1]. */
+/* Rewrite every INDEFINITE inert integral in `G` whose variable is `y[x]` into the
+ * DEFINITE form running from the initial value: Inactive[Integrate][f(y[x]), y[x]]
+ * becomes Inactive[Integrate][f(t), {t, y0, y[x]}] with a private `t`.
+ *
+ * This exists because the point-condition fit below cannot be done by substitution on
+ * such a relation: `y[x] -> y0` is a blind ReplaceAll, so it rewrites the integral's
+ * VARIABLE SLOT too and produces `Inactive[Integrate][1, 0]` — a meaningless
+ * expression that, once the relation carries no free constant, the corpus verifier
+ * scores as solved.  The definite form is the honest fitted answer, and `D` reduces it
+ * through the Leibniz rule (deriv.c), so it still verifies.  `G` consumed.  Returns
+ * NULL when there is nothing to rewrite. */
+static Expr* ds_definite_inert(const Expr* G, const char* yname, const char* xvar,
+                               const Expr* y0) {
+    Expr* zs[8]; int nz = 0;
+    ds_collect_inactive_integrals(G, zs, &nz, 8);
+    Expr* yofx = ds_make_funcapp(yname, 0, xvar);
+    Expr* out = expr_copy((Expr*)G);
+    int nrw = 0;
+    for (int i = 0; i < nz; i++) {
+        if (zs[i]->data.function.arg_count != 2
+            || !expr_eq(zs[i]->data.function.args[1], yofx)) continue;
+        const char* tv = intern_symbol("DSolve`impT");
+        Expr* f = ds_subst(expr_copy(zs[i]->data.function.args[0]),
+                           expr_copy(yofx), expr_new_symbol(tv));
+        Expr* spec = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
+                         expr_new_symbol(tv), expr_copy((Expr*)y0), expr_copy(yofx) }, 3);
+        Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
+                          (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+        Expr* def = expr_new_function(inact, (Expr*[]){ f, spec }, 2);
+        out = ds_subst(out, expr_copy(zs[i]), def);
+        nrw++;
+    }
+    for (int i = 0; i < nz; i++) expr_free(zs[i]);
+    expr_free(yofx);
+    if (nrw == 0) { expr_free(out); return NULL; }
+    return out;
+}
+
+/* Inactive[Integrate][f, {t, a, a}] -> 0: the zero-width integral the point-condition
+ * fit leaves behind once the relation is in definite form.  `e` consumed. */
+static Expr* ds_collapse_zero_width_inert_rec(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    if (ds_is_inactive_integrate_node(e) && e->data.function.arg_count == 2) {
+        Expr* sp = e->data.function.args[1];
+        if (head_is(sp, SYM_List) && sp->data.function.arg_count == 3
+            && expr_eq(sp->data.function.args[1], sp->data.function.args[2])) {
+            expr_free(e);
+            return expr_new_integer(0);
+        }
+    }
+    e->data.function.head = ds_collapse_zero_width_inert_rec(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        e->data.function.args[i] = ds_collapse_zero_width_inert_rec(e->data.function.args[i]);
+    return e;
+}
+/* Rewrite, then evaluate ONCE at the top: evaluating each node on the way out would
+ * re-evaluate every subtree per level. */
+static Expr* ds_collapse_zero_width_inert(Expr* e) {
+    return eval_and_free(ds_collapse_zero_width_inert_rec(e));
+}
+
 static Expr* dsolve_implicit_rhs(const DSolveProblem* P, const Expr* G) {
     const char* yname = P->fun_names[0];
     const char* xvar  = P->ind_names[0];
@@ -1706,7 +2065,31 @@ Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn) {
     for (size_t b = 0; b < nb; b++) {
         if (!gs[b]) continue;
         if (!dsolve_verify_implicit(P, gs[b])) { expr_free(gs[b]); continue; }
+        /* A relation carrying an INDEFINITE inert integral in y[x] cannot be fitted by
+         * substitution: `y[x] -> y0` is a blind ReplaceAll and would rewrite the
+         * integration-variable slot too.  Convert it to the definite form anchored at
+         * the initial value FIRST; the fit below then lands only on the upper limit,
+         * leaving a zero-width integral, which is collapsed to 0.  The rewritten
+         * relation is re-verified (the Leibniz rule in deriv.c makes that a real check),
+         * and a branch that fails is dropped rather than shipped — so this can only
+         * remove a wrong answer, never add one. */
+        if (P->ncond > 0 && ds_has_inactive_integrate(gs[b])) {
+            const DSolveCond* c0 = NULL;
+            for (size_t i = 0; i < P->ncond; i++)
+                if (P->conds[i].fi == 0 && P->conds[i].order == 0) { c0 = &P->conds[i]; break; }
+            if (c0) {
+                Expr* def = ds_definite_inert(gs[b], P->fun_names[0], P->ind_names[0],
+                                              c0->value);
+                if (def) {
+                    if (!dsolve_verify_implicit(P, def)) {
+                        expr_free(def); expr_free(gs[b]); continue;
+                    }
+                    expr_free(gs[b]); gs[b] = def;
+                }
+            }
+        }
         Expr* rhs = dsolve_implicit_rhs(P, gs[b]);
+        rhs = ds_collapse_zero_width_inert(rhs);
         Expr* rhs2 = ds_rename_param(rhs, P->param_head);      /* renames the C[1] */
         expr_free(rhs);
         Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
@@ -1811,6 +2194,24 @@ static bool dsolve_verify_parametric(const DSolveProblem* P, const Expr* X,
     Expr* yprime = eval_and_free(ds_call2(SYM_Times, Yp,
                        expr_new_function(expr_new_symbol(SYM_Power),
                            (Expr*[]){ Xp, expr_new_integer(-1) }, 2)));  /* dY/dX */
+    /* CANCEL dY/dX before it is substituted -- the residual may raise it to a power
+     * (x y'^3 == y y' + 1, 2.2.34-3312), and an uncancelled quotient of two rational
+     * functions of t then explodes in degree: zero_test's canonicalisation of the
+     * cubed form does not return (the profile is all GMP, inside Plus's canonical
+     * ordering), where Together[dY/dX] collapses to `t` in 0.05 s and the same
+     * zero-test answers in 0.003 s.  This is the normalisation the two sibling
+     * verifiers already have -- dsolve_verify_implicit does Together on its residual,
+     * dsolve_verify_body has the numeric fast path -- and its absence here was the
+     * whole of that hang.  Cancelling the RESIDUAL instead does not work: it has to
+     * happen before the power is taken.
+     *
+     * Gated to a quotient that is RATIONAL in the parameter, which is the shape that
+     * explodes and the shape Together fixes.  Ungated it is a regression in its own
+     * right: on a parametric candidate carrying radicals -- 2.1.2-980's
+     * (x^2+y^2)^(3/2) -- Together itself is the expensive step (measured 6 s -> 51 s),
+     * so the narrow test buys the cancellation exactly where it pays. */
+    if (ds_is_rational_in(yprime, tname))
+        yprime = eval_and_free(ds_call1(SYM_Together, yprime));
     bool ok = true;
     for (size_t e = 0; e < P->neq && ok; e++) {
         Expr* sub = expr_copy(P->eq_residuals[e]);

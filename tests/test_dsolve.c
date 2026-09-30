@@ -2923,6 +2923,181 @@ static void t_m60_bessel_inverse_power(void) {
                "Head[s] === List && !FreeQ[s, BesselJ]]");
 }
 
+/* ---- M61: the inert (Inactive[Integrate]) variation-of-parameters particular ---- */
+
+/* Verify an answer whose particular carries Inactive[Integrate], WITHOUT relying on
+ * the method's own gate.  Substituting into the ODE leaves a form that is linear in
+ * the surviving inert integrals; replacing each by a free symbol and requiring every
+ * coefficient of that linear form to vanish is the whole correctness statement (the
+ * identity must hold for an arbitrary value of each antiderivative).  Sample points
+ * and precision differ from the in-method gate, so this is an independent check. */
+#define M61_VERIFY(ode, residual)                                                    \
+    "Module[{s = DSolve[" ode ", y, x], b, r, zs, pieces, i},"                       \
+    "  Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive] &&"                 \
+    "  (b = s[[1]][[1]][[2]][[2]];"                                                  \
+    "   r = " residual ";"                                                           \
+    "   zs = DeleteDuplicates@Cases[r, Inactive[Integrate][__], {0, Infinity}];"     \
+    "   Length[zs] >= 1 &&"                                                          \
+    "   (For[i = 1, i <= Length[zs], i++,"                                           \
+    "        r = r /. zs[[i]] -> ToExpression[\"m61z\" <> ToString[i]]];"            \
+    "    FreeQ[r, Inactive] &&"                                                      \
+    "    (pieces = Join[{r /. Table[ToExpression[\"m61z\" <> ToString[i]] -> 0,"      \
+    "                               {i, Length[zs]}]},"                              \
+    "                   Table[Coefficient[r, ToExpression[\"m61z\" <> ToString[i]]]," \
+    "                         {i, Length[zs]}]];"                                    \
+    "     Max[Table[Max[Table[Abs[N[p /. {C[1] -> 17/13, C[2] -> -23/19} /. x -> pt,"\
+    "                             40]],"                                             \
+    "                        {pt, {23/50, 91/100, 157/100, 211/100}}]],"             \
+    "               {p, pieces}]] < 10^-25)))]"
+
+/* The flagship: a 2nd-order linear ODE at a singular point whose Bessel homogeneous
+ * set makes the variation-of-parameters quadratures non-elementary (§2.2.34-3387). */
+static void t_m61_inert_vop_bessel(void) {
+    check_true(M61_VERIFY("x y''[x] + 3 y'[x] - y[x] == x",
+                          "x D[b, {x, 2}] + 3 D[b, x] - b - x"));
+    /* the answer must be a closed form, never a truncated series */
+    check_true("FreeQ[DSolve[x y''[x] + 3 y'[x] - y[x] == x, y, x], SeriesData]");
+}
+
+/* The same mechanism across the rest of the family: BesselI/K, a complex Bessel
+ * order, and a y'-free equation (§2.2.34-3389/3392/3395). */
+static void t_m61_inert_vop_family(void) {
+    check_true(M61_VERIFY("x y''[x] + y'[x] - 2 y[x] x == x^2",
+                          "x D[b, {x, 2}] + D[b, x] - 2 b x - x^2"));
+    check_true(M61_VERIFY("x^2 y''[x] + x y'[x] + (x + 12) y[x] == x^2 + x",
+                          "x^2 D[b, {x, 2}] + x D[b, x] + (x + 12) b - x^2 - x"));
+    check_true(M61_VERIFY("9 x^2 y''[x] + (3 x + 2) y[x] == x^4 + x^2",
+                          "9 x^2 D[b, {x, 2}] + (3 x + 2) b - x^4 - x^2"));
+}
+
+/* An inert integral over a TRUNCATED SERIES basis would be meaningless, so the mode
+ * must never fire when the homogeneous set is a Frobenius/log series.  Held by
+ * construction — the homogeneous part is solved by the pinned SpecialFunctionForm,
+ * which returns closed forms only — and pinned here as a test (§2.2.34-3393/3394). */
+static void t_m61_inert_declines_series_basis(void) {
+    check_true("FreeQ[DSolve[x^2 (x + 1) y''[x] + x (x^2 + 3) y'[x] + y[x] "
+               "== -2 x^2 + x, y, x], Inactive]");
+    check_true("FreeQ[DSolve[3 x^2 (x + 1) y''[x] + x (5 - x) y'[x] "
+               "+ (2 x^2 - 1) y[x] == -x^3, y, x], Inactive]");
+}
+
+/* An inert particular has no value at a point, so its constants cannot be fitted:
+ * returning the unfitted general solution for an IVP would look solved and not be. */
+static void t_m61_inert_declines_ivp(void) {
+    check_true("FreeQ[DSolve[{x y''[x] + 3 y'[x] - y[x] == x, y[1] == 2, y'[1] == 0}, "
+               "y, x], Inactive]");
+}
+
+/* The byte-identity guard: where the quadratures DO close the answer must be
+ * unchanged, including when the antiderivative is a NAMED non-elementary function.
+ * 3390's particular carries ExpIntegralEi and must stay elementary-path. */
+static void t_m61_elementary_particular_unchanged(void) {
+    check_true("Module[{s = DSolve[x y''[x] - x y'[x] + y[x] == x^3, y, x]}, "
+               "Head[s] === List && FreeQ[s, Inactive] && !FreeQ[s, ExpIntegralEi]]");
+    check_true("Module[{s = DSolve[y''[x] + y[x] == x^2, y, x]}, "
+               "Head[s] === List && FreeQ[s, Inactive]]");
+    check_true("Module[{s = DSolve[x^2 y''[x] - 3 x y'[x] + 4 y[x] == x^3, y, x]}, "
+               "Head[s] === List && FreeQ[s, Inactive]]");
+    /* a homogeneous equation must never acquire a particular */
+    check_true("Module[{s = DSolve[x y''[x] + 3 y'[x] - y[x] == 0, y, x]}, "
+               "Head[s] === List && FreeQ[s, Inactive]]");
+}
+
+/* The whole design rests on the FTC rule for the inert head and on Activate being
+ * able to undo the inertness; guard both. */
+static void t_m61_inactive_ftc_contract(void) {
+    check_true("D[Inactive[Integrate][f[x], x], x] === f[x]");
+    check_true("Module[{s = DSolve[x y''[x] + 3 y'[x] - y[x] == x, y, x]}, "
+               "Head[s] === List && !FreeQ[Activate[s], Integrate]]");
+}
+
+/* The autonomous reduction's stage-1 constant is determined exactly by the point
+ * conditions (p(y0) == y'(x0)), and fitting it BEFORE judging the stage-2 quadrature
+ * turns a symbolic-parameter integrand the spin guard rejects into an elementary one. */
+static void t_m61_autonomous_ivp_constant_fit(void) {
+    check_form("DSolve[{y''[x] + 2 y[x] y'[x] == 0, y[0] == 0, y'[0] == 1}, y, x]",
+               "{{y -> Function[{x}, Tanh[x]]}}");
+    /* the general solution is untouched: two constants, and no inert integral */
+    check_true("Module[{s = DSolve[y''[x] + 2 y[x] y'[x] == 0, y, x]}, "
+               "Head[s] === List && FreeQ[s, Inactive] && !FreeQ[s, C[2]]]");
+    /* a BVP (two conditions at different points) must NOT be fitted this way */
+    check_true("Module[{s = DSolve[{y''[x] + 2 y[x] y'[x] == 0, y[0] == 0, y[1] == 1}, y, x]}, "
+               "Head[s] === List]");
+    /* a control IVP that already closed must be unchanged */
+    check_form("DSolve[{y''[x] == -y[x], y[0] == 0, y'[0] == 1}, y, x]",
+               "{{y -> Function[{x}, Sin[x]]}}");
+}
+
+/* When the stage-2 quadrature stays non-elementary the relation is still FITTED, and
+ * the inert integral is written in DEFINITE form.  The indefinite form could not be
+ * fitted at all: `y[x] -> y0` is a blind ReplaceAll, so it rewrote the integration
+ * VARIABLE too and produced `Inactive[Integrate][1, 0]` -- a meaningless expression
+ * that, once no free constant remained, looked like a solved answer. */
+static void t_m61_autonomous_implicit_definite_fit(void) {
+    check_true("Module[{s = DSolve[{y''[x] == y[x]^2, y[0] == 1, y'[0] == 0}, y, x]}, "
+               "Head[s] === List && FreeQ[s, C[_Integer]] && "
+               "MatchQ[Cases[s, Inactive[Integrate][_, _], {0, Infinity}], "
+               "{Inactive[Integrate][_, {_, _, _}] ..}]]");
+    /* the Leibniz rule for the inert definite head is what makes that verifiable */
+    check_form("D[Inactive[Integrate][f[t], {t, a, x}], x]", "f[x]");
+    check_form("D[Inactive[Integrate][f[t], {t, 0, y[x]}], x]",
+               "Derivative[1][y][x] f[y[x]]");
+}
+
+/* A separable IVP whose regular family provably cannot reach the initial point: the
+ * method divided out the root of h(y) = y^2, so no finite constant makes 1/(C - x^3/3)
+ * vanish.  The equilibrium y == y0 is the solution, and we used to ship the family
+ * with its constant unfitted. */
+static void t_m61_separable_singular_ivp(void) {
+    check_form("DSolve[{y'[x] == x^2 y[x]^2, y[1] == 0}, y, x]",
+               "{{y -> Function[{x}, 0]}}");
+    /* the general solution is untouched */
+    check_true("Module[{s = DSolve[y'[x] == x^2 y[x]^2, y, x]}, "
+               "Head[s] === List && !FreeQ[s, C[1]]]");
+    /* IVPs the family CAN fit must not gain a duplicate branch, and the genuinely
+     * non-unique Sqrt case must still return only Mathematica's answer */
+    check_form("DSolve[{y'[x] == y[x], y[0] == 0}, y, x]",  "{{y -> Function[{x}, 0]}}");
+    check_form("DSolve[{y'[x] == Sqrt[y[x]], y[0] == 0}, y, x]",
+               "{{y -> Function[{x}, 1/4 x^2]}}");
+    check_form("DSolve[{y'[x] == y[x] (1 - y[x]), y[0] == 1}, y, x]",
+               "{{y -> Function[{x}, 1]}}");
+}
+
+/* A Clairaut equation written NONLINEARLY in y.  `Clairaut` declined on the
+ * nonlinearity and `SolvableForY` discards the family on purpose (for a Clairaut
+ * equation its denominator p - dG/dx vanishes identically), so nobody owned it. */
+static void t_m61_clairaut_quadratic_in_y(void) {
+    check_true("Module[{s = DSolve[(-x y'[x] + y[x])^2 == 1 + y'[x]^2, y, x], f, r},"
+               " Head[s] === List && Length[s] == 2 &&"
+               " AllTrue[s, (f = y /. #;"
+               "   r = (-x f'[x] + f[x])^2 - 1 - f'[x]^2 /. C[1] -> 7/5;"
+               "   Max[Table[Abs[N[r /. x -> pt, 30]], {pt, {3/10, 11/10, 19/10}}]] < 10^-20) &]]");
+    /* the linear-in-y path is byte-identical */
+    check_form("DSolve`Clairaut[y[x] == x y'[x] + y'[x]^2, y, x]",
+               "{{y -> Function[{x}, C[1]^2 + C[1] x]}}");
+    check_form("DSolve[y[x] == x y'[x] + 1/y'[x], y, x]",
+               "{{y -> Function[{x}, 1/C[1] + C[1] x]}}");
+    /* the envelope still comes out under IncludeSingularSolutions */
+    check_true("Module[{s = DSolve[y[x] == x y'[x] + y'[x]^2, y, x, "
+               "IncludeSingularSolutions -> True]}, Length[s] == 2]");
+}
+
+/* Two latency root causes, both with reach well beyond the corpus that found them. */
+static void t_m61_bounded_latency(void) {
+    /* The parametric verify substituted an UNCANCELLED dY/dX into a residual that
+     * cubes it, and zero_test's canonicalisation of the degree-exploded rational did
+     * not return (> 120 s).  Together[dY/dX] collapses it first. */
+    check_true("MatchQ[TimeConstrained[DSolve[x y'[x]^3 == y[x] y'[x] + 1, y, x], 8, "
+               "$Aborted], {{Rule[x, _Function], Rule[y, _Function]}}]");
+    /* NthAlgebraic is the SECOND method tried on every scalar ODE and its per-root
+     * recursion was an unbounded DSolve whose implicit results it then discards. */
+    check_true("TimeConstrained[DSolve[(-x y'[x] + y[x])^2 == 1 + y'[x]^2, y, x], 8, "
+               "$Aborted] =!= $Aborted");
+    /* its own targets still solve */
+    check_form("DSolve`NthAlgebraic[y'[x]^2 == 4 y[x], y, x]",
+               "{{y -> Function[{x}, (C[1] - x)^2]}, {y -> Function[{x}, (C[1] + x)^2]}}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -3205,6 +3380,17 @@ int main(void) {
     TEST(t_m60_dfactor_left);
     TEST(t_m60_operfactor_forced);
     TEST(t_m60_bessel_inverse_power);
+    TEST(t_m61_inert_vop_bessel);
+    TEST(t_m61_inert_vop_family);
+    TEST(t_m61_inert_declines_series_basis);
+    TEST(t_m61_inert_declines_ivp);
+    TEST(t_m61_elementary_particular_unchanged);
+    TEST(t_m61_inactive_ftc_contract);
+    TEST(t_m61_autonomous_ivp_constant_fit);
+    TEST(t_m61_autonomous_implicit_definite_fit);
+    TEST(t_m61_separable_singular_ivp);
+    TEST(t_m61_clairaut_quadratic_in_y);
+    TEST(t_m61_bounded_latency);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

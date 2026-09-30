@@ -3320,6 +3320,10 @@ add_executable(dsolve_m60_stress_tests test_dsolve_m60_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m60_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m60_stress_tests COMMAND dsolve_m60_stress_tests)
 
+add_executable(dsolve_m61_stress_tests test_dsolve_m61_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m61_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m61_stress_tests COMMAND dsolve_m61_stress_tests)
+
 add_executable(inactive_tests test_inactive.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(inactive_tests PRIVATE ../src ../src/calculus)
 add_test(NAME inactive_tests COMMAND inactive_tests)
@@ -4450,6 +4454,30 @@ add_test(NAME dsolve_corpus_2_2_33_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2233.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 22)
+
+# 12000.org "Solving ODEs" section 2.2.34 (Problems 3301-3400).  M61: 100 records, all
+# scalar (16 IVP), 0 systems.  Three sub-blocks: first-order nonlinear solvable-for-y'
+# (dAlembert / Clairaut / homogeneous class A,C,G), genuine IVPs whose reference answer
+# is a Taylor series, and second-order linear at a regular singular point (homogeneous
+# and nonhomogeneous).  Baseline argv3 = the measured non-PASS count (9), 0 FAIL, 0
+# crash, measured twice per-case identical.  Went 80 -> 91 on five root-cause fixes:
+# an inert Inactive[Integrate] variation-of-parameters particular in a new LAST cascade
+# slot (3387/3388/3389/3392/3395), the autonomous stage-1 constant fitted from the
+# point conditions (3345/3347), the separable singular solution for an IVP the regular
+# family provably cannot reach (3336), two latency root causes with reach well beyond
+# this corpus (3312/3331 -- an uncancelled dY/dX in the parametric verify, and
+# NthAlgebraic's unbounded per-root recursion), a Clairaut equation written nonlinearly
+# in y (3331), and one converter fix (3313, a whole-LHS product misread as a point
+# condition -- which also repaired the standing 2.2.33-3296 and 2.2.16-1593 misses).
+# The residue 9 is honest: six have no closed form at all (3319/3338/3341/3342/3348/
+# 3349 -- Maple and Mathematica answer them with a Taylor series, which is a separate
+# capability and deliberately NOT bolted on here, since a truncated series would score
+# as a pass-on-trust), 3393/3394 need a series PARTICULAR (FrobeniusSeries/PowerSeries
+# decline all forcing -- the named next step), and 3346's stage-2 quadrature is elliptic.
+add_test(NAME dsolve_corpus_2_2_34_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2234.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

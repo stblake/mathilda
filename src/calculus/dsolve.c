@@ -169,6 +169,7 @@ extern Expr** dsolve_ifactor_first_integral_try(DSolveProblem* P, size_t* nbranc
 extern Expr** dsolve_changevar_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_ratsol2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_nonhomog_vop_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_nonhomog_vop_inert_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_piecewise_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_frobenius_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_first_order_series_try(DSolveProblem* P, size_t* nbranch);
@@ -532,6 +533,15 @@ Expr* builtin_dsolve(Expr* res) {
              * expand the series about a nearby ordinary point so a linear ODE with
              * any ordinary point never returns unevaluated (auto-dispatch only). */
             if (!result) result = dsolve_run(&P, dsolve_frobenius_shifted_try);
+            /* M61, absolutely last: a 2nd-order linear ODE with rational coefficients,
+             * a singular point and polynomial forcing, whose Bessel/hypergeometric
+             * homogeneous set makes the variation-of-parameters integrals non-elementary.
+             * The particular is returned with those quadratures held inert
+             * (Inactive[Integrate]), which is Mathematica's own shape for the family.
+             * Last by design: from here the slot can only turn UNEVAL into an answer, so
+             * it cannot cost a case that some earlier method already solves, and its
+             * cost lands only on equations that were returning nothing. */
+            if (!result) result = dsolve_run(&P, dsolve_nonhomog_vop_inert_try);
             break;
         case DS_FACTORABLE:   result = dsolve_run(&P, dsolve_factorable_try);  break;
         case DS_NTHALGEBRAIC: result = dsolve_run(&P, dsolve_nth_algebraic_try); break;

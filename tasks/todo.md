@@ -1,3 +1,117 @@
+# M61 — DSolve corpus wave: problems 3301–3400 (§2.2.34)
+
+Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-kind-moler.md`
+
+Upstream note: 12000.org regenerated 2026-09-28 and swapped its chapter-2 section
+numbers. The sequential pages moved §2.2.N → **§2.1.N** (`Ch2.S1.SSN.htm`), and our
+master corpus (our "§2.1.2") is now upstream §2.2.2, paginated
+`Ch2.S2.SS2.SSS1…13.htm`. Internal names keep the `2.2.34` spelling for continuity
+with the 33 checked-in sections.
+
+## Measured baseline — 80/100 PASS, 0 FAIL, 0 crash, 20 UNEVAL
+
+Gap by root cause: 7 nonhomogeneous-at-a-singular-point (F1) · 3 autonomous IVP
+constant unfitted (F2) · 2 series-basis particular (F4) · 1 converter miss (F0) ·
+1 separable singular solution (F3a) · 2 budget burners (F3b) · 6 with no closed form
+(out of scope — see the plan's Non-goals).
+
+## F0 — converter: a condition point must be a *point*  ✅ DONE
+- [x] `is_condition_row` also requires the argument free of `\prime`, of the dependent
+      functions, and of the independent variable. A whole-LHS product written
+      `y\left(1+{y'}^2\right)` was read as the condition `y(P)=V`, losing the ODE row
+      to the `NO ODE ROW` placeholder.
+- [x] Regression: no-op on 31 of 33 sections; repairs §2.2.34-3313, §2.2.33-3296
+      (M53's documented miss) and §2.2.16-1593 (a latent miss nobody had noticed).
+- [x] `DE_examples_2233.m` regenerated (99/100 semantically identical + the repair);
+      §2.2.16 regenerated to ZERO semantic change, so reverted rather than churned.
+
+## F1 — inert `Inactive[Integrate]` variation-of-parameters particular  ✅ DONE
+The diagnosis that mattered: the mechanism already existed (the shared VoP helper
+keeps a non-closing integral) and `SpecialFunctionForm` is homogeneous-only by
+construction, so the Bessel fundamental set was found and thrown away.
+- [x] `dsolve_common.c`: `ds_inactivate_integrate`, `ds_has_active_integrate` /
+      `ds_has_inactive_integrate` (`ds_has_head` is a NAME test, so it cannot tell them
+      apart), `dsolve_variation_of_parameters_mode` with `VP_ALLOW_INERT` and the
+      `vp_integral_hopeless` denominator pre-screen (a special function in the
+      DENOMINATOR: the failing `Integrate` costs up to 47.8 s, so it is not attempted).
+- [x] `ds_inert_vop_verified` — the gate, and the ONLY barrier: every other verifier
+      KEEPs a residual containing an integral and `PossibleZeroQ` answers True for one.
+      Z-decomposition by `Coefficient` + relative-zero at EXACT RATIONALS.
+- [x] `dsolve_nonhomog_vop.c`: `dsolve_nonhomog_vop_inert_try` sharing `nh_try_core`;
+      homogeneous part via the PINNED `DSolve`SpecialFunctionForm`, which structurally
+      guarantees a closed-form basis (so a truncated-series basis can never go inert).
+- [x] Cascade: a new LAST slot in `dsolve.c`, after both Frobenius fallbacks — so it
+      can only turn UNEVAL into an answer and cannot cost an existing PASS.
+- [x] Declines an IVP (an inert particular has no value at a point → unfittable).
+- [x] Tests: six `t_m61_*` units + `tests/test_dsolve_m61_stress.c` (7 families,
+      18-member forward generator, latency bound, and gate-margin negative controls
+      measuring correct 5.4e-51 vs three planted-wrong bases at 0.18–0.49).
+- [x] §2.2.34: **80 → 86 PASS (+6), 0 FAIL, 0 regressions.**
+
+## F2 — autonomous reduction: fit the stage-1 constant from the ICs  ✅ DONE
+- [x] `ar_fit_stage1` (`dsolve_autonomous.c`) — the conditions determine `C[2..n]` exactly
+      (`D_k(y0) == y⁽ᵏ⁾(x0)`); fitted BEFORE stage 2 is judged, so `y''+2yy'==0, y(0)=0,
+      y'(0)=1` → `Tanh[x]`. Scalar `Solve` for a single unknown (the list spelling bubbles
+      on the radical). Narrow: bails on no conditions, a missing order, or two points.
+- [x] The value condition is handed to the stage-2 sub-solve too, so the body returns
+      constant-free — otherwise the substrate must invert `{Tanh[C[1]]==0, Sech²==1}`,
+      cannot decide it, and declines the correct branch.
+- [x] **A second, independent bug**: `dsolve_implicit_rhs`'s `y[x] -> y0` is a blind
+      ReplaceAll, so it rewrote the inert integral's VARIABLE slot → `Inactive[Integrate][1,0]`,
+      which with no free constant left would have scored as SOLVED. Relations are now
+      converted to the **definite** form first (`ds_definite_inert`), the fit lands only on
+      the upper limit, and the zero-width integral collapses. `deriv.c` gains the Leibniz
+      rule for the inert definite head so it still verifies.
+- [x] A radical over a transcendental function of `y` declines the explicit path fast
+      (that sub-solve costs 90 s and returns an inert relation anyway).
+- [x] Solves 3345/3347; 3346 stays elliptic (out of scope, documented).
+
+## F3 — correctness + latency  ✅ DONE
+- [x] **F3a** singular solution in the substrate (`dsolve_run`), keyed on EVERY surviving
+      branch being FIT_EMPTY — `Solve` proved the family cannot reach the initial point —
+      not on `h(y0)==0`, which also holds for three cases already correct. Solves 3336;
+      covers Bernoulli/Homogeneous/Chini/Abel too.
+- [x] **F3b(i)** `dsolve_verify_parametric` substituted an UNCANCELLED `dY/dX` into a
+      residual that cubes it → zero_test never returned (>120 s), reachable from every
+      parametric answer. `Together` before substitution. **Gated to a quotient rational in
+      the parameter** — ungated it is itself the expensive step on a radical candidate
+      (2.1.2-980: 6 s → 51 s). Found by the master-corpus run, not by reasoning.
+- [x] **F3b(ii)** `NthAlgebraic` (cascade position 2) recursed a full `DSolve` unbounded and
+      discarded the implicit result: ~25 s on an equation Clairaut answers in 0.01 s. Now
+      deadline + per-branch TimeConstrained + decline memo.
+- [x] **F3b(iii)** `Clairaut` generalised from linear- to POLYNOMIAL-in-`y` (`clairaut_emit`
+      per root): `(y − x y')² == 1 + y'²` was owned by no method. Linear path byte-identical.
+- [x] Solves 3312, 3331.
+
+## F4 — inhomogeneous Frobenius recurrence  ⏭ DEFERRED (named next step)
+- Not landed. `FrobeniusSeries`/`PowerSeries` both call the homogeneous-only extractor and
+  decline ANY forced equation — that is what loses 3393/3394, and it is the mechanism this
+  whole "series expansion" block is nominally about. Recorded in `DSOLVE_PLAN.md` M61's
+  *Future*, with the two equations named.
+
+## Measured result — 80 → 91 / 100, 0 FAIL, 0 crash
+Deterministic: two runs per-case identical. All 11 gains are named defects above.
+Residue 9, honestly classified: 6 with NO closed form (3319/3338/3341/3342/3348/3349 —
+Maple/Mathematica answer with a Taylor series; a Taylor method would score them
+PASS-on-trust, so it is deferred behind an `O[(x−x0)^N]` gate), 2 needing a series
+*particular* (3393/3394), 1 elliptic (3346).
+
+## Regression — same-machine A/B against a HEAD binary in an isolated git worktree
+The checked-in per-section reports are stale and several section gates are ALREADY RED on
+main today, so a diff against them is not evidence. Over 11 exposed sections:
+**M61 better on 6, equal on 5, 0 FAIL in all 22 runs** (2212 5→4, 2214 3→1, 2219 11→10,
+2225 4→2, 2227 5→2, 2233 18→12). The 7 §2.2.19 cases that look lost against the checked-in
+report time out identically on the HEAD binary. Both truncating stress suites were
+A/B-confirmed identical too.
+
+## Tail  ✅ DONE
+- [x] `reports/2.2.34.{tsv,md}` + regenerated `reports/2.2.33.{tsv,md}`
+- [x] `tests/CMakeLists.txt` — gate `dsolve_corpus_2_2_34_tests` (baseline 9) + the m61 stress target
+- [x] `STATUS.md` §2.2.34 section block + wave-history bullet + the §2.2.33 M61 note
+- [x] `README.md` — 2233/2234 rows, 2231/2232 reordered, the upstream-renumbering note
+- [x] `DSOLVE_PLAN.md` M61; `docs/spec/builtins/calculus.md` (5 method rows)
+- [x] weekly changelog `docs/spec/changelog/2026-09-28.md`; `src/version.h` 0.236 → 0.237
+
 # Route every user-facing message through the Quiet/Check funnel
 
 Plan: `/Users/user/.claude/plans/we-need-to-do-misty-boot.md`

@@ -2256,6 +2256,136 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     gives no elementary particular), and the genuine `m`-th exterior power for right factors of order
     `2 ≤ m ≤ n−2`.
 
+- **M61 — §2.2.34 corpus (Problems 3301–3400) + inert VoP particular, autonomous IVP constant
+  fit, separable singular solution, two latency root causes, nonlinear Clairaut.** ✅ DONE.
+  12000.org's next hundred, measured end to end and then driven up by fixes that are general
+  rather than case-shaped: **80/100 → 91/100 (+11), 0 FAIL, 0 crash**, deterministic across two
+  per-case-identical runs, every gain attributable to a named defect. New gate
+  `dsolve_corpus_2_2_34_tests` (baseline 9); report `DSolve_test_status/reports/2.2.34.md`.
+  - **Upstream renumbered.** The site regenerated 2026-09-28 and SWAPPED its chapter-2 section
+    numbers: the sequential pages moved §2.2.N → **§2.1.N** (`Ch2.S1.SSN.htm`), and the master
+    corpus this plan calls §2.1.2 is now upstream §2.2.2, paginated `Ch2.S2.SS2.SSS1…13.htm`.
+    Internal names keep the `2.2.34` spelling (continuity with 33 sections and every milestone
+    here); the mapping and the consequences are in `DSolve_test_status/README.md`. The converter
+    needed no format work, *verified* not assumed: re-converting §2.2.33 from the new page gives
+    the same record counts and **100/100 semantically identical** records (the 90 textual diffs
+    are upstream LaTeX reformatting). One lasting consequence: the converter's byte-identity
+    contract can no longer be exercised against the live site, so **semantic** equivalence
+    replaces it.
+  - **`DSolve\`VariationOfParameters` — the inert `Inactive[Integrate]` particular.** This is the
+    step M60's closing note named twice, and measurement changed its shape entirely: the
+    mechanism already existed (the shared VoP helper keeps a non-closing Wronskian integral) and
+    the real blocker was a missing call site — `dsolve_specialform.c` is **homogeneous-only by
+    construction** (it gates on `dsolve_second_order_PQ`), so for a 2nd-order equation at a
+    regular singular point with polynomial forcing it found the Bessel/hypergeometric
+    fundamental set and threw it away because the equation had a right-hand side, while
+    `Kovacic` declines (Bessel is not Liouvillian). A second mode (`nh_try_core(…, inert)`)
+    occupies a new **LAST** cascade slot, after both Frobenius fallbacks. The slot position is a
+    correctness property, not a convenience: from there it can only turn UNEVAL into an answer,
+    so no existing PASS can be lost to it and its latency lands only on equations that were
+    returning nothing. The homogeneous part is solved by the **pinned** `SpecialFunctionForm`,
+    which structurally guarantees a closed-form basis — so a truncated-series basis, over which
+    an inert integral is meaningless, can never reach the quadrature (that is the 3393/3394 gate,
+    held by construction rather than by a post-hoc `SeriesData` check).
+    Two mechanisms carry it. `vp_integral_hopeless` **never hands `Integrate` an integrand whose
+    DENOMINATOR carries a special function** — the failing attempt on a Bessel Wronskian quotient
+    costs up to **47.8 s**, which blows every solve budget, while the screen costs microseconds
+    (and it is a denominator test, not a blanket one: `Integrate` genuinely closes a special
+    function in the numerator). And `ds_inert_vop_verified` is the **only** correctness barrier,
+    because nothing downstream can catch a wrong inert answer: `ds_residual_numeric_zero` and
+    `ds_branch_num_ok` both bail to KEEP on an `Integrate` head (and `ds_has_head` is a *name*
+    test, so it cannot even tell the inert head from the active one — hence the new
+    `ds_has_active_integrate` / `ds_has_inactive_integrate`), and `PossibleZeroQ` answers `True`
+    for any residual containing an inert integral. The gate exploits the particular being LINEAR
+    in its inert integrals: replace each by a symbol, split with `Coefficient`, and require every
+    coefficient of the linear form to vanish — the FTC part must cancel the forcing and each
+    `L[basis_i]` must be zero. Sampling is at **exact rationals** (`ds_subst_generics_exact`):
+    the same Bessel residual reads 1e-7 at machine reals, where twelve digits go to cancellation
+    between terms of magnitude 1e4, and 1e-28 exactly. An **IVP declines** — an inert particular
+    has no value at a point, so its constants cannot be fitted, and the prelude would score the
+    unfitted general solution as solved. *Solves* 3387/3388/3389/3392/3395. `deriv.c` also gains
+    the **Leibniz rule for the inert DEFINITE integral**, the companion of M59's indefinite rule.
+  - **`AutonomousReduction` — fit the stage-1 constants from the point conditions.** For an IVP
+    the conditions determine them exactly and independently of the quadrature
+    (`D_k(y0) == y⁽ᵏ⁾(x0)`, the same chain the reduction is built from), and fitting them FIRST
+    is what closes the class: `y''+2yy'==0, y(0)=0, y'(0)=1` reduces to `p == C[2]−y²`, whose
+    quadrature is a symbolic-parameter `ArcTanh` the stage-2 spin guard turns away — with
+    `C[2]==1` fitted it is `ArcTanh[y]` and the answer is `Tanh[x]`. The value condition is then
+    handed to the stage-2 sub-solve too, so the body comes back constant-free (otherwise the
+    substrate must invert `{Tanh[C[1]]==0, Sech[C[1]]²==1}`, which it cannot decide, and declines
+    the correct branch). Where the quadrature stays non-elementary the relation is fitted all the
+    same, in **definite** form `Inactive[Integrate][1/p, {t, y0, y[x]}]`: the indefinite form
+    could not be fitted at all, because `dsolve_implicit_rhs`'s `y[x] -> y0` is a blind
+    `ReplaceAll` that also rewrote the integration-variable slot, producing a meaningless
+    `Inactive[Integrate][1, 0]` which — once no free constant remained — would have scored as a
+    solved answer. A radical over a transcendental function of `y` now declines the explicit path
+    fast (that stage-2 sub-solve costs 90 s and returns an inert relation anyway), where the
+    existing denominator test could not see it. *Solves* 3345/3347; 3346 stays elliptic.
+  - **`Separable` — the singular (equilibrium) solution of an IVP.** Dividing by `h(y)` drops the
+    constant solutions, so `y'==x²y², y(1)=0` shipped `1/(C[1]−x³/3)` with its constant unfitted.
+    Placed in the substrate (`dsolve_run`), keyed on **every surviving branch being FIT_EMPTY** —
+    i.e. `Solve` PROVED the family cannot reach the initial point — and not on `h(y0)==0`, which
+    also holds for `y'==y, y(0)=0`, `y'==y(1−y), y(0)=1` and `y'==Sqrt[y], y(0)=0`, all three
+    already correct (testing it would emit a duplicate branch on two and a Mathematica-divergent
+    extra branch on the third). Covers Bernoulli/Homogeneous/Chini/Abel too. *Solves* 3336.
+  - **Two latency root causes, both with reach far beyond this corpus.** (1)
+    `dsolve_verify_parametric` substituted an **uncancelled** `dY/dX` into a residual that raises
+    it to a power (`x y'³ == y y' + 1` cubes it), and `zero_test`'s canonicalisation of the
+    degree-exploded rational did not return — a **>120 s hang** reachable from every parametric
+    answer (`Lagrange`, `SolvableForY`, `SolvableForX`), i.e. any user ODE of d'Alembert shape.
+    `Together` on the quotient before substitution collapses it to `t`. **Gated to a quotient
+    rational in the parameter**, which the wave's own measurement forced: ungated, `Together` is
+    itself the expensive step on a radical-carrying candidate (2.1.2-980, `(x²+y²)^(3/2)`: 6 s →
+    51 s plus a recursion-limit blowup). Cancelling the residual instead does not work — it has
+    to happen before the power. (2) `NthAlgebraic` is the **second** method tried on every scalar
+    ODE and its per-root recursion was an unbounded `DSolve` whose *implicit* results it then
+    discards: on `(y − x y')² == 1 + y'²` that was two 5.9 s solves thrown away, repeated by the
+    evaluator's fixed-point re-invocation for ~25 s, on an equation `Clairaut` answers in 0.01 s.
+    It now carries the standard kit (wall-clock deadline, per-branch `TimeConstrained`, decline
+    memo). *Solves* 3312 and, with the next item, 3331.
+  - **`Clairaut` — a Clairaut equation written NONLINEARLY in `y`.** `(y − x y')² == 1 + y'²` is
+    textbook Clairaut (its roots `y = x p ± Sqrt[1+p²]` are two Clairaut equations) and was
+    reachable by no method: this one required the algebraic residual to be *linear* in `y`, and
+    `SolvableForY`, which does isolate the roots, discards them deliberately — for a Clairaut
+    equation its denominator `p − G_x` vanishes identically, and its comment says the family is
+    "owned earlier", which it was not. The residual now need only be **polynomial** in `y`
+    (`PolynomialQ` gate, so a transcendental residual never reaches `Solve`); each root runs
+    through the same `d/dx Yexpr == p` test via the factored `clairaut_emit`. The linear path is
+    byte-identical, envelope included.
+  - *Tests:* six `t_m61_*` units in `tests/test_dsolve.c` and `tests/test_dsolve_m61_stress.c` —
+    seven families: an **18-member forward generator** over the generalised-Bessel grid
+    `x²y''+xy'+(a x^m+b)y == p(x)` (whose homogeneous basis is Bessel by construction, so nothing
+    is hand-picked), an elementary-still-wins family, the **gate accept/reject margin measured on
+    planted wrong bases** (correct 5.4e-51 against 0.18, 0.18 and 0.49 for an extra `Sqrt[x]`, a
+    mismatched Bessel order and a wrong exponent — the margin is *tested*, not merely observed),
+    series-basis and IVP declines, a **latency bound** that notices if the denominator screen
+    stops firing, and bounded declines. Each verified independently of the in-method gate, at
+    different sample points and precision.
+  - *Regression:* measured as a **same-machine A/B against a HEAD binary built in an isolated git
+    worktree** — the only honest comparator, since the checked-in per-section reports are stale
+    and several section gates are **already red on main today**. Over 11 exposed sections
+    (separable/IVP-heavy, 2nd-order-linear-heavy, dAlembert-heavy): M61 **better on 6, equal on
+    5, 0 FAIL in all 22 runs** (2212 5→4, 2214 3→1, 2219 11→10, 2225 4→2, 2227 5→2, 2233 18→12).
+    All 15 DSolve unit/stress suites report no failure; `make check-c99` and `check-messages`
+    green. `dsolve_tests` remains **pre-existing red** (it hits `alarm(120)` in `test_utils.h`
+    before any test runs, so the `t_m61_*` group never executes there) — its 30 assertions were
+    verified by direct evaluation instead, all passing; two stress suites truncate at the same
+    alarm, and their stalling families were A/B-confirmed identical on the HEAD binary.
+  - *Future, named by this wave:* the **series particular** — `FrobeniusSeries`/`PowerSeries`
+    both call the homogeneous-only extractor and so decline ANY forced equation, which is exactly
+    what loses 3393/3394 and is the mechanism this whole "series expansion" block is about. And a
+    **nonlinear Taylor-series IVP** method would close the six no-closed-form cases
+    (3319/3338/3341/3342/3348/3349) but only as PASS-on-trust, since the verifier samples far
+    from `x0`; it belongs in its own milestone behind an `O[(x−x0)^N]` residual gate, not bolted
+    on here. Also unclaimed: `SolvableForX` is pinned-only and solves 3319 in 0.088 s — the
+    documented objection to admitting it to the cascade was the slow parametric verify this wave
+    just fixed, so that decision is now worth re-measuring. Separately, and larger than this
+    wave: **`TimeConstrained` refunds nested time** (`builtin_time_constrained` saves and restores
+    the outer `ITIMER_PROF` instead of clamping to it), so every nested sub-solve extends the
+    user's deadline — which is why a `TimeConstrained[…, 12]` here returned at 20 s. That is a
+    global fix (Integrate, Simplify, NIntegrate, the corpus harness itself) and deserves its own
+    change and measurement.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

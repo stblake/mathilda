@@ -241,6 +241,100 @@ static Expr* ar_reduce(DSolveProblem* P, int* n_out) {
     return pbody;
 }
 
+/* M61 — fit the STAGE-1 constants C[2..n] from the point conditions, before stage 2.
+ *
+ * The reduction p = y'(y) carries the stage-1 constants, and for an initial-value
+ * problem the conditions determine them EXACTLY and independently of the quadrature:
+ * y(x0) = y0 fixes where to evaluate, and y^(k)(x0) = v_k for k = 1..n-1 gives n-1
+ * equations D_k(y0) == v_k in the n-1 unknowns, where D_1 = p, D_{k+1} = p d/dy(D_k)
+ * is the same chain the reduction is built from.
+ *
+ * Doing this first is what turns a whole class from an unfitted answer into a closed
+ * form: y'' + 2 y y' == 0, y(0) == 0, y'(0) == 1 reduces to p == C[2] - y^2, whose
+ * quadrature Integrate[1/(C[2] - y^2), y] is a symbolic-parameter ArcTanh the stage-2
+ * guard turns away -- while with C[2] == 1 fitted it is just ArcTanh[y] and the answer
+ * is Tanh[x].  Previously the case fell through to the inert first integral with C[2]
+ * still free, which the harness rightly scores as unsolved.
+ *
+ * Narrow by construction: with no conditions, with a condition missing at some order
+ * below n, with conditions at more than one point (a BVP), or when `Solve` does not
+ * return a usable value, `pbody` is returned UNCHANGED -- so no currently-passing
+ * general solution can move.  `pbody` consumed; result owned. */
+static Expr* ar_fit_stage1(const DSolveProblem* P, Expr* pbody, int n, const char* Ysym) {
+    if (n < 2 || P->ncond == 0) return pbody;
+    /* locate y(x0) and y^(k)(x0), k = 1..n-1, all at the SAME point */
+    const Expr* pt   = NULL;
+    const Expr* y0   = NULL;
+    const Expr* vals[16];
+    if (n - 1 > 15) return pbody;
+    for (int k = 0; k < n; k++) vals[k] = NULL;
+    for (size_t i = 0; i < P->ncond; i++) {
+        const DSolveCond* c = &P->conds[i];
+        if (c->fi != 0 || c->order < 0 || c->order >= n) return pbody;   /* over-determined */
+        if (!pt) pt = c->point;
+        else if (!expr_eq((Expr*)pt, (Expr*)c->point)) return pbody;     /* BVP: two points */
+        if (c->order == 0) { if (y0) return pbody; y0 = c->value; }
+        else { if (vals[c->order]) return pbody; vals[c->order] = c->value; }
+    }
+    if (!y0) return pbody;
+    for (int k = 1; k <= n - 1; k++) if (!vals[k]) return pbody;
+
+    /* the derivative chain in terms of pbody: D_1 = p, D_{k+1} = p d/dy(D_k) */
+    Expr** D = malloc((size_t)n * sizeof(Expr*));
+    D[0] = expr_copy(pbody);
+    for (int k = 1; k < n - 1; k++)
+        D[k] = eval_and_free(ds_call2(SYM_Times, expr_copy(pbody),
+                   ds_d(expr_copy(D[k - 1]), expr_new_symbol(Ysym))));
+
+    /* the system {D_k(y0) == v_k} and the unknowns {C[2], ..., C[n]} */
+    Expr** eqs  = malloc((size_t)(n - 1) * sizeof(Expr*));
+    Expr** unks = malloc((size_t)(n - 1) * sizeof(Expr*));
+    for (int k = 1; k <= n - 1; k++) {
+        Expr* at = ds_subst(expr_copy(D[k - 1]), expr_new_symbol(Ysym), expr_copy((Expr*)y0));
+        eqs[k - 1]  = expr_new_function(expr_new_symbol(SYM_Equal),
+                          (Expr*[]){ at, expr_copy((Expr*)vals[k]) }, 2);
+        unks[k - 1] = ds_const(k + 1);
+    }
+    for (int k = 0; k < n - 1; k++) expr_free(D[k]);
+    free(D);
+    /* One unknown -> the SCALAR Solve form.  Not cosmetic: Solve inverts the radical
+     * Sqrt[E^-y (C[2] + E^y (2y - 2))] == 1 for C[2] in the scalar spelling and
+     * bubbles unevaluated in the one-element list spelling. */
+    Expr* sol;
+    if (n - 1 == 1) {
+        sol = ds_solve(eqs[0], unks[0]);
+        free(eqs); free(unks);
+    } else {
+        sol = ds_solve(expr_new_function(expr_new_symbol(SYM_List), eqs, (size_t)(n - 1)),
+                       expr_new_function(expr_new_symbol(SYM_List), unks, (size_t)(n - 1)));
+        /* eqs/unks arrays are consumed by expr_new_function */
+    }
+
+    /* Use the first branch only when it assigns EVERY stage-1 constant a value free of
+     * the remaining unknowns; otherwise leave pbody alone. */
+    Expr* out = pbody;
+    if (head_is(sol, SYM_List) && sol->data.function.arg_count >= 1) {
+        Expr* br = sol->data.function.args[0];
+        if (head_is(br, SYM_List) && br->data.function.arg_count == (size_t)(n - 1)) {
+            Expr* cand = expr_copy(pbody);
+            bool ok = true;
+            for (size_t i = 0; i < br->data.function.arg_count && ok; i++) {
+                Expr* rule = br->data.function.args[i];
+                if (!head_is(rule, SYM_Rule) || rule->data.function.arg_count != 2) ok = false;
+                else cand = ds_subst(cand, expr_copy(rule->data.function.args[0]),
+                                           expr_copy(rule->data.function.args[1]));
+            }
+            if (ok && ds_free_of(cand, intern_symbol("C"))
+                   && !ds_contains(cand, intern_symbol("Indeterminate"))
+                   && !ds_contains(cand, intern_symbol("ComplexInfinity"))) {
+                expr_free(pbody); out = cand;
+            } else expr_free(cand);
+        }
+    }
+    expr_free(sol);
+    return out;
+}
+
 /* Explicit: reduce, then (elementary-quadrature only) solve y'==p(y) by separation. */
 Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
@@ -256,6 +350,10 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
     const char* yname = P->fun_names[0];
     const char* Ysym  = intern_symbol("DSolve`arY");
 
+    /* Fit the stage-1 constants from the conditions FIRST: a numeric p turns several
+     * symbolic-parameter integrands the guard below would reject into elementary ones. */
+    pbody = ar_fit_stage1(P, pbody, n, Ysym);
+
     /* Stage-2 quadrature-spin guard: y'==p(y) is separable with quadrature
      * Integrate[1/p,y], which SPINS uninterruptibly for a non-elementary integrand (a
      * Log under a radical, or a y-denominator radical).  Decline here (fast) -- the
@@ -267,15 +365,53 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
                         ds_call1(SYM_Together, expr_copy(pbody))));
         bool nonconst_denom = !ds_free_of(den, Ysym);
         expr_free(den);
-        if (nonconst_denom || ds_has_head(pbody, intern_symbol("Log"))) {
+        bool transc_radical = false;
+        if (!nonconst_denom && ds_has_radical_power(pbody)) {
+            /* A RADICAL over a transcendental function of y is the other non-elementary
+             * quadrature shape, and it slips past the denominator test (measured:
+             * Denominator[Together[Sqrt[E^-y (C + E^y (2y-2))]]] == 1, yet the stage-2
+             * sub-solve costs 90 s and returns an inert relation anyway).  Decline fast;
+             * the implicit companion below returns the first integral.  The elliptic
+             * quartic the guard above protects has a POLYNOMIAL radicand, so it is
+             * untouched. */
+            static const char* const tf[] = { "Log", "Exp", "Sin", "Cos", "Tan",
+                                              "Sinh", "Cosh", "Tanh", "ArcTan" };
+            for (size_t i = 0; i < sizeof(tf) / sizeof(tf[0]) && !transc_radical; i++)
+                transc_radical = ds_has_head(pbody, intern_symbol(tf[i]));
+            /* E^y is Power[E, y], not an Exp head, so test the symbol itself. */
+            if (!transc_radical) transc_radical = ds_contains(pbody, intern_symbol("E"));
+        }
+        if (nonconst_denom || transc_radical
+            || ds_has_head(pbody, intern_symbol("Log"))) {
             expr_free(pbody); ar_memo_add(memo_h); return NULL;
         }
     }
 
+    bool fitted = (P->ncond > 0) && ds_free_of(pbody, intern_symbol("C"));
     Expr* pOfY = ds_subst(pbody, expr_new_symbol(Ysym), ds_make_funcapp(yname, 0, xvar));
     Expr* eq2  = expr_new_function(expr_new_symbol(SYM_Equal),
                      (Expr*[]){ ds_make_funcapp(yname, 1, xvar), pOfY }, 2);
-    Expr* ybody = run_dsolve_applied(eq2, yname, xvar, (int)(g_ar_deadline - time(NULL)));
+    /* When the stage-1 constants are fitted, hand the value condition y(x0)==y0 to the
+     * stage-2 sub-solve as well, so the body comes back with NO generated constant at
+     * all.  Otherwise the substrate is left to fit the remaining C[1] out of the full
+     * condition set, and for y'' + 2 y y' == 0 that means asking Solve to invert
+     * {Tanh[C[1]] == 0, Sech[C[1]]^2 == 1} -- which it cannot decide, so the whole
+     * (correct) branch is declined and the case falls through to the inert companion.
+     * The first-order sub-solve inverts Tanh[x + c] against one condition directly. */
+    Expr* stage2 = eq2;
+    if (fitted) {
+        const DSolveCond* c0 = NULL;
+        for (size_t i = 0; i < P->ncond; i++)
+            if (P->conds[i].fi == 0 && P->conds[i].order == 0) { c0 = &P->conds[i]; break; }
+        if (c0) {
+            Expr* icl = expr_new_function(expr_new_symbol(yname),
+                            (Expr*[]){ expr_copy(c0->point) }, 1);
+            Expr* ic  = expr_new_function(expr_new_symbol(SYM_Equal),
+                            (Expr*[]){ icl, expr_copy(c0->value) }, 2);
+            stage2 = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ eq2, ic }, 2);
+        }
+    }
+    Expr* ybody = run_dsolve_applied(stage2, yname, xvar, (int)(g_ar_deadline - time(NULL)));
     if (!ybody) { ar_memo_add(memo_h); return NULL; }
     if (ds_free_of(ybody, xvar)) { expr_free(ybody); ar_memo_add(memo_h); return NULL; }
 
@@ -304,6 +440,12 @@ Expr** dsolve_autonomous_implicit_try(DSolveProblem* P, size_t* nbranch) {
     const char* xvar  = P->ind_names[0];
     const char* yname = P->fun_names[0];
     const char* Ysym  = intern_symbol("DSolve`arY");
+
+    /* Fit the stage-1 constants here too: an inert first integral that still carries a
+     * free C[k] is the general solution with the conditions unapplied -- i.e. unsolved.
+     * (Verified AFTER the fit as well: ar_num_ok above ran on the unfitted p, which is
+     * the more general statement, so the fitted p inherits it.) */
+    pbody = ar_fit_stage1(P, pbody, n, Ysym);
 
     /* G = Inactive[Integrate][1/pbody, Ysym] /. Ysym -> y[x]  -  x */
     Expr* invp = eval_and_free(ds_call2(SYM_Power, pbody, expr_new_integer(-1)));  /* consumes pbody */

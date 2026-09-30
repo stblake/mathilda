@@ -189,6 +189,10 @@ def detect_symbols(rows_tex):
     # The independent variable is chosen from the MAIN (non-condition) rows only, so
     # that parameters appearing solely in an initial condition (y(a)=b) never win, and
     # a swapped-variable ODE (x = x(y), y independent) is detected from its own body.
+    # indvar is not known yet here (that is what this block computes), so the
+    # condition test runs without its independent-variable guard.  Harmless: a
+    # product row wrongly held back is one the fallback below still scans, and a
+    # single-row array falls back to `joined` anyway.
     main_rows = [r for r in rows_tex if not is_condition_row(r, mains)]
     mjoined = ' '.join(main_rows) if main_rows else joined
     for cand in INDVAR_PREF:                             # preferred standard letter, present
@@ -408,7 +412,7 @@ def convert_side(expr, mains, arbs, indvar):
     return s
 
 
-def is_condition_row(row, mains):
+def is_condition_row(row, mains, indvar=None):
     """True iff the row is an initial/boundary condition `y(P)=V` / `y'(P)=V`.
 
     A condition row's LHS is *solely* the function application.  The earlier
@@ -416,7 +420,17 @@ def is_condition_row(row, mains):
     `x (5-x)`) as an application and silently dropped the whole ODE row
     (§2.2.2-109/119/129/166/175-178).  So anchor to the LHS (before the first
     `=`) and require that, after removing `\\left`/`\\right`, the entire LHS is
-    exactly `y(...)` / `y'(...)` — the matching close-paren must end the LHS."""
+    exactly `y(...)` / `y'(...)` — the matching close-paren must end the LHS.
+
+    That anchor is still satisfied by a whole-LHS *product* written with
+    `\\left(...\\right)`: `y\\left(1+{y'}^2\\right)=2xy'` and
+    `y'\\left(x^2+2\\right)=4x(y^2+2y+1)` are the ODE, not conditions, yet the
+    LHS is exactly `y(...)` / `y'(...)`.  Misreading them left the record with no
+    ODE row at all (the degenerate `NO ODE ROW` placeholder: §2.2.34-3313,
+    §2.2.33-3296, §2.2.16-1593).  So also require the argument to be a genuine
+    *point* — free of `\\prime`, of every dependent-function name, and of the
+    independent variable.  A real condition point is a number, a constant
+    (`\\frac{\\pi}{2}`), or a parameter (`y(a)=b`), never a function of `x`."""
     r = row.replace('&', '')
     if '=' not in r:
         return False
@@ -426,6 +440,12 @@ def is_condition_row(row, mains):
         if m:
             cl = find_matching(lhs, m.end() - 1)
             if cl >= 0 and lhs[cl + 1:].strip() == '':
+                arg = lhs[m.end():cl]
+                if r'\prime' in arg:
+                    continue
+                if any(re.search(r'(?<![A-Za-z])' + re.escape(g) + r'(?![A-Za-z0-9])', arg)
+                       for g in list(mains) + ([indvar] if indvar else [])):
+                    continue
                 return True
     return False
 
@@ -530,7 +550,7 @@ def convert_row(tex):
     eqs = []; conds = []
     for r in rows:
         if '=' not in r.replace('&', ''): continue
-        if is_condition_row(r, mains):
+        if is_condition_row(r, mains, indvar):
             c = convert_condition(r, mains, indvar)
             if c: conds.append(c)
         else:

@@ -269,10 +269,58 @@ Expr* dsolve_normal_form(const Expr* Pc, const Expr* Qc, const char* xvar,
 /* Particular solution of a linear ODE by variation of parameters over the
  * fundamental set `basis` (length n), forcing `g`, leading coefficient
  * `leadcoef` (the coefficient of y^(n); constant or x-dependent).  Returns the
- * particular solution (Simplify-reduced), or NULL if an integral is not
- * elementary.  `basis`, `g`, `leadcoef` are borrowed. */
+ * particular solution, or NULL only when the Wronskian is a structural zero.
+ * A per-term Wronskian integral that does not close is KEPT as an unevaluated
+ * `Integrate[...]`, so callers that need a fully closed form must test for it
+ * (`ds_has_active_integrate`).  `basis`, `g`, `leadcoef` are borrowed. */
 Expr* dsolve_variation_of_parameters(Expr** basis, size_t n, const Expr* g,
                                      const Expr* leadcoef, const char* xvar);
+
+/* VP_ELEMENTARY is the historical behaviour above, byte for byte.
+ * VP_ALLOW_INERT additionally (a) SKIPS the integration attempt outright when the
+ * antiderivative provably will not be found — a special function in the integrand's
+ * DENOMINATOR, which is what the Wronskian of a Bessel/hypergeometric fundamental
+ * set puts there — and (b) returns each such term as the INERT `Inactive[Integrate]`
+ * rather than a raw unevaluated `Integrate`.  Both matter: the failing `Integrate`
+ * attempt on a Bessel Wronskian quotient costs tens of seconds (measured 47.8 s for
+ * 9 x^2 y'' + (3x+2) y == x^4+x^2), and a raw unevaluated `Integrate` re-enters the
+ * integration cascade on every later re-evaluation of the body (~1.7 s per pass).
+ * `*inert_out`, when non-NULL, reports whether any term came back inert. */
+typedef enum { VP_ELEMENTARY = 0, VP_ALLOW_INERT = 1 } DSolveVPMode;
+Expr* dsolve_variation_of_parameters_mode(Expr** basis, size_t n, const Expr* g,
+                                          const Expr* leadcoef, const char* xvar,
+                                          DSolveVPMode mode, bool* inert_out);
+
+/* Rewrite every indefinite `Integrate[f, v]` (v a symbol) to `Inactive[Integrate][f, v]`.
+ * `e` consumed, result owned.  Definite (3-arg) integrals are left alone. */
+Expr* ds_inactivate_integrate(Expr* e);
+
+/* `ds_has_head(e, SYM_Integrate)` is a NAME-occurrence test, so it is true for
+ * `Inactive[Integrate][...]` as well.  These two distinguish the forms. */
+bool ds_has_active_integrate(const Expr* e);
+bool ds_has_inactive_integrate(const Expr* e);
+
+/* Correctness gate for a branch whose particular carries `Inactive[Integrate]`.
+ *
+ * Such a branch is accepted UNCONDITIONALLY by every other verifier in the
+ * substrate: `ds_residual_numeric_zero` and `ds_branch_num_ok` both bail to KEEP on
+ * an `Integrate` head, and `zero_test`/`PossibleZeroQ` answers True for any residual
+ * containing an inert integral.  So this is the only barrier between an inert answer
+ * and a corpus PASS, and it must be sound on its own.
+ *
+ * It works by exploiting the fact that the VoP particular is LINEAR in its inert
+ * integrals: writing Z_i for the i-th of them, the residual is
+ * c_0(x) + Sum_i c_i(x) Z_i, where c_0 must cancel the forcing (by the fundamental
+ * theorem of calculus) and each c_i == L[basis_i] must vanish (because the basis
+ * solves the homogeneous equation).  Substituting a distinct symbol for each Z_i and
+ * splitting with `Coefficient` checks those independently — on small expressions
+ * rather than the whole residual, and without relying on a generic draw.
+ *
+ * Each piece is tested at EXACT-RATIONAL sample points, relative to the sum of the
+ * magnitudes of its own terms.  Both choices are load-bearing: a Bessel residual at
+ * machine reals reads 1e-7 through sheer cancellation of 1e4-magnitude terms, where
+ * the same residual at exact rationals reads 1e-28. */
+bool ds_inert_vop_verified(const DSolveProblem* P, const Expr* body);
 
 /* ---- shared building blocks used by the methods ---- */
 
