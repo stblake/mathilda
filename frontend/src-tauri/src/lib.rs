@@ -1,5 +1,9 @@
 mod commands;
 mod notebook_format;
+// File > Open Recent: the list, its store, and the native submenu. Desktop-only, because it
+// exists to serve a menu bar and mobile has none.
+#[cfg(desktop)]
+mod recent;
 
 // Kernel backend is chosen at compile time:
 //   * desktop  -> `kernel.rs`: spawns the `mathilda` sidecar over stdio.
@@ -16,7 +20,10 @@ mod ffi;
 mod kernel;
 
 use commands::{evaluate_cell, interrupt_kernel, load_library, load_notebook, ping_kernel, restart_kernel, save_library, save_notebook, set_window_title};
+use commands::{clear_recent_files, forget_recent_file, push_recent_file, recent_files};
 use kernel::MathildaKernel;
+#[cfg(desktop)]
+use recent::RecentFiles;
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 #[cfg(desktop)]
@@ -24,12 +31,43 @@ use tauri::Emitter;
 use tauri::Manager;
 
 // Native menu bar is a desktop-only concept; iOS/Android have no app menu.
+//
+// Returns the menu together with the Open Recent state, because that submenu's items have to
+// be reachable after startup to redraw the list and there is no way to look a `MenuItem` back
+// up out of an installed `Menu`. `setup` installs the menu, draws the list once, and hands the
+// state to `app.manage`.
 #[cfg(desktop)]
-fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
+fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles)> {
     // Item ids are a CONTRACT with the webview: each one is emitted as `menu:<id>` and handled by
     // runMenuCommand in src/lib/menuCommands.ts, whose MENU_IDS list is what App.svelte subscribes
     // to. An id added here without a case there is a menu item that does nothing, which is why the
     // dispatcher warns on an unknown id rather than ignoring it.
+
+    // Open Recent. The ten slots are spelled out one per line, and deliberately so: the ids are
+    // read out of THIS FILE as source text by tools/check_menu_ids.py and diffed against the
+    // handler cases in menuCommands.ts, so a loop building `format!("recent-{i}")` would leave the
+    // Rust half of that check blind and the TypeScript half looking like dead wiring. Slot i shows
+    // recent-list entry i; RecentFiles derives its cap from how many slots it is given, so the
+    // number ten is not written down anywhere else.
+    let recent_slots = vec![
+        MenuItem::with_id(app, "recent-0", "", true, None::<&str>)?,
+        MenuItem::with_id(app, "recent-1", "", true, None::<&str>)?,
+        MenuItem::with_id(app, "recent-2", "", true, None::<&str>)?,
+        MenuItem::with_id(app, "recent-3", "", true, None::<&str>)?,
+        MenuItem::with_id(app, "recent-4", "", true, None::<&str>)?,
+        MenuItem::with_id(app, "recent-5", "", true, None::<&str>)?,
+        MenuItem::with_id(app, "recent-6", "", true, None::<&str>)?,
+        MenuItem::with_id(app, "recent-7", "", true, None::<&str>)?,
+        MenuItem::with_id(app, "recent-8", "", true, None::<&str>)?,
+        MenuItem::with_id(app, "recent-9", "", true, None::<&str>)?,
+    ];
+    let recent_clear = MenuItem::with_id(app, "recent-clear", "Clear Menu", true, None::<&str>)?;
+    // Disabled, so it never emits and needs no handler; a submenu that opens onto nothing reads
+    // as broken, one that says it is empty does not.
+    let recent_empty = MenuItem::new(app, "No Recent Files", false, None::<&str>)?;
+    // Built empty and filled by RecentFiles::rebuild once the menu is installed.
+    let recent = Submenu::with_items(app, "Open Recent", true, &[])?;
+
     let file = Submenu::with_items(
         app,
         "File",
@@ -37,6 +75,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         &[
             &MenuItem::with_id(app, "file-new",  "New Notebook", true, Some("CmdOrCtrl+N"))?,
             &MenuItem::with_id(app, "open",      "Open…",        true, Some("CmdOrCtrl+O"))?,
+            &recent,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "save",      "Save",         true, Some("CmdOrCtrl+S"))?,
             &MenuItem::with_id(app, "save-as",   "Save As…",     true, Some("CmdOrCtrl+Shift+S"))?,
@@ -171,7 +210,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         ],
     )?;
 
-    Menu::with_items(app, &[
+    let menu = Menu::with_items(app, &[
         &Submenu::with_items(app, "Mathilda", true, &[
             &PredefinedMenuItem::about(app, None, None)?,
             &PredefinedMenuItem::separator(app)?,
@@ -189,7 +228,10 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         &evaluation,
         &graphics,
         &view,
-    ])
+    ])?;
+
+    let recent = RecentFiles::new(app, recent, recent_slots, recent_clear, recent_empty)?;
+    Ok((menu, recent))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -203,8 +245,14 @@ pub fn run() {
             // Native menu (desktop only — mobile has no app menu bar).
             #[cfg(desktop)]
             {
-                let menu = build_menu(app)?;
+                let (menu, recent) = build_menu(app)?;
                 app.set_menu(menu)?;
+                // Draw File > Open Recent only once the menu is installed: the submenu has to
+                // be attached to a live NSMenu before appending to it reaches the menu bar.
+                if let Err(e) = recent.rebuild() {
+                    log::warn!("{e}");
+                }
+                app.manage(recent);
                 app.on_menu_event(|app, event| {
                     let id = event.id().as_ref().to_string();
                     let _ = app.emit(&format!("menu:{id}"), ());
@@ -235,6 +283,10 @@ pub fn run() {
             save_library,
             load_library,
             set_window_title,
+            recent_files,
+            push_recent_file,
+            forget_recent_file,
+            clear_recent_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -30,6 +30,9 @@ export interface MenuHooks {
   openFile: () => void;
   saveFile: () => void;
   saveFileAs: () => void;
+  /** Open entry `i` of the recent-files list (the `i` in the `recent-<i>` menu id). */
+  openRecent: (i: number) => void;
+  clearRecent: () => void;
 }
 
 /* Every id the native menu can emit. App.svelte subscribes to `menu:<id>` for each.
@@ -42,6 +45,15 @@ export interface MenuHooks {
  * Rust and TypeScript sides against each other and both agreed on a name Tauri rejects. */
 export const MENU_IDS = [
   'file-new', 'open', 'save', 'save-as', 'file-close', 'file-print',
+  /* File > Open Recent. A FIXED pool of ten slot ids, spelled out here and in lib.rs rather
+     than generated, because check_menu_ids.py reads both sides as source text — a
+     `format!("recent-{i}")` would be invisible to it and these would read as dead wiring.
+     The digit is an INDEX into the list recentFiles() returns, so the run must stay
+     contiguous from 0; the gate checks that too, since a gap would silently open the wrong
+     file rather than fail. */
+  'recent-0', 'recent-1', 'recent-2', 'recent-3', 'recent-4',
+  'recent-5', 'recent-6', 'recent-7', 'recent-8', 'recent-9',
+  'recent-clear',
   'edit-comment', 'edit-indent', 'edit-outdent', 'edit-dupLine', 'edit-findDoc',
   'edit-copyInputAbove',
   'insert-code', 'insert-text', 'insert-section',
@@ -104,6 +116,22 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
     case 'save-as':     hooks.saveFileAs(); break;
     case 'file-close':  act?.close(); break;
     case 'file-print':  window.print(); break;
+
+    /* File > Open Recent. Ten literal cases rather than a prefix test on `id`, because the
+       gate reads `case '<id>':` out of this file as text: a `if (id.startsWith('recent-'))`
+       would leave all ten looking unhandled and the check would report ten dead menu items.
+       The digit is the index into the list — see MENU_IDS. */
+    case 'recent-0': hooks.openRecent(0); break;
+    case 'recent-1': hooks.openRecent(1); break;
+    case 'recent-2': hooks.openRecent(2); break;
+    case 'recent-3': hooks.openRecent(3); break;
+    case 'recent-4': hooks.openRecent(4); break;
+    case 'recent-5': hooks.openRecent(5); break;
+    case 'recent-6': hooks.openRecent(6); break;
+    case 'recent-7': hooks.openRecent(7); break;
+    case 'recent-8': hooks.openRecent(8); break;
+    case 'recent-9': hooks.openRecent(9); break;
+    case 'recent-clear': hooks.clearRecent(); break;
 
     /* ---- Edit ----
        Undo, redo, cut, copy, paste and select-all are PREDEFINED native items with no id: they

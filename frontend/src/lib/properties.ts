@@ -8,6 +8,11 @@
 // this app persists UI state yet, and adding localStorage for one preference
 // would make this the only setting that survives a restart -- a surprise, not a
 // feature. When persistence arrives it should arrive for all of them at once.
+//
+// File > Open Recent (src-tauri/src/recent.rs) does persist, and is not the
+// exception that breaks this: a recent-files list is document history, not a
+// preference -- an Open Recent that forgets on restart is not the feature at all.
+// No UI setting has followed it, and none should until they all can.
 
 import { writable } from 'svelte/store';
 

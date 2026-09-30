@@ -79,3 +79,92 @@ pub async fn set_window_title(
         Err("Window 'main' not found".into())
     }
 }
+
+// ---------------------------------------------------------------------------
+// File > Open Recent (see recent.rs)
+//
+// These take an `AppHandle` and look the state up, rather than declaring
+// `State<'_, RecentFiles>`: `tauri::menu` — and so `RecentFiles` — is desktop-only, and a
+// desktop-only parameter type would force `generate_handler!` into two divergent copies of
+// the whole command list, one per platform, which is exactly the kind of list that drifts.
+// With the gate INSIDE each body the signature is platform-independent, there is one handler
+// list, and on mobile (no menu bar to serve) each call is a no-op returning nothing.
+//
+// `try_state` rather than `state`: the latter panics when unmanaged, and a panic in the file
+// path would be a worse bug than a recent list that quietly does not update.
+
+/// The recent-files list, newest first, as absolute paths.
+///
+/// The front end indexes into this with the `recent-<i>` menu id it was clicked with, so the
+/// order here IS the order of the menu items.
+#[tauri::command]
+pub async fn recent_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    #[cfg(desktop)]
+    {
+        use tauri::Manager;
+        return Ok(app
+            .try_state::<crate::recent::RecentFiles>()
+            .map(|r| r.list())
+            .unwrap_or_default());
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        Ok(Vec::new())
+    }
+}
+
+/// Record a file that was just opened or saved.
+#[tauri::command]
+pub async fn push_recent_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        use tauri::Manager;
+        if let Some(r) = app.try_state::<crate::recent::RecentFiles>() {
+            return r.push(std::path::Path::new(&path));
+        }
+        return Ok(());
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, path);
+        Ok(())
+    }
+}
+
+/// Drop a file from the list — the front end calls this when opening one failed, so a moved
+/// or deleted file leaves the menu instead of sitting there failing.
+#[tauri::command]
+pub async fn forget_recent_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        use tauri::Manager;
+        if let Some(r) = app.try_state::<crate::recent::RecentFiles>() {
+            return r.forget(std::path::Path::new(&path));
+        }
+        return Ok(());
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, path);
+        Ok(())
+    }
+}
+
+/// Empty the list — File > Open Recent > Clear Menu.
+#[tauri::command]
+pub async fn clear_recent_files(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        use tauri::Manager;
+        if let Some(r) = app.try_state::<crate::recent::RecentFiles>() {
+            return r.clear();
+        }
+        return Ok(());
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}

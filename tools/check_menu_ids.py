@@ -86,6 +86,26 @@ def main():
             )
         )
 
+    # The Open Recent pool, which the set comparisons below cannot judge. Its ids are not just
+    # names: the digit in `recent-3` is an INDEX into the list `recentFiles()` returns, so the
+    # run has to be contiguous from 0. Delete `recent-4` from all three sides and every check
+    # above still passes while the menu quietly opens the wrong file from the fifth row down --
+    # a wrong answer rather than a dead item, and the only failure here that is silent at
+    # runtime too.
+    slots = sorted(
+        int(i.rsplit("-", 1)[1])
+        for i in native
+        if i.startswith("recent-") and i.rsplit("-", 1)[1].isdigit()
+    )
+    if slots and slots != list(range(len(slots))):
+        problems.append(
+            (
+                "the recent-N pool is not contiguous from 0",
+                ["recent-%d" % n for n in slots],
+                "the N is an index into recentFiles(); a gap opens the WRONG file",
+            )
+        )
+
     for label, missing, why in [
         ("native item with no handler", native - cases, "clicking it does nothing"),
         (

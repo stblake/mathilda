@@ -102,6 +102,27 @@ file that carried one would claim a computation the reader's kernel never did.
 `.mathilda` is the extension a notebook was written under before v0.235. Open
 still accepts it, so no file on disk stops working; Save As offers only `.mnb`.
 
+### Open Recent
+
+**File > Open Recent**, directly under Open…, holds the last **10** files opened or
+saved — both formats in one list, newest first, with **Clear Menu** at the foot. Opening
+a file already in the list moves it back to the top rather than adding a second line; two
+files sharing a name get their folder appended (`notes.mnb — drafts`) so no two rows read
+alike. An entry whose file has since moved is dropped — on load if it is already gone, and
+otherwise the first time clicking it fails.
+
+The list lives in Rust (`src-tauri/src/recent.rs`), which owns the native submenu and
+persists to `recent.json` in the app config dir — the menu is native, so only Rust can draw
+it, and it has to be drawn before the webview has booted. This is the one piece of state
+the app keeps across restarts; see `src/lib/properties.ts` for why UI preferences still do
+not.
+
+The ten slot ids (`recent-0` … `recent-9`) are written out longhand on both sides rather
+than generated, because `make check-menu-ids` reads them out of `lib.rs` and
+`menuCommands.ts` as source text. That check also requires the run to be contiguous from
+0: the digit is an index into the list, so a gap would open the wrong file rather than
+nothing at all.
+
 ### The `.mnb` stanza format
 
 Each cell is a stanza, one blank line between them:

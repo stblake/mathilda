@@ -93,6 +93,30 @@ export async function setWindowTitle(title: string): Promise<void> {
   await invoke<void>("set_window_title", { title });
 }
 
+/* File > Open Recent. The LIST lives in Rust (src-tauri/src/recent.rs), which also owns the
+   native submenu and the JSON store under the app config dir — the menu is native, so only
+   Rust can draw it, and it has to be drawn before the webview has booted.
+
+   What stays here is the acting: Rust emits `menu:recent-<i>` like any other menu item, and
+   App.svelte indexes `recentFiles()` with that i. So the order of this array IS the order of
+   the menu items, and nothing else may sort it. */
+
+export async function recentFiles(): Promise<string[]> {
+  return await invoke<string[]>('recent_files');
+}
+
+export async function pushRecentFile(path: string): Promise<void> {
+  await invoke<void>('push_recent_file', { path });
+}
+
+export async function forgetRecentFile(path: string): Promise<void> {
+  await invoke<void>('forget_recent_file', { path });
+}
+
+export async function clearRecentFiles(): Promise<void> {
+  await invoke<void>('clear_recent_files');
+}
+
 /** Open a URL in the user's real browser, not the app's webview.
  *
  * Reference pages link out to GitHub source and to the published site; letting

@@ -20,7 +20,8 @@
   import { darkMode } from './lib/theme';
   import { kernelMemory } from './lib/status';
   import { pingKernel, saveLibrary, loadLibrary, loadNotebook, saveNotebook,
-           setWindowTitle as setTitleCmd } from './lib/ipc';
+           setWindowTitle as setTitleCmd,
+           recentFiles, pushRecentFile, forgetRecentFile, clearRecentFiles } from './lib/ipc';
   import { restart, abortEvaluation } from './lib/kernelActions';
   import { serializeLibrary, loadLibraryData, canvasState, activeActions, activeFlags, setFocused,
            openNotebookCells, currentNotebook } from './lib/canvas';
@@ -80,7 +81,7 @@
       unlisten.push(await listen<number>('kernel-memory',
                                          (e) => kernelMemory.set(e.payload)));
 
-      const hooks = { openFile, saveFile, saveFileAs };
+      const hooks = { openFile, saveFile, saveFileAs, openRecent, clearRecent };
       /* One try PER ID, not one around the loop. `listen` throws on a name Tauri's event grammar
          rejects, and with a single try that first throw aborted the whole loop -- so one bad id
          (`file.new`, back when they were dotted) left the ENTIRE menu bar unsubscribed, including
@@ -112,22 +113,20 @@
   const isNotebookFile = (p: string) => /\.(mnb|mathilda)$/i.test(p);
   const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
-  async function openFile() {
-    const sel = await open({
-      filters: [
-        { name: 'Mathilda Library or Notebook', extensions: ['lb', 'mnb', 'mathilda'] },
-        { name: 'Mathilda Library', extensions: ['lb'] },
-        { name: 'Mathilda Notebook', extensions: ['mnb', 'mathilda'] },
-      ],
-    });
-    if (!sel) return;
-    const path = typeof sel === 'string' ? sel : (sel as string[])[0];
+  /* Open one file by path, whichever of the two formats it is. Split out of openFile so the
+     dialog and File > Open Recent share ONE implementation of "what opening means" -- a
+     second copy of the .mnb/.lb branch is exactly how the two would drift.
+
+     Returns whether it opened, which is what lets openRecent drop an entry that no longer
+     works instead of leaving it in the menu to fail again. */
+  async function openPath(path: string): Promise<boolean> {
     if (isNotebookFile(path)) {
       try {
         const cells = await loadNotebook(path);
         openNotebookCells(baseName(path).replace(/\.(mnb|mathilda)$/i, ''), cells);
-      } catch (e) { console.error('Open failed:', e); }
-      return;
+      } catch (e) { console.error('Open failed:', e); return false; }
+      pushRecentFile(path).catch(() => {});
+      return true;
     }
     try {
       // Use loadLibrary (returns raw JSON string) not loadNotebook (parses as cells)
@@ -137,7 +136,45 @@
       libraryPath  = path;
       const filename = path.split('/').pop()?.replace(/\.lb$/i, '') ?? title;
       setWindowTitle(filename);
-    } catch (e) { console.error('Open failed:', e); }
+    } catch (e) { console.error('Open failed:', e); return false; }
+    pushRecentFile(path).catch(() => {});
+    return true;
+  }
+
+  async function openFile() {
+    const sel = await open({
+      filters: [
+        { name: 'Mathilda Library or Notebook', extensions: ['lb', 'mnb', 'mathilda'] },
+        { name: 'Mathilda Library', extensions: ['lb'] },
+        { name: 'Mathilda Notebook', extensions: ['mnb', 'mathilda'] },
+      ],
+    });
+    if (!sel) return;
+    await openPath(typeof sel === 'string' ? sel : (sel as string[])[0]);
+  }
+
+  /* File > Open Recent > the i'th item. The native menu knows only the index it was built
+     with, so the path comes back from the kernel-side list -- whose order IS the menu's, by
+     construction in recent.rs.
+
+     Re-read rather than cache: this window is not the only thing that can change the list
+     (a second window, a later save), and a stale cache here would open the wrong file. */
+  async function openRecent(i: number) {
+    let list: string[];
+    try { list = await recentFiles(); }
+    catch (e) { console.error('Open Recent failed:', e); return; }
+    const path = list[i];
+    if (!path) return;
+    if (!await openPath(path)) {
+      // It was recorded once and will not open now -- moved, deleted, or unreadable. Drop it
+      // rather than leave a menu entry that only ever fails.
+      forgetRecentFile(path).catch(() => {});
+    }
+  }
+
+  async function clearRecent() {
+    try { await clearRecentFiles(); }
+    catch (e) { console.error('Clear Menu failed:', e); }
   }
 
   async function saveFile() {
@@ -160,7 +197,10 @@
     if (isNotebookFile(path)) {
       const nb = currentNotebook();
       if (!nb) { console.error('Save failed: no notebook to save'); return; }
-      try { await saveNotebook(path, nb.store.serializeLegacy()); }
+      try {
+        await saveNotebook(path, nb.store.serializeLegacy());
+        pushRecentFile(path).catch(() => {});
+      }
       catch (e) { console.error('Save failed:', e); }
       return;
     }
@@ -175,6 +215,7 @@
       const filename = path.split('/').pop()?.replace(/\.lb$/i, '') ?? 'Library';
       libraryTitle = filename;
       setWindowTitle(filename);
+      pushRecentFile(path).catch(() => {});
     } catch (e) { console.error('Save failed:', e); }
   }
 
