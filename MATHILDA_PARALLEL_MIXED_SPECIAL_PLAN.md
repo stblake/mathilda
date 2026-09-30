@@ -217,6 +217,57 @@ assuming a native path is needed.
 Note this is worth **2 corpus cases** and is the least valuable item per unit of
 work. It is listed third for that reason.
 
+### The two time budgets, and why the cascade's is 10 s (v0.240)
+
+Added after the port, because v0.239 shipped the stage with **no** budget while
+Part II has had one since v0.161 — see `MATHILDA_DIVERGENCES.md` §F11 for the
+bug and the measurements. Two numbers, because the surfaces ask different
+questions:
+
+| surface | budget | rationale |
+|---|---|---|
+| `Method -> "ParallelMixedSpecial"`, qualified symbol | `$SpecialTimeBudget = 45` | a deliberate request for the full search; parity with Part II |
+| the Automatic cascade | 10 s (`PMS_CASCADE_BUDGET_SECONDS`) | charged to every integrand nothing else closed |
+| the stress harness | 120 s, both budgets | comparability with the other three ports |
+
+The cascade number is set from the measured cost of the stage's own work, with
+`$SpecialTimeBudget` raised to 120 so the budget is not what is being timed
+(v0.240, `IntegrateSurfaceSpecial` called directly):
+
+| integrand | s | outcome |
+|---|---|---|
+| `x E^x^2` | 0.019 | CLOSED |
+| `1/Log[x]` | 0.029 | CLOSED |
+| `E^x/x` | 0.026 | CLOSED |
+| `E^x/x^2` | 0.053 | CLOSED |
+| `1/Sqrt[1 + x^4]` | 0.071 | CLOSED (elliptic) |
+| `x^2/Sqrt[1 - x^4]` | 0.071 | CLOSED (elliptic) |
+| `1/Sqrt[1 - x^4]` | 0.075 | CLOSED (elliptic) |
+| `x/Sqrt[x^3 - x]` | 0.076 | CLOSED (elliptic) |
+| `1/Sqrt[x^3 - x]` | 0.076 | CLOSED (elliptic) |
+| `Sin[x]/x` | 0.187 | CLOSED — **slowest close** |
+| `Erf[x] E^(-x^2)` | 0.003 | declines |
+| `E^(-x^2)` | 0.058 | declines (earlier Cherry stage owns it) |
+| `Sqrt[x] E^(-x)` | 0.106 | declines |
+| `Log[x] Sin[x]` | **3.19** | answer found, withheld: no certificate |
+| `Cos[x] Log[x]` | **3.34** | answer found, withheld: no certificate |
+
+Two things follow. Every *close* is under 0.2 s, so the budget is nowhere near
+the closes — it cannot cost coverage. And the slowest interesting work is the
+`Log[x] Sin[x]` pair at ~3.3 s, which is **work item 1's own subject**: those are
+cases where the answer exists and only the certificate is missing. Setting the
+cascade budget at 10 s keeps them wholly inside it, so when the certificate work
+lands they become cascade closes *without* this number having to change. A 3 s
+budget — the first value tried — would have cut them off at the moment they
+started working.
+
+Corollary for anyone re-measuring: the corpus harness pins **both** budgets to
+the cap, and must do so **after** the lazy-load line, since each package
+re-assigns its own default as it loads. The harness had this wrong until v0.240,
+so the recorded 247/51/11/3 run measured Part II at 45 s rather than the intended
+120 s — a re-run at a true 120 s cap can only move cases *toward* PASS, and the
+slow bucket D pair above is where to look first.
+
 ---
 
 ## 5. Work item 4 — branch fidelity (1 case, bucket E)

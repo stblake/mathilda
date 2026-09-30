@@ -106,6 +106,25 @@ $ExtendedBoundsSP = True;       (* (K5)-(K8) and (B) of Section 5 in the special
 $StrictSP = True;               (* Theorem 8.6: special answers only with a certificate of non-elementarity *)
 $spCounter = 0;
 
+(* Robustness backstop, the counterpart of Part II's $ParallelMixedTimeBudget
+   (mixed/ParallelMixed.m) and needed for the same reason: the kernel search of
+   Algorithm S6 escalates through six {split, retry} configurations, and on an
+   integrand with two transcendental generators and no special kernel that can
+   close it the ansatz grows until the linear solve dominates -- unboundedly, as
+   interactive Integrate has no timeout of its own.  Without this, one such
+   integrand turns a plain Integrate[] into a minutes-long grind
+   (Sin[x^2 + Log[x]] Cos[x] measured >120 s).  A wall-clock budget converts it
+   into a clean {"failed", ...} decline, which the cascade and the Method
+   surface both already handle.  Set for parity with Part II; deterministic
+   ansatz-size caps are follow-up work, as they are there.
+
+   The Automatic cascade scopes this DOWN to PMS_CASCADE_BUDGET_SECONDS (10 s;
+   src/calculus/integrate.c, which Blocks this symbol -- UNQUALIFIED, since the
+   context injection leaves it in Global`) : a stage applied to every integrand
+   nothing else closed must be cheap, where an explicit
+   Method -> "ParallelMixedSpecial" is a deliberate request for the full search. *)
+$SpecialTimeBudget = 45;
+
 (* ------------------------------------------------------------------ helpers *)
 ToStr[e_] := ToString[e, InputForm];
 FreeSyms[e_] := DeleteDuplicates[Cases[{e}, s_Symbol /; ! NumericQ[s] &&
@@ -1076,7 +1095,7 @@ Options[IntegrateSurfaceSpecial] = {"Verbose" -> False, "Tower" -> None, "Sample
    functions, substitute back, fix the branch constant of every special term
    against its kernel numerically, and verify the whole answer by
    differentiation.  {answer, verified} or a status list. *)
-IntegrateSurfaceSpecial[integrand_, x_Symbol, opts : OptionsPattern[]] := Module[{verbose = TrueQ[OptionValue["Verbose"]],
+IntegrateSurfaceSpecial[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{verbose = TrueQ[OptionValue["Verbose"]],
     tower = OptionValue["Tower"], integrandN = integrand /. PMExp -> Exp, bt, T, fp, back, Ysym, strict, res, samples, x0, yExpr, out, total, anti, kern, fixed, ver},
   If[tower === None,
     bt = Catch[Quiet[BuildTower[integrand, x, "StructureTheorem" -> True, "Verbose" -> verbose]], "build"];
@@ -1093,7 +1112,8 @@ IntegrateSurfaceSpecial[integrand_, x_Symbol, opts : OptionsPattern[]] := Module
   If[samples === None,
     x0 = SamplePoint[integrandN, x];
     samples = {If[x0 =!= None, x0, 7/5], 9/4, 13/5}];
-  PresentSpecial[res, integrandN, x, T, back, samples, strict, verbose, TrueQ[OptionValue["Details"]]]];
+  PresentSpecial[res, integrandN, x, T, back, samples, strict, verbose, TrueQ[OptionValue["Details"]]]],
+  $SpecialTimeBudget, {"failed", "time budget exceeded"}];
 
 (* PresentSpecial: the surface form of a result of ParallelIntegrateSpecial: substitute
    back, fix the branch of every special term against its kernel, present, verify;
@@ -1824,7 +1844,7 @@ Options[IntegrateSurfacePartial] = {"Special" -> True, "Verbose" -> False, "Towe
 (* IntegrateSurfacePartial[f, x, opts]: IntegrateSurfaceSpecial with a partial
    answer I + Inactive[Integrate][r, x] when no complete one is found;
    {answer, verified} or a status *)
-IntegrateSurfacePartial[integrand_, x_Symbol, OptionsPattern[]] := Module[{special = TrueQ[OptionValue["Special"]], verbose = TrueQ[OptionValue["Verbose"]],
+IntegrateSurfacePartial[integrand_, x_Symbol, OptionsPattern[]] := TimeConstrained[Module[{special = TrueQ[OptionValue["Special"]], verbose = TrueQ[OptionValue["Verbose"]],
     tower = OptionValue["Tower"], samples = OptionValue["Samples"], integrandN = integrand /. PMExp -> Exp, bt, T, fp, back, Ysym, res, x0, yExpr, surf, total, anti, fixed, r, ok, d},
   If[tower === None,
     bt = Catch[Quiet[BuildTower[integrand, x, "StructureTheorem" -> True, "Verbose" -> verbose]], "build"];
@@ -1857,7 +1877,8 @@ IntegrateSurfacePartial[integrand_, x_Symbol, OptionsPattern[]] := Module[{speci
   If[d =!= $Failed,
     ok = AllTrue[samples, With[{a = Quiet[Num[d, x, #]], b = Quiet[Num[integrandN, x, #]]},
       NumericQ[a] && NumericQ[b] && Abs[a - b] < 10^-15 (1 + Abs[b])] &]];
-  {total + Inactive[Integrate][r, x], ok}];
+  {total + Inactive[Integrate][r, x], ok}],
+  $SpecialTimeBudget, {"failed", "time budget exceeded"}];
 
 
 End[];

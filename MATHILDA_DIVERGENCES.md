@@ -900,6 +900,111 @@ private too. Addressing either with the wrong context leaves the call
 error. When a call into these packages returns something structurally odd, check
 the context before the algorithm.
 
+### F9. The Automatic integer-factorisation budget is marginal, and perturbation-sensitive
+
+Not caused by this port, but exposed by it, and worth a entry because the failure
+is invisible in the answer.
+
+`FactorInteger`'s Automatic method bounds its search (`factint_warn_incomplete`,
+`src/facint.c`), and for a ~29-35 digit semiprime the bound is *marginal*: whether
+a given number factors depends on unrelated process state. Two checked-in tests
+sit on opposite sides of that line and **have never both been green**:
+
+| build | `MoebiusMu[10^50 + 1]` (wants -1) | `PrimeNu[2491...238]` (wants 8) |
+|---|---|---|
+| v0.237 (before this port) | **-1** ok | 7 — `nofac` |
+| v0.238 | **-1** ok | 7 — `nofac` |
+| v0.239 | 1 — `nofac` | **8** ok |
+
+So `moebiusmu_tests` and `primenu_tests` trade places; v0.239 did not break
+factorisation, it moved which case lands on the failing side. The state
+dependence is direct and reproducible **within one build**:
+
+```
+MoebiusMu[10^50 + 1]                                (* 1, with FactorInteger::nofac *)
+FactorInteger[10^50 + 1]; MoebiusMu[10^50 + 1]      (* -1: correct, after a warm-up  *)
+```
+
+Both go through the same `internal_factorinteger`, so running `FactorInteger`
+first changes the outcome of the second call.
+
+**Why the bound is marginal.** In the Automatic path `pollard_rho_brent_mpz` uses
+`max_iters = 14`, and `r` doubles per iteration, so one `(y_start, c)` attempt
+covers ~2^14 = 16 K inner steps and the 98 attempts ~1.6 M. Pollard-rho needs
+about `sqrt(p)` steps, and the unfactored cofactor here,
+`23702464296258769770591950101`, is `14103673319201 * 1680588011350901` — its
+smaller factor needs ~3.7 M. ECM then gets 7 B1 bounds x 10 curves, which is also
+marginal for a 14-digit factor, and its curve parameter is random per call.
+
+**The fix is a budget decision, not a bug fix**, which is why it is recorded here
+rather than changed in a commit about integration: raising the rho budget (say
+`max_iters` scaled to `size(n)` so a 29-digit semiprime gets its ~4 M steps) buys
+completeness at the cost of time on every genuinely hard composite, and the whole
+purpose of the present bound is to keep `FactorInteger` from hanging. Whoever
+takes it should fix both tests at once and measure the cost on a deliberately hard
+input (a 40-digit semiprime), not just on these two.
+
+### F10. A context-injected `.m` prefixes its functions but NOT its variables
+
+The sharp edge behind F8, found while scoping a budget from C and worth its own
+entry because the wrong guess is **silent and self-confirming**.
+
+`ParallelMixedSpecial.m` and `mixed/logrewrite.m` are loaded *into*
+`ParallelMixed`Private`` (no `BeginPackage`; a `Begin[...]` inside the file) so
+the body can name Part II's private functions by short name — the A22
+workaround. That injection is asymmetric:
+
+| defined in the file | ends up in |
+|---|---|
+| functions (`IntegrateSurfaceSpecial`, `BuildTower`, …) | `ParallelMixed`Private`` |
+| top-level variables (`$SpecialTimeBudget`, `$StrictSP`, `$ParallelMixedTimeBudget`) | **`Global`** |
+
+Measured at v0.240 after forcing the load:
+
+```
+$SpecialTimeBudget                        (* 45                          *)
+ParallelMixed`Private`$SpecialTimeBudget  (* itself -- unbound           *)
+Context[$SpecialTimeBudget]               (* Global`                     *)
+Names["*SpecialTimeBudget*"]
+  (* {$SpecialTimeBudget, ParallelMixed`Private`$SpecialTimeBudget} *)
+```
+
+Note the second element of that `Names` list: **the qualified spelling creates a
+new symbol rather than failing**. So
+
+```
+Block[{ParallelMixed`Private`$SpecialTimeBudget = 3}, ...]
+```
+
+binds a fresh unbound symbol, leaves the real default in force, raises no
+message, and the only symptom is that the budget does not apply — a 3 s budget
+that still ran the full 45 s. The fix is to Block the **unqualified** name, which
+is why the stress harnesses raise `$ParallelMixedTimeBudget` unqualified too. One
+qualified name in the same expression resolving (the *function*) is not evidence
+that the other (the *variable*) does.
+
+### F11. The special stage shipped without a time budget (FIXED, v0.240)
+
+Mathilda's own bug, not a divergence from Mathematica, recorded here because it
+is the same shape as the rest of section F: a stage that cannot bound itself.
+
+Part II has carried `$ParallelMixedTimeBudget = 45` since v0.161, with the reason
+in its own comment — *"interactive Integrate has no timeout of its own"*. The
+v0.239 special stage had **no budget at all**, and it is the *last* stage in the
+Automatic cascade, so every integrand nothing else closed reached an unbounded
+search. Measured: `Integrate[Sin[x^2 + Log[x]] Cos[x], x]` went from 47.6 s on a
+pre-v0.238 binary to **97.3 s**, and `integrate_newton_leibniz_tests` from 50.5 s
+(rc 0) to **120.06 s / SIGALRM**.
+
+Fixed by `$SpecialTimeBudget = 45` on both entry points (parity with Part II, and
+the value for an explicit `Method ->`) plus a 10 s scope for the Automatic
+cascade — see the v0.240 changelog entry for how 10 s was chosen from the
+measured cost of every close the stage brings to the cascade.
+
+The general lesson, already in `tasks/lessons.md` in its DSolve form: **a
+last-resort stage added to a cascade is charged to every input the cascade fails
+to close**, so its worst case, not its typical case, is what the cascade pays.
+
 ### Not a divergence after all: `RowReduce[..., ZeroTest -> f]`
 
 Listed as a seventh gap on the strength of

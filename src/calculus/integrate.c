@@ -780,16 +780,93 @@ static Expr* pms_verified_answer(Expr* r) {
     return ans;
 }
 
+/* Wall-clock budget, in seconds, that the AUTOMATIC CASCADE allows the special
+ * stage -- scoping down the package's own $SpecialTimeBudget (45 s, the parity
+ * value with Part II) for the duration of one cascade call.
+ *
+ * Why the cascade needs its own, much smaller, number.  The stage runs LAST, on
+ * every integrand no earlier stage closed, and Algorithm S6's kernel search
+ * escalates through six {split, retry} configurations: on an integrand with two
+ * transcendental generators and no kernel that can close it, the ansatz grows
+ * until the linear solve dominates.  Measured: Integrate[Sin[x^2 + Log[x]] Cos[x],
+ * {x, 0, 1}] -- a plain user-level call, and one of the cases in
+ * tests/test_integrate_newton_leibniz.c -- ran past 120 s before this gate, and
+ * x^3 Sin[x] Log[x]^2 costs 12.1 s.  An explicit Method -> "ParallelMixedSpecial"
+ * (or the qualified symbol) is a deliberate request for that search and keeps the
+ * full 45 s; the cascade is not, and must get out of the way.
+ *
+ * Choosing the value (measured at v0.240, $SpecialTimeBudget raised to 120 so
+ * the budget is not what is being timed -- the table is in
+ * MATHILDA_PARALLEL_MIXED_SPECIAL_PLAN.md).  Every integrand this stage CLOSES
+ * closes fast: 0.019 s (x E^x^2) to 0.187 s (Sin[x]/x), with the elliptic
+ * pencils at 0.07-0.08 s.  The slowest work that is not a close is the
+ * Log[x] Sin[x] / Cos[x] Log[x] pair at 3.19 / 3.34 s -- a special answer found
+ * but withheld by strict mode for want of a certificate.  So 10 s leaves every
+ * close a ~50x margin AND keeps that pair entirely inside the budget, which is
+ * what stops the certificate work of the plan (the route from 247 to 305) from
+ * needing this number changed to take effect.  It remains 4.5x below the
+ * package default, which is the point.
+ *
+ * The stress corpus is unaffected either way: its harness drives
+ * IntegrateSurfaceSpecial directly and pins both budgets to the 120 s cap. */
+#define PMS_CASCADE_BUDGET_SECONDS 10
+
+/* Armed by try_parallelmixedspecial when it is running the stage as part of the
+ * Automatic cascade rather than on an explicit Method -> / qualified-symbol
+ * request.  A plain int, not a counter: the stage cannot re-enter itself
+ * (tc_async_region_active bars that), so there is no nesting to track.
+ *
+ * CONSUMED, not merely read, by the builtin below: an outer TimeConstrained can
+ * siglongjmp out of the middle of the stage, which would otherwise leave the
+ * flag armed and silently give the cascade's tight budget to the next EXPLICIT
+ * Method -> call in the session.  Clearing it at the point of use makes that
+ * unwind harmless without a save/restore dance. */
+static int pms_in_cascade = 0;
+
 static Expr* builtin_integrate_pms(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     if (tc_async_region_active()) return NULL;   /* no self re-entry / nested heavy method */
     pms_lazy_load();
     if (!pms_load_succeeded) return NULL;
 
+    int cascade = pms_in_cascade;
+    pms_in_cascade = 0;            /* consume; see the flag's own comment */
+
     tc_async_defer_push();
     mth_msg_suppress_push();
-    Expr* raw = call_stage("ParallelMixed`Private`IntegrateSurfaceSpecial",
-                           res->data.function.args[0], res->data.function.args[1]);
+    Expr* raw;
+    if (cascade) {
+        /* Block[{$SpecialTimeBudget = n}, worker[f, x]].
+         * Block, not Set: dynamic scope restores the package's own default on
+         * every exit path, including the TimeConstrained unwind (v0.238 made
+         * Block restore OwnValues and DownValues across that unwind), so an
+         * explicit Method -> call later in the same session still gets 45 s.
+         *
+         * UNQUALIFIED deliberately.  The package is loaded INTO
+         * ParallelMixed`Private` (the logrewrite.m context-injection pattern),
+         * and that injection prefixes the FUNCTIONS it defines but not the
+         * variables: the budget really is Global`$SpecialTimeBudget, exactly as
+         * Part II's Global`$ParallelMixedTimeBudget is -- which is why the
+         * stress harness raises that one unqualified too.  Spelling this
+         * `ParallelMixed`Private`$SpecialTimeBudget` binds a DIFFERENT, unbound
+         * symbol and silently leaves the default in force (measured). */
+        Expr* call = expr_new_function(
+            expr_new_symbol("ParallelMixed`Private`IntegrateSurfaceSpecial"),
+            (Expr*[]){ expr_copy(res->data.function.args[0]),
+                       expr_copy(res->data.function.args[1]) }, 2);
+        Expr* bind = expr_new_function(
+            expr_new_symbol(SYM_Set),
+            (Expr*[]){ expr_new_symbol("$SpecialTimeBudget"),
+                       expr_new_integer(PMS_CASCADE_BUDGET_SECONDS) }, 2);
+        Expr* locals = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ bind }, 1);
+        Expr* blk = expr_new_function(expr_new_symbol(SYM_Block),
+                                      (Expr*[]){ locals, call }, 2);
+        raw = evaluate(blk);
+        expr_free(blk);
+    } else {
+        raw = call_stage("ParallelMixed`Private`IntegrateSurfaceSpecial",
+                         res->data.function.args[0], res->data.function.args[1]);
+    }
     mth_msg_suppress_pop();
     tc_async_defer_pop();
     if (!raw) return NULL;
@@ -818,9 +895,11 @@ static Expr* builtin_integrate_pms(Expr* res) {
  * 1/Sqrt[x^3 - x] is pseudo-elliptic by that test and closes as
  * -Sqrt[2] EllipticF[ArcSin[Sqrt[2]/Sqrt[1 + x]], 1/2].  The rational-structure
  * skip is kept: a pure rational function is BronsteinRational's. */
-static Expr* try_parallelmixedspecial(Expr* f, Expr* x) {
+static Expr* try_parallelmixedspecial(Expr* f, Expr* x, bool cascade) {
     if (pmt_is_rational_structure(f)) return NULL;
+    pms_in_cascade = cascade ? 1 : 0;   /* budget scope; see PMS_CASCADE_BUDGET_SECONDS */
     Expr* result = call_stage("Integrate`ParallelMixedSpecial", f, x);
+    pms_in_cascade = 0;                 /* belt-and-braces: the builtin consumed it */
     if (!result) return NULL;
 
     bool decline =
@@ -1498,7 +1577,7 @@ Expr* builtin_integrate(Expr* res) {
              * an antiderivative or declines, never the partial mode, so plain
              * Integrate[f, x] can no more return a half-solved
              * `answer + Inactive[Integrate][remainder, x]` than it could before. */
-            if (!result) result = try_parallelmixedspecial(effective_f, x);
+            if (!result) result = try_parallelmixedspecial(effective_f, x, true);
             break;
         case METHOD_RATIONAL:
             result = try_rational(effective_f, x);
@@ -1540,7 +1619,9 @@ Expr* builtin_integrate(Expr* res) {
             result = try_parallelmixedtower(effective_f, x);
             break;
         case METHOD_PARALLEL_MIXED_SPECIAL:
-            result = try_parallelmixedspecial(effective_f, x);
+            /* Explicit request: the package's full $SpecialTimeBudget, not the
+             * cascade's tight one (see PMS_CASCADE_BUDGET_SECONDS). */
+            result = try_parallelmixedspecial(effective_f, x, false);
             break;
         case METHOD_UNDEFINED:
             result = try_undefined(effective_f, x);
