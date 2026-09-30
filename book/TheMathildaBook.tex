@@ -95,6 +95,14 @@
 \theoremstyle{remark}
 \newtheorem*{remark}{Remark}
 
+% --- paragraph spacing -----------------------------------------------------
+% Paragraphs are separated by vertical space rather than by an indent: the
+% prose alternates constantly with transcripts and displays, where an indent
+% reads as noise. The glue lets TeX absorb a little slack when breaking pages.
+% Set last, so nothing loaded above resets it.
+\setlength{\parskip}{0.55\baselineskip plus 2pt minus 1pt}
+\setlength{\parindent}{0pt}
+
 % ---------------------------------------------------------------------------
 \begin{document}
 
