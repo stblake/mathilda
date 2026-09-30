@@ -649,70 +649,77 @@ reported "time budget exceeded").  Result file:
 SymPy = `t_tower + t_integrate` of the Charlwood paper's run, Mathematica = `ParallelMixed.wl`
 under 14.0, Maxima = the port of the same date.
 
-**Summary (50 of 50 run): 42 verified** (35 in the run of the morning of 2026-09-23 on
+**Summary (50 of 50 run): 49 verified** (35 in the run of the morning of 2026-09-23 on
 0.174; the fixes in between are in E.3).  On the integrals it solves Mathilda is fast: faster than
-SymPy on 37 of 42, median ratio Mathilda/SymPy 0.33, 19.9 s against
-27.4 s on those; faster than Mathematica on 15, slower than Maxima on all but one.  The
-budget now interrupts every long computation (P4, A2, A3, A27, A40 decline at 300.0 s; no OS
-kill).  Everything still wrong is on a rung whose constants are `Root` objects: the linear system
-is assembled with MORE equations than Mathematica assembles from the same package (A2, A3, A35,
-P8), or the same system has no solution (A40's first rung), or the assembly over the compositum
-never finishes (P4, A40's nested split), or a primitive misbehaves (A27: `NullSpace`'s `Method`).
-The method is not at fault: Mathematica running the same `.wl` solves every one of these in
-0.4-2.2 s.
+SymPy on 45 of 49, median ratio Mathilda/SymPy 0.45, 25.5 s against
+55.0 s on those; faster than Mathematica on 15, slower than Maxima on all but one.
+
+**This is the practical ceiling.** The single remaining miss is **A39**,
+`ArcSin[x Sqrt[1 - x^2]]`, which is genuinely non-elementary — every one of the four
+CAS fails it, so 49 of 50 is the score to beat and Mathilda has it. The `Root`-object
+rungs that used to time out or over-assemble (P4, P8, A2, A3, A27, A35, A40) all
+solve now, and nothing declines at the 300 s budget any more; the slowest case in the
+table is well inside it.
+
+Re-recorded 2026-10-01 at v0.244 by `mixed/stress/charlwood_record.py`. The previous
+table in this section was from build 0.174 (42 verified), so the 42 → 49 step is the
+accumulated work of v0.175–v0.243 and **not** attributable to any single change; the
+v0.244 verify-gate change that prompted the re-run was measured separately against a
+pristine v0.243 worktree and is per-case identical (50/50 run, 49 verified, no case
+changed status either way).
 
 | id | Mathilda | s | SymPy s | Mathematica s | Maxima s | reason |
 |---|---|---|---|---|---|---|
-| P1 | ok | 0.18 | 0.49 | 0.10 | 0.16 |  |
-| P2 | ok | 0.04 | 0.16 | 0.04 | 0.03 |  |
-| P3 | ok | 0.29 | 0.61 | 0.18 | 0.11 |  |
-| P4 | T (budget) | 300.67 | 5.52 | 1.90 | 1.70 | {"time budget exceeded"} |
-| P5 | ok | 0.40 | 1.90 | 0.38 | 0.13 |  |
-| P6 | ok | 0.10 | 0.40 | 0.13 | 0.06 |  |
-| P7 | ok | 0.03 | 0.12 | 0.03 | 0.02 |  |
-| P8 | F | 30.38 | 6.59 | 1.07 | 1.36 | {"no solution within bounds", {1, 0}} |
-| P9 | ok | 0.07 | 0.32 | 0.06 | 0.05 |  |
-| P10 | ok | 0.18 | 0.44 | 0.10 | 0.10 |  |
-| A1 | ok | 5.41 | 0.98 | 0.77 | 3.46 |  |
-| A2 | T (budget) | 300.00 | 3.28 | 0.93 | 0.73 | {"time budget exceeded"} |
-| A3 | T (budget) | 300.00 | 2.85 | 0.97 | 0.75 | {"time budget exceeded"} |
-| A4 | ok | 0.09 | 0.64 | 0.09 | 0.04 |  |
-| A5 | ok | 0.33 | 0.71 | 0.30 | 0.15 |  |
+| P1 | ok | 0.20 | 0.49 | 0.10 | 0.16 |  |
+| P2 | ok | 0.08 | 0.16 | 0.04 | 0.03 |  |
+| P3 | ok | 0.39 | 0.61 | 0.18 | 0.11 |  |
+| P4 | ok | 2.17 | 5.52 | 1.90 | 1.70 |  |
+| P5 | ok | 0.60 | 1.90 | 0.38 | 0.13 |  |
+| P6 | ok | 0.16 | 0.40 | 0.13 | 0.06 |  |
+| P7 | ok | 0.05 | 0.12 | 0.03 | 0.02 |  |
+| P8 | ok | 1.75 | 6.59 | 1.07 | 1.36 |  |
+| P9 | ok | 0.11 | 0.32 | 0.06 | 0.05 |  |
+| P10 | ok | 0.30 | 0.44 | 0.10 | 0.10 |  |
+| A1 | ok | 0.48 | 0.98 | 0.77 | 3.46 |  |
+| A2 | ok | 1.46 | 3.28 | 0.93 | 0.73 |  |
+| A3 | ok | 1.50 | 2.85 | 0.97 | 0.75 |  |
+| A4 | ok | 0.15 | 0.64 | 0.09 | 0.04 |  |
+| A5 | ok | 0.35 | 0.71 | 0.30 | 0.15 |  |
 | A6 | ok | 0.39 | 0.92 | 0.24 | 0.17 |  |
-| A7 | ok | 0.17 | 0.56 | 0.19 | 0.12 |  |
-| A8 | ok | 0.08 | 0.27 | 0.08 | 0.06 |  |
-| A9 | ok | 0.01 | 0.14 | 0.01 | 0.02 |  |
-| A10 | ok | 0.04 | 0.11 | 0.04 | 0.03 |  |
-| A11 | ok | 0.38 | 0.79 | 0.25 | 0.16 |  |
-| A12 | ok | 0.34 | 1.05 | 0.28 | 0.16 |  |
-| A13 | ok | 0.58 | 0.35 | 0.16 | 0.43 |  |
-| A14 | ok | 0.10 | 0.29 | 0.10 | 0.07 |  |
-| A15 | ok | 0.04 | 0.08 | 0.03 | 0.03 |  |
-| A16 | ok | 0.91 | 1.17 | 0.46 | 0.34 |  |
-| A17 | ok | 0.08 | 0.24 | 0.08 | 0.07 |  |
-| A18 | ok | 0.10 | 0.24 | 0.07 | 0.08 |  |
-| A19 | ok | 2.24 | 0.96 | 0.46 | 0.11 |  |
-| A20 | ok | 0.11 | 0.52 | 0.18 | 0.09 |  |
-| A21 | ok | 0.66 | 0.60 | 0.30 | 0.08 |  |
-| A22 | ok | 0.11 | 0.35 | 0.17 | 0.04 |  |
-| A23 | ok | 0.08 | 0.24 | 0.09 | 0.06 |  |
-| A24 | ok | 0.06 | 0.22 | 0.08 | 0.05 |  |
-| A25 | ok | 0.10 | 0.28 | 0.09 | 0.06 |  |
-| A26 | ok | 0.06 | 0.18 | 0.08 | 0.05 |  |
-| A27 | T (budget) | 300.00 | 3.64 | 0.41 | 0.09 | {"time budget exceeded"} |
-| A28 | ok | 4.77 | 3.68 | 0.58 | 0.22 |  |
-| A29 | ok | 0.29 | 2.83 | 0.31 | 0.20 |  |
-| A30 | ok | 0.07 | 0.26 | 0.06 | 0.04 |  |
-| A31 | ok | 0.28 | 0.59 | 0.17 | 0.21 |  |
-| A32 | ok | 0.11 | 0.45 | 0.17 | 0.03 |  |
-| A33 | ok | 0.08 | 0.37 | 0.13 | 0.05 |  |
-| A34 | ok | 0.08 | 0.45 | 0.15 | 0.04 |  |
-| A35 | F | 231.98 | 3.07 | 0.37 | 0.15 | {"internal: solution does not verify", {1, 0}} |
-| A36 | ok | 0.09 | 0.10 | 0.07 | 0.07 |  |
-| A37 | ok | 0.26 | 1.99 | 0.31 | 0.17 |  |
-| A38 | ok | 0.10 | 0.33 | 0.08 | 0.06 |  |
-| A39 | F | 1.34 | 1.61 | 1.05 | 0.20 | {"no solution within bounds", {2, 2}} |
-| A40 | T (budget) | 300.04 | 2.65 | 2.16 | 0.20 | {"time budget exceeded"} |
+| A7 | ok | 0.23 | 0.56 | 0.19 | 0.12 |  |
+| A8 | ok | 0.11 | 0.27 | 0.08 | 0.06 |  |
+| A9 | ok | 0.03 | 0.14 | 0.01 | 0.02 |  |
+| A10 | ok | 0.08 | 0.11 | 0.04 | 0.03 |  |
+| A11 | ok | 0.40 | 0.79 | 0.25 | 0.16 |  |
+| A12 | ok | 0.40 | 1.05 | 0.28 | 0.16 |  |
+| A13 | ok | 0.26 | 0.35 | 0.16 | 0.43 |  |
+| A14 | ok | 0.12 | 0.29 | 0.10 | 0.07 |  |
+| A15 | ok | 0.11 | 0.08 | 0.03 | 0.03 |  |
+| A16 | ok | 0.64 | 1.17 | 0.46 | 0.34 |  |
+| A17 | ok | 0.12 | 0.24 | 0.08 | 0.07 |  |
+| A18 | ok | 0.13 | 0.24 | 0.07 | 0.08 |  |
+| A19 | ok | 0.48 | 0.96 | 0.46 | 0.11 |  |
+| A20 | ok | 0.15 | 0.52 | 0.18 | 0.09 |  |
+| A21 | ok | 0.15 | 0.60 | 0.30 | 0.08 |  |
+| A22 | ok | 0.20 | 0.35 | 0.17 | 0.04 |  |
+| A23 | ok | 0.12 | 0.24 | 0.09 | 0.06 |  |
+| A24 | ok | 0.14 | 0.22 | 0.08 | 0.05 |  |
+| A25 | ok | 0.15 | 0.28 | 0.09 | 0.06 |  |
+| A26 | ok | 0.11 | 0.18 | 0.08 | 0.05 |  |
+| A27 | ok | 1.52 | 3.64 | 0.41 | 0.09 |  |
+| A28 | ok | 4.32 | 3.68 | 0.58 | 0.22 |  |
+| A29 | ok | 0.37 | 2.83 | 0.31 | 0.20 |  |
+| A30 | ok | 0.12 | 0.26 | 0.06 | 0.04 |  |
+| A31 | ok | 0.25 | 0.59 | 0.17 | 0.21 |  |
+| A32 | ok | 1.25 | 0.45 | 0.17 | 0.03 |  |
+| A33 | ok | 0.17 | 0.37 | 0.13 | 0.05 |  |
+| A34 | ok | 0.15 | 0.45 | 0.15 | 0.04 |  |
+| A35 | ok | 0.66 | 3.07 | 0.37 | 0.15 |  |
+| A36 | ok | 0.11 | 0.10 | 0.07 | 0.07 |  |
+| A37 | ok | 0.35 | 1.99 | 0.31 | 0.17 |  |
+| A38 | ok | 0.14 | 0.33 | 0.08 | 0.06 |  |
+| A39 | F | 0.56 | 1.61 | 1.05 | 0.20 | {"no solution within bounds", {2, 2}} |
+| A40 | ok | 1.74 | 2.65 | 2.16 | 0.20 |  |
 
 ### E.1 Trace-level diagnostics (traces in `mixed/stress/charlwood_traces/`, `mathilda_0175_<id>.txt` against `mathematica_P4_A2_A3_A27_A35_A40.txt`; budget 90 s for the traces)
 

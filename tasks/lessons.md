@@ -4091,3 +4091,74 @@ made them reach plain `Integrate`, where they arrived as raw Weierstrass rationa
 warning emitted by an earlier stage that no longer had the last word. Both had to
 be fixed in the same commit. **Unblocking an answer is not done when the answer is
 correct; it is done when the answer is one a user would want to read.**
+
+## The zero test is where a symbolic engine's wrong answers come from (v0.242, and the rest of the session)
+
+`Can` is Part II's zero test: every entry of every ansatz system, every conjunct of
+the non-elementarity certificate and `VerifySource` all decide through it. Its fast
+path — map the algebraic constants into a number field, `Together`, `Cancel`, map
+back — returned a **false NON-zero** on a shape `Together` declines to touch, while
+the slower path it was built to avoid got those same inputs right.
+
+Everything downstream inherited that, and the symptoms looked like four unrelated
+problems:
+
+- a **false certificate** on an elementary integrand (the remainder of `Sin[x]/x^2`,
+  whose antiderivative is `-Sin[x]/x`, certified non-elementary);
+- three corpus cases filed as *missing coverage* (`sin(x)/x^2`, `sin(3x)/x^2`, and
+  half of `sin(x^2)`), which were nothing of the kind;
+- both remaining `WEAK` partial-mode cases;
+- `VerifySource` rejecting a correct exponential source.
+
+One guard fixed all four. **When several "unrelated" gaps cluster in one subsystem,
+suspect the predicate they all consult before suspecting the algorithms.**
+
+Four transferable things.
+
+1. **A fast path is only entitled to the cases it actually handles.** The detour
+   exists because the direct path is ~27× slower on `Complex` atoms. That justifies
+   *trying* it; it does not justify *trusting* it. `Can` now checks its own work — a
+   `Together` that succeeded leaves no negative power in the numerator — and falls
+   back when it did not. Cheap, local, and it converts a wrong answer into a slow
+   one.
+
+2. **My corpus could not see the bug, and I nearly concluded from that that there
+   wasn't one.** 312 cases and 114 more, zero false certificates — because both
+   judge the *final* answer of the stage, and the false certificate was on an
+   *internal* sub-integrand of a case that was already declining for another reason.
+   A green corpus bounds the failures it is shaped to see. I found this only by
+   tracing a case I was trying to *improve*, not by auditing.
+
+3. **A guard added for one bug outlives it, and the way to retire it is a
+   REACHABILITY argument, not a re-derivation.** The `q =!= None` gate on the
+   certificate had stood 73 versions behind a comment stating a theorem; `git log -S`
+   found it landing in the same commit as the real fix, and the commit message said
+   so. What retired it was not re-arguing Proposition 9.2(b) but showing the guarded
+   branch is entered only when the ansatz system is inconsistent, and the two
+   integrands that motivated it now *solve*. The regression test therefore asserts
+   they SOLVE — strictly stronger than "do not certify", which would pass vacuously
+   the day the stage starts declining for an unrelated reason.
+
+4. **Unblocking an answer is not done when the answer is correct.** Releasing ~50
+   withheld answers put them in front of users for the first time, where they arrived
+   as raw Weierstrass rationals in `Tan[x/2]` behind an `Integrate::nonelem` warning
+   emitted by an earlier stage that no longer had the last word. Neither was visible
+   to the corpus judge, which asks only for a verified answer carrying the right
+   head. Both had to ship in the same commit as the unblocking.
+
+And one on method: a review agent I commissioned **disagreed with me**, called the
+change unsafe, and named a case (`Sqrt[Tan[x]]`) that turned out to be fine. Chasing
+its claim is what found the genuinely bad bug — `StructureTheorem` defaulting to
+False, so Part II built towers with algebraically dependent generators and had been
+emitting four false certificates on elementary integrands since the port. I verified
+that was pre-existing with `git worktree add --detach` on a pristine HEAD rather than
+arguing it from the payload shape, per
+`[[feedback_dsolve_corpus_regression_check_isolated_ab]]`. **Verify the claim; keep
+the lead.**
+
+Related: `[[feedback_verify_reference_values_never_recall_them]]` — the same fix moved
+`ArcTan[x]/Sqrt[1+x^2]` to "certified non-elementary" and I was about to accept that
+because it *felt* right. `x = Sinh[u]` (substitution checked numerically to 15 digits)
+reduces it to `Integral[u/(E^u +- I)]`, which Mathilda independently closes with
+`PolyLog[2, .]`. SymPy returning an unevaluated `Integral` proved nothing and did not
+count.

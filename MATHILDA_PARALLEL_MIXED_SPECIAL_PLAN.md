@@ -22,13 +22,23 @@ are scored by, not a re-implementation. Re-run with
 | Maxima | 305 | 7 | 0 | 0 |
 | Mathilda v0.239 (as recorded) | 247 | 51 | 11 | 3 |
 | Mathilda v0.240 (re-baselined, true 120 s cap) | 247 | 53 | 11 | 1 |
-| **Mathilda v0.241** | **295** | **14** | **2** | **1** |
+| Mathilda v0.241 (item 1, the certificate) | 295 | 14 | 2 | 1 |
+| Mathilda v0.242 (`Can`'s false zero-test) | 300 | 11 | 0 | 1 |
+| Mathilda v0.243 (item 2, `ExactRoot` over `Q(i)`) | 302 | 9 | 0 | 1 |
+| **Mathilda v0.244 (item 4, branch fidelity)** | **303** | **9** | **0** | **0** |
 
-> **v0.241 closed work item 1 (§2). Read §2's "The plan" as history, not as
-> instructions — its Finding 2 was wrong.** What remains is item 2 (§3, 5 cases),
-> item 4 (§5, 1 case) and item 3 (§4, 2 cases, still the least valuable). Nine of
-> the seventeen groups are now at exact parity with all three ports, and only 10
-> verdicts differ from Python where 58 did.
+> **Items 1, 2 and 4 are DONE (v0.241–v0.244). Only item 3 remains** — #109/#110,
+> the GF(p) Jacobian speed gap of §4, deliberately deferred as the least valuable
+> per unit of work. **303 is the ceiling without it**, and the nine remaining
+> `HONEST` are exactly those two plus the seven every reference port also declines
+> (#59, #97, #98, #274–277). There are **no FAILs and no false certificates**.
+>
+> Read §2's "The plan" as history, not as instructions — its Finding 2 was wrong.
+> §3's item 2 and §5's item 4 are likewise closed; their diagnoses are kept for the
+> record. The one substantive thing this document did not anticipate is v0.242:
+> `Can`'s number-field detour was returning a **false non-zero**, which was both a
+> latent false certificate and the real cause of three of the five "coverage" cases
+> of §3.
 >
 > Two corrections to the numbers above, both measured. The recorded v0.239 run had
 > Part II pinned at 45 s rather than the intended 120 s (the harness set the budgets
@@ -340,11 +350,11 @@ extended to a complex sample point is the obvious first thing to try.
 | after | PASS | what closed |
 |---|---|---|
 | v0.239 as recorded / v0.240 re-baselined | 247 | — |
-| **item 1 (certificate) — DONE v0.241** | **295** | A 39 + B 9 |
-| item 2 (coverage) | ~300 | C 5 |
-| item 4 (branch) | ~301 | E 1 |
-| the 2 remaining WEAK | ~303 | #233, #252 |
-| item 3 (GF(p) speed) | **305** | D 2 |
+| item 1 (certificate) — DONE v0.241 | 295 | A 39 + B 9 |
+| `Can`'s false zero-test — DONE v0.242 | 300 | C 3 + the 2 remaining WEAK |
+| item 2 (coverage) — DONE v0.243 | 302 | C 2 (the Fresnel pair) |
+| **item 4 (branch) — DONE v0.244** | **303** | E 1 |
+| item 3 (GF(p) speed) — deferred | **305** | D 2 |
 
 305 is parity: the remaining 7 are the HONEST cases every port declines
 (#59, #97, #98, #274–277 — strict mode withholding an uncertified special answer,

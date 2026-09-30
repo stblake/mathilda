@@ -187,6 +187,27 @@ static void test_tangent_tower_kernels(void) {
         "Sin[x^2] answers with an error function");
 }
 
+/* Branch fidelity: the second embedding of the constant field. The ansatz is
+ * solved over Q(i) and nothing in the linear algebra chooses between i -> +-i;
+ * both solve, and only one differentiates back once the surface radicals are
+ * read on their principal branches. Corpus #34, the last FAIL of the 312: the
+ * surface is 2 Sqrt[x] ArcSin[Sqrt[1+x]] - 2 I Sqrt[1+x] and the antiderivative
+ * is the same with +2 I Sqrt[1+x], residual -2 I/Sqrt[1+x] otherwise.
+ *
+ * Note this integrand is COMPLEX-VALUED on the whole real line (ArcSin of
+ * something bigger than 1), which is the other half of the fix: the verify gate
+ * used to fall back to genuinely complex sample points, where a branch cut puts
+ * surface and integrand on opposite sides and neither embedding verifies. */
+static void test_second_embedding_branch(void) {
+    assert_solves("ArcSin[Sqrt[x + 1]]/Sqrt[x]", "7/5");
+    /* and Part II alone, which is where the gate lives */
+    assert_true_msg(
+        "Module[{r = Integrate`ParallelMixedTower[ArcSin[Sqrt[x + 1]]/Sqrt[x], x]},"
+        " Head[r] =!= List && "
+        " Abs[N[(D[r, x] - ArcSin[Sqrt[x + 1]]/Sqrt[x]) /. x -> 9/4, 30]] < 10^-20]",
+        "Part II verifies the second-embedding surface");
+}
+
 /* The floor: an integrand the stage still cannot close must decline HONESTLY --
  * a {"failed", ...} status, never a certificate. The Cherry family below is
  * declined by all four reference ports too (corpus #274-#277), so it is the
@@ -304,6 +325,7 @@ int main(void) {
     TEST(test_elementary_stays_elementary);
     TEST(test_certificate_now_released);
     TEST(test_tangent_tower_kernels);
+    TEST(test_second_embedding_branch);
     TEST(test_honest_decline_still_honest);
     TEST(test_not_in_class);
     TEST(test_surfaces);

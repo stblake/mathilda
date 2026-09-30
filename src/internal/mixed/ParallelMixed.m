@@ -2597,7 +2597,7 @@ VanishingDenominator[fpair_, back_, x_] := Module[{den, vals, v},
     {c, fpair}];
   None];
 
-ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, integrand = integrand0},
+ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, integrand = integrand0},
   (* a tower that cannot be built is an honest {"failed", ...}, never $Failed *)
   bt = Catch[BuildTower[integrand, x, "StructureTheorem" -> OptionValue["StructureTheorem"], "Verbose" -> OptionValue["Verbose"]], "build"];
   If[bt === $Failed || ! ListQ[bt] || Length[bt] != 4, Return[{"failed", "tower construction failed", integrand}]];
@@ -2632,7 +2632,7 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
      wrong surface gives a residual that is neither, and is still rejected.
      (verify-timeout: accept as principal branch rather than reject a
      likely-correct but large answer.) *)
-  fac = TimeConstrained[
+  branchUnit[surf0_] := TimeConstrained[
     Quiet[Module[{cand, pts, dv, fv, fvals, keep, tol = 10^-12, units, gu, u, dsurf, params, prules, integrand = integrand0},
       (* free parameters (symbols other than x: a, b, ...) take fixed generic rational
          values for the numeric check, as the corpus runners do; a wrong surface is wrong
@@ -2640,7 +2640,7 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
       params = Complement[DeleteDuplicates[Cases[{integrand}, s_Symbol /; ! NumericQ[s] && s =!= None, {0, Infinity}]], {x}];
       prules = Thread[params -> Take[{5/7, 11/13, 3/2, 7/3, 13/5, 17/11, 19/7}, Min[Length[params], 7]]];
       integrand = integrand /. prules;
-      dsurf = D[surf, x] /. prules;   (* differentiate once, reused at every sample below *)
+      dsurf = D[surf0, x] /. prules;   (* differentiate once, reused at every sample below *)
       (* A dense fixed spread of positive rationals, not just the original 11
          anchors.  The sparse grid could be silently passed by a wrong,
          over-complete surface that happened to agree at those 11 points (a
@@ -2665,6 +2665,18 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
          the larger half of this gate's cost (33 points at 30 digits). *)
       fvals = Select[{#, N[integrand /. x -> #, 30]} & /@ cand,
         NumericQ[#[[2]]] && Abs[Im[#[[2]]]] < 10^-10 && Abs[#[[2]]] < 10^12 &];
+      (* An integrand that is COMPLEX-VALUED on the whole real line -- ArcSin of
+         something bigger than 1, say -- has no real domain to select, but the
+         real axis is still the right place to compare: surface and integrand are
+         read on the same principal branches there, and a sample point off the
+         axis can put them on opposite sides of a cut and make a correct surface
+         look wrong.  So drop only the REALITY requirement first and keep the
+         real points; fall through to genuinely complex points only if the
+         integrand is not even defined on the axis.  (#34 of the 312-case corpus,
+         ArcSin[Sqrt[x+1]]/Sqrt[x], is decided entirely here.) *)
+      If[fvals === {},
+        fvals = Select[{#, N[integrand /. x -> #, 30]} & /@ cand,
+          NumericQ[#[[2]]] && Abs[#[[2]]] < 10^12 &]];
       If[fvals === {},                                                   (* complex fallback *)
         fvals = {#, N[integrand /. x -> #, 30]} & /@ {7/13 + 5 I/11, 4/9 - 3 I/7, 2/7 + 3 I/5}];
       pts = fvals[[All, 1]]; fv = fvals[[All, 2]];
@@ -2700,7 +2712,27 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
            If[Abs[dv[[anchor]] - fv[[anchor]]] < tol, 1, -1]],
         True, 0]]],                                          (* not a unit multiple: wrong answer *)
     15, 1];
-  If[fac === 0 || FreeQ[{1, -1, I, -I}, fac], Return[{"failed", "verification failed"}]];
+  fac = branchUnit[surf];
+  (* Second embedding of the constant field.  The ansatz is solved over Q(i) (or
+     a number field containing it), and NOTHING in the linear algebra chooses
+     between the two embeddings i -> +-i: both give a solution, and only one of
+     them differentiates back to the integrand once the surface radicals are read
+     on their principal branches.  That ambiguity is the same KIND as the branch
+     of Sqrt[q] resolved just above -- an embedding the reconstruction cannot
+     pick and the numerics can -- and it is not reachable by a global unit,
+     because it conjugates the coefficients while leaving the functions alone.
+     Measured on ArcSin[Sqrt[x+1]]/Sqrt[x], the one FAIL of the 312-case corpus:
+     the surface is 2 Sqrt[x] ArcSin[Sqrt[1+x]] - 2 I Sqrt[1+x] and the
+     antiderivative is the same with +2 I Sqrt[1+x], residual -2 I/Sqrt[1+x]
+     otherwise.  Soundness is untouched: the conjugate is just one more CANDIDATE
+     and is accepted only on the same evidence as the original -- D[cand] exactly
+     +-f (or +-I f) at every finite real sample. *)
+  If[fac === 0 || FreeQ[{1, -1, I, -I}, fac],
+    If[FreeQ[surf, _Complex], Return[{"failed", "verification failed"}]];
+    surfC = surf /. Complex[re_, im_] :> Complex[re, -im];
+    fac = branchUnit[surfC];
+    If[fac === 0 || FreeQ[{1, -1, I, -I}, fac], Return[{"failed", "verification failed"}]];
+    surf = surfC];
   If[fac =!= 1, surf = fac surf];
   surf],
   $ParallelMixedTimeBudget, {"failed", "time budget exceeded"}];

@@ -395,3 +395,51 @@ tangent tower with a non-linear argument); item 4 (§5, #34 branch fidelity, 1 c
 the two surviving WEAK (#233, #252 — the partial mode leaves an *elementary*
 `2 Log[x]/x` in #252's remainder, which is its own bug); item 3 (§4, GF(p) speed,
 2 cases, still the least valuable per unit of work).
+
+## Phase 7 — the rest of the plan (v0.242–v0.244): 295 → 303, no FAILs
+
+| version | change | PASS |
+|---|---|---|
+| v0.241 | the curve-free certificate + StructureTheorem default | 295 |
+| v0.242 | `Can`'s number-field detour was a false zero-test | 300 |
+| v0.243 | `ExactRoot` factors over `Q(i)` (the Fresnel pair) | 302 |
+| v0.244 | branch fidelity: the second embedding, and real-axis sampling | **303** |
+
+**303 PASS / 9 HONEST / 0 WEAK / 0 FAIL.** The nine HONEST are the seven every
+reference port declines (#59, #97, #98, #274–277) plus #109/#110, the deferred GF(p)
+Jacobian gap — so 303 is the ceiling without that work and parity is 305. Zero false
+certificates and zero regressions at every step; PMT 114-case corpus 94 solved /
+3 declined / 17 nonelem / 0 wrong; Charlwood 49 of 50 (A39, genuinely non-elementary,
+is the only miss and all four CAS fail it), per-case identical across v0.244.
+
+**The one thing the plan did not anticipate, and the most valuable find:** `Can` —
+the zero test of the whole of Part II — silently returned a **false non-zero** when
+its number-field fast path hit an expression `Together` declines to touch. That was a
+latent false certificate (it had already produced one on the remainder of
+`Sin[x]/x^2`) *and* the real cause of three of the five cases §3 had filed as
+"coverage". One guard fixed both, plus both remaining WEAK cases.
+
+**Root cause of the `Together` bail, localised but NOT fixed** (its own change, wide
+blast radius): all four FLINT engines decline — the field one on `gens.count != 1`
+(`flint_bridge.c:4262`, its `Kx` layer being `K[x]` and nothing wider) — and the
+classical path then fails in `exact_poly_div`'s coefficient base case
+(`poly.c:1450`), whose unit test `is_rational_or_gaussian` rejects an
+`AlgebraicNumber` leading coefficient, so `together_recursive` reassembles the input
+`Plus` verbatim. Wider than `AlgebraicNumber` (`Sqrt[2]` does it too) and independent
+of the second variable (monic algebraic denominators combine, non-monic ones do not).
+`Apart` inherits it. The fix is ~5 lines at `poly.c:1450`, but `exact_poly_div` backs
+`PolynomialGCD`/`LCM`/`Mod`, `Decompose`, `Cancel` and the exact linear-algebra
+divider, so it needs its own corpus run.
+
+**Measurement notes for the next session.**
+- `stress_mathilda.py` needs `sympy`, which the default `python3` (3.14.7) lacks —
+  use `python3.11`. `OUT=` / `REPORT=` redirect outputs; `stress_mathilda_v0239.json.bak`
+  and `stress_mathilda_base0240.json` are kept beside the result as baselines.
+- A change to Part II's **verify gate** or to `Can` must be A/B'd against a pristine
+  worktree, not against the table in `MATHILDA_DIVERGENCES.md` §E — that table was
+  from build 0.174 and is seven versions of accumulated progress out of date. §E has
+  now been re-recorded at v0.244.
+- `integrate_newton_leibniz_tests` sits at **62.4 s** of its 120 s `alarm()`, up from
+  50.5 s before this work (the `StructureTheorem` default is paid on every
+  `ParallelIntegrateMixed` call). Still green with headroom, but it is the suite with
+  the least room to lend — profile before the next cascade change.

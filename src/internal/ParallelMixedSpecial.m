@@ -1165,7 +1165,7 @@ PresentSpecial[res_, integrandN_, x_, T_, back_, samples_, strict_, verbose_, de
   yExpr = If[T["q"] =!= None, T["q"]^(1/T["m"]), None];
   If[ExprQ[res],
     out = SubstituteBack[res, back];
-    Return[{out, VerifyAnswer[out, integrandN, x, samples]}]];
+    Return[ConjugateIfBetter[out, integrandN, x, samples]]];
   If[! SpecialResultQ[res],
     Return[If[ListQ[res], Map[If[ExprQ[#] && ! StringQ[#], SubstituteBack[#, back], #] &, res], res]]];
   total = SubstituteBack[res["elementary"], back];
@@ -1181,7 +1181,7 @@ PresentSpecial[res_, integrandN_, x_, T_, back_, samples_, strict_, verbose_, de
   total = HalfAngleFold[Present[total], back];
   (* the fold is INSIDE the verify: what the caller gets back is the form that
      was checked against the integrand, never a prettier unchecked cousin *)
-  ver = VerifyAnswer[total, integrandN, x, samples];
+  {total, ver} = ConjugateIfBetter[total, integrandN, x, samples];
   If[strict && ! res["certified"], Return[{"failed", "special answer found, but the integrand is not certified non-elementary", total}]];
   If[details, {total, ver, res}, {total, ver}]];
 
@@ -1200,6 +1200,23 @@ FixBranch[anti_, kern_, x_, samples_, K_] := Module[{mults = {1, -1, I, -I}, k, 
     If[ok, Return[mu anti, Module]],
     {mu, mults}];
   None];
+
+(* ConjugateIfBetter[e, integrand, x, samples]: {answer, verified}, trying the
+   OTHER embedding of the constant field when the first does not verify.  The
+   ansatz is solved over Q(i) (or a field containing it) and nothing in the
+   linear algebra chooses between i -> +-i: both solve, and only one
+   differentiates back once the surface radicals are read on their principal
+   branches.  Conjugating the coefficients leaves the functions alone, so this is
+   not reachable by the kernel-wise multiplier FixBranch applies.  Sound: the
+   conjugate is one more CANDIDATE, accepted only on the same evidence as the
+   original -- VerifyAnswer at every sample.  Corpus #34,
+   ArcSin[Sqrt[x+1]]/Sqrt[x], whose surface is 2 Sqrt[x] ArcSin[Sqrt[1+x]]
+   - 2 I Sqrt[1+x] where the antiderivative has +2 I Sqrt[1+x]. *)
+ConjugateIfBetter[e_, integrand_, x_, samples_] := Module[{ver, ec},
+  ver = VerifyAnswer[e, integrand, x, samples];
+  If[ver || FreeQ[e, _Complex], Return[{e, ver}]];
+  ec = e /. Complex[re_, im_] :> Complex[re, -im];
+  If[TrueQ[VerifyAnswer[ec, integrand, x, samples]], {ec, True}, {e, ver}]];
 
 VerifyAnswer[expr_, integrand_, x_, samples_] := Module[{d, a, b},
   d = QuietCheck[D[expr, x], $Failed];
