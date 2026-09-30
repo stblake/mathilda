@@ -1700,7 +1700,7 @@ monotonically down.
     **Measured on the 312-case stress corpus of the paper** (120 s cap, against
     the three reference ports, which all score 305 PASS / 7 HONEST):
     Mathilda **247 PASS, 51 HONEST, 11 WEAK, 3 FAIL**, with **no false
-    certificate**. Seven groups are at parity. 46 of the 51 HONEST are strict
+    certificate**. Seven groups are at parity. 39 of the 51 HONEST (46 in total, 7 of them HONEST in the reference too) are strict
     mode withholding an answer that is already correct and identical to
     Mathematica's — `Exp[-x^2]` → `-Sqrt[Pi] Erfc[x]/2`, `Exp[-x^3]` →
     `-Gamma[1/3, x^3]/3` — for want of a non-elementarity certificate, and all 11
@@ -1708,7 +1708,7 @@ monotonically down.
     remainder for the same reason. The cause is Part II's `q =!= None` guard on
     the holomorphic-remainder certificate (the T2/T10 false-certificate
     protection, absent from the research reference), so it is one root cause for
-    57 of the 58-case gap and it predates this stage. On the 247 cases it does
+    50 of the 58 differing cases and it predates this stage. On the 247 cases it does
     close, Mathilda is the fastest of the four ports (0.070 s median against
     Mathematica's 0.110 s).
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.

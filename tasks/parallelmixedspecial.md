@@ -250,7 +250,7 @@ R elementary 15/15, R radicals 5/5, S elementary 15/15, E radical (same 2 HONEST
 as every port). **No false certificate anywhere** — the soundness bar the corpus
 exists to police.
 
-**57 of the 58-case gap share ONE root cause.** 46 of the 51 HONEST are
+**50 of the 58 differing cases share ONE root cause.** 46 of the 51 HONEST are
 `{"failed", "special answer found, but the integrand is not certified
 non-elementary", answer}` — the answer is found and *matches the Mathematica
 reference exactly* (`exp(-x^2)` → `-Sqrt[Pi] Erfc[x]/2`, `exp(-x^3)` →
