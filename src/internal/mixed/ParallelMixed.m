@@ -1556,7 +1556,7 @@ HornerModP[cs_, t_, p_] := Fold[Mod[#1 t + #2, p] &, 0, Reverse[cs]];      (* cs
    coordinates of x0, y0 over Q on the power basis of theta (lowest first),
    mu the minimal polynomial of theta as its CoefficientList (None for
    K = Q).  Returns {certified, {{p, N_p}, ...}}.                          *)
-NontorsionDivisorCertificate[q_, x_, places_, mu_, nprimes_: 2, pmax_: 1000, budget_: 2 10^7] := Catch[Module[
+NontorsionDivisorCertificate[q_, x_, places_, mu_, nprimes_: 8, pmax_: 1000, budget_: 2 10^7] := Catch[Module[
   {d = Exponent[q, x], twoG, qc, muc, bad, data = {}, red, thetas, th, ev, pts, f, roots, mp, Np, z, ps, p},
   twoG = If[OddQ[d], d - 1, d - 2];
   qc = CoefficientList[q, x]; muc = If[mu === None, {0, 1}, mu];
@@ -1736,7 +1736,7 @@ InQSpanQ[rho_, mus_] := Module[{nf, vecs, n},
 (* InfConsts[T, g, pl, names]: rho ("pi", the coefficient of pi^(s+1) in
    D pi = -D g pi^2) and the mu_k of the named hyperexponential generators
    at the pl-th place over g = oo, as numbers where LcPlace reads them.   *)
-InfConsts[T_, g_, pl_, names_] := Module[{gens = T["gens"], i, lc},
+InfConstsOrig[T_, g_, pl_, names_] := Module[{gens = T["gens"], i, lc},
   i = Position[gens, g][[1, 1]];
   Association @@ Table[
     lc = LcPlace[T, If[nm === "pi", -T["derivs"][[i]], Can[#/nm] & /@ T["derivs"][[Position[gens, nm][[1, 1]]]]], g];
@@ -1746,7 +1746,7 @@ InfConsts[T_, g_, pl_, names_] := Module[{gens = T["gens"], i, lc},
    special pp = pi of F[g]: the classes of D pi / pi^(s+1) and of
    (D t_k / t_k) / pi^s modulo pp, when they are constants of Fbar, the same
    at every place over pp.                                                 *)
-SpecialConsts[T_, pp_, Dpi_, s_, g_, names_] := Module[{gens = T["gens"], pair, cls},
+SpecialConstsOrig[T_, pp_, Dpi_, s_, g_, names_] := Module[{gens = T["gens"], pair, cls},
   Association @@ Table[
     pair = If[nm === "pi", Dpi, Can[#/nm] & /@ T["derivs"][[Position[gens, nm][[1, 1]]]]];
     cls = If[# === 0, 0, ClassMod[#, pp, g, If[nm === "pi", s + 1, s], gens]] & /@ pair;
@@ -1762,7 +1762,20 @@ SpecialConsts[T_, pp_, Dpi_, s_, g_, names_] := Module[{gens = T["gens"], pair, 
    names -> the values at the place of rho ("pi") and of the mu_k of the
    named hyperexponential generators, for (K1) with attaining
    hyperexponentials (Remark 8.14).                                       *)
-DecideBound[T_, own_, mono_, r_, A_, kinds_, rhoFree_, lamK1_, lamK4_, rhoR_, upperAllAttain_, consts_] := Module[{x = T["gens"][[1]], R, exps, vals, basePlace},
+(* consts may be None (no values at the place); ext: None, or the raw data of
+   the place <|"s", "shifts", "sigPi", "lam", "own"|> (the shift, the shifts by
+   generator, the shift of pi, the generators in the leading coefficient of
+   every D t_k other than own), read only by the extended criteria of the
+   special-function stage.  DecideBound, SpecialData, InfConsts and
+   SpecialConsts are the hooks that stage overrides (ParallelMixedSpecial.m,
+   ExtendedBounds, by Block, the counterpart of the monkeypatching of
+   extended_bounds); their bodies are DecideBoundOrig, SpecialDataOrig,
+   InfConstsOrig and SpecialConstsOrig, which call the hooks by name.      *)
+DecideBound[args___] := DecideBoundOrig[args];
+SpecialData[args___] := SpecialDataOrig[args];
+InfConsts[args___] := InfConstsOrig[args];
+SpecialConsts[args___] := SpecialConstsOrig[args];
+DecideBoundOrig[T_, own_, mono_, r_, A_, kinds_, rhoFree_, lamK1_, lamK4_, rhoR_, upperAllAttain_, consts_, ext_: None] := Module[{x = T["gens"][[1]], R, exps, vals, basePlace},
   (* (K4) at a place whose own residue field is Fbar: a place of the curve, or x = oo of
      the base F(x) with Dx in F(x) (the same proof: kappa_v is a hyperexponential /
      hypertangent tower over Fbar, and rho_v^(r) in Fbar* is not a derivative there) *)
@@ -1771,7 +1784,7 @@ DecideBound[T_, own_, mono_, r_, A_, kinds_, rhoFree_, lamK1_, lamK4_, rhoR_, up
     mono =!= None && Kind[T, mono] =!= "other" && IndependentQ[T, mono], "K2",
     r == 0 && rhoFree && lamK1 && AllTrue[kinds, MemberQ[{"prim", "exp"}, #] &] &&
       (exps = Pick[A, kinds, "exp"]; exps === {} ||
-        (vals = consts[Prepend[exps, "pi"]]; vals =!= None && AllTrue[Values[vals], # =!= None && NumericQ[#] &] &&
+        (vals = If[consts === None, None, consts[Prepend[exps, "pi"]]]; vals =!= None && AllTrue[Values[vals], # =!= None && NumericQ[#] &] &&
           ! InQSpanQ[vals["pi"], vals[#] & /@ exps])), "K1",
     r >= 1 && rhoR =!= None && (R = Integrate[Can[rhoR], x]; ! FreeQ[R, Log | ArcTan | ArcTanh | RootSum]), "K3",
     r >= 1 && rhoFree && own =!= {} && (T["q"] =!= None || basePlace) && upperAllAttain && lamK4 &&
@@ -1781,7 +1794,7 @@ DecideBound[T_, own_, mono_, r_, A_, kinds_, rhoFree_, lamK1_, lamK4_, rhoR_, up
 (* InfData[key, T, rem]: Algorithm 6 at the places over t_i = oo for every
    generator, once per analysis: per generator {criterion or None, e_P, the
    list of {s, r, v_P(rem)} over the places, chain-possible}.              *)
-InfData[key_, T_, rem_] := Module[{gens = T["gens"], q = T["q"], m = T["m"], curve, out, g, own, items, exact, vrem, d, eP, lam, rhoSyms, rhoR, crit, places, chain, shifts, s, r, A, c, i},
+InfData[key_, T_, rem_] := Module[{gens = T["gens"], q = T["q"], m = T["m"], curve, out, g, own, items, exact, vrem, d, eP, lam, rhoSyms, rhoR, crit, places, chain, shifts, s, r, A, c, i, lamSyms},
   If[KeyExistsQ[$analyses[key], "inf"], Return[$analyses[key]["inf"]]];
   curve = Select[gens, ! FreeQ[q, #] &];
   out = Table[
@@ -1794,6 +1807,7 @@ InfData[key_, T_, rem_] := Module[{gens = T["gens"], q = T["q"], m = T["m"], cur
     d = If[MemberQ[curve, g], Exponent[q, g], 0];
     eP = Which[! MemberQ[curve, g], 1, m == 2, If[OddQ[d], 2, 1], True, m/GCD[m, d]];
     lam = Table[LamCoeffs[T, k, g], {k, Length[gens]}];
+    lamSyms = AssociationThread[gens -> Table[Complement[Select[gens, Function[z, ! FreeQ[lam[[k]], z]]], own], {k, Length[gens]}]];
     rhoSyms = LcInf[#, g] & /@ DeleteCases[T["derivs"][[i]], 0];
     rhoR = If[q === None && Length[gens] == 2 && i == 2 && T["derivs"][[1, 1]] === 1, -LcInf[T["derivs"][[2, 1]], g], None];
     crit = None; places = {}; chain = False;
@@ -1807,7 +1821,8 @@ InfData[key_, T_, rem_] := Module[{gens = T["gens"], q = T["q"], m = T["m"], cur
           AllTrue[A, FreeQ[lam[[Position[gens, #][[1, 1]]]], Alternatives @@ A] &],
           AllTrue[A, FreeQ[lam[[Position[gens, #][[1, 1]]]], Alternatives @@ Complement[gens, own]] &],
           rhoR, AllTrue[Complement[gens, own], MemberQ[A, #] &],
-          Function[names, InfConsts[T, g, pl, names]]],
+          Function[names, InfConsts[T, g, pl, names]],
+          <|"s" -> s, "shifts" -> shifts, "sigPi" -> shifts[g], "lam" -> lamSyms, "own" -> own|>],
         None];
       If[c === None, crit = None;
         chain = r >= 1 && AnyTrue[A, Kind[T, Position[gens, #][[1, 1]]] === "prim" &]; Break[]];
@@ -1823,7 +1838,7 @@ InfData[key_, T_, rem_] := Module[{gens = T["gens"], q = T["q"], m = T["m"], cur
    {criterion or None, s, r, e_P, branch}; the derivatives being defined over
    F, a factor split off a constant-coefficient special shares the data of
    its parent.                                                              *)
-SpecialData[key_, T_, pp_] := Module[{gens = T["gens"], q = T["q"], m = T["m"], parent, branch, own, vp, shifts, exact, vD, dk, pi, Dpi, sigPi, s, A, lam, rhoFree, mono, i, kd, crit, r},
+SpecialDataOrig[key_, T_, pp_] := Module[{gens = T["gens"], q = T["q"], m = T["m"], parent, branch, own, vp, shifts, exact, vD, dk, pi, Dpi, sigPi, s, A, lam, rhoFree, mono, i, kd, crit, r, lamSyms},
   If[KeyExistsQ[$analyses[key]["spec"], pp], Return[$analyses[key]["spec"][pp]]];
   parent = Lookup[$analyses[key]["parent"], pp, None];
   If[parent =!= None, $analyses[key, "spec", pp] = SpecialData[key, T, parent]; Return[$analyses[key]["spec"][pp]]];
@@ -1844,6 +1859,7 @@ SpecialData[key_, T_, pp_] := Module[{gens = T["gens"], q = T["q"], m = T["m"], 
   r = sigPi - s;
   A = Select[gens, Lookup[shifts, #, None] === s && ! MemberQ[own, #] &];
   lam = Table[LamCoeffs[T, k, None], {k, Length[gens]}];
+  lamSyms = AssociationThread[gens -> Table[Complement[Select[gens, Function[z, ! FreeQ[lam[[k]], z]]], own], {k, Length[gens]}]];
   rhoFree = ! branch && FreeQ[DeleteCases[Can /@ Dpi, 0], Alternatives @@ A];
   mono = None;
   If[Length[own] == 1,
@@ -1854,7 +1870,8 @@ SpecialData[key_, T_, pp_] := Module[{gens = T["gens"], q = T["q"], m = T["m"], 
       AllTrue[A, FreeQ[lam[[Position[gens, #][[1, 1]]]], Alternatives @@ A] &],
       AllTrue[A, FreeQ[lam[[Position[gens, #][[1, 1]]]], Alternatives @@ Complement[gens, own]] &],
       None, AllTrue[Complement[gens, own], MemberQ[A, #] &],
-      If[! branch && Length[own] == 1, Function[names, SpecialConsts[T, pp, Dpi, s, own[[1]], names]], Function[names, None]]],
+      If[! branch && Length[own] == 1, Function[names, SpecialConsts[T, pp, Dpi, s, own[[1]], names]], None],
+      <|"s" -> s, "shifts" -> shifts, "sigPi" -> sigPi, "lam" -> lamSyms, "own" -> own|>],
     None];
   $analyses[key, "spec", pp] = {crit, s, r, If[branch, m, 1], branch};
   $analyses[key]["spec"][pp]];
@@ -2151,11 +2168,66 @@ SamplePoint[expr_, x_] := Module[{rads, okay},
     (v = N[expr /. x -> x0]; NumericQ[v] && Abs[Im[v]] < 10^-9 && Abs[v] < 10^12)], False]];
   SelectFirst[{1/2, 2, 1/3, 3, 3/2, 1/5, 5, -1/2, -2, 7/10, 3/10}, okay, None]];
 
-(* BuildTower[integrand, x]  -- see the usage message. *)
-BuildTower[integrand_, x_Symbol] := Module[
+(* StructureRelation[T, registry, ap, Da, isLog, Y]
+   The Risch structure theorem (Rothstein--Caviness) for the tower, as in
+   special/build_tower.py (_structure_relation): rationals r_k with
+       exp:  D a     = Sum r_k D theta_k/theta_k + Sum r_k D t_k   (t_k = log u_k)
+       log:  D a / a = the same,
+   over the registered exponential (theta_k = e^eta_k) and logarithmic
+   (t_k = log u_k) generators; registry is the list of {generator, "exp" | "log",
+   argument} in the order of adjunction.  Returns {{{k, r_k}, ...}, c} with the
+   constant c = a - Sum r_k (eta_k or t_k) (exp) or c = Log[a / Prod (theta_k or
+   u_k)^r_k] (log), or None when there is no such relation.                   *)
+StructureRelation[T_, registry_, ap_, Da_, isLog_, Y_] := Module[
+  {gens = T["gens"], target, keys, cols, rs, eqs, sol, vals, coeffs, aExpr, prod, ratio, lin, cc, kindOf, argOf},
+  If[registry === {}, Return[None]];
+  target = TPad[T, If[isLog, TDiv[T, Da, ap], Da]];
+  If[AllTrue[target, Can[#] === 0 &], Return[None]];
+  keys = Select[registry, MemberQ[gens, #[[1]]] &];
+  If[keys === {}, Return[None]];
+  cols = Table[With[{dk = TPad[T, T["derivs"][[Position[gens, e[[1]]][[1, 1]]]]]},
+      If[e[[2]] === "exp", Can[#/e[[1]]] & /@ dk, dk]], {e, keys}];
+  rs = Table[Unique["r"], {Length[keys]}];
+  eqs = Flatten[Table[With[{num = Expand[Numerator[Together[Sum[rs[[j]] cols[[j, i]], {j, Length[keys]}] - target[[i]]]]]},
+      Which[num === 0, {}, FreeQ[num, Alternatives @@ gens], {num}, True, CoefficientRules[num, gens][[All, 2]]]],
+    {i, Length[target]}]];
+  sol = Quiet[Solve[Thread[eqs == 0], rs]];
+  If[! MatchQ[sol, {{___Rule}, ___}], Return[None]];
+  vals = rs /. First[sol];
+  If[! FreeQ[vals, Alternatives @@ rs], Return[None]];              (* a dependent registry: leave it *)
+  If[! AllTrue[vals, MatchQ[#, _Integer | _Rational] &], Return[None]];
+  coeffs = Select[Transpose[{keys[[All, 1]], vals}], #[[2]] =!= 0 &];
+  If[coeffs === {}, Return[None]];
+  kindOf[k_] := SelectFirst[registry, #[[1]] === k &][[2]];
+  argOf[k_] := SelectFirst[registry, #[[1]] === k &][[3]];
+  aExpr = ToY[T, ap, Y];
+  If[isLog,
+    prod = Times @@ ((If[kindOf[#[[1]]] === "exp", #[[1]], argOf[#[[1]]]])^#[[2]] & /@ coeffs);
+    ratio = Simplify[Cancel[aExpr/prod]];
+    If[! FreeQ[ratio, Alternatives @@ Append[gens, Y]], Return[None]];
+    Return[{coeffs, Log[ratio]}]];
+  lin = Total[#[[2]] If[kindOf[#[[1]]] === "exp", argOf[#[[1]]], #[[1]]] & /@ coeffs];
+  cc = Simplify[Cancel[aExpr - lin]];
+  If[! FreeQ[cc, Alternatives @@ Append[gens, Y]], Return[None]];
+  {coeffs, cc}];
+
+Options[BuildTower] = {"StructureTheorem" -> False, "Verbose" -> False};
+
+(* BuildTower[integrand, x]  -- see the usage message.  With "StructureTheorem" ->
+   True (the special-function stage, special/build_tower.py) a new Exp[a] or
+   Log[a] is first tested by the Risch structure theorem against the exponential
+   and logarithmic generators already present (StructureRelation): Exp[2 x] over
+   e^x becomes t^2, Exp[x/2] refines e^x to (e^(x/2))^2, Log[2 x] over Log[x]
+   becomes Log[2] + t, so that the generators stay algebraically independent
+   (hypothesis (T1) of Part II).  Off by default: Part II's towers are unchanged. *)
+BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
   {expr = integrand, gens = {x}, derivs = {{1, 0}}, q = None, m = 2, Y, back = {}, T, cands, c, kind, arg,
    tnew, ap, Da, base, r, mm, g, coef, rest, u, Dbase, pos, k = 0, fpair, rad, eulerStep, gq, a2, b2, c2, alpha, w, gw, yw, Dwp,
-   trigStep, rootNormalize, trigC, wSurface, g0e, y0e, rcoef, sf, noRadical, sample, record, signFix, x0, icoef, toTuple, degs},
+   trigStep, rootNormalize, trigC, wSurface, g0e, y0e, rcoef, sf, noRadical, sample, record, signFix, x0, icoef, toTuple, degs,
+   structQ = TrueQ[OptionValue["StructureTheorem"]], btVerbose = TrueQ[OptionValue["Verbose"]], registry = {}, stHead, rel,
+   stCoeffs, stConst, stVal, stFrac, stK, stR, stD, stI, stEta, tp, stSub, Dtp, stKind, stArg},
+  (* registry: {generator, "exp" | "log", argument} for the exponential and
+     logarithmic generators, their arguments in the current symbols *)
   Y = Unique["Y"];
   T = Tower[gens, derivs, q, m];
   toTuple[a_] := FromY[T, a /. RadRules[q, Y, m], Y];
@@ -2163,7 +2235,7 @@ BuildTower[integrand_, x_Symbol] := Module[
      made so that the formal identity holds there, i.e. on the integrand's
      real domain (a monic or "positive generators" convention is wrong on one
      side of a branch cut, and flips the sign of the whole result) *)
-  x0 = SamplePoint[integrand, x];
+  x0 = SamplePoint[integrand /. PMExp -> Exp, x];        (* an integrand may hold its exponentials as PMExp *)
   sample = If[x0 === None, <||>, <|x -> x0|>];
   record[sym_, surface_] := If[Length[sample] > 0,
     With[{v = Quiet[N[surface /. sample]]},
@@ -2211,6 +2283,7 @@ BuildTower[integrand_, x_Symbol] := Module[
     AppendTo[back, w -> wSurface];
     record[w, wSurface]; sample = KeyDrop[sample, Y];
     expr = (expr /. RadRules[q, Y, m]) /. {Y -> yw, gq -> gw};
+    registry = {#[[1]], #[[2]], (#[[3]] /. RadRules[q, Y, m]) /. {Y -> yw, gq -> gw}} & /@ registry;
     q = None; Y = Unique["Y"]; T = Tower[gens, derivs, q, m];
     True];
   (* rootNormalize[base, k/mr]: a rational-function base num/den, or a
@@ -2341,6 +2414,58 @@ BuildTower[integrand_, x_Symbol] := Module[
         arg = c[[If[Head[c] === Power, 2, 1]]];
         ap = toTuple[arg];
         Da = TowerD[T, ap];
+        (* the Risch structure theorem: is Exp[a] or Log[a] already algebraic over
+           the tower?  (Exp[2 x] over e^x, Log[x e^x] over Log[x], ...) *)
+        stHead = Which[MatchQ[c, Power[E, _] | PMExp[_]], "exp", Head[c] === Log, "log", True, None];
+        (* the exponential split of special/build_tower.py: the kernel merges a product
+           of exponentials into one on input (E^x E^(-E^(2 x)) is E^(x - E^(2 x)), as
+           _merge_exps does in the Python); the argument is split by the transcendental
+           generators its terms involve (terms in x alone form one group), e^(x - t) =
+           e^x e^(-t) held as PMExp factors, so that the tower does not depend on how the
+           exponentials were grouped *)
+        If[structQ && stHead === "exp" && Head[arg] === Plus,
+          With[{grp = GatherBy[List @@ arg, Function[z, Select[Append[Rest[gens], Y], ! FreeQ[z, #] &]]]},
+            If[Length[grp] > 1,
+              expr = expr /. c -> Times @@ (PMExp[Total[#]] & /@ grp);
+              If[btVerbose, Print["  exponential split: ", c /. PMExp -> Exp, " = ", Times @@ (HoldForm[Exp[#]] &[Total[#]] & /@ grp)]];
+              Continue[]]]];
+        If[structQ && stHead =!= None,
+          rel = StructureRelation[T, registry, ap, Da, stHead === "log", Y];
+          If[rel =!= None,
+            {stCoeffs, stConst} = rel;
+            stKind[kk_] := SelectFirst[registry, #[[1]] === kk &][[2]];
+            stArg[kk_] := SelectFirst[registry, #[[1]] === kk &][[3]];
+            If[stHead === "log",
+              stVal = stConst + Total[#[[2]] If[stKind[#[[1]]] === "log", #[[1]], stArg[#[[1]]]] & /@ stCoeffs];
+              expr = expr /. c -> stVal;
+              If[btVerbose, Print["  structure theorem: ", c, " = ", stVal]];
+              Continue[]];
+            stFrac = Select[stCoeffs, stKind[#[[1]]] === "exp" && ! IntegerQ[#[[2]]] &];
+            If[stFrac =!= {},
+              (* refine an exponential generator: theta = theta'^d *)
+              {stK, stR} = First[stFrac];
+              stD = Denominator[stR];
+              stI = Position[gens, stK][[1, 1]];
+              stEta = stArg[stK];
+              tp = Unique["t"];
+              stSub = stK -> tp^stD;
+              Dtp = Can[tp #/(stD stK)] & /@ derivs[[stI]];
+              derivs = Table[Can[(# /. stSub)] & /@ If[j == stI, Dtp, derivs[[j]]], {j, Length[gens]}];
+              gens = ReplacePart[gens, stI -> tp];
+              If[q =!= None, q = Expand[q /. stSub]];
+              expr = expr /. stSub;
+              registry = DeleteCases[registry, {stK, _, _}];
+              registry = {#[[1]], #[[2]], #[[3]] /. stSub} & /@ registry;
+              AppendTo[registry, {tp, "exp", stEta/stD}];
+              AppendTo[back, tp -> E^(stEta/stD)];
+              record[tp, E^(If[q =!= None, (stEta/stD) /. Y -> q^(1/m), stEta/stD])];
+              T = Tower[gens, derivs, q, m];
+              If[btVerbose, Print["  structure theorem: ", stK, " = ", tp, "^", stD, " with ", tp, " = exp(", stEta/stD, ")"]];
+              Continue[]];
+            stVal = Exp[stConst] Times @@ ((If[stKind[#[[1]]] === "exp", #[[1]], stArg[#[[1]]]])^#[[2]] & /@ stCoeffs);
+            expr = expr /. c -> stVal;
+            If[btVerbose, Print["  structure theorem: ", c, " = ", stVal]];
+            Continue[]]];
         k++; tnew = Unique["t"];
         (* primitives through a radical: the radical must be the tower's *)
         rcoef = 1; noRadical = False; icoef = 1;   (* 1/Sqrt[rad] = (1/rcoef) y/q after normalisation *)
@@ -2375,6 +2500,7 @@ BuildTower[integrand_, x_Symbol] := Module[
           Coth,    Pscale[1 - tnew^2, Da],
           ProductLog, TDiv[T, Pscale[tnew/(1 + tnew), Da], ap],          (* D W(a) = W Da / (a (1 + W)) *)
           Power | PMExp, Pscale[tnew, Da]]];
+        If[structQ && stHead =!= None, AppendTo[registry, {tnew, stHead, arg}]];
         AppendTo[back, tnew -> (c /. PMExp -> Exp)];
         record[tnew, (c /. PMExp -> Exp) /. Y -> q^(1/m)];
         expr = expr /. c -> tnew,
@@ -2393,6 +2519,7 @@ BuildTower[integrand_, x_Symbol] := Module[
           gens = ReplacePart[gens, pos -> u];
           derivs = ReplacePart[derivs, pos -> Pscale[1/(mm u^(mm - 1)), Dbase]];
           derivs = derivs /. g -> (u^mm - rest)/coef;
+          registry = {#[[1]], #[[2]], #[[3]] /. g -> (u^mm - rest)/coef} & /@ registry;
           If[q =!= None, q = Expand[q /. g -> (u^mm - rest)/coef];
             If[! FreeQ[q, Y], Message[BuildTower::radicand, q]; Throw[$Failed, "build"]]];
           AppendTo[back, u -> base^(1/mm)];
@@ -2449,7 +2576,7 @@ VanishingDenominator[fpair_, back_, x_] := Module[{den, vals, v},
 
 ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, integrand = integrand0},
   (* a tower that cannot be built is an honest {"failed", ...}, never $Failed *)
-  bt = Catch[BuildTower[integrand, x], "build"];
+  bt = Catch[BuildTower[integrand, x, "StructureTheorem" -> OptionValue["StructureTheorem"], "Verbose" -> OptionValue["Verbose"]], "build"];
   If[bt === $Failed || ! ListQ[bt] || Length[bt] != 4, Return[{"failed", "tower construction failed", integrand}]];
   {T, fpair, back, Y} = bt;
   den = VanishingDenominator[fpair, back, x];
@@ -2565,7 +2692,8 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
    degree caps are follow-up work.  Overridable by the caller if needed. *)
 $ParallelMixedTimeBudget = 45;
 
-Options[ParallelIntegrateMixed] = {"Bounds" -> None, "Verbose" -> False, "Verify" -> False, "SplitSpecials" -> Automatic, "SpecialExponent" -> 0};
+Options[ParallelIntegrateMixed] = {"Bounds" -> None, "Verbose" -> False, "Verify" -> False, "SplitSpecials" -> Automatic, "SpecialExponent" -> 0,
+  "StructureTheorem" -> False};
 (* iPIM shares these options via OptionsPattern[ParallelIntegrateMixed]; an
    unpassed OptionValue now resolves its default against ParallelIntegrateMixed
    (the symbol named in OptionsPattern[...]), so a separate Options[iPIM]
@@ -2759,7 +2887,11 @@ MonicPair[{num_, den_}, gens_] := Module[{lc},
    polynomial arithmetic alone (Dden a common multiple of the denominators of
    the D g); for m >= 3 the tower derivation on the Trager basis; the unit and
    special logands D u / u once each.                                          *)
-AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, unks_] := Module[
+(* extra: further columns {{unknown, tuple}, ...} after the special logands (the
+   kernel and remainder columns of the special-function stage), in their order;
+   their unknowns must be in unks, whose order is the column order of the row
+   reduction. *)
+AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, unks_, extra_: {}] := Module[
   {gens = T["gens"], q = T["q"], m = T["m"], nc = Length[css], cols, colFr, remFr, monoCols, Qh, atoms, fd, rules, back, alg,
    densG, Dden, Dg0s, Dg1s, denvF, ddenv, DdenF, qF, Qs0, Qs1, Lfix, parts, monoF, cg, n0, n1, s0, s1, akey, tmp,
    colIdx, ncols, entries, rhs, nrows, rowOf, rowEnts, distinct, quo, dpos, poly, aug, red, xs, ok, sub, resid, partsM, remM},
@@ -2777,6 +2909,15 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
     colFr = {#[[1]], NumDen /@ Take[#[[2]], nc]} & /@ cols;
     remFr = NumDen /@ Take[rem, nc];
     $AnsatzColMemo[akey] = {colFr, remFr}];
+  (* The special-function stage's extra columns.  Appended AFTER the memo, not
+     inside it: the memo key is rung-invariant on purpose (T, units, unkLogs,
+     rem, nc) so every rung of the retry ladder reuses it, and folding `extra`
+     into the memoised branch would either serve a stale colFr for a different
+     `extra` -- a silently wrong system -- or add `extra` to the key and destroy
+     the reuse.  The result is byte-for-byte the reference's colFr in the
+     reference's ORDER, extras last, which is the order `unks` indexes. *)
+  If[extra =!= {},
+    colFr = Join[colFr, {#[[1]], NumDen /@ Take[Can /@ TPad[T, #[[2]]], nc]} & /@ extra]];
   (* iterators named ma / ent, not a / e: a Do iterator inside the package
      captures a caller's symbol of the same name on Mathilda
      (MATHILDA_DIVERGENCES.md A18: Do, unlike Table, is not capture-avoiding), and a, b, e are the usual
@@ -2940,25 +3081,26 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
      rem     -- the residual f - Sum tau D u / u over the realised logands;
      EE      -- the pair D(V) - rem + Sum beta_i D s_i / s_i whose vanishing
                 is the linear system.                                        *)
-iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
-  {gens = T["gens"], q = T["q"], m = T["m"], nc, css, verbose = OptionValue["Verbose"], bounds = OptionValue["Bounds"],
+(* AnalyseSteps[f0, T, verbose]
+   Steps 1--14 of Algorithm 4 for one integrand over one tower -- the
+   classification, the residues and their realisation, the tower specials, the
+   units and the residual -- returned as the analysis Association (keys "f",
+   "Y", "detLogs", "rootLogs", "unkLogs", "denv", "unitsBase", "unitsComplete",
+   "rem", "splittable", "specials", "spec", "parent", "T"); an early exit (a
+   certificate or a failure) is raised with Throw[..., "PIM"].  The counterpart
+   of _analyse in parallel_mixed.py.  Analyse[f, T, verbose] caches it in
+   $analyses under Hash[{f, T}] (the key iPIM uses) and returns the key, or the
+   status list of the early exit.                                           *)
+AnalyseSteps[f0_, T_, verbose_] := Module[
+  {gens = T["gens"], q = T["q"], m = T["m"], nc, css, bounds = None,
    Y, f, dlcm, detLogs = {}, unkLogs = {}, rootLogs = {}, pfParts = {}, denv = 1, fl, p, mult, branch, eta, delta, special,
    eP, vP, Dp, tp, texpr, pts, taus, cert, done, seen, cand, rem, ld, nb, db, monos, cs0, cs1,
-   V, EE, betas, eqs, unks, sol, sub, frees, y, surf, I0, split = OptionValue["SplitSpecials"], splittable, newLogs, PP, rts, torsion = {}, got, tinf, lower, nonconst, units = {}, unitsComplete = True, uu0, certd, gammas, B, r2, g0, sunits, sols, uuS, sexp = OptionValue["SpecialExponent"], gstar, a2, b2, c2, disc, s2, s, ok, pend, uu, tv,
+   V, EE, betas, eqs, unks, sol, sub, frees, y, surf, I0, splittable, newLogs, PP, rts, torsion = {}, got, tinf, lower, nonconst, units = {}, unitsComplete = True, uu0, certd, gammas, B, r2, g0, sunits, sols, uuS, gstar, a2, b2, c2, disc, s2, s, ok, pend, uu, tv,
    pendingClasses = {}, rc, gDir, classes, principal, groups, found, unrealised, sysK, neq, A, key, unitsBase, sunitsAll, spec, tau, cv, tauHi, exps, proved = False, curve, typeE, T0, Dp0, infd, lrTerms, lrL, lrRat},
   Y = Unique["y"];
   nc = If[q === None, 1, T["n"]];                      (* coordinates carrying the integrand *)
   f = TPad[T, f0]; f = Table[If[i > nc, 0, Can[f[[i]]]], {i, T["n"]}];
-  (* Steps 1--14 of Algorithm 4 -- the classification, the residues and their
-     realisation, the tower specials, the units and the residual -- are
-     computed once per integrand and tower and reused by every rung of the
-     retry ladder (special exponents, exact bounds, the split of the specials),
-     which re-enters at Step 15; the counterpart of _Analysis in
-     parallel_mixed.py.  The split variant of Steps 5--6 is memoised below. *)
-  key = Hash[{f0, T}];
-  A = Lookup[$analyses, key, None];
   unitsBase = {};
-  If[A === None,
   (* the components must be rational functions of the generators: an opaque
      function would be treated as a constant by the solver *)
   If[! AllTrue[f, RationalFunctionQ[#, gens] &],
@@ -3122,15 +3264,21 @@ iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
   (* the divisor may be realisable only jointly over several primes: by
      torsion on a cubic model (Algorithm 3(d)) *)
   If[torsion =!= {} && m == 2,
+    (* ... or not realisable at all: a component of the divisor that is
+       provably non-torsion (Proposition 9.4 by reduction mod p) is a
+       certificate of non-elementarity (Corollary 7.6).  The certificate is
+       tried BEFORE the realisation: a divisor it proves non-torsion is not
+       realisable, so the outcome is that of the order realisation first,
+       certificate second (parallel_mixed.py), while the group law of
+       TorsionRealise over the field of the places (degree 8 for a quadratic
+       prime on a cubic) is skipped -- it took minutes where the certificate
+       takes a fraction of a second (the elliptic stress cases F108, F109) *)
+    infd = InfDivisorData[T, f, detLogs, SelectFirst[gens, ! FreeQ[q, #] &]];
+    certd = If[infd === "unknown", None, NontorsionDivisor[T, torsion, verbose, infd]];
+    If[certd =!= None, Throw[{"not elementary", "residue divisor not torsion: reduction mod p", certd[[1]], certd[[2]]}, "PIM"]];
     got = TorsionRealise[T, torsion, Y, 24, verbose];
     If[got =!= None, detLogs = Join[detLogs, got]; torsion = {},
-      (* ... or not realisable at all: a component of the divisor that is
-         provably non-torsion (Proposition 9.4 by reduction mod p) is a
-         certificate of non-elementarity (Corollary 7.6) *)
-      infd = InfDivisorData[T, f, detLogs, SelectFirst[gens, ! FreeQ[q, #] &]];
-      If[infd === "unknown" && verbose, Print["  mod-p certificate withheld: the residues of f dx at the places over infinity are not available"]];
-      certd = If[infd === "unknown", None, NontorsionDivisor[T, torsion, verbose, infd]];
-      If[certd =!= None, Throw[{"not elementary", "residue divisor not torsion: reduction mod p", certd[[1]], certd[[2]]}, "PIM"]]]];
+      If[infd === "unknown" && verbose, Print["  mod-p certificate withheld: the residues of f dx at the places over infinity are not available"]]]];
   If[torsion =!= {}, Throw[{"needs torsion realisation (milestone iii)", {#[[1]], #[[3]]} & /@ torsion}, "PIM"]];
 
   (* residue at the hypertangent place at infinity (Lemma 8.1) *)
@@ -3201,18 +3349,27 @@ iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
     {u, detLogs}];
   Do[rem = Can /@ (rem - pf), {pf, pfParts}];                        (* the RootSum logands *)
 
-    A = <|"f" -> f, "Y" -> Y, "detLogs" -> detLogs, "rootLogs" -> rootLogs, "unkLogs" -> unkLogs, "denv" -> denv, "unitsBase" -> unitsBase,
-          "unitsComplete" -> unitsComplete, "rem" -> rem, "splittable" -> splittable, "specials" -> <||>, "spec" -> <||>, "parent" -> <||>|>;
-    $analyses[key] = A];
-  {f, Y, detLogs, rootLogs, unkLogs, denv, unitsBase, unitsComplete, rem, splittable} =
-    Lookup[A, {"f", "Y", "detLogs", "rootLogs", "unkLogs", "denv", "unitsBase", "unitsComplete", "rem", "splittable"}];
+    <|"f" -> f, "Y" -> Y, "detLogs" -> detLogs, "rootLogs" -> rootLogs, "unkLogs" -> unkLogs, "denv" -> denv, "unitsBase" -> unitsBase,
+      "unitsComplete" -> unitsComplete, "rem" -> rem, "splittable" -> splittable, "specials" -> <||>, "spec" -> <||>, "parent" -> <||>, "T" -> T|>];
 
-  (* Steps 5--6 for the specials over Q or over Fbar: the special logands and
-     the S'-units over them, once per variant *)
-  spec = Lookup[A["specials"], split === True, None];
-  If[spec === None,
+Analyse[f0_, T_, verbose_: False] := Catch[Module[{key = Hash[{f0, T}]},
+  If[! KeyExistsQ[$analyses, key], $analyses[key] = AnalyseSteps[f0, T, verbose]];
+  key], "PIM"];
+
+(* AnalysisSpecials[key, split, verbose]
+   Steps 5--6 for the specials over Q (split = False) or over Fbar (split =
+   True): the special logands and the S'-units over them, {unkLogs, sunits},
+   computed once per variant and memoised in the analysis; the factors of a
+   split special record their parent.  The counterpart of
+   _Analysis.specials.                                                      *)
+AnalysisSpecials[key_, split_, verbose_] := Module[{A = $analyses[key], T, gens, q, m, Y, unkLogs, splittable, spec,
+    sunitsAll, newLogs, PP, gstar, rts, sols, sunits, uuS},
+  T = A["T"]; {gens, q, m} = {T["gens"], T["q"], T["m"]};
+  {Y, unkLogs, splittable} = Lookup[A, {"Y", "unkLogs", "splittable"}];
+  spec = Lookup[A["specials"], split, None];
+  If[spec =!= None, Return[spec]];
     sunitsAll = {};
-  If[split === True && splittable,
+  If[split && splittable,
     newLogs = {};
     Do[PP = pl[[1]];
       gstar = SelectFirst[gens, PolynomialQ[PP, #] && Exponent[PP, #] >= 2 && FreeQ[CoefficientList[PP, #], Alternatives @@ gens] &, None];
@@ -3283,8 +3440,39 @@ iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
       {pl, unkLogs}]];
   If[q =!= None && m >= 3 && unkLogs =!= {} && verbose, Print["  S'-units over the specials are not searched for m = ", m]];
 
-    $analyses[key, "specials", split === True] = {unkLogs, sunitsAll},
-    {unkLogs, sunitsAll} = spec];
+  $analyses[key, "specials", split] = {unkLogs, sunitsAll};
+  {unkLogs, sunitsAll}];
+
+(* AnalysisColumn[T, kind, u]: the column D u / u of a unit or S'-unit (kind
+   "u", u a tuple) or of a special logand (kind "s", u a polynomial), the
+   counterpart of _Analysis.column (AnsatzSystem computes the same columns). *)
+AnalysisColumn[T_, kind_, u_] := If[kind === "u", TDiv[T, TowerD[T, u], u],
+  If[T["q"] =!= None, TDiv[T, TowerD[T, TScalar[T, u]], TScalar[T, u]], TPad[T, {Can[TowerD[T, TScalar[T, u]][[1]]/u]}]]];
+
+iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
+  {gens = T["gens"], q = T["q"], m = T["m"], nc, css, verbose = OptionValue["Verbose"], bounds = OptionValue["Bounds"],
+   Y, f, dlcm, detLogs = {}, unkLogs = {}, rootLogs = {}, pfParts = {}, denv = 1, fl, p, mult, branch, eta, delta, special,
+   eP, vP, Dp, tp, texpr, pts, taus, cert, done, seen, cand, rem, ld, nb, db, monos, cs0, cs1,
+   V, EE, betas, eqs, unks, sol, sub, frees, y, surf, I0, split = OptionValue["SplitSpecials"], splittable, newLogs, PP, rts, torsion = {}, got, tinf, lower, nonconst, units = {}, unitsComplete = True, uu0, certd, gammas, B, r2, g0, sunits, sols, uuS, sexp = OptionValue["SpecialExponent"], gstar, a2, b2, c2, disc, s2, s, ok, pend, uu, tv,
+   pendingClasses = {}, rc, gDir, classes, principal, groups, found, unrealised, sysK, neq, A, key, unitsBase, sunitsAll, spec, tau, cv, tauHi, exps, proved = False, curve, typeE, T0, Dp0, infd, lrTerms, lrL, lrRat},
+  Y = Unique["y"];
+  nc = If[q === None, 1, T["n"]];                      (* coordinates carrying the integrand *)
+  f = TPad[T, f0]; f = Table[If[i > nc, 0, Can[f[[i]]]], {i, T["n"]}];
+  (* Steps 1--14 of Algorithm 4 -- the classification, the residues and their
+     realisation, the tower specials, the units and the residual -- are
+     computed once per integrand and tower and reused by every rung of the
+     retry ladder (special exponents, exact bounds, the split of the specials),
+     which re-enters at Step 15; the counterpart of _Analysis in
+     parallel_mixed.py.  The split variant of Steps 5--6 is memoised below. *)
+  key = Hash[{f0, T}];
+  A = Lookup[$analyses, key, None];
+  If[A === None, A = AnalyseSteps[f0, T, verbose]; $analyses[key] = A];
+  {f, Y, detLogs, rootLogs, unkLogs, denv, unitsBase, unitsComplete, rem, splittable} =
+    Lookup[A, {"f", "Y", "detLogs", "rootLogs", "unkLogs", "denv", "unitsBase", "unitsComplete", "rem", "splittable"}];
+
+  (* Steps 5--6 for the specials over Q or over Fbar: the special logands and
+     the S'-units over them, once per variant *)
+  {unkLogs, sunitsAll} = AnalysisSpecials[key, split === True, verbose];
   units = Join[sunitsAll, unitsBase];
 
   (* Step 15 by Algorithm 6: the special exponents and the degree bounds from

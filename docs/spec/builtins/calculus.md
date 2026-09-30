@@ -1148,6 +1148,20 @@ monotonically down.
   cheap **direct-quotient** fold on those (so `x^2/(x^3-1)^(1/3)` is unaffected),
   and the explicit `Method -> "ParallelMixedTower"` is not gated.  The item
   numbers below group methods by kind and are unchanged.
+
+  **Execution order (as of v0.238):** `ParallelMixedSpecial` (item 14) is now the
+  **last** stage, after Goursat.  It is the only stage that may answer with a
+  *non-elementary* function — `ExpIntegralEi`, `Erf`, the elliptic family — and an
+  elementary antiderivative is always the better answer, so every stage that can
+  produce one (Goursat's pseudo-elliptic reductions included) is given first
+  crack.  Being a general search, it also costs least where it is reached only by
+  integrands nothing cheaper could close.  Unlike `ParallelMixedTower` it is
+  **not** gated off the pseudo-elliptic shape: that gate keeps the
+  elementary-only stage away from a genus>0 `F/R^p` curve, on which it grinds and
+  closes nothing, and an elliptic pencil is exactly what this stage *does* close
+  (`1/Sqrt[x^3-x]` → `-Sqrt[2] EllipticF[ArcSin[Sqrt[2]/Sqrt[1+x]], 1/2]`).  The
+  cascade calls only its complete-answer surface, so plain `Integrate[f, x]` can
+  never return a partial `answer + Inactive[Integrate][remainder, x]`.
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
      derivative (e.g. `f'[x]`); see below.
   2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
@@ -1675,6 +1689,28 @@ monotonically down.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"ParallelMixedTower"` — `Integrate\`ParallelMixedTower[f, x]` (parallel
     Risch-Norman over a simple radical in a mixed transcendental tower).
+  - `"ParallelMixedSpecial"` — `Integrate\`ParallelMixedSpecial[f, x]` (the same
+    over a mixed tower with **special-function kernels**, so the answer may carry
+    `ExpIntegralEi`, `LogIntegral`, `Erf`/`Erfc`/`Erfi`, the incomplete
+    `Gamma[s, z]`, `SinIntegral`/`CosIntegral`, or `EllipticF`/`EllipticE`/`EllipticPi`).  The worker answers with the pair
+    `{answer, verified}`; a *verified* pair is unwrapped to the bare
+    antiderivative and anything else is handed back as the package said it, so
+    `Head[r] === List` remains the caller's test for "no answer".
+
+    **Measured on the 312-case stress corpus of the paper** (120 s cap, against
+    the three reference ports, which all score 305 PASS / 7 HONEST):
+    Mathilda **247 PASS, 51 HONEST, 11 WEAK, 3 FAIL**, with **no false
+    certificate**. Seven groups are at parity. 46 of the 51 HONEST are strict
+    mode withholding an answer that is already correct and identical to
+    Mathematica's — `Exp[-x^2]` → `-Sqrt[Pi] Erfc[x]/2`, `Exp[-x^3]` →
+    `-Gamma[1/3, x^3]/3` — for want of a non-elementarity certificate, and all 11
+    WEAK are the partial mode leaving exactly those sub-integrands in the
+    remainder for the same reason. The cause is Part II's `q =!= None` guard on
+    the holomorphic-remainder certificate (the T2/T10 false-certificate
+    protection, absent from the research reference), so it is one root cause for
+    57 of the 58-case gap and it predates this stage. On the 247 cases it does
+    close, Mathilda is the fastest of the four ports (0.070 s median against
+    Mathematica's 0.110 s).
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`
     (`Integrate\`Symmetry[f, {x, -c, c}]`): an odd integrand integrates to `0`,
@@ -2736,6 +2772,15 @@ hypertangent place at infinity), while `Exp[x^2]` — which this stage cannot
 certify — does not. A per-cascade de-dup flag ensures that when both
 `RischTranscendental` and `ParallelMixedTower` prove the same integrand
 non-elementary in the `Automatic` cascade, the message is printed once.
+
+`Integrate`ParallelMixedSpecial` follows the same rule, on the same boundary: a
+`{"not elementary", …}` result warns, and `{"failed", …}` / `{"not in class", …}`
+stay silent.  Note that a warning from this stage is not a refusal — it is
+frequently accompanied by an *answer*, since a proof of non-elementarity is
+exactly the precondition for emitting a special-function kernel.  The stage is
+strict about that pairing: it withholds an uncertified special answer rather than
+claim one, which is the `{"failed", "special answer found, but the integrand is
+not certified non-elementary", …}` status.
 
 ## Integrate`SigmaDecomposition — Cherry 1986 Theorem 4.4
 

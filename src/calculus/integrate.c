@@ -579,20 +579,19 @@ int  tc_async_region_active(void);
 static void pmt_lazy_load(void) {
     if (pmt_load_attempted) return;
     pmt_load_attempted = true;
-
-    char path[2048];
-    if (!mathilda_resolve_internal("mixed/ParallelMixed.m", path, sizeof(path))) {
-        mth_message("Integrate`ParallelMixedTower", "nofile",
-            "cannot locate src/internal/mixed/ParallelMixed.m on disk.");
+    /* mathilda_load_module rather than a bare mathilda_run_file: it carries a
+     * load-once memo keyed on the relpath, which ParallelMixedSpecial.m also
+     * loads Part II through.  Without the shared memo a session that reaches
+     * both methods parsed and evaluated this 217 KB file TWICE (~1 s each),
+     * re-running EndPackage[] and the logrewrite load -- harmless semantically
+     * (the definitions are just re-Set) but a visible cold-start cost and a
+     * source of duplicated Print output. */
+    if (mathilda_load_module("mixed/ParallelMixed.m")) {
+        pmt_load_succeeded = true;
         return;
     }
-
-    int opened = 0;
-    Expr* res = mathilda_run_file(path, &opened);
-    bool failed = res && res->type == EXPR_SYMBOL
-                      && strcmp(res->data.symbol.name, "$Failed") == 0;
-    if (res) expr_free(res);
-    if (opened && !failed) pmt_load_succeeded = true;
+    mth_message("Integrate`ParallelMixedTower", "nofile",
+        "cannot locate src/internal/mixed/ParallelMixed.m on disk.");
 }
 
 /* True iff `r` is a {"not elementary", ...} list -- the ParallelMixedTower
@@ -720,6 +719,124 @@ static Expr* try_parallelmixedtower(Expr* f, Expr* x) {
     return result;
 }
 
+/* ------------------------------------------------------------------------- *
+ * Stage: ParallelMixedSpecial.
+ * ------------------------------------------------------------------------- *
+ * The SPECIAL-FUNCTION stage of the same parallel (Risch-Norman) method: the
+ * ansatz of ParallelMixedTower extended with special-function kernels, so the
+ * answer may contain ExpIntegralEi, LogIntegral, Erf / Erfc / Erfi, the
+ * incomplete Gamma[s, z], SinIntegral / CosIntegral, and the elliptic
+ * EllipticF / EllipticE / EllipticPi of a pencil.  Implemented as a Wolfram-
+ * language module in src/internal/ParallelMixedSpecial.m, which is loaded INTO
+ * ParallelMixed`Private` (the logrewrite.m pattern) and so reaches Part II's
+ * internals by their short names -- see the file's own header.
+ *
+ * Contract of the worker.  IntegrateSurfaceSpecial[f, x, opts] answers with the
+ * PAIR {answer, verified} on success, or a status List: {"failed", reason, ...}
+ * (inconclusive), {"not elementary", ...} (a proof), {"not in class", ...} (the
+ * integrand is outside the class the stage decides).  This builtin unwraps a
+ * VERIFIED pair to the bare antiderivative and otherwise hands back exactly what
+ * the package said -- an unverified pair included.  Nothing is invented here, so
+ * the qualified-symbol surface still shows the package's own words, and
+ * `Head[r] === List` remains the caller's test for "no answer". */
+static bool pms_load_attempted = false;
+static bool pms_load_succeeded = false;
+
+static void pms_lazy_load(void) {
+    if (pms_load_attempted) return;
+    pms_load_attempted = true;
+    /* mathilda_load_module, not mathilda_run_file: the module has its own
+     * load-once memo keyed on the relpath, and the special module loads Part II
+     * through the same mechanism.  Going through the memo is what stops the
+     * 217 KB Part II file being parsed and evaluated TWICE (~1 s each) when both
+     * methods are reached in one session -- see the note on pmt_lazy_load. */
+    /* Muted across the load so a build without the file reports ONE message --
+     * the method-level one below, which names the method -- instead of that plus
+     * the loader's own LoadModule::nofile. Load-time chatter from the package is
+     * a probe's noise here, the same judgement builtin_integrate_pmt makes for
+     * the per-call diagnostics; a parser error still prints, being exempt from
+     * the funnel. */
+    mth_msg_suppress_push();
+    int ok = mathilda_load_module("ParallelMixedSpecial.m");
+    mth_msg_suppress_pop();
+    if (ok) {
+        pms_load_succeeded = true;
+        return;
+    }
+    mth_message("Integrate`ParallelMixedSpecial", "nofile",
+        "cannot locate src/internal/ParallelMixedSpecial.m on disk.");
+}
+
+/* {answer, verified} with verified === True -> the answer; else NULL. */
+static Expr* pms_verified_answer(Expr* r) {
+    if (!r || r->type != EXPR_FUNCTION) return NULL;
+    Expr* h = r->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_List) return NULL;
+    if (r->data.function.arg_count != 2) return NULL;
+    const Expr* v = r->data.function.args[1];
+    if (!v || v->type != EXPR_SYMBOL || v->data.symbol.name != SYM_True) return NULL;
+    Expr* ans = r->data.function.args[0];
+    r->data.function.args[0] = NULL;          /* move out; caller frees the wrapper */
+    return ans;
+}
+
+static Expr* builtin_integrate_pms(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (tc_async_region_active()) return NULL;   /* no self re-entry / nested heavy method */
+    pms_lazy_load();
+    if (!pms_load_succeeded) return NULL;
+
+    tc_async_defer_push();
+    mth_msg_suppress_push();
+    Expr* raw = call_stage("ParallelMixed`Private`IntegrateSurfaceSpecial",
+                           res->data.function.args[0], res->data.function.args[1]);
+    mth_msg_suppress_pop();
+    tc_async_defer_pop();
+    if (!raw) return NULL;
+
+    Expr* ans = pms_verified_answer(raw);
+    if (ans) { expr_free(raw); return ans; }
+
+    /* Not a verified pair.  A {"not elementary", ...} certificate is a PROOF, so
+     * it warns exactly as ParallelMixedTower's does; {"failed", ...} and
+     * {"not in class", ...} prove nothing and stay silent. */
+    if (pmt_is_nonelementary_certificate(raw))
+        integrate_announce_nonelementary(res->data.function.args[0],
+                                         res->data.function.args[1]);
+    return raw;
+}
+
+/* Automatic-cascade / Method -> "ParallelMixedSpecial" stage.  Declines unless
+ * the method returned an antiderivative, i.e. unless the builtin above unwrapped
+ * a verified pair -- so a List of any shape, $Failed, and an unresolved head all
+ * continue the cascade.
+ *
+ * Deliberately NOT gated on has_pseudoelliptic_radical, the gate that keeps
+ * ParallelMixedTower off a genus>0 F/R^p curve.  That gate is right for the
+ * elementary-only stage, which grinds on such a curve and closes nothing -- and
+ * exactly wrong here, because an elliptic pencil IS this stage's subject:
+ * 1/Sqrt[x^3 - x] is pseudo-elliptic by that test and closes as
+ * -Sqrt[2] EllipticF[ArcSin[Sqrt[2]/Sqrt[1 + x]], 1/2].  The rational-structure
+ * skip is kept: a pure rational function is BronsteinRational's. */
+static Expr* try_parallelmixedspecial(Expr* f, Expr* x) {
+    if (pmt_is_rational_structure(f)) return NULL;
+    Expr* result = call_stage("Integrate`ParallelMixedSpecial", f, x);
+    if (!result) return NULL;
+
+    bool decline =
+        result_is_unresolved(result, "Integrate`ParallelMixedSpecial") ||
+        (result->type == EXPR_SYMBOL &&
+         strcmp(result->data.symbol.name, "$Failed") == 0) ||
+        (result->type == EXPR_FUNCTION &&
+         result->data.function.head->type == EXPR_SYMBOL &&
+         result->data.function.head->data.symbol.name == SYM_List);
+    if (decline) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
 /* Method-option parsing.  Mirrors the canonical SYM_Method / SYM_Rule
  * idiom (see src/list.c:1480-1491 and src/facint.c:1276-1310). */
 typedef enum {
@@ -735,6 +852,7 @@ typedef enum {
     METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
     METHOD_PARALLEL_MIXED_TOWER,
+    METHOD_PARALLEL_MIXED_SPECIAL,
     METHOD_UNDEFINED,
     METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the real-axis FTC mechanism */
     METHOD_LINE_INTEGRAL,    /* definite-only: selects the complex contour mechanism */
@@ -764,6 +882,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(s, "ParallelMixedTower") == 0) return METHOD_PARALLEL_MIXED_TOWER;
+    if (strcmp(s, "ParallelMixedSpecial") == 0) return METHOD_PARALLEL_MIXED_SPECIAL;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
     if (strcmp(s, "NewtonLeibniz") == 0) return METHOD_NEWTON_LEIBNIZ;
     if (strcmp(s, "LineIntegral") == 0) return METHOD_LINE_INTEGRAL;
@@ -1237,7 +1356,7 @@ Expr* builtin_integrate(Expr* res) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
             if (h != last_warned_hash) {
-                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"NewtonLeibniz\", \"LineIntegral\".");
+                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"NewtonLeibniz\", \"LineIntegral\".");
                 last_warned_hash = h;
             }
             return NULL;
@@ -1358,6 +1477,28 @@ Expr* builtin_integrate(Expr* res) {
              * differentiate-back guard), so a decline here leaves the integral
              * unevaluated rather than wrong. */
             if (!result) result = try_goursat(effective_f, x);
+            /* ParallelMixedSpecial: the special-function stage, and the LAST
+             * stage of the cascade.
+             *
+             * Last for two reasons. It is the only stage that may answer with a
+             * non-elementary function (ExpIntegralEi, Erf, the elliptic family,
+             * ...), and an ELEMENTARY antiderivative is always the better answer
+             * -- so every stage that could produce one, Goursat's pseudo-elliptic
+             * reductions included, gets first crack. And it is a general search,
+             * so it costs least where it is reached only by integrands nothing
+             * cheaper could close.
+             *
+             * Note it is NOT gated on has_pseudoelliptic_radical, unlike
+             * ParallelMixedTower just above: that gate keeps the elementary-only
+             * stage off a genus>0 F/R^p curve, where it grinds and closes
+             * nothing, and an elliptic pencil is precisely what THIS stage
+             * closes. try_parallelmixedspecial keeps the rational-structure skip.
+             *
+             * Complete answers only: the cascade calls the surface that returns
+             * an antiderivative or declines, never the partial mode, so plain
+             * Integrate[f, x] can no more return a half-solved
+             * `answer + Inactive[Integrate][remainder, x]` than it could before. */
+            if (!result) result = try_parallelmixedspecial(effective_f, x);
             break;
         case METHOD_RATIONAL:
             result = try_rational(effective_f, x);
@@ -1397,6 +1538,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_PARALLEL_MIXED_TOWER:
             result = try_parallelmixedtower(effective_f, x);
+            break;
+        case METHOD_PARALLEL_MIXED_SPECIAL:
+            result = try_parallelmixedspecial(effective_f, x);
             break;
         case METHOD_UNDEFINED:
             result = try_undefined(effective_f, x);
@@ -1467,6 +1611,21 @@ void integrate_init(void) {
         "list that Integrate's cascade treats as a decline. When the method PROVES "
         "the integrand has no elementary antiderivative it issues Integrate::nonelem, "
         "as RischTranscendental does.");
+    /* The ParallelMixedSpecial method symbol (lazy-loads
+     * src/internal/ParallelMixedSpecial.m, which loads Part II itself). */
+    symtab_add_builtin("Integrate`ParallelMixedSpecial", builtin_integrate_pms);
+    symtab_get_def("Integrate`ParallelMixedSpecial")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Integrate`ParallelMixedSpecial",
+        "Integrate`ParallelMixedSpecial[f, x] integrates f with respect to x by the "
+        "SPECIAL-FUNCTION stage of the parallel (Risch-Norman) method over a mixed "
+        "tower (S. Blake): the ansatz of Integrate`ParallelMixedTower extended with "
+        "special-function kernels, so the answer may contain ExpIntegralEi, "
+        "LogIntegral, Erf, Erfc, Erfi, the incomplete Gamma[s, z], SinIntegral, "
+        "CosIntegral, or the elliptic EllipticF, EllipticE and EllipticPi of a "
+        "pencil. It returns the antiderivative, or a certificate / failure list "
+        "that Integrate's cascade treats as a decline. When the method PROVES the "
+        "integrand has no elementary antiderivative it issues Integrate::nonelem.");
+
     /* NOT Listable: Listable would thread over a definite-integral range
      * spec `{x, a, b}` element-wise (producing garbage like
      * {Integrate[f,x], Integrate[f,a], Integrate[f,b]}).  The `{x,a,b}` form
@@ -1494,6 +1653,7 @@ void integrate_init(void) {
         "  \"RischTranscendental\"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"ParallelMixedTower\" — Integrate`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II)\n"
+        "  \"ParallelMixedSpecial\" — Integrate`ParallelMixedSpecial (the same over a mixed tower with special-function kernels: Ei, li, erf, incomplete Gamma, Si, Ci, elliptic F/E/Pi)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
         "  \"NewtonLeibniz\"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
         "  \"LineIntegral\"        — complex contour integrals (implicit for the {x,z0,...,zn} form)\n"

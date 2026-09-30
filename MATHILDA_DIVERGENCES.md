@@ -36,14 +36,14 @@ historical record. Verified against the live binary, most of section A is now fi
 | A15b `Coefficient[…, x, i]` symbolic exponent | **FIXED** | v0.211 |
 | A16 `PolynomialGCD[p, e, Extension -> Automatic]`, `e` an unexpanded algebraic constant equal to 0 | **OPEN** | returns 1 (found on the v0.216 corpus re-run, 2026-09-27 late); `.m` expands and reduces before every extension gcd |
 | A17 `RowReduce[m, Method -> "OneStepRowReduction"]` with parametric entries | **OPEN** | does not finish on a 20 x 15 system linear in two parameters; `.m` uses the default method when parameters are present |
-| A18 a `Do` iterator inside a package captures a caller's same-named symbol | **OPEN** | `Table` is capture-avoiding, `Do` is not (the A11 fix does not cover it); `.m` iterators on the assembly path renamed |
+| A18 a `Do` iterator inside a package captures a caller's same-named symbol | **FIXED** (v0.238) | and it was never only `Do` -- `Sum` and `Product` too; only `Table` was registered as a scoping construct. `is_iterator_scope_head` (`src/modular.c`) now covers all four, so the `.m` renames `ma`/`ent`/`ne` are no longer needed. See F3. |
 | A19 `FreeQ[e, Complex]` is True on a complex atom | **OPEN** | found 2026-09-28 porting logrewrite; `logrewrite.m` tests `_Complex` everywhere |
 | A20 `ComplexExpand` writes a real nested radical as `Cos[Arg[...]]`, `Arg[1 - Sqrt[5]]` unevaluated | **OPEN** | `logrewrite.m` puts constants in rectangular form by rules (`RectPow`); `RRad` of the package inherits the hazard |
 | A21 `CountRoots` not implemented | **OPEN** | `SturmCount` in `logrewrite.m` |
 | A22 `$InputFileName`, `DirectoryName` not implemented | **OPEN** | a package cannot `Get` a sibling file; `LoadModule["mixed/logrewrite.m"]` instead |
 | A23 `NumericQ[Root[...]]` is False; `ToRadicals` gives the Ferrari form for every quartic | **OPEN** | `RootRadicals` in `logrewrite.m` (biquadratic / palindromic forms, root picked numerically) |
 | A24 `Can`'s field detour returned a `Dot[{}, Inverse[{}], {}]` coefficient | **OPEN** (state-dependent, no standalone repro) | `logrewrite.m` canonicalises with `CanRaw` |
-| A18 (re-checked on v0.221) | still **OPEN** | `g[v_] := Module[{s = 0}, Do[s += v, {k, 2}]; s]; g[k]` gives 3 |
+| A18 (re-checked on v0.221) | **FIXED** (v0.238) | `g[v_] := Module[{s = 0}, Do[s += v, {k, 2}]; s]; g[k]` gave 3, now gives `2 k` |
 | B7 an outer `TimeConstrained` cannot interrupt an inner one | **OPEN** (behavioural) | the package budget cannot cut the rewrite's own `TimeConstrained` short |
 | B1 `ToNumberField` non-canonical primitive element | **OPEN** (behavioural, by design) | `.m` reads whatever theta comes back |
 | B2–B6 | behavioural; see each entry | mostly by-design / hard |
@@ -55,7 +55,7 @@ workaround in that module (section D).
 Remaining core work: the three items found when the review corpus was re-run
 on v0.216 (2026-09-27, late): **A16** (extension gcd against an unexpanded zero constant, the cause of
 three FALSE non-elementary certificates on the raw run), **A17** (`OneStepRowReduction` on a parametric
-matrix) and **A18** (`Do` iterators capture a caller's symbol; `Table` does not). Each has a one-line
+matrix); **A18** (`Do` iterators capture a caller's symbol; `Table` does not) is FIXED in v0.238. Each has a one-line
 repro below and a `.m` workaround (section D). The **A14 `PolynomialGCD` Root generator** half (A14b)
 is now **FIXED** in v0.217 — `qa_resolve_extension` recognises a `Root[]` object as an algebraic
 generator through the radical-oriented autodetect/tower/extension-gcd pipeline (a `GEN_ROOT`
@@ -283,7 +283,7 @@ RowReduce[aug, Method -> "DivisionFreeRowReduction"]  (* 0.0 s *)
 on AlgebraicNumber entries). With parameters present (`! FreeQ[aug, _Symbol?(! NumericQ[#] &)]`) the `.m`
 now uses the default method; `Exp[a x] Sin[b x]` went from "time budget exceeded" to 1 s.
 
-### A18. A `Do` iterator inside a package body captures a caller's symbol of the same name (`Table` does not)
+### A18. A `Do` iterator inside a package body captures a caller's symbol of the same name (`Table` does not)  — **FIXED** (v0.238; and `Sum`/`Product` had it too, see F3)
 
 ```
 BeginPackage["P`"]; g::usage = "g"; h::usage = "h"; Begin["`Private`"];
@@ -790,3 +790,127 @@ the S'-units and the bounds, and differ exactly here:
   is now at 300.0 s (was: the 420 s OS kill, with the output lost in the pipe buffer).
 - **Root-index memo** per minimal polynomial in `qqbar_to_expr`: A16 13 s -> 0.9 s, A19 39 s -> 2.2 s.
 <!-- /charlwood-300 -->
+
+<!-- special-stage-port -->
+## F. Found porting the special-function stage (`ParallelMixedSpecial`), 2026-09-30, build v0.237
+
+All six were reproduced against the binary at the repo root and checked against
+Mathematica's documented behaviour. Unlike section A, **every one of these is now
+FIXED at the root** (v0.238) rather than worked around in a `.m`, so this section
+is a record of what the port exposed, not a list of live hazards.
+
+### F1. `Block` did not restore `DownValues`  (FIXED, v0.238)
+
+```
+gg[a_] := "orig";
+Block[{gg}, gg[a_] := "patched"; gg[1]]     (* "patched": correct                 *)
+gg[1]                                        (* was "patched"; Mathematica: "orig" *)
+```
+
+Only `own_values` was saved and restored, so a rule written to a `Block`-ed
+*function* symbol stayed installed for the rest of the session. This is the
+mechanism the special stage's `ExtendedBounds` is built on — it `Block`s four of
+Part II's bound-decision symbols and `SetDelayed`s extended versions inside — so
+the **first** extended call would have permanently repointed them, silently
+corrupting the existing `ParallelMixedTower` method. Attributes are deliberately
+still not cleared: Mathematica's `Block` does not clear them either (verified).
+
+A `TimeConstrained` timeout `siglongjmp`s past the restore, so frames are also
+threaded on a stack that `tc_run_guarded` drains — the same treatment
+`tc_async_deferred` and the message-suppression depth already had.
+
+### F2. `Block` was alpha-renamed by capture-avoiding substitution  (FIXED, v0.238)
+
+```
+g[v_] := Block[{e = 1}, v + e];   g[e + 1]     (* was 2 + e;  Mathematica: 3     *)
+g[v_] := Module[{e = 1}, v + e];  g[e + 1]     (* 2 + e: correct, lexical scope  *)
+```
+
+The A11 capture-avoidance fix (v0.212) treated every scoping construct alike, but
+`Block` is **dynamic** scope: a symbol arriving inside a caller's value is exactly
+what it means to rebind. Renaming the local defeated the construct, and the
+visible symptom was that a held body handed into a hook-installing `Block` kept
+reaching the *original* symbol.
+
+### F3. `Sum` and `Product` iterators captured a caller's symbol  (FIXED, v0.238)
+
+The other half of A18. `Sum[v, {k, 2}]` with `v = k` gave 3 (Mathematica `2 k`)
+and `Product[v, {k, 2}]` gave 2 (Mathematica `k^2`). Only `Table` was listed as a
+scoping construct; all four iterator heads are structurally identical and now are.
+
+### F4. Nested `Association` element assignment was a silent no-op  (FIXED, v0.238)
+
+```
+a = <||>; a["k", "s"] = 7;  a       (* was <||>;  Mathematica: <|k -> <|s -> 7|>|> *)
+a = <|"k" -> <||>|>; a["k","s"] = 7 (* worked: the intermediate key existed        *)
+```
+
+A deep write through a key that did not exist yet placed nothing: the `Set` was
+left unevaluated, `;` discarded it, and the association stayed empty **with no
+message**. The memo-table idiom `$cache[key, "field"] = v` — which the special
+stage uses for its per-integrand analyses — depends on the auto-vivification.
+
+### F5. `CoefficientArrays` was not implemented  (FIXED, v0.238)
+
+```
+CoefficientArrays[{x + 2 y - 3, 3 x - y}, {x, y}]   (* was unevaluated *)
+```
+
+`{b, M} = Normal[CoefficientArrays[eqs, vars]]` is how the stage's `LinSolveZero`
+(its SymPy-`linsolve` emulation) assembles every linear system. Mathilda's arrays
+are dense `List`s rather than `SparseArray`s — a deliberate divergence, and
+harmless to that spelling because `Normal` of a `List` is the identity.
+
+### F6. `BooleanQ`, `SymbolName`, `Internal`SyntacticNegativeQ` were missing  (FIXED, v0.238)
+
+`SymbolName` is used by the stage's generator test
+(`StringMatchQ[SymbolName[#], "Y" ~~ ___]`); `Internal`SyntacticNegativeQ` backs
+its port of SymPy's `could_extract_minus_sign`; `BooleanQ` is used by the stress
+harness to tell an `{answer, verified}` pair from a status list. `Hash` is still
+not implemented but needs no fix: it stays unevaluated, which is a perfectly
+deterministic `Association` key, and that is exactly what the existing Part II
+memos rely on.
+
+### F7. `AbsoluteTime[]` has INTEGER-SECOND resolution
+
+```
+t0 = AbsoluteTime[]; Do[Integrate[x^3 + 1/x, x], {i, 60}];
+AbsoluteTime[] - t0                        (* 0.0;  the work took 4.9 ms      *)
+First[AbsoluteTiming[Do[Integrate[x^3 + 1/x, x], {i, 60}]]]   (* 0.004941    *)
+```
+
+Mathematica's `AbsoluteTime[]` carries sub-millisecond fractional seconds, so the
+idiom `t0 = AbsoluteTime[]; body; AbsoluteTime[] - t0` is a normal way to time a
+region. Here it reads **0.0** for anything under a second, which is not an error
+and not a message -- just a silently useless number. The research stress runner
+times each case exactly that way (`stress_wl.py`'s `wltime`), so the Mathilda
+runner had to switch to `AbsoluteTiming`, which is sub-millisecond. Worth fixing
+in the kernel, since the failure mode is a plausible-looking zero.
+
+### F8. The two contexts of the mixed-tower packages are easy to confuse
+
+Not a kernel divergence but the same class of silent failure, recorded because it
+cost two debugging cycles. Part II exports **seven** public symbols -- `Tower`,
+`TowerD`, `ClassifyPrime`, `CertifyNonconstant`, `ParallelIntegrateMixed`,
+`BuildTower`, `Undecided` -- and keeps ~200 more in `ParallelMixed`Private``. The
+special stage is loaded *into* that private context, so its eight entry points are
+private too. Addressing either with the wrong context leaves the call
+**unevaluated**, and an unevaluated call reads downstream as a wrong *answer*
+(`r[[1]] === b` is False, reported as "differs from Part II") rather than as an
+error. When a call into these packages returns something structurally odd, check
+the context before the algorithm.
+
+### Not a divergence after all: `RowReduce[..., ZeroTest -> f]`
+
+Listed as a seventh gap on the strength of
+
+```
+RowReduce[{{1, 1/(x+1) - 1/(x+1)}, {0, 1}}, ZeroTest -> (False &)]
+```
+
+returning the same reduced matrix as the default. The entry `1/(x+1) - 1/(x+1)`
+evaluates to `0` **before** `RowReduce` sees it, so the option had nothing to
+decide. Re-probed with `Sin[x]^2 + Cos[x]^2 - 1`, which stays symbolic: the
+default reduces to the identity and the zero test correctly collapses the row.
+`matsol_parse_zerotest_option` has been there all along.
+<!-- /special-stage-port -->
