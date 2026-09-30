@@ -3975,3 +3975,47 @@ Reinforces `[[feedback_shared_tree_no_destructive_git]]` and
 `[[feedback_shared_tree_concurrent_session_files]]`: the rule is not just "don't reset" — it is
 that any command whose unit of work is the *file* is destructive when someone else owns part of
 that file.
+
+---
+
+## A new cascade stage is charged to every input the cascade FAILS to close (v0.240)
+
+Self-caught, one commit late. `Integrate`ParallelMixedSpecial` (v0.239) was added
+as the last stage of the Automatic cascade **without a wall-clock budget**, while
+the stage immediately before it has carried one since v0.161 with the reason in
+its own comment: *interactive `Integrate` has no timeout of its own.*
+
+The asymmetry is the whole lesson. A cascade stage's cost is not paid by the
+integrands it closes — those are the fast ones, measured here at 0.019–0.187 s.
+It is paid by every integrand that reaches it and it cannot close, because
+"cannot close" for a search that escalates through six configurations means
+*running all six to exhaustion*. So the number that matters when adding a stage
+is its **worst case on input it will decline**, and the place to look for that
+number is the last stage before yours, which has already met the problem.
+
+Concretely: `Integrate[Sin[x^2 + Log[x]] Cos[x], x]` 47.6 s → 97.3 s, and
+`integrate_newton_leibniz_tests` 50.5 s (rc 0) → 120.06 s / SIGALRM.
+
+Three things I would do differently, in order of value:
+
+1. **When adding a stage to a cascade, port its neighbour's guard rails, not just
+   its call shape.** I mirrored `try_parallelmixedtower`'s structure faithfully —
+   the `tc_async_defer` region, the message mute, the decline predicate — and
+   missed the budget, which is not in `integrate.c` at all but in the `.m` the
+   neighbour calls. Copying the C wrapper is not copying the contract.
+2. **Time the stage on input it CANNOT close, before wiring it into Automatic.**
+   Every verification I ran was on cases it closes or honestly declines *fast*;
+   the corpus harness drives the worker directly and so never exercised the
+   cascade at all. A "declines correctly" test says nothing about how long the
+   decline takes.
+3. **Read a suite's runtime, not just its exit code.** `newton_leibniz` was at
+   50.5 s of a 120 s alarm *before* this work — ~47 s of it one pre-existing
+   case — so it had no headroom to lend. A suite sitting at 40 % of its alarm is
+   a standing constraint on every cascade change, and nothing surfaces that but
+   looking.
+
+Related, and the reason this class keeps recurring: `[[project_cascade_reorder_exposes_latent_grind]]`
+(reordering exposed a latent grind) and the v0.237 note at line 3937 above (a
+normaliser inserted to make one class cheap becomes the dominant cost on
+another). Same shape each time — **a change that helps a class you chose is
+charged to a class you did not.**
