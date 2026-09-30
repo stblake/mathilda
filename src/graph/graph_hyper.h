@@ -84,6 +84,7 @@ Expr* builtin_uniform_hypergraph_q(Expr* res);          /* UniformHypergraphQ   
 Expr* builtin_hypergraph_dual(Expr* res);               /* HypergraphDual        */
 Expr* builtin_hypergraph_clique_expansion(Expr* res);   /* HypergraphCliqueExpansion */
 Expr* builtin_hypergraph_star_expansion(Expr* res);     /* HypergraphStarExpansion   */
+Expr* builtin_hypergraph_plot(Expr* res);               /* HypergraphPlot (hyp_plot.c) */
 Expr* builtin_hypergraph_to_graph(Expr* res);           /* HypergraphToGraph     */
 Expr* builtin_hypergraph_line_graph(Expr* res);         /* HypergraphLineGraph   */
 Expr* builtin_hypergraph_connected_components(Expr* res); /* HypergraphConnectedComponents */

@@ -296,9 +296,19 @@ void graph_init(void) {
     symtab_add_builtin("GraphPlot", builtin_graph_plot);
     symtab_get_def("GraphPlot")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("GraphPlot",
-        "GraphPlot[g] gives a Graphics object drawing the graph g with a "
-        "circular vertex layout. Vertex labels are off by default; pass "
-        "VertexLabels -> True to draw them (in black).");
+        "GraphPlot[g, opts] gives a Graphics object drawing the graph g (or a "
+        "list of rules {u -> v, ...}). The default layout is deterministic: tidy "
+        "layered trees for branching forests, layered drawings for DAGs, stress "
+        "majorization otherwise, with components packed side by side. Options: "
+        "GraphLayout -> \"StressEmbedding\" | \"SpringElectricalEmbedding\" | "
+        "\"CircularEmbedding\" | \"LayeredEmbedding\" | \"BipartiteEmbedding\" | "
+        "\"GridEmbedding\"; VertexCoordinates -> {{x,y}, ...} or {v -> {x,y}, ...}; "
+        "VertexLabels -> None | \"Name\" | Automatic | {v -> lbl, ...}; "
+        "GraphHighlight -> {v, e, ...} (red, thicker); VertexStyle and EdgeStyle -> "
+        "a colour or {item -> colour, ...}; EdgeLabels -> \"EdgeWeight\" | {e -> lbl}; "
+        "VertexSize -> d (diameter in edge lengths). Directed edges get arrowheads "
+        "that stop at the target vertex. Other options (ImageSize, PlotLabel, ...) "
+        "pass through to Graphics.");
 
     /* ---- Editing, transforms, set operations, cycles (gops_*.c) ------- */
     graph_ops_init();

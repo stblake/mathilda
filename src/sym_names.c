@@ -968,6 +968,18 @@ const char* SYM_FindVertexColoring = NULL;
 const char* SYM_EdgeWeight = NULL;
 const char* SYM_EdgeCapacity = NULL;
 const char* SYM_WeightedAdjacencyMatrix = NULL;
+const char* SYM_VertexCoordinates = NULL;
+const char* SYM_VertexLabels = NULL;
+const char* SYM_GraphLayout = NULL;
+const char* SYM_GraphHighlight = NULL;
+const char* SYM_VertexStyle = NULL;
+const char* SYM_EdgeStyle = NULL;
+const char* SYM_EdgeLabels = NULL;
+const char* SYM_VertexSize = NULL;
+const char* SYM_HypergraphPlot = NULL;
+const char* SYM_Arrowheads = NULL;
+const char* SYM_Style = NULL;
+const char* SYM_FontSize = NULL;
 
 /* NumberForm + Row (numeric-display formatting) and NumberForm's options. */
 const char* SYM_NumberForm = NULL;
@@ -1930,6 +1942,18 @@ void sym_names_init(void) {
     SYM_EdgeWeight                 = intern_symbol("EdgeWeight");
     SYM_EdgeCapacity               = intern_symbol("EdgeCapacity");
     SYM_WeightedAdjacencyMatrix    = intern_symbol("WeightedAdjacencyMatrix");
+    SYM_VertexCoordinates          = intern_symbol("VertexCoordinates");
+    SYM_VertexLabels               = intern_symbol("VertexLabels");
+    SYM_GraphLayout                = intern_symbol("GraphLayout");
+    SYM_GraphHighlight             = intern_symbol("GraphHighlight");
+    SYM_VertexStyle                = intern_symbol("VertexStyle");
+    SYM_EdgeStyle                  = intern_symbol("EdgeStyle");
+    SYM_EdgeLabels                 = intern_symbol("EdgeLabels");
+    SYM_VertexSize                 = intern_symbol("VertexSize");
+    SYM_HypergraphPlot             = intern_symbol("HypergraphPlot");
+    SYM_Arrowheads                 = intern_symbol("Arrowheads");
+    SYM_Style                      = intern_symbol("Style");
+    SYM_FontSize                   = intern_symbol("FontSize");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a

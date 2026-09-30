@@ -21,6 +21,12 @@
 
 #include "expr.h"
 
+/* Width of the string s set in Helvetica at 1pt, from the base-14 AFM
+ * advance widths (characters outside printable ASCII count as 0.556). The PDF
+ * writer uses it to align Text[]; layout code (GraphPlot) uses it to size
+ * labels before emitting them. */
+double graphics_helvetica_width(const char* s);
+
 /* Vector PDF. Dependency-free, headless. `path` is the output file. */
 int graphics_export_pdf(const Expr* graphics_expr, const char* path);
 

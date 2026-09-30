@@ -48,6 +48,13 @@ void graph_hyper_init(void) {
         "HypergraphStarExpansion[h] gives the incidence (star) expansion of h: the "
         "bipartite Graph on VertexList[h] and nodes Hyperedge[1], ..., Hyperedge[m], "
         "with v<->Hyperedge[j] whenever v lies in hyperedge j.");
+    reg("HypergraphPlot", builtin_hypergraph_plot,
+        "HypergraphPlot[h, opts] gives a Graphics object drawing the hypergraph h "
+        "(or a list of hyperedges): vertices placed by the stress layout of the star "
+        "expansion, each hyperedge of 3 or more vertices a translucent rounded hull "
+        "in its own palette colour, one of 2 a stadium and one of 1 a circle around "
+        "its vertex, vertex disks on top. Options: VertexLabels, VertexCoordinates, "
+        "VertexStyle and GraphLayout as in GraphPlot; others pass through to Graphics.");
     reg("HypergraphToGraph", builtin_hypergraph_to_graph,
         "HypergraphToGraph[h] converts h, read as an ordered hypergraph, to the "
         "directed Graph with v_a->v_b for every a<b in each hyperedge {v_1, ..., v_k} "

@@ -354,6 +354,53 @@ In[3]:= InputForm[HypergraphStarExpansion[Hypergraph[{Hyperedge[1], 2},{{Hypered
 Out[3]= HypergraphStarExpansion[Hypergraph[{Hyperedge[1], 2}, {{Hyperedge[1], 2}}]]
 ```
 
+## HypergraphPlot
+
+- `HypergraphPlot[h]`: a `Graphics[...]` object drawing the hypergraph `h`.
+- `HypergraphPlot[{e1, e2, ...}]`: draws the hypergraph of a list of hyperedges.
+- `HypergraphPlot[h, opts]`: with `VertexLabels`, `VertexCoordinates`,
+  `VertexStyle` and `GraphLayout` as in `GraphPlot`; other options pass through
+  to `Graphics`.
+
+**Features**:
+- `Protected`. Implemented in `src/graph/hyp_plot.c`; Mathematica has no
+  built-in hypergraph drawing (the Function Repository's `HypergraphPlot` is the
+  model). Deterministic, like `GraphPlot`.
+- **Layout**: the vertices are placed by the stress layout of the star
+  expansion (one extra node per hyperedge of two or more vertices, joined to its
+  members), so the members of a hyperedge sit around a common centre and
+  hyperedges sharing vertices are drawn side by side. `GraphLayout` picks another
+  embedding of the star expansion; `VertexCoordinates` overrides any subset.
+- **Hyperedges**: each is the convex hull of its (distinct) members, inflated
+  by a margin with rounded corners (sampled every 15 degrees), drawn as a
+  translucent (`Opacity[0.22]`) filled `Polygon` with a darker outline, in its
+  own colour of the `ColorData[97]` palette (cycled by hyperedge index). A
+  hyperedge of size 2 is therefore a stadium (a thick translucent line with round
+  caps) and one of size 1 a circle around its vertex; an empty one is not drawn.
+  Larger shapes are drawn first so smaller ones stay visible; a hyperedge sharing
+  a vertex with smaller ones gets a wider margin, so nested and repeated
+  hyperedges show as concentric outlines.
+- **Vertices** are dark disks drawn on top; labels avoid the directions of the
+  vertex's hyperedges.
+- Unevaluated on a non-hypergraph.
+
+```mathematica
+In[1]:= Head[HypergraphPlot[Hypergraph[{{1,2,3},{3,4},{4,5,6},{7}}]]]
+Out[1]= Graphics
+
+In[2]:= Count[HypergraphPlot[Hypergraph[{{1,2,3},{3,4},{4,5,6},{7}}]], _Polygon, Infinity]
+Out[2]= 4
+
+In[3]:= Count[HypergraphPlot[{{1, 2, 3}, {3, 4}}, VertexLabels -> "Name"], _Text, Infinity]
+Out[3]= 4
+
+In[4]:= HypergraphPlot[Hypergraph[{{1,2,3}}]] === HypergraphPlot[Hypergraph[{{1,2,3}}]]
+Out[4]= True
+
+In[5]:= HypergraphPlot[5]
+Out[5]= HypergraphPlot[5]
+```
+
 ## HypergraphToGraph
 
 - `HypergraphToGraph[h]`: the directed `Graph` obtained by reading `h` as an
