@@ -169,13 +169,36 @@ FieldDataMemo[atoms_] := With[{key = Sort[atoms]},
    that re-derives the very field we just built (315 ms against 0.2 ms on a
    LeafCount-73 fraction over Q(Sqrt[2])).  Dropping it is value-identical -- the
    two agree on every fraction of the corpus -- and takes the suite 26.0 -> 22.4 s. *)
-Can[e_] := Module[{atoms, fd},
+(* CanCombinedQ[u]: did Together/Cancel actually put u over a common
+   denominator?  A combined p/q has no negative power left in its NUMERATOR; an
+   expression Together declined to touch still carries the original quotients
+   there.  This is the detour's self-check, not a nicety -- see Can. *)
+CanCombinedQ[u_] := FreeQ[Numerator[u], Power[_, _?(NumericQ[#] && Negative[#] &)]];
+
+Can[e_] := Module[{atoms, fd, u},
   If[! TrueQ[$CanFieldEnabled], Return[CanRaw[e]]];
   atoms = DeleteDuplicates[Cases[e, _Root | _Complex | Power[_?NumericQ, _Rational], {0, Infinity}]];
   If[atoms === {} || LeafCount[e] < $CanFieldMinLeaves, Return[CanRaw[e]]];
   fd = FieldDataMemo[atoms];
   If[! MatchQ[fd, {_, _}], Return[CanRaw[e]]];
-  Cancel[Together[e /. fd[[1]]]] /. a_AlgebraicNumber :> fd[[2]][a]];
+  u = Cancel[Together[e /. fd[[1]]]];
+  (* Together BAILS on an expression that carries an AlgebraicNumber in a
+     DENOMINATOR and a factor in a second variable -- it returns its argument
+     untouched rather than combining, so the detour hands back something no more
+     reduced than it went in.  Can is the zero test of the whole of Part II, and
+     a false NON-zero from it is not a slow answer but a wrong one: it makes the
+     ansatz system look inconsistent, which is a decline at best and, since the
+     Proposition 9.2(b) certificate reads exactly that inconsistency, a FALSE
+     CERTIFICATE at worst.  Measured: the remainder of Sin[x]/x^2 after its two
+     Ei columns has the antiderivative -Sin[x]/x, and Part II certified it
+     non-elementary.  Fall back to the (slower, ~27x on Complex atoms) direct
+     path, which gets these right -- the detour is an optimisation and is only
+     entitled to the cases it actually canonicalises.
+     The underlying Together defect is tracked separately; minimal repro:
+       a = AlgebraicNumber[-2 I, {0, -1/2}];
+       Together[(a/(1 + a t) + 1/(1 - t)) (x + t^2 x)]   (* returns its input *) *)
+  If[! CanCombinedQ[u], Return[CanRaw[e]]];
+  u /. a_AlgebraicNumber :> fd[[2]][a]];
 
 (* $analyses: the once-per-integrand analyses of iPIM (Steps 1--14 of Algorithm 4), keyed by Hash[{f0, T}] *)
 $analyses = <||>;

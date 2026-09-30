@@ -162,15 +162,25 @@ static void test_certificate_now_released(void) {
         "Exp[-x^3] answers with an incomplete Gamma");
 }
 
-/* The floor under that: an integrand the stage still cannot close must decline
- * HONESTLY -- a {"failed", ...} status, never a certificate. Measured at v0.241,
- * and deliberately drawn from the two classes the certificate work does NOT
- * touch: the first three fail in the KERNEL SEARCH (corpus #87, #89, #90 --
- * Sin[x]/x^2 is a deep, order-2 pole and Sin[x^2]/Cos[x^2] find no exponential
- * source on a tangent tower), and the last two are the Cherry family every one
- * of the four reference ports also declines (corpus #274, #275). */
+/* A deep (order-2) pole on a tangent tower. The Ei columns were always found --
+ * that is the Ci -- but the ELEMENTARY remainder they leave, -Sin[x]/x, was
+ * rejected because Can's number-field detour silently failed to canonicalise it
+ * (see Can in ParallelMixed.m). Corpus #87/#172 and #175. */
+static void test_deep_pole_tangent_tower(void) {
+    assert_solves("Sin[x]/x^2", "7/5");
+    assert_solves("Sin[3 x]/x^2", "7/5");
+    assert_true_msg(
+        "! FreeQ[Integrate`ParallelMixedSpecial[Sin[x]/x^2, x], CosIntegral]",
+        "Sin[x]/x^2 answers with CosIntegral");
+}
+
+/* The floor: an integrand the stage still cannot close must decline HONESTLY --
+ * a {"failed", ...} status, never a certificate. Measured at v0.242, and drawn
+ * from the two classes this work does not touch: Sin[x^2] / Cos[x^2] fail in the
+ * KERNEL SEARCH (corpus #89, #90 -- GammaCandidates offers no Erf column for a
+ * conjugate exponential PAIR, though ExpSources now finds the source), and the
+ * Cherry pair is declined by all four reference ports too (#274, #275). */
 static void test_honest_decline_still_honest(void) {
-    assert_honest_decline("Sin[x]/x^2");
     assert_honest_decline("Sin[x^2]");
     assert_honest_decline("Cos[x^2]");
     assert_honest_decline("Exp[-Log[x]^2]");
@@ -283,6 +293,7 @@ int main(void) {
     TEST(test_kernel_elliptic);
     TEST(test_elementary_stays_elementary);
     TEST(test_certificate_now_released);
+    TEST(test_deep_pole_tangent_tower);
     TEST(test_honest_decline_still_honest);
     TEST(test_not_in_class);
     TEST(test_surfaces);
