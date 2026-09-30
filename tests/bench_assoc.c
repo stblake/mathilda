@@ -344,6 +344,45 @@ int main(void) {
     }
     printf("PASS: Do-loop over a loop-invariant association is O(1)\n\n");
 
+    /* ---- Incremental-update gate (in-place writes) ---------------------------
+     * Building or rewriting an association one key at a time must be O(1)
+     * amortised per update, so a loop of n updates is O(n): ratio ~2 at n vs
+     * 2n.  Before the in-place writers every update copied and re-canonicalised
+     * all entries (ratio ~4, 5.5 s for 10^4 AssociateTo inserts).  The
+     * overwrite and compound cases start from the shared global assoc<n>, so
+     * they also exercise the one-time copy-on-write of an aliased value. */
+    {
+        static const struct { const char* label; const char* fmt; } UPD[] = {
+            { "AssociateTo insert", "Module[{b = <||>}, Do[AssociateTo[b, i -> 2 i], {i, %d}]; Length[b]]" },
+            { "a[k] = v insert",    "Module[{b = <||>}, Do[b[i] = 2 i, {i, %d}]; Length[b]]" },
+            { "a[k] = v overwrite", "Module[{b = assoc%d}, Do[b[i] = 2 i, {i, %d}]; Length[b]]" },
+            { "a[k] += 1",          "Module[{b = assoc%d}, Do[b[i] += 1, {i, %d}]; Length[b]]" },
+        };
+        int nupd = (int)(sizeof(UPD) / sizeof(UPD[0]));
+        int upd_fail = 0;
+        printf("%-22s %10s %10s %8s %6s\n", "update loop", "n=20k(us)", "n=40k(us)", "ns/upd", "ratio");
+        printf("--------------------------------------------------------------------\n");
+        for (int i = 0; i < nupd; i++) {
+            char e[256];
+            format_op(e, sizeof(e), UPD[i].fmt, N_SMALL);
+            double us_small = median_us(e);
+            format_op(e, sizeof(e), UPD[i].fmt, N_LARGE);
+            double us_large = median_us(e);
+            double ratio = (us_small > 0.0) ? us_large / us_small : 0.0;
+            int bad = (ratio > RATIO_MAX);
+            printf("%-22s %10.1f %10.1f %8.1f %6.2f%s\n", UPD[i].label, us_small, us_large,
+                   (us_large * 1000.0) / (double)N_LARGE, ratio, bad ? "  <== NOT O(1)/update" : "");
+            if (bad) upd_fail++;
+        }
+        printf("--------------------------------------------------------------------\n");
+        if (upd_fail) {
+            printf("FAIL: %d update loop(s) scaled worse than O(n) (ratio > %.1f) -- "
+                   "single-key updates are copying the association\n", upd_fail, RATIO_MAX);
+            return 1;
+        }
+    }
+    printf("PASS: single-key update loops are O(1) per update (ratio < %.1f)\n\n", RATIO_MAX);
+
     /* ---- Absolute-cost check (machine-normalized) ----------------------------
      * Calibrate against a plain list sum of the same size, then express each op's
      * per-element cost as a multiple of that. This "cost in calibration units" is

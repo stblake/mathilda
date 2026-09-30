@@ -17,6 +17,9 @@
 #include "attr.h"
 #include "common.h"
 #include "eval.h"
+#include "print.h"                  /* expr_to_string — AssociateTo/KeyDropFrom messages */
+
+#include <stdio.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -86,10 +89,27 @@ static Expr* make_list(Expr** elems, size_t count) {
     return expr_new_function(expr_new_symbol(SYM_List), elems, count);
 }
 
+/* The one shared `Rule` / `RuleDelayed` head symbol used for entries this
+ * module builds.  A symbol node is immutable once shared (refcount > 1), so
+ * every entry can point at the same node instead of allocating one each --
+ * 64 bytes saved per entry.  Created on first use; never freed (reachable). */
+static Expr* g_rule_sym = NULL;
+static Expr* g_rule_delayed_sym = NULL;
+static Expr* shared_rule_head(bool delayed) {
+    Expr** slot = delayed ? &g_rule_delayed_sym : &g_rule_sym;
+    if (!*slot) *slot = expr_new_symbol(delayed ? SYM_RuleDelayed : SYM_Rule);
+    return expr_copy(*slot);
+}
+
+/* Build Rule[key, val] (or RuleDelayed) adopting both children. */
+static Expr* make_entry(Expr* key, Expr* val, bool delayed) {
+    Expr* args[2] = { key, val };
+    return expr_new_function(shared_rule_head(delayed), args, 2);
+}
+
 /* Build Rule[key, val] adopting both children. */
 static Expr* make_rule(Expr* key, Expr* val) {
-    Expr* args[2] = { key, val };
-    return expr_new_function(expr_new_symbol(SYM_Rule), args, 2);
+    return make_entry(key, val, false);
 }
 
 /* Build Missing["KeyAbsent", key] with a fresh copy of `key`. */
@@ -124,45 +144,44 @@ static Expr* rule_key(const Expr* rule) { return rule->data.function.args[0]; }
 static Expr* rule_val(const Expr* rule) { return rule->data.function.args[1]; }
 
 /* ======================================================================
- * Canonicalisation: turn a flat list of Rule nodes into a deduplicated,
- * insertion-ordered Association.  First occurrence fixes position; last
- * occurrence fixes value.  Amortised O(count) via the KeyIndex.
+ * Canonicalisation: turn a flat list of Rule/RuleDelayed nodes into a
+ * deduplicated, insertion-ordered Association.  First occurrence fixes
+ * position; last occurrence fixes the entry (key, value AND head, so a
+ * RuleDelayed stays delayed: <|a -> 1, a :> 2|> is <|a :> 2|>).  Amortised
+ * O(count) via the KeyIndex.
  *
- * `rules` are borrowed; the result contains deep copies.
+ * `rules` are borrowed; the result SHARES them (a refcount bump per entry, no
+ * new Rule nodes) -- entries are immutable while shared, so this is safe and
+ * it keeps construction to one pointer array plus the hash table.
  * ====================================================================== */
 Expr* assoc_from_rules(Expr** rules, size_t count) {
     KeyIndex ki;
     if (!ki_init(&ki, count)) return NULL;
 
     Expr** keys  = malloc(sizeof(Expr*) * (count ? count : 1)); /* borrowed */
-    size_t* value_slot = malloc(sizeof(size_t) * (count ? count : 1));
-    Expr** out   = malloc(sizeof(Expr*) * (count ? count : 1)); /* owned rules */
+    Expr** out   = malloc(sizeof(Expr*) * (count ? count : 1)); /* owned refs */
     size_t nout = 0;
 
     for (size_t i = 0; i < count; i++) {
         Expr* k = rule_key(rules[i]);
-        Expr* v = rule_val(rules[i]);
         size_t slot;
         size_t idx = ki_lookup(&ki, keys, k, &slot);
         if (idx == SIZE_MAX) {
             keys[nout] = k;
-            value_slot[nout] = nout;
             ki_insert(&ki, slot, nout);
-            out[nout] = make_rule(expr_copy(k), expr_copy(v));
-            nout++;
+            out[nout++] = expr_copy(rules[i]);
         } else {
-            /* Key already present: overwrite the stored value (last wins). */
-            size_t p = value_slot[idx];
-            Expr* newrule = make_rule(expr_copy(k), expr_copy(v));
-            expr_free(out[p]);
-            out[p] = newrule;
+            /* Key already present: the later entry wins, in the first slot.
+             * keys[idx] keeps pointing at the first key node, which stays alive
+             * in rules[] for the rest of the scan. */
+            expr_free(out[idx]);
+            out[idx] = expr_copy(rules[i]);
         }
     }
 
-    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),out, nout);
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
     free(out);
     free(keys);
-    free(value_slot);
     ki_free(&ki);
     return assoc;
 }
@@ -202,35 +221,37 @@ Expr* builtin_association(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 
+    /* Fast path: all arguments are entries.  Then the node is canonical iff its
+     * keys are distinct, which is exactly what a successful index build
+     * certifies -- so the check allocates only the hash table (no rule
+     * copies), and the index it produces is kept on the node for later O(1)
+     * reads.  A node that already carries a matching index is canonical by
+     * the same certificate and costs nothing. */
+    bool all_entries = true;
+    for (size_t i = 0; i < argc; i++)
+        if (!is_rule2(res->data.function.args[i])) { all_entries = false; break; }
+    if (all_entries) {
+        AssocIndex* idx = res->data.function.index;
+        if (assoc_index_matches(idx, res->data.function.args, argc)) return NULL;
+        assoc_index_free(idx);
+        res->data.function.index = NULL;
+        if (argc == 0) return NULL;
+        idx = assoc_index_build(res->data.function.args, argc);
+        if (idx) { res->data.function.index = idx; return NULL; }
+        /* A duplicate key: fall through to the rebuild. */
+    }
+
     size_t cap = argc ? argc : 1, n = 0;
     Expr** entries = malloc(sizeof(Expr*) * cap);
     bool spliced = false;
-
     for (size_t i = 0; i < argc; i++) {
         if (!collect_entries(res->data.function.args[i], &entries, &n, &cap, &spliced)) {
             free(entries);
             return NULL; /* invalid argument: leave unevaluated */
         }
     }
-
-    /* Detect whether the input is already canonical: all direct rules (no
-     * splicing) and no duplicate keys.  If so, no rebuild is needed. */
-    bool changed = spliced;
     Expr* result = assoc_from_rules(entries, n);
-    if (!changed && result && result->data.function.arg_count != n) {
-        changed = true; /* de-duplication removed some keys */
-    }
     free(entries);
-
-    if (!changed) {
-        expr_free(result);
-        /* Already canonical: leave `res` as-is. We do NOT attach an index here —
-         * evaluate()'s fixed-point step keeps the ORIGINAL node and discards this
-         * rebuilt `res`, so an index built here would be thrown away. The index
-         * is instead attached lazily by the first single-key read
-         * (assoc_lookup_value), on whichever node actually survives. */
-        return NULL;
-    }
     return result;
 }
 
@@ -288,30 +309,33 @@ static Expr* assoc_scan(const Expr* assoc, const Expr* key) {
     return NULL;
 }
 
-/* Borrowed value stored under `key`, or NULL if absent.  O(1) amortised when
- * the association carries a persistent index (built at canonicalisation), else
- * the O(n) assoc_scan.  Never mutates `assoc`: no lazy index build on a
- * borrowed/shared node, which keeps single-key reads pure and race-free under
- * the parallel compiled evaluator.  Also accepts a bare List of rules (index
- * absent -> scan), matching the callers that take is_assoc_or_rule_list. */
+/* Borrowed value stored under `key`, or NULL if absent.  O(1) amortised via
+ * the persistent AssocIndex (see assoc_index.h), which this builds LAZILY on
+ * the first single-key read and caches on the node; a node that cannot be
+ * indexed (a malformed entry or a duplicate key) is scanned instead, and the
+ * scan honours exactly the entries the index would (two-argument rules only),
+ * so both paths give the same answer.  Also accepts a bare List of rules
+ * (never indexed -> scan), matching the callers that take
+ * is_assoc_or_rule_list. */
 Expr* assoc_lookup_value(const Expr* assoc, const Expr* key) {
     AssocIndex* idx = assoc->data.function.index;
+    if (idx && !assoc_index_matches(idx, assoc->data.function.args, assoc->data.function.arg_count)) {
+        /* Stale: something replaced this node's args[] since the index was
+         * built.  Drop it and re-index below. */
+        assoc_index_free(idx);
+        ((Expr*)assoc)->data.function.index = idx = NULL;
+    }
     if (!idx && is_association(assoc) && assoc->data.function.arg_count > 0) {
-        /* Lazily build and cache the index on the FIRST single-key read. Eager
-         * attachment at canonicalisation does not survive: evaluate()'s
-         * fixed-point step keeps the original association node and frees the
-         * rebuilt one an eager index would have been attached to. The reader,
-         * by contrast, sees the surviving node — and evaluate()'s in-loop
-         * timestamp short-circuit keeps that node stable across a Do/Table/Sum
-         * loop, so this O(n) build happens once and every later probe is O(1).
+        /* Build and cache the index on the node the reader holds.  evaluate()'s
+         * timestamp and GROUND short-circuits keep that node stable across a
+         * Do/Table/Sum loop, and the in-place writers maintain the index
+         * incrementally, so this O(n) build happens once.
          *
-         * Mutating a `const` node is deliberate: the index is benign
-         * acceleration metadata on an immutable association (the same discipline
-         * as last_evaluated_at), and the interpreter is single-threaded. The
-         * compiled evaluator pre-builds the index at its marshalling boundary,
-         * so a shared association never reaches this lazy path from a worker
-         * thread. assoc_index_build returns NULL for a non-canonical node
-         * (an entry that is not a 2-arg rule), leaving the scan below correct. */
+         * Writing a `const` node is deliberate: the index is benign
+         * acceleration metadata (the same discipline as last_evaluated_at),
+         * and the interpreter is single-threaded.  The compiled evaluator
+         * pre-builds the index at its marshalling boundary, so a shared
+         * association never reaches this lazy path from a worker thread. */
         idx = assoc_index_build(assoc->data.function.args, assoc->data.function.arg_count);
         ((Expr*)assoc)->data.function.index = idx;
     }
@@ -326,11 +350,14 @@ Expr* assoc_lookup_value(const Expr* assoc, const Expr* key) {
  * at its marshalling boundary (cf_box), where evaluation is single-threaded, so
  * a subsequent parallel VM run never triggers assoc_lookup_value's lazy index
  * build — which mutates the shared node — from a worker thread.  Idempotent;
- * a no-op if the index already exists, the node is empty, or it is not a
- * canonical association (assoc_index_build returns NULL for a non-2-arg entry). */
+ * a no-op if a matching index already exists, the node is empty, or it cannot
+ * be indexed (assoc_index_build returns NULL for a malformed entry or a
+ * duplicate key). */
 void assoc_prebuild_index(const Expr* assoc) {
-    if (!assoc || assoc->data.function.index) return;
-    if (!is_association(assoc) || assoc->data.function.arg_count == 0) return;
+    if (!assoc || !is_association(assoc) || assoc->data.function.arg_count == 0) return;
+    AssocIndex* idx = assoc->data.function.index;
+    if (assoc_index_matches(idx, assoc->data.function.args, assoc->data.function.arg_count)) return;
+    assoc_index_free(idx);
     ((Expr*)assoc)->data.function.index =
         assoc_index_build(assoc->data.function.args, assoc->data.function.arg_count);
 }
@@ -351,6 +378,17 @@ Expr* assoc_lookup_value_real(const Expr* assoc, double key) {
     return assoc_lookup_value(assoc, &k);
 }
 
+/* True when every entry of association `a` is a two-argument rule.  O(1) when
+ * the node carries a matching index (a successful build certifies it), else a
+ * scan. */
+static bool assoc_well_formed(const Expr* a) {
+    if (assoc_index_matches(a->data.function.index, a->data.function.args,
+                            a->data.function.arg_count)) return true;
+    for (size_t i = 0; i < a->data.function.arg_count; i++)
+        if (!is_rule2(a->data.function.args[i])) return false;
+    return true;
+}
+
 /* Lookup / KeyExistsQ accept an association or a bare list of rules (like
  * Keys/Values). A list with non-rule elements simply has no matching keys. */
 static bool is_assoc_or_rule_list(const Expr* e) {
@@ -364,6 +402,13 @@ Expr* builtin_lookup(Expr* res) {
     Expr* key   = res->data.function.args[1];
     Expr* deflt = argc == 3 ? res->data.function.args[2] : NULL;
     if (!is_assoc_or_rule_list(assoc)) return NULL;
+    if (is_association(assoc) && !assoc_well_formed(assoc)) {
+        char* s = expr_to_string(assoc);
+        fprintf(stderr, "Lookup::invrl: The argument %s is not a valid Association or a "
+                        "list of rules.\n", s ? s : "");
+        free(s);
+        return NULL;
+    }
 
     /* Lookup threads over a (non-empty) list of associations, extracting the
      * key from each: Lookup[{a1, a2, ...}, key] -> {Lookup[a1, key], ...}. This
@@ -444,6 +489,13 @@ Expr* builtin_keyexistsq(Expr* res) {
     Expr* assoc = res->data.function.args[0];
     Expr* key   = res->data.function.args[1];
     if (!is_assoc_or_rule_list(assoc)) return NULL;
+    if (is_association(assoc) && !assoc_well_formed(assoc)) {
+        char* s = expr_to_string(assoc);
+        fprintf(stderr, "KeyExistsQ::invrl: The argument %s is not a valid Association or a "
+                        "list of rules.\n", s ? s : "");
+        free(s);
+        return expr_new_symbol(SYM_False);
+    }
     return expr_new_symbol(assoc_lookup_value(assoc, key) ? SYM_True : SYM_False);
 }
 
@@ -633,7 +685,7 @@ Expr* builtin_keyunion(Expr* res) {
                 ? make_missing(k)
                 : expr_copy(rule_val(a->data.function.args[idx]));
             Expr* rargs[2] = { expr_copy(k), val };
-            entries[u] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+            entries[u] = expr_new_function(shared_rule_head(false), rargs, 2);
         }
         outer[j] = expr_new_function(expr_new_symbol(SYM_Association),entries, nu);
         free(entries); free(jkeys); ki_free(&jki);
@@ -1050,42 +1102,389 @@ Expr* builtin_merge(Expr* res) {
 }
 
 /* ======================================================================
- * AssociateTo[symbol, key->val | {rules}] — HoldFirst in-place update.
- * Mirrors AppendTo: read the symbol's current association, produce the
- * updated one, and assign it back.
+ * In-place mutation: a[k] = v, a[k] += v, a[k] =., AssociateTo, KeyDropFrom.
+ *
+ * An association held by a symbol is updated where it is stored (the
+ * symbol's OwnValue slot), not by copy-and-reassign.  Each level of the write
+ * path is first made uniquely referenced -- a no-op when its refcount is 1,
+ * a one-level expr_unshare otherwise -- so a node another holder can see is
+ * never written (`b = a; a[k] = v` leaves b alone: the first write copies a's
+ * top level once, and every later write is in place).  On a uniquely
+ * referenced association:
+ *   - overwrite is O(1): the index finds the entry, whose value is swapped;
+ *   - insert is amortised O(1): args[] grows geometrically (capacity recorded
+ *     in the index) and the index gains one slot;
+ *   - delete is O(n) memmove plus an O(table) index fix-up, no rehashing.
+ *
+ * Fixed-point bookkeeping.  Replacing the node is what used to make every
+ * later read of the symbol re-evaluate (and re-canonicalise) all n entries.
+ * The writers keep the evaluator's verdict instead: a node that was a settled
+ * fixed point before the edit, edited only with settled children (Set has
+ * already evaluated the key and the value), is still one afterwards, so it is
+ * re-stamped under the live clock -- and keeps the GROUND flag when the new
+ * children are ground.  Anything else clears the stamp, so a mutated node is
+ * never served stale.  The edit bumps the eval clock like any OwnValue write
+ * (the symbol's value changed); settledness is judged against the clock value
+ * from BEFORE that bump, and re-stamping uses the clock AFTER it.
+ * ====================================================================== */
+
+static bool entry_is_delayed(const Expr* e) {
+    return head_is(e, SYM_RuleDelayed);
+}
+
+/* Make the association at *slot uniquely referenced and indexed.  Returns the
+ * node, or NULL when it cannot be indexed (a malformed entry or a duplicate
+ * key: the caller falls back to the functional path, which handles those). */
+static Expr* assoc_own_indexed(Expr** slot) {
+    Expr* a = *slot;
+    if (a->refcount > 1) a = *slot = expr_unshare(a);
+    if (a->refcount > 1) return NULL;                      /* unshare OOM */
+    AssocIndex* idx = a->data.function.index;
+    if (!assoc_index_matches(idx, a->data.function.args, a->data.function.arg_count)) {
+        assoc_index_free(idx);
+        a->data.function.index = idx =
+            assoc_index_build(a->data.function.args, a->data.function.arg_count);
+    }
+    return idx ? a : NULL;
+}
+
+/* Append `entry` (whose key is known absent) to the uniquely referenced,
+ * indexed association `a`.  Amortised O(1). */
+static bool assoc_append_inplace(Expr* a, Expr* entry) {
+    AssocIndex* idx = a->data.function.index;
+    size_t n = a->data.function.arg_count;
+    size_t cap = assoc_index_args_cap(idx);
+    if (n >= cap) {
+        size_t ncap = cap < 4 ? 4 : cap * 2;
+        Expr** grown = realloc(a->data.function.args, sizeof(Expr*) * ncap);
+        if (!grown) return false;
+        a->data.function.args = grown;
+        assoc_index_set_args(idx, grown, ncap);
+    }
+    a->data.function.args[n] = entry;
+    a->data.function.arg_count = n + 1;
+    if (!assoc_index_insert(idx, a->data.function.args, n)) {
+        /* Table growth failed: drop the index (reads fall back to a scan).
+         * The entry itself is in place, so the write still succeeded. */
+        assoc_index_free(idx);
+        a->data.function.index = NULL;
+    }
+    return true;
+}
+
+/* Remove entry i from the uniquely referenced, indexed association `a`. */
+static void assoc_remove_inplace(Expr* a, size_t i) {
+    Expr** args = a->data.function.args;
+    size_t n = a->data.function.arg_count;
+    Expr* gone = args[i];
+    uint64_t h = expr_hash(rule_key(gone));
+    memmove(args + i, args + i + 1, sizeof(Expr*) * (n - i - 1));
+    a->data.function.arg_count = n - 1;
+    assoc_index_remove(a->data.function.index, args, i, h);
+    expr_free(gone);
+}
+
+typedef struct {
+    uint64_t    clock;      /* eval clock BEFORE this edit's bump */
+    AssocTailFn tail;       /* finishes a path through a non-association value */
+    void*       tail_ctx;
+} WriteCtx;
+
+/* Stamp `e` settled (and ground when `ground`) or clear its stamp. */
+static void restamp(Expr* e, bool settled, bool ground) {
+    expr_invalidate_hash(e);
+    if (settled) eval_node_mark_settled(e, ground);
+    else         e->last_evaluated_at = 0;
+}
+
+/* One level of an in-place path write.  *slot holds an association and
+ * steps[0] is step number `level` of the whole path.  Consumes
+ * `val` (NULL for ASSOC_WRITE_UNSET).  On return *st / *gr describe whether
+ * the node now at *slot is a settled / ground fixed point. */
+static AssocWriteStatus write_level(Expr** slot, const AssocStep* steps, size_t nsteps,
+                                    size_t level, Expr* val, AssocWriteMode mode, bool delayed,
+                                    const WriteCtx* c, bool* st, bool* gr) {
+    bool pre_st = eval_node_settled_at(*slot, c->clock);
+    bool pre_gr = pre_st && eval_node_ground_now(*slot);
+    Expr* a = assoc_own_indexed(slot);
+    if (!a) { expr_free(val); return ASSOC_WRITE_UNSUPPORTED; }
+
+    /* Resolve this step to an entry position (or -1: absent key). */
+    const AssocStep* s = &steps[0];
+    int64_t i;
+    size_t n = a->data.function.arg_count;
+    if (s->key) {
+        i = assoc_index_lookup(a->data.function.index, a->data.function.args, s->key);
+    } else {
+        int64_t p = s->pos < 0 ? (int64_t)n + s->pos + 1 : s->pos;
+        if (p < 1 || p > (int64_t)n) { expr_free(val); restamp(a, pre_st, pre_gr); return ASSOC_WRITE_BADPOS; }
+        i = p - 1;
+    }
+
+    bool child_st = true, child_gr = true;
+    if (nsteps == 1) {
+        if (mode == ASSOC_WRITE_UNSET) {
+            if (i >= 0) assoc_remove_inplace(a, (size_t)i);
+        } else {
+            Expr* key = i >= 0 ? rule_key(a->data.function.args[i]) : (Expr*)s->key;
+            child_st = eval_node_settled_at(key, c->clock) &&
+                       (delayed || eval_node_settled_at(val, c->clock));
+            child_gr = child_st && eval_node_ground_now(key) && eval_node_ground_now(val);
+            Expr* entry;
+            if (i >= 0 && a->data.function.args[i]->refcount == 1) {
+                /* Overwrite a private entry in place: swap the value, and the
+                 * head when Set replaces a := entry (or SetDelayed a -> one). */
+                entry = a->data.function.args[i];
+                expr_free(entry->data.function.args[1]);
+                entry->data.function.args[1] = val;
+                if (entry_is_delayed(entry) != delayed) {
+                    expr_free(entry->data.function.head);
+                    entry->data.function.head = shared_rule_head(delayed);
+                }
+            } else if (i >= 0) {
+                /* Shared entry (another association holds it): a fresh one. */
+                entry = make_entry(expr_copy(key), val, delayed);
+                expr_free(a->data.function.args[i]);
+                a->data.function.args[i] = entry;
+            } else {
+                entry = make_entry(expr_copy(key), val, delayed);
+                if (!assoc_append_inplace(a, entry)) {
+                    expr_free(entry);
+                    restamp(a, pre_st, pre_gr);
+                    return ASSOC_WRITE_UNSUPPORTED;
+                }
+            }
+            restamp(entry, child_st, child_gr);
+        }
+    } else {
+        if (i < 0) { expr_free(val); restamp(a, pre_st, pre_gr); return ASSOC_WRITE_NOKEY; }
+        Expr** eslot = &a->data.function.args[i];
+        bool e_st = eval_node_settled_at(*eslot, c->clock);
+        bool e_gr = e_st && eval_node_ground_now(*eslot);
+        if ((*eslot)->refcount > 1) *eslot = expr_unshare(*eslot);
+        Expr* entry = *eslot;
+        if (entry->refcount > 1) { expr_free(val); return ASSOC_WRITE_UNSUPPORTED; }
+        Expr** vslot = &entry->data.function.args[1];
+        AssocWriteStatus r;
+        if (is_association(*vslot)) {
+            r = write_level(vslot, steps + 1, nsteps - 1, level + 1, val, mode, delayed, c,
+                            &child_st, &child_gr);
+        } else if (c->tail && mode == ASSOC_WRITE_SET) {
+            Expr* nv = c->tail(*vslot, level + 1, c->tail_ctx);
+            expr_free(val);
+            if (nv) {
+                expr_free(*vslot);
+                *vslot = nv;
+                r = ASSOC_WRITE_OK;
+                child_st = child_gr = false;   /* the functional tail's result is unevaluated */
+            } else {
+                r = ASSOC_WRITE_NOTASSOC;
+            }
+        } else {
+            expr_free(val);
+            r = ASSOC_WRITE_NOTASSOC;
+        }
+        if (r == ASSOC_WRITE_OK) {
+            restamp(entry, e_st && child_st, e_gr && child_gr);
+        } else {
+            restamp(entry, e_st, e_gr);
+            restamp(a, pre_st, pre_gr);
+            return r;
+        }
+    }
+    *st = pre_st && child_st;
+    *gr = pre_gr && child_gr;
+    restamp(a, *st, *gr);
+    return ASSOC_WRITE_OK;
+}
+
+AssocWriteStatus assoc_write_path(Expr** slot, const AssocStep* steps, size_t nsteps,
+                                  Expr* val, AssocWriteMode mode,
+                                  AssocTailFn tail, void* tail_ctx) {
+    if (!slot || !*slot || !is_association(*slot) || nsteps == 0) {
+        expr_free(val);
+        return ASSOC_WRITE_UNSUPPORTED;
+    }
+    bool delayed = (mode == ASSOC_WRITE_SET_DELAYED);
+    if (delayed) mode = ASSOC_WRITE_SET;
+    WriteCtx c = { eval_clock_get(), tail, tail_ctx };
+    eval_clock_bump();           /* the value held at *slot is changing */
+    bool st, gr;
+    return write_level(slot, steps, nsteps, 0, val, mode, delayed, &c, &st, &gr);
+}
+
+/* The OwnValue slot of `name` when its value is a plain `name = value` rule
+ * (the shape apply_own_values' fast path reads), else NULL. */
+static Expr** own_value_slot(const char* name) {
+    Rule* ov = symtab_get_own_values(name);
+    if (!ov || !ov->pattern || ov->pattern->type != EXPR_SYMBOL ||
+        !ov->replacement) return NULL;
+    /* Interned names compare by pointer; a caller's literal falls back to strcmp. */
+    if (ov->pattern->data.symbol.name != name && strcmp(ov->pattern->data.symbol.name, name) != 0)
+        return NULL;
+    return &ov->replacement;
+}
+
+Expr** assoc_symbol_slot(const char* name) {
+    if (!name) return NULL;
+    if (get_attributes(name) & (ATTR_PROTECTED | ATTR_LOCKED)) return NULL;
+    Expr** slot = own_value_slot(name);
+    return (slot && is_association(*slot)) ? slot : NULL;
+}
+
+/* A key argument: Key[k] names the key k; anything else is the key itself. */
+static const Expr* unwrap_key(const Expr* k) {
+    if (head_is(k, SYM_Key) && k->data.function.arg_count == 1) return k->data.function.args[0];
+    return k;
+}
+
+/* Resolve the lvalue of a HoldFirst association mutator: `s`, `s[k1, ...]`,
+ * `s[k1][k2]...` or `s[[k1, ...]]` (keys only).  Writes the root symbol name
+ * and appends the key steps to `steps` (capacity `cap`).  Returns the number
+ * of steps, or -1 when `lv` is not of that shape. */
+static int64_t lvalue_path(const Expr* lv, const char** root, AssocStep* steps, size_t cap) {
+    if (lv->type == EXPR_SYMBOL) { *root = lv->data.symbol.name; return 0; }
+    if (lv->type != EXPR_FUNCTION) return -1;
+    bool part = head_is(lv, SYM_Part);
+    const Expr* inner = part ? (lv->data.function.arg_count ? lv->data.function.args[0] : NULL)
+                             : lv->data.function.head;
+    if (!inner) return -1;
+    int64_t k = lvalue_path(inner, root, steps, cap);
+    if (k < 0) return -1;
+    for (size_t j = part ? 1 : 0; j < lv->data.function.arg_count; j++) {
+        const Expr* ix = lv->data.function.args[j];
+        if ((size_t)k >= cap) return -1;
+        if (part && (ix->type == EXPR_INTEGER || head_is(ix, SYM_List) ||
+                     head_is(ix, SYM_Span) ||
+                     (ix->type == EXPR_SYMBOL && ix->data.symbol.name == SYM_All)))
+            return -1;
+        steps[k].key = unwrap_key(ix);
+        steps[k].pos = 0;
+        k++;
+    }
+    return k;
+}
+
+/* The association reached by following `steps` from *slot, or NULL. */
+static Expr* assoc_at_path(Expr* a, const AssocStep* steps, size_t n) {
+    for (size_t i = 0; i < n && a; i++) {
+        if (!is_association(a)) return NULL;
+        a = assoc_lookup_value(a, steps[i].key);
+    }
+    return (a && is_association(a)) ? a : NULL;
+}
+
+#define ASSOC_MAX_LVALUE_DEPTH 64
+
+/* ======================================================================
+ * AssociateTo[s, key -> val | {rules} | assoc] — HoldFirst, in place.
+ * `s` may also name a nested association: AssociateTo[s[k], rule].
+ * Returns the updated association.
  * ====================================================================== */
 Expr* builtin_associate_to(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
-    Expr* sym = res->data.function.args[0];
-    Expr* kv  = res->data.function.args[1];
-    if (sym->type != EXPR_SYMBOL) return NULL;
+    Expr* lv = res->data.function.args[0];
+    Expr* kv = res->data.function.args[1];
 
-    Expr* current = evaluate(sym);
-    if (!current || !is_association(current)) { if (current) expr_free(current); return NULL; }
-
-    /* Gather current rules plus the new one(s), then re-canonicalise. */
-    size_t base = current->data.function.arg_count;
-    size_t extra = head_is(kv, SYM_List) ? kv->data.function.arg_count : 1;
-    Expr** all = malloc(sizeof(Expr*) * (base + extra));
-    size_t n = 0;
-    for (size_t i = 0; i < base; i++) all[n++] = current->data.function.args[i];
-    if (head_is(kv, SYM_List)) {
-        for (size_t i = 0; i < extra; i++) {
-            if (!is_rule2(kv->data.function.args[i])) { free(all); expr_free(current); return NULL; }
-            all[n++] = kv->data.function.args[i];
-        }
-    } else {
-        if (!is_rule2(kv)) { free(all); expr_free(current); return NULL; }
-        all[n++] = kv;
+    AssocStep steps[ASSOC_MAX_LVALUE_DEPTH + 1];
+    const char* root = NULL;
+    int64_t depth = lvalue_path(lv, &root, steps, ASSOC_MAX_LVALUE_DEPTH);
+    Expr** slot = depth >= 0 ? own_value_slot(root) : NULL;
+    if (!slot && lv->type == EXPR_SYMBOL) {
+        fprintf(stderr, "AssociateTo::blnoval: The symbol %s at position 1 should have an "
+                        "immediate value defined.\n", root);
+        return NULL;
+    }
+    Expr* target = slot ? assoc_at_path(*slot, steps, (size_t)depth) : NULL;
+    if (!target || (get_attributes(root) & (ATTR_PROTECTED | ATTR_LOCKED))) {
+        char* s = expr_to_string(lv);
+        fprintf(stderr, "AssociateTo::invak: The argument %s is not a valid Association.\n",
+                s ? s : "");
+        free(s);
+        return NULL;
     }
 
-    Expr* updated = assoc_from_rules(all, n);
-    free(all);
-    expr_free(current);
+    /* The new entries: one rule, a List of rules, or an association. */
+    Expr* const* items; size_t nitems;
+    if (is_rule2(kv)) { items = &res->data.function.args[1]; nitems = 1; }
+    else if (head_is(kv, SYM_List) || is_association(kv)) {
+        items = kv->data.function.args; nitems = kv->data.function.arg_count;
+        for (size_t i = 0; i < nitems; i++) if (!is_rule2(items[i])) return NULL;
+    } else {
+        return NULL;
+    }
 
-    /* Assign back to the symbol (HoldFirst guarantees `sym` is the symbol). */
-    symtab_add_own_value(sym->data.symbol.name, sym, updated);
-    return updated;
+    for (size_t i = 0; i < nitems; i++) {
+        steps[depth].key = rule_key(items[i]);
+        steps[depth].pos = 0;
+        AssocWriteStatus r = assoc_write_path(slot, steps, (size_t)depth + 1,
+                                              expr_copy(rule_val(items[i])),
+                                              entry_is_delayed(items[i]) ? ASSOC_WRITE_SET_DELAYED
+                                                                         : ASSOC_WRITE_SET,
+                                              NULL, NULL);
+        if (r != ASSOC_WRITE_OK) return NULL;
+    }
+    Expr* out = assoc_at_path(*slot, steps, (size_t)depth);
+    return out ? expr_copy(out) : NULL;
+}
+
+/* ======================================================================
+ * KeyDropFrom[s, key | Key[k] | {keys}] — HoldFirst, in place.  Removes the
+ * keys from the association held by s and returns the new association.
+ * ====================================================================== */
+Expr* builtin_keydropfrom(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* lv = res->data.function.args[0];
+    Expr* karg = res->data.function.args[1];
+
+    AssocStep steps[ASSOC_MAX_LVALUE_DEPTH + 1];
+    const char* root = NULL;
+    int64_t depth = lvalue_path(lv, &root, steps, ASSOC_MAX_LVALUE_DEPTH);
+    Expr** slot = depth >= 0 ? own_value_slot(root) : NULL;
+    if (depth >= 0 && !slot && lv->type == EXPR_SYMBOL) {
+        fprintf(stderr, "KeyDropFrom::blnoval: The symbol %s at position 1 should have an "
+                        "immediate value defined.\n", root);
+        return NULL;
+    }
+    Expr* target = slot ? assoc_at_path(*slot, steps, (size_t)depth) : NULL;
+    if (!target || (get_attributes(root) & (ATTR_PROTECTED | ATTR_LOCKED))) {
+        char* s = expr_to_string(lv);
+        fprintf(stderr, "KeyDropFrom::invak: The argument %s is not a valid Association.\n",
+                s ? s : "");
+        free(s);
+        return NULL;
+    }
+
+    Expr* const* keys; size_t nkeys;
+    if (head_is(karg, SYM_List)) { keys = karg->data.function.args; nkeys = karg->data.function.arg_count; }
+    else { keys = &res->data.function.args[1]; nkeys = 1; }
+
+    if (depth == 0 && nkeys > 8) {
+        /* Many keys: one O(n + m) filtering pass (assoc_key_select hashes the
+         * drop set once) beats m O(n) single deletions.  Key[k] wrappers are
+         * stripped first so they name their keys. */
+        Expr** plain = malloc(sizeof(Expr*) * nkeys);
+        for (size_t i = 0; i < nkeys; i++) plain[i] = expr_copy((Expr*)unwrap_key(keys[i]));
+        Expr* klist = make_list(plain, nkeys);
+        free(plain);
+        Expr* kept = assoc_key_select(*slot, klist, false);
+        expr_free(klist);
+        if (kept) {
+            eval_clock_bump();
+            expr_free(*slot);
+            *slot = kept;
+        }
+    } else {
+        for (size_t i = 0; i < nkeys; i++) {
+            steps[depth].key = unwrap_key(keys[i]);
+            steps[depth].pos = 0;
+            AssocWriteStatus r = assoc_write_path(slot, steps, (size_t)depth + 1, NULL,
+                                                  ASSOC_WRITE_UNSET, NULL, NULL);
+            if (r != ASSOC_WRITE_OK) break;
+        }
+    }
+    Expr* out = assoc_at_path(*slot, steps, (size_t)depth);
+    return out ? expr_copy(out) : NULL;
 }
 
 /* Apply f to a single argument and evaluate: evaluate(f[arg]). Owns result. */
@@ -1181,7 +1580,7 @@ Expr* assoc_rekey_from_list(const Expr* assoc, const Expr* values) {
     for (size_t i = 0; i < nres; i++) {
         Expr* key = rule_key(assoc->data.function.args[offset + i]);
         Expr* rargs[2] = { expr_copy(key), expr_copy(values->data.function.args[i]) };
-        entries[i] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+        entries[i] = expr_new_function(shared_rule_head(false), rargs, 2);
     }
     Expr* result = expr_new_function(expr_new_symbol(SYM_Association),entries, nres);
     free(entries);
@@ -1581,9 +1980,19 @@ void assoc_init(void) {
     symtab_add_builtin("AssociateTo", builtin_associate_to);
     symtab_get_def("AssociateTo")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_set_docstring("AssociateTo",
-        "AssociateTo[s, key -> val]  |  AssociateTo[s, {rules}]\n"
+        "AssociateTo[s, key -> val]  |  AssociateTo[s, {rules}]  |  AssociateTo[s, assoc]\n"
         "\tAdds or updates key-value pairs in the association held by symbol s,\n"
-        "\tmodifying s in place.");
+        "\tmodifying s in place (amortised O(1) per key), and returns the new\n"
+        "\tassociation. A RuleDelayed entry stays delayed. s may also name a nested\n"
+        "\tassociation, as in AssociateTo[s[k], rule].");
+
+    symtab_add_builtin("KeyDropFrom", builtin_keydropfrom);
+    symtab_get_def("KeyDropFrom")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
+    symtab_set_docstring("KeyDropFrom",
+        "KeyDropFrom[s, key]  |  KeyDropFrom[s, {k1, ...}]\n"
+        "\tRemoves the given keys (or Key[k]) from the association held by symbol s,\n"
+        "\tmodifying s in place, and returns the new association. Absent keys are\n"
+        "\tignored. s may also name a nested association, as in KeyDropFrom[s[k], key].");
 
     symtab_add_builtin("KeySort", builtin_keysort);
     symtab_get_def("KeySort")->attributes |= ATTR_PROTECTED;

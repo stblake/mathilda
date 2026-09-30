@@ -32,11 +32,12 @@
 bool is_association(const Expr* e);
 
 /* The value stored under `key` (a BORROWED pointer into `assoc`), or NULL if the
- * key is absent.  O(1) amortised when `assoc` carries its persistent key index
- * (every canonical association built through this module does), else an O(n)
- * scan.  Accepts an association or a bare List of rules.  Does not mutate
- * `assoc`.  This is the single-key lookup primitive shared by Lookup,
- * KeyExistsQ/KeyMemberQ/KeyFreeQ, Part, and the <|...|>[key] accessor. */
+ * key is absent.  O(1) amortised through the persistent key index, which the
+ * first read builds and caches on the node (see assoc_index.h); a node that
+ * cannot be indexed (malformed entry, duplicate key) is scanned, honouring the
+ * same entries.  Accepts an association or a bare List of rules.  Its only
+ * side effect is that cached index.  This is the single-key lookup primitive
+ * shared by Lookup, KeyExistsQ/KeyMemberQ/KeyFreeQ, Part, and <|...|>[key]. */
 Expr* assoc_lookup_value(const Expr* assoc, const Expr* key);
 
 /* Eagerly build + cache the single-key index (compiled marshalling boundary).
@@ -62,9 +63,10 @@ Expr* assoc_counts_ndarray(const Expr* arr);
  * newval; owned result, or NULL (then the caller frees newval). */
 Expr* assoc_set_key(const Expr* assoc, const Expr* key, Expr* newval);
 
-/* Build a canonical Association from `count` Rule[k,v] nodes.  The rules are
- * copied (the caller keeps ownership of `rules`).  Duplicate keys collapse
- * with last-value-wins while preserving first-occurrence order.  O(count). */
+/* Build a canonical Association from `count` Rule/RuleDelayed nodes.  The
+ * rules are shared into the result by refcount (the caller keeps its own
+ * references).  Duplicate keys collapse with last-entry-wins (head included,
+ * so RuleDelayed survives) while preserving first-occurrence order.  O(count). */
 Expr* assoc_from_rules(Expr** rules, size_t count);
 
 /* Thread `f` over the values of an association, preserving keys:
@@ -146,6 +148,56 @@ Expr* assoc_entry_with_value(const Expr* entry, Expr* newval);
 
 /* True for a two-argument Rule/RuleDelayed, i.e. a well-formed entry. */
 bool is_rule2(const Expr* e);
+
+/* ---------------------------------------------------------------------------
+ * In-place mutation (a[k] = v, a[k] += v, a[k] =., AssociateTo, KeyDropFrom).
+ *
+ * A write names a path of steps from a stored association: each step is a key
+ * (`key` non-NULL, already unwrapped from Key[...]) or a 1-based position
+ * (`key` NULL, `pos` may be negative).  assoc_write_path follows the path
+ * through nested associations, making each level uniquely referenced before
+ * touching it (a no-op at refcount 1, one expr_unshare otherwise) so aliases
+ * such as `b = a` never see the write, and keeps each node's key index and
+ * fixed-point stamp current -- so single-key updates are amortised O(1).
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    const Expr* key;     /* the key (borrowed), or NULL for a positional step */
+    int64_t     pos;     /* 1-based position when key == NULL (negative: from the end) */
+} AssocStep;
+
+typedef enum {
+    ASSOC_WRITE_SET = 0,       /* store `val` under Rule           (Set)        */
+    ASSOC_WRITE_SET_DELAYED,   /* store `val` under RuleDelayed    (SetDelayed) */
+    ASSOC_WRITE_UNSET          /* remove the last step's key       (Unset)      */
+} AssocWriteMode;
+
+typedef enum {
+    ASSOC_WRITE_OK = 0,
+    ASSOC_WRITE_NOKEY,         /* an intermediate key is absent       (Set::kval)  */
+    ASSOC_WRITE_NOTASSOC,      /* the path runs through a non-association value    */
+    ASSOC_WRITE_BADPOS,        /* a positional step is out of range   (Set::partw) */
+    ASSOC_WRITE_UNSUPPORTED    /* not an indexable association: use the slow path  */
+} AssocWriteStatus;
+
+/* Finishes a path whose remaining steps (from step number `step` on) run
+ * through `value`, a non-association (e.g. a List inside an association).
+ * Borrows `value`; returns an owned replacement, or NULL to decline. */
+typedef Expr* (*AssocTailFn)(Expr* value, size_t step, void* ctx);
+
+/* Write through the association held at *slot (which may be replaced by a
+ * private copy).  Consumes `val` (NULL for ASSOC_WRITE_UNSET).  `tail` may be
+ * NULL.  Bumps the eval clock: the value at *slot changes. */
+AssocWriteStatus assoc_write_path(Expr** slot, const AssocStep* steps, size_t nsteps,
+                                  Expr* val, AssocWriteMode mode,
+                                  AssocTailFn tail, void* tail_ctx);
+
+/* The OwnValue slot of symbol `name` when it holds an Association as a plain
+ * `name = value` rule and is neither Protected nor Locked, else NULL.  Writes
+ * through this slot update the symbol's value in place. */
+Expr** assoc_symbol_slot(const char* name);
+
+/* KeyDropFrom[s, key | {keys}] — HoldFirst; removes keys in place. */
+Expr* builtin_keydropfrom(Expr* res);
 
 /* Register every Association-family builtin, with attributes and docstrings. */
 void assoc_init(void);

@@ -19,6 +19,7 @@
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "assoc.h"                  /* assoc_lookup_value — O(1) <|...|>[key] */
+#include "part.h"                   /* expr_head — Set::write message */
 #include "interp.h"
 #include "interval.h"                /* interval_thread_call — Interval[...] threading */
 #include "compile/compiled_function.h"
@@ -188,13 +189,30 @@ static inline bool ground_head(const Expr* h) {
 /* Is `a` ground *right now*? For a FUNCTION we trust its cached bit only if it
  * is still valid (eval_ground_valid); atoms are decided structurally. This is
  * the recurrence used bottom-up when stamping a parent -- O(arity), not O(size). */
+/* A bare symbol is ground when it is Protected and has no OwnValues (True,
+ * False, Null, None, Automatic, ...): it evaluates to itself, and the only ways
+ * to change that -- Unprotect, or an internal OwnValue write on a Protected
+ * symbol -- both advance the rule epoch (attribute sites use
+ * eval_rule_epoch_bump; symtab_add_own_value marks the epoch for a Protected
+ * target), which invalidates every GROUND stamp at once.  This lets the very
+ * common `seen[k] = True` association stay GROUND across loop iterations. */
+static inline bool is_ground_symbol(const Expr* a) {
+    SymbolDef* def = a->data.symbol.def;
+    if (!def) {
+        def = symtab_get_def(a->data.symbol.name);
+        ((Expr*)a)->data.symbol.def = def;      /* benign cache, as in apply_own_values */
+    }
+    return def && !def->own_values && (get_attributes_def(def) & ATTR_PROTECTED);
+}
 static inline bool is_ground_now(const Expr* a) {
     switch (a->type) {
         case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
             return true;
         case EXPR_FUNCTION:
             return eval_ground_valid(a);
-        default:            /* bare SYMBOL, NDARRAY, COMPILED, MPFR: conservative */
+        case EXPR_SYMBOL:
+            return is_ground_symbol(a);
+        default:            /* NDARRAY, COMPILED, MPFR: conservative */
             return false;
     }
 }
@@ -210,6 +228,30 @@ static bool node_compute_ground(const Expr* e) {
         if (!args[i] || !is_ground_now(args[i])) return false;
     }
     return true;
+}
+
+/* In-place edit support (see eval.h). */
+bool eval_node_settled_at(const Expr* e, uint64_t clock) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_SYMBOL: {
+            SymbolDef* def = e->data.symbol.def;
+            if (!def) {
+                def = symtab_get_def(e->data.symbol.name);
+                ((Expr*)e)->data.symbol.def = def;
+            }
+            return def && !def->own_values;
+        }
+        case EXPR_FUNCTION:
+            return eval_stamp_of(e) == clock || eval_ground_valid(e);
+        default:
+            return true;       /* numbers, strings, arrays: evaluate to themselves */
+    }
+}
+bool eval_node_ground_now(const Expr* e) { return e && is_ground_now(e); }
+void eval_node_mark_settled(Expr* e, bool ground) {
+    if (!e) return;
+    e->last_evaluated_at = g_eval_clock | (ground ? EVAL_GROUND_BIT : 0);
 }
 
 /* ---- Trace collector (nested) --------------------------------------------
@@ -939,6 +981,111 @@ static bool is_assignable_lhs(Expr* lhs, Expr* rhs) {
  * unchanged, and still return true so the caller yields the RHS, matching
  * Mathematica semantics.
  */
+/* Association element assignment: `a[k1, ..., kn] = v`, `a[k1][k2] = v` (and
+ * `:=`) when the root symbol `a` holds an Association.  The keys are evaluated
+ * (a = <||>; k = "x"; a[k] = 5 sets a["x"]) and the value is written IN PLACE
+ * through assoc_write_path: amortised O(1), copy-on-write when the association
+ * is shared.  A missing intermediate key is Set::kval and a path through a
+ * non-association value is Set::write; both leave `a` unchanged and Set still
+ * returns the right-hand side, as in Mathematica.
+ *
+ * Returns 1 when the assignment was handled, 0 when it was rejected, and -1
+ * when `lhs` is not an association element target (the caller carries on). */
+static int assoc_element_assign(Expr* lhs, Expr* rhs, bool is_delayed) {
+    /* Find the root symbol and count the key arguments across curried levels. */
+    size_t nkeys = 0;
+    const Expr* cur = lhs;
+    while (cur->type == EXPR_FUNCTION) {
+        nkeys += cur->data.function.arg_count;
+        cur = cur->data.function.head;
+    }
+    if (cur->type != EXPR_SYMBOL || nkeys == 0) return -1;
+    const char* root = cur->data.symbol.name;
+    Expr** slot = assoc_symbol_slot(root);
+    if (!slot) return -1;
+
+    /* Keys in path order: the innermost call's arguments come first. */
+    Expr** keys = malloc(sizeof(Expr*) * nkeys);
+    AssocStep* steps = malloc(sizeof(AssocStep) * nkeys);
+    size_t k = nkeys;
+    for (cur = lhs; cur->type == EXPR_FUNCTION; cur = cur->data.function.head) {
+        size_t na = cur->data.function.arg_count;
+        k -= na;
+        for (size_t i = 0; i < na; i++) keys[k + i] = cur->data.function.args[i];
+    }
+    for (size_t i = 0; i < nkeys; i++) {
+        keys[i] = evaluate(keys[i]);                    /* evaluate borrows */
+        const Expr* key = keys[i];
+        if (key->type == EXPR_FUNCTION && key->data.function.head->type == EXPR_SYMBOL &&
+            key->data.function.head->data.symbol.name == SYM_Key &&
+            key->data.function.arg_count == 1)
+            key = key->data.function.args[0];
+        steps[i].key = key;
+        steps[i].pos = 0;
+    }
+
+    /* Resolve the slot again: evaluating a key may have run arbitrary code. */
+    slot = assoc_symbol_slot(root);
+    AssocWriteStatus st = slot
+        ? assoc_write_path(slot, steps, nkeys, expr_copy(rhs),
+                           is_delayed ? ASSOC_WRITE_SET_DELAYED : ASSOC_WRITE_SET, NULL, NULL)
+        : ASSOC_WRITE_UNSUPPORTED;
+
+    int handled = 1;
+    if (st == ASSOC_WRITE_NOKEY || st == ASSOC_WRITE_NOTASSOC) {
+        /* Walk the path to name the offending step. */
+        const Expr* v = *slot;
+        size_t i = 0;
+        for (; i + 1 < nkeys && v && is_association(v); i++) {
+            const Expr* next = assoc_lookup_value(v, steps[i].key);
+            if (!next) break;
+            v = next;
+        }
+        char* ks = expr_to_string((Expr*)steps[i].key);
+        if (st == ASSOC_WRITE_NOKEY) {
+            fprintf(stderr, "Set::kval: The value for the key %s does not exist.\n", ks ? ks : "");
+        } else if (v && v->type != EXPR_FUNCTION) {
+            Expr* h = expr_head((Expr*)v);
+            char* hs = h ? expr_to_string(h) : NULL;
+            char* vs = expr_to_string((Expr*)v);
+            fprintf(stderr, "Set::write: Tag %s in %s[%s] is Protected.\n",
+                    hs ? hs : "", vs ? vs : "", ks ? ks : "");
+            free(hs); free(vs);
+            if (h) expr_free(h);
+        }
+        free(ks);
+    } else if (st == ASSOC_WRITE_UNSUPPORTED) {
+        handled = -1;
+    }
+    for (size_t i = 0; i < nkeys; i++) expr_free(keys[i]);
+    free(keys);
+    free(steps);
+    if (handled >= 0 || lhs->data.function.head->type != EXPR_SYMBOL) return handled < 0 ? 0 : handled;
+
+    /* Fallback for an association the fast path cannot index (a malformed
+     * entry or a duplicate key): route through Part assignment with each key
+     * wrapped in Key[...] (assoc[k] === assoc[[Key[k]]]). */
+    {
+        Expr* expr_part_assign(Expr* lhs_p, Expr* rhs_p);
+        size_t nk = lhs->data.function.arg_count;
+        Expr** pargs = malloc(sizeof(Expr*) * (nk + 1));
+        pargs[0] = expr_copy(lhs->data.function.head);
+        for (size_t i = 0; i < nk; i++) {
+            Expr* kev = evaluate(lhs->data.function.args[i]);
+            Expr** karg = malloc(sizeof(Expr*));
+            karg[0] = kev;
+            pargs[i + 1] = expr_new_function(expr_new_symbol(SYM_Key), karg, 1);
+            free(karg);
+        }
+        Expr* part_lhs = expr_new_function(expr_new_symbol(SYM_Part), pargs, nk + 1);
+        free(pargs);
+        Expr* assigned = expr_part_assign(part_lhs, rhs);
+        expr_free(part_lhs);
+        if (assigned) { expr_free(assigned); eval_clock_bump(); return 1; }
+        return 0;
+    }
+}
+
 static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     /* Options[sym] = {name -> value, ...} redefines the symbol's default
      * option settings. Intercepted before the Protected guard below because
@@ -1074,6 +1221,11 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         if (own_rhs_ds) expr_free(rhs_ds);
         return all_ok;
     } else if (lhs->type == EXPR_FUNCTION) {
+        if (lhs->data.function.head->type == EXPR_FUNCTION) {
+            /* Curried target `a[k1][k2] = v` into a nested association. */
+            int handled = assoc_element_assign(lhs, rhs, is_delayed);
+            if (handled >= 0) return handled != 0;
+        }
         if (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_Part) {
             Expr* expr_part_assign(Expr* lhs, Expr* rhs); // Forward declare or include part.h
             Expr* assigned = expr_part_assign(lhs, rhs);
@@ -1090,39 +1242,10 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             /* Association element assignment: `assoc[k1, ..., kn] = val` when
              * the head symbol currently holds an Association -- Wolfram's
              * assoc[key] = val sugar (a = <||>; a["x"] = 5 mutates a, it does
-             * NOT install a DownValue). Reroute to the Part machinery with each
-             * key wrapped in Key[...] (assoc[k] === assoc[[Key[k]]]); the keys
-             * are evaluated first (a = <||>; k = "x"; a[k] = 5 sets a["x"]).
-             * Guard on the symbol's stored OwnValue being an Association so an
-             * ordinary DownValue definition (f[x_] := ..., g[1] = 5) is
-             * untouched -- expr_part_assign re-reads and writes the symbol. */
+             * NOT install a DownValue).  See assoc_element_assign. */
             {
-                Expr* expr_part_assign(Expr* lhs_p, Expr* rhs_p);
-                Rule* ov = symtab_get_own_values(symbol_name);
-                if (ov && ov->replacement &&
-                    ov->replacement->type == EXPR_FUNCTION &&
-                    ov->replacement->data.function.head->type == EXPR_SYMBOL &&
-                    ov->replacement->data.function.head->data.symbol.name == SYM_Association) {
-                    size_t nk = lhs->data.function.arg_count;
-                    Expr** pargs = malloc(sizeof(Expr*) * (nk + 1));
-                    pargs[0] = expr_copy(lhs->data.function.head);
-                    for (size_t i = 0; i < nk; i++) {
-                        Expr* kev = evaluate(lhs->data.function.args[i]);   /* evaluate borrows */
-                        Expr** karg = malloc(sizeof(Expr*));
-                        karg[0] = kev;
-                        pargs[i + 1] = expr_new_function(expr_new_symbol(SYM_Key), karg, 1);
-                        free(karg);
-                    }
-                    Expr* part_lhs = expr_new_function(expr_new_symbol(SYM_Part), pargs, nk + 1);
-                    free(pargs);
-                    Expr* assigned = expr_part_assign(part_lhs, rhs);
-                    expr_free(part_lhs);
-                    if (assigned) { expr_free(assigned); eval_clock_bump(); return true; }
-                    /* Could not place the key (e.g. a nested path through a
-                     * missing intermediate association): leave the Set
-                     * unevaluated rather than installing a spurious DownValue. */
-                    return false;
-                }
+                int handled = assoc_element_assign(lhs, rhs, is_delayed);
+                if (handled >= 0) return handled != 0;
             }
 
             /* f::usage = "..." additionally registers the string as f's

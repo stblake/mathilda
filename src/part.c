@@ -9,6 +9,7 @@
 #include "pack.h"      /* pack_force -- lift a small gather source up to the buffer */
 #include "part.h"
 #include "common.h"
+#include "print.h"     /* expr_to_string -- Set::partw */
 
 static bool is_atomic(Expr* e);
 
@@ -403,12 +404,105 @@ static bool part_indices_select_multiple(Expr** indices, size_t n) {
     return false;
 }
 
+/* Finishes an in-place association write whose remaining indices run through
+ * a non-association value (e.g. a[["k", 2]] = v with a["k"] a List): the
+ * value is rebuilt functionally by expr_part_assign_rec.  ctx is the Part
+ * index array. */
+typedef struct { Expr** indices; size_t n; Expr* rhs; } PartTailCtx;
+static Expr* part_assign_tail(Expr* value, size_t step, void* ctx) {
+    PartTailCtx* c = (PartTailCtx*)ctx;
+    size_t rhs_idx = 0;
+    return expr_part_assign_rec(value, c->indices + step, c->n - step, c->rhs, &rhs_idx, false);
+}
+
+/* In-place fast path for Part assignment into an association-valued symbol:
+ * a[[Key[k]]] = v, a[["k"]] = v, a[[i]] = v and nested a[[k1, k2, ...]] = v,
+ * where every index is a single key or position.  Writes through
+ * assoc_write_path (amortised O(1), copy-on-write when the association is
+ * shared).  Returns the new value held by the symbol (a new reference), NULL
+ * after a Set::partw failure (reported), or `fallback` (a sentinel) when the
+ * indices are outside this path. */
+static Expr* part_assign_assoc_inplace(const char* name, Expr** indices, size_t n,
+                                       Expr* rhs, Expr* fallback) {
+    Expr** slot = assoc_symbol_slot(name);
+    if (!slot || n == 0) return fallback;
+    AssocStep* steps = malloc(sizeof(AssocStep) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* ix = indices[i];
+        if (ix->type == EXPR_INTEGER) {
+            if (ix->data.integer == 0) { free(steps); return fallback; }
+            steps[i].key = NULL; steps[i].pos = ix->data.integer;
+        } else if (ix->type == EXPR_STRING) {
+            steps[i].key = ix; steps[i].pos = 0;
+        } else if (ix->type == EXPR_FUNCTION && ix->data.function.head->type == EXPR_SYMBOL &&
+                   ix->data.function.head->data.symbol.name == SYM_Key &&
+                   ix->data.function.arg_count == 1) {
+            steps[i].key = ix->data.function.args[0]; steps[i].pos = 0;
+        } else {
+            free(steps);
+            return fallback;        /* All, Span, a List of parts, ...: general path */
+        }
+    }
+    PartTailCtx tc = { indices, n, rhs };
+    AssocWriteStatus st = assoc_write_path(slot, steps, n, expr_copy(rhs), ASSOC_WRITE_SET,
+                                           part_assign_tail, &tc);
+    if (st == ASSOC_WRITE_NOKEY) {
+        /* Mathematica 15 quirk, matched deliberately: a Part path whose
+         * intermediate key is absent stores the value UNDER THAT KEY and drops
+         * the rest of the path -- a[["zz", "q"]] = 1 gives a["zz"] == 1 --
+         * silently.  (The a["zz", "q"] = 1 form is Set::kval instead.) */
+        size_t depth = 0;
+        const Expr* v = *slot;
+        while (depth + 1 < n && steps[depth].key && is_association(v)) {
+            const Expr* next = assoc_lookup_value(v, steps[depth].key);
+            if (!next) break;
+            v = next;
+            depth++;
+        }
+        st = assoc_write_path(slot, steps, depth + 1, expr_copy(rhs), ASSOC_WRITE_SET, NULL, NULL);
+    }
+    free(steps);
+    if (st == ASSOC_WRITE_OK) return expr_copy(*slot);
+    if (st == ASSOC_WRITE_UNSUPPORTED) return fallback;
+    if (st == ASSOC_WRITE_NOKEY) return NULL;
+    /* A missing intermediate key, an out-of-range position, or a path through
+     * a value that has no such part: Set::partw, value unchanged. */
+    char* ps = NULL;
+    {
+        Expr** pa = malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) pa[i] = expr_copy(indices[i]);
+        Expr* pl = n == 1 ? expr_copy(pa[0])
+                          : expr_new_function(expr_new_symbol(SYM_List), pa, n);
+        if (n == 1) expr_free(pa[0]);
+        free(pa);
+        ps = expr_to_string(pl);
+        expr_free(pl);
+    }
+    char* vs = expr_to_string(*slot);
+    fprintf(stderr, "Set::partw: Part %s of %s does not exist.\n", ps ? ps : "", vs ? vs : "");
+    free(ps); free(vs);
+    return NULL;
+}
+
 Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     if (lhs->type != EXPR_FUNCTION || lhs->data.function.head->type != EXPR_SYMBOL || lhs->data.function.head->data.symbol.name != SYM_Part) return NULL;
     if (lhs->data.function.arg_count < 2) return NULL;
-    
+
     Expr* sym = lhs->data.function.args[0];
     if (sym->type != EXPR_SYMBOL) return NULL;
+
+    if (!(rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL &&
+          rhs->data.function.head->data.symbol.name == SYM_List &&
+          part_indices_select_multiple(lhs->data.function.args + 1, lhs->data.function.arg_count - 1))) {
+        static Expr fallback_sentinel;
+        Expr* r = part_assign_assoc_inplace(sym->data.symbol.name, lhs->data.function.args + 1,
+                                            lhs->data.function.arg_count - 1, rhs, &fallback_sentinel);
+        if (r != &fallback_sentinel) {
+            /* NULL after Set::partw: the assignment was rejected but, as in
+             * Mathematica, Set still yields the right-hand side. */
+            return r ? r : expr_copy(rhs);
+        }
+    }
     
     Expr* current_val = symtab_get_own_values(sym->data.symbol.name) ? evaluate(sym) : NULL;
     if (!current_val) return NULL;
@@ -1236,6 +1330,12 @@ Expr* expr_delete(Expr* expr, Expr* pos) {
     
     // Case 1: Single integer
     if (pos->type == EXPR_INTEGER) {
+        return delete_path(expr, &pos, 1);
+    }
+
+    /* An association also takes a single key position: Delete[a, Key[k]] and
+     * Delete[a, "k"] drop that entry (an absent key leaves a unchanged). */
+    if (is_association(expr)) {
         return delete_path(expr, &pos, 1);
     }
     

@@ -1100,6 +1100,48 @@ Expr* builtin_clear(Expr* res) {
     return NULL;
 }
 
+/* `a[k1, ...][...] =.` where the root symbol a holds an Association: remove
+ * the (last) key in place, following the earlier keys into nested
+ * associations.  An absent key is not an error (Mathematica returns Null).
+ * Returns false when `lhs` is not such an element, so Unset carries on with
+ * DownValue removal. */
+static bool unset_association_element(Expr* lhs) {
+    size_t nkeys = 0;
+    const Expr* cur = lhs;
+    while (cur->type == EXPR_FUNCTION) {
+        nkeys += cur->data.function.arg_count;
+        cur = cur->data.function.head;
+    }
+    if (cur->type != EXPR_SYMBOL || nkeys == 0) return false;
+    const char* root = cur->data.symbol.name;
+    if (!assoc_symbol_slot(root)) return false;
+
+    Expr** keys = malloc(sizeof(Expr*) * nkeys);
+    AssocStep* steps = malloc(sizeof(AssocStep) * nkeys);
+    size_t k = nkeys;
+    for (cur = lhs; cur->type == EXPR_FUNCTION; cur = cur->data.function.head) {
+        size_t na = cur->data.function.arg_count;
+        k -= na;
+        for (size_t i = 0; i < na; i++) keys[k + i] = cur->data.function.args[i];
+    }
+    for (size_t i = 0; i < nkeys; i++) {
+        keys[i] = evaluate(keys[i]);
+        const Expr* key = keys[i];
+        if (key->type == EXPR_FUNCTION && key->data.function.head->type == EXPR_SYMBOL &&
+            key->data.function.head->data.symbol.name == SYM_Key &&
+            key->data.function.arg_count == 1)
+            key = key->data.function.args[0];
+        steps[i].key = key;
+        steps[i].pos = 0;
+    }
+    Expr** slot = assoc_symbol_slot(root);
+    if (slot) assoc_write_path(slot, steps, nkeys, NULL, ASSOC_WRITE_UNSET, NULL, NULL);
+    for (size_t i = 0; i < nkeys; i++) expr_free(keys[i]);
+    free(keys);
+    free(steps);
+    return true;
+}
+
 /* Unset[lhs] / `lhs =.`: remove the single rule whose left-hand side is
  * `lhs` (up to renaming of bound pattern variables). A bare symbol clears
  * its OwnValue; a function form clears the matching DownValue on the head
@@ -1117,6 +1159,10 @@ Expr* builtin_unset(Expr* res) {
     if (lhs->type == EXPR_SYMBOL) {
         symbol_name = lhs->data.symbol.name;
         own_value = true;
+    } else if (lhs->type == EXPR_FUNCTION && lhs->data.function.arg_count >= 1 &&
+               unset_association_element(lhs)) {
+        /* a[k] =. / a[k1][k2] =. on an association: the key is removed in place. */
+        return expr_new_symbol(SYM_Null);
     } else if (lhs->type == EXPR_FUNCTION &&
                lhs->data.function.head &&
                lhs->data.function.head->type == EXPR_SYMBOL) {
@@ -3526,6 +3572,14 @@ static const char* lvalue_symbol_name(Expr* lhs) {
         lhs->data.function.arg_count >= 1 &&
         lhs->data.function.head->data.symbol.name == SYM_Part) {
         return lvalue_symbol_name(lhs->data.function.args[0]);
+    }
+    /* An association element: a[k], a[k1, k2], a[k1][k2] where the root symbol
+     * a holds an Association (Set writes these in place; see eval.c). */
+    if (lhs->type == EXPR_FUNCTION && lhs->data.function.arg_count >= 1) {
+        const Expr* root = lhs->data.function.head;
+        while (root->type == EXPR_FUNCTION) root = root->data.function.head;
+        if (root->type == EXPR_SYMBOL && assoc_symbol_slot(root->data.symbol.name))
+            return root->data.symbol.name;
     }
     return NULL;
 }

@@ -133,6 +133,14 @@ static SymbolAttr builtin_attrs[] = {
     {"Exp", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"E", ATTR_PROTECTED},
     {"I", ATTR_PROTECTED},
+    /* Value-less constants: Protected (True/False also Locked) as in Wolfram.
+     * Beyond parity this lets them count as GROUND leaves (eval.c), so an
+     * association of flags such as seen[k] = True stays loop-invariant. */
+    {"True", ATTR_LOCKED | ATTR_PROTECTED},
+    {"False", ATTR_LOCKED | ATTR_PROTECTED},
+    {"Null", ATTR_PROTECTED},
+    {"None", ATTR_PROTECTED},
+    {"Automatic", ATTR_PROTECTED},
     {"Floor", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"Ceiling", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"Round", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},

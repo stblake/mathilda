@@ -131,6 +131,25 @@ void     eval_rule_epoch_bump(void);
 uint64_t eval_node_stamp(const Expr* e);
 bool     eval_node_is_ground(const Expr* e);
 
+/* Fixed-point bookkeeping for code that edits a settled container IN PLACE
+ * (the Association writers in assoc.c).  Such an edit must either re-stamp the
+ * edited node or clear its stamp, or evaluate() would serve the pre-edit
+ * fixed-point verdict for a node whose contents changed.
+ *   - eval_node_settled_at(e, clock): would evaluate(e) have returned e itself
+ *     under eval clock `clock`?  Atoms other than symbols: always.  A symbol:
+ *     iff it has no OwnValues.  A function: iff it was stamped at `clock` or
+ *     is a still-valid GROUND node.
+ *   - eval_node_ground_now(e): the GROUND recurrence the evaluator uses when
+ *     stamping a parent (literal atoms, Protected value-less symbols, and
+ *     still-valid GROUND function nodes).
+ *   - eval_node_mark_settled(e, ground): stamp e as a fixed point under the
+ *     LIVE clock, with the GROUND flag when `ground`.  Only legal when every
+ *     child of e is settled and e's head does not rewrite it (the caller's
+ *     proof obligation). */
+bool eval_node_settled_at(const Expr* e, uint64_t clock);
+bool eval_node_ground_now(const Expr* e);
+void eval_node_mark_settled(Expr* e, bool ground);
+
 // Helper to evaluate and free the input expression
 static inline Expr* eval_and_free(Expr* e) {
     if (!e) return NULL;

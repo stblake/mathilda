@@ -1331,6 +1331,16 @@ target_link_libraries(association_tests m)
 target_include_directories(association_tests PRIVATE ../src)
 add_test(NAME association_tests COMMAND association_tests)
 
+# In-place Association mutation: a[k] op= v, a[k] =., KeyDropFrom, nested
+# writes, and aliasing (b = a; a[k] = v must leave b alone).
+add_executable(assoc_mutation_tests test_assoc_mutation.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(assoc_mutation_tests m)
+target_include_directories(assoc_mutation_tests PRIVATE ../src)
+if(USE_ECM)
+    add_dependencies(assoc_mutation_tests build_ecm)
+endif()
+add_test(NAME assoc_mutation_tests COMMAND assoc_mutation_tests)
+
 # Association performance regression gate: fails if a hash-backed op scales
 # worse than O(n) (doubling-ratio check; machine-independent).
 add_executable(bench_assoc bench_assoc.c $<TARGET_OBJECTS:mathilda_common>)
