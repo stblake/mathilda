@@ -630,7 +630,9 @@ OFF_BUFFER = {
     "ReplacePart", "Level", "Apply", "Thread",
     # Grouping and ordering -- a sort or a hash over machine words, the same
     # shape as the Tally/DeleteDuplicates work already done in ndreduce.c.
-    "Split", "Gather", "GatherBy", "PositionIndex", "Lookup", "OrderedQ",
+    # (GatherBy, PositionIndex and Lookup left this list with the S6
+    # association work: src/assoc_packed.c keys the buffer by machine word.)
+    "Split", "Gather", "OrderedQ",
     "MinimalBy", "ReverseSortBy",
     # FindClusters (added 2026-08-09 with the builtin). Its ordering and its
     # fixed-count gap selection are deliberately EXACT -- they compare the
@@ -676,14 +678,14 @@ OFF_BUFFER = {
     "AssociationQ", "DirectedGraphQ", "GraphQ", "ListQ",
     # Selection and grouping keyed by a function or a pattern -- siblings of the
     # MinimalBy / Cases / DeleteDuplicates entries already on the buffer.
-    "MaximalBy", "DeleteCases", "DeleteDuplicatesBy", "CountsBy", "GroupBy",
+    "MaximalBy", "DeleteCases", "DeleteDuplicatesBy",
     "Pick", "DeleteMissing",
     # The rule / pattern engine.  Replace and friends walk the materialised tree;
     # a packed numeric argument is boxed whole before a single rule is tried.
     "Replace", "ReplaceAll", "ReplaceList", "ReplaceRepeated", "MatchQ",
-    # Association construction and key queries over a machine vector.
-    "AssociationMap", "AssociationThread", "KeyExistsQ", "KeyFreeQ",
-    "KeyMemberQ",
+    # Association key queries over a machine vector.  (AssociationMap,
+    # AssociationThread, CountsBy and GroupBy are on the buffer since S6.)
+    "KeyExistsQ", "KeyFreeQ", "KeyMemberQ",
     # Canonical comparison of two whole arrays -- could compare buffers directly
     # rather than materialising both into Expr trees.
     "Order",

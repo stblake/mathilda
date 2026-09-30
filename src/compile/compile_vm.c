@@ -19,6 +19,7 @@
 #include "../symtab.h"
 #include "../ndarray.h"          /* ndarray_part(_set) / map / elementwise / NDType */
 #include "../assoc.h"            /* assoc_lookup_value / assoc_values_list / assoc_set_key ... */
+#include "../assoc_packed.h"     /* assoc_packed_thread / _counts_words — ASSOC_THREAD / BYFN */
 #include "../ndreduce.h"         /* ndred_total_all */
 #include "../linalg/ndlinalg.h"  /* ndla_norm — V_NORM delegate */
 #include "../ndarray_internal.h" /* nd_parallel_for — threading the fused map loop */
@@ -365,11 +366,39 @@ static bool vm_assoc_values(const Instr* c, Slot* R) {
     const AssocSpec* sp = (const AssocSpec*)c->imm.p;
     Expr* assoc = sp->assoc ? sp->assoc : R[c->a].arr;
     if (!assoc) return false;
-    Expr* vals = assoc_values_list(assoc);        /* owned List of the values */
-    if (!vals) return false;
-    Expr* nd = ndarray_from_nested_list(vals, assoc_elem_ndt((CompileType)(c->flags & 0xFFu)));
-    expr_free(vals);
-    if (!nd) return false;                         /* non-numeric -> decline    */
+    Expr* nd;
+    if (c->flags & 0x200u) {
+        /* Keys[assoc]: written straight into the buffer. The declared type names
+         * only the values, so the keys are checked here: an Integer program
+         * accepts only machine Integer keys (a string key declines to the
+         * interpreter), a Real one any machine number. */
+        CompileType kt = (CompileType)(c->flags & 0xFFu);
+        int64_t n = (int64_t)assoc->data.function.arg_count;
+        if (n == 0 || (kt != CT_INT && kt != CT_REAL)) return false;
+        void* buf = malloc((size_t)n * (kt == CT_INT ? sizeof(int64_t) : sizeof(double)));
+        if (!buf) return false;
+        for (int64_t i = 0; i < n; i++) {
+            const Expr* e = assoc->data.function.args[i];
+            if (!is_rule2(e)) { free(buf); return false; }
+            const Expr* k = e->data.function.args[0];
+            if (kt == CT_INT) {
+                if (k->type != EXPR_INTEGER) { free(buf); return false; }
+                ((int64_t*)buf)[i] = k->data.integer;
+            } else {
+                double x;
+                if (!cf_to_double(k, &x)) { free(buf); return false; }
+                ((double*)buf)[i] = x;
+            }
+        }
+        nd = expr_new_ndarray_raw(1, &n, buf, kt == CT_INT ? NDT_INT64 : NDT_FLOAT64);
+        if (!nd) { free(buf); return false; }
+    } else {
+        Expr* vals = assoc_values_list(assoc);    /* owned List of the values */
+        if (!vals) return false;
+        nd = ndarray_from_nested_list(vals, assoc_elem_ndt((CompileType)(c->flags & 0xFFu)));
+        expr_free(vals);
+        if (!nd) return false;                     /* non-numeric -> decline    */
+    }
     if ((c->flags & 0x100u) && !sp->assoc) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }  /* free produced src */
     expr_free(R[c->dst].arr);                      /* release any stale handle  */
     R[c->dst].arr = nd;
@@ -450,6 +479,62 @@ static bool vm_assoc_set(const Instr* c, Slot* R) {
     if (!r) { expr_free(nv); return false; }
     assoc_prebuild_index(r);
     if ((c->flags & 0x100u) && !sp->assoc) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }
+    expr_free(R[c->dst].arr);
+    R[c->dst].arr = r;
+    return true;
+}
+
+/* AssociationThread[keys, vals] over two rank-1 machine arrays -> an OWNED
+ * association.  Native: assoc_packed_thread keys the buffer by machine word
+ * (first occurrence fixes the position, the last the value). */
+static bool vm_assoc_thread(const Instr* c, Slot* R) {
+    Expr* k = R[c->a].arr;
+    Expr* v = R[c->b].arr;
+    if (!k || !v) return false;
+    Expr* r = assoc_packed_thread(k, v);
+    if (!r || !is_association(r)) { expr_free(r); return false; }
+    assoc_prebuild_index(r);
+    if ((c->flags & 2u) && c->b != c->a) { expr_free(R[c->b].arr); R[c->b].arr = NULL; }
+    if (c->flags & 1u) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }
+    expr_free(R[c->dst].arr);
+    R[c->dst].arr = r;
+    return true;
+}
+
+/* AssociationMap[f, arr] / CountsBy[arr, f]: the compiled callee runs once per
+ * element (vm_call, no evaluator) into a machine buffer, which is then threaded
+ * against the keys or counted by word. */
+static bool vm_assoc_byfn(const Instr* c, Slot* R) {
+    const AssocCalleeSpec* sp = (const AssocCalleeSpec*)c->imm.p;
+    Expr* arr = R[c->a].arr;
+    if (!arr || arr->type != EXPR_NDARRAY || arr->data.ndarray.rank != 1) return false;
+    CompileType in_t  = (CompileType)((c->flags >> 4) & 0xFu);
+    CompileType out_t = (CompileType)((c->flags >> 8) & 0xFu);
+    NDType adt = arr->data.ndarray.dtype;
+    if (!((in_t == CT_INT && adt == NDT_INT64) || (in_t == CT_REAL && adt == NDT_FLOAT64)))
+        return false;
+    int64_t n = arr->data.ndarray.dims[0];
+    NDType odt = out_t == CT_INT ? NDT_INT64 : out_t == CT_REAL ? NDT_FLOAT64
+               : out_t == CT_BOOL ? NDT_BOOL : NDT_COMPLEX64;
+    if (out_t == CT_COMPLEX) return false;     /* a complex value has no word key */
+    void* buf = malloc((size_t)(n ? n : 1) * ndt_elem_size(odt));
+    if (!buf) return false;
+    for (int64_t i = 0; i < n; i++) {
+        Slot arg, res;
+        if (in_t == CT_INT) arg.i = ((const int64_t*)arr->data.ndarray.data)[i];
+        else                arg.r = ((const double*)arr->data.ndarray.data)[i];
+        if (!vm_call(sp->callee, &arg, 1, &res)) { free(buf); return false; }
+        if (odt == NDT_INT64)        ((int64_t*)buf)[i] = (int64_t)res.i;
+        else if (odt == NDT_FLOAT64) ((double*)buf)[i] = res.r;
+        else                         ((uint8_t*)buf)[i] = res.i ? 1 : 0;
+    }
+    Expr* vals = expr_new_ndarray_raw(1, &n, buf, odt);
+    if (!vals) { free(buf); return false; }
+    Expr* r = (c->flags & 2u) ? assoc_packed_counts_words(vals) : assoc_packed_thread(arr, vals);
+    expr_free(vals);
+    if (!r || !is_association(r)) { expr_free(r); return false; }
+    assoc_prebuild_index(r);
+    if (c->flags & 1u) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }
     expr_free(R[c->dst].arr);
     R[c->dst].arr = r;
     return true;
@@ -1092,7 +1177,11 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
              * negative argument: IntegerPart[-1.5] is -1, Floor[-1.5] is -2. */
             OP(TRUNC_R): RD.i = (long long)trunc(RA.r); NEXT();
             OP(CEIL_R):  RD.i = (long long)ceil(RA.r); NEXT();
-            OP(ROUND_R): RD.i = (long long)llround(RA.r); NEXT();
+            /* Round goes to the NEAREST EVEN integer on a tie, as the interpreter
+             * (and Wolfram's Compile) does: Round[2.5] is 2, Round[-1.5] is -2.
+             * llround rounds ties away from zero and answered 3 and -2.
+             * nearbyint honours the default round-to-nearest-even mode. */
+            OP(ROUND_R): RD.i = (long long)nearbyint(RA.r); NEXT();
             OP(RE_C): RD.r = creal(RA.z); NEXT();
             OP(IM_C): RD.r = cimag(RA.z); NEXT();
             OP(ARG_C): RD.r = carg(RA.z); NEXT();
@@ -1489,6 +1578,8 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(ASSOC_VALUES): do { if (!vm_assoc_values(c, R)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_KEYSEL): do { if (!vm_assoc_keysel(c, R)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_COUNTS): do { if (!vm_assoc_counts(c, R)) goto vm_fail; } while (0); NEXT();
+            OP(ASSOC_THREAD): do { if (!vm_assoc_thread(c, R)) goto vm_fail; } while (0); NEXT();
+            OP(ASSOC_BYFN):   do { if (!vm_assoc_byfn(c, R)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_MAP):    do { if (!vm_assoc_higher(c, R, false)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_SELECT): do { if (!vm_assoc_higher(c, R, true))  goto vm_fail; } while (0); NEXT();
             OP(ASSOC_SET):    do { if (!vm_assoc_set(c, R)) goto vm_fail; } while (0); NEXT();
@@ -1496,9 +1587,21 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 const AssocSpec* sp = (const AssocSpec*)c->imm.p;
                 Expr* assoc = sp->assoc ? sp->assoc : RA.arr;
                 if (!assoc) goto vm_fail;
-                Expr* v = ((unsigned)(c->flags >> 4) & 0xF) == (unsigned)CT_INT
+                Expr* v;
+                if (c->flags & 0x200u) {
+                    /* Positional Part[assoc, i]: the i-th value in insertion
+                     * order, negative i from the end; out of range declines. */
+                    long long n = (long long)assoc->data.function.arg_count, k = RB.i;
+                    if (k < 0) k += n + 1;
+                    if (k < 1 || k > n) goto vm_fail;
+                    const Expr* e = assoc->data.function.args[k - 1];
+                    if (!is_rule2(e)) goto vm_fail;
+                    v = e->data.function.args[1];
+                } else {
+                    v = ((unsigned)(c->flags >> 4) & 0xF) == (unsigned)CT_INT
                         ? assoc_lookup_value_i64(assoc, RB.i)
                         : assoc_lookup_value_real(assoc, RB.r);
+                }
                 if (!v) v = sp->deflt;
                 if (!v) goto vm_fail;
                 switch ((unsigned)c->flags & 0xF) {

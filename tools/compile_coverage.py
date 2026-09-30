@@ -215,7 +215,6 @@ EXEMPT = {
     "Dimensions": "shape test; A_SIZE covers the scalar Length case",
     "RandomSample": "draws from the global generator; not a pure kernel",
     "RandomChoice": "draws from the global generator",
-    "Counts": "returns an Association, which has no compiled type",
     "Tally": "returns ragged {value, count} pairs; no uniform compiled type",
     "Commonest": "count-keyed selection; result length is data-dependent",
     "Union": "result length is data-dependent",
@@ -250,6 +249,35 @@ EXEMPT = {
                          "machine type); AWARE only to read a packed value tensor",
     "InterpolatingPolynomial": "returns a symbolic polynomial in x, not a machine "
                                "array (cf. CharacteristicPolynomial)",
+    # Association producers over a machine vector (src/assoc_packed.c).  Counts,
+    # CountsBy, AssociationThread and AssociationMap now compile to a CT_ASSOC
+    # value; these three cannot, because a compiled association holds one
+    # machine scalar per key and their values are RAGGED lists.
+    "PositionIndex": "values are ragged position lists; a compiled association "
+                     "holds one machine scalar per key",
+    "GroupBy": "values are ragged groups; a compiled association holds one "
+               "machine scalar per key",
+    "GatherBy": "returns a ragged list of groups; no uniform compiled type",
+    # Pre-existing at the S6 branch point (these were already reported NEW on
+    # origin/main): heads whose result or operand has no compiled machine type.
+    "ArrayPlot": "returns a Graphics object; AWARE only to read a packed table",
+    "Image": "constructs an Image object, which has no compiled type",
+    "Image3D": "constructs an Image3D object, which has no compiled type",
+    "Image3DQ": "a predicate on an Image3D object",
+    "ImageQ": "a predicate on an Image object",
+    "ImageChannels": "reads an Image object",
+    "ImageData": "reads an Image object",
+    "ImageDimensions": "reads an Image object",
+    "ImageType": "reads an Image object",
+    "ImageConvolve": "operates on an Image object",
+    "ImageResize": "operates on an Image object",
+    "GaussianFilter": "operates on an Image object (or its pixel buffer)",
+    "Binarize": "operates on an Image object",
+    "ColorConvert": "operates on an Image object",
+    "FindThreshold": "operates on an Image object",
+    "PackedArrayQ": "asks about the representation",
+    "Fit": "returns a symbolic model expression, not a machine value",
+    "HermiteDecomposition": "exact integer lattice; no machine type",
 }
 
 
@@ -316,6 +344,13 @@ BASELINE = {
     # which the probe list cannot express (no _Boolean array shape), so the tool
     # reports it at the real/int shapes it can — either way, no lowering yet.
     "Boole",
+    # Pre-existing at the S6 branch point (already reported NEW on origin/main):
+    # numeric fast paths whose lowering is genuinely owed.
+    "Chop", "Clip", "DesignMatrix",
+    # Lookup's buffer operand is the KEY vector of an Association (AWARE since
+    # the S6 association work).  Scalar keys compile (B1/B2); a vector-of-keys
+    # form -- one ASSOC_LOOKUP_DYN per element into an array -- is owed.
+    "Lookup",
 }
 
 

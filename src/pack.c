@@ -827,6 +827,22 @@ static void pack_mark_aware_heads(void) {
          * a separate per-cell path (arrayplot_load) that is unaffected
          * either way. */
         "ArrayPlot",
+        /* The association producers that take a list (src/assoc_packed.c).
+         * Each keys a rank-1 int64/float64 buffer by machine word through
+         * nd_group_words -- Tally's keying plus a group id per element -- and
+         * GroupBy/GatherBy/CountsBy/AssociationMap run their function over the
+         * whole buffer as ONE compiled loop (autocompile_map_unary, behind an
+         * exactness gate). Anything else -- a complex or narrow dtype, a matrix,
+         * a function outside the gate -- is materialised inside the builtin
+         * (with_list_args in src/assoc.c), which is what the gate would have
+         * done. Their OUTPUTS stay boxed: they sit inside Rules, and the
+         * no-nesting invariant above forbids a buffer there. */
+        "PositionIndex", "GroupBy", "GatherBy", "CountsBy",
+        "AssociationThread", "AssociationMap",
+        /* Lookup[assoc, keys] with a machine vector of keys probes each word
+         * through the persistent index (assoc_packed_lookup); a packed default
+         * or first argument is materialised inside the builtin. */
+        "Lookup",
     };
     for (size_t i = 0; i < sizeof(AWARE) / sizeof(AWARE[0]); i++)
         symtab_set_packed_aware(AWARE[i]);
@@ -1110,6 +1126,11 @@ static void pack_mark_aware_heads(void) {
          * List path instead of round-tripping through a decline. */
         "Append", "Prepend", "Catenate",
         "RandomSample", "RandomChoice", "Counts",
+        /* The association producers key on the raw int64 word, box elements
+         * through ndarray_buffer_element_to_expr (exact Integers), and admit
+         * only exact integer arithmetic into a compiled key function. */
+        "PositionIndex", "GroupBy", "GatherBy", "CountsBy",
+        "AssociationThread", "AssociationMap", "Lookup",
     };
     for (size_t i = 0; i < sizeof(INT64_OK) / sizeof(INT64_OK[0]); i++)
         symtab_set_packed_int64_ok(INT64_OK[i]);

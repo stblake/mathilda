@@ -869,6 +869,137 @@ static bool nd_tally_words(const Expr* a, NDWordTally* out) {
     return nd_tally_hash(data, dt, n, out);
 }
 
+/* ------------------------------------------------------------ word groups ---
+ *
+ * nd_group_words is the tally above plus ONE more output: the group id of every
+ * element. That is exactly what PositionIndex (positions per distinct value) and
+ * GroupBy (elements per distinct key) need, and neither can be built from counts
+ * alone. Same keying rules as the tally, so a group here is a tally bucket there:
+ * int64 on the raw word (direct-indexed over a narrow range), float64 on its bit
+ * pattern (so -0.0 and 0.0 stay apart, as expr_eq keeps them), a non-finite
+ * double declines the whole call. Bool is keyed 0/1. Groups are numbered in
+ * first-appearance order, which is the order both builtins answer in. */
+
+void nd_word_groups_free(NDWordGroups* g) {
+    free(g->keys); free(g->cnts); free(g->gid);
+    g->keys = NULL; g->cnts = NULL; g->gid = NULL; g->nuniq = 0;
+}
+
+/* Append distinct key `k` (whose count starts at 0) and return its group id. */
+static bool ndg_push(NDWordGroups* g, size_t* cap, uint64_t k) {
+    if (g->nuniq == *cap) {
+        size_t nc = *cap * 2;
+        uint64_t* k2 = realloc(g->keys, sizeof(uint64_t) * nc);
+        if (!k2) return false;
+        g->keys = k2;
+        int64_t* c2 = realloc(g->cnts, sizeof(int64_t) * nc);
+        if (!c2) return false;
+        g->cnts = c2;
+        *cap = nc;
+    }
+    g->keys[g->nuniq] = k;
+    g->cnts[g->nuniq] = 0;
+    g->nuniq++;
+    return true;
+}
+
+/* Direct index over a narrow int64 range: slot[v - min] holds group id + 1. */
+static bool ndg_direct_i64(const int64_t* iv, size_t n, NDWordGroups* g, size_t* cap) {
+    int64_t mn = iv[0], mx = iv[0];
+    for (size_t i = 1; i < n; i++) {
+        if (iv[i] < mn) mn = iv[i];
+        if (iv[i] > mx) mx = iv[i];
+    }
+    uint64_t span = (uint64_t)mx - (uint64_t)mn;      /* exact: see nd_tally_direct_i64 */
+    if (span >= TALLY_DIRECT_MAX_RANGE || span + 1 > (uint64_t)n) return false;
+    uint32_t* slot = calloc((size_t)span + 1, sizeof(uint32_t));
+    if (!slot) return false;
+    for (size_t i = 0; i < n; i++) {
+        uint64_t idx = (uint64_t)iv[i] - (uint64_t)mn;
+        uint32_t s = slot[idx];
+        if (s == 0) {
+            if (!ndg_push(g, cap, (uint64_t)iv[i])) { free(slot); return false; }
+            s = slot[idx] = (uint32_t)g->nuniq;
+        }
+        g->gid[i] = s - 1;
+        g->cnts[s - 1]++;
+    }
+    free(slot);
+    return true;
+}
+
+typedef struct { uint64_t key; uint32_t gid1; } GroupEnt;   /* gid1 == 0: empty */
+
+static bool ndg_hash(const void* data, NDType dt, size_t n, NDWordGroups* g, size_t* cap) {
+    size_t tcap = 1024, mask = tcap - 1;
+    GroupEnt* tab = calloc(tcap, sizeof(GroupEnt));
+    if (!tab) return false;
+    for (size_t i = 0; i < n; i++) {
+        uint64_t k;
+        if (dt == NDT_INT64) {
+            k = (uint64_t)((const int64_t*)data)[i];
+        } else if (dt == NDT_BOOL) {
+            k = ((const uint8_t*)data)[i] ? 1u : 0u;
+        } else {
+            double x = ((const double*)data)[i];
+            if (!(x == x) || x > 1.7976931348623157e308 || x < -1.7976931348623157e308) {
+                free(tab); return false;             /* non-finite: see nd_tally_hash */
+            }
+            memcpy(&k, &x, sizeof(k));
+        }
+        size_t h = (size_t)tally_mix(k) & mask;
+        uint32_t gi;
+        for (;;) {
+            GroupEnt* e = &tab[h];
+            if (e->gid1 == 0) {
+                if (!ndg_push(g, cap, k)) { free(tab); return false; }
+                e->key = k; e->gid1 = (uint32_t)g->nuniq;
+                gi = e->gid1 - 1;
+                break;
+            }
+            if (e->key == k) { gi = e->gid1 - 1; break; }
+            h = (h + 1) & mask;
+        }
+        g->gid[i] = gi;
+        g->cnts[gi]++;
+        if (g->nuniq * 10 >= tcap * 7) {             /* grow + rehash the live keys */
+            size_t nc = tcap * 2, nmask = nc - 1;
+            GroupEnt* t2 = calloc(nc, sizeof(GroupEnt));
+            if (!t2) { free(tab); return false; }
+            for (size_t s = 0; s < tcap; s++) {
+                if (!tab[s].gid1) continue;
+                size_t q = (size_t)tally_mix(tab[s].key) & nmask;
+                while (t2[q].gid1) q = (q + 1) & nmask;
+                t2[q] = tab[s];
+            }
+            free(tab);
+            tab = t2; tcap = nc; mask = nmask;
+        }
+    }
+    free(tab);
+    return true;
+}
+
+bool nd_group_words(const void* data, NDType dt, size_t n, NDWordGroups* out) {
+    out->keys = NULL; out->cnts = NULL; out->gid = NULL; out->nuniq = 0;
+    if (n == 0 || n > 0xFFFFFFFFu) return false;         /* gid is uint32 */
+    if (dt != NDT_INT64 && dt != NDT_FLOAT64 && dt != NDT_BOOL) return false;
+    size_t cap = 256;
+    out->keys = malloc(sizeof(uint64_t) * cap);
+    out->cnts = malloc(sizeof(int64_t) * cap);
+    out->gid  = malloc(sizeof(uint32_t) * n);
+    if (!out->keys || !out->cnts || !out->gid) { nd_word_groups_free(out); return false; }
+    bool ok = false;
+    if (dt == NDT_INT64) {
+        ok = ndg_direct_i64((const int64_t*)data, n, out, &cap);
+        if (!ok) { out->nuniq = 0; ok = ndg_hash(data, dt, n, out, &cap); }
+    } else {
+        ok = ndg_hash(data, dt, n, out, &cap);
+    }
+    if (!ok) nd_word_groups_free(out);
+    return ok;
+}
+
 Expr* ndred_tally(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];

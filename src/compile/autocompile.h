@@ -142,6 +142,21 @@ bool autocompiled_eval_z(const AutoCompiled* ac, const double _Complex* zs,
  * on NULL. */
 Expr* autocompile_eval_closed(const Expr* expr);
 
+/* f applied to every element of a rank-1 int64 or float64 machine vector `arr`
+ * (borrowed), compiled into ONE Table loop and run once: the buffer answer to
+ * `Map[f, arr]` for GroupBy-style key functions, with no per-element Expr.
+ * `f` is a symbol head or a one-parameter Function (slot or named form).
+ *
+ * Returns a NEW rank-1 NDArray (int64, float64 or bool) of the same length that
+ * the caller owns, or NULL -- and the caller keeps its interpreter path -- when
+ * auto-compilation is off, the body is outside the compilable subset, the VM
+ * bails (integer overflow, non-finite), or the body fails the EXACTNESS GATE.
+ * That gate only admits constructs whose machine result is exactly the
+ * interpreter's: integer arithmetic that stays integral, real arithmetic, the
+ * roundings and the predicates. `#/2 &` over integers is refused, because the
+ * interpreter answers a Rational and the VM a double. */
+Expr* autocompile_map_unary(const Expr* f, const Expr* arr);
+
 void autocompiled_free(AutoCompiled* ac);
 
 #endif /* MATHILDA_AUTOCOMPILE_H */

@@ -108,6 +108,15 @@ EXTRA = [
     ("x_conjtranspose", "ConjugateTranspose[Table[N[i j], {i, 30}, {j, 30}]]"),
     ("x_cholesky",      "CholeskyDecomposition[Table[If[i == j, 30., 1./(1. + Abs[i - j])], {i, 30}, {j, 30}]]"),
     ("x_hilbert",       "HilbertMatrix[30]"),
+
+    # --- associations: the top-level lists read out of a buffer-built one ---
+    ("x_assoc_values_real",  "Values[AssociationThread[Range[400], Range[1., 400.]]]"),
+    ("x_assoc_keys_int",     "Keys[AssociationThread[Range[400], Range[1., 400.]]]"),
+    ("x_assoc_lookup",       "Lookup[AssociationThread[Range[400], Range[1., 400.]], Range[400]]"),
+    ("x_assoc_groupby_red",  "Values[GroupBy[Range[1., 400.], Floor[#/10.] &, Total]]"),
+    ("x_assoc_positionindex","Values[PositionIndex[Mod[Range[400], 7]]]"),
+    ("x_assoc_amap",         "Values[AssociationMap[#/2. &, Range[400]]]"),
+    ("x_assoc_countsby",     "Values[CountsBy[Range[1., 400.], Floor]]"),
     ("x_toeplitz",      "ToeplitzMatrix[Table[N[i], {i, 30}]]"),
     ("x_hankel",        "HankelMatrix[Table[N[i], {i, 30}]]"),
     ("x_vandermonde",   "VandermondeMatrix[Table[N[i], {i, 30}]]"),

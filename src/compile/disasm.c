@@ -626,7 +626,7 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
     if (c->op == OP_ASSOC_LOOKUP || c->op == OP_ASSOC_HASKEY || c->op == OP_ASSOC_VALUES) {
         const char* verb = c->op == OP_ASSOC_LOOKUP ? "Lookup"
                          : c->op == OP_ASSOC_HASKEY ? (c->flags ? "KeyFreeQ" : "KeyExistsQ")
-                         : "Values";
+                         : (c->flags & 0x200u) ? "Keys" : "Values";
         db_catf(b, "%s = %s[%s, ", rd, verb, ra);
         render_imm(b, p, i, L);
         db_cat(b, "]");
@@ -634,6 +634,14 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
     }
     if (c->op == OP_ASSOC_LEN) { db_catf(b, "%s = Length[%s]", rd, ra); return; }
     if (c->op == OP_ASSOC_COUNTS) { db_catf(b, "%s = Counts[%s]", rd, ra); return; }
+    if (c->op == OP_ASSOC_THREAD) {
+        db_catf(b, "%s = AssociationThread[%s, r%u]", rd, ra, (unsigned)c->b); return;
+    }
+    if (c->op == OP_ASSOC_BYFN) {
+        if (c->flags & 2u) db_catf(b, "%s = CountsBy[%s, <fn>]", rd, ra);
+        else               db_catf(b, "%s = AssociationMap[<fn>, %s]", rd, ra);
+        return;
+    }
     if (c->op == OP_ASSOC_MAP)    { db_catf(b, "%s = Map[<fn>, %s]", rd, ra); return; }
     if (c->op == OP_ASSOC_SELECT) { db_catf(b, "%s = Select[%s, <fn>]", rd, ra); return; }
     if (c->op == OP_ASSOC_SET) {

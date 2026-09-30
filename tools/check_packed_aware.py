@@ -45,6 +45,10 @@ SRC = os.path.join(ROOT, "src")
 # and rejected" from "never noticed".
 # ---------------------------------------------------------------------------
 EXEMPT = {
+    "KeyDrop": "its is_ndarray(karg) branch only routes a VISIBLE NDArray of keys "
+    "to the List path (with_list_args in src/assoc.c) -- no buffer path; a key list "
+    "is small next to the association, so the gate's materialisation costs nothing",
+    "KeyTake": "as KeyDrop",
     "List": "enforces the no-nesting invariant -- a buffer must never sit inside "
     "a plain List, which is what keeps the gate an O(argc) top-level scan",
     "NDArray": "the packing constructor itself: its is_ndarray(arg) branch makes "

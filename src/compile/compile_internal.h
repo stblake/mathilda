@@ -271,6 +271,15 @@ enum {
      * flags = value_type | free-source<<8.                                        \
      */                                                                            \
     X(ASSOC_SET, K_ARR)                                                   \
+    /* Associations BUILT from machine arrays (src/assoc_packed.c does the      \
+     * keying).  ASSOC_THREAD: AssociationThread[R[a], R[b]], keys and values    \
+     * both rank-1 arrays; flags bit0/bit1 free the R[a]/R[b] temps.  No imm.    \
+     * ASSOC_BYFN (imm.p = AssocCalleeSpec): the callee runs once per element of \
+     * R[a]; flags bit0 free R[a], bit1 set = CountsBy (count the callee's       \
+     * answers) else AssociationMap (element -> answer); in_type << 4,           \
+     * out_type << 8.                                                            \
+     */                                                                            \
+    X(ASSOC_THREAD, K_ARR) X(ASSOC_BYFN, K_ARR)                          \
     /* An array -> SCALAR reduction delegated to the interpreter's own entry   \
      * point (ndred_mean, ndred_variance, ...), the reduction counterpart of   \
      * A_NDFN below.  Total has its own opcode because an int64 sum must stay  \

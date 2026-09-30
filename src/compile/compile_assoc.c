@@ -96,7 +96,38 @@ typedef struct {
 static bool assoc_producer_head(const char* h, size_t na) {
     if ((strcmp(h, "KeyDrop") == 0 || strcmp(h, "KeyTake") == 0) && na == 2) return true;
     if (strcmp(h, "Counts") == 0 && na == 1) return true;
+    /* Built from machine arrays (ASSOC_THREAD / ASSOC_BYFN). */
+    if (strcmp(h, "AssociationThread") == 0 && (na == 1 || na == 2)) return true;
+    if ((strcmp(h, "AssociationMap") == 0 || strcmp(h, "CountsBy") == 0) && na == 2) return true;
     return false;
+}
+
+/* AssociationThread[k, v] / AssociationThread[k -> v]: the key and value
+ * operands, or false for any other shape. */
+static bool athread_operands(Expr* const* A, size_t na, const Expr** k, const Expr** v) {
+    if (na == 2) { *k = A[0]; *v = A[1]; return true; }
+    if (na == 1 && A[0]->type == EXPR_FUNCTION && A[0]->data.function.head->type == EXPR_SYMBOL
+        && A[0]->data.function.head->data.symbol.name == SYM_Rule
+        && A[0]->data.function.arg_count == 2) {
+        *k = A[0]->data.function.args[0]; *v = A[0]->data.function.args[1];
+        return true;
+    }
+    return false;
+}
+
+/* The machine key types an association built from an array can carry. */
+static bool keyable_elem(CompileType t) {
+    return CT_IS_ARRAY(t) && CT_RANK(t) == 1 && (CT_ELEM(t) == CT_INT || CT_ELEM(t) == CT_REAL);
+}
+
+/* Map / Select / Append produce an association only when THEIR association
+ * operand is one (Map's is A[1], the other two's A[0]); over an array they are
+ * the ordinary array lowerings.  Returns that operand, or NULL. */
+static const Expr* assoc_transform_operand(const char* h, Expr* const* A, size_t na) {
+    if (na != 2) return NULL;
+    if (strcmp(h, "Map") == 0) return A[1];
+    if (strcmp(h, "Select") == 0 || strcmp(h, "Append") == 0) return A[0];
+    return NULL;
 }
 
 /* THE shared resolver — used by both infer_type and emit_node so they can never
@@ -127,9 +158,16 @@ static void resolve_assoc_operand(Ctx* c, const Expr* e, AssocOperand* o) {
         return;
     }
     if (is_association(e)) { o->kind = ASSOC_CONST; o->assoc = e; return; }
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && assoc_producer_head(e->data.function.head->data.symbol.name, e->data.function.arg_count)) {
-        o->kind = ASSOC_EXPR; o->expr = e;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        size_t na = e->data.function.arg_count;
+        if (assoc_producer_head(h, na)) { o->kind = ASSOC_EXPR; o->expr = e; return; }
+        /* Map/Select/Append compose: a produced association feeds the next op. */
+        const Expr* inner = assoc_transform_operand(h, e->data.function.args, na);
+        if (inner) {
+            AssocOperand io; resolve_assoc_operand(c, inner, &io);
+            if (io.kind != ASSOC_NONE) { o->kind = ASSOC_EXPR; o->expr = e; }
+        }
     }
 }
 
@@ -251,12 +289,105 @@ Expr* assoc_slot_to_value(Slot s, CompileType t) {
     }
 }
 
+/* Common machine element type across a constant association's KEYS (Keys[p] over
+ * a literal / folded bag).  Integer and Real keys only. */
+static bool assoc_const_keys_elem(const Expr* assoc, CompileType* out) {
+    size_t n = assoc->data.function.arg_count;
+    if (n == 0) return false;
+    CompileType elem = CT_INT;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* entry = assoc->data.function.args[i];
+        if (entry->type != EXPR_FUNCTION || entry->data.function.arg_count != 2) return false;
+        const Expr* k = entry->data.function.args[0];
+        if (k->type == EXPR_REAL) elem = CT_REAL;
+        else if (k->type != EXPR_INTEGER) return false;
+    }
+    *out = elem;
+    return true;
+}
+
+/* Is `h` the name of an association OPERAND symbol -- a declared `_Association`
+ * argument or a folded global bag -- so that `h[k]` is the accessor form? */
+static bool assoc_symbol_operand(Ctx* c, const char* h) {
+    CompileType st;
+    if (scope_find(c, h, &st, NULL) >= 0) return false;
+    int k = arg_find(c, h);
+    if (k >= 0) return CT_IS_ASSOC(c->arg_types[k]);
+    return global_assoc(c, h) != NULL;
+}
+
+/* The key slot of a POSITIONAL-read spec.  Positional `Part[p, i]` and the keyed
+ * runtime `Lookup[p, i]` share an opcode (distinguished by a flag bit), and the
+ * CSE pass keys a pure op on (a, b, imm) but not on its flags -- so the two must
+ * never share an AssocSpec.  This marker, which no user key can equal, keeps
+ * them apart. */
+static Expr* assoc_position_marker(void) {
+    return expr_new_symbol("System`Compile$AssocPosition");
+}
+
+/* Part[p, i] with an INTEGER i: the i-th value in insertion order (negative from
+ * the end), exactly Part's positional reading of an association.  Emitted as the
+ * runtime-key lookup with the positional flag (0x200); out of range declines. */
+static bool emit_assoc_position(Ctx* c, const Expr* pexpr, const Expr* kexpr, Val* out) {
+    AssocOperand ao; resolve_assoc_operand(c, pexpr, &ao);
+    AssocSrc src;
+    if (!materialize_assoc_src(c, &ao, &src)) { c->ok = false; return true; }
+    CompileType rt = src.valtype;
+    if (src.cst && !assoc_const_values_elem(src.cst, &rt)) { c->ok = false; return true; }
+    if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) { c->ok = false; return true; }
+    Val kv;
+    if (!emit(c, kexpr, &kv)) { c->ok = false; return true; }
+    if (kv.type != CT_INT) { pop_tmp(c, kv); c->ok = false; return true; }
+    Expr* mk = assoc_position_marker();
+    AssocSpec* sp = emit_assocspec(c, mk, NULL, src.cst);
+    expr_free(mk);
+    if (!sp) { pop_tmp(c, kv); return true; }
+    Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+    uint16_t f = (uint16_t)((unsigned)rt | ((unsigned)CT_INT << 4) | 0x200u);
+    uint32_t bagreg = src.cst ? (uint32_t)kv.reg : (uint32_t)src.reg;
+    pop_tmp(c, kv);
+    int dst = alloc_temp(c);
+    ins_f(c, OP_ASSOC_LOOKUP_DYN, f, (uint32_t)dst, bagreg, (uint32_t)kv.reg, ip);
+    if (src.owned) free_if_tmp(c, (Val){ src.reg, true, CT_ASSOC_TYPE(src.valtype), false });
+    out->reg = dst; out->tmp = true; out->type = rt; out->built = false;
+    return true;
+}
+
 /* Emit the Association read ops (B1).  Returns true if `h` is an association op
  * that was HANDLED — lowered (out set) or cleanly bailed (c->ok=false).  Returns
  * false if `h` is not one, or is a head shared with the array lowerings
  * (Length/Values) whose operand is not an association — so the caller keeps
  * looking. */
 bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
+    /* p[k] -- the accessor form -- is Lookup[p, k] with no default: an absent key
+     * declines to the interpreter, which answers Missing["KeyAbsent", k] exactly
+     * as p[k] does. */
+    if (na == 1 && assoc_symbol_operand(c, h)) {
+        Expr* la[2] = { expr_new_symbol(h), A[0] };
+        bool r = try_emit_assoc(c, "Lookup", la, 2, out);
+        expr_free(la[0]);
+        return r;
+    }
+    /* Part[p, k] / p[[k]] over an association: a string or Key[k] subscript is a
+     * KEY read (Lookup semantics, absent -> interpreter); an integer subscript is
+     * POSITIONAL, the k-th value.  Over an array, the array Part lowering. */
+    if (strcmp(h, "Part") == 0 && na == 2) {
+        AssocOperand po; resolve_assoc_operand(c, A[0], &po);
+        if (po.kind == ASSOC_NONE) return false;
+        Expr* k = A[1];
+        if (k->type == EXPR_FUNCTION && k->data.function.head->type == EXPR_SYMBOL &&
+            strcmp(k->data.function.head->data.symbol.name, "Key") == 0 &&
+            k->data.function.arg_count == 1) {
+            Expr* la[2] = { A[0], k->data.function.args[0] };
+            return try_emit_assoc(c, "Lookup", la, 2, out);
+        }
+        if (k->type == EXPR_STRING) {
+            Expr* la[2] = { A[0], k };
+            return try_emit_assoc(c, "Lookup", la, 2, out);
+        }
+        return emit_assoc_position(c, A[0], k, out);
+    }
+    bool is_keys    = strcmp(h, "Keys") == 0 && na == 1;
     bool is_lookup  = strcmp(h, "Lookup") == 0 && (na == 2 || na == 3);
     bool is_exists  = (strcmp(h, "KeyExistsQ") == 0 || strcmp(h, "KeyMemberQ") == 0) && na == 2;
     bool is_free    = strcmp(h, "KeyFreeQ") == 0 && na == 2;
@@ -268,7 +399,9 @@ bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
     bool is_map     = strcmp(h, "Map") == 0 && na == 2;      /* Map[f, assoc]     */
     bool is_select  = strcmp(h, "Select") == 0 && na == 2;   /* Select[assoc, p]  */
     bool is_append  = strcmp(h, "Append") == 0 && na == 2;   /* Append[assoc,k->v]*/
-    if (!is_lookup && !is_exists && !is_free && !is_len && !is_values
+    bool is_built   = strcmp(h, "AssociationThread") == 0 ||
+                      ((strcmp(h, "AssociationMap") == 0 || strcmp(h, "CountsBy") == 0) && na == 2);
+    if (!is_lookup && !is_exists && !is_free && !is_len && !is_values && !is_keys && !is_built
         && !is_keydrop && !is_keytake && !is_counts && !is_map && !is_select && !is_append) return false;
 
     /* B4: Map[f, assoc] / Select[assoc, pred] — a higher-order transform via a
@@ -314,6 +447,63 @@ bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         return true;
     }
 
+    /* Associations BUILT from machine arrays -- AssociationThread[keys, vals],
+     * AssociationMap[f, v], CountsBy[v, f].  The operands are arrays, not
+     * associations, so these are handled before the resolver below. */
+    {
+        bool is_at = strcmp(h, "AssociationThread") == 0;
+        bool is_am = strcmp(h, "AssociationMap") == 0 && na == 2;
+        bool is_cb = strcmp(h, "CountsBy") == 0 && na == 2;
+        if (is_at) {
+            const Expr *ke, *ve;
+            if (!athread_operands(A, na, &ke, &ve)) { c->ok = false; return true; }
+            Val kv, vv;
+            if (!emit(c, ke, &kv)) { c->ok = false; return true; }
+            if (!emit(c, ve, &vv)) { pop_tmp(c, kv); c->ok = false; return true; }
+            if (!keyable_elem(kv.type) || !CT_IS_ARRAY(vv.type) || CT_RANK(vv.type) != 1 ||
+                CT_ELEM(vv.type) == CT_BOOL) {
+                pop_tmp(c, vv); pop_tmp(c, kv); c->ok = false; return true;
+            }
+            uint16_t f = 0;
+            if (vv.tmp) { pop_tmp(c, vv); f |= 2u; }     /* LIFO: values first */
+            if (kv.tmp) { pop_tmp(c, kv); f |= 1u; }
+            Slot z; memset(&z, 0, sizeof z);
+            int dst = alloc_arr(c);
+            ins_f(c, OP_ASSOC_THREAD, f, (uint32_t)dst, (uint32_t)kv.reg, (uint32_t)vv.reg, z);
+            out->reg = dst; out->tmp = true; out->type = CT_ASSOC_TYPE(CT_ELEM(vv.type));
+            out->built = true;
+            return true;
+        }
+        if (is_am || is_cb) {
+            const Expr* fn = is_am ? A[0] : A[1];
+            const Expr* ae = is_am ? A[1] : A[0];
+            Val av;
+            if (!emit(c, ae, &av)) { c->ok = false; return true; }
+            if (!keyable_elem(av.type)) { pop_tmp(c, av); c->ok = false; return true; }
+            CompileType in_t = CT_ELEM(av.type);
+            struct CompiledProgram* callee = compile_value_callee(c, fn, in_t);
+            if (!callee) { pop_tmp(c, av); c->ok = false; return true; }
+            CompileType rt = compiled_result_type(callee);
+            bool ok_rt = is_am ? (rt == CT_INT || rt == CT_REAL)
+                               : (rt == CT_INT || rt == CT_REAL || rt == CT_BOOL);
+            if (!ok_rt || compiled_num_args(callee) != 1) {
+                compiled_free(callee); pop_tmp(c, av); c->ok = false; return true;
+            }
+            AssocCalleeSpec* sp = calloc(1, sizeof *sp);
+            if (!sp) { compiled_free(callee); pop_tmp(c, av); c->ok = false; return true; }
+            sp->callee = callee;
+            if (!ctx_own_assoccallee(c, sp)) { pop_tmp(c, av); return true; }
+            uint16_t f = (uint16_t)(((unsigned)in_t << 4) | ((unsigned)rt << 8) | (is_cb ? 2u : 0u));
+            if (av.tmp) { pop_tmp(c, av); f |= 1u; }
+            Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+            int dst = alloc_arr(c);
+            ins_f(c, OP_ASSOC_BYFN, f, (uint32_t)dst, (uint32_t)av.reg, 0, ip);
+            out->reg = dst; out->tmp = true;
+            out->type = CT_ASSOC_TYPE(is_cb ? CT_INT : rt); out->built = true;
+            return true;
+        }
+    }
+
     /* Counts is the one association op whose OPERAND is a machine array, not an
      * association -> <|element -> count|> (integer values).  Handled before the
      * association-operand resolver below. */
@@ -336,7 +526,7 @@ bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         /* Lookup / KeyExistsQ / KeyMemberQ / KeyFreeQ / KeyDrop / KeyTake are
          * association-only: bail.  Length / Values / Append are shared with the
          * array path — let it try. */
-        if (is_len || is_values || is_append) return false;
+        if (is_len || is_values || is_keys || is_append) return false;
         c->ok = false; return true;
     }
 
@@ -507,17 +697,23 @@ bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         return true;
     }
 
-    /* Values: an owned packed vector.  A constant source rides in the spec; a
-     * produced source is consumed in place (pop + reuse slot + free-source flag,
-     * bit 0x100), an argument bag stays borrowed. */
+    /* Values / Keys: an owned packed vector.  A constant source rides in the
+     * spec; a produced source is consumed in place (pop + reuse slot +
+     * free-source flag, bit 0x100), an argument bag stays borrowed.  Keys
+     * (flag bit 0x200) are typed from a constant bag's keys, and are Integer for
+     * a runtime bag -- the declared type names only the VALUES, so a bag whose
+     * keys are not machine integers (strings, say) declines at run time. */
     {
         CompileType elem = src_valtype;
-        if (src_cst && !assoc_const_values_elem(src_cst, &elem)) { c->ok = false; return true; }
+        if (is_keys) {
+            elem = CT_INT;
+            if (src_cst && !assoc_const_keys_elem(src_cst, &elem)) { c->ok = false; return true; }
+        } else if (src_cst && !assoc_const_values_elem(src_cst, &elem)) { c->ok = false; return true; }
         if (elem != CT_INT && elem != CT_REAL && elem != CT_COMPLEX) { c->ok = false; return true; }
         AssocSpec* sp = emit_assocspec(c, NULL, NULL, src_cst);
         if (!sp) return true;
         Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
-        uint16_t f = (uint16_t)elem;
+        uint16_t f = (uint16_t)((unsigned)elem | (is_keys ? 0x200u : 0u));
         uint32_t areg;
         if (src_cst) areg = 0;
         else if (src_owned) {
@@ -536,6 +732,104 @@ bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
  * otherwise (so a shared head falls through to the array branch, and an
  * association-only head with no valid operand ultimately bails). */
 bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileType* out) {
+    /* p[k] and Part[p, k]: the same normalisation as try_emit_assoc. */
+    if (na == 1 && assoc_symbol_operand(c, h)) {
+        Expr* la[2] = { expr_new_symbol(h), A[0] };
+        bool r = try_infer_assoc(c, "Lookup", la, 2, out);
+        expr_free(la[0]);
+        return r;
+    }
+    if (strcmp(h, "Part") == 0 && na == 2) {
+        AssocOperand po; resolve_assoc_operand(c, A[0], &po);
+        if (po.kind == ASSOC_NONE) return false;
+        Expr* k = A[1];
+        if (k->type == EXPR_FUNCTION && k->data.function.head->type == EXPR_SYMBOL &&
+            strcmp(k->data.function.head->data.symbol.name, "Key") == 0 &&
+            k->data.function.arg_count == 1) {
+            Expr* la[2] = { A[0], k->data.function.args[0] };
+            return try_infer_assoc(c, "Lookup", la, 2, out);
+        }
+        if (k->type == EXPR_STRING) {
+            Expr* la[2] = { A[0], k };
+            return try_infer_assoc(c, "Lookup", la, 2, out);
+        }
+        CompileType kt, vt = CT_REAL;
+        if (!infer_type(c, k, &kt) || kt != CT_INT) return false;
+        if (po.kind == ASSOC_ARG) vt = po.valtype;
+        else if (po.kind == ASSOC_CONST) { if (!assoc_const_values_elem(po.assoc, &vt)) return false; }
+        else { CompileType t; if (!infer_type(c, po.expr, &t) || !CT_IS_ASSOC(t)) return false;
+               vt = CT_ASSOC_VALTYPE(t); }
+        if (vt != CT_INT && vt != CT_REAL && vt != CT_COMPLEX) return false;
+        *out = vt; return true;
+    }
+    /* Map / Select / Append over an association produce one (B4/B5); typed here
+     * so they compose -- Values[Map[f, p]], Length[Select[p, pred]],
+     * Lookup[Append[p, k -> x], k]. */
+    {
+        const Expr* inner = assoc_transform_operand(h, A, na);
+        if (inner) {
+            AssocOperand io; resolve_assoc_operand(c, inner, &io);
+            if (io.kind == ASSOC_NONE) return false;          /* the array lowering */
+            CompileType vt = CT_REAL;
+            if (io.kind == ASSOC_ARG) vt = io.valtype;
+            else if (io.kind == ASSOC_CONST) { if (!assoc_const_values_elem(io.assoc, &vt)) vt = CT_REAL; }
+            else { CompileType t; if (!infer_type(c, io.expr, &t) || !CT_IS_ASSOC(t)) return false;
+                   vt = CT_ASSOC_VALTYPE(t); }
+            if (strcmp(h, "Append") == 0) {
+                const Expr* rule = A[1];
+                if (!(rule->type == EXPR_FUNCTION && rule->data.function.head->type == EXPR_SYMBOL
+                      && rule->data.function.head->data.symbol.name == SYM_Rule
+                      && rule->data.function.arg_count == 2)) return false;
+                if (!expr_is_compile_const(c, rule->data.function.args[0])) return false;
+                CompileType xt;
+                if (!infer_type(c, rule->data.function.args[1], &xt)) return false;
+                if (vt != CT_INT && vt != CT_REAL && vt != CT_COMPLEX) return false;
+                *out = CT_ASSOC_TYPE(vt); return true;
+            }
+            /* Map / Select: the callee decides (its result type for Map; Select
+             * keeps the source values and needs a Boolean predicate). */
+            const Expr* fn = (strcmp(h, "Map") == 0) ? A[0] : A[1];
+            struct CompiledProgram* callee = compile_value_callee(c, fn, vt);
+            if (!callee) return false;
+            CompileType rt = compiled_result_type(callee);
+            bool ok1 = compiled_num_args(callee) == 1;
+            compiled_free(callee);
+            if (!ok1) return false;
+            if (strcmp(h, "Map") == 0) {
+                if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) return false;
+                *out = CT_ASSOC_TYPE(rt); return true;
+            }
+            if (rt != CT_BOOL) return false;
+            *out = CT_ASSOC_TYPE(vt); return true;
+        }
+    }
+    /* Built from machine arrays: AssociationThread / AssociationMap / CountsBy. */
+    if (strcmp(h, "AssociationThread") == 0) {
+        const Expr *ke, *ve; CompileType kt, vt;
+        if (!athread_operands(A, na, &ke, &ve)) return false;
+        if (!infer_type(c, ke, &kt) || !infer_type(c, ve, &vt)) return false;
+        if (!keyable_elem(kt) || !CT_IS_ARRAY(vt) || CT_RANK(vt) != 1 || CT_ELEM(vt) == CT_BOOL)
+            return false;
+        *out = CT_ASSOC_TYPE(CT_ELEM(vt)); return true;
+    }
+    if ((strcmp(h, "AssociationMap") == 0 || strcmp(h, "CountsBy") == 0) && na == 2) {
+        bool am = strcmp(h, "AssociationMap") == 0;
+        CompileType at;
+        if (!infer_type(c, am ? A[1] : A[0], &at) || !keyable_elem(at)) return false;
+        struct CompiledProgram* callee = compile_value_callee(c, am ? A[0] : A[1], CT_ELEM(at));
+        if (!callee) return false;
+        CompileType rt = compiled_result_type(callee);
+        bool one = compiled_num_args(callee) == 1;
+        compiled_free(callee);
+        if (!one) return false;
+        if (am) {
+            if (rt != CT_INT && rt != CT_REAL) return false;
+            *out = CT_ASSOC_TYPE(rt); return true;
+        }
+        if (rt != CT_INT && rt != CT_REAL && rt != CT_BOOL) return false;
+        *out = CT_ASSOC_TYPE(CT_INT); return true;
+    }
+    bool is_keys   = strcmp(h, "Keys") == 0 && na == 1;
     bool is_lookup = strcmp(h, "Lookup") == 0 && (na == 2 || na == 3);
     bool is_exists = (strcmp(h, "KeyExistsQ") == 0 || strcmp(h, "KeyMemberQ") == 0
                       || strcmp(h, "KeyFreeQ") == 0) && na == 2;
@@ -543,7 +837,8 @@ bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileType* ou
     bool is_values = strcmp(h, "Values") == 0 && na == 1;
     bool is_keysel = (strcmp(h, "KeyDrop") == 0 || strcmp(h, "KeyTake") == 0) && na == 2;
     bool is_counts = strcmp(h, "Counts") == 0 && na == 1;
-    if (!is_lookup && !is_exists && !is_len && !is_values && !is_keysel && !is_counts) return false;
+    if (!is_lookup && !is_exists && !is_len && !is_values && !is_keys && !is_keysel && !is_counts)
+        return false;
 
     if (is_counts) {
         CompileType t;
@@ -567,6 +862,11 @@ bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileType* ou
 
     if (is_exists) { *out = CT_BOOL; return true; }
     if (is_len)    { *out = CT_INT;  return true; }
+    if (is_keys) {
+        CompileType kt = CT_INT;
+        if (src_cst && !assoc_const_keys_elem(src_cst, &kt)) return false;
+        *out = CT_ARRAY(kt, 1); return true;
+    }
     if (is_keysel) {
         if (!expr_is_compile_const(c, A[1])) return false;
         CompileType vt = src_valtype;

@@ -84,6 +84,23 @@ Expr* ndred_ranked_max(Expr* res);  /* RankedMax[a, n] */
  * order, exactly as the List path does. */
 Expr* ndred_tally(Expr* res);           /* Tally[a] */
 
+/* The tally's keying plus the group id of EVERY element: the substrate under
+ * PositionIndex and GroupBy over a machine buffer (src/assoc.c). `data` is a
+ * rank-1 buffer of `n` elements of dtype int64, float64 or bool, keyed exactly as
+ * Tally keys it (raw int64 word; float64 bit pattern; non-finite declines).
+ * On true the caller owns *out (nd_word_groups_free): keys[u] / cnts[u] are the
+ * u-th distinct word and its multiplicity in first-appearance order, gid[i] is
+ * element i's group. False (nothing to free) on an unsupported dtype, a
+ * non-finite double, n == 0 or n > 2^32-1, or allocation failure. */
+typedef struct {
+    uint64_t* keys;
+    int64_t*  cnts;
+    uint32_t* gid;
+    size_t    nuniq;
+} NDWordGroups;
+bool nd_group_words(const void* data, NDType dt, size_t n, NDWordGroups* out);
+void nd_word_groups_free(NDWordGroups* g);
+
 /* Commonest[a] / Commonest[a, n] / Commonest[a, UpTo[n]] — the same count, then
  * a sort of the DISTINCT values by count descending, first appearance ascending.
  * Both share one counting routine, so their tie-breaking cannot drift apart.

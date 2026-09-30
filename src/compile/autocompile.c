@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 #include <complex.h>
 
 #include "../expr.h"
@@ -260,6 +261,208 @@ Expr* autocompiled_eval_mpfr(const AutoCompiled* ac, const Expr* const* xs) {
     /* A managed result is a NEW Expr (EXPR_MPFR / Complex[MPFR,MPFR]) the caller
      * owns; on any non-managed result the caller should interpret. */
     return CT_IS_MANAGED(o.type) ? o.v.a : NULL;
+}
+
+/* ------------------------------------------------------------------------
+ * autocompile_map_unary — f applied to every element of a machine vector, as
+ * ONE compiled loop.  See autocompile.h for the contract.
+ * ------------------------------------------------------------------------ */
+
+/* The element placeholder: `Part[V, I]` inside the loop body. */
+static const char* ac_map_v(void) { return intern_symbol("AutoCompile`MapVector"); }
+static const char* ac_map_i(void) { return intern_symbol("AutoCompile`MapIndex"); }
+
+static bool ac_head_is(const Expr* e, const char* name) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
+}
+
+static CompileType ac_join(CompileType a, CompileType b) {
+    if (a == CT_ERR || b == CT_ERR) return CT_ERR;
+    if (a == CT_BOOL || b == CT_BOOL) return (a == b) ? CT_BOOL : CT_ERR;
+    return (a == CT_REAL || b == CT_REAL) ? CT_REAL : CT_INT;
+}
+
+/* The EXACTNESS GATE.  A tiny type inference over the substituted body that
+ * accepts only constructs whose machine lowering computes exactly what the
+ * interpreter would: integer ops that stay integers (checked for overflow by the
+ * VM), real ops on reals, and the int -> int roundings/tests.  It rejects what
+ * the compiler would silently turn Real — `x/2` or `x^-1` on integers is a
+ * Rational to the interpreter and a double to the VM — plus any symbol it cannot
+ * type (a global may hold a Rational) and every head it does not know.
+ * Returns CT_INT / CT_REAL / CT_BOOL, or CT_ERR to refuse. */
+static CompileType ac_exact_type(const Expr* e, CompileType elem) {
+    if (!e) return CT_ERR;
+    switch (e->type) {
+        case EXPR_INTEGER: return CT_INT;
+        case EXPR_REAL:    return CT_REAL;
+        case EXPR_SYMBOL: {
+            const char* s = e->data.symbol.name;
+            if (strcmp(s, "True") == 0 || strcmp(s, "False") == 0) return CT_BOOL;
+            return CT_ERR;
+        }
+        case EXPR_FUNCTION: break;
+        default: return CT_ERR;
+    }
+    const Expr* hd = e->data.function.head;
+    if (hd->type != EXPR_SYMBOL) return CT_ERR;
+    const char* h = hd->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    Expr** A = e->data.function.args;
+
+    if (strcmp(h, "Part") == 0)      /* the element placeholder Part[V, I] */
+        return (n == 2 && A[0]->type == EXPR_SYMBOL && A[0]->data.symbol.name == ac_map_v())
+               ? elem : CT_ERR;
+
+    CompileType t[8];
+    if (n > 8) return CT_ERR;
+    for (size_t k = 0; k < n; k++) if ((t[k] = ac_exact_type(A[k], elem)) == CT_ERR) return CT_ERR;
+
+    /* Arithmetic closed over Int and Real.  A Real sum or product of more than
+     * two terms is refused: Plus/Times are Orderless, so the interpreter adds
+     * the terms in canonical order while the VM adds them as written, and
+     * floating-point addition is not associative. */
+    static const char* const ARITH[] = { "Plus", "Times", "Subtract", "Max", "Min", NULL };
+    for (int k = 0; ARITH[k]; k++)
+        if (strcmp(h, ARITH[k]) == 0) {
+            if (n == 0) return CT_ERR;
+            CompileType r = t[0];
+            for (size_t j = 1; j < n; j++) r = ac_join(r, t[j]);
+            if (r == CT_REAL && n > 2) return CT_ERR;
+            return r == CT_BOOL ? CT_ERR : r;
+        }
+    /* Mod and Equal/Unequal on Reals are not bit-for-bit the VM's: the
+     * interpreter's real Equal is tolerant, and its real Mod is x - m Floor[x/m]
+     * evaluated as a tree.  Integers only. */
+    if (strcmp(h, "Mod") == 0)
+        return (n == 2 && t[0] == CT_INT && t[1] == CT_INT) ? CT_INT : CT_ERR;
+    if (strcmp(h, "Equal") == 0 || strcmp(h, "Unequal") == 0) {
+        if (n < 2) return CT_ERR;
+        for (size_t j = 0; j < n; j++) if (t[j] != CT_INT) return CT_ERR;
+        return CT_BOOL;
+    }
+    if (strcmp(h, "Minus") == 0 || strcmp(h, "Abs") == 0)
+        return (n == 1 && t[0] != CT_BOOL) ? t[0] : CT_ERR;
+    /* Numeric -> Integer on both sides. */
+    if (strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0 ||
+        strcmp(h, "Sign") == 0 || strcmp(h, "IntegerPart") == 0)
+        return (n == 1 && t[0] != CT_BOOL) ? CT_INT : CT_ERR;
+    if (strcmp(h, "Quotient") == 0)
+        return (n == 2 && t[0] == CT_INT && t[1] == CT_INT) ? CT_INT : CT_ERR;
+    if (strcmp(h, "Boole") == 0) return (n == 1 && t[0] == CT_BOOL) ? CT_INT : CT_ERR;
+    if (strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0)
+        return (n == 1 && t[0] == CT_INT) ? CT_BOOL : CT_ERR;
+    if (strcmp(h, "Positive") == 0 || strcmp(h, "Negative") == 0 ||
+        strcmp(h, "NonNegative") == 0 || strcmp(h, "NonPositive") == 0)
+        return (n == 1 && t[0] != CT_BOOL) ? CT_BOOL : CT_ERR;
+    static const char* const CMP[] = { "Less", "LessEqual", "Greater", "GreaterEqual", NULL };
+    for (int k = 0; CMP[k]; k++)
+        if (strcmp(h, CMP[k]) == 0) {
+            if (n < 2) return CT_ERR;
+            for (size_t j = 0; j < n; j++) if (t[j] == CT_BOOL) return CT_ERR;
+            return CT_BOOL;
+        }
+    if (strcmp(h, "And") == 0 || strcmp(h, "Or") == 0 || strcmp(h, "Xor") == 0 ||
+        strcmp(h, "Not") == 0) {
+        if (n == 0) return CT_ERR;
+        for (size_t j = 0; j < n; j++) if (t[j] != CT_BOOL) return CT_ERR;
+        return CT_BOOL;
+    }
+    if (strcmp(h, "If") == 0)
+        return (n == 3 && t[0] == CT_BOOL) ? ac_join(t[1], t[2]) : CT_ERR;
+    /* Divide / Power stay exact only when a Real is involved, or for an integer
+     * raised to a non-negative integer literal. */
+    if (strcmp(h, "Divide") == 0)
+        return (n == 2 && t[0] != CT_BOOL && t[1] != CT_BOOL &&
+                (t[0] == CT_REAL || t[1] == CT_REAL)) ? CT_REAL : CT_ERR;
+    if (strcmp(h, "Power") == 0) {
+        if (n != 2 || t[0] == CT_BOOL || t[1] == CT_BOOL) return CT_ERR;
+        if (t[0] == CT_REAL || t[1] == CT_REAL) return CT_REAL;
+        return (A[1]->type == EXPR_INTEGER && A[1]->data.integer >= 0) ? CT_INT : CT_ERR;
+    }
+    return CT_ERR;
+}
+
+/* Copy of `body` with the element variable replaced by `elt` (borrowed): Slot[1]
+ * for a slot-form Function (param == NULL), else the named symbol `param`. */
+static Expr* ac_subst(const Expr* body, const char* param, const Expr* elt) {
+    if (param) {
+        if (body->type == EXPR_SYMBOL && body->data.symbol.name == param) return expr_copy((Expr*)elt);
+    } else if (ac_head_is(body, "Slot") && body->data.function.arg_count == 1 &&
+               body->data.function.args[0]->type == EXPR_INTEGER &&
+               body->data.function.args[0]->data.integer == 1) {
+        return expr_copy((Expr*)elt);
+    }
+    if (body->type != EXPR_FUNCTION) return expr_copy((Expr*)body);
+    size_t n = body->data.function.arg_count;
+    Expr* out = expr_new_function(ac_subst(body->data.function.head, param, elt), NULL, n);
+    for (size_t k = 0; k < n; k++)
+        out->data.function.args[k] = ac_subst(body->data.function.args[k], param, elt);
+    return out;
+}
+
+Expr* autocompile_map_unary(const Expr* f, const Expr* arr) {
+    if (!f || !arr || !autocompile_enabled()) return NULL;
+    if (arr->type != EXPR_NDARRAY || arr->data.ndarray.rank != 1) return NULL;
+    NDType dt = arr->data.ndarray.dtype;
+    if (dt != NDT_INT64 && dt != NDT_FLOAT64) return NULL;
+    int64_t len = arr->data.ndarray.dims[0];
+    if (len < 1) return NULL;
+    CompileType elem = (dt == NDT_INT64) ? CT_INT : CT_REAL;
+
+    const char* vname = ac_map_v();
+    const char* iname = ac_map_i();
+    Expr* pargs[2] = { expr_new_symbol(vname), expr_new_symbol(iname) };
+    Expr* elt = expr_new_function(expr_new_symbol("Part"), pargs, 2);
+
+    /* The scalar body, element variable replaced by Part[V, I]. */
+    Expr* body = NULL;
+    if (f->type == EXPR_SYMBOL) {
+        Expr* a1 = expr_copy(elt);
+        body = expr_new_function(expr_copy((Expr*)f), &a1, 1);
+    } else if (ac_head_is(f, "Function")) {
+        size_t fa = f->data.function.arg_count;
+        if (fa == 1) {
+            body = ac_subst(f->data.function.args[0], NULL, elt);
+        } else if (fa == 2) {
+            const Expr* p = f->data.function.args[0];
+            if (ac_head_is(p, "List") && p->data.function.arg_count == 1) p = p->data.function.args[0];
+            if (p->type == EXPR_SYMBOL)
+                body = ac_subst(f->data.function.args[1], p->data.symbol.name, elt);
+        }
+    }
+    expr_free(elt);
+    if (!body) return NULL;
+    if (ac_exact_type(body, elem) == CT_ERR) { expr_free(body); return NULL; }
+
+    /* Table[body, {I, Length[V]}] over the declared vector V: one VM call. */
+    Expr* lenargs[1] = { expr_new_symbol(vname) };
+    Expr* iter[2] = { expr_new_symbol(iname),
+                      expr_new_function(expr_new_symbol("Length"), lenargs, 1) };
+    Expr* targs[2] = { body, expr_new_function(expr_new_symbol("List"), iter, 2) };
+    Expr* table = expr_new_function(expr_new_symbol("Table"), targs, 2);
+
+    const char* names[1] = { vname };
+    CompileType types[1] = { CT_ARRAY(elem, 1) };
+    CompiledProgram* prog = compile_expr_prec(table, names, types, 1, 0u, 0);
+    expr_free(table);
+    if (!prog) return NULL;
+
+    CompileValue args[1], o;
+    args[0].type = types[0];
+    args[0].v.a = (Expr*)arr;                     /* borrowed by the program */
+    Expr* out = NULL;
+    if (compiled_eval(prog, args, &o)) {
+        if (CT_IS_ARRAY(o.type) && o.v.a && o.v.a->type == EXPR_NDARRAY &&
+            o.v.a->data.ndarray.rank == 1 && o.v.a->data.ndarray.dims[0] == len &&
+            (o.v.a->data.ndarray.dtype == NDT_INT64 || o.v.a->data.ndarray.dtype == NDT_FLOAT64 ||
+             o.v.a->data.ndarray.dtype == NDT_BOOL))
+            out = o.v.a;
+        else if (CT_IS_ARRAY(o.type) && o.v.a)
+            expr_free(o.v.a);
+    }
+    compiled_free(prog);
+    return out;
 }
 
 void autocompiled_free(AutoCompiled* ac) {

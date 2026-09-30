@@ -22,6 +22,8 @@
 #include "../match.h"          /* env_new / env_set / replace_bindings */
 #include "../eval.h"           /* evaluate / eval_and_free */
 #include "../print.h"          /* expr_to_string — Thread::tdlen diagnostic */
+#include "../message.h"        /* mth_msg_suppressed — CompiledFunction::cfas */
+#include <stdio.h>
 
 struct CompiledFunction {
     unsigned         refcount;   /* Expr copies share the payload */
@@ -662,6 +664,23 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
     if (cf->runtime_attrs & ATTR_LISTABLE) {
         Expr* threaded;
         if (cf_thread(cf, args, nargs, &threaded)) return threaded;
+    }
+
+    /* A declared `_Association` parameter accepts only an Association.  Anything
+     * else -- a plain List, a List of rules -- used to fall through to the
+     * uncompiled body silently, where Lookup[{1., 2.}, "a"] quietly became
+     * Missing[...] and flowed into the arithmetic.  Reject it instead: say so,
+     * and leave the call unevaluated, as a wrong-arity call is. */
+    for (size_t i = 0; i < nargs; i++) {
+        if (!CT_IS_ASSOC(cf->arg_types[i]) || is_association(args[i])) continue;
+        if (!mth_msg_suppressed()) {
+            char* s = expr_to_string(args[i]);
+            printf("CompiledFunction::cfas: Argument %s at position %zu should be an "
+                   "Association.\n", s ? s : "?", i + 1);
+            free(s);
+            mth_msg_note_fired();
+        }
+        return NULL;
     }
 
     if (cf->prog) {

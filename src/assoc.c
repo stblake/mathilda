@@ -10,6 +10,8 @@
 
 #include "assoc.h"
 #include "assoc_index.h"
+#include "assoc_packed.h"
+#include "pack.h"
 #include "ndreduce.h"
 #include "ndarray.h"
 #include "sym_names.h"
@@ -96,6 +98,28 @@ static Expr* make_rule(Expr* key, Expr* val) {
 static Expr* make_missing(const Expr* key) {
     Expr* args[2] = { expr_new_string("KeyAbsent"), expr_copy((Expr*)key) };
     return expr_new_function(expr_new_symbol(SYM_Missing), args, 2);
+}
+
+/* Re-run builtin `fn` on a copy of `res` whose machine-array arguments in
+ * positions [lo, hi) -- a visible NDArray[...] or a packed list -- are
+ * materialised to ordinary Lists. This is how every association head that takes
+ * a list answers a buffer it has no dedicated path for: the transparency gate
+ * materialises a PACKED argument for an unaware head, but never a VISIBLE
+ * NDArray, and leaving `GroupBy[NDArray[...], f]` unevaluated is a wrong answer,
+ * not a slow one (CLAUDE.md). NULL when `fn` declines the List form too. */
+static Expr* with_list_args(Expr* res, size_t lo, size_t hi, Expr* (*fn)(Expr*)) {
+    size_t argc = res->data.function.arg_count;
+    Expr* call = expr_new_function(expr_copy(res->data.function.head), NULL, argc);
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        /* A packed argument anywhere is materialised too -- exactly what the
+         * gate does for an unaware head -- so no buffer is left to nest. */
+        bool unpack = is_packed_list(a) || (i >= lo && i < hi && is_ndarray(a));
+        call->data.function.args[i] = unpack ? ndarray_to_nested_list(a) : expr_copy(a);
+    }
+    Expr* r = fn(call);
+    expr_free(call);
+    return r;
 }
 
 /* ======================================================================
@@ -256,6 +280,18 @@ static Expr* keys_or_values(Expr* res, bool want_keys) {
 
     if (is_association(a) || head_is(a, SYM_List)) {
         size_t count = a->data.function.arg_count;
+        /* A column of machine numbers comes back PACKED: the answer is a fresh
+         * top-level List, so this cannot nest a buffer (see assoc_packed.h),
+         * and Total[Values[a]] then reduces a buffer instead of n Exprs. */
+        if (count >= pack_min_elements()) {
+            bool all_rules = true;
+            for (size_t i = 0; i < count && all_rules; i++)
+                all_rules = is_rule2(a->data.function.args[i]);
+            if (all_rules) {
+                Expr* packed = assoc_pack_column(a, want_keys);
+                if (packed) return packed;
+            }
+        }
         Expr** out = malloc(sizeof(Expr*) * (count ? count : 1));
         for (size_t i = 0; i < count; i++) {
             Expr* el = a->data.function.args[i];
@@ -363,7 +399,18 @@ Expr* builtin_lookup(Expr* res) {
     Expr* assoc = res->data.function.args[0];
     Expr* key   = res->data.function.args[1];
     Expr* deflt = argc == 3 ? res->data.function.args[2] : NULL;
+    /* Lookup is packed-aware for its KEYS only: a packed association slot (not
+     * an association at all) or a packed default -- which would be copied into
+     * the result list -- is materialised exactly as the gate would. */
+    if (is_packed_list(assoc) || (deflt && is_packed_list(deflt)))
+        return with_list_args(res, 0, 0, builtin_lookup);
     if (!is_assoc_or_rule_list(assoc)) return NULL;
+    /* A machine array of keys is a list of keys: probed straight off the buffer
+     * through the persistent index, else looked up as the materialised list. */
+    if (is_ndarray(key)) {
+        Expr* r = is_association(assoc) ? assoc_packed_lookup(assoc, key, deflt) : NULL;
+        return r ? r : with_list_args(res, 1, 2, builtin_lookup);
+    }
 
     /* Lookup threads over a (non-empty) list of associations, extracting the
      * key from each: Lookup[{a1, a2, ...}, key] -> {Lookup[a1, key], ...}. This
@@ -536,10 +583,16 @@ Expr* assoc_set_key(const Expr* assoc, const Expr* key, Expr* newval) {
     return result;
 }
 
+Expr* builtin_keydrop(Expr* res);
+Expr* builtin_keytake(Expr* res);
+
 static Expr* key_drop_take(Expr* res, bool take) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     Expr* karg  = res->data.function.args[1];
+    /* A machine array of keys is a list of keys. */
+    if (is_ndarray(karg))
+        return with_list_args(res, 1, 2, take ? builtin_keytake : builtin_keydrop);
 
     /* Thread over a (non-empty) list of associations, dropping/keeping the keys
      * in each: KeyDrop[{a1, a2, ...}, keys] -> {KeyDrop[a1, keys], ...}. This is
@@ -680,6 +733,16 @@ Expr* builtin_associationthread(Expr* res) {
     } else {
         return NULL;
     }
+    if (is_ndarray(keys) || is_ndarray(vals)) {
+        /* Buffer keys are de-duplicated by machine word, never boxed first. */
+        if (is_ndarray(keys)) { Expr* r = assoc_packed_thread(keys, vals); if (r) return r; }
+        if (argc == 2) return with_list_args(res, 0, 2, builtin_associationthread);
+        Expr* two[2] = { expr_copy(keys), expr_copy(vals) };        /* keys -> vals form */
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), two, 2);
+        Expr* r = with_list_args(call, 0, 2, builtin_associationthread);
+        expr_free(call);
+        return r;
+    }
     if (!head_is(keys, SYM_List) || !head_is(vals, SYM_List)) return NULL;
     size_t n = keys->data.function.arg_count;
     if (n != vals->data.function.arg_count) return NULL;
@@ -779,7 +842,10 @@ Expr* builtin_counts(Expr* res) {
      * cannot key faithfully (complex, rank > 1, non-finite floats) and returns
      * the List-path answer for them, which arrives here as an ordinary List of
      * pairs and is rewritten the same way. */
-    if (is_ndarray(list)) { Expr* r = counts_from_ndarray(list); if (r) return r; }
+    if (is_ndarray(list)) {
+        Expr* r = counts_from_ndarray(list);
+        return r ? r : with_list_args(res, 0, 1, builtin_counts);
+    }
     /* Counts over an association tallies its values (Counts[Values[assoc]]). */
     if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
     if (!head_is(list, SYM_List)) return NULL;
@@ -823,6 +889,12 @@ Expr* builtin_groupby(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
     Expr* reducer = (argc == 3) ? res->data.function.args[2] : NULL;
+    /* A machine buffer: run f once over the whole buffer (compiled) and group
+     * the machine keys; otherwise group the materialised list. */
+    if (is_ndarray(list)) {
+        if (!is_rule2(f)) { Expr* r = assoc_packed_groupby(list, f, reducer); if (r) return r; }
+        return with_list_args(res, 0, 1, builtin_groupby);
+    }
     /* GroupBy[assoc, f]: group the entries by f[value] into sub-associations
      * (keys preserved); GroupBy[assoc, f, red] reduces each sub-association. The
      * keyfn -> valfn transform form is list-only, so leave it unevaluated on an
@@ -971,6 +1043,10 @@ Expr* assoc_gather_core(Expr* list, Expr* f) {
 
 Expr* builtin_gatherby(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
+    if (is_ndarray(res->data.function.args[0])) {
+        Expr* r = assoc_packed_gatherby(res->data.function.args[0], res->data.function.args[1]);
+        return r ? r : with_list_args(res, 0, 1, builtin_gatherby);
+    }
     return assoc_gather_core(res->data.function.args[0],
                              res->data.function.args[1]);
 }
@@ -1389,6 +1465,10 @@ Expr* builtin_countsby(Expr* res) {
     Expr* f    = res->data.function.args[1];
     /* CountsBy over an association tallies its values by f. */
     if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+    if (is_ndarray(list)) {
+        Expr* r = assoc_packed_countsby(list, f);
+        return r ? r : with_list_args(res, 0, 1, builtin_countsby);
+    }
     if (!head_is(list, SYM_List)) return NULL;
     size_t n = list->data.function.arg_count;
 
@@ -1416,6 +1496,11 @@ Expr* builtin_countsby(Expr* res) {
 Expr* builtin_positionindex(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     Expr* list = res->data.function.args[0];
+    /* A machine buffer: positions grouped by machine word, no boxed input. */
+    if (is_ndarray(list)) {
+        Expr* r = assoc_packed_positionindex(list);
+        return r ? r : with_list_args(res, 0, 1, builtin_positionindex);
+    }
     if (!head_is(list, SYM_List)) return NULL;
     size_t n = list->data.function.arg_count;
 
@@ -1455,6 +1540,10 @@ Expr* builtin_associationmap(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* f    = res->data.function.args[0];
     Expr* keys = res->data.function.args[1];
+    if (is_ndarray(keys)) {
+        Expr* r = assoc_packed_map(f, keys);
+        return r ? r : with_list_args(res, 1, 2, builtin_associationmap);
+    }
     if (!head_is(keys, SYM_List)) return NULL;
     size_t n = keys->data.function.arg_count;
     Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));

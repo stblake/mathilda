@@ -103,6 +103,7 @@ k5    = Table[1./25., {5}, {5}];
 k5v   = Table[1./5., {5}];
 idx   = Mod[Range[n]*7919, 100000] + 1;
 src   = Range[1., 100000.];
+aj    = AssociationThread[cv, bv];
 tf    = Map[# > 0.5 &, sv];
 tg    = Map[# < 0.7 &, sv];
 ck[x_] := N[Total[Flatten[{x}]]];
@@ -394,6 +395,29 @@ P("bincounts", "struct", "BinCounts[jv, {0, 1000, 1}]",
   "np.bincount(jv, minlength=1000)")
 P("gatherby", "struct", "GatherBy[cv, EvenQ]", None, chk="N[Length[r]]",
   pychk="float(len(r))")
+
+# --- association producers and readers over a machine vector --------------
+# The association heads that take a list keep their INPUT on the buffer
+# (src/assoc_packed.c): no materialisation, machine-word keying, one compiled
+# pass for a key function. Their nested outputs are boxed by the no-nesting
+# invariant, so the checksums read Length or Values; Values / Keys / a bulk
+# Lookup are fresh top-level lists and must come back PACKED (--survival).
+# `aj` is a 200000-entry Integer -> Real association built in the preamble.
+P("positionindex", "assoc", "PositionIndex[jv]", None, chk="N[Length[r]]",
+  pychk="float(len(r))")
+P("groupby", "assoc", "GroupBy[jv, Mod[#, 100] &]", None, chk="N[Length[r]]",
+  pychk="float(len(r))")
+P("groupby_total", "assoc", "GroupBy[jv, Mod[#, 100] &, Total]", None,
+  chk="ck[Values[r]]")
+P("countsby", "assoc", "CountsBy[jv, Mod[#, 7] &]", None, chk="ck[Values[r]]")
+P("assocthread", "assoc", "AssociationThread[cv, bv]", None,
+  chk="ck[Values[r]]")
+P("assocmap", "assoc", "AssociationMap[# + 1 &, cv]", None,
+  chk="ck[Values[r]]")
+P("assoc_lookup", "assoc", "Lookup[aj, idx]", None)
+P("assoc_values", "assoc", "Values[aj]", None)
+P("assoc_keys", "assoc", "Keys[aj]", None)
+P("assoc_totalvalues", "assoc", "Total[Values[aj]]", None)
 P("arraypad", "struct", "ArrayPad[v, 10]", "np.pad(v, (10, 10))")
 P("replacepart", "struct", "ReplacePart[v, 1 -> 0.]", None)
 P("insert", "struct", "Insert[v, 0., 1]", "np.insert(v, 0, 0.0)")

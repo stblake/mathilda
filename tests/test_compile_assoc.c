@@ -464,9 +464,116 @@ static void test_repeated_eval_no_leak(void) {
     }
 }
 
+/* ------------------------------------------------------------------ *
+ *  S6: the idiomatic read forms, composable transforms, array-built  *
+ *  associations, and the _Association argument guard                 *
+ * ------------------------------------------------------------------ */
+
+#define P3 "<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>"
+
+/* Keys, p[k], Part[p, k] and p[[k]] lower, and agree with the interpreter. */
+static void test_read_forms(void) {
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, p[\"a\"]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Part[p, \"a\"]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, p[[\"a\"]]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, p[[Key[\"a\"]]]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, p[[2]]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}, {i, _Integer}}, p[[i]] + p[i]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Integer}}, Keys[p]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Total[Keys[KeyDrop[p, 1]]]]");
+    /* compiled === interpreted, on the same association */
+    assert_true("Compile[{{p, _Association, _Real}}, p[\"b\"] + p[[\"c\"]] + p[[Key[\"a\"]]]]"
+                "[" P3 "] === (" P3 "[\"b\"] + " P3 "[[\"c\"]] + " P3 "[[Key[\"a\"]]])");
+    /* positional: first, last, negative index */
+    assert_true("Compile[{{p, _Association, _Real}}, p[[1]] + 10. p[[-1]]][" P3 "] === 31.");
+    assert_true("Compile[{{p, _Association, _Real}, {i, _Integer}}, p[[i]] + p[i]]"
+                "[<|1 -> 1., 5 -> 2., 9 -> 3.|>, 1] === 2.");
+    /* Keys of an integer-keyed bag -> packed-equal integer vector */
+    assert_true("Normal[Compile[{{p, _Association, _Real}}, Keys[p]][<|1 -> 1., 5 -> 2.|>]] === {1, 5}");
+    /* a string-keyed bag declines at run time: the interpreter answers */
+    assert_true("Compile[{{p, _Association, _Real}}, Keys[p]][" P3 "] === {\"a\", \"b\", \"c\"}");
+    /* absent key / out-of-range position decline to the interpreter */
+    assert_true("Compile[{{p, _Association, _Real}}, p[\"zz\"]][" P3 "] === Missing[\"KeyAbsent\", \"zz\"]");
+    assert_eval_contains("Compile[{{p, _Association, _Real}}, p[[7]]][" P3 "]", "Part[");
+}
+
+/* Map / Select / Append are producers now, so they compose. */
+static void test_transform_composition(void) {
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Total[Values[Map[#^2 &, p]]]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Length[Select[p, # > 1. &]]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}, {x, _Real}}, "
+                  "Lookup[Append[p, \"z\" -> x], \"z\"]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, "
+                  "Total[Values[Select[Map[# + 1 &, p], # > 2. &]]]]");
+    assert_true("Compile[{{p, _Association, _Real}}, Total[Values[Map[#^2 &, p]]]][" P3 "]"
+                " === Total[Values[Map[#^2 &, " P3 "]]]");
+    assert_true("Compile[{{p, _Association, _Real}}, Length[Select[p, # > 1. &]]][" P3 "]"
+                " === Length[Select[" P3 ", # > 1. &]]");
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Lookup[Append[p, \"z\" -> x], \"z\"]]"
+                "[" P3 ", 7.5] === 7.5");
+}
+
+/* AssociationThread / AssociationMap / CountsBy over machine arrays build a
+ * compiled association (ASSOC_THREAD / ASSOC_BYFN). */
+static void test_built_from_arrays(void) {
+    assert_lowers("CompileDiagnostics[{{v, _Real, 1}}, Total[Values[AssociationThread[Range[Length[v]], v]]]]");
+    assert_lowers("CompileDiagnostics[{{k, _Integer, 1}, {v, _Real, 1}}, AssociationThread[k -> v]]");
+    assert_lowers("CompileDiagnostics[{{k, _Integer, 1}}, Lookup[AssociationMap[#^2 &, k], 3]]");
+    assert_lowers("CompileDiagnostics[{{k, _Integer, 1}}, CountsBy[k, EvenQ]]");
+    assert_lowers("CompileDiagnostics[{{v, _Integer, 1}}, Counts[v]]");
+    assert_true("Compile[{{v, _Real, 1}}, Total[Values[AssociationThread[Range[Length[v]], v]]]]"
+                "[{1., 2., 3.5}] === 6.5");
+    /* duplicate keys: first position, last value -- as the interpreter */
+    assert_true("Compile[{{k, _Integer, 1}, {v, _Real, 1}}, AssociationThread[k, v]]"
+                "[{5, 6, 5}, {1., 2., 3.}] === AssociationThread[{5, 6, 5}, {1., 2., 3.}]");
+    assert_true("Compile[{{k, _Integer, 1}}, AssociationMap[#^2 &, k]][{3, 1, 3, 2}]"
+                " === AssociationMap[#^2 &, {3, 1, 3, 2}]");
+    assert_true("Compile[{{k, _Integer, 1}}, CountsBy[k, Mod[#, 3] &]][Range[10]]"
+                " === CountsBy[Range[10], Mod[#, 3] &]");
+    assert_true("Compile[{{k, _Integer, 1}}, CountsBy[k, EvenQ]][Range[5]] === CountsBy[Range[5], EvenQ]");
+    assert_true("Compile[{{k, _Real, 1}}, Length[CountsBy[k, Floor]]][{1.5, 1.7, 2.1}] === 2");
+}
+
+/* A non-association passed where _Association was declared is REJECTED (a
+ * message and an unevaluated call), no longer run through the uncompiled body. */
+static void test_rejects_non_association(void) {
+    assert_eval_contains("Compile[{{p, _Association, _Real}}, Lookup[p, \"a\"] + 1.][{1., 2.}]",
+                         "CompiledFunction[");
+    assert_eval_lacks("Compile[{{p, _Association, _Real}}, Lookup[p, \"a\"] + 1.][{1., 2.}]",
+                      "Missing");
+    assert_eval_contains("Compile[{{p, _Association, _Real}}, Lookup[p, \"a\"] + 1.][{\"a\" -> 1.}]",
+                         "CompiledFunction[");
+    assert_true("Compile[{{p, _Association, _Real}}, Lookup[p, \"a\"] + 1.][<|\"a\" -> 1.|>] === 2.");
+}
+
+/* Compiled Round rounds half to EVEN, as the interpreter does. */
+static void test_round_half_even(void) {
+    assert_true("Compile[{{x, _Real}}, Round[x]] /@ {-2.5, -1.5, 0.5, 1.5, 2.5}"
+                " === Round[{-2.5, -1.5, 0.5, 1.5, 2.5}]");
+}
+
+static void test_s6_repeated_eval_no_leak(void) {
+    for (int i = 0; i < 30; i++) {
+        Expr* r = eval_and_free(parse_expression(
+            "Compile[{{k, _Integer, 1}, {v, _Real, 1}}, "
+            "Lookup[AssociationThread[k, v], 2] + Total[Values[Map[# + 1. &, AssociationMap[# 2. &, k]]]]]"
+            "[{1, 2, 3}, {4., 5., 6.}]"));
+        char* s = expr_to_string(r);
+        ASSERT_STR_EQ(s, "20.0");
+        free(s); expr_free(r);
+    }
+}
+
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_read_forms);
+    TEST(test_transform_composition);
+    TEST(test_built_from_arrays);
+    TEST(test_rejects_non_association);
+    TEST(test_round_half_even);
+    TEST(test_s6_repeated_eval_no_leak);
 
     TEST(test_lookup_arg);
     TEST(test_lookup_default);

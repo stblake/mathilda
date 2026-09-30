@@ -250,16 +250,20 @@ looking for the entry point to delegate to.
 
 ## What is deliberately NOT here
 
-52 further heads are **exempt with a recorded reason** in
+74 further heads are **exempt with a recorded reason** in
 `tools/compile_coverage.py`'s `EXEMPT` table. The reasons that recur:
 
 - **The result length is data-dependent** — `Union`, `Intersection`,
   `Complement`, `DeleteDuplicates`, `Commonest`, `IntegerDigits`. A compiled
   register has a static type.
 - **The result is not a uniform machine array** — `Tally` (ragged
-  `{value, count}` pairs), `Counts` (an `Association`), `MinMax`, `Quartiles`
-  and `QuotientRemainder` (tuples), and the `LUDecomposition` /
-  `QRDecomposition` / `SingularValueDecomposition` triples.
+  `{value, count}` pairs), `MinMax`, `Quartiles` and `QuotientRemainder`
+  (tuples), and the `LUDecomposition` / `QRDecomposition` /
+  `SingularValueDecomposition` triples. `PositionIndex`, `GroupBy` and
+  `GatherBy` belong here too: their values are ragged lists, and a compiled
+  association holds one machine scalar per key. (`Counts`, `CountsBy`,
+  `AssociationThread` and `AssociationMap` are no longer exempt — each compiles
+  to a `CT_ASSOC` value; see `src/compile/compile_assoc.c`.)
 - **The result type is not static** — `Eigenvalues` may be complex for a real
   matrix; `Eigenvectors`' shape depends on whether the matrix is defective.
 - **There is no boolean array dtype** (§13 gap C.1) — `Positive`, `Negative`,
