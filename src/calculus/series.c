@@ -25,6 +25,8 @@
 
 #include "series.h"
 #include "../sparsearray.h"
+#include "../message.h"    /* mth_message: the Quiet[]/Check[] funnel for Series::ivar. */
+#include "../print.h"      /* expr_to_string, to name the offending variable. */
 #include "expr.h"
 #include "symtab.h"
 #include "attr.h"
@@ -3295,9 +3297,12 @@ Expr* builtin_normal(Expr* res) {
  * limit_effective_assumptions (limit.c). The Assumptions option (when present
  * and not Automatic) overrides the ambient $Assumptions; otherwise the ambient
  * assumptions -- set by an enclosing Assuming[...] or a direct $Assumptions
- * assignment -- are used. Series is HoldAll, so the option RHS arrives
- * UNEVALUATED and must be evaluated before parsing; the ambient $Assumptions
- * is read unevaluated (per read_dollar_assumptions's contract, since its own
+ * assignment -- are used. The option RHS is evaluated before parsing: Series no
+ * longer holds its arguments, so it normally arrives evaluated already, but the
+ * builtin is re-entered DIRECTLY (bypassing the evaluator) from
+ * internal_rationalize_then_numericalize with rebuilt args, so the evaluation
+ * stays. The ambient $Assumptions is read unevaluated (per
+ * read_dollar_assumptions's contract, since its own
  * Element evaluator would recurse). Returns NULL when the assumption set is
  * non-informative (True / Automatic / empty) or inconsistent, so a NULL ctx
  * reproduces the legacy path byte-for-byte. Caller owns the result. */
@@ -3326,54 +3331,92 @@ static AssumeCtx* series_effective_assumptions(Expr* assm_option) {
     return ctx;
 }
 
-/* Series and SeriesCoefficient are HoldAll, so the series VARIABLE arrives
- * unevaluated.  Mathematica nevertheless resolves a variable that carries an
- * OwnValue naming another symbol:
+/* Report that a series specification's variable is not a symbol.  Mirrors
+ * Mathematica's General::ivar, and solve.c's warn_ivar in routing through the
+ * message funnel so Quiet[] silences it and Check[] sees it.
  *
- *     w = Unique["w"];  Series[Sqrt[1 + w^4], {w, 0, 4}]   ->   1 + w11^4/2
+ * THROTTLED, for a reason solve.c does not have to worry about.  The iterator
+ * heads are HoldAll (Table, Plot, NIntegrate, Do, ...), so they bind a DIFFERENT
+ * value of the variable on every step:
  *
- * A .m routine that expands in a freshly generated symbol does exactly that,
- * and without the resolution the held symbol does not occur in the (evaluated)
- * expression at all, which is therefore CONSTANT in it -- so the "series" is
- * the input itself, returned silently with no message.  ParallelMixed.m's
- * RealiseClass built a linear-algebra row out of such a non-series, which then
- * carried a square root of a polynomial where a rational number belonged.
+ *     Plot[Normal[Series[Sin[x], {x, 0, 5}]], {x, 0, 1}]
  *
- * A value that is not a symbol is left alone, matching Mathematica: a numeric
- * value leaves the call unevaluated (`Series[f, {5, 0, 4}]`), an expression
- * value is treated as a variable the input is constant in.
+ * hands this function {0.01, 0, 5}, {0.02, 0, 5}, ... -- one complaint per sample
+ * point, each a distinct form, so deduplicating on the form alone would not help.
+ * Mathematica prints such a message three times and then General::stop; the
+ * Mathilda funnel has no repeat limiter, so the cap lives here.  It is per head
+ * (a swallowed SeriesCoefficient::ivar behind a Series::ivar would be a lie) and
+ * is RE-ARMED by the next well-formed call (series_ivar_rearm), so a throttled
+ * expression cannot mute a later, unrelated one. The above spelling stays wrong
+ * either way -- as in Mathematica, it needs Plot[Evaluate[...], ...]. */
+#define SERIES_IVAR_MAX 3
+enum { SERIES_IVAR_SERIES = 0, SERIES_IVAR_COEFF = 1, SERIES_IVAR_SLOTS = 2 };
+static int g_series_ivar_fired[SERIES_IVAR_SLOTS];
+
+static void series_ivar_rearm(void) {
+    for (int i = 0; i < SERIES_IVAR_SLOTS; i++) g_series_ivar_fired[i] = 0;
+}
+
+static void series_warn_ivar(int slot, const char* head, const Expr* var) {
+    if (!var) return;
+    /* The budget counts what the user SAW, so a Quiet[] region neither prints nor
+     * spends it -- but the message is still emitted there, because the funnel
+     * notes a firing BEFORE the suppression check and that is exactly how an
+     * enclosing Check[] detects a silenced diagnostic. */
+    int quiet = mth_msg_suppressed();
+    if (!quiet) {
+        if (g_series_ivar_fired[slot] >= SERIES_IVAR_MAX) return;
+        g_series_ivar_fired[slot]++;
+    }
+    char* shown = expr_to_string((Expr*)var);
+    mth_message(head, "ivar", "%s is not a valid variable.", shown ? shown : "?");
+    free(shown);
+}
+
+/* A series specification's expansion variable must be a Symbol.
  *
- * Returns a rebuilt call with every such spec variable replaced, or NULL when
- * there is nothing to resolve (the common case).  The rebuilt call's own spec
- * variables have no OwnValues, so one pass always suffices. */
-static Expr* series_resolve_spec_vars(const Expr* res, size_t first_spec) {
-    if (!res || res->type != EXPR_FUNCTION) return NULL;
+ * Series and SeriesCoefficient evaluate their arguments (they are Protected
+ * only, as in Mathematica), so a variable carrying an OwnValue arrives already
+ * substituted: `x = 5; Series[Sin[x], {x, 0, 3}]` reaches the builtin as
+ * `Series[Sin[5], {5, 0, 3}]`.  That is exactly the resolution a .m routine
+ * expanding in a `Unique[]` symbol needs -- `w = Unique["w"]` makes the spec
+ * `{w11, 0, 4}` and the body `Sqrt[1 + w11^4]`, so the two agree and the
+ * expansion is real rather than the silently-constant input (the A25 class).
+ * But nothing downstream type-checks the variable: expr_free_of is purely
+ * structural, so do_series_single's "f is free of x" early-out does NOT fire for
+ * a literal that occurs in the body, and the Taylor engine would go on to
+ * compute replace_all_of(f, 5, 0) and D[Sin[5], 5] -- nonsense dressed as a
+ * series (`5 - 1/6 5^3 + O[5]^4`).  So reject it here, with a message, as
+ * NSeries already does (numerical_calculus/nseries.c) and as Mathematica's
+ * General::ivar does.
+ *
+ * Only the shapes parse_series_spec accepts are examined: a List of two or more
+ * elements, or a two-element Rule.  Anything else (`Series[f, x]`) is not a spec
+ * at all and must stay SILENTLY unevaluated, as before.  A trailing
+ * `Assumptions -> assm` option is a Rule whose LHS is a symbol, so it passes and
+ * the option separation in builtin_series still claims it; option NAMES are not
+ * validated here (an unrecognised one is treated as a leading-order spec, as it
+ * was before this check existed).
+ *
+ * Returns false after emitting the message; the caller then returns NULL and the
+ * call is left unevaluated.  A pass re-arms the message throttle. */
+static bool series_spec_vars_ok(const Expr* res, size_t first_spec,
+                                int slot, const char* head) {
+    if (!res || res->type != EXPR_FUNCTION) return true;
     size_t n = res->data.function.arg_count;
-    Expr** newargs = NULL;
     for (size_t i = first_spec; i < n; i++) {
         Expr* s = res->data.function.args[i];
-        if (s->type != EXPR_FUNCTION || s->data.function.arg_count < 2) continue;
-        if (!has_symbol_head(s, "List") && !has_symbol_head(s, "Rule")) continue;
-        Expr* x = s->data.function.args[0];
-        if (x->type != EXPR_SYMBOL) continue;
-        Expr* ev = eval_and_free(expr_copy(x));
-        if (!ev) continue;
-        if (ev->type != EXPR_SYMBOL || ev->data.symbol.name == x->data.symbol.name) {
-            expr_free(ev);
-            continue;
-        }
-        if (!newargs) {
-            newargs = calloc(n, sizeof(Expr*));
-            if (!newargs) { expr_free(ev); return NULL; }
-            for (size_t j = 0; j < n; j++) newargs[j] = expr_copy(res->data.function.args[j]);
-        }
-        expr_free(newargs[i]->data.function.args[0]);
-        newargs[i]->data.function.args[0] = ev;              /* ownership moves */
+        if (s->type != EXPR_FUNCTION) continue;
+        size_t ac = s->data.function.arg_count;
+        bool is_spec = (has_symbol_head(s, "List") && ac >= 2) ||
+                       (has_symbol_head(s, "Rule") && ac == 2);
+        if (!is_spec) continue;
+        if (s->data.function.args[0]->type == EXPR_SYMBOL) continue;
+        series_warn_ivar(slot, head, s->data.function.args[0]);
+        return false;
     }
-    if (!newargs) return NULL;
-    Expr* call = expr_new_function(expr_copy(res->data.function.head), newargs, n);
-    free(newargs);
-    return call;
+    series_ivar_rearm();
+    return true;
 }
 
 /* Parse a single spec argument, accepting either `{x, x0, n}` (full form)
@@ -5678,8 +5721,10 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
         else if (assume_known_positive(assume, x)) x_sign = +1;
     }
 
-    /* Evaluate f with the series context implicit. Since Series has
-     * HoldAll, f has not been evaluated yet; we evaluate now. */
+    /* Series no longer holds its arguments, so f normally arrives evaluated;
+     * this stays because builtin_series is also re-entered DIRECTLY (bypassing
+     * the evaluator) by internal_rationalize_then_numericalize with rebuilt
+     * args, and because the expansion below needs an owned copy either way. */
     Expr* f_eval = eval_and_free(expr_copy(f));
     Expr* x0_eval = eval_and_free(expr_copy(x0));
 
@@ -6176,16 +6221,9 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
 Expr* builtin_series(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
 
-    /* A held series variable that names another symbol (see
-     * series_resolve_spec_vars). */
-    {
-        Expr* rr = series_resolve_spec_vars(res, 1);
-        if (rr) {
-            Expr* out = builtin_series(rr);
-            expr_free(rr);
-            return out;
-        }
-    }
+    /* The expansion variable must be a symbol (see series_spec_vars_ok). This
+     * must precede every other branch: each of them reads the spec. */
+    if (!series_spec_vars_ok(res, 1, SERIES_IVAR_SERIES, "Series")) return NULL;
 
     /* Series uses PolynomialQuotient/Remainder, GCD and Together while
      * extracting the leading-term expansion — coefficients must be
@@ -6210,6 +6248,8 @@ Expr* builtin_series(Expr* res) {
             }
             Expr* call = expr_new_function(mk_symbol("Series"), new_args,
                                            res->data.function.arg_count);
+            free(new_args);   /* expr_new_function adopts the elements, not the
+                               * array -- as the multivariate path below does. */
             threaded[i] = eval_and_free(call);
         }
         Expr* lst = expr_new_function(mk_symbol("List"), threaded, n);
@@ -6313,15 +6353,12 @@ Expr* builtin_series(Expr* res) {
 Expr* builtin_seriescoefficient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
 
-    /* Same held-variable resolution as Series (series_resolve_spec_vars). */
-    {
-        Expr* rr = series_resolve_spec_vars(res, 1);
-        if (rr) {
-            Expr* out = builtin_seriescoefficient(rr);
-            expr_free(rr);
-            return out;
-        }
-    }
+    /* Same variable check as Series (series_spec_vars_ok). It must come before
+     * the symbolic-index special cases below, which match on the raw spec: with
+     * `x = 5` in scope, {5, 0, n} would otherwise satisfy
+     * `expr_eq(f->args[0], xv)` for ProductLog[5] and emit a general term. */
+    if (!series_spec_vars_ok(res, 1, SERIES_IVAR_COEFF, "SeriesCoefficient"))
+        return NULL;
 
     /* General term SeriesCoefficient[ProductLog[x], {x, 0, n}] with symbolic n:
      *   Piecewise[{{(-n)^(n-1)/n!, n >= 1}}, 0]. */
@@ -6466,9 +6503,20 @@ Expr* builtin_seriescoefficient(Expr* res) {
 void series_init(void) {
     symtab_get_def("SeriesData")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Series", builtin_series);
-    symtab_get_def("Series")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+
+    /* Series and SeriesCoefficient do NOT hold their arguments in Mathematica --
+     * Attributes[Series] is {Protected} -- and neither do Mathilda's Limit, D or
+     * NSeries. Holding bought nothing here (do_series_single evaluates f and x0
+     * itself) and cost real bugs: a named spec was dead (`s = {x, 0, 3};
+     * Series[Exp[x], s]` froze), `Sequence @@` did not splice, and the
+     * list-threading test read the head of the UNEVALUATED first argument, so a
+     * named list gave a different answer from the literal one. Evaluated
+     * arguments also resolve a spec variable that names another symbol (the
+     * `w = Unique["w"]` case) for free. The variable is type-checked instead, by
+     * series_spec_vars_ok. */
+    symtab_get_def("Series")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Normal", builtin_normal);
     symtab_get_def("Normal")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("SeriesCoefficient", builtin_seriescoefficient);
-    symtab_get_def("SeriesCoefficient")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_get_def("SeriesCoefficient")->attributes |= ATTR_PROTECTED;
 }

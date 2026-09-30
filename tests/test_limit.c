@@ -998,6 +998,16 @@ static void test_method_heads(void) {
     /* Attributes match Limit's own. */
     check("Attributes[Limit`Series]", "{Protected}");
 
+    /* A non-symbol limit variable must not leak Series::ivar out of the Series
+     * layer. Limit does not hold its arguments, so `x = 5` makes the spec
+     * `5 -> 0` and ctx->x the integer 5; the layer's Series probe would then be
+     * rejected by series_spec_vars_ok, and because the funnel notes a firing even
+     * under Quiet[] the message would flip an enclosing Check[] to its failure
+     * branch. layer2_series declines silently instead. */
+    check("Check[Block[{x}, x = 5; Limit`Series[Sin[x]/x, x -> 0]], $Failed]",
+          "Limit`Series[1/5 Sin[5], 5 -> 0]");
+    check("Check[Block[{x}, x = 5; Limit[Sin[x]/x, x -> 0]], $Failed]", "0");
+
     /* Every head is documented. */
     check("StringLength[Information[\"Limit`Oscillatory\"]] > 80", "True");
     check("StringLength[Information[\"Limit`Gruntz\"]] > 80", "True");

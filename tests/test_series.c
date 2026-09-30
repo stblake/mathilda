@@ -1956,14 +1956,18 @@ static void test_series_divide(void) {
         "SeriesData[x, 0, List[1, 0, 0, 0], -2, 2, 1]");
 }
 
-/* HoldAll keeps the series variable unevaluated, but a variable whose OwnValue
- * names another SYMBOL is resolved to it before the expansion, as in
- * Mathematica.  Without this a .m routine that expands in a Unique[] symbol
- * gets its INPUT back silently: the held symbol does not occur in the evaluated
- * expression, so the expression is constant in it (MATHILDA_DIVERGENCES A25 --
- * this is what left ParallelMixed.m's RealiseClass solving its linear algebra
- * against a non-series).  A value that is not a symbol is left alone. */
-static void test_series_held_symbol_valued_variable(void) {
+/* A series variable whose OwnValue names another SYMBOL is resolved to it before
+ * the expansion, as in Mathematica.  Without this a .m routine that expands in a
+ * Unique[] symbol gets its INPUT back silently: the generated symbol does not
+ * occur in the expression, so the expression is constant in it
+ * (MATHILDA_DIVERGENCES A25 -- this is what left ParallelMixed.m's RealiseClass
+ * solving its linear algebra against a non-series).  Through v0.235 the
+ * resolution was done by hand (series_resolve_spec_vars) because Series was
+ * HoldAll; since v0.236 it is what ordinary argument evaluation does.
+ *
+ * A value that is NOT a symbol is no longer treated as a variable the input is
+ * constant in -- see test_series_ivar_decline. */
+static void test_series_symbol_valued_variable(void) {
     setup_full();
     assert_fullform(
         "Block[{v, u}, v = u; Normal[Series[Sqrt[1 + u^4], {v, 0, 4}]]]",
@@ -1972,11 +1976,80 @@ static void test_series_held_symbol_valued_variable(void) {
     assert_fullform(
         "Block[{v, u}, v = u; SeriesCoefficient[Sqrt[1 + u^4], {v, 0, 4}]]",
         "Rational[1, 2]");
-    /* a NON-symbol value is not resolved: the expression is constant in it and
-     * the leading coefficient is the expression itself (Mathematica agrees) */
+    /* a compound value is rejected rather than silently standing in for a
+     * variable the input happens to be free of */
     assert_fullform(
-        "Block[{v, u}, v = u + 1; Normal[Series[Sqrt[1 + u^4], {v, 0, 2}]]]",
-        "Power[Plus[1, Power[u, 4]], Rational[1, 2]]");
+        "Block[{v, u}, v = u + 1; Quiet[Series[Sqrt[1 + u^4], {v, 0, 2}]]]",
+        "Series[Power[Plus[1, Power[u, 4]], Rational[1, 2]], "
+        "List[Plus[1, u], 0, 2]]");
+}
+
+/* Series and SeriesCoefficient must NOT hold their arguments: Mathematica's
+ * attributes are {Protected}, and so are Limit's, D's and NSeries's here.  The
+ * stray HoldAll (dropped in v0.236) made a NAMED argument behave differently
+ * from the literal it stood for -- a named spec was simply dead, and a named
+ * first argument did not thread because the threading test read the head of the
+ * UNEVALUATED argument. */
+static void test_series_arguments_are_evaluated(void) {
+    setup_full();
+    assert_fullform("Attributes[Series]", "List[Protected]");
+    assert_fullform("Attributes[SeriesCoefficient]", "List[Protected]");
+
+    /* a named {x, x0, n} spec */
+    assert_fullform(
+        "Block[{s}, s = {x, 0, 3}; Series[Exp[x], s]]",
+        "SeriesData[x, 0, List[1, 1, Rational[1, 2], Rational[1, 6]], 0, 4, 1]");
+    assert_fullform(
+        "Block[{s}, s = {x, 0, 3}; SeriesCoefficient[Exp[x], s]]",
+        "Rational[1, 6]");
+    /* a named leading-term rule */
+    assert_fullform(
+        "Block[{r}, r = (x -> 0); Series[Sin[x] - x, r]]",
+        "SeriesData[x, 0, List[0, 0, 0, Rational[-1, 6], 0], 0, 5, 1]");
+    /* Sequence splices into the argument list */
+    assert_fullform(
+        "Series[Exp[x], Sequence @@ {{x, 0, 2}}]",
+        "SeriesData[x, 0, List[1, 1, Rational[1, 2]], 0, 3, 1]");
+    /* a named list threads exactly like the literal list it stands for */
+    assert_fullform(
+        "Block[{l}, l = {Sin[x], Cos[x]}; Series[l, {x, 0, 2}]]",
+        "List[SeriesData[x, 0, List[0, 1, 0], 0, 3, 1], "
+        "SeriesData[x, 0, List[1, 0, Rational[-1, 2]], 0, 3, 1]]");
+    assert_fullform(
+        "Series[{Sin[x], Cos[x]}, {x, 0, 2}]",
+        "List[SeriesData[x, 0, List[0, 1, 0], 0, 3, 1], "
+        "SeriesData[x, 0, List[1, 0, Rational[-1, 2]], 0, 3, 1]]");
+    /* a declined call echoes the evaluated argument, not the name */
+    assert_fullform(
+        "Block[{g}, g = Gamma[x]; Series[g, {x, Infinity, 3}]]",
+        "Series[Gamma[x], List[x, Infinity, 3]]");
+}
+
+/* A spec variable that is not a symbol is a ROUTED DECLINE, not a wrong answer.
+ * With arguments evaluated, `x = 5` hands the builtin the spec {5, 0, 3}, and
+ * nothing downstream type-checks it: expr_free_of is purely structural, so
+ * do_series_single's "free of x" early-out misses a literal that occurs in the
+ * body and the Taylor engine would answer `5 - 1/6 5^3 + O[5]^4`.  Mirrors
+ * Mathematica's General::ivar and NSeries's own ivar decline.
+ *
+ * Each case uses a DISTINCT bad variable: series_warn_ivar warns once per form. */
+static void test_series_ivar_decline(void) {
+    setup_full();
+    assert_fullform("Block[{x}, x = 5; Quiet[Series[Sin[x], {x, 0, 3}]]]",
+                    "Series[Sin[5], List[5, 0, 3]]");
+    assert_fullform("Block[{x}, x = 6; Quiet[SeriesCoefficient[Sin[x], {x, 0, 3}]]]",
+                    "SeriesCoefficient[Sin[6], List[6, 0, 3]]");
+    /* the message reaches Check[] -- a raw fprintf would return the value here */
+    assert_fullform("Check[Series[Sin[y], {7, 0, 3}], $Failed]", "$Failed");
+    assert_fullform("Check[SeriesCoefficient[Sin[y], {8, 0, 3}], $Failed]", "$Failed");
+    /* a second argument that is no spec at all stays SILENTLY unevaluated */
+    assert_fullform("Check[Series[Exp[z], z], $Failed]", "Series[Power[E, z], z]");
+    /* an Assumptions option is not mistaken for a spec with variable
+     * `Assumptions`, and still reaches the coefficient cleanup */
+    assert_fullform("Check[Series[Exp[z], Assumptions -> z > 0], $Failed]",
+                    "Series[Power[E, z], Rule[Assumptions, Greater[z, 0]]]");
+    assert_fullform(
+        "Normal[Series[Abs[z], {z, 0, 2}, Assumptions -> z > 0]]", "z");
 }
 
 /* Subtraction composes Plus[a, Times[-1,b]]; identical series cancel to 0. */
@@ -2502,7 +2575,9 @@ int main(void) {
     TEST(test_series_power_scalar_base);
     TEST(test_series_power_series_exponent);
     TEST(test_series_divide);
-    TEST(test_series_held_symbol_valued_variable);
+    TEST(test_series_symbol_valued_variable);
+    TEST(test_series_arguments_are_evaluated);
+    TEST(test_series_ivar_decline);
     TEST(test_series_subtract);
     TEST(test_series_plus_real_contagion);
     TEST(test_series_plus_mpfr);

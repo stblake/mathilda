@@ -117,8 +117,11 @@ EXEMPT = {
     "LeafCount": "counts a packed list as ONE node (1 against 5 for a "
     "4-element vector), which would perturb Simplify's complexity "
     "metric -- the reason it was excluded by design",
-    "Series": "has no NDArray handling; the call stays unevaluated either way, "
-    "but the packed form prints its argument differently",
+    "Series": "has no NDArray kernel and needs none: a machine buffer is free of "
+    "the expansion variable, so the expansion IS the argument, returned "
+    "verbatim. Since v0.236 Series no longer holds its first argument, so "
+    "a packed List threads element-wise instead of arriving whole -- same "
+    "answer, and a visible NDArray still comes back unchanged",
     "SortBy": "its NDArray path does not sort -- SortBy[buffer, Abs] returns the "
     "input unchanged. A live gap on the VISIBLE NDArray surface too, "
     "but fixing it is a sort change, not a packing one",

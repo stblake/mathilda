@@ -1320,6 +1320,15 @@ apply_prefactor:
 }
 
 static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
+    /* The limit variable must be a symbol before we probe with Series. split_rule
+     * does not check, and Limit does not hold its arguments, so `x = 5;
+     * Limit[Sin[x]/x, x -> 0]` arrives as `Limit[Sin[5]/5, 5 -> 0]` with
+     * ctx->x == 5. Series rejects a non-symbol expansion variable with
+     * Series::ivar (series_spec_vars_ok), and this is a SPECULATIVE probe inside
+     * a cascade -- a message from it would leak out of Limit and, because the
+     * funnel notes a firing even under Quiet, flip an enclosing Check[] to its
+     * failure branch. Decline silently instead and let the cascade continue. */
+    if (!ctx->x || ctx->x->type != EXPR_SYMBOL) return NULL;
     /* Max/Min are piecewise, not analytic: Series would Taylor-expand them into
      * meaningless Derivative[Max][...] terms. Bail so the cascade reaches the
      * Gruntz layer, which resolves Max/Min by eventual dominance. (Symbols are

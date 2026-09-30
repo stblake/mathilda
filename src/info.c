@@ -3974,12 +3974,14 @@ void info_init(void) {
         "\texpand non-analytic heads (Abs[x], Sign[x], UnitStep[x], Conjugate[x]).\n"
         "The result of Series is a SeriesData object; use Normal to convert it back to\n"
         "\tan ordinary expression by dropping the O-term.\n"
-        "Series is Protected and HoldAll so the expansion variable is not evaluated.");
+        "Series is Protected and does not hold its arguments; the expansion variable\n"
+        "\tmust evaluate to a symbol, or the call is left unevaluated with Series::ivar.");
     symtab_set_docstring("SeriesCoefficient",
         "SeriesCoefficient[f, {x, x0, k}]\n"
         "\tgives the coefficient of (x - x0)^k in the power-series expansion of f\n"
         "\tabout x = x0. Works for a concrete integer index k and a finite expansion\n"
-        "point, for any f that Series can expand. HoldAll, Protected.");
+        "point, for any f that Series can expand. Protected; the expansion variable\n"
+        "\tmust evaluate to a symbol.");
     symtab_set_docstring("Normal",
         "Normal[expr]\n"
         "\tconverts expr to a normal expression. If expr is a SeriesData object, the\n"

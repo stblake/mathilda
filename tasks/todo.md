@@ -950,3 +950,83 @@ Two reports, one session.
 Version bumped to **v0.235** (substantive: behaviour change), changelog under
 `docs/spec/changelog/2026-09-28.md`, `InputForm` entry in
 `docs/spec/builtins/expression-information.md` notes the notebook rule.
+
+---
+
+# Drop `HoldAll` from `Series` and `SeriesCoefficient` (v0.236)
+
+Plan: `/Users/user/.claude/plans/series-and-seriescoefficient-should-ticklish-crab.md`
+
+`Attributes[Series]` / `Attributes[SeriesCoefficient]` were `{HoldAll, Protected}`;
+Mathematica's are `{Protected}`, and so are Mathilda's own `Limit` (fixed in
+`4e7b0515`), `D` and `NSeries`. The hold bought nothing — `do_series_single`
+evaluates `f`/`x0`, `parse_series_spec` evaluates the order, and
+`series_resolve_spec_vars` existed only to undo the hold for the variable — and it
+cost six bugs, all the same shape: a *named* argument behaving differently from the
+literal it stood for.
+
+## Code
+- [x] `series.c` `series_init` — `ATTR_HOLDALL` dropped from both; comment rewritten
+      on the `limit.c:4285` model
+- [x] `series.c` — `series_resolve_spec_vars` deleted (dead: the evaluator now
+      resolves a symbol-valued spec variable), replaced by `series_spec_vars_ok`
+- [x] `series.c` — `series_warn_ivar`: funnelled `Series::ivar` /
+      `SeriesCoefficient::ivar`, per-head, capped at 3, re-armed by the next
+      well-formed call, budget spent only on messages the user saw
+- [x] Guard runs FIRST in both builtins — before the inexact dispatch and before
+      `SeriesCoefficient`'s `ProductLog`/`FresnelC`/`FresnelS` symbolic-index
+      branches, which match on the raw spec (verified: `{5, 0, n}` otherwise
+      produced the general term)
+- [x] `series.c` — the hand-rolled `eval_and_free`s KEPT (direct re-entry from
+      `internal_rationalize_then_numericalize`); stale HoldAll comments refreshed
+- [x] `limit.c` `layer2_series` — symbol guard on `ctx->x`. `split_rule` never
+      checked, and `Limit` no longer holds, so `x = 5; Limit`Series[Sin[x]/x, x -> 0]`
+      leaked the new `ivar` out of a *speculative* probe and flipped an enclosing
+      `Check[]`
+- [x] `series.c` — pre-existing leak fixed on the way past: the list-threading path
+      never freed its `new_args` array (16 B/element; the multivariate path below it
+      does). Valgrind: the series script now matches the `1+1` baseline exactly
+
+## Docs
+- [x] `src/info.c` (both docstrings), `src/calculus/series.h` header comment
+- [x] `docs/spec/builtins/power-series.md` — attributes, the resolution rule, the new
+      `ivar` contract; the stale claim that `Series[f, {5,0,4}]` "leaves the call
+      unevaluated" (it returned the input) is now true
+- [x] `tools/check_packed_aware.py` — the `Series` exemption reason was stale
+- [x] `docs/spec/changelog/2026-09-28.md`, `src/version.h` → 0.236
+
+## Tests
+- [x] `test_series.c`: `test_series_symbol_valued_variable` rewritten;
+      `test_series_arguments_are_evaluated` + `test_series_ivar_decline` added
+      (attributes, the six fixed forms, `ivar` through `Check[]` and `Quiet[]`)
+- [x] `test_limit.c`: the `Limit`Series` leak regression
+
+## Review / verification
+- **Gates** — `make check-messages` (assert-empty; the new site routes, so it is
+  invisible to the scan — no EXEMPT/BASELINE entry), `check-c99`,
+  `check-packed-aware`: all green.
+- **41 suites** re-run clean. Two standing failures were confirmed **pre-existing**
+  by an isolated A/B (revert `series.c` to HEAD, rebuild, re-run): `series_tests` 4
+  (`Integrate[Series[...]]` reaching `ParallelIntegrateMixed` ×2, `Sqrt[a^2 b^2 + x]`
+  coefficient cleanup ×2) and `simplify_tests` 1 (`x^2^(3/2)` parenthesisation).
+  NOTE: the suites use libc `assert()` and are built with `NDEBUG`, so a failure
+  prints `FAIL:` to stderr and still **exits 0** — count `^FAIL`, never trust `$?`.
+- **347-case corpus A/B** — every `Series`/`SeriesCoefficient` expression in nine
+  test files, run through both binaries: **36 differing lines, all of them the
+  intended changes**, zero unintended differences among the ~330 pre-existing cases.
+- **Perf** — `parallelmixedtower_tests` (the heaviest `Series` consumer, via
+  `ParallelMixed.m`'s `Unique[]` expansions) ≈11.7 s vs ≈12.2 s baseline: the extra
+  evaluation pass is absorbed by `Expr.last_evaluated_at` memoisation.
+- **Book** — all four `Series`-using example files byte-identical against the HEAD
+  binary, so no regeneration.
+
+## Known, accepted
+- A compound expansion variable (`Series[Sin[f[t]]/f[t], {f[t], 0, 4}]`) used to
+  expand by accident of the structural `expr_free_of`/`D`; it now declines.
+  Mathematica rejects it too. No internal caller passes one (audited: `gruntz`
+  dummies, `residue` validates, `dsolve_frobenius`/`kovacic`/`ramanujan` build
+  symbols).
+- `Quiet[]` only silences attempts made *inside* it, so a declined `Series` that a
+  surrounding `Table` re-evaluates outside the quiet region can still print. Generic
+  to every declining-with-message builtin here (`Solve::ivar` behaves the same), not
+  introduced by this change. The 3-per-head cap bounds it.

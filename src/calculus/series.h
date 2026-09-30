@@ -15,8 +15,9 @@
  *   Series[f, {x, x0, n}]
  *     Produces a truncated power-series expansion of f about x = x0 up to
  *     order (x - x0)^n. Handles Taylor, Laurent (negative powers), Puiseux
- *     (fractional powers), and logarithmic expansions. Attributes:
- *     HoldAll, Protected.
+ *     (fractional powers), and logarithmic expansions. Attributes: Protected
+ *     (the arguments are evaluated, as in Mathematica; x must evaluate to a
+ *     symbol, or the call declines with Series::ivar).
  *
  *   Series[f, x -> x0]
  *     Emits the leading term only (expansion at order 0).
