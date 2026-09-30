@@ -19,6 +19,16 @@ Expr* builtin_unique(Expr* res);
 bool expr_is_binding_scope(Expr* e);
 Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger);
 
+/* Block's dynamic-scope frames, exposed for the TimeConstrained unwind only.
+ * Block restores its locals' OwnValues, DownValues and attributes on the way
+ * out, but a timeout siglongjmps past every C frame in between, so
+ * tc_run_guarded records the depth before the body and drains back to it after
+ * a jump -- otherwise a Block-installed temporary rule (a rewrite hook, say)
+ * would stay installed for the rest of the session. Same pattern as the
+ * async-defer count and the message-suppression depth. */
+int  mth_block_depth_save(void);
+void mth_block_depth_unwind(int depth);
+
 void modular_init(void);
 
 #endif // MODULAR_H

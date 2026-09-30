@@ -27,6 +27,7 @@
 #include <flint/arb.h>
 #include <flint/acb.h>
 #include <flint/acb_dirichlet.h>
+#include <flint/acb_elliptic.h>
 
 /* ------------------------------------------------------------------ */
 /*  Expr -> acb  (numeric scalars only)                                */
@@ -206,6 +207,101 @@ Expr* flint_num_stieltjes(const Expr* n, const Expr* a) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Legendre elliptic integrals                                        */
+/* ------------------------------------------------------------------ */
+/* Arb's acb_elliptic_* already use the PARAMETER convention m = k^2 and
+ * Mathematica's branch placement, so these are straight pass-throughs. The
+ * `times_pi` flag is 0 throughout: phi arrives in radians, not as a multiple of
+ * Pi. Precision follows the same rule as every other kernel here -- the min
+ * inexact-bit count over the arguments, machine 53-bit floor -- so
+ * N[EllipticF[1/3, 1/2], 30] really is computed at 30 digits and not rounded up
+ * from a double. */
+
+Expr* flint_num_elliptic_k(const Expr* m) {
+    const Expr* args[1] = { m };
+    slong outb = pick_out_bits(args, 1);
+    slong wp = outb + NB_GUARD;
+    acb_t M, R; acb_init(M); acb_init(R);
+    Expr* out = NULL;
+    if (expr_to_acb(m, M, wp)) {
+        acb_elliptic_k(R, M, wp);
+        out = acb_to_expr(R, outb);
+    }
+    acb_clear(M); acb_clear(R);
+    return out;
+}
+
+Expr* flint_num_elliptic_e(const Expr* m) {
+    const Expr* args[1] = { m };
+    slong outb = pick_out_bits(args, 1);
+    slong wp = outb + NB_GUARD;
+    acb_t M, R; acb_init(M); acb_init(R);
+    Expr* out = NULL;
+    if (expr_to_acb(m, M, wp)) {
+        acb_elliptic_e(R, M, wp);
+        out = acb_to_expr(R, outb);
+    }
+    acb_clear(M); acb_clear(R);
+    return out;
+}
+
+Expr* flint_num_elliptic_f(const Expr* phi, const Expr* m) {
+    const Expr* args[2] = { phi, m };
+    slong outb = pick_out_bits(args, 2);
+    slong wp = outb + NB_GUARD;
+    acb_t P, M, R; acb_init(P); acb_init(M); acb_init(R);
+    Expr* out = NULL;
+    if (expr_to_acb(phi, P, wp) && expr_to_acb(m, M, wp)) {
+        acb_elliptic_f(R, P, M, 0, wp);
+        out = acb_to_expr(R, outb);
+    }
+    acb_clear(P); acb_clear(M); acb_clear(R);
+    return out;
+}
+
+Expr* flint_num_elliptic_e_inc(const Expr* phi, const Expr* m) {
+    const Expr* args[2] = { phi, m };
+    slong outb = pick_out_bits(args, 2);
+    slong wp = outb + NB_GUARD;
+    acb_t P, M, R; acb_init(P); acb_init(M); acb_init(R);
+    Expr* out = NULL;
+    if (expr_to_acb(phi, P, wp) && expr_to_acb(m, M, wp)) {
+        acb_elliptic_e_inc(R, P, M, 0, wp);
+        out = acb_to_expr(R, outb);
+    }
+    acb_clear(P); acb_clear(M); acb_clear(R);
+    return out;
+}
+
+Expr* flint_num_elliptic_pi(const Expr* n, const Expr* m) {
+    const Expr* args[2] = { n, m };
+    slong outb = pick_out_bits(args, 2);
+    slong wp = outb + NB_GUARD;
+    acb_t N, M, R; acb_init(N); acb_init(M); acb_init(R);
+    Expr* out = NULL;
+    if (expr_to_acb(n, N, wp) && expr_to_acb(m, M, wp)) {
+        acb_elliptic_pi(R, N, M, wp);
+        out = acb_to_expr(R, outb);
+    }
+    acb_clear(N); acb_clear(M); acb_clear(R);
+    return out;
+}
+
+Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
+    const Expr* args[3] = { n, phi, m };
+    slong outb = pick_out_bits(args, 3);
+    slong wp = outb + NB_GUARD;
+    acb_t N, P, M, R; acb_init(N); acb_init(P); acb_init(M); acb_init(R);
+    Expr* out = NULL;
+    if (expr_to_acb(n, N, wp) && expr_to_acb(phi, P, wp) && expr_to_acb(m, M, wp)) {
+        acb_elliptic_pi_inc(R, N, P, M, 0, wp);
+        out = acb_to_expr(R, outb);
+    }
+    acb_clear(N); acb_clear(P); acb_clear(M); acb_clear(R);
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
 /*  FLINT` context builtins                                            */
 /* ------------------------------------------------------------------ */
 
@@ -275,6 +371,14 @@ Expr* flint_num_zeta(const Expr* s) { (void)s; return NULL; }
 Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a) { (void)s; (void)a; return NULL; }
 Expr* flint_num_polygamma(const Expr* n, const Expr* z) { (void)n; (void)z; return NULL; }
 Expr* flint_num_stieltjes(const Expr* n, const Expr* a) { (void)n; (void)a; return NULL; }
+Expr* flint_num_elliptic_k(const Expr* m) { (void)m; return NULL; }
+Expr* flint_num_elliptic_e(const Expr* m) { (void)m; return NULL; }
+Expr* flint_num_elliptic_f(const Expr* phi, const Expr* m) { (void)phi; (void)m; return NULL; }
+Expr* flint_num_elliptic_e_inc(const Expr* phi, const Expr* m) { (void)phi; (void)m; return NULL; }
+Expr* flint_num_elliptic_pi(const Expr* n, const Expr* m) { (void)n; (void)m; return NULL; }
+Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
+    (void)n; (void)phi; (void)m; return NULL;
+}
 void  flint_num_bridge_init(void) { /* no FLINT/MPFR: nothing to register */ }
 
 #endif

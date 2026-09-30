@@ -283,9 +283,28 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
             }
             if (found >= 0) {
                 new_args[found] = assoc_entry_assigned(new_args[found], rest, nrest, rhs, rhs_idx, is_rhs_list);
-            } else if (nrest == 0) {
-                /* nrest == 0 -> the recursive call returns the RHS value. */
-                Expr* nv = expr_part_assign_rec(new_head, rest, nrest, rhs, rhs_idx, is_rhs_list);
+            } else {
+                /* The key is absent, so CREATE it.
+                 *
+                 * nrest == 0: this is the last subscript, and the recursive call
+                 * returns the RHS value itself.
+                 *
+                 * nrest > 0: a nested path runs through a key that does not
+                 * exist yet, so open an empty Association there and assign on
+                 * through it -- `a = <||>; a["k", "s"] = 7` gives
+                 * `<|"k" -> <|"s" -> 7|>|>`, as in Wolfram. This branch used to
+                 * do nothing at all for nrest > 0, which made a deep write into
+                 * a fresh Association a SILENT no-op: the Set was left
+                 * unevaluated, `;` discarded it, and the association stayed
+                 * empty with no message. Data loss with no diagnostic is worse
+                 * than an error, and the memo-table idiom
+                 * `$cache[key, "field"] = v` depends on the auto-vivification. */
+                Expr* seed = (nrest == 0)
+                    ? NULL
+                    : expr_new_function(expr_new_symbol(SYM_Association), NULL, 0);
+                Expr* nv = expr_part_assign_rec(seed ? seed : new_head,
+                                                rest, nrest, rhs, rhs_idx, is_rhs_list);
+                if (seed) expr_free(seed);
                 Expr* krule_args[2] = { expr_copy(lookup_key), nv };
                 Expr* nrule = expr_new_function(expr_new_symbol(SYM_Rule), krule_args, 2);
                 new_args = realloc(new_args, sizeof(Expr*) * (len + 1));

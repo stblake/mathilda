@@ -335,11 +335,43 @@ static void test_integrator_endtoend(void) {
     /* Antidifferentiation (Gap 2): the E^(E^x) i=0 Laurent coefficient integrates
      * within the field, x E^x + 1 -> x, giving x E^(E^x). */
     assert_integrates("E^(E^x) (x E^x + 1)");
-    /* The non-elementary sibling still declines (guard against over-eager solve). */
+    /* The non-elementary sibling: the RDE TOWER must not claim it (the guard this
+     * test exists for), and if the wider cascade answers, the answer must be
+     * non-elementary and must verify.
+     *
+     * Tightened from `FreeQ[Integrate[E^(Log[x]^2), x], Integrate] === False`,
+     * which forbade ANY answer from the whole cascade, in v0.238. Once the
+     * iterator-capture defect was fixed (MATHILDA_DIVERGENCES.md A18: Do, Sum and
+     * Product bound their iterator by name, silently replacing a caller's
+     * same-named symbol with a loop index), DerivativeDivides' substitution search
+     * finds the fold u = Log[x] it had been missing, and the base-field Cherry erf
+     * engine closes the reduced integral:
+     *
+     *   Integrate[E^(Log[x]^2), x] = I Sqrt[Pi] Erf[-I (1 + 2 Log[x])/2] / (2 E^(1/4))
+     *
+     * whose derivative matches the integrand to ~1e-30, and which is what
+     * Mathematica returns too. That is a correct NON-elementary antiderivative,
+     * not the over-eager elementary solve the guard was written against -- so the
+     * guard is restated as what it actually means rather than deleted. */
     {
-        char* s = eval_fullform("FreeQ[Integrate[E^(Log[x]^2), x], Integrate]");
+        /* (a) the RDE tower path itself still declines */
+        char* s = eval_fullform(
+            "FreeQ[Integrate[E^(Log[x]^2), x, Method -> \"RischTranscendental\"], Integrate]");
         ASSERT_MSG(strcmp(s, "False") == 0,
-            "Integrate[E^(Log[x]^2)] must stay unintegrated, got FreeQ=%s", s);
+            "Integrate[E^(Log[x]^2), Method -> RischTranscendental] must stay "
+            "unintegrated (the RDE tower must not over-solve), got FreeQ=%s", s);
+        free(s);
+        /* (b) whatever the cascade answers is non-elementary and differentiates
+         *     back: an ELEMENTARY answer here would be the real defect. */
+        s = eval_fullform(
+            "With[{ii = Integrate[E^(Log[x]^2), x]}, "
+            "If[FreeQ[ii, Integrate], "
+            "  If[FreeQ[ii, Erf | Erfi | ExpIntegralEi], $ElementaryClaim, "
+            "    If[Abs[N[(D[ii, x] - E^(Log[x]^2)) /. x -> 3/2, 30]] < 10^-20, 0, $Wrong]], "
+            "  0]]");
+        ASSERT_MSG(strcmp(s, "0") == 0,
+            "Integrate[E^(Log[x]^2)] must decline or answer with a verified "
+            "non-elementary antiderivative, got %s", s);
         free(s);
     }
 }

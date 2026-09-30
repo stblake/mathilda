@@ -31,6 +31,7 @@
 #include "sinhintegral.h"
 #include "coshintegral.h"
 #include "logintegral.h"
+#include "elliptic.h"
 #include "symtab.h"
 #include "special_functions/sf_machine.h"
 #include <complex.h>
@@ -528,6 +529,38 @@ static bool ndk_Beta_c(double are, double aim, double bre, double bim,
 }
 static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false };
 
+/* The Legendre elliptic integrals over real arrays, by Carlson's symmetric
+ * forms (src/special_functions/elliptic.c). PARAMETER convention m = k^2.
+ *
+ * Real arguments only: a complex element declines, and so does one outside the
+ * real principal domain (m > 1 for the complete forms, or 1 - m Sin[phi]^2 < 0
+ * for the incomplete), because there the value is genuinely complex and only the
+ * FLINT/Arb path places the branch correctly. Declining ABANDONS the array and
+ * the List path answers exactly -- slower, never wrong.
+ *
+ * EllipticE carries BOTH a unary and a binary kernel, because the head is
+ * arity-overloaded: EllipticE[m] is complete and EllipticE[phi, m] incomplete.
+ * EllipticPi deliberately has neither; see its EXEMPT entry in the audits. */
+static bool ndk_EllipticK_r(double m, double* o) { return elliptic_machine_k(m, o); }
+static bool ndk_EllipticE_r(double m, double* o) { return elliptic_machine_e_complete(m, o); }
+static const NDUnaryKernel NDKU_EllipticK = { NULL, ndk_EllipticK_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_EllipticE = { NULL, ndk_EllipticE_r, true, false, NULL, NULL, false };
+
+static bool ndk_EllipticF_c(double pre, double pim, double mre, double mim,
+                            double* rr, double* ri) {
+    if (pim != 0.0 || mim != 0.0) return false;
+    if (!elliptic_machine_f(pre, mre, rr)) return false;
+    *ri = 0.0; return isfinite(*rr);
+}
+static bool ndk_EllipticEInc_c(double pre, double pim, double mre, double mim,
+                               double* rr, double* ri) {
+    if (pim != 0.0 || mim != 0.0) return false;
+    if (!elliptic_machine_e_inc(pre, mre, rr)) return false;
+    *ri = 0.0; return isfinite(*rr);
+}
+static const NDBinaryKernel NDKB_EllipticF = { ndk_EllipticF_c,    true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_EllipticE = { ndk_EllipticEInc_c, true, NULL, NULL, false };
+
 /* Exponential-integral family and friends.  These modules compute in MPFR and
  * round at the end, so there was no double path to reuse — the kernels in
  * sf_machine.c are written for exactly this.  All are registered
@@ -728,6 +761,9 @@ void ndkernels_init(void) {
     REG_U(Gamma); REG_U(LogGamma); REG_U(Erf); REG_U(Erfc);
     REG_U(Factorial);
     REG_B(BesselJ, NDKB_BesselJ);
+    REG_U(EllipticK); REG_U(EllipticE);      /* complete: one argument  */
+    REG_B(EllipticF, NDKB_EllipticF);        /* incomplete: phi and m   */
+    REG_B(EllipticE, NDKB_EllipticE);
     REG_B(BesselY, NDKB_BesselY);
     REG_B(Beta,    NDKB_Beta);
 

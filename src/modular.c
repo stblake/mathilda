@@ -29,11 +29,23 @@ typedef struct ScopingEnv {
     struct ScopingEnv* next;
 } ScopingEnv;
 
+/* The ITERATOR family: head[body, {i, ...}, ...] -- body in arg 0, one or more
+ * iterator specs after it, each binding its first element. Table, Do, Sum and
+ * Product are structurally identical here and bind their iterator the same way,
+ * so capture-avoidance must treat them alike. Only Table used to be listed,
+ * which is exactly MATHILDA_DIVERGENCES.md A18: `g[v_] := Module[{s = 0},
+ * Do[s += v, {k, 2}]; s]; g[k]` gave 3 where Mathematica gives 2 k, because the
+ * caller's `k` was injected into a body whose `Do` then bound it. Sum and
+ * Product had it too (`Sum[v, {k, 2}]` → 3, `Product` → 2). */
+static bool is_iterator_scope_head(const char* h) {
+    return h == SYM_Table || h == SYM_Do || h == SYM_Sum || h == SYM_Product;
+}
+
 static bool is_scoping_construct(Expr* e) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;
     return h == SYM_Module || h == SYM_Block || h == SYM_With ||
-           h == SYM_Function || h == SYM_Table;
+           h == SYM_Function || is_iterator_scope_head(h);
 }
 
 // Does this construct carry its bound names in argument 0?
@@ -55,7 +67,7 @@ static bool is_scoping_construct(Expr* e) {
 static bool scoping_binds_in_arg0(Expr* e) {
     if (!is_scoping_construct(e)) return false;
     const char* h = e->data.function.head->data.symbol.name;
-    if (h == SYM_Table) return false;
+    if (is_iterator_scope_head(h)) return false;   /* arg 0 is the body */
     if (h == SYM_Function) return e->data.function.arg_count >= 2;
     return e->data.function.arg_count >= 1;
 }
@@ -74,22 +86,23 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
-    // Table binds its iterator variables in the *iterator* specs (args 1..),
-    // each of the form {var, ...}; arg 0 is the body. Every other scoping
-    // construct (Module/Block/With/Function) binds in arg 0. They therefore
-    // need completely different substitution handling, so detect Table here.
-    bool is_table = is_scoping_construct(e)
-        && e->data.function.head->data.symbol.name == SYM_Table;
+    // The iterator family (Table/Do/Sum/Product) binds its iterator variables in
+    // the *iterator* specs (args 1..), each of the form {var, ...}; arg 0 is the
+    // body. Every other scoping construct (Module/Block/With/Function) binds in
+    // arg 0. They therefore need completely different substitution handling, so
+    // detect the iterator shape here.
+    bool binds_in_iterators = is_scoping_construct(e)
+        && is_iterator_scope_head(e->data.function.head->data.symbol.name);
 
     // Handle shadowing in scoping constructs
     ScopingEnv* filtered_env = env;
 
-    if (is_table || scoping_binds_in_arg0(e)) {
+    if (binds_in_iterators || scoping_binds_in_arg0(e)) {
         // Collect the names this construct binds, so they are removed from the
         // env we push into the body (lexical shadowing).
         const char* shadow_buf[64];
         size_t nshadow = 0;
-        if (is_table) {
+        if (binds_in_iterators) {
             for (size_t k = 1; k < e->data.function.arg_count && nshadow < 64; k++) {
                 Expr* it = e->data.function.args[k];
                 if (it->type == EXPR_FUNCTION
@@ -145,7 +158,7 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
         // Table: arg 0 is the body (substitute normally with the shadowed
         // env); args 1.. are iterator specs {var, lim...} where `var` is a
         // binding occurrence (copied) and the limits are substituted.
-        if (is_table) {
+        if (binds_in_iterators) {
             if (i == 0) {
                 new_args[i] = substitute_scoping(e->data.function.args[i], filtered_env);
             } else {
@@ -340,11 +353,25 @@ Expr* builtin_unique(Expr* res) {
  * See MATHILDA_DIVERGENCES.md A11.
  * ------------------------------------------------------------------------ */
 
-/* True when `e` is a scoping construct that actually binds names. */
+/* True when `e` is a scoping construct that actually binds names.
+ *
+ * Block is deliberately EXCLUDED: its scope is DYNAMIC, not lexical, so a
+ * symbol arriving from a caller's value is precisely what it means to rebind,
+ * and renaming the local to avoid "capturing" it destroys the construct's whole
+ * purpose. Mathematica agrees -- with the A11 example read over Block,
+ *
+ *     g[v_] := Block[{e = 1}, v + e];   g[e + 1]
+ *
+ * Mathematica gives 3 (the injected e sees the Block's value), where the same
+ * shape over Module gives 2 + e. Renaming here broke the standard idiom of
+ * Block-ing a function symbol to install a temporary rewrite hook and then
+ * evaluating a held body that calls it: the hook was installed on a renamed
+ * symbol and the body kept reaching the original. */
 bool expr_is_binding_scope(Expr* e) {
     if (!is_scoping_construct(e)) return false;
     const char* h = e->data.function.head->data.symbol.name;
-    if (h == SYM_Table) return e->data.function.arg_count >= 2; /* body + iterator(s) */
+    if (h == SYM_Block) return false;                          /* dynamic scope */
+    if (is_iterator_scope_head(h)) return e->data.function.arg_count >= 2; /* body + iterator(s) */
     return scoping_binds_in_arg0(e);
 }
 
@@ -352,7 +379,7 @@ bool expr_is_binding_scope(Expr* e) {
  * shadow-name collection in substitute_scoping. */
 static void scoping_collect_locals(Expr* e, const char** out, size_t* n, size_t cap) {
     const char* h = e->data.function.head->data.symbol.name;
-    if (h == SYM_Table) {
+    if (is_iterator_scope_head(h)) {
         for (size_t k = 1; k < e->data.function.arg_count && *n < cap; k++) {
             Expr* it = e->data.function.args[k];
             if (it->type == EXPR_FUNCTION
@@ -418,7 +445,7 @@ static Expr* scoping_apply_rename(Expr* e, ScopingEnv* ren) {
     size_t argc = e->data.function.arg_count;
     Expr** na = malloc(sizeof(Expr*) * (argc > 0 ? argc : 1));
 
-    if (h == SYM_Table) {
+    if (is_iterator_scope_head(h)) {
         na[0] = substitute_scoping(e->data.function.args[0], ren);   /* body */
         for (size_t i = 1; i < argc; i++) {
             Expr* it = e->data.function.args[i];
@@ -623,6 +650,95 @@ Expr* builtin_module(Expr* res) {
     return final_res;
 }
 
+/* ---------------------------------------------------------------- Block ----
+ * Block[{x, y = v}, body] gives its locals DYNAMIC scope: the body sees them
+ * with no value, and whatever they had is restored on the way out. "Whatever
+ * they had" is BOTH rule lists, not just OwnValues:
+ *
+ *     gg[a_] := "orig";
+ *     Block[{gg}, gg[a_] := "patched"; gg[1]]      (* "patched"            *)
+ *     gg[1]                                        (* "orig" -- restored   *)
+ *
+ * Restoring only own_values (as this did before) left the DownValues written
+ * inside the Block installed for the rest of the session. That is not a missing
+ * nicety: Block over a function symbol is the standard way to install a
+ * temporary rewrite hook (ParallelMixedSpecial's ExtendedBounds does exactly
+ * this over four of ParallelMixed's bound-decision symbols), so the first such
+ * call would silently and permanently repoint them.
+ *
+ * DefaultValues (`default_options`, backing Options[f]) are deliberately NOT
+ * cleared: Mathematica's Block does clear them, but Options here are registered
+ * once at module-init time and nothing in the tree rebinds them under Block, so
+ * clearing would be pure blast radius.
+ *
+ * Non-local exit. Throw/Return travel as ordinary sentinel return values, so
+ * they reach the restore below normally. A TimeConstrained timeout does not --
+ * it siglongjmps clean past every C frame between the deadline and
+ * tc_run_guarded. Frames are therefore also threaded on a global stack so that
+ * unwind can drain whatever it jumped over; see mth_block_depth_save /
+ * mth_block_depth_unwind, used by tc_run_guarded exactly as it already saves
+ * and restores the async-defer count and the message-suppression depth. */
+
+typedef struct BlockSavedVar {
+    char*    name;
+    Rule*    old_own;
+    Rule*    old_down;
+    uint32_t old_attrs;
+} BlockSavedVar;
+
+typedef struct BlockFrame {
+    BlockSavedVar*     saved;
+    size_t             count;
+    struct BlockFrame* next;
+} BlockFrame;
+
+static BlockFrame* block_stack = NULL;
+static int         block_depth = 0;
+
+/* Free one rule list wholesale (the values written inside the Block). */
+static void blk_free_rules(Rule* r) {
+    while (r) {
+        Rule* next = r->next;
+        expr_free(r->pattern);
+        expr_free(r->replacement);
+        free(r);
+        r = next;
+    }
+}
+
+/* Put every saved symbol back and release the frame. Idempotent per frame:
+ * only ever called once, either by builtin_block or by the unwind drain. */
+static void blk_restore_frame(BlockFrame* f) {
+    for (size_t i = 0; i < f->count; i++) {
+        if (!f->saved[i].name) continue;
+        SymbolDef* def = symtab_get_def(f->saved[i].name);
+        blk_free_rules(def->own_values);
+        blk_free_rules(def->down_values);
+        def->own_values  = f->saved[i].old_own;
+        def->down_values = f->saved[i].old_down;
+        def->attributes  = f->saved[i].old_attrs;
+        free(f->saved[i].name);
+    }
+    free(f->saved);
+    free(f);
+}
+
+int mth_block_depth_save(void) { return block_depth; }
+
+/* Drain the Block stack back down to `depth`, restoring each frame. Called
+ * after a timeout siglongjmp, where the frames between here and the deadline
+ * never got to run their own restore. */
+void mth_block_depth_unwind(int depth) {
+    while (block_depth > depth && block_stack) {
+        BlockFrame* f = block_stack;
+        block_stack = f->next;
+        block_depth--;
+        blk_restore_frame(f);
+    }
+    /* Defensive: a mismatched count must not leave the counter drifting. */
+    if (!block_stack) block_depth = 0;
+}
+
 Expr* builtin_block(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars = res->data.function.args[0];
@@ -631,13 +747,13 @@ Expr* builtin_block(Expr* res) {
     if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
 
     size_t var_count = vars->data.function.arg_count;
-    
-    typedef struct {
-        char* name;
-        Rule* old_own;
-        uint32_t old_attrs;
-    } SavedVar;
-    SavedVar* saved = calloc(var_count, sizeof(SavedVar));
+
+    BlockFrame* frame = malloc(sizeof(BlockFrame));
+    frame->saved = calloc(var_count ? var_count : 1, sizeof(BlockSavedVar));
+    frame->count = var_count;
+    frame->next  = block_stack;
+    block_stack  = frame;
+    block_depth++;
 
     for (size_t i = 0; i < var_count; i++) {
         Expr* v = vars->data.function.args[i];
@@ -655,11 +771,13 @@ Expr* builtin_block(Expr* res) {
 
         if (name) {
             SymbolDef* def = symtab_get_def(name);
-            saved[i].name = mathilda_strdup(name);
-            saved[i].old_own = def->own_values;
-            saved[i].old_attrs = def->attributes;
-            def->own_values = NULL; // Clear values
-            
+            frame->saved[i].name      = mathilda_strdup(name);
+            frame->saved[i].old_own   = def->own_values;
+            frame->saved[i].old_down  = def->down_values;
+            frame->saved[i].old_attrs = def->attributes;
+            def->own_values  = NULL;   /* the body sees the symbol unset ... */
+            def->down_values = NULL;   /* ... in BOTH rule lists */
+
             if (init_val) {
                 symtab_add_own_value(name, (v->type == EXPR_SYMBOL ? v : v->data.function.args[0]), init_val);
                 expr_free(init_val);
@@ -679,25 +797,13 @@ Expr* builtin_block(Expr* res) {
         }
     }
 
-    // Restore
-    for (size_t i = 0; i < var_count; i++) {
-        if (saved[i].name) {
-            SymbolDef* def = symtab_get_def(saved[i].name);
-            // Free temporary values assigned in block
-            Rule* curr = def->own_values;
-            while (curr) {
-                Rule* next = curr->next;
-                expr_free(curr->pattern);
-                expr_free(curr->replacement);
-                free(curr);
-                curr = next;
-            }
-            def->own_values = saved[i].old_own;
-            def->attributes = saved[i].old_attrs;
-            free(saved[i].name);
-        }
+    /* Pop this frame (an inner Block always pops before its outer one, so the
+     * top of the stack is ours) and restore. */
+    if (block_stack == frame) {
+        block_stack = frame->next;
+        block_depth--;
+        blk_restore_frame(frame);
     }
-    free(saved);
 
     return final_res;
 }

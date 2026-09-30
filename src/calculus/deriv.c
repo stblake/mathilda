@@ -378,6 +378,28 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         return mk_fn2("Plus", t1, t2);
     }
 
+    /* --- complete elliptic integrals of the first and second kind, in the
+     * PARAMETER convention m = k^2 (g is m here):
+     *   d/dm EllipticK[m] = (EllipticE[m] - (1 - m) EllipticK[m]) / (2 m (1 - m))
+     *   d/dm EllipticE[m] = (EllipticE[m] - EllipticK[m]) / (2 m)
+     * Only the one-argument spellings reach this table, so EllipticE[phi, m]
+     * (and EllipticF, EllipticPi) are handled in the multi-argument block. --- */
+    if (!strcmp(name, "EllipticK")) {
+        Expr* one_minus_m = mk_fn2("Plus", mk_int(1), mk_neg(expr_copy(g)));
+        Expr* num = mk_fn2("Plus", mk_fn1("EllipticE", expr_copy(g)),
+                        mk_neg(mk_fn2("Times", expr_copy(one_minus_m),
+                                      mk_fn1("EllipticK", expr_copy(g)))));
+        Expr* den = mk_fn2("Times", mk_fn2("Times", mk_int(2), expr_copy(g)),
+                           one_minus_m);
+        return mk_fn2("Times", num, mk_fn2("Power", den, mk_int(-1)));
+    }
+    if (!strcmp(name, "EllipticE")) {
+        Expr* num = mk_fn2("Plus", mk_fn1("EllipticE", expr_copy(g)),
+                        mk_neg(mk_fn1("EllipticK", expr_copy(g))));
+        Expr* den = mk_fn2("Times", mk_int(2), expr_copy(g));
+        return mk_fn2("Times", num, mk_fn2("Power", den, mk_int(-1)));
+    }
+
     /* --- error function: d/dg Erf[g] = (2/Sqrt[Pi]) E^(-g^2). --- */
     if (!strcmp(name, "Erf")) {
         Expr* coeff = mk_fn2("Times", mk_int(2),
@@ -1395,6 +1417,123 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
                               mk_fn2("ProductLog", expr_copy(K), expr_copy(Z)),
                               mk_fn2("Power", denom, mk_int(-1)));
             return mk_fn2("Times", dWdZ, dZ);
+        }
+
+        /* --- The Legendre elliptic integrals. Second (F, E) or third (Pi)
+         * argument is the PARAMETER m = k^2, not the modulus.
+         *
+         *   d/dphi EllipticF[phi, m]     = 1 / Sqrt[1 - m Sin[phi]^2]
+         *   d/dphi EllipticE[phi, m]     =     Sqrt[1 - m Sin[phi]^2]
+         *   d/dphi EllipticPi[n, phi, m] = 1 / ((1 - n Sin[phi]^2) Sqrt[1 - m Sin[phi]^2])
+         *   d/dm   EllipticK[m]          = (EllipticE[m] - (1 - m) EllipticK[m]) / (2 m (1 - m))
+         *   d/dm   EllipticE[m]          = (EllipticE[m] - EllipticK[m]) / (2 m)
+         *   d/dm   EllipticE[phi, m]     = (EllipticE[phi, m] - EllipticF[phi, m]) / (2 m)
+         *
+         * The phi-derivatives are just the integrands, which is why a numeric
+         * verify of an antiderivative built from these kernels closes. The
+         * m-derivative of EllipticF and the n-/m-derivatives of EllipticPi are
+         * left as an inert Derivative[...] form rather than guessed: each is a
+         * four-term expression whose signs are easy to get wrong, and an inert
+         * derivative is honest where a wrong formula would silently corrupt
+         * every caller. (BesselJ does the same for its order.) --- */
+        if (h == SYM_EllipticPi && n == 3) {
+            Expr* N   = args[0];
+            Expr* PHI = args[1];
+            Expr* M   = args[2];
+            Expr* dPHI = deriv_of(PHI, x, nonconsts);
+            Expr* dN   = deriv_of(N, x, nonconsts);
+            Expr* dM   = deriv_of(M, x, nonconsts);
+            Expr* terms[3];
+            size_t nt = 0;
+            if (!is_lit_zero(dPHI)) {
+                Expr* s2 = mk_fn2("Power", mk_fn1("Sin", expr_copy(PHI)), mk_int(2));
+                Expr* rad = mk_fn2("Plus", mk_int(1),
+                                mk_neg(mk_fn2("Times", expr_copy(M), expr_copy(s2))));
+                Expr* circ = mk_fn2("Plus", mk_int(1),
+                                mk_neg(mk_fn2("Times", expr_copy(N), s2)));
+                Expr* den = mk_fn2("Times", circ, mk_fn1("Sqrt", rad));
+                terms[nt++] = mk_fn2("Times", mk_fn2("Power", den, mk_int(-1)), dPHI);
+            } else expr_free(dPHI);
+            if (!is_lit_zero(dN)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0), mk_int(0) }, 3);
+                Expr* og = mk_fn_head1(op, mk_sym("EllipticPi"));
+                terms[nt++] = mk_fn2("Times",
+                    expr_new_function(og, (Expr*[]){ expr_copy(N), expr_copy(PHI), expr_copy(M) }, 3), dN);
+            } else expr_free(dN);
+            if (!is_lit_zero(dM)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(0), mk_int(1) }, 3);
+                Expr* og = mk_fn_head1(op, mk_sym("EllipticPi"));
+                terms[nt++] = mk_fn2("Times",
+                    expr_new_function(og, (Expr*[]){ expr_copy(N), expr_copy(PHI), expr_copy(M) }, 3), dM);
+            } else expr_free(dM);
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            Expr* acc = mk_fn2("Plus", terms[0], terms[1]);
+            for (size_t i = 2; i < nt; i++) acc = mk_fn2("Plus", acc, terms[i]);
+            return acc;
+        }
+
+        if ((h == SYM_EllipticF || h == SYM_EllipticE) && n == 2) {
+            bool is_F = (h == SYM_EllipticF);
+            Expr* PHI = args[0];
+            Expr* M   = args[1];
+            Expr* dPHI = deriv_of(PHI, x, nonconsts);
+            Expr* dM   = deriv_of(M, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+            if (!is_lit_zero(dPHI)) {
+                Expr* s2 = mk_fn2("Power", mk_fn1("Sin", expr_copy(PHI)), mk_int(2));
+                Expr* rad = mk_fn2("Plus", mk_int(1),
+                                mk_neg(mk_fn2("Times", expr_copy(M), s2)));
+                Expr* root = mk_fn1("Sqrt", rad);
+                /* F: 1/Sqrt[...]   E: Sqrt[...] */
+                Expr* dfdphi = is_F ? mk_fn2("Power", root, mk_int(-1)) : root;
+                terms[nt++] = mk_fn2("Times", dfdphi, dPHI);
+            } else expr_free(dPHI);
+            if (!is_lit_zero(dM)) {
+                if (is_F) {
+                    Expr* op = expr_new_function(mk_sym("Derivative"),
+                                  (Expr*[]){ mk_int(0), mk_int(1) }, 2);
+                    Expr* og = mk_fn_head1(op, mk_sym("EllipticF"));
+                    terms[nt++] = mk_fn2("Times",
+                        expr_new_function(og, (Expr*[]){ expr_copy(PHI), expr_copy(M) }, 2), dM);
+                } else {
+                    /* (E[phi,m] - F[phi,m]) / (2 m) */
+                    Expr* diff = mk_fn2("Plus",
+                        mk_fn2("EllipticE", expr_copy(PHI), expr_copy(M)),
+                        mk_neg(mk_fn2("EllipticF", expr_copy(PHI), expr_copy(M))));
+                    Expr* den = mk_fn2("Times", mk_int(2), expr_copy(M));
+                    terms[nt++] = mk_fn2("Times",
+                        mk_fn2("Times", diff, mk_fn2("Power", den, mk_int(-1))), dM);
+                }
+            } else expr_free(dM);
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
+        if (h == SYM_EllipticPi && n == 2) {   /* complete: both args inert */
+            Expr* N = args[0];
+            Expr* M = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dM = deriv_of(M, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+            for (int which = 0; which < 2; which++) {
+                Expr* d = which == 0 ? dN : dM;
+                if (is_lit_zero(d)) { expr_free(d); continue; }
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(which == 0 ? 1 : 0),
+                                         mk_int(which == 0 ? 0 : 1) }, 2);
+                Expr* og = mk_fn_head1(op, mk_sym("EllipticPi"));
+                terms[nt++] = mk_fn2("Times",
+                    expr_new_function(og, (Expr*[]){ expr_copy(N), expr_copy(M) }, 2), d);
+            }
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
         }
 
         if (h == SYM_BesselJ && n == 2) {

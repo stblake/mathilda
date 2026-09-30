@@ -358,6 +358,7 @@ set(COMMON_SRC
     ../src/special_functions/sinhintegral.c
     ../src/special_functions/coshintegral.c
     ../src/special_functions/fresnel.c
+    ../src/special_functions/elliptic.c
     ../src/special_functions/sinc.c
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
@@ -3412,6 +3413,10 @@ target_include_directories(expintegralei_tests PRIVATE ../src)
 
 add_executable(logintegral_tests test_logintegral.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(logintegral_tests PRIVATE ../src)
+
+add_executable(elliptic_tests test_elliptic.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(elliptic_tests PRIVATE ../src)
+add_test(NAME elliptic_tests COMMAND elliptic_tests)
 
 add_executable(sinintegral_tests test_sinintegral.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sinintegral_tests PRIVATE ../src)

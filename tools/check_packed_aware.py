@@ -57,6 +57,16 @@ EXEMPT = {
     # 2026-07-30 for want of a narrowing float64->int64 kernel category. They
     # have one now (NDUnaryKernel.to_int), are off NOT_AWARE, and answer with the
     # exact Integers the List path does -- so they are no longer exceptions.
+    "CoefficientArrays": "structural, not element-wise: it decomposes a "
+    "polynomial SYSTEM by total degree, and its arithmetic is Expr-level "
+    "(build_monomials over Expand'ed terms), so there is nothing for a buffer to "
+    "accelerate. The EXPR_NDARRAY branch is a materialise guard for the VISIBLE "
+    "NDArray the gate never touches -- CoefficientArrays[NDArray[{1,2,3}], {x}] "
+    "is the system of three constant polynomials, and without the guard it would "
+    "fall through to \"one polynomial\", fail to be one, and answer with a "
+    "silently unevaluated call. It must NOT go on AWARE: a PACKED-list argument "
+    "is correctly materialised to a List by the gate, which is exactly what "
+    "AWARE would suppress. Same shape as the NDArray entry above.",
     "Im": "projection kernel (to_real), so a real input yields a real 0.0 where "
     "the List gives the exact Integer 0; it needs the narrowing treatment "
     "Floor and friends got, which its to_real category cannot express",

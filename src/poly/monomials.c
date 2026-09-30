@@ -42,6 +42,7 @@
 #include "groebner.h"   /* gb_build_order_matrix, gb_classify_named_order */
 #include "flint_bridge.h" /* flint_field_monomials — field-coefficient fast path */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "pack.h"      /* pack_unpack: materialise a visible NDArray argument */
 
 #include <stdlib.h>
 #include <string.h>
@@ -556,6 +557,227 @@ Expr* builtin_monomiallist(Expr* res) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  CoefficientArrays                                                  */
+/* ------------------------------------------------------------------ */
+/* CoefficientArrays[polys, vars] decomposes a polynomial system by TOTAL DEGREE
+ * in vars: element d + 1 of the result carries every degree-d coefficient, so
+ * that for a system the first two elements are exactly the constant vector and
+ * the coefficient matrix of a linear system --
+ *
+ *     CoefficientArrays[{x + 2 y - 3, 3 x - y}, {x, y}]
+ *       -> {{-3, 0}, {{1, 2}, {3, -1}}}
+ *
+ * which is what a linear solver wants: `{b, M} = CoefficientArrays[eqs, vars]`.
+ *
+ * Index convention (Mathematica's). A degree-d coefficient lives at the index
+ * tuple naming its variables in NON-DECREASING order, and every other
+ * permutation of that tuple is 0 -- the array is upper-triangular, not
+ * symmetric. So `CoefficientArrays[x y, {x, y}]` puts the 1 at {1, 2} and
+ * leaves {2, 1} zero, and `x^2` goes to {1, 1}. A list of polynomials adds the
+ * equation index as the LEADING axis, so element d + 1 has rank d + 1; a single
+ * polynomial has rank d (element 1 is then a bare scalar, not a vector).
+ *
+ * Divergence from Mathematica, deliberate: Mathematica returns SparseArrays and
+ * these are dense Lists. `Normal` of a List is the identity, so the usual
+ * `Normal[CoefficientArrays[...]]` spelling is unaffected, and every other list
+ * operation works on the result where a SparseArray here would not (see
+ * MATHILDA_DIVERGENCES.md A27 -- the head is still inert). Density is capped:
+ * a degree-d element over k variables has k^d entries, so a request whose total
+ * would exceed CA_MAX_ENTRIES is declined rather than silently exhausting
+ * memory. */
+
+#define CA_MAX_ENTRIES 20000000L
+
+/* Nested dense zero array of rank `rank` with every axis `k` long. */
+static Expr* ca_zeros(int k, int rank) {
+    if (rank == 0) return expr_new_integer(0);
+    Expr** args = malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
+    for (int i = 0; i < k; i++) args[i] = ca_zeros(k, rank - 1);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), args, (size_t)k);
+    free(args);
+    return out;
+}
+
+/* Overwrite the entry of the nested dense array `arr` at idx[0..rank) (0-based)
+ * with `val` (adopted). */
+static void ca_set(Expr* arr, const int* idx, int rank, Expr* val) {
+    for (int d = 0; d < rank; d++) {
+        if (!is_list_head(arr) || (size_t)idx[d] >= arr->data.function.arg_count) {
+            expr_free(val);
+            return;
+        }
+        if (d == rank - 1) {
+            expr_free(arr->data.function.args[idx[d]]);
+            arr->data.function.args[idx[d]] = val;
+            return;
+        }
+        arr = arr->data.function.args[idx[d]];
+    }
+    /* rank == 0: nothing addressable, caller handles the scalar case. */
+    expr_free(val);
+}
+
+Expr* builtin_coefficientarrays(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** args = res->data.function.args;
+
+    /* Strip trailing option rules; capture Modulus, as CoefficientRules does. */
+    Expr* modulus = NULL;
+    size_t npos = argc;
+    while (npos > 0 && is_rule_head(args[npos - 1])) {
+        Expr* rule = args[npos - 1];
+        Expr* key  = rule->data.function.args[0];
+        if (key->type == EXPR_SYMBOL && key->data.symbol.name == SYM_Modulus) {
+            Expr* m = rule->data.function.args[1];
+            if (m->type == EXPR_INTEGER || m->type == EXPR_BIGINT) modulus = m;
+        }
+        npos--;
+    }
+    if (npos < 1 || npos > 2) return NULL;
+
+    Expr* polys = args[0];
+
+    /* A VISIBLE NDArray is a system of constant polynomials, so materialise it
+     * and go on. The transparency gate never touches a visible NDArray (only a
+     * packed List), and this head is not on AWARE, so without this the call
+     * would fall through to "one polynomial" -- and an NDArray is not a
+     * polynomial, so the answer would be a silently unevaluated
+     * CoefficientArrays[NDArray[...], vars] rather than {{1, 2, 3}}. */
+    Expr* unpacked = NULL;
+    if (polys->type == EXPR_NDARRAY) {
+        unpacked = pack_unpack(polys);
+        if (!unpacked) return NULL;
+        polys = unpacked;
+    }
+
+    /* A List argument is a SYSTEM (equation index becomes the leading axis);
+     * anything else is one polynomial and the arrays carry no leading axis. */
+    int      is_system = is_list_head(polys);
+    size_t   m         = is_system ? polys->data.function.arg_count : 1;
+    Expr**   eqs       = malloc(sizeof(Expr*) * (m > 0 ? m : 1));
+    for (size_t i = 0; i < m; i++)
+        eqs[i] = is_system ? polys->data.function.args[i] : polys;
+
+    /* Variables. `All` or omitted means Variables[] of the whole input -- taken
+     * over the List as a unit so every equation shares one column order. */
+    Expr* vars_arg = (npos >= 2) ? args[1] : NULL;
+    if (vars_arg && vars_arg->type == EXPR_SYMBOL &&
+        vars_arg->data.symbol.name == SYM_All) vars_arg = NULL;
+
+    int k;
+    Expr* owned = NULL;
+    Expr** vars = resolve_vars(polys, vars_arg, &k, &owned);
+    if (k <= 0) {
+        free(eqs); free(vars);
+        if (owned) expr_free(owned);
+        if (unpacked) expr_free(unpacked);
+        return NULL;
+    }
+
+    /* The default (lexicographic) monomial order: the sort order is irrelevant
+     * here, since every monomial is placed by its own exponent vector, but
+     * build_monomials needs a weight matrix. */
+    int rows = 0;
+    int64_t* W = order_weight_matrix(NULL, k, &rows);
+    if (!W) {
+        free(eqs); free(vars);
+        if (owned) expr_free(owned);
+        if (unpacked) expr_free(unpacked);
+        return NULL;
+    }
+
+    /* Decompose every equation, and find the maximum total degree. */
+    Mono** all   = calloc(m ? m : 1, sizeof(Mono*));
+    size_t* counts = calloc(m ? m : 1, sizeof(size_t));
+    int maxdeg = 0;
+    int ok = 1;
+    for (size_t i = 0; i < m && ok; i++) {
+        all[i] = build_monomials(eqs[i], vars, k, W, rows, modulus, &counts[i]);
+        if (!all[i]) { ok = 0; break; }
+        for (size_t t = 0; t < counts[i]; t++) {
+            int d = 0;
+            for (int j = 0; j < k; j++) d += all[i][t].exps[j];
+            if (d > maxdeg) maxdeg = d;
+        }
+    }
+    free(W);
+
+    /* Density guard: element d + 1 holds m * k^d entries. */
+    if (ok) {
+        double total = 0.0, kd = 1.0;
+        for (int d = 0; d <= maxdeg; d++) {
+            total += (double)m * kd;
+            if (total > (double)CA_MAX_ENTRIES) break;
+            kd *= (double)k;
+        }
+        if (total > (double)CA_MAX_ENTRIES) {
+            mth_message("CoefficientArrays", "dense",
+                "the dense result for degree %d in %d variables exceeds %ld entries; "
+                "CoefficientArrays returns dense arrays and declines this size.",
+                maxdeg, k, CA_MAX_ENTRIES);
+            ok = 0;
+        }
+    }
+
+    if (!ok) {
+        for (size_t i = 0; i < m; i++) if (all[i]) monos_free(all[i], counts[i]);
+        free(all); free(counts); free(eqs); free(vars);
+        if (owned) expr_free(owned);
+        if (unpacked) expr_free(unpacked);
+        return NULL;
+    }
+
+    /* Build one element per total degree. */
+    Expr** out = malloc(sizeof(Expr*) * (size_t)(maxdeg + 1));
+    for (int d = 0; d <= maxdeg; d++) {
+        if (is_system) {
+            Expr** rowsv = malloc(sizeof(Expr*) * (m > 0 ? m : 1));
+            for (size_t i = 0; i < m; i++) rowsv[i] = ca_zeros(k, d);
+            out[d] = expr_new_function(expr_new_symbol(SYM_List), rowsv, m);
+            free(rowsv);
+        } else {
+            out[d] = ca_zeros(k, d);
+        }
+    }
+
+    /* Place each monomial at its sorted variable-index tuple. */
+    int* idx = malloc(sizeof(int) * (size_t)(maxdeg > 0 ? maxdeg : 1));
+    for (size_t i = 0; i < m; i++) {
+        for (size_t t = 0; t < counts[i]; t++) {
+            int d = 0;
+            for (int j = 0; j < k; j++)
+                for (int r = 0; r < all[i][t].exps[j]; r++) idx[d++] = j;
+            Expr* coeff = all[i][t].coeff; all[i][t].coeff = NULL;   /* move */
+            Expr* target = out[d];
+            if (is_system) {
+                if (d == 0) {           /* the constant vector: one slot per eq */
+                    expr_free(target->data.function.args[i]);
+                    target->data.function.args[i] = coeff;
+                    continue;
+                }
+                target = target->data.function.args[i];
+            } else if (d == 0) {
+                expr_free(out[0]);
+                out[0] = coeff;
+                continue;
+            }
+            ca_set(target, idx, d, coeff);
+        }
+    }
+    free(idx);
+
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, (size_t)(maxdeg + 1));
+    free(out);
+
+    for (size_t i = 0; i < m; i++) monos_free(all[i], counts[i]);
+    free(all); free(counts); free(eqs); free(vars);
+    if (owned) expr_free(owned);
+    if (unpacked) expr_free(unpacked);
+    return result;
+}
+
+/* ------------------------------------------------------------------ */
 /*  FromCoefficientRules                                               */
 /* ------------------------------------------------------------------ */
 
@@ -636,6 +858,19 @@ void monomials_init(void) {
     symtab_get_def("MonomialList")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("CoefficientRules", builtin_coefficientrules);
     symtab_get_def("CoefficientRules")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("CoefficientArrays", builtin_coefficientarrays);
+    symtab_get_def("CoefficientArrays")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("CoefficientArrays",
+        "CoefficientArrays[polys, vars] gives the coefficient arrays of the "
+        "polynomial system polys in the variables vars, grouped by total degree: "
+        "element d + 1 holds every degree-d coefficient, so {b, m} = "
+        "CoefficientArrays[eqs, vars] is the constant vector and coefficient "
+        "matrix of a linear system. A degree-d coefficient sits at the index "
+        "tuple naming its variables in non-decreasing order, every other "
+        "permutation being 0; a list of polynomials carries the equation index "
+        "as the leading axis. CoefficientArrays[poly, vars] treats a non-List "
+        "first argument as a single polynomial. Option Modulus -> p reduces the "
+        "coefficients. The arrays are dense Lists rather than SparseArrays.");
     symtab_add_builtin("FromCoefficientRules", builtin_fromcoefficientrules);
     symtab_get_def("FromCoefficientRules")->attributes |= ATTR_PROTECTED;
 }

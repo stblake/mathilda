@@ -43,6 +43,8 @@ Expr* builtin_complexq(Expr* res);
 Expr* builtin_exactnumberq(Expr* res);
 Expr* builtin_inexactnumberq(Expr* res);
 Expr* builtin_valueq(Expr* res);
+Expr* builtin_booleanq(Expr* res);
+Expr* builtin_symbolname(Expr* res);
 Expr* builtin_evenq(Expr* res);
 Expr* builtin_oddq(Expr* res);
 Expr* builtin_mod(Expr* res);

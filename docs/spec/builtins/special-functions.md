@@ -1831,3 +1831,85 @@ Out[1]= -3/2 x + (1/2 Log[1 + x] - 1/2 Log[1 - x]) (-1/2 + 3/2 x^2)
 In[2]:= LegendreQ[2, 0.5]
 Out[2]= -0.818663
 ```
+
+## EllipticK, EllipticF, EllipticE and EllipticPi
+
+The Legendre elliptic integrals. **The parameter argument is `m = k²`, not the
+modulus `k`** — the Wolfram Language convention. This is the one place a reader
+of these signatures goes silently wrong, so each is written out as its integral:
+
+- `EllipticK[m]` — ∫₀^(π/2) dt / √(1 − m sin²t), complete, first kind.
+- `EllipticF[φ, m]` — ∫₀^φ dt / √(1 − m sin²t), incomplete, first kind.
+- `EllipticE[m]` — ∫₀^(π/2) √(1 − m sin²t) dt, complete, second kind.
+- `EllipticE[φ, m]` — ∫₀^φ √(1 − m sin²t) dt, incomplete, second kind.
+- `EllipticPi[n, m]` — ∫₀^(π/2) dt / ((1 − n sin²t) √(1 − m sin²t)), complete,
+  third kind.
+- `EllipticPi[n, φ, m]` — the same with upper limit φ, incomplete, third kind.
+
+`EllipticE` and `EllipticPi` are arity-overloaded exactly as in Wolfram: one
+argument is complete for `E`, two arguments are complete for `Π`. There is no
+`EllipticK[φ, m]` — that spelling is `EllipticF`.
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+**Features**:
+- Exact reductions: `EllipticK[0] = π/2`, `EllipticK[1] = ComplexInfinity`,
+  `EllipticE[0] = π/2`, `EllipticE[1] = 1`; `EllipticF[0, m] = 0`,
+  `EllipticF[φ, 0] = φ`, `EllipticF[π/2, m] = EllipticK[m]`;
+  `EllipticE[φ, 1] = Sin[φ]`, `EllipticE[π/2, m] = EllipticE[m]`;
+  `EllipticPi[0, m] = EllipticK[m]`, `EllipticPi[0, φ, m] = EllipticF[φ, m]`,
+  `EllipticPi[n, 0, m] = 0`, `EllipticPi[n, π/2, m] = EllipticPi[n, m]`.
+- Exact non-special arguments stay symbolic (`EllipticF[1/3, 1/2]`); a numeric
+  value follows from an inexact argument or from `N`.
+- **Numeric evaluation** routes through FLINT/Arb's `acb_elliptic_*`, which is
+  rigorous, arbitrary-precision, defined on the whole complex plane, and already
+  uses the parameter convention and branch placement above. That buys the three
+  things a hand-rolled kernel most easily gets wrong:
+  - the **quasi-periodic extension** off the principal strip
+    (`F(φ + kπ | m) = F(φ | m) + 2k K(m)`, and likewise for `E` and `Π`), so φ of
+    any size is handled;
+  - **complex φ**, which `EllipticF[ArcSin[z], m]` produces routinely as soon as
+    `|z| > 1` — the normal case for an elliptic pencil written in `ArcSin` form;
+  - the **Cauchy principal value** for `EllipticPi` with `n > 1`, where the path
+    crosses the pole at `sin²t = 1/n` and the value is genuinely complex.
+- **Machine kernels.** `EllipticK`, `EllipticE` (both arities) and `EllipticF`
+  carry `double` kernels built on Carlson's symmetric forms `R_F` and `R_D`, used
+  by the packed/NDArray element-wise paths. They cover the real principal domain
+  and **decline** outside it (`m > 1`, or `1 − m sin²φ < 0`), which abandons the
+  buffer so the List path answers exactly through Arb — slower, never wrong.
+  `EllipticPi` has no machine kernel: its principal value needs `R_J` with the
+  `p < 0` transformation, and a wrong principal value is a wrong answer, so it is
+  exempt in the packed audits with that reason.
+- **Derivatives.** The φ-derivatives are the integrands, which is what makes a
+  numeric verification of an antiderivative built from these kernels close:
+  `D[EllipticF[φ, m], φ] = 1/√(1 − m sin²φ)`,
+  `D[EllipticE[φ, m], φ] = √(1 − m sin²φ)`,
+  `D[EllipticPi[n, φ, m], φ] = 1/((1 − n sin²φ) √(1 − m sin²φ))`. Also
+  `D[EllipticK[m], m] = (E(m) − (1−m) K(m)) / (2m(1−m))`,
+  `D[EllipticE[m], m] = (E(m) − K(m)) / (2m)` and
+  `D[EllipticE[φ, m], m] = (E(φ,m) − F(φ,m)) / (2m)`.
+  `D[EllipticF[φ, m], m]` and the `n`- and `m`-derivatives of `EllipticPi` are
+  deliberately left as inert `Derivative[…]` forms rather than guessed: each is a
+  four-term expression whose signs are easy to get wrong, and an inert derivative
+  is honest where a wrong formula corrupts every caller silently. `BesselJ` treats
+  its order the same way.
+- Wrong arity emits `EllipticK::argx` / `EllipticF::argrx` (fixed arity) or
+  `EllipticE::argt` / `EllipticPi::argt` (the overloaded pair) and stays
+  unevaluated.
+- Without FLINT (`USE_FLINT` undefined) the numeric path falls back to the
+  machine Carlson kernels for the real domain and otherwise declines, leaving the
+  call symbolic.
+
+```mathematica
+In[1]:= EllipticK[0]
+Out[1]= 1/2 Pi
+
+In[2]:= N[EllipticK[1/2], 25]
+Out[2]= 1.854074677301371918433850
+
+In[3]:= D[EllipticF[phi, m], phi]
+Out[3]= 1/Sqrt[1 - m Sin[phi]^2]
+
+In[4]:= N[EllipticPi[3/2, ArcSin[Sqrt[2] Sqrt[1/(1 + 7/5)]], 1/2], 20]
+Out[4]= 0.98773969972852208021 - 2.7206990463513267759 I
+```

@@ -29,6 +29,7 @@
 #include "sinhintegral.h"
 #include "coshintegral.h"
 #include "fresnel.h"
+#include "elliptic.h"
 #include "sinc.h"
 #include "inverf.h"
 #include "inverfc.h"
@@ -684,6 +685,16 @@ void core_init(void) {
     symtab_add_builtin("ExactNumberQ", builtin_exactnumberq);
     symtab_add_builtin("InexactNumberQ", builtin_inexactnumberq);
     symtab_add_builtin("ValueQ", builtin_valueq);
+    symtab_add_builtin("BooleanQ", builtin_booleanq);
+    symtab_get_def("BooleanQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("BooleanQ",
+        "BooleanQ[expr] gives True if expr is either True or False, and False "
+        "otherwise. Unlike TrueQ it tests the symbol, so BooleanQ[False] is True.");
+    symtab_add_builtin("SymbolName", builtin_symbolname);
+    symtab_get_def("SymbolName")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("SymbolName",
+        "SymbolName[symbol] gives the name of symbol as a string, with any "
+        "context prefix removed.");
     symtab_add_builtin("EvenQ", builtin_evenq);
     symtab_add_builtin("OddQ", builtin_oddq);
     symtab_add_builtin("Mod", builtin_mod);
@@ -773,6 +784,7 @@ void core_init(void) {
     sinhintegral_init();
     coshintegral_init();
     fresnel_init();
+    elliptic_init();
     sinc_init();
     inverf_init();
     inverfc_init();
@@ -2819,6 +2831,38 @@ Expr* builtin_inexactnumberq(Expr* res) {
  * f has any DownValues (regardless of whether the argument actually matches a
  * rule — this mirrors Wolfram's ValueQ). symtab_lookup (not symtab_get_def) is
  * used so that querying an undefined symbol never materializes it. */
+/* BooleanQ[e] -- True exactly for the symbols True and False, which is what
+ * distinguishes a {answer, verified} pair from a status list whose second
+ * element happens to be something else. Note this is a *syntactic* test, not
+ * TrueQ: BooleanQ[False] is True where TrueQ[False] is False. */
+Expr* builtin_booleanq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        return builtin_arg_error("BooleanQ",
+            res->type == EXPR_FUNCTION ? res->data.function.arg_count : 0, 1, 1);
+    }
+    Expr* a = res->data.function.args[0];
+    bool b = a->type == EXPR_SYMBOL &&
+             (a->data.symbol.name == SYM_True || a->data.symbol.name == SYM_False);
+    return expr_new_symbol(b ? SYM_True : SYM_False);
+}
+
+/* SymbolName[sym] -- the symbol's name as a string with any context prefix
+ * stripped, so SymbolName[Global`x] and SymbolName[P`Private`x] are both "x".
+ * Anything but a symbol is left unevaluated (Wolfram emits SymbolName::sym and
+ * returns the call; declining is the same observable for a caller that tests
+ * the head). */
+Expr* builtin_symbolname(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        return builtin_arg_error("SymbolName",
+            res->type == EXPR_FUNCTION ? res->data.function.arg_count : 0, 1, 1);
+    }
+    Expr* a = res->data.function.args[0];
+    if (a->type != EXPR_SYMBOL) return NULL;
+    const char* n = a->data.symbol.name;
+    const char* last = strrchr(n, '`');
+    return expr_new_string(last ? last + 1 : n);
+}
+
 Expr* builtin_valueq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         return builtin_arg_error("ValueQ",
@@ -4185,6 +4229,12 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
      * well-defined and -Wclobbered stays quiet. */
     volatile sig_atomic_t saved_defer  = tc_async_deferred;
     volatile int          saved_msgdep = mth_msg_suppress_depth_save();
+    /* Block's dynamic-scope frames. Unlike the two counters above these cannot
+     * simply be re-assigned: each frame owns the saved rule lists of its
+     * locals, so the jump must DRAIN them, putting every symbol back. A Block
+     * that installs a temporary rewrite hook and is unwound mid-body would
+     * otherwise leave that hook installed permanently. */
+    volatile int          saved_blkdep = mth_block_depth_save();
     if (sigsetjmp(tc_jmp_env, 1) == 0) {
         result = evaluate(body);
     } else {
@@ -4193,6 +4243,7 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
          * expr_compare cannot dereference the abandoned stack memo. */
         sort_abort_reset();
     }
+    mth_block_depth_unwind(saved_blkdep);
     tc_async_deferred = saved_defer;
     mth_msg_suppress_depth_load(saved_msgdep);
     return result;
