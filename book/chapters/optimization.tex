@@ -1,0 +1,1391 @@
+\chapter{Numerical Optimization}
+\label{ch:optimization}
+
+Section~\ref{ssec:optimization} gave a short tour of optimization in Mathilda.
+It minimized Rosenbrock's function, solved one constrained problem, and let
+differential evolution find the bottom of Rastrigin's egg carton. This chapter
+goes further. It is about the algorithms behind the four optimizers
+\B{FindMinimum}, \B{FindMaximum}, \B{NMinimize}, and \B{NMaximize}: what each
+one computes, why it works, when it fails, and how to tell the difference at
+the prompt.
+
+Optimization asks for the smallest (or largest) value of a function, and for the
+point where it occurs. That single question covers a surprising amount of
+applied mathematics. Fitting a model to data is the minimization of a sum of
+squares. The shape of a hanging chain minimizes potential energy. A light ray
+takes the path of least time. A factory schedule maximizes profit subject to
+limited machine hours. A portfolio minimizes risk for a required return. The
+last section of the chapter solves each of these as a short worked example,
+with a picture of the answer.
+
+Three themes run through the chapter. The first is the mathematics. Every
+method is introduced with the idea that makes it work. Brent's method rests on
+the golden ratio, BFGS on the secant condition, differential evolution on its
+mutation rule, and the penalty method on hidden Lagrange multipliers. The second is
+honesty about what a numerical optimizer can promise. A local method finds a
+local minimum. A global method searches harder but proves nothing. A
+constrained answer must satisfy its constraints, and Mathilda refuses to return
+one that does not. The third is speed. The optimizers compile the objective to
+bytecode before they search, and the benchmarks at the end of the chapter show
+what that buys against SciPy and Mathematica, and where it does not help.
+
+\section{Local and global}
+\label{sec:opt-local-global}
+
+A \emph{local minimum}\index{local minimum} of \(f\) is a point \(x^*\) with
+\(f(x^*) \le f(x)\) for every \(x\) in some neighbourhood of \(x^*\). A
+\emph{global minimum}\index{global minimum} satisfies the inequality for every
+\(x\) in the whole domain. A function can have many local minima and still
+have only one global minimum. The function \(x\cos x\) on \([0, 16]\) is a
+good first example. It oscillates with growing amplitude, so each valley is
+deeper than the one before.
+
+\plotcell{optimization/landscape}
+
+The red points are the three answers \B{FindMinimum} gives from the starting
+points \(2\), \(7\), and \(14\). Each one is correct. Each is the bottom of the
+valley that contains its starting point. None of them knows about the others.
+This is the defining property of a \emph{local} method. It follows the slope
+downhill from where you put it, and it stops at the first point where the slope
+vanishes.
+
+The global optimizers take a region instead of a starting point.
+\B{NMinimize} searches the whole interval and reports the deepest valley it
+finds:
+
+\begin{codepairs}
+\pair{optimization/forms/1}{From \(x = 2\), \B{FindMinimum} finds the first
+valley.}
+\pair{optimization/forms/2}{From \(x = 7\) it goes downhill to the right and
+finds the second.}
+\pair{optimization/forms/3}{\B{NMinimize} searches all of \([0,16]\). Its
+answer is the deepest of the three valleys in the figure.}
+\pair{optimization/forms/4}{\B{FindMaximum} climbs uphill. From \(x=5\) it
+reaches the nearest peak.}
+\pair{optimization/forms/5}{\B{NMaximize} finds the highest peak in the
+interval.}
+\pair{optimization/forms/6}{Every optimizer returns a list of two things. The
+first is the optimal value and the second is a list of rules for the optimal
+point.}
+\pair{optimization/forms/7}{The rules plug straight into \mcode{ReplaceAll}\ldots}
+\pair{optimization/forms/8}{\ldots so it is easy to check the answer by
+substituting it back into the objective.}
+\end{codepairs}
+
+The two families use the same syntax as far as possible. The first argument is
+the objective, or a list \mcode{\{f, cons\}} of an objective and its
+constraints. The second argument names the variables. \B{FindMinimum} pairs
+each variable with a starting value, as in \mcode{\{x, 2\}}. \B{NMinimize}
+takes the bare variables and searches a region. Both return
+\mcode{\{fmin, \{x -> xmin, \ldots\}\}}.
+
+\calloutnote{Theory}{There is no general algorithm that finds the global
+minimum of an arbitrary continuous function using finitely many function
+values. Between any two samples the function could dip arbitrarily low, and no
+finite set of samples can rule that out. A global method therefore needs extra
+knowledge, such as a Lipschitz bound, or it must accept a probabilistic
+answer. The methods in \B{NMinimize} take the second route, except DIRECT,
+which uses the Lipschitz idea without knowing the constant.}
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+& local (needs a start) & global (needs a region) \\
+\midrule
+minimize & \mcode{FindMinimum} & \mcode{NMinimize} \\
+maximize & \mcode{FindMaximum} & \mcode{NMaximize} \\
+default method & Brent (1 variable), BFGS (several) & differential evolution \\
+constraints & boxes, smooth inequalities and equalities & also \mcode{Or} and integers \\
+answer & a local optimum & the best optimum found \\
+\bottomrule
+\end{tabular}
+\caption{The four optimizers.}
+\label{tab:opt-four}
+\end{table}
+
+The maximizers are thin wrappers. \B{FindMaximum}\mcode{[f, ...]} calls
+\B{FindMinimum}\mcode{[-f, ...]} and negates the value it gets back, and
+\B{NMaximize} does the same with \B{NMinimize}. Everything this chapter says
+about minimization therefore applies to maximization with the sign reversed.
+
+\section{Minimizing in one variable}
+\label{sec:opt-brent}
+
+With one variable and no derivative, the natural idea is to shrink an interval
+that is known to contain a minimum. Suppose \(a < b < c\) and \(f(b)\) is
+smaller than both \(f(a)\) and \(f(c)\). A continuous \(f\) must have a local
+minimum in \((a, c)\). Such a triple is a \emph{bracket}\index{bracket (minimization)}.
+Evaluate \(f\) at a new point \(u\) inside the larger of the two subintervals.
+Whichever of \(b\) and \(u\) has the smaller value becomes the middle of a new,
+smaller bracket.
+
+The best place for \(u\) is not the midpoint. If the new point divides the
+larger subinterval in the ratio
+\[
+  \frac{3 - \sqrt5}{2} \approx 0.382,
+\]
+then the new bracket has the same proportions as the old one, and every step
+shrinks the interval by the same factor \(1/\varphi \approx 0.618\), where
+\(\varphi\) is the golden ratio. This is \emph{golden-section
+search}\index{golden-section search}. It is slow but it never fails, because it
+needs only comparisons of function values.
+
+Near a smooth minimum a function looks like a parabola, and a parabola through
+three points can be minimized exactly. \emph{Brent's
+method}\index{Brent's method} combines the two ideas. It fits a parabola through
+the three best points and jumps to its vertex. When that jump is unsafe, because
+it lands outside the bracket or the steps stop shrinking fast enough, Brent's
+method takes a golden-section step instead. The result converges superlinearly
+on smooth functions and never does worse than golden section on rough ones.
+It is the default method for \B{FindMinimum} in one variable.
+
+\begin{codepairs}
+\pair{optimization/brent/1}{The quartic \(x^4 - 3x^2 + x\) has two minima.
+From \(x = 1\), Brent finds the shallow one.}
+\pair{optimization/brent/2}{From \(x=-1\) it finds the deeper one.}
+\pair{optimization/brent/3}{The form \mcode{\{x, x0, xmin, xmax\}} gives
+the search interval explicitly.}
+\pair{optimization/brent/4}{Brent needs no derivative, so a kink is no obstacle.
+The minimum of \(|x - 1/3|\) is found to the default tolerance.}
+\pair{optimization/brent/5}{Twelve evaluations of the objective are enough for
+a smooth minimum. \mcode{EvaluationMonitor} counts them.}
+\end{codepairs}
+
+When \B{FindMinimum} is given a single starting value, it first builds a
+bracket by stepping downhill with growing steps until the function turns up
+again. That search is the reason a starting point matters. The bracket is built
+around the first valley the steps reach.
+
+\calloutnote{Under the hood}{The one-dimensional path is \mcode{fm\_bracket}
+followed by \mcode{fm\_brent\_min} in
+\texttt{src/numerical\_calculus/findmin\_common.c}. Both have MPFR twins
+(\mcode{fm\_bracket\_mpfr} and \mcode{fm\_brent\_min\_mpfr}) with the same
+acceptance test and the same golden-section fallback, so
+\mcode{WorkingPrecision} runs the identical algorithm in higher precision.}
+
+\subsection{How many digits can a minimum have?}
+
+The minimum of the Gamma function on the positive axis is a classical
+constant. \B{FindMinimum} finds it at machine precision and, with
+\mcode{WorkingPrecision}, in 40-digit arithmetic. The minimum is also a root of
+the derivative \(\psi(x) = \Gamma'(x)/\Gamma(x)\), so \B{FindRoot} applied to
+\B{PolyGamma} gives an independent check:
+
+\begin{codepairs}
+\pair{optimization/precision/1}{The minimum of \(\Gamma\) at machine
+precision.}
+\pair{optimization/precision/2}{The same minimum in 40-digit arithmetic. The
+value is printed to 40 digits.}
+\pair{optimization/precision/3}{The root of \(\psi\), computed by
+\B{FindRoot}.}
+\end{codepairs}
+
+Compare the two locations digit by digit. They agree for the first 21
+significant digits and then part company, even though both computations
+carried 40 digits. The minimizer is not wrong. It has reached the limit that
+every minimizer faces.
+
+\begin{theorem}[Accuracy of a minimizer]
+\index{minimizer!attainable accuracy}
+Let \(f\) be twice differentiable with \(f'(x^*) = 0\) and \(f''(x^*) > 0\).
+If \(f\) can be evaluated only to relative precision \(\varepsilon\), then
+\(x^*\) can be located only to relative precision about
+\(\sqrt{\varepsilon}\).
+\end{theorem}
+
+The reason is Taylor's theorem. Near the minimum,
+\(f(x^* + h) \approx f(x^*) + \tfrac12 f''(x^*)\,h^2\). A displacement \(h\)
+changes \(f\) by an amount proportional to \(h^2\). Once \(h^2\) falls below the
+rounding level \(\varepsilon\,|f(x^*)|\), the function values at \(x^*\) and at
+\(x^* + h\) are indistinguishable, and no method can tell which is lower. With
+40 digits, \(\sqrt{\varepsilon}\) is about \(10^{-20}\), which is exactly the
+agreement in the session. A root has no such limit, because \(\psi(x^* + h)\)
+changes linearly in \(h\). This is why \B{FindRoot} on the derivative is the
+better tool when a minimizer must be known to full precision. It is also why
+the default \B{PrecisionGoal} of \B{FindMinimum} is half the working precision.
+
+\calloutnote{Pitfall}{The value \(f(x^*)\) is accurate to nearly the full working
+precision even when \(x^*\) is not, for the same reason. An error \(h\) in the
+location costs only \(h^2\) in the value. A reported minimum value is usually
+far more trustworthy than the reported location.}
+
+\section{Descent in several variables}
+\label{sec:opt-descent}
+
+In several variables there is no bracket, and a method needs a direction as well
+as a step. The gradient \(\nabla f\) points uphill, so \(-\nabla f\) is the
+direction of steepest descent. \emph{Steepest descent} moves along it. It is a
+poor method on anything but a round bowl. In a long narrow valley the gradient
+points almost across the valley, and the iterates zigzag from wall to wall.
+
+Newton's method uses curvature as well. Approximate \(f\) near the current
+point \(x_k\) by its second-order Taylor model
+\[
+  m_k(p) = f(x_k) + \nabla f(x_k)^{\mathsf T} p + \tfrac12\, p^{\mathsf T} H_k\, p ,
+\]
+where \(H_k\) is the Hessian matrix of second derivatives. If \(H_k\) is
+positive definite, the model has a unique minimum where its gradient vanishes,
+at the \emph{Newton step}
+\[
+  p_k = -H_k^{-1} \nabla f(x_k).
+\]
+Near a minimum with a positive definite Hessian, Newton's method converges
+quadratically. The number of correct digits roughly doubles at every step. Far
+from the minimum \(H_k\) may be indefinite, and the Newton step may point
+uphill.
+
+\subsection{Line search}
+
+Both steepest descent and Newton give a direction \(d_k\). A \emph{line
+search}\index{line search} then chooses how far to go. Mathilda uses
+backtracking with the \emph{Armijo condition}\index{Armijo condition}. Try a
+step \(\alpha\), and accept it if
+\[
+  f(x_k + \alpha d_k) \le f(x_k) + c_1\, \alpha\, \nabla f(x_k)^{\mathsf T} d_k ,
+  \qquad c_1 = 10^{-4}.
+\]
+Otherwise halve \(\alpha\) and try again. Because \(d_k\) is a descent
+direction, the right-hand side decreases with \(\alpha\) at a rate proportional
+to the slope, and a small enough step always satisfies the condition. The
+condition asks for a decrease that is at least a small fraction of what the
+linear model predicts. It rules out steps that reduce \(f\) by a negligible
+amount.
+
+\subsection{Quasi-Newton methods and BFGS}
+
+Newton's method needs the Hessian, which costs \(n^2\) second derivatives and a
+linear solve per step. A \emph{quasi-Newton method}\index{quasi-Newton method}
+builds an approximation to the inverse Hessian from the gradients it has
+already computed. After a step \(s_k = x_{k+1} - x_k\), the gradient changes by
+\(y_k = \nabla f(x_{k+1}) - \nabla f(x_k)\). For a quadratic function,
+\(y_k = H s_k\) exactly. So the new approximation \(B_{k+1}\) to the inverse
+Hessian is required to satisfy the \emph{secant equation}
+\[
+  B_{k+1}\, y_k = s_k .
+\]
+Many matrices satisfy it. The \emph{BFGS update}\index{BFGS method} (Broyden,
+Fletcher, Goldfarb, and Shanno, 1970) chooses the one closest to \(B_k\) in a
+weighted norm, and keeps it symmetric and positive definite. With
+\(\rho_k = 1/(y_k^{\mathsf T} s_k)\) it reads
+\[
+  B_{k+1} = B_k
+    + \rho_k^2\,(s_k^{\mathsf T} y_k + y_k^{\mathsf T} B_k y_k)\, s_k s_k^{\mathsf T}
+    - \rho_k\,\bigl(B_k y_k\, s_k^{\mathsf T} + s_k\, y_k^{\mathsf T} B_k\bigr).
+\]
+The search direction is \(d_k = -B_k \nabla f(x_k)\). The iteration starts with
+\(B_0 = I\), so the first step is steepest descent, and the matrix learns the
+curvature as the iterates move. BFGS converges superlinearly and needs only
+gradients. It is the default method of \B{FindMinimum} in more than one
+variable.
+
+\calloutnote{Under the hood}{\mcode{fm\_run\_bfgs} in
+\texttt{src/numerical\_calculus/findmin\_bfgs.c} applies exactly the update
+above to a dense \(n \times n\) matrix. Two safeguards keep it well defined.
+The update is skipped when \(y_k^{\mathsf T} s_k \le 10^{-12}\), because the
+curvature condition \(y^{\mathsf T} s > 0\) is what keeps \(B_k\) positive
+definite. If the direction \(-B_k\nabla f\) is ever not a descent direction,
+\(B_k\) is reset to the identity. The iteration stops when
+\(\|\nabla f\| < 10^{-\text{AccuracyGoal}}\) or when the step is smaller than
+\(10^{-\text{PrecisionGoal}}\) relative to \(|x|\).}
+
+Rosenbrock's function
+\[
+  f(x, y) = (1 - x)^2 + 100\,(y - x^2)^2
+\]
+is the standard test for these methods. Its minimum at \((1,1)\) lies at the
+bottom of a long, curved, nearly flat valley. The usual starting point is
+\((-1.2, 1)\), on the far side of the valley:
+
+\begin{codepairs}
+\pair{optimization/bfgs/1}{Name the objective once for the session.}
+\pair{optimization/bfgs/2}{BFGS reaches \((1,1)\). The value
+\(7\times10^{-21}\) is zero to machine precision.}
+\pair{optimization/bfgs/3}{The gradient that BFGS uses is computed
+symbolically by \B{D}, once, before the search starts.}
+\pair{optimization/bfgs/4}{\mcode{StepMonitor} runs after every accepted step.
+BFGS took 39 steps.}
+\pair{optimization/bfgs/5}{\mcode{EvaluationMonitor} runs at every evaluation of
+the objective or its gradient, including rejected line-search trials.}
+\pair{optimization/bfgs/6}{\mcode{MaxIterations} stops the search early. After ten
+steps the iterate is still on the far side of the valley.}
+\pair{optimization/bfgs/7}{\mcode{Gradient} supplies the gradient explicitly. The
+answer is the same.}
+\pair{optimization/bfgs/8}{With bare variables, every starting value is \(1\).
+Starting at the origin would put this objective on a saddle point, where the
+gradient vanishes.}
+\end{codepairs}
+
+A monitor can also collect the iterates. Wrapping the call in \B{Reap} and
+sowing \mcode{\{x, y\}} at each step records the whole path, which can then be
+drawn over the level curves of the function:
+
+\plotcell{optimization/rosenbrock-path}
+
+The path shows how BFGS behaves. The first steps cross the valley floor
+roughly, because \(B_0 = I\) knows nothing about the curvature. After a few
+steps the matrix has learned the shape of the valley, and the iterates follow
+the curved floor round to \((1, 1)\).
+
+\calloutnote{Performance}{At machine precision \B{FindMinimum} compiles the
+objective and each component of its symbolic gradient to bytecode
+(\S\ref{sec:compile-auto}) and evaluates them on the register machine at every
+trial point. The reference documentation records typical gains of about
+\(3\times\) on a one-dimensional transcendental objective and \(4\times\) on
+two-dimensional Rosenbrock. Setting \mcode{EvaluationMonitor} turns this off,
+because the monitor has to run in the interpreter.}
+
+\section{The local methods}
+\label{sec:opt-local-methods}
+
+BFGS is a good default, but no single method is best for every problem. The
+\mcode{Method} option of \B{FindMinimum} selects from sixteen local methods.
+Table~\ref{tab:opt-local} groups them by the information they use.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\mcode{Method} & uses & constraints & idea \\
+\midrule
+\mcode{"Brent"} & values & interval & golden section + parabolas (1 variable) \\
+\mcode{"QuasiNewton"} & gradient & all smooth & dense BFGS \\
+\mcode{"ConjugateGradient"} & gradient & all smooth & Polak--Ribi\`ere+ with restarts \\
+\mcode{"LBFGSB"} & gradient & all smooth & BFGS from the last 10 steps \\
+\mcode{"TNC"} & gradient & all smooth & truncated Newton, Hessian-free \\
+\mcode{"Newton"} & Hessian & all smooth & Newton with modified Cholesky \\
+\mcode{"NewtonCG"} & gradient & none & Newton step by conjugate gradients \\
+\mcode{"Dogleg"} & Hessian & none & trust region, dogleg path \\
+\mcode{"TrustNCG"} & gradient & none & trust region, Steihaug CG \\
+\mcode{"TrustExact"} & Hessian & none & trust region, Mor\'e--Sorensen \\
+\mcode{"TrustKrylov"} & gradient & none & trust region, Lanczos (GLTR) \\
+\mcode{"Powell"} & values & boxes & conjugate directions \\
+\mcode{"NelderMead"} & values & boxes & downhill simplex \\
+\mcode{"SLSQP"} & gradient & all smooth & sequential quadratic programming \\
+\mcode{"COBYLA"} & values & all & linear models in a trust region \\
+\mcode{"COBYQA"} & values & all & quadratic models in a trust region \\
+\bottomrule
+\end{tabular}
+\caption{The local methods of \mcode{FindMinimum}. ``All smooth'' means box
+constraints plus smooth inequalities and equalities.}
+\label{tab:opt-local}
+\end{table}
+
+\subsection{Newton, conjugate gradients, and limited memory}
+
+\mcode{"Newton"} forms the exact Hessian by differentiating the symbolic
+gradient. To survive an indefinite Hessian it factors \(H + \tau I\) by
+Cholesky, increasing \(\tau\) until the factorization succeeds. The shifted
+matrix is positive definite, so the step is always a descent direction, and
+near a minimum \(\tau = 0\) works and full quadratic convergence returns.
+
+\mcode{"ConjugateGradient"} needs no matrix at all. Each direction is the
+negative gradient plus a multiple of the previous direction,
+\(d_{k+1} = -g_{k+1} + \beta_k d_k\), with the Polak--Ribi\`ere+ choice
+\(\beta_k = \max\bigl(0,\, g_{k+1}^{\mathsf T}(g_{k+1} - g_k)/\|g_k\|^2\bigr)\).
+On a quadratic with exact line searches the directions are mutually conjugate
+with respect to the Hessian, and the method terminates in at most \(n\) steps.
+
+\mcode{"LBFGSB"} is the limited-memory form of BFGS. It never stores the
+\(n\times n\) matrix. It keeps the ten most recent pairs \((s_i, y_i)\) and
+computes \(B_k \nabla f\) directly by the two-loop recursion of Nocedal, in
+\(O(10\,n)\) operations. The memory and the cost per step grow linearly with
+\(n\), which is what makes quasi-Newton methods practical for thousands of
+variables. \mcode{"TNC"} and \mcode{"NewtonCG"} take the same idea further.
+They solve the Newton system \(H p = -g\) approximately by conjugate
+gradients, and they touch \(H\) only through products \(Hv\), each estimated
+from two gradients by the finite difference
+\(Hv \approx (\nabla f(x + hv) - \nabla f(x))/h\).
+
+\subsection{Trust regions}
+
+A line search picks a direction first and a length second. A \emph{trust-region
+method}\index{trust-region method} does the opposite. It fixes a radius
+\(\Delta\) within which the quadratic model \(m_k\) is trusted, and chooses the
+step by minimizing the model inside the ball:
+\[
+  \min_{\|p\| \le \Delta}\; \nabla f(x_k)^{\mathsf T} p + \tfrac12\, p^{\mathsf T} H_k\, p .
+\]
+The step is then judged by the ratio
+\[
+  \rho = \frac{f(x_k) - f(x_k + p)}{m_k(0) - m_k(p)}
+\]
+of the actual to the predicted decrease. If \(\rho > 0.15\) the step is
+accepted. If \(\rho < 1/4\) the model was poor and \(\Delta\) shrinks by a
+factor of four. If \(\rho > 3/4\) and the step reached the boundary,
+\(\Delta\) doubles. These are SciPy's constants, and Mathilda uses them
+unchanged. The four trust-region methods differ only in how they solve the
+subproblem. \mcode{"Dogleg"} follows a two-segment path from the Cauchy point
+to the Newton point. \mcode{"TrustNCG"} runs conjugate gradients and stops at
+the boundary. \mcode{"TrustExact"} solves the subproblem almost exactly by the
+Mor\'e--Sorensen iteration, which handles an indefinite Hessian.
+\mcode{"TrustKrylov"} projects the problem onto a Krylov subspace by the
+Lanczos process and solves the small tridiagonal problem exactly.
+
+\subsection{Methods without derivatives}
+
+Some objectives have no usable derivative. They may be noisy, piecewise, or
+the output of a simulation. \mcode{"Powell"} minimizes along each of \(n\)
+directions in turn with Brent's method, then replaces one direction by the net
+displacement of the cycle. On a quadratic this builds up a set of conjugate
+directions using function values alone.
+
+\mcode{"NelderMead"} keeps a \emph{simplex}\index{Nelder--Mead simplex} of
+\(n + 1\) points. Each step replaces the worst vertex \(x_h\). It first
+reflects \(x_h\) through the centroid \(\bar x\) of the others, to
+\(x_r = \bar x + (\bar x - x_h)\). If the reflected point is the best so far,
+the simplex tries to expand further, to \(\bar x + 2(\bar x - x_h)\). If it is
+still the worst, the simplex contracts halfway toward \(\bar x\), and if even
+that fails, every vertex shrinks halfway toward the best one. The simplex
+tumbles downhill, stretches along valleys, and contracts around a minimum. The
+coefficients \(1, 2, \tfrac12, \tfrac12\) are the standard ones.
+
+\begin{codepairs}
+\pair{optimization/methods/1}{Rosenbrock's function again.}
+\pair{optimization/methods/2}{Newton with the exact Hessian. It needed 20 steps
+where BFGS needed 39.}
+\pair{optimization/methods/3}{Limited-memory BFGS.}
+\pair{optimization/methods/4}{A trust region with a near-exact subproblem
+solve.}
+\pair{optimization/methods/5}{The Nelder--Mead simplex uses no derivatives
+at all, and it still reaches the minimum.}
+\end{codepairs}
+
+The iterates of four of these methods can be recorded with \mcode{StepMonitor},
+exactly as before. The next figure plots \(\log_{10} f\) along each path. The
+curves are, in order of their length, Newton (20 steps, orange), TrustExact
+(29, red), LBFGSB (35, green), and QuasiNewton (39, blue).
+
+\plotcell{optimization/convergence}
+
+All four curves have the same shape. There is a long flat stretch while the
+iterate travels along the valley, then a steep plunge once the method is close
+enough for its model to be accurate. The plunge is the superlinear or
+quadratic convergence of the theory. Most of the cost of a local method is in
+the flat stretch, which is why a good starting point matters more than the
+choice among good methods.
+
+\subsection{Four minima, four starting points}
+
+Himmelblau's function
+\[
+  h(x, y) = (x^2 + y - 11)^2 + (x + y^2 - 7)^2
+\]
+has four minima, each with value \(0\), and one local maximum. It shows the
+local character of \B{FindMinimum} in two dimensions:
+
+\begin{codepairs}
+\pair{optimization/methods/6}{Name Himmelblau's function.}
+\pair{optimization/methods/7}{From \((1,1)\) the answer is the integer minimum
+\((3,2)\).}
+\pair{optimization/methods/8}{From \((-1,1)\) the minimum in the second
+quadrant.}
+\pair{optimization/methods/9}{From \((-1,-1)\) the third.}
+\pair{optimization/methods/10}{From \((1,-1)\) the fourth.}
+\pair{optimization/methods/11}{\B{FindMaximum} from the origin finds the local
+maximum, \(h \approx 181.617\).}
+\end{codepairs}
+
+\plotcell{optimization/himmelblau}
+
+\subsection{A non-smooth objective}
+
+The function \(g = |x - 1| + |y + 2| + |x - y|\) has corners along three lines.
+Its minimum value is \(3\), attained on the whole segment \(x = y\),
+\(-2 \le x \le 1\). The gradient methods still work here because the objective
+is smooth almost everywhere, and the finite-difference fallback steps across
+the kinks. Nelder--Mead makes no smoothness assumption at all:
+
+\begin{codepairs}
+\pair{optimization/nonsmooth/1}{A sum of absolute values.}
+\pair{optimization/nonsmooth/2}{The default method lands on the segment of
+minima, at \(x = y \approx 0.88\).}
+\pair{optimization/nonsmooth/3}{Nelder--Mead lands at a different point with
+the same value, because the minimizer is not unique.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{A non-unique minimizer is common in practice, and
+different methods (or different starting points) return different points with
+the same minimum value. When you compare two answers to such a problem, compare
+the values.}
+
+\section{Constraints in a local search}
+\label{sec:opt-local-constraints}
+
+A constrained problem has the form
+\[
+  \min_x f(x) \quad \text{subject to} \quad g_i(x) \le 0,\; h_j(x) = 0 .
+\]
+\B{FindMinimum} accepts the constraints as the second element of
+\mcode{\{f, cons\}}, written as ordinary comparisons joined by \mcode{\&\&}.
+It sorts them into two kinds.
+
+A comparison between one variable and a constant, such as \mcode{0 <= x <= 1},
+is a \emph{box constraint}\index{box constraint}. Box constraints are enforced
+exactly by \emph{projection}. After every trial step, each coordinate is clipped
+back into its interval. The iterate never leaves the box.
+
+Every other inequality or equality is a \emph{general constraint}, and the
+default treatment is an \emph{augmented Lagrangian}\index{augmented Lagrangian}
+method. The idea starts from the simpler \emph{quadratic
+penalty}\index{penalty method}. Replace the constrained problem by the
+unconstrained one
+\[
+  \min_x\; f(x) + \mu \Bigl( \sum_i \max(0, g_i(x))^2 + \sum_j h_j(x)^2 \Bigr),
+\]
+which charges a price for every violation. As \(\mu \to \infty\), the minimizer
+of the penalized function approaches the constrained minimizer. The figure shows
+this for the problem of minimizing \(x^2\) subject to \(x \ge 1\). The
+penalized minimizer is \(\mu/(1 + \mu)\), which is \(0.5\), \(0.91\), and
+\(0.99\) for \(\mu = 1, 10, 100\) (the blue, orange, and green curves).
+
+\plotcell{optimization/penalty}
+
+The figure also shows the weakness of the pure penalty. The minimizer
+approaches the constraint only as \(\mu \to \infty\), and for large \(\mu\) the
+penalized function has a steep wall that makes the unconstrained problem
+badly conditioned. The augmented Lagrangian fixes this with Lagrange
+multipliers. For each constraint \(c_k\) it keeps an estimate \(\lambda_k\) of
+the multiplier and minimizes
+\[
+  f(x) + \sum_k \bigl(\lambda_k\, c_k(x) + \mu\, c_k(x)^2\bigr),
+\]
+where inactive inequalities are shifted out in the standard way. After each
+inner minimization the multipliers are updated by the PHR rule (Powell,
+Hestenes, and Rockafellar),
+\[
+  \lambda_k \leftarrow \lambda_k + 2\mu\, c_k(x)
+  \qquad (\text{and } \lambda_k \leftarrow \max(0, \cdot) \text{ for an inequality}).
+\]
+The multiplier term shifts the minimizer onto the constraint at a finite
+\(\mu\), so the method does not need the ill-conditioned limit. At the
+solution, \(\lambda_k\) converges to the true Lagrange multiplier of the
+Karush--Kuhn--Tucker conditions.
+
+\calloutnote{Under the hood}{\mcode{fm\_run\_penalty} in
+\texttt{src/numerical\_calculus/findmin\_penalty.c} starts with \(\mu = 1\)
+and all \(\lambda_k = 0\), so its first round is exactly the quadratic penalty.
+Each round runs the chosen inner solver (BFGS by default), updates the
+multipliers, and multiplies \(\mu\) by ten, for at most nine rounds. It stops
+when the iterate is feasible and has stopped moving between rounds. It also
+remembers the best feasible iterate of the whole schedule. If a late,
+ill-conditioned round drifts out of the feasible set, that earlier point is
+returned instead.}
+
+\begin{codepairs}
+\pair{optimization/local-constraints/1}{Box constraints only. The unconstrained
+minimum \((3,3)\) is outside the box, so the answer is the nearest corner.}
+\pair{optimization/local-constraints/2}{The closest point of the unit disk to
+\((2,1)\) is \((2,1)/\sqrt5\).}
+\pair{optimization/local-constraints/3}{A linear program. The minimum of
+\(x+y\) on this region is the corner \((7/3, 0)\).}
+\pair{optimization/local-constraints/4}{SLSQP reaches the same corner with
+\(y\) exactly \(0\).}
+\pair{optimization/local-constraints/5}{An equality constraint: the minimum of
+\(xy\) on the unit circle is \(-1/2\).}
+\pair{optimization/local-constraints/6}{\B{FindMaximum} with a linear
+constraint.}
+\pair{optimization/local-constraints/7}{Problem~71 of Hock and Schittkowski,
+with one inequality, one equality, and bounds. Its published optimum is
+\(17.014\).}
+\pair{optimization/local-constraints/8}{COBYQA solves the disk problem using
+function values only.}
+\end{codepairs}
+
+\plotcell{optimization/disk}
+
+The disk problem shows the geometry of a constrained minimum. The level curves
+of the objective are circles around \((2,1)\). The solution is the point where
+the smallest level curve that meets the feasible set touches it, and there the
+gradient of the objective is parallel to the gradient of the constraint. That
+parallel condition,
+\(\nabla f(x^*) + \lambda\, \nabla g(x^*) = 0\) with \(\lambda \ge 0\), is the
+Karush--Kuhn--Tucker condition for a single active inequality.
+
+\subsection{Sequential quadratic programming}
+
+The penalty approach treats constraints indirectly. \mcode{"SLSQP"} treats
+them directly. At each iterate it replaces \(f\) by a quadratic model, whose
+Hessian is a BFGS approximation to the Hessian of the Lagrangian, and
+replaces each constraint by its linearization. The resulting \emph{quadratic
+program}\index{quadratic programming} is solved exactly by the dual
+active-set method of Goldfarb and Idnani, and the step is accepted by a line
+search on an \(\ell_1\) penalty merit function. Near a solution SQP behaves
+like Newton's method applied to the KKT conditions, and it converges
+superlinearly. It is the method to reach for when a smooth constrained problem
+has to be solved accurately, as with the HS71 problem above.
+
+\mcode{"COBYLA"} and \mcode{"COBYQA"} are the derivative-free counterparts.
+They build linear (COBYLA) or quadratic (COBYQA) models of the objective and
+of every constraint by sampling points around the current iterate, and solve a
+trust-region subproblem on the models. COBYLA's linear models are cheap and
+robust to kinks, but they cannot follow a strongly curved valley. COBYQA's
+quadratic models can.
+
+\calloutnote{Pitfall}{Neither \mcode{"Powell"}, \mcode{"NelderMead"}, nor the
+five trust-region methods accept general constraints. They reject such a
+problem with the message \mcode{FindMinimum::nimpl}. Use the default method,
+\mcode{"SLSQP"}, or one of the COBY methods instead.}
+
+\section{Global search with NMinimize}
+\label{sec:opt-global}
+
+Rastrigin's function
+\[
+  r(x, y) = 20 + x^2 - 10\cos 2\pi x + y^2 - 10\cos 2\pi y
+\]
+is a paraboloid with a cosine ripple added. Every integer lattice point is near
+a local minimum, and only the origin is global.
+
+\plotcell[0.55\linewidth]{optimization/rastrigin}
+
+A local method started almost anywhere on this surface stops in the nearest
+dimple. \B{NMinimize} does not need a starting point:
+
+\begin{codepairs}
+\pair{optimization/nminimize/1}{Rastrigin's function in two variables.}
+\pair{optimization/nminimize/2}{\B{FindMinimum} from \((2.3, -1.6)\) stops in
+the dimple at \((1, -2)\), with value about \(5\).}
+\pair{optimization/nminimize/3}{\B{NMinimize} finds the global minimum \(0\) at
+the origin.}
+\pair{optimization/nminimize/4}{Box constraints set the search region
+explicitly.}
+\pair{optimization/nminimize/5}{\B{SeedRandom} does not affect \B{NMinimize}.
+This is the raw search result with no local polish\ldots}
+\pair{optimization/nminimize/6}{\ldots and a different \B{SeedRandom} gives the
+identical answer.}
+\pair{optimization/nminimize/7}{The method option \mcode{"RandomSeed"}
+changes the search, and the raw answer moves.}
+\end{codepairs}
+
+Two design decisions show in this session. First, the search is deterministic.
+The stochastic engines draw from their own generator (SplitMix64) with a fixed
+default seed, so the same call always gives the same answer, and a test that
+checks it is stable. \B{SeedRandom}, which seeds \B{RandomReal} and the rest of
+the system's random functions, has no effect on it. To vary the search, pass
+\mcode{"RandomSeed" -> s} inside the \mcode{Method} option.
+
+Second, the search needs a region. If a variable has a box constraint, the box
+is the region. If it has none, \B{NMinimize} searches \([-10, 10]\) in that
+coordinate. A variable with only one bound gets a span of \(20\) on the open
+side. This default is why the first call above found the origin without being
+told where to look.
+
+\calloutnote{Pitfall}{A global optimizer with a bounded search region cannot
+see a minimum outside it. If the true minimum of your problem might be far
+from the origin, give the variables bounds. The one automatic exception,
+described in \S\ref{sec:opt-global-constraints}, is a constrained problem
+whose feasible set lies entirely outside the default region.}
+
+\subsection{Differential evolution}
+
+The default engine is \emph{differential evolution}\index{differential
+evolution} (Storn and Price~\cite{stornprice}), in the variant called
+DE/rand/1/bin. It maintains a population of \(N\) points
+\(x_1, \dots, x_N\). In each generation every member \(x_i\) gets a challenger,
+built in three steps.
+\begin{enumerate}
+\item \emph{Mutation.} Pick three other members \(x_{r_1}, x_{r_2}, x_{r_3}\) at
+random and form the mutant
+\[
+  v = x_{r_1} + F\,(x_{r_2} - x_{r_3}), \qquad F = 0.6 .
+\]
+\item \emph{Crossover.} Build the trial point \(u\) coordinate by coordinate.
+Take \(u_j = v_j\) with probability \(CR = 0.9\), and \(u_j = (x_i)_j\)
+otherwise. One randomly chosen coordinate always comes from \(v\), so \(u\)
+differs from \(x_i\).
+\item \emph{Selection.} If \(u\) is better than \(x_i\), it replaces \(x_i\) in
+the population.
+\end{enumerate}
+
+The mutation step is the clever part. The difference \(x_{r_2} - x_{r_3}\) of
+two random members has the same distribution as the spread of the population.
+Early on, when the population fills the search region, the steps are large and
+the search is global. As the population gathers in the best basin, the
+differences shrink and the search becomes local. The method adapts its own step
+size with no tuning.
+
+\calloutnote{Under the hood}{\mcode{nm\_de} in
+\texttt{src/numerical\_calculus/nm\_de.c} uses a population of \(10n\) clamped
+to \([15, 200]\). A mutant coordinate that leaves the box is not clipped to the
+wall. It is reflected to a random point between its base vector and the
+violated bound (``bounce-back''). Clipping piles members onto the boundary,
+where their differences in that coordinate become zero and the coordinate
+freezes. The run stops early once at least half the population is feasible and
+the spread of their objective values is below
+\(10^{-\text{AccuracyGoal}} + (1 + |f|)\,10^{-\text{PrecisionGoal}}\).}
+
+After the last generation, \B{NMinimize} polishes. It takes the best
+\(\min(2n, 50)\) distinct members of the final population, runs the local
+solver of \S\ref{sec:opt-local-constraints} from each, and keeps the deepest
+minimum. Polishing several members instead of only the best one matters on a
+rugged surface. The best member of a half-converged population can sit in a
+shallow basin next to a deeper one that another member has found. The polish
+also explains the difference between the raw answers above, of order
+\(10^{-10}\), and the polished answer \(0\).
+
+The next figure shows the raw DE result on Rastrigin, with the polish switched
+off, as a function of the generation budget \mcode{MaxIterations}. Each point is a
+separate run with the same seed, so a larger budget continues the same
+trajectory further. The vertical axis is \(\log_{10}\) of the best value.
+
+\plotcell{optimization/de-budget}
+
+The curve has two phases. For the first fifty or so generations it falls in
+steps. Each flat stretch is the population exploring one basin, and each drop
+is the moment a mutant lands in a better one. Just after generation fifty the
+best value falls below \(1\), the height of the shallowest non-global minima,
+so the population has reached the global basin. From then on the members
+contract into it, and the best value falls by about a factor of ten every five
+generations, reaching \(5\times10^{-10}\) at generation 100.
+
+\calloutnote{Pitfall}{The generation budget depends on how the method is
+named. With no \mcode{Method} option, DE runs up to \(150n\) generations. With
+\mcode{Method -> "DifferentialEvolution"} written out, it runs up to \(100\).
+Experiment~89 in \texttt{benchmarks/} found that this difference turns a
+five-dimensional Rastrigin problem that the default solves into one that fails
+on five of six seeds. If you name the method explicitly, set
+\mcode{MaxIterations} as well.}
+
+\section{A tour of the global engines}
+\label{sec:opt-engines}
+
+\B{NMinimize} has eight engines, and \mcode{Automatic} selects one of them. They share the variable handling, the
+constraint treatment, the compiled objective, and the final polish, and differ
+only in how they search. Table~\ref{tab:opt-global} summarizes them.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\mcode{Method} & search & reference \\
+\midrule
+\mcode{Automatic} & differential evolution, budget \(150n\) & \\
+\mcode{"DifferentialEvolution"} & population, DE/rand/1/bin & Storn and Price 1997 \\
+\mcode{"SimulatedAnnealing"} & \(\min(\max(2n,12),50)\) Metropolis chains & Kirkpatrick et al.\ 1983 \\
+\mcode{"NelderMead"} & \(\min(2n,20)\) restarted simplexes & Nelder and Mead 1965 \\
+\mcode{"RandomSearch"} & random starts, each polished & \\
+\mcode{"BasinHopping"} & perturb, minimize, accept & Wales and Doye 1997 \\
+\mcode{"DualAnnealing"} & generalized simulated annealing & Tsallis and Stariolo 1996 \\
+\mcode{"SHGO"} & sample, graph, minimizer pool & Endres et al.\ 2018 \\
+\mcode{"DIRECT"} & deterministic box subdivision & Jones et al.\ 1993 \\
+\bottomrule
+\end{tabular}
+\caption{The global engines of \mcode{NMinimize}. Each accepts sub-options in
+the form \mcode{Method -> \{"Name", "SearchPoints" -> k, \ldots\}}.}
+\label{tab:opt-global}
+\end{table}
+
+\paragraph{Simulated annealing.} A single point walks at random. A move that
+lowers the objective is always accepted. A move that raises it by \(\Delta\) is
+accepted with the Metropolis probability \(e^{-\Delta/T}\), where the
+temperature \(T\) decreases geometrically~\cite{kirkpatrick}. At high
+temperature the walk crosses ridges freely, and as it cools it settles into a
+basin. Mathilda runs \(\min(\max(2n, 12), 50)\) independent chains, polishes the
+best point of each chain, and ranks the chains by their polished minima. It also
+measures the typical size of \(\Delta\) near each chain's start, so that the
+temperature is on the same scale as the objective.
+
+\paragraph{Random search and Nelder--Mead.} \mcode{"RandomSearch"} draws random
+points in the region and runs the local solver from each one. It is the
+simplest global method, and it works only when a random start has a fair chance
+of landing in the right basin. \mcode{"NelderMead"} runs the simplex method of
+\S\ref{sec:opt-local-methods} from \(\min(2n, 20)\) random simplexes and keeps
+the best polished result.
+
+\paragraph{Basin hopping.} Each hop displaces the current point by a random
+vector, then runs a full local minimization (the ``quench''). The Metropolis
+test compares the two \emph{minimized} energies.
+The walk therefore moves on the coarse landscape of basin floors, which is much
+smoother than the original surface. Every fifty hops the step size is adjusted
+toward an acceptance rate of one half.
+
+\paragraph{Dual annealing.} Generalized simulated annealing draws its jumps from
+a heavy-tailed Tsallis distribution with shape \(q_v = 2.62\), so that most
+jumps are short but some cross the whole box. It accepts uphill moves by a
+generalized Metropolis rule with shape \(q_a = -5\), starts at temperature
+\(5230\), and reheats (``reanneals'') when the temperature falls below
+\(2\times10^{-5}\) of the start. After each chain a local search refines the
+best point, which is the second annealing that gives the method its name.
+These are SciPy's defaults.
+
+\paragraph{SHGO.} Simplicial homology global optimization samples the box,
+joins the samples into a graph, and keeps the \emph{minimizer pool}: the samples
+that are better than all their neighbours in the graph. Each pool vertex sits in
+a different basin, so one local search from each pool vertex reaches every
+basin the sampling resolved, with far fewer local searches than blind
+multi-start.
+
+\paragraph{DIRECT.} DIviding RECTangles (Jones, Perttunen, and
+Stuckman~\cite{direct}) is deterministic. It scales the box to the unit cube and
+samples its centre. At each iteration it selects the \emph{potentially optimal}
+cells, those that could contain the minimum for some value of an unknown
+Lipschitz constant, and splits each into thirds along its longest sides.
+Large cells are split because the minimum might hide in them, and cells with
+low centre values are split because the minimum is probably near them. The
+default is the locally biased variant DIRECT-L of Gablonsky and Kelley.
+
+All eight engines solve Rastrigin in two variables from their defaults, except
+one. Differential evolution, Nelder--Mead, and DIRECT appeared above; here are
+the rest:
+
+\begin{codepairs}
+\pair{optimization/engines/1}{Rastrigin's function again.}
+\pair{optimization/engines/2}{Simulated annealing.}
+\pair{optimization/engines/3}{Dual annealing.}
+\pair{optimization/engines/4}{Basin hopping.}
+\pair{optimization/engines/5}{SHGO lands exactly on the origin.}
+\pair{optimization/engines/6}{Random search stops at a local minimum with value
+about \(9.95\).}
+\pair{optimization/engines/7}{With 400 starts instead of the default 16, it
+finds the origin.}
+\pair{optimization/engines/8}{Five seeds of random search give five answers,
+none of them the global minimum.}
+\pair{optimization/engines/9}{Five seeds of simulated annealing all find \(0\).}
+\end{codepairs}
+
+The random-search failure is instructive. Inside \([-10,10]^2\) Rastrigin has
+about \(21^2 = 441\) basins, one near each integer point, and the global basin
+is one of them. A random start lands in it with probability about \(1/441\),
+so the default \(16\) starts succeed with probability about
+\(1 - (440/441)^{16} \approx 4\%\). Four hundred starts succeed with
+probability about \(60\%\). Multi-start search has no way to move
+from one basin to the next. That is exactly what the population in DE, the hot
+phase of annealing, and the hops of basin hopping supply.
+
+\calloutnote{Theory}{The same arithmetic explains why random search fails in
+high dimension. The reference documentation notes that the central basin of the
+Griewank function on \([-600, 600]^{10}\) occupies about \(10^{-11}\) of the
+box. No feasible number of random starts reaches it.}
+
+\subsection{DIRECT and the lucky centre}
+
+A deterministic method can look better than it is. DIRECT samples the centre of
+the box first, and Rastrigin's minimum is at the centre of the symmetric box
+\([-5.12, 5.12]^2\):
+
+\begin{codepairs}
+\pair{optimization/direct/1}{Rastrigin's function.}
+\pair{optimization/direct/2}{Raw DIRECT on the symmetric box returns the origin
+exactly, because the origin is its first sample.}
+\pair{optimization/direct/3}{On an asymmetric box the raw DIRECT answer is close
+to the origin, but not on it.}
+\pair{optimization/direct/4}{The default polish finishes the job.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{When you test a global optimizer, do not put the known
+minimum at the centre of the search box. Test functions such as Rastrigin,
+Ackley, and the sphere all have their minimum at the origin, and DIRECT (and
+anything else that samples the centre) will find it for free.}
+
+\subsection{Harder landscapes}
+
+Rastrigin is regular and its global basin is central. The standard corpus of
+test functions includes much harder cases. The next session tries four with
+published optima: the six-hump camel (\(-1.0316\)), drop-wave (\(-1\) at the
+origin), Schwefel's function (\(0\) at \(x_i = 420.9687\), near the corner of
+the box), and the Eggholder (\(-959.6407\) at \((512, 404.2319)\), on the edge
+of the box).
+
+\begin{codepairs}
+\pair{optimization/hard/1}{The six-hump camel function. The answer is one of its
+two symmetric global minima.}
+\pair{optimization/hard/2}{Drop-wave: global value \(-1\) at the origin.}
+\pair{optimization/hard/3}{Schwefel's function in two variables. The residual
+\(2.5\times10^{-5}\) comes from the rounded constant \(418.9829\).}
+\pair{optimization/hard/4}{The Eggholder function.}
+\pair{optimization/hard/5}{Default DE stops in a deep local basin at
+\(-935.34\).}
+\pair{optimization/hard/6}{Simulated annealing reaches the global basin, within
+\(0.004\) of the published optimum.}
+\end{codepairs}
+
+\plotcell[0.6\linewidth]{optimization/eggholder}
+
+The Eggholder shows that a global optimizer's answer is a claim. It is never a
+proof.
+Its surface is a set of diagonal ridges and troughs, and its best trough runs
+into the edge of the box. Differential evolution converged on the white point,
+a trough nearly as deep as the global one and far from it. Simulated annealing,
+with its many independent chains, found the red point on the edge. The
+reference documentation records that Mathematica's default \mcode{NMinimize}
+stops at the same \(-935.34\).
+
+\section{Constraints in a global search}
+\label{sec:opt-global-constraints}
+
+Inside the global search, Mathilda handles general constraints with
+\emph{Deb's feasibility rules}\index{Deb's feasibility rules} instead of a
+weighted penalty. To compare two candidate points:
+\begin{enumerate}
+\item a feasible point beats an infeasible one;
+\item of two feasible points, the one with the smaller objective wins;
+\item of two infeasible points, the one with the smaller total violation wins.
+\end{enumerate}
+The rules need no penalty weight, so there is nothing to tune. The objective
+and the constraints are never added together, so a large objective cannot
+drown a small violation or the reverse. Box constraints define the search
+region and are enforced by projection, as before. After the search, the
+polish uses the augmented Lagrangian of \S\ref{sec:opt-local-constraints}.
+
+The total violation is \(\sum_i \max(0, g_i)^2 + \sum_j h_j^2\), and a point
+counts as feasible when this is below a threshold. How large that threshold
+should be turns out to be a delicate question, and getting it wrong produced
+a real bug.
+
+\subsection{Two thresholds for two questions}
+
+In August 2026, while building the benchmarks of experiment~89, the author
+found that
+\[
+  \mcode{NMinimize[\{x\^{}2 + y\^{}2, x + y >= 2\}, \{x, y\}]}
+\]
+returned \(1.9998\) at \(x = 0.999971\), \(y = 0.999929\). The sum \(x + y\) is
+\(1.99990\), so the returned point violated its own constraint by
+\(10^{-4}\). No warning was printed. SciPy and Mathematica both returned the
+feasible point \((1,1)\) with value \(2\).
+
+The cause was one constant doing two jobs. The feasibility test compared the
+\emph{squared} violation total with \(10^{-8}\), which is a tolerance of
+\(10^{-4}\) on the violation itself. The same constant served two purposes. It
+ranked candidates during the search, and it decided whether the final answer
+was feasible enough to return. Differential evolution stopped improving the
+constraint as soon as the squared violation crossed \(10^{-8}\), and the
+return test then accepted the result.
+
+The two purposes need different thresholds. Deb's rules consult the objective
+only when \emph{both} points count as feasible. If the ranking threshold is
+tighter than the residual the search can actually reach, no point ever counts
+as feasible. The rules then compare violations only, and the search stops
+optimizing the objective altogether. This was measured. A tight ranking
+threshold sent a 15-dimensional minimax test problem from its optimum
+\(0.125116\) to \(1.85479\). The return test answers a different question. It
+certifies to the caller that the point satisfies the constraints, and that
+certificate should be tight.
+
+The fix split the constant in two, each named for its question and stated as a
+violation that is squared where it is defined:
+\begin{itemize}
+\item \mcode{NM\_FEAS\_RANK}, a violation of \(10^{-4}\), used only to rank
+points during the search. It is loose on purpose, and bit-identical to the old
+constant, so every search trajectory is unchanged.
+\item \mcode{NM\_FEAS\_RETURN}, a violation of \(10^{-5}\), used for the
+post-polish selection and the final decision. It is enforced. A result that
+cannot meet it is reported as \mcode{\{Infinity, x -> Indeterminate\}}, the
+same form \B{NMinimize} uses for an infeasible problem.
+\end{itemize}
+The return bound is \(10^{-5}\) and not tighter because it is set where every
+supported class of problem can meet it. The measured residuals were about
+\(4\times10^{-12}\) for continuous problems with seven of the eight methods
+(Nelder--Mead reached \(10^{-6}\)), and about \(6\times10^{-6}\) for
+mixed-integer problems, whose continuous coordinates are
+refined with the integers pinned. A tighter bound would turn solvable problems
+into \mcode{Infinity}.
+
+\begin{codepairs}
+\pair{optimization/global-constraints/1}{The problem that exposed the bug. The
+answer is now exactly \((1,1)\).}
+\pair{optimization/global-constraints/2}{The equality version.}
+\pair{optimization/global-constraints/3}{The disk and the half-plane
+\(x + y \ge 3\) do not meet. An empty feasible set gives \mcode{Infinity}.}
+\pair{optimization/global-constraints/4}{A disjunction: \(x \le -2\) or
+\(x \ge 2\). The minimum of \(x^2\) is \(4\), on the boundary of one branch.}
+\pair{optimization/global-constraints/5}{Himmelblau's function restricted to two
+small disks, one around each of two minima. The answer is the minimum inside
+one of them.}
+\pair{optimization/global-constraints/6}{The feasible set \(x + y \ge 80\) lies
+entirely outside the default region \([-10,10]^2\). The region grows until it
+finds it.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The two predicates are \mcode{nm\_better} and
+\mcode{nm\_better\_return} in
+\texttt{src/numerical\_calculus/findmin\_nm\_common.c}. Both are Deb's rules
+with a different threshold. The long comment above the two constants in
+\texttt{findmin\_internal.h} records the history, including the value
+\(10^{-6}\) that was tried first for the return bound and rejected because it
+turned a mixed-integer problem with the exact solution \((1,1)\) into
+\mcode{Infinity}.}
+
+A disjunction \mcode{c1 || c2} is feasible when at least one branch holds.
+\B{NMinimize} scores it by the smallest of the branch violations, which is zero
+exactly when some branch is satisfied. The minimum is not differentiable, but
+the global engines use only function values, so they consume it directly.
+\B{FindMinimum}, whose penalty method needs a smooth penalty, rejects \mcode{Or}.
+
+The last example shows \emph{region expansion}\index{region expansion}. When the
+default region contains no feasible point, the unbounded coordinates grow by
+powers of ten, up to \(\pm10^5\), and the search is repeated. The first attempt
+always uses the base region and the base seed, so a problem that is feasible
+there is solved exactly as before.
+
+\section{Integer and linear problems}
+\label{sec:opt-integer}
+
+Mathilda has no separate linear-programming function. There is no
+\mcode{LinearOptimization}, \mcode{LinearProgramming}, or
+\mcode{QuadraticOptimization}, and \mcode{FindMinimum} rejects the method
+names \mcode{"InteriorPoint"} and \mcode{"LinearProgramming"} as not yet
+implemented. A linear or quadratic program is posed to \B{NMinimize} or
+\B{NMaximize} like any other constrained problem, and a variable is made
+integer by the constraint \mcode{Element[x, Integers]}.
+
+An integer program shows how much integrality changes a problem. Maximize \(x + y\)
+subject to \(-2x + 2y \ge 1\), \(-8x + 10y \le 13\), and \(x, y \ge 0\):
+
+\begin{codepairs}
+\pair{optimization/integers/1}{The linear relaxation. Its optimum is the vertex
+\((4, 4.5)\), with value \(8.5\).}
+\pair{optimization/integers/2}{With integer variables the optimum is
+\((1, 2)\), with value \(3\). Integer answers print as exact integers.}
+\end{codepairs}
+
+\plotcell[0.5\linewidth]{optimization/ilp}
+
+The feasible region of the relaxation is the thin shaded triangle. Rounding its
+optimum \((4, 4.5)\) gives \((4, 4)\) or \((4, 5)\), and neither is feasible.
+The only integer points in the triangle are \((0,1)\) and \((1,2)\), far from the
+relaxed optimum. In general the integer optimum can be arbitrarily far from the
+relaxed one, which is why integer programming is NP-hard while linear
+programming is solvable in polynomial time.
+
+\calloutnote{Under the hood}{Integer coordinates are rounded whenever a
+candidate is generated, so the global search moves on the lattice. The polish
+for an integer problem is a coordinate descent that tries steps of \(\pm1\) and
+\(\pm2\) on each integer coordinate and accepts any improvement under Deb's
+rules. A swap move handles ``one-hot'' groups, equalities of the form
+\(x_1 + \dots + x_m = k\) over 0--1 variables such as the rows of an assignment
+matrix. When continuous variables are also present, the polish solves the
+continuous relaxation, rounds, and refines the continuous coordinates with the
+integers fixed.}
+
+\begin{codepairs}
+\pair{optimization/integers/3}{The 0--1 knapsack. Three items of weight 10, 20,
+30 and value 60, 100, 120 go in a bag of capacity 50. The best choice is the
+second and third items.}
+\pair{optimization/integers/4}{The relaxation takes a fraction of the third
+item and is worth 240.}
+\pair{optimization/integers/5}{A mixed problem, with \(x\) integer and \(y\)
+real, and an equality. The exact solution is \(x = y = 1\), value \(3\). The
+continuous coordinate is refined to about \(6\times10^{-6}\), inside the
+return bound.}
+\pair{optimization/integers/6}{The optimum \((15, 3)\) lies outside the default
+region. The relaxation step of the polish finds it.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Write the integer declaration inside the constraints,
+joined with \mcode{\&\&}. When the problem is a list of three or more elements,
+\mcode{\{f, c1, c2\}}, \B{NMinimize} treats the extra elements as further
+constraints, but \B{NMaximize} currently mishandles that form and returns a
+meaningless value. The form \mcode{\{f, c1 \&\& c2\}} works with both.}
+
+\section{Many variables}
+\label{sec:opt-many}
+
+Test problems are usually stated for \(n\) variables, and writing
+\(x_1, \dots, x_{10}\) by hand is tedious. \B{NMinimize} accepts
+\emph{indexed variables} such as \mcode{x[i]}, generated by \B{Table} or
+\B{Array}. \B{FindMinimum} does not yet accept them. Its variables must be
+symbols, but \B{Symbol} can generate as many as needed:
+
+\begin{codepairs}
+\pair{optimization/indexed/1}{Rastrigin's function in five variables, with
+indexed variables.}
+\pair{optimization/indexed/2}{Rosenbrock's function in five variables.
+\B{Array} builds the variable list.}
+\pair{optimization/indexed/3}{Six generated symbols for \B{FindMinimum}.}
+\pair{optimization/indexed/4}{The six-variable Rosenbrock function.}
+\pair{optimization/indexed/5}{\B{FindMinimum} holds its arguments, so the
+objective and the variable specification are wrapped in \B{Evaluate}.}
+\end{codepairs}
+
+\calloutnote{Performance}{Indexed variables are convenient but slow. The
+optimizer rewrites them to fresh symbols, and part of the evaluation falls back
+to the interpreter. Experiment~89 measured the same five-dimensional Rastrigin
+problem at 2.9~ms with explicit variables and 119.7~ms with
+\mcode{Table[v[i], \{i, 1, 5\}]}, a factor of 41. For a timed or repeated
+optimization, generate plain symbols as in pair~3.}
+
+\section{How fast, and how reliable}
+\label{sec:opt-performance}
+
+A global optimizer evaluates its objective thousands of times, so the cost of
+one evaluation dominates everything else. Before the search begins,
+\B{NMinimize} compiles the objective and each general constraint to bytecode
+(Chapter~\ref{ch:compilation}) and evaluates them on the register machine at
+every trial point. If an expression cannot be compiled, or the compiled code
+reports a domain error or a non-finite result at some point, that point falls
+back to the interpreter, so compilation changes the speed and never the answer.
+SciPy's optimizers call back into a Python function for every evaluation.
+
+Experiment~89 in \texttt{benchmarks/} races \B{NMinimize} and \B{NMaximize}
+against SciPy~1.17.1 and Mathematica. Table~\ref{tab:opt-bench} gives a
+selection. Times are the best of three runs after a warm-up.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Case & Mathilda & Mathematica & SciPy \\
+\midrule
+Rastrigin 2-D, DE & 0.114 & 213.8 & 24.9 \\
+Ackley 10-D, DE & 10.04 & 1188 & 742.3 \\
+Rosenbrock 5-D, DE & 1.529 & 916.6 & 536.2 \\
+Beale 2-D, default & 0.094 & 4.333 & 37.7 \\
+inequality-constrained & 0.255 & 0.941 & 0.189 \\
+equality-constrained & 0.218 & 0.414 & 0.186 \\
+mixed integer & 0.019 & 0.646 & 5.540 \\
+Rastrigin 5-D, explicit variables & 2.933 & 740.6 & 163.3 \\
+Rastrigin 5-D, indexed variables & 119.7 & 773.4 & 162.2 \\
+\bottomrule
+\end{tabular}
+\caption{Selected timings from experiment 89, in milliseconds.}
+\label{tab:opt-bench}
+\end{table}
+
+Across its 18 cases, experiment~89 finds Mathilda between \(1.4\times\) and
+\(350\times\) faster than the faster of the two competitors. The two
+constrained rows are the exception. SciPy's SLSQP is slightly faster there, by
+factors of \(1.35\) and \(1.17\). Those two rows were also the ones that
+exposed the feasibility bug of \S\ref{sec:opt-global-constraints}. After the
+fix the inequality case takes \(0.259\)~ms against the \(0.255\)~ms in the
+table, so correctness cost nothing measurable. The indexed-variable row shows
+the \(41\times\) penalty of \S\ref{sec:opt-many} in context. It turns a lead of
+\(56\times\) into one of \(1.4\times\).
+
+The races of the individual engines tell the same story. Against SciPy's
+implementations of the same algorithms with the same parameters, dual
+annealing (experiment~81) is about \(100\)--\(600\times\) faster, basin hopping
+(experiment~85) about \(100\)--\(650\times\), and DIRECT (experiment~83), whose
+SciPy version is itself compiled C, \(1.5\)--\(20\times\). The reference
+documentation reports the local constrained solvers against SciPy at about
+\(17\times\) for SLSQP on HS71, \(40\)--\(200\times\) for COBYLA, and
+\(30\)--\(390\times\) for COBYQA. Local minimization of a cheap function is a
+different matter. On two-dimensional Rosenbrock, the weekly benchmark report
+(\texttt{benchmarks/REPORT.md}) has \B{FindMinimum} at \(0.190\)~ms, SciPy at
+\(3.6\)~ms, and Mathematica at \(0.158\)~ms, so Mathilda is \(1.2\times\) behind
+Mathematica there.
+
+\subsection{Speed is not robustness}
+
+Experiment~90 is the companion of experiment~89, and it asks a different
+question. Did the optimizer find the published global optimum at all? It uses
+the landscapes that experiment~89 excluded because the systems disagreed. On
+seven hard functions Mathilda's default solved two, and SciPy's differential
+evolution solved four. Mathilda missed Schwefel and Griewank in five
+dimensions and Rastrigin in ten. It solved drop-wave, which SciPy missed. Both
+missed Bukin~N.6 and the Eggholder.
+
+The two facts are connected. The default search budget is small, and the
+search stops as soon as the population's objective values agree to tolerance.
+That is why a typical call returns in well under a millisecond, and it is
+also why the search gives up early on landscapes that need persistence. On a
+hard problem, raise the budget with \mcode{MaxIterations} or
+\mcode{"SearchPoints"}, try more than one engine, and try more than one
+\mcode{"RandomSeed"}. If the answers agree, you have evidence. If they do not,
+you have learned something important about your problem.
+
+\section{Testing an optimizer}
+\label{sec:opt-testing}
+
+The feasibility bug of \S\ref{sec:opt-global-constraints} shipped even though
+the test suite, \texttt{tests/test\_nminimize.c}, had 29 tests that all passed,
+several of them constrained. Every one of those tests checked the objective to
+within \(10^{-3}\), and \(1.9998\) is within \(10^{-3}\) of \(2\). None checked
+that the returned point satisfied the constraint. After the fix the author
+audited the whole suite, which by then had 83 tests, in two ways.
+
+The structural audit classified every test by what it asserts. Thirty-one
+constrained tests never checked their constraints at all. Seventeen
+feasibility checks were one-sided, of the form ``\(x + y \le 2 + \epsilon\)''.
+A one-sided check catches a point that overshoots the boundary and is blind to
+one that falls short of it, and falling short is exactly what the bug did.
+
+The mutation audit asked how many tests would notice a wrong answer. A
+temporary change made the result builder return a deliberately wrong answer,
+and a non-fatal assertion macro recorded the pass/fail map of the whole suite
+in one run. With the returned point 10\% wrong and the objective value left
+correct, 26 of 83 tests failed. With the objective 10\% wrong and the point
+left correct, 60 of 83 failed. The suite was more than twice as good at
+noticing a wrong number as a wrong answer. After the audit added two-sided
+feasibility assertions to the eleven tests with real constraints, and
+documented why each remaining constrained test has none, a 10\%-wrong point was
+caught by 32 of 83.
+
+The lesson generalizes to any numerical code, and the audit wrote it into the
+header of the test file as a policy. An objective tolerance may be loose,
+because a stochastic search does not reach the optimum exactly. A feasibility
+tolerance must be tight and two-sided, because feasibility is what makes the
+answer an answer. Where a feasibility tolerance has to be loose, that is a
+finding about the solver, and it should be recorded as one.
+
+\calloutnote{Pitfall}{The same discipline applies when you check an optimizer's
+answer yourself. Substitute the returned point into every constraint, as pair~8
+of the first session did for the objective. A minimum value that looks right
+proves nothing about feasibility.}
+
+\section{Featured examples}
+\label{sec:opt-featured}
+
+The examples in this section are short. Each poses a familiar problem, solves it
+in a line or two, and draws the answer. They are chosen so that you can check
+every result by hand or against a known formula.
+
+\subsection*{Design the cheapest can}
+
+A drinks can must hold 355~ml. Which radius and height use the least metal? The
+surface area of a closed cylinder is \(2\pi r^2 + 2\pi r h\), and the volume
+constraint is \(\pi r^2 h = 355\). Calculus gives \(h = 2r\) and
+\(r = (355/2\pi)^{1/3} \approx 3.837\)~cm, so the ideal can is as tall as it is
+wide. The plot shows the area with \(h\) eliminated, as a function of \(r\).
+
+\plotcell[0.55\linewidth]{optimization/can}
+
+Real cans are taller than this. One reason is that the top and bottom are made
+of thicker metal than the wall. Weighting the two terms of the area differently is a
+one-character change to the objective.
+
+\subsection*{Fold the largest open box}
+
+Cut a square of side \(x\) from each corner of a \(30 \times 20\) sheet and fold
+up the sides. The volume is \((30 - 2x)(20 - 2x)x\). Setting its derivative to
+zero gives a quadratic whose smaller root is
+\(x = (50 - 10\sqrt7)/6 \approx 3.924\).
+
+\plotcell[0.55\linewidth]{optimization/openbox}
+
+The constraint \(0 \le x \le 10\) keeps the box physical. Without it the cubic
+grows without bound for large \(x\).
+
+\subsection*{Fit a curve to data}
+
+Least-squares fitting is minimization. Twenty-five noisy measurements of an
+exponential decay are fitted by the model \(a e^{-kt} + c\) by minimizing the
+sum of squared residuals. The data were generated with \(a = 3\), \(k = 0.7\),
+\(c = 0.5\) and noise of at most \(0.1\), and the fit recovers all three to
+within a few percent.
+
+\plotcell[0.6\linewidth]{optimization/fit}
+
+\B{Fit} solves \emph{linear} least-squares problems directly. A model that is
+nonlinear in its parameters, like this one, needs an iterative minimizer.
+
+\subsection*{Place a warehouse to minimize distance}
+
+Five stores sit at known positions, and their weekly demand is \(3, 1, 2, 1,
+1\) truckloads. Where should the warehouse go to minimize total truck travel?
+The objective is the demand-weighted sum of straight-line distances, the
+Fermat--Weber problem. It has no closed-form solution, and the objective is not
+differentiable at the stores.
+
+\plotcell[0.55\linewidth]{optimization/warehouse}
+
+The disk sizes show the demand. The warehouse (red) is pulled toward the
+heaviest store at the origin. At the optimum the weighted unit vectors toward
+the five stores sum to zero, a balance of forces that Varignon demonstrated
+with strings and weights through holes in a table.
+
+\subsection*{Schedule production under constraints}
+
+A plant makes two products earning 3 and 5 units of profit per batch. Three
+workshops limit the batches: \(x \le 4\), \(2y \le 12\), and \(3x + 2y \le
+18\). This is the Wyndor Glass problem of Hillier and Lieberman's textbook,
+with optimum \(36\) at \((2, 6)\).
+
+\plotcell[0.5\linewidth]{optimization/production}
+
+The shaded pentagon is the set of feasible plans, and the grey lines are two
+level lines of the profit, \(3x + 5y = 24\) and \(3x + 5y = 36\). A linear
+objective is maximized at a vertex of the polygon, which is the basis of the
+simplex method.
+
+\subsection*{Build an efficient portfolio}
+
+Three assets have expected returns \(6\%\), \(10\%\), and \(14\%\), and a known
+covariance matrix. For a required return \(r\), the least risky long-only
+portfolio minimizes the variance \(w^{\mathsf T} C w\) subject to
+\(\sum w_i = 1\), \(\mu^{\mathsf T} w = r\), and \(w \ge 0\). Solving this
+quadratic program for a range of \(r\) traces Markowitz's \emph{efficient
+frontier}\index{efficient frontier}.
+
+\plotcell[0.55\linewidth]{optimization/portfolio}
+
+The horizontal axis is the standard deviation of the portfolio and the vertical
+axis its expected return. Each point is one SLSQP solve. The curve bends back
+at the bottom. The least risky portfolio mixes all three assets and is less
+risky than the safest single asset, whose standard deviation is \(0.1\).
+
+\subsection*{Reach a target with a robot arm}
+
+A planar arm has links of length \(1\) and \(0.7\). Which joint angles put the
+hand at \((1.2, 0.8)\)? Inverse kinematics is a system of two equations in two
+unknowns, and minimizing the squared distance from hand to target solves it.
+
+\plotcell[0.5\linewidth]{optimization/robot}
+
+The residual \(5\times10^{-19}\) says the hand is on the target. A second
+solution, with the elbow bent the other way, is reached from a different
+starting angle. For a redundant arm with more joints than equations, the same
+formulation still works, and a second term in the objective can choose among
+the solutions.
+
+\subsection*{Follow a ray of light}
+
+Fermat's principle says that light travels between two points along the path
+of least time. A ray goes from \((0, 1)\) in air, at speed \(1\), to
+\((2, -1)\) in glass, at speed \(2/3\), crossing the surface \(y = 0\) at some
+point \((x, 0)\).
+
+\plotcell[0.5\linewidth]{optimization/snell}
+
+The ratio of the sines of the angles to the normal is exactly \(1.5\), the
+ratio of the two speeds. Minimizing travel time has derived Snell's law. The
+straight line (blue) is shorter, but the ray (red) spends less time in
+the slow glass.
+
+\subsection*{Hang a chain}
+
+A chain of ten links, each of length \(1/4\), hangs between \((0, 0)\) and
+\((2, 0)\). It settles where its potential energy, the sum of the heights of its
+joints, is least, subject to one equality constraint per link. The problem has
+eighteen variables and ten nonlinear equality constraints, and the default
+augmented Lagrangian method solves it.
+
+\plotcell[0.55\linewidth]{optimization/chain}
+
+The shape is a discrete catenary. As the number of links grows it converges to
+the curve \(y = a\cosh((x - 1)/a) + b\) of the calculus of variations.
+
+\subsection*{Find the lowest point of a rugged landscape}
+
+The Ackley function is nearly flat far from the origin, covered with small
+dimples, and has one deep funnel at the centre. Its global minimum is \(0\) at
+the origin. The default call finds it without any bounds.
+
+\plotcell[0.6\linewidth]{optimization/ackley}
+
+The dimples trap local methods and the flat outer region gives a gradient
+almost no information. Differential evolution needs neither. Its population
+samples the whole region, and its difference vectors shrink as the members
+collect in the funnel.
+
+\subsection*{Where this connects}
+
+Optimization sits on top of most of the rest of the system. The symbolic
+gradients and Hessians that drive BFGS, Newton, and SLSQP come from the
+differentiation of \S\ref{sec:numcalc} and its exact neighbours, and the
+compiled evaluation that makes every search fast is the machinery of
+Chapter~\ref{ch:compilation}. \B{FindRoot} and \B{FindMinimum} are two views of
+the same problem, as the Gamma example showed, and a minimizer located to full
+precision is often best computed as a root of the derivative. The featured
+examples drew on the graphics of Chapter~\ref{ch:graphics}. Two gaps remain
+that a reader coming from Mathematica will notice. There is no dedicated
+linear or quadratic programming function, so such problems go to
+\B{NMinimize}, and there are no \mcode{FindArgMin} or \mcode{NArgMin} shortcuts,
+so the location is read from the rules of the full result. For the complete
+list of methods and sub-options, type \texttt{?FindMinimum} or
+\texttt{?NMinimize} at the prompt.

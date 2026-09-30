@@ -1,0 +1,1149 @@
+\chapter{Graphs and Hypergraphs}
+\label{ch:graphs}
+
+
+Section~\ref{sec:graphs} introduced the \B{Graph} expression: how to build one,
+read it back, take its adjacency matrix, and ask for a shortest path or a
+colouring. This chapter continues from there and covers the rest of the
+subsystem. It is about the questions that make graph theory a subject and not
+only a data structure. How many spanning trees does a network have? Where does
+the traffic concentrate? How much can flow from a source to a sink, and which
+edges are the bottleneck? Are two graphs the same graph in disguise? Can a
+graph be drawn in the plane without crossings? The second half of the chapter
+drops the assumption that an edge joins exactly two things. A \emph{hypergraph}
+allows an edge to join any number of vertices, which is the natural model for
+co-authorship, chemical reactions, database relations, and the rewriting states
+of Wolfram-model physics.
+
+Three themes run through the chapter. The first is the mathematics: most
+sections lead with a theorem (Kirchhoff, Menger, Gallai, Kuratowski, Berge) and
+then check it at the prompt. The second is exactness. Mathilda gives an exact
+answer whenever the problem has one, and a hard search that runs out of budget
+leaves the call unevaluated; it never returns a result that is merely plausible.
+The third is speed. Each algorithm here was benchmarked against Mathematica~15
+and against networkx or xgi. The last section gives the figures, including the
+one case where Mathilda is slower.
+
+\section{A laboratory of named graphs}
+\label{sec:graphs-families}
+
+Graph theory has its favourite examples, and the one that disproves more
+conjectures than any other is the \emph{Petersen graph}.\index{Petersen graph}
+It has ten vertices and fifteen edges, and every vertex has degree three.
+\B{PetersenGraph} generates it, and a few measurements show how tightly it is
+built:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/families/1}{The Petersen graph, printed as a summary
+like every graph.}
+\pair{graphs-hypergraphs/families/2}{Ten vertices, fifteen edges, and only one
+degree occurs: the graph is \emph{3-regular}.}
+\pair{graphs-hypergraphs/families/3}{\B{GraphDiameter} and \B{GraphRadius} are
+both \(2\): any two vertices are at most two steps apart.
+\B{MeanGraphDistance} is exact.}
+\pair{graphs-hypergraphs/families/4}{\B{GraphDensity}: \(15\) of the
+\(\binom{10}{2} = 45\) possible edges are present.}
+\end{codepairs}
+
+The mean distance \(5/3\) is easy to confirm by hand. Each vertex has three
+neighbours at distance \(1\) and six more vertices at distance \(2\), so the
+mean over its nine partners is \((3 + 12)/9\). Mathilda keeps that as the
+rational \(5/3\) and does not round it to \(1.66667\). This happens throughout
+the subsystem: a distance or a coefficient over integer data comes back exact.
+
+The Petersen graph is one of a large set of generators. \B{HypercubeGraph},
+\B{WheelGraph}, \B{GridGraph}, \B{TuranGraph}, \B{CirculantGraph},
+\B{CompleteKaryTree}, and others give the standard families on the vertices
+\(1, \dots, n\). \B{GraphDistanceMatrix} gives every pairwise distance at once:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/families/5}{Four standard families: the 3-cube, a
+wheel, a \(3\times4\) grid, and the Tur\'an graph \(T(6,3)\), which is
+\(K_{2,2,2}\).}
+\pair{graphs-hypergraphs/families/6}{All-pairs distances in the 5-cycle. Each
+row is a cyclic shift of \(0,1,2,2,1\).}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\B{GraphDistanceMatrix} on an unweighted graph runs
+a \emph{bit-parallel multi-source breadth-first search} (Then et~al., 2015).
+Up to 256 sources advance together, one bit per source at each vertex, so each
+sweep over the adjacency structure settles 256 rows of the matrix. The result is a packed
+integer matrix. A weighted graph goes to Dijkstra instead, and exact weights
+give an exact matrix.}
+
+\section{Drawing graphs}
+\label{sec:graphs-drawing}
+
+A graph has no shape of its own. A drawing is a choice of position for every
+vertex, and a good choice makes structure visible: symmetry, clusters,
+bottlenecks. \B{GraphPlot} makes that choice automatically. Its default for
+general graphs is \emph{stress majorization}\index{graph drawing!stress
+majorization}, which places the vertices so that the straight-line distance
+between every two of them is as close as possible to their graph distance.
+For the Petersen graph the result is symmetric but has three crossings:
+
+\plotcell{graphs-hypergraphs/petersen}
+
+The drawing most books use is different: an outer pentagon, an inner pentagram,
+and five spokes. \mcode{VertexCoordinates} fixes the positions yourself. Here they
+are two rings of five points, listed in \B{VertexList} order:
+
+\plotcell{graphs-hypergraphs/petersen-classic}
+
+Both pictures show the same graph. The first is the one the layout algorithm
+finds from the distances alone. The second uses outside knowledge of the
+graph's symmetry. Later sections reuse the classic coordinates \mcode{pent}.
+
+The automatic layout adapts to the kind of graph. A grid comes out as a grid,
+and the 3-cube as the familiar Necker drawing, with \mcode{VertexLabels} showing
+the vertex names:
+
+\plotcell{graphs-hypergraphs/grid}
+
+\plotcell{graphs-hypergraphs/families}
+
+\calloutnote{Under the hood}{\B{GraphPlot} (\texttt{src/graph/glayout.c})
+starts the stress layout from a Pivot MDS embedding and refines it by SMACOF
+iterations on the breadth-first distance matrix. For components of up to 60
+vertices it also tries circular and Tutte starting points, and among the
+drawings within \(10\%\) of the lowest stress it keeps the one with the fewest
+edge crossings. Trees and directed acyclic graphs are drawn in layers instead,
+with dummy vertices on long edges and barycentre ordering to reduce crossings.
+Components are packed side by side. The layout uses no random numbers, so the
+same graph always gives the same picture.}
+
+The rest of the chapter uses three more options. \mcode{GraphHighlight} draws chosen
+vertices and edges in red, \mcode{VertexStyle} colours vertices individually,
+and \mcode{EdgeLabels} writes text on edges. Hypergraphs have their own drawing
+function, \mcode{HypergraphPlot}, which appears in \S\ref{sec:hypergraphs}.
+
+\section{Directed graphs and dependency}
+\label{sec:graphs-directed}
+
+A directed edge \(u \to v\) often means ``\(u\) must happen before \(v\)''. A
+build system, a course prerequisite chart, and a spreadsheet's formula
+dependencies are all directed graphs of this kind. Getting dressed is a small
+example: socks and trousers go on before shoes, the shirt before the tie, and so
+on.\index{directed acyclic graph}
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/directed/1}{Seven garments and the order constraints
+between them.}
+\pair{graphs-hypergraphs/directed/2}{\B{TopologicalSort} lists the vertices so
+that every edge points forward: a valid order in which to get dressed.}
+\pair{graphs-hypergraphs/directed/3}{A topological order exists exactly when the
+graph has no directed cycle. \B{AcyclicGraphQ} checks this.}
+\pair{graphs-hypergraphs/directed/4}{Add an edge from the jacket back to the
+shirt and the constraints become impossible to satisfy.}
+\end{codepairs}
+
+\B{GraphPlot} draws a directed acyclic graph in layers, with every arrow
+pointing down. A topological order is any left-to-right, top-to-bottom reading
+that respects the arrows:
+
+\plotcell{graphs-hypergraphs/dress}
+
+
+\begin{theorem}
+A directed graph has a topological order if and only if it is acyclic.
+\end{theorem}
+
+One direction is immediate: along a directed cycle, no vertex can come before
+all the others. For the other, every finite acyclic graph has a vertex with no
+incoming edges. Put it first, delete it, and repeat. That argument is Kahn's
+algorithm, and it runs in time linear in the size of the graph.
+
+When a directed graph does have cycles, its \emph{strongly connected
+components}\index{strongly connected component} are the maximal sets of vertices
+that can all reach one another. Contracting each component to a single vertex
+always leaves an acyclic graph, so every directed graph is a DAG of strongly
+connected pieces:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/directed/5}{A graph with a 3-cycle, a 2-cycle, and a
+vertex that only points in.}
+\pair{graphs-hypergraphs/directed/6}{\B{StronglyConnectedComponents} finds the
+three pieces.}
+\pair{graphs-hypergraphs/directed/7}{\B{ReverseGraph} flips every edge. The
+strongly connected components are unchanged.}
+\end{codepairs}
+
+A directed graph also has an \emph{oriented incidence matrix} \(B\), with one row
+per vertex and one column per edge: \(-1\) where the edge leaves and \(+1\) where
+it arrives. Its product with its own transpose is the Laplacian of the
+underlying undirected graph, whatever orientation was chosen:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/directed/8}{\B{IncidenceMatrix} of a directed graph
+records each edge's tail and head.}
+\pair{graphs-hypergraphs/directed/9}{\(BB^{\mathsf T} = L\) holds exactly.}
+\end{codepairs}
+
+\calloutnote{Theory}{The identity \(L = BB^{\mathsf T}\) shows at once that the
+Laplacian is positive semidefinite, since
+\(x^{\mathsf T} L x = \lVert B^{\mathsf T} x\rVert^2 = \sum_{u\to v}(x_u - x_v)^2
+\ge 0\). The quadratic form measures how much a vertex function \(x\) varies
+across the edges, and that is why the small Laplacian eigenvalues describe the
+smooth, slowly varying structure of a graph: its clusters and bottlenecks.}
+
+\calloutnote{Pitfall}{\B{ConnectedComponents} on a \emph{directed} graph gives
+the components of the underlying undirected graph in Mathilda, which is the same
+as \B{WeaklyConnectedComponents}. Mathematica returns the strongly connected
+components here. Use \B{StronglyConnectedComponents} when you mean mutual
+reachability.}
+
+\section{The Laplacian and counting spanning trees}
+\label{sec:graphs-laplacian}
+
+Section~\ref{ssec:graph-matrix} used the adjacency matrix \(A\). The matrix that
+turns out to be more useful is the \emph{Laplacian} or \emph{Kirchhoff matrix}
+\(L = D - A\), where \(D\) is the diagonal matrix of vertex
+degrees.\index{Laplacian matrix}\index{Kirchhoff matrix} \B{KirchhoffMatrix}
+builds it. Every row of \(L\) sums to zero, so \(L\) is always singular, and the
+multiplicity of the eigenvalue \(0\) is the number of connected components.
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/spectra/1}{Name the Petersen graph once for this
+session.}
+\pair{graphs-hypergraphs/spectra/2}{The Laplacian of the 4-cycle has degrees on
+the diagonal and \(-1\) at each edge.}
+\pair{graphs-hypergraphs/spectra/3}{The Petersen Laplacian has spectrum
+\(\{5^4, 2^5, 0^1\}\). There is one zero because the graph is connected.}
+\pair{graphs-hypergraphs/spectra/4}{Delete one row and the matching column and
+take the determinant. The result, \(2000\), is the number of spanning trees.}
+\pair{graphs-hypergraphs/spectra/5}{The adjacency spectrum is
+\(3^1, 1^5, (-2)^4\). It is related to the Laplacian spectrum by
+\(\lambda_L = 3 - \lambda_A\).}
+\end{codepairs}
+
+\begin{theorem}[Kirchhoff's matrix-tree theorem]
+\index{matrix-tree theorem}
+Let \(G\) be a graph on \(n\) vertices with Laplacian \(L\). Every cofactor of
+\(L\) equals the number \(\tau(G)\) of spanning trees of \(G\). Equivalently, if
+\(\mu_1, \dots, \mu_{n-1}\) are the nonzero Laplacian eigenvalues,
+\[
+  \tau(G) \;=\; \frac{1}{n}\prod_{i=1}^{n-1} \mu_i .
+\]
+\end{theorem}
+
+The session verifies the theorem both ways. The cofactor is \(2000\), and the
+spectrum gives \(\tfrac{1}{10}\cdot 5^4 \cdot 2^5 = 2000\) as well. Because the
+Laplacian of an unweighted graph is an integer matrix, \B{Det} computes the
+cofactor exactly, with no rounding. Counting the spanning trees of a
+large graph therefore costs one exact determinant, however many trees there
+are.
+
+\calloutnote{Theory}{The factor \(3 - \lambda_A\) is specific to regular graphs:
+when every degree is \(k\), \(D = kI\) and \(L = kI - A\) has the same
+eigenvectors as \(A\). For irregular graphs the two spectra carry different
+information, and the \emph{normalised} Laplacian \(D^{-1/2} L D^{-1/2}\) is often
+the better object.}
+
+\section{Trees and Cayley's formula}
+\label{sec:graphs-trees}
+
+A \emph{tree}\index{tree} is a connected graph with no cycles. Equivalently, it
+is a connected graph on \(n\) vertices with exactly \(n - 1\) edges, or a graph
+in which every two vertices are joined by exactly one path. Trees are the
+skeletons of graphs: every connected graph contains a \emph{spanning tree} that
+reaches all its vertices, and \B{FindSpanningTree} returns one.
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/trees/3}{\B{CompleteKaryTree}\mcode{[3, 2]} is the
+complete binary tree with three levels.}
+\pair{graphs-hypergraphs/trees/4}{Seven vertices and six edges: one fewer edge
+than vertices, as for every tree.}
+\pair{graphs-hypergraphs/trees/5}{A spanning tree of the Petersen graph keeps
+all ten vertices and nine of the fifteen edges.}
+\pair{graphs-hypergraphs/trees/6}{\B{TreeGraphQ} confirms it is a tree.}
+\end{codepairs}
+
+Trees are drawn in layers from a root. A complete ternary tree with four levels
+has \(1 + 3 + 9 + 27 = 40\) vertices:
+
+\plotcell{graphs-hypergraphs/tree}
+
+A spanning tree of the Petersen graph, drawn in red on the classic layout, uses
+nine of the fifteen edges and reaches every vertex:
+
+\plotcell{graphs-hypergraphs/spanning}
+
+
+How many spanning trees does the complete graph \(K_n\) have? The matrix-tree
+theorem of \S\ref{sec:graphs-laplacian} answers the question for each \(n\)
+separately, and the answers follow a striking pattern:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/trees/1}{The number of spanning trees of \(K_n\) for
+\(n = 2, \dots, 8\), each an exact cofactor of the Laplacian.}
+\pair{graphs-hypergraphs/trees/2}{The same numbers are \(n^{n-2}\).}
+\end{codepairs}
+
+\begin{theorem}[Cayley's formula]
+\index{Cayley's formula}
+There are exactly \(n^{n-2}\) trees on \(n\) labelled vertices.
+\end{theorem}
+
+The spanning trees of \(K_n\) are exactly the labelled trees on its vertices, so
+the two computations count the same thing. The Laplacian of \(K_n\) is
+\(nI - J\), where \(J\) is the all-ones matrix. Its eigenvalues are \(0\) once
+and \(n\) with multiplicity \(n - 1\), and the spectral form of the matrix-tree
+theorem gives \(\tfrac1n\, n^{n-1} = n^{n-2}\). The session checked the formula
+for seven values of \(n\). The eigenvalue argument proves it for all of them.
+
+\calloutnote{Pitfall}{In this version \B{FindSpanningTree} ignores
+\B{EdgeWeight}: on a weighted graph it returns \emph{a} spanning tree, not
+necessarily a \emph{minimum} one. Mathematica returns a minimum spanning tree.
+Until this is fixed, do not rely on the total weight of the tree it
+returns.}
+
+\section{Editing and combining graphs}
+\label{sec:graphs-editing}
+
+Graphs are immutable expressions, so an edit returns a new graph and leaves the
+original unchanged. \B{VertexDelete}, \B{EdgeAdd}, \B{VertexAdd}, and
+\B{EdgeDelete} make local changes. \B{GraphComplement}, \B{LineGraph},
+\B{ReverseGraph}, and \B{UndirectedGraph} transform a whole graph.
+\B{GraphUnion}, \B{GraphIntersection}, and \B{GraphDifference} combine two.
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/editing/1}{Deleting a vertex also deletes its incident
+edges. The 5-cycle becomes a path on four vertices.}
+\pair{graphs-hypergraphs/editing/2}{Adding the closing edge turns a path into a
+triangle.}
+\pair{graphs-hypergraphs/editing/3}{The complement of \(C_5\) joins exactly the
+pairs that \(C_5\) does not\ldots}
+\pair{graphs-hypergraphs/editing/4}{\ldots and that complement is again a
+5-cycle. \(C_5\) is \emph{self-complementary}.}
+\pair{graphs-hypergraphs/editing/5}{\B{LineGraph} has a vertex for each edge. The
+three spokes of a star all meet at the hub, so they form a triangle.}
+\pair{graphs-hypergraphs/editing/6}{\B{GraphUnion} merges the vertex and edge
+sets. The shared vertex \(3\) glues the two paths together.}
+\end{codepairs}
+
+\calloutnote{Performance}{A graph built by \B{Graph} is validated once, and the
+result is kept in a small \emph{validated-graph memo} keyed by the expression
+node: the vertex hash index, the integer-endpoint edge arrays, and the
+compressed adjacency lists. Every later call on the same object starts from
+those integer arrays, so predicates such as \B{SimpleGraphQ} take \(O(1)\) time
+and editing operations never re-hash vertices. That is why deleting \(1000\)
+vertices from a \(10^5\)-vertex graph takes about \(4\) ms in Mathilda and
+\(52\) ms in Mathematica.}
+
+\section{Tours: Euler and Hamilton}
+\label{sec:graphs-tours}
+
+Two old problems ask for a closed walk that uses every element of a graph once.
+An \emph{Eulerian cycle}\index{Eulerian cycle} uses every \emph{edge} exactly
+once. A \emph{Hamiltonian cycle}\index{Hamiltonian cycle} visits every
+\emph{vertex} exactly once. The two problems sound similar and are very
+different in difficulty.
+
+\begin{theorem}[Euler, 1736]
+A connected graph has an Eulerian cycle if and only if every vertex has even
+degree.
+\end{theorem}
+
+That condition is checked in linear time, and Hierholzer's algorithm constructs
+the cycle in linear time too. \B{EulerianGraphQ} and \B{FindEulerianCycle} do
+exactly this:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/tours/1}{In \(K_5\) every degree is \(4\), which is even.
+In \(K_4\) every degree is \(3\), which is odd.}
+\pair{graphs-hypergraphs/tours/2}{An Euler tour of \(K_5\): all ten edges, each
+traversed once, ending where it began.}
+\end{codepairs}
+
+No comparable condition is known for Hamiltonian cycles. Deciding whether one
+exists is NP-complete, so \B{FindHamiltonianCycle} has to search. Three graphs
+show the three possible outcomes:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/tours/3}{The 3-cube has a Hamiltonian cycle, a
+\emph{Gray code} through the eight vertices.}
+\pair{graphs-hypergraphs/tours/4}{The Petersen graph has none. The empty list is
+a proof of non-existence, not a failure to search.}
+\pair{graphs-hypergraphs/tours/5}{It does have a Hamiltonian \emph{path}. Petersen
+is the smallest \emph{hypohamiltonian} graph.}
+\pair{graphs-hypergraphs/tours/6}{The \(3\times3\) grid has no Hamiltonian cycle
+either, for a parity reason explained below.}
+\pair{graphs-hypergraphs/tours/7}{\B{FindPath} with \mcode{All} lists every
+simple path between two vertices: both ways round the pentagon.}
+\end{codepairs}
+
+The Gray code on the cube, highlighted:
+
+\plotcell{graphs-hypergraphs/hamilton}
+
+
+\calloutnote{Theory}{The grid is bipartite, and its two colour classes have
+\(5\) and \(4\) vertices. A cycle in a bipartite graph alternates between the
+classes, so a Hamiltonian cycle would need the two classes to be the same
+size. No search is needed. The Petersen case has no such short proof. Its
+non-Hamiltonicity is a classical result that is usually proved by examining
+cases, which is what the search does.}
+
+\calloutnote{Under the hood}{\B{FindHamiltonianCycle}
+(\texttt{src/graph/galg\_hamilton.c}) is a depth-first search with
+\emph{constraint propagation}. Each step decides whether one \emph{edge} is in
+the cycle. A vertex with only two remaining edges forces both of them into the
+cycle. A vertex that already has two chosen edges excludes all its others. An
+edge that would close a cycle shorter than \(n\) is refused. At every node of
+the search, the edges not yet excluded must form a biconnected graph, which
+Tarjan's algorithm checks in linear time. The
+search works under a node budget. If the budget runs out, the call returns
+\emph{unevaluated}, so an empty list always means the search proved there is no
+Hamiltonian cycle.}
+
+\section{Centrality and clustering}
+\label{sec:graphs-centrality}
+
+A \emph{centrality}\index{centrality} assigns each vertex a number that measures
+how important it is. There are many definitions, and they disagree in
+informative ways. A small graph shows the differences: a triangle
+\(\{1,2,3\}\) with a pendant vertex \(4\) attached to vertex \(3\).
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/centrality/1}{A triangle with a tail.}
+\pair{graphs-hypergraphs/centrality/2}{\B{DegreeCentrality} counts
+neighbours.}
+\pair{graphs-hypergraphs/centrality/3}{\B{ClosenessCentrality} is the reciprocal
+of the mean distance to the other vertices. Vertex \(3\) is at distance \(1\)
+from all of them.}
+\pair{graphs-hypergraphs/centrality/4}{\B{BetweennessCentrality} counts shortest
+paths through a vertex. Only vertex \(3\) lies between others: on the paths
+\(1\)--\(4\) and \(2\)--\(4\).}
+\pair{graphs-hypergraphs/centrality/5}{\B{PageRankCentrality} is the stationary
+distribution of a random surfer. It sums to \(1\).}
+\pair{graphs-hypergraphs/centrality/6}{\B{EigenvectorCentrality} is the Perron
+vector of \(A\): a vertex is important if its neighbours are.}
+\end{codepairs}
+
+Every measure ranks vertex \(3\) first and vertex \(4\) last. They differ in
+how large the gaps are. Betweenness gives every vertex except \(3\) a score of
+zero, while PageRank still gives the leaf a noticeable share. \B{KatzCentrality}
+and \B{HITSCentrality} (hubs and authorities, for directed graphs) complete the
+set.
+
+\emph{Clustering} measures how close each neighbourhood is to a clique. The
+local coefficient of a vertex is the fraction of pairs of its neighbours that
+are themselves adjacent:\index{clustering coefficient}
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/centrality/7}{Vertices \(1\) and \(2\) have a complete
+neighbourhood. Of the three pairs among vertex 3's neighbours, only one is an
+edge. A leaf has no pairs.}
+\pair{graphs-hypergraphs/centrality/8}{The global coefficient (three times the
+triangles, divided by the connected triples) differs from the mean of the local
+coefficients. Both are exact.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{The \emph{global} and \emph{mean} clustering coefficients
+answer different questions and are easy to confuse. The global coefficient
+weights each vertex by the number of neighbour pairs it has, so hubs dominate.
+The mean weights every vertex equally, so the many leaves of a sparse network
+pull it down. Here the two are \(3/5\) and \(7/12\). On a real social network
+they can differ by a factor of two.}
+
+\calloutnote{Under the hood}{\B{BetweennessCentrality} is Brandes's algorithm:
+one breadth-first search per source, followed by a reverse accumulation of
+dependencies. It costs \(O(nm)\) in total. The sources are independent, so
+Mathilda divides them among threads and adds up the per-thread vectors.
+\B{EigenvectorCentrality} uses Arnoldi iteration on the sparse adjacency
+structure and never builds the dense matrix. On a \(10^4\)-vertex graph,
+betweenness takes \(0.23\) s against Mathematica's \(4.5\) s, and Katz
+centrality on \(10^5\) vertices takes \(31\) ms against \(38\) s.}
+
+\section{Random graphs and the giant component}
+\label{sec:graphs-random}
+
+The Erd\H{o}s--R\'enyi random graph \(G(n, m)\) chooses \(m\) of the
+\(\binom{n}{2}\) possible edges uniformly at random. Its most famous property is
+a \emph{phase transition}.\index{random graph!giant component} When the average
+degree \(c = 2m/n\) is below \(1\), every connected component is small, of size
+\(O(\log n)\). When \(c\) passes \(1\), a single \emph{giant component}
+containing a positive fraction of all the vertices appears suddenly. A table of
+the largest component in \(G(1000, m)\) shows the transition:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/random/1}{Largest component size as \(m\) grows. The
+average degree reaches \(1\) at \(m = 500\).}
+\end{codepairs}
+
+A picture shows the same transition at a smaller size. With \(120\) vertices and
+\(80\) edges the average degree is \(4/3\), just above the threshold. One
+component of \(47\) vertices, drawn in red, has already absorbed a large share
+of the graph, while the rest are small trees and isolated vertices:
+
+\plotcell{graphs-hypergraphs/giant}
+
+
+Below \(m = 500\) the largest component has about a dozen vertices. By
+\(m = 600\) (average degree \(1.2\)) it holds a third of the graph, and by
+\(m = 1000\) (average degree \(2\)) more than four-fifths. The theory predicts
+the size. The fraction \(\beta\) of vertices in the giant component solves
+\(\beta = 1 - e^{-c\beta}\), which gives \(\beta \approx 0.797\) at \(c = 2\).
+That is close to the \(815\) that the session found.
+
+The degree of a single vertex in \(G(n,m)\) is approximately Poisson with mean
+\(c\). A sample with \(n = 200\) and \(c = 4\) is already close:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/random/2}{A seeded random graph with \(200\) vertices
+and \(400\) edges.}
+\pair{graphs-hypergraphs/random/3}{Its mean degree is exactly \(2m/n = 4\).}
+\pair{graphs-hypergraphs/random/4}{The degree distribution: how many vertices
+have each degree.}
+\pair{graphs-hypergraphs/random/5}{The counts a Poisson distribution with mean
+\(4\) predicts for \(200\) vertices.}
+\end{codepairs}
+
+\calloutnote{Performance}{\B{RandomGraph} samples \(m\) indices out of the
+\(\binom{n}{2}\) candidate edges without replacement, making exactly the draws
+\B{RandomSample} would make, and decodes each index to its vertex pair with a
+binary search over the rows of the upper triangle. The candidate list is never
+built, so memory is \(O(m)\), not \(O(n^2)\). A seeded \B{RandomGraph} gives the
+same graph as sampling the explicit candidate list would.}
+
+\section{Flows, cuts, and connectivity}
+\label{sec:graphs-flows}
+
+Think of each directed edge as a pipe with a \emph{capacity}. How much can flow
+from a source \(s\) to a sink \(t\), if every intermediate vertex passes on
+exactly what it receives? \B{FindMaximumFlow} takes the capacities as an
+option, listed in \B{EdgeList} order:\index{maximum flow}
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/flows/1}{A four-vertex network. The capacities are
+supplied to each call below.}
+\pair{graphs-hypergraphs/flows/2}{The maximum flow from \(s\) to \(t\) is
+\(5\).}
+\pair{graphs-hypergraphs/flows/3}{\mcode{"FlowMatrix"} shows how: both edges out
+of \(s\) are full (\(3\) and \(2\)), and vertex \(a\) splits its \(3\) as \(1\)
+to \(b\) and \(2\) to \(t\).}
+\pair{graphs-hypergraphs/flows/4}{\B{FindEdgeCut} gives the fewest edges whose
+removal separates \(s\) from \(t\). Here those are the two edges out of
+\(s\).}
+\end{codepairs}
+
+Drawn in layers from source to sink, with each edge labelled by its flow and
+its capacity, the saturated cut is easy to see. Both edges out of \(s\) carry
+their full capacity:
+
+\plotcell{graphs-hypergraphs/flow}
+
+
+The flow value is \(5\), and the two edges out of \(s\) have total capacity
+\(3 + 2 = 5\). This is not a coincidence.
+
+\begin{theorem}[Max-flow min-cut]
+\index{max-flow min-cut theorem}
+In any network, the value of a maximum \(s\)--\(t\) flow equals the minimum total
+capacity of a set of edges whose removal separates \(s\) from \(t\).
+\end{theorem}
+
+Applied to unit capacities, the theorem becomes \emph{Menger's theorem}. The
+number of edge-disjoint paths between two vertices equals the minimum number of
+edges whose removal separates them. This turns connectivity into a flow
+computation:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/flows/5}{The Petersen graph again.}
+\pair{graphs-hypergraphs/flows/6}{\B{FindMinimumCut} is a global minimum cut: the
+cheapest way to split the graph in two. Isolating one vertex costs its three
+edges.}
+\pair{graphs-hypergraphs/flows/7}{\B{FindVertexCut} gives the three neighbours
+of a vertex. Removing them disconnects that vertex from the rest.}
+\pair{graphs-hypergraphs/flows/8}{\B{VertexConnectivity}, \B{EdgeConnectivity},
+and the minimum degree are all \(3\).}
+\end{codepairs}
+
+Whitney's inequality \(\kappa(G) \le \lambda(G) \le \delta(G)\) holds for every
+graph: vertex connectivity is at most edge connectivity, which is at most the
+minimum degree. The Petersen graph attains equality throughout. It is as well
+connected as a 3-regular graph can be, which is part of why it appears so often
+in network design.
+
+\calloutnote{Under the hood}{\B{FindMaximumFlow} is \emph{Dinic's algorithm}. It
+builds breadth-first level graphs, truncated at the sink, and pushes blocking
+flows along them using current-arc pointers on a compressed residual network.
+Every capacity is converted to a 64-bit integer first. Rational and real
+capacities are scaled by a common factor, so even the maximum flow of
+floating-point capacities is computed without rounding error.
+\B{FindMinimumCut} uses the Nagamochi--Ibaraki algorithm, which needs no source
+or sink. \B{VertexConnectivity} uses Even's reduction to \(O(n)\) flow problems
+and replaces an earlier search over vertex subsets whose cost grew
+exponentially.}
+
+\section{Matchings, covers, and cliques}
+\label{sec:graphs-covers}
+
+A \emph{matching}\index{matching} is a set of edges that share no vertex. A
+\emph{vertex cover}\index{vertex cover} is a set of vertices that touches every
+edge. An \emph{independent set}\index{independent set} is a set of vertices no
+two of which are adjacent. A \emph{clique} is a set of vertices every two of
+which are adjacent. Maximum matchings can be found in polynomial time. The other
+three problems are NP-hard. Mathilda solves all four exactly:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/covers/1}{Petersen once more.}
+\pair{graphs-hypergraphs/covers/2}{\B{FindIndependentEdgeSet} gives a maximum
+matching. Five edges cover all ten vertices, so the matching is
+\emph{perfect}.}
+\pair{graphs-hypergraphs/covers/3}{\B{FindVertexCover} gives a minimum vertex
+cover of six vertices\ldots}
+\pair{graphs-hypergraphs/covers/4}{\ldots and \B{FindIndependentVertexSet} gives
+a maximum independent set of four.}
+\pair{graphs-hypergraphs/covers/5}{Together they make up the whole vertex
+set.}
+\pair{graphs-hypergraphs/covers/6}{\B{FindClique} finds the largest clique. In
+the Petersen graph that is a single edge: the graph has no triangles.}
+\pair{graphs-hypergraphs/covers/7}{In \(K_5\) the whole graph is a clique.}
+\pair{graphs-hypergraphs/covers/8}{The chromatic number is \(3\), because the
+graph contains 5-cycles, which need three colours.}
+\end{codepairs}
+
+On the classic drawing the three structures are easy to compare. The minimum
+vertex cover is in red, and the four blue vertices left over are the maximum
+independent set:
+
+\plotcell{graphs-hypergraphs/cover}
+
+The perfect matching pairs off all ten vertices with five disjoint edges:
+
+\plotcell{graphs-hypergraphs/matching}
+
+And a proper colouring with three colours, one per class of the partition that
+\B{FindVertexColoring} returns:
+
+\plotcell{graphs-hypergraphs/coloring}
+
+
+Line 5 is Gallai's identity. A set is independent exactly when its complement is
+a vertex cover. So a maximum independent set and a minimum cover are
+complements of each other, and \(\alpha(G) + \tau(G) = n\), here \(4 + 6 = 10\).
+A clique in \(G\) is an independent set in the complement of \(G\), so the four
+problems reduce to two.
+
+\calloutnote{Theory}{For \emph{bipartite} graphs the NP-hard problems become
+easy. \emph{K\H{o}nig's theorem} says that the minimum vertex cover of a
+bipartite graph has the same size as the maximum matching, and a maximum
+matching can be found in polynomial time. Mathilda uses this. When the
+independent-set solver finds a bipartite connected component of \(256\) or more
+vertices, it solves that component with Hopcroft--Karp and K\H{o}nig's
+construction instead of branching on it.}
+
+\calloutnote{Under the hood}{Matching uses Hopcroft--Karp for bipartite graphs
+and Edmonds's blossom algorithm otherwise. Independent set and vertex cover use
+\emph{branch and reduce}: degree-0, degree-1, and degree-2 folding, domination,
+and connected-component splitting, with the search itself kept for what remains.
+\B{FindClique} uses BBMC, a bitset branch and bound that colours the candidate
+set to prune. Every solver has a budget and returns unevaluated when it runs
+out, never a smaller answer passed off as optimal. A randomised differential
+test of about 12\,000 cases against Mathematica~15 found no disagreements in
+optimum sizes. It did find that Mathematica sometimes returns non-maximum
+matchings on weighted graphs.}
+
+\section{Isomorphism, symmetry, and planarity}
+\label{sec:graphs-iso}
+
+Two graphs are \emph{isomorphic}\index{graph isomorphism} if some relabelling of
+the vertices turns one into the other. Vertex names and the order in which
+edges are listed do not affect the answer. \B{IsomorphicGraphQ} decides the
+question, \B{FindGraphIsomorphism} returns the relabelling, and
+\B{CanonicalGraph} gives a canonical representative. Two graphs are isomorphic
+exactly when their canonical forms are identical:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/isomorphism/1}{A square on symbolic vertices, with its
+edges listed out of order.}
+\pair{graphs-hypergraphs/isomorphism/2}{It is the 4-cycle.}
+\pair{graphs-hypergraphs/isomorphism/3}{The isomorphism is returned as an
+\B{Association} from old vertex names to new ones.}
+\pair{graphs-hypergraphs/isomorphism/4}{The two canonical forms are identical.
+\B{SameQ} is enough to compare them.}
+\pair{graphs-hypergraphs/isomorphism/5}{\B{GraphAutomorphismGroup} gives the
+symmetries of the Petersen graph as a permutation group with four
+generators.}
+\end{codepairs}
+
+That group has order \(120\) and is isomorphic to the symmetric group \(S_5\).
+The Petersen graph is the Kneser graph \(K(5,2)\): its vertices are the
+2-subsets of a 5-set, and two vertices are adjacent when the subsets are
+disjoint. Any permutation of the five points gives a symmetry.
+
+\calloutnote{Under the hood}{Isomorphism, canonical form, and automorphisms all
+use one \emph{individualization--refinement} engine, the method used by nauty
+and bliss. Colour refinement (1-dimensional Weisfeiler--Leman) splits the
+vertices by degree profile until the partition is stable. If some colour class
+still has more than one vertex, the engine singles out one vertex, refines
+again, and searches the resulting tree, pruning with the automorphisms found so
+far. On random 3-regular graphs with \(10^4\) vertices, which refinement alone
+cannot fully separate, Mathilda takes \(4\) ms and Mathematica \(818\) ms.}
+
+A graph is \emph{planar}\index{planar graph} if it can be drawn in the plane
+without edge crossings. By Kuratowski's theorem, a graph is planar exactly when
+it contains no subdivision of \(K_5\) or of \(K_{3,3}\):
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/isomorphism/6}{\(K_4\) and the grid are planar. The two
+Kuratowski graphs \(K_5\) and \(K_{3,3}\) are not.}
+\pair{graphs-hypergraphs/isomorphism/7}{The Petersen graph is not planar. It
+contains a subdivision of \(K_{3,3}\).}
+\end{codepairs}
+
+The two Kuratowski graphs, drawn by \B{GraphPlot}. However the vertices of
+\(K_5\) are placed, some pair of edges must cross:
+
+\plotcell{graphs-hypergraphs/k5}
+
+\(K_{3,3}\) in the two-column bipartite layout. It is the ``three utilities''
+puzzle: three houses, three utilities, and no way to connect each house to each
+utility without a crossing:
+
+\plotcell{graphs-hypergraphs/k33}
+
+
+\calloutnote{Under the hood}{\B{PlanarGraphQ} is the \emph{left--right planarity
+test} of de~Fraysseix and Rosenstiehl, as refined by Brandes. It runs in linear
+time, in two depth-first passes: one orients the edges and computes low-points,
+and the other checks that the back edges can be split consistently between the
+left and right sides of each tree edge. It never builds an embedding, so it
+never needs to handle one.}
+
+\section{Graphs are expressions}
+\label{sec:graphs-programming}
+
+Everything in this chapter so far used graph functions. But a graph is an
+ordinary expression, so the rest of the language works on it too. Graphs can be
+built from data with \B{KeyValueMap} and \B{Thread}, filtered with \B{Select},
+and rewritten with rules:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/programming/1}{A small ``who follows whom'' table, held
+as an association from each person to a list.}
+\pair{graphs-hypergraphs/programming/2}{Thread each key over its list of values
+to get the directed edges.}
+\pair{graphs-hypergraphs/programming/3}{The edges, in the order the data gave
+them.}
+\pair{graphs-hypergraphs/programming/4}{People nobody follows: vertices of
+in-degree zero.}
+\pair{graphs-hypergraphs/programming/5}{\B{EdgeRules} goes the other way and
+turns edges back into rules.}
+\pair{graphs-hypergraphs/programming/6}{A rule rewrites edges like any other
+expression.}
+\pair{graphs-hypergraphs/programming/7}{\B{NeighborhoodGraph} is the ball of
+radius \(1\) around vertex \(1\): the vertex and its three neighbours.}
+\pair{graphs-hypergraphs/programming/8}{\B{Subgraph} keeps the chosen vertices
+and the edges among them. In this labelling, vertices \(1\) to \(5\) form a
+5-cycle.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{A rule applied to an \B{EdgeList} produces a list of
+edges, not a graph. Wrap the result in \B{Graph} to validate it again. This is
+deliberate. \B{Graph} is the single point where simplicity and endpoint
+membership are checked, and where the validated-graph memo is seeded. Every
+function that accepts a graph can therefore assume the invariants hold, and does
+not need to check them again.}
+
+\section{Hypergraphs}
+\label{sec:hypergraphs}
+
+In a graph every edge has two ends. Many relations have more participants. A
+paper has several authors, a reaction has several reagents, and a row of a
+database relates several fields. Replacing such a relation with all the pairwise
+edges it implies loses information: three authors on one paper and three
+separate two-author papers produce the same triangle. A
+\emph{hypergraph}\index{hypergraph} keeps the relation intact. It consists of a
+vertex set and a list of \emph{hyperedges}, and each hyperedge is an arbitrary
+subset of the vertices.
+
+\subsection{Building and reading a hypergraph}
+\label{ssec:hyp-construct}
+
+\B{Hypergraph} takes a list of hyperedges, and optionally a vertex list first.
+Like \B{Graph}, it is an ordinary expression, validated when it is built:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/hyper-basics/1}{Four hyperedges of sizes \(3, 2, 3, 1\)
+on seven vertices.}
+\pair{graphs-hypergraphs/hyper-basics/2}{The canonical form lists the vertices
+first, as \B{Graph} does.}
+\pair{graphs-hypergraphs/hyper-basics/3}{The graph accessors also work on
+hypergraphs. \B{VertexDegree} counts the hyperedges containing each
+vertex.}
+\pair{graphs-hypergraphs/hyper-basics/4}{\B{HyperedgeSizes} gives the size of
+each hyperedge.}
+\pair{graphs-hypergraphs/hyper-basics/5}{\B{HypergraphRank} and
+\B{HypergraphCorank} are the largest and smallest hyperedge sizes. They differ,
+so the hypergraph is not \emph{uniform}.}
+\pair{graphs-hypergraphs/hyper-basics/6}{\B{IncidenceMatrix} is \(7\times 4\):
+entry \((i, j)\) is \(1\) when vertex \(i\) is in hyperedge \(j\).}
+\pair{graphs-hypergraphs/hyper-basics/7}{\B{HypergraphDual} exchanges the roles
+of vertices and hyperedges. Vertex 3 lies in hyperedges 1 and 2, so it becomes
+the dual hyperedge \(\{1, 2\}\).}
+\end{codepairs}
+
+\mcode{HypergraphPlot} draws each hyperedge as a translucent region around its
+members: a rounded hull for three or more vertices, a stadium for two, and a
+ring for one. Vertices \(3\) and \(4\) each lie in two hyperedges, and vertex
+\(7\) sits alone in a singleton:
+
+\plotcell{graphs-hypergraphs/hyper}
+
+
+The incidence matrix fully describes the hypergraph, and the dual has the
+transposed incidence matrix. Applying the dual twice returns the original
+hypergraph, with the vertices renamed by their positions. A hypergraph can equally be read as a family of sets or as a
+bipartite graph between vertices and hyperedges, and each hypergraph operation
+is easiest to understand in one of these two readings.
+
+\calloutnote{Pitfall}{A hyperedge list is kept exactly as written, including its
+order and any repeated vertex. This lets Wolfram-model states such as
+\mcode{\{\{1,2,3\},\{3,4\}\}} be used directly. Most hypergraph operations treat
+a hyperedge as the \emph{set} of its distinct vertices. The order-sensitive ones
+are \B{HyperedgeSizes}, which counts repeats, and \B{HypergraphToGraph}, which
+reads a hyperedge as an ordered chain.}
+
+\subsection{From hypergraphs to graphs}
+\label{ssec:hyp-expansions}
+
+There are three standard ways to turn a hypergraph into a graph, and each keeps
+different information. The \emph{clique expansion} makes every hyperedge a
+clique. The \emph{star expansion} adds one vertex for each hyperedge and joins
+it to that hyperedge's members, which is the bipartite incidence graph. The
+Wolfram Function Repository convention in \B{HypergraphToGraph} reads each
+hyperedge as an ordered chain:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/hyper-structure/1}{Name the hypergraph from the previous
+section.}
+\pair{graphs-hypergraphs/hyper-structure/2}{\B{HypergraphCliqueExpansion}: the
+two triples become triangles and the pair becomes an edge. The singleton
+\(\{7\}\) adds no edges.}
+\pair{graphs-hypergraphs/hyper-structure/3}{\B{HypergraphStarExpansion} has
+\(7 + 4\) vertices and one edge for each incidence, \(3+2+3+1 = 9\).}
+\pair{graphs-hypergraphs/hyper-structure/4}{\B{HypergraphToGraph} turns an
+ordered hyperedge \(\{a, b, c\}\) into the directed edges \(a\to b\),
+\(a \to c\), \(b \to c\).}
+\end{codepairs}
+
+Connectivity and distance make sense without expanding. Two vertices are
+adjacent when some hyperedge contains both, and two hyperedges are adjacent
+when they intersect:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/hyper-structure/5}{\B{HypergraphConnectedComponents}:
+the chain \(\{1,2,3\}\), \(\{3,4\}\), \(\{4,5,6\}\) connects six vertices.
+Vertex \(7\) is isolated.}
+\pair{graphs-hypergraphs/hyper-structure/6}{Vertex \(1\) to vertex \(6\) takes
+three hyperedges. Hyperedge \(1\) to hyperedge \(3\) takes two steps, through
+hyperedge \(2\).}
+\end{codepairs}
+
+\subsection{\texorpdfstring{\(s\)}{s}-line graphs}
+\label{ssec:hyp-sline}
+
+The \emph{line graph} of a hypergraph has one vertex for each hyperedge, and
+two of them are joined when the hyperedges intersect. Asking for an overlap of
+at least \(s\) vertices gives the \emph{\(s\)-line graph}\index{hypergraph!s-line
+graph}, a family of increasingly strict views of the same data. For
+co-authorship data, \(s = 1\) links papers that share any author and \(s = 2\)
+links only papers that share a pair of authors. Consider four hyperedges
+arranged around a ring:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/hyper-structure/7}{A ring of four hyperedges:
+\(\{1,2,3\}\), \(\{2,3,4\}\), \(\{3,4,5\}\), \(\{1,5\}\).}
+\pair{graphs-hypergraphs/hyper-structure/8}{\B{HypergraphLineGraph} with
+\(s = 1\) has five of the six possible edges. Only hyperedges \(2\) and \(4\) are
+disjoint.}
+\pair{graphs-hypergraphs/hyper-structure/9}{With \(s = 2\) only overlaps of two
+or more vertices count: \(\{2,3\}\) and \(\{3,4\}\).}
+\pair{graphs-hypergraphs/hyper-structure/10}{\B{HyperedgeConnectedComponents} at
+\(s = 2\): the hyperedge \(\{1,5\}\) is no longer connected to the others.}
+\end{codepairs}
+
+The ring hypergraph drawn. Hyperedges \(1\), \(2\), and \(3\) overlap in two
+vertices each, which is exactly what the \(2\)-line graph detects:
+
+\plotcell{graphs-hypergraphs/ring}
+
+
+\calloutnote{Performance}{Most hypergraph operations run in time linear in the
+total incidence \(\sum_e |e|\). The \(s\)-overlap family is the exception: it
+costs \(O(\sum_v \deg(v)^2)\), the number of hyperedge pairs that meet at some
+vertex. The \(1\)-line graph has that many edges anyway, so no algorithm could
+do better. The algorithm counts overlaps for each vertex's incidence list in a
+scratch array and never forms the intersection of two hyperedges directly.}
+
+\subsection{Transversals}
+\label{ssec:hyp-transversals}
+
+A \emph{transversal}\index{hypergraph!transversal} (or \emph{hitting set}) is a
+set of vertices that meets every hyperedge. The minimal transversals form a
+hypergraph of their own, the \emph{transversal hypergraph}
+\(\operatorname{Tr}(H)\). This single construction covers many problems. The
+minimal vertex covers of a graph are the transversals of its edge set. The
+minimal diagnoses of a faulty circuit are the transversals of its conflict sets.
+In a database, the candidate keys and the minimal non-keys are transversal
+hypergraphs of each other.
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/hyper-transversals/1}{The ring hypergraph from above.}
+\pair{graphs-hypergraphs/hyper-transversals/2}{\B{TransversalHypergraph}: the
+four minimal hitting sets. Each of them meets all four hyperedges.}
+\pair{graphs-hypergraphs/hyper-transversals/3}{\B{FindMinimumTransversal} gives
+a smallest hitting set. Its size, \(2\), is the transversal number
+\(\tau(H)\).}
+\pair{graphs-hypergraphs/hyper-transversals/4}{Taking transversals twice gives
+back the original hyperedges, as Berge's duality theorem says it must.}
+\end{codepairs}
+
+\begin{theorem}[Berge]
+If \(H\) is a \emph{simple} hypergraph (no hyperedge contains another), then
+\(\operatorname{Tr}(\operatorname{Tr}(H)) = H\).
+\end{theorem}
+
+The ring is simple, and the last line of the session confirms the theorem.
+Computing \(\operatorname{Tr}(H)\) is the \emph{hypergraph dualization} problem.
+Its exact complexity is a well-known open question. Fredman and Khachiyan showed
+that it can be solved in quasi-polynomial time in the combined size of the input
+and output, and no polynomial algorithm is known.
+
+\calloutnote{Under the hood}{\B{TransversalHypergraph} is \emph{MMCS}
+(minimal-to-minimal via crit and uncov, Murakami and Uno). It grows a candidate
+set one vertex at a time, and for each chosen vertex it keeps track of the
+hyperedges only that vertex hits. A vertex that stops having any such hyperedge
+cannot belong to a minimal transversal, so that branch is cut immediately. On a
+16-vertex instance it runs in \(4.2\) ms. The Function Repository's
+\mcode{TransversalHypergraph} takes \(5.2\) s. \B{FindMinimumTransversal} is a
+combinatorial branch and bound. On an \(80\)-vertex instance it runs
+\(3.2\)--\(3.6\times\) faster than the MILP solvers (Mathematica's
+\mcode{LinearOptimization}, SciPy's HiGHS) that are the usual way to compute
+it.}
+
+Random hypergraphs and sub-hypergraphs complete the toolkit.
+\B{RandomHypergraph}\mcode{[\{n, m\}, k]} samples a \(k\)-uniform hypergraph and
+uses the stream that \B{SeedRandom} seeds. There are two ways to restrict a
+hypergraph to a vertex subset, and they are easy to confuse:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/hyper-transversals/5}{A reproducible random
+3-uniform hypergraph: eight vertices, five triples.}
+\pair{graphs-hypergraphs/hyper-transversals/6}{Its hyperedges.}
+\pair{graphs-hypergraphs/hyper-transversals/7}{\B{Subhypergraph} keeps only the
+hyperedges that lie \emph{entirely} inside the subset\ldots}
+\pair{graphs-hypergraphs/hyper-transversals/8}{\ldots while
+\B{HypergraphRestriction} intersects \emph{every} hyperedge with the subset and
+drops only the ones that become empty.}
+\end{codepairs}
+
+\calloutnote{Theory}{Mathematica~15 has no built-in hypergraph type:
+\mcode{Names["*Hypergraph*"]} returns an empty list. Hypergraphs are available
+in the Wolfram ecosystem only as top-level add-ons: the
+WolframInstitute/Hypergraph paclet, Function Repository entries such as
+\mcode{ResourceFunction["TransversalHypergraph"]}, and the Wolfram Physics
+Project tools. Mathilda uses their names where one exists, accepts their
+argument forms, and implements everything in C.}
+
+\section{Featured examples}
+\label{sec:graphs-featured}
+
+The examples in this section are short. Each is a small, self-contained problem
+from outside mathematics, solved in a few lines with the functions of this
+chapter.
+
+\subsection*{The knight's tour}
+\index{knight's tour}
+
+Can a knight visit every square of a chessboard exactly once and return to its
+starting square? Build the graph whose vertices are the \(64\) squares, with an
+edge for every knight move, and the question becomes: is this graph Hamiltonian?
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/featured/1}{The four ``forward'' knight moves. Each edge
+is generated once.}
+\pair{graphs-hypergraphs/featured/2}{The knight's graph of an \(n\times n\)
+board, with squares named \(\{i, j\}\).}
+\pair{graphs-hypergraphs/featured/3}{The standard board has \(168\) knight
+moves.}
+\pair{graphs-hypergraphs/featured/4}{Corner squares have only two moves, and
+central squares have eight.}
+\pair{graphs-hypergraphs/featured/5}{A closed tour exists: a Hamiltonian cycle
+through all \(64\) squares.}
+\pair{graphs-hypergraphs/featured/6}{On the \(5\times5\) board there is no closed
+tour, but an open one visits all \(25\) squares.}
+\end{codepairs}
+
+Placing each square at its own board coordinates turns the graph drawing into a
+chessboard. The grey lines are all \(168\) knight moves, and the red ones are
+the closed tour that \B{FindHamiltonianCycle} found:
+
+\plotcell{graphs-hypergraphs/knight}
+
+
+The \(5 \times 5\) result has a one-line explanation. A knight always moves to a
+square of the other colour, so the knight's graph is bipartite. A closed tour
+alternates colours, so it needs as many light squares as dark ones. A board with
+\(25\) squares cannot have that.
+
+\subsection*{Find the powerbrokers of Renaissance Florence}
+\index{Florentine families}
+
+In a well-known study of fifteenth-century Florence, Padgett and Ansell recorded
+the marriages between the city's leading families. Betweenness centrality
+explains how the Medici came to dominate:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/featured/7}{Twenty marriage ties among fifteen
+families.}
+\pair{graphs-hypergraphs/featured/8}{The Medici lie on far more shortest paths
+than any other family: \(47.5\), twice the next highest.}
+\pair{graphs-hypergraphs/featured/9}{By degree alone the Medici lead less
+dramatically.}
+\pair{graphs-hypergraphs/featured/10}{Removing the Medici alone disconnects the
+network.}
+\pair{graphs-hypergraphs/featured/11}{A marriage alliance between the Pazzi and
+the Lamberteschi has to pass through the Medici.}
+\end{codepairs}
+
+The marriage network, with the Medici in red. Every path from the Pazzi or the
+Salviati to the rest of Florence passes through them:
+
+\plotcell{graphs-hypergraphs/florence}
+
+
+The Medici had only a few more marriages than the Strozzi or the Guadagni.
+What set them apart was their position: they were the family through which
+everyone else's connections ran, and that is what betweenness measures.
+
+\subsection*{Colour the map of Australia}
+
+Colour Australia's states and territories so that neighbours differ. The
+constraints form a graph with one vertex per region. Tasmania is an island, so
+it has no neighbours.
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/featured/12}{Seven regions and their land borders.}
+\pair{graphs-hypergraphs/featured/13}{Three colours suffice, and three are
+needed: WA, NT, and SA form a triangle.}
+\end{codepairs}
+
+With each region placed roughly where it is on the map and coloured by
+\B{FindVertexColoring}:
+
+\plotcell{graphs-hypergraphs/australia}
+
+
+\subsection*{Compute collaboration distance}
+
+A mathematician's \emph{Erd\H{o}s number} is their collaboration distance from
+Paul Erd\H{o}s. Papers are hyperedges over their authors, and collaboration
+distance is hypergraph distance:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/featured/14}{Five papers as hyperedges over seven
+authors.}
+\pair{graphs-hypergraphs/featured/15}{From R\'enyi to Patashnik takes three
+papers.}
+\pair{graphs-hypergraphs/featured/16}{A smallest set of authors that covers
+every paper. No two authors cover all five.}
+\end{codepairs}
+
+The five papers drawn as regions. Graham sits in three of them, which is why
+every short collaboration path passes near him:
+
+\plotcell{graphs-hypergraphs/papers}
+
+
+\subsection*{What a graph forgets}
+
+Why use hypergraphs at all? Because the pairwise view loses information. One
+paper with three authors and three separate two-author papers produce the same
+collaboration graph:
+
+\begin{codepairs}
+\pair{graphs-hypergraphs/featured/17}{The two clique expansions are isomorphic,
+although the hypergraphs are different.}
+\end{codepairs}
+
+\subsection*{Get dressed in the right order}
+
+The dependency graph of \S\ref{sec:graphs-directed} is itself a featured
+example. \B{TopologicalSort} returns an order that respects every constraint,
+and adding one contradictory constraint makes \B{AcyclicGraphQ} report that no
+order exists.
+
+\section{How fast is it?}
+\label{sec:graphs-performance}
+
+Every head in this chapter was benchmarked against Mathematica~15.0 and against
+the standard Python libraries (networkx for graphs, xgi for hypergraphs). The
+benchmark sources are in \texttt{benchmarks/92-graph-predicates} through
+\texttt{benchmarks/96-hypergraphs}, and each row was checked for agreement of
+values across the systems. Table~\ref{tab:graph-bench} gives a representative
+selection. Times are milliseconds on Apple silicon, best of three.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Case & Mathilda & Mathematica & ratio \\
+\midrule
+\B{VertexDelete}, \(1000\) of \(10^5\) vertices & 4 & 52 & \(13\times\) \\
+\B{GraphUnion}, two \(10^5\)-edge graphs & 13 & 354 & \(27\times\) \\
+\B{BetweennessCentrality}, \(10^4\) vertices & 230 & 4\,500 & \(20\times\) \\
+\B{KatzCentrality}, \(10^5\) vertices & 31 & 38\,000 & \(1200\times\) \\
+\B{IsomorphicGraphQ}, 3-regular, \(10^4\) vertices & 4 & 818 & \(200\times\) \\
+Maximum matching, triangulated grid & 2.8 & 190 & \(68\times\) \\
+\midrule
+\B{Hypergraph} construction, \(10^5\) hyperedges & 19.9 & 2\,912 & \(146\times\) \\
+\B{HypergraphDual}, \(10^5\) hyperedges & 8.1 & 236 & \(29\times\) \\
+\B{HyperedgeDistance}, \(10^5\) hyperedges & 2.8 & 7\,255 & \(2600\times\) \\
+\B{TransversalHypergraph}, 16 vertices & 4.2 & 5\,219 & \(1200\times\) \\
+\B{RandomHypergraph} (FR form), \(10^5\) triples & 10.6 & 1.6 & \(0.15\times\) \\
+\bottomrule
+\end{tabular}
+\caption{Representative graph and hypergraph timings, in milliseconds. The
+hypergraph baselines are the Wolfram paclet and Function Repository code, which
+is top-level Wolfram Language, not kernel C.}
+\label{tab:graph-bench}
+\end{table}
+
+Two caveats keep the table fair. First, the very large hypergraph ratios compare
+compiled C with interpreted Wolfram Language. That is the real choice facing
+Mathematica users, but it is not a comparison of equally engineered kernels. The
+graph rows, by contrast, compare with Mathematica's own C++ kernel, and those are
+the more meaningful figures. Second, Mathilda loses one row. The Function
+Repository's \mcode{RandomHypergraph} returns a single packed integer array.
+Mathilda returns a validated \B{Hypergraph} whose \(10^5\) hyperedges are
+separate expression nodes, and allocating those nodes alone takes longer than
+\(1.6\) ms. \B{GraphComplement} is at parity. Every other benchmarked case is
+at or ahead of both Mathematica and Python, both warm and cold (with a freshly
+built graph before each timed call).
+
+\calloutnote{Performance}{Most of the speed comes from representation, not from
+clever algorithms. A graph stays an ordinary expression, so the
+uniform-expression model of Chapter~\ref{ch:datastructures} is kept. But the
+first operation on a graph resolves it into integer arrays in the
+validated-graph memo, and every algorithm afterwards runs on those arrays with
+no hashing and no pattern matching. The hypergraph memo in
+\texttt{src/graph/hyp\_util.c} works the same way, and when the vertices are a
+compact range of machine integers it looks them up by direct addressing.}
+
+\subsection*{Where this connects}
+
+This chapter builds on several earlier ones. The Laplacian is an ordinary
+integer matrix, so the exact \B{Det} and \B{Eigenvalues} of \S\ref{sec:linalg}
+gave the matrix-tree theorem directly. Isomorphisms come back as associations
+(Chapter~\ref{ch:datastructures}), and random graphs and hypergraphs use the
+same seeded stream as the rest of the system. The chapter also followed the
+rule the rest of the book follows: the exact solvers for Hamiltonian cycles,
+cliques, independent sets, covers, and transversals return an exact answer or
+return unevaluated, and never return a result that only looks plausible. To draw
+any of these graphs, see Chapter~\ref{ch:graphics}. For the options of any
+function mentioned here, type \texttt{?Name} at the prompt to read its
+reference page.

@@ -1,0 +1,3 @@
+# The Florentine marriage network, with the Medici highlighted.
+florence = Graph[{"Acciaiuoli" <-> "Medici", "Castellani" <-> "Peruzzi", "Castellani" <-> "Strozzi", "Castellani" <-> "Barbadori", "Medici" <-> "Barbadori", "Medici" <-> "Ridolfi", "Medici" <-> "Tornabuoni", "Medici" <-> "Albizzi", "Medici" <-> "Salviati", "Salviati" <-> "Pazzi", "Peruzzi" <-> "Strozzi", "Peruzzi" <-> "Bischeri", "Strozzi" <-> "Ridolfi", "Strozzi" <-> "Bischeri", "Ridolfi" <-> "Tornabuoni", "Tornabuoni" <-> "Guadagni", "Albizzi" <-> "Ginori", "Albizzi" <-> "Guadagni", "Bischeri" <-> "Guadagni", "Guadagni" <-> "Lamberteschi"}];
+fig = GraphPlot[florence, VertexLabels -> "Name", GraphHighlight -> {"Medici"}, ImageSize -> 460]
