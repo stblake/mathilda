@@ -1280,6 +1280,34 @@ int g_integrate_quiet = 0;
  * runs at depth 0 with only one method active and does not consult it. */
 static int g_integrate_nonelem_announced = 0;
 
+/* Deferred payload for that diagnostic inside a cascade.  A stage that PROVES
+ * non-elementarity is not the last word: a LATER stage may still produce a
+ * non-elementary antiderivative in closed form, and since v0.241 it routinely
+ * does -- Integrate[Log[x] Sin[x], x] is proved non-elementary by
+ * RischTranscendental and then ANSWERED CosIntegral[x] - Cos[x] Log[x] by
+ * ParallelMixedSpecial, three stages later.  Warning and then answering is not
+ * incoherent (the answer is indeed not elementary) but it is noise no other CAS
+ * emits, so the message is held until the cascade is done and printed only if
+ * nothing answered.  Held as strings, not Expr*, so no ownership crosses the
+ * cascade.  intg_nonelem_pending_clear() drops a held message without printing;
+ * it also runs on cascade ENTRY, so a message stranded by a TimeConstrained
+ * siglongjmp cannot surface against an unrelated later integrand. */
+static char* g_integrate_nonelem_pending_f = NULL;
+static char* g_integrate_nonelem_pending_x = NULL;
+
+static void intg_nonelem_pending_clear(void) {
+    free(g_integrate_nonelem_pending_f); g_integrate_nonelem_pending_f = NULL;
+    free(g_integrate_nonelem_pending_x); g_integrate_nonelem_pending_x = NULL;
+}
+
+static void intg_nonelem_pending_flush(void) {
+    if (g_integrate_nonelem_pending_f && g_integrate_nonelem_pending_x)
+        mth_message("Integrate", "nonelem",
+                    "The integrand %s has no antiderivative elementary in %s.",
+                    g_integrate_nonelem_pending_f, g_integrate_nonelem_pending_x);
+    intg_nonelem_pending_clear();
+}
+
 /* Emit the user-facing "no elementary antiderivative" diagnostic for the
  * ORIGINAL integrand, shared by every method that can PROVE non-elementarity
  * (currently RischTranscendental and ParallelMixedTower).  The caller is
@@ -1297,12 +1325,20 @@ static int g_integrate_nonelem_announced = 0;
 void integrate_announce_nonelementary(Expr* f, Expr* x) {
     if (g_integrate_depth > 1) return;    /* internal recursion: stay silent   */
     if (g_integrate_quiet != 0) return;   /* speculative / DSolve suppression   */
-    if (g_integrate_depth == 1) {         /* cascade: at most one stage speaks  */
-        if (g_integrate_nonelem_announced) return;
-        g_integrate_nonelem_announced = 1;
-    }
     char* fs = expr_to_string(f);
     char* xs = expr_to_string(x);
+    if (g_integrate_depth == 1 && fs && xs) {  /* cascade: at most one stage speaks */
+        if (g_integrate_nonelem_announced) { free(fs); free(xs); return; }
+        g_integrate_nonelem_announced = 1;
+        /* HOLD it: a later stage may still answer.  Flushed at the cascade exit
+         * only when nothing did (see the comment on the pending payload). */
+        intg_nonelem_pending_clear();
+        g_integrate_nonelem_pending_f = fs;   /* ownership moves to the payload */
+        g_integrate_nonelem_pending_x = xs;
+        return;
+    }
+    /* depth 0 -- the direct qualified-symbol surface, one method, no cascade to
+     * change its mind: say it now. */
     mth_message("Integrate", "nonelem", "The integrand %s has no antiderivative elementary in %s.", fs ? fs : "?", xs ? xs : "?");
     free(fs); free(xs);
 }
@@ -1493,7 +1529,10 @@ Expr* builtin_integrate(Expr* res) {
      * first stage that proves non-elementarity (RischTranscendental or, after
      * it, ParallelMixedTower) speaks exactly once.  A sub-integral re-enters at
      * depth >= 2 and must NOT clear it. */
-    if (g_integrate_depth == 1) g_integrate_nonelem_announced = 0;
+    if (g_integrate_depth == 1) {
+        g_integrate_nonelem_announced = 0;
+        intg_nonelem_pending_clear();   /* drop anything a longjmp stranded */
+    }
 
     Expr* result = NULL;
     switch (method) {
@@ -1665,6 +1704,15 @@ Expr* builtin_integrate(Expr* res) {
     rt_transcendental_set_debase(debase_saved);   /* no-op unless the inexact path disabled it */
 
     g_integrate_depth--;
+
+    /* The cascade is over: a stage that proved non-elementarity gets to speak
+     * only if no LATER stage produced a closed form.  ParallelMixedSpecial now
+     * answers a good many integrands RischTranscendental had already proved
+     * non-elementary, and warning about an answer we are about to print is
+     * noise. */
+    if (g_integrate_depth == 0) {
+        if (result) intg_nonelem_pending_clear(); else intg_nonelem_pending_flush();
+    }
 
     /* Record a failure so the fixed-point loop's redundant re-entry on the
      * identical integrand (same top-level evaluation) short-circuits above.

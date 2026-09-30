@@ -327,3 +327,71 @@ statement about 247 cases, not 312.
 4. The C method and its three surfaces in `src/calculus/integrate.c`.
 5. `special/stress_mathilda.py` + the four-port `stress_compare.py`.
 6. Tests, docs, `src/version.h` bump and tag.
+
+---
+
+## Phase 6 — the certificate (v0.241): 247 → 295 of 312
+
+Work item 1 of `MATHILDA_PARALLEL_MIXED_SPECIAL_PLAN.md`, done. Full write-up in
+`docs/spec/changelog/2026-09-28.md` (v0.241); the divergence in
+`MATHILDA_DIVERGENCES.md` §F12; the lesson in `tasks/lessons.md`.
+
+**Result.** 312-case corpus, `TIMEOUT=120 WORKERS=6`, scored by the shared
+`stress_judge.py`: **295 PASS / 14 HONEST / 2 WEAK / 1 FAIL**, zero false
+certificates, zero regressions. Ten verdicts differ from Python, where 58 did.
+Nine of seventeen groups are now at exact parity with all three reference ports.
+PMT 114-case corpus, independently: 85 → 94 solved, 16 → 3 declined, 13 → 17
+`nonelem`, 0 wrong.
+
+**Re-baseline first, and why it mattered.** The recorded 247/51/11/3 measured Part
+II at 45 s: the harness set both budgets *above* the lazy-load line, where each
+package's own default overwrites them. The research runner was fixed for this at
+v0.240; the repo copy in `mixed/stress/` was not, and is in any case not runnable
+here (its `stress_special` / `stress_judge` / `stress_wl` imports live only in the
+research tree). A true-120 s re-baseline of unmodified v0.240 is **247/53/11/1** —
+#109/#110 stop being hard timeouts and become honest declines. All before/after
+claims are against that, not against the recorded run.
+
+Harness note for the next session: `stress_mathilda.py` needs `sympy` (via
+`stress_special.py`), which the default `python3` (3.14.7) lacks. Use
+`python3.11`. `OUT=` / `REPORT=` redirect the outputs, which is how the v0.239
+record was preserved (`stress_mathilda_v0239.json.bak`) and the baseline kept
+beside the result (`stress_mathilda_base0240.json`).
+
+**What was done.**
+
+1. Retired the `q =!= None` gate on Part II's Proposition 9.2(b) certificate
+   (`ParallelMixed.m`). It was belt-and-braces added at v0.168 *in the same commit
+   as the real fix* for the T2/T10 false certificates (a ragged `Transpose` in
+   `RealisePoints`); its stated justification — that the certificate presupposes a
+   curve — was written afterwards. Retired on a reachability argument, not a
+   re-derivation: the branch is entered only when the ansatz system is
+   inconsistent, and T2/T10 now solve.
+2. Flipped `"StructureTheorem"` to `True` for `ParallelIntegrateMixed`. This is a
+   **prerequisite**, not a bonus: it fixes four pre-existing false certificates
+   (§F12) over towers with dependent generators, and the guard removal would
+   otherwise open a second certificate route over exactly those towers.
+3. `HalfAngleFold` in `ParallelMixedSpecial.m`, inside the verify, so a released
+   answer reads `CosIntegral[x] - Cos[x] Log[x]` rather than a rational function of
+   `Tan[x/2]`.
+4. Deferred `Integrate::nonelem` in the cascade (`integrate.c`): held as strings,
+   flushed at the cascade exit only if nothing answered. The direct qualified
+   surfaces still speak immediately.
+
+**Verification run.** `parallelmixedtower_tests` (13, incl. two new soundness
+tests), `parallelmixedspecial_tests` (13), `integrate_newton_leibniz_tests`,
+`elliptic_tests`, `risch_rde_tower_tests`, `integrate_risch_transcendental_tests`,
+`integrate_fresnel_tests`, `integrate_derivdivides_tests`,
+`integrate_jeffrey_tests` — all rc 0. `make check-c99`, `make check-messages` clean.
+
+**Watch item.** `integrate_newton_leibniz_tests` 50.5 s → **62.4 s** of its 120 s
+`alarm()`. Still green with headroom, but the structure-theorem default is now paid
+on every `ParallelIntegrateMixed` call and this suite had the least room to lend
+(see the v0.240 lesson). Worth a profile before the next cascade change.
+
+**Next, in value order:** item 2 (§3, 5 cases — now diagnosed as a deep order-2
+pole in `EiFromResidues` and a missing exponential source in `GammaCandidates` on a
+tangent tower with a non-linear argument); item 4 (§5, #34 branch fidelity, 1 case);
+the two surviving WEAK (#233, #252 — the partial mode leaves an *elementary*
+`2 Log[x]/x` in #252's remainder, which is its own bug); item 3 (§4, GF(p) speed,
+2 cases, still the least valuable per unit of work).

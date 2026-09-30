@@ -2767,11 +2767,27 @@ remainder that the linear system shows to be non-exact under the exact proved
 bounds. Its inconclusive `{"failed", …}` give-ups stay **silent** — for the
 parallel method, failure proves nothing about elementarity. So
 `Integrate[1/(x Log[x + Sqrt[x^2 + 1]]), x]` warns (the residue `Sqrt[1+x^2]/x`
-is non-constant) and `Tan[Sqrt[x^2 + 1]]` warns (a non-constant residue at the
-hypertangent place at infinity), while `Exp[x^2]` — which this stage cannot
-certify — does not. A per-cascade de-dup flag ensures that when both
+is non-constant), `Tan[Sqrt[x^2 + 1]]` warns (a non-constant residue at the
+hypertangent place at infinity) and, since v0.241, `Exp[x^2]` warns too — the
+holomorphic-remainder certificate is no longer gated on the tower carrying a
+curve, so a curve-free monomial tower whose ansatz system is inconsistent at
+*proved* bounds now certifies. `Sqrt[Log[x]]`, which keeps a guessed bound in
+force at every rung of the retry ladder, is the inconclusive case that still
+stays silent. A per-cascade de-dup flag ensures that when both
 `RischTranscendental` and `ParallelMixedTower` prove the same integrand
 non-elementary in the `Automatic` cascade, the message is printed once.
+
+**The message is deferred inside the `Automatic` cascade (v0.241).** A stage that
+proves non-elementarity is no longer the last word: `ParallelMixedSpecial` runs
+last and routinely *answers* an integrand an earlier stage already proved
+non-elementary — `Integrate[Log[x] Sin[x], x]` is proved by
+`RischTranscendental` and answered `CosIntegral[x] - Cos[x] Log[x]` three stages
+later. Warning and then answering is not incoherent (the answer is indeed not
+elementary) but it is noise, so the message is held and printed at the cascade
+exit only when nothing answered. The direct qualified-symbol surfaces
+(`Integrate`ParallelMixedTower[f, x]` and friends), which run one method with no
+cascade to change its mind, still emit it immediately. `Quiet[]` suppresses it
+either way.
 
 `Integrate`ParallelMixedSpecial` follows the same rule, on the same boundary: a
 `{"not elementary", …}` result warns, and `{"failed", …}` / `{"not in class", …}`
@@ -2780,7 +2796,13 @@ frequently accompanied by an *answer*, since a proof of non-elementarity is
 exactly the precondition for emitting a special-function kernel.  The stage is
 strict about that pairing: it withholds an uncertified special answer rather than
 claim one, which is the `{"failed", "special answer found, but the integrand is
-not certified non-elementary", …}` status.
+not certified non-elementary", …}` status.  At v0.241 that status became rare
+rather than routine — the erf / incomplete-Gamma / `Ci`-`Si` families it used to
+withhold now certify and are released — and the stage scores 295 of the paper's
+312-case corpus against 305 for each of SymPy, Mathematica 14 and Maxima, with no
+false certificate.  A tangent generator's surface is folded back out of the
+Weierstrass form before it is returned, so `Integrate[Cos[x] Log[x], x]` reads
+`Log[x] Sin[x] - SinIntegral[x]` rather than a rational function of `Tan[x/2]`.
 
 ## Integrate`SigmaDecomposition — Cherry 1986 Theorem 4.4
 

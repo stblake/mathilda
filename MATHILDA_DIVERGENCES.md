@@ -1005,6 +1005,43 @@ The general lesson, already in `tasks/lessons.md` in its DSolve form: **a
 last-resort stage added to a cascade is charged to every input the cascade fails
 to close**, so its worst case, not its typical case, is what the cascade pays.
 
+### F12. Four false non-elementarity certificates from dependent tower generators (FIXED, v0.241)
+
+Mathilda's own bug again, and the worst class there is: a certificate that the
+integrand has **no** elementary antiderivative, issued for an integrand that has
+one. Everything else in this file is a missing or slow answer; this is a wrong one,
+and it is unfalsifiable from inside — the user has no way to tell a proof from a
+mistake.
+
+`Options[ParallelIntegrateMixed]` defaulted `"StructureTheorem" -> False`, so
+`BuildTower` would raise a tower whose generators are algebraically **dependent**:
+`E^x` alongside `E^(2x)`, `Log[x]` alongside `Log[x^2]`. Over such a tower every
+residue argument is vacuous — a residue that looks non-constant in one generator is
+constant once the dependency is used — so the Proposition 9.2(a) residue path
+certified four elementary integrands:
+
+| integrand | Mathilda said | the answer |
+|---|---|---|
+| `Exp[2x]/(1 + Exp[x])` | `{"not elementary", 1 + E^x, -E^(2x)}` | `E^x - Log[1 + E^x]` |
+| `Exp[x]/(1 + Exp[x] + Exp[2x])` | `{"not elementary", …}` | `-2 ArcTan[(-1 - 2 E^x)/Sqrt[3]]/Sqrt[3]` |
+| `1/(Exp[x] - Exp[-x])` | `{"not elementary", E^x - E^(-x), E^x/2}` | `(Log[-1 + E^x] - Log[1 + E^x])/2` |
+| `Log[x^2]/Log[x]` | `{"not elementary", Log[x], x Log[x^2]}` | `2 x` |
+
+Each also emitted `Integrate::nonelem` through the cascade. Present since the port;
+confirmed pre-existing by reproducing all four on a pristine `HEAD` in a
+`git worktree` rather than by arguing from the payload shape. The special-function
+stage was immune throughout because its entry points always passed
+`"StructureTheorem" -> True` explicitly — which is exactly the fix: the default is
+now `True` for `ParallelIntegrateMixed` too. `Options[BuildTower]` keeps `False`,
+since its direct callers pass the option themselves.
+
+Cost of the default being on: the PMT 114-case corpus went 85 → 94 solved with zero
+wrong answers, so the structure theorem *buys* coverage as well as soundness.
+
+The lesson, in `tasks/lessons.md`: a soundness-critical option must default to the
+safe side, and "the caller that matters always passes it" is not a defence — it
+means only that the unsafe default is reached by every *other* caller.
+
 ### Not a divergence after all: `RowReduce[..., ZeroTest -> f]`
 
 Listed as a seventh gap on the strength of

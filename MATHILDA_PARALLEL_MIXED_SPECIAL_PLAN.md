@@ -20,7 +20,24 @@ are scored by, not a re-implementation. Re-run with
 | Python (SymPy, the paper's reference) | 305 | 7 | 0 | 0 |
 | Mathematica 14 | 305 | 7 | 0 | 0 |
 | Maxima | 305 | 7 | 0 | 0 |
-| **Mathilda v0.239** | **247** | **51** | **11** | **3** |
+| Mathilda v0.239 (as recorded) | 247 | 51 | 11 | 3 |
+| Mathilda v0.240 (re-baselined, true 120 s cap) | 247 | 53 | 11 | 1 |
+| **Mathilda v0.241** | **295** | **14** | **2** | **1** |
+
+> **v0.241 closed work item 1 (§2). Read §2's "The plan" as history, not as
+> instructions — its Finding 2 was wrong.** What remains is item 2 (§3, 5 cases),
+> item 4 (§5, 1 case) and item 3 (§4, 2 cases, still the least valuable). Nine of
+> the seventeen groups are now at exact parity with all three ports, and only 10
+> verdicts differ from Python where 58 did.
+>
+> Two corrections to the numbers above, both measured. The recorded v0.239 run had
+> Part II pinned at 45 s rather than the intended 120 s (the harness set the budgets
+> *above* the lazy-load line, where each package's own default overwrites them);
+> re-baselining v0.240 at a true cap moves #109/#110 from hard timeout to honest
+> decline, so the standing baseline is **247/53/11/1**, not 247/51/11/3. And the
+> claim that the withheld answers were "character-for-character Mathematica's" is
+> true of the mathematics, not the text: they came out as raw Weierstrass rationals
+> in `Tan[x/2]`, which v0.241 folds (§2).
 
 **No false certificate anywhere.** That is the bar this corpus exists to police —
 a `{"not elementary", …}` for an integrand that *is* elementary is the one
@@ -63,7 +80,37 @@ K structure 2, D trigonometric 1. For B: S random (special) 6, R partial
 
 ---
 
-## 2. Work item 1 — the certificate (50 cases)
+## 2. Work item 1 — the certificate (50 cases) — **DONE, v0.241**
+
+**Outcome: 247 → 295.** The diagnosis below is preserved because its *first* finding
+was right and load-bearing; its second was not, and cost nothing only because it was
+re-measured before being acted on.
+
+- **Finding 1 stands, and was the whole of it.** The `q =!= None` guard was expired
+  and it *was* the blocker — the only failing conjunct. Deleting it, plus the
+  structure-theorem prerequisite below, is the entire fix.
+- **Finding 2 does not reproduce at v0.240 and is withdrawn.**
+  `VerifiedResidueFree` is *not* order-dependent: it returns `True` on a warm cache,
+  inside `Block[{$analyses = <||>}, …]`, and lazily inside the certificate's `&&`
+  chain alike, on `Exp[-x^2]`, `Exp[x^2]`, `Sqrt[x] Exp[x]` and on the harder
+  three-generator `Log[x] Sin[x]` pair. No change was made to it. The lesson is
+  recorded in `tasks/lessons.md`: re-measure a documented finding before planning
+  around it.
+- **What the plan missed**, and what actually carried risk: `ParallelIntegrateMixed`
+  defaulted `"StructureTheorem" -> False`, so Part II built towers with
+  algebraically *dependent* generators and emitted **four false certificates**
+  through the residue path, pre-existing and independent of this guard
+  (`Exp[2x]/(1 + Exp[x])`, `Exp[x]/(1 + Exp[x] + Exp[2x])`, `1/(Exp[x] - Exp[-x])`,
+  `Log[x^2]/Log[x]`). Confirmed pre-existing on a pristine `HEAD` worktree, and
+  fixed by flipping that default. It is a *prerequisite*: removing the guard opens a
+  second certificate route over exactly those unvalidated towers.
+- **What releasing the answers exposed**, also not in the plan: they reach plain
+  `Integrate` now, so they had to become readable (`HalfAngleFold`) and the eager
+  `Integrate::nonelem` from an earlier cascade stage had to be deferred.
+
+Full write-up: `docs/spec/changelog/2026-09-28.md`, entry v0.241.
+
+### The original diagnosis, as written before the work
 
 ### What is actually happening
 
@@ -292,18 +339,38 @@ extended to a complex sample point is the obvious first thing to try.
 
 | after | PASS | what closed |
 |---|---|---|
-| today (v0.239) | 247 | — |
-| item 1 (certificate) | ~297 | A 39 + B 11 |
-| item 2 (coverage) | ~302 | C 5 |
-| item 3 (GF(p) speed) | ~304 | D 2 |
-| item 4 (branch) | **305** | E 1 |
+| v0.239 as recorded / v0.240 re-baselined | 247 | — |
+| **item 1 (certificate) — DONE v0.241** | **295** | A 39 + B 9 |
+| item 2 (coverage) | ~300 | C 5 |
+| item 4 (branch) | ~301 | E 1 |
+| the 2 remaining WEAK | ~303 | #233, #252 |
+| item 3 (GF(p) speed) | **305** | D 2 |
 
 305 is parity: the remaining 7 are the HONEST cases every port declines
 (#59, #97, #98, #274–277 — strict mode withholding an uncertified special answer,
 by design and identically in all four ports).
 
-Item 1 is worth 50 cases and is the only one that needs a decision about
-soundness rather than effort; items 2–4 are worth 5, 2 and 1.
+Item 1 was worth 48 cases and was the only one that needed a decision about
+soundness rather than effort; it is done. Items 2, 4 and 3 are worth 5, 1 and 2,
+and the two surviving WEAK (#233 `1/(x + exp(x)) + cos(x)/x`, #252
+`2*log(x)/x + sin(x)/x`, which leaves an *elementary* `2 Log[x]/x` in the
+remainder) are a separate, small partial-mode question.
+
+Item 2 is now diagnosed rather than merely named:
+
+- `sin(x)/x^2`, `sin(3x)/x^2` (#87/#172, #175) — the tower is `t = Tan[x/2]` and
+  the pole at `x = 0` has order **2**. `EiFromResidues`
+  (`ParallelMixedSpecial.m:420-468`) handles a *deep* pole only under a narrow
+  condition; the order-1 sibling `sin(x)/x` closes today. Python's answer keeps the
+  tangent generator: `Ci(x) - 2 tan(x/2)/(x (tan(x/2)^2 + 1))`.
+- `sin(x^2)`, `cos(x^2)` (#89, #90) — the tower is `t = Tan[x^2/2]` and
+  `GammaCandidates` finds no exponential source, so the `s = 1/2` Erf kernel is
+  never offered. Python answers with a pure conjugate `erfc` pair,
+  `-√I √π erfc(√I x)/4 - √π √(-I) erfc(√(-I) x)/4`, so the sources `exp(±i x^2)`
+  *are* derivable from a tangent generator — as they already are for `Sin[x]/x`'s
+  `Ei` pair. Note Mathilda's own cascade already answers `Integrate[Sin[x^2], x]`
+  as `Sqrt[π/2] FresnelS[Sqrt[2/π] x]` through a different stage; this is a gap in
+  *this* stage only.
 
 ---
 

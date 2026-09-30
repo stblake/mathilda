@@ -2692,8 +2692,25 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
    degree caps are follow-up work.  Overridable by the caller if needed. *)
 $ParallelMixedTimeBudget = 45;
 
+(* "StructureTheorem" -> True is the DEFAULT here, unlike Options[BuildTower],
+   and it is a soundness requirement rather than a refinement.  Without it
+   BuildTower will happily raise a tower whose generators are algebraically
+   DEPENDENT -- E^x and E^(2 x), or Log[x] and Log[x^2] -- and every residue
+   argument over such a tower is vacuous, because a residue that looks
+   non-constant in one generator is constant once the dependency is used.  Four
+   measured false certificates, all of them elementary, all fixed by this line:
+
+     E^(2x)/(1 + E^x)            certified, is  E^x - Log[1 + E^x]
+     E^x/(1 + E^x + E^(2x))      certified, is  -2 ArcTan[(-1 - 2 E^x)/Sqrt[3]]/Sqrt[3]
+     1/(E^x - E^(-x))            certified, is  (Log[-1 + E^x] - Log[1 + E^x])/2
+     Log[x^2]/Log[x]             certified, is  2 x
+
+   A false certificate is the one failure mode worse than declining, so the
+   default belongs on the safe side.  The special-function stage has always
+   passed True explicitly (ParallelMixedSpecial.m), which is exactly why it was
+   immune to all four; this brings the ParallelMixedTower surface into line. *)
 Options[ParallelIntegrateMixed] = {"Bounds" -> None, "Verbose" -> False, "Verify" -> False, "SplitSpecials" -> Automatic, "SpecialExponent" -> 0,
-  "StructureTheorem" -> False};
+  "StructureTheorem" -> True};
 (* iPIM shares these options via OptionsPattern[ParallelIntegrateMixed]; an
    unpassed OptionValue now resolves its default against ParallelIntegrateMixed
    (the symbol named in OptionsPattern[...]), so a separate Options[iPIM]
@@ -3521,18 +3538,36 @@ iPIM[f0_, T_, OptionsPattern[ParallelIntegrateMixed]] := Module[
     (* Proposition 9.2(b): every bound in force is proved, the logand
        candidates are complete -- the unit group known, the specials split
        over Fbar, none of them over the curve variable, where the S'-units are
-       only searched within a bound -- and the residual VERIFIED residue-free:
-       the inconsistent system shows the residual to be a non-exact
-       differential of the second kind (the holomorphic remainder) *)
+       only searched within a bound -- and the residual VERIFIED residue-free.
+       Over a curve the inconsistent system shows the residual to be a non-exact
+       differential of the second kind (the holomorphic remainder); with no
+       curve the same inconsistency is the Proposition itself, and the integrand
+       simply has no elementary antiderivative. *)
     curve = Select[gens, ! FreeQ[q, #] &];
     typeE = q =!= None && AnyTrue[unkLogs, FreeQ[#[[1]], Alternatives @@ Complement[gens, curve]] &];
-    (* the holomorphic-remainder (second-kind) certificate presupposes an
-       algebraic curve of positive genus; on a no-curve tower (q === None) no
-       such differential exists, so never certify there -- fall through to
-       {"failed", ...} instead (this is the T2/T10 false-certificate guard). *)
-    If[q =!= None && OptionValue["Bounds"] === None && proved && (unitsComplete || SecondKindAtInfinityQ[T, rem]) && ! typeE && ! (splittable && split =!= True) &&
+    (* NOT restricted to a tower that carries a curve.  It was, from v0.168 to
+       v0.240, as "the T2/T10 false-certificate guard": Mathilda had certified
+       1/(x (Log[x]^2 + 1)) (= ArcTan[Log[x]]) and 1/(x^4 - 1) falsely.  But that
+       defect was an INCOMPLETE LOGAND SET, not a missing curve -- a ragged
+       Transpose[{pts, taus}] in RealisePoints, fixed to Thread in the very commit
+       that added the guard, and a Gaussian atom that FreeQ[e, Complex] hid from
+       the field, fixed at v0.175 -- so an ELEMENTARY integrand reached an
+       inconsistent system.  Both now solve, and this branch is entered only when
+       sol === {}, so it is unreachable for them whatever the guard says; that is
+       asserted directly, on those integrands, in test_parallelmixedspecial.c.
+       Retiring the guard is worth ~50 cases of the 312-case corpus, and the
+       stage's own ParametricCertificate (ParallelMixedSpecial.m) has never
+       carried it -- it certifies on curve-free towers already. *)
+    If[OptionValue["Bounds"] === None && proved && (unitsComplete || SecondKindAtInfinityQ[T, rem]) && ! typeE && ! (splittable && split =!= True) &&
+        (* the inner q =!= None is NOT redundant now the outer one is gone: it is
+           part of the dispatch that selects the classical single-generator,
+           degree-2-curve arm *)
         If[Length[gens] == 1 && q =!= None && m == 2 && T["derivs"][[1]] === {1, 0}, ResidueFree[T, rem, Y], VerifiedResidueFree[rem, T]],
-      Throw[{"not elementary", "holomorphic remainder: residual second-kind differential is not exact (every bound in force is proved)", bounds}, "PIM"]];
+      Throw[{"not elementary",
+        If[q =!= None,
+          "holomorphic remainder: residual second-kind differential is not exact (every bound in force is proved)",
+          "no solution at proved bounds with a complete logand set and a residue-free residual (Proposition 9.2(b))"],
+        bounds}, "PIM"]];
     Throw[Join[{"failed", "no solution within bounds", bounds},
       If[splittable && split =!= True, {"splittable"}, {}], If[! proved, {"guess"}, {}]], "PIM"]];
   sub = First[sol];

@@ -4019,3 +4019,75 @@ Related, and the reason this class keeps recurring: `[[project_cascade_reorder_e
 normaliser inserted to make one class cheap becomes the dominant cost on
 another). Same shape each time — **a change that helps a class you chose is
 charged to a class you did not.**
+
+## A guard added beside the root-cause fix outlives the defect, and only a reachability argument retires it (v0.241)
+
+`ParallelMixed.m` gated the Proposition 9.2(b) non-elementarity certificate on
+`q =!= None` — the tower carrying an algebraic curve — for 73 versions, and the
+comment justified it mathematically: *"the holomorphic-remainder (second-kind)
+certificate presupposes an algebraic curve of positive genus."* That justification
+was invented after the fact. `git log -S` on the guard found it landing in commit
+5440fb16 **in the same commit as the real fix**, and the commit message says so
+plainly: a ragged `Transpose[{pts, taus}]` in `RealisePoints` was left unevaluated,
+so unequal residues were never realised and two ELEMENTARY integrands reached an
+inconsistent system and were certified non-elementary. `Transpose -> Thread` fixed
+that; the guard was belt-and-braces over a bug that no longer existed.
+
+Cost of the leftover: **48 corpus cases**, 247 -> 295 of 312.
+
+Three things worth keeping:
+
+1. **Read the commit that introduced a guard before trusting the comment on it.**
+   The comment stated a theorem; the commit stated a bug. When the two disagree, the
+   commit is the evidence and the comment is the story someone told afterwards. One
+   `git log -S '<the guard expression>'` was the whole investigation.
+2. **Retire a guard by REACHABILITY, not by re-arguing the theorem.** The soundness
+   question "is Proposition 9.2(b) valid without a curve?" is hard and I could have
+   argued it either way. The question that actually settled it is cheap and
+   decidable: the guarded branch is entered *only when the ansatz system is
+   inconsistent*, the two integrands that motivated the guard now SOLVE, so the
+   branch is unreachable for them whatever the guard says. I then probed fifteen
+   more elementary curve-free integrands chosen to stress the logand set — fourteen
+   solved, the fifteenth certified correctly through a different path. The
+   regression test asserts SOLVES, not "does not certify", because a solution
+   *proves* the branch was never reached; "does not certify" would pass vacuously
+   the day the stage starts declining for an unrelated reason.
+3. **A subagent review that contradicts you is worth more than one that agrees, and
+   is still not evidence.** The review I commissioned said the deletion was unsafe
+   and named `Sqrt[Tan[x]]` as a live false certificate. It was right that the case
+   reaches `sol === {}` with all bounds proved, and wrong that the surface breaks —
+   the retry ladder splits `1 + u^4` and the case solves. But chasing its claim is
+   what found the *real* bug, which was somewhere else entirely (below). Verify the
+   claim, keep the lead.
+
+**The real bug it led to.** `Options[ParallelIntegrateMixed]` defaulted
+`"StructureTheorem" -> False`, so `BuildTower` would raise towers with
+algebraically DEPENDENT generators — `E^x` beside `E^(2x)`, `Log[x]` beside
+`Log[x^2]` — over which every residue argument is vacuous. Four elementary
+integrands were certified non-elementary through the *residue* path, entirely
+independently of the guard I was removing. `Exp[2x]/(1 + Exp[x])` is
+`E^x - Log[1 + E^x]`; Mathilda called it non-elementary. Pre-existing since the
+port, and invisible because the special stage always passed `True` explicitly.
+
+**How I knew it was pre-existing, rather than assumed it.** The payload shape
+argued it (my branch throws a String in slot 2; these carried an expression), but
+an argument is not a measurement. `git worktree add --detach` on pristine `HEAD` —
+additive, and safe on a tree a concurrent session is using, unlike `git stash` —
+plus a copy of the binary, reproduced all four identically. That is the standing
+technique: `[[feedback_dsolve_corpus_regression_check_isolated_ab]]`.
+
+**And the check I nearly skipped.** The fix moved `ArcTan[x]/Sqrt[1 + x^2]` from
+"declined" to "certified non-elementary", and I was about to accept it because it
+felt non-elementary. Instead: `x = Sinh[u]` (substitution checked numerically to
+15 digits) reduces it to `Integral[u/(E^u +- I)]`, and Mathilda independently
+closes that family with `PolyLog[2, .]`. Genuinely non-elementary. `SymPy` returning
+an unevaluated `Integral` proved nothing and I did not count it —
+`[[feedback_verify_reference_values_never_recall_them]]` applies to elementarity
+just as much as to constants.
+
+A user-visible tail nobody asks for until it ships: releasing ~50 withheld answers
+made them reach plain `Integrate`, where they arrived as raw Weierstrass rationals
+(`CosIntegral[x] - Log[x]/(1 + Tan[x/2]^2) + ...`) behind an `Integrate::nonelem`
+warning emitted by an earlier stage that no longer had the last word. Both had to
+be fixed in the same commit. **Unblocking an answer is not done when the answer is
+correct; it is done when the answer is one a user would want to read.**

@@ -259,11 +259,20 @@ static void test_nonelem_warning_emitted(void) {
     ASSERT(eval_stderr_contains(
         "Integrate[1/(x Log[x + Sqrt[x^2 + 1]]), x, Method -> \"ParallelMixedTower\"]",
         "Integrate::nonelem"));
-    /* An inconclusive {"failed", ...} give-up (here Exp[x^2], which this stage
-     * cannot certify) must stay SILENT: failure of the parallel method proves
-     * nothing about elementarity. */
-    ASSERT(!eval_stderr_contains(
+    /* Exp[x^2] now CERTIFIES and so must WARN.  Until v0.240 it was this test's
+     * "stays silent" exemplar, because the holomorphic-remainder certificate was
+     * hard-gated to a tower carrying a curve; on a curve-free monomial tower the
+     * bounds {2,1} are proved, the residual is residue-free and the system is
+     * inconsistent, which is Proposition 9.2(b) itself. */
+    ASSERT(eval_stderr_contains(
         "Integrate[Exp[x^2], x, Method -> \"ParallelMixedTower\"]",
+        "Integrate::nonelem"));
+    /* An inconclusive {"failed", ...} give-up must still stay SILENT: failure of
+     * the parallel method proves nothing about elementarity.  Sqrt[Log[x]]
+     * declines with {"failed", "no solution within bounds", {4, 3}} at every
+     * rung of the retry ladder, so the certificate is never reached. */
+    ASSERT(!eval_stderr_contains(
+        "Integrate[Sqrt[Log[x]], x, Method -> \"ParallelMixedTower\"]",
         "Integrate::nonelem"));
     /* Integrate::nonelem now routes through the funnel: Quiet[] suppresses the
      * print (it was a deliberate raw fprintf before this migration). */
@@ -326,6 +335,90 @@ static void test_soundness_fixes(void) {
         "r = Integrate`ParallelMixedTower[Sqrt[x^2 + 1]/x, x];"
         " Abs[N[(D[r, x] - Sqrt[x^2 + 1]/x) /. x -> 2, 25]] < 10^-15",
         "True");
+}
+
+/* ------------------------------ no false certificate on a curve-free tower
+ * The certificate of Proposition 9.2(b) is no longer hard-gated to a tower
+ * carrying a curve (that gate was belt-and-braces over the T2/T10 residue-
+ * realisation bug, fixed at its root in v0.168/v0.175).  Every integrand here
+ * is ELEMENTARY and lives on a curve-free tower, so a {"not elementary", ...}
+ * from any of them is a FALSE certificate -- the one failure mode worse than
+ * declining.  Asserted as "solves", which is stronger than "does not certify":
+ * the certificate branch is entered only when the ansatz system is
+ * inconsistent, so a solution proves the branch was never reached. */
+static void test_no_false_certificate_curve_free(void) {
+    static const struct { const char* f; const char* pt; } cases[] = {
+        /* the two historical false certificates the retired guard was added for */
+        { "1/(x (Log[x]^2 + 1))",  "2"   },
+        { "1/(x^4 - 1)",           "2"   },
+        { "1/(x^4 + 1)",           "2"   },
+        /* reach sol === {} with ALL BOUNDS PROVED and a residue-free residual in
+         * the base run; only the split of the degree-4 special 1 + u^4 over Fbar
+         * saves them, so they are the tightest guard on the retired conjunct */
+        { "Sqrt[Tan[x]]",          "1/2" },
+        { "Tan[x]^(3/2)",          "1/2" },
+        { "1/Sqrt[Tan[x]]",        "1/2" },
+        /* the elementary twins of the newly-certifying family, on the identical
+         * towers with the identical specials */
+        { "(1 + 2 x^2) Exp[x^2]",  "3/5" },
+        { "(1 - 2 x^2) Exp[-x^2]", "3/5" },
+        { "(1 - 3 x^3) Exp[-x^3]", "3/5" },
+        { "(x - 1) Exp[x]/x^2",    "7/5" },
+        { "Exp[1/x]/x^2",          "7/5" },
+        /* algebraically DEPENDENT generators (E^x with E^(2x), Log[x] with
+         * Log[x^2]).  Every residue argument over such a tower is vacuous, and
+         * all four certified falsely until "StructureTheorem" became the default
+         * for ParallelIntegrateMixed.  They are the reason that default moved. */
+        { "Exp[2 x]/(1 + Exp[x])",        "7/5" },
+        { "Exp[x]/(1 + Exp[x] + Exp[2 x])", "7/5" },
+        { "1/(Exp[x] - Exp[-x])",         "7/5" },
+        { "Log[x^2]/Log[x]",              "7/5" },
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof *cases; i++) {
+        char buf[768];
+        snprintf(buf, sizeof buf,
+                 "Module[{r = Integrate`ParallelMixedTower[%s, x]},"
+                 " Head[r] =!= List && "
+                 " Abs[N[(D[r, x] - (%s)) /. x -> %s, 30]] < 10^-20]",
+                 cases[i].f, cases[i].f, cases[i].pt);
+        Expr* parsed = parse_expression(buf);
+        ASSERT(parsed != NULL);
+        Expr* evaluated = evaluate(parsed);
+        expr_free(parsed);
+        char* s = expr_to_string(evaluated);
+        ASSERT_MSG(strcmp(s, "True") == 0,
+                   "curve-free elementary integrand did not solve (a List here is "
+                   "a FALSE non-elementarity certificate): %s -> %s",
+                   cases[i].f, s);
+        free(s);
+        expr_free(evaluated);
+    }
+}
+
+/* ------------- the certificate that the retired guard used to suppress
+ * Genuinely non-elementary, curve-free: proved bounds, a complete logand set
+ * and a verified residue-free residual, which is Proposition 9.2(b) whether or
+ * not the tower carries a curve.  Worth ~50 cases of the 312-case corpus. */
+static void test_certifies_curve_free_nonelementary(void) {
+    static const char* nonelem[] = {
+        "Exp[-x^2]", "Exp[x^2]", "Exp[-x^3]", "Sqrt[x] Exp[x]", "Exp[1/x]",
+    };
+    for (size_t i = 0; i < sizeof nonelem / sizeof *nonelem; i++) {
+        char buf[512];
+        snprintf(buf, sizeof buf,
+                 "Module[{r = Integrate`ParallelMixedTower[%s, x]},"
+                 " ListQ[r] && r[[1]] === \"not elementary\"]", nonelem[i]);
+        Expr* parsed = parse_expression(buf);
+        ASSERT(parsed != NULL);
+        Expr* evaluated = evaluate(parsed);
+        expr_free(parsed);
+        char* s = expr_to_string(evaluated);
+        ASSERT_MSG(strcmp(s, "True") == 0,
+                   "curve-free non-elementary integrand was not certified: %s -> %s",
+                   nonelem[i], s);
+        free(s);
+        expr_free(evaluated);
+    }
 }
 
 /* ------------------- non-torsion certificate at finite places (2026-09-22) */
@@ -396,6 +489,8 @@ void test_parallelmixedtower(void) {
     TEST(test_method_certifies_nonelementary);
     TEST(test_nonelem_warning_emitted);
     TEST(test_soundness_fixes);
+    TEST(test_no_false_certificate_curve_free);
+    TEST(test_certifies_curve_free_nonelementary);
     TEST(test_nontorsion_divisor_certificate);
 
     printf("All ParallelMixedTower tests passed!\n");

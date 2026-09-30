@@ -15,14 +15,17 @@
  * Assertions use ASSERT_MSG / ASSERT_STR_EQ (hard exit(1)), NOT assert_eval_eq,
  * whose libc assert() is a no-op under -DNDEBUG.
  *
- * What is deliberately NOT asserted: that the erf / incomplete-Gamma family
- * ANSWERS. It does compute the right answer -- character for character
- * Mathematica's -- but strict mode withholds it because Part II's
- * holomorphic-remainder certificate is guarded off on a curve-free tower (the
- * `q =!= None` T2/T10 false-certificate protection). Those cases are asserted to
- * decline HONESTLY, i.e. with a {"failed", ...} status and never a certificate,
- * and the guard below will fail the moment that becomes a {"not elementary", ...}
- * -- which would be a false certificate, the failure mode that matters most.
+ * The erf / incomplete-Gamma family ANSWERS, as of v0.241. Until then it did not:
+ * it computed the right answer and strict mode (Theorem 8.6) withheld it, because
+ * Part II's certificate was hard-gated to a tower carrying a curve -- the
+ * `q =!= None` T2/T10 false-certificate protection. That gate was belt-and-braces
+ * over a residue-realisation bug fixed at its root, so it retired; the boundary
+ * this file pins therefore MOVED rather than softened. What guards the soundness
+ * now is test_no_false_certificate_curve_free in test_parallelmixedtower.c, which
+ * asserts that sixteen ELEMENTARY curve-free integrands still SOLVE -- stronger
+ * than "do not certify", since a solution proves the certificate branch (entered
+ * only on an inconsistent system) was never reached. A false certificate remains
+ * the failure mode that matters most.
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -138,21 +141,40 @@ static void test_elementary_stays_elementary(void) {
 
 /* ---- the certificate boundary ---------------------------------------- */
 
-/* The erf / incomplete-Gamma family: the answer IS computed and is the
- * reference's, but Part II cannot certify non-elementarity on a curve-free
- * tower (the `q =!= None` guard), so strict mode withholds it. Asserted as an
- * HONEST decline: the day this becomes a certificate, it is a false one. */
-static void test_certificate_withheld_honestly(void) {
-    assert_honest_decline("Exp[-x^2]");
-    assert_honest_decline("Exp[x^2]");
-    assert_honest_decline("Exp[-x^3]");
-    /* ... and the answer inside the status is nonetheless the right one, so the
-     * withholding is the certificate's fault and not the kernel's. */
+/* The erf / incomplete-Gamma family: the answer was always computed and always
+ * the reference's; what was missing was the certificate strict mode (Theorem
+ * 8.6) demands before releasing it. Part II now certifies on a curve-free tower
+ * -- proved bounds, a complete logand set, a verified residue-free residual,
+ * which is Proposition 9.2(b) itself rather than its second-kind specialisation
+ * -- so these ANSWER. Before v0.241 every one of them was an HONEST decline. */
+static void test_certificate_now_released(void) {
+    assert_solves("Exp[-x^2]", "7/5");
+    assert_solves("Exp[x^2]", "7/5");
+    assert_solves("Exp[-x^3]", "7/5");
+    assert_solves("Sqrt[x] Exp[x]", "7/5");
+    /* and the released answer is the special-function one, not an elementary
+     * near-miss the stage talked itself into */
     assert_true_msg(
-        "Module[{r = Integrate`ParallelMixedSpecial[Exp[-x^2], x]},"
-        " ListQ[r] && Length[r] >= 3 && "
-        " Abs[N[(D[r[[3]], x] - Exp[-x^2]) /. x -> 7/5, 30]] < 10^-20]",
-        "the withheld Exp[-x^2] answer still differentiates back");
+        "! FreeQ[Integrate`ParallelMixedSpecial[Exp[-x^2], x], Erf | Erfc | Erfi]",
+        "Exp[-x^2] answers with an error function");
+    assert_true_msg(
+        "! FreeQ[Integrate`ParallelMixedSpecial[Exp[-x^3], x], Gamma]",
+        "Exp[-x^3] answers with an incomplete Gamma");
+}
+
+/* The floor under that: an integrand the stage still cannot close must decline
+ * HONESTLY -- a {"failed", ...} status, never a certificate. Measured at v0.241,
+ * and deliberately drawn from the two classes the certificate work does NOT
+ * touch: the first three fail in the KERNEL SEARCH (corpus #87, #89, #90 --
+ * Sin[x]/x^2 is a deep, order-2 pole and Sin[x^2]/Cos[x^2] find no exponential
+ * source on a tangent tower), and the last two are the Cherry family every one
+ * of the four reference ports also declines (corpus #274, #275). */
+static void test_honest_decline_still_honest(void) {
+    assert_honest_decline("Sin[x]/x^2");
+    assert_honest_decline("Sin[x^2]");
+    assert_honest_decline("Cos[x^2]");
+    assert_honest_decline("Exp[-Log[x]^2]");
+    assert_honest_decline("Exp[-Log[x]^2]/x");
 }
 
 /* An integrand genuinely outside the class must decline, never answer. Here
@@ -260,7 +282,8 @@ int main(void) {
     TEST(test_kernel_sici);
     TEST(test_kernel_elliptic);
     TEST(test_elementary_stays_elementary);
-    TEST(test_certificate_withheld_honestly);
+    TEST(test_certificate_now_released);
+    TEST(test_honest_decline_still_honest);
     TEST(test_not_in_class);
     TEST(test_surfaces);
     TEST(test_cascade_never_partial);
