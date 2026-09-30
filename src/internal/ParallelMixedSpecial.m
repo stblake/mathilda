@@ -470,12 +470,24 @@ EiFromResidues[f0_, T_, sources_, verbose_: False] := Catch[Module[{f = f0, gens
 (* ---------------------------------------------------------- Gamma kernels (S3) *)
 (* ExactRoot[W, k, gens]: {R, c} with W = c R^k, c constant, if W is a constant
    times a k-th power of a rational function of gens; else None *)
-ExactRoot[W0_, k_, gens_] := Catch[Module[{W = Can[W0], R = 1, c = 1},
+ExactRoot[W0_, k_, gens_] := Catch[Module[{W = Can[W0], R = 1, c = 1, fl},
+  (* FactorList over Q leaves a GAUSSIAN k-th power irreducible -- for the
+     Fresnel pair Sin[x^2] / Cos[x^2] the square W = I xi^2/x^2 arrives as
+     (I - 2 t - I t^2)/(x^2 - 2 I t x^2 - t^2 x^2), whose numerator is
+     -I (t - I)^2 but factors over Q as itself, multiplicity 1.  1 is not
+     divisible by k = 2, so the root was declined and the Erf kernel never
+     offered.  Factor over Q(i) when the coefficients are not rational.
+     Extension -> Automatic is NOT enough here (measured: it hands the
+     polynomial back unfactored); the generator has to be named.
+     The constant this frees needs no root of its own -- it accumulates in c and
+     is returned as the kernel's cw, the identity being omega^k = W/cw -- which
+     is why Sqrt[I] never has to enter the constant field. *)
+  fl[u_] := If[FreeQ[u, _Complex], FactorList[u], Quiet[FactorList[u, Extension -> I]]];
   Do[With[{part = pr[[1]], sgn = pr[[2]]},
       If[FreeQ[part, Alternatives @@ gens], c *= part^sgn; Continue[]];
       Do[If[FreeQ[fac[[1]], Alternatives @@ gens], c *= (fac[[1]]^fac[[2]])^sgn; Continue[]];
         If[Mod[fac[[2]], k] != 0, Throw[None, "er"]];
-        R *= fac[[1]]^(sgn Quotient[fac[[2]], k]), {fac, FactorList[part]}]],
+        R *= fac[[1]]^(sgn Quotient[fac[[2]], k]), {fac, fl[part]}]],
     {pr, {{Numerator[W], 1}, {Denominator[W], -1}}}];
   {R, c}], "er"];
 

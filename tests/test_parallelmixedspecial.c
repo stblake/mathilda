@@ -162,29 +162,39 @@ static void test_certificate_now_released(void) {
         "Exp[-x^3] answers with an incomplete Gamma");
 }
 
-/* A deep (order-2) pole on a tangent tower. The Ei columns were always found --
- * that is the Ci -- but the ELEMENTARY remainder they leave, -Sin[x]/x, was
- * rejected because Can's number-field detour silently failed to canonicalise it
- * (see Can in ParallelMixed.m). Corpus #87/#172 and #175. */
-static void test_deep_pole_tangent_tower(void) {
+/* The tangent tower, both ways it used to fail (corpus #87/#172, #175, #89, #90).
+ *
+ * A deep (order-2) pole: the Ei columns were always found -- that is the Ci --
+ * but the ELEMENTARY remainder they leave, -Sin[x]/x, was rejected because Can's
+ * number-field detour silently failed to canonicalise it (see Can in
+ * ParallelMixed.m).
+ *
+ * A non-linear tangent argument: Sin[x^2] needs the conjugate Erf PAIR, which
+ * needs W = I xi^2/x^2 recognised as an exact square -- and its numerator
+ * -I (t - I)^2 is irreducible over Q, so ExactRoot must factor over Q(i). The
+ * freed constant is carried as the kernel's cw, so Sqrt[I] never enters the
+ * constant field. */
+static void test_tangent_tower_kernels(void) {
     assert_solves("Sin[x]/x^2", "7/5");
     assert_solves("Sin[3 x]/x^2", "7/5");
+    assert_solves("Sin[x^2]", "7/5");
+    assert_solves("Cos[x^2]", "7/5");
     assert_true_msg(
         "! FreeQ[Integrate`ParallelMixedSpecial[Sin[x]/x^2, x], CosIntegral]",
         "Sin[x]/x^2 answers with CosIntegral");
+    assert_true_msg(
+        "! FreeQ[Integrate`ParallelMixedSpecial[Sin[x^2], x], Erf | Erfc | Erfi]",
+        "Sin[x^2] answers with an error function");
 }
 
 /* The floor: an integrand the stage still cannot close must decline HONESTLY --
- * a {"failed", ...} status, never a certificate. Measured at v0.242, and drawn
- * from the two classes this work does not touch: Sin[x^2] / Cos[x^2] fail in the
- * KERNEL SEARCH (corpus #89, #90 -- GammaCandidates offers no Erf column for a
- * conjugate exponential PAIR, though ExpSources now finds the source), and the
- * Cherry pair is declined by all four reference ports too (#274, #275). */
+ * a {"failed", ...} status, never a certificate. The Cherry family below is
+ * declined by all four reference ports too (corpus #274-#277), so it is the
+ * honest boundary rather than a Mathilda gap. */
 static void test_honest_decline_still_honest(void) {
-    assert_honest_decline("Sin[x^2]");
-    assert_honest_decline("Cos[x^2]");
     assert_honest_decline("Exp[-Log[x]^2]");
     assert_honest_decline("Exp[-Log[x]^2]/x");
+    assert_honest_decline("x^2 Exp[-Log[x]^2]");
 }
 
 /* An integrand genuinely outside the class must decline, never answer. Here
@@ -293,7 +303,7 @@ int main(void) {
     TEST(test_kernel_elliptic);
     TEST(test_elementary_stays_elementary);
     TEST(test_certificate_now_released);
-    TEST(test_deep_pole_tangent_tower);
+    TEST(test_tangent_tower_kernels);
     TEST(test_honest_decline_still_honest);
     TEST(test_not_in_class);
     TEST(test_surfaces);
