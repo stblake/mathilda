@@ -296,6 +296,13 @@ Writes an `Image` to a raster image file, or a `Graphics` object to an image fil
   plot). Coordinates may be exact (`1/2`, `Pi/4`, `Sqrt[2]`): they are converted the same
   way the on-screen renderer converts them. Text uses the PDF base-14 Helvetica, so no font
   is embedded. This is the recommended format for print and for the book.
+- In the PDF, `Text[s, pos, {ox, oy}]` aligns as Mathematica does (`{-1, 0}` puts the left
+  end of `s` at `pos`, `{0, 0}` centres it, using the Helvetica advance widths), and
+  `Text[Style[s, n | FontSize -> n | colour, ...], ...]` sets that string's size and
+  colour. `Arrowheads[s]` fixes the arrowhead length at `s` times the plot width, and an
+  arrow's shaft stops inside its head rather than poking past the point.
+  `AspectRatio -> Automatic` maps x and y with one scale (the page height follows the
+  data unless `ImageSize -> {w, h}` fixes both, in which case the picture is centred).
 - **PNG** and **JPEG** render through the graphics backend into an offscreen buffer, so the
   file is pixel-identical to the on-screen plot (the same axes, ticks, labels and text).
   They therefore need graphics support compiled in (`USE_GRAPHICS`) **and** a usable GUI

@@ -977,6 +977,7 @@ set(COMMON_SRC
     ../src/graph/spanningtree.c
     ../src/graph/connectivity.c
     ../src/graph/graphplot.c
+    ../src/graph/glayout.c
     ../src/graph/vertexcoloring.c
     ../src/graph/edgeweight.c
     ../src/graph/wtadjmat.c
@@ -1002,6 +1003,7 @@ set(COMMON_SRC
     ../src/graph/hyp_random.c
     ../src/graph/hyp_transversal.c
     ../src/graph/hyp_init.c
+    ../src/graph/hyp_plot.c
     ../src/graph/galg_common.c
     ../src/graph/galg_init.c
     ../src/graph/galg_flow.c
@@ -1080,6 +1082,10 @@ add_executable(graph_metrics_tests test_graph_metrics.c $<TARGET_OBJECTS:mathild
 target_link_libraries(graph_metrics_tests m)
 target_include_directories(graph_metrics_tests PRIVATE ../src ../src/graph)
 add_test(NAME graph_metrics_tests COMMAND graph_metrics_tests)
+add_executable(graphplot_tests test_graphplot.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(graphplot_tests m)
+target_include_directories(graphplot_tests PRIVATE ../src ../src/graph ../src/graphics)
+add_test(NAME graphplot_tests COMMAND graphplot_tests)
 add_executable(hypergraph_tests test_hypergraph.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(hypergraph_tests m)
 target_include_directories(hypergraph_tests PRIVATE ../src ../src/graph)

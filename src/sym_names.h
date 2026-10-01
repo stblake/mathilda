@@ -1031,6 +1031,21 @@ extern const char* SYM_EdgeWeight;
 extern const char* SYM_EdgeCapacity;
 extern const char* SYM_WeightedAdjacencyMatrix;
 
+/* GraphPlot / HypergraphPlot options, and the Text/Arrow styling heads the
+ * PDF exporter honours (Style, FontSize, Arrowheads). */
+extern const char* SYM_VertexCoordinates;
+extern const char* SYM_VertexLabels;
+extern const char* SYM_GraphLayout;
+extern const char* SYM_GraphHighlight;
+extern const char* SYM_VertexStyle;
+extern const char* SYM_EdgeStyle;
+extern const char* SYM_EdgeLabels;
+extern const char* SYM_VertexSize;
+extern const char* SYM_HypergraphPlot;
+extern const char* SYM_Arrowheads;
+extern const char* SYM_Style;
+extern const char* SYM_FontSize;
+
 /* NumberForm + Row (numeric-display formatting) and NumberForm's option
  * names. NumberForm is a print wrapper handled in print.c; the option-name
  * pointers are compared by identity in numberform.c's option parser. */

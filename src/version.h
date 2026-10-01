@@ -13,8 +13,8 @@
  * from preprocessor macros; see version.c. mathilda_version() returns it.
  */
 
-#define MATHILDA_VERSION_NUMBER 0.246  /* keep in sync with the string below */
-#define MATHILDA_VERSION_STRING "0.246"
+#define MATHILDA_VERSION_NUMBER 0.247  /* keep in sync with the string below */
+#define MATHILDA_VERSION_STRING "0.247"
 
 /* Full descriptive version string, e.g.
  *   "Mathilda 0.01 (Apple LLVM 17.0.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ...)"

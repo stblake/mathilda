@@ -1133,34 +1133,101 @@ Out[5]= TopologicalSort[Graph[<3 vertices, 3 edges>]]
 
 ## GraphPlot
 
-- `GraphPlot[g]`: a `Graphics[...]` object drawing `g`.
+- `GraphPlot[g]`: a `Graphics[...]` object drawing the graph `g`.
+- `GraphPlot[{u -> v, ...}]`: draws the graph of a list of rules.
+- `GraphPlot[g, opts]`: with the options below; any other option (`ImageSize`,
+  `PlotLabel`, `Background`, ...) is passed through to `Graphics`.
 
 **Features**:
-- `Protected`. Vertices are laid out on a circle, each drawn as a `Disk`; edges
-  are `Line`s. The specification calls for one `Text` label per vertex as well,
-  but the current binary emits no `Text` primitives (see the example below).
-- Renders through the standard graphics path (a window when `USE_GRAPHICS=1`,
-  the text placeholder otherwise).
-- MVP limitations: directed edges are drawn as plain lines (no arrowheads yet);
-  a force-directed layout is a future hook. Mathematica's `GraphPlot` uses a
-  spring-electrical layout.
-- Unevaluated on a non-graph.
+- `Protected`. Implemented in `src/graph/graphplot.c` over the layout engine
+  `src/graph/glayout.c`. **Deterministic**: no random numbers anywhere, so the
+  same graph always gives an identical `Graphics` expression.
+- **Default layout** (`GraphLayout -> Automatic`): a forest with a branching
+  vertex is drawn as tidy layered trees (hanging from the tree centre, or from
+  the source of an arborescence); an all-directed acyclic graph as a layered
+  drawing; everything else (paths and cycles included) by **stress
+  majorization** (SMACOF on BFS graph distances, weights `d^-2`), started from
+  Pivot MDS. Components of up to 60 vertices also try circle starts and Tutte
+  (barycentric) starts from shortest cycles, and keep, among the drawings within
+  10% of the least stress, the one with the fewest edge crossings; a
+  crossing-free drawing may cost up to 2.5x the stress when it removes at least
+  four crossings (so the dodecahedron comes out as its Schlegel diagram while
+  the cube stays the textbook Necker cube). Each drawing is rotated to a
+  canonical orientation (principal axis horizontal; snapped to the axes when the
+  edges are four-fold, then straightened so grids come out exactly as grids;
+  vertex 1 on top when there is no preferred axis). Every connected component is
+  laid out on its own and the components are shelf-packed, largest first, with
+  isolated vertices gathered into a square block.
+- **Cost**: full stress majorization up to 1000 vertices per component, Pivot
+  MDS (50 pivots, `O(k (n + m))`) above that. A 500-vertex random graph takes
+  about 0.15 s, a 25x20 grid 0.03 s.
+- `GraphLayout` values: `"StressEmbedding"`, `"SpringElectricalEmbedding"` (Hu's
+  spring-electrical model, exact repulsion up to 1000 vertices, grid
+  cut-off above), `"CircularEmbedding"` (`VertexList` order, vertex 1 on top),
+  `"LayeredEmbedding"` / `"LayeredDigraphEmbedding"` (longest-path layers for a
+  DAG, BFS layers from the centre otherwise, dummy vertices on long edges,
+  barycentre crossing reduction, isotonic-regression x placement; wide shallow
+  drawings get taller layer spacing), `"BipartiteEmbedding"` (the two parts in
+  two columns, barycentre-ordered; falls back to stress for a non-bipartite
+  graph), `"GridEmbedding"` (`VertexList` order on a square grid).
+- `VertexCoordinates -> {{x1, y1}, ...}` (one pair per vertex, `VertexList`
+  order) fixes the drawing; `VertexCoordinates -> {v -> {x, y}, ...}` fixes the
+  given vertices and lays out the rest.
+- `VertexLabels -> None` (default) | `"Name"` | `Automatic` | `True` | `All`
+  labels each vertex with its name; `{v -> lbl, ...}` labels only those. A label
+  sits beside its vertex on the side with the widest angular gap between the
+  incident edges (upper right when free), in 10 pt Helvetica, and the frame
+  grows so no label is clipped.
+- **Directed edges** are `Arrow`s with an `Arrowheads` directive sized to the
+  vertex disks; each arrow starts outside its source disk and its tip stops just
+  short of the target disk. A mutual pair `u -> v`, `v -> u` is drawn as two
+  arrows offset to either side.
+- `GraphHighlight -> {v, ..., e, ...}`: highlighted vertices and edges are drawn
+  red (`RGBColor[1, 0, 0]`), vertices 15% larger and edges 2.5x thicker, on top
+  of the others. Edges may be written `u <-> v`, `UndirectedEdge[u, v]`,
+  `u -> v` or `DirectedEdge[u, v]`.
+- `VertexStyle -> style` or `{v -> style, ...}`; `EdgeStyle -> style` or
+  `{e -> style, ...}` (a colour, or a list of directives), e.g. a vertex
+  colouring from `FindVertexColoring`.
+- `EdgeLabels -> "EdgeWeight"` writes each weight at its edge midpoint (offset
+  towards the inside of the drawing); `EdgeLabels -> {e -> lbl, ...}` labels
+  chosen edges. `VertexSize -> d` sets the disk diameter to `d` edge lengths.
+- **Look**: vertices are disks in `RGBColor[0.368417, 0.506779, 0.709798]`
+  (Mathematica's `ColorData[97]` blue) with a thin darker rim, edges 1.1 pt in
+  grey-blue `RGBColor[0.571589, 0.586483, 0.699215]`, the disk radius scaled to
+  the median edge length and the extent of the drawing. The result carries
+  `PlotRange`, `AspectRatio -> Automatic`, `Axes -> False` and an explicit
+  `ImageSize -> {w, h}` (300 pt on the long side, growing gently with the vertex
+  count), so `Export["g.pdf", GraphPlot[g]]` gives a tight, equal-aspect picture.
+- Unevaluated on a non-graph, or when an argument after the graph is not a rule.
 
 ```mathematica
-In[1]:= Head[GraphPlot[CycleGraph[8]]]
+In[1]:= Head[GraphPlot[PetersenGraph[]]]
 Out[1]= Graphics
 
 In[2]:= Count[GraphPlot[CompleteGraph[6]], _Line, Infinity]
 Out[2]= 15
 
-In[3]:= Count[GraphPlot[CycleGraph[5]], _Disk, Infinity]
-Out[3]= 5
+In[3]:= Count[GraphPlot[Graph[{1 -> 2, 2 -> 3, 3 -> 1}]], _Arrow, Infinity]
+Out[3]= 3
 
-In[4]:= Count[GraphPlot[CycleGraph[5]], _Text, Infinity]
-Out[4]= 0
+In[4]:= Cases[GraphPlot[PathGraph[{1, 2, 3}], VertexCoordinates -> {{0, 0}, {1, 0}, {2, 1}}], Disk[p_, _] :> p, Infinity]
+Out[4]= {{0.0, 0.0}, {1.0, 0.0}, {2.0, 1.0}}
 
-In[5]:= GraphPlot[5]
-Out[5]= GraphPlot[5]
+In[5]:= Count[GraphPlot[CycleGraph[5], VertexLabels -> "Name"], _Text, Infinity]
+Out[5]= 5
+
+In[6]:= MemberQ[GraphPlot[CycleGraph[3], GraphHighlight -> {1}], RGBColor[1., 0., 0.], Infinity]
+Out[6]= True
+
+In[7]:= {Axes, AspectRatio} /. Rest[List @@ GraphPlot[CycleGraph[4]]]
+Out[7]= {False, Automatic}
+
+In[8]:= Length[Union[Cases[GraphPlot[GridGraph[{4, 4}]], Disk[{x_, _}, _] :> Round[x, 0.001], Infinity]]]
+Out[8]= 4
+
+In[9]:= GraphPlot[5]
+Out[9]= GraphPlot[5]
 ```
 
 ## FindVertexColoring

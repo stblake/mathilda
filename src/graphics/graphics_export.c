@@ -13,10 +13,14 @@
  *     Point      -> filled dot
  *     Rectangle  -> filled + stroked box
  *     Arrow      -> polyline + solid arrowhead
- *     Text       -> Helvetica string (BT .. Tj .. ET)
+ *     Text       -> Helvetica string (BT .. Tj .. ET); Text[s, pos, {ox, oy}]
+ *                   aligns as Mathematica does ({-1, 0}: left end at pos), and
+ *                   Text[Style[s, n | FontSize -> n | colour ...], ...] sets
+ *                   the size and colour of that one string
  *
- * plus the RGBColor/GrayLevel/Hue/CMYKColor/Opacity/Thickness/PointSize
- * directives. PDF's coordinate system is y-up with the origin at the lower
+ * plus the RGBColor/GrayLevel/Hue/CMYKColor/Opacity/Thickness/PointSize/
+ * Arrowheads directives. AspectRatio -> Automatic maps world units with equal
+ * x and y scale (centred on the page) instead of stretching to fill it. PDF's coordinate system is y-up with the origin at the lower
  * left, which is exactly the mathematical convention, so world y needs no
  * flip. Colour, opacity and the "nice" tick policy mirror the renderer so the
  * PDF and the on-screen/PNG output agree.
@@ -235,6 +239,8 @@ typedef struct {
     int   axes_set;       /* Axes option was present */
     double bg_r, bg_g, bg_b; int have_bg;
     double width, height; /* page size in points (from ImageSize) */
+    int   equal_aspect;   /* AspectRatio -> Automatic: equal x/y scale */
+    int   size_pair;      /* ImageSize -> {w, h} fixed both dimensions */
 } Opts;
 
 /* Look for option `sym -> value` among the Graphics args (index >= 1). */
@@ -275,6 +281,7 @@ static void parse_range(const Expr* v, Opts* o) {
 static void parse_opts(const Expr* g, Opts* o) {
     o->have_range = 0; o->frame = 0; o->axes = 1; o->axes_set = 0;
     o->have_bg = 0; o->width = 504.0; o->height = 360.0; /* 7in x 5in default */
+    o->equal_aspect = 0; o->size_pair = 0;
 
     const Expr* v;
     if ((v = find_option(g, SYM_PlotRange))) parse_range(v, o);
@@ -290,9 +297,12 @@ static void parse_opts(const Expr* g, Opts* o) {
         else if (head_is(v, SYM_List) && v->data.function.arg_count == 2
                  && to_double(v->data.function.args[0], &w)
                  && to_double(v->data.function.args[1], &h) && w > 0 && h > 0) {
-            o->width = w; o->height = h;
+            o->width = w; o->height = h; o->size_pair = 1;
         }
     }
+    if ((v = find_option(g, SYM_AspectRatio)) && v->type == EXPR_SYMBOL
+        && v->data.symbol.name == SYM_Automatic)
+        o->equal_aspect = 1;
 }
 
 /* ---------------------------------------------------------- tick policy --- */
@@ -331,6 +341,7 @@ typedef struct {
     double dash[GFX_MAX_DASH];
     int    ndash;
     int    dash_emitted;          /* a non-solid dash pattern is in force */
+    double arrowhead;             /* Arrowheads[s]: s (fraction of width), 0 = auto */
     /* world->page transform */
     double ox, oy, sx, sy;
 } Emit;
@@ -394,6 +405,23 @@ static void emit_pdf_string(Buf* c, const char* s) {
         else { char t[2] = { *p, 0 }; buf_cat(c, t); }
     }
     buf_cat(c, ")");
+}
+
+/* Helvetica advance widths (1/1000 em) for ASCII 32..126, from the AFM. */
+static const short HELV_W[95] = {
+    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
+    556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
+    1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+    667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
+    333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+    556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584
+};
+
+double graphics_helvetica_width(const char* s) {
+    double w = 0;
+    for (const unsigned char* p = (const unsigned char*)s; p && *p; p++)
+        w += (*p >= 32 && *p <= 126) ? HELV_W[*p - 32] : 556;
+    return w / 1000.0;
 }
 
 /* Text content -> a display string (caller frees), or NULL if unrenderable. */
@@ -479,6 +507,10 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
         return;
     }
     if (apply_directive(e, p, plot_w)) return;   /* Thickness/PointSize/Dashing/Directive */
+    if (head_is(p, SYM_Arrowheads) && p->data.function.arg_count >= 1) {
+        double s; if (to_double(p->data.function.args[0], &s) && s >= 0) e->arrowhead = s;
+        return;
+    }
 
     /* Line -------------------------------------------------------------- */
     if (head_is(p, SYM_Line) && p->data.function.arg_count >= 1) {
@@ -566,31 +598,50 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
     if (head_is(p, SYM_Arrow) && p->data.function.arg_count >= 1) {
         const Expr* pts = p->data.function.args[0];
         if (!head_is(pts, SYM_List) || pts->data.function.arg_count < 2) return;
-        set_stroke(e);
-        buf_catf(e->c, "%.3f w\n", stroke_w(e, plot_w));
-        double lx = 0, ly = 0, px = 0, py = 0; int first = 1;
-        for (size_t i = 0; i < pts->data.function.arg_count; i++) {
+        /* Page-space vertices first, so the shaft can stop at the head's base
+         * (a butt-capped stroke run to the tip pokes out past the point). */
+        size_t np = pts->data.function.arg_count, k = 0;
+        double* P = (double*)malloc(sizeof(double) * 2 * np);
+        if (!P) return;
+        for (size_t i = 0; i < np; i++) {
             double x, y;
             if (!get_pt(pts->data.function.args[i], &x, &y)) continue;
-            px = lx; py = ly; lx = X(e, x); ly = Y(e, y);
-            buf_catf(e->c, "%.3f %.3f %s\n", lx, ly, first ? "m" : "l");
-            first = 0;
+            P[2 * k] = X(e, x); P[2 * k + 1] = Y(e, y); k++;
         }
-        if (!first) buf_cat(e->c, "S\n");
-        /* Solid arrowhead on the final segment. Its length scales with the
-         * final segment (capped), so a short arrow gets a small head — a fixed
-         * head swamped the many short chevrons of a dashed StreamPlot. Long
-         * arrows (e.g. VectorPlot) still hit the cap, unchanged. */
+        if (k < 2) { free(P); return; }
+        double lx = P[2 * (k - 1)], ly = P[2 * (k - 1) + 1];
+        double px = P[2 * (k - 2)], py = P[2 * (k - 2) + 1];
+        /* Solid arrowhead on the final segment. Arrowheads[s] fixes its length
+         * at s times the plot width; otherwise it scales with the final segment
+         * (capped), so a short arrow gets a small head -- a fixed head swamped
+         * the many short chevrons of a dashed StreamPlot. */
         double dx = lx - px, dy = ly - py, len = sqrt(dx*dx + dy*dy);
+        double hl = 0, hw = 0, ux = 0, uy = 0, bx = lx, by = ly;
         if (len > 1e-6) {
-            double hl = len * 0.55;
-            if (hl > 8.0) hl = 8.0;   /* cap: long arrows keep the old ~8pt head */
-            double ux = dx/len, uy = dy/len, hw = hl * 0.38; /* slimmer than before */
-            double bx = lx - ux*hl, by = ly - uy*hl;
+            if (e->arrowhead > 0) { hl = e->arrowhead * plot_w; hw = hl * 0.42; }
+            else {
+                hl = len * 0.55;
+                if (hl > 8.0) hl = 8.0;   /* cap: long arrows keep the ~8pt head */
+                hw = hl * 0.38;
+            }
+            ux = dx/len; uy = dy/len;
+            bx = lx - ux*hl; by = ly - uy*hl;
+        }
+        set_stroke(e);
+        buf_catf(e->c, "%.3f w\n", stroke_w(e, plot_w));
+        for (size_t i = 0; i + 1 < k; i++)
+            buf_catf(e->c, "%.3f %.3f %s\n", P[2 * i], P[2 * i + 1], i == 0 ? "m" : "l");
+        /* End the shaft inside the head (a little past its base), unless the
+         * head is longer than the last segment. */
+        if (hl > 0 && hl < len) buf_catf(e->c, "%.3f %.3f l S\n", lx - ux*hl*0.8, ly - uy*hl*0.8);
+        else if (hl > 0) buf_cat(e->c, "S\n");
+        else buf_catf(e->c, "%.3f %.3f l S\n", lx, ly);
+        if (hl > 0) {
             set_fill(e);
             buf_catf(e->c, "%.3f %.3f m %.3f %.3f l %.3f %.3f l h f\n",
                      lx, ly, bx - uy*hw, by + ux*hw, bx + uy*hw, by - ux*hw);
         }
+        free(P);
         return;
     }
 
@@ -598,12 +649,33 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
     if (head_is(p, SYM_Text) && p->data.function.arg_count >= 2) {
         double x, y;
         if (!get_pt(p->data.function.args[1], &x, &y)) return;
-        char* s = text_string(p->data.function.args[0]);
-        if (!s) return;
+        const Expr* body = p->data.function.args[0];
         double fs = 10.0;
-        double tx = X(e, x) - 0.25 * fs * (double)strlen(s); /* rough centring */
-        double ty = Y(e, y) - 0.35 * fs;
-        set_fill(e);
+        double tr = e->r, tg = e->g, tb = e->b;
+        /* Style[s, n | FontSize -> n | colour, ...]: size and colour. */
+        if (head_is(body, SYM_Style) && body->data.function.arg_count >= 1) {
+            for (size_t i = 1; i < body->data.function.arg_count; i++) {
+                const Expr* d = body->data.function.args[i];
+                double v, a;
+                if (to_double(d, &v) && v > 0) fs = v;
+                else if (head_is(d, SYM_Rule) && d->data.function.arg_count == 2
+                         && d->data.function.args[0]->type == EXPR_SYMBOL
+                         && d->data.function.args[0]->data.symbol.name == SYM_FontSize
+                         && to_double(d->data.function.args[1], &v) && v > 0) fs = v;
+                else resolve_color(d, &tr, &tg, &tb, &a);
+            }
+            body = body->data.function.args[0];
+        }
+        char* s = text_string(body);
+        if (!s) return;
+        /* Offset {ox, oy}: the point of the text box at pos, in box-relative
+         * coordinates from -1 (left/bottom) to 1; {0, 0} centres. */
+        double ox = 0, oy = 0;
+        if (p->data.function.arg_count >= 3) get_pt(p->data.function.args[2], &ox, &oy);
+        double tw = graphics_helvetica_width(s) * fs, th = 0.70 * fs;  /* cap height */
+        double tx = X(e, x) - 0.5 * (1.0 + ox) * tw;
+        double ty = Y(e, y) - 0.5 * (1.0 + oy) * th;
+        buf_catf(e->c, "%.4f %.4f %.4f rg\n", tr, tg, tb);
         buf_cat(e->c, "BT /F1 ");
         buf_catf(e->c, "%.1f Tf %.3f %.3f Td ", fs, tx, ty);
         emit_pdf_string(e->c, s);
@@ -811,9 +883,22 @@ int graphics_export_pdf(const Expr* g, const char* path) {
     double mT = 12.0, mB = draw_axes ? 30.0 : 8.0;
     Deco deco; deco_parse(g, draw_axes, &deco);
     mT += deco.extra_top; mR += deco.extra_right;
+    if (o.equal_aspect && !o.size_pair) {
+        /* Width fixed, height follows the data: no letterboxing. */
+        double rw0 = W - mL - mR;
+        if (rw0 < 20) rw0 = 20;
+        H = rw0 * (dh / dw) + mT + mB;
+        if (H > 4.0 * W) H = 4.0 * W;
+    }
     double rx = mL, ry = mB, rw = W - mL - mR, rh = H - mT - mB;
     if (rw < 20) rw = 20;
     if (rh < 20) rh = 20;
+    if (o.equal_aspect) {
+        /* Equal scale: shrink the longer side of the plot region and centre. */
+        double sc = rw / dw < rh / dh ? rw / dw : rh / dh;
+        double nw = dw * sc, nh = dh * sc;
+        rx += (rw - nw) / 2; ry += (rh - nh) / 2; rw = nw; rh = nh;
+    }
 
     /* Build the content stream. */
     Buf content; buf_init(&content);
