@@ -62,6 +62,51 @@ char* mathilda_ffi_eval_latex(const char* input);
  * Caller-owned memory; free with mathilda_ffi_free(). Never returns NULL. */
 char* mathilda_ffi_eval_json(const char* input);
 
+/* --- Notebook-cell evaluation and editor services ------------------------
+ *
+ * These exist for a front end that drives the kernel as a notebook or console
+ * (e.g. a xeus Jupyter kernel): a cell may hold several statements, Print
+ * output and messages must reach the cell, and an editor wants completion and
+ * a continuation check. They are the in-process counterpart of the sidecar's
+ * `cell:true` NDJSON pipe mode (repl.c: pipe_process_input), and emit the SAME
+ * protocol event lines, so one event mapping serves both transports. */
+
+/* Receives one NDJSON event line (no trailing newline), exactly as the sidecar
+ * would write it to stdout: {"id":N,"type":"line"|"stream"|"message"|"expr"|
+ * "plot"|"image"|"usage"|"names"|"error"|"done", ...}. The embedder parses it
+ * and publishes the matching front-end message. Called in order, on the
+ * calling thread, before mathilda_ffi_eval_cell returns. */
+typedef void (*mathilda_ffi_sink)(void* ctx, const char* json_line);
+
+/* Evaluate `code` for request `id`, delivering each event to `sink`.
+ *
+ * cell != 0 — notebook-cell semantics: the cell is split into statements like a
+ *   Mathematica input cell (newline- or ';'-separated); the whole cell is
+ *   parsed before anything runs, so a syntax error anywhere evaluates nothing;
+ *   each statement's Print output arrives as a "stream" event and its messages
+ *   as "message" events BEFORE its result; a statement ending in ';' or
+ *   evaluating to Null sends no result; a per-statement "line" event carries
+ *   the session $Line (so `%`, In[n], Out[n] work across cells).
+ * cell == 0 — one expression, no history, no capture (the batch-tool path).
+ *
+ * A terminating {"type":"done"} is always the last event. Rich results route
+ * as in mathilda_ffi_eval_json (Graphics -> "plot", Image -> "image", ?name ->
+ * "usage"/"names", otherwise "expr" with an optional "latex"). Implicitly
+ * initializes the kernel; not reentrant (serialize calls — see file header). */
+void mathilda_ffi_eval_cell(const char* code, int id, int cell,
+                            mathilda_ffi_sink sink, void* ctx);
+
+/* 1 if `code` forms a complete expression (every (), [], {} closed, no open
+ * "..." string or (* ... *) comment), 0 otherwise. Drives a console/notebook
+ * continuation prompt — the same rule the REPL's smart-Return uses. */
+int mathilda_ffi_is_complete(const char* code);
+
+/* A JSON array (as a string) of defined symbol names beginning with `prefix`,
+ * sorted, for tab completion — e.g. prefix "Sin" -> "[\"Sin\",\"Sinh\",
+ * \"SinIntegral\"]". Caller-owned; free with mathilda_ffi_free(). Never NULL
+ * ("[]" when nothing matches). A NULL/empty prefix lists every symbol. */
+char* mathilda_ffi_complete(const char* prefix);
+
 /* Release a string returned by mathilda_ffi_eval / _eval_latex. NULL-safe. */
 void mathilda_ffi_free(char* s);
 

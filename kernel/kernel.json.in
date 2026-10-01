@@ -1,0 +1,12 @@
+{
+    "display_name": "Mathilda",
+    "argv": [
+        "@XKERNEL_BIN@",
+        "-f",
+        "{connection_file}"
+    ],
+    "language": "mathilda",
+    "env": {
+        "MATHILDA_HOME": "@XEUS_MATHILDA_HOME@"
+    }
+}
