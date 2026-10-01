@@ -291,6 +291,25 @@ Expr* dsolve_variation_of_parameters_mode(Expr** basis, size_t n, const Expr* g,
                                           const Expr* leadcoef, const char* xvar,
                                           DSolveVPMode mode, bool* inert_out);
 
+/* Optional per-term wall-clock budget (seconds) for the Wronskian integrals of
+ * either variation-of-parameters entry point.  0 — the default — is unbounded and
+ * byte-identical to the historical behaviour.  A caller that needs an ELEMENTARY
+ * closure sets it around its call and restores 0 after: the structural
+ * `vp_integral_hopeless` screen only catches a SPECIAL FUNCTION in the
+ * denominator, and an integrand can be elementary-looking yet still not close —
+ * `DSolve`Kovacic`'s own Exp[c ArcTanh[radical]] fundamental set for
+ * (x^3+2x^2)y''-x y'+(1-x)y == x^2(x+1)^2 cost a measured 222 s to fail, which
+ * blows every solve budget while the answer was going to be declined anyway.
+ *
+ * A term whose bounded attempt times out does NOT come back as a raw unevaluated
+ * `Integrate[...]`: that re-enters the integration cascade on every later
+ * re-evaluation of the body, which is the same unbounded search again (3 s of budget
+ * became 375 s over the re-evaluations).  In VP_ALLOW_INERT it becomes the mode's own
+ * re-evaluation-proof `Inactive[Integrate]`; in VP_ELEMENTARY the whole particular is
+ * abandoned (NULL), since that caller requires a closed form and there is nothing
+ * useful to hand it. */
+void dsolve_vp_set_integral_budget(int secs);
+
 /* Rewrite every indefinite `Integrate[f, v]` (v a symbol) to `Inactive[Integrate][f, v]`.
  * `e` consumed, result owned.  Definite (3-arg) integrals are left alone. */
 Expr* ds_inactivate_integrate(Expr* e);
@@ -298,6 +317,7 @@ Expr* ds_inactivate_integrate(Expr* e);
 /* `ds_has_head(e, SYM_Integrate)` is a NAME-occurrence test, so it is true for
  * `Inactive[Integrate][...]` as well.  These two distinguish the forms. */
 bool ds_has_active_integrate(const Expr* e);
+
 bool ds_has_inactive_integrate(const Expr* e);
 
 /* Correctness gate for a branch whose particular carries `Inactive[Integrate]`.

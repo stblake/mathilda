@@ -676,6 +676,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_chebychev.c
     ../src/calculus/integrate_goursat.c
     ../src/calculus/integrate_fresnel.c
+    ../src/calculus/integrate_gammapower.c
     ../src/calculus/integrate_jeffrey.c
     ../src/calculus/integrate_newton_leibniz.c
     ../src/calculus/integrate_symmetry.c
@@ -3340,6 +3341,10 @@ add_executable(dsolve_m61_stress_tests test_dsolve_m61_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m61_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m61_stress_tests COMMAND dsolve_m61_stress_tests)
 
+add_executable(dsolve_m62_stress_tests test_dsolve_m62_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m62_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m62_stress_tests COMMAND dsolve_m62_stress_tests)
+
 add_executable(inactive_tests test_inactive.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(inactive_tests PRIVATE ../src ../src/calculus)
 add_test(NAME inactive_tests COMMAND inactive_tests)
@@ -3939,7 +3944,7 @@ endif()
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 580)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 578)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
 # verifies the ODE residual AND every initial condition (M21).  Baseline 2
@@ -4498,6 +4503,32 @@ add_test(NAME dsolve_corpus_2_2_34_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2234.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
+
+# 12000.org "Solving ODEs" section 2.2.35 (Problems 3401-3500).  M62: 100 records, all
+# scalar (31 IVP), 0 systems; Riley-Hobson-Bence, Robert H Martin 1983, Martin-Reissner
+# 1961.  Three sub-blocks: elementary first order (30 quadrature / 16 separable / ~20
+# linear, 3402-3458), first-order exact / homogeneous class A,C,G / symmetry [F(x),G(y)]
+# / Bernoulli (3459-3481), and a higher-order block (3401, 3482-3500): 2nd-order linear
+# homogeneous and nonhomogeneous, missing-x, shifted Euler, 3rd-order constant
+# coefficient, 3rd-order exact nonlinear, 3rd-order missing-y, Gegenbauer at symbolic
+# eigenvalue.  Baseline argv3 = the measured non-PASS count (2), 0 FAIL, 0 crash, 0
+# timeout, measured twice per-case identical.  Went 95 -> 98 on four root-cause fixes:
+# TimeConstrained now CLAMPS a nested budget instead of refunding it (3401's Kovacic
+# closure went 375 s -> 9.85 s and every corpus budget became an actual bound); a
+# symbolic-exponent x^p E^(a x^m) -> incomplete-Gamma recogniser in Integrate (3495,
+# 12.9 s-to-fail per integral -> 0.03 s and a closed form); the sequential scalar
+# constant fit for a constant nested inside a Log, which Solve's list form cannot
+# invert (3482); and ExactODE generalised to a NONLINEAR total derivative by a jet
+# peel, plus the per-nesting-level first-integral constant that repairs an incomplete
+# general solution (3497; the aliasing also hit 3498, which PASSed with two constants
+# for a third-order ODE).  The residue 2 is honest: 3401 is a forced regular-singular
+# equation whose answer IS found but whose correctness gate costs ~15 s, over the 8 s
+# budget, and 3481 is the IVP whose explicit branches all degenerate at the initial
+# point (the deferred class shared with 2.2.30-2979 and 2.2.31-3049).
+add_test(NAME dsolve_corpus_2_2_35_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2235.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

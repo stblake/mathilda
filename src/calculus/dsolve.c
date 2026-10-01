@@ -140,6 +140,7 @@ extern Expr** dsolve_undetcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_exactode_nl_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_genairy_try(DSolveProblem* P, size_t* nbranch);
@@ -527,6 +528,17 @@ Expr* builtin_dsolve(Expr* res) {
              * cascade): a first-order ODE with no closed form stays unevaluated by
              * default (matching SymPy's opt-in 1st_power_series and Mathematica), so
              * a truncated series is offered only on explicit request. */
+            /* Nonlinear exactness (the jet peel) — a general backstop, so it runs
+             * after every specialist and every implicit fallback, immediately before
+             * the series one.  It claims ANY equation whose left side happens to be a
+             * total derivative, which from an earlier slot means preempting methods
+             * that answer the same equations directly and better: from ExactODE's own
+             * early linear slot it took §2.1.2-1143 (y y''' == y' y'') from 0.08 s to
+             * 9.96 s for the IDENTICAL answer, and from just after the first-integral
+             * group it preempted M59's autonomous implicit companion on §2.1.2-1168
+             * (y^2 y''' == y'^3), which owns that order-3 autonomous family.  Here it
+             * can only turn a decline into an answer. */
+            if (!result) result = dsolve_run(&P, dsolve_exactode_nl_try);
             /* series fallback: always-available, so it runs last */
             if (!result) result = dsolve_run(&P, dsolve_frobenius_try);
             /* very last resort: if x=0 was an irregular/obstructed singular point,
@@ -561,7 +573,9 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_UNDETCOEFF:   result = dsolve_run(&P, dsolve_undetcoeff_try);  break;
         case DS_CONSTCOEFF:   result = dsolve_run(&P, dsolve_constcoeff_try);  break;
         case DS_EULER:        result = dsolve_run(&P, dsolve_euler_try);       break;
-        case DS_EXACTODE:     result = dsolve_run(&P, dsolve_exactode_try);    break;
+        case DS_EXACTODE:     result = dsolve_run(&P, dsolve_exactode_try);
+                              if (!result) result = dsolve_run(&P, dsolve_exactode_nl_try);
+                              break;
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
         case DS_KOVACIC:      result = dsolve_run(&P, dsolve_kovacic_try);     break;
         case DS_GENAIRY:      result = dsolve_run(&P, dsolve_genairy_try);     break;

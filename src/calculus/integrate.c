@@ -29,6 +29,7 @@
 #include "integrate_chebychev.h"
 #include "integrate_goursat.h"
 #include "integrate_fresnel.h"
+#include "integrate_gammapower.h"
 #include "integrate_jeffrey.h"
 #include "integrate_newton_leibniz.h"
 #include "integrate_symmetry.h"
@@ -478,6 +479,14 @@ static Expr* try_goursat(Expr* f, Expr* x) {
 /* K Sin[a x^2+b x+c] / K Cos[...] -> FresnelS/FresnelC (complete the square). */
 static Expr* try_fresnel(Expr* f, Expr* x) {
     return integrate_fresnel_try(f, x);
+}
+
+/* K x^p E^(a x^m), p SYMBOLIC -> the incomplete Gamma[(p+1)/m, -a x^m].  Gated to
+ * a symbolic exponent so a numeric one keeps its elementary / Erf answer from the
+ * later stages; see integrate_gammapower.c for why it is worth a stage of its own
+ * (the general stages SEARCH for 12.9 s before declining on this shape). */
+static Expr* try_gammapower(Expr* f, Expr* x) {
+    return integrate_gammapower_try(f, x);
 }
 
 /* Stage 2: recursive transcendental Risch integrator.
@@ -1550,6 +1559,11 @@ Expr* builtin_integrate(Expr* res) {
              * the square (the trig sibling of the Gaussian -> Erf recognizer),
              * deterministic and diff-back verified. */
             if (!result) result = try_fresnel(effective_f, x);
+            /* Symbolic power times an exponential -> incomplete Gamma.  Before the
+             * general stages because they SEARCH on this shape (12.9 s to decline on
+             * x^n E^(-x)); gated to a symbolic exponent, so nothing with a numeric
+             * one is diverted from its elementary / Erf answer below. */
+            if (!result) result = try_gammapower(effective_f, x);
             /* Weierstrass before derivative-divides: it is a domain-specific,
              * deterministic algorithm for rational trig/hyperbolic integrands
              * that is guaranteed to close (and verified by construction), so it

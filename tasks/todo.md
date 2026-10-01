@@ -1,3 +1,69 @@
+# Task — M62: DSolve corpus §2.2.35 (12000.org Problems 3401–3500)
+
+Measure the next hundred ODEs end to end, then drive the number up with fixes that
+are general rather than case-shaped. Full record: `DSOLVE_PLAN.md` M62,
+`DSolve_test_status/STATUS.md` §2.2.35.
+
+## Plan
+
+- [x] Fetch upstream §2.1.35 (`Ch2.S1.SS35.htm`) and convert to
+      `DSolve_test_status/DE_examples_2235.m` (100 records, 100 scalar, 31 IVP, 0 systems).
+- [x] Transcription gate: the documented tripwire greps (M42 glued coefficient×function,
+      M48 glued letter+head, M49 `(prime)`/Greek mangling), `NO ODE ROW` count, and the
+      indvar/function census. All clean; no converter change needed.
+- [x] Register `dsolve_corpus_2_2_35_tests` in `tests/CMakeLists.txt`.
+- [x] Cold fork-per-case baseline, twice, per-case identical: **95/100, 0 FAIL, 0 crash**.
+      Non-PASS: 3401, 3481, 3482, 3495, 3497.
+- [x] Root-cause each non-PASS rather than patching the case.
+- [x] Fix 1 — `TimeConstrained` clamps a nested budget instead of refunding it
+      (`src/core.c`). Both layers were broken; two-line repro ran a loop to completion
+      in 24.5 s under a 3 s budget. Kovacic on 3401: 375 s → 9.85 s.
+- [x] Fix 2 — symbolic-exponent `x^p E^(a x^m)` → incomplete Gamma
+      (`src/calculus/integrate_gammapower.c`). 12.9 s-to-fail → 0.03 s; 3495 closes.
+- [x] Fix 3 — sequential scalar constant fit for a constant nested inside a `Log`
+      (`ds_fit_sequential`). 3482 closes.
+- [x] Fix 4 — `DSolve`ExactODE`: per-nesting-level first-integral constant (repairs an
+      INCOMPLETE general solution that scored PASS — 3498) and nonlinear exactness by a
+      jet peel (3497 closes).
+- [x] Re-measure, twice, per-case identical: **98/100, 0 FAIL, 0 crash, 0 timeout**.
+- [x] Lower the gate baseline to 2.
+- [x] Anti-overfit tests: `tests/test_dsolve_m62_stress.c`, five families (a timing
+      inequality, a constant COUNT, a certificate grid with negative controls, an IVP fit
+      generator, two exactness generators).
+- [x] Regression A/B against a HEAD worktree binary over ten exposed sections: better on
+      4, equal on 6, zero lost, 0 FAIL in 22 runs. Found and fixed two regressions of
+      this wave's own before landing.
+- [x] §2.1.2 master-corpus A/B (1204 records, both binaries): **635 PASS vs HEAD's 614
+      (+21), zero cases lost, 0 FAIL**, timeouts 8 → 4, crashes 2 → 1. Gate 580 → 578,
+      green again after being red on main at 590. It found a THIRD regression of this
+      wave's own (the peel's cascade slot, twice) that nine sections had missed.
+- [x] Valgrind over the five changed paths: better than baseline, not merely flat
+      (13.6 KB definitely lost vs 74.8 KB; 6.7 KB indirect vs 2.66 MB).
+- [x] Docs: `DSOLVE_PLAN.md` M62, `STATUS.md`, `README.md`, `reports/2.2.35.{tsv,md}`,
+      `docs/spec/builtins/{calculus,time-and-date}.md`, changelog, version bump + tag.
+
+## Review
+
+Two fixes were withdrawn or narrowed *because of* measurement, which is the part worth
+remembering:
+
+1. A **hygiene gate** rejecting any answer carrying a private `DSolve`` symbol looked
+   categorical and correct. It costs nine §2.2.33 passes, because M61's inert DEFINITE
+   integral legitimately carries its bound integration variable in the answer. A private
+   symbol is a leak only where it occurs FREE; that needs bound-variable analysis and is
+   its own change. The leak it targeted (`DSolve`Y` from the Bernoulli linearisation)
+   is still open.
+2. The **nonlinear exact peel** had to be scoped to a general solution. ExactODE sits
+   early in the cascade, so an ungated new claimant preempted the nonlinear-2nd-order
+   specialists and lost §2.2.34-3345/3347 — which answer `Tanh[x]` by fitting the
+   reduction's stage-1 constant from the point conditions.
+
+Also: a self-referential certificate proves nothing. The nonlinear peel's first cut
+formed the operator part with the wrong sign and then verified `dF/dx == L` against its
+own wrong `L`, happily returning a first integral off by `2 Cos[x]`.
+
+---
+
 # Task — execution-speed comparison of the four ParallelMixedSpecial ports
 
 Goal: compare the **execution speed** of the Python (SymPy), Mathematica and Maxima

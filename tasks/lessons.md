@@ -4162,3 +4162,39 @@ because it *felt* right. `x = Sinh[u]` (substitution checked numerically to 15 d
 reduces it to `Integral[u/(E^u +- I)]`, which Mathilda independently closes with
 `PolyLog[2, .]`. SymPy returning an unevaluated `Integral` proved nothing and did not
 count.
+
+## M62 (§2.2.35, v0.253) — three lessons about verification, not about ODEs
+
+1. **A self-referential certificate proves nothing.** The new nonlinear exact-ODE path
+   peels a first integral `F` out of the operator part `L` and accepts it when
+   `dF/dx == L` exactly. The first cut computed `L` with the wrong sign (`R + g0`
+   instead of `R - g0`), so the peel verified happily against its own wrong `L` and
+   returned a first integral off by `2 Cos[x]`. The certificate must be anchored to
+   something the construction did not produce — here the ORIGINAL residual — or it only
+   checks internal consistency. What exposed it was not the certificate but a garbage
+   answer two recursion levels downstream.
+
+2. **A categorical correctness rule needs the scope its proof has.** "No answer may
+   carry one of the solver's own private `DSolve`` symbols" is true of a *free*
+   occurrence and false of a *bound* one: M61's inert definite integral legitimately
+   carries its integration variable `DSolve`impT` in the answer. The blanket version
+   cost nine §2.2.33 passes, and no amount of thinking about the leak it targets would
+   have surfaced that — the cross-section A/B did, in one run. Built, measured,
+   withdrawn; the leak (`DSolve`Y` escaping the Bernoulli linearisation) is still open
+   and still real.
+
+3. **An early cascade slot makes a new method a liability, not just a gain.** The same
+   nonlinear peel claimed two §2.2.34 IVPs that `AutonomousReduction` answers with
+   `Tanh[x]`, because `ExactODE` runs long before the nonlinear-2nd-order specialists.
+   A new claimant has to be scoped to the cases nothing better reaches — here
+   `ncond == 0` — and the way to find out which those are is to run the sections that
+   contain them, not to read the cascade order.
+
+A fourth, about measurement rather than correctness: **a bound that is not an upper
+bound teaches you to distrust the wrong thing.** `TimeConstrained` refunded nested
+time, so every "this method is slow" conclusion in this corpus was really "this method
+is slow AND its budget never fired". A two-line repro
+(`TimeConstrained[TimeConstrained[<loop>, 30], 3]` → 24.5 s) was available the whole
+time; M61 named the bug and deferred it, and three of the five cases I was profiling
+turned out to be downstream of it. Check that the instrument works before trusting a
+reading from it.

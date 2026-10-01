@@ -949,9 +949,27 @@ static Expr* kovacic_add_forcing(const DSolveProblem* P, Expr* homog, const char
                    ds_subst(ds_subst(expr_copy(homog), ds_const(1), expr_new_integer(0)),
                             ds_const(2), expr_new_integer(1)), x);
     Expr* basis[2] = { y1, y2 };
+    /* Bound each Wronskian integral.  Kovacic's own basis is Liouvillian, so the
+     * structural hopeless-screen (a special function in the denominator) does not
+     * see it, yet an Exp[c ArcTanh[radical]] fundamental set can still send
+     * Integrate on a search that does not return: measured 222 s to fail on
+     * (x^3+2x^2)y''-x y'+(1-x)y == x^2(x+1)^2, for an answer that is then declined
+     * anyway.  A term that times out abandons the particular (the elementary mode
+     * has nothing to return), so the decline below is reached without the search. */
+    dsolve_vp_set_integral_budget(3);
     Expr* yp = dsolve_variation_of_parameters(basis, 2, g, lead, x);
+    dsolve_vp_set_integral_budget(0);
+    bool arbitrary_forcing = ds_has_undefined_function(g);
     expr_free(g); expr_free(lead);
     if (!yp) { expr_free(y1); expr_free(y2); expr_free(homog); return NULL; }
+    /* A concrete forcing whose Wronskian integral did not close is NOT an answer:
+     * decline here rather than hand numeric_verify a residual carrying an active
+     * Integrate (which it cannot decide, and which costs another integration pass
+     * per sample).  An ARBITRARY forcing keeps its inert integral deliberately —
+     * see the note below. */
+    if (!arbitrary_forcing && ds_has_active_integrate(yp)) {
+        expr_free(yp); expr_free(y1); expr_free(y2); expr_free(homog); return NULL;
+    }
     expr_free(homog);       /* rebuild C[1] y1 + C[2] y2 + yp from the cleaned basis */
     Expr* full = A2(A2(T2(ds_const(1), y1), T2(ds_const(2), y2)), yp);
     /* An ARBITRARY forcing g(x) (an undefined function) yields an inert-Integrate
@@ -959,14 +977,7 @@ static Expr* kovacic_add_forcing(const DSolveProblem* P, Expr* homog, const char
      * correct answer.  Accept it on the VoP construction (matching Mathematica's
      * own integral-form answer for x^2 y''+x y'+(x^2-1/4)y==g[x], §2.2.14-1350);
      * dsolve_run's symbolic verify keeps it under the undecidable policy. */
-    {
-        Expr* gchk = expr_copy((Expr*)R);
-        for (int k = ord; k >= 1; k--) gchk = ds_subst(gchk, ds_make_funcapp(yname, k, x), expr_new_integer(0));
-        gchk = ds_subst(gchk, ds_make_funcapp(yname, 0, x), expr_new_integer(0));
-        bool arbitrary = ds_has_undefined_function(gchk);
-        expr_free(gchk);
-        if (arbitrary) return full;
-    }
+    if (arbitrary_forcing) return full;
     if (!numeric_verify(P, full)) { expr_free(full); return NULL; }
     return full;
 }

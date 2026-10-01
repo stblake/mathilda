@@ -935,6 +935,78 @@ static Expr* ds_collapse_principal(Expr* e) {
     return e;
 }
 
+/* Count the distinct generated constants in e. */
+static size_t ds_nconsts(const Expr* e) {
+    Expr** cs = NULL; size_t n = 0;
+    ds_collect_consts(e, &cs, &n);
+    for (size_t i = 0; i < n; i++) expr_free(cs[i]);
+    free(cs);
+    return n;
+}
+
+/* Sequential SCALAR-form constant fit, the fallback for a system Solve could not
+ * invert.  One condition at a time: build it from the CURRENT body, try
+ * `Solve[cond, C[k]]` for each constant still present, and substitute the first
+ * that both solves and actually eliminates that constant; surplus constants stay
+ * free (correct for an under-determined IVP).
+ *
+ * Why it is needed: only Solve's scalar form applies inverse-function inversion,
+ * so a constant nested inside a transcendental bubbles back unevaluated from the
+ * LIST form -- and the list form is what every multi-constant fit uses.
+ * `y'' + y'^2 + y' == 0, y(0)=0` is the small example: the general solution
+ * C[2] + Log[C[1] - E^(-x)] is found in 30 ms, and the fit of a single condition
+ * on it (`Solve[{C[2]+Log[C[1]-1]==0}, {C[1],C[2]}]`) bubbles, which took the
+ * whole method down -- the IVP was declined although its general solution was in
+ * hand and each condition is individually invertible.
+ *
+ * Runs only AFTER the list form produced no fit, so it cannot alter a fit that
+ * already worked; and it accepts a substitution only when the constant count
+ * drops, so a bubbled scalar Solve cannot smuggle an unfitted body through. */
+static Expr* ds_fit_sequential(const DSolveProblem* P, const Expr* body,
+                               const char* xvar) {
+    Expr* cur = expr_copy((Expr*)body);
+    bool any = false;
+    for (size_t c = 0; c < P->ncond; c++) {
+        if (P->conds[c].fi != 0) continue;
+        Expr** params = NULL; size_t npar = 0;
+        ds_collect_consts(cur, &params, &npar);
+        if (npar == 0) { free(params); break; }
+
+        Expr* bexpr = expr_copy(cur);
+        for (int d = 0; d < P->conds[c].order; d++)
+            bexpr = ds_d(bexpr, expr_new_symbol(xvar));
+        bexpr = ds_subst(bexpr, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
+                      (Expr*[]){ bexpr, eval_and_free(expr_copy(P->conds[c].value)) }, 2);
+
+        size_t before = npar;
+        for (size_t k = 0; k < npar; k++) {
+            Expr* sol = ds_solve(expr_copy(eq), expr_copy(params[k]));
+            bool took = false;
+            if (sol && head_is(sol, SYM_List) && sol->data.function.arg_count > 0
+                && head_is(sol->data.function.args[0], SYM_List)) {
+                Expr* cand = eval_and_free(internal_replace_all(
+                    (Expr*[]){ expr_copy(cur), expr_copy(sol->data.function.args[0]) }, 2));
+                cand = ds_collapse_principal(cand);
+                if (ds_nconsts(cand) < before
+                    && !ds_contains(cand, SYM_Undefined)
+                    && !ds_contains(cand, intern_symbol("$Failed"))) {
+                    expr_free(cur); cur = cand; took = true; any = true;
+                } else {
+                    expr_free(cand);
+                }
+            }
+            if (sol) expr_free(sol);
+            if (took) break;
+        }
+        expr_free(eq);
+        for (size_t k = 0; k < npar; k++) expr_free(params[k]);
+        free(params);
+    }
+    if (!any) { expr_free(cur); return NULL; }
+    return cur;
+}
+
 /* Fit generated constants to the initial/boundary conditions; returns a fresh
  * body (the general body copied when there is nothing to fit).  Sets *no_solution
  * (when non-NULL) true only when Solve PROVES the conditions inconsistent (the LIST
@@ -1106,6 +1178,11 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
         }
     }
     if (solres) expr_free(solres);
+    /* The list form could not invert the fit system: try the conditions one at a
+     * time in Solve's scalar form (see ds_fit_sequential).  Fallback only -- an
+     * inconsistent or scalar-empty result is a verdict, not a failure to invert. */
+    if (!fitted && !inconsistent && !scalar_empty && !scalar_fit)
+        fitted = ds_fit_sequential(P, body, xvar);
     (void)neq;
     if (inconsistent) {            /* over-determined BVP: no solution */
         if (no_solution) *no_solution = true;
@@ -1658,6 +1735,11 @@ static bool vp_special_head(const Expr* e) {
     return false;
 }
 
+/* Per-term budget for the Wronskian integrals; 0 = unbounded (the default and the
+ * historical behaviour).  See the note on dsolve_vp_set_integral_budget. */
+static int g_vp_int_budget = 0;
+void dsolve_vp_set_integral_budget(int secs) { g_vp_int_budget = secs > 0 ? secs : 0; }
+
 /* True when `Integrate[integrand, x]` provably will not close: a special function
  * survives in `Denominator[Together[integrand]]`.  Microseconds; `integrand`
  * borrowed. */
@@ -1772,6 +1854,8 @@ Expr* dsolve_variation_of_parameters_mode(Expr** basis, size_t n, const Expr* g,
         } else {
             Expr** ut = malloc(n * sizeof(Expr*));
             bool any_inert = false;
+            size_t nbuilt = 0;      /* terms in ut[] so far, for the bail-out below */
+            bool budget_spent = false;
             g_integrate_quiet++;   /* a non-closing Wronskian integral is kept inert */
             for (size_t i = 0; i < n; i++) {
                 Expr* Wi = vp_matrix(dv, n, (long)i, gn);
@@ -1795,6 +1879,41 @@ Expr* dsolve_variation_of_parameters_mode(Expr** basis, size_t n, const Expr* g,
                     Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
                                       (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
                     ui = expr_new_function(inact, (Expr*[]){ uip, expr_new_symbol(xvar) }, 2);
+                } else if (g_vp_int_budget > 0) {
+                    /* Bounded attempt — see dsolve_vp_set_integral_budget. */
+                    Expr* call = expr_new_function(expr_new_symbol(SYM_Integrate),
+                                     (Expr*[]){ expr_copy(uip), expr_new_symbol(xvar) }, 2);
+                    Expr* guarded = expr_new_function(expr_new_symbol(SYM_TimeConstrained),
+                                     (Expr*[]){ call, expr_new_integer(g_vp_int_budget),
+                                                expr_new_symbol(intern_symbol("$Aborted")) }, 3);
+                    ui = eval_and_free(guarded);
+                    bool spent = (ui && ui->type == EXPR_SYMBOL
+                                  && ui->data.symbol.name == intern_symbol("$Aborted"));
+                    if (spent) {
+                        expr_free(ui);
+                        /* Do NOT hand back a raw unevaluated Integrate: it re-enters
+                         * the integration cascade on every later re-evaluation of the
+                         * body, which is the same unbounded search again (3 s of
+                         * budget became 375 s over the re-evaluations).  In
+                         * VP_ALLOW_INERT the mode's own inert head is re-evaluation
+                         * proof; in VP_ELEMENTARY there is nothing to return, since
+                         * the caller requires a closed form — bail out of the whole
+                         * particular. */
+                        if (mode == VP_ALLOW_INERT) {
+                            Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
+                                              (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+                            ui = expr_new_function(inact,
+                                     (Expr*[]){ uip, expr_new_symbol(xvar) }, 2);
+                        } else {
+                            expr_free(uip);
+                            budget_spent = true;
+                            break;
+                        }
+                    } else {
+                        expr_free(uip);
+                        if (mode == VP_ALLOW_INERT && ds_has_active_integrate(ui))
+                            ui = ds_inactivate_integrate(ui);
+                    }
                 } else {
                     ui = ds_integrate(uip, expr_new_symbol(xvar));
                     if (mode == VP_ALLOW_INERT && ds_has_active_integrate(ui))
@@ -1802,9 +1921,22 @@ Expr* dsolve_variation_of_parameters_mode(Expr** basis, size_t n, const Expr* g,
                 }
                 if (ds_has_head(ui, SYM_Integrate)) any_inert = true;
                 ut[i] = eval_and_free(ds_call2(SYM_Times, expr_copy(basis[i]), ui));
+                nbuilt++;
             }
             g_integrate_quiet--;
             expr_free(gn);
+            if (budget_spent) {          /* no elementary particular exists in budget */
+                for (size_t i = 0; i < nbuilt; i++) expr_free(ut[i]);
+                free(ut);
+                expr_free(detW);
+                for (size_t k = 0; k < n; k++) {
+                    for (size_t j = 0; j < n; j++) expr_free(dv[k][j]);
+                    free(dv[k]);
+                }
+                free(dv);
+                if (inert_out) *inert_out = false;
+                return NULL;
+            }
             yp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ut, n));
             free(ut);
             /* Simplify only a fully-closed elementary answer; an inert-Integrate

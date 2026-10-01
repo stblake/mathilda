@@ -3098,6 +3098,92 @@ static void t_m61_bounded_latency(void) {
                "{{y -> Function[{x}, (C[1] - x)^2]}, {y -> Function[{x}, (C[1] + x)^2]}}");
 }
 
+
+/* ---- M62 (§2.2.35, v0.253) ------------------------------------------------- */
+
+/* TimeConstrained is an UPPER bound, nesting included.  Both enforcement layers used
+ * to refund the inner call's time to the outer budget, so a nested 60 s inside a 1 s
+ * ran to completion.  The assertion is that each form ABORTS, which it can only do if
+ * the outer budget actually fired. */
+static void t_m62_timeconstrained_clamps(void) {
+    check_true("TimeConstrained[TimeConstrained[Do[Sin[1.0], {200000000}], 60, $Aborted], 1, "
+               "$Aborted] === $Aborted");
+    /* a shorter inner budget still wins */
+    check_true("TimeConstrained[TimeConstrained[Do[Sin[1.0], {200000000}], 1, $Aborted], 60, "
+               "$Aborted] === $Aborted");
+    /* and a budget never truncates what fits inside it */
+    check_true("TimeConstrained[Integrate[x^2, x], 30, $Aborted] === x^3/3");
+}
+
+/* An order-n general solution must carry exactly n DISTINCT constants.  ExactODE's
+ * first-integral placeholder was one shared private symbol, so a DOUBLY-exact equation
+ * merged the outer and inner constants and x y''' + 2 y'' == A x came back with two:
+ * an incomplete family, whose residual is still exactly zero, so nothing but a count
+ * can see it. */
+static void t_m62_exactode_constant_count(void) {
+    check_true("Length[Union[Cases[DSolve[x y'''[x] + 2 y''[x] == A x, y, x], C[_], Infinity]]] == 3");
+    check_true("Length[Union[Cases[DSolve[x y'''[x] + 2 y''[x] == 0, y, x], C[_], Infinity]]] == 3");
+    check_true("Module[{s = First[DSolve[x y'''[x] + 2 y''[x] == A x, y, x]]}, "
+               "PossibleZeroQ[Simplify[(x y'''[x] + 2 y''[x] - A x) /. s]]]");
+}
+
+/* Integrate: x^p E^(a x^m) with p SYMBOLIC closes as an incomplete Gamma.  The general
+ * stages did not decline on this shape, they searched (12.9 s per integral), which was
+ * the whole cost of DSolve[y'' - y == x^n]. */
+static void t_m62_gammapower(void) {
+    check_form("Integrate[x^n E^(-x), x]", "-Gamma[1 + n, x]");
+    check_true("FreeQ[Integrate[x^n E^(-x^2), x], Integrate]");
+    check_true("PossibleZeroQ[Simplify[PowerExpand[D[Integrate[x^n E^x, x], x] - x^n E^x]]]");
+    /* a NUMERIC exponent keeps its elementary / Erf answer */
+    check_true("FreeQ[Integrate[x^2 E^(-x), x], Gamma]");
+    check_true("FreeQ[Integrate[E^(-x^2), x], Gamma]");
+    check_true("FreeQ[DSolve[y''[x] - y[x] == x^n, y, x], Integrate]");
+}
+
+/* A constant nested inside a Log is fitted by the sequential SCALAR-form fallback:
+ * Solve's list form, which every multi-constant fit uses, cannot invert it, and the
+ * whole method used to decline with its general solution already in hand. */
+static void t_m62_sequential_constant_fit(void) {
+    check_true("FreeQ[DSolve[{y''[x] + y'[x]^2 + y'[x] == 0, y[0] == 0, y'[0] == 1}, y, x], C]");
+    check_form("DSolve[{y''[x] + y'[x]^2 + y'[x] == 0, y[0] == 0, y'[0] == 1}, y, x]",
+               "{{y -> Function[{x}, Log[2 - E^(-x)]]}}");
+    /* under-determined: exactly one constant survives */
+    check_true("Length[Union[Cases[DSolve[{y''[x] + y'[x]^2 + y'[x] == 0, y[0] == 0}, y, x], "
+               "C[_], Infinity]]] == 1");
+    /* the fits the list form already handled are unchanged */
+    check_form("DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi/2] == 1}, y, x]",
+               "{{y -> Function[{x}, Sin[x]]}}");
+    check_form("DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi] == 1}, y, x]", "{}");
+}
+
+/* ExactODE also detects a NONLINEAR total derivative, by peeling it over the jet
+ * variables.  2 y y''' + 2(y+3y')y'' + 2 y'^2 has first integral (y^2)'' + (y^2)'. */
+static void t_m62_nonlinear_exact(void) {
+    check_true("Head[TimeConstrained[DSolve[2 y[x] y'''[x] + 2 (y[x] + 3 y'[x]) y''[x] "
+               "+ 2 y'[x]^2 == Sin[x], y, x], 8, $Aborted]] === List");
+    /* Verified, not pinned to a spelling: (y^2)'' == 0 has the family y = Sqrt[linear],
+     * and which method claims it (hence whether it comes back as one branch or a +/-
+     * pair, simplified or not) is a cascade-ordering detail. */
+    check_true("Module[{s = DSolve[2 y[x] y''[x] + 2 y'[x]^2 == 0, y, x]}, "
+               "Head[s] === List && Length[s] >= 1 && "
+               "And @@ (PossibleZeroQ[Simplify[(2 y[x] y''[x] + 2 y'[x]^2) /. #]] & /@ s)]");
+    /* not a total derivative -> declines */
+    check_true("Head[DSolve`ExactODE[y''[x] + y[x]^2 == 0, y, x]] =!= List");
+    /* an IVP is left to the specialists, which answer it better */
+    check_form("DSolve[{y''[x] + 2 y[x] y'[x] == 0, y[0] == 0, y'[0] == 1}, y, x]",
+               "{{y -> Function[{x}, Tanh[x]]}}");
+}
+
+/* The nonlinear peel is a general backstop, so its cascade slot is LAST before the
+ * series fallbacks: from an earlier slot it preempted methods that answer the same
+ * equations directly and far faster (2.1.2-1143 0.08 s -> 9.96 s for the identical
+ * answer; 2.1.2-1168 5.2 s -> 7.4 s, across an 8 s budget). */
+static void t_m62_peel_slot_latency(void) {
+    check_true("MatchQ[TimeConstrained[DSolve[y[x] y'''[x] == y'[x] y''[x], y, x], 3, $Aborted], "
+               "{{Rule[y, _Function]}}]");
+    check_true("TimeConstrained[DSolve[y[x]^2 y'''[x] == (y'[x])^3, y, x], 8, $Aborted] =!= $Aborted");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -3391,6 +3477,13 @@ int main(void) {
     TEST(t_m61_separable_singular_ivp);
     TEST(t_m61_clairaut_quadratic_in_y);
     TEST(t_m61_bounded_latency);
+
+    TEST(t_m62_timeconstrained_clamps);
+    TEST(t_m62_exactode_constant_count);
+    TEST(t_m62_gammapower);
+    TEST(t_m62_sequential_constant_fit);
+    TEST(t_m62_nonlinear_exact);
+    TEST(t_m62_peel_slot_latency);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

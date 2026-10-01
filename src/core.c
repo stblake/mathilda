@@ -4011,6 +4011,34 @@ Expr* builtin_symbol(Expr* res) {
  * under nesting and don't clobber other timer users in the address
  * space.
  *
+ * Nesting CLAMPS, it does not refund.  An inner budget can only ever
+ * shorten the enclosing one: `TimeConstrained[expr, inner]` inside a
+ * `TimeConstrained[..., outer]` runs for at most the outer's REMAINING
+ * time, and the time it consumes is charged to the outer.  Both layers
+ * had to be fixed for this to hold, and each was independently
+ * sufficient to break it:
+ *
+ *   - the ITIMER_PROF layer armed the inner budget outright and, on
+ *     exit, reinstalled the outer timer at the value it had when the
+ *     inner call STARTED -- a full refund of everything the inner call
+ *     spent.  It now arms min(inner, outer remaining) and reinstalls the
+ *     outer at (remaining - consumed).
+ *   - the cooperative wall-clock layer set an inner absolute deadline
+ *     that could be LATER than the outer's, so the outer deadline went
+ *     unenforced for the duration; and when clock_gettime failed it
+ *     dropped the outer deadline entirely.  The inner deadline is now
+ *     min'd with the outer's, and an unavailable clock inherits it.
+ *
+ * Why it matters beyond tidiness: every subsystem that bounds its own
+ * sub-steps this way -- Integrate (three call sites), DSolve's per-method
+ * kit, Simplify, NIntegrate -- used to lift the caller's deadline by
+ * simply entering such a scope, so a user's `TimeConstrained[expr, 3]`
+ * could and did run for minutes.  Measured directly:
+ * `TimeConstrained[TimeConstrained[<loop>, 30], 3]` ran the loop to
+ * completion in 24.5 s, and `TimeConstrained[Integrate[<Wronskian
+ * quotient>, x], 3]` took 46 s to abort.  A budget that is not an upper
+ * bound is not a budget.
+ *
  * Memory: the longjmp unwind cannot run destructors, so any Expr nodes
  * the in-flight evaluator allocated leak.  This is the documented
  * Mathematica behaviour ("may give different results on different
@@ -4363,11 +4391,22 @@ Expr* builtin_time_constrained(Expr* res) {
     sa.sa_flags = 0;
     sigaction(SIGPROF, &sa, &old_sa);
 
+    /* Read the enclosing timer BEFORE arming ours, so our budget can be
+     * clamped to what it has left (see the nesting note in the header).  A
+     * zero it_value means nothing was armed: no enclosing budget. */
+    memset(&old_it, 0, sizeof(old_it));
+    getitimer(ITIMER_PROF, &old_it);
+    long long outer_us = (long long)old_it.it_value.tv_sec * 1000000LL
+                       + (long long)old_it.it_value.tv_usec;
+    long long armed_us = (long long)secs * 1000000LL + (long long)usecs;
+    if (outer_us > 0 && outer_us < armed_us) armed_us = outer_us;
+    if (armed_us <= 0) armed_us = 1;
+
     struct itimerval new_it;
     memset(&new_it, 0, sizeof(new_it));
-    new_it.it_value.tv_sec  = (time_t)secs;
-    new_it.it_value.tv_usec = (suseconds_t)usecs;
-    setitimer(ITIMER_PROF, &new_it, &old_it);
+    new_it.it_value.tv_sec  = (time_t)(armed_us / 1000000LL);
+    new_it.it_value.tv_usec = (suseconds_t)(armed_us % 1000000LL);
+    setitimer(ITIMER_PROF, &new_it, NULL);
 
     sigjmp_buf  saved_jmp_env;
     memcpy(&saved_jmp_env, &tc_jmp_env, sizeof(saved_jmp_env));
@@ -4392,12 +4431,21 @@ Expr* builtin_time_constrained(Expr* res) {
             tc_deadline.tv_sec  += tc_deadline.tv_nsec / 1000000000L;
             tc_deadline.tv_nsec %= 1000000000L;
         }
+        /* Never outlive the enclosing budget: an inner deadline later than
+         * the outer's would leave the outer unenforced while we run. */
+        if (saved_deadline_active
+            && (tc_deadline.tv_sec > saved_deadline.tv_sec
+                || (tc_deadline.tv_sec == saved_deadline.tv_sec
+                    && tc_deadline.tv_nsec > saved_deadline.tv_nsec)))
+            tc_deadline = saved_deadline;
         tc_deadline_active = 1;
     } else {
-        /* If the monotonic clock is unavailable we silently fall back
-         * to signal-only enforcement; this is no worse than before
-         * this change. */
-        tc_deadline_active = 0;
+        /* The monotonic clock is unavailable, so fall back to signal-only
+         * enforcement for OUR budget -- but keep the enclosing deadline
+         * rather than dropping it, which would hand the outer call an
+         * unbounded inner scope on exactly the hosts this layer exists for. */
+        tc_deadline        = saved_deadline;
+        tc_deadline_active = saved_deadline_active;
     }
 
     Expr* body = expr_copy(expr_arg);
@@ -4411,11 +4459,32 @@ Expr* builtin_time_constrained(Expr* res) {
 
     /* Disarm OUR timer first, then reinstall the prior timer and handler.
      * Order matters: leaving our timer armed while we swap the handler
-     * back could deliver SIGPROF into someone else's handler. */
-    struct itimerval disarm;
+     * back could deliver SIGPROF into someone else's handler.
+     *
+     * The enclosing timer is reinstalled CHARGED for what we spent, not at
+     * the value it held on entry: restoring the entry value refunds the
+     * whole nested computation to the caller's budget.  Our timer's own
+     * remaining time gives the amount consumed (zero when we aborted,
+     * because it had already fired).  An outer budget that is used up comes
+     * back armed at 1 us, so the caller aborts at its next step rather than
+     * running on unbounded. */
+    struct itimerval cur, disarm, restore;
+    memset(&cur, 0, sizeof(cur));
+    getitimer(ITIMER_PROF, &cur);
+    long long rem_us  = (long long)cur.it_value.tv_sec * 1000000LL
+                      + (long long)cur.it_value.tv_usec;
+    long long used_us = armed_us - rem_us;
+    if (used_us < 0) used_us = 0;
     memset(&disarm, 0, sizeof(disarm));
+    memset(&restore, 0, sizeof(restore));
+    if (outer_us > 0) {
+        long long left_us = outer_us - used_us;
+        if (left_us < 1) left_us = 1;
+        restore.it_value.tv_sec  = (time_t)(left_us / 1000000LL);
+        restore.it_value.tv_usec = (suseconds_t)(left_us % 1000000LL);
+    }
     setitimer(ITIMER_PROF, &disarm, NULL);
-    setitimer(ITIMER_PROF, &old_it, NULL);
+    setitimer(ITIMER_PROF, &restore, NULL);
     sigaction(SIGPROF, &old_sa, NULL);
 
     /* Restore the outer-call jmp_buf so a parent TimeConstrained can

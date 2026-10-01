@@ -2386,6 +2386,150 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     global fix (Integrate, Simplify, NIntegrate, the corpus harness itself) and deserves its own
     change and measurement.
 
+- **M62 — §2.2.35 corpus (Problems 3401–3500) + `TimeConstrained` nesting, symbolic-exponent
+  incomplete Gamma, sequential constant fit, nonlinear exact ODEs.** ✅ DONE. The next hundred,
+  measured end to end and then driven up by four fixes that are general rather than case-shaped:
+  **95/100 → 98/100 (+3), 0 FAIL, 0 crash, 0 timeout**, deterministic across two per-case-identical
+  runs. New gate `dsolve_corpus_2_2_35_tests` (baseline 2); report
+  `DSolve_test_status/reports/2.2.35.md`. Two of M61's closing notes are discharged here: the
+  global `TimeConstrained` fix it named, and the latency half of its series-particular item.
+  - **`TimeConstrained` CLAMPS a nested budget instead of refunding it** (`src/core.c`) — the
+    global fix M61's closing paragraph named, and the largest single lever here. Both enforcement
+    layers lifted the caller's deadline merely by entering an inner scope: the `ITIMER_PROF` layer
+    reinstalled the outer timer at the value it held when the inner call *started* (a full refund
+    of everything the inner call spent, and the inner was armed for its full request even when
+    that exceeded the outer's remaining time), and the cooperative wall-clock layer set an inner
+    ABSOLUTE deadline that could be later than the outer's — plus it dropped the outer deadline
+    entirely when `clock_gettime` failed, i.e. on exactly the hosts that layer exists for. Both
+    had to be fixed; either alone breaks the property. The repro is two lines and needs no
+    subsystem: `TimeConstrained[TimeConstrained[<loop>, 30], 3]` ran the loop **to completion in
+    24.5 s**. Because Integrate (three call sites), Simplify, NIntegrate and DSolve's own
+    per-method kit all bound sub-steps this way, *no* budget in the system was an upper bound —
+    which is why the measured cost of a failing attempt could be 46 s under a 3 s constraint. Now
+    `min(inner, outer remaining)` is armed and the outer is reinstalled charged for what the inner
+    consumed (1 µs when exhausted, so the caller aborts at its next step). Consequences beyond
+    this corpus: `DSolve\`Kovacic`'s forced closure on 3401 went **375 s → 9.85 s**, and the two
+    §2.2.32 cases documented for waves as "correct VoP at the 8 s boundary" (3164/3165) are now
+    inside it. A companion, smaller lever landed with it: `dsolve_vp_set_integral_budget` lets a
+    variation-of-parameters caller that needs an ELEMENTARY closure bound each Wronskian integral,
+    which `DSolve\`Kovacic` now does (its own Liouvillian basis is invisible to the structural
+    `vp_integral_hopeless` screen — `Exp[c ArcTanh[radical]]` carries no special-function head yet
+    still sends `Integrate` on a search that does not return). A timed-out term must NOT come back
+    as a raw unevaluated `Integrate`: that re-enters the integration cascade on every later
+    re-evaluation of the body, which turned a 3 s budget into 375 s over the re-evaluations — so
+    the elementary mode bails out of the particular instead, and Kovacic declines a concrete
+    forcing whose integral did not close rather than handing `numeric_verify` a residual it cannot
+    decide.
+  - **Symbolic-exponent `x^p E^(a x^m)` → incomplete Gamma** (new
+    `src/calculus/integrate_gammapower.c`, one cascade line in `integrate.c` after the Fresnel
+    recogniser). With `p` symbolic the integrand is outside every elementary stage, and those
+    stages do not merely decline — they SEARCH: `Integrate[x^n E^(-x), x]` cost a measured
+    **12.9 s** to come back unevaluated, and 12.4 s for the Gaussian sibling `x^n E^(-x²)`. Two of
+    those are the entire 26 s cost of 3495 `y'' - y == x^n`, whose variation-of-parameters
+    particular is exactly that pair of integrals. The answer is
+    `-(1/m)(-a)^(-s) Gamma[s, -a x^m]` with `s = (p+1)/m`, emitted only behind an exact
+    differentiate-back certificate — two passes, because the closed form is stated in the
+    principal-branch convention `(-a x^m)^k == (-a)^k x^(m k)` which `Simplify` does not apply on
+    its own, so `a > 0` or `m > 1` needs `PowerExpand`; the second pass quotients out exactly that
+    convention and nothing else. Gated to a symbolic exponent: for a non-negative integer `p` the
+    answer is elementary and the existing stages give it, and for a numeric non-integer they give
+    the cleaner Erf form, so firing there would be a quality regression dressed as a speedup. The
+    gate needed a `NumberQ` test, not a structural symbol scan — `Rational[1,2]` is an
+    `EXPR_FUNCTION` with a symbol head, so `Sqrt[x]`'s exponent reads as "symbolic" to a bare
+    walk, and the recogniser silently took over `Integrate[Sqrt[x] E^(-x), x]`. *Solves* 3495
+    (8 s abort → 0.09 s, closed form).
+  - **Sequential scalar constant fit** (`ds_fit_sequential`, `src/calculus/dsolve_common.c`). Only
+    Solve's SCALAR form applies inverse-function inversion — the substrate already relied on that
+    for the single-condition case — and every multi-constant fit uses the LIST form, so a constant
+    nested inside a transcendental bubbles back unevaluated and takes the whole method down with
+    it. 3482 `y'' + y'² + y' == 0, y(0) = 0` is the small example: the general solution
+    `C[2] + Log[C[1] - E^(-x)]` is found in 30 ms, each condition is individually invertible, and
+    the IVP was declined. The fallback fits one condition at a time in the scalar form, accepting
+    a substitution only when the constant COUNT drops (so a bubbled scalar Solve cannot smuggle an
+    unfitted body through), and leaves surplus constants free — correct for an under-determined
+    IVP, and tested as such: one condition on a second-order equation must leave exactly one free
+    constant, not zero and not two. It runs only after the list form produced no fit, so no fit
+    that already worked can change. *Solves* 3482.
+  - **`DSolve\`ExactODE`: a nonlinear total derivative, and a per-level first-integral constant**
+    (`src/calculus/dsolve_exactode.c`). Two independent repairs in one file.
+    *(a) An incomplete general solution that scored PASS.* The first-integral constant is carried
+    as a plain private symbol rather than a `C[k]` (a documented `DiffUnderInt` avoidance), and it
+    was ONE fixed name — so on a **doubly**-exact equation the outer and inner constants were the
+    same symbol and merged inside the inner sub-solve, before any rename could tell them apart.
+    `x y''' + 2 y'' == A x` came back as `C[1] + C[2] x + A x³/18 + C[2] Log[x]`: two constants
+    for a third-order ODE, with `x` and `Log[x]` sharing one. Nothing downstream can catch that —
+    the residual of an incomplete family is still exactly zero, so the corpus harness scored 3498
+    as solved. Fixed with one name per nesting level plus numbering the constant one past the
+    largest `C[k]` the sub-solve actually used (identical to the old `C[n]` whenever the recursion
+    does not nest). The regression test is a COUNT: an order-*n* general solution must carry
+    exactly *n* distinct constants.
+    *(b) Nonlinear exactness.* The linear path matches coefficients; a nonlinear left side needs
+    the general construction over the jet variables `j_k = y^(k)`. Since
+    `dF/dx = F_x + Σ F_{j_k} j_{k+1}`, we have `dL/dj_n = F_{j_{n-1}}`, so one integration recovers
+    `F`'s dependence on the top jet and subtracting that piece's total derivative leaves a shorter
+    expression to which the same step applies; peeling `k = n … 1` either exhausts `L` or leaves a
+    remainder still carrying a derivative, which PROVES non-exactness. One exact `dF/dx == L`
+    comparison is the acceptance certificate. 3497 `2 y y''' + 2(y+3y')y'' + 2 y'² == Sin[x]`
+    peels to `2 y y'' + 2 y y' + 2 y'²` — which is `(y²)'' + (y²)'` — and the recursion closes the
+    chain. Note the certificate is self-referential if the operator part is wrong: an early cut
+    formed `R + g0` instead of `R - g0` and verified happily against its own wrong `L`, producing
+    a first integral off by `2 Cos[x]`; that is why the sign is now commented.
+    **Placement cost two measured corrections.** The peel is a general backstop — it claims ANY
+    equation whose left side happens to be a total derivative — so sharing ExactODE's early linear
+    slot made it preempt methods that answer the same equations directly. It now has its own LATE
+    slot (after `ifactor_first_integral`, before the series fallbacks) and runs for a general
+    solution only (`ncond == 0`). Both restrictions came from the corpus, not from reasoning:
+    ungated for IVPs it claimed and lost §2.2.34-3345/3347, which `AutonomousReduction` answers
+    `Tanh[x]` by fitting its stage-1 constant from the point conditions; and from the early slot it
+    took **§2.1.2-1143** (`y y''' == y' y''`, whose first integral is `y y'' - y'^2`) from 0.08 s to
+    9.96 s for the *same answer* — a 125x latency regression only the master-corpus run found.
+    Pinning `DSolve\`ExactODE` tries both paths, so the pinned method stays complete.
+    *Solves* 3497, and §2.2.34-3346 (the elliptic stage-2 case M61 left as residue) as a
+    side-effect.
+  - *Withdrawn, deliberately:* a **hygiene gate** rejecting any answer that carries one of the
+    solver's own private `DSolve\`` symbols. The leak it targets is real and is a silent wrong
+    answer — `DSolve\`Y` escaping the Bernoulli linearisation reads as a free parameter, so
+    neither the symbolic nor the numeric verify rejects it — but a blanket test is wrong: M61's
+    inert DEFINITE integral legitimately carries its bound integration variable `DSolve\`impT` in
+    the answer, and the gate cost **nine** §2.2.33 passes. The correct version needs
+    bound-variable analysis (a private symbol is a leak only where it occurs FREE) and is its own
+    change. Built, measured, removed — recorded here because the measurement is the useful part.
+  - *Tests:* `tests/test_dsolve_m62_stress.c`, five families, each shaped to the failure mode it
+    guards. The `TimeConstrained` family asserts an INEQUALITY on a pure CPU loop at one, two and
+    three levels of nesting (no subsystem heuristics in the way). The constant-count family runs a
+    forward generator of doubly-exact equations and counts distinct `C[k]` — the only test that
+    can see an incomplete general solution. The Gamma family verifies by the recogniser's own
+    certificate over a `(p, a, m)` grid, and its NEGATIVE controls (integer and rational exponents
+    must keep their elementary / Erf answers) matter more than its positives; it also carries a
+    latency bound, since a recogniser that stops firing shows up as 13 s rather than as a wrong
+    answer. The fit family generates nonlinear second-order IVPs over `y'' + y'² + k y' == 0`,
+    checks the ODE *and* every condition, and pins the under-determined member's constant count.
+    The nonlinear-exact family generates `(y²)'' == g` and `(y²)''' + (y²)'' == g` over six
+    forcings — exact by construction, so nothing is hand-picked — and asserts both gates.
+  - *Regression:* same-machine A/B against a HEAD binary built in an isolated git worktree, over
+    ten exposed sections: **better on 4 (2223 +1, 2227 +2, 2232 +2, 2234 +1), equal on 6, zero
+    cases lost, 0 FAIL in all 22 runs** — and then the §2.1.2 master corpus, 1204 records through
+    both binaries, which is what a latency change has to answer to: **635 PASS against HEAD's 614
+    (+21), 0 FAIL on both, ZERO cases lost, timeouts 8 → 4, crashes 2 → 1.** §2.1.2-225
+    (`A y + (a+2bx+cx²+y²)² y'' == 0`) is the shape of the gain: both binaries decline it, but
+    HEAD's `TimeConstrained[…, 8]` overran to **48 s** where M62 returns at 7.48 s. The one
+    remaining crash is the documented intermittent macOS libmalloc/GMP-lock SIGILL the
+    `siglongjmp` abort carries (HEAD crashed too, on a different case; neither reproduces in
+    isolation over three trials) — and the clamp makes SIGPROF-driven aborts land where the
+    child `alarm(20)` used to, so that pre-existing hazard is now exercised more often, which is
+    worth a look on its own. Valgrind on the five changed paths is **better** than baseline, not
+    merely flat: 13.6 KB definitely lost against HEAD's 74.8 KB, and 6.7 KB indirect against
+    2.66 MB — an abandoned unbounded search allocates. **THREE regressions of this
+    wave's own were found by measurement and none by reasoning:** the hygiene gate's nine §2.2.33
+    losses, the nonlinear peel's two §2.2.34 IVP losses, and — only in the master run — the peel's
+    §2.1.2-1143 slowdown, which is why its cascade slot moved twice before it was right.
+    `make check-c99` and `check-messages` green; `dsolve_m62_stress_tests` and every other DSolve
+    stress suite pass. `dsolve_stress_tests` and `dsolve_m34_stress_tests` fail one assertion each
+    — **verified pre-existing**, both failing identically on the HEAD worktree binary
+    (`DSolve\`UndeterminedCoefficients[y''-2y'+y == Cos[2x]]` declines on both, and
+    `(x^3+2)y''+4xy'+y == 0` times out on both even at 40 s); `dsolve_tests` remains the documented
+    `alarm(120)` casualty, so the `t_m62_*` units in it were verified by direct evaluation.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

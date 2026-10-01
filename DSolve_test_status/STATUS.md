@@ -14,7 +14,7 @@ FAIL = wrong branch (numeric back-substitution) · SKIP = system.
 ## Section 2.1.2 — "Problems not solved, but were solved by Maple and Mathematica"
 
 Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
-`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **580** (M60 generalised Airy + operator-factor reducibility).
+`ctest -R dsolve_corpus_2_1_2_tests` · gate baseline **578** (M62; green again — it had been red on main, see the M62 row).
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
@@ -35,6 +35,7 @@ Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
 | 2026-09-23 (**M57**) | **590 / 1204 total** | — | **614** | **+5 (585 → 590), 0 FAIL.** `SolvableForY` / `SolvableForX` — the `y=G(x,y')` "dp" differentiation method (Maple's `dp`), generalising `DSolve\`Lagrange` (its linear-induced-ODE special case): isolate `y` (resp. `x`), differentiate, recurse the cascade on the induced first-order ODE, return the **parametric** solution. **Deterministic gain +2**: 347 (`y=_G(x,y')`) and 352 (`_with_symmetry_[F(x),G(y)]`) now solve via `SolvableForY` (both verified — it returns them, the M56 ref did not; `1st_solvable_for_yx` 22 → 23, `1st_with_symmetry` +352). The other +3 is the documented `_with_linear_symmetries` timing cluster (2nd/high-order — 58/375/592/799/983/1001 gained, 79/80/94 lost; all declined instantly by `SolvableForY`) oscillating with machine load. 350/351 solve but exceed the 8 s forked budget. `SolvableForX` is **pinned-only** (auto yield ~0 + slow cubic-denominator verify). A `PolynomialQ` pre-gate kills the transcendental time-burners (`Sin[xy]` 20 s → 0.24 s). Gate baseline **631 → 629** (614 + margin for the timing cluster; lowered by the +2 deterministic gain). |
 | 2026-09-30 (**M60**) | **634 / 1204 total** | — | **570** | **+29 net (605 → 634), 0 FAIL** — measured against a fresh same-day baseline of 605/599 (the checked-in M59 row of 595 had drifted +10 on intervening non-DSolve work). **+30 gained, 1 lost.** Three mechanisms: new `DSolve\`GeneralizedAiry` (the n-th order pure-power potential `u^(n) == A x^m u` → `x^j ₀F_{n−1}`, reached through a depression gauge, symbolic `A`/`m` supported); `OperatorFactor` lifted to **order 2 + forcing** (Kovacic owns order 2's tidy answers, but its Case-1 residue was falling through to a truncated Frobenius series even when `DFactor` could find the factor — which is also what unblocks the order-3 peel's own quotient); and the **adjoint/left-factor peel**, the classical Beke order-(n−1) right factor, plus a generalised Bessel row `Q = A x^m + B x^(-2)`. Bucket attribution: **`3rd_high_linear` 42 → 64 (+22)**, `2nd_linear` 243 → 249 (+6), `1st_solvable_for_yx` +1, `Emden_Fowler` +1; the single loss (342) is a first-order *nonlinear* ODE that `OperatorFactor` declines in 0.4 ms and which solves in 5.25 s standalone — the documented 8 s timing cluster. Also three pre-existing latency root-causes fixed (unsimplified `Exp[-(Log[x]+…)]` trailing integrand: 3.98 s **and a failure** vs 0.015 s; symbolic `C[k]` in the algebraic integrator: 2.06 s vs 0.011 s; unbounded ansatz width and a speculative double-pole order: a failing search 60.2 s → 0.72 s) — 2.1.2-250 went from a >120 s non-answer to a 2.6 s solve. Measurement deterministic across two full runs. Gate baseline **619 → 580** (570 + 10 margin). |
 | 2026-09-30 (**M61**) | **621 / 1204 total** | — | **583** | **+5 net vs HEAD on the same machine** (616 → 621 PASS; 9 gained, 4 lost), **0 FAIL**, crashes 3 → 1. Not a §2.1.2-targeted wave — these are side-effects of the M61 §2.2.34 fixes (the inert VoP particular, the nonlinear-in-`y` Clairaut, the `NthAlgebraic` bound, the parametric-verify cancellation). The 4 losses (233/342/591/856) all solve in **3–5 s on BOTH binaries**, i.e. the documented 8 s timing-boundary cluster flipping under fork load — verified by an isolated A/B, and M61 is not the slower of the two on any of them. **Gate left at 580, deliberately:** it is **already red on main** (HEAD measures **588** non-PASS on this machine), so M61 reduces the overshoot from 8 to 3 but cannot honestly claim 580. Raising it would hide pre-existing drift. This wave also found and fixed one real regression of its own before landing — an ungated `Together` in the parametric verify cost 2.1.2-980 6 s → 51 s; the master run was the only thing that caught it. |
+| 2026-10-02 (**M62**) | **635 / 1204 total** | — | **569** | **+21 net, ZERO cases lost, 0 FAIL**, measured same-machine against a HEAD worktree binary (HEAD 614 PASS / 590 non-PASS on the same run pair); timeouts 8 → 4, crashes 2 → 1. Not a §2.1.2-targeted wave — the gain is almost entirely the global `TimeConstrained` fix (nesting now CLAMPS instead of refunding, so a budget is finally an upper bound): 2.1.2-225 is the shape of it, declined by both binaries but in 7.48 s against HEAD's **48 s** under a `TimeConstrained[…, 8]`. The surviving crash is the documented intermittent macOS libmalloc/GMP-lock SIGILL the `siglongjmp` abort carries (HEAD crashed too, on a different case; neither reproduces in isolation over three trials); note the clamp makes SIGPROF-driven aborts land where the child `alarm(20)` used to, so that pre-existing hazard is exercised more often. Gate baseline **580 → 578** (569 + 9 margin for the documented 8 s timing cluster) — it was **red on main at 590** before this wave. |
 
 ### Gap by bucket (baseline, ranked)
 
@@ -1644,6 +1645,141 @@ to its own milestone with a proper `O[(x−x0)^N]` gate); 3393/3394 need a serie
 quadrature is elliptic.
 
 Full per-case results: `reports/2.2.34.tsv`; bucketed report: `reports/2.2.34.md`.
+
+---
+
+## Section 2.2.35 — "Problems 3401 to 3500" (Nasser Abbasi)
+
+Corpus: `DE_examples_2235.m` — 100 records, **100 scalar (31 IVP) + 0 systems**.
+Converted with `tools/latex_ode_to_mathilda.py` (upstream §2.1.35,
+`Ch2.S1.SS35.htm`; the internal `2.2.35` name is kept for continuity — see
+`README.md`). Sources: Riley–Hobson–Bence (45), Robert H. Martin 1983 (39),
+Martin–Reissner 1961 (15), Nelson–Folley–Coral 1964 (1). Three blocks:
+**3402–3458** elementary first order (30 quadrature, 16 separable, ~20 linear);
+**3459–3481** first-order exact / homogeneous class A,C,G / symmetry `[F(x),G(y)]`
+/ Bernoulli / rational, several as IVPs; **3401, 3482–3500** the higher-order
+block — second-order linear homogeneous and nonhomogeneous, missing-`x`, shifted
+Euler, third-order constant-coefficient, third-order exact *nonlinear*, third-order
+missing-`y`, and Gegenbauer at a symbolic eigenvalue with `z` as the independent
+variable. `ctest -R dsolve_corpus_2_2_35_tests` · gate baseline **2**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-01 (M62 baseline) | 95 / 100 | 95.0% | 5 | 0 FAIL, 0 crash. Two runs per-case identical. Non-PASS: 3401, 3481, 3482, 3495, 3497. |
+| 2026-10-01 (**M62**) | **98 / 100** | **98.0%** | **2** | **+3 (3482, 3495, 3497), 0 FAIL, 0 crash, 0 timeout, 0 regression**, two runs per-case identical. Four root-cause fixes, each general rather than case-shaped (below). Gate baseline **2**. |
+
+**M62 fixes.**
+
+1. **`TimeConstrained` clamps a nested budget instead of refunding it**
+   (`src/core.c`). Both enforcement layers lifted the caller's deadline merely by
+   entering an inner scope: the `ITIMER_PROF` layer reinstalled the outer timer at
+   the value it held when the inner call *started*, and the cooperative wall-clock
+   layer set an inner absolute deadline that could be later than the outer's (and
+   dropped the outer entirely when `clock_gettime` failed). Reproducible in two
+   lines — `TimeConstrained[TimeConstrained[<loop>, 30], 3]` ran the loop to
+   completion in **24.5 s**. Since Integrate (three call sites), Simplify,
+   NIntegrate and DSolve's own per-method kit all bound sub-steps this way, no
+   budget anywhere was an upper bound. Now `min(inner, outer remaining)` is armed
+   and the outer is reinstalled charged for what the inner spent. Consequence for
+   this corpus: `DSolve\`Kovacic` on the forced 3401 went **375 s → 9.85 s**, and
+   two §2.2.32 cases documented as "correct VoP at the 8 s boundary" (3164/3165)
+   now land inside it.
+2. **Symbolic-exponent `x^p E^(a x^m)` → incomplete Gamma**
+   (new `src/calculus/integrate_gammapower.c`). With `p` symbolic the integrand is
+   outside every elementary stage, and those stages do not merely decline — they
+   *search*: `Integrate[x^n E^(-x), x]` cost a measured **12.9 s** to come back
+   unevaluated (12.4 s for the Gaussian sibling). Two of those are the entire cost
+   of 3495 `y'' - y == x^n`, whose variation-of-parameters particular is exactly
+   that pair. The recogniser emits `-(1/m)(-a)^(-s) Gamma[s, -a x^m]`,
+   `s = (p+1)/m`, behind an exact differentiate-back certificate, and is gated to a
+   symbolic exponent so a numeric one keeps its elementary / Erf answer. 3495:
+   8 s abort → **0.09 s with a closed form**.
+3. **Sequential scalar constant fit** (`ds_fit_sequential`,
+   `src/calculus/dsolve_common.c`). Only Solve's *scalar* form applies
+   inverse-function inversion, and every multi-constant fit uses the list form, so a
+   constant nested inside a transcendental bubbles back unevaluated and takes the
+   whole method down. 3482's general solution `C[2] + Log[C[1] - E^(-x)]` is found
+   in 30 ms and the IVP was declined anyway. The fallback fits one condition at a
+   time in the scalar form, accepting a substitution only when the constant count
+   drops, and leaves surplus constants free (correct for an under-determined IVP).
+   Runs only after the list form produced no fit, so no working fit changes.
+4. **`DSolve\`ExactODE`: a nonlinear total derivative, and a per-level
+   first-integral constant** (`src/calculus/dsolve_exactode.c`). Two parts.
+   *(a)* The first-integral constant was one fixed private symbol, so on a
+   **doubly**-exact equation the outer and inner constants were the SAME symbol and
+   merged in the inner sub-solve — `x y''' + 2 y'' == A x` came back as
+   `C[1] + C[2] x + A x³/18 + C[2] Log[x]`: two constants for a third-order ODE, an
+   incomplete general solution whose residual is still exactly zero, so the harness
+   scored it PASS (3498 was a silent wrong answer). Per-level names plus numbering
+   one past the sub-solve's own largest `C[k]` fix it. *(b)* Exactness is now also
+   detected for a NONLINEAR left side, by peeling the total derivative over the jet
+   variables `j_k = y^(k)` (`dL/dj_n = F_{j_{n-1}}`, integrate, subtract, recurse),
+   behind an exact `dF/dx == L` certificate. 3497
+   `2 y y''' + 2(y+3y')y'' + 2 y'^2 == Sin[x]` peels to `2 y y'' + 2 y y' + 2 y'^2`
+   (which is `(y²)'' + (y²)'`) and the chain closes. Scoped to a general solution:
+   ExactODE sits early in the cascade, and for an IVP the nonlinear-second-order
+   specialists answer better (`AutonomousReduction` gives `Tanh[x]` for
+   `y'' + 2 y y' == 0`, `y(0)=0`, `y'(0)=1`) — measured, after the ungated version
+   claimed and lost §2.2.34-3345/3347. It also gets its **own late cascade slot**
+   (after `ifactor_first_integral`, before the series fallbacks) rather than sharing
+   the linear path's early one: from there it claimed §2.1.2-1143 `y y''' == y' y''`
+   and reached the *identical* answer in 9.96 s where `AutonomousReduction` takes
+   0.08 s. A general backstop placed early is a liability, not a gain. Pinning
+   `DSolve\`ExactODE` tries both paths, so the pinned method stays complete.
+
+**Residue 2, honestly classified.** `3401`
+`(x³+2x²)y'' - x y' + (1-x)y == x²(x+1)²` is a forced regular-singular equation
+whose homogeneous part is a closed-form `₂F₁` (0.12 s) and whose full answer
+`DSolve\`VariationOfParameters` *does* produce — in 15 s, essentially all of it in
+the inert-particular correctness gate, over the 8 s budget. Making that gate cheaper
+is a separate change with its own measurement. `3481`
+`(2 Sin[y] - x)y' == Tan[y]`, `y(0) = π/2` is the IVP whose explicit branches all
+carry `Log[x]` and so degenerate at the initial point — the deferred class shared
+with §2.2.30-2979 and §2.2.31-3049; its twin 3480 (`y(0) = 0`) passes.
+
+**Named by this wave, not done.** (i) A **hygiene gate** rejecting an answer that
+carries one of the solver's own private `DSolve\`` symbols is the right idea and was
+built, measured and **withdrawn**: M61's inert *definite* integral legitimately
+carries its bound integration variable `DSolve\`impT` in the answer, so a blanket
+test costs nine §2.2.33 passes. The correct version needs bound-variable analysis
+(a private symbol is a leak only where it occurs free) and belongs in its own change.
+The leak it was aimed at — `DSolve\`Y` escaping the Bernoulli linearisation, which
+reads as a free parameter so no verifier rejects it — is therefore still open.
+(ii) The §2.2.34 note about a series *particular* stands; 3401 shows the companion
+problem is the cost of VERIFYING a non-elementary particular, not finding one.
+
+**Cross-section regression A/B** (same machine, HEAD built in an isolated git
+worktree, sections run back to back through both harnesses — the only honest
+comparator, since the checked-in per-section reports date from whenever each
+baseline was set):
+
+| Section | HEAD non-PASS | M62 non-PASS | change |
+|---|--:|--:|---|
+| 2.2.1 | 0 | 0 | — |
+| 2.2.13 | 3 | 3 | — |
+| 2.2.14 | 1 | 1 | — |
+| 2.2.22 | 0 | 0 | — |
+| 2.2.23 | 2 | **1** | +2220 |
+| 2.2.27 | 4 | **2** | +2639, +2669 |
+| 2.2.31 | 2 | 2 | — |
+| 2.2.32 | 2 | **0** | +3164, +3165 (the documented "correct VoP at the 8 s boundary" pair) |
+| 2.2.33 | 11 | 11 | — |
+| 2.2.34 | 9 | **8** | +3346 (the elliptic stage-2 case M61 left as residue) |
+
+**Better on 4, equal on 6, zero cases lost, 0 FAIL in all 22 runs** — and then the
+§2.1.2 master corpus (1204 records, both binaries), which is what a latency change
+has to answer to: **635 PASS against HEAD's 614 (+21), zero cases lost, 0 FAIL**,
+timeouts 8 → 4, crashes 2 → 1. Its own gate goes **580 → 578** and is green again
+after being red on main at 590. Valgrind over the five changed paths is *better* than
+baseline rather than merely flat (13.6 KB definitely lost against 74.8 KB, 6.7 KB
+indirect against 2.66 MB) — an abandoned unbounded search allocates. The other
+sections' gate baselines are deliberately left where they are: each improvement
+above rests on a single run, and these gates already carry margin for the
+documented 8 s timing-boundary cluster — lowering them on one measurement would buy
+a flaky gate for no information. Only the new §2.2.35 gate is set from this wave
+(and from two per-case-identical runs).
+
+Full per-case results: `reports/2.2.35.tsv`; bucketed report: `reports/2.2.35.md`.
 
 ---
 
