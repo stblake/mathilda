@@ -337,12 +337,19 @@ void test_plot3d_plot_label_stored_in_options(void) {
         "\"My Surface\"", 0);
 }
 
-/* Regression: a Plot3D surface colours its faces and then draws a wireframe,
- * so a colour change mid-Graphics3D flushes the accumulated mesh3d block. That
- * mid-flush previously emitted the vertex/face arrays WITHOUT their closing
- * ']', producing invalid JSON ("x":[...,"y":[...) that failed to parse — no
- * plot on mobile. The payload must be well-formed (balanced brackets) and
- * carry a mesh3d trace. */
+/* Count non-overlapping occurrences of `needle` in `hay`. */
+static int count_substr(const char* hay, const char* needle) {
+    int c = 0; size_t nl = strlen(needle);
+    for (const char* p = strstr(hay, needle); p; p = strstr(p + nl, needle)) c++;
+    return c;
+}
+
+/* Regression: the payload must be well-formed (balanced brackets) and carry a
+ * mesh3d trace. AND it must stay COMPACT: the whole surface is one mesh3d trace
+ * (per-quad colour via facecolor) and the whole wireframe is one scatter3d
+ * trace (segments joined by null). Previously each shaded quad and each grid
+ * segment was its own trace — ~1,700 traces / ~300 KB for one plot, enough
+ * separate WebGL objects to hang the notebook front end. */
 void test_plot3d_plotly_json_is_well_formed(void) {
     struct Expr* g = evaluate(parse_expression(
         "Plot3D[Sin[x] Cos[y], {x, 0, 3}, {y, 0, 3}]"));
@@ -353,8 +360,18 @@ void test_plot3d_plotly_json_is_well_formed(void) {
         printf("FAIL: mesh3d Plotly JSON has unbalanced brackets (malformed)\n");
         exit(1);
     }
-    if (!strstr(json, "\"type\":\"mesh3d\"")) {
-        printf("FAIL: no mesh3d trace in Plot3D payload\n");
+    int n_mesh = count_substr(json, "\"type\":\"mesh3d\"");
+    int n_scatter = count_substr(json, "\"type\":\"scatter3d\"");
+    if (n_mesh != 1) {
+        printf("FAIL: expected exactly 1 mesh3d trace, got %d\n", n_mesh);
+        exit(1);
+    }
+    if (n_scatter > 1) {
+        printf("FAIL: wireframe not combined — %d scatter3d traces (want <=1)\n", n_scatter);
+        exit(1);
+    }
+    if (!strstr(json, "\"facecolor\":")) {
+        printf("FAIL: mesh3d trace carries no facecolor (per-quad shading lost)\n");
         exit(1);
     }
     free(json);
