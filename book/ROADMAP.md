@@ -139,6 +139,12 @@ chain) over `Polygon`/point sets, with exact GMP-rational coordinates. Written
 `FindVertexColoring` (exact minimal colouring), and `GraphPlot` (prose only — it
 returns graphics, no text transcript). Written 2026-09-25.
 
+**New chapters (2026-09-28, Verified):** The Mathilda Notebook (`chapters/notebook.tex`,
+after Chapter 3), Graphs and Hypergraphs (`chapters/graphs-hypergraphs.tex`, which follows §4.10),
+Numerical Optimization (`chapters/optimization.tex`), Machine Learning
+(`chapters/machine-learning.tex`) and Image Processing (`chapters/image-processing.tex`). The last
+four follow Chapter 4. Examples are in `examples/<chapter>/` and figures in `figures/<chapter>/`.
+
 ## The System (Chapters 5–9)
 
 | # | Chapter | File | Status |

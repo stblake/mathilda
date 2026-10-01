@@ -1,0 +1,10 @@
+# Classes can be any expression; the payload shows the label vocabulary and class indices.
+w = Classify[{{1, 1} -> x, {1, 2} -> x, {5, 5} -> {1, 2}, {6, 5} -> "y"}]
+w["Classes"]
+w[{5.2, 5.1}]
+FullForm[w]
+Classify[{{0, 0}, {1, 1}, {5, 5}} -> {"A", "A", "B"}]
+Classify[{{0, "red"} -> 1, {1, "blue"} -> 2}]
+w[{{1, 1}, {6, 5}}]
+Classify[{1 -> "a", 2 -> "b"}, Method -> {"NaiveBayes", "NeighborsNumber" -> 5}]
+Classify[{1 -> "a", 2 -> "b"}, Method -> "SupportVectorMachine"]

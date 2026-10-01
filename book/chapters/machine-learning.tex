@@ -1,0 +1,1379 @@
+\chapter{Machine Learning}
+\label{ch:ml}
+
+Most of this book computes an answer from a rule. You give Mathilda a polynomial
+and it factors it; you give it a differential equation and it solves it. Machine
+learning runs the other way. You give it examples of the answer, and it builds the
+rule. A \emph{classifier}\index{classifier} learns to name the class of a new point
+from points whose classes are known. A \emph{predictor} learns a numerical response
+in the same way. A \emph{clustering} finds groups in points that carry no labels at
+all, and a \emph{density estimate} learns the distribution the points came from.
+This chapter covers all four, with the mathematics of each method and the check
+that confirms it at the prompt.
+
+Mathilda's machine-learning builtins live in \texttt{src/ml/}. \B{Classify} offers
+five methods: nearest neighbours, naive Bayes, logistic regression, decision trees,
+and random forests. \B{Predict} offers least-squares regression and nearest
+neighbours. \B{FindClusters} has ten clustering methods, \B{LearnDistribution}
+fits Gaussians, mixtures, and categorical tables, and \B{PrincipalComponents},
+\B{DimensionReduce}, and \B{DimensionReduction} reduce dimension. The set is
+deliberately small next to Mathematica's. Every method is a textbook algorithm
+with its decisions stated in the source, and every fitted model is an ordinary
+expression that you can take apart with \B{Part}. The chapter uses that openness
+throughout: when a method claims a decision boundary at \(4.5\), the transcript
+reads the coefficients back and checks it.
+
+The chapter has three parts. The first builds classifiers on one running example
+and explains each method. The second covers evaluation, regression, clustering,
+mixtures, and principal components. The last section is a set of short featured
+examples on real data: Fisher's irises, the 1974 Motor Trend road tests, spam
+messages, and handwritten digits.
+
+\section{A first classifier}
+\label{sec:ml-first}
+
+The running example is a set of ninety points in the plane, thirty from each of
+three overlapping Gaussian clouds. Each point carries a class, \mcode{"A"},
+\mcode{"B"}, or \mcode{"C"}. Here are the points coloured by class. The clouds are
+centred at \((0,0)\), \((3,3)\), and \((0,4)\), each with standard deviation
+\(0.8\), so the second and third clouds overlap noticeably.
+
+\plotcell[0.6\linewidth]{machine-learning/blobs-data}
+
+The helper \mcode{blob} draws its coordinates from \B{RandomVariate}, which uses
+the same stream as \B{RandomReal}, so \B{SeedRandom} makes the whole session
+reproducible. Every session in this chapter starts from a seed, and running it
+twice gives the same transcript.
+
+\subsection{Training data and the fitted model}
+\label{ssec:ml-data}
+
+\mcode{Classify} takes its training data as a list of rules
+\(\text{features} \to \text{class}\). The features are a list of numbers, or a
+single number when there is only one feature. \B{Thread} turns a list of points
+and a class into such rules:
+
+\begin{codepairs}
+\pair{machine-learning/first/1}{A seeded generator of Gaussian clouds.}
+\pair{machine-learning/first/2}{Three clouds of thirty points.}
+\pair{machine-learning/first/3}{Each point becomes a rule \(\text{point} \to
+\text{class}\).}
+\pair{machine-learning/first/4}{Ninety training examples.}
+\pair{machine-learning/first/5}{The first two examples.}
+\pair{machine-learning/first/6}{\mcode{Classify} returns a \B{ClassifierFunction}.
+It prints with its parameters elided.}
+\pair{machine-learning/first/7}{Apply the model to a point to get a class.}
+\pair{machine-learning/first/8}{With \mcode{"Probabilities"} it returns one rule
+per class.}
+\pair{machine-learning/first/9}{\B{Map} applies it to several points. The cloud
+centres come back as their own classes.}
+\pair{machine-learning/first/10}{The model answers questions about itself.}
+\end{codepairs}
+
+The default method is \emph{nearest neighbours} with one neighbour, the subject of
+the next section. The classes are kept in the order they first appear in the
+training data, here \mcode{"A"}, \mcode{"B"}, \mcode{"C"}. That order is also the
+order of the probability rules, and it breaks ties: when two classes are equally
+likely, the one that appeared first wins. None of the methods sorts the classes.
+
+A class does not have to be a string. It can be any expression: a symbol, a number,
+or even a list. Classes are compared structurally, the way \B{SameQ} compares
+them, so \mcode{"a"} and \mcode{a} are two different classes.
+
+\begin{codepairs}
+\pair{machine-learning/forms/1}{Three classes: the symbol \mcode{x}, the list
+\mcode{\{1, 2\}}, and the string \mcode{"y"}.}
+\pair{machine-learning/forms/2}{The class vocabulary, in order of first
+appearance.}
+\pair{machine-learning/forms/3}{A list is returned as a class like any other.}
+\pair{machine-learning/forms/4}{\B{FullForm} shows the whole model: the method, a
+payload, the feature count, and \(k\).}
+\end{codepairs}
+
+The payload is the class vocabulary followed by one row per training example. Each
+row holds the features and then the \emph{index} of the class, starting from
+zero. So the numeric part of the model is purely numeric, and the vocabulary is the
+one place a class is named.\index{classifier!label vocabulary}
+
+\calloutnote{Under the hood}{A fitted model is not a new kind of object. It is an
+ordinary expression whose head is \mcode{ClassifierFunction},
+\B{PredictorFunction}, \B{DimensionReducerFunction}, or
+\mcode{LearnedDistribution}, and whose four arguments are a method name, a payload
+of plain lists, and two integers. Applying one uses the evaluator's existing
+dispatch for compound heads (\texttt{ml\_model\_apply} in
+\texttt{src/ml/predict.c}, called from \texttt{src/eval.c}), which is the same
+mechanism that applies a pure function or an association. The design notes in
+\texttt{src/ml/predict.h} record why: a new node type would need new cases in
+copying, freeing, hashing, comparison, and printing, to store numbers that lists
+already hold. The printer elides the payload because a nearest-neighbour model
+carries its entire training set.}
+
+\subsection{What Classify does not accept}
+\label{ssec:ml-limits}
+
+Mathematica's \mcode{Classify} accepts several data layouts, features of mixed
+type, and a batch of points in one call. Mathilda's accepts one layout and numeric
+features only. An unsupported call returns unevaluated rather than guessing:
+
+\begin{codepairs}
+\pair{machine-learning/forms/5}{The \(\text{list} \to \text{list}\) layout is not
+accepted. Use \mcode{Thread} to make rules.}
+\pair{machine-learning/forms/6}{A string feature is refused. Features must be
+real numbers.}
+\pair{machine-learning/forms/7}{A matrix of points is not a batch. Use \mcode{Map}
+instead.}
+\pair{machine-learning/forms/8}{An option that means nothing to the method is
+refused, not ignored.}
+\pair{machine-learning/forms/9}{A method that is not implemented is refused.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Because every feature must be a number, a categorical
+feature such as a colour has to be encoded by hand before training. The usual
+choice is \emph{one-hot} encoding: one 0/1 feature per category. Coding the
+categories as \(1, 2, 3\) instead imposes an order and a spacing that the
+categories do not have, and a distance-based method will take that spacing
+seriously.}
+
+\section{Nearest neighbours}
+\label{sec:ml-knn}
+
+The \(k\)-nearest-neighbour classifier\index{nearest neighbours!classification}
+has no training step at all. The training set is the model. To classify a query
+point \(x\), it computes the squared Euclidean distance
+\[
+  d(x, x_i) \;=\; \sum_{j=1}^{p} (x_j - x_{ij})^2
+\]
+to every training point \(x_i\), keeps the \(k\) smallest, and lets those \(k\)
+points vote. The probability reported for class \(c\) is its share of the vote,
+\(\#\{\,i \in N_k(x) : y_i = c\,\}/k\), where \(N_k(x)\) is the set of the \(k\)
+nearest training points. Squaring the distance does not change which points are
+nearest, and it saves a square root per comparison.
+
+With \(k=1\), the default, each training point claims the region of the plane
+closer to it than to any other training point. These regions are the cells of the
+\emph{Voronoi diagram}\index{Voronoi diagram} of the training set, and the decision
+boundary is made of cell edges. The plot below colours a fine grid of query points
+by the class the classifier assigns and draws the training points on top.
+
+\plotcell[0.6\linewidth]{machine-learning/knn-1}
+
+The figure sessions label the classes \(1, 2, 3\) so that a class can index a list
+of colours. The helper \mcode{picture} classifies about \(4600\) grid points and
+draws each one as a small rectangle. The same helper draws every decision-region
+figure in this chapter, so the figures can be compared directly.
+
+With one neighbour every training point is classified correctly, including the
+orange point that sits inside the blue cloud near \((0.8, 1.1)\). That point claims
+a small island of its own. This is \emph{overfitting}\index{overfitting}: the
+boundary follows the noise in the training set. More neighbours smooth it out.
+With fifteen neighbours the islands disappear and the boundaries straighten:
+
+\plotcell[0.6\linewidth]{machine-learning/knn-15}
+
+The number of neighbours is a sub-option of the method:
+
+\begin{codepairs}
+\pair{machine-learning/knn/4}{Five neighbours vote.}
+\pair{machine-learning/knn/5}{At \((1.5, 2)\), three of the five nearest points
+are from \mcode{"B"}.}
+\end{codepairs}
+
+Section~\ref{sec:ml-eval} measures how the choice of \(k\) affects accuracy on
+new data.
+
+\subsection{Scale matters}
+\label{ssec:ml-scale}
+
+A distance adds up the squared differences of all the features, so a feature
+measured on a large scale dominates the others. Suppose the first coordinate were
+recorded in millimetres and the second in metres. Multiplying the first coordinate
+by \(1000\) leaves the problem unchanged, but the classifier now ignores the second
+coordinate almost entirely:
+
+\begin{codepairs}
+\pair{machine-learning/knn/6}{The first feature, rescaled by \(1000\).}
+\pair{machine-learning/knn/7}{The centre of cloud \mcode{"C"} is now classified as
+\mcode{"A"}, because only the first coordinate counts.}
+\pair{machine-learning/knn/8}{The training means and standard deviations of each
+column.}
+\pair{machine-learning/knn/9}{\B{Standardize} gives each column mean \(0\) and
+standard deviation \(1\).}
+\pair{machine-learning/knn/10}{A new point is scaled with the \emph{training}
+statistics before it is classified. The answer is \mcode{"C"} again.}
+\end{codepairs}
+
+\mcode{Standardize} computes \((x - \bar{x})/s\) for each column, with the sample
+standard deviation \(s\) (divisor \(n-1\)), so it agrees with \B{Mean} and
+\B{StandardDeviation}. A query point must be scaled with the training means and
+deviations, not its own. \mcode{Standardize} returns only the scaled data, so the
+session keeps \mcode{mu} and \mcode{sd} to apply to new points.
+
+\calloutnote{Under the hood}{The classifier finds the nearest points by a linear
+scan of the payload, keeping the \(k\) best in a small sorted array
+(\texttt{ml\_classifier\_apply} in \texttt{src/ml/classify.c}). Ties in distance
+keep the earlier training row, and ties in the vote go to the class that appeared
+first, so the answer never depends on scan order. There is no spatial index, so
+each query costs \(O(np)\) for \(n\) training points with \(p\) features. Training
+costs almost nothing, and prediction costs a pass over the data.}
+
+\section{Naive Bayes}
+\label{sec:ml-bayes}
+
+A \emph{probabilistic} classifier models how each class generates its points and
+then inverts the model with Bayes' rule.\index{Bayes' rule} If \(\pi_c\) is the
+prior probability of class \(c\) and \(f_c(x)\) is the density of its points, the
+posterior probability of class \(c\) at \(x\) is
+\[
+  P(c \mid x) \;=\; \frac{\pi_c\, f_c(x)}{\sum_{c'} \pi_{c'}\, f_{c'}(x)} .
+\]
+\emph{Gaussian naive Bayes}\index{naive Bayes} takes each \(f_c\) to be a product
+of one-dimensional normal densities, one per feature:
+\[
+  f_c(x) \;=\; \prod_{j=1}^{p} \frac{1}{\sqrt{2\pi\sigma_{cj}^2}}
+    \exp\!\left(-\frac{(x_j - \mu_{cj})^2}{2\sigma_{cj}^2}\right).
+\]
+The product is the ``naive'' assumption: within a class, the features are treated
+as independent. Equivalently, each class has a diagonal covariance matrix.
+Training estimates \(\pi_c\) as the fraction of training points in class \(c\),
+and \(\mu_{cj}\) and \(\sigma^2_{cj}\) as the mean and variance of feature \(j\)
+within class \(c\). That is one pass over the data.
+
+A one-feature example shows the whole model. Eight points on a line, with
+\mcode{"lo"} mostly on the left and \mcode{"hi"} mostly on the right:
+
+\begin{codepairs}
+\pair{machine-learning/bayes/1}{The point at \(4\) is \mcode{"hi"} and the point
+at \(5\) is \mcode{"lo"}, so the classes overlap.}
+\pair{machine-learning/bayes/2}{A naive Bayes fit.}
+\pair{machine-learning/bayes/3}{The payload: vocabulary, priors, and then a mean
+row and a variance row for each class.}
+\pair{machine-learning/bayes/4}{The posterior at \(3.9\).}
+\pair{machine-learning/bayes/5}{The same posterior from Bayes' rule and \B{PDF},
+written out by hand.}
+\pair{machine-learning/bayes/6}{The two variances are equal, so the boundary is
+the midpoint \(4.5\). A tie goes to the first class.}
+\end{codepairs}
+
+The class \mcode{"lo"} holds \(\{1,2,3,5\}\), with mean \(2.75\) and variance
+\(2.1875\). The class \mcode{"hi"} holds \(\{4,6,7,8\}\), with mean \(6.25\) and
+the same variance. The variance uses the divisor \(n_c\) (the maximum-likelihood
+estimate), not \(n_c - 1\). The hand computation in line 5 uses \mcode{PDF} of a
+\B{NormalDistribution}, which is separate code from the classifier, and the two
+agree to every printed digit.
+
+When the class variances differ, the boundary is no longer a single point. Taking
+logarithms, the classifier compares
+\[
+  \log \pi_c \;-\; \frac{1}{2}\sum_{j} \left( \log (2\pi\sigma_{cj}^2)
+    + \frac{(x_j-\mu_{cj})^2}{\sigma_{cj}^2} \right)
+\]
+across classes, and the difference between two classes is a quadratic function of
+\(x\). In one dimension a quadratic can have two roots, so the class with the
+larger variance can win on \emph{both} sides:
+
+\begin{codepairs}
+\pair{machine-learning/bayes/7}{Now \mcode{"lo"} is tight around \(2\) and
+\mcode{"hi"} is spread from \(5\) to \(13\).}
+\pair{machine-learning/bayes/8}{Far to the left, at \(-10\), the wide class wins
+again.}
+\end{codepairs}
+
+This is correct for the model. Far from both means, the density with the heavier
+spread is the larger one. In two dimensions the boundaries are conic sections,
+which the running example shows clearly:
+
+\plotcell[0.6\linewidth]{machine-learning/bayes-regions}
+
+\calloutnote{Under the hood}{The classifier works with log densities and
+converts to probabilities once, with a softmax: it subtracts the largest log
+posterior before exponentiating. A product of many small densities underflows to
+zero in floating point for a point several standard deviations out, and then every
+class would look equally likely at exactly the points where the answer is
+clearest.}
+
+\calloutnote{Pitfall}{If a feature is constant within one class, its variance
+there is zero and its density is infinite at that value. Mathilda puts a floor
+under every variance: \(10^{-6}\) times the variance of that feature over the
+whole training set (\texttt{src/ml/classify.c}). The floor scales with the
+feature, so it behaves the same whether the feature is in millimetres or
+kilometres. It is still tiny, so a feature that never varies in one class acts
+almost as a veto. The spam example in \S\ref{sec:ml-featured} runs into exactly
+this.}
+
+\section{Logistic regression}
+\label{sec:ml-logistic}
+
+Naive Bayes models the points and derives the class probabilities.
+\emph{Logistic regression}\index{logistic regression} models the probabilities
+directly. For two classes it sets
+\[
+  P(y = 1 \mid x) \;=\; \sigma(\beta_0 + \beta^{\mathsf T} x),
+  \qquad \sigma(t) \;=\; \frac{1}{1 + e^{-t}},
+\]
+and chooses \(\beta\) to maximise the log-likelihood
+\[
+  \ell(\beta) \;=\; \sum_{i=1}^{n} \Bigl( y_i \log p_i + (1-y_i)\log(1-p_i) \Bigr),
+  \qquad p_i = \sigma(\beta_0 + \beta^{\mathsf T} x_i).
+\]
+The decision boundary \(P = 1/2\) is the hyperplane
+\(\beta_0 + \beta^{\mathsf T} x = 0\). Here \(y = 1\) means the second class in
+the vocabulary.
+
+\(\ell\) is concave, so Newton's method finds its maximum. Each Newton step turns
+out to be a weighted least-squares problem, which is why the method is called
+\emph{iteratively reweighted least squares} (IRLS).\index{IRLS} With the design
+matrix \(A = [\,1 \mid X\,]\), the weights \(w_i = p_i(1 - p_i)\), and the working
+response \(z_i = \eta_i + (y_i - p_i)/w_i\) where \(\eta_i\) is the current linear
+predictor, the next estimate solves
+\[
+  (A^{\mathsf T} W A)\,\beta \;=\; A^{\mathsf T} W z .
+\]
+The one-feature example from the previous section:
+
+\begin{codepairs}
+\pair{machine-learning/logistic/1}{The same eight points.}
+\pair{machine-learning/logistic/2}{A logistic fit.}
+\pair{machine-learning/logistic/3}{The coefficients \(\beta_0, \beta_1\), read from
+the payload.}
+\pair{machine-learning/logistic/4}{The boundary \(-\beta_0/\beta_1\) is exactly
+\(4.5\).}
+\pair{machine-learning/logistic/5}{And the probability there is exactly one
+half.}
+\pair{machine-learning/logistic/6}{The logistic function by hand, at
+\(x = 6\)\ldots}
+\pair{machine-learning/logistic/7}{\ldots is the probability of \mcode{"hi"}.}
+\end{codepairs}
+
+The data are symmetric about \(4.5\), so the fitted boundary lands there exactly.
+Line 5 is the check that ties the fit and the application together: any mistake
+in how the coefficients are stored or read back would move the probability away
+from \(1/2\). The fitted curve is the familiar S shape:
+
+\plotcell[0.6\linewidth]{machine-learning/logistic-curve}
+
+\calloutnote{Theory}{If the two classes can be separated by a hyperplane, the
+likelihood has no maximum. Scaling \(\beta\) up sends every \(p_i\) towards \(0\)
+or \(1\) and \(\ell\) towards \(0\), so plain Newton iteration runs off to
+infinity. Mathilda adds a small ridge, \(10^{-6}\), to the diagonal of
+\(A^{\mathsf T} W A\) for the non-intercept coefficients. This is the Newton step
+for a penalised likelihood, which is strictly concave, so the fit is finite and
+unique. The intercept is not penalised, because shrinking it would bias the base
+rate. The iteration also stops after 100 steps, and each weight is clamped at
+\(10^{-10}\) so that the working response never divides by zero.}
+
+Separable data therefore give a finite answer, with the boundary in the middle of
+the gap:
+
+\begin{codepairs}
+\pair{machine-learning/logistic/8}{Two points each side of a wide gap.}
+\pair{machine-learning/logistic/9}{Large but finite coefficients.}
+\pair{machine-learning/logistic/10}{The probability is one half at \(5\), the
+middle of the gap.}
+\end{codepairs}
+
+\subsection{More than two classes}
+\label{ssec:ml-ovr}
+
+For \(K > 2\) classes Mathilda fits \emph{one-vs-rest}:\index{one-vs-rest} \(K\)
+separate binary models, the \(k\)th treating class \(k\) as positive and all the
+others as negative. The predicted class is the one whose model gives the largest
+probability. On the running example the boundaries are straight line segments:
+
+\plotcell[0.6\linewidth]{machine-learning/logistic-regions}
+
+One-vs-rest has a weakness that a small example exposes. Put three classes in a
+row on a line:
+
+\begin{codepairs}
+\pair{machine-learning/logistic/11}{Three classes in a row.}
+\pair{machine-learning/logistic/12}{Three coefficient vectors. The middle one is
+flat: slope \(0\), intercept \(\log(1/2)\).}
+\pair{machine-learning/logistic/13}{In the middle, \mcode{"b"} still wins.}
+\end{codepairs}
+
+No single threshold separates \mcode{"b"} from \mcode{"a"} and \mcode{"c"}
+together, so the best one-feature logistic model for ``\mcode{"b"} against the
+rest'' is a constant. Its intercept \(\log(1/2)\) gives \(\sigma = 1/3\), the
+fraction of \mcode{"b"} in the data. The class still comes out right, because the
+models for \mcode{"a"} and \mcode{"c"} are both close to zero in the middle.
+
+\calloutnote{Pitfall}{The \(K\) probabilities of a one-vs-rest model come from
+\(K\) independent fits, and nothing makes them add up to one. Mathilda divides
+them by their sum before reporting them. Division by a common factor does not
+change which is largest, so the predicted class is exactly what the \(K\) models
+say, but the reported probabilities are a convention and not calibrated
+likelihoods. The source (\texttt{src/ml/classify.c}) gives the reason for
+one-vs-rest over a softmax model: a softmax's coefficients are defined only up to
+an additive constant, so they could not be checked by a test.}
+
+\section{Decision trees and random forests}
+\label{sec:ml-trees}
+
+A \emph{decision tree}\index{decision tree} classifies by asking a sequence of
+yes-or-no questions of the form ``is feature \(j\) at most \(t\)?''. Each answer
+sends the point to one of two subtrees, and a leaf gives the answer. Mathilda grows
+trees by CART, the \emph{classification and regression trees} algorithm of
+Breiman, Friedman, Olshen, and Stone. At each node it chooses the split that most
+reduces the \emph{Gini impurity}\index{Gini impurity}
+\[
+  G \;=\; 1 - \sum_{c} q_c^2 ,
+\]
+where \(q_c\) is the fraction of the node's points in class \(c\). A pure node has
+\(G = 0\). A split of \(m\) points into children of sizes \(m_L\) and \(m_R\) is
+scored by the weighted impurity \(m_L G_L + m_R G_R\), and the best split has the
+smallest.
+
+\begin{codepairs}
+\pair{machine-learning/trees/1}{The eight points again.}
+\pair{machine-learning/trees/2}{A CART tree.}
+\pair{machine-learning/trees/3}{Seven nodes. Each row is \{feature, threshold,
+left, right\}. A feature of \(-1\) marks a leaf.}
+\pair{machine-learning/trees/4}{The class counts at every node, in vocabulary
+order \(\{\)\mcode{"lo"}, \mcode{"hi"}\(\}\).}
+\pair{machine-learning/trees/5}{The tree carves out the single point \(5\) as
+\mcode{"lo"}.}
+\end{codepairs}
+
+Node and feature numbers start at zero. Read the table from the top. Node 0 asks
+whether \(x \le 3.5\). If so, the point goes to node 1, a leaf holding the three
+\mcode{"lo"} points. If not, node 2 asks whether \(x \le 5.5\), and so on down to
+node 4 (the point \(4\), \mcode{"hi"}) and node 5 (the point \(5\),
+\mcode{"lo"}). Every threshold lies halfway between two neighbouring training
+values: \(3.5\), \(4.5\), \(5.5\). A threshold equal to a training value would
+make the side a new point lands on depend on floating-point equality, while a
+midpoint puts the boundary in the gap where no training point lies.
+
+Mathilda grows the tree until every leaf is pure or cannot be split (the depth
+limit is 32). So a tree reproduces its training labels exactly, like one nearest
+neighbour, and it overfits in the same way. On the running example, a 19-node
+tree gets all ninety training points right:
+
+\begin{codepairs}
+\pair{machine-learning/trees/6}{The running example.}
+\pair{machine-learning/trees/7}{}
+\pair{machine-learning/trees/8}{}
+\pair{machine-learning/trees/9}{A 19-node tree.}
+\pair{machine-learning/trees/10}{All ninety training points are classified
+correctly.}
+\end{codepairs}
+
+Every boundary a tree draws is parallel to an axis, because every question
+involves one feature. The regions are unions of rectangles, and the narrow strips
+are the price of isolating individual points:
+
+\plotcell[0.6\linewidth]{machine-learning/tree-regions}
+
+\calloutnote{Under the hood}{For each node and feature, the splitter
+(\texttt{src/ml/tree.c}) sorts the node's points by that feature. It then walks
+the sorted order, moving one point at a time from the right child to the left and
+updating both class histograms. The impurity is evaluated only where the feature
+value changes. That costs \(O(m \log m)\) per feature per node for the sort and
+\(O(m)\) for the sweep, where recomputing the histograms for every candidate
+threshold would cost \(O(m^2)\). Ties in impurity go to the lower feature index and
+then the lower threshold, and the sort breaks equal values by point index, so the
+same data always give the same tree. The source chooses Gini over entropy because
+it needs no logarithm and has no special case at \(q_c = 0\).}
+
+\subsection{Random forests}
+\label{ssec:ml-forest}
+
+A single deep tree has low bias and high variance: a small change in the data can
+change the tree a lot. A \emph{random forest}\index{random forest} averages many
+trees to reduce the variance. Mathilda grows fifty trees. Each tree sees a
+\emph{bootstrap} resample of the training set, \(n\) rows drawn with replacement,
+and each node considers only a random subset of \(\operatorname{round}(\sqrt{p})\)
+of the \(p\) features. The forest reports the average of the trees' class
+distributions.
+
+\begin{codepairs}
+\pair{machine-learning/trees/11}{Two forests grown from the same seed.}
+\pair{machine-learning/trees/12}{They are identical. A forest holds fifty
+trees.}
+\pair{machine-learning/trees/13}{The trees differ in size, because each saw
+different data.}
+\pair{machine-learning/trees/14}{The trees disagree near a boundary, so the
+probabilities are mixed.}
+\pair{machine-learning/trees/15}{Another seed gives another forest and slightly
+different probabilities.}
+\end{codepairs}
+
+A single tree on this data gives probabilities of \(0\) or \(1\) almost everywhere.
+The forest's averages carry real information about how confident the ensemble is.
+Its decision regions are smoother than one tree's, but they keep the axis-aligned
+character:
+
+\plotcell[0.6\linewidth]{machine-learning/forest-regions}
+
+\calloutnote{Theory}{Averaging \(B\) predictors, each with variance \(\sigma^2\)
+and pairwise correlation \(\rho\), gives variance
+\(\rho\sigma^2 + (1-\rho)\sigma^2/B\). More trees shrink only the second term.
+The first term needs the trees to be less correlated, and that is the job of the
+feature sampling. If every tree could choose among all features, most would split
+first on the same strong feature and look alike. Restricting each node to a
+random subset forces variety. With two features, as here, each node considers
+just one.}
+
+\calloutnote{Under the hood}{Both the bootstrap and the feature sampling draw from
+\texttt{random\_uniform\_01}, the generator behind \mcode{RandomReal}. This is why
+\mcode{SeedRandom} makes a forest reproducible, as line 12 checks. Each tree's leaf
+counts are normalised to a distribution before the fifty are averaged. Pooling the
+raw counts instead would give a tree with large leaves more weight than a tree
+with small ones. The forest size is fixed at fifty. Mathematica tunes it on
+held-out data, which would mean setting aside part of your data without asking.}
+
+\section{Measuring a classifier}
+\label{sec:ml-eval}
+
+Accuracy on the training data says little. One nearest neighbour and a full tree
+score \(100\%\) on any training set without duplicated contradictory points. The
+honest measure is accuracy on data the model has not seen. The session below draws
+a fresh \emph{test set} of 300 points from the same three clouds and measures each
+method on it:\index{test set}
+
+\begin{codepairs}
+\pair{machine-learning/evaluate/1}{The running example\ldots}
+\pair{machine-learning/evaluate/2}{}
+\pair{machine-learning/evaluate/3}{}
+\pair{machine-learning/evaluate/4}{\ldots and 300 fresh points from the same
+clouds, with a different seed.}
+\pair{machine-learning/evaluate/5}{Accuracy: the fraction of examples classified
+correctly.}
+\pair{machine-learning/evaluate/6}{Perfect on the training data, \(94.7\%\) on the
+test set.}
+\pair{machine-learning/evaluate/7}{Pairs of \{true class, predicted class\}.}
+\pair{machine-learning/evaluate/8}{The confusion matrix: rows are true classes,
+columns are predictions.}
+\end{codepairs}
+
+The \emph{confusion matrix}\index{confusion matrix} shows where the errors are.
+Cloud \mcode{"A"} is almost never confused with anything. Most errors are
+\mcode{"C"} points called \mcode{"B"}, where the two clouds overlap. Mathilda has
+no \mcode{ClassifierMeasurements} function, but \B{Count} over the pairs gives the
+matrix, and any other measure (precision, recall, per-class accuracy) is one line
+more.
+
+Now compare the methods, on the training data and on the test set:
+
+\begin{codepairs}
+\pair{machine-learning/evaluate/9}{All five methods.}
+\pair{machine-learning/evaluate/10}{\{method, training accuracy, test accuracy\}
+for each.}
+\end{codepairs}
+
+One nearest neighbour, perfect in training, is the worst on the test set.
+Naive Bayes, which makes errors in training, is the best. The data
+really are Gaussian clouds, so naive Bayes has the right model. On data that are
+not Gaussian, the order would change.
+
+\subsection{Choosing \texorpdfstring{\(k\)}{k}}
+\label{ssec:ml-choosek}
+
+The number of neighbours trades variance for bias. Too few, and the classifier
+follows noise. Too many, and it averages over points from other classes. The plot
+shows test accuracy for \(k = 1, \dots, 60\):
+
+\plotcell[0.6\linewidth]{machine-learning/k-sweep}
+
+Accuracy rises from \(94.7\%\) at \(k=1\) to about \(97\%\) by \(k=5\),
+stays there up to \(k \approx 57\), and then starts to fall as each vote reaches
+into neighbouring classes. The classes are well separated, so the plateau is
+long; on harder data it is shorter. The curve is jagged because a test set of 300
+points changes accuracy in steps of \(1/300\).
+
+In practice there is no separate test set, and \(k\) has to be chosen from the
+training data. \emph{Cross-validation}\index{cross-validation} does this. Split the
+training data into \(m\) parts, train on \(m-1\) of them, test on the remaining
+one, and average over the \(m\) choices. Mathilda has no built-in cross-validation,
+but it takes two lines:
+
+\begin{codepairs}
+\pair{machine-learning/evaluate/11}{Five folds of eighteen, from a random
+permutation.}
+\pair{machine-learning/evaluate/12}{Train on four folds, test on the fifth, and
+average.}
+\pair{machine-learning/evaluate/13}{Cross-validated accuracy of the four
+deterministic methods.}
+\end{codepairs}
+
+The ranking agrees with the test set: the two methods that assume smooth
+boundaries (naive Bayes and logistic regression) beat the two that can fit
+anything (one neighbour and a full tree). With only ninety points, the numbers
+move by a few percent with the random split.
+
+\subsection{When the boundary is not straight}
+\label{ssec:ml-rings}
+
+Every method so far has done well on the running example because its classes are
+roughly separable by straight lines. The next data set is not. Class
+\mcode{"in"} is a noisy ring of radius \(1\), and class \mcode{"out"} a ring of
+radius \(2.5\) around it. No straight line separates them:
+
+\begin{codepairs}
+\pair{machine-learning/rings/1}{Noisy points on a circle.}
+\pair{machine-learning/rings/2}{Two hundred training points\ldots}
+\pair{machine-learning/rings/3}{\ldots and six hundred test points.}
+\pair{machine-learning/rings/4}{}
+\pair{machine-learning/rings/5}{Logistic regression scores \(50\%\), no better
+than a coin.}
+\end{codepairs}
+
+Nearest neighbours and the tree adapt to any shape. Naive Bayes also works well,
+and the reason is instructive. Both classes are centred at the origin, but the
+outer class has a much larger variance in each coordinate. The naive Bayes
+boundary is a conic section, and here the conic is a closed curve around the
+origin:
+
+\plotcell[0.55\linewidth]{machine-learning/rings-bayes}
+
+Logistic regression can only draw a straight line, and it cannot do better than
+chance. It does not need a new method, though. It needs a better feature. The
+squared radius \(r^2 = x_1^2 + x_2^2\) separates the rings with a single threshold,
+so add it as a third feature:\index{feature engineering}
+
+\begin{codepairs}
+\pair{machine-learning/rings/6}{Append \(x \cdot x\) to each feature vector.}
+\pair{machine-learning/rings/7}{Logistic regression on three features.}
+\pair{machine-learning/rings/8}{\(99.8\%\) on the test set.}
+\pair{machine-learning/rings/9}{The weight on \(r^2\) dominates, and the weights on
+\(x_1, x_2\) are small.}
+\pair{machine-learning/rings/10}{The boundary is the circle
+\(r = \sqrt{-\beta_0/\beta_3}\), close to \(1.75\), halfway between the rings.}
+\end{codepairs}
+
+A linear model in the new features is a quadratic model in the old ones. This is
+the idea behind kernel methods and behind much of practical machine learning:
+choosing features well often matters more than choosing the method.
+
+\section{Regression with Predict}
+\label{sec:ml-predict}
+
+\mcode{Predict} learns a numerical response instead of a class. Its default method is
+\emph{least squares}\index{least squares}: it fits
+\(y \approx \beta_0 + \beta^{\mathsf T} x\) by minimising
+\(\sum_i (y_i - \beta_0 - \beta^{\mathsf T} x_i)^2\). With the design matrix
+\(A = [\,1 \mid X\,]\), the minimiser solves the \emph{normal equations}
+\[
+  A^{\mathsf T} A\, \beta \;=\; A^{\mathsf T} y .
+\]
+Forty noisy points on the line \(y = 2.5 + 0.8x\):
+
+\begin{codepairs}
+\pair{machine-learning/predict/1}{Forty points: true intercept \(2.5\), slope
+\(0.8\), and unit noise.}
+\pair{machine-learning/predict/2}{A \mcode{PredictorFunction}.}
+\pair{machine-learning/predict/3}{The coefficients \(\beta_0, \beta_1\), and a
+prediction at \(x = 5\).}
+\pair{machine-learning/predict/4}{\B{Fit} computes the same line by its own
+route\ldots}
+\pair{machine-learning/predict/5}{\ldots and so does \B{LeastSquares} on the
+design matrix.}
+\pair{machine-learning/predict/6}{A matrix whose last column is the response is
+accepted too.}
+\end{codepairs}
+
+Three separate routes give the same coefficients to six digits. The estimates
+\(2.40\) and \(0.82\) differ from the true \(2.5\) and \(0.8\) because of the
+noise, which is what a finite sample does. With several features the
+coefficients come back in feature order, after the intercept. Noise-free data
+from \(y = 1 + 2x_1 + 3x_2\) recover the coefficients exactly:
+
+\begin{codepairs}
+\pair{machine-learning/predict/7}{Intercept \(1\), then \(2\) and \(3\).}
+\pair{machine-learning/predict/8}{The second feature is twice the first, so the fit
+is not unique, and \mcode{Predict} declines.}
+\end{codepairs}
+
+In line 8 the second feature is exactly twice the first, so infinitely many
+coefficient vectors fit equally well. Mathilda returns the call unevaluated
+instead of picking one.
+
+\calloutnote{Under the hood}{\texttt{ml\_ols} in \texttt{src/ml/predict.c} forms
+\(A^{\mathsf T} A\) and \(A^{\mathsf T} y\) in one pass, without building \(A\),
+and solves by Gaussian elimination with partial pivoting. The comment there
+explains why it does not use LAPACK's QR-based \texttt{dgels}, which is
+numerically better because it avoids squaring the condition number. The system
+has only \(p+1\) rows for \(p\) features, and a zero pivot in elimination reports
+collinear features directly, which is what makes the refusal in line 8 possible.
+With many nearly collinear features the normal equations lose accuracy, and
+\mcode{LeastSquares} is the better tool.}
+
+\subsection{Nearest-neighbour regression}
+\label{ssec:ml-knnreg}
+
+\mcode{Predict} with \mcode{Method -> "NearestNeighbors"} predicts the mean response
+of the \(k\) nearest training points. The default is \(k = 3\). A regression
+averages, so a few neighbours smooth out noise, while a classifier votes, and its
+default of one neighbour reproduces the training labels exactly.
+
+\begin{codepairs}
+\pair{machine-learning/predict/9}{A nearest-neighbour predictor.}
+\pair{machine-learning/predict/10}{The prediction at \(5\), and \(k\).}
+\pair{machine-learning/predict/11}{The same number by hand: sort by distance to
+\(5\), take three, average.}
+\pair{machine-learning/predict/12}{Other methods, such as random forests, are not
+implemented.}
+\end{codepairs}
+
+The two predictors side by side: the least-squares line in blue and the
+three-neighbour predictor in orange. The nearest-neighbour curve is a step
+function, constant wherever the set of three nearest points does not change. It
+follows the local wiggles of the data, noise included:
+
+\plotcell[0.6\linewidth]{machine-learning/regression}
+
+\calloutnote{Pitfall}{\B{LinearModelFit} exists, but only as another name for the
+least-squares \mcode{Predict}. It returns a \mcode{PredictorFunction} with the same
+coefficients. Mathematica's \mcode{LinearModelFit} returns a \mcode{FittedModel}
+with regression diagnostics such as \(R^2\), standard errors, and an ANOVA table.
+None of those are implemented, and the source says so rather than approximating
+them.}
+
+\section{Finding clusters}
+\label{sec:ml-clusters}
+
+Clustering\index{clustering} is classification without labels: the task is to
+find groups in the data. \mcode{FindClusters} takes a list of numbers, of vectors, of
+colours, or of strings, and returns the groups as a list of lists. It keeps the
+elements in their input order, and orders the clusters by first appearance. On a
+line the answer is easy to follow:
+
+\begin{codepairs}
+\pair{machine-learning/clusters/1}{Three groups, found automatically.}
+\pair{machine-learning/clusters/2}{An exact count, and an upper bound with
+\mcode{UpTo}.}
+\end{codepairs}
+
+With exactly two clusters the two closest groups merge. With \mcode{UpTo[4]},
+\mcode{FindClusters} returns the three groups the data suggest, not four.
+
+The default method is \emph{single linkage}\index{single linkage}: repeatedly
+merge the two clusters whose closest members are nearest. The result is the same
+as building the \emph{minimum spanning tree} of the points and deleting its
+longest edges. With no count given, Mathilda cuts every tree edge longer than
+three times the median edge. Single linkage finds clusters of any shape, as long
+as a gap separates them. It fails when a chain of points bridges two clusters, or
+when an outlier sits far from everything:
+
+\begin{codepairs}
+\pair{machine-learning/clusters/3}{The running example, without labels.}
+\pair{machine-learning/clusters/4}{}
+\pair{machine-learning/clusters/5}{Single linkage finds one big cluster and an
+outlier.}
+\pair{machine-learning/clusters/6}{Asked for three, it still splits off
+outliers.}
+\pair{machine-learning/clusters/7}{\(k\)-means finds three clusters of about thirty
+each.}
+\pair{machine-learning/clusters/8}{Their means are close to the true centres
+\((0,0)\), \((3,3)\), \((0,4)\).}
+\end{codepairs}
+
+The three clouds overlap, so there is no gap between them, and single linkage
+cannot separate them. \emph{\(k\)-means}\index{k-means} solves a different
+problem. It looks for \(k\) centres \(m_1, \dots, m_k\) that minimise the total
+squared distance from each point to its nearest centre,
+\[
+  \sum_{i=1}^{n} \min_{j} \lVert x_i - m_j \rVert^2 .
+\]
+Lloyd's algorithm alternates two steps. It assigns each point to its nearest
+centre, then moves each centre to the mean of its points. Neither step can
+increase the objective, so the iteration converges, though possibly to a local
+minimum. Here are the three clusters it finds, coloured by cluster:
+
+\plotcell[0.6\linewidth]{machine-learning/kmeans-blobs}
+
+\calloutnote{Under the hood}{Mathilda's \(k\)-means starts deterministically, with
+\emph{farthest-first} seeding: the first centre is the data point nearest the
+overall mean, and each further centre is the point farthest from the centres
+already chosen. So the result does not depend on the order of the input, and no
+random seed is needed. A centre that loses all its points is moved to the point
+farthest from its own centre. \mcode{"KMeans"} needs a count, either exactly \(k\)
+or \mcode{UpTo[k]}, and returns unevaluated without one (line 9 below). The
+details are in \texttt{src/list/find\_clusters.c} and its reference page.}
+
+The two methods fail in opposite ways. On two concentric rings, \(k\)-means cuts
+the plane with a straight line and splits each ring in half:
+
+\plotcell[0.5\linewidth]{machine-learning/rings-kmeans}
+
+Single linkage follows each ring around, because consecutive points on a ring are
+closer to each other than the rings are:
+
+\plotcell[0.5\linewidth]{machine-learning/rings-linkage}
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}llccc@{}}
+\toprule
+Method & Idea & automatic & \mcode{UpTo[n]} & \(n\) \\
+\midrule
+\mcode{"Agglomerate"} (default) & single linkage & yes & yes & yes \\
+\mcode{"SpanningTree"} & minimum spanning tree & yes & yes & yes \\
+\mcode{"KMeans"} & Lloyd's algorithm & no & yes & yes \\
+\mcode{"KMedoids"} & centres are data points & no & yes & yes \\
+\mcode{"Spectral"} & graph Laplacian & yes & yes & no \\
+\mcode{"DBSCAN"} & density-connected regions & yes & no & no \\
+\mcode{"GaussianMixture"} & EM, count by BIC & yes & no & no \\
+\mcode{"JarvisPatrick"} & shared nearest neighbours & yes & no & no \\
+\mcode{"MeanShift"} & modes of a density & yes & no & no \\
+\mcode{"NeighborhoodContraction"} & moving points to local means & yes & no & no \\
+\bottomrule
+\end{tabular}
+\caption{The ten \mcode{FindClusters} methods, and which ways of giving the count
+each accepts.}
+\label{tab:ml-cluster-methods}
+\end{table}
+
+Table~\ref{tab:ml-cluster-methods} lists all ten methods. All of them work on
+vectors of any dimension. Methods with a neighbourhood radius (\mcode{"DBSCAN"},
+\mcode{"MeanShift"}, \mcode{"NeighborhoodContraction"}) take it as a sub-option,
+and their results depend strongly on it. Mathematica chooses a distance function
+and preprocesses the data by its own unpublished rules, so its cluster
+assignments will often differ from Mathilda's.
+
+\subsection{Classifying new points after clustering}
+\label{ssec:ml-clusterclassify}
+
+Mathematica's \mcode{ClusterClassify} returns a function that assigns new points
+to the clusters it found. Mathilda has no such function, but a clustering is a
+labelling, and \mcode{Classify} can learn it:
+
+\begin{codepairs}
+\pair{machine-learning/clusters/9}{\(k\)-means needs a count.}
+\pair{machine-learning/clusters/10}{Label each point with the number of its
+cluster.}
+\pair{machine-learning/clusters/11}{Train a classifier on those labels.}
+\pair{machine-learning/clusters/12}{New points are assigned to clusters.}
+\end{codepairs}
+
+A nearest-neighbour classifier trained this way assigns a new point to the
+cluster of its nearest clustered point. For \(k\)-means you could instead compute
+the nearest cluster mean, which gives the Voronoi cells of the centres.
+
+\section{Gaussian mixtures}
+\label{sec:ml-mixtures}
+
+\(k\)-means measures distance the same way in every direction, so it assumes the
+clusters are round and of similar size. The next two clouds are long, thin, and
+tilted towards each other. Each has 150 points:
+
+\begin{codepairs}
+\pair{machine-learning/mixture/1}{Standard normal pairs\ldots}
+\pair{machine-learning/mixture/2}{\ldots stretched and sheared into two tilted
+clouds.}
+\pair{machine-learning/mixture/3}{\(k\)-means with two clusters, and a Gaussian
+mixture.}
+\pair{machine-learning/mixture/4}{Cluster sizes.}
+\pair{machine-learning/mixture/5}{How many of the first cloud's 150 points land in
+the first cluster of each.}
+\end{codepairs}
+
+\(k\)-means splits the data along the wrong line. Only 23 points of its first
+cluster come from the first cloud:
+
+\plotcell[0.5\linewidth]{machine-learning/gmm-kmeans}
+
+A \emph{Gaussian mixture}\index{Gaussian mixture} models the data as coming from
+\(K\) normal distributions, each with its own mean \(\mu_j\), full covariance
+matrix \(\Sigma_j\), and weight \(w_j\):
+\[
+  f(x) \;=\; \sum_{j=1}^{K} w_j\, \mathcal{N}(x;\, \mu_j, \Sigma_j).
+\]
+The mixture puts all but two of the first cloud's points in one cluster:
+
+\plotcell[0.5\linewidth]{machine-learning/gmm-clusters}
+
+The parameters are fitted by the \emph{expectation--maximisation}
+(EM)\index{expectation--maximisation} algorithm. The E-step computes, for each
+point \(i\) and component \(j\), the \emph{responsibility}
+\[
+  r_{ij} \;=\; \frac{w_j\, \mathcal{N}(x_i;\, \mu_j, \Sigma_j)}
+                   {\sum_{l} w_l\, \mathcal{N}(x_i;\, \mu_l, \Sigma_l)} ,
+\]
+the posterior probability that point \(i\) came from component \(j\). The M-step
+re-estimates each component from the points, weighted by responsibility:
+\[
+  w_j = \frac{1}{n}\sum_i r_{ij}, \qquad
+  \mu_j = \frac{\sum_i r_{ij}\, x_i}{\sum_i r_{ij}}, \qquad
+  \Sigma_j = \frac{\sum_i r_{ij}\,(x_i - \mu_j)(x_i-\mu_j)^{\mathsf T}}{\sum_i r_{ij}} .
+\]
+No iteration decreases the likelihood. Mathilda stops when its relative change
+falls below \(10^{-10}\), or after 200 iterations. \(k\)-means is the limit of this algorithm in which every
+covariance is the same multiple of the identity and shrinks to zero, so each
+responsibility becomes \(0\) or \(1\). The number of components is chosen by the
+\emph{Bayesian information criterion}\index{Bayesian information criterion}
+\[
+  \mathrm{BIC} \;=\; q \log n \;-\; 2\log L,
+\]
+where \(L\) is the maximised likelihood and \(q\) the number of free parameters.
+Each extra component adds parameters, and BIC charges \(\log n\) for each one.
+Mathilda fits \(K = 1, 2, \dots\) up to at most ten components and keeps the
+smallest BIC.
+
+\calloutnote{Theory}{The likelihood of a Gaussian mixture has no maximum. Centre a
+component on a single data point and shrink its covariance: its density at that
+point, and so the likelihood, goes to infinity. An unguarded BIC search then buys
+extra components that each sit on one point. Mathilda adds a floor to each
+covariance diagonal. In \mcode{FindClusters} the floor is the square of the median
+edge of the minimum spanning tree, on the principle that the data cannot resolve
+structure finer than the typical spacing between points. The mixture code in
+\texttt{src/ml/gmm.c} also computes responsibilities in log space, with the
+log-sum-exp trick, because in several dimensions the densities of far-away points
+underflow to zero. A component whose covariance matrix is singular falls back to a
+diagonal covariance instead of failing the fit.}
+
+\subsection{Mixtures as densities}
+\label{ssec:ml-density}
+
+The same fit, called through \mcode{LearnDistribution}, returns the density itself.
+\S\ref{ssec:stat-distributions} used \mcode{LearnDistribution} to fit a single normal
+distribution. With \mcode{Method -> "GaussianMixture"} it fits a mixture:
+
+\begin{codepairs}
+\pair{machine-learning/mixture/6}{A fitted mixture, printed with its parameters
+elided.}
+\pair{machine-learning/mixture/7}{Two components of almost equal weight\ldots}
+\pair{machine-learning/mixture/8}{\ldots and the mean of the first, close to the
+true \((1.5, 3)\).}
+\pair{machine-learning/mixture/9}{\mcode{PDF} on a list of points gives one density
+each.}
+\pair{machine-learning/mixture/10}{A single Gaussian fitted to the same data.}
+\pair{machine-learning/mixture/11}{Between the clouds, the single Gaussian sees
+plenty of density. The mixture sees very little.}
+\end{codepairs}
+
+The contours of the fitted mixture show the two tilted components:
+
+\plotcell[0.6\linewidth]{machine-learning/gmm-density}
+
+A single Gaussian fitted to this data is centred between the two clouds, in a
+region that holds almost no data. The mixture density there is more than ten times
+smaller. \mcode{LearnDistribution} also accepts outcomes that are not numbers, with
+\mcode{Method -> "ContingencyTable"}, and simply counts them:
+
+\begin{codepairs}
+\pair{machine-learning/mixture/12}{A categorical distribution.}
+\pair{machine-learning/mixture/13}{The empirical frequencies. An outcome never seen
+has probability exactly \(0\).}
+\end{codepairs}
+
+\B{SmoothKernelDistribution} completes the set with a kernel density estimate,
+used in one of the featured examples below.
+
+\section{Principal components}
+\label{sec:ml-pca}
+
+The last unsupervised tool finds the directions in which data vary most.
+\emph{Principal component analysis}\index{principal component analysis} (PCA)
+rotates the coordinate system so that the first axis points along the direction of
+largest variance, the second along the largest remaining direction perpendicular to
+the first, and so on. The new coordinates are uncorrelated.
+
+Here is the mathematics. Centre the data, so each column of the \(n\times p\) data
+matrix \(X\) has mean zero, and form the sample covariance matrix
+\[
+  C \;=\; \frac{1}{n-1}\, X^{\mathsf T} X .
+\]
+\(C\) is symmetric and positive semidefinite, so it has an orthonormal basis of
+eigenvectors \(v_1, \dots, v_p\) with eigenvalues
+\(\lambda_1 \ge \dots \ge \lambda_p \ge 0\). The variance of the data along a unit
+vector \(u\) is \(u^{\mathsf T} C u\), which is largest for \(u = v_1\), where it
+equals \(\lambda_1\). The principal components of a row \(x\) are its coordinates
+\(v_j^{\mathsf T} x\) in this basis.
+
+\plotcell[0.6\linewidth]{machine-learning/pca-axes}
+
+The figure shows 200 points from a correlated Gaussian, with the two eigenvectors
+of \(C\) drawn from the mean, each \(2\sqrt{\lambda_j}\) long in both directions.
+The session computes the same quantities:
+
+\begin{codepairs}
+\pair{machine-learning/pca/1}{200 correlated points.}
+\pair{machine-learning/pca/2}{Their mean and covariance matrix.}
+\pair{machine-learning/pca/3}{The eigenvalues and eigenvectors of the covariance
+matrix.}
+\pair{machine-learning/pca/4}{\mcode{PrincipalComponents}: the data in the rotated
+coordinates.}
+\pair{machine-learning/pca/5}{The new coordinates have variances
+\(\lambda_1, \lambda_2\) and zero covariance.}
+\end{codepairs}
+
+Line 5 is the defining property. The variances of the components are the
+eigenvalues, and their covariance is zero after \B{Chop} removes rounding at the
+\(10^{-16}\) level. The total variance \(3.553 + 1.521 = 4.866 + 0.209\) is
+unchanged, because a rotation preserves it. One direction holds \(96\%\) of it.
+
+The first eigenvector is \((-0.847, -0.531)\) according to \B{Eigenvectors}, but
+the first principal component of the first point is positive. An eigenvector is
+defined only up to sign. \mcode{PrincipalComponents} flips each eigenvector so that its
+largest entry is positive, so its output does not depend on which eigensolver was
+used.
+
+\calloutnote{Theory}{PCA is the \emph{singular value decomposition} of the
+centred data. If \(X = U S V^{\mathsf T}\), then
+\(X^{\mathsf T}X = V S^2 V^{\mathsf T}\), so the right singular vectors are the
+eigenvectors of \(C\) and \(\lambda_j = s_j^2/(n-1)\). Many libraries compute PCA
+this way, because it avoids forming \(X^{\mathsf T}X\) and so avoids squaring the
+condition number. Mathilda's \texttt{ml\_pca} (\texttt{src/ml/pca.c}) instead forms
+the \(p \times p\) covariance matrix and diagonalises it, with LAPACK's
+\texttt{dsyev} when it is linked and a cyclic Jacobi method otherwise. For a
+modest number of features the two give the same answer, as the next two lines
+show.}
+
+\begin{codepairs}
+\pair{machine-learning/pca/6}{The right singular vectors of the centred data, the
+same as the eigenvectors in line 3.}
+\pair{machine-learning/pca/7}{\(s_j^2/(n-1)\) gives the eigenvalues again.}
+\end{codepairs}
+
+\subsection{Reducing dimension}
+\label{ssec:ml-reduce}
+
+Keeping only the first \(k\) principal components reduces each row from \(p\)
+numbers to \(k\), with the least loss of variance possible for a linear map.
+\mcode{DimensionReduce} returns the reduced data. \mcode{DimensionReduction} returns a
+reusable \mcode{DimensionReducerFunction} that applies the same projection to new
+points:
+
+\begin{codepairs}
+\pair{machine-learning/pca/8}{The first component of the first three points, as in
+line 4.}
+\pair{machine-learning/pca/9}{A reducer from two dimensions to one.}
+\pair{machine-learning/pca/10}{It projects a new point, or a matrix of points. The
+training mean projects to (almost) zero.}
+\pair{machine-learning/pca/11}{\mcode{Method -> "Correlation"} standardises each
+column first.}
+\pair{machine-learning/pca/12}{Points on a line have all their variance in one
+component.}
+\end{codepairs}
+
+The reducer subtracts the \emph{training} mean before it projects, which makes
+projections of different batches comparable. The correlation method is the right
+choice when the columns have different units. Without it, the column with the
+largest numbers dominates the first component for no statistical reason.
+\mcode{DimensionReduce} also offers \mcode{"LatentSemanticAnalysis"}, which skips the
+centring (a truncated SVD, suited to sparse non-negative data such as word counts),
+and \mcode{"MultidimensionalScaling"}, which works from the matrix of pairwise
+distances and is limited to 2000 rows because that matrix is \(n \times n\). Only
+PCA is available as a reusable reducer.
+
+\section{Performance and limits}
+\label{sec:ml-performance}
+
+The cost of each method follows from its algorithm. Table~\ref{tab:ml-cost} gives
+the order of the work for \(n\) training points, \(p\) features, and \(K\)
+classes. It is read from the implementations in \texttt{src/ml/}, not measured.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Method & training & one prediction \\
+\midrule
+nearest neighbours & copy the data, \(O(np)\) & scan the data, \(O(np)\) \\
+naive Bayes & one pass, \(O(np)\) & \(O(Kp)\) \\
+logistic regression & per step \(O(np^2)\), times \(K\) for one-vs-rest & \(O(Kp)\) \\
+decision tree & per level about \(O(pn\log n)\) & depth of the tree \\
+random forest & 50 trees on bootstrap samples & 50 tree walks \\
+least squares & \(O(np^2 + p^3)\) & \(O(p)\) \\
+\(k\)-means (\mcode{FindClusters}) & \(O(nkp)\) per iteration & --- \\
+Gaussian mixture & \(O(nKp^2)\) per EM step, for each \(K\) tried & --- \\
+PCA & \(O(np^2 + p^3)\) & \(O(kp)\) \\
+\bottomrule
+\end{tabular}
+\caption{Order of the work for each method.}
+\label{tab:ml-cost}
+\end{table}
+
+The repository has measurements for the clustering code. The reference page for
+\mcode{FindClusters} (\texttt{docs/spec/builtins/lists-and-iteration.md}) records that
+the spanning-tree methods on machine-precision points take \(6.8\) ms for 2000
+points, \(0.17\) s for 10\,000, and \(0.81\) s for 20\,000, and are capped at
+20\,000 points because the cost grows quadratically. Exact (rational) points and
+strings are capped at 2000. On a line there is no cap, and \(10^6\) numbers take
+about \(2.3\) s. \mcode{"KMeans"} on 20\,000 points in ten dimensions with
+\(k = 3\) takes \(0.60\) s. The machine-learning reference page
+(\texttt{docs/spec/builtins/machine-learning.md}) records the 2000-row cap on
+multidimensional scaling.
+
+There are also benchmarks of machine-learning algorithms written directly in
+Mathilda's array language instead of calling a builtin. The third benchmark sweep
+in \texttt{docs/design/performance.md} (\S9) and experiment 10 in
+\texttt{docs/experiments/} time a \(k\)-means of 100\,000 points in eight
+dimensions with \(k = 16\) for 20 iterations. Mathilda takes \(2.26\) s,
+Mathematica~14.0 \(7.33\) s, and NumPy \(0.77\) s. A logistic regression on a
+\(200\,000 \times 32\) matrix with 100 gradient-descent steps takes \(2.71\) s in
+Mathilda, \(2.15\) s in Mathematica, and \(0.84\) s in NumPy. Those two programs
+spend their time in \B{Dot} and element-wise arithmetic on packed arrays
+(\S\ref{sec:ds-packed}). The same report attributes the remaining gap to NumPy to
+several passes over the data where a hand-fused loop would make one.
+
+\calloutnote{Performance}{A fitted model is kept as ordinary lists of numbers.
+Every application reads the parameters it needs back out of those lists, and a
+nearest-neighbour or forest prediction reads a lot of them: the whole training set,
+or fifty trees. This keeps models printable, comparable with \mcode{SameQ}, and
+editable with \mcode{Part}, at the cost of a slower prediction. There are no
+benchmarks of \mcode{Classify} or \mcode{Predict} in the repository, so this chapter
+quotes no timings for them.}
+
+\subsection*{What is missing}
+
+Compared with Mathematica~15, the machine-learning subsystem is small, and it
+does not hide the gaps: an unsupported method, option, or data layout returns the
+call unevaluated. The main differences are these.
+
+\begin{itemize}
+\item Features must be real numbers. There is no automatic handling of
+  categorical, text, image, date, or missing values, and no
+  \mcode{FeatureExtraction}.
+\item \mcode{Classify} accepts only a list of rules, and a model applies to one point
+  at a time.
+\item \mcode{Classify} has five methods. Mathematica also has support vector machines,
+  gradient-boosted trees, neural networks, and Markov models. \mcode{Predict} has only
+  least squares and nearest neighbours.
+\item There is no automatic method selection, no hyperparameter tuning, no
+  \mcode{ValidationSet}, and no class weights. The forest always has fifty trees,
+  and trees are never pruned.
+\item There is no \mcode{ClassifierMeasurements}, \mcode{PredictorMeasurements},
+  or \mcode{ClusterClassify}. This chapter builds accuracy, the confusion matrix,
+  cross-validation, and cluster assignment from a few lines each.
+\item A model answers only a few properties: \mcode{"Classes"},
+  \mcode{"Method"}, \mcode{"FeatureCount"}, \mcode{"NeighborCount"}, and for a
+  predictor \mcode{"Coefficients"} and \mcode{"TrainingData"}. Everything else is
+  in the payload, which you can read with \mcode{Part}, as this chapter does.
+\end{itemize}
+
+\section{Featured examples}
+\label{sec:ml-featured}
+
+The examples in this section are short tasks on real data. Each is a few lines of
+input, usually with a picture. The iris examples share one session, so later
+examples use names defined in earlier ones.
+
+\subsection*{Classify iris species}
+
+In 1936 R.~A. Fisher published measurements of 150 iris flowers from three
+species: sepal length, sepal width, petal length, and petal width, in
+centimetres. The session types in the first fifteen flowers of each species,
+trains on ten of each, and tests on the other five.\index{iris data}
+
+\begin{codepairs}
+\pair{machine-learning/iris/1}{Fifteen \emph{Iris setosa}\ldots}
+\pair{machine-learning/iris/2}{\ldots fifteen \emph{Iris versicolor}\ldots}
+\pair{machine-learning/iris/3}{\ldots and fifteen \emph{Iris virginica}.}
+\pair{machine-learning/iris/4}{}
+\pair{machine-learning/iris/5}{Ten of each species for training, five of each for
+testing.}
+\pair{machine-learning/iris/6}{A logistic-regression classifier.}
+\pair{machine-learning/iris/7}{Predictions for the fifteen test flowers.}
+\pair{machine-learning/iris/8}{All fifteen are right.}
+\pair{machine-learning/iris/9}{A flower between versicolor and virginica gets a
+mixed answer.}
+\pair{machine-learning/iris/10}{The other deterministic methods get 14, 15, and
+15 right.}
+\end{codepairs}
+
+Setosa is easy, because its petals are much smaller. Versicolor and virginica
+overlap. In the petal plane, five nearest neighbours draw these regions:
+
+\plotcell[0.6\linewidth]{machine-learning/iris-regions}
+
+\subsection*{Read the rules a tree learned}
+
+A decision tree is a classifier you can read. The tree for the iris training set
+has five nodes:
+
+\begin{codepairs}
+\pair{machine-learning/iris/11}{Split on feature 2 (petal length) at \(2.5\), then
+on feature 3 (petal width) at \(1.65\).}
+\pair{machine-learning/iris/12}{The class counts at each node: each leaf holds ten
+flowers of one species.}
+\end{codepairs}
+
+As rules: if the petal length is at most \(2.5\) cm, the flower is a setosa.
+Otherwise, if the petal width is at most \(1.65\) cm, it is a versicolor, and if
+not, a virginica. Feature numbers start at zero, so feature 2 is the third column.
+The threshold \(2.5\) lies halfway between the longest setosa petal in the
+training set (\(1.7\)) and the shortest versicolor petal (\(3.3\)).
+
+\subsection*{Compress measurements with PCA}
+
+Four measurements per flower are correlated, because big flowers are big in every
+dimension. Principal components show how much of the variation is really
+independent:
+
+\begin{codepairs}
+\pair{machine-learning/iris/13}{Principal components of all 45 flowers.}
+\pair{machine-learning/iris/14}{The fraction of the total variance in each
+component.}
+\pair{machine-learning/iris/15}{A reusable reducer projects a new flower to two
+numbers.}
+\end{codepairs}
+
+The first component alone holds \(92\%\) of the variance, and the first two hold
+\(98\%\). The projection onto those two keeps the species apart:
+
+\plotcell[0.6\linewidth]{machine-learning/iris-pca}
+
+\subsection*{Discover species without labels}
+
+Suppose the species names were lost. Can clustering recover them?
+
+\begin{codepairs}
+\pair{machine-learning/iris/16}{\(k\)-means with three clusters, cross-tabulated
+against the species (columns: setosa, versicolor, virginica).}
+\end{codepairs}
+
+The first cluster is exactly the fifteen setosa flowers. The other two clusters
+each mix versicolor and virginica, and they agree with the species on 24 of the
+30 flowers. Here are the clusters, in the petal plane:
+
+\plotcell[0.6\linewidth]{machine-learning/iris-clusters}
+
+\subsection*{See two modes in one measurement}
+
+The petal lengths alone separate setosa from the rest. A kernel density estimate
+(\mcode{SmoothKernelDistribution}) makes that visible without any labels. It places a
+normal density on each observation and averages them, with a bandwidth chosen by
+the normal-reference rule \(h = \hat\sigma\,(4/(3n))^{1/5}\).
+
+\plotcell[0.6\linewidth]{machine-learning/iris-bimodal}
+
+The printed bandwidth is \(0.89\) cm. The left mode is setosa. The right one
+merges versicolor and virginica, whose petal lengths overlap. The
+normal-reference rule is designed for data close to a single normal distribution,
+so on multimodal data it tends to oversmooth.
+
+\subsection*{Predict fuel economy}
+
+The 1974 \emph{Motor Trend} road tests (the \texttt{mtcars} data set) give the
+weight, horsepower, and fuel economy of 32 cars. Heavier cars use more fuel:
+
+\begin{codepairs}
+\pair{machine-learning/mileage/1}{The 32 cars\ldots}
+\pair{machine-learning/mileage/2}{\ldots their weights in thousands of pounds\ldots}
+\pair{machine-learning/mileage/3}{\ldots gross horsepower\ldots}
+\pair{machine-learning/mileage/4}{\ldots and miles per gallon.}
+\pair{machine-learning/mileage/5}{About \(5.3\) miles per gallon lost per 1000
+pounds.}
+\pair{machine-learning/mileage/6}{Predicted economy of a 3000-pound car.}
+\end{codepairs}
+
+The coefficients \(37.285\) and \(-5.344\) are the standard textbook result for
+this data set.
+
+\plotcell[0.6\linewidth]{machine-learning/mileage-line}
+
+\subsection*{Weigh two predictors at once}
+
+Weight and horsepower are correlated: heavy cars tend to have big engines. A
+regression on both separates their effects:
+
+\begin{codepairs}
+\pair{machine-learning/mileage/7}{Intercept, then the coefficients of weight and
+horsepower.}
+\pair{machine-learning/mileage/8}{A 3000-pound car with 150 horsepower.}
+\end{codepairs}
+
+With horsepower in the model, the weight coefficient drops from \(-5.34\) to
+\(-3.88\). Part of what looked like the effect of weight was the effect of the
+engines that heavy cars carry.
+
+\subsection*{Flag unusual cars}
+
+A density estimate can flag unusual cases. Fit a two-dimensional normal
+distribution to (weight, economy) and list the cars where the fitted density is
+lowest:
+
+\begin{codepairs}
+\pair{machine-learning/mileage/9}{A bivariate normal fitted to weight and
+economy.}
+\pair{machine-learning/mileage/10}{The three cars with the lowest density.}
+\end{codepairs}
+
+The Chrysler Imperial is heavy but more economical than its weight suggests. The
+Toyota Corolla and the Fiat 128 are light and unusually economical even for their
+weight. All three lie far from the regression line in the previous figure.
+
+\subsection*{Detect spam messages}
+
+Mathilda's classifiers take numbers, so text must first become features. This
+example uses three: the number of exclamation marks, the fraction of capital
+letters, and the number of words from a short list of money words. The training
+set is twelve short messages, typed in:
+
+\begin{codepairs}
+\pair{machine-learning/spam/1}{Three numerical features of a message.}
+\pair{machine-learning/spam/2}{Six spam messages\ldots}
+\pair{machine-learning/spam/3}{\ldots and six genuine ones.}
+\pair{machine-learning/spam/4}{A naive Bayes filter.}
+\pair{machine-learning/spam/5}{The features of a new message.}
+\pair{machine-learning/spam/6}{Three new messages, classified.}
+\pair{machine-learning/spam/7}{One innocent use of ``free'' is enough to condemn a
+message.}
+\end{codepairs}
+
+The last line shows the limits of twelve examples. No genuine message in the
+training set contains a money word, so within that class the feature has zero
+variance, and naive Bayes treats any money word as proof of spam (see the pitfall
+in \S\ref{sec:ml-bayes}). A real filter needs thousands of messages and many
+more features, but the pipeline is the same: text to numbers, numbers to a
+classifier.
+
+\subsection*{Recognise noisy digits}
+
+Each digit is drawn on a grid three pixels wide and five tall, and flattened into
+a vector of fifteen numbers. The training and test sets are copies with Gaussian
+noise added to every pixel. One noisy copy of each digit:
+
+\plotcell[0.7\linewidth]{machine-learning/digits-noisy}
+
+\begin{codepairs}
+\pair{machine-learning/digits/1}{The ten clean digits.}
+\pair{machine-learning/digits/2}{Noise with standard deviation \(0.3\), clipped to
+\([0, 1]\).}
+\pair{machine-learning/digits/3}{Twenty noisy copies of each digit for
+training.}
+\pair{machine-learning/digits/4}{Thirty more of each for testing.}
+\pair{machine-learning/digits/5}{\(88\%\) of the test digits are read
+correctly.}
+\pair{machine-learning/digits/6}{A noisy 8.}
+\pair{machine-learning/digits/7}{The most common mistakes, as \{\{true, read\},
+count\}.}
+\end{codepairs}
+
+The most common mistake is reading a 0 as an 8. The two digits differ in a single
+pixel, the centre of the grid, so noise on that one pixel can turn one into the
+other. The next is 9 read as 5, which also differ in one pixel. Nearest-neighbour
+classification of images is a real method, and on the classic MNIST digits it does
+well with enough training data. Its weakness is also visible here: pixel
+distance does not know which pixels matter.
+
+\subsection*{Smooth a noisy signal}
+
+Nearest-neighbour regression is also a smoother. Train it on noisy samples of a
+sine wave, and it returns a local average:
+
+\plotcell[0.6\linewidth]{machine-learning/smooth}
+
+The orange curve is the five-neighbour predictor, and the blue curve is the true
+sine. The predictor follows the signal well in the middle of the range. At the two
+ends its neighbours all lie on one side, so it flattens out. This bias at the
+boundary is shared by every local-averaging smoother.
+
+\subsection*{Where this connects}
+
+Machine learning in Mathilda is built from parts that earlier chapters cover. The
+training data are lists and rules (Chapter~\ref{ch:datastructures}), and a fitted
+model is an ordinary expression that \mcode{Part}, \mcode{FullForm}, and \mcode{SameQ} work
+on. The random data come from the seeded generators of
+\S\ref{ssec:stat-distributions}, so every example here can be reproduced exactly.
+Least squares and principal components are linear algebra (\S\ref{sec:linalg}):
+the session checked \mcode{Predict} against \mcode{LeastSquares} and
+\mcode{PrincipalComponents} against \B{SingularValueDecomposition}. Single-linkage
+clustering is a minimum spanning tree, one of the graph objects of
+Chapter~\ref{ch:graphs}, and the array benchmarks quoted in
+\S\ref{sec:ml-performance} run on the packed arrays of \S\ref{sec:ds-packed}. For
+the full options of any function in this chapter, type \texttt{?Name} at the
+prompt.

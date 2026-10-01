@@ -1,0 +1,1436 @@
+\chapter{Image Processing}
+\label{ch:images}
+
+A digital image is a grid of numbers. Each number records how much light fell on
+one small square of a sensor, and everything an image-processing system does is
+arithmetic on that grid. Blurring averages neighbours. Edge detection takes
+differences. Thresholding compares every pixel with one number, and morphology
+takes the largest or smallest value in a window. The mathematics is old and well
+understood: convolution, the Fourier transform, order statistics, and the
+geometry of sets. What makes it hard in practice is scale. A modest photograph
+has a quarter of a million pixels, and a pipeline may touch each of them dozens
+of times.
+
+This chapter shows how Mathilda handles images. It starts with the
+representation, because a surprising number of image bugs come from misreading
+it. It then works through the standard toolbox: geometry, tone and colour,
+convolution and filtering, derivatives and edges, thresholding, and mathematical
+morphology. It ends with volumetric images and a set of short worked tasks in the
+style of a cookbook. Each operation is shown twice. A small matrix, printed at
+the prompt, lets you check the arithmetic pixel by pixel. A larger image, rendered
+as a figure, shows what the operation looks like.
+
+Three themes run through the chapter. The first is that an image is an
+ordinary expression, so the tools of the rest of the book work on it and on its
+pixels. The second is checkable mathematics. Most operations obey an exact
+identity (duality, idempotence, conservation of the mean, a reflected kernel),
+and the sessions test those identities directly. The third is speed. Mathilda
+keeps pixels in machine buffers, and the operations were benchmarked against
+SciPy and scikit-image. The measurements are quoted where they matter and
+collected in Section~\ref{sec:img-speed}.
+
+Mathilda does not ship a library of sample photographs, so every image in this
+chapter is built from a formula. That has one advantage: you can type any input
+line yourself and get exactly the picture printed here.
+
+\section{An image is an expression}
+\label{sec:img-expr}
+
+\B{Image} wraps a rectangular array of numbers. The simplest way to make a test
+image is to write down a formula for the brightness at each pixel and let
+\B{Table} evaluate it. A \emph{zone plate}\index{zone plate} is the classic
+choice: rings whose spatial frequency rises steadily with distance from the
+centre, so a single picture contains every frequency from zero up to the sampling
+limit.
+
+\plotcell[0.5\linewidth]{image-processing/zone}
+
+The image is \(160\) pixels wide and \(128\) tall. It is deliberately not square,
+for a reason the next session makes clear.
+
+\subsection{Pixels, types, and the transposition trap}
+\label{ssec:img-types}
+
+A byte image stores integers from \(0\) to \(255\). The accessors report its
+shape, its type, and its pixels:
+
+\begin{codepairs}
+\pair{image-processing/basics/1}{Two rows of three pixels, written as bytes.}
+\pair{image-processing/basics/2}{\B{ImageQ} confirms that the data made a valid
+image.}
+\pair{image-processing/basics/3}{\B{ImageDimensions} gives the width first,
+while \B{ImageData} is an array of rows. The two orders are transposed.}
+\pair{image-processing/basics/4}{\B{ImageType} was inferred from the values: all
+integers, all within \(0..255\).}
+\pair{image-processing/basics/5}{With its type as the second argument,
+\mcode{ImageData} returns the stored integers unchanged.}
+\pair{image-processing/basics/6}{Without it, every pixel is scaled into
+\([0,1]\). The byte \(255\) becomes exactly \(1.0\).}
+\pair{image-processing/basics/7}{\B{FullForm} shows the canonical form
+\mcode{Image[data, type]}. The pixels sit in an \B{NDArray}, a machine
+buffer.}
+\end{codepairs}
+
+\index{image!dimensions}The transposition in line 3 is the most common source
+of silently wrong image code. The part
+\mcode{ImageData[img][[y, x]]} is row \(y\), counted from the top, and column
+\(x\), counted from the left, so the array is height by width.
+\mcode{ImageDimensions} follows the convention of a screen and reports width
+first. Mathematica uses the same pair of conventions, and so does Mathilda.
+
+\calloutnote{Pitfall}{A square test image cannot tell the two orders apart. Code
+that confuses \mcode{\{width, height\}} with \mcode{Dimensions[ImageData[img]]}
+passes every test on a \(64\times64\) image and fails on the first photograph.
+Build your test images non-square, as this chapter does.}
+
+\index{image!type}The type fixes the range of a stored value. Mathilda infers it
+from the values alone, which makes it predictable:
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+data & inferred type \\
+\midrule
+all integers, every value in \(\{0, 1\}\) & \mcode{"Bit"} \\
+all integers, every value in \(0..255\) & \mcode{"Byte"} \\
+anything else & \mcode{"Real"} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{codepairs}
+\pair{image-processing/types/1}{The same shape of data written three ways gives
+three types. A real \(0.\) and an integer \(0\) are different data.}
+\pair{image-processing/types/2}{A bit image scales to \(0.0\) and \(1.0\).}
+\pair{image-processing/types/3}{Ragged rows are not an image, so \mcode{Image}
+stays unevaluated and \mcode{ImageQ} says so.}
+\pair{image-processing/types/4}{Neither is a string.}
+\pair{image-processing/types/5}{Real data is kept as given, even outside
+\([0,1]\). Clamping happens only when the image is written to a file.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\texttt{src/image.c} validates the data once, when
+\mcode{Image} first normalises to its two-argument canonical form. A builtin that
+cannot evaluate returns its input unchanged, so without a canonical form a valid
+\mcode{Image[data]} and a malformed \mcode{Image["hello"]} would look alike.
+Because the canonical form is only produced by the validator, the accessors
+recheck only that the rows have equal length, which costs \(O(\text{height})\).
+The first implementation revalidated every pixel on every call, and
+\mcode{ImageDimensions} of a \(512\times512\) image took \(0.59\) ms. It now takes
+\(0.58\,\mu\)s (\texttt{docs/spec/builtins/image-processing.md}).}
+
+\subsection{Colour channels}
+\label{ssec:img-colour}
+
+A colour image adds a third axis. Each pixel is a list of channel values, so the
+array is height by width by channels, interleaved:
+
+\begin{codepairs}
+\pair{image-processing/colour/1}{A \(2\times2\) image of red, green, blue and
+white.}
+\pair{image-processing/colour/2}{\B{ImageChannels} is \(3\). The data has a
+third axis of length \(3\).}
+\pair{image-processing/colour/3}{Row 1, column 2 is the green pixel.}
+\pair{image-processing/colour/4}{\B{ColorConvert} to grey applies the Rec.~601
+luminance weights.}
+\pair{image-processing/colour/5}{The weights sum to one, so white stays
+white.}
+\pair{image-processing/colour/6}{The result has one channel.}
+\end{codepairs}
+
+\index{luminance!Rec.~601}The grey value of a colour pixel is
+\[
+  Y = 0.299\,R + 0.587\,G + 0.114\,B .
+\]
+Green dominates because the eye is most sensitive to it. Every Mathilda
+operation that needs one brightness from a colour pixel (thresholding, edge
+detection, template matching) uses these same weights, so the operations agree
+with each other about what ``brightness'' means.
+
+A channel can be pulled out with \B{Part} and viewed as an image in its own
+right. Here red rises from left to right and green from top to bottom:
+
+\plotcell[0.8\linewidth]{image-processing/channels}
+
+\section{Making, saving, and loading images}
+\label{sec:img-io}
+
+\B{Export} writes an image to PNG, JPEG, or BMP according to the file extension,
+and \B{Import} reads PNG, JPEG, BMP, GIF, TGA, PSD, HDR, and PNM files back.
+\B{RandomImage} makes noise, which is the standard input for testing a filter:
+
+\begin{codepairs}
+\pair{image-processing/io/1}{\mcode{Export} returns the file name, so it can feed
+\mcode{Import} directly.}
+\pair{image-processing/io/2}{Read the file back.}
+\pair{image-processing/io/3}{The samples survive exactly. The type is
+\mcode{"Real"}, because \mcode{Import} scales 8-bit samples by \(1/255\).}
+\pair{image-processing/io/4}{Uniform noise on \([0,1]\), four wide and three
+high.}
+\pair{image-processing/io/5}{The pixels.}
+\pair{image-processing/io/6}{\B{SeedRandom} makes the noise reproducible. It
+uses the same stream as \B{RandomReal}.}
+\pair{image-processing/io/7}{With no arguments, \mcode{RandomImage} gives a
+\(150\times150\) grey image.}
+\end{codepairs}
+
+The option \mcode{ColorSpace -> "RGB"} gives three independent channels:
+
+\plotcell[0.5\linewidth]{image-processing/random}
+
+\calloutnote{Under the hood}{\texttt{src/imageio.c} decodes and encodes with the
+public-domain \texttt{stb\_image} headers, vendored so that \mcode{Import}
+cannot fail for lack of a system library. They are compiled with internal
+linkage in that one file. That keeps them from colliding with the copy of
+\texttt{stb\_image} inside Raylib, which caused a link failure before the change.
+JPEG output uses a fixed quality of \(90\). PNG is lossless and is the right
+choice for results you intend to measure.}
+
+\section{Geometry}
+\label{sec:img-geometry}
+
+Geometric operations move pixels without changing their values.
+\B{ImageReflect}, \B{ImageRotate}, \B{ImagePad}, and \B{ImageCrop} are easiest to
+understand on a small non-square image whose pixels are all different:
+
+\begin{codepairs}
+\pair{image-processing/geometry/1}{Pixels \(0.1\) to \(0.6\), in two rows.}
+\pair{image-processing/geometry/2}{\mcode{ImageReflect} with no direction flips
+top to bottom.}
+\pair{image-processing/geometry/3}{\mcode{Left} (or \mcode{Right}) flips left to
+right.}
+\pair{image-processing/geometry/4}{A half turn reverses both axes.}
+\pair{image-processing/geometry/5}{A quarter turn swaps width and height.}
+\pair{image-processing/geometry/6}{Four quarter turns give back the identical
+expression. \B{SameQ} tests identity, with no tolerance.}
+\pair{image-processing/geometry/7}{\mcode{ImagePad} with a number pads with
+zeros.}
+\pair{image-processing/geometry/8}{\mcode{"Fixed"} replicates the edge pixel
+instead.}
+\pair{image-processing/geometry/9}{Cropping back to the original size undoes the
+padding exactly.}
+\pair{image-processing/geometry/10}{With no size, \mcode{ImageCrop} trims a
+uniform border. The border colour is read from a corner.}
+\end{codepairs}
+
+The same operations on a picture, an asymmetric ramp, show which way each one
+moves the content. From the left: the original, the vertical flip, the
+horizontal flip, and the half turn.
+
+\plotcell[\linewidth]{image-processing/reflect}
+
+Padding needs a rule for the values it invents. \mcode{ImagePad} offers three: a
+constant (zero by default), \mcode{"Fixed"}, which copies the nearest edge pixel
+outward, and \mcode{"Reflected"}, which mirrors the image across its edge:
+
+\plotcell[0.9\linewidth]{image-processing/pad}
+
+\calloutnote{Theory}{The padding rule is the boundary condition of every
+neighbourhood operation. A filter at the edge of an image reads pixels that do
+not exist, and it has to be told what they are. Zero padding darkens the border
+of a blurred image, which looks like lens vignetting. Replicating the edge keeps a
+constant image constant under any smoothing filter, and Mathilda's filters all use
+that rule. \mcode{ImagePad[img, m, "Fixed"]} makes the same rule available
+explicitly, so padding first and filtering second agrees with filtering alone.}
+
+\subsection{Rotation by an arbitrary angle}
+
+A quarter turn sends every pixel to another pixel's position. A rotation by any
+other angle does not, because a rotated grid does not land on the original grid.
+\mcode{ImageRotate} then \emph{resamples}\index{resampling!rotation}. For each
+output pixel it rotates the position backwards, finds where that point falls in
+the source, and interpolates bilinearly between the four surrounding pixels.
+Points that fall outside the source are black:
+
+\plotcell[0.8\linewidth]{image-processing/rotate}
+
+The third panel rotates the square by \(\pi/4\) and back again. The square
+returns, slightly softened by two rounds of interpolation, but the corners of the
+frame do not. They left the image on the first rotation and came back as black.
+
+\calloutnote{Under the hood}{\texttt{src/imagegeom.c} keeps right angles on a
+separate path that only permutes indices. Nothing is interpolated there, so four
+quarter turns are the identity under \mcode{===}. Sending a quarter turn through
+the bilinear resampler would give the same pixels only if the half-pixel
+convention were exactly right. The general path uses \emph{inverse mapping}: it
+loops over destination pixels and asks where each came from. Forward mapping, which
+loops over the source and writes where each pixel lands, leaves holes wherever
+the rotation stretches the grid.}
+
+\subsection{Resizing and aliasing}
+\label{ssec:img-resize}
+
+\B{ImageResize} changes the number of pixels. Enlarging is interpolation.
+Shrinking is harder, because it throws information away, and the way it is thrown
+away matters. A fine checkerboard shows the problem:
+
+\begin{codepairs}
+\pair{image-processing/resize/1}{A \(4\times4\) checkerboard of \(0\) and
+\(1\).}
+\pair{image-processing/resize/2}{Halving each side by area averaging gives a flat
+\(0.5\), the average brightness.}
+\pair{image-processing/resize/3}{Point sampling keeps every other pixel. Those are
+all \(0\), so the pattern turns black.}
+\pair{image-processing/resize/4}{A small image to enlarge.}
+\pair{image-processing/resize/5}{\mcode{"Nearest"} enlargement repeats each
+pixel.}
+\pair{image-processing/resize/6}{The default for enlarging is bilinear
+interpolation.}
+\pair{image-processing/resize/7}{A single number sets the width. The height
+follows the aspect ratio.}
+\pair{image-processing/resize/8}{A \(60\times40\) noise image.}
+\pair{image-processing/resize/9}{Reducing it to \(40\times25\), a factor of
+\(1.5\) one way and \(1.6\) the other, keeps the mean brightness exactly.}
+\end{codepairs}
+
+\begin{theorem}[Nyquist--Shannon]
+\index{sampling theorem}\index{aliasing}
+A signal sampled at spacing \(h\) is determined by its samples only if it
+contains no frequency above \(1/(2h)\). A component above that limit is not
+lost. It reappears in the samples as a lower frequency, its \emph{alias}.
+\end{theorem}
+
+Shrinking an image by a factor \(s\) multiplies the sample spacing by \(s\), so
+every frequency above the new limit must be removed \emph{before} the new samples
+are taken. Point sampling removes nothing, and the zone plate shows the result.
+Below, the original is on the left. In the middle it has been reduced \(4\times\)
+by point sampling and enlarged again for display. On the right the reduction used
+area averaging:
+
+\plotcell[\linewidth]{image-processing/aliasing}
+
+The fine outer rings of the middle panel have turned into false patterns: whole
+new sets of circles centred in the corners. They are aliases. Area averaging
+replaces each new pixel by the mean of the source region it covers, which is a box
+low-pass filter and a resample in one step. The high frequencies average out to
+grey and no false structure appears.
+
+\calloutnote{Under the hood}{\mcode{ImageResize} uses area averaging whenever
+either axis shrinks and bilinear interpolation when both grow. The area weights
+use fractional coverage, so a \(3\to2\) reduction is as correct as \(4\to2\), and
+every source pixel contributes the same total weight. That is why the mean is
+preserved exactly in line~9. Coordinates are centre-aligned: output pixel \(i\)
+samples source position \((i+\tfrac12)s - \tfrac12\). The simpler map \(i s\)
+shifts the image by half a pixel at every scale except \(1{:}1\).}
+
+\calloutnote{Performance}{On a \(512\times512\) image, area reduction to
+\(256\times256\) takes \(0.63\) ms and bilinear enlargement to \(1024\times1024\)
+takes \(2.76\) ms, against \(2.0\) ms and \(14.3\) ms for scikit-image
+(\texttt{docs/spec/builtins/image-processing.md}, ``Storage: machine buffers'';
+benchmark sources in \texttt{benchmarks/64-image-resize}).}
+
+\section{Tone: point operations and the histogram}
+\label{sec:img-tone}
+
+A \emph{point operation}\index{point operation} replaces each pixel by a function
+of its own value. It ignores the neighbours, so it cannot blur or sharpen. It can
+change brightness, contrast, and the distribution of grey levels.
+\B{ImageAdjust} with no parameters stretches the range so the darkest pixel
+becomes \(0\) and the brightest \(1\). With a list \(\{c, b, g\}\) it applies
+contrast \(c\), brightness \(b\), and gamma \(g\) by the curve
+\[
+  v' = \Bigl(\operatorname{clip}_{[0,1]}\bigl((v - \tfrac12)(1 + c) + \tfrac12 + b\bigr)\Bigr)^{1/g}.
+\]
+
+\begin{codepairs}
+\pair{image-processing/tone/1}{A dim, flat image: all values between \(0.40\)
+and \(0.55\).}
+\pair{image-processing/tone/2}{The stretch maps the range onto \([0,1]\)
+linearly.}
+\pair{image-processing/tone/3}{Stretching again changes nothing. The stretch is
+idempotent.}
+\pair{image-processing/tone/4}{Contrast \(1\) doubles distances from mid-grey.
+Mid-grey itself stays fixed.}
+\pair{image-processing/tone/5}{Brightness adds a constant.}
+\pair{image-processing/tone/6}{Gamma \(2\) takes square roots and lifts the
+shadows.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{The contrast, brightness, and gamma curve is Mathilda's own
+documented formula. Mathematica does not publish the exact curve its
+\mcode{ImageAdjust} uses, so parametric adjustments may differ from Mathematica's
+in the last digits or more. The plain stretch has no such ambiguity.}
+
+The gamma parameter bends the ramp without moving its ends. From the top: gamma
+\(\tfrac12\), the untouched ramp, gamma \(2\), and contrast \(+1\), which
+saturates both ends:
+
+\plotcell[0.7\linewidth]{image-processing/gamma}
+
+\subsection{The histogram, and equalising it}
+
+\B{ImageLevels} returns the histogram as data, a list of \(\{\text{level},
+\text{count}\}\) pairs. The result is data you can compute with:
+
+\begin{codepairs}
+\pair{image-processing/tone/7}{A bit image has two natural levels. Here two
+pixels are \(0\) and four are \(1\).}
+\pair{image-processing/tone/8}{With \(4\) bins, each pixel counts at the nearest
+of the levels \(0, \tfrac13, \tfrac23, 1\).}
+\pair{image-processing/tone/9}{\B{HistogramTransform} spreads four distinct
+values evenly over \([0,1]\).}
+\end{codepairs}
+
+\index{histogram equalisation}The last line is \emph{histogram equalisation}. If
+\(F\) is the cumulative distribution of the pixel values, so \(F(v)\) is the
+fraction of pixels no brighter than \(v\), the transform replaces each value \(v\)
+by \(F(v)\). The result is as close to uniformly distributed as the data allows.
+Four equally common values go to \(\tfrac14, \tfrac12, \tfrac34, 1\) regardless of
+where they started.
+
+The difference between a stretch and equalisation shows on an image whose values
+are crowded into a narrow band. Below, from the top: the original, the stretch,
+and the equalised image. The stretch is linear, so the disk and the background
+keep their relative contrast. Equalisation gives each grey level screen space in
+proportion to how many pixels use it. The large background gets most of the
+range, and the fine banding shows the \(256\) bins.
+
+\plotcell[0.4\linewidth]{image-processing/tone}
+
+\calloutnote{Under the hood}{\texttt{src/imagecolor.c} computes the equalising
+map from the Rec.~601 luminance and applies it to a colour image as a ratio,
+multiplying every channel of a pixel by the same factor. Equalising each channel
+separately would change the balance between them and shift the hue. The
+\mcode{ImageAdjust} stretch takes \(0.76\) ms on a \(512\times512\) image against
+\(7.7\) ms for scikit-image's \mcode{rescale\_intensity}, and \mcode{ImageLevels}
+takes \(0.66\) ms against \(1.6\) ms for NumPy's \mcode{histogram}.}
+
+\section{Colour}
+\label{sec:img-colourops}
+
+\mcode{ColorConvert} reduces a colour image to grey. The three primaries show the
+Rec.~601 weights directly: pure green is the brightest, pure blue the darkest.
+
+\plotcell[0.7\linewidth]{image-processing/grayscale}
+
+\subsection{Quantisation by median cut}
+
+\B{ColorQuantize} reduces an image to at most \(n\) colours. It uses
+\emph{median cut}\index{median cut}\index{colour quantisation}. Think of every
+pixel as a point in the RGB cube. Start with one box around all of them. Repeatedly
+take the box whose widest single channel spans the largest range, and split it at
+the median of that channel. When there are \(n\) boxes, replace every pixel by the
+mean colour of its box.
+
+\begin{codepairs}
+\pair{image-processing/colourops/1}{Two clusters of grey, split into two colours.
+Each pair collapses to its mean.}
+\end{codepairs}
+
+On the colour ramp below, two colours split the red axis, four split red and
+green, and sixteen begin to follow the diagonal of the blue channel:
+
+\plotcell[\linewidth]{image-processing/quantize}
+
+\calloutnote{Theory}{\(k\)-means clustering gives a palette with lower total
+error than median cut, but it starts from random centres. Its palette would depend
+on the state of the random generator, so it could not be tested or documented as
+a fixed result. Median cut is deterministic. Splitting the box with the widest
+spread, rather than the box with the most pixels, puts palette entries where the
+colours actually differ.}
+
+\subsection{Replacing colours, and the alpha channel}
+
+\B{ColorReplace} replaces every pixel within a Euclidean distance of a colour.
+The default tolerance is \(0.02\):
+
+\begin{codepairs}
+\pair{image-processing/colourops/2}{Pure red, an almost-red, blue, and white.}
+\pair{image-processing/colourops/3}{Only pure red is replaced. The almost-red
+pixel is \(0.042\) away, outside the default tolerance.}
+\pair{image-processing/colourops/4}{A tolerance of \(0.05\) catches it too.}
+\end{codepairs}
+
+\plotcell[0.5\linewidth]{image-processing/colorreplace}
+
+With several rules, the nearest target colour wins, so the answer does not depend
+on the order in which the rules are listed.
+
+An \emph{alpha channel}\index{alpha channel} records opacity. \B{AlphaChannel}
+reads it, \B{SetAlphaChannel} attaches one, and \B{RemoveAlphaChannel} either
+drops it or composites the image over a background:
+
+\begin{codepairs}
+\pair{image-processing/colourops/5}{An image without alpha is fully opaque, so
+its alpha channel is all ones.}
+\pair{image-processing/colourops/6}{A white image at half opacity.}
+\pair{image-processing/colourops/7}{Grey plus alpha is two channels.}
+\pair{image-processing/colourops/8}{Composited over black, half-transparent white
+is grey.}
+\pair{image-processing/colourops/9}{Dropping the alpha forgets the transparency
+and leaves white.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{\mcode{ColorConvert} currently converts only to
+\mcode{"Grayscale"} (or \mcode{"Gray"}). Other colour spaces such as
+\mcode{"HSB"} and \mcode{"LAB"} leave the call unevaluated.}
+
+\section{Convolution}
+\label{sec:img-convolution}
+
+Most filters are linear. Each output pixel is a weighted sum of the input pixels
+around it, with the same weights everywhere. Such an operation is a
+\emph{convolution}\index{convolution}. For an image \(f\) and a kernel \(k\) whose
+centre is at index \((0, 0)\),
+\[
+  (f * k)[y, x] = \sum_{i, j} k[i, j]\, f[y - i,\, x - j].
+\]
+The minus signs matter. They mean the kernel is \emph{reflected} before it is slid
+across the image. The same sum with plus signs is a
+\emph{correlation}\index{correlation}. \B{ImageConvolve} computes the first and
+\B{ImageCorrelate} the second:
+
+\begin{codepairs}
+\pair{image-processing/convolve/1}{A single bright pixel, a \emph{delta}.}
+\pair{image-processing/convolve/2}{Convolving a delta reproduces the kernel. The
+delta response of a filter \emph{is} its kernel.}
+\pair{image-processing/convolve/3}{Correlation gives the kernel reversed.}
+\pair{image-processing/convolve/4}{A constant image convolved with a kernel that
+sums to \(1\) stays constant, border included.}
+\pair{image-processing/convolve/5}{A kernel summing to \(3\) triples the
+brightness.}
+\pair{image-processing/convolve/6}{The result is always a real image, even for a
+byte input.}
+\end{codepairs}
+
+Convolution and correlation agree on any symmetric kernel, such as a Gaussian or a
+box, which is why confusing them is easy. They differ on an asymmetric kernel, as
+lines 2 and 3 show. Line 4 depends on the border rule. Every filter in Mathilda
+replicates the edge pixel, the \mcode{"Fixed"} rule of \mcode{ImagePad}, so a
+constant image has constant neighbours everywhere.
+
+\calloutnote{Theory}{Convolution is the natural operation because it commutes
+with translation: shifting the image and then filtering gives the same result as
+filtering and then shifting. By the convolution theorem, convolution becomes
+pointwise multiplication after a Fourier transform,
+\(\widehat{f * k} = \hat f \cdot \hat k\). A blur is therefore a filter that
+multiplies high spatial frequencies by small numbers, and \(\hat k\) is its
+frequency response.}
+
+\subsection{Gaussian and box kernels}
+
+The two standard smoothing kernels are the Gaussian and the box.
+\B{GaussianMatrix}\mcode{[r]} gives a \((2r+1)\times(2r+1)\) Gaussian with
+standard deviation \(r/2\), normalised to sum to one. \B{BoxMatrix}\mcode{[r]} is a
+matrix of ones, unnormalised as in Mathematica. \B{GaussianFilter} and
+\B{MeanFilter} are the corresponding filters:
+
+\begin{codepairs}
+\pair{image-processing/gauss/1}{A radius-1 Gaussian. The centre carries most of
+the weight.}
+\pair{image-processing/gauss/2}{It sums to exactly one at any radius.}
+\pair{image-processing/gauss/3}{The box is all ones, so it brightens by a factor
+of nine unless you divide.}
+\pair{image-processing/gauss/4}{A delta in a \(5\times5\) image.}
+\pair{image-processing/gauss/5}{Filtering the delta reproduces
+\mcode{GaussianMatrix[1]}, up to rounding in the last bit.}
+\pair{image-processing/gauss/6}{\mcode{GaussianFilter} is the same computation
+as \mcode{ImageConvolve} with \mcode{GaussianMatrix}, bit for bit.}
+\pair{image-processing/gauss/7}{\mcode{MeanFilter} spreads the delta evenly over
+the \(3\times3\) window.}
+\pair{image-processing/gauss/8}{It agrees exactly with the normalised box
+kernel.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Normalising a truncated Gaussian by the analytic constant
+\(1/(2\pi\sigma^2)\) leaves its sum slightly below one, because the tails beyond
+the kernel's edge are missing. Every pass through such a filter would darken the
+image a little. \mcode{GaussianMatrix} divides by the sum of the entries it
+actually has, which is why line 2 prints exactly \(1.0\).}
+
+Increasing the radius removes finer and finer detail. On the zone plate the outer
+rings, which carry the highest frequencies, go first. From the left: radius \(0\)
+(no change), \(8\), \(16\), and \(32\).
+
+\plotcell[\linewidth]{image-processing/gaussian}
+
+\subsection{Separability}
+\label{ssec:img-separable}
+
+A direct \((2r+1)\times(2r+1)\) convolution costs \((2r+1)^2\) multiplications per
+pixel. For most smoothing kernels that is far more than necessary.
+
+\begin{definition}
+\index{separable kernel}
+A kernel \(k\) is \emph{separable} if it is an outer product,
+\(k[i, j] = u[i]\, v[j]\), which is to say a matrix of rank one.
+\end{definition}
+
+A separable convolution factors into a pass down the columns with \(u\) followed
+by a pass along the rows with \(v\). The cost falls from \((2r+1)^2\) to
+\(2(2r+1)\) per pixel: at radius \(8\), from \(289\) multiplications to \(34\).
+The Gaussian is separable because
+\(e^{-(x^2+y^2)/2\sigma^2} = e^{-x^2/2\sigma^2} e^{-y^2/2\sigma^2}\). So is the box.
+
+\calloutnote{Under the hood}{\mcode{ImageConvolve} tests \emph{every} kernel for
+rank one, whatever its origin. It pivots on the entry of largest magnitude, so a
+kernel with zero corners (every derivative kernel has them) still factors, and it
+checks each entry against the product to a relative tolerance of \(10^{-12}\). A
+Gaussian factors to about \(10^{-16}\), so real separable kernels pass easily,
+while a kernel of rank two fails by many orders of magnitude. Treating a rank-two
+kernel as separable would give a completely different filter. Putting the test in
+\mcode{ImageConvolve}, which \mcode{GaussianFilter} calls, is what keeps line 6
+above an identity under \mcode{===}.}
+
+\calloutnote{Performance}{At \(512\times512\), a separable Gaussian takes
+\(1.48\) ms at radius \(2\) and \(3.44\) ms at radius \(8\). SciPy's general
+\mcode{ndimage.convolve}, which does not detect separability, takes \(2.5\) ms and
+\(53.2\) ms, while its dedicated \mcode{gaussian\_filter} takes \(1.6\) ms and
+\(3.3\) ms (\texttt{docs/spec/builtins/image-processing.md}, ``Separable
+kernels''). In Mathilda any rank-one kernel gets the fast path automatically.}
+
+\subsection{Large kernels and the Fourier transform}
+
+A kernel that is neither separable nor small is a candidate for the fast Fourier
+transform, by the convolution theorem. A \emph{motion blur}\index{motion blur}
+is a good example. Averaging along a diagonal line, \mcode{IdentityMatrix[61]/61.},
+has rank \(61\), so it cannot be factored:
+
+\plotcell[0.8\linewidth]{image-processing/motion}
+
+\calloutnote{Under the hood}{The dispatcher in \texttt{src/imagefilter.c} tries
+three methods in order: the separable factorisation, then the transform if a cost
+model predicts it is cheaper, then the direct loop. A transform computes
+\emph{circular} convolution, which would wrap the right edge of the image into
+the left. To prevent that, the image is first padded by replication to
+\(h + k_h - 1\) rows and \(w + k_w - 1\) columns, so no output pixel can read a
+wrapped value, and the answer is read from a shifted window of the result.
+Measured at \(512\times512\), the transform costs about \(2.7\) ms whatever the
+kernel size, while the direct loop costs \(10.6\) ms for \(9\times9\) and
+\(199\) ms for \(32\times32\). The crossover is set at \(7\times7\). Below it the
+direct loop is kept, so small kernels stay bit-exact.}
+
+\subsection{Sharpening}
+\label{ssec:img-sharpen}
+
+Sharpening is the reverse of smoothing: it amplifies the high frequencies that a
+blur attenuated. A standard sharpening kernel is
+\[
+  \begin{pmatrix} 0 & -1 & 0 \\ -1 & 5 & -1 \\ 0 & -1 & 0 \end{pmatrix}
+  = \delta - \nabla^2_{\text{discrete}},
+\]
+the identity minus the five-point discrete Laplacian. It leaves flat regions
+unchanged (the entries sum to one) and exaggerates any difference between a pixel
+and its neighbours. Applied to a blurred image, it restores some of the edge
+contrast:
+
+\plotcell[0.8\linewidth]{image-processing/sharpen}
+
+\calloutnote{Pitfall}{Sharpening cannot restore information that the blur
+destroyed. It steepens the transitions that remain, and it amplifies noise at the
+same time, because noise is high-frequency too. Results above \(1\) and below
+\(0\) are kept in the real image and are only clipped when the image is
+exported.}
+
+\section{Rank filters and noise}
+\label{sec:img-rank}
+
+A \emph{rank filter}\index{rank filter} sorts the values in each window and
+takes one of them. \B{MedianFilter} takes the middle one. A median is not a
+weighted sum, so it is not a convolution, and it behaves differently on outliers:
+
+\begin{codepairs}
+\pair{image-processing/rank/1}{One bright outlier in a flat grey field.}
+\pair{image-processing/rank/2}{The median removes it completely.}
+\pair{image-processing/rank/3}{The mean spreads it over the whole window.}
+\pair{image-processing/rank/4}{A \(3\times3\) window of the numbers
+\(1..9\).}
+\pair{image-processing/rank/5}{Its median is \(5\). The median of the three row
+medians is \(4\).}
+\pair{image-processing/rank/6}{\mcode{MedianFilter} gives the true median.}
+\end{codepairs}
+
+Lines 5 and 6 show that the median is not separable. A sum, a maximum, and a
+minimum over a rectangle can each be computed row by row and then column by
+column, because they do not depend on how the values are grouped. A median depends
+on each value's rank within the whole window, and grouping loses that
+information. The shortcut in line 5 is fast and wrong.
+
+The practical case is \emph{salt-and-pepper noise}\index{noise!salt-and-pepper},
+where a fraction of pixels are forced to black or white. Below, from the top: the
+noisy image, a \(3\times3\) mean filter, and a \(3\times3\) median filter. The
+mean smears each outlier into a grey blotch. The median removes almost all of them
+and keeps the edges sharp.
+
+\plotcell[0.4\linewidth]{image-processing/median}
+
+\calloutnote{Performance}{The window is sorted by insertion sort. For the radii
+used in practice (\(1\) to \(3\), windows of \(9\) to \(49\) values) a small
+contiguous sort beats a histogram or running median on constant factors. At
+\(512\times512\), radius \(1\) takes \(3.13\) ms against SciPy's \(6.8\) ms, and
+radius \(2\) takes \(10.27\) ms against \(15.3\) ms. The cost grows with the
+window, so at large radii a histogram method would win.}
+
+\section{Derivatives, edges, and corners}
+\label{sec:img-edges}
+
+\subsection{Derivative filters}
+
+An edge is where brightness changes quickly, and edge detection therefore
+starts with derivatives. The filter \B{DerivativeFilter} with orders \(\{n, m\}\) takes the \(n\)th
+derivative down the rows and the \(m\)th across the columns. Each is a separable
+kernel built from three one-dimensional stencils:
+\[
+  \text{order } 0:\ \tfrac14(1, 2, 1), \qquad
+  \text{order } 1:\ \tfrac12(-1, 0, 1), \qquad
+  \text{order } 2:\ (1, -2, 1).
+\]
+The smoothing stencil of order \(0\) is applied along the other axis, so order
+\(\{0, 1\}\) is the Sobel operator for \(\partial/\partial x\).
+
+\begin{codepairs}
+\pair{image-processing/derivs/1}{A ramp rising by \(0.1\) per pixel.}
+\pair{image-processing/derivs/2}{The \(x\) derivative is the slope, \(0.1\). The
+ends are halved because the replicated border is flat.}
+\pair{image-processing/derivs/3}{Nothing changes down the rows.}
+\pair{image-processing/derivs/4}{A vertical step from \(0\) to \(1\).}
+\pair{image-processing/derivs/5}{The central difference spreads the jump over two
+pixels.}
+\pair{image-processing/derivs/6}{\B{GradientFilter} is the magnitude
+\(\sqrt{f_x^2 + f_y^2}\).}
+\end{codepairs}
+
+\calloutnote{Pitfall}{The textbook Sobel kernel has integer entries
+\((1,2,1)\otimes(-1,0,1)\) and reports a gradient eight times the true slope.
+Mathilda's stencils are normalised, so a ramp of slope \(0.1\) reports \(0.1\). The
+ranking of edges is the same either way, but thresholds taken from a textbook
+that uses the integer kernel must be divided by eight.}
+
+The gradient magnitude is used, and not \(|f_x| + |f_y|\), because the magnitude
+does not depend on the edge's orientation. A diagonal edge shows the difference:
+
+\begin{codepairs}
+\pair{image-processing/derivs/8}{A step along the diagonal.}
+\pair{image-processing/derivs/9}{Both partial derivatives have size \(0.375\) at
+the edge.}
+\pair{image-processing/derivs/10}{The magnitude is \(0.53\). The absolute sum would
+report \(0.75\), a factor \(\sqrt2\) larger, only because the edge is at
+\(45^\circ\).}
+\end{codepairs}
+
+On a picture, the \(x\) derivative (top) responds to vertical edges with a sign:
+white where brightness rises to the right, black where it falls. Zero is mid-grey,
+after \mcode{ImageAdjust} has mapped the signed range onto \([0,1]\) for display.
+The \(y\) derivative (middle) responds to horizontal edges. The magnitude (bottom)
+is the outline in every direction.
+
+\plotcell[0.4\linewidth]{image-processing/derivatives}
+
+\subsection{Canny edge detection}
+
+\B{EdgeDetect} implements the \emph{Canny detector}\index{Canny edge detector}. It
+has four stages, and each one fixes a failure of the one before:
+
+\begin{enumerate}
+\item \textbf{Smooth.} Differencing amplifies noise, so the image is first blurred
+with a Gaussian, radius \(2\) by default.
+\item \textbf{Gradient.} Magnitude and direction come from the normalised Sobel
+pair.
+\item \textbf{Non-maximum suppression.} The magnitude forms a ridge several pixels
+wide. A pixel is kept only if it is a maximum along the gradient direction, which
+thins the ridge to one pixel.
+\item \textbf{Hysteresis.} A single threshold either breaks weak stretches of a
+long edge or admits noise. Canny uses two. A pixel above the high threshold is an
+edge, and a pixel above the low threshold is kept if it is connected to one.
+\end{enumerate}
+
+\begin{codepairs}
+\pair{image-processing/derivs/7}{With no smoothing, the step in the previous
+session gives an edge exactly one pixel wide.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The one-pixel width depends on a detail. The central
+difference of a clean step is an even plateau, \(0.5\) at two adjacent pixels (line
+5 above). A test of the form ``at least both neighbours'' keeps both and draws a
+two-pixel edge. \texttt{src/imagefilter.c} compares strictly against the backward
+neighbour and loosely against the forward one, so ties resolve to one side. The
+high threshold defaults to Otsu's threshold (Section~\ref{sec:img-threshold}) on
+the \emph{suppressed} magnitude, and the low threshold is \(0.4\) times the high.
+scikit-image's \mcode{canny} draws the same synthetic step two pixels wide and
+discards border rows. At \(512\times512\) Mathilda takes \(9.1\) ms and
+scikit-image \(19.9\) ms.}
+
+The smoothing stage matters most on noisy data. Below, from the top: an image
+with uniform noise added, Canny with no smoothing, and Canny with smoothing
+radius \(4\). Without smoothing, the noise produces edges everywhere.
+
+\plotcell[0.4\linewidth]{image-processing/canny}
+
+\subsection{Corners}
+
+A corner is a point where the brightness changes in two independent directions.
+The standard tool is the \emph{structure tensor}\index{structure tensor}
+\[
+  M = \begin{pmatrix}
+    \langle f_x^2 \rangle & \langle f_x f_y \rangle \\
+    \langle f_x f_y \rangle & \langle f_y^2 \rangle
+  \end{pmatrix},
+\]
+where \(\langle\cdot\rangle\) is a Gaussian-weighted average over a window. Both
+eigenvalues of \(M\) are small on a flat region. On a straight edge every
+gradient in the window is parallel, \(M\) has rank one, and one eigenvalue is
+zero. At a corner both are large. \B{CornerFilter} gives the smaller eigenvalue
+\(\lambda_{\min}\) (the Shi--Tomasi response) by default, or Harris's
+\(\det M - 0.04 \operatorname{tr}(M)^2\). \B{ImageCorners} returns the positions of
+the strongest local maxima:
+
+\begin{codepairs}
+\pair{image-processing/corners/1}{A bright square.}
+\pair{image-processing/corners/2}{Its four corners, each given as a row and a
+column.}
+\pair{image-processing/corners/3}{A straight vertical edge.}
+\pair{image-processing/corners/4}{Its Shi--Tomasi response is exactly zero
+everywhere.}
+\pair{image-processing/corners/5}{The Harris response goes negative on the
+edge.}
+\pair{image-processing/corners/6}{A checkerboard of \(6\times6\) squares.}
+\pair{image-processing/corners/7}{Its nine interior corners.}
+\pair{image-processing/corners/8}{Rotating the image rotates the response. The
+two orders agree to rounding.}
+\end{codepairs}
+
+The response of the shapes image is bright at the four corners of the rectangle.
+The circle also responds, in a dotted ring. A digitised circle is a staircase of
+tiny steps, and each step is a small corner.
+
+\plotcell[0.7\linewidth]{image-processing/corners}
+
+\calloutnote{Pitfall}{\mcode{ImageCorners} returns \(\{\text{row},
+\text{column}\}\) positions that index \mcode{ImageData} directly. Mathematica
+returns \(\{x, y\}\) measured from the bottom left. The featured example on
+template matching converts between the two.}
+
+\calloutnote{Under the hood}{\(\lambda_{\min}\) is computed as
+\(\tfrac12\bigl(S_{xx} + S_{yy} - \sqrt{(S_{xx}-S_{yy})^2 + 4S_{xy}^2}\bigr)\). The
+form \(\sqrt{\operatorname{tr}^2 - 4\det}\) is algebraically equal, but
+cancellation can make its argument slightly negative and produce a NaN.
+\mcode{ImageCorners} applies \(3\times3\) non-maximum suppression, then the
+threshold (a fraction of the largest response, \(0.05\) by default), then an
+optional minimum separation, choosing greedily from the strongest down. At
+\(512\times512\) the positions take \(6.01\) ms against \(29.8\) ms for
+scikit-image's \mcode{corner\_shi\_tomasi} with \mcode{corner\_peaks}.}
+
+\subsection{Template matching}
+\label{ssec:img-ncc}
+
+To find a small pattern \(t\) inside an image, slide it across and score each
+position. Plain correlation is a poor score because it rewards brightness: a white
+patch beats a correct but darker match. The \emph{normalised cross-correlation}
+\index{normalised cross-correlation} subtracts the mean of each window and divides
+by the standard deviations,
+\[
+  \operatorname{NCC}(y, x) =
+  \frac{\sum (f - \bar f_{w})(t - \bar t)}
+       {\sqrt{\sum (f - \bar f_{w})^2 \sum (t - \bar t)^2}},
+\]
+where the sums run over the window \(w\) at \((y, x)\). The score lies in
+\([-1, 1]\), and it is unchanged if the image is multiplied by a positive constant
+or has a constant added:
+
+\begin{codepairs}
+\pair{image-processing/ncc/1}{A noise image, \(40\) wide and \(30\) high.}
+\pair{image-processing/ncc/2}{The template is a \(7\times7\) crop centred at row
+\(14\), column \(24\).}
+\pair{image-processing/ncc/3}{Score every position.}
+\pair{image-processing/ncc/4}{The best match is at the crop's centre, with a
+score of \(1\).}
+\pair{image-processing/ncc/5}{Paint a white block into the lower left\ldots}
+\pair{image-processing/ncc/6}{\ldots and change the contrast and offset of the
+whole image.}
+\pair{image-processing/ncc/7}{Plain correlation\ldots}
+\pair{image-processing/ncc/8}{\ldots now peaks inside the white block.}
+\pair{image-processing/ncc/9}{The normalised score\ldots}
+\pair{image-processing/ncc/10}{\ldots still finds the true match.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The definition needs the window sum and the window
+sum of squares at every position. Using the identities
+\(\sum (f - \bar f)(t - \bar t) = \sum f t - \bar t \sum f\) and
+\(\sum (f - \bar f)^2 = \sum f^2 - (\sum f)^2/m\), with \(m\) the number of pixels
+in the window, Mathilda reads both from \emph{summed-area tables}\index{summed-area
+table}. Each window sum then costs four lookups whatever the template size. The
+remaining cross term \(\sum f t\) is an ordinary correlation and goes through the
+Fourier path. At \(512\times512\) with a \(32\times32\) template, matching takes
+\(3.55\) ms against \(146.5\) ms for the same algorithm in NumPy and SciPy.}
+
+\calloutnote{Pitfall}{The template is passed as a matrix of samples, as in line 2,
+not as an \mcode{Image}. A window with no variation has no shape to compare and
+scores \(0\).}
+
+\section{Thresholding}
+\label{sec:img-threshold}
+
+\emph{Binarisation}\index{binarisation} turns a grey image into a bit image,
+separating foreground from background. \B{Binarize} with a number \(t\) sets
+every pixel strictly above \(t\) to \(1\). With no number, it chooses \(t\) by
+\emph{Otsu's method}\index{Otsu's method}, which \B{FindThreshold} exposes on its
+own.
+
+\begin{theorem}[Otsu, 1979]
+Split the pixels at a threshold \(t\) into two classes with weights \(w_0, w_1\)
+(the fractions of pixels in each) and means \(\mu_0, \mu_1\). Minimising the
+weighted within-class variance \(w_0\sigma_0^2 + w_1\sigma_1^2\) is equivalent to
+maximising the between-class variance
+\[
+  \sigma_B^2(t) = w_0\, w_1\, (\mu_0 - \mu_1)^2 .
+\]
+\end{theorem}
+
+The equivalence holds because the total variance is the sum of the two, and the
+total does not depend on \(t\). The between-class form needs only running sums,
+so one pass over a \(256\)-bin histogram finds the best threshold.
+
+\begin{codepairs}
+\pair{image-processing/threshold/1}{Two clusters of values, around \(0.15\) and
+\(0.85\).}
+\pair{image-processing/threshold/2}{Otsu's threshold falls between the clusters,
+at a histogram bin level.}
+\pair{image-processing/threshold/3}{The two clusters separate.}
+\pair{image-processing/threshold/4}{A pixel exactly at the threshold becomes
+\(0\): the comparison is strict.}
+\pair{image-processing/threshold/5}{The result is a bit image.}
+\end{codepairs}
+
+A single threshold fails when the lighting varies across the image. If one side
+of a page is darker than the other, no one number separates ink from paper on both
+sides. \B{LocalAdaptiveBinarize}\mcode{[img, r, \{c1, c2, c3\}]} compares each pixel
+with its own neighbourhood instead. The threshold at each pixel is
+\[
+  T(y, x) = c_1\, \mu_r(y, x) + c_2\, \sigma_r(y, x) + c_3 ,
+\]
+where \(\mu_r\) and \(\sigma_r\) are the mean and standard deviation over the
+\((2r+1)\times(2r+1)\) window. The default \(\{1, 0, 0\}\) is Bradley's method,
+and a negative \(c_2\) gives Sauvola's.
+
+\begin{codepairs}
+\pair{image-processing/threshold/6}{A checkerboard under a strong lighting ramp.}
+\pair{image-processing/threshold/7}{Otsu's global threshold turns the left side
+entirely black.}
+\pair{image-processing/threshold/8}{The local threshold keeps both tones
+there.}
+\end{codepairs}
+
+Below, from the top: the unevenly lit checkerboard, Otsu's global threshold, and
+the local threshold at radius \(32\).
+
+\plotcell[0.7\linewidth]{image-processing/binarize}
+
+\calloutnote{Performance}{The window mean and variance come from summed-area
+tables, so the cost per pixel does not depend on \(r\). At \(512\times512\),
+radius \(2\) takes \(0.58\) ms and radius \(32\) takes \(0.73\) ms, against about
+\(1.7\) ms for scikit-image's \mcode{threshold\_local} at every radius. An earlier
+version built the result as \(262{,}144\) separate integer expressions, and that
+construction took longer than the thresholding. Emitting a packed buffer instead
+also made global \mcode{Binarize} \(23\times\) faster, from \(6.47\) ms to
+\(0.278\) ms.}
+
+\calloutnote{Pitfall}{With the default \(\{1, 0, 0\}\) the threshold \emph{is} the
+local mean, and on a smooth ramp a pixel can equal its local mean. The decision on
+such a pixel then depends on the last bit of the arithmetic. A small offset, such
+as \(c_3 = -0.05\), moves the threshold away from the tie. The featured example on
+page binarisation uses one.}
+
+\section{Mathematical morphology}
+\label{sec:img-morphology}
+
+\emph{Mathematical morphology}\index{mathematical morphology} studies shapes by
+probing them with a small set, the \emph{structuring element} \(B\). For a grey
+image \(f\), the two basic operations are
+\[
+  (f \oplus B)(p) = \max_{b \in B} f(p + b), \qquad
+  (f \ominus B)(p) = \min_{b \in B} f(p + b).
+\]
+\B{Dilation} (\(\oplus\)) takes the maximum over the element, so bright regions
+grow. \B{Erosion} (\(\ominus\)) takes the minimum, so they shrink. On a bit
+image these are the Minkowski sum and difference of the foreground with \(B\).
+\B{Opening} erodes and then dilates. It removes bright features smaller than
+\(B\) and restores the rest. \B{Closing} dilates and then erodes. It fills dark
+features smaller than \(B\).
+
+\begin{codepairs}
+\pair{image-processing/morph/1}{A single bright pixel.}
+\pair{image-processing/morph/2}{Dilated by a cross, it becomes the cross. The
+output of a dilated point \emph{is} the element.}
+\pair{image-processing/morph/3}{Only the element's support matters. A radius
+\(1\), a \mcode{BoxMatrix}, and a box of fives give the same result.}
+\pair{image-processing/morph/4}{A random grey image for testing the laws.}
+\pair{image-processing/morph/5}{Duality: erosion is dilation of the negative,
+negated. The error is exactly zero.}
+\pair{image-processing/morph/6}{Four operations at radius \(2\)\ldots}
+\pair{image-processing/morph/7}{\ldots bracket the image pixel by pixel: erosion
+\(\le\) opening \(\le f \le\) closing \(\le\) dilation.}
+\pair{image-processing/morph/8}{Opening is idempotent. Opening twice is opening
+once.}
+\end{codepairs}
+
+These laws are the right tests of an implementation because each fails for a
+different bug. Duality fails if the maximum and minimum are swapped or if the
+border rule treats bright and dark differently. The ordering fails if the element
+is off-centre. Idempotence fails if the pair is composed wrongly. Replicate padding
+is what makes all three hold at the border as well as in the interior.
+
+A speckled disk shows all four operations. Top row: the original, erosion, and
+dilation. Bottom row: the original, opening, and closing. Erosion eats into the
+disk through every hole. Dilation grows every speck of noise. Opening removes the
+isolated specks outside the disk, and closing fills the holes inside it.
+
+\plotcell[0.8\linewidth]{image-processing/morphology}
+
+\calloutnote{Theory}{The maximum over a window of width \(k\) can be computed with
+three comparisons per pixel whatever \(k\) is. This is the \emph{van
+Herk--Gil--Werman} algorithm\index{van Herk--Gil--Werman algorithm}. Cut the line
+into blocks of length \(k\). Within each block compute a running maximum forwards
+and another backwards. Any window of length \(k\) overlaps exactly two adjacent
+blocks, so its maximum is the larger of the backward maximum at its start and the
+forward maximum at its end. Because the maximum is associative, the result is
+exact. A square element is separable, so the same idea handles two dimensions one
+axis at a time.}
+
+\calloutnote{Performance}{With van Herk--Gil--Werman, dilation of a
+\(512\times512\) image costs about \(2.0\) ms at every radius from \(2\) to \(32\),
+against \(2.3\) to \(2.4\) ms for SciPy's \mcode{grey\_dilation}
+(\texttt{docs/spec/builtins/image-processing.md}, ``Morphology'').}
+
+\calloutnote{Pitfall}{In Mathilda the morphological operations return a
+\mcode{"Real"} image even when the input is a bit image. The values are still
+exactly \(0\) and \(1\), but \mcode{ImageData[result, "Bit"]} is refused because
+\mcode{"Bit"} is not the result's type. Read the pixels with plain
+\mcode{ImageData}, or apply \mcode{Binarize} if a bit image is needed.}
+
+\subsection{Connected components}
+
+\B{MorphologicalComponents} labels the connected regions of the foreground. It
+returns an integer matrix: \(0\) for the background, and \(1, 2, \dots\) for the
+components in the order they are first met in a raster scan. Whether two pixels
+touching only at a corner are connected is a choice, and the option
+\mcode{CornerNeighbors} makes it:
+
+\begin{codepairs}
+\pair{image-processing/components/1}{With the default 8-connectivity, diagonal
+neighbours join: one component.}
+\pair{image-processing/components/2}{With 4-connectivity they are two.}
+\pair{image-processing/components/3}{A U shape.}
+\pair{image-processing/components/4}{Its two arms are one component, joined at
+the bottom.}
+\pair{image-processing/components/5}{Four isolated corner pixels.}
+\pair{image-processing/components/6}{Four components, and one after dilation.
+Dilation can merge components but never split them.}
+\pair{image-processing/components/7}{A second argument sets the foreground
+threshold.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The U shape is the case that separates a correct
+labelling from a naive one. The scan moves left to right and top to bottom, and
+at each pixel it can see only neighbours already visited. It meets the two arms
+first and gives them different labels, and only the bottom row shows that they
+are connected. Mathilda records such equivalences in a union-find structure during
+the first pass and resolves them in a second pass, which also renumbers the labels
+to \(1..k\) with no gaps.}
+
+The result is a matrix of labels, which can be turned back into an image for
+display. Here each label becomes its own grey level:
+
+\plotcell[0.7\linewidth]{image-processing/components}
+
+\calloutnote{Pitfall}{Labels are indices. Wrapping a label
+matrix in \mcode{Image} unchanged, when its values run up to \(255\), gives a
+byte image, and \mcode{ImageData} would then divide every label by \(255\). The
+figure's input rescales the labels explicitly first. When the function landed, labelling a \(512\times512\)
+image took \(5.2\) ms against SciPy's \(1.2\) ms. Most of that time was spent
+building the output matrix as expressions. The labelling itself was fast.}
+
+\subsection{The distance transform}
+
+\B{DistanceTransform} replaces each foreground pixel by its distance to the
+nearest background pixel. Mathilda computes the \emph{exact} Euclidean distance:
+
+\begin{codepairs}
+\pair{image-processing/distance/1}{A field of foreground with one background pixel
+in the top-left corner.}
+\pair{image-processing/distance/2}{Compute the transform.}
+\pair{image-processing/distance/3}{Three columns across and four rows down is at
+distance exactly \(5\).}
+\pair{image-processing/distance/4}{The diagonal neighbour is at \(\sqrt 2\).}
+\pair{image-processing/distance/5}{The top-left corner of the result.}
+\pair{image-processing/distance/6}{A small disk.}
+\pair{image-processing/distance/7}{A pixel survives one \(3\times3\) erosion
+exactly when its distance is at least \(2\).}
+\end{codepairs}
+
+\calloutnote{Theory}{The classic two-pass \emph{chamfer} transform propagates
+integer step costs and cannot represent \(\sqrt2\), so its diagonal distances are
+a few percent off. Mathilda uses the method of Felzenszwalb and Huttenlocher. The
+squared Euclidean distance is a sum over the axes, so it can be minimised one axis
+at a time. Along one axis the problem is
+\(D(x) = \min_y \bigl((x - y)^2 + g(y)\bigr)\), the lower envelope of a family of
+parabolas that all have the same shape. Any two such parabolas cross exactly once,
+so the envelope can be built in a single sweep with a stack, in linear time. The
+square root is taken once, at the end.}
+
+Rendered after \mcode{ImageAdjust}, the transform of the two shapes brightens
+toward their centres. The ridge lines in the rectangle are its \emph{medial axis},
+the points equidistant from two sides.
+
+\plotcell[0.7\linewidth]{image-processing/distance}
+
+\calloutnote{Performance}{On the same \(512\times512\) mask, the transform takes
+\(2.86\) ms against \(7.3\) ms for SciPy's \mcode{distance\_transform\_edt}, and
+the two agree exactly: both report a maximum of \(6\) and a total of
+\(323{,}895\).}
+
+\subsection{Thinning and pruning}
+
+\B{Thinning} reduces a shape to its \emph{skeleton}\index{skeleton}, a curve one
+pixel wide that keeps the shape's connectivity. \B{Pruning} then shortens the free
+ends of the skeleton, which removes the short spurs that thinning grows at small
+irregularities of the boundary.
+
+\begin{codepairs}
+\pair{image-processing/thin/1}{A bar three pixels thick.}
+\pair{image-processing/thin/2}{Its skeleton is the centre line.}
+\pair{image-processing/thin/3}{Pruning twice removes two pixels from each end.}
+\pair{image-processing/thin/4}{An isolated pixel has no free end, so pruning
+leaves it alone.}
+\pair{image-processing/thin/5}{A grey image is thresholded at \(0.5\) first.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\texttt{src/imagethin.c} uses the
+\emph{Zhang--Suen}\index{Zhang--Suen thinning} algorithm. A pixel may be deleted
+if it has between two and six foreground neighbours and exactly one transition from
+background to foreground as you walk once around its eight neighbours. The two
+subiterations of each pass add different conditions on the north, south, east,
+and west neighbours, so they remove pixels from opposite sides in turn. Deleting
+every removable pixel in a single pass would cut diagonal lines, because two
+diagonal neighbours can each be removable while removing both disconnects the
+shape. The passes repeat until one deletes nothing.}
+
+A thick ring with a spur thins to a one-pixel circle with a whisker, and ten rounds
+of pruning remove the whisker:
+
+\plotcell[0.8\linewidth]{image-processing/thinning}
+
+\section{Composition}
+\label{sec:img-compose}
+
+\B{ImageCompose} lays one image over another. It alpha-composites the overlay onto
+the base, keeps the base's size, and clips whatever falls outside.
+\B{ImageAssemble} tiles a grid of images into one, which is how the figures in
+this chapter place results side by side.
+
+\begin{codepairs}
+\pair{image-processing/compose/1}{A black \(6\times4\) base.}
+\pair{image-processing/compose/2}{A white \(2\times2\) patch.}
+\pair{image-processing/compose/3}{By default the overlay is centred.}
+\pair{image-processing/compose/4}{A position \(\{x, y\}\) places the overlay's
+centre, with \(y\) counted from the \emph{bottom}. An opacity of \(0.5\) gives
+grey.}
+\pair{image-processing/compose/5}{Composing a colour overlay onto a grey base
+gives a colour result.}
+\pair{image-processing/compose/6}{Tiles keep their natural sizes. A gap is left
+blank.}
+\end{codepairs}
+
+Compositing uses the standard \emph{over} operator\index{alpha compositing}: with
+overlay colour \(c_o\) and opacity \(\alpha\) on a base colour \(c_b\), the result
+is \(\alpha c_o + (1 - \alpha) c_b\). Three half-transparent disks placed on a
+gradient show the background through them:
+
+\plotcell[0.6\linewidth]{image-processing/compose}
+
+\calloutnote{Pitfall}{\mcode{ImageCompose} takes positions in Mathematica's image
+coordinates, \(x\) from the left and \(y\) from the bottom, while \mcode{ImageData}
+and \mcode{ImageCorners} count rows from the top. Converting a row \(r\) of an
+image of height \(h\) gives \(y = h - r + 1\). A composition that got this wrong
+would look right on any test image that is symmetric top to bottom.}
+
+\calloutnote{Under the hood}{\texttt{src/imagecompose.c} decides how to combine
+channel counts in one place. A grey image next to a colour image is replicated into
+three equal channels, never padded with zeros, because grey means the same value in
+every channel and zero-padding would turn a grey pixel red.}
+
+\section{Volumes}
+\label{sec:img-volumes}
+
+\B{Image3D} is the three-dimensional version of \mcode{Image}. Its data is a stack
+of slices, depth by height by width, so it is indexed \mcode{[[z, y, x]]}. CT and
+MRI scans, confocal microscopy, and simulation output all come in this form.
+
+\begin{codepairs}
+\pair{image-processing/volume/1}{Two slices of three rows of four voxels. The
+value encodes the position.}
+\pair{image-processing/volume/2}{\mcode{ImageDimensions} is fully reversed. It
+lists width, then height, then depth.}
+\pair{image-processing/volume/3}{A volume is not a plane. \mcode{ImageQ} is false
+and \B{Image3DQ} is true.}
+\pair{image-processing/volume/4}{Slice \(2\), row \(3\), column \(4\) holds
+\(0.234\).}
+\pair{image-processing/volume/5}{A solid ball of radius \(5\).}
+\pair{image-processing/volume/6}{Its voxel sum, and after a Gaussian, an erosion,
+and a dilation. The Gaussian preserves the total exactly.}
+\pair{image-processing/volume/7}{The distance transform works in three
+dimensions: the centre is \(5\) voxels from the outside.}
+\pair{image-processing/volume/8}{Padding adds two voxels on every side of every
+axis.}
+\pair{image-processing/volume/9}{\mcode{Front} reflects along the depth axis, so
+the first slice is now the old second slice.}
+\end{codepairs}
+
+With three axes there are six possible orderings, and a cubic test volume cannot
+tell any of them apart. That is why the session uses extents \(4, 3, 2\).
+
+A slice of a volume is an ordinary image, so \mcode{Part} and \mcode{Image} are
+enough to look inside one. Below are three slices through a ball of radius \(10\)
+(top row), the same slices after a radius-\(2\) dilation (middle), and after a
+radius-\(3\) Gaussian blur (bottom). Each operation acts in all three directions,
+so the slice nearest the edge of the ball (left column) changes the most.
+
+\plotcell[0.45\linewidth]{image-processing/volume}
+
+\calloutnote{Performance}{Separability pays more in three dimensions. A separable
+kernel costs \(3(2r+1)\) multiplications per voxel instead of \((2r+1)^3\): at
+radius \(4\), \(27\) instead of \(729\). On a \(64^3\) volume a radius-\(4\)
+Gaussian takes \(2.92\) ms. SciPy's general \mcode{ndimage.convolve} takes
+\(155.1\) ms and its separable \mcode{gaussian\_filter} \(2.9\) ms
+(\texttt{docs/spec/builtins/image-processing.md}, ``Volumetric convolution'';
+\texttt{benchmarks/69-image3d-fft-convolve} through
+\texttt{benchmarks/78-image3d-reflect} for the other volumetric heads).}
+
+\section{Storage and speed}
+\label{sec:img-speed}
+
+An image operation does very little arithmetic per pixel. A \(3\times3\) blur is
+nine multiply-adds. The cost that dominates is often the movement of data, and in
+a system built on expressions the obvious representation, a nested list of
+numbers, is expensive: each pixel is a separate heap object. Mathilda therefore
+stores the pixels of an image in a machine buffer:
+
+\begin{codepairs}
+\pair{image-processing/storage/1}{A filtered image.}
+\pair{image-processing/storage/2}{Its pixels are an \mcode{NDArray}, a flat
+buffer of machine doubles.}
+\pair{image-processing/storage/3}{\mcode{ImageData} hands them out as an ordinary
+list.}
+\pair{image-processing/storage/4}{Pixels given to \mcode{Image} as a list of
+machine numbers are stored as a buffer too.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Mathilda has two array surfaces (see
+Section~\ref{sec:ds-packed}): a \emph{packed list}, which looks like an ordinary
+\mcode{List}, and a visible \mcode{NDArray}. Images use the visible form. The
+evaluator unpacks a packed list that is still at rest when evaluation finishes,
+which is correct for an ordinary function call but would unpack an image's pixels
+on every evaluation. A visible \mcode{NDArray} is never unpacked that way. The
+image heads are also listed as packed-aware in \texttt{src/pack.c}, so a buffer
+passed between filters is never converted into expressions on the way in.}
+
+The effect of the change is large, and it is measured
+(\texttt{docs/spec/builtins/image-processing.md}, ``Storage: machine buffers'').
+On a \(512\times512\) image, the fixed cost of getting pixels into and out of a
+filter fell from \(4.62\) ms to \(0.98\) ms, and a chain of three
+\mcode{GaussianFilter} calls fell from \(17.3\) ms to \(4.43\) ms.
+Table~\ref{tab:img-bench} collects the comparisons quoted in this chapter. All
+times are for a \(512\times512\) grey image unless stated, on Apple silicon.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}lrlr@{}}
+\toprule
+Operation & Mathilda & Reference & Reference time \\
+\midrule
+Gaussian, radius 8 (separable) & 3.44 & SciPy \texttt{gaussian\_filter} & 3.3 \\
+Gaussian, radius 8 (separable) & 3.44 & SciPy \texttt{convolve} & 53.2 \\
+Resize \(512\to1024\), bilinear & 2.76 & scikit-image \texttt{resize} & 14.3 \\
+Median, radius 1 & 3.13 & SciPy \texttt{ndimage} median & 6.8 \\
+Dilation, radius 16 & 2.03 & SciPy \texttt{grey\_dilation} & 2.3 \\
+Distance transform & 2.86 & SciPy \texttt{distance\_transform\_edt} & 7.3 \\
+Canny edges & 9.1 & scikit-image \texttt{canny} & 19.9 \\
+Corner positions & 6.01 & scikit-image \texttt{corner\_peaks} & 29.8 \\
+Template match, \(32\times32\) & 3.55 & NumPy/SciPy, same algorithm & 146.5 \\
+Local threshold, radius 16 & 0.66 & scikit-image \texttt{threshold\_local} & 1.68 \\
+Contrast stretch & 0.76 & scikit-image \texttt{rescale\_intensity} & 7.7 \\
+Component labelling & 5.20 & SciPy \texttt{label} & 1.2 \\
+Gaussian on \(64^3\), radius 4 & 2.92 & SciPy \texttt{gaussian\_filter} & 2.9 \\
+\bottomrule
+\end{tabular}
+\caption{Image operations in milliseconds. Sources:
+\texttt{docs/spec/builtins/image-processing.md} and the benchmark pairs under
+\texttt{benchmarks/} that it cites. The labelling figure is from when that function
+landed and predates later packing work.}
+\label{tab:img-bench}
+\end{table}
+
+Two rows need comment. The Gaussian is at parity with SciPy's dedicated separable
+routine, and \(15\times\) faster than its general convolution only because that
+routine does not detect separability. Component labelling is the one row where
+Mathilda was slower. The labelling itself took about \(0.6\) ms. The rest was the
+construction of the \(262{,}144\)-entry label matrix as expressions, the same
+bottleneck that the buffer storage removed for images.
+
+\calloutnote{Performance}{Three times in this subsystem an operation ran \(4\) to
+\(23\) times slower than it should have while giving correct answers, because the
+pixels were being converted between buffers and expressions. No correctness test
+can catch that. \mcode{make check-image-packing} now checks mechanically that every
+image-returning head hands back a packed buffer, at both two and three
+dimensions.}
+
+The image heads are containers and are not part of the subset that
+\B{Compile} lowers to machine code:
+
+\begin{codepairs}
+\pair{image-processing/storage/5}{A compiled body that calls an image filter falls
+back to the interpreter.}
+\end{codepairs}
+
+This costs little, because each image head is already a single call into compiled
+C that processes the whole buffer. Put the image operations outside a compiled
+function, and compile only the per-pixel arithmetic of your own that surrounds
+them.
+
+\section{Limitations}
+\label{sec:img-limits}
+
+The image subsystem covers the core of a first course in image processing. It
+differs from Mathematica's in several ways that you will meet quickly:
+
+\begin{itemize}
+\item \mcode{ColorConvert} converts only to grey. There are no HSB, Lab, or other
+colour spaces yet.
+\item Images do not support arithmetic directly. \mcode{Image[\{\{0.2\}\}] +
+Image[\{\{0.1\}\}]} stays unevaluated. Do the arithmetic on \mcode{ImageData}
+and wrap the result in \mcode{Image}, as several figures in this chapter do.
+\item There is no \mcode{ExampleData} test-image library and no
+\mcode{Rasterize}, so test images come from formulas or from files.
+\item \mcode{ImageRotate} does not accept volumes, since a rotation in three
+dimensions needs an axis.
+\item The template of \mcode{ImageCorrelate} is a matrix, not an
+\mcode{Image}.
+\item \mcode{ImageCorners} returns \(\{\text{row}, \text{column}\}\), not
+Mathematica's \(\{x, y\}\).
+\item Morphological operations return real images even for bit input.
+\item Some Mathematica image functions (segmentation by watershed, feature
+descriptors, image alignment) have no counterpart yet.
+\end{itemize}
+
+\section{Featured examples}
+\label{sec:img-featured}
+
+The remaining pages are short worked tasks. Each takes one to three lines of real
+work, and each builds its own synthetic input so that you can reproduce it
+exactly. The input is a stand-in for the real thing: a photograph of coins, a
+scanned page, a radiograph. The operations are the ones you would apply to the
+real image.
+
+\subsection*{Count the coins on a tray}
+
+Twelve coins lie on a ribbed tray. Otsu's threshold separates metal from tray,
+and counting the connected components counts the coins. The whole pipeline is the
+third line:
+
+\plotcell[0.55\linewidth]{image-processing/feat-coins}
+
+\subsection*{Separate touching cells}
+
+Cells in a micrograph often touch, and touching cells merge into one component.
+Here nine discs merge into six. The distance transform is large only near the
+centre of each disc, so keeping the pixels more than \(30\) from the background
+leaves one small core per cell, and the count is right again. From the left: the
+cells, their distance transform, and the cores.
+
+\plotcell[\linewidth]{image-processing/feat-cells}
+
+This works while the overlap between two cells is smaller than their radius.
+Cells that overlap more than that need a watershed segmentation, which Mathilda
+does not yet provide.
+
+\subsection*{Binarise a page under uneven light}
+
+A page photographed under a desk lamp is bright on one side and dark on the other.
+Otsu's global threshold (middle) loses the whole dark half. A local threshold with
+a small offset (bottom) recovers every glyph. On this image the recovered ink
+matches the true ink mask pixel for pixel.
+
+\plotcell[0.7\linewidth]{image-processing/feat-page}
+
+\subsection*{Skeletonise a pen stroke}
+
+Handwriting recognition often works on the centre line of a stroke. \mcode{Thinning} gives the centre line. \mcode{Pruning} then removes
+spurs at the ends. The dot of the ``i'' thins to a single pixel and survives the
+pruning, because an isolated pixel has no free end.
+
+\plotcell[0.7\linewidth]{image-processing/feat-stroke}
+
+\subsection*{Outline a bone in a noisy radiograph}
+
+A long bone in cross-section is a bright shell of cortex around darker marrow. The
+radiograph is noisy, so the smoothing radius of the Canny detector is raised to
+\(6\). Both the outer and the inner boundary of the cortex come out as clean
+closed curves.
+
+\plotcell[0.7\linewidth]{image-processing/feat-xray}
+
+\subsection*{Find a patch in a texture and mark it}
+
+Normalised cross-correlation finds where an \(11\times11\) patch came from in a
+random texture. The peak is reported as \(\{\text{row}, \text{column}\}\).
+\mcode{ImageCompose} counts \(y\) from the bottom, so the frame is placed at
+\(\{\text{col}, 96 - \text{row} + 1\}\). The frame image is transparent except
+for its border, so the texture shows through.
+
+\plotcell[0.6\linewidth]{image-processing/feat-target}
+
+\subsection*{Replace the background}
+
+A mask of the foreground becomes the alpha channel of the image. Composited onto a
+new background, only the masked region of the original remains. The hole in the
+mask lets the new sky show through.
+
+\plotcell[0.7\linewidth]{image-processing/feat-background}
+
+\subsection*{Locate the corners of a calibration board}
+
+Camera calibration starts by finding the inner corners of a chessboard. With a
+minimum separation of \(32\) pixels, \mcode{ImageCorners} returns one position per
+corner, all \(35\) of them. The marks are dilated so that they are visible at
+print size.
+
+\plotcell[0.8\linewidth]{image-processing/feat-chess}
+
+\subsection*{Sharpen with an unsharp mask}
+
+The \emph{unsharp mask}\index{unsharp mask} is the photographer's sharpening
+method: subtract a blurred copy from the image and add the difference back,
+\(f + (f - G * f) = (2\delta - G) * f\). Written as one kernel, it is a single
+convolution. The rings of the softened zone plate regain their contrast.
+
+\plotcell[0.8\linewidth]{image-processing/feat-unsharp}
+
+\subsection*{Make a six-colour poster}
+
+Screen printing uses a few flat inks. Median cut chooses six colours that cover
+the spread of a smooth sunset-coloured field, and every pixel takes the nearest of
+them.
+
+\plotcell[0.8\linewidth]{image-processing/feat-poster}
+
+\subsection*{Look inside a scanned volume}
+
+A CT scan is a volume. This one is a hollow shell with a small ball hidden
+inside. A single slice (left) shows the ring of the shell and the ball as a disk.
+The mean along the depth axis (right) simulates a projection radiograph, in which
+the shell becomes a bright rim and the ball a faint shadow.
+
+\plotcell[0.5\linewidth]{image-processing/feat-ctscan}
+
+\subsection*{Where this connects}
+
+Images draw on much of the rest of the book. Their pixels are the machine buffers
+of Section~\ref{sec:ds-packed}, and \mcode{ImageData} converts them to the ordinary
+lists that every list function accepts. The Fourier transform that speeds up large
+convolutions is the one the numerical chapters use, and the convolution theorem is
+the same theorem there. Random test images use the seeded generator of the rest of
+the system, so every figure here can be reproduced. For drawing plots rather than
+processing rasters, see Chapter~\ref{ch:graphics}, and for other file formats see
+Chapter~\ref{ch:dataio}. For the options of any function in this chapter, type
+\texttt{?Name} at the prompt to read its reference page.
