@@ -81,6 +81,31 @@ bool df_factor_mpz(const mpz_t m, mpz_t** out_primes,
         expr_to_mpz(pair->data.function.args[0], primes[i]);  /* inits primes[i] */
         exps[i] = (unsigned long)pair->data.function.args[1]->data.integer;
         got = i + 1;
+        /* Every base must actually BE prime.  FactorInteger's Automatic method
+         * is bounded, and on a hard composite that survives trial division,
+         * Pollard rho and ECM it returns the cofactor unfactored with exponent
+         * 1 (it warns, FactorInteger::nofac, but it still answers).  Reading
+         * that as a prime factor is how MoebiusMu, PrimeNu, PrimeOmega and
+         * LiouvilleLambda came to return confident WRONG numbers rather than
+         * declining:
+         *
+         *     m = NextPrime[10^40] NextPrime[10^41]   (* a 82-digit semiprime *)
+         *     PrimeQ[m]       False     (* Mathilda knows it is composite *)
+         *     PrimeNu[m]      1         (* true: 2 *)
+         *     PrimeOmega[m]   1         (* true: 2 *)
+         *     MoebiusMu[m]    -1        (* true: 1 *)
+         *
+         * facint.c's own facint_factor_complete already states the contract --
+         * "the caller must then DECLINE rather than trust a possibly-composite
+         * prime" -- but this helper goes through internal_factorinteger and so
+         * never saw the flag.  40 Miller-Rabin rounds, the same bound that
+         * function uses.  A unit base (+-1) is not a prime and not a failure.
+         * Every caller already returns NULL on false, which leaves the head
+         * unevaluated: an honest "I cannot" in place of a wrong integer. */
+        if (mpz_cmpabs_ui(primes[i], 1) != 0 &&
+            mpz_probab_prime_p(primes[i], 40) == 0) {
+            ok = false; break;
+        }
     }
     expr_free(fact);
 

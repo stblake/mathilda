@@ -1,6 +1,64 @@
 Expr* builtin_factor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
+    /* Modulus -> p asks for the factorisation in F_p[x], and it was being
+     * IGNORED -- the option was simply not recognised here, so the polynomial
+     * was factored over Q and the answer came back as if the option were absent:
+     *
+     *     Factor[x^2 + 1, Modulus -> 5]   gave  1 + x^2   (GF(5): (x+2)(x+3))
+     *     Factor[x^4 + 1, Modulus -> 2]   gave  1 + x^4   (GF(2): (1+x)^4)
+     *
+     * A silent wrong answer, and FactorList inherited it verbatim since it
+     * delegates here.  FLINT's nmod_poly_factor was already linked and in use;
+     * flint_nmod_poly_factor_list exposes it.  When the fast path declines -- a
+     * non-word-size or composite modulus, more than one variable, USE_FLINT=0 --
+     * the whole call declines (NULL, head unevaluated) rather than answering
+     * over Q, which is the one outcome that must not come back. */
+    {
+        size_t n = res->data.function.arg_count;
+        Expr* last = res->data.function.args[n - 1];
+        Expr* mod_p = NULL;
+        if (n >= 2 && last->type == EXPR_FUNCTION
+            && last->data.function.head->type == EXPR_SYMBOL
+            && last->data.function.head->data.symbol.name == SYM_Rule
+            && last->data.function.arg_count == 2
+            && last->data.function.args[0]->type == EXPR_SYMBOL
+            && last->data.function.args[0]->data.symbol.name == SYM_Modulus)
+            mod_p = last->data.function.args[1];
+
+        if (mod_p) {
+            if (n != 2 || mod_p->type != EXPR_INTEGER || mod_p->data.integer < 2)
+                return NULL;
+            Expr** vars = NULL; size_t nv = 0, cap = 0;
+            collect_variables(res->data.function.args[0], &vars, &nv, &cap);
+            Expr* x = (nv == 1) ? expr_copy(vars[0]) : NULL;
+            for (size_t i = 0; i < nv; i++) expr_free(vars[i]);
+            free(vars);
+            if (!x) return NULL;                       /* not univariate: decline */
+
+            Expr* fl = flint_nmod_poly_factor_list(res->data.function.args[0], x,
+                                                   (unsigned long)mod_p->data.integer);
+            expr_free(x);
+            if (!fl) return NULL;
+            /* {{c,1},{f1,e1},...}  ->  c f1^e1 ... */
+            size_t np = fl->data.function.arg_count;
+            Expr** terms = malloc(np * sizeof(Expr*));
+            if (!terms) { expr_free(fl); return NULL; }
+            for (size_t i = 0; i < np; i++) {
+                Expr* pr = fl->data.function.args[i];
+                Expr* base = expr_copy(pr->data.function.args[0]);
+                Expr* e    = pr->data.function.args[1];
+                terms[i] = (e->type == EXPR_INTEGER && e->data.integer == 1)
+                    ? base
+                    : internal_power((Expr*[]){ base, expr_copy(e) }, 2);
+            }
+            expr_free(fl);
+            Expr* prod = internal_times(terms, np);
+            free(terms);
+            return prod;
+        }
+    }
+
 #ifdef USE_FLINT
     /* Parametric radical field Q(t..)(sqrt k), k a free symbol: factor over the
      * field via FLINT (sqrt(k) -> S collapse -> multivariate factoring over Q).

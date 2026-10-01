@@ -98,6 +98,52 @@ void test_factorlist_arity() {
     check("FactorList[1, 2, 3, 4]", "FactorList[1, 2, 3, 4]"); /* nonopt */
 }
 
+/* Modulus -> p means the factorisation in F_p[x], and it was being IGNORED:
+ * Factor and FactorList stripped the option and answered over Q, so
+ * Factor[x^2 + 1, Modulus -> 5] gave 1 + x^2 where over GF(5) it is
+ * (x + 2)(x + 3), and Factor[x^4 + 1, Modulus -> 2] gave 1 + x^4 where it is
+ * (1 + x)^4.  A silent wrong answer, not a decline, and FactorList inherited it
+ * because it delegates to Factor.  Now routed through FLINT's nmod_poly_factor.
+ *
+ * The declines matter as much as the answers: where the fast path cannot go
+ * (composite modulus, more than one variable) the head must stay UNEVALUATED
+ * rather than quietly fall back to the factorisation over Q, which is exactly
+ * the wrong answer this fixes. */
+static void test_factorlist_modulus(void) {
+    check("FactorList[x^2 + 1, Modulus -> 5]", "{{1, 1}, {2 + x, 1}, {3 + x, 1}}");
+    check("FactorList[x^4 + 1, Modulus -> 2]", "{{1, 1}, {1 + x, 4}}");
+    check("FactorList[x^3 - x, Modulus -> 7]",
+          "{{1, 1}, {x, 1}, {1 + x, 1}, {6 + x, 1}}");
+    /* the content is carried, not dropped */
+    check("FactorList[2 x^2 + 2, Modulus -> 5]", "{{2, 1}, {2 + x, 1}, {3 + x, 1}}");
+    /* irreducible over GF(2) stays whole */
+    check("FactorList[x^2 + x + 1, Modulus -> 2]", "{{1, 1}, {1 + x + x^2, 1}}");
+
+    check("Factor[x^2 + 1, Modulus -> 5]", "(2 + x) (3 + x)");
+    check("Factor[x^4 + 1, Modulus -> 2]", "(1 + x)^4");
+    check("Factor[x^2 - 2, Modulus -> 7]", "(3 + x) (4 + x)");
+
+    /* declines, NOT an answer over Q */
+    check("Factor[x^2 + 1, Modulus -> 4]", "Factor[1 + x^2, Modulus -> 4]");
+    check("Factor[x y + 1, Modulus -> 5]", "Factor[1 + x y, Modulus -> 5]");
+
+    /* PolynomialGCD had the same hole, and PolynomialExtendedGCD did not:
+     * with the same option the extended form already answered {2 + x, {0, 1}}
+     * while the plain one said 1. */
+    check("PolynomialGCD[x^2 + 1, x + 2, Modulus -> 5]", "2 + x");
+    check("PolynomialGCD[x^2 - 1, x - 1, Modulus -> 5]", "4 + x");
+    check("PolynomialGCD[x^2 + 1, x + 1, Modulus -> 5]", "1");
+    check("PolynomialGCD[x^3 - x, x^2 - x, x^2 + x, Modulus -> 5]", "x");
+    check("PolynomialGCD[x y + 1, x + 2, Modulus -> 5]",
+          "PolynomialGCD[1 + x y, 2 + x, Modulus -> 5]");
+
+    /* and none of this may disturb the ordinary, no-Modulus answers */
+    check("Factor[x^4 - 1]", "(-1 + x) (1 + x) (1 + x^2)");
+    check("FactorList[x^4 - 1]", "{{1, 1}, {-1 + x, 1}, {1 + x, 1}, {1 + x^2, 1}}");
+    check("PolynomialGCD[x^2 - 1, x - 1]", "-1 + x");
+    check("PolynomialGCD[x^2 - y^2, x - y]", "x - y");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -107,6 +153,7 @@ int main() {
     TEST(test_factorlist_multivariate);
     TEST(test_factorlist_rational);
     TEST(test_factorlist_options);
+    TEST(test_factorlist_modulus);
     TEST(test_factorlist_nonpolynomial);
     TEST(test_factorlist_roundtrip);
     TEST(test_factorlist_attributes);

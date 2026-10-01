@@ -6982,9 +6982,68 @@ Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x, unsigned
     return out;
 }
 
+/* flint_nmod_poly_factor_list[a, x, p]: the factorisation of a over F_p in
+ * FactorList's shape, {{c, 1}, {f1, e1}, ...}, with c the leading coefficient
+ * and every fi monic irreducible in F_p[x].
+ *
+ * Factor and FactorList were IGNORING Modulus -> p outright: the option was
+ * stripped and the answer came back over Q, so Factor[x^2 + 1, Modulus -> 5]
+ * returned 1 + x^2 where over GF(5) it is (x + 2)(x + 3), and
+ * Factor[x^4 + 1, Modulus -> 2] returned 1 + x^4 where it is (1 + x)^4.  A
+ * silent wrong answer rather than a decline.  FLINT's nmod_poly_factor was
+ * already linked and in use inside this file for splitting a minimal
+ * polynomial into residue fields; this exposes it. */
+Expr* flint_nmod_poly_factor_list(const Expr* a, const Expr* x, unsigned long p) {
+    if (!x || x->type != EXPR_SYMBOL) return NULL;
+    if (p < 2 || !n_is_prime(p)) return NULL;
+    const char* xn = x->data.symbol.name;
+    nmod_poly_t A;
+    nmod_poly_init(A, p);
+    Expr* out = NULL;
+    if (expr_to_nmod_poly(a, xn, p, A) && !nmod_poly_is_zero(A)) {
+        slong deg = nmod_poly_degree(A);
+        ulong lead = nmod_poly_get_coeff_ui(A, (ulong)deg);
+        if (deg == 0) {
+            /* a constant: the content alone */
+            Expr* pair = expr_new_function(expr_new_symbol(SYM_List),
+                (Expr*[]){ expr_new_integer((int64_t)lead), expr_new_integer(1) }, 2);
+            out = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ pair }, 1);
+        } else {
+            /* nmod_poly_factor wants a monic input; the content is carried
+             * separately so the product of the returned pairs is a again. */
+            nmod_poly_t M;
+            nmod_poly_init(M, p);
+            nmod_poly_make_monic(M, A);
+            nmod_poly_factor_t fac;
+            nmod_poly_factor_init(fac);
+            nmod_poly_factor(fac, M);
+            size_t n = (size_t)fac->num;
+            Expr** pairs = malloc((n + 1) * sizeof(Expr*));
+            if (pairs) {
+                pairs[0] = expr_new_function(expr_new_symbol(SYM_List),
+                    (Expr*[]){ expr_new_integer((int64_t)lead), expr_new_integer(1) }, 2);
+                for (size_t i = 0; i < n; i++) {
+                    Expr* fe = nmod_poly_to_expr(fac->p + i, xn);
+                    pairs[i + 1] = expr_new_function(expr_new_symbol(SYM_List),
+                        (Expr*[]){ fe, expr_new_integer((int64_t)fac->exp[i]) }, 2);
+                }
+                out = expr_new_function(expr_new_symbol(SYM_List), pairs, n + 1);
+                free(pairs);
+            }
+            nmod_poly_factor_clear(fac);
+            nmod_poly_clear(M);
+        }
+    }
+    nmod_poly_clear(A);
+    return out;
+}
+
 #else /* !USE_FLINT */
 
 int   flint_bridge_available(void) { return 0; }
+Expr* flint_nmod_poly_factor_list(const Expr* a, const Expr* x, unsigned long p) {
+    (void)a; (void)x; (void)p; return NULL;
+}
 Expr* flint_nmod_poly_divrem(const Expr* a, const Expr* b, const Expr* x,
                              unsigned long p, int which) {
     (void)a; (void)b; (void)x; (void)p; (void)which; return NULL;

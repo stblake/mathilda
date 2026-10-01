@@ -560,6 +560,10 @@ int flint_polynomial_reduce(const Expr* poly, const Expr* const* divisors,
  * invertible mod p (and, for divrem, when the reduced divisor is zero). */
 Expr* flint_nmod_poly_divrem(const Expr* a, const Expr* b, const Expr* x,
                              unsigned long p, int which);
+/* flint_nmod_poly_factor_list: {{c,1},{f1,e1},...} over F_p, c the leading
+ * coefficient and each fi monic irreducible; NULL if p is not a word-size prime,
+ * the argument is not univariate in x over Z, or FLINT is absent. */
+Expr* flint_nmod_poly_factor_list(const Expr* a, const Expr* x, unsigned long p);
 Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x,
                            unsigned long p);
 
