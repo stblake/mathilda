@@ -1378,6 +1378,17 @@ Expr* get_coeff(Expr* e, Expr* var, int d) {
 /* True iff e is rational-like (Integer, BigInt, Rational[n,d]) or
  * Complex[r, i] with both components rational-like. Field elements of
  * Q or Q[i] qualify; algebraic non-field atoms like Sqrt[2] do not. */
+/* A bare AlgebraicNumber[theta, coeffs] -- a canonical constant of ONE number
+ * field, which Power[., -1] inverts exactly.  Deliberately not recursive and
+ * not matched through Times/Plus: only a lone field constant is a unit here. */
+static bool head_is_algebraicnumber(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol.name, "AlgebraicNumber") == 0
+        && e->data.function.arg_count >= 1;
+}
+
 static bool is_rational_or_gaussian(const Expr* e) {
     if (!e) return false;
     if (is_rational_like((Expr*)e)) return true;
@@ -1447,7 +1458,29 @@ Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
          * triggers the multivariate Euclidean coefficient explosion (case-13
          * Together hang). Such a B is not rational_or_gaussian, so it still
          * returns NULL below. */
-        if (is_rational_or_gaussian(B)) {
+        /* An AlgebraicNumber divisor is a unit too, and for the same reason.
+         * The paragraph above rules out a SYMBOLIC radical, where Times[A, 1/B]
+         * would merely assert an exact division in Q[Sqrt2, ...] without
+         * performing one -- B stays an opaque atom, the claim propagates into
+         * the GCD machinery, and the multivariate Euclidean blow-up follows.
+         * An AlgebraicNumber is the opposite: it is a canonical element of a
+         * single number field with exact inversion already implemented, so the
+         * quotient is COMPUTED rather than asserted --
+         *     1/AlgebraicNumber[Sqrt[2], {0, 1}] -> AlgebraicNumber[Sqrt[2], {0, 1/2}]
+         *     a (1/a) -> 1
+         * -- and nothing opaque escapes.
+         *
+         * Rejecting it was what made Together DECLINE over a real quadratic
+         * field: `Together[x (1/(1 + Sqrt[2] t) + 1/(1 - t))]` returned its own
+         * argument uncombined, where the identical shape over Q or over Q(i)
+         * combines, because Complex[q, q] passed this test and the number-field
+         * constant did not.  Downstream that is not a cosmetic difference: the
+         * special-function integrator's Can is a ZERO TEST, and an expression it
+         * cannot combine is an expression it cannot decide, so the remainder
+         * grows instead of cancelling (corpus #110: 81 -> 163 -> 703 -> 879
+         * leaves, then the time budget).  It is also exactly why the sibling
+         * case whose places lie over +-I was always fast. */
+        if (is_rational_or_gaussian(B) || head_is_algebraicnumber(B)) {
             return internal_times((Expr*[]){expr_copy(A), internal_power((Expr*[]){expr_copy(B), expr_new_integer(-1)}, 2)}, 2);
         }
         return NULL;
@@ -2555,6 +2588,60 @@ static bool pg_has_negpow(const Expr* e) {
 /* routes through the single-generator α-path when one is found.        */
 Expr* builtin_polynomialgcd(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+    /* Modulus -> p asks for the GCD in F_p[x], and it was being IGNORED: the
+     * option fell through as an unrecognised trailing Rule and the answer came
+     * back over Q.  So
+     *
+     *     PolynomialGCD[x^2 + 1, x + 2, Modulus -> 5]      gave 1
+     *
+     * where over GF(5) x^2 + 1 = (x + 2)(x + 3) and the gcd is x + 2 -- a
+     * silent wrong answer, not a decline.  The capability was already there and
+     * already correct one head over: PolynomialExtendedGCD with the same option
+     * answers {2 + x, {0, 1}} through FLINT's nmod_poly.  Route to exactly that
+     * and keep the gcd, folding pairwise for more than two arguments (the GCD
+     * is associative, and each fold is again monic in F_p[x]).
+     *
+     * When the fast path declines -- a non-word-size or composite modulus, more
+     * than one variable, USE_FLINT=0 -- the whole call declines (NULL, head left
+     * unevaluated) rather than silently answering over Q, which is the one
+     * outcome that must not come back. */
+    {
+        size_t base_argc = 0;
+        Expr* mod_p = poly_modulus_option(res, &base_argc);
+        if (mod_p) {
+            if (base_argc == 0) return NULL;
+            /* the GCD variable, inferred from the operands as Variables[] does */
+            Expr** vars = NULL; size_t nv = 0, cap = 0;
+            for (size_t i = 0; i < base_argc; i++)
+                collect_variables(res->data.function.args[i], &vars, &nv, &cap);
+            Expr* x = (nv == 1) ? expr_copy(vars[0]) : NULL;
+            for (size_t i = 0; i < nv; i++) expr_free(vars[i]);
+            free(vars);
+            if (!x) return NULL;                     /* not univariate: decline */
+
+            Expr* g = expr_copy(res->data.function.args[0]);
+            for (size_t i = 1; i < base_argc && g; i++) {
+                Expr* xg = flint_nmod_poly_xgcd(g, res->data.function.args[i], x,
+                                                (mod_p->type == EXPR_INTEGER &&
+                                                 mod_p->data.integer >= 2)
+                                                ? (unsigned long)mod_p->data.integer : 0);
+                expr_free(g);
+                g = NULL;
+                if (xg) {
+                    if (xg->type == EXPR_FUNCTION && xg->data.function.arg_count >= 1)
+                        g = expr_copy(xg->data.function.args[0]);
+                    expr_free(xg);
+                }
+            }
+            expr_free(x);
+            if (base_argc == 1 && g) {               /* one argument: itself, mod p */
+                Expr* r = internal_polynomialmod((Expr*[]){ g, expr_copy(mod_p) }, 2);
+                return r;
+            }
+            return g;                                 /* NULL => decline */
+        }
+    }
 
     /* Rational-function arguments: a polynomial in the GCD variable whose
      * COEFFICIENTS are rational functions of the other variables — e.g.

@@ -652,21 +652,14 @@ under 14.0, Maxima = the port of the same date.
 **Summary (50 of 50 run): 49 verified** (35 in the run of the morning of 2026-09-23 on
 0.174; the fixes in between are in E.3).  On the integrals it solves Mathilda is fast: faster than
 SymPy on 45 of 49, median ratio Mathilda/SymPy 0.45, 25.5 s against
-55.0 s on those; faster than Mathematica on 15, slower than Maxima on all but one.
-
-**This is the practical ceiling.** The single remaining miss is **A39**,
-`ArcSin[x Sqrt[1 - x^2]]`, which is genuinely non-elementary — every one of the four
-CAS fails it, so 49 of 50 is the score to beat and Mathilda has it. The `Root`-object
-rungs that used to time out or over-assemble (P4, P8, A2, A3, A27, A35, A40) all
-solve now, and nothing declines at the 300 s budget any more; the slowest case in the
-table is well inside it.
-
-Re-recorded 2026-10-01 at v0.244 by `mixed/stress/charlwood_record.py`. The previous
-table in this section was from build 0.174 (42 verified), so the 42 → 49 step is the
-accumulated work of v0.175–v0.243 and **not** attributable to any single change; the
-v0.244 verify-gate change that prompted the re-run was measured separately against a
-pristine v0.243 worktree and is per-case identical (50/50 run, 49 verified, no case
-changed status either way).
+55.0 s on those; faster than Mathematica on 15, slower than Maxima on all but one.  The
+budget now interrupts every long computation (P4, A2, A3, A27, A40 decline at 300.0 s; no OS
+kill).  Everything still wrong is on a rung whose constants are `Root` objects: the linear system
+is assembled with MORE equations than Mathematica assembles from the same package (A2, A3, A35,
+P8), or the same system has no solution (A40's first rung), or the assembly over the compositum
+never finishes (P4, A40's nested split), or a primitive misbehaves (A27: `NullSpace`'s `Method`).
+The method is not at fault: Mathematica running the same `.wl` solves every one of these in
+0.4-2.2 s.
 
 | id | Mathilda | s | SymPy s | Mathematica s | Maxima s | reason |
 |---|---|---|---|---|---|---|

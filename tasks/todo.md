@@ -1,1146 +1,604 @@
-# M61 — DSolve corpus wave: problems 3301–3400 (§2.2.34)
+# Task — execution-speed comparison of the four ParallelMixedSpecial ports
 
-Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-kind-moler.md`
+Goal: compare the **execution speed** of the Python (SymPy), Mathematica and Maxima
+implementations of the parallel mixed tower *special* algorithm on the 312-case stress
+corpus of `MATHILDA_PARALLEL_MIXED_SPECIAL_PLAN.md`, with Mathilda v0.244 as a fourth
+column.
 
-Upstream note: 12000.org regenerated 2026-09-28 and swapped its chapter-2 section
-numbers. The sequential pages moved §2.2.N → **§2.1.N** (`Ch2.S1.SSN.htm`), and our
-master corpus (our "§2.1.2") is now upstream §2.2.2, paginated
-`Ch2.S2.SS2.SSS1…13.htm`. Internal names keep the `2.2.34` spelling for continuity
-with the 33 checked-in sections.
+Research tree: `~/Documents/Research/post_phd_research/algebraic_integration/risch_norman_radicals/special`
+(referred to as `<research>/special` in the plan document).
 
-## Measured baseline — 80/100 PASS, 0 FAIL, 0 crash, 20 UNEVAL
+## Why the recorded runs cannot answer the question
 
-Gap by root cause: 7 nonhomogeneous-at-a-singular-point (F1) · 3 autonomous IVP
-constant unfitted (F2) · 2 series-basis particular (F4) · 1 converter miss (F0) ·
-1 separable singular solution (F3a) · 2 budget burners (F3b) · 6 with no closed form
-(out of scope — see the plan's Non-goals).
+The four `stress_*.json` files on disk each carry a per-case `time`, and
+`stress_compare.py`'s own docstring already says not to quote them as a speed result.
+Measured/read confirmations:
 
-## F0 — converter: a condition point must be a *point*  ✅ DONE
-- [x] `is_condition_row` also requires the argument free of `\prime`, of the dependent
-      functions, and of the independent variable. A whole-LHS product written
-      `y\left(1+{y'}^2\right)` was read as the condition `y(P)=V`, losing the ODE row
-      to the `NO ODE ROW` placeholder.
-- [x] Regression: no-op on 31 of 33 sections; repairs §2.2.34-3313, §2.2.33-3296
-      (M53's documented miss) and §2.2.16-1593 (a latent miss nobody had noticed).
-- [x] `DE_examples_2233.m` regenerated (99/100 semantically identical + the repair);
-      §2.2.16 regenerated to ZERO semantic change, so reverted rather than churned.
+- [x] **Different worker counts.** Python ran **sequentially** (`stress_special.main`
+      has no executor), WL at **6** kernels, Maxima at **8**, Mathilda at **6** — on an
+      8-physical-core i9-9880H. The parallel ports' per-case clocks are inflated by
+      contention the sequential one never paid.
+- [x] **Different timed regions.** 136 of 312 cases have *harness* work inside at least
+      one port's clock:
+      - WL and Mathilda bracket the harness's Part II cross-check
+        (`ParallelIntegrateMixed`) together with the call — 61 `elem` cases.
+      - Maxima prints `elapsed_real_time() - t0` *after* the whole post-processing
+        block (`pms_rt_t1` is captured and never used), so its clock carries the
+        remainder `ratsimp`/`radcan`/`bfloat` probes (75 partial cases) **and** a second
+        full Part II integration (61 `elem` cases).
+      - Python brackets `_run`, i.e. the call plus `sp.simplify(rem - expect)` and the
+        Part II cross-check.
+- [x] **Python ran all 312 cases in one process**, so SymPy's global caches were warm
+      across cases; the other three start a fresh process per case.
+- [x] Measured instance: case 1 (`log(x)`) reads **2.0 s** in the recorded Maxima run
+      and **0.6 s** re-run at 2 workers.
 
-## F1 — inert `Inactive[Integrate]` variation-of-parameters particular  ✅ DONE
-The diagnosis that mattered: the mechanism already existed (the shared VoP helper
-keeps a non-closing integral) and `SpecialFunctionForm` is homogeneous-only by
-construction, so the Bessel fundamental set was found and thrown away.
-- [x] `dsolve_common.c`: `ds_inactivate_integrate`, `ds_has_active_integrate` /
-      `ds_has_inactive_integrate` (`ds_has_head` is a NAME test, so it cannot tell them
-      apart), `dsolve_variation_of_parameters_mode` with `VP_ALLOW_INERT` and the
-      `vp_integral_hopeless` denominator pre-screen (a special function in the
-      DENOMINATOR: the failing `Integrate` costs up to 47.8 s, so it is not attempted).
-- [x] `ds_inert_vop_verified` — the gate, and the ONLY barrier: every other verifier
-      KEEPs a residual containing an integral and `PossibleZeroQ` answers True for one.
-      Z-decomposition by `Coefficient` + relative-zero at EXACT RATIONALS.
-- [x] `dsolve_nonhomog_vop.c`: `dsolve_nonhomog_vop_inert_try` sharing `nh_try_core`;
-      homogeneous part via the PINNED `DSolve`SpecialFunctionForm`, which structurally
-      guarantees a closed-form basis (so a truncated-series basis can never go inert).
-- [x] Cascade: a new LAST slot in `dsolve.c`, after both Frobenius fallbacks — so it
-      can only turn UNEVAL into an answer and cannot cost an existing PASS.
-- [x] Declines an IVP (an inert particular has no value at a point → unfittable).
-- [x] Tests: six `t_m61_*` units + `tests/test_dsolve_m61_stress.c` (7 families,
-      18-member forward generator, latency bound, and gate-margin negative controls
-      measuring correct 5.4e-51 vs three planted-wrong bases at 0.18–0.49).
-- [x] §2.2.34: **80 → 86 PASS (+6), 0 FAIL, 0 regressions.**
+## Plan
 
-## F2 — autonomous reduction: fit the stage-1 constant from the ICs  ✅ DONE
-- [x] `ar_fit_stage1` (`dsolve_autonomous.c`) — the conditions determine `C[2..n]` exactly
-      (`D_k(y0) == y⁽ᵏ⁾(x0)`); fitted BEFORE stage 2 is judged, so `y''+2yy'==0, y(0)=0,
-      y'(0)=1` → `Tanh[x]`. Scalar `Solve` for a single unknown (the list spelling bubbles
-      on the radical). Narrow: bails on no conditions, a missing order, or two points.
-- [x] The value condition is handed to the stage-2 sub-solve too, so the body returns
-      constant-free — otherwise the substrate must invert `{Tanh[C[1]]==0, Sech²==1}`,
-      cannot decide it, and declines the correct branch.
-- [x] **A second, independent bug**: `dsolve_implicit_rhs`'s `y[x] -> y0` is a blind
-      ReplaceAll, so it rewrote the inert integral's VARIABLE slot → `Inactive[Integrate][1,0]`,
-      which with no free constant left would have scored as SOLVED. Relations are now
-      converted to the **definite** form first (`ds_definite_inert`), the fit lands only on
-      the upper limit, and the zero-width integral collapses. `deriv.c` gains the Leibniz
-      rule for the inert definite head so it still verifies.
-- [x] A radical over a transcendental function of `y` declines the explicit path fast
-      (that sub-solve costs 90 s and returns an inert relation anyway).
-- [x] Solves 3345/3347; 3346 stays elliptic (out of scope, documented).
-
-## F3 — correctness + latency  ✅ DONE
-- [x] **F3a** singular solution in the substrate (`dsolve_run`), keyed on EVERY surviving
-      branch being FIT_EMPTY — `Solve` proved the family cannot reach the initial point —
-      not on `h(y0)==0`, which also holds for three cases already correct. Solves 3336;
-      covers Bernoulli/Homogeneous/Chini/Abel too.
-- [x] **F3b(i)** `dsolve_verify_parametric` substituted an UNCANCELLED `dY/dX` into a
-      residual that cubes it → zero_test never returned (>120 s), reachable from every
-      parametric answer. `Together` before substitution. **Gated to a quotient rational in
-      the parameter** — ungated it is itself the expensive step on a radical candidate
-      (2.1.2-980: 6 s → 51 s). Found by the master-corpus run, not by reasoning.
-- [x] **F3b(ii)** `NthAlgebraic` (cascade position 2) recursed a full `DSolve` unbounded and
-      discarded the implicit result: ~25 s on an equation Clairaut answers in 0.01 s. Now
-      deadline + per-branch TimeConstrained + decline memo.
-- [x] **F3b(iii)** `Clairaut` generalised from linear- to POLYNOMIAL-in-`y` (`clairaut_emit`
-      per root): `(y − x y')² == 1 + y'²` was owned by no method. Linear path byte-identical.
-- [x] Solves 3312, 3331.
-
-## F4 — inhomogeneous Frobenius recurrence  ⏭ DEFERRED (named next step)
-- Not landed. `FrobeniusSeries`/`PowerSeries` both call the homogeneous-only extractor and
-  decline ANY forced equation — that is what loses 3393/3394, and it is the mechanism this
-  whole "series expansion" block is nominally about. Recorded in `DSOLVE_PLAN.md` M61's
-  *Future*, with the two equations named.
-
-## Measured result — 80 → 91 / 100, 0 FAIL, 0 crash
-Deterministic: two runs per-case identical. All 11 gains are named defects above.
-Residue 9, honestly classified: 6 with NO closed form (3319/3338/3341/3342/3348/3349 —
-Maple/Mathematica answer with a Taylor series; a Taylor method would score them
-PASS-on-trust, so it is deferred behind an `O[(x−x0)^N]` gate), 2 needing a series
-*particular* (3393/3394), 1 elliptic (3346).
-
-## Regression — same-machine A/B against a HEAD binary in an isolated git worktree
-The checked-in per-section reports are stale and several section gates are ALREADY RED on
-main today, so a diff against them is not evidence. Over 11 exposed sections:
-**M61 better on 6, equal on 5, 0 FAIL in all 22 runs** (2212 5→4, 2214 3→1, 2219 11→10,
-2225 4→2, 2227 5→2, 2233 18→12). The 7 §2.2.19 cases that look lost against the checked-in
-report time out identically on the HEAD binary. Both truncating stress suites were
-A/B-confirmed identical too.
-
-## Tail  ✅ DONE
-- [x] `reports/2.2.34.{tsv,md}` + regenerated `reports/2.2.33.{tsv,md}`
-- [x] `tests/CMakeLists.txt` — gate `dsolve_corpus_2_2_34_tests` (baseline 9) + the m61 stress target
-- [x] `STATUS.md` §2.2.34 section block + wave-history bullet + the §2.2.33 M61 note
-- [x] `README.md` — 2233/2234 rows, 2231/2232 reordered, the upstream-renumbering note
-- [x] `DSOLVE_PLAN.md` M61; `docs/spec/builtins/calculus.md` (5 method rows)
-- [x] weekly changelog `docs/spec/changelog/2026-09-28.md`; `src/version.h` 0.236 → 0.237
-
-# Route every user-facing message through the Quiet/Check funnel
-
-Plan: `/Users/user/.claude/plans/we-need-to-do-misty-boot.md`
-
-## Commit 0 — tooling (no version bump)  ✅ DONE (22bbd3da)
-- [x] `tools/check_message_routing.py` — multi-line-aware detection, EXEMPT + BASELINE, ratchet
-- [x] Seed BASELINE with the full current backlog (294)
-- [x] `make check-messages` target + `.PHONY`
-- [x] Wire into `.github/workflows/build.yml`
-- [x] Verify: gate green on unchanged tree
-
-## Commit 1 — funnel + highest leverage (bump+tag v0.222)  ✅ DONE
-- [x] `mth_message` / `mth_message_gated` / `mth_message_v` / `mth_message_cont` in message.h/.c (guarded printf attr)
-- [x] Migrate `common.c:builtin_arg_error` (4 fprintf) → dropped common.c from BASELINE (290 left)
-- [x] Build clean, check-messages ratchets, check-c99, behavior verified (Check[Fourier[],CAUGHT]→CAUGHT, Quiet suppresses)
-
-## Commit 2 — confirmed correctness bugs (bump+tag v0.223)  ✅ DONE
-- [x] power.c (6), plus.c (2), times.c (1) → mth_message_gated(g_arith_warnings_muted,...)
-- [x] linalg/matpow.c (3) → expr_to_string + mth_message
-- [x] solve/solvenlsys.c warn_nsdim, solve/solveinv.c emit_ifun (note; ifun-suppress stays moot)
-- [x] findmin_common.c fm_warn → mth_message_v(g_fm_quiet,...) (adds note)
-- [x] Verified: Check[MatrixPower[..,1/2]]→CAUGHT, Check[Power[0,-2]]→CAUGHT, Quiet suppresses, Quiet[Check]→FAILED. BASELINE 290→279.
-
-## Commit 3 — subsystem helpers → wrappers (bump+tag)
-- [ ] fit_warn, fm_warn, DRY re-body fs_msg/dt_msg/ops_msg/root_warn/inv_warn/purefunc
-
-## Commits 4..N — inline sites by module (bump+tag each)
-- [ ] solve/
-- [ ] linalg/
-- [ ] poly/
-- [ ] calculus/ (incl. Integrate::nonelem + RischTranscendental routed)
-- [ ] numerical_calculus/
-- [ ] numerical_roots/
-- [ ] strings/ + strings/regex/
-- [ ] product/
-- [ ] top-level A: int.c, real.c, special_functions/, numbertheory/
-- [ ] top-level B: eval/core/context/refine/rootreduce/numberform/funcprog/names/interp/complex_expand/options_builtin/vectors/vectoranal/partitions/bitwise/list/precision/numeric/random/nc_accuracy/expand*
-
-## Final commit — assert-empty + docs (bump+tag)
-- [ ] BASELINE == {}; flip gate to assert-empty
-- [ ] tests: test_messages.c (or extend test_parallelmixedtower); update deliberate-raw test
-- [ ] docs: CLAUDE.md, SPEC.md §9, docs/design/message_routing.md, changelog
-- [ ] valgrind spot-check; rebuild code-review graph
+- [ ] 1. `speed_bench.py` in `<research>/special`: one uniform clock across the four
+      ports. Timed region = **exactly the entry-point call**
+      (`integrate_surface_special` / `integrate_surface_partial` and each port's
+      spelling of them) — no package load, no process start-up, no harness
+      verification, no Part II cross-check. One case per OS process for **every** port,
+      Python included. Reuses the existing corpus (`stress_special.C`) and the existing
+      expression translators (`stress_wl.to_wl/tower_wl`, `stress_maxima.mx/tower_code`)
+      so nothing about the mathematics is re-implemented.
+- [ ] 2. `WORKERS=1` (sequential) for the measurement run — no contention, and it also
+      sidesteps the Mathematica licence stall seen at 2 concurrent kernels. `CAP=120` s,
+      the corpus cap, pinned in-kernel where the port has an inner budget (Mathilda:
+      both `$ParallelMixedTimeBudget` and `$SpecialTimeBudget`, *after* the lazy-load
+      line).
+- [ ] 3. Measure each port's **fixed per-case floor** separately (process start-up +
+      package load), 5 reps: it is not part of the algorithm's speed but it is what a
+      user pays, so it is reported as its own column rather than smuggled into the clock.
+- [ ] 4. Run all four ports, 312 cases each. Cross-check every case's `kind`/`status`
+      against the recorded verdict run — a case that is fast because it now errors is
+      not a speed result.
+- [ ] 5. `speed_report.py`: verdict-agreement check, then per-case ratios, medians,
+      totals on the common subset, per-group breakdown, slowest cases per port, and the
+      cases where the ranking inverts.
+- [ ] 6. Write the findings up. Research-tree measurement of research-tree ports, so no
+      Mathilda source change, no version bump, no changelog entry unless a Mathilda
+      defect is found.
 
 ## Review
-(to be filled in)
 
-## `Integrate` — `ParallelMixedTower`: the real form of the logarithmic part (logrewrite.m, 2026-09-28)
+All six items done. Two runs were needed, because the first uniform-clock run was
+itself unfair.
 
-Port of the research campaign of 2026-09-28 (logrewrite.{py,wl,mac}: Rioboo's collapse of conjugate
-pairs of logarithms to real logarithms, arctangents and hyperbolic arctangents) to the Mathilda
-package, with pre/post measurements. `.m` files, one C test and docs only; no C change.
+**Deliverables** (all in `<research>/special`, nothing in the Mathilda tree changed
+except this file and the plan-document correction below):
 
-### Plan
-- [x] 1. Probe every kernel construct of logrewrite.wl in Mathilda first (three probe scripts): FreeQ on
-  complex atoms, ComplexExpand on nested radicals, CountRoots, $InputFileName, nested TimeConstrained,
-  Do-iterator capture, PolynomialExtendedGCD / PolynomialRemainder over algebraic constants, D and N of
-  ArcTan/ArcTanh forms for the verify gate
-- [x] 2. Baseline (pre) on the unchanged package: Charlwood 50 (charlwood_wl.py mathilda), review corpus
-  (review_wl.py, SYSTEM=mathilda), tests/build/parallelmixedtower_tests
-- [x] 3. `src/internal/mixed/logrewrite.m`: one function per function of logrewrite.wl, loaded with
-  `LoadModule["mixed/logrewrite.m"]` inside the private context; host adaptations (`_Complex`,
-  `RectPow`, `SturmCount`, `RootRadicals`, `CanRaw`, lr-prefixed iterators); default `LogToReal` in
-  ParallelMixed.m when the file is missing; hook at the end of iPIM (`lrTerms` -> `LogToReal`)
-- [x] 4. Develop against a copy of src/internal selected with MATHILDA_HOME; compare 42 integrands with
-  Mathematica (trace lines and derivative checks at points including x = 2, 3, 5/2)
-- [x] 5. Fix found in every port (a defect of the campaign, not of the port): the arctangent argument over
-  the radical is a polynomial in y (YQuot / _y_quot / pm_y_quot) -- a radical in a denominator was
-  read on the principal branch by the surface layer (Charlwood P5 wrong for Tan[x] < 0 in Mathematica
-  and Mathilda); re-verified in the four ports
-- [x] 6. Install, C test `test_method_real_form`, MATHILDA_DIVERGENCES.md A19-A24 / B7 / D, changelog
-- [x] 7. Post measurements on the installed package (Charlwood, review corpus, C tests) and the review
-  section below
+- `speed_bench.py` — the uniform-clock harness, four ports, `--floor`, `--port=all`.
+- `speed_report.py` — console report: integrity, three bases, ratio matrix, groups.
+- `speed_tex.py` → `PARALLEL_MIXED_SPECIAL_PERF_COMPARISON.{tex,pdf}` (10 pages).
+  Every figure is computed from the JSONs by the generator; none is transcribed.
+- `speed_{python,wl,maxima,mathilda}.json`, `speed_floor.json`, `speed_cases.tsv`,
+  and the discarded first run as `speed_*_nowarm.*`.
+
+**Result** — 282 cases every port answers, algorithm time only, sequential:
+
+| port | common sum | median | p90 | max | floor |
+|---|---|---|---|---|---|
+| Mathilda 0.244 | 50.8 s | 0.061 | 0.293 | cap | 0.05 s |
+| Maxima 5.49 | 63.7 s | 0.043 | 0.429 | 12.46 | 0.69 s |
+| Mathematica 14.0 | 69.1 s | 0.083 | 0.318 | 11.95 | 2.98 s |
+| Python/SymPy | 154.6 s | 0.262 | 1.392 | 26.26 | 0.53 s |
+
+Integrity: **0 of 312 outcomes changed** for any port against the verdict runs.
+
+**The measurement finding that mattered more than the table.** A first pass put Maxima
+at 227 s and 6.45x slower than Mathematica. Wrong: Maxima autoloads/compiles library
+code on the first *real* call (0.483 s, then 0.013 s), not at `load()`, so excluding the
+package load did not exclude it, and with a fresh process per case it landed on all 312
+— 147 s of the 227 s. Python, Mathematica and Mathilda have no such cost, and
+Mathilda's runner *already* warmed itself via its lazy-load line, so the port that
+looked best was the only one getting the treatment. Warming every process inverted the
+ranking: Maxima 227.3 → 79.3 s, now the lowest median of the four. Verified no residual
+per-branch autoload (case vs same-group sibling in one warm process: erf 0.062/0.058,
+elliptic 0.084/0.084, Ei 0.012/0.012, partial 0.030/0.023). Lesson saved as
+`memory/feedback_fresh_process_benchmark_charges_lazy_init.md`.
+
+**Also corrected**: `MATHILDA_PARALLEL_MIXED_SPECIAL_PLAN.md` §4 quoted
+`Python 45.0 s / Maxima 42.9 s / ~3 s` for #109/#110 from the contention-inflated
+verdict runs, and omitted Mathematica. Clean-clocked it is Python 26.3/22.3, Maxima
+10.2/1.04, **Mathematica 0.83/1.65**, Mathilda >120 both. Item 3 is still worth only 2
+cases, but the 0.83 s shows the 120 s wall is not intrinsic to the certificate.
+
+No Mathilda source change, so no version bump and no changelog entry.
+
+---
+
+## Notebook: syntax highlighting + bottom-up structural selection (2026-10-01)
+
+Frontend-only (Tauri/Svelte/CodeMirror). No kernel/Rust changes (confirmed with
+user: bracket/token-level selection, capitalization heuristic for symbols).
+
+- [x] `frontend/src/lib/mathildaLex.ts` — pure lexer (scanToken, tokenize) mirroring parse.c lexical rules
+- [x] `frontend/src/lib/mathildaLang.ts` — CodeMirror StreamLanguage + HighlightStyle (CSS-var colours)
+- [x] `frontend/src/lib/structSelect.ts` — buildSpans / ladderAt / chooseExpand (pure)
+- [x] `frontend/src/lib/CellShell.svelte` — wire language+highlight, multi-click handler, Alt-Up/Down, cache invalidation
+- [x] `frontend/src/App.svelte` — `--cm-*` colour vars (dark `:root`, light `html.light`)
+- [x] `frontend/package.json` — add `@lezer/highlight`, `check:selection` script
+- [x] `frontend/scripts/check-selection.mjs` — node test of tokenizer + span ladder
+- [x] Verify: `npm run check` (tsc/svelte-check), `npm run build`, `npm run check:selection`
 
 ### Review
-- Both measurements on build 0.222 on a quiet machine, the baseline through `MATHILDA_HOME` pointing at
-  a copy of the previous module tree (the binary was rebuilt from 0.221 to 0.222 during the session):
-  Charlwood 48/50 -> 49/50 (A19 passes the gate in its real form), kernel 20.4 s -> 23.6 s, median
-  0.209 -> 0.204 s, results with I 16 -> 0; review 303/68/0 -> 303/68/0, 693 s -> 602 s, 44 -> 0
-  returned integrals with I; `parallelmixedtower_tests` 11 tests pass incl. `test_method_real_form`.
-- The port exposed a defect of the campaign itself (the arctangent argument with the radical in a
-  denominator, P5 wrong for Tan[x] < 0 in Mathematica too), fixed in all four ports and re-verified.
-- Six new host divergences (A19-A24) and one behavioural one (B7), each with a one-line repro and a
-  workaround in `logrewrite.m`; A24 (`Can`'s field detour returning `Dot[{}, Inverse[{}], {}]`) has
-  no standalone repro yet -- it appeared on A40 after P4 in one kernel and is worth a core look.
-- Not done: the `E^x` / `E^(2 x)` independent-generator defect of BuildTower (both ports certify
-  `1/(1 + E^x + E^(2 x))` as not elementary) was noticed and left alone; the rewrite's 30 s budget is
-  not interruptible by the package budget (B7). Nothing committed; the user was committing their own
-  work in this repository at the time.
 
+Done, frontend-only (no kernel/Rust change → no version bump, tag, spec, or
+changelog). Shared pure lexer `mathildaLex.ts` (mirrors parse.c lexical rules)
+feeds both: a CodeMirror `StreamLanguage` + themed `HighlightStyle`
+(`mathildaLang.ts`) for highlighting, and bracket/token nesting spans
+(`structSelect.ts`) for bottom-up selection. In `CellShell.svelte`: highlight
+bundle swapped in for the no-op `defaultHighlightStyle`; a left multi-click
+(`event.detail`) selects the token then one enclosing bracket level per further
+click (Mathematica's model); Alt-Up/Down do the same from the keyboard; the span
+cache invalidates on edit. `--cm-*` colour vars added to both themes in
+`App.svelte`.
 
-## `Integrate` — `ParallelMixedTower`: Charlwood 50 at least as fast as the faster of Maxima and Mathematica on every row (plan, 2026-09-28)
+Verified: `check:selection` (new, 21 assertions) PASS incl. the exact chosen
+behaviour (`a + b*c` → `b` → whole, no `b*c` step); `npm run check`
+(svelte-check + tsc) 0 errors; `npm run build` OK; existing check:prose/search/
+snippets/notebook all still PASS. **Not** verified here: the live GUI (colours in
+light/dark, click feel) — needs `cd frontend && npm run tauri dev` with the
+sidecar built, which is an interactive desktop app.
 
-Goal: on each of Charlwood's fifty integrals, Mathilda's kernel time under the protocol of
-`charlwood_wl.py mathilda` (one process per integral, lazy load, two warm-ups, `Integrate[f, x,
-Method -> "ParallelMixedTower"]`) is at most min(Maxima, Mathematica) measured the same way with
-the same package state (real-form rewrite active in all three).  Nothing here changes what the
-package computes: every item is a cost fix, verified by the same corpus runs as before.
+Known MVP limits (documented in the plan as future, kernel-backed upgrades):
+selection is delimiter/precedence-free (no `b*c` sub-select); symbol colouring is
+the capitalisation heuristic (not the real defined/undefined split); chained
+calls `f[x][y]` don't merge heads; genuine `[[ ]]` Part may show one extra level.
 
-### Where Mathilda stands (build 0.228, HEAD f74307de, 2026-09-28)
+### Follow-up (same day): user ran the bundled app
 
-- 49/50 verified, **26.0 s** of kernel time (A39 the same honest `failed` as every system).
-  Stored: `mixed/charlwood_mathilda.json` (0.190 moved to `mixed/stress/charlwood_mathilda_0190.json`,
-  the fresh run also in `mixed/stress/charlwood_mathilda_0228.json`).
-- Like-for-like targets re-measured today WITH the rewrite (the research-directory result files
-  `charlwood_wl.json` of Sep 27 and `maxima/charlwood_maxima.json` of Sep 23 predate
-  logrewrite): Maxima **9.34 s** (`mixed/stress/charlwood_maxima_20260928.json`; A1 3.46 -> 0.15 s,
-  A13 0.43 -> 0.09 since the review changes), Mathematica **17.18 s**
-  (`mixed/stress/charlwood_wl_20260928.json`).  Sum of the per-row bests **9.20 s**; Maxima is the
-  faster of the two on 45 rows.
-- Mathilda is slower than the best on **50/50** rows (only 2 within 1.25x: P4, P8); median ratio 2.4;
-  worst A32 43x, A28 13.9x, A27 13.6x, A40 7.0x.
-- Run-to-run noise is ~1-2 % (five passes of eight integrals in `mixed/stress/stage_timing`); the
-  differences that matter are systematic.
+Two issues surfaced when the user launched via MathildaNotebook.command:
 
-### Where the time goes
+1. **Clickable selection "completely broken."** Root cause: the first handler keyed
+   expansion on `MouseEvent.detail` (the browser's RAPID multi-click counter), so
+   slow deliberate clicks never expanded. Rewrote to a pace-independent gesture:
+   a 2nd click on the same atom, or any click inside the current selection, expands
+   one level (fast double-click still starts it); wrapped in `Prec.highest(...)` to
+   preempt CM's word/line select and in try/catch. `CellShell.svelte` only.
 
-Stage timing from an instrumented copy of the package (`mixed/stress/stage_timing/instrument.py`,
-`run_stages.py`, result `stages_0228.json`; PMStage marks summed per stage over one timed call):
+2. **`*::nofile` errors loading `.m` files.** NOT the frontend — the bundled kernel
+   runs from an arbitrary cwd and the resolver's search paths (`$MATHILDA_HOME` →
+   exe-rel → prefix → cwd ladder) found nothing, so EVERY `.m` load failed (init.m
+   silently; CRCTable/ParallelMixed loudly). Pre-existing in every bundle; the
+   Integrate example just surfaced it. Fix: `tauri.conf.json` bundles `src/internal`
+   as resource `internal`; `kernel.rs` `spawn_inner` sets
+   `.env("MATHILDA_HOME", resource_dir()/internal)` when present (dev falls back to
+   the cwd ladder). Self-contained → won't recur on rebuilds.
 
-| stage | ms over the suite | share | largest rows (ms) |
-|---|---:|---:|---|
-| residue analysis of the prime loop (RealisePoints, RealiseClass, residues) | 4845 | 20.6% | A28 3106, A27 1110, A29 227, A34 40, A19 35 |
-| ansatz assembly: parts + entries + dense fill (AnsatzSystem) | 3373 | 14.3% | A3 687, A2 632, P4 614, A16 250, A39 138 |
-| real form of the logarithmic part (logrewrite.m) | 3151 | 13.4% | P8 1237, A40 973, P4 374, A3 103, A2 101 |
-| unit / S'-unit logand columns, recomputed on every rung | 2507 | 10.7% | P4 427, P5 214, A3 199, A2 192, A35 179 |
-| degree bounds (PlaceBounds), per rung | 2300 | 9.8% | A3 145, A2 141, P4 132, A16 104, P5 102 |
-| numeric verify-or-decline gate (33 points, 30 digits) | 1625 | 6.9% | P3 139, A40 125, A12 87, A13 76, A27 75 |
-| residual f - sum tau D u/u (Can with algebraic constants) | 1364 | 5.8% | A32 1012, A28 160, A27 131, A29 42, A34 13 |
-| hypertangent residue + tower specials (FactorList of the derivations) | 853 | 3.6% | A39 72, A3 51, A2 49, P5 41, P4 39 |
-| entry of each rung (TransConsts, AlgPolesQ, TPad, Can /@ f) | 754 | 3.2% | A2 58, A3 51, P4 50, A16 47, A39 36 |
-| S'-units over the specials (norm search, Miller functions) | 742 | 3.2% | P8 181, P5 77, A37 72, A39 34, A19 34 |
-| number field of the ansatz (ToNumberField + basis), per rung | 623 | 2.6% | P4 196, A40 120, A35 76, A3 47, A2 46 |
-| tower construction | 413 | 1.8% | A39 20, A35 18, P3 17, A11 16, A6 15 |
-| post-solve residual check and back-mapping | 390 | 1.7% | A35 133, A40 51, P4 49, A3 22, A2 21 |
-| exact row reduction | 226 | 1.0% | P4 52, A3 48, A2 46, A16 13 |
-| **all stages (instrumented run, rewrite active)** | **23517** | | |
+Verified: frontend `npm run check` 0 errors; `check:selection` PASS; `cargo check`
+clean; rebuilt bundle contains `Resources/internal/` (13 .m files, subdirs intact);
+and a kernel pipe-mode test from cwd=/ shows the four errors WITHOUT MATHILDA_HOME
+and a clean run WITH it (integral result identical). Lessons added to memory
+[[project_notebook_frontend_highlight_and_selection]].
 
-Per-row times in ms (Mathilda 0.228; after P1; the two targets re-measured today; the target is the smaller):
+### Follow-up 2: precedence-aware selection (user's explicit spec)
 
-| id | integrand | Mathilda 0.228 | after fix P1 | Maxima | Mathematica | target | ratio |
-|---|---|---:|---:|---:|---:|---:|---:|
-| A28 | `(x**2 + 1)/((1 - x**2)*sqrt(x**4 …` | 4321 | 3147 | 227 | 576 | 227 (Max) | 13.9 |
-| A40 | `atan(x*sqrt(1 - x**2))` | 1736 | 1583 | 225 | 2314 | 225 (Max) | 7.0 |
-| A27 | `sqrt(sin(x))/(sin(x)**2 + 1)` | 1525 | 1402 | 103 | 526 | 103 (Max) | 13.6 |
-| A2 | `atan(x + sqrt(1 - x**2))` | 1462 | 1408 | 704 | 1148 | 704 (Max) | 2.0 |
-| A3 | `x*atan(x + sqrt(1 - x**2))/sqrt(1…` | 1501 | 1392 | 699 | 1153 | 699 (Max) | 2.0 |
-| P5 | `cos(x)**2/sqrt(cos(x)**4 + cos(x)…` | 604 | 576 | 133 | 389 | 133 (Max) | 4.3 |
-| A35 | `sqrt(-sqrt(sec(x) - 1) + sqrt(sec…` | 663 | 738 | 384 | 309 | 309 (Mat) | 2.4 |
-| A16 | `x*log(x + sqrt(1 - x**2))/sqrt(1 …` | 643 | 665 | 345 | 471 | 345 (Max) | 1.9 |
-| A19 | `atan(x)/(x**2*sqrt(1 - x**2))` | 480 | 441 | 136 | 496 | 136 (Max) | 3.2 |
-| P8 | `sqrt(tan(x)**2 + 2*tan(x) + 2)` | 1748 | 1618 | 1356 | 1560 | 1356 (Max) | 1.2 |
-| A39 | `asin(x*sqrt(1 - x**2))` | 556 | 511 | 249 | 921 | 249 (Max) | 2.1 |
-| P3 | `-asin(sqrt(x) - sqrt(x + 1))` | 389 | 341 | 102 | 180 | 102 (Max) | 3.3 |
-| A12 | `x**3*asec(x)/sqrt(x**4 - 1)` | 398 | 379 | 147 | 271 | 147 (Max) | 2.6 |
-| A1 | `x*log(x + sqrt(x**2 + 1))*log(x**…` | 484 | 379 | 153 | 193 | 153 (Max) | 2.5 |
-| A11 | `x**3*asin(x)/sqrt(1 - x**4)` | 397 | 372 | 149 | 243 | 149 (Max) | 2.5 |
-| P4 | `log(x*sqrt(x**2 + 1) + 1)` | 2174 | 1922 | 1734 | 2270 | 1734 (Max) | 1.1 |
-| A13 | `x*log(x + sqrt(x**2 + 1))*atan(x)…` | 264 | 275 | 89 | 130 | 89 (Max) | 3.1 |
-| A5 | `log(x + sqrt(x**2 + 1))/(1 - x**2…` | 352 | 319 | 134 | 356 | 134 (Max) | 2.4 |
-| A37 | `atan(x*sqrt(x**2 + 1))` | 351 | 401 | 216 | 360 | 216 (Max) | 1.9 |
-| A6 | `asin(x)/(x**2 + 1)**(3/2)` | 389 | 340 | 156 | 266 | 156 (Max) | 2.2 |
-| A22 | `asin(x)/(x**2*sqrt(1 - x**2))` | 204 | 198 | 36 | 130 | 36 (Max) | 5.5 |
-| A29 | `(1 - x**2)/((x**2 + 1)*sqrt(x**4 …` | 367 | 353 | 202 | 313 | 202 (Max) | 1.7 |
-| A31 | `sqrt(sin(x) + 1)*log(sin(x))` | 246 | 231 | 96 | 106 | 96 (Max) | 2.4 |
-| A7 | `log(x + sqrt(x**2 - 1))/(x**2 + 1…` | 235 | 237 | 116 | 201 | 116 (Max) | 2.0 |
-| P10 | `x**3*exp(asin(x))/sqrt(1 - x**2)` | 300 | 207 | 90 | 94 | 90 (Max) | 2.3 |
-| A4 | `asin(x)/(sqrt(1 - x**2) + 1)` | 155 | 158 | 44 | 89 | 44 (Max) | 3.6 |
-| A34 | `sin(x)/sqrt(1 - sin(x)**6)` | 154 | 158 | 48 | 159 | 48 (Max) | 3.3 |
-| A21 | `atan(x)/(x**2*sqrt(x**2 + 1))` | 155 | 135 | 34 | 96 | 34 (Max) | 4.0 |
-| A24 | `log(x)/(x**2*sqrt(x**2 + 1))` | 137 | 125 | 29 | 83 | 29 (Max) | 4.3 |
-| P1 | `log(x)*asin(x)` | 198 | 193 | 134 | 101 | 101 (Mat) | 1.9 |
-| A38 | `-atan(sqrt(x) - sqrt(x + 1))` | 143 | 167 | 79 | 85 | 79 (Max) | 2.1 |
-| A30 | `log(sin(x))/(sin(x) + 1)` | 124 | 127 | 44 | 69 | 44 (Max) | 2.9 |
-| A26 | `x*log(x)/sqrt(x**2 + 1)` | 113 | 112 | 30 | 81 | 30 (Max) | 3.7 |
-| A36 | `x*log(x**2 + 1)*atan(x)**2` | 109 | 127 | 59 | 46 | 46 (Mat) | 2.8 |
-| A15 | `x*log(x + sqrt(x**2 + 1))/sqrt(x*…` | 114 | 108 | 28 | 71 | 28 (Max) | 3.9 |
-| A25 | `x*asec(x)/sqrt(x**2 - 1)` | 155 | 135 | 59 | 104 | 59 (Max) | 2.3 |
-| A20 | `x*atan(x)/sqrt(1 - x**2)` | 152 | 163 | 90 | 214 | 90 (Max) | 1.8 |
-| P6 | `sqrt(tan(x)**4 + 1)*tan(x)` | 162 | 131 | 62 | 167 | 62 (Max) | 2.1 |
-| A33 | `tan(x)/sqrt(tan(x)**4 + 1)` | 165 | 158 | 93 | 138 | 93 (Max) | 1.7 |
-| A18 | `x*atan(x)/sqrt(x**2 + 1)` | 129 | 117 | 55 | 86 | 55 (Max) | 2.1 |
-| A32 | `sec(x)/sqrt(sec(x)**4 - 1)` | 1252 | 99 | 42 | 82 | 42 (Max) | 2.4 |
-| A8 | `log(x)/(x**2*sqrt(x**2 - 1))` | 111 | 110 | 57 | 88 | 57 (Max) | 1.9 |
-| A14 | `x*log(sqrt(1 - x**2) + 1)/sqrt(1 …` | 119 | 119 | 66 | 89 | 66 (Max) | 1.8 |
-| A23 | `x*log(x)/sqrt(x**2 - 1)` | 125 | 108 | 60 | 87 | 60 (Max) | 1.8 |
-| P2 | `x*asin(x)/sqrt(1 - x**2)` | 77 | 75 | 29 | 42 | 29 (Max) | 2.6 |
-| A10 | `x*log(x + sqrt(x**2 - 1))/sqrt(x*…` | 83 | 77 | 31 | 39 | 31 (Max) | 2.5 |
-| P9 | `sin(x)*atan(sqrt(sec(x) - 1))` | 108 | 88 | 46 | 53 | 46 (Max) | 1.9 |
-| P7 | `tan(x)/sqrt(sec(x)**3 + 1)` | 54 | 49 | 23 | 36 | 23 (Max) | 2.1 |
-| A17 | `log(x)/(x**2*sqrt(1 - x**2))` | 123 | 112 | 94 | 86 | 86 (Mat) | 1.3 |
-| A9 | `sqrt(x**3 + 1)/x` | 28 | 29 | 19 | 9 | 9 (Mat) | 3.2 |
-| **total** | | **26034** | **22415** | **9336** | **17176** | **9197** | |
+User's test: clicking x in `Integrate[(2 x + 1) Sin[x^2+x+1] - x Log[x] + 1, x]`
+must ladder x -> 2 x -> 2 x + 1 -> (2 x + 1) Sin[...] -> whole. That is
+PRECEDENCE-aware, which the frontend-only bracket/token model (the earlier chosen
+scope) cannot produce. Reversed that decision and built the kernel-authoritative
+approach:
 
-C-level sampling (`sample`, 1 ms, three calls per integral, `mixed/stress/profiles_20260928/`):
-A28 spends 68 % under `builtin_plus` -> `expr_compare` -> `collect_symbols_in` (sort.c:271);
-P8 35 % in GMP integer gcds under `PolynomialGCD`/`Cancel`; the retry-heavy rows (A2, A3, P4, P5,
-A16, A19) 10-20 % in `rb_collect_symbol_names` (match.c:1544) + its `strcmp`, called from
-`replace_bindings` on every down-value application; 10-16 % everywhere in malloc/free churn.
+- C: `mth_parse_spans` + opt-in `MthSpanSink*` on `ParserState` (NULL on the
+  normal path); one `record_span` at the Pratt-loop top captures each precedence
+  stage; `flat_continuation` suppresses partial Plus/Times sums; `record_span`
+  trims trailing whitespace. Exposed in `src/parse.h`. (src/parse.c)
+- Pipe: `{"id":N,"expr":"...","spans":true}` -> `{"type":"spans","payload":[[s,e],..]}`
+  via `pipe_process_spans`/`pipe_emit_spans`; one-line route in pipe_mode_loop.
+  (src/repl.c)
+- Rust: `MathildaKernel::fetch_spans` + `syntax_spans` command + registration.
+- Frontend: `fetchSpans` (ipc.ts, UTF-8->UTF-16, raw text); gesture rewritten to
+  store {anchor, level} and recompute the ladder each click so the first-click
+  local fallback upgrades to kernel spans; first click selects the token, further
+  clicks climb; `CellShell` caches kernel spans per doc + prefetch on focus/edit.
 
-### Root causes (each verified in isolation)
+Also fixed the earlier "second attempt selects whole expression" bug (anchor the
+gesture on the token, not "is the click inside the selection").
 
-- **F1 `Cancel[e, Extension -> Automatic]` on AlgebraicNumber input.**  rat.c
-  `builtin_cancel_compute` runs `cancel_auto_gcd_quotient` (PolynomialGCD + PolynomialQuotient,
-  each re-detecting the splitting field) before the native `flint_field_cancel`: 315 ms on a
-  LeafCount-73 fraction over Q(Sqrt 2) versus 0.2 ms for the 1-argument `Cancel[e]`, which reduces
-  identically (checked on a fraction with a common factor over Q(Sqrt 2, I)).  `Can`'s field
-  detour hits this on every call (A32: three residual `Can`s = 0.7 s; the detour is a net loss on
-  small fields and a net win on P8/P4 -- the suite is 29.0 s with `$CanFieldEnabled = False`);
-  `CanL`/`KGcd` of logrewrite.m hit it on nested radicals.  **Verified fix**: dropping the option
-  in `Can`'s detour gives 26.0 -> 22.4 s, 49/50 unchanged (A32 1.25 -> 0.10, A28 -1.2, P4 -0.25,
-  P8 -0.13, A40 -0.15, A27 -0.12, A3 -0.11; `mixed/stress/charlwood_mathilda_0228_canfix.json`).
-- **F2 `VanishOrder`** (`SeriesCoefficient[ub, {e, 0, k}]`, k < 8, on Sqrt[q(rho + e)] with Sqrt[2]
-  constants): 3.33 s of A28's 3.4 s, 0.13 s of A29 -- the kernel's Series is the Plus-ordering hot
-  spot of the A28 profile.  `DeepResidues` (line 491), `RealiseClass` (1190), `FundamentalUnit`
-  (1273), `ResidueFree` (1512/1516), `SpecialData` (1617) and `InfinityData` (1841-1847) still use
-  Series too.
-- **F3 `RealiseClass`**: `NullSpace[rows, ZeroTest -> (RootReduce[Together[#]] === 0 &)]` over
-  Gaussian rationals: 1.08 s of A27's 1.4 s.
-- **F4 the rewrite** (`LogToReal`, 3.15 s): P8 1.24 s and A40 0.97 s sit in the conjugate-pair
-  loop (`LogToAtan` -> `RiobooAtan`/`RealZeroFreeQ`/`SturmCount`/`YQuot`, all through `CanL`) and
-  in the final `CanL[Expand[arg]]` pass -- F1 on nested radicals and Root objects.
-- **F5 the retry ladder recomputes rung-invariant work** (P4, A2, A3, A16 run 5 rungs; P5, A19,
-  A22, A4 3): logand columns 2.5 s, PlaceBounds 2.3 s, FieldData 0.6 s, rung entry 0.75 s.
-- **F6 the assembly** (3.4 s): `AppendTo` in the entries/rhs/parts loops is O(n) per call in
-  Mathilda (5,000 appends 0.26 s, 10,000 1.5 s, 20,000 6.0 s; `Sow`/`Reap` 5,000 in 4 ms), the
-  dense fill by `aug[[i, j]] = v` copies a row per assignment (150 x 70 in 31 ms, 300 x 140 in
-  470 ms), and `CoefficientRules` on the unexpanded product runs once per column per coordinate.
-- **F7 the verify gate** (1.6 s, up to 140 ms on P3): 33 points, the integrand evaluated twice
-  per point and D[surf] once, all at 30 digits.
-- **F8 kernel overheads** (the floor of the small rows: A9 28 ms against 7, P7 50 against 21,
-  A15 105 against 29): (a) `expr_compare`'s polynomial-degree tier outside an Orderless sort
-  walks both subtrees on every comparison (`g_symmemo == NULL` path of sort.c:654 does not consult
-  the persistent `symset_cache`; Plus's already-sorted pre-check at plus.c:877 and every
-  `Times`/`Plus` re-evaluation pay it); (b) `replace_bindings` collects the symbol names of every
-  binding value with an O(k^2) `strcmp` dedup on every rule application (match.c:1540-1580, added
-  with the A11 capture fix in v0.212 -- the small rows doubled between 0.190 and 0.228: A15
-  37 -> 105 ms, P2 46 -> 77, A9 17 -> 28); (c) `AppendTo` copies the whole list (core.c:2140);
-  (d) `Series` of a square root of a polynomial with algebraic constants (F2).
+Verified: kernel pipe test gives the exact ladder for `2 x + 1`
+([[0,1],[2,3],[0,3],[6,7],[0,7]]) and for the integrand; `npm run check` 0 errors;
+`check:selection` PASS (incl. the first-click-selects, different-token-restart,
+and local->kernel upgrade cases); `cargo check` clean. Pending: version.h bump +
+tag + changelog when committed; optional C unit test for mth_parse_spans in the
+CMake suite.
 
-### Plan
+### Follow-up 3: output "Convert To" right-click menu
 
-Phase A -- the package (`src/internal/mixed/ParallelMixed.m`, `logrewrite.m`).  After every item:
-`python3.11 charlwood_wl.py mathilda` from the research directory (49/50, 0 wrong, time per row),
-`SYSTEM=mathilda python3.11 review_wl.py` (304/67/0, no regression), `tests/build/parallelmixedtower_tests`.
-Expected effect in parentheses (suite total after the item, from today's stage data).
-
-- [ ] **P1 `Can` field detour without `Extension -> Automatic`** (verified today: 26.0 -> 22.4 s).
-      Also guard `FieldData` against the A24 garbage (`piv === {}` or a singular `B` -> `$Failed`,
-      so `Can` falls back to `CanRaw`), and reuse `$CanFieldMemo` for `AnsatzSystem`'s `FieldData`.
-- [ ] **P2 `VanishOrder` by exact arithmetic** (A28 -2.9 s, A29 -0.13 -> ~19.4 s): ord_P(a + b y)
-      at an unramified constant place is the multiplicity of rho in N(u) = a^2 - q b^2 when the
-      conjugate a - b y does not vanish at P; when both vanish, divide (g - rho) out of a and b and
-      recurse.  Same-answer check against the Series version on the residue corpus.  Then audit
-      the remaining `Series` uses (lines 491, 1190, 1273, 1512, 1516, 1617, 1841-1847): the ones on
-      Sqrt[polynomial] with algebraic constants go through the package's own exact truncated
-      arithmetic (`LaurentPolyTimes` / `PMTruncate`, the A13 route), the rest stay.
-- [ ] **P3 `RealiseClass` / `FindElement` null spaces over one field** (A27 -1.0 s -> ~18.4 s):
-      map the rows with `FieldData` and take `NullSpace` without `ZeroTest` (AlgebraicNumber
-      arithmetic is canonical, zero is syntactic; plain `NullSpace` for Gaussian rationals), as
-      `AnsatzSystem` already does; the `RR`/`RRad` calls on the rows go with it.
-- [ ] **P4 the rewrite through the fast canonical form** (P8 -1.0, A40 -0.8, P4 -0.3 -> ~16.3 s):
-      `CanL` = the memoised field detour of P1 (with the guard) where the constants map into one
-      number field, `CanRaw` otherwise; `KGcd` = `PolynomialGCD` on the AlgebraicNumber form
-      without the option (probe first that the 2-argument form reduces over the field); memoise
-      `RootRadicals` per Root object and `RealZeroFreeQ` per polynomial (it is asked for A and B of
-      every pair).  Re-measure `lr-Ipairs` and `lr-finalCanL` with the stage tool.
-- [ ] **P5 rung-invariant work cached in `$analyses[key]`** (-3.0 s -> ~13.3 s): the logand columns
-      of `AnsatzSystem` per (unit, coordinate) (they do not depend on the bounds), `FieldData` by
-      atom set (the existing memo), the `VP`/`VInf` data of `PlaceBounds` (SpecialData/InfData are
-      memoised; the loop around them is not), `TPad`/`Can /@ f`/`TransConsts`/`AlgPolesQ` at rung
-      entry.
-- [ ] **P6 the assembly without quadratic primitives** (3.4 -> ~1.2 s, -2.2 s -> ~11.1 s):
-      `Sow`/`Reap` (or `Table`) for `parts`, `entries`, `rhs`; the matrix built once from the
-      rules (a `Table` over the row/column association, or `Normal[SparseArray[...]]` once its
-      cost is probed) instead of 10^4 `Part` assignments; `CoefficientRules` once per column.
-- [ ] **P7 the verify gate** (-0.5 s with the integrand evaluated once per point; -1.2 s if the
-      grid is cut to 8-12 points with early exit -- the grid was set to 33 deliberately after an
-      off-grid wrong surface, so the point count is the user's call; the exact post-solve residual
-      check of `AnsatzSystem` already rules out an inconsistent solve, the gate only pins the branch).
-- [ ] **P8 the floor of the small rows** (~-1.5 s over the 30 rows under 150 ms): `PlaceBounds`
-      costs 20-45 ms on towers with no curve (`InfData`'s `VInf` per generator), the tower-specials
-      pass 8-12 ms (`FactorList` of every derivation, twice per rung with the ConicToLine retry),
-      rung entry 8 ms, the gate 5-25 ms; each has a trivial-case shortcut.
-- [ ] Checkpoint: four-way table (`mixed/charlwood_four.py`), per-row ratio; expected ~10-11 s
-      against the 9.2 s sum of bests, with the sub-100 ms rows still 1.5-3x over their targets.
-
-Phase B -- the kernel (each with a differential toggle in the style of `MATHILDA_NO_SYMSET_CACHE`,
-the message/valgrind gates, and a bump + tag).
-
-- [ ] **C1 `Cancel`/`PolynomialGCD` with `Extension -> Automatic` on AlgebraicNumber-coefficient
-      input** take the native field path (`flint_field_cancel` / the FLINT number-field gcd)
-      before `cancel_auto_gcd_quotient`; memoise `extension_autodetect` by the set of algebraic
-      atoms (nested radicals re-derive the compositum on every call).  Makes P1/P4 host-independent.
-- [ ] **C2 `expr_compare` tier 3 outside a sort** consults `expr_symset_cache_get`/`put` in the
-      `g_symmemo == NULL` path, and the already-sorted pre-checks of `Plus` (plus.c:877) and
-      `Times` run inside a `symmemo_begin`/`symmemo_free` scope; consider caching the degree vector
-      per node the same way (`expr_poly_degree` is the next walk).  Expected 10-20 % on A27, A32,
-      A40, P4; the A28 pathology disappears with P2 regardless.
-- [ ] **C3 `replace_bindings`' danger set**: names are interned, so the `strcmp` fallback in
-      `rb_collect_symbol_names` goes (pointer compare only); compute the set lazily, only when
-      `rb_rec` meets a scoping construct, from the per-node `symset_cache` of the binding values
-      rather than a fresh walk; or precompute per definition the locals of its scoping constructs
-      and test the values for those names only.  Expected 10-20 % on the retry-heavy rows and most
-      of the 0.190 -> 0.228 regression of the small rows.
-- [ ] **C4 `AppendTo` amortised O(1)**: grow in place with spare capacity when the value is
-      uniquely owned (refcount 1); `Sow`/`Reap` in P6 is the package-side fix that does not wait
-      for this.
-- [ ] **C5 `NullSpace`/`RowReduce` with a `ZeroTest`** on exact algebraic entries: a native exact
-      path over Q(i) and AlgebraicNumber (after P3 the package no longer needs it).
-- [ ] **C6 `Series` of Sqrt[polynomial] with algebraic constants**: 400 ms per coefficient today
-      (after P2 the package no longer needs it; a kernel-level look at why Plus ordering dominates).
-- [ ] Re-measure the fifty and the review corpus, four-way table, `MATHILDA_DIVERGENCES.md`
-      (new section on the cost divergences B8-B12: F1, F2, F3, F6, F8b), changelog, lessons.
-
-### Measurement protocol and pitfalls found today
-
-- Measure through the lazy load only.  A `Get` of the package after the lazy load re-defines the
-  trivial default `LogToReal` and `LoadModule["mixed/logrewrite.m"]` is then a no-op: the
-  re-read package runs WITHOUT the real-form rewrite (P8 0.40 s instead of 1.65 s, suite 19.7 s
-  instead of 26.0 s).  `review_wl.py`'s `MATHILDA_PKG` mode has this property; `MATHILDA_HOME`
-  pointing at a module tree does not.  The stage tool Gets its own instrumented `logrewrite.m` for
-  this reason.
-- The Maxima and Mathematica columns must be re-measured whenever the packages change; today's
-  files carry the date in their names.  Table 1 of the Maxima paper is NOT touched by this work.
-- `$`-prefixed package globals (`$CanFieldEnabled`, `$CanFieldMemo`, `$analyses`) live outside
-  the private context (bare names reach them); `$CanFieldEnabled = False` is the A/B switch of P1.
-- Mathilda has no evaluated-flag: a declined `Integrate` re-runs on every reference (the runner's
-  `/. Integrate -> PMDeclined`).
-
-### Review  (2026-09-28, v0.229)
-
-**Result.** Charlwood's fifty, one process per integral under the protocol of `charlwood_wl.py
-mathilda`: kernel time **23.53 s -> 13.10 s** (1.80x), 49/50 verified throughout, 0 wrong. Targets
-re-measured the same day: Maxima 9.34 s, Mathematica 17.18 s, the sum of the per-row bests 9.20 s.
-Mathilda is now faster than Mathematica over the suite as a whole, and on four rows it is faster
-than BOTH: **P8 0.64 s against 1.36 / 1.56, P4 1.24 against 1.73 / 2.27, A33 0.08 against 0.09 /
-0.14, A17 0.07 against 0.09 / 0.09**; A28 (1.02x) and A38 (1.04x) sit on the target. Biggest
-single-row wins: A28 3.45 s -> 0.23 (14.9x), P8 1.70 -> 0.64, P4 2.01 -> 1.24, A40 1.48 -> 1.13,
-A27 1.43 -> 0.96. Worst remaining ratios: A27 9.3x and A40 5.0x of Maxima. Files:
-`mixed/stress/session_base_0228.json` (before) and `charlwood_mathilda_0229.json` (after);
-`mixed/stress/vs_targets.py RUN.json [PREV.json]` prints the per-row table against the targets.
-
-**The review corpus got BETTER, not just faster**: 304 correct / 67 gap -> **329 correct / 42 gap,
-0 wrong answers**, 582 s -> 249 s of kernel time. That is the `Series` fix below, not the cost work.
-(The one row the runner marks WRONG, R272, previously TIMED OUT at 120 s and now returns an honest
-`needs torsion realisation` decline at 113 s; `KNOWN_GAPS['mathilda']` records it as `timeout` and
-the tolerance rule does not cover that reason. No antiderivative is returned, so no wrong answer.)
-
-**The largest single find was a correctness bug, not a cost one.** `Series`/`SeriesCoefficient` are
-`HoldAll` and did not resolve a series variable carrying a symbol-valued OwnValue, which Mathematica
-does. A `.m` routine that expands in a `Unique[...]` symbol therefore got its INPUT back, silently:
-`RealiseClass` built the rows of its exact linear algebra out of a non-series, so every unbalanced
-configuration at infinity was solved against a matrix carrying `Sqrt[1 + w^4]` where a rational
-belonged, and realised nothing. 25 more integrals of the review corpus now close.
-(MATHILDA_DIVERGENCES.md A25.)
-
-**What landed** (each measured against the suite and the corpus; the plan's numbering):
-
-| item | effect | note |
-|---|---|---|
-| P1 `Can` field detour without the option + `FieldData` span guard + shared memo | -1.3 s | A32 1.15 s -> 0.08 |
-| P2 `VanishOrder` by the norm's multiplicity | -3.0 s | A28 3.24 -> 0.22, at Maxima's 0.23 |
-| Series held-variable fix (kernel) | +1.4 s | a correctness fix that does MORE work; pays for itself in the corpus |
-| P5 rung-invariant logand columns + P6 assembly without quadratic primitives | -5.4 s | with C2/C3 |
-| C2 `expr_compare` degree tier uses the persistent symset cache | (in the -5.4) | |
-| C3 `replace_bindings` danger set built once, lazily | (in the -5.4) | most of the v0.212 small-row regression |
-| P3b `RealiseClass` cheapest configuration first | -0.2 s | A27 1.19 -> 1.05 |
-| P4 `KGcd` over the number field + `RootRadicals`/`RealZeroFreeQ` memos | -0.2 s | |
-| residual `f - Sum tau Du/u`: one `Can` per logand, not two | -0.2 s | A27 1.05 -> 0.95 |
-| **`CanRaw` asks for `Extension -> Automatic` only when a Gaussian constant is present** | **-1.4 s** | P8 1.62 -> 0.59, A40 1.40 -> 1.11 |
-| P6b the 1-part and y-part columns share the derivative contraction | small | strict work removal |
-| P8a `Can` once in the tower-specials scan, `ClassifyPrime` memoised | small | strict work removal |
-
-**What was tried and REJECTED** (each measured, each left out):
-
-- **P3 as planned** -- `NullSpace` over one number field instead of `ZeroTest -> RootReduce`. A27
-  1.38 s -> 2.99 s: the entries are large radical expressions and mapping them into the field costs
-  more than the zero tests. A cheap numeric screen in the `ZeroTest` was also neutral. The honest
-  answer for that null space is a native exact path (C5), not a package rewrite.
-- **P4's `CanL` through `Can`'s field detour**. The suite 14.9 s -> 23.5 s (A40 1.44 -> 8.07): the
-  rewrite's constants change from pair to pair, so nearly every call builds a fresh number field.
-- **`$CanFieldEnabled = False`** (now that `CanRaw` is cheap) and **a larger size gate on the
-  detour**. A27 likes it (0.98 -> 0.61) and P8 does not at all (0.68 -> 3.39): P8's compositum
-  fractions are exactly what the detour is for. Left at the original gate.
-- **Pre-contracting `FieldData`'s `back` to one dot product.** `(v . Binv) . basisRad` multiplies
-  each radical monomial by ONE rational; contracting first makes every coordinate carry a sum of
-  radicals. Suite +1.7 s.
-- **The verify gate at 30-digit sample points instead of exact rationals.** Isolated it looked like
-  85 ms -> 31-65 ms for the 33 evaluations; over the suite it was +0.95 s.
-- **P7's single integrand evaluation** is kept (it is strictly less work) but is worth ~0 ms: the
-  gate's 12 % is `N[D[surf] /. x -> pt, 30]`, not the integrand.
-
-**Kernel bugs found on the way** (MATHILDA_DIVERGENCES.md A25-A27):
-
-- A25 `Series` held-variable resolution -- FIXED.
-- A26 multivariate `PolynomialGCD` with `AlgebraicNumber` coefficients returns a non-divisor.
-  Half-fixed: `collect_variables` no longer enrols an `AlgebraicNumber` as a polynomial variable
-  (`Variables[a + x]` is `{x}` now) and `Extension -> Automatic` no longer answers `1` on the
-  univariate case. The classical content computation over `K` still returns the second operand when
-  the main-variable degrees are equal. Needs a native `flint_field_gcd`; every component exists.
-- A27 `SparseArray` is not implemented, and `Normal` of the unevaluated head returns the
-  `SparseArray[...]` expression -- a silent non-matrix. The first attempt at P6 assembled the
-  augmented matrix this way and every integral failed; the fill is now row by row (158 ms -> 15 ms
-  on 300 x 140, which is also faster than `SparseArray` would have been).
-
-**Where the remaining 3.9 s sits** (stage timing, `mixed/stress/stage_timing`, after the changes):
-the verify gate 12 %, the ansatz `parts` + `entries` 22 %, the logand columns 10 %, `PlaceBounds`
-9 %, the conjugate-pair rewrite 6 %. Per row the gap is A40 (-0.88 s) and A27 (-0.84) followed by
-A3/A2 (-0.35 each) and thirty rows each 20-80 ms over. The C-level profile of both A40 and A27 is
-now generic evaluator overhead -- 15-17 % malloc/free, 5 % symbol interning, 9 % ordering -- not a
-package hot spot, so the next real step is C4 (`AppendTo`/args-array churn), C5 (a native exact
-null space over `Q(i)`/`AlgebraicNumber`) and the `flint_field_gcd` of A26, not more `.m` work.
-
-**Not done from the plan**: C1 (only its two correctness halves), C4, C5, C6, and the four-way
-table checkpoint.
-
-**The full 510-binary C test suite: 8 failures, ALL verified PRE-EXISTING** (the five changed
-`src/*.c` files and `src/internal` reverted to `HEAD`, rebuilt, identical failure in every case).
-Zero regressions. Two new regression tests were added for the fixes: the held-variable `Series`
-case (`tests/test_series.c`) and `AlgebraicNumber` as a constant rather than a polynomial variable
-(`tests/test_algebraicnumber.c`).
-
-- `crc_corpus_tests`: 6 diff-nonzero against a baseline of 3. The three new ones are the
-  `Sqrt[(a + b x)/(c + d x)]` family through `Integrate[.., Method -> "CRCTable"]`, which returns an
-  `Abs`-carrying form whose formal derivative does not close. The test's own comment claiming that
-  family "now closes cleanly after the number-field Cancel improvements" is stale for the
-  `Method -> "CRCTable"` route it exercises -- it does close through the full `Integrate`.
-- `dsolve_stress_tests`: `DSolve`UndeterminedCoefficients[y'' - 2 y' + y == Cos[2 x], y, x]`
-  returns unevaluated where the test asserts a `List`. The full `DSolve` still solves it
-  (`C[1] E^x + C[2] x E^x + Sin[ArcTan[-4, -3] + 2 x]/5`) by another method, so only that
-  method's direct entry point regressed -- and before this session.
-- `dsolve_tests`: exits 142 = SIGALRM, the 120 s watchdog every test binary gets from
-  `test_utils.h`. It reaches ~48 of its tests in 120 s. This is the pre-existing in-suite
-  failure recorded in memory (`project_dsolve_tests_m19_insuite_abort`); the suite is simply
-  longer than the watchdog now. NOT a slowdown from this work: 60 representative `DSolve`
-  calls lifted out of `test_dsolve.c` run in 1.62 s on a pristine HEAD kernel and 1.66 s on
-  this one (2 %, at the noise floor of a loaded machine).
-- `intrischnorman_tests`: `Integrate[1/Log[x], x]` gives `ExpIntegralEi[Log[x]]` where the test
-  wants `LogIntegral[x]` (the same function). Reproduced identically on a pristine HEAD kernel
-  AND a pristine `src/internal`, so PRE-EXISTING.
-- `moebiusmu_tests` / `primenu_tests`: `MoebiusMu[10^50 + 1]` and
-  `PrimeNu[2491230487120948712093481230948273409812734091238]` come back with the wrong parity /
-  count inside the test binary (`FactorInteger::nofac: ... composite but no factor was found
-  within the search bounds` -- the ECM budget), while a plain `-file` run answers `-1` and `8`
-  correctly. Both test binaries rebuilt from a HEAD kernel fail identically: PRE-EXISTING.
-- `risch_rde_tower_tests`: asserts `Integrate[E^(Log[x]^2), x]` stays unintegrated; it now returns
-  an `Erf` form. Rebuilt from a HEAD kernel with a HEAD `src/internal`: the same `Erf` form, so
-  PRE-EXISTING (the assertion is stale, not a regression).
-- `dsolve_corpus_tests` needs more than the 20 min cap this run gave it (1204 cases, ~500 in
-  17 min); re-run it with `timeout 3600` for a verdict.
+Right-click an output expression -> Convert To -> StandardForm / InputForm /
+FullForm / TeXForm / MathML, switching the display form in place.
+- Rust: generic `eval_once(expr) -> {payload,latex,error}` command (non-cell eval,
+  no $Line pollution) — kernel.rs/commands.rs/lib.rs; `evalOnce` in ipc.ts.
+- Output.svelte: contextmenu on `.out-expr`, per-item form + fetched-string cache,
+  `exprHtml()` form-aware render, `.convert-menu` popup. InputForm uses `item.text`;
+  StandardForm/TeXForm/MathML derive from `item.latex`; FullForm (and TeX/MathML
+  without latex) fetched via evalOnce. No C change.
+Verified: kernel non-cell eval gives FullForm `Plus[1,Power[x,2]]`, TeXForm
+`1+x^{2}`, InputForm `1 + x^2`; `npm run check` 0 errors; `cargo check` clean.
 
 ---
 
-# `PolynomialGCD` — a native multivariate GCD over a number field (plan, 2026-09-29)
+## No slow cases in `Integrate`ParallelMixedSpecial`, and no segfaults (2026-10-01)
 
-Plan: `/Users/user/.claude/plans/cheeky-seeking-flute.md`.  Target: the `flint_field_gcd`
-named as the fix in `MATHILDA_DIVERGENCES.md` A26.
+Goal: eliminate the slow cases in the special-function stage — the centerpiece of
+Mathilda's integration suite. Two constraints set by the user: the algorithm must be
+**correct by construction with no verification step** inside it (verification belongs in
+tests), and there must be **no segfaults**. Plan: `~/.claude/plans/curious-munching-key.md`.
+Corpus baseline at v0.244: **303 PASS / 9 HONEST / 0 WEAK / 0 FAIL**.
 
-- [x] Spike the FLINT call sequence before building on it (`fq_nmod_mpoly_gcd` in each residue
-      field of `M mod p`, CRT back) — verified on the A26 pair for an INERT prime (p = 5, 11)
-      and a SPLIT one (p = 7, 17); both reconstruct `x + sqrt2 y` exactly
-- [x] `flint_field_gcd` — modular (Encarnación) multivariate GCD over `K = Q(theta)`, with the
-      `{G, M}` Gröbner certificate and a `MATHILDA_NO_FIELD_GCD=1` A/B gate
-- [x] Radical / `Root` input normalised to one common field and rendered back through the
-      PRODUCT BASIS of the caller's own atoms (radicals in, radicals out)
-- [x] Two hooks: `poly_gcd_internal`'s inner FLINT fast path (covers `Factor`, `SquareFreeQ`,
-      `FactorTerms`, `PolynomialLCM`, `Cancel`/`Together`, Risch/DSolve) and
-      `builtin_polynomialgcd`'s FLINT block, ahead of the Phase C/D tower paths
-- [x] Safety net: the multivariate classical path CHECKS its answer and returns `1` when it
-      does not divide both operands (a pre-emptive refusal was too blunt — see below)
-- [x] `KGcd` (`logrewrite.m`) drops its multivariate A26 workaround
-- [x] Tests, docs (A26 rewritten, `algebra.md`, changelog, docstring), version `0.230`
-- [ ] `flint_field_reduce_core`'s univariate-only restriction — **dropped, not needed**: see below
+### What the profiling found — four unrelated mechanisms, not one
 
-## Review
+- **(A) Cost is multiplicative in the number of independent generator families appearing
+  additively.** `Log[x]/x` 0.021 s, `Sin[x]/x` 0.216 s, `Exp[-x^2]` 0.063 s; the two-term
+  sum 5.75 s (24x the parts), the three-term sum **20.12 s (67x)**. One ansatz spans the
+  *product* of the families.
+- **(B) A live segfault**, repro `D[Inactive[Integrate][f[u], Sqrt[x]] + 1, x]`, firing
+  seven times in one 21-second window from a test suite.
+- **(C/D) #109 and #110 fail for two different reasons, neither the recorded one.** §4 of
+  the plan document blames GF(p) Jacobian speed; that arithmetic already landed and is
+  60–100x faster than the figures §4 reasons from. #109 is a missing quartic Legendre
+  branch in `ThirdInt` plus the crash; #110 is `RealisePoints`/`TorsionRealise` on
+  un-normalised nested-radical coordinates (`ToNumberField` gives a degree-**4** field in
+  9.8 ms, so "degree 8" is a spelling artefact).
+- **(E) The trig/Si–Ci family is 4–5.7x Maxima across ~16 cases.** `Sin[x]/x` costs
+  0.194 s where the same mathematics as exponentials costs 0.082 s: a `Tan[x/2]`
+  Weierstrass tower is built and `e^{ix}` then recovered back out of it.
 
-**What was actually wrong.** Three defects, of which A26 recorded only the first.
+### Phase 1 — the segfault, fixed at root  [done]
 
-1. *A wrong answer.* `PolynomialGCD[f, g]` returned `g`; `PolynomialGCD[g, f]` returned `f` —
-   always the second operand, never a common divisor. `PolynomialGCD[x + a y, (x+a y)(x+2)]`
-   returned something of higher degree than its own first operand. Mechanism, traced to source:
-   `poly_content` bottoms out in `my_number_gcd` → `get_int_content` (`poly.c:1251-1291`), which
-   is INTEGER content and answers 1 for any `K`-coefficient, so both operands enter the PRS
-   non-primitive over `K` and the first `pseudo_rem` (`lc(B)*A - lc(A)*B`) vanishes identically.
-2. *A missed factor.* `Extension -> Automatic` on RADICAL input reached the Phase D tower path,
-   which computes the `Q[gamma,x,y]`-GCD, not the `Q(gamma)[x,y]`-GCD (`qafactor.c:2798` says so
-   itself). Correct only while the cofactors are free of algebraic constants; returns 1 otherwise.
-   Not recorded in A26 — found by probing, not by reading.
-3. *An unreachable engine.* Every explicit `Extension -> <value>` form (a value, a list, `All`,
-   `None`) went to the classical path. Only `Extension -> Automatic` reached a field engine.
+`deriv_of` (`src/calculus/deriv.c:545`) was a pass-through forwarding `compute_deriv`'s
+"cannot differentiate" NULL into callers that store it straight into an argument slot;
+`evaluate_step` then dereferences it (`src/eval.c:1471`). **82 call sites, none checking.**
+`deriv_of` now returns the inert `D[g, x]` — the behaviour its own docstring already
+promised — so the class is impossible rather than merely absent. Answers improve too:
+`D[INT + g[x], x]` gives `Derivative[1][g][x] + D[INT, x]`. The wrap stays `D` and not
+`Dt` on purpose (`deriv.c:2850`: re-emitting `Dt` re-enters `builtin_dt` unboundedly).
 
-**Verified against Mathematica 13.2** rather than assumed. That mattered: Mathematica's default
-`PolynomialGCD` on `AlgebraicNumber` coefficients returns **1**, not the gcd — so "what the right
-answer is" was a question with a surprising answer, and the safety net was designed to match it.
+### Phase 2 — additive decomposition  [done]
 
-**Why modular/`fq_nmod`.** FLINT has no multivariate gcd over a number field — `gr_mpoly.h`
-declares no arithmetic at all (a skeleton: no add, no mul, no gcd) and there is no
-`nf_elem_mpoly`. `fq_nmod_mpoly_gcd` is the only multivariate gcd with characteristic-p
-coefficients, so Encarnación is both the textbook answer and the *least* code: FLINT does the
-multivariate work, this writes reduction, CRT, reconstruction and certification.
-`flint_bridge.h:358` already advertised "multivariate via a modular fq_nmod GCD" — that comment
-had been aspirational since it was written; it is now true.
+**The soundness correction that mattered most.** My first equivalence — "terms that cancel
+must share a generator" — is **false**, and it survived every probe because I probed
+exponentials, which do share a generator. The counterexample is a pair of *primitives*:
 
-**Splitting the residue ring is mandatory, not an optimisation.** For a non-cyclic Galois group —
-`Q(sqrt2, sqrt3)`, group `(Z/2)^2` — *no* prime keeps `M` irreducible, since the group has no
-element of order 4. Any design that requires an inert prime fails on exactly the compositum
-fields this work needs. The spike deliberately exercised both an inert and a split prime before
-a line of the engine was written.
+    Log[1+x]/x + Log[x]/(1+x)  ->  Log[x] Log[1+x]   elementary
+    Log[1+x]/x   alone         ->  "not in class"
+    Log[x]/(1+x) alone         ->  "not in class"
 
-**The certificate is one call.** `G` is monic ⇒ its leading monomial is tau-free; `M`'s is
-`tau^n`; coprime leading monomials ⇒ `{G, M}` is a Gröbner basis by Buchberger's first criterion
-⇒ `fmpq_mpoly_divrem_ideal` *decides* divisibility over `K`. No cofactor reconstruction. So an
-unlucky prime or a premature reconstruction costs an iteration and can never produce a wrong
-answer.
+Disjoint families, elementary sum, neither half even in the class, because for primitives
+with base derivatives `D(c t_A t_B) = c (D t_A) t_B + c t_A (D t_B)` is a two-term sum with
+*disjoint* support. A naive split turns this PASS into a decline.
 
-**Results** (all now correct; previously the first two were non-divisors and the third missed the
-factor):
+The guard: let `N` be the blocks that did not close and `P` the **coupling-capable** ones
+(a `Log` or an `InvRational` head at an argument rational in `x` alone). Compose when
+`|N and P| <= 1`, else decline to the joint path. The degree argument is written out at the
+call site with the one residual assumption (the *class* boundary is not proved).
 
-| input | before | after |
-|---|---|---|
-| `PolynomialGCD[(x+a y)(x+1), (x+a y)(x+2)]` | `(x+a y)(x+2)` | `x + a y` |
-| `PolynomialGCD[g, f]` (order swapped) | `f` | `x + a y` |
-| `d(x^2+√2y+3), d(x^2+2√2y−1)`, `Ext → Automatic` | `1` | `d` |
-| explicit `Extension -> Sqrt[2]`, multivariate | second operand | `x + √2 y` |
+| case | before | after | |
+|---|---|---|---|
+| `Log[x]/x + Sin[x]/x + Exp[-x^2]` | 20.12 s | **0.287 s** | 70x |
+| #252 | 6.38 s | **0.28 s** | 23x |
+| #251 | 2.62 s | **0.12 s** | 22x |
+| #129 | 3.57 s | **0.38 s** | 9.4x |
+| #199 | 3.30 s | **0.41 s** | 8.0x |
+| #250 | 0.61 s | **0.12 s** | 5.1x |
+| #233 | 1.16 s | **0.28 s** | 4.1x |
 
-`Cancel`/`Together` now match Mathematica in all five option forms — which is why the planned
-lift of `flint_field_reduce_core`'s `gens.count != 1` restriction was **dropped**: the
-`poly_gcd_internal` hook already reaches `Cancel`, and Mathematica also leaves the default
-`AlgebraicNumber` case uncancelled, so there was nothing left to fix. Less code than planned.
+Corpus kernel time excluding #109/#110: **64.5 s -> 43.9 s (-32%)**. Cost on cases that do
+not split is 4–10%. `#199` composing despite two coupling-capable blocks is corollary C2
+doing real work: its `ArcTan` block *closes*, so it leaves `N`.
 
-**Two bugs found in my own work, both worth recording.**
+### Verification
 
-- *Use-after-free.* On the radical path `theta` is borrowed from the normalised operand, which I
-  freed before rendering — the result came back as `x`, a clean-looking non-divisor that the
-  certificate had already passed on the *correct* value. Fixed by a single cleanup at the bottom.
-- *A safety net that was too blunt.* The first version refused the classical PRS outright
-  whenever an algebraic constant was present with more than one variable. That is sound but
-  over-broad: it broke `dsolve_m12_stress`, whose answer runs through `Q(Sqrt[17])` and whose
-  gcds the PRS was handling correctly. Replaced by a post-check — run the PRS, then verify the
-  answer divides both operands and fall back to 1 only when it does not. Precise, and it only
-  ever replaces a genuinely wrong answer. Caught by the full suite, not by the targeted tests.
-- *Normalising in the wrong basis.* Clearing denominators in `theta`'s power basis and then
-  rendering in the caller's radicals injected a junk constant: `x + I y` came back as
-  `3 x + 3 I y`, because `Expand` folds `2*I` into `Complex[0,2]`, so the atom set is `{I, 2I}`
-  and the primitive element is `theta = 3I`. The compositum did the same via
-  `sqrt2 = (theta^3 − 9 theta)/2` → a factor 2. Both are correct *associates*, which is exactly
-  what makes them easy to ship. Fix: stay monic (canonical and basis-independent, and already
-  what the modular reconstruction produces). Recorded as a memory.
+- **Corpus: 303 PASS / 9 HONEST / 0 WEAK / 0 FAIL, `verdict changes: NONE`**, HONEST the
+  same nine ids `[59, 97, 98, 109, 110, 274, 275, 276, 277]`.
+- **PMT 114: 94 solved / 17 nonelem / 3 declined / 0 wrong**; **Charlwood 50: 49 verified**
+  — both baseline. (`charlwood_record.py` rewrote section E of `MATHILDA_DIVERGENCES.md`
+  with stale template prose contradicting its own measured run; restored from backup. The
+  table did not change.)
+- **Unit suite: 506 pass / 9 fail / 0 crash** of 515, all nine accounted for:
+  `crc_corpus_tests` pre-existing (compared *case identities*, not totals — the documented
+  trio plus the `1/Sqrt[a + b Tan[c x]^2]` family its own baseline names acceptable; two
+  verified to `Simplify` back to 0); `dsolve_m34_stress` red on pristine HEAD;
+  `dsolve_stress`/`dsolve_tests`/`dsolve_corpus` load-sensitive, `alarm()`, or my 300 s cap;
+  `parallelmixedspecial_tests` a stale mid-sweep binary; plus the two below.
+- New tests: `test_undifferentiable_subexpression` (one case per affected head) and four
+  groups in `tests/test_parallelmixedspecial.c` — both counterexamples, split-vs-joint
+  agreement *including remainder equality*, the complete-answer property, and faithfulness.
 
-**Performance — the interesting part.** The engine is called from `poly_gcd_internal` on every
-gcd and declines on almost all of them, so the decline path is a hot path. Three rounds:
+### Two cleanups the sweep forced
 
-1. First cut: Charlwood 13.1 → **18.0 s** (A40 alone 1.13 → 3.06). Fixed by two cheap gates — a
-   structural `fg_has_algebraic` scan before anything expensive, and declining below two
-   polynomial variables (univariate is already correct and faster elsewhere; this engine exists
-   for the multivariate case nothing else can do). → **13.4 s**.
-2. Adding nested-radical support put A40 back to 2.13 s. The obvious suspect was the qqbar
-   minpoly lookup in atom collection, so I memoised it: 496 constructions → **19**, and the time
-   **did not move at all**. Worth recording — the cheap-looking thing was not the cost.
-3. Instrumenting properly settled it: `flint_qqbar_to_number_field_common` was **113 calls
-   costing 1.065 s**, while all 43 modular GCDs those calls enabled cost **0.003 s** together.
-   Building the field, not computing in it. Caching it by atom set (the C analogue of the .m
-   layer's `FieldDataMemo`) → 0.180 s, A40 → **1.247 s**.
+- **Orphaned test binaries removed.** `intrischnorman_tests` and `int_rnb_tests` are
+  binaries from the C RischNorman/RischNormanBlake implementations deleted in `1a20f7f9` —
+  not CMake targets (`make`: "No rule to make target"), sources gone, dated 18 Sep. A
+  `ls *_tests` sweep of `tests/build` picks such orphans up and their failures are noise.
+- **`moebiusmu_tests` / `primenu_tests` strengthened.** They asserted oracles depending on
+  ECM splitting a large composite cofactor; when it fails, `FactorInteger` returns it
+  "unfactored with exponent 1" and both functions compute a **confidently wrong answer**.
+  Three consecutive runs of the old `PrimeNu[...]` assertion on one unmodified build gave
+  **7, 8, 8**. Replaced with products of explicit four-digit primes — above `2^63` so the
+  bigint path still runs, every factor inside trial division's reach, expected value known
+  by *construction* — plus the `mu = (-1)^nu` / `nu <= omega` identities. 4/4 deterministic.
+  The hazard itself is left as a finding: these heads return a wrong number rather than
+  staying unevaluated when the factorisation is incomplete.
 
-Final: **12.5 s**, 49/50, 0 wrong — *faster than the 13.10 s baseline* while fixing the wrong
-answers. P8 0.64 → 0.557, P4 1.24 → 1.18, A27 0.96 → 0.888, A28 0.23 → 0.212, A40 1.13 → 1.247.
-Both memos were kept: the atom memo does not show on this benchmark but removes an obvious
-repeated cost, and the field memo is the whole of the win.
+### Not yet done
 
-**Also found, left alone** (recorded in the plan, not fixed — out of scope):
-- `qafactor.c:4770` builds a three-argument `PolynomialGCD[num, den, S]` intending `S` as the
-  variable. `PolynomialGCD` is variadic over *polynomials*, so it computes `gcd(num, den, S)` —
-  almost always 1.
-- `Modulus` is advertised in `Options[PolynomialGCD]` (`options_builtin.c:607`) but
-  `builtin_polynomialgcd` never parses it, so `PolynomialGCD[a, b, Modulus -> 5]` returns
-  unevaluated.
+- **#231 `Sqrt[Log[x]] + ArcTan[x]/x` is not improved** (3.9 s). Both blocks are
+  coupling-capable and neither closes, so the guard declines — conservatively, since no
+  coupling actually occurs. Recovering it needs the sharper test of whether block A's
+  integrand really has a component along `g_A * D g_B`; that is exactly where a mistake is
+  a wrong answer, so the sound-but-conservative rule went in first. #227 is a 7%
+  regression, as predicted at design time.
+- Phases 3–8 (remove verification / construct the branch and embedding; the quartic
+  third-kind hole; the trig front end; #110; the small items; docs).
+- **No version bump or commit.** This tree is shared with another active session
+  (`frontend/*`, `src/parse.c`, `src/parse.h`, `src/repl.c` are theirs), so `src/version.h`
+  is left alone to avoid a collision — and the binary measured here also compiled their
+  in-progress parser/repl changes. The corpus matching baseline exactly argues against any
+  interaction, but it is not a clean-room measurement.
 
-# `flint_field_gcd` — stress test and harden to library standard (plan, 2026-09-29)
+### Follow-up 4: converted output must be selectable (structural like input)
 
-Plan: `/Users/user/.claude/plans/cheeky-seeking-flute.md`
+User: converting output to InputForm/FullForm must allow the same depth-first
+clickable selection as input; TeXForm just needs ordinary text selection.
+- Extracted the input's click-selection into a shared CM extension
+  `structuralSelection.ts` (ViewPlugin + Prec.highest mousedown + Alt-Up/Down);
+  CellShell refactored to use it (removed its inline duplicate).
+- New read-only `CodeView.svelte` (EditorState.readOnly) renders converted output:
+  InputForm/FullForm with highlight + structural selection, TeXForm/MathML as plain
+  selectable text. Replaces the non-selectable static {@html <code>}.
+Verified: `npm run check` 0 errors (150 files), `check:selection` PASS. Input
+selection logic unchanged (same shared gesture) — reverify in-app after relaunch.
 
-- [x] Instrument first (`MATHILDA_FIELD_GCD_STATS=1`): per-stage timers + prime/certificate counters
-- [x] Raise the coefficient ceiling (62-bit primes, bit budget not prime count)
-- [x] Fix the degree-6 decline (upstream, qqbar compositum primitive-element choice)
-- [x] Fix the compositum render-back (greedy spanning atom selection)
-- [x] Fix the `fg_field_images` allocation-failure leak
-- [x] `tests/bench_field_gcd.c` — 22 self-certifying cases + 2 gates, in ctest
-- [x] `test_field_gcd_stress_regressions` in `tests/test_algebraicnumber.c`
-- [x] Optimise only what the profile condemned (prime choice, prime pool, push_term)
-- [x] Adversarial pass (zero/constant operands, deep towers, huge exponents, mixed spellings)
-- [x] Docs: A26a, `algebra.md`, changelog, `flint_bridge.h` contract; v0.232 + tag
+### Follow-up 5: fix InputForm/FullForm output selection (focus-steal)
 
-## Review
+Converted-output structural selection failed because CellShell's `.cell-content`
+on:click focused the INPUT editor on any click (incl. output), wiping the output
+selection. Fixed: skip input-focus when the click is in `.output-pane`; focus the
+clicked view in the shared onMousedown; add drawSelection() to CodeView.
+`npm run check` 0 errors. (Save-on-close prompt: still pending — see below.)
 
-**The bar was "would a FLINT developer accept this", so the question asked was not "does it answer
-the A26 repros" but "what is its cost curve, where does it silently give up, and can it be made to
-crash". Three of the four things found were silent — they all ANSWERED.**
+### Follow-up 6: save-on-close prompt
 
-A decline is the failure mode that matters here and it is not a slow answer: the engine returns
-NULL, `poly_gcd_internal`'s post-check answers 1, that is a valid common divisor, nothing
-downstream complains, and the real gcd is gone. Two whole classes were doing this.
+Added unsaved-changes tracking + a Save/Don't Save/Cancel prompt on window close.
+- notebook.ts: global `dirty` store + markDirty() in the 8 content-mutating store
+  methods (not output/status/exec, since serialize() saves only {type,source}).
+- App.svelte: markClean() on save success + .lb open + startup; saveFile/saveFileAs/
+  doSave now return boolean; `getCurrentWindow().onCloseRequested` → if dirty,
+  preventDefault + in-app 3-button modal → Save (saveFile then win.destroy) /
+  Don't Save (destroy) / Cancel (stay). Enter=Save, Esc=Cancel.
+- capabilities: + core:window:allow-destroy.
+Verified: `npm run check` 0 errors; selection test PASS. Caveat: macOS Cmd+Q may
+bypass onCloseRequested (red-X close is covered).
 
-| | v0.230 | v0.232 |
-|---|---|---|
-| coefficient ceiling | declines past **~831 bits** | no decline at 13,288 bits |
-| `[K:Q] = 6` via radicals | declines for **every** generator tried | works |
-| compositum `{√2, √3}` | correct but a degree-4 `Root` per coefficient | `1 + x^3 + Sqrt[2] x y + y^2` |
-| 628-term operands | 63 ms | 30 ms |
-| residue-field work | — | 2.4–2.6× less |
-| Charlwood 50 | 12.5 s, 49/50 | 12.5 s, 49/50 |
+### Follow-up 7: 2D render all trig/hyperbolic functions (v0.246)
 
-**The ceiling was arithmetic.** 64 primes × 29 bits = 1856 bits of modulus, and rational
-reconstruction needs about twice the coefficient size; measured, 10^250 passed and 10^300 did not.
-62-bit primes plus a cap demoted to a grind-backstop fixed it. This is only safe because the
-certificate rather than the budget is what makes the answer correct — extra primes cost time, never
-correctness.
-
-**The degree-6 decline was upstream and beautifully specific.** `qqbar_express_in_field_esc` tries
-64 bits and then refuses to escalate when the generator has degree `<= 6`. Degrees 2–5 resolve
-inside 64 bits; 7+ escalate; **6 alone** needs more than 64 bits and is denied. So the compositum's
-trial-membership search rejected every candidate multiplier and the whole field failed. Fixed by
-choosing the primitive element from DEGREES — `alpha + c*b` always lies in `Q(alpha, b)`, so it
-generates the compositum exactly when the degrees agree — which removes the membership test rather
-than tuning it. The shared `in_field` was left alone: its degree gate exists because ungated
-escalation had regressed the DSolve callers.
-
-**Two suspects from reading the code that measurement cleared.** Recording these because the
-reading was persuasive and wrong both times, which is the same lesson this engine taught last round:
-- the *certificate* looked like the expensive step — an exact multivariate ideal division over Q run
-  after every prime, up to 64 times. It is ~5 µs against ~150 µs for one prime's residue gcds.
-  Gating it on a stabilised reconstruction therefore **cost an extra prime of the dominant work**
-  and made the small cases 2× slower; reverted to certifying each distinct candidate once,
-  immediately, so an easy input finishes on the first prime.
-- hoisting the per-component input reduction (`fg_lift` runs once per irreducible factor) looked
-  like an `r`× saving. Lift is 8% of the time. Dropped, deliberately, unimplemented.
-
-Only the `O(L²)` keyed-insert image construction was worth replacing (`push_term` + `sort_terms`).
-
-**The win came from somewhere the plan had not listed at all**: `fg_gcd_mod_p` runs one multivariate
-gcd per irreducible factor of `M mod p`, so the per-prime cost *is* how far the prime splits.
-Choosing least-split primes cut the residue work 2.4–2.6×. The direction was A/B'd rather than
-assumed, because it is genuinely not obvious — a split prime has single-word coefficient arithmetic
-where an inert one does degree-`n` polynomial arithmetic, so this only wins if FLINT's per-call cost
-dominates. It does, at these sizes: choosing the *most*-split prime was 1.6× slower at `n = 2` and
-2.6× slower at `n = 8`. Noted in the code that the balance is worth re-measuring on much larger
-operands.
-
-**One self-inflicted trap, caught by the harness abort-trapping on its own 903-digit row:**
-`is_associate` interpolated each operand twice into a buffer sized for one copy each. My bug, in the
-test code, and a useful reminder that a fixed `char buf[2048]` in `check_gcd` would have silently
-truncated the large-coefficient assertions into something that no longer tested what it named — both
-are now sized from the strings.
-
-**Plan item 1 was wrong and is dropped.** I expected a reachable hard abort: nothing on the `fg_`
-path guards `_get_term_exp_ui`, and FLINT's failure there is `flint_throw`, which is `FLINT_NORETURN`.
-It is unreachable — `to_mpoly` gates exponents on `EXPR_INTEGER`, i.e. `int64`, and every
-non-negative `int64` fits a `ulong`; `x^(2^63)` becomes a bigint and is refused before FLINT sees
-it. Verified against four adversarial exponent shapes, all of which decline cleanly. The invariant
-is now documented rather than guarded with dead code.
-
-**Verification.** 22/22 harness cases certify with the scaling ratio at 2.33 for 1.94× the terms
-(limit 3.0); `algebraicnumber_tests`, `numberfield_tests`, `flint_bridge_tests` pass; Charlwood
-49/50 at 12.5 s, unchanged; `make check-c99` and `make check-messages` green.
-
-**Also found, pre-existing, recorded not fixed** (identical at v0.230 and with
-`MATHILDA_NO_FIELD_GCD=1`, so outside this engine):
-- `PolynomialGCD[0, f]` with algebraic coefficients answers 1; Mathematica answers `f`.
-- A coefficient mixing an inexact real with an algebraic constant returns a garbage near-zero float
-  instead of declining: `PolynomialGCD[Expand[(x + 1.5 Sqrt[2] y)(x+1)], ...]` → `3.71618e-16`. The
-  pure-float case is correct, so it is specifically the mixture.
-- Mixed spellings of one field, and two distinct `AlgebraicNumber` generators, still answer 1
-  (`field_scan` reports a conflict rather than building the compositum).
+Integrate[1/(-1+x^2),x] → -ArcTanh[x] didn't typeset (fell back to text) because
+print_latex.c's FUNC_MAP lacked ArcTanh et al. Added ArcCot/ArcSec/ArcCsc, Coth/
+Sech/Csch, and all six inverse hyperbolics (\operatorname{...} where no KaTeX
+builtin; \coth is builtin). Verified via kernel: all now emit proper LaTeX.
+version.h 0.245→0.246; changelog note added. (Pending commit → tag v0.246.)
 
 ---
 
-# Notebook front end: dead menu bar, auto-append cell, wrapped output
+## Review — "why are we slower than Maxima/Mathematica", and 109/110 (v0.248)
 
-Three items, all in `frontend/`. No `src/version.h` bump and no tag: 25 of the last 25
-frontend-only commits leave it alone — `$VersionNumber` is the KERNEL's version and the
-notebook app is versioned separately (`src-tauri` 0.1.0). No `docs/spec/changelog/` entry
-either, for the same reason: that tree documents builtins.
+### What the question turned out to be
 
-## 1. The native menu bar is entirely dead  (bug)
+Two different questions, with two different answers, and the published table
+invites confusing them:
 
-`listen('menu:file.new')` throws — Tauri event names allow only `[A-Za-z0-9\-/:_]`, and `.`
-is not in the set. `App.svelte:84-87` subscribes all 32 ids in ONE `try`, so the first
-throw aborts the loop: `open`, `save`, `save-as`, `run-all`, `interrupt`, `restart` and
-`toggle-dark` are legal names that are never reached either. Nothing is wired.
+- **all-312 total** (Mathilda 277.6 s vs Maxima 79.3 / MMA 74.6) is **86.5% two
+  cases**: #109 and #110 at the 120 s cap = 240.0 s. Excluding them Mathilda is
+  37.5 s against Maxima 68.0 and MMA 72.1. Not a breadth problem.
+- **per-case ratio to the best other port** is the real answer: median **1.25x**,
+  geometric mean 1.21x, **194 of 282 cases slower** than the fastest other port.
+  Mathilda wins the common total only because it has no catastrophic tail (max
+  4.40 s vs Maxima 12.46 / MMA 11.95). Worst clusters: D trigonometric 4.92x
+  median (worst #84 sin(x)/x at 7.10x), B Ei/li 2.15x, P families 1.95x.
 
-- [ ] `src-tauri/src/lib.rs` — 25 dotted ids → hyphens (`file.new` → `file-new`, …)
-- [ ] `src/lib/menuCommands.ts` — same in `MENU_IDS` and the switch cases
-- [ ] `src/App.svelte` — per-id `try`, so one bad id degrades to one dead item, not 32
-- [ ] `tools/check_menu_ids.py` — add the grammar check that was missing (see below)
-- [ ] `scripts/check-notebook.mjs` — its three `cell.toX` regexes carry the old ids
+### Where the time is (measured, not guessed)
 
-**Why the existing gate missed it.** `check_menu_ids.py` joins three sets (native ids,
-`MENU_IDS`, dispatcher cases) and reports any asymmetry. It proved the two sides AGREED;
-it never asked whether what they agreed on was a legal event name. Its `ID_CHARS` admits
-`.` on purpose ("alphanumeric with dots and dashes"). Fix: keep the permissive pattern for
-*discovery* — tightening it would make a dotted id invisible rather than reported — and
-validate each discovered id against Tauri's grammar. Also add it to CI, where it is absent.
+Added `$SpecialProfile` to ParallelMixedSpecial.m, because a `sample` profile
+cannot attribute a `.m` pipeline — it names `evaluate_step`/matcher/malloc. The
+stage attribution sums to 99.7% of the entry-point clock over 310 cases:
 
-## 2. Evaluating the last cell appends a new code cell
+- **48% is Part II re-entries** — 748 calls, ~2.4 complete elementary
+  integrations per case. E1 27% (the architecture), **E4 14%**, E2 6%.
+- 33% the special-stage algebra proper, 8% certificates, 4% BuildTower.
 
-- [ ] `src/lib/NotebookCard.svelte` — after a SINGLE-cell run, if the evaluated cell's row
-      is the last row, `addRow('code')` and focus it.
+**E4 was pure waste**: 344 Part II runs, **0 replacements**. Not luck —
+a single gamma kernel's column is non-elementary by construction (s is never a
+positive integer, so Gamma[s,.] never degenerates; Liouville/Rosenlicht). Added
+`SingleKernelNonelementaryQ`; E4 now probes only the whole special part and only
+with >= 2 terms. Elliptic kinds deliberately not claimed. **-10.6% corpus-wide**,
+verdict run byte-identical (303/9/0/0, zero verdict changes, identical `why`).
 
-Decisions: the single-cell entry points only (`handleRun` for Shift+Enter, `runCellById`
-for the toolbar and `eval-cell`), NOT `runAll`/`runRange` — "Evaluate Notebook" ending by
-appending a stray empty cell is not what either Mathematica or Jupyter does. Fires
-immediately rather than awaiting the result, so a slow evaluation does not hold the new
-cell back. Focus moves to it (Mathematica puts the caret in the new input cell); there is
-nowhere else for it to go, since the evaluated cell was last. Rows, not cells, because a
-row can hold cells side by side and a sibling is not "below". Gated on the same
-non-empty-source condition as `runCell`, so repeated Shift+Enter cannot run away.
+### #109 / #110 — not the special stage at all
 
-## 3. Output wraps instead of scrolling right
+Both record **zero completed stages**: the whole 120 s is in the FIRST one,
+Part II. The branch is `TorsionRealise` — when the mod-p non-torsion certificate
+fires Part II declines in 0.1-0.5 s; when it does not, the symbolic group law
+runs. **6 of 18 sibling quadratics hang the same way**, and the number field is
+not the discriminator (x^2-x-1 fast / x^2-3x+1 hangs, both Q(sqrt5)).
 
-- [ ] `src/lib/Output.svelte` — `.out-error` gets `white-space: pre-wrap` plus `overflow-wrap`
-      and loses `overflow-x: auto`. (Planned `.out-expected` too; reading the CSS showed it
-      already had `pre-wrap` + `word-break`, so only `.out-error` actually needed the fix.)
-- [ ] `src/lib/Output.svelte` — expression output: measure whether the KaTeX render
-      overflows its container and fall back to the wrapping `.out-code-wrap` when it does
+- #109: the group law is never normalised over `Root[]` coordinates — add[P,P]
+  8 ms, add[2P,P] 41 ms and a page of `Root[...]^12`, squaring per doubling,
+  with a `Root::conv` flood to 4928 bits. `RootReduce` of its defining relation
+  is 1.3 ms.
+- #110: group law instant (TorsionOrder = 4 in 0.5 ms), logands built in 1.3 s;
+  the sink is after that, in poly-GCD/degree churn on growing Q(sqrt2)
+  coefficients.
 
-KaTeX cannot line-break — it lays math out as unbreakable inline-block boxes — so wide
-typeset output can only scroll. `isListOutput` already diverts >4 commas or >200 chars to
-wrapping code, which is why long lists wrap today and a wide 150-char polynomial with no
-commas does not. Measuring beats tuning that threshold: typeset math where it fits, wrapped
-text where it does not, decided by the layout rather than guessed from the string. The
-decision is sticky per item to avoid oscillating (swapping to wrapped code removes the
-overflow that caused the swap) and is reset on resize, so widening the card restores the
-typeset form. `overflow-x: auto` stays on `.out-collapsible` as the escape for what still
-cannot wrap — a wide image, a short unbreakable math run.
+Both point at one fix: normalise `PointsOver`'s coordinates into a single number
+field before the group law (`ToNumberField` gives degree 4 in 9.8 ms).
 
-## Verification
+### Two core bugs found and fixed on the way
 
-- [ ] `make check-menu-ids` — fails on the current tree, passes after
-- [ ] `npm run check:notebook`, `npm run check:search`, `npm run check` (svelte-check)
-- [ ] rebuild, relaunch, and exercise by hand: a menu item from each submenu; Shift+Enter
-      on the last cell and on a middle cell; a wide polynomial and a long `Print` string
+- **String literals truncated at 255 chars** (`parse_string`, `parse_symbol`).
+  Silent. Found because 6 of 312 answers would not re-parse. Buffers now grow;
+  `test_long_string_literal_not_truncated` checks the tail, not just the length,
+  and that two 301-char symbol names stay distinct.
+- **TeXForm dropped parentheses on juxtaposed factors in a fraction**:
+  `a/(b (c+d))` -> `\frac{a}{b c+d}`, a wrong answer in typeset form, and the
+  shape of every third-kind elliptic antiderivative. Multi-factor slots now
+  render at `*` precedence. `test_texform_fraction_parenthesisation`.
 
-## 4. Cell styles: Title, Subtitle, Chapter, Subsubsection
+### Report
 
-- [x] `src/lib/notebook.ts` — `CellType` widened to 9; `CELL_STYLES` becomes the single
-      source of truth (id, label, tag, icon, desc) with `isHeading` / `headingTag` beside it
-- [x] `src/lib/Toolbar.svelte` — its hand-written copy of the style list deleted, reads
-      `CELL_STYLES`
-- [x] `src/lib/CellShell.svelte` — the two duplicated heading branches collapse into one
-      `<svelte:element this={headingTag(...)}>`; six id-keyed CSS rules replace the
-      tag-keyed pair
-- [x] `src-tauri/src/notebook_format.rs` — `KNOWN_TYPES` extended to all nine
-- [x] `src-tauri/src/lib.rs` + `menuCommands.ts` — six Convert-to items, in outline order
+`PARALLEL_MIXED_SPECIAL_PERF_COMPARISON.tex` gained **Appendix A: every case in
+the suite** — all 312 in corpus order with the four clocks and Mathilda's own
+answer, typeset by Mathilda's `TeXForm` via the new `answers_tex.py`. 34 pages,
+0 errors, 0 overfull hboxes.
 
-The tags are deliberately NON-monotonic: `section` stays `h1` and `subsection` stays `h2`,
-because every generated reference page is built from them and their anchors are linked. The
-visual ladder is carried by id-keyed CSS instead. The Rust list matters more than it looks:
-`normalise_type` runs on **serialize** as well as parse, so a style Rust does not know would
-be written out as `code` and the heading destroyed — checked against `CELL_STYLES`.
+### Open / next
 
-## 5. Cmd+L — copy input from above  ·  6. Empty notebook on open
+- The torsion-realisation normalisation (closes #109/#110 and 4 more).
+- The trig front end: on the Tan[x/2] tower the residue is `2t/(1+t^2)` where the
+  exponential tower has a bare generator, so EiCandidates costs 33.6 ms vs 6.3
+  and DecompResidue 8.7 vs 0.9. This is the 4.92x group-D median.
+- Part II re-entries at 48% — E1 is the architecture, but worth asking whether
+  the E1 result can be reused rather than recomputed.
+- `Hash[]` is not a builtin, so `Part2`'s memo key `Hash[{...}]` stays
+  unevaluated and compares structurally. It WORKS (exact, no collisions) but is
+  O(size). Implementing `Hash` would silently turn that exact memo into a
+  collision-prone one — fix the memo first if `Hash` ever lands.
 
-- [x] `cellCommands.ts` — `previousInputSource` (testable without an editor) and
-      `copyInputFromAbove`; bound as `Mod-l` before `defaultKeymap`, and as Edit > Copy
-      Input from Above (`edit-copyInputAbove`)
-- [x] `canvas.ts` — one untitled card; the nine `_nb1.._nb9` consts become a
-      `STARTER_LAYOUT` table plus `ensureStarterCards()`, so both tours still work
-- [x] `Canvas.svelte` — the `setTimeout(loadStartupContent)` on mount removed
+---
 
-## 7. `%`, `%%`, `%n` did nothing in a notebook  (bug, kernel — bump+tag v0.234)
+## Review — the torsion realisation for #109/#110 (v0.249)
 
-`Integrate[x^5 E^x, x]` then `% // Factor` printed a literal `Out[-1]`.
+### Outcome
 
-- [x] `src/repl.c` — `repl_set_line` / `repl_store_in` / `repl_store_out` factored out of
-      `process_input` and called from `pipe_eval_statement` too, one line per STATEMENT
-- [x] `src/repl.c` — new `{"type":"line","line":L}` message per statement
-- [x] `ipc.ts` / `notebook.ts` / `NotebookCard.svelte` — `In[n]` reconciled from it
+**#109: 120 s cap -> 0.88 s, and HONEST -> PASS** (it now returns a special-function
+answer rather than declining). Corpus **304 PASS / 8 HONEST / 0 WEAK / 0 FAIL**,
+one verdict change, that one. Verdict-run total 282.9 -> 166.6 s.
+**#110 is not fixed** and is blocked on a separate, documented core defect.
 
-Cells only. A plain (non-`cell`) request is a one-shot from a batch tool and has no history;
-holding every result of a 10^7-element sweep alive in `Out[n]` would grow without bound.
+Four more of the swept `y^2 = x^3-x` denominators that hit the budget now resolve
+in 0.40-0.66 s: `x^2-6`, `x^2-2x+2`, `x^2-5x+1`, `x^2-3x+1` (#109).
 
-## 8. `Rule[a, b]` typeset as FullForm  (bug, kernel — same bump)
+### What it actually was — not what I proposed
 
-`DSolve[y''[x] - 3 y'[x] == y[x], y[x], x]` came back as `\{\{Rule[y[x], ...]\}\}`.
+My proposal was "put the place coordinates into one number field before the group
+law". That turned out to be the right *area* and the wrong *fix*: the coordinates
+are already fine (`PointsOver` RootReduces them, and `Solve` returns radicals).
+Three stacked defects, each silent:
 
-- [x] `src/print_latex.c` — an `INFIX_MAP` table (Rule, RuleDelayed, Set, SetDelayed,
-      And, Or, the six relations, SameQ/UnsameQ) plus `Not` and the chained `Inequality`,
-      with precedence levels below `Plus` so nesting parenthesises correctly
-- [x] `src/print_latex.c` — `True`/`False`/`Null`/`Indeterminate` set upright
-- [x] `src/print.c` — `RuleDelayed` becomes `:\to` there too (both renderers printed `\to`
-      for it, making `a -> b` and `a :> b` indistinguishable once typeset)
+1. **`MinimalPolynomial` refused on a `Root[]` whose numerics do not converge.**
+   It picks its irreducible factor by an 80-digit NUMERIC test with a 1e-3
+   ceiling — run even with only ONE candidate, where `G(s)=0` holds by
+   construction and there is nothing to choose. `N[Root[<dense deg 8, 40-digit
+   coefficients>, 3], 80]` returns the Root unevaluated (Root::conv x3), so a
+   provably correct answer was refused. Fixed in `src/poly/minpoly.c`; also
+   10-20x faster on the single-candidate case, which is the common one.
+   The silent chain: Root refinement declines -> MinimalPolynomial unevaluated ->
+   `NontorsionDivisor` CoefficientLists it into a one-element list of garbage ->
+   the mod-p certificate grinds past the whole budget. No link reported anything.
 
-## Correction to the note at the top of this plan
+2. **`DivisionPolyOrder` mixed the two coordinates in its zero test.** Even `n`
+   (which carry the `yv` factor) cost 0.003 ... 0.249 s and then hung; odd `n`,
+   same degrees up to 264 in X but no `Y0`, stayed under 0.035 s. A product is
+   zero iff a factor is.
 
-Items 1–6 are frontend-only and take no bump, as stated. Items 7–8 are **kernel** changes
-(`src/repl.c`, `src/print_latex.c`, `src/print.c`) and therefore DO bump `src/version.h`
-(v0.234), carry a `docs/spec/changelog/2026-09-28.md` entry, and are tagged. The earlier
-claim that the menu fix "would carry a version bump and a changelog note" was wrong for the
-frontend work and right only for this kernel work.
+3. **`TorsionOrder` ran the chord-and-tangent fallback after the division
+   polynomials had already decided.** The psi_n criterion is a theorem, not a
+   hint; the fallback belongs to the undepressed model only. It was the
+   expensive half: 0.005, 0.019, 11.2 s, then nothing.
 
-## Review
+### #110 — pinned, not fixed
 
-All eight items done. Gates, all green:
+Its divisor is genuinely 4-torsion, so the certificate correctly declines and the
+Miller logands get built over Q(sqrt2). `TDiv[T, TowerD[T,u], u]` then costs 5 s
+per logand and `Can` GROWS the remainder (81 -> 163 -> 703 -> 879 leaves), because
 
-| Gate | Result |
+    Together[x (1/(1 + Sqrt[2] t) + 1/(1 - t))]   BAILS, returns its input
+    Together[x (1/(1 + 2 t)       + 1/(1 - t))]   combines
+    Together[x (1/(1 + I t)       + 1/(1 - t))]   combines
+
+i.e. the open `exact_poly_div` defect at `src/poly/poly.c:1450`, whose unit test
+accepts Integer/Rational/Complex[q,q] and rejects everything else. It is also
+exactly why #111 (roots ±I) is fast and #110 (roots 1±Sqrt[2]) is not. Blast
+radius is PolynomialGCD/LCM/Mod, Decompose, Cancel and the exact linear solver,
+so it is its own change with its own corpus run.
+
+### Regression gates (all clean)
+
+| gate | before | after |
+|---|---|---|
+| 312-case corpus | 303/9/0/0 | **304/8/0/0**, only #109 changed |
+| PMT 114 | 94 solved / 3 declined / 17 nonelem | identical, 94 verified |
+| Charlwood 50 | 49 of 50 verified | identical |
+| unit suite | 5 red of 513 | identical set, crc_corpus byte-identical |
+
+---
+
+## Review — the bugs this session uncovered (v0.250, v0.251)
+
+### Verified-fresh inventory first
+
+Six candidates from earlier phases; **one had already been fixed** by other work
+(`TrigToExp[Sin[x^2]]` -> ComplexInfinity and `TrigToExp[Log[x] Sin[x]]` ->
+Indeterminate both now answer correctly). Re-checking before acting is the
+cheapest step in the whole exercise.
+
+### Fixed — three silent wrong answers (v0.250)
+
+The class that matters: a confident wrong value rather than a decline.
+
+1. **Number theory on a hard composite.** `FactorInteger`'s Automatic method is
+   bounded and returns an unfactored cofactor with exponent 1. `df_factor_mpz`
+   (`src/numbertheory/nt_gaussian.c`) read that back as a prime. For an 82-digit
+   semiprime: `PrimeNu` = 1 and `PrimeOmega` = 1 (true 2), `MoebiusMu` = -1
+   (true 1) -- while `PrimeQ` on the same number correctly said False.
+   `facint.c` already stated the rule its own API follows; this helper never saw
+   the flag. 40 Miller-Rabin rounds per base; all five consumers already
+   declined on failure.
+2. **`Factor` / `FactorList` ignored `Modulus`.** `Factor[x^2+1, Modulus -> 5]`
+   gave `1 + x^2`; over GF(5) it is `(x+2)(x+3)`. New
+   `flint_nmod_poly_factor_list` over FLINT's `nmod_poly_factor` -- already
+   linked and already used inside `flint_bridge.c`.
+3. **`PolynomialGCD` ignored `Modulus`**, while `PolynomialExtendedGCD` with the
+   same option was already correct. Routed to the same FLINT nmod path.
+
+All three **decline** where the fast path cannot go rather than falling back to
+the answer over Q.
+
+### Fixed — the last capped case (v0.251), and a wrong diagnosis on the way
+
+I was confident #110 was the `Together` bail over Q(Sqrt[2]). That bug is real
+and now fixed -- `exact_poly_div` accepts an `AlgebraicNumber` divisor, whose
+inverse is COMPUTED rather than asserted, unlike the symbolic radical the
+surrounding comment rules out -- and **it changed #110's time not at all.**
+
+The real cause, found by timing the one call that did not return: `Can`'s
+number-field detour. On #110's logand norm (164 leaves, atoms {Sqrt[2]}) the
+direct path is Together 1.3 ms -> 56 leaves; the detour is Together 2.7 s ->
+6732 leaves and then Cancel never finishes. The detour's only value is sparing
+`CanRaw` the `Extension -> Automatic` option, which `CanRaw` asks for only when
+a Complex atom is present. Gated on that.
+
+**Corpus 305 PASS / 7 HONEST / 0 WEAK / 0 FAIL -- the parity ceiling.** #110 the
+only verdict change; verdict-run total 282.9 -> 41.6 s.
+
+### Gates
+
+| gate | result |
 |---|---|
-| `make check-menu-ids` | 38 ids, three-way complete (was 32, all dead) |
-| `make check-pipe-protocol` | OK — grew the history + LaTeX sections |
-| `npm run check` (svelte-check) | 0 errors, 7 pre-existing warnings |
-| `npm run check:notebook` | all pass — grew sections 1b–1g (26 → ~115 checks) |
-| `check:search` / `check:prose` / `check:snippets` | all pass |
-| `cargo test` (src-tauri) | 17 pass, including a real-kernel cell round trip |
-| `print_tests` | pass — new `test_operator_latex` |
-| `repl_hooks_tests` | pass (guards the `process_input` refactor) |
+| 312 corpus | **305/7/0/0**, one verdict change (#110), `why` unchanged on 311 |
+| PMT 114 | 94 solved / 3 declined / 17 nonelem, all 94 verified -- baseline |
+| Charlwood 50 | 49 of 50 verified -- baseline |
+| unit suite | running at time of writing; `solve_corpus_tests` red in the batch run was LOAD (130/130 in isolation) |
 
-Two things found along the way and left alone, because neither is what was reported:
+### Still open
 
-- **`Factor` expands `E^x (-120 + 120 x - ...)`** into a sum instead of leaving the product
-  alone. Identical with and without `%` (`Factor[E^x (...)]` typed directly does the same),
-  so it is a pre-existing `Factor` issue, not a `%` one.
-- **`render_plus` brackets a leading negative integer** — `(-120)\,e^{x}` where the plain
-  printer gives `-120 E^x` — and over-groups a `Times` inside a sum. Cosmetic, pre-existing,
-  in a different function from the one this change touched.
-
-## 9. `Factor` multiplied a product out  (bug, kernel — same bump; found while verifying 7)
-
-With `%` working, the reported cell became `Integrate[x^5 E^x, x] // Factor` — and
-came back EXPANDED. Root cause: `Together[E^x (x^2 - 1)]` is `-E^x + x^2 E^x`, and that
-expansion is not a polynomial in the one variable `collect_variables` finds (`x`), so
-`bz_factor_to_expr` handed it straight back.
-
-- [x] `src/poly/facpoly_factor_builtin.inc` — a denominator-free `Times` whose result came
-      back as a `Plus` is factored factor by factor instead (factoring is multiplicative).
-      The denominator case is excluded: `Factor[(x^2-1)/(x-1)]` is legitimately `1 + x`.
-- [x] `tests/test_factor_baseline.c` — `test_factor_of_a_product_stays_a_product`, pinning
-      both sides of the guard
-
-`Together`'s expansion is the ROOT defect and is deliberately untouched: the integrator,
-DSolve and Simplify are tuned around the shape it returns, so that is its own piece of
-work with its own corpus runs. A/B builds confirm no regression: `crc_corpus_tests` fails
-identically with and without the change (same 6 cases, pre-existing red vs a baseline of
-3), and `dsolve_tests` reaches the same 48th test and stalls at the same
-`t_m39_nonhomog_vop` either way.
-
-## 10. `./build-sidecar.sh` could not build after a plain `make`  (blocker, found while launching)
-
-`make USE_ECM=0` does not recompile the two sources that read `-DNO_ECM`, because object
-files do not record their flags — so after the default `make USE_ECM=1` the link failed on
-a missing `_ecm_init`.
-
-- [x] `frontend/build-sidecar.sh` — `touch src/facint.c src/version.c` before the build
-
-## 11. A clickable launcher, wired into the front-end build
-
-- [x] `MathildaNotebook.command` (repo root, beside the makefile) — double-click in
-      Finder to open the notebook.
-      The `.command` suffix is what makes it clickable at all (Finder runs those in
-      Terminal; an extensionless executable opens in a text editor). Builds the
-      release bundle if it is missing, warns — and still opens — if any
-      `.c`/`.h`/`.rs`/`.ts`/`.svelte` source is newer than the bundle's executable.
-- [x] `frontend/build-app.sh` + `npm run build:app` — ONE build path: sidecar, JS
-      deps, `tauri build --bundles app`, re-apply the launcher's exec bit, print the
-      clickable path. The launcher calls this rather than reimplementing it.
-- [x] `frontend/README.md` — Production Build section rewritten around it.
-
-A script, not a symlink: the bundle lives under `frontend/src-tauri/target/`, which
-`cargo clean` and a fresh clone both remove, and a symlink would then be a dead file
-that reports nothing when clicked.
-
-Contributor-facing build tooling, so no bump of its own; it rides the v0.234 commit.
-
-Also surfaced: `build-sidecar.sh` REPLACES the repo's `./Mathilda` with the
-`USE_ECM=0` build, because the makefile writes one output path. Pre-existing and left
-as is, but it now says so on the way past (`make -j` restores the default) — silently
-degrading the binary a developer then uses for factorisation is the kind of thing
-only `$Version` would reveal.
-
-## DSolve M60 — higher-order linear: reducibility + generalised-Airy (2026-09-29)
-
-Plan: `/Users/user/.claude/plans/melodic-mapping-clarke.md`. Targets the largest measured
-§2.1.2 gap bucket (`3rd_high_linear`, 101 UNEVAL).
-
-- [x] Pre-change §2.1.2 baseline measured: **605 PASS / 599 non-PASS / 0 FAIL**
-      (the checked-in M59 row read 595/609 — the tree had drifted +10 on other work)
-- [x] Stage A — `DSolve`GeneralizedAiry` (`src/calculus/dsolve_genairy.c`): depression
-      gauge `y = w u` + pure-power potential `u^(n) == A x^m u` → `x^j 0F_{n-1}` basis;
-      symbolic `A`/`m`; forcing via VoP; numeric self-verify; cascade + pinned builtin
-- [x] Stage B — `OperatorFactor` at order 2 + forcing carried through the peel
-- [x] Stage C — adjoint (left-factor) peel = Beke order-(n−1) right factors; `DFactor`
-      reports the left factor (emitted last, list is innermost-first)
-- [x] Latency root-causes found and fixed, all pre-existing but newly exposed:
-      unsimplified `Exp[-(Log[x]+…)]` trailing integrand (3.98 s **and fails** vs
-      0.015 s simplified); symbolic `C[k]` inside the algebraic integrator (2.06 s vs
-      0.011 s — fixed by integrating per constant); unbounded ansatz width in
-      `of_find_factor` (new `OF_MAX_UNKNOWNS`)
-- [x] Generalised Bessel row `Q = A x^m + B x^(-2)` in `dsolve_specialform.c`
-- [x] `tests/test_dsolve_m60_stress.c` (8 forward-generator families) + `t_m60_*` units
-- [x] Post-change §2.1.2: **605 → 634 PASS (+30 / −1, net +29), 570 non-PASS, 0 FAIL**,
-      deterministic across two full runs. Bucket: **3rd_high_linear 42 → 64 (+22)**,
-      2nd_linear 243 → 249 (+6). STATUS.md row + bucket table updated; ctest gate 619 → 580
-- [x] DSOLVE_PLAN.md M60 entry + §1c catalog + weekly changelog
-- [x] All 14 DSolve ctest stress suites pass (incl. new `dsolve_m60_stress_tests`, 19 s);
-      `make check-c99` green. `dsolve_tests` is PRE-EXISTING red (hits the `alarm(120)` in
-      test_utils.h at test 48 of 266, so the `t_m60_*` group never executes there) — all 16
-      of its assertions verified by direct evaluation instead
-- [x] valgrind: pinned `DSolve\`GeneralizedAiry` and `DSolve\`OperatorFactor` are **leak-flat**
-      vs the `1+1` baseline (13,440 B / 420 blocks); so is `DSolve\`DFactor`. The +320 B / 5
-      blocks seen on the automatic `DSolve` route is Kovacic's declining attempt, which leaks
-      MORE on its own (13,824 B / 426 blocks) — pre-existing, not M60
-- [ ] Commit (M60 paths only; no version bump, no tag). NOTE: `tasks/todo.md` and
-      `docs/spec/changelog/2026-09-28.md` also carry a concurrent session's uncommitted
-      notebook work, so they are deliberately left OUT of the commit
-
----
-
-## Notebook: printer directives + the `.mnb` extension (v0.235)
-
-Two reports, one session.
-
-### 1. `D[Log[1-Sqrt[x]] Sqrt[x], x] // InputForm` did not print in InputForm
-
-- [x] Reproduced at the protocol boundary, which is where it lives:
-      `{"latex":"InputForm[\\frac{\\frac{-1}{2}}{(1-\\sqrt{x})}+..."}` — the payload was
-      already correct, the `latex` field was not, and the front end prefers `latex`
-- [x] Root cause, kernel half: `print.c` consumes InputForm/FullForm/TeXForm/NumberForm;
-      `print_latex.c` knew only `HoldForm`, so the wrapper fell through its generic
-      `Head[a, b]` arm. Typesetting *is* StandardForm — there is no second notation to
-      render these in, so `expr_to_latex` now returns the **empty string** (the existing
-      "use the payload" signal in both repl.c and mathilda_ffi.c). Whole-tree scan, so
-      `Hold[InputForm[x]]` and `{InputForm[1/2], 3}` cannot leak either
-- [x] Root cause, front-end half: with no `latex`, `renderOutput` fell back to running the
-      PAYLOAD through KaTeX. With `throwOnError` off `Sqrt[x]` does not fail — it typesets
-      as the letters S q r t beside a bracketed x. The kernel fix alone would have traded
-      one wrong rendering for another; an un-typeset payload now goes out as `<code>`
-- [x] Tests, both sides of the seam: `test_printer_directive_has_no_latex` in
-      `tests/test_print.c` (each directive empty, each text form intact, an undirected
-      expression still rendering) and six new cases in `tools/check_pipe_protocol.py`
-- [x] Verified: `print_tests`, `packed_list_tests`, `check_pipe_protocol.py`, `make
-      check-c99`, `npm run check` (0 errors), `npm run check:notebook`, `npm run build`.
-      REPL output for the reported expression is unchanged
-
-### 2. Notebook files save as `.mnb`
-
-- [x] Save As writes `.mnb` ("Mathilda notebook"); the stanza format itself is untouched
-- [x] Open still accepts `.mathilda` — a file on disk should not stop opening because the
-      extension was renamed — but it is never written again
-- [x] Doc comments in `App.svelte`, `canvas.ts`, `ipc.ts`, `notebook.ts`, `commands.rs`,
-      `notebook_format.rs`, `check-notebook.mjs` and `frontend/README.md` follow
-
-Version bumped to **v0.235** (substantive: behaviour change), changelog under
-`docs/spec/changelog/2026-09-28.md`, `InputForm` entry in
-`docs/spec/builtins/expression-information.md` notes the notebook rule.
-
----
-
-# Drop `HoldAll` from `Series` and `SeriesCoefficient` (v0.236)
-
-Plan: `/Users/user/.claude/plans/series-and-seriescoefficient-should-ticklish-crab.md`
-
-`Attributes[Series]` / `Attributes[SeriesCoefficient]` were `{HoldAll, Protected}`;
-Mathematica's are `{Protected}`, and so are Mathilda's own `Limit` (fixed in
-`4e7b0515`), `D` and `NSeries`. The hold bought nothing — `do_series_single`
-evaluates `f`/`x0`, `parse_series_spec` evaluates the order, and
-`series_resolve_spec_vars` existed only to undo the hold for the variable — and it
-cost six bugs, all the same shape: a *named* argument behaving differently from the
-literal it stood for.
-
-## Code
-- [x] `series.c` `series_init` — `ATTR_HOLDALL` dropped from both; comment rewritten
-      on the `limit.c:4285` model
-- [x] `series.c` — `series_resolve_spec_vars` deleted (dead: the evaluator now
-      resolves a symbol-valued spec variable), replaced by `series_spec_vars_ok`
-- [x] `series.c` — `series_warn_ivar`: funnelled `Series::ivar` /
-      `SeriesCoefficient::ivar`, per-head, capped at 3, re-armed by the next
-      well-formed call, budget spent only on messages the user saw
-- [x] Guard runs FIRST in both builtins — before the inexact dispatch and before
-      `SeriesCoefficient`'s `ProductLog`/`FresnelC`/`FresnelS` symbolic-index
-      branches, which match on the raw spec (verified: `{5, 0, n}` otherwise
-      produced the general term)
-- [x] `series.c` — the hand-rolled `eval_and_free`s KEPT (direct re-entry from
-      `internal_rationalize_then_numericalize`); stale HoldAll comments refreshed
-- [x] `limit.c` `layer2_series` — symbol guard on `ctx->x`. `split_rule` never
-      checked, and `Limit` no longer holds, so `x = 5; Limit`Series[Sin[x]/x, x -> 0]`
-      leaked the new `ivar` out of a *speculative* probe and flipped an enclosing
-      `Check[]`
-- [x] `series.c` — pre-existing leak fixed on the way past: the list-threading path
-      never freed its `new_args` array (16 B/element; the multivariate path below it
-      does). Valgrind: the series script now matches the `1+1` baseline exactly
-
-## Docs
-- [x] `src/info.c` (both docstrings), `src/calculus/series.h` header comment
-- [x] `docs/spec/builtins/power-series.md` — attributes, the resolution rule, the new
-      `ivar` contract; the stale claim that `Series[f, {5,0,4}]` "leaves the call
-      unevaluated" (it returned the input) is now true
-- [x] `tools/check_packed_aware.py` — the `Series` exemption reason was stale
-- [x] `docs/spec/changelog/2026-09-28.md`, `src/version.h` → 0.236
-
-## Tests
-- [x] `test_series.c`: `test_series_symbol_valued_variable` rewritten;
-      `test_series_arguments_are_evaluated` + `test_series_ivar_decline` added
-      (attributes, the six fixed forms, `ivar` through `Check[]` and `Quiet[]`)
-- [x] `test_limit.c`: the `Limit`Series` leak regression
-
-## Review / verification
-- **Gates** — `make check-messages` (assert-empty; the new site routes, so it is
-  invisible to the scan — no EXEMPT/BASELINE entry), `check-c99`,
-  `check-packed-aware`: all green.
-- **41 suites** re-run clean. Two standing failures were confirmed **pre-existing**
-  by an isolated A/B (revert `series.c` to HEAD, rebuild, re-run): `series_tests` 4
-  (`Integrate[Series[...]]` reaching `ParallelIntegrateMixed` ×2, `Sqrt[a^2 b^2 + x]`
-  coefficient cleanup ×2) and `simplify_tests` 1 (`x^2^(3/2)` parenthesisation).
-  NOTE: the suites use libc `assert()` and are built with `NDEBUG`, so a failure
-  prints `FAIL:` to stderr and still **exits 0** — count `^FAIL`, never trust `$?`.
-- **347-case corpus A/B** — every `Series`/`SeriesCoefficient` expression in nine
-  test files, run through both binaries: **36 differing lines, all of them the
-  intended changes**, zero unintended differences among the ~330 pre-existing cases.
-- **Perf** — `parallelmixedtower_tests` (the heaviest `Series` consumer, via
-  `ParallelMixed.m`'s `Unique[]` expansions) ≈11.7 s vs ≈12.2 s baseline: the extra
-  evaluation pass is absorbed by `Expr.last_evaluated_at` memoisation.
-- **Book** — all four `Series`-using example files byte-identical against the HEAD
-  binary, so no regeneration.
-
-## Known, accepted
-- A compound expansion variable (`Series[Sin[f[t]]/f[t], {f[t], 0, 4}]`) used to
-  expand by accident of the structural `expr_free_of`/`D`; it now declines.
-  Mathematica rejects it too. No internal caller passes one (audited: `gruntz`
-  dummies, `residue` validates, `dsolve_frobenius`/`kovacic`/`ramanujan` build
-  symbols).
-- `Quiet[]` only silences attempts made *inside* it, so a declined `Series` that a
-  surrounding `Table` re-evaluates outside the quiet region can still print. Generic
-  to every declining-with-message builtin here (`Solve::ivar` behaves the same), not
-  introduced by this change. The 3-per-head cap bounds it.
+- `x^2 + 2x - 1` on the same curve still reaches the budget (not a corpus case).
+- `Together` over a *symbolic* radical denominator still declines, by design.
+- `Root` numeric refinement does not always converge (`src/root_numeric.c:699`).
+- A branch error in `Integrate[Sqrt[1+x^3], x]` (residual -1.178 at x = 1/3),
+  pre-existing and not in the corpus.
+- `Hash[]` is still not a builtin. When it lands, fix `Part2`'s memo FIRST: its
+  key is `Hash[{...}]`, which currently stays unevaluated and therefore compares
+  structurally (exact). An integer hash would make that memo collision-prone.

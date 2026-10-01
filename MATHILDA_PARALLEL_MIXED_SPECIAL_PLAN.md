@@ -248,9 +248,12 @@ suspects, in order: a missing `Ci`/`Si` conjugate-`Ei`-pair reduction in
 Ids **109, 110**:
 
 ```
-1/((x^2 - 3x + 1) Sqrt[x^3 - x])        Python 45.0 s   Maxima 42.9 s   Mathilda >120 s
-1/((x^2 - 2x - 1) Sqrt[x^3 - x])        Python 43.5 s   Maxima  ~3 s    Mathilda >120 s
+                                        Python    Maxima    Mathematica    Mathilda
+1/((x^2 - 3x + 1) Sqrt[x^3 - x])         26.3 s    10.2 s       0.83 s      >120 s
+1/((x^2 - 2x - 1) Sqrt[x^3 - x])         22.3 s     1.04 s      1.65 s      >120 s
 ```
+
+Those four columns are `speed_bench.py`'s uniform clock (`PARALLEL_MIXED_SPECIAL_PERF_COMPARISON.{tex,pdf}` in `<research>/special`): the entry-point call alone, one case per process, sequential, warm. **They replace the `Python 45.0 s / Maxima 42.9 s / ~3 s` figures this section used to quote**, which came from the verdict runs — measured at 6 and 8 concurrent workers on 8 cores, with the harness's own post-processing inside Maxima's clock, so they were inflated by roughly 2x and 5x respectively. The correction does not change the conclusion that this item is worth 2 cases, but it sharpens the target: **Mathematica closes #109 in 0.83 s**, 12x faster than Maxima and 32x faster than SymPy, so the 120 s wall is not an intrinsic cost of the certificate. Note also that Maxima's two siblings differ by 10x (10.2 s against 1.04 s) while Mathematica's differ by 2x the other way, so the quadratic cofactor matters more than the genus and a single-case measurement of this item would mislead.
 
 Both need the **mod-p non-torsion certificate** of a third-kind residue divisor,
 i.e. Jacobian arithmetic over GF(p). This is the gap already measured in
