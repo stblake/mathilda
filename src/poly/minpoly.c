@@ -560,31 +560,55 @@ static Expr* mp_core(const Expr* s, const Expr* var) {
         ncand = 1;
     }
 
-    /* Pick the factor that vanishes at s (high-precision numeric test). */
-    NumericSpec spec;
+    /* Pick the factor that vanishes at s.
+     *
+     * With a SINGLE candidate there is nothing to pick: G(s) = 0 holds by
+     * construction (the resultant elimination above built G that way), so its
+     * one irreducible factor is the minimal polynomial, exactly.  The numeric
+     * test below exists only to choose AMONG several factors, and running it in
+     * the one-candidate case turns a provably correct answer into a refusal
+     * whenever N[s] is unavailable.
+     *
+     * That is not hypothetical.  Root[] numeric refinement does not always
+     * converge -- `N[Root[<dense degree 8, 40-digit coefficients>, 3], 80]`
+     * returns the Root unevaluated after three Root::conv warnings -- so
+     * mp_eval_abs then measured |factor(Root[...])|, an unevaluated symbol,
+     * bestmag stayed 1e300, and MinimalPolynomial came back UNEVALUATED for a
+     * polynomial that IrreduciblePolynomialQ confirms irreducible.  Silently:
+     * the caller in ParallelMixed.m's NontorsionDivisor fed the unevaluated
+     * result to CoefficientList, got a one-element list of garbage for the
+     * field's defining polynomial, and the mod-p non-torsion certificate then
+     * ground past the whole time budget on it (corpus #109/#110). */
+    Expr* chosen = NULL;
+    double bestmag = 0.0;
+    if (ncand == 1) {
+        chosen = expr_copy(cands[0]);
+    } else {
+        NumericSpec spec;
 #ifdef USE_MPFR
-    spec.mode = NUMERIC_MODE_MPFR;
-    spec.bits = numeric_digits_to_bits(80);
+        spec.mode = NUMERIC_MODE_MPFR;
+        spec.bits = numeric_digits_to_bits(80);
 #else
-    spec = numeric_machine_spec();
+        spec = numeric_machine_spec();
 #endif
-    Expr* Ns = numericalize(s, spec);
-    int best = -1;
-    double bestmag = 1e300;
-    for (size_t i = 0; i < ncand; i++) {
-        double m = mp_eval_abs(cands[i], var, Ns, spec);
-        if (m < bestmag) { bestmag = m; best = (int)i; }
+        Expr* Ns = numericalize(s, spec);
+        int best = -1;
+        bestmag = 1e300;
+        for (size_t i = 0; i < ncand; i++) {
+            double m = mp_eval_abs(cands[i], var, Ns, spec);
+            if (m < bestmag) { bestmag = m; best = (int)i; }
+        }
+        expr_free(Ns);
+        if (best >= 0) chosen = expr_copy(cands[best]);
     }
-    expr_free(Ns);
-
-    Expr* chosen = (best >= 0) ? expr_copy(cands[best]) : NULL;
     for (size_t i = 0; i < ncand; i++) expr_free(cands[i]);
     free(cands);
     expr_free(G);
     mp_ctx_free(&c);
 
     /* eps: with high precision a true root is essentially 0; non-roots are
-     * O(1).  A loose ceiling guards against a non-algebraic slip-through. */
+     * O(1).  A loose ceiling guards against a non-algebraic slip-through.
+     * bestmag is 0 on the single-candidate path, which is decided exactly. */
     if (!chosen || bestmag > 1e-3) {
         if (chosen) expr_free(chosen);
         return NULL;

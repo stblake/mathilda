@@ -179,6 +179,19 @@ Can[e_] := Module[{atoms, fd, u},
   If[! TrueQ[$CanFieldEnabled], Return[CanRaw[e]]];
   atoms = DeleteDuplicates[Cases[e, _Root | _Complex | Power[_?NumericQ, _Rational], {0, Infinity}]];
   If[atoms === {} || LeafCount[e] < $CanFieldMinLeaves, Return[CanRaw[e]]];
+  (* Only a COMPLEX atom earns the detour.  Its whole value is to do the field
+     arithmetic once over AlgebraicNumber instead of making CanRaw re-derive the
+     splitting field on every call, and CanRaw asks for Extension -> Automatic --
+     the expensive branch, 51 ms against 1.9 ms -- exactly when a Complex atom is
+     present.  With only real radicals CanRaw takes its CHEAP branch, plain
+     one-argument Cancel, which the comment above records as reducing identically
+     on radicals; so for those the detour cannot win, and it can lose badly.
+     Measured on corpus #110's Miller logand over Q(Sqrt[2]), the norm
+     v1^2 - q v2^2: the direct path is Together 1.3 ms to 56 leaves, while the
+     detour's Together takes 2.7 s and returns 6732 leaves -- a 41x blow-up from
+     one 164-leaf input -- after which Cancel does not finish at all.  That one
+     call, reached four times through TDiv, was the whole of #110's budget. *)
+  If[FreeQ[atoms, _Complex], Return[CanRaw[e]]];
   fd = FieldDataMemo[atoms];
   If[! MatchQ[fd, {_, _}], Return[CanRaw[e]]];
   u = Cancel[Together[e /. fd[[1]]]];
@@ -626,7 +639,7 @@ EllOps[q_, g_] := Module[{c, c3, toM, add},
    Order of the point (X0, Y0) on Ytil^2 = X^3 + A X + B if it is <= Nmax,
    else None: the division polynomials psi_n are built by the standard
    recursion with Ytil^2 reduced, and n P = O iff psi_n(P) = 0.            *)
-DivisionPolyOrder[A_, B_, X0_, Y0_, Nmax_: 24] := Module[{X, yv, psi, red, get, n},
+DivisionPolyOrder[A_, B_, X0_, Y0_, Nmax_: 24] := Module[{X, yv, psi, red, get, n, yZero = None, atP},
   red[e_] := PolynomialRemainder[Expand[e], yv^2 - (X^3 + A X + B), yv];
   psi[0] = 0; psi[1] = 1; psi[2] = 2 yv;
   psi[3] = 3 X^4 + 6 A X^2 + 12 B X - A^2;
@@ -636,7 +649,36 @@ DivisionPolyOrder[A_, B_, X0_, Y0_, Nmax_: 24] := Module[{X, yv, psi, red, get, 
       red[get[h + 2] get[h]^3 - get[h - 1] get[h + 1]^3],
       red[Cancel[get[h] (get[h + 2] get[h - 1]^2 - get[h - 2] get[h + 1]^2)/(2 yv)]]]];
   Do[get[k] = psi[k], {k, 0, 4}];
-  n = SelectFirst[Range[2, Nmax], IsZero[get[#] /. {X -> X0, yv -> Y0}] &, None];
+  (* atP[p]: decide p(X0, Y0) == 0 exactly, keeping Y0 OUT of the test wherever
+     the shape allows.  `red` leaves every psi_n in the form a(X) + b(X) yv, and
+     the classical parity makes one half vanish outright: psi_n is a polynomial
+     in X alone for odd n, and carries yv as a factor for even n.  Substituting
+     both coordinates at once therefore hands IsZero a product that mixes X0's
+     field with Y0's SEPARATE representation, and that is what made this the
+     single most expensive step in Part II.  On corpus #109 the place is
+     X0 = (3 + Sqrt[5])/2 with Y0 = Root[u^4 - 15 u^2 - 5, 2]: deciding
+     "a large element of Q(Sqrt[5]) times that Root object is zero" falls through
+     to the numeric test, which escalates Root::conv to thousands of bits.
+     Measured per n, the EVEN n (which carry Y0) cost 0.003, 0.005, 0.017, 0.061,
+     0.105, 0.178, 0.249 s and then do not finish at all, while the ODD n -- the
+     same polynomial degrees, up to 264 in X, but no Y0 -- stay under 0.035 s
+     throughout.  Building the psi_n is not the cost: the identical scan to
+     n = 24 at a rational point is 0.16 s.
+
+     A product is zero iff a factor is, so the even case is exactly
+     IsZero[b(X0)] -- no Y0, no mixing.  The genuinely mixed case (neither half
+     structurally zero, which these psi_n never produce, but which the function
+     must still answer correctly) goes through the conjugate
+     a^2 - b^2 (X0^3 + A X0 + B) = (a + b Y0)(a - b Y0), computable without Y0:
+     a NONZERO value disproves a + b Y0 == 0 outright, and only a zero one needs
+     the direct test, which then settles which of the two conjugates vanished. *)
+  atP = Function[p, Module[{a = p /. yv -> 0, b = Coefficient[p, yv, 1]},
+    Which[
+      b === 0, IsZero[a /. X -> X0],
+      a === 0, If[yZero === None, yZero = IsZero[Y0]]; yZero || IsZero[b /. X -> X0],
+      True,    IsZero[Expand[a^2 - b^2 (X^3 + A X + B)] /. X -> X0] &&
+               IsZero[(a /. X -> X0) + (b /. X -> X0) Y0]]]];
+  n = SelectFirst[Range[2, Nmax], atP[get[#]] &, None];
   n];
 
 (* TorsionOrder[q, g, P, add, c, bound]
@@ -644,8 +686,20 @@ DivisionPolyOrder[A_, B_, X0_, Y0_, Nmax_: 24] := Module[{X, yv, psi, red, get, 
    the division polynomials when the model is depressed, otherwise by
    repeated addition; None if no order <= bound.                            *)
 TorsionOrder[q_, g_, P_, add_, c_, bound_] := Module[{m = None, kP},
-  If[c[[2]] === 0, m = DivisionPolyOrder[c[[3]] c[[1]], c[[4]] c[[1]]^2, P[[1]], P[[2]], bound]];
-  If[m === None, kP = P; Do[kP = add[kP, P]; If[kP === None, m = k; Break[]], {k, 2, bound}]];
+  (* The division polynomials DECIDE, they do not merely suggest: for P =!= O
+     and 2 <= n <= bound, n P = O iff psi_n(P) = 0.  So a complete scan that
+     finds nothing PROVES the order exceeds `bound`, and the repeated-addition
+     loop below cannot find one either -- it was being run anyway, on exactly
+     the points where it is ruinous.  Measured on corpus #109's place
+     ((3+Sqrt[5])/2, Root[u^4-15u^2-5, 2]), the chord-and-tangent steps cost
+     0.005, 0.019 and 11.2 s and then do not finish at all: RR is RootReduce,
+     which has to re-minimise a coordinate whose degree climbs with every
+     addition, so the point representation grows 168 -> 1022 -> 4512 leaves.
+     The loop is the fallback for the model this branch does not cover, i.e. an
+     undepressed one (c2 =!= 0), where psi_n as written below does not apply. *)
+  If[c[[2]] === 0,
+    m = DivisionPolyOrder[c[[3]] c[[1]], c[[4]] c[[1]]^2, P[[1]], P[[2]], bound],
+    kP = P; Do[kP = add[kP, P]; If[kP === None, m = k; Break[]], {k, 2, bound}]];
   m];
 
 (* EllSum[q, g, Y, terms, add, c]

@@ -124,6 +124,36 @@ static void test_unevaluated(void) {
              "MinimalPolynomial[Plus[Log[2], x], x]");
 }
 
+/* A Root[] object whose NUMERIC refinement does not converge must still get its
+ * minimal polynomial.  The factor among the candidates is chosen by an 80-digit
+ * numeric test with a 1e-3 ceiling -- fine when there is a choice to make, but it
+ * was run even with a SINGLE candidate, where G(s) = 0 holds by construction.
+ * `N[this, 80]` emits three Root::conv warnings and returns the Root unevaluated,
+ * so the test could not score it, and MinimalPolynomial refused outright on a
+ * polynomial that IrreduciblePolynomialQ confirms irreducible.
+ *
+ * It refused silently, and the caller did not notice: ParallelMixed.m's
+ * NontorsionDivisor fed the unevaluated result to CoefficientList, took the
+ * one-element list of garbage as a number field's defining polynomial, and the
+ * mod-p non-torsion certificate then ran past the whole 120 s budget on it
+ * (integration corpus #109). */
+static void test_root_nonconvergent_numerics(void) {
+    run_test("MinimalPolynomial[Root[2298903058544965460896492004394531250000 "
+             "- 250417320057749748229980468750000000 #1 "
+             "+ 11606206744909286499023437500000 #1^2 "
+             "- 294947862625122070312500000 #1^3 "
+             "+ 4494413375854492187500 #1^4 - 42187500000000000 #1^5 "
+             "+ 239062500000 #1^6 - 750000 #1^7 + #1^8 &, 3], x]",
+             "Plus[2298903058544965460896492004394531250000, "
+             "Times[-250417320057749748229980468750000000, x], "
+             "Times[11606206744909286499023437500000, Power[x, 2]], "
+             "Times[-294947862625122070312500000, Power[x, 3]], "
+             "Times[4494413375854492187500, Power[x, 4]], "
+             "Times[-42187500000000000, Power[x, 5]], "
+             "Times[239062500000, Power[x, 6]], "
+             "Times[-750000, Power[x, 7]], Power[x, 8]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -132,6 +162,7 @@ int main(void) {
     test_nested();
     test_complex();
     test_root_objects();
+    test_root_nonconvergent_numerics();
     test_rational();
     test_listable();
     test_pure_function();
