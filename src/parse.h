@@ -18,6 +18,22 @@
 Expr* parse_expression(const char* input);
 
 /*
+ * Source spans for structural (bottom-up) selection in the notebook.
+ *
+ * mth_parse_spans parses `input` WITHOUT evaluating and returns, for every
+ * subexpression the parser builds, its half-open [start, end) byte range into
+ * `input` — including each precedence stage (so `a + b*c` yields `a`, `b`, `c`,
+ * `b*c`, `a + b*c`). This is what the editor needs for Mathematica-style
+ * balanced selection and cannot get from the Expr tree, which carries no
+ * positions. It is tolerant: incomplete/!syntactic input yields the spans of the
+ * parts that did parse. The caller frees the result with mth_span_sink_free.
+ */
+typedef struct { int start; int end; } MthSpan;
+typedef struct { MthSpan* v; size_t n, cap; } MthSpanSink;
+MthSpanSink* mth_parse_spans(const char* input);
+void mth_span_sink_free(MthSpanSink* sink);
+
+/*
  * Parses the next top-level STATEMENT from the input string pointer,
  * advancing the pointer past the parsed statement and its trailing ';'
  * separator (if any). Unlike parse_expression, a ';'-chain is NOT folded into

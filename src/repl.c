@@ -1170,6 +1170,33 @@ static char* pipe_read_line(FILE* in) {
     return buf;
 }
 
+/* Emit the structural-selection spans as a JSON array of [start, end] integer
+ * pairs (byte offsets into the request's expr). Pure integers → no escaping. */
+static void pipe_emit_spans(int id, const MthSpanSink* k) {
+    size_t cap = 64 + (k ? k->n : 0) * 24;
+    char* buf = malloc(cap);
+    if (!buf) return;
+    int off = snprintf(buf, cap, "{\"id\":%d,\"type\":\"spans\",\"payload\":[", id);
+    if (k) {
+        for (size_t i = 0; i < k->n && off > 0 && (size_t)off < cap; i++)
+            off += snprintf(buf + off, cap - (size_t)off, "%s[%d,%d]",
+                            i ? "," : "", k->v[i].start, k->v[i].end);
+    }
+    if (off > 0 && (size_t)off < cap) snprintf(buf + off, cap - (size_t)off, "]}");
+    pipe_emit(buf);
+    free(buf);
+}
+
+/* Handle a {"id":N,"expr":"...","spans":true} request: parse WITHOUT evaluating
+ * and return the subexpression spans the notebook uses for structural selection,
+ * then the terminating done. */
+static void pipe_process_spans(const char* input, int id) {
+    MthSpanSink* k = mth_parse_spans(input);
+    pipe_emit_spans(id, k);
+    mth_span_sink_free(k);
+    pipe_emit_done(id);
+}
+
 static void pipe_mode_loop(void) {
     g_pipe_out = stdout;
     char* line;
@@ -1194,7 +1221,14 @@ static void pipe_mode_loop(void) {
         char* expr = NULL;
         if (json_get_int(line, "id", &id))
             expr = json_get_string_dup(line, "expr");
-        if (expr) pipe_process_input(expr, id, json_get_true(line, "cell"));
+        if (expr) {
+            /* A "spans" request parses for structural selection and never
+             * evaluates; everything else is an ordinary evaluation. */
+            if (json_get_true(line, "spans"))
+                pipe_process_spans(expr, id);
+            else
+                pipe_process_input(expr, id, json_get_true(line, "cell"));
+        }
         free(expr);
         free(line);
     }

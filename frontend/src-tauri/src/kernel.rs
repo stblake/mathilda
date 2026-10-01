@@ -6,6 +6,7 @@ use std::time::Duration;
 use tauri::async_runtime::Receiver;
 use tauri::ipc::Channel;
 use tauri::Emitter;
+use tauri::Manager;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
@@ -47,11 +48,28 @@ impl MathildaKernel {
     }
 
     async fn spawn_inner(&self) -> Result<(), String> {
-        let (rx, child) = self
+        let mut cmd = self
             .app
             .shell()
             .sidecar("mathilda")
-            .map_err(|e| format!("sidecar lookup: {e}"))?
+            .map_err(|e| format!("sidecar lookup: {e}"))?;
+
+        // Point the kernel at its bundled src/internal tree (init.m, the integral
+        // tables, the mixed-tower modules). The sidecar runs from an arbitrary
+        // working directory, so without this it cannot locate ANY .m file and
+        // every LoadModule/Get silently fails (init.m) or errors (CRCTable,
+        // ParallelMixed*). The C resolver (src/loadmodule.c) checks $MATHILDA_HOME
+        // first. In dev the bundled resource dir may be absent, so we set it only
+        // when the directory actually exists and otherwise let the kernel fall
+        // back to its CWD/executable search (which works from the repo tree).
+        if let Ok(res_dir) = self.app.path().resource_dir() {
+            let home = res_dir.join("internal");
+            if home.exists() {
+                cmd = cmd.env("MATHILDA_HOME", home);
+            }
+        }
+
+        let (rx, child) = cmd
             .spawn()
             .map_err(|e| format!("spawn: {e}"))?;
 
@@ -102,6 +120,110 @@ impl MathildaKernel {
     /// Ping the kernel publicly (for frontend health check).
     pub async fn ping(&self) -> Result<(), String> {
         self.ping_inner().await
+    }
+
+    /// Evaluate a single expression QUIETLY — no cell history, so it does not
+    /// bump $Line / Out[n] (used by the output "Convert To" menu for FullForm /
+    /// TeXForm, which must not disturb the session). Returns {payload, latex,
+    /// error} as a JSON object.
+    pub async fn eval_once(&self, expr: String) -> Result<Value, String> {
+        let mut guard = self.state.lock().await;
+        let state = guard.as_mut().ok_or("kernel not running")?;
+
+        let id = state.next_id;
+        state.next_id = state.next_id.wrapping_add(1);
+
+        // No "cell" key → the kernel evaluates one expression without touching
+        // session history (see pipe_process_input / pipe_eval_statement).
+        let request = serde_json::to_string(&json!({ "id": id, "expr": expr }))
+            .map_err(|e| format!("json: {e}"))?
+            + "\n";
+        state
+            .child
+            .write(request.as_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+
+        let mut payload = String::new();
+        let mut latex = String::new();
+        let mut error = String::new();
+        loop {
+            match state.rx.recv().await {
+                Some(CommandEvent::Stdout(bytes)) => {
+                    match classify_stdout_line(&String::from_utf8_lossy(&bytes), id) {
+                        LineAction::Forward(msg) => match msg.get("type").and_then(|t| t.as_str()) {
+                            Some("expr") => {
+                                payload = msg.get("payload").and_then(|p| p.as_str()).unwrap_or("").to_string();
+                                latex = msg.get("latex").and_then(|p| p.as_str()).unwrap_or("").to_string();
+                            }
+                            Some("error") => {
+                                error = msg.get("message").and_then(|p| p.as_str()).unwrap_or("").to_string();
+                            }
+                            _ => {}
+                        },
+                        LineAction::Done { .. } => break,
+                        LineAction::Ignore => {}
+                    }
+                }
+                Some(CommandEvent::Terminated(p)) => {
+                    return Err(format!("Kernel died (code {:?})", p.code));
+                }
+                _ => {}
+            }
+        }
+        Ok(json!({ "payload": payload, "latex": latex, "error": error }))
+    }
+
+    /// Parse `expr` for structural (bottom-up) selection and return its
+    /// subexpression spans as [start, end] byte-offset pairs. Does NOT evaluate.
+    /// Shares the evaluation mutex, so it waits behind a running evaluation —
+    /// acceptable because selection is an editing affordance, and the frontend
+    /// caches the result per document.
+    pub async fn fetch_spans(&self, expr: String) -> Result<Vec<[i64; 2]>, String> {
+        let mut guard = self.state.lock().await;
+        let state = guard.as_mut().ok_or("kernel not running")?;
+
+        let id = state.next_id;
+        state.next_id = state.next_id.wrapping_add(1);
+
+        let request = serde_json::to_string(&json!({
+            "id": id, "expr": expr, "spans": true
+        }))
+        .map_err(|e| format!("json: {e}"))?
+            + "\n";
+        state
+            .child
+            .write(request.as_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+
+        let mut spans: Vec<[i64; 2]> = Vec::new();
+        loop {
+            match state.rx.recv().await {
+                Some(CommandEvent::Stdout(bytes)) => {
+                    match classify_stdout_line(&String::from_utf8_lossy(&bytes), id) {
+                        LineAction::Forward(msg) => {
+                            if msg.get("type").and_then(|t| t.as_str()) == Some("spans") {
+                                if let Some(arr) = msg.get("payload").and_then(|p| p.as_array()) {
+                                    spans = arr
+                                        .iter()
+                                        .filter_map(|pair| {
+                                            let p = pair.as_array()?;
+                                            Some([p.first()?.as_i64()?, p.get(1)?.as_i64()?])
+                                        })
+                                        .collect();
+                                }
+                            }
+                        }
+                        LineAction::Done { .. } => break,
+                        LineAction::Ignore => {}
+                    }
+                }
+                Some(CommandEvent::Terminated(p)) => {
+                    return Err(format!("Kernel died (code {:?})", p.code));
+                }
+                _ => {}
+            }
+        }
+        Ok(spans)
     }
 
     /// Evaluate `expr`, forwarding output messages to `channel` until "done".

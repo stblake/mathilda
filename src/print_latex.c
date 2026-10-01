@@ -298,7 +298,16 @@ static const FuncTeX FUNC_MAP[] = {
     {"Sin","\\sin",1}, {"Cos","\\cos",1}, {"Tan","\\tan",1},
     {"Csc","\\csc",1}, {"Sec","\\sec",1}, {"Cot","\\cot",1},
     {"ArcSin","\\arcsin",1}, {"ArcCos","\\arccos",1}, {"ArcTan","\\arctan",1},
+    /* \arccot/\arcsec/\arccsc are not KaTeX/LaTeX builtins → \operatorname. */
+    {"ArcCot","\\operatorname{arccot}",1}, {"ArcSec","\\operatorname{arcsec}",1},
+    {"ArcCsc","\\operatorname{arccsc}",1},
     {"Sinh","\\sinh",1}, {"Cosh","\\cosh",1}, {"Tanh","\\tanh",1},
+    /* \coth is a builtin; \sech/\csch are not → \operatorname. */
+    {"Coth","\\coth",1}, {"Sech","\\operatorname{sech}",1}, {"Csch","\\operatorname{csch}",1},
+    /* Inverse hyperbolics: none are LaTeX/KaTeX builtins → \operatorname. */
+    {"ArcSinh","\\operatorname{arcsinh}",1}, {"ArcCosh","\\operatorname{arccosh}",1},
+    {"ArcTanh","\\operatorname{arctanh}",1}, {"ArcCoth","\\operatorname{arccoth}",1},
+    {"ArcSech","\\operatorname{arcsech}",1}, {"ArcCsch","\\operatorname{arccsch}",1},
     {"Log","\\ln",1},
     {"Exp","\\exp",1},
     {"Abs","\\left|%s\\right|",0},  /* special: inline arg */

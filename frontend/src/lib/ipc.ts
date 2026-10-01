@@ -61,6 +61,51 @@ export async function evaluateCell(
   await invoke<void>('evaluate_cell', { expr: normalizeInput(expr), channel });
 }
 
+/** Parse an expression for structural (bottom-up) selection: returns, for every
+ *  subexpression, its [from, to] range as UTF-16 indices into `expr` (ready to
+ *  hand to CodeMirror). The kernel reports UTF-8 BYTE offsets, so we map them
+ *  back to UTF-16 here. Sends the RAW text (not normalizeInput, which would
+ *  change its length and so its offsets); the kernel's parser reads unicode
+ *  operators like `→` directly. */
+export async function fetchSpans(expr: string): Promise<[number, number][]> {
+  const raw = await invoke<[number, number][]>('syntax_spans', { expr });
+  return byteSpansToUtf16(expr, raw);
+}
+
+function byteSpansToUtf16(doc: string, spans: [number, number][]): [number, number][] {
+  // Fast path: pure ASCII → one byte per UTF-16 unit, offsets already match.
+  let ascii = true;
+  for (let i = 0; i < doc.length; i++) if (doc.charCodeAt(i) > 0x7f) { ascii = false; break; }
+  if (ascii) return spans;
+  // Build a UTF-8-byte-offset → UTF-16-index table at code-point boundaries.
+  const byteToU16 = new Map<number, number>();
+  const enc = new TextEncoder();
+  let b = 0;
+  byteToU16.set(0, 0);
+  for (let i = 0; i < doc.length;) {
+    const cp = doc.codePointAt(i)!;
+    const ch = String.fromCodePoint(cp);
+    b += enc.encode(ch).length;
+    i += ch.length;            // 1, or 2 for a surrogate pair
+    byteToU16.set(b, i);
+  }
+  const map = (off: number): number => {
+    let o = off;
+    while (o > 0 && !byteToU16.has(o)) o--; // snap into a multibyte char to its start
+    return byteToU16.get(o) ?? 0;
+  };
+  return spans.map(([s, e]) => [map(s), map(e)]);
+}
+
+/** Evaluate one expression quietly (no cell history, so it does not disturb
+ *  $Line / Out[n]) and return its result forms. Used by the output "Convert To"
+ *  menu to fetch FullForm / TeXForm of a result. */
+export async function evalOnce(
+  expr: string,
+): Promise<{ payload: string; latex: string; error: string }> {
+  return await invoke('eval_once', { expr });
+}
+
 export async function restartKernel(): Promise<void> {
   await invoke<void>('restart_kernel');
 }

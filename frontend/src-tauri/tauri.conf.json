@@ -37,6 +37,9 @@
     ],
     "externalBin": [
       "binaries/mathilda"
-    ]
+    ],
+    "resources": {
+      "../../src/internal": "internal"
+    }
   }
 }

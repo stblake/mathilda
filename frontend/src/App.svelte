@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { writable } from 'svelte/store';
+  import { writable, get } from 'svelte/store';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -16,7 +16,7 @@
   import SearchBar from './lib/SearchBar.svelte';
   import { searchOpen } from './lib/search';
   import { uiScale } from './lib/properties';
-  import { kernelStatus } from './lib/notebook';
+  import { kernelStatus, dirty, markClean } from './lib/notebook';
   import { darkMode } from './lib/theme';
   import { kernelMemory } from './lib/status';
   import { pingKernel, saveLibrary, loadLibrary, loadNotebook, saveNotebook,
@@ -97,6 +97,32 @@
 
   onDestroy(() => unlisten.forEach(u => u()));
 
+  // --- Save-on-close prompt --------------------------------------------------
+  /* A 3-way modal (Save / Don't Save / Cancel), shown when the window is closed
+     with unsaved changes. The native dialog plugin is 2-button only, so this is
+     an in-app modal; `savePrompt` holds the pending promise's resolver. */
+  let savePrompt: ((v: 'save' | 'dont' | 'cancel') => void) | null = null;
+  function promptSaveClose(): Promise<'save' | 'dont' | 'cancel'> {
+    return new Promise((resolve) => { savePrompt = resolve; });
+  }
+  function answerSavePrompt(v: 'save' | 'dont' | 'cancel') {
+    const r = savePrompt; savePrompt = null; r?.(v);
+  }
+
+  onMount(async () => {
+    try {
+      const win = getCurrentWindow();
+      unlisten.push(await win.onCloseRequested(async (event) => {
+        if (!get(dirty)) return;          // nothing unsaved -> let it close
+        event.preventDefault();           // hold the close while we ask
+        const choice = await promptSaveClose();
+        if (choice === 'cancel') return;  // keep the window open
+        if (choice === 'save') { const ok = await saveFile(); if (!ok) return; }
+        await win.destroy();              // force the close (bypasses this handler)
+      }));
+    } catch (e) { console.warn('close handler:', e); }
+  });
+
   // ---------------------------------------------------------------------------
   // File I/O — library-level (whole canvas)
 
@@ -136,6 +162,7 @@
       libraryPath  = path;
       const filename = path.split('/').pop()?.replace(/\.lb$/i, '') ?? title;
       setWindowTitle(filename);
+      markClean(); // a freshly opened library matches disk
     } catch (e) { console.error('Open failed:', e); return false; }
     pushRecentFile(path).catch(() => {});
     return true;
@@ -177,15 +204,15 @@
     catch (e) { console.error('Clear Menu failed:', e); }
   }
 
-  async function saveFile() {
-    if (libraryPath) doSave(libraryPath); else saveFileAs();
+  async function saveFile(): Promise<boolean> {
+    return libraryPath ? await doSave(libraryPath) : await saveFileAs();
   }
 
   /* Save As offers both formats. Choosing .mnb EXPORTS the current notebook
      (the active pane, else the top card) as sources only; it does not become the
      library's path, so a later Cmd+S still saves the whole canvas as .lb rather
      than overwriting the notebook file with something else. */
-  async function saveFileAs() {
+  async function saveFileAs(): Promise<boolean> {
     const path = await save({
       defaultPath: (libraryTitle || 'library') + '.lb',
       filters: [
@@ -193,22 +220,23 @@
         { name: 'Mathilda Notebook (current notebook, no outputs)', extensions: ['mnb'] },
       ],
     });
-    if (!path) return;
+    if (!path) return false;
     if (isNotebookFile(path)) {
       const nb = currentNotebook();
-      if (!nb) { console.error('Save failed: no notebook to save'); return; }
+      if (!nb) { console.error('Save failed: no notebook to save'); return false; }
       try {
         await saveNotebook(path, nb.store.serializeLegacy());
         pushRecentFile(path).catch(() => {});
+        markClean();
+        return true;
       }
-      catch (e) { console.error('Save failed:', e); }
-      return;
+      catch (e) { console.error('Save failed:', e); return false; }
     }
     libraryPath = path;
-    doSave(path);
+    return await doSave(path);
   }
 
-  async function doSave(path: string) {
+  async function doSave(path: string): Promise<boolean> {
     try {
       const json = serializeLibrary(libraryTitle);
       await saveLibrary(path, json);
@@ -216,7 +244,9 @@
       libraryTitle = filename;
       setWindowTitle(filename);
       pushRecentFile(path).catch(() => {});
-    } catch (e) { console.error('Save failed:', e); }
+      markClean();
+      return true;
+    } catch (e) { console.error('Save failed:', e); return false; }
   }
 
   function setWindowTitle(name: string) {
@@ -240,6 +270,13 @@
   $: document.documentElement.style.fontSize = `${$uiScale * 16}px`;
 
   function onKeydown(e: KeyboardEvent) {
+    /* The save-on-close modal owns the keyboard while it is up: Enter = Save,
+       Escape = Cancel. */
+    if (savePrompt) {
+      if (e.key === 'Escape') { e.preventDefault(); answerSavePrompt('cancel'); }
+      else if (e.key === 'Enter') { e.preventDefault(); answerSavePrompt('save'); }
+      return;
+    }
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     if (e.key === 's' || e.key === 'S') { e.preventDefault(); saveFile(); return; }
@@ -309,7 +346,63 @@
   </div>
 {/if}
 
+<!-- Save-before-closing prompt (unsaved changes on window close) -->
+{#if savePrompt}
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+  <div class="save-modal-backdrop" on:click={() => answerSavePrompt('cancel')}>
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+    <div class="save-modal" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation>
+      <div class="save-modal-title">Save changes before closing?</div>
+      <div class="save-modal-msg">Your notebook has unsaved changes. If you don’t save, they will be lost.</div>
+      <div class="save-modal-buttons">
+        <button class="btn-dont" on:click={() => answerSavePrompt('dont')}>Don’t Save</button>
+        <span class="save-modal-spacer"></span>
+        <button class="btn-cancel" on:click={() => answerSavePrompt('cancel')}>Cancel</button>
+        <button class="btn-save" on:click={() => answerSavePrompt('save')}>Save</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
+  /* ---- Save-before-closing modal ---- */
+  .save-modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: var(--z-menu, 400);
+  }
+  .save-modal {
+    background: var(--menu-bg, #1a1b2e);
+    color: var(--text, #cdd6f4);
+    border: 1px solid var(--menu-border, rgba(255, 255, 255, 0.12));
+    border-radius: 10px;
+    box-shadow: var(--menu-shadow, 0 20px 50px rgba(0, 0, 0, 0.5));
+    padding: 20px 22px 16px;
+    width: min(420px, 90vw);
+  }
+  .save-modal-title { font-size: 1.02rem; font-weight: 650; margin-bottom: 8px; }
+  .save-modal-msg {
+    font-size: 0.86rem; color: var(--text-muted, #9399b2);
+    line-height: 1.5; margin-bottom: 18px;
+  }
+  .save-modal-buttons { display: flex; align-items: center; gap: 8px; }
+  .save-modal-spacer { flex: 1; }
+  .save-modal-buttons button {
+    font-family: inherit; font-size: 0.85rem;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--menu-border, rgba(255, 255, 255, 0.14));
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    color: var(--text, #cdd6f4);
+  }
+  .save-modal-buttons button:hover { background: var(--surface-3, rgba(255, 255, 255, 0.12)); }
+  .save-modal-buttons .btn-save {
+    background: var(--accent, #89b4fa); border-color: var(--accent, #89b4fa);
+    color: #0b1020; font-weight: 600;
+  }
+  .save-modal-buttons .btn-save:hover { filter: brightness(1.07); }
+  .save-modal-buttons .btn-dont { color: var(--err, #f38ba8); }
+
   /* ---- Dark mode (default — :root always applies) ---- */
   :global(:root) {
     --bg:          #050810;
@@ -320,6 +413,20 @@
     --text-muted:  #45475a;
     --accent:      #89b4fa;
     --accent-glow: rgba(137,180,250,0.10);
+
+    /* Code-cell syntax highlighting (CodeMirror). Dark palette (Catppuccin
+       Mocha family, matching --accent). mathildaLang.ts references these. */
+    --cm-comment:  #6c7086;
+    --cm-string:   #a6e3a1;
+    --cm-number:   #fab387;
+    --cm-builtin:  #89b4fa;
+    --cm-symbol:   #cdd6f4;
+    --cm-pattern:  #f38ba8;
+    --cm-slot:     #f9e2af;
+    --cm-out:      #f9e2af;
+    --cm-operator: #89dceb;
+    --cm-bracket:  #9399b2;
+    --cm-error:    #f38ba8;
     --out-text:    #cdd6f4;
     --gutter-bg:   rgba(255,255,255,0.015);
     --gutter-hover:rgba(255,255,255,0.03);
@@ -356,6 +463,20 @@
     --text-muted:  #666688;
     --accent:      #3b82f6;
     --accent-glow: rgba(59,130,246,0.15);
+
+    /* Code-cell syntax highlighting (CodeMirror). Light palette (Catppuccin
+       Latte family), overriding the dark defaults above when html.light is set. */
+    --cm-comment:  #8c8fa1;
+    --cm-string:   #40a02b;
+    --cm-number:   #fe640b;
+    --cm-builtin:  #1e66f5;
+    --cm-symbol:   #4c4f69;
+    --cm-pattern:  #d20f39;
+    --cm-slot:     #df8e1d;
+    --cm-out:      #df8e1d;
+    --cm-operator: #209fb5;
+    --cm-bracket:  #7c7f93;
+    --cm-error:    #d20f39;
     --out-text:    #1c1c2e;
     --gutter-bg:   #eeeef5;
     --gutter-hover:#e4e5f0;

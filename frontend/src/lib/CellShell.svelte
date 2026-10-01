@@ -14,7 +14,8 @@
   import { EditorView, keymap } from '@codemirror/view';
   import { EditorState, EditorSelection } from '@codemirror/state';
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-  import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+  import { mathildaHighlightExtension } from './mathildaLang';
+  import { mathildaStructuralSelection } from './structuralSelection';
   import Output from './Output.svelte';
   import RefPage from './RefPage.svelte';
   import { openRefpage } from './canvas';
@@ -130,7 +131,12 @@
         doc: cell.source,
         extensions: [
           history(),
-          syntaxHighlighting(defaultHighlightStyle),
+          /* Mathilda syntax highlighting (StreamLanguage + themed HighlightStyle).
+             Replaces the old syntaxHighlighting(defaultHighlightStyle), which
+             coloured nothing because no language fed it tokens. */
+          ...mathildaHighlightExtension,
+          /* Bottom-up structural selection + Alt-Up/Down (shared with output views). */
+          ...mathildaStructuralSelection,
           /* The find bar's current-match mark: painted, not selected, so the
              find bar keeps focus (see searchHighlight.ts). */
           searchMarkExtension,
@@ -138,9 +144,10 @@
              This is not cosmetic metadata: every comment command in
              @codemirror/commands (toggleComment, toggleLineComment, ...) reads
              `commentTokens` out of language data and does NOTHING AT ALL when it
-             is absent. No language extension is installed here, so without this
-             facet the toolbar's comment button would look implemented, pass
-             review, and silently no-op. */
+             is absent. The Mathilda StreamLanguage above intentionally does not
+             declare commentTokens, so this facet still provides them; without it
+             the toolbar's comment button would look implemented, pass review, and
+             silently no-op. */
           EditorState.languageData.of(() => [
             { commentTokens: { block: { open: '(*', close: '*)' } } },
           ]),
@@ -470,7 +477,14 @@
     class="cell-content"
     class:cell-horizontal={horizontal && cell.type === 'code'}
     bind:this={splitContainer}
-    on:click|stopPropagation={() => { if (cell.type === 'code' && view) view.focus(); }}
+    on:click|stopPropagation={(e) => {
+      /* Focus the INPUT editor on a body click — but NOT when the click lands in
+         the output pane, whose own (read-only) editors own their selection; else
+         clicking output to select it would steal focus back to the input and wipe
+         that selection. */
+      if (cell.type === 'code' && view &&
+          !(e.target instanceof Element && e.target.closest('.output-pane'))) view.focus();
+    }}
     on:pointermove={onSplitPointerMove}
     on:pointerup={onSplitPointerUp}
     on:pointercancel={onSplitPointerUp}

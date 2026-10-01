@@ -110,6 +110,14 @@ function makeRow(type: CellType = 'code', source = ''): NotebookRow {
 // Selection
 
 export const selectedCells = writable<Set<string>>(new Set());
+
+/* Global unsaved-changes flag. True when a notebook's CONTENT (cell source, cell
+ * or row structure, cell type) has changed since the last save/open — the things
+ * serialize() persists. Output, status and exec index do NOT set it (not saved).
+ * The window close handler reads this to offer "Save before closing?". */
+export const dirty = writable<boolean>(false);
+export function markDirty() { dirty.set(true); }
+export function markClean() { dirty.set(false); }
 export let lastSelectedId: string | null = null;
 
 export function selectOnly(id: string) {
@@ -164,6 +172,7 @@ export function createNotebook() {
 
     /** Insert a new row at absolute row index. Returns new cell id. */
     insertRowAt(rowIdx: number, type: CellType = 'code', source = ''): string {
+      markDirty();
       const row = makeRow(type, source);
       update(rows => [...rows.slice(0, rowIdx), row, ...rows.slice(rowIdx)]);
       return row.cells[0].id;
@@ -171,6 +180,7 @@ export function createNotebook() {
 
     /** Append a row at the end. Returns new cell id. */
     addRow(type: CellType = 'code', source = ''): string {
+      markDirty();
       const row = makeRow(type, source);
       update(rows => [...rows, row]);
       return row.cells[0].id;
@@ -180,6 +190,7 @@ export function createNotebook() {
 
     /** Insert a cell at position cellIdx inside the row identified by rowId. Returns new cell id. */
     insertCellInRow(rowId: string, cellIdx: number, type: CellType = 'code', source = ''): string {
+      markDirty();
       const cell = makeCell(type, source);
       update(rows => rows.map(row => {
         if (row.id !== rowId) return row;
@@ -192,6 +203,7 @@ export function createNotebook() {
     // --- removal ---
 
     removeCell(cellId: string) {
+      markDirty();
       update(rows => {
         const next = rows.map(row => ({
           ...row,
@@ -203,6 +215,7 @@ export function createNotebook() {
     },
 
     removeCells(ids: Set<string>) {
+      markDirty();
       update(rows => {
         const next = rows.map(row => ({
           ...row,
@@ -216,6 +229,7 @@ export function createNotebook() {
     // --- mutation ---
 
     updateSource(id: string, source: string) {
+      markDirty();
       update(rows => rows.map(row => ({
         ...row,
         cells: row.cells.map(c => c.id === id ? { ...c, source } : c),
@@ -228,6 +242,7 @@ export function createNotebook() {
      * purpose (a reference page) would otherwise carry a stray empty cell above
      * its content. Rewrites that row instead of appending after it. */
     setCellSourceAndType(source: string, type: CellType) {
+      markDirty();
       update(rows => {
         if (rows.length === 0 || rows[0].cells.length === 0) return rows;
         const first = rows[0];
@@ -252,6 +267,7 @@ export function createNotebook() {
      *  Switching code -> text -> code now restores the result instead of
      *  discarding it. */
     setCellType(id: string, type: CellType) {
+      markDirty();
       update(rows => rows.map(row => ({
         ...row,
         cells: row.cells.map(c => c.id === id ? { ...c, type } : c),

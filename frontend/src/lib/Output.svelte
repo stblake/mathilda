@@ -2,6 +2,8 @@
   import type { OutputItem } from './notebook';
   import katex from 'katex';
   import 'katex/dist/katex.min.css';
+  import { evalOnce } from './ipc';
+  import CodeView from './CodeView.svelte';
 
   /* Opens a symbol's own reference page. Passed in so this stays a renderer. */
   export let onOpenDoc: ((name: string) => void) | null = null;
@@ -13,6 +15,86 @@
   // Per-item expanded/overflow state
   let expanded: Record<number, boolean> = {};
   let overflows: Record<number, boolean> = {};
+
+  /* ---- "Convert To" on an output expression (right-click) ----
+     An `expr` result carries both `text` (InputForm) and `latex` (StandardForm,
+     which is also the TeXForm source). The right-click menu switches how the
+     result is DISPLAYED, in place, Mathematica-style:
+       StandardForm → KaTeX of `latex` (default)
+       InputForm    → the `text` payload
+       TeXForm      → the `latex` source as text (or kernel TeXForm if no latex)
+       MathML       → KaTeX's MathML output for `latex`
+       FullForm     → fetched from the kernel (FullForm[...]); no client source
+     FullForm/TeXForm are fetched with evalOnce (no cell history), cached per item. */
+  type ExprForm = 'standard' | 'input' | 'fullform' | 'texform' | 'mathml';
+  const CONVERT_FORMS: { id: ExprForm; label: string }[] = [
+    { id: 'standard', label: 'StandardForm (2D)' },
+    { id: 'input',    label: 'InputForm' },
+    { id: 'fullform', label: 'FullForm' },
+    { id: 'texform',  label: 'TeXForm' },
+    { id: 'mathml',   label: 'MathML' },
+  ];
+  let exprForm: Record<number, ExprForm> = {};
+  let formCache: Record<number, Partial<Record<ExprForm, string>>> = {};
+  let convertMenu: { idx: number; x: number; y: number } | null = null;
+
+  function openConvertMenu(e: MouseEvent, idx: number) {
+    e.preventDefault();
+    convertMenu = { idx, x: e.clientX, y: e.clientY };
+  }
+
+  function setForm(idx: number, form: ExprForm) {
+    exprForm[idx] = form; exprForm = { ...exprForm };
+    convertMenu = null;
+    void ensureFormData(idx, form);
+  }
+
+  function setCache(idx: number, form: ExprForm, val: string) {
+    formCache[idx] = { ...(formCache[idx] ?? {}), [form]: val };
+    formCache = { ...formCache };
+  }
+
+  function mathmlFrom(latex: string): string {
+    try { return katex.renderToString(latex, { throwOnError: false, output: 'mathml' }); }
+    catch { return ''; }
+  }
+
+  /* Populate formCache[idx][form] for a non-trivial form, fetching from the
+     kernel only when there is no client-side source. */
+  async function ensureFormData(idx: number, form: ExprForm) {
+    if (form === 'standard' || form === 'input') return;      // rendered directly
+    if (formCache[idx]?.[form] !== undefined) return;         // already have it
+    const item = items[idx];
+    if (!item || item.kind !== 'expr') return;
+    const latex = item.latex ?? '';
+    if (form === 'texform' && latex) { setCache(idx, 'texform', latex); return; }
+    if (form === 'mathml' && latex)  { setCache(idx, 'mathml', mathmlFrom(latex)); return; }
+    // Needs the kernel: FullForm always; TeXForm/MathML only when latex is absent.
+    try {
+      if (form === 'fullform') {
+        const r = await evalOnce(`FullForm[${item.text}]`);
+        setCache(idx, 'fullform', r.error || r.payload);
+      } else {
+        const r = await evalOnce(`TeXForm[${item.text}]`);
+        const tex = r.error || r.payload;
+        setCache(idx, 'texform', tex);
+        if (form === 'mathml') setCache(idx, 'mathml', mathmlFrom(tex));
+      }
+    } catch {
+      setCache(idx, form, '(conversion failed)');
+    }
+  }
+
+  /* The text + mode to show for a converted (non-standard) form. `math` ⇒ render
+     in a CodeView with Mathilda highlighting + structural selection (InputForm,
+     FullForm); otherwise plain selectable text (TeXForm, MathML). Takes `cache`
+     as an arg so Svelte re-runs it when a fetched form arrives. */
+  function convDisplay(item: OutputItem & { kind: 'expr' }, idx: number, form: ExprForm,
+                       cache: typeof formCache): { text: string; ready: boolean; math: boolean } {
+    if (form === 'input') return { text: item.text, ready: true, math: true };
+    const v = cache[idx]?.[form];
+    return { text: v ?? '', ready: v !== undefined, math: form === 'fullform' };
+  }
 
   // Svelte action: measures actual scrollHeight vs offsetHeight.
   // Triggers reactivity only when overflow state changes.
@@ -208,6 +290,7 @@
   function onWindowClick(ev: MouseEvent) {
     const t = ev.target as HTMLElement | null;
     if (!t || !t.closest('.img-frame')) selImg = null;
+    if (!t || !t.closest('.convert-menu')) convertMenu = null;
   }
 
   /* Per-output display width, in CSS pixels, once the reader has dragged the corner.
@@ -575,8 +658,19 @@
   {#each items as item, idx (idx)}
     <div class="out-item" class:expanded={expanded[idx]} class:overflowing={overflows[idx]}>
       {#if item.kind === 'expr'}
+        {@const form = exprForm[idx] ?? 'standard'}
         <div class="out-collapsible" use:measureOverflow={idx} use:measureExprWidth={idx}>
-          <div class="out-expr">{@html renderOutput(item.text, item.latex, wideExpr[idx])}</div>
+          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+          <div class="out-expr" title="Right-click to Convert To…"
+               on:contextmenu={(e) => openConvertMenu(e, idx)}>
+            {#if form === 'standard'}
+              {@html renderOutput(item.text, item.latex, wideExpr[idx])}
+            {:else}
+              {@const d = convDisplay(item, idx, form, formCache)}
+              {#if !d.ready}<span class="out-converting">converting…</span>
+              {:else}<CodeView doc={d.text} math={d.math} />{/if}
+            {/if}
+          </div>
         </div>
       {:else if item.kind === 'expected'}
         <!-- A reference-page example that has not been run yet. Shown as plain
@@ -713,7 +807,59 @@
   {/each}
 </div>
 
+<!-- Right-click "Convert To" menu for an output expression. -->
+{#if convertMenu}
+  {@const mi = convertMenu.idx}
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+  <div class="convert-menu" style="left:{convertMenu.x}px; top:{convertMenu.y}px;"
+       on:click|stopPropagation on:contextmenu|preventDefault|stopPropagation>
+    <div class="convert-title">Convert To</div>
+    {#each CONVERT_FORMS as f (f.id)}
+      <button class="convert-item"
+              class:active={(exprForm[mi] ?? 'standard') === f.id}
+              on:click={() => setForm(mi, f.id)}>{f.label}</button>
+    {/each}
+  </div>
+{/if}
+
 <style>
+  /* ---- "Convert To" context menu (modelled on Menu.svelte / the cell-type picker) ---- */
+  .convert-menu {
+    position: fixed;
+    z-index: var(--z-menu, 400);
+    min-width: 170px;
+    background: var(--menu-bg, #1a1b2e);
+    border: 1px solid var(--menu-border, rgba(255,255,255,0.12));
+    border-radius: 7px;
+    box-shadow: var(--menu-shadow, 0 10px 32px rgba(0,0,0,0.4));
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .convert-title {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--tb-caption, var(--text-muted, #6c7086));
+    padding: 3px 8px 4px;
+  }
+  .convert-item {
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text, #cdd6f4);
+    font-family: inherit;
+    font-size: 0.82rem;
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+  .convert-item:hover { background: var(--surface-2, rgba(255,255,255,0.06)); }
+  .convert-item.active { color: var(--accent, #89b4fa); font-weight: 600; }
+
+  .out-converting { color: var(--text-muted, #6c7086); font-style: italic; }
+
   .output {
     padding: 0.3rem 0.75rem 0.5rem;
     min-height: 1px;

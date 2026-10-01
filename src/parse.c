@@ -23,7 +23,39 @@ typedef struct {
                         // cross a genuine (non-comment) newline? Used to make a
                         // top-level line break terminate a statement instead of
                         // acting as implicit multiplication.
+    MthSpanSink* spans; // When non-NULL (mth_parse_spans only), every
+                        // subexpression's source range is recorded here for the
+                        // notebook's structural selection. NULL on the normal
+                        // parse/eval path -- all existing {..} initializers omit
+                        // it, so C99 zero-fills it and that path is unchanged.
 } ParserState;
+
+/* Record the half-open byte range [start, end) of one subexpression into the
+ * sink. No-op when no sink is attached (the normal path) or the range is empty.
+ * `start`/`end` are pointers into s->input, so offsets are absolute even across
+ * ;-separated statements. */
+static void record_span(ParserState* s, const char* start, const char* end) {
+    if (!s->spans) return;
+    /* Trim trailing whitespace: a subexpression's end can sit past a space when
+     * its last sub-parse skipped trailing whitespace before finding no further
+     * operator (e.g. the `x` in `2 x + 1` leaves pos at the `+`, so the Times
+     * span would otherwise read "2 x "). */
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' ||
+                           end[-1] == '\r' || end[-1] == '\f' || end[-1] == '\v'))
+        end--;
+    if (end <= start) return;
+    MthSpanSink* k = s->spans;
+    if (k->n == k->cap) {
+        size_t nc = k->cap ? k->cap * 2 : 32;
+        MthSpan* nv = realloc(k->v, nc * sizeof(MthSpan));
+        if (!nv) return; /* drop this span rather than crash on OOM */
+        k->v = nv;
+        k->cap = nc;
+    }
+    k->v[k->n].start = (int)(start - s->input);
+    k->v[k->n].end = (int)(end - s->input);
+    k->n++;
+}
 
 // Forward declarations
 static Expr* parse_expression_state(ParserState* s);
@@ -1236,6 +1268,25 @@ static bool minus_is_prefix(const char* s) {
     return number_followed_by_power(n);
 }
 
+/* True when applying `op` to `left` would merely append to the SAME flat head
+ * (Plus or Times) that `left` already has — i.e. an a+b+... or a*b*... chain
+ * continuing in place. Used only during structural-selection span recording to
+ * suppress partial-sum/product spans so the ladder matches Mathematica's flat
+ * n-ary grouping. */
+static bool flat_continuation(const Expr* left, const OperatorDef* op) {
+    if (!left || left->type != EXPR_FUNCTION) return false;
+    const Expr* h = left->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    const char* lh = h->data.symbol.name;
+    const char* oh = NULL;
+    if (op->type == OP_MINUS) oh = "Plus";          /* a - b extends Plus */
+    else if (op->type == OP_TIMES) oh = "Times";    /* explicit or implicit * */
+    else if (op->head_name &&
+             (strcmp(op->head_name, "Plus") == 0 || strcmp(op->head_name, "Times") == 0))
+        oh = op->head_name;
+    return oh && lh && strcmp(lh, oh) == 0;
+}
+
 // Pratt parser for operator precedence
 static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     skip_whitespace(s);
@@ -1256,6 +1307,9 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         *s->pos == '>' || *s->pos == '|' || *s->pos == '&' ||
         *s->pos == ':' || *s->pos == '@' ||
         (*s->pos == ';' && s->pos[1] != ';')) return NULL;
+
+    /* Start of this (sub)expression, for structural-selection span recording. */
+    const char* left_start = s->pos;
 
     Expr* left = NULL;
     /* Did `left` come from an UNPARENTHESISED chainable comparison at this level?
@@ -1346,6 +1400,9 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     if (!left) return NULL;
     
     while (1) {
+        /* End of `left` at its current extent, captured BEFORE the trailing
+         * whitespace is skipped so a recorded span's end is tight. */
+        const char* tight_end = s->pos;
         skip_whitespace(s);
         OperatorDef op_def = get_operator(s->pos);
         
@@ -1368,7 +1425,18 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             op_def.len = 0; // Don't advance pos
         }
 
-        if (op_def.type == OP_NONE || op_def.prec < min_prec) break;
+        /* Structural-selection span recording. Record `left` as one selectable
+         * stage, EXCEPT when the fold about to run merely appends to the same
+         * flat head (Plus/Times) `left` already is: those partial sums/products
+         * are not selectable units in Mathematica's flat n-ary model (a+b+c
+         * selects a..c then the whole Plus, with no a+b step). The complete flat
+         * node is still recorded on the pass that finds no continuing operator. */
+        {
+            bool stop = (op_def.type == OP_NONE || op_def.prec < min_prec);
+            if (s->spans && (stop || !flat_continuation(left, &op_def)))
+                record_span(s, left_start, tight_end);
+            if (stop) break;
+        }
 
         /* Recomputed each iteration: only the branch that actually builds a bare chainable
          * comparison sets it back to true, so any other operator in between breaks the chain. */
@@ -1702,7 +1770,7 @@ static Expr* parse_expression_state(ParserState* s) {
 
 // Public interface
 Expr* parse_expression(const char* input) {
-    ParserState state = {input, input, 0, 0};
+    ParserState state = {input, input, 0, 0, NULL};
     Expr* result = parse_expression_state(&state);
     
     // Check for trailing garbage
@@ -1718,7 +1786,7 @@ Expr* parse_expression(const char* input) {
 
 Expr* parse_next_expression(const char** input_ptr) {
     if (!input_ptr || !*input_ptr) return NULL;
-    ParserState state = {*input_ptr, *input_ptr, 0, 0};
+    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL};
 
     /* Skip leading whitespace, comments, and empty ';' separators so that a
      * stray or doubled separator never yields a spurious empty statement. */
@@ -1748,3 +1816,38 @@ Expr* parse_next_expression(const char** input_ptr) {
     return result;
 }
 
+
+/* Parse `input` for structural selection, recording every subexpression's source
+ * range without evaluating. Multi-statement input (a;b;c) is walked statement by
+ * statement with absolute offsets, mirroring parse_next_expression; a hard parse
+ * error advances one byte so the walk always terminates. Tolerant: the spans of
+ * the parts that did parse are returned even if the tail is unparseable. */
+MthSpanSink* mth_parse_spans(const char* input) {
+    MthSpanSink* sink = calloc(1, sizeof *sink);
+    if (!sink || !input) return sink;
+    const char* p = input;
+    while (*p) {
+        ParserState state = {input, p, 0, 0, sink};
+        /* Skip leading whitespace, comments, and empty ';' separators. */
+        for (;;) {
+            skip_whitespace(&state);
+            if (*state.pos == ';' && state.pos[1] != ';') { state.pos++; continue; }
+            break;
+        }
+        if (*state.pos == '\0') break;
+        const char* before = state.pos;
+        Expr* result = parse_expression_prec(&state, 101);
+        if (result) expr_free(result);
+        skip_whitespace(&state);
+        if (*state.pos == ';' && state.pos[1] != ';') state.pos++;
+        if (state.pos <= before) state.pos = before + 1; /* guarantee progress */
+        p = state.pos;
+    }
+    return sink;
+}
+
+void mth_span_sink_free(MthSpanSink* sink) {
+    if (!sink) return;
+    free(sink->v);
+    free(sink);
+}

@@ -35,6 +35,26 @@ pub async fn ping_kernel(kernel: State<'_, MathildaKernel>) -> Result<(), String
     kernel.ping().await
 }
 
+/// Evaluate one expression quietly (no cell history) and return {payload, latex,
+/// error}. Used by the output "Convert To" menu (FullForm / TeXForm).
+#[tauri::command]
+pub async fn eval_once(
+    expr: String,
+    kernel: State<'_, MathildaKernel>,
+) -> Result<Value, String> {
+    kernel.eval_once(expr).await
+}
+
+/// Parse an expression for structural (bottom-up) selection; returns [start, end]
+/// byte-span pairs for every subexpression. Does not evaluate.
+#[tauri::command]
+pub async fn syntax_spans(
+    expr: String,
+    kernel: State<'_, MathildaKernel>,
+) -> Result<Vec<[i64; 2]>, String> {
+    kernel.fetch_spans(expr).await
+}
+
 /// Save one notebook to a `.mnb` file (see `notebook_format.rs`).
 /// `cells` is a JSON array of objects: [{type, source}, ...].
 /// Only type and source are written; outputs are ephemeral.

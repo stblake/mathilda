@@ -19,7 +19,7 @@ mod ffi;
 #[path = "kernel_ffi.rs"]
 mod kernel;
 
-use commands::{evaluate_cell, interrupt_kernel, load_library, load_notebook, ping_kernel, restart_kernel, save_library, save_notebook, set_window_title};
+use commands::{evaluate_cell, interrupt_kernel, load_library, load_notebook, ping_kernel, restart_kernel, save_library, save_notebook, set_window_title, syntax_spans, eval_once};
 use commands::{clear_recent_files, forget_recent_file, push_recent_file, recent_files};
 use kernel::MathildaKernel;
 #[cfg(desktop)]
@@ -275,6 +275,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             evaluate_cell,
+            syntax_spans,
+            eval_once,
             restart_kernel,
             interrupt_kernel,
             ping_kernel,
