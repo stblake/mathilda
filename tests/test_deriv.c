@@ -243,6 +243,73 @@ static void test_nonconstants(void) {
                "D[z, x, NonConstants -> {y, z}])");
 }
 
+/* An undifferentiable SUBexpression must not take the whole call down.
+ *
+ * compute_deriv returns NULL for "I cannot differentiate this", which is
+ * a valid answer only at the top level. Every recursive site stores the
+ * result straight into an argument slot, and a NULL there is dereferenced
+ * unconditionally by evaluate_step -- i.e. a segfault. deriv_of now emits
+ * the inert D[g, x] instead, so each case below both survives and gives
+ * the Mathematica answer: whatever can be differentiated is, and only the
+ * opaque part stays inert.
+ *
+ * Inactive[Integrate][f[u], Sqrt[x]] is the witness: an inert integral
+ * whose integration "variable" is not a symbol. Reached in the wild from
+ * Integrate[1/((x^2 - 3x + 1) Sqrt[x^3 - x]), x], which segfaulted. */
+static void test_undifferentiable_subexpression(void) {
+    const char* INT = "Inactive[Integrate][f[u], Sqrt[x]]";
+    const char* DINT =
+        "D[Inactive[Integrate][f[u], Power[x, Rational[1, 2]]], x]";
+    char buf[512], exp[512];
+
+    /* Bare: already worked -- compute_deriv's own NULL keeps D unevaluated. */
+    snprintf(buf, sizeof(buf), "D[%s, x]", INT);
+    check(buf, DINT);
+
+    /* Plus: the sum rule. The differentiable term still differentiates. */
+    snprintf(buf, sizeof(buf), "D[%s + 1, x]", INT);
+    check(buf, DINT);
+    snprintf(buf, sizeof(buf), "D[1 + %s + 2, x]", INT);
+    check(buf, DINT);
+    snprintf(buf, sizeof(buf), "D[%s + g[x], x]", INT);
+    snprintf(exp, sizeof(exp), "Plus[Derivative[1][g][x], %s]", DINT);
+    check(buf, exp);
+
+    /* Times: the product rule. */
+    snprintf(buf, sizeof(buf), "D[2 %s, x]", INT);
+    snprintf(exp, sizeof(exp), "Times[2, %s]", DINT);
+    check(buf, exp);
+
+    /* Power and composition: the chain rule. */
+    snprintf(buf, sizeof(buf), "D[%s^2, x]", INT);
+    snprintf(exp, sizeof(exp),
+             "Times[2, Inactive[Integrate][f[u], Power[x, Rational[1, 2]]], %s]",
+             DINT);
+    check(buf, exp);
+    snprintf(buf, sizeof(buf), "D[Sin[%s], x]", INT);
+    snprintf(exp, sizeof(exp),
+             "Times[Cos[Inactive[Integrate][f[u], Power[x, Rational[1, 2]]]], %s]",
+             DINT);
+    check(buf, exp);
+
+    /* List threading. */
+    snprintf(buf, sizeof(buf), "D[{%s + 1}, x]", INT);
+    snprintf(exp, sizeof(exp), "List[%s]", DINT);
+    check(buf, exp);
+
+    /* Dt takes the same recursion. The wrap stays D, not Dt, on purpose:
+     * re-emitting Dt re-enters builtin_dt and recurses without bound
+     * (see the note at deriv.c:2850). */
+    snprintf(buf, sizeof(buf), "Dt[%s + 1, x]", INT);
+    check(buf, DINT);
+
+    /* Cancellation and free-of still short-circuit to 0. */
+    snprintf(buf, sizeof(buf), "D[%s - %s, x]", INT, INT);
+    check(buf, "0");
+    snprintf(buf, sizeof(buf), "D[%s + 1, y]", INT);
+    check(buf, "0");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -259,6 +326,7 @@ int main(void) {
     TEST(test_dt);
     TEST(test_equal_distribution);
     TEST(test_nonconstants);
+    TEST(test_undifferentiable_subexpression);
 
     printf("All derivative tests passed.\n");
     return 0;

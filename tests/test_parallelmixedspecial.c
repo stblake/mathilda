@@ -272,6 +272,141 @@ static void test_partial_mode(void) {
         "the partial mode returns answer + Inactive[Integrate][remainder, x]");
 }
 
+/* ---- the additive decomposition --------------------------------------- */
+
+/* Cost in this stage is MULTIPLICATIVE in the number of independent generator
+ * families appearing additively, because one ansatz spans the product of the
+ * families. Splitting the integrand into blocks whose families are pairwise
+ * disjoint and integrating each on its own tower turns 20.1 s into 0.29 s on
+ * the three-family case below.
+ *
+ * What these tests pin is the SOUNDNESS GUARD, not the speed. Disjoint
+ * families do NOT by themselves make the split complete: for two primitives
+ * whose derivatives lie in the shared base,
+ *     D(c t_A t_B) = c (D t_A) t_B + c t_A (D t_B)
+ * is a two-term sum with DISJOINT support, so a sum can be elementary while
+ * each half is not even in the class. The guard declines whenever two or more
+ * COUPLING-CAPABLE blocks (carrying a Log or an ArcTan-family head at a
+ * rational argument) fail to close, and the joint path then runs unchanged. */
+static void test_additive_split_soundness(void) {
+    /* The counterexample. Each half alone is "not in class"; the sum is
+     * Log[x] Log[1+x]. The families {Log[x]} and {Log[1+x]} are disjoint, so a
+     * naive split would turn this PASS into a decline. */
+    assert_solves("Log[1 + x]/x + Log[x]/(1 + x)", "7/5");
+    assert_true_msg("Module[{r = Integrate`ParallelMixedSpecial["
+                    "  Log[1 + x]/x + Log[x]/(1 + x), x]},"
+                    " FreeQ[r, Inactive[Integrate]] && FreeQ[r, List]]",
+                    "the two-coupling-capable-block sum stays COMPLETE");
+    /* Same shape through the inverse-tangent family. Both halves are corpus
+     * `nic` cases; the sum is ArcTan[x] Log[x]. */
+    assert_solves("ArcTan[x]/x + Log[x]/(1 + x^2)", "7/5");
+
+    /* A block's STATUS must never become the sum's. Each of these is out of
+     * class on its own and must still report so, not be composed away. */
+    assert_true_msg("Module[{r = Integrate`ParallelMixedSpecial[ArcTan[x]/x, x]},"
+                    " ListQ[r] && r[[1]] === \"not in class\"]",
+                    "a single out-of-class integrand still says so");
+
+    /* Cross-term cancellation inside ONE family: each half is non-elementary
+     * (Ei), the sum is E^x/x. These share the generator Exp[x], so they land
+     * in the same block and the split never separates them. */
+    assert_solves("Exp[x]/x - Exp[x]/x^2", "7/5");
+    assert_true_msg("FreeQ[Integrate`ParallelMixedSpecial[Exp[x]/x - Exp[x]/x^2, x],"
+                    " ExpIntegralEi]",
+                    "the Ei pair cancels to an elementary answer, as before");
+}
+
+/* The split must agree with the joint path. "Additive" -> False is a real
+ * kill switch, so the old path stays live and directly comparable.
+ *
+ * Compared through the PARTIAL entry, which is uniform over both outcomes:
+ * #129 and #134 below have no complete answer at all (their Exp[-x^2] Log[x]
+ * term is out of class), so the complete entry answers them with a status,
+ * not a pair. Two things are asserted, and the second is the one that
+ * matters: the answers agree up to a constant, AND the inert remainders are
+ * equal -- the remainder is what the corpus judge scores, so a split that
+ * handed back a differently-apportioned remainder would be a behaviour
+ * change even with a correct total. */
+static void test_additive_split_agrees(void) {
+    const char* cases[] = {
+        "2 Log[x]/x + Sin[x]/x",                      /* complete, 24x        */
+        "Log[x]/x + Sin[x]/x + Exp[-x^2]",            /* complete, 70x        */
+        "Sin[x]/x + Exp[-x^2]",                       /* complete             */
+        "x Exp[x]/(x + 1)^2 + Exp[-x^2] Log[x]",      /* partial, 8.9x        */
+        "Exp[-x^2] Log[x] - 3 Log[x]/x^2 + 3/x^2",    /* partial, one block   */
+        "1/(x + Exp[x]) + Cos[x]/x",                  /* partial, 3.9x        */
+        "(Log[x] + 1/x) Exp[x] + 1/x",                /* elementary, one block*/
+        NULL
+    };
+    char buf[2560];
+    for (int i = 0; cases[i]; i++) {
+        snprintf(buf, sizeof(buf),
+            "Module[{a, b, ra, rb, pa, pb},"
+            " Quiet[Integrate`ParallelMixedSpecial[x, x]];"
+            " a = ParallelMixed`Private`IntegrateSurfacePartial[%s, x, \"Additive\" -> True];"
+            " b = ParallelMixed`Private`IntegrateSurfacePartial[%s, x, \"Additive\" -> False];"
+            " If[! (ListQ[a] && ListQ[b] && Length[a] == 2 && Length[b] == 2), False,"
+            "  ra = Total[Cases[{a[[1]]}, Inactive[Integrate][q_, x] :> q, Infinity]];"
+            "  rb = Total[Cases[{b[[1]]}, Inactive[Integrate][q_, x] :> q, Infinity]];"
+            "  pa = a[[1]] /. Inactive[Integrate][_, x] -> 0;"
+            "  pb = b[[1]] /. Inactive[Integrate][_, x] -> 0;"
+            "  a[[2]] === b[[2]] && Simplify[ra - rb] === 0 &&"
+            "  Simplify[D[pa - pb, x]] === 0]]", cases[i], cases[i]);
+        char* s = eval_str(buf);
+        ASSERT_MSG(strcmp(s, "True") == 0,
+                   "additive split disagrees with the joint path on %s: got %s",
+                   cases[i], s);
+        free(s);
+    }
+}
+
+/* A complete split answer must carry NO Inactive[Integrate]: the joint path
+ * reaches its Inactive[Integrate] only for a genuine partial result, so an
+ * Inactive[Integrate][0, x] would make a complete answer read as partial --
+ * which the corpus judge scores as a different outcome. */
+static void test_additive_split_complete_is_complete(void) {
+    assert_true_msg(
+        "Module[{r}, Quiet[Integrate`ParallelMixedSpecial[x, x]];"
+        " r = ParallelMixed`Private`IntegrateSurfacePartial["
+        "       2 Log[x]/x + Sin[x]/x, x];"
+        " ListQ[r] && r[[2]] === True && FreeQ[r[[1]], Inactive[Integrate]]]",
+        "a complete split answer carries no Inactive[Integrate]");
+    /* and a genuinely partial one still does */
+    assert_true_msg(
+        "Module[{r}, Quiet[Integrate`ParallelMixedSpecial[x, x]];"
+        " r = ParallelMixed`Private`IntegrateSurfacePartial["
+        "       1/(x + Exp[x]) + Cos[x]/x, x];"
+        " ListQ[r] && r[[2]] === True && ! FreeQ[r[[1]], Inactive[Integrate]] &&"
+        " ! FreeQ[r[[1]], CosIntegral]]",
+        "a partial split answer keeps its remainder inert");
+}
+
+/* Two different radicals in two different additive terms: each block builds
+ * its own tower. The joint path also answers these, but through one Euler
+ * substitution carrying both radicals, which returns a far heavier form --
+ * so what is pinned here is that the split answers and is FAITHFUL, i.e. the
+ * split answer is exactly the sum of what the blocks give on their own.
+ *
+ * That faithfulness property is the real invariant of this transform, and it
+ * is worth asserting separately from correctness: when it holds, a wrong
+ * split answer can only come from a wrong block answer, never from the
+ * splitting itself. (It is how the Sqrt[1+x^3] case was cleared during
+ * development -- the split reproduced the block sum exactly, and the residual
+ * came entirely from that block's own elliptic branch, which is equally wrong
+ * through the ordinary single-integrand path.) */
+static void test_additive_split_two_radicals(void) {
+    assert_solves("Sqrt[1 - x^2] + Sqrt[1 + x^2]", "1/3");
+    assert_solves("Sqrt[1 - x^2] + 1/Sqrt[4 + x^2]", "1/3");
+    assert_true_msg(
+        "Module[{s, a, b}, Quiet[Integrate`ParallelMixedSpecial[x, x]];"
+        " s = ParallelMixed`Private`IntegrateSurfaceSpecial[Sqrt[1 - x^2] + Sqrt[1 + x^2], x];"
+        " a = ParallelMixed`Private`IntegrateSurfaceSpecial[Sqrt[1 - x^2], x];"
+        " b = ParallelMixed`Private`IntegrateSurfaceSpecial[Sqrt[1 + x^2], x];"
+        " ListQ[s] && ListQ[a] && ListQ[b] &&"
+        " Simplify[s[[1]] - (a[[1]] + b[[1]])] === 0]",
+        "the split answer is exactly the sum of the per-block answers");
+}
+
 /* ---- Part II is untouched by the merge -------------------------------- */
 
 /* The stage's additive delta to Part II is off by default, so
@@ -331,6 +466,10 @@ int main(void) {
     TEST(test_surfaces);
     TEST(test_cascade_never_partial);
     TEST(test_partial_mode);
+    TEST(test_additive_split_soundness);
+    TEST(test_additive_split_agrees);
+    TEST(test_additive_split_complete_is_complete);
+    TEST(test_additive_split_two_radicals);
     TEST(test_part2_unchanged);
     TEST(test_extended_bounds_restores);
 

@@ -541,9 +541,28 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts);
 /* Shortcut: return D[g, x] as a fresh tree. When x is NULL, return
  * Dt[g] instead. For symbols and numeric atoms the answer is folded
  * immediately; for compound expressions we recurse through
- * compute_deriv so constants short-circuit there too. */
+ * compute_deriv so constants short-circuit there too.
+ *
+ * NEVER returns NULL. compute_deriv returns NULL to mean "I cannot
+ * differentiate this", which is a valid answer only at the TOP level,
+ * where builtin_d / builtin_dt keep the whole call unevaluated and
+ * higher_order_partial wraps the residue as an inert D[...]. Every
+ * caller of THIS function, by contrast, stores the result straight into
+ * an argument slot of a larger tree (the sum rule, the product rule,
+ * the chain rule, ...) -- and a NULL in an argument array is
+ * dereferenced unconditionally by evaluate_step, i.e. a segfault rather
+ * than an unevaluated result. There are 82 such call sites and none of
+ * them checks, so the guarantee belongs here, once, instead of being
+ * restated 82 times. Emitting the inert derivative also gives the
+ * better answer: D[Inactive[Integrate][f[u], Sqrt[x]] + 1, x] becomes
+ * D[Inactive[Integrate][f[u], Sqrt[x]], x] -- the inert derivative of
+ * the inert part, with the differentiable part still differentiated --
+ * which is what Mathematica returns. */
 static Expr* deriv_of(Expr* g, Expr* x, Expr* nonconsts) {
-    return compute_deriv(g, x, nonconsts);
+    Expr* d = compute_deriv(g, x, nonconsts);
+    if (d) return d;
+    return x ? mk_fn2("D", expr_copy(g), expr_copy(x))
+             : mk_fn1("Dt", expr_copy(g));
 }
 
 /* The chain rule applied to an ``f[g1, g2, ..., gn]`` expression whose

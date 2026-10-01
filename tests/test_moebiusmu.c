@@ -45,13 +45,49 @@ void test_moebiusmu_negative() {
     check("MoebiusMu[-30] == MoebiusMu[30]", "True");
 }
 
-/* ---- BigInt path: large argument ---- */
+/* ---- BigInt path: large argument ----
+ *
+ * The inputs are PRODUCTS OF EXPLICIT SMALL PRIMES, not large hard-to-factor
+ * numbers. That is deliberate and is what makes this test deterministic.
+ *
+ * `MoebiusMu[10^50 + 1]` used to stand here and is FLAKY: 10^50 + 1 has a
+ * 29-digit composite cofactor that ECM splits only sometimes, and when it
+ * fails FactorInteger emits
+ *     FactorInteger::nofac: ... is composite but no factor was found within
+ *     the search bounds; it is returned unfactored with exponent 1
+ * and MoebiusMu then computes mu from an INCOMPLETE factorisation -- returning
+ * +1 where the answer is -1. Measured on one unmodified build: three runs of
+ * `PrimeNu[2491230487120948712093481230948273409812734091238]` gave 7, 8, 8.
+ * So the old assertion tested ECM's luck, and a failure of it said nothing
+ * about MoebiusMu.
+ *
+ * What exercises the bigint path is an argument above 2^63, which a product of
+ * seven four-digit primes supplies (10^24 > 9.2 * 10^18) while every factor
+ * stays inside trial division's reach. The expected value is then known by
+ * CONSTRUCTION -- mu = (-1)^k for k distinct primes, 0 when any is repeated --
+ * rather than taken from an oracle, which is strictly stronger. */
 void test_moebiusmu_bignum() {
-    check("MoebiusMu[10^50 + 1]", "-1");
-    /* (2^61 - 1) is a Mersenne prime -> mu = -1 */
+    /* 1009 * 2003 * 3001 * 4001 * 5003 * 6007 * 7001, seven distinct primes */
+    check("MoebiusMu[5105695083667128769810567]", "-1");
+    check("MoebiusMu[5105695083667128769810567] == "
+          "MoebiusMu[1009 * 2003 * 3001 * 4001 * 5003 * 6007 * 7001]", "True");
+    /* the same with an eighth prime (10007): even count -> +1 */
+    check("MoebiusMu[51092690702256957599494343969]", "1");
+    /* one factor repeated (1009^2 * the other six) -> not squarefree -> 0 */
+    check("MoebiusMu[5151646339420132928738862103]", "0");
+    /* a bigint that is a pure prime power: 1009^3 * 2003^2 * 3001 > 2^63 */
+    check("MoebiusMu[12368054568910624561]", "0");
+    /* (2^61 - 1) is a Mersenne prime -> mu = -1; primality needs no factoring */
     check("MoebiusMu[2^61 - 1]", "-1");
-    /* A perfect square of a large prime -> mu = 0 */
+    /* A perfect square of a large prime -> mu = 0; the square root is exact,
+     * so this too needs no general factorisation */
     check("MoebiusMu[(10^25 + 9)^2]", "0");
+    /* the defining identity on the bigint path: mu is 0 off the squarefree
+     * numbers and (-1)^PrimeNu on them, so it must agree with PrimeNu/PrimeOmega */
+    check("With[{n = 5105695083667128769810567},"
+          " MoebiusMu[n] == (-1)^PrimeNu[n] && PrimeNu[n] == PrimeOmega[n]]", "True");
+    check("With[{n = 5151646339420132928738862103},"
+          " MoebiusMu[n] == 0 && PrimeNu[n] < PrimeOmega[n]]", "True");
 }
 
 /* ---- Listable: threads element-wise over lists ---- */

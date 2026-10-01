@@ -3,6 +3,7 @@
 #include "print.h"
 #include "test_utils.h"
 #include <stdio.h>
+#include <string.h>
 #include "symtab.h"
 #include "core.h"
 #include "eval.h"
@@ -599,6 +600,66 @@ static void test_variadic_comparison_heads(void) {
     assert_eval_eq("FullForm[Hold[(a != b) < c]]", "Hold[Less[Unequal[a, b], c]]", 0);
 }
 
+/* A string literal, and a symbol name, must survive the lexer at ANY length.
+ * Both buffers were a fixed char[256] whose overflow was silently dropped, so
+ * every literal past 255 characters lost its tail with no diagnostic: a wrong
+ * answer outright, and, for the common case of a literal holding an expression
+ * (ToExpression, a generated .m file), a bogus syntax error at the cut point.
+ * A string built at RUN time (StringJoin) was never affected, which is how it
+ * survived -- so the lengths below must come from source literals. */
+void test_long_string_literal_not_truncated() {
+    char src[2600];
+    const size_t lens[] = {200, 255, 256, 257, 300, 1000, 2048};
+    for (size_t k = 0; k < sizeof(lens) / sizeof(lens[0]); k++) {
+        size_t n = lens[k];
+        src[0] = '"';
+        for (size_t i = 0; i < n; i++) src[1 + i] = (char)('a' + (i % 26));
+        src[1 + n] = '"';
+        src[2 + n] = '\0';
+        Expr* e = parse_expression(src);
+        ASSERT(e != NULL);
+        ASSERT(e->type == EXPR_STRING);
+        ASSERT_MSG(strlen(e->data.string) == n,
+                   "string literal of %zu chars parsed to %zu",
+                   n, strlen(e->data.string));
+        /* the TAIL must be intact, not merely the length */
+        ASSERT(e->data.string[n - 1] == (char)('a' + ((n - 1) % 26)));
+        expr_free(e);
+    }
+    /* escapes past the old boundary still decode */
+    {
+        char esc[700];
+        size_t p = 0;
+        esc[p++] = '"';
+        for (size_t i = 0; i < 300; i++) esc[p++] = 'z';
+        esc[p++] = '\\'; esc[p++] = 'n';
+        for (size_t i = 0; i < 300; i++) esc[p++] = 'z';
+        esc[p++] = '"'; esc[p] = '\0';
+        Expr* e = parse_expression(esc);
+        ASSERT(e != NULL && e->type == EXPR_STRING);
+        ASSERT(strlen(e->data.string) == 601);
+        ASSERT(e->data.string[300] == '\n');
+        expr_free(e);
+    }
+    /* a long context-qualified symbol name must not alias onto a shorter one */
+    {
+        char a[600], b[600];
+        size_t p = 0;
+        for (size_t i = 0; i < 300; i++) { a[p] = 'q'; b[p] = 'q'; p++; }
+        a[p] = 'A'; b[p] = 'B'; p++;
+        a[p] = '\0'; b[p] = '\0';
+        Expr* ea = parse_expression(a);
+        Expr* eb = parse_expression(b);
+        ASSERT(ea != NULL && eb != NULL);
+        ASSERT(ea->type == EXPR_SYMBOL && eb->type == EXPR_SYMBOL);
+        ASSERT_MSG(!expr_eq(ea, eb),
+                   "two 301-char symbol names differing in the last character "
+                   "were parsed as the same symbol");
+        expr_free(ea); expr_free(eb);
+    }
+    printf("PASS: long string literals and symbol names are not truncated\n");
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -627,6 +688,7 @@ int main() {
     TEST(test_parse_scaled_scientific);
     TEST(test_parentheses_break_comparison_chains);
     TEST(test_unparenthesised_chains_still_chain);
+    TEST(test_long_string_literal_not_truncated);
 
     printf("\nAll parser tests passed!\n");
     return 0;

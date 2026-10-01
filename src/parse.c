@@ -213,12 +213,31 @@ static void skip_whitespace(ParserState* s) {
 
 // Parses a symbol (x, `name`, $var) and resolves it through the context
 // system, producing a canonical (possibly qualified) symbol name.
+/* The buffer grows for the same reason parse_string's does: dropping the tail
+ * of an over-long name silently ALIASES two distinct symbols onto one, which is
+ * a wrong answer rather than a slow one.  Context-qualified names
+ * (Long`Nested`Context`name) are the realistic way to exceed 255. */
 static Expr* parse_symbol(ParserState* s) {
-    char buffer[256];
+    char stackbuf[256];
+    char* buffer = stackbuf;
+    size_t cap = sizeof(stackbuf);
     size_t i = 0;
 
     while (isalnum(*s->pos) || *s->pos == '`' || *s->pos == '$') {
-        if (i < sizeof(buffer)-1) buffer[i++] = *s->pos;
+        if (i + 1 >= cap) {
+            size_t ncap = cap * 2;
+            char* nb = (buffer == stackbuf) ? (char*)malloc(ncap)
+                                            : (char*)realloc(buffer, ncap);
+            if (!nb) {
+                if (buffer != stackbuf) free(buffer);
+                fprintf(stderr, "Out of memory parsing symbol name\n");
+                return NULL;
+            }
+            if (buffer == stackbuf) memcpy(nb, stackbuf, i);
+            buffer = nb;
+            cap = ncap;
+        }
+        buffer[i++] = *s->pos;
         s->pos++;
     }
     buffer[i] = '\0';
@@ -226,6 +245,7 @@ static Expr* parse_symbol(ParserState* s) {
     char* resolved = context_resolve_name(buffer);
     Expr* out = expr_new_symbol(resolved ? resolved : buffer);
     free(resolved);
+    if (buffer != stackbuf) free(buffer);
     return out;
 }
 
@@ -682,11 +702,24 @@ static Expr* parse_number(ParserState* s) {
 }
 
 // Parses quoted strings ("text")
+/* The buffer GROWS, like parse_list's: a string literal has no length limit.
+ * It was a fixed char[256] whose overflow was silently DROPPED, so every
+ * literal longer than 255 characters lost its tail with no diagnostic --
+ * `StringLength["<300 c's>"]` answered 255.  Silent truncation of a literal is
+ * a wrong answer by itself, and for the common case of a literal that holds an
+ * expression (ToExpression[...], a generated .m file, a docstring) the cut
+ * lands mid-token and surfaces instead as a bogus syntax error at a point the
+ * source does not contain.  A string built at run time (StringJoin, <>) was
+ * never affected, which is why this survived: only source literals truncate.
+ * The stack buffer is kept as the fast path -- .m loading parses many short
+ * strings and should not pay a malloc for each. */
 static Expr* parse_string(ParserState* s) {
     s->pos++;  // Skip opening quote
-    char buffer[256];
+    char stackbuf[256];
+    char* buffer = stackbuf;
+    size_t cap = sizeof(stackbuf);
     size_t i = 0;
-    
+
     while (*s->pos && *s->pos != '"') {
         char c = *s->pos;
         if (c == '\\' && s->pos[1] != '\0') {
@@ -703,18 +736,34 @@ static Expr* parse_string(ParserState* s) {
                 default:  c = *s->pos; break;
             }
         }
-        if (i < sizeof(buffer)-1) buffer[i++] = c;
+        if (i + 1 >= cap) {                       /* room for c and the NUL */
+            size_t ncap = cap * 2;
+            char* nb = (buffer == stackbuf) ? (char*)malloc(ncap)
+                                            : (char*)realloc(buffer, ncap);
+            if (!nb) {
+                if (buffer != stackbuf) free(buffer);
+                fprintf(stderr, "Out of memory parsing string literal\n");
+                return NULL;
+            }
+            if (buffer == stackbuf) memcpy(nb, stackbuf, i);
+            buffer = nb;
+            cap = ncap;
+        }
+        buffer[i++] = c;
         s->pos++;
     }
-    
+
     if (*s->pos != '"') {
+        if (buffer != stackbuf) free(buffer);
         fprintf(stderr, "Unterminated string\n");
         return NULL;
     }
     s->pos++;  // Skip closing quote
-    
+
     buffer[i] = '\0';
-    return expr_new_string(buffer);
+    Expr* out = expr_new_string(buffer);
+    if (buffer != stackbuf) free(buffer);
+    return out;
 }
 
 /* ------------------- Compound Expressions ------------------- */

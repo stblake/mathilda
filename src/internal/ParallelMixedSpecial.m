@@ -106,6 +106,26 @@ $ExtendedBoundsSP = True;       (* (K5)-(K8) and (B) of Section 5 in the special
 $StrictSP = True;               (* Theorem 8.6: special answers only with a certificate of non-elementarity *)
 $spCounter = 0;
 
+(* ----------------------------------------------------------- stage profiling *)
+(* $SpecialProfile -> True makes each pipeline stage below accumulate its wall
+   time and its call count into $SpecialStages; SpecialProfile[] reads it back,
+   sorted by cost.  This exists because a `sample` profile cannot attribute this
+   pipeline at all: every .m stage bottoms out in the same generic C primitives
+   (evaluate_step, the matcher, malloc churn), so the profile names those and
+   not the stage.  The stages are millisecond-scale, so the TrueQ guard on the
+   off path costs nothing measurable.  AbsoluteTiming, not AbsoluteTime:
+   AbsoluteTime[] has integer-second resolution here. *)
+$SpecialProfile = False;
+$SpecialStages = <||>;
+SetAttributes[PMStage, HoldRest];
+PMStage[lbl_, body_] := If[! TrueQ[$SpecialProfile], body,
+  Module[{r = AbsoluteTiming[body], p},
+    p = Lookup[$SpecialStages, lbl, {0., 0}];
+    $SpecialStages[lbl] = {p[[1]] + r[[1]], p[[2]] + 1};
+    r[[2]]]];
+SpecialProfile[] := Reverse[SortBy[Normal[$SpecialStages], #[[2, 1]] &]];
+SpecialProfileReset[] := ($SpecialStages = <||>;);
+
 (* Robustness backstop, the counterpart of Part II's $ParallelMixedTimeBudget
    (mixed/ParallelMixed.m) and needed for the same reason: the kernel search of
    Algorithm S6 escalates through six {split, retry} configurations, and on an
@@ -193,6 +213,288 @@ CountOps[e_] := Which[
       If[Internal`SyntacticNegativeQ[e], 1, 0]],
   Head[e] === Power, If[e[[2]] === -1, 1 + CountOps[e[[1]]], 1 + CountOps[e[[1]]] + CountOps[e[[2]]]],
   True, 1 + Total[CountOps /@ (List @@ e)]];
+
+(* -------------------------------------------- additive decomposition (S11) *)
+(* The cost of the stage is MULTIPLICATIVE in the number of independent
+   generator families the integrand mentions, because one ansatz is built
+   spanning the product of the families (AnsatzSystem, ParallelMixed.m:2966,
+   driven by the {split, retry} ladder below and re-run per drop by Minimal).
+   Measured on this binary, v0.244:
+
+     Log[x]/x                        0.021 s
+     Sin[x]/x                        0.216 s
+     Exp[-x^2]                       0.063 s
+     Log[x]/x + Sin[x]/x             5.75 s   (24x the sum of the parts)
+     Log[x]/x + Sin[x]/x + Exp[-x^2] 20.12 s  (67x)
+
+   and in each case the answer is the concatenation of the independent
+   answers.  So: split the integrand into additive blocks whose generator
+   families are pairwise disjoint, integrate each block on its own tower, and
+   sum.  Per-block BuildTower is ~4-11 ms, noise against the per-call floor,
+   and it is strictly MORE capable than the joint one -- two different
+   radicals in two different terms (Sqrt[1-x^2] + Sqrt[1+x^3]) make the joint
+   tower fail outright and each block succeed.
+
+   SOUNDNESS.  Disjoint families do NOT by themselves make the split
+   complete.  The obvious argument -- "terms that cancel must share a
+   generator" -- is FALSE, and this counterexample is why the guard below
+   exists (both halves verified on this binary):
+
+     Log[1+x]/x + Log[x]/(1+x)  ->  Log[x] Log[1+x]   elementary
+     Log[1+x]/x   alone         ->  "not in class"
+     Log[x]/(1+x) alone         ->  "not in class"
+
+   The families {Log[1+x]} and {Log[x]} are disjoint, the sum is elementary,
+   and neither half is even in the class.  The mechanism is specific to
+   PRIMITIVES: if t_A, t_B are primitives whose derivatives lie in the shared
+   base C(x), then
+
+       D(c t_A t_B) = c (D t_A) t_B + c t_A (D t_B)
+
+   is a two-term sum whose terms have DISJOINT support, so Liouville's v_0 is
+   entitled to the mixed monomial t_A t_B.  No other generator kind can do
+   this: a hyperexponential has D theta = lambda theta and so keeps theta in
+   every term; likewise Tan/Tanh (D t = (1 +- t^2) Da), ProductLog, and a
+   flattened root.  An InvRadical primitive (ArcSin, ArcSec, ...) carries its
+   radical into D t, which is not in the shared base -- and if the radical
+   WERE shared the two blocks would already have merged on it.
+
+   Writing L = L_B(t_A) and v_0 = Sum_k v_k t_A^k with v_k in L_B, the
+   t_A^n coefficient for the top degree n >= 1 gives D v_n in C(x): block B
+   must itself hold an element whose derivative is in the shared base.  Call
+   such a block COUPLING-CAPABLE (BasePrimitiveQ below: it carries a Log or an
+   InvRational head at an argument rational in x alone).  Hence
+
+     Lemma.  If f = Sum_B f_B over blocks with pairwise-disjoint families and
+     Int f is elementary while some Int f_B is not, then at least TWO blocks
+     are coupling-capable and the obstruction is a constant-coefficient
+     bilinear form in base primitives drawn from distinct blocks.
+
+   Two corollaries drive the guard: with at most one coupling-capable block
+   among those that did not close, no cross-block rescue exists; and a block
+   that closes completely cannot take part in a coupling at all.  The residual
+   assumption is the CLASS boundary rather than the elementary one -- a kernel
+   built from a joint exponential monomial (JointMonomials) has mixed support,
+   and I have neither a proof that it cannot rescue a block-pure sum nor an
+   integrand where it does.  Completeness here is already heuristic (the six
+   {split, retry} rungs, the guessed bounds, the budget decline), and answer
+   soundness does not rest on it.                                           *)
+
+(* a^b with a non-rational exponent is exp(b log a), held as PMExp so the
+   kernel does not fold it back: the same rewrite BuildTower applies at
+   ParallelMixed.m:2424, so the scan sees x^Sqrt[2] and 2^x as exponentials *)
+PMExpHold[e_, x_] := e /. Power[b_, ex_] /; b =!= E && ! MatchQ[ex, _Rational | _Integer] &&
+  (! FreeQ[ex, x] || ! FreeQ[b, x]) :> PMExp[ex Log[b]];
+
+(* the rational content divided out.  Exp[x], Exp[-x] and Exp[2 x] are ONE
+   family (one eulerStep generator, and the structure theorem at
+   ParallelMixed.m:2466 refines Exp[x/3] and Exp[3x/2] to a common e^(x/6)),
+   as are Tan[x/2] and Tan[x]; Exp[x] and Exp[x^2] are two.
+   Only RATIONAL content is divided out, not every numeric factor: 2^x is
+   PMExp[x Log[2]], and e^(x Log 2) is NOT algebraic over e^x (Log[2] is
+   irrational), so stripping Log[2] would wrongly fuse 2^x with Exp[x]. *)
+RatContent[a_] := Which[a === 0, 1, MatchQ[a, _Integer | _Rational], a,
+  Head[a] === Times,
+    With[{c = Times @@ Select[List @@ a, MatchQ[#, _Integer | _Rational] &]},
+      If[MatchQ[c, _Integer | _Rational] && c =!= 0, c, 1]],
+  True, 1];
+NormTerm[a_] := With[{c = RatContent[a]}, If[c =!= 0, Expand[a/c], a]];
+(* a polynomial with its integer content divided out, so that the radicands
+   of Sqrt[4x^2+4] and Sqrt[x^2+1] are one family.  The SIGN is deliberately
+   left alone: Sqrt[x-x^3] and Sqrt[-x+x^3] are different radicands. *)
+NormPoly[a_] := Module[{e = Quiet[Expand[Together[a]]], ft},
+  ft = Quiet[Check[FactorTermsList[e], {1, e}]];
+  NormTerm[If[ListQ[ft] && Length[ft] == 2, ft[[2]], e]]];
+(* an exponent contributes one key per additive term, because BuildTower's
+   exponential split (ParallelMixed.m:2449) breaks e^(x - t) into e^x e^(-t);
+   purely numeric terms are a constant factor and carry no family *)
+ExpKeys[a_] := Module[{t = Together[a], ts},
+  ts = If[Head[Expand[t]] === Plus, List @@ Expand[t], {t}];
+  DeleteDuplicates[{"exp", NormTerm[#]} & /@ DeleteCases[ts, _?NumericQ]]];
+(* Log[2 x] = Log[2] + Log[x], Log[x^3] = 3 Log[x] and Log[x^2+2x+1] =
+   2 Log[x+1] are all the generator of their squarefree factors, so a Log
+   contributes one key per non-constant irreducible factor of its argument.
+   This is exactly what separates Log[x] from Log[1+x] -- the counterexample
+   pair above -- so it is load-bearing, not cosmetic. *)
+LogKey[a_] := Module[{t = Quiet[Together[a]], ps, fs},
+  ps = DeleteCases[Quiet[{Numerator[t], Denominator[t]}], _?NumericQ];
+  If[ps === {}, Return[{}]];     (* Log of a constant carries no generator *)
+  fs = Flatten[Function[p, If[Quiet[PolynomialQ[p, FreeSyms[p]]] && FreeSyms[p] =!= {},
+         Quiet[FactorsOf[p][[All, 1]]], {p}]] /@ ps, 1];
+  Sort[DeleteDuplicates[NormPoly /@ DeleteCases[fs, _?NumericQ]]]];
+
+FamHeads = Join[GenHeads, TrigHeads, HypHeads];
+
+(* the family keys of ONE kernel subexpression *)
+KernelKeys[e_, x_] := Module[{h = Head[e]},
+  Which[
+    MatchQ[e, Power[E, _]], ExpKeys[e[[2]]],
+    h === PMExp && Length[e] == 1, ExpKeys[e[[1]]],
+    Length[e] != 1, {},
+    MemberQ[Join[TrigHeads, {Tan, Cot}], h], {{"trig", NormTerm[Together[e[[1]]]]}},
+    MemberQ[Join[HypHeads, {Tanh, Coth}], h], {{"trigh", NormTerm[Together[e[[1]]]]}},
+    h === Log, {"log", #} & /@ LogKey[e[[1]]],
+    h === ArcTan || h === ArcCot, {{"atan", NormTerm[Together[e[[1]]]]}},
+    h === ArcTanh || h === ArcCoth, {{"atanh", NormTerm[Together[e[[1]]]]}},
+    KeyExistsQ[InvRadical, h], {{SymbolName[h], Together[e[[1]]]}},
+    h === ProductLog, {{"W", Together[e[[1]]]}},
+    True, {}]];
+
+(* the family keys of a surface expression.  Sqrt[Log[x]] carries Log[x]'s
+   key, because Lemma 3.2's flattening gives it the generator u^2 = Log[x];
+   a radical of a rational function is its own family.
+   The PMExp rewrite is applied HERE rather than relied on from the caller:
+   without it 2^x scans as having no family at all, i.e. as rational in x,
+   which would absorb it into another block as though it were inert. *)
+SurfaceFamilies[u0_, x_] := Module[{u = PMExpHold[u0, x], ks},
+  ks = Cases[{u}, e : ((h_[_] /; MemberQ[FamHeads, h]) | Power[E, _] | PMExp[_]) :> KernelKeys[e, x], Infinity];
+  ks = Join[ks, Cases[{u}, Power[b_, r_Rational] /; ! IntegerQ[r] :>
+         If[Quiet[RationalFunctionQ[b, {x}]], {{"rad", NormPoly[b]}}, SurfaceFamilies[b, x]], Infinity]];
+  (* Flatten, not Union @@ -- an empty Union@@{} / Join@@{} stays unevaluated
+     and poisons every comparison downstream (measured on 2^x, whose Log[2]
+     exponent factor yields no key at all) *)
+  Sort[DeleteDuplicates[Flatten[ks, 1]]]];
+
+(* coupling-capable: the block carries a primitive whose derivative lies in
+   the shared base C(x) -- a Log or an InvRational head at an argument
+   rational in x alone.  Only such blocks can take part in the cross-block
+   coupling of the Lemma, so only they need the guard. *)
+BasePrimitiveQ[u_, x_] := Cases[{u},
+  (h_[a_] /; (h === Log || KeyExistsQ[InvRational, h]) && Quiet[RationalFunctionQ[a, {x}]]),
+  Infinity] =!= {};
+
+(* one merge step: fuse the first pair of blocks that share a family *)
+BlockMerge1[st_] := Catch[Module[{nb = st[[1]], nk = st[[2]], L},
+  L = Length[nb];
+  Do[Do[If[Intersection[nk[[i]], nk[[j]]] =!= {},
+      Throw[{Append[Delete[nb, {{i}, {j}}], Join[nb[[i]], nb[[j]]]],
+             Append[Delete[nk, {{i}, {j}}], Union[nk[[i]], nk[[j]]]]}]],
+    {j, i + 1, L}], {i, L}];
+  st]];
+
+(* AdditiveBlocks[f, x] -> {{block, keys}, ...}
+   The additive terms of f grouped into the connected components of the
+   "shares a generator family" graph.  Terms with no family at all are
+   rational in x alone; they are absorbed into the cheapest non-rational
+   block rather than given one of their own, because a separate rational
+   block pays the whole per-call floor for work try_rational does in
+   microseconds, and because keeping them together reproduces today's answer
+   byte for byte on the corpus cases where the rational part cancels against
+   an elementary piece (#134, #199, #204). *)
+AdditiveBlocks[f_, x_] := Module[{fe, terms, ks, st, blocks, keys, ratT, idx},
+  fe = Expand[f];
+  (* An integrand that is not a sum cannot be split, so return before the
+     family scan rather than after it.  This keeps the decomposition off the
+     critical path of the ~200 corpus cases that are not sums: with the scan
+     running unconditionally the median case paid 3-10% for a partition it
+     could never use, which showed up as the median rising 0.061 -> 0.063 s
+     and "fastest port" dropping from 88 cases to 74 while the heavy tail
+     improved. *)
+  If[Head[fe] =!= Plus, Return[{{f, {}}}]];
+  fe = Expand[PMExpHold[fe, x]];
+  If[Head[fe] =!= Plus, Return[{{f, {}}}]];
+  terms = List @@ fe;
+  ks = SurfaceFamilies[#, x] & /@ terms;
+  ratT = Flatten[Position[ks, {}]];
+  idx = Complement[Range[Length[terms]], ratT];
+  If[idx === {}, Return[{{Total[terms], {}}}]];
+  st = FixedPoint[BlockMerge1, {List /@ idx, ks[[idx]]}];
+  {blocks, keys} = st;
+  If[ratT =!= {},
+    With[{cheap = First[Ordering[(Length[keys[[#]]] * 10^6 + LeafCount[Total[terms[[blocks[[#]]]]]]) & /@ Range[Length[blocks]]]]},
+      blocks[[cheap]] = Join[blocks[[cheap]], ratT]]];
+  Table[{Total[terms[[Sort[blocks[[k]]]]]], keys[[k]]}, {k, Length[blocks]}]];
+
+(* the heads a block may introduce that make its answer more than elementary *)
+SpecialHeadsSP = {ExpIntegralEi, LogIntegral, SinIntegral, CosIntegral,
+  SinhIntegral, CoshIntegral, Erf, Erfc, Erfi, Gamma, EllipticF, EllipticE, EllipticPi};
+
+(* the {elementary+special, remainder} halves of a surface answer, split on
+   the top-level sum exactly as IntegrateSurfacePartial assembles it *)
+SplitParts[a_, x_] := Module[{ts = If[Head[a] === Plus, List @@ a, {a}]},
+  {Total[DeleteCases[ts, Inactive[Integrate][_, x]]],
+   Total[Cases[ts, Inactive[Integrate][r_, x] :> r]]}];
+(* a block CLOSED: no remainder and no special function.  By corollary C2 of
+   the coupling Lemma such a block cannot take part in a cross-block
+   coupling, so it never needs the guard. *)
+ClosedElemQ[p_] := p[[2]] === 0 && FreeQ[p[[1]], Alternatives @@ SpecialHeadsSP];
+
+(* SplitIntegratePartial: the additive fast path of IntegrateSurfacePartial.
+   Returns {answer, ok} on success, or None to fall through to the joint path.
+
+   The guard is the coupling Lemma above: let N be the blocks that did not
+   close to a plain elementary expression and P the coupling-capable ones.
+   With |N and P| <= 1 no cross-block rescue can exist and the split is
+   complete; with two or more we decline and let the joint path run, because
+   that is exactly the Log[1+x]/x + Log[x]/(1+x) shape whose halves are each
+   out of class while the sum is Log[x] Log[1+x].
+
+   The merged `ok` is the conjunction of the blocks' own flags -- not a new
+   check.  Each block already verified its own answer against its own
+   integrand, and D is linear, so a sum of verified pieces is a verified sum.
+
+   The budget is divided among the blocks so that k blocks cannot cost k
+   times $SpecialTimeBudget (an outer TimeConstrained cannot interrupt an
+   inner one, so the outer wrapper is not a backstop here). *)
+SplitIntegratePartial[blocks_, integrandN_, x_, special_, verbose_, samples0_] :=
+ Module[{samples = samples0, x0, k = Length[blocks], rs, ps, Nn, Pp, bad, anti, rem},
+  If[samples === None,
+    x0 = SamplePoint[integrandN, x];
+    samples = {If[x0 =!= None, x0, 7/5], 9/4, 13/5}];
+  rs = Block[{$SpecialTimeBudget = $SpecialTimeBudget/k},
+    Function[b, IntegrateSurfacePartial[b[[1]], x, "Special" -> special,
+      "Verbose" -> verbose, "Samples" -> samples, "Additive" -> False]] /@ blocks];
+  (* any block that did not return a {answer, flag} pair -- a failure or a
+     status -- sends the whole call to the joint path, so a block-level
+     "not elementary"/"not in class" is never mistaken for the sum's *)
+  If[! AllTrue[rs, ListQ[#] && Length[#] == 2 && BooleanQ[#[[2]]] &], Return[None]];
+  ps = SplitParts[#[[1]], x] & /@ rs;
+  Nn = Flatten[Position[ClosedElemQ /@ ps, False]];
+  Pp = Flatten[Position[BasePrimitiveQ[#[[1]], x] & /@ blocks, True]];
+  bad = Intersection[Nn, Pp];
+  If[Length[bad] >= 2,
+    If[verbose, Print["  additive split declined: ", Length[bad],
+      " coupling-capable blocks did not close (cross-block cancellation possible)"]];
+    Return[None]];
+  anti = Total[ps[[All, 1]]];
+  rem = Can[Total[ps[[All, 2]]]];
+  If[verbose, Print["  additive split: ", k, " blocks, ",
+    Length[Nn], " not closed, ", Length[Pp], " coupling-capable"]];
+  (* a COMPLETE answer carries no Inactive[Integrate] at all.  The joint path
+     reaches its Inactive[Integrate] line only for a genuine PartialResult and
+     returns complete answers earlier through PresentSpecial, so emitting
+     Inactive[Integrate][0, x] here would make a complete split answer read as
+     partial -- which the corpus judge scores as a different outcome. *)
+  {anti + If[rem === 0, 0, Inactive[Integrate][rem, x]], AllTrue[rs, #[[2]] &]}];
+
+(* SplitIntegrateSpecial: the same fast path for the complete-answer entry.
+   Returns {answer, ok} on success, or None to fall through to the joint path.
+
+   Complete mode is stricter than partial mode in one way that matters: a
+   block may come back as a STATUS ("not in class", "not elementary",
+   "failed", or a strict downgrade of an uncertified special answer) rather
+   than an answer, and a block's status is NOT the sum's -- the sum may well
+   be elementary when a block is not (that is the counterexample).  So any
+   non-pair from any block sends the whole call to the joint path, which is
+   also what keeps the `nic` cases bit-identical. *)
+SplitIntegrateSpecial[blocks_, integrandN_, x_, strict_, verbose_, samples0_] :=
+ Module[{samples = samples0, x0, k = Length[blocks], rs, Nn, Pp, bad},
+  If[samples === None,
+    x0 = SamplePoint[integrandN, x];
+    samples = {If[x0 =!= None, x0, 7/5], 9/4, 13/5}];
+  rs = Block[{$SpecialTimeBudget = $SpecialTimeBudget/k},
+    Function[b, IntegrateSurfaceSpecial[b[[1]], x, "Verbose" -> verbose,
+      "Samples" -> samples, "Strict" -> strict, "Additive" -> False]] /@ blocks];
+  If[! AllTrue[rs, ListQ[#] && Length[#] == 2 && BooleanQ[#[[2]]] &], Return[None]];
+  Nn = Flatten[Position[ClosedElemQ[{#[[1]], 0}] & /@ rs, False]];
+  Pp = Flatten[Position[BasePrimitiveQ[#[[1]], x] & /@ blocks, True]];
+  bad = Intersection[Nn, Pp];
+  If[Length[bad] >= 2,
+    If[verbose, Print["  additive split declined: ", Length[bad],
+      " coupling-capable blocks did not close elementarily"]];
+    Return[None]];
+  If[verbose, Print["  additive split: ", k, " blocks, ", Length[Nn], " with special terms"]];
+  {Total[rs[[All, 1]]], AllTrue[rs, #[[2]] &]}];
 
 (* ------------------------------------------------------------------ kernels *)
 (* Kernel[kind, col, data]: a kernel column, the element col (Trager
@@ -1005,14 +1307,14 @@ ParallelIntegrateSpecial[f00_List, T_Association, opts : OptionsPattern[]] := Wi
   If[! SpecialResultQ[r], Return[r]];
   f = TPad[T, f00];
   cert = If[r["certified"], r["certificate"], None];
-  If[cert === None, cert = CertifyNonelementary[f, T]];
+  If[cert === None, cert = PMStage["CertifyNonelementary", CertifyNonelementary[f, T]]];
   If[cert === None,
-    cert = CertifyNonelementary[SpecialPart[r, T], T];
+    cert = PMStage["CertifyNonelementary", CertifyNonelementary[SpecialPart[r, T], T]];
     If[cert =!= None, cert = Prepend[cert, "special part"]]];
   r["certificate"] = cert; r["certified"] = cert =!= None;
   If[r["certified"],
     r["independence"] = If[Length[r["terms"]] == 1, {True, {"a single special term: necessary by the certificate"}},
-      IndependenceCertificate[r, T, r["base"], verbose]];
+      PMStage["IndependenceCertificate", IndependenceCertificate[r, T, r["base"], verbose]]];
     r["necessity"] = "necessary: the integrand has no elementary integral" <>
       If[r["independence"][[1]], "; the special terms are independent modulo elementary functions", ""],
     r["independence"] = {False, "no certificate for the integrand"};
@@ -1025,38 +1327,39 @@ Pis[f00_, T_, sources0_, back_, Y_, verbose_, elementaryFirst_] := Catch[Module[
     sources = sources0, determined = {}, f1, ei, cert, th, kernels, key, last = None, r, I0, used, mn},
   f = CanT[TPad[T, f00]];
   If[elementaryFirst,
-    base = Part2[f, T];
+    base = PMStage["Part2 (E1)", Part2[f, T]];
     If[ExprQ[base], If[verbose, Print["  elementary (Part II)"]]; Throw[base, "pis"]];     (* E1 *)
     If[verbose, Print["  Part II: ", StringTake[ToStr[base], UpTo[160]]]];
     If[! Certified[base],                                                                (* E2 *)
-      b2 = Part2[f, T, True];
+      b2 = PMStage["Part2 (E2 extended)", Part2[f, T, True]];
       If[ExprQ[b2], If[verbose, Print["  elementary (Part II with the extended bounds of Section 5)"]]; Throw[b2, "pis"]];
       If[Certified[b2], base = b2]]];
   certified = Certified[base];
-  If[sources === None, sources = ExpSources[T, back, Y, verbose]];
+  If[sources === None, sources = PMStage["ExpSources", ExpSources[T, back, Y, verbose]]];
   (* Step 2: Ei kernels determined by residues *)
-  {f1, ei, cert} = EiFromResidues[f, T, sources, verbose];
+  {f1, ei, cert} = PMStage["EiFromResidues", EiFromResidues[f, T, sources, verbose]];
   If[cert =!= None, Throw[cert, "pis"]];
   determined = Join[determined, ei];
   (* Step 3: third kind on a pencil, only for a certified non-torsion divisor   (E3) *)
   If[NotTorsionQ[base],
-    {f1, th} = ThirdKind[f1, T, verbose];
+    {f1, th} = PMStage["ThirdKind", ThirdKind[f1, T, verbose]];
     determined = Join[determined, th]];
   (* Step 4: undetermined columns *)
-  kernels = Join[GammaCandidates[f1, T, sources, verbose], EllipticColumns[T, verbose]];
+  kernels = Join[PMStage["GammaCandidates", GammaCandidates[f1, T, sources, verbose]],
+                 PMStage["EllipticColumns", EllipticColumns[T, verbose]]];
   (* Step 5: Part II's analysis of the remainder, the extended system *)
-  If[AllZeroQ[f1], Throw[Finish[SpecialResult[0, determined], T, verbose, t0, certified, base], "pis"]];
-  key = SPAnalyse[f1, T, verbose];
+  If[AllZeroQ[f1], Throw[PMStage["Finish", Finish[SpecialResult[0, determined], T, verbose, t0, certified, base]], "pis"]];
+  key = PMStage["SPAnalyse", SPAnalyse[f1, T, verbose]];
   If[ListQ[key],
     If[key[[1]] === "not elementary" && Length[key] == 3 && ! StringQ[key[[2]]],
       Throw[{"not in class", key[[2]], key[[3]], "non-constant residue of the remainder"}, "pis"]];
     Throw[{"failed", "analysis of the remainder", key}, "pis"]];
   Do[Do[
-      r = SolveWithKernels[key, split, retry, kernels, verbose];
+      r = PMStage["SolveWithKernels", SolveWithKernels[key, split, retry, kernels, verbose]];
       If[AssociationQ[r],
-        mn = Minimal[key, split, retry, kernels, r["I"], r["coeffs"], r["bx"], verbose];      (* E4 *)
+        mn = PMStage["Minimal", Minimal[key, split, retry, kernels, r["I"], r["coeffs"], r["bx"], verbose]];      (* E4 *)
         {I0, used} = mn;
-        Throw[Finish[SpecialResult[I0, Join[determined, used]], T, verbose, t0, certified, base], "pis"]];
+        Throw[PMStage["Finish", Finish[SpecialResult[I0, Join[determined, used]], T, verbose, t0, certified, base]], "pis"]];
       last = r;
       If[r[[3]] && retry >= 0, Break[]],                  (* bounds proved: raising the guess changes nothing *)
       {retry, 0, 2}],
@@ -1083,19 +1386,55 @@ Minimal[key_, split_, retry_, kernels_, I0_, coeffs_, bx_, verbose_] := Module[{
       {j, active}]];
   {sol[[1]], Table[{sol[[2]][j], kernels[[j]]}, {j, active}]}];
 
+(* SingleKernelNonelementaryQ[K, gens]: the column of this ONE kernel provably
+   has no elementary antiderivative, so Part II cannot replace it and E4's probe
+   on it is a search that cannot succeed.
+
+   By construction -- the kernel identity Finish verifies just below, plus
+   KernelAntiderivative -- a gamma kernel's column integrates to a nonzero
+   constant multiple of
+
+     s = 0                 ExpIntegralEi[v],
+     s = a/k, k >= 2       Gamma[s, -v], or Sqrt[Pi] Erfc[h] when -v = h^2,
+
+   and GammaCandidates builds s only as a/k with k >= 2 and GCD[a, k] == 1
+   (:975), so s is NEVER a positive integer -- the one case in which Gamma[s, .]
+   degenerates to an elementary polynomial times an exponential.  For a
+   non-constant argument each of these is non-elementary over every elementary
+   extension (Liouville, in Rosenlicht's form), which is the same theorem the
+   stage's own certificates rest on.  Hence a single gamma term is never
+   replaceable, and ONLY a cancellation between two or more kernels can make a
+   sum of them elementary -- which is what the whole-part probe below tests, and
+   the shape the coupling Lemma of AdditiveBlocks describes.
+
+   Measured: E4 ran 344 full Part II integrations over the 312-case corpus and
+   replaced nothing, 0 of 344, which is 14% of the stage's entire clock.  This
+   is a soundness argument and not an empirical one: v non-constant is required
+   explicitly, and the elliptic kinds are NOT claimed -- a degenerate pencil is
+   ruled out upstream by BuildTower's squarefree radicand rather than here, so
+   their probes are left in place. *)
+SingleKernelNonelementaryQ[K_, gens_] := K["kind"] === "gamma" &&
+  (K["s"] === 0 || ! IntegerQ[K["s"]]) && ! FreeQ[K["v"], Alternatives @@ gens];
+
 (* ElementaryParts: Algorithm S7, Step 15 (E4): replace by Part II's elementary
    antiderivative the special part as a whole, else every special term that has one *)
-ElementaryParts[res_, T_, verbose_] := Module[{nc = NCo[T], col, whole, r, keep = {}, extra = 0},
+ElementaryParts[res_, T_, verbose_] := Module[{nc = NCo[T], gens = T["gens"], col, whole, r, keep = {}, extra = 0},
   If[res["terms"] === {}, Return[res]];
   col[terms_] := Module[{u = TZero[T]}, Do[u = Padd[u, Pscale[t[[1]], TPad[T, t[[2]]["col"]]]], {t, terms}]; CanT[u]];
   whole = col[res["terms"]];
   If[AllTrue[Take[whole, nc], # === 0 &], Return[SpecialResult[res["elementary"], {}]]];
-  r = Part2[whole, T, True];
-  If[ExprQ[r],
-    If[verbose, Print["  the special part integrates elementarily: replaced"]];
-    Return[SpecialResult[res["elementary"] + r, {}]]];
-  Do[r = Part2[col[{t}], T, True];
+  (* the special part as a whole: with one term this is the per-term probe, so it
+     is skipped on exactly the terms the invariant above covers *)
+  If[Length[res["terms"]] >= 2 || ! SingleKernelNonelementaryQ[res["terms"][[1, 2]], gens],
+    r = PMStage["Part2 (E4 whole)", Part2[whole, T, True]];
     If[ExprQ[r],
+      PMStage["** E4 replaced the whole special part", Null];
+      If[verbose, Print["  the special part integrates elementarily: replaced"]];
+      Return[SpecialResult[res["elementary"] + r, {}]]]];
+  Do[If[SingleKernelNonelementaryQ[t[[2]], gens], AppendTo[keep, t]; Continue[]];
+    r = PMStage["Part2 (E4 per term)", Part2[col[{t}], T, True]];
+    If[ExprQ[r],
+      PMStage["** E4 replaced one term", Null];
       extra += r;
       If[verbose, Print["  ", KernelRepr[t[[2]]], " integrates elementarily: replaced"]],
       AppendTo[keep, t]],
@@ -1131,7 +1470,8 @@ BackY[back_, gens_] := SelectFirst[back[[All, 1]], MatchQ[#, _Symbol] && ! Membe
 
 SubstituteBack[e_, back_] := e //. back;
 
-Options[IntegrateSurfaceSpecial] = {"Verbose" -> False, "Tower" -> None, "Samples" -> None, "Strict" -> None, "Details" -> False};
+Options[IntegrateSurfaceSpecial] = {"Verbose" -> False, "Tower" -> None, "Samples" -> None,
+  "Strict" -> None, "Details" -> False, "Additive" -> True};
 
 (* IntegrateSurfaceSpecial[f, x, opts]: build the tower (BuildTower with the
    structure theorem, or "Tower" -> {T, fpair, back}), integrate with special
@@ -1139,23 +1479,32 @@ Options[IntegrateSurfaceSpecial] = {"Verbose" -> False, "Tower" -> None, "Sample
    against its kernel numerically, and verify the whole answer by
    differentiation.  {answer, verified} or a status list. *)
 IntegrateSurfaceSpecial[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{verbose = TrueQ[OptionValue["Verbose"]],
-    tower = OptionValue["Tower"], integrandN = integrand /. PMExp -> Exp, bt, T, fp, back, Ysym, strict, res, samples, x0, yExpr, out, total, anti, kern, fixed, ver},
+    tower = OptionValue["Tower"], integrandN = integrand /. PMExp -> Exp, bt, T, fp, back, Ysym, strict, res, samples, x0, yExpr, out, total, anti, kern, fixed, ver, blocks, sp},
+  strict = If[OptionValue["Strict"] === None, $StrictSP, TrueQ[OptionValue["Strict"]]];
+  (* the additive fast path.  Skipped when the caller pinned a tower (a tower
+     for the whole integrand and a split of it are contradictory) and when
+     "Details" is asked for, since the caller then wants this call's own
+     internal result Association, which does not compose across blocks. *)
+  If[tower === None && TrueQ[OptionValue["Additive"]] && ! TrueQ[OptionValue["Details"]],
+    blocks = Quiet[AdditiveBlocks[integrand, x]];
+    If[ListQ[blocks] && Length[blocks] >= 2,
+      sp = SplitIntegrateSpecial[blocks, integrandN, x, strict, verbose, OptionValue["Samples"]];
+      If[sp =!= None, Return[sp]]]];
   If[tower === None,
-    bt = Catch[Quiet[BuildTower[integrand, x, "StructureTheorem" -> True, "Verbose" -> verbose]], "build"];
+    bt = PMStage["BuildTower", Catch[Quiet[BuildTower[integrand, x, "StructureTheorem" -> True, "Verbose" -> verbose]], "build"]];
     If[! ListQ[bt] || Length[bt] != 4, Return[{"failed", "tower construction failed", ToStr[integrand]}]];
     {T, fp, back} = bt[[1 ;; 3]];
     If[verbose,
       Print["  tower: generators ", T["gens"], " with D = ", T["derivs"], If[T["q"] =!= None, ", y^" <> ToString[T["m"]] <> " = " <> ToStr[T["q"]], ""]];
       Print["  integrand: ", fp]],
     {T, fp, back} = tower];
-  Ysym = BackY[back, T["gens"]];
-  strict = If[OptionValue["Strict"] === None, $StrictSP, TrueQ[OptionValue["Strict"]]];
+  Ysym = BackY[back, T["gens"]];      (* strict was resolved above, for the split *)
   res = ParallelIntegrateSpecial[fp, T, "Back" -> back, "Y" -> Ysym, "Verbose" -> verbose, "Strict" -> False];
   samples = OptionValue["Samples"];
   If[samples === None,
     x0 = SamplePoint[integrandN, x];
     samples = {If[x0 =!= None, x0, 7/5], 9/4, 13/5}];
-  PresentSpecial[res, integrandN, x, T, back, samples, strict, verbose, TrueQ[OptionValue["Details"]]]],
+  PMStage["PresentSpecial", PresentSpecial[res, integrandN, x, T, back, samples, strict, verbose, TrueQ[OptionValue["Details"]]]]],
   $SpecialTimeBudget, {"failed", "time budget exceeded"}];
 
 (* PresentSpecial: the surface form of a result of ParallelIntegrateSpecial: substitute
@@ -1843,8 +2192,8 @@ PartialIntegrate[f00_List, T_Association, OptionsPattern[]] := WithPart2Memo[Mod
     back = OptionValue["Back"], Y = OptionValue["Y"], verbose = TrueQ[OptionValue["Verbose"]], f, full, fCert, f1, rem, terms, key, f2, th, moved,
     kernels, best = None, out, I0, coeffs, r, used, S, h, out2, sz, doneQ = False},
   f = CanT[TPad[T, f00]];
-  full = If[special, ParallelIntegrateSpecial[f, T, "Sources" -> sources, "Back" -> back, "Y" -> Y, "Verbose" -> verbose, "Strict" -> True],
-    Part2[f, T]];
+  full = If[special, PMStage["= ParallelIntegrateSpecial (bracket)", ParallelIntegrateSpecial[f, T, "Sources" -> sources, "Back" -> back, "Y" -> Y, "Verbose" -> verbose, "Strict" -> True]],
+    PMStage["Part2 (P0)", Part2[f, T]]];
   If[ExprQ[full] || SpecialResultQ[full], Return[full]];
   fCert = If[special,
     If[ListQ[full] && full =!= {} && MemberQ[{"not elementary", "not in class"}, full[[1]]], full, None],
@@ -1853,11 +2202,11 @@ PartialIntegrate[f00_List, T_Association, OptionsPattern[]] := WithPart2Memo[Mod
   If[sources === None, sources = {}];
   (* (P1) residues; if an Ei kernel of the exponential span leaves a new
      non-constant residue elsewhere, the residues are carried by the remainder instead *)
-  {f1, rem, terms} = ResidueSplits[f, T, sources, special, verbose];
-  key = If[! AllZeroQ[f1], SPAnalyse[f1, T, verbose], None];
+  {f1, rem, terms} = PMStage["ResidueSplits", ResidueSplits[f, T, sources, special, verbose]];
+  key = If[! AllZeroQ[f1], PMStage["SPAnalyse", SPAnalyse[f1, T, verbose]], None];
   If[special && terms =!= {} && ListQ[key] && key[[1]] === "not elementary" && ! StringQ[key[[2]]],
-    {f1, rem, terms} = ResidueSplits[f, T, {}, False, verbose];
-    key = If[! AllZeroQ[f1], SPAnalyse[f1, T, verbose], None]];
+    {f1, rem, terms} = PMStage["ResidueSplits", ResidueSplits[f, T, {}, False, verbose]];
+    key = If[! AllZeroQ[f1], PMStage["SPAnalyse", SPAnalyse[f1, T, verbose]], None]];
   (* (P2) third kind for a certified non-torsion divisor *)
   If[ListQ[key] && key[[1]] === "not elementary" && StringQ[key[[2]]] && StringContainsQ[key[[2]], "not torsion"],
     {f2, th} = ThirdKind[f1, T, verbose];
@@ -1879,17 +2228,17 @@ PartialIntegrate[f00_List, T_Association, OptionsPattern[]] := WithPart2Memo[Mod
   If[ListQ[key],
     If[verbose, Print["  partial: the remainder analysis stops (", StringTake[ToStr[key], UpTo[80]], "); r = f"]];
     Return[PartialFinish[PartialResult[0, {}, f], T, fCert, special]]];
-  kernels = If[special, Join[GammaCandidates[f1, T, sources, False], EllipticColumns[T, False]], {}];
+  kernels = If[special, Join[PMStage["GammaCandidates", GammaCandidates[f1, T, sources, False]], PMStage["EllipticColumns", EllipticColumns[T, False]]], {}];
   Do[Do[                                                       (* both splittings and both column orders; the simplest remainder wins *)
-      out = PartialSolve[key, kernels, split, 0, verbose, order];
+      out = PMStage["PartialSolve", PartialSolve[key, kernels, split, 0, verbose, order]];
       If[out === None, Continue[]];
       {I0, coeffs, r} = out;
       used = Select[Transpose[{coeffs, kernels}], ! ExactZeroQ[#[[1]]] &];
       If[used =!= {},                                          (* strict: special terms only if necessary *)
         S = SpecialPart[SpecialResult[0, used], T];
         h = CanT[Padd[f1, Pscale[-1, r]]];                      (* the part that I integrates *)
-        If[CertifyNonelementary[S, T] === None && CertifyNonelementary[h, T] === None,
-          out2 = PartialSolve[key, {}, split, 0, verbose, order];
+        If[PMStage["CertifyNonelementary", CertifyNonelementary[S, T]] === None && PMStage["CertifyNonelementary", CertifyNonelementary[h, T]] === None,
+          out2 = PMStage["PartialSolve", PartialSolve[key, {}, split, 0, verbose, order]];
           If[out2 =!= None, {I0, coeffs, r} = out2; used = {}]]];
       sz = RemainderSize[T, r];
       If[best === None || LexLess[sz, best[[4]]], best = {I0, used, r, sz}];
@@ -1901,20 +2250,31 @@ PartialIntegrate[f00_List, T_Association, OptionsPattern[]] := WithPart2Memo[Mod
   {I0, used, r} = best[[1 ;; 3]];
   PartialFinish[PartialResult[I0, Join[terms, used], Padd[rem, r]], T, fCert, special]]];
 
-Options[IntegrateSurfacePartial] = {"Special" -> True, "Verbose" -> False, "Tower" -> None, "Samples" -> None};
+Options[IntegrateSurfacePartial] = {"Special" -> True, "Verbose" -> False, "Tower" -> None,
+  "Samples" -> None, "Additive" -> True};
 
 (* IntegrateSurfacePartial[f, x, opts]: IntegrateSurfaceSpecial with a partial
    answer I + Inactive[Integrate][r, x] when no complete one is found;
    {answer, verified} or a status *)
 IntegrateSurfacePartial[integrand_, x_Symbol, OptionsPattern[]] := TimeConstrained[Module[{special = TrueQ[OptionValue["Special"]], verbose = TrueQ[OptionValue["Verbose"]],
-    tower = OptionValue["Tower"], samples = OptionValue["Samples"], integrandN = integrand /. PMExp -> Exp, bt, T, fp, back, Ysym, res, x0, yExpr, surf, total, anti, fixed, r, ok, d},
+    tower = OptionValue["Tower"], samples = OptionValue["Samples"], integrandN = integrand /. PMExp -> Exp, bt, T, fp, back, Ysym, res, x0, yExpr, surf, total, anti, fixed, r, ok, d, blocks, sp},
+  (* the additive fast path: integrate blocks of terms with pairwise-disjoint
+     generator families on their own towers and sum.  Skipped when the caller
+     pinned a tower -- honouring a tower for the whole integrand and splitting
+     it are contradictory -- and when it declines, the joint path below runs
+     unchanged. *)
+  If[tower === None && TrueQ[OptionValue["Additive"]],
+    blocks = Quiet[AdditiveBlocks[integrand, x]];
+    If[ListQ[blocks] && Length[blocks] >= 2,
+      sp = SplitIntegratePartial[blocks, integrandN, x, special, verbose, samples];
+      If[sp =!= None, Return[sp]]]];
   If[tower === None,
-    bt = Catch[Quiet[BuildTower[integrand, x, "StructureTheorem" -> True, "Verbose" -> verbose]], "build"];
+    bt = PMStage["BuildTower", Catch[Quiet[BuildTower[integrand, x, "StructureTheorem" -> True, "Verbose" -> verbose]], "build"]];
     If[! ListQ[bt] || Length[bt] != 4, Return[{"failed", "tower construction failed", ToStr[integrand]}]];
     {T, fp, back} = bt[[1 ;; 3]],
     {T, fp, back} = tower];
   Ysym = BackY[back, T["gens"]];
-  res = PartialIntegrate[fp, T, "Special" -> special, "Back" -> back, "Y" -> Ysym, "Verbose" -> verbose];
+  res = PMStage["= PartialIntegrate (bracket)", PartialIntegrate[fp, T, "Special" -> special, "Back" -> back, "Y" -> Ysym, "Verbose" -> verbose]];
   If[samples === None,
     x0 = SamplePoint[integrandN, x];
     samples = {If[x0 =!= None, x0, 7/5], 9/4, 13/5}];
@@ -1922,7 +2282,7 @@ IntegrateSurfacePartial[integrand_, x_Symbol, OptionsPattern[]] := TimeConstrain
      which returns the same answer (the pipeline is deterministic, and a special answer
      of PartialIntegrate is certified); it is presented here without the rerun *)
   If[! PartialResultQ[res],
-    Return[If[special, PresentSpecial[res, integrandN, x, T, back, samples, $StrictSP, False, False],
+    Return[If[special, PMStage["PresentSpecial", PresentSpecial[res, integrandN, x, T, back, samples, $StrictSP, False, False]],
       If[ExprQ[res], {SubstituteBack[res, back], True}, res]]]];
   yExpr = If[T["q"] =!= None, T["q"]^(1/T["m"]), None];
   surf[u0_] := With[{u = TPad[T, u0]},
@@ -1932,10 +2292,10 @@ IntegrateSurfacePartial[integrand_, x_Symbol, OptionsPattern[]] := TimeConstrain
     fixed = FixBranch[t[[1]] anti, t[[1]] surf[t[[2]]["col"]], x, samples, t[[2]]];
     total += If[fixed =!= None, fixed, t[[1]] anti],
     {t, res["terms"]}];
-  total = HalfAngleFold[Present[total], back];
-  r = Simplify[surf[res["remainder"]]];
+  total = PMStage["Present (partial)", HalfAngleFold[Present[total], back]];
+  r = PMStage["Simplify (remainder)", Simplify[surf[res["remainder"]]]];
   ok = False;
-  d = QuietCheck[D[total, x] + r, $Failed];
+  d = PMStage["VerifyAnswer (partial)", QuietCheck[D[total, x] + r, $Failed]];
   If[d =!= $Failed,
     ok = AllTrue[samples, With[{a = Quiet[Num[d, x, #]], b = Quiet[Num[integrandN, x, #]]},
       NumericQ[a] && NumericQ[b] && Abs[a - b] < 10^-15 (1 + Abs[b])] &]];

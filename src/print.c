@@ -1667,18 +1667,35 @@ static void print_tex(Expr* e, int parent_prec) {
                     print_tex(num_args[i], 4500);
                 }
             } else {
+                /* Context precedence inside a \frac slot.  0 ("never
+                 * parenthesise") is right only while the factor is the slot's
+                 * SOLE occupant: the brace group is then the grouping, and
+                 * \frac{1}{1+x} needs no brackets.  With two or more factors
+                 * they sit side by side in one brace group, joined by implicit
+                 * multiplication, so each must be rendered at the `*`
+                 * precedence -- otherwise a Plus among them loses its
+                 * parentheses and the LaTeX states a DIFFERENT expression:
+                 *   a/(b (c + d))            ->  \frac{a}{b c+d}   = (bc+d)
+                 *   1/(Sqrt[10] (1-Sqrt[5])) ->  \frac{1}{\sqrt{10} 1-\sqrt{5}}
+                 * Both were wrong answers in the typeset output, not merely
+                 * ugly.  The den_count == 0 branch above already passes 4500
+                 * for exactly this reason. */
                 printf("\\frac{");
                 if (num_count == 0) { printf("1"); }
                 else {
+                    int nprec = (num_count > 1) ? 4500 : 0;
                     for (size_t i = 0; i < num_count; i++) {
                         if (i > 0) printf(" ");
-                        print_tex(num_args[i], 0);
+                        print_tex(num_args[i], nprec);
                     }
                 }
                 printf("}{");
-                for (size_t i = 0; i < den_count; i++) {
-                    if (i > 0) printf(" ");
-                    print_tex(den_args[i], 0);
+                {
+                    int dprec = (den_count > 1) ? 4500 : 0;
+                    for (size_t i = 0; i < den_count; i++) {
+                        if (i > 0) printf(" ");
+                        print_tex(den_args[i], dprec);
+                    }
                 }
                 printf("}");
             }

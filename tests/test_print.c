@@ -214,6 +214,49 @@ void test_printer_directive_has_no_latex() {
     expr_free(plain);
 }
 
+/* A factor inside a \frac slot must keep its parentheses whenever the slot
+ * holds more than one factor: they are juxtaposed by implicit multiplication,
+ * so a Plus among them that loses its brackets makes the typeset output state a
+ * DIFFERENT expression.  Every factor was being rendered at precedence 0
+ * ("never parenthesise"), which is right only for a slot's sole occupant, so
+ * `a/(b (c + d))` came out as \frac{a}{b c+d}, i.e. (bc+d)/… — a wrong answer
+ * in the typeset form, and the shape every third-kind elliptic answer has. */
+void test_texform_fraction_parenthesisation() {
+    static const struct { const char* in; const char* tex; } cases[] = {
+        /* the bug: two or more factors in a slot */
+        {"TeXForm[a/(b (c + d))]",   "\\frac{a}{b \\left(c+d\\right)}"},
+        {"TeXForm[1/(x (1 + x))]",   "\\frac{1}{x \\left(1+x\\right)}"},
+        {"TeXForm[x/((a + b) (c + d))]",
+         "\\frac{x}{\\left(a+b\\right) \\left(c+d\\right)}"},
+        {"TeXForm[(x + 1) (x + 2)/((x + 3) (x + 4))]",
+         "\\frac{\\left(1+x\\right) \\left(2+x\\right)}"
+         "{\\left(3+x\\right) \\left(4+x\\right)}"},
+        /* a lone factor must NOT gain gratuitous brackets */
+        {"TeXForm[1/(1 + x)]",       "\\frac{1}{1+x}"},
+        {"TeXForm[(a + b)/(c + d)]", "\\frac{a+b}{c+d}"},
+        {"TeXForm[a/b]",             "\\frac{a}{b}"},
+        /* several atoms in a slot need none either */
+        {"TeXForm[1/(x y z)]",       "\\frac{1}{x y z}"},
+        {"TeXForm[(a + b)/(x y)]",   "\\frac{a+b}{x y}"},
+        /* a parenthesised base already carried its own brackets */
+        {"TeXForm[1/(x^2 (1 + x)^3)]",
+         "\\frac{1}{x^{2} \\left(1+x\\right)^{3}}"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        Expr* e = parse_expression(cases[i].in);
+        ASSERT(e != NULL);
+        Expr* res = evaluate(e);
+        char* str = expr_to_string(res);
+        if (!str || strcmp(str, cases[i].tex) != 0)
+            printf("  %s\n    got      %s\n    expected %s\n",
+                   cases[i].in, str ? str : "(null)", cases[i].tex);
+        ASSERT(str && strcmp(str, cases[i].tex) == 0);
+        free(str);
+        expr_free(res);
+    }
+    printf("PASS: TeXForm parenthesises juxtaposed factors in a fraction\n");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -226,6 +269,7 @@ int main() {
     TEST(test_series_latex);
     TEST(test_operator_latex);
     TEST(test_printer_directive_has_no_latex);
+    TEST(test_texform_fraction_parenthesisation);
 
     printf("All print tests passed!\n");
     return 0;
