@@ -583,21 +583,29 @@ char* graphics_to_plotly_json(const Expr* g) {
  * 3D coordinate helpers
  * --------------------------------------------------------------------- */
 
-/* Append one numeric component of a 3-element point list. */
-static int append_coord3_array(Buf* b, const Expr* pts, int component) {
-    if (!head_is(pts, SYM_List)) return 0;
-    buf_cat(b, "[");
-    int first = 1;
-    for (size_t i = 0; i < pts->data.function.arg_count; i++) {
-        const Expr* triple = pts->data.function.args[i];
-        if (!head_is(triple, SYM_List) || triple->data.function.arg_count < 3) continue;
-        double v;
-        if (!expr_to_double(triple->data.function.args[component], &v)) continue;
-        if (!first) buf_cat(b, ",");
-        buf_catd(b, v);
-        first = 0;
-    }
-    return buf_cat(b, "]");
+/* Emit ONE scatter3d trace from the accumulated line buffers and reset them.
+ * Segments are separated inside the arrays by JSON null, so the whole wireframe
+ * is a single trace — a Plot3D mesh is ~1,000 grid segments, and one trace each
+ * was enough separate WebGL objects to hang the front end. No-op when empty. */
+static void flush_line_trace(Buf* data_buf, int* first_trace,
+                             Buf* lx, Buf* ly, Buf* lz, size_t* lpts,
+                             double r, double g, double b) {
+    if (*lpts == 0) return;
+    buf_cat(lx, "]"); buf_cat(ly, "]"); buf_cat(lz, "]");
+    char cs[72];
+    rgba_str(cs, sizeof(cs), r, g, b, 1.0);
+    if (!*first_trace) buf_cat(data_buf, ",");
+    *first_trace = 0;
+    buf_cat(data_buf, "{\"type\":\"scatter3d\",\"mode\":\"lines\",\"x\":");
+    buf_cat(data_buf, lx->buf);
+    buf_cat(data_buf, ",\"y\":"); buf_cat(data_buf, ly->buf);
+    buf_cat(data_buf, ",\"z\":"); buf_cat(data_buf, lz->buf);
+    buf_cat(data_buf, ",\"line\":{\"color\":\""); buf_cat(data_buf, cs);
+    buf_cat(data_buf, "\",\"width\":3},\"showlegend\":false}");
+    buf_free(lx); buf_free(ly); buf_free(lz);
+    buf_init(lx, 65536); buf_init(ly, 65536); buf_init(lz, 65536);
+    buf_cat(lx, "["); buf_cat(ly, "["); buf_cat(lz, "[");
+    *lpts = 0;
 }
 
 /* -----------------------------------------------------------------------
@@ -626,51 +634,32 @@ char* graphics3d_to_plotly_json(const Expr* g) {
     double cur_opacity = 0.85;
     int first_trace = 1;
 
-    /* mesh3d accumulates all polygon vertices into one trace per color block.
-     * We flush at every color change and at the end. */
-    Buf mesh_x, mesh_y, mesh_z, mesh_i, mesh_j, mesh_k;
-    buf_init(&mesh_x, 4096); buf_init(&mesh_y, 4096); buf_init(&mesh_z, 4096);
-    buf_init(&mesh_i, 2048); buf_init(&mesh_j, 2048); buf_init(&mesh_k, 2048);
-    size_t mesh_vcount = 0;  /* total vertices so far in current mesh block */
-    size_t mesh_qcount = 0;  /* total quads so far in current mesh block */
-    double mesh_r = cur_r, mesh_g_val = cur_g_val, mesh_b_color = cur_b;
+    /* Every Polygon[] quad accumulates into ONE mesh3d trace; per-quad colour
+     * is carried by Plotly's facecolor array (one colour per triangle). A
+     * Plot3D surface shades each quad a slightly different colour, so emitting
+     * a trace per colour was ~1,700 traces / ~300 KB for a single plot — enough
+     * separate WebGL objects to hang (and appear to "crash") the front end. One
+     * trace with facecolor renders identically and is cheap. */
+    Buf mesh_x, mesh_y, mesh_z, mesh_i, mesh_j, mesh_k, mesh_fc;
+    buf_init(&mesh_x, 65536); buf_init(&mesh_y, 65536); buf_init(&mesh_z, 65536);
+    buf_init(&mesh_i, 32768); buf_init(&mesh_j, 32768); buf_init(&mesh_k, 32768);
+    buf_init(&mesh_fc, 65536);
+    size_t mesh_vcount = 0;  /* total vertices accumulated */
+    size_t mesh_qcount = 0;  /* total triangles accumulated */
     double mesh_opacity = cur_opacity;
-
-    /* Emit the accumulated mesh3d trace and reset buffers. */
-#define FLUSH_MESH() do { \
-    if (mesh_qcount > 0) { \
-        char mc[64]; \
-        rgba_str(mc, sizeof(mc), mesh_r, mesh_g_val, mesh_b_color, mesh_opacity); \
-        if (!first_trace) buf_cat(&data_buf, ","); \
-        first_trace = 0; \
-        /* Close the vertex/face arrays HERE so every flush is well-formed — a \
-         * color change mid-surface flushes an in-progress block, not just the \
-         * final one. (The next block is re-primed with "[" below.) */ \
-        buf_cat(&mesh_x, "]"); buf_cat(&mesh_y, "]"); buf_cat(&mesh_z, "]"); \
-        buf_cat(&mesh_i, "]"); buf_cat(&mesh_j, "]"); buf_cat(&mesh_k, "]"); \
-        buf_cat(&data_buf, "{\"type\":\"mesh3d\","); \
-        buf_cat(&data_buf, "\"x\":"); buf_cat(&data_buf, mesh_x.buf); \
-        buf_cat(&data_buf, ",\"y\":"); buf_cat(&data_buf, mesh_y.buf); \
-        buf_cat(&data_buf, ",\"z\":"); buf_cat(&data_buf, mesh_z.buf); \
-        buf_cat(&data_buf, ",\"i\":"); buf_cat(&data_buf, mesh_i.buf); \
-        buf_cat(&data_buf, ",\"j\":"); buf_cat(&data_buf, mesh_j.buf); \
-        buf_cat(&data_buf, ",\"k\":"); buf_cat(&data_buf, mesh_k.buf); \
-        buf_cat(&data_buf, ",\"color\":\""); buf_cat(&data_buf, mc); \
-        buf_cat(&data_buf, "\",\"flatshading\":true,\"showscale\":false}"); \
-        /* Reset mesh buffers. */ \
-        buf_free(&mesh_x); buf_free(&mesh_y); buf_free(&mesh_z); \
-        buf_free(&mesh_i); buf_free(&mesh_j); buf_free(&mesh_k); \
-        buf_init(&mesh_x, 4096); buf_init(&mesh_y, 4096); buf_init(&mesh_z, 4096); \
-        buf_init(&mesh_i, 2048); buf_init(&mesh_j, 2048); buf_init(&mesh_k, 2048); \
-        mesh_vcount = 0; mesh_qcount = 0; \
-        buf_cat(&mesh_x, "["); buf_cat(&mesh_y, "["); buf_cat(&mesh_z, "["); \
-        buf_cat(&mesh_i, "["); buf_cat(&mesh_j, "["); buf_cat(&mesh_k, "["); \
-    } \
-} while (0)
 
     /* Prime the mesh buffers with opening brackets. */
     buf_cat(&mesh_x, "["); buf_cat(&mesh_y, "["); buf_cat(&mesh_z, "[");
     buf_cat(&mesh_i, "["); buf_cat(&mesh_j, "["); buf_cat(&mesh_k, "[");
+    buf_cat(&mesh_fc, "[");
+
+    /* Line[] segments accumulate into ONE scatter3d trace per colour, separated
+     * by JSON null (see flush_line_trace). */
+    Buf line_x, line_y, line_z;
+    buf_init(&line_x, 65536); buf_init(&line_y, 65536); buf_init(&line_z, 65536);
+    buf_cat(&line_x, "["); buf_cat(&line_y, "["); buf_cat(&line_z, "[");
+    size_t line_pts = 0;                 /* array elements in the current block */
+    double line_r = cur_r, line_g_val = cur_g_val, line_b = cur_b;
 
     buf_cat(&data_buf, "[");
 
@@ -683,9 +672,13 @@ char* graphics3d_to_plotly_json(const Expr* g) {
         {
             double r, g_c, b, a;
             if (resolve_color_rgb(p, &r, &g_c, &b, &a)) {
-                FLUSH_MESH();
+                /* The surface stays one trace (colour -> facecolor), but a line
+                 * block is one colour, so flush the current wireframe block
+                 * before the new colour takes effect. */
+                flush_line_trace(&data_buf, &first_trace,
+                                 &line_x, &line_y, &line_z, &line_pts,
+                                 line_r, line_g_val, line_b);
                 cur_r = r; cur_g_val = g_c; cur_b = b;
-                mesh_r = r; mesh_g_val = g_c; mesh_b_color = b;
                 continue;
             }
         }
@@ -700,7 +693,8 @@ char* graphics3d_to_plotly_json(const Expr* g) {
             continue;
         }
 
-        /* Line[List[List[x,y,z], ...]] → scatter3d */
+        /* Line[List[List[x,y,z], ...]] → accumulate into the shared scatter3d
+         * line buffers, breaking from the previous segment with a null. */
         if (head_is(p, SYM_Line) && p->data.function.arg_count >= 1) {
             const Expr* pts = p->data.function.args[0];
             if (!head_is(pts, SYM_List) || pts->data.function.arg_count < 2) continue;
@@ -708,19 +702,25 @@ char* graphics3d_to_plotly_json(const Expr* g) {
             const Expr* first_pt = pts->data.function.args[0];
             if (!head_is(first_pt, SYM_List) || first_pt->data.function.arg_count < 3) continue;
 
-            char color_str[64];
-            rgba_str(color_str, sizeof(color_str), cur_r, cur_g_val, cur_b, 1.0);
-
-            if (!first_trace) buf_cat(&data_buf, ",");
-            first_trace = 0;
-
-            buf_cat(&data_buf, "{\"type\":\"scatter3d\",\"mode\":\"lines\",");
-            buf_cat(&data_buf, "\"x\":"); append_coord3_array(&data_buf, pts, 0);
-            buf_cat(&data_buf, ",\"y\":"); append_coord3_array(&data_buf, pts, 1);
-            buf_cat(&data_buf, ",\"z\":"); append_coord3_array(&data_buf, pts, 2);
-            buf_cat(&data_buf, ",\"line\":{\"color\":\"");
-            buf_cat(&data_buf, color_str);
-            buf_cat(&data_buf, "\",\"width\":3},\"showlegend\":false}");
+            if (line_pts == 0) {
+                /* First segment of a new block fixes the block's colour. */
+                line_r = cur_r; line_g_val = cur_g_val; line_b = cur_b;
+            } else {
+                /* Break from the previous segment with a null element. */
+                buf_cat(&line_x, ",null"); buf_cat(&line_y, ",null"); buf_cat(&line_z, ",null");
+                line_pts++;
+            }
+            for (size_t vi = 0; vi < pts->data.function.arg_count; vi++) {
+                const Expr* vp = pts->data.function.args[vi];
+                if (!head_is(vp, SYM_List) || vp->data.function.arg_count < 3) continue;
+                double vx, vy, vz;
+                if (!expr_to_double(vp->data.function.args[0], &vx)) continue;
+                if (!expr_to_double(vp->data.function.args[1], &vy)) continue;
+                if (!expr_to_double(vp->data.function.args[2], &vz)) continue;
+                if (line_pts > 0) { buf_cat(&line_x, ","); buf_cat(&line_y, ","); buf_cat(&line_z, ","); }
+                buf_catd(&line_x, vx); buf_catd(&line_y, vy); buf_catd(&line_z, vz);
+                line_pts++;
+            }
             continue;
         }
 
@@ -752,27 +752,53 @@ char* graphics3d_to_plotly_json(const Expr* g) {
 
             /* Triangle indices. base = start of this polygon's vertices. */
             size_t base = mesh_vcount - nv;
-            /* Fan: (0, k, k+1) for k in 1..nv-2. */
+            char fcbuf[72];
+            rgba_str(fcbuf, sizeof(fcbuf), cur_r, cur_g_val, cur_b, 1.0);
+            /* Fan: (0, k, k+1) for k in 1..nv-2. Per-triangle colour -> facecolor. */
             for (size_t k = 1; k + 1 < nv; k++) {
                 if (mesh_qcount > 0) {
                     buf_cat(&mesh_i, ","); buf_cat(&mesh_j, ","); buf_cat(&mesh_k, ",");
+                    buf_cat(&mesh_fc, ",");
                 }
                 char ibuf[32];
                 snprintf(ibuf, sizeof(ibuf), "%zu", base);     buf_cat(&mesh_i, ibuf);
                 snprintf(ibuf, sizeof(ibuf), "%zu", base + k); buf_cat(&mesh_j, ibuf);
                 snprintf(ibuf, sizeof(ibuf), "%zu", base + k + 1); buf_cat(&mesh_k, ibuf);
+                buf_cat(&mesh_fc, "\""); buf_cat(&mesh_fc, fcbuf); buf_cat(&mesh_fc, "\"");
                 mesh_qcount++;
             }
             continue;
         }
     }
 
-    /* Flush any remaining mesh (FLUSH_MESH closes the arrays itself). */
-    FLUSH_MESH();
-#undef FLUSH_MESH
+    /* Emit the accumulated line wireframe as one trace, then free its buffers. */
+    flush_line_trace(&data_buf, &first_trace, &line_x, &line_y, &line_z, &line_pts,
+                     line_r, line_g_val, line_b);
+    buf_free(&line_x); buf_free(&line_y); buf_free(&line_z);
+
+    /* Emit the single accumulated mesh3d trace for the whole surface. */
+    if (mesh_qcount > 0) {
+        buf_cat(&mesh_x, "]"); buf_cat(&mesh_y, "]"); buf_cat(&mesh_z, "]");
+        buf_cat(&mesh_i, "]"); buf_cat(&mesh_j, "]"); buf_cat(&mesh_k, "]");
+        buf_cat(&mesh_fc, "]");
+        char opbuf[32];
+        snprintf(opbuf, sizeof(opbuf), "%.3f", mesh_opacity);
+        if (!first_trace) buf_cat(&data_buf, ",");
+        first_trace = 0;
+        buf_cat(&data_buf, "{\"type\":\"mesh3d\",");
+        buf_cat(&data_buf, "\"x\":"); buf_cat(&data_buf, mesh_x.buf);
+        buf_cat(&data_buf, ",\"y\":"); buf_cat(&data_buf, mesh_y.buf);
+        buf_cat(&data_buf, ",\"z\":"); buf_cat(&data_buf, mesh_z.buf);
+        buf_cat(&data_buf, ",\"i\":"); buf_cat(&data_buf, mesh_i.buf);
+        buf_cat(&data_buf, ",\"j\":"); buf_cat(&data_buf, mesh_j.buf);
+        buf_cat(&data_buf, ",\"k\":"); buf_cat(&data_buf, mesh_k.buf);
+        buf_cat(&data_buf, ",\"facecolor\":"); buf_cat(&data_buf, mesh_fc.buf);
+        buf_cat(&data_buf, ",\"opacity\":"); buf_cat(&data_buf, opbuf);
+        buf_cat(&data_buf, ",\"flatshading\":true,\"showscale\":false}");
+    }
 
     buf_free(&mesh_x); buf_free(&mesh_y); buf_free(&mesh_z);
-    buf_free(&mesh_i); buf_free(&mesh_j); buf_free(&mesh_k);
+    buf_free(&mesh_i); buf_free(&mesh_j); buf_free(&mesh_k); buf_free(&mesh_fc);
 
     buf_cat(&data_buf, "]");
 
