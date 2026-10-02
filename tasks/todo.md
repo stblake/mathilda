@@ -52,7 +52,7 @@ Unnoticed because `kernel/test/kernel_test.py` tore the kernel down with
 - [x] Verify: build + test under xeus 6.0.6
 - [x] Verify: build + test under xeus 5.2.8 (fresh env) — this is what closes #85
 - [x] Version bump 0.253 → 0.254, changelog, commit, tag
-- [ ] Reply on the issue
+- [x] Reply on the issue (v0.254, `824721c2`, tagged)
 
 ## Review
 
