@@ -75,7 +75,7 @@
   {"2.2.26-2560", {y''[x]+2 y'[x]+5 y[x] == 0, y[0] == 0, y'[0] == 2}, y, x, "[[_2nd_order, _missing_x]]", True},
   {"2.2.26-2561", {2 y''[x]-y'[x]+3 y[x] == 0, y[1] == 1, y'[1] == 1}, y, x, "[[_2nd_order, _missing_x]]", True},
   {"2.2.26-2562", {3 y''[x]-2 y'[x]+4 y[x] == 0, y[2] == 1, y'[2] == -1}, y, x, "[[_2nd_order, _missing_x]]", True},
-  {"2.2.26-2563", y''[w]+w^(2)y[w] == 0, y, w, "[[_2nd_order, _missing_x]]", True},
+  {"2.2.26-2563", y''[x]+w^(2)y[x] == 0, y, x, "[[_2nd_order, _missing_x]]", True},
   {"2.2.26-2564", t^(2)y''[t]+y'[t]t+y[t] == 0, y, t, "[[_Emden, _Fowler], [_2nd_order, _linear, ‘_with_symmetry_[0,F(x)]‘]]", True},
   {"2.2.26-2565", t^(2)y''[t]+2 y'[t]t+2 y[t] == 0, y, t, "[[_Emden, _Fowler]]", True},
   {"2.2.26-2566", y''[x]-6 y'[x]+9 y[x] == 0, y, x, "[[_2nd_order, _missing_x]]", True},

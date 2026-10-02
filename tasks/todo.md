@@ -1,78 +1,62 @@
-# Issue #85 — the xeus kernel only builds against xeus 6
+# M63 — DSolve corpus §2.2.36 (3501–3600) + the parameter-as-indvar converter repair
 
-Reported by mkoeppe packaging Mathilda 0.252 for Sage: `kernel/` fails to
-compile because `mathilda_interpreter.{hpp,cpp}` targets the xeus **6**
-`xinterpreter` ABI while his toolchain ships xeus **5.2.x**.
-`kernel/README.md` already claims "xeus ≥ 5" — the code never honoured it.
+Next hundred in the `DSOLVE_PLAN.md` campaign: upstream §2.1.36
+(`Ch2.S1.SS36.htm`), Problems 3501–3600, 100 records / 100 scalar / 9 IVPs.
 
-## The three xeus 5 → 6 deltas that touch us (5.2.8 vs 6.0.6 headers diffed)
+Converting it turned up a bug with reach far beyond the new section: the
+converter promotes a lone **parameter** letter to the independent variable, so
+`3570` (`y'' - 2a y' + a² y == 0`) became an ODE *in `a`*. Measured over all 36
+committed corpora, **17 records are silent wrong equations of that class** — one
+(`§2.2.16-1534`) already written down in `README.md` as an unexplained residue.
+A mis-transcribed record scores PASS or UNEVAL against an equation the book never
+asked, so this is a correctness bug in the gated corpora.
 
-| | xeus 5.0 – 5.2.8 | xeus 6.0+ |
-|---|---|---|
-| shutdown | `void shutdown_request_impl()` | `nl::json shutdown_request_impl(bool restart)` |
-| interrupt | *absent* | `nl::json interrupt_request_impl()` |
-| info reply | `create_info_reply(protocol_version, implementation, …, banner, debugger, help_links)` | `create_info_reply(implementation, …, banner, help_links, supported_features)` |
+Two commits, each bumped and tagged (user's call).
 
-The first two are the reported compile errors. The third is worse: all ten of our
-arguments are `std::string`, so against xeus 5 the call binds with every argument
-**shifted one slot left** — `"xmathilda"` becomes the protocol version and the
-banner is dropped. It compiles and lies.
+## Commit 1 — converter fix + the 17-record repair
 
-Everything else is source-identical across 5.x/6.x, so `main.cpp` needs no
-change. xeus 4 is out of scope (`execute_request_impl` took an `xrequest_context`).
+- [x] `detect_symbols`: restrict the step-3 lone-letter adoption to `y` (+ the
+      existing Greek path) — every other lone Latin letter is a parameter
+- [x] `detect_symbols`: under a `_missing_x` classification, take the indvar only
+      from a function-argument position, else the fresh-letter fallback (needs
+      `classif` plumbed through `convert_row` ← `main`)
+- [x] Verify in isolation: old-vs-new converter on the SAME fetched page, **19**
+      sections. Exactly 13 records move, all known victims; the other 10
+      sections (incl. §2.2.1/20/21/24/25/29/30/35 as negative controls) are
+      byte-identical
+- [x] Patch the **17** record lines into the **9** committed `DE_examples_*.m`
+      (record lines only — keep upstream LaTeX drift out of the diff). The 17th
+      is §2.2.28-2789, found by the new audit, not by the hand scans
+- [ ] Re-measure those 9 sections before/after, same machine, back to back;
+      update `argv[3]` in `tests/CMakeLists.txt` + `reports/*` + `STATUS.md`
+- [x] `tools/check_corpus_indvar.py` + `make check-corpus-indvar`: green on the
+      repaired tree, 24 findings on the pre-fix copies
+- [x] `README.md`: the stale `Ch2.S2.SSN.htm` fetch URL, the "cannot be
+      regenerated" note, and an audit-first instruction
+- [ ] v0.255, changelog, `DSOLVE_PLAN.md` M63 entry, tag
 
-## Second, independent bug (found while reading xeus 6's core)
+## Commit 2 — the §2.2.36 wave
 
-xeus 6 `xkernel_core::shutdown_request` does `std::string reply_status =
-reply["status"];` and only calls `p_server->stop()` when it is `"ok"`. Our two
-handlers returned a bare `nl::json::object()`, so nlohmann threw 302 and no reply
-was ever sent. Confirmed against the installed pre-fix kernel:
-
-```
-ERROR: received bad message: [json.exception.type_error.302] type must be string, but is null
-Message type: interrupt_request        -> NO REPLY
-Message type: shutdown_request         -> NO REPLY
-process still alive after shutdown_request: True
-```
-
-Unnoticed because `kernel/test/kernel_test.py` tore the kernel down with
-`shutdown_kernel(now=True)` — a SIGKILL that never sends the request.
-
-## Plan
-
-- [x] Diff every xeus header the kernel touches, 5.2.8 vs 6.0.6
-- [x] Reproduce the control-channel bug against the installed kernel
-- [x] `mathilda_interpreter.hpp` — `MATHILDA_XEUS_6` macro + guarded declarations
-- [x] `mathilda_interpreter.cpp` — guarded definitions; `create_shutdown_reply` /
-      `create_interrupt_reply` on xeus 6 (fixes bug 2); guarded `create_info_reply`
-- [x] `CMakeLists.txt` — `find_package(xeus 5.0 REQUIRED)`, report the API branch
-- [x] `kernel_test.py` — graceful interrupt + shutdown checks (regression test
-      for bug 2); must FAIL on the pre-fix binary
-- [x] `README.md` — supported xeus versions
-- [x] Verify: build + test under xeus 6.0.6
-- [x] Verify: build + test under xeus 5.2.8 (fresh env) — this is what closes #85
-- [x] Version bump 0.253 → 0.254, changelog, commit, tag
-- [x] Reply on the issue (v0.254, `824721c2`, tagged)
+- [x] Generate `DE_examples_2236.m`; validate (100 records, all parse, trap greps
+      clean, indvar census x/z/t only, `check-corpus-indvar` green)
+- [ ] `add_test(dsolve_corpus_2_2_36_tests)` + `STATUS.md` block + `README.md` row
+- [ ] Baseline: fork-per-case, twice, per-case identical; bucket report
+- [x] The `3521`/`3527`/`3599` root cause, **re-diagnosed by measurement**: these
+      are NOT a missing-answer case. `DSolve\`Linearizable` already solves them
+      from the original equation in 0.11 s, three cascade slots after
+      `Separable` — which eats the whole 8 s budget first on an `Integrate` of
+      its own SAMPLED integrand. So the fix is the mixed-angle `TrigExpand`
+      normalisation in `sep_find_split`, applied to `F` BEFORE sampling (a retry
+      cannot work: `TrigExpand` is a no-op inside a denominator), gated on a
+      mixed-angle kernel and guarded on the rewrite actually eliminating it
+      (§2.1.2-1134 matches the gate, cannot be helped, and must stay byte-identical)
+- [x] `tests/test_dsolve_m63_stress.c`, five families, negative controls + a
+      latency bound (the fix is a latency property, so an answer-only test would
+      pass before AND after)
+- [ ] Regression: isolated-worktree A/B over the touched sections + the §2.1.2
+      master corpus; `check-c99`, `check-messages`, valgrind
+- [ ] v0.256, docs, `STATUS.md` (also add M62's missing wave-history bullet), tag
 
 ## Review
 
-**What changed.** `kernel/src/mathilda_interpreter.hpp` now derives one macro,
-`MATHILDA_XEUS_6`, from `XEUS_VERSION_MAJOR` and declares the two divergent
-virtuals under it; `.cpp` carries the matching pair of definitions plus a guarded
-`create_info_reply` (the xeus 5 branch passes `XEUS_KERNEL_PROTOCOL_VERSION`
-first and `/*debugger*/ false` in its own slot). On xeus 6 the handlers now
-return `xeus::create_shutdown_reply(restart)` / `create_interrupt_reply()`.
-`CMakeLists.txt` floors `xeus` at 5.0 and `xeus-zmq` at 3.0 and prints which API
-branch it selected. `kernel_test.py` gained the two control-channel checks and
-now shuts the kernel down the way Jupyter does.
-
-**Verification.** 19/19 checks pass under xeus 6.0.6 AND under a fresh xeus
-5.2.8 env (`~/micromamba/envs/mathilda-xeus5`, xeus-zmq 3.1.0) — the first time
-the kernel has ever been built against xeus 5. The two new checks fail on the
-pre-fix binary (`NO REPLY` / still alive), so they earn their place. Root `make`
-and `make check-c99` clean.
-
-**Loose end worth knowing.** A true mid-computation interrupt still needs an
-abort flag in the evaluator loop; `interrupt_request` now *acknowledges*
-correctly rather than throwing, but it does not stop a running `Integrate[]`.
-That was already on the kernel's follow-up list and is unchanged by this fix.
+(filled in as the work lands)

@@ -92,12 +92,17 @@ manually, then convert:
 
 ```bash
 curl -sL -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" \
-  'https://12000.org/my_notes/solving_ODE/current_version/Ch2.S2.SSN.htm' \
+  'https://12000.org/my_notes/solving_ODE/current_version/Ch2.S1.SSN.htm' \
   -o /tmp/sectionN.html
 python3 tools/latex_ode_to_mathilda.py /tmp/sectionN.html \
   DSolve_test_status/DE_examples_K.m --label 2.2.K \
-  --url https://12000.org/.../Ch2.S2.SSN.htm
+  --url https://12000.org/.../Ch2.S1.SSN.htm
 ```
+
+Then **`make check-corpus-indvar`**, before anything else is believed. A record can
+parse cleanly and still encode a different equation than the book printed, and the
+harness will happily verify a solution against the garbled one — see the audit note
+below.
 
 **Upstream renumbering (2026-09-28).** The site was regenerated and its chapter-2 section
 numbers SWAPPED. The sequential "Problems N to M" pages moved from `Ch2.S2.SSN.htm` (§2.2.N) to
@@ -123,7 +128,30 @@ the *same* fetched page, which isolates a converter change from upstream drift.
 **Source format note.** The corpora through §2.2.19 were built from the older
 tex4ht `indexsubsectionN.htm` pages; the site has since migrated to **LaTeXML
 ("oxide")** and those URLs are now 1.4 KB redirect stubs. The live source is the
-`Ch2.S2.SSN.htm` "sorted sequentially" pages (`SSN = §2.2.N`, table id `Ch2.T(N+9)`).
+"sorted sequentially" pages, now at **`Ch2.S1.SSN.htm`** (`SSN = §2.1.N` upstream
+= our §2.2.N; the table id is `Ch2.T(N)`).
+
+**Every section is regenerable again** (verified 2026-10-02, M63). An earlier note
+here recorded §2.2.1–19 as frozen artifacts because their tex4ht URLs had become
+redirect stubs — but the 2026-09-28 regeneration put *all* sequential pages on the
+`Ch2.S1.SSN.htm` scheme, including the early ones (`Ch2.S1.SS2.htm` serves Problems
+101–200, `SS12` serves 1101–1200). This matters: four of the eighteen records M63
+corrected were wrong only because nobody had re-run the converter on them after a
+fix that had already repaired the bug (`§2.2.12-1157/1182`, `§2.2.16-1537`,
+`§2.2.17-1603`). Upstream now paginates to §2.1.145 (14 500 problems).
+
+**Audit before you trust a conversion: `make check-corpus-indvar`.** A record that
+parses can still be the WRONG equation, and the harness then verifies a solution
+against *it*, scoring PASS or UNEVAL for a question nobody asked. The recurring
+shape is a **parameter promoted to the independent variable** — `y'' - 2a y' + a²y
+= 0` read as an ODE in `a`, `x'' + k²x = 0` as an ODE in `k`. Eighteen records
+across nine sections were in that state until M63. `tools/check_corpus_indvar.py`
+applies two rules read off the record itself: a `_missing_x` classification forbids
+the independent variable from occurring in the equation body, and the independent
+variable must be a letter that names a variable by convention (`x t z s r u v y`
+plus the Greek names), never a parameter letter. It is assert-empty, with an
+`EXEMPT` list for a deliberate case. It does not replace the eyeball greps below —
+it covers one class completely, they cover the rest partially.
 `latex_ode_to_mathilda.py` auto-detects the format: LaTeXML pages (no tex4ht
 `id='TBL-'` cells) go through `_parse_table_latexml`, which reads the column layout
 from the header `<tr>` legend (`# | ODE | classification | Solved? | Maple | Mma |

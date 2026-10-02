@@ -550,6 +550,21 @@ check-packed-aware:
 check-messages:
 	python3 tools/check_message_routing.py
 
+# `make check-corpus-indvar` — does every DSolve corpus record ask the question
+# the book printed? A converted record can PARSE cleanly and still encode a
+# DIFFERENT equation, because the converter promoted a PARAMETER to the
+# independent variable (`y''-2ay'+a^2y=0` read as an ODE in `a`). The harness
+# then back-substitutes into the garbled equation, so the record scores PASS —
+# or UNEVAL — for a question nobody asked, and neither the residual nor the gate
+# baseline can see it. Eighteen records across nine sections were in that state;
+# hand-grepping found the class six times (M42/M44/M48/M49/M61/M63) and each new
+# section re-opened it. Two rules read off the record itself: a `_missing_x`
+# classification forbids the independent variable from occurring in the body, and
+# the independent variable must be a letter that names a variable by convention.
+# Assert-empty, with an EXEMPT list for a deliberate case.
+check-corpus-indvar:
+	python3 tools/check_corpus_indvar.py
+
 # `make check-array-exactness` — does any routine hand back a TWO-HEADED array
 # from a machine input? A routine given a packed array must answer with a scalar
 # or an array of one element head; an exact 0 invented inside a machine-real
@@ -710,7 +725,7 @@ print-cc:
 	@$(CC) --version 2>/dev/null | head -1
 
 .PHONY: all clean install uninstall docs docs-build docs-serve check-c99 check-interval check-packed-aware \
-        check-messages \
+        check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \
         check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap check-diophantine-heldout print-cc

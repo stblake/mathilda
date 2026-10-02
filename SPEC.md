@@ -403,7 +403,22 @@ make check-nd-surfaces       # do the packed and NDArray surfaces agree?
 make check-compile-coverage  # does every numeric fast path also COMPILE?
 make check-image-packing     # does every image head hand back a packed buffer?
 make check-fastpath-sweep    # measured: is each head really on the buffer?
+make check-corpus-indvar     # does every DSolve corpus record ask the book's question?
 ```
+
+`make check-corpus-indvar` runs `tools/check_corpus_indvar.py` over the
+`DSolve_test_status/DE_examples_*.m` corpora. A converted ODE record can parse
+cleanly and still encode a **different equation than the source printed**, because
+the converter inferred the wrong independent variable — and then the harness
+back-substitutes the solution into the garbled equation, so the record scores PASS
+(or UNEVAL) for a question nobody asked. Neither the residual nor the gate baseline
+can see that. The recurring shape is a parameter promoted to the variable
+(`y'' - 2a y' + a²y = 0` read as an ODE in `a`); eighteen records across nine
+sections were in that state, and the class had been found by hand five times before
+the check existed. Two rules, both read off the record: a `_missing_x`
+classification forbids the independent variable from occurring in the equation body,
+and the independent variable must be a letter that names a variable by convention.
+Assert-empty, with an `EXEMPT` list for a deliberate case.
 
 `make check-c99` runs `tools/check_c99_portability.py`, which flags POSIX-only
 symbols that glibc hides under `-std=c99`: `<math.h>` constants (`M_PI`, `M_E`,

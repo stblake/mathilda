@@ -81,7 +81,7 @@
   {"2.2.2-167", y'[x]+y[x]^(2) == x^(2)+1, y, x, "[_Riccati]", False},
   {"2.2.2-168", y'[x]+2 y[x] x == 1+x^(2)+y[x]^(2), y, x, "[[_homogeneous, ‘class C‘], _Riccati]", True},
   {"2.2.2-169", y[x] == y'[x] x -(((y'[x])^(2))/(4)), y, x, "[[_1st_order, _with_linear_symmetries], _Clairaut]", True},
-  {"2.2.2-170", r y''[r] == (1+(y'[r])^(2))^((3)/(2)), y, r, "[[_2nd_order, _missing_x]]", False},
+  {"2.2.2-170", r y''[x] == (1+(y'[x])^(2))^((3)/(2)), y, x, "[[_2nd_order, _missing_x]]", False},
   {"2.2.2-171", {x'[t] == x[t]-x[t]^(2), x[0] == 2}, x, t, "[_quadrature]", True},
   {"2.2.2-172", {x'[t] == 10 x[t]-x[t]^(2), x[0] == 1}, x, t, "[_quadrature]", True},
   {"2.2.2-173", {x'[t] == 1-x[t]^(2), x[0] == 3}, x, t, "[_quadrature]", False},

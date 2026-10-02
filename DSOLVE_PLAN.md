@@ -2530,6 +2530,71 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     `(x^3+2)y''+4xy'+y == 0` times out on both even at 40 s); `dsolve_tests` remains the documented
     `alarm(120)` casualty, so the `t_m62_*` units in it were verified by direct evaluation.
 
+- **M63a — the parameter-as-indvar converter repair: eighteen corpus records were the WRONG
+  equation.** ✅ DONE. Converting §2.2.36 turned up one mis-transcribed record (3570,
+  `y'' - 2a y' + a²y == 0` read as an ODE *in* `a`), and auditing the class turned up seventeen
+  more already sitting in the gated corpora. This is the sixth appearance of the "parses but is
+  the WRONG equation" family (M42, M44 ×3, M48 ×3, M49, M61) and the worst-behaved: a
+  mis-transcribed record is back-substituted into the *garbled* equation, so it scores PASS or
+  UNEVAL for a question the book never asked, and neither the residual, the verify gate, nor the
+  ctest baseline can see it. One of the eighteen (`§2.2.16-1534`) had been standing in
+  `README.md` as an unexplained residue since M36.
+  - **Two gates in `detect_symbols` (`tools/latex_ode_to_mathilda.py`).** *(a)* The lone-letter
+    step adopted ANY present non-main letter; its Latin candidate set is now `{y}` alone. The
+    argument is complete rather than heuristic: a genuine independent variable with any other
+    spelling is in `INDVAR_PREF` and was already claimed by the preferred-letter step, so the one
+    thing this step can legitimately contribute is the swapped-variable reading `x = x(y)` — and
+    the complete set of legitimate adoptions across all 36 corpora is nine records, every Latin
+    one of them `y` (§2.2.1-98/99/100, §2.2.30-2961/2962/2966; the other three are the M49 Greek
+    `dr/dθ` path, untouched). *(b)* The record's CAS classification is now plumbed through
+    `convert_row`, and a `_missing_x` tag — upstream *stating* that the equation carries no
+    explicit dependence on its independent variable — restricts the indvar to a function-argument
+    position (`y''(t)`), falling through to a fresh letter otherwise. That is what catches
+    `§2.2.2-170` (`r y'' == (1+y'²)^(3/2)`, where `r` is the radius of curvature but is also in
+    `INDVAR_PREF`, so the *preferred-letter* step took it — the one victim gate (a) cannot see).
+  - **Measured, not argued, in both directions.** Over the 495 `_missing_x` records in the
+    committed corpora exactly 8 had the independent variable free in the equation body and all 8
+    were mis-transcriptions — zero false positives. The old-vs-new converter run on nineteen
+    re-fetched pages moves **13 records, every one a known victim**, and leaves the other ten
+    sections byte-identical (§2.2.1/8/17/20/21/24/25/29/30/35 as negative controls); of the 168
+    `_missing_x` records on those pages, 159 are byte-identical and the 9 that move each move to
+    the right letter (`x` for a `y`-ODE, `t` where `x` is the dependent function). The
+    argument-position branch has never fired upstream — not one of the 168 writes `y''(t)` — but
+    it keeps the rule honest rather than lucky. A blanket `_quadrature` veto was *rejected* by
+    measurement: 14 of those 157 records have the dependent variable undifferentiated with the
+    indvar free, 8 are victims and **6 are legitimate** factorable `x`-equations
+    (§2.2.8-746, §2.2.17-1682/1684, §2.2.33-3285/3292/3293).
+  - **The audit, `make check-corpus-indvar`** (`tools/check_corpus_indvar.py`). The class had been
+    found by hand five times and each new section re-opened it, so it is mechanical now: two rules
+    read off the record (a `_missing_x` classification forbids the indvar in the body; the indvar
+    must be a letter that names a variable by convention), assert-empty, `EXEMPT` for a deliberate
+    case. **It earned its place on first run** — it found the eighteenth victim, `§2.2.28-2789`,
+    which every hand scan had missed because it is a *system* record: the SIR model
+    `x' = -bxy + m, y' = bxy - gy`, whose `m` is the immigration RATE, read as an ODE in `m` while
+    every sibling in its block uses `t`.
+  - **Four of the eighteen needed no code change at all** (§2.2.12-1157/1182, §2.2.16-1537,
+    §2.2.17-1603): their parameter is glued to the dependent letter (`ay`), which the lone-letter
+    scan cannot see, so converter work that landed *after* those sections were generated had
+    already repaired them — the committed records were stale artifacts. That four wrong equations
+    survived many waves *because nobody re-ran the converter* is the argument for the audit, and
+    the reason `README.md` now says to run it before trusting a conversion.
+  - **Also corrected in `README.md`**, both measured wrong: the fetch URL (`Ch2.S2.SSN.htm` has
+    404'd since the 2026-09-28 upstream regeneration; the live path is `Ch2.S1.SSN.htm`) and the
+    claim that §2.2.1–19 can no longer be regenerated — every section is back, which is what made
+    repairing the pre-LaTeXML records possible at all. Upstream now paginates to §2.1.145.
+  - *Corpus effect, measured before/after on the same machine, back to back, per section:*
+    **+3 (§2.2.12-1157, §2.2.16-1534, §2.2.33-3247), zero cases lost, 0 FAIL in all 18 runs**;
+    fourteen records keep their verdict but now hold the right equation, which is the point — the
+    garbled reading of a logistic IVP or a constant-coefficient equation is *also* solvable, and
+    that is exactly why the class stayed invisible. §2.2.16-1534 went `$Aborted` (7.9 s) →
+    PASS in 0.02 s. Non-PASS over the nine sections 67 → 64. Gate baselines: §2.2.2 7 → 6,
+    §2.2.16 3 → 2, §2.2.18 4 → 3, §2.2.26 11 → 9, §2.2.33 22 → 10, §2.2.17/§2.2.28 unchanged —
+    and §2.2.12 3 → **4** / §2.2.13 1 → **3**, which are *raised*: both were already red on main
+    (the pristine runs measure 5 and 3), so they are now honest instead of aspirational. The
+    report refresh surfaced that drift explicitly — eight pre-existing gains and six pre-existing
+    losses, every one present in the *pristine* run, so none of it belongs to this change.
+    §2.2.12-1133, §2.2.13-1201 and §2.2.13-1219 are the losses worth chasing next.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

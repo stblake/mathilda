@@ -150,13 +150,14 @@ numeric back-substitution real for the first time. §2.1.2 re-verified: **0 new 
 Corpus: `DE_examples_222.m` — 100 records, **all scalar, 9 IVPs**. Continuation of
 §2.2.1 (same elementary Table 2.19): linear / separable / homogeneous (classes A/C/G) /
 Bernoulli / exact / Riccati / d'Alembert, plus a handful of 2nd-order missing-x/missing-y.
-**Zero overlap** with §2.1.2. `ctest -R dsolve_corpus_2_2_2_tests` · gate baseline **8**.
+**Zero overlap** with §2.1.2. `ctest -R dsolve_corpus_2_2_2_tests` · gate baseline **6**.
 
 | Date | Scalar solved | Solve % | Gap (non-PASS) | Notes |
 |------|--------------:|--------:|---------------:|-------|
 | 2026-09-08 (baseline) | 82 / 100 | 82.0% | 18 | 0 FAIL. Converter-fix generation (below). |
 | 2026-09-08 (**M22**)  | **92 / 100** | **92.0%** | **8** | **+10, 0 FAIL, 0 regression.** Homogeneous-correctness + Exact-transcendental + FOS-implicit waves. Gate baseline **8**. |
 | 2026-09-09 (M31 re-baseline) | **93 / 100** | **93.0%** | **7** | +1, 0 FAIL. Side-effect of M31's shared prelude precision fix. Gate baseline **8 → 7**. |
+| 2026-10-02 (**M63a**) | 94 / 100 | 94.0% | 6 | **1 record corrected** (170, `r y'' == (1+y'^2)^(3/2)`: `r` is the radius of curvature, read as the independent variable). Verdict unchanged — it is an honest UNEVAL either way, so this is fidelity only. Gate baseline **7 → 6**. |
 
 **Converter fix (`tools/latex_ode_to_mathilda.py`, benefits every section):**
 `is_condition_row` matched `<main>·(…)` multiplication (`y²(y'x+y)`, `x(5−x)`) as a
@@ -603,12 +604,13 @@ Corpus: `DE_examples_2212.m` — 100 records, **100 scalar (38 IVP), 0 systems**
 first-order territory (36 separable / 18 linear / 15 linear "class A" / 13 quadrature /
 Bernoulli / exact / homogeneous), a run of "Abel 2nd type / class A" that are really
 homogeneous-degree-0 rational (solved as homogeneous), plus two solvable-for-y/x forms.
-`ctest -R dsolve_corpus_2_2_12_tests` · gate baseline **3**.
+`ctest -R dsolve_corpus_2_2_12_tests` · gate baseline **4**.
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-09 (baseline) | 80 / 100 | 80.0% | 20 | **1 FAIL** (1147, a wrong answer), 19 UNEVAL. Not solved out of the box — the section exposes real defects. |
 | 2026-09-09 (**M32**)  | **97 / 100** | **97.0%** | **3** | **+17, FAIL→0, 0 crashes, 0 regression.** Three root-cause fixes below. |
+| 2026-10-02 (**M63a**) | 96 / 100 | 96.0% | 4 | **4 records corrected** (1157, 1182, 1187, 1190 — all autonomous `_quadrature` whose rate constant was read as the variable); **1157 UNEVAL → PASS**, the Abel-2nd-kind residue this section has carried since M32. The gate was **already red before this change** (pristine measures 5 against a baseline of 3): §2.2.12-1133 has drifted PASS → UNEVAL since the report was written, which the pristine run attributes to main, not here. Gate baseline **3 → 4**, honest again. |
 
 **M32 fixes** (all shared-substrate, so they lift earlier sections too — none regress):
 1. **IVP constant-fitting (`src/calculus/dsolve_common.c`).** The fitter now DROPS a branch that
@@ -653,12 +655,13 @@ Corpus: `DE_examples_2213.m` — 100 records, **100 scalar (32 IVP), 0 systems**
 first-order (exact / linear / separable / homogeneous / Abel / symmetry) and 2nd-order linear
 (46 reducible-μ, 6 Euler–Cauchy "Emden–Fowler", plus const-coeff). Unlike the pure first-order
 §2.2.8/§2.2.12, half the section is 2nd-order.
-`ctest -R dsolve_corpus_2_2_13_tests` · gate baseline **1**.
+`ctest -R dsolve_corpus_2_2_13_tests` · gate baseline **3**.
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-09 (baseline) | 91 / 100 | 91.0% | 9 | 0 FAIL, 9 UNEVAL: exact-transcendental / rational-clear declines, a `mu=Sin y` hang, an exact/homogeneous IVP shadow, and 1 Abel-2nd-kind. |
 | 2026-09-09 (**M33**)  | **99 / 100** | **99.0%** | **1** | **+8, FAIL→0, 0 regression.** Five root-cause fixes below. |
+| 2026-10-02 (**M63a**) | 97 / 100 | 97.0% | 3 | **1 record corrected** (1292, `y'' + 2a y' + (a^2+1) y == 0`). Verdict unchanged, and the corrected answer verifies numerically (residual 0, both conditions met) — though it is spelled over the symbolic complex-root basis (`Re[]`/`Im[]` of `-a + I`), the deferred §2.2.32-3155 class. **Already red before this change** (pristine 3 against baseline 1): 1201 and 1219 have drifted PASS → UNEVAL on main. Gate baseline **1 → 3**, honest again. |
 
 **M33 fixes** (all shared-substrate, so they lift earlier sections too — none regress):
 1. **Exact potential Path-1/Path-2 + syntactic-denominator clearing + robust `mu(y)`
@@ -792,12 +795,13 @@ Corpus: `DE_examples_2216.m` — 100 records, **all scalar (56 IVP), 0 systems**
 linear IVPs (1501–1518: `UnitStep`/Heaviside → `PiecewiseForcing`, `DiracDelta` → variation
 of parameters, one mixed `DiracDelta`+`UnitStep`), 5 specials (Clairaut 1536, Riccati 1577,
 first-order symmetry 1575/1576, class-A 1561).
-`ctest -R dsolve_corpus_2_2_16_tests` · gate baseline **3**.
+`ctest -R dsolve_corpus_2_2_16_tests` · gate baseline **2**.
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-11 (baseline) | 96 / 100 | 96.0% | 4 | 0 FAIL. Residue 1508/1509 (mixed/irrational-root impulse forcing), 1534 (converter indep-var), 1590 (cubic-log separable). |
 | 2026-09-11 (**M36**)  | **97 / 100** | **97.0%** | **3** | **0 FAIL, 0 regression.** 1590 now solves (cubic-log separable → implicit first integral; SymPy does **not** solve it). Gate baseline **3**. |
+| 2026-10-02 (**M63a**) | 98 / 100 | 98.0% | 2 | **2 records corrected** (1534, 1537); **1534 $Aborted → PASS in 0.02 s** — the record `README.md` has carried since M36 as "the converter reads the parameter `a` as the independent variable", now actually fixed. Gate baseline **3 → 2**. |
 
 **M36 additions.**
 - **Converter `Abs[…]`** (`tools/latex_ode_to_mathilda.py`): `\left|…\right|` / `\lvert…\rvert` /
@@ -835,6 +839,7 @@ dominated: 27 homogeneous, 23 Abel-tagged (most also `_homogeneous`/`_exact`, al
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-11 (baseline) | 79 / 100 | 79.0% | 21 | **5 FAIL** (fractional-power ODEs shipping a wrong branch: 1622/1624/1636/1638/1641) + 16 UNEVAL. |
 | 2026-09-11 (**M37**)  | **87 / 100** | **87.0%** | **13** | **0 FAIL, 0 regression.** 5 FAILs fixed (numeric branch filters / verifying-root fitter / prelude-matching post-fit gate); `DSolve\`AbelAIR` closes 1604/1606/1607/1676. Gate baseline **13**. |
+| 2026-10-02 (**M63a**) | 87 / 100 | 87.0% | 13 | **1 record corrected** (1603, the logistic IVP `y' == ay - by^2`). Verdict unchanged — the garbled `dy/da` reading was also solvable, which is exactly why this class was invisible. Gate baseline **13** (unchanged). |
 
 **M37 additions.**
 - **Fractional-power branch correctness** (`src/calculus/dsolve_common.c`, `dsolve_bernoulli.c`,
@@ -874,12 +879,13 @@ Corpus: `DE_examples_2218.m` — 100 records, **all scalar (14 IVP), 0 systems**
 (exact/(non)homog), 10 separable, 8 2nd-order `_missing_x`, 11 Abel-2nd-kind, 8 quadrature, 5
 Emden–Fowler (all linear/Euler subtype), plus 3 Bernoulli, 3 Riccati, 3 linear, 2 exact, 2
 homogeneous-G.
-`ctest -R dsolve_corpus_2_2_18_tests` · gate baseline **4**.
+`ctest -R dsolve_corpus_2_2_18_tests` · gate baseline **3**.
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-11 (baseline) | 95 / 100 | 95.0% | 5 | 0 FAIL. Mathilda's 2nd-order stack (Kovacic/NormalForm/SpecialFunctionForm/change-of-var/Frobenius) already solves the bulk out of the box. |
 | 2026-09-11 (**M38**)  | **96 / 100** | **96.0%** | **4** | **0 FAIL, 0 regression.** Fixed the `zero_test` decay false-positive that made `DSolve\`Kovacic` drop an inhomogeneous forcing → `1763`. Gate baseline **4**. |
+| 2026-10-02 (**M63a**) | 97 / 100 | 97.0% | 3 | **2 records corrected** (1744, 1791). Verdicts unchanged — both garbled readings solved too, now against the right equation. Gate baseline **4 → 3**. |
 
 **M38 additions.**
 - **`zero_test` decay false-positive → dropped-forcing correctness fix** (`src/calculus/dsolve_common.{c,h}`,
@@ -1204,12 +1210,13 @@ A Braun-textbook section (*Differential Equations and Their Applications*): a
 FIRST-ORDER-NONLINEAR-heavy front half (homogeneous class A/C, dAlembert, Bernoulli,
 Abel, exact, separable, and Riccati) and a second-order block (constant-coefficient
 "missing x", Euler–Cauchy, Emden–Fowler, Gegenbauer, and with-symmetry linear).
-`ctest -R dsolve_corpus_2_2_26_tests` · gate baseline **11**.
+`ctest -R dsolve_corpus_2_2_26_tests` · gate baseline **9**.
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-14 (baseline) | 87 / 100 | 87.0% | 13 | pre-wave: **0 FAIL, 0 crash**; 13 UNEVAL (2532 + 2592 + 11 non-elementary). |
 | 2026-09-14 (M45) | **89 / 100** | **89.0%** | **11** | **0 FAIL, 0 crash.** 2532 (Bernoulli symbol-leak) + 2592 (polynomial-solution VoP) fixed. |
+| 2026-10-02 (**M63a**) | 91 / 100 | 91.0% | 9 | **1 record corrected** (2563, `y'' + w^2 y == 0`: `w` is the angular frequency). Verdict unchanged. Gate baseline **11 → 9**. |
 
 **M45 wave.** Two general root-cause fixes (no overfit), 0 regression:
 1. **Bernoulli integrating-factor `DSolve\`Y` leak** (`dsolve_bernoulli.c`) — the linearised
@@ -1302,6 +1309,7 @@ forcing `_missing_y`/VoP). `ctest -R dsolve_corpus_2_2_28_tests` · gate baselin
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-15 (baseline) | 84 / 100 | 84.0% | 16 | pre-wave: **0 FAIL, 0 crash**, 16 UNEVAL (2 scalar, 14 system). |
 | 2026-09-15 (M47) | **86 / 100** | **86.0%** | **14** | **0 FAIL, 0 crash.** Scalars **18/18**; 2713 + 2719 → PASS via two general fixes. |
+| 2026-10-02 (**M63a**) | 86 / 100 | 86.0% | 14 | **1 record corrected** (2789, the SIR system `x' == -bxy + m, y' == bxy - gy`, whose `m` is the immigration rate) — the eighteenth victim, found by `make check-corpus-indvar` and missed by every hand scan because it is a *system* record. Verdict unchanged (no closed form either reading). Gate baseline **14** (unchanged). |
 
 **M47 wave.** Two general root-cause fixes (no overfit), 0 regression:
 1. **Constant-base-radical VoP integrand simplify** (`dsolve_common.c`,
@@ -1549,12 +1557,13 @@ Corpus: `DE_examples_2233.m` — 100 records, **93 scalar (14 IVP) + 7 systems**
 Converted with `tools/latex_ode_to_mathilda.py`. Constant-coefficient linear
 nonhomogeneous (2nd/3rd/high-order) + reducible 2nd-order (missing-x / missing-y,
 the reducible-μ class) + quadrature / rational / dAlembert + small linear systems.
-`ctest -R dsolve_corpus_2_2_33_tests` · gate baseline **23**.
+`ctest -R dsolve_corpus_2_2_33_tests` · gate baseline **10**.
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-16 (M53) | **77 / 100** | **77.0%** | **23** | **0 FAIL, 0 crash.** Scalar 72/93, systems 5/7. Dominant gap the `2nd_reducible_mu` class (13 UNEVAL — the M18 Stage-2 target); + quadrature/dAlembert/rational and one converter miss (3296). One general solver fix drove 0 FAIL — see below. Gate baseline **23**. |
 | 2026-09-17 (M54) | **78 / 100** | **78.0%** | **22** | **0 FAIL.** 3256 (`(1-x²)y''+x y'==1`, y-free) flipped UNEVAL → PASS after the Kovacic `Q==0` early-decline gate (it churned to its 5 s budget ahead of `ReductionOfOrder`). No other verdict changed. Gate baseline **23 → 22**. |
+| 2026-10-02 (**M63a**) | 90 / 100 | 90.0% | 10 | **4 records corrected** (3244, 3245, 3247, 3281 — all `_missing_x`, all reading the wave number `k` as the variable). Gate baseline **22/23 → 10**. |
 
 **M53 — one general solver fix (IVP condition-verification):**
 
@@ -2224,3 +2233,54 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   a HEAD binary in an isolated worktree** over 11 exposed sections: M61 better on 6, equal on 5,
   0 FAIL in all 22 runs. New: 6 `t_m61_*` units + `tests/test_dsolve_m61_stress.c` (7 families,
   18-member forward generator, latency bound, gate-margin controls). v0.236→0.237.
+
+- **M62 (2026-10-01)** — §2.2.35 (Problems 3401–3500) corpus wave, **95 → 98/100, +3, 0 FAIL,
+  0 crash, 0 timeout**, deterministic across two per-case-identical runs. Four root-cause fixes:
+  **`TimeConstrained` now CLAMPS a nested budget instead of refunding it** (`src/core.c`) — both
+  enforcement layers lifted the caller's deadline merely by entering an inner scope, so *no*
+  budget in the system was an upper bound (`TimeConstrained[TimeConstrained[loop, 30], 3]` ran the
+  loop to completion in 24.5 s); a **symbolic-exponent `x^p E^(a x^m)` → incomplete-Gamma
+  recogniser** in `Integrate` behind an exact differentiate-back certificate, where the elementary
+  stages did not merely decline but *searched* (12.9 s per integral); the **sequential scalar
+  constant fit** for a constant nested inside a transcendental, which Solve's list form cannot
+  invert; and **`DSolve`ExactODE` generalised to a nonlinear total derivative** by a jet peel,
+  plus the per-nesting-level first-integral constant that repaired an *incomplete general
+  solution scoring PASS*. A hygiene gate rejecting answers carrying the solver's own private
+  symbols was built, measured to cost nine §2.2.33 passes, and withdrawn. Regression: A/B against
+  a HEAD worktree binary over ten sections (better on 4, equal on 6) and the §2.1.2 master corpus
+  (**635 PASS against HEAD's 614, timeouts 8 → 4, zero cases lost**). New:
+  `tests/test_dsolve_m62_stress.c` (5 families). v0.252→0.253.
+
+- **M63a (2026-10-02)** — **the parameter-as-indvar converter repair: eighteen corpus records
+  were the WRONG equation.** Not a method wave — a transcription-correctness wave, and the sixth
+  appearance of the "parses but is the wrong equation" family (M42, M44 ×3, M48 ×3, M49, M61).
+  Converting §2.2.36 exposed one victim (3570, `y'' - 2a y' + a²y == 0` read as an ODE *in* `a`);
+  auditing the class found seventeen more already inside the gated corpora, one of them
+  (§2.2.16-1534) standing in `README.md` as an unexplained residue since M36. The failure mode is
+  invisible by construction: the harness back-substitutes into the *garbled* equation, so the
+  record scores PASS or UNEVAL for a question the book never asked. Two gates in `detect_symbols`
+  — the lone-letter step's Latin candidate set restricted to `{y}` (the complete set of
+  legitimate adoptions across 36 corpora is nine records, every Latin one `y`), and the record's
+  CAS classification plumbed through so a `_missing_x` tag restricts the variable to a
+  function-argument position (which is what catches §2.2.2-170, where `r` is the radius of
+  curvature *and* a preferred letter). Verified by the documented contract — old-vs-new converter
+  on the SAME nineteen re-fetched pages moves **13 records, every one a known victim**, ten
+  sections byte-identical. **New gate `make check-corpus-indvar`** (`tools/check_corpus_indvar.py`,
+  assert-empty over 4804 records), which **found the eighteenth victim on its first run**:
+  §2.2.28-2789, the SIR system whose immigration rate `m` was read as time, missed by every hand
+  scan because it is a *system* record. Four of the eighteen needed no code change — their
+  parameter is glued to the dependent letter (`ay`), so a later converter fix had already repaired
+  them and the committed records were simply stale. Nine sections re-measured before/after on the
+  same machine, back to back: **+3 (§2.2.12-1157, §2.2.16-1534, §2.2.33-3247), zero lost, 0 FAIL
+  in all 18 runs**; fourteen records keep their verdict but now against the right equation. All
+  nine reports refreshed, which also surfaced **pre-existing drift on main** (gains 2.2.2-153,
+  2.2.16-1509, 2.2.17-1601, 2.2.18-1769, 2.2.26-2524/2525/2526, 2.2.33-3291; losses 2.2.12-1133,
+  2.2.13-1201/1219, 2.2.16-1581, 2.2.17-1617, 2.2.26-2532 — all present in the *pristine* run, so
+  none of it belongs to this change). Two gates were red on main before this and are now honest
+  rather than aspirational (§2.2.12 3 → 4, §2.2.13 1 → 3); the rest fall (§2.2.2 7 → 6,
+  §2.2.16 3 → 2, §2.2.18 4 → 3, §2.2.26 11 → 9, §2.2.33 22 → 10). One intermittent SIGILL on
+  §2.2.2-176 in one of the 18 runs, not reproducible in isolation over three trials and with the
+  same verdict either way — the documented macOS libmalloc/GMP-lock crash the per-case abort
+  carries. `README.md` corrected on two further measured points: the fetch URL
+  (`Ch2.S2.SSN.htm` has 404'd since upstream's 2026-09-28 regeneration) and the claim that
+  §2.2.1–19 can no longer be regenerated. v0.254→0.255.

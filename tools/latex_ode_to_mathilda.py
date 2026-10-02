@@ -153,7 +153,7 @@ def normalize_subscripts(tex):
     return tex
 
 
-def detect_symbols(rows_tex):
+def detect_symbols(rows_tex, classif=''):
     joined = ' '.join(rows_tex)
     primed = set(_canon_sym(m) for m in re.findall(
         r'(' + NAME_RE + r')\s*\^\s*\{\s*(?:\\prime\s*)+\}', joined))
@@ -195,11 +195,38 @@ def detect_symbols(rows_tex):
     # single-row array falls back to `joined` anyway.
     main_rows = [r for r in rows_tex if not is_condition_row(r, mains)]
     mjoined = ' '.join(main_rows) if main_rows else joined
-    for cand in INDVAR_PREF:                             # preferred standard letter, present
-        if cand in main_set: continue
-        if re.search(r'(?<![A-Za-z0-9])' + cand + r'(?![A-Za-z0-9])', mjoined):
-            indvar = cand; break
-    if indvar is None:                                   # LaTeXML juxtaposition retry
+    # A `_missing_x` classification is upstream TELLING us the equation does not
+    # contain its independent variable (Maple's tag for an autonomous ODE), so every
+    # letter in the body is a PARAMETER and the only legitimate evidence for the
+    # indvar is an explicit function-argument position (`y^{\prime\prime}(t)`).
+    # Without this gate the scans below take the parameter: `ry''=(1+y'^2)^{3/2}`
+    # (§2.2.2-170, `r` = radius of curvature) picked `r` at the preferred-letter
+    # step, and `y''+w^2y=0` (§2.2.26-2563) / `x''+k^2x=0` (§2.2.33-3245) picked the
+    # frequency at the lone-letter step — a different, harder equation that then
+    # verifies against ITSELF, so the corpus scored it PASS or UNEVAL for a question
+    # the book never asked.  Measured over the 495 `_missing_x` records in the 36
+    # committed corpora: exactly 8 had the indvar free in the body and all 8 were
+    # mis-transcriptions, zero false positives.  Re-running old-vs-new over nineteen
+    # re-fetched sections: of their 168 `_missing_x` records the gate leaves 159
+    # BYTE-IDENTICAL and moves exactly the 9 victims, each to the right letter (`x`
+    # for a `y`-ODE, `t` when `x` is the dependent function).  The argument-position
+    # branch has never fired upstream — not one of the 168 writes `y''(t)` for an
+    # autonomous equation — but it keeps the rule honest rather than lucky.
+    body_names_indvar = '_missing_x' not in classif
+    if not body_names_indvar:
+        argvars = set(re.findall(
+            r'(?:' + '|'.join(re.escape(m) for m in mains) + r')'
+            r'(?:\s*\^\s*\{[^{}]*\})?\s*(?:\\left)?\(\s*(' + NAME_RE + r')\s*(?:\\right)?\)',
+            mjoined)) if mains else set()
+        argvars = {_canon_sym(a) for a in argvars} - main_set - GREEK_CONST
+        if len(argvars) == 1:
+            indvar = argvars.pop()
+    if body_names_indvar:
+        for cand in INDVAR_PREF:                         # preferred standard letter, present
+            if cand in main_set: continue
+            if re.search(r'(?<![A-Za-z0-9])' + cand + r'(?![A-Za-z0-9])', mjoined):
+                indvar = cand; break
+    if indvar is None and body_names_indvar:             # LaTeXML juxtaposition retry
         # A preferred independent-variable letter can appear ONLY glued to a digit or
         # the dependent letter (`y''-ty=0`, `4ty''+3y'-3y=0`, `y'-2ty=1`), which the
         # word-boundary scan above misses; `y''-t^3 y=0` is caught only because its
@@ -213,15 +240,30 @@ def detect_symbols(rows_tex):
             if cand in main_set: continue
             if re.search(r'(?<![A-Za-z0-9])' + cand + r'(?![A-Za-z0-9])', msep):
                 indvar = cand; break
-    if indvar is None:                                   # any present non-main letter (x=x(y))
+    if indvar is None and body_names_indvar:             # swapped variable (x = x(y))
         present = re.findall(r'(?<![A-Za-z0-9\\])([A-Za-z])(?![A-Za-z0-9])', mjoined)
-        # `e` (Euler's number) and `i` (imaginary unit) are mathematical constants,
-        # never the independent variable: a constant-coefficient complex ODE like
-        # `y''+2 i y'+3 y=0` (§2.2.4-309/310/311, no explicit independent variable)
-        # must NOT pick `i` as the indep var — it falls through to a fresh standard
-        # letter, and the bare `i` is mapped to the imaginary unit `I` in convert_side.
+        # Only `y` qualifies.  A genuine independent variable with any other spelling
+        # is already in INDVAR_PREF and was taken by the preferred-letter step above,
+        # so the one thing this step can legitimately contribute is the swapped-
+        # variable reading `x = x(y)` (§2.2.1-98/99/100, §2.2.30-2961/2962/2966) —
+        # every OTHER lone letter is a parameter of an autonomous equation, and
+        # adopting it transcribes a different ODE than the book printed:
+        # `y'=-k(y-1)^2` (§2.2.12-1187) became `dy/dk`, `y'=ay^{(a-1)/a}`
+        # (§2.2.16-1534, a standing unexplained residue until this was found) became
+        # `dy/da`, likewise §2.2.12-1190, §2.2.18-1791, §2.2.28-2789 (the SIR system
+        # `x'=-bxy+m, y'=bxy-gy`, whose `m` is the immigration RATE — every sibling
+        # in its block uses `t`) and, with the `_missing_x` gate above as a second
+        # net, §2.2.13-1292 / §2.2.18-1744 / §2.2.26-2563 / §2.2.33-3244,3245,3247,
+        # 3281 / §2.2.36-3570.  Eighteen such records were measured across the 36
+        # committed corpora, found by `make check-corpus-indvar`, which now gates
+        # the class; the restriction moves exactly those and nothing else over
+        # nineteen re-fetched sections.  `e`/`i`/`I`
+        # (Euler's number, the imaginary unit) were already excluded for the same
+        # reason — a complex constant-coefficient ODE `y''+2iy'+3y=0`
+        # (§2.2.4-309/310/311) must not pick `i`; this generalises that exclusion
+        # from two constants to every letter that is not a variable by convention.
         cands = [c for c in sorted(set(present))
-                 if c not in main_set and c not in ARBFUN and c not in ('e', 'i', 'I')]
+                 if c == 'y' and c not in main_set and c not in ARBFUN]
         # A Greek-letter macro present as a non-dependent variable is the independent
         # variable of a FIRST-order `dr/d\theta` ODE (§2.2.30-2972/2973/2992) — treat
         # it exactly like a lone swapped-variable Latin letter.  The first-order gate
@@ -237,13 +279,30 @@ def detect_symbols(rows_tex):
         gcands = sorted({GREEK[k] for k in GREEK
                          if re.search(re.escape(k) + r'(?![A-Za-z])', mjoined)}
                         - main_set - set(arbs) - GREEK_CONST) if max_order <= 1 else []
-        # A LONE non-standard letter is the genuine swapped-variable indep var
-        # (`dx/dy=f(x,y)` → `y`).  TWO OR MORE are parameters of an autonomous ODE
-        # (`y'=k(a-y)(b-y)`, §2.2.25-2498): picking the alphabetically-first (`a`)
-        # invents a spurious `dy/da` Riccati that DSolve cannot close — fall through
-        # to a fresh standard letter (`x`) instead, the intended quadrature reading.
+        # Still require a LONE candidate.  With `cands` restricted to `y` this can
+        # only bite the Greek side, where it remains the M44 rule: TWO OR MORE
+        # present variables are parameters of an autonomous ODE (`y'=k(a-y)(b-y)`,
+        # §2.2.25-2498) and picking the alphabetically-first invents a spurious
+        # `dy/da` Riccati — fall through to a fresh standard letter instead.
         if len(cands) + len(gcands) == 1:
             indvar = (cands + gcands)[0]
+        elif not cands and not gcands:
+            # The one assumption this step now hard-codes is that a genuine
+            # independent variable is spelled from INDVAR_PREF ∪ {y} ∪ Greek.  A
+            # future section using a bare `p`/`w`/`n` as the real variable would
+            # therefore fall through to a fresh letter — silently, which is the
+            # failure mode this whole block exists to stop.  Do NOT widen
+            # INDVAR_PREF to cover it (`w` as a parameter is §2.2.26-2563); say so
+            # on stderr instead, so the next section's conversion surfaces the
+            # case rather than quietly transcribing around it.
+            rejected = [c for c in sorted(set(present))
+                        if c not in main_set and c not in ARBFUN
+                        and c not in ('e', 'i', 'I')]
+            if len(rejected) == 1:
+                sys.stderr.write(
+                    "note: lone letter %r read as a PARAMETER, not the "
+                    "independent variable; if the source really uses it as the "
+                    "variable, add it to INDVAR_PREF\n" % rejected[0])
     if indvar is None:                                   # autonomous: fresh standard letter
         for cand in INDVAR_PREF:
             if cand not in main_set: indvar = cand; break
@@ -534,7 +593,12 @@ def expand_cases(eq, blocks, mains, arbs, indvar):
     return eq
 
 
-def convert_row(tex):
+def convert_row(tex, classif=''):
+    # `classif` is the row's CAS classification, passed through to detect_symbols
+    # purely as evidence about the INDEPENDENT VARIABLE: a `_missing_x` tag says the
+    # equation does not contain it, so no letter in the body may be adopted as it.
+    # Default '' keeps the signature backward-compatible for a caller that has no
+    # classification to offer.
     # Detect the dependent function(s) and independent variable from the UNprotected
     # tex: the cases-block split here exposes the forcing's independent variable
     # (e.g. `t` inside `0<=t<Pi`), which protect_cases would otherwise hide in a
@@ -542,7 +606,7 @@ def convert_row(tex):
     # forcing referencing a foreign symbol.  (For rows with no cases block this is
     # identical to detecting from the protected tex.)
     det_rows = [r for r in re.split(r'\\\\', normalize_subscripts(strip_array(tex))) if r.strip()]
-    mains, arbs, indvar = detect_symbols(det_rows)
+    mains, arbs, indvar = detect_symbols(det_rows, classif)
     # Protect cases blocks, then split/convert per row using the symbols above.
     tex, cases_blocks = protect_cases(tex)
     tex = normalize_subscripts(strip_array(tex))
@@ -693,7 +757,7 @@ def main():
     recs = list(parse_table(text))
     out_lines = []; n_scalar = 0; n_system = 0; n_ivp = 0
     for rec in recs:
-        mains, arbs, indvar, eqs, conds = convert_row(rec['tex'])
+        mains, arbs, indvar, eqs, conds = convert_row(rec['tex'], rec['classif'])
         label = '%s-%s' % (args.label, re.sub(r'[^0-9]', '', rec['n']))
         classif = rec['classif']
         sy = 'True' if rec['sympy'] else 'False'

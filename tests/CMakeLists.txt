@@ -3959,7 +3959,7 @@ add_test(NAME dsolve_corpus_2_2_1_tests
 add_test(NAME dsolve_corpus_2_2_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_222.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 6)
 # Section 2.2.3 "Problems 201 to 300" (Table 2.19): 100 elementary ODEs, 35 IVPs.
 # Continuation of §2.2.2 (constant-coeff any-order, Euler/Emden-Fowler, elementary
 # first-order); same IVP handling (equation slot {ode, ic...}).  M23.  Baseline 1
@@ -4133,7 +4133,7 @@ add_test(NAME dsolve_corpus_2_2_11_tests
 add_test(NAME dsolve_corpus_2_2_12_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2212.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
 # Section 2.2.13 (Problems 1201-1300, Edwards & Penney): 100 records, 32 IVP,
 # 0 systems.  52 second-order (incl. 6 Euler-Cauchy "Emden-Fowler") + 48
@@ -4142,7 +4142,7 @@ add_test(NAME dsolve_corpus_2_2_12_tests
 add_test(NAME dsolve_corpus_2_2_13_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2213.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
 
 # Section 2.2.14 (Problems 1301-1400, Boyce & DiPrima): 100 records, 25 IVP,
 # 1 system.  2nd-order-linear dominated -- 38 _with_linear_symmetries, 19
@@ -4195,7 +4195,7 @@ add_test(NAME dsolve_corpus_2_2_15_tests
 add_test(NAME dsolve_corpus_2_2_16_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2216.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
 # Section 2.2.17 (Problems 1601-1700, Nasser Abbasi): 100 records, 28 IVP, 0
 # systems.  First-order-dominated: 27 homogeneous, 23 Abel-tagged (most overlap
@@ -4227,7 +4227,7 @@ add_test(NAME dsolve_corpus_2_2_17_tests
 add_test(NAME dsolve_corpus_2_2_18_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2218.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
 
 # Section 2.2.19 (Problems 1801-1900, Nasser Abbasi): 100 records, 27 IVP, 0
 # systems.  Second-order-linear dominated: 3 Riccati, ~30 nonhomogeneous 2nd-order
@@ -4356,7 +4356,7 @@ add_test(NAME dsolve_corpus_2_2_25_tests
 add_test(NAME dsolve_corpus_2_2_26_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2226.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 11)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
 
 # Section 2.2.27 (Problems 2601-2700, Nasser Abbasi): 100 records, 96 scalar
 # (39 IVP), 4 systems.  A 2nd-order-linear-heavy section: constant-coefficient
@@ -4478,7 +4478,7 @@ add_test(NAME dsolve_corpus_2_2_32_tests
 add_test(NAME dsolve_corpus_2_2_33_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2233.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 22)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 10)
 
 # 12000.org "Solving ODEs" section 2.2.34 (Problems 3301-3400).  M61: 100 records, all
 # scalar (16 IVP), 0 systems.  Three sub-blocks: first-order nonlinear solvable-for-y'

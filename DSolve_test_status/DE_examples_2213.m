@@ -104,7 +104,7 @@
   {"2.2.13-1289", {u''[x]-u'[x]+2 u[x] == 0, u[0] == 2, u'[0] == 0}, u, x, "[[_2nd_order, _missing_x]]", True},
   {"2.2.13-1290", {5 u''[x]+2 u'[x]+7 u[x] == 0, u[0] == 2, u'[0] == 1}, u, x, "[[_2nd_order, _missing_x]]", True},
   {"2.2.13-1291", {y''[x]+2 y'[x]+6 y[x] == 0, y[0] == 2, y'[0] == alpha}, y, x, "[[_2nd_order, _missing_x]]", True},
-  {"2.2.13-1292", {y''[a]+2 a y'[a]+ (a^(2)+1) y[a] == 0, y[0] == 1, y'[0] == 0}, y, a, "[[_2nd_order, _missing_x]]", True},
+  {"2.2.13-1292", {y''[x]+2 a y'[x]+(a^(2)+1)y[x] == 0, y[0] == 1, y'[0] == 0}, y, x, "[[_2nd_order, _missing_x]]", True},
   {"2.2.13-1293", t^(2) y''[t]+y'[t] t +y[t] == 0, y, t, "[[_Emden, _Fowler], [_2nd_order, _linear, ‘_with_symmetry_[0,F(x)]‘]]", True},
   {"2.2.13-1294", t^(2) y''[t]+4 y'[t] t +2 y[t] == 0, y, t, "[[_2nd_order, _exact, _linear, _homogeneous]]", True},
   {"2.2.13-1295", t^(2) y''[t]+3 y'[t] t +((5 y[t])/(4)) == 0, y, t, "[[_Emden, _Fowler]]", True},

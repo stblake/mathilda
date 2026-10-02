@@ -15,7 +15,7 @@
 {
   {"2.2.17-1601", y'[x] Sqrt[-x^(2)+1]+Sqrt[1-y[x]^(2)] == 0, y, x, "[_separable]", True},
   {"2.2.17-1602", {y'[x] == ((Cos[x])/(Sin[y[x]])), y[Pi] == ((Pi)/(2))}, y, x, "[_separable]", True},
-  {"2.2.17-1603", {y'[a] == a y[a]-b y[a]^(2), y[0] == y0}, y, a, "[_quadrature]", True},
+  {"2.2.17-1603", {y'[x] == a y[x]-b y[x]^(2), y[0] == y0}, y, x, "[_quadrature]", True},
   {"2.2.17-1604", y'[x]+y[x] == ((2 x E^(-x))/(1+E^(x) y[x])), y, x, "[[_Abel, ‘2nd type‘, ‘class B‘]]", False},
   {"2.2.17-1605", y'[x] x -2 y[x] == ((x^(6))/(y[x]+x^(2))), y, x, "[_rational, [_Abel, ‘2nd type‘, ‘class B‘]]", True},
   {"2.2.17-1606", y'[x]-y[x] == (((x +1) E^(4 x))/((E^(x)+y[x])^(2))), y, x, "[[_1st_order, ‘_with_symmetry_[F(x),G(x)*y+H(x)]‘]]", False},

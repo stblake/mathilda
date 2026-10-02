@@ -101,7 +101,7 @@
   {"2.2.28-2786", {x1'[t] == x1[t], x2'[t] == 2 x1[t]+x2[t]-2 x3[t], x3'[t] == 3 x1[t]+2 x2[t]+x3[t]+(E)^(t)Cos[2 t]}, {x1, x2, x3}, t, "system_of_ODEs", True},
   {"2.2.28-2787", {x1'[x] == 3 x1[x], x2'[x] == x1[x]+3 x2[x], x3'[x] == 3 x3[x], x4'[x] == 2 x3[x]+3 x4[x]}, {x1, x2, x3, x4}, x, "system_of_ODEs", True},
   {"2.2.28-2788", {x'[t] == x[t]-x[t]^(2)-2 x[t] y[t], y'[t] == 2 y[t]-2 y[t]^(2)-3 x[t] y[t]}, {x, y}, t, "system_of_ODEs", False},
-  {"2.2.28-2789", {x'[m] == -b x[m] y[m]+m, y'[m] == b x[m] y[m]-g y[m]}, {x, y}, m, "system_of_ODEs", False},
+  {"2.2.28-2789", {x'[t] == -b x[t] y[t]+m, y'[t] == b x[t] y[t]-g y[t]}, {x, y}, t, "system_of_ODEs", False},
   {"2.2.28-2790", {x'[t] == a x[t]-b x[t] y[t], y'[t] == -c y[t]+d x[t] y[t], z'[t] == z[t]+x[t]^(2)+y[t]^(2)}, {x, y, z}, t, "system_of_ODEs", False},
   {"2.2.28-2791", {x'[t] == -x[t]-x[t] y[t]^(2), y'[t] == -y[t]-y[t] x[t]^(2), z'[t] == 1-z[t]+x[t]^(2)}, {x, y, z}, t, "system_of_ODEs", False},
   {"2.2.28-2792", {x'[t] == x[t] y[t]^(2)-x[t], y'[t] == x[t] Sin[Pi y[t]]}, {x, y}, t, "system_of_ODEs", False},
