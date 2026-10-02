@@ -29,10 +29,24 @@ set(MATHILDA_ROOT "${MATHILDA_ROOT}" CACHE PATH "Path to the Mathilda source tre
 set(MATHILDA_MAKE_FLAGS "" CACHE STRING "Extra flags passed to `make libmathilda.a`")
 
 # --- xeus toolchain --------------------------------------------------------
-find_package(xeus REQUIRED)
-find_package(xeus-zmq REQUIRED)
+# Both xeus 5.x and 6.x are supported; src/mathilda_interpreter.hpp picks the
+# xinterpreter API branch from XEUS_VERSION_MAJOR (see MATHILDA_XEUS_6 there).
+# The floor is a real one: xeus 4's execute_request_impl took an xrequest_context
+# rather than a send_reply_callback, which is more than a signature away. Say so
+# at configure time — a version error here is far easier to act on than a wall of
+# "marked 'override', but does not override" (issue #85).
+find_package(xeus 5.0 REQUIRED)
+find_package(xeus-zmq 3.0 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Threads REQUIRED)
+
+if(xeus_VERSION VERSION_GREATER_EQUAL 6.0)
+    message(STATUS "xmathilda: xeus ${xeus_VERSION} — xinterpreter API 6 "
+                   "(shutdown_request_impl(bool), interrupt_request_impl)")
+else()
+    message(STATUS "xmathilda: xeus ${xeus_VERSION} — xinterpreter API 5 "
+                   "(void shutdown_request_impl(), no interrupt hook)")
+endif()
 
 # --- Build (or locate) libmathilda.a ---------------------------------------
 # The archive is the whole evaluator minus main() (repl.o), plus the FFI entry
@@ -86,14 +100,39 @@ target_link_libraries(xmathilda PRIVATE
     Threads::Threads
     m)
 
+# libxeus and libxeus-zmq are shared and their install_names are @rpath-relative,
+# so the INSTALLED binary needs an rpath naming the toolchain's lib directory.
+# CMake strips the build-tree rpath on install and adds nothing by default, so
+# without this the kernelspec launches a binary that dies at dyld
+# ("Library not loaded: @rpath/libxeus-zmq.N.dylib ... no LC_RPATH's found") and
+# Jupyter reports only "Kernel died before replying to kernel_info". It happened
+# to work when the build ran inside an activated conda env, which injects
+# -Wl,-rpath via LDFLAGS — i.e. it worked by accident, and not for a packager.
+# Distro builds that manage rpaths themselves can override with
+# -DCMAKE_SKIP_INSTALL_RPATH=ON.
+set_target_properties(xmathilda PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 # --- Kernelspec installation ----------------------------------------------
 # kernel.json tells Jupyter how to launch the kernel; MATHILDA_HOME points the
 # loader at the internal/ module tree (init.m etc.) shipped in the source.
+#
+# The absolute path in "argv" must be where the binary actually LANDS, so
+# kernel.json has to be generated at install time, not configure time: the
+# documented flow is `cmake --install … --prefix <env>`, and --prefix overrides
+# CMAKE_INSTALL_PREFIX only for that install step. Baking it in at configure time
+# silently wrote /usr/local/bin/xmathilda (the default prefix) into the
+# kernelspec, so Jupyter launched the wrong binary or none at all. install(CODE)
+# runs with the effective prefix; install rules fire in declaration order, so the
+# regenerated file is the one install(FILES) picks up.
 set(XEUS_MATHILDA_HOME "${MATHILDA_ROOT}/src" CACHE PATH "Dir containing internal/")
-set(XKERNEL_BIN "${CMAKE_INSTALL_PREFIX}/bin/xmathilda")
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/kernel.json.in"
-               "${CMAKE_CURRENT_BINARY_DIR}/kernel.json" @ONLY)
 
 install(TARGETS xmathilda RUNTIME DESTINATION bin)
+install(CODE "
+    set(XKERNEL_BIN \"\${CMAKE_INSTALL_PREFIX}/bin/xmathilda\")
+    set(XEUS_MATHILDA_HOME \"${XEUS_MATHILDA_HOME}\")
+    configure_file(\"${CMAKE_CURRENT_SOURCE_DIR}/kernel.json.in\"
+                   \"${CMAKE_CURRENT_BINARY_DIR}/kernel.json\" @ONLY)
+    message(STATUS \"xmathilda kernelspec argv[0]: \${XKERNEL_BIN}\")
+")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kernel.json"
         DESTINATION share/jupyter/kernels/xmathilda)

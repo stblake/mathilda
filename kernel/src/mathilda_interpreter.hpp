@@ -14,7 +14,31 @@
 #include <string>
 
 #include <nlohmann/json.hpp>
+#include <xeus/xeus.hpp>            /* XEUS_VERSION_MAJOR */
 #include <xeus/xinterpreter.hpp>
+
+// xeus 6 reshaped two of xinterpreter's pure virtuals, so the kernel has to pick
+// a branch at compile time (issue #85 — Sage builds against xeus 5.2.x):
+//
+//              xeus 5.0 – 5.2.x                 xeus 6.0+
+//   shutdown   void shutdown_request_impl()     nl::json shutdown_request_impl(bool restart)
+//   interrupt  -- absent, the core never asks   nl::json interrupt_request_impl()
+//
+// A third difference is silent rather than fatal and is handled in the .cpp:
+// create_info_reply() lost its leading `protocol_version` parameter in xeus 6,
+// so the same all-std::string call binds under xeus 5 with every argument
+// shifted one slot. Everything else the kernel uses — execute_request_impl and
+// its config, complete/inspect/is_complete, the publish_* family, and all of
+// main.cpp — is source-identical across 5.x and 6.x.
+//
+// This macro is the ONLY version test; add new divergences here, not inline.
+// xeus < 5 is not supported (its execute_request_impl took an xrequest_context);
+// CMakeLists.txt enforces that floor at configure time.
+#if defined(XEUS_VERSION_MAJOR) && XEUS_VERSION_MAJOR >= 6
+#  define MATHILDA_XEUS_6 1
+#else
+#  define MATHILDA_XEUS_6 0
+#endif
 
 namespace mathilda_kernel
 {
@@ -48,9 +72,13 @@ namespace mathilda_kernel
 
         nl::json kernel_info_request_impl() override;
 
+#if MATHILDA_XEUS_6
         nl::json shutdown_request_impl(bool restart) override;
 
         nl::json interrupt_request_impl() override;
+#else
+        void shutdown_request_impl() override;   /* xeus 5: no flag, no reply */
+#endif
     };
 }
 

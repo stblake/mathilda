@@ -216,7 +216,16 @@ namespace mathilda_kernel
         const std::string version = mathilda_ffi_version();
         const std::string banner =
             "Mathilda " + version + " — a Mathematica-like computer algebra system.";
+        // xeus 6 dropped the leading `protocol_version` parameter (the core fills
+        // it in) and the trailing `debugger` flag. Both versions overwrite
+        // protocol_version in xkernel_core::kernel_info_request, so what we pass
+        // under xeus 5 is immaterial — but the argument COUNT is not: every
+        // parameter here is a std::string, so a single call would bind silently
+        // shifted under the other version. See MATHILDA_XEUS_6 in the header.
         return xeus::create_info_reply(
+#if !MATHILDA_XEUS_6
+            /*protocol_version*/      XEUS_KERNEL_PROTOCOL_VERSION,
+#endif
             /*implementation*/        "xmathilda",
             /*implementation_version*/version,
             /*language_name*/         "mathilda",
@@ -226,20 +235,42 @@ namespace mathilda_kernel
             /*pygments_lexer*/        "mathematica",
             /*codemirror_mode*/       std::string("mathematica"),
             /*nbconvert_exporter*/    "",
-            /*banner*/                banner);
+            /*banner*/                banner
+#if !MATHILDA_XEUS_6
+            , /*debugger*/            false
+#endif
+            );
     }
 
-    nl::json interpreter::shutdown_request_impl(bool /*restart*/)
+#if MATHILDA_XEUS_6
+
+    nl::json interpreter::shutdown_request_impl(bool restart)
     {
         // The evaluator's state is process-global; a restart is a fresh process,
         // so there is nothing to tear down here.
-        return nl::json::object();
+        //
+        // The reply MUST carry "status": xkernel_core::shutdown_request reads it
+        // as a std::string and only stops the server when it is "ok", so a bare
+        // nl::json::object() throws nlohmann 302 inside the control handler — no
+        // shutdown_reply is sent and the kernel never exits.
+        return xeus::create_shutdown_reply(restart);
     }
 
     nl::json interpreter::interrupt_request_impl()
     {
         // Mathilda's evaluator is not yet interruptible mid-computation (an abort
         // flag checked in the eval loop is a follow-up); acknowledge the request.
-        return nl::json::object();
+        // Same "status" requirement as shutdown above.
+        return xeus::create_interrupt_reply();
     }
+
+#else   /* xeus 5: no return value, no restart flag, and no interrupt hook at all
+         * — its xkernel_core builds the shutdown reply itself and handles
+         * interrupt_request without consulting the interpreter. */
+
+    void interpreter::shutdown_request_impl()
+    {
+    }
+
+#endif
 }

@@ -28,6 +28,13 @@ evaluator loop).
 ## Build
 
 The kernel needs the xeus toolchain (xeus ≥ 5, xeus-zmq ≥ 3, `nlohmann_json`).
+Both the xeus 5.x and 6.x `xinterpreter` APIs are supported — they differ in
+`shutdown_request_impl`/`interrupt_request_impl` and in `create_info_reply`'s
+argument list, which `src/mathilda_interpreter.hpp` selects between with the
+`MATHILDA_XEUS_6` macro. That macro is the one place a future API break belongs.
+xeus 4 is not supported (its `execute_request_impl` took an `xrequest_context`);
+`cmake` says so at configure time rather than letting the compiler explain it.
+
 The simplest source is conda-forge:
 
 ```bash

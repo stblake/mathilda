@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, time
 from jupyter_client.manager import start_new_kernel
 
 fails = 0
@@ -28,9 +28,21 @@ def run(code):
     status = reply["content"]["status"]
     return results, displays, streams, errors, status
 
-# kernel_info
+# kernel_info. Every field here is a distinct slot of xeus's create_info_reply,
+# whose parameter list differs between xeus 5 and 6 (it lost a leading
+# `protocol_version` in 6). All the arguments are strings, so a call written for
+# the wrong version binds silently one slot over and the reply comes back
+# plausible but shifted — hence checking the far end of the list (banner) and not
+# just the near end. `supported_features` exists only in xeus 6's reply, so its
+# presence is also how the control-channel checks below tell the versions apart.
 kc.kernel_info(); ki = kc.get_shell_msg(timeout=30)["content"]
+xeus6 = "supported_features" in ki
+print(f"   xeus API: {'6' if xeus6 else '5'} (protocol {ki.get('protocol_version')})")
 check("kernel_info: language mathilda", ki["language_info"]["name"] == "mathilda", ki.get("language_info"))
+check("kernel_info: implementation xmathilda", ki.get("implementation") == "xmathilda", ki.get("implementation"))
+check("kernel_info: banner names Mathilda", ki.get("banner", "").startswith("Mathilda "), ki.get("banner"))
+check("kernel_info: codemirror_mode mathematica",
+      ki["language_info"].get("codemirror_mode") == "mathematica", ki.get("language_info"))
 
 # simple symbolic result with LaTeX
 r,d,s,e,st = run("Integrate[x^2, x]")
@@ -78,7 +90,41 @@ run("11 + 11")
 r,d,s,e,st = run("% + 1")
 check("history: % works (23)", any(v.get("text/plain")=="23" for v in r), (r,d))
 
-km.shutdown_kernel(now=True)
+# --- control channel -------------------------------------------------------
+# On xeus 6 both replies come straight from the interpreter and MUST carry
+# status: xkernel_core reads reply["status"] as a std::string and only calls
+# p_server->stop() when it is "ok", so an interpreter returning a bare {} throws
+# nlohmann 302 inside the control handler — no reply is sent at all and the kernel
+# never exits. That is what these two checks guard.
+#
+# On xeus 5 the core writes both replies itself and never asks the interpreter,
+# and it sends them with *null* content: it std::moves the reply json into
+# publish_message and then hands the moved-from value to send_reply. That is an
+# upstream xeus 5 bug (xeus 6 passes a copy to publish and moves only into
+# send_reply), nothing we can influence, so there the assertion is only that the
+# reply arrives and the kernel actually goes away.
+def control(msg_type, content, timeout=15):
+    kc.control_channel.send(kc.session.msg(msg_type, content))
+    try:
+        return kc.get_control_msg(timeout=timeout)
+    except Exception as ex:
+        return {"msg_type": f"NO REPLY ({type(ex).__name__})"}
+
+def check_reply(req, want_type):
+    m = control(req, {"restart": False} if req == "shutdown_request" else {})
+    ok = m.get("msg_type") == want_type
+    if ok and xeus6:                      # only xeus 6 routes the reply through us
+        ok = (m.get("content") or {}).get("status") == "ok"
+    check(f"{req}: {want_type}" + (" with status ok" if xeus6 else ""),
+          ok, (m.get("msg_type"), m.get("content")))
+
+check_reply("interrupt_request", "interrupt_reply")
+check_reply("shutdown_request", "shutdown_reply")
+
+time.sleep(3)
+check("shutdown_request: kernel process exited", not km.is_alive())
+
+km.shutdown_kernel(now=True)   # backstop if the graceful path above did not land
 print()
 print(("ALL PASS" if fails==0 else f"{fails} FAILURE(S)"))
 sys.exit(1 if fails else 0)
