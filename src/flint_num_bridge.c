@@ -139,67 +139,152 @@ static slong pick_out_bits(const Expr* const* args, int n) {
 /* Guard bits added to the working precision above the target. */
 #define NB_GUARD 32
 
+/* How many times the working precision may double before we give up asking for
+ * `outb` good bits and emit only the bits we actually have. Six doublings is a
+ * 64x precision ladder, which covers every conditioning problem seen in
+ * practice while keeping the worst case bounded. */
+#define NB_MAX_DOUBLINGS 6
+
+/* ------------------------------------------------------------------ */
+/*  The evaluation ladder                                              */
+/* ------------------------------------------------------------------ */
+/* A kernel called once at `outb + NB_GUARD` bits and rendered at `outb` bits is
+ * only right when the kernel's own ball stays within NB_GUARD bits. When it does
+ * not, rendering the midpoint at `outb` bits prints digits nobody computed. Arb
+ * is rigorous and will tell us, so ask.
+ *
+ * MEASURED, so this is not a speculative guard: N[EllipticPi[-10^30, 1/2], 30]
+ * asks for 100 bits and acb_elliptic_pi comes back with 78. Without the ladder
+ * the last six of the thirty digits were garbage; with it they are right
+ * (1.570796326794897122662117945335*10^-15, mpmath-confirmed).
+ *
+ * What this is NOT. The ladder cannot see an argument that was ALREADY rounded
+ * before it got here, because scalar_to_arb sets every input exactly, radius 0
+ * (see its comment) -- so an ill-conditioned function applied to a correctly
+ * rounded input gives a TIGHT ball around the wrong value, and no amount of
+ * asking the ball will reveal it. That failure mode is real and was the headline
+ * bug here (N[EllipticK[99999999999999999/10^17], 20] gave six good digits of
+ * twenty; N[Zeta[1 + 1/10^20], 20] gave 2^66 + 1), and it is fixed one layer up,
+ * in numeric_plan_working_spec (src/numeric.c), which is what chooses the
+ * precision the arguments arrive at. Keep the two straight: this ladder covers
+ * the KERNEL's losses, that plan covers the ARGUMENT's.
+ *
+ * The rules, in order:
+ *
+ *   finite?            no  -> a genuine pole. Return NULL (stay unevaluated), and
+ *                             do NOT retry: doubling cannot make it finite.
+ *   rel accuracy       >= outb -> done. This is the first iteration for every
+ *                             well-conditioned argument, so the common path pays
+ *                             one extra cheap predicate and nothing else.
+ *   contains zero?     yes -> relative accuracy is unattainable (the true value
+ *                             may BE zero), so retrying is pure cost. Emit the
+ *                             midpoint, as this code always did.
+ *   otherwise          climb; on exhausting the ladder emit only the bits the
+ *                             ball actually has, which is fewer digits and all
+ *                             of them correct.
+ */
+
+/* Significant bits worth rendering from `z` when `outb` were asked for, or -1 to
+ * mean "not finite -- bail". */
+static slong nb_emit_bits(const acb_t z, slong outb) {
+    if (!acb_is_finite(z)) return -1;
+    slong acc = acb_rel_accuracy_bits(z);
+    if (acc >= outb || acb_contains_zero(z)) return outb;
+    return acc > 2 ? acc : outb;   /* acc <= 2: nothing to report; keep old shape */
+}
+
+/* True when another doubling could plausibly help. */
+static int nb_should_retry(const acb_t z, slong outb, int attempt) {
+    if (attempt >= NB_MAX_DOUBLINGS) return 0;
+    if (!acb_is_finite(z)) return 0;              /* pole: hopeless */
+    if (acb_contains_zero(z)) return 0;           /* relative target unattainable */
+    return acb_rel_accuracy_bits(z) < outb;
+}
+
+/* Arb kernel shapes, by arity. The incomplete elliptic kernels carry an extra
+ * `times_pi` flag; static adapters below absorb it so they fit these types. */
+typedef void (*nb_fn1)(acb_t, const acb_t, slong);
+typedef void (*nb_fn2)(acb_t, const acb_t, const acb_t, slong);
+typedef void (*nb_fn3)(acb_t, const acb_t, const acb_t, const acb_t, slong);
+
+/* Evaluate `f` at `args`, climbing the precision ladder. The arguments are
+ * re-converted on every attempt because scalar_to_arb ROUNDS a Rational at
+ * `prec` -- a retry that reused the first conversion would raise the working
+ * precision around an input that is still only accurate to the old one. */
+static Expr* nb_eval(const Expr* const* args, int n, slong outb,
+                     nb_fn1 f1, nb_fn2 f2, nb_fn3 f3) {
+    acb_t A[3], R;
+    for (int i = 0; i < n; i++) acb_init(A[i]);
+    acb_init(R);
+    Expr* out = NULL;
+    for (int attempt = 0; ; attempt++) {
+        slong wp = (outb + NB_GUARD) << attempt;
+        int ok = 1;
+        for (int i = 0; i < n && ok; i++) ok = expr_to_acb(args[i], A[i], wp);
+        if (!ok) break;                            /* non-numeric: decline */
+        if (n == 1)      f1(R, A[0], wp);
+        else if (n == 2) f2(R, A[0], A[1], wp);
+        else             f3(R, A[0], A[1], A[2], wp);
+        if (nb_should_retry(R, outb, attempt)) continue;
+        slong bits = nb_emit_bits(R, outb);
+        if (bits > 0) out = acb_to_expr(R, bits);
+        break;
+    }
+    for (int i = 0; i < n; i++) acb_clear(A[i]);
+    acb_clear(R);
+    return out;
+}
+
+static Expr* nb_eval1(const Expr* a, nb_fn1 f) {
+    const Expr* args[1] = { a };
+    return nb_eval(args, 1, pick_out_bits(args, 1), f, NULL, NULL);
+}
+
+static Expr* nb_eval2(const Expr* a, const Expr* b, nb_fn2 f) {
+    const Expr* args[2] = { a, b };
+    return nb_eval(args, 2, pick_out_bits(args, 2), NULL, f, NULL);
+}
+
+static Expr* nb_eval3(const Expr* a, const Expr* b, const Expr* c, nb_fn3 f) {
+    const Expr* args[3] = { a, b, c };
+    return nb_eval(args, 3, pick_out_bits(args, 3), NULL, NULL, f);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Kernels                                                            */
 /* ------------------------------------------------------------------ */
 
 Expr* flint_num_zeta(const Expr* s) {
-    const Expr* args[1] = { s };
-    slong outb = pick_out_bits(args, 1);
-    slong wp = outb + NB_GUARD;
-    acb_t S, R; acb_init(S); acb_init(R);
-    Expr* out = NULL;
-    if (expr_to_acb(s, S, wp)) {
-        acb_dirichlet_zeta(R, S, wp);
-        out = acb_to_expr(R, outb);
-    }
-    acb_clear(S); acb_clear(R);
-    return out;
+    return nb_eval1(s, acb_dirichlet_zeta);
 }
 
 Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a) {
-    const Expr* args[2] = { s, a };
-    slong outb = pick_out_bits(args, 2);
-    slong wp = outb + NB_GUARD;
-    acb_t S, A, R; acb_init(S); acb_init(A); acb_init(R);
-    Expr* out = NULL;
-    if (expr_to_acb(s, S, wp) && expr_to_acb(a, A, wp)) {
-        acb_dirichlet_hurwitz(R, S, A, wp);
-        out = acb_to_expr(R, outb);
-    }
-    acb_clear(S); acb_clear(A); acb_clear(R);
-    return out;
+    return nb_eval2(s, a, acb_dirichlet_hurwitz);
 }
 
 Expr* flint_num_polygamma(const Expr* n, const Expr* z) {
-    const Expr* args[2] = { n, z };
-    slong outb = pick_out_bits(args, 2);
-    slong wp = outb + NB_GUARD;
-    acb_t N, Z, R; acb_init(N); acb_init(Z); acb_init(R);
-    Expr* out = NULL;
-    if (expr_to_acb(n, N, wp) && expr_to_acb(z, Z, wp)) {
-        acb_polygamma(R, N, Z, wp);
-        out = acb_to_expr(R, outb);
-    }
-    acb_clear(N); acb_clear(Z); acb_clear(R);
-    return out;
+    return nb_eval2(n, z, acb_polygamma);
 }
 
-/* StieltjesGamma[n] or StieltjesGamma[n, a]; n a non-negative integer. */
+/* StieltjesGamma[n] or StieltjesGamma[n, a]; n a non-negative integer. The fmpz
+ * order does not fit the nb_fn* shapes, so this one climbs the ladder by hand.
+ * `a` governs the precision; the default a = 1 is exact, hence the 53-bit floor. */
 Expr* flint_num_stieltjes(const Expr* n, const Expr* a) {
     fmpz_t N; fmpz_init(N);
     if (!expr_to_fmpz(n, N) || fmpz_sgn(N) < 0) { fmpz_clear(N); return NULL; }
-    const Expr* args[1] = { a ? a : n };  /* a governs precision; default a=1 exact */
+    const Expr* args[1] = { a ? a : n };
     slong outb = a ? pick_out_bits(args, 1) : 53;
-    slong wp = outb + NB_GUARD;
     acb_t A, R; acb_init(A); acb_init(R);
     Expr* out = NULL;
-    int ok = 1;
-    if (a) ok = expr_to_acb(a, A, wp);
-    else   acb_one(A);
-    if (ok) {
+    for (int attempt = 0; ; attempt++) {
+        slong wp = (outb + NB_GUARD) << attempt;
+        if (a && !expr_to_acb(a, A, wp)) break;
+        if (!a) acb_one(A);
         acb_dirichlet_stieltjes(R, N, A, wp);
-        out = acb_to_expr(R, outb);
+        if (nb_should_retry(R, outb, attempt)) continue;
+        slong bits = nb_emit_bits(R, outb);
+        if (bits > 0) out = acb_to_expr(R, bits);
+        break;
     }
     acb_clear(A); acb_clear(R);
     fmpz_clear(N);
@@ -212,93 +297,43 @@ Expr* flint_num_stieltjes(const Expr* n, const Expr* a) {
 /* Arb's acb_elliptic_* already use the PARAMETER convention m = k^2 and
  * Mathematica's branch placement, so these are straight pass-throughs. The
  * `times_pi` flag is 0 throughout: phi arrives in radians, not as a multiple of
- * Pi. Precision follows the same rule as every other kernel here -- the min
- * inexact-bit count over the arguments, machine 53-bit floor -- so
- * N[EllipticF[1/3, 1/2], 30] really is computed at 30 digits and not rounded up
- * from a double. */
+ * Pi, and the adapters below pin it so the kernels fit the nb_fn* shapes. */
+
+static void nb_elliptic_f(acb_t r, const acb_t phi, const acb_t m, slong prec) {
+    acb_elliptic_f(r, phi, m, 0, prec);
+}
+
+static void nb_elliptic_e_inc(acb_t r, const acb_t phi, const acb_t m, slong prec) {
+    acb_elliptic_e_inc(r, phi, m, 0, prec);
+}
+
+static void nb_elliptic_pi_inc(acb_t r, const acb_t n, const acb_t phi,
+                               const acb_t m, slong prec) {
+    acb_elliptic_pi_inc(r, n, phi, m, 0, prec);
+}
 
 Expr* flint_num_elliptic_k(const Expr* m) {
-    const Expr* args[1] = { m };
-    slong outb = pick_out_bits(args, 1);
-    slong wp = outb + NB_GUARD;
-    acb_t M, R; acb_init(M); acb_init(R);
-    Expr* out = NULL;
-    if (expr_to_acb(m, M, wp)) {
-        acb_elliptic_k(R, M, wp);
-        out = acb_to_expr(R, outb);
-    }
-    acb_clear(M); acb_clear(R);
-    return out;
+    return nb_eval1(m, acb_elliptic_k);
 }
 
 Expr* flint_num_elliptic_e(const Expr* m) {
-    const Expr* args[1] = { m };
-    slong outb = pick_out_bits(args, 1);
-    slong wp = outb + NB_GUARD;
-    acb_t M, R; acb_init(M); acb_init(R);
-    Expr* out = NULL;
-    if (expr_to_acb(m, M, wp)) {
-        acb_elliptic_e(R, M, wp);
-        out = acb_to_expr(R, outb);
-    }
-    acb_clear(M); acb_clear(R);
-    return out;
+    return nb_eval1(m, acb_elliptic_e);
 }
 
 Expr* flint_num_elliptic_f(const Expr* phi, const Expr* m) {
-    const Expr* args[2] = { phi, m };
-    slong outb = pick_out_bits(args, 2);
-    slong wp = outb + NB_GUARD;
-    acb_t P, M, R; acb_init(P); acb_init(M); acb_init(R);
-    Expr* out = NULL;
-    if (expr_to_acb(phi, P, wp) && expr_to_acb(m, M, wp)) {
-        acb_elliptic_f(R, P, M, 0, wp);
-        out = acb_to_expr(R, outb);
-    }
-    acb_clear(P); acb_clear(M); acb_clear(R);
-    return out;
+    return nb_eval2(phi, m, nb_elliptic_f);
 }
 
 Expr* flint_num_elliptic_e_inc(const Expr* phi, const Expr* m) {
-    const Expr* args[2] = { phi, m };
-    slong outb = pick_out_bits(args, 2);
-    slong wp = outb + NB_GUARD;
-    acb_t P, M, R; acb_init(P); acb_init(M); acb_init(R);
-    Expr* out = NULL;
-    if (expr_to_acb(phi, P, wp) && expr_to_acb(m, M, wp)) {
-        acb_elliptic_e_inc(R, P, M, 0, wp);
-        out = acb_to_expr(R, outb);
-    }
-    acb_clear(P); acb_clear(M); acb_clear(R);
-    return out;
+    return nb_eval2(phi, m, nb_elliptic_e_inc);
 }
 
 Expr* flint_num_elliptic_pi(const Expr* n, const Expr* m) {
-    const Expr* args[2] = { n, m };
-    slong outb = pick_out_bits(args, 2);
-    slong wp = outb + NB_GUARD;
-    acb_t N, M, R; acb_init(N); acb_init(M); acb_init(R);
-    Expr* out = NULL;
-    if (expr_to_acb(n, N, wp) && expr_to_acb(m, M, wp)) {
-        acb_elliptic_pi(R, N, M, wp);
-        out = acb_to_expr(R, outb);
-    }
-    acb_clear(N); acb_clear(M); acb_clear(R);
-    return out;
+    return nb_eval2(n, m, acb_elliptic_pi);
 }
 
 Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
-    const Expr* args[3] = { n, phi, m };
-    slong outb = pick_out_bits(args, 3);
-    slong wp = outb + NB_GUARD;
-    acb_t N, P, M, R; acb_init(N); acb_init(P); acb_init(M); acb_init(R);
-    Expr* out = NULL;
-    if (expr_to_acb(n, N, wp) && expr_to_acb(phi, P, wp) && expr_to_acb(m, M, wp)) {
-        acb_elliptic_pi_inc(R, N, P, M, 0, wp);
-        out = acb_to_expr(R, outb);
-    }
-    acb_clear(N); acb_clear(P); acb_clear(M); acb_clear(R);
-    return out;
+    return nb_eval3(n, phi, m, nb_elliptic_pi_inc);
 }
 
 /* ------------------------------------------------------------------ */

@@ -1061,6 +1061,40 @@ static Expr** kernel_coefs(const char* name, size_t N) {
             c[k] = simp(mk_power(expr_copy(fact), expr_new_integer(-1)));
         }
         expr_free(fact);
+    } else if (strcmp(name, "EllipticK") == 0 || strcmp(name, "EllipticE") == 0) {
+        /* The complete integrals at m = 0, with a_0 = 1 and
+         * a_k = a_{k-1} ((2k-1)/(2k))^2 = ((2k-1)!!/(2k)!!)^2:
+         *
+         *   K(m) = (Pi/2) sum_{k>=0} a_k m^k
+         *   E(m) = (Pi/2) sum_{k>=0} a_k m^k / (1 - 2k)
+         *
+         * so K is Pi/2 + Pi m/8 + 9 Pi m^2/128 + 25 Pi m^3/512 + ... and E is
+         * Pi/2 - Pi m/8 - 3 Pi m^2/128 - 5 Pi m^3/512 - ..., both matching
+         * Mathematica term for term.
+         *
+         * A dedicated kernel is the ONLY way to get these. The generic
+         * Taylor-via-D path cannot: d/dm K is (E - (1-m)K)/(2m(1-m)), which at
+         * m = 0 is (Pi/2 - Pi/2)/0 -> Times[0, ComplexInfinity] ->
+         * Indeterminate, and has_infinity then abandons the whole expansion --
+         * which is why Series[EllipticK[m], {m, 0, 1}] did not previously emit
+         * even the leading Pi/2. */
+        bool is_K = (strcmp(name, "EllipticK") == 0);
+        Expr* half_pi = simp(mk_times(make_rational(1, 2), expr_new_symbol("Pi")));
+        Expr* a = expr_new_integer(1);                      /* a_0 */
+        for (size_t k = 0; k < N; k++) {
+            if (k > 0) {
+                Expr* r = make_rational((int64_t)(2 * k - 1), (int64_t)(2 * k));
+                a = simp(mk_times(a, simp(mk_power(r, expr_new_integer(2)))));
+            }
+            Expr* t = simp(mk_times(expr_copy(half_pi), expr_copy(a)));
+            if (!is_K) {
+                /* 1/(1 - 2k); k = 0 leaves it alone */
+                if (k > 0) t = simp(mk_times(t, make_rational(1, 1 - 2 * (int64_t)k)));
+            }
+            c[k] = t;
+        }
+        expr_free(a);
+        expr_free(half_pi);
     } else if (strcmp(name, "Log1p") == 0) {
         /* Log[1+u] = sum_{k>=1} (-1)^(k-1) u^k / k */
         c[0] = expr_new_integer(0);
@@ -2210,6 +2244,12 @@ static bool is_known_elementary(Expr* e) {
         "ArcSin", "ArcCos", "ArcTan", "ArcCot",
         "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth",
         "SinIntegral", "SinhIntegral", "FresnelC", "FresnelS",
+        /* The COMPLETE elliptic integrals. "Elementary" is already loose here
+         * (SinIntegral and the Fresnels are not either); what the list really
+         * selects is "has a known kernel series at 0 and composes through an
+         * inner series". The arity-1 guard above is what keeps the INCOMPLETE
+         * spellings EllipticE[phi, m] / EllipticF[phi, m] out. */
+        "EllipticK", "EllipticE",
         NULL
     };
     for (int i = 0; names[i]; i++) if (has_symbol_head(e, names[i])) return true;
@@ -2672,6 +2712,18 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                         }
                     }
                 }
+            }
+            else if (strcmp(head, "EllipticK") == 0 || strcmp(head, "EllipticE") == 0) {
+                /* The COMPLETE integrals only: the incomplete spellings are
+                 * EllipticE[phi, m] and EllipticF[phi, m], which have two
+                 * arguments and never reach this single-argument chain. The
+                 * kernel is valid only where the inner series has no constant
+                 * term, i.e. the expansion really is around m = 0;
+                 * so_apply_kernel_at_zero enforces that and returns NULL
+                 * otherwise, so an expansion about any other point still falls
+                 * through to Taylor-via-D (which works there -- it is only
+                 * m = 0 where the m-derivative is 0/0). */
+                r = so_apply_kernel_at_zero(head, inner);
             }
             else if (strcmp(head, "ArcSin")  == 0) {
                 r = so_apply_kernel_at_zero("ArcSin", inner);

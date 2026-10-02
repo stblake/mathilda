@@ -557,6 +557,33 @@ P("gammaregularized", "special", "GammaRegularized[2., p]",
 P("betaregularized", "special", "BetaRegularized[v, 2., 3.]",
   "sp.betainc(2.0, 3.0, v)")
 P("factorial_real", "special", "Factorial[10. v]", "sp.gamma(10.0*v + 1.0)")
+
+# The Legendre elliptic integrals. PARAMETER convention m = k^2, which is also
+# SciPy's, so ellipk/ellipe/ellipkinc/ellipeinc are straight counterparts.
+#
+# m is scaled to v*0.95, not v: v ends at exactly 1.0, where the complete
+# integrals of the first and third kinds have a pole and the machine kernels
+# decline -- which would measure the DECLINE path and call it the kernel. phi is
+# v*1.5 radians, and with m <= 0.95 that keeps 1 - m Sin[phi]^2 >= 0.05, inside
+# the real principal domain where the incomplete kernels answer.
+#
+# SciPy has no complete third kind, so the baseline is the Carlson composition
+# Pi(n|m) == R_F(0, 1-m, 1) + (n/3) R_J(0, 1-m, 1, 1-n), checked against mpmath
+# at <= 1 ulp for n in {-2, 0.2, 0.5, 0.9} x m in {0.1, 0.5, 0.95}. It is what a
+# NumPy user would actually write, so it is the fair comparison. The INCOMPLETE
+# third kind has no such one-liner and carries py=None.
+P("elliptick", "special", "EllipticK[v*0.95]", "sp.ellipk(v*0.95)")
+P("elliptice", "special", "EllipticE[v*0.95]", "sp.ellipe(v*0.95)")
+P("ellipticf_inc", "special", "EllipticF[v*1.5, 0.5]",
+  "sp.ellipkinc(v*1.5, np.full_like(v, 0.5))")
+P("elliptice_inc", "special", "EllipticE[v*1.5, 0.5]",
+  "sp.ellipeinc(v*1.5, np.full_like(v, 0.5))")
+P("ellipticpi", "special", "EllipticPi[0.5, v*0.95]",
+  "sp.elliprf(np.zeros_like(v), 1.0-v*0.95, np.ones_like(v))"
+  " + (0.5/3.0)*sp.elliprj(np.zeros_like(v), 1.0-v*0.95,"
+  " np.ones_like(v), np.full_like(v, 1.0-0.5))")
+P("ellipticpi_inc", "special", "EllipticPi[0.5, v*1.5, 0.25]", None,
+  note="no SciPy incomplete third kind")
 P("binomial_real", "special", "Binomial[10., 10. v]",
   "sp.binom(10.0, 10.0*v)")
 P("pochhammer", "special", "Pochhammer[p, 2.]", "sp.poch(p, 2.0)")

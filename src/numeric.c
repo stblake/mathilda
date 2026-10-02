@@ -1138,9 +1138,8 @@ static bool numeric_plan_working_spec(const ExactScan* s, NumericSpec spec,
 
     /* A bare number is already correctly rounded by the leaf conversion —
      * there is no function to amplify anything, so leave the fast path
-     * untouched. Likewise when nothing in the input was lossy. */
+     * untouched. */
     if (!s->has_call) return false;
-    if (s->finite_bits <= 0 && s->amplify_bits <= 0) return false;
 
     /* The precision the caller wants back, which is also the precision the
      * unraised evaluation would run at. */
@@ -1151,6 +1150,34 @@ static bool numeric_plan_working_spec(const ExactScan* s, NumericSpec spec,
     if (s->amplify_bits > 0) {
         long amplified = out_bits + s->amplify_bits + NUMERIC_GUARD_BITS;
         if (amplified > required) required = amplified;
+    }
+
+    /* An explicit N[expr, d] asks for d GOOD digits, and the amount a function
+     * loses is invisible to the leaf scan above: it depends on the function's
+     * CONDITIONING at the point, not on how the input is spelled. Measured, with
+     * an exact rational input so no leaf was lossy and nothing was raised:
+     *
+     *   N[EllipticK[99999999999999999/10^17], 20]  ->  20.9581794072978496314
+     *   true                                           20.958267651569278982883...
+     *
+     * -- six good digits of twenty, silently, because dK/dm ~ 1/(2(1-m)) ~ 2^56
+     * there and the whole evaluation ran at exactly the 67 bits that 20 digits
+     * asks for. Zeta at 1 + 10^-20 came back as 2^66 + 1 the same way. So give
+     * every arbitrary-precision request the guard, not just the ones whose
+     * LEAVES needed raising; `floor_bits` below is the headroom this scan
+     * already intended for "cancellation within the expression", and a
+     * conditioning loss is that same thing reached from the other side.
+     *
+     * Machine mode is deliberately excluded: 53 bits is all a double has, there
+     * is no larger request to satisfy, and raising it would push every plain
+     * N[Sin[0.5]] onto MPFR. The guard is 64 bits, so this fixes a loss of up to
+     * ~19 digits and not an unbounded one -- a truly ill-conditioned point still
+     * needs the caller to ask for more, exactly as $MaxExtraPrecision bounds the
+     * same ladder elsewhere. */
+    if (!numeric_spec_is_mpfr(spec) && required <= out_bits) return false;
+    if (numeric_spec_is_mpfr(spec) && required <= out_bits
+        && s->finite_bits <= 0 && s->amplify_bits <= 0) {
+        required = out_bits + NUMERIC_GUARD_BITS;
     }
     if (required <= out_bits) return false;   /* already precise enough */
 

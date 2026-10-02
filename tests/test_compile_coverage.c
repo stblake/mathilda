@@ -70,13 +70,6 @@ static const Gap KNOWN_GAPS[] = {
     { "QuotientRemainder",    "returns a list, not one machine number" },
     /* (c) no machine kernel ON PURPOSE, because the correct machine answer is
      * not a real number over the range callers actually use. */
-    { "EllipticPi",           "for n > 1 the path crosses the pole at Sin[t]^2 == 1/n "
-                              "and the value is the Cauchy PRINCIPAL VALUE, genuinely "
-                              "complex; that needs Carlson R_J with the p < 0 "
-                              "transformation, and a wrong principal value is a wrong "
-                              "answer, so there is no double kernel and the exact "
-                              "FLINT/Arb path answers. EllipticK, EllipticE and "
-                              "EllipticF do have double kernels and do compile." },
 };
 static const size_t NGAPS = sizeof KNOWN_GAPS / sizeof KNOWN_GAPS[0];
 

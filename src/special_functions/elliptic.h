@@ -32,5 +32,11 @@ bool elliptic_machine_k(double m, double* out);
 bool elliptic_machine_e_complete(double m, double* out);
 bool elliptic_machine_f(double phi, double m, double* out);
 bool elliptic_machine_e_inc(double phi, double m, double* out);
+/* The third kind, via Carlson R_J. Both DECLINE where p = 1 - n (complete) or
+ * p = 1 - n Sin[phi]^2 (incomplete) is <= 0: there the value is genuinely
+ * complex (Pi[3/2 | 1/2] = -0.4567 - 2.7207 I), not a real principal value, so
+ * a double out parameter cannot carry it and Arb must place the branch. */
+bool elliptic_machine_pi(double n, double m, double* out);
+bool elliptic_machine_pi_inc(double n, double phi, double m, double* out);
 
 #endif /* ELLIPTIC_H */

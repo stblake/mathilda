@@ -608,18 +608,39 @@ Expr* interval_power_int(const Expr* A, int64_t n) {
     return iv_canonicalize_pairs(los, his, n2);
 }
 
-Expr* interval_power_pos_exp(const Expr* A, const Expr* p) {
+/* [a,b]^p for a real, non-integer p: monotone either way, so the enclosure is
+ * just the two endpoints in the right order.
+ *
+ *   p > 0, A >= 0   increasing   -> [a^p, b^p]
+ *   p < 0, A >  0   decreasing   -> [b^p, a^p]
+ *
+ * The negative half used to be absent, and the gap was not academic: the
+ * general interval certifier (interval_thread_call) threads a NumericFunction by
+ * differentiating it and asking for a sign-definite enclosure, and a derivative
+ * of the shape 1/Sqrt[...] is built as Power[..., -1/2]. So every
+ * NumericFunction whose derivative is a negative half-power silently declined --
+ * which is exactly why EllipticE[Interval[{1/4,1/2}], 1/2] threaded (its
+ * derivative is Power[.., +1/2]) while EllipticF[Interval[{1/4,1/2}], 1/2] did
+ * not, and why EllipticPi (Power[.., -3/2]) did not either. A strictly positive
+ * base is required for p < 0: 0 is a pole, not an endpoint. */
+Expr* interval_power_real_exp(const Expr* A, const Expr* p) {
     if (!is_interval(A)) return NULL;
-    if (iv_sign((Expr*)p) <= 0) return NULL;          /* need p > 0 */
-    if (iv_sign(interval_pair_lo(A, 0)) < 0) return NULL; /* need A >= 0 */
+    int psign = iv_sign((Expr*)p);
+    if (psign == 0) return NULL;
     size_t na = interval_pair_count(A);
+    if (psign > 0) {
+        if (iv_sign(interval_pair_lo(A, 0)) < 0) return NULL;    /* need A >= 0 */
+    } else {
+        /* every pair must be strictly positive, or a reciprocal straddles a pole */
+        for (size_t i = 0; i < na; i++)
+            if (iv_sign(interval_pair_lo(A, i)) <= 0) return NULL;
+    }
     IvBuild out; ivb_init(&out);
     for (size_t i = 0; i < na; i++) {
         Expr* a = interval_pair_lo(A, i);
         Expr* b = interval_pair_hi(A, i);
-        /* x^p is increasing for x >= 0, p > 0 */
-        Expr* lo = iv_binop("Power", a, (Expr*)p, RND_DOWN);
-        Expr* hi = iv_binop("Power", b, (Expr*)p, RND_UP);
+        Expr* lo = iv_binop("Power", psign > 0 ? a : b, (Expr*)p, RND_DOWN);
+        Expr* hi = iv_binop("Power", psign > 0 ? b : a, (Expr*)p, RND_UP);
         if (!lo || !hi) { expr_free(lo); expr_free(hi); ivb_free(&out); return NULL; }
         ivb_push(&out, lo, hi);
     }
@@ -956,6 +977,15 @@ Expr* interval_apply_function(const char* head, const Expr* iv) {
     if (strcmp(head, "Gamma") == 0)    return iv_gamma_like(iv, "Gamma");
     if (strcmp(head, "LogGamma") == 0) return iv_gamma_like(iv, "LogGamma");
     if (strcmp(head, "Zeta") == 0)     return iv_thread_region(iv, IV_DEC, "Zeta", 0, false, 1.0, INFINITY);
+    /* The complete elliptic integrals: K increases and E decreases on
+     * (-Infinity, 1), and at m = 1 K has a pole while beyond it both are
+     * complex -- so the region bound is load-bearing, not decoration. A bespoke
+     * row is needed because the general derivative certifier cannot help here:
+     * K' is (E - (1-m) K)/(2m(1-m)) and E' is (E - K)/(2m), each of which
+     * reintroduces K[Interval] and E[Interval], so the chain never bottoms out
+     * in elementary heads and IV_CERTIFY_MAX_DEPTH fires. */
+    if (strcmp(head, "EllipticK") == 0) return iv_thread_region(iv, IV_INC, "EllipticK", 0, false, -INFINITY, 1.0);
+    if (strcmp(head, "EllipticE") == 0) return iv_thread_region(iv, IV_DEC, "EllipticE", 0, false, -INFINITY, 1.0);
     /* Self-referential / awkward derivative (the general certifier can't help),
      * but simply monotone on a known real sub-domain. InverseErf increases on
      * (-1,1); InverseErfc decreases on (0,2); ProductLog (principal branch)
@@ -1073,6 +1103,17 @@ static int iv_range_sign(Expr* d) {
     return 0;
 }
 
+/* Does `e` contain `target` as a subexpression? */
+static bool iv_contains_expr(const Expr* e, const Expr* target) {
+    if (!e || !target) return false;
+    if (expr_eq((Expr*)e, (Expr*)target)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (iv_contains_expr(e->data.function.head, target)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (iv_contains_expr(e->data.function.args[i], target)) return true;
+    return false;
+}
+
 Expr* interval_thread_call(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     Expr* head = res->data.function.head;
@@ -1132,6 +1173,31 @@ Expr* interval_thread_call(Expr* res) {
         (deriv->type == EXPR_FUNCTION && deriv->data.function.head->type == EXPR_SYMBOL &&
          deriv->data.function.head->data.symbol.name &&
          strcmp(deriv->data.function.head->data.symbol.name, "D") == 0);
+
+    /* SELF-REFERENTIAL derivative: decline, and do it here rather than relying
+     * on the depth guard.
+     *
+     * If d/dx f[x] contains f[x] ITSELF, then certifying f over an interval
+     * needs f over an interval and the descent cannot bottom out. The elliptic
+     * integrals are the canonical case: d/dm F(phi|m) is built from F(phi|m)
+     * and E(phi|m), and d/dn of the complete Pi from Pi, E and K.
+     * IV_CERTIFY_MAX_DEPTH does stop the recursion, but stopping it four levels
+     * down leaves a half-rewritten expression that the evaluator's fixed-point
+     * loop never settles, and the user sees `$IterationLimit exceeded` where a
+     * clean symbolic decline was the right answer.
+     *
+     * The test is for the LITERAL expression, not merely for the head, and that
+     * distinction is load-bearing: d/dx PolyLog[3, x] is PolyLog[2, x]/x, which
+     * mentions PolyLog but at a REDUCED order, so that descent does bottom out
+     * (PolyLog[2] -> PolyLog[1] -> Log) and must keep threading. Only a
+     * derivative that reproduces the very expression being differentiated is
+     * hopeless.
+     *
+     * This is why the complete K and E carry bespoke monotone rows in
+     * interval_apply_function: a self-referential derivative means the generic
+     * certifier can never help, and monotonicity has to be asserted from the
+     * mathematics instead. */
+    if (!bad && iv_contains_expr(deriv, fx)) bad = true;
 
     IvBuild out; ivb_init(&out);
     bool ok = !bad;

@@ -652,9 +652,11 @@ Expr* builtin_power(Expr* res) {
     }
     if (is_interval(base)) {
         if (exp->type == EXPR_INTEGER) return interval_power_int(base, exp->data.integer);
-        /* Positive fractional/real exponent over a non-negative interval (e.g.
-         * the parser's Sqrt -> Power[.,1/2]); other cases stay symbolic. */
-        return interval_power_pos_exp(base, exp);
+        /* Non-integer real exponent, either sign: increasing for p > 0 over a
+         * non-negative interval (the parser's Sqrt -> Power[., 1/2]), decreasing
+         * for p < 0 over a strictly positive one (a derivative's 1/Sqrt[...],
+         * which is Power[., -1/2]). Other cases stay symbolic. */
+        return interval_power_real_exp(base, exp);
     }
     if (is_interval(exp)) {
         /* scalar^Interval for a positive scalar base; else symbolic. */

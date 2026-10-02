@@ -540,7 +540,12 @@ static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false };
  *
  * EllipticE carries BOTH a unary and a binary kernel, because the head is
  * arity-overloaded: EllipticE[m] is complete and EllipticE[phi, m] incomplete.
- * EllipticPi deliberately has neither; see its EXEMPT entry in the audits. */
+ * EllipticPi likewise: a BINARY kernel for the complete form, and an N-ARY one
+ * for the incomplete, which the element-wise NDArray layer cannot use (it tops
+ * out at arity 2) but Compile[]'s OP_KERNN does -- so registering it is what
+ * lowers EllipticPi[n, phi, m] inside Compile[]. Both decline p <= 0, where the
+ * value is genuinely complex rather than a real principal value; the builtin's
+ * delist fallback keeps the NDArray surface correct there and for arity 3. */
 static bool ndk_EllipticK_r(double m, double* o) { return elliptic_machine_k(m, o); }
 static bool ndk_EllipticE_r(double m, double* o) { return elliptic_machine_e_complete(m, o); }
 static const NDUnaryKernel NDKU_EllipticK = { NULL, ndk_EllipticK_r, true, false, NULL, NULL, false };
@@ -560,6 +565,23 @@ static bool ndk_EllipticEInc_c(double pre, double pim, double mre, double mim,
 }
 static const NDBinaryKernel NDKB_EllipticF = { ndk_EllipticF_c,    true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_EllipticE = { ndk_EllipticEInc_c, true, NULL, NULL, false };
+
+static bool ndk_EllipticPi_c(double nre, double nim, double mre, double mim,
+                             double* rr, double* ri) {
+    if (nim != 0.0 || mim != 0.0) return false;
+    if (!elliptic_machine_pi(nre, mre, rr)) return false;
+    *ri = 0.0; return isfinite(*rr);
+}
+static const NDBinaryKernel NDKB_EllipticPi = { ndk_EllipticPi_c, true, NULL, NULL, false };
+
+static bool ndk_EllipticPiInc_n(const double* re, const double* im, size_t n,
+                                double* rr, double* ri) {
+    if (n != 3) return false;
+    for (size_t i = 0; i < 3; i++) if (im[i] != 0.0) return false;
+    if (!elliptic_machine_pi_inc(re[0], re[1], re[2], rr)) return false;
+    *ri = 0.0; return isfinite(*rr);
+}
+static const NDNaryKernel NDKN_EllipticPi = { ndk_EllipticPiInc_n, 3, true };
 
 /* Exponential-integral family and friends.  These modules compute in MPFR and
  * round at the end, so there was no double path to reuse — the kernels in
@@ -764,6 +786,8 @@ void ndkernels_init(void) {
     REG_U(EllipticK); REG_U(EllipticE);      /* complete: one argument  */
     REG_B(EllipticF, NDKB_EllipticF);        /* incomplete: phi and m   */
     REG_B(EllipticE, NDKB_EllipticE);
+    REG_B(EllipticPi, NDKB_EllipticPi);
+    REG_N(EllipticPi);
     REG_B(BesselY, NDKB_BesselY);
     REG_B(Beta,    NDKB_Beta);
 

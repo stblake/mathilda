@@ -59,7 +59,7 @@ Expr* interval_power_int(const Expr* A, int64_t n);
 
 /* A^p for a positive real/rational scalar exponent p when A is entirely >= 0
  * (e.g. Sqrt, which the parser lowers to Power[., 1/2]). Returns NULL otherwise. */
-Expr* interval_power_pos_exp(const Expr* A, const Expr* p);
+Expr* interval_power_real_exp(const Expr* A, const Expr* p);
 
 /* Thread a monotone unary function (given by head name, e.g. "Exp") over an
  * interval. Returns NULL if a result endpoint leaves the reals (e.g. Log of a

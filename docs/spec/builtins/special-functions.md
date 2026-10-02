@@ -1856,7 +1856,7 @@ argument is complete for `E`, two arguments are complete for `Π`. There is no
 - Exact reductions: `EllipticK[0] = π/2`, `EllipticK[1] = ComplexInfinity`,
   `EllipticE[0] = π/2`, `EllipticE[1] = 1`; `EllipticF[0, m] = 0`,
   `EllipticF[φ, 0] = φ`, `EllipticF[π/2, m] = EllipticK[m]`;
-  `EllipticE[φ, 1] = Sin[φ]`, `EllipticE[π/2, m] = EllipticE[m]`;
+  `EllipticE[π/2, m] = EllipticE[m]`;
   `EllipticPi[0, m] = EllipticK[m]`, `EllipticPi[0, φ, m] = EllipticF[φ, m]`,
   `EllipticPi[n, 0, m] = 0`, `EllipticPi[n, π/2, m] = EllipticPi[n, m]`.
 - Exact non-special arguments stay symbolic (`EllipticF[1/3, 1/2]`); a numeric
@@ -1877,9 +1877,77 @@ argument is complete for `E`, two arguments are complete for `Π`. There is no
   by the packed/NDArray element-wise paths. They cover the real principal domain
   and **decline** outside it (`m > 1`, or `1 − m sin²φ < 0`), which abandons the
   buffer so the List path answers exactly through Arb — slower, never wrong.
-  `EllipticPi` has no machine kernel: its principal value needs `R_J` with the
-  `p < 0` transformation, and a wrong principal value is a wrong answer, so it is
-  exempt in the packed audits with that reason.
+  Measured against mpmath on identical machine inputs, the buffer now agrees with
+  the scalar path to 3 ulp (`K`, `F`) and 6 ulp (`E`); `R_F` and `R_D` share one
+  duplication loop, since every caller that wants `R_D` wants `R_F` at the same
+  arguments and the two recurrences walk an identical sequence.
+  `EllipticPi` has **no** machine kernel, so unlike the others it is not
+  `packed_aware`: a packed `List` is materialised by the transparency gate and a
+  visible `NDArray` is delisted and re-evaluated, so the List path answers
+  element by element through Arb. Its real domain would need Carlson `R_J`, and
+  `n ≥ 1` is not a real principal value at all — `Π(3/2 | 1/2)` is
+  `−0.45672 − 2.72070 i`, so the honest machine answer there is to decline.
+  Because `packed_aware` is a property of the symbol and not of one arity, a
+  future `R_J` kernel for the two-argument form must keep that delist fallback
+  for the three-argument one.
+- **Exact values.** `EllipticK[-1] = Γ(1/4)²/(4√(2π))` and
+  `EllipticK[1/2] = 8π^(3/2)/Γ(-1/4)²` (the lemniscatic singular values; `E` has
+  no closed form at either and keeps none). `EllipticPi[n, 0] = π/(2√(1-n))`,
+  `EllipticPi[n, φ, 0] = ArcTanh[√(n−1) tan φ]/√(n−1)`. At infinity:
+  `EllipticK[∞] = 0`, `EllipticE[∞] = EllipticE[ComplexInfinity] =
+  ComplexInfinity`, `EllipticF[φ, ∞] = 0`,
+  `EllipticPi[∞, m] = EllipticPi[n, ∞] = 0`. All three incomplete forms are
+  **odd in the amplitude** — `EllipticF[−φ, m] = −EllipticF[φ, m]`, likewise `E`
+  and `Π` — because each integrand is even in `t`; the fold uses the same
+  superficial-negativity test the trig heads use, so `−2x` folds and `−x−y` does
+  not.
+
+- **`Series`.** The complete integrals expand at `m = 0` from a dedicated
+  kernel: `K = (π/2) Σ aₖ mᵏ` and `E = (π/2) Σ aₖ mᵏ/(1−2k)` with `a₀ = 1`,
+  `aₖ = aₖ₋₁((2k−1)/(2k))²`. It has to be dedicated — the generic
+  Taylor-via-`D` path evaluates `d/dm K` at `m = 0`, which is `(π/2 − π/2)/0`
+  → `Indeterminate`, and the expansion is then abandoned, so
+  `Series[EllipticK[m], {m, 0, 1}]` did not previously emit even the leading
+  `π/2`. Composition through an inner series works; an expansion about a regular
+  point still takes Taylor-via-`D`. The incomplete forms expand in `φ` by the
+  generic path, as before.
+
+- **`Interval`.** The complete integrals thread by certified monotonicity —
+  `K` increasing and `E` decreasing, both only below `m = 1`, beyond which the
+  value is complex. The amplitude slot of `EllipticF`, `EllipticE[φ,m]` and
+  `EllipticPi` threads through the general derivative certifier. The `m` slot
+  declines: its derivative reproduces the head, so the certifier can never
+  bottom out there.
+
+- **Machine numbers.** An inexact machine scalar is answered by the `double`
+  kernel and comes back as a machine `Real`, not a 53-bit `EXPR_MPFR` — so
+  `Precision[EllipticK[0.5]]` is `MachinePrecision`, `MachineNumberQ` is `True`,
+  and an elliptic-produced list packs for its consumers. An `EXPR_MPFR`
+  argument still routes to Arb, so `SetPrecision[m, 16]` is never silently
+  answered in `double`.
+
+- **The `m = 1` continuation.** `E(φ | 1) = ∫₀^φ |cos t| dt`, which is `Sin[φ]`
+  only on the principal strip `|φ| ≤ π/2`; off it the value continues as
+  `Sin[φ − kπ] + 2k`. The reduction therefore fires only where it is *provably*
+  valid — decided by evaluating `Abs[φ] ≤ π/2`, so an exact rational, a `Real`,
+  an `MPFR` and a symbol carrying assumptions all get an answer. A symbolic
+  amplitude is undecidable and stays symbolic rather than becoming wrong:
+  `EllipticE[2, 1]` is left alone, and `N[EllipticE[2, 1]]` is `1.0907025731743`
+  (`= 2 − Sin[2]`), agreeing with its neighbour at `m = 1 − 10⁻²⁵`.
+
+- **Inexactness and poles.** The numeric path runs *before* the remaining exact
+  reductions, so an inexact argument gets an inexact answer — `EllipticK[0.]` is
+  `1.5707963267948966`, not the exact `π/2`, and `EllipticPi[0., 1/2]` is
+  `1.8540746773013719`, not the symbolic `EllipticK[1/2]`. The exact reductions
+  remain underneath as the fallback, which is what still reduces
+  `EllipticE[π/2, 0.5]` (Arb reads numbers, not a `Times`). Poles are checked
+  *ahead* of the numeric path, in every spelling of the argument, because Arb
+  returns a non-finite ball there and the bridge renders that as "unevaluated":
+  `EllipticK[1]`, `EllipticK[1.]` and `EllipticK[SetPrecision[1, 30]]` all give
+  `ComplexInfinity`, and so does the complete `EllipticPi[1, m]` — whose
+  divergence is real (`Π(1−ε | 1/2)` grows as `1/√ε`). The *incomplete* third
+  kind has no pole at `n = 1`: `EllipticPi[1, 1, 1/2]` is `1.73199154202`.
+
 - **Derivatives.** The φ-derivatives are the integrands, which is what makes a
   numeric verification of an antiderivative built from these kernels close:
   `D[EllipticF[φ, m], φ] = 1/√(1 − m sin²φ)`,
@@ -1888,11 +1956,22 @@ argument is complete for `E`, two arguments are complete for `Π`. There is no
   `D[EllipticK[m], m] = (E(m) − (1−m) K(m)) / (2m(1−m))`,
   `D[EllipticE[m], m] = (E(m) − K(m)) / (2m)` and
   `D[EllipticE[φ, m], m] = (E(φ,m) − F(φ,m)) / (2m)`.
-  `D[EllipticF[φ, m], m]` and the `n`- and `m`-derivatives of `EllipticPi` are
-  deliberately left as inert `Derivative[…]` forms rather than guessed: each is a
-  four-term expression whose signs are easy to get wrong, and an inert derivative
-  is honest where a wrong formula corrupts every caller silently. `BesselJ` treats
-  its order the same way.
+  `D[EllipticF[φ, m], m] = −E(φ,m)/(2(m−1)m) − F(φ,m)/(2m) +
+  sin(2φ)/(4(m−1)√(1−m sin²φ))`, and for the **complete** third kind
+  `D[EllipticPi[n, m], n] = (nE + (m−n)K + (n²−m)Π)/(2(m−n)(n−1)n)` and
+  `D[EllipticPi[n, m], m] = (E/(m−1) + Π)/(2(n−m))`. Each of those three was an
+  inert placeholder until it had been checked against a central difference at 30
+  digits.
+
+  The `n`- and `m`-derivatives of the **incomplete** `EllipticPi` remain
+  deliberately inert, and not for want of trying: a least-squares fit over the
+  natural candidate basis (E, F, Π over `(n−m)`, `(m−1)`, `(n−1)`, plus the
+  `sin(2φ)/√(…)` boundary term) does not recover them — residual 1.5 relative,
+  with no simple rational coefficients — so the closed form involves terms that
+  basis does not span. An inert derivative is honest where a guessed one corrupts
+  every caller silently; `BesselJ` treats its order the same way. One visible
+  consequence: `Interval[]` threading for the incomplete `EllipticPi` in its `m`
+  slot stays symbolic, since the certifier differentiates to get a sign.
 - Wrong arity emits `EllipticK::argx` / `EllipticF::argrx` (fixed arity) or
   `EllipticE::argt` / `EllipticPi::argt` (the overloaded pair) and stays
   unevaluated.
