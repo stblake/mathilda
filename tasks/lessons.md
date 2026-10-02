@@ -4282,3 +4282,67 @@ Three process notes from the same wave, each of which cost a wrong conclusion fi
   been tripping over (`Exact`, `LieSymmetry`, and a 16 s `Homogeneous` spin) — which is
   also why a stress family that varies a coefficient can end up measuring a different
   method's defect than the one you changed.
+
+## M64 — the instrument was the whole job, and three of its four readings were wrong first
+
+The question was simple enough to sound like it needed no instrument: *is the
+`Integrate` cascade mis-ordered, with the expensive stages ahead of the cheap ones?*
+Answering it took four measurements, and the first three were artefacts of how they
+were taken rather than facts about the cascade. The answer, once the instrument was
+honest, is **no** — the eight cheap exact stages ahead of the hot pair cost **0.0%**
+(0.14 s across 25 aborting integrands), 90.8% sits in exactly two stages, and the
+mechanism is not ordering at all but **speculative recursion into the whole cascade**
+(`try_linearity` once per `Plus` term, `try_derivdivides` once per candidate kernel,
+with the stage `switch` re-running at every depth).
+
+**1. A pinned method is not a proxy for its cascade stage.** The first reading came
+from timing `Integrate[f, x, Method -> "<Stage>"]` across the corpus, and it said
+DerivativeDivides was ~87% of the cost and Linearity was 0%. Both halves were wrong,
+for two different reasons. The cascade's call site is *deliberately* cheaper than the
+explicit method — `try_derivdivides` sends only pseudo-elliptic integrands into the
+heavyweight Eliminate/Solve search — so pinned time is an upper bound that varies by
+integrand class. And `try_linearity` has **no pinned surface at all**, which a sweep
+over pinned surfaces necessarily reports as zero rather than as unmeasured. Measured
+from inside, Linearity is 43.5% against DerivativeDivides' 47.3%: comparable, and
+invisible to the instrument I started with. *A sweep over the surfaces that exist
+cannot see the stage that has none.*
+
+**2. Then the profiler itself was wrong three times, each time in a way that still
+produced plausible-looking numbers.** It reported 36.7 s of stage time under a 25 s
+bound (the cascade recurses, so a stage was charged its callees' time — fixed by
+accounting only at `g_integrate_depth == 1`). It charged the hot stage 0.028 s of a
+25 s run (the `TimeConstrained` abort unwinds by `siglongjmp`, so the stage that was
+*running when the budget blew* — on the only integrands whose cost matters — had no
+accounting hook at all; fixed by recording the in-flight stage and flushing it). And
+once that was in, a *nested* cascade pass cleared the outermost in-flight record,
+losing it again. Three bugs, three sets of totals that each summed to something and
+each pointed somewhere. **A profile that does not sum to the wall clock is not a
+profile**; check that first, before reading any share off it.
+
+**3. A budget on a cascade must bound the STAGE, not the cascade.** Shipping
+`TimeConstraint -> 3` the obvious way — once the deadline passes, skip the remaining
+stages — took the 150-integrand classification from **125 closes to 117**. The reason
+generalises to any confidence-first cascade: the budget is spent by the expensive
+stages in the *middle*, and the stages after them are the cheap ones that close what
+the expensive ones just failed to close (PMT 0.27 s mean, PMS 0.34 s). The working
+shape lets the deadline abort the long search's *inner* work and keeps walking. Two
+near misses in the same family: wrapping a stage boundary in `TimeConstrained` made
+the bound exact (3 → 3.00 s) and converted a 0.066 s CLOSE into a 3 s DECLINE; and
+arming the budget per `builtin_integrate` entry multiplied it by the evaluator's
+fixed-point pass count (`-> 3` ran 30 s), which `eval_toplevel_id()` epoch keying
+fixes the same way `dsolve_separable.c` does.
+
+**4. "All tests passed!" is not a pass, and neither is a tail.** I reported all ten
+Integrate suites green off their last lines. The suites print `FAIL:` in the body,
+then print "All tests passed!" and **exit 0**. Grep the body for `FAIL`; a zero exit
+status from a suite that was never written to propagate one is not evidence.
+
+**5. The class gate that looked like the real fix regressed capability, and the
+measurement is what said so.** The structurally right idea — recurse only when the
+reduced integrand is polynomial, rational, or algorithmically convertible to one — was
+built with a four-part predicate and scored **+5 closes / −4**: it lost
+`Integrate[x ArcSin[x]/Sqrt[1-x^2], x]` and its ArcCos twin, both previously verified
+answers, to unevaluated. It is disabled at both call sites with the predicate left in
+place behind `MATHILDA_MAYBE_UNUSED`, because the idea is sound and the *predicate* is
+what needs deriving from the reduced integrands the two hot stages actually produce —
+not from what the class names suggest they produce.
