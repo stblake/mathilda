@@ -13,14 +13,16 @@
 
 **`Integrate[f, x, Method -> "<name>"] dispatches directly to a single`**
 
+**`Integrate[f, x, TimeConstraint -> t] gives the cascade a wall-clock budget`**
+
 <details>
 <summary>Notes</summary>
 
-fundamental theorem of calculus (Method -\> "NewtonLeibniz"). multiple integral (innermost/last spec integrated first; inner bounds may depend on outer variables).  See also Integrate\`SingularPoints. subroutine, bypassing the default cascade.  Accepted method names: "Automatic"          — the full dispatch cascade (default) "BronsteinRational"  — Integrate\`BronsteinRational (polynomial / rational) "DerivativeDivides"  — Integrate\`DerivativeDivides (substitution u(x); direct + Eliminate/Solve) "LinearRadicals"     — Integrate\`LinearRadicals (rationalise radicals of a x + b) "QuadraticRadicals"  — Integrate\`QuadraticRadicals (Euler substitution for Sqrt\[a x^2 + b x + c\]) "LinearRatioRadicals" — Integrate\`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d)) "ChebychevAlgebraic" — Integrate\`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem) "GoursatAlgebraic"   — Integrate\`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent) "Weierstrass"        — Integrate\`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution) "RischTranscendental"       — Integrate\`RischTranscendental (recursive transcendental Risch; correct by construction) "CRCTable"           — Integrate\`CRCTable (lazy-loaded CRC integral table) "ParallelMixedTower" — Integrate\`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II) "Undefined"          — Integrate\`Undefined (unknown functions u\[x\], u'\[x\]; Roach §1.7) "NewtonLeibniz"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form) "LineIntegral"        — complex contour integrals (implicit for the {x,z0,...,zn} form) "Residue"             — improper/periodic real definite integrals by the residue theorem (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period, principal values, even half-lines); tried before NewtonLeibniz under Automatic "DiffUnderInt"         — parameter-dependent definite integrals by differentiation under the ("DifferentiationUnderIntegral") integral sign (Feynman's trick): Integrate\`DiffUnderInt; Laplace/Fourier, sinc, and even-rational half-line families; tried after Residue and NewtonLeibniz in the definite cascade "RamanujanMasterTheorem" — half-line Int\_0^Inf x^(s-1) f(x) dx by the Mellin transform / ("Mellin")              Ramanujan Master Theorem: Integrate\`RamanujanMasterTheorem; exp/Gaussian/algebraic/Cos/Sin/ArcTan/Log/BesselJ/pFq/PolyLog kernels (monomial x^k substitution; Erf, incomplete Gamma, BesselJ^2 reduced to pFq); also the exp-geometric kernel 1/(E^(c x)+g) (Bose-Einstein / Fermi-Dirac -\> Gamma\*PolyLog), a Frullani pre-pass (f(a x)-f(b x))/x -\> (f(0)-f(Inf)) Log\[b/a\], and a Log\[x\]^k weight; strip-gated, yielding a ConditionalExpression when Assumptions do not prove convergence; after NewtonLeibniz under Automatic Method -\> {"DerivativeDivides", "Substitution" -\> u} pins the kernel u(x), trialing only that substitution. Named methods are strict: failure returns unevaluated, with no fallback. The CRCTable rules are loaded from disk on first use only. An applied 1-D InterpolatingFunction integrates to its antiderivative InterpolatingFunction (mirroring D).
+fundamental theorem of calculus (Method -\> "NewtonLeibniz"). multiple integral (innermost/last spec integrated first; inner bounds may depend on outer variables).  See also Integrate\`SingularPoints. subroutine, bypassing the default cascade.  Accepted method names: "Automatic"          — the full dispatch cascade (default) "BronsteinRational"  — Integrate\`BronsteinRational (polynomial / rational) "DerivativeDivides"  — Integrate\`DerivativeDivides (substitution u(x); direct + Eliminate/Solve) "LinearRadicals"     — Integrate\`LinearRadicals (rationalise radicals of a x + b) "QuadraticRadicals"  — Integrate\`QuadraticRadicals (Euler substitution for Sqrt\[a x^2 + b x + c\]) "LinearRatioRadicals" — Integrate\`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d)) "ChebychevAlgebraic" — Integrate\`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem) "GoursatAlgebraic"   — Integrate\`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent) "Weierstrass"        — Integrate\`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution) "RischTranscendental"       — Integrate\`RischTranscendental (recursive transcendental Risch; correct by construction) "CRCTable"           — Integrate\`CRCTable (lazy-loaded CRC integral table) "ParallelMixedTower" — Integrate\`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II) "ParallelMixedSpecial" — Integrate\`ParallelMixedSpecial (the same over a mixed tower with special-function kernels: Ei, li, erf, incomplete Gamma, Si, Ci, elliptic F/E/Pi) "Undefined"          — Integrate\`Undefined (unknown functions u\[x\], u'\[x\]; Roach §1.7) "NewtonLeibniz"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form) "LineIntegral"        — complex contour integrals (implicit for the {x,z0,...,zn} form) "Residue"             — improper/periodic real definite integrals by the residue theorem (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period, principal values, even half-lines); tried before NewtonLeibniz under Automatic "DiffUnderInt"         — parameter-dependent definite integrals by differentiation under the ("DifferentiationUnderIntegral") integral sign (Feynman's trick): Integrate\`DiffUnderInt; Laplace/Fourier, sinc, and even-rational half-line families; tried after Residue and NewtonLeibniz in the definite cascade "RamanujanMasterTheorem" — half-line Int\_0^Inf x^(s-1) f(x) dx by the Mellin transform / ("Mellin")              Ramanujan Master Theorem: Integrate\`RamanujanMasterTheorem; exp/Gaussian/algebraic/Cos/Sin/ArcTan/Log/BesselJ/pFq/PolyLog kernels (monomial x^k substitution; Erf, incomplete Gamma, BesselJ^2 reduced to pFq); also the exp-geometric kernel 1/(E^(c x)+g) (Bose-Einstein / Fermi-Dirac -\> Gamma\*PolyLog), a Frullani pre-pass (f(a x)-f(b x))/x -\> (f(0)-f(Inf)) Log\[b/a\], and a Log\[x\]^k weight; strip-gated, yielding a ConditionalExpression when Assumptions do not prove convergence; after NewtonLeibniz under Automatic Method -\> {"DerivativeDivides", "Substitution" -\> u} pins the kernel u(x), trialing only that substitution. Named methods are strict: failure returns unevaluated, with no fallback. of t seconds (default 3; Infinity for no budget).  It is checked BETWEEN stages, at every recursion depth, and inside the substitution stage's kernel and branch loops and its Eliminate/Solve calls -- so it stops the cascade progressing once spent, but it is not yet a hard bound: a single long-running evaluation inside one stage can overrun it.  It matters only for integrands Integrate cannot close; measured from inside the cascade (MATHILDA\_INTEGRATE\_PROFILE=1), two stages account for 90.8% of that cost -- the linearity split (43.5%) and the substitution search (47.3%) -- while the eight cheap exact stages ahead of them are together under 0.1%.  An explicit Method -\> name is a deliberate request for the full search and carries no budget unless you pass TimeConstraint yourself. The CRCTable rules are loaded from disk on first use only. An applied 1-D InterpolatingFunction integrates to its antiderivative InterpolatingFunction (mirroring D).
 
 </details>
 
-## Examples (70)
+## Examples (60)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -290,66 +292,32 @@ In[52]:= Integrate[1/Sqrt[(2 x + 1)/(x + 3)], x, Method -> "LinearRatioRadicals"
 Out[52]= (5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]] (-5 Sqrt[(1 + 2 x)/(3 + x)]/(-4 + 2 (1 + 2 x)/(3 + x)) + 5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]]/Sqrt[2]))/Sqrt[2]
 ```
 
-### Worked examples (10)
-
-```mathematica
-In[53]:= Integrate[(x^a-1)/Log[x], {x,0,1}]
-Out[53]= Log[1 + a]
-
-In[54]:= Integrate[Exp[-a x] Sin[b x]/x, {x,0,Infinity}, Assumptions->a>0]
-Out[54]= 1/2 (Pi b)/Sqrt[b^2] - ArcTan[a/b]
-
-In[55]:= Integrate[Sin[a x]^2/x^2, {x,0,Infinity}, Assumptions->a>0]
-Out[55]= 1/2 Pi a
-
-In[56]:= Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]
-Out[56]= Pi Log[1 + a]
-
-In[57]:= Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]
-Out[57]= 1/2 (a (ArcTan[1, a/c] - ArcTan[1, -a/c]) - c Log[1 + a^2/c^2])
-
-In[58]:= Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]
-Out[58]= 1/2 Pi Erf[1/2 a]
-
-In[59]:= Integrate[Log[1 + x^(3/2)]/(x Sqrt[1 - x^3]), {x,0,1}, Method->"DiffUnderInt"]
-Out[59]= 1/12 Pi^2
-
-In[60]:= Integrate[Sec[2x] Log[1 + Sqrt[1 - Tan[x]^2]], {x,0,π/4}, Method->"DiffUnderInt"]
-Out[60]= Integrate[Sec[2 x] Log[1 + Sqrt[1 - Tan[x]^2]], {x, 0, 1/4 u03c0}, Method -> "DiffUnderInt"]
-
-In[61]:= Integrate[Csc[2x]^2 Log[1 + Tan[x]^a], {x,0,π/4}, Method->"DiffUnderInt"]
-Out[61]= Integrate[Csc[2 x]^2 Log[1 + Tan[x]^a], {x, 0, 1/4 u03c0}, Method -> "DiffUnderInt"]
-
-In[62]:= Integrate[Exp[-x^2], {x,0,Infinity}]
-Out[62]= 1/2 Sqrt[Pi]
-```
-
 ### Applications (8)
 
 ```mathematica
-In[63]:= Integrate[1/(1 + x^2), x]
-Out[63]= ArcTan[x]
+In[53]:= Integrate[1/(1 + x^2), x]
+Out[53]= ArcTan[x]
 
-In[64]:= Integrate[1/x, x]
-Out[64]= Log[x]
+In[54]:= Integrate[1/x, x]
+Out[54]= Log[x]
 
-In[65]:= Integrate[Cos[x], x]
-Out[65]= Sin[x]
+In[55]:= Integrate[Cos[x], x]
+Out[55]= Sin[x]
 
-In[66]:= Integrate[x^3 + x, x]
-Out[66]= 1/2 x^2 + 1/4 x^4
+In[56]:= Integrate[x^3 + x, x]
+Out[56]= 1/2 x^2 + 1/4 x^4
 
-In[67]:= Integrate[1/(x^3 + 1), x]
-Out[67]= 1/3 Log[1 + x] + ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/6 Log[1 - x + x^2]
+In[57]:= Integrate[1/(x^3 + 1), x]
+Out[57]= 1/3 Log[1 + x] + ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/6 Log[1 - x + x^2]
 
-In[68]:= Integrate[(x^2 + 1)/(x^4 + 1), x]
-Out[68]= ArcTan[x/Sqrt[2]]/Sqrt[2] + ArcTan[(x + x^3)/Sqrt[2]]/Sqrt[2]
+In[58]:= Integrate[(x^2 + 1)/(x^4 + 1), x]
+Out[58]= ArcTan[x/Sqrt[2]]/Sqrt[2] + ArcTan[(x + x^3)/Sqrt[2]]/Sqrt[2]
 
-In[69]:= Integrate[x*Exp[x], x]
-Out[69]= -E^x + x E^x
+In[59]:= Integrate[x*Exp[x], x]
+Out[59]= -E^x + x E^x
 
-In[70]:= Integrate[1/(x*Log[x]), x]
-Out[70]= Log[Log[x]]
+In[60]:= Integrate[1/(x*Log[x]), x]
+Out[60]= Log[Log[x]]
 ```
 
 ## Options & behaviour
@@ -799,6 +767,26 @@ over the sampler):
    strategy and the rest of the cascade.
 
 The reduced integral re-enters the full `Integrate`, so substitutions compose.
+`Integrate` takes a **`TimeConstraint`** option (default **3**, `Infinity` for no
+budget; `Options[Integrate]`). It gives the cascade a wall-clock budget, honoured
+between stages at every recursion depth and inside this stage's kernel and branch
+loops and its `Eliminate`/`Solve` calls. It is **not yet a hard bound** — a single
+long-running evaluation inside one stage can overrun it — and it is deliberately
+**not** allowed to abandon the rest of the cascade: doing so was measured to cost
+eight closes in 125, because the stages after the expensive one are cheap
+(ParallelMixedTower 0.27 s, ParallelMixedSpecial 0.34 s mean) and are often the
+ones that actually close the integrand. An explicit `Method -> name` is a
+deliberate request for the full search and carries no budget unless you pass
+`TimeConstraint` yourself.
+
+Where the time actually goes, measured from inside the cascade with
+`MATHILDA_INTEGRATE_PROFILE=1` over 25 integrands `Integrate` cannot close: the
+eight cheap exact stages ahead of this one cost **0.0%** (0.14 s in total), while
+the linearity split is **43.5%** and this stage **47.3%** — 90.8% in two stages,
+both because they recurse speculatively into the whole cascade (per `Plus` term and
+per candidate kernel respectively, and the cascade runs at every depth). So the
+cascade is ordered correctly; the cost is the fan-out.
+
 Three guards keep the recursion finite and cheap: an **integrand memo** that
 short-circuits any integrand (canonicalised by renaming the integration variable
 to a fixed sentinel) already attempted in the current top-level descent — this
@@ -1104,6 +1092,39 @@ no multivariate integration, no constant of integration.
   cheap **direct-quotient** fold on those (so `x^2/(x^3-1)^(1/3)` is unaffected),
   and the explicit `Method -> "ParallelMixedTower"` is not gated.  The item
   numbers below group methods by kind and are unchanged.
+
+  **Symbolic-exponent power times an exponential (as of v0.253).** A dedicated
+  recogniser sits just after the Fresnel row, ahead of every general stage:
+
+      Integrate[x^p E^(a x^m), x]  ==  -(1/m) (-a)^(-s) Gamma[s, -a x^m],  s = (p+1)/m
+
+  gated to a **symbolic** exponent `p` (`m` a positive integer, `a` free of `x`) and
+  emitted only behind an exact differentiate-back certificate.  It exists because the
+  general stages do not merely decline on this shape, they *search*:
+  `Integrate[x^n E^(-x), x]` cost a measured 12.9 s to come back unevaluated, and
+  `Integrate[x^n E^(-x^2), x]` 12.4 s; both are now ~0.03 s, and
+  `DSolve[y'' - y == x^n, y, x]` — whose variation-of-parameters particular is exactly
+  that pair of integrals — went from an 8 s abort to a closed form in 0.09 s.  A
+  **numeric** exponent is deliberately left to the stages below, which give the
+  elementary answer for a non-negative integer `p` and the cleaner `Erf` form
+  otherwise.  The certificate is checked twice, since the closed form is stated in the
+  principal-branch convention `(-a x^m)^k == (-a)^k x^(m k)`: an exact `Simplify` pass
+  first, then one under `PowerExpand`, which quotients out that convention and nothing
+  else.
+
+  **Execution order (as of v0.238):** `ParallelMixedSpecial` (item 14) is now the
+  **last** stage, after Goursat.  It is the only stage that may answer with a
+  *non-elementary* function — `ExpIntegralEi`, `Erf`, the elliptic family — and an
+  elementary antiderivative is always the better answer, so every stage that can
+  produce one (Goursat's pseudo-elliptic reductions included) is given first
+  crack.  Being a general search, it also costs least where it is reached only by
+  integrands nothing cheaper could close.  Unlike `ParallelMixedTower` it is
+  **not** gated off the pseudo-elliptic shape: that gate keeps the
+  elementary-only stage away from a genus>0 `F/R^p` curve, on which it grinds and
+  closes nothing, and an elliptic pencil is exactly what this stage *does* close
+  (`1/Sqrt[x^3-x]` → `-Sqrt[2] EllipticF[ArcSin[Sqrt[2]/Sqrt[1+x]], 1/2]`).  The
+  cascade calls only its complete-answer surface, so plain `Integrate[f, x]` can
+  never return a partial `answer + Inactive[Integrate][remainder, x]`.
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
      derivative (e.g. `f'[x]`); see below.
   2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
@@ -1631,6 +1652,28 @@ no multivariate integration, no constant of integration.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"ParallelMixedTower"` — `Integrate\`ParallelMixedTower[f, x]` (parallel
     Risch-Norman over a simple radical in a mixed transcendental tower).
+  - `"ParallelMixedSpecial"` — `Integrate\`ParallelMixedSpecial[f, x]` (the same
+    over a mixed tower with **special-function kernels**, so the answer may carry
+    `ExpIntegralEi`, `LogIntegral`, `Erf`/`Erfc`/`Erfi`, the incomplete
+    `Gamma[s, z]`, `SinIntegral`/`CosIntegral`, or `EllipticF`/`EllipticE`/`EllipticPi`).  The worker answers with the pair
+    `{answer, verified}`; a *verified* pair is unwrapped to the bare
+    antiderivative and anything else is handed back as the package said it, so
+    `Head[r] === List` remains the caller's test for "no answer".
+
+    **Measured on the 312-case stress corpus of the paper** (120 s cap, against
+    the three reference ports, which all score 305 PASS / 7 HONEST):
+    Mathilda **247 PASS, 51 HONEST, 11 WEAK, 3 FAIL**, with **no false
+    certificate**. Seven groups are at parity. 39 of the 51 HONEST (46 in total, 7 of them HONEST in the reference too) are strict
+    mode withholding an answer that is already correct and identical to
+    Mathematica's — `Exp[-x^2]` → `-Sqrt[Pi] Erfc[x]/2`, `Exp[-x^3]` →
+    `-Gamma[1/3, x^3]/3` — for want of a non-elementarity certificate, and all 11
+    WEAK are the partial mode leaving exactly those sub-integrands in the
+    remainder for the same reason. The cause is Part II's `q =!= None` guard on
+    the holomorphic-remainder certificate (the T2/T10 false-certificate
+    protection, absent from the research reference), so it is one root cause for
+    50 of the 58 differing cases and it predates this stage. On the 247 cases it does
+    close, Mathilda is the fastest of the four ports (0.070 s median against
+    Mathematica's 0.110 s).
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`
     (`Integrate\`Symmetry[f, {x, -c, c}]`): an odd integrand integrates to `0`,

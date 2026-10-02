@@ -1,6 +1,6 @@
 # Special Functions
 
-41 built-in function(s) in this category.
+43 built-in function(s) in this category.
 
 - [`AiryAi`](AiryAi.md) — AiryAi[z]  _(Stable)_
 - [`AiryBi`](AiryBi.md) — AiryBi[z]  _(Stable)_
@@ -13,6 +13,8 @@
 - [`Beta`](Beta.md) — Beta[a, b]  _(Stable)_
 - [`CosIntegral`](CosIntegral.md) — CosIntegral[z]  _(Stable)_
 - [`CoshIntegral`](CoshIntegral.md) — CoshIntegral[z]  _(Stable)_
+- [`EllipticF`](EllipticF.md) — EllipticF[phi, m] is the incomplete elliptic integral of the first kind, Integrate[1/Sqrt[1 - m Sin[t]^2], {t, 0, phi}]. The second argument is the PARAMETER m = k^2, not the modulus k. EllipticF[phi, 0] is phi and EllipticF[Pi/2, m] is EllipticK[m]; phi may be complex and of any size (the quasi-period is applied).  _(Stable)_
+- [`EllipticK`](EllipticK.md) — EllipticK[m] is the complete elliptic integral of the first kind, Integrate[1/Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}]. The argument is the PARAMETER m = k^2, not the modulus k. EllipticK[0] is Pi/2 and EllipticK[1] is ComplexInfinity; exact arguments otherwise stay symbolic and inexact ones evaluate numerically at their precision.  _(Stable)_
 - [`Erf`](Erf.md) — Erf[z]  _(Stable)_
 - [`Erfc`](Erfc.md) — Erfc[z]  _(Stable)_
 - [`Erfi`](Erfi.md) — Erfi[z]  _(Stable)_

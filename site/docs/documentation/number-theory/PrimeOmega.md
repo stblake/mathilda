@@ -73,5 +73,6 @@ the quantity LiouvilleLambda computes internally before taking (-1)^Omega, so th
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_moebiusmu.c`](https://github.com/stblake/mathilda/blob/main/tests/test_moebiusmu.c)
 - Tests: [`tests/test_primenu.c`](https://github.com/stblake/mathilda/blob/main/tests/test_primenu.c)
 - Tests: [`tests/test_primeomega.c`](https://github.com/stblake/mathilda/blob/main/tests/test_primeomega.c)

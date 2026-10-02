@@ -65,5 +65,5 @@ Out[6]= {HoldAllComplete, Protected}
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_evaluate.c`](https://github.com/stblake/mathilda/blob/main/tests/test_evaluate.c)
 - Tests: [`tests/test_expr_pool.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expr_pool.c)
+- Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
 - Tests: [`tests/test_purefunc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_purefunc.c)
-- Tests: [`tests/test_repl_hooks.c`](https://github.com/stblake/mathilda/blob/main/tests/test_repl_hooks.c)

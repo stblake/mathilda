@@ -5,7 +5,7 @@
 
 ## Description
 
-**`Image[data] is a raster image, normalising to the canonical Image[data, type]. The data is a rectangular height x width array of pixel values, or height x width x channels for a colour image, so it is indexed data[[y, x]] with rows running down the image -- note that ImageDimensions reports {width, height}, transposed relative to this. The type is inferred from the values: all-integer data in {0, 1} is "Bit", all-integer in 0..255 is "Byte", anything else is "Real". Image[data, type] states the type instead, and declines if the data does not fit it. Ragged data declines rather than being padded.`**
+**`Image[data] is a raster image, normalising to the canonical Image[data, type]. The data is a rectangular height x width array of pixel values, or height x width x channels for a colour image, so it is indexed data[[y, x]] with rows running down the image -- note that ImageDimensions reports {width, height}, transposed relative to this. The type is inferred from the values: all-integer data in {0, 1} is "Bit", all-integer in 0..255 is "Byte", anything else is "Real". Image[data, type] states the type instead -- "Bit" (0 or 1), "Byte" (0..255), "Bit16" (0..65535) or "Real" ("Real32" and "Real64" are accepted as synonyms) -- and, as in Mathematica, COERCES the data to it: an integer type rounds each value to the nearest integer and clips it to the type's range, so Image[{{0, 300}}, "Byte"] stores {0, 255}; "Real" keeps any real value. Image[image, type] converts an image between types, preserving brightness. Data that is not a rectangular array of real numbers (ragged, non-numeric or complex) is left unevaluated.`**
 
 ## Examples (38)
 
@@ -50,16 +50,16 @@ In[9]:= ImageType[Image[{{0., 0.5}}]]
 Out[9]= "Real"
 ```
 
-A stated type must fit the data, or the call declines
+A stated type coerces the data: 300 clips to 255
 
 ```mathematica
-In[10]:= Head[Image[{{0, 300}}, "Byte"]]
-Out[10]= Image
+In[10]:= ImageData[Image[{{0, 300}}, "Byte"], "Byte"]
+Out[10]= {{0, 255}}
 ```
 
 ```mathematica
-In[11]:= Head[Image[{{0, 2}}, "Bit"]]
-Out[11]= Image
+In[11]:= ImageData[Image[{{0.5, 2, 0.4}}, "Bit"], "Bit"]
+Out[11]= {{1, 1, 0}}
 
 In[12]:= ImageType[Image[{{0, 1}, {1, 0}}, "Byte"]]
 Out[12]= "Byte"
@@ -138,7 +138,7 @@ An already-canonical image is left alone, so evaluation reaches a fixed point
 
 ```mathematica
 In[26]:= Image[Image[{{0., 1.}}]] === Image[{{0., 1.}}]
-Out[26]= False
+Out[26]= True
 ```
 
 Pixels survive a round trip through ImageData exactly
@@ -187,7 +187,7 @@ The storage is a packed buffer, not a tree of Expr nodes
 
 ```mathematica
 In[37]:= Head[Part[Image[Table[N[i j]/64, {i, 8}, {j, 8}]], 1]]
-Out[37]= List
+Out[37]= NDArray
 ```
 
 ```mathematica
@@ -201,7 +201,7 @@ Out[38]= "Real"
 
 ## References
 
-**See also:** [ImageQ](../../image-processing/ImageQ/), [ImageDimensions](../../image-processing/ImageDimensions/)
+**See also:** [ImageQ](../../image-processing/ImageQ/), [ImageDimensions](../../image-processing/ImageDimensions/), [ImageData](../../image-processing/ImageData/), [ImageType](../../image-processing/ImageType/)
 
 - Source: [`src/image.c`](https://github.com/stblake/mathilda/blob/main/src/image.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)

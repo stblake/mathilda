@@ -7,7 +7,7 @@
 
 **`EdgeWeight[g] gives the weights of g's edges, in EdgeList order. Defaults to all 1s if g was built without an EdgeWeight option.`**
 
-## Examples (5)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -24,7 +24,7 @@ In[3]:= EdgeWeight[5]
 Out[3]= EdgeWeight[5]
 ```
 
-### Options (2)
+### Options (3)
 
 ```mathematica
 In[4]:= EdgeWeight[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]]
@@ -32,6 +32,9 @@ Out[4]= {5, 7}
 
 In[5]:= EdgeWeight[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{a,1/2}]]
 Out[5]= {a, 1/2}
+
+In[6]:= EdgeWeight[Graph[{1->2, 2->3}, EdgeWeight -> {5, 7}]]
+Out[6]= {5, 7}
 ```
 
 ## Algorithm
@@ -46,14 +49,15 @@ Memory (SPEC section 4): returns a fresh list; the evaluator frees res.
   option. Weights may be symbolic or exact; they are returned as given.
 - Unevaluated on a non-graph (see `VertexList`).
 - Weight-aware consumers: `WeightedAdjacencyMatrix`, `FindShortestPath` and
-  `GraphDistance` (see `FindShortestPath`). The other search/computation heads
-  in this section ignore weights.
+  `GraphDistance` (see `FindShortestPath`), `FindSpanningTree` (a minimum
+  spanning tree), and the cut family. The option is accepted by both
+  `Graph[e, EdgeWeight -> w]` and `Graph[v, e, EdgeWeight -> w]`.
 
 **Attributes:** `Protected`.
 
 ## References
 
-**See also:** [EdgeList](../../graphs/EdgeList/), [Graph](../../graphs/Graph/), [VertexList](../../graphs/VertexList/), [WeightedAdjacencyMatrix](../../graphs/WeightedAdjacencyMatrix/), [FindShortestPath](../../graphs/FindShortestPath/), [GraphDistance](../../graphs/GraphDistance/)
+**See also:** [EdgeList](../../graphs/EdgeList/), [Graph](../../graphs/Graph/), [VertexList](../../graphs/VertexList/), [WeightedAdjacencyMatrix](../../graphs/WeightedAdjacencyMatrix/), [FindShortestPath](../../graphs/FindShortestPath/), [GraphDistance](../../graphs/GraphDistance/), [FindSpanningTree](../../graphs/FindSpanningTree/)
 
 - Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)

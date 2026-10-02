@@ -340,8 +340,13 @@ def run_session(lines, timeout=60):
     reqs.append(json.dumps({"type": "quit"}))
     inp = "\n".join(reqs) + "\n"
     try:
+        # errors="replace" matches every other read in this file.  Without it a
+        # single non-UTF-8 byte anywhere in the binary's output aborts the WHOLE
+        # reference regeneration with a UnicodeDecodeError -- which is why the
+        # committed site had not been rebuilt since v0.218.  A replacement char
+        # in one example is strictly better than no site.
         proc = subprocess.run([str(MATHILDA)], input=inp, capture_output=True,
-                              text=True, timeout=timeout)
+                              text=True, errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         return None
     payloads, plots = {}, {}

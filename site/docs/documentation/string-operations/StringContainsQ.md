@@ -65,4 +65,5 @@ Out[6]= {IgnoreCase -> False}
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_parallelmixedspecial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parallelmixedspecial.c)
 - Tests: [`tests/test_stringcontainsq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcontainsq.c)

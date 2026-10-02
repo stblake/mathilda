@@ -7,7 +7,7 @@
 
 **`LearnDistribution[data] fits a distribution to data and returns a LearnedDistribution, usable with PDF. Method -> "Multinormal" is the default; Method -> "GaussianMixture" fits a mixture, choosing the component count by BIC. Multinormal fits a mean vector and a sample covariance (n-1 divisor, matching Variance). Rows are observations and columns are variables; a flat list is n observations of one variable. A singular covariance -- collinear columns, or fewer observations than dimensions -- returns unevaluated, because no density exists rather than because of an error. Method -> "ContingencyTable" is for NOMINAL data instead of numeric: it stores a probability per distinct outcome, which in one dimension is a categorical distribution. Outcomes may be any expressions -- strings, symbols, or equal-length lists of them -- compared structurally, and are kept in first-appearance order. Probabilities are empirical frequencies with no smoothing, so PDF of an outcome never observed is exactly 0; smoothing would require knowing how many outcomes were possible but unseen, which for arbitrary expressions is unknowable. Ragged outcomes decline.`**
 
-## Examples (5)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -31,11 +31,14 @@ In[4]:= PDF[LearnDistribution[{{1.,2.},{2.,3.},{3.,5.},{4.,4.},{5.,7.},{6.,8.}}]
 Out[4]= {0.113186, 3.6193e-169}
 ```
 
-### Options (1)
+### Options (2)
 
 ```mathematica
 In[5]:= d = LearnDistribution[{"r", "r", "r", "b"}, Method -> "ContingencyTable"]
 Out[5]= LearnedDistribution["ContingencyTable", <>]
+
+In[6]:= Last[LearnDistribution[{1.4, 1.4, 1.3, 1.5, 1.4, 1.7, 1.4, 1.5, 1.4, 1.5, 1.5, 1.6, 1.4, 1.1, 1.2, 4.7, 4.5, 4.9, 4., 4.6, 4.5, 4.7, 3.3, 4.6, 3.9, 3.5, 4.2, 4., 4.7, 3.6, 6., 5.1, 5.9, 5.6, 5.8, 6.6, 4.5, 6.3, 5.8, 6.1, 5.1, 5.3, 5.5, 5., 5.1}, Method -> "GaussianMixture"]]
+Out[6]= 2
 ```
 
 ## Options & behaviour
@@ -51,6 +54,17 @@ clustering path before its floor existed, six components for eight points. The m
 nearest-neighbour distance says the honest thing instead: structure finer than the spacing
 between samples is not resolvable. The *median* rather than the mean, so one tight pair
 cannot drag the floor toward zero and reopen the same hole.
+
+**The spacing is measured between *distinct* points**, because a repeated value is not a
+sample spacing of zero. Rounded data repeats most of its values — the first 15 iris petal
+lengths per species, to 0.1 cm, have 45 values but only 28 distinct ones — and counting a
+duplicate's zero distance to its twin put the median at 0, the floor at `1e-300`, and the
+fit at nine components, two of them a single point with weight 1/45. Measured between
+distinct values the floor is the data's real resolution (0.1² here) and BIC picks two
+components, weights `{1/3, 2/3}` with means 1.42 and 4.91 — the same model Mathematica 15
+learns. The floor is also held to at least `1e-4` of the average per-coordinate variance
+(a component standard deviation of 1% of the data's), and the component count is capped
+by the number of distinct points, as `FindClusters`' mixture path caps it.
 
 **A one-component mixture relates to the Multinormal fit exactly**, not approximately, and
 the relationship is worth stating because it looks like a discrepancy:
@@ -89,7 +103,7 @@ test alone would pass two densities that shared a normalisation error.
 
 ## References
 
-**See also:** [LearnedDistribution](../../other-advanced/LearnedDistribution/), [PDF](../../machine-learning/PDF/), [PrincipalComponents](../../machine-learning/PrincipalComponents/), [Variance](../../data-structures/Variance/), [StandardDeviation](../../data-structures/StandardDeviation/), [FullForm](../../expression-information/FullForm/)
+**See also:** [LearnedDistribution](../../other-advanced/LearnedDistribution/), [PDF](../../machine-learning/PDF/), [PrincipalComponents](../../machine-learning/PrincipalComponents/), [Variance](../../data-structures/Variance/), [StandardDeviation](../../data-structures/StandardDeviation/), [FullForm](../../expression-information/FullForm/), [FindClusters](../../lists-and-iteration/FindClusters/)
 
 - Source: [`src/ml/dist.c`](https://github.com/stblake/mathilda/blob/main/src/ml/dist.c)
 - Specification: [`docs/spec/builtins/machine-learning.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/machine-learning.md)

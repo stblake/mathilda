@@ -10,7 +10,7 @@
 <details>
 <summary>Notes</summary>
 
-Option Extension -\> alpha computes the GCD over Q(alpha), where alpha is an algebraic number recognised by qa\_resolve\_extension (Sqrt\[c\], c^(1/n), or I). Default Extension -\> None and Extension -\> Automatic compute over the rationals, treating any algebraic numbers in the input as independent variables.
+Option Extension -\> alpha computes the GCD over Q(alpha); Extension -\> Automatic detects the extension from the operands. Coefficients in a number field are handled in either spelling, radical or AlgebraicNumber, in any number of variables. The result is determined only up to a constant of the field.
 
 </details>
 
@@ -121,10 +121,10 @@ ordinary `Expr` subtrees, so coefficient GCDs recurse through the same machinery
 - G. E. Collins, "Subresultants and Reduced Polynomial Remainder Sequences", JACM 14(1), 1967.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_algebraicnumber.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumber.c)
 - Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
 - Tests: [`tests/test_expr_sharing.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expr_sharing.c)
 - Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
-- Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
 
 ## Notes & additional examples
 

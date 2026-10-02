@@ -34,3 +34,4 @@ Out[1]= {$1, x2, {a3, b3}}
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)
+- Tests: [`tests/test_series.c`](https://github.com/stblake/mathilda/blob/main/tests/test_series.c)

@@ -54,7 +54,7 @@ Memory (SPEC section 4): returns a freshly-allocated matrix; frees res.
 
 ## References
 
-**See also:** [Det](../../linear-algebra/Det/), [Tr](../../linear-algebra/Tr/), [Eigenvalues](../../linear-algebra/Eigenvalues/), [MatrixPower](../../linear-algebra/MatrixPower/), [AdjacencyGraph](../../graphs/AdjacencyGraph/), [WeightedAdjacencyMatrix](../../graphs/WeightedAdjacencyMatrix/)
+**See also:** [Det](../../linear-algebra/Det/), [Tr](../../linear-algebra/Tr/), [Eigenvalues](../../linear-algebra/Eigenvalues/), [MatrixPower](../../linear-algebra/MatrixPower/), [AdjacencyGraph](../../graphs/AdjacencyGraph/), [WeightedAdjacencyMatrix](../../graphs/WeightedAdjacencyMatrix/), [SparseArray](../../data-structures/SparseArray/)
 
 - Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)

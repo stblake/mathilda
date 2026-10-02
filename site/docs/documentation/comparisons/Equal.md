@@ -7,22 +7,40 @@
 
 lhs == rhs or Equal\[lhs, rhs\] tests mathematical equality. Numeric arguments decide directly (Integer / Rational exact comparison; Real / MPFR comparison with precision tolerance); structurally identical symbolic forms decide True; otherwise the call stays unevaluated as a symbolic equation. Equal threads over Lists pairwise; chained Equal becomes Inequality. Following IEEE 754 / ISO 60559, Indeterminate is unordered with every value including itself, so any Indeterminate argument gives False.
 
-## Examples (3)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
+
+```mathematica
+In[1]:= {0.1 + 0.2} == {0.3}
+Out[1]= True
+
+In[2]:= {1, 2} == {1, 2, 3}
+Out[2]= False
+
+In[3]:= {x, 1} == {y, 2}
+Out[3]= False
+```
 
 ### Applications (3)
 
 ```mathematica
-In[1]:= 2 == 2
-Out[1]= True
+In[4]:= 2 == 2
+Out[4]= True
 
-In[2]:= 1 == 1.
-Out[2]= True
+In[5]:= 1 == 1.
+Out[5]= True
 
-In[3]:= a == b
-Out[3]= a == b
+In[6]:= a == b
+Out[6]= a == b
 ```
+
+## Options & behaviour
+
+- An `Indeterminate` argument gives `False`, per IEEE 754 — see
+  [Indeterminate and IEEE unordered comparison](#indeterminate-and-ieee-unordered-comparison).
 
 ## Implementation notes
 
@@ -43,10 +61,14 @@ Out[3]= a == b
   `<|a -> 1, b -> 2|> == <|b -> 2, a -> 1|>` is `False`. `Unequal` uses the
   same test (see
   [Association atomicity](../data-structures/index.md)).
+- Two Lists are compared element by element with `Equal` itself, recursively
+  through nested lists, so the machine-real tolerance applies inside them:
+  `{0.1 + 0.2, 1.} == {0.3, 1.}` is `True`. Lists of different lengths are
+  `False`, one decidably unequal position makes the whole comparison `False`
+  (`{x, 1} == {y, 2}`), and otherwise it stays symbolic (`{x} == {y}`).
+  `Unequal` uses the same test.
 - `Equal` is `Orderless` for the equality test but preserves Mathematica's
   printed form.
-- An `Indeterminate` argument gives `False`, per IEEE 754 — see
-  [Indeterminate and IEEE unordered comparison](#indeterminate-and-ieee-unordered-comparison).
 
 **Attributes:** `Protected`.
 

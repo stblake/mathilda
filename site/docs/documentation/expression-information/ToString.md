@@ -44,12 +44,13 @@ Out[3]= "x^{2}+y^{3}"
 - `Protected`.
 - An unsupported form leaves the call unevaluated (e.g. `ToString[x, FooForm]` returns `ToString[x, FooForm]`), so a typo is visible at the call site rather than silently downgraded.
 - `TeXForm` renders the generated constant `C[k]` (from `DSolve`, `Reduce`, `Integrate`) as the subscripted `c_k`, matching Mathematica: `ToString[C[1], TeXForm]` is `"c_1"`, and `ToString[C[10], TeXForm]` is `"c_{10}"` (single-character subscripts bare, longer ones braced). The same holds for the notebook LaTeX renderer.
+- `TeXForm` sets the infix heads infix: `Rule` as `\to`, `RuleDelayed` as `:\to`, `Set` as `=`, `SetDelayed` as `:=`, `And`/`Or` as `\land`/`\lor`, the relations as `=`, `\neq`, `<`, `>`, `\leq`, `\geq`, `SameQ`/`UnsameQ` as `\equiv`/`\not\equiv`, `Not` as `\neg`, and a chained `Inequality` as the chain (`1<x<2`). `RuleDelayed` is deliberately distinguished from `Rule` — one glyph for both would make `a -> b` and `a :> b` indistinguishable once typeset, the same reason `SetDelayed` is `:=`. The notebook LaTeX renderer agrees, and additionally brackets a nested operator that binds looser than the one holding it (`(a || b) && c`, but not `a && b || c`).
 
 **Attributes:** `Protected`.
 
 ## References
 
-**See also:** [String](../../other-advanced/String/), [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/), [TeXForm](../../expression-information/TeXForm/), [DSolve](../../calculus/DSolve/), [Reduce](../../solutions-of-equations/Reduce/), [Integrate](../../calculus/Integrate/)
+**See also:** [String](../../other-advanced/String/), [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/), [TeXForm](../../expression-information/TeXForm/), [DSolve](../../calculus/DSolve/), [Reduce](../../solutions-of-equations/Reduce/), [Integrate](../../calculus/Integrate/), [Rule](../../assignment-and-rules/Rule/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

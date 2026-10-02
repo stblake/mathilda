@@ -7,16 +7,9 @@
 
 **`CompilePrint[cf] prints the bytecode of the CompiledFunction cf: its argument and result registers with their types, the scalar/array/tile register banks, and one line per instruction giving both the raw operands and a readable rendering. For an object whose body did not compile it reports the bail reason instead. Returns Null.`**
 
-## Examples (1)
+## Examples
 
-Every input below was run against the current Mathilda build and its output recorded.
-
-### Basic examples (1)
-
-```mathematica
-In[1]:= CompilePrint[Compile[{x}, Integrate[x, x]]] Signature   CompiledFunction[{x : Real}, Integrate[x, x]] Program     not compiled — every call runs the interpreter Reason      no machine lowering for this head at these argument types Bailed on   Integrate[x, x]
-Out[1]= 1/2 Bailed Null Program Reason Signature argument at call compiled every for head interpreter lowering machine no not on runs the these this types u2014 x^2 CompiledFunction[{Pattern[x, Real]}, 1/2 x^2]
-```
+_No verified examples yet for this function._
 
 ## Implementation notes
 

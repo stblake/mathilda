@@ -40,6 +40,7 @@ Out[2]= 1/p[y]
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
 - Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 - Tests: [`tests/test_dsolve_m58_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m58_stress.c)
-- Tests: [`tests/test_inactive.c`](https://github.com/stblake/mathilda/blob/main/tests/test_inactive.c)
+- Tests: [`tests/test_dsolve_m61_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m61_stress.c)

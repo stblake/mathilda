@@ -1,6 +1,6 @@
 # Other & Advanced
 
-104 built-in function(s) in this category.
+109 built-in function(s) in this category.
 
 - [`$AutoArrayPacking`]($AutoArrayPacking.md) — $AutoArrayPacking  _(Stable)_
 - [`$AutoCompilation`]($AutoCompilation.md) — $AutoCompilation  _(Stable)_
@@ -16,12 +16,14 @@
 - [`BesselJZero`](BesselJZero.md) — BesselJZero[n, k] gives the k-th positive zero of BesselJ[n, x]. Stays symbolic for symbolic arguments.  _(Stable)_
 - [`Black`](Black.md) — Black  _(Experimental)_
 - [`Blue`](Blue.md) — Blue  _(Experimental)_
+- [`BooleanQ`](BooleanQ.md) — BooleanQ[expr] gives True if expr is either True or False, and False otherwise. Unlike TrueQ it tests the symbol, so BooleanQ[False] is True.  _(Experimental)_
 - [`Brown`](Brown.md) — Brown  _(Experimental)_
-- [`Byte`](Byte.md) — Byte  _(Experimental)_
+- [`Byte`](Byte.md) — Byte  _(Stable)_
 - [`Character`](Character.md) — Character  _(Experimental)_
 - [`ChartLabels`](ChartLabels.md) — ChartLabels  _(Experimental)_
 - [`ChartStyle`](ChartStyle.md) — ChartStyle  _(Experimental)_
 - [`ClassifierFunction`](ClassifierFunction.md) — ClassifierFunction[method, parameters, featureCount, k] is the fitted classifier Classify returns. Apply it to a feature vector to get a class, or to a feature vector and "Probabilities" to get one rule per class.  _(Stable)_
+- [`CoefficientArrays`](CoefficientArrays.md) — CoefficientArrays[polys, vars] gives the coefficient arrays of the polynomial system polys in the variables vars, grouped by total degree: element d + 1 holds every degree-d coefficient, so {b, m} = CoefficientArrays[eqs, vars] is the constant vector and coefficient matrix of a linear system. A degree-d coefficient sits at the index tuple naming its variables in non-decreasing order, every other permutation being 0; a list of polynomials carries the equation index as the leading axis. CoefficientArrays[poly, vars] treats a non-List first argument as a single polynomial. Option Modulus -> p reduces the coefficients. The arrays are dense Lists rather than SparseArrays.  _(Experimental)_
 - [`ComplexQ`](ComplexQ.md) — ComplexQ[expr]  _(Experimental)_
 - [`ContourLabels`](ContourLabels.md) — ContourLabels  _(Experimental)_
 - [`ContourShading`](ContourShading.md) — ContourShading  _(Experimental)_
@@ -30,6 +32,8 @@
 - [`Cyan`](Cyan.md) — Cyan  _(Experimental)_
 - [`DataType`](DataType.md) — DataType[a]  _(Stable)_
 - [`DimensionReducerFunction`](DimensionReducerFunction.md) — DimensionReducerFunction[method, {means, loadings...}, featureCount, reducedDimension] is the reusable reducer DimensionReduction returns. Apply it to a feature vector, or to a matrix of them, to project into the reduced space.  _(Stable)_
+- [`EllipticE`](EllipticE.md) — EllipticE[m] is the complete elliptic integral of the second kind, Integrate[Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}], and EllipticE[phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticE[0] is Pi/2, EllipticE[1] is 1, and EllipticE[phi, 1] is Sin[phi].  _(Stable)_
+- [`EllipticPi`](EllipticPi.md) — EllipticPi[n, m] is the complete elliptic integral of the third kind, Integrate[1/((1 - n Sin[t]^2) Sqrt[1 - m Sin[t]^2]), {t, 0, Pi/2}], and EllipticPi[n, phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticPi[0, m] is EllipticK[m] and EllipticPi[0, phi, m] is EllipticF[phi, m]. For n > 1 the path crosses the pole at Sin[t]^2 == 1/n and the value is the Cauchy principal value.  _(Stable)_
 - [`EndOfFile`](EndOfFile.md) — EndOfFile  _(Experimental)_
 - [`ExactNumberQ`](ExactNumberQ.md) — ExactNumberQ[expr]  _(Experimental)_
 - [`Expression`](Expression.md) — Expression  _(Stable)_
@@ -96,6 +100,7 @@
 - [`String`](String.md) — String  _(Stable)_
 - [`StringExpression`](StringExpression.md) — StringExpression[p1, p2, ...] or p1 ~~ p2 ~~ ...  _(Stable)_
 - [`Subsets`](Subsets.md) — Subsets[list]  _(Stable)_
+- [`SymbolName`](SymbolName.md) — SymbolName[symbol] gives the name of symbol as a string, with any context prefix removed.  _(Experimental)_
 - [`TokenWords`](TokenWords.md) — TokenWords  _(Experimental)_
 - [`UniformDistribution`](UniformDistribution.md) — UniformDistribution[{lo, hi}] represents a continuous uniform distribution; UniformDistribution[] is uniform on {0, 1}.  _(Stable)_
 - [`VectorPoints`](VectorPoints.md) — VectorPoints  _(Experimental)_

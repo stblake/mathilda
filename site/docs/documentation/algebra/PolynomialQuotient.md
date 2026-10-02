@@ -90,10 +90,10 @@ returned through `out_Q`/`out_R` pointers.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 2.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_algebraicnumber.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumber.c)
 - Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
 - Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
 - Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
-- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
 
 ## Notes & additional examples
 

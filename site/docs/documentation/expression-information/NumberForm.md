@@ -66,3 +66,4 @@ The same nf_format_parts drives the measure pass, so alignment widths and the pr
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_numberform.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numberform.c)
+- Tests: [`tests/test_print.c`](https://github.com/stblake/mathilda/blob/main/tests/test_print.c)

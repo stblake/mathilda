@@ -1,6 +1,6 @@
 # Hypergraphs
 
-25 built-in function(s) in this category.
+26 built-in function(s) in this category.
 
 - [`ConnectedHypergraphQ`](ConnectedHypergraphQ.md) — ConnectedHypergraphQ[h] gives True if h has at least one vertex and is connected. h may be a plain List of hyperedges.  _(Stable)_
 - [`FindMinimumTransversal`](FindMinimumTransversal.md) — FindMinimumTransversal[h] gives a smallest set of vertices meeting every hyperedge of h (a minimum hitting set). Left unevaluated if some hyperedge is empty or the exact search exceeds its budget.  _(Stable)_
@@ -16,6 +16,7 @@
 - [`HypergraphEdgeAdd`](HypergraphEdgeAdd.md) — HypergraphEdgeAdd[h, e] appends the hyperedge e (a List); HypergraphEdgeAdd[h, {e1, ...}] appends several. New vertices are added.  _(Stable)_
 - [`HypergraphEdgeDelete`](HypergraphEdgeDelete.md) — HypergraphEdgeDelete[h, e] or [h, {e1, ...}] deletes every hyperedge identical (SameQ) to one given.  _(Stable)_
 - [`HypergraphLineGraph`](HypergraphLineGraph.md) — HypergraphLineGraph[h] gives the line graph of h: vertices 1..m, i<->j when hyperedges i and j intersect. HypergraphLineGraph[h, s] gives the s-line graph, joining hyperedges that share at least s vertices.  _(Stable)_
+- [`HypergraphPlot`](HypergraphPlot.md) — HypergraphPlot[h, opts] gives a Graphics object drawing the hypergraph h (or a list of hyperedges): vertices placed by the stress layout of the star expansion, each hyperedge of 3 or more vertices a translucent rounded hull in its own palette colour, one of 2 a stadium and one of 1 a circle around its vertex, vertex disks on top. Options: VertexLabels, VertexCoordinates, VertexStyle and GraphLayout as in GraphPlot; others pass through to Graphics.  _(Stable)_
 - [`HypergraphQ`](HypergraphQ.md) — HypergraphQ[h] gives True if h is a valid Hypergraph, and False otherwise.  _(Stable)_
 - [`HypergraphRank`](HypergraphRank.md) — HypergraphRank[h] gives the largest hyperedge arity of h (0 if h has no hyperedges).  _(Stable)_
 - [`HypergraphRestriction`](HypergraphRestriction.md) — HypergraphRestriction[h, {v1, ...}] intersects every hyperedge of h with the given vertices, dropping hyperedges that miss them (Berge's induced sub-hypergraph).  _(Stable)_

@@ -105,6 +105,7 @@ Out[17]= True
 - Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
 - Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_parallelmixedtower.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parallelmixedtower.c)
 
 ## Notes & additional examples
 

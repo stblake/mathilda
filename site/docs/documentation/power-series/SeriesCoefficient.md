@@ -12,7 +12,7 @@ gives the coefficient of (x - x0)^k in the power-series expansion of f about x =
 <details>
 <summary>Notes</summary>
 
-point, for any f that Series can expand. HoldAll, Protected.
+point, for any f that Series can expand. Protected; the expansion variable must evaluate to a symbol.
 
 </details>
 
@@ -77,7 +77,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
-- `HoldAll`, `Protected`.
+- `Protected` only; the arguments are evaluated and the expansion variable must be
+  a symbol (see `Series` above — the same `ivar` decline applies, under the head
+  `SeriesCoefficient`).
 - Computed by expanding with `Series` and extracting the `k`-th coefficient from
   the resulting `SeriesData`; general for any head `Series` can expand, with a
   concrete integer index `k` and a finite expansion point.
@@ -85,11 +87,11 @@ Against other systems, from the benchmark suite (same input, results cross-check
   expansions at Infinity) and non-integer indices are left unevaluated; the
   symbolic-index general term (a Piecewise) is not produced.
 
-**Attributes:** `HoldAll`, `Protected`.
+**Attributes:** `Protected`.
 
 ## References
 
-**See also:** [HoldAll](../../expression-information/HoldAll/), [Series](../../power-series/Series/), [SeriesData](../../power-series/SeriesData/)
+**See also:** [Series](../../power-series/Series/), [SeriesData](../../power-series/SeriesData/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/power-series.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/power-series.md)

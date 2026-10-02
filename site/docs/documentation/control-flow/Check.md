@@ -24,4 +24,7 @@ _No verified examples yet for this function._
 
 - Source: [`src/message.c`](https://github.com/stblake/mathilda/blob/main/src/message.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
-- Tests: [`tests/test_parallelmixedtower.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parallelmixedtower.c)
+- Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
+- Tests: [`tests/test_findmin.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin.c)
+- Tests: [`tests/test_findmin_cobyla.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_cobyla.c)
+- Tests: [`tests/test_findmin_slsqp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_slsqp.c)

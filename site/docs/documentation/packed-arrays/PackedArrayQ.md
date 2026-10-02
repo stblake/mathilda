@@ -39,3 +39,4 @@ Out[4]= False
 
 - Source: [`src/ndarray.c`](https://github.com/stblake/mathilda/blob/main/src/ndarray.c)
 - Specification: [`docs/spec/builtins/packed-arrays.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/packed-arrays.md)
+- Tests: [`tests/test_logexp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_logexp.c)

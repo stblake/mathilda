@@ -143,10 +143,10 @@ A two-argument `Expand[expr, patt]` only expands subexpressions that *contain* `
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (normal forms and the distributive expansion of polynomials).
 - Source: [`src/expand.c`](https://github.com/stblake/mathilda/blob/main/src/expand.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_algebraicnumber.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumber.c)
 - Tests: [`tests/test_bernoullib.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bernoullib.c)
 - Tests: [`tests/test_characteristicpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_characteristicpolynomial.c)
 - Tests: [`tests/test_coefficient_rules.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coefficient_rules.c)
-- Tests: [`tests/test_collect_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_collect_corpus.c)
 
 ## Notes & additional examples
 

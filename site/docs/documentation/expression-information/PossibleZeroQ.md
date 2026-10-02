@@ -161,7 +161,7 @@ See ZERO_RECOGNISE_PLAN.md for design notes and references.
 - Tests: [`tests/test_divisorsigma.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisorsigma.c)
 - Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 - Tests: [`tests/test_dsolve_m5_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m5_stress.c)
-- Tests: [`tests/test_dsolve_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_stress.c)
+- Tests: [`tests/test_dsolve_m62_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m62_stress.c)
 
 ## Notes & additional examples
 

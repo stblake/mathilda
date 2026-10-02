@@ -1,7 +1,7 @@
 # TeXForm
 
-!!! note "Status: Experimental"
-    present and registered, but lightly documented and not yet covered by dedicated tests.
+!!! success "Status: Stable"
+    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## Description
 
@@ -52,6 +52,7 @@ Out[6]= \sec(x)^{2}
 
 - Source: [`src/print.c`](https://github.com/stblake/mathilda/blob/main/src/print.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_print.c`](https://github.com/stblake/mathilda/blob/main/tests/test_print.c)
 
 ## Notes & additional examples
 

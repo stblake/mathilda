@@ -42,6 +42,7 @@ Out[4]= 2147483777
 - Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_primenu.c`](https://github.com/stblake/mathilda/blob/main/tests/test_primenu.c)
 
 ## Notes & additional examples
 

@@ -5,9 +5,9 @@
 
 ## Description
 
-**`FindMaximumFlow[g, s, t] gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow[g, s, t, "prop"] gives "FlowValue", "FlowMatrix" (dense n x n matrix of edge flows) or "EdgeList" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -> {c1, ...} option (EdgeList order; default 1, EdgeWeight is ignored); VertexCapacity -> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.`**
+**`FindMaximumFlow[g, s, t] gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow[g, s, t, "prop"] gives "FlowValue", "FlowMatrix" (dense n x n matrix of edge flows) or "EdgeList" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -> {c1, ...} option (EdgeList order), else from g's own EdgeCapacity, else 1; EdgeWeight is ignored; VertexCapacity -> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.`**
 
-## Examples (13)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -31,7 +31,7 @@ In[4]:= FindMaximumFlow[CycleGraph[4], 2, 2]
 Out[4]= 0
 ```
 
-### Options (9)
+### Options (10)
 
 ```mathematica
 In[5]:= FindMaximumFlow[Graph[{1->2,2->3,1->3}], 1, 3, EdgeCapacity -> {2, 3, 1}]
@@ -43,23 +43,26 @@ Out[6]= {{0, 2, 1}, {0, 0, 2}, {0, 0, 0}}
 In[7]:= FindMaximumFlow[Graph[{1->2,2->3,1->3}], 1, 3, EdgeCapacity -> {1/2, 3, 1}]
 Out[7]= 1.5
 
-In[8]:= FindMaximumFlow[Graph[{1,2,3},{1->2,2->3,1->3}, EdgeWeight->{5,5,5}], 1, 3]
-Out[8]= 2
+In[8]:= FindMaximumFlow[Graph[{1->2, 2->3, 1->3}, EdgeCapacity -> {2, 3, 4}], 1, 3]
+Out[8]= 6
 
-In[9]:= FindMaximumFlow[Graph[{1->2,2->3,1->3}], 1, 3, EdgeCapacity -> {Infinity, 3, 1}]
-Out[9]= 4
+In[9]:= FindMaximumFlow[Graph[{1,2,3},{1->2,2->3,1->3}, EdgeWeight->{5,5,5}], 1, 3]
+Out[9]= 2
 
-In[10]:= FindMaximumFlow[Graph[{1->2,2->3,1->3}], 1, 3, EdgeCapacity -> {-1, 3, 1}]
-Out[10]= FindMaximumFlow[Graph[<3 vertices, 3 edges>], 1, 3, EdgeCapacity -> {-1, 3, 1}]
+In[10]:= FindMaximumFlow[Graph[{1->2,2->3,1->3}], 1, 3, EdgeCapacity -> {Infinity, 3, 1}]
+Out[10]= 4
 
-In[11]:= FindMaximumFlow[PathGraph[{1, 2, 3}], 1, 3, EdgeCapacity -> {10, 10}, VertexCapacity -> {2, 10, 10}]
-Out[11]= 2
+In[11]:= FindMaximumFlow[Graph[{1->2,2->3,1->3}], 1, 3, EdgeCapacity -> {-1, 3, 1}]
+Out[11]= FindMaximumFlow[Graph[<3 vertices, 3 edges>], 1, 3, EdgeCapacity -> {-1, 3, 1}]
 
-In[12]:= FindMaximumFlow[CompleteGraph[4], {1, 2}, {3, 4}, VertexCapacity -> {3, 1, 1, 5}]
-Out[12]= 3
+In[12]:= FindMaximumFlow[PathGraph[{1, 2, 3}], 1, 3, EdgeCapacity -> {10, 10}, VertexCapacity -> {2, 10, 10}]
+Out[12]= 2
 
-In[13]:= FindMaximumFlow[PathGraph[{1, 2, 3}], 1, 3, VertexCapacity -> {1, 1/2, 1}]
-Out[13]= 0.5
+In[13]:= FindMaximumFlow[CompleteGraph[4], {1, 2}, {3, 4}, VertexCapacity -> {3, 1, 1, 5}]
+Out[13]= 3
+
+In[14]:= FindMaximumFlow[PathGraph[{1, 2, 3}], 1, 3, VertexCapacity -> {1, 1/2, 1}]
+Out[14]= 0.5
 ```
 
 ## Options & behaviour
@@ -94,9 +97,12 @@ Out[13]= 0.5
   undirected). Where every capacity on the source side is `Infinity`,
   Mathematica 15 answers `0`; Mathilda gives the true value (`Infinity`, or the
   finite bottleneck).
-- **Capacities ignore `EdgeWeight`**, exactly as Mathematica does; without
-  `EdgeCapacity` every edge has capacity 1. An undirected edge carries flow
-  either way.
+- **Capacities ignore `EdgeWeight`**, exactly as Mathematica does. With no
+  `EdgeCapacity` option (or `EdgeCapacity -> Automatic`) the capacities are the
+  graph's own `EdgeCapacity` when it was built with one
+  (`Graph[e, EdgeCapacity -> {...}]`), else 1 for every edge — Mathematica's
+  documented rule. An explicit option wins over the stored list. An undirected
+  edge carries flow either way.
 - Numbers (shared by the whole flow/cut family): integer capacities/weights give
   exact Integers; Rational or Real ones give a Real (as Mathematica); `Infinity`
   is an allowed capacity; a negative or symbolic one leaves the call
@@ -109,8 +115,9 @@ Out[13]= 0.5
 
 ## References
 
-**See also:** [EdgeList](../../graphs/EdgeList/), [VertexList](../../graphs/VertexList/), [EdgeWeight](../../graphs/EdgeWeight/)
+**See also:** [SparseArray](../../data-structures/SparseArray/), [EdgeList](../../graphs/EdgeList/), [VertexList](../../graphs/VertexList/), [EdgeWeight](../../graphs/EdgeWeight/)
 
 - Source: [`src/graph/galg_init.c`](https://github.com/stblake/mathilda/blob/main/src/graph/galg_init.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
+- Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
 - Tests: [`tests/test_graph_algos.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_algos.c)

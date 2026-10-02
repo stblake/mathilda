@@ -45,12 +45,14 @@ Out[5]= 3 < x < 1
 
 ## References
 
+**See also:** [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/)
+
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification: [`docs/spec/builtins/comparisons.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/comparisons.md)
+- Tests: [`tests/test_comparisons.c`](https://github.com/stblake/mathilda/blob/main/tests/test_comparisons.c)
 - Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
 - Tests: [`tests/test_expand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expand.c)
 - Tests: [`tests/test_facpoly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_facpoly.c)
-- Tests: [`tests/test_factor_baseline.c`](https://github.com/stblake/mathilda/blob/main/tests/test_factor_baseline.c)
 
 ## Notes & additional examples
 

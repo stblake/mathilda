@@ -219,7 +219,7 @@ non-summable inputs fall through to the held form. No creative-telescoping
 
 ## References
 
-**See also:** [Integrate](../../calculus/Integrate/), [HoldAll](../../expression-information/HoldAll/), [Compile](../../control-flow/Compile/), [Real](../../other-advanced/Real/), [Complex](../../arithmetic/Complex/), [Rational](../../arithmetic/Rational/), [Simplify](../../simplification/Simplify/), [Binomial](../../arithmetic/Binomial/)
+**See also:** [Integrate](../../calculus/Integrate/), [HoldAll](../../expression-information/HoldAll/), [Table](../../lists-and-iteration/Table/), [Pi](../../mathematical-constants/Pi/), [Product](../../calculus/Product/), [Compile](../../control-flow/Compile/), [Real](../../other-advanced/Real/), [Complex](../../arithmetic/Complex/)
 
 - Petkovšek, Wilf & Zeilberger, "A=B" (A K Peters, 1996).
 - Graham, Knuth & Patashnik, "Concrete Mathematics", 2nd ed. (Addison-Wesley, 1994), ch. 2 & 6.

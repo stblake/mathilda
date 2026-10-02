@@ -17,30 +17,40 @@ generates the list {n, n + 1, ..., m - 1, m}.
 
 uses step d.
 
-## Examples (6)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
+
+```mathematica
+In[1]:= Range[0, 2 Pi, Pi/2]
+Out[1]= {0, 1/2 Pi, Pi, 3/2 Pi, 2 Pi}
+
+In[2]:= Range[Pi]
+Out[2]= {1, 2, 3}
+```
 
 ### Applications (6)
 
 ```mathematica
-In[1]:= Range[5]
-Out[1]= {1, 2, 3, 4, 5}
+In[3]:= Range[5]
+Out[3]= {1, 2, 3, 4, 5}
 
-In[2]:= Range[2, 10, 2]
-Out[2]= {2, 4, 6, 8, 10}
+In[4]:= Range[2, 10, 2]
+Out[4]= {2, 4, 6, 8, 10}
 
-In[3]:= Range[0, 1, 1/4]
-Out[3]= {0, 1/4, 1/2, 3/4, 1}
+In[5]:= Range[0, 1, 1/4]
+Out[5]= {0, 1/4, 1/2, 3/4, 1}
 
-In[4]:= Range[10, 1, -1]
-Out[4]= {10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
+In[6]:= Range[10, 1, -1]
+Out[6]= {10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
 
-In[5]:= Map[#^2 &, Range[5]]
-Out[5]= {1, 4, 9, 16, 25}
+In[7]:= Map[#^2 &, Range[5]]
+Out[7]= {1, 4, 9, 16, 25}
 
-In[6]:= Total[Range[100]]
-Out[6]= 5050
+In[8]:= Total[Range[100]]
+Out[8]= 5050
 ```
 
 ## Performance
@@ -64,7 +74,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## References
 
-**See also:** [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
+**See also:** [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/), [Table](../../lists-and-iteration/Table/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

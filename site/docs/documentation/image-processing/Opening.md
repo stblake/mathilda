@@ -5,7 +5,7 @@
 
 ## Description
 
-**`Opening[image, r] erodes then dilates with the same element, removing bright features smaller than it while leaving larger ones close to their original size. IDEMPOTENT: Opening[Opening[f]] equals Opening[f], which is the defining property and the reason opening twice is not a sharpening loop.`**
+**`Opening[image, r] erodes then dilates with the same element, removing bright features smaller than it while leaving larger ones close to their original size. IDEMPOTENT: Opening[Opening[f]] equals Opening[f], which is the defining property and the reason opening twice is not a sharpening loop A "Bit" image stays "Bit"; other types give "Real".`**
 
 ## Examples (37)
 
@@ -132,6 +132,8 @@ Out[37]= -Image-
 **Attributes:** `Protected`.
 
 ## References
+
+**See also:** [Image3D](../../image-processing/Image3D/)
 
 - Source: [`src/imagefilter.c`](https://github.com/stblake/mathilda/blob/main/src/imagefilter.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)

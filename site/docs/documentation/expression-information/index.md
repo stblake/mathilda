@@ -59,7 +59,7 @@
 - [`SetAttributes`](SetAttributes.md) — SetAttributes[s, attr] sets the attributes for s.  _(Stable)_
 - [`StringQ`](StringQ.md) — StringQ[expr]  _(Stable)_
 - [`Symbol`](Symbol.md) — Symbol["name"]  _(Stable)_
-- [`TeXForm`](TeXForm.md) — TeXForm[expr]  _(Experimental)_
+- [`TeXForm`](TeXForm.md) — TeXForm[expr]  _(Stable)_
 - [`ToExpression`](ToExpression.md) — ToExpression[input]  _(Stable)_
 - [`ToString`](ToString.md) — ToString[expr]  _(Stable)_
 - [`Trace`](Trace.md) — Trace[expr]  _(Stable)_

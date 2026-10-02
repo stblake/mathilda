@@ -11,7 +11,7 @@ searches for a local maximum of f starting from x = x0.
 
 **`FindMaximum[f, {x, x0, x1}]`**
 
-derivative-free 1D search bracketing the maximum from two starts (Brent on -f).
+derivative-free 1D search (Brent on -f) using x0 and x1 as the first two values of x; not bounds.
 
 **`FindMaximum[f, {x, xstart, xmin, xmax}]`**
 
@@ -104,7 +104,7 @@ is precision-aware (`mpfr_neg` for `EXPR_MPFR` results, plain real otherwise).
 
 ## References
 
-**See also:** [FindMinimum](../../numerical-calculus/FindMinimum/), [Block](../../scoping-constructs/Block/), [NMinimize](../../numerical-calculus/NMinimize/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [Compile](../../control-flow/Compile/)
+**See also:** [FindMinimum](../../numerical-calculus/FindMinimum/), [Block](../../scoping-constructs/Block/), [NMinimize](../../numerical-calculus/NMinimize/), [HoldAll](../../expression-information/HoldAll/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [Pi](../../mathematical-constants/Pi/), [Quiet](../../control-flow/Quiet/)
 
 - J. Nocedal, S. J. Wright, *Numerical Optimization*, 2nd ed. (Springer, 2006).
 - Source: [`src/numerical_calculus/findmin.c`](https://github.com/stblake/mathilda/blob/main/src/numerical_calculus/findmin.c)

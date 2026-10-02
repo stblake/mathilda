@@ -5,7 +5,7 @@
 
 ## Description
 
-**`ImageType[image] gives the pixel type as "Bit", "Byte" or "Real". The type fixes the range of a stored value, which is what makes ImageData's scaling to the unit interval well defined.`**
+**`ImageType[image] gives the pixel type as "Bit", "Byte", "Bit16" or "Real". The type fixes the range of a stored value, which is what makes ImageData's scaling to the unit interval well defined.`**
 
 ## Examples (34)
 

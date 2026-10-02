@@ -5,7 +5,7 @@
 
 ## Description
 
-**`Closing[image, r] dilates then erodes with the same element, filling dark features smaller than it. Idempotent, like Opening, and the two bracket the image: Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere.`**
+**`Closing[image, r] dilates then erodes with the same element, filling dark features smaller than it. Idempotent, like Opening, and the two bracket the image: Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere A "Bit" image stays "Bit"; other types give "Real".`**
 
 ## Examples (38)
 
@@ -135,6 +135,8 @@ Out[38]= -Image-
 **Attributes:** `Protected`.
 
 ## References
+
+**See also:** [Image3D](../../image-processing/Image3D/)
 
 - Source: [`src/imagefilter.c`](https://github.com/stblake/mathilda/blob/main/src/imagefilter.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)

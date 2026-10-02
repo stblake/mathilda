@@ -44,7 +44,7 @@ Out[3]= True
 - Tests: [`tests/test_comparisons.c`](https://github.com/stblake/mathilda/blob/main/tests/test_comparisons.c)
 - Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 - Tests: [`tests/test_hermitian_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hermitian_matrix_q.c)
-- Tests: [`tests/test_symmetric_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_symmetric_matrix_q.c)
+- Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
 
 ## Notes & additional examples
 

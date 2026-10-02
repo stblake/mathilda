@@ -51,7 +51,7 @@ Memory (SPEC section 4): returns a freshly-allocated matrix; frees res.
 
 ## References
 
-**See also:** [EdgeWeight](../../graphs/EdgeWeight/)
+**See also:** [EdgeWeight](../../graphs/EdgeWeight/), [SparseArray](../../data-structures/SparseArray/)
 
 - Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)

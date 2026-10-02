@@ -47,6 +47,8 @@ Out[5]= {1, 1/2, "a", x}
 
 ## References
 
+**See also:** [FullForm](../../expression-information/FullForm/), [TeXForm](../../expression-information/TeXForm/), [NumberForm](../../expression-information/NumberForm/), [HoldForm](../../expression-information/HoldForm/)
+
 - Source: [`src/print.c`](https://github.com/stblake/mathilda/blob/main/src/print.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)

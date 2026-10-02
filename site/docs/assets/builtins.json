@@ -792,6 +792,14 @@
     "url": "documentation/control-flow/Boole/"
   },
   {
+    "name": "BooleanQ",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "BooleanQ[expr] gives True if expr is either True or False, and False otherwise. Unlike TrueQ it tests the symbol, so BooleanQ[False] is True.",
+    "url": "documentation/other-advanced/BooleanQ/"
+  },
+  {
     "name": "BoxMatrix",
     "category": "Image Processing",
     "slug": "image-processing",
@@ -819,7 +827,7 @@
     "name": "Byte",
     "category": "Other & Advanced",
     "slug": "other-advanced",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "Byte",
     "url": "documentation/other-advanced/Byte/"
   },
@@ -1044,7 +1052,7 @@
     "category": "Image Processing",
     "slug": "image-processing",
     "status": "Stable",
-    "summary": "Closing[image, r] dilates then erodes with the same element, filling dark features smaller than it. Idempotent, like Opening, and the two bracket the image: Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere.",
+    "summary": "Closing[image, r] dilates then erodes with the same element, filling dark features smaller than it. Idempotent, like Opening, and the two bracket the image: Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere A \"Bit\" image stays \"Bit\"; other types give \"Real\".",
     "url": "documentation/image-processing/Closing/"
   },
   {
@@ -1054,6 +1062,14 @@
     "status": "Stable",
     "summary": "Coefficient[expr, form]",
     "url": "documentation/algebra/Coefficient/"
+  },
+  {
+    "name": "CoefficientArrays",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "CoefficientArrays[polys, vars] gives the coefficient arrays of the polynomial system polys in the variables vars, grouped by total degree: element d + 1 holds every degree-d coefficient, so {b, m} = CoefficientArrays[eqs, vars] is the constant vector and coefficient matrix of a linear system. A degree-d coefficient sits at the index tuple naming its variables in non-decreasing order, every other permutation being 0; a list of polynomials carries the equation index as the leading axis. CoefficientArrays[poly, vars] treats a non-List first argument as a single polynomial. Option Modulus -> p reduces the coefficients. The arrays are dense Lists rather than SparseArrays.",
+    "url": "documentation/other-advanced/CoefficientArrays/"
   },
   {
     "name": "CoefficientList",
@@ -1260,7 +1276,7 @@
     "category": "Graphs",
     "slug": "graphs",
     "status": "Stable",
-    "summary": "ConnectedComponents[g] gives the connected components of g (weak, on the underlying undirected graph).",
+    "summary": "ConnectedComponents[g] gives the connected components of g: the strongly connected components when g has directed edges (listed with no edge from a component to a later one), else the components, largest first. ConnectedComponents[g, {v1, ...}] keeps only those containing some vi.",
     "url": "documentation/graphs/ConnectedComponents/"
   },
   {
@@ -1268,7 +1284,7 @@
     "category": "Graphs",
     "slug": "graphs",
     "status": "Stable",
-    "summary": "ConnectedGraphQ[g] gives True if g is connected.",
+    "summary": "ConnectedGraphQ[g] gives True if g is connected (strongly connected when g has directed edges).",
     "url": "documentation/graphs/ConnectedGraphQ/"
   },
   {
@@ -1560,6 +1576,14 @@
     "url": "documentation/other-advanced/DataType/"
   },
   {
+    "name": "DateList",
+    "category": "Time and Date",
+    "slug": "time-and-date",
+    "status": "Stable",
+    "summary": "DateList[]",
+    "url": "documentation/time-and-date/DateList/"
+  },
+  {
     "name": "Decompose",
     "category": "Algebra",
     "slug": "algebra",
@@ -1748,7 +1772,7 @@
     "category": "Image Processing",
     "slug": "image-processing",
     "status": "Stable",
-    "summary": "Dilation[image, r] gives the maximum over a (2r+1) x (2r+1) square neighbourhood; Dilation[image, elem] uses the SUPPORT of the matrix elem -- its nonzero positions -- as the neighbourhood. This is flat morphology: the element's values do not enter the maximum, which is what keeps Dilation[img, BoxMatrix[1]] and Dilation[img, 1] the same operation. Padding replicates the border, the same rule the convolutions use, which is what makes Dilation >= image hold at the edges too. A full rectangle is separable for the maximum exactly as for a sum, so it costs kw + kh comparisons rather than kw * kh.",
+    "summary": "Dilation[image, r] gives the maximum over a (2r+1) x (2r+1) square neighbourhood; Dilation[image, elem] uses the SUPPORT of the matrix elem -- its nonzero positions -- as the neighbourhood. This is flat morphology: the element's values do not enter the maximum, which is what keeps Dilation[img, BoxMatrix[1]] and Dilation[img, 1] the same operation. Padding replicates the border, the same rule the convolutions use, which is what makes Dilation >= image hold at the edges too. A full rectangle is separable for the maximum exactly as for a sum, so it costs kw + kh comparisons rather than kw * kh. A \"Bit\" image gives a \"Bit\" image; other types give \"Real\".",
     "url": "documentation/image-processing/Dilation/"
   },
   {
@@ -2088,6 +2112,38 @@
     "url": "documentation/solutions-of-equations/Eliminate/"
   },
   {
+    "name": "EllipticE",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "EllipticE[m] is the complete elliptic integral of the second kind, Integrate[Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}], and EllipticE[phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticE[0] is Pi/2, EllipticE[1] is 1, and EllipticE[phi, 1] is Sin[phi].",
+    "url": "documentation/other-advanced/EllipticE/"
+  },
+  {
+    "name": "EllipticF",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "EllipticF[phi, m] is the incomplete elliptic integral of the first kind, Integrate[1/Sqrt[1 - m Sin[t]^2], {t, 0, phi}]. The second argument is the PARAMETER m = k^2, not the modulus k. EllipticF[phi, 0] is phi and EllipticF[Pi/2, m] is EllipticK[m]; phi may be complex and of any size (the quasi-period is applied).",
+    "url": "documentation/special-functions/EllipticF/"
+  },
+  {
+    "name": "EllipticK",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "EllipticK[m] is the complete elliptic integral of the first kind, Integrate[1/Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}]. The argument is the PARAMETER m = k^2, not the modulus k. EllipticK[0] is Pi/2 and EllipticK[1] is ComplexInfinity; exact arguments otherwise stay symbolic and inexact ones evaluate numerically at their precision.",
+    "url": "documentation/special-functions/EllipticK/"
+  },
+  {
+    "name": "EllipticPi",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "EllipticPi[n, m] is the complete elliptic integral of the third kind, Integrate[1/((1 - n Sin[t]^2) Sqrt[1 - m Sin[t]^2]), {t, 0, Pi/2}], and EllipticPi[n, phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticPi[0, m] is EllipticK[m] and EllipticPi[0, phi, m] is EllipticF[phi, m]. For n > 1 the path crosses the pole at Sin[t]^2 == 1/n and the value is the Cauchy principal value.",
+    "url": "documentation/other-advanced/EllipticPi/"
+  },
+  {
     "name": "EmptyGraphQ",
     "category": "Graphs",
     "slug": "graphs",
@@ -2164,7 +2220,7 @@
     "category": "Image Processing",
     "slug": "image-processing",
     "status": "Stable",
-    "summary": "Erosion[image, r] gives the minimum over a (2r+1) x (2r+1) square neighbourhood; Erosion[image, elem] uses the support of elem. Dual to Dilation: for a symmetric element, Erosion[f, k] equals 1 - Dilation[1 - f, k] exactly, which holds at the border only because the replicate padding is itself self-dual.",
+    "summary": "Erosion[image, r] gives the minimum over a (2r+1) x (2r+1) square neighbourhood; Erosion[image, elem] uses the support of elem. Dual to Dilation: for a symmetric element, Erosion[f, k] equals 1 - Dilation[1 - f, k] exactly, which holds at the border only because the replicate padding is itself self-dual A \"Bit\" image stays \"Bit\"; other types give \"Real\".",
     "url": "documentation/image-processing/Erosion/"
   },
   {
@@ -2592,6 +2648,14 @@
     "url": "documentation/file-io/FilePrint/"
   },
   {
+    "name": "FileSize",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "FileSize[\"name\"]",
+    "url": "documentation/file-io/FileSize/"
+  },
+  {
     "name": "FindClique",
     "category": "Graphs",
     "slug": "graphs",
@@ -2716,7 +2780,7 @@
     "category": "Graphs",
     "slug": "graphs",
     "status": "Stable",
-    "summary": "FindMaximumFlow[g, s, t] gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow[g, s, t, \"prop\"] gives \"FlowValue\", \"FlowMatrix\" (dense n x n matrix of edge flows) or \"EdgeList\" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -> {c1, ...} option (EdgeList order; default 1, EdgeWeight is ignored); VertexCapacity -> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.",
+    "summary": "FindMaximumFlow[g, s, t] gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow[g, s, t, \"prop\"] gives \"FlowValue\", \"FlowMatrix\" (dense n x n matrix of edge flows) or \"EdgeList\" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -> {c1, ...} option (EdgeList order), else from g's own EdgeCapacity, else 1; EdgeWeight is ignored; VertexCapacity -> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.",
     "url": "documentation/graphs/FindMaximumFlow/"
   },
   {
@@ -2772,7 +2836,7 @@
     "category": "Graphs",
     "slug": "graphs",
     "status": "Stable",
-    "summary": "FindSpanningTree[g] gives a spanning tree (forest) of g as a graph.",
+    "summary": "FindSpanningTree[g] gives a spanning tree (forest) of g as a graph: a minimum spanning tree when g has EdgeWeight (an arborescence for a directed graph), else a breadth-first one. FindSpanningTree[{g, v}] gives the tree grown from vertex v.",
     "url": "documentation/graphs/FindSpanningTree/"
   },
   {
@@ -3188,7 +3252,7 @@
     "category": "Graphs",
     "slug": "graphs",
     "status": "Stable",
-    "summary": "Graph[v, e] represents a graph with vertices v and edges e. Graph[e] derives the vertices from the edge list. Edges are DirectedEdge[u,v] or UndirectedEdge[u,v]; u->v and u<->v are accepted as shorthand. Simple graphs only: no self-loops or parallel edges.",
+    "summary": "Graph[v, e] represents a graph with vertices v and edges e. Graph[e] derives the vertices from the edge list. Edges are DirectedEdge[u,v] or UndirectedEdge[u,v]; u->v and u<->v are accepted as shorthand. Graph[e, opts] and Graph[v, e, opts] attach per-edge lists, matched to e by position: EdgeWeight -> {w1, ...} and EdgeCapacity -> {c1, ...}. Simple graphs only: no self-loops or parallel edges.",
     "url": "documentation/graphs/Graph/"
   },
   {
@@ -3284,7 +3348,7 @@
     "category": "Graphs",
     "slug": "graphs",
     "status": "Stable",
-    "summary": "GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout. Vertex labels are off by default; pass VertexLabels -> True to draw them (in black).",
+    "summary": "GraphPlot[g, opts] gives a Graphics object drawing the graph g (or a list of rules {u -> v, ...}). The default layout is deterministic: tidy layered trees for branching forests, layered drawings for DAGs, stress majorization otherwise, with components packed side by side. Options: GraphLayout -> \"StressEmbedding\" | \"SpringElectricalEmbedding\" | \"CircularEmbedding\" | \"LayeredEmbedding\" | \"BipartiteEmbedding\" | \"GridEmbedding\"; VertexCoordinates -> {{x,y}, ...} or {v -> {x,y}, ...}; VertexLabels -> None | \"Name\" | Automatic | {v -> lbl, ...}; GraphHighlight -> {v, e, ...} (red, thicker); VertexStyle and EdgeStyle -> a colour or {item -> colour, ...}; EdgeLabels -> \"EdgeWeight\" | {e -> lbl}; VertexSize -> d (diameter in edge lengths). Directed edges get arrowheads that stop at the target vertex. Other options (ImageSize, PlotLabel, ...) pass through to Graphics.",
     "url": "documentation/graphs/GraphPlot/"
   },
   {
@@ -3696,6 +3760,14 @@
     "url": "documentation/hypergraphs/HypergraphLineGraph/"
   },
   {
+    "name": "HypergraphPlot",
+    "category": "Hypergraphs",
+    "slug": "hypergraphs",
+    "status": "Stable",
+    "summary": "HypergraphPlot[h, opts] gives a Graphics object drawing the hypergraph h (or a list of hyperedges): vertices placed by the stress layout of the star expansion, each hyperedge of 3 or more vertices a translucent rounded hull in its own palette colour, one of 2 a stadium and one of 1 a circle around its vertex, vertex disks on top. Options: VertexLabels, VertexCoordinates, VertexStyle and GraphLayout as in GraphPlot; others pass through to Graphics.",
+    "url": "documentation/hypergraphs/HypergraphPlot/"
+  },
+  {
     "name": "HypergraphQ",
     "category": "Hypergraphs",
     "slug": "hypergraphs",
@@ -3796,7 +3868,7 @@
     "category": "Image Processing",
     "slug": "image-processing",
     "status": "Stable",
-    "summary": "Image[data] is a raster image, normalising to the canonical Image[data, type]. The data is a rectangular height x width array of pixel values, or height x width x channels for a colour image, so it is indexed data[[y, x]] with rows running down the image -- note that ImageDimensions reports {width, height}, transposed relative to this. The type is inferred from the values: all-integer data in {0, 1} is \"Bit\", all-integer in 0..255 is \"Byte\", anything else is \"Real\". Image[data, type] states the type instead, and declines if the data does not fit it. Ragged data declines rather than being padded.",
+    "summary": "Image[data] is a raster image, normalising to the canonical Image[data, type]. The data is a rectangular height x width array of pixel values, or height x width x channels for a colour image, so it is indexed data[[y, x]] with rows running down the image -- note that ImageDimensions reports {width, height}, transposed relative to this. The type is inferred from the values: all-integer data in {0, 1} is \"Bit\", all-integer in 0..255 is \"Byte\", anything else is \"Real\". Image[data, type] states the type instead -- \"Bit\" (0 or 1), \"Byte\" (0..255), \"Bit16\" (0..65535) or \"Real\" (\"Real32\" and \"Real64\" are accepted as synonyms) -- and, as in Mathematica, COERCES the data to it: an integer type rounds each value to the nearest integer and clips it to the type's range, so Image[{{0, 300}}, \"Byte\"] stores {0, 255}; \"Real\" keeps any real value. Image[image, type] converts an image between types, preserving brightness. Data that is not a rectangular array of real numbers (ragged, non-numeric or complex) is left unevaluated.",
     "url": "documentation/image-processing/Image/"
   },
   {
@@ -3868,7 +3940,7 @@
     "category": "Image Processing",
     "slug": "image-processing",
     "status": "Stable",
-    "summary": "ImageCorrelate[image, kernel] correlates image with kernel: the kernel is NOT reflected, which is the only difference from ImageConvolve. The two are related exactly -- correlation equals convolution with the kernel reversed on both axes -- and they agree on any symmetric kernel, so the distinction only shows on an asymmetric one, where a delta with {{1,2,3}} gives {3,2,1} here and {1,2,3} convolved. ImageCorrelate[image, template, \"NormalizedCrossCorrelation\"] is template matching: it subtracts the local mean and divides by the local standard deviation, so it measures SHAPE and is invariant to brightness offset and contrast scale. Plain correlation is maximised by brightness rather than similarity -- a white patch beats a correct but darker match -- which is why raw correlation is a poor matcher. Where the template is a crop of the image the score is exactly 1 and is the global maximum. A flat window has no shape to compare and scores 0 rather than dividing by zero; scoring 1 would make every flat region match everything. Colour is reduced to luminance first for the NCC form.",
+    "summary": "ImageCorrelate[image, kernel] correlates image with kernel: the kernel is NOT reflected, which is the only difference from ImageConvolve. The two are related exactly -- correlation equals convolution with the kernel reversed on both axes -- and they agree on any symmetric kernel, so the distinction only shows on an asymmetric one, where a delta with {{1,2,3}} gives {3,2,1} here and {1,2,3} convolved. The kernel may also be a single-channel Image, whose unit-scale pixels are used as the matrix. ImageCorrelate[image, template, \"NormalizedCrossCorrelation\"] is template matching: it subtracts the local mean and divides by the local standard deviation, so it measures SHAPE and is invariant to brightness offset and contrast scale. Plain correlation is maximised by brightness rather than similarity -- a white patch beats a correct but darker match -- which is why raw correlation is a poor matcher. Where the template is a crop of the image the score is exactly 1 and is the global maximum. A flat window has no shape to compare and scores 0 rather than dividing by zero; scoring 1 would make every flat region match everything. Colour is reduced to luminance first for the NCC form.",
     "url": "documentation/image-processing/ImageCorrelate/"
   },
   {
@@ -3940,7 +4012,7 @@
     "category": "Image Processing",
     "slug": "image-processing",
     "status": "Stable",
-    "summary": "ImageRotate[image] rotates a quarter turn counterclockwise; ImageRotate[image, angle] rotates by angle in radians (use n Degree for degrees). A multiple of a right angle takes an EXACT index-permutation path -- every pixel lands on another pixel's position, nothing is interpolated, and four quarter turns are exactly the identity. An odd number of quarter turns swaps the dimensions. Any other angle interpolates bilinearly, sampling the source per destination pixel (inverse mapping, so every output is filled exactly once; forward mapping leaves holes wherever the rotation stretches). Area rotated in from outside reads as 0 rather than the replicated edge, because that area was never photographed and smearing the border across it would invent content.",
+    "summary": "ImageRotate[image] rotates a quarter turn counterclockwise; ImageRotate[image, angle] rotates by angle in radians counterclockwise (use n Degree for degrees; a negative angle turns clockwise); ImageRotate[image, side] turns the top of the image to face side (Left, Right, Top or Bottom) and ImageRotate[image, side1 -> side2] turns side1 onto side2. A multiple of a right angle takes an EXACT index-permutation path -- every pixel lands on another pixel's position, nothing is interpolated, and four quarter turns are exactly the identity. An odd number of quarter turns swaps the dimensions. Any other angle interpolates bilinearly, sampling the source per destination pixel (inverse mapping, so every output is filled exactly once; forward mapping leaves holes wherever the rotation stretches). Area rotated in from outside reads as 0 rather than the replicated edge, because that area was never photographed and smearing the border across it would invent content. Unlike Mathematica, a free angle keeps the input's dimensions (Mathematica's size Full) rather than enlarging to enclose the rotated image.",
     "url": "documentation/image-processing/ImageRotate/"
   },
   {
@@ -3956,7 +4028,7 @@
     "category": "Image Processing",
     "slug": "image-processing",
     "status": "Stable",
-    "summary": "ImageType[image] gives the pixel type as \"Bit\", \"Byte\" or \"Real\". The type fixes the range of a stored value, which is what makes ImageData's scaling to the unit interval well defined.",
+    "summary": "ImageType[image] gives the pixel type as \"Bit\", \"Byte\", \"Bit16\" or \"Real\". The type fixes the range of a stored value, which is what makes ImageData's scaling to the unit interval well defined.",
     "url": "documentation/image-processing/ImageType/"
   },
   {
@@ -4840,6 +4912,22 @@
     "url": "documentation/elementary-functions/Log/"
   },
   {
+    "name": "Log10",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
+    "status": "Stable",
+    "summary": "Log10[z]",
+    "url": "documentation/elementary-functions/Log10/"
+  },
+  {
+    "name": "Log2",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
+    "status": "Stable",
+    "summary": "Log2[z]",
+    "url": "documentation/elementary-functions/Log2/"
+  },
+  {
     "name": "LogGamma",
     "category": "Special Functions",
     "slug": "special-functions",
@@ -5676,7 +5764,7 @@
     "category": "Image Processing",
     "slug": "image-processing",
     "status": "Stable",
-    "summary": "Opening[image, r] erodes then dilates with the same element, removing bright features smaller than it while leaving larger ones close to their original size. IDEMPOTENT: Opening[Opening[f]] equals Opening[f], which is the defining property and the reason opening twice is not a sharpening loop.",
+    "summary": "Opening[image, r] erodes then dilates with the same element, removing bright features smaller than it while leaving larger ones close to their original size. IDEMPOTENT: Opening[Opening[f]] equals Opening[f], which is the defining property and the reason opening twice is not a sharpening loop A \"Bit\" image stays \"Bit\"; other types give \"Real\".",
     "url": "documentation/image-processing/Opening/"
   },
   {
@@ -7320,6 +7408,14 @@
     "url": "documentation/structural-manipulation/Span/"
   },
   {
+    "name": "SparseArray",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "SparseArray[{pos1 -> v1, ...}], SparseArray[rules, dims], SparseArray[rules, dims, default]",
+    "url": "documentation/data-structures/SparseArray/"
+  },
+  {
     "name": "Splice",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -7660,7 +7756,7 @@
     "category": "Graphs",
     "slug": "graphs",
     "status": "Stable",
-    "summary": "StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions).",
+    "summary": "StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions), in the same order as ConnectedComponents on a directed graph.",
     "url": "documentation/graphs/StronglyConnectedComponents/"
   },
   {
@@ -7768,6 +7864,14 @@
     "url": "documentation/expression-information/Symbol/"
   },
   {
+    "name": "SymbolName",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "SymbolName[symbol] gives the name of symbol as a string, with any context prefix removed.",
+    "url": "documentation/other-advanced/SymbolName/"
+  },
+  {
     "name": "SymmetricMatrixQ",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -7859,7 +7963,7 @@
     "name": "TeXForm",
     "category": "Expression Information",
     "slug": "expression-information",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "TeXForm[expr]",
     "url": "documentation/expression-information/TeXForm/"
   },
@@ -8216,6 +8320,14 @@
     "url": "documentation/lists-and-iteration/UnitVector/"
   },
   {
+    "name": "UnixTime",
+    "category": "Time and Date",
+    "slug": "time-and-date",
+    "status": "Stable",
+    "summary": "UnixTime[]",
+    "url": "documentation/time-and-date/UnixTime/"
+  },
+  {
     "name": "Unprotect",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -8460,7 +8572,7 @@
     "category": "Graphs",
     "slug": "graphs",
     "status": "Stable",
-    "summary": "WeaklyConnectedComponents[g] gives the weakly connected components of g.",
+    "summary": "WeaklyConnectedComponents[g] gives the weakly connected components of g (edge directions ignored), largest first. WeaklyConnectedComponents[g, {v1, ...}] keeps only those containing some vi.",
     "url": "documentation/graphs/WeaklyConnectedComponents/"
   },
   {

@@ -34,11 +34,11 @@ Out[5]= 2
 
 connectivity.c - ConnectedGraphQ[g] and VertexConnectivity[g].
 
-Both operate on the underlying undirected graph.
-
 ```text
   ConnectedGraphQ[g]    True iff g has >= 1 vertex and forms a single
-                        connected component.
+                        connected component: strongly connected when g has
+                        a directed edge (Mathematica's rule), connected
+                        otherwise.
   VertexConnectivity[g] the least number of vertices whose removal
                         disconnects g (n-1 for a complete graph, 0 if already
                         disconnected or trivial). Computed by brute-force

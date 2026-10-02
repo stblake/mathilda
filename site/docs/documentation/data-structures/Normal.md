@@ -7,7 +7,7 @@
 
 **`Normal[expr]`**
 
-converts expr to a normal expression. If expr is a SeriesData object, the O-term is dropped and the truncated polynomial (or Laurent/Puiseux sum) is returned. Other expressions pass through unchanged.
+converts expr to a normal expression. If expr is a SeriesData object, the O-term is dropped and the truncated polynomial (or Laurent/Puiseux sum) is returned. Normal\[SparseArray\[...\]\] gives the dense nested List the sparse specification denotes, Normal\[assoc\] its list of rules and Normal\[ndarray\] its nested List. Other expressions pass through unchanged.
 
 ## Examples (6)
 

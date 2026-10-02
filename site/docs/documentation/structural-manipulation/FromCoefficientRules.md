@@ -27,37 +27,6 @@ In[1]:= FromCoefficientRules[{{2, 0} -> a, {1, 1} -> b, {0, 2} -> c}, {x, y}]
 Out[1]= a x^2 + b x y + c y^2
 ```
 
-## Algorithm
-
-monomials.c — MonomialList, CoefficientRules, FromCoefficientRules
-
-A sparse {exponent-vector -> coefficient} view of a multivariate polynomial, plus the list of its monomials and the inverse reconstruction. All three heads share one core:
-
-```text
-  1. resolve the variable list (explicit, `All`, or default Variables[poly]);
-  2. reduce coefficients modulo an optional `Modulus -> m`;
-  3. Expand and split into additive terms;
-  4. decompose each term into (integer exponent vector, coefficient) w.r.t.
-     the variables;
-  5. merge like monomials and drop zero coefficients;
-  6. sort by a monomial order (six named orders + explicit weight matrix).
-```
-
-MonomialList and CoefficientRules differ only in how each (expvec, coeff) term is rendered. FromCoefficientRules is the inverse of CoefficientRules.
-
-Every named order is a special case of "descending lexicographic order of the weighted exponent vectors w.v" (Wolfram's own model), so a single weight matrix drives one comparator. For k variables (e_i = i-th unit row, deg = all-ones row), greatest monomial first:
-
-```text
-  Lexicographic                    e_0, e_1, ..., e_{k-1}          (default)
-  NegativeLexicographic           -e_0, ..., -e_{k-1}   (= Sort, ascending)
-  DegreeLexicographic              deg, e_0, ..., e_{k-2}
-  DegreeReverseLexicographic       deg, -e_{k-1}, ..., -e_1
-  NegativeDegreeLexicographic     -deg, e_0, ..., e_{k-2}
-  NegativeDegreeReverseLexicographic  -deg, -e_{k-1}, ..., -e_1
-```
-
-These reproduce Wolfram's explicit-matrix spellings exactly (e.g. DegreeLexicographic on {x,y} is {{1,1},{1,0}}; DegreeReverseLexicographic on {x,y,z} is {{1,1,1},{0,0,-1},{0,-1,0}}).
-
 ## Implementation notes
 
 - `Protected`.

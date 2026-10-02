@@ -200,6 +200,7 @@ fails to converge.
 - Source: [`src/numerical_roots/findroot.c`](https://github.com/stblake/mathilda/blob/main/src/numerical_roots/findroot.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_findmin.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin.c)
 - Tests: [`tests/test_findroot.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findroot.c)
 
 ## Notes & additional examples

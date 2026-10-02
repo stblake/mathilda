@@ -1,7 +1,7 @@
 # Byte
 
-!!! note "Status: Experimental"
-    present and registered, but lightly documented and not yet covered by dedicated tests.
+!!! success "Status: Stable"
+    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## Description
 

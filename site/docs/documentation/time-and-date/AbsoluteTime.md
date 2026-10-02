@@ -49,6 +49,8 @@ Out[1]= 3.98985e+09
 
 ## References
 
+**See also:** [DateList](../../time-and-date/DateList/)
+
 - Source: [`src/datetime.c`](https://github.com/stblake/mathilda/blob/main/src/datetime.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)
 - Tests: [`tests/test_datetime.c`](https://github.com/stblake/mathilda/blob/main/tests/test_datetime.c)

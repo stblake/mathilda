@@ -13,40 +13,46 @@ generates a list of n copies of expr.
 
 generates a list of the values of expr with i running from 1 to imax.
 
-## Examples (8)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (1)
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Table[i^2, {i, 4}]
 Out[1]= {1, 4, 9, 16}
+
+In[2]:= Table[x, {x, 0, Pi, 0.5}]
+Out[2]= {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0}
+
+In[3]:= Table[x, {x, 0, 2 Pi, Pi/2}]
+Out[3]= {0, 1/2 Pi, Pi, 3/2 Pi, 2 Pi}
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[2]:= Table[i^2, {i, 1, 5}]
-Out[2]= {1, 4, 9, 16, 25}
+In[4]:= Table[i^2, {i, 1, 5}]
+Out[4]= {1, 4, 9, 16, 25}
 
-In[3]:= Table[i + j, {i, 1, 2}, {j, 1, 3}]
-Out[3]= {{2, 3, 4}, {3, 4, 5}}
+In[5]:= Table[i + j, {i, 1, 2}, {j, 1, 3}]
+Out[5]= {{2, 3, 4}, {3, 4, 5}}
 
-In[4]:= Table[x, 4]
-Out[4]= {x, x, x, x}
+In[6]:= Table[x, 4]
+Out[6]= {x, x, x, x}
 
-In[5]:= Table[i, {i, 0, 1, 1/2}]
-Out[5]= {0, 1/2, 1}
+In[7]:= Table[i, {i, 0, 1, 1/2}]
+Out[7]= {0, 1/2, 1}
 
-In[6]:= Table[Fibonacci[n], {n, 1, 12}]
-Out[6]= {1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144}
+In[8]:= Table[Fibonacci[n], {n, 1, 12}]
+Out[8]= {1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144}
 
-In[7]:= Table[Sum[1/k, {k, 1, n}], {n, 1, 5}]
-Out[7]= {1, 3/2, 11/6, 25/12, 137/60}
+In[9]:= Table[Sum[1/k, {k, 1, n}], {n, 1, 5}]
+Out[9]= {1, 3/2, 11/6, 25/12, 137/60}
 
-In[8]:= Table[If[i == j, 1, 0], {i, 1, 3}, {j, 1, 3}]
-Out[8]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
+In[10]:= Table[If[i == j, 1, 0], {i, 1, 3}, {j, 1, 3}]
+Out[10]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 ```
 
 ## Performance
@@ -100,11 +106,21 @@ For a single iterator the spec is parsed by the shared `iter_spec_parse` (`src/i
   rather than silently truncating; an exact-integer range is rejected up front,
   before any element is allocated.
 
+- **Numeric symbolic bounds.** A bound or step that is not an explicit number
+  but has a real value (`Pi`, `2 Pi`, `Pi/2`, `Sqrt[2]`) iterates the lattice
+  `imin + k di`, `k = 0, ..., Floor[(imax - imin)/di]`, as in Mathematica:
+  `Table[x, {x, 0., 2 Pi, 1.}]` has seven elements and
+  `Table[x, {x, 0, 2 Pi, Pi/2}]` is `{0, Pi/2, Pi, 3 Pi/2, 2 Pi}`. The shared
+  iterator parser (`iter_normalize_bounds`, `src/iter.c`) replaces such an
+  upper bound by the exact last lattice point, so `Do`, `Sum`, `Product` and
+  `Range` agree; these all used to stay unevaluated (`Do` looped forever on a
+  symbolic running value). A free symbol (`{x, 1, n}`) is still not a bound.
+
 **Attributes:** `HoldAll`, `Protected`.
 
 ## References
 
-**See also:** [HoldAll](../../expression-information/HoldAll/), [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/), [Sum](../../calculus/Sum/), [Product](../../calculus/Product/)
+**See also:** [HoldAll](../../expression-information/HoldAll/), [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/), [Sum](../../calculus/Sum/), [Product](../../calculus/Product/), [Pi](../../mathematical-constants/Pi/), [Do](../../control-flow/Do/), [Range](../../lists-and-iteration/Range/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

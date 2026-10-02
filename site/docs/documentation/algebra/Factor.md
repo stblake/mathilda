@@ -20,7 +20,7 @@ factoring algorithm via norm + sqfr\_norm + alg\_factor. compositum Q(alpha\_1, 
 
 </details>
 
-## Examples (13)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -43,36 +43,42 @@ In[5]:= Factor[(x^3 + 2x^2)/(x^2 - 4y^2) - (x + 2)/(x^2 - 4y^2)]
 Out[5]= ((-1 + x) (1 + x) (2 + x))/((x - 2 y) (x + 2 y))
 ```
 
-### Worked examples (1)
+### Worked examples (3)
 
 ```mathematica
 In[6]:= Factor[y^2 - x^2]
 Out[6]= -(x + y) (x - y)
+
+In[7]:= Factor[E^x (x^2 - 1)]
+Out[7]= E^x (-1 + x) (1 + x)
+
+In[8]:= Factor[Log[x] (x^2 - 1)]
+Out[8]= Log[x] (-1 + x) (1 + x)
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[7]:= Factor[x^4 - 1]
-Out[7]= (-1 + x) (1 + x) (1 + x^2)
+In[9]:= Factor[x^4 - 1]
+Out[9]= (-1 + x) (1 + x) (1 + x^2)
 
-In[8]:= Factor[6 x^2 + 7 x + 2]
-Out[8]= (1 + 2 x) (2 + 3 x)
+In[10]:= Factor[6 x^2 + 7 x + 2]
+Out[10]= (1 + 2 x) (2 + 3 x)
 
-In[9]:= Factor[x^2 + 1, Extension -> I]
-Out[9]= (-I + x) (I + x)
+In[11]:= Factor[x^2 + 1, Extension -> I]
+Out[11]= (-I + x) (I + x)
 
-In[10]:= Factor[x^2 - 2, Extension -> Sqrt[2]]
-Out[10]= (Sqrt[2] + x) (-Sqrt[2] + x)
+In[12]:= Factor[x^2 - 2, Extension -> Sqrt[2]]
+Out[12]= (Sqrt[2] + x) (-Sqrt[2] + x)
 
-In[11]:= Factor[x^10 - 1]
-Out[11]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
+In[13]:= Factor[x^10 - 1]
+Out[13]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
 
-In[12]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
-Out[12]= (1 - Sqrt[2] x + x^2) (1 + Sqrt[2] x + x^2)
+In[14]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
+Out[14]= (1 - Sqrt[2] x + x^2) (1 + Sqrt[2] x + x^2)
 
-In[13]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]
-Out[13]= (Sqrt[2] + x) (Sqrt[3] + x) (-Sqrt[2] + x) (-Sqrt[3] + x)
+In[15]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]
+Out[15]= (Sqrt[2] + x) (Sqrt[3] + x) (-Sqrt[2] + x) (-Sqrt[3] + x)
 ```
 
 ## Performance
@@ -115,13 +121,14 @@ The univariate **Berlekamp–Zassenhaus** core (`factor_zassenhaus`): take the p
 - Bivariate inputs whose leading coefficient (in some variable) is a non-unit integer constant `a` (with `|a| > 1`) are handled via Wang's leading-coefficient correction, Stage 2: the monic substitution `Q(x, y) = a^(d-1) · P(x/a, y)` makes the lift's input monic in x with integer coefficients.  After lifting `Q = G_1 · ... · G_r` via the existing pipeline, the true factors of `P` are recovered as `F_i = G_i(a·x, y) / cont_Z(G_i(a·x, y))`, where the integer content collects exactly the share of `a^(d-1)` redistributed into G_i by the substitution.  Stages 1 and 2 compose, so inputs with negative non-unit LC (e.g. `lc_x(P) = -6`) also enter the structured pipeline.  This unlocks inputs like `Factor[Expand[(2x+3y)(3x+5y)]]`, `Factor[2 a^2 - 5 a b + 3 b^2]`, and three-factor non-monic forms whose LCs are constant in y (or constant in x).
 - Bivariate inputs whose leading coefficient (in some variable) is a non-constant polynomial in the other variable are handled via Wang's leading-coefficient correction, Stage 3 (predicted-LC two-factor Hensel).  When `lc_x(P)(y) = A(y)`, Mathilda factors `A` over `Z[y]`, finds `α` with `A(α) = +1` so the squarefree univariate image `P(x, α)` factors into monic Z[x] pieces `u`, `v`, then enumerates distributions of `A`'s irreducible factors between two predicted leading coefficients `q_u, q_v` (with `q_u · q_v = A` and `q_u(α) = q_v(α) = +1`).  The Hensel iteration is modified so each `Δu` correction has its leading-x coefficient PINNED to the y^k coefficient of `q_u`, keeping `lc_x(U)(y) = q_u(y)` invariant across the lift.  This unlocks inputs like `Factor[Expand[(xy+1)(xy+2)]]`, `Factor[Expand[((y²+1)x+1)(x+3)]]`, `Factor[Expand[((y+1)x+1)((y+1)x+2)]]`.  MVP scope: r = 2 (two univariate factors), both monic, `|cont(A)| = 1`, and inputs with non-trivial monomial content fall through so `heuristic_factor`'s Phase 0 path produces the canonical fully-factored form.
 - **Binomial-descent soundness.** The heuristic two-term `a^k ± b^k` descent fires only when *both* terms of the `Plus` parse as genuine polynomial monomials (an integer times variables and integer powers). A term with a non-polynomial head — `Cos[r^2]`, `r^2 Sin[r^2]`, a generic `f[r^2]` — is no longer misread as the bare constant `1`. Previously the monomial parse silently dropped such factors, so `Factor[Cos[r^2] - r^2]` returned the unsound `-(-1 + r)(1 + r)`, and, because `Simplify` runs `Factor` as a candidate and keeps the shorter form, `Simplify[Laplacian[Sin[r^2], {r, t}, "Polar"]]` collapsed to `4 - 4 r^2`. Such inputs are now returned unfactored.
+- **A product never comes back as a sum.** `Factor` normalises through `Together`, and `Together` expands a multivariate product: `Together[E^x (x^2 - 1)]` is `-E^x + x^2 E^x`. That expansion is not a polynomial in the single variable `collect_variables` finds (`x`) — its coefficients carry `E^x` — so there was nothing to factor and the expansion came straight back: `Factor[E^x (x^2 - 1)]` returned `-E^x + x^2 E^x`, *less* factored than its own input, and `Integrate[x^5 E^x, x] // Factor` multiplied the integrator's answer out. Factoring is multiplicative, so a **denominator-free** product is now factored factor by factor: `Factor[E^x (x^2 - 1)]` → `E^x (-1 + x) (1 + x)`, `Factor[Log[x] (x^2 - 1)]` → `(-1 + x) (1 + x) Log[x]`, and an irreducible polynomial factor is returned whole rather than expanded. The denominator case is deliberately excluded, because a sum is the right answer there: `Factor[(x^2 - 1)/(x - 1)]` is `1 + x`, and threading over that `Times` would hand back an uncancelled `(x - 1) (x + 1)/(x - 1)`. Under that guard the rewrite fires only where the polynomial path has already failed, so nothing that factors today changes route. (The root defect is `Together`'s expansion, left alone here: a great deal of the integrator, `DSolve` and `Simplify` is tuned around the shape it returns.)
 - **Uncombined-fraction soundness.** `Factor` derives its numerator/denominator from `Together`, then factors each as a polynomial. When `Together` *declines* to combine a sum of fractions (notably a sum whose numerators share ≥2 dependent trig/hyperbolic kernels over `Q(i)`, which `Together` leaves uncombined to avoid a GCD blow-up), the "numerator" is still a `Plus` carrying `Power[linear, -1]` denominators — not a polynomial. Feeding it to the polynomial factorer treated `1/(x - I)` as an indeterminate and returned a **non-equivalent** result: `Factor[(-1/2*I) (Cosh[x] + Sinh[x])/(-I + x) + (1/2*I) (Cosh[x] + Sinh[x])/(I + x)]` collapsed to `0`, which (via the same `Simplify`-trusts-`Factor` path) made `D[Integrate[Exp[x]/(x^2 + 1), x], x] // Simplify` return `0` instead of `E^x/(1 + x^2)`. `Factor` now verifies the numerator/denominator are genuinely denominator-free before factoring and, when they are not, returns the input unchanged rather than a false factorisation. The well-combined cases (polynomials, single-trig, symbol sums, real-denominator sums, `f[x] + g[x]`, Gaussian-integer polynomials) are unaffected.
 
 **Attributes:** `Listable`, `Protected`.
 
 ## References
 
-**See also:** [Sqrt](../../arithmetic/Sqrt/), [Sin](../../elementary-functions/Sin/), [Modulus](../../other-advanced/Modulus/), [Together](../../algebra/Together/), [Expand](../../algebra/Expand/), [Plus](../../arithmetic/Plus/), [Simplify](../../simplification/Simplify/)
+**See also:** [Sqrt](../../arithmetic/Sqrt/), [Sin](../../elementary-functions/Sin/), [Modulus](../../other-advanced/Modulus/), [Together](../../algebra/Together/), [Expand](../../algebra/Expand/), [Plus](../../arithmetic/Plus/), [Simplify](../../simplification/Simplify/), [Times](../../arithmetic/Times/)
 
 - B. M. Trager, "Algebraic factoring and rational function integration", SYMSAC 1976 — the norm / sqfr_norm / alg_factor approach used for the Extension path.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 8 (polynomial factorization).

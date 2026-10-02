@@ -36,8 +36,8 @@ Out[3]= True
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
 - Tests: [`tests/test_boolean.c`](https://github.com/stblake/mathilda/blob/main/tests/test_boolean.c)
 - Tests: [`tests/test_cond.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cond.c)
-- Tests: [`tests/test_mateigen_direct.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mateigen_direct.c)
-- Tests: [`tests/test_risch_residue_split.c`](https://github.com/stblake/mathilda/blob/main/tests/test_risch_residue_split.c)
+- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
+- Tests: [`tests/test_dsolve_m60_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m60_stress.c)
 
 ## Notes & additional examples
 

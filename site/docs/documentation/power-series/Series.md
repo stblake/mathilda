@@ -22,7 +22,7 @@ iteratively expands f, first in x, then in y, etc.
 <details>
 <summary>Notes</summary>
 
-Series handles Taylor, Laurent (negative powers), and Puiseux (fractional powers) expansions, as well as logarithmic and symbolic-exponent cases such as x^x and (1+x)^n. The Assumptions -\> assm option (also read from an ambient Assuming\[...\] scope or $Assumptions) uses the sign/reality/domain of parameters and the expansion variable to simplify coefficients (Sqrt\[a^2\] -\> a, Abs\[a\] -\> a, Log\[a^p\] -\> p Log\[a\] for a \> 0), pick the Log branch of the integral family at x = 0, and expand non-analytic heads (Abs\[x\], Sign\[x\], UnitStep\[x\], Conjugate\[x\]). The result of Series is a SeriesData object; use Normal to convert it back to an ordinary expression by dropping the O-term. Series is Protected and HoldAll so the expansion variable is not evaluated.
+Series handles Taylor, Laurent (negative powers), and Puiseux (fractional powers) expansions, as well as logarithmic and symbolic-exponent cases such as x^x and (1+x)^n. The Assumptions -\> assm option (also read from an ambient Assuming\[...\] scope or $Assumptions) uses the sign/reality/domain of parameters and the expansion variable to simplify coefficients (Sqrt\[a^2\] -\> a, Abs\[a\] -\> a, Log\[a^p\] -\> p Log\[a\] for a \> 0), pick the Log branch of the integral family at x = 0, and expand non-analytic heads (Abs\[x\], Sign\[x\], UnitStep\[x\], Conjugate\[x\]). The result of Series is a SeriesData object; use Normal to convert it back to an ordinary expression by dropping the O-term. Series is Protected and does not hold its arguments; the expansion variable must evaluate to a symbol, or the call is left unevaluated with Series::ivar.
 
 </details>
 
@@ -245,7 +245,9 @@ capped at order 20 and fails at true branch points where derivatives blow up
 branch-point handlers). Symbolic expansion points cap the internal pad tightly to
 avoid `O(N^2)` symbolic coefficient blow-up.
 
-- `HoldAll` and `Protected` (so the expansion variable is not evaluated before `Series` has a chance to shield it).
+- `Protected` only — **`Series` does not hold its arguments**, matching Mathematica (and `Limit`, `D` and `NSeries` here). So a *named* argument behaves exactly like the literal it stands for: `s = {x, 0, 3}; Series[Exp[x], s]` expands, `Series[Exp[x], Sequence @@ {{x, 0, 3}}]` splices, `l = {Sin[x], Cos[x]}; Series[l, {x, 0, 2}]` threads into a list of two series just as the literal list does, and a call that cannot be expanded echoes the evaluated argument rather than the name. (Through v0.235 these all froze: `Series` carried a stray `HoldAll`.)
+- **A variable naming a symbol is resolved**, because that is what ordinary argument evaluation does: `Module[{w}, w = Unique["w"]; Normal[Series[Sqrt[1 + w^4], {w, 0, 4}]]]` expands in the generated symbol and gives `1 + w11^4/2`. This matters for any `.m` routine that expands in a freshly generated symbol — without the resolution the symbol does not occur in the expression at all, the expression is *constant* in it, and the "series" is the input itself, returned silently with no message. `SeriesCoefficient` resolves the same way.
+- **The expansion variable must be a symbol.** Anything else — a variable carrying a numeric or compound value, or a literal non-symbol — declines with `Series::ivar` / `SeriesCoefficient::ivar` (`5 is not a valid variable.`) and leaves the call unevaluated, as in Mathematica and as `NSeries` already did. Nothing downstream type-checks the variable, so this is a correctness gate rather than tidiness: with `x = 5` in scope the spec is `{5, 0, 3}`, the "free of x" early-out cannot fire for a literal that occurs in the body, and the Taylor engine would otherwise answer `Series[Sin[5], {5, 0, 3}]` = `5 - 1/6 5^3 + O[5]^4`. A second argument that is no spec at all (`Series[f, x]`), and an unrecognised option name, are left unevaluated *silently*, as before. The message is capped at three consecutive appearances per head and re-armed by the next well-formed call, because the iterator heads are `HoldAll` and bind a fresh value per step — `Plot[Normal[Series[Sin[x], {x, 0, 5}]], {x, 0, 1}]` would otherwise print one line per sample point. That spelling needs `Plot[Evaluate[...], ...]`, exactly as in Mathematica.
 - Threaded over lists: `Series[{f1, f2, ...}, spec]` becomes `{Series[f1, spec], Series[f2, spec], ...}`.
 - Handles Taylor expansions for smooth functions, Laurent expansions where the function has a pole at `x0`, Puiseux expansions for fractional-power cases such as `Sqrt[Sin[x]]`, and logarithmic expansions for cases like `x^x` where `Log[x]` survives as a symbolic coefficient.
 - Symbolic parameters in exponents are supported: `Series[(1 + x)^n, {x, 0, 4}]` returns the binomial expansion with `n` kept unexpanded.
@@ -258,11 +260,11 @@ avoid `O(N^2)` symbolic coefficient blow-up.
 
   The assumption is forwarded into each inner variable for multivariate expansions.
 
-**Attributes:** `HoldAll`, `Protected`.
+**Attributes:** `Protected`.
 
 ## References
 
-**See also:** [SeriesData](../../power-series/SeriesData/), [HoldAll](../../expression-information/HoldAll/), [D](../../calculus/D/), [Limit](../../calculus/Limit/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/), [$Assumptions](../../simplification/$Assumptions/), [ExpIntegralEi](../../special-functions/ExpIntegralEi/), [LogIntegral](../../special-functions/LogIntegral/)
+**See also:** [SeriesData](../../power-series/SeriesData/), [Limit](../../calculus/Limit/), [D](../../calculus/D/), [NSeries](../../numerical-calculus/NSeries/), [HoldAll](../../expression-information/HoldAll/), [SeriesCoefficient](../../power-series/SeriesCoefficient/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/), [$Assumptions](../../simplification/$Assumptions/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 3.
 - Joel S. Cohen, *Computer Algebra and Symbolic Computation: Mathematical Methods* (A K Peters, 2003).

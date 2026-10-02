@@ -5,7 +5,7 @@
 
 ## Description
 
-**`Erosion[image, r] gives the minimum over a (2r+1) x (2r+1) square neighbourhood; Erosion[image, elem] uses the support of elem. Dual to Dilation: for a symmetric element, Erosion[f, k] equals 1 - Dilation[1 - f, k] exactly, which holds at the border only because the replicate padding is itself self-dual.`**
+**`Erosion[image, r] gives the minimum over a (2r+1) x (2r+1) square neighbourhood; Erosion[image, elem] uses the support of elem. Dual to Dilation: for a symmetric element, Erosion[f, k] equals 1 - Dilation[1 - f, k] exactly, which holds at the border only because the replicate padding is itself self-dual A "Bit" image stays "Bit"; other types give "Real".`**
 
 ## Examples (38)
 

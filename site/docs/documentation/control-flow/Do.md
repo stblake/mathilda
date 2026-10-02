@@ -66,6 +66,9 @@ Out[4]= 8
 - Employs exact dynamic iteration identical to `Table` but discards the evaluated results, returning `Null`.
 - Supports explicit break states (`Return`, `Break`, `Continue`, `Throw`, `Abort`, `Quit`).
 - Can execute an infinite loop using `Do[expr, Infinity]`.
+- Numeric symbolic bounds (`Do[..., {x, 0, 2 Pi, Pi/2}]`) iterate the lattice
+  up to the bound, as `Table` does; the loop used to run forever because its
+  termination test never advanced on a symbolic running value.
 - A body that is machine-numeric throughout takes an automatic fast path
   (`src/numloop.c`) that runs it as a double-stack program with no `Expr`
   allocation. The fast path is built without evaluating anything: loop-invariant

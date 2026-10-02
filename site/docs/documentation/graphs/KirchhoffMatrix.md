@@ -45,7 +45,7 @@ Out[5]= {{2, -1, -1}, {-1, 2, -1}, {-1, -1, 2}}
 
 ## References
 
-**See also:** [D](../../calculus/D/), [Normal](../../data-structures/Normal/)
+**See also:** [D](../../calculus/D/), [SparseArray](../../data-structures/SparseArray/), [Normal](../../data-structures/Normal/)
 
 - Source: [`src/graph/gmet_init.c`](https://github.com/stblake/mathilda/blob/main/src/graph/gmet_init.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)

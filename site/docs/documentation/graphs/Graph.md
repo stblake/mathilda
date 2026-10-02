@@ -5,9 +5,9 @@
 
 ## Description
 
-**`Graph[v, e] represents a graph with vertices v and edges e. Graph[e] derives the vertices from the edge list. Edges are DirectedEdge[u,v] or UndirectedEdge[u,v]; u->v and u<->v are accepted as shorthand. Simple graphs only: no self-loops or parallel edges.`**
+**`Graph[v, e] represents a graph with vertices v and edges e. Graph[e] derives the vertices from the edge list. Edges are DirectedEdge[u,v] or UndirectedEdge[u,v]; u->v and u<->v are accepted as shorthand. Graph[e, opts] and Graph[v, e, opts] attach per-edge lists, matched to e by position: EdgeWeight -> {w1, ...} and EdgeCapacity -> {c1, ...}. Simple graphs only: no self-loops or parallel edges.`**
 
-## Examples (10)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -24,7 +24,7 @@ In[3]:= InputForm[Graph[{1->2, 2->3, 3->1}]]
 Out[3]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3, 3 -> 1}]
 ```
 
-### Scope (7)
+### Scope (9)
 
 ```mathematica
 In[4]:= InputForm[Graph[{a,b,c}, {DirectedEdge[a,b], UndirectedEdge[b,c]}]]
@@ -36,17 +36,23 @@ Out[5]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3}, EdgeWeight -> {5, 7}]
 In[6]:= FullForm[Graph[{1,2},{1<->2}]]
 Out[6]= Graph[List[1, 2], List[UndirectedEdge[1, 2]]]
 
-In[7]:= Graph[{1,2}, {1->1}]
-Out[7]= Graph[{1, 2}, {1 -> 1}]
+In[7]:= InputForm[Graph[{a<->b, b<->c, a<->c}, EdgeWeight -> {1.5, 2, 1}]]
+Out[7]= Graph[{a, b, c}, {a <-> b, b <-> c, a <-> c}, EdgeWeight -> {1.5, 2, 1}]
 
-In[8]:= Graph[{1,2}, {1->2, 1->2}]
-Out[8]= Graph[{1, 2}, {1 -> 2, 1 -> 2}]
+In[8]:= InputForm[Graph[{1->2, 2->3}, EdgeCapacity -> {4, 5}, EdgeWeight -> {1, 2}]]
+Out[8]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3}, EdgeWeight -> {1, 2}, EdgeCapacity -> {4, 5}]
 
-In[9]:= Graph[{1,2}, {1->3}]
-Out[9]= Graph[{1, 2}, {1 -> 3}]
+In[9]:= Graph[{1,2}, {1->1}]
+Out[9]= Graph[{1, 2}, {1 -> 1}]
 
-In[10]:= Graph[{1,2,3}, {1->2, 2->3}, EdgeWeight -> {5}]
-Out[10]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3}, EdgeWeight -> {5}]
+In[10]:= Graph[{1,2}, {1->2, 1->2}]
+Out[10]= Graph[{1, 2}, {1 -> 2, 1 -> 2}]
+
+In[11]:= Graph[{1,2}, {1->3}]
+Out[11]= Graph[{1, 2}, {1 -> 3}]
+
+In[12]:= Graph[{1,2,3}, {1->2, 2->3}, EdgeWeight -> {5}]
+Out[12]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3}, EdgeWeight -> {5}]
 ```
 
 ## Options & behaviour
@@ -65,14 +71,17 @@ Accepts:
 ```text
   Graph[edges]                        -- vertices derived from the edges (directed default)
   Graph[verts, edges]                 -- explicit vertex list
-  Graph[verts, edges, EdgeWeight -> {w1, ..., wm}]
-                                       -- explicit vertex list + per-edge weights, matched
-                                          to `edges` by position; wrong length is malformed
-                                          (left unevaluated), same as any other rejection
-                                          below. Weighted graphs require the explicit-vertex
-                                          form -- Graph[edges, EdgeWeight -> {...}] is not
-                                          accepted (deliberately out of scope; see the plan).
+  Graph[edges, opt...]
+  Graph[verts, edges, opt...]         -- either form followed by per-edge options:
+                                           EdgeWeight   -> {w1, ..., wm}
+                                           EdgeCapacity -> {c1, ..., cm}
+                                         each matched to `edges` by position. A list of
+                                         the wrong length, a repeated option, or any
+                                         other option leaves Graph[...] unevaluated,
+                                         like every other rejection below.
 ```
+
+The two forms are told apart by the second argument: a List is the edge list of the explicit-vertex form, a Rule the first option of the edges-only form. The canonical result stores the options after the edge list in their canonical order (EdgeWeight, then EdgeCapacity; see graph.h), whatever order they were given in, so every spelling of one graph canonicalizes to the same tree.
 
 Edge sugar is normalized on construction:
 
@@ -102,20 +111,25 @@ Against other systems, from the benchmark suite (same input, results cross-check
 ## Implementation notes
 
 - `Protected`. A graph is a value: the constructor normalizes and validates its
-  input and returns the canonical `Graph[List[verts], List[edges]]` (or, when
-  weighted, `Graph[List[verts], List[edges], EdgeWeight -> List[weights]]`).
+  input and returns the canonical `Graph[List[verts], List[edges]]`, followed
+  by `EdgeWeight -> List[weights]` and then `EdgeCapacity -> List[caps]` when
+  given (always in that order, so every spelling of one graph is the same
+  expression).
 - Edge normalization: `u -> v` (`Rule`) and `DirectedEdge[u, v]` become
   `DirectedEdge[u, v]`; `u <-> v` (`TwoWayRule`) and `UndirectedEdge[u, v]`
   become `UndirectedEdge[u, v]`. Directed and undirected edges may be mixed.
 - Malformed input is left unevaluated: self-loops, parallel/duplicate edges,
-  3-argument edges, an edge endpoint absent from an explicit vertex list, or
-  (for a weighted graph) an `EdgeWeight` list whose length doesn't match the
-  edge list. Anti-parallel directed edges `u -> v` and `v -> u` are distinct and
+  3-argument edges, an edge endpoint absent from an explicit vertex list, an
+  `EdgeWeight`/`EdgeCapacity` list whose length doesn't match the edge list, a
+  repeated option, or any other option. Anti-parallel directed edges `u -> v` and `v -> u` are distinct and
   allowed.
-- The weighted form requires the explicit-vertex form;
-  `Graph[e, EdgeWeight -> {...}]` (derived vertices) is not accepted and stays
-  unevaluated. A weight list whose length doesn't match `e` is malformed, like
-  any other rejection above. Read the weights back with `EdgeWeight`.
+- The two forms are told apart by the second argument: a `List` is the edge list
+  of `Graph[v, e, ...]`, a rule the first option of `Graph[e, ...]`. Read the
+  weights back with `EdgeWeight`; every weight-aware head (`GraphDistance`,
+  `FindShortestPath`, `FindSpanningTree`, the cut family, ...) sees them the
+  same way whichever form built the graph.
+- Graph-editing heads (`EdgeDelete`, `Subgraph`, ...) carry `EdgeWeight` over;
+  they do not yet carry `EdgeCapacity`.
 - Printing: in standard output a graph shows a terse summary,
   `Graph[<n vertices, m edges>]`. `InputForm` and `FullForm` print the literal
   constructor, which round-trips through the parser.
@@ -127,7 +141,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## References
 
-**See also:** [Rule](../../assignment-and-rules/Rule/), [EdgeWeight](../../graphs/EdgeWeight/), [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/), [GraphQ](../../graphs/GraphQ/)
+**See also:** [FindMaximumFlow](../../graphs/FindMaximumFlow/), [Rule](../../assignment-and-rules/Rule/), [EdgeWeight](../../graphs/EdgeWeight/), [List](../../other-advanced/List/), [GraphDistance](../../graphs/GraphDistance/), [FindShortestPath](../../graphs/FindShortestPath/), [FindSpanningTree](../../graphs/FindSpanningTree/), [EdgeDelete](../../graphs/EdgeDelete/)
 
 - Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)

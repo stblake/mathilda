@@ -31,4 +31,5 @@ Out[1]= y^2
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 - Tests: [`tests/test_inactive.c`](https://github.com/stblake/mathilda/blob/main/tests/test_inactive.c)

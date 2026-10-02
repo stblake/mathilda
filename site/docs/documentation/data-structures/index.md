@@ -1,6 +1,6 @@
 # Data Structures
 
-81 built-in function(s) in this category.
+82 built-in function(s) in this category.
 
 - [`Append`](Append.md) — Append[expr, elem] adds elem to the end of expr.  _(Stable)_
 - [`Apply`](Apply.md) — f @@ expr or Apply[f, expr]  _(Stable)_
@@ -74,6 +74,7 @@
 - [`Select`](Select.md) — Select[list, crit]  _(Stable)_
 - [`Sort`](Sort.md) — Sort[list] sorts the elements of list into canonical order.  _(Stable)_
 - [`SortBy`](SortBy.md) — SortBy[list, f]  _(Stable)_
+- [`SparseArray`](SparseArray.md) — SparseArray[{pos1 -> v1, ...}], SparseArray[rules, dims], SparseArray[rules, dims, default]  _(Stable)_
 - [`Splice`](Splice.md) — Splice[{e1, e2, ...}]  _(Stable)_
 - [`StandardDeviation`](StandardDeviation.md) — StandardDeviation[data] gives the standard deviation estimate of the elements in data.  _(Stable)_
 - [`SubsetQ`](SubsetQ.md) — SubsetQ[a, b]  _(Stable)_
