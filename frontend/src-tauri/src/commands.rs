@@ -3,8 +3,40 @@
 use crate::kernel::MathildaKernel;
 use crate::notebook_format::{parse_stanzas, serialize_stanzas};
 use serde_json::Value;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::ipc::Channel;
 use tauri::State;
+
+/// Gate for the save-on-close prompt. Both close paths — the window's
+/// `CloseRequested` (red button / File ▸ Close Window) and the app's
+/// `ExitRequested` (Cmd+Q / dock ▸ Quit) — are intercepted in `lib.rs` and
+/// prevented until the webview's modal decides. The webview flips these:
+///
+/// * `confirmed` — the user chose to quit; the next real close is let through
+///   (set just before `app.exit(0)`, which re-fires `ExitRequested`).
+/// * `prevented` — a prompt is in flight. It doubles as a safety net: if the
+///   webview never answers, a *second* quit attempt forces the exit, so a hung
+///   front end can never make the app unquittable.
+#[derive(Default)]
+pub struct QuitGuard {
+    pub confirmed: AtomicBool,
+    pub prevented: AtomicBool,
+}
+
+/// The user confirmed the quit (Save-then-close or Don't Save): let the real
+/// close through and terminate. `app.exit(0)` re-fires `ExitRequested`, which
+/// the handler now allows because `confirmed` is set.
+#[tauri::command]
+pub fn confirm_and_quit(app: tauri::AppHandle, guard: State<'_, QuitGuard>) {
+    guard.confirmed.store(true, Ordering::SeqCst);
+    app.exit(0);
+}
+
+/// The user cancelled the quit: re-arm the gate so the next close prompts again.
+#[tauri::command]
+pub fn cancel_quit(guard: State<'_, QuitGuard>) {
+    guard.prevented.store(false, Ordering::SeqCst);
+}
 
 /// Evaluate a Mathilda expression, streaming output messages through
 /// `channel` until the kernel emits "done".

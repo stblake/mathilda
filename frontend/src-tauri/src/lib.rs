@@ -21,12 +21,13 @@ mod kernel;
 
 use commands::{evaluate_cell, interrupt_kernel, load_library, load_notebook, ping_kernel, restart_kernel, save_library, save_notebook, set_window_title, syntax_spans, eval_once};
 use commands::{clear_recent_files, forget_recent_file, push_recent_file, recent_files};
+use commands::{cancel_quit, confirm_and_quit, QuitGuard};
+use std::sync::atomic::Ordering;
 use kernel::MathildaKernel;
 #[cfg(desktop)]
 use recent::RecentFiles;
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-#[cfg(desktop)]
 use tauri::Emitter;
 use tauri::Manager;
 
@@ -241,7 +242,25 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // Save-on-close gate, half one. The red traffic-light button and
+        // File > Close Window arrive here as CloseRequested. Hold the close and
+        // let the webview's Save/Don't Save/Cancel modal decide; it flips the
+        // QuitGuard and calls `confirm_and_quit` (or `cancel_quit`). Cmd+Q and
+        // dock > Quit never reach this event — they take the ExitRequested path
+        // in the run handler below.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let guard = window.state::<QuitGuard>();
+                if !guard.confirmed.load(Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = window.emit("quit-requested", ());
+                }
+            }
+        })
         .setup(|app| {
+            // The gate's shared state, managed before any close/quit event can fire.
+            app.manage(QuitGuard::default());
+
             // Native menu (desktop only — mobile has no app menu bar).
             #[cfg(desktop)]
             {
@@ -289,7 +308,29 @@ pub fn run() {
             push_recent_file,
             forget_recent_file,
             clear_recent_files,
+            confirm_and_quit,
+            cancel_quit,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        // Save-on-close gate, half two. Cmd+Q and dock > Quit send
+        // NSApplication terminate:, which bypasses the window's CloseRequested
+        // entirely and arrives as ExitRequested. Same gate, same webview modal.
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let guard = app_handle.state::<QuitGuard>();
+                // The user already confirmed; this is our own app.exit(0). Let it go.
+                if guard.confirmed.load(Ordering::SeqCst) {
+                    return;
+                }
+                // A prompt is already pending. A SECOND quit attempt means the
+                // user insists (or the webview is wedged): let the exit through
+                // rather than ever trapping the app with an unanswerable prompt.
+                if guard.prevented.swap(true, Ordering::SeqCst) {
+                    return;
+                }
+                api.prevent_exit();
+                let _ = app_handle.emit("quit-requested", ());
+            }
+        });
 }

@@ -8,7 +8,7 @@
   import { writable, get } from 'svelte/store';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { listen } from '@tauri-apps/api/event';
-  import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { invoke } from '@tauri-apps/api/core';
   import Canvas from './lib/Canvas.svelte';
   import Toolbar from './lib/Toolbar.svelte';
   import { MENU_IDS, runMenuCommand } from './lib/menuCommands';
@@ -98,9 +98,16 @@
   onDestroy(() => unlisten.forEach(u => u()));
 
   // --- Save-on-close prompt --------------------------------------------------
-  /* A 3-way modal (Save / Don't Save / Cancel), shown when the window is closed
+  /* A 3-way modal (Save / Don't Save / Cancel), shown when the app is closed
      with unsaved changes. The native dialog plugin is 2-button only, so this is
-     an in-app modal; `savePrompt` holds the pending promise's resolver. */
+     an in-app modal; `savePrompt` holds the pending promise's resolver.
+
+     EVERY close path is gated in Rust (src-tauri/src/lib.rs) and announced as the
+     `quit-requested` event: the window's CloseRequested (red button, File > Close
+     Window) AND the app's ExitRequested (Cmd+Q, dock > Quit). macOS routes Cmd+Q
+     through terminate:, which never fires the window's CloseRequested — so
+     listening to that event alone (as this once did) silently missed every Quit.
+     We answer the gate by invoking `confirm_and_quit` / `cancel_quit`. */
   let savePrompt: ((v: 'save' | 'dont' | 'cancel') => void) | null = null;
   function promptSaveClose(): Promise<'save' | 'dont' | 'cancel'> {
     return new Promise((resolve) => { savePrompt = resolve; });
@@ -109,18 +116,25 @@
     const r = savePrompt; savePrompt = null; r?.(v);
   }
 
+  async function handleQuitRequest() {
+    // Re-entrancy: a modal is already up (a second close gesture, or the Rust
+    // ExitRequested handler re-emitting). The gate stays held; ignore duplicates
+    // rather than stacking prompts.
+    if (savePrompt) return;
+    if (!get(dirty)) { await invoke('confirm_and_quit'); return; }      // nothing to lose
+    const choice = await promptSaveClose();
+    if (choice === 'cancel') { await invoke('cancel_quit'); return; }   // re-arm the gate, stay open
+    if (choice === 'save') {
+      const ok = await saveFile();
+      if (!ok) { await invoke('cancel_quit'); return; }                 // save failed/cancelled -> stay open
+    }
+    await invoke('confirm_and_quit');                                   // Save ok, or Don't Save -> quit
+  }
+
   onMount(async () => {
     try {
-      const win = getCurrentWindow();
-      unlisten.push(await win.onCloseRequested(async (event) => {
-        if (!get(dirty)) return;          // nothing unsaved -> let it close
-        event.preventDefault();           // hold the close while we ask
-        const choice = await promptSaveClose();
-        if (choice === 'cancel') return;  // keep the window open
-        if (choice === 'save') { const ok = await saveFile(); if (!ok) return; }
-        await win.destroy();              // force the close (bypasses this handler)
-      }));
-    } catch (e) { console.warn('close handler:', e); }
+      unlisten.push(await listen('quit-requested', handleQuitRequest));
+    } catch (e) { console.warn('quit handler:', e); }
   });
 
   // ---------------------------------------------------------------------------
