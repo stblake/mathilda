@@ -108,6 +108,7 @@ Memory ------ The core algorithm allocates / clears its own mpz_t scratch. The c
 - Source: [`src/rationalize.c`](https://github.com/stblake/mathilda/blob/main/src/rationalize.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_chop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chop.c)
+- Tests: [`tests/test_elliptic.c`](https://github.com/stblake/mathilda/blob/main/tests/test_elliptic.c)
 - Tests: [`tests/test_rationalize.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rationalize.c)
 
 ## Notes & additional examples

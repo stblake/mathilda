@@ -2113,11 +2113,11 @@
   },
   {
     "name": "EllipticE",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Special Functions",
+    "slug": "special-functions",
     "status": "Stable",
-    "summary": "EllipticE[m] is the complete elliptic integral of the second kind, Integrate[Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}], and EllipticE[phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticE[0] is Pi/2, EllipticE[1] is 1, and EllipticE[phi, 1] is Sin[phi].",
-    "url": "documentation/other-advanced/EllipticE/"
+    "summary": "EllipticE[m] is the complete elliptic integral of the second kind, Integrate[Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}], and EllipticE[phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticE[0] is Pi/2 and EllipticE[1] is 1. EllipticE[phi, 1] is Sin[phi] only for |phi| <= Pi/2, since E(phi|1) is the integral of Abs[Cos[t]]: EllipticE[2, 1] is 2 - Sin[2], not Sin[2].",
+    "url": "documentation/special-functions/EllipticE/"
   },
   {
     "name": "EllipticF",
@@ -2137,11 +2137,11 @@
   },
   {
     "name": "EllipticPi",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Special Functions",
+    "slug": "special-functions",
     "status": "Stable",
-    "summary": "EllipticPi[n, m] is the complete elliptic integral of the third kind, Integrate[1/((1 - n Sin[t]^2) Sqrt[1 - m Sin[t]^2]), {t, 0, Pi/2}], and EllipticPi[n, phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticPi[0, m] is EllipticK[m] and EllipticPi[0, phi, m] is EllipticF[phi, m]. For n > 1 the path crosses the pole at Sin[t]^2 == 1/n and the value is the Cauchy principal value.",
-    "url": "documentation/other-advanced/EllipticPi/"
+    "summary": "EllipticPi[n, m] is the complete elliptic integral of the third kind, Integrate[1/((1 - n Sin[t]^2) Sqrt[1 - m Sin[t]^2]), {t, 0, Pi/2}], and EllipticPi[n, phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticPi[0, m] is EllipticK[m] and EllipticPi[0, phi, m] is EllipticF[phi, m]; EllipticPi[1, m] is ComplexInfinity. Where the path crosses the pole at Sin[t]^2 == 1/n the value is complex, not a real principal value: EllipticPi[3/2, 1/2] is -0.4567203134529101 - 2.720699046351328 I.",
+    "url": "documentation/special-functions/EllipticPi/"
   },
   {
     "name": "EmptyGraphQ",
@@ -3057,19 +3057,19 @@
   },
   {
     "name": "FresnelC",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Special Functions",
+    "slug": "special-functions",
     "status": "Stable",
     "summary": "FresnelC[z]",
-    "url": "documentation/other-advanced/FresnelC/"
+    "url": "documentation/special-functions/FresnelC/"
   },
   {
     "name": "FresnelS",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Special Functions",
+    "slug": "special-functions",
     "status": "Stable",
     "summary": "FresnelS[z]",
-    "url": "documentation/other-advanced/FresnelS/"
+    "url": "documentation/special-functions/FresnelS/"
   },
   {
     "name": "FromCoefficientRules",

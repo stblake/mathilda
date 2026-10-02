@@ -1,13 +1,13 @@
-# EllipticF
+# EllipticE
 
 !!! success "Status: Stable"
     documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## Description
 
-**`EllipticF[phi, m] is the incomplete elliptic integral of the first kind, Integrate[1/Sqrt[1 - m Sin[t]^2], {t, 0, phi}]. The second argument is the PARAMETER m = k^2, not the modulus k. EllipticF[phi, 0] is phi and EllipticF[Pi/2, m] is EllipticK[m]; phi may be complex and of any size (the quasi-period is applied).`**
+**`EllipticE[m] is the complete elliptic integral of the second kind, Integrate[Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}], and EllipticE[phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticE[0] is Pi/2 and EllipticE[1] is 1. EllipticE[phi, 1] is Sin[phi] only for |phi| <= Pi/2, since E(phi|1) is the integral of Abs[Cos[t]]: EllipticE[2, 1] is 2 - Sin[2], not Sin[2].`**
 
-## Examples (15)
+## Examples (17)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -27,77 +27,91 @@ In[4]:= N[EllipticPi[3/2, ArcSin[Sqrt[2] Sqrt[1/(1 + 7/5)]], 1/2], 20]
 Out[4]= 0.987739699728522080208 - 2.7206990463513267759*I
 ```
 
-### Applications (11)
+### Applications (13)
 
-A full quarter period is the complete integral
+Complete, m = 0: the quarter period again
 
 ```mathematica
-In[5]:= EllipticF[Pi/2, 1/2]
-Out[5]= (8 Pi^(3/2))/Gamma[-1/4]^2
+In[5]:= EllipticE[0]
+Out[5]= 1/2 Pi
 ```
 
-With m = 0 the integrand is 1
+The integrand is Abs[Cos[t]], whose quarter-period integral is 1
 
 ```mathematica
-In[6]:= EllipticF[phi, 0]
-Out[6]= phi
+In[6]:= EllipticE[1]
+Out[6]= 1
 ```
 
-Odd in the amplitude, by the same superficial-negativity test the trig heads use
+One argument is complete, two incomplete -- and a full quarter period closes the gap
 
 ```mathematica
-In[7]:= EllipticF[-2 x, m]
-Out[7]= -EllipticF[2 x, m]
+In[7]:= EllipticE[Pi/2, 1/2]
+Out[7]= EllipticE[1/2]
 ```
 
-The amplitude derivative is the integrand itself
+Unlike K, E has no closed form at 1/2 or -1
 
 ```mathematica
-In[8]:= D[EllipticF[phi, m], phi]
-Out[8]= 1/Sqrt[1 - m Sin[phi]^2]
+In[8]:= N[EllipticE[1/2], 30]
+Out[8]= 1.350643881047675502520174735339
 ```
 
-The parameter derivative, checked against a 30-digit central difference before it was allowed in
+E(phi|1) = Integrate[Abs[Cos[t]]], which is Sin[phi] on |phi| <= Pi/2
 
 ```mathematica
-In[9]:= D[EllipticF[phi, m], m]
-Out[9]= -1/2 EllipticF[phi, m]/m - 1/2 EllipticE[phi, m]/(m (-1 + m)) + 1/4 Sin[2 phi]/((-1 + m) Sqrt[1 - m Sin[phi]^2])
+In[9]:= EllipticE[1/2, 1]
+Out[9]= Sin[1/2]
+```
+
+Past Pi/2 that identity is false, so the call stays symbolic rather than answering Sin[2]
+
+```mathematica
+In[10]:= EllipticE[2, 1]
+Out[10]= EllipticE[2, 1]
 ```
 
 ```mathematica
-In[10]:= N[EllipticF[1/5, 1/2], 25]
-Out[10]= 0.2006673105648029970320719
+In[11]:= N[EllipticE[2, 1], 20]
+Out[11]= 1.09070257317431830461
 
-In[11]:= NIntegrate[1/Sqrt[1 - 1/2 Sin[t]^2], {t, 0, 1/5}]
-Out[11]= 0.200667
+In[12]:= N[2 - Sin[2], 20]
+Out[12]= 1.09070257317431830461
 ```
 
-The quasi-period F(phi + k Pi) = F(phi) + 2k K, residual at 20 digits
+The parameter derivative of the complete integral
 
 ```mathematica
-In[12]:= N[EllipticF[1/5 + 3 Pi, 1/2] - (EllipticF[1/5, 1/2] + 6 EllipticK[1/2]), 20]
-Out[12]= 1.17549435082228750797e-38
+In[13]:= D[EllipticE[m], m]
+Out[13]= (1/2 (EllipticE[m] - EllipticK[m]))/m
 ```
 
-|z| > 1 makes ArcSin[z] complex -- the normal case for an elliptic pencil
+The amplitude derivative is the integrand
 
 ```mathematica
-In[13]:= N[EllipticF[ArcSin[3/2], 1/2], 20]
-Out[13]= 1.3820851603910208068 - 1.85407467730137191843*I
+In[14]:= D[EllipticE[phi, m], phi]
+Out[14]= Sqrt[1 - m Sin[phi]^2]
 ```
 
-The amplitude that used to cost eight digits
+Same dedicated kernel as K, with the 1/(1-2k) factor
 
 ```mathematica
-In[14]:= N[EllipticF[Pi/2 - 10^-8, 99/100], 20]
-Out[14]= 3.69563726298987467781
+In[15]:= Series[EllipticE[m], {m, 0, 3}]
+Out[15]= 1/2 Pi + -1/8 Pi m + -3/128 Pi m^2 + -5/512 Pi m^3 + O[m]^4
 ```
 
-Listable, and the list rides the packed buffer
+Certified decreasing in m, so the endpoints come back swapped
 
 ```mathematica
-In[15]:= EllipticF[{0.3, 0.6, 0.9}, 0.5]
-Out[15]= {0.302255, 0.618108, 0.960966}
+In[16]:= EllipticE[Interval[{1/4, 1/2}]]
+Out[16]= Interval[{EllipticE[1/2], EllipticE[1/4]}]
+```
+
+Listable; the unary kernel runs element-wise on the buffer
+
+```mathematica
+In[17]:= EllipticE[{0.1, 0.2, 0.3}]
+Out[17]= {1.53076, 1.48904, 1.44536}
 ```
 
 ## Performance
@@ -115,41 +129,42 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
-**Algorithm.** `builtin_ellipticf` runs the numeric path first (inexact in, inexact out),
-then the exact reductions `F(0, m) = 0`, `F(φ, 0) = φ`, `F(φ, ∞) = 0`,
-`F(π/2, m) = K(m)`, and finally the oddness fold in the amplitude. The machine kernel is
-`elliptic_inc_real(φ, m, want_E = false)`:
+**Algorithm.** The head is arity-overloaded, and `builtin_elliptice` dispatches on argument
+count to `elliptice_complete` (`E[m]`) or `elliptice_incomplete` (`E[φ, m]`); a wrong count
+emits `EllipticE::argt`. Both run the numeric path first, then their reductions —
+`E[0] = π/2`, `E[1] = 1`, `E[∞] = ComplexInfinity` for the complete form; `E[0, m] = 0`,
+`E[φ, 0] = φ`, `E[π/2, m] = E[m]` and the oddness fold for the incomplete one.
 
-1. reduce the amplitude to the principal strip — `k = ⌊φ/π + 1/2⌋`, `r = φ − kπ`, so
-   `|r| ≤ π/2`;
-2. evaluate `F(r|m) = s · R_F(cos²r, 1 − m s², 1)` with `s = sin r` (DLMF 19.25.5, after
-   using `R_F`'s homogeneity to clear the `csc²` scaling);
-3. restore the shift with the quasi-period `F(φ + kπ | m) = F(φ|m) + 2k K(m)`, which calls
-   `elliptic_machine_k` — so a shifted amplitude declines whenever the complete form does.
+The kernels are Carlson's:
 
-Outside the real principal domain (`1 − m sin²φ < 0`, or a complex amplitude, which
-`EllipticF[ArcSin[z], m]` produces as soon as `|z| > 1`) the kernel declines and
-`flint_num_elliptic_f` answers through Arb's `acb_elliptic_f`, which carries the
-quasi-period and the branch placement itself.
+- complete — `E(m) = R_F(0, 1−m, 1) − (m/3) R_D(0, 1−m, 1)`, with `m == 1` answered
+  directly as `1`;
+- incomplete — `elliptic_inc_real(φ, m, want_E = true)`, the same principal-strip
+  reduction `EllipticF` uses, plus the `R_D` term, and the quasi-period closed with
+  `E(m)` in place of `K(m)`.
 
-**One spelling carries eight digits.** The first argument of `R_F` is `Cos[r]^2` and must
-be computed as `c*c`, never as `1 - s*s`: near `r = π/2` that subtraction's absolute error
-is the size of the true value, so `R_F`'s first argument arrives with ~100% relative
-error. Measured against the 30-digit path at the same `double`:
-`EllipticF[π/2 − 1e−8, 0.99]` was wrong by **2.7e-08** relative (1.2e8 ulp) against
-6.7e-16 at a generic amplitude; it is now 1.7e-15 worst case over a π/2 approach ladder.
-A single `fmax`-style clamp (`if (a < 0) a = 0`) covers the one case squaring cannot — an
-`r` at which `cos r` underflows to zero, where a rounding-negative `a` would make
-`carlson_rf` decline at exactly the amplitude where `F` is simply `K`.
+**`R_F` and `R_D` are one loop.** Every caller that wants `R_D` wants `R_F` at the same
+arguments, and the two recurrences walk an identical `xₘ, yₘ, zₘ` sequence, so
+`carlson_rf_rd` computes both from one duplication — three square roots per step instead
+of six. That is what pays for the tighter `EC_ERRTOL_RD = 0.0015`: `EllipticE` over 10⁶
+elements is back under its pre-fix cost with 18× the accuracy (106 ulp → 6).
 
-**Data structures.** `double` scalars and the shared `carlson_rf` duplication loop; `acb_t`
-on the Arb path. `EllipticF` is registered as a binary (`REG_B`) ND kernel, so a packed or
-visible `NDArray` pair runs element-wise through the same `double` code.
+**`E[φ, 1]` is `Sin[φ]` only on the principal strip.** `E(φ|1) = ∫₀^φ |cos t| dt`, which is
+`Sin[φ]` for `|φ| ≤ π/2` and not beyond it. Applied unconditionally the rule made
+`EllipticE[2, 1]` answer `Sin[2] = 0.909297` where the value is `2 − Sin[2] = 1.090703` —
+a jump of 0.18 against its own neighbour at `m = 1 − 10⁻¹⁸`. The reduction is now gated on
+`ell_in_principal_strip`, so a symbolic amplitude stays symbolic rather than wrong, and
+`N[]` routes it to Arb.
 
-**Complexity / limits.** `O(1)` per element, ~3 ulp; `Compile[]` lowers it at scalar and
-rank-1 shapes. `D[EllipticF[φ,m], m]` is a closed form (checked against a central
-difference at 30 digits before it was allowed in), unlike the `EllipticPi` parameter
-derivatives, which stay inert.
+**Data structures.** `double` scalars through `carlson_rf_rd`; `acb_t` with the bridge's
+accuracy ladder above machine precision. Both arities are registered ND kernels — unary
+(`REG_U`) for the complete form, binary (`REG_B`) for the incomplete — so each rides the
+packed/NDArray buffer and lowers inside `Compile[]`.
+
+**Complexity / limits.** `O(1)` per element, ~6 ulp, no allocation. Real principal domain
+only: `m > 1` for the complete form and `1 − m sin²φ < 0` for the incomplete one decline to
+Arb. `Interval[]` threads by certified monotonicity (`E` decreasing in `m` below 1);
+`Series` at `m = 0` uses the dedicated kernel `(π/2) Σ aₖ mᵏ/(1−2k)`.
 
 - Exact reductions: `EllipticK[0] = π/2`, `EllipticK[1] = ComplexInfinity`,
   `EllipticE[0] = π/2`, `EllipticE[1] = 1`; `EllipticF[0, m] = 0`,
@@ -289,32 +304,32 @@ derivatives, which stay inert.
 
 ## References
 
-**See also:** [EllipticK](../../special-functions/EllipticK/), [EllipticE](../../special-functions/EllipticE/), [EllipticPi](../../special-functions/EllipticPi/), [E](../../mathematical-constants/E/), [N](../../arithmetic/N/), [ArcSin](../../elementary-functions/ArcSin/), [List](../../other-advanced/List/), [Series](../../power-series/Series/)
+**See also:** [EllipticK](../../special-functions/EllipticK/), [EllipticF](../../special-functions/EllipticF/), [EllipticPi](../../special-functions/EllipticPi/), [E](../../mathematical-constants/E/), [N](../../arithmetic/N/), [ArcSin](../../elementary-functions/ArcSin/), [List](../../other-advanced/List/), [Series](../../power-series/Series/)
 
 - B. C. Carlson, *Computing elliptic integrals by duplication*, Numer. Math. **33** (1979) 1-16.
 - B. C. Carlson, *Numerical computation of real or complex elliptic integrals*, Numer. Algorithms **10** (1995) 13-26.
 - W. H. Press et al., *Numerical Recipes in C*, 2nd ed. (Cambridge, 1992), §6.11.
-- DLMF §19.25.5 — `F(φ|m) = s R_F(1−s², 1−m s², 1)`, `s = sin φ`.
+- DLMF §19.25.7 — `E(φ|m) = s R_F(...) − (m/3) s³ R_D(...)`.
 - Source: [`src/special_functions/elliptic.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/elliptic.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_elliptic.c`](https://github.com/stblake/mathilda/blob/main/tests/test_elliptic.c)
-- Tests: [`tests/test_parallelmixedspecial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parallelmixedspecial.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-The second argument is the **parameter** `m = k²`, not the modulus `k`.
+`EllipticE` is arity-overloaded exactly as in the Wolfram Language: **one** argument is the
+complete integral, **two** the incomplete one. A wrong count emits `EllipticE::argt` and
+leaves the call unevaluated.
 
-The amplitude may be of any size and may be complex, and both cases matter in practice.
-Size is handled by the quasi-period `F(φ + kπ | m) = F(φ | m) + 2k K(m)`: the machine
-kernel reduces `φ` into `|r| ≤ π/2`, evaluates there, and adds back `2k K(m)` — so a
-shifted amplitude declines exactly when the complete integral does. Complex amplitudes
-arrive unbidden, since `EllipticF[ArcSin[z], m]` is complex as soon as `|z| > 1`, which is
-the normal spelling of an elliptic pencil; those go to Arb, which is defined on the whole
-plane.
+The `m = 1` pair of examples is the interesting one. `E(φ|1) = ∫₀^φ |cos t| dt` equals
+`Sin[φ]` only for `|φ| ≤ π/2`; applied unconditionally it made `EllipticE[2, 1]` answer
+`0.909297` where the value is `2 − Sin[2] = 1.090703`, and jump 0.18 against its own
+neighbour at `m = 1 − 10⁻¹⁸`. The reduction is now gated on the principal strip, so the
+exact call stays symbolic — correct but not closed-form — and `N[]` routes it to Arb, where
+it agrees with `2 − Sin[2]` to every digit shown.
 
-The `π/2 − 10⁻⁸` example is a regression guard. `R_F`'s first argument is `Cos[φ]²`, and
-computing it as `1 − Sin[φ]²` gave ~100% relative error there: the result was wrong by
-2.7e-08 relative, an eight-digit loss, against 6.7e-16 at a generic amplitude. Squaring
-`cos` instead brings it to 1.7e-15 worst case.
+Both arities carry `double` Carlson kernels, and the two share one duplication loop: every
+caller that wants `R_D` wants `R_F` at the same arguments, so computing them together buys
+three square roots per step instead of six. That is what paid for the tighter stopping
+tolerance behind the accuracy the examples above show (106 ulp → 6).

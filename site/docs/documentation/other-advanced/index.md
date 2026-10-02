@@ -1,6 +1,6 @@
 # Other & Advanced
 
-109 built-in function(s) in this category.
+105 built-in function(s) in this category.
 
 - [`$AutoArrayPacking`]($AutoArrayPacking.md) — $AutoArrayPacking  _(Stable)_
 - [`$AutoCompilation`]($AutoCompilation.md) — $AutoCompilation  _(Stable)_
@@ -32,8 +32,6 @@
 - [`Cyan`](Cyan.md) — Cyan  _(Experimental)_
 - [`DataType`](DataType.md) — DataType[a]  _(Stable)_
 - [`DimensionReducerFunction`](DimensionReducerFunction.md) — DimensionReducerFunction[method, {means, loadings...}, featureCount, reducedDimension] is the reusable reducer DimensionReduction returns. Apply it to a feature vector, or to a matrix of them, to project into the reduced space.  _(Stable)_
-- [`EllipticE`](EllipticE.md) — EllipticE[m] is the complete elliptic integral of the second kind, Integrate[Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}], and EllipticE[phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticE[0] is Pi/2, EllipticE[1] is 1, and EllipticE[phi, 1] is Sin[phi].  _(Stable)_
-- [`EllipticPi`](EllipticPi.md) — EllipticPi[n, m] is the complete elliptic integral of the third kind, Integrate[1/((1 - n Sin[t]^2) Sqrt[1 - m Sin[t]^2]), {t, 0, Pi/2}], and EllipticPi[n, phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticPi[0, m] is EllipticK[m] and EllipticPi[0, phi, m] is EllipticF[phi, m]. For n > 1 the path crosses the pole at Sin[t]^2 == 1/n and the value is the Cauchy principal value.  _(Stable)_
 - [`EndOfFile`](EndOfFile.md) — EndOfFile  _(Experimental)_
 - [`ExactNumberQ`](ExactNumberQ.md) — ExactNumberQ[expr]  _(Experimental)_
 - [`Expression`](Expression.md) — Expression  _(Stable)_
@@ -42,8 +40,6 @@
 - [`Frame`](Frame.md) — Frame  _(Experimental)_
 - [`FrameStyle`](FrameStyle.md) — FrameStyle  _(Experimental)_
 - [`FrameTicks`](FrameTicks.md) — FrameTicks  _(Experimental)_
-- [`FresnelC`](FresnelC.md) — FresnelC[z]  _(Stable)_
-- [`FresnelS`](FresnelS.md) — FresnelS[z]  _(Stable)_
 - [`Gray`](Gray.md) — Gray  _(Experimental)_
 - [`Green`](Green.md) — Green  _(Experimental)_
 - [`HoldFirst`](HoldFirst.md) — HoldFirst  _(Experimental)_

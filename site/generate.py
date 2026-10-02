@@ -466,8 +466,30 @@ def parse_spec_files():
             head = re.sub(r"\(.*?\)", "", h).strip()        # drop "(+)", "(parser-level)"
             # A heading naming several functions is a curated grouping; record
             # the whole set so each member can point at the others.
+            #
+            # "and" separates names as readily as a comma does, and a heading that
+            # uses it was silently losing members: "EllipticK, EllipticF, EllipticE
+            # and EllipticPi" yielded the token "EllipticE and EllipticPi", which
+            # fails NAME_RE, so those two attached to NO section -- and a nameless
+            # section means the category falls back to Other & Advanced with no
+            # body, hence no Details, no examples and no Features bullets. Same for
+            # "FresnelC and FresnelS", which lost BOTH names and the whole section.
+            #
+            # Splitting on "and" unconditionally is wrong, though: most headings
+            # containing it are prose ("Gradient and derivative filters in a
+            # volume", "Piecewise and Rounding Functions"), and tokenising those
+            # would attach a real builtin to a section that merely mentions it.
+            # So the "and" split is accepted only when the WHOLE heading reads as a
+            # name list -- every token a valid name -- which is exactly the curated
+            # grouping this block is for. Measured over docs/spec/builtins: three
+            # headings change, recovering ImagePad/ImageCrop, FresnelC/FresnelS and
+            # EllipticE/EllipticPi, and nothing else moves.
             group = [t.strip().strip("`") for t in re.split(r"[,/]", head)]
             group = [t for t in group if NAME_RE.match(t)]
+            listed = [t.strip().strip("`")
+                      for t in re.split(r"[,/&]|\band\b", head) if t.strip()]
+            if listed and all(NAME_RE.match(t) for t in listed):
+                group = listed
             for token in group:
                 if token not in sections:
                     sections[token] = {"category": slug, "body": body,

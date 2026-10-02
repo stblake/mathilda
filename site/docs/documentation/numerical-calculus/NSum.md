@@ -51,7 +51,7 @@ In[7]:= NSum[(-5)^i/i!, {i, 0, Infinity}, NSumTerms -> 25] - Exp[-5]
 Out[7]= -2.4182e-15
 
 In[8]:= NSum[1/n^(11/10), {n, 1, Infinity}, WorkingPrecision -> 40] - Zeta[11/10]
-Out[8]= 4.40810381558357815488276201458342129182e-39
+Out[8]= -2.9387358770557187699218413430556141945467e-39
 
 In[9]:= NSum[(-1)^x/(1 + (x - 12)^2), {x, 0, Infinity}, Method -> "AlternatingSigns", WorkingPrecision -> 30]
 Out[9]= 0.2751938594139530395689715615907

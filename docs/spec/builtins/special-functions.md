@@ -1870,8 +1870,10 @@ argument is complete for `E`, two arguments are complete for `Π`. There is no
     any size is handled;
   - **complex φ**, which `EllipticF[ArcSin[z], m]` produces routinely as soon as
     `|z| > 1` — the normal case for an elliptic pencil written in `ArcSin` form;
-  - the **Cauchy principal value** for `EllipticPi` with `n > 1`, where the path
-    crosses the pole at `sin²t = 1/n` and the value is genuinely complex.
+  - the **value past the pole** for `EllipticPi` with `n > 1`, where the path
+    crosses `sin²t = 1/n`. It is not a real principal value — `Π(3/2 | 1/2)` is
+    `−0.456720313453 − 2.72069904635 i`, mpmath and Arb agreeing — so the machine
+    kernel declines there and Arb answers.
 - **Machine kernels.** `EllipticK`, `EllipticE` (both arities) and `EllipticF`
   carry `double` kernels built on Carlson's symmetric forms `R_F` and `R_D`, used
   by the packed/NDArray element-wise paths. They cover the real principal domain
@@ -1881,15 +1883,21 @@ argument is complete for `E`, two arguments are complete for `Π`. There is no
   the scalar path to 3 ulp (`K`, `F`) and 6 ulp (`E`); `R_F` and `R_D` share one
   duplication loop, since every caller that wants `R_D` wants `R_F` at the same
   arguments and the two recurrences walk an identical sequence.
-  `EllipticPi` has **no** machine kernel, so unlike the others it is not
-  `packed_aware`: a packed `List` is materialised by the transparency gate and a
-  visible `NDArray` is delisted and re-evaluated, so the List path answers
-  element by element through Arb. Its real domain would need Carlson `R_J`, and
-  `n ≥ 1` is not a real principal value at all — `Π(3/2 | 1/2)` is
-  `−0.45672 − 2.72070 i`, so the honest machine answer there is to decline.
-  Because `packed_aware` is a property of the symbol and not of one arity, a
-  future `R_J` kernel for the two-argument form must keep that delist fallback
-  for the three-argument one.
+  `EllipticPi` carries one too, on Carlson's `R_J` (and `R_C`, which `R_J`
+  needs): the **complete** `EllipticPi[n, m]` is a binary (`REG_B`) kernel at
+  41 ns/element and 2 ulp, and the **incomplete** `EllipticPi[n, φ, m]` is an
+  n-ary (`REG_N`) one at 1 ulp, carrying the quasi-period
+  `Π(n; φ+kπ|m) = Π(n; φ|m) + 2k Π(n|m)`. The element-wise NDArray layer tops
+  out at arity 2, so only the complete form rides that path; `Compile[]` lowers
+  both, the three-argument shape through `OP_KERNN`. Like the others the kernel
+  **declines** outside the real principal domain: `n > 1` is not a real
+  principal value at all (`Π(3/2 | 1/2)` is `−0.45672 − 2.72070 i`), so the
+  honest machine answer there is to hand back to Arb.
+  Because `packed_aware` is a property of the symbol and not of one arity,
+  registering the two-argument kernel also stopped the transparency gate
+  materialising packed `List`s for the three-argument form — which is why the
+  `ndarray_delist_and_reeval` fallback in all three argument positions had to
+  land first, and must stay.
 - **Exact values.** `EllipticK[-1] = Γ(1/4)²/(4√(2π))` and
   `EllipticK[1/2] = 8π^(3/2)/Γ(-1/4)²` (the lemniscatic singular values; `E` has
   no closed form at either and keeps none). `EllipticPi[n, 0] = π/(2√(1-n))`,

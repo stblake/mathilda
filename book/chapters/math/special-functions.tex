@@ -7,8 +7,9 @@ an integral like \(\int_0^\infty t^{z-1}e^{-t}\,dt\), or a power series whose
 coefficients grow by a fixed ratio, or the solution of a second-order linear
 differential equation with a variable coefficient, you have left the elementary
 world and entered the realm of the \emph{special functions}: the gamma and zeta
-functions, the error function, the Bessel and Airy functions, the Legendre and
-hypergeometric families.\index{special functions} They are ``special'' only in
+functions, the error function, the Bessel and Airy functions, the Legendre
+functions, the elliptic integrals, and the hypergeometric
+family.\index{special functions} They are ``special'' only in
 the sense that they were named and tabulated before computers existed; today they
 are as ordinary as \(\sin\), and Mathilda treats them so.
 
@@ -436,6 +437,102 @@ structure of \(Q_2\) in pair~7---a Legendre polynomial multiplying
 \(\operatorname{arctanh}x\), minus a lower-degree polynomial---is exactly that
 recurrence made concrete.
 
+\subsection{Legendre elliptic integrals}
+\label{ssec:sf-elliptic}
+
+Measure the arc of an ellipse, or the period of a pendulum that swings more than a
+few degrees, and the integral you get cannot be done in elementary
+terms.\index{elliptic integrals} That is not a failure of technique: Liouville's
+theory says no elementary antiderivative exists. Legendre's response was to name
+three canonical integrals and reduce every other one to
+them,\index{elliptic integrals!Legendre normal form} and those three are
+\B{EllipticK} and \B{EllipticF} (first kind, complete and incomplete), \B{EllipticE}
+(second kind), and \B{EllipticPi} (third kind):
+\[
+  F(\phi\,|\,m)=\int_0^\phi\frac{dt}{\sqrt{1-m\sin^2 t}},\qquad
+  E(\phi\,|\,m)=\int_0^\phi\!\sqrt{1-m\sin^2 t}\;dt,
+\]
+\[
+  \Pi(n;\phi\,|\,m)=\int_0^\phi\frac{dt}{(1-n\sin^2 t)\sqrt{1-m\sin^2 t}},
+\]
+with the \emph{complete} integrals \(K(m)=F(\pi/2\,|\,m)\), \(E(m)=E(\pi/2\,|\,m)\)
+and \(\Pi(n\,|\,m)\) taking the upper limit to \(\pi/2\). One warning before any
+example: the argument \(m\) is the \textbf{parameter} \(m=k^2\), not the modulus
+\(k\)---Mathilda follows the Wolfram convention, and this is the one place a reader
+of these signatures goes silently
+wrong.\index{elliptic integrals!parameter versus modulus}
+
+\begin{codepairs}
+\pair{special-functions/elliptic/1}{With \(m=0\) the integrand is \(1\), so \(K\) is
+the quarter period \(\pi/2\).}
+\pair{special-functions/elliptic/2}{At \(m=1/2\) a closed form exists---one of the
+lemniscatic singular values, through \(\Gamma\).}
+\pair{special-functions/elliptic/3}{The same number to thirty digits, through Arb's
+ball arithmetic.}
+\pair{special-functions/elliptic/4}{At \(m=1\) the integrand loses its last
+denominator at the upper limit and \(K\) diverges.}
+\pair{special-functions/elliptic/5}{The expansion at \(m=0\), from a dedicated
+\B{Series} kernel.}
+\pair{special-functions/elliptic/6}{A full quarter period closes the incomplete form
+into the complete one.}
+\pair{special-functions/elliptic/7}{The amplitude derivative \emph{is} the
+integrand---the fundamental theorem of calculus, made visible.}
+\pair{special-functions/elliptic/8}{The quasi-period
+\(F(\phi+k\pi\,|\,m)=F(\phi\,|\,m)+2kK(m)\), confirmed as a residual.}
+\pair{special-functions/elliptic/9}{And the parameter derivative of the second kind,
+expressed in \(E\) and \(K\) themselves.}
+\end{codepairs}
+
+Pair~5 is a case where a general method genuinely cannot work and a special one must.
+The generic Taylor route would differentiate \(K\) and evaluate at \(m=0\), but
+\(dK/dm=(E-(1-m)K)/(2m(1-m))\) is \((\pi/2-\pi/2)/0\) there---indeterminate---so the
+expansion was abandoned before it produced even its leading term. The closed
+coefficient recurrence \(a_k=a_{k-1}((2k-1)/2k)^2\) has no such trouble.
+
+\usagebox{EllipticK}
+
+The next four examples are the family's two genuine traps, and they are worth more
+than their line count. The first: \(E(\phi\,|\,1)=\int_0^\phi|\cos t|\,dt\), which
+equals \(\sin\phi\) only while \(|\phi|\le\pi/2\). Applied without that guard it
+reports \(\sin 2=0.909\) for a true \(2-\sin 2=1.091\)---a wrong answer that no
+amount of precision would reveal, since the formula is exactly right on the strip
+where most examples live. The second: for \(n>1\) the path of \(\Pi\) crosses the
+pole at \(\sin^2 t=1/n\), and the value beyond it is genuinely
+complex\index{elliptic integrals!third kind}---not the real Cauchy principal value it
+is often said to be.
+
+\begin{codepairs}
+\pair{special-functions/elliptic/10}{On the principal strip the \(m=1\) identity
+holds, and \(E(1/2\,|\,1)=\sin(1/2)\) exactly.}
+\pair{special-functions/elliptic/11}{Beyond it the identity is false; the engine
+declines to apply it and \(N\) recovers the true \(2-\sin 2\).}
+\pair{special-functions/elliptic/12}{A vanishing characteristic turns the third kind
+into the first.}
+\pair{special-functions/elliptic/13}{Past the pole, \(\Pi(3/2\,|\,1/2)\) is complex,
+and both digits and sign matter.}
+\pair{special-functions/elliptic/14}{The perimeter of an ellipse with \(a=1\) and
+\(e^2=1/4\)---the problem the second kind was named for.}
+\pair{special-functions/elliptic/15}{A pendulum released at \(30^\circ\) swings
+\(1.74\%\) slower than the small-angle law predicts.}
+\pair{special-functions/elliptic/16}{And \(K\) is a Gauss hypergeometric function in
+disguise: \(K(m)=\tfrac{\pi}{2}\,{}_2F_1(\tfrac12,\tfrac12;1;m)\).}
+\end{codepairs}
+
+Pairs~14--15 are the two problems that put these integrals in every textbook, and
+pair~16 is the bridge to the next subsection.\calloutnote{Under the hood}{Numerically
+the integrals are computed by \emph{Carlson's symmetric forms}---\(R_F\), \(R_D\),
+\(R_J\) and \(R_C\), evaluated by duplication until the arguments agree to a
+tolerance and then closed with a fifth-order
+tail.\index{Carlson symmetric forms} The arrangement rewards care: \(R_F\) and
+\(R_D\) walk an identical argument sequence, so computing them in one loop buys three
+square roots per step instead of six, and the first argument of \(R_F\) must be
+spelled \(\cos^2 r\) rather than \(1-\sin^2 r\)---near \(r=\pi/2\) the subtraction's
+absolute error is the size of the answer, which once cost eight digits of
+\(F(\pi/2-10^{-8}\,|\,0.99)\). The machine kernels cover the real principal domain at
+a few ulp and \emph{decline} outside it, where FLINT's \texttt{acb\_elliptic\_*}
+answers in rigorous ball arithmetic on the whole complex plane. Everything is in
+\texttt{src/special\_functions/elliptic.c}.}
+
 \subsection{The hypergeometric family: one function to rule them all}
 \label{ssec:sf-hypergeometric}
 
@@ -450,7 +547,8 @@ function
 is a power series whose term ratio is a fixed rational function of the summation
 index---and that one structural constraint is general enough to contain the
 exponential, the logarithm, the trigonometric functions, the Bessel functions, the
-error function, and the Legendre functions as special cases. Mathilda exposes it as
+error function, the Legendre functions, and the elliptic integrals of
+\S\ref{ssec:sf-elliptic} as special cases. Mathilda exposes it as
 \B{HypergeometricPFQ}, with the classical low-order cases \B{Hypergeometric2F1}
 (Gauss), \B{Hypergeometric1F1} (Kummer's confluent), and \B{Hypergeometric0F1}
 (the confluent limit) as named heads. The system's job is to \emph{recognize} when a
@@ -532,9 +630,9 @@ reduction and the Hurwitz zeta of \S\ref{ssec:sf-zeta} are two faces of one seri
 The special functions are the point where the three layers of Mathilda meet on a
 single object. Their \emph{exact} values are computed by the same rational and
 symbolic arithmetic as \S\ref{sec:arithmetic} and \S\ref{sec:algebra}; their
-\emph{identities}---the derivatives that close the gamma, Bessel, Airy, and Legendre
-families under \B{D}, the series expansions, the antiderivatives that \B{Integrate}
-returns by name---are what let them take part in the calculus of
+\emph{identities}---the derivatives that close the gamma, Bessel, Airy, Legendre and
+elliptic families under \B{D}, the series expansions, the antiderivatives that
+\B{Integrate} returns by name---are what let them take part in the calculus of
 \S\ref{sec:calculus} rather than merely being evaluated at its end; and their
 \emph{numerics}, backed by MPFR on the real line and by FLINT's rigorous Arb ball
 arithmetic in the complex plane, are what the numerical methods of

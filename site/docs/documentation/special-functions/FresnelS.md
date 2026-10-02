@@ -1,20 +1,20 @@
-# FresnelC
+# FresnelS
 
 !!! success "Status: Stable"
     documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## Description
 
-**`FresnelC[z]`**
+**`FresnelS[z]`**
 
-gives the Fresnel integral C(z) = Integral\_0^z Cos\[Pi t^2/2\] dt.
+gives the Fresnel integral S(z) = Integral\_0^z Sin\[Pi t^2/2\] dt.
 
-**`FresnelC[+-Infinity] = +-1/2, FresnelC[+-I Infinity] = +-I/2.`**
+**`FresnelS[+-Infinity] = +-1/2, FresnelS[+-I Infinity] = -+I/2.`**
 
 <details>
 <summary>Notes</summary>
 
-An entire, odd function with no branch cuts. FresnelC\[0\] = 0, Real and complex inputs evaluate numerically at machine or arbitrary (MPFR) precision; D\[FresnelC\[z\], z\] = Cos\[Pi z^2/2\]. Listable.
+An entire, odd function with no branch cuts. FresnelS\[0\] = 0, Real and complex inputs evaluate numerically at machine or arbitrary (MPFR) precision; D\[FresnelS\[z\], z\] = Sin\[Pi z^2/2\]. Listable.
 
 </details>
 
@@ -68,8 +68,10 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## References
 
+**See also:** [FresnelC](../../special-functions/FresnelC/), [Piecewise](../../control-flow/Piecewise/)
+
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
-- Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+- Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
-- Tests: [`tests/test_fresnelc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fresnelc.c)
+- Tests: [`tests/test_fresnels.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fresnels.c)
 - Tests: [`tests/test_numeric_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric_stress.c)

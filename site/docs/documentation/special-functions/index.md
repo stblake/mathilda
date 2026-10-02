@@ -1,6 +1,6 @@
 # Special Functions
 
-43 built-in function(s) in this category.
+47 built-in function(s) in this category.
 
 - [`AiryAi`](AiryAi.md) — AiryAi[z]  _(Stable)_
 - [`AiryBi`](AiryBi.md) — AiryBi[z]  _(Stable)_
@@ -13,13 +13,17 @@
 - [`Beta`](Beta.md) — Beta[a, b]  _(Stable)_
 - [`CosIntegral`](CosIntegral.md) — CosIntegral[z]  _(Stable)_
 - [`CoshIntegral`](CoshIntegral.md) — CoshIntegral[z]  _(Stable)_
+- [`EllipticE`](EllipticE.md) — EllipticE[m] is the complete elliptic integral of the second kind, Integrate[Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}], and EllipticE[phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticE[0] is Pi/2 and EllipticE[1] is 1. EllipticE[phi, 1] is Sin[phi] only for |phi| <= Pi/2, since E(phi|1) is the integral of Abs[Cos[t]]: EllipticE[2, 1] is 2 - Sin[2], not Sin[2].  _(Stable)_
 - [`EllipticF`](EllipticF.md) — EllipticF[phi, m] is the incomplete elliptic integral of the first kind, Integrate[1/Sqrt[1 - m Sin[t]^2], {t, 0, phi}]. The second argument is the PARAMETER m = k^2, not the modulus k. EllipticF[phi, 0] is phi and EllipticF[Pi/2, m] is EllipticK[m]; phi may be complex and of any size (the quasi-period is applied).  _(Stable)_
 - [`EllipticK`](EllipticK.md) — EllipticK[m] is the complete elliptic integral of the first kind, Integrate[1/Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}]. The argument is the PARAMETER m = k^2, not the modulus k. EllipticK[0] is Pi/2 and EllipticK[1] is ComplexInfinity; exact arguments otherwise stay symbolic and inexact ones evaluate numerically at their precision.  _(Stable)_
+- [`EllipticPi`](EllipticPi.md) — EllipticPi[n, m] is the complete elliptic integral of the third kind, Integrate[1/((1 - n Sin[t]^2) Sqrt[1 - m Sin[t]^2]), {t, 0, Pi/2}], and EllipticPi[n, phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticPi[0, m] is EllipticK[m] and EllipticPi[0, phi, m] is EllipticF[phi, m]; EllipticPi[1, m] is ComplexInfinity. Where the path crosses the pole at Sin[t]^2 == 1/n the value is complex, not a real principal value: EllipticPi[3/2, 1/2] is -0.4567203134529101 - 2.720699046351328 I.  _(Stable)_
 - [`Erf`](Erf.md) — Erf[z]  _(Stable)_
 - [`Erfc`](Erfc.md) — Erfc[z]  _(Stable)_
 - [`Erfi`](Erfi.md) — Erfi[z]  _(Stable)_
 - [`EulerE`](EulerE.md) — EulerE[n]  _(Stable)_
 - [`ExpIntegralEi`](ExpIntegralEi.md) — ExpIntegralEi[z]  _(Stable)_
+- [`FresnelC`](FresnelC.md) — FresnelC[z]  _(Stable)_
+- [`FresnelS`](FresnelS.md) — FresnelS[z]  _(Stable)_
 - [`Gamma`](Gamma.md) — Gamma[z]  _(Stable)_
 - [`HarmonicNumber`](HarmonicNumber.md) — HarmonicNumber[n]  _(Stable)_
 - [`HurwitzZeta`](HurwitzZeta.md) — HurwitzZeta[s, a]  _(Stable)_

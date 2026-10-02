@@ -848,12 +848,18 @@ Expr* builtin_ellipticpi(Expr* res) {
     else return ell_argt("EllipticPi", argc, 2, 3);
     if (v) return v;
 
-    /* EllipticPi has no machine kernel (no Carlson R_J here), so unlike
-     * K/E/F it is not packed_aware and a VISIBLE NDArray reaches this builtin
-     * untouched -- where, before this, it was simply left unevaluated in all
-     * three argument positions. Per CLAUDE.md an unevaluated visible NDArray is
-     * a wrong answer, not a slow one, so delist and re-evaluate: the List path
-     * answers correctly, element by element, through Arb. */
+    /* A VISIBLE NDArray that no kernel consumed reaches this builtin untouched
+     * -- where, before this, it was simply left unevaluated in all three
+     * argument positions. Per CLAUDE.md an unevaluated visible NDArray is a
+     * wrong answer, not a slow one, so delist and re-evaluate: the List path
+     * answers correctly, element by element.
+     *
+     * Still load-bearing now that the R_J kernels exist, and MORE so. The
+     * element-wise ND layer tops out at arity 2, so the three-argument form has
+     * no kernel to dispatch to -- yet packed_aware is a property of the SYMBOL,
+     * not of one arity, so registering the two-argument kernel also stopped the
+     * transparency gate materialising packed Lists here. This fallback is what
+     * keeps that correct, which is why it had to land before REG_B. */
     for (size_t i = 0; i < argc; i++)
         if (is_ndarray(res->data.function.args[i]))
             return ndarray_delist_and_reeval(res);
@@ -893,7 +899,9 @@ void elliptic_init(void) {
         "Integrate[Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}], and "
         "EllipticE[phi, m] the incomplete one, with upper limit phi. The "
         "parameter argument is m = k^2, not the modulus k. EllipticE[0] is "
-        "Pi/2, EllipticE[1] is 1, and EllipticE[phi, 1] is Sin[phi].");
+        "Pi/2 and EllipticE[1] is 1. EllipticE[phi, 1] is Sin[phi] only for "
+        "|phi| <= Pi/2, since E(phi|1) is the integral of Abs[Cos[t]]: "
+        "EllipticE[2, 1] is 2 - Sin[2], not Sin[2].");
 
     symtab_add_builtin("EllipticPi", builtin_ellipticpi);
     symtab_get_def("EllipticPi")->attributes |=
