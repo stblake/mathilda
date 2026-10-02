@@ -16,6 +16,8 @@
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
   import { mathildaHighlightExtension } from './mathildaLang';
   import { mathildaStructuralSelection } from './structuralSelection';
+  import { mathildaAutocomplete, mathildaCompletionKeymap } from './completion';
+  import { closeCompletion } from '@codemirror/autocomplete';
   import Output from './Output.svelte';
   import RefPage from './RefPage.svelte';
   import { openRefpage } from './canvas';
@@ -140,6 +142,10 @@
           /* The find bar's current-match mark: painted, not selected, so the
              find bar keeps focus (see searchHighlight.ts). */
           searchMarkExtension,
+          /* Autocomplete: a builtin + session-symbol dropdown. Provides the
+             completion state, the typing trigger and the Up/Down/Enter/Escape
+             defaults; the Tab binding in the keymap below accepts/opens it. */
+          mathildaAutocomplete(),
           /* Mathilda's only comment form is the nested block comment (* ... *).
              This is not cosmetic metadata: every comment command in
              @codemirror/commands (toggleComment, toggleLineComment, ...) reads
@@ -152,7 +158,11 @@
             { commentTokens: { block: { open: '(*', close: '*)' } } },
           ]),
           keymap.of([
-            { key: 'Shift-Enter', run() { dispatch('run', { id: cell.id }); return true; } },
+            /* Close the autocomplete dropdown FIRST: with the cell about to
+               evaluate (and the caret about to move to the next cell), a lingering
+               completion tooltip -- it lives on document.body -- would be left
+               orphaned over the output. closeCompletion is a no-op when none is open. */
+            { key: 'Shift-Enter', run(v) { closeCompletion(v); dispatch('run', { id: cell.id }); return true; } },
             /* Cmd+L — Mathematica's Copy Input from Above. Bound before defaultKeymap so it wins,
                and it returns the command's own result: with no input above, `false` lets the key
                fall through rather than swallowing it silently. */
@@ -163,7 +173,7 @@
                first means the row is no longer last by the time `run` looks, so that append correctly
                declines and Mod-Enter keeps inserting exactly one. Both dispatches are synchronous and
                the store updates synchronously, so `run` does see the new row. */
-            { key: 'Mod-Enter',   run() { dispatch('addBelow', { rowId }); dispatch('run', { id: cell.id }); return true; } },
+            { key: 'Mod-Enter',   run(v) { closeCompletion(v); dispatch('addBelow', { rowId }); dispatch('run', { id: cell.id }); return true; } },
             { key: 'ArrowUp',     run(v) {
               const sel = v.state.selection.main;
               if (sel.head <= v.state.doc.lineAt(0).to) {
@@ -179,6 +189,10 @@
               }
               return false;
             }},
+            /* Tab-completion: accept/open the autocomplete dropdown. Before
+               defaultKeymap so Tab is claimed while a completion is active, and
+               falls through to normal behaviour when there is nothing to complete. */
+            ...mathildaCompletionKeymap,
             ...defaultKeymap,
             ...historyKeymap,
           ]),

@@ -38,6 +38,28 @@ pub fn cancel_quit(guard: State<'_, QuitGuard>) {
     guard.prevented.store(false, Ordering::SeqCst);
 }
 
+/// Set the View-menu checkmarks from the webview's current state, called after a
+/// menu item toggles a store so the native checkmarks stay in step — including the
+/// radio behaviour of the colour-scheme group (exactly one checked). Desktop-only;
+/// a no-op elsewhere. See `ViewMenu` in lib.rs.
+#[tauri::command]
+pub fn sync_view_menu(app: tauri::AppHandle, autocomplete: bool, scheme: String) {
+    #[cfg(desktop)]
+    {
+        use tauri::Manager;
+        if let Some(vm) = app.try_state::<crate::ViewMenu>() {
+            let _ = vm.autocomplete.set_checked(autocomplete);
+            for (id, item) in &vm.schemes {
+                let _ = item.set_checked(*id == scheme);
+            }
+        }
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, autocomplete, scheme);
+    }
+}
+
 /// Evaluate a Mathilda expression, streaming output messages through
 /// `channel` until the kernel emits "done".
 #[tauri::command]

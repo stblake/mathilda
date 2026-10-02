@@ -21,15 +21,25 @@ mod kernel;
 
 use commands::{evaluate_cell, interrupt_kernel, load_library, load_notebook, ping_kernel, restart_kernel, save_library, save_notebook, set_window_title, syntax_spans, eval_once};
 use commands::{clear_recent_files, forget_recent_file, push_recent_file, recent_files};
-use commands::{cancel_quit, confirm_and_quit, QuitGuard};
+use commands::{cancel_quit, confirm_and_quit, sync_view_menu, QuitGuard};
 use std::sync::atomic::Ordering;
 use kernel::MathildaKernel;
 #[cfg(desktop)]
 use recent::RecentFiles;
 #[cfg(desktop)]
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::Emitter;
 use tauri::Manager;
+
+/// Handles for the View-menu items whose checkmark mirrors a webview store, so
+/// `sync_view_menu` (commands.rs) can update them when the store changes. Managed
+/// in app state; desktop-only, like the native menu itself.
+#[cfg(desktop)]
+pub struct ViewMenu {
+    pub autocomplete: CheckMenuItem<tauri::Wry>,
+    /// (colour-scheme id, its menu item); exactly one is checked at a time.
+    pub schemes: Vec<(String, CheckMenuItem<tauri::Wry>)>,
+}
 
 // Native menu bar is a desktop-only concept; iOS/Android have no app menu.
 //
@@ -38,7 +48,7 @@ use tauri::Manager;
 // up out of an installed `Menu`. `setup` installs the menu, draws the list once, and hands the
 // state to `app.manage`.
 #[cfg(desktop)]
-fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles)> {
+fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles, ViewMenu)> {
     // Item ids are a CONTRACT with the webview: each one is emitted as `menu:<id>` and handled by
     // runMenuCommand in src/lib/menuCommands.ts, whose MENU_IDS list is what App.svelte subscribes
     // to. An id added here without a case there is a menu item that does nothing, which is why the
@@ -201,6 +211,34 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles)
         ],
     )?;
 
+    // `toggle-dark` stays a plain item. `toggle-autocomplete` and the scheme
+    // items are CheckMenuItems whose checkmark mirrors a webview store, kept in
+    // step by sync_view_menu. The ids are a contract with menuCommands.ts and are
+    // spelled out longhand (not generated), because check_menu_ids.py reads both
+    // sides as source text; the scheme labels mirror COLOR_SCHEMES in schemes.ts.
+    let toggle_autocomplete =
+        CheckMenuItem::with_id(app, "toggle-autocomplete", "Autocomplete", true, true, None::<&str>)?;
+    let sc_default   = CheckMenuItem::with_id(app, "scheme-default",         "Default (adaptive)", true, true,  None::<&str>)?;
+    let sc_dracula   = CheckMenuItem::with_id(app, "scheme-dracula",         "Dracula",            true, false, None::<&str>)?;
+    let sc_nord      = CheckMenuItem::with_id(app, "scheme-nord",            "Nord",               true, false, None::<&str>)?;
+    let sc_monokai   = CheckMenuItem::with_id(app, "scheme-monokai",         "Monokai",            true, false, None::<&str>)?;
+    let sc_sol_dark  = CheckMenuItem::with_id(app, "scheme-solarized-dark",  "Solarized Dark",     true, false, None::<&str>)?;
+    let sc_sol_light = CheckMenuItem::with_id(app, "scheme-solarized-light", "Solarized Light",    true, false, None::<&str>)?;
+    let sc_gruvbox   = CheckMenuItem::with_id(app, "scheme-gruvbox",         "Gruvbox",            true, false, None::<&str>)?;
+    let sc_one_dark  = CheckMenuItem::with_id(app, "scheme-one-dark",        "One Dark",           true, false, None::<&str>)?;
+    let sc_tokyo     = CheckMenuItem::with_id(app, "scheme-tokyo-night",     "Tokyo Night",        true, false, None::<&str>)?;
+    let sc_github    = CheckMenuItem::with_id(app, "scheme-github-light",    "GitHub Light",       true, false, None::<&str>)?;
+    let sc_seventies = CheckMenuItem::with_id(app, "scheme-seventies",       "70s (Green Phosphor)", true, false, None::<&str>)?;
+    let sc_eighties  = CheckMenuItem::with_id(app, "scheme-eighties",        "80s (Brown/Orange)", true, false, None::<&str>)?;
+    let sc_grayscale = CheckMenuItem::with_id(app, "scheme-grayscale",       "Grayscale",          true, false, None::<&str>)?;
+    let sc_off       = CheckMenuItem::with_id(app, "scheme-off",             "Off (none)",         true, false, None::<&str>)?;
+    let syntax = Submenu::with_items(app, "Syntax Highlighting", true, &[
+        &sc_default, &sc_dracula, &sc_nord, &sc_monokai, &sc_sol_dark,
+        &sc_sol_light, &sc_gruvbox, &sc_one_dark, &sc_tokyo, &sc_github,
+        &sc_seventies, &sc_eighties, &sc_grayscale,
+        &PredefinedMenuItem::separator(app)?,
+        &sc_off,
+    ])?;
     let view = Submenu::with_items(
         app,
         "View",
@@ -208,8 +246,30 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles)
         &[
             &MenuItem::with_id(app, "toggle-dark", "Toggle Dark Mode", true,
                                Some("CmdOrCtrl+Shift+T"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &toggle_autocomplete,
+            &syntax,
         ],
     )?;
+    let view_menu = ViewMenu {
+        autocomplete: toggle_autocomplete,
+        schemes: vec![
+            ("default".into(), sc_default),
+            ("dracula".into(), sc_dracula),
+            ("nord".into(), sc_nord),
+            ("monokai".into(), sc_monokai),
+            ("solarized-dark".into(), sc_sol_dark),
+            ("solarized-light".into(), sc_sol_light),
+            ("gruvbox".into(), sc_gruvbox),
+            ("one-dark".into(), sc_one_dark),
+            ("tokyo-night".into(), sc_tokyo),
+            ("github-light".into(), sc_github),
+            ("seventies".into(), sc_seventies),
+            ("eighties".into(), sc_eighties),
+            ("grayscale".into(), sc_grayscale),
+            ("off".into(), sc_off),
+        ],
+    };
 
     let menu = Menu::with_items(app, &[
         &Submenu::with_items(app, "Mathilda", true, &[
@@ -232,7 +292,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles)
     ])?;
 
     let recent = RecentFiles::new(app, recent, recent_slots, recent_clear, recent_empty)?;
-    Ok((menu, recent))
+    Ok((menu, recent, view_menu))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -264,7 +324,7 @@ pub fn run() {
             // Native menu (desktop only — mobile has no app menu bar).
             #[cfg(desktop)]
             {
-                let (menu, recent) = build_menu(app)?;
+                let (menu, recent, view_menu) = build_menu(app)?;
                 app.set_menu(menu)?;
                 // Draw File > Open Recent only once the menu is installed: the submenu has to
                 // be attached to a live NSMenu before appending to it reaches the menu bar.
@@ -272,6 +332,7 @@ pub fn run() {
                     log::warn!("{e}");
                 }
                 app.manage(recent);
+                app.manage(view_menu);
                 app.on_menu_event(|app, event| {
                     let id = event.id().as_ref().to_string();
                     let _ = app.emit(&format!("menu:{id}"), ());
@@ -310,6 +371,7 @@ pub fn run() {
             clear_recent_files,
             confirm_and_quit,
             cancel_quit,
+            sync_view_menu,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

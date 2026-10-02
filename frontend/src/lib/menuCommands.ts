@@ -23,6 +23,8 @@ import { splitCell, mergeCellDown, duplicateCell, deleteCell, convertCell,
          copyInputFromAbove } from './cellCommands';
 import { restart, abortEvaluation } from './kernelActions';
 import { darkMode } from './theme';
+import { autocompleteEnabled, colorScheme } from './properties';
+import { invoke } from '@tauri-apps/api/core';
 import type { CellType } from './notebook';
 
 /** What App.svelte lends the dispatcher: the library-level file operations it owns. */
@@ -65,6 +67,16 @@ export const MENU_IDS = [
   'eval-cell', 'run-all', 'interrupt', 'restart',
   'gfx-plot', 'gfx-image', 'gfx-image3d', 'gfx-graphics',
   'toggle-dark',
+  'toggle-autocomplete',
+  /* Colour schemes. Spelled out longhand (not generated from COLOR_SCHEMES) for
+     the same reason as the recent-N pool: check_menu_ids.py reads this list as
+     source text, and the ids must match the CheckMenuItems in lib.rs. The id
+     minus the `scheme-` prefix is the scheme id in schemes.ts. (Avoid writing a
+     single-quoted id in this comment — the gate would read it as a real entry.) */
+  'scheme-default', 'scheme-dracula', 'scheme-nord', 'scheme-monokai',
+  'scheme-solarized-dark', 'scheme-solarized-light', 'scheme-gruvbox',
+  'scheme-one-dark', 'scheme-tokyo-night', 'scheme-github-light',
+  'scheme-seventies', 'scheme-eighties', 'scheme-grayscale', 'scheme-off',
 ] as const;
 
 /* The notebook a command acts on: the active pane, or the first one on the canvas so that a
@@ -101,6 +113,16 @@ export function convertActiveCell(type: CellType) {
   const cell = get(activeCell);
   if (!act || !cell || cell.notebookId !== act.notebookId) return;
   if (convertCell(act.store, cell.cellId, type)) retypeActiveCell(type);
+}
+
+/* After a View-menu item flips a store, push the current state to the native menu
+   so its checkmarks match — including the colour-scheme group, where exactly one
+   tick should show. */
+function syncViewMenu() {
+  invoke('sync_view_menu', {
+    autocomplete: get(autocompleteEnabled),
+    scheme: get(colorScheme),
+  }).catch(() => {});
 }
 
 export function runMenuCommand(id: string, hooks: MenuHooks) {
@@ -203,6 +225,25 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
 
     /* ---- View ---- */
     case 'toggle-dark': darkMode.update(v => !v); break;
+    case 'toggle-autocomplete': autocompleteEnabled.update(v => !v); syncViewMenu(); break;
+    /* Colour schemes: a literal case per scheme (not an `id.startsWith` test) so the gate
+       sees each id handled; the scheme id is the menu id minus the 'scheme-'
+       prefix. syncViewMenu then leaves exactly the chosen one ticked. */
+    case 'scheme-default':
+    case 'scheme-dracula':
+    case 'scheme-nord':
+    case 'scheme-monokai':
+    case 'scheme-solarized-dark':
+    case 'scheme-solarized-light':
+    case 'scheme-gruvbox':
+    case 'scheme-one-dark':
+    case 'scheme-tokyo-night':
+    case 'scheme-github-light':
+    case 'scheme-seventies':
+    case 'scheme-eighties':
+    case 'scheme-grayscale':
+    case 'scheme-off':
+      colorScheme.set(id.slice('scheme-'.length)); syncViewMenu(); break;
 
     default:
       /* An id the Rust menu emits with no case here: a menu item that does nothing. Say so once

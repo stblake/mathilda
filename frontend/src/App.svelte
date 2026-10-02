@@ -15,7 +15,8 @@
   import PropertiesPanel from './lib/PropertiesPanel.svelte';
   import SearchBar from './lib/SearchBar.svelte';
   import { searchOpen } from './lib/search';
-  import { uiScale } from './lib/properties';
+  import { uiScale, colorScheme } from './lib/properties';
+  import { applyColorScheme } from './lib/schemes';
   import { kernelStatus, dirty, markClean } from './lib/notebook';
   import { darkMode } from './lib/theme';
   import { kernelMemory } from './lib/status';
@@ -283,6 +284,10 @@
      the keyboard drives. Two independent scales would drift apart. */
   $: document.documentElement.style.fontSize = `${$uiScale * 16}px`;
 
+  /* Syntax-highlighting colour scheme: set/clear the --cm-* vars on <html>
+     (lib/schemes.ts). Same shape as the dark-mode class and the font-size above. */
+  $: applyColorScheme($colorScheme);
+
   function onKeydown(e: KeyboardEvent) {
     /* The save-on-close modal owns the keyboard while it is up: Enter = Save,
        Escape = Cancel. */
@@ -441,6 +446,28 @@
     --cm-operator: #89dceb;
     --cm-bracket:  #9399b2;
     --cm-error:    #f38ba8;
+    /* Greyscale scheme ramp (lib/schemes.ts). Dark variant: light greys for the
+       dark canvas. The light variant is in the html.light block below, which is
+       what makes the Grayscale scheme adaptive. */
+    --cm-gray-fg:     #ececec;
+    --cm-gray-strong: #c0c0c0;
+    --cm-gray-mid:    #9e9e9e;
+    --cm-gray-dim:    #808080;
+    --cm-gray-faint:  #686868;
+    /* Green-phosphor scheme ramp (lib/schemes.ts, the '70s scheme). Like the
+       grayscale ramp this is ADAPTIVE: bright CRT greens here for the dark
+       canvas, deeper greens in the html.light block below. Builtins are set
+       apart by WEIGHT as well as hue (builtinBold in schemes.ts). */
+    --cm-grn-builtin:  #73ff6b;
+    --cm-grn-symbol:   #4fdd8f;
+    --cm-grn-operator: #6ee7c6;
+    --cm-grn-pattern:  #3fe0a8;
+    --cm-grn-number:   #c6f24a;
+    --cm-grn-string:   #9fd98a;
+    --cm-grn-slot:     #aee84f;
+    --cm-grn-bracket:  #5f9e68;
+    --cm-grn-comment:  #4e7d56;
+    --cm-grn-error:    #ff5f56;
     --out-text:    #cdd6f4;
     --gutter-bg:   rgba(255,255,255,0.015);
     --gutter-hover:rgba(255,255,255,0.03);
@@ -491,6 +518,23 @@
     --cm-operator: #209fb5;
     --cm-bracket:  #7c7f93;
     --cm-error:    #d20f39;
+    /* Greyscale ramp, light variant: dark greys for the light canvas. */
+    --cm-gray-fg:     #141414;
+    --cm-gray-strong: #3a3a3a;
+    --cm-gray-mid:    #565656;
+    --cm-gray-dim:    #727272;
+    --cm-gray-faint:  #8a8a8a;
+    /* Green-phosphor ramp, light variant: deep greens for the light canvas. */
+    --cm-grn-builtin:  #0b8a2e;
+    --cm-grn-symbol:   #1f7a3f;
+    --cm-grn-operator: #0a8f74;
+    --cm-grn-pattern:  #0f7d5c;
+    --cm-grn-number:   #5e7a00;
+    --cm-grn-string:   #3f7a2a;
+    --cm-grn-slot:     #5a7a12;
+    --cm-grn-bracket:  #4a7d55;
+    --cm-grn-comment:  #79a07f;
+    --cm-grn-error:    #c0362c;
     --out-text:    #1c1c2e;
     --gutter-bg:   #eeeef5;
     --gutter-hover:#e4e5f0;

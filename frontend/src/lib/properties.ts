@@ -42,3 +42,14 @@ export const uiScale = writable(1.0);
 /** The steps the panel offers. Not the keyboard's 0.1: a discrete set is what a
  *  set of buttons can honestly represent. */
 export const UI_SCALE_STEPS = [0.75, 1, 1.25, 1.5];
+
+/** Whether code cells offer the builtin/session-symbol completion dropdown.
+ *  Read by the completion source and the Tab binding in lib/completion.ts; the
+ *  Properties panel toggles it. Plain writable, no persistence — same decision
+ *  as the preferences above. */
+export const autocompleteEnabled = writable(true);
+
+/** The active syntax-highlighting colour scheme id (see lib/schemes.ts).
+ *  'default' is the adaptive Catppuccin light/dark palette; the others are fixed
+ *  palettes applied over it. App.svelte applies this; the panel chooses it. */
+export const colorScheme = writable('default');

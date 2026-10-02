@@ -523,10 +523,25 @@
    *
    *  Called BEFORE the await on the kernel, so the cell appears at once — the point is to be able to
    *  keep typing while a long evaluation is still running. */
-  async function continueBelowIfLast(cellId: string) {
+  async function continueBelowIfLast(cellId: string): Promise<string | null> {
     const id = appendCellIfLast(nb.store, cellId);
-    if (!id) return;
+    if (!id) return null;
     await tick(); cellFocusFns[id]?.();
+    return id;
+  }
+
+  /* Move the caret to the next cell below the one just evaluated, so Shift+Enter
+     walks the notebook. Reuses seekFocusable -- the same "enter the row below"
+     logic arrow navigation uses, which tries the focus function and verifies it
+     took (document.activeElement changed), so a non-focusable row (a read-only
+     heading) is skipped rather than swallowing the caret. No-op when there is
+     nothing focusable below. */
+  async function advanceToNextCell(cellId: string) {
+    await tick();
+    const rows = nb.store.getRows();
+    const ri = rows.findIndex((r: any) => r.cells.some((c: any) => c.id === cellId));
+    if (ri < 0) return;
+    seekFocusable(rows, ri + 1, 1);
   }
 
   async function runCell(cellId: string, source: string) {
@@ -598,9 +613,17 @@
     }
   }
 
-  function handleRun(e: CustomEvent<{ id: string }>) {
+  async function handleRun(e: CustomEvent<{ id: string }>) {
     const cell = nb.store.allCells().find((c: any) => c.id === e.detail.id);
-    if (cell) { continueBelowIfLast(cell.id); runCell(cell.id, cell.source); }
+    if (!cell) return;
+    /* Evaluate, then move the caret ON -- to the fresh cell appended below the
+       last row, or else to the next existing cell -- so Shift+Enter can be held
+       to walk and evaluate a notebook, and the caret is never left on the cell
+       just run. runCell's kernel call is async and intentionally NOT awaited: the
+       caret advances at once, so you can keep typing while a long cell computes. */
+    const appended = await continueBelowIfLast(cell.id);
+    runCell(cell.id, cell.source);
+    if (!appended) await advanceToNextCell(cell.id);
   }
 
   function handleChange(e: CustomEvent<{ id: string; source: string }>) {

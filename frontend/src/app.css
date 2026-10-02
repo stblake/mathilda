@@ -47,6 +47,7 @@
   --z-banner: 300;
   --z-menu-backdrop: 399;
   --z-menu: 400;
+  --z-autocomplete: 450;    /* editor completion dropdown, rendered on <body> */
   --text: #6b6375;
   --text-h: #08060d;
   /* Subordinate text: subsection headings, captions, recorded output. */
@@ -379,4 +380,46 @@ code {
 ::highlight(mathilda-search) {
   background-color: rgba(250, 179, 135, 0.45);
   color: inherit;
+}
+
+/* ---- Autocomplete dropdown (CodeMirror) --------------------------------------
+   The builtin/session-symbol completion list (see lib/completion.ts). CodeMirror's
+   default tooltip is light-only, so drive it from the same theme tokens as the
+   rest of the UI and it follows light/dark automatically. */
+.cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  /* Rendered on <body> (see completion.ts) to escape the cell's overflow clip and
+     the canvas transform, so it must stack above the canvas explicitly. */
+  z-index: var(--z-autocomplete, 450);
+}
+.cm-tooltip-autocomplete > ul {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.9rem;
+  max-height: 16em;
+}
+.cm-tooltip-autocomplete > ul > li {
+  color: var(--text);
+  padding: 2px 8px;
+}
+.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+.cm-tooltip-autocomplete .cm-completionMatchedText {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.cm-tooltip-autocomplete .cm-completionDetail {
+  color: var(--text-dim);
+  font-style: normal;
+  margin-left: 0.75em;
+  font-size: 0.85em;
+}
+.cm-tooltip-autocomplete .cm-completionIcon {
+  opacity: 0.6;
 }
