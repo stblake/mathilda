@@ -19,6 +19,14 @@
  * than at startup.  See LAZY_LOAD_CRC below.
  */
 
+/* clock_gettime / CLOCK_MONOTONIC (used by ip_mono_seconds, the cascade
+ * profiler's clock) are POSIX, not C99.  glibc hides them under -std=c99 unless
+ * a feature-test macro is defined BEFORE the first include; placed below the
+ * first #include it has no effect at all (see SPEC.md §10). */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "integrate.h"
 #include "integrate_interp.h"
 #include "integrate_unknown.h"
@@ -66,6 +74,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>    /* clock_gettime / clock: the cascade profiler's clock */
 
 /* True iff `e` is the symbol `True`.  The PolynomialQ / rationalQ
  * predicates we call below return either True or False. */
@@ -176,6 +185,20 @@ static Expr* call_stage(const char* head_name, Expr* f, Expr* x) {
     expr_free(call);
     return result;
 }
+
+static void   integrate_arm_budget(double seconds);
+
+/* NOTE -- a stage-boundary `TimeConstrained[Integrate`DerivativeDivides[f,x], t]`
+ * wrapper was built here and REMOVED. It did make TimeConstraint a hard bound
+ * (3 s measured 3.00 s, 1 s measured 1.00 s), but it changed the stage's RESULT:
+ * `Sqrt[Sin[x]]/(Sin[x]^2 + 1)`, which the recursion gate in
+ * integrate_derivdivides.c closes in 0.066 s, became a 3 s DECLINE under the
+ * wrapper. Something about reaching the stage through its registered head inside
+ * TimeConstrained -- the fail-memo keying, or the argument-evaluation order --
+ * loses the close, so the wrapper cost an answer to buy a bound. Not reinstated
+ * without understanding that; the recursion gate removes the need in this case
+ * (20 s abort -> 0.066 s close) and TimeConstraint remains the between-stages
+ * backstop described with g_intg_deadline below. */
 
 /* Stage 0: undefined-function integrator (Roach 1992, §1.7).  Handles
  * integrands rational in unknown functions u[x] and their derivatives,
@@ -1089,6 +1112,54 @@ static bool definite_parse_method(Expr* opt, const char** name,
 }
 
 /* True iff `opt` is a Rule/RuleDelayed whose LHS is the symbol `sym`. */
+
+/* The default TimeConstraint for the Automatic cascade, in seconds.
+ *
+ * Chosen by measurement, not by taste. Profiling the cascade from the inside
+ * (MATHILDA_INTEGRATE_PROFILE=1) over the integrands it fails to close shows
+ * `try_derivdivides` is very nearly the whole cost -- 25.05 s of a 25.06 s
+ * cascade on `Sqrt[Sin[x]]/(Sin[x]^2 + 1)`, against 0.003 s for the ten stages
+ * ahead of it. Timing the stage on the integrands it DOES close bounds the price
+ * of cutting it off: median 0.40 s, p90 1.72 s, and only one close in 45 runs
+ * longer than 3 s -- and that one (an ArcCos/Log mixed radical) is closed by
+ * ParallelMixedTower three stages later in 0.21 s. So 3 s costs no answers and
+ * caps the cases that currently do not terminate. Override per call with
+ * `TimeConstraint -> t`, or `Infinity` for the old unbounded behaviour. */
+#define INTEGRATE_DEFAULT_TIME_CONSTRAINT 3.0
+
+/* An option whose LHS is the named (non-interned) symbol, e.g. "TimeConstraint".
+ * Mirrors is_rule_with_lhs in src/simp/simp_builtins.c, which is how the same
+ * option is matched on Simplify / FullSimplify / Refine. */
+static bool integrate_option_is(const Expr* opt, const char* name) {
+    if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2)
+        return false;
+    const Expr* h = opt->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    if (h->data.symbol.name != SYM_Rule && h->data.symbol.name != SYM_RuleDelayed)
+        return false;
+    const Expr* lhs = opt->data.function.args[0];
+    return lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol.name, name) == 0;
+}
+
+/* TimeConstraint value -> seconds. Infinity (symbol or DirectedInfinity) and any
+ * non-positive or unreadable value mean unbounded, matching
+ * simp_parse_time_budget. A {t, ...} list takes its first element. */
+static double integrate_parse_time_constraint(const Expr* e) {
+    if (!e) return HUGE_VAL;
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity)
+        return HUGE_VAL;
+    if (e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_DirectedInfinity) return HUGE_VAL;
+        if (h == SYM_List && e->data.function.arg_count >= 1)
+            return integrate_parse_time_constraint(e->data.function.args[0]);
+    }
+    double v;
+    if (common_machine_real_value((Expr*)e, &v) && v > 0.0) return v;
+    return HUGE_VAL;
+}
+
 static bool option_lhs_is(Expr* opt, const char* sym) {
     if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) return false;
     if (opt->data.function.head->type != EXPR_SYMBOL) return false;
@@ -1148,6 +1219,14 @@ static Expr* integrate_definite(Expr* res) {
         Expr* opt = res->data.function.args[t];
         if (option_lhs_is(opt, SYM_Assumptions)) {
             assumptions = opt->data.function.args[1];   /* borrowed */
+            continue;
+        }
+        /* TimeConstraint -> t: same option as on the indefinite form.  The
+         * definite path integrates indefinitely first, so the budget reaches the
+         * kernel search through that call. */
+        if (integrate_option_is(opt, "TimeConstraint")) {
+            integrate_arm_budget(
+                integrate_parse_time_constraint(opt->data.function.args[1]));
             continue;
         }
         /* PrincipalValue -> True / False (not an interned system symbol; match
@@ -1275,6 +1354,197 @@ static Expr* integrate_definite(Expr* res) {
 
 /* Nesting depth of the method cascade (see integrate.h). */
 int g_integrate_depth = 0;
+
+/* ------------------------------------------------------------------------
+ * TimeConstraint: the cascade's wall-clock budget.
+ *
+ * Owned HERE, not by any one stage, and checked between stages at EVERY depth.
+ * That placement is forced. Bounding a single stage's own loops cannot bound it,
+ * because the expensive work is a recursive cascade DESCENT the stage initiates:
+ * try_direct_kernel -> Integrate[qu, u] re-enters the switch, and the stages that
+ * then run (try_linearity above all -- 43.5% of the measured decline cost, and
+ * itself a per-term recursion) know nothing about the caller's deadline.
+ * Measured: with the budget inside derivdivides only, `TimeConstraint -> 3` let a
+ * case run 30 s because one nested descent ran 27 s uninterrupted, while `-> 1`
+ * stopped at 1.9 s purely because the deadline had already passed before that
+ * descent began. Checked between stages at every depth, every unit of work is
+ * bounded by construction.
+ *
+ * Armed once per top-level evaluation (eval_toplevel_id()), not per
+ * builtin_integrate entry: the evaluator's fixed point re-enters several times
+ * for one user-level Integrate, and re-arming would multiply the budget by the
+ * number of passes.
+ * ---------------------------------------------------------------------- */
+static double   g_intg_deadline   = HUGE_VAL;
+static uint64_t g_intg_budget_ep  = 0;
+static bool     g_intg_budget_set = false;
+
+static double intg_mono_seconds(void);     /* defined with the profiler below */
+
+static void integrate_arm_budget(double seconds) {
+    uint64_t ep = eval_toplevel_id();
+    if (g_intg_budget_set && ep == g_intg_budget_ep) return;
+    g_intg_budget_ep = ep;
+    g_intg_budget_set = true;
+    g_intg_deadline = (seconds > 0.0 && seconds < HUGE_VAL)
+                          ? intg_mono_seconds() + seconds : HUGE_VAL;
+}
+
+/* Kept for the in-stage bounds to consult via integrate.h; the cascade itself
+ * deliberately does NOT short-circuit on it -- see the note on IP_STAGE. */
+MATHILDA_MAYBE_UNUSED static bool integrate_budget_spent(void) {
+    return g_intg_deadline < HUGE_VAL && intg_mono_seconds() >= g_intg_deadline;
+}
+
+
+/* ------------------------------------------------------------------------
+ * MATHILDA_INTEGRATE_PROFILE=1 -- per-stage cost of the Automatic cascade.
+ *
+ * WHAT THIS EXISTS TO ANSWER. A cascade stage is charged for the inputs it
+ * DECLINES, not the ones it closes: a stage that closes is the fast path by
+ * construction, while every integrand that reaches it and cannot be closed pays
+ * the stage's full search. So "is the cascade ordered wrong?" is a question
+ * about decline cost by position, and that cannot be answered from outside --
+ * the pinned `Integrate`<Method>` surface measures something DIFFERENT, because
+ * some cascade call sites are deliberately cheaper than the explicit method:
+ * `try_derivdivides` routes a PSEUDO-ELLIPTIC integrand to the direct-quotient
+ * path only, and `try_parallelmixedtower` is skipped for that shape entirely. So
+ * a pinned-surface measurement is representative for most integrands and wrong
+ * for those, and only an inside measurement can tell you which you have. (Here
+ * the two agree: on Sqrt[Sin[x]]/(Sin[x]^2 + 1), which is not pseudo-elliptic
+ * and so takes the full path, the pinned surface reports 15.0 s against its 15 s
+ * cap and the cascade 25.05 s against a 25 s cap -- the same stage, saturating
+ * whatever bound it is given.)
+ *
+ * Costs nothing when off: one cached int test per stage, no clock call. Same
+ * family of knob as MATHILDA_PACK_DIAG / MATHILDA_NO_PACK.
+ * ---------------------------------------------------------------------- */
+typedef enum {
+    IP_UNDEFINED = 0, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
+    IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_WEIERSTRASS,
+    IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_PMT, IP_GOURSAT, IP_PMS,
+    IP_NSTAGES
+} IntegrateProfStage;
+
+static const char* const ip_stage_name[IP_NSTAGES] = {
+    "01 Undefined", "02 BronsteinRational", "03 LinearRadicals",
+    "04 QuadraticRadicals", "05 LinearRatioRadicals", "06 ChebychevAlgebraic",
+    "07 Fresnel", "08 GammaPower", "09 Linearity", "10 Weierstrass",
+    "11 DerivativeDivides", "12 RischTranscendental", "13 CRCTable",
+    "14 ParallelMixedTower", "15 GoursatAlgebraic", "16 ParallelMixedSpecial"
+};
+static long   g_ip_entries = 0;   /* cascade passes over one integrand */
+static double g_ip_secs[IP_NSTAGES];
+static long   g_ip_calls[IP_NSTAGES];
+static long   g_ip_closes[IP_NSTAGES];
+static long   g_ip_aborted[IP_NSTAGES];
+static int    g_ip_on = -1;              /* -1 = env not yet read */
+
+/* Monotonic seconds. CLOCK_MONOTONIC is immune to NTP steps; falls back to the
+ * CPU clock when the syscall is unavailable. Mirrors simp_mono_seconds() in
+ * src/simp/simp_util.c and dt_wall_seconds() in datetime.c -- kept local rather
+ * than reaching into a simp-internal header. */
+static double ip_mono_seconds(void);
+static double intg_mono_seconds(void) { return ip_mono_seconds(); }
+
+static double ip_mono_seconds(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+    return (double)clock() / (double)CLOCKS_PER_SEC;
+}
+
+static void ip_flush_inflight(void);
+
+static void ip_dump(void) {
+    ip_flush_inflight();
+    double tot = 0.0;
+    for (int i = 0; i < IP_NSTAGES; i++) tot += g_ip_secs[i];
+    fprintf(stderr, "\n=== Integrate cascade profile (outermost frame only) ===\n");
+    fprintf(stderr, "  %-24s %7s %7s %7s %10s %9s %7s\n",
+            "stage", "calls", "closes", "abort", "total(s)", "mean(s)", "share");
+    for (int i = 0; i < IP_NSTAGES; i++) {
+        if (!g_ip_calls[i]) continue;
+        fprintf(stderr, "  %-24s %7ld %7ld %7ld %10.3f %9.4f %6.1f%%\n",
+                ip_stage_name[i], g_ip_calls[i], g_ip_closes[i], g_ip_aborted[i],
+                g_ip_secs[i],
+                g_ip_secs[i] / (double)g_ip_calls[i],
+                tot > 0.0 ? 100.0 * g_ip_secs[i] / tot : 0.0);
+    }
+    fprintf(stderr, "  %-24s %7ld %7s %7s %10.3f\n", "TOTAL", g_ip_entries, "", "", tot);
+    fprintf(stderr, "  (TOTAL calls = cascade passes over the SAME integrand:"
+                    " the evaluator fixed point re-enters)\n");
+    fprintf(stderr, "========================================================\n");
+}
+
+static bool ip_enabled(void) {
+    if (g_ip_on < 0) {
+        const char* s = getenv("MATHILDA_INTEGRATE_PROFILE");
+        g_ip_on = (s && *s && strcmp(s, "0") != 0) ? 1 : 0;
+        if (g_ip_on) atexit(ip_dump);
+    }
+    return g_ip_on == 1;
+}
+
+/* Accounted only at the OUTERMOST cascade frame.  A stage that recurses into
+ * Integrate would otherwise be charged its callees' time as well, and the
+ * per-stage totals would sum past the wall clock -- which is exactly what the
+ * first cut of this profiler did (36.7 s of stage time under a 25 s bound).
+ * Note the cascade can still run several times for ONE user-level Integrate:
+ * the evaluator's fixed point re-evaluates the expression, so g_ip_entries
+ * counts those passes and the per-pass mean is total/entries, not total/calls. */
+/* The stage currently in flight at the outermost frame, and when it started.
+ * REQUIRED, not bookkeeping: a stage killed by the caller's TimeConstrained is
+ * unwound by siglongjmp, so its ip_account() never runs and the most expensive
+ * stage on every aborting integrand -- the only ones whose cost we care about --
+ * would be invisible. ip_flush_inflight() charges it instead, called when the
+ * next outermost pass begins and again at exit. */
+static int    g_ip_cur    = -1;
+static double g_ip_cur_t0 = 0.0;
+
+static void ip_flush_inflight(void) {
+    if (g_ip_cur < 0) return;
+    g_ip_secs[g_ip_cur] += ip_mono_seconds() - g_ip_cur_t0;
+    g_ip_calls[g_ip_cur]++;              /* an abandoned stage closed nothing */
+    g_ip_aborted[g_ip_cur]++;
+    g_ip_cur = -1;
+}
+
+static void ip_account(int stage, double t0, bool closed) {
+    if (g_integrate_depth != 1) return;
+    g_ip_secs[stage] += ip_mono_seconds() - t0;
+    g_ip_calls[stage]++;
+    if (closed) g_ip_closes[stage]++;
+}
+
+/* NOTE -- this macro briefly also skipped a stage once the TimeConstraint was
+ * spent, i.e. it TERMINATED the cascade. Measured over 150 integrands that cost
+ * EIGHT closes (125 -> 117) and is the wrong semantics: the stages after the
+ * expensive one are cheap (PMT 0.27 s, PMS 0.34 s mean) and are often the ones
+ * that close the integrand, so abandoning them to save time on a stage that
+ * already failed trades an answer for nothing. A budget belongs AROUND one
+ * stage's own search, after which the cascade continues -- which needs the hard
+ * bound discussed in call_stage_bounded's removal note.
+ *
+ * Time one cascade stage. Only the OUTERMOST frame is accounted: a stage that
+ * recurses into Integrate would otherwise be charged its callees' time too and
+ * the shares would not sum. */
+#define IP_STAGE(stage, callexpr)                                            \
+    do {                                                                     \
+        if (!result) {                                                       \
+            if (ip_enabled()) {                                              \
+                double _ip_t0 = ip_mono_seconds();                           \
+                if (g_integrate_depth == 1) {                                \
+                    g_ip_cur = (stage); g_ip_cur_t0 = _ip_t0;                \
+                }                                                            \
+                result = (callexpr);                                         \
+                if (g_integrate_depth == 1) g_ip_cur = -1;                   \
+                ip_account((stage), _ip_t0, result != NULL);                 \
+            } else {                                                         \
+                result = (callexpr);                                         \
+            }                                                                \
+        }                                                                    \
+    } while (0)
 
 /* Speculative-integration suppression counter (see integrate.h). */
 int g_integrate_quiet = 0;
@@ -1436,7 +1706,9 @@ Expr* builtin_integrate(Expr* res) {
     if (integrate_line_is_contour_spec(res->data.function.args[1]))
         return integrate_definite(res);
 
-    if (argc > 3) return NULL;
+    /* Trailing options are parsed as a loop below, so more than one is allowed
+     * (`Integrate[f, x, Method -> "...", TimeConstraint -> 3]`).  The loop
+     * rejects anything that is neither a recognised option nor a method name. */
 
     Expr* x = res->data.function.args[1];
 
@@ -1474,8 +1746,20 @@ Expr* builtin_integrate(Expr* res) {
      * surface compatibility (it constrains parameter domains); the indefinite
      * cascade does not yet consume it, so it is simply skipped here rather than
      * mis-parsed as a Method value. */
-    if (argc == 3 && !option_lhs_is(res->data.function.args[2], SYM_Assumptions)) {
-        method = parse_method_option(res->data.function.args[2], &method_sub);
+    /* TimeConstraint -> t bounds the kernel search of the one stage that is, by
+     * measurement, nearly the whole cost of a cascade that fails to close (see
+     * integrate_derivdivides.h).  Default 3 s; Infinity restores the unbounded
+     * search.  A trailing option may appear in any order and any combination,
+     * which is why this is a loop rather than the single-option test it replaced. */
+    double time_constraint = INTEGRATE_DEFAULT_TIME_CONSTRAINT;
+    for (size_t t = 2; t < argc; t++) {
+        Expr* opt = res->data.function.args[t];
+        if (option_lhs_is(opt, SYM_Assumptions)) continue;   /* accepted, not yet consumed */
+        if (integrate_option_is(opt, "TimeConstraint")) {
+            time_constraint = integrate_parse_time_constraint(opt->data.function.args[1]);
+            continue;
+        }
+        method = parse_method_option(opt, &method_sub);
         if (method == METHOD_INVALID) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
@@ -1533,6 +1817,15 @@ Expr* builtin_integrate(Expr* res) {
      * is how the RischTranscendental stage tells the user's integrand from an
      * internal recursion variable when deciding whether to name it in a
      * nonelem diagnostic. */
+    /* Arm the TimeConstraint for this descent, at the OUTERMOST frame only: the
+     * deadline is absolute, so every nested re-entry from a stage's own recursion
+     * inherits the same cutoff -- which is the point, since that fan-out is what
+     * is being bounded.  An explicit `Method -> ...` is a deliberate request for
+     * the full search and is left unbounded unless the caller passed
+     * TimeConstraint themselves. */
+    if (g_integrate_depth == 0 && method == METHOD_AUTOMATIC)
+        integrate_arm_budget(time_constraint);
+
     g_integrate_depth++;
     /* Fresh top-level cascade: clear the Integrate::nonelem de-dup flag so the
      * first stage that proves non-elementarity (RischTranscendental or, after
@@ -1546,24 +1839,31 @@ Expr* builtin_integrate(Expr* res) {
     Expr* result = NULL;
     switch (method) {
         case METHOD_AUTOMATIC:
-            result = try_undefined(effective_f, x);
-            if (!result) result = try_rational(effective_f, x);
-            if (!result) result = try_linrad(effective_f, x);
-            if (!result) result = try_quadrad(effective_f, x);
-            if (!result) result = try_linratiorad(effective_f, x);
+            /* Depth 1 only: a NESTED pass (a stage recursing into Integrate --
+             * the cascade switch runs at every depth) would otherwise flush the
+             * outermost stage still in flight and charge it only the few ms
+             * before the recursion began, losing the rest of its cost. */
+            if (ip_enabled() && g_integrate_depth == 1) {
+                ip_flush_inflight(); g_ip_entries++;
+            }
+            IP_STAGE(IP_UNDEFINED, try_undefined(effective_f, x));
+            IP_STAGE(IP_RATIONAL,     try_rational(effective_f, x));
+            IP_STAGE(IP_LINRAD,       try_linrad(effective_f, x));
+            IP_STAGE(IP_QUADRAD,      try_quadrad(effective_f, x));
+            IP_STAGE(IP_LINRATIORAD,  try_linratiorad(effective_f, x));
             /* Chebychev binomial differentials: a fast, deterministic
              * rationalising substitution that closes (correct by construction),
              * so it runs ahead of the Eliminate/Solve search and Risch-Norman. */
-            if (!result) result = try_chebychev(effective_f, x);
+            IP_STAGE(IP_CHEBYCHEV,    try_chebychev(effective_f, x));
             /* Fresnel: K Sin/Cos of a quadratic -> FresnelS/FresnelC by completing
              * the square (the trig sibling of the Gaussian -> Erf recognizer),
              * deterministic and diff-back verified. */
-            if (!result) result = try_fresnel(effective_f, x);
+            IP_STAGE(IP_FRESNEL,      try_fresnel(effective_f, x));
             /* Symbolic power times an exponential -> incomplete Gamma.  Before the
              * general stages because they SEARCH on this shape (12.9 s to decline on
              * x^n E^(-x)); gated to a symbolic exponent, so nothing with a numeric
              * one is diverted from its elementary / Erf answer below. */
-            if (!result) result = try_gammapower(effective_f, x);
+            IP_STAGE(IP_GAMMAPOWER,   try_gammapower(effective_f, x));
             /* Weierstrass before derivative-divides: it is a domain-specific,
              * deterministic algorithm for rational trig/hyperbolic integrands
              * that is guaranteed to close (and verified by construction), so it
@@ -1573,17 +1873,17 @@ Expr* builtin_integrate(Expr* res) {
              * polynomials (Sin[2x]+Sin[3x], constant-coeff forcing sums) get the
              * clean additive antiderivative instead of a divergent/looping
              * tan-half-angle form.  Declines unless every term closes. */
-            if (!result) result = try_linearity(effective_f, x);
-            if (!result) result = try_weierstrass(effective_f, x);
-            if (!result) result = try_derivdivides(effective_f, x);
+            IP_STAGE(IP_LINEARITY,    try_linearity(effective_f, x));
+            IP_STAGE(IP_WEIERSTRASS,  try_weierstrass(effective_f, x));
+            IP_STAGE(IP_DERIVDIVIDES, try_derivdivides(effective_f, x));
             /* Recursive transcendental Risch: correct by construction, adding
              * closed forms the earlier stages missed (logarithmic polynomials,
              * Gaussians -> Erf, exp/x -> ExpIntegralEi, 1/Log -> LogIntegral,
              * Log[1+ax]/x -> PolyLog).  The former RischNorman / RischNormanBlake
              * pmint heuristics that ran here were removed in v0.163 -- the
              * ParallelMixedTower stage below subsumes both. */
-            if (!result) result = try_rischtranscendental(effective_f, x);
-            if (!result) result = try_crctable(effective_f, x);
+            IP_STAGE(IP_RISCHTRANS,   try_rischtranscendental(effective_f, x));
+            IP_STAGE(IP_CRCTABLE,     try_crctable(effective_f, x));
             /* The parallel Risch-Norman integrator over a mixed tower.  After
              * the CRC table so a tabled integral is answered cleanly and
              * cheaply rather than paying this stage's package load and search
@@ -1594,8 +1894,8 @@ Expr* builtin_integrate(Expr* res) {
              * (t^4+2t^3-4)/(t^2 Sqrt[(t^2-1)(t^2-4)])) -- and closes nothing,
              * so the integrand goes straight to the Goursat stage that does.
              * The explicit Method -> "ParallelMixedTower" is unaffected. */
-            if (!result && !has_pseudoelliptic_radical(effective_f, x))
-                result = try_parallelmixedtower(effective_f, x);
+            if (!has_pseudoelliptic_radical(effective_f, x))
+                IP_STAGE(IP_PMT,      try_parallelmixedtower(effective_f, x));
             /* Goursat pseudo-elliptic (and cube-/fourth-root) reductions to
              * genus-0 curves.  Runs last, after ParallelMixedTower: it is a
              * specialist for pseudo-elliptic F/R^p (p in {1/2,1/3,2/3,1/4,3/4})
@@ -1608,7 +1908,7 @@ Expr* builtin_integrate(Expr* res) {
              * stage promptly.)  Still correct-by-construction (an internal
              * differentiate-back guard), so a decline here leaves the integral
              * unevaluated rather than wrong. */
-            if (!result) result = try_goursat(effective_f, x);
+            IP_STAGE(IP_GOURSAT,      try_goursat(effective_f, x));
             /* ParallelMixedSpecial: the special-function stage, and the LAST
              * stage of the cascade.
              *
@@ -1630,7 +1930,7 @@ Expr* builtin_integrate(Expr* res) {
              * an antiderivative or declines, never the partial mode, so plain
              * Integrate[f, x] can no more return a half-solved
              * `answer + Inactive[Integrate][remainder, x]` than it could before. */
-            if (!result) result = try_parallelmixedspecial(effective_f, x, true);
+            IP_STAGE(IP_PMS,          try_parallelmixedspecial(effective_f, x, true));
             break;
         case METHOD_RATIONAL:
             result = try_rational(effective_f, x);
@@ -1819,6 +2119,18 @@ void integrate_init(void) {
         "Method -> {\"DerivativeDivides\", \"Substitution\" -> u} pins the kernel u(x),\n"
         "trialing only that substitution.\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
+        "Integrate[f, x, TimeConstraint -> t] gives the cascade a wall-clock budget\n"
+        "of t seconds (default 3; Infinity for no budget).  It is checked BETWEEN\n"
+        "stages, at every recursion depth, and inside the substitution stage's\n"
+        "kernel and branch loops and its Eliminate/Solve calls -- so it stops the\n"
+        "cascade progressing once spent, but it is not yet a hard bound: a single\n"
+        "long-running evaluation inside one stage can overrun it.  It matters only\n"
+        "for integrands Integrate cannot close; measured from inside the cascade\n"
+        "(MATHILDA_INTEGRATE_PROFILE=1), two stages account for 90.8% of that cost\n"
+        "-- the linearity split (43.5%) and the substitution search (47.3%) -- while\n"
+        "the eight cheap exact stages ahead of them are together under 0.1%.  An\n"
+        "explicit Method -> name is a deliberate request for the full search and\n"
+        "carries no budget unless you pass TimeConstraint yourself.\n"
         "The CRCTable rules are loaded from disk on first use only.\n"
         "An applied 1-D InterpolatingFunction integrates to its antiderivative\n"
         "InterpolatingFunction (mirroring D).");

@@ -164,7 +164,69 @@ mean 8.72 s per integrand it cannot close, and it **fails to finish inside 15 s 
 unbounded Eliminate/Solve search in a cascade stage, charged to every input it
 declines. `RischTranscendental` is a distant second (one case of 23 caps).
 
-### The bound, decided by measurement: 3 s, and it costs nothing
+### CORRECTION — the pinned profile measured the wrong thing
+
+The table above is the PINNED surface (`Method -> "DerivativeDivides"`), and
+attributing it to the cascade was wrong twice over. Fixed by building
+`MATHILDA_INTEGRATE_PROFILE=1` (src/calculus/integrate.c), which times each stage
+from inside the cascade at the outermost frame, and attributes a stage killed by
+the caller's `TimeConstrained` (a siglongjmp skips the normal accounting, so the
+most expensive stage on every aborting integrand was invisible).
+
+In-cascade, over the same 25-integrand decline corpus:
+
+| pos | stage | total (s) | mean | share |
+|---|---|---:|---:|---:|
+| 01-08 | the eight cheap exact stages | 0.14 | ~0.001 | **0.0%** |
+| **09** | **Linearity** | **120.39** | 4.82 | **43.5%** |
+| 10 | Weierstrass | 0.04 | 0.002 | 0.0% |
+| **11** | **DerivativeDivides** | **130.86** | 6.23 | **47.3%** |
+| 12 | RischTranscendental | 19.97 | 1.54 | 7.2% |
+| 13-16 | CRCTable / PMT / Goursat / PMS | 5.48 | - | 2.0% |
+
+**`try_linearity` is 43.5% and has NO pinned surface**, so no outside measurement
+could see it. With DerivativeDivides that is 90.8% in two stages. Both are
+expensive for the same reason -- speculative recursion into the FULL cascade,
+per `Plus` term and per candidate kernel respectively (the cascade switch runs at
+every depth). **The ordering hypothesis is answered: the order is not the
+problem.** The eight stages ahead of the hot pair cost 0.0%.
+
+Two further corrections to the record: the cascade DOES run the Eliminate/Solve
+search (`try_derivdivides` sends only a *pseudo-elliptic* integrand down the
+direct-only path), and the test suites print `FAIL:` lines in their body while
+still printing "All tests passed!" and exiting 0 -- reading the tail line is not
+reading the result.
+
+### What was tried, measured, and NOT shipped
+
+1. **The recursion gate** (the user's proposal: recurse only when the reduced
+   integrand is polynomial, rational, or algorithmically convertible). Corpus
+   effect was good -- closes 125 -> 128, aborts 16 -> 9, five aborts becoming
+   closes at 3.6-10.8 s. But it LOSES FOUR: O079/O080 of the overintegration
+   corpus and, in the test suite, `Integrate[x ArcSin[x]/Sqrt[1-x^2], x,
+   Method -> "DerivativeDivides"]` plus its ArcCos twin, which go from a verified
+   answer to unevaluated. The predicate rejects reduced integrands that are
+   transcendental in u, and those are this method's core business. **Disabled at
+   its two call sites; the predicate is kept (MATHILDA_MAYBE_UNUSED) with this
+   note.** The idea is right; the class needs deriving from the actual reduced
+   integrands, case by case, not guessed.
+2. **A stage-boundary `TimeConstrained` wrapper**, which DID make TimeConstraint a
+   hard bound (3 s measured 3.00 s, 1 s measured 1.00 s). Removed: it cost an
+   answer -- an integrand closing in 0.066 s became a 3 s decline. Rationale left
+   as a source note in integrate.c.
+
+### Open leads
+
+- **Reaching the stage through its registered head is ~680x faster on one
+  integrand**: `Integrate`DerivativeDivides[Sqrt[Sin[x]]/(Sin[x]^2+1), x]` closes
+  in 0.066 s where the direct C call `integrate_derivdivides_full` takes 45 s and
+  aborts. Either a real optimisation in the eval path (memoisation /
+  canonicalisation) or the two routes are not doing equivalent work. Understand
+  this BEFORE attempting a hard bound again.
+- `try_linearity`, the larger of the two hot stages, is untouched.
+- The gate's class predicate (above).
+
+### Superseded: the bound decided from the pinned profile
 
 Timing `Method -> "DerivativeDivides"` on the 125 integrands the cascade closes
 makes the case worse than the decline table alone showed, and the fix free:

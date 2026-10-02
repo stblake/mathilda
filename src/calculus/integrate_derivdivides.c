@@ -47,6 +47,13 @@
  * argument.  We never expr_free(res).
  */
 
+/* clock_gettime / CLOCK_MONOTONIC (the TimeConstraint deadline clock) are POSIX,
+ * not C99.  glibc hides them under -std=c99 unless a feature-test macro is
+ * defined BEFORE the first include; below it, it has no effect (SPEC.md §10). */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "integrate_derivdivides.h"
 
 #include "expr.h"
@@ -63,6 +70,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
+#include <time.h>
 
 /* ---------------------------------------------------------------------- */
 /* Small builders / evaluation helpers (mirrors integrate_unknown.c)      */
@@ -295,6 +304,96 @@ static void sort_kernels(ExprVec* v) {
 #define DD_MAX_DEPTH 8
 static int dd_depth = 0;
 
+/* ------------------------------------------------------------------------
+ * TimeConstraint deadline (seconds), set per top-level Integrate by the
+ * cascade; HUGE_VAL means unbounded, which is what the explicit
+ * `Method -> "DerivativeDivides"` surface gets.
+ *
+ * WHY THIS STAGE AND NOT ANOTHER. Measured from inside the cascade
+ * (MATHILDA_INTEGRATE_PROFILE=1) over the integrands Integrate fails to close,
+ * this stage is essentially the entire cost: on
+ * `Sqrt[Sin[x]]/(Sin[x]^2 + 1)` it is 25.05 s of a 25.06 s cascade -- 100.0% --
+ * while the ten stages ahead of it together cost 0.003 s. So the cascade is
+ * NOT mis-ordered (the cheap exact methods are already first and are free);
+ * one stage is unbounded.
+ *
+ * THE COST HAS TWO SOURCES, and the cascade pays both. try_derivdivides sends a
+ * pseudo-elliptic integrand down the direct-only path but everything else to
+ * integrate_derivdivides_full, so Pass 2's Eliminate/Solve search does run here
+ * for most integrands. And Pass 1 is not cheap either: try_direct_kernel ->
+ * integrate_in -> Integrate[qu, u] re-enters the WHOLE cascade once per candidate
+ * kernel (the cascade switch runs at every depth), so a kernel list of n buys n
+ * full descents, each able to fan out again. The gate in try_direct_kernel
+ * addresses the second source structurally; this deadline bounds both, which is
+ * why it is absolute -- set once at the outermost entry, so every nested
+ * re-entry inherits the same cutoff. A per-call budget would be multiplied by
+ * the fan-out, i.e. by the very thing being bounded.
+ * ---------------------------------------------------------------------- */
+static double dd_deadline = HUGE_VAL;
+
+/* Monotonic seconds; CLOCK_MONOTONIC is immune to NTP steps, with the CPU clock
+ * as fallback.  Mirrors simp_mono_seconds() / dt_wall_seconds(). */
+static double dd_mono_seconds(void);
+static bool   dd_expired(void);
+
+/* Seconds left in the budget, for bounding a single sub-evaluation; 0 when
+ * unbounded (so callers pass no TimeConstrained wrapper at all). */
+static double dd_remaining(void) {
+    if (dd_deadline >= HUGE_VAL) return 0.0;
+    double left = dd_deadline - dd_mono_seconds();
+    return left > 0.0 ? left : 0.001;      /* expired: ask for the minimum */
+}
+
+/* Evaluate `call` under what is left of the budget.  REQUIRED for the Eliminate/
+ * Solve relation: it is ONE evaluation that can run for tens of seconds without
+ * re-entering the cascade, so no between-stages check can bound it -- measured,
+ * `TimeConstraint -> 3` let an integrand run 40 s because a single Eliminate call
+ * consumed 37 of them. Consumes `call`; returns NULL when the budget is spent. */
+static Expr* dd_eval_bounded(Expr* call) {
+    double left = dd_remaining();
+    if (left <= 0.0) return eval_take(call);          /* unbounded */
+    Expr* guarded = expr_new_function(
+        expr_new_symbol("TimeConstrained"),
+        (Expr*[]){ call, expr_new_real(left), expr_new_symbol("$Aborted") }, 3);
+    Expr* out = eval_take(guarded);                   /* consumes guarded */
+    if (out && out->type == EXPR_SYMBOL
+        && strcmp(out->data.symbol.name, "$Aborted") == 0) {
+        expr_free(out);
+        return NULL;
+    }
+    return out;
+}
+
+static double dd_mono_seconds(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+    return (double)clock() / (double)CLOCKS_PER_SEC;
+}
+
+/* Armed ONCE per top-level evaluation, keyed on eval_toplevel_id().
+ *
+ * Not per call: the evaluator's fixed point re-enters builtin_integrate several
+ * times for one user-level Integrate, so re-arming on entry multiplies the
+ * budget by the number of passes -- measured, `TimeConstraint -> 3` let a case
+ * run 30 s (ten passes) while `-> 1` stopped at 1.94 s (two). The epoch key is
+ * the same one the fail-memo and DSolve`Separable's budget use. */
+static uint64_t dd_budget_epoch = 0;
+static bool     dd_budget_epoch_set = false;
+
+void integrate_derivdivides_set_budget(double seconds) {
+    uint64_t ep = eval_toplevel_id();
+    if (dd_budget_epoch_set && ep == dd_budget_epoch) return;   /* same integral */
+    dd_budget_epoch = ep;
+    dd_budget_epoch_set = true;
+    dd_deadline = (seconds > 0.0 && seconds < HUGE_VAL)
+                      ? dd_mono_seconds() + seconds : HUGE_VAL;
+}
+
+static bool dd_expired(void) {
+    return dd_deadline < HUGE_VAL && dd_mono_seconds() >= dd_deadline;
+}
+
 /* Canonical integrands already attempted in the current top-level descent.
  * Valid while dd_depth > 0; freed by the outermost frame on exit. */
 static ExprVec dd_seen = { NULL, 0, 0 };
@@ -356,6 +455,90 @@ static int64_t kernel_root_degree(const Expr* w, const Expr* x) {
     return 0;
 }
 
+/* Does `e` mention the symbol `u`?  A plain structural test -- expr_free_of()
+ * in this file is the derivative-based one, which is far more than needed here
+ * and would evaluate D[] on every node of the walk. */
+static bool dd_contains_sym(const Expr* e, const Expr* u) {
+    if (!e || !u || u->type != EXPR_SYMBOL) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == u->data.symbol.name;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (dd_contains_sym(e->data.function.head, u)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (dd_contains_sym(e->data.function.args[i], u)) return true;
+    return false;
+}
+
+static bool dd_polynomial_in(const Expr* g, const Expr* u) {
+    Expr* args[2] = { expr_copy((Expr*)g), expr_copy((Expr*)u) };
+    Expr* call = internal_polynomialq(args, 2);
+    Expr* val  = evaluate(call);
+    expr_free(call);
+    bool ok = val && val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True;
+    expr_free(val);
+    return ok;
+}
+
+static bool dd_rational_in(const Expr* g, const Expr* u) {
+    Expr* tog = eval_take(mk_fn1("Together", expr_copy((Expr*)g)));
+    if (!tog) return false;
+    Expr* num = eval_take(mk_fn1("Numerator", expr_copy(tog)));
+    Expr* den = eval_take(mk_fn1("Denominator", tog));          /* consumes tog */
+    bool ok = num && den && dd_polynomial_in(num, u) && dd_polynomial_in(den, u);
+    expr_free(num); expr_free(den);
+    return ok;
+}
+
+/* Every sub-structure containing u must be rational, or a rational power of a
+ * polynomial of degree <= 2 in u.  Walks the tree; no evaluation except the
+ * degree test, which only runs on a radicand. */
+static bool dd_algebraic_rationalisable(const Expr* g, const Expr* u) {
+    if (!g) return true;
+    if (!dd_contains_sym(g, u)) return true;                 /* free of u: fine */
+    if (g->type == EXPR_SYMBOL) return true;                 /* u itself */
+    if (g->type != EXPR_FUNCTION) return true;
+    const Expr* h = g->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    const char* hn = h->data.symbol.name;
+    if (hn == SYM_Plus || hn == SYM_Times) {
+        for (size_t i = 0; i < g->data.function.arg_count; i++)
+            if (!dd_algebraic_rationalisable(g->data.function.args[i], u)) return false;
+        return true;
+    }
+    /* Exp / Log of something already in the class: the reduced integrand is then
+     * rational in the Risch monomial tower (u, E^p(u), Log p(u)), which the
+     * transcendental Risch stage decides algorithmically -- the same standard as
+     * "convertible to rational", one tower level up. Without this the gate loses
+     * genuine closes: O079/O080 of the overintegration corpus,
+     * E^ArcCsc[x] (... Log[...] ...), reduce to exactly this shape and were
+     * closed by RischTranscendental before the gate existed. */
+    if ((hn == SYM_Exp || hn == SYM_Log) && g->data.function.arg_count == 1)
+        return dd_algebraic_rationalisable(g->data.function.args[0], u);
+    if (hn == SYM_Power && g->data.function.arg_count == 2) {
+        /* E^anything-in-the-class is the Exp case written as a Power. */
+        const Expr* b0 = g->data.function.args[0];
+        if (b0->type == EXPR_SYMBOL && b0->data.symbol.name == SYM_E)
+            return dd_algebraic_rationalisable(g->data.function.args[1], u);
+        const Expr* base = g->data.function.args[0];
+        const Expr* ex   = g->data.function.args[1];
+        if (ex->type == EXPR_INTEGER)                        /* rational so far */
+            return dd_algebraic_rationalisable(base, u);
+        /* fractional exponent: the radicand must be a polynomial of degree <= 2 */
+        if (!dd_polynomial_in(base, u)) return false;
+        Expr* deg = eval_take(mk_fn2("Exponent", expr_copy((Expr*)base),
+                                     expr_copy((Expr*)u)));
+        bool small = deg && deg->type == EXPR_INTEGER && deg->data.integer <= 2;
+        expr_free(deg);
+        return small;
+    }
+    return false;                                            /* transcendental in u */
+}
+
+MATHILDA_MAYBE_UNUSED static bool dd_decidable_class(const Expr* g, const Expr* u) {
+    if (dd_polynomial_in(g, u)) return true;
+    if (dd_rational_in(g, u))   return true;
+    return dd_algebraic_rationalisable(g, u);
+}
+
 /* Try kernel `w` via  q = Cancel[Together[f / D[w, x]]]; q /. w -> u.
  * Returns a verified antiderivative or NULL.  Borrows everything. */
 static Expr* try_direct_kernel(const Expr* f, const Expr* x, const Expr* w) {
@@ -411,6 +594,31 @@ static Expr* try_direct_kernel(const Expr* f, const Expr* x, const Expr* w) {
     return result;
 }
 
+
+/* ------------------------------------------------------------------------
+ * Is `g` in a class the cascade's cheap deterministic stages can DECIDE?
+ *
+ * The recursion in Pass 1 is speculative: for every candidate kernel w it forms
+ * the reduced integrand qu and calls Integrate[qu, u], which re-enters the whole
+ * cascade. When qu is rational -- or one of the concrete algebraic shapes that
+ * rationalise ALGORITHMICALLY -- that descent is cheap and decisive, and it is
+ * the point of the substitution: the whole method exists to turn an integrand
+ * into a rational one. When qu is anything else, the descent is a full cascade
+ * search on an integrand no simpler than the one we started from, and the fan-out
+ * (one descent per kernel, each able to fan out again) is what makes this stage
+ * 47% of the cost of every integral the cascade fails to close.
+ *
+ * So: recurse when qu is polynomial or rational in u, or when its only
+ * non-rational structure is a rational power of a polynomial of degree <= 2 in u
+ * -- the linear-radical, quadratic-radical, linear-ratio-radical and
+ * binomial-differential forms that stages 03-06 rationalise by construction.
+ * A transcendental kernel in u (Log, Exp, a trig head) or a radical of a cubic or
+ * higher polynomial is NOT decidable here and does not earn a descent.
+ *
+ * This is a gate on the RECURSION, not on the answer: the differentiate-back
+ * check still guards every result, so a declined descent can only cost a kernel
+ * that would have closed, never produce a wrong one.
+ * ---------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------- */
 /* Strategy 2: Eliminate / Solve with branch selection                    */
 /* ---------------------------------------------------------------------- */
@@ -440,13 +648,16 @@ static Expr* try_eliminate_kernel(const Expr* f, const Expr* x, const Expr* w) {
      * elimination they did not request. */
     int saved_quiet = eliminate_suppress_messages;
     eliminate_suppress_messages = 1;
-    Expr* rel = eval_take(mk_fn2("Eliminate", eqns, vars));   /* consumes eqns, vars */
+    /* Bounded: a single Eliminate on a radical relation can run for tens of
+     * seconds without re-entering the cascade, so this is the one place a
+     * between-stages deadline check cannot reach. */
+    Expr* rel = dd_eval_bounded(mk_fn2("Eliminate", eqns, vars)); /* consumes eqns, vars */
     eliminate_suppress_messages = saved_quiet;
 
     Expr* result = NULL;
     /* Eliminate must have produced an equation, not bailed back unevaluated. */
     if (rel && head_is(rel, SYM_Equal)) {
-        Expr* sol = eval_take(mk_fn2("Solve", expr_copy(rel), expr_copy(dty)));
+        Expr* sol = dd_eval_bounded(mk_fn2("Solve", expr_copy(rel), expr_copy(dty)));
         if (sol) {
             /* gs = Cancel[ PowerExpand[ Factor //@ (Dt[y] /. sol) ] / Dt[u] ] */
             Expr* dvals = eval_take(internal_replace_all(
@@ -466,6 +677,7 @@ static Expr* try_eliminate_kernel(const Expr* f, const Expr* x, const Expr* w) {
                     if (!expr_free_of(g, x))   continue;
                     if (!expr_free_of(g, dtx)) continue;
                     if (!expr_free_of(g, dtu)) continue;
+                    if (dd_expired()) break;
                     Expr* G = integrate_in(g, u);
                     if (!G) continue;
                     Expr* r = replace_one(G, u, w);          /* consumes G */
@@ -499,6 +711,7 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
     if (x->type != EXPR_SYMBOL) return NULL;
     if (expr_free_of(f, x))      return NULL;   /* nothing to integrate in x */
     if (dd_depth >= DD_MAX_DEPTH) return NULL;
+    if (dd_expired())            return NULL;   /* TimeConstraint spent */
     /* Symbolic-exponent monomials (x^k, x^(k-1), ...) send the Together/Cancel
      * quotient normalisation into a PolynomialGCD pseudo-remainder blow-up and
      * are never a productive substitution kernel -- decline them up front. */
@@ -532,7 +745,7 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
     dd_depth++;
 
     /* Pass 1: the cheap, quiet, branch-correct direct quotient. */
-    for (size_t i = 0; i < kernels.n && !result; i++)
+    for (size_t i = 0; i < kernels.n && !result && !dd_expired(); i++)
         result = try_direct_kernel(f, x, kernels.items[i]);
 
     /* Pass 2: the thorough Eliminate/Solve search.  Heavyweight (~0.1-1s per
@@ -540,7 +753,7 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
      * are finished by the direct strategy above and the rest of the cascade.
      * See the recursion-guard note above for why. */
     if (!result && use_eliminate && outermost)
-        for (size_t i = 0; i < kernels.n && !result; i++)
+        for (size_t i = 0; i < kernels.n && !result && !dd_expired(); i++)
             result = try_eliminate_kernel(f, x, kernels.items[i]);
 
     dd_depth--;

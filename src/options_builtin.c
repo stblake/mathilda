@@ -749,6 +749,10 @@ void options_register_defaults(void) {
     /* ---- Symbolic calculus ---- */
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));     /* "Automatic" | "BronsteinRational" | ... */
+    /* Seconds given to the cascade's kernel search before it gives up; Infinity
+     * restores the unbounded behaviour.  3 is measured, not chosen: see
+     * INTEGRATE_DEFAULT_TIME_CONSTRAINT in src/calculus/integrate.c. */
+    ob_add(&b, r_int("TimeConstraint", 3));
     ob_commit(&b, "Integrate");
 
     ob_init(&b);

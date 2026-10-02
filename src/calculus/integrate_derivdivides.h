@@ -70,4 +70,17 @@ Expr* builtin_integrate_derivdivides(Expr* res);
  * integrate_init(). */
 void integrate_derivdivides_init(void);
 
+
+/* Set the wall-clock budget, in seconds, for the kernel search of the NEXT
+ * top-level cascade descent; <= 0 or HUGE_VAL means unbounded.
+ *
+ * The Automatic cascade sets this from `Integrate`'s TimeConstraint option
+ * (default 3 s) because this stage is, measured from inside the cascade, very
+ * nearly its entire cost on an integrand Integrate cannot close -- not through
+ * the Eliminate/Solve search (which the cascade does not run) but through the
+ * per-kernel recursion back into Integrate. The explicit
+ * `Method -> "DerivativeDivides"` surface deliberately leaves it unbounded: it
+ * is a direct request for the full search. */
+void integrate_derivdivides_set_budget(double seconds);
+
 #endif /* INTEGRATE_DERIVDIVIDES_H */

@@ -2367,6 +2367,26 @@ over the sampler):
    strategy and the rest of the cascade.
 
 The reduced integral re-enters the full `Integrate`, so substitutions compose.
+`Integrate` takes a **`TimeConstraint`** option (default **3**, `Infinity` for no
+budget; `Options[Integrate]`). It gives the cascade a wall-clock budget, honoured
+between stages at every recursion depth and inside this stage's kernel and branch
+loops and its `Eliminate`/`Solve` calls. It is **not yet a hard bound** — a single
+long-running evaluation inside one stage can overrun it — and it is deliberately
+**not** allowed to abandon the rest of the cascade: doing so was measured to cost
+eight closes in 125, because the stages after the expensive one are cheap
+(ParallelMixedTower 0.27 s, ParallelMixedSpecial 0.34 s mean) and are often the
+ones that actually close the integrand. An explicit `Method -> name` is a
+deliberate request for the full search and carries no budget unless you pass
+`TimeConstraint` yourself.
+
+Where the time actually goes, measured from inside the cascade with
+`MATHILDA_INTEGRATE_PROFILE=1` over 25 integrands `Integrate` cannot close: the
+eight cheap exact stages ahead of this one cost **0.0%** (0.14 s in total), while
+the linearity split is **43.5%** and this stage **47.3%** — 90.8% in two stages,
+both because they recurse speculatively into the whole cascade (per `Plus` term and
+per candidate kernel respectively, and the cascade runs at every depth). So the
+cascade is ordered correctly; the cost is the fan-out.
+
 Three guards keep the recursion finite and cheap: an **integrand memo** that
 short-circuits any integrand (canonicalised by renaming the integration variable
 to a fixed sentinel) already attempted in the current top-level descent — this
