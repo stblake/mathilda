@@ -2417,7 +2417,12 @@ Full per-case results: `reports/2.2.36.tsv`; bucketed report: `reports/2.2.36.md
   the pre-fix run's 635, 0 FAIL on both — and all five movers solve on BOTH binaries, three to
   four interleaved reps each, at 5.2–6.3 s against an 8 s harness bound with ~0.8 s of run-to-run
   spread, i.e. boundary-band noise rather than a regression (the first, batch-ordered, A/B showed
-  a phantom +0.3 s that interleaving removed). Gates: new §2.2.36 at **1**, §2.2.16 **2 → 1**, and
+  a phantom +0.3 s that interleaving removed). **Valgrind on the same full input is a large net
+  win, not merely flat**: definitely lost 92,088 B → 15,824 B and indirectly lost 4.31 MB →
+  71.6 KB, because an unbounded search allocates and bounding it abandons ~4.2 MB less
+  intermediate structure. (On input the pre-fix binary can also finish — i.e. with the
+  unclosable integrand removed — the two are within noise at 13,440 B against 13,632 B, which
+  is the conservative figure the commit message quotes.) Gates: new §2.2.36 at **1**, §2.2.16 **2 → 1**, and
   §2.2.4 **0 → 3** — the last not this wave's doing, settled per-case on a pre-fix binary (all
   three are `Sin[10t]`-forced second-order equations that `sep_find_split` rejects at
   `max_order != 1`, identical on both binaries, one genuinely needing ~11 s). Residue 1, honest:
