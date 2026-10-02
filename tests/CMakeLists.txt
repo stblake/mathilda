@@ -3345,6 +3345,10 @@ add_executable(dsolve_m62_stress_tests test_dsolve_m62_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m62_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m62_stress_tests COMMAND dsolve_m62_stress_tests)
 
+add_executable(dsolve_m63_stress_tests test_dsolve_m63_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m63_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m63_stress_tests COMMAND dsolve_m63_stress_tests)
+
 add_executable(inactive_tests test_inactive.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(inactive_tests PRIVATE ../src ../src/calculus)
 add_test(NAME inactive_tests COMMAND inactive_tests)
@@ -3978,7 +3982,7 @@ add_test(NAME dsolve_corpus_2_2_3_tests
 add_test(NAME dsolve_corpus_2_2_4_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_224.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
 # Section 2.2.5 "Problems 401 to 500" (Table 2.19): 100 elementary ODEs, 15 IVPs.
 # Continuation of §2.2.4; a series-solution-heavy chunk (Edwards & Penney): 2nd-order
 # linear (const + variable coeff), Airy/Emden-Fowler, Gegenbauer, Bessel, Jacobi/2F1,
@@ -4195,7 +4199,7 @@ add_test(NAME dsolve_corpus_2_2_15_tests
 add_test(NAME dsolve_corpus_2_2_16_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2216.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Section 2.2.17 (Problems 1601-1700, Nasser Abbasi): 100 records, 28 IVP, 0
 # systems.  First-order-dominated: 27 homogeneous, 23 Abel-tagged (most overlap
@@ -4529,6 +4533,40 @@ add_test(NAME dsolve_corpus_2_2_35_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2235.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+
+# 12000.org "Solving ODEs" section 2.2.36 (Problems 3501-3600).  M63: 100 records, all
+# scalar (9 IVP), 0 systems; Goode & Annin 4th ed 2015 (44), Goode 2nd ed 2000 (43),
+# Riley-Hobson-Bence 2nd ed 2002 (13).  Three blocks: 3501-3513 second-order linear with
+# z as the independent variable (series / special-function -- Jacobi, Laguerre and
+# Gegenbauer at a symbolic eigenvalue, Lienard, Emden-Fowler); 3514-3556 elementary first
+# order (24 separable / 22 linear / 17 homogeneous class A / 9 dAlembert / 10 rational);
+# 3557-3600 second-order missing-x constant-coefficient + Euler-Cauchy + quadrature
+# (incl. a symbolic-exponent y'' == x^n and a 3rd-order quadrature IVP), with 3592-3600
+# repeating 3514-3522 so a fix there scores twice.  Baseline argv3 = the measured
+# non-PASS count (1), 0 FAIL, 0 crash, 0 timeout, measured twice per-case identical on
+# both sides.  Went 96 -> 99 on ONE root-cause fix, whose diagnosis was not the one the
+# symptom suggested: 3521/3527/3599 are upstream _separable with sympy=True and each spun
+# to the 8 s wall, but DSolve`Linearizable already answered all three from the ORIGINAL
+# equation in 0.06-0.11 s, three cascade slots later.  DSolve`Separable -- slot 7 of 52,
+# with no bound on its own antiderivatives -- was spending the whole solve first, and not
+# in its split search (the separability zero test is 2.4 ms) but in Integrate on its own
+# SAMPLED integrands: sampling at integer points turns a mixed-angle kernel into a
+# shifted one (Csc[2] Csc[x] Cos[x-2]), each ~20 s to come back unevaluated.  Separable
+# now attempts both integrals under a 6 s wall-clock deadline SHARED by its explicit
+# entry and its implicit twin, so a hopeless integrand costs the cascade one budget
+# rather than one per path.  Both a TrigExpand-before-sampling rewrite (faster, but it
+# claims the records for the implicit twin, whose relation carries the sampling artefact
+# Cot[2] where the cascade returns the explicit ArcCos Mathematica gives) and a
+# per-integral bound (1 s loses 2.1.2-1134, whose answer legitimately carries an
+# unevaluated Integrate needing ~5 s to be DECIDED; 2 s leaves it on the boundary) were
+# built, measured and discarded.  The budget bounds any integrand, not one trig shape:
+# the autonomous non-elementary y' == -2 ArcTan[y]/(1+y^2) goes 7.76 s -> 1.39 s and
+# y' == Cos[x]^2 Cos[2y]^2 14.2 -> 8.0 s.  Residue 1 is honest: 3579 is y=_G(x,y') with
+# sympy=False, the documented non-elementary class whose sibling 3576 solves.
+add_test(NAME dsolve_corpus_2_2_36_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2236.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

@@ -1,5 +1,9 @@
 /*
- * dsolve_separable.c — DSolve`Separable (+ DSolve`SeparableImplicit).
+ * dsolve_separable.c — DSolve`Separable (explicit + implicit twin).
+ *
+ * Both paths are reached through the single registered builtin `DSolve`Separable`
+ * (there is no `DSolve`SeparableImplicit` symbol — an earlier version of this
+ * comment claimed one, which is a trap when bisecting a case with pinned methods).
  *
  * Solves the first-order separable ODE  y'[x] == g(x) h(y).  The RHS F(x, Y)
  * (Y a plain symbol standing for y[x]) is separated by evaluating it at sample
@@ -30,6 +34,7 @@
 #include "integrate.h"          /* g_integrate_quiet: silence speculative nonelem */
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 /* Fast numeric pre-filter for the separability check  chk = F - g*h  (in x and
  * Y): returns false only when chk evaluates to a clearly NON-zero finite number
@@ -118,14 +123,108 @@ static bool sep_find_split(DSolveProblem* P, Expr** g_out, Expr** h_out,
  * KEPT unevaluated, so the first integral G == C is still emitted (and verified
  * by the implicit-function rule, since D[Integrate[f,y],y] == f) -- e.g. the
  * autonomous y' == -2 ArcTan[y]/(1+y^2), whose y-side integral is non-elementary. */
+/* Per-antiderivative budget, in seconds.
+ *
+ * WHY THIS EXISTS.  Separable sits at cascade slot 7 of 52 and had NO bound on its
+ * own antiderivatives, so one integrand that does not close spent the entire DSolve
+ * budget on behalf of every method behind it.  And the integrands here are not the
+ * ones the user wrote: the split search samples F at integer points, which turns a
+ * trig kernel with a compound argument into a SHIFTED kernel carrying a constant trig
+ * coefficient — `Csc[2] Csc[x] Cos[x-2]` for g, and the quotient
+ * `Cot[2]^2/(Csc[2] Csc[Y] Cos[2-Y] - 1)` for 1/h — each of which Integrate searches
+ * for ~20 s before coming back unevaluated.
+ *
+ * Measured on §2.2.36-3521 `y' == Cos[x-y]/(Sin[x] Sin[y]) - 1` and its two siblings
+ * 3527/3599, which this repairs: before, `DSolve`Separable` ran 30 s without deciding
+ * and the solve died at the 8 s corpus bound; after, it declines in ~4 s and
+ * `DSolve`Linearizable` — three slots later, and able to solve the ORIGINAL equation
+ * all along — answers `ArcCos[C[1] Csc[x]]` in 0.1 s.  So these records were never
+ * missing a capability.  One method was spending the budget of the method that had
+ * the answer, and the fix is to bound the attempt rather than to teach Separable a
+ * new trick: a bounded attempt helps every integrand nobody has thought of, and a
+ * rewrite (TrigExpand before sampling) was built, measured against this, and
+ * DISCARDED — it was faster on these three (0.08 s) but claimed them for Separable's
+ * implicit twin, whose answer carries the sampling artefact `Cot[2]` and is an
+ * implicit relation where Mathematica and Linearizable give the explicit ArcCos.
+ *
+ * It is ONE DEADLINE PER TOP-LEVEL SOLVE, shared by the explicit entry and the
+ * implicit twin, and not a budget per integral — which is the difference between a
+ * fix and a flaky one.  A per-integral bound has to serve two measured requirements
+ * at once and cannot: §2.1.2-1134's answer legitimately carries an unevaluated
+ * `Integrate` whose sampled integrand needs ~1-2 s to come back undecided, so a 1 s
+ * bound LOSES that record (measured: an answer at 5.1 s became a 16 s abort) and a
+ * 2 s bound leaves it sitting on the boundary, passing or failing with the load.
+ * Raising the bound instead pushes the records this repairs toward the wall, because
+ * each of the two paths pays its own: at 2 s §2.2.36-3521 closes at 4.1 s, at 3 s at
+ * 6.2 s, against an 8 s budget.  A shared deadline separates the two cases on the
+ * quantity that actually distinguishes them — 1134's integrals cost seconds, 3521's
+ * cost twenty — and charges a hopeless integrand ONCE: at six seconds 1134 is
+ * unchanged at 5.3 s (measured twice, where the deadline never binds it) and 3521
+ * declines at the deadline and closes at 6.15 s, after which Linearizable answers.
+ * Six is therefore the smallest value that clears 1134's genuine ~5 s need, and the
+ * sharing is what keeps 3521 inside the 8 s bound at that value rather than paying
+ * 12 s for two paths.
+ *
+ * A TIMEOUT IS TREATED AS A DECLINE ON BOTH PATHS, including the implicit twin that
+ * normally keeps a non-elementary integral unevaluated.  The distinction matters: a
+ * non-elementary integrand has been *decided*, and an inert `Integrate` for it is an
+ * answer; a timed-out one has been decided of nothing, and handing back a raw
+ * unevaluated `Integrate` re-enters the integration cascade on every later
+ * re-evaluation of the body — the trap that turned a 3 s budget into 375 s in M62. */
+#define SEP_BUDGET_SEC 6
+
+static uint64_t g_sep_epoch = 0;
+static bool     g_sep_epoch_set = false;
+static time_t   g_sep_deadline = 0;
+
+/* Seconds left in this top-level solve's separable budget; 0 when it is spent.  The
+ * deadline is (re)armed on the first call of each top-level evaluation, so the
+ * explicit and implicit entries of one DSolve share it. */
+static int sep_remaining(void) {
+    uint64_t ep = eval_toplevel_id();
+    if (!g_sep_epoch_set || ep != g_sep_epoch) {
+        g_sep_epoch = ep; g_sep_epoch_set = true;
+        g_sep_deadline = time(NULL) + SEP_BUDGET_SEC;
+    }
+    time_t now = time(NULL);
+    return (g_sep_deadline > now) ? (int)(g_sep_deadline - now) : 0;
+}
+
+/* Integrate[integrand, var] inside what is left of the budget.  Consumes
+ * `integrand`; returns NULL and sets *spent when the deadline is reached. */
+static Expr* sep_integrate_bounded(Expr* integrand, const char* var, bool* spent) {
+    int left = sep_remaining();
+    if (left <= 0) { expr_free(integrand); *spent = true; return NULL; }
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Integrate),
+                     (Expr*[]){ integrand, expr_new_symbol(var) }, 2);
+    Expr* guarded = expr_new_function(expr_new_symbol(SYM_TimeConstrained),
+                     (Expr*[]){ call, expr_new_integer(left),
+                                expr_new_symbol(intern_symbol("$Aborted")) }, 3);
+    Expr* out = eval_and_free(guarded);
+    if (out && out->type == EXPR_SYMBOL
+        && out->data.symbol.name == intern_symbol("$Aborted")) {
+        expr_free(out);
+        *spent = true;
+        return NULL;
+    }
+    return out;
+}
+
 static bool sep_integrals(Expr* g, Expr* h, const char* Yname, const char* xvar,
                           Expr** lhs, Expr** rhs, bool require_elem) {
     Expr* invh = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ h, expr_new_integer(-1) }, 2));
+    bool spent = false;
     g_integrate_quiet++;
-    Expr* lhsInt = ds_integrate(invh, expr_new_symbol(Yname));
-    Expr* rhsInt = ds_integrate(g, expr_new_symbol(xvar));
+    Expr* lhsInt = sep_integrate_bounded(invh, Yname, &spent);
+    Expr* rhsInt = NULL;
+    if (spent) expr_free(g);            /* the second attempt never ran: g is still ours */
+    else       rhsInt = sep_integrate_bounded(g, xvar, &spent);   /* consumes g regardless */
     g_integrate_quiet--;
+    if (spent) {
+        expr_free(lhsInt); expr_free(rhsInt);
+        return false;
+    }
     if (require_elem && (ds_has_head(lhsInt, SYM_Integrate) || ds_has_head(rhsInt, SYM_Integrate))) {
         expr_free(lhsInt); expr_free(rhsInt); return false;
     }

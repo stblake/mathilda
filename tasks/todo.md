@@ -41,18 +41,27 @@ Two commits, each bumped and tagged (user's call).
       clean, indvar census x/z/t only, `check-corpus-indvar` green)
 - [ ] `add_test(dsolve_corpus_2_2_36_tests)` + `STATUS.md` block + `README.md` row
 - [ ] Baseline: fork-per-case, twice, per-case identical; bucket report
-- [x] The `3521`/`3527`/`3599` root cause, **re-diagnosed by measurement**: these
-      are NOT a missing-answer case. `DSolve\`Linearizable` already solves them
+- [x] The `3521`/`3527`/`3599` root cause, **re-diagnosed by measurement twice**.
+      (i) Not a missing-answer case: `DSolve\`Linearizable` already solves them
       from the original equation in 0.11 s, three cascade slots after
       `Separable` — which eats the whole 8 s budget first on an `Integrate` of
-      its own SAMPLED integrand. So the fix is the mixed-angle `TrigExpand`
-      normalisation in `sep_find_split`, applied to `F` BEFORE sampling (a retry
-      cannot work: `TrigExpand` is a no-op inside a denominator), gated on a
-      mixed-angle kernel and guarded on the rewrite actually eliminating it
-      (§2.1.2-1134 matches the gate, cannot be helped, and must stay byte-identical)
+      its own SAMPLED integrand. (ii) And not a normalisation case either: a
+      `TrigExpand`-before-sampling rewrite was built, measured and **discarded**
+      (faster at 0.08 s, but it claims the records for Separable's implicit twin,
+      whose relation carries the sampling artefact `Cot[2]` where the cascade
+      returns the explicit `ArcCos` Mathematica gives; and it half-expands
+      multiple angles into something worse). What landed is a **6 s wall-clock
+      deadline SHARED by both Separable entries** — a per-integral bound cannot
+      work: 1 s loses §2.1.2-1134 (whose answer legitimately carries an
+      unevaluated `Integrate` needing ~5 s to be DECIDED), 2 s leaves it on the
+      boundary, and raising it walks the repaired records toward the wall because
+      each path pays its own
 - [x] `tests/test_dsolve_m63_stress.c`, five families, negative controls + a
       latency bound (the fix is a latency property, so an answer-only test would
-      pass before AND after)
+      pass before AND after). The generator found three PRE-EXISTING unbounded
+      steps on its own: `DSolve\`Exact`, `DSolve\`LieSymmetry` (~10 s) and
+      `DSolve\`Homogeneous` (16 s on a scaled mixed-angle RHS), all identical on
+      a pre-fix binary — named in `DSOLVE_PLAN.md`, not fixed here
 - [ ] Regression: isolated-worktree A/B over the touched sections + the §2.1.2
       master corpus; `check-c99`, `check-messages`, valgrind
 - [ ] v0.256, docs, `STATUS.md` (also add M62's missing wave-history bullet), tag

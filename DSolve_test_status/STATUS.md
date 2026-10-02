@@ -1803,6 +1803,113 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
 
 ---
 
+## Section 2.2.36 — "Problems 3501 to 3600" (Goode & Annin / Riley–Hobson–Bence)
+
+Corpus: `DE_examples_2236.m` — 100 records, **100 scalar (9 IVP) + 0 systems**.
+Converted with `tools/latex_ode_to_mathilda.py` (upstream §2.1.36,
+`Ch2.S1.SS36.htm`; the internal `2.2.36` name is kept for continuity — see
+`README.md`). Sources: Goode & Annin, *Differential Equations and Linear Algebra*
+4th ed. 2015 (44), Goode 2nd ed. 2000 (43), Riley–Hobson–Bence 2nd ed. 2002 (13).
+Three blocks: **3501–3513** second-order linear with **`z`** as the independent
+variable (series / special-function — Jacobi, Laguerre and Gegenbauer at a
+symbolic eigenvalue, Liénard, Emden–Fowler); **3514–3556** elementary first order
+(24 separable, 22 linear, 17 homogeneous class A, 9 dAlembert, 10 rational);
+**3557–3600** second-order `_missing_x` constant-coefficient + Euler–Cauchy +
+quadrature (incl. a symbolic-exponent `y'' == x^n` and a 3rd-order quadrature
+IVP), with **3592–3600 repeating 3514–3522** (eight verbatim; 3596 differs from
+3518 only in a constant), so a fix in that block scores twice.
+`ctest -R dsolve_corpus_2_2_36_tests` · gate baseline **1**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-02 (M63 baseline) | 96 / 100 | 96.0% | 4 | 0 FAIL, 0 crash, 0 timeout. Two runs per-case identical. Non-PASS: 3521, 3527, 3579, 3599. Every `z`-block series answer verifies, including the five returned as truncated `SeriesData`. |
+| 2026-10-02 (**M63**) | **99 / 100** | **99.0%** | **1** | **+3 (3521, 3527, 3599), 0 FAIL, 0 crash, 0 timeout**, two runs per-case identical. One root-cause fix (below). Gate baseline **1**. |
+
+**M63 fix — `DSolve`Separable` bounds its own antiderivatives**
+(`src/calculus/dsolve_separable.c`). `3521`/`3599` (`y' == Cos[x−y]/(Sin x Sin y) − 1`)
+and `3527` (the `Sin[x+y]` sibling, as an IVP) are upstream-classified `_separable`
+with `sympy=True`, and each spun to the 8 s wall.
+
+**The diagnosis that mattered was not the one the symptom suggested.** These were
+never lost for want of a method: `DSolve`Linearizable` answers all three from the
+**original** equation in 0.06–0.11 s (`ArcCos[C[1] Csc[x]]`, `ArcCos[C[1] Sec[x]]`,
+`ArcCos[Sec[x]/2]`), three cascade slots after `Separable`. They were lost because
+`Separable` — slot 7 of 52, with no bound on its own integrals — spent the entire
+solve first, and not in its split search (the separability zero test is 2.4 ms) but in
+`Integrate` on its own **sampled** integrands: sampling at integer points turns a
+mixed-angle kernel into a shifted one, `Csc[2] Csc[x] Cos[x−2]` for `g` and the
+quotient `Cot[2]²/(Csc[2] Csc[Y] Cos[2−Y] − 1)` for `1/h`, each ~20 s to come back
+unevaluated. An answer-only test would have passed before the fix as well as after.
+
+The fix is a **6 s wall-clock deadline per top-level solve, SHARED** by the explicit
+entry and the implicit twin (`sep_remaining` / `sep_integrate_bounded`, keyed on
+`eval_toplevel_id()`). Two earlier designs were built and discarded, each by
+measurement:
+
+1. **A `TrigExpand`-before-sampling rewrite** — faster (0.08 s, since Separable then
+   receives `Cot[x] Cot[y]` and both integrals close at once) and **withdrawn**: it
+   makes Separable *claim* these records, and its implicit twin's relation carries the
+   sampling artefact `Cot[2]` where the cascade left alone returns the explicit
+   `ArcCos` form Mathematica gives. It also does not generalise — `TrigExpand` expands
+   multiple angles as well as sums and cannot reach into a denominator, so on
+   `Cos[x−2y]/(Sin x Sin 2y) − 1` it half-expands into something strictly worse
+   (Separable's search 12 → 8 s on it, the full cascade 12.2 → 19.5 s). Rescuing that
+   with a node-count "must shrink" guard is when the simpler answer became obvious.
+2. **A per-integral bound** — it cannot serve two measured requirements at once.
+   §2.1.2-1134's answer legitimately carries an unevaluated `Integrate` and needs ~5 s
+   to get it *decided*: a 1 s bound **loses the record** (an answer at 5.1 s became a
+   16 s abort), a 2 s bound leaves it on the boundary passing or failing with the load,
+   and raising it walks the repaired records toward the wall because each path pays its
+   own (3521 closes at 4.1 s under 2 s, 6.2 s under 3 s). One shared deadline separates
+   the cases on the quantity that distinguishes them — 1134's integrals cost seconds,
+   3521's cost twenty — and charges a hopeless integrand once. Six seconds is where
+   both hold: 1134 unchanged at 5.3 s, 3521 at 6.15 s, §2.2.36 per-case identical twice.
+
+A timeout is a **decline on both paths**. A *decided* non-elementary integrand is an
+answer the implicit twin keeps; a timed-out one has decided nothing, and a raw
+unevaluated `Integrate` re-enters the integration cascade on every later re-evaluation
+— the trap that turned a 3 s budget into 375 s in M62.
+
+**Reach beyond these three records,** because the budget bounds any integrand rather
+than one trig shape. Measured A/B on the separable controls: the autonomous
+non-elementary `y' == −2 ArcTan[y]/(1+y²)` **7.76 s → 1.39 s**,
+`y' == Cos[x]² Cos[2y]²` **14.2 s → 8.0 s**, `y' == Cot[x] y/(1+y)` 0.035 → 0.014 s;
+§2.1.2-1134, §2.2.2-165, the symbolic-parameter split `(a y+b)/(c y+d)` and the trivial
+separables all unchanged.
+
+**Two gate corrections that are NOT this wave's doing,** both settled per-case on a
+pre-fix binary rather than argued. §2.2.16 falls **2 → 1**: `1581`
+(`(3y³ + 3y Cos y + 1) y' + (2x+1)y/(x²+1) == 0`, a *non-trig* separable) is recovered
+by the budget, which is the generality claim in one record. §2.2.4 rises **0 → 3**:
+`390`, `391` and `394` are `Sin[10t]`/`Cos[10t]`-forced constant-coefficient second-order
+equations that `sep_find_split` rejects at `max_order != 1`, so the budget cannot reach
+them — and all three solve on BOTH binaries at identical times (5.69/10.98/5.66 s against
+5.81/10.93/5.69 s). `391` genuinely needs ~11 s against the 8 s bound and `390`/`394` sit
+in the boundary band, so the gate was aspirational, not met. Also measured and left alone
+rather than ratcheted on a single reading: §2.2.1 now 0 (gate 2) and §2.2.24 now 5
+(gate 9), both pre-existing gains.
+
+**Residue 1, honest.** `3579` (`y' == (x²(1−y²) + y E^(y/x))/(x(E^(y/x) + 2x²y))`) is
+`y=_G(x,y')` with `sympy=False` — the documented non-elementary class (§2.2.17 carries
+eight of them). Its sibling `3576` solves.
+
+**Named by this wave, not done.** Three more unbounded steps the stress generator
+exposed, all verified identical on a pre-fix binary: `DSolve`Exact` and
+`DSolve`LieSymmetry` carry the same defect on the same shape (~10 s each; no corpus
+record needs them for it, because Linearizable claims the family first);
+`DSolve`Homogeneous` spins **16 s** on a *scaled* mixed-angle RHS
+(`k(Cos[x−y]/(Sin x Sin y) − 1)`, `k ≥ 2`), which is why the `k`-varying members of the
+generator never reach Separable and the family is tested through the pinned entry; and
+the original spin's deeper cause is in `Integrate` —
+`wj_has_kernel_in_denominator` admits Weierstrass only on a literal negative `Power`,
+but the canonicaliser writes `Cos[x−a]/Sin[x]` as `Times[Csc[x], Cos[…]]`, so no
+`Csc`/`Sec`/`Cot` integrand ever reaches that stage and `Integrate[Cos[x−a]/Sin[x], x]`,
+which is elementary, either spins or is falsely reported non-elementary.
+
+Full per-case results: `reports/2.2.36.tsv`; bucketed report: `reports/2.2.36.md`.
+
+---
+
 ## Wave history
 
 - **M15 (2026-09-06)** — infrastructure: converter (`tools/latex_ode_to_mathilda.py`),
@@ -2284,3 +2391,37 @@ Corpus: `DE_examples_3.m` — pending fetch/convert. Gate:
   carries. `README.md` corrected on two further measured points: the fetch URL
   (`Ch2.S2.SSN.htm` has 404'd since upstream's 2026-09-28 regeneration) and the claim that
   §2.2.1–19 can no longer be regenerated. v0.254→0.255.
+
+- **M63b (2026-10-02)** — §2.2.36 (Problems 3501–3600) corpus wave, **96 → 99/100, +3, 0 FAIL,
+  0 crash, 0 timeout**, two per-case-identical runs on each side. ONE root-cause fix, and the
+  diagnosis took three attempts because the symptom was misleading twice over. `3521`/`3527`/
+  `3599` are upstream `_separable` with `sympy=True` and each spun to the 8 s wall. (1) They were
+  not missing a capability: `DSolve\`Linearizable` answers all three from the **original**
+  equation in 0.06–0.11 s, three cascade slots after `Separable`. (2) `Separable`'s cost is not
+  its split search (the separability zero test is 2.4 ms) but `Integrate` on its own **sampled**
+  integrands — sampling at integer points turns a mixed-angle kernel into a shifted one,
+  `Csc[2] Csc[x] Cos[x−2]`, ~20 s each to come back unevaluated. So one method at cascade slot 7
+  of 52, with no bound on its own antiderivatives, was spending the budget of the method that had
+  the answer. **The fix is a 6 s wall-clock deadline SHARED by both Separable entries**
+  (`sep_remaining`, keyed on `eval_toplevel_id()`). Two earlier designs were built, measured and
+  discarded: a `TrigExpand`-before-sampling rewrite (75× faster, but it claims the records for the
+  implicit twin, whose relation carries the sampling artefact `Cot[2]` where the cascade returns
+  the explicit `ArcCos` Mathematica gives — and it half-expands multiple angles into something
+  worse), and a per-integral bound (1 s **loses** §2.1.2-1134, whose answer legitimately carries
+  an unevaluated `Integrate` needing ~5 s to be *decided*; 2 s leaves it on the boundary; raising
+  it walks the repaired records toward the wall because each path pays its own). Because it bounds
+  *any* integrand rather than one trig shape, the gain is broader than the three records:
+  §2.2.16-1581 (a non-trig separable) is recovered, the autonomous non-elementary
+  `y' == −2 ArcTan[y]/(1+y²)` goes 7.8 s → 1.4 s and `y' == Cos[x]² Cos[2y]²` 14.2 s → 8.0 s.
+  **Regression: 17 sections re-measured, zero regressions and one gain**; §2.1.2 632 PASS against
+  the pre-fix run's 635, 0 FAIL on both — and all five movers solve on BOTH binaries, three to
+  four interleaved reps each, at 5.2–6.3 s against an 8 s harness bound with ~0.8 s of run-to-run
+  spread, i.e. boundary-band noise rather than a regression (the first, batch-ordered, A/B showed
+  a phantom +0.3 s that interleaving removed). Gates: new §2.2.36 at **1**, §2.2.16 **2 → 1**, and
+  §2.2.4 **0 → 3** — the last not this wave's doing, settled per-case on a pre-fix binary (all
+  three are `Sin[10t]`-forced second-order equations that `sep_find_split` rejects at
+  `max_order != 1`, identical on both binaries, one genuinely needing ~11 s). Residue 1, honest:
+  `3579`, `y=_G(x,y')` with `sympy=False`. New `tests/test_dsolve_m63_stress.c` (5 families, whose
+  generator found three PRE-EXISTING unbounded steps on its own: `DSolve\`Exact`,
+  `DSolve\`LieSymmetry` and a 16 s `DSolve\`Homogeneous` spin on a scaled mixed-angle RHS).
+  v0.256→0.257 (0.256 was taken by a concurrent notebook commit).

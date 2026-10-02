@@ -2595,6 +2595,90 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     losses, every one present in the *pristine* run, so none of it belongs to this change.
     §2.2.12-1133, §2.2.13-1201 and §2.2.13-1219 are the losses worth chasing next.
 
+- **M63b — §2.2.36 corpus (Problems 3501–3600) + a shared integral budget for `Separable`.**
+  ✅ DONE. The next hundred, measured end to end: **96/100 → 99/100, 0 FAIL, 0 crash,
+  0 timeout**, two per-case-identical runs on each side. New gate
+  `dsolve_corpus_2_2_36_tests`; report `DSolve_test_status/reports/2.2.36.md`. 100 scalar
+  records, 9 IVPs, from Goode & Annin (44), Goode 2nd ed. (43) and Riley–Hobson–Bence (13).
+  Three blocks: **3501–3513** second-order linear with `z` as the independent variable
+  (series / special-function — Jacobi, Laguerre, Gegenbauer at a symbolic eigenvalue,
+  Liénard, Emden–Fowler), **3514–3556** elementary first order, **3557–3600** second-order
+  `_missing_x` + Euler–Cauchy + quadrature, with 3592–3600 repeating 3514–3522 so a fix
+  there scores twice. Every `z`-block answer verifies, including the five returned as
+  truncated `SeriesData` — the question §2.2.20/21 settled, re-confirmed here.
+  - **One root-cause fix, and the diagnosis was not the one the symptom suggested.**
+    `3521`/`3599` (`y' == Cos[x−y]/(Sin x Sin y) − 1`) and `3527` (the `Sin[x+y]` sibling,
+    as an IVP) are upstream `_separable` with `sympy=True` and each spun to the 8 s wall.
+    The obvious reading — Separable needs the angle-addition identity to see the split — is
+    wrong **twice**, and bisecting the cascade with the pinned builtins is what showed it.
+    (1) `DSolve\`Linearizable` already answers all three from the **original** equation in
+    0.06–0.11 s (`ArcCos[C[1] Csc[x]]`, `ArcCos[C[1] Sec[x]]`, `ArcCos[Sec[x]/2]` for the
+    IVP), three cascade slots after Separable; the records were never missing a capability.
+    (2) Separable's cost is not in its split search — the separability zero test on this
+    shape is 2.4 ms — but in `Integrate` on its own **sampled** integrands: sampling at
+    integer points turns a mixed-angle kernel into a shifted one, `Csc[2] Csc[x] Cos[x−2]`
+    for `g` and the quotient `Cot[2]²/(Csc[2] Csc[Y] Cos[2−Y] − 1)` for `1/h`, each ~20 s
+    to come back unevaluated. So one method at cascade slot 7 of 52 was spending the entire
+    solve on behalf of every method behind it. An answer-only test would have passed before
+    the fix as well as after; this is a latency property and its test asserts a time.
+  - **The fix is a budget, and it is SHARED across both Separable entries** (`sep_remaining`
+    / `sep_integrate_bounded`, `src/calculus/dsolve_separable.c`): one 6 s wall-clock
+    deadline per top-level solve, armed on first use and keyed on `eval_toplevel_id()`, so
+    the explicit path and the implicit twin cannot each charge the cascade a full budget.
+    Every part of that was forced by a measurement, and two earlier designs were built and
+    discarded:
+      1. *A `TrigExpand`-before-sampling rewrite.* Faster (0.08 s, because Separable then
+         receives `Cot[x] Cot[y]` and both integrals close at once) and **discarded**: it
+         makes Separable *claim* these records, and its implicit twin's relation carries the
+         sampling artefact `Cot[2]` where the cascade left alone returns the explicit
+         `ArcCos` that Mathematica gives. It also does not generalise — `TrigExpand` expands
+         multiple angles as well as sums and cannot reach into a denominator, so on
+         `Cos[x−2y]/(Sin x Sin 2y) − 1` it half-expands into a form strictly worse to work
+         with (Separable's search 12 s → 8 s on it, the full cascade 12.2 s → 19.5 s).
+         A node-count "must shrink" guard rescued that, which is when the simpler answer
+         became obvious: bound the attempt instead of teaching the method a new identity.
+      2. *A per-integral bound.* It cannot serve two measured requirements at once.
+         §2.1.2-1134's answer legitimately carries an unevaluated `Integrate` and needs ~5 s
+         to get it *decided*: a 1 s bound **loses the record** (an answer at 5.1 s became a
+         16 s abort) and a 2 s bound leaves it on the boundary, passing or failing with the
+         load. Raising the bound walks the repaired records toward the wall instead, since
+         each path pays its own — 3521 closes at 4.1 s under 2 s and 6.2 s under 3 s. The
+         shared deadline separates the cases on the quantity that distinguishes them (1134's
+         integrals cost seconds, 3521's cost twenty) and charges a hopeless integrand once.
+      3. *Six seconds*, where both hold with margin: 1134 unchanged at 5.3 s (twice), 3521
+         at 6.15 s against the 8 s bound, and §2.2.36 per-case identical across two runs.
+    A timeout is a **decline on both paths**: a decided non-elementary integrand is an
+    answer the implicit twin keeps, a timed-out one has decided nothing, and a raw
+    unevaluated `Integrate` re-enters the integration cascade on every re-evaluation — the
+    trap that turned a 3 s budget into 375 s in M62.
+  - *Reach beyond the three records,* because the budget bounds ANY integrand rather than
+    one trig shape. Measured A/B on the separable controls: the autonomous non-elementary
+    `y' == −2 ArcTan[y]/(1+y²)` **7.76 s → 1.39 s**, `y' == Cos[x]² Cos[2y]²`
+    **14.2 s → 8.0 s**, `y' == Cot[x] y/(1+y)` 0.035 s → 0.014 s, and §2.1.2-1134,
+    §2.2.2-165, the symbolic-parameter split and the trivial separables all unchanged.
+  - *Residue 1, honest:* `3579`, a `y=_G(x,y')` equation with `sympy=False` — the documented
+    non-elementary class (§2.2.17 carries eight). Its sibling `3576` solves.
+  - **Named by this wave, not done — three unbounded steps the generator exposed.**
+    `DSolve\`Exact` and `DSolve\`LieSymmetry` carry the same defect on the same shape
+    (~10 s each, measured); no corpus record needs them for this family because
+    Linearizable claims it first. `DSolve\`Homogeneous` spins **16 s** on a *scaled*
+    mixed-angle RHS — `k(Cos[x−y]/(Sin x Sin y) − 1)` for `k ≥ 2`, identical on both
+    binaries — which is why the `k`-varying members of the stress generator never reach
+    Separable at all, and is the reason that family is tested through the pinned entry.
+    And the deeper cause of the original spin is in `Integrate`, not DSolve:
+    `wj_has_kernel_in_denominator` (`src/calculus/integrate_jeffrey.c`) admits Weierstrass
+    to the cascade only on a literal `Power[base, negative]` with `x` in the base, but the
+    canonicaliser writes `Cos[x−a]/Sin[x]` as `Times[Csc[x], Cos[…]]`, so **no
+    `Csc`/`Sec`/`Cot` integrand ever reaches that stage** — `Integrate[Cos[x−a]/Sin[x], x]`
+    is elementary (`Cos[a] Log[Sin x] + Sin[a] x`) and the system either spins or falsely
+    reports non-elementarity, while `Integrate\`Weierstrass` pinned returns it in 0.007 s.
+    Hoisting the admission newly admits multiple-angle integrands whose answers change
+    spelling (`Integrate[Csc[x], x]` would move from `½(Log[2−2Cos x] − Log[2+2Cos x])` to
+    `Log[Tan[x/2]]`), so it is a milestone with its own measurement.
+  - *Also corrected:* `dsolve_separable.c`'s header advertised a `DSolve\`SeparableImplicit`
+    builtin that was never registered — both paths are reached through `DSolve\`Separable`,
+    and the phantom name is a trap when bisecting with pinned methods.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

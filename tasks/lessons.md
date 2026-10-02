@@ -4198,3 +4198,87 @@ is slow AND its budget never fired". A two-line repro
 time; M61 named the bug and deferred it, and three of the five cases I was profiling
 turned out to be downstream of it. Check that the instrument works before trusting a
 reading from it.
+
+## M63 — "the method is missing a capability" was the wrong diagnosis twice over
+
+Two independent lessons from the same wave, both about *where to look*.
+
+**1. A transcription bug is a correctness bug, and it hides behind the verifier.**
+Eighteen records in the gated DSolve corpora were a different equation than the book
+printed, because the converter promoted a *parameter* letter to the independent
+variable (`y'' - 2a y' + a²y = 0` read as an ODE in `a`). Every mechanism that exists
+to catch a wrong answer was blind to it, and necessarily so: the harness
+back-substitutes into the record it holds, so a garbled record is verified against
+itself and scores PASS. Worse, the garbled reading is usually *also* solvable — the
+mis-read logistic IVP `dy/da` solves, the mis-read `y''[a] - 2a y'[a] + a² y[a]` has a
+Bessel-type answer — so the only observable symptom is no symptom. Fourteen of the
+eighteen had been scoring PASS for many waves.
+
+Three things follow. **The classification column is evidence, not decoration.**
+Maple's `_missing_x` is a hard statement that the equation does not contain its
+independent variable; reading it turned an unprovable heuristic into a rule with zero
+false positives over 495 records. **The completeness argument beats the pattern
+argument.** The fix that worked was not "exclude `a`, `k`, `w`" but "the only Latin
+letter this step can legitimately contribute is `y`, because every other genuine
+spelling was already claimed one step earlier" — and that was checkable: the complete
+set of legitimate adoptions across 36 corpora is nine records, every Latin one `y`.
+**And four of the eighteen needed no code change at all** — a later converter fix had
+already repaired them and nobody had re-run the converter. A tool whose output is
+checked in has a second failure mode: the output goes stale while the tool gets
+better. `make check-corpus-indvar` now gates the class, and it found the eighteenth
+victim (a *system* record, which every hand scan had skipped) on its first run.
+
+**2. "Times out on an equation it should solve" is not evidence that the method
+cannot solve it.** `3521`/`3527`/`3599` are upstream-classified `_separable`, spun to
+the 8 s wall, and the obvious reading was that `DSolve`Separable` needs an
+angle-addition rewrite to see the split. Measurement said otherwise on both counts:
+`DSolve`Linearizable` already answers all three from the **original** equation in
+0.06–0.11 s, three cascade slots later — and `Separable`'s cost is not in its split
+search (the separability zero test is 2.4 ms) but in `Integrate` on its own *sampled*
+integrands, 20 s each. The records were never missing a capability; a method was
+spending the cascade's whole budget 24 lines before the method that had the answer.
+
+That re-diagnosis changed the fix — and then a second measurement changed it again,
+which is the part worth keeping. The obvious repair once you know the cost is in the
+sampled integrands is to **normalise before sampling**: `TrigExpand` turns the RHS into
+`Cot[x] Cot[y]`, both integrals close at once, and the solve drops from 6 s to 0.08 s.
+It was built, it worked, and it was **discarded** — because it makes Separable *claim*
+the records, and its implicit twin answers with a relation carrying the sampling
+artefact `Cot[2]` where the cascade left alone returns the explicit
+`ArcCos[C[1] Csc[x]]` that Mathematica gives. **75x faster was a worse answer.** It also
+would not generalise: `TrigExpand` expands multiple angles as well as sums and cannot
+reach into a denominator, so on the `Cos[x-2y]/(Sin x Sin 2y)` sibling it half-expands
+into a form strictly worse to work with — which took a node-count "must shrink" guard
+to contain, at which point the simpler answer was obvious. **Bound the attempt instead
+of teaching the method a new identity**: a bound helps every integrand nobody has
+thought of, and it recovered a non-trig separable (§2.2.16-1581) and halved two
+unrelated controls as a side effect.
+
+The bound's own shape was forced too, and by a loss rather than by reasoning: a
+**per-integral** budget cannot serve two measured requirements at once. §2.1.2-1134's
+answer legitimately carries an unevaluated `Integrate` and needs ~5 s to get it
+*decided*; at 1 s that record is **lost outright**, at 2 s it sits on the boundary
+passing or failing with the load, and raising the bound walks the repaired records
+toward the 8 s wall because each of the method's two entries pays its own. One
+**shared** deadline separates the cases on the quantity that actually distinguishes
+them — 1134's integrals cost seconds, 3521's cost twenty — and charges a hopeless
+integrand once.
+
+Three process notes from the same wave, each of which cost a wrong conclusion first:
+
+- **Batch-ordered A/B measures load drift, not your change.** Running three reps of
+  the old binary and then three of the new showed a consistent +0.3 s that looked like
+  wrapper overhead and would have been reported as a regression. Interleaving
+  pre/post/pre/post removed it entirely (means 5.52 vs 5.49 s, spread 0.8 s).
+  Interleave, always.
+- **A latency fix cannot be A/B'd under valgrind on the input it fixes.** The pre-fix
+  binary has no bound, so the integrand runs unbounded under a 30x slowdown and never
+  finishes. Compare the two binaries on input the OLD one can complete, and measure
+  the new path's cost separately.
+- **Before touching a slow method, bisect the cascade with the pinned
+  `DSolve`<Method>` builtins.** It takes one minute and it tells you whether anything
+  already answers the case. If something does, the bug is a budget, not a capability.
+  The same bisection then found three PRE-EXISTING unbounded steps the generator had
+  been tripping over (`Exact`, `LieSymmetry`, and a 16 s `Homogeneous` spin) — which is
+  also why a stress family that varies a coefficient can end up measuring a different
+  method's defect than the one you changed.
