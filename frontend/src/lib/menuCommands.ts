@@ -76,7 +76,7 @@ export const MENU_IDS = [
   'scheme-default', 'scheme-dracula', 'scheme-nord', 'scheme-monokai',
   'scheme-solarized-dark', 'scheme-solarized-light', 'scheme-gruvbox',
   'scheme-one-dark', 'scheme-tokyo-night', 'scheme-github-light',
-  'scheme-seventies', 'scheme-eighties', 'scheme-grayscale', 'scheme-off',
+  'scheme-sixties', 'scheme-seventies', 'scheme-eighties', 'scheme-grayscale', 'scheme-off',
 ] as const;
 
 /* The notebook a command acts on: the active pane, or the first one on the canvas so that a
@@ -239,6 +239,7 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
     case 'scheme-one-dark':
     case 'scheme-tokyo-night':
     case 'scheme-github-light':
+    case 'scheme-sixties':
     case 'scheme-seventies':
     case 'scheme-eighties':
     case 'scheme-grayscale':

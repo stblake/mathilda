@@ -4,6 +4,7 @@
   import 'katex/dist/katex.min.css';
   import { evalOnce } from './ipc';
   import CodeView from './CodeView.svelte';
+  import { plainOutput } from './properties';
 
   /* Opens a symbol's own reference page. Passed in so this stays a renderer. */
   export let onOpenDoc: ((name: string) => void) | null = null;
@@ -658,7 +659,11 @@
   {#each items as item, idx (idx)}
     <div class="out-item" class:expanded={expanded[idx]} class:overflowing={overflows[idx]}>
       {#if item.kind === 'expr'}
-        {@const form = exprForm[idx] ?? 'standard'}
+        {@const base = exprForm[idx] ?? 'standard'}
+        <!-- A teletype scheme forbids 2D math: redirect the typeset forms
+             (StandardForm, MathML) to 1D InputForm, but leave an explicit 1D
+             choice (InputForm/FullForm/TeXForm) alone. -->
+        {@const form = $plainOutput && (base === 'standard' || base === 'mathml') ? 'input' : base}
         <div class="out-collapsible" use:measureOverflow={idx} use:measureExprWidth={idx}>
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
           <div class="out-expr" title="Right-click to Convert To…"

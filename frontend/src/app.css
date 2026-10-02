@@ -423,3 +423,32 @@ code {
 .cm-tooltip-autocomplete .cm-completionIcon {
   opacity: 0.6;
 }
+
+/* ---- 1960s teletype scheme (lib/schemes.ts; applyColorScheme sets data-teletype)
+   ------------------------------------------------------------------------------
+   The INK is already handled by the sixties palette: every --cm-* token is
+   var(--cm-ink), which is adaptive (black on light, near-white on dark), so the
+   look flips with the dark-mode toggle. This block does the two things a --cm-*
+   palette cannot: swap the face to fixed-width Courier across every input and
+   output surface, and fold the one or two coloured diagnostics into the ink so
+   "everything is the one colour" holds. 1D output (no 2D KaTeX) is forced in
+   Output.svelte, gated on the plainOutput store. !important is needed because the
+   CodeMirror editor/CodeView set their font from a generated theme stylesheet. */
+html[data-teletype] .cm-editor,
+html[data-teletype] .cm-content,
+html[data-teletype] .code-view,
+html[data-teletype] .out-expr,
+html[data-teletype] .output pre,
+html[data-teletype] .output code,
+html[data-teletype] .out-stream,
+html[data-teletype] .out-error,
+html[data-teletype] .out-message,
+html[data-teletype] .out-expected {
+  font-family: 'Courier New', Courier, 'Courier 10 Pitch', monospace !important;
+}
+/* "Everything black": the red error and amber message rules lose their hue and
+   print in the same ink as the rest (still adaptive via --cm-ink). */
+html[data-teletype] .out-error,
+html[data-teletype] .out-message {
+  color: var(--cm-ink) !important;
+}

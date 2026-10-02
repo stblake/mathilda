@@ -53,3 +53,24 @@ All four done and verified (v0.259).
 - `npm run build` (vite) → built.
 
 Not committed/tagged — awaiting go-ahead. When ready: commit + `git tag v0.259`.
+
+---
+
+# 1960s teletype scheme (v0.260)
+
+Follow-up: a monochrome, Courier, 1D-output scheme. User clarified it must adapt
+to dark mode (not force paper white), so the ink is adaptive like grayscale.
+
+- [x] `schemes.ts`: `sixties` scheme — all tokens `var(--cm-ink)`, `builtinBold`,
+      new `mono` flag. `applyColorScheme` toggles `data-teletype`.
+- [x] `App.svelte`: `--cm-ink` — `#000` light, `#e8e8e8` dark (adaptive).
+- [x] `app.css`: `html[data-teletype]` block — Courier across editor + all output
+      surfaces; error/message colours folded into `--cm-ink`.
+- [x] `properties.ts`: `plainOutput` derived store (scheme `.mono`).
+- [x] `Output.svelte`: force 1D — redirect StandardForm/MathML → InputForm when
+      `$plainOutput`; explicit 1D forms pass through.
+- [x] `menuCommands.ts` + `lib.rs`: `scheme-sixties`, ordered before 70s.
+- [x] `src/version.h` 0.259→0.260; changelog entry.
+
+Verified: check_menu_ids.py (65/65/65), npm run check (0 errors), cargo check,
+vite build. Not committed — awaiting go-ahead.

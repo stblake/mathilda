@@ -468,6 +468,10 @@
     --cm-grn-bracket:  #5f9e68;
     --cm-grn-comment:  #4e7d56;
     --cm-grn-error:    #ff5f56;
+    /* Teletype ('60s) ink: one adaptive monochrome foreground -- near-white on
+       the dark canvas, pure black on light (see html.light). The sixties scheme
+       paints every --cm-* token with it, so the look flips with light/dark. */
+    --cm-ink:          #e8e8e8;
     --out-text:    #cdd6f4;
     --gutter-bg:   rgba(255,255,255,0.015);
     --gutter-hover:rgba(255,255,255,0.03);
@@ -535,6 +539,8 @@
     --cm-grn-bracket:  #4a7d55;
     --cm-grn-comment:  #79a07f;
     --cm-grn-error:    #c0362c;
+    /* Teletype ink, light variant: black on paper. */
+    --cm-ink:          #000000;
     --out-text:    #1c1c2e;
     --gutter-bg:   #eeeef5;
     --gutter-hover:#e4e5f0;

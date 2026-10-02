@@ -228,6 +228,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles,
     let sc_one_dark  = CheckMenuItem::with_id(app, "scheme-one-dark",        "One Dark",           true, false, None::<&str>)?;
     let sc_tokyo     = CheckMenuItem::with_id(app, "scheme-tokyo-night",     "Tokyo Night",        true, false, None::<&str>)?;
     let sc_github    = CheckMenuItem::with_id(app, "scheme-github-light",    "GitHub Light",       true, false, None::<&str>)?;
+    let sc_sixties   = CheckMenuItem::with_id(app, "scheme-sixties",         "60s (Teletype)",       true, false, None::<&str>)?;
     let sc_seventies = CheckMenuItem::with_id(app, "scheme-seventies",       "70s (Green Phosphor)", true, false, None::<&str>)?;
     let sc_eighties  = CheckMenuItem::with_id(app, "scheme-eighties",        "80s (Brown/Orange)", true, false, None::<&str>)?;
     let sc_grayscale = CheckMenuItem::with_id(app, "scheme-grayscale",       "Grayscale",          true, false, None::<&str>)?;
@@ -235,7 +236,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles,
     let syntax = Submenu::with_items(app, "Syntax Highlighting", true, &[
         &sc_default, &sc_dracula, &sc_nord, &sc_monokai, &sc_sol_dark,
         &sc_sol_light, &sc_gruvbox, &sc_one_dark, &sc_tokyo, &sc_github,
-        &sc_seventies, &sc_eighties, &sc_grayscale,
+        &sc_sixties, &sc_seventies, &sc_eighties, &sc_grayscale,
         &PredefinedMenuItem::separator(app)?,
         &sc_off,
     ])?;
@@ -264,6 +265,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles,
             ("one-dark".into(), sc_one_dark),
             ("tokyo-night".into(), sc_tokyo),
             ("github-light".into(), sc_github),
+            ("sixties".into(), sc_sixties),
             ("seventies".into(), sc_seventies),
             ("eighties".into(), sc_eighties),
             ("grayscale".into(), sc_grayscale),

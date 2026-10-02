@@ -32,6 +32,12 @@ export interface ColorScheme {
   /** Render builtin names in bold (used by grayscale, where weight — not hue —
    *  distinguishes them). Drives --cm-builtin-weight; see mathildaLang.ts. */
   builtinBold?: boolean;
+  /** Teletype mode (the '60s scheme): a fixed-width Courier face across every
+   *  input and output surface, and 1D output (no 2D typeset math). Drives the
+   *  `data-teletype` attribute (applyColorScheme, below) that app.css hooks the
+   *  font onto, and the `plainOutput` store (properties.ts) that Output.svelte
+   *  reads to force InputForm. */
+  mono?: boolean;
 }
 
 export const COLOR_SCHEMES: ColorScheme[] = [
@@ -89,6 +95,20 @@ export const COLOR_SCHEMES: ColorScheme[] = [
     cm: { comment: '#6e7781', string: '#0a3069', number: '#0550ae', builtin: '#8250df',
           symbol: '#24292f', pattern: '#cf222e', slot: '#953800', out: '#953800',
           operator: '#cf222e', bracket: '#24292f', error: '#cf222e' },
+  },
+  {
+    // A 1960s line-printer / teletype look: one monochrome INK for every token
+    // -- adaptive, so it is black on a light canvas and near-white on dark (via
+    // --cm-ink in App.svelte) -- builtins bold, a fixed-width Courier face, and
+    // 1D output (no 2D typeset math). `mono` drives the font and output-form
+    // switch; the all-ink palette below drives the colour.
+    id: 'sixties', label: '60s (Teletype)',
+    builtinBold: true,
+    mono: true,
+    cm: { comment: 'var(--cm-ink)', string: 'var(--cm-ink)', number: 'var(--cm-ink)',
+          builtin: 'var(--cm-ink)', symbol: 'var(--cm-ink)', pattern: 'var(--cm-ink)',
+          slot: 'var(--cm-ink)', out: 'var(--cm-ink)', operator: 'var(--cm-ink)',
+          bracket: 'var(--cm-ink)', error: 'var(--cm-ink)' },
   },
   {
     // A 1970s green-phosphor CRT look: everything in shades of green, builtins
@@ -151,4 +171,9 @@ export function applyColorScheme(id: string): void {
      otherwise so the highlighter's `var(--cm-builtin-weight, normal)` falls back. */
   if (scheme?.builtinBold) root.style.setProperty('--cm-builtin-weight', 'bold');
   else root.style.removeProperty('--cm-builtin-weight');
+  /* Teletype ('60s) mode: a data attribute app.css hooks the Courier font onto.
+     The 1D-output switch is the `plainOutput` store (properties.ts); the colours
+     are the all-ink --cm-* palette set above. */
+  if (scheme?.mono) root.setAttribute('data-teletype', '');
+  else root.removeAttribute('data-teletype');
 }
