@@ -4346,3 +4346,56 @@ answers, to unevaluated. It is disabled at both call sites with the predicate le
 place behind `MATHILDA_MAYBE_UNUSED`, because the idea is sound and the *predicate* is
 what needs deriving from the reduced integrands the two hot stages actually produce —
 not from what the class names suggest they produce.
+
+---
+
+## Numerical-optimisation reliability: the book's stated cause was a hypothesis; measure it (2026-10-03)
+
+Reviewing book §7.11, the stated cause of the hard-corpus reliability gap (2/7 vs SciPy's
+4/7) was "the default search budget is small, and the search gives up early on landscapes
+that need persistence." The plan's centrepiece followed from that reading:
+**restart-on-stagnation** in `nm_de.c`. Built it (gated to the Automatic path, elitist
+re-seed, stall-stop), and it **moved nothing** — then made T4 *worse* when a
+generation-stagnation trigger was added, because it interrupted a slow but productive grind.
+
+What measurement actually showed, per landscape:
+- **Schwefel 5-D** is a *region* problem, not persistence: its optimum is at x≈421, outside
+  the default ±10 box, and **without bounds the objective's infimum is below 0** (region
+  escalation finds −2368 and still fails the `=0` check). It is only "solvable" because the
+  benchmark hands SciPy bounds [−500,500]; given the same bounds Mathilda solves it. Not a bug.
+- **Griewank 5-D** and **Rastrigin 10-D** are DE-*strength* problems: the collapse-based
+  restart never even fired (a rugged population never collapses to the tight tolerance), and
+  more restarts/budget alone (NP=200, 2000 gens) did not crack Rastrigin-10D.
+
+The fix that worked was a **stronger DE**, not persistence — four scipy-style levers, all
+gated to the Automatic path so explicit `"DifferentialEvolution"` stays bit-identical:
+**current-to-best/1 mutation + per-generation dithered F (U[0.5,1.0]) + 15·d population +
+Latin-hypercube init + best-of-4 independent runs** (distinct seeds, keep best, at the driver
+level). Each lever earned its place by measurement:
+- ctb + dither + 15n: Griewank solved, Rastrigin-10D 4.97→0.99 (→ 3/7).
+- **Latin-hypercube init** cracked Rastrigin-10D to 0.0 (separable landscape: stratified
+  per-coordinate coverage lets crossover assemble the all-zeros point) — but *regressed*
+  Griewank and drop-wave by shifting the single-seed trajectory.
+- **best-of-K (K=4)** recovered those: a stochastic global search is seed-sensitive on a
+  deceptive basin, so keeping the best of a few independent runs is what makes the default
+  robust. Final: **4/7** default (T2,T3,T4,T5), **6/7** given the domain bounds the functions
+  are defined on (adds Schwefel, Eggholder — both unbounded-below as written, so solvable only
+  *with* bounds); only Bukin N.6 (razor valley) resists, as it does scipy.
+
+The collapse-based restart was *removed entirely*: A/B showed it added ~3× easy-case cost with
+zero corpus benefit (it never fired on the rugged landscapes that needed help, and the
+generation-stagnation variant made Rastrigin-10D worse by interrupting a productive grind).
+
+**Lessons.**
+1. A book/spec sentence naming a *cause* ("small budget, gives up early") is a hypothesis.
+   A/B it against the binary before building the mechanism it implies. Here the named cause
+   was wrong and its mechanism (restart) was net-negative.
+2. "Reliability gap vs SciPy" can be a **harness-fairness** artefact: SciPy was given bounds
+   the Mathilda call lacked. Check the problem statements are the same before treating a
+   miss as a defect. An unbounded objective may have no finite minimum to "find".
+3. Keep an implemented-but-unhelpful mechanism out of the tree. The restart was coded,
+   measured, and deleted — simpler and faster than shipping it "just in case".
+4. Also: the indexed-variable "41× optimiser penalty" from the same chapter was not in the
+   optimiser at all — it was `Sum[]`'s Gosper stage churning Simplify on an opaque-indexed
+   summand. Bisect to the actual hot call before attributing a slowdown to the subsystem the
+   symptom appears in. (See the memory note on the Sum/Gosper opaque-index guard.)

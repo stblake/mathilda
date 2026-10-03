@@ -441,6 +441,10 @@ typedef struct {
 
 #define NM_DEFAULT_SPAN   10.0     /* half-width of the default search box   */
 #define NM_BOUND_SPAN     20.0     /* span added when only one bound is known*/
+#define NM_AUTO_RUNS      4        /* Method -> Automatic: independent best-of-K
+                                    * DE runs (distinct seeds, keep best) for
+                                    * robustness against a stochastic search's
+                                    * seed luck on a deceptive basin           */
 /* ------------------------------------------------------------------------
  * TWO feasibility thresholds, because there are two genuinely different jobs.
  * Both are stated on the ACTUAL constraint violation and SQUARED here, since
@@ -650,6 +654,9 @@ bool fm_run_bfgs_mpfr(Expr* f, Expr** vars, size_t n,
 FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
                                     Expr** x0_out, Expr** x1_out,
                                     Expr** xmin_out, Expr** xmax_out);
+/* A variable atom: a bare symbol x, or an indexed accessor v[k] (a function with
+ * a symbol head other than List). See fm_parse_var_spec / the driver. */
+bool fm_is_var_atom(const Expr* e);
 /* True when the symbol `s` can serve as an optimization variable: it evaluates
  * to itself (no OwnValue, e.g. not an active Table/Do iterator) and is not a
  * numeric constant such as Pi or E. Used to tell the variable list {x, y} from

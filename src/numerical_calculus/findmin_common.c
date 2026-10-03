@@ -1084,19 +1084,31 @@ bool fm_symbol_is_free(Expr* s) {
     return is_free;
 }
 
+/* A "variable atom": a bare symbol x, or an indexed accessor v[k] (a function
+ * with a symbol head other than List). Indexed accessors are rewritten to fresh
+ * scalar symbols before the solver runs (see the driver's normalization), so the
+ * whole symbol-keyed machinery applies unchanged. */
+bool fm_is_var_atom(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return true;
+    return e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name != SYM_List;
+}
+
 FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
                                     Expr** x0_out, Expr** x1_out,
                                     Expr** xmin_out, Expr** xmax_out) {
     *var_out = NULL;
     *x0_out = *x1_out = *xmin_out = *xmax_out = NULL;
     if (!spec) return FM_SPEC_BAD;
-    if (spec->type == EXPR_SYMBOL) {
-        /* Bare variable, e.g. FindMinimum[f, {x, y, ...}] entry.
-         * Default x0 = 1.0 to match Mathematica and to avoid the common
-         * pitfall of starting at the saddle/critical point of oscillatory
-         * functions (Sin[x] Sin[2y], Cos[...]+Sin[...] etc. all have a
-         * vanishing gradient at the origin, which trivially "converges"
-         * the inner solver). */
+    if (fm_is_var_atom(spec)) {
+        /* Bare variable atom, e.g. a FindMinimum[f, {x, y, ...}] entry, or an
+         * indexed accessor v[k]. Default x0 = 1.0 to match Mathematica and to
+         * avoid the common pitfall of starting at the saddle/critical point of
+         * oscillatory functions (Sin[x] Sin[2y], Cos[...]+Sin[...] etc. all have
+         * a vanishing gradient at the origin, which trivially "converges" the
+         * inner solver). */
         *var_out = spec;
         *x0_out = expr_new_real(1.0);
         return FM_SPEC_VAR_ONLY;
@@ -1109,7 +1121,7 @@ FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
     if (n < 1 || n > 4) return FM_SPEC_BAD;
 
     Expr* var = spec->data.function.args[0];
-    if (var->type != EXPR_SYMBOL) return FM_SPEC_BAD;
+    if (!fm_is_var_atom(var)) return FM_SPEC_BAD;
     *var_out = var;
 
     if (n == 1) {

@@ -54,19 +54,29 @@ void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
     size_t n = D->n;
     const double* rlo = D->reg_lo;
     const double* rhi = D->reg_hi;
+    /* The Automatic path (Method -> Automatic, no user MaxIterations) is free to
+     * trade a little speed for robustness: it is the one the hard multimodal
+     * corpus exercises, and its extra budget / population / mutation tuning is
+     * gated behind this exact predicate so an explicit "DifferentialEvolution"
+     * (or a user MaxIterations / SearchPoints / ScalingFactor) stays bit-for-bit
+     * as before. It is the same predicate that grants the 150n budget below. */
+    bool auto_tune = (nc->method == NM_AUTO && !D->opts->max_iter_set);
     /* An explicit "SearchPoints" is honored verbatim (only floored at the DE
-     * minimum of 4 members its DE/rand/1 mutation needs). The automatic
+     * minimum of 4 members its DE/rand/1 mutation needs). Otherwise the
      * population is Storn & Price's 10n — the textbook default — clamped to
-     * [15, 200]: the floor keeps a tiny problem's population workable, and the
-     * ceiling 200 = 10·20 bounds the per-generation cost on high-dimensional
-     * problems. This sizing is the same whether the method is an explicit
-     * "DifferentialEvolution" or Method -> Automatic (there is no longer a lower
-     * historical clamp for the explicit form). NelderMead restarts and
-     * RandomSearch starts honor SearchPoints verbatim. */
+     * [15, 200]; the Automatic path uses a larger 15n clamped to [20, 300], the
+     * sizing scipy's differential_evolution defaults to (popsize·d = 15·d),
+     * because the deceptive multimodal landscapes it must cover need the extra
+     * coverage of the global basin (Griewank's narrow central well, say). An
+     * explicit "DifferentialEvolution" keeps the 10n sizing. */
     size_t NP;
     if (nc->search_points > 0) {
         NP = (size_t)nc->search_points;
         if (NP < 4) NP = 4;
+    } else if (auto_tune) {
+        NP = 15 * n;
+        if (NP < 20)  NP = 20;
+        if (NP > 300) NP = 300;
     } else {
         NP = 10 * n;
         if (NP < 15)  NP = 15;
@@ -74,6 +84,20 @@ void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
     }
     double F  = nc->F  > 0.0 ? nc->F  : 0.6;
     double CR = nc->CR >= 0.0 ? nc->CR : 0.9;
+    /* Dither the scaling factor F per generation over [0.5, 1.0] on the Automatic
+     * path when the user has not pinned one (scipy's default "dithering"). A F
+     * that varies each generation is the single most effective robustness lever
+     * for DE on multimodal landscapes — it keeps the differential step from
+     * settling into one scale and stalling in a local basin — and it costs one
+     * extra RNG draw per generation, so a fixed RandomSeed stays reproducible. */
+    bool dither_F = auto_tune && !(nc->F > 0.0);
+    /* Mutation strategy. The explicit path keeps classic DE/rand/1/bin (the
+     * base vector is a random member). The Automatic path uses current-to-best/1
+     * (base = the member itself, pulled toward the incumbent best): it converges
+     * markedly faster on high-dimensional multimodal basins (10-D Rastrigin), and
+     * the greediness it would otherwise risk is offset by the dithered F, the
+     * larger Latin-hypercube population, and binomial crossover's coordinate mixing. */
+    bool use_ctb = auto_tune;
     int64_t maxgen = D->opts->max_iter > 0 ? D->opts->max_iter : 100;
     /* Method -> Automatic with no explicit MaxIterations scales the generation
      * budget with dimension (150n). A deceptive multimodal landscape such as
@@ -82,7 +106,7 @@ void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
      * find a good basin. This is free on easy problems: the convergence
      * early-break below stops as soon as the population collapses. An explicit
      * "DifferentialEvolution" (or a user MaxIterations) keeps the flat budget. */
-    if (nc->method == NM_AUTO && !D->opts->max_iter_set)
+    if (auto_tune)
         maxgen = 150 * (int64_t)n;
 
     double* pop   = (double*)malloc(sizeof(double) * NP * n);
@@ -94,15 +118,43 @@ void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
      * random. When no list is supplied seeded == 0 and every member is random —
      * the RNG stream is then identical to before, so seeded runs reproduce. */
     size_t seeded = nm_population_from_points(D, nc->init_points, n, NP, pop);
-    for (size_t p = 0; p < NP; p++) {
-        if (p >= seeded) {
-            for (size_t j = 0; j < n; j++) {
-                double v = nm_rng_range(rng, rlo[j], rhi[j]);
+    if (auto_tune && seeded == 0) {
+        /* Latin-hypercube initial population (scipy's default). Each coordinate is
+         * stratified into NP equal bins with one sample per bin, the bins shuffled
+         * independently per coordinate. This covers every dimension evenly where
+         * independent uniform draws leave gaps -- decisive for a *separable*
+         * multimodal landscape such as 10-D Rastrigin, where each coordinate has to
+         * find its own basin and binomial crossover then assembles the global
+         * point from members that each got a few coordinates right. Gated to the
+         * Automatic path, so an explicit run keeps the uniform-random stream. */
+        size_t* perm = (size_t*)malloc(sizeof(size_t) * NP);
+        for (size_t j = 0; j < n; j++) {
+            for (size_t p = 0; p < NP; p++) perm[p] = p;
+            for (size_t p = NP; p > 1; p--) {          /* Fisher-Yates shuffle */
+                size_t q = (size_t)(nm_rng_next(rng) % p);
+                size_t tmp = perm[p - 1]; perm[p - 1] = perm[q]; perm[q] = tmp;
+            }
+            for (size_t p = 0; p < NP; p++) {
+                double u = ((double)perm[p] + nm_rng_unif(rng)) / (double)NP;
+                double v = rlo[j] + u * (rhi[j] - rlo[j]);
                 if (D->is_int[j]) v = round(v);
                 pop[p * n + j] = v;
             }
         }
-        nm_eval(D, &pop[p * n], &fpop[p], &ppop[p]);
+        free(perm);
+        for (size_t p = 0; p < NP; p++)
+            nm_eval(D, &pop[p * n], &fpop[p], &ppop[p]);
+    } else {
+        for (size_t p = 0; p < NP; p++) {
+            if (p >= seeded) {
+                for (size_t j = 0; j < n; j++) {
+                    double v = nm_rng_range(rng, rlo[j], rhi[j]);
+                    if (D->is_int[j]) v = round(v);
+                    pop[p * n + j] = v;
+                }
+            }
+            nm_eval(D, &pop[p * n], &fpop[p], &ppop[p]);
+        }
     }
     size_t bi = 0;
     for (size_t p = 1; p < NP; p++)
@@ -112,6 +164,9 @@ void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
     *penbest = ppop[bi];
 
     for (int64_t g = 0; g < maxgen; g++) {
+        /* Per-generation dithered scaling factor (Automatic path); otherwise the
+         * fixed F, with no extra RNG draw, so the explicit stream is unchanged. */
+        double Fg = dither_F ? (0.5 + 0.5 * nm_rng_unif(rng)) : F;
         for (size_t p = 0; p < NP; p++) {
             size_t r1, r2, r3;
             if (NP < 4) break;
@@ -121,8 +176,15 @@ void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
             size_t jr = nm_rng_next(rng) % n;
             for (size_t j = 0; j < n; j++) {
                 if (nm_rng_unif(rng) < CR || j == jr) {
-                    double base = pop[r1 * n + j];
-                    double v = base + F * (pop[r2 * n + j] - pop[r3 * n + j]);
+                    /* rand/1: base is a random member. current-to-best/1: base is
+                     * the member, with an extra pull toward the incumbent best.
+                     * r1 is still drawn in both so the RNG stream is structurally
+                     * identical and a fixed RandomSeed stays reproducible. */
+                    double base = use_ctb ? pop[p * n + j] : pop[r1 * n + j];
+                    double v = use_ctb
+                        ? base + Fg * (xbest[j] - base)
+                               + Fg * (pop[r2 * n + j] - pop[r3 * n + j])
+                        : base + Fg * (pop[r2 * n + j] - pop[r3 * n + j]);
                     /* Bounce-back on a bound violation instead of clamping to
                      * the bound. Clamping strands the search: once several
                      * members share the exact boundary value for coordinate j,
@@ -155,7 +217,11 @@ void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
             }
         }
         /* Converged if the best is feasible and the feasible sub-population's
-         * objective spread has collapsed to the requested tolerance. */
+         * objective spread has collapsed to the requested tolerance -- the early
+         * stop that keeps easy problems sub-millisecond. The generous 150n
+         * Automatic budget is simply the ceiling for a rugged landscape that never
+         * collapses (10-D Rastrigin runs it out); current-to-best/1 with a dithered
+         * F and the 15n population is what actually drives those basins down. */
         if (*penbest <= NM_FEAS_RANK) {   /* loose: convergence probe, not a claim */
             double fmin = 1e300, fmax = -1e300;
             size_t cnt = 0;

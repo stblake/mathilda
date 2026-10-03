@@ -26,6 +26,12 @@ Expr* sum_factor(Expr* e);
 /* True if e is free of var (FreeQ[e, var]). */
 bool sum_free_of(Expr* e, Expr* var);
 
+/* True if e contains an opaque indexed accessor (v[i] for an undefined v) whose
+ * argument depends on var.  Used to bail out of Gosper and to skip the
+ * closed-form cascade on a short finite range, where such a body has no closed
+ * form and only churns Simplify.  Defined in sum_gosper.c. */
+bool sum_body_has_opaque_index(Expr* e, Expr* var);
+
 /* Convenience: integer node. */
 Expr* sum_int(int64_t v);
 

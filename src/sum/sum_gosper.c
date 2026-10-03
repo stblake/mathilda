@@ -104,6 +104,47 @@ static bool has_var_radical(Expr* e, Expr* var) {
 }
 
 /*
+ * head[args] is an "opaque indexed accessor" when `head` is a plain, wholly
+ * undefined symbol -- no builtin, not Protected, no down/own values -- i.e. an
+ * indexed variable like v in v[i], not a known math head.  Every head Gosper or
+ * the closed-form cascade can actually carry the index through (Factorial,
+ * Binomial, Gamma, Pochhammer, Power, Sin, ...) is a Protected C builtin, so
+ * this never rejects a summable term, and a symbol with a definition would have
+ * been evaluated away before the body reached a stage.
+ */
+static bool sum_head_is_opaque(Expr* head) {
+    if (!head || head->type != EXPR_SYMBOL) return false;
+    SymbolDef* d = symtab_lookup(head->data.symbol.name);
+    if (!d) return true;                 /* never materialised: undefined */
+    if (d->builtin_func) return false;   /* a C builtin head */
+    if ((d->attributes | d->base_attributes) & ATTR_PROTECTED) return false;
+    if (d->down_values || d->own_values) return false;  /* user-defined */
+    return true;                         /* a plain, undefined indexed accessor */
+}
+
+/*
+ * True if e contains an opaque indexed accessor whose argument depends on var,
+ * e.g. v[i] on its own or nested in Cos[2 Pi v[i]].  The term ratio
+ * t(var+1)/t(var) of such a summand carries unrelated opaque leaves and can
+ * never be a rational function, so it is not a hypergeometric term; worse, the
+ * step-1 Simplify churns combinatorially on such a transcendental body before
+ * failing (measured 0.34 s for Sum[v[i]^2 - 10 Cos[2 Pi v[i]], {i,1,5}] versus
+ * 0.1 ms enumerated).  Both the Gosper early-bail and the short-range cascade
+ * skip (sum.c) use this -- the single site where the two share the test.
+ */
+bool sum_body_has_opaque_index(Expr* e, Expr* var) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (sum_head_is_opaque(e->data.function.head)) {
+        for (size_t k = 0; k < e->data.function.arg_count; k++)
+            if (!sum_free_of(e->data.function.args[k], var)) return true;
+    }
+    if (sum_body_has_opaque_index(e->data.function.head, var)) return true;
+    for (size_t k = 0; k < e->data.function.arg_count; k++)
+        if (sum_body_has_opaque_index(e->data.function.args[k], var)) return true;
+    return false;
+}
+
+/*
  * Gosper's algorithm.  Returns the indefinite antidifference F(var) such that
  * F(var+1) - F(var) = t(var), or NULL if t is not a hypergeometric term or not
  * Gosper-summable.
@@ -113,6 +154,11 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
      * hypergeometric term.  Bail before the step-1 Simplify, which can diverge
      * on such radicals. */
     if (has_var_radical(t, var)) return NULL;
+
+    /* Likewise an opaque indexed accessor (v[i] for an undefined v): no rational
+     * term ratio exists, and the step-1 Simplify churns on such a body.  Bail
+     * first, like the radical case. */
+    if (sum_body_has_opaque_index(t, var)) return NULL;
 
     /* 1. term ratio r = t(var+1)/t(var), reduced to a rational function. */
     Expr* tshift = shift_var(t, var, 1);

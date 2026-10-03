@@ -1389,6 +1389,14 @@ objective value before returning.
 - `FindMinimum[{f, cons}, vars]` -- constrained minimisation; as with
   `NMinimize`, `{f, c1, c2, ...}` treats every trailing element as a
   constraint (implicitly `And`-ed).
+- **Indexed variables** `v[k]` are accepted, like `NMinimize`: a list of
+  accessors `{v[1], v[2], …}`, a held generator `Table[v[i], {i, 1, n}]`, or inner
+  specs `{{v[1], x0}, …}`.  Each accessor is rewritten to a fresh scalar symbol so
+  the whole solver (bindings, auto-compilation, result rules) applies unchanged,
+  and the result is reported over the original `v[k]`
+  (`FindMinimum[Sum[(v[i]-i)^2, {i,1,3}], Table[v[i], {i,1,3}]]` →
+  `{0., {v[1]->1., v[2]->2., v[3]->3.}}`).  The objective is compiled over the
+  fresh symbols, so an indexed problem runs at the same speed as the explicit one.
 
 Although `FindMinimum` is `HoldAll`, only the **variables** stay held: the
 starting values, the bounds of `{x, xstart, xmin, xmax}`, and the values of
@@ -1941,8 +1949,8 @@ matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
 
 | `Method ->` | Engine |
 |-------------|--------|
-| `Automatic` | `"DifferentialEvolution"` with a dimension-scaled budget (see below) |
-| `"DifferentialEvolution"` | DE/rand/1/bin with Deb feasibility selection (default) |
+| `Automatic` | `"DifferentialEvolution"`, tuned for robustness (scipy-style): Latin-hypercube population initialisation, current-to-best/1 mutation, a per-generation dithered scaling factor `F ~ U[0.5, 1.0]`, a `15·d` population, best-of-`4` independent runs (distinct seeds, keep the best), and a dimension-scaled budget (see below). These apply only under `Automatic`; naming the method explicitly keeps the plain configuration below bit-for-bit. Deterministic for a fixed `"RandomSeed"` |
+| `"DifferentialEvolution"` | DE/rand/1/bin with Deb feasibility selection, fixed `F`, `10·d` population (default) |
 | `"NelderMead"` | downhill-simplex; each restart's vertex polished into its basin minimum, deepest kept |
 | `"RandomSearch"` | multiple random starts, each refined by the local solver, best local minimum kept |
 | `"SimulatedAnnealing"` | Metropolis search with geometric cooling |
@@ -2012,7 +2020,7 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points), DualAnnealing (independent chains), BasinHopping (independent multi-start runs) | population / restart / start / sample / chain / run count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n, the same whether `"DifferentialEvolution"` is explicit or via `Method -> Automatic`); SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`); DualAnnealing `1` chain and BasinHopping `1` run (scipy's single-run defaults) |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points), DualAnnealing (independent chains), BasinHopping (independent multi-start runs) | population / restart / start / sample / chain / run count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n) under an explicit `"DifferentialEvolution"`, and the larger `Clip[15·d, {20, 300}]` (scipy's `popsize·d`) under `Method -> Automatic`; SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`); DualAnnealing `1` chain and BasinHopping `1` run (scipy's single-run defaults) |
 | `"SamplingMethod" -> m` | SHGO | `"Simplicial"` (default), `"Sobol"`, or `"Halton"` — how the box is sampled and its connectivity graph built (see below). An unknown value warns (`NMinimize::sopt`) and keeps `"Simplicial"` |
 | `"Iterations" -> k` | SHGO | sampling/refinement rounds (scipy's `iters`, default 1); each round grows the complex and re-pools, stopping early once no new local minimum appears. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) |
 | `"VisitingParameter" -> qv` | DualAnnealing | Tsallis visiting-distribution shape `q_v` (scipy's `visit`, default 2.62); `q_v → 1` is Gaussian (classical SA), 2 is Cauchy (fast SA), `> 2` gives the heavy tails of GSA. A real in `(1, 3]`; an out-of-range or non-real value warns (`NMinimize::sopt`) and keeps 2.62 |
@@ -2034,7 +2042,7 @@ Recognised sub-options:
 | `"TargetAcceptanceRate" -> r` | BasinHopping | the acceptance rate the step-size adaptation aims for (scipy's `target_accept_rate`, default 0.5): above it the step grows (escape a basin), below it the step shrinks. A real in `(0, 1)`, else warns (`NMinimize::sopt`) |
 | `"StepFactor" -> a` | BasinHopping | multiplicative step-size adjustment factor (scipy's `stepwise_factor`, default 0.9): the step is divided by `a` to grow or multiplied by `a` to shrink. A real in `(0, 1)`, else warns (`NMinimize::sopt`) |
 | `"SuccessIterations" -> m` | BasinHopping | stop a run once the global best has not improved for `m` consecutive hops (scipy's `niter_success`); a positive integer enables it, `Automatic`/`None` disable it (the default); else warns (`NMinimize::sopt`) |
-| `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6); a real in `(0, 2]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
+| `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6); a real in `(0, 2]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default. Pinning `F` also turns off the per-generation dithering the `Method -> Automatic` path otherwise applies |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9); a real in `[0, 1]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |
 | `"LevelIterations" -> L` | SimulatedAnnealing | trial moves at each temperature level, so the per-chain budget is `MaxIterations · L` (default 50, the previous fixed multiplier). An explicit value is honored verbatim — past the automatic aggregate cap, like `"SearchPoints"`. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) and falls back to Automatic |

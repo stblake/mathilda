@@ -27,6 +27,7 @@
  */
 
 #include "sum.h"
+#include "sum_internal.h"   /* sum_body_has_opaque_index — shared with sum_gosper.c */
 #include "ndarray.h"   /* is_ndarray — see sum_body_is_array */
 #include "symtab.h"
 #include "eval.h"
@@ -586,6 +587,16 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
         bool index_pred_body =
             sum_body_has_index_predicate(f, s.var->data.symbol.name);
 
+        /* A short range whose body contains an opaque indexed accessor (v[i] for
+         * an undefined indexed variable -- the shape an optimiser objective over
+         * Table[v[i], ...] produces) has no closed form, and the cascade only
+         * churns Simplify on it before falling through here anyway.  Enumerate it
+         * directly.  Mirrors short_expensive_body; the Gosper stage has the same
+         * guard for the long-range path. */
+        bool short_opaque_index_body =
+            nterms <= (double)SUM_ARRAY_EXPAND_MAX
+            && sum_body_has_opaque_index(f, s.var);
+
         /* A range whose end points are symbolic lattice points (Pi .. 3 + Pi,
          * from iter_normalize_bounds) is enumerated when short, as Mathematica
          * does: the closed form is equally exact but hands back a factored
@@ -594,7 +605,8 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
             nterms <= (double)SUM_ARRAY_EXPAND_MAX
             && (!expr_is_integer_like(s.imin) || !expr_is_integer_like(s.imax));
         if (!is_real && di_val == 1.0 && min_val <= max_val
-            && !short_expensive_body && !index_pred_body && !short_symbolic_lattice) {
+            && !short_expensive_body && !index_pred_body && !short_symbolic_lattice
+            && !short_opaque_index_body) {
             Rule* saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);

@@ -94,6 +94,23 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         } else {
             expr_free(ev);
         }
+    } else if (var_arg->type == EXPR_FUNCTION
+               && !(var_arg->data.function.head->type == EXPR_SYMBOL
+                    && var_arg->data.function.head->data.symbol.name == SYM_List)) {
+        /* A held generator spec -- Table[v[i], {i, 1, n}], Array[v, n], ... -- is
+         * evaluated once to the concrete list {v[1], ..., v[n]} so the system path
+         * can read it. FindMinimum is HoldAll, so (unlike NMinimize) the generator
+         * does not arrive pre-expanded. A bare accessor v[k] evaluates to itself
+         * (undefined v), so it stays the single variable. */
+        Expr* ev = eval_and_free(expr_copy(var_arg));
+        if (ev && ev->type == EXPR_FUNCTION
+            && ev->data.function.head->type == EXPR_SYMBOL
+            && ev->data.function.head->data.symbol.name == SYM_List) {
+            var_eval = ev;
+            var_arg = ev;
+        } else {
+            expr_free(ev);
+        }
     }
 
     /* Parse variables. var_arg may be:
@@ -139,6 +156,23 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
                 if (all_free_sym) is_system = true;
             }
         }
+        /* A list every element of which is an indexed accessor v[k] (optionally
+         * mixed with inner {v[k], ...} specs or bare symbols), with at least one
+         * accessor, is a system of indexed variables -- the FindMinimum analog of
+         * NMinimize's Table[v[i], ...]. {v[k], x0} (accessor + a numeric start) is
+         * not caught here: x0 is not a variable atom, so it stays a scalar spec. */
+        if (!is_system) {
+            bool all_atom_or_inner = true, any_accessor = false;
+            for (size_t i = 0; i < na; i++) {
+                Expr* e = var_arg->data.function.args[i];
+                bool is_inner = (e->type == EXPR_FUNCTION
+                    && e->data.function.head->type == EXPR_SYMBOL
+                    && e->data.function.head->data.symbol.name == SYM_List);
+                if (fm_is_var_atom(e) && e->type == EXPR_FUNCTION) any_accessor = true;
+                if (!is_inner && !fm_is_var_atom(e)) all_atom_or_inner = false;
+            }
+            if (all_atom_or_inner && any_accessor) is_system = true;
+        }
     }
 
     Expr** vars = NULL;
@@ -155,6 +189,13 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     size_t n = 0;
     bool two_start = false;       /* scalar {x, x0, x1} form */
     double two_start_x1 = 0.0;
+    /* Indexed-variable normalization state (see the block after parsing). */
+    bool indexed = false;         /* any variable was an indexed accessor v[k]   */
+    Expr** orig_vars = NULL;      /* owned copies of the original var exprs       */
+    const char** synth = NULL;    /* synthesized fresh-symbol names to remove     */
+    Expr* f_norm = NULL;          /* owned objective rewritten over fresh symbols */
+    Expr* cons_norm = NULL;       /* owned constraints rewritten over fresh syms  */
+    Expr* grad_norm = NULL;       /* owned Gradient option rewritten over fresh   */
 
     if (is_system) {
         n = var_arg->data.function.arg_count;
@@ -217,6 +258,56 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
             }
         }
         expr_free(x0e); expr_free(x1e); expr_free(xmin); expr_free(xmax);
+    }
+
+    /* Indexed-variable normalization. Everything below is keyed on scalar symbols
+     * (fm_bind_snapshot, auto-compilation, and fm_build_result all read
+     * vars[i]->data.symbol.name). When the spec named indexed variables -- v[1],
+     * v[2], ... or Table[v[i], ...] -- vars[] holds accessor function nodes;
+     * rewrite each to a fresh scalar symbol so the whole solver applies unchanged,
+     * and keep the originals to build the result rules over. Mirrors nm_driver.c. */
+    for (size_t i = 0; i < n; i++)
+        if (vars[i]->type != EXPR_SYMBOL) { indexed = true; break; }
+    if (indexed) {
+        orig_vars = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+        synth     = (const char**)calloc(n ? n : 1, sizeof(char*));
+        const char** ihead = (const char**)malloc(sizeof(char*) * (n ? n : 1));
+        size_t nih = 0;
+        Expr** eff = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) {
+            orig_vars[i] = expr_copy(vars[i]);
+            if (vars[i]->type == EXPR_SYMBOL) {
+                eff[i] = expr_copy(vars[i]);
+            } else {
+                eff[i] = nm_fresh_symbol();
+                synth[i] = eff[i]->data.symbol.name;
+                const char* hn = vars[i]->data.function.head->data.symbol.name;
+                bool seen = false;
+                for (size_t j = 0; j < nih; j++) if (ihead[j] == hn) { seen = true; break; }
+                if (!seen) ihead[nih++] = hn;
+            }
+        }
+        /* Rewrite objective / constraints / user gradient onto the fresh symbols,
+         * with the accessor heads localized so a held Table/Sum inside the objective
+         * expands without capturing a global value of v. */
+        NmHeadSave* hs = (NmHeadSave*)calloc(nih ? nih : 1, sizeof(NmHeadSave));
+        nm_heads_localize(hs, ihead, nih);
+        { Expr* fe = eval_and_free(expr_copy(f_raw));
+          f_norm = nm_subst(fe, vars, eff, n); expr_free(fe); }
+        if (cons) { Expr* ce = eval_and_free(expr_copy(cons));
+          cons_norm = nm_subst(ce, vars, eff, n); expr_free(ce); }
+        if (opts.gradient) { Expr* ge = eval_and_free(expr_copy(opts.gradient));
+          grad_norm = nm_subst(ge, vars, eff, n); expr_free(ge); }
+        nm_heads_restore(hs, nih);
+        free(hs); free(ihead);
+        /* Swap the fresh scalar symbols in for the solver. vars[i] were borrowed
+         * from var_arg/var_eval; after the swap they are owned (freed at cleanup,
+         * where the synthesized symtab entries are also dropped). */
+        for (size_t i = 0; i < n; i++) vars[i] = eff[i];
+        free(eff);
+        f_raw = f_norm;
+        if (cons) cons = cons_norm;
+        if (opts.gradient) opts.gradient = grad_norm;
     }
 
     /* Now bind variables. */
@@ -583,13 +674,13 @@ run_done:
     if (ok) {
 #ifdef USE_MPFR
         if (mpfr_result) {
-            result_out = fm_build_result_mpfr(fx_min_mpfr, vars,
+            result_out = fm_build_result_mpfr(fx_min_mpfr, indexed ? orig_vars : vars,
                                               (mpfr_t const*)x_vec_mpfr, n);
         } else {
-            result_out = fm_build_result(fx_min, vars, x_vec, n);
+            result_out = fm_build_result(fx_min, indexed ? orig_vars : vars, x_vec, n);
         }
 #else
-        result_out = fm_build_result(fx_min, vars, x_vec, n);
+        result_out = fm_build_result(fx_min, indexed ? orig_vars : vars, x_vec, n);
 #endif
     }
 #ifdef USE_MPFR
@@ -631,6 +722,18 @@ cleanup:
         }
         free(gens);
     }
+    /* Indexed path: vars[i] are the owned fresh symbols; free them and drop the
+     * synthesized symtab entries the bindings/compile created, then free the
+     * rewritten objective/constraints/gradient and the original-var copies. */
+    if (indexed) {
+        for (size_t i = 0; i < n; i++) if (vars && vars[i]) expr_free(vars[i]);
+        if (synth) for (size_t i = 0; i < n; i++) if (synth[i]) symtab_remove_symbol(synth[i]);
+    }
+    free(synth);
+    if (orig_vars) { for (size_t i = 0; i < n; i++) expr_free(orig_vars[i]); free(orig_vars); }
+    expr_free(f_norm);
+    expr_free(cons_norm);
+    expr_free(grad_norm);
     free(vars);
     free(x_vec);
     free(boxes);

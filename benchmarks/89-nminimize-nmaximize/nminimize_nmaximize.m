@@ -11,12 +11,13 @@
    different basin on both -- and live in 90-nminimize-testbed instead, where
    the check carries solution quality rather than the objective value.
 
-   VARIABLES ARE EXPLICIT, NEVER INDEXED.  Table[v[i], {i,1,n}] costs Mathilda
-   ~41x on this workload (rastr5: 111.6 ms indexed vs 2.7 ms explicit) because
-   indexed-variable dispatch falls to the interpreter.  Benchmarking with
-   indexed variables would measure that dispatch path rather than the
-   optimizer.  The I* pair below measures the penalty deliberately, in
-   isolation, instead of letting it contaminate every other case.
+   The I* pair below contrasts explicit variables with Table[v[i], {i,1,n}].
+   Indexed variables used to cost ~41x (rastr5: 111.6 ms vs 2.7 ms), but the
+   cause was never the optimizer -- its indexed-variable normalization and
+   compiled fast path already handled them; it was Sum[]'s Gosper stage churning
+   Simplify on the opaque-indexed summand before failing.  With that fixed
+   (v0.264) the two are at parity (~8.5 ms vs ~8.2 ms here), so the I* pair now
+   documents the parity rather than a penalty.
 
    CHECK ROUNDING is 10^4, not the 10^6 used by 15-optimization.  Three
    different local-polish implementations agree on a global optimum to about

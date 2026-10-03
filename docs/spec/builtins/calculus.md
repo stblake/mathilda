@@ -3076,12 +3076,19 @@ Gosper's algorithm for indefinite summation of a hypergeometric term
 Gosper–Petkovšek normal form (dispersion + gcd peeling) → degree-bounded
 key equation `a(i) x(i+1) - b(i-1) x(i) = c(i)` → antidifference
 `F = (b(i-1)/c(i)) x(i) t(i)`.  Returns unevaluated when `t` is not a
-hypergeometric term or is not Gosper-summable.  A summand carrying a
-fractional power of an `i`-dependent base (e.g. `Sqrt[p(i)]`) has an
-irrational term ratio, so it is rejected structurally up front — this is both
-correct and avoids the term-ratio `Simplify` diverging on such a radical,
-which previously hung nested finite sums like the Thomson-problem repulsion
-`Sum[1/Sqrt[(x[i]-x[j])^2+...], {i,1,n-1}, {j,i+1,n}]`.
+hypergeometric term or is not Gosper-summable.  Two summand shapes are rejected
+structurally up front, before the term-ratio `Simplify` that can diverge on them:
+a fractional power of an `i`-dependent base (e.g. `Sqrt[p(i)]`, irrational term
+ratio — this kept nested finite sums like the Thomson-problem repulsion
+`Sum[1/Sqrt[(x[i]-x[j])^2+...], {i,1,n-1}, {j,i+1,n}]` from hanging), and an
+**opaque indexed accessor** — an undefined symbol `v` applied to an argument that
+depends on `i`, as in `v[i]` or `Cos[2 Pi v[i]]`.  The latter has no rational term
+ratio and the `Simplify` churns combinatorially on it; the guard made
+`Sum[v[i]^2 - 10 Cos[2 Pi v[i]], {i,1,5}]` (the shape an optimiser objective over
+`Table[v[i], …]` produces) go from 0.345 s to 0.15 ms, and is behaviour-preserving
+— every head Gosper can carry the index through (`Factorial`, `Binomial`, `Gamma`,
+`Pochhammer`, …) is a protected builtin, never an opaque accessor.  The short-range
+`Sum` cascade applies the same test, enumerating such a finite sum directly.
 
 ```mathematica
 In[1]:= Sum[k k!, k]

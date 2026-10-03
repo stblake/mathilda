@@ -406,17 +406,22 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
      * expansion triggers only to rescue infeasibility, and stops as soon as a
      * feasible point is found (the smallest region that yields feasibility,
      * which keeps the search from drifting into far, non-physical basins). */
-    int max_attempt = (any_default && !infeasible_box && !infeasible_pre)
-                    ? NM_MAX_REGION_EXPAND : 0;
+    int max_region = (any_default && !infeasible_box && !infeasible_pre)
+                   ? NM_MAX_REGION_EXPAND : 0;
+    /* Best-of-K independent runs on the Automatic path. The strengthened DE is
+     * strong per run, but like any stochastic global search it is seed-sensitive
+     * on a deceptive basin (drop-wave, Griewank); running a few independent runs
+     * with distinct seeds and keeping the best makes the default robust to that
+     * luck without the user trying several "RandomSeed"s by hand. Gated to
+     * Automatic, so an explicit method or a user MaxIterations keeps one run.
+     * The two loop exits are orthogonal: once a run is feasible, keep going until
+     * NM_AUTO_RUNS independent runs are done (no region growth between them);
+     * while still infeasible, grow the unbounded region to rescue feasibility,
+     * up to NM_MAX_REGION_EXPAND times. */
+    int auto_runs = (nc.method == NM_AUTO && !opts.max_iter_set) ? NM_AUTO_RUNS : 1;
     double* xattempt = (double*)malloc(sizeof(double) * n);
-    for (int attempt = 0; attempt <= max_attempt; attempt++) {
-        if (attempt > 0) {
-            double span = NM_DEFAULT_SPAN * pow(10.0, (double)attempt);
-            for (size_t i = 0; i < n; i++) if (used_default[i]) {
-                reg_lo[i] = vs.is_int[i] ? floor(-span) : -span;
-                reg_hi[i] = vs.is_int[i] ? ceil(span)   :  span;
-            }
-        }
+    int grown = 0, good_runs = 0;
+    for (int attempt = 0; ; attempt++) {
         double fa = 1e300, pa = 1e300;
         NmRng rng;
         nm_rng_seed(&rng, nc.seed + (uint64_t)attempt * 0x100000001B3ULL);
@@ -453,7 +458,17 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
             for (size_t i = 0; i < n; i++) xbest[i] = xattempt[i];
             fbest = fa; penbest = pa;
         }
-        if (penbest <= NM_FEAS_RETURN) break;  /* genuinely feasible: stop expanding */
+        if (penbest <= NM_FEAS_RETURN) {       /* feasible: do the best-of-K runs */
+            if (++good_runs >= auto_runs) break;
+        } else {                               /* infeasible: grow region to rescue */
+            if (grown >= max_region) break;
+            grown++;
+            double span = NM_DEFAULT_SPAN * pow(10.0, (double)grown);
+            for (size_t i = 0; i < n; i++) if (used_default[i]) {
+                reg_lo[i] = vs.is_int[i] ? floor(-span) : -span;
+                reg_hi[i] = vs.is_int[i] ? ceil(span)   :  span;
+            }
+        }
     }
     free(xattempt);
     /* The guarantee. A point that cannot meet NM_FEAS_RETURN is NOT handed back
