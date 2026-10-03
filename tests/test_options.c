@@ -51,8 +51,10 @@ int main(void) {
     chk("Options[LinearSolve]", "{Method -> Automatic, Modulus -> 0, ZeroTest -> Automatic}");
     chk("Options[NSeries]", "{Radius -> 1.0, WorkingPrecision -> MachinePrecision, "
                             "AccuracyGoal -> MachinePrecision, PrecisionGoal -> Automatic}");
-    /* Symbolic builtins now carry their honored options (was empty {}). */
-    chk("Options[Integrate]", "{Method -> Automatic}");
+    /* Symbolic builtins now carry their honored options (was empty {}).
+     * Integrate carries the measured TimeConstraint -> 3 cascade budget
+     * (INTEGRATE_DEFAULT_TIME_CONSTRAINT; registered in src/options_builtin.c). */
+    chk("Options[Integrate]", "{Method -> Automatic, TimeConstraint -> 3}");
     chk("Options[Limit]", "{Direction -> Automatic, Assumptions -> Automatic, Method -> Automatic}");
     chk("Options[D]", "{NonConstants -> {}}");
     chk("Options[GroebnerBasis]",
@@ -71,8 +73,10 @@ int main(void) {
     chk("OptionValue[Cases, Heads]", "False");
     chk("OptionValue[Eigenvalues, Cubics]", "False");
     /* SetOptions edits a registered default in place. */
-    chk("SetOptions[Integrate, Method -> \"RischTranscendental\"]", "{Method -> \"RischTranscendental\"}");
-    chk("Options[Integrate]", "{Method -> \"RischTranscendental\"}");
+    /* SetOptions edits Method in place; the registered TimeConstraint default stays. */
+    chk("SetOptions[Integrate, Method -> \"RischTranscendental\"]",
+        "{Method -> \"RischTranscendental\", TimeConstraint -> 3}");
+    chk("Options[Integrate]", "{Method -> \"RischTranscendental\", TimeConstraint -> 3}");
 
     /* ---- Options[obj, name] / Options[obj, {names}] ---- */
     chk("Options[fa, a]", "{a -> 1}");
