@@ -477,9 +477,13 @@ int main(int argc, char** argv) {
      *   2. `1/Sqrt[5 + 3 Tan[2 x]^2]`
      *   3. `1/Sqrt[5 + 2 Tan[3 x]^2]`
      *
-     * (The formerly-cited `Sqrt[(3 + x)/(1 + 2 x)]` now closes cleanly after
-     * the number-field Cancel improvements — it left this pile — and
-     * `1/Sqrt[1 - Sin[x]]`, Formula 400, is now counted under "Timed out".)
+     * (The three `Sqrt[(a + b x)/(c + d x)]` cases — `Sqrt[(2+3x)/(1+x)]`,
+     * `Sqrt[(3+x)/(1+2x)]`, `Sqrt[(5+2x)/(2+x)]` — formerly in this pile now
+     * close cleanly: CRC Formula 145 was rewritten to emit a direct, Abs-free
+     * antiderivative in the original radical (see
+     * src/internal/CRCMathTablesIntegrals.m), so the old `v/Abs[v]` Sign factor
+     * no longer leaves D[antideriv] carrying an inert Derivative[1][Abs][v].
+     * `1/Sqrt[1 - Sin[x]]`, Formula 400, is counted under "Timed out".)
      *
      * Treat the test as passing when no NEW DIFF NONZERO case appears.
      * Raise this only after investigating each case as above; never

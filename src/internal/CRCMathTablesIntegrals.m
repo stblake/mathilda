@@ -432,9 +432,19 @@ IntegrateTable[1/((c_ + d_. x_) Sqrt[(a_ + b_. x_) (c_ + d_. x_)]), x_] /; FreeQ
 IntegrateTable[(c_ + d_. x_)/Sqrt[(a_ + b_. x_) (c_ + d_. x_)], x_] /; FreeQ[{a, b, c, d}, x] := With[{u = a + b x, v = c + d x, k = a d - b c}, 
     Sqrt[u v]/b - k/(2 b) IntegrateTable[1/Sqrt[u v], x]];
 
-(* Formula 145 *)
-IntegrateTable[Sqrt[(c_ + d_. x_)/(a_ + b_. x_)], x_] /; FreeQ[{a, b, c, d}, x] := With[{u = a + b x, v = c + d x}, 
-    v/Abs[v] IntegrateTable[v/Sqrt[u v], x]];
+(* Formula 145.  Direct closed form in the ORIGINAL radical Sqrt[(c+dx)/(a+bx)]
+ * (no Abs).  k = a d - b c.  The previous
+ *     v/Abs[v] IntegrateTable[v/Sqrt[u v], x]
+ * rationalised Sqrt[v/u] = Abs[v]/Sqrt[u v] and pulled out the domain-constant
+ * Sign[v] = v/Abs[v].  That is a correct antiderivative on each connected real
+ * branch, but its Abs makes D[antideriv] keep an inert Derivative[1][Abs][v]
+ * (Abs' is not reduced to Sign), so the result does not differentiate back to the
+ * integrand and the CRC corpus flags it as DIFF NONZERO even though it is right.
+ * This form has no Abs; verified D[rhs] - Sqrt[(c+dx)/(a+bx)] == 0 symbolically
+ * for free a,b,c,d (ArcTanh covers d/b<0 via its imaginary argument, staying
+ * real-valued overall). *)
+IntegrateTable[Sqrt[(c_ + d_. x_)/(a_ + b_. x_)], x_] /; FreeQ[{a, b, c, d}, x] := With[{u = a + b x, r = (c + d x)/(a + b x), k = a d - b c},
+    u Sqrt[r]/b - k/(b^(3/2) Sqrt[d]) ArcTanh[Sqrt[b] Sqrt[r]/Sqrt[d]]];
 
 (* Formula 146 *)
 IntegrateTable[(c_ + d_. x_)^m_ Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, c, d, m}, x] := With[{u = a + b x, v = c + d x, k = a d - b c}, 
