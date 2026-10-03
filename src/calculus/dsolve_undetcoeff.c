@@ -87,6 +87,33 @@ static Expr* uc_expand_hyperbolic(Expr* g) {
     return eval_and_free(ds_call2("ReplaceAll", g, rules));
 }
 
+/* Is L[cand] - T a decidable zero?  cand, a[], T all borrowed.
+ *
+ * Verifies a determined undetermined-coefficients candidate.  Simplify the
+ * residual before the zero test: the raw residual of a NON-UC forcing carrying a
+ * symbolic parameter (e.g. Sec[a x], whose "y_p = Sec[a x]/a^2" leaves residual
+ * D[Sec[a x],{x,2}]/a^2) is a zero_test FALSE POSITIVE -- PossibleZeroQ of the
+ * unsimplified form is True though it is genuinely nonzero -- which would defeat
+ * this gate and ship a WRONG particular (M51 y''+a^2 y == Sec[a x]).  Simplify
+ * collapses it to a decidably-nonzero form so the term correctly declines to
+ * constcoeff's variation of parameters.  A genuine UC residual is provably zero
+ * either way, so real accepts are unchanged. */
+static bool uc_cand_solves(const Expr* cand, Expr** a, int n, const char* xvar,
+                           const Expr* T) {
+    Expr* Lc = expr_new_integer(0);
+    for (int j = 0; j <= n; j++) {
+        Expr* dj = expr_copy((Expr*)cand);
+        for (int i = 0; i < j; i++) dj = ds_d(dj, expr_new_symbol(xvar));
+        Lc = eval_and_free(ds_call2(SYM_Plus, Lc,
+                 ds_call2(SYM_Times, expr_copy(a[j]), dj)));
+    }
+    Expr* resid = eval_and_free(ds_call1("Simplify",
+                      ds_call2(SYM_Subtract, Lc, expr_copy((Expr*)T))));
+    bool z = ds_is_zero(resid);
+    expr_free(resid);
+    return z;
+}
+
 /* Particular solution for a single UC term T (in xvar), given the constant
  * coefficients a[0..n].  Returns owned y_p or NULL if T is not UC / not solvable. */
 static Expr* uc_particular(const Expr* T, Expr** a, int n, const char* xvar) {
@@ -198,29 +225,23 @@ static Expr* uc_particular(const Expr* T, Expr** a, int n, const char* xvar) {
                  * decline, so linear1's integral form / constcoeff variation of
                  * parameters handles the equation instead of a wrong y_p. */
                 if (!ds_contains(cand, uca) && !ds_contains(cand, ucb)) {
-                    Expr* cand_s = ds_simplify(cand);
-                    Expr* Lc = expr_new_integer(0);
-                    for (int j = 0; j <= n; j++) {
-                        Expr* dj = expr_copy(cand_s);
-                        for (int i = 0; i < j; i++) dj = ds_d(dj, expr_new_symbol(xvar));
-                        Lc = eval_and_free(ds_call2(SYM_Plus, Lc,
-                                 ds_call2(SYM_Times, expr_copy(a[j]), dj)));
-                    }
-                    /* Simplify before the zero test.  The raw residual of a NON-UC
-                     * forcing carrying a symbolic parameter (e.g. Sec[a x], whose
-                     * "y_p = Sec[a x]/a^2" leaves residual D[Sec[a x],{x,2}]/a^2) is a
-                     * zero_test FALSE POSITIVE -- PossibleZeroQ of the unsimplified form
-                     * is True though it is genuinely nonzero -- which defeats this gate
-                     * and ships a WRONG particular (M51 y''+a^2 y == Sec[a x]).  Simplify
-                     * collapses it to a decidably-nonzero form so the term correctly
-                     * declines to constcoeff's variation of parameters.  A genuine UC
-                     * residual is provably zero either way, so real accepts are
-                     * unchanged (numeric coefficients already declined via VoP). */
-                    Expr* resid = eval_and_free(ds_call1("Simplify",
-                                      ds_call2(SYM_Subtract, Lc, expr_copy((Expr*)T))));
-                    bool solves = ds_is_zero(resid);
-                    expr_free(resid);
-                    if (solves) yp = cand_s; else expr_free(cand_s);
+                    /* Verify on the RAW candidate first: a determined UC linear
+                     * combination has a directly-decidable residual (uc_cand_solves
+                     * is also the gate that makes a NON-UC forcing decline).
+                     * ds_simplify can rewrite a clean A Cos[b x] + B Sin[b x] into
+                     * an ArcTan-phase Sin[.] whose residual the zero test cannot
+                     * prove zero -- a FALSE decline on a correct answer (double root
+                     * + Cos[2 x]).  So verify raw, then simplify for tidiness only
+                     * if the simplified form still verifies; otherwise return the
+                     * clean, self-verifying raw form. */
+                    if (uc_cand_solves(cand, a, n, xvar, T)) {
+                        Expr* cand_s = ds_simplify(expr_copy(cand));
+                        if (uc_cand_solves(cand_s, a, n, xvar, T)) {
+                            yp = cand_s; expr_free(cand);
+                        } else {
+                            expr_free(cand_s); yp = cand;
+                        }
+                    } else expr_free(cand);
                 } else expr_free(cand);
             }
             expr_free(sol);
