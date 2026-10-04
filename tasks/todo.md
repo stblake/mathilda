@@ -117,4 +117,28 @@ NIntegrate). I verify each case numerically in the REPL during dev. Bump
       and-docs-only (no src change) -> NO version bump/tag per CLAUDE.md.
 
 ## Review
-_(filled in as phases complete)_
+
+ALL probe-set cases resolved (22/22 accounted for). Session v0.275–v0.276 + a
+tests/docs commit closed the remaining tail after the prior v0.268–v0.274 work:
+
+- **v0.275** PV plumbing (Phase 0) + keyhole-log axis pole (Case 18) + hyperbolic
+  rectangular reduction (Case 7). PrincipalValue threaded into
+  integrate_residue_try (g_pv). a0_keyhole_log admits a simple axis pole as the
+  average of the two keyhole-branch residues; removable z0=1 needs no option.
+  residue_family_rectangular reduces x^k/Sinh x via TrigToExp to the keyhole-log.
+    C18 Log[x]/(x^3-1) = 4Pi^2/27;  C7 x/Sinh[x] = Pi^2/2;  (PV) Log[x]/(x^2-4) = Pi^2/8.
+- **v0.276** Gaussian / shifted-rectangle (Case 15) -- residue_family_gaussian.
+  TrigToExp -> sum of pure Gaussians, complete the square. Runs FIRST on the
+  whole-line branch (fixes the HANG on symbolic a as well as the concrete miss).
+    C15 Exp[-x^2]Cos[2ax] = Sqrt[Pi]e^-a^2.
+- **(no bump)** Cases 17 (Log[x]/Cosh[x]) and 21 (Hankel) are documented honest
+  declines -- outside the residue repertoire, decline cleanly, pinned as negative
+  controls (test_honest_declines).
+
+Verification: all per-case closed forms hand-derived and/or NIntegrate-checked
+during dev (C18 worked by hand to 4Pi^2/27; PV Pi^2/8 cross-checked vs symmetric-
+exclusion Cauchy + the x->a^2/x scaling identity; C7 vs known Pi^2/2; C15 vs
+Sqrt[Pi]e^-a^2 at a=7/5). 26 integrate/series/limit/gamma/erf suites green after
+each phase; residue + core suites green at HEAD. No regressions.
+
+Deferred (non-probe housekeeping): MEMORY.md compaction (hook wants <17.1KB).
