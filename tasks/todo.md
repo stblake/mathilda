@@ -109,7 +109,12 @@ NIntegrate). I verify each case numerically in the REPL during dev. Bump
       on the whole-line branch (gated on contains_exp_of_var), so it also fixes the
       HANG (was spinning the nonelem antiderivative search). C15 E^-x^2 Cos[2ax] =
       Sqrt[Pi]e^-a^2 (symbolic + concrete + Automatic). test_gaussian.
-- [ ] Best-effort 17 & 21, else documented honest declines; tests/docs/bump/tag
+- [x] 17 & 21 documented honest declines  [DONE]: both decline CLEANLY under strict
+      Method->"Residue" (no hang, no wrong value). C17 Log[x]/Cosh[x] = Mellin-of-sech
+      differentiated at s=1 -> Dirichlet-beta derivative (Gamma[1/4] constant), NOT a
+      residue sum; w=Exp[x] fails (Log x -> Log[Log w]). C21 Hankel fragment ambiguous/
+      divergent. Pinned as negative controls (test_honest_declines) + docs note. Tests-
+      and-docs-only (no src change) -> NO version bump/tag per CLAUDE.md.
 
 ## Review
 _(filled in as phases complete)_

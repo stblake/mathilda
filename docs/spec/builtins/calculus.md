@@ -2331,7 +2331,13 @@ non-integer power, including a **principal-value** pole on the positive axis),
 Chebyshev-weight, Mellin–Barnes, sector, rectangular/hyperbolic and
 Gaussian/shifted-rectangle families described above extend the reach to
 branch-cut, log-weighted, principal-value, Gaussian and symbolic-exponent
-contours.
+contours.  A few integrands remain **deliberate, documented declines** (returned
+unevaluated, never a forced or wrong value): `∫₀^∞ Log[x]/Cosh[x] dx` — its value
+is the Mellin transform of `sech` differentiated at `s = 1`, a Dirichlet-beta
+derivative (a `Γ(1/4)`-level constant), not a residue sum, and the `w = Exp[x]`
+reduction fails because `Log x` becomes `Log[Log w]`; and the Hankel-type
+`∫₁^{-∞} eˣ x^{-s} dx`, whose contour is ambiguous / divergent in the ordinary
+sense.
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,

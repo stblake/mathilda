@@ -412,6 +412,23 @@ static void test_gaussian(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Honest declines (deliberate, documented): integrands outside the residue
+ * repertoire stay UNEVALUATED under strict Method -> "Residue" -- never a wrong
+ * or forced value.  Pinned so a future accidental "answer" is caught.
+ * ---------------------------------------------------------------------- */
+static void test_honest_declines(void) {
+    /* Case 17: Integrate[Log[x]/Cosh[x]] -- the Mellin transform of Sech
+     * differentiated at s = 1 (a Dirichlet-beta derivative / Gamma[1/4] constant),
+     * not a residue sum; the w = Exp[x] reduction fails (Log x -> Log[Log w]). */
+    check_eq("Integrate[Log[x]/Cosh[x], {x, 0, Infinity}, Method -> \"Residue\"]",
+             "Integrate[Log[x] Sech[x], {x, 0, Infinity}, Method -> \"Residue\"]");
+    /* Case 21: a Hankel-type contour fragment, ambiguous / divergent in the
+     * ordinary sense. */
+    check_eq("Integrate[Exp[x] x^(-s), {x, 1, -Infinity}, Method -> \"Residue\"]",
+             "Integrate[E^x x^(-s), {x, 1, -Infinity}, Method -> \"Residue\"]");
+}
+
+/* -------------------------------------------------------------------------
  * Parametrized contour on (0, 2Pi): Integrate[g(c Exp[I t]) (I c Exp[I t])] =
  * Contour[g, |z|=c] = 2 Pi i Sum Res, including essential singularities.  Each
  * pin asserts FreeQ[r, Integrate] so a decline cannot pass via a numeric
@@ -524,6 +541,7 @@ int main(void) {
     TEST(test_keyhole_log);
     TEST(test_keyhole_pv);
     TEST(test_gaussian);
+    TEST(test_honest_declines);
     TEST(test_contour_param);
     TEST(test_mellin_barnes);
     TEST(test_sector);
