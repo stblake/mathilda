@@ -102,7 +102,13 @@ NIntegrate). I verify each case numerically in the REPL during dev. Bump
       "0 Infinity" message from a downstream cascade stage -- harmless, out of scope.
 
 ## Phase 7 — Tier F hard tail
-- [ ] Gaussian-Fourier recognizer (15)
+- [x] Gaussian-Fourier recognizer (15)  [DONE v0.276]: residue_family_gaussian --
+      shifted-rectangle (entire E^(quadratic) kernel). TrigToExp+Expand -> Sum of
+      E^(linear); complete the square per term: Int e^(A x^2+B x+D) = Sqrt[-Pi/A]
+      e^(D-B^2/(4A)), Re A<0 (sign verified over the guaranteed region). Runs FIRST
+      on the whole-line branch (gated on contains_exp_of_var), so it also fixes the
+      HANG (was spinning the nonelem antiderivative search). C15 E^-x^2 Cos[2ax] =
+      Sqrt[Pi]e^-a^2 (symbolic + concrete + Automatic). test_gaussian.
 - [ ] Best-effort 17 & 21, else documented honest declines; tests/docs/bump/tag
 
 ## Review

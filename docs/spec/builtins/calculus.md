@@ -2253,6 +2253,17 @@ symbolic-exponent contours:
   polynomial `x^k` factor becomes `(Log w)^k`, handing the **keyhole-log** family
   the integrand `(Log w)^k R(w)` with its removable `w = 1` (i.e. `x = 0`) pole —
   `∫_{-∞}^∞ x/Sinh[x] dx = π²/2`.
+- **Gaussian / shifted rectangle on `(-∞, ∞)`** — an *entire* integrand
+  `E^(A x² + B x + C)` times a Fourier/exponential kernel, `Re A < 0`.  `e^{A z²}`
+  is entire, so the line of integration shifts freely (a rectangle enclosing no
+  poles) — the pole-free degenerate case of the rectangular contour.  `TrigToExp`
+  turns any `Cos`/`Sin`/`Cosh`/`Sinh` kernel into a sum of `E^(linear)`, so the
+  integrand becomes `Σ_i C_i E^(A x² + B_i x + D_i)` and each Gaussian closes by
+  completing the square, `∫_{-∞}^∞ e^{A x² + B x + D} dx = √(−π/A)·e^{D − B²/(4A)}`:
+  `∫_{-∞}^∞ e^{−x²} Cos[2 a x] dx = √π e^{−a²}`.  The leading coefficient's sign is
+  verified over the whole assumption region, so a positive one (a divergent
+  integral) declines.  Not a residue computation (no poles), but the standard
+  contour route for the family.
 
 **Assumptions and symbolic parameters.**  An `Integrate[f, {x, a, b},
 Assumptions -> …]` option lets the residue families evaluate integrals whose
@@ -2317,9 +2328,10 @@ a mis-fire and returned unevaluated.  Negative controls such as
 rational), and `Integrate[1/(2 + Cos[x]), {x, 0, Pi}]` (not a full period) all
 stay unevaluated.  The keyhole/Mellin, keyhole-with-log (integer *and*
 non-integer power, including a **principal-value** pole on the positive axis),
-Chebyshev-weight, Mellin–Barnes, sector and rectangular/hyperbolic families
-described above extend the reach to branch-cut, log-weighted, principal-value and
-symbolic-exponent contours.
+Chebyshev-weight, Mellin–Barnes, sector, rectangular/hyperbolic and
+Gaussian/shifted-rectangle families described above extend the reach to
+branch-cut, log-weighted, principal-value, Gaussian and symbolic-exponent
+contours.
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,

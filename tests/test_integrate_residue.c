@@ -387,6 +387,31 @@ static void test_keyhole_pv(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Gaussian / shifted-rectangle on (-Inf, Inf): an entire E^(quadratic) kernel,
+ * TrigToExp'd to a sum of pure Gaussians and closed by completing the square.
+ * ---------------------------------------------------------------------- */
+static void test_gaussian(void) {
+    /* Case 15: Integrate[Exp[-x^2] Cos[2 a x]] = Sqrt[Pi] E^(-a^2).  Symbolic a
+     * (formerly HUNG); concrete a = 1 declined.  Both close now. */
+    check_eq("Integrate[Exp[-x^2] Cos[2 x], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
+             "Sqrt[Pi]/E");
+    check_eq("Integrate[Exp[-x^2] Cos[2 a x], {x, -Infinity, Infinity}, Method -> \"Residue\", "
+             "Assumptions -> a > 0]", "Sqrt[Pi] E^(-a^2)");
+    /* Shifted exponent, Exp kernel, and a scaled leading coefficient. */
+    check_eq("Integrate[Exp[-x^2 + 3 x], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
+             "E^(9/4) Sqrt[Pi]");
+    check_eq("With[{r = Integrate[Exp[-x^2 + I x], {x, -Infinity, Infinity}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r - Sqrt[Pi] Exp[-1/4]]]}]", "{True, 0}");
+    check_eq("With[{r = Integrate[Exp[-2 x^2] Cos[x], {x, -Infinity, Infinity}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r - Sqrt[Pi/2] Exp[-1/8]]]}]", "{True, 0}");
+    /* Odd kernel integrates to 0. */
+    check_eq("Integrate[Exp[-x^2] Sin[2 x], {x, -Infinity, Infinity}, Method -> \"Residue\"]", "0");
+    /* Positive leading coefficient diverges: the family must decline. */
+    check_eq("Integrate[Exp[x^2], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
+             "Integrate[E^x^2, {x, -Infinity, Infinity}, Method -> \"Residue\"]");
+}
+
+/* -------------------------------------------------------------------------
  * Parametrized contour on (0, 2Pi): Integrate[g(c Exp[I t]) (I c Exp[I t])] =
  * Contour[g, |z|=c] = 2 Pi i Sum Res, including essential singularities.  Each
  * pin asserts FreeQ[r, Integrate] so a decline cannot pass via a numeric
@@ -498,6 +523,7 @@ int main(void) {
     TEST(test_mellin_symbolic_exponent);
     TEST(test_keyhole_log);
     TEST(test_keyhole_pv);
+    TEST(test_gaussian);
     TEST(test_contour_param);
     TEST(test_mellin_barnes);
     TEST(test_sector);

@@ -70,6 +70,9 @@ static Expr* mk_fn1(const char* h, Expr* a) {
 static Expr* mk_fn2(const char* h, Expr* a, Expr* b) {
     return expr_new_function(mk_sym(h), (Expr*[]){ a, b }, 2);
 }
+static Expr* mk_fn3(const char* h, Expr* a, Expr* b, Expr* c) {
+    return expr_new_function(mk_sym(h), (Expr*[]){ a, b, c }, 3);
+}
 
 /* Evaluate `call`, free it, return the (owned) result. */
 static Expr* eval_take(Expr* call) {
@@ -2046,6 +2049,144 @@ static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b) {
 }
 
 /* -------------------------------------------------------------------------
+ * Gaussian / shifted-rectangle contour on (-Inf, Inf).
+ *
+ * An ENTIRE integrand E^(quadratic in x) times a Fourier/exponential kernel.
+ * Since e^(A x^2) (Re A < 0) is entire and decays off the real axis, the line of
+ * integration may be shifted (a rectangle enclosing no poles, whose vertical
+ * sides vanish) -- the pole-free degenerate case of the rectangular contour.
+ * TrigToExp turns a Cos/Sin/Cosh/Sinh kernel into a sum of E^(linear), so the
+ * integrand becomes a sum of pure Gaussians Sum_i C_i E^(A x^2 + B_i x + D_i),
+ * and each integrates by completing the square:
+ *
+ *     Int_{-Inf}^{Inf} e^(A x^2 + B x + D) dx = Sqrt[-Pi/A] e^(D - B^2/(4 A)),
+ *
+ * valid for Re A < 0.  This closes e.g. Integrate[Exp[-x^2] Cos[2 a x]] =
+ * Sqrt[Pi] e^(-a^2) -- an entire integrand with no residues, so it is NOT a true
+ * residue computation, but it is the standard contour route for the family and
+ * belongs with the other whole-line contour recognizers. */
+
+/* Coefficient[p, x, k] as a machine extraction; owned. */
+static Expr* poly_coeff(Expr* p, Expr* x, int k) {
+    return eval_take(mk_fn3("Coefficient", expr_copy(p), expr_copy(x), mk_int(k)));
+}
+
+/* True iff e contains E^(... x ...) or Exp[... x ...] -- an exponential whose
+ * exponent involves the integration variable (the Gaussian signature). */
+static bool contains_exp_of_var(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_SYMBOL &&
+        e->data.function.args[0]->data.symbol.name == SYM_E &&
+        contains_symbol(e->data.function.args[1], x)) return true;
+    if (head_name_is(e, "Exp") && e->data.function.arg_count >= 1 &&
+        contains_symbol(e->data.function.args[0], x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_exp_of_var(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+static Expr* residue_family_gaussian(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_neg_pos_infinity(a, b)) return NULL;
+    /* Must be an exponential of x (a genuine Gaussian candidate) -- cheaply
+     * rejects the rational / Fourier cases the earlier families already own. */
+    if (!contains_exp_of_var(f, x)) return NULL;
+
+    /* Expand any trig/hyperbolic kernel to exponentials and flatten to a sum. */
+    Expr* g = ev1("Expand", ev1("TrigToExp", expr_copy(f)));
+    if (!g) return NULL;
+
+    Expr** terms; size_t nterms; Expr* one[1];
+    if (head_name_is(g, "Plus")) { terms = g->data.function.args; nterms = g->data.function.arg_count; }
+    else { one[0] = g; terms = one; nterms = 1; }
+
+    Expr* total = mk_int(0);
+    bool bad = false;
+    for (size_t ti = 0; ti < nterms && !bad; ti++) {
+        Expr* T = terms[ti];
+        /* Split T = C * E^P: C the x-free prefactor, P the accumulated exponent. */
+        Expr** fac; size_t nf; Expr* f1[1];
+        if (head_name_is(T, "Times")) { fac = T->data.function.args; nf = T->data.function.arg_count; }
+        else { f1[0] = T; fac = f1; nf = 1; }
+        Expr* C = mk_int(1);
+        Expr* P = mk_int(0);
+        for (size_t fi = 0; fi < nf && !bad; fi++) {
+            Expr* fe = fac[fi];
+            bool is_exp = head_name_is(fe, "Power") &&
+                          fe->data.function.args[0]->type == EXPR_SYMBOL &&
+                          fe->data.function.args[0]->data.symbol.name == SYM_E;
+            if (is_exp) {
+                P = eval_take(mk_fn2("Plus", P, expr_copy(fe->data.function.args[1])));
+            } else if (head_name_is(fe, "Exp")) {
+                P = eval_take(mk_fn2("Plus", P, expr_copy(fe->data.function.args[0])));
+            } else if (contains_symbol(fe, x)) {
+                bad = true;                         /* x outside the exponent: not Gaussian */
+            } else {
+                C = eval_take(mk_fn2("Times", C, expr_copy(fe)));
+            }
+            if (!P || !C) bad = true;
+        }
+        if (bad) { if (C) expr_free(C); if (P) expr_free(P); break; }
+
+        /* P must be a degree-2 polynomial in x with a sign-negative leading
+         * coefficient (guaranteed over the assumed region, not just sampled). */
+        Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(P), expr_copy(x)));
+        bool deg2 = deg && deg->type == EXPR_INTEGER && deg->data.integer == 2;
+        if (deg) expr_free(deg);
+        Expr* A = deg2 ? poly_coeff(P, x, 2) : NULL;
+        Expr* B = deg2 ? poly_coeff(P, x, 1) : NULL;
+        Expr* D = deg2 ? poly_coeff(P, x, 0) : NULL;
+        if (!deg2 || !A || !B || !D ||
+            contains_symbol(A, x) || contains_symbol(B, x) || contains_symbol(D, x)) {
+            if (A) expr_free(A);
+            if (B) expr_free(B);
+            if (D) expr_free(D);
+            expr_free(C); expr_free(P); bad = true; break;
+        }
+        /* Re A < 0 over the whole region.  numeric_double/param_interval read the
+         * guaranteed bound (a concrete A gives [A,A]); a symbolic leading
+         * coefficient the assumptions do not pin negative is refused. */
+        double alo, ahi, are, aim;
+        param_interval(A, &alo, &ahi);
+        Expr* Asamp = g_inst ? apply_inst(A) : NULL;
+        bool sample_neg = res_reim(Asamp ? Asamp : A, &are, &aim) &&
+                          fabs(aim) < RES_TOL && are < -RES_TOL;
+        if (Asamp) expr_free(Asamp);
+        if (!(sample_neg && ahi < -RES_TOL)) {
+            expr_free(A); expr_free(B); expr_free(D); expr_free(C); expr_free(P);
+            bad = true; break;
+        }
+        /* term = C e^D Sqrt[-Pi/A] e^(-B^2/(4 A)). */
+        Expr* sqrtfac = mk_fn2("Power",
+            mk_fn2("Times", mk_int(-1), mk_fn2("Times", mk_sym(SYM_Pi),
+                mk_fn2("Power", expr_copy(A), mk_int(-1)))),
+            mk_fn2("Power", mk_int(2), mk_int(-1)));           /* Sqrt[-Pi/A] */
+        Expr* expfac = ev1("Exp", mk_fn2("Plus", expr_copy(D),
+            mk_fn2("Times", mk_fn2("Power", expr_copy(B), mk_int(2)),
+                mk_fn2("Power", mk_fn2("Times", mk_int(-4), expr_copy(A)), mk_int(-1)))));
+                                                               /* e^(D - B^2/(4A)) */
+        Expr* term = eval_take(mk_fn2("Times", C,
+            mk_fn2("Times", sqrtfac, expfac)));
+        expr_free(A); expr_free(B); expr_free(D); expr_free(P);
+        if (!term) { bad = true; break; }
+        total = eval_take(mk_fn2("Plus", total, term));
+        if (!total) { bad = true; break; }
+    }
+    expr_free(g);
+    if (bad || !total) { if (total) expr_free(total); return NULL; }
+
+    Expr* val = g_inst ? ev1("Simplify", total)
+                       : ev1("Simplify", ev1("ComplexExpand", total));
+    if (!val) return NULL;
+    double vv, re, im;
+    if (contains_symbol(val, x) ||
+        !(res_is_real_scalar(val, x, &vv) || res_is_finite_scalar(val, x, &re, &im))) {
+        expr_free(val); return NULL;
+    }
+    return val;
+}
+
+/* -------------------------------------------------------------------------
  * Sector contour -- Integrate[x^m / (c + x^n), {x, 0, Infinity}], n possibly a
  * symbolic parameter (n > m + 1 for convergence).  The wedge of angle 2Pi/n maps
  * the ray back to itself scaled by Exp[2 Pi i/n], and the single enclosed pole
@@ -2356,9 +2497,13 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         /* Finite interval (-1,1) with the Chebyshev weight 1/Sqrt[1-x^2]. */
         value = residue_family_chebyshev_weight(f, x, a, b, diverges);
     } else if (is_neg_pos_infinity(a, b)) {
-        /* Whole line: Fourier/Jordan if a trig/exp kernel is present, then the
-         * quasi-periodic (rectangular-contour) family, else rational. */
-        value = residue_family_fourier(f, x, a, b);
+        /* Whole line: the Gaussian / shifted-rectangle (entire E^(quadratic)
+         * kernel) first -- it is gated tightly on an exponential of x and short-
+         * circuits the non-elementary antiderivative search that otherwise spins.
+         * Then Fourier/Jordan if a trig/exp kernel is present, the quasi-periodic
+         * (rectangular-contour) family, else rational. */
+        value = residue_family_gaussian(f, x, a, b);
+        if (!value) value = residue_family_fourier(f, x, a, b);
         if (!value) value = residue_family_rectangular(f, x, a, b);
         if (!value) value = residue_family_rational(f, x, a, b, diverges);
     } else if (is_zero_pos_infinity(a, b)) {
