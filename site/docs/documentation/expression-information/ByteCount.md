@@ -15,19 +15,19 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= ByteCount[5]
-Out[1]= 48
+Out[1]= 64
 
 In[2]:= ByteCount[{1, 2, 3}]
-Out[2]= 269
+Out[2]= 349
 
 In[3]:= ByteCount[x^2 + 1]
-Out[3]= 381
+Out[3]= 493
 
 In[4]:= ByteCount[Range[100]]
-Out[4]= 5701
+Out[4]= 872
 
 In[5]:= ByteCount[Factorial[50]]
-Out[5]= 48
+Out[5]= 96
 ```
 
 ## Implementation notes

@@ -14,7 +14,7 @@ For n \> 0, BitLength\[n\] is Floor\[Log\[2, n\]\] + 1; BitLength\[0\] is 0. For
 
 </details>
 
-## Examples (7)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -46,6 +46,43 @@ Out[6]= {0, 1, 3, 8}
 In[7]:= BitLength[1, 2] BitLength::argx: BitLength called with 2 arguments; 1 argument is expected.
 ```
 
+### Applications (5)
+
+255 is 11111111 in binary, eight bits
+
+```mathematica
+In[8]:= BitLength[255]
+Out[8]= 8
+```
+
+One more bit than 255
+
+```mathematica
+In[9]:= BitLength[256]
+Out[9]= 9
+```
+
+Exact for arbitrarily large integers, with no floating point
+
+```mathematica
+In[10]:= BitLength[2^100]
+Out[10]= 101
+```
+
+A negative n uses two's complement: BitLength[BitNot[n]]
+
+```mathematica
+In[11]:= BitLength[-256]
+Out[11]= 8
+```
+
+Listable: it threads over a list
+
+```mathematica
+In[12]:= BitLength[{0, 1, 2, 7, 8, 255, 256}]
+Out[12]= {0, 1, 2, 3, 4, 8, 9}
+```
+
 ## Options & behaviour
 
 **Diagnostics**. A non-integer argument emits `BitLength::int` and echoes the
@@ -69,6 +106,31 @@ BitLength is Listable (threads over lists automatically). The packed / NDArray f
 
 ## Implementation notes
 
+**Algorithm.** `builtin_bitlength` gives the number of binary bits needed to represent an
+integer `n`. All arithmetic is done in GMP, so machine integers (`EXPR_INTEGER`) and bignums
+(`EXPR_BIGINT`) are handled uniformly. The magnitude whose base-2 size is wanted is `n` itself
+for `n >= 0` and `BitNot[n] = -n - 1` for `n < 0` (computed as `-(n + 1)`, which is `>= 0`
+there); its bit length is `mpz_sizeinbase(m, 2)` — exact, because base 2 is a power of two —
+and `0` is special-cased to `0`. So `BitLength[n] = Floor[Log2[n]] + 1` for `n > 0` without
+ever going through floating point, `BitLength[0] = 0`, `BitLength[-1] = 0`,
+`BitLength[-2] = 1`, and `BitLength[-2^k] = k`.
+
+A concrete non-integer numeric argument (`Real`, `Rational`, `Complex`, …) emits
+`BitLength::int` and leaves the call unevaluated; a symbolic argument flows through silently
+(returns `NULL`); a wrong arity emits `BitLength::argx`. Both diagnostics route through the
+`mth_message` funnel, so they honour `Quiet[]`/`Check[]`.
+
+**Data structures.** Two short-lived GMP `mpz_t` values (`n` and the magnitude `m`); the
+result is a machine `Integer`, since a bit length is bounded by the operand's own size and
+always lands within `EXPR_INTEGER` range.
+
+**Complexity / limits.** `O(1)` on a machine integer, `O(size of n)` on a bignum (the cost of
+`mpz_sizeinbase`). `BitLength` is `Protected` and `Listable`, so it threads element-wise over
+a list. The packed/`NDArray` fast path is the `int64` kernel `ndk_BitLength_ii`
+(`src/ndinteger.c`) and the `Compile[]` lowering is `OP_BLEN_I`; both cover the full `int64`
+range including `INT64_MIN` (`BitLength[-2^63]` is `63`), which the complement-based magnitude
+computes without overflow.
+
 - `Protected`, `Listable`. Threads element-wise over a list of integers, e.g.
   `BitLength[{0, 1, 2, 7, 8, 255, 256}]`.
 - For `n > 0`, `BitLength[n]` is an efficient exact version of
@@ -89,6 +151,23 @@ BitLength is Listable (threads over lists automatically). The packed / NDArray f
 
 **See also:** [NDArray](../../linear-algebra/NDArray/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/bitwise/bitlength.c`](https://github.com/stblake/mathilda/blob/main/src/bitwise/bitlength.c)
 - Specification: [`docs/spec/builtins/bitwise.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/bitwise.md)
 - Tests: [`tests/test_bitwise.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bitwise.c)
+
+## Notes & additional examples
+
+### Notes
+
+`BitLength[n]` is the number of binary bits needed to represent the integer `n`. For `n > 0`
+it is an exact `Floor[Log[2, n]] + 1` that never converts through floating point (it uses
+GMP's base-2 `mpz_sizeinbase`), so it is exact for arbitrarily large `n`. `BitLength[0]` is
+`0`.
+
+For `n < 0` it equals `BitLength[BitNot[n]]`, and in two's complement `BitNot[n] = -n - 1`, so
+`BitLength[-1]` is `0`, `BitLength[-2]` is `1`, and `BitLength[-2^k]` is `k`.
+
+`BitLength` is `Protected` and `Listable`, so it threads element-wise over a list. It has a
+packed/`NDArray` `int64` fast path and a `Compile[]` lowering, both covering the full `int64`
+range including `INT64_MIN` (`BitLength[-2^63]` is `63`). A non-integer argument emits
+`BitLength::int` and stays unevaluated; a symbolic argument is left unevaluated silently.

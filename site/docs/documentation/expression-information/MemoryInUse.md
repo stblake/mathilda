@@ -7,7 +7,7 @@
 
 **`MemoryInUse[] gives the number of bytes of memory currently resident for the Mathilda process. This is the process resident set size, so unlike Mathematica's MemoryInUse it also counts the binary, the shared libraries and whatever the allocator holds without returning it to the system -- it is the figure Activity Monitor and top report, not a count of session data alone. Returns unevaluated on a platform that offers no way to ask, rather than reporting zero.`**
 
-## Examples (2)
+## Examples (4)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -15,10 +15,26 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= MemoryInUse[]
-Out[1]= 8204288
+Out[1]= 8208384
 
 In[2]:= N[MemoryInUse[]/1024^2, 4]
-Out[2]= 7.8438
+Out[2]= 7.8477
+```
+
+### Applications (2)
+
+An Integer count of bytes
+
+```mathematica
+In[3]:= Head[MemoryInUse[]]
+Out[3]= Integer
+```
+
+Always some memory resident
+
+```mathematica
+In[4]:= MemoryInUse[] > 0
+Out[4]= True
 ```
 
 ## Algorithm
@@ -67,6 +83,30 @@ _DARWIN_C_SOURCE for the BSD fields, _DEFAULT_SOURCE plus _XOPEN_SOURCE for glib
 
 ## Implementation notes
 
+**Algorithm.** `builtin_memoryinuse` (`src/meminfo.c`) returns the process's
+current **resident set size** in bytes, read by `meminfo_current`:
+`mach_task_basic_info`'s `resident_size` on macOS (already bytes), and the
+resident-pages field of `/proc/self/statm` scaled by `sysconf(_SC_PAGESIZE)` on
+Linux (not an assumed 4096, so a 16 KiB-page kernel is correct). This is
+deliberately **not** Mathematica's quantity — Wolfram counts only the current
+session's data, whereas RSS also includes the binary, the shared libraries (GMP,
+MPFR, LAPACK, Readline, Raylib), the stacks, and allocator slack. RSS was chosen
+because it is the number Activity Monitor and `top` report, which is what a
+notebook status bar wants to agree with.
+
+**Data structures.** None of its own — one OS query filling a `uint64_t`, returned
+as an `EXPR_INTEGER`. `MemoryInUse[]` takes no arguments; the one-argument
+subkernel form is rejected (`arg_count != 0` returns `NULL`) because there are no
+subkernels to ignore silently.
+
+**Complexity / limits.** `O(1)` (a syscall / small file read). On a platform that
+offers no way to ask, `meminfo_current` fails and the builtin returns `NULL`
+(stays unevaluated) rather than reporting `0` — a zero would read as "no memory
+in use", which is false and plausible in a status bar. **The value changes from
+run to run**, so examples assert only structure (`Head[MemoryInUse[]]` is
+`Integer`, `MemoryInUse[] > 0`), never a literal byte count. Attributes
+`Protected`.
+
 - `Protected`.
 - **This is the process resident set size, which is not the same quantity Mathematica
   reports.** Wolfram's `MemoryInUse[]` counts the bytes holding the current session's data —
@@ -96,3 +136,21 @@ _DARWIN_C_SOURCE for the BSD fields, _DEFAULT_SOURCE plus _XOPEN_SOURCE for glib
 - Source: [`src/meminfo.c`](https://github.com/stblake/mathilda/blob/main/src/meminfo.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_meminfo.c`](https://github.com/stblake/mathilda/blob/main/tests/test_meminfo.c)
+
+## Notes & additional examples
+
+### Notes
+
+`MemoryInUse[]` gives the number of bytes of memory currently resident for the
+Mathilda process. The actual figure **changes from run to run**, so examples check
+only its shape (`Head[MemoryInUse[]]` is `Integer`, `MemoryInUse[] > 0`) rather
+than a literal byte count.
+
+This is the process **resident set size**, which is not the quantity Mathematica's
+`MemoryInUse[]` reports: Wolfram counts only the current session's data, whereas
+this also includes the binary, the shared libraries (GMP, MPFR, LAPACK, Readline,
+and Raylib on a graphics build), the stacks, and whatever the allocator holds
+without returning it. On a freshly started kernel the two are not interchangeable —
+but RSS is the number Activity Monitor and `top` show, which is what a notebook
+status bar wants to agree with. On a platform that offers no way to ask, the call
+returns unevaluated rather than reporting a misleading `0`.

@@ -32,7 +32,7 @@ In[2]:= D[LogIntegral[z], z]
 Out[2]= 1/Log[z]
 
 In[3]:= N[LogIntegral[10^6], 30]
-Out[3]= 78627.54915946218191986291074769
+Out[3]= 78627.5491594621819198629107479
 
 In[4]:= N[LogIntegral[1000], 20]
 Out[4]= 177.609657990152226688
@@ -68,6 +68,30 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
+**Algorithm.** `builtin_logintegral` evaluates `li(z)` through the identity
+`li(z) = Ei(Log z)`, reusing `ExpIntegralEi`'s numeric stack rather than
+duplicating it; the principal `Log` supplies the `±i Pi` jump that places the
+branch cut on `(-Infinity, +1)`. Exact special values: `0 -> 0`,
+`1 -> -Infinity`, `Infinity -> Infinity`, `ComplexInfinity`/`Indeterminate ->
+Indeterminate`. Exact non-special numbers (`li[2]`, `li[1/2]`) stay symbolic,
+matching the Wolfram Language; only an inexact argument (or explicit `N[...]`)
+evaluates, by building `ExpIntegralEi[Log[z]]` and evaluating it — a defensive
+check drops the result and stays symbolic if the composition did not reduce. The
+machine kernel `logintegral_machine_complex` is `Ei(clog z)`, declining at
+`z = 0` (Indeterminate) and `z = 1` (pole).
+
+**Data structures.** `Expr`; reuses the `ExpIntegralEi` kernels (`mpfr_eint` /
+the real and complex convergent series); `double complex` machine kernel. ND:
+unary kernel `NDKU_LogIntegral = { logintegral_machine_complex,
+ndk_LogIntegral_r, ... }` (the real kernel is `sf_machine_li`), registered
+`REG_U`, so `packed_aware`. Attributes: `Listable`, `NumericFunction`,
+`Protected`.
+
+**Complexity / limits.** Cost is one `ExpIntegralEi` evaluation. The principal
+`Log` puts the cut on the negative real axis, so `li[-1.]` is complex
+(`Ei(i Pi)`). Exact rationals stay symbolic. `Compile[]` lowers at both scalar
+and rank-1 array shapes (`Compiled -> True`).
+
 - Exact special values: `LogIntegral[0] = 0`, `LogIntegral[1] = -Infinity`,
   `LogIntegral[Infinity] = Infinity`; `ComplexInfinity` and `Indeterminate` map
   to `Indeterminate`.
@@ -97,7 +121,8 @@ Attributes: Listable, NumericFunction, Protected.
 
 **See also:** [ExpIntegralEi](../../special-functions/ExpIntegralEi/), [Log](../../elementary-functions/Log/), [Real](../../other-advanced/Real/), [N](../../arithmetic/N/), [D](../../calculus/D/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- DLMF §6.2 — the logarithmic integral li.
+- Source: [`src/special_functions/logintegral.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/logintegral.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_cherry_li.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_li.c)
 - Tests: [`tests/test_cherry_sigma.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_sigma.c)

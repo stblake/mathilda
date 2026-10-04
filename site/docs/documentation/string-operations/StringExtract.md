@@ -25,7 +25,7 @@ Extracts across levels: whitespace at the lowest level, then "\n", then "\n\n", 
 
 Uses sepi as the separator for successive levels. Absent blocks yield Missing\["PartAbsent", pos\]. A list of strings threads.
 
-## Examples (4)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -43,6 +43,29 @@ Out[3]= "ccc"
 
 In[4]:= StringExtract["a 1\nb 2\nc 3 x", All, 3]
 Out[4]= {Missing["PartAbsent", 3], Missing["PartAbsent", 3], "x"}
+```
+
+### Applications (3)
+
+The 2nd whitespace-delimited block
+
+```mathematica
+In[5]:= StringExtract["alpha beta gamma", 2]
+Out[5]= "beta"
+```
+
+Split on "-", take the 3rd block
+
+```mathematica
+In[6]:= StringExtract["a-b-c-d", "-" -> 3]
+Out[6]= "c"
+```
+
+A span of blocks
+
+```mathematica
+In[7]:= StringExtract["one two three four", 2 ;; 3]
+Out[7]= {"two", "three"}
 ```
 
 ## Algorithm
@@ -70,12 +93,31 @@ Registered by regex_init() (regex_init.c) alongside its StringSplit dependency. 
 
 ## Implementation notes
 
+**Algorithm.** `builtin_stringextract` splits a string into blocks and selects by position, treating each argument after the subject as one level (fewer than two arguments emits `StringExtract::argm`). The split at every level is delegated to `StringSplit` (synthesised as `StringSplit[str, sep]` and evaluated), so the whole string-pattern engine, whitespace-run collapsing, and empty-end trimming are reused verbatim — making `StringExtract[s, sep -> All]` exactly `StringSplit[s, sep]`. `apply_position` resolves `n`/`-n` (`pos_single`), `All` (every block), `{n…}` (a collection, deferring any `Span`/`All` element to `Part` semantics), and `m ;; n` (a `Span`, via `expr_part`). An explicit `sep -> pos` rule carries its own separator; a bare position gets a depth-default separator — whitespace at the lowest level, growing runs of `"\n"` above. Multi-level specs recurse into each selected block.
+
+**Data structures.** A `LevelSpec` table of borrowed-or-owned separator/position pairs; results nest as `List`s.
+
+**Complexity / limits.** Dominated by the delegated `StringSplit` evaluations. An out-of-range single index yields `Missing["PartAbsent", n]` rather than leaving the call unevaluated; a non-string subject (or list element) does leave it unevaluated. A list subject threads.
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [StringSplit](../../string-operations/StringSplit/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/strings/stringextract.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringextract.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
 - Tests: [`tests/test_stringfns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringfns.c)
+
+## Notes & additional examples
+
+### Notes
+
+`StringExtract` splits a string into blocks and selects by position. It is built
+directly on `StringSplit` (it synthesises and evaluates `StringSplit[str, sep]`),
+so the split behaviour is identical and `StringExtract[s, sep -> All]` is exactly
+`StringSplit[s, sep]`.
+
+A bare position gets a depth-default separator (whitespace at the lowest level,
+growing runs of `"\n"` above). An out-of-range index yields
+`Missing["PartAbsent", n]` rather than leaving the call unevaluated.

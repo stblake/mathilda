@@ -7,7 +7,7 @@
 
 **`HistogramTransform[image] equalises the histogram, spreading the brightness distribution toward uniform over 256 bins by mapping each value through the cumulative distribution. The mapping is computed from the LUMINANCE and applied to every channel as a ratio, so hue survives; equalising each channel independently would shift colour, since it removes exactly the imbalance that makes an image warm or cool. A black pixel has no ratio to scale and takes the new luminance in every channel. Alpha passes through.`**
 
-## Examples (8)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -57,6 +57,19 @@ In[8]:= Module[{a = HistogramTransform[dark]}, Max[Abs[Flatten[ImageData[Histogr
 Out[8]= True
 ```
 
+### Applications (3)
+
+```mathematica
+In[9]:= ImageDimensions[HistogramTransform[Image[{{0.1, 0.5}, {0.5, 0.9}}]]]
+Out[9]= {2, 2}
+
+In[10]:= ImageType[HistogramTransform[Image[{{0.1, 0.5}, {0.5, 0.9}}]]]
+Out[10]= "Real"
+
+In[11]:= ImageChannels[HistogramTransform[Image[{{0.2, 0.4, 0.6, 0.8}}]]]
+Out[11]= 1
+```
+
 ## Algorithm
 
 imagecolor.c -- ColorReplace, ColorQuantize and HistogramTransform.
@@ -64,6 +77,28 @@ imagecolor.c -- ColorReplace, ColorQuantize and HistogramTransform.
 Three heads that act on an image's COLOURS rather than its geometry, and they share the one thing that makes such operations awkward: a decision made per pixel needs a global view first. Replacing a colour needs a distance rule, quantising needs a palette derived from every pixel, and equalising needs the whole distribution. So each of these makes a pass to gather, then a pass to write — which is why none of them fits the filter machinery in imagefilter.c.
 
 ## Implementation notes
+
+**Algorithm.** `builtin_histogramtransform` equalises the histogram, spreading
+the brightness distribution toward uniform over 256 bins (`HT_BINS`). It builds
+the histogram of the **luminance** (Rec. 601 `luma` for a colour image, the
+single channel otherwise), accumulates it into a cumulative distribution `cdf`
+normalised to `[0, 1]`, and remaps each pixel's luminance `l` to `nl = cdf[bin]`.
+The new luminance is applied to every channel **as a ratio** `f = nl / l`, so hue
+survives — equalising each channel independently is the other obvious choice and
+it shifts colour, because it removes exactly the imbalance that makes an image
+warm or cool. A black pixel (`l <= 1e-9`) has no ratio to scale and takes the new
+luminance `nl` in every channel, which is grey — the only hue-free answer
+available — and each channel is clamped to `[0, 1]`. An alpha channel passes
+through unchanged.
+
+**Data structures.** A fixed 256-element `size_t` histogram and `double` CDF on
+the stack; one flat unit-scale pixel buffer (`image_load`) and one output buffer
+of the same shape. Two passes over the pixels — one to build the histogram, one
+to remap. The result is a `"Real"` image.
+
+**Complexity / limits.** `O(n + bins)`, `n = width · height · channels`, bins
+fixed at 256. Operates on a plane; the mapping is derived once from the global
+luminance distribution and applied to every pixel.
 
 - `Protected`. Each value is mapped through the cumulative distribution over 256 bins, spreading
   the histogram toward uniform.
@@ -78,6 +113,21 @@ Three heads that act on an image's COLOURS rather than its geometry, and they sh
 
 ## References
 
+- R. C. Gonzalez and R. E. Woods, *Digital Image Processing*, 3rd ed. (Pearson, 2008), §3.3 (histogram equalization).
 - Source: [`src/imagecolor.c`](https://github.com/stblake/mathilda/blob/main/src/imagecolor.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`HistogramTransform[image]` equalises the histogram, spreading the brightness
+distribution toward uniform over 256 bins by mapping each value through the
+cumulative distribution.
+
+The mapping is computed from the **luminance** and applied to every channel as a
+ratio, so hue survives — equalising each channel independently would shift
+colour, since it removes exactly the imbalance that makes an image warm or cool.
+A black pixel has no ratio to scale and takes the new luminance in every channel.
+An alpha channel passes through.

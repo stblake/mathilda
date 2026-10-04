@@ -33,7 +33,7 @@ Gives n characters, or as many as are available.
 
 Gives the list of results for each si.
 
-## Examples (11)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -74,6 +74,29 @@ In[11]:= StringTake[x, 1]
 Out[11]= StringTake[x, 1]
 ```
 
+### Applications (3)
+
+The first three characters
+
+```mathematica
+In[12]:= StringTake["abcdef", 3]
+Out[12]= "abc"
+```
+
+The last two
+
+```mathematica
+In[13]:= StringTake["abcdef", -2]
+Out[13]= "ef"
+```
+
+Characters 2 through 4
+
+```mathematica
+In[14]:= StringTake["abcdef", {2, 4}]
+Out[14]= "bcd"
+```
+
 ## Implementation notes
 
 `builtin_stringtake` takes `(string, spec)` and slices by byte through the helper `stringtake_substring` (which `memcpy`s `str[start-1 .. end-1]` into a fresh buffer). A positive integer `n` takes the first `n` bytes; negative `-n` takes the last `n`; `UpTo[n]` (detected by `is_upto`) clamps to the available length. A `List` spec selects: `{n}` a single character, `{m, n}` a range, and `{m, n, s}` a stepped range built byte-by-byte into a `malloc`'d buffer. Negative endpoints normalise as `len + k + 1`; out-of-range or non-integer specs return `NULL`. A first argument that is a `List` of strings is handled by recursively building and evaluating `StringTake[si, spec]` per element. `ATTR_PROTECTED`.
@@ -87,3 +110,15 @@ Out[11]= StringTake[x, 1]
 - Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
 - Tests: [`tests/test_stringposition.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringposition.c)
 - Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)
+
+## Notes & additional examples
+
+### Notes
+
+`StringTake` slices a string by byte: a positive `n` takes the first `n`, a
+negative `-n` the last `n`, `{m, n}` the inclusive range, and `{m, n, s}` a
+stepped range. `UpTo[n]` clamps to the available length.
+
+Negative endpoints count from the end; indexing is 1-based. A first argument that
+is a list of strings is handled per element. An out-of-range or non-integer spec
+leaves the call unevaluated.

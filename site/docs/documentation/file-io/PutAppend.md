@@ -20,18 +20,18 @@ PutAppend works the same as Put, except that it preserves any existing contents 
 
 </details>
 
-## Examples (2)
+## Examples (3)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (2)
+### Applications (3)
 
 ```mathematica
 In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
-Out[1]= Null
 
 In[2]:= PutAppend[y, "/tmp/mathilda_demo.m"]
-Out[2]= Null
+
+In[3]:= FilePrint["/tmp/mathilda_demo.m"]
 ```
 
 ## Algorithm

@@ -147,8 +147,8 @@ reduced; symbolic or negative orders stay unevaluated.
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
 - Tests: [`tests/test_beta.c`](https://github.com/stblake/mathilda/blob/main/tests/test_beta.c)
 - Tests: [`tests/test_collect_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_collect_corpus.c)
+- Tests: [`tests/test_crc_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_crc_corpus.c)
 - Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
-- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 
 ## Notes & additional examples
 

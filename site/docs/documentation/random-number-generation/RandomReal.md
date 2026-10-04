@@ -29,7 +29,7 @@ gives an n1 x n2 x ... array of pseudorandom reals.
 
 yields reals with n digits of precision. Leading or trailing digits of the generated number can be 0. n may be MachinePrecision (the default) or a positive number of decimal digits.
 
-## Examples (8)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -65,6 +65,43 @@ In[8]:= SeedRandom[42]; Precision[RandomReal[1, WorkingPrecision -> 40]]
 Out[8]= 40.037
 ```
 
+### Applications (5)
+
+Uniform in [0, 1); seed makes it reproducible
+
+```mathematica
+In[9]:= SeedRandom[1]; RandomReal[]
+Out[9]= 0.811612
+```
+
+Four draws from an interval
+
+```mathematica
+In[10]:= SeedRandom[1]; RandomReal[{-5, 5}, 4]
+Out[10]= {3.11612, 2.47105, -3.99849, 2.46217}
+```
+
+A 2x2 matrix in [0, 1)
+
+```mathematica
+In[11]:= SeedRandom[1]; RandomReal[1, {2, 2}]
+Out[11]= {{0.811612, 0.747105}, {0.100151, 0.746217}}
+```
+
+Symbolic bounds are numericalized
+
+```mathematica
+In[12]:= SeedRandom[10]; RandomReal[{0, Pi}]
+Out[12]= 0.698786
+```
+
+30-digit draws via MPFR
+
+```mathematica
+In[13]:= SeedRandom[1]; RandomReal[{0, 1}, 3, WorkingPrecision -> 30]
+Out[13]= {0.4603584700202491976408685272501, 0.3896202478046461081440296684121, 0.9468091928475074732095949575463}
+```
+
 ## Implementation notes
 
 **Algorithm.** `builtin_randomreal` (in `src/random.c`) has two paths selected by the requested working precision. The machine path (`randomreal_machine`) draws a uniform `double` in `[0,1)` via `random_uniform_01`, which samples a 53-bit integer with `mpz_urandomm(big, g_rand_state, 2^53)` and divides by `2^53` — i.e. full-mantissa doubles from the shared **Mersenne Twister** state (`gmp_randinit_mt`). `random_real_range` affinely maps it to `[xmin, xmax)`. A bare `x` means `[0, x)`, `{a, b}` means `[a, b)`; bounds are coerced with `expr_to_real`.
@@ -96,3 +133,21 @@ When a precision argument requests extended precision, the MPFR path (`randomrea
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
 - Tests: [`tests/test_correlations.c`](https://github.com/stblake/mathilda/blob/main/tests/test_correlations.c)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
+
+## Notes & additional examples
+
+### Notes
+
+A bare `x` means `[0, x)`, `{a, b}` means `[a, b)`; `RandomReal[]` is `[0, 1)`.
+Bounds may be symbolic-but-numeric (`Pi`, `Sqrt[2]`, `E/2`): they are reduced to a
+number before the affine rescale, so `RandomReal[{0, Pi}]` works.
+
+The machine path draws a full 53-bit mantissa per value and a list of draws
+(`RandomReal[range, n]` or an array shape `{n1, ...}`) is built straight into a
+packed `Real` buffer, so `RandomReal[{0,1}, 10^7]` is an `NDArray`, not ten million
+boxed reals. `WorkingPrecision -> d` with `d` above machine precision switches to an
+MPFR-backed draw at that many digits.
+
+`SeedRandom[s]` fixes the stream, so every example above is reproducible run to
+run. `RandomReal` shares its generator with `RandomComplex`, `RandomVariate` and
+`RandomImage`, so one seed makes all of them reproducible together.

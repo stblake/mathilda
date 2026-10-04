@@ -1,0 +1,10 @@
+---
+source: src/special_functions/coshintegral.c
+references:
+  - "DLMF §6.2.16 — the hyperbolic cosine integral Chi(z) = γ + Log(z) + Int_0^z (cosh t - 1)/t dt."
+---
+**Algorithm.** `builtin_coshintegral` handles `CoshIntegral[z] = Chi(z)`, the imaginary-axis sibling of `Ci` (`Chi(z) = Ci(iz) - iπ/2`), with a logarithmic singularity at `0` and a branch cut along `(-Infinity, 0]`. Exact special values first: `Chi[0] = -Infinity`, `Chi[±Infinity] = Infinity`, `Chi[±I Infinity] = ±I π/2`, `ComplexInfinity`/`Indeterminate -> Indeterminate`. A **numeric real or complex** argument routes to the MPFR kernel: for moderate `|z|` the **convergent Maclaurin series** (`Chi(z) = γ + Log(z) + Sum_{k>=1} z^{2k}/(2k(2k)!)` — the trig series with the alternating sign removed, so every term is positive and the real axis needs no cancellation guard, only a fixed 64-bit guard); the principal `Log(z)` supplies the `±iπ` cut jump. For large `|z|` the **asymptotic expansion** `sinh(z) F(z) + cosh(z) G(z)` plus a piecewise Stokes constant `K` (`-π/2` for `Im z < 0`, `π sgn⁺(Re z) - π/2` for `Im z > 0`) restores the principal branch. A negative real `x` gives the from-above value `Complex[Chi(|x|), Pi]`; machine-real results that overflow a `double` (Chi grows like `e^{|x|}`) are emitted as a 53-bit MPFR real. The complex path uses the shared `ncpx` toolkit; a `USE_MPFR=0` build uses a machine-double series/asymptotic.
+
+**Data structures.** `Expr`; the shared complex-MPFR toolkit `ncpx` (`numeric_complex.h`). The ND kernel is a real `REG_U` registration (`NDKU_CoshIntegral`): real buffers via `ndk_CoshIntegral_r` → `sf_machine_chi`, complex buffers via `coshintegral_machine_complex` (with the shared `sf_series_usable` cancellation gate). `Compile[]` lowers `CoshIntegral` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes.
+
+**Complexity / limits.** `O(1)` per element at machine precision; MPFR term count and guard bits scale with `|z|` and precision. Logarithmic singularity at `0`, branch cut on the negative real axis. Symbolic arguments stay symbolic. Attributes: `Listable`, `NumericFunction`, `Protected`.

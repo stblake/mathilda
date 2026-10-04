@@ -17,7 +17,7 @@ Gives n + 1 equally spaced points spanning 0 to max.
 
 Gives n + 1 equally spaced points spanning min to max; point i is min + i (max - min)/n. Descending intervals (min \> max) are allowed and give a negative step. Exact input gives exact results in lowest terms, with both endpoints exact. Returns unevaluated unless n is a positive integer.
 
-## Examples (6)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -41,6 +41,36 @@ Out[5]= {a, a + 1/2 (-a + b), b}
 
 In[6]:= Subdivide[0]
 Out[6]= Subdivide[0]
+```
+
+### Applications (4)
+
+0 to 1 in five equal parts, exact rationals
+
+```mathematica
+In[7]:= Subdivide[5]
+Out[7]= {0, 1/5, 2/5, 3/5, 4/5, 1}
+```
+
+Five parts spanning 0 to 10
+
+```mathematica
+In[8]:= Subdivide[0, 10, 5]
+Out[8]= {0, 2, 4, 6, 8, 10}
+```
+
+A machine-real endpoint makes every point a real
+
+```mathematica
+In[9]:= Subdivide[0, 1.0, 4]
+Out[9]= {0.0, 0.25, 0.5, 0.75, 1.0}
+```
+
+A degenerate interval repeats the endpoint
+
+```mathematica
+In[10]:= Subdivide[5, 5, 2]
+Out[10]= {5, 5, 5}
 ```
 
 ## Algorithm
@@ -97,6 +127,32 @@ The int64 fast path below is chosen only when overflow is impossible by construc
 
 ## Implementation notes
 
+**Algorithm.** `builtin_subdivide` returns `n + 1` equally spaced points
+spanning an interval, endpoints included (`n` counts the parts, not the points).
+The three surface forms are normalised to one `(min, max, n)` triple — `[n]`
+implies `0..1`, `[max, n]` implies `0..max` — and point `i` (0-based) is
+`min + i (max - min) / n`. Descending intervals need no special case: when
+`max < min` the span is negative and the points descend. `n` must be a positive
+machine integer (capped at `SUBDIVIDE_MAX_N = 10^6`); anything else leaves the
+call unevaluated.
+
+**Exactness.** Two guarantees. The endpoints are *copied, never computed*
+(element 0 is a copy of `min`, element `n` of `max`), so no representation change
+can touch them. Interior points are each derived directly from their index `i`,
+never as `previous + step`, so nothing accumulates error. For integer endpoints
+inside `SUBDIVIDE_MAX_ENDPOINT` the interior point is `(min*n + i*(max-min))/n`
+reduced once by `make_rational` (so whole points print as integers alongside
+rationals: `Subdivide[10, 4]` is `{0, 5/2, 5, 15/2, 10}`); everything else
+(bigint, rational, symbolic) builds a `Plus`/`Times`/`Power` tree and lets the
+evaluator do the arithmetic, keeping exact input exact.
+
+**Buffer fast path.** When either endpoint is a machine `Real` the whole result
+is one `float64` array: `ndbuild_open_f64` fills it with `min + i*step` directly
+(the endpoints written from the inputs, not computed), avoiding 10⁶ evaluator
+entries — `np.linspace`-grade. A sub-threshold or packing-off case computes the
+same doubles into a plain `List`. Only a machine `Real` is contagious; an MPFR
+or symbolic endpoint keeps the exact/general path. `ATTR_PROTECTED`.
+
 - Results are **exact** for exact input: rationals come back in lowest terms,
   and a point landing on a whole number prints as an integer, so
   `Subdivide[10, 4]` gives `{0, 5/2, 5, 15/2, 10}`.
@@ -132,7 +188,23 @@ The int64 fast path below is chosen only when overflow is impossible by construc
 
 **See also:** [Range](../../lists-and-iteration/Range/), [Real](../../other-advanced/Real/)
 
-- Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
+- Source: [`src/list/subdivide.c`](https://github.com/stblake/mathilda/blob/main/src/list/subdivide.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Subdivide[n]` gives `n + 1` equally spaced points from `0` to `1`;
+`Subdivide[max, n]` spans `0` to `max`, and `Subdivide[min, max, n]` spans `min`
+to `max`. `n` counts the *parts*, so there are always `n + 1` points. A
+descending interval (`max < min`) just produces descending points, with no
+special case.
+
+Results are exact when the endpoints are: `Subdivide[5]` is
+`{0, 1/5, 2/5, 3/5, 4/5, 1}`, and whole points print as integers alongside the
+rationals. A machine-real endpoint makes the whole result machine reals (and, at
+scale, a packed array). The endpoints are copied from the input, never recomputed,
+and each interior point is derived directly from its index, so nothing drifts.

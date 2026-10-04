@@ -22,7 +22,7 @@ While has attribute HoldAll.
 
 </details>
 
-## Examples (3)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -37,6 +37,29 @@ Out[2]= 3
 
 In[3]:= n = 1; While[True, If[n > 10, Break[]]; n = n + 1]; n
 Out[3]= 11
+```
+
+### Applications (3)
+
+Repeat the body while the test stays True
+
+```mathematica
+In[4]:= n = 1; While[n < 4, n++]; n
+Out[4]= 4
+```
+
+Read the running value out afterward
+
+```mathematica
+In[5]:= m = 0; While[m < 100, m += 7]; m
+Out[5]= 105
+```
+
+The Euclidean algorithm as a While loop
+
+```mathematica
+In[6]:= gcd2[a0_, b0_] := Module[{a = a0, b = b0, t}, While[b != 0, t = b; b = Mod[a, b]; a = t]; a]; gcd2[48, 36]
+Out[6]= 12
 ```
 
 ## Implementation notes
@@ -63,3 +86,18 @@ Out[3]= 11
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_iter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_iter.c)
 - Tests: [`tests/test_mateigen_direct.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mateigen_direct.c)
+
+## Notes & additional examples
+
+### Notes
+
+`While[test, body]` evaluates `test`, then `body`, repeatedly, until `test` first
+fails to give `True`; `While[test]` runs an empty body, useful when `test` itself
+has the side effect. Both arguments are held (`HoldAll`) and re-evaluated each
+pass.
+
+`While` returns `Null`, so — like `Do` — it is used for its side effects and the
+result is read out of a variable afterward. `Break[]` exits the loop, `Continue[]`
+skips to the next test, and `Return[v]` makes the loop yield `v`; `Throw`, `Abort`
+and `Quit` propagate unchanged. If the first test is not `True`, the body never
+runs.

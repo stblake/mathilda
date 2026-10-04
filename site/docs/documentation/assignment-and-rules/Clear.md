@@ -30,7 +30,6 @@ In[2]:= x + 1
 Out[2]= 6
 
 In[3]:= Clear[x]
-Out[3]= Null
 
 In[4]:= x + 1
 Out[4]= 1 + x

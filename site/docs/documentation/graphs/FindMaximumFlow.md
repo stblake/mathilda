@@ -7,7 +7,7 @@
 
 **`FindMaximumFlow[g, s, t] gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow[g, s, t, "prop"] gives "FlowValue", "FlowMatrix" (dense n x n matrix of edge flows) or "EdgeList" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -> {c1, ...} option (EdgeList order), else from g's own EdgeCapacity, else 1; EdgeWeight is ignored; VertexCapacity -> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.`**
 
-## Examples (14)
+## Examples (17)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -65,12 +65,60 @@ In[14]:= FindMaximumFlow[PathGraph[{1, 2, 3}], 1, 3, VertexCapacity -> {1, 1/2, 
 Out[14]= 0.5
 ```
 
+### Applications (3)
+
+Direct 3 plus 1 through vertex 2
+
+```mathematica
+In[15]:= FindMaximumFlow[Graph[{1, 2, 3}, {1 -> 2, 2 -> 3, 1 -> 3}, EdgeCapacity -> {2, 1, 3}], 1, 3]
+Out[15]= 4
+```
+
+Unit capacities: three edge-disjoint paths
+
+```mathematica
+In[16]:= FindMaximumFlow[CompleteGraph[4], 1, 2]
+Out[16]= 3
+```
+
+Bottlenecked by the middle edges
+
+```mathematica
+In[17]:= FindMaximumFlow[Graph[{1, 2, 3, 4}, {1 -> 2, 1 -> 3, 2 -> 4, 3 -> 4}, EdgeCapacity -> {3, 2, 2, 3}], 1, 4]
+Out[17]= 4
+```
+
 ## Options & behaviour
 
 `EdgeWeight` is not a capacity, an infinite capacity is allowed, `s == t` gives
 `0`, and a negative capacity or a non-graph leaves the call unevaluated:
 
 ## Implementation notes
+
+**Algorithm.** `builtin_find_maximum_flow` computes the value of a maximum flow
+from `s` to `t` (either may be a list of sources/sinks) with **Dinic's
+algorithm**. A fourth argument selects the property: `"FlowValue"` (default),
+`"FlowMatrix"` (a dense `n x n` matrix of per-edge flows), or `"EdgeList"` (the
+edges carrying flow, oriented along it, in flow-matrix row-major order).
+Capacities come from `EdgeCapacity -> {c1, ...}` (else the graph's own
+`EdgeCapacity`, else `1`); `EdgeWeight` is ignored. A `VertexCapacity` option
+caps the flow through each vertex, modelled by the split-vertex construction
+(`v_in -> v_out`). Several sources/sinks are wired to a super-source/super-sink.
+An undirected edge carries flow either way up to its capacity; a directed edge
+only forwards.
+
+**Data structures.** Capacities are parsed into a scaled-`int64` `GfCap` (exact
+integers; reals scaled by a shared power of two; `Infinity` as a finite stand-in
+above every finite sum) — including a packed-buffer fast path that reads an
+`NDArray` capacity list without unpacking. The network is a `GfNet` CSR residual
+graph (adjacent forward/reverse arc pairs) with level-BFS truncated at the sink's
+level and an iterative current-arc blocking-flow search. The flow matrix is
+offered to the packer (`pack_offer`).
+
+**Complexity / limits.** `O(E sqrt(E))` on unit capacities; a handful of phases
+in practice. Exact `Integer` for integer capacities, `Real` otherwise, `Infinity`
+when the flow reaches the `Infinity` stand-in. A negative or symbolic capacity
+leaves the call unevaluated.
 
 - Part of the graph-algorithm family (flows, cuts, matchings, covers, cliques,
   independent sets, Hamiltonian cycles, isomorphism, planarity) implemented in
@@ -117,7 +165,21 @@ Out[14]= 0.5
 
 **See also:** [SparseArray](../../data-structures/SparseArray/), [EdgeList](../../graphs/EdgeList/), [VertexList](../../graphs/VertexList/), [EdgeWeight](../../graphs/EdgeWeight/)
 
-- Source: [`src/graph/galg_init.c`](https://github.com/stblake/mathilda/blob/main/src/graph/galg_init.c)
+- E. A. Dinic, *Algorithm for solution of a problem of maximum flow in a network with power estimation*, Soviet Math. Dokl. **11** (1970) 1277-1280.
+- Source: [`src/graph/galg_flow.c`](https://github.com/stblake/mathilda/blob/main/src/graph/galg_flow.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
 - Tests: [`tests/test_graph_algos.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_algos.c)
+
+## Notes & additional examples
+
+### Notes
+
+The flow value is capacity-limited: capacities come from the `EdgeCapacity`
+option (`EdgeList` order), defaulting to `1` per edge when none is given, and
+`EdgeWeight` plays no part. With integer capacities the answer is exact.
+
+A fourth argument requests `"FlowValue"`, `"FlowMatrix"`, or `"EdgeList"`.
+Sources and sinks may each be a list, and `VertexCapacity` bounds the flow
+through individual vertices. An undirected edge can carry flow in either
+direction; a directed edge only forwards.

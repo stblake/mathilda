@@ -26,17 +26,11 @@ Out[2]= Null (x + y)
 ### Applications (3)
 
 ```mathematica
-In[1]:= Print["Hello, Mathilda!"]
-"Hello, Mathilda!"
-Out[1]= Null
+In[3]:= Print["Hello, Mathilda!"]
 
-In[2]:= Print[2 + 3]
-5
-Out[2]= Null
+In[4]:= Print[2 + 3]
 
-In[3]:= Print["x = ", 2^10]
-"x = "1024
-Out[3]= Null
+In[5]:= Print["x = ", 2^10]
 ```
 
 ## Implementation notes

@@ -513,6 +513,13 @@ docs-build:
 docs-serve:
 	mkdocs serve -f site/mkdocs.yml
 
+# Backstop gate: re-run every published In[]/Out[] example through the current
+# binary and fail on any mismatch. `make docs` verifies examples at *generation*
+# time; this guards the committed tree against going stale when the binary's
+# behaviour changes and nobody regenerated. Needs ./Mathilda.
+check-docs-examples: $(TARGET)
+	python3 site/verify_docs_examples.py
+
 # Portability gate: catch POSIX-only symbols that glibc hides under -std=c99 —
 # both <math.h> constants (M_PI, M_E, ...) used without a C99 fallback and
 # POSIX functions (jn, yn, strdup, fileno, ...) used without a feature-test
@@ -724,7 +731,7 @@ print-cc:
 	@echo "CC = $(CC)"
 	@$(CC) --version 2>/dev/null | head -1
 
-.PHONY: all clean install uninstall docs docs-build docs-serve check-c99 check-interval check-packed-aware \
+.PHONY: all clean install uninstall docs docs-build docs-serve check-docs-examples check-c99 check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \

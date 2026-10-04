@@ -7,7 +7,7 @@
 
 **`ImageCompose[base, over] alpha-composites over onto base, centred, keeping base's size and clipping whatever falls outside. ImageCompose[base, over, {x, y}] centres the overlay at {x, y} in image coordinates -- x from the left, y from the BOTTOM. ImageCompose[base, {over, a}] scales the overlay's opacity by a. A grey image composed with a colour one produces colour: grey means the same value in every channel, so it is replicated rather than zero-padded.`**
 
-## Examples (15)
+## Examples (19)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -83,7 +83,58 @@ In[15]:= Module[{d = ImageData[ImageCompose[a, {red, 0.}]]}, d[[8, 8, 1]] === d[
 Out[15]= True
 ```
 
+### Applications (4)
+
+A 3x3 black field
+
+```mathematica
+In[16]:= base = Image[{{0., 0., 0.}, {0., 0., 0.}, {0., 0., 0.}}];
+```
+
+Compositing keeps the base's size
+
+```mathematica
+In[17]:= ImageDimensions[ImageCompose[base, Image[{{1.}}]]]
+Out[17]= {3, 3}
+```
+
+A single white pixel lands at the centre
+
+```mathematica
+In[18]:= ImageData[ImageCompose[base, Image[{{1.}}]]]
+Out[18]= {{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 0.0}}
+```
+
+Grey overlay on colour base stays colour
+
+```mathematica
+In[19]:= ImageChannels[ImageCompose[Image[{{{0., 0., 0.}}}], Image[{{1.}}]]]
+Out[19]= 3
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_imagecompose` alpha-composites `over` onto `base`. The result keeps
+the base's size — composition is "draw on this", not "make something bigger" — and any part of
+`over` falling outside is clipped. The overlay is centred by default; `ImageCompose[base, over,
+{x, y}]` places its centre at image coordinate `{x, y}` (x from the left, **y from the
+bottom**), which the storage-order flip `oy = base.h - py - over.h/2` converts to a row offset.
+`ImageCompose[base, {over, opacity}]` scales the overlay's alpha by a constant.
+
+Per destination pixel the standard over operator runs: `out = o·α + b·(1−α)` for each colour
+channel, with `α` the overlay's own alpha at that point times the opacity. Channel counts are
+reconciled once by `promote`, which combines in the larger colour count — a grey overlay on a
+colour base produces colour, since grey means "the same in every channel" and is replicated
+rather than zero-padded. The result carries an alpha channel only if the base did
+(`out_alpha = base_alpha + α·(1 − base_alpha)`); compositing onto an opaque image stays opaque.
+
+**Data structures.** Two decoded `Img` buffers; a fresh
+`base.w · base.h · out_channels` buffer, wrapped by `image_build_real` as a packed `"Real"`
+image (every image head returns a packed buffer — `make check-image-packing`). `sample`
+handles grey-to-colour replication and absent alpha in one accessor.
+
+**Complexity / limits.** `O(base.w · base.h · channels)`. Placement outside the base is
+clipped, not an error; the opacity constant must lie in `[0, 1]`.
 
 - `Protected`.
 - The result keeps the **base's** size and clips whatever falls outside: composition is "draw on
@@ -100,3 +151,17 @@ Out[15]= True
 - Source: [`src/imagecompose.c`](https://github.com/stblake/mathilda/blob/main/src/imagecompose.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ImageCompose[base, over]` draws `over` onto `base` with the standard over operator, centred
+and keeping the base's dimensions; whatever falls outside is clipped.
+`ImageCompose[base, over, {x, y}]` places the overlay's centre at image coordinate `{x, y}` —
+x from the left, **y from the bottom**, Mathematica's convention. `ImageCompose[base, {over,
+a}]` fades the overlay by a constant opacity `a`.
+
+A grey overlay on a colour base produces colour: grey means the same value in every channel,
+so it is replicated rather than zero-padded (which would turn a grey pixel red). The result
+carries alpha only if the base did.

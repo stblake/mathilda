@@ -7,7 +7,7 @@
 
 **`Opening[image, r] erodes then dilates with the same element, removing bright features smaller than it while leaving larger ones close to their original size. IDEMPOTENT: Opening[Opening[f]] equals Opening[f], which is the defining property and the reason opening twice is not a sharpening loop A "Bit" image stays "Bit"; other types give "Real".`**
 
-## Examples (37)
+## Examples (40)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -127,7 +127,50 @@ In[37]:= Opening[zone, 2]
 Out[37]= -Image-
 ```
 
+### Applications (3)
+
+A lone bright pixel is smaller than the element, so it is removed
+
+```mathematica
+In[38]:= ImageData[Opening[Image[{{0, 0, 0}, {0, 1, 0}, {0, 0, 0}}], 1]]
+Out[38]= {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}}
+```
+
+A 2x2 bright blob
+
+```mathematica
+In[39]:= blob = Image[{{0, 0, 0, 0}, {0, 1, 1, 0}, {0, 1, 1, 0}, {0, 0, 0, 0}}];
+```
+
+Idempotent: opening twice is opening once
+
+```mathematica
+In[40]:= ImageData[Opening[blob, 0]] == ImageData[Opening[Opening[blob, 0], 0]]
+Out[40]= True
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_opening` is `morph_builtin(res, MORPH_ERODE, true)`: an **erosion
+followed by a dilation** with the *same* structuring element. It removes bright features
+smaller than the element while leaving larger ones close to their original size. Both passes go
+through `morph_run` (the separable van Herk–Gil–Werman min/max, bit-exact with the direct
+form); `two_pass` runs the second with the opposite operator (`MORPH_DILATE`).
+
+Using the same element both times is what makes the pair **idempotent**:
+`Opening[Opening[f]] = Opening[f]`, the defining property of an opening and the reason opening
+twice is not a sharpening loop. A different second element would still smooth but would no
+longer be an opening. Opening sits in the morphology ordering
+`Erosion ≤ Opening ≤ f ≤ Closing ≤ Dilation` pointwise everywhere — the replicate padding is
+what keeps that true at the border.
+
+**Data structures.** A decoded unit buffer plus one scratch buffer for the intermediate
+erosion; the result through `image_build_typed`/`_real`. A `"Bit"` image stays `"Bit"` (a
+max/min of stored values is a stored value), other types become `"Real"`; either way it is a
+packed buffer (`make check-image-packing`).
+
+**Complexity / limits.** `O(pixels)` for a full rectangle (two van Herk passes),
+`O(pixels · |support|)` for an arbitrary element. Radius ≤ 256 planar, ≤ 64 volumetric.
 
 **Attributes:** `Protected`.
 
@@ -138,3 +181,16 @@ Out[37]= -Image-
 - Source: [`src/imagefilter.c`](https://github.com/stblake/mathilda/blob/main/src/imagefilter.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Opening[image, r]` erodes then dilates with the same element, removing bright features smaller
+than it while leaving larger ones close to their original size.
+
+It is **idempotent**: `Opening[Opening[f]] == Opening[f]`, the defining property of an opening
+and the reason opening twice is not a sharpening loop — which is why the same element must be
+used for both passes. Opening brackets the image from below in the morphology ordering
+`Erosion ≤ Opening ≤ image ≤ Closing ≤ Dilation`. A `"Bit"` image stays `"Bit"`; other types
+give `"Real"`.

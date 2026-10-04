@@ -7,9 +7,35 @@
 
 **`Information[symbol] or ?symbol returns information on symbol.`**
 
-## Examples
+## Examples (4)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
+
+```mathematica
+In[1]:= StringQ[Information[Sin]]
+Out[1]= True
+
+In[2]:= Head[Information[Plus]]
+Out[2]= String
+```
+
+### Applications (2)
+
+Information hands back the docstring as a string
+
+```mathematica
+In[3]:= StringQ[Information[Sin]]
+Out[3]= True
+```
+
+Its result is a String
+
+```mathematica
+In[4]:= Head[Information[Plus]]
+Out[4]= String
+```
 
 ## Implementation notes
 
@@ -25,3 +51,16 @@ _No verified examples yet for this function._
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
 - Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
 - Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Information[sym]` returns the symbol's docstring — the same text the interactive `?sym`
+shortcut prints — as a string, or a `No information available` string when the symbol has
+none. Every builtin registers its docstring via `symtab_set_docstring`, which is the store
+both `Information` and `?sym` read.
+
+Because the result is the usage text itself (long, multi-line, and specific to the symbol
+asked about), the examples above probe it structurally; in the REPL you would simply type
+`?Sin`.

@@ -21,7 +21,7 @@ Pads each string on the right with spaces to the length of the longest, making t
 
 Pads or truncates each string to length n.
 
-## Examples (4)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -39,6 +39,29 @@ Out[3]= {"    a", "   ab", "  abc", " abcd", "abcde"}
 
 In[4]:= StringPadLeft[{"a", "ab", "abc", "abcd", "abcde"}, 3]
 Out[4]= {"  a", " ab", "abc", "bcd", "cde"}
+```
+
+### Applications (3)
+
+Right-pad to width 5 with zeros
+
+```mathematica
+In[5]:= StringPadRight["42", 5, "0"]
+Out[5]= "42000"
+```
+
+A multi-character pad cycles
+
+```mathematica
+In[6]:= StringPadRight["abc", 7, ".-"]
+Out[6]= "abc.-.-"
+```
+
+Too long: truncation keeps the FIRST n
+
+```mathematica
+In[7]:= StringPadRight["abcdef", 3]
+Out[7]= "abc"
 ```
 
 ## Algorithm
@@ -65,12 +88,29 @@ Strings are treated as raw byte arrays (consistent with StringRepeat / StringTak
 
 ## Implementation notes
 
+**Algorithm.** `StringPadRight` is the mirror of `StringPadLeft` and shares the same `pad_dispatch` (invoked with the `left` flag false). It pads on the right and, when the string is longer than `n`, truncates keeping the first `n` bytes. The pad string (a single space by default) is laid down cyclically from the left, `p[i mod plen]`, so a multi-character pad such as `".-"` repeats `.-.-…`. A `List` first argument pads every element to the explicit `n`, or to the longest element in the one-argument form.
+
+**Data structures.** One output buffer per string; a `List` result for a list input.
+
+**Complexity / limits.** `O(n)` per string. An arity outside 1–3 emits `StringPadRight::argb`. A non-integer/negative `n`, a non-string or list-valued pad, or an empty pad when padding is required, leaves the call unevaluated. Not `Listable`; byte-length based.
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [StringPadLeft](../../string-operations/StringPadLeft/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/strings/stringpad.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringpad.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
 - Tests: [`tests/test_stringpad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringpad.c)
+
+## Notes & additional examples
+
+### Notes
+
+`StringPadRight` is the mirror of `StringPadLeft`: it pads on the right and, when
+truncating, keeps the first `n` bytes. The two share one implementation
+(`pad_dispatch`) selected by a `left` flag.
+
+The pad string is laid down cyclically from the left, so a multi-character pad
+such as `".-"` repeats `.-.-...`. Lengths are byte counts.

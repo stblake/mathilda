@@ -18,7 +18,7 @@ expanded form of expr. form may be a symbol, a kernel, or a product of terms; ex
 
 </details>
 
-## Examples (5)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -39,6 +39,43 @@ Out[4]= 2
 
 In[5]:= Exponent[1 + x^2 + a x^3, x, List]
 Out[5]= {0, 2, 3}
+```
+
+### Applications (5)
+
+The highest power of x
+
+```mathematica
+In[6]:= Exponent[1 + x^2 + x^5, x]
+Out[6]= 5
+```
+
+Expr need not be expanded first
+
+```mathematica
+In[7]:= Exponent[(1 + x)^3, x]
+Out[7]= 3
+```
+
+Collect the exponent set with a custom h
+
+```mathematica
+In[8]:= Exponent[1 + x + x^2, x, List]
+Out[8]= {0, 1, 2}
+```
+
+A list of forms threads
+
+```mathematica
+In[9]:= Exponent[a x^2 + b x y^3, {x, y}]
+Out[9]= {2, 3}
+```
+
+The zero polynomial: Max of an empty set
+
+```mathematica
+In[10]:= Exponent[0, x]
+Out[10]= -Infinity
 ```
 
 ## Algorithm
@@ -91,6 +128,35 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
+**Algorithm.** `builtin_exponent` first expands its argument (`expr_expand`) and
+splits the result into additive terms — the arguments of a top-level `Plus`, or
+the whole expression as a single term. The genuine zero polynomial expands to a
+numeric `0`, which has *no* terms, so its exponent set is empty and the wrapper
+fires on nothing (`Max[]` = `-Infinity`). `form` is decomposed into `(base, fe)`
+pairs by `form_pairs` — a symbol or kernel gives `(form, 1)`, a `Power[b, e]`
+gives `(b, e)`, and a `Times` gives one pair per non-numeric factor. For each
+monomial term `exp_in_term` reads the power of each base (`base_exp_in_monomial`:
+1 if the base *is* the term, the exponent of a matching `Power`, the sum over a
+`Times`, else `0`); for a single-base form the term's exponent is that power
+divided by `fe`, and for a product form it is the `Min` over bases of
+`base-exponent / fe` — the largest `k` with `form^k` dividing the term. The
+exponents are insertion-sorted by `expr_compare`, de-duplicated with `expr_eq`,
+and handed to `h` (default `Max`); `Exponent[expr, form, h]` substitutes any
+other `h`.
+
+**Data structures.** Everything is `Expr` trees. A growable `Expr**` holds the
+per-term exponent set (one entry per additive term before dedup), and
+`form_pairs` fills parallel `Expr**` arrays of bases and form-exponents. Symbolic
+or rational exponents are kept as expressions and flow through `Max`/`Min`
+unevaluated (so `Exponent[x^(1/2) + x^(1+n), x]` returns a `Max[1/2, 1 + n]`).
+
+**Complexity / limits.** Dominated by the initial `Expand`; the exponent-set
+sort is an `O(n^2)` insertion sort over the small set of distinct term degrees.
+`Exponent` is **purely syntactic** — no zero-coefficient recognition, so a term
+with a coefficient that is zero but not in normal form still counts. It is a
+symbolic structural head with no packed/NDArray or `Compile[]` path; `Listable`
+makes `Exponent[expr, {f1, f2, ...}]` thread into a per-form list for free.
+
 - `Listable`, `Protected`.
 - The default aggregator is `h = Max`. `Exponent[expr, form, Min]` gives the lowest power; `Exponent[expr, form, List]` gives the sorted, de-duplicated set of exponents.
 - `form` may be a symbol, a kernel (e.g. `Sin[x]`), or a product of terms.
@@ -104,9 +170,23 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/poly/exponent.c`](https://github.com/stblake/mathilda/blob/main/src/poly/exponent.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_characteristicpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_characteristicpolynomial.c)
 - Tests: [`tests/test_expand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expand.c)
 - Tests: [`tests/test_exponent.c`](https://github.com/stblake/mathilda/blob/main/tests/test_exponent.c)
 - Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Exponent[expr, form]` gives the maximum power of `form` in the expanded form of
+`expr`, applying `h` (default `Max`) to the set of exponents found;
+`Exponent[expr, form, h]` substitutes any other `h`, so `h = List` returns the
+whole sorted exponent set. `expr` is expanded first, so it need not be given
+expanded, and `form` may be a symbol, a kernel, or a product of terms. The
+reading is **purely syntactic** — there is no zero-coefficient recognition — and
+the genuine zero polynomial has an empty exponent set, so `Exponent[0, x]` is
+`Max[]` = `-Infinity`. Because `Exponent` is `Listable`, a list of forms threads
+into a list of exponents.

@@ -26,7 +26,7 @@ and gives the value expr for the whole function. Return takes effect as soon as 
 
 </details>
 
-## Examples (5)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -49,6 +49,29 @@ In[5]:= f[n_] := Module[{s = 0}, Do[s = s + i; If[s > 10, Return[i]], {i, 1, n}]
 Out[5]= 5
 ```
 
+### Applications (3)
+
+Return exits the enclosing Function body
+
+```mathematica
+In[6]:= Function[x, If[x > 0, Return[pos], Return[neg]]][3]
+Out[6]= pos
+```
+
+Breaks out of a loop inside a Module
+
+```mathematica
+In[7]:= h[n_] := Module[{s = 0}, Do[s += i; If[s > 10, Return[i]], {i, 1, n}]]; h[10]
+Out[7]= 5
+```
+
+The two-argument form targets a named boundary; with no Block here it survives
+
+```mathematica
+In[8]:= Module[{}, Do[Return[5, Block], {3}]]
+Out[8]= Return[5, Block]
+```
+
 ## Implementation notes
 
 **Algorithm.** `Return` has no C builtin handler; it is a control-flow marker (just `ATTR_PROTECTED` in `attr.c`) recognized by `eval_classify_return` in `src/eval.c`. A `Return[...]` expression simply evaluates to itself and bubbles up through `CompoundExpression` and enclosing constructs unchanged until it reaches a boundary that inspects it. `eval_classify_return(e, boundary_head, &out)` uses pointer equality on the interned `SYM_Return` head and returns one of three actions: `CONSUME` with an out-value (the loop yields it), `PROPAGATE` (keep bubbling), or `NONE`. `Return[]` consumes with a fresh `Null`; `Return[expr]` consumes at the nearest boundary regardless of head, copying `expr`; `Return[expr, h]` consumes only at a boundary whose head symbol equals `h` (else PROPAGATE). The classifier is deliberately side-effect free — the single allocation on CONSUME is the copied payload, needed because the caller frees the original marker. The iteration loops (`Do`/`For`/`While`) call it via `iter_flow_classify`, and the body of user functions / `CompoundExpression` is the other principal boundary. Extra arguments beyond the second are ignored.
@@ -69,3 +92,17 @@ Out[5]= 5
 - Tests: [`tests/test_iter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_iter.c)
 - Tests: [`tests/test_return.c`](https://github.com/stblake/mathilda/blob/main/tests/test_return.c)
 - Tests: [`tests/test_scan.c`](https://github.com/stblake/mathilda/blob/main/tests/test_scan.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Return[expr]` yields `expr` from the innermost enclosing scope or loop boundary —
+`Function`, `Module`, `Block`, `With`, `Do`, `For` or `While`. `Return[]` is
+shorthand for `Return[Null]`.
+
+`CompoundExpression` and the `Hold`-free heads (`If`, `Which`, `Switch`, …) let
+the marker bubble through unchanged so it can reach the enclosing boundary. The
+two-argument `Return[expr, h]` skips past intervening boundaries to the nearest
+one whose head is `h`; if none matches, the marker survives at top level as a
+literal expression (as in the third example, where there is no enclosing `Block`).

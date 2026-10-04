@@ -21,7 +21,7 @@ Bins of width step.
 
 Explicit range and width. Options: ChartStyle   color/style list cycling through bins BarSpacing   gap fraction of bin width (default 0.2) Standard Graphics options pass through.
 
-## Examples (5)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -32,7 +32,7 @@ In[1]:= Histogram[Table[RandomReal[], {200}]]
 Out[1]= -Graphics-
 
 In[2]:= data = Table[RandomReal[], {200}]
-Out[2]= {0.163459, 0.399881, 0.180261, 0.488293, 0.364611, 0.546171, 0.799625, 0.567222, 0.275357, 0.518935, 0.854059, 0.891557, 0.609034, 0.893852, 0.945741, 0.203367, 0.0153462, 0.552036, 0.82574, 0.120352, 0.543773, 0.718595, 0.818073, 0.647427, 0.157353, 0.336319, 0.72078, 0.0387531, 0.871289, 0.949323, 0.813373, 0.963234, 0.918982, 0.73235, 0.0332513, 0.363044, 0.0295465, 0.449457, 0.908902, 0.660356, 0.848165, 0.119556, 0.174597, 0.93679, 0.681477, 0.92874, 0.578528, 0.332455, 0.0199278, 0.879728, 0.404211, 0.657884, 0.118411, 0.232114, 0.144167, 0.789001, 0.459248, 0.640935, 0.772508, 0.586038, 0.969974, 0.191942, 0.458281, 0.75289, 0.52573, 0.868656, 0.00643903, 0.825028, 0.374633, 0.538904, 0.516429, 0.636781, 0.143862, 0.252373, 0.471298, 0.514287, 0.32073, 0.46356, 0.661759, 0.176205, 0.908985, 0.390064, 0.831806, 0.141807, 0.922481, 0.104998, 0.551512, 0.42463, 0.25566, 0.490701, 0.867931, 0.991217, 0.164728, 0.365557, 0.0904831, 0.501906, 0.0848454, 0.702384, 0.0306247, 0.31768, 0.434679, 0.235537, 0.752202, 0.0640635, 0.826504, 0.326468, 0.71664, 0.244142, 0.689698, 0.54554, 0.405133, 0.385448, 0.99899, 0.836612, 0.246385, 0.851748, 0.840174, 0.817124, 0.0592616, 0.234919, 0.198897, 0.479217, 0.483222, 0.509122, 0.995372, 0.114941, 0.409288, 0.558008, 0.828863, 0.979411, 0.537475, 0.0478138, 0.858764, 0.550252, 0.594273, 0.954652, 0.20372, 0.850857, 0.789125, 0.169924, 0.991752, 0.962901, 0.373489, 0.957726, 0.383316, 0.896055, 0.0842293, 0.271931, 0.295567, 0.935604, 0.454057, 0.674897, 0.322378, 0.843365, 0.163633, 0.635681, 0.785748, 0.366094, 0.131396, 0.69922, 0.369056, 0.685819, 0.25458, 0.823105, 0.0108974, 0.582242, 0.607249, 0.465932, 0.798227, 0.0578118, 0.36602, 0.600256, 0.742257, 0.571475, 0.589142, 0.898007, 0.736182, 0.928651, 0.679331, 0.759978, 0.618506, 0.995947, 0.296229, 0.338429, 0.926193, 0.0183857, 0.0732505, 0.997971, 0.0812398, 0.100212, 0.26097, 0.0796988, 0.936997, 0.448482, 0.30116, 0.967142, 0.492933, 0.222438, 0.891999, 0.727065}
+Out[2]= {0.898168, 0.822246, 0.486932, 0.908284, 0.428175, 0.932029, 0.131627, 0.853968, 0.0497704, 0.584082, 0.302085, 0.137246, 0.701554, 0.55101, 0.282818, 0.717397, 0.420001, 0.248719, 0.352146, 0.834998, 0.0979758, 0.104027, 0.709625, 0.835462, 0.729187, 0.597183, 0.53771, 0.946709, 0.41, 0.305271, 0.0779037, 0.334263, 0.354373, 0.00963086, 0.591771, 0.523084, 0.0360014, 0.392808, 0.183878, 0.223776, 0.23013, 0.681739, 0.636806, 0.194441, 0.203807, 0.725877, 0.375132, 0.867256, 0.431451, 0.810405, 0.772533, 0.4733, 0.608341, 0.548074, 0.650504, 0.767579, 0.402964, 0.903085, 0.255249, 0.488619, 0.215692, 0.483165, 0.0850616, 0.975261, 0.664815, 0.698508, 0.242494, 0.177173, 0.152351, 0.678393, 0.764858, 0.0119961, 0.724651, 0.053345, 0.38038, 0.546757, 0.101937, 0.691765, 0.425465, 0.10441, 0.236588, 0.629644, 0.256469, 0.359752, 0.243209, 0.765368, 0.0625062, 0.395556, 0.463383, 0.367876, 0.242292, 0.280831, 0.222355, 0.95352, 0.916981, 0.291277, 0.790124, 0.656521, 0.496403, 0.36685, 0.605281, 0.190074, 0.368757, 0.750386, 0.218605, 0.854503, 0.0631354, 0.492749, 0.78421, 0.067381, 0.404588, 0.887172, 0.986161, 0.109416, 0.0188128, 0.857345, 0.199804, 0.397022, 0.964901, 0.137297, 0.545313, 0.550262, 0.62597, 0.508226, 0.177263, 0.900855, 0.670446, 0.924974, 0.986038, 0.457149, 0.730116, 0.357833, 0.264861, 0.489474, 0.0695345, 0.228527, 0.0651126, 0.878594, 0.0886117, 0.858396, 0.870913, 0.939162, 0.260281, 0.0733191, 0.756655, 0.905309, 0.0368469, 0.89336, 0.385519, 0.597237, 0.888194, 0.429421, 0.41403, 0.525518, 0.890559, 0.657609, 0.197113, 0.833592, 0.144836, 0.16589, 0.738772, 0.095379, 0.6518, 0.263895, 0.144144, 0.276424, 0.933648, 0.342755, 0.365329, 0.640436, 0.346002, 0.595686, 0.0739085, 0.883215, 0.464774, 0.628304, 0.849411, 0.490909, 0.376777, 0.536012, 0.539017, 0.950868, 0.83077, 0.207706, 0.553058, 0.753565, 0.477569, 0.333518, 0.269935, 0.448931, 0.887562, 0.130198, 0.396262, 0.902854, 0.460089, 0.457556, 0.342479, 0.952447, 0.504037, 0.291491}
 
 In[3]:= Histogram[data, 20]
 Out[3]= -Graphics-
@@ -42,6 +42,25 @@ Out[4]= -Graphics-
 
 In[5]:= Histogram[data, {0, 1, 0.05}]
 Out[5]= -Graphics-
+```
+
+### Applications (5)
+
+```mathematica
+In[6]:= Histogram[{1, 2, 2, 3, 3, 3, 4, 4, 4, 4}]
+Out[6]= -Graphics-
+
+In[7]:= Histogram[Range[100], 10]
+Out[7]= -Graphics-
+
+In[8]:= Histogram[Range[100], {25}]
+Out[8]= -Graphics-
+
+In[9]:= Histogram[Range[100], {0, 100, 25}]
+Out[9]= -Graphics-
+
+In[10]:= Length[Cases[Histogram[Range[100], 10], _Rectangle, Infinity]]
+Out[10]= 10
 ```
 
 ## Algorithm
@@ -83,11 +102,51 @@ Options (both):
 
 ## Implementation notes
 
+**Algorithm.** `builtin_histogram` lives alongside `BarChart` in `barchart.c` and
+shares its `split_chart_options` and `emit_bar` machinery. It is a plain
+`Protected` builtin (**not** `HoldAll`): the data is evaluated and coerced to
+reals. `histogram_parse_bins` reads the bin specification —
+`Histogram[data]` uses **Sturges' rule** `n_bins = ceil(log2 n) + 1` clamped to
+`[2, 50]`; `Histogram[data, k]` gives `k` bins; `Histogram[data, {step}]` gives
+`ceil((dmax - dmin)/step)` bins over the data range; `Histogram[data, {min, max,
+step}]` fixes the range and gives `ceil((max - min)/step)` bins. Counting: with
+`bin_w = (bin_max - bin_min)/n_bins`, each value lands in bin
+`(int)((v - bin_min)/bin_w)` clamped to `[0, n_bins-1]`, accumulated into an
+`int` count array. Empty bins are skipped (no zero-height rectangle). Each
+populated bin is drawn by the shared `emit_bar` as a 5-primitive bar over
+`[x0, x0 + bin_w] x [0, count]`, coloured by `bar_color` indexed by the bin.
+The result is an inert `Graphics[prims, opts...]` with `PlotRange` x = the bin
+range and y = `[0, max_count*1.06 + 0.5]`.
+
+**Data structures.** `ChartOpts`; a `calloc`'d `int counts[n_bins]`; `Expr**
+prims` sized by the populated-bin count.
+
+**Complexity / limits.** `O(n_vals + n_bins)`. Uniform-width bins only; Sturges'
+count is hard-capped at 50; frequency counts only (no density/PDF
+normalisation). Defaults `Axes -> True`, `AspectRatio -> 0.618` (`BarSpacing` is
+parsed but unused in the histogram layout).
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [ChartStyle](../../other-advanced/ChartStyle/), [BarSpacing](../../other-advanced/BarSpacing/)
 
-- Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
+- H. A. Sturges, *The Choice of a Class Interval*, J. Amer. Statist. Assoc. **21** (1926) 65-66 — the default bin count.
+- Source: [`src/graphics/barchart.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/barchart.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)
+
+## Notes & additional examples
+
+### Notes
+
+`Histogram` lives alongside `BarChart` and shares its bar-drawing machinery; it is
+`Protected` but **not** `HoldAll`. The bin specification is flexible:
+`Histogram[data]` uses **Sturges' rule** (`ceil(log2 n) + 1` bins, clamped to
+`[2, 50]`); `Histogram[data, k]` gives `k` bins; `Histogram[data, {step}]` fixes the
+bin width; `Histogram[data, {min, max, step}]` fixes the range and width.
+
+Each value is dropped into its bin and the bin counts become bar heights; empty
+bins are skipped (no zero-height rectangle). Only equal-width frequency bins are
+supported — there is no density/PDF normalisation. Defaults are `Axes -> True`,
+`AspectRatio -> 0.618`.

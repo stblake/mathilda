@@ -1,0 +1,8 @@
+---
+source: src/graph/gops_cycles.c
+---
+**Algorithm.** `builtin_find_cycle` takes `FindCycle[g]`, `FindCycle[g, kspec]`, `FindCycle[g, kspec, n]` and `FindCycle[{g, v}, ...]`, with `kspec` being `k`, `Infinity`, `{k}` or `{kmin, kmax}` (cycle length counts edges) and `n` a positive integer or `All`. The plain one-cycle form is a stack-based DFS (`dfs_any_cycle`) that reports the first back edge to a vertex on the current root path, written from that ancestor, following Mathematica's search order. With `{g, v}` it runs a BFS from `v` (`bfs_cycle_through`). Length-bounded and multi-cycle forms backtrack from each vertex as the lowest-positioned vertex of the cycle, so each cycle is reported once rather than once per rotation or direction. Undirected cycles need length 3 or more, directed ones length 2 or more.
+
+**Data structures.** The search runs over the per-graph edge-index views (`eu`/`ev`/`directed`) and a CSR incidence structure, with `int` arrays for the DFS stack, visited marks and current path; results accumulate in a growable list of cycle expressions, each an edge list.
+
+**Complexity / limits.** `O(V + E)` for the single-cycle and through-a-vertex forms. The length-bounded and enumerating forms are exponential in the worst case (a cycle of exact length k is NP-hard), so they poll `TimeConstrained` and give up, leaving the call unevaluated, after a fixed step budget. Mixed directed/undirected graphs, and weighted graphs with a length spec, are left unevaluated. No cycle gives `{}`. For the bounded forms the choice and order of cycles is Mathilda's own deterministic one.

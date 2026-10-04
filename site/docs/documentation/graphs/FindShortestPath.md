@@ -7,7 +7,7 @@
 
 **`FindShortestPath[g,s,t] gives a shortest path from s to t as a list of vertices ({} if none).`**
 
-## Examples (7)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -42,6 +42,22 @@ Out[6]= {1, 4}
 
 In[7]:= GraphDistance[Graph[{1,2,3,4},{1->2,2->3,3->4,1->4},EdgeWeight->{1,1,1,10}], 1, 4]
 Out[7]= 3.0
+```
+
+### Applications (2)
+
+Follows edge directions
+
+```mathematica
+In[8]:= FindShortestPath[Graph[{1 -> 2, 2 -> 3, 3 -> 1, 3 -> 4}], 1, 4]
+Out[8]= {1, 2, 3, 4}
+```
+
+No path exists
+
+```mathematica
+In[9]:= FindShortestPath[Graph[{1 -> 2, 3 -> 4}], 1, 4]
+Out[9]= {}
 ```
 
 ## Options & behaviour
@@ -80,6 +96,25 @@ Memory (SPEC section 4): returns freshly-allocated results; frees res.
 
 ## Implementation notes
 
+**Algorithm.** `builtin_find_shortest_path` returns a shortest `s`-`t` path as a list of
+vertices. It dispatches on `graph_weights_usable(g)`: a graph carrying an `EdgeWeight` list in
+which every weight is a non-negative, non-complex number runs **Dijkstra**; otherwise — an
+unweighted graph, or one with any symbolic, negative or complex weight — it falls back to
+**BFS** rather than erroring. Both follow edge direction on a directed graph and treat an
+undirected edge as usable both ways, and both reconstruct the path by walking a `parent[]` array
+back from `t`.
+
+**Data structures.** BFS uses the shared CSR `GraphAdj` with an integer FIFO queue, a `dist[]`
+array (`-1` = unreached) and `parent[]`. Dijkstra builds a *separate* call-scoped weighted
+adjacency `WAdj` (via a `GraphVIdx` hash) rather than widening the shared `GraphAdj`, with a
+`double` `dist[]` (`DBL_MAX` = unreached), a `done[]` flag array and `parent[]`; it selects the
+next vertex by a linear array scan, not a heap.
+
+**Complexity / limits.** BFS is `O(V + E)`; the array-scan Dijkstra is `O(V^2)`. When there is
+no `s`-`t` path the result is `{}` (the empty list). A non-graph argument, or an `s`/`t` that is
+not a vertex, returns unevaluated. (The companion `GraphDistance` returns the path *length*, or
+`Infinity` when unreachable.)
+
 - `Protected`. Shared by the search & computation heads (`FindShortestPath`,
   `GraphDistance`, `ConnectedComponents`, `WeaklyConnectedComponents`,
   `StronglyConnectedComponents`, `FindSpanningTree`, `ConnectedGraphQ`,
@@ -110,6 +145,19 @@ Memory (SPEC section 4): returns freshly-allocated results; frees res.
 
 **See also:** [GraphDistance](../../graphs/GraphDistance/), [ConnectedComponents](../../graphs/ConnectedComponents/), [WeaklyConnectedComponents](../../graphs/WeaklyConnectedComponents/), [StronglyConnectedComponents](../../graphs/StronglyConnectedComponents/), [FindSpanningTree](../../graphs/FindSpanningTree/), [ConnectedGraphQ](../../graphs/ConnectedGraphQ/), [VertexConnectivity](../../graphs/VertexConnectivity/), [EdgeWeight](../../graphs/EdgeWeight/)
 
-- Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
+- E. W. Dijkstra, *A note on two problems in connexion with graphs*, Numer. Math. **1** (1959) 269-271.
+- Source: [`src/graph/shortestpath.c`](https://github.com/stblake/mathilda/blob/main/src/graph/shortestpath.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
+
+## Notes & additional examples
+
+### Notes
+
+The result is the path from `s` to `t` as a list of vertices; it is `{}` when no path exists.
+On a directed graph the path respects edge directions.
+
+A graph that carries non-negative numeric `EdgeWeight`s is traversed with Dijkstra's algorithm,
+so the path minimises total weight; an unweighted graph (or one with symbolic or negative
+weights) falls back to a breadth-first search that minimises the hop count. `GraphDistance`
+gives the corresponding path length.

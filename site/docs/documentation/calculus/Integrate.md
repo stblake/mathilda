@@ -314,7 +314,7 @@ In[58]:= Integrate[(x^2 + 1)/(x^4 + 1), x]
 Out[58]= ArcTan[x/Sqrt[2]]/Sqrt[2] + ArcTan[(x + x^3)/Sqrt[2]]/Sqrt[2]
 
 In[59]:= Integrate[x*Exp[x], x]
-Out[59]= -E^x + x E^x
+Out[59]= E^x (-1 + x)
 
 In[60]:= Integrate[1/(x*Log[x]), x]
 Out[60]= Log[Log[x]]

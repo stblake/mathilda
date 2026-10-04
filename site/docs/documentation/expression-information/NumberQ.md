@@ -9,7 +9,7 @@
 
 gives True if expr is an explicit number (Integer, BigInt, Rational, Real, MPFR, or Complex), and False otherwise.  Symbolic constants such as Pi give False; use NumericQ for those.
 
-## Examples (10)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -66,6 +66,31 @@ In[10]:= MachineNumberQ[1 + 2 I]
 Out[10]= False
 ```
 
+### Applications (5)
+
+```mathematica
+In[11]:= NumberQ[3]
+Out[11]= True
+
+In[12]:= NumberQ[2/3]
+Out[12]= True
+
+In[13]:= NumberQ[1 + 2 I]
+Out[13]= True
+```
+
+A symbolic constant is not an explicit number
+
+```mathematica
+In[14]:= NumberQ[Pi]
+Out[14]= False
+```
+
+```mathematica
+In[15]:= NumberQ[x]
+Out[15]= False
+```
+
 ## Implementation notes
 
 `builtin_numberq` (`src/core.c`) returns `True` for an explicit number — `EXPR_INTEGER`, `EXPR_REAL`, `EXPR_BIGINT`, `EXPR_MPFR` (under `USE_MPFR`), or a `Rational`/`Complex` head — and `False` otherwise. (Contrast `NumericQ`, whose `is_numeric_quantity` helper also accepts symbolic constants like `Pi` and numeric-function calls.)
@@ -82,3 +107,14 @@ Out[10]= False
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
 - Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+
+## Notes & additional examples
+
+### Notes
+
+`NumberQ[expr]` is `True` for an **explicit** number — an integer, bigint, machine
+or arbitrary-precision real, rational, or complex. It draws the line exactly where
+`NumericQ` does not: `NumberQ[Pi]` is `False` because `Pi` is a symbol that merely
+*has* a numeric value, whereas `NumericQ[Pi]` is `True`. Use `NumberQ` when you
+need an already-evaluated literal number, and `NumericQ` when a symbolic constant
+or a numeric-function call should also qualify.

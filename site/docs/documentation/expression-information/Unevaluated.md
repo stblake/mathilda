@@ -16,7 +16,7 @@ f\[Unevaluated\[expr\]\] effectively works by temporarily holding that argument,
 
 </details>
 
-## Examples (6)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -40,6 +40,42 @@ Out[5]= HoldComplete[Unevaluated[1 + 2]]
 
 In[6]:= Attributes[Unevaluated]
 Out[6]= {HoldAllComplete, Protected}
+```
+
+### Applications (6)
+
+Length sees the held Plus, not a sum
+
+```mathematica
+In[7]:= Length[Unevaluated[Plus[5, 6, 7, 8]]]
+Out[7]= 4
+```
+
+```mathematica
+In[8]:= Length[Unevaluated[1 + 2 + 3]]
+Out[8]= 3
+```
+
+Stripping happens after Sequence splicing
+
+```mathematica
+In[9]:= Length[Unevaluated[Sequence[a, b]]]
+Out[9]= 2
+```
+
+A genuinely held slot keeps the wrapper
+
+```mathematica
+In[10]:= Hold[Unevaluated[1 + 2]]
+Out[10]= Hold[Unevaluated[1 + 2]]
+```
+
+```mathematica
+In[11]:= HoldComplete[Unevaluated[1 + 2]]
+Out[11]= HoldComplete[Unevaluated[1 + 2]]
+
+In[12]:= Attributes[Unevaluated]
+Out[12]= {HoldAllComplete, Protected}
 ```
 
 ## Implementation notes
@@ -67,3 +103,20 @@ Out[6]= {HoldAllComplete, Protected}
 - Tests: [`tests/test_expr_pool.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expr_pool.c)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
 - Tests: [`tests/test_purefunc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_purefunc.c)
+
+## Notes & additional examples
+
+### Notes
+
+`f[Unevaluated[expr]]` makes an ordinary head `f` hold the single argument `expr`
+that it would normally evaluate: the wrapper is stripped in the non-held slot, but
+stripping it does **not** force evaluation of the exposed content for that step —
+so `Length[Unevaluated[1 + 2 + 3]]` is `3`, because `Length` sees the held
+`Plus[1, 2, 3]`.
+
+The wrapper is **not** stripped in a slot that was already held — under `HoldAll`,
+`HoldFirst`/`HoldRest`, or `HoldAllComplete` — because the argument was never going
+to be evaluated: `Hold[Unevaluated[1 + 2]]` stays intact. Stripping happens after
+`Sequence` flattening, so a `Sequence` directly inside `Unevaluated` survives into
+the argument slot. `Unevaluated` itself carries `HoldAllComplete`, so as a
+top-level expression it evaluates to itself.

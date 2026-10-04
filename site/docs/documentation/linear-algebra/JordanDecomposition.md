@@ -16,7 +16,7 @@ JordanDecomposition works on every input family supported by the rest of the lin
 
 </details>
 
-## Examples (3)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -31,6 +31,29 @@ Out[2]= {{24, 0, 0}, {0, 48, 1}, {0, 0, 48}}
 
 In[3]:= {s, j} = JordanDecomposition[{{-1.2, 2.7, 3.8}, {4.2, 4.4, 5.3}, {3.5, 7.6, 6.8}}]; Diagonal[j]
 Out[3]= {13.7715, -2.12527, -1.6462}
+```
+
+### Applications (3)
+
+A defective matrix: j carries a 1 on the superdiagonal
+
+```mathematica
+In[4]:= JordanDecomposition[{{2, 1}, {0, 2}}]
+Out[4]= {{{1, 0}, {0, 1}}, {{2, 1}, {0, 2}}}
+```
+
+Distinct eigenvalues, so j is diagonal
+
+```mathematica
+In[5]:= JordanDecomposition[{{1, 0}, {0, 3}}]
+Out[5]= {{{1, 0}, {0, 1}}, {{1, 0}, {0, 3}}}
+```
+
+One 2x2 Jordan block and one 1x1 block
+
+```mathematica
+In[6]:= JordanDecomposition[{{2, 1, 0}, {0, 2, 0}, {0, 0, 3}}]
+Out[6]= {{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}, {{2, 1, 0}, {0, 2, 0}, {0, 0, 3}}}
 ```
 
 ## Algorithm
@@ -80,6 +103,12 @@ Memory contract: standard builtin ownership (SPEC.md §4).  This file does
 NOT free `res`; it returns a fresh Expr* the evaluator owns, or NULL to leave the call unevaluated.
 
 ## Implementation notes
+
+**Algorithm.** `builtin_jordandecomposition` gives `{s, j}` with `j` the Jordan canonical form of the square matrix `m` and `s` the similarity matrix, so that `m == s . j . Inverse[s]`; `j` is block-diagonal in Jordan blocks (an eigenvalue on the diagonal, 1's on the superdiagonal) and the columns of `s` are the generalized eigenvectors grouped into chains that match `j`'s blocks. Two paths share one chain engine. The exact/symbolic path `jd_exact_core` takes the characteristic polynomial from `eigen_char_poly_faddeev`, solves it for the distinct eigenvalues with their algebraic multiplicities, and for each `lambda` forms `N = m - lambda*I` and the nullity sequence `nu_i = dim ker(N^i)`, which drives a top-down chain-top selection and bottom-up chain construction using `eigen_null_space` plus a `MatrixRank`-based extend-a-spanning-set-to-a-basis primitive, every step in the field of the entries. The numeric path `jd_numeric_fast` exploits the fact that a generic numeric matrix has distinct eigenvalues and so is diagonalizable: it reads the eigenvectors straight off the numeric eigensolver (the `Eigenvectors` head, LAPACK-style Direct kernel or the MPFR twin) as the columns of `s` and puts the per-column Rayleigh eigenvalue on `j`'s diagonal.
+
+**Data structures.** The result is a nested `List` `{s, j}`. The internal matrix/vector arithmetic runs through the ordinary heads so that every field (exact rational, free-symbolic, complex) is handled; `jd_dot` calls `dot2`, `eval_and_free`s the product, and `pack_unpack`s it so a machine operand's packed `NDArray` result is turned back into an indexable `List`. The file reuses the eigen helpers (`eigen_char_poly_faddeev`, `eigen_solve_poly`, `eigen_null_space`, ...) from `eigen_internal.h`, and the head is on `src/pack.c`'s `AWARE` list. Input families: exact integer/rational (exact output), free-symbolic with closed-form eigenvalues, complex, machine-precision Real, and arbitrary-precision MPFR (output at the input precision).
+
+**Complexity / limits.** The exact path is dominated by factoring the characteristic polynomial and the per-eigenvalue nullity-sequence rank computations over the entry field; the numeric path scales (a 100×100 random matrix never touches exact arithmetic). A numerically defective matrix is rationalised, decomposed by the exact core, and numericalised back; an exact matrix with an irrational, defective eigenvalue whose generalized eigenspace cannot be spanned exactly is left unevaluated rather than returned wrong. A non-square or empty matrix emits `JordanDecomposition::matsq` and the call is left unevaluated.
 
 - `Protected`.
 - Works on every input family:
@@ -134,6 +163,24 @@ NOT free `res`; it returns a fresh Expr* the evaluator owns, or NULL to leave th
 
 **See also:** [Solve](../../solutions-of-equations/Solve/), [MatrixRank](../../linear-algebra/MatrixRank/), [NDArray](../../linear-algebra/NDArray/), [Eigenvectors](../../linear-algebra/Eigenvectors/), [QRDecomposition](../../linear-algebra/QRDecomposition/), [SingularValueDecomposition](../../linear-algebra/SingularValueDecomposition/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- R. A. Horn and C. R. Johnson, *Matrix Analysis*, 2nd ed. (Cambridge, 2013), ch. 3 — Canonical Forms.
+- Source: [`src/linalg/jordandecomp.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/jordandecomp.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_jordandecomp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_jordandecomp.c)
+
+## Notes & additional examples
+
+### Notes
+
+`JordanDecomposition[m]` returns `{s, j}` where `j` is the Jordan canonical form
+of the square matrix `m` and `s` is the similarity matrix, so that
+`m == s . j . Inverse[s]`. A `1` on `j`'s superdiagonal marks a deficient
+eigenspace; the columns of `s` are the generalized eigenvectors grouped into the
+Jordan chains that match `j`'s blocks.
+
+Exact and symbolic matrices are decomposed from the characteristic polynomial and
+the nullity sequence of `(m - lambda I)^k`, so the output stays exact. A generic
+numeric matrix has distinct eigenvalues and is diagonalizable, so it takes the
+numeric eigenvector path (`j` diagonal) and scales to large sizes; a numerically
+defective matrix falls back to an exact decomposition and is numericalised back.
+A non-square or empty matrix is left unevaluated.

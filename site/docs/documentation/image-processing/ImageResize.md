@@ -7,7 +7,7 @@
 
 **`ImageResize[image, {w, h}] resizes to w x h pixels; ImageResize[image, w] gives width w with the height following to preserve the aspect ratio. Resampling -> "Nearest" | "Bilinear" | "Average" selects the method; the default Automatic uses AREA AVERAGING when either axis shrinks and bilinear otherwise. That default is about aliasing: point-sampling a shrinking image destroys every frequency above half the new sampling rate -- a fine checkerboard reduced by nearest-neighbour comes back a flat field -- and no interpolation afterwards can restore what point-sampling discarded. Area averaging is a box prefilter and a resample in one pass, exact for integer reduction factors, using true fractional coverage so a 3 -> 2 reduction is as correct as 4 -> 2. Enlarging has no frequencies to remove, so bilinear is used there; area averaging on an enlargement would degenerate to nearest. Coordinates are centre-aligned, avoiding the half-pixel shift that sx = i * scale introduces at any scale other than 1:1. The result is a "Real" image; sizes must be positive integers.`**
 
-## Examples (35)
+## Examples (38)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -127,7 +127,48 @@ In[35]:= ImageResize[zone, {24, 8}]
 Out[35]= -Image-
 ```
 
+### Applications (3)
+
+```mathematica
+In[36]:= ImageDimensions[ImageResize[Image[{{0., 1.}, {1., 0.}}], {4, 4}]]
+Out[36]= {4, 4}
+
+In[37]:= ImageData[ImageResize[Image[{{0., 1.}, {1., 0.}}], {1, 1}]]
+Out[37]= {{0.5}}
+
+In[38]:= ImageDimensions[ImageResize[Image[{{0., 1., 0., 1.}, {1., 0., 1., 0.}}], 2]]
+Out[38]= {2, 1}
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_imageresize` resamples an image to a new size.
+`ImageResize[image, {w, h}]` gives `w × h` pixels; `ImageResize[image, w]` gives
+width `w` with the height following to preserve the aspect ratio
+(`round(sh · w / sw)`). `Resampling -> "Nearest" | "Bilinear" | "Average"`
+selects the method; the default `Automatic` uses **area averaging when either
+axis shrinks** and bilinear otherwise. That default is about aliasing: Nyquist
+requires every frequency above half the new sampling rate to be removed *before*
+resampling, and point-sampling a shrinking image (nearest) destroys them with no
+recovery — a fine checkerboard reduced by nearest returns a flat field. Area
+averaging (`rs_average`) is a box prefilter and a resample in one pass, using
+**true fractional coverage** so a 3→2 reduction is as correct as 4→2, and it is
+exact for integer reduction factors. Enlarging has no frequencies to remove, so
+bilinear (`rs_bilinear`) is used there. All three maps are **pixel-centred**:
+a destination pixel `i` covers `[i·s, (i+1)·s)` with centre `(i + 0.5)·s`, so the
+bilinear map is `sx = (i + 0.5)·s − 0.5` — avoiding the half-pixel shift and
+edge asymmetry that the naive `sx = i·s` introduces at any scale other than 1:1.
+A volume takes the rank-3 path (`resize3_run`). The result is a `"Real"` image.
+
+**Data structures.** Flat `double` buffers: `src` of `sw · sh · channels`, `dst`
+of `dw · dh · channels`, resampled by the chosen kernel (each channel handled
+independently, edge indices clamped by `clamp_idx`). Built into a `"Real"` image
+(`image_build_real`).
+
+**Complexity / limits.** Nearest `O(dw · dh · c)`; bilinear `O(dw · dh · c)` with
+four taps per pixel; area averaging `O(dst area × average source coverage)`.
+Target sizes must be positive integers (a fractional pixel count has no meaning
+and is declined rather than silently rounded), capped at `10⁶` per axis.
 
 **Attributes:** `Protected`.
 
@@ -138,3 +179,21 @@ Out[35]= -Image-
 - Source: [`src/imagegeom.c`](https://github.com/stblake/mathilda/blob/main/src/imagegeom.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ImageResize[image, {w, h}]` resizes to `w × h` pixels; `ImageResize[image, w]`
+gives width `w` with the height following to preserve the aspect ratio.
+`Resampling -> "Nearest" | "Bilinear" | "Average"` selects the method; the
+default `Automatic` uses **area averaging** when either axis shrinks and bilinear
+otherwise.
+
+That default is about aliasing: point-sampling a shrinking image destroys every
+frequency above half the new sampling rate, and no later interpolation can
+restore it. Area averaging is a box prefilter and resample in one pass, exact for
+integer reduction factors and using true fractional coverage otherwise.
+Coordinates are pixel-centre aligned, avoiding the half-pixel shift the naive
+`sx = i·scale` introduces at any scale other than 1:1. The result is a `"Real"`
+image, and sizes must be positive integers.

@@ -9,7 +9,7 @@
 
 gives the number of top-level elements in expr (the arity of its head).  Length of any atom is 0.
 
-## Examples (1)
+## Examples (5)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -18,6 +18,36 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= Length[{a, b, c}]
 Out[1]= 3
+```
+
+### Applications (4)
+
+The number of elements of a list
+
+```mathematica
+In[2]:= Length[{a, b, c}]
+Out[2]= 3
+```
+
+The argument count of any function
+
+```mathematica
+In[3]:= Length[f[x, y]]
+Out[3]= 2
+```
+
+Plus[a, b, c] has three arguments
+
+```mathematica
+In[4]:= Length[a + b + c]
+Out[4]= 3
+```
+
+An atom has no parts
+
+```mathematica
+In[5]:= Length[x]
+Out[5]= 0
 ```
 
 ## Performance
@@ -50,3 +80,13 @@ Against other systems, from the benchmark suite (same input, results cross-check
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
 - Tests: [`tests/test_basin_hopping.c`](https://github.com/stblake/mathilda/blob/main/tests/test_basin_hopping.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Length[expr]` returns the number of top-level arguments (`arg_count`) when
+`expr` is a function, and `0` for every atom — a symbol, number, or string has no
+parts. Because a sum is `Plus[...]` and a list is `List[...]` internally, the
+same count works on both; `Length` makes no distinction between a `List` and any
+other head.

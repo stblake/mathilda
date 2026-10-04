@@ -21,7 +21,7 @@ Gives at most n clusters, and fewer when the data suggests fewer.
 
 Uses algorithm m: Agglomerate, SpanningTree, KMeans, KMedoids, Spectral, DBSCAN, GaussianMixture, JarvisPatrick, MeanShift or NeighborhoodContraction. KMeans and KMedoids require a count; the density methods require Automatic. Options: Method, DistanceFunction (Automatic, EuclideanDistance, ManhattanDistance or SquaredEuclideanDistance -- all equivalent in 1D), CriterionFunction and PerformanceGoal (accepted, no effect). Returns unevaluated for a non-numeric element, an empty list, a method incompatible with the count mode, or a list too large for the chosen method (Spectral above 2000 elements, MeanShift and NeighborhoodContraction above 4000, both being quadratic).
 
-## Examples (8)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -59,6 +59,29 @@ Out[7]= {{{0, 0}, {0, 11}}, {{8, 6}}}
 
 In[8]:= FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> "KMeans"]
 Out[8]= {{1, 2, 3, 1}, {10, 12, 13}, {25}}
+```
+
+### Applications (3)
+
+The gaps choose three clusters
+
+```mathematica
+In[9]:= FindClusters[{1, 2, 3, 10, 11, 12, 20}]
+Out[9]= {{1, 2, 3}, {10, 11, 12}, {20}}
+```
+
+Two well-separated runs
+
+```mathematica
+In[10]:= FindClusters[Join[Range[5], Range[20, 25]]]
+Out[10]= {{1, 2, 3, 4, 5}, {20, 21, 22, 23, 24, 25}}
+```
+
+Ask for exactly two clusters
+
+```mathematica
+In[11]:= FindClusters[{1.0, 1.1, 5.0, 5.1, 5.2}, 2]
+Out[11]= {{1.0, 1.1}, {5.0, 5.1, 5.2}}
 ```
 
 ## Options & behaviour
@@ -196,6 +219,35 @@ Measured on arm64 Darwin at commit `2dea9cc05`.
 | 2-D points | 2,000 | 1.55 s |
 
 ## Implementation notes
+
+**Algorithm.** `builtin_find_clusters` partitions a list into clusters of nearby
+elements. `fc_probe_shape` decides the element kind: real scalars (distance
+`|a - b|` on the line), equal-length numeric vectors (squared Euclidean
+distance), colours whose arguments are coordinates (`RGBColor`/`GrayLevel`/
+`Hue`/`CMYKColor`, one head throughout), or strings (`EditDistance`); a mixture,
+a ragged shape, a non-real component, `Complex`, or a visible `NDArray` declines.
+The count is `Automatic` (cut a sorted-adjacent gap exceeding `FC_GAP_FACTOR = 3`
+times the median gap), `UpTo[n]` (bounded), or `n` (fixed, capped at the distinct
+count). Clusters appear by first occurrence; elements keep input order within a
+cluster.
+
+**Methods and exactness.** Named methods include `Agglomerate`/`SpanningTree`,
+`KMeans`, `KMedoids`, `DBSCAN`, `MeanShift`, `NeighborhoodContraction`,
+`JarvisPatrick`, `GaussianMixture` (the `src/ml` EM fit) and `Spectral`. In one
+dimension the spanning tree *is* the sorted adjacency chain, computed on the
+elements themselves via `list_numeric_cmp`, so exact 1-D input is ordered
+exactly; above one dimension it is a real minimum spanning tree built by Prim's
+algorithm over exact distances, with a machine-double Prim for points whose every
+coordinate is already machine. The inherently-inexact methods (KMeans, the
+density family, GaussianMixture, Spectral) work on a double projection, which is
+correct — a mean, kernel or eigenvector is inexact by definition.
+
+**Complexity / limits.** 1-D is O(n log n) (dominated by the sort) with no size
+cap (~2.3 s at 10⁶). Multi-dimensional MST is quadratic: machine points capped at
+20000, exact points and strings at 2000; `Spectral` builds an n×n matrix and
+declines above `FC_SPECTRAL_MAX_N = 2000`. The result is **not** bit-identical to
+Mathematica (which auto-selects an unpublished metric/preprocessing); the
+`tests/test_list.c` acceptance table is the specification. `ATTR_PROTECTED`.
 
 - `Protected`.
 - The result is a list of lists. Clusters appear in order of the first
@@ -380,9 +432,27 @@ Measured on arm64 Darwin at commit `2dea9cc05`.
 
 **See also:** [CMYKColor](../../graphics/CMYKColor/), [SquaredEuclideanDistance](../../lists-and-iteration/SquaredEuclideanDistance/), [EditDistance](../../lists-and-iteration/EditDistance/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [NDArray](../../linear-algebra/NDArray/), [List](../../other-advanced/List/), [LearnDistribution](../../machine-learning/LearnDistribution/)
 
-- Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
+- Source: [`src/list/find_clusters.c`](https://github.com/stblake/mathilda/blob/main/src/list/find_clusters.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
 - Tests: [`tests/test_findclusters_distance.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findclusters_distance.c)
 - Tests: [`tests/test_findclusters_ndim.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findclusters_ndim.c)
 - Tests: [`tests/test_findclusters_scalar_pin.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findclusters_scalar_pin.c)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
+
+## Notes & additional examples
+
+### Notes
+
+`FindClusters[list]` partitions `list` into clusters of nearby elements, choosing
+the number automatically from the gaps; `FindClusters[list, n]` forces exactly
+`n`, and `FindClusters[list, UpTo[n]]` gives at most `n`. Clusters appear in order
+of the first occurrence of any member, and elements keep their input order within
+a cluster.
+
+All elements must be of one kind: real numbers (distance on the line),
+equal-length numeric vectors (squared Euclidean), colours whose arguments are
+coordinates, or strings (`EditDistance`). One dimension has no size cap; above it
+the partition is built from a minimum spanning tree and is capped (20000 machine
+points, 2000 exact points or strings). The result is **not** intended to match
+Mathematica's — it auto-selects an unpublished metric — so this implements the
+textbook algorithm for each named `Method`.

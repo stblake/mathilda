@@ -7,7 +7,7 @@
 
 **`RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges. RandomGraph[{n, m}, k] gives a list of k such graphs; memory use grows with k.`**
 
-## Examples (6)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -33,7 +33,43 @@ In[6]:= RandomGraph[{6, 5}, -1]
 Out[6]= RandomGraph[{6, 5}, -1]
 ```
 
+### Applications (3)
+
+```mathematica
+In[7]:= r = RandomGraph[{6, 8}];
+```
+
+G(n, m): exactly n vertices and m edges
+
+```mathematica
+In[8]:= {VertexCount[r], EdgeCount[r]}
+Out[8]= {6, 8}
+```
+
+A list of k independent graphs
+
+```mathematica
+In[9]:= Length[RandomGraph[{4, 3}, 5]]
+Out[9]= 5
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_random_graph` samples from the Erdős–Rényi `G(n, m)` model: a simple
+undirected graph on vertices `1..n` with exactly `m` edges, every `m`-edge graph equally likely.
+The `m` edges are drawn without replacement from the `n(n-1)/2` candidate pairs, but the
+candidate list is never materialised: `random_sample_indices(maxe, m)` produces exactly the
+draws `RandomSample` would (so it honours `SeedRandom`), and each sampled index is decoded to a
+vertex pair by binary search over the triangular row offsets. The assembled `Graph[...]` is
+re-validated by the evaluator's `builtin_graph`.
+
+**Data structures.** Only the `m` sampled indices and the resulting edge `List`; the decode is
+`O(m log n)` time and `O(m)` memory — no `O(n^2)` candidate array.
+
+**Complexity / limits.** `O(m log n)`. Guards: `n` or `m` negative returns unevaluated; `n`
+above `2^31-1` returns unevaluated (overflow); `m` greater than `n(n-1)/2` returns unevaluated.
+`RandomGraph[{n, m}, k]` returns a list of `k` independent graphs (`k = 0` gives `{}`); on any
+sub-failure the whole list is discarded. Always undirected.
 
 - `Protected`. Uses the seeded system RNG, so `SeedRandom` makes it
   reproducible. Vertices are `1..n`, edges undirected (see `CycleGraph`).
@@ -54,8 +90,21 @@ Out[6]= RandomGraph[{6, 5}, -1]
 
 **See also:** [SeedRandom](../../random-number-generation/SeedRandom/), [CycleGraph](../../graphs/CycleGraph/), [Graph](../../graphs/Graph/), [RandomSample](../../random-number-generation/RandomSample/)
 
-- Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
+- P. Erdős and A. Rényi, *On random graphs I*, Publ. Math. Debrecen **6** (1959) 290-297.
+- Source: [`src/graph/generators.c`](https://github.com/stblake/mathilda/blob/main/src/graph/generators.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
 - Tests: [`tests/test_graph_slow.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_slow.c)
 - Tests: [`tests/test_graphplot.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphplot.c)
+
+## Notes & additional examples
+
+### Notes
+
+`RandomGraph[{n, m}]` draws a uniformly random simple undirected graph on `n` vertices with
+exactly `m` edges (the Erdős–Rényi `G(n, m)` model). The vertex and edge counts are therefore
+fixed by the arguments; the structure is what varies, and it is reproducible under
+`SeedRandom`.
+
+`RandomGraph[{n, m}, k]` returns a list of `k` independent such graphs. `m` may not exceed
+`n(n-1)/2`, the number of possible edges.

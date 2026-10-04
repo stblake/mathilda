@@ -7,7 +7,7 @@
 
 **`Thinning[image] reduces the foreground to a one-pixel-wide skeleton by Zhang-Suen thinning, iterating until a pass deletes nothing. Thinning[image, n] stops after n iterations. The two subiterations are what preserve connectivity: deleting every individually-removable pixel in one pass severs a diagonal line, since two diagonal neighbours can each be removable while removing both disconnects the shape. A non-binary image is thresholded at 0.5 -- apply Binarize first for any other rule. The result is a "Bit" image, and it is always a subset of the input.`**
 
-## Examples (26)
+## Examples (29)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -133,6 +133,19 @@ In[26]:= Round[Total[Flatten[ImageData[Thinning[Image[Table[If[i == 5 && j == 6,
 Out[26]= 1
 ```
 
+### Applications (3)
+
+```mathematica
+In[27]:= ImageData[Thinning[Image[{{0, 0, 0, 0, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 0, 0, 0, 0}}]]]
+Out[27]= {{0.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 1.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0, 0.0}}
+
+In[28]:= ImageType[Thinning[Image[{{1, 1, 1}, {1, 1, 1}, {1, 1, 1}}]]]
+Out[28]= "Bit"
+
+In[29]:= ImageData[Thinning[Image[{{0, 0, 0, 0, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 0, 0, 0, 0}}], 1]]
+Out[29]= {{0.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 1.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0, 0.0}}
+```
+
 ## Algorithm
 
 imagethin.c -- Thinning and Pruning: reducing a shape to its skeleton, and tidying it.
@@ -144,6 +157,33 @@ WHY ZHANG-SUEN. It is the standard two-subiteration thinning, and its two subite
 THRESHOLD. A non-binary image is thresholded at 0.5 rather than at "nonzero". Nonzero is the right rule for MorphologicalComponents, where the caller has usually binarised already, but for these two it would make almost every grey image entirely foreground and the skeleton would be a frame around the border. Callers wanting another rule should apply Binarize first, which is a decision they can see.
 
 ## Implementation notes
+
+**Algorithm.** `builtin_thinning` reduces the foreground to a one-pixel-wide
+skeleton by **Zhang–Suen** thinning. It builds a foreground mask
+(`mask_from_image`: channels averaged, thresholded at `0.5`) and iterates
+`thin_pass` until a pass deletes nothing (`Thinning[image]`) or for `n` passes
+(`Thinning[image, n]`). Each full iteration runs **two subiterations**
+(`thin_pass(..., second = false)` then `second = true`), and the two are what
+preserve connectivity: deleting every individually-removable pixel in one pass
+severs a diagonal line, since two diagonal neighbours can each be removable while
+removing both disconnects the shape — the two conditions delete from opposite
+sides on alternating passes. A pixel is marked for deletion when it has `2..6`
+foreground neighbours (`neighbour_count`), exactly one `0→1` transition around
+the 8-ring (`transitions`, so removing it would not break connectivity), and
+satisfies the subiteration's pair of corner conditions. Crucially, marked pixels
+are deleted **together after the whole pass** — deleting in place would let one
+pixel's removal change the verdict on its neighbour mid-pass. Outside the image
+counts as background. The result is always a `"Bit"` image and is always a subset
+of the input.
+
+**Data structures.** An `unsigned char` foreground mask of `width · height`, plus
+a per-pass `unsigned char` deletion map (`calloc`) so marking and deletion are
+separated. The eight neighbours are gathered in Zhang–Suen's order (`neighbours`,
+P2 north then clockwise). Built into a `"Bit"` image (`image_build_bit`).
+
+**Complexity / limits.** `O(width · height)` per subiteration; the number of
+iterations to convergence is bounded by half the shape's thickness. A non-binary
+image is thresholded at `0.5` — apply `Binarize` first for any other rule.
 
 - `Protected`. Returns a `"Bit"` image, always a **subset** of the input.
 - Zhang-Suen thinning: two subiterations per pass, deleting from opposite sides on alternate
@@ -161,6 +201,24 @@ THRESHOLD. A non-binary image is thresholded at 0.5 rather than at "nonzero". No
 
 **See also:** [Binarize](../../image-processing/Binarize/)
 
+- T. Y. Zhang and C. Y. Suen, *A fast parallel algorithm for thinning digital patterns*, Comm. ACM **27** (1984) 236-239.
 - Source: [`src/imagethin.c`](https://github.com/stblake/mathilda/blob/main/src/imagethin.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Thinning[image]` reduces the foreground to a one-pixel-wide skeleton by
+**Zhang–Suen** thinning, iterating until a pass deletes nothing;
+`Thinning[image, n]` stops after `n` iterations.
+
+The two subiterations are what preserve connectivity: deleting every
+individually-removable pixel in one pass would sever a diagonal line, because two
+diagonal neighbours can each be removable while removing both disconnects the
+shape. Marked pixels are deleted together after each pass, never in place. A
+non-binary image is thresholded at `0.5` — apply `Binarize` first for any other
+rule. The result is a `"Bit"` image and is always a subset of the input. Follow
+it with `Pruning` to remove the short spurs a skeleton grows at boundary
+irregularities.

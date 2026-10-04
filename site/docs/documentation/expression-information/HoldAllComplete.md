@@ -24,7 +24,6 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= SetAttributes[h, HoldAllComplete]
-Out[1]= Null
 
 In[2]:= h[1+1]
 Out[2]= h[1 + 1]

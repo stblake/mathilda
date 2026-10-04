@@ -21,7 +21,7 @@ Counts the occurrences of any of the pi.
 
 Gives the list of results for each of the si. Equivalent to Length\[StringCases\[...\]\] but does not build the matched substrings. Options: Overlaps -\> False (default; overlapping substrings are not counted as separate), True (overlaps counted separately, one substring per start), or All (every matching substring at every start); IgnoreCase -\> True treats upper/lowercase as equivalent.
 
-## Examples (7)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -52,6 +52,29 @@ Out[6]= 10
 
 In[7]:= StringCount["aAbB", "a", IgnoreCase -> True]
 Out[7]= 2
+```
+
+### Applications (3)
+
+Non-overlapping by default
+
+```mathematica
+In[8]:= StringCount["mississippi", "ss"]
+Out[8]= 2
+```
+
+A character-class pattern
+
+```mathematica
+In[9]:= StringCount["a1b2c3d4", DigitCharacter]
+Out[9]= 4
+```
+
+Count overlapping starts
+
+```mathematica
+In[10]:= StringCount["banana", "a", Overlaps -> True]
+Out[10]= 3
 ```
 
 ## Algorithm
@@ -88,14 +111,32 @@ Byte semantics: like the rest of src/strings, offsets are byte offsets (no UTF-8
 
 ## Implementation notes
 
+**Algorithm.** `builtin_stringcount` handles options and builds its rule set exactly as `StringCases` does, but `sct_scalar` calls `regex_scan` with `want_captures = 0` and returns the span count as an `Integer` — it never materialises a substring, costing one small span record per match instead of a `malloc` + `Expr` + list element. A `Rule`/`RuleDelayed` pattern is accepted (only the LHS matters to a count), as is a list of subjects, which threads to one count each.
+
+**Data structures.** The shared `RegexScan` (span array only, no capture pool); one `Integer` result per subject.
+
+**Complexity / limits.** Because the scan is the same, `StringCount[s, p, opts]` is always exactly `Length[StringCases[s, p, opts]]` and `Length[StringPosition[...]]`. `Overlaps`/`IgnoreCase` behave as in `StringCases`. A wrong positional arity emits `StringCount::argrx`; byte semantics throughout.
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [StringCases](../../string-operations/StringCases/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [SetOptions](../../assignment-and-rules/SetOptions/), [StringPosition](../../string-operations/StringPosition/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/strings/regex/stringcount.c`](https://github.com/stblake/mathilda/blob/main/src/strings/regex/stringcount.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
 - Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
 - Tests: [`tests/test_stringcontainsq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcontainsq.c)
 - Tests: [`tests/test_stringcount.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcount.c)
+
+## Notes & additional examples
+
+### Notes
+
+`StringCount` is the counting-only companion of `StringCases`: it runs the same
+`regex_scan` enumeration but records only a small span per match rather than
+building each substring, so it is cheaper for a pure count.
+
+The result is exactly `Length[StringCases[...]]` for every pattern and option.
+`Overlaps`/`IgnoreCase` behave as in `StringCases`, and a list of subjects
+threads, giving one count each.

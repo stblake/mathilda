@@ -1,0 +1,25 @@
+---
+source: src/match.c
+---
+**Definition.** `Verbatim[expr]` is a pattern object that matches `expr` taken
+**literally**: the pattern constructs inside `expr` (`Blank`, `Pattern`, ...) are
+*not* interpreted, so `Verbatim[x_]` matches only the literal expression `x_` (i.e.
+`Pattern[x, Blank[]]`), not an arbitrary expression. It has no builtin and no
+rewrite rule of its own — it is a directive to the matcher — and it is `Protected`.
+The docstring lives centrally in `info.c`.
+
+**Representation.** `Verbatim` is recognised structurally inside `match_internal`
+(`src/match.c`): when the pattern node is a one-argument function whose head is the
+interned `SYM_Verbatim`, the matcher succeeds iff the subject is **structurally
+equal** to the wrapped argument — `expr_eq(expr, Verbatim_arg)` — and then threads
+the parent continuation; otherwise it fails. Because the test is `expr_eq`, no
+variable is bound and no sub-pattern is interpreted. `Verbatim` sits alongside the
+other matcher-transparent heads (`HoldPattern`, `Longest`/`Shortest`), and the
+matcher's "is this a pattern object?" guard knows `SYM_Verbatim` so a literal
+pattern expression is still reachable as subject matter.
+
+**Usage & limits.** Use it wherever you must match or replace an expression that
+*is itself* a pattern — searching a list for a literal `x_ + y_`, or rewriting the
+symbol `_` as data rather than as `Blank[]`. Being an exact structural equality, it
+binds nothing: `Verbatim[p]` never captures, so there is nothing to reuse on the
+right-hand side of a rule beyond the literal match. It is a single-argument form.

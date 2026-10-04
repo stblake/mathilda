@@ -29,6 +29,10 @@ n-D local minimum auto-starting each variable at 1.
 
 local minimum subject to box and Inequality constraints; {f, c1, c2, ...} And-s the trailing elements.
 
+**`FindMinimum[f, Table[v[i], {i, 1, n}]]`**
+
+indexed variables v\[k\] (also {v\[1\], v\[2\], ...}); reported over v\[k\].
+
 <details>
 <summary>Notes</summary>
 
@@ -36,7 +40,7 @@ Methods (Method -\> ...): Automatic           picks Brent for 1D, QuasiNewton (B
 
 </details>
 
-## Examples (13)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -69,26 +73,33 @@ In[7]:= FindMinimum[(x - Pi)^2, {x, 0}, WorkingPrecision -> 50]
 Out[7]= {0.0, {x -> 3.1415926535897932384626433832795028841971693993751}}
 ```
 
+### Worked examples (1)
+
+```mathematica
+In[8]:= FindMinimum[Sum[(v[i]-i)^2, {i,1,3}], Table[v[i], {i,1,3}]]
+Out[8]= {0.0, {v[1] -> 1.0, v[2] -> 2.0, v[3] -> 3.0}}
+```
+
 ### Applications (6)
 
 ```mathematica
-In[8]:= FindMinimum[x^2 - 4 x + 7, {x, 0}]
-Out[8]= {3.0, {x -> 2.0}}
+In[9]:= FindMinimum[x^2 - 4 x + 7, {x, 0}]
+Out[9]= {3.0, {x -> 2.0}}
 
-In[9]:= FindMinimum[Cos[x] + x/5, {x, 0, 10}]
-Out[9]= {-0.391749, {x -> 2.94023}}
+In[10]:= FindMinimum[Cos[x] + x/5, {x, 0, 10}]
+Out[10]= {-0.391749, {x -> 2.94023}}
 
-In[10]:= FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1}, {y, 1}}]
-Out[10]= {3.46541e-23, {x -> 1.0, y -> 1.0}}
+In[11]:= FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1}, {y, 1}}]
+Out[11]= {3.46541e-23, {x -> 1.0, y -> 1.0}}
 
-In[11]:= FindMinimum[Gamma[x], {x, 1.5}]
-Out[11]= {0.885603, {x -> 1.46163}}
+In[12]:= FindMinimum[Gamma[x], {x, 1.5}]
+Out[12]= {0.885603, {x -> 1.46163}}
 
-In[12]:= FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1.2}, {y, 1}}, Method -> "LBFGSB"]
-Out[12]= {4.71192e-22, {x -> 1.0, y -> 1.0}}
+In[13]:= FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1.2}, {y, 1}}, Method -> "LBFGSB"]
+Out[13]= {4.71192e-22, {x -> 1.0, y -> 1.0}}
 
-In[13]:= FindMinimum[(x - 2)^2 + (y - 3)^2, {{x, 0, 0, 1}, {y, 0, 0, 1}}, Method -> "LBFGSB"]
-Out[13]= {5.0, {x -> 1.0, y -> 1.0}}
+In[14]:= FindMinimum[(x - 2)^2 + (y - 3)^2, {{x, 0, 0, 1}, {y, 0, 0, 1}}, Method -> "LBFGSB"]
+Out[14]= {5.0, {x -> 1.0, y -> 1.0}}
 ```
 
 ## Performance

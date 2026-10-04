@@ -21,7 +21,7 @@ Pads each string on the left with spaces to the length of the longest, making th
 
 Pads or truncates each string to length n.
 
-## Examples (4)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -39,6 +39,29 @@ Out[3]= {"    a", "   ab", "  abc", " abcd", "abcde"}
 
 In[4]:= StringPadLeft[{"a", "ab", "abc", "abcd", "abcde"}, 3]
 Out[4]= {"  a", " ab", "abc", "bcd", "cde"}
+```
+
+### Applications (3)
+
+Left-pad to width 5 with zeros
+
+```mathematica
+In[5]:= StringPadLeft["42", 5, "0"]
+Out[5]= "00042"
+```
+
+Too long: truncation keeps the LAST n
+
+```mathematica
+In[6]:= StringPadLeft["abcdef", 3]
+Out[6]= "def"
+```
+
+A list pads to the longest element
+
+```mathematica
+In[7]:= StringPadLeft[{"a", "bb", "ccc"}]
+Out[7]= {"  a", " bb", "ccc"}
 ```
 
 ## Algorithm
@@ -65,12 +88,30 @@ Strings are treated as raw byte arrays (consistent with StringRepeat / StringTak
 
 ## Implementation notes
 
+**Algorithm.** `StringPadLeft` and `StringPadRight` share `pad_dispatch`, a `left` flag selecting the side. `pad_one` either truncates — copying the last `n` bytes for the left variant, the first `n` for the right — or pads, laying the pad string down cyclically (`p[i mod plen]`) into the pad region that precedes (left) or follows (right) the string. The pad string defaults to a single space. For a `List` first argument the target length is the explicit `n`, or, in the one-argument form, the longest element — so a bare list form equalises all widths.
+
+**Data structures.** One output buffer per string; a `List` result when the input is a list.
+
+**Complexity / limits.** `O(n)` per string. An arity outside 1–3 emits `StringPadLeft::argb`/`StringPadRight::argb`. A non-integer or negative `n`, a non-string or list-valued pad string, or an empty pad when padding is required, leaves the call unevaluated. The pad builtins are deliberately **not** `Listable`, so the handler sees the whole list (the 1-arg form must). Byte-length based.
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [StringPadRight](../../string-operations/StringPadRight/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/strings/stringpad.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringpad.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
 - Tests: [`tests/test_stringpad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringpad.c)
+
+## Notes & additional examples
+
+### Notes
+
+`StringPadLeft` makes a string a given length, padding on the left or truncating
+it. When the string is longer than `n` it keeps the last `n` bytes; the pad
+string (a single space by default) is laid down cyclically, `p[i mod plen]`.
+
+The one-argument list form pads every element to the length of the longest, so
+all come out equal width. Lengths are byte counts. A list-valued pad string is
+not supported and leaves the call unevaluated.

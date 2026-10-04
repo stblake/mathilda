@@ -14,7 +14,7 @@ a1 p1 + ... + an pn + b == poly and b minimal: no term of b is divisible by any 
 
 </details>
 
-## Examples (7)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -45,6 +45,29 @@ Out[6]= {1/4/a, 1/4 a - 1/4 y/a}
 
 In[7]:= PolynomialReduce[x^3, {x^2 + 1}, {x}, Modulus -> 7]
 Out[7]= {{x}, 6 x}
+```
+
+### Applications (3)
+
+{{quotient}, remainder}
+
+```mathematica
+In[8]:= PolynomialReduce[x^2 + y^2, {x - y}, {x, y}]
+Out[8]= {{x + y}, 2 y^2}
+```
+
+Several divisors
+
+```mathematica
+In[9]:= PolynomialReduce[x^2 y + x y^2 + y^2, {x y - 1, y^2 - 1}, {x, y}]
+Out[9]= {{x + y, 1}, 1 + x + y}
+```
+
+Univariate division
+
+```mathematica
+In[10]:= PolynomialReduce[x^2, {x - 1}, {x}]
+Out[10]= {{1 + x}, 1}
 ```
 
 ## Options & behaviour
@@ -111,6 +134,41 @@ PolynomialReduce is a symbolic/structural head (it returns lists of symbolic pol
 
 ## Implementation notes
 
+**Algorithm.** `builtin_polynomialreduce` is the multivariate-division sibling of
+`GroebnerBasis` and shares its options. It gives `{{a1, ..., an}, b}` with
+`a1 p1 + ... + an pn + b == poly` and `b` fully reduced — no term of `b` is
+divisible by the leading term of any `pi` under the chosen `MonomialOrder`
+(default `Lexicographic`). It extracts options (`MonomialOrder`,
+`CoefficientDomain`, `Modulus`, `ParameterVariables`), resolves the main
+variables (explicit argument, else `Variables` minus any `ParameterVariables`),
+treats any remaining free symbols as coefficient-field parameters, normalises the
+inputs (`pr_normalise`), and dispatches to one of three engines:
+
+- **pure `Q`** (`pr_reduce_rational`): the exact `GBPoly` divisor engine
+  `gb_divmod` (`groebner.c`), with a FLINT `fmpq_mpoly` fast path for
+  `Lexicographic`;
+- **rational-function field `Q(params)`** (`pr_reduce_field`): division in the
+  coefficient field via `Together`/`Cancel` field arithmetic;
+- **`GF(p)`** (`pr_reduce_modular`): the `gbmod.c` `gfp_divmod` engine
+  (`Modulus -> p` prime; supports `Lexicographic` and
+  `DegreeReverseLexicographic`).
+
+If the `pi` form a Gröbner basis, `b` is the unique normal form.
+
+**Data structures.** Polynomials cross into the engine as `GBPoly`
+(sorted-monomial representation, built by `gb_from_expr` against the main-variable
+array and a resolved `GBOrder`/weight matrix) or `GFpPoly` for the modular path;
+the field engine uses `RPoly` terms with `Expr`-valued field coefficients. The
+quotients and remainder come back through `gb_to_expr`/`rpoly_to_expr` into the
+`{List{a1..an}, b}` result.
+
+**Complexity / limits.** The reduction loop is worst-case exponential in the
+divisor count and degrees, as multivariate division is; the FLINT path dominates
+for large pure-`Q` inputs. `CoefficientDomain -> Integers`/`InexactNumbers`,
+nonzero `Tolerance`, `Modulus` with parameters, and unsupported order/modulus
+combinations decline with a note. A symbolic head — no packed/NDArray or
+`Compile[]` path. `Protected`.
+
 - `Protected`.
 - The engine is `gb_divmod` (`src/poly/groebner.c`), the same normal-form
   division Buchberger uses; over Q with `Lexicographic` order it dispatches
@@ -129,8 +187,23 @@ PolynomialReduce is a symbolic/structural head (it returns lists of symbolic pol
 
 **See also:** [Variables](../../algebra/Variables/), [GroebnerBasis](../../algebra/GroebnerBasis/), [Expand](../../algebra/Expand/), [Modulus](../../other-advanced/Modulus/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- D. Cox, J. Little and D. O'Shea, *Ideals, Varieties, and Algorithms*, 4th ed. (Springer, 2015), ch. 2 §3 — the multivariate division algorithm.
+- Source: [`src/poly/polynomialreduce.c`](https://github.com/stblake/mathilda/blob/main/src/poly/polynomialreduce.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_polynomialreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_polynomialreduce.c)
 - Tests: [`tests/test_risch_field.c`](https://github.com/stblake/mathilda/blob/main/tests/test_risch_field.c)
 - Tests: [`tests/test_risch_hypertangent.c`](https://github.com/stblake/mathilda/blob/main/tests/test_risch_hypertangent.c)
+
+## Notes & additional examples
+
+### Notes
+
+`PolynomialReduce[poly, {p1, ..., pn}, {x1, ..., xk}]` gives `{{a1, ..., an}, b}`
+with `a1 p1 + ... + an pn + b == poly` and `b` fully reduced — no term of the
+remainder `b` is divisible by any leading term of the `pi` under the chosen
+`MonomialOrder` (default `Lexicographic`). It is the multivariate-division
+sibling of `GroebnerBasis` and shares its options (`MonomialOrder`,
+`CoefficientDomain`, `Modulus -> p` for `GF(p)`, `ParameterVariables`); free
+symbols outside the variable list are treated as coefficient-field parameters. If
+the `pi` happen to be a Gröbner basis, `b` is the unique normal form. The
+variable list may be omitted, in which case `Variables` is used.

@@ -1,37 +1,39 @@
 ### Worked examples
 
 ```mathematica
-In[1]:= UnitStep[-2]
-Out[1]= 0
-
-In[2]:= UnitStep[3]
-Out[2]= 1
+In[1]:= UnitStep[3]  (* a nonnegative argument gives 1 *)
 ```
 
-UnitStep is `Listable`, so it vectorizes over a table to produce a discrete step profile (here switching on at `k = 3`):
-
 ```mathematica
-In[1]:= Table[UnitStep[k - 3], {k, 0, 6}]
-Out[1]= {0, 0, 0, 1, 1, 1, 1}
+In[1]:= UnitStep[-2]  (* a negative argument gives 0 *)
 ```
 
-Exact symbolic-real arguments are resolved by numerical certification — even transcendental comparisons collapse to an exact `0` or `1`:
-
 ```mathematica
-In[1]:= UnitStep[Pi - 3]
-Out[1]= 1
-
-In[2]:= UnitStep[Log[2] - Log[3]]
-Out[2]= 0
+In[1]:= UnitStep[0]  (* the step is closed at zero: UnitStep[0] is 1 *)
 ```
 
-The multivariate form is the indicator of the nonnegative orthant, returning `1` only when no argument is negative:
+```mathematica
+In[1]:= UnitStep[{-2, 0, 3}]  (* Listable, so it threads over a vector *)
+```
 
 ```mathematica
-In[1]:= UnitStep[1, -1, 2]
-Out[1]= 0
+In[1]:= UnitStep[2, 3, -1]  (* several arguments: 1 only when none is negative *)
+```
+
+```mathematica
+In[1]:= UnitStep[x]  (* an undecidable sign is left unevaluated *)
 ```
 
 ### Notes
 
-`UnitStep[x]` is `0` for `x < 0` and `1` for `x >= 0` (the value at `0` is `1`). The result is always exact: certifiable real arguments resolve numerically, while non-real or unresolved arguments are left unevaluated. UnitStep is `Listable` and `Orderless`.
+`UnitStep` is the Heaviside step, closed at the origin (`UnitStep[0] = 1`), and
+its result is always the exact integer 0 or 1 once the sign is settled. Signs are
+decided by numerical certification, so an exact symbolic real like
+`UnitStep[Sqrt[2] - 1]` resolves while a genuinely unknown `UnitStep[x]` stays
+symbolic.
+
+The multi-argument form is the indicator of the non-negative orthant: it drops
+each argument it can prove non-negative and keeps `UnitStep` over the rest. The
+`NDArray` kernel is **narrowing** — a real buffer answers with an `int64` buffer,
+not boxed reals — and the same narrowing holds under `Compile[]`, where
+`UnitStep[0.5]` is `1`, not `1.`.

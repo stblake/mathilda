@@ -25,10 +25,9 @@ Out[2]= {HoldPattern[a] :> 5}
 
 ```mathematica
 In[3]:= square[n_] := n*n
-Out[3]= Null
 
 In[4]:= DownValues[square]
-Out[4]= {n_^2 -> n^2}
+Out[4]= {HoldPattern[square[n_]] :> n n}
 
 In[5]:= square[7]
 Out[5]= 49

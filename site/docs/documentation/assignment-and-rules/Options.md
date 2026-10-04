@@ -9,7 +9,7 @@
 
 Options\[expr\] gives the options explicitly set in an expression such as a graphics object.  Options\[obj, name\] gives the setting for the named option; Options\[obj, {names}\] gives a list of settings.  Assign to Options\[f\] to redefine all default options at once.
 
-## Examples (3)
+## Examples (5)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -23,6 +23,22 @@ In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], O
 
 In[3]:= SetOptions[f, c -> 3] SetOptions::optnf: c is not a known option for f. AppendTo[Options[f], c -> 3]
 Out[3]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOptions::optnf (c -> 3)}, a c Dot[f, {a -> 1, b -> 2, c -> 3}] for is known not option]
+```
+
+### Applications (2)
+
+A single named option as a rule
+
+```mathematica
+In[4]:= Options[NumberForm, DigitBlock]
+Out[4]= {DigitBlock -> Infinity}
+```
+
+A symbol with no registered options has none
+
+```mathematica
+In[5]:= Options[gsym]
+Out[5]= {}
 ```
 
 ## Algorithm
@@ -48,6 +64,26 @@ Memory: every result is freshly built. Sub-expressions taken from `res` or from 
 ```
 
 ## Implementation notes
+
+**Algorithm.** `builtin_options` (`src/options_builtin.c`) returns an object's
+option list, always as a freshly built `List` (never `NULL` for a recognised
+shape). `options_of_object` branches on the first argument: a **symbol** yields a
+copy of its registered defaults via `symtab_get_options` (or `{}` if it has
+none); a **compound expression** yields just the option rules explicitly present
+among its own arguments (each `Rule`/`RuleDelayed` whose left side is a
+symbol/string, detected by `is_option_rule`); anything else yields `{}`.
+
+The two-argument forms `Options[obj, name]` and `Options[obj, {names}]` build the
+full list and then select the matching whole rules with `lookup_rule`, whose name
+comparison is context-insensitive (`strip_context` drops any `` ` ``-qualified
+prefix). Selected rules are returned in the requested order; a name with no
+setting simply contributes nothing.
+
+**Data structures & limits.** A symbol's defaults are stored on
+`SymbolDef.default_options` as `List[Rule[name, val], ...]` — the
+`DefaultValues`-equivalent — reached through `symtab_get_options`/`_set_options`.
+Every element handed back is `expr_copy`'d, so the stored list is never aliased
+or mutated. `Options` is `Protected`.
 
 - `Options`, `SetOptions`, and `OptionValue` all have attribute `{Protected}`.
 - Default options survive `Clear[f]` (only rules are cleared) and are removed
@@ -79,9 +115,22 @@ Memory: every result is freshly built. Sub-expressions taken from `res` or from 
 
 **See also:** [SetOptions](../../assignment-and-rules/SetOptions/), [OptionValue](../../assignment-and-rules/OptionValue/), [Set](../../assignment-and-rules/Set/), [Hold](../../expression-information/Hold/), [Integrate](../../calculus/Integrate/), [Limit](../../calculus/Limit/), [Series](../../power-series/Series/), [PowerExpand](../../algebra/PowerExpand/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/options_builtin.c`](https://github.com/stblake/mathilda/blob/main/src/options_builtin.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
 - Tests: [`tests/test_accuracygoal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_accuracygoal.c)
 - Tests: [`tests/test_algebraicnumbernorm.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumbernorm.c)
 - Tests: [`tests/test_algebraicnumbertrace.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumbertrace.c)
 - Tests: [`tests/test_array_pad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_pad.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Options[s]` returns a symbol's default option settings as a list of rules
+`{name -> value, ...}`; a symbol with none gives `{}`. `Options[s, name]` or
+`Options[s, {names}]` selects just the requested rules, in the order asked for.
+
+Applied to a compound expression rather than a symbol, `Options[expr]` returns
+only the option rules that appear explicitly among `expr`'s arguments. Name
+matching ignores any context prefix, and the returned list is a fresh copy, so
+nothing stored is aliased.

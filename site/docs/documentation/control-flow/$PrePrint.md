@@ -17,10 +17,10 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= $PrePrint = Framed
-Out[1]= Framed[Framed]
+Out[1]= Framed
 
 In[2]:= 3 + 4
-Out[2]= Framed[7]
+Out[2]= 7
 ```
 
 ## Implementation notes

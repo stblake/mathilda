@@ -16,7 +16,7 @@ Equals the platform's DBL\_MAX.
 
 </details>
 
-## Examples (4)
+## Examples (5)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -40,6 +40,15 @@ In[4]:= MachineNumberQ[$MaxNumber]
 Out[4]= False
 ```
 
+### Applications (1)
+
+The largest finite IEEE 754 double, DBL_MAX
+
+```mathematica
+In[5]:= $MaxMachineNumber
+Out[5]= 1.79769e+308
+```
+
 ## Implementation notes
 
 A Protected OwnValue set in `system_constants_init` (`src/core.c`) to `expr_new_real(DBL_MAX)`, the largest finite IEEE 754 `double`.
@@ -52,3 +61,13 @@ A Protected OwnValue set in `system_constants_init` (`src/core.c`) to `expr_new_
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+
+## Notes & additional examples
+
+### Notes
+
+`$MaxMachineNumber` is a read-only Protected OwnValue equal to `<float.h>` `DBL_MAX`, the
+largest finite machine `double` (`≈ 1.79769×10³⁰⁸`). A machine-precision computation that
+would exceed it overflows; the arbitrary-precision ceiling `$MaxNumber` is larger.
+
+The value is a fixed machine constant on every IEEE 754 platform.

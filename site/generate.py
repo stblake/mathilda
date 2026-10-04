@@ -1868,24 +1868,34 @@ def main():
                               overlay_body, re.S | re.M)
                 if m and m.group(1).strip():
                     app_body = m.group(1).strip()
-                    # Parse into (input, output) pairs so these render through the
-                    # same path as every other example group -- which is what
-                    # lifts a `(* ... *)` note out as a sentence above the cell.
-                    app_pairs = []
+                    # The overlay author writes only the INPUT lines; the current
+                    # build supplies every Out. Any Out[] pasted in the overlay is
+                    # ignored and re-derived here through the same verify_block path
+                    # the spec examples use, so the page's "every input below was
+                    # run against the current Mathilda build" claim holds for
+                    # overlay worked examples too and an output can never silently
+                    # rot. All inputs run in ONE session in document order (as a
+                    # reader would run them top to bottom, and as each spec example
+                    # group already does), so an early setup line is visible to a
+                    # later example. The full input -- trailing `(* ... *)` note
+                    # included -- is kept, so _example_fence lifts the note out as
+                    # a sentence above the cell and the binary still ignores it.
+                    app_inputs = []
                     for blk in re.findall(r"```mathematica\n(.*?)```", app_body, re.S):
-                        lines = blk.rstrip().split("\n")
-                        for i, ln in enumerate(lines):
+                        for ln in blk.rstrip().split("\n"):
                             mi = re.match(r"^In\[\d+\]:=\s?(.*)$", ln)
-                            if not mi:
-                                continue
-                            mo = (re.match(r"^Out\[\d+\]=\s?(.*)$", lines[i + 1])
-                                  if i + 1 < len(lines) else None)
-                            if mo:
-                                app_pairs.append((mi.group(1).strip(), mo.group(1).strip()))
-                    if app_pairs:
-                        applications = ("pairs", app_pairs)
+                            if mi and mi.group(1).strip():
+                                app_inputs.append(mi.group(1).strip())
+                    if app_inputs:
+                        app_pairs, afigs = verify_block(app_inputs)
+                        figures.update(afigs)
+                        verified_examples += len(app_pairs)
+                        if app_pairs:
+                            applications = ("pairs", app_pairs)
                     else:
-                        applications = (app_body, len(re.findall(r"^In\[", app_body, re.M)) or 1)
+                        # Worked examples written as pure prose, no In[] fences.
+                        applications = (app_body,
+                                        len(re.findall(r"^In\[", app_body, re.M)) or 1)
                     overlay_body = (overlay_body[:m.start()] +
                                     overlay_body[m.end():]).strip() or None
 

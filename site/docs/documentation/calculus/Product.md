@@ -18,7 +18,7 @@ Options: Method (Automatic | "Telescoping" | "Rational" | "Geometric" | "QProduc
 
 </details>
 
-## Examples (18)
+## Examples (23)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -88,6 +88,43 @@ In[18]:= Product[1/(1 - Prime[i]^-s)]
 Out[18]= Product[1/(1 - Prime[i]^(-s))]
 ```
 
+### Applications (5)
+
+A symbolic finite product is a factorial
+
+```mathematica
+In[19]:= Product[k, {k, 1, n}]
+Out[19]= Factorial[n]
+```
+
+A finite numeric range is multiplied out
+
+```mathematica
+In[20]:= Product[k^2, {k, 1, 5}]
+Out[20]= 14400
+```
+
+A telescoping rational product
+
+```mathematica
+In[21]:= Product[(k + 1)/k, {k, 1, n}]
+Out[21]= 1 + n
+```
+
+A polynomial-exponential (geometric) product
+
+```mathematica
+In[22]:= Product[2^k, {k, 1, n}]
+Out[22]= 2^(1/2 n (1 + n))
+```
+
+A convergent infinite product
+
+```mathematica
+In[23]:= Product[1 - 1/k^2, {k, 2, Infinity}]
+Out[23]= 1/2
+```
+
 ## Algorithm
 
 product.c -- Product dispatcher for Mathilda.
@@ -126,15 +163,68 @@ Memory contract: builtin_product takes ownership of res but must not free it
 
 ## Implementation notes
 
+**Algorithm.** `builtin_product` is the multiplicative analogue of `Sum`, and is
+`HoldAll` so the iterator is not evaluated against an outer binding. It strips
+trailing options (`Method`, `VerifyConvergence`), rewrites multiple iterators
+`Product[f, s1, ..., sk]` into nested single-spec products, then dispatches on
+the one spec in `product_one_spec`. A finite numeric range or an explicit list
+is multiplied out directly: `expand_list`/`expand_range` bind the index and fold
+the evaluated terms with `Times` (an empty product is `1`). Before the slow
+evaluate-per-factor loop, a unit-step integer range whose body is inexact at the
+first index takes a compiled machine multiply–accumulate (`product_try_compiled`,
+via auto-compilation); an exact body (e.g. `n!`) stays on the interpreter so it
+keeps exact bignum arithmetic.
+
+**Data structures.** `Expr` trees, the `IterSpec` lattice parser
+(`iter_spec_parse_lattice`), and the iterator shadow/restore pair
+(`iter_spec_shadow`/`iter_spec_restore`) that localises the bound index. For
+symbolic bounds, `Infinity`, or the indefinite form `Product[f, i]`, it runs a
+`Method` cascade over context-qualified sub-builtins
+(`Product\`Telescoping`, `Product\`Rational`, `Product\`Geometric`,
+`Product\`QProduct`, then `Product\`Special`, `Product\`Cantor`,
+`Product\`Viete`, `Product\`EulerPrime`, `Product\`RationalInfinite`,
+`Product\`BesselZero`, `Product\`Infinite`, `Product\`LogSum`), each returning a
+closed form or coming back unevaluated to signal "fall through"
+(`result_is_unresolved`). The cascade is ordered cheapest/most-specific first so
+the nicest closed form wins.
+
+**Complexity / limits.** A closed-form stage is independent of the span width; a
+finite enumeration is linear in the number of factors (guarded by
+`PRODUCT_MAX_FINITE_TERMS`, 10^8). The closed-form stages assume a unit step, so
+a non-unit step (`{i, 1, n, 2}`) with symbolic/over-wide bounds is left held
+rather than given a wrong step-1 form. A finite range whose body hides an
+index-dependent predicate (`EvenQ[k]`, `PrimeQ[k]`, ...) is forced to enumerate,
+since symbolic evaluation would collapse the predicate and telescope the wrong
+factor. When every stage falls through, `Product[...]` is returned unevaluated.
+
 **Attributes:** `HoldAll`, `Protected`.
 
 ## References
 
 **See also:** [Sum](../../calculus/Sum/), [HoldAll](../../expression-information/HoldAll/), [NProduct](../../numerical-calculus/NProduct/), [Pochhammer](../../special-functions/Pochhammer/), [Factorial](../../arithmetic/Factorial/), [Together](../../algebra/Together/), [Factor](../../algebra/Factor/), [QPochhammer](../../special-functions/QPochhammer/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/product/product.c`](https://github.com/stblake/mathilda/blob/main/src/product/product.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_divisors.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisors.c)
 - Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Product` is the multiplicative analogue of `Sum`. It is `HoldAll`, so the index
+is localised and the iterator bounds are not evaluated against an outer binding.
+A finite numeric range (or an explicit list of values) is multiplied out
+directly, with an empty product giving `1`; a symbolic, indefinite, or convergent
+infinite product is handed to a closed-form method cascade.
+
+The cascade tries, cheapest-first, the telescoping (Gamma-free rational),
+rational (Pochhammer / Gamma), geometric (`base^k`) and q-product families, plus
+several infinite-product specialists. The method can be pinned with
+`Method -> "Telescoping" | "Rational" | "Geometric" | "QProduct"`, and
+convergence testing for infinite products can be disabled with
+`VerifyConvergence -> False`. Multiple iterators `Product[f, s1, s2]` form nested
+products, so an inner bound may depend on an outer index. When no method applies
+the `Product[...]` is returned unevaluated.

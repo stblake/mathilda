@@ -7,7 +7,7 @@
 
 **`Image3DQ[expr] gives True if expr is a valid volumetric image in canonical form. Malformed input to Image3D stays unevaluated, so this is how validity is tested.`**
 
-## Examples (34)
+## Examples (37)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -117,7 +117,53 @@ In[34]:= Image3DQ[zone]
 Out[34]= False
 ```
 
+### Applications (3)
+
+A 2-slice volume is a valid Image3D
+
+```mathematica
+In[35]:= Image3DQ[Image3D[{{{0., 1.}, {1., 0.}}, {{1., 0.}, {0., 1.}}}]]
+Out[35]= True
+```
+
+A plane is not a volume
+
+```mathematica
+In[36]:= Image3DQ[Image[{{0., 1.}, {1., 0.}}]]
+Out[36]= False
+```
+
+A bare array is not yet an Image3D
+
+```mathematica
+In[37]:= Image3DQ[{{{0., 1.}, {1., 0.}}}]
+Out[37]= False
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_image3dq` is a predicate: it calls `image3d_info` on its argument and
+returns `True` or `False`. `image3d_info` accepts only the canonical volumetric form
+`Image3D[data, "type"]` — the head must be `Image3D`, the second argument one of the canonical
+type names, and the data a rectangular `depth × height × width` array (or
+`depth × height × width × channels` for colour). `img3_shape_fast` checks rectangularity by
+walking only slice and row lengths, and `img_data_storable` rejects complex storage; a packed
+buffer answers its shape in `O(1)` from its dims. A malformed `Image3D[...]` returns `NULL`
+from its constructor and so stays unevaluated, which is exactly why a separate predicate is
+needed: an unevaluated `Image3D["hello"]` and a valid one would otherwise be
+indistinguishable.
+
+`Image3DQ` is the volumetric twin of `ImageQ`; `ImageQ` is `False` for a volume and
+`Image3DQ` `False` for a plane, so the two partition the image heads cleanly.
+
+**Data structures.** Reads the `Expr` tree without copying it. For a packed `Image3D` the
+voxels live in a visible rank-3 (grey) or rank-4 (colour) `NDArray`, slices outermost, indexed
+`data[[z, y, x]]`.
+
+**Complexity / limits.** `O(1)` for a packed volume's shape plus the storable scan; a nested
+volume pays `O(depth · height)` for the rectangularity check and `O(voxels)` for the storable
+check. Returns a boolean, so it is registered packed-aware (the probe never materialises the
+buffer it inspects).
 
 **Attributes:** `Protected`.
 
@@ -126,3 +172,17 @@ Out[34]= False
 - Source: [`src/image.c`](https://github.com/stblake/mathilda/blob/main/src/image.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Image3DQ` is the volumetric counterpart of `ImageQ`, and the two are disjoint: `ImageQ`
+answers `False` for a volume and `Image3DQ` `False` for a plane.
+
+It is the way to test validity because malformed input to `Image3D` stays **unevaluated**
+rather than failing — a bare nested array has not yet been through the `Image3D` constructor,
+so it is not in canonical form and `Image3DQ` reports `False`.
+
+A volume is stored `depth × height × width` (slices outermost, indexed `data[[z, y, x]]`),
+while `ImageDimensions` reports it fully reversed as `{width, height, depth}`.

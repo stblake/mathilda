@@ -7,7 +7,7 @@
 
 **`ImageReflect[image] reflects top to bottom; ImageReflect[image, Left] or Right reflects left to right, and Top or Bottom is the vertical reflection again -- either name of a pair selects the same axis, since reflecting to the top and reflecting to the bottom are one operation. For an Image3D, Front or Back selects the DEPTH axis, the pair Mathematica uses for volumes; those two DECLINE on a plane, which has no depth axis, rather than being reinterpreted as some other axis and turning a mistake into a wrong picture. A reflection is a pure index permutation, so it interpolates nothing: reflecting twice about the same axis is the identity bit for bit, and reflections about different axes commute exactly.`**
 
-## Examples (38)
+## Examples (41)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -130,7 +130,52 @@ In[38]:= ImageReflect[zone]
 Out[38]= -Image-
 ```
 
+### Applications (3)
+
+Default: flip top to bottom
+
+```mathematica
+In[39]:= ImageData[ImageReflect[Image[{{0., 1.}, {2., 3.}}]]]
+Out[39]= {{2.0, 3.0}, {0.0, 1.0}}
+```
+
+The Left side flips left to right
+
+```mathematica
+In[40]:= ImageData[ImageReflect[Image[{{0., 1.}, {2., 3.}}], Left]]
+Out[40]= {{1.0, 0.0}, {3.0, 2.0}}
+```
+
+Reflecting twice is the identity, bit for bit
+
+```mathematica
+In[41]:= ImageData[ImageReflect[ImageReflect[Image[{{0., 1.}, {2., 3.}}]]]]
+Out[41]= {{0.0, 1.0}, {2.0, 3.0}}
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_imagereflect` flips an image about an axis by a **pure index
+permutation** — no interpolation, so it is exact and self-inverse. `ImageReflect[image]`
+reflects top-to-bottom (the default); a side argument selects the axis via `reflect_side_axis`:
+`Top`/`Bottom` the height axis, `Left`/`Right` the width axis. Either name of a pair selects
+the same axis, since reflecting "to the top" and "to the bottom" are the same operation. The
+destination pixel `(x, y)` reads source `(w−1−x or x, h−1−y or y)` depending on the mode.
+
+For an `Image3D` (`reflect3_run`), `Front`/`Back` additionally name the depth axis — the pair
+Mathematica uses for volumes. Those two **decline on a plane**, which has no depth axis:
+silently reinterpreting them as another axis would turn a caller's mistake into a wrong
+picture.
+
+Because it is a permutation, the algebra is exact: reflecting twice about the same axis is the
+identity **bit for bit**, and reflections about different axes commute exactly.
+
+**Data structures.** One decoded unit buffer in; a fresh same-size buffer out, wrapped by
+`image_build_real` / `image3d_build_real` as a packed `"Real"` image (every image head returns
+a packed buffer — `make check-image-packing`).
+
+**Complexity / limits.** `O(pixels)`, one pass. The only inputs refused are `Front`/`Back` on a
+plane and a non-side symbol.
 
 **Attributes:** `Protected`.
 
@@ -141,3 +186,17 @@ Out[38]= -Image-
 - Source: [`src/imagegeom.c`](https://github.com/stblake/mathilda/blob/main/src/imagegeom.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ImageReflect[image]` reflects top-to-bottom; `ImageReflect[image, Left]` (or `Right`) reflects
+left-to-right, and `Top`/`Bottom` is the vertical reflection again — either name of a pair
+selects the same axis, since reflecting to the top and to the bottom are one operation. For an
+`Image3D`, `Front`/`Back` select the depth axis; those two decline on a plane rather than being
+reinterpreted.
+
+A reflection is a pure index permutation, so it interpolates nothing: reflecting twice about
+the same axis is the identity bit for bit, and reflections about different axes commute
+exactly.

@@ -7,7 +7,7 @@
 
 **`ImageQ[expr] gives True if expr is a valid image in canonical form, and False otherwise. Malformed input to Image stays unevaluated, so ImageQ is how validity is tested.`**
 
-## Examples (34)
+## Examples (38)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -117,7 +117,48 @@ In[34]:= ImageQ[zone]
 Out[34]= True
 ```
 
+### Applications (4)
+
+```mathematica
+In[35]:= ImageQ[Image[{{0., 1.}, {1., 0.}}]]
+Out[35]= True
+
+In[36]:= ImageQ[5]
+Out[36]= False
+
+In[37]:= ImageQ[Image[{{0., 1.}, {1.}}]]
+Out[37]= False
+
+In[38]:= ImageQ[Image3D[{{{0., 1.}}, {{1., 0.}}}]]
+Out[38]= False
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_imageq` is a one-argument predicate that returns
+`True`/`False` and nothing symbolic: it calls `image_info(arg, NULL, NULL, NULL,
+NULL)` and wraps the boolean. `image_info` is the single validity gate the whole
+subsystem shares — it checks that the argument is a two-argument `Image[data,
+type]` whose second argument is a type string (`"Bit"`, `"Byte"`, `"Bit16"`,
+`"Real"`), that `img_shape_fast` finds a rectangular height × width (× channels)
+array, and that `img_data_storable` confirms every leaf is in the range the type
+fixes. `ImageQ` is the companion to the fact that malformed input to `Image[...]`
+is left **unevaluated** rather than erroring — the constructor returns `NULL` for
+ragged, non-numeric or complex data, so the head stays `Image[...]` and `ImageQ`
+is how a caller tests whether that happened. A volume is deliberately `False`
+here (it is `Image3DQ` that accepts one), since the two ranks are distinct
+objects.
+
+**Data structures.** Reads the canonical `Image` node — an `EXPR_FUNCTION` with
+head `Image`, argument 0 the pixel array (normally a packed NDArray buffer),
+argument 1 the type string. No buffer is loaded or copied; validation walks only
+the shape and leaf scalars. `ImageQ` is on `pack.c`'s `AWARE` list, so a packed
+pixel buffer is inspected in place rather than being unpacked into boxed `Expr`
+nodes.
+
+**Complexity / limits.** `O(1)` for the structural checks plus one pass over the
+leaves for `img_data_storable`; no allocation. Returns `False`, never
+unevaluated, for every non-image — it is a total predicate.
 
 **Attributes:** `Protected`.
 
@@ -128,3 +169,19 @@ Out[34]= True
 - Source: [`src/image.c`](https://github.com/stblake/mathilda/blob/main/src/image.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ImageQ[expr]` gives `True` exactly when `expr` is a valid image in canonical
+`Image[data, type]` form, and `False` otherwise — it never returns unevaluated,
+so it is a total predicate usable in a pattern test or condition.
+
+Validity is decided by the subsystem's shared `image_info` gate: a two-argument
+`Image`, a recognised type string, a rectangular pixel array, and every stored
+value inside the range the type fixes. This matters because the `Image[...]`
+constructor leaves **malformed** input (ragged, non-numeric, complex) unevaluated
+rather than erroring — the head stays `Image[...]`, and `ImageQ` is the way to
+test whether the construction actually succeeded. A volumetric `Image3D` is
+`False`; its own predicate is `Image3DQ`.

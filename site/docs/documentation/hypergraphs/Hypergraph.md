@@ -7,7 +7,7 @@
 
 **`Hypergraph[{e1, e2, ...}] represents a hypergraph whose hyperedges e_i are Lists of vertices; the vertices are derived in first-appearance order. Hypergraph[{v1, ...}, {e1, ...}] gives the vertices explicitly. Hypergraph[g] converts a Graph. Hyperedges may repeat, overlap, nest, be empty, or repeat a vertex; their order is kept for ordered (Wolfram-model) use, while set-based heads read each as the set of its vertices.`**
 
-## Examples (7)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -40,11 +40,71 @@ In[7]:= InputForm[Hypergraph[{1,2},{{1,5}}]]
 Out[7]= Hypergraph[{1, 2}, {{1, 5}}]
 ```
 
+### Applications (4)
+
+The running example: 7 vertices, 4 hyperedges
+
+```mathematica
+In[8]:= h = Hypergraph[{{1, 2, 3}, {3, 4}, {4, 5, 6}, {7}}]
+Out[8]= Hypergraph[<7 vertices, 4 hyperedges>]
+```
+
+Vertices, in first-appearance order
+
+```mathematica
+In[9]:= VertexList[h]
+Out[9]= {1, 2, 3, 4, 5, 6, 7}
+```
+
+The hyperedges, kept exactly as written
+
+```mathematica
+In[10]:= EdgeList[h]
+Out[10]= {{1, 2, 3}, {3, 4}, {4, 5, 6}, {7}}
+```
+
+The shared Graph accessors work on a Hypergraph
+
+```mathematica
+In[11]:= {VertexCount[h], EdgeCount[h]}
+Out[11]= {7, 4}
+```
+
 ## Options & behaviour
 
 An unknown vertex in a hyperedge leaves the call unevaluated:
 
 ## Implementation notes
+
+**Algorithm.** `builtin_hypergraph` is a canonicalising constructor with three
+accepted forms. `Hypergraph[{e1, ...}]` derives the vertices in first-appearance
+order; `Hypergraph[{v1, ...}, {e1, ...}]` takes them explicitly (duplicates
+dropped, first occurrence kept); `Hypergraph[g]` turns each edge `u<->v`/`u->v`
+of a `Graph` into the hyperedge `{u, v}`. A hyperedge must be a `List`; anything
+else leaves the call unevaluated. A canonical, already-valid `Hypergraph` is its
+own fixed point — the builtin returns `NULL` for it. Vertices are resolved by an
+**integer fast path** when every element is a machine integer in a range at most
+`4n + 1024` wide (`Range[n]`, Wolfram-model states): first appearance by direct
+addressing into a `seen` bitmap, which skips the hash index for the dominant
+`Σ|e|` element-resolution cost; otherwise through the `GraphVIdx` open-addressing
+hash. Construction then seeds the validated-hypergraph memo (`hyp_memo_from`),
+resolving every hyperedge element to a vertex index.
+
+**Data structures.** The object is a plain `Expr` tree
+`Hypergraph[List, List]` — no new `EXPR_*` tag. The memo (`HYP_MEMO_SLOTS = 4`,
+LRU-evicted, keyed by node pointer and holding an `expr_copy` reference so the
+node stays alive and immutable) stores the vertex index, the hyperedges as a
+vertex-index CSR in two forms — `eoff/ev` (raw, repeats kept) and `soff/sv`
+(distinct vertices, aliasing the raw arrays when no hyperedge repeats a vertex)
+— and, built lazily on first need, the vertex→hyperedge incidence CSR
+(`voff/ve`). `hyp_int_list` returns a packed `int64` buffer above the packing
+threshold.
+
+**Complexity / limits.** Construction is `O(Σ|e|)`; validation by every later
+head is `O(1)` on a memo hit. The integer fast path roughly halves construction.
+Hyperedge counts and total incidence are capped at `INT32_MAX`. The memo is
+module-static and lock-free: hypergraph builtins run only on the evaluator
+thread.
 
 - Hypergraphs are ordinary `Expr` trees of the canonical form
   `Hypergraph[{v1, ..., vn}, {e1, ..., em}]` — no new `EXPR_*` tag. Each
@@ -85,7 +145,30 @@ An unknown vertex in a hyperedge leaves the call unevaluated:
 
 **See also:** [Graph](../../graphs/Graph/), [List](../../other-advanced/List/), [HypergraphToGraph](../../hypergraphs/HypergraphToGraph/), [EdgeList](../../graphs/EdgeList/), [InputForm](../../expression-information/InputForm/), [HyperedgeSizes](../../hypergraphs/HyperedgeSizes/), [HypergraphEdgeDelete](../../hypergraphs/HypergraphEdgeDelete/), [FullForm](../../expression-information/FullForm/)
 
-- Source: [`src/graph/hyp_init.c`](https://github.com/stblake/mathilda/blob/main/src/graph/hyp_init.c)
+- C. Berge, *Hypergraphs: Combinatorics of Finite Sets*, North-Holland Mathematical Library 45 (Elsevier, 1989).
+- Source: [`src/graph/hyp_util.c`](https://github.com/stblake/mathilda/blob/main/src/graph/hyp_util.c)
 - Specification: [`docs/spec/builtins/hypergraphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/hypergraphs.md)
 - Tests: [`tests/test_graphplot.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphplot.c)
 - Tests: [`tests/test_hypergraph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hypergraph.c)
+
+## Notes & additional examples
+
+### Notes
+
+A `Hypergraph` is an ordinary `Expr` tree, `Hypergraph[{v1, ..., vn}, {e1, ..., em}]`,
+with no new kernel type — the same uniformity that lets `Part`, `Map` and the
+Graph accessors apply to it. Each hyperedge is a `List` of vertices; vertices are
+arbitrary, pairwise-distinct expressions. Hyperedges may repeat (a
+multi-hypergraph), overlap, nest, be empty, or repeat a vertex (`{1, 1, 2}`, as
+Wolfram-model states do).
+
+Order is kept, and that is deliberate. Order-sensitive heads
+(`HypergraphToGraph`, `EdgeList`, the arity heads, `HypergraphEdgeDelete`) see the
+hyperedge exactly as written; every set-theoretic head reads it as the set of its
+distinct vertices. So one object answers both the ordered (directed) and the
+unordered question.
+
+Standard output is the terse summary `Hypergraph[<n vertices, m hyperedges>]`;
+`InputForm` and `FullForm` print the literal, which round-trips through the parser.
+Mathematica has no built-in `Hypergraph`; the name follows the
+WolframInstitute/Hypergraph paclet.

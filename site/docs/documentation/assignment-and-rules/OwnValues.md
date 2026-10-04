@@ -31,7 +31,7 @@ In[4]:= a = 7
 Out[4]= 7
 
 In[5]:= OwnValues[a]
-Out[5]= {7 -> 7}
+Out[5]= {HoldPattern[a] :> 7}
 ```
 
 ## Implementation notes

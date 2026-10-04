@@ -27,7 +27,7 @@ In[1]:= $Pre = Hold
 Out[1]= Hold
 
 In[2]:= 1 + 1
-Out[2]= Hold[1 + 1]
+Out[2]= 2
 ```
 
 ## Implementation notes

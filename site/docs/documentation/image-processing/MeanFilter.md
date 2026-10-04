@@ -7,7 +7,7 @@
 
 **`MeanFilter[image, r] averages over a (2r+1) x (2r+1) neighbourhood. This IS a convolution with a normalised box, and it is implemented as one rather than as a separate averaging loop -- two implementations of one identity is how the identity quietly stops holding. Being a full rectangle the kernel is separable, so it costs kw + kh rather than kw * kh.`**
 
-## Examples (46)
+## Examples (49)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -150,7 +150,40 @@ In[46]:= MeanFilter[zone, 1]
 Out[46]= -Image-
 ```
 
+### Applications (3)
+
+```mathematica
+In[47]:= ImageData[MeanFilter[Image[{{0., 0, 0}, {0, 1., 0}, {0, 0, 0}}], 1]]
+Out[47]= {{0.111111, 0.111111, 0.111111}, {0.111111, 0.111111, 0.111111}, {0.111111, 0.111111, 0.111111}}
+
+In[48]:= ImageData[MeanFilter[Image[{{0.5, 0.5}, {0.5, 0.5}}], 1]]
+Out[48]= {{0.5, 0.5}, {0.5, 0.5}}
+
+In[49]:= ImageType[MeanFilter[Image[{{0, 1}, {1, 0}}, "Bit"], 1]]
+Out[49]= "Real"
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_meanfilter` averages each pixel over a `(2r+1) × (2r+1)`
+neighbourhood. The radius must be a non-negative integer. The key design choice
+is that this IS a convolution with a normalised box: the routine builds a `n × n`
+kernel of `1/n²` (`n = 2r+1`) and runs it through the shared
+`convolve_dispatch`, rather than through a separate averaging loop — two
+implementations of one identity is how the identity quietly stops holding. A full
+rectangle factorises, so `convolve_dispatch` takes the separable path and the
+cost is `kw + kh` taps per pixel per axis rather than `kw · kh`. A volume takes
+the rank-3 path (`mean3_run`). Border reads clamp to the nearest edge pixel, the
+same `"Fixed"` padding every convolution here uses.
+
+**Data structures.** A `n × n` flat `double` box kernel; `src`/`dst` flat
+height · width · channels unit-scale buffers. The result is a `"Real"` image
+(`image_build_real`). No bespoke accumulator — it is the convolution core.
+
+**Complexity / limits.** `O(width · height · channels · (kw + kh))` via the
+separable path, independent of the kernel area. Radius is capped at 256. The box
+is normalised (unlike `BoxMatrix`, whose entries are `1`), so the output is a
+true mean rather than a sum.
 
 **Attributes:** `Protected`.
 
@@ -161,3 +194,18 @@ Out[46]= -Image-
 - Source: [`src/imagefilter.c`](https://github.com/stblake/mathilda/blob/main/src/imagefilter.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`MeanFilter[image, r]` averages over a `(2r+1) × (2r+1)` neighbourhood. This *is*
+a convolution with a normalised box, and it is implemented as one rather than as
+a separate averaging loop — two implementations of one identity is how the
+identity quietly stops holding.
+
+Being a full rectangle, the box kernel is separable, so the cost is `kw + kh`
+taps per axis rather than `kw · kh`, independent of the window area. Border
+pixels use the same `"Fixed"` (replicate) padding the convolutions use, and the
+result is a `"Real"` image. Contrast with `BoxMatrix[r]`, whose entries are `1`
+and unnormalised — convolving with it is `(2r+1)²` times too bright.

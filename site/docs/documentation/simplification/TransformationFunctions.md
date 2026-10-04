@@ -16,7 +16,7 @@ TransformationFunctions -\> Automatic uses the built-in collection of transforma
 
 </details>
 
-## Examples (6)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -30,7 +30,7 @@ In[2]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {}]
 Out[2]= Cos[x]^2 + Sin[x]^2
 ```
 
-### Applications (4)
+### Applications (5)
 
 ```mathematica
 In[3]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {Automatic}]
@@ -39,11 +39,13 @@ Out[3]= 1
 In[4]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {}]
 Out[4]= Cos[x]^2 + Sin[x]^2
 
-In[5]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {f}]
-Out[5]= 1
+In[5]:= f = Function[e, e /. Sin[a_]^2 + Cos[a_]^2 -> 1];
 
-In[6]:= Simplify[1 + Tan[x]^2, TransformationFunctions -> {Automatic, TrigToExp}]
-Out[6]= Sec[x]^2
+In[6]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {f}]
+Out[6]= 1
+
+In[7]:= Simplify[1 + Tan[x]^2, TransformationFunctions -> {Automatic, TrigToExp}]
+Out[7]= Sec[x]^2
 ```
 
 ## Implementation notes

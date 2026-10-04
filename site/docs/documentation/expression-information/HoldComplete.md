@@ -16,7 +16,7 @@ HoldComplete has attribute HoldAllComplete: it prevents argument evaluation, Seq
 
 </details>
 
-## Examples (5)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -37,6 +37,36 @@ Out[4]= HoldComplete[g[1 + 2]]
 
 In[5]:= ReleaseHold[HoldComplete[Sequence[1, 2]]]
 Out[5]= Sequence[1, 2]
+```
+
+### Applications (4)
+
+Holds its argument, like Hold
+
+```mathematica
+In[6]:= HoldComplete[1 + 1]
+Out[6]= HoldComplete[1 + 1]
+```
+
+But unlike Hold it does not splice Sequence
+
+```mathematica
+In[7]:= HoldComplete[Sequence[1, 2], 3]
+Out[7]= HoldComplete[Sequence[1, 2], 3]
+```
+
+For contrast, Hold does splice it
+
+```mathematica
+In[8]:= Hold[Sequence[1, 2], 3]
+Out[8]= Hold[1, 2, 3]
+```
+
+ReleaseHold strips the wrapper and evaluates
+
+```mathematica
+In[9]:= ReleaseHold[HoldComplete[1 + 1]]
+Out[9]= 2
 ```
 
 ## Implementation notes
@@ -60,3 +90,15 @@ Out[5]= Sequence[1, 2]
 - Tests: [`tests/test_releasehold.c`](https://github.com/stblake/mathilda/blob/main/tests/test_releasehold.c)
 - Tests: [`tests/test_sequence.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sequence.c)
 - Tests: [`tests/test_unevaluated.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unevaluated.c)
+
+## Notes & additional examples
+
+### Notes
+
+`HoldComplete[expr]` is the strongest hold wrapper: it carries the `HoldAllComplete`
+attribute, so besides holding every argument unevaluated it also suppresses the upvalue
+lookup and the `Sequence` / `Unevaluated`-stripping that an ordinary `Hold` still performs.
+That is why `HoldComplete[Sequence[1, 2], 3]` keeps its `Sequence` intact where `Hold`
+flattens it.
+
+`ReleaseHold` removes the wrapper and lets the contents evaluate.

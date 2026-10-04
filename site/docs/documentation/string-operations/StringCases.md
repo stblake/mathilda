@@ -21,7 +21,7 @@ Gives the matches of any of the pi.
 
 Gives the list of results for each of the si. Options: Overlaps -\> False (default; overlapping substrings are not treated as separate), True (overlaps separate, one substring per start), or All (every matching substring at every start); IgnoreCase -\> True treats upper/lowercase as equivalent.
 
-## Examples (5)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -46,6 +46,29 @@ Out[4]= {"AAA", "AA", "A", "AA", "A", "A"}
 
 In[5]:= StringCases["aAbB", "a", IgnoreCase -> True]
 Out[5]= {"a", "A"}
+```
+
+### Applications (3)
+
+Runs of letters, left to right
+
+```mathematica
+In[6]:= StringCases["the cat sat", LetterCharacter ..]
+Out[6]= {"the", "cat", "sat"}
+```
+
+Keep only the captured digit
+
+```mathematica
+In[7]:= StringCases["a1b2c3", RegularExpression["[a-z](\\d)"] -> "$1"]
+Out[7]= {"1", "2", "3"}
+```
+
+Overlapping matches, one per start
+
+```mathematica
+In[8]:= StringCases["AAAA", "AA", Overlaps -> True]
+Out[8]= {"AA", "AA", "AA"}
 ```
 
 ## Algorithm
@@ -81,14 +104,33 @@ The match enumeration itself is regex_scan() in regex_common.c, shared with Stri
 
 ## Implementation notes
 
+**Algorithm.** `builtin_stringcases` seeds `Overlaps`/`IgnoreCase` from the registered `Options` (so `SetOptions` takes effect), strips trailing option rules to leave the positional arguments, and builds the rule set — anchored only in `Overlaps -> All` mode, where exact-substring matches are enumerated. It then calls the shared enumerator `regex_scan` once per subject. For a bare pattern each span becomes the matched substring; for a `patt -> rhs` rule, `regex_rule_replacement` expands `$0`/`$n` from the capture pool. `want_captures` is set only when some rule carries an RHS, so pure extraction never allocates a capture pool.
+
+**Data structures.** `regex_scan` fills a `RegexScan`: a growable span array plus a flat capture pool that spans index by *offset* (so growing the pool never invalidates a recorded span). The result is a `List` of `EXPR_STRING`.
+
+**Complexity / limits.** The `False`/`True` scans stream left-to-right; `All` mode probes `O(len² · nr)` substrings against the anchored rules. `StringCount` and `StringPosition` share this scanner, so the three always agree on count and overlap policy. Offsets are byte offsets; the occurrence-limit form `StringCases[s, p, n]` is unsupported and left unevaluated.
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [SetOptions](../../assignment-and-rules/SetOptions/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/strings/regex/stringcases.c`](https://github.com/stblake/mathilda/blob/main/src/strings/regex/stringcases.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
 - Tests: [`tests/test_stringcontainsq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcontainsq.c)
 - Tests: [`tests/test_stringcount.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcount.c)
 - Tests: [`tests/test_stringfns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringfns.c)
+
+## Notes & additional examples
+
+### Notes
+
+Matching is non-overlapping and greedy by default (`Overlaps -> False`). A
+`patt -> rhs` rule rewrites each match, expanding `$0`/`$n`; a bare pattern
+returns the matched substring itself.
+
+`StringCases` shares its match enumerator (`regex_scan`) with `StringCount` and
+`StringPosition`, so `StringCount[s, p]` always equals
+`Length[StringCases[s, p]]` under any option setting. A list of subjects threads
+element-wise.

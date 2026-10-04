@@ -55,7 +55,7 @@
 - [`ReleaseHold`](ReleaseHold.md) — ReleaseHold[expr]  _(Stable)_
 - [`Row`](Row.md) — Row[{e1, e2, ...}] displays the ei concatenated together in a row.  _(Stable)_
 - [`Sequence`](Sequence.md) — Sequence[e1, e2, ...]  _(Stable)_
-- [`SequenceHold`](SequenceHold.md) — SequenceHold  _(Experimental)_
+- [`SequenceHold`](SequenceHold.md) — SequenceHold  _(Stable)_
 - [`SetAttributes`](SetAttributes.md) — SetAttributes[s, attr] sets the attributes for s.  _(Stable)_
 - [`StringQ`](StringQ.md) — StringQ[expr]  _(Stable)_
 - [`Symbol`](Symbol.md) — Symbol["name"]  _(Stable)_

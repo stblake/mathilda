@@ -46,10 +46,10 @@ In[6]:= Series[ArcTan[x], {x, 0, 9}]
 Out[6]= x - 1/3 x^3 + 1/5 x^5 - 1/7 x^7 + 1/9 x^9 + O[x]^10
 
 In[7]:= Integrate[ArcTan[x], x]
-Out[7]= 1/2 (2 x ArcTan[x] - Log[1 + x^2])
+Out[7]= 1/2 (-Log[1 + x^2] + x (ArcTan[1, x] - ArcTan[1, -x]))
 
 In[8]:= N[16 ArcTan[1/5] - 4 ArcTan[1/239], 40]
-Out[8]= 3.1415926535897932384626433832795028841975
+Out[8]= 3.1415926535897932384626433832795028841971
 ```
 
 ## Implementation notes

@@ -931,6 +931,17 @@ function are **not** automatically flattened out.
   that splices only at the eventual call site — e.g.
   `splice[x_] := Sequence[x, x, x]; {a, splice[b], c}` gives `{a, b, b, b, c}`.
 
+```mathematica
+In[1]:= Hold[Sequence[a, b]]
+Out[1]= Hold[a, b]
+
+In[2]:= SetAttributes[h, {HoldAll, SequenceHold}]; h[a, Sequence[b, c]]
+Out[2]= h[a, Sequence[b, c]]
+
+In[3]:= splice[x_] := Sequence[x, x, x]; {a, splice[b], c}
+Out[3]= {a, b, b, b, c}
+```
+
 ## InputForm
 - `InputForm[expr]` causes `expr` to be printed in a form suitable for input (standard form in Mathilda).
 - In the notebook front end, `InputForm` (and `FullForm`, `TeXForm`, `NumberForm`) suppresses
@@ -982,6 +993,14 @@ Out[3]= {32768.e, 1.94872e7, 1.06045e10}
 - `Row[{e1, e2, ...}]` displays the `ei` concatenated in a row; strings are shown without quotes.
 - `Row[{e1, e2, ...}, s]` inserts the string `s` between successive elements.
 - `Protected`. Used by `NumberForm`'s `NumberFormat` option to assemble a custom display.
+
+```mathematica
+In[1]:= Row[{"x", " = ", 5}]
+Out[1]= x = 5
+
+In[2]:= Row[{1, 2, 3}, ", "]
+Out[2]= 1, 2, 3
+```
 
 ## ToString
 - `ToString[expr]`: returns a `String` containing the printed form of `expr` in `InputForm`.
@@ -1067,6 +1086,16 @@ Range[n, m]
 	generates the list {n, n + 1, ..., m - 1, m}.
 Range[n, m, d]
 	uses step d."
+```
+
+The result is the docstring as a string, so it can be tested structurally:
+
+```mathematica
+In[1]:= StringQ[Information[Sin]]
+Out[1]= True
+
+In[2]:= Head[Information[Plus]]
+Out[2]= String
 ```
 
 ## Names
@@ -1264,7 +1293,10 @@ Gives the peak number of bytes resident for the Mathilda process over its lifeti
   largest value some earlier call to `MemoryInUse` happened to observe. That distinction is
   the point: a polled maximum misses any spike falling between two polls, and a status bar
   polling once a second would miss nearly every spike worth knowing about.
-- `MaxMemoryUsed[] >= MemoryInUse[]` always holds, and the peak never decreases.
+- The peak never decreases within a run. It and `MemoryInUse[]` are read from two different
+  OS counters (`getrusage` versus the per-task resident size), so the two are not guaranteed
+  to agree to the byte at a given instant — near startup `ru_maxrss` can even read a page
+  below the current RSS, so `MaxMemoryUsed[] >= MemoryInUse[]` is not a reliable invariant.
 - **`ru_maxrss` is in different units on the two platforms** — bytes on Darwin, kilobytes on
   Linux — so it is scaled per platform. An unconverted use is wrong by a factor of 1024 on
   one of them while looking plausible on both.
@@ -1274,3 +1306,13 @@ Gives the peak number of bytes resident for the Mathilda process over its lifeti
   from the very macro every other module needs in order to see POSIX at all. So each platform
   gets the macro that widens *its* namespace: `_DARWIN_C_SOURCE` on macOS, `_DEFAULT_SOURCE`
   plus `_XOPEN_SOURCE` on glibc.
+
+The returned value changes from run to run, so examples assert only structure:
+
+```mathematica
+In[1]:= Head[MaxMemoryUsed[]]
+Out[1]= Integer
+
+In[2]:= MaxMemoryUsed[] > 0
+Out[2]= True
+```

@@ -15,7 +15,6 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= SetAttributes[r, OneIdentity]
-Out[1]= Null
 
 In[2]:= Attributes[r]
 Out[2]= {OneIdentity}

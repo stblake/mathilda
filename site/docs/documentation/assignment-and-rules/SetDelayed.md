@@ -15,7 +15,6 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= f[n_] := n^2
-Out[1]= Null
 
 In[2]:= f[4]
 Out[2]= 16

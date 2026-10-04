@@ -7,7 +7,7 @@
 
 **`ImageType[image] gives the pixel type as "Bit", "Byte", "Bit16" or "Real". The type fixes the range of a stored value, which is what makes ImageData's scaling to the unit interval well defined.`**
 
-## Examples (34)
+## Examples (38)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -117,7 +117,43 @@ In[34]:= ImageType[zone]
 Out[34]= "Real"
 ```
 
+### Applications (4)
+
+```mathematica
+In[35]:= ImageType[Image[{{0, 255}}, "Byte"]]
+Out[35]= "Byte"
+
+In[36]:= ImageType[Image[{{0., 1.}}]]
+Out[36]= "Real"
+
+In[37]:= ImageType[Image[{{0, 1}, {1, 0}}]]
+Out[37]= "Bit"
+
+In[38]:= ImageType[Image3D[{{{0, 1}}, {{1, 0}}}, "Bit"]]
+Out[38]= "Bit"
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_imagetype` returns the pixel type as a string. It tries
+`image3d_info` first (so a volume is accepted) and then `image_info`, reading out
+the stored `ImgType` enum and mapping it through `img_type_name` to one of
+`"Bit"`, `"Byte"`, `"Bit16"` or `"Real"`. The type is not recomputed from the
+data — it is the second argument of the canonical `Image[data, type]` /
+`Image3D[data, type]` node, fixed at construction. That construction is where the
+inference happens: all-integer data in `{0,1}` becomes `"Bit"`, all-integer in
+`0..255` becomes `"Byte"`, anything else `"Real"`. The type's whole purpose is to
+fix the **range** of a stored value — `"Bit"` is `{0,1}`, `"Byte"` is `0..255`,
+`"Bit16"` is `0..65535`, `"Real"` is already the unit interval — which is what
+makes `ImageData`'s scaling to `[0,1]` well defined.
+
+**Data structures.** Reads the type string directly from argument 1 of the image
+node; no pixel buffer is touched. `ImageType` is on `pack.c`'s `AWARE` list, so a
+packed-buffer image answers without being unpacked.
+
+**Complexity / limits.** `O(1)`. Returns unevaluated (`NULL`) for a non-image.
+`"Real32"`/`"Real64"` are accepted as synonyms at construction but normalise to
+`"Real"`, so that is what is reported back.
 
 **Attributes:** `Protected`.
 
@@ -128,3 +164,19 @@ Out[34]= "Real"
 - Source: [`src/image.c`](https://github.com/stblake/mathilda/blob/main/src/image.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ImageType[image]` gives the pixel type as `"Bit"`, `"Byte"`, `"Bit16"` or
+`"Real"`. The type is stored on the image, set when it was constructed, not
+re-derived from the pixels on each call.
+
+The type fixes the *range* of a stored value — `"Bit"` is `{0, 1}`, `"Byte"` is
+`0..255`, `"Bit16"` is `0..65535`, `"Real"` is already the unit interval — and
+that is exactly what makes `ImageData`'s scaling well defined: a `"Byte"` 255
+scales to `1.0`, a `"Real"` 1.0 stays `1.0`. Type inference at construction reads
+only the values: all-integer in `{0, 1}` is `"Bit"`, all-integer in `0..255` is
+`"Byte"`, anything else `"Real"`, so `Image[{{0, 1}}]` is a bit image while
+`Image[{{0., 1.}}]` is a real one.

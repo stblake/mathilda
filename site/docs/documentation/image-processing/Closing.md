@@ -7,7 +7,7 @@
 
 **`Closing[image, r] dilates then erodes with the same element, filling dark features smaller than it. Idempotent, like Opening, and the two bracket the image: Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere A "Bit" image stays "Bit"; other types give "Real".`**
 
-## Examples (38)
+## Examples (41)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -130,7 +130,44 @@ In[38]:= Closing[zone, 2]
 Out[38]= -Image-
 ```
 
+### Applications (3)
+
+```mathematica
+In[39]:= ImageData[Closing[Image[{{1, 1, 1}, {1, 0, 1}, {1, 1, 1}}, "Bit"], 1]]
+Out[39]= {{1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}}
+
+In[40]:= ImageType[Closing[Image[{{1, 1, 1}, {1, 0, 1}, {1, 1, 1}}, "Bit"], 1]]
+Out[40]= "Bit"
+
+In[41]:= ImageData[Closing[Closing[Image[{{1, 1, 1}, {1, 0, 1}, {1, 1, 1}}, "Bit"], 1], 1]]
+Out[41]= {{1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}}
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_closing` is `morph_builtin(res, MORPH_DILATE, two_pass =
+true)` — a **dilation followed by an erosion** with the *same* structuring
+element. The shared `morph_builtin` runs `morph_run` once for the first pass and,
+when `two_pass`, again with the opposite operation (`MORPH_DILATE` then
+`MORPH_ERODE`), reusing the same support mask both times. Using the same element
+both times is what makes the pair **idempotent** — `Closing[Closing[f]]` equals
+`Closing[f]` — and what makes it a closing rather than merely two smoothings; a
+different second element would still smooth but would not be a closing.
+Geometrically it fills dark features smaller than the element while leaving larger
+ones close to their original size. Each pass inherits `Dilation`'s machinery: the
+separable van Herk–Gil-Werman max/min for a full rectangle, `morph_direct` for an
+arbitrary element, and replicate padding. Because dilation and erosion are duals
+and the padding is self-dual, the family brackets the image:
+`Erosion <= Opening <= image <= Closing <= Dilation` pointwise everywhere.
+
+**Data structures.** Two flat `double` scratch buffers `a` (first pass) and `b`
+(second pass), plus the `unsigned char` support mask. A `"Bit"` image stays
+`"Bit"` (`image_build_typed`), every other type gives `"Real"`.
+
+**Complexity / limits.** Twice a single morphology pass: `O(width · height ·
+channels)` amortised for a full rectangle (independent of `r`), `O(width ·
+height · channels · |support|)` for an arbitrary element. A volume takes the
+rank-3 two-pass path.
 
 **Attributes:** `Protected`.
 
@@ -138,6 +175,22 @@ Out[38]= -Image-
 
 **See also:** [Image3D](../../image-processing/Image3D/)
 
+- J. Serra, *Image Analysis and Mathematical Morphology* (Academic Press, 1982).
 - Source: [`src/imagefilter.c`](https://github.com/stblake/mathilda/blob/main/src/imagefilter.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Closing[image, r]` dilates then erodes with the same element, filling dark
+features smaller than it. Using the **same** structuring element for both passes
+is what makes it idempotent — `Closing[Closing[f]] = Closing[f]` — and what makes
+it a closing rather than two unrelated smoothings.
+
+Like `Opening`, it is idempotent, and the two bracket the image:
+`Erosion <= Opening <= image <= Closing <= Dilation` pointwise everywhere. Each
+pass reuses `Dilation`/`Erosion`'s separable van Herk–Gil-Werman machinery, so
+the cost does not grow with the radius. A `"Bit"` image stays `"Bit"`; other
+types give `"Real"`.

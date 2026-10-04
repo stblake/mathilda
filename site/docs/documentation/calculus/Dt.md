@@ -47,7 +47,7 @@ In[8]:= Dt[Log[x]]
 Out[8]= Dt[x]/x
 
 In[9]:= Dt[a x, x]
-Out[9]= a
+Out[9]= a + x Dt[a, x]
 
 In[10]:= Dt[x^n]
 Out[10]= x^(-1 + n) (n Dt[x] + Dt[n] x Log[x])

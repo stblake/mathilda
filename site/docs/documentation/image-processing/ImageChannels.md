@@ -7,7 +7,7 @@
 
 **`ImageChannels[image] gives the number of colour channels: 1 for a grey image, otherwise the length of each pixel's value list (3 for RGB, 4 with an alpha channel).`**
 
-## Examples (34)
+## Examples (37)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -117,7 +117,38 @@ In[34]:= ImageChannels[zone]
 Out[34]= 1
 ```
 
+### Applications (3)
+
+```mathematica
+In[35]:= ImageChannels[Image[{{{1., 0, 0}, {0, 1., 0}}}]]
+Out[35]= 3
+
+In[36]:= ImageChannels[Image[{{0., 1.}}]]
+Out[36]= 1
+
+In[37]:= ImageChannels[Image[{{{1., 0, 0, 0.5}}}]]
+Out[37]= 4
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_imagechannels` returns the number of colour channels as
+an integer. It tries `image3d_info` first and then `image_info`, each of which
+reports the channel count as a by-product of validating the shape. The count is
+read off the pixel array's rank: a rank-2 (height × width) array is grey and
+reports `1`; a rank-3 (height × width × channels) array reports its last
+dimension — `3` for RGB, `4` when an alpha channel is present, `2` for
+grey-plus-alpha. For a volume the same rule applies to the trailing axis of the
+depth × height × width (× channels) buffer. The channel axis is the **innermost,
+interleaved** dimension, which is the order every filter's flat `image_load`
+buffer also uses.
+
+**Data structures.** Reads only the shape metadata of the canonical image node;
+no buffer is loaded. `ImageChannels` is on `pack.c`'s `AWARE` list, so a packed
+image is inspected in place.
+
+**Complexity / limits.** `O(1)` — the shape walk that `image_info` already does.
+Returns unevaluated for a non-image.
 
 **Attributes:** `Protected`.
 
@@ -126,3 +157,16 @@ Out[34]= 1
 - Source: [`src/image.c`](https://github.com/stblake/mathilda/blob/main/src/image.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ImageChannels[image]` gives the number of colour channels: `1` for a grey image,
+otherwise the length of each pixel's value list — `3` for RGB, `4` with an alpha
+channel, `2` for grey-plus-alpha.
+
+The channel count is the trailing (innermost, interleaved) dimension of the pixel
+array, so it is read straight off the image's shape without loading any pixels.
+It accepts a volumetric `Image3D` as well as a plane, applying the same rule to
+the last axis of the depth × height × width (× channels) buffer.

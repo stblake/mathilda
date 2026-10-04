@@ -16,7 +16,7 @@ All symbols, whether explicitly entered using Symbol or not, have head Symbol; x
 
 </details>
 
-## Examples (4)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -34,6 +34,34 @@ Out[3]= {g[x], f["x"], f[2]}
 
 In[4]:= Symbol["a`x"]
 Out[4]= a`x
+```
+
+### Applications (4)
+
+```mathematica
+In[5]:= Symbol["x"]
+Out[5]= x
+```
+
+The result is a genuine symbol
+
+```mathematica
+In[6]:= Head[Symbol["abc"]]
+Out[6]= Symbol
+```
+
+An embedded backtick gives an absolutely-qualified name
+
+```mathematica
+In[7]:= Symbol["a`x"]
+Out[7]= a`x
+```
+
+X_Symbol matches only the symbol
+
+```mathematica
+In[8]:= {f[x], f["x"], f[2]} /. f[s_Symbol] :> g[s]
+Out[8]= {g[x], f["x"], f[2]}
 ```
 
 ## Implementation notes
@@ -58,3 +86,18 @@ Out[4]= a`x
 - Tests: [`tests/test_findmin_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_methods.c)
 - Tests: [`tests/test_findmin_neldermead.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_neldermead.c)
 - Tests: [`tests/test_findmin_newtoncg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_newtoncg.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Symbol["name"]` returns the symbol with the given name, creating it if it does
+not yet exist. The name must satisfy the standard symbol-name syntax: each
+backtick-delimited context segment starts with a letter or `$` and continues with
+letters, digits, or `$`. A leading backtick makes the name relative to the current
+`$Context`, an embedded backtick gives an absolutely-qualified name, and a bare
+name is resolved through `$Context` / `$ContextPath`.
+
+Because every symbol's `Head` is `Symbol`, an `x_Symbol` pattern matches any
+symbol and nothing else. An invalid name emits `Symbol::symname` and leaves the
+call unevaluated; a non-string argument does likewise.

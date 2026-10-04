@@ -69,13 +69,21 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
+**Algorithm.** `builtin_besselj` (via `besselj_two_arg`) handles `BesselJ[n, z]`, the solution regular at the origin. Exact `z == 0` with classified order gives `J_0(0) = 1`, `J_n(0) = 0` (`Re nu > 0` or `n` a negative integer), `ComplexInfinity` (non-integer `Re nu < 0`), or `Indeterminate` (`Re nu = 0`, `nu != 0`). For a numeric call with an inexact argument: integer order and real `z` take the MPFR-native **`mpfr_jn`** fast path (correctly rounded); any other numeric order/argument goes to the unified complex-MPFR core `bj_core`, which picks the **power series** DLMF 10.2.2 for small/moderate `|z|` (one-Gamma recurrence `t_0 = (z/2)^nu/Gamma(nu+1)`, `t_k = t_{k-1}·(-(z/2)^2)/(k(nu+k))`, with `~2|z|/ln2` guard bits to absorb the `~e^{|z|}` partial-sum cancellation) or the **asymptotic series** DLMF 10.17.3 for large `|z|` (`J_nu(z) ~ sqrt(2/(πz))[cos(w) A - sin(w) B]`, summed to optimal truncation). Integer order is reduced to non-negative order via `J_{-n}(z) = (-1)^n J_n(z)` (the power series would otherwise hit Gamma poles). Half-integer→elementary rewrites live in `src/internal/bessel.m`; `Series` at 0/Infinity in `calculus/series.c`; `D[BesselJ[n,z],z] = (BesselJ[n-1,z] - BesselJ[n+1,z])/2` in `calculus/deriv.c`. Everything else stays symbolic, letting those DownValues and Series/D fire.
+
+**Data structures.** `Expr`; the shared complex-MPFR toolkit `ncpx` (`numeric_complex.h`) at explicit working precision. The ND kernel is a binary `REG_B` registration (`NDKB_BesselJ`): over real arrays with **integer** order it calls libc `jn` (declines non-integer order or any complex operand to the `List` path). `Compile[]` lowers `BesselJ[n, z]` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes via that kernel.
+
+**Complexity / limits.** `mpfr_jn` is `O(1)` at machine precision for integer order; the core's series/asymptotic term counts and guard bits scale with `|z|` and precision. Non-integer order has a branch cut along the negative real `z` axis (from the `(z/2)^nu` factor). Symbolic arguments stay symbolic. Attributes: `Listable`, `NumericFunction`, `Protected`.
+
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 
 **See also:** [BesselY](../../special-functions/BesselY/), [BesselI](../../special-functions/BesselI/), [BesselK](../../special-functions/BesselK/), [N](../../arithmetic/N/), [Gamma](../../special-functions/Gamma/), [SeriesCoefficient](../../power-series/SeriesCoefficient/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- DLMF §10.2.2 — power series J_nu(z) = Sum_k (-1)^k (z/2)^{nu+2k}/(k! Gamma(nu+k+1)).
+- DLMF §10.17.3 — the large-argument asymptotic expansion of J_nu(z).
+- Source: [`src/special_functions/bessel.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/bessel.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_besselj.c`](https://github.com/stblake/mathilda/blob/main/tests/test_besselj.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)

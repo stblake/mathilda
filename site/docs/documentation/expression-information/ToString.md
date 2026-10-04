@@ -20,7 +20,7 @@ Supported forms: InputForm (default), FullForm, TeXForm.
 
 </details>
 
-## Examples (3)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -35,6 +35,37 @@ Out[2]= "Plus[Power[x, 2], Power[y, 3]]"
 
 In[3]:= ToString[x^2 + y^3, TeXForm]
 Out[3]= "x^{2}+y^{3}"
+```
+
+### Applications (5)
+
+InputForm by default
+
+```mathematica
+In[4]:= ToString[x^2 + y^3]
+Out[4]= "x^2 + y^3"
+```
+
+```mathematica
+In[5]:= ToString[x^2 + y^3, FullForm]
+Out[5]= "Plus[Power[x, 2], Power[y, 3]]"
+
+In[6]:= ToString[x^2 + y^3, TeXForm]
+Out[6]= "x^{2}+y^{3}"
+```
+
+The result is always a String
+
+```mathematica
+In[7]:= Head[ToString[42]]
+Out[7]= String
+```
+
+A generated constant becomes a subscript
+
+```mathematica
+In[8]:= ToString[C[10], TeXForm]
+Out[8]= "c_{10}"
 ```
 
 ## Implementation notes
@@ -58,3 +89,19 @@ Out[3]= "x^{2}+y^{3}"
 - Tests: [`tests/test_assoc_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_ops.c)
 - Tests: [`tests/test_blas.c`](https://github.com/stblake/mathilda/blob/main/tests/test_blas.c)
 - Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ToString[expr]` returns a `String` holding the printed form of `expr` in
+`InputForm`; `ToString[expr, form]` selects the form, with `FullForm` and
+`TeXForm` supported and `StandardForm` / `OutputForm` accepted as aliases of
+`InputForm`. All of the formatting is shared with the standard printer, so the
+string matches what the REPL would display.
+
+An unsupported form leaves the call unevaluated (e.g. `ToString[x, FooForm]`),
+making a typo visible at the call site rather than silently downgrading it. Under
+`TeXForm` the generated constants `C[k]` from `DSolve` / `Reduce` / `Integrate`
+render as the subscripted `c_k` (single-character subscripts bare, longer ones
+braced), matching Mathematica and the notebook LaTeX renderer.

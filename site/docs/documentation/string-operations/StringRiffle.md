@@ -21,7 +21,7 @@ Joins with sep and wraps the result in the left/right delimiters.
 
 Inserts separator sep\_i (a string or {left, sep, right}) between elements at level i.
 
-## Examples (4)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -39,6 +39,29 @@ Out[3]= "(a b c d e)"
 
 In[4]:= StringRiffle[{{"a", 27}, {"b", 28}, {"c", 29}}, {"{", ", ", "}"}, ": "]
 Out[4]= "{a: 27, b: 28, c: 29}"
+```
+
+### Applications (3)
+
+Default scheme: a single space
+
+```mathematica
+In[5]:= StringRiffle[{"a", "b", "c"}]
+Out[5]= "a b c"
+```
+
+A custom separator
+
+```mathematica
+In[6]:= StringRiffle[{"2024", "01", "02"}, "-"]
+Out[6]= "2024-01-02"
+```
+
+A {left, sep, right} triple
+
+```mathematica
+In[7]:= StringRiffle[{"x", "y", "z"}, {"(", ", ", ")"}]
+Out[7]= "(x, y, z)"
 ```
 
 ## Algorithm
@@ -66,12 +89,30 @@ Strings are treated as raw byte arrays (consistent with the rest of the string s
 
 ## Implementation notes
 
+**Algorithm.** `builtin_stringriffle` takes the first argument as the data and the rest as per-level separators (level 1 outermost). Each separator is parsed by `parse_sep` into a `{left, sep, right}` triple — a plain string becomes `{"", sep, ""}`, a 3-string list is the triple itself. `riffle_build` recurses: a leaf renders through `leaf_to_str` (strings verbatim, any other expression via `expr_to_string`/`ToString`), and each level joins its children with the explicit separator for that level or, when none is supplied, the default scheme chosen from `depth_from_bottom` — a single space at the innermost level and one extra newline per level above. It is the inverse of `StringSplit`.
+
+**Data structures.** A `SepSpec` array of resolved triples; per level the child strings are built first, then assembled two-pass (sum lengths, then copy) into one buffer.
+
+**Complexity / limits.** `O(total output)`. No arguments emits `StringRiffle::argm`; a first argument that is neither a list nor a string, or a malformed separator, leaves the call unevaluated. `StringRiffle` is deliberately not `Listable` so it can inspect the whole nested structure. Byte-oriented.
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [StringSplit](../../string-operations/StringSplit/), [ToString](../../expression-information/ToString/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/strings/stringriffle.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringriffle.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
 - Tests: [`tests/test_stringriffle.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringriffle.c)
+
+## Notes & additional examples
+
+### Notes
+
+`StringRiffle` is the inverse of `StringSplit`: it joins a (possibly nested) list
+with separators. A plain string separator goes between the top-level elements; a
+3-string list is a `{left, sep, right}` delimiter triple.
+
+The default scheme uses a single space at the innermost level and one extra
+newline per level above it. Non-string leaves are rendered with `ToString` (so
+`27` becomes `"27"`); string leaves are used verbatim.

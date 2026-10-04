@@ -15,7 +15,6 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= SetAttributes[g, Orderless]
-Out[1]= Null
 
 In[2]:= g[3, 1, 2]
 Out[2]= g[1, 2, 3]

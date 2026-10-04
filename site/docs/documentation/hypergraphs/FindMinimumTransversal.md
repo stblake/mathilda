@@ -7,7 +7,7 @@
 
 **`FindMinimumTransversal[h] gives a smallest set of vertices meeting every hyperedge of h (a minimum hitting set). Left unevaluated if some hyperedge is empty or the exact search exceeds its budget.`**
 
-## Examples (6)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -33,7 +33,57 @@ In[6]:= FindMinimumTransversal[{{1,2},{}}]
 Out[6]= FindMinimumTransversal[{{1, 2}, {}}]
 ```
 
+### Applications (3)
+
+One vertex, 2, hits both hyperedges
+
+```mathematica
+In[7]:= FindMinimumTransversal[{{1, 2}, {2, 3}}]
+Out[7]= {2}
+```
+
+A smallest hitting set has size 2
+
+```mathematica
+In[8]:= FindMinimumTransversal[{{1, 2}, {2, 3}, {3, 4}}]
+Out[8]= {2, 3}
+```
+
+The minimum transversal number
+
+```mathematica
+In[9]:= Length[FindMinimumTransversal[{{1, 2, 3}, {3, 4}, {4, 5, 6}, {7}}]]
+Out[9]= 3
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_find_minimum_transversal` returns one minimum-cardinality
+transversal (a minimum hitting set, NP-hard) by exact **branch and bound**. It
+branches on the uncovered hyperedge with the fewest open vertices — include a
+vertex, then exclude it for later siblings. The search is seeded with a greedy
+**max-coverage upper bound** (a lazy max-heap on coverage gains, stale entries
+re-pushed, so the greedy pass is `O(Σ|e| log n)`) and pruned by
+`mn_lower_bound`, the larger of three bounds: a **degree bound** (fewest
+high-degree open vertices to cover all uncovered hyperedges), a **greedy disjoint
+packing** (pairwise-disjoint uncovered hyperedges, taken in increasing total open
+degree, one vertex each), and a **fractional-packing / LP-dual** bound
+(`y_F = min_{v∈F} 1/d(v)` dual-feasible, raised by one low-degree-first
+dual-ascent pass, ceiling-rounded). When a packing already matches the greedy
+bound the answer is proved optimal with no search at all.
+
+**Data structures.** The distinct-vertex CSR `soff/sv` and incidence CSR
+`voff/ve`; `MinState` with the covered-count array, swap-removed uncovered set,
+`excl` mask, current/best solution stacks, and the lower-bound scratch
+(`odeg`/`touched`/`dcount` for the degree bound, `ekey`/`eord` ordering, `mark`
+stamping for the packing, `ey`/`slack` for the LP dual). The result is a sorted
+`List` of vertices.
+
+**Complexity / limits.** Exponential worst case, kept tractable by the bounds.
+**Correct-or-unevaluated:** left unevaluated if any hyperedge is empty
+(unhittable), past `HYP_MIN_MAX_NODES = 2·10⁷` branch-and-bound nodes, or if the
+greedy upper bound exceeds 20000 (a C-stack-depth guard); it polls
+`tc_check_deadline()` every 4096 nodes for `TimeConstrained`.
 
 - A transversal (hitting set) meets every hyperedge; it is minimal when no
   proper subset is one.
@@ -73,6 +123,25 @@ Out[6]= FindMinimumTransversal[{{1, 2}, {}}]
 
 **See also:** [TransversalHypergraph](../../hypergraphs/TransversalHypergraph/), [Tr](../../linear-algebra/Tr/), [TimeConstrained](../../time-and-date/TimeConstrained/)
 
-- Source: [`src/graph/hyp_init.c`](https://github.com/stblake/mathilda/blob/main/src/graph/hyp_init.c)
+- C. Berge, *Hypergraphs: Combinatorics of Finite Sets*, North-Holland Mathematical Library 45 (Elsevier, 1989), ch. 2 (transversals / minimum hitting set).
+- Source: [`src/graph/hyp_transversal.c`](https://github.com/stblake/mathilda/blob/main/src/graph/hyp_transversal.c)
 - Specification: [`docs/spec/builtins/hypergraphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/hypergraphs.md)
 - Tests: [`tests/test_hypergraph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hypergraph.c)
+
+## Notes & additional examples
+
+### Notes
+
+`FindMinimumTransversal[h]` returns a single smallest vertex set meeting every
+hyperedge — a minimum hitting set, so its `Length` is the transversal number of
+`h`. Where `TransversalHypergraph` enumerates all the *minimal* transversals,
+this returns just one of *minimum* cardinality.
+
+The minimum hitting set is NP-hard, so the engine is exact branch and bound: a
+greedy max-coverage upper bound seeds the search, which is then pruned by a degree
+bound, a disjoint-hyperedge packing bound, and a fractional LP-dual bound — and
+when a packing already matches the greedy bound the answer is proved optimal with
+no search. Like `TransversalHypergraph` it is correct-or-unevaluated: it is left
+unevaluated if some hyperedge is empty (nothing can hit it) or if the exact search
+exceeds its node budget, and `TimeConstrained` can interrupt it. Both a
+`Hypergraph` and a bare List of hyperedges are accepted.

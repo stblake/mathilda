@@ -36,7 +36,7 @@ Methods (Method -\> ...): Automatic           picks Brent for 1D, QuasiNewton (B
 
 </details>
 
-## Examples (11)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -69,20 +69,27 @@ In[7]:= FindMinimum[(x - Pi)^2, {x, 0}, WorkingPrecision -> 50]
 Out[7]= {0.0, {x -> 3.1415926535897932384626433832795028841971693993751}}
 ```
 
+### Worked examples (1)
+
+```mathematica
+In[8]:= FindMinimum[Sum[(v[i]-i)^2, {i,1,3}], Table[v[i], {i,1,3}]]
+Out[8]= {0.0, {v[1] -> 1.0, v[2] -> 2.0, v[3] -> 3.0}}
+```
+
 ### Applications (4)
 
 ```mathematica
-In[8]:= FindMaximum[Sin[x], {x, 1}]
-Out[8]= {1.0, {x -> 1.5708}}
+In[9]:= FindMaximum[Sin[x], {x, 1}]
+Out[9]= {1.0, {x -> 1.5708}}
 
-In[9]:= FindMaximum[x (10 - x), {x, 0}]
-Out[9]= {25.0, {x -> 5.0}}
+In[10]:= FindMaximum[x (10 - x), {x, 0}]
+Out[10]= {25.0, {x -> 5.0}}
 
-In[10]:= FindMaximum[Sin[x] Sin[2 y], {{x, 1}, {y, 1}}]
-Out[10]= {1.0, {x -> 1.5708, y -> 0.785398}}
+In[11]:= FindMaximum[Sin[x] Sin[2 y], {{x, 1}, {y, 1}}]
+Out[11]= {1.0, {x -> 1.5708, y -> 0.785398}}
 
-In[11]:= FindMaximum[10 - (x - 3)^2 - (y + 1)^2, {{x, 0}, {y, 0}}, Method -> "LBFGSB"]
-Out[11]= {10.0, {x -> 3.0, y -> -1.0}}
+In[12]:= FindMaximum[10 - (x - 3)^2 - (y + 1)^2, {{x, 0}, {y, 0}}, Method -> "LBFGSB"]
+Out[12]= {10.0, {x -> 3.0, y -> -1.0}}
 ```
 
 ## Implementation notes

@@ -1,0 +1,10 @@
+---
+references:
+  - "B. D. McKay and A. Piperno, *Practical graph isomorphism, II*, J. Symbolic Comput. **60** (2014) 94-112."
+source: src/graph/galg_isoheads.c
+---
+**Algorithm.** `builtin_find_graph_isomorphism` accepts `FindGraphIsomorphism[g, h]` (one map) or `[g, h, n]` / `[g, h, All]` (up to `n` maps). Each graph is reduced by `gi_build` to a vertex-coloured structure with up to three relations (undirected, directed out, directed in): self-loops are folded into the vertex colour, and an edge class of multiplicity `k > 1` is subdivided by a new vertex coloured `(k, kind)`, so mixed graphs, loops and multigraphs are all handled; weights are ignored. `gi_compatible` rejects on vertex/edge counts, degree histograms and colour multisets and returns `{}`. Otherwise the engine `galg_iso_find` (one map) or `galg_iso_enumerate` (several) in `galg_iso.c` runs individualization-refinement: both graphs are refined to the coarsest equitable partition (1-dimensional Weisfeiler-Leman) in lockstep, a path is followed in `g` and a trace-identical path searched in `h`, aborting on the first deviating event and verifying the leaf edge by edge. If the direct search passes about 4n nodes it falls back to comparing canonical forms. The result is a list of `Association`s `vertex of g -> vertex of h`.
+
+**Data structures.** `Graph[List, List]` expression trees are flattened to CSR relations (`GalgIsoGraph`); the engine keeps an ordered partition with exact undo logs, so memory is linear in the graph plus the current path. Enumerated maps are collected in an `int` buffer capped at 2^27 cells.
+
+**Complexity / limits.** Graph isomorphism has no known polynomial algorithm; one refinement is `O((n + m) log n)` and the tree is small for most graphs. The search is budgeted at 5e7 refinement nodes and polls the `TimeConstrained` deadline; on exhaustion, or if enumeration exceeds its cap, the head stays unevaluated rather than guessing. `All` on a highly symmetric graph returns the whole automorphism coset, which can be huge.

@@ -14,7 +14,7 @@ such that p == Quotient\*q + Remainder, with deg(Remainder) \< deg(q) in x. Sing
 
 </details>
 
-## Examples (6)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -32,7 +32,7 @@ In[2]:= PolynomialQuotientRemainder[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2
 Out[2]= {Sqrt[2] + x, 0}
 ```
 
-### Applications (4)
+### Applications (5)
 
 ```mathematica
 In[3]:= PolynomialQuotientRemainder[x^2 - 1, x - 1, x]
@@ -41,11 +41,13 @@ Out[3]= {1 + x, 0}
 In[4]:= PolynomialQuotientRemainder[x^5 + x + 1, x^2 + 1, x]
 Out[4]= {-x + x^3, 1 + 2 x}
 
-In[5]:= Expand[q (x^2 + 1) + r]
-Out[5]= 1 + x + x^5
+In[5]:= {q, r} = PolynomialQuotientRemainder[x^5 + x + 1, x^2 + 1, x];
 
-In[6]:= PolynomialQuotientRemainder[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
-Out[6]= {Sqrt[2] + x^2, 0}
+In[6]:= Expand[q (x^2 + 1) + r]
+Out[6]= 1 + x + x^5
+
+In[7]:= PolynomialQuotientRemainder[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[7]= {Sqrt[2] + x^2, 0}
 ```
 
 ## Implementation notes

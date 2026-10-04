@@ -16,7 +16,7 @@ Evaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appe
 
 </details>
 
-## Examples (11)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -57,6 +57,22 @@ In[11]:= Hold[Evaluate[1+1, 2+2]]
 Out[11]= Hold[2, 4]
 ```
 
+### Applications (2)
+
+Hold keeps its argument unevaluated
+
+```mathematica
+In[12]:= Hold[1 + 1]
+Out[12]= Hold[1 + 1]
+```
+
+Evaluate forces evaluation even inside the held position
+
+```mathematica
+In[13]:= Hold[Evaluate[1 + 1]]
+Out[13]= Hold[2]
+```
+
 ## Implementation notes
 
 `builtin_evaluate` (`src/core.c`) returns a copy of its single argument. Its real effect happens earlier: the evaluator forces `Evaluate[expr]` arguments to be evaluated even inside a `Hold*` head's held positions, so by the time the builtin runs the argument is already evaluated and it merely unwraps it.
@@ -80,3 +96,15 @@ Out[11]= Hold[2, 4]
 - Tests: [`tests/test_findmin_dogleg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_dogleg.c)
 - Tests: [`tests/test_findmin_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_methods.c)
 - Tests: [`tests/test_findmin_neldermead.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_neldermead.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Evaluate[expr]` forces `expr` to be evaluated even when it sits in an argument position
+that the enclosing head would otherwise hold. In an ordinary (unheld) position it is a
+no-op, since the argument has already been evaluated by the standard pipeline — the C
+builtin then just unwraps it.
+
+With more than one argument it splices through `Sequence`, so `Evaluate[a, b]` behaves as
+`Sequence[a, b]`.

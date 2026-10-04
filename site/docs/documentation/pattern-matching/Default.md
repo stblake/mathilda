@@ -24,7 +24,6 @@ In[1]:= Default[h] = 1
 Out[1]= 1
 
 In[2]:= h[x_, y_.] := {x, y}
-Out[2]= Null
 
 In[3]:= h[5]
 Out[3]= {5, 1}
@@ -36,7 +35,6 @@ In[5]:= Default[q] = 0
 Out[5]= 0
 
 In[6]:= q[a_, b_.] := {a, b}
-Out[6]= Null
 
 In[7]:= q[7]
 Out[7]= {7, 0}

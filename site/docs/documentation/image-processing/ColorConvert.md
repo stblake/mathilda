@@ -7,7 +7,7 @@
 
 **`ColorConvert[image, "Grayscale"] (or "Gray") reduces an image or an Image3D to a single channel using the Rec. 601 luminance weights 0.299 R + 0.587 G + 0.114 B, the same weights every filter here uses when it needs brightness. An image that is ALREADY GREY is returned unchanged, bit for bit, since no weighting happens. An image whose three channels are merely EQUAL is returned only to within an ulp, and whether it is exact depends on the value: those weights sum to 0.9999999999999999 when added in the order they are applied, though to exactly 1.0 in any order beginning with 0.114, so the final rounding lands on the input for some values and one ulp below it for others. The weights are the standard's and are not adjusted to compensate; a triple hand-tuned to sum to exactly 1.0 in double would no longer be Rec. 601.`**
 
-## Examples (30)
+## Examples (33)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -108,7 +108,54 @@ In[30]:= ColorConvert[zone, "Grayscale"]
 Out[30]= -Image-
 ```
 
+### Applications (3)
+
+Pure red -> its Rec. 601 luminance 0.299
+
+```mathematica
+In[31]:= ImageData[ColorConvert[Image[{{{1., 0., 0.}}}], "Grayscale"]]
+Out[31]= {{0.299}}
+```
+
+Green carries most of the perceived brightness
+
+```mathematica
+In[32]:= ImageData[ColorConvert[Image[{{{0., 1., 0.}}}], "Grayscale"]]
+Out[32]= {{0.587}}
+```
+
+The result is one channel
+
+```mathematica
+In[33]:= ImageChannels[ColorConvert[Image[{{{1., 1., 0.}, {0., 0., 1.}}}], "Gray"]]
+Out[33]= 1
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_colorconvert` converts an image (plane or `Image3D`) to greyscale.
+Only `"Grayscale"` (or `"Gray"`) is accepted: the other colour spaces Mathematica supports
+(LAB, HSB, XYZ, …) each carry their own white point and transfer-function decisions, and
+accepting the name while doing something approximate would be worse than declining it. The
+reduction uses the **Rec. 601** luminance weights `0.299 R + 0.587 G + 0.114 B` (`img_to_grey`
+for a plane, `img3_grey_volume` for a volume — one place, so both ranks agree), because the eye
+is not equally sensitive across the spectrum: green carries most perceived brightness and blue
+almost none, so a plain average would put pure red and pure blue on the same side of a
+threshold when perceptually they are far apart.
+
+What is exact is documented honestly. An **already-grey** image is copied through bit for bit.
+An image whose three channels are merely **equal** is exact only to within an ulp, and *whether*
+depends on the value: those weights sum to `0.9999999999999999` in the order they are applied
+but exactly `1.0` in any order beginning with `0.114`, so the final rounding lands on the input
+for some values and one ulp below for others. The weights are the standard's and are not
+adjusted to compensate — a triple hand-tuned to sum to exactly `1.0` in double would no longer
+be Rec. 601.
+
+**Data structures.** One decoded unit buffer in; a fresh single-channel buffer out, wrapped by
+`image_build_real` / `image3d_build_real` as a packed `"Real"` image (every image head returns
+a packed buffer — `make check-image-packing`).
+
+**Complexity / limits.** `O(pixels)`. Only the greyscale target is implemented.
 
 **Attributes:** `Protected`.
 
@@ -117,3 +164,18 @@ Out[30]= -Image-
 - Source: [`src/imagefilter.c`](https://github.com/stblake/mathilda/blob/main/src/imagefilter.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ColorConvert[image, "Grayscale"]` (or `"Gray"`) reduces an image or an `Image3D` to one
+channel using the Rec. 601 weights `0.299 R + 0.587 G + 0.114 B` — the same weights every
+filter here uses when it needs brightness. The weights are not a mean: green carries most of
+the perceived brightness and blue almost none, so a plain average would make a saturated blue
+and a saturated green look equally bright.
+
+An already-grey image is returned unchanged, bit for bit. An image whose channels are merely
+equal matches the input only to within an ulp, since those weights do not sum to exactly 1 in
+binary; the weights are the standard's and are not adjusted to compensate. Only the greyscale
+target is supported.

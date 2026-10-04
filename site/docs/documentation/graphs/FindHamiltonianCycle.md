@@ -7,7 +7,7 @@
 
 **`FindHamiltonianCycle[g] gives {c} with c a Hamiltonian cycle of g as a list of edges, or {} if there is none. FindHamiltonianCycle[g, n] / [g, All] gives up to n / all Hamiltonian cycles. Exact backtracking with pruning; unevaluated if the search budget is exhausted.`**
 
-## Examples (8)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -43,7 +43,43 @@ In[8]:= TimeConstrained[FindHamiltonianCycle[GridGraph[{150, 150}]], 0.05]
 Out[8]= $Aborted
 ```
 
+### Applications (2)
+
+The cycle itself, as a list of edges
+
+```mathematica
+In[9]:= FindHamiltonianCycle[CycleGraph[5]]
+Out[9]= {{1 <-> 2, 2 <-> 3, 3 <-> 4, 4 <-> 5, 5 <-> 1}}
+```
+
+A path has no Hamiltonian cycle
+
+```mathematica
+In[10]:= FindHamiltonianCycle[PathGraph[4]]
+Out[10]= {}
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_find_hamiltonian_cycle` is an exact backtracking search over *edge*
+decisions with constraint propagation. Each edge is undecided, chosen or excluded on an undo
+trail. Propagation enforces that every vertex has exactly two chosen incident edges (for a
+directed graph, one in-arc and one out-arc): once two are chosen the rest are excluded, and when
+only two remain undecided both are forced; fewer than two is a contradiction. Chosen edges form
+vertex-disjoint path fragments, and an edge that would close a fragment into a sub-tour of fewer
+than `n` vertices is refused. The strong pruning is a connectivity test at every node — the
+non-excluded graph must stay biconnected (undirected, iterative Tarjan) or strongly connected
+(directed, double BFS); branching extends the fragment end with the fewest remaining options.
+
+**Data structures.** A CSR incidence (`off`/`inc`, plus `ioff`/`iinc` for directed graphs);
+an edge-state array `st[]`; per-vertex chosen/available counts; a fragment-end map `oth[]`; an
+undo trail; a propagation worklist; and Tarjan scratch arrays (`disc`/`low`/`stk`).
+
+**Complexity / limits.** NP-complete; the per-node biconnectivity check is linear. Capped at
+`HAM_MAX_NODES = 2·10^7` search nodes, polled against `TimeConstrained`; exhaustion returns
+unevaluated (never a wrong "no cycle"). Returns `{c}` with `c` the cycle as a list of edges
+(`FindHamiltonianCycle[g, n]` / `[g, All]` returns up to `n` / all cycles), or `{}` when none
+exists. A non-graph argument returns unevaluated.
 
 - `Protected`; unevaluated on a non-graph.
 - The cycle starts at `VertexList[g][[1]]`, each edge written in traversal
@@ -67,6 +103,19 @@ Out[8]= $Aborted
 
 **See also:** [FindVertexCover](../../graphs/FindVertexCover/), [TimeConstrained](../../time-and-date/TimeConstrained/)
 
-- Source: [`src/graph/galg_init.c`](https://github.com/stblake/mathilda/blob/main/src/graph/galg_init.c)
+- R. E. Tarjan, *Depth-first search and linear graph algorithms*, SIAM J. Comput. **1** (1972) 146-160.
+- Source: [`src/graph/galg_hamilton.c`](https://github.com/stblake/mathilda/blob/main/src/graph/galg_hamilton.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph_algos.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_algos.c)
+
+## Notes & additional examples
+
+### Notes
+
+The result is `{c}`, where `c` is a Hamiltonian cycle — a closed tour visiting every vertex
+once — given as a list of edges in traversal order; it is `{}` when no such cycle exists.
+`FindHamiltonianCycle[g, n]` returns up to `n` cycles and `[g, All]` returns all of them.
+
+The search is exact backtracking with biconnectivity/strong-connectivity pruning, so both a
+cycle and the answer `{}` are proofs. If the node budget is exhausted the call stays
+unevaluated.

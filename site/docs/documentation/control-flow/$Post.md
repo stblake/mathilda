@@ -17,10 +17,10 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= $Post = Framed
-Out[1]= Framed[Framed]
+Out[1]= Framed
 
 In[2]:= 2 + 2
-Out[2]= Framed[4]
+Out[2]= 4
 ```
 
 ## Implementation notes

@@ -37,7 +37,7 @@ In[3]:= 5 Quotient[-17, 5] + Mod[-17, 5]
 Out[3]= -17
 
 In[4]:= Quotient[5 + 3 I, 2]
-Out[4]= 2 + 2 I
+Out[4]= 2 + 2*I
 ```
 
 ## Implementation notes

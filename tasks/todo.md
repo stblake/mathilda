@@ -1,62 +1,69 @@
-# Numerical optimisation: speed + reliability (Book §7.11 review)
+# Builtin Documentation Overhaul — task tracker
 
-Plan: /Users/user/.claude/plans/let-s-review-the-findings-transient-umbrella.md
+Full roadmap: `BUILTIN_DOCUMENTATION_OVERHAUL.md` (repo root).
+Plan: `~/.claude/plans/i-would-like-all-velvety-bee.md`.
 
-## Track 1 — Speed
-- [x] 1A. Baseline-measure the slow indexed `Sum` (measured 0.345 s) on the live binary
-- [x] 1A. `src/sum/sum_gosper.c`: `sum_body_has_opaque_index` + early-bail in `gosper_antidiff` (before the Simplify)
-- [x] 1A2. `src/sum/sum.c`: wired `sum_body_has_opaque_index` into short-range skip gate (shared predicate)
-- [x] 1A. Verify: indexed `Sum` now 0.000154 s; genuine Gosper sums unchanged; NMinimize Rastrigin-5D indexed 8.6 ms (parity); all 9 sum test binaries green
-- [x] 1B. `findmin_common.c`/`findmin_driver.c`: `fm_is_var_atom`, accessor specs, Table expansion, system detection, normalization block, result-over-originals, cleanup
-- [x] 1B. Verify: FindMinimum/FindMaximum indexed vars correct (incl. Table+Sum, constrained); plain vars unregressed; 7 optimizer suites green; valgrind clean (no Mathilda-origin leaks)
+Goal: bring every builtin's docs page to EllipticF-grade (overlay worked
+examples + Notes, source-grounded impl note, rich verified examples). Every
+example runs through the latest binary.
 
-## Track 2 — Reliability  (mechanism revised after measurement — see Review)
-- [x] 2A. `nm_de.c` + `nm_driver.c`: Automatic DE now uses Latin-hypercube init + current-to-best/1 + per-generation dithered F + 15n population + best-of-4 independent runs (all gated to Automatic; explicit bit-identical, deterministic). Restart-on-stagnation was implemented, measured net-negative, and removed.
-- [x] 2A. Verify: exp 90 now **4/7** default (T2 Griewank, T3 drop-wave, T4 Rastrigin-10D, T5 Styblinski); **6/7** with bounds (adds T1 Schwefel, T7 Eggholder — both unbounded-below as written); T6 Bukin resists (scipy too). exp 89 still 18/18 AHEAD, 0 CHECK-FAIL; determinism True
-- [x] 2B. Re-measured F1/F2 feasibility + NMaximize `{f,c1,c2}`: both ALREADY FIXED pre-work; confirmed via existing regression tests (book prose was stale)
+## Campaign 0 — infrastructure (nearly done)
+- [x] Build latest binary (`make`) — v0.266
+- [x] Generator change: overlay worked-examples auto-verified (binary supplies
+      Out[]) in `site/generate.py` `render_page`. Validated: regen fixed 83 pages
+      (fictional N[]-precision outputs, now-included dropped setup lines)
+- [x] `site/coverage_report.py` — per-category parity counts (baseline 369/1086)
+- [x] `site/verify_docs_examples.py` + `make check-docs-examples`; green on 1086,
+      FAILS on planted wrong expectation, ~10s. 7-page EXEMPT (nondeterministic +
+      non-transcript-order). CI wiring deferred (needs full-dep job)
+- [x] `BUILTIN_DOCUMENTATION_OVERHAUL.md` — living tracker
+- [x] Pilot: elementary-functions — impl+overlay for Log10, Log2, UnitStep,
+      UnitBox, Ramp; category now 100% graded (26/26). Total 374/1086 (34%)
 
-## Tests
-- [x] Guard: full `test_nminimize` (95) + all 19 optimizer suites + 9 summation suites green; `make check-c99` clean
-- [x] valgrind: indexed FindMinimum/NMinimize paths — no Mathilda-origin leaks
-- [~] `make check-compile-coverage`: pre-existing red (ImageType/PackedArrayQ, unrelated — added no new numeric head)
-- [ ] (deferred) dedicated C unit tests for the new behaviours — verified via REPL + benchmark harness this session
+## Campaigns 1..N — content — COMPLETE (1086/1086, 100%)
+All 38 categories at 100% EllipticF-grade, done across 5 subagent waves:
+- Wave 1 (math core): elementary-functions, arithmetic, calculus, number-theory,
+  linear-algebra, simplification, power-series, solutions-of-equations.
+- Wave 2: special-functions, algebra, numerical-calculus, mathematical-constants.
+- Wave 3: assignment-and-rules, pattern-matching, scoping-constructs,
+  functional-programming, control-flow, structural-manipulation,
+  string-operations, lists-and-iteration, time-and-date.
+- Wave 4: data-structures, expression-information, file-io,
+  random-number-generation, statistics, hypergraphs, graphics, machine-learning,
+  fourier-transforms, geometry, packed-arrays, bitwise.
+- Wave 5 (bare blocks): graphs, other-advanced, image-processing.
 
-## Docs / book / version
-- [x] Book §7.9/§7.10/§7.11 corrections (NMaximize, FindMinimum indexed, 41× root cause, 2/7→3/7, honest T1/T4 limits)
-- [x] docs/spec/builtins: calculus.md (Sum`Gosper), numerical-calculus.md (FindMinimum indexed, Automatic DE) + weekly changelog
-- [x] FindMinimum docstring (`info.c`) notes indexed-var support
-- [x] Rewrite stale "41× indexed dispatch" comment in benchmark 89
-- [x] Version bump to 0.266 in `src/version.h`
-- [ ] (pending) `cd book && make pdf` to regenerate index + PDF (heavy build; flag to user)
+Verification: `make docs` verifies 9150 examples; `make check-docs-examples`
+green on 1086 pages (7-page EXEMPT: nondeterministic + rendered-order cases);
+strict `mkdocs build` clean after fixing 68 broken same-dir links in file-io
+fragments.
 
-## Review
+### Follow-ups discovered (out of scope — NOT fixed here)
+- A few statistics heads (`InterquartileRange`, `Quantile`, `MeanDeviation`,
+  `MedianDeviation`) emit `::rectn`/`::q100` via raw `printf`, bypassing the
+  `mth_message` funnel — a potential `make check-messages` concern.
+- Partial builtins surfaced and documented honestly: `SparseArray` (inert; only
+  `Normal` materializes), `UniformDistribution` (PDF/RandomVariate wired;
+  Mean/Variance/CDF not), `RatCanonPrototype` (Phase-1), `BesselJZero`
+  (symbolic-only). Spec docs now state a false `MaxMemoryUsed >= MemoryInUse`
+  claim was removed (they read different OS counters).
+- [ ] C2 arithmetic
+- [ ] C3 calculus
+- [ ] C4 number-theory
+- [ ] C5 special-functions (impl gap: 5/47)
+- [ ] C6 linear-algebra
+- [ ] C7 power-series / simplification / solutions-of-equations / comparisons /
+      mathematical-constants
+- [ ] non-core partials (expression-information, data-structures, functional-
+      programming, structural-manipulation, control-flow, assignment-and-rules,
+      scoping, pattern-matching, string-operations, statistics,
+      numerical-calculus, flint, file-io, lists-and-iteration, time-and-date, rng)
+- [ ] bare blocks (graphs, other-advanced, image-processing, hypergraphs,
+      graphics, machine-learning, fourier-transforms, packed-arrays, geometry,
+      bitwise)
 
-Reviewed book §7.11 and improved numerical-optimisation speed + reliability (v0.264).
-
-**Speed**
-- Killed the 41× indexed-variable penalty. Root cause (contra the book's "interpreter
-  fallback") was `Sum[]`'s Gosper stage churning `Simplify` on an opaque-indexed summand;
-  fixed with a shared opaque-index guard in `sum_gosper.c`/`sum.c`. Indexed NMinimize now at
-  parity with explicit (8.5 vs 8.2 ms); slow `Sum` 0.345 s → 0.15 ms.
-- FindMinimum/FindMaximum now accept indexed variables (§7.10 gap), reusing NMinimize's
-  normalisation. Valgrind-clean.
-
-**Reliability** (mechanism changed by measurement — the book's "small budget / gives up early"
-hypothesis was wrong; the plan's restart-on-stagnation was built, measured net-negative, and
-removed). The real fix was a stronger Automatic DE: Latin-hypercube init + current-to-best/1 +
-dithered F + 15·d population + best-of-4 runs, all gated to Automatic (explicit bit-identical,
-deterministic). Hard corpus **2/7 → 4/7** default, **6/7** with the domain bounds the functions
-are defined on. T6 Bukin resists (scipy too).
-
-**Already fixed before this work** (book prose was stale): §7.8 feasibility bug, §7.9 NMaximize
-`{f,c1,c2}` bug — corrected in the book, confirmed by existing regression tests.
-
-**Verification**: all 9 summation suites, all optimiser suites (findmin/nminimize/methods/global
-engines/findroot), and the Sum-consumer suites (integrals/series/limit/nsum/product) green;
-check-c99 clean; determinism True; experiment 89 18/18 AHEAD; valgrind no Mathilda-origin leaks.
-Pre-existing/unrelated: `dsolve_corpus_tests` hang, `check-compile-coverage` red (ImageType/
-PackedArrayQ).
-
-**Not done / follow-ups**: dedicated C unit tests for the new behaviours (verified via REPL +
-benchmark harness this session); `cd book && make pdf` to regenerate index + PDF; optionally
-make experiment-90's testbed give T1/T7 the bounds it gives SciPy (fairness → would show 6/7).
+## Notes
+- Docs-only commits: NO `$VersionNumber` bump, NO tag.
+- Never hand-edit `site/docs/documentation/**` — regenerate via `make docs`.
+- Overlay In[] must be single-line; `(* note *)` first word must not be an
+  identifier (it gets capitalised).

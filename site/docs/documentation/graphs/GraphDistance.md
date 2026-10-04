@@ -7,7 +7,7 @@
 
 **`GraphDistance[g, s, t] gives the length of a shortest path from s to t (Infinity if unreachable). GraphDistance[g, s] gives the list of distances from s to every vertex, in VertexList order. Edge weights are used as lengths when g has EdgeWeight.`**
 
-## Examples (5)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -32,6 +32,43 @@ Out[4]= 12.0
 
 In[5]:= GraphDistance[Graph[{1,2},{1<->2}, EdgeWeight->{a}], 1]
 Out[5]= GraphDistance[Graph[<2 vertices, 1 edge>], 1]
+```
+
+### Applications (5)
+
+Opposite vertices of a 6-cycle are 3 hops apart
+
+```mathematica
+In[6]:= GraphDistance[CycleGraph[6], 1, 4]
+Out[6]= 3
+```
+
+A path's endpoints
+
+```mathematica
+In[7]:= GraphDistance[PathGraph[{1, 2, 3, 4}], 1, 4]
+Out[7]= 3
+```
+
+Two-argument form: all distances from a source
+
+```mathematica
+In[8]:= GraphDistance[CycleGraph[5], 1]
+Out[8]= {0, 1, 2, 2, 1}
+```
+
+Weighted: Dijkstra, a machine real
+
+```mathematica
+In[9]:= GraphDistance[Graph[{1 <-> 2, 2 <-> 3}, EdgeWeight -> {5, 7}], 1, 3]
+Out[9]= 12.0
+```
+
+An unreachable target is Infinity
+
+```mathematica
+In[10]:= GraphDistance[Graph[{1, 2, 3}, {1 <-> 2}], 1, 3]
+Out[10]= Infinity
 ```
 
 ## Algorithm
@@ -63,6 +100,35 @@ Memory (SPEC section 4): returns freshly-allocated results; frees res.
 
 ## Implementation notes
 
+**Algorithm.** `GraphDistance[g, s, t]` gives the length of a shortest path from
+`s` to `t`. The core `builtin_graph_distance` dispatches on
+`graph_weights_usable(g)`. The unweighted default runs a breadth-first search
+over the successor adjacency `GraphAdj.out[]` — for a directed graph this follows
+edge direction, and for an undirected graph `out[]` is symmetric, so it is an
+ordinary shortest path — and returns the integer hop count. When `g` carries a
+non-negative numeric `EdgeWeight`, it runs Dijkstra over a call-scoped weighted
+adjacency `WAdj` (built fresh rather than widening the shared `GraphAdj`, which
+has no weight storage) and returns the accumulated distance as a machine real.
+An unreachable target is `Infinity`; a symbolic or negative weight falls back to
+unit BFS rather than erroring. The registered head is actually the wrapper
+`builtin_gmet_graph_distance` (`gmet_distance.c`): it answers the single-source
+form `GraphDistance[g, s]` (all distances from `s`) itself and forwards the
+three-argument form here.
+
+**Data structures.** The unweighted path uses `graph_build_adj`'s CSR adjacency
+(`out[]`/`in[]` over one `block` allocation) with `parent[]`/`dist[]` arrays
+(`-1` = unreached). The weighted path builds `WAdj` in two passes — an
+`outdeg` count, then a fill — indexing endpoints through a `GraphVIdx` and owning
+the resolved per-edge weight expressions; Dijkstra keeps a `done[]` flag array
+and `double dist[]` (`DBL_MAX` = unreached).
+
+**Complexity / limits.** BFS is `O(V + E)`. Dijkstra is implemented as a plain
+`O(V²)` array scan (no binary heap), matching this subsystem's small-graph
+exact-algorithm precedent. A weighted distance is a machine `double` (so `12.`,
+not `12`), bit-for-bit consistent with `GraphDistance[g, s]` and
+`GraphDistanceMatrix`. Negative edge weights are out of scope — they silently
+demote the query to an unweighted hop count.
+
 - *(w)* weight-aware. `GraphDistance[g, s]` is the single-source form added
   by the graph-metrics module (`src/graph/gmet_*.c`); `GraphDistance[g, s, t]`
   is unchanged. `GraphDistance` is re-registered by a wrapper that delegates
@@ -85,8 +151,24 @@ Memory (SPEC section 4): returns freshly-allocated results; frees res.
 
 **See also:** [VertexList](../../graphs/VertexList/), [FindShortestPath](../../graphs/FindShortestPath/), [GraphDistanceMatrix](../../graphs/GraphDistanceMatrix/)
 
-- Source: [`src/graph/gmet_init.c`](https://github.com/stblake/mathilda/blob/main/src/graph/gmet_init.c)
+- T. H. Cormen, C. E. Leiserson, R. L. Rivest and C. Stein, *Introduction to Algorithms*, 3rd ed. (MIT Press, 2009), §§22.2 (BFS) and 24.3 (Dijkstra).
+- Source: [`src/graph/shortestpath.c`](https://github.com/stblake/mathilda/blob/main/src/graph/shortestpath.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
 - Tests: [`tests/test_graph_metrics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_metrics.c)
 - Tests: [`tests/test_hypergraph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hypergraph.c)
+
+## Notes & additional examples
+
+### Notes
+
+Without edge weights the distance is the BFS hop count, an integer; for a
+directed graph the search follows edge direction. When the graph carries a
+non-negative numeric `EdgeWeight`, the distance is the Dijkstra total and comes
+back as a machine real (so `12.`, not `12`), agreeing bit-for-bit with the
+single-source form and `GraphDistanceMatrix`.
+
+`GraphDistance[g, s, t]` gives one length; `GraphDistance[g, s]` gives the list
+of distances from `s` to every vertex in canonical order. An unreachable target
+is `Infinity`; a symbolic or negative weight demotes the query to an unweighted
+hop count rather than erroring.

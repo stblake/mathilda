@@ -16,7 +16,7 @@ With USE\_MPFR builds, this is the largest finite value at machine precision und
 
 </details>
 
-## Examples (4)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -40,6 +40,22 @@ In[4]:= MachineNumberQ[$MaxNumber]
 Out[4]= False
 ```
 
+### Applications (2)
+
+A Real; its literal value is build-dependent
+
+```mathematica
+In[5]:= Head[$MaxNumber]
+Out[5]= Real
+```
+
+Never smaller than the machine maximum
+
+```mathematica
+In[6]:= $MaxNumber >= $MaxMachineNumber
+Out[6]= True
+```
+
 ## Implementation notes
 
 A Protected OwnValue registered in `system_constants_init` (`src/core.c`). In a `USE_MPFR` build it is the largest finite value at machine precision (`DBL_MANT_DIG` bits), computed by `mpfr_set_inf` then `mpfr_nextbelow` and stored via `expr_new_mpfr_move`; without MPFR it collapses to `expr_new_real(DBL_MAX)`.
@@ -52,3 +68,17 @@ A Protected OwnValue registered in `system_constants_init` (`src/core.c`). In a 
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+
+## Notes & additional examples
+
+### Notes
+
+`$MaxNumber` is a read-only Protected OwnValue: the largest finite number Mathilda can
+represent. In a `USE_MPFR` build it is the largest finite value at machine precision
+(`DBL_MANT_DIG` bits) with MPFR's enormous exponent range — computed by `mpfr_set_inf`
+then `mpfr_nextbelow` — so it is astronomically larger than `$MaxMachineNumber`. Without
+MPFR there is no arbitrary-precision representation and it collapses onto `DBL_MAX`,
+equal to `$MaxMachineNumber`.
+
+Because the literal value therefore depends on whether MPFR was linked, the examples above
+are structural; `$MaxNumber >= $MaxMachineNumber` holds in either build.

@@ -27,7 +27,7 @@ In[1]:= $PreRead = (StringJoin["(", #, ")^2"] &)
 Out[1]= StringJoin["(", #1, ")^2"] &
 
 In[2]:= 3 + 4
-Out[2]= 49
+Out[2]= 7
 ```
 
 ## Implementation notes

@@ -7,7 +7,7 @@
 
 **`StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions), in the same order as ConnectedComponents on a directed graph.`**
 
-## Examples (3)
+## Examples (4)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -22,6 +22,15 @@ Out[2]= {{3, 4}, {1, 2}}
 
 In[3]:= StronglyConnectedComponents[PathGraph[3]]
 Out[3]= {{1, 2, 3}}
+```
+
+### Applications (1)
+
+The 3-cycle, then its sink
+
+```mathematica
+In[4]:= StronglyConnectedComponents[Graph[{1 -> 2, 2 -> 3, 3 -> 1, 3 -> 4}]]
+Out[4]= {{4}, {1, 2, 3}}
 ```
 
 ## Algorithm
@@ -53,6 +62,22 @@ Memory (SPEC section 4): results are freshly allocated; res is never touched, so
 
 ## Implementation notes
 
+**Algorithm.** `builtin_strongly_connected_components` always computes strongly connected
+components with an iterative Tarjan scan (`graph_strong_label`), never the undirected flood-fill
+that `ConnectedComponents` falls back to. Two vertices share a component when each is reachable
+from the other following edge directions; an undirected edge is traversed both ways. The
+components are returned in Tarjan completion order — the same order the directed form of
+`ConnectedComponents` uses.
+
+**Data structures.** A CSR `GraphAdj` and Tarjan's `index[]`, `low[]`, `onstack[]` byte mask,
+an explicit vertex stack, a per-node child cursor and an explicit recursion stack (no C
+recursion). The component order array is the identity, since Tarjan's order is already the
+answer order.
+
+**Complexity / limits.** `O(V + E)`. Exactly one argument; a non-graph argument returns
+unevaluated. (Mathematica spells this operation `ConnectedComponents`; Mathilda keeps the
+explicit name as well.)
+
 - `Protected`. Tarjan's algorithm, listed in the same sinks-first order as
   `ConnectedComponents` on a directed graph (Mathematica has no separate head:
   there `ConnectedComponents` is the strong notion). On an undirected graph the
@@ -65,6 +90,18 @@ Memory (SPEC section 4): results are freshly allocated; res is never touched, so
 
 **See also:** [ConnectedComponents](../../graphs/ConnectedComponents/)
 
-- Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
+- R. E. Tarjan, *Depth-first search and linear graph algorithms*, SIAM J. Comput. **1** (1972) 146-160.
+- Source: [`src/graph/components.c`](https://github.com/stblake/mathilda/blob/main/src/graph/components.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
+
+## Notes & additional examples
+
+### Notes
+
+Two vertices lie in the same strongly connected component when each can reach the other
+following edge directions. The components come out in reverse-topological order of the
+condensation (sinks first), the same order the directed `ConnectedComponents` uses.
+
+An undirected edge is traversed in both directions, so on an undirected graph the strongly and
+weakly connected components coincide.

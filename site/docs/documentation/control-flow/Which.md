@@ -16,7 +16,7 @@ Which has attribute HoldAll, so the tests and values are not evaluated until Whi
 
 </details>
 
-## Examples (6)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -36,14 +36,16 @@ In[4]:= sign[x_] := Which[x < 0, -1, x > 0, 1, True, Indeterminate]; sign /@ {-2
 Out[4]= {-1, Indeterminate, 1}
 ```
 
-### Applications (2)
+### Applications (3)
 
 ```mathematica
 In[5]:= Which[False, 1, True, 2, True, 3]
 Out[5]= 2
 
-In[6]:= Which[x > 0, pos, x < 0, neg, True, zero]
-Out[6]= Which[x > 0, pos, x < 0, neg, True, zero]
+In[6]:= sign[x_] := Which[x < 0, -1, x == 0, 0, x > 0, 1];
+
+In[7]:= Which[x > 0, pos, x < 0, neg, True, zero]
+Out[7]= Which[x > 0, pos, x < 0, neg, True, zero]
 ```
 
 ## Implementation notes

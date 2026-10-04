@@ -25,7 +25,7 @@ gives a list of n pseudorandom integers.
 
 gives an n1 x n2 x ... array of pseudorandom integers.
 
-## Examples (7)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -52,6 +52,43 @@ Out[6]= -6
 
 In[7]:= IntegerQ[RandomInteger[10^20]]
 Out[7]= True
+```
+
+### Applications (5)
+
+Seed first, so the draw is reproducible
+
+```mathematica
+In[8]:= SeedRandom[1]; RandomInteger[10]
+Out[8]= 8
+```
+
+Ten rolls of a die, inclusive range
+
+```mathematica
+In[9]:= SeedRandom[1]; RandomInteger[{1, 6}, 10]
+Out[9]= {5, 5, 1, 5, 2, 4, 6, 4, 1, 1}
+```
+
+Bare 1 means [0, 1]: eight coin flips
+
+```mathematica
+In[10]:= SeedRandom[2]; RandomInteger[1, 8]
+Out[10]= {0, 0, 1, 0, 1, 0, 0, 1}
+```
+
+A 2x4 array of digits
+
+```mathematica
+In[11]:= SeedRandom[1]; RandomInteger[{0, 9}, {2, 4}]
+Out[11]= {{8, 7, 1, 7}, {1, 5, 9, 5}}
+```
+
+The range may exceed machine width
+
+```mathematica
+In[12]:= SeedRandom[1]; RandomInteger[10^40]
+Out[12]= 5112342999594421926379878200838926612795
 ```
 
 ## Implementation notes
@@ -83,3 +120,21 @@ The `RandomInteger[range, n]` and `RandomInteger[range, {n1, n2, ...}]` forms pr
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
 - Tests: [`tests/test_nminimize.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nminimize.c)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
+
+### Notes
+
+The range is **inclusive** at both ends. A bare `n` means `[0, n]`; `{a, b}` means
+`[a, b]`; `RandomInteger[]` gives `0` or `1`. A second argument asks for many draws
+at once: `n` returns a flat list and `{n1, n2, ...}` a nested array, filled in
+row-major order.
+
+`SeedRandom[s]` before the call fixes the whole sequence, so a seeded
+`RandomInteger` is reproducible across runs — this is what makes the outputs above
+stable. Without a seed the stream is reseeded from system entropy at first use.
+
+A list of machine-width draws rides a packed integer buffer, so
+`RandomInteger[{a, b}, 10^7]` builds an `NDArray` directly rather than ten million
+boxed integers. A range wider than a machine word (`RandomInteger[10^40]`) is drawn
+exactly through GMP and returned as an arbitrary-precision integer.

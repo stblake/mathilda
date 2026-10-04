@@ -7,7 +7,7 @@
 
 **`ImageCorners[image] gives the positions of corners. ImageCorners[image, r, t, d, n] sets the window radius (default 2), the threshold as a fraction of the largest response (0.05), the MINIMUM SEPARATION in pixels (0), and the maximum number of features (all). Three filters apply in that order because each removes what the others cannot: a threshold alone returns a blob of adjacent pixels per corner since the response is smooth; 3x3 non-maximum suppression alone returns a maximum in every flat region since a plateau of zeros has maxima; and separation is what makes the list usable, since the first two leave clusters a pixel apart -- 4104 of them on a noise-like 512x512 image. Separation is greedy in DESCENDING RESPONSE order, so the survivor of a cluster is its strongest member rather than whichever came first in raster order, and the feature limit is applied last: before separation it would return n positions from a single cluster. The result is sorted strongest first, ties broken by position so the same image always gives the same list. Positions are {row, column}, 1-based, so each indexes ImageData directly; that is NOT Mathematica's {x, y} from the bottom left, and Mathematica spells the feature limit as a MaxFeatures option where this takes it positionally -- both differences are stated rather than guessed.`**
 
-## Examples (39)
+## Examples (42)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -131,7 +131,54 @@ In[39]:= ImageCorners[zone]
 Out[39]= {{31, 31}, {11, 10}, {11, 22}, {21, 10}, {21, 22}, {6, 7}, {6, 25}, {25, 6}, {26, 25}, {28, 10}, {10, 28}, {22, 28}, {28, 22}, {2, 16}, {16, 2}, {29, 12}, {29, 20}, {12, 29}, {20, 29}}
 ```
 
+### Applications (3)
+
+A bright square: positions are {row, column}
+
+```mathematica
+In[40]:= ImageCorners[Image[{{0., 0., 0., 0.}, {0., 1., 1., 0.}, {0., 1., 1., 0.}, {0., 0., 0., 0.}}]]
+Out[40]= {{2, 2}}
+```
+
+Radius, threshold, separation, max features
+
+```mathematica
+In[41]:= ImageCorners[Image[{{0., 0., 0., 0.}, {0., 1., 1., 0.}, {0., 1., 1., 0.}, {0., 0., 0., 0.}}], 1, 0.05, 0, 1]
+Out[41]= {{2, 2}}
+```
+
+Separation keeps clusters from flooding the list
+
+```mathematica
+In[42]:= SeedRandom[42]; Length[ImageCorners[RandomImage[1, {32, 32}], 2, 0.2, 3]]
+Out[42]= 35
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_imagecorners` finds corners via the **structure tensor**. A corner is
+where the image gradient points in two independent directions, which is a statement about the
+second-moment matrix `M = [[⟨Ix Ix⟩, ⟨Ix Iy⟩], [⟨Ix Iy⟩, ⟨Iy Iy⟩]]` of the gradient over a
+Gaussian-weighted window. `structure_tensor` builds the three smoothed gradient products
+(reusing the normalised Sobel stencils and a separable Gaussian through `convolve_dispatch`);
+`corner_response` reads them as `MinimumEigenvalue` (Shi-Tomasi) `λ_min = ½(tr − √((Sxx−Syy)² +
+4 Sxy²))`, written as a sum of squares under the root so cancellation cannot produce a NaN.
+Along a straight edge `M` has rank 1, so `λ_min = 0` exactly — the property that separates a
+corner detector from an edge detector.
+
+`corner_peaks_list` then applies, in order: a threshold at `frac` of the largest response
+(default 0.05); 3×3 non-maximum suppression; a minimum-separation filter, greedy in
+**descending response** so a cluster's survivor is its strongest member; and finally the
+feature cap (`MaxFeatures` option, or the 5th positional argument). The list is sorted
+strongest first, ties broken by position for determinism.
+
+**Data structures.** A grey plane, three tensor buffers and a response buffer; the result is a
+`List` of `{row, column}` positions (1-based, indexing `ImageData` directly) — **not** an
+image, so the `make check-image-packing` audit does not apply. Note this is *not* Mathematica's
+`{x, y}` from the bottom-left.
+
+**Complexity / limits.** `O(pixels)` for the response (separable convolutions) plus the greedy
+separation pass over detected peaks. Window radius ≤ 32.
 
 **Attributes:** `Protected`.
 
@@ -139,6 +186,24 @@ Out[39]= {{31, 31}, {11, 10}, {11, 22}, {21, 10}, {21, 22}, {6, 7}, {6, 25}, {25
 
 **See also:** [ImageData](../../image-processing/ImageData/)
 
+- C. Harris and M. Stephens, *A Combined Corner and Edge Detector*, Proc. 4th Alvey Vision Conf. (1988) 147-151.
+- J. Shi and C. Tomasi, *Good Features to Track*, Proc. CVPR (1994) 593-600.
 - Source: [`src/imagefilter.c`](https://github.com/stblake/mathilda/blob/main/src/imagefilter.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ImageCorners[image]` gives corner positions as `{row, column}`, 1-based, so each indexes
+`ImageData` directly — this is **not** Mathematica's `{x, y}` from the bottom-left.
+`ImageCorners[image, r, t, d, n]` sets the window radius (default 2), the threshold as a
+fraction of the largest response (0.05), the minimum separation in pixels (0), and the maximum
+number of features (all, also settable with the `MaxFeatures` option).
+
+A corner is where the structure tensor has two strong eigenvalues; along a straight edge it has
+rank 1 and the response is 0 exactly. Three filters apply in order — threshold, 3×3
+non-maximum suppression, then minimum separation greedy in descending response — because each
+removes what the others cannot; the feature cap is applied last, and the list is sorted
+strongest first.

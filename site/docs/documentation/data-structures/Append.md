@@ -7,7 +7,7 @@
 
 **`Append[expr, elem] adds elem to the end of expr.`**
 
-## Examples (3)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -22,6 +22,34 @@ Out[2]= <|"b" -> 2, "a" -> 9|>
 
 In[3]:= Prepend[<|"a" -> 1, "b" -> 2|>, "b" -> 9]
 Out[3]= <|"b" -> 9, "a" -> 1|>
+```
+
+### Applications (4)
+
+```mathematica
+In[4]:= Append[{1, 2, 3}, 4]
+Out[4]= {1, 2, 3, 4}
+```
+
+Appending to the empty list
+
+```mathematica
+In[5]:= Append[{}, 1]
+Out[5]= {1}
+```
+
+Works on any head, not just List
+
+```mathematica
+In[6]:= Append[f[a, b], c]
+Out[6]= f[a, b, c]
+```
+
+A rule appends an entry to an association
+
+```mathematica
+In[7]:= Append[<|a -> 1, b -> 2|>, c -> 3]
+Out[7]= <|a -> 1, b -> 2, c -> 3|>
 ```
 
 ## Implementation notes
@@ -48,3 +76,13 @@ Out[3]= <|"b" -> 9, "a" -> 1|>
 - Tests: [`tests/test_assoc_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_ops.c)
 - Tests: [`tests/test_assoc_read.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_read.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Append[expr, elem]` adds `elem` as the last argument of `expr`, keeping the
+original head. It is not restricted to lists: `Append[f[a, b], c]` gives
+`f[a, b, c]`, and for an association a `key -> value` rule adds (or, for an
+existing key, updates) an entry. The input is left unchanged — `Append` returns a
+new expression — so use `AppendTo` for an in-place update of a variable.

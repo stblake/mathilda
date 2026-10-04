@@ -7,7 +7,7 @@
 
 **`RandomImage[] gives a 150x150 grey image of uniform noise on [0, 1]. RandomImage[max] scales the range to [0, max]; RandomImage[max, {w, h}] sets the size, and a single n means {n, n}. ColorSpace -> "RGB" gives three independent channels. Samples are drawn from the same stream as RandomReal, so SeedRandom makes the result reproducible.`**
 
-## Examples (20)
+## Examples (23)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -112,6 +112,29 @@ In[20]:= Head[RandomImage[1, {4, 4}, ColorSpace -> "CMYK"]]
 Out[20]= RandomImage
 ```
 
+### Applications (3)
+
+The default is a 150x150 grey noise field
+
+```mathematica
+In[21]:= ImageDimensions[RandomImage[]]
+Out[21]= {150, 150}
+```
+
+Three independent channels
+
+```mathematica
+In[22]:= ImageChannels[RandomImage[1, {4, 4}, ColorSpace -> "RGB"]]
+Out[22]= 3
+```
+
+Drawn from RandomReal's stream, so SeedRandom pins it
+
+```mathematica
+In[23]:= SeedRandom[1]; ImageData[RandomImage[1, {1, 2}]]
+Out[23]= {{0.811612}, {0.747105}}
+```
+
 ## Algorithm
 
 imageio.c -- Import and Export for raster image files.
@@ -123,6 +146,27 @@ WHY A VENDORED DECODER. JPEG decoding is a baseline-Huffman-plus-IDCT project of
 WHAT A SAMPLE MEANS. A decoded 8-bit sample is scaled by 1/255 into the unit interval, because that is what the rest of the subsystem means by a brightness (see `image_load`) and the type a filter answers with is always "Real". So `Import` produces a "Real" image, not a "Byte" one: an image whose stored range depended on the file's bit depth would make every downstream kernel's scale depend on it too.
 
 ## Implementation notes
+
+**Algorithm.** `builtin_random_image` fills a buffer with uniform noise. The max value
+(default 1), size (`read_size`: a single `n` means `{n, n}`, default `150 × 150`) and a
+`ColorSpace -> "RGB"` option (three independent channels, vs. the one-channel `"Grayscale"`
+default) are parsed through `options_extract`. Each sample is `random_uniform_01() * max` —
+drawn from the **same** stream as `RandomReal`, so `SeedRandom` makes a random image
+reproducible; a private generator would have quietly made this the one random builtin that
+ignores the seed. The samples are scaled by `max` but **not** clamped: the caller asked for
+that range, a `"Real"` image may legitimately hold values above 1, and clamping is `Export`'s
+job.
+
+`RandomImage` exists because a filter is most honestly judged on a noise field — a smoothing
+radius means nothing on a checkerboard and everything on noise — and before it the only way to
+get one was a deterministic `Mod` expression masquerading as random.
+
+**Data structures.** A fresh `w · h · channels` buffer, wrapped by `image_build_real` as a
+packed `"Real"` image (every image head returns a packed buffer — `make check-image-packing`).
+
+**Complexity / limits.** `O(w · h · channels)` draws from the global RNG. Dimensions must be
+positive integers (a symbolic size stays unevaluated rather than becoming a guess); an
+unsupported colour space declines rather than defaulting to grey.
 
 - `Protected`.
 - Samples are drawn from the **same stream as `RandomReal`**, so `SeedRandom` makes a
@@ -143,3 +187,15 @@ WHAT A SAMPLE MEANS. A decoded 8-bit sample is scaled by 1/255 into the unit int
 - Source: [`src/imageio.c`](https://github.com/stblake/mathilda/blob/main/src/imageio.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`RandomImage[]` gives a 150 × 150 grey image of uniform noise on `[0, 1]`; `RandomImage[max]`
+scales the range to `[0, max]`, `RandomImage[max, {w, h}]` sets the size (a single `n` means
+`{n, n}`), and `ColorSpace -> "RGB"` gives three independent channels.
+
+Samples are drawn from the **same** stream as `RandomReal`, so `SeedRandom` makes the result
+reproducible. The samples are scaled by `max` but not clamped — a `"Real"` image may hold
+values above 1, and clamping belongs in `Export`.

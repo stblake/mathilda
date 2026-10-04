@@ -7,7 +7,7 @@
 
 **`ImageDimensions[image] gives {width, height}. This is TRANSPOSED relative to ImageData, which returns a height x width array -- the same convention Mathematica uses.`**
 
-## Examples (31)
+## Examples (34)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -109,7 +109,52 @@ In[31]:= ImageDimensions[zone]
 Out[31]= {32, 32}
 ```
 
+### Applications (3)
+
+One row of three pixels: width 3, height 1
+
+```mathematica
+In[32]:= ImageDimensions[Image[{{0., 1., 0.}}]]
+Out[32]= {3, 1}
+```
+
+Height x width 2x3 stores, reports {3, 2}
+
+```mathematica
+In[33]:= ImageDimensions[Image[{{0., 1., 0.}, {1., 0., 1.}}]]
+Out[33]= {3, 2}
+```
+
+A volume reports {width, height, depth}
+
+```mathematica
+In[34]:= ImageDimensions[Image3D[{{{0., 1.}, {1., 0.}}, {{1., 0.}, {0., 1.}}}]]
+Out[34]= {2, 2, 2}
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_imagedimensions` reports an image's size. It tries `image3d_info`
+first: a volume answers `{width, height, depth}` — three elements, **fully reversed** from the
+`depth × height × width` storage order. A plane answers `{width, height}` via `image_info` —
+**transposed** relative to `ImageData`, which returns a `height × width` array. Both are
+Mathematica's conventions and the subsystem's most common trap, which is why every size test
+uses a non-square image (a square one cannot tell the two axes apart).
+
+The size comes from `img_shape_fast`, not the full validator, and that is a measured
+decision: routing the query through the per-pixel validator made `ImageDimensions` cost
+0.59 ms on a 512 × 512 image because asking how wide an image is touched all 262144 pixels. A
+filter pipeline queries dimensions constantly, so `img_shape_fast` instead reads a packed
+buffer's dims in `O(1)` and, for nested data, checks only that rows are the same length
+(`O(height)`) — ~500× cheaper, with the per-pixel numeric check left where it is paid once, in
+construction.
+
+**Data structures.** Reads the stored `NDArray` dims (or the nested-`List` row lengths); the
+result is a 2- or 3-element `List` of integers.
+
+**Complexity / limits.** `O(1)` for a packed image, `O(height)` (or `O(depth · height)`) for a
+nested one. Registered packed-aware, so a packed image's dims are read directly rather than the
+buffer being materialised first.
 
 **Attributes:** `Protected`.
 
@@ -120,3 +165,18 @@ Out[31]= {32, 32}
 - Source: [`src/image.c`](https://github.com/stblake/mathilda/blob/main/src/image.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ImageDimensions` gives `{width, height}`, which is **transposed** from `ImageData`'s
+`height × width` array — the convention Mathematica uses and the single most common source of
+silently-wrong image code. The example above pins it with a non-square image: a 2 × 3 pixel
+array (two rows of three) reports `{3, 2}`.
+
+For an `Image3D` the result is `{width, height, depth}`, fully reversed from the
+`depth × height × width` storage order.
+
+The size is read without walking the pixels, so querying it repeatedly in a filter pipeline is
+cheap — it was deliberately taken off the full-validator path that once made it `O(pixels)`.

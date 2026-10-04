@@ -249,6 +249,17 @@ Booleans and cancels duplicate arguments (`a` Xor `a` is `False`): `Xor[]` is
 `False`, `Xor[True, a]` is `!a`, and `Xor[a, b, a]` is `b`. A `Xor` with only
 symbolic, distinct arguments stays unevaluated (`Xor[p, q, r]`).
 
+```mathematica
+In[1]:= Xor[True, False]
+Out[1]= True
+
+In[2]:= Xor[p, q, p]
+Out[2]= q
+
+In[3]:= Xor[True, a]
+Out[3]= Not[a]
+```
+
 ## Equivalent
 Logical equivalence.
 - `Equivalent[e1, e2, ...]`: Yields `True` when **all** of the `ei` share one
@@ -263,6 +274,17 @@ literal Booleans and cancels duplicate arguments: `Equivalent[]` and
 stays unevaluated. `LogicalExpand`, `Reduce`, and `FindInstance` expand
 `Equivalent` to the cyclic conjunction `Implies[a1,a2] && … && Implies[an,a1]`.
 
+```mathematica
+In[1]:= Equivalent[True, a, b]
+Out[1]= a && b
+
+In[2]:= Equivalent[False, a]
+Out[2]= Not[a]
+
+In[3]:= Equivalent[True, False]
+Out[3]= False
+```
+
 ## Implies
 Material implication.
 - `Implies[p, q]`: The statement `p ⟹ q`, equivalent to `!p || q`.
@@ -271,6 +293,17 @@ Material implication.
 `True`, `Implies[True, q]` is `q`, `Implies[p, False]` is `!p`, and
 `Implies[p, p]` is `True`; otherwise it stays unevaluated. (`LogicalExpand` and
 `Reduce` expand `Implies[p, q]` to `!p || q`.)
+
+```mathematica
+In[1]:= Implies[True, q]
+Out[1]= q
+
+In[2]:= Implies[p, False]
+Out[2]= Not[p]
+
+In[3]:= LogicalExpand[Implies[p, q]]
+Out[3]= Not[p] || q
+```
 
 ## TrueQ
 Tests whether an expression evaluates explicitly to `True`.
@@ -959,6 +992,14 @@ Evaluates an expression with messages suppressed.
 - `HoldAll`, so the argument is evaluated under the suppression, not before it.
 - A message still *fires* while suppressed (an enclosing `Check` sees it); only the printing is silenced.
 
+```mathematica
+In[1]:= Quiet[1/0]
+Out[1]= ComplexInfinity
+
+In[2]:= Quiet[Log[0]]
+Out[2]= -Infinity
+```
+
 ## Check
 Detects whether a message was generated while evaluating an expression.
 - `Check[expr, failexpr]`: Returns `failexpr` if any message is generated during the evaluation of `expr`, otherwise the value of `expr`.
@@ -968,6 +1009,17 @@ Detects whether a message was generated while evaluating an expression.
 - `HoldAll`. A `Throw` inside `expr` propagates (it is not a message).
 - Typically wrapped as `Quiet[Check[expr, failexpr]]` to detect a failure without printing its message.
 
+```mathematica
+In[1]:= Check[2 + 2, failed]
+Out[1]= 4
+
+In[2]:= Check[1/0, failed]
+Out[2]= failed
+
+In[3]:= Quiet[Check[1/0, caughtit]]
+Out[3]= caughtit
+```
+
 ## Message
 Prints a named message.
 - `Message[sym::tag, e1, e2, ...]`: Notes that a diagnostic fired (so an enclosing `Check` sees it) and, unless messages are suppressed, prints the message text defined by `sym::tag`.
@@ -975,3 +1027,11 @@ Prints a named message.
 **Features**:
 - `HoldFirst`.
 - Returns `Null`.
+
+```mathematica
+In[1]:= Quiet[Check[Message[g::x]; 7, flagged]]
+Out[1]= flagged
+
+In[2]:= Message[myfun::warn]  (* fires a diagnostic; returns Null *)
+Out[2]= Null
+```

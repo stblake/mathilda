@@ -46,7 +46,7 @@ In[9]:= N[RootMeanSquare[{1, 2, 3, 4, 5}], 30]
 Out[9]= 3.316624790355399849114932736672
 
 In[10]:= N[RootMeanSquare[Table[Sin[n], {n, 1, 1000}]], 20]
-Out[10]= 0.707242937053949660224
+Out[10]= 0.707242937053949660265
 ```
 
 ## Implementation notes

@@ -18,9 +18,46 @@ An entire, odd function with no branch cuts. FresnelC\[0\] = 0, Real and complex
 
 </details>
 
-## Examples
+## Examples (5)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (5)
+
+Odd and entire, so the value at zero is zero
+
+```mathematica
+In[1]:= FresnelC[0]
+Out[1]= 0
+```
+
+The limit value is 1/2
+
+```mathematica
+In[2]:= FresnelC[Infinity]
+Out[2]= 1/2
+```
+
+Arbitrary precision via the MPFR series
+
+```mathematica
+In[3]:= N[FresnelC[1], 20]
+Out[3]= 0.779893400376822829476
+```
+
+The integrand Cos[Pi x^2/2]
+
+```mathematica
+In[4]:= D[FresnelC[x], x]
+Out[4]= Cos[1/2 Pi x^2]
+```
+
+Threads element-wise over the packed real list
+
+```mathematica
+In[5]:= FresnelC[{0.5, 1.0, 1.5}]
+Out[5]= {0.492344, 0.779893, 0.445261}
+```
 
 ## Algorithm
 
@@ -64,14 +101,37 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
+**Algorithm.** `builtin_fresnelc` handles `FresnelC[z] = Int_0^z cos(π t^2/2) dt` (the π/2-normalized / Wolfram convention), entire and odd. It shares one numeric kernel with `FresnelS`: the pair `(C, S)` is computed together and this builtin returns the `C` component. Exact special values first: `FresnelC[0] = 0`, `FresnelC[±Infinity] = ±1/2`, `FresnelC[±I Infinity] = ±I/2`, `ComplexInfinity`/`Indeterminate -> Indeterminate`. A **numeric real** argument (machine or arbitrary precision) uses the convergent Maclaurin series for small/moderate `|x|` (with `~(π/2)|x|^2/ln2` guard bits to absorb the `~e^{(π/2)|z|^2}` partial-sum cancellation), or the **asymptotic expansion** DLMF 7.12 (`C(x) = 1/2 + f(x) sin(π x^2/2) - g(x) cos(π x^2/2)`, summed to optimal truncation) for large `|x|` — the asymptotic constant `1/2` holds only in a sector around the real axis (Stokes), so it is used for real inputs only. A **complex** argument always uses the convergent paired `A/B` series (`A = C + iS`, `B = C - iS`) in the shared `ncpx` toolkit (correct everywhere). A symbolic negative-leading argument folds by oddness. A `USE_MPFR=0` build uses a double-complex `A/B` series.
+
+**Data structures.** `Expr`; the shared complex-MPFR toolkit `ncpx` (`numeric_complex.h`), folding by oddness to `Re z >= 0`. The ND kernel is a real `REG_U` registration (`NDKU_FresnelC`, `ndk_FresnelC_r` → `sf_machine_fresnel_c` in `src/special_functions/sf_machine.c`): element-wise over a packed or visible real `NDArray`. `Compile[]` lowers `FresnelC` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes.
+
+**Complexity / limits.** `O(1)` per element at machine precision; MPFR term count and guard bits scale with `|z|^2` and precision. Entire function (no branch cuts). `D[FresnelC[x], x] = Cos[π x^2/2]`. Symbolic arguments stay symbolic. Attributes: `Listable`, `NumericFunction`, `Protected`.
+
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 
 **See also:** [FresnelS](../../special-functions/FresnelS/), [Piecewise](../../control-flow/Piecewise/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- DLMF §7.2(iii) — the Fresnel integral C(z) = Int_0^z cos(π t^2/2) dt.
+- DLMF §7.12 — the asymptotic expansion of the Fresnel integrals.
+- Source: [`src/special_functions/fresnel.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/fresnel.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_fresnelc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fresnelc.c)
 - Tests: [`tests/test_numeric_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric_stress.c)
+
+## Notes & additional examples
+
+### Notes
+
+Mathilda uses the Pi/2-normalized (Wolfram) convention
+`FresnelC[z] = Int_0^z Cos[Pi t^2/2] dt`. The function is entire and odd, with
+`FresnelC[±Infinity] = ±1/2` and `FresnelC[±I Infinity] = ±I/2`.
+
+`FresnelC` and `FresnelS` share one numeric kernel: the pair `(C, S)` is computed
+together and each builtin returns its component. The real path uses a convergent
+Maclaurin series for small/moderate arguments and an asymptotic expansion (DLMF
+7.12) for large ones; complex arguments always use the convergent paired `A/B`
+series, correct across the whole plane. `FresnelC` carries a real `NDArray`
+kernel and lowers under `Compile[]` at both scalar and rank-1 array shapes.

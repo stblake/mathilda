@@ -7,7 +7,7 @@
 
 **`Prepend[expr, elem] adds elem to the beginning of expr.`**
 
-## Examples (3)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -22,6 +22,27 @@ Out[2]= <|"b" -> 2, "a" -> 9|>
 
 In[3]:= Prepend[<|"a" -> 1, "b" -> 2|>, "b" -> 9]
 Out[3]= <|"b" -> 9, "a" -> 1|>
+```
+
+### Applications (3)
+
+```mathematica
+In[4]:= Prepend[{2, 3, 4}, 1]
+Out[4]= {1, 2, 3, 4}
+```
+
+Works on any head, not just List
+
+```mathematica
+In[5]:= Prepend[f[b, c], a]
+Out[5]= f[a, b, c]
+```
+
+A rule goes to the front of the association
+
+```mathematica
+In[6]:= Prepend[<|a -> 1, b -> 2|>, c -> 3]
+Out[6]= <|c -> 3, a -> 1, b -> 2|>
 ```
 
 ## Implementation notes
@@ -51,3 +72,12 @@ variant that writes the result back to a symbol's OwnValue.)
 - Tests: [`tests/test_assoc_read.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_read.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Prepend` adds the element at the front while keeping the original head, so it is not
+restricted to lists. For an association the argument must be a rule (or rules); it is
+placed first, and if its key already exists the old entry is dropped from its former
+position. `Append` is the tail-side counterpart.

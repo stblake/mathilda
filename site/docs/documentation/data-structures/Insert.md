@@ -7,7 +7,7 @@
 
 **`Insert[expr, elem, n] inserts elem at position n in expr.`**
 
-## Examples (6)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -31,6 +31,29 @@ Out[5]= Partition[<|"a" -> 1, "b" -> 2|>, 1]
 
 In[6]:= Reverse[<|"x" -> {1, 2}, "y" -> {3, 4}|>, 2]
 Out[6]= <|"x" -> {2, 1}, "y" -> {4, 3}|>
+```
+
+### Applications (3)
+
+X goes before position 2
+
+```mathematica
+In[7]:= Insert[{a, b, c}, x, 2]
+Out[7]= {a, x, b, c}
+```
+
+-1 appends at the end
+
+```mathematica
+In[8]:= Insert[{a, b, c}, x, -1]
+Out[8]= {a, b, c, x}
+```
+
+Insert at several positions at once
+
+```mathematica
+In[9]:= Insert[{a, b, c, d}, x, {{2}, {4}}]
+Out[9]= {a, x, b, c, x, d}
 ```
 
 ## Implementation notes
@@ -57,3 +80,14 @@ Out[6]= <|"x" -> {2, 1}, "y" -> {4, 3}|>
 - Tests: [`tests/test_assoc_read.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_read.c)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
 - Tests: [`tests/test_part.c`](https://github.com/stblake/mathilda/blob/main/tests/test_part.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Insert[expr, elem, pos]` inserts `elem` so that it occupies position `pos` in
+the result, shifting later elements along; negative positions count from the end,
+so `pos = -1` appends. A position may be a path for nested insertion, and a list
+of positions `{{p1}, {p2}, ...}` inserts a copy of `elem` at each (positions
+refer to the original expression). The original head is preserved, so `Insert`
+works on any expression, not just lists.

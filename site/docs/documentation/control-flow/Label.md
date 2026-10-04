@@ -9,7 +9,7 @@
 
 Marks a point in a CompoundExpression to which control can be transferred with Goto\[tag\]. As a statement it evaluates to Null.
 
-## Examples (2)
+## Examples (4)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -23,7 +23,39 @@ In[2]:= f[a_] := Module[{x = 1., xp}, Label[begin]; If[Abs[xp - x] < 10^-8, Goto
 Out[2]= 1.41421
 ```
 
+### Applications (2)
+
+Label marks the target that Goto returns to
+
+```mathematica
+In[3]:= Module[{k = 1}, Label[a]; k = 2 k; If[k < 16, Goto[a]]; k]
+Out[3]= 16
+```
+
+As a bare statement a Label evaluates to Null
+
+```mathematica
+In[4]:= Label[done]
+```
+
 ## Implementation notes
+
+**Algorithm.** `Label[tag]` marks a jump target inside a `CompoundExpression`.
+`Label` is `Protected`. `builtin_label` validates arity (exactly one argument) and
+returns `expr_new_symbol(SYM_Null)`, so evaluated as an ordinary statement a
+`Label` is a no-op worth `Null`. Its real role is passive: the *raw held*
+`Label[tag]` node, as it appears literally in the enclosing `CompoundExpression`,
+is what `builtin_compoundexpression` scans for when it consumes a `Goto[tag]`
+sentinel (see [Goto](Goto.md)). Tags are compared structurally (conventionally a
+literal symbol or integer).
+
+**Data structures.** None of its own; it is a plain two-node `EXPR_FUNCTION` that
+`CompoundExpression` reads by position among its statements.
+
+**Complexity / limits.** A `Label` is meaningful only as an explicit element of a
+`CompoundExpression`; the matching `Goto` resolves it by a linear scan of that
+compound expression's statements, then of enclosing ones. A `Label` reached in
+normal top-to-bottom flow simply evaluates to `Null` and execution continues.
 
 - Both are `Protected`. `tag` is evaluated (conventionally a literal symbol or
   integer) and compared structurally to each `Label`'s tag.
@@ -45,6 +77,18 @@ Out[2]= 1.41421
 
 **See also:** [Goto](../../control-flow/Goto/), [CompoundExpression](../../assignment-and-rules/CompoundExpression/), [Catch](../../control-flow/Catch/), [Throw](../../control-flow/Throw/), [If](../../control-flow/If/), [While](../../control-flow/While/)
 
-- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
 - Tests: [`tests/test_goto_label.c`](https://github.com/stblake/mathilda/blob/main/tests/test_goto_label.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Label[tag]` marks a point that `Goto[tag]` can jump to. It must appear as an
+explicit element of a `CompoundExpression` — it is the literal `Label[tag]` node
+that the compound expression scans for when it consumes a `Goto` sentinel.
+
+Evaluated in ordinary top-to-bottom flow a `Label` is a no-op worth `Null`, so
+reaching one by falling through simply continues to the next statement; only a
+`Goto` gives it an effect.

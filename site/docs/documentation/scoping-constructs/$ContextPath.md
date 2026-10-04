@@ -15,7 +15,7 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= $ContextPath
-Out[1]= {"Global`", "System`"}
+Out[1]= {"FullSimplify`", "Global`", "System`"}
 
 In[2]:= BeginPackage["MyPkg`"]
 Out[2]= "MyPkg`"

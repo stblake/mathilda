@@ -49,7 +49,7 @@ In[5]:= D[AiryBi[z], z]
 Out[5]= AiryBiPrime[z]
 
 In[6]:= N[AiryBi[2.0 + 1.0 I], 20]
-Out[6]= 0.778230383757041677129 + 2.50509630006410244363*I
+Out[6]= 0.77823 + 2.5051*I
 ```
 
 ## Algorithm
@@ -120,13 +120,20 @@ Attributes (both heads): Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
+**Algorithm.** `builtin_airybi` is the companion of `AiryAi` — the solution of `y'' = z y` that grows exponentially as `z -> +Infinity`. Exact special values come first: `AiryBi[0] = 1/(3^(1/6) Gamma[2/3])`, `AiryBi[+Infinity] = Infinity`, `AiryBi[-Infinity] = 0`, `AiryBi[Indeterminate] = Indeterminate`. Numeric arguments route to the unified core `airy_bi_core`, which evaluates `Bi(z)` and `Bi'(z)` together and chooses among three algorithms on `r = |z|`, `theta = arg z`, and precision `P`: the **Maclaurin series** (same recurrence `b_n = b_{n-3}/(n(n-1))` as Ai, different seed constants, with `(2/3) r^{3/2}/ln2` guard bits) for small/moderate `|z|`; the **dominant asymptotic series** DLMF 9.7.7/9.7.8 (the same `u_k, v_k` as Ai but with no `(-1)^k` sign and prefactor `1/sqrt(pi)`) in the central sector where the neglected recessive companion `~exp(-2 Re zeta)` is below `2^-P` (Bi's anti-Stokes line is `|arg z| = π/3`); and the **connection to Ai** DLMF 9.2.10 near and left of `|arg z| = π/3`, evaluating the two rotated points by a file-local Ai asymptotic kernel so Bi's oscillation on the negative axis emerges naturally. `AiryBiPrime` reuses the core (`AiryBiPrime[0] = 3^(1/6)/Gamma[1/3]`, `+Infinity` at `+Infinity`); `D[AiryBi[z], z] = AiryBiPrime[z]` lives in `calculus/deriv.c`.
+
+**Data structures.** `Expr`; the numeric core uses the same file-local complex-MPFR `acx` toolkit (pairs of `mpfr_t`, alias-safe, explicit working precision) as `airyai.c`. Machine results overflowing a `double` are promoted to MPFR. The ND kernel is a real `REG_U` registration (`NDKU_AiryBi` → `sf_machine_airy_bi`), real-only; `Compile[]` lowers `AiryBi` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes.
+
+**Complexity / limits.** `O(1)` per element at machine precision; MPFR term count and guard bits scale with `P` and `|z|`. Entire function (no branch cuts). Exact value at `0` only; symbolic/exact non-zero arguments stay symbolic. `AiryBiPrime` leaves `-Infinity` unevaluated (growing-amplitude oscillation).
+
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 
 **See also:** [AiryAi](../../special-functions/AiryAi/), [N](../../arithmetic/N/), [AiryBiPrime](../../other-advanced/AiryBiPrime/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- DLMF §9.2, §9.7 — Airy functions: dominant asymptotic series Bi(z) ~ exp(zeta)/(sqrt(pi) z^{1/4}) Sum u_k/zeta^k, and the Bi–Ai connection Bi(z) = e^{iπ/6} Ai(z e^{2πi/3}) + e^{-iπ/6} Ai(z e^{-2πi/3}).
+- Source: [`src/special_functions/airybi.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/airybi.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_airybi.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airybi.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)

@@ -20,7 +20,7 @@ expr is treated as a full array only at levels where every sub-piece shares the 
 
 </details>
 
-## Examples (5)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -43,6 +43,43 @@ In[5]:= Dimensions[1]
 Out[5]= {}
 ```
 
+### Applications (5)
+
+A full rectangular matrix
+
+```mathematica
+In[6]:= Dimensions[{{1, 2}, {3, 4}}]
+Out[6]= {2, 2}
+```
+
+Ragged below level 1, so only the outer length is counted
+
+```mathematica
+In[7]:= Dimensions[{{a, b, c}, {d, e}, {f}}]
+Out[7]= {3}
+```
+
+Four nested levels
+
+```mathematica
+In[8]:= Dimensions[{{{{a, b}}}}]
+Out[8]= {1, 1, 1, 2}
+```
+
+Capped at the first two levels
+
+```mathematica
+In[9]:= Dimensions[{{{{a, b}}}}, 2]
+Out[9]= {1, 1}
+```
+
+An atom has no parts
+
+```mathematica
+In[10]:= Dimensions[x]
+Out[10]= {}
+```
+
 ## Implementation notes
 
 **Algorithm.** `builtin_dimensions` (in `src/core.c`) measures the shape of a rectangular nested structure all of whose levels share the same head (taken from the top-level expression's head). The recursive helper `get_dimensions` records each level's `arg_count`, then recurses into the first child to get the candidate sub-shape and verifies every sibling has identical depth and dimensions; as soon as the structure becomes ragged it stops and returns the dimensions found so far. An optional second argument caps the depth (`Infinity` maps to the internal cap).
@@ -61,3 +98,16 @@ Out[5]= {}
 - Tests: [`tests/test_core_algebra.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core_algebra.c)
 - Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)
 - Tests: [`tests/test_graph_metrics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_metrics.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Dimensions[expr]` reports the shape only down to the level at which `expr` stops
+being a full array — a level counts only when every sub-piece there shares the
+same head and length, so the second example stops at `{3}` rather than inventing
+a second dimension for the ragged rows. The scan uses a fixed per-level stack
+(`DIMENSIONS_MAX_DEPTH = 64`) and takes its reference head from the top-level
+expression, so a nested `List` of `List`s is measured as a tensor. An atom
+returns the empty `List` `{}`, and `Dimensions[expr, n]` truncates the result to
+the first `n` levels.

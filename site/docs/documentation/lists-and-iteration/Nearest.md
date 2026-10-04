@@ -9,7 +9,7 @@
 
 Gives the element of list closest to x, as a list. All elements tied at the minimum distance Abs\[element - x\] are returned, in their original order; an empty list gives {}. Returns unevaluated unless every distance is a real number, so a symbolic element or target leaves the expression unchanged rather than dropping it from the result.
 
-## Examples (3)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -24,6 +24,29 @@ Out[2]= {30}
 
 In[3]:= Nearest[{1, a, 3}, 2]
 Out[3]= Nearest[{1, a, 3}, 2]
+```
+
+### Applications (3)
+
+The single closest element
+
+```mathematica
+In[4]:= Nearest[{1, 2, 3, 4, 5}, 2.3]
+Out[4]= {2}
+```
+
+A tie returns both, in input order
+
+```mathematica
+In[5]:= Nearest[{10, 20, 30, 40}, 25]
+Out[5]= {20, 30}
+```
+
+Complex elements compare by modulus
+
+```mathematica
+In[6]:= Nearest[{3 + 4 I, 1}, 0]
+Out[6]= {1}
 ```
 
 ## Algorithm
@@ -58,6 +81,30 @@ Measured on arm64 Darwin at commit `2dea9cc05`.
 
 ## Implementation notes
 
+**Algorithm.** `builtin_nearest` (two-argument form) returns the element(s) of a
+list closest to a target `x`. `nearest_distance` forms `Abs[element - x]` by
+composing `internal_subtract` and `internal_abs` through `eval_and_free`, so a
+complex element uses its modulus for free. The shape follows `MinimalBy`, not a
+quickselect: one pass finds the minimum distance, a second collects *every*
+element whose distance equals it, in input order — so ties are returned together
+(`Nearest[{1, 5, 10}, 3]` is `{1, 5}`) and the tie handling falls out of the
+ascending collect pass rather than being coded.
+
+**Numeric gate.** Every distance must be a real number (checked by
+`list_real_number_q`), or the whole call declines — this covers a symbolic
+element, a symbolic target, and a non-real complex in one test, and even rejects
+a symbolic real such as `Pi`. The minimum and ties are decided with
+`list_numeric_cmp`; an undecidable comparison declines rather than guessing.
+`Nearest[{}, x]` is `{}` (checked before the gate).
+
+**Complexity / limits.** O(n) distance evaluations and O(n) comparisons, with
+O(n) peak extra memory; two evaluate passes per element dominate, so this is an
+interpreter-speed path, not a buffer one — `Nearest` is deliberately *not* on
+`pack.c`'s `AWARE` list, so a packed argument is materialised and a visible
+`NDArray` (not a `List`) is left unevaluated rather than silently truncated. Only
+the two-argument form is implemented (no n-nearest, radius, rule or
+`DistanceFunction` forms). `ATTR_PROTECTED`.
+
 - `Protected`.
 - Distance is `Abs[element - x]`, so a complex element uses its modulus.
 - **All** elements tied at the minimum distance are returned, in their original
@@ -82,7 +129,21 @@ Measured on arm64 Darwin at commit `2dea9cc05`.
 
 **See also:** [MinimalBy](../../functional-programming/MinimalBy/), [Abs](../../arithmetic/Abs/)
 
-- Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
+- Source: [`src/list/nearest.c`](https://github.com/stblake/mathilda/blob/main/src/list/nearest.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
 - Tests: [`tests/test_ml_predict.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_predict.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Nearest[list, x]` returns the element (or elements) of `list` closest to the
+target `x`, using `Abs[element - x]` as the distance. **Every** element tied at
+the minimum distance is returned, in the order it appears in the input, so the
+result is always a list. `Nearest[{}, x]` is `{}`.
+
+Every distance must be a real number, or the whole call is left unevaluated — a
+symbolic element, a symbolic target, a non-real complex, or even a symbolic real
+such as `Pi` all decline, rather than silently dropping out of the result.
+Complex elements are handled through their modulus.

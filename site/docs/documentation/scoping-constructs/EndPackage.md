@@ -25,13 +25,12 @@ In[1]:= BeginPackage["MyPkg`"]
 Out[1]= "MyPkg`"
 
 In[2]:= EndPackage[]
-Out[2]= Null
 
 In[3]:= $Context
 Out[3]= "Global`"
 
 In[4]:= $ContextPath
-Out[4]= {"MyPkg`", "Global`", "System`"}
+Out[4]= {"MyPkg`", "FullSimplify`", "Global`", "System`"}
 ```
 
 ## Implementation notes

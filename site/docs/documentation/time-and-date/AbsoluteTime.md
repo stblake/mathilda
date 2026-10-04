@@ -30,7 +30,7 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= AbsoluteTime[]
-Out[1]= 3.98985e+09
+Out[1]= 4.0001e+09
 ```
 
 ## Implementation notes

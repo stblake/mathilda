@@ -48,14 +48,26 @@ Reads the objects contained in a file and returns them as a `List`, directed by 
 - When end of file is reached partway through a `{type_1, ...}` pass, the unread slots of that final pass are filled with `EndOfFile`.
 - `ReadList` is a sequence of `Read` calls: it loops the shared reading engine (`src/io/read.c`) to end of file. It also accepts an open `InputStream` (reading from its current point and leaving it open); a named file that is not already open is opened and closed by `ReadList`.
 
-**Example**:
-```
-(* data.txt: three lines "1 2 3", "4.5 6", "2e5 1.5e-3" *)
-ReadList["data.txt", Number]              (* {1, 2, 3, 4.5, 6, 200000., 0.0015} *)
-ReadList["data.txt", Word]                (* {"1", "2", "3", "4.5", "6", "2e5", "1.5e-3"} *)
-ReadList["pairs.txt", {Word, Number}]     (* {{"a", 1}, {"b", 2}, {"c", 3}} *)
-ReadList["odd.txt", {Number, Number}]     (* {{1, 2}, {3, EndOfFile}} for "1 2 3" *)
-ReadList["data.csv", Word, WordSeparators -> {","}]   (* {"a", "b", "c"} for "a,b,c" *)
+#### Basic Examples
+
+```mathematica
+In[1]:= Put[2, 3, 5, 7, 11, "/tmp/mathilda_io_rl.txt"]  (* Put writes one expression per line *)
+
+In[2]:= ReadList["/tmp/mathilda_io_rl.txt", Number]  (* every number into a flat list *)
+Out[2]= {2, 3, 5, 7, 11}
+
+In[3]:= ReadList["/tmp/mathilda_io_rl.txt"]  (* no type: every remaining expression *)
+Out[3]= {2, 3, 5, 7, 11}
+
+In[4]:= str = OpenWrite["/tmp/mathilda_io_rl2.txt"]; WriteString[str, "a 1\nb 2\nc 3\n"]; Close[str];
+
+In[5]:= ReadList["/tmp/mathilda_io_rl2.txt", {Word, Number}]  (* one of each type per pass *)
+Out[5]= {{"a", 1}, {"b", 2}, {"c", 3}}
+
+In[6]:= str = OpenWrite["/tmp/mathilda_io_csv.txt"]; WriteString[str, "a,b,c\n"]; Close[str];
+
+In[7]:= ReadList["/tmp/mathilda_io_csv.txt", Word, WordSeparators -> {","}]  (* comma-separated fields *)
+Out[7]= {"a", "b", "c"}
 ```
 
 ## Read
@@ -75,15 +87,40 @@ The read types and the `RecordSeparators`/`WordSeparators`/`TokenWords`/`NullRec
 - Returns `$Failed` for a stream that is not open, or (with `Read::readn`) for a token that is not of the requested numeric type.
 - The `Expression` leaf is read **unevaluated** and the constructed result is then evaluated by the surrounding evaluator — so `Read[s, Expression]` evaluates while `Read[s, Hold[Expression]]` stays held.
 
-**Example**:
+#### Basic Examples
+
+```mathematica
+In[1]:= Put[10, 20, 30, "/tmp/mathilda_io_read.txt"]  (* a three-line data file *)
+
+In[2]:= str = OpenRead["/tmp/mathilda_io_read.txt"]
+Out[2]= InputStream["/tmp/mathilda_io_read.txt", 1]
+
+In[3]:= Read[str, Number]
+Out[3]= 10
+
+In[4]:= Read[str, {Number, Number}]  (* read the next two numbers into a list *)
+Out[4]= {20, 30}
+
+In[5]:= Read[str, Number]  (* past the end of the file *)
+Out[5]= EndOfFile
+
+In[6]:= Close[str]
+Out[6]= "/tmp/mathilda_io_read.txt"
 ```
-s = OpenRead["data.txt"];     (* "1 2 3\n4.5 6\n" *)
-Read[s, Number]               (* 1 *)
-Read[s, Number]               (* 2 *)
-Read[s, {Number, Number}]     (* {3, 4.5} *)
-Read[s, Number]               (* 6 *)
-Read[s, Number]               (* EndOfFile *)
-Close[s]                      (* "data.txt" *)
+
+```mathematica
+In[1]:= str = OpenWrite["/tmp/mathilda_io_read2.txt"]; WriteString[str, "1 2\n3 4\nx + 1\n"]; Close[str];
+
+In[2]:= ins = OpenRead["/tmp/mathilda_io_read2.txt"];
+
+In[3]:= Read[ins, {{Number, Number}, {Number, Number}}]  (* a 2x2 matrix in one call *)
+Out[3]= {{1, 2}, {3, 4}}
+
+In[4]:= Read[ins, Hold[Expression]]  (* read the next expression without evaluating it *)
+Out[4]= Hold[x + 1]
+
+In[5]:= Close[ins]
+Out[5]= "/tmp/mathilda_io_read2.txt"
 ```
 
 ## OpenRead / OpenWrite / OpenAppend
@@ -97,12 +134,57 @@ Open a file and return a stream object addressing a persistent current point.
 - The integer in the returned object is an internal handle into the stream registry; the object is inert and prints as itself.
 - The registry is freed on `Close` or, for anything still open, at program exit (no leaks).
 
+#### Basic Examples
+
+```mathematica
+In[1]:= str = OpenWrite["/tmp/mathilda_io_open.txt"]  (* OpenWrite truncates the file *)
+Out[1]= OutputStream["/tmp/mathilda_io_open.txt", 1]
+
+In[2]:= Write[str, x^2]
+
+In[3]:= Close[str]
+Out[3]= "/tmp/mathilda_io_open.txt"
+
+In[4]:= app = OpenAppend["/tmp/mathilda_io_open.txt"]  (* OpenAppend keeps the prior contents *)
+Out[4]= OutputStream["/tmp/mathilda_io_open.txt", 2]
+
+In[5]:= Write[app, y^2]
+
+In[6]:= Close[app]
+Out[6]= "/tmp/mathilda_io_open.txt"
+
+In[7]:= ins = OpenRead["/tmp/mathilda_io_open.txt"]
+Out[7]= InputStream["/tmp/mathilda_io_open.txt", 3]
+
+In[8]:= ReadList[ins]  (* both lines survive the append *)
+Out[8]= {x^2, y^2}
+
+In[9]:= Close[ins]
+Out[9]= "/tmp/mathilda_io_open.txt"
+```
+
 ## Close
 Closes an open stream and returns its file name.
 - `Close[stream]` — close an `InputStream`/`OutputStream` object.
 - `Close["file"]` / `Close[File["file"]]` — close a stream opened for that file.
 
 **Features**: `Protected`. Returns `$Failed` (with `Close::stream`) if the stream is not open.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= str = OpenWrite["/tmp/mathilda_io_close.txt"]
+Out[1]= OutputStream["/tmp/mathilda_io_close.txt", 1]
+
+In[2]:= Streams["/tmp/mathilda_io_close.txt"]  (* the stream is open *)
+Out[2]= {OutputStream["/tmp/mathilda_io_close.txt", 1]}
+
+In[3]:= Close[str]  (* Close returns the file name *)
+Out[3]= "/tmp/mathilda_io_close.txt"
+
+In[4]:= Streams["/tmp/mathilda_io_close.txt"]  (* and removes it from the registry *)
+Out[4]= {}
+```
 
 ## Streams
 Lists the currently open streams.
@@ -111,6 +193,28 @@ Lists the currently open streams.
 
 **Features**: `Protected`.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= a = OpenWrite["/tmp/mathilda_io_a.txt"]
+Out[1]= OutputStream["/tmp/mathilda_io_a.txt", 1]
+
+In[2]:= b = OpenWrite["/tmp/mathilda_io_b.txt"]
+Out[2]= OutputStream["/tmp/mathilda_io_b.txt", 2]
+
+In[3]:= Streams[]  (* all open streams *)
+Out[3]= {OutputStream["/tmp/mathilda_io_a.txt", 1], OutputStream["/tmp/mathilda_io_b.txt", 2]}
+
+In[4]:= Streams["/tmp/mathilda_io_a.txt"]  (* just the streams for one file *)
+Out[4]= {OutputStream["/tmp/mathilda_io_a.txt", 1]}
+
+In[5]:= Close[a]
+Out[5]= "/tmp/mathilda_io_a.txt"
+
+In[6]:= Close[b]
+Out[6]= "/tmp/mathilda_io_b.txt"
+```
+
 ## StreamPosition / SetStreamPosition
 Query and set the current point of a stream, as an integer byte offset.
 - `StreamPosition[stream]` — the current position.
@@ -118,6 +222,33 @@ Query and set the current point of a stream, as an integer byte offset.
 - `SetStreamPosition[stream, Infinity]` — move to the end of the stream.
 
 **Features**: `Protected`. Return `$Failed` if the stream is not open.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= Put[100, 200, 300, "/tmp/mathilda_io_sp.txt"]  (* writes "100\n200\n300\n" *)
+
+In[2]:= str = OpenRead["/tmp/mathilda_io_sp.txt"]
+Out[2]= InputStream["/tmp/mathilda_io_sp.txt", 1]
+
+In[3]:= Read[str, Number]
+Out[3]= 100
+
+In[4]:= StreamPosition[str]  (* byte offset after "100\n" *)
+Out[4]= 4
+
+In[5]:= SetStreamPosition[str, 0]  (* rewind to the start *)
+Out[5]= 0
+
+In[6]:= Read[str, Number]  (* the same first number again *)
+Out[6]= 100
+
+In[7]:= SetStreamPosition[str, Infinity]  (* jump to end of file: the byte length *)
+Out[7]= 12
+
+In[8]:= Close[str]
+Out[8]= "/tmp/mathilda_io_sp.txt"
+```
 
 ## Write / WriteString
 Write to an output stream.
@@ -130,13 +261,30 @@ Write to an output stream.
 - `Protected`. Return `$Failed` if the file cannot be opened.
 - `Write` evaluates its expression arguments before writing (use `Hold[...]` to write an unevaluated form), and output is flushed after each call so it round-trips with `Read`/`ReadList`.
 
-**Example**:
+#### Basic Examples
+
+```mathematica
+In[1]:= str = OpenWrite["/tmp/mathilda_io_w.txt"]
+Out[1]= OutputStream["/tmp/mathilda_io_w.txt", 1]
+
+In[2]:= Write[str, 1 + 1]  (* Write evaluates, prints input form, adds a newline *)
+
+In[3]:= Write[str, a + b]
+
+In[4]:= WriteString[str, "done\n"]  (* WriteString writes raw text, no added newline *)
+
+In[5]:= Close[str]
+Out[5]= "/tmp/mathilda_io_w.txt"
+
+In[6]:= ReadList["/tmp/mathilda_io_w.txt"]  (* 1 + 1 was evaluated to 2 before writing *)
+Out[6]= {2, a + b, done}
 ```
-s = OpenWrite["out.txt"];
-Write[s, 1 + 1];              (* writes "2\n" *)
-Write[s, a + b];              (* writes "a + b\n" *)
-Close[s];
-ReadList["out.txt"]           (* {2, a + b} *)
+
+```mathematica
+In[1]:= str = OpenWrite["/tmp/mathilda_io_wh.txt"]; Write[str, Hold[2 + 2]]; Close[str];  (* Hold writes the unevaluated form *)
+
+In[2]:= ReadList["/tmp/mathilda_io_wh.txt", String]
+Out[2]= {"Hold[2 + 2]"}
 ```
 
 ## LoadModule
@@ -164,6 +312,19 @@ the current working directory.
   never re-register rules.
 - Generalises the bespoke fallback previously hard-coded for the CRC integral
   tables; `Get` (above) shares its file-reading core.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= LoadModule["simp/FullSimplify.m"]  (* load an internal module *)
+Out[1]= True
+
+In[2]:= LoadModule["simp/FullSimplify.m"]  (* already loaded: still True, not re-read *)
+Out[2]= True
+
+In[3]:= Quiet[LoadModule["no/such/module.m"]]  (* not found -> False *)
+Out[3]= False
+```
 
 ## Import
 Reads a raster image file and returns an `Image`.
@@ -449,11 +610,19 @@ Gives the size of a file, in bytes, as an integer.
 - Returns `$Failed` and prints a `FileSize::nffil` message when the file cannot be found. The message respects `Quiet[]` and is visible to `Check[]`.
 - Leaves the call unevaluated when given the wrong arity, a symbolic argument, or any non-string atom.
 
-**Example**:
-```
-FileSize["/etc/hosts"]              (* 213 *)
-Head[FileSize["/etc/hosts"]]        (* Integer *)
-Quiet[FileSize["no-such-file"]]     (* $Failed *)
+#### Basic Examples
+
+```mathematica
+In[1]:= Put[2, 3, 5, 7, 11, "/tmp/mathilda_io_fs.txt"]  (* writes "2\n3\n5\n7\n11\n" = 11 bytes *)
+
+In[2]:= FileSize["/tmp/mathilda_io_fs.txt"]
+Out[2]= 11
+
+In[3]:= Head[FileSize["/tmp/mathilda_io_fs.txt"]]  (* a plain Integer, not a Quantity *)
+Out[3]= Integer
+
+In[4]:= Quiet[FileSize["/tmp/mathilda_no_such_file_xyz"]]  (* missing file -> $Failed *)
+Out[4]= $Failed
 ```
 
 ## FileExtension
@@ -500,12 +669,20 @@ Assembles a file name from a list of path components (or canonicalizes a lone na
 - `Options[FileNameJoin]` reports the `OperatingSystem` default.
 - `FileNameJoin[]` prints `FileNameJoin::argx` and stays unevaluated; a non-string/non-list argument, a list containing a non-string, or an unknown OS leaves the call unevaluated.
 
-**Example**:
-```
-FileNameJoin[{"dir1", "dir2", "file"}]                       (* "dir1/dir2/file" *)
-FileNameJoin[{"dir1/dir2", "file"}]                          (* "dir1/dir2/file" *)
-FileNameJoin[{"", "usr", "bin"}]                             (* "/usr/bin" *)
-FileNameJoin[{"dir1", "dir2"}, OperatingSystem->"Windows"]   (* "dir1\dir2" *)
+#### Basic Examples
+
+```mathematica
+In[1]:= FileNameJoin[{"usr", "local", "bin"}]
+Out[1]= "usr/local/bin"
+
+In[2]:= FileNameJoin[{"a/b", "c"}]  (* components may themselves contain separators *)
+Out[2]= "a/b/c"
+
+In[3]:= FileNameJoin[{"", "etc", "hosts"}]  (* an empty leading part gives an absolute path *)
+Out[3]= "/etc/hosts"
+
+In[4]:= FileNameJoin[{"dir1", "dir2"}, OperatingSystem -> "Windows"]  (* backslash separator *)
+Out[4]= "dir1\dir2"
 ```
 
 ## FileNameSplit
@@ -522,12 +699,20 @@ Splits a file name into the `List` of its path components — the structural inv
 - `FileNameJoin[FileNameSplit[name]]` reconstructs a canonicalized `name`.
 - `FileNameSplit[]` prints `FileNameSplit::argx` and stays unevaluated; a non-string argument or an unknown OS leaves the call unevaluated.
 
-**Example**:
-```
-FileNameSplit["a/b/c"]                                        (* {"a", "b", "c"} *)
-FileNameSplit["/home/sb/mathilda/examples/"]                  (* {"", "home", "sb", "mathilda", "examples"} *)
-FileNameSplit["C:\path\file", OperatingSystem->"Windows"]     (* {"C:", "path", "file"} *)
-FileNameSplit["\\server\share\path\file", OperatingSystem->"Windows"]  (* {"\\server\share", "path", "file"} *)
+#### Basic Examples
+
+```mathematica
+In[1]:= FileNameSplit["/home/user/data.csv"]  (* leading "" marks an absolute path *)
+Out[1]= {"", "home", "user", "data.csv"}
+
+In[2]:= FileNameSplit["a//b/c/"]  (* duplicate and trailing separators are dropped *)
+Out[2]= {"a", "b", "c"}
+
+In[3]:= FileNameJoin[FileNameSplit["/usr/local/bin"]]  (* Join inverts Split *)
+Out[3]= "/usr/local/bin"
+
+In[4]:= FileNameSplit["C:\\path\\file.txt", OperatingSystem -> "Windows"]  (* a drive is an ordinary first part *)
+Out[4]= {"C:", "path", "file.txt"}
 ```
 
 ## FilePrint

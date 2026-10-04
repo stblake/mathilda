@@ -9,7 +9,7 @@
 
 s and returns the new Options\[s\].  It can change Protected (but not Locked) symbols, and only changes existing options -- an unknown name raises SetOptions::optnf.  Use AppendTo\[Options\[s\], ...\] to add one.
 
-## Examples (3)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -23,6 +23,19 @@ In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], O
 
 In[3]:= SetOptions[f, c -> 3] SetOptions::optnf: c is not a known option for f. AppendTo[Options[f], c -> 3]
 Out[3]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOptions::optnf (c -> 3)}, a c Dot[f, {a -> 1, b -> 2, c -> 3}] for is known not option]
+```
+
+### Applications (3)
+
+```mathematica
+In[4]:= Options[FactorInteger]
+Out[4]= {GaussianIntegers -> False}
+
+In[5]:= SetOptions[FactorInteger, GaussianIntegers -> True]
+Out[5]= {GaussianIntegers -> True}
+
+In[6]:= Options[FactorInteger]
+Out[6]= {GaussianIntegers -> True}
 ```
 
 ## Algorithm
@@ -48,6 +61,25 @@ Memory: every result is freshly built. Sub-expressions taken from `res` or from 
 ```
 
 ## Implementation notes
+
+**Algorithm.** `builtin_setoptions` (`src/options_builtin.c`) redefines
+individual default options of a symbol. The first argument must be a symbol; a
+`Locked` symbol is refused with `SetOptions::locked`. It then takes a working
+copy of the symbol's current option rules (from `symtab_get_options`) as a flat
+vector and, for each trailing `name -> value` rule, finds the existing option of
+that name (context-insensitive match) and **replaces it in place**, preserving
+the option's original position.
+
+`SetOptions` cannot *add* an option: a name not already in the symbol's defaults
+raises `SetOptions::optnf` and the call aborts leaving the stored options
+unchanged; a malformed (non-rule) argument returns `NULL`. On success the new
+list is stored with `symtab_set_options`, the evaluation cache is dropped
+(`eval_clock_bump`, since option changes can alter results), and a copy of the
+updated option list is returned.
+
+**Data structures & limits.** Options live on `SymbolDef.default_options` as
+`List[Rule[...]]`; the working vector holds `expr_copy`'d rules so nothing
+aliased is mutated before the atomic store. `SetOptions` is `Protected`.
 
 - `Options`, `SetOptions`, and `OptionValue` all have attribute `{Protected}`.
 - Default options survive `Clear[f]` (only rules are cleared) and are removed
@@ -79,9 +111,23 @@ Memory: every result is freshly built. Sub-expressions taken from `res` or from 
 
 **See also:** [Options](../../assignment-and-rules/Options/), [OptionValue](../../assignment-and-rules/OptionValue/), [Set](../../assignment-and-rules/Set/), [Hold](../../expression-information/Hold/), [Integrate](../../calculus/Integrate/), [Limit](../../calculus/Limit/), [Series](../../power-series/Series/), [PowerExpand](../../algebra/PowerExpand/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/options_builtin.c`](https://github.com/stblake/mathilda/blob/main/src/options_builtin.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
 - Tests: [`tests/test_numberform.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numberform.c)
 - Tests: [`tests/test_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_options.c)
+
+## Notes & additional examples
+
+### Notes
+
+`SetOptions[s, name -> value, ...]` changes a symbol's *default* option settings
+and returns the full updated option list. The change is made in place: the
+matching option keeps its original position and only its value is replaced, so
+later `Options[s]` and option-reading builtins see the new default.
+
+`SetOptions` can only change options a symbol already has — a name that is not a
+known option raises `SetOptions::optnf` and leaves the settings untouched. The
+first argument must be a symbol, and a `Locked` symbol is refused with
+`SetOptions::locked`.

@@ -86,6 +86,12 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
+**Algorithm.** `builtin_expintegralei` handles `ExpIntegralEi[z] = Ei(z)`, with a branch cut along `(-Infinity, 0)` (principal value on the cut). Exact special values first: `Ei[0] = -Infinity`, `Ei[Infinity] = Infinity`, `Ei[-Infinity] = 0`, `Ei[±I Infinity] = ±I Pi`, `ComplexInfinity`/`Indeterminate -> Indeterminate`. Then by argument kind: a **machine/arbitrary real `x > 0`** uses MPFR's native `mpfr_eint` (fast, correctly rounded, covering very high precision); a **real `x < 0`** uses the convergent series `γ + ln|x| + Sum_{k>=1} x^k/(k k!)` (the principal value on the cut), switching to the divergent **asymptotic** expansion `(e^x/x) Sum k!/z^k` once `|x|` is large enough that the convergent series would demand `~|x|/ln2` guard bits; a **complex** argument (any precision) uses the convergent series `γ + Log(z) + Sum z^k/(k k!)` in the file-local `ecx` toolkit with `(|z| + |Re z|)/ln2` guard bits, or, for large `|z|`, the asymptotic expansion with the `i π sign(Im z)` branch-cut jump. A `USE_MPFR=0` build uses a machine-double convergent/asymptotic series.
+
+**Data structures.** `Expr`; file-local `ecx` (pairs of `mpfr_t`, alias-safe, explicit precision). An explicit low-precision request (`N[…, 8]` giving an MPFR leaf) is honoured by emitting an MPFR result so the requested digits print. The ND kernel is a real `REG_U` registration (`NDKU_ExpIntegralEi`): real buffers via `ndk_ExpIntegralEi_r` → `sf_machine_ei`, complex buffers via `expintegralei_machine_complex` (with the shared `sf_series_usable` cancellation gate). `Compile[]` lowers `ExpIntegralEi` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes.
+
+**Complexity / limits.** `mpfr_eint` is `O(1)` at machine precision for `x > 0`; elsewhere the series/asymptotic term counts and guard bits scale with `|z|` and precision. Branch cut on the negative real axis (principal value there). Symbolic arguments stay symbolic; degenerate machine results promote via `numeric_promote_result_if_degenerate`. Attributes: `Listable`, `NumericFunction`, `Protected`.
+
 - Exact special values: `ExpIntegralEi[0] = -Infinity`,
   `ExpIntegralEi[Infinity] = Infinity`, `ExpIntegralEi[-Infinity] = 0`,
   `ExpIntegralEi[I Infinity] = I Pi`, `ExpIntegralEi[-I Infinity] = -I Pi`;
@@ -128,7 +134,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **See also:** [Real](../../other-advanced/Real/), [N](../../arithmetic/N/), [D](../../calculus/D/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- DLMF §6.2.5, §6.6.2 — the exponential integral Ei(z) and its convergent series γ + Log(z) + Sum z^k/(k k!).
+- DLMF §6.12.2 — the divergent asymptotic expansion Ei(z) ~ (e^z/z) Sum k!/z^k.
+- Source: [`src/special_functions/expintegralei.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/expintegralei.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
 - Tests: [`tests/test_cherry_li.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_li.c)

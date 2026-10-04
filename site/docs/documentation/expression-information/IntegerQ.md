@@ -16,7 +16,7 @@ Returns False on rationals with denominator \> 1, reals, and symbolic expression
 
 </details>
 
-## Examples (10)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -73,6 +73,36 @@ In[10]:= MachineNumberQ[1 + 2 I]
 Out[10]= False
 ```
 
+### Applications (4)
+
+An exact integer
+
+```mathematica
+In[11]:= IntegerQ[5]
+Out[11]= True
+```
+
+A Real is not an integer, even at an integral value
+
+```mathematica
+In[12]:= IntegerQ[5.0]
+Out[12]= False
+```
+
+A Rational is not an integer
+
+```mathematica
+In[13]:= IntegerQ[1/2]
+Out[13]= False
+```
+
+A symbol is not known to be one, so False
+
+```mathematica
+In[14]:= IntegerQ[x]
+Out[14]= False
+```
+
 ## Implementation notes
 
 `builtin_integerq` (`src/core.c`) returns `True` exactly when `expr_is_integer_like(arg)` holds (an `EXPR_INTEGER` or `EXPR_BIGINT`), and `False` otherwise.
@@ -89,3 +119,15 @@ Out[10]= False
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
 - Tests: [`tests/test_divisible.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisible.c)
 - Tests: [`tests/test_meminfo.c`](https://github.com/stblake/mathilda/blob/main/tests/test_meminfo.c)
+
+## Notes & additional examples
+
+### Notes
+
+`IntegerQ[e]` is `True` exactly when `e` is an exact integer — a machine `Integer` or an
+arbitrary-precision bigint — and `False` for everything else, including reals at integral
+values, rationals, and symbols. Like the other `*Q` predicates it always returns a
+boolean; it never stays unevaluated.
+
+Use it to test exactness: `IntegerQ[5.0]` is `False` because `5.0` is a machine real, not
+an integer.

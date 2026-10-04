@@ -16,7 +16,7 @@ Derived from the platform's DBL\_MANT\_DIG -- typically 53\*Log\[10,2\] (~ 15.95
 
 </details>
 
-## Examples (4)
+## Examples (5)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -40,6 +40,15 @@ In[4]:= MachineNumberQ[$MaxNumber]
 Out[4]= False
 ```
 
+### Applications (1)
+
+Decimal digits carried by a machine double, 53 log10 2
+
+```mathematica
+In[5]:= $MachinePrecision
+Out[5]= 15.9546
+```
+
 ## Implementation notes
 
 A Protected OwnValue registered in `system_constants_init` (`src/core.c`) as `expr_new_real(NUMERIC_MACHINE_PRECISION_DIGITS)` — the number of decimal digits in a machine `double` (~15.95).
@@ -52,3 +61,14 @@ A Protected OwnValue registered in `system_constants_init` (`src/core.c`) as `ex
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+
+## Notes & additional examples
+
+### Notes
+
+`$MachinePrecision` is a read-only Protected OwnValue giving the number of decimal digits
+in a machine `double`, `53 · log₁₀ 2 ≈ 15.9546`. It is the precision `N[expr]` (with no
+second argument) works at, and the threshold that separates machine-precision reals from
+the arbitrary-precision MPFR path.
+
+The value is a fixed machine constant on every IEEE 754 platform.

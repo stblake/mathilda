@@ -7,7 +7,7 @@
 
 **`LocalAdaptiveBinarize[image, r] binarizes by comparing each pixel to the MEAN of its own (2r+1)x(2r+1) neighbourhood, and LocalAdaptiveBinarize[image, r, {c1, c2, c3}] to c1*mean + c2*stddev + c3. A global threshold cannot binarize unevenly lit content, and that is not a tuning problem: if one half of a page is darker than the other, no single number separates ink from paper in both halves at once. Mean alone (the default {1, 0, 0}) is Bradley's method; a negative c2 is Sauvola's, tightening the threshold where the neighbourhood is busy. Summed-area tables make the window statistics O(1) per pixel regardless of r -- without them a radius-16 window would be 1089 taps per pixel. The result is typed "Bit", since it is binary by construction. Colour is reduced to luminance first.`**
 
-## Examples (42)
+## Examples (45)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -140,7 +140,52 @@ In[42]:= LocalAdaptiveBinarize[zone, 1]
 Out[42]= -Image-
 ```
 
+### Applications (3)
+
+The result is binary, typed Bit
+
+```mathematica
+In[43]:= ImageType[LocalAdaptiveBinarize[Image[{{0., 0., 1.}, {0., 1., 1.}, {1., 1., 1.}}], 1]]
+Out[43]= "Bit"
+```
+
+Each pixel vs its local mean
+
+```mathematica
+In[44]:= ImageData[LocalAdaptiveBinarize[Image[{{0., 0., 1.}, {0., 1., 1.}, {1., 1., 1.}}], 1]]
+Out[44]= {{0.0, 0.0, 1.0}, {0.0, 1.0, 1.0}, {1.0, 1.0, 0.0}}
+```
+
+A negative c2 is Sauvola's rule
+
+```mathematica
+In[45]:= ImageData[LocalAdaptiveBinarize[Image[{{0.2, 0.9}, {0.3, 0.8}}], 1, {1, -0.2, 0.}]]
+Out[45]= {{0.0, 1.0}, {0.0, 1.0}}
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_localadaptivebinarize` thresholds each pixel against a statistic of its
+own `(2r+1) × (2r+1)` neighbourhood rather than a global level — the only way to binarize
+unevenly lit content, since if one half of a page is darker than the other, no single number
+separates ink from paper in both halves. The rule is `g > c1·mean + c2·stddev + c3`, with the
+coefficients defaulting to `{1, 0, 0}` (Bradley's mean thresholding);
+`LocalAdaptiveBinarize[image, r, {c1, c2, c3}]` sets them, and a negative `c2` gives Sauvola's
+method, tightening the threshold where the neighbourhood is busy.
+
+The window statistics are `O(1)` per pixel via **summed-area tables**: a padded prefix-sum
+table `s1` for the mean, and a second table `s2` of squares (built only when `c2 ≠ 0`, since
+the default never needs the standard deviation) for the variance `s2/area − mean²`, clamped at
+0 before `sqrt` because cancellation can push a uniform window a hair negative. Without the
+tables a radius-16 window would be 1089 taps per pixel.
+
+**Data structures.** A grey plane, one or two `(PH+1)(PW+1)` summed-area tables, and a
+`width · height` byte mask; the result is built by `bit_image_from_mask` as a `"Bit"` image —
+the output is binary by construction, so it is typed `"Bit"` and handed back as a packed buffer
+(every image head returns one — `make check-image-packing`).
+
+**Complexity / limits.** `O(pixels)` regardless of radius. Radius 1–256; colour is reduced to
+luminance first. The coefficient triple must be numeric.
 
 **Attributes:** `Protected`.
 
@@ -151,3 +196,18 @@ Out[42]= -Image-
 - Source: [`src/imagefilter.c`](https://github.com/stblake/mathilda/blob/main/src/imagefilter.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`LocalAdaptiveBinarize[image, r]` binarizes by comparing each pixel to the **mean** of its own
+`(2r+1) × (2r+1)` neighbourhood; `LocalAdaptiveBinarize[image, r, {c1, c2, c3}]` compares to
+`c1·mean + c2·stddev + c3`. A global threshold cannot binarize unevenly lit content: if one
+half of a page is darker than the other, no single number separates ink from paper in both
+halves at once.
+
+Mean alone (the default `{1, 0, 0}`) is Bradley's method; a negative `c2` is Sauvola's,
+tightening the threshold where the neighbourhood is busy. Summed-area tables make the window
+statistics `O(1)` per pixel regardless of `r`. The result is typed `"Bit"`, and colour is
+reduced to luminance first.

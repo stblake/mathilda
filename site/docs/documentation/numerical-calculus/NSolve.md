@@ -16,7 +16,7 @@ Options: MaxRoots, Method (Automatic | "EndomorphismMatrix" | "Homotopy" | "Symb
 
 </details>
 
-## Examples (7)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -51,6 +51,36 @@ Out[6]= {{x -> -1.0979116727228235764163996 + 0.83988692161565920362280281*I, y 
 ```mathematica
 In[7]:= NSolve[Sqrt[x] + 3 x^(1/3) == 5, x]
 Out[7]= {{x -> 1.80863}}
+```
+
+### Applications (4)
+
+A univariate polynomial, solved through NRoots
+
+```mathematica
+In[8]:= NSolve[x^2 - 2 == 0, x]
+Out[8]= {{x -> -1.41421}, {x -> 1.41421}}
+```
+
+The Reals domain keeps only the real root
+
+```mathematica
+In[9]:= NSolve[x^3 - 1 == 0, x, Reals]
+Out[9]= {{x -> 1.0}}
+```
+
+A linear system
+
+```mathematica
+In[10]:= NSolve[{x + y == 3, x - y == 1}, {x, y}]
+Out[10]= {{x -> 2.0, y -> 1.0}}
+```
+
+A zero-dimensional nonlinear system
+
+```mathematica
+In[11]:= NSolve[{x^2 + y^2 == 1, y == x}, {x, y}]
+Out[11]= {{x -> 0.707107, y -> 0.707107}, {x -> -0.707107, y -> -0.707107}}
 ```
 
 ## Algorithm
@@ -102,13 +132,90 @@ Memory contract (builtin): takes ownership of `res`; returns a fresh Expr* on su
 
 ## Implementation notes
 
+**Algorithm.** `builtin_nsolve` reads `NSolve[expr [, vars [, dom [, prec]]]]`,
+peels options from the tail, defaults `vars` to the collected non-constant
+symbols and `dom` to Complexes, and dispatches:
+
+1. **Univariate polynomial** → `NRoots` directly (NRoots never frees its
+   argument), forwarding `PrecisionGoal`/`AccuracyGoal` so its polishing and
+   accuracy contract govern the roots; the disjunction is repackaged into
+   `{{x -> r1}, …}` with the `Reals` filter and `MaxRoots` cap applied. A huge
+   literal exponent is guarded (`NSolve::deg`) before any machinery allocates.
+2. **Square zero-dimensional polynomial system** (`nsolve_system.c`) → the
+   **eigenvalue / multiplication-matrix (Möller–Stetter) method**: a greVlex
+   Gröbner basis (`gb_buchberger`) gives the quotient ring `A = Q[x]/I`; its
+   standard-monomial basis is enumerated; rational multiplication matrices
+   `M_{x_i}` are built by normal-form reduction; a generic linear form `M_l = Σ
+   c_i M_{x_i}` (deterministic seeded coefficients) is formed, and the
+   eigenvalues/eigenvectors of `M_l` at MPFR precision
+   (`eigen_all_eigenvectors_real_mpfr`) give each coordinate as `x_i(p) =
+   (M_{x_i} v)[j]/v[j]`. Every candidate is verified against the original
+   residuals. `Method -> "Symbolic"` instead does lexicographic **elimination**
+   (solve the univariate generator with `NRoots`, back-substitute, recurse,
+   verify); `"Homotopy"` currently routes to the same eigenvalue engine.
+3. **Fallback** → symbolic `Solve` then numericalisation, dropping provably
+   extraneous roots; a univariate non-polynomial last resort seeds `FindRoot`
+   from a real grid (plus `±2i` unless `Reals`), verified and deduplicated.
+
+Results are a list of rule-lists: `{}` no solutions, `{{}}` the universal
+solution. Both the univariate path and both system solvers call `builtin_nroots`
+directly, so the NRoots engines (Aberth / companion / Jenkins–Traub) are
+NSolve's numeric backbone.
+
+**Data structures.** The Gröbner engine works over `Q` (`GBPoly`); the
+multiplication matrices are `mpq_t` rationals, the linear-form matrix and its
+per-variable companions `mpfr_t`, and the eigen buffers and recovered
+coordinates MPFR/`ncpx`. The standard-monomial basis is a flat `int[d·nvar]`.
+`want_machine` holds when no precision digit count is given; otherwise the system
+runs at `target_bits + max(32, target_bits/2)` bits and emits MPFR values.
+
+**Complexity / limits.** The eigenproblem is `O(d³)` in the quotient-ring
+dimension `d`; hard caps `NSYS_MAX_DIM = 256`, `NSYS_MAX_BOX = 200000`, and a
+per-generator total-degree gate `NSYS_MAX_TDEG = 60` make a too-large or
+positive-dimensional system fall back / stay unevaluated. The univariate degree
+guard is `NSOLVE_MAX_POLY_DEGREE = 10000`. Options: `MaxRoots`, `Method`
+(`Automatic` | `"EndomorphismMatrix"` | `"Homotopy"` | `"Symbolic"`),
+`WorkingPrecision` (also a trailing positional digit count), `AccuracyGoal`
+(default `MachinePrecision`, forwarded to NRoots), `PrecisionGoal`,
+`VerifySolutions` (default on), `RandomSeeding` (seed for the generic linear
+form, default 1234). `NSolve[expr, vars, Reals]` filters to real values; the
+`Integers` domain is left to `Solve`. Diagnostics route through `mth_message`.
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [NRoots](../../numerical-calculus/NRoots/), [Solve](../../solutions-of-equations/Solve/), [VerifySolutions](../../solutions-of-equations/VerifySolutions/), [ConditionalExpression](../../control-flow/ConditionalExpression/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [FindRoot](../../calculus/FindRoot/), [Exists](../../solutions-of-equations/Exists/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- H. M. Möller and H. J. Stetter, *Multivariate polynomial equations with multiple zeros solved by matrix eigenproblems*, Numer. Math. **70** (1995) 311–329.
+- D. A. Cox, J. Little and D. O'Shea, *Using Algebraic Geometry*, 2nd ed. (Springer, 2005), ch. 2 — the eigenvalue method for zero-dimensional ideals.
+- Source: [`src/numerical_roots/nsolve.c`](https://github.com/stblake/mathilda/blob/main/src/numerical_roots/nsolve.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)
 - Tests: [`tests/test_nsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nsolve.c)
 - Tests: [`tests/test_nsolve_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nsolve_stress.c)
+
+## Notes & additional examples
+
+### Notes
+
+`NSolve[expr, vars]` returns numerical solutions as a list of replacement-rule
+lists; `{}` means no solutions and `{{}}` the universal solution. `vars` may be a
+single variable or a list, and `NSolve[{e1, e2, ...}, vars]` is the conjunction
+`e1 && e2 && ...`. `NSolve[expr, vars, Reals]` restricts to real solutions; the
+default domain is the complexes.
+
+A univariate polynomial equation is handed to `NRoots` (roots repeated by
+multiplicity), so `NRoots`'s `PrecisionGoal`/`AccuracyGoal` contract governs the
+answer. A square, zero-dimensional polynomial **system** uses a Groebner-basis
+multiplication-matrix (Moeller-Stetter) eigenvalue method: a Groebner basis gives
+the quotient ring, and the eigenvalues/eigenvectors of the multiplication maps
+yield each coordinate, every candidate verified against the original residuals.
+`Method -> "Symbolic"` instead uses lexicographic elimination (solve the
+univariate generator, back-substitute, recurse). Other equations fall back to
+symbolic `Solve` then numericalisation, with a univariate `FindRoot` grid as a
+last resort.
+
+A working precision may be given as a trailing positional argument or via
+`WorkingPrecision`; integer, real, and complex coefficients are handled at
+machine and arbitrary precision. `MaxRoots`, `VerifySolutions`, and
+`RandomSeeding` (the seed for the generic linear form) are also accepted.

@@ -16,7 +16,7 @@ With USE\_MPFR builds, this is the smallest positive value at machine precision 
 
 </details>
 
-## Examples (4)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -40,6 +40,22 @@ In[4]:= MachineNumberQ[$MaxNumber]
 Out[4]= False
 ```
 
+### Applications (2)
+
+A Real; its literal value is build-dependent
+
+```mathematica
+In[5]:= Head[$MinNumber]
+Out[5]= Real
+```
+
+Never larger than the machine minimum
+
+```mathematica
+In[6]:= $MinNumber <= $MinMachineNumber
+Out[6]= True
+```
+
 ## Implementation notes
 
 A Protected OwnValue registered in `system_constants_init` (`src/core.c`). Under `USE_MPFR` it is the smallest positive value at machine precision (`mpfr_set_zero` then `mpfr_nextabove`, stored via `expr_new_mpfr_move`); without MPFR it collapses to `expr_new_real(DBL_MIN)`.
@@ -52,3 +68,15 @@ A Protected OwnValue registered in `system_constants_init` (`src/core.c`). Under
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+
+## Notes & additional examples
+
+### Notes
+
+`$MinNumber` is a read-only Protected OwnValue: the smallest positive number Mathilda can
+represent. In a `USE_MPFR` build it is the smallest positive value at machine precision
+(`mpfr_set_zero` then `mpfr_nextabove`), far below `$MinMachineNumber` thanks to MPFR's
+exponent range. Without MPFR it collapses onto `DBL_MIN`, equal to `$MinMachineNumber`.
+
+Because the literal value therefore depends on whether MPFR was linked, the examples above
+are structural; `$MinNumber <= $MinMachineNumber` holds in either build.

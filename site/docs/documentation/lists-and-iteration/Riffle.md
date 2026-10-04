@@ -13,7 +13,7 @@ Interleaves x into the gaps between successive elements of list, giving {e1, x, 
 
 Uses the xi cyclically, filling the n - 1 gaps left to right; separators beyond the last gap are unused. The head of list is preserved.
 
-## Examples (6)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -37,6 +37,36 @@ Out[5]= {a, b}
 
 In[6]:= Riffle[f[a, b], x]
 Out[6]= f[a, x, b]
+```
+
+### Applications (4)
+
+One separator in every gap
+
+```mathematica
+In[7]:= Riffle[{1, 2, 3, 4}, 0]
+Out[7]= {1, 0, 2, 0, 3, 0, 4}
+```
+
+Interleave a symbol between the elements
+
+```mathematica
+In[8]:= Riffle[Range[5], x]
+Out[8]= {1, x, 2, x, 3, x, 4, x, 5}
+```
+
+A separator list cycles through the gaps
+
+```mathematica
+In[9]:= Riffle[{a, b, c, d, e}, {1, 2, 3}]
+Out[9]= {a, 1, b, 2, c, 3, d, 1, e}
+```
+
+The comma-join idiom
+
+```mathematica
+In[10]:= StringJoin[Riffle[{"a", "b", "c"}, ", "]]
+Out[10]= "a, b, c"
 ```
 
 ## Algorithm
@@ -80,6 +110,25 @@ NOT HANDLED: packed arrays (EXPR_NDARRAY) are a distinct representation from Lis
 
 ## Implementation notes
 
+**Algorithm.** `builtin_riffle` interleaves separators into the gaps of a list.
+`Riffle[list, x]` places `x` in every gap; `Riffle[list, {x1, ..., xk}]` consumes
+the `xi` in order and cycles back to `x1`, filling gaps left to right. A list of
+`n` elements has exactly `n - 1` gaps, so the output has `2n - 1` slots: the gap
+following element `i` takes separator index `i mod k`, and separators past the
+last gap are simply never indexed.
+
+**Edge invariants.** `n <= 1` (no gaps) or an empty separator list copies the
+input through unchanged — checked *before* the `2n - 1` sizing, since with
+`n == 0` that expression underflows `size_t`. The head of the first argument is
+preserved rather than forced to `List`, so `Riffle[f[a, b], x]` gives
+`f[a, x, b]` and `Riffle[{}, 0]` is `{}` with no special case.
+
+**Data structures / limits.** One pass, O(n) element copies, a single
+exactly-sized allocation (the output length is known up front). A packed/`NDArray`
+first argument takes the `ndstruct_riffle` buffer fast path, falling back to
+`ndstruct_delist_repack`; `Riffle` is on `pack.c`'s `AWARE` list. An atom first
+argument stays unevaluated. No special attributes beyond `ATTR_PROTECTED`.
+
 - `Protected`.
 - Separators go only **between** consecutive elements — never before the first
   and never after the last. A list of $n$ elements has exactly $n - 1$ gaps, so
@@ -102,8 +151,22 @@ NOT HANDLED: packed arrays (EXPR_NDARRAY) are a distinct representation from Lis
 
 **See also:** [List](../../other-advanced/List/)
 
-- Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
+- Source: [`src/list/riffle.c`](https://github.com/stblake/mathilda/blob/main/src/list/riffle.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
 - Tests: [`tests/test_ndarray_selection.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_selection.c)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Riffle[list, x]` places `x` in each of the gaps between consecutive elements,
+and `Riffle[list, {x1, ..., xk}]` cycles through the separators left to right. A
+list of `n` elements has `n - 1` gaps, so separators go only *between* elements —
+never before the first or after the last — and the output has `2n - 1` slots.
+
+A single element (or an empty list) has no gaps, so the list is returned
+unchanged. The head of the first argument is preserved, so
+`Riffle[f[a, b], x]` gives `f[a, x, b]`. Interleaving a separator and then
+`StringJoin`-ing is the usual way to build a delimited string.

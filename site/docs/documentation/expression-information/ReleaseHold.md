@@ -16,7 +16,7 @@ ReleaseHold removes only one layer of Hold etc.; it does not remove inner occurr
 
 </details>
 
-## Examples (8)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -48,6 +48,41 @@ In[8]:= ReleaseHold[{f[Hold[1+2]], g[HoldForm[3+4]]}]
 Out[8]= {f[3], g[7]}
 ```
 
+### Applications (5)
+
+```mathematica
+In[9]:= ReleaseHold[Hold[1 + 1]]
+Out[9]= 2
+```
+
+Every hold family
+
+```mathematica
+In[10]:= ReleaseHold /@ {Hold[1 + 2], HoldForm[2 + 3], HoldComplete[3 + 4]}
+Out[10]= {3, 5, 7}
+```
+
+Traverses into subexpressions
+
+```mathematica
+In[11]:= ReleaseHold[f[Hold[1 + 2]]]
+Out[11]= f[3]
+```
+
+Only one layer is removed
+
+```mathematica
+In[12]:= ReleaseHold[Hold[Hold[1 + 1]]]
+Out[12]= Hold[1 + 1]
+```
+
+No wrapper present: acts as identity
+
+```mathematica
+In[13]:= ReleaseHold[42]
+Out[13]= 42
+```
+
 ## Implementation notes
 
 `builtin_releasehold` (`src/core.c`) calls `release_hold_recursive`, which walks the tree and strips one layer off every `Hold`-family wrapper it finds (`Hold`/`HoldForm`/`HoldPattern`/`HoldComplete`, per `is_hold_head`), replacing a single-argument wrapper with its content and a multi-argument one with `Sequence[...]`. It does not recurse into the released contents.
@@ -69,3 +104,14 @@ Out[8]= {f[3], g[7]}
 - Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
 - Tests: [`tests/test_releasehold.c`](https://github.com/stblake/mathilda/blob/main/tests/test_releasehold.c)
 - Tests: [`tests/test_unevaluated.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unevaluated.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ReleaseHold[expr]` strips the standard unevaluated containers — `Hold`,
+`HoldForm`, `HoldPattern`, and `HoldComplete` — and lets the contents evaluate. It
+traverses into the subexpressions of `expr` and removes any wrapper it finds, but
+it does **not** recurse back into the contents it just released, so a nested
+`Hold[Hold[...]]` loses only its outer layer. When `expr` contains no hold
+wrapper, `ReleaseHold` is the identity.

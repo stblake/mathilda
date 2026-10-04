@@ -1211,7 +1211,7 @@
     "name": "ComplexPlot3D",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "ComplexPlot3D[f, {z, zmin, zmax}, opts...]",
     "url": "documentation/graphics/ComplexPlot3D/"
   },
@@ -4883,7 +4883,7 @@
     "name": "LoadModule",
     "category": "File I/O",
     "slug": "file-io",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "LoadModule[\"relpath\"]",
     "url": "documentation/file-io/LoadModule/"
   },
@@ -6091,7 +6091,7 @@
     "name": "PolarAxes",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "PolarAxes",
     "url": "documentation/graphics/PolarAxes/"
   },
@@ -7131,7 +7131,7 @@
     "name": "SequenceHold",
     "category": "Expression Information",
     "slug": "expression-information",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "SequenceHold",
     "url": "documentation/expression-information/SequenceHold/"
   },

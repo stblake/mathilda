@@ -9,15 +9,17 @@
 
 is a symbol whose value, if any, is evaluated once when the Mathilda session terminates (via Quit\[\] or EOF).
 
-## Examples (1)
+## Examples (2)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (1)
+### Applications (2)
 
 ```mathematica
 In[1]:= $Epilog := Print["bye"]
-Out[1]= Null
+
+In[2]:= Quit[]
+Out[2]= Quit[]
 ```
 
 ## Implementation notes

@@ -32,15 +32,16 @@ FilePrint returns Null on success and $Failed if the file cannot be opened. Nega
 
 </details>
 
-## Examples (1)
+## Examples (2)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (1)
+### Applications (2)
 
 ```mathematica
 In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
-Out[1]= Null
+
+In[2]:= FilePrint["/tmp/mathilda_demo.m"]
 ```
 
 ## Implementation notes

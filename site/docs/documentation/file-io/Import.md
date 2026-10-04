@@ -7,7 +7,7 @@
 
 **`Import["file"] reads a raster image file (PNG, JPEG, BMP, GIF, TGA, PSD, HDR, PNM) and returns an Image. Import["file", "Image"] is the same. Samples are scaled by 1/255 into the unit interval, so the result is a "Real" image whatever the file's bit depth, and the file's channel count is preserved -- grey stays 1 channel, RGBA keeps its alpha. Gives $Failed for a missing or malformed file.`**
 
-## Examples (21)
+## Examples (25)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -112,6 +112,34 @@ In[21]:= Head[Import["/tmp/mathilda_doc.xyz"]]
 Out[21]= Import
 ```
 
+### Applications (4)
+
+An 8x8 RGB image
+
+```mathematica
+In[22]:= img = Image[Table[{N[i/8], N[j/8], 0.5}, {i, 8}, {j, 8}], "Real"];
+```
+
+Write it so there is something to read
+
+```mathematica
+In[23]:= Export["/tmp/mathilda_import.png", img];
+```
+
+Decode it back
+
+```mathematica
+In[24]:= ImageDimensions[Import["/tmp/mathilda_import.png"]]
+Out[24]= {8, 8}
+```
+
+Always a "Real" image
+
+```mathematica
+In[25]:= ImageType[Import["/tmp/mathilda_import.png"]]
+Out[25]= "Real"
+```
+
 ## Algorithm
 
 imageio.c -- Import and Export for raster image files.
@@ -123,6 +151,30 @@ WHY A VENDORED DECODER. JPEG decoding is a baseline-Huffman-plus-IDCT project of
 WHAT A SAMPLE MEANS. A decoded 8-bit sample is scaled by 1/255 into the unit interval, because that is what the rest of the subsystem means by a brightness (see `image_load`) and the type a filter answers with is always "Real". So `Import` produces a "Real" image, not a "Byte" one: an image whose stored range depended on the file's bit depth would make every downstream kernel's scale depend on it too.
 
 ## Implementation notes
+
+**Algorithm.** `builtin_import` decodes a raster file into an `Image`. It takes a path and an
+optional second argument that must name an image format (`"Image"`, `"PNG"`, `"JPEG"`/`"JPG"`,
+`"BMP"`, `"GIF"`, `"TGA"`, `"PNM"`); with no second argument the path must be one `is_decodable`
+recognises by extension, otherwise the call is left unevaluated (`NULL`) — so `Import` does not
+pretend to implement formats it has no decoder for, and the door stays open for non-image
+imports elsewhere. Decoding is `stbi_load(path, &w, &h, &n, 0)`: the `0` requested-channel count
+means "**however many the file has**", so a grey file stays 1-channel and an RGBA file keeps its
+alpha rather than being forced to RGB.
+
+The `unsigned char` samples are scaled by `1/255` into a `double` buffer, and
+`image_build_real(buf, w, h, n)` produces a **canonical, packed `"Real"` image** — the same
+representation every filter yields, so an imported photograph is not a second-class citizen
+downstream. A missing or malformed file returns `$Failed` (`failed()`); a zero/invalid
+dimension from the decoder also returns `$Failed`.
+
+**Data structures.** The vendored public-domain **`stb_image`** decoder
+(`src/external/stb/stb_image.h`), a transient `double` sample buffer, and the packed `Image`
+(an `NDArray`-backed real tensor) that `image_build_real` returns. No system image library is a
+build requirement; `stbi_load` frees its own pixel buffer via `stbi_image_free`.
+
+**Complexity / limits.** `O(w·h·channels)` to decode and rescale. The fixed `1/255` scaling
+means the stored range is always `[0,1]` whatever the file's bit depth, which is what keeps
+every downstream kernel's arithmetic meaning stable (see `ImageData`). `ATTR_PROTECTED`.
 
 - `Protected`.
 - Samples are scaled by `1/255` into the unit interval, so the result is a `"Real"`
@@ -149,3 +201,24 @@ WHAT A SAMPLE MEANS. A decoded 8-bit sample is scaled by 1/255 into the unit int
 - Source: [`src/imageio.c`](https://github.com/stblake/mathilda/blob/main/src/imageio.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Import["file"]` decodes a raster image (PNG, JPEG, BMP, GIF, TGA, PSD, HDR, PNM) by
+content and returns an `Image`; `Import["file", "Image"]` states it explicitly.
+Samples are scaled by `1/255` into the unit interval, so the result is a `"Real"`
+image whatever the file's bit depth, and the file's channel count is **preserved**
+— a grey file stays 1-channel and an RGBA file keeps its alpha.
+
+The result is packed and canonical, the same representation a filter produces, so
+`Import[Export[f, img]]` round-trips and the image needs no special-casing
+downstream. A missing or malformed file gives `$Failed`; a path whose format is not
+handled at all stays unevaluated (so `Import` does not appear to implement every
+format). Decoding is by the vendored `stb_image`, so no system image library is a
+build requirement.
+
+These examples write to and read from `$TemporaryDirectory`-style paths under
+`/tmp`; there is no in-memory image source, so `Import`/`Export` necessarily touch
+the filesystem.

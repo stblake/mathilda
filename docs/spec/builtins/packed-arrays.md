@@ -277,6 +277,17 @@ Out[13]= {1., 2.}
 `ToPackedArray` above. It undoes both forms of buffer storage — a packed `List`
 and an explicit `NDArray[...]`.
 
+```mathematica
+In[1]:= FromPackedArray[ToPackedArray[{1., 2., 3., 4.}]]
+Out[1]= {1.0, 2.0, 3.0, 4.0}
+
+In[2]:= NDArrayQ[FromPackedArray[ToPackedArray[{1., 2., 3., 4.}]]]
+Out[2]= False
+
+In[3]:= FromPackedArray[NDArray[{1., 2., 3.}]]
+Out[3]= {1.0, 2.0, 3.0}
+```
+
 ## `PackedArrayQ`
 
 `PackedArrayQ[expr]` gives `True` when `expr` is a packed array — a `List` stored

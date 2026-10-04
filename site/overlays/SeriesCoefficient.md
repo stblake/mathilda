@@ -1,34 +1,32 @@
 ### Worked examples
 
 ```mathematica
-In[1]:= SeriesCoefficient[Exp[x], {x, 0, 10}]
-Out[1]= 1/3628800
-```
-
-The coefficient of `x^7` in `Tan[x]` matches the corresponding tangent number:
-
-```mathematica
-In[1]:= SeriesCoefficient[Tan[x], {x, 0, 7}]
-Out[1]= 17/315
-```
-
-The coefficient of `x^n` in `1/(1 - x - x^2)` is the n-th Fibonacci number; here
-`F(10) = 89`:
-
-```mathematica
-In[1]:= SeriesCoefficient[1/(1 - x - x^2), {x, 0, 10}]
-Out[1]= 89
+In[1]:= SeriesCoefficient[Exp[x], {x, 0, 10}]  (* the coefficient of x^10 in e^x is 1/10! *)
 ```
 
 ```mathematica
-In[1]:= SeriesCoefficient[Cos[x], {x, 0, 8}]
-Out[1]= 1/40320
+In[1]:= SeriesCoefficient[Tan[x], {x, 0, 7}]  (* odd coefficients of Tan give the tangent numbers *)
+```
+
+```mathematica
+In[1]:= SeriesCoefficient[1/(1 - x - x^2), {x, 0, 10}]  (* the Fibonacci generating function: F(10) = 89 *)
+```
+
+```mathematica
+In[1]:= SeriesCoefficient[Cos[x], {x, 0, 8}]  (* even coefficients of Cos are reciprocals of factorials *)
+```
+
+```mathematica
+In[1]:= SeriesCoefficient[ProductLog[x], {x, 0, n}]  (* a symbolic index returns the closed-form general term *)
 ```
 
 ### Notes
 
 `SeriesCoefficient[f, {x, x0, k}]` returns the coefficient of `(x - x0)^k` in the
-power-series expansion of `f` about `x = x0`, for any `f` that `Series` can expand
-and a concrete integer index `k`. It is computed by expanding `f` to order `k` and
-extracting the single coefficient, so the result is exact (rational or symbolic).
-`SeriesCoefficient` is `HoldAll`, so the expansion variable is held unevaluated.
+power-series expansion of `f` about `x = x0`, for any `f` that `Series` can expand.
+At a concrete integer index it expands `f` to order `k` and extracts the single
+coefficient, so the result is exact (rational or symbolic). For a handful of heads
+(`ProductLog`, `FresnelC`, `FresnelS`) a **symbolic** index returns the closed-form
+general term as a `Piecewise`. The arguments are evaluated normally
+(`SeriesCoefficient` is `Protected`, not `HoldAll`); a non-integer or otherwise
+unusable index is left unevaluated.

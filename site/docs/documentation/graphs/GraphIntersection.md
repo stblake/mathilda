@@ -7,7 +7,7 @@
 
 **`GraphIntersection[g1, g2, ...] gives the graph on the union of the vertex sets whose edges are those common to all the gi, in canonical order. Weights are dropped.`**
 
-## Examples (6)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -33,7 +33,39 @@ In[6]:= GraphUnion[CycleGraph[3], 5]
 Out[6]= GraphUnion[Graph[<3 vertices, 3 edges>], 5]
 ```
 
+### Applications (3)
+
+```mathematica
+In[7]:= g1 = Graph[{1 <-> 2, 2 <-> 3, 3 <-> 4}];
+
+In[8]:= g2 = Graph[{2 <-> 3, 3 <-> 4, 4 <-> 1}];
+```
+
+The edges shared by both
+
+```mathematica
+In[9]:= EdgeList[GraphIntersection[g1, g2]]
+Out[9]= {2 <-> 3, 3 <-> 4}
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_graph_intersection` builds the graph on the union of the argument graphs'
+vertex sets whose edges are those common to *every* graph. Vertices are merged in canonical
+(`expr_compare`) order. The edges of the first graph are tested for membership in each other
+graph — an edge is kept when it is present in all of them (`hits == ng-1`) — and the kept edges
+are counting-sorted into canonical order. The first graph's orientation is preserved, and edge
+weights are dropped. `GraphIntersection[g]` of a single graph returns `g`.
+
+**Data structures.** A `GopsView` per graph with integer endpoints; a `GopsKeySet` hash of the
+first graph's edges, probed by each other graph's edges mapped onto the shared vertex indices;
+the vertex union sort uses radix/counting for all-integer vertices and a comparison sort
+otherwise.
+
+**Complexity / limits.** `O(V + E)` apart from the `O(V log V)` vertex-union sort (`O(V)` when
+vertices are already ordered integers). Variadic, at least one argument; a non-graph argument
+returns unevaluated. An undirected edge equals its reversal under the edge key, so orientation
+does not block a match.
 
 - `Protected`. A non-graph argument is left unevaluated.
 - Vertices are always the union of the inputs' vertices, in canonical order.
@@ -58,6 +90,16 @@ Out[6]= GraphUnion[Graph[<3 vertices, 3 edges>], 5]
 
 **See also:** [GraphUnion](../../graphs/GraphUnion/), [GraphDifference](../../graphs/GraphDifference/), [Sort](../../data-structures/Sort/), [SameQ](../../comparisons/SameQ/), [GraphDisjointUnion](../../graphs/GraphDisjointUnion/)
 
-- Source: [`src/graph/gops_init.c`](https://github.com/stblake/mathilda/blob/main/src/graph/gops_init.c)
+- Source: [`src/graph/gops_setops.c`](https://github.com/stblake/mathilda/blob/main/src/graph/gops_setops.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_ops.c)
+
+## Notes & additional examples
+
+### Notes
+
+`GraphIntersection[g1, g2, ...]` gives the graph on the union of the vertex sets whose edges are
+those common to all of the `gi`, in canonical order. Weights are dropped.
+
+An undirected edge matches its reversal, so `1 <-> 2` and `2 <-> 1` are the same edge for the
+set operation. The result is a canonical `Graph`; query it with `EdgeList` / `EdgeCount`.

@@ -20,7 +20,7 @@ For atoms, Head returns Integer, Real, BigInt, Rational, Complex, Symbol, or Str
 
 </details>
 
-## Examples (3)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -35,6 +35,36 @@ Out[2]= Rational
 
 In[3]:= Head[a + b, f]
 Out[3]= f[Plus]
+```
+
+### Applications (4)
+
+The symbol applied as the head
+
+```mathematica
+In[4]:= Head[f[x]]
+Out[4]= f
+```
+
+A list is List[...] internally
+
+```mathematica
+In[5]:= Head[{1, 2, 3}]
+Out[5]= List
+```
+
+An atom reports its type name
+
+```mathematica
+In[6]:= Head[3/4]
+Out[6]= Rational
+```
+
+The two-argument form wraps the result in f
+
+```mathematica
+In[7]:= Head[a + b, f]
+Out[7]= f[Plus]
 ```
 
 ## Implementation notes
@@ -56,3 +86,14 @@ Out[3]= f[Plus]
 - Tests: [`tests/test_algebraicnumber.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumber.c)
 - Tests: [`tests/test_assoc_atomicity.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_atomicity.c)
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Head[expr]` returns the top-level wrapper via `expr_head`: the applied symbol or
+expression for a function (`f` for `f[x]`, `Plus` for `a + b`, `List` for a
+list), and the type symbol for an atom — `Integer`, `Real`, `Rational`,
+`Complex`, `Symbol`, or `String`. The two-argument form `Head[expr, h]` returns
+`h[Head[expr]]`, leaving the outer application for the evaluator to reduce. Head
+extraction is also what `expr[[0]]` and `Extract[expr, {0}]` perform.

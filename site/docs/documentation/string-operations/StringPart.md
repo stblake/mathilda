@@ -21,7 +21,7 @@ Gives characters m through n in steps of s.
 
 Gives the list of results for each si. Negative indices count from the end.
 
-## Examples (11)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -62,6 +62,29 @@ In[11]:= StringPart[x, 1]
 Out[11]= StringPart[x, 1]
 ```
 
+### Applications (3)
+
+The first character
+
+```mathematica
+In[12]:= StringPart["hello", 1]
+Out[12]= "h"
+```
+
+The last character
+
+```mathematica
+In[13]:= StringPart["hello", -1]
+Out[13]= "o"
+```
+
+A list of positions
+
+```mathematica
+In[14]:= StringPart["hello", {1, 3, 5}]
+Out[14]= {"h", "l", "o"}
+```
+
 ## Implementation notes
 
 `builtin_stringpart` takes `(string, spec)` and indexes by byte (1-based; negative counts from the end via `len + k + 1`). The single-index path uses the helper `stringpart_single`, which bounds-checks `k` and returns a length-1 `EXPR_STRING`. A `List` spec maps `stringpart_single` over each index into a result `List`; a `Span[m, n, s]` spec resolves `start`/`end`/`step` (honouring `All` and negative endpoints), computes the element count, and emits the stepped characters as a `List`. When the first argument is itself a `List` of strings, the builtin recurses by constructing and evaluating an inner `StringPart[si, spec]` per element. Out-of-range or non-integer indices return `NULL`. `ATTR_PROTECTED`.
@@ -73,3 +96,15 @@ Out[11]= StringPart[x, 1]
 - Source: [`src/picostrings.c`](https://github.com/stblake/mathilda/blob/main/src/picostrings.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
 - Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)
+
+## Notes & additional examples
+
+### Notes
+
+`StringPart` indexes a string by byte, 1-based, with negative indices counting
+from the end (`len + k + 1`). A single index gives a length-1 string; a list of
+indices gives a list of characters, and a `Span[m, n, s]` gives the stepped
+characters.
+
+A first argument that is itself a list of strings is handled per element. An
+out-of-range or non-integer index leaves the call unevaluated.

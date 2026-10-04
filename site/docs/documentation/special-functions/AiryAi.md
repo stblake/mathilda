@@ -108,13 +108,20 @@ Attributes (both heads): Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
+**Algorithm.** `builtin_airyai` takes the exact special values first — `AiryAi[0] = 1/(3^(2/3) Gamma[2/3])` (built as a symbolic expression and evaluated), `AiryAi[±Infinity] = 0`, `AiryAi[Indeterminate] = Indeterminate` — and otherwise routes numeric arguments (machine real, arbitrary-precision real, or complex with an inexact part) to the unified core `airy_ai_core`, which computes `Ai(z)` and `Ai'(z)` together. The core selects between two algorithms on `r = |z|` and the requested precision `P`: a **Maclaurin series** for small/moderate `|z|` (from `Ai'' = z Ai`, coefficients `a_0 = Ai(0)`, `a_1 = Ai'(0)`, `a_2 = 0`, `a_n = a_{n-3}/(n(n-1))`), with `(2/3) r^{3/2}/ln2` guard bits to absorb the partial-sum cancellation; and the **asymptotic series** DLMF 9.7.5/9.7.6 (`zeta = (2/3) z^{3/2}`) summed to optimal truncation for large `|z|` with `|arg z| ≤ 2π/3`. Closer to the negative real axis the core uses the DLMF 9.2.12 connection relation `Ai(z) = -[w Ai(wz) + conj(w) Ai(conj(w) z)]`, `w = e^{2πi/3}`, so the oscillation on the negative axis emerges from two rotated evaluations. `AiryAiPrime` reuses the same core and selects the derivative component; `D[AiryAi[z], z] = AiryAiPrime[z]` lives in `calculus/deriv.c`. A genuinely symbolic or exact non-zero argument (e.g. `AiryAi[2]`) stays unevaluated.
+
+**Data structures.** `Expr`; the numeric core works in a file-local complex-MPFR toolkit `acx` (pairs of `mpfr_t`, no MPC library), each op at an explicit working precision and alias-safe. Machine results overflowing a `double` are promoted to MPFR. The ND kernel is a real `REG_U` registration (`NDKU_AiryAi` → `sf_machine_airy_ai` in `src/special_functions/sf_machine.c`), so a packed or visible real `NDArray` runs element-wise; the kernel is real-only and declines complex buffers. `Compile[]` lowers `AiryAi` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes.
+
+**Complexity / limits.** `O(1)` per element at machine precision; the MPFR core scales its term count and guard bits with `P` and `|z|`. Entire function (no branch cuts). The exact value at `0` is closed form; symbolic/exact non-zero arguments stay symbolic. `AiryAiPrime` carries its own exact values (`-1/(3^(1/3) Gamma[1/3])` at 0, `0` at `+Infinity`); `-Infinity` is left unevaluated for the derivative since `Ai'` oscillates with growing amplitude there.
+
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 
 **See also:** [Erf](../../special-functions/Erf/), [N](../../arithmetic/N/), [AiryAiPrime](../../other-advanced/AiryAiPrime/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- DLMF §9.2, §9.7 — Airy functions: power series, asymptotic expansions, and the connection formula Ai(z) = -[w Ai(wz) + conj(w) Ai(conj(w) z)].
+- Source: [`src/special_functions/airyai.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/airyai.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_airyai.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airyai.c)
 - Tests: [`tests/test_airybi.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airybi.c)

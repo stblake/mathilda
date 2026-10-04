@@ -25,6 +25,18 @@ wall-clock time, together with the result obtained.
   multithreaded reductions and elementwise kernels, `Dot` and the LAPACK-backed
   decompositions all run on several cores at once.
 
+```
+In[1]:= AbsoluteTiming[Sum[i, {i, 1, 1000000}]][[2]]
+Out[1]= 500000500000
+In[2]:= AbsoluteTiming[Integrate[x^2, x]][[2]]
+Out[2]= 1/3 x^3
+In[3]:= Length[AbsoluteTiming[1 + 1]]
+Out[3]= 2
+```
+
+The first element of the pair is the elapsed wall-clock time, which varies
+between runs; extract the reproducible result with `[[2]]`.
+
 ## RepeatedTiming
 Evaluates `expr` repeatedly and returns a list of the average time in seconds used, together with the result obtained.
 - `RepeatedTiming[expr]`
@@ -91,6 +103,17 @@ Gives a broken-down date/time as `{year, month, day, hour, minute, second}`.
 - **Format elements**: `"Year"`, `"YearShort"`, `"Quarter"`, `"Month"`, `"MonthName"`, `"Day"`, `"DayName"`, `"Hour"`, `"Hour12"`, `"AMPM"`, `"Minute"`, `"Second"`, `"Millisecond"`. They are read in the order given; any non-element string between them is treated as a separator. Unfilled fields default to `{current year, 1, 1, 0, 0, 0}`. E.g. `DateList[{"09/28/26",{"Day","Month","YearShort"}}] == {2028,4,9,0,0,0.}` (month `28` reduces to April 2028), `DateList[{"9/28/2026",{"Month","/","Day","/","Year"}}] == {2026,9,28,0,0,0.}`, `DateList[{"2/15",{"Month","Day"}}]` fills the current year.
 - Performs no corrections for time zones, daylight saving time, or leap seconds.
 
+```
+In[1]:= DateList[{2026, 10, 4}]
+Out[1]= {2026, 10, 4, 0, 0, 0.0}
+In[2]:= DateList[0]
+Out[2]= {1900, 1, 1, 0, 0, 0.0}
+In[3]:= DateList[{2022, 2, 31}]
+Out[3]= {2022, 3, 3, 0, 0, 0.0}
+In[4]:= DateList["28 Sep, 2026"]
+Out[4]= {2026, 9, 28, 0, 0, 0.0}
+```
+
 ## UnixTime
 Gives the total number of seconds since the Unix epoch, 1970-01-01 00:00:00 GMT.
 - `UnixTime[]` -- current time, the true POSIX epoch second.
@@ -111,6 +134,17 @@ Gives the total number of seconds since the Unix epoch, 1970-01-01 00:00:00 GMT.
 - Out-of-range date components are reduced to standard normalized form before rounding, e.g. `UnixTime[{2022, 2, 31}] == UnixTime[{2022, 3, 3}] == 1646265600`.
 - Performs no corrections for time zones, daylight saving time, or leap seconds.
 
+```
+In[1]:= UnixTime[{1970, 1, 1, 0, 0, 0}]
+Out[1]= 0
+In[2]:= UnixTime[{2022, 1, 1, 0, 0, 0}]
+Out[2]= 1640995200
+In[3]:= UnixTime[{2022, 2, 31}]
+Out[3]= 1646265600
+In[4]:= AbsoluteTime[{2000, 1, 1}] - UnixTime[{2000, 1, 1}]
+Out[4]= 2208988800
+```
+
 ## Pause
 Pauses for at least `n` seconds, then returns `Null`.
 - `Pause[n]`
@@ -128,6 +162,13 @@ Pauses for at least `n` seconds, then returns `Null`.
   or a `NumericQ` symbolic form (`Pause[Pi]`). Zero or negative `n` returns
   immediately. A non-numeric argument leaves `Pause[x]` unevaluated.
 
+```
+In[1]:= Pause[0] === Null
+Out[1]= True
+In[2]:= Pause[1/100] === Null
+Out[2]= True
+```
+
 ## SessionTime
 Gives the total number of seconds of wall-clock time elapsed since the beginning
 of the current Mathilda session.
@@ -138,6 +179,16 @@ of the current Mathilda session.
 - Measured from a monotonic clock captured at kernel start-up; includes time
   spent in `Pause`.
 
+```
+In[1]:= SessionTime[] >= 0
+Out[1]= True
+In[2]:= Head[SessionTime[]]
+Out[2]= Real
+```
+
+The elapsed-time value itself grows with every call, so these examples report
+its sign and head rather than a fixed number.
+
 ## TimeUsed
 Gives the total number of seconds of CPU time used so far in the current Mathilda
 session.
@@ -147,6 +198,16 @@ session.
 - `Protected`.
 - CPU time via `clock()`; does not advance during `Pause` or other idle waits.
 
+```
+In[1]:= TimeUsed[] >= 0
+Out[1]= True
+In[2]:= Head[TimeUsed[]]
+Out[2]= Real
+```
+
+The CPU-time value grows with the work done, so these examples report its sign
+and head rather than a fixed number.
+
 ## $TimeUnit
 Gives the minimum time interval in seconds recorded on the computer system.
 
@@ -154,4 +215,14 @@ Gives the minimum time interval in seconds recorded on the computer system.
 - `Protected` (read-only system constant).
 - A real equal to the resolution of the `clock()`-based timers
   (`1 / CLOCKS_PER_SEC`), the granularity `Pause` documents itself against.
+
+```
+In[1]:= $TimeUnit
+Out[1]= 1e-06
+In[2]:= Head[$TimeUnit]
+Out[2]= Real
+```
+
+The value is machine-dependent, but on a standard POSIX host `CLOCKS_PER_SEC` is
+`1000000`, so `$TimeUnit` is `1.*10^-6`.
 

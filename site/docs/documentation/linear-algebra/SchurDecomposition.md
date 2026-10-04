@@ -20,7 +20,7 @@ Options: Pivoting -\> True also returns a scaling/permutation matrix d with m . 
 
 </details>
 
-## Examples (3)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -35,6 +35,29 @@ Out[2]= {True, False}
 
 In[3]:= {q, s, p, t} = SchurDecomposition[{{{.5, 1}, {1.5, 2}}, {{2.5, 3}, {3.5, 4}}}]; Chop[{{.5, 1}, {1.5, 2}} - q . s . ConjugateTranspose[p]]
 Out[3]= {{0, 0}, {0, 0}}
+```
+
+### Applications (3)
+
+Gives {q, t} with q orthonormal and t upper-triangular
+
+```mathematica
+In[4]:= SchurDecomposition[{{1, 2}, {3, 4}}]
+Out[4]= {{{-0.824565, -0.565767}, {0.565767, -0.824565}}, {{-0.372281, -1.0}, {0.0, 5.37228}}}
+```
+
+An already-diagonal matrix, computed numerically
+
+```mathematica
+In[5]:= SchurDecomposition[{{2, 0}, {0, 3}}]
+Out[5]= {{{1.0, 0.0}, {0.0, 1.0}}, {{2.0, 0.0}, {0.0, 3.0}}}
+```
+
+Complex t, eigenvalues 1 +- 2 I on the diagonal
+
+```mathematica
+In[6]:= SchurDecomposition[N[{{3, -2}, {4, -1}}], RealBlockDiagonalForm -> False]
+Out[6]= {{{-0.408248 - 0.408248*I, -0.689898 - 0.436701*I}, {-0.816497, 0.563299 - 0.126599*I}}, {{1.0 + 2.0*I, 4.44949 + 0.44949*I}, {0.0, 1.0 - 2.0*I}}}
 ```
 
 ## Algorithm
@@ -66,6 +89,12 @@ Memory contract: standard builtin ownership (SPEC.md §4).  Never frees `res`.
 ```
 
 ## Implementation notes
+
+**Algorithm.** `builtin_schurdecomposition` is a dispatcher. It parses the options (`Pivoting`, `RealBlockDiagonalForm` default `True`, `TargetStructure -> "Dense" | "Structured"`) with `schur_parse_options`, distinguishes the standard form `SchurDecomposition[m] -> {q, t}` (with `m == q . t . ConjugateTranspose[q]`, `q` orthonormal/unitary and `t` block upper-triangular) from the generalized QZ form `SchurDecomposition[{m, a}] -> {q, s, p, t}`, classifies the input's numeric precision, and routes: a non-numeric (symbolic) matrix returns `NULL` — a generic matrix has no closed-form Schur decomposition, so the call is left unevaluated; a standard, real, arbitrary-precision matrix goes to `schur_mpfr_standard_real` (which is also the no-LAPACK fallback); everything else numeric goes to `schur_machine_standard` / `schur_machine_generalized` via LAPACK. `RealBlockDiagonalForm -> True` keeps `t` real with 2×2 blocks for complex-conjugate eigenvalue pairs; `-> False` makes `t` complex upper-triangular; `Pivoting -> True` additionally returns a scaling/permutation matrix.
+
+**Data structures.** The result is a nested `List` of machine-precision (or MPFR) reals or `Complex` values. The machine kernel loads the matrix through `numarray.c`'s `na_load_matrix`, which accepts both an `NDArray` and a boxed `List`-of-`List`s, and `schur_matrix_order` reads the rank-2 shape directly — so no separate `ndla_*` guard is needed, but the head is on `src/pack.c`'s `AWARE` list so the gate hands a packed argument straight through as an `NDArray` rather than materialising it. The LAPACK machine kernel (`schurdecomp_machine.c`) and the MPFR twin (`schurdecomp_mpfr.c`) are the two numeric backends.
+
+**Complexity / limits.** `O(n^3)` for the LAPACK QR-iteration backend (Hessenberg reduction followed by the Francis double-shift QR / QZ sweep). The decomposition is defined only for numerical square matrices — a symbolic matrix is left unevaluated. The generalized form requires the two-matrix argument `{m, a}`; the arbitrary-precision MPFR path covers the standard real case at the input precision.
 
 - `Protected`.
 - **Numerical only** — a generic matrix has no closed-form symbolic Schur
@@ -118,6 +147,24 @@ Memory contract: standard builtin ownership (SPEC.md §4).  Never frees `res`.
 
 **See also:** [NDArray](../../linear-algebra/NDArray/), [QRDecomposition](../../linear-algebra/QRDecomposition/), [JordanDecomposition](../../linear-algebra/JordanDecomposition/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed. (Johns Hopkins, 2013), ch. 7 — The Unsymmetric Eigenvalue Problem.
+- Source: [`src/linalg/schurdecomp.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/schurdecomp.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_schurdecomp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_schurdecomp.c)
+
+## Notes & additional examples
+
+### Notes
+
+`SchurDecomposition[m]` returns `{q, t}` with `q` orthonormal (unitary) and `t`
+block upper-triangular, so that `m == q . t . ConjugateTranspose[q]`. By default
+`RealBlockDiagonalForm -> True` keeps `t` real, using a 2×2 block for each
+complex-conjugate eigenvalue pair; `-> False` makes `t` complex upper-triangular
+with the eigenvalues on its diagonal. `Pivoting -> True` additionally returns a
+scaling/permutation matrix.
+
+The decomposition is numerical: a symbolic matrix has no closed-form Schur form
+and is left unevaluated. `SchurDecomposition[{m, a}]` gives the generalized (QZ)
+decomposition `{q, s, p, t}`. A machine or packed/`NDArray` matrix is read
+straight off its buffer by the LAPACK kernel; arbitrary-precision real inputs use
+an MPFR backend.

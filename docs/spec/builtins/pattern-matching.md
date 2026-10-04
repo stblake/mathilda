@@ -96,6 +96,17 @@ Gives the position of the first element matching a pattern, in depth-first order
 - Over an association the position is a key, e.g. `{Key[k], ...}`.
 - Delegates to `Position` (with the first-match cap), so traversal, level specs, the `Heads` option, and association handling match `Position` exactly.
 
+```mathematica
+In[1]:= FirstPosition[{a, b, c, b}, b]
+Out[1]= {2}
+
+In[2]:= FirstPosition[{{1, 2}, {3, 4}}, 4]
+Out[2]= {2, 2}
+
+In[3]:= FirstPosition[{1, 2, 3}, 5, None]
+Out[3]= None
+```
+
 ## Count
 Gives the number of elements or subexpressions that match a pattern.
 - `Count[list, pattern]`

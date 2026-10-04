@@ -7,7 +7,7 @@
 
 **`TreeGraphQ[g] gives True if g is a tree: at least one vertex, connected, and with no cycles, ignoring edge direction. A disconnected forest is not a tree.`**
 
-## Examples (5)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -28,6 +28,50 @@ Out[4]= False
 
 In[5]:= TreeGraphQ[Graph[{1},{}]]
 Out[5]= True
+```
+
+### Applications (6)
+
+A star is a tree
+
+```mathematica
+In[6]:= TreeGraphQ[StarGraph[5]]
+Out[6]= True
+```
+
+A cycle has as many edges as vertices
+
+```mathematica
+In[7]:= TreeGraphQ[CycleGraph[4]]
+Out[7]= False
+```
+
+A path is a tree
+
+```mathematica
+In[8]:= TreeGraphQ[PathGraph[{1, 2, 3, 4}]]
+Out[8]= True
+```
+
+Direction is ignored, so an out-tree counts
+
+```mathematica
+In[9]:= TreeGraphQ[Graph[{1 -> 2, 1 -> 3}]]
+Out[9]= True
+```
+
+Two components, so too few edges to be a tree
+
+```mathematica
+In[10]:= TreeGraphQ[Graph[{1, 2, 3, 4}, {1 <-> 2, 3 <-> 4}]]
+Out[10]= False
+```
+
+Anti-parallel pair is two edges on two vertices
+
+```mathematica
+In[11]:= TreeGraphQ[Graph[{1 -> 2, 2 -> 1}]]
+Out[11]= False
 ```
 
 ## Algorithm
@@ -72,6 +116,12 @@ Memory (SPEC section 4): returns freshly-allocated results; frees res.
 
 ## Implementation notes
 
+**Algorithm.** `builtin_tree_graph_q` returns `False` for a non-graph, then reads the cached `GRAPH_PROP_TREE` flag. On a miss it tests that the graph has at least one vertex and exactly `V - 1` edges, then runs union-find over all edges. It answers `True` when every edge joins two different components. With `V - 1` joins the graph is one component, so it is connected and acyclic. Direction is ignored, so the out-tree `1 -> 2, 1 -> 3` is a tree. The anti-parallel pair `1 -> 2, 2 -> 1` is two edges on two vertices and is not. The null graph is not a tree.
+
+**Data structures.** It reads the memoized `graph_edge_indices` views (`eu[k]`, `ev[k]`, `directed[k]`) over the `Graph[List, List]` expression. Union-find uses two `int` arrays (`parent` and `size`) with path halving and union by size. The answer is stored with `graph_prop_set`.
+
+**Complexity / limits.** `O(V + E alpha(V))` on the first query, and `O(1)` on a repeat for the same graph node. The edge count test rejects most non-trees before any union-find work. The result is always `True` or `False`: an argument that is not a valid graph gives `False`, not an unevaluated form.
+
 - `Protected`. Requires at least one vertex, connectivity, and exactly
   `VertexCount - 1` edges.
 - An out-tree such as `1 -> 2, 1 -> 3` is a tree; a disconnected forest, the
@@ -85,6 +135,12 @@ Memory (SPEC section 4): returns freshly-allocated results; frees res.
 
 **See also:** [UndirectedGraphQ](../../graphs/UndirectedGraphQ/)
 
-- Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
+- Source: [`src/graph/acyclic.c`](https://github.com/stblake/mathilda/blob/main/src/graph/acyclic.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
+
+## Notes & additional examples
+
+### Notes
+
+`TreeGraphQ` ignores edge direction, so an out-tree counts, while the anti-parallel pair `1 -> 2, 2 -> 1` does not. The null graph is not a tree. The verdict is cached on the graph, so repeating the query on the same graph is `O(1)`.

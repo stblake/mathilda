@@ -28,7 +28,7 @@ RandomSample never samples any element more than once. Use SeedRandom to seed th
 
 </details>
 
-## Examples (10)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -66,6 +66,36 @@ In[10]:= RandomSample[x]
 Out[10]= RandomSample[x]
 ```
 
+### Applications (4)
+
+A random permutation: no element repeats
+
+```mathematica
+In[11]:= SeedRandom[1]; RandomSample[{a, b, c, d, e}]
+Out[11]= {e, c, b, d, a}
+```
+
+Five distinct draws from 1..10
+
+```mathematica
+In[12]:= SeedRandom[1]; RandomSample[Range[10], 5]
+Out[12]= {9, 8, 3, 1, 6}
+```
+
+UpTo clamps to the length
+
+```mathematica
+In[13]:= SeedRandom[1]; RandomSample[{a, b, c, d, e}, UpTo[3]]
+Out[13]= {e, c, b}
+```
+
+Weighted, without replacement
+
+```mathematica
+In[14]:= SeedRandom[1]; RandomSample[{1, 1, 1, 10} -> {a, b, c, d}, 2]
+Out[14]= {d, c}
+```
+
 ## Options & behaviour
 
 > **Packed arrays.** `RandomSample` and `RandomChoice` gather from a packed
@@ -100,3 +130,19 @@ The weighted form `RandomSample[{w1,...}->{e1,...}, n]` uses `weighted_sample_wi
 - Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
 - Tests: [`tests/test_nminimize.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nminimize.c)
 - Tests: [`tests/test_random.c`](https://github.com/stblake/mathilda/blob/main/tests/test_random.c)
+
+## Notes & additional examples
+
+### Notes
+
+`RandomSample` selects **without replacement**: no element is chosen twice, so the
+count may not exceed the list length (use `UpTo[n]`, which clamps). With no count
+it returns a full random permutation of the list.
+
+The uniform form runs a partial Fisher–Yates shuffle — each of the first `n` slots
+is swapped with a uniformly chosen later slot — so it is `O(n)` even when drawing a
+few elements from a very long list. The weighted form `{w1, ...} -> {e1, ...}`
+draws sequentially by inverse-CDF, zeroing each chosen weight so it cannot recur.
+
+All draws come from the stream `SeedRandom` controls, so the samples above are
+reproducible across runs.

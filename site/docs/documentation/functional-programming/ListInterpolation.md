@@ -28,7 +28,7 @@ A fast path for List, packed, and NDArray value tensors; works at machine or arb
 
 </details>
 
-## Examples (4)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -46,6 +46,43 @@ Out[3]= 3.875
 
 In[4]:= ListInterpolation[{{1, 2}, {3, 4}}][1.5, 1.5]
 Out[4]= 2.5
+```
+
+### Applications (5)
+
+Values on the integer grid 1, 2, 3, 4
+
+```mathematica
+In[5]:= ListInterpolation[{1, 4, 9, 16}]
+Out[5]= InterpolatingFunction[{{1, 4}}, <>]
+```
+
+Evaluate the interpolant between grid points
+
+```mathematica
+In[6]:= ListInterpolation[{1, 4, 9, 16}][2.5]
+Out[6]= 6.25
+```
+
+Place the grid equally spaced on [0, 3]
+
+```mathematica
+In[7]:= ListInterpolation[{1, 4, 9, 16}, {{0, 3}}]
+Out[7]= InterpolatingFunction[{{0, 3}}, <>]
+```
+
+Piecewise-linear: halfway between 4 and 9
+
+```mathematica
+In[8]:= ListInterpolation[{1, 4, 9, 16}, InterpolationOrder -> 1][2.5]
+Out[8]= 6.5
+```
+
+A 2-D array interpolates in both directions
+
+```mathematica
+In[9]:= ListInterpolation[{{1, 2}, {3, 4}}][1.5, 1.5]
+Out[9]= 2.5
 ```
 
 ## Algorithm
@@ -105,12 +142,59 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
+**Algorithm.** `builtin_listinterpolation` is the value-only companion to
+`Interpolation`: it interpolates a rectangular array of *values* laid out on a
+regular grid and returns an `InterpolatingFunction`. It reads the array's
+rectangular shape along a representative spine (`listinterp_shape`, nesting depth =
+dimensionality), synthesises the abscissae for each axis (`listinterp_axis` — plain
+integer positions `1..n` by default, `n` equally-spaced points from a `{xmin,
+xmax}` interval, or an explicit list of positions), stitches the coordinates and
+values into the `{{coord, val}, ...}` table that `Interpolation` consumes, and
+hands it to the shared `builtin_interpolation_impl`. All numerics, MPFR handling,
+options, and the vectorised `InterpolatingFunction[...]` object are therefore
+shared verbatim — this is purely a front-end turning "values on a grid" into
+"value at abscissa".
+
+Options pass straight through: `InterpolationOrder -> n` sets the
+piecewise-polynomial degree (default 3; 0 constant, 1 linear), `Method ->
+"Spline" | "Hermite"` picks the scheme, and `PeriodicInterpolation -> True` builds
+a periodic interpolant. `List`, packed, and `NDArray` value tensors all feed the
+same path, at machine or arbitrary (MPFR) precision matching the data.
+
+**Data structures.** A `shape[]` vector (capped at `LISTINTERP_MAXDIM = 16`
+dimensions) and per-axis abscissa `Expr` arrays — exact endpoint `Expr`s copied so
+the object's domain prints exactly, interior nodes machine reals — feeding the
+`InterpolatingFunction` representation the shared engine builds.
+
+**Complexity / limits.** Dominated by the underlying `Interpolation` build (per
+axis, piecewise fits across the grid). The array must be rectangular (enforced
+node-by-node by `listinterp_emit`), non-empty on every axis, and at most 16
+dimensions; a domain spec must give one `{min, max}` pair (or position list) per
+dimension.
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [InterpolatingFunction](../../functional-programming/InterpolatingFunction/), [Interpolation](../../functional-programming/Interpolation/), [NDArray](../../linear-algebra/NDArray/), [List](../../other-advanced/List/), [Rational](../../arithmetic/Rational/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- C. de Boor, *A Practical Guide to Splines*, rev. ed. (Springer, 2001) — piecewise-polynomial interpolation on a grid.
+- Source: [`src/interp.c`](https://github.com/stblake/mathilda/blob/main/src/interp.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
 - Tests: [`tests/test_interp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_interp.c)
+
+## Notes & additional examples
+
+### Notes
+
+`ListInterpolation[array]` builds an `InterpolatingFunction` from an array of
+*values* taken to lie on a regular grid at integer positions `1, 2, ...` in each
+direction — the value-only companion to `Interpolation`, which takes
+`{abscissa, value}` pairs. The nesting depth of `array` is the number of
+dimensions. Call the returned object like a function to sample it.
+
+A second argument places the grid: `{{xmin, xmax}, ...}` spaces it equally over an
+interval per dimension, or explicit position lists give the grid lines directly.
+`InterpolationOrder -> n` sets the degree (default 3, so a longer run of points is
+a cubic fit; `1` is piecewise-linear), and `Method` and `PeriodicInterpolation`
+select the scheme.

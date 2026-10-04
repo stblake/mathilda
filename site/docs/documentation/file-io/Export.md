@@ -7,7 +7,7 @@
 
 **`Export["file", obj] writes obj to a file, choosing the format from the file extension; Export["file", obj, "FMT"] states it explicitly. An Image writes to a raster file (PNG, JPEG, BMP, TGA); its samples outside the unit interval are clamped, since 8-bit output has no room for them. A Graphics object (the result of Plot, ListPlot, Graphics, ...) writes to PDF, PNG, or JPEG: PDF is a resolution-independent vector file produced without any external library and works headless, while PNG and JPEG render through the graphics backend and so need graphics support compiled in and a display. A Graphics3D object (Plot3D, ParametricPlot3D, ...) exports to PNG or JPEG the same way; it has no vector-PDF form. Returns the file name, so Import[Export[f, img]] round-trips.`**
 
-## Examples (15)
+## Examples (19)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -86,6 +86,33 @@ In[15]:= Head[Export["/tmp/mathilda_doc_vol.png", Image3D[Table[0.5, {z, 1, 2}, 
 Out[15]= Export
 ```
 
+### Applications (4)
+
+An 8x12 grey image
+
+```mathematica
+In[16]:= img = Image[Table[N[(i + j)/16], {i, 8}, {j, 12}], "Real"];
+```
+
+Returns the file name
+
+```mathematica
+In[17]:= Export["/tmp/mathilda_export.png", img]
+Out[17]= "/tmp/mathilda_export.png"
+```
+
+```mathematica
+In[18]:= FileExistsQ["/tmp/mathilda_export.png"]
+Out[18]= True
+```
+
+{width, height} = {12, 8}
+
+```mathematica
+In[19]:= ImageDimensions[Import["/tmp/mathilda_export.png"]]
+Out[19]= {12, 8}
+```
+
 ## Options & behaviour
 
 ### Graphics export
@@ -148,6 +175,35 @@ WHAT A SAMPLE MEANS. A decoded 8-bit sample is scaled by 1/255 into the unit int
 
 ## Implementation notes
 
+**Algorithm.** `builtin_export` writes an object to a file and **returns the file name** (so
+`Import[Export[f, img]]` is a one-expression round trip). The format comes from an explicit
+third-argument string, else from the path's extension.
+
+A `Graphics`/`Graphics3D` second argument is handled first. **PDF** of 2D graphics goes through
+`graphics_export_pdf`, a dependency-free built-in vector emitter — no external library and no
+display, so it works headless; a 3D scene has no vector projection and is declined. **PNG/JPEG**
+render the scene to an RGBA buffer through the Raylib backend (`graphics_render_rgba` /
+`graphics3d_render_rgba`, sized by `ImageSize`/`AspectRatio`) and encode it with `stb_image_write`
+— so they need `USE_GRAPHICS` **and** a usable GUI session, and return `$Failed` gracefully
+otherwise while PDF still works.
+
+Otherwise the second argument is loaded as an image by `image_load` (which declines an
+`Image3D`, returning `NULL`, rather than silently writing a middle slice). Each `double` sample
+is converted to a byte with **clamping, not wrapping**: `v <= 0` (and `NaN`, via `!(v > 0)`) → `0`,
+`v >= 1` → `255`, else `v·255 + 0.5`. The bytes are written by extension/format with
+`stbi_write_png` / `stbi_write_jpg` (quality 90) / `stbi_write_bmp` / `stbi_write_tga`; an
+unclaimed format returns `NULL` (unevaluated) and a failed write returns `$Failed`.
+
+**Data structures.** The vendored public-domain **`stb_image_write`** encoder
+(`src/external/stb/stb_image_write.h`), a transient `unsigned char` byte buffer, and — for
+graphics — the Raylib RGBA render buffer or the PDF emitter's primitive walk. Encoding the
+bytes with `stb` rather than Raylib's own writers means JPEG output does not depend on which
+formats a given Raylib build supports.
+
+**Complexity / limits.** `O(w·h·channels)` for an image; a plot's cost is dominated by
+rendering. Clamping is deliberate: 8-bit output has nowhere to put an unsharp mask's legitimate
+overshoot, and wrapping would turn a bright highlight black. `ATTR_PROTECTED`.
+
 - `Protected`.
 - Returns the file name, so `Import[Export[f, img]]` is a round trip that can be written
   as a single expression.
@@ -163,3 +219,24 @@ WHAT A SAMPLE MEANS. A decoded 8-bit sample is scaled by 1/255 into the unit int
 - Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
 - Tests: [`tests/test_graphplot.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphplot.c)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`Export["file", obj]` writes `obj` to a file, choosing the format from the
+extension; `Export["file", obj, "FMT"]` states it. An `Image` writes to a raster
+file (PNG, JPEG, BMP, TGA), and a `Graphics`/`Graphics3D` object writes to a graphic
+(PDF, PNG, or JPEG). It **returns the file name**, which is what makes
+`Import[Export[f, img]]` a single-expression round trip.
+
+PDF of a 2D `Graphics` is a resolution-independent vector file from a built-in
+emitter — no external library and no display, so it works headless and is the
+recommended print format. PNG/JPEG render through the graphics backend, so they
+need `USE_GRAPHICS` and a GUI session and otherwise return `$Failed` gracefully;
+PDF still works. On raster export, samples outside the unit interval are **clamped**
+(not wrapped), and `NaN` clamps to `0`. An `Image3D` is declined rather than
+silently reduced to a slice. Writing is by the vendored `stb_image_write`.
+
+There is no in-memory file target, so `Export` necessarily touches the filesystem;
+these examples write under `/tmp`.

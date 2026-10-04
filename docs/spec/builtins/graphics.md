@@ -998,6 +998,20 @@ Out[5]= -Graphics-  (* rose with sample-point overlay and title *)
 regular intervals plus angular degree/radian labels). Currently accepted and
 documented but not yet rendered; Cartesian axes are drawn instead.
 
+```mathematica
+(* accepted on PolarPlot; Cartesian axes are drawn until the polar grid overlay lands *)
+In[1]:= PolarPlot[1, {t, 0, 2 Pi}, PolarAxes -> True]
+Out[1]= -Graphics-
+
+(* the option is passed through verbatim as a Rule onto the Graphics[] object *)
+In[2]:= Cases[PolarPlot[Sin[2 t], {t, 0, 2 Pi}, PolarAxes -> True], (PolarAxes -> v_) :> v, Infinity]
+Out[2]= {True}
+
+(* an inert, Protected option keyword -- it has no own-values of its own *)
+In[3]:= {Head[PolarAxes], MemberQ[Attributes[PolarAxes], Protected]}
+Out[3]= {Symbol, True}
+```
+
 ## ParametricPlot3D
 Samples and displays a parametric 3D space curve or surface patch, returning
 a `Graphics3D[...]` object rendered in an orbit-camera window.
@@ -1383,12 +1397,29 @@ would emit at those grid points is muted during sampling, as in `Plot`.
 **Examples**
 
 ```mathematica
-ComplexPlot[z^2, {z, -2-2I, 2+2I}]
-ComplexPlot[Sin[z], {z, -Pi-Pi*I, Pi+Pi*I}]
-ComplexPlot[1/(z^2+1), {z, -2-2I, 2+2I}, PlotPoints->80]
-ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, PlotLegends->Automatic]
-ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, ColorFunction->"PhaseRings"]
-ComplexPlot[(z^3-3)/z, {z, -2-2I, 2+2I}, ColorFunction->(Hue[#8+0.5]&)]
+(* domain colouring: hue = Arg[f], lightness folds in |f| (zeros black, poles white) *)
+In[1]:= ComplexPlot[z^2, {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 40]
+Out[1]= -Graphics-
+
+(* poles of a rational function, with the phase legend bar *)
+In[2]:= ComplexPlot[(z^2 + 1)/(z^2 - 1), {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 40, PlotLegends -> Automatic]
+Out[2]= -Graphics-
+
+(* "PhaseRings" ramp: one brightness ring per e-fold of |f|, clustering at poles and zeros *)
+In[3]:= ComplexPlot[(z^3 - 3)/z, {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 40, ColorFunction -> "PhaseRings"]
+Out[3]= -Graphics-
+
+(* custom colour map: #8 is the phase Arg[f], rotated by half a turn *)
+In[4]:= ComplexPlot[Sin[z], {z, -Pi - Pi I, Pi + Pi I}, PlotPoints -> 30, ColorFunction -> (Hue[#8 + 0.5] &)]
+Out[4]= -Graphics-
+
+(* the head is an ordinary Graphics[] object *)
+In[5]:= Head[ComplexPlot[z, {z, -1 - I, 1 + I}, PlotPoints -> 10]]
+Out[5]= Graphics
+
+(* the cyclic phase ramp and high grid default *)
+In[6]:= Options[ComplexPlot, {PlotPoints, ColorFunction}]
+Out[6]= {PlotPoints -> 400, ColorFunction -> "Cyclic"}
 ```
 
 ---
@@ -1420,9 +1451,21 @@ Three-dimensional surface plot of a complex function: **height = `|f(z)|`**,
 **Examples**
 
 ```mathematica
-ComplexPlot3D[z^2, {z, -2-2I, 2+2I}]
-ComplexPlot3D[Sin[z], {z, -2-2I, 2+2I}, Lighting->None]
-ComplexPlot3D[1/z, {z, -2-2I, 2+2I}, PlotLegends->Automatic, Lighting->None]
+(* height = |f(z)|, colour = Arg[f(z)] on the thermal ramp *)
+In[1]:= ComplexPlot3D[z^2, {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 30]
+Out[1]= -Graphics3D-
+
+(* a simple pole, flat-shaded for true phase colours, with the phase legend *)
+In[2]:= ComplexPlot3D[1/z, {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 30, Lighting -> None, PlotLegends -> Automatic]
+Out[2]= -Graphics3D-
+
+(* the result is a Graphics3D[] object rendered in the orbit-camera window *)
+In[3]:= Head[ComplexPlot3D[Sin[z], {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 20]]
+Out[3]= Graphics3D
+
+(* a lower grid default than ComplexPlot: this is an N x N polygon mesh, not a raster *)
+In[4]:= Options[ComplexPlot3D, {PlotPoints, Lighting}]
+Out[4]= {PlotPoints -> 200, Lighting -> Automatic}
 ```
 
 ---
@@ -1525,6 +1568,11 @@ Out[3]= -Graphics-
 In[4]:= VectorPlot[{-y, x}, {x, -1.5, 1.5}, {y, -1.5, 1.5},
           RegionFunction -> Function[{x,y}, x^2 + y^2 < 1]]
 Out[4]= -Graphics-
+
+(* the result is a Graphics[] object built from Arrow[] primitives *)
+In[5]:= Head[VectorPlot[{-y, x}, {x, -1, 1}, {y, -1, 1}, VectorPoints -> 5]]
+Out[5]= Graphics
+```
 
 ---
 
@@ -1672,5 +1720,4 @@ Out[4]= Null
 (* 3D content -- orbit camera plus the usual control row *)
 In[5]:= Manipulate[Plot3D[Sin[x + n] Cos[y], {x, -3, 3}, {y, -3, 3}], {n, 0, 3}]
 Out[5]= Null
-```
 ```

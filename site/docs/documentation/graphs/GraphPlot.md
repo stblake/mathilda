@@ -7,7 +7,7 @@
 
 **`GraphPlot[g, opts] gives a Graphics object drawing the graph g (or a list of rules {u -> v, ...}). The default layout is deterministic: tidy layered trees for branching forests, layered drawings for DAGs, stress majorization otherwise, with components packed side by side. Options: GraphLayout -> "StressEmbedding" | "SpringElectricalEmbedding" | "CircularEmbedding" | "LayeredEmbedding" | "BipartiteEmbedding" | "GridEmbedding"; VertexCoordinates -> {{x,y}, ...} or {v -> {x,y}, ...}; VertexLabels -> None | "Name" | Automatic | {v -> lbl, ...}; GraphHighlight -> {v, e, ...} (red, thicker); VertexStyle and EdgeStyle -> a colour or {item -> colour, ...}; EdgeLabels -> "EdgeWeight" | {e -> lbl}; VertexSize -> d (diameter in edge lengths). Directed edges get arrowheads that stop at the target vertex. Other options (ImageSize, PlotLabel, ...) pass through to Graphics.`**
 
-## Examples (9)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -46,6 +46,36 @@ In[9]:= MemberQ[GraphPlot[CycleGraph[3], GraphHighlight -> {1}], RGBColor[1., 0.
 Out[9]= True
 ```
 
+### Applications (4)
+
+The result is an ordinary Graphics object
+
+```mathematica
+In[10]:= Head[GraphPlot[CycleGraph[4]]]
+Out[10]= Graphics
+```
+
+A list of rules is plotted as its Graph
+
+```mathematica
+In[11]:= Head[GraphPlot[{1 -> 2, 2 -> 3, 3 -> 1}]]
+Out[11]= Graphics
+```
+
+An explicit layout method
+
+```mathematica
+In[12]:= MatchQ[GraphPlot[CompleteGraph[4], GraphLayout -> "CircularEmbedding"], _Graphics]
+Out[12]= True
+```
+
+Labels sit beside each vertex on its widest gap
+
+```mathematica
+In[13]:= Head[GraphPlot[PathGraph[{1, 2, 3}], VertexLabels -> "Name"]]
+Out[13]= Graphics
+```
+
 ## Algorithm
 
 graphplot.c - GraphPlot[g, opts]: draw a graph as a Graphics[...] expression, plus the drawing helpers GraphPlot shares with HypergraphPlot (glayout.h).
@@ -71,6 +101,44 @@ The output uses only primitives every renderer draws -- Line, Arrow, Disk, Circl
 Memory (SPEC section 4): returns a freshly-allocated Graphics tree; the evaluator frees res. Nothing borrowed from res outlives the call.
 
 ## Implementation notes
+
+**Algorithm.** `builtin_graph_plot` draws a graph as a `Graphics[...]` expression
+through a four-stage pipeline. **(1) Layout** (`glayout_compute`, in
+`src/graph/glayout.c`): `GraphLayout -> Automatic` chooses by structure — a tidy
+tree for a branching forest (leaves in DFS order, parents centred over their
+children), a layered drawing for a DAG, and **stress majorization** (SMACOF on
+BFS graph distances) for everything else; the explicit methods are
+`"CircularEmbedding"`, `"SpringElectricalEmbedding"` (Hu's spring-electrical model
+with Fruchterman-Reingold grid repulsion), `"StressEmbedding"`,
+`"LayeredEmbedding"`/`"LayeredDigraphEmbedding"`, `"BipartiteEmbedding"` and
+`"GridEmbedding"`, an inapplicable one falling back to stress. `VertexCoordinates`
+overrides any subset of the positions, and a complete spec skips the layout
+entirely. **(2) Size**: the vertex-disk radius is scaled to the median edge length
+and the layout extent, so a 10- and a 1000-vertex graph both read. **(3) Frame**
+(`gd_frame`): each label is placed beside its vertex on the side with the widest
+angular gap between incident edges, and the world box and page size are solved
+together so labels are never clipped. **(4) Emit**: edges first (a `Line` when
+undirected, an `Arrow` shortened to stop at the target disk with `Arrowheads`
+sized to the disks, mutual pairs `u->v`/`v->u` offset apart), then vertex `Disk`s
+with a thin darker rim, then labels. `GraphPlot[{rules}]` plots `Graph[{rules}]`;
+options the head does not consume pass through to `Graphics`.
+
+**Data structures.** Edges are read via `graph_edge_indices` into integer endpoint
+arrays (`eu`/`ev`) and a per-edge direction-bit array; coordinates live in a flat
+`double xy[]` buffer filled by the layout. Primitives accumulate in a `GDPrims`
+vector and are finished (`gd_finish`) into a `Graphics[...]` tree built from only
+the primitives every renderer draws — `Line`, `Arrow`, `Disk`, `Circle`, `Text`
+and colour/`Thickness`/`Arrowheads` directives — with `AspectRatio -> Automatic`,
+`Axes -> False` and an explicit `PlotRange`/`ImageSize`. Vertex colour is
+`RGBColor[0.368417, 0.506779, 0.709798]` (`ColorData[97][1]`), edges a medium
+grey-blue, `GraphHighlight` red and thicker, matching Mathematica.
+
+**Complexity / limits.** Cost is dominated by the layout: stress majorization is
+`O(n^2)` per sweep (large components skip the per-sweep majorization), the
+all-pairs BFS distance matrix is `O(n (V + E))`, and the exact graph centre used
+to seed BFS layouts is computed only up to 2000 vertices. The output is a
+`Graphics` object — a renderable drawing, not a machine value — so, like other
+graphics heads, `GraphPlot` carries no NDArray/`Compile` fast path.
 
 - `Protected`. Implemented in `src/graph/graphplot.c` over the layout engine
   `src/graph/glayout.c`. **Deterministic**: no random numbers anywhere, so the
@@ -140,7 +208,28 @@ Memory (SPEC section 4): returns a freshly-allocated Graphics tree; the evaluato
 
 **See also:** [ImageSize](../../other-advanced/ImageSize/), [VertexList](../../graphs/VertexList/), [FindVertexColoring](../../graphs/FindVertexColoring/)
 
-- Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
+- E. R. Gansner, Y. Koren and S. North, *Graph drawing by stress majorization*, in Graph Drawing (GD 2004), LNCS **3383**, Springer (2005) 239-250.
+- Y. Hu, *Efficient, high-quality force-directed graph drawing*, The Mathematica Journal **10** (2005) 37-71.
+- T. M. J. Fruchterman and E. M. Reingold, *Graph drawing by force-directed placement*, Software: Practice and Experience **21** (1991) 1129-1164.
+- Source: [`src/graph/graphplot.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graphplot.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
 - Tests: [`tests/test_graphplot.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphplot.c)
+
+## Notes & additional examples
+
+### Notes
+
+`GraphPlot[g]` returns a `Graphics[...]` expression drawing `g`, built from plain
+primitives (`Line`, `Arrow`, `Disk`, `Circle`, `Text`), so it renders anywhere
+`Graphics` does. Because that object is large and layout-dependent, the examples
+above probe it with `Head` or `MatchQ` rather than printing the drawing itself.
+
+The vertex positions come from `GraphLayout`: `Automatic` picks a tidy tree for a
+forest, a layered drawing for a DAG, and stress-majorization placement otherwise,
+while `"CircularEmbedding"`, `"SpringElectricalEmbedding"`, `"StressEmbedding"`,
+`"LayeredEmbedding"`, `"BipartiteEmbedding"` and `"GridEmbedding"` request a
+specific method. `VertexCoordinates` pins any subset of the vertices, and options
+`GraphPlot` does not itself consume (such as `ImageSize` or `PlotLabel`) pass
+through to the enclosing `Graphics`. A bare list of edge rules is plotted as the
+corresponding `Graph`.

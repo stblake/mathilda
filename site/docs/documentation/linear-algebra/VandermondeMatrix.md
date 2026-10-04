@@ -49,10 +49,10 @@ In[7]:= VandermondeMatrix[{a, b, c}]
 Out[7]= {{1, a, a^2}, {1, b, b^2}, {1, c, c^2}}
 
 In[8]:= Factor[Det[VandermondeMatrix[{a, b, c}]]]
-Out[8]= (-a + b) (-a + c) (-b + c)
+Out[8]= -(a - b) (a - c) (b - c)
 
 In[9]:= Factor[Det[VandermondeMatrix[{a, b, c, d}]]]
-Out[9]= (-a + b) (-a + c) (-b + c) (-a + d) (-b + d) (-c + d)
+Out[9]= (a - b) (a - c) (b - c) (a - d) (b - d) (c - d)
 ```
 
 ## Options & behaviour

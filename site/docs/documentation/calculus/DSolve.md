@@ -18,7 +18,7 @@ independent variable x, returning {{y -\> Function\[{x}, ...\]}}. expression in 
 
 </details>
 
-## Examples (22)
+## Examples (27)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -146,6 +146,43 @@ In[22]:= DSolve[y''[x] == 7, y, x]
 Out[22]= {{y -> Function[{x}, C[1] + C[2] x + 7/2 x^2]}}
 ```
 
+### Applications (5)
+
+A first-order linear ODE
+
+```mathematica
+In[23]:= DSolve[y'[x] == y[x], y[x], x]
+Out[23]= {{y[x] -> C[1] E^x}}
+```
+
+Separable, with the general constant C[1]
+
+```mathematica
+In[24]:= DSolve[y'[x] == x y[x], y[x], x]
+Out[24]= {{y[x] -> C[1] E^(1/2 x^2)}}
+```
+
+Constant-coefficient linear: the harmonic oscillator
+
+```mathematica
+In[25]:= DSolve[y''[x] + y[x] == 0, y[x], x]
+Out[25]= {{y[x] -> C[1] Cos[x] - C[2] Sin[x]}}
+```
+
+Real exponential fundamental set
+
+```mathematica
+In[26]:= DSolve[y''[x] - y[x] == 0, y[x], x]
+Out[26]= {{y[x] -> C[2] E^x + C[1] E^(-x)}}
+```
+
+An initial-value problem fits C[1]
+
+```mathematica
+In[27]:= DSolve[{y'[x] == y[x], y[0] == 1}, y[x], x]
+Out[27]= {{y[x] -> E^x}}
+```
+
 ## Algorithm
 
 dsolve.c — DSolve dispatcher (cascade polyalgorithm).
@@ -162,15 +199,79 @@ The shared problem substrate (parse / verify / fit / assemble) is in dsolve_comm
 
 ## Implementation notes
 
+**Algorithm.** `builtin_dsolve` is a cascade polyalgorithm that mirrors
+`Integrate`: a `Method`-option enum (`ds_method_from_string`) selects either the
+automatic cascade or a single pinned method (strict, no fallback). After
+`dsolve_parse` builds a shared `DSolveProblem`, the dispatcher branches on the
+problem shape — PDE, a system (`nfun > 1`), or a scalar ODE — and in each branch
+tries methods in a fixed order with `if (!result) result = dsolve_run(&P,
+<method>_try)` until one succeeds. The scalar `DS_AUTOMATIC` chain runs the
+specialists roughly front-to-back by specificity: Factorable and NthAlgebraic
+split products/powers of the top derivative first; then first-order named classes
+(Quadrature, LinearFirstOrder, Bernoulli, Homogeneous, Separable, Exact,
+Clairaut, Lagrange); then constant-coefficient and Euler–Cauchy linear ODEs
+(UndeterminedCoefficients, LinearConstantCoefficients); then the heavier
+second-order machinery (Kovacic, special-function / change-of-variable,
+variation-of-parameters); then substitution and reduction methods (Riccati,
+Chini, Abel, Lie point symmetry); and finally the always-available Frobenius /
+power-series fallbacks. Each method file (`src/calculus/dsolve_<method>.c`)
+returns an array of solution branches or `NULL` to fall through.
+
+**Data structures.** The problem substrate (parse / verify / fit / assemble)
+lives in `dsolve_common.c`; the dispatcher only sequences method `*_try`
+functions and wraps them in `dsolve_run`, `dsolve_run_implicit`,
+`dsolve_run_parametric`, `dsolve_run_first_integral`, `dsolve_run_system` and
+`dsolve_run_pde`. A per-command fail-memo keyed on `eval_toplevel_id()`
+(`ds_fail_tab`, 32 slots) records each `(equation, variable, method)` the
+deterministic cascade already declined, so the fixed-point loop does not re-run
+the whole cascade on re-entry; `g_dsolve_depth` separates the outermost user
+call from internal recursions. For the whole cascade the cosmetic
+`Power::infy` / `Infinity::indet` warnings are muted
+(`arith_warnings_mute_push`), because speculative probes legitimately form `1/0`
+while classifying an equation — the back-substitution verifier is the real gate.
+
+**Complexity / limits.** Cost is the sum of the declining probes up to the first
+method that claims the equation, so ordering is tuned to reach each family
+before an earlier general method spins on it (several methods carry per-attempt
+`TimeConstrained` deadlines and decline memos for exactly this reason). Options
+default to `GeneratedParameters -> C`, `Assumptions -> True`,
+`Method -> Automatic`, `IncludeSingularSolutions -> False`. Every returned branch
+is verified by back-substitution before it is kept. A few methods are
+pinned-only (not in the automatic chain) — `FirstOrderPowerSeries`, `SolvableForX`,
+the eigenvalue problem — so by default a first-order ODE with no closed form
+stays unevaluated rather than returning a truncated series.
+
 **Attributes:** `Protected`.
 
 ## References
 
 **See also:** [Integrate](../../calculus/Integrate/), [HoldAll](../../expression-information/HoldAll/), [PolynomialQ](../../algebra/PolynomialQ/), [Solve](../../solutions-of-equations/Solve/), [TimeConstrained](../../time-and-date/TimeConstrained/), [Piecewise](../../control-flow/Piecewise/), [Log](../../elementary-functions/Log/), [Hypergeometric1F1](../../special-functions/Hypergeometric1F1/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- E. S. Cheb-Terrab and A. D. Roche, *Integrating factors for second-order ODEs* (1999) — the ReducibleIntegratingFactor / ReducibleFirstIntegral classes, cited in the dispatcher.
+- Source: [`src/calculus/dsolve.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/dsolve.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
 - Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 - Tests: [`tests/test_dsolve_m12_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m12_stress.c)
 - Tests: [`tests/test_dsolve_m14_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m14_stress.c)
 - Tests: [`tests/test_dsolve_m17_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve_m17_stress.c)
+
+## Notes & additional examples
+
+### Notes
+
+`DSolve[eqn, y[x], x]` returns `{{y[x] -> expr}}` with the solution as an
+expression in `x`; `DSolve[eqn, y, x]` instead returns the solution as a pure
+`Function`. Arbitrary constants are generated as `C[1]`, `C[2]`, ... (rename them
+with `GeneratedParameters`). Initial or boundary conditions supplied as equations
+at points (e.g. `y[0] == 1`) are fitted, eliminating the constants.
+
+Like `Integrate`, `DSolve` is a cascade polyalgorithm: it tries a sequence of
+methods — ordered so that specific, cheap classifiers (factorable, separable,
+linear, Bernoulli, exact, constant-coefficient) run before the heavier
+second-order and symmetry machinery (Kovacic, Lie point symmetry) and the
+Frobenius / power-series fallbacks. A pinned method is available as
+`Method -> "<name>"` (e.g. `"Separable"`, `"Kovacic"`), which dispatches directly
+with no fallback. Every returned branch is verified by back-substitution before
+it is kept, so a decline yields an unevaluated `DSolve[...]` rather than a wrong
+answer. Systems `DSolve[{eqns}, {y1, ...}, x]` and partial differential equations
+`DSolve[eqn, u, {x, y}]` are handled by their own branches of the dispatcher.

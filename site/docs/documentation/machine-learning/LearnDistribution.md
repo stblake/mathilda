@@ -7,7 +7,7 @@
 
 **`LearnDistribution[data] fits a distribution to data and returns a LearnedDistribution, usable with PDF. Method -> "Multinormal" is the default; Method -> "GaussianMixture" fits a mixture, choosing the component count by BIC. Multinormal fits a mean vector and a sample covariance (n-1 divisor, matching Variance). Rows are observations and columns are variables; a flat list is n observations of one variable. A singular covariance -- collinear columns, or fewer observations than dimensions -- returns unevaluated, because no density exists rather than because of an error. Method -> "ContingencyTable" is for NOMINAL data instead of numeric: it stores a probability per distinct outcome, which in one dimension is a categorical distribution. Outcomes may be any expressions -- strings, symbols, or equal-length lists of them -- compared structurally, and are kept in first-appearance order. Probabilities are empirical frequencies with no smoothing, so PDF of an outcome never observed is exactly 0; smoothing would require knowing how many outcomes were possible but unseen, which for arbitrary expressions is unknowable. Ragged outcomes decline.`**
 
-## Examples (6)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -39,6 +39,43 @@ Out[5]= LearnedDistribution["ContingencyTable", <>]
 
 In[6]:= Last[LearnDistribution[{1.4, 1.4, 1.3, 1.5, 1.4, 1.7, 1.4, 1.5, 1.4, 1.5, 1.5, 1.6, 1.4, 1.1, 1.2, 4.7, 4.5, 4.9, 4., 4.6, 4.5, 4.7, 3.3, 4.6, 3.9, 3.5, 4.2, 4., 4.7, 3.6, 6., 5.1, 5.9, 5.6, 5.8, 6.6, 4.5, 6.3, 5.8, 6.1, 5.1, 5.3, 5.5, 5., 5.1}, Method -> "GaussianMixture"]]
 Out[6]= 2
+```
+
+### Applications (5)
+
+A univariate normal from a flat list
+
+```mathematica
+In[7]:= m = LearnDistribution[{1., 2., 3., 4., 5., 6.}]
+Out[7]= LearnedDistribution["Multinormal", <>]
+```
+
+Evaluate the fitted density at one point
+
+```mathematica
+In[8]:= PDF[m, {3.5}]
+Out[8]= 0.213244
+```
+
+Nominal outcomes, not numbers
+
+```mathematica
+In[9]:= d = LearnDistribution[{"r", "r", "r", "b"}, Method -> "ContingencyTable"]
+Out[9]= LearnedDistribution["ContingencyTable", <>]
+```
+
+An outcome never observed has probability exactly 0
+
+```mathematica
+In[10]:= {PDF[d, "r"], PDF[d, "b"], PDF[d, "g"]}
+Out[10]= {0.75, 0.25, 0.0}
+```
+
+BIC chooses two components for bimodal data
+
+```mathematica
+In[11]:= Last[LearnDistribution[{1.4, 1.4, 1.3, 1.5, 1.4, 1.7, 1.4, 1.5, 1.4, 1.5, 1.5, 1.6, 1.4, 1.1, 1.2, 4.7, 4.5, 4.9, 4., 4.6, 4.5, 4.7, 3.3, 4.6, 3.9, 3.5, 4.2, 4., 4.7, 3.6}, Method -> "GaussianMixture"]]
+Out[11]= 2
 ```
 
 ## Options & behaviour
@@ -83,6 +120,45 @@ test alone would pass two densities that shared a normalisation error.
 
 ## Implementation notes
 
+**Algorithm.** `builtin_learn_distribution` fits one of three families and returns a
+`LearnedDistribution`, which prints elided (its parameters are derived) — the deliberate
+opposite of a *specified* distribution such as `NormalDistribution[μ, σ]`.
+
+- **`"Multinormal"`** (default). `ml_column_mean` and a sample covariance with the
+  `n − 1` divisor (matching `Variance`, so a one-variable fit agrees with
+  `StandardDeviation²`), factored by `ml_chol`. A singular covariance — collinear
+  columns, or fewer observations than dimensions — declines, because no density exists.
+
+- **`"GaussianMixture"`**. BIC model selection over `k = 1 … kmax`, each `k` fitted by
+  `ml_gmm_fit` (EM in `src/ml/gmm.c`): deterministic farthest-first initialisation, a
+  **log-space E-step** via log-sum-exp (a `dim`-factor density underflows for an
+  outlying point, and a linear-space zero would hand it uniform responsibilities —
+  silently refusing to distinguish exactly the informative points), and an M-step whose
+  covariance floor is added as a **ridge** `floor · I` on the diagonal rather than a
+  clamp. The variance floor itself (`ml_nn_floor`) is the **squared median
+  nearest-neighbour distance between *distinct* points** — load-bearing, because a
+  mixture likelihood is unbounded above and a merely-"small" floor lets BIC buy
+  arbitrarily many near-singular spikes; counting duplicates' zero distances once drove
+  the floor to `1e-300` and the fit to nine spurious components. A scale guard holds it
+  to at least `1e-4` of the mean per-coordinate variance. `kmax` is bounded by
+  `n/(dim+1)`, the distinct-point count, and 10; `BIC = paramCount · ln n − 2 · loglik`.
+
+- **`"ContingencyTable"`** — nominal, not numeric. It runs *before* the numeric reader,
+  builds a label vocabulary (`ml_labels_build`, `expr_eq`, first-appearance order) over
+  outcomes that may be any expressions or equal-length lists of them, and stores
+  frequency `count/n` per outcome. Probabilities are **empirical with no smoothing** —
+  an unseen outcome is exactly `0`, since smoothing would require knowing the size of an
+  unknowable outcome space. Ragged outcomes decline.
+
+**Data structures.** An `MlGmm` (weights, means, covariances, Cholesky factors,
+log-determinants) for the mixture; the stored `LearnedDistribution[method, payload, dim,
+extra]` payload is a plain `List`.
+
+**Complexity / limits.** Multinormal `O(n · dim² + dim³)`; the mixture search is
+`O(kmax · iterations · n · k · dim²)` with `ml_nn_floor` an `O(n² · dim)` preprocess.
+A flat list is accepted as `n` observations of one variable (a univariate normal),
+unlike `PrincipalComponents`.
+
 - Rows are observations, columns are variables; a flat list is `n` observations of one
   variable, which is a perfectly good univariate normal (unlike `PrincipalComponents`,
   which declines a single variable).
@@ -105,6 +181,30 @@ test alone would pass two densities that shared a normalisation error.
 
 **See also:** [LearnedDistribution](../../other-advanced/LearnedDistribution/), [PDF](../../machine-learning/PDF/), [PrincipalComponents](../../machine-learning/PrincipalComponents/), [Variance](../../data-structures/Variance/), [StandardDeviation](../../data-structures/StandardDeviation/), [FullForm](../../expression-information/FullForm/), [FindClusters](../../lists-and-iteration/FindClusters/)
 
+- A. P. Dempster, N. M. Laird and D. B. Rubin, *Maximum likelihood from incomplete data via the EM algorithm*, J. Roy. Statist. Soc. B **39** (1977) 1-38.
+- G. Schwarz, *Estimating the dimension of a model*, Ann. Statist. **6** (1978) 461-464 (BIC).
+- C. M. Bishop, *Pattern Recognition and Machine Learning* (Springer, 2006), §9.2 (Gaussian mixtures).
 - Source: [`src/ml/dist.c`](https://github.com/stblake/mathilda/blob/main/src/ml/dist.c)
 - Specification: [`docs/spec/builtins/machine-learning.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/machine-learning.md)
 - Tests: [`tests/test_ml_dist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_dist.c)
+
+## Notes & additional examples
+
+### Notes
+
+`LearnDistribution` fits a distribution and returns a `LearnedDistribution`, usable with
+`PDF`. It prints elided — the deliberate opposite of a *specified* distribution such as
+`NormalDistribution[μ, σ]`, whose parameters the user wrote and which therefore prints in
+full; `FullForm` reveals the fitted parameters either way.
+
+The default `"Multinormal"` fits a mean and a sample covariance with the `n − 1` divisor,
+so a one-variable fit agrees with `StandardDeviation²`. A flat list is read as `n`
+observations of one variable (unlike `PrincipalComponents`, which declines a single
+variable). A singular covariance returns unevaluated, because no density exists.
+
+`"GaussianMixture"` fits a mixture and chooses the component count by BIC — two
+components, here, with the fitted means landing on the two modes. Its variance floor is
+the squared median nearest-neighbour distance between *distinct* points, which stops BIC
+buying arbitrarily many near-singular spikes. `"ContingencyTable"` is for nominal data:
+probabilities are empirical frequencies with no smoothing, so an unseen outcome is
+exactly `0`.

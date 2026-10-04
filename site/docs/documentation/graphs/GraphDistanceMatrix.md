@@ -7,7 +7,7 @@
 
 **`GraphDistanceMatrix[g] gives the matrix of shortest-path distances between all pairs of vertices of g, rows and columns in VertexList order; entry {i, j} is the distance from vertex i to vertex j (Infinity if unreachable). GraphDistanceMatrix[g, d] keeps only distances at most d. Integers for unweighted graphs, machine reals when g has EdgeWeight (edge weights as lengths).`**
 
-## Examples (6)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -37,7 +37,50 @@ In[6]:= GraphDistanceMatrix[Graph[{1,2,3},{1<->2,2<->3,1<->3}, EdgeWeight->{1,1,
 Out[6]= {{0.0, 1.0, 2.0}, {1.0, 0.0, 1.0}, {2.0, 1.0, 0.0}}
 ```
 
+### Applications (5)
+
+Entry (i, j) is the shortest-path length from i to j
+
+```mathematica
+In[7]:= GraphDistanceMatrix[CycleGraph[4]]
+Out[7]= {{0, 1, 2, 1}, {1, 0, 1, 2}, {2, 1, 0, 1}, {1, 2, 1, 0}}
+```
+
+The second argument is a cutoff; longer distances become Infinity
+
+```mathematica
+In[8]:= GraphDistanceMatrix[PathGraph[{1, 2, 3, 4}], 1]
+Out[8]= {{0, 1, Infinity, Infinity}, {1, 0, 1, Infinity}, {Infinity, 1, 0, 1}, {Infinity, Infinity, 1, 0}}
+```
+
+Directed edges give an asymmetric matrix
+
+```mathematica
+In[9]:= GraphDistanceMatrix[Graph[{1, 2, 3}, {DirectedEdge[1, 2], DirectedEdge[2, 3]}]]
+Out[9]= {{0, 1, 2}, {Infinity, 0, 1}, {Infinity, Infinity, 0}}
+```
+
+Unreachable pairs are Infinity
+
+```mathematica
+In[10]:= GraphDistanceMatrix[Graph[{1, 2, 3}, {UndirectedEdge[1, 2]}]]
+Out[10]= {{0, 1, Infinity}, {1, 0, Infinity}, {Infinity, Infinity, 0}}
+```
+
+The largest entry is the diameter
+
+```mathematica
+In[11]:= Max[GraphDistanceMatrix[GridGraph[{3, 4}]]]
+Out[11]= 5
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_graph_distance_matrix` accepts `[g]` or `[g, d]`, where `d` is a non-negative cutoff and entries beyond it become `Infinity`. For an unweighted graph it builds a CSR of the reversed arcs and runs a bit-parallel multi-source BFS (`gmet_msbfs_run`): 256 targets per adjacency sweep, each visited vertex writing its level into a contiguous run of its row. A graph with `EdgeWeight` instead runs a binary-heap Dijkstra from every source and returns machine reals. Distances follow edge direction; an undirected edge is usable both ways. The diagonal is `0`, unreached pairs are `Infinity`.
+
+**Data structures.** The matrix is built in a flat `n*n` `int64_t` (unweighted, `-1` for unreached) or `double` buffer. When every entry is finite it is returned directly as a packed int64 or float64 `NDArray`, with no boxing. Otherwise `matrix_from_int` / `matrix_from_real` emit a `List` of rows, each offered to the packer, with the `Infinity` symbol in the unreached slots. Source batches and per-thread BFS or heap workspaces are spread over the thread team, and results are cached by expression.
+
+**Complexity / limits.** `O(n (n + m) / 256)` word operations unweighted and `O(n (m + n) log n)` weighted, with `O(n^2)` output. The empty graph and symbolic, complex or negative weights leave the call unevaluated.
 
 - Part of the distances / centralities / clustering / graph-families module,
   implemented in `src/graph/gmet_*.c` (header `src/graph/graph_metrics.h`,
@@ -81,6 +124,14 @@ Out[6]= {{0.0, 1.0, 2.0}, {1.0, 0.0, 1.0}, {2.0, 1.0, 0.0}}
 
 **See also:** [VertexList](../../graphs/VertexList/), [NDArrayQ](../../other-advanced/NDArrayQ/), [EdgeWeight](../../graphs/EdgeWeight/), [GraphDistance](../../graphs/GraphDistance/), [VertexEccentricity](../../graphs/VertexEccentricity/), [MeanGraphDistance](../../graphs/MeanGraphDistance/), [ClosenessCentrality](../../graphs/ClosenessCentrality/), [EccentricityCentrality](../../graphs/EccentricityCentrality/)
 
-- Source: [`src/graph/gmet_init.c`](https://github.com/stblake/mathilda/blob/main/src/graph/gmet_init.c)
+- Source: [`src/graph/gmet_distance.c`](https://github.com/stblake/mathilda/blob/main/src/graph/gmet_distance.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)
 - Tests: [`tests/test_graph_metrics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph_metrics.c)
+
+## Notes & additional examples
+
+### Notes
+
+Rows are sources and columns are targets, in `VertexList` order. The diagonal is `0`. An unweighted graph gives exact integers; a graph with `EdgeWeight` gives machine reals.
+
+When every entry is finite the result is a packed integer (or real) matrix. If any pair is unreachable or cut off by the distance bound, the matrix is returned as an ordinary list of lists with `Infinity` in those slots.

@@ -128,12 +128,10 @@ being designed with the `Predict` family rather than invented twice.
 ```mathematica
 In[1]:= d = {{1., 2., 3.}, {3., 5., 4.}, {4., 4., 8.}, {6., 9., 2.}, {7., 8., 9.}};
         DimensionReduce[d, 2]
-Out[1]= {{-5.28583, 0.302136}, {-1.6734, -0.58098}, {0.141634, 3.22424},
-         {1.80921, -4.66364}, {5.00839, 1.71825}}
+Out[1]= {{-5.28583, 0.302136}, {-1.6734, -0.58098}, {0.141634, 3.22424}, {1.80921, -4.66364}, {5.00839, 1.71825}}
 
 In[2]:= DimensionReduce[d, 2, Method -> "LatentSemanticAnalysis"]
-Out[2]= {{3.53625, 1.0399}, {7.03311, -0.290957}, {9.24375, 3.24698},
-         {9.903, -4.78819}, {13.8764, 1.13662}}
+Out[2]= {{3.53625, 1.0399}, {7.03311, -0.290957}, {9.24375, 3.24698}, {9.903, -4.78819}, {13.8764, 1.13662}}
 ```
 
 ## Trained models
@@ -238,6 +236,17 @@ coefficients — the same ones `Predict` finds. Attributes: `Protected`.
 properties are regression diagnostics (`RSquared`, standard errors, ANOVA). Those are
 a separate piece of work and are **not** approximated here.
 
+```mathematica
+In[1]:= m = LinearModelFit[{1. -> 3., 2. -> 5., 3. -> 7., 4. -> 9.}]
+Out[1]= PredictorFunction["LinearRegression", <>]
+
+In[2]:= {m[10.], m["Coefficients"]}
+Out[2]= {21.0, {1.0, 2.0}}
+
+In[3]:= LinearModelFit[{{1., 1., 6.}, {2., 1., 8.}, {1., 2., 9.}, {3., 2., 13.}, {2., 3., 14.}}]["Coefficients"]
+Out[3]= {1.0, 2.0, 3.0}
+```
+
 ## DimensionReduction
 
 Returns a reusable **`DimensionReducerFunction`**. Attributes: `Protected`.
@@ -305,6 +314,17 @@ visibility.
 - **A non-positive standard deviation, or an inverted range, returns unevaluated** —
   not `NaN`, which would propagate silently through a whole sample and surface much
   later as a strange plot. `RandomVariate[dist, 0]` is a valid empty request.
+
+```mathematica
+In[1]:= SeedRandom[42]; RandomVariate[NormalDistribution[], 5]
+Out[1]= {0.981398, -0.56572, 1.34033, 0.402313, -0.964221}
+
+In[2]:= SeedRandom[7]; RandomVariate[UniformDistribution[{0., 10.}], 4]
+Out[2]= {0.553604, 1.72116, 7.17576, 4.2721}
+
+In[3]:= RandomVariate[NormalDistribution[], 0]
+Out[3]= {}
+```
 
 ## PDF
 

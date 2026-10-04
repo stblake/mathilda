@@ -22,7 +22,7 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= Timing[Sum[i, {i, 1000}]]
-Out[1]= {0.000244, 500500}
+Out[1]= {0.000112, 500500}
 
 In[2]:= Timing[Sum[i, {i, 1, 1000000}]][[2]]
 Out[2]= 500000500000

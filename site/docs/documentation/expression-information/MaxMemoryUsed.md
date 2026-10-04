@@ -7,9 +7,39 @@
 
 **`MaxMemoryUsed[] gives the peak number of bytes resident for the Mathilda process over its lifetime. The high-water mark comes from the operating system, so it catches spikes that occurred between two calls to MemoryInUse rather than only the largest value previously observed.`**
 
-## Examples
+## Examples (4)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
+
+```mathematica
+In[1]:= Head[MaxMemoryUsed[]]
+Out[1]= Integer
+
+In[2]:= MaxMemoryUsed[] > 0
+Out[2]= True
+```
+
+### Applications (2)
+
+An Integer count of bytes
+
+```mathematica
+In[3]:= Head[MaxMemoryUsed[]]
+Out[3]= Integer
+```
+
+A positive high-water mark
+
+```mathematica
+In[4]:= MaxMemoryUsed[] > 0
+Out[4]= True
+```
+
+## Options & behaviour
+
+The returned value changes from run to run, so examples assert only structure:
 
 ## Algorithm
 
@@ -57,12 +87,41 @@ _DARWIN_C_SOURCE for the BSD fields, _DEFAULT_SOURCE plus _XOPEN_SOURCE for glib
 
 ## Implementation notes
 
+**Algorithm.** `builtin_maxmemoryused` (`src/meminfo.c`) returns the peak resident
+bytes over the life of the process, read by `meminfo_peak` from `getrusage`'s
+`ru_maxrss`. It is a genuine OS high-water mark, **not** the largest value some
+earlier `MemoryInUse[]` call happened to observe: a polled maximum misses any
+spike falling between two polls, and a once-a-second status bar would miss nearly
+every spike worth knowing about. The peak and the current RSS come from two
+different OS counters (`getrusage` here versus the per-task resident size in
+`MemoryInUse[]`), so the two are not guaranteed to agree to the byte at a given
+instant — near startup the `ru_maxrss` peak can read a page below the mach current
+RSS.
+
+**Data structures.** None of its own — one `getrusage(RUSAGE_SELF, ...)` call
+filling a `uint64_t`, returned as an `EXPR_INTEGER`. Takes no arguments; a
+non-empty call returns `NULL` (stays unevaluated).
+
+**Complexity / limits.** `O(1)`. Two portability traps are handled explicitly.
+`ru_maxrss` is **bytes on Darwin but kilobytes on Linux**, so the Linux path
+scales by 1024 — an unconverted use is wrong by that factor on one platform while
+looking plausible on both. And its feature-test guard runs *opposite* to every
+other file: `ru_maxrss` is a BSD extension (not POSIX), so `_XOPEN_SOURCE` would
+*hide* the field on Darwin; the file defines `_DARWIN_C_SOURCE` on macOS and
+`_DEFAULT_SOURCE` + `_XOPEN_SOURCE` on glibc, each before any `#include`. **The
+value changes from run to run**, so examples assert only structure
+(`Head[MaxMemoryUsed[]]` is `Integer`, `MaxMemoryUsed[] > 0`), never a literal byte
+count. Attributes `Protected`.
+
 - `Protected`.
 - A genuine high-water mark from the operating system (`getrusage`'s `ru_maxrss`), not the
   largest value some earlier call to `MemoryInUse` happened to observe. That distinction is
   the point: a polled maximum misses any spike falling between two polls, and a status bar
   polling once a second would miss nearly every spike worth knowing about.
-- `MaxMemoryUsed[] >= MemoryInUse[]` always holds, and the peak never decreases.
+- The peak never decreases within a run. It and `MemoryInUse[]` are read from two different
+  OS counters (`getrusage` versus the per-task resident size), so the two are not guaranteed
+  to agree to the byte at a given instant — near startup `ru_maxrss` can even read a page
+  below the current RSS, so `MaxMemoryUsed[] >= MemoryInUse[]` is not a reliable invariant.
 - **`ru_maxrss` is in different units on the two platforms** — bytes on Darwin, kilobytes on
   Linux — so it is scaled per platform. An unconverted use is wrong by a factor of 1024 on
   one of them while looking plausible on both.
@@ -82,3 +141,21 @@ _DARWIN_C_SOURCE for the BSD fields, _DEFAULT_SOURCE plus _XOPEN_SOURCE for glib
 - Source: [`src/meminfo.c`](https://github.com/stblake/mathilda/blob/main/src/meminfo.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_meminfo.c`](https://github.com/stblake/mathilda/blob/main/tests/test_meminfo.c)
+
+## Notes & additional examples
+
+### Notes
+
+`MaxMemoryUsed[]` gives the peak number of bytes resident for the Mathilda process
+over its lifetime. The actual figure **changes from run to run**, so examples check
+only its shape (`Head[MaxMemoryUsed[]]` is `Integer`, `MaxMemoryUsed[] > 0`) rather
+than a literal byte count.
+
+The value is a genuine high-water mark from the operating system (`getrusage`'s
+`ru_maxrss`), not the largest figure some earlier `MemoryInUse[]` call happened to
+observe. That distinction is the point: a polled maximum would miss any spike
+falling between two polls, and a status bar polling once a second would miss nearly
+every spike worth knowing about. Because the peak and the current figure are read
+from two different OS counters (`getrusage` versus the per-task resident size),
+`MaxMemoryUsed[]` and `MemoryInUse[]` are not guaranteed to agree to the byte at a
+given instant — near startup the peak can even read a page below the current RSS.

@@ -76,7 +76,7 @@ Only the numerator expands: Expand leaves denominators alone
 
 ```mathematica
 In[12]:= Expand[(x + 1)^2/(y + 1)]
-Out[12]= (1 + 2 x + x^2)/(1 + y)
+Out[12]= 1/(1 + y) + 2 x/(1 + y) + x^2/(1 + y)
 ```
 
 ## Performance

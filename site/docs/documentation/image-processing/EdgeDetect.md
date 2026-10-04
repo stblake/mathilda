@@ -7,7 +7,7 @@
 
 **`EdgeDetect[image] finds edges by the Canny algorithm, giving a "Bit" image. EdgeDetect[image, r] sets the Gaussian smoothing radius (default 2; 0 means no smoothing). EdgeDetect[image, r, t] sets the high threshold explicitly. Four stages: smooth, because a derivative amplifies noise; gradient by the normalised Sobel pair; non-maximum suppression along the gradient direction, which is what makes an edge ONE pixel wide rather than a thick band; and hysteresis, keeping any pixel above the high threshold plus any above 0.4 of it that is 8-connected to one, so a real edge survives its faint stretches while isolated weak responses do not. The high threshold defaults to Otsu's method applied to the SUPPRESSED magnitude, where the two classes really are edge against non-edge; on the raw magnitude it would be dominated by the ridge flanks.`**
 
-## Examples (31)
+## Examples (34)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -111,7 +111,51 @@ In[31]:= EdgeDetect[zone]
 Out[31]= -Image-
 ```
 
+### Applications (3)
+
+```mathematica
+In[32]:= ImageType[EdgeDetect[Image[{{0., 0, 1, 1}, {0, 0, 1, 1}}]]]
+Out[32]= "Bit"
+
+In[33]:= EdgeDetect[Image[{{0., 0, 1, 1}, {0, 0, 1, 1}, {0, 0, 1, 1}}], 0]
+Out[33]= -Image-
+
+In[34]:= ImageDimensions[EdgeDetect[Image[{{0., 0, 1, 1}, {0, 0, 1, 1}}]]]
+Out[34]= {4, 2}
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_edgedetect` implements the **Canny** edge detector,
+returning a `"Bit"` image. `EdgeDetect[image]` uses a default Gaussian smoothing
+radius of 2; `EdgeDetect[image, r]` sets it (`r = 0` means no smoothing);
+`EdgeDetect[image, r, t]` sets the high threshold explicitly. The image is reduced
+to a luminance plane (`img_grey_plane`) and run through four stages:
+
+1. **Smooth** — convolve with `GaussianMatrix[r]` (reusing that builder), because
+   a derivative amplifies noise. `r = 0` skips it.
+2. **Gradient** — the normalised Sobel pair (`deriv_kernel`) gives `dx`, `dy`;
+   the magnitude is `sqrt(dx² + dy²)`.
+3. **Non-maximum suppression** (`canny_nms`) along the gradient direction, which
+   is what makes an edge one pixel wide rather than a thick band.
+4. **Hysteresis** — keep any pixel above the high threshold, plus any pixel above
+   `0.4 ×` high that is 8-connected (flood-filled via an explicit stack) to a
+   strong one, so a real edge survives its faint stretches while isolated weak
+   responses do not.
+
+The high threshold defaults to **Otsu on the suppressed magnitude** (`img_otsu`
+over `nms`), where the two classes really are edge-against-non-edge; on the raw
+magnitude it would be dominated by the ridge flanks. The `0.4` low/high ratio is
+the conventional choice, stated because it is a choice.
+
+**Data structures.** Six flat `double`/`size_t` scratch arrays of `width ·
+height` (`sm`, `dx`, `dy`, `mag`, `nms`, and the hysteresis stack `stk`), plus
+the two Sobel kernels. The result is a 0/1 mask packed into a `"Bit"` image.
+
+**Complexity / limits.** `O(width · height)` for the per-pixel stages plus the
+separable Gaussian and Sobel convolutions; hysteresis is a linear flood fill over
+the connected weak-edge pixels. Radius is capped at 64; a blank or uniform
+gradient field (no two Otsu classes) honestly yields no edges.
 
 **Attributes:** `Protected`.
 
@@ -119,6 +163,25 @@ Out[31]= -Image-
 
 **See also:** [DerivativeFilter](../../image-processing/DerivativeFilter/)
 
+- J. Canny, *A computational approach to edge detection*, IEEE TPAMI **8** (1986) 679-698.
+- N. Otsu, *A threshold selection method from gray-level histograms*, IEEE Trans. Systems, Man, and Cybernetics **9** (1979) 62-66.
 - Source: [`src/imagefilter.c`](https://github.com/stblake/mathilda/blob/main/src/imagefilter.c)
 - Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
 - Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+
+## Notes & additional examples
+
+### Notes
+
+`EdgeDetect[image]` finds edges by the **Canny** algorithm, giving a `"Bit"`
+image. `EdgeDetect[image, r]` sets the Gaussian smoothing radius (default `2`;
+`0` means no smoothing), and `EdgeDetect[image, r, t]` sets the high threshold
+explicitly.
+
+Four stages: smooth (a derivative amplifies noise); gradient by the normalised
+Sobel pair; non-maximum suppression along the gradient direction, which makes an
+edge one pixel wide rather than a thick band; and hysteresis, keeping any pixel
+above the high threshold plus any above `0.4 ×` it that is 8-connected to one.
+The high threshold defaults to Otsu's method applied to the **suppressed**
+magnitude, where the two classes really are edge against non-edge; run on the raw
+magnitude it would be dominated by the ridge flanks.

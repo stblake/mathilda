@@ -16,7 +16,7 @@ Equals the platform's DBL\_MIN.
 
 </details>
 
-## Examples (4)
+## Examples (5)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -40,6 +40,15 @@ In[4]:= MachineNumberQ[$MaxNumber]
 Out[4]= False
 ```
 
+### Applications (1)
+
+The smallest positive normalised double, DBL_MIN
+
+```mathematica
+In[5]:= $MinMachineNumber
+Out[5]= 2.22507e-308
+```
+
 ## Implementation notes
 
 A Protected OwnValue set in `system_constants_init` (`src/core.c`) to `expr_new_real(DBL_MIN)`, the smallest positive normalized IEEE 754 `double`.
@@ -52,3 +61,14 @@ A Protected OwnValue set in `system_constants_init` (`src/core.c`) to `expr_new_
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+
+## Notes & additional examples
+
+### Notes
+
+`$MinMachineNumber` is a read-only Protected OwnValue equal to `<float.h>` `DBL_MIN`, the
+smallest positive *normalised* machine `double` (`≈ 2.22507×10⁻³⁰⁸`). A positive
+machine-precision result below it underflows; the arbitrary-precision floor `$MinNumber`
+is smaller.
+
+The value is a fixed machine constant on every IEEE 754 platform.

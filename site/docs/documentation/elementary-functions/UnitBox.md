@@ -16,7 +16,7 @@ The result is always exact. Exact symbolic real arguments are resolved by the sa
 
 </details>
 
-## Examples (7)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -45,7 +45,65 @@ In[7]:= UnitBox[x]
 Out[7]= UnitBox[x]
 ```
 
+### Applications (5)
+
+Inside the unit box, the value is 1
+
+```mathematica
+In[8]:= UnitBox[0]
+Out[8]= 1
+```
+
+The box is closed at both endpoints
+
+```mathematica
+In[9]:= UnitBox[1/2]
+Out[9]= 1
+```
+
+Outside the box, the value is 0
+
+```mathematica
+In[10]:= UnitBox[0.7]
+Out[10]= 0
+```
+
+Listable over a vector of test points
+
+```mathematica
+In[11]:= UnitBox[{-1, -1/2, 0, 1/2, 0.7}]
+Out[11]= {0, 1, 1, 1, 0}
+```
+
+A symbolic argument is left unevaluated
+
+```mathematica
+In[12]:= UnitBox[x]
+Out[12]= UnitBox[x]
+```
+
 ## Implementation notes
+
+**Algorithm.** `builtin_unitbox` reuses `ustep_class` twice rather than adding a
+second classifier: x is in the box iff neither shifted argument `x + 1/2` nor
+`1/2 - x` is certified negative. So `UnitBox[x]` is 1 when both one-sided
+`UnitStep`-shaped tests pass, 0 when either shifted argument is negative, and
+unevaluated when a side cannot be decided. The box is **closed** at both ends
+(`UnitBox[1/2] = 1`), matching `UnitStep[0] = 1`, and the result is always the
+exact integer 0 or 1 when determined.
+
+**Data structures.** Each element costs two `Expr` allocations and two
+`evaluate()` calls (the shifted arguments `x ± 1/2`), traded for reusing
+`ustep_class`'s certification logic instead of duplicating it. The ND kernel
+(`ndk_UnitBox_i` double→int64, `ndk_UnitBox_ii` int64→int64, `REG_U`) is
+narrowing and lives on `pack.c`'s AWARE + `INT64_OK` list. Unlike `UnitStep`,
+`Ramp`, `Round` and `IntegerPart`, `UnitBox` does **not** thread over an
+`Interval` argument — the interval machinery encloses only monotone functions and
+a two-sided box is not one.
+
+**Complexity / limits.** `O(1)` per element; `Compile[]` lowers the single-argument
+box to `CT_INT` at scalar and rank-1 shapes (`UnitBox[0.5]` is `1`, not `1.`). A
+non-real or undecidable argument is left unevaluated.
 
 - `Listable`, `NumericFunction`, `Orderless`, `Protected`, matching
   Mathematica. `Orderless` reflects the variadic multidimensional box
@@ -79,6 +137,21 @@ Out[7]= UnitBox[x]
 
 **See also:** [Orderless](../../expression-information/Orderless/), [UnitStep](../../elementary-functions/UnitStep/), [Real](../../other-advanced/Real/), [Pi](../../mathematical-constants/Pi/), [Ramp](../../elementary-functions/Ramp/), [Complex](../../arithmetic/Complex/), [Sign](../../arithmetic/Sign/), [Floor](../../arithmetic/Floor/)
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/piecewise.c`](https://github.com/stblake/mathilda/blob/main/src/piecewise.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
 - Tests: [`tests/test_unitbox.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unitbox.c)
+
+## Notes & additional examples
+
+### Notes
+
+`UnitBox` is the rectangular pulse: 1 on the closed interval `-1/2 <= x <= 1/2`
+and 0 outside it. Both endpoints belong to the box (`UnitBox[1/2] = 1`), matching
+the closed-at-zero convention of `UnitStep`, and the result is always the exact
+integer 0 or 1 once the argument's position is certified.
+
+Internally the two-sided test reuses `UnitStep`'s one-sided sign certification on
+the shifted arguments `x + 1/2` and `1/2 - x`. Because a box is not monotone,
+`UnitBox` is the one member of this family that does **not** thread over an
+`Interval`; it does carry a narrowing `NDArray` kernel and a `Compile[]` lowering
+(`UnitBox[0.5]` compiles to the integer `1`).

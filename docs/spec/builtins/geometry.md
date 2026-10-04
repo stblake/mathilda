@@ -34,6 +34,20 @@ Area[Polygon[{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}]]   (* 1: explicit closing
 Area[Polygon[{{0, 0}, {1, 0}}]]                     (* Undefined: < 3 distinct vertices *)
 ```
 
+```
+In[1]:= Area[Polygon[{{0, 0}, {1, 0}, {1/2, 1/2}}]]
+Out[1]= 1/4
+
+In[2]:= Area[Polygon[{{0, 0}, {4, 0}, {4, 4}, {2, 1}, {0, 4}}]]
+Out[2]= 10
+
+In[3]:= Area[Polygon[{{0, 0}, {1.5, 0}, {1.5, 1}, {0, 1}}]]
+Out[3]= 1.5
+
+In[4]:= Area[Polygon[{{0, 0}, {1, 0}}]]
+Out[4]= Undefined
+```
+
 ## Perimeter
 
 `Perimeter[Polygon[{{x1, y1}, ...}]]` — sum of edge lengths including the
@@ -46,6 +60,17 @@ Perimeter[Polygon[{{0, 0}, {3., 0}, {3., 4.}}]]  (* 12.0 *)
 Perimeter[Polygon[{{0, 0}, {1, 0}}]]             (* Undefined *)
 ```
 
+```
+In[1]:= Perimeter[Polygon[{{0, 0}, {1, 0}, {0, 1}}]]
+Out[1]= 2 + Sqrt[2]
+
+In[2]:= Perimeter[Polygon[{{0, 0}, {1/2, 0}, {0, 1}}]]
+Out[2]= 3/2 + 1/2 Sqrt[5]
+
+In[3]:= Perimeter[Polygon[{{0, 0}, {3., 0}, {3., 4.}}]]
+Out[3]= 12.0
+```
+
 ## RegionCentroid
 
 `RegionCentroid[Polygon[{{x1, y1}, ...}]]` — area centroid `{cx, cy}` of a
@@ -54,6 +79,14 @@ simple polygon with nonzero area.
 ```
 RegionCentroid[Polygon[{{0, 0}, {1, 0}, {0, 1}}]]              (* {1/3, 1/3} *)
 RegionCentroid[Polygon[{{0, 0}, {4, 0}, {4, 4}, {2, 1}, {0, 4}}]]  (* {2, 7/5} *)
+```
+
+```
+In[1]:= RegionCentroid[Polygon[{{0, 0}, {1, 0}, {0, 1}}]]
+Out[1]= {1/3, 1/3}
+
+In[2]:= RegionCentroid[Polygon[{{0, 0}, {4, 0}, {4, 4}, {2, 1}, {0, 4}}]]
+Out[2]= {2, 7/5}
 ```
 
 ## RegionMember
@@ -70,6 +103,17 @@ RegionMember[Polygon[{{0, 0}, {2, 0}, {2, 2}, {0, 2}}], {3, 1}]     (* False *)
 RegionMember[Polygon[{{0, 0}, {4, 0}, {4, 4}, {2, 1}, {0, 4}}], {2, 3}]  (* False: in the notch *)
 ```
 
+```
+In[1]:= RegionMember[Polygon[{{0, 0}, {2, 0}, {2, 2}, {0, 2}}], {1, 1}]
+Out[1]= True
+
+In[2]:= RegionMember[Polygon[{{0, 0}, {2, 0}, {2, 2}, {0, 2}}], {2, 1}]
+Out[2]= True
+
+In[3]:= RegionMember[Polygon[{{0, 0}, {2, 0}, {2, 2}, {0, 2}}], {3, 1}]
+Out[3]= False
+```
+
 ## ConvexHullRegion
 
 `ConvexHullRegion[{{x1, y1}, ...}]` — convex hull of a 2D point set (Andrew's
@@ -84,6 +128,20 @@ ConvexHullRegion[{{0, 0}, {2, 0}, {1, 0}, {2, 2}, {0, 2}, {1, 1}}]
 ConvexHullRegion[{{0, 0}, {1, 1}, {2, 2}, {3, 3}}]   (* Line[{{0, 0}, {3, 3}}] *)
 ConvexHullRegion[{{1, 2}}]                           (* Point[{1, 2}] *)
 Area[ConvexHullRegion[{{0, 0}, {2, 0}, {1, 0}, {2, 2}, {0, 2}, {1, 1}}]]  (* 4 *)
+```
+
+```
+In[1]:= ConvexHullRegion[{{0, 0}, {2, 0}, {1, 0}, {2, 2}, {0, 2}, {1, 1}}]
+Out[1]= Polygon[{{0, 0}, {2, 0}, {2, 2}, {0, 2}}]
+
+In[2]:= ConvexHullRegion[{{0, 0}, {1, 1}, {2, 2}, {3, 3}}]
+Out[2]= Line[{{0, 0}, {3, 3}}]
+
+In[3]:= ConvexHullRegion[{{1, 2}}]
+Out[3]= Point[{1, 2}]
+
+In[4]:= Area[ConvexHullRegion[{{0, 0}, {2, 0}, {1, 0}, {2, 2}, {0, 2}, {1, 1}}]]
+Out[4]= 4
 ```
 
 ## When these heads decline

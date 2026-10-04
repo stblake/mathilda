@@ -42,7 +42,7 @@ In[6]:= ArcCos[Sqrt[2]/2]
 Out[6]= 1/4 Pi
 
 In[7]:= N[ArcCos[2], 20]
-Out[7]= 0.0 + 1.31695789692481670862*I
+Out[7]= 0.0 + 1.31695789692481670863*I
 ```
 
 ## Implementation notes
