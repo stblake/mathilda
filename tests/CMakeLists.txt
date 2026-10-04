@@ -4568,6 +4568,24 @@ add_test(NAME dsolve_corpus_2_2_36_tests
                  ../../DSolve_test_status/DE_examples_2236.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
+# M64 (Problems 3601-3700, our section 2.2.37 = upstream 2.1.37).  Heavily
+# first-order (20 linear / 10 separable / 8 Bernoulli / the homogeneous-classA/
+# dAlembert/Abel-2nd-type/Riccati families) with a tail of missing-x constant-
+# coefficient 2nd/3rd order and a few exact/quadrature -- Mathilda's strong suit.
+# Landed 96 -> 98/100 on one general fix: DSolve`Bernoulli now recognises an
+# IRRATIONAL/transcendental constant exponent (n = Pi for 3666, Sqrt[3] for 3668)
+# -- its exponent detector read n off the whole-Q ratio Y Q_Y/Q, which Cancel
+# cannot reduce for Y^Pi, so it declined and a later cascade method burned the
+# budget.  Now n is read off one term of Expand[Q] (per-monomial log-derivative)
+# and A,B via Y^n->W abstraction + Coefficient.  Baseline argv3 = non-PASS count.
+# Residue 2 honest: 3650 is a Root-object homogeneous IVP whose C[k] does not fit
+# (y=x*Root[..] forces y(0)=0 against y(0)=2); 3662 solves but its Sqrt-branch
+# general solution is not confirmable by the prelude's numeric sampler.
+add_test(NAME dsolve_corpus_2_2_37_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2237.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

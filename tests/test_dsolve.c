@@ -115,6 +115,23 @@ static void t_bernoulli_negative_n(void) {
     check_true("PossibleZeroQ[(y'[x] - (x^2 + y[x]^2)/(x y[x])) /. "
                "DSolve[y'[x] == (x^2 + y[x]^2)/(x y[x]), y, x][[1]]]");
 }
+/* M64: Bernoulli with an IRRATIONAL / transcendental constant exponent n.
+ * Held out from the §2.2.37 corpus (3666 uses n = Pi, 3668 n = Sqrt[3]).
+ * The substitution v = y^(1-n) is valid for any constant n != 1; the exponent
+ * detector must not require a rational n.  Clean main DECLINES all three (it
+ * read n off the whole-Q ratio, which Cancel cannot reduce for a Y^Pi kernel).
+ * Each is chosen so the linearised reduction is elementary and fast: pinned
+ * (isolates DSolve`Bernoulli) with constant then x-coefficient B, and the
+ * automatic cascade on the non-autonomous form (which routes to Bernoulli,
+ * not Separable). */
+static void t_m64_bernoulli_irrational_exponent(void) {
+    check_true("PossibleZeroQ[(y'[x] - y[x] - y[x]^Pi) /. "
+               "DSolve`Bernoulli[y'[x] == y[x] + y[x]^Pi, y, x][[1]]]");
+    check_true("PossibleZeroQ[(y'[x] - 2 y[x] - x y[x]^Pi) /. "
+               "DSolve`Bernoulli[y'[x] == 2 y[x] + x y[x]^Pi, y, x][[1]]]");
+    check_true("PossibleZeroQ[(y'[x] - 2 y[x] - x y[x]^Pi) /. "
+               "DSolve[y'[x] == 2 y[x] + x y[x]^Pi, y, x][[1]]]");
+}
 static void t_homogeneous(void) {
     check_true("PossibleZeroQ[(y'[x] - (x - y[x])/(x + y[x])) /. "
                "DSolve[y'[x] == (x - y[x])/(x + y[x]), y, x][[1]]]");
@@ -3205,6 +3222,7 @@ int main(void) {
     TEST(t_generated_parameters);
     TEST(t_bernoulli);
     TEST(t_bernoulli_negative_n);
+    TEST(t_m64_bernoulli_irrational_exponent);
     TEST(t_homogeneous);
     TEST(t_exact);
     TEST(t_exact_value);

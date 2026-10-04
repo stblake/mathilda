@@ -2679,6 +2679,43 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     builtin that was never registered — both paths are reached through `DSolve\`Separable`,
     and the phantom name is a trap when bisecting with pinned methods.
 
+- **M64 — §2.2.37 corpus (Problems 3601–3700) + `DSolve\`Bernoulli` handles an irrational /
+  transcendental constant exponent.** ✅ DONE. The next hundred, measured end to end:
+  **96/100 → 98/100, 0 FAIL, 0 crash, 0 timeout**. New corpus `DE_examples_2237.m` (upstream
+  §2.1.37, 100 scalar records, 21 IVPs; `make check-corpus-indvar` green); new gate
+  `dsolve_corpus_2_2_37_tests` at baseline **2**; report `DSolve_test_status/reports/2.2.37.md`.
+  Heavily first-order (20 linear, 10 separable, 8 Bernoulli, and the homogeneous-classA /
+  dAlembert / Abel-2nd-type / Riccati families) with a tail of missing-x constant-coefficient
+  2nd/3rd order — Mathilda's strong suit, hence the high baseline.
+  - **One general fix, diagnosed from inside the cascade with the pinned builtins.** `3666`
+    (`y' − y/((π−1)x) == 3x y^π/(1−π)`, `n = π`) and `3668` (`(1−√3)y' + y sec x == y^√3 sec x`,
+    `n = √3`) are textbook Bernoulli equations, and `v = y^(1−n)` linearises them for ANY
+    constant `n ≠ 1`. Pinned `DSolve\`Bernoulli` **declined** both: its exponent detector read
+    `n` off the whole-`Q` logarithmic derivative `Y Q_Y/Q` (`Q = F − Y F_Y`), and `Cancel`
+    cannot reduce that ratio when `Y^π` is a non-polynomial kernel, so `n` came back carrying
+    `Y` and the free-of guard rejected it. (`3668` additionally spun in a *later* cascade method
+    to the wall — UNEVAL by timeout, not by a missing method; owning it in Bernoulli at slot 5
+    makes it return fast, the recurring "a later method burns the budget" shape.)
+  - **The obstruction is structural, and the fix steps around it in two places.** The evaluator
+    collapses `Y^a·Y^b → Y^(a+b)` only for *direct* `Times` factors, and neither `Plus` nor
+    `Cancel` will merge `c1 Y^n + c2 Y^n` once the coefficients carry the symbolic `n` — so the
+    `Y·(… + B Y^(n−1) + …)` left by `Y F_Y`, and the like-term `Y^n` sums in `A`/`B`, never
+    reduce for an irrational `n`. (1) `n` is now read off a **single term** of `Expand[Q]` as
+    the per-monomial log-derivative `Y t_Y/t`, where a lone monomial's `Y^(n−1)·Y·Y^(−n)`
+    collapses to `Y^0` for every exponent. (2) `A`,`B` are extracted by **abstracting `Y^n` to a
+    fresh symbol `W`** (so `F = A Y + B W` is linear) and taking `Coefficient`, replacing the
+    `(F − B Y^n)/Y` division that left a spurious `Y^(n−1)` residue for irrational `n`.
+    `src/calculus/dsolve_bernoulli.c`. The `recon` reconstruction check and the `bern_mixed_radical`
+    / `bern_Y_nonalgebraic` / `bern_Y_in_sum_power` early-decline guards are **unchanged**, so no
+    non-Bernoulli form is newly claimed; integer / rational / negative Bernoulli is unaffected
+    (verified against the in-tree Bernoulli forms and the full corpus — 0 FAIL, no section regressed).
+  - *Residue 2, honest:* `3650` (`y' == (−2x+4y)/(x+y)`, `y(0)=2`) is a Root-object
+    homogeneous/Abel IVP — DSolve returns `y = x·Root[cubic]` but the IC cannot fit it (that form
+    forces `y(0)=0`), so `C[k]` is left unfitted → UNEVAL by rule; Root-object IC fitting is a
+    separate, delicate piece of work. `3662` (`(x−a)(x−b)(y′−√y) == 2(b−a)y`) is solved correctly,
+    but its `Sqrt`-branch general solution is not confirmable by the prelude's numeric sampler —
+    a verification limitation, not a DSolve gap. v0.266→0.267.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
@@ -2688,7 +2725,7 @@ Cascade order: cheap deterministic recognizers first. `[✓]` implemented,
 - `[✓] Quadrature` — `y^(n)==f(x)`, `f` free of `y`: integrate `n` times + constant polynomial.
 - `[✓] LinearFirstOrder` — `y'+p(x)y==q(x)`: integrating factor `Exp[∫p]`.
 - `[✓] Separable` — `y'==g(x)h(y)`: `∫dy/h==∫g dx + C[1]`, solved for `y`.
-- `[✓] Bernoulli` — `y'==A y + B y^n` (n≠0,1): substitution `v=y^(1-n)` (exponent recovered robustly, incl. fractional/negative n).
+- `[✓] Bernoulli` — `y'==A y + B y^n` (n≠0,1): substitution `v=y^(1-n)` (exponent recovered robustly for any constant n — integer, fractional/negative, AND irrational/transcendental such as Pi or Sqrt[3]; see M64).
 - `[✓] Homogeneous` — `y'==F(y/x)`: substitution `y=v x` → separable. Direct
   log-form inversion, with an exponentiate-and-clear-radicals fallback
   (`homog_exp_log_invert`: `Prod g_i^{c_i} == C[1] x` raised to power `d` → `Solve`

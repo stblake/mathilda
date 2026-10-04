@@ -6,10 +6,15 @@
  *
  *     v' == (1-n) A v + (1-n) B.
  *
- * The exponent n is recovered from F(x, Y) = A Y + B Y^n without assuming n is
- * an integer: with Q := F - Y F_Y = B(1-n) Y^n, the quantity Y Q_Y / Q equals n
- * exactly and is constant iff F has that single non-linear power.  Then
- * B = Q / ((1-n) Y^n) and A = (F - B Y^n)/Y; the linearised problem is handed to
+ * The exponent n is recovered from F(x, Y) = A Y + B Y^n for ANY constant n
+ * (integer, rational, OR irrational/transcendental such as Pi, Sqrt[3]): with
+ * Q := Expand[F - Y F_Y] = B(1-n) Y^n, a single non-linear power, n is read off
+ * one term of Q as the per-monomial logarithmic derivative Y t_Y / t (which
+ * reduces for every exponent, unlike the whole-Q ratio Y Q_Y / Q — Cancel
+ * cannot kernelise Y^Pi).  A and B are then read off by abstracting Y^n to a
+ * fresh symbol W (F = A Y + B W, linear) and taking Coefficient, which collects
+ * cleanly where c1 Y^n + c2 Y^n would not when the coefficients carry n.  The
+ * linearised problem v' == (1-n) A v + (1-n) B is handed to
  * dsolve_linear_factor_solve and the result raised to the 1/(1-n) power.
  */
 #include "dsolve_common.h"
@@ -117,65 +122,81 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
     if (bern_Y_nonalgebraic(FY, Yn)) { expr_free(FY); return NULL; }
     if (bern_Y_in_sum_power(FY, Yn)) { expr_free(FY); return NULL; }
 
-    /* Q = FY - Y F_Y */
-    Expr* Q = eval_and_free(ds_call2(SYM_Subtract, expr_copy(FY),
-                 eval_and_free(ds_call2(SYM_Times, expr_new_symbol(Yn),
-                                        ds_d(expr_copy(FY), expr_new_symbol(Yn))))));
+    /* Q = FY - Y F_Y, Expanded.  Expand is load-bearing: Y * F_Y introduces
+     * Y * Y^(n-1), and the evaluator only collapses two same-base powers to
+     * Y^n when they are DIRECT Times factors.  Left inside an undistributed
+     * Y*(... + B Y^(n-1) + ...) product the combine never fires, and for a
+     * transcendental/irrational exponent (n = Pi, Sqrt[3]) neither Plus nor
+     * Cancel can reduce it afterwards — Cancel cannot kernelise Y^Pi and Plus
+     * will not merge c1 Y^n + c2 Y^n when the coefficients carry the symbolic
+     * n.  Distributing first lets Y^1 * Y^(n-1) -> Y^n collapse at the source. */
+    Expr* Q = eval_and_free(ds_call1("Expand",
+                 eval_and_free(ds_call2(SYM_Subtract, expr_copy(FY),
+                     eval_and_free(ds_call2(SYM_Times, expr_new_symbol(Yn),
+                                            ds_d(expr_copy(FY), expr_new_symbol(Yn))))))));
     if (ds_is_zero(Q)) { expr_free(Q); expr_free(FY); return NULL; }   /* purely linear */
 
-    /* n = Y Q_Y / Q, a constant != 0.  Reduce (Cancel) BEFORE the free-of guard:
-     * Q is stored unexpanded (e.g. -2 x E^(2x) Y^3 hidden inside a sum), so the
-     * raw ratio still contains x/Y textually and ds_free_of would fall to a
-     * numeric probe that floating-point-cancels Q to 0 and reads 0^(-1) as
-     * "non-zero", wrongly rejecting a valid equation (and leaking Power::infy).
-     * Cancel — not Simplify — because this runs on the DECLINE path of every
-     * equation reaching Bernoulli: full Simplify hangs on a symbolic radical
-     * ratio (e.g. y' == Sqrt[y^4 + K] from AutonomousReduction), while Cancel is
-     * a cheap rational-GCD that still reduces the genuine constant exponent. */
+    /* Exponent n, read off a SINGLE term of Q rather than from the whole-Q ratio
+     * Y Q_Y / Q.  For a genuine Bernoulli Q = (1-n) B Y^n is one power in Y, so
+     * every term is c Y^n g(x) and the per-monomial logarithmic derivative
+     * Y t_Y / t = n reduces cleanly for ANY exponent (the lone monomial's
+     * Y^(n-1) * Y * Y^(-n) collapses to Y^0), where the whole-Q ratio does not
+     * for an irrational n (same Cancel/Plus wall as above).  A spurious n from a
+     * non-Bernoulli first term is caught below by the free-of guards and the
+     * reconstruction check; a Y-free term yields n = 0 and is declined there.
+     * Cancel still reduces the genuine constant exponent to lowest terms. */
+    Expr* t1 = Q;
+    if (Q->type == EXPR_FUNCTION && Q->data.function.head->type == EXPR_SYMBOL
+        && Q->data.function.head->data.symbol.name == SYM_Plus
+        && Q->data.function.arg_count > 0)
+        t1 = Q->data.function.args[0];
     Expr* nexp = eval_and_free(ds_call1("Cancel", eval_and_free(ds_call2(SYM_Times,
                     eval_and_free(ds_call2(SYM_Times, expr_new_symbol(Yn),
-                                           ds_d(expr_copy(Q), expr_new_symbol(Yn)))),
-                    powneg1(expr_copy(Q))))));
+                                           ds_d(expr_copy(t1), expr_new_symbol(Yn)))),
+                    powneg1(expr_copy(t1))))));
     if (!ds_free_of(nexp, Yn) || !ds_free_of(nexp, xvar) || ds_is_zero(nexp)) {
         expr_free(nexp); expr_free(Q); expr_free(FY); return NULL;
     }
+    expr_free(Q);   /* done with Q; A, B come from FY by power abstraction below */
+
     Expr* omn = eval_and_free(ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(nexp))); /* 1-n */
-    if (ds_is_zero(omn)) { expr_free(omn); expr_free(nexp); expr_free(Q); expr_free(FY); return NULL; }
+    if (ds_is_zero(omn)) { expr_free(omn); expr_free(nexp); expr_free(FY); return NULL; }
 
     Expr* Ynpow = eval_and_free(ds_call2(SYM_Power, expr_new_symbol(Yn), expr_copy(nexp))); /* Y^n */
-    /* B = Q / ((1-n) Y^n) */
-    Expr* B = ev3(SYM_Times, expr_copy(Q), powneg1(expr_copy(omn)), powneg1(expr_copy(Ynpow)));
-    expr_free(Q);
-    /* A = (FY - B Y^n) / Y */
-    Expr* A = eval_and_free(ds_call2(SYM_Times,
-                 eval_and_free(ds_call2(SYM_Subtract, expr_copy(FY),
-                                        ds_call2(SYM_Times, expr_copy(B), expr_copy(Ynpow)))),
-                 powneg1(expr_new_symbol(Yn))));
+    /* Abstract the nonlinear power Y^n to a fresh symbol W so F = A Y + B W is
+     * linear in {Y, W}, then read A, B off by Coefficient.  This sidesteps the
+     * non-collection wall a final time: once Y^n is one opaque symbol, Plus
+     * merges the B-terms and Coefficient returns A and B free of Y for EVERY
+     * exponent — the direct (FY - B Y^n)/Y division would instead leave a
+     * spurious Y^(n-1) residue for an irrational n. */
+    const char* Wn = intern_symbol("DSolve`W");
+    Expr* Fsub = ds_subst(expr_copy(FY), expr_copy(Ynpow), expr_new_symbol(Wn));
+    Expr* B = eval_and_free(ds_call2("Coefficient", expr_copy(Fsub), expr_new_symbol(Wn)));
+    Expr* rem = eval_and_free(ds_call1("Expand",
+                   eval_and_free(ds_call2(SYM_Subtract, Fsub,          /* consumes Fsub */
+                       ds_call2(SYM_Times, expr_copy(B), expr_new_symbol(Wn))))));
+    Expr* A = eval_and_free(ds_call2("Coefficient", rem, expr_new_symbol(Yn))); /* consumes rem */
 
-    bool ok = ds_free_of(A, Yn) && ds_free_of(B, Yn);
+    bool ok = ds_free_of(A, Yn) && ds_free_of(A, Wn) && ds_free_of(B, Yn) && ds_free_of(B, Wn);
     if (ok) {
-        Expr* recon = eval_and_free(ds_call2(SYM_Plus,
-            ds_call2(SYM_Times, expr_copy(A), expr_new_symbol(Yn)),
-            ds_call2(SYM_Times, expr_copy(B), expr_copy(Ynpow))));
-        Expr* chk = eval_and_free(ds_call2(SYM_Subtract, expr_copy(FY), recon));
-        ok = ds_is_zero(chk);
-        expr_free(chk);
+        Expr* recon = eval_and_free(ds_call1("Expand",
+            eval_and_free(ds_call2(SYM_Subtract, expr_copy(FY),
+                eval_and_free(ds_call2(SYM_Plus,
+                    ds_call2(SYM_Times, expr_copy(A), expr_new_symbol(Yn)),
+                    ds_call2(SYM_Times, expr_copy(B), expr_copy(Ynpow))))))));
+        ok = ds_is_zero(recon);
+        expr_free(recon);
     }
     expr_free(FY); expr_free(Ynpow);
     if (!ok) { expr_free(A); expr_free(B); expr_free(omn); expr_free(nexp); return NULL; }
 
-    /* v' + Pcoef v == Qcoef,  Pcoef = -(1-n) A,  Qcoef = (1-n) B.
-     * A and B are mathematically free of Y (verified above), but can still carry Y
-     * TEXTUALLY: Q = FY - Y F_Y is stored undistributed (Times does not distribute
-     * over Plus), so B = Q/((1-n) Y^n) keeps a frozen DSolve`Y factor.  When the
-     * reduced linear integrating-factor integral is ELEMENTARY the evaluator collapses
-     * it away, but when it is NON-elementary dsolve_linear_factor_solve keeps it as an
-     * unevaluated Integrate[...] and the frozen DSolve`Y then LEAKS into the final
-     * answer (e.g. y' == (1+Cos[4x])/4 y - (1-Cos[4x])/800 y^2, whose integrating
-     * factor E^(x/4+Sin[4x]/16) has no elementary ∫mu q).  Cancel each coefficient to
-     * lowest terms in Y first, eliminating the textual Y before it can be frozen; it is
-     * the same cheap rational-GCD used for the exponent n above (never Simplify, which
-     * hangs on radical coefficients).  Mathematically Y-free forms are unchanged. */
+    /* v' + Pcoef v == Qcoef,  Pcoef = -(1-n) A,  Qcoef = (1-n) B.  A and B now
+     * come from Coefficient on the W-abstracted F, so they are already free of
+     * any textual DSolve`Y (the old B = Q/((1-n) Y^n) route froze a Y factor
+     * that leaked when the integrating-factor integral was non-elementary, e.g.
+     * y' == (1+Cos[4x])/4 y - (1-Cos[4x])/800 y^2).  Cancel to lowest terms is
+     * kept as cheap hygiene for the linear solver — a rational-GCD (never
+     * Simplify, which hangs on radical coefficients); Y-free forms are unchanged. */
     Expr* Pcoef = eval_and_free(ds_call1("Cancel",
                      ev3(SYM_Times, expr_new_integer(-1), expr_copy(omn), A)));  /* consumes A */
     Expr* Qcoef = eval_and_free(ds_call1("Cancel",

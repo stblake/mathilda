@@ -1908,6 +1908,53 @@ which is elementary, either spins or is falsely reported non-elementary.
 
 Full per-case results: `reports/2.2.36.tsv`; bucketed report: `reports/2.2.36.md`.
 
+## Section 2.2.37 — "Problems 3601 to 3700" (Nasser Abbasi)
+
+Corpus: `DE_examples_2237.m` — 100 records, **100 scalar (21 IVP) + 0 systems**.
+Converted with `tools/latex_ode_to_mathilda.py` (upstream §2.1.37,
+`Ch2.S1.SS37.htm`; the internal `2.2.37` name is kept for continuity — see
+`README.md`). Heavily first-order: 20 linear, 10 separable, 8 Bernoulli, and the
+homogeneous-classA / dAlembert / Abel-2nd-type / Riccati families, with a tail of
+missing-x constant-coefficient 2nd/3rd order and a few exact/quadrature — Mathilda's
+strong suit. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_37_tests` · gate baseline **2**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-04 (M64 baseline) | 96 / 100 | 96.0% | 4 | 0 FAIL, 0 crash, 0 timeout. Non-PASS: 3650, 3662, 3666, 3668. |
+| 2026-10-04 (**M64**) | **98 / 100** | **98.0%** | **2** | **+2 (3666, 3668), 0 FAIL, 0 crash, 0 timeout**. One general fix (below). Gate baseline **2**. |
+
+**M64 fix — `DSolve`Bernoulli` recognises an irrational / transcendental constant
+exponent** (`src/calculus/dsolve_bernoulli.c`). `3666` (`n = Pi`) and `3668`
+(`n = Sqrt[3]`) are textbook Bernoulli equations; the substitution `v = y^(1-n)`
+is valid for any constant `n ≠ 1`, but the exponent detector read `n` off the
+whole-`Q` ratio `Y Q_Y / Q` (`Q = F − Y F_Y`), which `Cancel` cannot reduce when
+`Y^Pi` is a non-polynomial kernel — so `DSolve`Bernoulli` declined even when
+pinned, and the cascade's next owner then burned the time budget (`3668` spun to
+the wall, scoring UNEVAL by timeout, not by a missing method).
+
+The wall is structural: the evaluator only collapses `Y^a · Y^b → Y^(a+b)` for
+**direct** `Times` factors, and neither `Plus` nor `Cancel` will merge
+`c1 Y^n + c2 Y^n` once the coefficients carry the symbolic `n`. Two changes step
+around it: `n` is read off a **single term** of `Expand[Q]` as the per-monomial
+logarithmic derivative `Y t_Y / t` (a lone monomial's `Y^(n-1)·Y·Y^(-n)` collapses
+to `Y^0` for every exponent), and `A`, `B` are extracted by **abstracting `Y^n` to
+a fresh symbol `W`** (`F = A Y + B W`, linear) and taking `Coefficient`, instead of
+the `(F − B Y^n)/Y` division that left a spurious `Y^(n-1)` residue for irrational
+`n`. The `recon` reconstruction check and the `bern_*` early-decline guards are
+unchanged, so no non-Bernoulli form is newly claimed; integer/rational Bernoulli
+is unaffected (verified against the in-tree Bernoulli units and the full corpus).
+
+Residue (2, honest): **3650** (`y' == (−2x+4y)/(x+y)`, `y(0)=2`) is a Root-object
+homogeneous/Abel IVP — DSolve returns the general solution `y = x·Root[cubic]` but
+the IC does not fit (that form forces `y(0)=0`), so `C[k]` is left unfitted and the
+prelude scores it UNEVAL by rule. **3662** (`(x−a)(x−b)(y′−√y) == 2(b−a)y`) is
+solved correctly by `DSolve`Bernoulli`, but its `Sqrt`-branch general solution is
+not confirmable by the prelude's numeric sampler, so it scores UNEVAL though the
+closed form is right.
+
+Full per-case results: `reports/2.2.37.tsv`; bucketed report: `reports/2.2.37.md`.
+
 ---
 
 ## Wave history
@@ -2430,3 +2477,21 @@ Full per-case results: `reports/2.2.36.tsv`; bucketed report: `reports/2.2.36.md
   generator found three PRE-EXISTING unbounded steps on its own: `DSolve\`Exact`,
   `DSolve\`LieSymmetry` and a 16 s `DSolve\`Homogeneous` spin on a scaled mixed-angle RHS).
   v0.256→0.257 (0.256 was taken by a concurrent notebook commit).
+- **M64 (2026-10-04)** — §2.2.37 (Problems 3601–3700) corpus wave, **96 → 98/100, +2, 0 FAIL,
+  0 crash, 0 timeout**. New corpus `DE_examples_2237.m` (upstream §2.1.37, `make check-corpus-indvar`
+  green), gate `dsolve_corpus_2_2_37_tests` at **2**. ONE general fix: `DSolve\`Bernoulli` now
+  recognises a constant **irrational / transcendental exponent** (`n = Pi` in 3666, `Sqrt[3]` in
+  3668). The substitution `v = y^(1-n)` is valid for any constant `n ≠ 1`, but the exponent
+  detector read `n` off the whole-`Q` ratio `Y Q_Y/Q` (`Q = F − Y F_Y`), which `Cancel` cannot
+  reduce when `Y^Pi` is a non-polynomial kernel, so it declined even pinned — and 3668 then spun
+  in a later cascade method to the wall (UNEVAL by timeout, not a missing method). The wall is
+  structural: the evaluator collapses `Y^a·Y^b → Y^(a+b)` only for direct `Times` factors, and
+  neither `Plus` nor `Cancel` merges `c1 Y^n + c2 Y^n` once the coefficients carry the symbolic
+  `n`. Fix (`src/calculus/dsolve_bernoulli.c`): read `n` off a **single term of `Expand[Q]`** via
+  the per-monomial log-derivative `Y t_Y/t`, and extract `A`,`B` by **abstracting `Y^n → W`**
+  (`F = A Y + B W`, linear) + `Coefficient`, replacing the `(F − B Y^n)/Y` division that left a
+  spurious `Y^(n-1)` residue for irrational `n`. `recon` + the `bern_*` early guards unchanged, so
+  nothing non-Bernoulli is newly claimed; integer/rational Bernoulli unaffected (verified against
+  the in-tree Bernoulli forms and the full corpus, 0 FAIL, no section regressed). Residue 2,
+  honest: 3650 (Root-object homogeneous/Abel IVP whose `C[k]` does not fit), 3662 (solved, but its
+  `Sqrt`-branch general solution is not confirmable by the numeric sampler). v0.266→0.267.

@@ -1,69 +1,38 @@
-# Builtin Documentation Overhaul — task tracker
+# DSolve campaign — land §2.2.37 (Problems 3601–3700)
 
-Full roadmap: `BUILTIN_DOCUMENTATION_OVERHAUL.md` (repo root).
-Plan: `~/.claude/plans/i-would-like-all-velvety-bee.md`.
+Full plan: `~/.claude/plans/let-s-continue-our-implementation-magical-peacock.md`
+Scope: land + one general-fix wave, 0-FAIL invariant, general fixes only.
 
-Goal: bring every builtin's docs page to EllipticF-grade (overlay worked
-examples + Notes, source-grounded impl note, rich verified examples). Every
-example runs through the latest binary.
+## Phase A — acquire & convert
+- [x] curl `Ch2.S1.SS37.htm` (browser UA) → scratch; 317 KB LaTeXML "3601 to 3700", ~100 records
+- [x] convert → `DE_examples_2237.m`: 100 records (21 IVP, 0 systems)
+- [x] spot-check: no leftover LaTeX, labels 3601–3700, 20 linear/10 sep/8 Bernoulli/…
 
-## Campaign 0 — infrastructure (nearly done)
-- [x] Build latest binary (`make`) — v0.266
-- [x] Generator change: overlay worked-examples auto-verified (binary supplies
-      Out[]) in `site/generate.py` `render_page`. Validated: regen fixed 83 pages
-      (fictional N[]-precision outputs, now-included dropped setup lines)
-- [x] `site/coverage_report.py` — per-category parity counts (baseline 369/1086)
-- [x] `site/verify_docs_examples.py` + `make check-docs-examples`; green on 1086,
-      FAILS on planted wrong expectation, ~10s. 7-page EXEMPT (nondeterministic +
-      non-transcript-order). CI wiring deferred (needs full-dep job)
-- [x] `BUILTIN_DOCUMENTATION_OVERHAUL.md` — living tracker
-- [x] Pilot: elementary-functions — impl+overlay for Log10, Log2, UnitStep,
-      UnitBox, Ramp; category now 100% graded (26/26). Total 374/1086 (34%)
+## Phase B — audit & gate
+- [x] `make check-corpus-indvar` green (4904 records, 38 files)
+- [x] added `dsolve_corpus_2_2_37_tests` to `tests/CMakeLists.txt`
 
-## Campaigns 1..N — content — COMPLETE (1086/1086, 100%)
-All 38 categories at 100% EllipticF-grade, done across 5 subagent waves:
-- Wave 1 (math core): elementary-functions, arithmetic, calculus, number-theory,
-  linear-algebra, simplification, power-series, solutions-of-equations.
-- Wave 2: special-functions, algebra, numerical-calculus, mathematical-constants.
-- Wave 3: assignment-and-rules, pattern-matching, scoping-constructs,
-  functional-programming, control-flow, structural-manipulation,
-  string-operations, lists-and-iteration, time-and-date.
-- Wave 4: data-structures, expression-information, file-io,
-  random-number-generation, statistics, hypergraphs, graphics, machine-learning,
-  fourier-transforms, geometry, packed-arrays, bitwise.
-- Wave 5 (bare blocks): graphs, other-advanced, image-processing.
+## Phase C — baseline measurement
+- [x] baseline: **96 PASS, 4 UNEVAL, 0 FAIL, 0 crash, 0 timeout**
+- [x] 4 gaps diagnosed: 3666(n=Pi), 3668(n=√3) Bernoulli; 3662 verify-artifact; 3650 Root-IVP
 
-Verification: `make docs` verifies 9150 examples; `make check-docs-examples`
-green on 1086 pages (7-page EXEMPT: nondeterministic + rendered-order cases);
-strict `mkdocs build` clean after fixing 68 broken same-dir links in file-io
-fragments.
+## Phase D — one general-fix wave
+- [x] diagnosed from inside cascade: `DSolve`Bernoulli` declines symbolic/irrational exponent
+- [x] general fix: per-term exponent + `Y^n→W` abstraction (`src/calculus/dsolve_bernoulli.c`)
+- [x] re-measure §2.2.37: **98 PASS, 2 UNEVAL, 0 FAIL** (+2: 3666, 3668)
+- [x] Bernoulli unit regression (n=2,3,1/2,-1,x-coeff) all PASS
+- [~] full corpus regression (`ctest -R dsolve_corpus`) — RUNNING (on §2.1.2 now)
+- [x] added held-out unit test `t_m64_bernoulli_irrational_exponent` (test_dsolve.c)
 
-### Follow-ups discovered (out of scope — NOT fixed here)
-- A few statistics heads (`InterquartileRange`, `Quantile`, `MeanDeviation`,
-  `MedianDeviation`) emit `::rectn`/`::q100` via raw `printf`, bypassing the
-  `mth_message` funnel — a potential `make check-messages` concern.
-- Partial builtins surfaced and documented honestly: `SparseArray` (inert; only
-  `Normal` materializes), `UniformDistribution` (PDF/RandomVariate wired;
-  Mean/Variance/CDF not), `RatCanonPrototype` (Phase-1), `BesselJZero`
-  (symbolic-only). Spec docs now state a false `MaxMemoryUsed >= MemoryInUse`
-  claim was removed (they read different OS counters).
-- [ ] C2 arithmetic
-- [ ] C3 calculus
-- [ ] C4 number-theory
-- [ ] C5 special-functions (impl gap: 5/47)
-- [ ] C6 linear-algebra
-- [ ] C7 power-series / simplification / solutions-of-equations / comparisons /
-      mathematical-constants
-- [ ] non-core partials (expression-information, data-structures, functional-
-      programming, structural-manipulation, control-flow, assignment-and-rules,
-      scoping, pattern-matching, string-operations, statistics,
-      numerical-calculus, flint, file-io, lists-and-iteration, time-and-date, rng)
-- [ ] bare blocks (graphs, other-advanced, image-processing, hypergraphs,
-      graphics, machine-learning, fourier-transforms, packed-arrays, geometry,
-      bitwise)
+## Phase E — land
+- [x] ratchet §2.2.37 baseline 100000→2; reports/2.2.37.{md,tsv} regenerated
+- [x] STATUS.md section block + M64 wave-history; M64 milestone in DSOLVE_PLAN.md
+- [x] changelog (docs/spec/changelog/2026-09-28.md); calculus.md Bernoulli row updated
+- [x] bump src/version.h 0.266→0.267
+- [ ] rebuild dsolve_tests + run (confirm new unit test passes); valgrind spot-check
+- [ ] commit + tag v0.267 (when user asks)
 
-## Notes
-- Docs-only commits: NO `$VersionNumber` bump, NO tag.
-- Never hand-edit `site/docs/documentation/**` — regenerate via `make docs`.
-- Overlay In[] must be single-line; `(* note *)` first word must not be an
-  identifier (it gets capitalised).
+## Review
+Baseline 96→98/100 on one general fix (Bernoulli irrational exponent), 0 FAIL.
+Residue 2 (3650 Root-IVP, 3662 verify-artifact) documented. Pending: full
+regression result + unit-test rebuild + valgrind, then commit/tag.
