@@ -2147,7 +2147,15 @@ recognizers:
   via `Re`/`Im` of the single decaying exponential, not split into two.
 - **Rational-in-`{Sin, Cos}` over a full period** `(0, 2π)` or `(-π, π)` — via
   `z = Exp[I x]` on the unit circle: value `= 2 π i · Σ Res` over the poles
-  inside the unit disk.
+  inside the unit disk.  The parameters may be **symbolic under assumptions**,
+  including a *coupled* constraint such as `a > b > 0`: the in-disk pole is
+  selected at a representative point of the assumption region (from the
+  independent bounds, or `FindInstance` when a parameter is bounded only by
+  another), and a higher-order parametric pole's residue is taken by the
+  analytic-part derivative `Res = (1/(m-1)!) d^{m-1}[N/(lead ∏_{r≠z₀}(z-r)^{m_r})]|_{z₀}`
+  — fast where a Laurent series of a symbolic radical pole is not.  E.g.
+  `Integrate[1/(a + b Cos[x])^3, {x,0,2π}, Assumptions -> a > b > 0]
+  = π(2a²+b²)/(a²−b²)^(5/2)`, and `1/(a + b Cos[x]) → 2π/√(a²−b²)`.
 - **Parametrized contour over a full period** — a *transcendental* integrand of
   the form `g(Exp[I t]) · (I c Exp[I t])` (the Jacobian of `z = c Exp[I t]`):
   the same `t → −I Log[u]` substitution leaves `G(u) = integrand/(I u)`, whose

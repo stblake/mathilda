@@ -704,6 +704,76 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
     return value;
 }
 
+/* Multiplicity of z0 as a root of the polynomial P: the number of leading
+ * derivatives P, P', P'', ... that vanish at z0, read at the parameter
+ * instantiation point (res_reim retries there, and a root's order is a
+ * structural integer, the same at any generic point of the assumed region).
+ * solve_roots de-duplicates a multiple root to one representative, so this is
+ * how the order is recovered for the analytic-part residue.  Borrows P, x, z0. */
+static int pole_order(Expr* P, Expr* x, Expr* z0) {
+    Expr* d = expr_copy(P);
+    int m = 0;
+    for (int k = 0; k < 64 && d; k++) {
+        Expr* at = eval_take(mk_fn2("ReplaceAll", expr_copy(d),
+                       mk_fn2("Rule", expr_copy(x), expr_copy(z0))));
+        double re, im;
+        bool zero = at && res_reim(at, &re, &im) && fabs(re) < RES_TOL && fabs(im) < RES_TOL;
+        if (at) expr_free(at);
+        if (!zero) break;
+        m++;
+        d = eval_take(mk_fn2("D", d, expr_copy(x)));       /* consumes d */
+    }
+    if (d) expr_free(d);
+    return m;
+}
+
+/* Residue at a PARAMETRIC pole z0 of Fz = N/D, by the analytic-part derivative
+ * rather than a Laurent series:
+ *   Res = (1/(m0-1)!) d^{m0-1}/dz^{m0-1}[ N / (lead * Prod_{r != z0}(z-r)^{m_r}) ]|_{z0},
+ * where {r} = `droots` are the DISTINCT roots of D, m_r their multiplicities, and
+ * lead the leading coefficient of D, so lead * Prod_r (z-r)^{m_r} == D and
+ * dropping z0's own factor leaves exactly the pole-free part.  The generic
+ * residue engine expands a Series of the shifted integrand, whose cost explodes
+ * with the surface form of a symbolic radical pole (Sqrt[4a^2-4b^2] is ~30x
+ * slower than Sqrt[a^2-b^2] for the identical value); this closed derivative is
+ * ~0.1s where that is >30s.  Borrows all; owned residue (NOT simplified) or NULL. */
+static Expr* trig_symbolic_residue(Expr* Fz, Expr* z, Expr* z0, ExprVec* droots) {
+    Expr* N0; Expr* D0;
+    if (!res_num_den(Fz, &N0, &D0)) return NULL;
+    int deg = res_degree(D0, z);
+    Expr* lead = eval_take(expr_new_function(mk_sym("Coefficient"),
+                     (Expr*[]){ expr_copy(D0), expr_copy(z), mk_int(deg) }, 3));
+    int m0 = pole_order(D0, z, z0);
+    if (!lead || m0 < 1) { expr_free(N0); expr_free(D0); if (lead) expr_free(lead); return NULL; }
+    Expr* drest = lead;                           /* lead * Prod_{r != z0}(z-r)^{m_r} */
+    bool bad = false;
+    for (size_t i = 0; i < droots->n && !bad; i++) {
+        if (expr_eq(droots->v[i], z0)) continue;
+        int mr = pole_order(D0, z, droots->v[i]);
+        if (mr < 1) { bad = true; break; }
+        drest = eval_take(mk_fn2("Times", drest,
+                    mk_fn2("Power",
+                        mk_fn2("Plus", expr_copy(z),
+                               mk_fn2("Times", mk_int(-1), expr_copy(droots->v[i]))),
+                        mk_int(mr))));
+        if (!drest) bad = true;
+    }
+    expr_free(D0);
+    if (bad || !drest) { expr_free(N0); if (drest) expr_free(drest); return NULL; }
+    Expr* G = eval_take(mk_fn2("Times", N0, mk_fn2("Power", drest, mk_int(-1))));
+    if (!G) return NULL;
+    Expr* deriv = (m0 <= 1) ? G
+                            : eval_take(mk_fn2("D", G,
+                                  expr_new_function(mk_sym("List"),
+                                      (Expr*[]){ expr_copy(z), mk_int(m0 - 1) }, 2)));
+    if (!deriv) return NULL;
+    Expr* atz0 = eval_take(mk_fn2("ReplaceAll", deriv,
+                     mk_fn2("Rule", expr_copy(z), expr_copy(z0))));
+    if (!atz0) return NULL;
+    return eval_take(mk_fn2("Times", atz0,                 /* / (m0-1)!  (=1 for m0<=2) */
+               mk_fn2("Power", mk_fn1("Factorial", mk_int(m0 - 1)), mk_int(-1))));
+}
+
 /* -------------------------------------------------------------------------
  * Family C -- rational-in-{Sin,Cos} integrands over a full period.
  * ---------------------------------------------------------------------- */
@@ -759,26 +829,60 @@ static Expr* residue_family_trig(Expr* f, Expr* x, Expr* a, Expr* b,
         else if (mag > 1.0 + RES_TOL) { /* outside: skip */ }
         else { circle_pole = true; break; }   /* on the unit circle -> divergent */
     }
-    ev_free(&roots);
     expr_free(Q);
     if (circle_pole) {
         if (diverges) *diverges = true;
-        expr_free(z); expr_free(Fz); ev_free(&keep); return NULL;
+        expr_free(z); expr_free(Fz); ev_free(&roots); ev_free(&keep); return NULL;
     }
-    if (undecidable || keep.n == 0) { expr_free(z); expr_free(Fz); ev_free(&keep); return NULL; }
+    if (undecidable || keep.n == 0) {
+        expr_free(z); expr_free(Fz); ev_free(&roots); ev_free(&keep); return NULL;
+    }
 
-    Expr** poles = malloc(keep.n * sizeof(*poles));
-    int* weight  = malloc(keep.n * sizeof(*weight));
-    for (size_t i = 0; i < keep.n; i++) { poles[i] = keep.v[i]; weight[i] = 2; }
+    /* Distinct in-disk poles.  solve_roots lists a multiple root once per
+     * multiplicity (an order-n pole n times -- numeric roots are de-duplicated,
+     * symbolic ones not), which would over-count; the multiplicity is recovered
+     * by counting the copies. */
+    ExprVec uniq; ev_init(&uniq);
+    for (size_t i = 0; i < keep.n; i++) {
+        bool dup = false;
+        for (size_t j = 0; j < uniq.n && !dup; j++)
+            if (expr_eq(keep.v[i], uniq.v[j])) dup = true;
+        if (!dup) ev_push(&uniq, expr_copy(keep.v[i]));
+    }
 
-    Expr* S = sum_residues(Fz, z, poles, weight, keep.n);
-    free(poles); free(weight);
-    expr_free(Fz);
-    if (!S) { expr_free(z); ev_free(&keep); return NULL; }
-
-    Expr* value = close_algebraic(S);
-    expr_free(S); expr_free(z);
-    ev_free(&keep);
+    Expr* value = NULL;
+    if (g_inst) {
+        /* Symbolic parameters (e.g. 1/(a + b Cos[x])^3, a > b > 0): the in-disk
+         * pole was classified at the instantiation point by res_reim above.  Its
+         * residue is taken by the analytic-part derivative (fast for a radical
+         * pole, unlike the generic Series engine), simplified, then summed; the
+         * value is real under the assumptions, so close by Simplify[2 Pi i S]. */
+        Expr* S = mk_int(0);
+        bool bad = false;
+        for (size_t i = 0; i < uniq.n && !bad; i++) {
+            /* `roots` are the DISTINCT roots (solve_roots de-duplicates); the
+             * pole order is recovered inside by counting vanishing derivatives. */
+            Expr* r  = trig_symbolic_residue(Fz, z, uniq.v[i], &roots);
+            Expr* rs = r ? ev1("Simplify", r) : NULL;
+            if (!rs) { bad = true; break; }
+            S = eval_take(mk_fn2("Plus", S, rs));
+            if (!S) { bad = true; break; }
+        }
+        if (!bad && S)
+            value = ev1("Simplify", mk_fn2("Times",
+                        mk_fn2("Times", mk_int(2),
+                               mk_fn2("Times", mk_sym(SYM_Pi), mk_sym(SYM_I))), S));
+        else if (S) expr_free(S);
+    } else {
+        Expr** poles = malloc(uniq.n * sizeof(*poles));
+        int* weight  = malloc(uniq.n * sizeof(*weight));
+        for (size_t i = 0; i < uniq.n; i++) { poles[i] = uniq.v[i]; weight[i] = 2; }
+        Expr* S = sum_residues(Fz, z, poles, weight, uniq.n);
+        free(poles); free(weight);
+        if (S) { value = close_algebraic(S); expr_free(S); }
+    }
+    expr_free(Fz); expr_free(z);
+    ev_free(&uniq); ev_free(&keep); ev_free(&roots);
 
     double vv;
     if (!value || !res_is_real_scalar(value, x, &vv)) { if (value) expr_free(value); return NULL; }
@@ -1076,8 +1180,48 @@ static Expr* build_instantiation(Expr* f, Expr* x, Expr* assumptions) {
     if (np == 0) return NULL;
     if (assumptions) absorb_fact(pb, np, assumptions);
 
+    bool all_bounded = true;
     for (size_t i = 0; i < np; i++)
-        if (pb[i].lo <= -HUGE_VAL && pb[i].hi >= HUGE_VAL) return NULL;  /* unconstrained */
+        if (pb[i].lo <= -HUGE_VAL && pb[i].hi >= HUGE_VAL) { all_bounded = false; break; }
+
+    if (!all_bounded) {
+        /* A COUPLED constraint (e.g. a > b > 0) leaves a parameter bounded only
+         * by another parameter, which absorb_fact cannot reduce to a numeric
+         * interval.  Ask FindInstance for one consistent representative point of
+         * the assumption region -- enough to read off the pole signs.  The
+         * per-parameter intervals (g_bounds) are then unknown, so the families
+         * that gate on them (mellin/sector convergence) decline via param_interval,
+         * while the unit-circle family -- which only classifies poles AT the
+         * point -- still works.  g_all_pos stays off (no global positivity proof),
+         * so the radical-cleaning PowerExpand is not licensed. */
+        if (!assumptions) return NULL;
+        Expr** vs = malloc(np * sizeof(*vs));
+        for (size_t i = 0; i < np; i++) vs[i] = mk_sym(pb[i].sym);
+        Expr* vars = expr_new_function(mk_sym("List"), vs, np);
+        free(vs);
+        Expr* fi = eval_take(mk_fn2("FindInstance", expr_copy(assumptions), vars));
+        if (!fi || !head_name_is(fi, "List") || fi->data.function.arg_count < 1) {
+            if (fi) expr_free(fi);
+            return NULL;
+        }
+        Expr* sol = fi->data.function.args[0];                 /* {p -> v, ...} */
+        if (!head_name_is(sol, "List") || sol->data.function.arg_count != np) {
+            expr_free(fi); return NULL;
+        }
+        bool ok = true;
+        for (size_t i = 0; i < np && ok; i++) {
+            Expr* rule = sol->data.function.args[i];
+            double v;
+            if (!head_name_is(rule, "Rule") || rule->data.function.arg_count != 2 ||
+                !numeric_double(rule->data.function.args[1], &v)) ok = false;
+        }
+        if (!ok) { expr_free(fi); return NULL; }
+        Expr* g = expr_copy(sol);
+        expr_free(fi);
+        g_all_pos = false;
+        g_nbounds = 0;
+        return g;
+    }
 
     /* All-positive parameters licence a PowerExpand-based simplification of
      * radical pole locations (Sqrt[-4 a^2] -> 2 I a) and real-parameter

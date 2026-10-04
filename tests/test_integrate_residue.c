@@ -98,6 +98,25 @@ static void test_family_trig(void) {
     check_eq("Integrate[1/(5-4 Cos[x]), {x, 0, 2 Pi}]", "2/3 Pi");
     /* (-Pi, Pi) is also a full period. */
     check_eq("Chop[N[Integrate[1/(2+Cos[x]), {x, -Pi, Pi}] - 2 Pi/Sqrt[3]]]", "0");
+    /* Higher-order NUMERIC pole: 1/(2+Cos[x])^2 = 4 Pi/(3 Sqrt[3]). */
+    check_eq("Chop[N[Integrate[1/(2+Cos[x])^2, {x, 0, 2 Pi}] - 4 Pi/(3 Sqrt[3])]]", "0");
+}
+
+/* -------------------------------------------------------------------------
+ * Unit-circle trig with SYMBOLIC parameters (Case 16): the in-disk pole is
+ * classified at a FindInstance representative point of the assumption region
+ * (here a coupled a > b > 0), and its residue is taken by the analytic-part
+ * derivative so an order-n parametric radical pole stays fast.
+ * ---------------------------------------------------------------------- */
+static void test_trig_symbolic(void) {
+    /* Order 1: Integrate[1/(a+b Cos[x]), a>b>0] = 2 Pi/Sqrt[a^2-b^2]. */
+    check_eq("With[{r = Integrate[1/(a + b Cos[x]), {x, 0, 2 Pi}, Assumptions -> a > b > 0, "
+             "Method -> \"Residue\"]}, {FreeQ[r, Integrate], "
+             "Simplify[r - 2 Pi/Sqrt[a^2 - b^2]] == 0}]", "{True, True}");
+    /* Order 3 (Case 16): = Pi (2a^2+b^2)/(a^2-b^2)^(5/2). */
+    check_eq("With[{r = Integrate[1/(a + b Cos[x])^3, {x, 0, 2 Pi}, Assumptions -> a > b > 0, "
+             "Method -> \"Residue\"]}, {FreeQ[r, Integrate], "
+             "Simplify[r - Pi (2 a^2 + b^2)/(a^2 - b^2)^(5/2)] == 0}]", "{True, True}");
 }
 
 /* -------------------------------------------------------------------------
@@ -411,6 +430,7 @@ int main(void) {
     TEST(test_keyhole_log);
     TEST(test_contour_param);
     TEST(test_sector);
+    TEST(test_trig_symbolic);
     TEST(test_rational_symbolic);
     TEST(test_symbolic_negative_controls);
 

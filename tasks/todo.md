@@ -63,8 +63,14 @@ NIntegrate). I verify each case numerically in the REPL during dev. Bump
       test_contour_param (FreeQ+Chop non-vacuous); docs + changelog; v0.271.
       Fixed a u=0 double-count (denominator root 0 vs the always-added 0 cand).
 
-## Phase 4 — Tier D unit-circle order-n
-- [ ] Verify/extend family C under assumptions; Case 16; tests/docs/bump/tag
+## Phase 4 — Tier D unit-circle order-n  [DONE v0.272]
+- [x] build_instantiation FindInstance fallback for COUPLED assumptions (a>b>0 left
+      `a` bounded only by `b` -> was declining). Fixes order-1 symbolic trig.
+- [x] residue_family_trig symbolic branch: pole_order (counts vanishing derivatives
+      at the instantiated root, since solve_roots dedups multiplicity) + analytic-part
+      derivative residue (fast for radical poles; Series is >30s and form-sensitive).
+      Case 16 1/(a+b Cos)^3 -> Pi(2a^2+b^2)/(a^2-b^2)^(5/2); order-1 -> 2Pi/Sqrt[a^2-b^2].
+      test_trig_symbolic + order-2 numeric regression; docs + changelog; v0.272.
 
 ## Phase 5 — Tier E special contours
 - [ ] `residue_family_fresnel` (10)
