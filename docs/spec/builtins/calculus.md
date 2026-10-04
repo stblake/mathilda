@@ -618,6 +618,22 @@ coprime, so the `w^-1` coefficient is unchanged. Transcendental /
 special-function integrands keep the direct expansion, which uses the engine's
 own knowledge of the Laurent series at `z0` (e.g. `Zeta` at `1`).
 
+**Self-validation at higher-order poles.** A padded `Series` can return a `-1`
+coefficient that is *present but inaccurate*: over an order-`m` pole the regular
+cofactor is truncated too early and the principal part drops product-rule cross
+terms, while the series still claims validity at that order. This is invisible to
+a single read, and it silently corrupted the residue at a **symbolic** higher-order
+pole (e.g. `Res[Exp[I z]/(z^2+a^2)^2, I a]` lost its `1/a^3` term). The coefficient
+converges once the expansion order reaches `m-1` and is exactly stable thereafter,
+so `Residue` now computes it at successive orders and accepts only when two
+consecutive orders **agree** — correct for any pole order, at a numeric or symbolic
+centre. A separate **dropped-pole guard** covers a concrete odd-denominator
+rational power composed directly with a pole (e.g. `z^(1/3)/(1+z^2)^2` at `z = I`),
+which made `Series` lose the principal part entirely and return a silent `0`: when
+the direct expansion reports an analytic point but the denominator of `Together[f]`
+vanishes at `z0`, `Residue` re-expands the shifted integrand `f /. z -> z0 + w`,
+where `z^p` becomes an analytic binomial `(z0+w)^p` and the pole sits in `w`.
+
 ```
 In[1]:= Residue[1/z, {z, 0}]
 Out[1]= 1

@@ -221,6 +221,16 @@ static void test_fourier_symbolic(void) {
     check_eq("Chop[N[(Integrate[Exp[I k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
              "Assumptions -> {a > 0, k > 0}] - Pi E^(-a k)/a) /. {a -> 12/10, k -> 9/10}]]",
              "0");
+    /* Higher-order pole with a SYMBOLIC parameter (regression). The order-2 pole
+     * at z = I a formerly under-padded its Laurent series and dropped the
+     * product-rule cross term, so Integrate[Cos[x]/(x^2+a^2)^2] returned the
+     * wrong Pi E^-a/(2 a^2) instead of Pi (1+a) E^-a/(2 a^3). */
+    check_eq("Integrate[Cos[x]/(x^2+a^2)^2, {x, -Infinity, Infinity}, "
+             "Assumptions -> a > 0, Method -> \"Residue\"]",
+             "(1/2 Pi (1 + a) E^(-a))/a^3");
+    check_eq("Chop[N[(Integrate[Cos[x]/(x^2+a^2)^2, {x, -Infinity, Infinity}, "
+             "Assumptions -> a > 0, Method -> \"Residue\"] "
+             "- Pi (1 + a) E^(-a)/(2 a^3)) /. a -> 7/5]]", "0");
 }
 
 /* -------------------------------------------------------------------------

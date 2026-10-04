@@ -65,6 +65,31 @@ static void test_higher_order_poles(void) {
     check_eq("Residue[Exp[I z]/(z^2 + 1)^2, {z, I}]", "(-1/2*I)/E");
 }
 
+/* Higher-order poles at a SYMBOLIC centre, and a concrete rational power
+ * composed directly with a pole -- both formerly silent wrong answers.
+ *
+ * A symbolic expansion centre (z0 = I a) over an order-m pole under-padded the
+ * Laurent series and dropped product-rule cross terms; the coefficient is now
+ * self-validated by requiring two consecutive expansion orders to agree. A
+ * concrete odd-denominator rational power (z^(1/3)) composed directly with the
+ * pole made Series lose the principal part, returning a silent 0; residue_compute
+ * now detects the dropped pole (denominator vanishes at z0) and re-expands the
+ * shifted integrand f /. z -> z0 + w, where z^p is an analytic binomial. */
+static void test_symbolic_higher_order_poles(void) {
+    /* Res[Exp[I z]/(z^2+a^2)^2, I a] = -I e^-a (1+a)/(4 a^3). */
+    check_eq("N[Abs[(Residue[Exp[I z]/(z^2 + a^2)^2, {z, I a}] "
+             "- (-I) E^(-a) (1 + a)/(4 a^3)) /. a -> 7/5]] < 1/1000000", "True");
+    /* Res[Exp[I z]/(z^2+a^2)^3, I a] = -I e^-a (a^2+3a+3)/(16 a^5) (triple pole). */
+    check_eq("N[Abs[(Residue[Exp[I z]/(z^2 + a^2)^3, {z, I a}] "
+             "- (-I) E^(-a) (a^2 + 3 a + 3)/(16 a^5)) /. a -> 2]] < 1/1000000", "True");
+    /* z^(1/3) composed directly with a double pole at z = I: was a silent 0. */
+    check_eq("Residue[z^(1/3)/(1 + z^2)^2, {z, I}]", "(-1/6*I) I^(1/3)");
+    check_eq("N[Abs[Residue[z^(2/3)/(1 + z^2)^2, {z, I}] "
+             "- (D[z^(2/3)/(z + I)^2, z] /. z -> I)]] < 1/1000000", "True");
+    /* z^(1/2) (even denominator) always worked -- guard it stays correct. */
+    check_eq("Residue[Sqrt[z]/(1 + z^2)^2, {z, I}]", "(1/8 - 1/8*I)/Sqrt[2]");
+}
+
 /* Poles of transcendental functions, resolved through the series engine. */
 static void test_transcendental_poles(void) {
     check_eq("Residue[Cot[z], {z, 0}]", "1");
@@ -130,6 +155,7 @@ int main(void) {
 
     TEST(test_simple_poles);
     TEST(test_higher_order_poles);
+    TEST(test_symbolic_higher_order_poles);
     TEST(test_transcendental_poles);
     TEST(test_unknown_function);
     TEST(test_analytic_points);

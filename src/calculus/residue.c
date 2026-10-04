@@ -215,61 +215,135 @@ static Expr* residue_simple_pole(Expr* f, Expr* z, Expr* z0) {
     return residue_eval2("Times", Pat, inv);
 }
 
-/* Adaptive Laurent-coefficient extraction: expand `expr` about `spt` in `svar`
- * to order 0 (raising it when an unknown-function leading term hides exponent
- * -1) and return an owned copy of the (svar-spt)^-1 coefficient, 0 at an analytic
- * point, or NULL at a branch point / when no series can be produced. */
-static Expr* residue_extract(Expr* expr, Expr* svar, Expr* spt) {
-    int64_t order = 0;
-    for (int attempt = 0; attempt < 8; attempt++) {
-        Expr* sd = residue_series(expr, svar, spt, order);
-        if (!sd) return NULL;
+/* Read the (svar-spt)^-1 coefficient from a single Series expansion to the given
+ * target `order`. Sets *status: 0 = coefficient returned (owned); 1 = analytic
+ * point (no principal part), returns NULL; 2 = failure / branch point, NULL;
+ * 3 = the O-term lies at or before exponent -1 so the coefficient is not yet
+ * resolved at this order, NULL. *pole_m (when non-NULL) receives the pole order
+ * -nmin (>=1) or 0 at an analytic point, for the caller's convergence sizing. */
+static Expr* residue_coeff_once(Expr* expr, Expr* svar, Expr* spt,
+                                int64_t order, int* status, int64_t* pole_m) {
+    *status = 2;
+    if (pole_m) *pole_m = 0;
+    Expr* sd = residue_series(expr, svar, spt, order);
+    if (!sd) return NULL;
+    if (!is_series_data(sd)) { expr_free(sd); return NULL; }
 
-        /* Series must have produced a SeriesData; otherwise it could not expand. */
-        if (!is_series_data(sd)) { expr_free(sd); return NULL; }
-
-        Expr** a     = sd->data.function.args;
-        Expr* coefs  = a[2];
-        Expr* nmin_e = a[3];
-        Expr* nmax_e = a[4];
-        Expr* den_e  = a[5];
-        if (nmin_e->type != EXPR_INTEGER || nmax_e->type != EXPR_INTEGER ||
-            den_e->type != EXPR_INTEGER || coefs->type != EXPR_FUNCTION) {
-            expr_free(sd);
-            return NULL;
-        }
-        int64_t nmin = nmin_e->data.integer;
-        int64_t nmax = nmax_e->data.integer;
-        int64_t den  = den_e->data.integer;
-
-        /* Fractional exponents -> branch point -> residue undefined. */
-        if (den != 1) { expr_free(sd); return NULL; }
-
-        /* Coefficient of exponent -1 lives at index (-1 - nmin) in the list;
-         * it is known when nmin <= -1 <= nmax-1 (i.e. 0 <= index < len). */
-        int64_t len   = (int64_t)coefs->data.function.arg_count;
-        int64_t index = -1 - nmin;
-
-        if (index < 0) {
-            /* nmin > -1: analytic (no principal part) -> residue 0. */
-            expr_free(sd);
-            return expr_new_integer(0);
-        }
-        if (index < len) {
-            Expr* result = expr_copy(coefs->data.function.args[index]);
-            expr_free(sd);
-            return result;
-        }
-
-        /* -1 lies at or beyond the O-term (nmax <= -1). Raise the order enough to
-         * push the O-term past exponent -1, with a small margin, then retry. */
-        int64_t next = order + (0 - nmax) + 2;
-        if (next <= order) next = order + 1;   /* guarantee progress */
+    Expr** a     = sd->data.function.args;
+    Expr* coefs  = a[2];
+    Expr* nmin_e = a[3];
+    Expr* nmax_e = a[4];
+    Expr* den_e  = a[5];
+    if (nmin_e->type != EXPR_INTEGER || nmax_e->type != EXPR_INTEGER ||
+        den_e->type != EXPR_INTEGER || coefs->type != EXPR_FUNCTION) {
         expr_free(sd);
-        if (next > 256) return NULL;           /* safety cap */
-        order = next;
+        return NULL;
+    }
+    int64_t nmin = nmin_e->data.integer;
+    int64_t den  = den_e->data.integer;
+
+    /* Fractional exponents -> branch point -> residue undefined. */
+    if (den != 1) { expr_free(sd); return NULL; }
+
+    if (pole_m) *pole_m = (nmin <= -1) ? -nmin : 0;
+
+    int64_t len   = (int64_t)coefs->data.function.arg_count;
+    int64_t index = -1 - nmin;
+    if (index < 0) { expr_free(sd); *status = 1; return NULL; }  /* analytic */
+    if (index < len) {
+        Expr* r = expr_copy(coefs->data.function.args[index]);
+        expr_free(sd);
+        *status = 0;
+        return r;
+    }
+    expr_free(sd);
+    *status = 3;   /* O-term <= -1: need a higher order */
+    return NULL;
+}
+
+/* Resolve the (svar-spt)^-1 coefficient starting from `start_order`, raising the
+ * order while the O-term still hides exponent -1. Returns the owned coefficient
+ * (status 0), an owned integer 0 (analytic, status 1), or NULL (branch/failure).
+ * On success *used is the order actually used and *pole_m the pole order. */
+static Expr* residue_coeff_resolved(Expr* expr, Expr* svar, Expr* spt,
+                                    int64_t start_order, int64_t* used,
+                                    int64_t* pole_m) {
+    int64_t order = start_order < 0 ? 0 : start_order;
+    for (int attempt = 0; attempt < 10; attempt++) {
+        int status; int64_t m = 0;
+        Expr* c = residue_coeff_once(expr, svar, spt, order, &status, &m);
+        if (pole_m) *pole_m = m;
+        if (status == 0) { if (used) *used = order; return c; }
+        if (status == 1) { if (used) *used = order; return expr_new_integer(0); }
+        if (status == 2) return NULL;
+        /* status == 3: O-term still at/below -1; raise and retry. */
+        order += 3;
+        if (order > 256) return NULL;
     }
     return NULL;
+}
+
+/* True iff PossibleZeroQ[a - b] is True.  `a`, `b` borrowed. */
+static bool residue_coeffs_agree(Expr* a, Expr* b) {
+    Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus),
+                     (Expr*[]){ expr_copy(a),
+                                expr_new_function(expr_new_symbol(SYM_Times),
+                                    (Expr*[]){ expr_new_integer(-1), expr_copy(b) }, 2) }, 2);
+    bool z = residue_is_zero(diff);
+    expr_free(diff);
+    return z;
+}
+
+/* Self-validating Laurent-coefficient extraction. The series engine can return a
+ * (svar-spt)^-1 coefficient that is PRESENT but inaccurate: a higher-order pole's
+ * regular cofactor is truncated too early, so the principal part drops product-
+ * rule cross terms (the symbolic double/triple-pole bug). A padded series still
+ * claims validity at that order, so a single read cannot detect the loss. Instead
+ * we exploit that the coefficient CONVERGES once the order reaches pole_order-1
+ * and is exactly stable thereafter: compute it at successive orders and accept
+ * only when two consecutive orders agree. Returns an owned copy of the residue,
+ * 0 at an analytic point, or NULL at a branch point / when no series converges. */
+static Expr* residue_extract(Expr* expr, Expr* svar, Expr* spt) {
+    /* Probe at order 0 to learn the pole order (and short-circuit the analytic
+     * and branch-point cases). */
+    int st0; int64_t m0 = 0;
+    Expr* c0 = residue_coeff_once(expr, svar, spt, 0, &st0, &m0);
+    if (st0 == 2) return NULL;                 /* branch / failure */
+    if (st0 == 1) return expr_new_integer(0);  /* analytic -> residue 0 */
+    if (c0) { expr_free(c0); }                 /* discard: we re-derive with margin */
+
+    int64_t m = (m0 >= 1) ? m0 : 1;
+    int64_t used = 0, pm = 0;
+    /* Start a safe margin above the convergence threshold (pole_order - 1). */
+    Expr* prev = residue_coeff_resolved(expr, svar, spt, m - 1, &used, &pm);
+    if (!prev) return NULL;
+
+    int64_t ord = used;
+    for (int it = 0; it < 12; it++) {
+        int64_t used2 = 0, pm2 = 0;
+        Expr* cur = residue_coeff_resolved(expr, svar, spt, ord + 1, &used2, &pm2);
+        if (!cur) return prev;                 /* can't go higher: trust prev */
+        if (residue_coeffs_agree(prev, cur)) { expr_free(prev); return cur; }
+        expr_free(prev);
+        prev = cur;
+        ord = used2;
+        if (ord > 64) return prev;             /* bounded effort */
+    }
+    return prev;
+}
+
+/* Does f have a pole (not an analytic point) at z = z0?  True when the
+ * denominator of Together[f] vanishes there. Borrowed args. */
+static bool residue_has_pole_at(Expr* f, Expr* z, Expr* z0) {
+    Expr* tog = residue_eval1("Together", expr_copy(f));
+    if (!tog) return false;
+    Expr* Q = residue_eval1("Denominator", tog);   /* consumes tog */
+    if (!Q) return false;
+    Expr* Qat = residue_subst(Q, z, z0);
+    expr_free(Q);
+    bool zero = Qat && residue_is_zero(Qat);
+    if (Qat) expr_free(Qat);
+    return zero;
 }
 
 Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
@@ -299,7 +373,37 @@ Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
     /* Transcendental / special-function integrand: expand directly about z0 so
      * the series engine can use its knowledge of the function's Laurent series
      * there (e.g. Zeta at 1, Cot / 1/Sin^n at 0, unknown f[z]/z^n). */
-    return residue_extract(f, z, z0);
+    Expr* r = residue_extract(f, z, z0);
+
+    /* Dropped-pole guard. A concrete odd-denominator rational power composed
+     * DIRECTLY with a pole at a nonzero z0 (e.g. z^(1/3)/(1+z^2)^2 at z = I)
+     * makes the series engine lose the principal part, so residue_extract reads
+     * an analytic series and returns 0 -- a silent WRONG answer. When z0 is in
+     * fact a pole, re-expand the SHIFTED integrand f /. z -> z0 + w about w = 0:
+     * there z^p becomes the analytic binomial (z0+w)^p and the pole sits in w
+     * directly, which the series engine handles correctly. */
+    if (r && r->type == EXPR_INTEGER && r->data.integer == 0 &&
+        residue_has_pole_at(f, z, z0)) {
+        Expr* w = expr_new_symbol("Residue`$w");
+        Expr* shiftpt = expr_new_function(expr_new_symbol(SYM_Plus),
+                            (Expr*[]){ expr_copy(z0), expr_copy(w) }, 2);
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                         (Expr*[]){ expr_copy(z), shiftpt }, 2);
+        Expr* fs = residue_eval2("ReplaceAll", expr_copy(f), rule);
+        Expr* zero = expr_new_integer(0);
+        if (fs) {
+            Expr* r2 = residue_extract(fs, w, zero);
+            expr_free(fs);
+            if (r2 && !(r2->type == EXPR_INTEGER && r2->data.integer == 0)) {
+                expr_free(r);
+                expr_free(w); expr_free(zero);
+                return r2;
+            }
+            if (r2) expr_free(r2);
+        }
+        expr_free(w); expr_free(zero);
+    }
+    return r;
 }
 
 Expr* builtin_residue(Expr* res) {

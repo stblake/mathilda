@@ -6131,7 +6131,17 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * the full Laurent pad. Restricting to INTEGER/REAL/BIGINT wrongly demoted a
      * complex pole like I = Complex[0,1] to pad=2, one term short -- the residue
      * at a double/triple complex pole (Fourier/Jordan family) then dropped its
-     * product-rule cross term. Only a free/symbolic x0 keeps the tight pad. */
+     * product-rule cross term. Only a free/symbolic x0 keeps the tight pad.
+     *
+     * A SYMBOLIC x0 over a higher-order pole has the same one-term-short failure
+     * (e.g. Series[Exp[I z]/(z^2+a^2)^2, {z, I a, 0}] drops its 1/a^3 cross term),
+     * but widening the symbolic pad here regresses every symbolic-centre Series
+     * consumer -- notably DSolve's power-series / Frobenius methods, where the
+     * extra orders in a hot loop blow past per-ODE TimeConstrained budgets. So the
+     * tight symbolic pad stays, and the correctness fix lives where it is cheap:
+     * residue extraction (residue.c) raises the expansion ORDER until the (z-z0)^-1
+     * coefficient agrees across two consecutive orders, which compensates for the
+     * tight pad only in the residues that actually need it. */
     bool x0_is_numeric = expr_is_numeric_like(x0_use);
     int64_t pad = x0_is_numeric ? 12 : 2;
     int64_t internal_order = order + pad;
