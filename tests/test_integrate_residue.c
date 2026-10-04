@@ -319,6 +319,31 @@ static void test_keyhole_log(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Parametrized contour on (0, 2Pi): Integrate[g(c Exp[I t]) (I c Exp[I t])] =
+ * Contour[g, |z|=c] = 2 Pi i Sum Res, including essential singularities.  Each
+ * pin asserts FreeQ[r, Integrate] so a decline cannot pass via a numeric
+ * fallback; the value is genuinely complex (2 Pi i), not real.
+ * ---------------------------------------------------------------------- */
+static void test_contour_param(void) {
+    /* Case 9/19: Contour[Exp[1/z] Sin[1/z], |z|=1] -- essential singularity at 0,
+     * Res = 1 (w^1 coeff of Exp[w] Sin[w]).  = 2 Pi i. */
+    check_eq("With[{r = Integrate[Exp[Exp[-I t]] Sin[Exp[-I t]] I Exp[I t], {t, 0, 2 Pi}, "
+             "Method -> \"Residue\"]}, {FreeQ[r, Integrate], Chop[N[r - 2 Pi I]]}]", "{True, 0}");
+    /* Case 20: Contour[Exp[2z]/(z^4 (z-1/2)), |z|=1] -- order-4 pole at 0 (Res
+     * -128/3) + simple pole at 1/2 (Res 16 E).  = 2 Pi i (16 E - 128/3). */
+    check_eq("With[{r = Integrate[(Exp[2 Exp[I t]]/(Exp[4 I t] (Exp[I t] - 1/2))) I Exp[I t], "
+             "{t, 0, 2 Pi}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r - 2 Pi I (16 E - 128/3)]]}]", "{True, 0}");
+    /* Case 22: Contour[z^5 Cos[1/z^2], |z|=2] -- essential singularity, Res = 0
+     * (no z^-1 term in z^5 Sum (-1)^k z^(-4k)/(2k)!).  = 0. */
+    check_eq("With[{r = Integrate[(2 Exp[I t])^5 Cos[1/(2 Exp[I t])^2] 2 I Exp[I t], "
+             "{t, 0, 2 Pi}, Method -> \"Residue\"]}, {FreeQ[r, Integrate], Chop[N[r]]}]",
+             "{True, 0}");
+    /* The ordinary rational-in-{Cos,Sin} trig family is unaffected. */
+    check_eq("Integrate[1/(2 + Cos[t]), {t, 0, 2 Pi}, Method -> \"Residue\"]", "(2 Pi)/Sqrt[3]");
+}
+
+/* -------------------------------------------------------------------------
  * Sector contour: x^m/(c + x^n), symbolic exponent n.
  * ---------------------------------------------------------------------- */
 static void test_sector(void) {
@@ -384,6 +409,7 @@ int main(void) {
     TEST(test_mellin);
     TEST(test_mellin_symbolic_exponent);
     TEST(test_keyhole_log);
+    TEST(test_contour_param);
     TEST(test_sector);
     TEST(test_rational_symbolic);
     TEST(test_symbolic_negative_controls);

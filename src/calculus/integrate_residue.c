@@ -50,6 +50,7 @@
 
 /* Fresh variable names, context-qualified to stay clear of user symbols. */
 #define RES_W  "IntegrateResidue`$w"   /* Family C: z = Exp[I x] on |z|=1        */
+#define RES_W2 "IntegrateResidue`$w2"  /* res_ess0: Laurent variable w = 1/u     */
 
 /* Classification tolerance for Im/Abs sign decisions (relative to magnitude). */
 static const double RES_TOL = 1e-8;
@@ -785,6 +786,130 @@ static Expr* residue_family_trig(Expr* f, Expr* x, Expr* a, Expr* b,
 }
 
 /* -------------------------------------------------------------------------
+ * Parametrized contour on the full period (0, 2Pi).
+ *
+ * Integrate[g(c Exp[I t]) * (I c Exp[I t]), {t, 0, 2Pi}] is the contour integral
+ * of g(z) around |z| = c, i.e. 2 Pi i * Sum_{|z_k| < c} Res[g, z_k].  The same
+ * unit-circle substitution as the trig family (t -> -I Log[u], so Exp[I t] -> u
+ * and Exp[-I t] -> 1/u; the whole t-integral becomes Contour[G, |u|=1] with
+ * G = integrand / (I u)), but here for a TRANSCENDENTAL g with an essential
+ * singularity or an Exp/trig-of-(1/u) kernel -- the case residue_family_trig
+ * declines because G is not rational in u.  The contour value is generally
+ * complex (e.g. 2 Pi i), so only the finite-scalar gate applies.
+ * ---------------------------------------------------------------------- */
+
+/* Res[g, u = 0] when 0 is an essential singularity: the Laurent u^{-1}
+ * coefficient equals the w^1 coefficient of g(1/w), an ordinary (Laurent-)
+ * series in w.  Used only when residue_compute declines at 0 (g entire in 1/u
+ * there -- Exp[1/u], Cos[1/u^2], ...).  If g(1/w) itself has an essential
+ * singularity at w=0 (e.g. g = Exp[2 u]/u^4 -> Exp[2/w]), Series cannot expand
+ * and a leftover w makes this decline -- correct, since then 0 is an ordinary
+ * pole handled by residue_compute instead.  Borrows g, u; owned result or NULL. */
+static Expr* res_ess0(Expr* g, Expr* u) {
+    Expr* w = mk_sym(RES_W2);
+    Expr* sub = eval_take(mk_fn2("ReplaceAll", expr_copy(g),
+                    mk_fn2("Rule", expr_copy(u),
+                           mk_fn2("Power", expr_copy(w), mk_int(-1)))));   /* g /. u -> 1/w */
+    if (!sub) { expr_free(w); return NULL; }
+    Expr* spec = expr_new_function(mk_sym("List"),
+                    (Expr*[]){ expr_copy(w), mk_int(0), mk_int(1) }, 3);
+    Expr* ser = eval_take(mk_fn2("Series", sub, spec));                   /* Series[., {w,0,1}] */
+    Expr* nrm = ser ? ev1("Normal", ser) : NULL;
+    Expr* coeff = nrm ? eval_take(expr_new_function(mk_sym("Coefficient"),
+                      (Expr*[]){ nrm, expr_copy(w), mk_int(1) }, 3)) : NULL;
+    bool ok = coeff && !contains_symbol(coeff, w);     /* w left behind -> Series failed */
+    expr_free(w);
+    if (!ok) { if (coeff) expr_free(coeff); return NULL; }
+    return coeff;
+}
+
+static Expr* residue_family_contour_param(Expr* f, Expr* x, Expr* a, Expr* b,
+                                          bool* diverges) {
+    if (!is_full_period(a, b)) return NULL;
+    /* Cost gate: the parametrized forms carry Exp[.] (stored as Power[E, .]).
+     * A pure rational-in-{Cos,Sin} integrand has no E and is the trig family's;
+     * skipping it here keeps the Simplify below off the common path. */
+    { Expr* E = mk_sym(SYM_E);
+      bool has_e = contains_symbol(f, E);
+      expr_free(E);
+      if (!has_e) return NULL; }
+
+    Expr* u = mk_sym(RES_W);
+    /* t -> -I Log[u]; Simplify collapses E^(k Log u + r) -> u^k E^r. */
+    Expr* raw = eval_take(mk_fn2("ReplaceAll", expr_copy(f),
+                    mk_fn2("Rule", expr_copy(x),
+                        mk_fn2("Times", mk_fn2("Times", mk_int(-1), mk_sym(SYM_I)),
+                               mk_fn1("Log", expr_copy(u))))));
+    if (!raw) { expr_free(u); return NULL; }
+    Expr* G = ev1("Simplify", mk_fn2("Times", raw,
+                    mk_fn2("Power", mk_fn2("Times", mk_sym(SYM_I), expr_copy(u)), mk_int(-1))));
+    if (!G) { expr_free(u); return NULL; }
+    /* G must be a meromorphic function of u alone: x eliminated and no residual
+     * Log[u] (a bare x / Log[x] in the integrand would leave one -- not a contour
+     * integrand). */
+    if (contains_symbol(G, x) || contains_head(G, "Log")) {
+        expr_free(u); expr_free(G); return NULL;
+    }
+
+    /* Candidate poles inside |u| < 1: the rational-denominator roots, plus u = 0
+     * (the 1/u kernels put a singularity there that is not a polynomial root).
+     * A pole on |u| = 1 is a real-axis singularity -> the period integral
+     * diverges. */
+    Expr* num; Expr* den;
+    if (!res_num_den(G, &num, &den)) { expr_free(u); expr_free(G); return NULL; }
+    expr_free(num);
+    ExprVec cand; ev_init(&cand);
+    ev_push(&cand, mk_int(0));                                 /* always test u = 0 */
+    bool bad = false;
+    if (res_polyq(den, u) && contains_symbol(den, u)) {
+        ExprVec roots;
+        if (solve_roots(den, u, &roots)) {
+            for (size_t i = 0; i < roots.n && !bad; i++) {
+                double re, im;
+                if (!res_reim(roots.v[i], &re, &im)) { bad = true; break; }  /* symbolic pole */
+                double mag = sqrt(re * re + im * im);
+                if (mag < RES_TOL) continue;                  /* u = 0 already a candidate */
+                if (mag < 1.0 - RES_TOL) {
+                    ev_push(&cand, expr_copy(roots.v[i]));
+                } else if (mag <= 1.0 + RES_TOL) {            /* on the circle: divergent */
+                    if (diverges) *diverges = true;
+                    bad = true;
+                }
+            }
+            ev_free(&roots);
+        } else bad = true;
+    }
+    expr_free(den);
+    if (bad) { expr_free(u); expr_free(G); ev_free(&cand); return NULL; }
+
+    Expr* S = mk_int(0);
+    for (size_t i = 0; i < cand.n && !bad; i++) {
+        Expr* z0 = cand.v[i];
+        double zre, zim;
+        bool is_zero = res_reim(z0, &zre, &zim) &&
+                       fabs(zre) < RES_TOL && fabs(zim) < RES_TOL;
+        Expr* r = residue_compute(G, u, z0);
+        if (!r && is_zero) r = res_ess0(G, u);                 /* essential singularity */
+        if (!r) { bad = true; break; }
+        S = eval_take(mk_fn2("Plus", S, r));
+        if (!S) { bad = true; break; }
+    }
+    ev_free(&cand);
+    expr_free(G);
+    if (bad || !S) { expr_free(u); if (S) expr_free(S); return NULL; }
+
+    /* value = 2 Pi i * S.  May be genuinely complex, so the finite-scalar gate. */
+    Expr* value = ev1("Simplify", mk_fn2("Times",
+                      mk_fn2("Times", mk_int(2),
+                             mk_fn2("Times", mk_sym(SYM_Pi), mk_sym(SYM_I))), S));
+    expr_free(u);
+    if (!value) return NULL;
+    double re, im;
+    if (!res_is_finite_scalar(value, x, &re, &im)) { expr_free(value); return NULL; }
+    return value;
+}
+
+/* -------------------------------------------------------------------------
  * Half-line [0, Inf) via even symmetry.
  * ---------------------------------------------------------------------- */
 
@@ -1313,7 +1438,9 @@ static bool mellin_log_split(Expr* F, Expr* v, Expr** p_out, int* m_out, Expr** 
 
     Expr* P; Expr* Q;
     if (!res_num_den(R, &P, &Q) || !res_polyq(P, v) || !res_polyq(Q, v)) {
-        if (P) expr_free(P); if (Q) expr_free(Q); expr_free(p); expr_free(R); return false;
+        if (P) expr_free(P);
+        if (Q) expr_free(Q);
+        expr_free(p); expr_free(R); return false;
     }
     expr_free(P); expr_free(Q);
     *p_out = p; *m_out = m; *R_out = R;
@@ -1788,8 +1915,12 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
 
     Expr* value = NULL;
     if (is_full_period(a, b)) {
-        /* Full period (0,2Pi)/(-Pi,Pi): unit-circle trig-substitution family. */
+        /* Full period (0,2Pi)/(-Pi,Pi): unit-circle trig-substitution family,
+         * then the parametrized-contour family for transcendental integrands
+         * (essential singularities) that are not rational in z = Exp[I x]. */
         value = residue_family_trig(f, x, a, b, diverges);
+        if (!value && !(diverges && *diverges))
+            value = residue_family_contour_param(f, x, a, b, diverges);
     } else if (is_neg_pos_infinity(a, b)) {
         /* Whole line: Fourier/Jordan if a trig/exp kernel is present, then the
          * quasi-periodic (rectangular-contour) family, else rational. */

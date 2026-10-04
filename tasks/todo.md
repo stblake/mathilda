@@ -53,9 +53,15 @@ NIntegrate). I verify each case numerically in the REPL during dev. Bump
       now CLEAN. Tests rewritten to assert FreeQ[r,Integrate] (non-vacuous).
 - [ ] PV indentation for axis pole (Case 18)  [Phase 2b]
 
-## Phase 3 — Tier C parametrized contour + essential-sing
-- [ ] `residue_family_contour_param`; `res_ess0` primitive
-- [ ] Cases 9(param), 19, 20, 22; tests/docs/bump/tag
+## Phase 3 — Tier C parametrized contour + essential-sing  [DONE v0.271]
+- [x] `residue_family_contour_param` (t->-I Log[u], G=F/(I u), 2 Pi i Sum Res
+      inside |u|<1; finite-scalar gate since value is complex); `res_ess0`
+      (w^1 coeff of Series[G/.u->1/w,{w,0,1}]). Gated on Exp presence; wired
+      after residue_family_trig in the full-period branch.
+- [x] Cases 19 (2 Pi I), 20 (2 Pi I(16E-128/3)), 22 (0); Case 9 delivered via
+      the parametrized spelling (Case 19) -- literal Circle contour stays OOS.
+      test_contour_param (FreeQ+Chop non-vacuous); docs + changelog; v0.271.
+      Fixed a u=0 double-count (denominator root 0 vs the always-added 0 cand).
 
 ## Phase 4 — Tier D unit-circle order-n
 - [ ] Verify/extend family C under assumptions; Case 16; tests/docs/bump/tag

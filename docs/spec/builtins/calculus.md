@@ -2148,6 +2148,18 @@ recognizers:
 - **Rational-in-`{Sin, Cos}` over a full period** `(0, 2π)` or `(-π, π)` — via
   `z = Exp[I x]` on the unit circle: value `= 2 π i · Σ Res` over the poles
   inside the unit disk.
+- **Parametrized contour over a full period** — a *transcendental* integrand of
+  the form `g(Exp[I t]) · (I c Exp[I t])` (the Jacobian of `z = c Exp[I t]`):
+  the same `t → −I Log[u]` substitution leaves `G(u) = integrand/(I u)`, whose
+  period integral is the contour integral `∮_{|z|=c} g = 2 π i · Σ_{|u_k|<1}
+  Res[G, u_k]`.  This is the non-rational sibling of the unit-circle family,
+  covering an **essential singularity** at `0`: when the ordinary residue engine
+  declines there, the residue is read as the `w^1` coefficient of `G(1/w)` (the
+  Laurent `u^{-1}` coefficient), so `∮_{|z|=1} Exp[1/z] Sin[1/z] = 2 π i`,
+  `∮_{|z|=2} z^5 Cos[1/z²] = 0`, and `∮_{|z|=1} Exp[2z]/(z⁴(z−½)) =
+  2 π i (16 e − 128/3)` (order-4 pole at `0` plus a simple pole at `½`).  The
+  value is genuinely complex, so only the finite-scalar (not the real) gate
+  applies.  A pole on `|u| = 1` makes the period integral divergent.
 - **Removable axis singularity (Fourier)** — a **simple** real-axis pole of `R`
   at which the kernel vanishes (so `f = R·K` is analytic there, e.g. `Sin[x]/x`
   at `0`) contributes a **half residue** `π i · Res`, the indented-contour value,
