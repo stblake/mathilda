@@ -4399,3 +4399,49 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
    optimiser at all — it was `Sum[]`'s Gosper stage churning Simplify on an opaque-indexed
    summand. Bisect to the actual hot call before attributing a slowdown to the subsystem the
    symptom appears in. (See the memory note on the Sum/Gosper opaque-index guard.)
+
+## Residue keyhole — symbolic exponent interval & the s-vs-p asymmetry (2026-10-04)
+- `param_interval` (src/calculus/integrate_residue.c) reads ONLY a bare parameter
+  symbol or a numeric constant. For a keyhole exponent, `s = p + 1`, and exactly
+  one of `s`, `p` is bare depending on the family: keyhole `x^a R` has `p = a`
+  bare, `s = 1 + a` a Plus; rectangular `Exp[a x] R(Exp[x])` has `p = a - 1` a
+  Plus but `s` evaluates to the bare `a`. Reading `p + 1` unconditionally FIXED
+  the keyhole (Case 12) but broke the rectangular family — mellin_core declined,
+  the cascade fell through, and a downstream method HUNG (120s). Fix: read `s`
+  when bare+bounded, else fall back to `p + 1`.
+- The hang presented as a flaky `integrate_residue_tests` SIGALRM at the 120s
+  whole-binary `alarm()` (test_utils.h). It looked like a pre-existing slow suite
+  until an A/B: HEAD engine+tests ran in 1.9s, mine in >120s — the regression was
+  entirely mine. ALWAYS A/B-time a "slow suite" against clean HEAD before
+  attributing it to pre-existing flakiness.
+
+## Residue keyhole — the `Chop[N[...]]` pin is VACUOUS when the method declines (2026-10-05)
+- Phase 2 reported Cases 4 & 5 "solved", but on the clean committed binary
+  `Integrate[Log[x]/(1+x^6),…,Method->"Residue"]` DECLINED (returned the
+  unevaluated `Integrate[...]`). The committed test `check_eq("Chop[N[Integrate[
+  …Method->"Residue"] - ref]]", "0")` passed anyway — because `N[]` of an
+  *unevaluated* `Integrate` falls back to NIntegrate, which numerically equals
+  `ref`. The test exercised NIntegrate, NOT the residue method. A decline that a
+  fallback silently covers is exactly `[[feedback_decline_with_a_fallback_is_a_silent_wrong_answer]]`.
+  FIX THE TEST SHAPE: pin `{FreeQ[r, Integrate], Chop[N[r - ref]]} == {True, 0}`
+  so a decline (Integrate head survives) fails loudly. Verified both ways with an
+  A/B against clean HEAD before concluding it was pre-existing.
+- Root cause of the decline was NOT the residue algorithm (it computed the right
+  value) but the CLOSING: `a0_keyhole_log` used `Simplify[RootReduce[Re[I_k]]]`,
+  and `RootReduce` turns the poles `(-1)^(1/6)` into `Root[…]` objects whose
+  `Arg` never simplifies, leaving an unresolved `Re[Root…]` that failed the
+  real-scalar gate. The keyhole sum is `Σ (klog z_l)^k Res`, klog carrying
+  `Arg[z_l]`; it collapses to a clean closed form ONLY if `Arg` reduces exactly
+  on the roots of unity — which Mathilda did not do (`Arg[(-1)^(1/6)]` stayed
+  symbolic). Fixing `Arg` on root-of-unity constants (src/complex.c,
+  `arg_turns_of`) + closing with `ComplexExpand` instead of `RootReduce[Re]` made
+  Cases 4/4b return clean `-√3 π²/18`, `-√2 π²/16`. The enabling fix was a core
+  `Arg` gap, not residue-specific code — look for the general obstruction behind a
+  "method declines on a whole family" symptom.
+- `Residue[essentialSing, {u,0}]` returns UNEVALUATED (head `Residue`), not a
+  wrong 0 — so an essential-singularity residue (Tier C) must read the Laurent
+  coeff directly: `Res[g,0] = Coefficient[Normal[Series[g /. u->1/w, {w,0,1}]], w, 1]`.
+  Works for entire-in-(1/u) integrands (e^{1/u}, cos(1/u²)); for a *pole* at 0 of
+  an entire-in-u integrand (e^{2u}/u^4) use ordinary `Residue`/`residue_compute`
+  (the 1/w substitution would turn e^{2u} into the essential e^{2/w}). Try the
+  ordinary residue first, fall back to the 1/w-Laurent form.

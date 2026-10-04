@@ -1434,7 +1434,7 @@ static Expr* a0_keyhole_log(Expr* R, Expr* v, int m) {
                         mk_fn2("Power", den, mk_int(-1)))) : NULL;
         if (num && !quo) expr_free(num);
         if (den && !quo && !num) expr_free(den);
-        I[k] = quo ? ev1("Re", quo) : NULL;                    /* I_k is real */
+        I[k] = quo;                                 /* kept complex; closed below */
         if (!I[k]) fail = true;
     }
     Expr* ans = (!fail && I[m]) ? expr_copy(I[m]) : NULL;
@@ -1443,10 +1443,162 @@ static Expr* a0_keyhole_log(Expr* R, Expr* v, int m) {
     free(I); free(S); expr_free(twopii);
     if (!ans) return NULL;
 
-    /* Close: concrete -> RootReduce + Simplify (algebraic multiple of Pi^k);
-     * parametric -> Simplify. */
+    /* Close: each I_k is real but the triangular solve carries it as an exact
+     * complex expression (the keyhole klog(z_k) = Log|z_k| + i*arg).
+     * ComplexExpand collapses those arg terms -- now that Arg reduces on the
+     * roots of unity the poles live at -- and the imaginary parts cancel; a
+     * premature per-step Re[] or RootReduce instead buried the poles in Root
+     * objects whose Arg never simplified, forcing a decline. */
+    Expr* val = ev1("Simplify", ev1("ComplexExpand", ans));
+    if (!val) return NULL;
+    double vv, re, im;
+    if (!(res_is_real_scalar(val, v, &vv) || res_is_finite_scalar(val, v, &re, &im))) {
+        expr_free(val); return NULL;
+    }
+    return val;
+}
+
+/* Res[ z^a (Log z)^k R(z), z ] for a HIGHER-ORDER pole z (order >= 2), with the
+ * keyhole branch (arg in (0, 2Pi]).  Shift w = z - z_k: z^a = z_k^a (1+w/z_k)^a
+ * and Log z = klog(z_k) + Log(1+w/z_k), both analytic at w=0 (z_k off the cut),
+ * so the residue is z_k^a * Res_{w=0}[ (1+w/z_k)^a (klog(z_k)+Log(1+w/z_k))^k
+ * R(w+z_k) ].  (A SIMPLE pole uses the direct z_k^a klog(z_k)^k Res(R,z_k) in
+ * the caller, robust for algebraic pole locations.)  Borrows R, v, z, a. */
+static Expr* klog_branch_pole_contribution(Expr* R, Expr* v, Expr* z, Expr* a, int k) {
+    Expr* za  = mellin_branch(z, a);                    /* z_k^a, keyhole */
+    Expr* klz = klog_of(z);
+    if (!za || !klz) { if (za) expr_free(za); if (klz) expr_free(klz); return NULL; }
+    Expr* oneplus = mk_fn2("Plus", mk_int(1),
+        mk_fn2("Times", expr_copy(v), mk_fn2("Power", expr_copy(z), mk_int(-1))));
+    Expr* apow = mk_fn2("Power", expr_copy(oneplus), expr_copy(a));   /* (1+w/z)^a */
+    Expr* lfac = mk_fn2("Power",
+        mk_fn2("Plus", klz, mk_fn1("Log", oneplus)), mk_int(k));      /* (klz+Log(1+w/z))^k */
+    Expr* Rshift = eval_take(mk_fn2("ReplaceAll", expr_copy(R),
+                       mk_fn2("Rule", expr_copy(v),
+                              mk_fn2("Plus", expr_copy(v), expr_copy(z)))));
+    if (!Rshift) { expr_free(za); expr_free(apow); expr_free(lfac); return NULL; }
+    Expr* prod = eval_take(mk_fn2("Times", mk_fn2("Times", apow, lfac), Rshift));
+    Expr* zero = mk_int(0);
+    Expr* r0 = prod ? residue_compute(prod, v, zero) : NULL;
+    if (prod) expr_free(prod);
+    expr_free(zero);
+    if (!r0) { expr_free(za); return NULL; }
+    return eval_take(mk_fn2("Times", za, r0));
+}
+
+/* Keyhole-log for a NON-integer branch power a: Integrate[v^a (Log v)^m R(v),
+ * {v, 0, Infinity}], R rational, m >= 1.  The keyhole of z^a (Log z)^m R (branch
+ * arg in [0, 2Pi)) gives, for each k, the lower-triangular system
+ *   (1 - e^(2 Pi i a)) I_k = 2 Pi i T_k + e^(2 Pi i a) Sum_{j<k} C(k,j)
+ *                            (2 Pi i)^(k-j) I_j,
+ * with T_k = Sum_l Res[z^a (Log z)^k R, z_l] (keyhole branch) and I_j =
+ * Integrate[v^a (Log v)^j R].  Solved upward from I_0 = 2 Pi i T_0 /
+ * (1 - e^(2 Pi i a)) -- the m=0 case coincides with mellin_core.  (1 - e^(2 Pi i a))
+ * is nonzero precisely because a is NOT an integer; the integer case takes the
+ * (Log z)^(k+1) contour in a0_keyhole_log instead.  Returns owned I_m, or NULL. */
+static Expr* keyhole_log_general_a(Expr* R, Expr* v, Expr* a, int m) {
+    Expr* P; Expr* Q;
+    if (!res_num_den(R, &P, &Q)) return NULL;
+    int dNum = res_degree(P, v), dDen = res_degree(Q, v);
+    expr_free(P);
+    /* Convergence 0 < Re(s) < dDen - dNum, s = a + 1 (the log is subpolynomial). */
+    { Expr* s = eval_take(mk_fn2("Plus", expr_copy(a), mk_int(1)));
+      double slo, shi, sre, sim;
+      param_interval(s, &slo, &shi);
+      if (slo <= -HUGE_VAL && shi >= HUGE_VAL) {
+          double alo, ahi; param_interval(a, &alo, &ahi);
+          slo = alo + 1.0; shi = ahi + 1.0;
+      }
+      bool okconv = res_reim(s, &sre, &sim) && fabs(sim) < RES_TOL &&
+                    slo > -RES_TOL && shi < (double)(dDen - dNum) + RES_TOL;
+      expr_free(s);
+      if (!okconv) { expr_free(Q); return NULL; } }
+
+    ExprVec roots;
+    if (!solve_roots(Q, v, &roots)) { expr_free(Q); return NULL; }
+    Expr* dQ = eval_take(mk_fn2("D", Q, expr_copy(v)));           /* consumes Q */
+
+    Expr** T = calloc((size_t)m + 1, sizeof(Expr*));             /* T[0..m] */
+    for (int k = 0; k <= m; k++) T[k] = mk_int(0);
+    bool bad = false;
+    for (size_t i = 0; i < roots.n && !bad; i++) {
+        Expr* z = roots.v[i]; double zre, zim;
+        if (!res_reim(z, &zre, &zim)) { bad = true; break; }      /* symbolic pole */
+        if (zim > -RES_TOL && zim < RES_TOL && zre > RES_TOL) { bad = true; break; } /* on (0,Inf): PV */
+        Expr* dQz = dQ ? eval_take(mk_fn2("ReplaceAll", expr_copy(dQ),
+                            mk_fn2("Rule", expr_copy(v), expr_copy(z)))) : NULL;
+        double dre, dim;
+        bool simple = dQz && res_reim(dQz, &dre, &dim) &&
+                      (fabs(dre) > RES_TOL || fabs(dim) > RES_TOL);
+        if (dQz) expr_free(dQz);
+        Expr* za = NULL, *klz = NULL, *resR = NULL;
+        if (simple) {
+            za   = mellin_branch(z, a);
+            klz  = klog_of(z);
+            resR = (za && klz) ? residue_compute(R, v, z) : NULL;
+            if (!za || !klz || !resR) {
+                if (za) expr_free(za);
+                if (klz) expr_free(klz);
+                if (resR) expr_free(resR);
+                bad = true; break;
+            }
+        }
+        for (int k = 0; k <= m && !bad; k++) {
+            Expr* c;
+            if (simple)
+                c = eval_take(mk_fn2("Times",
+                        mk_fn2("Times", expr_copy(za), expr_copy(resR)),
+                        mk_fn2("Power", expr_copy(klz), mk_int(k))));
+            else
+                c = klog_branch_pole_contribution(R, v, z, a, k);
+            if (!c) { bad = true; break; }
+            T[k] = eval_take(mk_fn2("Plus", T[k], c));
+            if (!T[k]) { bad = true; break; }
+        }
+        if (za) expr_free(za);
+        if (klz) expr_free(klz);
+        if (resR) expr_free(resR);
+    }
+    ev_free(&roots);
+    if (dQ) expr_free(dQ);
+    if (bad) { for (int k = 0; k <= m; k++) if (T[k]) expr_free(T[k]); free(T); return NULL; }
+
+    Expr* twopii = eval_take(mk_fn2("Times", mk_int(2),
+                        mk_fn2("Times", mk_sym(SYM_Pi), mk_sym(SYM_I))));
+    Expr* efac = ev1("Exp", mk_fn2("Times", expr_copy(twopii), expr_copy(a)));  /* e^(2 Pi i a) */
+    Expr* denom = efac ? eval_take(mk_fn2("Plus", mk_int(1),
+                             mk_fn2("Times", mk_int(-1), expr_copy(efac)))) : NULL; /* 1 - e^(2 Pi i a) */
+    Expr** I = calloc((size_t)m + 1, sizeof(Expr*));
+    bool fail = (!efac || !denom);
+    for (int k = 0; k <= m && !fail; k++) {
+        /* num = 2 Pi i T_k + e^(2 Pi i a) Sum_{j<k} C(k,j) (2 Pi i)^(k-j) I_j */
+        Expr* num = eval_take(mk_fn2("Times", expr_copy(twopii), expr_copy(T[k])));
+        for (int j = 0; j < k && num; j++) {
+            Expr* term = eval_take(mk_fn2("Times",
+                mk_fn2("Binomial", mk_int(k), mk_int(j)),
+                mk_fn2("Times",
+                    mk_fn2("Power", expr_copy(twopii), mk_int(k - j)),
+                    expr_copy(I[j]))));
+            num = eval_take(mk_fn2("Plus", num,
+                       mk_fn2("Times", expr_copy(efac), term)));
+        }
+        Expr* quo = num ? eval_take(mk_fn2("Times", num,
+                        mk_fn2("Power", expr_copy(denom), mk_int(-1)))) : NULL;
+        I[k] = quo;                                 /* kept complex; closed below */
+        if (!I[k]) fail = true;
+    }
+    Expr* ans = (!fail && I[m]) ? expr_copy(I[m]) : NULL;
+    for (int k = 0; k <= m; k++) if (I[k]) expr_free(I[k]);
+    for (int k = 0; k <= m; k++) if (T[k]) expr_free(T[k]);
+    free(I); free(T); expr_free(twopii);
+    if (efac) expr_free(efac);
+    if (denom) expr_free(denom);
+    if (!ans) return NULL;
+
+    /* Close: the I_m is real; ComplexExpand collapses the keyhole z_k^a
+     * (fractional powers of the pole locations) and the imaginary parts cancel. */
     Expr* val = g_inst ? ev1("Simplify", ans)
-                       : ev1("Simplify", ev1("RootReduce", ans));
+                       : ev1("Simplify", ev1("ComplexExpand", ans));
     if (!val) return NULL;
     double vv, re, im;
     if (!(res_is_real_scalar(val, v, &vv) || res_is_finite_scalar(val, v, &re, &im))) {
@@ -1460,20 +1612,26 @@ static Expr* residue_family_mellin_log(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!is_zero_pos_infinity(a, b)) return NULL;
     Expr* p; int m; Expr* R;
     if (!mellin_log_split(f, x, &p, &m, &R)) return NULL;
-    /* This branch: p a non-negative integer, folded in as R' = x^p R. */
-    if (!(p->type == EXPR_INTEGER && p->data.integer >= 0)) {
-        expr_free(p); expr_free(R); return NULL;
+    /* Integer p >= 0: fold in as R' = x^p R, then the a=0 (Log z)^(k+1) contour
+     * (e^(2 Pi i p) = 1 makes the general-a denominator vanish).  Non-integer /
+     * symbolic p: the general-a keyhole with the (1 - e^(2 Pi i a)) factor. */
+    if (p->type == EXPR_INTEGER && p->data.integer >= 0) {
+        int64_t pp = p->data.integer;
+        expr_free(p);
+        Expr* Rp = R;
+        if (pp > 0) {
+            Rp = eval_take(mk_fn2("Times",
+                     mk_fn2("Power", expr_copy(x), mk_int(pp)), R));   /* consumes R */
+            if (!Rp) return NULL;
+        }
+        Expr* val = a0_keyhole_log(Rp, x, m);
+        expr_free(Rp);
+        return val;
     }
-    int64_t pp = p->data.integer;
-    expr_free(p);
-    Expr* Rp = R;
-    if (pp > 0) {
-        Rp = eval_take(mk_fn2("Times",
-                 mk_fn2("Power", expr_copy(x), mk_int(pp)), R));   /* consumes R */
-        if (!Rp) return NULL;
-    }
-    Expr* val = a0_keyhole_log(Rp, x, m);
-    expr_free(Rp);
+    /* A negative integer power is a pole at 0, not a branch: decline. */
+    if (p->type == EXPR_INTEGER) { expr_free(p); expr_free(R); return NULL; }
+    Expr* val = keyhole_log_general_a(R, x, p, m);
+    expr_free(p); expr_free(R);
     return val;
 }
 

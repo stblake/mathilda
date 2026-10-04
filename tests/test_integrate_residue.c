@@ -288,20 +288,34 @@ static void test_mellin_symbolic_exponent(void) {
  * system solved for I_0..I_m from residues alone.
  * ---------------------------------------------------------------------- */
 static void test_keyhole_log(void) {
-    /* Integrate[Log[x]/(1+x^6)] = -Sqrt[3] Pi^2/18 (m=1, six simple poles). */
-    check_eq("Chop[N[Integrate[Log[x]/(1+x^6), {x, 0, Infinity}, Method -> \"Residue\"] "
-             "- (-Sqrt[3] Pi^2/18)]]", "0");
-    /* Integrate[(Log x)^2/(x^2+x+1)] = 16 Pi^3/(81 Sqrt[3]) (m=2). */
-    check_eq("Chop[N[Integrate[Log[x]^2/(x^2+x+1), {x, 0, Infinity}, Method -> \"Residue\"] "
-             "- 16 Pi^3/(81 Sqrt[3])]]", "0");
+    /* Each pin asserts BOTH that the residue method actually evaluated
+     * (FreeQ[r, Integrate] -- so a silent decline + N[] NIntegrate fallback
+     * cannot pass vacuously) AND that the closed form is numerically correct. */
+
+    /* Integrate[Log[x]/(1+x^6)] = -Sqrt[3] Pi^2/18 (m=1, six simple poles on the
+     * sixth roots of -1 -- needs exact Arg on those roots to collapse). */
+    check_eq("With[{r = Integrate[Log[x]/(1+x^6), {x, 0, Infinity}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r + Sqrt[3] Pi^2/18]]}]", "{True, 0}");
+    /* Integrate[(Log x)^2/(x^2+x+1)] = 16 Pi^3/(81 Sqrt[3]) (m=2, primitive cube
+     * roots). */
+    check_eq("With[{r = Integrate[Log[x]^2/(x^2+x+1), {x, 0, Infinity}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r - 16 Pi^3/(81 Sqrt[3])]]}]", "{True, 0}");
     /* Higher-order pole with a log: Integrate[Log[x]/(1+x^2)^2] = -Pi/4. */
     check_eq("Integrate[Log[x]/(1+x^2)^2, {x, 0, Infinity}, Method -> \"Residue\"]", "-1/4 Pi");
     /* Integer power folded in (p=2): Integrate[x^2 Log[x]/(1+x^6)] = 0 by the
      * x -> 1/x symmetry of x^2/(1+x^6). */
-    check_eq("Chop[N[Integrate[x^2 Log[x]/(1+x^6), {x, 0, Infinity}, Method -> \"Residue\"]]]", "0");
-    /* A pure log integral without Method still routes here under the cascade. */
-    check_eq("Chop[N[Integrate[Log[x]/(1+x^4), {x, 0, Infinity}, Method -> \"Residue\"] "
-             "+ Sqrt[2] Pi^2/16]]", "0");
+    check_eq("With[{r = Integrate[x^2 Log[x]/(1+x^6), {x, 0, Infinity}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r]]}]", "{True, 0}");
+    /* A pure log integral: Integrate[Log[x]/(1+x^4)] = -Sqrt[2] Pi^2/16 (fourth
+     * roots of -1, carrying an I factor). */
+    check_eq("With[{r = Integrate[Log[x]/(1+x^4), {x, 0, Infinity}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r + Sqrt[2] Pi^2/16]]}]", "{True, 0}");
+
+    /* Case 14 -- NON-integer branch power with a log: the (1 - e^(2 Pi i a))
+     * keyhole.  Integrate[Sqrt[x] Log[x]/(x^2+1)^2] = Pi(Pi-4)/(8 Sqrt[2])
+     * (a = 1/2, m = 1, double poles at +/- i). */
+    check_eq("With[{r = Integrate[Sqrt[x] Log[x]/(x^2+1)^2, {x, 0, Infinity}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r - Pi (Pi - 4)/(8 Sqrt[2])]]}]", "{True, 0}");
 }
 
 /* -------------------------------------------------------------------------

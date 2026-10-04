@@ -2175,15 +2175,27 @@ symbolic-exponent contours:
   off `s = a + 1` (e.g. `Integrate[x^a/(x+1)^3, {x,0,∞}, Assumptions -> -1 < a < 2]
   = π a(1−a)/(2 sin π a)`).
 - **Keyhole with a logarithm on `(0, ∞)`** — `f = x^p (Log x)^m R(x)`, `R`
-  rational, `m ≥ 1`, and `p` a **non-negative integer** (folded in as
-  `R' = x^p R`).  The keyhole contour of `(Log z)^{k+1} R(z)` (branch `arg ∈
-  [0,2π)`) gives, for each `k = 0..m`, a lower-triangular relation among
-  `I_j = ∫₀^∞ (Log x)^j R dx` and the pole-residue sums
-  `S_{k+1} = Σ_l Res[(Log z)^{k+1} R, z_l]`; solving it upward from `I_0` yields
-  the requested `I_m` **entirely from residues**, no auxiliary quadrature.  A
-  simple pole uses the direct `(Log z_l)^{k+1} Res(R, z_l)`; an order-≥2 pole the
-  shifted form.  E.g. `∫₀^∞ Log[x]/(1+x⁶) = −√3 π²/18`,
-  `∫₀^∞ (Log x)²/(x²+x+1) = 16 π³/(81√3)`, `∫₀^∞ Log[x]/(1+x²)² = −π/4`.
+  rational, `m ≥ 1`.  Two complementary branches, by whether `x^p` jumps across
+  the cut:
+  - **`p` a non-negative integer** (folded in as `R' = x^p R`, so `a = 0`).  The
+    keyhole contour of `(Log z)^{k+1} R(z)` (branch `arg ∈ [0,2π)`) gives, for
+    each `k = 0..m`, a lower-triangular relation among `I_j = ∫₀^∞ (Log x)^j R dx`
+    and the pole-residue sums `S_{k+1} = Σ_l Res[(Log z)^{k+1} R, z_l]`; solving
+    it upward from `I_0` yields the requested `I_m` **entirely from residues**,
+    no auxiliary quadrature.  E.g. `∫₀^∞ Log[x]/(1+x⁶) = −√3 π²/18`,
+    `∫₀^∞ (Log x)²/(x²+x+1) = 16 π³/(81√3)`, `∫₀^∞ Log[x]/(1+x⁴) = −√2 π²/16`.
+  - **`p` non-integer** (so `z^p` itself jumps, `1 − e^{2πi p} ≠ 0`).  The
+    keyhole of `z^p (Log z)^m R(z)` gives the lower-triangular system
+    `(1 − e^{2πi p}) I_k = 2πi T_k + e^{2πi p} Σ_{j<k} C(k,j) (2πi)^{k−j} I_j`,
+    with `T_k = Σ_l Res[z^p (Log z)^k R, z_l]` on the branch; the `k=0` row is
+    the plain keyhole/Mellin value.  E.g.
+    `∫₀^∞ √x Log[x]/(x²+1)² = π(π−4)/(8√2)`.
+  A simple pole uses the direct `z_l^p (Log z_l)^{k} Res(R, z_l)`; an order-≥2
+  pole the shifted form.  Because the pole-residue sums carry the keyhole
+  logarithm `Log z_l = Log|z_l| + i·arg z_l` evaluated at the (algebraic) poles,
+  the closed form collapses only because `Arg` reduces exactly on roots of unity
+  (`Arg[(-1)^{1/6}] = π/6`); a numeric `p`/`m` lands on an algebraic multiple of
+  `π^{m+1}`.
 - **Sector on `(0, ∞)`** — `f = x^m/(c + x^n)` with the exponent `n` possibly a
   **symbolic parameter**: the wedge of angle `2π/n` gives
   `(π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`.  This is the one family admitting a
@@ -2255,11 +2267,10 @@ a mis-fire and returned unevaluated.  Negative controls such as
 (genuine axis pole, kernel nonzero),
 `Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}]` (branch point, not
 rational), and `Integrate[1/(2 + Cos[x]), {x, 0, Pi}]` (not a full period) all
-stay unevaluated.  The keyhole/Mellin, keyhole-with-log, sector and rectangular
-families described above extend the reach to branch-cut, log-weighted and
-symbolic-exponent contours.  Still out of scope: the log-keyhole with a
-**non-integer** power (`∫₀^∞ √x Log[x] R`, which needs the `(1−e^{2πia})` jump),
-and with a **principal-value** pole on the positive axis
+stay unevaluated.  The keyhole/Mellin, keyhole-with-log (integer *and*
+non-integer power), sector and rectangular families described above extend the
+reach to branch-cut, log-weighted and symbolic-exponent contours.  Still out of
+scope: the log-keyhole with a **principal-value** pole on the positive axis
 (`∫₀^∞ Log[x]/(x³−1)`, which needs an indentation term).
 
 The `Integrate`` package also exposes the lower-level helpers

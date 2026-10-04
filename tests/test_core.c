@@ -683,6 +683,41 @@ void test_arg(void) {
     char* s_arg_zero_mpfr = expr_to_string_fullform(eval_and_free(parse_expression("Arg[N[0, 35]]")));
     assert(strcmp(s_arg_zero_mpfr, "0") == 0);
     free(s_arg_zero_mpfr);
+
+    /* Root-of-unity-like constants: arg is an exact rational multiple of Pi,
+     * recovered structurally from products of real-rational powers (the generic
+     * a+bI re/im split cannot see it).  (-1)^(1/6) = Exp[I Pi/6]. */
+    char* s_ru1 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[(-1)^(1/6)]")));
+    assert(strcmp(s_ru1, "Times[Rational[1, 6], Pi]") == 0);
+    free(s_ru1);
+
+    char* s_ru2 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[(-1)^(5/6)]")));
+    assert(strcmp(s_ru2, "Times[Rational[5, 6], Pi]") == 0);
+    free(s_ru2);
+
+    /* -(-1)^(1/6) = Exp[I 7 Pi/6], arg reduced into (-Pi, Pi] is -5 Pi/6. */
+    char* s_ru3 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[-(-1)^(1/6)]")));
+    assert(strcmp(s_ru3, "Times[Rational[-5, 6], Pi]") == 0);
+    free(s_ru3);
+
+    /* Negative real base: (-8)^(1/3) = 2 Exp[I Pi/3], arg Pi/3. */
+    char* s_ru4 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[(-8)^(1/3)]")));
+    assert(strcmp(s_ru4, "Times[Rational[1, 3], Pi]") == 0);
+    free(s_ru4);
+
+    /* Imaginary-unit factor: I (-1)^(1/4) = Exp[I 3 Pi/4], arg 3 Pi/4. */
+    char* s_ru5 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[I (-1)^(1/4)]")));
+    assert(strcmp(s_ru5, "Times[Rational[3, 4], Pi]") == 0);
+    free(s_ru5);
+
+    /* Positive real power stays arg 0; a free symbol stays unevaluated. */
+    char* s_ru6 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[2^(1/2)]")));
+    assert(strcmp(s_ru6, "0") == 0);
+    free(s_ru6);
+
+    char* s_ru7 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[x^(1/3)]")));
+    assert(strcmp(s_ru7, "Arg[Power[x, Rational[1, 3]]]") == 0);
+    free(s_ru7);
 }
 
 /* Phase 2: Abs/Arg/Sign on Complex[MPFR, MPFR] must produce results at

@@ -1301,7 +1301,13 @@ Complex number functions.
   `Im`, `Abs`, `Arg` (all real-valued by construction).
 - `Arg[z]`: Phase angle. Pure-real MPFR returns symbolic `0` or `Pi`;
   `Complex[MPFR, MPFR]` evaluates via `mpfr_atan2` at the working
-  precision.
+  precision.  A **root-of-unity-like constant** — a product of real-rational
+  powers and the imaginary unit, e.g. `(-1)^(1/6)`, `-(-1)^(5/6)`, `(-8)^(1/3)`,
+  `I (-1)^(1/4)` — returns the exact rational multiple of `Pi`
+  (`Arg[(-1)^(1/6)] = Pi/6`, `Arg[-(-1)^(1/6)] = -5 Pi/6`), reduced into
+  `(-Pi, Pi]`.  The argument adds mod `2 Pi` over the factors (`arg = ([c<0] +
+  Σ eᵢ[bᵢ<0]) Pi`), so the generic `a + b I` re/im split that cannot recover it
+  is bypassed; a free symbol or a non-root-of-unity Gaussian stays unevaluated.
 
 ## ComplexExpand
 

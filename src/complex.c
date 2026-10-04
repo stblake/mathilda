@@ -639,6 +639,93 @@ Expr* builtin_conjugate(Expr* res) {
     return NULL;
 }
 
+/* ------------------------------------------------------------------------
+ * Exact Arg of a root-of-unity-like constant.
+ *
+ * Mathematica's `Arg` of an explicit algebraic constant such as (-1)^(1/6)
+ * or -(-1)^(5/6) is a rational multiple of Pi, but the generic is_complex
+ * re/im split below cannot recover it (there is no a + b I form), so it fell
+ * through to an unevaluated `Arg[(-1)^(1/6)]`.  This happens for every pole of
+ * 1 + x^n located off the Gaussian lattice -- exactly the poles the keyhole
+ * residue families sum over -- leaving those integrals in an Arg-salad that no
+ * simplifier can collapse.
+ *
+ * For a product of real-rational powers, arg adds mod 2Pi:
+ *   arg( c * b1^e1 * b2^e2 * ... ) / Pi  =  [c<0] + Sum_i ei*[bi<0]   (mod 2),
+ * since |bi|^ei is a positive real (0 turns) and (-|bi|)^ei = |bi|^ei (-1)^ei
+ * contributes ei half-turns.  arg_turns_of accumulates that rational "turns in
+ * units of Pi"; arg_from_turns reduces it into (-Pi, Pi].  Declines (false /
+ * NULL) for anything outside this shape, so a free symbol or an a+bI sum falls
+ * through untouched to the generic path. */
+static int64_t arg_ru_gcd(int64_t a, int64_t b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b) { int64_t t = a % b; a = b; b = t; }
+    return a ? a : 1;
+}
+
+#define ARG_TURNS_CAP ((int64_t)1 << 40)   /* refuse pathological denominators */
+
+static bool arg_turns_of(Expr* z, int64_t* tn, int64_t* td) {
+    int64_t n, d;
+    if (is_rational_like(z)) {                 /* real rational leaf */
+        *tn = (expr_numeric_sign(z) < 0) ? 1 : 0; *td = 1; return true;
+    }
+    /* Pure-imaginary Gaussian leaf Complex[0, b], b real rational nonzero:
+     * arg = +/- Pi/2.  (A general Complex[a, b] is left to the a+bI path.) */
+    if (head_is(z, SYM_Complex) && z->data.function.arg_count == 2) {
+        Expr* zr = z->data.function.args[0];
+        Expr* zi = z->data.function.args[1];
+        if (is_rational_like(zr) && expr_numeric_sign(zr) == 0 &&
+            is_rational_like(zi)) {
+            int si = expr_numeric_sign(zi);
+            if (si == 0) return false;
+            *tn = (si > 0) ? 1 : -1; *td = 2; return true;   /* +/- Pi/2 */
+        }
+        return false;
+    }
+    if (head_is(z, SYM_Times)) {
+        int64_t an = 0, ad = 1;
+        for (size_t i = 0; i < z->data.function.arg_count; i++) {
+            int64_t bn, bd;
+            if (!arg_turns_of(z->data.function.args[i], &bn, &bd)) return false;
+            int64_t nn = an * bd + bn * ad, ndd = ad * bd;      /* an/ad += bn/bd */
+            if (ndd == 0) return false;
+            int64_t g = arg_ru_gcd(nn, ndd); an = nn / g; ad = ndd / g;
+            if (ad < 0) { an = -an; ad = -ad; }
+            if (ad > ARG_TURNS_CAP || an > ARG_TURNS_CAP || an < -ARG_TURNS_CAP) return false;
+        }
+        *tn = an; *td = ad; return true;
+    }
+    if (head_is(z, SYM_Power) && z->data.function.arg_count == 2) {
+        Expr* base = z->data.function.args[0];
+        Expr* exp  = z->data.function.args[1];
+        int64_t en, ed;
+        if (exp->type == EXPR_INTEGER) { en = exp->data.integer; ed = 1; }
+        else if (!is_rational(exp, &en, &ed)) return false;
+        if (!is_rational_like(base)) return false;
+        int sgn = expr_numeric_sign(base);
+        if (sgn == 0) return false;
+        if (sgn > 0) { *tn = 0; *td = 1; return true; }   /* positive base: value > 0 */
+        int64_t g = arg_ru_gcd(en, ed);                   /* negative base: ei turns */
+        *tn = en / g; *td = ed / g;
+        if (*td < 0) { *tn = -*tn; *td = -*td; }
+        return *td <= ARG_TURNS_CAP;
+    }
+    (void)n; (void)d;
+    return false;
+}
+
+static Expr* arg_from_turns(int64_t tn, int64_t td) {
+    int64_t twod = 2 * td;
+    int64_t mm = tn % twod; if (mm < 0) mm += twod;    /* [0, 2td) */
+    int64_t pn = (mm > td) ? mm - twod : mm;           /* (-td, 0) or [0, td] -> (-1,1] */
+    if (pn == 0) return expr_new_integer(0);
+    Expr* coef = make_rational(pn, td);                /* = 1 when pn == td -> Arg[-1] = Pi */
+    Expr* args[2]; args[0] = coef; args[1] = expr_new_symbol(SYM_Pi);
+    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
+}
+
 Expr* builtin_arg(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
@@ -667,6 +754,12 @@ Expr* builtin_arg(Expr* res) {
         return expr_numeric_sign(arg) < 0 ? expr_new_symbol(SYM_Pi)
                                           : expr_new_integer(0);
     }
+
+    /* Exact Arg of a root-of-unity-like constant, e.g. (-1)^(1/6) -> Pi/6,
+     * -(-1)^(5/6) -> -Pi/6.  Only fires on products of real-rational powers
+     * (a free symbol or an a+bI sum declines and falls through below). */
+    { int64_t tn, td;
+      if (arg_turns_of(arg, &tn, &td)) return arg_from_turns(tn, td); }
 
     if (is_complex(arg, &re, &im)) {
 #ifdef USE_MPFR
