@@ -152,6 +152,11 @@ Symbolic sum.
   factors the same way.
 - Returns `0` if no arguments are provided.
 - Returns `Overflow[]` if integer addition overflows or if any argument is `Overflow[]`.
+- A finite term plus a real `±Infinity` absorbs the finite part (`Infinity + 3 → Infinity`),
+  but a finite term plus a **directed (complex) infinity** keeps its direction rather
+  than collapsing to a real `Infinity`: `1/2 - I Infinity` stays
+  `Plus[1/2, Times[Complex[0, -1], Infinity]]` (so a Mellin–Barnes / Bromwich
+  vertical line `s = c ± I Infinity` remains recognisable to `Integrate`).
 
 ```mathematica
 In[1]:= 1 + 2 + x + 2*x

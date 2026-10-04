@@ -720,6 +720,30 @@ void test_arg(void) {
     free(s_ru7);
 }
 
+/* A directed (complex) infinity c + (b I) Infinity must NOT collapse to a real
+ * Infinity in Plus: the imaginary direction is preserved so a Mellin-Barnes
+ * vertical line s = c +/- I Infinity stays recognisable.  Real +/-Infinity
+ * arithmetic is unchanged. */
+void test_directed_infinity(void) {
+    /* 1/2 - I Infinity stays a Plus of the finite offset and -I Infinity. */
+    char* s1 = expr_to_string_fullform(eval_and_free(parse_expression("1/2 - I Infinity")));
+    assert(strcmp(s1, "Plus[Rational[1, 2], Times[Complex[0, -1], Infinity]]") == 0);
+    free(s1);
+
+    char* s2 = expr_to_string_fullform(eval_and_free(parse_expression("1/2 + I Infinity")));
+    assert(strcmp(s2, "Plus[Rational[1, 2], Times[Complex[0, 1], Infinity]]") == 0);
+    free(s2);
+
+    /* Real infinities still absorb a finite shift. */
+    char* s3 = expr_to_string_fullform(eval_and_free(parse_expression("Infinity + 3")));
+    assert(strcmp(s3, "Infinity") == 0);
+    free(s3);
+
+    char* s4 = expr_to_string_fullform(eval_and_free(parse_expression("2 - 3 Infinity")));
+    assert(strcmp(s4, "Times[-1, Infinity]") == 0 || strcmp(s4, "DirectedInfinity[-1]") == 0);
+    free(s4);
+}
+
 /* Phase 2: Abs/Arg/Sign on Complex[MPFR, MPFR] must produce results at
  * the input's MPFR precision rather than coercing to a machine double.
  *
@@ -1317,6 +1341,7 @@ int main(void) {
     TEST(test_abs_conjugate);
     TEST(test_sign);
     TEST(test_arg);
+    TEST(test_directed_infinity);
     TEST(test_mpfr_complex_abs_arg_sign);
     TEST(test_trig);
     TEST(test_gcd_lcm);

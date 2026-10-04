@@ -363,6 +363,26 @@ static void test_contour_param(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Mellin-Barnes / Bromwich vertical line: Integrate[F(s) x^-s, {s, c-iInf,
+ * c+iInf}] = 2 Pi i Sum over F's left poles.  The limit c +/- I Infinity must
+ * survive as a directed infinity (plus.c classify fix) for the line to be seen.
+ * ---------------------------------------------------------------------- */
+static void test_mellin_barnes(void) {
+    /* Case 11: inverse Mellin of Gamma[s] is e^-x; = 2 Pi i e^-x (was a silent 0). */
+    check_eq("With[{r = Integrate[Gamma[s] x^(-s), {s, 1/2 - I Infinity, 1/2 + I Infinity}]}, "
+             "{FreeQ[r, Integrate], Simplify[r - 2 Pi I Exp[-x]] == 0}]", "{True, True}");
+    /* Gamma[2 s] x^-s = I Pi e^-Sqrt[x] (B = 2 scales the pole ladder). */
+    check_eq("With[{r = Integrate[Gamma[2 s] x^(-s), {s, 1/2 - I Infinity, 1/2 + I Infinity}]}, "
+             "{FreeQ[r, Integrate], Simplify[r - I Pi Exp[-Sqrt[x]]] == 0}]", "{True, True}");
+    /* Orientation: the downward line is the negative. */
+    check_eq("With[{r = Integrate[Gamma[s] x^(-s), {s, 1/2 + I Infinity, 1/2 - I Infinity}]}, "
+             "{FreeQ[r, Integrate], Simplify[r + 2 Pi I Exp[-x]] == 0}]", "{True, True}");
+    /* Negative control: no Gamma-pole ladder -> declines (stays unevaluated). */
+    check_eq("Head[Integrate[1/s, {s, 1/2 - I Infinity, 1/2 + I Infinity}, Method -> \"Residue\"]]",
+             "Integrate");
+}
+
+/* -------------------------------------------------------------------------
  * Sector contour: x^m/(c + x^n), symbolic exponent n.
  * ---------------------------------------------------------------------- */
 static void test_sector(void) {
@@ -429,6 +449,7 @@ int main(void) {
     TEST(test_mellin_symbolic_exponent);
     TEST(test_keyhole_log);
     TEST(test_contour_param);
+    TEST(test_mellin_barnes);
     TEST(test_sector);
     TEST(test_trig_symbolic);
     TEST(test_rational_symbolic);

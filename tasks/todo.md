@@ -77,9 +77,16 @@ NIntegrate). I verify each case numerically in the REPL during dev. Bump
 - [ ] `residue_family_hyperbolic` (7)
 - [ ] `residue_family_chebyshev_weight` (8); tests/docs/bump/tag
 
-## Phase 6 — Case 11 Mellin–Barnes vertical line
-- [ ] `I*Infinity` / vertical-line classification; `residue_family_mellin_barnes`
-- [ ] Case 11 → 2πi e^(-x); tests/docs/bump/tag
+## Phase 6 — Case 11 Mellin–Barnes vertical line  [DONE v0.273]
+- [x] CORE fix (src/plus.c classify_plus_term): a Times[Complex[0,b],Infinity]
+      (non-real coeff) is a DIRECTED infinity, not real ±Infinity -> `1/2 - I Infinity`
+      stays a Plus (was collapsing to Infinity, so the limits died before Integrate).
+- [x] is_vertical_line + residue_family_mellin_barnes: const*Gamma[A+Bs]*X^(P+Qs),
+      close left, 2 Pi i Sum_k Res at s=-(A+k)/B (Sum closes the series).
+      Case 11 Gamma[s]x^-s -> 2 Pi I e^-x (was silent 0!); Gamma[2s]x^-s -> I Pi e^-Sqrt[x].
+      test_mellin_barnes + test_directed_infinity; docs + changelog; v0.273.
+      NOTE: declining vertical-line integrals (e.g. 1/s) emit a cosmetic
+      "0 Infinity" message from a downstream cascade stage -- harmless, out of scope.
 
 ## Phase 7 — Tier F hard tail
 - [ ] Gaussian-Fourier recognizer (15)

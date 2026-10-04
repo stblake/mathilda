@@ -2216,6 +2216,14 @@ symbolic-exponent contours:
   the closed form collapses only because `Arg` reduces exactly on roots of unity
   (`Arg[(-1)^{1/6}] = π/6`); a numeric `p`/`m` lands on an algebraic multiple of
   `π^{m+1}`.
+- **Mellin–Barnes / Bromwich vertical line** — `Integrate[F(s) x^{-s}, {s, c−i∞,
+  c+i∞}]` with `F(s) = const · Γ(A + B s)` (`B > 0`): the inverse-Mellin contour,
+  closed to the left, equals `2πi · Σ_k Res` over the Γ-pole ladder `s = −(A+k)/B`
+  (`Res[Γ(A+Bs)] = (1/B)(−1)^k/k!`); the residue series closes to the transform's
+  closed form — `∫ Γ(s) x^{−s} ds = 2πi e^{−x}` (Case 11, formerly a silent `0`),
+  `∫ Γ(2s) x^{−s} ds = iπ e^{−√x}`.  The endpoint `c ± i∞` is recognised as a
+  directed infinity (it no longer collapses to a real `∞`); the orientation sets
+  the sign, and a non-Mellin–Barnes integrand or a non-closing series declines.
 - **Sector on `(0, ∞)`** — `f = x^m/(c + x^n)` with the exponent `n` possibly a
   **symbolic parameter**: the wedge of angle `2π/n` gives
   `(π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`.  This is the one family admitting a

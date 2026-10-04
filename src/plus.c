@@ -26,6 +26,17 @@
  *    2 = ComplexInfinity (or any Times factor that contains it)
  *    3 = Indeterminate (or any Times factor that contains it)
  */
+/* True iff `e` is a Complex[re, im] with a NONZERO imaginary part -- a non-real
+ * numeric coefficient.  Times[Complex[0,b], Infinity] is then a complex-DIRECTED
+ * infinity (e.g. the imaginary unit times Infinity), not a real +/-Infinity. */
+static bool is_nonreal_complex(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return false;
+    if (e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Complex) return false;
+    Expr* im = e->data.function.args[1];
+    return !(im->type == EXPR_INTEGER && im->data.integer == 0);
+}
+
 static int classify_plus_term(Expr* e) {
     if (is_indeterminate_sym(e)) return 3;
     if (is_complex_infinity_sym(e)) return 2;
@@ -44,8 +55,15 @@ static int classify_plus_term(Expr* e) {
         if (has_indet) return 3;
         if (has_cinf) return 2;
         if (has_inf) {
-            /* Canonical Times has the numeric coefficient first. */
+            /* Canonical Times has the numeric coefficient first.  A NON-REAL
+             * coefficient (I*Infinity, (c+di)*Infinity) is a directed infinity
+             * in a complex direction, NOT a real +/-Infinity: classify it as an
+             * ordinary term so Plus leaves `c + I Infinity` structurally intact
+             * (the direction is preserved, e.g. for a Mellin-Barnes vertical
+             * line `s = c +/- I Infinity`) rather than collapsing it to a real
+             * Infinity. */
             Expr* f0 = e->data.function.args[0];
+            if (is_nonreal_complex(f0)) return 0;
             if (expr_numeric_sign(f0) < 0) return -1;
             return 1;
         }

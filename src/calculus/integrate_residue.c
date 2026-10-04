@@ -51,6 +51,7 @@
 /* Fresh variable names, context-qualified to stay clear of user symbols. */
 #define RES_W  "IntegrateResidue`$w"   /* Family C: z = Exp[I x] on |z|=1        */
 #define RES_W2 "IntegrateResidue`$w2"  /* res_ess0: Laurent variable w = 1/u     */
+#define RES_K  "IntegrateResidue`$k"   /* Mellin-Barnes: residue-sum index        */
 
 /* Classification tolerance for Im/Abs sign decisions (relative to magnitude). */
 static const double RES_TOL = 1e-8;
@@ -2042,6 +2043,172 @@ static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b) {
  * Master entry + builtin.
  * ---------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------
+ * Mellin-Barnes / Bromwich vertical line: Integrate[F(s) x^-s, {s, c-iInf,
+ * c+iInf}] = 2 Pi i Sum over the poles of F to the LEFT of Re(s)=c.
+ * ---------------------------------------------------------------------- */
+
+/* A vertical-line endpoint c + (b I) Infinity: set *c_out (owned finite real
+ * offset) and *dir = sign(b); false otherwise.  `c + I Infinity` evaluates to
+ * Plus[c, Times[Complex[0,b], Infinity]] (the directed infinity is preserved --
+ * see classify_plus_term in plus.c), and a bare +/- I Infinity to that Times. */
+static bool vline_endpoint(Expr* e, Expr** c_out, int* dir) {
+    Expr** terms; size_t nt; Expr* one[1];
+    if (head_name_is(e, "Plus")) { terms = e->data.function.args; nt = e->data.function.arg_count; }
+    else { one[0] = e; terms = one; nt = 1; }
+    int found = 0, d = 0;
+    ExprVec rest; ev_init(&rest);
+    for (size_t i = 0; i < nt; i++) {
+        Expr* t = terms[i];
+        if (head_name_is(t, "Times") && t->data.function.arg_count == 2 &&
+            is_infinity_sym(t->data.function.args[1]) &&
+            head_name_is(t->data.function.args[0], "Complex") &&
+            t->data.function.args[0]->data.function.arg_count == 2) {
+            Expr* cx = t->data.function.args[0];
+            Expr* cre = cx->data.function.args[0];
+            Expr* cim = cx->data.function.args[1];
+            bool re0 = (cre->type == EXPR_INTEGER && cre->data.integer == 0);
+            int sg = expr_numeric_sign(cim);
+            if (re0 && sg != 0) { found++; d = sg; continue; }
+        }
+        ev_push(&rest, expr_copy(t));
+    }
+    if (found != 1) { ev_free(&rest); return false; }
+    Expr* c;
+    if (rest.n == 0) c = mk_int(0);
+    else if (rest.n == 1) { c = rest.v[0]; rest.v[0] = NULL; }
+    else {
+        Expr** ca = malloc(rest.n * sizeof(*ca));
+        for (size_t i = 0; i < rest.n; i++) { ca[i] = rest.v[i]; rest.v[i] = NULL; }
+        c = eval_take(expr_new_function(mk_sym("Plus"), ca, rest.n));
+        free(ca);
+    }
+    ev_free(&rest);
+    double re, im;
+    if (!c || !res_reim(c, &re, &im) || fabs(im) > RES_TOL) {   /* offset must be finite real */
+        if (c) expr_free(c);
+        return false;
+    }
+    *c_out = c; *dir = d;
+    return true;
+}
+
+/* (a,b) a vertical line: both endpoints c +/- iInf with the SAME real offset and
+ * opposite directions.  *c = the offset (numeric), *orient = +1 if a->b runs
+ * upward (a at -iInf, b at +iInf), -1 if downward. */
+static bool is_vertical_line(Expr* a, Expr* b, double* c, int* orient) {
+    Expr* ca = NULL; Expr* cb = NULL; int da = 0, db = 0;
+    if (!vline_endpoint(a, &ca, &da)) return false;
+    if (!vline_endpoint(b, &cb, &db)) { expr_free(ca); return false; }
+    double ra, ia, rb, ib;
+    bool ok = res_reim(ca, &ra, &ia) && res_reim(cb, &rb, &ib) &&
+              fabs(ra - rb) < RES_TOL * (1.0 + fabs(ra)) && da == -db && da != 0;
+    expr_free(ca); expr_free(cb);
+    if (!ok) return false;
+    *c = ra;
+    *orient = (da < 0) ? +1 : -1;   /* a at -iInf, b at +iInf -> upward -> +2 Pi i */
+    return true;
+}
+
+/* Mellin-Barnes: F(s) = const * Gamma[A + B s] * X^(P + Q s), B a positive
+ * numeric, closed to the LEFT.  Gamma[A+Bs] has poles at s = -(A+k)/B, k>=0,
+ * with residue (1/B)(-1)^k/k!; the integral = orient * 2 Pi i * Sum_k of the
+ * full residue, a series Sum closes to the inverse-Mellin closed form
+ * (Gamma[s] x^-s -> 2 Pi i e^-x).  Declines if the integrand is not of this shape
+ * or the series does not close.  Borrows f, s. */
+static Expr* residue_family_mellin_barnes(Expr* f, Expr* s, double c, int orient) {
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+    else { one[0] = f; fac = one; nf = 1; }
+
+    Expr* gammaArg = NULL; Expr* Xbase = NULL; Expr* powExp = NULL;
+    ExprVec constf; ev_init(&constf);
+    bool bad = false;
+    for (size_t i = 0; i < nf && !bad; i++) {
+        Expr* t = fac[i];
+        if (!contains_symbol(t, s)) { ev_push(&constf, expr_copy(t)); continue; }
+        if (head_name_is(t, "Gamma") && t->data.function.arg_count == 1 && !gammaArg) {
+            gammaArg = expr_copy(t->data.function.args[0]);
+        } else if (head_name_is(t, "Power") && t->data.function.arg_count == 2 &&
+                   !contains_symbol(t->data.function.args[0], s) && !Xbase) {
+            Xbase  = expr_copy(t->data.function.args[0]);
+            powExp = expr_copy(t->data.function.args[1]);
+        } else { bad = true; }
+    }
+    if (bad || !gammaArg || !Xbase || !powExp) {
+        if (gammaArg) expr_free(gammaArg);
+        if (Xbase) expr_free(Xbase);
+        if (powExp) expr_free(powExp);
+        ev_free(&constf); return NULL;
+    }
+
+    /* A = gammaArg /. s->0, B = d/ds gammaArg (constant for an affine argument);
+     * P, Q likewise for the power exponent. */
+    Expr* zero = mk_int(0);
+    Expr* A = eval_take(mk_fn2("ReplaceAll", expr_copy(gammaArg), mk_fn2("Rule", expr_copy(s), expr_copy(zero))));
+    Expr* B = eval_take(mk_fn2("D", expr_copy(gammaArg), expr_copy(s)));
+    Expr* P = eval_take(mk_fn2("ReplaceAll", expr_copy(powExp), mk_fn2("Rule", expr_copy(s), expr_copy(zero))));
+    Expr* Q = eval_take(mk_fn2("D", expr_copy(powExp), expr_copy(s)));
+    expr_free(zero); expr_free(gammaArg); expr_free(powExp);
+    double Bv;
+    bool okB = B && !contains_symbol(B, s) && A && !contains_symbol(A, s) &&
+               P && !contains_symbol(P, s) && Q && !contains_symbol(Q, s) &&
+               numeric_double(B, &Bv) && Bv > 0.0;
+    double Av;
+    /* Rightmost left-pole at s = -A/B must lie to the LEFT of the contour c. */
+    if (okB && numeric_double(A, &Av) && !(c > -Av / Bv - RES_TOL)) okB = false;
+    if (!okB) {
+        if (A) expr_free(A);
+        if (B) expr_free(B);
+        if (P) expr_free(P);
+        if (Q) expr_free(Q);
+        expr_free(Xbase); ev_free(&constf); return NULL;
+    }
+
+    /* const = Product of the s-free factors. */
+    Expr* cst;
+    if (constf.n == 0) cst = mk_int(1);
+    else if (constf.n == 1) { cst = constf.v[0]; constf.v[0] = NULL; }
+    else {
+        Expr** ca = malloc(constf.n * sizeof(*ca));
+        for (size_t i = 0; i < constf.n; i++) { ca[i] = constf.v[i]; constf.v[i] = NULL; }
+        cst = eval_take(expr_new_function(mk_sym("Times"), ca, constf.n));
+        free(ca);
+    }
+    ev_free(&constf);
+
+    /* s_k = -(A+k)/B;  term = const * (1/B) * (-1)^k/k! * X^(P + Q s_k). */
+    Expr* k = mk_sym(RES_K);
+    Expr* sk = mk_fn2("Times", mk_int(-1),
+                   mk_fn2("Times", mk_fn2("Plus", expr_copy(A), expr_copy(k)),
+                          mk_fn2("Power", expr_copy(B), mk_int(-1))));
+    Expr* expo = mk_fn2("Plus", expr_copy(P), mk_fn2("Times", expr_copy(Q), sk));
+    Expr* term = mk_fn2("Times",
+        mk_fn2("Times", cst, mk_fn2("Power", expr_copy(B), mk_int(-1))),
+        mk_fn2("Times",
+            mk_fn2("Times", mk_fn2("Power", mk_int(-1), expr_copy(k)),
+                   mk_fn2("Power", mk_fn1("Factorial", expr_copy(k)), mk_int(-1))),
+            mk_fn2("Power", expr_copy(Xbase), expo)));
+    expr_free(A); expr_free(B); expr_free(P); expr_free(Q); expr_free(Xbase);
+
+    Expr* spec = expr_new_function(mk_sym("List"),
+                     (Expr*[]){ expr_copy(k), mk_int(0), mk_sym(SYM_Infinity) }, 3);
+    Expr* S = eval_take(mk_fn2("Sum", term, spec));
+    expr_free(k);
+    if (!S) return NULL;
+
+    /* value = orient * 2 Pi i * S. */
+    Expr* two_pi_i = mk_fn2("Times", mk_int(2 * orient),
+                         mk_fn2("Times", mk_sym(SYM_Pi), mk_sym(SYM_I)));
+    Expr* value = ev1("Simplify", mk_fn2("Times", two_pi_i, S));
+    if (!value) return NULL;
+    /* The series must have closed (no residual Sum) and eliminated s. */
+    if (contains_symbol(value, s) || contains_head(value, "Sum")) {
+        expr_free(value); return NULL;
+    }
+    return value;
+}
+
 Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
                             Expr* assumptions, bool* diverges) {
     if (diverges) *diverges = false;
@@ -2058,7 +2225,11 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
     }
 
     Expr* value = NULL;
-    if (is_full_period(a, b)) {
+    double vlc; int vlo;
+    if (is_vertical_line(a, b, &vlc, &vlo)) {
+        /* Mellin-Barnes / Bromwich vertical line s = c +/- i Infinity. */
+        value = residue_family_mellin_barnes(f, x, vlc, vlo);
+    } else if (is_full_period(a, b)) {
         /* Full period (0,2Pi)/(-Pi,Pi): unit-circle trig-substitution family,
          * then the parametrized-contour family for transcendental integrands
          * (essential singularities) that are not rational in z = Exp[I x]. */
