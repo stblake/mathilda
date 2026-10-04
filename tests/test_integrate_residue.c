@@ -270,6 +270,41 @@ static void test_mellin(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Symbolic branch-power exponent: x^a R(x) with a a free parameter.  The
+ * convergence interval is taken from the exponent (s = a+1), so a symbolic a is
+ * no longer wrongly refused.
+ * ---------------------------------------------------------------------- */
+static void test_mellin_symbolic_exponent(void) {
+    /* Integrate[x^a/(x+1)^3, -1<a<2] = Pi a (1-a)/(2 Sin[Pi a]). */
+    check_eq("Integrate[x^a/(x+1)^3, {x, 0, Infinity}, Assumptions -> -1 < a < 2, "
+             "Method -> \"Residue\"]", "1/2 Pi a (-1 + a) Csc[Pi (1 + a)]");
+    check_eq("Chop[N[(Integrate[x^a/(x+1)^3, {x, 0, Infinity}, Assumptions -> -1 < a < 2, "
+             "Method -> \"Residue\"] - Pi a (1 - a)/(2 Sin[Pi a])) /. a -> 1/2]]", "0");
+}
+
+/* -------------------------------------------------------------------------
+ * Keyhole with a logarithm: Integrate[x^p (Log x)^m R(x), {x,0,Inf}], p a
+ * non-negative integer, m >= 1.  The (Log z)^(k+1) contour gives a triangular
+ * system solved for I_0..I_m from residues alone.
+ * ---------------------------------------------------------------------- */
+static void test_keyhole_log(void) {
+    /* Integrate[Log[x]/(1+x^6)] = -Sqrt[3] Pi^2/18 (m=1, six simple poles). */
+    check_eq("Chop[N[Integrate[Log[x]/(1+x^6), {x, 0, Infinity}, Method -> \"Residue\"] "
+             "- (-Sqrt[3] Pi^2/18)]]", "0");
+    /* Integrate[(Log x)^2/(x^2+x+1)] = 16 Pi^3/(81 Sqrt[3]) (m=2). */
+    check_eq("Chop[N[Integrate[Log[x]^2/(x^2+x+1), {x, 0, Infinity}, Method -> \"Residue\"] "
+             "- 16 Pi^3/(81 Sqrt[3])]]", "0");
+    /* Higher-order pole with a log: Integrate[Log[x]/(1+x^2)^2] = -Pi/4. */
+    check_eq("Integrate[Log[x]/(1+x^2)^2, {x, 0, Infinity}, Method -> \"Residue\"]", "-1/4 Pi");
+    /* Integer power folded in (p=2): Integrate[x^2 Log[x]/(1+x^6)] = 0 by the
+     * x -> 1/x symmetry of x^2/(1+x^6). */
+    check_eq("Chop[N[Integrate[x^2 Log[x]/(1+x^6), {x, 0, Infinity}, Method -> \"Residue\"]]]", "0");
+    /* A pure log integral without Method still routes here under the cascade. */
+    check_eq("Chop[N[Integrate[Log[x]/(1+x^4), {x, 0, Infinity}, Method -> \"Residue\"] "
+             "+ Sqrt[2] Pi^2/16]]", "0");
+}
+
+/* -------------------------------------------------------------------------
  * Sector contour: x^m/(c + x^n), symbolic exponent n.
  * ---------------------------------------------------------------------- */
 static void test_sector(void) {
@@ -333,6 +368,8 @@ int main(void) {
     TEST(test_fourier_symbolic);
     TEST(test_rectangular);
     TEST(test_mellin);
+    TEST(test_mellin_symbolic_exponent);
+    TEST(test_keyhole_log);
     TEST(test_sector);
     TEST(test_rational_symbolic);
     TEST(test_symbolic_negative_controls);

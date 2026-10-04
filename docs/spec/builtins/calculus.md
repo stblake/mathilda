@@ -2170,7 +2170,20 @@ symbolic-exponent contours:
   prefactor is the exact reduction of the keyhole jump `1/(1 − e^{2πi s})`,
   landing a numeric `s` on an algebraic multiple of `π` (e.g.
   `∫₀^∞ x^{1/3}/(x²+1) = π/√3`, `∫₀^∞ √x/(1+x)² = π/2`).  Requires
-  `0 < Re(s) < deg Q − deg P`.
+  `0 < Re(s) < deg Q − deg P`.  The exponent may also be a **symbolic
+  parameter** `a` under an interval assumption — the convergence interval is read
+  off `s = a + 1` (e.g. `Integrate[x^a/(x+1)^3, {x,0,∞}, Assumptions -> -1 < a < 2]
+  = π a(1−a)/(2 sin π a)`).
+- **Keyhole with a logarithm on `(0, ∞)`** — `f = x^p (Log x)^m R(x)`, `R`
+  rational, `m ≥ 1`, and `p` a **non-negative integer** (folded in as
+  `R' = x^p R`).  The keyhole contour of `(Log z)^{k+1} R(z)` (branch `arg ∈
+  [0,2π)`) gives, for each `k = 0..m`, a lower-triangular relation among
+  `I_j = ∫₀^∞ (Log x)^j R dx` and the pole-residue sums
+  `S_{k+1} = Σ_l Res[(Log z)^{k+1} R, z_l]`; solving it upward from `I_0` yields
+  the requested `I_m` **entirely from residues**, no auxiliary quadrature.  A
+  simple pole uses the direct `(Log z_l)^{k+1} Res(R, z_l)`; an order-≥2 pole the
+  shifted form.  E.g. `∫₀^∞ Log[x]/(1+x⁶) = −√3 π²/18`,
+  `∫₀^∞ (Log x)²/(x²+x+1) = 16 π³/(81√3)`, `∫₀^∞ Log[x]/(1+x²)² = −π/4`.
 - **Sector on `(0, ∞)`** — `f = x^m/(c + x^n)` with the exponent `n` possibly a
   **symbolic parameter**: the wedge of angle `2π/n` gives
   `(π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`.  This is the one family admitting a
@@ -2242,11 +2255,12 @@ a mis-fire and returned unevaluated.  Negative controls such as
 (genuine axis pole, kernel nonzero),
 `Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}]` (branch point, not
 rational), and `Integrate[1/(2 + Cos[x]), {x, 0, Pi}]` (not a full period) all
-stay unevaluated.  The keyhole/Mellin, sector and rectangular families
-described above extend the reach to branch-cut and symbolic-exponent contours;
-a log-keyhole (`∫₀^∞ Log[x] R(x)`) with symbolic on-circle poles remains out of
-scope (it needs assumption-aware `Arg`/`Log` branch reasoning that Mathilda does
-not yet have).
+stay unevaluated.  The keyhole/Mellin, keyhole-with-log, sector and rectangular
+families described above extend the reach to branch-cut, log-weighted and
+symbolic-exponent contours.  Still out of scope: the log-keyhole with a
+**non-integer** power (`∫₀^∞ √x Log[x] R`, which needs the `(1−e^{2πia})` jump),
+and with a **principal-value** pole on the positive axis
+(`∫₀^∞ Log[x]/(x³−1)`, which needs an indentation term).
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,

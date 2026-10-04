@@ -1143,9 +1143,22 @@ static Expr* mellin_core(Expr* F, Expr* v) {
     expr_free(P);
     /* Convergence over the whole assumed region: 0 < Re(s) < deg(den)-deg(num),
      * checked against the guaranteed interval (a one-sided assumption like a > 0
-     * does not bound s above and must be refused).  s must also be real. */
+     * does not bound s above and must be refused).  s must also be real.
+     *
+     * param_interval only reads a BARE parameter symbol or a numeric constant.
+     * s = p + 1, and exactly one of s, p is bare in the cases that matter:
+     *   - keyhole x^a R: p = a (bare), s = 1 + a (a Plus) -> read p, add 1;
+     *   - rectangular Exp[a x] R(Exp[x]): p = a - 1 (a Plus), but s evaluates to
+     *     the bare symbol a -> read s directly.
+     * So take the s-interval from s when s is usable, else fall back to p + 1.
+     * (Both unbounded -- an exotic exponent like a/2 -- declines, which is safe.) */
     { double slo, shi, sre, sim;
       param_interval(s, &slo, &shi);
+      if (slo <= -HUGE_VAL && shi >= HUGE_VAL) {    /* s not a bare bounded symbol */
+          double plo, phi;
+          param_interval(p, &plo, &phi);
+          slo = plo + 1.0; shi = phi + 1.0;
+      }
       if (!res_reim(s, &sre, &sim) || fabs(sim) > RES_TOL ||
           slo < -RES_TOL || shi > (double)(dDen - dNum) + RES_TOL) {
           expr_free(Q); expr_free(p); expr_free(R); expr_free(s); return NULL;
@@ -1226,6 +1239,242 @@ static Expr* mellin_core(Expr* F, Expr* v) {
 static Expr* residue_family_mellin(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!is_zero_pos_infinity(a, b)) return NULL;
     return mellin_core(f, x);
+}
+
+/* -------------------------------------------------------------------------
+ * Keyhole with a logarithm -- Integrate[v^p (Log v)^m R(v), {v, 0, Infinity}],
+ * R rational, m >= 1, and (this branch) p a non-negative integer.
+ *
+ * The keyhole contour of g(z) = (Log z)^(k+1) R(z) (branch cut on the positive
+ * real axis, Log z with arg in [0, 2Pi)) gives, for each k = 0..m,
+ *     -Sum_{j=0}^{k} C(k+1,j) (2 Pi i)^(k+1-j) I_j = 2 Pi i S_{k+1},
+ * where I_j = Integrate[(Log x)^j R, {x,0,Inf}] and S_{k+1} = Sum over the poles
+ * z_l (off the positive axis) of Res[(Log z)^(k+1) R(z), z_l].  This is lower-
+ * triangular in (I_0,...,I_k): I_0 from k=0, then I_1, ..., up to the requested
+ * I_m -- solved entirely from residues, no auxiliary quadrature.  An integer
+ * power p >= 1 is folded in as R' = v^p R (still rational), reducing to p=0.
+ *
+ * Non-integer / symbolic p (where z^p itself jumps across the cut) needs the
+ * (Log z)^m contour with a (1 - e^{2 Pi i p}) factor and is handled separately
+ * (not yet); a pole ON the positive axis needs a principal-value indentation
+ * (not yet) -- both decline here, leaving the integral unevaluated.
+ * ---------------------------------------------------------------------- */
+
+/* Split F = v^p (Log v)^m R(v), m >= 1.  *p_out (owned, defaults to 0), *m_out,
+ * *R_out (owned, rational in v) on success; false (nothing owned) otherwise. */
+static bool mellin_log_split(Expr* F, Expr* v, Expr** p_out, int* m_out, Expr** R_out) {
+    *p_out = NULL; *R_out = NULL; *m_out = 0;
+    const char* vn = v->data.symbol.name;
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(F, "Times")) { fac = F->data.function.args; nf = F->data.function.arg_count; }
+    else { one[0] = F; fac = one; nf = 1; }
+
+    Expr* p = NULL; int m = 0;
+    ExprVec rest; ev_init(&rest);
+    for (size_t i = 0; i < nf; i++) {
+        Expr* fe = fac[i];
+        /* bare Log[v] */
+        if (head_name_is(fe, "Log") && fe->data.function.arg_count == 1 &&
+            fe->data.function.args[0]->type == EXPR_SYMBOL &&
+            fe->data.function.args[0]->data.symbol.name == vn) { m += 1; continue; }
+        if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2) {
+            Expr* base = fe->data.function.args[0];
+            Expr* e    = fe->data.function.args[1];
+            /* (Log[v])^k, k a positive integer */
+            if (head_name_is(base, "Log") && base->data.function.arg_count == 1 &&
+                base->data.function.args[0]->type == EXPR_SYMBOL &&
+                base->data.function.args[0]->data.symbol.name == vn &&
+                e->type == EXPR_INTEGER && e->data.integer > 0) {
+                m += (int)e->data.integer; continue;
+            }
+            /* v^e, e v-free: the single branch/power factor */
+            if (base->type == EXPR_SYMBOL && base->data.symbol.name == vn &&
+                !contains_symbol(e, v)) {
+                if (p) { expr_free(p); ev_free(&rest); return false; }  /* two powers */
+                p = expr_copy(e); continue;
+            }
+        }
+        ev_push(&rest, expr_copy(fe));
+    }
+    if (m == 0) { if (p) expr_free(p); ev_free(&rest); return false; }  /* no log: not us */
+    if (!p) p = mk_int(0);
+
+    Expr* R;
+    if (rest.n == 0) R = mk_int(1);
+    else if (rest.n == 1) { R = rest.v[0]; rest.v[0] = NULL; }
+    else {
+        Expr** ra = malloc(rest.n * sizeof(*ra));
+        for (size_t i = 0; i < rest.n; i++) { ra[i] = rest.v[i]; rest.v[i] = NULL; }
+        R = eval_take(expr_new_function(mk_sym("Times"), ra, rest.n));
+        free(ra);
+    }
+    ev_free(&rest);
+    if (!R) { expr_free(p); return false; }
+
+    Expr* P; Expr* Q;
+    if (!res_num_den(R, &P, &Q) || !res_polyq(P, v) || !res_polyq(Q, v)) {
+        if (P) expr_free(P); if (Q) expr_free(Q); expr_free(p); expr_free(R); return false;
+    }
+    expr_free(P); expr_free(Q);
+    *p_out = p; *m_out = m; *R_out = R;
+    return true;
+}
+
+/* The keyhole logarithm of a pole z (arg lifted into (0, 2Pi]):
+ * klog(z) = Log[Abs[z]] + I*theta.  Owned; borrows z. */
+static Expr* klog_of(Expr* z) {
+    double re, im;
+    Expr* theta = ev1("Arg", expr_copy(z));
+    if (!theta) return NULL;
+    if (res_reim(z, &re, &im) && atan2(im, re) <= RES_TOL)
+        theta = eval_take(mk_fn2("Plus", theta,
+                     mk_fn2("Times", mk_int(2), mk_sym(SYM_Pi))));
+    return mk_fn2("Plus", mk_fn1("Log", mk_fn1("Abs", expr_copy(z))),
+                          mk_fn2("Times", mk_sym(SYM_I), theta));
+}
+
+/* Res[(klog z)^pw R(z), z] for a HIGHER-ORDER pole z (order >= 2).  Shift
+ * w = z - z_k: klog z = klog(z_k) + Log(1 + w/z_k) (analytic at w=0, z_k off the
+ * cut), so the residue is the w^-1 coefficient of
+ * (klog(z_k) + Log(1+w/z_k))^pw * R(w+z_k).  The heavier Series inversion of the
+ * shifted rational is reserved for poles that genuinely need it -- a SIMPLE pole
+ * uses the direct klog(z_k)^pw * Res(R,z_k) in the caller instead, which is
+ * robust for algebraic (nested-radical) pole locations.  Borrows R, v, z. */
+static Expr* klog_pole_contribution(Expr* R, Expr* v, Expr* z, int pw) {
+    Expr* klogzk = klog_of(z);
+    if (!klogzk) return NULL;
+    Expr* logfac = mk_fn2("Power",
+        mk_fn2("Plus", klogzk,
+            mk_fn1("Log", mk_fn2("Plus", mk_int(1),
+                mk_fn2("Times", expr_copy(v),
+                       mk_fn2("Power", expr_copy(z), mk_int(-1)))))),
+        mk_int(pw));
+    Expr* Rshift = eval_take(mk_fn2("ReplaceAll", expr_copy(R),
+                       mk_fn2("Rule", expr_copy(v),
+                              mk_fn2("Plus", expr_copy(v), expr_copy(z)))));
+    if (!Rshift) { expr_free(logfac); return NULL; }
+    Expr* prod = eval_take(mk_fn2("Times", logfac, Rshift));
+    Expr* zero = mk_int(0);
+    Expr* r = prod ? residue_compute(prod, v, zero) : NULL;
+    if (prod) expr_free(prod);
+    expr_free(zero);
+    return r;
+}
+
+/* Keyhole-log for a rational R and log power m (p already folded in). Triangular
+ * solve for I_0..I_m; returns the owned I_m (real), or NULL to decline. */
+static Expr* a0_keyhole_log(Expr* R, Expr* v, int m) {
+    Expr* P; Expr* Q;
+    if (!res_num_den(R, &P, &Q)) return NULL;
+    int dNum = res_degree(P, v), dDen = res_degree(Q, v);
+    expr_free(P);
+    if (dDen - dNum < 2) { expr_free(Q); return NULL; }        /* need decay at Inf */
+    ExprVec roots;
+    if (!solve_roots(Q, v, &roots)) { expr_free(Q); return NULL; }
+    Expr* dQ = eval_take(mk_fn2("D", Q, expr_copy(v)));        /* consumes Q */
+
+    Expr** S = calloc((size_t)m + 2, sizeof(Expr*));           /* S[1..m+1] */
+    for (int k = 1; k <= m + 1; k++) S[k] = mk_int(0);
+    bool bad = false;
+    for (size_t i = 0; i < roots.n && !bad; i++) {
+        Expr* z = roots.v[i]; double zre, zim;
+        if (!res_reim(z, &zre, &zim)) { bad = true; break; }   /* symbolic pole: decline */
+        if (zim > -RES_TOL && zim < RES_TOL && zre > RES_TOL) { bad = true; break; } /* on (0,Inf): PV */
+        /* Simple iff Q'(z) != 0; a simple pole takes the robust direct form
+         * klog(z)^k * Res(R,z), an order >= 2 pole the shifted Series form. */
+        Expr* dQz = dQ ? eval_take(mk_fn2("ReplaceAll", expr_copy(dQ),
+                            mk_fn2("Rule", expr_copy(v), expr_copy(z)))) : NULL;
+        double dre, dim;
+        bool simple = dQz && res_reim(dQz, &dre, &dim) &&
+                      (fabs(dre) > RES_TOL || fabs(dim) > RES_TOL);
+        if (dQz) expr_free(dQz);
+        Expr* klogz = NULL, *resR = NULL;
+        if (simple) {
+            klogz = klog_of(z);
+            resR  = klogz ? residue_compute(R, v, z) : NULL;
+            if (!klogz || !resR) { if (klogz) expr_free(klogz); if (resR) expr_free(resR); bad = true; break; }
+        }
+        for (int k = 1; k <= m + 1 && !bad; k++) {
+            Expr* c;
+            if (simple)
+                c = eval_take(mk_fn2("Times",
+                        mk_fn2("Power", expr_copy(klogz), mk_int(k)), expr_copy(resR)));
+            else
+                c = klog_pole_contribution(R, v, z, k);
+            if (!c) { bad = true; break; }
+            S[k] = eval_take(mk_fn2("Plus", S[k], c));
+            if (!S[k]) { bad = true; break; }
+        }
+        if (klogz) expr_free(klogz);
+        if (resR) expr_free(resR);
+    }
+    ev_free(&roots);
+    if (dQ) expr_free(dQ);
+    if (bad) { for (int k = 1; k <= m + 1; k++) if (S[k]) expr_free(S[k]); free(S); return NULL; }
+
+    Expr* twopii = eval_take(mk_fn2("Times", mk_int(2),
+                        mk_fn2("Times", mk_sym(SYM_Pi), mk_sym(SYM_I))));
+    Expr** I = calloc((size_t)m + 1, sizeof(Expr*));
+    bool fail = false;
+    for (int k = 0; k <= m && !fail; k++) {
+        /* num = -2pi i S_{k+1} - Sum_{j<k} C(k+1,j) (2pi i)^(k+1-j) I_j */
+        Expr* num = eval_take(mk_fn2("Times", mk_int(-1),
+                        mk_fn2("Times", expr_copy(twopii), expr_copy(S[k + 1]))));
+        for (int j = 0; j < k && num; j++) {
+            Expr* term = eval_take(mk_fn2("Times",
+                mk_fn2("Binomial", mk_int(k + 1), mk_int(j)),
+                mk_fn2("Times",
+                    mk_fn2("Power", expr_copy(twopii), mk_int(k + 1 - j)),
+                    expr_copy(I[j]))));
+            num = eval_take(mk_fn2("Plus", num,
+                       mk_fn2("Times", mk_int(-1), term)));
+        }
+        Expr* den = eval_take(mk_fn2("Times", mk_int(k + 1), expr_copy(twopii)));
+        Expr* quo = (num && den) ? eval_take(mk_fn2("Times", num,
+                        mk_fn2("Power", den, mk_int(-1)))) : NULL;
+        if (num && !quo) expr_free(num);
+        if (den && !quo && !num) expr_free(den);
+        I[k] = quo ? ev1("Re", quo) : NULL;                    /* I_k is real */
+        if (!I[k]) fail = true;
+    }
+    Expr* ans = (!fail && I[m]) ? expr_copy(I[m]) : NULL;
+    for (int k = 0; k <= m; k++) if (I[k]) expr_free(I[k]);
+    for (int k = 1; k <= m + 1; k++) if (S[k]) expr_free(S[k]);
+    free(I); free(S); expr_free(twopii);
+    if (!ans) return NULL;
+
+    /* Close: concrete -> RootReduce + Simplify (algebraic multiple of Pi^k);
+     * parametric -> Simplify. */
+    Expr* val = g_inst ? ev1("Simplify", ans)
+                       : ev1("Simplify", ev1("RootReduce", ans));
+    if (!val) return NULL;
+    double vv, re, im;
+    if (!(res_is_real_scalar(val, v, &vv) || res_is_finite_scalar(val, v, &re, &im))) {
+        expr_free(val); return NULL;
+    }
+    return val;
+}
+
+/* Half-line [0, Inf) log-weighted integrand v^p (Log v)^m R(v). */
+static Expr* residue_family_mellin_log(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_zero_pos_infinity(a, b)) return NULL;
+    Expr* p; int m; Expr* R;
+    if (!mellin_log_split(f, x, &p, &m, &R)) return NULL;
+    /* This branch: p a non-negative integer, folded in as R' = x^p R. */
+    if (!(p->type == EXPR_INTEGER && p->data.integer >= 0)) {
+        expr_free(p); expr_free(R); return NULL;
+    }
+    int64_t pp = p->data.integer;
+    expr_free(p);
+    Expr* Rp = R;
+    if (pp > 0) {
+        Rp = eval_take(mk_fn2("Times",
+                 mk_fn2("Power", expr_copy(x), mk_int(pp)), R));   /* consumes R */
+        if (!Rp) return NULL;
+    }
+    Expr* val = a0_keyhole_log(Rp, x, m);
+    expr_free(Rp);
+    return val;
 }
 
 /* Whole-line quasi-periodic integrand f(x) = Exp[c x] R(Exp[x]): the rectangular
@@ -1393,6 +1642,7 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         /* Half-line [0,Inf): even symmetry first (exact), then the keyhole/Mellin
          * (branch-power / log) and sector (1/(1+x^n)) families. */
         value = residue_half_line(f, x, a, b, diverges);
+        if (!value) value = residue_family_mellin_log(f, x, a, b);
         if (!value) value = residue_family_mellin(f, x, a, b);
         if (!value) value = residue_family_sector(f, x, a, b);
     }
