@@ -52,6 +52,7 @@
 #define RES_W  "IntegrateResidue`$w"   /* Family C: z = Exp[I x] on |z|=1        */
 #define RES_W2 "IntegrateResidue`$w2"  /* res_ess0: Laurent variable w = 1/u     */
 #define RES_K  "IntegrateResidue`$k"   /* Mellin-Barnes: residue-sum index        */
+#define RES_T  "IntegrateResidue`$t"   /* Chebyshev weight: x = Cos[t] angle       */
 
 /* Classification tolerance for Im/Abs sign decisions (relative to magnitude). */
 static const double RES_TOL = 1e-8;
@@ -237,6 +238,13 @@ static bool is_neg_pos_infinity(Expr* a, Expr* b) {
 static bool is_zero_pos_infinity(Expr* a, Expr* b) {
     double av, bv;
     return res_bound(a, &av) == 1 && fabs(av) < RES_TOL && res_bound(b, &bv) == 2;
+}
+
+/* True iff (a, b) == (-1, 1). */
+static bool is_pm1_interval(Expr* a, Expr* b) {
+    double av, bv;
+    return res_bound(a, &av) == 1 && fabs(av + 1.0) < RES_TOL &&
+           res_bound(b, &bv) == 1 && fabs(bv - 1.0) < RES_TOL;
 }
 
 /* True iff (a, b) is a full trig period: (0, 2Pi) or (-Pi, Pi). */
@@ -1011,6 +1019,51 @@ static Expr* residue_family_contour_param(Expr* f, Expr* x, Expr* a, Expr* b,
     if (!value) return NULL;
     double re, im;
     if (!res_is_finite_scalar(value, x, &re, &im)) { expr_free(value); return NULL; }
+    return value;
+}
+
+/* -------------------------------------------------------------------------
+ * Finite interval (-1, 1) with the Chebyshev weight 1/Sqrt[1-x^2].
+ *
+ * Integrate[R(x)/Sqrt[1-x^2], {x, -1, 1}], R rational: x = Cos[t] maps it to
+ * Integrate[R(Cos t), {t, 0, Pi}] = (1/2) Integrate[R(Cos t), {t, 0, 2Pi}] (the
+ * integrand is even and 2Pi-periodic in t), which the unit-circle trig family
+ * evaluates.  Running in the residue stage (before Newton-Leibniz) it also pre-
+ * empts the FTC branch's wrong-sign antiderivative for e.g. 1/((1+x^2)Sqrt[1-x^2]).
+ * ---------------------------------------------------------------------- */
+static Expr* residue_family_chebyshev_weight(Expr* f, Expr* x, Expr* a, Expr* b,
+                                             bool* diverges) {
+    if (!is_pm1_interval(a, b)) return NULL;
+    /* h = f * Sqrt[1-x^2] must be rational in x (so f is exactly a rational over
+     * the 1/Sqrt[1-x^2] weight). */
+    Expr* sqrtw = mk_fn2("Power",
+        mk_fn2("Plus", mk_int(1), mk_fn2("Times", mk_int(-1),
+               mk_fn2("Power", expr_copy(x), mk_int(2)))),
+        mk_fn2("Power", mk_int(2), mk_int(-1)));            /* Sqrt[1 - x^2] */
+    Expr* h = ev1("Simplify", mk_fn2("Times", expr_copy(f), sqrtw));
+    if (!h) return NULL;
+    Expr* P; Expr* Q;
+    if (!res_num_den(h, &P, &Q) || !res_polyq(P, x) || !res_polyq(Q, x)) {
+        if (P) expr_free(P);
+        if (Q) expr_free(Q);
+        expr_free(h); return NULL;
+    }
+    expr_free(P); expr_free(Q);
+    /* R(Cos t), t a fresh angle; the trig family handles {t, 0, 2Pi}. */
+    Expr* t = mk_sym(RES_T);
+    Expr* Rcos = eval_take(mk_fn2("ReplaceAll", h,                 /* consumes h */
+                     mk_fn2("Rule", expr_copy(x), mk_fn1("Cos", expr_copy(t)))));
+    if (!Rcos) { expr_free(t); return NULL; }
+    Expr* twopi = eval_take(mk_fn2("Times", mk_int(2), mk_sym(SYM_Pi)));
+    Expr* zero = mk_int(0);
+    Expr* full = residue_family_trig(Rcos, t, zero, twopi, diverges);   /* 2Pi-period value */
+    expr_free(Rcos); expr_free(t); expr_free(zero); expr_free(twopi);
+    if (!full) return NULL;
+    Expr* value = ev1("Simplify",
+        mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)), full));  /* halve */
+    if (!value) return NULL;
+    double vv;
+    if (!res_is_real_scalar(value, x, &vv)) { expr_free(value); return NULL; }
     return value;
 }
 
@@ -2236,6 +2289,9 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         value = residue_family_trig(f, x, a, b, diverges);
         if (!value && !(diverges && *diverges))
             value = residue_family_contour_param(f, x, a, b, diverges);
+    } else if (is_pm1_interval(a, b)) {
+        /* Finite interval (-1,1) with the Chebyshev weight 1/Sqrt[1-x^2]. */
+        value = residue_family_chebyshev_weight(f, x, a, b, diverges);
     } else if (is_neg_pos_infinity(a, b)) {
         /* Whole line: Fourier/Jordan if a trig/exp kernel is present, then the
          * quasi-periodic (rectangular-contour) family, else rational. */

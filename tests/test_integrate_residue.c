@@ -120,6 +120,27 @@ static void test_trig_symbolic(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Finite interval (-1,1) with the Chebyshev weight 1/Sqrt[1-x^2] (Case 8):
+ * x = Cos[t] -> (1/2) of the full-period trig integral.  Running before
+ * Newton-Leibniz, it also pre-empts the FTC branch's WRONG-SIGN antiderivative.
+ * ---------------------------------------------------------------------- */
+static void test_chebyshev_weight(void) {
+    /* Case 8: Integrate[1/((1+x^2) Sqrt[1-x^2]), {x,-1,1}] = Pi/Sqrt[2]
+     * (Newton-Leibniz returns the wrong sign -Pi/Sqrt[2] here). */
+    check_eq("Integrate[1/((1 + x^2) Sqrt[1 - x^2]), {x, -1, 1}]", "Pi/Sqrt[2]");
+    check_eq("Integrate[1/((1 + x^2) Sqrt[1 - x^2]), {x, -1, 1}, Method -> \"Residue\"]",
+             "Pi/Sqrt[2]");
+    /* Weight only: Integrate[1/Sqrt[1-x^2], {x,-1,1}] = Pi. */
+    check_eq("Integrate[1/Sqrt[1 - x^2], {x, -1, 1}, Method -> \"Residue\"]", "Pi");
+    /* Another rational numerator: 1/((2+x^2) Sqrt[1-x^2]) = Pi/Sqrt[6]. */
+    check_eq("Chop[N[Integrate[1/((2 + x^2) Sqrt[1 - x^2]), {x, -1, 1}, Method -> \"Residue\"] "
+             "- Pi/Sqrt[6]]]", "0");
+    /* No Chebyshev weight: the family declines, Newton-Leibniz owns it. */
+    check_eq("Integrate[1/(1 + x^2), {x, -1, 1}, Method -> \"Residue\"]",
+             "Integrate[1/(1 + x^2), {x, -1, 1}, Method -> \"Residue\"]");
+}
+
+/* -------------------------------------------------------------------------
  * Principal value (simple real-axis pole, half residue) + even half-line.
  * ---------------------------------------------------------------------- */
 static void test_principal_value(void) {
@@ -452,6 +473,7 @@ int main(void) {
     TEST(test_mellin_barnes);
     TEST(test_sector);
     TEST(test_trig_symbolic);
+    TEST(test_chebyshev_weight);
     TEST(test_rational_symbolic);
     TEST(test_symbolic_negative_controls);
 

@@ -73,9 +73,14 @@ NIntegrate). I verify each case numerically in the REPL during dev. Bump
       test_trig_symbolic + order-2 numeric regression; docs + changelog; v0.272.
 
 ## Phase 5 — Tier E special contours
-- [ ] `residue_family_fresnel` (10)
-- [ ] `residue_family_hyperbolic` (7)
-- [ ] `residue_family_chebyshev_weight` (8); tests/docs/bump/tag
+- [x] `residue_family_chebyshev_weight` (Case 8) v0.274: R(x)/Sqrt[1-x^2] on (-1,1),
+      x=Cos[t] -> (1/2) trig-family. FIXES WRONG SIGN (NL gave -Pi/Sqrt2; correct +Pi/Sqrt2).
+      Runs before NL so it pre-empts the bad antiderivative. test_chebyshev_weight.
+- [~] Case 10 (sin(x^3)): ALREADY correct via integrate_fresnel.c (plain Integrate =
+      Pi/(3 Sqrt[3] Gamma[2/3]) = Gamma[4/3]/2). Residue-path gap is cosmetic -> SKIP.
+- [ ] `residue_family_hyperbolic` (Case 7 x/Sinh = Pi^2/2): reduces to PV keyhole-log
+      (w=e^x -> 2 Log w/(w^2-1), PV pole at w=1) OR a height-Pi rectangle. Needs PV
+      machinery (Phase 0) or a rectangle family -- DEFERRED (complex, decline not wrong).
 
 ## Phase 6 — Case 11 Mellin–Barnes vertical line  [DONE v0.273]
 - [x] CORE fix (src/plus.c classify_plus_term): a Times[Complex[0,b],Infinity]

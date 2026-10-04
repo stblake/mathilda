@@ -2216,6 +2216,12 @@ symbolic-exponent contours:
   the closed form collapses only because `Arg` reduces exactly on roots of unity
   (`Arg[(-1)^{1/6}] = π/6`); a numeric `p`/`m` lands on an algebraic multiple of
   `π^{m+1}`.
+- **Finite interval `(-1, 1)` with the Chebyshev weight** — `Integrate[R(x) /
+  Sqrt[1 - x^2], {x, -1, 1}]`, `R` rational: `x = Cos[t]` maps it to
+  `(1/2) ∫₀^{2π} R(Cos t) dt`, evaluated by the unit-circle family.  It runs in
+  the residue stage, *before* Newton–Leibniz, so it also pre-empts the FTC
+  branch's wrong-sign antiderivative — `∫₋₁¹ dx/((1+x²)√(1−x²)) = π/√2` (FTC
+  alone returned `−π/√2`), `∫₋₁¹ dx/√(1−x²) = π`.
 - **Mellin–Barnes / Bromwich vertical line** — `Integrate[F(s) x^{-s}, {s, c−i∞,
   c+i∞}]` with `F(s) = const · Γ(A + B s)` (`B > 0`): the inverse-Mellin contour,
   closed to the left, equals `2πi · Σ_k Res` over the Γ-pole ladder `s = −(A+k)/B`
