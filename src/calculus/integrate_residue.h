@@ -66,9 +66,19 @@
  * CONSTRUCTION, with no numeric quadrature crosscheck.  A parameter the
  * assumptions leave two-sided unbounded is refused (its sign is undetermined).
  * Without assumptions the classification stays purely numeric (unchanged).
+ *
+ * `principal_value` is the caller's `PrincipalValue -> True` option.  It is
+ * consulted by the keyhole-log family: a SIMPLE pole of the rational factor on
+ * the branch cut (0, Inf) is then admitted as a Cauchy principal value, its
+ * contribution being the average of the two keyhole-branch residues (the
+ * indentation half-residues above and below the cut).  A branch-point pole at
+ * z = 1 carrying a Log factor is removable (the Log zero cancels it), so that
+ * sub-case is admitted even without the flag.  Outside the keyhole-log family
+ * the flag is presently inert.
  */
 Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
-                            Expr* assumptions, bool* diverges);
+                            Expr* assumptions, bool* diverges,
+                            bool principal_value);
 
 /* `Integrate`ContourResidue[f, {x, a, b}]` builtin.  Strict: NULL on any
  * non-applicable input (no fallback). */

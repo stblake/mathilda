@@ -6,8 +6,10 @@ Policy: tests stay correct-by-construction (closed-form pins; no committed
 NIntegrate). I verify each case numerically in the REPL during dev. Bump
 `src/version.h` + tag per substantive phase. Route warnings via `mth_message`.
 
-## Phase 0 — PV plumbing (prereq)
-- [ ] Thread parsed `principal_value` into `integrate_residue_try` (new param)
+## Phase 0 — PV plumbing (prereq)  [DONE v0.275]
+- [x] Thread parsed `principal_value` into `integrate_residue_try` (new 7th param,
+      carried via file-scope g_pv saved/restored per frame). integrate.c passes it;
+      ContourResidue builtin passes false; even-half-line recursion inherits g_pv.
 
 ## Phase 1 — Tier A correctness (FOUNDATIONAL)
 - [x] Baseline-repro: Case 2 wrong; `Residue[z^(1/3)/(1+z^2)^2,{z,I}]` → 0 wrong
@@ -51,7 +53,11 @@ NIntegrate). I verify each case numerically in the REPL during dev. Bump
       Simplify[RootReduce[Re[.]]] (buried poles in Root objects Arg couldn't
       touch) to Simplify[ComplexExpand[.]]. C4=-Sqrt[3]Pi^2/18, C4b=-Sqrt[2]Pi^2/16
       now CLEAN. Tests rewritten to assert FreeQ[r,Integrate] (non-vacuous).
-- [ ] PV indentation for axis pole (Case 18)  [Phase 2b]
+- [x] PV indentation for axis pole (Case 18)  [DONE v0.275]: a0_keyhole_log admits a
+      SIMPLE axis pole as the average of the two keyhole-branch residues
+      (1/2 Res(R,z0)[(Log z0)^k + (Log z0+2Pi i)^k]). Removable z0=1 (Log 1=0) needs no
+      option; genuine z0!=1 needs PrincipalValue->True. C18 Log[x]/(x^3-1)=4Pi^2/27;
+      Log[x]/(x^2-4) PV = Pi^2/8. Hand-derived + NIntegrate symmetric-exclusion checked.
 
 ## Phase 3 — Tier C parametrized contour + essential-sing  [DONE v0.271]
 - [x] `residue_family_contour_param` (t->-I Log[u], G=F/(I u), 2 Pi i Sum Res
@@ -78,9 +84,11 @@ NIntegrate). I verify each case numerically in the REPL during dev. Bump
       Runs before NL so it pre-empts the bad antiderivative. test_chebyshev_weight.
 - [~] Case 10 (sin(x^3)): ALREADY correct via integrate_fresnel.c (plain Integrate =
       Pi/(3 Sqrt[3] Gamma[2/3]) = Gamma[4/3]/2). Residue-path gap is cosmetic -> SKIP.
-- [ ] `residue_family_hyperbolic` (Case 7 x/Sinh = Pi^2/2): reduces to PV keyhole-log
-      (w=e^x -> 2 Log w/(w^2-1), PV pole at w=1) OR a height-Pi rectangle. Needs PV
-      machinery (Phase 0) or a rectangle family -- DEFERRED (complex, decline not wrong).
+- [x] Case 7 x/Sinh = Pi^2/2  [DONE v0.275]: NO new family -- generalized
+      residue_family_rectangular. After w=Exp[x], a Sinh/Cosh/... of Log[w] rationalises
+      under TrigToExp+Together and a polynomial x^k becomes (Log w)^k, so x/Sinh[x] ->
+      2 Log[w]/(w^2-1), routed to residue_family_mellin_log (removable w=1 pole). Pure-Exp
+      strip path untouched (gated on a hyperbolic head). Works Automatic + pinned.
 
 ## Phase 6 — Case 11 Mellin–Barnes vertical line  [DONE v0.273]
 - [x] CORE fix (src/plus.c classify_plus_term): a Times[Complex[0,b],Infinity]

@@ -1286,7 +1286,8 @@ static Expr* integrate_definite(Expr* res) {
              * methods are honoured regardless. */
             bool has_undef = def_has_undefined_function(cur);
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_RESIDUE))
-                r = integrate_residue_try(cur, x, a, b, assumptions, &diverges);
+                r = integrate_residue_try(cur, x, a, b, assumptions, &diverges,
+                                          principal_value);
             /* The residue method conclusively found a pole on the integration
              * contour: the integral does not converge.  Emit Integrate::idiv
              * and stop -- do NOT fall through to Newton-Leibniz (which would

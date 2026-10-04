@@ -152,6 +152,11 @@ static bool res_real_double(const Expr* e, double* out) {
  * ---------------------------------------------------------------------- */
 static Expr* g_inst = NULL;   /* List[Rule[param, Real], ...] or NULL */
 static bool  g_all_pos = false;  /* true iff every instantiated parameter is > 0 */
+/* The caller's PrincipalValue -> True option, threaded into the keyhole-log
+ * family so a simple pole on the branch cut (0, Inf) is admitted as a Cauchy
+ * principal value rather than declined.  Set/restored around each
+ * integrate_residue_try frame (NULL-safe default off). */
+static bool  g_pv = false;
 /* The assumption-guaranteed interval of each parameter (mirrors g_inst), so a
  * family can verify a convergence/applicability gate holds over the WHOLE
  * assumed region -- not merely at the single instantiation point (which would
@@ -1093,7 +1098,7 @@ static Expr* residue_half_line(Expr* f, Expr* x, Expr* a, Expr* b,
     Expr* pos = mk_sym(SYM_Infinity);
     /* Recurse over the full line: a divergent full-line even integrand means the
      * half-line [0, Inf) diverges too, so propagate the flag. */
-    Expr* full = integrate_residue_try(f, x, neg, pos, NULL, diverges);
+    Expr* full = integrate_residue_try(f, x, neg, pos, NULL, diverges, g_pv);
     expr_free(neg); expr_free(pos);
     if (!full) return NULL;
 
@@ -1704,7 +1709,6 @@ static Expr* a0_keyhole_log(Expr* R, Expr* v, int m) {
     for (size_t i = 0; i < roots.n && !bad; i++) {
         Expr* z = roots.v[i]; double zre, zim;
         if (!res_reim(z, &zre, &zim)) { bad = true; break; }   /* symbolic pole: decline */
-        if (zim > -RES_TOL && zim < RES_TOL && zre > RES_TOL) { bad = true; break; } /* on (0,Inf): PV */
         /* Simple iff Q'(z) != 0; a simple pole takes the robust direct form
          * klog(z)^k * Res(R,z), an order >= 2 pole the shifted Series form. */
         Expr* dQz = dQ ? eval_take(mk_fn2("ReplaceAll", expr_copy(dQ),
@@ -1713,15 +1717,39 @@ static Expr* a0_keyhole_log(Expr* R, Expr* v, int m) {
         bool simple = dQz && res_reim(dQz, &dre, &dim) &&
                       (fabs(dre) > RES_TOL || fabs(dim) > RES_TOL);
         if (dQz) expr_free(dQz);
-        Expr* klogz = NULL, *resR = NULL;
+        /* A pole on the branch cut (0, Inf).  Its keyhole contribution is the
+         * Cauchy principal value: the average of the two branch residues (the
+         * indentation half-residues just above the cut, klog = Log z, and just
+         * below it, klog = Log z + 2 Pi i).  Admitted when the caller asked for
+         * PrincipalValue, or when it is REMOVABLE -- a simple pole at z = 1,
+         * where the Log factor's zero (Log 1 = 0) cancels it and the ordinary
+         * integral coincides with its principal value.  A higher-order axis pole
+         * makes the principal value diverge: decline. */
+        bool on_axis = (zim > -RES_TOL && zim < RES_TOL && zre > RES_TOL);
+        bool removable_axis = on_axis && simple && fabs(zre - 1.0) < RES_TOL;
+        if (on_axis && !(g_pv || removable_axis)) { bad = true; break; }
+        if (on_axis && !simple) { bad = true; break; }
+        Expr* klogz = NULL, *klogz2 = NULL, *resR = NULL;
         if (simple) {
-            klogz = klog_of(z);
+            klogz = on_axis ? mk_fn1("Log", expr_copy(z)) : klog_of(z);  /* arg-0 branch on the cut */
             resR  = klogz ? residue_compute(R, v, z) : NULL;
             if (!klogz || !resR) { if (klogz) expr_free(klogz); if (resR) expr_free(resR); bad = true; break; }
+            if (on_axis)
+                klogz2 = eval_take(mk_fn2("Plus", expr_copy(klogz),
+                             mk_fn2("Times", mk_int(2),
+                                 mk_fn2("Times", mk_sym(SYM_Pi), mk_sym(SYM_I)))));
         }
         for (int k = 1; k <= m + 1 && !bad; k++) {
             Expr* c;
-            if (simple)
+            if (on_axis) {
+                /* 1/2 Res(R,z) [ (Log z)^k + (Log z + 2 Pi i)^k ] */
+                Expr* br = mk_fn2("Plus",
+                    mk_fn2("Power", expr_copy(klogz), mk_int(k)),
+                    mk_fn2("Power", expr_copy(klogz2), mk_int(k)));
+                c = eval_take(mk_fn2("Times",
+                        mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)),
+                               expr_copy(resR)), br));
+            } else if (simple)
                 c = eval_take(mk_fn2("Times",
                         mk_fn2("Power", expr_copy(klogz), mk_int(k)), expr_copy(resR)));
             else
@@ -1731,6 +1759,7 @@ static Expr* a0_keyhole_log(Expr* R, Expr* v, int m) {
             if (!S[k]) { bad = true; break; }
         }
         if (klogz) expr_free(klogz);
+        if (klogz2) expr_free(klogz2);
         if (resR) expr_free(resR);
     }
     ev_free(&roots);
@@ -1960,14 +1989,21 @@ static Expr* residue_family_mellin_log(Expr* f, Expr* x, Expr* a, Expr* b) {
     return val;
 }
 
-/* Whole-line quasi-periodic integrand f(x) = Exp[c x] R(Exp[x]): the rectangular
- * contour of height 2 Pi i.  Reduced to the keyhole/Mellin core by w = Exp[x]:
- *   Int_{-Inf}^{Inf} f(x) dx = Int_0^Inf f(Log w) / w dw,
- * and f(Log w)/w = w^(c-1) R(w) is exactly the Mellin integrand.  This keeps a
- * single residue engine for both the strip and the branch cut. */
+/* Whole-line quasi-periodic integrand on (-Inf, Inf), reduced to the keyhole /
+ * Mellin core by the exact substitution w = Exp[x]:
+ *   Int_{-Inf}^{Inf} f(x) dx = Int_0^Inf f(Log w) / w dw.
+ * Two shapes close:
+ *   - f(x) = Exp[c x] R(Exp[x]) (the rectangular-contour strip): f(Log w)/w =
+ *     w^(c-1) R(w) is exactly the branch-power Mellin integrand -> mellin_core.
+ *   - f(x) = x^k / Sinh x and relatives (x^k/Cosh x, Exp[a x]/Cosh x, ...): the
+ *     hyperbolic factors become rational in w under TrigToExp, while a polynomial
+ *     x^k factor becomes (Log w)^k, so f(Log w)/w is the keyhole-LOG integrand
+ *     (Log w)^k R(w) -> residue_family_mellin_log.  Its pole at w = 1 (x = 0) is
+ *     the removable branch-point pole that family already handles.  One residue
+ *     engine serves the strip, the branch cut, and the log cut alike. */
 static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!is_neg_pos_infinity(a, b)) return NULL;
-    /* Only worth the substitution when Exp[x] actually occurs. */
+    /* Only worth the substitution when Exp[x] or a hyperbolic function occurs. */
     if (!contains_head(f, "Exp") &&
         !(contains_symbol(f, x)))  /* cheap guard; real check is the split below */
         return NULL;
@@ -1980,9 +2016,30 @@ static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b) {
     Expr* g = eval_take(mk_fn2("Times", fl, mk_fn2("Power", expr_copy(w), mk_int(-1))));
     if (!g) { expr_free(w); return NULL; }
 
-    /* The substituted integrand must be a genuine branch-power * rational form
-     * (a stray Log[w] left over means f was not of the Exp[c x] R(Exp[x]) type). */
-    if (contains_head(g, "Log")) { expr_free(g); expr_free(w); return NULL; }
+    /* A hyperbolic (or circular) function of Log w rationalises under TrigToExp:
+     * Sinh[Log w] = (w - 1/w)/2, etc.  Together clears the resulting 1/w pieces. */
+    bool had_hyp = contains_head(g, "Sinh") || contains_head(g, "Cosh") ||
+                   contains_head(g, "Tanh") || contains_head(g, "Csch") ||
+                   contains_head(g, "Sech") || contains_head(g, "Coth");
+    if (had_hyp) {
+        Expr* g2 = ev1("Together", ev1("TrigToExp", expr_copy(g)));
+        if (g2) { expr_free(g); g = g2; }
+    }
+
+    /* A leftover Log[w] is the keyhole-log integrand (Log w)^k R(w): route it to
+     * the keyhole-log family, which owns the removable w = 1 branch-point pole.
+     * This only makes sense once the hyperbolic factors have rationalised; a
+     * stray Log from a non-hyperbolic f means it was not of a reducible type. */
+    if (contains_head(g, "Log")) {
+        Expr* value = NULL;
+        if (had_hyp) {
+            Expr* zero = mk_int(0), *inf = mk_sym(SYM_Infinity);
+            value = residue_family_mellin_log(g, w, zero, inf);
+            expr_free(zero); expr_free(inf);
+        }
+        expr_free(g); expr_free(w);
+        return value;
+    }
     Expr* value = mellin_core(g, w);
     expr_free(g); expr_free(w);
     return value;
@@ -2263,9 +2320,15 @@ static Expr* residue_family_mellin_barnes(Expr* f, Expr* s, double c, int orient
 }
 
 Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
-                            Expr* assumptions, bool* diverges) {
+                            Expr* assumptions, bool* diverges,
+                            bool principal_value) {
     if (diverges) *diverges = false;
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+
+    /* PrincipalValue context for the keyhole-log family (restored on exit so a
+     * nested frame cannot leak its setting back to the caller). */
+    bool pv_prev = g_pv;
+    g_pv = principal_value;
 
     /* Enter symbolic-parameter mode when assumptions are supplied and we are the
      * outermost call (g_inst not already set by an enclosing call -- the even
@@ -2308,6 +2371,7 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
     }
 
     if (built_here) { expr_free(g_inst); g_inst = NULL; g_nbounds = 0; }
+    g_pv = pv_prev;
     return value;
 }
 
@@ -2320,7 +2384,7 @@ Expr* builtin_integrate_contour_residue(Expr* res) {
     if (x->type != EXPR_SYMBOL) return NULL;
     Expr* a = spec->data.function.args[1];
     Expr* b = spec->data.function.args[2];
-    return integrate_residue_try(f, x, a, b, NULL, NULL);
+    return integrate_residue_try(f, x, a, b, NULL, NULL, false);
 }
 
 void integrate_residue_init(void) {

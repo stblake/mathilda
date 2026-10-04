@@ -2215,7 +2215,15 @@ symbolic-exponent contours:
   logarithm `Log z_l = Log|z_l| + i·arg z_l` evaluated at the (algebraic) poles,
   the closed form collapses only because `Arg` reduces exactly on roots of unity
   (`Arg[(-1)^{1/6}] = π/6`); a numeric `p`/`m` lands on an algebraic multiple of
-  `π^{m+1}`.
+  `π^{m+1}`.  A **simple pole on the branch cut `(0, ∞)`** (integer-`p` branch)
+  enters as a Cauchy principal value: the contour indents around it above and
+  below, so it contributes the *average* of its two keyhole-branch residues,
+  `½ Res(R, z₀)[(Log z₀)^k + (Log z₀ + 2πi)^k]`.  A branch-point pole at `z₀ = 1`
+  carrying the `Log` factor is **removable** (`Log 1 = 0` cancels it) and is
+  admitted with no option — `∫₀^∞ Log[x]/(x³−1) = 4π²/27` (the integrand is in
+  fact continuous at `x = 1`).  A genuine axis pole (`z₀ ≠ 1`) needs
+  `PrincipalValue -> True` and then returns the principal value, e.g.
+  `∫₀^∞ Log[x]/(x²−4) dx = π²/8`; a higher-order axis pole (divergent PV) declines.
 - **Finite interval `(-1, 1)` with the Chebyshev weight** — `Integrate[R(x) /
   Sqrt[1 - x^2], {x, -1, 1}]`, `R` rational: `x = Cos[t]` maps it to
   `(1/2) ∫₀^{2π} R(Cos t) dt`, evaluated by the unit-circle family.  It runs in
@@ -2235,10 +2243,16 @@ symbolic-exponent contours:
   `(π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`.  This is the one family admitting a
   symbolic `n` (the keyhole cannot enumerate `n` poles), powering
   `Integrate[1/(1 + x^n), {x, 0, ∞}, Assumptions -> n > 1] = (π/n) csc(π/n)`.
-- **Rectangular / quasi-periodic on `(-∞, ∞)`** — `f = Exp[c x] R(Exp[x])`
-  (period `2πi`): reduced to the keyhole core by `w = Exp[x]`
-  (`∫_{-∞}^∞ f dx = ∫₀^∞ f(Log w)/w dw = ∫₀^∞ w^{c-1} R(w) dw`), so e.g.
-  `Integrate[Exp[a x]/(Exp[x]+1), {x, -∞, ∞}, Assumptions -> 0 < a < 1] = π csc(π a)`.
+- **Rectangular / quasi-periodic on `(-∞, ∞)`** — reduced to the half-line core
+  by the exact substitution `w = Exp[x]`
+  (`∫_{-∞}^∞ f dx = ∫₀^∞ f(Log w)/w dw`).  Two shapes close: `f = Exp[c x] R(Exp[x])`
+  (period `2πi`) becomes the branch-power Mellin integrand `w^{c-1} R(w)`, so
+  `Integrate[Exp[a x]/(Exp[x]+1), {x, -∞, ∞}, Assumptions -> 0 < a < 1] = π csc(π a)`;
+  and `f = x^k/Sinh x` and its hyperbolic relatives — the `Sinh`/`Cosh`/… of
+  `Log w` rationalise under `TrigToExp` (`Sinh[Log w] = (w − 1/w)/2`) while a
+  polynomial `x^k` factor becomes `(Log w)^k`, handing the **keyhole-log** family
+  the integrand `(Log w)^k R(w)` with its removable `w = 1` (i.e. `x = 0`) pole —
+  `∫_{-∞}^∞ x/Sinh[x] dx = π²/2`.
 
 **Assumptions and symbolic parameters.**  An `Integrate[f, {x, a, b},
 Assumptions -> …]` option lets the residue families evaluate integrals whose
@@ -2302,10 +2316,10 @@ a mis-fire and returned unevaluated.  Negative controls such as
 `Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}]` (branch point, not
 rational), and `Integrate[1/(2 + Cos[x]), {x, 0, Pi}]` (not a full period) all
 stay unevaluated.  The keyhole/Mellin, keyhole-with-log (integer *and*
-non-integer power), sector and rectangular families described above extend the
-reach to branch-cut, log-weighted and symbolic-exponent contours.  Still out of
-scope: the log-keyhole with a **principal-value** pole on the positive axis
-(`∫₀^∞ Log[x]/(x³−1)`, which needs an indentation term).
+non-integer power, including a **principal-value** pole on the positive axis),
+Chebyshev-weight, Mellin–Barnes, sector and rectangular/hyperbolic families
+described above extend the reach to branch-cut, log-weighted, principal-value and
+symbolic-exponent contours.
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,

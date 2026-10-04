@@ -359,6 +359,34 @@ static void test_keyhole_log(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Keyhole-log with a pole on the branch cut (0, Inf): the Cauchy principal
+ * value, each axis pole contributing the average of its two keyhole-branch
+ * residues.  A simple pole at z = 1 under a Log factor is REMOVABLE (Log 1 = 0),
+ * so it is admitted without the option; a genuine axis pole needs
+ * PrincipalValue -> True.
+ * ---------------------------------------------------------------------- */
+static void test_keyhole_pv(void) {
+    /* Case 18: Integrate[Log[x]/(x^3-1)] = 4 Pi^2/27.  Removable pole at x = 1
+     * (the integrand is in fact continuous there), admitted with no option. */
+    check_eq("With[{r = Integrate[Log[x]/(x^3-1), {x, 0, Infinity}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r - 4 Pi^2/27]]}]", "{True, 0}");
+    check_eq("Integrate[Log[x]/(x^3-1), {x, 0, Infinity}, Method -> \"Residue\"]", "4/27 Pi^2");
+    /* A genuine (non-removable) axis pole at x = 2: declines without the option,
+     * returns the principal value Pi^2/8 with it. */
+    check_eq("Integrate[Log[x]/(x^2-4), {x, 0, Infinity}, Method -> \"Residue\"]",
+             "Integrate[Log[x]/(-4 + x^2), {x, 0, Infinity}, Method -> \"Residue\"]");
+    check_eq("With[{r = Integrate[Log[x]/(x^2-4), {x, 0, Infinity}, Method -> \"Residue\", "
+             "PrincipalValue -> True]}, {FreeQ[r, Integrate], Chop[N[r - Pi^2/8]]}]", "{True, 0}");
+
+    /* Case 7: Integrate[x/Sinh[x], {x, -Inf, Inf}] = Pi^2/2.  The rectangular
+     * substitution w = Exp[x] turns x/Sinh x into the keyhole-log integrand
+     * 2 Log[w]/(w^2-1) with a removable pole at w = 1 (x = 0). */
+    check_eq("With[{r = Integrate[x/Sinh[x], {x, -Infinity, Infinity}, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[r - Pi^2/2]]}]", "{True, 0}");
+    check_eq("Integrate[x/Sinh[x], {x, -Infinity, Infinity}, Method -> \"Residue\"]", "1/2 Pi^2");
+}
+
+/* -------------------------------------------------------------------------
  * Parametrized contour on (0, 2Pi): Integrate[g(c Exp[I t]) (I c Exp[I t])] =
  * Contour[g, |z|=c] = 2 Pi i Sum Res, including essential singularities.  Each
  * pin asserts FreeQ[r, Integrate] so a decline cannot pass via a numeric
@@ -469,6 +497,7 @@ int main(void) {
     TEST(test_mellin);
     TEST(test_mellin_symbolic_exponent);
     TEST(test_keyhole_log);
+    TEST(test_keyhole_pv);
     TEST(test_contour_param);
     TEST(test_mellin_barnes);
     TEST(test_sector);
