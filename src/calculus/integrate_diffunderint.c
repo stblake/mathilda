@@ -185,6 +185,48 @@ static bool has_trig_of_x(const Expr* e, const Expr* x) {
     return false;
 }
 
+/* True iff `e`'s head is a forward trig / hyperbolic function. */
+static bool is_trig_head_sym(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION ||
+        e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    static const char* T[] = { "Sin","Cos","Tan","Cot","Sec","Csc",
+                               "Sinh","Cosh","Tanh","Coth","Sech","Csch" };
+    for (size_t i = 0; i < sizeof(T)/sizeof(T[0]); i++)
+        if (strcmp(h, T[i]) == 0) return true;
+    return false;
+}
+
+/* True iff some multiplicative term of `g` carries TWO OR MORE forward
+ * trig/hyperbolic factors OF x (Sin[b x] Cos[c x], Sin[b x] Sin[c x], ...),
+ * where a Power[trig, k] counts as a SINGLE factor.  Such a product drives the
+ * Laplace/sinc complex-exponential path into a tangled Log/ArcTanh form that
+ * carries a spurious imaginary part (or an Indeterminate) for some real
+ * parameter signs; TrigReduce first rewrites the product as a sum of single
+ * trig-of-x terms the families integrate cleanly.  A single trig factor raised
+ * to a power (Sin[a x]^2, ...) is deliberately NOT a match -- those already
+ * close through the existing paths and must stay untouched. */
+static bool has_trig_product_of_x(const Expr* g, const Expr* x) {
+    if (!g || g->type != EXPR_FUNCTION) return false;
+    if (head_name_is(g, "Plus")) {
+        for (size_t i = 0; i < g->data.function.arg_count; i++)
+            if (has_trig_product_of_x(g->data.function.args[i], x)) return true;
+        return false;
+    }
+    if (head_name_is(g, "Times")) {
+        int c = 0;
+        for (size_t i = 0; i < g->data.function.arg_count; i++) {
+            Expr* f = g->data.function.args[i];
+            Expr* base = f;
+            if (head_name_is(f, "Power") && f->data.function.arg_count == 2)
+                base = f->data.function.args[0];
+            if (is_trig_head_sym(base) && contains_symbol(base, x)) c++;
+        }
+        return c >= 2;
+    }
+    return false;
+}
+
 /* True iff `e` contains a radical of x: Power[base, e] with a fractional-CONSTANT
  * exponent and base depending on x (Sqrt[1-x^2], (a^2-x^2)^(1/2), ...).  A
  * symbolic exponent like x^a is NOT a radical and stays engine-safe. */
@@ -332,7 +374,28 @@ static Expr* integrate_gaussian_param(const Expr* J, const Expr* p);
 static Expr* integrate_over_param(const Expr* J, const Expr* p) {
     Expr* gp = integrate_gaussian_param(J, p);
     if (gp) return gp;
-    return ev2("Integrate", expr_copy((Expr*)J), expr_copy((Expr*)p));
+    /* Normalize before handing J to the engine: pull Logs out of radicals /
+     * reciprocal powers (Log[1/u^(1/4)] -> -(1/4) Log[u]).  The indefinite engine
+     * grinds UNINTERRUPTIBLY on a Log[1/poly^rational] back-integrand (it enters an
+     * algebraic / radical integration path), yet the Log/ArcTan/rational spelling
+     * PowerExpand produces integrates instantly.  PowerExpand can shift a branch,
+     * but the caller re-verifies D[I,p]-J===0, so a branch slip is rejected, never
+     * returned. */
+    Expr* Jn = ev1("PowerExpand", expr_copy((Expr*)J));
+    if (!Jn) Jn = expr_copy((Expr*)J);
+    Expr* Je = ev1("Expand", Jn);                 /* consumes Jn */
+    if (!Je) Je = expr_copy((Expr*)J);
+    /* Bounded gate, mirroring inner_definite's families-only discipline: the
+     * parameter back-integrand must be free of radical / trig / Gaussian OF p --
+     * those drive the engine into the same uninterruptible grind the inner-integral
+     * families avoid (TimeConstrained does not bound a nested evaluate).  Log /
+     * ArcTan / rational / polynomial in p are elementary, fast and terminating. */
+    if (has_radical_of_x(Je, p) || has_trig_of_x(Je, p) ||
+        contains_gaussian_exp(Je, p)) {
+        expr_free(Je);
+        return NULL;                              /* abandon this parameter, no hang */
+    }
+    return ev2("Integrate", Je, expr_copy((Expr*)p));   /* consumes Je */
 }
 
 /* Value of the antiderivative G at p = p0.  Direct substitution when it yields a
@@ -1213,11 +1276,23 @@ static Expr* inner_definite(const Expr* g, const Expr* x, const Expr* a,
                             const Expr* b, const Expr* assumptions,
                             const ParamBound* pb, size_t np) {
     if (is_zero_expr(a) && is_pos_inf(b)) {
-        Expr* r = laplace_halfline(g, x, pb, np, assumptions);
-        if (!r) r = laplace_sinc_halfline(g, x, pb, np, assumptions);
-        if (!r) r = rational_halfline(g, x, pb, np, assumptions);
-        if (!r) r = rational_halfline_general(g, x, pb, np, assumptions);
-        if (!r) r = gaussian_halfline(g, x, pb, np, assumptions);
+        /* Collapse a PRODUCT of trig-of-x into a sum of single trig terms
+         * (Sin[b x] Sin[c x] -> (Cos[(b-c)x] - Cos[(b+c)x])/2) before the
+         * families run: the complex-exponential path otherwise yields a tangled
+         * Log[b-c]/ArcTanh form that is non-real (or Indeterminate) for some real
+         * parameter signs.  Left untouched when no such product is present. */
+        Expr* gred = NULL;
+        const Expr* gg = g;
+        if (has_trig_product_of_x(g, x)) {
+            gred = ev1("TrigReduce", expr_copy((Expr*)g));
+            if (gred) gg = gred;
+        }
+        Expr* r = laplace_halfline(gg, x, pb, np, assumptions);
+        if (!r) r = laplace_sinc_halfline(gg, x, pb, np, assumptions);
+        if (!r) r = rational_halfline(gg, x, pb, np, assumptions);
+        if (!r) r = rational_halfline_general(gg, x, pb, np, assumptions);
+        if (!r) r = gaussian_halfline(gg, x, pb, np, assumptions);
+        if (gred) expr_free(gred);
 #ifdef DIUI_DEBUG
         fprintf(stderr, "DIUI:   [%.0fms] half-line family -> %s\n",
                 diui_ms(), r ? "HIT" : "miss");
@@ -1238,6 +1313,7 @@ static Expr* inner_definite(const Expr* g, const Expr* x, const Expr* a,
 static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b,
                       const Expr* assumptions, const Expr* p,
                       const ParamBound* pb, size_t np,
+                      bool zero_base_only,
                       Expr** out_p0, Expr** out_i0) {
     /* 1. other-parameter zero base: f|_{p->q} identically 0 in x. */
     for (size_t i = 0; i < np; i++) {
@@ -1259,6 +1335,11 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
         if (zero) { *out_p0 = c; *out_i0 = mk_int(0); return true; }
         expr_free(c);
     }
+    /* A zero-integrand base is EXACT (I0 = 0, sign-independent).  The computed
+     * base below is sign-sensitive (the family renders it for one sign branch)
+     * and the D[I,p]-J verification cannot catch a wrong constant base, so a
+     * caller that has another parameter to try prefers to skip it here. */
+    if (zero_base_only) return false;
     /* 3. directly-integrable base: I(p0) = Integrate[f|_{p->p0}, {x,a,b}] closes.
      *    Only the cheap numeric anchor p0 = 0 is tried: substituting one
      *    parameter for another tends to CREATE a harder (or engine-hanging)
@@ -1786,89 +1867,99 @@ done:
 /* -------------------------------------------------------------------------
  * Stage A -- pure quadrature (lambda = 0).
  * ---------------------------------------------------------------------- */
+/* One parameter attempt.  `zero_base_only` restricts find_base to an EXACT
+ * (sign-independent) zero base; see the two-pass driver below.  Returns an owned
+ * verified closed form, or NULL to move on. */
+static Expr* stage_quadrature_param(const Expr* f, const Expr* x, const Expr* a,
+                                    const Expr* b, const Expr* assumptions,
+                                    const Expr* p, const ParamBound* pb, size_t np,
+                                    bool zero_base_only) {
+    /* g = Simplify[D[f, p]].  Skip if f is independent of p. */
+    Expr* g = ev1("Simplify", deriv(f, p));
+    if (!g || is_zero_q(g)) { if (g) expr_free(g); return NULL; }
+
+    /* J(p) = Integrate[g, {x,a,b}].  Must close to a finite closed form.
+     * Simplify collapses the FTC boundary artifacts (e.g. the lower-limit
+     * `0^(1+a)` term in Integrate[x^a,{x,0,1}]) that would otherwise stop the
+     * parameter-integration from closing. */
+    Expr* J = inner_definite(g, x, a, b, assumptions, pb, np);
+    expr_free(g);
+    if (J) { Expr* Js = simplify_with(J, assumptions); expr_free(J); J = Js; }
+    if (!J || contains_head(J, "Integrate") || !is_finite_value(J)) {
+        if (J) expr_free(J); return NULL;
+    }
+
+    /* G(p) = Integrate[J, p]  (antiderivative over the parameter). */
+    Expr* G = integrate_over_param(J, p);
+    if (!G || contains_head(G, "Integrate") || !is_finite_value(G)) {
+        if (G) expr_free(G); expr_free(J); return NULL;
+    }
+
+    /* Base point with an exact known value I(p0). */
+    Expr* p0 = NULL; Expr* I0 = NULL;
+    if (!find_base(f, x, a, b, assumptions, p, pb, np, zero_base_only, &p0, &I0)) {
+        expr_free(G); expr_free(J); return NULL;
+    }
+
+    /* I(p) = G(p) - G(p0) + I(p0). */
+    Expr* Gp0 = eval_at_param(G, p, p0);
+    if (!Gp0) { expr_free(p0); expr_free(I0); expr_free(G); expr_free(J); return NULL; }
+
+    Expr* sum = mk_fn2("Plus", expr_copy(G),
+                       mk_fn2("Plus",
+                              mk_fn2("Times", mk_int(-1), Gp0),
+                              expr_copy(I0)));
+    Expr* I = simplify_with(sum, assumptions);
+    expr_free(sum);
+    expr_free(p0); expr_free(I0); expr_free(G);
+
+    /* Symbolic verification: D[I,p] - J === 0 (under the assumptions). */
+    bool ok = false;
+    if (I && is_finite_value(I)) {
+        Expr* chk = mk_fn2("Plus", deriv(I, p),
+                           mk_fn2("Times", mk_int(-1), expr_copy(J)));
+        ok = is_zero_with(chk, assumptions);
+        expr_free(chk);
+    }
+#ifdef DIUI_DEBUG
+    fprintf(stderr, "DIUI:   [%.0fms] verify (zb=%d) D[I,p]-J==0 : %s\n",
+            diui_ms(), zero_base_only, ok ? "PASS" : "FAIL");
+#endif
+    expr_free(J);
+    if (ok) {
+        Expr* cl = diui_finalize(I, assumptions);
+        if (cl) { expr_free(I); return cl; }
+        return I;
+    }
+    if (I) expr_free(I);
+    return NULL;
+}
+
 static Expr* stage_quadrature(const Expr* f, const Expr* x, const Expr* a,
                               const Expr* b, const Expr* assumptions,
                               const ParamBound* pb, size_t np) {
-    for (size_t pi = 0; pi < np; pi++) {
-        Expr* p = mk_sym(pb[pi].sym);
+    /* Two passes over the parameters.  Pass 1 accepts ONLY a parameter with an
+     * exact zero base (I0 = 0, sign-independent); pass 2 allows the sign-sensitive
+     * computed base.  A parameter whose integrand vanishes at the base point
+     * reconstructs the integral cleanly for every parameter sign, whereas a
+     * computed base is rendered for one sign branch -- and the D[I,p]-J check
+     * cannot catch a wrong constant base, so a zero-base parameter, when one
+     * exists, must win.  (E.g. Exp[-a x] Sin[b x] Sin[c x]/x: the b/c paths have
+     * the exact base b=0 -> 0, while the a-path's base Integrate[Sin[b x] Sin[c
+     * x]/x] is only valid for b>c.) */
+    for (int pass = 0; pass < 2; pass++) {
+        bool zero_base_only = (pass == 0);
+        for (size_t pi = 0; pi < np; pi++) {
+            Expr* p = mk_sym(pb[pi].sym);
 #ifdef DIUI_DEBUG
-        fprintf(stderr, "DIUI: [%.0fms] try param %s\n", diui_ms(), pb[pi].sym);
+            fprintf(stderr, "DIUI: [%.0fms] try param %s (zb=%d)\n",
+                    diui_ms(), pb[pi].sym, zero_base_only);
 #endif
-
-        /* g = Simplify[D[f, p]].  Skip if f is independent of p. */
-        Expr* g = ev1("Simplify", deriv(f, p));
-        if (!g || is_zero_q(g)) {
-#ifdef DIUI_DEBUG
-            fprintf(stderr, "DIUI:   g is zero / null -> skip\n");
-#endif
-            if (g) { expr_free(g); } expr_free(p); continue; }
-
-        /* J(p) = Integrate[g, {x,a,b}].  Must close to a finite closed form.
-         * Simplify collapses the FTC boundary artifacts (e.g. the lower-limit
-         * `0^(1+a)` term in Integrate[x^a,{x,0,1}]) that would otherwise stop
-         * the parameter-integration from closing. */
-        Expr* J = inner_definite(g, x, a, b, assumptions, pb, np);
-        expr_free(g);
-        if (J) { Expr* Js = simplify_with(J, assumptions); expr_free(J); J = Js; }
-        if (!J || contains_head(J, "Integrate") || !is_finite_value(J)) {
-#ifdef DIUI_DEBUG
-            fprintf(stderr, "DIUI:   [%.0fms] J did not close / non-finite -> skip\n", diui_ms());
-#endif
-            if (J) { expr_free(J); } expr_free(p); continue;
+            Expr* r = stage_quadrature_param(f, x, a, b, assumptions, p, pb, np,
+                                             zero_base_only);
+            expr_free(p);
+            if (r) return r;
         }
-
-        /* G(p) = Integrate[J, p]  (antiderivative over the parameter). */
-        Expr* G = integrate_over_param(J, p);
-        if (!G || contains_head(G, "Integrate") || !is_finite_value(G)) {
-#ifdef DIUI_DEBUG
-            fprintf(stderr, "DIUI:   [%.0fms] G did not close -> skip\n", diui_ms());
-#endif
-            if (G) { expr_free(G); } expr_free(J); expr_free(p); continue;
-        }
-
-        /* Base point with an exact known value I(p0). */
-        Expr* p0 = NULL; Expr* I0 = NULL;
-        if (!find_base(f, x, a, b, assumptions, p, pb, np, &p0, &I0)) {
-#ifdef DIUI_DEBUG
-            fprintf(stderr, "DIUI:   [%.0fms] no base found -> skip\n", diui_ms());
-#endif
-            expr_free(G); expr_free(J); expr_free(p); continue;
-        }
-
-        /* I(p) = G(p) - G(p0) + I(p0). */
-        Expr* Gp0 = eval_at_param(G, p, p0);
-        if (!Gp0) {
-#ifdef DIUI_DEBUG
-            fprintf(stderr, "DIUI:   G(p0) not finite -> skip\n");
-#endif
-            expr_free(p0); expr_free(I0); expr_free(G); expr_free(J); expr_free(p); continue; }
-
-        Expr* sum = mk_fn2("Plus", expr_copy(G),
-                           mk_fn2("Plus",
-                                  mk_fn2("Times", mk_int(-1), Gp0),
-                                  expr_copy(I0)));
-        Expr* I = simplify_with(sum, assumptions);
-        expr_free(sum);
-        expr_free(p0); expr_free(I0); expr_free(G);
-
-        /* Symbolic verification: D[I,p] - J === 0 (under the assumptions). */
-        bool ok = false;
-        if (I && is_finite_value(I)) {
-            Expr* chk = mk_fn2("Plus", deriv(I, p),
-                               mk_fn2("Times", mk_int(-1), expr_copy(J)));
-            ok = is_zero_with(chk, assumptions);
-            expr_free(chk);
-        }
-#ifdef DIUI_DEBUG
-        fprintf(stderr, "DIUI:   [%.0fms] verify D[I,p]-J==0 : %s\n", diui_ms(), ok ? "PASS" : "FAIL");
-#endif
-        expr_free(J); expr_free(p);
-        if (ok) {
-            Expr* cl = diui_finalize(I, assumptions);
-            if (cl) { expr_free(I); return cl; }
-            return I;
-        }
-        if (I) expr_free(I);
     }
     return NULL;
 }

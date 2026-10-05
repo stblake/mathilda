@@ -255,6 +255,30 @@ static void test_fugacity_cascade(void) {
         "Re[s] > 1 && 0 < z < 1]", "0", 0);
 }
 
+/* Phase 1: robustness (no hang) + correctness (no non-real / Indeterminate). */
+static void test_phase1_robustness(void) {
+    /* (a) Exp[-a x] (Sin[b x]/x)^2 used to HANG uninterruptibly: the parameter
+     * back-integration handed the engine a Log[1/poly^(1/4)] form that drove it
+     * into a radical grind.  integrate_over_param now PowerExpands + gates, so it
+     * closes fast to b ArcTan[2b/a] - (a/4) Log[1 + 4 b^2/a^2]. (If the fix
+     * regresses, this test hangs rather than fails -- that is the signal.) */
+    assert_closes_num(
+        "Integrate[Exp[-a x] (Sin[b x]/x)^2, {x, 0, Infinity}, "
+        "Method -> \"DiffUnderInt\", Assumptions -> {a > 0, b > 0}]",
+        "b ArcTan[2 b/a] - (a/4) Log[1 + 4 b^2/a^2]", "a -> 13/10, b -> 7/10");
+    /* (b) Exp[-a x] Sin[b x] Sin[c x]/x used to return a non-real form (a spurious
+     * -I Pi/2) for b < c, and Indeterminate for b == c: the a-parameter path's
+     * sign-sensitive computed base was taken over the exact zero base of the b/c
+     * paths.  The zero-base-first pass + trig-product TrigReduce now give the
+     * clean, all-signs-real value.  Checked at a b < c point, where the bug bit. */
+    assert_closes_num(
+        "Integrate[Exp[-a x] Sin[b x] Sin[c x]/x, {x, 0, Infinity}, "
+        "Method -> \"DiffUnderInt\", "
+        "Assumptions -> {a > 0, Element[b, Reals], Element[c, Reals]}]",
+        "1/4 Log[(a^2 + (b + c)^2)/(a^2 + (b - c)^2)]",
+        "a -> 1, b -> 7/10, c -> 13/10");
+}
+
 void test_integrate_diffunderint(void) {
     symtab_init();
     core_init();
@@ -272,6 +296,7 @@ void test_integrate_diffunderint(void) {
     TEST(test_routing);
     TEST(test_declines_cleanly);
     TEST(test_fugacity_cascade);
+    TEST(test_phase1_robustness);
 
     printf("All Integrate DiffUnderInt tests passed!\n");
 }

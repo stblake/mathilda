@@ -1813,7 +1813,22 @@ is what closes a *decaying* sinc such as `∫₀^∞ e^{-p x} Sin[q x]/x dx = Ar
 whose Laplace image is non-even), and the **Gaussian moment** family
 `∫₀^∞ xⁿ e^{-p x²}{1,cos} dx` in `Sqrt[Pi]`/`e^{-q²/4p}`. The Gaussian
 parameter back-integration `∫ c e^{-k p²} dp` is supplied directly as an `Erf`
-(the engine does not produce it). Forms outside these families (finite-period
+(the engine does not produce it).
+
+The **parameter back-integration** `∫ J dp` is bounded by construction: `J` is
+first `PowerExpand`-ed (so a `Log[1/poly^rational]` image is pulled apart into
+plain `Log`s — the reciprocal-radical spelling otherwise drives the indefinite
+engine into an uninterruptible algebraic grind), then declined unless it is free
+of radical/trig/Gaussian *of the parameter*, leaving only the elementary
+`Log`/`ArcTan`/rational forms the families emit. A **product of trig-of-x**
+(`Sin[b x] Sin[c x]`, …) is `TrigReduce`-normalised to a sum of single trig terms
+before the families run, and parameter selection **prefers an exact zero base**
+(an integrand that vanishes at the base point, `I(p₀)=0`) over a sign-sensitive
+computed base — together these make `∫₀^∞ e^{-a x} Sin[b x] Sin[c x]/x dx` close
+to the clean, all-signs-real `(1/4) Log[(a²+(b+c)²)/(a²+(b−c)²)]` rather than a
+`b>c`-only form that goes non-real for `b<c`.
+
+Forms outside these families (finite-period
 trig, piecewise/`Min`-`Max` results, the Sin-Gaussian Dawson/Erfi moment) are
 declined — the integral is returned unevaluated, fast, never a wrong value. The
 two rational half-line families gate on the inner integrand being a **rational
@@ -1828,7 +1843,8 @@ Worked examples that close:
 `Integrate[Sin[a x]^2/x^2, {x,0,Infinity}, Assumptions->a>0]` → `π a/2`;
 `Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]` → `π Log[1+a]`;
 `Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]` → `a ArcTan[a/c] − (c/2) Log[1+a²/c²]`;
-`Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]` → `(π/2) Erf[a/2]`.
+`Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]` → `(π/2) Erf[a/2]`;
+`Integrate[Exp[-a x] Sin[b x] Sin[c x]/x, {x,0,Infinity}, Assumptions->{a>0,Element[b,Reals],Element[c,Reals]}]` → `(1/4) Log[(a²+(b+c)²)/(a²+(b−c)²)]`.
 
 Three **finite-domain** families need neither a pre-existing parameter (the first
 two are purely numeric) nor an engine-safe inner integral (all three differentiate
