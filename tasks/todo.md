@@ -66,7 +66,25 @@ strip + sound residue cleanup ; v0.291" (or split 1a/1b/1c with sequential bumps
 
 ### Awaiting user go-ahead to commit + tag v0.292.
 
-## Phase 3 (next) — higher-order hyperbolic residue (#10), symmetry-aware Feynman (#9,#14), Malmsten (#3)
+## Phase 3 — deep-research tier
 
-Still unevaluated (unbroken): #3 #6 #9 #10 #14. (#6 Hurwitz-zeta Mellin is a candidate too.)
-#10 still ~55s to decline (unchanged baseline; Phase 3 turns it into a fast close).
+### 3a. Higher-order hyperbolic residue (#10) — v0.293 — COMPLETE, verified, committed
+- [x] `residue_family_hyperbolic_strip` matcher now accepts `Sech[beta x]^n` / `1/Cosh[beta x]^n`
+      (integer n>=1); convergence gate widened to `|Re alpha| < n Re beta`.
+- [x] `hyperbolic_strip_term` (new): per-exp-term Gamma-reflection closed form for n>=2
+      (= order-n residue of the quasi-period fold). n=1 path untouched (zero regression).
+- [x] #10 `Cos[a x]/Cosh[b x]^2` {-oo,oo} → `Pi a Csch[Pi a/(2b)]/b^2`, 0.03s (was ~55s decline).
+      Class: Cosh^3 → `Pi(a^2+b^2)Sech/(2b^3)`, Cosh^4 → `Pi a(a^2+4b^2)Csch/(6b^4)`, Sin*Sinh ok.
+- [x] Reference values DERIVED by contour + numerically verified (plan's recalled value was 2x off).
+- [x] Tests in test_integrate_residue.c (test_hyperbolic_strip); all definite suites green;
+      check-c99 / check-messages clean. version.h→0.293; changelog + calculus.md updated.
+
+### 3b/3c — remaining targets (next)
+- #6 Hurwitz/Lerch: `Integrate[e^(-a x)x^(s-1)/(1-e^(-x)),{x,0,oo}, s>1 && a>0]` → `Gamma[s]HurwitzZeta[s,a]`.
+  Clean Mellin extension (rec_expgeom absorbs an e^(-a x) shift → Hurwitz/Lerch). VERIFIED value. Next.
+- #9 `Log[a^2+Sin[x]^2]` {0,Pi/2}, a>0 → `Pi Log[(a+Sqrt[a^2+1])/2]` (VERIFIED). Sound for a>0
+  (parity landmine is a<0, out of domain; deferral was for the Poisson/elliptic cousins). Blocker:
+  inner_definite refuses finite-interval trig — needs a narrow `Integrate[1/(c+d Sin^2 x),{0,Pi/2}]` closer.
+- #14 `Log[1+a x]/(x(1+x^2))` {0,oo}, a>0 → Feynman; back-integral is a dilog. Reachable, unverified close.
+- #3 Malmsten `(e^(-a x)-e^(-b x))/(x(e^x-1))` {0,oo}: **DIVERGES at x=0** (integrand ~ (b-a)/x).
+  NOT closeable — current declined/unevaluated state is correct. Do NOT fabricate a value.

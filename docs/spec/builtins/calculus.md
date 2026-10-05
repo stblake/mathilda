@@ -2410,13 +2410,22 @@ symbolic-exponent contours:
   carries the parameters: `∫_{-∞}^∞ e^{−a x²} Cos[b x] dx = √(π/a) e^{−b²/(4a)}`
   (`a > 0`), and the even half-line form is half of it.  Not a residue
   computation (no poles), but the standard contour route for the family.
-- **Periodic-strip (hyperbolic) rectangle on `(-∞, ∞)`** — `N(x)/Cosh[b x]`.  The
-  quasi-period `Cosh[b(x + iπ/b)] = −Cosh[b x]` folds the infinite ladder of poles
-  into the single enclosed pole at `x = iπ/(2b)`:
-  `∫_{-∞}^∞ e^{α x}/Cosh[b x] dx = (π/b) Sec[α π/(2b)]` for `|Re α| < Re b`.
-  `TrigToExp` turns a `Cosh`/`Sinh`/`Exp` numerator into a sum of such terms, so
-  `∫ e^{a x}/Cosh[π x] = Sec[a/2]`, `∫ Cosh[a x]/Cosh[b x] = (π/b) Sec[πa/(2b)]`,
-  and `∫ e^{i a x}/Cosh[b x] = (π/b) Sech[πa/(2b)]`.  Handles the symbolic
+- **Periodic-strip (hyperbolic) rectangle on `(-∞, ∞)`** — `N(x)/Cosh[b x]^n`,
+  integer `n ≥ 1`.  The quasi-period `Cosh[b(x + iπ/b)] = −Cosh[b x]` folds the
+  infinite ladder of (order-`n`) poles into the single enclosed pole at
+  `x = iπ/(2b)`: `∫_{-∞}^∞ e^{α x}/Cosh[b x] dx = (π/b) Sec[α π/(2b)]` for
+  `|Re α| < Re b`.  `TrigToExp` turns a `Cosh`/`Sinh`/`Exp` numerator into a sum of
+  such terms, so `∫ e^{a x}/Cosh[π x] = Sec[a/2]`,
+  `∫ Cosh[a x]/Cosh[b x] = (π/b) Sec[πa/(2b)]`, and
+  `∫ e^{i a x}/Cosh[b x] = (π/b) Sech[πa/(2b)]`.  For `n ≥ 2` the per-term value is
+  the Gamma reflection of the Mellin-Barnes integral (equivalently the order-`n`
+  residue of the fold), `2^{n−1}/(b (n−1)!)·R(w)·∏(w)`, `w = α/(2b)`, with
+  `R = π/Cos[πw]`, `∏_{j=0}^{m−1}((j+½)²−w²)` for odd `n = 2m+1` and
+  `R = πw/Sin[πw]`, `∏_{j=1}^{m−1}(j²−w²)` for even `n = 2m`; the convergence gate
+  widens to `|Re α| < n Re b`.  So the double pole
+  `∫_{-∞}^∞ Cos[a x]/Cosh[b x]² dx = π a Csch[πa/(2b)]/b²`, the triple pole
+  `Cos[a x]/Cosh[b x]³ → π(a²+b²) Sech[πa/(2b)]/(2b³)`, and the `Sin`/`Sinh`
+  numerators give a correct (unsimplified) `Csc`-sum.  Handles the symbolic
   non-integer `b` the `Exp[x]` rectangular reduction cannot rationalise.  A common
   positive scale on `x` in the hyperbolic arguments is normalised first
   (`Sinh[a x] → Sinh[x]`), so `∫₀^∞ x/Sinh[a x] = π²/(4a²)`.

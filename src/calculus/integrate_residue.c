@@ -2551,15 +2551,104 @@ static bool contains_exp_of_var(Expr* e, Expr* x) {
     return false;
 }
 
-/* Periodic-strip (rectangle) contour for N(x)/Cosh[b x] on (-Inf, Inf).  The
+/* Match a single factor equal to Sech[beta x]^n or 1/Cosh[beta x]^n for an integer
+ * n >= 1, with argument exactly beta*x (beta x-free, linear, zero constant term).
+ * On success returns true, sets *beta_out (owned by caller) and *n_out = n. */
+static bool match_cosh_power_factor(Expr* fe, Expr* x, Expr** beta_out, int* n_out) {
+    Expr* u = NULL;        /* the hyperbolic argument beta*x */
+    int n = 0;
+    if (head_name_is(fe, "Sech") && fe->data.function.arg_count == 1) {
+        u = fe->data.function.args[0]; n = 1;
+    } else if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2 &&
+               fe->data.function.args[1]->type == EXPR_INTEGER) {
+        long k = (long) fe->data.function.args[1]->data.integer;
+        Expr* base = fe->data.function.args[0];
+        if (head_name_is(base, "Sech") && base->data.function.arg_count == 1 && k >= 1) {
+            u = base->data.function.args[0]; n = (int) k;
+        } else if (head_name_is(base, "Cosh") && base->data.function.arg_count == 1 && k <= -1) {
+            u = base->data.function.args[0]; n = (int) (-k);
+        }
+    }
+    if (!u || n < 1) return false;
+    Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(u), expr_copy(x)));
+    bool lin = deg && deg->type == EXPR_INTEGER && deg->data.integer == 1;
+    if (deg) expr_free(deg);
+    if (!lin) return false;
+    Expr* c1 = poly_coeff(u, x, 1);
+    Expr* c0 = poly_coeff(u, x, 0);
+    bool ok = c1 && !contains_symbol(c1, x) &&
+              c0 && c0->type == EXPR_INTEGER && c0->data.integer == 0;
+    if (c0) expr_free(c0);
+    if (ok) { *beta_out = c1; *n_out = n; return true; }
+    if (c1) expr_free(c1);
+    return false;
+}
+
+/* Whole-line closed form Integrate[E^(alpha x)/Cosh[beta x]^n, {x,-Inf,Inf}] for an
+ * integer n >= 2, via the Gamma reflection of the Mellin-Barnes value (equivalently
+ * the order-n residue of the quasi-period fold):
+ *   2^(n-1)/(beta (n-1)!) * R(w) * Prod(w),   w = alpha/(2 beta),
+ *   n = 2m+1 (odd):  R = Pi/Cos[Pi w],     Prod = Prod_{j=0}^{m-1} ((j+1/2)^2 - w^2)
+ *   n = 2m   (even): R = Pi w / Sin[Pi w], Prod = Prod_{j=1}^{m-1} (j^2 - w^2)
+ * This reduces to the n=1 form (Pi/beta) Sec[alpha Pi/(2 beta)], which the caller
+ * keeps on its own dedicated path.  Even/odd in alpha and manifestly elementary, so
+ * the caller's ComplexExpand+Simplify tail collapses it to Sech/Csch * polynomial.
+ * alpha, beta borrowed; returns an owned expression. */
+static Expr* hyperbolic_strip_term(Expr* alpha, Expr* beta, int n) {
+    Expr* w = eval_take(mk_fn2("Times", expr_copy(alpha),
+                  mk_fn2("Power", mk_fn2("Times", mk_int(2), expr_copy(beta)),
+                         mk_int(-1))));                    /* w = alpha/(2 beta) */
+    if (!w) return NULL;
+    Expr* R;
+    Expr* prod = mk_int(1);
+    if (n % 2 == 1) {
+        int m = (n - 1) / 2;
+        R = mk_fn2("Times", mk_sym(SYM_Pi),
+                mk_fn2("Power",
+                   mk_fn1("Cos", mk_fn2("Times", mk_sym(SYM_Pi), expr_copy(w))),
+                   mk_int(-1)));
+        for (int j = 0; j < m; j++) {
+            /* (j + 1/2)^2 - w^2 = (2j+1)^2/4 - w^2 */
+            Expr* c = mk_fn2("Times", mk_int((long)(2*j+1)*(2*j+1)),
+                          mk_fn2("Power", mk_int(4), mk_int(-1)));
+            Expr* fac = mk_fn2("Plus", c,
+                          mk_fn2("Times", mk_int(-1),
+                             mk_fn2("Power", expr_copy(w), mk_int(2))));
+            prod = mk_fn2("Times", prod, fac);
+        }
+    } else {
+        int m = n / 2;
+        R = mk_fn2("Times", mk_sym(SYM_Pi),
+                mk_fn2("Times", expr_copy(w),
+                   mk_fn2("Power",
+                      mk_fn1("Sin", mk_fn2("Times", mk_sym(SYM_Pi), expr_copy(w))),
+                      mk_int(-1))));
+        for (int j = 1; j < m; j++) {
+            Expr* fac = mk_fn2("Plus", mk_int((long)j*j),
+                          mk_fn2("Times", mk_int(-1),
+                             mk_fn2("Power", expr_copy(w), mk_int(2))));
+            prod = mk_fn2("Times", prod, fac);
+        }
+    }
+    expr_free(w);
+    /* coef = 2^(n-1) / (beta (n-1)!) -- Power/Factorial keep it exact for large n. */
+    Expr* coef = mk_fn2("Times",
+        mk_fn2("Power", mk_int(2), mk_int(n - 1)),
+        mk_fn2("Times", mk_fn2("Power", expr_copy(beta), mk_int(-1)),
+            mk_fn2("Power", mk_fn1("Factorial", mk_int(n - 1)), mk_int(-1))));
+    return eval_take(mk_fn2("Times", coef, mk_fn2("Times", R, prod)));
+}
+
+/* Periodic-strip (rectangle) contour for N(x)/Cosh[b x]^n on (-Inf, Inf).  The
  * quasi-period Cosh[b(x + i Pi/b)] = -Cosh[b x] folds the infinite ladder of
- * poles into the single enclosed pole at x = i Pi/(2 b):
+ * (order-n) poles into the single enclosed pole at x = i Pi/(2 b):
  *   Integrate[E^(alpha x)/Cosh[b x], {x,-Inf,Inf}] = (Pi/b) Sec[alpha Pi/(2 b)]
- * for |Re alpha| < Re b.  TrigToExp turns a Cosh/Sinh/Exp numerator into a sum of
- * such exponentials, so Cosh[a x]/Cosh[b x], Sinh.../Cosh, and E^(I a x)/Cosh[b x]
- * are all covered.  Handles a symbolic non-integer b that the w = Exp[x]
- * rectangular reduction cannot rationalise.  Cosh has no real-axis zero, so no
- * principal value arises. */
+ * for |Re alpha| < Re b, and the n >= 2 generalisation in hyperbolic_strip_term for
+ * |Re alpha| < n Re b.  TrigToExp turns a Cosh/Sinh/Exp numerator into a sum of such
+ * exponentials, so Cosh[a x]/Cosh[b x], Sinh.../Cosh, E^(I a x)/Cosh[b x], and the
+ * higher-power Cos[a x]/Cosh[b x]^2 (and relatives) are all covered.  Handles a
+ * symbolic non-integer b that the w = Exp[x] rectangular reduction cannot
+ * rationalise.  Cosh has no real-axis zero, so no principal value arises. */
 static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!is_neg_pos_infinity(a, b) || f->type != EXPR_FUNCTION) return NULL;
 
@@ -2569,23 +2658,13 @@ static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b)
     if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
     else { one[0] = f; fac = one; nf = 1; }
     Expr* beta = NULL;
+    int npow = 1;                                   /* order of the 1/Cosh factor */
     Expr** Nparts = malloc(nf * sizeof(Expr*));
     size_t np = 0;
     for (size_t i = 0; i < nf; i++) {
         Expr* fe = fac[i];
-        if (!beta && head_name_is(fe, "Sech") && fe->data.function.arg_count == 1) {
-            Expr* u = fe->data.function.args[0];
-            Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(u), expr_copy(x)));
-            bool lin = deg && deg->type == EXPR_INTEGER && deg->data.integer == 1;
-            if (deg) expr_free(deg);
-            Expr* c1 = lin ? poly_coeff(u, x, 1) : NULL;
-            Expr* c0 = lin ? poly_coeff(u, x, 0) : NULL;
-            bool ok = c1 && !contains_symbol(c1, x) &&
-                      c0 && c0->type == EXPR_INTEGER && c0->data.integer == 0;
-            if (c0) expr_free(c0);
-            if (ok) { beta = c1; continue; }       /* consume the Sech factor */
-            if (c1) expr_free(c1);
-        }
+        if (!beta && match_cosh_power_factor(fe, x, &beta, &npow))
+            continue;                               /* consume the Sech^n factor */
         Nparts[np++] = expr_copy(fe);
     }
     if (!beta) { for (size_t i = 0; i < np; i++) expr_free(Nparts[i]); free(Nparts); return NULL; }
@@ -2640,22 +2719,32 @@ static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b)
             C = eval_take(mk_fn2("Times", C, ev1("Exp", pconst)));
         else if (pconst) expr_free(pconst);
         expr_free(P);
-        /* Convergence |Re alpha| < Re beta: Re alpha - beta < 0 and -Re alpha - beta < 0. */
+        /* Convergence |Re alpha| < n Re beta (Cosh^n ~ e^(n beta|x|)/2^n at infinity):
+         * Re alpha - n beta < 0 and -Re alpha - n beta < 0. */
+        Expr* nbeta = eval_take(mk_fn2("Times", mk_int(npow), expr_copy(beta)));
         Expr* rea = ev1("ComplexExpand", mk_fn1("Re", expr_copy(alpha)));
-        bool conv = rea &&
+        bool conv = nbeta && rea &&
             res_region_neg(mk_fn2("Plus", expr_copy(rea),
-                               mk_fn2("Times", mk_int(-1), expr_copy(beta)))) &&
+                               mk_fn2("Times", mk_int(-1), expr_copy(nbeta)))) &&
             res_region_neg(mk_fn2("Plus", mk_fn2("Times", mk_int(-1), expr_copy(rea)),
-                               mk_fn2("Times", mk_int(-1), expr_copy(beta))));
+                               mk_fn2("Times", mk_int(-1), expr_copy(nbeta))));
         if (rea) expr_free(rea);
+        if (nbeta) expr_free(nbeta);
         if (!conv) { expr_free(alpha); expr_free(C); bad = true; break; }
-        /* term = C (Pi/beta) Sec[alpha Pi/(2 beta)]. */
-        Expr* sec = ev1("Sec", mk_fn2("Times", expr_copy(alpha),
-                        mk_fn2("Times", mk_sym(SYM_Pi),
-                               mk_fn2("Power", expr_copy(twob), mk_int(-1)))));
-        Expr* term = eval_take(mk_fn2("Times", C,
+        /* n == 1: C (Pi/beta) Sec[alpha Pi/(2 beta)]; n >= 2: the general Gamma-reflection
+         * closed form (elementary, Sech/Csch * polynomial after the tail Simplify). */
+        Expr* term;
+        if (npow == 1) {
+            Expr* sec = ev1("Sec", mk_fn2("Times", expr_copy(alpha),
+                            mk_fn2("Times", mk_sym(SYM_Pi),
+                                   mk_fn2("Power", expr_copy(twob), mk_int(-1)))));
+            term = eval_take(mk_fn2("Times", C,
                         mk_fn2("Times", mk_fn2("Times", mk_sym(SYM_Pi),
                             mk_fn2("Power", expr_copy(beta), mk_int(-1))), sec)));
+        } else {
+            Expr* Fn = hyperbolic_strip_term(alpha, beta, npow);
+            term = Fn ? eval_take(mk_fn2("Times", C, Fn)) : (expr_free(C), (Expr*)NULL);
+        }
         expr_free(alpha);
         if (!term) { bad = true; break; }
         total = eval_take(mk_fn2("Plus", total, term));

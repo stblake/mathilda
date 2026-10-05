@@ -700,6 +700,33 @@ static void test_hyperbolic_strip(void) {
     /* Concrete scale is fully simplified. */
     check_eq("Integrate[x/Sinh[2 x], {x, 0, Infinity}, Method -> \"Residue\"]",
              "1/16 Pi^2");
+
+    /* Higher-order poles (Cosh^n, n >= 2) via the Gamma-reflection closed form. */
+    /* Case In[10]: Cos[a x]/Cosh[b x]^2 = Pi a Csch[Pi a/(2 b)]/b^2  (double pole). */
+    check_eq("Integrate[Cos[a x]/Cosh[b x]^2, {x, -Infinity, Infinity}, "
+             "Assumptions -> Element[a, Reals] && b > 0, Method -> \"Residue\"]",
+             "(Pi a Csch[(1/2 Pi a)/b])/b^2");
+    /* Cos/Cosh^3 (triple pole) = Pi(a^2+b^2) Sech[Pi a/(2b)]/(2 b^3). */
+    check_eq("Integrate[Cos[a x]/Cosh[b x]^3, {x, -Infinity, Infinity}, "
+             "Assumptions -> Element[a, Reals] && b > 0, Method -> \"Residue\"]",
+             "(1/2 Pi (a^2 + b^2) Sech[(1/2 Pi a)/b])/b^3");
+    /* Concrete double pole, numeric confirmation against the series value. */
+    check_eq("With[{r = Integrate[Cos[a x]/Cosh[b x]^2, {x,-Infinity,Infinity}, "
+             "Assumptions -> Element[a,Reals] && b>0, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[(r - Pi a Csch[Pi a/(2 b)]/b^2) /. {a->13/10, b->9/10}]]}]",
+             "{True, 0}");
+    /* Sech^4 (fourth-order pole): Pi a (a^2 + 4 b^2) Csch[Pi a/(2b)]/(6 b^4). */
+    check_eq("With[{r = Integrate[Cos[a x]/Cosh[b x]^4, {x,-Infinity,Infinity}, "
+             "Assumptions -> Element[a,Reals] && b>0, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[(r - Pi a (a^2+4 b^2) Csch[Pi a/(2 b)]/(6 b^4)) "
+             "/. {a->13/10, b->9/10}]]}]", "{True, 0}");
+    /* Multi-exponential numerator over a double pole (Sin*Sinh, an even integrand):
+     * the closed form is a correct Csc-sum (unsimplified, like the order-1 Sin*Sinh
+     * case), pinned numerically against 2 Integrate[.,{0,Inf}]. */
+    check_eq("With[{r = Integrate[Sin[a x] Sinh[b x]/Cosh[c x]^2, {x,-Infinity,Infinity}, "
+             "Assumptions -> c > Abs[b] && a > 0, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[(r - 237884/1000000) /. {a->13/10, b->9/10, c->19/10}], 10^-5]}]",
+             "{True, 0}");
 }
 
 static void test_rational_symbolic(void) {
