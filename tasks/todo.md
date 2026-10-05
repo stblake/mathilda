@@ -81,10 +81,59 @@ All reference values twice-confirmed vs NIntegrate (see plan triage table).
 - [x] In[11] = 2πa/(a²-b²-c²)^(3/2) (form 16πa/(4a²-4b²-4c²)^(3/2), correct). Pin in
       test_trig_symbolic (non-vacuous). version 0.283 + docs + changelog + tag; check-messages OK.
 
-## Phase 8 — Hard tail
-- [ ] In[13] (Cos[a x]-Cos[b x])/x²: best-effort multi-frequency Fourier diff; else decline
-- [ ] In[20] arctan: honest decline (parametric-diff, not residue); pin negative control
-- [ ] docs note + tests. (bump only if src behavior changed)
+## Phase 8 — Hard tail  [DONE v0.284]
+- [x] In[13] (Cos[a x]-Cos[b x])/x²: SOLVED (not a decline). New residue_family_fourier_sum
+      (+fsum_term) handles R(x)·Σ C_i K[ω_i x] (K all Cos or all Sin, ω_i same sign); lifts
+      to Σ C_i e^(iω_i x), closes half-plane. Axis-pole-by-cancellation gate: admit a real
+      pole of R only when Limit[f,x->z0] of the ORIGINAL integrand is finite (the numerator
+      cancelled the singularity), half-residue weight 1 vs enclosed weight 2. Half-line
+      π(b-a)/2, whole-line π(b-a). Single Cos[a x]/x² (no cancellation) DECLINES (divergent).
+- [x] In[20] arctan: HONEST DECLINE. Branch-cut (ArcTan) integrand; value (π/2)Log[1+a/b]
+      is Feynman parametric-diff, not residue. Pinned as unevaluated-form control.
+- [x] Pins: In[13] exact half+whole + non-vacuous numeric + divergence-decline control +
+      (Sin[a x]-Sin[b x])/x->0 sibling (test_fourier_symbolic); In[20] unevaluated pin
+      (test_honest_declines). docs multi-freq-Fourier bullet + In[20] note; changelog.
+      version 0.284 + tag. Residue suite + integrate/series/limit/fresnel/beta/exponent/
+      factor/simplify suites green.
 
 ## Review
-(filled at end)
+
+All 21 probe cases (In[1]–In[21]) from the v0.276 transcript are accounted for.
+In[6] is a parser error (user typo `Method -> ]`), not a math case.
+
+OK on arrival (no change needed): In[1] πCsc[πa], In[2] πe^(-ab)/b, In[8] (π/n)Csc[π/n].
+
+Fixed (correctness / new families), one commit + tag each:
+- In[14] WRONG=0 → (π/b²)(1-e^(-ab))  [v0.277] — TWO bugs: Fourier conjugation via
+  ReplaceAll[I->-I] (now ComplexExpand[Re/Im]); CORE FactorTerms returning 0 content
+  for a nonzero input (facpoly_factorterms.inc: content of nonzero is a unit).
+- In[15] rode the conjugation fix (cleaner form).  [v0.277]
+- In[5] ½√(π/a)e^(-b²/4a)  [v0.278] — Refine-based sign gate (res_region_neg + g_assume)
+  replacing the brittle interval test. CORE Exponent fix (recurse into non-flat Times).
+- In[7] π/(2ab(a+b))  [v0.279] — res_close_positive (PowerExpand+Refine) in close_algebraic.
+- In[4] Sec[a/2], In[18] (π/b)Sech[πa/2b], In[21] (π/b)Sec[πa/2b], In[12] π²/(4a²)  [v0.280]
+  — new residue_family_hyperbolic_strip (quasi-period fold) + scale normalization in
+  rectangular. BONUS sound Refine[Arg[pos/neg/i·pos]] rewrite.
+- In[9] ½a^(-s/2)Γ(s/2) (s>0), In[10] ½Γ((p+1)/2)Sin[π(p+1)/4]  [v0.281] — new
+  residue_family_mellin_power (u=x^ν → (C/ν)M[G](μ/ν)).
+- In[19] (π/2n)Csc[π(2m+1)/2n] (n≥m+1), In[16] b^(a+1-c)Γ(a+1)Γ(c-a-1)/Γ(c)  [v0.282] —
+  sector symbolic-exponent (monomial_split_sym) + new residue_family_beta.
+- In[11] 2πa/(a²-b²-c²)^(3/2)  [v0.283] — unit-circle b Cos+c Sin degenerate-instance retry
+  + Quiet the classification probe (no Power::infy leak; message-routing correctness).
+- In[13] π(b-a)/2  [v0.284] — new residue_family_fourier_sum (multi-frequency diff).
+
+Documented correct-but-unsimplified (Refine/Simplify gaps, NOT residue-method gaps; not
+forced per plan):
+- In[3] x^a Log[x]/(1+x²)²: (1-E^(2πia)) factor does not collapse.
+- In[17] Log[x]/(x²+a²) = πLog[a]/(2a): Arg[I a] does not reduce for symbolic a>0.
+
+Honest decline (documented + pinned as a negative control):
+- In[20] ArcTan[a x]/(x(1+b²x²)) = (π/2)Log[1+a/b]: branch-cut/Feynman, not residue.
+
+Core bugs fixed in passing (each with its own regression test):
+- FactorTerms fabricated content 0 from a nonzero input (poisoned Simplify).  [v0.277]
+- Exponent miscounted a non-flat Times[-1, Times[a, x^2]] (gave 1).  [v0.278]
+- Refine now reduces Arg[positive/negative/i·positive] under assumptions.  [v0.280]
+
+No regressions: residue, integrate (newton_leibniz/ramanujan/symmetry/fresnel/beta),
+series, limit, factor_terms, exponent, simplify, beta suites all green. check-messages OK.

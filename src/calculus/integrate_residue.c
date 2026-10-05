@@ -753,6 +753,147 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
     return value;
 }
 
+/* A term T = C * K[omega x] of a trig SUM: C the x-free coefficient, K a Cos/Sin
+ * (not Exp), u its argument (omega x).  False if T is not of that shape. */
+static bool fsum_term(Expr* T, Expr* x, Expr** C_out, KernelKind* kind, Expr** u_out) {
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(T, "Times")) { fac = T->data.function.args; nf = T->data.function.arg_count; }
+    else { one[0] = T; fac = one; nf = 1; }
+    Expr* C = mk_int(1); int kidx = -1; KernelKind kk = KERN_NONE;
+    for (size_t i = 0; i < nf; i++) {
+        KernelKind k2; double f2;
+        if (match_kernel(fac[i], x, &k2, &f2)) {
+            if (kidx >= 0 || k2 == KERN_EXP) { expr_free(C); return false; }
+            kk = k2; kidx = (int)i;
+        } else if (contains_symbol(fac[i], x)) { expr_free(C); return false; }
+        else C = eval_take(mk_fn2("Times", C, expr_copy(fac[i])));
+    }
+    if (kidx < 0) { expr_free(C); return false; }
+    *C_out = C; *kind = kk; *u_out = expr_copy(kernel_arg(fac[kidx]));
+    return true;
+}
+
+/* Multi-frequency Fourier: Integrate[R(x) * Sum_i C_i K[omega_i x], {x,-Inf,Inf}],
+ * K one type (all Cos or all Sin), all omega_i the same sign, R rational.  The
+ * sum lifts to Sum_i C_i e^(I omega_i x) and the same half-plane contour is
+ * closed.  A real-axis pole of R is admitted when the summed numerator makes the
+ * ORIGINAL integrand finite there (the x=0 double pole of (Cos[a x]-Cos[b x])/x^2
+ * is reduced to a removable/simple one by the cancellation), contributing the
+ * indented half-residue of the lifted g; otherwise the integral diverges.  Re
+ * (Cos) / Im (Sin) of Pi I Sum Res.  Closes (Cos[a x]-Cos[b x])/x^2 -> Pi(b-a)
+ * (In[13]; the even half-line is Pi(b-a)/2); a single Cos[a x]/x^2 declines. */
+static Expr* residue_family_fourier_sum(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_neg_pos_infinity(a, b) || !head_name_is(f, "Times")) return NULL;
+
+    /* Split into R-factors and exactly one Plus-of-trig factor N. */
+    Expr* Nplus = NULL;
+    size_t nfac = f->data.function.arg_count;
+    Expr** rp = malloc(nfac * sizeof(*rp));
+    size_t nr = 0;
+    for (size_t i = 0; i < nfac; i++) {
+        Expr* fe = f->data.function.args[i];
+        if (head_name_is(fe, "Plus") && contains_symbol(fe, x) &&
+            (contains_head(fe, "Cos") || contains_head(fe, "Sin"))) {
+            if (Nplus) { for (size_t j = 0; j < nr; j++) expr_free(rp[j]); free(rp); return NULL; }
+            Nplus = fe;
+        } else rp[nr++] = expr_copy(fe);
+    }
+    if (!Nplus) { for (size_t j = 0; j < nr; j++) expr_free(rp[j]); free(rp); return NULL; }
+    Expr* R = (nr == 0) ? mk_int(1)
+            : (nr == 1) ? rp[0]
+            : eval_take(expr_new_function(mk_sym("Times"), rp, nr));
+    free(rp);
+
+    /* Each term of N -> C_i K[omega_i x]: one kernel type, all omega_i same sign. */
+    KernelKind kind = KERN_NONE; int sgn = 0; bool bad = false;
+    Expr* Nexp = mk_int(0);                               /* Sum_i C_i e^(I omega_i x) */
+    for (size_t i = 0; i < Nplus->data.function.arg_count && !bad; i++) {
+        Expr* C; KernelKind k2; Expr* u;
+        if (!fsum_term(Nplus->data.function.args[i], x, &C, &k2, &u)) { bad = true; break; }
+        if (kind == KERN_NONE) kind = k2;
+        else if (kind != k2) { expr_free(C); expr_free(u); bad = true; break; }
+        double wre, wim;
+        Expr* c1 = eval_take(mk_fn3("Coefficient", expr_copy(u), expr_copy(x), mk_int(1)));
+        bool okw = c1 && res_reim(c1, &wre, &wim) && fabs(wim) < RES_TOL && fabs(wre) > RES_TOL;
+        if (c1) expr_free(c1);
+        if (!okw) { expr_free(C); expr_free(u); bad = true; break; }
+        int s = wre > 0.0 ? 1 : -1;
+        if (sgn == 0) sgn = s; else if (sgn != s) { expr_free(C); expr_free(u); bad = true; break; }
+        Expr* term = eval_take(mk_fn2("Times", C,
+                         mk_fn1("Exp", mk_fn2("Times", mk_sym(SYM_I), u))));
+        Nexp = eval_take(mk_fn2("Plus", Nexp, term));
+        if (!Nexp) { bad = true; break; }
+    }
+    if (bad || kind == KERN_EXP || sgn == 0 || !Nexp) {
+        expr_free(R); if (Nexp) expr_free(Nexp); return NULL;
+    }
+
+    /* R rational, denominator degree drop >= 1 (Jordan). */
+    Expr* P; Expr* Q;
+    if (!res_num_den(R, &P, &Q) || !res_polyq(P, x) || !res_polyq(Q, x)) {
+        expr_free(R); expr_free(Nexp); if (P) expr_free(P); if (Q) expr_free(Q); return NULL;
+    }
+    int dP = res_degree(P, x), dQ = res_degree(Q, x);
+    expr_free(P);
+    if (dP < 0 || dQ < dP + 1) { expr_free(R); expr_free(Nexp); expr_free(Q); return NULL; }
+    Expr* g = eval_take(mk_fn2("Times", R, Nexp));        /* consumes R, Nexp */
+    if (!g) { expr_free(Q); return NULL; }
+
+    bool up = (sgn > 0);
+    ExprVec roots, keep, realp; ev_init(&keep); ev_init(&realp);
+    if (!solve_roots(Q, x, &roots)) { expr_free(Q); expr_free(g); ev_free(&keep); ev_free(&realp); return NULL; }
+    bool fail = false;
+    for (size_t i = 0; i < roots.n && !fail; i++) {
+        double re, im;
+        if (!res_reim(roots.v[i], &re, &im)) { fail = true; break; }
+        double mag = 1.0 + fabs(re) + fabs(im);
+        if (up ? (im > RES_TOL * mag) : (im < -RES_TOL * mag)) ev_push(&keep, expr_copy(roots.v[i]));
+        else if (up ? (im < -RES_TOL * mag) : (im > RES_TOL * mag)) { /* other half-plane */ }
+        else {
+            /* Real-axis pole: admitted only if the ORIGINAL integrand f is finite
+             * there (the summed numerator cancels the singularity, leaving at most
+             * a simple pole of the lifted g).  up only. */
+            double lr, li;
+            Expr* lim = eval_take(mk_fn2("Limit", expr_copy(f),
+                            mk_fn2("Rule", expr_copy(x), expr_copy(roots.v[i]))));
+            bool finite = up && lim && res_reim(lim, &lr, &li);
+            if (lim) expr_free(lim);
+            if (!finite) { fail = true; break; }
+            /* de-dup (a double root lists once, but guard anyway) */
+            bool dup = false;
+            for (size_t j = 0; j < realp.n; j++) if (expr_eq(realp.v[j], roots.v[i])) dup = true;
+            if (!dup) ev_push(&realp, expr_copy(roots.v[i]));
+        }
+    }
+    ev_free(&roots); expr_free(Q);
+    if (fail || keep.n + realp.n == 0) { expr_free(g); ev_free(&keep); ev_free(&realp); return NULL; }
+
+    size_t nk = keep.n + realp.n, kk = 0;
+    Expr** poles = malloc(nk * sizeof(*poles));
+    int* weight = malloc(nk * sizeof(*weight));
+    for (size_t i = 0; i < keep.n; i++)  { poles[kk] = res_powerclean(expr_copy(keep.v[i]));  weight[kk] = 2; kk++; }
+    for (size_t i = 0; i < realp.n; i++) { poles[kk] = res_powerclean(expr_copy(realp.v[i])); weight[kk] = 1; kk++; }
+
+    Expr* S = sum_residues(g, x, poles, weight, nk);
+    for (size_t i = 0; i < nk; i++) expr_free(poles[i]);
+    free(poles); free(weight); expr_free(g); ev_free(&keep); ev_free(&realp);
+    if (!S) return NULL;
+
+    Expr* sign = up ? mk_int(1) : mk_int(-1);
+    Expr* J = ev1("Simplify", ev1("Together",
+                  mk_fn2("Times", mk_fn2("Times", mk_sym(SYM_Pi), mk_sym(SYM_I)),
+                         mk_fn2("Times", sign, expr_copy(S)))));
+    expr_free(S);
+    if (!J) return NULL;
+    Expr* value = (kind == KERN_COS)
+        ? ev1("Simplify", ev1("ComplexExpand", mk_fn1("Re", expr_copy(J))))
+        : ev1("Simplify", ev1("ComplexExpand", mk_fn1("Im", expr_copy(J))));
+    expr_free(J);
+    double vv;
+    if (!value || !res_is_real_scalar(value, x, &vv)) { if (value) expr_free(value); return NULL; }
+    return value;
+}
+
 /* Multiplicity of z0 as a root of the polynomial P: the number of leading
  * derivatives P, P', P'', ... that vanish at z0, read at the parameter
  * instantiation point (res_reim retries there, and a root's order is a
@@ -1453,6 +1594,7 @@ static bool res_region_pos(Expr* e) { return res_region_sign(e, false); }
  * ---------------------------------------------------------------------- */
 static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b);
+static Expr* residue_family_fourier_sum(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_mellin(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_mellin_power(Expr* f, Expr* x, Expr* a, Expr* b);
@@ -3006,6 +3148,7 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
          * (rectangular-contour) family, else rational. */
         value = residue_family_gaussian(f, x, a, b);
         if (!value) value = residue_family_fourier(f, x, a, b);
+        if (!value) value = residue_family_fourier_sum(f, x, a, b);
         if (!value) value = residue_family_rectangular(f, x, a, b);
         if (!value) value = residue_family_hyperbolic_strip(f, x, a, b);
         if (!value) value = residue_family_rational(f, x, a, b, diverges);

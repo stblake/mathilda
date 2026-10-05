@@ -308,6 +308,30 @@ static void test_fourier_symbolic(void) {
              "{FreeQ[r, Integrate], "
              "Chop[N[(r + 2 Pi Exp[-a b] Sin[a Sqrt[c - b^2]]/Sqrt[c - b^2]) "
              "/. {a -> 1, b -> 1, c -> 4}]]}]", "{True, 0}");
+
+    /* Case In[13] -- multi-frequency Fourier: a DIFFERENCE of two cosines whose
+     * individual integrals diverge, so the problem is not separable.  The sum
+     * Cos[a x] - Cos[b x] lifts to Re[(E^(I a x) - E^(I b x))], and the x=0
+     * double pole of 1/x^2 is reduced to a simple one by the cancellation
+     * (numerator -> 0 at x=0), admitted only because Limit[f, x->0] is finite.
+     * Half-line Pi (b-a)/2, whole-line Pi (b-a). */
+    check_eq("Integrate[(Cos[a x] - Cos[b x])/x^2, {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]", "1/2 Pi (-a + b)");
+    check_eq("Integrate[(Cos[a x] - Cos[b x])/x^2, {x, -Infinity, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]", "Pi (-a + b)");
+    check_eq("With[{r = Integrate[(Cos[a x] - Cos[b x])/x^2, {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[(r - Pi (b - a)/2) /. {a -> 2, b -> 5}]]}]",
+             "{True, 0}");
+    /* The single Cos[a x]/x^2 (no cancellation -> genuine x=0 double pole, the
+     * integral diverges) must DECLINE, not fabricate a finite value. */
+    check_eq("Integrate[Cos[a x]/x^2, {x, 0, Infinity}, Assumptions -> a > 0, "
+             "Method -> \"Residue\"]",
+             "Integrate[Cos[a x]/x^2, {x, 0, Infinity}, Assumptions -> a > 0, "
+             "Method -> \"Residue\"]");
+    /* Sibling Sin difference: both pieces integrate to Pi/2, difference 0. */
+    check_eq("Integrate[(Sin[a x] - Sin[b x])/x, {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]", "0");
 }
 
 /* -------------------------------------------------------------------------
@@ -484,6 +508,17 @@ static void test_honest_declines(void) {
      * ordinary sense. */
     check_eq("Integrate[Exp[x] x^(-s), {x, 1, -Infinity}, Method -> \"Residue\"]",
              "Integrate[E^x x^(-s), {x, 1, -Infinity}, Method -> \"Residue\"]");
+    /* Case In[20]: ArcTan[a x]/(x (1+b^2 x^2)) on {0, Infinity} = (Pi/2) Log[1+a/b].
+     * The integrand has a BRANCH CUT (ArcTan), not isolated poles; the value is
+     * reached by parametric differentiation (Feynman: d/da of the integral is a
+     * rational contour integral Pi/(2(a+b)), then integrate in a), which is not
+     * the residue theorem.  A deliberate, honest decline -- no Feynman engine is
+     * built on the residue path.  (Mathematica returns the closed form via a
+     * different route.) */
+    check_eq("Integrate[ArcTan[a x]/(x (1 + b^2 x^2)), {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]",
+             "Integrate[ArcTan[a x]/(x (1 + b^2 x^2)), {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]");
 }
 
 /* -------------------------------------------------------------------------

@@ -2185,6 +2185,18 @@ recognizers:
   signs of `I`; the `Re`/`Im` extraction uses `ComplexExpand` (parameters are
   real) so both are conjugated correctly, e.g.
   `∫ Sin[a x]/(x (x²+b²)) = (π/b²)(1 − e^{−a b})` for `a, b > 0`.
+- **Multi-frequency Fourier (difference of kernels) on `(-∞, ∞)`** — `f = R(x) ·
+  Σ_i C_i K[ω_i x]` with the `K` all one type (`Cos` or `Sin`), the `ω_i` of one
+  sign, and `R` rational.  The sum lifts to `Σ_i C_i e^{i ω_i x}` and the single
+  half-plane contour closes it; `∫ R·(Σ C_i Cos) = Re[π i Σ Res]`,
+  `Σ Sin → Im`.  The point is a **difference whose pieces diverge separately** but
+  whose sum is integrable because the numerator cancels the axis singularity: a
+  real-axis pole of `R` is admitted only when `Limit[f, x → z₀]` is finite there
+  (the cancellation has reduced the order), contributing the indented half
+  residue — so `∫₀^∞ (Cos[a x] − Cos[b x])/x² = π(b − a)/2` (the `x = 0` double
+  pole of `1/x²` is halved to a simple one by `Cos[a x] − Cos[b x] = O(x²)`),
+  while a single `Cos[a x]/x²` (no cancellation, genuine double pole) correctly
+  **declines** as divergent.
 
 A one-line **half-line** add-on covers even integrands:
 `∫₀^∞ f = ½ ∫₋∞^∞ f`.  Three further recognizers handle branch-cut and
@@ -2333,6 +2345,14 @@ stored `−I` atom correctly.  *Not yet simplified* (a `Simplify`/`Refine` gap, 
 a residue-method one): a keyhole-log answer with a symbolic positive parameter can
 retain `Arg[I a]` (e.g. `∫₀^∞ Log[x]/(x²+a²)`, value `π Log[a]/(2a)`) or a
 `(1 − E^(2 I π a))` factor.
+
+**A deliberate decline.**  `∫₀^∞ ArcTan[a x]/(x (1 + b² x²)) dx = (π/2) Log[1 + a/b]`
+returns unevaluated under `Method -> "Residue"`.  The integrand has a **branch
+cut** (`ArcTan`), not isolated poles; its value is reached by parametric
+differentiation (Feynman — `∂_a I = ∫₀^∞ dx/((1 + a²x²)(1 + b²x²)) = π/(2(a+b))`,
+then integrate in `a`), which is not the residue theorem.  No Feynman engine is
+wired onto the residue path, so this is an honest decline rather than a
+misclassification.
 
 ```
 In[0a]:= Integrate[Cos[k x]/(x^2 + a^2), {x, -Infinity, Infinity},
