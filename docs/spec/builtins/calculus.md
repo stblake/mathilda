@@ -1797,11 +1797,31 @@ respect to a free parameter `p`, evaluates the resulting simpler definite
 integral `J(p) = Integrate[D[f,p], {x,a,b}]`, integrates `J(p)` back over the
 parameter, and fixes the constant of integration from an **exact** base value
 `I(p0)` (a `p` where `f` vanishes identically, or reduces to a directly-
-integrable form). Every case is the first-order ODE `I'(p) = J(p)`
-(Boulnois 2023). Verification is symbolic and correct-by-construction
-(`Simplify[D[I,p] - J] === 0` plus the exact base) — there is **no** numeric
-crosscheck. Assumptions (`a > 0`, …) are honoured and used to clean the closed
-forms.
+integrable form). The general case is the first-order linear ODE
+`I'(p) = lambda(p) I(p) + M(p)` (Boulnois 2023). Verification is symbolic and
+correct-by-construction (`Simplify[D[I,p] - (lambda I + M)] === 0` plus the exact
+base) — there is **no** numeric crosscheck. Assumptions (`a > 0`, …) are honoured
+and used to clean the closed forms.
+
+Two stages solve that ODE. **Stage A (`lambda = 0`, pure quadrature)**: when the
+inner integral `J` closes to an x-free form, `I = Integral J dp + const`. **Stage
+B (`lambda != 0`, integrating factor)**: when `J` does *not* close but equals
+`lambda(p) I + M(p)` — i.e. `D[f,p] - lambda(p) f = D[U,x]` by integration by
+parts in `x`, for an x-free `lambda` and a `U` in the span of `f`'s transcendental
+atoms — the integral is recovered as `I = (1/mu)(Integral mu M dp + C)` with
+`mu = Exp[-Integral lambda dp]`. The ansatz `U = Sum c_k B_k` (the `B_k` the
+atom-product shapes of `f` and `D[f,p]`) and `lambda` are found by matching
+coefficients of the independent atoms via `Solve`, and the IBP identity is then
+verified literally. This is what closes the classic Feynman Gaussian
+`Integrate[Exp[-a^2 x^2] Cos[b x], {x,0,Infinity}]`: differentiating in `b` gives
+`J = -(b/(2a^2)) I`, so `I = (Sqrt[Pi]/(2a)) Exp[-b^2/(4a^2)]`. All parameter
+antiderivatives route through the bounded back-integration (never the unbounded
+engine on a radical/trig/Gaussian-of-parameter form).
+
+When neither the inner integral nor Stage B closes for a parameter, selection
+prefers a parameter with an **exact zero base** (`I(p0) = 0`) over one needing a
+sign-sensitive computed base, since the `D[I,p]` check cannot catch a wrong
+constant base.
 
 Because the general integrator is slow/hangs on the parameter-dependent inner
 integrals Feynman's trick produces, `DiffUnderInt` evaluates the standard
@@ -1844,7 +1864,8 @@ Worked examples that close:
 `Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]` → `π Log[1+a]`;
 `Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]` → `a ArcTan[a/c] − (c/2) Log[1+a²/c²]`;
 `Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]` → `(π/2) Erf[a/2]`;
-`Integrate[Exp[-a x] Sin[b x] Sin[c x]/x, {x,0,Infinity}, Assumptions->{a>0,Element[b,Reals],Element[c,Reals]}]` → `(1/4) Log[(a²+(b+c)²)/(a²+(b−c)²)]`.
+`Integrate[Exp[-a x] Sin[b x] Sin[c x]/x, {x,0,Infinity}, Assumptions->{a>0,Element[b,Reals],Element[c,Reals]}]` → `(1/4) Log[(a²+(b+c)²)/(a²+(b−c)²)]`;
+`Integrate[Exp[-a^2 x^2] Cos[b x], {x,0,Infinity}, Assumptions->a>0]` → `(√π/(2a)) Exp[−b²/(4a²)]`  (Stage B).
 
 Three **finite-domain** families need neither a pre-existing parameter (the first
 two are purely numeric) nor an engine-safe inner integral (all three differentiate

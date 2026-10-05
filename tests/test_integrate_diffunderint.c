@@ -216,13 +216,6 @@ static void test_routing(void) {
 /* Safety: integrands the method cannot yet close return the input unevaluated
  * *fast* (never hang) rather than a wrong value. */
 static void test_declines_cleanly(void) {
-    /* Gaussian cosine moment: DiffUnderInt differentiates the parameter into a
-     * Sin-Gaussian (a Dawson/Erfi form the moment family declines), so no
-     * parameter closes and it returns unevaluated fast -- this integrand is
-     * directly integrable by a Gaussian family, not a Feynman target. */
-    assert_head_unevaluated(
-        "Integrate[Exp[-x^2] Cos[2 a x], {x, 0, Infinity}, "
-        "Method -> \"DiffUnderInt\"]", "Integrate");
     /* No free parameter -> not applicable. */
     assert_head_unevaluated(
         "Integrate`DiffUnderInt[Sin[x]/x, {x, 0, Infinity}]", "Integrate`DiffUnderInt");
@@ -253,6 +246,23 @@ static void test_fugacity_cascade(void) {
         "Assumptions -> Re[s] > 1 && z < 1 && z > 0]) "
         "/. ConditionalExpression[cv_, cc_] :> cv) - Gamma[s] PolyLog[s, z], "
         "Re[s] > 1 && 0 < z < 1]", "0", 0);
+}
+
+/* Stage B: first-order linear ODE in the parameter (lambda != 0).  The inner
+ * integral J = Integrate[D[f,p]] does not close to an x-free form, but equals
+ * lambda(p) I + M(p), so the integral is recovered by the integrating factor. */
+static void test_stage_b_ode(void) {
+    /* The classic Feynman Gaussian: differentiating in the frequency gives a
+     * Sin-Gaussian inner integral the moment family declines; Stage B finds
+     * I'(a) = -2a I and closes I = (Sqrt[Pi]/2) Exp[-a^2]. */
+    assert_closes(
+        "Integrate[Exp[-x^2] Cos[2 a x], {x, 0, Infinity}, Method -> \"DiffUnderInt\"]",
+        "(Sqrt[Pi]/2) Exp[-a^2]", "");
+    /* Two-parameter form: I'(b) = -(b/(2a^2)) I, base I(0) = Sqrt[Pi]/(2a). */
+    assert_closes(
+        "Integrate[Exp[-a^2 x^2] Cos[b x], {x, 0, Infinity}, "
+        "Method -> \"DiffUnderInt\", Assumptions -> {a > 0, Element[b, Reals]}]",
+        "(Sqrt[Pi]/(2 a)) Exp[-b^2/(4 a^2)]", "a > 0");
 }
 
 /* Phase 1: robustness (no hang) + correctness (no non-real / Indeterminate). */
@@ -297,6 +307,7 @@ void test_integrate_diffunderint(void) {
     TEST(test_declines_cleanly);
     TEST(test_fugacity_cascade);
     TEST(test_phase1_robustness);
+    TEST(test_stage_b_ode);
 
     printf("All Integrate DiffUnderInt tests passed!\n");
 }

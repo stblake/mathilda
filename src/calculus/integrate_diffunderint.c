@@ -1864,6 +1864,294 @@ done:
     return result;
 }
 
+/* =========================================================================
+ * Stage B -- first-order linear ODE in the parameter (lambda != 0).
+ *
+ * When Stage A's inner integral J = Integrate[D[f,p], {x,a,b}] does not close to
+ * an x-free form, J may still be expressible AS a multiple of the original
+ * integral: J = lambda(p) I + M(p), where I = Integrate[f, {x,a,b}] and lambda,
+ * M are x-free.  This holds exactly when, by integration by parts in x,
+ *     D[f,p] - lambda(p) f = D[U,x]
+ * for some U in the span of f and g's transcendental atoms and an x-free
+ * lambda(p); then J = lambda I + [U]_a^b.  That is the first-order linear ODE
+ *     I'(p) = lambda(p) I(p) + M(p),   M = [U]_a^b,
+ * solved by the integrating factor mu = Exp[-Integral lambda dp].  The classic
+ * Feynman Gaussian Integrate[Exp[-a^2 x^2] Cos[b x], {x,0,Inf}] closes this way
+ * (differentiating in b gives J = -(b/(2a^2)) I, so I = I(0) Exp[-b^2/(4a^2)]).
+ * ---------------------------------------------------------------------- */
+
+/* A maximal transcendental-of-x leaf: Exp/Log/trig/hyperbolic/inverse-trig of an
+ * argument containing x, or Exp spelled Power[E, arg(x)].  These are treated as
+ * independent indeterminates when matching the IBP identity. */
+static bool is_primitive_atom(const Expr* F, const Expr* x) {
+    if (!F || F->type != EXPR_FUNCTION || !contains_symbol(F, x)) return false;
+    if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
+        F->data.function.args[0]->type == EXPR_SYMBOL &&
+        strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0)
+        return true;                                   /* Exp[arg] as Power[E,arg] */
+    if (F->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = F->data.function.head->data.symbol.name;
+    static const char* H[] = { "Exp","Log","Sin","Cos","Tan","Cot","Sec","Csc",
+                               "Sinh","Cosh","Tanh","Coth","Sech","Csch",
+                               "ArcTan","ArcSin","ArcCos","ArcSinh","ArcCosh","ArcTanh" };
+    for (size_t i = 0; i < sizeof(H)/sizeof(H[0]); i++)
+        if (strcmp(h, H[i]) == 0) return true;
+    return false;
+}
+
+/* Append each DISTINCT primitive atom of `e` (borrowed pointers) to out[]. */
+static void collect_primitive_atoms(const Expr* e, const Expr* x,
+                                    Expr** out, size_t* n, size_t cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (is_primitive_atom(e, x)) {
+        for (size_t i = 0; i < *n; i++) if (expr_eq(out[i], e)) return;
+        if (*n < cap) out[(*n)++] = (Expr*)e;
+        return;                                        /* do not recurse into an atom */
+    }
+    collect_primitive_atoms(e->data.function.head, x, out, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        collect_primitive_atoms(e->data.function.args[i], x, out, n, cap);
+}
+
+/* The atom-product shape of a single multiplicative term: the product of its
+ * primitive-atom factors (and Power[atom,k] factors), x-monomial and x-free
+ * coefficients stripped.  Owned, canonicalised by evaluation; NULL if the term
+ * carries no atom. */
+static Expr* atom_shape_of_term(Expr* term, const Expr* x) {
+    Expr* facbuf[64];
+    size_t nf = collect_factors(term, facbuf, 64, 0);
+    Expr* shape = NULL;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* F = facbuf[i];
+        bool keep = is_primitive_atom(F, x);           /* Exp=Power[E,arg], Sin, Cos, ... */
+        if (!keep && head_name_is(F, "Power") && F->data.function.arg_count == 2)
+            keep = is_primitive_atom(F->data.function.args[0], x);  /* Sin[..]^2, ... */
+        if (keep) {
+            Expr* fc = expr_copy(F);
+            shape = shape ? t_mul(shape, fc) : fc;
+        }
+    }
+    if (!shape) return NULL;
+    return eval_take(shape);                            /* canonical factor order */
+}
+
+/* Append the DISTINCT atom-product shapes of e's additive terms (owned). */
+static void collect_term_shapes(const Expr* e, const Expr* x,
+                                Expr** out, size_t* n, size_t cap) {
+    Expr* ee = ev1("Expand", expr_copy((Expr*)e));
+    if (!ee) return;
+    size_t nt; Expr** terms; Expr* single[1];
+    if (head_name_is(ee, "Plus")) { nt = ee->data.function.arg_count; terms = ee->data.function.args; }
+    else { nt = 1; single[0] = ee; terms = single; }
+    for (size_t t = 0; t < nt; t++) {
+        Expr* sh = atom_shape_of_term(terms[t], x);
+        if (!sh) continue;
+        bool dup = false;
+        for (size_t i = 0; i < *n; i++) if (expr_eq(out[i], sh)) { dup = true; break; }
+        if (dup || *n >= cap) { expr_free(sh); continue; }
+        out[(*n)++] = sh;
+    }
+    expr_free(ee);
+}
+
+/* [U(x,p)]_{x=a}^{x=b}, via direct substitution or Limit at an improper bound.
+ * Returns NULL (decline) if either boundary is non-finite or still x-dependent --
+ * the IBP identity J = lambda I + [U] is only valid when the boundary converges. */
+static Expr* boundary_value(const Expr* U, const Expr* x, const Expr* a,
+                            const Expr* b, const Expr* assumptions) {
+    Expr* Ub = eval_at_param(U, x, b);
+    if (!Ub) return NULL;
+    Expr* Ua = eval_at_param(U, x, a);
+    if (!Ua) { expr_free(Ub); return NULL; }
+    Expr* diff = mk_fn2("Plus", Ub, t_neg(Ua));        /* consumes Ub, Ua */
+    Expr* M = simplify_with(diff, assumptions);
+    expr_free(diff);
+    if (M && is_finite_value(M) && !contains_symbol(M, x)) return M;
+    if (M) expr_free(M);
+    return NULL;
+}
+
+/* Detect J = lambda(p) I + M(p) by the IBP ansatz.  On success returns true with
+ * owned *out_lambda, *out_M. */
+static bool detect_linear_ode(const Expr* f, const Expr* g, const Expr* x,
+                              const Expr* a, const Expr* b,
+                              const Expr* assumptions,
+                              Expr** out_lambda, Expr** out_M) {
+    enum { CAP = 16 };
+    Expr* shapes[CAP]; size_t nsh = 0;
+    collect_term_shapes(f, x, shapes, &nsh, CAP);
+    collect_term_shapes(g, x, shapes, &nsh, CAP);
+    bool ok = false;
+    Expr* U = NULL; Expr* lam = NULL;
+    if (nsh == 0 || nsh >= CAP) goto done;
+
+    /* U = sum_k c_k shapes[k];  lam a fresh coefficient. */
+    for (size_t k = 0; k < nsh; k++) {
+        char nm[32]; snprintf(nm, sizeof(nm), "DIUIc%zu", k);
+        Expr* term = t_mul(mk_sym(nm), expr_copy(shapes[k]));
+        U = U ? t_add(U, term) : term;
+    }
+    lam = mk_sym("DIUIlam");
+
+    /* R = Expand[g - lam f - D[U,x]], then atoms -> fresh Y indeterminates. */
+    {
+    Expr* dU = deriv(U, x);
+    Expr* R = ev1("Expand",
+                  t_add(expr_copy((Expr*)g),
+                        t_add(t_neg(t_mul(expr_copy(lam), expr_copy((Expr*)f))),
+                              t_neg(dU))));
+    /* Collect the primitive atoms of R itself: D[U,x] introduces derivative atoms
+     * (Sin from Cos, ...) not present in f/g, and an atom left unsubstituted would
+     * carry x into CoefficientList's coefficients.  Collecting from R is complete
+     * by construction. */
+    Expr* atoms[CAP]; size_t nat = 0;                  /* borrowed from R */
+    if (R) collect_primitive_atoms(R, x, atoms, &nat, CAP);
+    if (!R || nat == 0 || nat >= CAP) { if (R) expr_free(R); goto done; }
+    Expr* rules[CAP];
+    for (size_t i = 0; i < nat; i++) {
+        char nm[32]; snprintf(nm, sizeof(nm), "DIUIy%zu", i);
+        rules[i] = mk_fn2("Rule", expr_copy(atoms[i]), mk_sym(nm));
+    }
+    Expr* rulelist = expr_new_function(mk_sym("List"), rules, nat);
+    Expr* R2 = ev2("ReplaceAll", R, rulelist);
+    /* Any transcendental-of-x surviving substitution means the basis is
+     * incomplete -> CoefficientList would mishandle x; decline. */
+    if (R2 && (has_trig_of_x(R2, x) || has_radical_of_x(R2, x) ||
+               contains_gaussian_exp(R2, x))) { expr_free(R2); R2 = NULL; }
+
+    /* Coefficient equations of R2 in {x, Y_i}: each must vanish. */
+    Expr* vars[CAP + 1]; vars[0] = expr_copy((Expr*)x);
+    for (size_t i = 0; i < nat; i++) { char nm[32]; snprintf(nm, sizeof(nm), "DIUIy%zu", i); vars[i+1] = mk_sym(nm); }
+    Expr* varlist = expr_new_function(mk_sym("List"), vars, nat + 1);
+    Expr* CL = R2 ? ev2("CoefficientList", R2, varlist) : NULL;
+    if (!R2) expr_free(varlist);
+    Expr* flat = CL ? ev1("Flatten", CL) : NULL;
+    Expr* eqsrc = flat ? ev2("DeleteCases", flat, mk_int(0)) : NULL;
+
+    if (eqsrc && head_name_is(eqsrc, "List") && eqsrc->data.function.arg_count > 0) {
+        size_t ne = eqsrc->data.function.arg_count;
+        Expr** eqitems = (Expr**)malloc(ne * sizeof(Expr*));
+        for (size_t i = 0; i < ne; i++)
+            eqitems[i] = mk_fn2("Equal", expr_copy(eqsrc->data.function.args[i]), mk_int(0));
+        Expr* eqlist = expr_new_function(mk_sym("List"), eqitems, ne);
+        free(eqitems);
+        Expr** sv = (Expr**)malloc((nsh + 1) * sizeof(Expr*));
+        for (size_t k = 0; k < nsh; k++) { char nm[32]; snprintf(nm, sizeof(nm), "DIUIc%zu", k); sv[k] = mk_sym(nm); }
+        sv[nsh] = expr_copy(lam);
+        Expr* svlist = expr_new_function(mk_sym("List"), sv, nsh + 1);
+        free(sv);
+        Expr* sol = ev2("Solve", eqlist, svlist);
+        if (sol && head_name_is(sol, "List") && sol->data.function.arg_count > 0) {
+            Expr* first = sol->data.function.args[0];              /* borrowed */
+            Expr* lamr = eval_take(mk_fn2("ReplaceAll", expr_copy(lam), expr_copy(first)));
+            Expr* Ur   = eval_take(mk_fn2("ReplaceAll", expr_copy(U),   expr_copy(first)));
+            Expr* lamv = lamr ? simplify_with(lamr, assumptions) : NULL;
+            Expr* Us   = Ur   ? simplify_with(Ur, assumptions)   : NULL;
+            if (lamr) expr_free(lamr);
+            if (Ur)   expr_free(Ur);
+            /* lambda must be x-free, finite; reject a still-symbolic (c_k-laden)
+             * underdetermined solution. */
+            bool good = lamv && Us && is_finite_value(lamv) && !contains_symbol(lamv, x) &&
+                        !contains_head(lamv, "DIUIlam") && !contains_head(Us, "DIUIlam");
+            /* Verify the IBP identity literally (atoms may not be independent). */
+            if (good) {
+                Expr* idc = t_add(expr_copy((Expr*)g),
+                                  t_add(t_neg(t_mul(expr_copy(lamv), expr_copy((Expr*)f))),
+                                        t_neg(deriv(Us, x))));
+                good = is_zero_with(idc, assumptions);
+                expr_free(idc);
+            }
+            if (good) {
+                Expr* M = boundary_value(Us, x, a, b, assumptions);
+                if (M) { *out_lambda = lamv; *out_M = M; lamv = NULL; ok = true; }
+            }
+            if (lamv) expr_free(lamv);
+            if (Us) expr_free(Us);
+        }
+        if (sol) expr_free(sol);
+        /* eqlist, svlist were consumed by ev2("Solve", ...) -- do not free them. */
+    }
+    if (eqsrc) expr_free(eqsrc);
+    }
+
+done:
+    for (size_t i = 0; i < nsh; i++) expr_free(shapes[i]);
+    if (U) expr_free(U);
+    if (lam) expr_free(lam);
+    return ok;
+}
+
+/* Solve I'(p) = lambda(p) I(p) + M(p) with I(p0) = I0, by integrating factor.
+ * All parameter antiderivatives route through integrate_over_param (bounded), so
+ * no unbounded engine call is formed.  Returns owned I, or NULL. */
+static Expr* solve_linear_ode(const Expr* lambda, const Expr* M, const Expr* p,
+                              const Expr* p0, const Expr* I0,
+                              const Expr* assumptions) {
+    Expr* L = integrate_over_param(lambda, p);          /* Integral lambda dp */
+    if (!L || contains_head(L, "Integrate") || !is_finite_value(L)) {
+        if (L) expr_free(L);
+        return NULL;
+    }
+    Expr* L0 = eval_at_param(L, p, p0);
+    if (!L0) { expr_free(L); return NULL; }
+    Expr* I;
+    if (is_zero_q(M)) {
+        /* Homogeneous: I = I0 Exp[L - L0]. */
+        I = t_mul(expr_copy((Expr*)I0),
+                  mk_fn1("Exp", mk_fn2("Plus", expr_copy(L), t_neg(expr_copy(L0)))));
+    } else {
+        /* Inhomogeneous: I = Exp[L](N - N0) + Exp[L - L0] I0, N = Integral Exp[-L] M dp. */
+        Expr* muM = t_mul(mk_fn1("Exp", t_neg(expr_copy(L))), expr_copy((Expr*)M));
+        Expr* N = integrate_over_param(muM, p); expr_free(muM);
+        if (!N || contains_head(N, "Integrate") || !is_finite_value(N)) {
+            if (N) expr_free(N);
+            expr_free(L); expr_free(L0);
+            return NULL;
+        }
+        Expr* N0 = eval_at_param(N, p, p0);
+        if (!N0) { expr_free(N); expr_free(L); expr_free(L0); return NULL; }
+        Expr* term1 = t_mul(mk_fn1("Exp", expr_copy(L)), mk_fn2("Plus", N, t_neg(N0)));
+        Expr* term2 = t_mul(mk_fn1("Exp", mk_fn2("Plus", expr_copy(L), t_neg(expr_copy(L0)))),
+                            expr_copy((Expr*)I0));
+        I = t_add(term1, term2);
+    }
+    expr_free(L); expr_free(L0);
+    Expr* Is = simplify_with(I, assumptions); expr_free(I);
+    if (Is && is_finite_value(Is)) return Is;
+    if (Is) expr_free(Is);
+    return NULL;
+}
+
+/* Stage B driver for one parameter: detect the linear ODE, pin the base, solve,
+ * and verify D[I,p] - (lambda I + M) === 0. */
+static Expr* stage_linear_ode(const Expr* f, const Expr* g, const Expr* x,
+                              const Expr* a, const Expr* b, const Expr* assumptions,
+                              const Expr* p, const ParamBound* pb, size_t np) {
+    Expr* lam = NULL; Expr* M = NULL;
+    if (!detect_linear_ode(f, g, x, a, b, assumptions, &lam, &M)) return NULL;
+
+    Expr* p0 = NULL; Expr* I0 = NULL;
+    if (!find_base(f, x, a, b, assumptions, p, pb, np, false, &p0, &I0)) {
+        expr_free(lam); expr_free(M); return NULL;
+    }
+    Expr* I = solve_linear_ode(lam, M, p, p0, I0, assumptions);
+    expr_free(p0); expr_free(I0);
+    if (!I) { expr_free(lam); expr_free(M); return NULL; }
+
+    /* D[I,p] - (lambda I + M) === 0 under the assumptions. */
+    Expr* chk = t_add(deriv(I, p),
+                      t_neg(t_add(t_mul(expr_copy(lam), expr_copy(I)), expr_copy(M))));
+    bool ok = is_zero_with(chk, assumptions);
+    expr_free(chk); expr_free(lam); expr_free(M);
+#ifdef DIUI_DEBUG
+    fprintf(stderr, "DIUI:   [%.0fms] Stage B verify : %s\n", diui_ms(), ok ? "PASS" : "FAIL");
+#endif
+    if (!ok) { expr_free(I); return NULL; }
+    Expr* cl = diui_finalize(I, assumptions);
+    if (cl) { expr_free(I); return cl; }
+    return I;
+}
+
 /* -------------------------------------------------------------------------
  * Stage A -- pure quadrature (lambda = 0).
  * ---------------------------------------------------------------------- */
@@ -1883,16 +2171,25 @@ static Expr* stage_quadrature_param(const Expr* f, const Expr* x, const Expr* a,
      * `0^(1+a)` term in Integrate[x^a,{x,0,1}]) that would otherwise stop the
      * parameter-integration from closing. */
     Expr* J = inner_definite(g, x, a, b, assumptions, pb, np);
-    expr_free(g);
     if (J) { Expr* Js = simplify_with(J, assumptions); expr_free(J); J = Js; }
     if (!J || contains_head(J, "Integrate") || !is_finite_value(J)) {
-        if (J) expr_free(J); return NULL;
+        if (J) expr_free(J);
+        /* Stage A's inner integral did not close.  Try Stage B: J = lambda I + M,
+         * a first-order linear ODE in the parameter (e.g. Exp[-a^2 x^2] Cos[b x]).
+         * Only in the second (computed-base) pass, to avoid redundant work. */
+        Expr* r = zero_base_only ? NULL
+                 : stage_linear_ode(f, g, x, a, b, assumptions, p, pb, np);
+        expr_free(g);
+        return r;
     }
+    expr_free(g);
 
     /* G(p) = Integrate[J, p]  (antiderivative over the parameter). */
     Expr* G = integrate_over_param(J, p);
     if (!G || contains_head(G, "Integrate") || !is_finite_value(G)) {
-        if (G) expr_free(G); expr_free(J); return NULL;
+        if (G) expr_free(G);
+        expr_free(J);
+        return NULL;
     }
 
     /* Base point with an exact known value I(p0). */
