@@ -15,3 +15,8 @@ Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[{x, y}, 0 < x^2 + y^2 <
 # An infinite limit: the M-N form of the definition, proved and refuted
 Resolve[ForAll[m, m > 0, Exists[n, n > 0, ForAll[x, x > n, x^2 > m]]], Reals]
 Resolve[ForAll[m, m > 0, Exists[n, n > 0, ForAll[x, x > n, -x^2 > m]]], Reals]
+# A finite limit AT infinity: |f - L| < eps clears to a rational atom; proved and refuted
+Resolve[ForAll[eps, eps > 0, Exists[n, n > 0, ForAll[x, x > n, Abs[1/x] < eps]]], Reals]
+Resolve[ForAll[eps, eps > 0, Exists[n, n > 0, ForAll[x, x > n, Abs[1/x - 5] < eps]]], Reals]
+# An infinite limit at a FINITE point (vertical asymptote): f > M with f = 1/x^2
+Resolve[ForAll[M, M > 0, Exists[del, del > 0, ForAll[x, 0 < Abs[x] < del, 1/x^2 > M]]], Reals]

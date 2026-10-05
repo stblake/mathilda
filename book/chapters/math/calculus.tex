@@ -266,12 +266,43 @@ sentence written for a function that instead runs to \(-\infty\):
 decision is again two-sided.}
 \end{codepairs}
 
-The vertical-asymptote case---an infinite limit at a \emph{finite} point, such as
-\(\lim_{x\to0}1/x^2=\infty\)---sits just beyond this boundary: clearing the
-denominator leaves the bound \(M\) multiplied by \(x^2\) inside the alternating
-quantifiers, and at present Mathilda \emph{declines} that sentence rather than
-return a verdict it cannot certify---the same soundness contract, one step deeper
-in.
+Both of those stay inside the polynomial world because the target is itself a
+polynomial inequality. The two families a limits chapter leans on hardest only
+\emph{look} rational: a \emph{finite} value approached \emph{at
+infinity}\index{limit!at infinity}, \(\lim_{x\to\infty}1/x=0\), and an
+\emph{infinite} value at a \emph{finite} point---a vertical
+asymptote\index{asymptote!vertical}\index{limit!infinite!at a finite point}---such
+as \(\lim_{x\to0}1/x^2=\infty\). Both transcribe to sentences whose atoms carry a
+variable in the denominator (\(\lvert 1/x\rvert<\varepsilon\), \(1/x^2>M\)), and
+Mathilda proves them too, two-sided as before:
+
+\begin{codepairs}
+\pair{calculus/limits/16}{\(\lim_{x\to\infty}1/x=0\): a finite value reached at
+infinity, with the ray \(x>N\) and the bound \(\lvert 1/x\rvert<\varepsilon\)---%
+\mcode{True}.}
+\pair{calculus/limits/17}{The same sentence with the wrong value \(5\)---%
+\mcode{False}; the decision stays two-sided across the rational case.}
+\pair{calculus/limits/18}{The vertical asymptote \(\lim_{x\to0}1/x^2=\infty\),
+proved from \(1/x^2>M\) on the punctured interval \(0<\lvert x\rvert<\delta\)---%
+\mcode{True}.}
+\end{codepairs}
+
+These are decidable---rational atoms are semialgebraic---but reaching the verdict
+takes one preprocessing step a polynomial target does not need.\calloutnote{Under
+the hood}{The \(\exists\)-witness is non-polynomial in the parameters (here
+\(N=1/\varepsilon\), \(\delta=1/\sqrt{M}\)), so eliminating the inner \(\forall x\)
+leaves a \emph{rational} condition on the parameters that survive---\(\delta\le
+1/\sqrt{M}\), say. A CAD accepts only polynomial atoms, so before it runs each atom
+\(p/q \lessgtr 0\) is cleared to its sign-exact polynomial form over the
+reals\index{denominator clearing}: \(p/q<0\) becomes \(p\,q<0\), and \(p/q\le0\)
+becomes \(p\,q\le0 \wedge q\neq0\)---the \(q\neq0\) guard dropping the poles, which
+are never solutions (\(q^2>0\) off the pole set makes the signs of \(p/q\) and
+\(p\,q\) agree). An absolute value of a quotient is split first as \(\lvert
+p/q\rvert = \lvert p\rvert/\lvert q\rvert\), so the pole stays inside the sign
+analysis rather than slipping through the branch split. With the denominators
+cleared the alternating elimination goes through---and the earlier claim that
+Mathilda could not reach the vertical asymptote no longer holds. The boundary that
+remains is the transcendental one of the first callout, not this.}
 
 \usagebox{Limit}
 
