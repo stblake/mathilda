@@ -67,6 +67,13 @@ static void test_sign_abs_re(void) {
     check("Refine[Re[a + b I], Element[a | b, Reals]]", "a");
     check("Refine[Abs[x], x > 0]", "x");
     check("Refine[Conjugate[x], Element[x, Reals]]", "x");
+    /* Arg of a provably-signed quantity (prov_pos descends Times/Power, so a^2,
+     * 2a, 1/a^2 count as positive under a > 0); i*(positive) -> Pi/2. */
+    check("Refine[Arg[a], a > 0]", "0");
+    check("Refine[Arg[a^2], a > 0]", "0");
+    check("Refine[Arg[2 a], a > 0]", "0");
+    check("Refine[Arg[I a], a > 0]", "1/2 Pi");
+    check("Refine[Arg[2 I a], a > 0]", "1/2 Pi");
 }
 
 static void test_rounding_mod(void) {

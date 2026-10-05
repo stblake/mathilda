@@ -2272,6 +2272,16 @@ symbolic-exponent contours:
   carries the parameters: `∫_{-∞}^∞ e^{−a x²} Cos[b x] dx = √(π/a) e^{−b²/(4a)}`
   (`a > 0`), and the even half-line form is half of it.  Not a residue
   computation (no poles), but the standard contour route for the family.
+- **Periodic-strip (hyperbolic) rectangle on `(-∞, ∞)`** — `N(x)/Cosh[b x]`.  The
+  quasi-period `Cosh[b(x + iπ/b)] = −Cosh[b x]` folds the infinite ladder of poles
+  into the single enclosed pole at `x = iπ/(2b)`:
+  `∫_{-∞}^∞ e^{α x}/Cosh[b x] dx = (π/b) Sec[α π/(2b)]` for `|Re α| < Re b`.
+  `TrigToExp` turns a `Cosh`/`Sinh`/`Exp` numerator into a sum of such terms, so
+  `∫ e^{a x}/Cosh[π x] = Sec[a/2]`, `∫ Cosh[a x]/Cosh[b x] = (π/b) Sec[πa/(2b)]`,
+  and `∫ e^{i a x}/Cosh[b x] = (π/b) Sech[πa/(2b)]`.  Handles the symbolic
+  non-integer `b` the `Exp[x]` rectangular reduction cannot rationalise.  A common
+  positive scale on `x` in the hyperbolic arguments is normalised first
+  (`Sinh[a x] → Sinh[x]`), so `∫₀^∞ x/Sinh[a x] = π²/(4a²)`.
 
 **Assumptions and symbolic parameters.**  An `Integrate[f, {x, a, b},
 Assumptions -> …]` option lets the residue families evaluate integrals whose

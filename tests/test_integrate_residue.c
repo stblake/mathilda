@@ -560,6 +560,49 @@ static void test_symbolic_negative_controls(void) {
  * Family A (rational) also fires for symbolic parameters under Assumptions and
  * closes to a clean rational form (not a Sqrt[-4 a^2] surface).
  * ---------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+ * Periodic-strip (rectangle) contour: N(x)/Cosh[b x] on (-Inf, Inf) via the
+ * quasi-period Cosh[b(x+i Pi/b)] = -Cosh[b x], and the scale-normalisation
+ * Sinh[a x] -> Sinh[x] that reduces x/Sinh[a x] to the a=1 w=Exp[x] route.
+ * ---------------------------------------------------------------------- */
+static void test_hyperbolic_strip(void) {
+    /* Case In[4]: E^(a x)/Cosh[Pi x] = Sec[a/2]  (b = Pi concrete). */
+    check_eq("Integrate[Exp[a x]/Cosh[Pi x], {x, -Infinity, Infinity}, "
+             "Assumptions -> -Pi < a < Pi, Method -> \"Residue\"]", "Sec[1/2 a]");
+    /* Case In[21]: Cosh[a x]/Cosh[b x] = (Pi/b) Sec[Pi a/(2 b)]. */
+    check_eq("Integrate[Cosh[a x]/Cosh[b x], {x, -Infinity, Infinity}, "
+             "Assumptions -> b > a > 0, Method -> \"Residue\"]",
+             "(Pi Sec[(1/2 Pi a)/b])/b");
+    /* Case In[18]: E^(I a x)/Cosh[b x] = (Pi/b) Sech[Pi a/(2 b)]. */
+    check_eq("Integrate[Exp[I a x]/Cosh[b x], {x, -Infinity, Infinity}, "
+             "Assumptions -> Element[a, Reals] && b > 0, Method -> \"Residue\"]",
+             "(Pi Sech[(1/2 Pi a)/b])/b");
+    /* Bare Sech integrates to Pi/b (the alpha = 0 term). */
+    check_eq("Integrate[Sech[Pi x], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
+             "1");
+    /* Odd numerator over Cosh integrates to 0. */
+    check_eq("Integrate[Sinh[a x]/Cosh[b x], {x, -Infinity, Infinity}, "
+             "Assumptions -> b > a > 0, Method -> \"Residue\"]", "0");
+    /* Numeric confirmations. */
+    check_eq("Chop[N[(Integrate[Exp[a x]/Cosh[Pi x], {x,-Infinity,Infinity}, "
+             "Assumptions -> -Pi<a<Pi, Method -> \"Residue\"] - Sec[a/2]) /. a -> 1]]", "0");
+    check_eq("Chop[N[(Integrate[Cosh[a x]/Cosh[b x], {x,-Infinity,Infinity}, "
+             "Assumptions -> b>a>0, Method -> \"Residue\"] - Pi Sec[Pi a/(2 b)]/b) "
+             "/. {a -> 1, b -> 2}]]", "0");
+
+    /* Case In[12]: x/Sinh[a x] on [0,Inf) = Pi^2/(4 a^2).  Even reduction ->
+     * whole line; the scale-normalisation u = a x reduces Sinh[a x] to Sinh[x]
+     * so the w=Exp[x] keyhole route closes.  The symbolic-a closed form carries
+     * an (unsimplified, but correct) keyhole Arg surface, so pin numerically. */
+    check_eq("With[{r = Integrate[x/Sinh[a x], {x, 0, Infinity}, "
+             "Assumptions -> a > 0, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[(r - Pi^2/(4 a^2)) /. a -> 3/2]]}]",
+             "{True, 0}");
+    /* Concrete scale is fully simplified. */
+    check_eq("Integrate[x/Sinh[2 x], {x, 0, Infinity}, Method -> \"Residue\"]",
+             "1/16 Pi^2");
+}
+
 static void test_rational_symbolic(void) {
     check_eq("Integrate[1/(x^2+a^2), {x, -Infinity, Infinity}, Assumptions -> a > 0]",
              "Pi/a");
@@ -606,6 +649,7 @@ int main(void) {
     TEST(test_sector);
     TEST(test_trig_symbolic);
     TEST(test_chebyshev_weight);
+    TEST(test_hyperbolic_strip);
     TEST(test_rational_symbolic);
     TEST(test_symbolic_negative_controls);
 

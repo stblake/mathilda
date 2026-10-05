@@ -40,10 +40,17 @@ All reference values twice-confirmed vs NIntegrate (see plan triage table).
       (1-E^(2πia)) doesn't collapse), NOT residue-method gaps. Not forced per plan. a0/general_a
       closers left unchanged (res_close_positive wouldn't help -- Arg[I a] survives PowerExpand).
 
-## Phase 4 — Periodic-strip hyperbolic rectangle + scale normalization (In[4],18,21,12)
-- [ ] residue_family_hyperbolic_strip (quasi-period shift, geometric 1/(1-λ))
-- [ ] scale-normalization pre-step (u = c x) → In[12] via existing a=1 route
-- [ ] Pins: In[4] Sec[a/2]; In[18] (π/b)Sech[πa/2b]; In[21] (π/b)Sec[πa/2b]; In[12] π²/4a². version+docs+tag
+## Phase 4 — Periodic-strip hyperbolic rectangle + scale normalization  [DONE v0.280]
+- [x] residue_family_hyperbolic_strip: N(x)/Cosh[b x], quasi-period fold -> single pole,
+      per-term (Pi/b)Sec[alpha Pi/2b]; TrigToExp numerator; Refine convergence. Wired
+      after rectangular. In[4] Sec[a/2], In[21] (Pi/b)Sec, In[18] (Pi/b)Sech CLEAN.
+- [x] scale-normalization in rectangular (x->x/c for common positive c): In[12]
+      x/Sinh[a x] {0,Inf} EVALUATES = Pi^2/(4a^2) (form messy for symbolic a -- keyhole
+      Arg surface, same as In[17]; numeric pin). Concrete x/Sinh[2x]=Pi^2/16 clean.
+- [x] BONUS (sound, general): Refine[Arg[pos]]->0, Arg[neg]->Pi, Arg[i*pos]->+-Pi/2
+      (simp_assume_rewrite.c) -- prov_pos descends Times/Power. NOT applied to keyhole
+      closers (PowerExpand there is unsound: Arg[-4a^2]=Pi -> Arg[a^2]=0 drops a factor).
+- [x] Pins in test_hyperbolic_strip + refine Arg pins. version 0.280 + docs + changelog + tag.
 
 ## Phase 5 — Mellin after power substitution (In[9], In[10])
 - [ ] residue_family_mellin_power: u=x^ν → (1/ν)M[f](μ/ν), f∈{Exp,Sin,Cos}

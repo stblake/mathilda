@@ -1376,12 +1376,14 @@ static bool res_region_sign(Expr* e, bool want_negative) {
     param_interval(e, &lo, &hi);
     return want_negative ? (hi < -RES_TOL) : (lo > RES_TOL);
 }
-static bool res_region_neg(Expr* e) { return res_region_sign(e, true); }
+static bool res_region_neg(Expr* e) { return res_region_sign(e, true);  }
+static bool res_region_pos(Expr* e) { return res_region_sign(e, false); }
 
 /* -------------------------------------------------------------------------
  * New contour families (implemented in the phases below).
  * ---------------------------------------------------------------------- */
 static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b);
+static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_mellin(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b);
 
@@ -2060,12 +2062,71 @@ static Expr* residue_family_mellin_log(Expr* f, Expr* x, Expr* a, Expr* b) {
  *     (Log w)^k R(w) -> residue_family_mellin_log.  Its pole at w = 1 (x = 0) is
  *     the removable branch-point pole that family already handles.  One residue
  *     engine serves the strip, the branch cut, and the log cut alike. */
+/* The common coefficient c of x in every hyperbolic/exp argument of e (each of
+ * the form c*x, linear and x-free).  *ok is cleared if an argument is x-dependent
+ * but not of that shape, or if two arguments disagree.  Leaves *c_io NULL if no
+ * such argument occurs.  Used to normalise Sinh[a x] -> Sinh[x] before the
+ * w = Exp[x] reduction (which needs an integer/unit coefficient). */
+static void res_collect_scale(Expr* e, Expr* x, Expr** c_io, bool* ok) {
+    if (!e || e->type != EXPR_FUNCTION || !*ok) return;
+    Expr* arg = NULL;
+    if (e->data.function.arg_count == 1 &&
+        (head_name_is(e, "Sinh") || head_name_is(e, "Cosh") || head_name_is(e, "Tanh") ||
+         head_name_is(e, "Csch") || head_name_is(e, "Sech") || head_name_is(e, "Coth") ||
+         head_name_is(e, "Exp")))
+        arg = e->data.function.args[0];
+    else if (head_name_is(e, "Power") && e->data.function.arg_count == 2 &&
+             e->data.function.args[0]->type == EXPR_SYMBOL &&
+             e->data.function.args[0]->data.symbol.name == SYM_E)
+        arg = e->data.function.args[1];
+    if (arg && contains_symbol(arg, x)) {
+        Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(arg), expr_copy(x)));
+        bool lin = deg && deg->type == EXPR_INTEGER && deg->data.integer == 1;
+        if (deg) expr_free(deg);
+        Expr* c1 = lin ? eval_take(mk_fn3("Coefficient", expr_copy(arg), expr_copy(x), mk_int(1))) : NULL;
+        Expr* c0 = lin ? eval_take(mk_fn3("Coefficient", expr_copy(arg), expr_copy(x), mk_int(0))) : NULL;
+        bool good = c1 && !contains_symbol(c1, x) &&
+                    c0 && c0->type == EXPR_INTEGER && c0->data.integer == 0;
+        if (c0) expr_free(c0);
+        if (!good) { if (c1) expr_free(c1); *ok = false; return; }
+        if (!*c_io) *c_io = c1;
+        else { if (!expr_eq(c1, *c_io)) *ok = false; expr_free(c1); }
+        return;                                 /* do not descend into the argument */
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        res_collect_scale(e->data.function.args[i], x, c_io, ok);
+}
+
 static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!is_neg_pos_infinity(a, b)) return NULL;
     /* Only worth the substitution when Exp[x] or a hyperbolic function occurs. */
     if (!contains_head(f, "Exp") &&
         !(contains_symbol(f, x)))  /* cheap guard; real check is the split below */
         return NULL;
+
+    /* Scale-normalise a common POSITIVE coefficient c (Sinh[a x] -> Sinh[x]) so
+     * the w = Exp[x] reduction sees a unit coefficient: substitute x -> x/c
+     * (Jacobian 1/c), recurse, and keep the result.  c > 0 keeps (-Inf,Inf)
+     * oriented; c != 1 ensures termination (the recursion re-enters with c = 1). */
+    {
+        Expr* c = NULL; bool ok = true;
+        res_collect_scale(f, x, &c, &ok);
+        if (ok && c && !(c->type == EXPR_INTEGER && c->data.integer == 1) &&
+            res_region_pos(c)) {
+            Expr* fsub = eval_take(mk_fn2("ReplaceAll", expr_copy(f),
+                            mk_fn2("Rule", expr_copy(x),
+                                mk_fn2("Times", expr_copy(x),
+                                    mk_fn2("Power", expr_copy(c), mk_int(-1))))));
+            Expr* fnorm = fsub ? eval_take(mk_fn2("Times", fsub,
+                                     mk_fn2("Power", expr_copy(c), mk_int(-1)))) : NULL;
+            expr_free(c);
+            if (fnorm) {
+                Expr* r = integrate_residue_try(fnorm, x, a, b, NULL, NULL, g_pv);
+                expr_free(fnorm);
+                if (r) return r;
+            }
+        } else if (c) expr_free(c);
+    }
 
     Expr* w = mk_sym("IntegrateResidue`$w");
     /* g(w) = (f /. x -> Log[w]) / w. */
@@ -2140,6 +2201,130 @@ static bool contains_exp_of_var(Expr* e, Expr* x) {
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (contains_exp_of_var(e->data.function.args[i], x)) return true;
     return false;
+}
+
+/* Periodic-strip (rectangle) contour for N(x)/Cosh[b x] on (-Inf, Inf).  The
+ * quasi-period Cosh[b(x + i Pi/b)] = -Cosh[b x] folds the infinite ladder of
+ * poles into the single enclosed pole at x = i Pi/(2 b):
+ *   Integrate[E^(alpha x)/Cosh[b x], {x,-Inf,Inf}] = (Pi/b) Sec[alpha Pi/(2 b)]
+ * for |Re alpha| < Re b.  TrigToExp turns a Cosh/Sinh/Exp numerator into a sum of
+ * such exponentials, so Cosh[a x]/Cosh[b x], Sinh.../Cosh, and E^(I a x)/Cosh[b x]
+ * are all covered.  Handles a symbolic non-integer b that the w = Exp[x]
+ * rectangular reduction cannot rationalise.  Cosh has no real-axis zero, so no
+ * principal value arises. */
+static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_neg_pos_infinity(a, b) || f->type != EXPR_FUNCTION) return NULL;
+
+    /* Locate the Sech[beta x] factor (1/Cosh is stored as Sech); beta its x-free
+     * coefficient, with the argument exactly beta*x (linear, no constant). */
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+    else { one[0] = f; fac = one; nf = 1; }
+    Expr* beta = NULL;
+    Expr** Nparts = malloc(nf * sizeof(Expr*));
+    size_t np = 0;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* fe = fac[i];
+        if (!beta && head_name_is(fe, "Sech") && fe->data.function.arg_count == 1) {
+            Expr* u = fe->data.function.args[0];
+            Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(u), expr_copy(x)));
+            bool lin = deg && deg->type == EXPR_INTEGER && deg->data.integer == 1;
+            if (deg) expr_free(deg);
+            Expr* c1 = lin ? poly_coeff(u, x, 1) : NULL;
+            Expr* c0 = lin ? poly_coeff(u, x, 0) : NULL;
+            bool ok = c1 && !contains_symbol(c1, x) &&
+                      c0 && c0->type == EXPR_INTEGER && c0->data.integer == 0;
+            if (c0) expr_free(c0);
+            if (ok) { beta = c1; continue; }       /* consume the Sech factor */
+            if (c1) expr_free(c1);
+        }
+        Nparts[np++] = expr_copy(fe);
+    }
+    if (!beta) { for (size_t i = 0; i < np; i++) expr_free(Nparts[i]); free(Nparts); return NULL; }
+
+    Expr* N = (np == 0) ? mk_int(1)
+            : (np == 1) ? Nparts[0]
+            : expr_new_function(mk_sym("Times"), Nparts, np);
+    free(Nparts);
+
+    /* Numerator as a sum of exponentials C_i E^(alpha_i x). */
+    Expr* g = ev1("Expand", ev1("TrigToExp", N));            /* consumes N */
+    if (!g) { expr_free(beta); return NULL; }
+    Expr** terms; size_t nt; Expr* tone[1];
+    if (head_name_is(g, "Plus")) { terms = g->data.function.args; nt = g->data.function.arg_count; }
+    else { tone[0] = g; terms = tone; nt = 1; }
+
+    Expr* twob = eval_take(mk_fn2("Times", mk_int(2), expr_copy(beta)));   /* 2 beta */
+    Expr* total = mk_int(0);
+    bool bad = false;
+    for (size_t ti = 0; ti < nt && !bad; ti++) {
+        Expr* T = terms[ti];
+        Expr** tf; size_t tnf; Expr* tf1[1];
+        if (head_name_is(T, "Times")) { tf = T->data.function.args; tnf = T->data.function.arg_count; }
+        else { tf1[0] = T; tf = tf1; tnf = 1; }
+        Expr* C = mk_int(1);
+        Expr* P = mk_int(0);                                 /* accumulated exponent */
+        for (size_t fi = 0; fi < tnf && !bad; fi++) {
+            Expr* fe = tf[fi];
+            bool is_pow_e = head_name_is(fe, "Power") && fe->data.function.arg_count == 2 &&
+                fe->data.function.args[0]->type == EXPR_SYMBOL &&
+                fe->data.function.args[0]->data.symbol.name == SYM_E;
+            if (is_pow_e) P = eval_take(mk_fn2("Plus", P, expr_copy(fe->data.function.args[1])));
+            else if (head_name_is(fe, "Exp") && fe->data.function.arg_count >= 1)
+                P = eval_take(mk_fn2("Plus", P, expr_copy(fe->data.function.args[0])));
+            else if (contains_symbol(fe, x)) bad = true;     /* x outside an exponent */
+            else C = eval_take(mk_fn2("Times", C, expr_copy(fe)));
+            if (!P || !C) bad = true;
+        }
+        if (bad) { if (C) expr_free(C); if (P) expr_free(P); break; }
+        /* Exponent must be affine in x; alpha = slope (x-free), constant folds into
+         * C.  A constant exponent gives Exponent -> -Infinity (alpha = 0, the
+         * pure-Sech case), so reject only a genuine degree >= 2. */
+        Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(P), expr_copy(x)));
+        bool deg_ok = !(deg && deg->type == EXPR_INTEGER && deg->data.integer >= 2);
+        if (deg) expr_free(deg);
+        Expr* alpha = deg_ok ? poly_coeff(P, x, 1) : NULL;
+        if (!deg_ok || !alpha || contains_symbol(alpha, x)) {
+            if (alpha) expr_free(alpha); expr_free(C); expr_free(P); bad = true; break;
+        }
+        Expr* pconst = poly_coeff(P, x, 0);
+        if (pconst && !(pconst->type == EXPR_INTEGER && pconst->data.integer == 0))
+            C = eval_take(mk_fn2("Times", C, ev1("Exp", pconst)));
+        else if (pconst) expr_free(pconst);
+        expr_free(P);
+        /* Convergence |Re alpha| < Re beta: Re alpha - beta < 0 and -Re alpha - beta < 0. */
+        Expr* rea = ev1("ComplexExpand", mk_fn1("Re", expr_copy(alpha)));
+        bool conv = rea &&
+            res_region_neg(mk_fn2("Plus", expr_copy(rea),
+                               mk_fn2("Times", mk_int(-1), expr_copy(beta)))) &&
+            res_region_neg(mk_fn2("Plus", mk_fn2("Times", mk_int(-1), expr_copy(rea)),
+                               mk_fn2("Times", mk_int(-1), expr_copy(beta))));
+        if (rea) expr_free(rea);
+        if (!conv) { expr_free(alpha); expr_free(C); bad = true; break; }
+        /* term = C (Pi/beta) Sec[alpha Pi/(2 beta)]. */
+        Expr* sec = ev1("Sec", mk_fn2("Times", expr_copy(alpha),
+                        mk_fn2("Times", mk_sym(SYM_Pi),
+                               mk_fn2("Power", expr_copy(twob), mk_int(-1)))));
+        Expr* term = eval_take(mk_fn2("Times", C,
+                        mk_fn2("Times", mk_fn2("Times", mk_sym(SYM_Pi),
+                            mk_fn2("Power", expr_copy(beta), mk_int(-1))), sec)));
+        expr_free(alpha);
+        if (!term) { bad = true; break; }
+        total = eval_take(mk_fn2("Plus", total, term));
+        if (!total) { bad = true; break; }
+    }
+    expr_free(g); expr_free(beta); expr_free(twob);
+    if (bad || !total) { if (total) expr_free(total); return NULL; }
+
+    Expr* val = g_inst ? ev1("Simplify", total)
+                       : ev1("Simplify", ev1("ComplexExpand", total));
+    if (!val) return NULL;
+    double vv, re, im;
+    if (contains_symbol(val, x) ||
+        !(res_is_real_scalar(val, x, &vv) || res_is_finite_scalar(val, x, &re, &im))) {
+        expr_free(val); return NULL;
+    }
+    return val;
 }
 
 static Expr* residue_family_gaussian(Expr* f, Expr* x, Expr* a, Expr* b) {
@@ -2556,6 +2741,7 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         value = residue_family_gaussian(f, x, a, b);
         if (!value) value = residue_family_fourier(f, x, a, b);
         if (!value) value = residue_family_rectangular(f, x, a, b);
+        if (!value) value = residue_family_hyperbolic_strip(f, x, a, b);
         if (!value) value = residue_family_rational(f, x, a, b, diverges);
     } else if (is_zero_pos_infinity(a, b)) {
         /* Half-line [0,Inf): even symmetry first (exact), then the keyhole/Mellin

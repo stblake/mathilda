@@ -140,6 +140,14 @@ static bool sr_num(const Expr* e, double* v) {
     return false;
 }
 
+/* True iff e is a purely-imaginary numeric literal Complex[0, c]; sets *im = c. */
+static bool sr_pure_imag(const Expr* e, double* im) {
+    if (!sr_head(e, "Complex") || e->data.function.arg_count != 2) return false;
+    double re;
+    if (!sr_num(e->data.function.args[0], &re) || re != 0.0) return false;
+    return sr_num(e->data.function.args[1], im);
+}
+
 /* Does ctx prove the strict order A < B by a direct inequality fact? */
 static bool sr_proves_slt(const AssumeCtx* ctx, const Expr* A, const Expr* B) {
     if (!ctx) return false;
@@ -291,6 +299,47 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
                 else if (assume_known_nonneg(ctx, a0))
                     out = expr_copy((Expr*)rv);
                 if (out) { expr_free(node); *changed = 1; return out; }
+            }
+        }
+
+        /* Arg of a quantity whose sign/axis the assumptions pin, which
+         * ComplexExpand (sign-agnostic) cannot settle: Arg[positive] = 0,
+         * Arg[negative] = Pi, and Arg[(i*c) * positive] = +-Pi/2 (the sign from
+         * c).  prov_pos already descends Times/Power, so a^2, 2a, 1/a^2, ... are
+         * recognised as positive under a > 0.  Fixes the Arg[...]-laden keyhole
+         * forms (e.g. Log[x]/(x^2+a^2), x/Sinh[a x]). */
+        if (strcmp(h, "Arg") == 0 && ctx) {
+            if (assume_known_positive(ctx, a0)) {
+                expr_free(node); *changed = 1; return expr_new_integer(0);
+            }
+            if (assume_known_negative(ctx, a0)) {
+                expr_free(node); *changed = 1;
+                return eval_and_free(parse_expression("Pi"));
+            }
+            if (sr_head(a0, "Times")) {
+                size_t n = a0->data.function.arg_count;
+                double imv = 0; bool got = false;
+                Expr** rp = malloc(n * sizeof(Expr*)); size_t nr = 0;
+                for (size_t i = 0; i < n; i++) {
+                    Expr* fe = a0->data.function.args[i];
+                    if (!got && sr_pure_imag(fe, &imv)) { got = true; continue; }
+                    rp[nr++] = expr_copy(fe);
+                }
+                if (got && imv != 0.0) {
+                    Expr* r = (nr == 0) ? expr_new_integer(1)
+                            : (nr == 1) ? rp[0]
+                            : expr_new_function(expr_new_symbol(SYM_Times), rp, nr);
+                    free(rp);
+                    bool pos = assume_known_positive(ctx, r);
+                    expr_free(r);
+                    if (pos) {
+                        expr_free(node); *changed = 1;
+                        return eval_and_free(parse_expression(imv > 0.0 ? "Pi/2" : "-Pi/2"));
+                    }
+                } else {
+                    for (size_t i = 0; i < nr; i++) expr_free(rp[i]);
+                    free(rp);
+                }
             }
         }
 
