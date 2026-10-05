@@ -1788,6 +1788,21 @@ monotonically down.
     `Integrate\`RamanujanMasterTheorem[f, {x, 0, Infinity}]`. Under Automatic it
     runs before Newton-Leibniz (and before DiffUnderInt). See **Mellin / Ramanujan
     Master Theorem** below.
+  - `"IntegralRepresentation"` — a half-line integrand that IS a classical
+    integral representation of a special function;
+    `Integrate\`IntegralRepresentation[f, {x, 0, Infinity}]`. Families:
+    `E^(-p x) BesselJ[nu, q x]` → Laplace-Bessel
+    `(Sqrt[q^2+p^2]-p)^nu/(q^nu Sqrt[q^2+p^2])` (`p>0`);
+    `E^(-A Cosh[x]) Cosh[n x]` → `BesselK[n, A]` (`A>0`);
+    `x^(nu-1) E^(-A x - B/x)` → `2 (B/A)^(nu/2) BesselK[nu, 2 Sqrt[A B]]`
+    (`A,B>0`; `nu` a half-integer gives an elementary form, e.g.
+    `E^(-A x - B/x)/Sqrt[x]` → `Sqrt[Pi/A] e^(-2 Sqrt[A B])`);
+    `Cos[p x^3 + q x]` → `Pi (3p)^(-1/3) AiryAi[q (3p)^(-1/3)]` (`p>0`, `q` real).
+    Each gate is proved from Assumptions; correct-by-construction, no NIntegrate.
+    Under Automatic it runs after Ramanujan, before Newton-Leibniz.  (The Euler
+    finite-interval generalization `x^(a-1)(1-x)^(b-1)(alpha+beta x)^e` on `[0,1]`
+    → `alpha^e Beta[a,b] Hypergeometric2F1[-e, a, a+b, -beta/alpha]` runs under the
+    `"Beta"` mechanism — e.g. `x^(a-1)(1-x)^(b-1)/(x+c)^(a+b)` on `[0,1]`.)
   The definite mechanisms name themselves only: the actual mechanism is
   chosen from the spec type, so on a definite integral any *other* method name
   is passed through to the inner indefinite integration that produces the

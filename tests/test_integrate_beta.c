@@ -148,9 +148,14 @@ static void test_method_option(void) {
              "1/8 Pi");
     check_eq("Integrate[Sin[x]^(1/2) Cos[x]^(1/2), {x, 0, Pi/2}, "
              "Method -> \"TrigPower\"]", "Gamma[3/4]^2/Sqrt[Pi]");
-    /* Strict: a non-Beta integrand under Method -> "Beta" stays unevaluated. */
-    check_eq("Integrate[1/(1+x), {x, 0, 1}, Method -> \"Beta\"]",
-             "Integrate[1/(1 + x), {x, 0, 1}, Method -> \"Beta\"]");
+    /* The Euler extension (one extra linear factor) now closes 1/(1+x) on [0,1]
+     * under the Beta mechanism -- (1+x)^(-1) is the a=b=1 Euler integrand, value
+     * Log[2].  (Under Automatic, Newton-Leibniz computed the same value anyway.) */
+    check_eq("Integrate[1/(1+x), {x, 0, 1}, Method -> \"Beta\"]", "Log[2]");
+    /* Strict: a genuinely non-Beta/Euler integrand (a non-linear factor base)
+     * stays unevaluated under Method -> "Beta". */
+    check_eq("Integrate[1/(1+x^2), {x, 0, 1}, Method -> \"Beta\"]",
+             "Integrate[1/(1 + x^2), {x, 0, 1}, Method -> \"Beta\"]");
 }
 
 /* -------------------------------------------------------------------------

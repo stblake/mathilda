@@ -686,6 +686,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_dirac.c
     ../src/calculus/integrate_diffunderint.c
     ../src/calculus/integrate_ramanujan.c
+    ../src/calculus/integrate_intrep.c
     ../src/calculus/intrat.c
     ../src/calculus/integrate_risch_transcendental.c
     ../src/calculus/risch_util.c
@@ -3101,6 +3102,15 @@ else()
     target_link_libraries(integrate_beta_tests gmp m)
 endif()
 add_test(NAME integrate_beta_tests COMMAND integrate_beta_tests)
+
+add_executable(integrate_intrep_tests test_integrate_intrep.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(integrate_intrep_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_intrep_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_intrep_tests gmp m)
+endif()
+add_test(NAME integrate_intrep_tests COMMAND integrate_intrep_tests)
 
 add_executable(integrate_diffunderint_tests test_integrate_diffunderint.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(integrate_diffunderint_tests PRIVATE ../src)

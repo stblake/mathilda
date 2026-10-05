@@ -44,9 +44,29 @@ Phase 3 deep research). 20 stress integrals → 7 general gaps.
 Suggested single commit "feat(integrate): Phase 1 — cascade reorder + rational-Mellin
 strip + sound residue cleanup ; v0.291" (or split 1a/1b/1c with sequential bumps).
 
-## Phase 2 (next) — integral-representation recognizers (#2,#12,#15,#19) + Euler→Beta·2F1 (#18)
-## Phase 3 — higher-order hyperbolic residue (#10), symmetry-aware Feynman (#9,#14), Malmsten (#3)
+## Phase 2 — integral-representation recognizers + Euler→Beta·2F1 (v0.292) — COMPLETE, awaiting commit
 
-Still unevaluated (unbroken, future phases): #2 #3 #6 #9 #10 #12 #14 #15 #18 #19.
-#10/#15 still ~55s to decline (unchanged from baseline; narrow FTC pre-decline deferred —
-Phase 2/3 turn them into fast closes).
+### 2a. `src/calculus/integrate_intrep.c` (new) — half-line integral reps
+- [x] Laplace-Bessel `E^(-p x)BesselJ[nu,q x]` → #2 `1/Sqrt[a^2+c^2]` (general nu).
+- [x] Bessel-K cosh `E^(-A Cosh[x])Cosh[n x]` → #15 `BesselK[n,a]` (+ n=0 bare → K_0).
+- [x] Bessel-K exp `x^(nu-1)E^(-A x-B/x)` → #19 `Sqrt[Pi/a]e^(-2Sqrt[ab])` (TrigToExp LAST, no
+      trailing Simplify — it re-folds exp→cosh-sinh). General nu → BesselK.
+- [x] Airy `Cos[p x^3+q x]` → #12 `Pi AiryAi[a]`.
+- [x] Wired: METHOD_INTEGRAL_REP, cascade after Ramanujan/before NL, init, CMake mathilda_common.
+
+### 2b. Euler→Beta·2F1 (`integrate_euler_2f1_try`, `integrate_beta.c`)
+- [x] `x^(a-1)(1-x)^(b-1)(alpha+beta x)^e` on [0,1] → `alpha^e Beta[a,b] 2F1[-e,a,a+b,-beta/alpha]`.
+      #18 → `Beta[a,b](1+1/c)^(-a)c^(-(a+b))`. Gate via `prove_ref` (Refine, not Simplify).
+- [x] Stale beta-suite control updated (1/(1+x) Method->Beta now = Log[2], a valid Euler close).
+
+### Verification
+- [x] new `tests/test_integrate_intrep.c` (self-certifying Simplify[res-ref]===0) — PASS.
+- [x] all definite suites green; check-c99 / check-messages clean.
+- [x] version.h → 0.292; changelog + calculus.md docs updated.
+
+### Awaiting user go-ahead to commit + tag v0.292.
+
+## Phase 3 (next) — higher-order hyperbolic residue (#10), symmetry-aware Feynman (#9,#14), Malmsten (#3)
+
+Still unevaluated (unbroken): #3 #6 #9 #10 #14. (#6 Hurwitz-zeta Mellin is a candidate too.)
+#10 still ~55s to decline (unchanged baseline; Phase 3 turns it into a fast close).

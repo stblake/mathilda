@@ -102,6 +102,16 @@ static int prove(Expr* pred, Expr* as) {
     return r;
 }
 
+/* Prove a predicate True under `as` via Refine (the assumption-aware sign
+ * prover): Simplify leaves an implication like `c > 0 => c+1 > 0` unproved
+ * (it returns `c > -1`), but Refine discharges it.  Consumes pred. */
+static bool prove_ref(Expr* pred, Expr* as) {
+    Expr* r = as ? eval_take(mk_fn2("Refine", pred, cp(as))) : ev1("Refine", pred);
+    bool t = sym_is(r, "True");
+    expr_free(r);
+    return t;
+}
+
 /* Structural test for the factor (1 - x). */
 static bool is_one_minus_x(const Expr* g, const Expr* x) {
     if (!head_name_is(g, "Plus") || g->data.function.arg_count != 2) return false;
@@ -248,6 +258,107 @@ static Expr* beta_gate(Expr* value, Expr* A, Expr* B, Expr* assumptions) {
         mk_fn2("Greater", mk_fn1("Re", cp(B)), mk_int(0)));
     Expr* cs = simp2(cond_show, assumptions);
     return eval_take(mk_fn2("ConditionalExpression", value, cs));
+}
+
+/* ---- Euler finite-interval -> Beta * Hypergeometric2F1 ------------------ */
+/* Integrate[x^(a-1) (1-x)^(b-1) (alpha + beta x)^e, {x,0,1}]
+ *   = alpha^e Beta[a,b] Hypergeometric2F1[-e, a, a+b, -beta/alpha],
+ * the Euler integral representation of 2F1.  Requires the extra linear factor
+ * (alpha + beta x); a pure Beta integrand is left to integrate_beta_try.  Gated
+ * on Re a>0, Re b>0 (convergence) and alpha>0 && alpha+beta>0 (the base stays
+ * positive on [0,1], which also puts the 2F1 argument off the branch cut). */
+
+static Expr* mk_fn3b(const char* h, Expr* a, Expr* b, Expr* c) { Expr* v[3]={a,b,c}; return mk_fn(h,v,3); }
+static Expr* mk_fn4b(const char* h, Expr* a, Expr* b, Expr* c, Expr* d) { Expr* v[4]={a,b,c,d}; return mk_fn(h,v,4); }
+static Expr* Pow_(Expr* a, Expr* b) { return mk_fn2("Power", a, b); }
+static Expr* coeff_(const Expr* e, const Expr* x, long k) {
+    return eval_take(mk_fn3b("Coefficient", cp(e), cp((Expr*)x), mk_int(k)));
+}
+static bool is_zero_simp_(Expr* e) {   /* consumes e */
+    Expr* s = simp(e);
+    bool z = (s->type == EXPR_INTEGER && s->data.integer == 0);
+    expr_free(s);
+    return z;
+}
+
+typedef struct {
+    const Expr* x;
+    Expr* aexp;        /* exponent of x        (owned) */
+    Expr* bexp;        /* exponent of (1-x)    (owned) */
+    Expr* C;           /* x-free constant      (owned) */
+    Expr* lin_base;    /* captured extra-factor base (owned), or NULL */
+    Expr* lin_exp;     /* captured extra-factor exponent (owned), or NULL */
+    bool  ok;
+} EulerCtx;
+
+static bool euler_visit(Expr* g, void* vctx) {
+    EulerCtx* c = (EulerCtx*)vctx;
+    const Expr* x = c->x;
+    if (free_of_x(g, x)) { c->C = Times_(c->C, cp(g)); return true; }
+    if (is_symbol(g, x)) { c->aexp = Plus_(c->aexp, mk_int(1)); return true; }
+    if (is_one_minus_x(g, x)) { c->bexp = Plus_(c->bexp, mk_int(1)); return true; }
+    if (head_name_is(g, "Power") && g->data.function.arg_count == 2) {
+        Expr* base = g->data.function.args[0];
+        Expr* e    = g->data.function.args[1];
+        if (!free_of_x(e, x)) { c->ok = false; return false; }
+        if (is_symbol(base, x))      { c->aexp = Plus_(c->aexp, cp(e)); return true; }
+        if (is_one_minus_x(base, x)) { c->bexp = Plus_(c->bexp, cp(e)); return true; }
+        if (!c->lin_base) { c->lin_base = cp(base); c->lin_exp = cp(e); return true; }
+    }
+    c->ok = false;
+    return false;
+}
+
+Expr* integrate_euler_2f1_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!contains_symbol(f, x)) return NULL;
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    if (!(b->type == EXPR_INTEGER && b->data.integer == 1)) return NULL;
+
+    EulerCtx c = { x, mk_int(0), mk_int(0), mk_int(1), NULL, NULL, true };
+    for_each_factor(f, euler_visit, &c);
+    if (!c.ok || !c.lin_base) {
+        expr_free(c.aexp); expr_free(c.bexp); expr_free(c.C);
+        if (c.lin_base) expr_free(c.lin_base);
+        if (c.lin_exp) expr_free(c.lin_exp);
+        return NULL;
+    }
+    /* Validate the extra factor's base is genuinely linear alpha + beta x, beta != 0. */
+    Expr* beta  = coeff_(c.lin_base, x, 1);
+    Expr* alpha = coeff_(c.lin_base, x, 0);
+    bool linear = free_of_x(alpha, x) && free_of_x(beta, x) &&
+                  !(beta->type == EXPR_INTEGER && beta->data.integer == 0) &&
+                  is_zero_simp_(Plus_(cp(c.lin_base),
+                      Times_(mk_int(-1), Plus_(cp(alpha), Times_(cp(beta), cp((Expr*)x))))));
+    Expr* e = cp(c.lin_exp);
+    expr_free(c.lin_base); expr_free(c.lin_exp);
+    if (!linear) {
+        expr_free(c.aexp); expr_free(c.bexp); expr_free(c.C);
+        expr_free(alpha); expr_free(beta); expr_free(e);
+        return NULL;
+    }
+    Expr* A = simp(Plus_(c.aexp, mk_int(1)));   /* a = aexp + 1 */
+    Expr* B = simp(Plus_(c.bexp, mk_int(1)));   /* b = bexp + 1 */
+
+    /* Gates: a>0, b>0, alpha>0, alpha+beta>0 (base positive on [0,1]). */
+    bool gate = prove_ref(mk_fn2("Greater", cp(A), mk_int(0)), assumptions) &&
+                prove_ref(mk_fn2("Greater", cp(B), mk_int(0)), assumptions) &&
+                prove_ref(mk_fn2("Greater", cp(alpha), mk_int(0)), assumptions) &&
+                prove_ref(mk_fn2("Greater", Plus_(cp(alpha), cp(beta)), mk_int(0)), assumptions);
+    if (!gate) {
+        expr_free(c.C); expr_free(A); expr_free(B); expr_free(alpha); expr_free(beta); expr_free(e);
+        return NULL;
+    }
+    /* value = C alpha^e Beta[a,b] Hypergeometric2F1[-e, a, a+b, -beta/alpha]. */
+    Expr* two_f1 = mk_fn4b("Hypergeometric2F1",
+        Times_(mk_int(-1), cp(e)), cp(A), Plus_(cp(A), cp(B)),
+        Times_(mk_int(-1), Times_(cp(beta), Pow_(cp(alpha), mk_int(-1)))));
+    Expr* val = Times_(c.C, Times_(Pow_(cp(alpha), cp(e)),
+                    Times_(Beta_(cp(A), cp(B)), two_f1)));
+    expr_free(A); expr_free(B); expr_free(alpha); expr_free(beta); expr_free(e);
+    val = simp2(val, assumptions);
+    if (!val || mentions_nonfinite(val)) { if (val) expr_free(val); return NULL; }
+    return val;
 }
 
 /* ---- Sin^m Cos^n over [0, c] -------------------------------------------- */

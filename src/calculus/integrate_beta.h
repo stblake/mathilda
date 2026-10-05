@@ -36,6 +36,12 @@
  * assumptions may be NULL.  Returns a fresh value or NULL to fall through. */
 Expr* integrate_beta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
 
+/* Euler integral x^(a-1)(1-x)^(b-1)(alpha+beta x)^e on [0,1] -> the Euler
+ * representation alpha^e Beta[a,b] Hypergeometric2F1[-e, a, a+b, -beta/alpha].
+ * Requires the extra linear factor; pure Beta is integrate_beta_try's.  Borrowed
+ * args; assumptions may be NULL.  Returns a fresh value or NULL to fall through. */
+Expr* integrate_euler_2f1_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
+
 /* Sin^m Cos^n family over [0, Pi/2], [0, Pi], [0, 2 Pi].  Borrowed args;
  * assumptions may be NULL.  Returns a fresh value or NULL to fall through. */
 Expr* integrate_trigpower_try(Expr* f, Expr* x, Expr* a, Expr* b,

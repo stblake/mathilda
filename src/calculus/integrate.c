@@ -47,6 +47,7 @@
 #include "integrate_dirac.h"
 #include "integrate_diffunderint.h"
 #include "integrate_ramanujan.h"
+#include "integrate_intrep.h"
 #include "intrat.h"
 #include "integrate_risch_transcendental.h"
 #include "risch_canonical.h"
@@ -976,6 +977,7 @@ typedef enum {
     METHOD_SINPOW_MONO,      /* definite-only: Sin[r x]^k / x^m on [0,Inf) */
     METHOD_OSC_POWER,        /* definite-only: Cos/Sin[b x^n] on [0,Inf) */
     METHOD_RATIONAL_LOG,     /* definite-only: R(x) Log[x]^n on [0,Inf) */
+    METHOD_INTEGRAL_REP,     /* definite-only: special-function integral reps (half-line) */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -1010,6 +1012,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "RationalLog") == 0) return METHOD_RATIONAL_LOG;
     if (strcmp(s, "RamanujanMasterTheorem") == 0 || strcmp(s, "Mellin") == 0)
         return METHOD_RAMANUJAN;
+    if (strcmp(s, "IntegralRepresentation") == 0) return METHOD_INTEGRAL_REP;
     return METHOD_INVALID;
 }
 
@@ -1106,7 +1109,8 @@ static bool definite_parse_method(Expr* opt, const char** name,
         m == METHOD_DIFF_UNDER_INT || m == METHOD_RAMANUJAN ||
         m == METHOD_SYMMETRY || m == METHOD_BETA ||
         m == METHOD_TRIG_POWER || m == METHOD_SINPOW_MONO ||
-        m == METHOD_OSC_POWER || m == METHOD_RATIONAL_LOG) return true;
+        m == METHOD_OSC_POWER || m == METHOD_RATIONAL_LOG ||
+        m == METHOD_INTEGRAL_REP) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -1319,9 +1323,13 @@ static Expr* integrate_definite(Expr* res) {
              * declines (NULL, cheaply: the interval/shape check is first) on a
              * shape it does not own, so FTC below still owns the integer-power
              * and genuinely elementary cases. */
-            /* Euler-Beta: x^(k-1)(1-x)^(l-1) [Log weights] on [0,1]. */
+            /* Euler-Beta: x^(k-1)(1-x)^(l-1) [Log weights] on [0,1]; then the
+             * Euler->Beta*2F1 generalization with one extra linear factor
+             * (alpha+beta x)^e. */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
                 r = integrate_beta_try(cur, x, a, b, assumptions);
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
+                r = integrate_euler_2f1_try(cur, x, a, b, assumptions);
             /* Sin^m Cos^n over a canonical trig interval ([0,Pi/2], [0,Pi], [0,2Pi]). */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
                 r = integrate_trigpower_try(cur, x, a, b, assumptions);
@@ -1332,6 +1340,15 @@ static Expr* integrate_definite(Expr* res) {
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN ||
                        mech == METHOD_OSC_POWER))
                 r = integrate_ramanujan_try(cur, x, a, b, assumptions);
+            /* Integral-representation recognizer: a half-line integrand that IS a
+             * classical integral representation of a special function
+             * (Laplace-Bessel, Bessel-K, Airy) — no elementary antiderivative, so
+             * the Mellin/residue/FTC families do not close it, but the closed form
+             * is immediate once the shape matches and its convergence gate is
+             * proved.  After Ramanujan (the general Mellin gets first crack), before
+             * FTC/DiffUnderInt. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_INTEGRAL_REP))
+                r = integrate_intrep_try(cur, x, a, b, assumptions);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
              * parameter-differentiation mechanism, the Ramanujan/Mellin
              * mechanism, the symmetry mechanism, or a Beta mechanism.  Runs
@@ -1341,7 +1358,7 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_RAMANUJAN && mech != METHOD_SYMMETRY &&
                 mech != METHOD_BETA && mech != METHOD_TRIG_POWER &&
                 mech != METHOD_SINPOW_MONO && mech != METHOD_OSC_POWER &&
-                mech != METHOD_RATIONAL_LOG)
+                mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP)
                 r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
                                                     principal_value);
             /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
@@ -2211,6 +2228,7 @@ void integrate_init(void) {
      * cascade, after residue and Newton-Leibniz. */
     integrate_diffunderint_init();
     integrate_ramanujan_init();
+    integrate_intrep_init();
 
     /* Recursive transcendental Risch integrator:
      * Integrate`RischTranscendental.  Correct by construction. */
