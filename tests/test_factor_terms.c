@@ -206,6 +206,32 @@ static void test_factorterms_rational_complex(void) {
 }
 
 /* ------------------------------------------------------------------- */
+/* Regression: the content of a NONZERO expression is never 0.          */
+/*                                                                      */
+/* An upstream Together that fails to clear a denominator can leave a   */
+/* Laurent term (e.g. b^-1) inside the numerator; the nonnegative-      */
+/* degree coefficient extraction then sees no monomials and formerly    */
+/* returned a 0 content, which multiplied the whole FactorTerms result  */
+/* down to a spurious 0.  That silently poisoned Simplify (which trusts */
+/* a transform's literal 0 and early-exits), e.g.                       */
+/* Simplify[(I - I Exp[-a b])/b^2] -> 0 (a WRONG answer).  Needs >= 2    */
+/* distinct function-head variables + a Gaussian (I) coefficient + a    */
+/* symbolic denominator to trigger.                                     */
+/* ------------------------------------------------------------------- */
+static void test_factorterms_no_spurious_zero(void) {
+    /* FactorTerms must not fabricate a 0 from a nonzero input. */
+    run_str("FactorTerms[I/b - I Cosh[c]/b + I Sinh[c]/b] === 0", "False");
+    run_str("FactorTerms[I/b - I Cosh[c]/b + I Cosh[d]/b] === 0", "False");
+    run_str("FactorTerms[I/b - I Cos[c]/b + I Sin[c]/b] === 0", "False");
+    /* ...and it preserves the value (difference simplifies to 0). */
+    run_str("Simplify[FactorTerms[I/b - I Cosh[c]/b + I Sinh[c]/b] "
+            "- (I - I Cosh[c] + I Sinh[c])/b]", "0");
+    /* The downstream Simplify silent-wrong-answer this guards against. */
+    run_str("Simplify[(I - I Exp[-a b])/b^2] === 0", "False");
+    run_str("Simplify[(I - I Exp[-c])/b] === 0", "False");
+}
+
+/* ------------------------------------------------------------------- */
 /* Attributes -- sanity check.                                          */
 /* ------------------------------------------------------------------- */
 static void test_factorterms_attributes(void) {
@@ -225,6 +251,7 @@ int main(void) {
     TEST(test_factorterms_var_list);
     TEST(test_factorterms_threading);
     TEST(test_factorterms_rational_complex);
+    TEST(test_factorterms_no_spurious_zero);
     TEST(test_factorterms_attributes);
 
     printf("All FactorTerms / FactorTermsList tests passed!\n");

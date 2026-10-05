@@ -271,6 +271,31 @@ static void test_fourier_symbolic(void) {
     check_eq("Chop[N[(Integrate[Cos[x]/(x^2+a^2)^2, {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0, Method -> \"Residue\"] "
              "- Pi (1 + a) E^(-a)/(2 a^3)) /. a -> 7/5]]", "0");
+
+    /* Case In[14] -- a removable axis pole at x=0 coexisting with an enclosed
+     * pole, symbolic parameters.  This FORMERLY RETURNED A WRONG 0: the Sin
+     * extraction conjugated the contour value via ReplaceAll[I -> -I] (which
+     * leaves a stored Complex[0,-1] atom untouched), so the enclosed-pole term
+     * cancelled against itself; and FactorTerms fabricated a 0 numerical
+     * content from a Together that left a b^-1 in the numerator.  The closing
+     * now uses ComplexExpand[Im[...]] and FactorTerms never returns a 0 content
+     * for a nonzero input.  Correct value (Pi/b^2)(1 - E^(-a b)). */
+    check_eq("Integrate[Sin[a x]/(x (x^2+b^2)), {x, -Infinity, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]",
+             "(Pi (1 - E^(-a b)))/b^2");
+    check_eq("With[{r = Integrate[Sin[a x]/(x (x^2+b^2)), {x, -Infinity, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[(r - Pi (1 - E^(-a b))/b^2) /. {a -> 1, b -> 1}]]}]",
+             "{True, 0}");
+
+    /* Case In[15] -- complex-exponential kernel over a quadratic with two
+     * upper-half-plane poles at I b +- Sqrt[c-b^2].  Value
+     * -2 Pi E^(-a b) Sin[a Sqrt[c-b^2]]/Sqrt[c-b^2] (non-vacuous numeric pin). */
+    check_eq("With[{r = Integrate[Exp[I a x]/(x^2 - 2 I b x - c), {x, -Infinity, Infinity}, "
+             "Assumptions -> a > 0 && b > 0 && c > b^2, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], "
+             "Chop[N[(r + 2 Pi Exp[-a b] Sin[a Sqrt[c - b^2]]/Sqrt[c - b^2]) "
+             "/. {a -> 1, b -> 1, c -> 4}]]}]", "{True, 0}");
 }
 
 /* -------------------------------------------------------------------------

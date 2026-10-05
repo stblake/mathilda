@@ -1395,6 +1395,12 @@ not depend on a given set of variables.
   is not extracted as a Gaussian unit; the integer GCD `5` is returned
   instead, with the leading factor of `I` left inside the residue. The
   resulting factorization is mathematically equivalent.
+- The content of a nonzero input is always a unit — never `0`. If an upstream
+  `Together` leaves a Laurent term (e.g. `b^-1`) inside the numerator, the
+  nonnegative-degree coefficient extraction sees no monomials; the content is
+  then taken as `1` (nothing is factored, the residue is intact) rather than a
+  spurious `0`. (A `0` content formerly multiplied the whole result to `0` and
+  silently poisoned `Simplify`, which trusts a transform's literal `0`.)
 
 ```mathematica
 In[1]:= FactorTerms[3 + 6x + 3x^2]

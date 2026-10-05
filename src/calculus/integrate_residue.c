@@ -212,18 +212,6 @@ static Expr* res_powerclean(Expr* e) {
     return e;
 }
 
-/* Complex conjugate of J.  In symbolic-parameter mode the parameters are real
- * and the imaginaries are the explicit unit I (after res_powerclean), so
- * conjugation is J with I -> -I; the symbolic Conjugate head would not reduce.
- * Outside that mode, the ordinary Conjugate head (numeric params resolve it). */
-static Expr* res_conjugate(Expr* J) {
-    if (g_inst)
-        return eval_take(mk_fn2("ReplaceAll", expr_copy(J),
-                                mk_fn2("Rule", mk_sym(SYM_I),
-                                       mk_fn2("Times", mk_int(-1), mk_sym(SYM_I)))));
-    return mk_fn1("Conjugate", expr_copy(J));
-}
-
 /* Bound classification: 0 = symbolic/complex, 1 = finite (value in *v), 2 = +Inf,
  * 3 = -Inf. */
 static int res_bound(Expr* e, double* v) {
@@ -695,20 +683,22 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
     expr_free(S);
     if (!J) return NULL;
 
-    /* Kernel-specific answer: Exp -> J, Cos -> Re[J], Sin -> Im[J], via the exact
-     * Conjugate identities (symbolic Re/Im do not reduce Pi/E etc.). */
+    /* Kernel-specific answer: Exp -> J, Cos -> Re[J], Sin -> Im[J].  ComplexExpand
+     * treats every free parameter as real (which they are here -- the kernel
+     * frequency and the rational factor's parameters), so it reduces Re[J]/Im[J]
+     * to a clean closed form and correctly conjugates BOTH the explicit +I and
+     * any compact -I (Complex[0,-1]) atoms.  A bare symbolic Re/Im would not
+     * reduce Pi/E; the earlier `Conjugate` with an `I -> -I` ReplaceAll shortcut
+     * flipped only the interned +I and silently dropped the enclosed-pole term
+     * whenever an axis half-residue (mixed +I / -I sum) was also present --
+     * e.g. Integrate[Sin[a x]/(x(x^2+b^2)), {x,-Inf,Inf}] collapsed to 0. */
     Expr* value;
     if (kind == KERN_EXP) {
         value = expr_copy(J);
     } else if (kind == KERN_COS) {
-        value = ev1("Simplify",
-                    mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)),
-                           mk_fn2("Plus", expr_copy(J), res_conjugate(J))));
+        value = ev1("Simplify", ev1("ComplexExpand", mk_fn1("Re", expr_copy(J))));
     } else { /* KERN_SIN */
-        Expr* diff = mk_fn2("Plus", expr_copy(J),
-                            mk_fn2("Times", mk_int(-1), res_conjugate(J)));
-        value = ev1("Simplify", mk_fn2("Times", diff,
-                        mk_fn2("Power", mk_fn2("Times", mk_int(2), mk_sym(SYM_I)), mk_int(-1))));
+        value = ev1("Simplify", ev1("ComplexExpand", mk_fn1("Im", expr_copy(J))));
     }
     expr_free(J);
 

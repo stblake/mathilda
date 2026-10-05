@@ -2173,7 +2173,11 @@ recognizers:
   at `0`) contributes a **half residue** `π i · Res`, the indented-contour value,
   giving `∫ Sin[x]/x = π`.  A *genuine* axis pole (kernel nonzero there, e.g.
   `Cos[x]/x`) makes the ordinary integral diverge and returns unevaluated —
-  plain `Integrate` does not compute a principal value.
+  plain `Integrate` does not compute a principal value.  With **symbolic
+  parameters** the axis half-residue and an enclosed pole may carry opposite
+  signs of `I`; the `Re`/`Im` extraction uses `ComplexExpand` (parameters are
+  real) so both are conjugated correctly, e.g.
+  `∫ Sin[a x]/(x (x²+b²)) = (π/b²)(1 − e^{−a b})` for `a, b > 0`.
 
 A one-line **half-line** add-on covers even integrands:
 `∫₀^∞ f = ½ ∫₋∞^∞ f`.  Three further recognizers handle branch-cut and

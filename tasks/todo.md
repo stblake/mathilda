@@ -1,144 +1,59 @@
-# Residue method: general algorithmic extensions
+# Residue method: second round of general algorithmic extensions
 
 Plan: `~/.claude/plans/pasted-content-id-e7e1-the-following-humming-bachman.md`
 
-Policy: tests stay correct-by-construction (closed-form pins; no committed
-NIntegrate). I verify each case numerically in the REPL during dev. Bump
-`src/version.h` + tag per substantive phase. Route warnings via `mth_message`.
+Policy: correct-by-construction tests (exact string or `{FreeQ[r,Integrate],
+Chop[N[r-ref]]}`→`{True,0}`; no committed NIntegrate). Verify each case against
+NIntegrate during dev. Bump `src/version.h` + tag per substantive phase. Route
+warnings via `mth_message`/Quiet.
 
-## Phase 0 — PV plumbing (prereq)  [DONE v0.275]
-- [x] Thread parsed `principal_value` into `integrate_residue_try` (new 7th param,
-      carried via file-scope g_pv saved/restored per frame). integrate.c passes it;
-      ContourResidue builtin passes false; even-half-line recursion inherits g_pv.
+All reference values twice-confirmed vs NIntegrate (see plan triage table).
 
-## Phase 1 — Tier A correctness (FOUNDATIONAL)
-- [x] Baseline-repro: Case 2 wrong; `Residue[z^(1/3)/(1+z^2)^2,{z,I}]` → 0 wrong
-- [x] `series.c`: symbolic-centre `pad` scales with pole multiplicity (`series_max_neg_power`)
-- [x] `residue.c`: two-order agreement loop; dropped-pole retry via shifted form
-- [x] Audit Case 1 (matches NIntegrate); symbolic double/triple + z^(1/3)/z^(2/3) tests
-- [x] version 0.268; docs (Residue Method para) + changelog
-- [~] FULL test suite running (dsolve corpus slow); then commit + tag v0.268
+## Phase 1 — Fourier conjugation correctness (In[14] WRONG=0, highest severity)  [DONE v0.277]
+- [x] TWO bugs found. (a) Fourier closing: `ReplaceAll[I->-I]` dropped stored -I atoms
+      with a mixed-sign (axis+enclosed) residue sum -> switched Cos/Sin extraction to
+      `ComplexExpand[Re/Im[J]]`, removed res_conjugate. (b) CORE: `FactorTerms` returned
+      content 0 from a nonzero Laurent input (b^-1 left by a failed Together), poisoning
+      Simplify (Simplify[(I-I Exp[-a b])/b^2]->0). Fixed facpoly_factorterms.inc: content
+      of nonzero is a unit (1), never 0.
+- [x] Full Fourier regression green (In[2], x Sin/(x²+b²), Sin[x]/x, Sin[x]/(x(x²+1)),
+      Cos/(x²+b²)^2); FactorTerms/FullSimplify/Together/ratcanon/limit suites green.
+- [x] Pins: In[14] (Pi(1-E^(-a b)))/b^2 (exact + non-vacuous); In[15] numeric pin;
+      FactorTerms no-spurious-zero regression. version 0.277 + docs + changelog + tag
 
-### Phase 2 entry findings (from REPL prototyping, current binary)
-- Keyhole-log algorithm CONFIRMED: `I_m = Limit[D[G(q),{q,m}], q->a]`, G=∫x^q R.
-  Case 4 via stripped-Beta derivative gives exactly -Sqrt[3]Pi^2/18.
-- CANNOT reuse `Integrate[x^q R]` builtin: wraps in ConditionalExpression (breaks
-  D), and non-power denominators (Case 5, x^2+x+1) don't produce a Beta. Must
-  build G(q) from the residue sum inside mellin_core, symbolic q, then D + Limit.
-- Symbolic-exponent mellin currently DECLINES because `mellin_core` calls
-  `param_interval(s)` with s=a+1 (a Plus, not a bare param) -> unbounded ->
-  convergence gate rejects. FIX: derive s-interval from `param_interval(p)+1`.
-  (g_inst IS built; `Inequality[-1,Less,a,Less,2]` is absorbed fine.)
+## Phase 2 — Symbolic-param plumbing robustness (In[5]; enables 9/18)
+- [ ] build_instantiation per-param bounds (Element[_,Reals]/Re[s]>0 don't nuke others)
+- [ ] Refine-based strict-sign convergence gate (shared helper); replace Gaussian interval gate
+- [ ] Pin In[5] ½√(π/a)e^(-b²/4a) on {0,∞}. version + docs + changelog + tag
 
-## Phase 2 — Tier B keyhole-log + PV axis pole
-- [x] symbolic-exponent mellin fix (param_interval(p)+1): **Case 12 solved**
-      (`x^a/(x+1)^3` -> `Pi a(1-a)/(2 Sin[Pi a])`), Case 3 still OK
-- [x] ALGORITHM VALIDATED (REPL): a=0 keyhole via (log z)^(k+1) contour +
-      triangular solve from residues only. Case 4 -> -Sqrt[3]Pi^2/18,
-      Case 5 -> 3.5361. (The differentiate-G(q) route is fragile for m=2 — DO
-      NOT use it; the (log)^(k+1) contour is the robust method.)
-- [x] IMPLEMENT `residue_family_mellin_log` (a=0 / integer p): klog branch,
-      S_{k+1}=Sum Res[(klog z)^(k+1) R], triangular solve; Cases 4, 5 DONE
-      (simple-pole shortcut for algebraic locations; order-2 via shifted form)
-- [x] FIXED self-inflicted perf regression: param_interval s-vs-p asymmetry broke
-      rectangular family -> 120s cascade hang (A/B caught it). Suite back to 2.1s.
-- [x] v0.269, docs + changelog + lesson; tests green; COMMIT + tag
-- [x] non-integer-a + log (Case 14): `keyhole_log_general_a` with (1-e^{2πia})
-      triangular system. `Sqrt[x]Log[x]/(x^2+1)^2 -> Pi(Pi-4)/(8 Sqrt[2])`. v0.270
-- [x] ROOT-CAUSE FIX (v0.270): `Arg` now evaluates on root-of-unity constants
-      (`Arg[(-1)^(1/6)]->Pi/6`, incl. imaginary-unit + negative-base factors) in
-      `src/complex.c`. This un-declined Cases 4 & 4b (were returning unevaluated,
-      so their committed `Chop[N[...]]` tests passed VACUOUSLY via the N[]
-      NIntegrate fallback). a0_keyhole_log closing switched from
-      Simplify[RootReduce[Re[.]]] (buried poles in Root objects Arg couldn't
-      touch) to Simplify[ComplexExpand[.]]. C4=-Sqrt[3]Pi^2/18, C4b=-Sqrt[2]Pi^2/16
-      now CLEAN. Tests rewritten to assert FreeQ[r,Integrate] (non-vacuous).
-- [x] PV indentation for axis pole (Case 18)  [DONE v0.275]: a0_keyhole_log admits a
-      SIMPLE axis pole as the average of the two keyhole-branch residues
-      (1/2 Res(R,z0)[(Log z0)^k + (Log z0+2Pi i)^k]). Removable z0=1 (Log 1=0) needs no
-      option; genuine z0!=1 needs PrincipalValue->True. C18 Log[x]/(x^3-1)=4Pi^2/27;
-      Log[x]/(x^2-4) PV = Pi^2/8. Hand-derived + NIntegrate symmetric-exclusion checked.
+## Phase 3 — Assumption-aware closing simplification (In[3], In[7], In[17])
+- [ ] res_close_positive helper (PowerExpand + Arg/Abs/Log-of-I·pos + Sqrt[-c²]) under g_all_pos
+- [ ] wire into a0_keyhole_log, keyhole_log_general_a, close_algebraic/half-line; res_powerclean poles
+- [ ] Pins: In[17] π Log[a]/(2a); In[7] π/(2ab(a+b)); In[3] clean. version + docs + changelog + tag
 
-## Phase 3 — Tier C parametrized contour + essential-sing  [DONE v0.271]
-- [x] `residue_family_contour_param` (t->-I Log[u], G=F/(I u), 2 Pi i Sum Res
-      inside |u|<1; finite-scalar gate since value is complex); `res_ess0`
-      (w^1 coeff of Series[G/.u->1/w,{w,0,1}]). Gated on Exp presence; wired
-      after residue_family_trig in the full-period branch.
-- [x] Cases 19 (2 Pi I), 20 (2 Pi I(16E-128/3)), 22 (0); Case 9 delivered via
-      the parametrized spelling (Case 19) -- literal Circle contour stays OOS.
-      test_contour_param (FreeQ+Chop non-vacuous); docs + changelog; v0.271.
-      Fixed a u=0 double-count (denominator root 0 vs the always-added 0 cand).
+## Phase 4 — Periodic-strip hyperbolic rectangle + scale normalization (In[4],18,21,12)
+- [ ] residue_family_hyperbolic_strip (quasi-period shift, geometric 1/(1-λ))
+- [ ] scale-normalization pre-step (u = c x) → In[12] via existing a=1 route
+- [ ] Pins: In[4] Sec[a/2]; In[18] (π/b)Sech[πa/2b]; In[21] (π/b)Sec[πa/2b]; In[12] π²/4a². version+docs+tag
 
-## Phase 4 — Tier D unit-circle order-n  [DONE v0.272]
-- [x] build_instantiation FindInstance fallback for COUPLED assumptions (a>b>0 left
-      `a` bounded only by `b` -> was declining). Fixes order-1 symbolic trig.
-- [x] residue_family_trig symbolic branch: pole_order (counts vanishing derivatives
-      at the instantiated root, since solve_roots dedups multiplicity) + analytic-part
-      derivative residue (fast for radical poles; Series is >30s and form-sensitive).
-      Case 16 1/(a+b Cos)^3 -> Pi(2a^2+b^2)/(a^2-b^2)^(5/2); order-1 -> 2Pi/Sqrt[a^2-b^2].
-      test_trig_symbolic + order-2 numeric regression; docs + changelog; v0.272.
+## Phase 5 — Mellin after power substitution (In[9], In[10])
+- [ ] residue_family_mellin_power: u=x^ν → (1/ν)M[f](μ/ν), f∈{Exp,Sin,Cos}
+- [ ] Pins: In[9] ½a^(-s/2)Γ(s/2); In[10] ½Γ((p+1)/2)Sin[π(p+1)/4]. version+docs+tag
 
-## Phase 5 — Tier E special contours
-- [x] `residue_family_chebyshev_weight` (Case 8) v0.274: R(x)/Sqrt[1-x^2] on (-1,1),
-      x=Cos[t] -> (1/2) trig-family. FIXES WRONG SIGN (NL gave -Pi/Sqrt2; correct +Pi/Sqrt2).
-      Runs before NL so it pre-empts the bad antiderivative. test_chebyshev_weight.
-- [~] Case 10 (sin(x^3)): ALREADY correct via integrate_fresnel.c (plain Integrate =
-      Pi/(3 Sqrt[3] Gamma[2/3]) = Gamma[4/3]/2). Residue-path gap is cosmetic -> SKIP.
-- [x] Case 7 x/Sinh = Pi^2/2  [DONE v0.275]: NO new family -- generalized
-      residue_family_rectangular. After w=Exp[x], a Sinh/Cosh/... of Log[w] rationalises
-      under TrigToExp+Together and a polynomial x^k becomes (Log w)^k, so x/Sinh[x] ->
-      2 Log[w]/(w^2-1), routed to residue_family_mellin_log (removable w=1 pole). Pure-Exp
-      strip path untouched (gated on a hyperbolic head). Works Automatic + pinned.
+## Phase 6 — Sector symbolic powers (In[19]) + generalized Beta (In[16])
+- [ ] extend residue_family_sector (symbolic num/den exponents, Refine convergence)
+- [ ] residue_family_beta: x^a/(x+b)^c → b^(a+1-c)Γ(a+1)Γ(c-a-1)/Γ(c)
+- [ ] Pins: In[19], In[16]. version+docs+tag
 
-## Phase 6 — Case 11 Mellin–Barnes vertical line  [DONE v0.273]
-- [x] CORE fix (src/plus.c classify_plus_term): a Times[Complex[0,b],Infinity]
-      (non-real coeff) is a DIRECTED infinity, not real ±Infinity -> `1/2 - I Infinity`
-      stays a Plus (was collapsing to Infinity, so the limits died before Integrate).
-- [x] is_vertical_line + residue_family_mellin_barnes: const*Gamma[A+Bs]*X^(P+Qs),
-      close left, 2 Pi i Sum_k Res at s=-(A+k)/B (Sum closes the series).
-      Case 11 Gamma[s]x^-s -> 2 Pi I e^-x (was silent 0!); Gamma[2s]x^-s -> I Pi e^-Sqrt[x].
-      test_mellin_barnes + test_directed_infinity; docs + changelog; v0.273.
-      NOTE: declining vertical-line integrals (e.g. 1/s) emit a cosmetic
-      "0 Infinity" message from a downstream cascade stage -- harmless, out of scope.
+## Phase 7 — Trig combined b Cos+c Sin + warning-leak fix (In[11])
+- [ ] amplitude-phase pre-normalization (β Cos+γ Sin → R Cos[θ-φ]); shift θ→θ+φ
+- [ ] Quiet the internal N-probe in res_reim/apply_inst (no Power::infy leak)
+- [ ] Pin In[11] 2πa/(a²-b²-c²)^(3/2). version+docs+tag; make check-messages
 
-## Phase 7 — Tier F hard tail
-- [x] Gaussian-Fourier recognizer (15)  [DONE v0.276]: residue_family_gaussian --
-      shifted-rectangle (entire E^(quadratic) kernel). TrigToExp+Expand -> Sum of
-      E^(linear); complete the square per term: Int e^(A x^2+B x+D) = Sqrt[-Pi/A]
-      e^(D-B^2/(4A)), Re A<0 (sign verified over the guaranteed region). Runs FIRST
-      on the whole-line branch (gated on contains_exp_of_var), so it also fixes the
-      HANG (was spinning the nonelem antiderivative search). C15 E^-x^2 Cos[2ax] =
-      Sqrt[Pi]e^-a^2 (symbolic + concrete + Automatic). test_gaussian.
-- [x] 17 & 21 documented honest declines  [DONE]: both decline CLEANLY under strict
-      Method->"Residue" (no hang, no wrong value). C17 Log[x]/Cosh[x] = Mellin-of-sech
-      differentiated at s=1 -> Dirichlet-beta derivative (Gamma[1/4] constant), NOT a
-      residue sum; w=Exp[x] fails (Log x -> Log[Log w]). C21 Hankel fragment ambiguous/
-      divergent. Pinned as negative controls (test_honest_declines) + docs note. Tests-
-      and-docs-only (no src change) -> NO version bump/tag per CLAUDE.md.
+## Phase 8 — Hard tail
+- [ ] In[13] (Cos[a x]-Cos[b x])/x²: best-effort multi-frequency Fourier diff; else decline
+- [ ] In[20] arctan: honest decline (parametric-diff, not residue); pin negative control
+- [ ] docs note + tests. (bump only if src behavior changed)
 
 ## Review
-
-ALL probe-set cases resolved (22/22 accounted for). Session v0.275–v0.276 + a
-tests/docs commit closed the remaining tail after the prior v0.268–v0.274 work:
-
-- **v0.275** PV plumbing (Phase 0) + keyhole-log axis pole (Case 18) + hyperbolic
-  rectangular reduction (Case 7). PrincipalValue threaded into
-  integrate_residue_try (g_pv). a0_keyhole_log admits a simple axis pole as the
-  average of the two keyhole-branch residues; removable z0=1 needs no option.
-  residue_family_rectangular reduces x^k/Sinh x via TrigToExp to the keyhole-log.
-    C18 Log[x]/(x^3-1) = 4Pi^2/27;  C7 x/Sinh[x] = Pi^2/2;  (PV) Log[x]/(x^2-4) = Pi^2/8.
-- **v0.276** Gaussian / shifted-rectangle (Case 15) -- residue_family_gaussian.
-  TrigToExp -> sum of pure Gaussians, complete the square. Runs FIRST on the
-  whole-line branch (fixes the HANG on symbolic a as well as the concrete miss).
-    C15 Exp[-x^2]Cos[2ax] = Sqrt[Pi]e^-a^2.
-- **(no bump)** Cases 17 (Log[x]/Cosh[x]) and 21 (Hankel) are documented honest
-  declines -- outside the residue repertoire, decline cleanly, pinned as negative
-  controls (test_honest_declines).
-
-Verification: all per-case closed forms hand-derived and/or NIntegrate-checked
-during dev (C18 worked by hand to 4Pi^2/27; PV Pi^2/8 cross-checked vs symmetric-
-exclusion Cauchy + the x->a^2/x scaling identity; C7 vs known Pi^2/2; C15 vs
-Sqrt[Pi]e^-a^2 at a=7/5). 26 integrate/series/limit/gamma/erf suites green after
-each phase; residue + core suites green at HEAD. No regressions.
-
-Deferred (non-probe housekeeping): MEMORY.md compaction (hook wants <17.1KB).
+(filled at end)

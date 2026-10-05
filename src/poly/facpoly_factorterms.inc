@@ -56,7 +56,16 @@ static Expr* ft_content_wrt_set(Expr* poly,
     }
 
     expr_free(expanded);
-    return g ? g : expr_new_integer(0);
+    /* `poly` is nonzero here (the zero case returned at the top).  If no
+     * monomial coefficient was found, the input is not a genuine polynomial in
+     * the S variables -- e.g. it carries negative powers (a Laurent term such
+     * as b^-1 left behind when an upstream Together failed to clear a
+     * denominator), which the nonnegative-degree coefficient extraction cannot
+     * see.  The content of a nonzero expression is a unit, NEVER 0; returning 0
+     * here made FactorTerms multiply its factor list down to a spurious 0 (a
+     * silent wrong answer, e.g. Simplify[(I - I Exp[-a b])/b^2] -> 0).  Return
+     * the unit content 1 so nothing is factored out and the residue is intact. */
+    return g ? g : expr_new_integer(1);
 }
 
 /* Divide `poly` by `content` in K[all_vars]. Falls back to symbolic     */
