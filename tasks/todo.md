@@ -31,10 +31,14 @@ All reference values twice-confirmed vs NIntegrate (see plan triage table).
 - [x] Pins: In[5] whole/half + Element[b,Reals] (test_gaussian); Exponent nonflat_times
       (test_exponent). version 0.278 + docs + changelog + tag. Suites green.
 
-## Phase 3 — Assumption-aware closing simplification (In[3], In[7], In[17])
-- [ ] res_close_positive helper (PowerExpand + Arg/Abs/Log-of-I·pos + Sqrt[-c²]) under g_all_pos
-- [ ] wire into a0_keyhole_log, keyhole_log_general_a, close_algebraic/half-line; res_powerclean poles
-- [ ] Pins: In[17] π Log[a]/(2a); In[7] π/(2ab(a+b)); In[3] clean. version + docs + changelog + tag
+## Phase 3 — Assumption-aware closing simplification  [DONE v0.279, partial]
+- [x] res_close_positive helper (Simplify[Refine[Simplify[PowerExpand[e]],g_assume]])
+      under g_inst&&g_all_pos; wired into close_algebraic AFTER RootReduce.
+- [x] In[7] 1/((x²+a²)(x²+b²)) on {0,∞} -> Pi/(2ab(a+b)) CLEAN (test_rational_symbolic).
+- [~] In[17] Log[x]/(x²+a²) and In[3] x^a Log[x]/(1+x²)²: DOCUMENTED correct-but-unsimplified.
+      Blockers are Simplify/Refine gaps (Arg[I a] doesn't reduce to Pi/2 for symbolic a>0;
+      (1-E^(2πia)) doesn't collapse), NOT residue-method gaps. Not forced per plan. a0/general_a
+      closers left unchanged (res_close_positive wouldn't help -- Arg[I a] survives PowerExpand).
 
 ## Phase 4 — Periodic-strip hyperbolic rectangle + scale normalization (In[4],18,21,12)
 - [ ] residue_family_hyperbolic_strip (quasi-period shift, geometric 1/(1-λ))

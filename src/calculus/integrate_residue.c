@@ -218,6 +218,23 @@ static Expr* res_powerclean(Expr* e) {
     return e;
 }
 
+/* Collapse a correct-but-ugly symbolic closed form when every parameter is known
+ * positive.  Plain Simplify leaves radical surfaces a residue sum throws up --
+ * Sqrt[(a+b)^2 (a-b)^2], Sqrt[-2 a^2], (a^4)^(1/4), ...  PowerExpand exposes them
+ * (Sqrt[-c^2] -> I c, Sqrt[square] -> the base) and Refine under the stored
+ * assumptions discharges the residual sign choices, then a final Simplify
+ * finishes: e.g. the half-line 1/((x^2+a^2)(x^2+b^2)) closes to Pi/(2 a b (a+b)).
+ * A no-op (plain Simplify) outside all-positive symbolic mode or when the raw
+ * assumptions are unavailable.  Consumes e, returns owned. */
+static Expr* res_close_positive(Expr* e) {
+    if (!(g_inst && g_all_pos) || !g_assume) return ev1("Simplify", e);
+    Expr* pe = ev1("Simplify", ev1("PowerExpand", e));
+    if (!pe) return NULL;
+    Expr* rf = eval_take(mk_fn2("Refine", pe, expr_copy(g_assume)));
+    if (!rf) return NULL;
+    return ev1("Simplify", rf);
+}
+
 /* Bound classification: 0 = symbolic/complex, 1 = finite (value in *v), 2 = +Inf,
  * 3 = -Inf. */
 static int res_bound(Expr* e, double* v) {
@@ -400,9 +417,19 @@ static Expr* sum_residues(Expr* T, Expr* v, Expr** poles, int* weight, size_t n)
 
 /* Algebraic closure (families A, C): value = Pi * RootReduce[I * S]. */
 static Expr* close_algebraic(Expr* S) {
+    /* All-positive symbolic parameters: RootReduce re-introduces nested surds
+     * (Sqrt[(a+b)^2 (a-b)^2]) that never collapse, so take the positivity-aware
+     * PowerExpand/Refine close instead -- e.g. the two-conjugate-pair rational
+     * 1/((x^2+a^2)(x^2+b^2)) on [0,Inf) closes to Pi/(2 a b (a+b)). */
     Expr* alg = ev1("RootReduce", mk_fn2("Times", mk_sym(SYM_I), expr_copy(S)));
     if (!alg) return NULL;
-    return ev1("Simplify", mk_fn2("Times", mk_sym(SYM_Pi), alg));
+    Expr* base = ev1("Simplify", mk_fn2("Times", mk_sym(SYM_Pi), alg));
+    /* All-positive symbolic parameters: RootReduce canonicalises the two-pole
+     * sum into nested surds (Sqrt[(a+b)^2 (a-b)^2]) that plain Simplify leaves
+     * standing; the positivity-aware PowerExpand/Refine close collapses them --
+     * e.g. 1/((x^2+a^2)(x^2+b^2)) on [0,Inf) -> Pi/(2 a b (a+b)). */
+    if (g_inst && g_all_pos && base) return res_close_positive(base);
+    return base;
 }
 
 /* Consistency gates on the closed form.  The residue theorem makes each family's

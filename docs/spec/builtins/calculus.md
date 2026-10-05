@@ -2284,10 +2284,20 @@ Convergence/applicability gates (`n > m + 1`, `0 < s < deg`-drop, `c > 0`) are
 verified against the assumption-**guaranteed** interval bounds, not the sample
 point, so an under-constrained problem (e.g. only `n > 0` for the sector family)
 is refused rather than guessed; a parameter the assumptions leave two-sided
-unbounded is likewise refused.  Radical pole locations are `PowerExpand`-cleaned
-under all-positive parameters (`Sqrt[-4 a²] → 2 I a`) so a rational answer closes
-to `π/a` rather than a `Sqrt[-4 a²]` surface, and real-parameter conjugation
-uses `I → −I` (the symbolic `Conjugate` would not reduce).
+unbounded is likewise refused.  A sign gate that an interval cannot settle (a
+compound coefficient like `−a`, or the open bound `a > 0` whose recorded lower
+end is `0`) is proved instead by `Refine[… , assumptions]` — so the Gaussian's
+`Re A < 0` admits `A = −a` under `a > 0`.  Radical pole locations are
+`PowerExpand`-cleaned under all-positive parameters (`Sqrt[-4 a²] → 2 I a`) and
+the closed form of a two-conjugate-pair rational is further collapsed with a
+positivity-aware `PowerExpand`/`Refine` pass (`Sqrt[(a+b)²(a−b)²] → (a+b)(a−b)`),
+so `∫₀^∞ 1/((x²+a²)(x²+b²)) = π/(2 a b (a+b))` rather than a nested-surd surface.
+Real/imaginary parts of a Fourier contour value are taken with
+`ComplexExpand[Re/Im[·]]` (parameters are real), which conjugates both `+I` and a
+stored `−I` atom correctly.  *Not yet simplified* (a `Simplify`/`Refine` gap, not
+a residue-method one): a keyhole-log answer with a symbolic positive parameter can
+retain `Arg[I a]` (e.g. `∫₀^∞ Log[x]/(x²+a²)`, value `π Log[a]/(2a)`) or a
+`(1 − E^(2 I π a))` factor.
 
 ```
 In[0a]:= Integrate[Cos[k x]/(x^2 + a^2), {x, -Infinity, Infinity},

@@ -565,6 +565,19 @@ static void test_rational_symbolic(void) {
              "Pi/a");
     check_eq("Chop[N[(Integrate[1/(x^2+a^2)^2, {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0] - Pi/(2 a^3)) /. a -> 7/5]]", "0");
+
+    /* Case In[7]: two conjugate pole-pairs on [0, Inf).  solve_roots returns the
+     * quartic roots unfactored, and RootReduce canonicalises the residue sum into
+     * nested surds (Sqrt[(a+b)^2 (a-b)^2]) that plain Simplify leaves standing;
+     * the all-positive PowerExpand/Refine close in close_algebraic collapses them
+     * to the clean Pi/(2 a b (a+b)).  (Both with and without a != b.) */
+    check_eq("Integrate[1/((x^2+a^2)(x^2+b^2)), {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0 && a != b, Method -> \"Residue\"]",
+             "(1/2 Pi)/(a^2 b + a b^2)");
+    check_eq("With[{r = Integrate[1/((x^2+a^2)(x^2+b^2)), {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[(r - Pi/(2 a b (a+b))) /. {a -> 1, b -> 2}]]}]",
+             "{True, 0}");
 }
 
 int main(void) {
