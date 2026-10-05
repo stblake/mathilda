@@ -60,10 +60,14 @@ All reference values twice-confirmed vs NIntegrate (see plan triage table).
       can't combine a Re[...] conjunct with a sibling); In[10] x^p Sin[x^2] clean; Cos sibling;
       Sin[x^3]=Gamma[4/3]/2. test_mellin_power. version 0.281 + docs + changelog + tag.
 
-## Phase 6 — Sector symbolic powers (In[19]) + generalized Beta (In[16])
-- [ ] extend residue_family_sector (symbolic num/den exponents, Refine convergence)
-- [ ] residue_family_beta: x^a/(x+b)^c → b^(a+1-c)Γ(a+1)Γ(c-a-1)/Γ(c)
-- [ ] Pins: In[19], In[16]. version+docs+tag
+## Phase 6 — Sector symbolic powers (In[19]) + generalized Beta (In[16])  [DONE v0.282]
+- [x] monomial_split_sym (symbolic numerator exponent); sector gates via res_region_*
+      (c>0, n>0, 0<s<n). In[19] x^(2m)/(1+x^(2n)) = (Pi/2n)Csc[Pi(2m+1)/2n] with n>=m+1.
+      NOTE: strict n>m needs integer-gap (n>m & ints => n>=m+1) Refine lacks -> use n>=m+1.
+      Removed now-unused integer monomial_split.
+- [x] residue_family_beta: x^a/(x+b)^c (non-integer c, branch pt at -b) via x=b t ->
+      b^(a+1-c)Gamma[a+1]Gamma[c-a-1]/Gamma[c]. Tried last on half-line (integer-c -> mellin).
+      In[16] clean. test_beta + In[19] in test_sector. version 0.282 + docs + changelog + tag.
 
 ## Phase 7 — Trig combined b Cos+c Sin + warning-leak fix (In[11])
 - [ ] amplitude-phase pre-normalization (β Cos+γ Sin → R Cos[θ-φ]); shift θ→θ+φ

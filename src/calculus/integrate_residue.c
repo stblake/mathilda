@@ -1387,6 +1387,7 @@ static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b)
 static Expr* residue_family_mellin(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_mellin_power(Expr* f, Expr* x, Expr* a, Expr* b);
+static Expr* residue_family_beta(Expr* f, Expr* x, Expr* a, Expr* b);
 
 /* -------------------------------------------------------------------------
  * Keyhole / Mellin core -- Integrate[v^p R(v), {v, 0, Infinity}].
@@ -2437,35 +2438,34 @@ static Expr* residue_family_gaussian(Expr* f, Expr* x, Expr* a, Expr* b) {
 
 /* Split a monomial C * v^m (C free of v, m a nonnegative integer): on success
  * *C_out is owned, *m_out is the integer exponent.  Returns false otherwise. */
-static bool monomial_split(Expr* num, Expr* v, Expr** C_out, int* m_out) {
-    if (!contains_symbol(num, v)) { *C_out = expr_copy(num); *m_out = 0; return true; }
+/* num = C * v^e with e (possibly SYMBOLIC) x-free; the symbolic-exponent
+ * generalisation of monomial_split used by the sector family (x^(2m) numerator). */
+static bool monomial_split_sym(Expr* num, Expr* v, Expr** C_out, Expr** e_out) {
+    if (!contains_symbol(num, v)) { *C_out = expr_copy(num); *e_out = mk_int(0); return true; }
     if (num->type == EXPR_SYMBOL && num->data.symbol.name == v->data.symbol.name) {
-        *C_out = mk_int(1); *m_out = 1; return true;
+        *C_out = mk_int(1); *e_out = mk_int(1); return true;
     }
     if (head_name_is(num, "Power") && num->data.function.arg_count == 2 &&
         num->data.function.args[0]->type == EXPR_SYMBOL &&
         num->data.function.args[0]->data.symbol.name == v->data.symbol.name &&
-        num->data.function.args[1]->type == EXPR_INTEGER) {
-        *C_out = mk_int(1);
-        *m_out = (int)num->data.function.args[1]->data.integer;
-        return true;
+        !contains_symbol(num->data.function.args[1], v)) {
+        *C_out = mk_int(1); *e_out = expr_copy(num->data.function.args[1]); return true;
     }
     if (head_name_is(num, "Times")) {
-        Expr* C = mk_int(1); int m = -1;
+        Expr* C = mk_int(1); Expr* e = NULL;
         for (size_t i = 0; i < num->data.function.arg_count; i++) {
             Expr* fe = num->data.function.args[i];
             if (!contains_symbol(fe, v)) { C = eval_take(mk_fn2("Times", C, expr_copy(fe))); continue; }
-            if (m >= 0) { expr_free(C); return false; }            /* two v-factors */
-            if (fe->type == EXPR_SYMBOL && fe->data.symbol.name == v->data.symbol.name) m = 1;
-            else if (head_name_is(fe, "Power") &&
-                     fe->data.function.args[0]->type == EXPR_SYMBOL &&
+            if (e) { expr_free(C); expr_free(e); return false; }
+            if (fe->type == EXPR_SYMBOL && fe->data.symbol.name == v->data.symbol.name) e = mk_int(1);
+            else if (head_name_is(fe, "Power") && fe->data.function.args[0]->type == EXPR_SYMBOL &&
                      fe->data.function.args[0]->data.symbol.name == v->data.symbol.name &&
-                     fe->data.function.args[1]->type == EXPR_INTEGER)
-                m = (int)fe->data.function.args[1]->data.integer;
+                     !contains_symbol(fe->data.function.args[1], v))
+                e = expr_copy(fe->data.function.args[1]);
             else { expr_free(C); return false; }
         }
-        if (m < 0) m = 0;
-        *C_out = C; *m_out = m; return true;
+        if (!e) e = mk_int(0);
+        *C_out = C; *e_out = e; return true;
     }
     return false;
 }
@@ -2493,22 +2493,22 @@ static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b) {
     }
     if (!c || !n) { expr_free(num); expr_free(den); return NULL; }
 
-    Expr* C; int m;
-    if (!monomial_split(num, x, &C, &m)) { expr_free(num); expr_free(den); return NULL; }
+    Expr* C; Expr* e;
+    if (!monomial_split_sym(num, x, &C, &e)) { expr_free(num); expr_free(den); return NULL; }
 
-    /* Convergence / positivity gates that must hold over the WHOLE assumed
-     * region (guaranteed interval bounds, not the instantiation point): c > 0
-     * and n > m + 1 (so 0 < s = m+1 < n).  n must also be real. */
-    double clo, chi, nlo, nhi, nim, nre;
-    param_interval(c, &clo, &chi);
-    param_interval(n, &nlo, &nhi);
-    bool okc = clo > RES_TOL;                                   /* c > 0 guaranteed */
-    bool okn = nlo >= (double)(m + 1) &&                        /* n > m+1 guaranteed */
-               res_reim(n, &nre, &nim) && fabs(nim) < RES_TOL;  /* n real */
-    if (!okc || !okn) { expr_free(C); expr_free(num); expr_free(den); return NULL; }
+    /* Convergence / positivity gates over the WHOLE assumed region (symbolic m, n
+     * are allowed -- x^(2m)/(1+x^(2n))): c > 0, n > 0 real, and 0 < s < n with
+     * s = e + 1.  res_region_* proves these from the assumptions (Refine) rather
+     * than only an interval, so symbolic exponents like 2n and 2m+1 are admitted. */
+    Expr* s   = mk_fn2("Plus", expr_copy(e), mk_int(1));
+    Expr* smn = mk_fn2("Plus", expr_copy(s), mk_fn2("Times", mk_int(-1), expr_copy(n)));  /* s - n */
+    bool conv = res_region_pos(c) && res_region_pos(n) &&
+                res_region_pos(s) && res_region_neg(smn);
+    expr_free(smn);
+    if (!conv) { expr_free(s); expr_free(e); expr_free(C); expr_free(num); expr_free(den); return NULL; }
+    expr_free(e);
 
-    /* value = C (Pi/n) c^(s/n - 1) Csc[Pi s/n], s = m + 1. */
-    Expr* s   = mk_int(m + 1);
+    /* value = C (Pi/n) c^(s/n - 1) Csc[Pi s/n]. */
     Expr* son = mk_fn2("Times", expr_copy(s), mk_fn2("Power", expr_copy(n), mk_int(-1)));  /* s/n */
     Expr* cpow = mk_fn2("Power", expr_copy(c),
                         mk_fn2("Plus", expr_copy(son), mk_int(-1)));                        /* c^(s/n-1) */
@@ -2631,6 +2631,88 @@ static Expr* residue_family_mellin_power(Expr* f, Expr* x, Expr* a, Expr* b) {
 
     Expr* val = g_inst ? ev1("Simplify", result)
                        : ev1("Simplify", ev1("ComplexExpand", result));
+    if (!val) return NULL;
+    double vv, re, im;
+    if (contains_symbol(val, x) ||
+        !(res_is_real_scalar(val, x, &vv) || res_is_finite_scalar(val, x, &re, &im))) {
+        expr_free(val); return NULL;
+    }
+    return val;
+}
+
+/* -------------------------------------------------------------------------
+ * Generalized Beta on (0, Inf): Integrate[C x^alpha (x + beta)^(-gamma)] =
+ * C beta^(alpha+1-gamma) Gamma[alpha+1] Gamma[gamma-alpha-1] / Gamma[gamma],
+ * for beta > 0, alpha + 1 > 0, gamma - alpha - 1 > 0.  The substitution
+ * x = beta t reduces it to beta^(alpha+1-gamma) B(alpha+1, gamma-alpha-1); the
+ * core ∫₀^∞ t^alpha/(1+t)^gamma is the Beta/keyhole integral, valid for a
+ * NON-integer gamma (a branch point at t = -1) that the rational Mellin engine
+ * cannot take.  Covers In[16] x^a/(x+b)^c = b^(a+1-c) B(a+1, c-a-1). */
+static Expr* residue_family_beta(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_zero_pos_infinity(a, b) || f->type != EXPR_FUNCTION) return NULL;
+
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+    else { one[0] = f; fac = one; nf = 1; }
+
+    Expr* alpha = NULL; Expr* beta = NULL; Expr* delta = NULL; Expr* C = mk_int(1);
+    bool bad = false;
+    for (size_t i = 0; i < nf && !bad; i++) {
+        Expr* fe = fac[i];
+        if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2) {
+            Expr* base = fe->data.function.args[0];
+            Expr* exp  = fe->data.function.args[1];
+            if (!alpha && base->type == EXPR_SYMBOL &&
+                base->data.symbol.name == x->data.symbol.name && !contains_symbol(exp, x)) {
+                alpha = expr_copy(exp); continue;
+            }
+            /* (x + beta)^delta: base a Plus x + (x-free const), x-coefficient 1. */
+            if (!beta && head_name_is(base, "Plus") && contains_symbol(base, x) &&
+                !contains_symbol(exp, x)) {
+                Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(base), expr_copy(x)));
+                bool lin = deg && deg->type == EXPR_INTEGER && deg->data.integer == 1;
+                if (deg) expr_free(deg);
+                Expr* c1 = lin ? eval_take(mk_fn3("Coefficient", expr_copy(base), expr_copy(x), mk_int(1))) : NULL;
+                Expr* c0 = lin ? eval_take(mk_fn3("Coefficient", expr_copy(base), expr_copy(x), mk_int(0))) : NULL;
+                bool ok = c1 && c1->type == EXPR_INTEGER && c1->data.integer == 1 &&
+                          c0 && !contains_symbol(c0, x);
+                if (c1) expr_free(c1);
+                if (ok) { beta = c0; delta = expr_copy(exp); continue; }
+                if (c0) expr_free(c0);
+            }
+        }
+        if (!alpha && fe->type == EXPR_SYMBOL && fe->data.symbol.name == x->data.symbol.name) {
+            alpha = mk_int(1); continue;
+        }
+        if (!contains_symbol(fe, x)) { C = eval_take(mk_fn2("Times", C, expr_copy(fe))); continue; }
+        bad = true;
+    }
+    if (bad || !alpha || !beta || !delta || !C) {
+        if (alpha) expr_free(alpha); if (beta) expr_free(beta);
+        if (delta) expr_free(delta); if (C) expr_free(C);
+        return NULL;
+    }
+
+    Expr* gamma = eval_take(mk_fn2("Times", mk_int(-1), delta));           /* gamma = -delta */
+    Expr* ap1   = mk_fn2("Plus", expr_copy(alpha), mk_int(1));             /* alpha + 1 */
+    Expr* gma   = mk_fn2("Plus", expr_copy(gamma),
+                      mk_fn2("Times", mk_int(-1), expr_copy(ap1)));        /* gamma - alpha - 1 */
+    /* Convergence: beta > 0, alpha + 1 > 0, gamma - alpha - 1 > 0. */
+    bool conv = gamma && res_region_pos(beta) && res_region_pos(ap1) && res_region_pos(gma);
+    expr_free(alpha);
+    if (!conv) { if (gamma) expr_free(gamma); expr_free(ap1); expr_free(gma);
+                 expr_free(beta); expr_free(C); return NULL; }
+
+    /* C beta^(alpha+1-gamma) Gamma[alpha+1] Gamma[gamma-alpha-1] / Gamma[gamma]. */
+    Expr* bpow = mk_fn2("Power", expr_copy(beta),
+                     mk_fn2("Plus", expr_copy(ap1), mk_fn2("Times", mk_int(-1), expr_copy(gamma))));
+    Expr* res = mk_fn2("Times", C, mk_fn2("Times", bpow,
+                    mk_fn2("Times", mk_fn1("Gamma", ap1),
+                        mk_fn2("Times", mk_fn1("Gamma", gma),
+                            mk_fn2("Power", mk_fn1("Gamma", expr_copy(gamma)), mk_int(-1))))));
+    expr_free(beta); expr_free(gamma);
+
+    Expr* val = ev1("Simplify", res);
     if (!val) return NULL;
     double vv, re, im;
     if (contains_symbol(val, x) ||
@@ -2866,6 +2948,7 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         if (!value) value = residue_family_mellin(f, x, a, b);
         if (!value) value = residue_family_sector(f, x, a, b);
         if (!value) value = residue_family_mellin_power(f, x, a, b);
+        if (!value) value = residue_family_beta(f, x, a, b);
     }
 
     if (built_here) {

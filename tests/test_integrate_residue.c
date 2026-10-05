@@ -538,6 +538,31 @@ static void test_sector(void) {
      * (n > 1), matching Wolfram.  (Beta[1/n, 1-1/n]/n = (Pi/n) Csc[Pi/n].) */
     check_eq("Integrate[1/(1+x^n), {x, 0, Infinity}, Assumptions -> n > 0]",
              "ConditionalExpression[Beta[1/n, 1 - 1/n]/n, 1/n > 0 && 1/n < 1]");
+
+    /* Case In[19]: SYMBOLIC numerator and denominator exponents,
+     * x^(2m)/(1 + x^(2n)) = (Pi/(2n)) Csc[Pi(2m+1)/(2n)].  The convergence
+     * s = 2m+1 < 2n must be provable: state it as n >= m+1 (the integer form of
+     * n > m; Refine lacks the integer-gap step n > m && Integers => n >= m+1). */
+    check_eq("Integrate[x^(2 m)/(1 + x^(2 n)), {x, 0, Infinity}, "
+             "Assumptions -> Element[m, Integers] && Element[n, Integers] && n >= m + 1 && m >= 0, "
+             "Method -> \"Residue\"]", "(1/2 Pi Csc[(1/2 Pi (1 + 2 m))/n])/n");
+    check_eq("Chop[N[(Integrate[x^(2 m)/(1 + x^(2 n)), {x, 0, Infinity}, "
+             "Assumptions -> Element[m, Integers] && Element[n, Integers] && n >= m + 1 && m >= 0, "
+             "Method -> \"Residue\"] - Pi/(2 n) Csc[Pi(2 m+1)/(2 n)]) /. {m -> 1, n -> 2}]]", "0");
+}
+
+/* Generalized Beta on (0, Inf): x^a/(x+b)^c, non-integer c (branch point at -b). */
+static void test_beta(void) {
+    /* Case In[16]: x^a/(x+b)^c = b^(a+1-c) Gamma[a+1] Gamma[c-a-1]/Gamma[c]. */
+    check_eq("Integrate[x^a/(x+b)^c, {x, 0, Infinity}, "
+             "Assumptions -> b > 0 && c > a + 1 && a > -1, Method -> \"Residue\"]",
+             "(Gamma[1 + a] Gamma[-1 - a + c] b^(1 + a - c))/Gamma[c]");
+    check_eq("Chop[N[(Integrate[x^a/(x+b)^c, {x, 0, Infinity}, "
+             "Assumptions -> b > 0 && c > a + 1 && a > -1, Method -> \"Residue\"] "
+             "- b^(a+1-c) Beta[a+1, c-a-1]) /. {a -> 1/2, b -> 1, c -> 3}]]", "0");
+    check_eq("Chop[N[(Integrate[x^a/(x+b)^c, {x, 0, Infinity}, "
+             "Assumptions -> b > 0 && c > a + 1 && a > -1, Method -> \"Residue\"] "
+             "- b^(a+1-c) Beta[a+1, c-a-1]) /. {a -> 1, b -> 2, c -> 4}]]", "0");
 }
 
 /* -------------------------------------------------------------------------
@@ -674,6 +699,7 @@ int main(void) {
     TEST(test_contour_param);
     TEST(test_mellin_barnes);
     TEST(test_sector);
+    TEST(test_beta);
     TEST(test_trig_symbolic);
     TEST(test_chebyshev_weight);
     TEST(test_hyperbolic_strip);

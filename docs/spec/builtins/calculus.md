@@ -2242,11 +2242,21 @@ symbolic-exponent contours:
   `∫ Γ(2s) x^{−s} ds = iπ e^{−√x}`.  The endpoint `c ± i∞` is recognised as a
   directed infinity (it no longer collapses to a real `∞`); the orientation sets
   the sign, and a non-Mellin–Barnes integrand or a non-closing series declines.
-- **Sector on `(0, ∞)`** — `f = x^m/(c + x^n)` with the exponent `n` possibly a
-  **symbolic parameter**: the wedge of angle `2π/n` gives
-  `(π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`.  This is the one family admitting a
-  symbolic `n` (the keyhole cannot enumerate `n` poles), powering
-  `Integrate[1/(1 + x^n), {x, 0, ∞}, Assumptions -> n > 1] = (π/n) csc(π/n)`.
+- **Sector on `(0, ∞)`** — `f = C x^m/(c + x^n)` with the exponents `m`, `n`
+  possibly **symbolic parameters**: the wedge of angle `2π/n` gives
+  `C (π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`, under `c > 0`, `n > 0`,
+  `0 < s < n` (proved over the assumed region).  This is the one family admitting
+  a symbolic `n` (the keyhole cannot enumerate `n` poles), powering
+  `Integrate[1/(1 + x^n), {x, 0, ∞}, Assumptions -> n > 1] = (π/n) csc(π/n)` and
+  `Integrate[x^{2m}/(1 + x^{2n}), …] = (π/(2n)) csc(π(2m+1)/(2n))` (state the
+  convergence as `n ≥ m + 1` — `Refine` does not take the integer step
+  `n > m ∧ ℤ ⟹ n ≥ m + 1`).
+- **Generalized Beta on `(0, ∞)`** — `C x^a (x + b)^{−c}` with a NON-integer `c`
+  (a branch point at `−b` the rational Mellin engine cannot take): `x = b t`
+  gives `C b^{a+1−c} B(a+1, c−a−1) = C b^{a+1−c} Γ(a+1) Γ(c−a−1)/Γ(c)`, under
+  `b > 0`, `a + 1 > 0`, `c − a − 1 > 0`.  So
+  `Integrate[x^a/(x+b)^c, {x, 0, ∞}, Assumptions -> b>0 && c>a+1 && a>-1] =
+  b^{a+1−c} Γ(a+1) Γ(c−a−1)/Γ(c)`.
 - **Mellin after a power substitution on `(0, ∞)`** — `C x^{μ−1} G(κ x^ν)` with
   `G ∈ {Exp, Sin, Cos}` and `ν` a positive integer.  `u = x^ν` turns it into
   `(C/ν)` times the Mellin transform of `G` at `s = μ/ν` — the
