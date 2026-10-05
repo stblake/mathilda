@@ -1307,9 +1307,36 @@ static Expr* integrate_definite(Expr* res) {
              * reported as 0, and NULL always falls through unchanged. */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_SYMMETRY))
                 r = integrate_symmetry_try(cur, x, a, b, assumptions);
+            /* Deterministic, correct-by-construction transform reductions run
+             * BEFORE the Newton-Leibniz FTC search (confidence-first ordering,
+             * the rule the Weierstrass and Symmetry placements already follow):
+             * each is gated by a cheap structural shape test and closes exactly
+             * the half-line / canonical-interval family it owns, so a
+             * symbolic-exponent integrand (x^(s-1) f, Sin^a Cos^b, ...) yields
+             * its closed form at once -- instead of first letting FTC grind a
+             * doomed elementary-antiderivative search (Risch / ParallelMixed*)
+             * for tens of seconds and emit a spurious Integrate::nonelem.  Each
+             * declines (NULL, cheaply: the interval/shape check is first) on a
+             * shape it does not own, so FTC below still owns the integer-power
+             * and genuinely elementary cases. */
+            /* Euler-Beta: x^(k-1)(1-x)^(l-1) [Log weights] on [0,1]. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
+                r = integrate_beta_try(cur, x, a, b, assumptions);
+            /* Sin^m Cos^n over a canonical trig interval ([0,Pi/2], [0,Pi], [0,2Pi]). */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
+                r = integrate_trigpower_try(cur, x, a, b, assumptions);
+            /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
+             * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
+             * transforms) that residue does not own.  Under Automatic it runs
+             * before FTC and DiffUnderInt; the pinned mechanism has no fallback. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN ||
+                       mech == METHOD_OSC_POWER))
+                r = integrate_ramanujan_try(cur, x, a, b, assumptions);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
              * parameter-differentiation mechanism, the Ramanujan/Mellin
-             * mechanism, the symmetry mechanism, or a Beta mechanism. */
+             * mechanism, the symmetry mechanism, or a Beta mechanism.  Runs
+             * after the deterministic reductions above so it only sees the
+             * integrand classes none of them owns. */
             if (!r && mech != METHOD_RESIDUE && mech != METHOD_DIFF_UNDER_INT &&
                 mech != METHOD_RAMANUJAN && mech != METHOD_SYMMETRY &&
                 mech != METHOD_BETA && mech != METHOD_TRIG_POWER &&
@@ -1317,22 +1344,6 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_RATIONAL_LOG)
                 r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
                                                     principal_value);
-            /* Euler-Beta reductions: x^(k-1)(1-x)^(l-1) on [0,1] and
-             * Sin^m Cos^n over a canonical trig interval -- non-elementary
-             * antiderivatives (incomplete Beta) that FTC cannot reach.  After
-             * Newton-Leibniz (which owns the integer-power cases via an
-             * elementary antiderivative), before Ramanujan. */
-            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
-                r = integrate_beta_try(cur, x, a, b, assumptions);
-            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
-                r = integrate_trigpower_try(cur, x, a, b, assumptions);
-            /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
-             * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
-             * transforms) that residue and FTC do not close.  Under Automatic it
-             * runs before DiffUnderInt; the pinned mechanism has no fallback. */
-            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN ||
-                       mech == METHOD_OSC_POWER))
-                r = integrate_ramanujan_try(cur, x, a, b, assumptions);
             /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
              * under Automatic these are pre-passes inside Ramanujan; the pinned
              * methods route directly here. */

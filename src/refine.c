@@ -458,6 +458,24 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
         }
     }
 
+    /* Arg[p] -> 0 (p > 0) / Pi (p < 0) for a provably-signed real compound p.
+     * Sound because deep_sign only settles the sign of a REAL expression (the
+     * same basis as the Abs/Sqrt collapses above); a complex argument leaves
+     * deep_sign == 0 and Arg untouched.  Collapses the keyhole residue forms
+     * (e.g. Arg[-a] with a > 0 -> Pi, which closes Log[x]/(x^2-a^2) PV). */
+    if (strcmp(h, "Arg") == 0 && rebuilt->data.function.arg_count == 1) {
+        const Expr* p = rebuilt->data.function.args[0];
+        if (p->type == EXPR_FUNCTION) {          /* only worth a CAD run for compound p */
+            int s = deep_sign(p, Aconj, b);
+            if (s != 0) {
+                *changed = 1;
+                Expr* out = (s > 0) ? expr_new_integer(0) : expr_new_symbol(SYM_Pi);
+                expr_free(rebuilt);
+                return out;
+            }
+        }
+    }
+
     /* Sqrt[p^2] -> +/-p when the sign of p is known. */
     const Expr* rad = sqrt_radicand(rebuilt);
     if (rad) {

@@ -173,6 +173,13 @@ static bool  g_pv = false;
 typedef struct { const char* sym; double lo, hi; } ParamBound;
 static ParamBound g_bounds[16];
 static size_t     g_nbounds = 0;
+/* True in the COUPLED instantiation mode (a parameter bounded only by another, so
+ * the representative point came from FindInstance rather than per-parameter
+ * intervals).  Kept distinct from g_nbounds so the directly-bounded parameters
+ * (e.g. the exponent a in x^a/(x^2+2b x+c), bounded -1<a<1) can still fill
+ * g_bounds for the convergence gate while the trig family still recognises the
+ * coupled mode for its degenerate-point retry. */
+static bool       g_coupled = false;
 
 /* e with the parameter instantiation applied and evaluated (owned), or NULL if
  * no instantiation is active. */
@@ -242,6 +249,123 @@ static Expr* res_close_positive(Expr* e) {
     Expr* rf = eval_take(mk_fn2("Refine", pe, expr_copy(g_assume)));
     if (!rf) return NULL;
     return ev1("Simplify", rf);
+}
+
+/* Structural node count (cheap size metric; a smaller form is preferred). */
+static size_t res_node_count(const Expr* e) {
+    if (!e) return 0;
+    size_t n = 1;
+    if (e->type == EXPR_FUNCTION) {
+        n += res_node_count(e->data.function.head);
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            n += res_node_count(e->data.function.args[i]);
+    }
+    return n;
+}
+
+/* True iff e contains a Power whose EXPONENT is not a plain number (Integer /
+ * Real / BigInt / Rational) -- i.e. a symbolic-parameter exponent such as x^a or
+ * Abs[z]^a.  A general Simplify of such a form grinds or hangs (the same shape
+ * that hangs FullSimplify on (1-s)^(-nu) in the Ramanujan path), so the final
+ * cleanup below skips its Simplify step for them. */
+static bool res_has_symbolic_exponent(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is((Expr*)e, "Power") && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type != EXPR_INTEGER && ex->type != EXPR_REAL &&
+            ex->type != EXPR_BIGINT && !head_name_is((Expr*)ex, "Rational"))
+            return true;
+    }
+    if (res_has_symbolic_exponent(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (res_has_symbolic_exponent(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* True iff e is built ONLY from Plus/Times/Log/Rational and Power with an INTEGER
+ * exponent, over numeric/symbol atoms -- i.e. an elementary rational-log form with
+ * NO radical (Power^Rational) and NO trig/hyperbolic/Arg/Abs/special head.  Such a
+ * form is safe to hand to FullSimplify (bounded, no nested-radical or Sec grind),
+ * which a plain Simplify cannot fully reduce when a cancelling imaginary unit
+ * survives the keyhole sum (the PV Log[x]/(x^2-a^2) lands on Pi^2/(4a)). */
+static bool res_elementary_lograt(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL ||
+        e->type == EXPR_BIGINT || e->type == EXPR_SYMBOL) return true;
+    if (e->type != EXPR_FUNCTION) return false;        /* string etc. */
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* hn = h->data.symbol.name;
+    if (!(strcmp(hn, "Plus") == 0 || strcmp(hn, "Times") == 0 ||
+          strcmp(hn, "Power") == 0 || strcmp(hn, "Log") == 0 ||
+          strcmp(hn, "Rational") == 0 || strcmp(hn, "Complex") == 0)) return false;
+    if (strcmp(hn, "Power") == 0 && e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type != EXPR_INTEGER) return false;  /* radical / sym exp */
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!res_elementary_lograt(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* Final SOUND cleanup of a family's closed form under the caller's raw
+ * Assumptions.  Every family is correct by construction, but several -- the
+ * keyhole-log PV family, the conjugate-pair rational close, the hyperbolic strip
+ * -- return a form laden with Arg/Abs/Sqrt[a^2]/(a^4)^(1/4) that the Assumptions
+ * can discharge yet the per-family close (plain Simplify, or a close gated on
+ * g_all_pos) does not.  Refine is SOUND: it rewrites Sqrt[a^2]->a, Abs[a]->a,
+ * Arg[pos]->0, Arg[neg]->Pi ONLY when it can PROVE the sign from the assumptions
+ * -- unlike the all-positive PowerExpand of res_close_positive, which is not and
+ * is therefore never used here.  Simplify then combines the collapsed terms
+ * (e.g. the keyhole-log PV #13 Log[x]/(x^2-a^2) closes to Pi^2/(4a) once the
+ * sound Arg[-a]->Pi rewrite fires).
+ *
+ * Deliberately NO ComplexExpand: on a compact nested-radical conjugate-pair form
+ * (e.g. 1/(x^4+2a x^2+1) on -1<a<1) ComplexExpand EXPLODES the expression into a
+ * giant Re/Im tree that then HANGS Simplify -- while buying the collapsible
+ * keyhole-log family nothing Refine does not already give.
+ *
+ * The candidate REPLACES the original only when strictly smaller by node count,
+ * so a form that legitimately stays messy (Arg[I a], which Refine cannot reduce,
+ * or a mixed-sign radical whose sign the assumptions do not pin) is never
+ * enlarged or corrupted, and a family that already closed cleanly is untouched.
+ * The Simplify step is skipped on a symbolic-parameter exponent (x^a), which it
+ * would grind on.  Unlike res_close_positive this is decoupled from g_all_pos,
+ * so the mixed-sign region and the keyhole-log family benefit too.  Consumes
+ * `value`, returns owned. */
+static Expr* res_refine_final(Expr* value, Expr* assumptions) {
+    if (!value || !assumptions || value->type != EXPR_FUNCTION) return value;
+    if (head_name_is(value, "ConditionalExpression")) return value;  /* don't disturb */
+    bool sym_exp = res_has_symbolic_exponent(value);
+
+    /* Refine is the sound sign collapse (Sqrt[a^2]->a, Abs[a]->a, Arg[pos]->0,
+     * Arg[neg]->Pi), proven from the assumptions -- never the unsound PowerExpand
+     * of res_close_positive.  Simplify then combines the collapsed terms.  On a
+     * symbolic-parameter exponent (x^a) the Simplify is skipped: it grinds on the
+     * (1-s)^(-nu) shape.  No ComplexExpand -- on a nested-radical conjugate-pair
+     * form (the #11 quartic) it explodes into a giant tree that hangs Simplify,
+     * while buying the collapsible families nothing Refine does not already give. */
+    Expr* cand = eval_take(mk_fn2("Refine", expr_copy(value), expr_copy(assumptions)));
+    if (cand && !sym_exp)
+        cand = eval_take(mk_fn2("Simplify", cand, expr_copy(assumptions)));
+    if (!cand) return value;
+    /* Finishing pass for the keyhole-log PV shape: once Refine/Simplify have
+     * collapsed the Arg/Abs/Sqrt, a cancelling imaginary unit can survive that
+     * plain Simplify re-factors apart (Pi^2/(4a) left as a half-combined form with
+     * a stray I).  FullSimplify lands the real closed form -- but it is unsafe on
+     * radical (#11/#16) and trig (#17 Sec) and symbolic-exponent (#4) forms, so it
+     * runs ONLY on a small radical-/trig-free elementary rational-log form. */
+    if (res_elementary_lograt(cand) && res_node_count(cand) <= 256) {
+        Expr* fs = eval_take(mk_fn2("FullSimplify", expr_copy(cand), expr_copy(assumptions)));
+        if (fs) {
+            if (res_node_count(fs) < res_node_count(cand)) { expr_free(cand); cand = fs; }
+            else expr_free(fs);
+        }
+    }
+    /* Replace only when strictly smaller, so a legitimately-messy result (Arg[I a]
+     * Refine cannot reduce; a mixed-sign radical the assumptions do not pin; the
+     * already-clean Sec form of the hyperbolic strip) is never enlarged. */
+    if (res_node_count(cand) < res_node_count(value)) { expr_free(value); return cand; }
+    expr_free(cand);
+    return value;
 }
 
 /* Bound classification: 0 = symbolic/complex, 1 = finite (value in *v), 2 = +Inf,
@@ -1377,7 +1501,7 @@ static Expr* build_nonzero_inst(const Expr* f, const Expr* x) {
 static Expr* residue_family_trig(Expr* f, Expr* x, Expr* a, Expr* b, bool* diverges) {
     Expr* v = residue_family_trig_core(f, x, a, b, diverges);
     if (v || (diverges && *diverges)) return v;
-    if (!g_inst || g_nbounds != 0 || !g_assume) return NULL;
+    if (!g_inst || !g_coupled || !g_assume) return NULL;
     Expr* nz = build_nonzero_inst(f, x);
     if (!nz) return NULL;
     Expr* saved = g_inst; g_inst = nz;
@@ -1480,15 +1604,17 @@ static Expr* build_instantiation(Expr* f, Expr* x, Expr* assumptions) {
         if (pb[i].lo <= -HUGE_VAL && pb[i].hi >= HUGE_VAL) { all_bounded = false; break; }
 
     if (!all_bounded) {
-        /* A COUPLED constraint (e.g. a > b > 0) leaves a parameter bounded only
-         * by another parameter, which absorb_fact cannot reduce to a numeric
+        /* A COUPLED constraint (e.g. a > b > 0, or c > b^2) leaves some parameter
+         * bounded only by another, which absorb_fact cannot reduce to a numeric
          * interval.  Ask FindInstance for one consistent representative point of
-         * the assumption region -- enough to read off the pole signs.  The
-         * per-parameter intervals (g_bounds) are then unknown, so the families
-         * that gate on them (mellin/sector convergence) decline via param_interval,
-         * while the unit-circle family -- which only classifies poles AT the
-         * point -- still works.  g_all_pos stays off (no global positivity proof),
-         * so the radical-cleaning PowerExpand is not licensed. */
+         * the assumption region -- enough to read off the pole signs.  We STILL
+         * record every SOUND per-parameter bound absorb_fact did find (a direct
+         * symbol-vs-numeric relation like -1<a<1 or b>0; an unfound bound stays
+         * +/-Inf, i.e. conservatively unbounded), so a convergence gate on a
+         * directly-bounded exponent (the a in x^a/(x^2+2b x+c)) can discharge even
+         * though b, c are only coupled -- while g_coupled marks the mode for the
+         * trig family's degenerate-point retry.  g_all_pos stays off (no global
+         * positivity proof), so the radical-cleaning PowerExpand is not licensed. */
         if (!assumptions) return NULL;
         Expr** vs = malloc(np * sizeof(*vs));
         for (size_t i = 0; i < np; i++) vs[i] = mk_sym(pb[i].sym);
@@ -1514,7 +1640,10 @@ static Expr* build_instantiation(Expr* f, Expr* x, Expr* assumptions) {
         Expr* g = expr_copy(sol);
         expr_free(fi);
         g_all_pos = false;
-        g_nbounds = 0;
+        g_coupled = true;
+        /* Record the sound bounds absorb_fact found (unfound ones are +/-Inf). */
+        g_nbounds = np;
+        for (size_t i = 0; i < np; i++) g_bounds[i] = pb[i];
         return g;
     }
 
@@ -1526,6 +1655,7 @@ static Expr* build_instantiation(Expr* f, Expr* x, Expr* assumptions) {
         if (pb[i].lo < 0.0) { g_all_pos = false; break; }
 
     /* Record the guaranteed intervals for the convergence/applicability gates. */
+    g_coupled = false;
     g_nbounds = np;
     for (size_t i = 0; i < np; i++) g_bounds[i] = pb[i];
 
@@ -1726,12 +1856,17 @@ static Expr* mellin_core(Expr* F, Expr* v) {
     Expr* p; Expr* R;
     if (!mellin_split(F, v, &p, &R)) return NULL;
 
-    /* s = p + 1.  Reject an integer s (Sin[Pi s] = 0: the keyhole degenerates,
-     * and an integer power is a job for the even/rational half-line families). */
+    /* s = p + 1.  Reject a CONCRETE integer s (Sin[Pi s] = 0: the keyhole
+     * degenerates, and an integer power is a job for the even/rational half-line
+     * families).  Use res_reim_direct -- NOT res_reim -- so the test reads the
+     * literal s, never the parameter instantiation: a symbolic exponent (s = 1+a)
+     * must survive even when the coupled FindInstance point lands on an integer
+     * (a -> 0 gives s = 1), because the generic Csc[Pi s] closed form is correct
+     * for all non-integer a and that is the right generic-parameter answer. */
     Expr* s = eval_take(mk_fn2("Plus", expr_copy(p), mk_int(1)));
     if (!s) { expr_free(p); expr_free(R); return NULL; }
     { double sre, sim;
-      if (res_reim(s, &sre, &sim) && fabs(sim) < RES_TOL &&
+      if (res_reim_direct(s, &sre, &sim) && fabs(sim) < RES_TOL &&
           fabs(sre - floor(sre + 0.5)) < RES_TOL) {
           expr_free(p); expr_free(R); expr_free(s); return NULL;
       } }
@@ -3163,8 +3298,12 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         if (!value) value = residue_family_beta(f, x, a, b);
     }
 
+    /* Sound assumption-aware cleanup, once, at the outermost frame (where this
+     * frame owns g_assume).  A no-op unless it strictly shrinks the form. */
+    if (built_here && value) value = res_refine_final(value, g_assume);
+
     if (built_here) {
-        expr_free(g_inst); g_inst = NULL; g_nbounds = 0;
+        expr_free(g_inst); g_inst = NULL; g_nbounds = 0; g_coupled = false;
         if (g_assume) { expr_free(g_assume); g_assume = NULL; }
     }
     g_pv = pv_prev;

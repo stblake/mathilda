@@ -1761,6 +1761,13 @@ monotonically down.
     (`Integrate\`TrigPower[f, {x, 0, c}]`): over `[0, Pi/2]` it is
     `Beta[(m+1)/2, (n+1)/2]/2`; over `[0, Pi]`/`[0, 2Pi]` the standard parity
     multipliers apply (an odd power integrates to `0`).
+    Under Automatic, `Beta`, `TrigPower` and the Mellin/Ramanujan method
+    (below) — all deterministic and correct-by-construction, gated by a cheap
+    interval/shape test — run **before** Newton-Leibniz (confidence-first
+    ordering, after residue/symmetry): a symbolic-exponent integrand they own
+    (`x^(s-1) f`, `Sin^a Cos^b`) closes at once, instead of first driving FTC
+    into a doomed elementary-antiderivative search. FTC still owns the
+    integer-power and genuinely-elementary cases they decline on.
   - `"NewtonLeibniz"` — the real-axis definite-integral mechanism (implicit for
     the `{x, a, b}` form); see **Definite integration** below.
   - `"LineIntegral"` — the complex contour mechanism (implicit for the
@@ -1779,7 +1786,7 @@ monotonically down.
   - `"RamanujanMasterTheorem"` (alias `"Mellin"`) — half-line `∫₀^∞ x^{s-1} f(x) dx`
     by the Mellin-transform / Ramanujan Master Theorem method;
     `Integrate\`RamanujanMasterTheorem[f, {x, 0, Infinity}]`. Under Automatic it
-    runs after Newton-Leibniz and before DiffUnderInt. See **Mellin / Ramanujan
+    runs before Newton-Leibniz (and before DiffUnderInt). See **Mellin / Ramanujan
     Master Theorem** below.
   The definite mechanisms name themselves only: the actual mechanism is
   chosen from the spec type, so on a definite integral any *other* method name
@@ -2289,7 +2296,13 @@ symbolic-exponent contours:
   `0 < Re(s) < deg Q − deg P`.  The exponent may also be a **symbolic
   parameter** `a` under an interval assumption — the convergence interval is read
   off `s = a + 1` (e.g. `Integrate[x^a/(x+1)^3, {x,0,∞}, Assumptions -> -1 < a < 2]
-  = π a(1−a)/(2 sin π a)`).
+  = π a(1−a)/(2 sin π a)`).  The denominator coefficients may be symbolic too,
+  including under a *coupled* assumption that leaves them unbounded: the directly
+  bounded exponent still fills the convergence gate while the (complex-conjugate)
+  poles are classified at a `FindInstance` point, so `Integrate[x^a/(x²+2b x+c),
+  {x,0,∞}, Assumptions -> -1 < a < 1 && c > b² && b > 0]` closes.  (A symbolic
+  exponent is kept even when that representative point lands on an integer `s` —
+  the generic `Csc[π s]` form is the right generic-parameter answer.)
 - **Keyhole with a logarithm on `(0, ∞)`** — `f = x^p (Log x)^m R(x)`, `R`
   rational, `m ≥ 1`.  Two complementary branches, by whether `x^p` jumps across
   the cut:
@@ -2484,6 +2497,18 @@ derivative (a `Γ(1/4)`-level constant), not a residue sum, and the `w = Exp[x]`
 reduction fails because `Log x` becomes `Log[Log w]`; and the Hankel-type
 `∫₁^{-∞} eˣ x^{-s} dx`, whose contour is ambiguous / divergent in the ordinary
 sense.
+
+**Output simplification.**  Every family's value is finally passed, once, through
+a sound assumption-aware cleanup: `Refine` collapses `Sqrt[a²]→a`, `Abs[a]→a`,
+`Arg[pos]→0`, `Arg[neg]→π` **only** where the assumptions prove the sign (never the
+unsound `PowerExpand`), a plain `Simplify` combines the terms, and — on a small,
+radical- and trig-free elementary rational-log form carrying a cancelling imaginary
+unit — a bounded `FullSimplify` finisher lands the real closed form.  The result
+replaces the raw form only when strictly smaller, so a legitimately-messy value
+(an `Arg[I a]` that `Refine` cannot reduce; a mixed-sign radical whose sign is not
+assumed; an already-clean `Sec` form) is never enlarged or corrupted.  This is what
+turns the principal-value `∫₀^∞ Log[x]/(x²−a²) dx` (`a > 0`) from a large
+`Arg`/`Abs`/`(a⁴)^{1/4}` expression into the clean `π²/(4a)`.
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
