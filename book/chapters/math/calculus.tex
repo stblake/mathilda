@@ -240,6 +240,39 @@ four-variable decomposition, and at present Mathilda runs that to its limit and
 cannot certify. The soundness contract holds at the edge of tractability, not only at
 the edge of decidability.}
 
+The target value need not be finite either. An \emph{infinite
+limit}\index{limit!infinite}, \(\lim_{x\to\infty} f(x) = \infty\), is the same
+\(\forall\exists\forall\) template with two substitutions. ``Within
+\(\varepsilon\) of \(L\)'' has no meaning once the value runs away, so it becomes
+``beyond every bound'', \(f(x) > M\); and the approach is no longer to a finite
+point, so the punctured neighbourhood \(0<\lvert x-a\rvert<\delta\) gives way to a
+ray \(x > N\). The sentence
+\[
+  \forall\,M>0 \quad \exists\,N>0 \quad \forall x \quad
+  \bigl(x>N \;\Rightarrow\; f(x)>M\bigr)
+\]
+is, for \(f(x)=x^2\), built entirely from polynomial atoms---\(x>N\) and
+\(x^2>M\)---so it stays inside the semialgebraic class the CAD decides, exactly as
+squaring the norm did for the plane. Mathilda proves it, and refutes the same
+sentence written for a function that instead runs to \(-\infty\):
+
+\begin{codepairs}
+\pair{calculus/limits/14}{The infinite-limit definition of
+\(\lim_{x\to\infty}x^2=\infty\), with the bound \(M\) in place of
+\(\varepsilon\) and the ray \(x>N\) in place of the punctured interval, returned
+\mcode{True}: a proof.}
+\pair{calculus/limits/15}{The same sentence for \(-x^2\), which runs to
+\(-\infty\): \mcode{False}. No \(N\) forces \(-x^2\) above every bound, and the
+decision is again two-sided.}
+\end{codepairs}
+
+The vertical-asymptote case---an infinite limit at a \emph{finite} point, such as
+\(\lim_{x\to0}1/x^2=\infty\)---sits just beyond this boundary: clearing the
+denominator leaves the bound \(M\) multiplied by \(x^2\) inside the alternating
+quantifiers, and at present Mathilda \emph{declines} that sentence rather than
+return a verdict it cannot certify---the same soundness contract, one step deeper
+in.
+
 \usagebox{Limit}
 
 \subsection{Series}

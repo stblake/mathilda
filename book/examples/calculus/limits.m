@@ -12,3 +12,6 @@ Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[x, 0 < Abs[x - 2] < del
 Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[x, 0 < Abs[x - 2] < del, Abs[(3 x - 1) - 6] < eps]]], Reals]
 Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[{x, y}, 0 < x^2 + y^2 < del^2, Abs[x + y] < eps]]], Reals]
 Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[{x, y}, 0 < x^2 + y^2 < del^2, Abs[x^2 + y^2] < eps]]], Reals]
+# An infinite limit: the M-N form of the definition, proved and refuted
+Resolve[ForAll[m, m > 0, Exists[n, n > 0, ForAll[x, x > n, x^2 > m]]], Reals]
+Resolve[ForAll[m, m > 0, Exists[n, n > 0, ForAll[x, x > n, -x^2 > m]]], Reals]
