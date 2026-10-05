@@ -561,6 +561,33 @@ static void test_symbolic_negative_controls(void) {
  * closes to a clean rational form (not a Sqrt[-4 a^2] surface).
  * ---------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------
+ * Mellin after a power substitution u = x^nu: x^(mu-1) G(kappa x^nu) ->
+ * (1/nu) * Mellin[G](mu/nu), G in {Exp, Sin, Cos} (the Gamma / generalized
+ * Fresnel family).
+ * ---------------------------------------------------------------------- */
+static void test_mellin_power(void) {
+    /* Case In[9]: x^(s-1) e^(-a x^2) = (1/2) a^(-s/2) Gamma[s/2]  (convergence
+     * stated as s > 0, not the Refine-unfriendly complex spelling Re[s] > 0). */
+    check_eq("Integrate[x^(s-1) Exp[-a x^2], {x, 0, Infinity}, "
+             "Assumptions -> s > 0 && a > 0, Method -> \"Residue\"]",
+             "1/2 Gamma[1/2 s] a^(-1/2 s)");
+    check_eq("Chop[N[(Integrate[x^(s-1) Exp[-a x^2], {x,0,Infinity}, "
+             "Assumptions -> s>0 && a>0, Method -> \"Residue\"] - a^(-s/2) Gamma[s/2]/2) "
+             "/. {s -> 3/2, a -> 1}]]", "0");
+    /* Case In[10]: x^p Sin[x^2] = (1/2) Gamma[(p+1)/2] Sin[Pi(p+1)/4]. */
+    check_eq("Integrate[x^p Sin[x^2], {x, 0, Infinity}, "
+             "Assumptions -> -1 < p < 1, Method -> \"Residue\"]",
+             "1/2 Gamma[1/2 (1 + p)] Sin[1/4 Pi (1 + p)]");
+    /* The Cos sibling. */
+    check_eq("Integrate[x^p Cos[x^2], {x, 0, Infinity}, "
+             "Assumptions -> -1 < p < 1, Method -> \"Residue\"]",
+             "1/2 Gamma[1/2 (1 + p)] Cos[1/4 Pi (1 + p)]");
+    /* A plain generalized-Fresnel (mu = 1): Sin[x^3] = Gamma[4/3] Sin[Pi/6] = Gamma[4/3]/2. */
+    check_eq("Chop[N[Integrate[Sin[x^3], {x, 0, Infinity}, Method -> \"Residue\"] "
+             "- Gamma[4/3]/2]]", "0");
+}
+
+/* -------------------------------------------------------------------------
  * Periodic-strip (rectangle) contour: N(x)/Cosh[b x] on (-Inf, Inf) via the
  * quasi-period Cosh[b(x+i Pi/b)] = -Cosh[b x], and the scale-normalisation
  * Sinh[a x] -> Sinh[x] that reduces x/Sinh[a x] to the a=1 w=Exp[x] route.
@@ -650,6 +677,7 @@ int main(void) {
     TEST(test_trig_symbolic);
     TEST(test_chebyshev_weight);
     TEST(test_hyperbolic_strip);
+    TEST(test_mellin_power);
     TEST(test_rational_symbolic);
     TEST(test_symbolic_negative_controls);
 

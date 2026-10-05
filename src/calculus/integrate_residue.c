@@ -1386,6 +1386,7 @@ static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_mellin(Expr* f, Expr* x, Expr* a, Expr* b);
 static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b);
+static Expr* residue_family_mellin_power(Expr* f, Expr* x, Expr* a, Expr* b);
 
 /* -------------------------------------------------------------------------
  * Keyhole / Mellin core -- Integrate[v^p R(v), {v, 0, Infinity}].
@@ -2526,6 +2527,120 @@ static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b) {
 }
 
 /* -------------------------------------------------------------------------
+ * Mellin after a power substitution: Integrate[C x^(mu-1) G(kappa x^nu),
+ * {x, 0, Inf}] for G in {Exp, Sin, Cos}.  Substituting u = x^nu gives
+ * (C/nu) * (Mellin transform of G at s = mu/nu):
+ *   Exp[-c u]  -> Gamma[s] c^-s                 (Re s > 0; needs c = -kappa > 0)
+ *   Sin[k u]   -> Gamma[s] k^-s Sin[Pi s/2]     (0 < Re s < 1, k > 0)
+ *   Cos[k u]   -> Gamma[s] k^-s Cos[Pi s/2]     (0 < Re s < 1, k > 0)
+ * This is the generalized-Fresnel / Gamma-Mellin family: x^(s-1) e^(-a x^2) =
+ * (1/2) a^(-s/2) Gamma[s/2] (In[9]), x^p Sin[x^2] = (1/2) Gamma[(p+1)/2]
+ * Sin[Pi(p+1)/4] (In[10]).  The u = x^nu substitution is the standard sector
+ * (wedge) contour; the family is correct by construction once the convergence
+ * gates hold over the assumed region. */
+static Expr* residue_family_mellin_power(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_zero_pos_infinity(a, b) || f->type != EXPR_FUNCTION) return NULL;
+
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+    else { one[0] = f; fac = one; nf = 1; }
+
+    Expr* p = mk_int(0);                 /* accumulated power-of-x exponent */
+    Expr* C = mk_int(1);                 /* x-free prefactor */
+    Expr* harg = NULL; int htype = 0;    /* 1 = Exp, 2 = Sin, 3 = Cos */
+    bool bad = false;
+    for (size_t i = 0; i < nf && !bad; i++) {
+        Expr* fe = fac[i];
+        bool is_xpow = head_name_is(fe, "Power") && fe->data.function.arg_count == 2 &&
+            fe->data.function.args[0]->type == EXPR_SYMBOL &&
+            fe->data.function.args[0]->data.symbol.name == x->data.symbol.name &&
+            !contains_symbol(fe->data.function.args[1], x);
+        bool is_bare_x = fe->type == EXPR_SYMBOL && fe->data.symbol.name == x->data.symbol.name;
+        bool is_powE = head_name_is(fe, "Power") && fe->data.function.arg_count == 2 &&
+            fe->data.function.args[0]->type == EXPR_SYMBOL &&
+            fe->data.function.args[0]->data.symbol.name == SYM_E &&
+            contains_symbol(fe->data.function.args[1], x);
+        bool is_trig = fe->type == EXPR_FUNCTION && fe->data.function.arg_count == 1 &&
+            (head_name_is(fe, "Exp") || head_name_is(fe, "Sin") || head_name_is(fe, "Cos")) &&
+            contains_symbol(fe->data.function.args[0], x);
+        if (is_xpow)      p = eval_take(mk_fn2("Plus", p, expr_copy(fe->data.function.args[1])));
+        else if (is_bare_x) p = eval_take(mk_fn2("Plus", p, mk_int(1)));
+        else if (!harg && is_powE) { htype = 1; harg = expr_copy(fe->data.function.args[1]); }
+        else if (!harg && is_trig) {
+            htype = head_name_is(fe, "Exp") ? 1 : (head_name_is(fe, "Sin") ? 2 : 3);
+            harg = expr_copy(fe->data.function.args[0]);
+        } else if (contains_symbol(fe, x)) bad = true;
+        else C = eval_take(mk_fn2("Times", C, expr_copy(fe)));
+        if (!p || !C) bad = true;
+    }
+    if (bad || !harg) { if (harg) expr_free(harg); if (p) expr_free(p); if (C) expr_free(C); return NULL; }
+
+    /* harg must be the monomial kappa * x^nu (nu a positive integer, kappa x-free). */
+    Expr* nu = eval_take(mk_fn2("Exponent", expr_copy(harg), expr_copy(x)));
+    bool nu_ok = nu && nu->type == EXPR_INTEGER && nu->data.integer >= 1;
+    Expr* kappa = nu_ok ? eval_take(mk_fn3("Coefficient", expr_copy(harg), expr_copy(x), expr_copy(nu))) : NULL;
+    bool mono = false;
+    if (nu_ok && kappa && !contains_symbol(kappa, x)) {
+        Expr* recon = mk_fn2("Times", expr_copy(kappa), mk_fn2("Power", expr_copy(x), expr_copy(nu)));
+        Expr* diff = eval_take(mk_fn2("Plus", expr_copy(harg),
+                         mk_fn2("Times", mk_int(-1), recon)));
+        mono = diff && diff->type == EXPR_INTEGER && diff->data.integer == 0;
+        if (diff) expr_free(diff);
+    }
+    expr_free(harg);
+    if (!mono) { if (nu) expr_free(nu); if (kappa) expr_free(kappa); expr_free(p); expr_free(C); return NULL; }
+
+    Expr* sm = eval_take(mk_fn2("Times", mk_fn2("Plus", p, mk_int(1)),
+                             mk_fn2("Power", expr_copy(nu), mk_int(-1))));   /* s = (p+1)/nu; consumes p */
+    Expr* invnu = mk_fn2("Power", expr_copy(nu), mk_int(-1));
+    Expr* result = NULL;
+    /* Convergence over the assumed region (res_region_* : Re s > 0, and for
+     * Sin/Cos also Re s < 1).  State it as s > 0 / 0 < s < 1 -- the complex
+     * spelling Re[s] > 0 cannot be combined with a sibling conjunct (a Refine
+     * And-decomposition limitation), so x^(s-1) e^(-a x^2) wants Assumptions ->
+     * s > 0 && a > 0. */
+    if (htype == 1) {
+        /* Exp[kappa x^nu]: decay needs kappa < 0 (c = -kappa > 0); Re s > 0. */
+        Expr* smm1 = NULL;
+        if (sm && res_region_neg(kappa) && res_region_pos(sm)) {
+            Expr* cpos = mk_fn2("Times", mk_int(-1), expr_copy(kappa));       /* c = -kappa */
+            result = mk_fn2("Times", expr_copy(C), mk_fn2("Times", expr_copy(invnu),
+                        mk_fn2("Times",
+                            mk_fn2("Power", cpos, mk_fn2("Times", mk_int(-1), expr_copy(sm))),
+                            mk_fn1("Gamma", expr_copy(sm)))));
+        }
+        (void)smm1;
+    } else {
+        /* Sin/Cos[kappa x^nu]: kappa > 0 and 0 < Re s < 1. */
+        Expr* smm1 = mk_fn2("Plus", expr_copy(sm), mk_int(-1));
+        bool conv = res_region_pos(kappa) && res_region_pos(sm) && res_region_neg(smm1);
+        expr_free(smm1);
+        if (conv) {
+            Expr* phase = mk_fn1(htype == 2 ? "Sin" : "Cos",
+                              mk_fn2("Times", mk_sym(SYM_Pi),
+                                  mk_fn2("Times", expr_copy(sm),
+                                      mk_fn2("Power", mk_int(2), mk_int(-1)))));
+            result = mk_fn2("Times", expr_copy(C), mk_fn2("Times", expr_copy(invnu),
+                        mk_fn2("Times",
+                            mk_fn2("Power", expr_copy(kappa), mk_fn2("Times", mk_int(-1), expr_copy(sm))),
+                            mk_fn2("Times", mk_fn1("Gamma", expr_copy(sm)), phase))));
+        }
+    }
+    expr_free(nu); expr_free(kappa); expr_free(C); expr_free(sm); expr_free(invnu);
+    if (!result) return NULL;
+
+    Expr* val = g_inst ? ev1("Simplify", result)
+                       : ev1("Simplify", ev1("ComplexExpand", result));
+    if (!val) return NULL;
+    double vv, re, im;
+    if (contains_symbol(val, x) ||
+        !(res_is_real_scalar(val, x, &vv) || res_is_finite_scalar(val, x, &re, &im))) {
+        expr_free(val); return NULL;
+    }
+    return val;
+}
+
+/* -------------------------------------------------------------------------
  * Master entry + builtin.
  * ---------------------------------------------------------------------- */
 
@@ -2750,6 +2865,7 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         if (!value) value = residue_family_mellin_log(f, x, a, b);
         if (!value) value = residue_family_mellin(f, x, a, b);
         if (!value) value = residue_family_sector(f, x, a, b);
+        if (!value) value = residue_family_mellin_power(f, x, a, b);
     }
 
     if (built_here) {

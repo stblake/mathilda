@@ -2247,6 +2247,14 @@ symbolic-exponent contours:
   `(π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`.  This is the one family admitting a
   symbolic `n` (the keyhole cannot enumerate `n` poles), powering
   `Integrate[1/(1 + x^n), {x, 0, ∞}, Assumptions -> n > 1] = (π/n) csc(π/n)`.
+- **Mellin after a power substitution on `(0, ∞)`** — `C x^{μ−1} G(κ x^ν)` with
+  `G ∈ {Exp, Sin, Cos}` and `ν` a positive integer.  `u = x^ν` turns it into
+  `(C/ν)` times the Mellin transform of `G` at `s = μ/ν` — the
+  sector/wedge contour: `Exp[−c u] → Γ(s) c^{−s}` (`Re s > 0`),
+  `Sin[k u] → Γ(s) k^{−s} Sin[π s/2]`, `Cos[k u] → Γ(s) k^{−s} Cos[π s/2]`
+  (`0 < Re s < 1`).  The Gamma / generalized-Fresnel family:
+  `∫₀^∞ x^{s−1} e^{−a x²} = ½ a^{−s/2} Γ(s/2)` (state `s > 0`, not `Re[s] > 0`),
+  `∫₀^∞ x^p Sin[x²] = ½ Γ((p+1)/2) Sin[π(p+1)/4]`, `∫₀^∞ Sin[x³] = Γ(4/3)/2`.
 - **Rectangular / quasi-periodic on `(-∞, ∞)`** — reduced to the half-line core
   by the exact substitution `w = Exp[x]`
   (`∫_{-∞}^∞ f dx = ∫₀^∞ f(Log w)/w dw`).  Two shapes close: `f = Exp[c x] R(Exp[x])`

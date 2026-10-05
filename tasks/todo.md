@@ -52,9 +52,13 @@ All reference values twice-confirmed vs NIntegrate (see plan triage table).
       closers (PowerExpand there is unsound: Arg[-4a^2]=Pi -> Arg[a^2]=0 drops a factor).
 - [x] Pins in test_hyperbolic_strip + refine Arg pins. version 0.280 + docs + changelog + tag.
 
-## Phase 5 — Mellin after power substitution (In[9], In[10])
-- [ ] residue_family_mellin_power: u=x^ν → (1/ν)M[f](μ/ν), f∈{Exp,Sin,Cos}
-- [ ] Pins: In[9] ½a^(-s/2)Γ(s/2); In[10] ½Γ((p+1)/2)Sin[π(p+1)/4]. version+docs+tag
+## Phase 5 — Mellin after power substitution (In[9], In[10])  [DONE v0.281]
+- [x] residue_family_mellin_power: C x^(mu-1) G(kappa x^nu), G in {Exp,Sin,Cos}, u=x^nu
+      -> (C/nu) M[G](mu/nu). Exp->Gamma c^-s (Re s>0); Sin/Cos->Gamma k^-s {Sin,Cos}[Pi s/2]
+      (0<Re s<1). res_region_* convergence gates.
+- [x] In[9] x^(s-1)e^(-a x^2) = (1/2)a^(-s/2)Gamma[s/2] (needs s>0 not Re[s]>0 -- Refine
+      can't combine a Re[...] conjunct with a sibling); In[10] x^p Sin[x^2] clean; Cos sibling;
+      Sin[x^3]=Gamma[4/3]/2. test_mellin_power. version 0.281 + docs + changelog + tag.
 
 ## Phase 6 — Sector symbolic powers (In[19]) + generalized Beta (In[16])
 - [ ] extend residue_family_sector (symbolic num/den exponents, Refine convergence)
