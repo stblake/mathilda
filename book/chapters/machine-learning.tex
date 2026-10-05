@@ -339,9 +339,9 @@ the payload.}
 \(4.5\).}
 \pair{machine-learning/logistic/5}{And the probability there is exactly one
 half.}
-\pair{machine-learning/logistic/6}{The logistic function by hand, at
-\(x = 6\)\ldots}
-\pair{machine-learning/logistic/7}{\ldots is the probability of \mcode{"hi"}.}
+\pair{machine-learning/logistic/6}{The logistic function by hand, evaluated at
+\(x = 6\).}
+\pair{machine-learning/logistic/7}{This value is the probability the model assigns to \mcode{"hi"}.}
 \end{codepairs}
 
 The data are symmetric about \(4.5\), so the fitted boundary lands there exactly.
@@ -531,10 +531,10 @@ a fresh \emph{test set} of 300 points from the same three clouds and measures ea
 method on it:\index{test set}
 
 \begin{codepairs}
-\pair{machine-learning/evaluate/1}{The running example\ldots}
+\pair{machine-learning/evaluate/1}{Rebuild the running example's training set.}
 \pair{machine-learning/evaluate/2}{}
 \pair{machine-learning/evaluate/3}{}
-\pair{machine-learning/evaluate/4}{\ldots and 300 fresh points from the same
+\pair{machine-learning/evaluate/4}{Then draw 300 fresh points from the same
 clouds, with a different seed.}
 \pair{machine-learning/evaluate/5}{Accuracy: the fraction of examples classified
 correctly.}
@@ -610,8 +610,8 @@ radius \(2.5\) around it. No straight line separates them:
 
 \begin{codepairs}
 \pair{machine-learning/rings/1}{Noisy points on a circle.}
-\pair{machine-learning/rings/2}{Two hundred training points\ldots}
-\pair{machine-learning/rings/3}{\ldots and six hundred test points.}
+\pair{machine-learning/rings/2}{Two hundred points make the training set.}
+\pair{machine-learning/rings/3}{Six hundred more make the test set.}
 \pair{machine-learning/rings/4}{}
 \pair{machine-learning/rings/5}{Logistic regression scores \(50\%\), no better
 than a coin.}
@@ -664,9 +664,9 @@ Forty noisy points on the line \(y = 2.5 + 0.8x\):
 \pair{machine-learning/predict/3}{The coefficients \(\beta_0, \beta_1\), and a
 prediction at \(x = 5\).}
 \pair{machine-learning/predict/4}{\B{Fit} computes the same line by its own
-route\ldots}
-\pair{machine-learning/predict/5}{\ldots and so does \B{LeastSquares} on the
-design matrix.}
+route.}
+\pair{machine-learning/predict/5}{\B{LeastSquares} on the design matrix gives the
+same coefficients.}
 \pair{machine-learning/predict/6}{A matrix whose last column is the response is
 accepted too.}
 \end{codepairs}
@@ -858,8 +858,8 @@ clusters are round and of similar size. The next two clouds are long, thin, and
 tilted towards each other. Each has 150 points:
 
 \begin{codepairs}
-\pair{machine-learning/mixture/1}{Standard normal pairs\ldots}
-\pair{machine-learning/mixture/2}{\ldots stretched and sheared into two tilted
+\pair{machine-learning/mixture/1}{Start with standard normal pairs.}
+\pair{machine-learning/mixture/2}{They are stretched and sheared into two tilted
 clouds.}
 \pair{machine-learning/mixture/3}{\(k\)-means with two clusters, and a Gaussian
 mixture.}
@@ -932,9 +932,9 @@ distribution. With \mcode{Method -> "GaussianMixture"} it fits a mixture:
 \begin{codepairs}
 \pair{machine-learning/mixture/6}{A fitted mixture, printed with its parameters
 elided.}
-\pair{machine-learning/mixture/7}{Two components of almost equal weight\ldots}
-\pair{machine-learning/mixture/8}{\ldots and the mean of the first, close to the
-true \((1.5, 3)\).}
+\pair{machine-learning/mixture/7}{The two components have almost equal weight.}
+\pair{machine-learning/mixture/8}{The mean of the first is close to the true
+\((1.5, 3)\).}
 \pair{machine-learning/mixture/9}{\mcode{PDF} on a list of points gives one density
 each.}
 \pair{machine-learning/mixture/10}{A single Gaussian fitted to the same data.}
@@ -1159,9 +1159,9 @@ centimetres. The session types in the first fifteen flowers of each species,
 trains on ten of each, and tests on the other five.\index{iris data}
 
 \begin{codepairs}
-\pair{machine-learning/iris/1}{Fifteen \emph{Iris setosa}\ldots}
-\pair{machine-learning/iris/2}{\ldots fifteen \emph{Iris versicolor}\ldots}
-\pair{machine-learning/iris/3}{\ldots and fifteen \emph{Iris virginica}.}
+\pair{machine-learning/iris/1}{The first fifteen flowers are \emph{Iris setosa}.}
+\pair{machine-learning/iris/2}{The next fifteen are \emph{Iris versicolor}.}
+\pair{machine-learning/iris/3}{The last fifteen are \emph{Iris virginica}.}
 \pair{machine-learning/iris/4}{}
 \pair{machine-learning/iris/5}{Ten of each species for training, five of each for
 testing.}
@@ -1251,10 +1251,10 @@ The 1974 \emph{Motor Trend} road tests (the \texttt{mtcars} data set) give the
 weight, horsepower, and fuel economy of 32 cars. Heavier cars use more fuel:
 
 \begin{codepairs}
-\pair{machine-learning/mileage/1}{The 32 cars\ldots}
-\pair{machine-learning/mileage/2}{\ldots their weights in thousands of pounds\ldots}
-\pair{machine-learning/mileage/3}{\ldots gross horsepower\ldots}
-\pair{machine-learning/mileage/4}{\ldots and miles per gallon.}
+\pair{machine-learning/mileage/1}{Load the names of the 32 cars.}
+\pair{machine-learning/mileage/2}{Their weights are given in thousands of pounds.}
+\pair{machine-learning/mileage/3}{Gross horsepower follows.}
+\pair{machine-learning/mileage/4}{Fuel economy is measured in miles per gallon.}
 \pair{machine-learning/mileage/5}{About \(5.3\) miles per gallon lost per 1000
 pounds.}
 \pair{machine-learning/mileage/6}{Predicted economy of a 3000-pound car.}
@@ -1305,8 +1305,8 @@ set is twelve short messages, typed in:
 
 \begin{codepairs}
 \pair{machine-learning/spam/1}{Three numerical features of a message.}
-\pair{machine-learning/spam/2}{Six spam messages\ldots}
-\pair{machine-learning/spam/3}{\ldots and six genuine ones.}
+\pair{machine-learning/spam/2}{Six of the messages are spam.}
+\pair{machine-learning/spam/3}{The other six are genuine.}
 \pair{machine-learning/spam/4}{A naive Bayes filter.}
 \pair{machine-learning/spam/5}{The features of a new message.}
 \pair{machine-learning/spam/6}{Three new messages, classified.}

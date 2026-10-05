@@ -197,8 +197,8 @@ factors.}
 $\mathbb{Q}(\sqrt2)$, only the $x^2-2$ part of $x^4-5x^2+6$ factors; the $x^2-3$ part
 stays irreducible, since $\sqrt3\notin\mathbb{Q}(\sqrt2)$.}
 \pair{algebra/extensions/4}{\B{IrreduciblePolynomialQ} confirms $x^2+1$ is irreducible
-over the rationals\ldots}
-\pair{algebra/extensions/5}{\ldots and that it stops being irreducible once $i$ is
+over the rationals.}
+\pair{algebra/extensions/5}{It stops being irreducible once $i$ is
 adjoined.}
 \pair{algebra/extensions/6}{\B{MinimalPolynomial} runs the other way, recovering the
 lowest-degree rational polynomial with $\sqrt2+\sqrt3$ as a root---the very quartic of
@@ -261,8 +261,8 @@ over \(\mathbb{Q}\), the product of its conjugates \(\pm\sqrt2\), is \(-2\).}
 \(\mathbb{Q}(\sqrt5)\) is spanned by \(1\) and \((1+\sqrt5)/2\)---\emph{not} by
 \(\sqrt5\) alone.}
 \pair{algebra/numberfield/9}{\B{AlgebraicIntegerQ} confirms the golden ratio
-\((1+\sqrt5)/2\), a root of \(x^2-x-1\), is an algebraic integer\ldots}
-\pair{algebra/numberfield/10}{\ldots while \(1/2\) is not.}
+\((1+\sqrt5)/2\), a root of \(x^2-x-1\), is an algebraic integer.}
+\pair{algebra/numberfield/10}{By contrast, \(1/2\) is not.}
 \end{codepairs}
 
 The norm and trace are not ad hoc: \(\mathbb{Q}(\theta)\) is a \(d\)-dimensional
@@ -353,8 +353,8 @@ of \B{Together}, and the form you want before integrating. \B{Numerator} and
 denominator $x(x+1)$.}
 \pair{algebra/rational/2}{\B{Numerator} reads off the top of a fraction. Note that it is
 \emph{structural}: the shared factor $x+1$ is not cancelled first, so the numerator is
-$1+x$\ldots}
-\pair{algebra/rational/3}{\ldots and \B{Denominator} likewise returns $x^2-1$, still
+$1+x$.}
+\pair{algebra/rational/3}{\B{Denominator} likewise returns $x^2-1$, still
 carrying that common factor.}
 \pair{algebra/rational/4}{\B{Cancel} is what divides the shared $x+1$ out, reducing the
 same fraction to $1/(x-1)$.}
@@ -914,8 +914,8 @@ is \(1+\sqrt2\).}
 The verdicts are not symmetric, and the asymmetry is the key to using the test well.
 
 \begin{codepairs}
-\pair{algebra/possiblezeroq/5}{A genuine non-zero is reported \texttt{False}\ldots}
-\pair{algebra/possiblezeroq/6}{\ldots as is a free symbol, which is not \emph{identically}
+\pair{algebra/possiblezeroq/5}{A genuine non-zero is reported \texttt{False}.}
+\pair{algebra/possiblezeroq/6}{So is a free symbol, which is not \emph{identically}
 zero.}
 \end{codepairs}
 
@@ -965,8 +965,8 @@ makes probable. (Figures from this build, Apple M-series.)}
 
 \begin{codepairs}
 \pair{algebra/possiblezeroq-limits/2}{\(\arctan\tfrac13+\arctan\tfrac12=\tfrac\pi4\): the
-zero test decides it at once\ldots}
-\pair{algebra/possiblezeroq-limits/3}{\ldots where \texttt{Simplify}, after much more work,
+zero test decides it at once.}
+\pair{algebra/possiblezeroq-limits/3}{\texttt{Simplify}, after much more work,
 leaves it unreduced. Numeric evidence settles what the symbolic search does not recognise.}
 \end{codepairs}
 

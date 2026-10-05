@@ -1,7 +1,7 @@
 # 4.7.6 Polylogarithm, Lerch transcendent, and the Lambert W function
-# The polylogarithm generalizes the logarithm (order 1) ...
+# The polylogarithm generalizes the logarithm (order 1)
 PolyLog[1, x]
-# ... and the dilogarithm has famous closed forms
+# The dilogarithm (order 2) has famous closed forms
 PolyLog[2, 1]
 PolyLog[2, -1]
 PolyLog[2, 1/2]

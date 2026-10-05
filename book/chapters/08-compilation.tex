@@ -45,8 +45,8 @@ Here the parameter is declared \mcode{\{x, \_Real\}}: a machine real.}
 a machine real.}
 \pair{08-compilation/basics/4}{An exact integer argument is accepted and coerced
 to the declared type---\(3\) enters as \(3.0\), so the result is \(10.0\).}
-\pair{08-compilation/basics/5}{Parameters can be typed \mcode{\_Integer} \dots}
-\pair{08-compilation/basics/6}{\dots or \mcode{\_Complex}; the compiler emits
+\pair{08-compilation/basics/5}{Parameters can be typed \mcode{\_Integer}.}
+\pair{08-compilation/basics/6}{They can also be typed \mcode{\_Complex}; the compiler emits
 integer or complex opcodes accordingly.}
 \pair{08-compilation/basics/7}{And when an argument is \emph{not} a machine
 number, the compiled function quietly hands the work back to the evaluator: a
@@ -329,20 +329,20 @@ answer to each.
 \begin{codepairs}
 \pair{08-compilation/precision/1}{\(3000000^3\) is far past the \texttt{int64}
 range. The compiled code detects the overflow, abandons the call, and the
-interpreter re-runs it and promotes to a bignum \dots}
-\pair{08-compilation/precision/2}{\dots giving exactly the interpreter's answer.
+interpreter re-runs it and promotes to a bignum.}
+\pair{08-compilation/precision/2}{This gives exactly the interpreter's answer.
 Overflow is caught, never wrapped: the compiled result is always the true one.}
 \pair{08-compilation/precision/3}{For more digits than a \texttt{double} holds,
 \mcode{WorkingPrecision -> n} compiles the arithmetic in extended precision (MPFR)
-at \(n\) digits---here \(\sqrt{2}\) to forty \dots}
-\pair{08-compilation/precision/4}{\dots identical to what the interpreter computes
+at \(n\) digits---here \(\sqrt{2}\) to forty digits.}
+\pair{08-compilation/precision/4}{The result is identical to what the interpreter computes
 at the same precision.}
 \pair{08-compilation/precision/5}{The diagnostics confirm the result type is now
 \texttt{MPFRReal}, not \texttt{Real}.}
 \pair{08-compilation/precision/6}{Alternatively \mcode{"BigIntegers" -> True}
 keeps integer arithmetic exact (GMP) \emph{inside} the compiled code, so the cube
-stays compiled and correct rather than bailing out on overflow \dots}
-\pair{08-compilation/precision/7}{\dots with result type \texttt{BigInteger}.}
+stays compiled and correct rather than bailing out on overflow.}
+\pair{08-compilation/precision/7}{The result type is \texttt{BigInteger}.}
 \end{codepairs}
 
 There is a third mode, for the rare case where you know your integers stay within

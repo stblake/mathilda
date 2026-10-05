@@ -2,7 +2,7 @@
 # Even positive integers close into rational multiples of a power of Pi
 Zeta[2]
 Zeta[4]
-# ... which is exactly the Basel sum, recognized directly by Sum
+# Zeta[2] is exactly the Basel sum, recognized directly by Sum
 Sum[1/n^2, {n, 1, Infinity}]
 # Special values off the critical strip, from the functional equation
 Zeta[0]

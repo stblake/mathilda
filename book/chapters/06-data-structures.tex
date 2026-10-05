@@ -45,16 +45,16 @@ thing it is, and \B{Head} reads it off for anything at all---an operator express
 an atom, a list, or a call to an undefined function.
 
 \begin{codepairs}
-\pair{06-data-structures/expressions/4}{The head of \(a+bc\) is \B{Plus}\ldots}
-\pair{06-data-structures/expressions/5}{\ldots and of the sub-product \(bc\) it is
+\pair{06-data-structures/expressions/4}{The head of \(a+bc\) is \B{Plus}.}
+\pair{06-data-structures/expressions/5}{The head of the sub-product \(bc\) is
 \B{Times}.}
-\pair{06-data-structures/expressions/6}{A machine integer has head \texttt{Integer}\ldots}
-\pair{06-data-structures/expressions/7}{\ldots a machine real, head \texttt{Real}\ldots}
-\pair{06-data-structures/expressions/8}{\ldots a fraction, head \B{Rational}\ldots}
-\pair{06-data-structures/expressions/9}{\ldots and a complex number, head \B{Complex}.}
+\pair{06-data-structures/expressions/6}{A machine integer has head \texttt{Integer}.}
+\pair{06-data-structures/expressions/7}{A machine real has head \texttt{Real}.}
+\pair{06-data-structures/expressions/8}{A fraction has head \B{Rational}.}
+\pair{06-data-structures/expressions/9}{A complex number has head \B{Complex}.}
 \pair{06-data-structures/expressions/10}{Strings carry head \texttt{String}.}
-\pair{06-data-structures/expressions/11}{A list's head is \texttt{List}\ldots}
-\pair{06-data-structures/expressions/12}{\ldots and an unknown \(f[x]\) has head
+\pair{06-data-structures/expressions/11}{A list's head is \texttt{List}.}
+\pair{06-data-structures/expressions/12}{An unknown \(f[x]\) has head
 \(f\), the symbol you named. Nothing is privileged.}
 \end{codepairs}
 
@@ -64,10 +64,10 @@ head and arguments. \B{AtomQ} draws the line, and it is worth watching where it
 falls, because ``looks compound'' and ``is compound'' are not the same.
 
 \begin{codepairs}
-\pair{06-data-structures/expressions/13}{An integer is an atom\ldots}
-\pair{06-data-structures/expressions/14}{\ldots so is a symbol\ldots}
-\pair{06-data-structures/expressions/15}{\ldots and so, despite printing as
-\(1/2\), is a \B{Rational}: it is indivisible as a value even though its
+\pair{06-data-structures/expressions/13}{An integer is an atom.}
+\pair{06-data-structures/expressions/14}{So is a symbol.}
+\pair{06-data-structures/expressions/15}{A \B{Rational} is one too, despite printing
+as \(1/2\): it is indivisible as a value even though its
 \texttt{FullForm} shows two integers.}
 \pair{06-data-structures/expressions/16}{A function call is not an atom---you can
 take it apart.}
@@ -227,8 +227,8 @@ whole expression.
 \pair{06-data-structures/arrayops/9}{The value \(7\) sits at position \(\{3\}\).}
 \pair{06-data-structures/arrayops/10}{In a nested list the position is a full index
 path: \(4\) is at row two, column two.}
-\pair{06-data-structures/arrayops/11}{No match returns \(\mcode{Missing["NotFound"]}\)\ldots}
-\pair{06-data-structures/arrayops/12}{\ldots unless you supply a default, which is
+\pair{06-data-structures/arrayops/11}{No match returns \(\mcode{Missing["NotFound"]}\).}
+\pair{06-data-structures/arrayops/12}{If you supply a default, it is
 returned in its place.}
 \end{codepairs}
 
@@ -255,15 +255,15 @@ back in the order written.}
 \(\mathit{assoc}[\mathit{key}]\) looks the key up---the idiomatic accessor.}
 \pair{06-data-structures/associations/3}{The \texttt{[[key]]} form does the same
 through \B{Part}.}
-\pair{06-data-structures/associations/4}{\B{Keys} lists the keys, in order\ldots}
-\pair{06-data-structures/associations/5}{\ldots and \B{Values} the corresponding
+\pair{06-data-structures/associations/4}{\B{Keys} lists the keys, in order.}
+\pair{06-data-structures/associations/5}{\B{Values} lists the corresponding
 values.}
 \pair{06-data-structures/associations/6}{\B{Lookup} is the explicit accessor.}
 \pair{06-data-structures/associations/7}{Its three-argument form supplies a default
 for an absent key---the safe way to read data that may be incomplete.}
 \pair{06-data-structures/associations/8}{\B{KeyExistsQ} tests for a key's
-presence\ldots}
-\pair{06-data-structures/associations/9}{\ldots reporting \texttt{False} when it is
+presence.}
+\pair{06-data-structures/associations/9}{It reports \texttt{False} when the key is
 missing.}
 \pair{06-data-structures/associations/10}{A bare lookup of an absent key returns a
 \mcode{Missing} marker naming what was not found, rather than an error.}
@@ -521,9 +521,10 @@ result is big enough.}
 packs, at any size---there is no producer to opt in, and a source literal is left
 exactly as typed.}
 \pair{06-data-structures/packing/14}{The master switch \B{\$AutoArrayPacking} turns
-automatic packing off\ldots}
-\pair{06-data-structures/packing/15}{\ldots and back on. It never touches an explicit
-\B{ToNDArray}---that is the user asking, not the system guessing.}
+automatic packing off.}
+\pair{06-data-structures/packing/15}{The same switch turns it back on. It never
+touches an explicit \B{ToNDArray}---that is the user asking, not the system
+guessing.}
 \end{codepairs}
 
 The distinction in the middle pairs surprises people: \mcode{Range[1., 300.]} packs
@@ -542,8 +543,8 @@ it announces itself as a distinct, purely numeric object modelled on numpy's
 they claim to be.
 
 \begin{codepairs}
-\pair{06-data-structures/ndarray/2}{\B{NDArray} prints wrapped in its own head\ldots}
-\pair{06-data-structures/ndarray/3}{\ldots whose \B{Head} is \texttt{NDArray}, not
+\pair{06-data-structures/ndarray/2}{\B{NDArray} prints wrapped in its own head.}
+\pair{06-data-structures/ndarray/3}{That head is \texttt{NDArray}, not
 \texttt{List}.}
 \pair{06-data-structures/ndarray/4}{So it is \emph{not} \B{SameQ} to the plain
 list---the head is part of a value's identity.}
@@ -566,8 +567,8 @@ the same builtins under a second registration.
 
 \begin{codepairs}
 \pair{06-data-structures/ndarray/8}{\B{ToPackedArray} widens a mixed integer/real
-list to a single \texttt{"float64"} buffer\ldots}
-\pair{06-data-structures/ndarray/9}{\ldots the integers becoming doubles, since one
+list to a single \texttt{"float64"} buffer.}
+\pair{06-data-structures/ndarray/9}{The integers become doubles, since one
 buffer holds one machine type.}
 \pair{06-data-structures/ndarray/11}{A derived array stays packed: adding a scalar to
 a packed list gives a packed list.}
@@ -596,8 +597,8 @@ whole abstraction safe.
 \pair{06-data-structures/gate/3}{\B{Cases}---which has no idea packing exists---filters
 it with a pattern and gets exactly the right answer.}
 \pair{06-data-structures/gate/4}{\B{Reverse} understands buffers, so it reverses in
-place\ldots}
-\pair{06-data-structures/gate/5}{\ldots and keeps the result packed.}
+place.}
+\pair{06-data-structures/gate/5}{It keeps the result packed.}
 \pair{06-data-structures/gate/6}{And the buffer path and the ordinary path agree on
 the answer, by construction.}
 \end{codepairs}

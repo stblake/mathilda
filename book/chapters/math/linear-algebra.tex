@@ -137,8 +137,8 @@ when the matrix is singular; the inverse undoes the linear map when it does not.
 rational entries.}
 \pair{linear-algebra/det/4}{Symbolically, the \(2\times2\) inverse is the classical
 adjugate over the determinant \(ad-bc\).}
-\pair{linear-algebra/det/5}{Store a matrix to check the defining identity\ldots}
-\pair{linear-algebra/det/6}{\ldots{}\(A\,A^{-1}\) is the identity, exactly.}
+\pair{linear-algebra/det/5}{Store a matrix to check the defining identity.}
+\pair{linear-algebra/det/6}{The product \(A\,A^{-1}\) is the identity, exactly.}
 \pair{linear-algebra/det/7}{\B{MatrixPower} raises a matrix to an integer power by
 repeated squaring; the tenth power of \(\left(\begin{smallmatrix}1&1\\1&0\end{smallmatrix}\right)\)
 is a block of consecutive Fibonacci numbers.}
@@ -225,8 +225,8 @@ bottom row of zeros is the dependency made visible.}
 the sum of a scaling of the first two.}
 \pair{linear-algebra/reduction/3}{\B{NullSpace} returns the one vector \(\{1,-2,1\}\)
 spanning the kernel.}
-\pair{linear-algebra/reduction/4}{Store the matrix\ldots}
-\pair{linear-algebra/reduction/5}{\ldots and confirm it: \(A\) times the null
+\pair{linear-algebra/reduction/4}{Store the matrix.}
+\pair{linear-algebra/reduction/5}{Confirm it: \(A\) times the null
 vector is \(\mathbf 0\).}
 \pair{linear-algebra/reduction/6}{These are exact even symbolically---row-reducing
 a matrix whose third row is \(\text{row}_1+\text{row}_2\) exposes the zero row and
@@ -332,9 +332,9 @@ mutually perpendicular unit vectors.}
 \pair{linear-algebra/decomp/6}{\B{SingularValueDecomposition} of a rank-\(1\)
 matrix: a single non-zero singular value \(\sqrt{10}\) on the diagonal of
 \(\Sigma\), the rest zero.}
-\pair{linear-algebra/decomp/7}{A symmetric machine matrix for the Schur form\ldots}
-\pair{linear-algebra/decomp/8}{\ldots factored by \B{SchurDecomposition}\ldots}
-\pair{linear-algebra/decomp/9}{\ldots into an orthonormal \texttt{q} and an
+\pair{linear-algebra/decomp/7}{A symmetric machine matrix for the Schur form.}
+\pair{linear-algebra/decomp/8}{It is factored by \B{SchurDecomposition}.}
+\pair{linear-algebra/decomp/9}{The result is an orthonormal \texttt{q} and an
 upper-triangular \texttt{t} (diagonal here, since the matrix is symmetric): its
 diagonal carries the eigenvalues.}
 \pair{linear-algebra/decomp/10}{\B{Chop} confirms \(A = Q\,T\,Q^{*}\) to machine
@@ -402,8 +402,8 @@ superdiagonal.
 \begin{codepairs}
 \pair{linear-algebra/eigen/6}{A matrix with a defective eigenvalue \(12\).}
 \pair{linear-algebra/eigen/7}{\B{JordanDecomposition} returns the similarity
-\(S\) and the Jordan form \(J\)\ldots}
-\pair{linear-algebra/eigen/8}{\ldots whose \(J\) has a \(2\times2\) Jordan block for
+\(S\) and the Jordan form \(J\).}
+\pair{linear-algebra/eigen/8}{The form \(J\) has a \(2\times2\) Jordan block for
 \(12\): the eigenvalue twice on the diagonal, a \(1\) above it marking the deficient
 eigenspace.}
 \pair{linear-algebra/eigen/9}{And the decomposition reconstructs the matrix:
@@ -454,8 +454,8 @@ FLINT.}
 \pair{linear-algebra/precision/5}{The visible packed form: an \B{NDArray} is a
 dense machine buffer that announces itself.}
 \pair{linear-algebra/precision/6}{\B{Dot} over two \texttt{NDArray}s runs on the raw
-buffers and returns a closed-system \texttt{NDArray}\ldots}
-\pair{linear-algebra/precision/7}{\ldots and \B{Det} of one returns a bare machine
+buffers and returns a closed-system \texttt{NDArray}.}
+\pair{linear-algebra/precision/7}{\B{Det} of one returns a bare machine
 scalar, straight off the buffer.}
 \end{codepairs}
 

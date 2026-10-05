@@ -39,8 +39,8 @@ identity that ties the two functions together:
 \begin{codepairs}
 \pair{number-theory/euclid/1}{The largest integer dividing both \(24\) and \(36\).}
 \pair{number-theory/euclid/2}{And the smallest that \(4\) and \(6\) both divide.}
-\pair{number-theory/euclid/3}{Their product, \(\gcd\cdot\operatorname{lcm}\), \dots}
-\pair{number-theory/euclid/4}{\dots equals the product of the numbers themselves---a
+\pair{number-theory/euclid/3}{Their product \(\gcd\cdot\operatorname{lcm}\) is formed.}
+\pair{number-theory/euclid/4}{It equals the product of the numbers themselves---a
 classic identity, true for any pair.}
 \end{codepairs}
 
@@ -349,8 +349,8 @@ non-negative \(x\) with \(x\equiv r_i\pmod{n_i}\) for every \(i\)---unique modul
 the moduli's least common multiple:
 
 \begin{codepairs}
-\pair{number-theory/crt/1}{The three moduli\ldots}
-\pair{number-theory/crt/2}{\ldots and the residues to match.}
+\pair{number-theory/crt/1}{The three moduli are listed.}
+\pair{number-theory/crt/2}{The matching residues are listed too.}
 \pair{number-theory/crt/3}{The unique \(x\) in \([0,105)\) that is \(\equiv2,3,2\)
 modulo \(3,5,7\)---the residue \(23\).}
 \pair{number-theory/crt/4}{And it checks: \(23\) leaves exactly those remainders.}
@@ -453,8 +453,8 @@ is congruent to its digit sum modulo \(9\), because \(10\equiv1\):
 
 \begin{codepairs}
 \pair{number-theory/digits/7}{\B{DigitSum} adds the base-ten digits: \(1+2+3+4+5+6=21\).}
-\pair{number-theory/digits/8}{Its residue modulo \(9\) \dots}
-\pair{number-theory/digits/9}{\dots equals the number's own residue modulo \(9\). That is
+\pair{number-theory/digits/8}{Its residue modulo \(9\) is taken.}
+\pair{number-theory/digits/9}{It equals the number's own residue modulo \(9\). That is
 casting out nines.}
 \pair{number-theory/digits/10}{\B{DigitCount} tallies how often each digit occurs---one
 \(1\), two \(2\)s, three \(3\)s, four \(4\)s (the final slot counts the zeros).}
@@ -536,19 +536,19 @@ textbook primes \(p=61\), \(q=53\) so every step is legible; the session is cont
 each line building on the last. First the public modulus and its secret totient:
 
 \begin{codepairs}
-\pair{number-theory/rsa/1}{Pick the first prime, \(p=61\)\dots}
-\pair{number-theory/rsa/2}{\dots and the second, \(q=53\).}
+\pair{number-theory/rsa/1}{Pick the first prime, \(p=61\).}
+\pair{number-theory/rsa/2}{Pick the second prime, \(q=53\).}
 \pair{number-theory/rsa/3}{The modulus \(n=pq=3233\) is public; its factors are the secret.}
-\pair{number-theory/rsa/4}{The totient \(\varphi(n)=3120\)\dots}
-\pair{number-theory/rsa/5}{\dots which for a product of two primes is \((p-1)(q-1)\), as
+\pair{number-theory/rsa/4}{The totient is \(\varphi(n)=3120\).}
+\pair{number-theory/rsa/5}{For a product of two primes this is \((p-1)(q-1)\), as
 knowing the factorization lets us confirm.}
 \end{codepairs}
 
 Next a public exponent coprime to \(\varphi(n)\), and the private exponent that inverts it:
 
 \begin{codepairs}
-\pair{number-theory/rsa/6}{The conventional public exponent \(e=17\)\dots}
-\pair{number-theory/rsa/7}{\dots coprime to \(\varphi(n)\), so it is invertible.}
+\pair{number-theory/rsa/6}{The conventional public exponent is \(e=17\).}
+\pair{number-theory/rsa/7}{It is coprime to \(\varphi(n)\), so it is invertible.}
 \pair{number-theory/rsa/8}{\B{ExtendedGCD} already exposes the inverse in its B\'ezout
 coefficient: \((-367)\cdot17+2\cdot3120=1\).}
 \pair{number-theory/rsa/9}{The private key \(d\) is that inverse as a positive residue,

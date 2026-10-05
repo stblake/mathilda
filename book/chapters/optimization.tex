@@ -67,8 +67,8 @@ interval.}
 \pair{optimization/forms/6}{Every optimizer returns a list of two things. The
 first is the optimal value and the second is a list of rules for the optimal
 point.}
-\pair{optimization/forms/7}{The rules plug straight into \mcode{ReplaceAll}\ldots}
-\pair{optimization/forms/8}{\ldots so it is easy to check the answer by
+\pair{optimization/forms/7}{The rules plug straight into \mcode{ReplaceAll}.}
+\pair{optimization/forms/8}{So it is easy to check the answer by
 substituting it back into the objective.}
 \end{codepairs}
 
@@ -653,8 +653,8 @@ the origin.}
 \pair{optimization/nminimize/4}{Box constraints set the search region
 explicitly.}
 \pair{optimization/nminimize/5}{\B{SeedRandom} does not affect \B{NMinimize}.
-This is the raw search result with no local polish\ldots}
-\pair{optimization/nminimize/6}{\ldots and a different \B{SeedRandom} gives the
+This is the raw search result with no local polish.}
+\pair{optimization/nminimize/6}{A different \B{SeedRandom} gives the
 identical answer.}
 \pair{optimization/nminimize/7}{The method option \mcode{"RandomSeed"}
 changes the search, and the raw answer moves.}
@@ -1111,7 +1111,7 @@ explicit variables and 119.7~ms with \mcode{Table[v[i], \{i, 1, 5\}]}, a factor
 of 41. The cause was never the optimizer --- its rewrite to fresh symbols and the
 compiled fast path already handled indexed variables --- but \B{Sum}'s Gosper
 stage churning \B{Simplify} on the opaque-indexed summand
-(\mcode{v[i]^2 - 10 Cos[2 Pi v[i]]}) before failing. With a structural guard in
+(\mcode{v[i]\^{}2 - 10 Cos[2 Pi v[i]]}) before failing. With a structural guard in
 that stage the two forms now run at parity, so indexed variables are a
 convenience with no speed cost.}
 

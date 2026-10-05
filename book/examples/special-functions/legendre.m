@@ -4,7 +4,7 @@ Table[LegendreP[n, x], {n, 0, 3}]
 LegendreP[4, x]
 # Orthogonality on [-1, 1]: the squared norm is 2/(2n+1)
 Integrate[LegendreP[2, x]^2, {x, -1, 1}]
-# ... and distinct degrees are orthogonal
+# Distinct degrees are orthogonal, so the cross integral vanishes
 Integrate[LegendreP[2, x] LegendreP[3, x], {x, -1, 1}]
 # The second-kind solution LegendreQ carries the logarithm
 LegendreQ[0, x]

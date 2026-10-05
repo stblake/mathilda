@@ -66,7 +66,7 @@ quickest way to build an intuition for what fits what.
 \texttt{Integer}.}
 \pair{07-programming/patterns/2}{\(3.14\) does not---its head is \texttt{Real}, so
 \texttt{\_Integer} fails.}
-\pair{07-programming/patterns/3}{\ldots but \texttt{\_Real} matches it. A typed
+\pair{07-programming/patterns/3}{But \texttt{\_Real} matches it. A typed
 blank is a structural test on the head.}
 \pair{07-programming/patterns/4}{Head-typed blanks reach the atomic numeric heads:
 \(1/2\) is \texttt{Rational[1, 2]}.}
@@ -76,9 +76,9 @@ matches a two-argument \texttt{f}.}
 \pair{07-programming/patterns/7}{\texttt{\_\_} (\B{BlankSequence}) matches a run of
 one or more arguments.}
 \pair{07-programming/patterns/8}{An empty \texttt{f[]} has no arguments, so
-\texttt{\_\_} (one or more) fails\ldots}
-\pair{07-programming/patterns/9}{\ldots while \texttt{\_\_\_}
-(\B{BlankNullSequence}, zero or more) matches it.}
+\texttt{\_\_} (one or more) fails.}
+\pair{07-programming/patterns/9}{The \texttt{\_\_\_} blank
+(\B{BlankNullSequence}, zero or more) still matches it.}
 \pair{07-programming/patterns/10}{Sequence blanks match \emph{positions}: some
 prefix, a \(3\), some suffix.}
 \pair{07-programming/patterns/11}{A named typed blank binds: the rule fires only on
@@ -252,8 +252,8 @@ function \emph{is} a bundle of pattern rules.
 \pair{07-programming/downvalues/2}{It fires by matching: on a number, a symbolic
 sum, and a constant alike.}
 \pair{07-programming/downvalues/3}{A second symbol, \texttt{area}, gets its own
-rule\ldots}
-\pair{07-programming/downvalues/4}{\ldots and a \emph{second} rule with a different
+rule.}
+\pair{07-programming/downvalues/4}{A \emph{second} rule follows, with a different
 argument count.}
 \pair{07-programming/downvalues/5}{Dispatch is by pattern: one argument gives the
 disk area, two the rectangle.}
@@ -265,8 +265,8 @@ disk area, two the rectangle.}
 \pair{07-programming/downvalues/9}{\texttt{fib[10]} unwinds through the rules to
 \(55\).}
 \pair{07-programming/downvalues/10}{\texttt{collatz} on even integers---the guard
-\texttt{\_?EvenQ} selects the rule\ldots}
-\pair{07-programming/downvalues/11}{\ldots and a separate rule handles the odd case.}
+\texttt{\_?EvenQ} selects the rule.}
+\pair{07-programming/downvalues/11}{A separate rule handles the odd case.}
 \pair{07-programming/downvalues/12}{\B{NestList} then iterates the two-rule function:
 the Collatz orbit of \(27\).}
 \end{codepairs}
@@ -348,8 +348,8 @@ before evaluating it.}
 reaches inside \B{Hold}: \texttt{a} becomes \(2\) even though the body is held.}
 \pair{07-programming/scoping/6}{A \B{Module} local can be read and assigned from
 inside a nested pure function---here a running counter.}
-\pair{07-programming/scoping/7}{A global \texttt{n}\ldots}
-\pair{07-programming/scoping/8}{\ldots and a function \texttt{g} that reads it.}
+\pair{07-programming/scoping/7}{A global \texttt{n} is set.}
+\pair{07-programming/scoping/8}{A function \texttt{g} reads it.}
 \pair{07-programming/scoping/9}{\B{Block} overrides \texttt{n} \emph{dynamically}:
 \texttt{g[]} sees the temporary \(3\), so \(3^2 = 9\).}
 \pair{07-programming/scoping/10}{\B{Module} does \emph{not}: its private \texttt{n}
@@ -396,8 +396,8 @@ than on a chain of booleans, with a trailing \texttt{\_} as the default.
 
 \begin{codepairs}
 \pair{07-programming/branching/1}{\B{If} chooses the true branch.}
-\pair{07-programming/branching/2}{\B{Which} as a multi-way classifier\ldots}
-\pair{07-programming/branching/3}{\ldots dispatched over a list with
+\pair{07-programming/branching/2}{\B{Which} acts as a multi-way classifier.}
+\pair{07-programming/branching/3}{It is dispatched over a list with
 \texttt{/@}.}
 \pair{07-programming/branching/4}{The sign function, three cases with a \texttt{True}
 default.}
@@ -530,9 +530,9 @@ into \texttt{Plus}, giving \texttt{Plus[1, 2, 3, 4]}, which evaluates to the sum
 \pair{07-programming/mapapply/1}{\B{Map} wraps each element in \texttt{box}.}
 \pair{07-programming/mapapply/2}{\texttt{/@} is the same operator in infix form.}
 \pair{07-programming/mapapply/3}{\B{Apply} replaces the head \texttt{List} with
-\texttt{Plus}\ldots}
-\pair{07-programming/mapapply/4}{\ldots which \texttt{@@} writes infix; the list
-becomes a sum.}
+\texttt{Plus}.}
+\pair{07-programming/mapapply/4}{The operator \texttt{@@} writes the same thing
+infix; the list becomes a sum.}
 \pair{07-programming/mapapply/5}{With a symbolic head the mechanism is bare:
 \texttt{List} becomes \texttt{f}.}
 \pair{07-programming/mapapply/6}{\texttt{@@@} applies at level one---the head of each
@@ -703,19 +703,19 @@ them on your own symbols, watching the evaluator's behavior change.
 \texttt{Listable}, \texttt{Orderless} (commutative), and more---its algebra is its
 attributes.}
 \pair{07-programming/attributes/2}{Give a fresh symbol \texttt{circ} the attribute
-\texttt{Orderless}\ldots}
-\pair{07-programming/attributes/3}{\ldots and its arguments are sorted into canonical
+\texttt{Orderless}.}
+\pair{07-programming/attributes/3}{Its arguments are then sorted into canonical
 order automatically.}
-\pair{07-programming/attributes/4}{Make \texttt{gp} \texttt{Flat}\ldots}
-\pair{07-programming/attributes/5}{\ldots and nested \texttt{gp} calls flatten into
+\pair{07-programming/attributes/4}{Make \texttt{gp} \texttt{Flat}.}
+\pair{07-programming/attributes/5}{Nested \texttt{gp} calls then flatten into
 one.}
-\pair{07-programming/attributes/6}{Make \texttt{hl} \texttt{Listable}\ldots}
-\pair{07-programming/attributes/7}{\ldots and it threads element-wise over a list
+\pair{07-programming/attributes/6}{Make \texttt{hl} \texttt{Listable}.}
+\pair{07-programming/attributes/7}{It then threads element-wise over a list
 argument, with no loop written.}
 \pair{07-programming/attributes/8}{Over several list arguments it threads them in
 parallel.}
-\pair{07-programming/attributes/9}{Remove the attribute\ldots}
-\pair{07-programming/attributes/10}{\ldots and the threading stops---\texttt{hl}
+\pair{07-programming/attributes/9}{Remove the attribute.}
+\pair{07-programming/attributes/10}{The threading stops, and \texttt{hl}
 holds the list whole again.}
 \end{codepairs}
 
@@ -790,8 +790,8 @@ no work while asleep, so it reports a time near zero.}
 \pair{07-programming/timing/4}{The duration can be exact---a rational quarter of a
 second pauses for \(0.25\)\,s.}
 \pair{07-programming/timing/5}{By now the session has spent nearly a second
-\emph{waiting}, and \mcode{SessionTime} counts all of it\ldots}
-\pair{07-programming/timing/6}{\ldots while \mcode{TimeUsed}, the CPU meter, has
+\emph{waiting}, and \mcode{SessionTime} counts all of it.}
+\pair{07-programming/timing/6}{But \mcode{TimeUsed}, the CPU meter, has
 barely moved---the pauses cost time, not computation.}
 \end{codepairs}
 
