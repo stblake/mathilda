@@ -235,7 +235,8 @@ static Expr* qe_parametric(const Expr* body, int quant, const char** FREE, int n
      * the original body is used unchanged. */
     Expr* pre = NULL;
     if (reduce_stmt_has_piecewise(body, vall, nvall)
-     || reduce_stmt_has_radical(body, vall, nvall)) {
+     || reduce_stmt_has_radical(body, vall, nvall)
+     || reduce_stmt_has_fraction(body, vall, nvall)) {
         bool changed = false;
         pre = reduce_piecewise_preprocess(body, vall, nvall, &changed);
     }

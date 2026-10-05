@@ -20,6 +20,20 @@ proved and must never turn a decline into a wrong verdict.
 
 Observed on **v0.284** (2026-10-05). Reproduce with the block at the end.
 
+> **RESOLVED in v0.289 (2026-10-05): the whole of failure class A below is fixed,
+> and the §2 root-cause hypothesis was wrong.** The CAD handles the
+> parameter×variable *product* perfectly. The real cause was a **missing
+> denominator-clearing pass**: chained quantifier elimination emits a *rational*
+> atom at an intermediate level (the inner `∀x` of the product case eliminates
+> correctly to `del>0 && m <= 1/del`), and every multivariate real engine declined
+> any atom with a non-constant denominator (`nonconst_denom`). Clearing
+> `p/q REL 0` to the sign-exact polynomial form in the multivariate Reals
+> preprocessing (`reduce_piecewise_preprocess`, plus `Abs[p/q] -> Abs[p]/Abs[q]`
+> so the Abs sign-split stays sound at a pole) closes all three §1 gap rows and
+> both §2 product cases. Class B (higher-arity *refutation*) and the transcendental
+> declines (§4) are unaffected and remain open. The original analysis is kept below
+> as the record; the frontier table's "declined" rows marked (A) are now decided.
+
 ---
 
 ## 1. The decidability frontier (observed)
@@ -35,11 +49,13 @@ Each row is the literal ε/M–δ (or –N) transcription of a limit definition,
 | Finite value, planar, prove | `lim_{(x,y)→0}(x+y)=0` | `∀ε ∃δ ∀{x,y} (0<x²+y²<δ² ⇒ \|x+y\|<ε)` | **True** |
 | Infinite value, **at infinity**, prove | `lim_{x→∞} x² = ∞` | `∀M ∃N ∀x (x>N ⇒ x²>M)` | **True** |
 | Infinite value, **at infinity**, refute | `lim_{x→∞}(−x²)=∞` | same, `−x²` | **False** |
-| **Finite value, planar, refute** | `lim_{(x,y)→0}(x+y)=1` | `∀ε ∃δ ∀{x,y} (0<x²+y²<δ² ⇒ \|x+y−1\|<ε)` | **declined** |
-| **Finite value, at infinity, prove** | `lim_{x→∞} 1/x = 0` | `∀ε ∃N ∀x (x>N ⇒ \|1/x\|<ε)` | **declined** |
-| **Infinite value, finite point, prove** | `lim_{x→0} 1/x² = ∞` | `∀M ∃δ ∀x (0<\|x\|<δ ⇒ 1/x²>M)` | **declined** |
+| **Finite value, planar, refute** | `lim_{(x,y)→0}(x+y)=1` | `∀ε ∃δ ∀{x,y} (0<x²+y²<δ² ⇒ \|x+y−1\|<ε)` | **declined** (class B, open) |
+| ~~Finite value, at infinity, prove~~ | `lim_{x→∞} 1/x = 0` | `∀ε ∃N ∀x (x>N ⇒ \|1/x\|<ε)` | **True (v0.289)** |
+| ~~Infinite value, finite point, prove~~ | `lim_{x→0} 1/x² = ∞` | `∀M ∃δ ∀x (0<\|x\|<δ ⇒ 1/x²>M)` | **True (v0.289)** |
 
-The last three rows are the gaps. They split into two independent causes.
+The last three rows *were* the gaps. Two (class A) are **fixed in v0.289** — see the
+note at the top. The planar refute (class B) remains open. They split into two
+independent causes, analysed below.
 
 ---
 
@@ -91,18 +107,27 @@ finite limits at infinity — the bulk of a standard limits chapter — while th
 additive cases (finite limit at a point, `x → ∞` of a function that *grows* to
 ∞) go through.
 
-**Root-cause hypothesis** (unverified — needs instrumentation of
-`src/solve/reduce_cad.c`). A product `p·v` of a parameter `p` and a variable `v`
-raises the total degree of the projection factors and makes the `∃`-witness
-depend on the parameter non-polynomially (`δ = 1/M`, `N = √M`). The suspicion is
-that CAD **projection/lifting on these mixed product terms** either blows up or
-hits a branch that gives up, rather than a genuine undecidability — the additive
-siblings, identical in every other respect, project cleanly. Worth checking: does
-a manual change of variables that removes the product (e.g. `t = 1/x`, turning
-`lim_{x→0⁺} 1/x = ∞` into `lim_{t→∞} t = ∞`, the additive `∀M ∃N ∀t (t>N ⇒ t>M)`,
-which **does** prove `True` just like [3]) let the same decision go through? If so
-the fix may be a normalising substitution in the front end rather than a change to
-the core CAD.
+**Root-cause (CONFIRMED in v0.289 — the hypothesis below was WRONG).** The CAD does
+*not* blow up on the product: `Reduce[Exists[del, del>0 && m del <= 1], {m}, Reals]`
+→ `True`, `Reduce[m del <= 1 && del>0, {m, del}, Reals]` → the correct region, and
+`Resolve[ForAll[m, m>0, Exists[del, del>0 && m del <= 1]], Reals]` → `True`. The
+decline was a **front-end plumbing** gap: the `∃`-witness is non-polynomial in the
+parameter, so the inner `∀x` *correctly* eliminates to a **rational** atom
+(`del>0 && m <= 1/del`), and the next elimination level then declined it because
+every multivariate real engine bails on an atom with a non-constant denominator
+(`nonconst_denom` in `reduce_atom.c`; checked in `reduce_cad.c` / `reduce_fm.c` /
+`reduce_sys.c` / `reduce_zerodim.c`). The Reals preprocessing cleared radicals and
+split selectors but never cleared rational denominators. The fix (v0.289) adds that
+clearing pass (`p/q REL 0 → p q REL 0 [&& q≠0]`, with `Abs[p/q]→Abs[p]/Abs[q]` to
+keep the Abs sign-split sound at a pole) — a general preprocessing rewrite, not the
+per-case `t = 1/x` substitution the superseded hypothesis below guessed at.
+
+> *Original (unverified, now disproved) hypothesis, kept for the record:* "A product
+> `p·v` … raises the total degree of the projection factors … CAD projection/lifting
+> on these mixed product terms either blows up or hits a branch that gives up …
+> the fix may be a normalising substitution in the front end rather than a change to
+> the core CAD." — The CAD was never the problem; the missing denominator-clearing
+> pass was.
 
 ---
 
@@ -138,11 +163,12 @@ failures" and should not be conflated with classes A and B.
 
 ## 5. Suggested improvements, by payoff
 
-1. **Class A (parameter×variable product).** Highest payoff by far — it unblocks
-   both infinite limits at a point and finite limits at infinity, i.e. most of a
-   calculus limits chapter, and the statements are tiny. First step: instrument
-   `reduce_cad.c` on reproducer [2] to see whether projection explodes or a case
-   is dropped; try a front-end substitution that clears the product.
+1. **Class A (parameter×variable product). ✅ DONE in v0.289.** It was not a
+   product/CAD problem at all but a missing **rational-denominator clearing** pass
+   (the inner elimination emits `m <= 1/del`, which the engines declined). Clearing
+   `p/q REL 0 → p q REL 0 [&& q≠0]` in the multivariate Reals preprocessing (with
+   `Abs[p/q]→Abs[p]/Abs[q]`) unblocked both infinite limits at a point and finite
+   limits at infinity. See the §2 root-cause note and the v0.289 changelog.
 2. **Class B (higher-arity refutation).** Faster/space-bounded CAD or a dedicated
    "no witness exists" search so wrong planar (and higher) limits are *refuted*
    rather than declined.

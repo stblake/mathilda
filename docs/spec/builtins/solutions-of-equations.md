@@ -1220,9 +1220,16 @@ machinery where the two overlap:
 An unrecognised trailing option warns (`Reduce::optx`) and leaves the call
 unevaluated. Options may follow the variables with or without an explicit domain.
 
-Rational-function relations whose canonicalisation would clear a variable
-denominator (e.g. `1/x < 1`) are declined (left unevaluated) rather than answered
-from the polynomial numerator alone, which would be unsound. Statements that
+Rational-function relations with a variable denominator (e.g. `1/x < 1`) are
+handled by **clearing the denominator** rather than dropping it (which would be
+unsound). Over a single variable the sign diagram keeps the denominator's roots as
+excluded poles. Over several variables the Reals preprocessing rewrites each atom
+`p/q REL 0` (q non-constant) to its sign-exact polynomial equivalent before the
+FM/CAD engines — `p/q < 0 ⟺ p q < 0`, `p/q <= 0 ⟺ p q <= 0 && q != 0`, and
+similarly for `== / !=` (the `q != 0` guards drop the poles, which are never
+solutions) — so `Reduce[x/y <= 0, {x, y}, Reals]` and
+`Reduce[(x-1)/(x+1) > 0, {x, y}, Reals]` decide. An atom whose denominator the
+pass cannot clear still declines soundly (left unevaluated). Statements that
 require an engine not yet wired (nonlinear multivariate equations over Complexes)
 also remain unevaluated; those engines land in the later phases of the plan.
 Quantifiers (`Exists`, `ForAll`) embedded in a `Reduce` statement, and the
@@ -1286,11 +1293,14 @@ the free variables' decomposition:
   decline.
 
   A parametric body carrying a **real-function selector** (`Abs`, `Min`, `Max`,
-  `Piecewise`, `Sign`, `UnitStep`, …) or a square-root radical is case-split into
-  polynomial branches by the *same* real-domain preprocessing the base `Reduce`
-  engine applies to a multivariate Reals problem, before the CAD sees it — so the
-  parametric path and the fully-quantified decision path agree on such bodies
-  rather than the parametric one declining. Examples:
+  `Piecewise`, `Sign`, `UnitStep`, …), a square-root radical, or a **rational atom
+  with a variable denominator** is rewritten into polynomial branches by the *same*
+  real-domain preprocessing the base `Reduce` engine applies to a multivariate Reals
+  problem, before the CAD sees it — so the parametric path and the fully-quantified
+  decision path agree on such bodies rather than the parametric one declining. The
+  denominator clearing is what lets a chained elimination whose witness is
+  non-polynomial in the parameters (`del = 1/m`, `N = 1/eps`) carry the intermediate
+  rational atom it produces (`m <= 1/del`) into the next level. Examples:
   `Reduce[ForAll[x, Abs[x] < d, x^2 < 9], {d}, Reals] -> d <= 3`;
   `Reduce[ForAll[x, x^2 < 1, Abs[x] < e], {e}, Reals] -> e >= 1`;
   `Reduce[ForAll[x, Abs[x-2] < d, Abs[3 x - 6] < e], {d, e}, Reals] ->
@@ -1313,6 +1323,11 @@ the free variables' decomposition:
   `Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[x,
   0 < Abs[x-2] < del, Abs[(3 x - 1) - 5] < eps]]], Reals] -> True`,
   while the wrong target `6` returns `False`; likewise `lim_{x->3} x^2 = 9 -> True`.
+  With denominator clearing this extends to the families whose ε–δ transcription is
+  intrinsically rational: **limits at infinity** (`lim_{x->oo} 1/x = 0`,
+  `Resolve[ForAll[eps, eps>0, Exists[nn, nn>0, ForAll[x, x>nn, Abs[1/x] < eps]]],
+  Reals] -> True`) and **infinite limits at a finite point**
+  (`lim_{x->0} 1/x^2 = oo -> True`); a wrong target again refutes.
   A transcendental limit (`Sin[x]/x`) has no polynomial CAD and correctly
   **declines** (stays unevaluated). The `0 < |x-a| < del` guard may be written as a
   chained `Inequality` (as here) or as an explicit `&&` of two bounds -- both are

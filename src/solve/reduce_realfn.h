@@ -44,6 +44,14 @@ bool reduce_stmt_has_piecewise(const Expr* e, Expr** vars, int nv);
  * before the FM/CAD engines, which accept only polynomial atoms. */
 bool reduce_stmt_has_radical(const Expr* e, Expr** vars, int nv);
 
+/* True iff `e` contains a relation with a variable denominator (a Power[u, k] with
+ * k a negative numeric exponent and u mentioning one of the `nv` reduce `vars`:
+ * 1/x, 1/Sqrt[x], a/b).  Drives the multivariate dispatch to clear denominators
+ * (p/q REL 0 -> p q REL 0 [&& q != 0], in reduce_piecewise_preprocess) into
+ * polynomial atoms before the FM/CAD engines, which otherwise decline any atom
+ * with a non-constant denominator (reduce_atom.c's nonconst_denom). */
+bool reduce_stmt_has_fraction(const Expr* e, Expr** vars, int nv);
+
 /* Rewrite the statement so the general real sign diagram can consume it:
  *   1. substitute every Mod[u,m] (m a positive constant) by u - m*Floor[u/m];
  *   2. expand a relational leaf that is linear in a single Floor/Ceiling/Round

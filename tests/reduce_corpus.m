@@ -263,6 +263,14 @@
   {"rf-sqrt-abs-lt",     Sqrt[Abs[x]] < 1,                 x,       Reals,     "solved"},
   {"rf-log-abs",         Log[Abs[x]] < 0,                  x,       Reals,     "solved"},
 
+  (* ---- rational-denominator clearing (v0.289): a multivariate atom p/q REL 0 with
+   *      a variable denominator is cleared to the sign-exact polynomial form (poles
+   *      excluded), so the CAD/FM engines decide it instead of declining ---- *)
+  {"frac-xy-lt",         x/y < 1,                          {x, y},  Reals,     "solved"},
+  {"frac-xy-le0",        x/y <= 0,                         {x, y},  Reals,     "solved"},
+  {"frac-shift-gt",      (x - 1)/(x + 1) > 0,              {x, y},  Reals,     "solved"},
+  {"frac-sum-le",        1/x + 1/(x + 1) <= m,             {x, m},  Reals,     "solved"},
+
   (* ---- soundness: radicals the pass cannot rationalize EXACTLY must decline,
    *      never a guessed rewrite ---- *)
   {"dec-mm-sqrt-coeff",  x Sqrt[y] < 1,                    {x, y},  Reals,     "decline"},

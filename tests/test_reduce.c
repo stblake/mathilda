@@ -1026,6 +1026,43 @@ static void test_epsilon_delta(void) {
                  "Resolve[ForAll[eps,");
 }
 
+/* Rational-denominator clearing in the multivariate Reals path (v0.289).  A chained
+ * quantifier elimination emits a RATIONAL atom (m <= 1/del) at an intermediate level;
+ * before this pass every multivariate engine declined any atom with a non-constant
+ * denominator (nonconst_denom), which lost every infinite limit at a point and every
+ * finite limit at infinity.  Preprocessing 6 (reduce_realfn.c) clears p/q REL 0 to
+ * the sign-exact polynomial form; split_abs_denominators keeps Abs-of-fraction sound
+ * at the pole.  This pins the end-to-end limit proofs AND the base-engine atoms, in
+ * BOTH directions (a wrong limit must refute, never guess). */
+static void test_rational_denominator_clearing(void) {
+    /* RESOLVE_IMPROVEMENTS.md §2: parameter x variable product, both neighbourhoods. */
+    run_test("Resolve[ForAll[m, m > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < x < del, m x < 1]]], Reals]", "True");
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[n, n > 0, "
+             "ForAll[x, x > n, eps x > 1]]], Reals]", "True");
+    /* lim_{x->oo} 1/x = 0  (True); wrong target 5 must refute (False) -- the Abs
+     * argument is itself the pole-bearing fraction, exercising split_abs_denominators. */
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[nn, nn > 0, "
+             "ForAll[x, x > nn, Abs[1/x] < eps]]], Reals]", "True");
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[nn, nn > 0, "
+             "ForAll[x, x > nn, Abs[1/x - 5] < eps]]], Reals]", "False");
+    /* lim_{x->0} 1/x^2 = oo  (True): fraction in the conclusion, pole excluded by guard. */
+    run_test("Resolve[ForAll[M, M > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x] < del, 1/x^2 > M]]], Reals]", "True");
+    /* lim_{x->0} 1/(x+2) = 1/2  (True) with a fraction conclusion; wrong target 1 False. */
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x] < del, Abs[1/(x+2) - 1/2] < eps]]], Reals]", "True");
+    run_test("Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, "
+             "ForAll[x, 0 < Abs[x] < del, Abs[1/(x+2) - 1] < eps]]], Reals]", "False");
+    /* Base engine: multivariate rational atoms now decide instead of declining. */
+    run_test("Resolve[Exists[x, x > 0 && m == 1/x], Reals]", "Greater[m, 0]");
+    run_test("Reduce[x/y <= 0, {x, y}, Reals]",
+             "Or[And[Less[x, 0], Greater[y, 0]], And[Greater[x, 0], Less[y, 0]], "
+             "And[Equal[x, 0], Or[Less[y, 0], Greater[y, 0]]]]");
+    run_test("Reduce[(x - 1)/(x + 1) > 0 && y == y, {x, y}, Reals]",
+             "Or[Less[x, -1], Greater[x, 1]]");
+}
+
 /* Chained Inequality (`a < f < b`) carrying an Abs under a quantifier restriction:
  * decided on every path (decision/parametric x ForAll/Exists).  Guards the
  * interaction that used to decline before the parametric Abs pass (v0.206) and the
@@ -1614,6 +1651,7 @@ int main(void) {
     TEST(test_quantifiers_decline);
     TEST(test_quantifiers_bounded_alternation);
     TEST(test_epsilon_delta);
+    TEST(test_rational_denominator_clearing);
     TEST(test_chained_inequality_abs);
     TEST(test_logical_expand);
     TEST(test_find_instance);

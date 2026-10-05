@@ -1148,6 +1148,215 @@ static Expr* rationalize_radical_leaves(const Expr* e, Expr** vars, int nv, bool
     return rationalize_tree(e, false, vars, nv, 0, changed);
 }
 
+/* ------------------------------------------------------------------ *
+ *  Preprocessing 6: rational-denominator clearing                     *
+ *                                                                     *
+ *  Rewrite a relation  p/q REL 0  (q a NON-constant polynomial in the  *
+ *  reduce variables) into an EQUIVALENT denominator-free boolean form   *
+ *  over the Reals, so the FM/CAD engines -- which accept only           *
+ *  polynomial atoms and otherwise DECLINE any atom with a variable      *
+ *  denominator (reduce_atom.c's nonconst_denom backstop) -- can decide  *
+ *  it.  Without this pass the inner block of a chained quantifier       *
+ *  elimination -- whose witness is non-polynomial in the parameters     *
+ *  (del = 1/m, N = 1/eps) -- emits a rational atom (m <= 1/del) that     *
+ *  the NEXT elimination level then declines, which is the whole reason   *
+ *  infinite limits at a point and finite limits at infinity were lost.   *
+ *                                                                     *
+ *  The identity is sign-exact because q^2 > 0 off the pole set:         *
+ *     p/q  <  0   <=>   p q  <  0                                        *
+ *     p/q  <= 0   <=>   p q  <= 0  &&  q != 0                            *
+ *     p/q  == 0   <=>   p    == 0  &&  q != 0                            *
+ *     p/q  != 0   <=>   p    != 0  &&  q != 0                            *
+ *  (> / >= are the <= / < table on the sign-swapped relation, reached    *
+ *  by negate_rel in the NNF walk below).  The strict rows need no q!=0   *
+ *  guard -- the product already excludes q==0.  The guards drop the      *
+ *  poles, matching Reduce's domain semantics (a pole is excluded, never  *
+ *  a solution: Reduce[1/x<=0,x] is x<0, not x<=0).                       *
+ *                                                                     *
+ *  Runs in the SAME fixpoint as selector splitting and radical          *
+ *  rationalization, ORDERED selector -> fraction -> radical, so a        *
+ *  fraction that exposes a radical (del <= 1/Sqrt[M] clears to           *
+ *  del M - Sqrt[M] <= 0) is rationalized in the same iteration.  Walked  *
+ *  in NNF (like rationalize_tree) so a negated leaf clears with its      *
+ *  De-Morgan relation and the pole set stays excluded under negation.    */
+
+/* Power[u, k] with k a negative numeric exponent and u mentioning a reduce
+ * variable -- the structural signature of a variable denominator (1/del is
+ * Power[del,-1]; 1/Sqrt[M] is Power[M,Rational[-1,2]]; a/b is
+ * Times[a,Power[b,-1]]).  A cheap over-approximation: a false positive only costs
+ * a Together that then finds a constant denominator and leaves the leaf as it was. */
+static bool is_var_denom_power(const Expr* e, Expr** vars, int nv) {
+    if (!is_head(e, SYM_Power) || e->data.function.arg_count != 2) return false;
+    const Expr* ex = e->data.function.args[1];
+    bool negexp = false;
+    if (ex->type == EXPR_INTEGER)   negexp = ex->data.integer < 0;
+    else if (ex->type == EXPR_REAL) negexp = ex->data.real < 0.0;
+    else if (is_head(ex, SYM_Rational) && ex->data.function.arg_count == 2
+             && ex->data.function.args[0]->type == EXPR_INTEGER)
+        negexp = ex->data.function.args[0]->data.integer < 0;
+    if (!negexp) return false;
+    return contains_any_var(e->data.function.args[0], vars, nv);
+}
+
+/* Any subterm that is a variable-denominator power. */
+static bool has_var_denom(const Expr* e, Expr** vars, int nv) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_var_denom_power(e, vars, nv)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_var_denom(e->data.function.args[i], vars, nv)) return true;
+    return false;
+}
+
+bool reduce_stmt_has_fraction(const Expr* e, Expr** vars, int nv) {
+    return has_var_denom(e, vars, nv);
+}
+
+/* A branch-cut transcendental (Log, inverse trig/hyperbolic) whose Together
+ * simplification applies complex-branch identities unsound over the reals
+ * (Together[Log[x^2]-2Log[-x]] -> -2 I Pi, wrong for real x<0).  Mirrors
+ * reduce_atom.c's contains_branch_transcendental; such a leaf is left UNCLEARED
+ * (the downstream engine then declines it soundly rather than risk Together). */
+static bool clearfrac_has_branch_cut(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_Log || h == SYM_ArcSin || h == SYM_ArcCos || h == SYM_ArcTan
+            || h == SYM_ArcCot || h == SYM_ArcSec || h == SYM_ArcCsc
+            || h == SYM_ArcSinh || h == SYM_ArcCosh || h == SYM_ArcTanh
+            || h == SYM_ArcCoth || h == SYM_ArcSech || h == SYM_ArcCsch)
+            return true;
+    }
+    if (clearfrac_has_branch_cut(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (clearfrac_has_branch_cut(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* head[e], evaluated (copies e). */
+static Expr* call1_copy(const char* head, const Expr* e) {
+    return eval_and_free(expr_new_function(expr_new_symbol(head),
+        (Expr*[]){ expr_copy((Expr*)e) }, 1));
+}
+/* Expand[a*b], evaluated (ADOPTS a, b).  Expand is needed so a fraction-exposed
+ * radical such as (del Sqrt[M] - 1) Sqrt[M] collapses to del M - Sqrt[M], linear
+ * in Sqrt[M], which the radical pass then rationalizes. */
+static Expr* mk_expand_times(Expr* a, Expr* b) {
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ a, b }, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+        (Expr*[]){ prod }, 1));
+}
+
+/* Is `den` a numeric (variable-free) constant -- an ordinary polynomial relation
+ * after clearing?  Mirrors reduce_atom.c's canonical_denom constant test. */
+static bool denom_is_constant(const Expr* den) {
+    switch (den->type) {
+        case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT:
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+#endif
+            return true;
+        case EXPR_FUNCTION:
+            return is_head(den, SYM_Rational);     /* Rational[p,q] is constant */
+        default:
+            return false;                          /* a symbol, etc. */
+    }
+}
+
+/* Clear a variable denominator from one relational leaf  L rel R  (rel already
+ * NNF-folded).  Returns a denominator-free equivalent, or a plain copy of the
+ * relation when there is no variable denominator, a branch-cut transcendental, or
+ * a constant denominator (so a radical-only or ordinary polynomial leaf is handed
+ * back verbatim -- Together never gets to mangle a surviving Sqrt). */
+static Expr* clearfrac_relation(const Expr* L, const Expr* R, const char* rel,
+                                Expr** vars, int nv, bool* changed) {
+    Expr* diff = mk_sub(L, R);                          /* evaluated L - R */
+    if (!has_var_denom(diff, vars, nv) || clearfrac_has_branch_cut(diff)) {
+        expr_free(diff);
+        return rel_copy(rel, L, R);
+    }
+    Expr* tog = call1_copy(SYM_Together, diff);
+    expr_free(diff);
+    Expr* num = call1_copy(SYM_Numerator, tog);
+    Expr* den = call1_copy(SYM_Denominator, tog);
+    expr_free(tog);
+    if (denom_is_constant(den)) {                       /* nothing to clear */
+        expr_free(num); expr_free(den);
+        return rel_copy(rel, L, R);
+    }
+    *changed = true;
+    Expr* numden = mk_expand_times(expr_copy(num), expr_copy(den));   /* p q */
+    Expr* denne  = rel0(SYM_Unequal, den);             /* q != 0  (copies den) */
+    Expr* out;
+    if (rel == SYM_Less)              out = rel0(SYM_Less,    numden);
+    else if (rel == SYM_Greater)      out = rel0(SYM_Greater, numden);
+    else if (rel == SYM_LessEqual)    out = mk_and2(rel0(SYM_LessEqual,    numden), expr_copy(denne));
+    else if (rel == SYM_GreaterEqual) out = mk_and2(rel0(SYM_GreaterEqual, numden), expr_copy(denne));
+    else if (rel == SYM_Equal)        out = mk_and2(rel0(SYM_Equal,   num), expr_copy(denne));
+    else /* SYM_Unequal */            out = mk_and2(rel0(SYM_Unequal, num), expr_copy(denne));
+    expr_free(numden); expr_free(denne); expr_free(num); expr_free(den);
+    return out;
+}
+
+/* NNF walk carrying polarity `neg`, structurally parallel to rationalize_tree, so
+ * a negated rational leaf clears with its De-Morgan relation and the excluded pole
+ * set survives negation. */
+static Expr* clearfrac_tree(const Expr* e, bool neg, Expr** vars, int nv, bool* changed) {
+    if (!e) return NULL;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        size_t n = e->data.function.arg_count;
+        if (is_rel_head(h) && n == 2) {
+            const char* rel = neg ? negate_rel(h) : h;
+            return clearfrac_relation(e->data.function.args[0], e->data.function.args[1],
+                                      rel, vars, nv, changed);
+        }
+        if ((h == SYM_And || h == SYM_Or) && n >= 1) {
+            const char* out = (h == SYM_And) == !neg ? SYM_And : SYM_Or;  /* De Morgan */
+            Expr** parts = malloc(n * sizeof(Expr*));
+            for (size_t i = 0; i < n; i++)
+                parts[i] = clearfrac_tree(e->data.function.args[i], neg, vars, nv, changed);
+            Expr* r = expr_new_function(expr_new_symbol(out), parts, n);
+            free(parts);
+            return r;
+        }
+        if (h == SYM_Not && n == 1)
+            return clearfrac_tree(e->data.function.args[0], !neg, vars, nv, changed);
+        if (h == SYM_Implies && n == 2) {                  /* a => b  ==  !a || b */
+            Expr* na = expr_new_function(expr_new_symbol(SYM_Not),
+                (Expr*[]){ expr_copy(e->data.function.args[0]) }, 1);
+            Expr* orx = mk_or2(na, expr_copy(e->data.function.args[1]));
+            Expr* r = clearfrac_tree(orx, neg, vars, nv, changed);
+            expr_free(orx);
+            return r;
+        }
+        if (h == SYM_Inequality && n >= 3 && (n % 2) == 1) { /* chained a op b op c ... */
+            size_t nrel = (n - 1) / 2;
+            Expr** parts = malloc(nrel * sizeof(Expr*));
+            for (size_t j = 0; j < nrel; j++) {
+                const Expr* a  = e->data.function.args[2 * j];
+                const Expr* op = e->data.function.args[2 * j + 1];
+                const Expr* b  = e->data.function.args[2 * j + 2];
+                const char* oh = op->type == EXPR_SYMBOL ? op->data.symbol.name : SYM_Less;
+                Expr* leaf = rel_copy(oh, a, b);
+                parts[j] = clearfrac_tree(leaf, neg, vars, nv, changed);
+                expr_free(leaf);
+            }
+            Expr* r = expr_new_function(expr_new_symbol(neg ? SYM_Or : SYM_And), parts, nrel);
+            free(parts);
+            return r;
+        }
+    }
+    /* Non-boolean / unhandled node: no rational relation to rewrite, so copying it
+     * (Not-wrapped under negation) is sound. */
+    if (neg) return expr_new_function(expr_new_symbol(SYM_Not), (Expr*[]){ expr_copy((Expr*)e) }, 1);
+    return expr_copy((Expr*)e);
+}
+
+/* One pass: clear every variable denominator from a relational leaf. */
+static Expr* clearfrac_leaves(const Expr* e, Expr** vars, int nv, bool* changed) {
+    return clearfrac_tree(e, false, vars, nv, changed);
+}
+
 /* Rewrite Mod->Floor, Abs sign-splits, Min/Max case-splits and integer-part
  * relations away, so the sign-diagram engines see only polynomial atoms.  The
  * four transforms are cyclically dependent -- an Abs or Min/Max split can EXPOSE
@@ -1176,18 +1385,90 @@ Expr* reduce_realfn_preprocess(const Expr* e, const Expr* x, bool* changed) {
     return cur;
 }
 
+/* Abs[u] -> Abs[Numerator[u]] / Abs[Denominator[u]] over the Reals when u has a
+ * variable denominator (|p/q| = |p|/|q| for q != 0 -- a sound identity).  This
+ * moves the denominator OUT of the Abs so the downstream whole-formula sign split
+ * (eliminate_abs) sees a POLE-FREE argument.  eliminate_abs guards its branches by
+ * `u>=0` / `u<0`; for u = 1/x those clear to x>0 / x<0, which MISS the pole x=0 and
+ * collapse the surrounding formula to False there -- unsound inside a ForAll (the
+ * lim_{x->oo} 1/x = 0 statement wrongly refuted).  For u = x the guards are
+ * x>=0 / x<0, which cover x=0, so the surrounding implication's escape survives.
+ * Recurses bottom-up; runs once before the selector/fraction/radical fixpoint. */
+static Expr* split_abs_denominators(const Expr* e, Expr** vars, int nv, bool* fired) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    Expr* head = split_abs_denominators(e->data.function.head, vars, nv, fired);
+    size_t n = e->data.function.arg_count;
+    Expr** args = n ? malloc(n * sizeof(Expr*)) : NULL;
+    for (size_t i = 0; i < n; i++)
+        args[i] = split_abs_denominators(e->data.function.args[i], vars, nv, fired);
+    Expr* rb = expr_new_function(head, args, n);
+    free(args);
+    if (is_head(rb, SYM_Abs) && rb->data.function.arg_count == 1) {
+        const Expr* u = rb->data.function.args[0];
+        if (has_var_denom(u, vars, nv) && !clearfrac_has_branch_cut(u)) {
+            Expr* tog = call1_copy(SYM_Together, u);
+            Expr* num = call1_copy(SYM_Numerator, tog);
+            Expr* den = call1_copy(SYM_Denominator, tog);
+            expr_free(tog);
+            if (!denom_is_constant(den)) {
+                Expr* an  = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs),
+                    (Expr*[]){ num }, 1));                           /* Abs[num] (Abs[1]->1) */
+                Expr* ad  = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs),
+                    (Expr*[]){ den }, 1));                           /* Abs[den]             */
+                Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ ad, expr_new_integer(-1) }, 2);      /* 1/Abs[den]           */
+                Expr* prod = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ an, inv }, 2));                       /* Abs[num]/Abs[den]    */
+                *fired = true;
+                expr_free(rb);
+                return prod;
+            }
+            expr_free(num); expr_free(den);
+        }
+    }
+    return rb;
+}
+
+/* A variable denominator inside a sign-splitting selector OTHER than Abs
+ * (Min/Max/Piecewise/Sign/UnitStep/...).  Those selectors are eliminated by the
+ * same whole-formula sign split as Abs but their fractional arguments are not
+ * factored out, so clearing a denominator exposed under one risks the same
+ * pole-collapse unsoundness.  When present, fraction clearing is disabled for the
+ * whole statement (it then declines soundly rather than guess).  Abs is excluded:
+ * split_abs_denominators has already made every Abs argument pole-free. */
+static bool minmax_pw_arg_has_denom(const Expr* e, Expr** vars, int nv) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const char* h = e->data.function.head->type == EXPR_SYMBOL
+        ? e->data.function.head->data.symbol.name : NULL;
+    if (h && (h == SYM_Min || h == SYM_Max || is_piecewise_head(h)))
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (has_var_denom(e->data.function.args[i], vars, nv)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (minmax_pw_arg_has_denom(e->data.function.args[i], vars, nv)) return true;
+    return false;
+}
+
 /* Multivariate (any nv) piecewise preprocessing: the domain-agnostic selector
- * splits only (Abs, Min/Max, Piecewise/Sign/UnitStep/...).  The integer-part
- * machinery (Mod->Floor and Floor/Ceiling/Round isolation) is univariate, so a
- * residual integer-part atom is left for the CAD engine to decline soundly. */
+ * splits (Abs, Min/Max, Piecewise/Sign/UnitStep/...), rational-denominator
+ * clearing, and square-root radical rationalization, iterated to a fixpoint.  The
+ * integer-part machinery (Mod->Floor and Floor/Ceiling/Round isolation) is
+ * univariate, so a residual integer-part atom is left for the CAD engine to
+ * decline soundly. */
 Expr* reduce_piecewise_preprocess(const Expr* e, Expr** vars, int nv, bool* changed) {
     bool any = false;
-    Expr* cur = expr_copy((Expr*)e);
+    Expr* cur = split_abs_denominators(e, vars, nv, &any);  /* Abs[p/q] -> Abs[p]/Abs[q] */
+    /* Disable fraction clearing if a non-Abs selector carries a fractional argument
+     * (sound: those paths then decline instead of risking a pole-collapse). */
+    bool allow_frac = !minmax_pw_arg_has_denom(cur, vars, nv);
     for (int iter = 0; iter < 8; iter++) {
         bool ch = false;
-        Expr* nxt = apply_selector_splits(cur, &ch);       /* Abs / Min-Max / Piecew. */
-        Expr* rad = rationalize_radical_leaves(nxt, vars, nv, &ch);  /* Sqrt[u] -> u<c^2 */
-        expr_free(nxt);
+        Expr* sel  = apply_selector_splits(cur, &ch);           /* Abs / Min-Max / Piecew. */
+        Expr* frac = allow_frac ? clearfrac_leaves(sel, vars, nv, &ch)  /* p/q REL 0 -> p q ..*/
+                                : expr_copy(sel);
+        expr_free(sel);
+        Expr* rad  = rationalize_radical_leaves(frac, vars, nv, &ch);  /* Sqrt[u] -> u<c^2 */
+        expr_free(frac);
         expr_free(cur);
         cur = rad;
         if (!ch) break;
