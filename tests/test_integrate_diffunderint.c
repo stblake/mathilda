@@ -263,6 +263,12 @@ static void test_stage_b_ode(void) {
         "Integrate[Exp[-a^2 x^2] Cos[b x], {x, 0, Infinity}, "
         "Method -> \"DiffUnderInt\", Assumptions -> {a > 0, Element[b, Reals]}]",
         "(Sqrt[Pi]/(2 a)) Exp[-b^2/(4 a^2)]", "a > 0");
+    /* Self-similar Gaussian: IBP-in-x cannot find it; the reciprocal substitution
+     * x -> Sqrt[b^2/a^2]/x gives I'(b) = -2a I, so I = (Sqrt[Pi]/(2a)) Exp[-2 a b]. */
+    assert_closes(
+        "Integrate[Exp[-a^2 x^2 - b^2/x^2], {x, 0, Infinity}, "
+        "Method -> \"DiffUnderInt\", Assumptions -> {a > 0, b > 0}]",
+        "(Sqrt[Pi]/(2 a)) Exp[-2 a b]", "a > 0 && b > 0");
 }
 
 /* Phase 1: robustness (no hang) + correctness (no non-real / Indeterminate). */

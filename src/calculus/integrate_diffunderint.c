@@ -1971,6 +1971,28 @@ static Expr* boundary_value(const Expr* U, const Expr* x, const Expr* a,
     return NULL;
 }
 
+/* True iff `e` contains a negative power of x (1/x^k, Laurent).  The IBP ansatz
+ * does not model Laurent integrands (CoefficientList has no negative degrees);
+ * such a form is left for the self-similar recognizer. */
+static bool has_inv_x_power(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* ex   = e->data.function.args[1];
+        if (contains_symbol(base, x)) {
+            if (ex->type == EXPR_INTEGER && ex->data.integer < 0) return true;
+            if (ex->type == EXPR_REAL && ex->data.real < 0) return true;
+            if (ex->type == EXPR_FUNCTION && head_name_is(ex, "Rational") &&
+                ex->data.function.args[0]->type == EXPR_INTEGER &&
+                ex->data.function.args[0]->data.integer < 0) return true;
+        }
+    }
+    if (has_inv_x_power(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_inv_x_power(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 /* Detect J = lambda(p) I + M(p) by the IBP ansatz.  On success returns true with
  * owned *out_lambda, *out_M. */
 static bool detect_linear_ode(const Expr* f, const Expr* g, const Expr* x,
@@ -1978,6 +2000,9 @@ static bool detect_linear_ode(const Expr* f, const Expr* g, const Expr* x,
                               const Expr* assumptions,
                               Expr** out_lambda, Expr** out_M) {
     enum { CAP = 16 };
+    /* Laurent integrand (1/x^k): the polynomial coefficient-matching below cannot
+     * represent it -- leave it for the self-similar recognizer. */
+    if (has_inv_x_power(f, x) || has_inv_x_power(g, x)) return false;
     Expr* shapes[CAP]; size_t nsh = 0;
     collect_term_shapes(f, x, shapes, &nsh, CAP);
     collect_term_shapes(g, x, shapes, &nsh, CAP);
@@ -2081,6 +2106,61 @@ done:
     return ok;
 }
 
+/* Self-similar Gaussian recognizer: f = Exp[c0 + c2 x^2 + cm2/x^2] with c2, cm2
+ * both negative.  Under the reciprocal substitution x -> k/x, k = Sqrt[cm2/c2],
+ * the exponent is invariant, so Integrate[g, {x,0,Inf}] maps to lambda I with
+ * lambda = (g|_{x->k/x}) (k/x^2) / f (x-free when it fires).  M = 0 (the kernel
+ * decays at both ends).  Closes Integrate[Exp[-a^2 x^2 - b^2/x^2], {x,0,Inf}]:
+ * differentiating in b gives lambda = -2a, so I = I(0) Exp[-2 a b]. */
+static bool detect_selfsimilar_ode(const Expr* f, const Expr* g, const Expr* x,
+                                   const Expr* assumptions, Expr** out_lambda) {
+    const Expr* arg = NULL;
+    if (head_name_is(f, "Exp") && f->data.function.arg_count == 1)
+        arg = f->data.function.args[0];
+    else if (head_name_is(f, "Power") && f->data.function.arg_count == 2 &&
+             f->data.function.args[0]->type == EXPR_SYMBOL &&
+             strcmp(f->data.function.args[0]->data.symbol.name, "E") == 0)
+        arg = f->data.function.args[1];
+    if (!arg || !contains_symbol(arg, x)) return false;
+
+    Expr* c2  = ev1("Simplify", mk_fn3("Coefficient", expr_copy((Expr*)arg), expr_copy((Expr*)x), mk_int(2)));
+    Expr* ax2 = ev1("Expand", t_mul(expr_copy((Expr*)arg), t_pow(expr_copy((Expr*)x), 2)));
+    Expr* cm2 = ev1("Simplify", mk_fn3("Coefficient", ax2, expr_copy((Expr*)x), mk_int(0)));
+    bool ok = false;
+    /* c0 = arg - c2 x^2 - cm2/x^2; the shape {2,0,-2} is valid iff c0 is x-free
+     * (Coefficient[arg,x,0] cannot be used -- it lumps the 1/x^2 term into x^0). */
+    Expr* c0 = simplify_with(
+        t_add(expr_copy((Expr*)arg),
+              t_neg(t_add(t_mul(expr_copy(c2), t_pow(expr_copy((Expr*)x), 2)),
+                          t_mul(expr_copy(cm2), t_pow(expr_copy((Expr*)x), -2))))),
+        assumptions);
+    bool shape_ok = c0 && !contains_symbol(c0, x) &&
+                    !contains_symbol(c2, x) && !contains_symbol(cm2, x);
+    if (shape_ok) {
+        /* k = Sqrt[cm2/c2] = Sqrt[beta/alpha] (both negative -> ratio positive). */
+        Expr* k = ev1("Simplify",
+                      mk_fn2("Power", t_mul(expr_copy(cm2), t_pow(expr_copy(c2), -1)), t_rat(1, 2)));
+        if (k && !contains_symbol(k, x)) {
+            Expr* xsub = t_mul(expr_copy(k), t_pow(expr_copy((Expr*)x), -1));   /* k/x */
+            Expr* gsub = subst(g, x, xsub); expr_free(xsub);
+            /* J = Integrate[g(k/x) (k/x^2), {x,0,Inf}] = lambda I. */
+            Expr* lam = NULL;
+            if (gsub) {
+                Expr* h = t_mul(gsub, t_mul(expr_copy(k), t_pow(expr_copy((Expr*)x), -2)));
+                Expr* ratio = t_mul(h, t_pow(expr_copy((Expr*)f), -1));
+                lam = simplify_with(ratio, assumptions);
+                expr_free(ratio);
+            }
+            if (lam && !contains_symbol(lam, x) && is_finite_value(lam) && !is_zero_q(lam)) {
+                *out_lambda = lam; ok = true;
+            } else if (lam) { expr_free(lam); }
+        }
+        if (k) expr_free(k);
+    }
+    expr_free(c2); expr_free(c0); expr_free(cm2);
+    return ok;
+}
+
 /* Solve I'(p) = lambda(p) I(p) + M(p) with I(p0) = I0, by integrating factor.
  * All parameter antiderivatives route through integrate_over_param (bounded), so
  * no unbounded engine call is formed.  Returns owned I, or NULL. */
@@ -2128,7 +2208,12 @@ static Expr* stage_linear_ode(const Expr* f, const Expr* g, const Expr* x,
                               const Expr* a, const Expr* b, const Expr* assumptions,
                               const Expr* p, const ParamBound* pb, size_t np) {
     Expr* lam = NULL; Expr* M = NULL;
-    if (!detect_linear_ode(f, g, x, a, b, assumptions, &lam, &M)) return NULL;
+    if (!detect_linear_ode(f, g, x, a, b, assumptions, &lam, &M)) {
+        /* Fall back to the self-similar Gaussian recognizer (Exp[-a^2 x^2 - b^2/x^2]),
+         * which IBP-in-x cannot find; it yields lambda directly, with M = 0. */
+        if (detect_selfsimilar_ode(f, g, x, assumptions, &lam)) M = mk_int(0);
+        else return NULL;
+    }
 
     Expr* p0 = NULL; Expr* I0 = NULL;
     if (!find_base(f, x, a, b, assumptions, p, pb, np, false, &p0, &I0)) {

@@ -1818,6 +1818,13 @@ verified literally. This is what closes the classic Feynman Gaussian
 antiderivatives route through the bounded back-integration (never the unbounded
 engine on a radical/trig/Gaussian-of-parameter form).
 
+A **self-similar** recognizer handles the Laurent-Gaussian
+`Exp[c0 + c2 x^2 + cm2/x^2]` (`c2, cm2 < 0`) that integration by parts in `x`
+cannot reach: the reciprocal substitution `x -> Sqrt[cm2/c2]/x` leaves the
+exponent invariant, so `J = lambda I` with `lambda` read off directly. This closes
+`Integrate[Exp[-a^2 x^2 - b^2/x^2], {x,0,Infinity}]`: differentiating in `b` gives
+`lambda = -2a`, so `I = (Sqrt[Pi]/(2a)) Exp[-2 a b]`.
+
 When neither the inner integral nor Stage B closes for a parameter, selection
 prefers a parameter with an **exact zero base** (`I(p0) = 0`) over one needing a
 sign-sensitive computed base, since the `D[I,p]` check cannot catch a wrong
@@ -1865,7 +1872,8 @@ Worked examples that close:
 `Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]` → `a ArcTan[a/c] − (c/2) Log[1+a²/c²]`;
 `Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]` → `(π/2) Erf[a/2]`;
 `Integrate[Exp[-a x] Sin[b x] Sin[c x]/x, {x,0,Infinity}, Assumptions->{a>0,Element[b,Reals],Element[c,Reals]}]` → `(1/4) Log[(a²+(b+c)²)/(a²+(b−c)²)]`;
-`Integrate[Exp[-a^2 x^2] Cos[b x], {x,0,Infinity}, Assumptions->a>0]` → `(√π/(2a)) Exp[−b²/(4a²)]`  (Stage B).
+`Integrate[Exp[-a^2 x^2] Cos[b x], {x,0,Infinity}, Assumptions->a>0]` → `(√π/(2a)) Exp[−b²/(4a²)]`  (Stage B);
+`Integrate[Exp[-a^2 x^2 - b^2/x^2], {x,0,Infinity}, Assumptions->{a>0,b>0}]` → `(√π/(2a)) Exp[−2ab]`  (Stage B, self-similar).
 
 Three **finite-domain** families need neither a pre-existing parameter (the first
 two are purely numeric) nor an engine-safe inner integral (all three differentiate
