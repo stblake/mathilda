@@ -79,9 +79,15 @@ strip + sound residue cleanup ; v0.291" (or split 1a/1b/1c with sequential bumps
 - [x] Tests in test_integrate_residue.c (test_hyperbolic_strip); all definite suites green;
       check-c99 / check-messages clean. version.h→0.293; changelog + calculus.md updated.
 
-### 3b/3c — remaining targets (next)
-- #6 Hurwitz/Lerch: `Integrate[e^(-a x)x^(s-1)/(1-e^(-x)),{x,0,oo}, s>1 && a>0]` → `Gamma[s]HurwitzZeta[s,a]`.
-  Clean Mellin extension (rec_expgeom absorbs an e^(-a x) shift → Hurwitz/Lerch). VERIFIED value. Next.
+### 3b. Lerch/Hurwitz integral representation (#6) — v0.294 — COMPLETE, verified, committed
+- [x] `rec_lerch_hurwitz` (new, integrate_intrep.c): `x^(s-1)e^(-a x)/(1-z e^(-c x))` →
+      `c^(-s)Gamma[s]LerchPhi[z,s,a/c]` (`Gamma[s]HurwitzZeta[s,a/c]` when z=1).
+- [x] #6 → `Gamma[s]HurwitzZeta[s,a]`, 0.003s (was 1.5s decline). Class: c-scaling + fugacity z.
+- [x] Gate A>0 && c>0 SEPARATELY (Simplify won't prove scaled a/c>0; each factor proves). z<=1 pole gate;
+      Re s>1 (z=1) else Re s>0. Divergent a=0 and s=1 pole both decline.
+- [x] test_lerch_hurwitz in test_integrate_intrep.c; all suites green; check-c99/messages clean.
+
+### 3b(rest)/3c — remaining targets
 - #9 `Log[a^2+Sin[x]^2]` {0,Pi/2}, a>0 → `Pi Log[(a+Sqrt[a^2+1])/2]` (VERIFIED). Sound for a>0
   (parity landmine is a<0, out of domain; deferral was for the Poisson/elliptic cousins). Blocker:
   inner_definite refuses finite-interval trig — needs a narrow `Integrate[1/(c+d Sin^2 x),{0,Pi/2}]` closer.

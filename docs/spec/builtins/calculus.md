@@ -1797,7 +1797,11 @@ monotonically down.
     `x^(nu-1) E^(-A x - B/x)` → `2 (B/A)^(nu/2) BesselK[nu, 2 Sqrt[A B]]`
     (`A,B>0`; `nu` a half-integer gives an elementary form, e.g.
     `E^(-A x - B/x)/Sqrt[x]` → `Sqrt[Pi/A] e^(-2 Sqrt[A B])`);
-    `Cos[p x^3 + q x]` → `Pi (3p)^(-1/3) AiryAi[q (3p)^(-1/3)]` (`p>0`, `q` real).
+    `Cos[p x^3 + q x]` → `Pi (3p)^(-1/3) AiryAi[q (3p)^(-1/3)]` (`p>0`, `q` real);
+    `x^(s-1) E^(-a x)/(1 - z E^(-c x))` → `c^(-s) Gamma[s] LerchPhi[z, s, a/c]`, and
+    `Gamma[s] HurwitzZeta[s, a/c]` when `z = 1` (the Lerch/Hurwitz representation;
+    `a,c>0` gated separately so the scaled `a/c>0` discharges, `Re s>1` when `z=1`
+    else `Re s>0`) — e.g. `E^(-a x) x^(s-1)/(1-E^(-x))` → `Gamma[s] HurwitzZeta[s, a]`.
     Each gate is proved from Assumptions; correct-by-construction, no NIntegrate.
     Under Automatic it runs after Ramanujan, before Newton-Leibniz.  (The Euler
     finite-interval generalization `x^(a-1)(1-x)^(b-1)(alpha+beta x)^e` on `[0,1]`

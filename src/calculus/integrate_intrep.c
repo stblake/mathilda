@@ -298,6 +298,119 @@ static Expr* rec_airy(Expr* f, Expr* x, Expr* as) {
     return simp2(val, as);
 }
 
+/* ---- (5) Lerch/Hurwitz: x^(s-1) E^(-A x) / (d0 + d1 E^(-c x)) ----------- */
+/* Integral representation of the Lerch transcendent / Hurwitz zeta:
+ *   Integrate[x^(s-1) E^(-A x)/(d0 + d1 E^(-c x)), {x,0,Inf}]
+ *     = (1/d0) c^(-s) Gamma(s) LerchPhi[z, s, A/c],   z = -d1/d0,
+ *   and -> (1/d0) c^(-s) Gamma(s) HurwitzZeta[s, A/c] when z == 1
+ *   (since 1/(1 - E^(-c x)) = Sum_{k>=0} E^(-k c x) gives Sum_k z^k/(A/c + k)^s).
+ * Convergence, proved from Assumptions: A/c > 0 (decay at +Inf) and c > 0; the
+ * denominator has no zero on (0,Inf) for real z <= 1; and Re s > 1 when z == 1
+ * (the x=0 pole, denominator ~ c x there), else Re s > 0.  This is the e^(-A x)-
+ * shifted companion of the Bose/Fermi Mellin family (Integrate`Ramanujan, a=1,
+ * -> Gamma(s) Zeta(s)/PolyLog), which runs first and owns the unshifted cases. */
+static Expr* rec_lerch_hurwitz(Expr* f, Expr* x, Expr* as) {
+    Expr* fv[16]; size_t n = collect_factors(f, fv, 16);
+    Expr* C = mk_int(1);
+    Expr* rho = NULL;      /* x power exponent (= s - 1) */
+    Expr* g = NULL;        /* decay exponent (-A x) */
+    Expr* D = NULL;        /* denominator base (d0 + d1 E^(-c x)); borrowed */
+    bool bad = false;
+    for (size_t i = 0; i < n && !bad; i++) {
+        Expr* fac = fv[i];
+        if (free_of_x(fac, x)) { C = Times_(C, cp(fac)); continue; }
+        if (is_symbol(fac, x) && !rho) { rho = mk_int(1); continue; }
+        if (head_name_is(fac, "Power") && fac->data.function.arg_count == 2 &&
+            is_symbol(fac->data.function.args[0], x) &&
+            free_of_x(fac->data.function.args[1], x) && !rho) {
+            rho = cp(fac->data.function.args[1]); continue;
+        }
+        Expr* e = exp_arg(fac);
+        if (e && !g) { g = e; continue; }
+        if (!e && head_name_is(fac, "Power") && fac->data.function.arg_count == 2 &&
+            fac->data.function.args[1]->type == EXPR_INTEGER &&
+            fac->data.function.args[1]->data.integer == -1 &&
+            contains_symbol(fac->data.function.args[0], x) && !D) {
+            D = fac->data.function.args[0]; continue;
+        }
+        bad = true;
+    }
+    if (bad || !rho || !g || !D) { expr_free(C); if (rho) expr_free(rho); return NULL; }
+
+    /* Decay exponent g = -A x (linear; a constant term folds into C). */
+    Expr* g1 = coeff(g, x, 1), *g0 = coeff(g, x, 0);
+    bool glin = is_zero_simp(Plus_(cp(g), Times_(mk_int(-1),
+                    Plus_(Times_(cp(g1), cp(x)), cp(g0)))));
+    if (g0 && !is_zero_expr(g0)) C = Times_(C, ev1("Exp", cp(g0)));
+    if (g0) expr_free(g0);
+    Expr* A = simp(Times_(mk_int(-1), cp(g1)));   /* A = -g1 */
+    expr_free(g1);
+
+    /* Denominator D = d0 + d1 E^(-c x): one x-free part d0 and exactly one
+     * x-term d1 E^h with h linear of negative slope. */
+    Expr** dt; size_t ndt; Expr* dt1[1];
+    if (head_name_is(D, "Plus")) { dt = D->data.function.args; ndt = D->data.function.arg_count; }
+    else { dt1[0] = D; dt = dt1; ndt = 1; }
+    Expr* d0 = mk_int(0); Expr* d1 = NULL; Expr* h = NULL; int ec = 0; bool dbad = false;
+    for (size_t i = 0; i < ndt && !dbad; i++) {
+        Expr* term = dt[i];
+        if (free_of_x(term, x)) { d0 = Plus_(d0, cp(term)); continue; }
+        Expr* tfv[8]; size_t tn = collect_factors(term, tfv, 8);
+        Expr* tc = mk_int(1); Expr* te = NULL; bool tbad = false;
+        for (size_t j = 0; j < tn && !tbad; j++) {
+            Expr* tf = tfv[j];
+            if (free_of_x(tf, x)) { tc = Times_(tc, cp(tf)); continue; }
+            Expr* e2 = exp_arg(tf);
+            if (e2 && !te) { te = e2; continue; }
+            tbad = true;
+        }
+        if (tbad || !te || ec > 0) { expr_free(tc); dbad = true; break; }
+        d1 = tc; h = te; ec++;                    /* te/h borrowed into D */
+    }
+    if (dbad || ec != 1 || !glin) {
+        expr_free(C); expr_free(rho); expr_free(A); expr_free(d0);
+        if (d1) expr_free(d1); return NULL;
+    }
+    /* h = c1 x (linear, zero constant); c = -c1 > 0 (decay). */
+    Expr* h1 = coeff(h, x, 1), *h0 = coeff(h, x, 0);
+    bool hlin = is_zero_simp(cp(h0)) &&
+                is_zero_simp(Plus_(cp(h), Times_(mk_int(-1), Times_(cp(h1), cp(x)))));
+    if (h0) expr_free(h0);
+    Expr* c  = simp(Times_(mk_int(-1), cp(h1)));           /* c = -h1 */
+    expr_free(h1);
+    Expr* z  = simp(Times_(mk_int(-1), Times_(cp(d1), Pow_(cp(d0), mk_int(-1)))));  /* z = -d1/d0 */
+    expr_free(d1);
+    Expr* s  = simp(Plus_(cp(rho), mk_int(1)));            /* s = rho + 1 */
+    expr_free(rho);
+    Expr* aHZ = simp(Times_(cp(A), Pow_(cp(c), mk_int(-1))));   /* a = A/c */
+
+    /* Gates.  A/c > 0 is gated as A > 0 AND c > 0 separately: Simplify does not
+     * discharge a scaled inequality like a/2 > 0 from a > 0, but proves each
+     * factor, and A > 0 && c > 0 => A/c > 0 soundly. */
+    bool z_is_one = (z->type == EXPR_INTEGER && z->data.integer == 1);
+    bool ok = hlin && prove_pos(A, as) && prove_pos(c, as);
+    expr_free(A);
+    if (ok) {
+        if (z_is_one)
+            ok = prove(mk_fn2("Greater", cp(s), mk_int(1)), as) == 1;   /* Re s > 1 */
+        else
+            ok = prove_pos(Plus_(mk_int(1), Times_(mk_int(-1), cp(z))), as) &&   /* z < 1 */
+                 prove_pos(s, as);                                      /* Re s > 0 */
+    }
+    if (!ok) {
+        expr_free(C); expr_free(c); expr_free(z); expr_free(s); expr_free(d0); expr_free(aHZ);
+        return NULL;
+    }
+    /* value = C (1/d0) c^(-s) Gamma(s) * (HurwitzZeta | LerchPhi). */
+    Expr* special = z_is_one ? mk_fn2("HurwitzZeta", cp(s), cp(aHZ))
+                             : mk_fn3("LerchPhi", cp(z), cp(s), cp(aHZ));
+    Expr* pref = Times_(Pow_(cp(d0), mk_int(-1)),
+                     Times_(Pow_(cp(c), Times_(mk_int(-1), cp(s))), mk_fn1("Gamma", cp(s))));
+    Expr* val = Times_(C, Times_(pref, special));
+    expr_free(c); expr_free(z); expr_free(s); expr_free(d0); expr_free(aHZ);
+    return simp2(val, as);
+}
+
 /* ---- entry -------------------------------------------------------------- */
 
 Expr* integrate_intrep_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
@@ -310,6 +423,7 @@ Expr* integrate_intrep_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions
     if ((v = rec_besselk_cosh(f, x, assumptions)))   return v;
     if ((v = rec_besselk_exp(f, x, assumptions)))    return v;
     if ((v = rec_airy(f, x, assumptions)))           return v;
+    if ((v = rec_lerch_hurwitz(f, x, assumptions)))  return v;
     return NULL;
 }
 
@@ -349,7 +463,9 @@ void integrate_intrep_init(void) {
         "special function: E^(-p x) BesselJ[nu, q x] -> Laplace-Bessel; "
         "E^(-A Cosh[x]) Cosh[n x] -> BesselK[n, A]; x^(nu-1) E^(-A x - B/x) -> "
         "2 (B/A)^(nu/2) BesselK[nu, 2 Sqrt[A B]]; Cos[p x^3 + q x] -> "
-        "Pi (3p)^(-1/3) AiryAi[q (3p)^(-1/3)].  Each is gated on its convergence "
-        "condition (p, A, B > 0) proved from Assumptions.  Returns unevaluated "
-        "when the integrand or interval is not of a recognised form.");
+        "Pi (3p)^(-1/3) AiryAi[q (3p)^(-1/3)]; x^(s-1) E^(-a x)/(1 - z E^(-x)) -> "
+        "Gamma[s] LerchPhi[z, s, a] (and Gamma[s] HurwitzZeta[s, a] when z == 1).  "
+        "Each is gated on its convergence condition (p, A, B, a > 0; Re s > 1) "
+        "proved from Assumptions.  Returns unevaluated when the integrand or "
+        "interval is not of a recognised form.");
 }

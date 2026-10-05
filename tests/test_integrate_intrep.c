@@ -132,8 +132,36 @@ static void test_euler_2f1(void) {
         "Beta[a,b] Hypergeometric2F1[s, a, a+b, z]", "{a -> 2, b -> 3, z -> 2/5, s -> 6/5}");
 }
 
+/* -------- Lerch / Hurwitz: x^(s-1) E^(-a x)/(1 - z E^(-c x)) ------------- */
+static void test_lerch_hurwitz(void) {
+    /* #6: z=1 -> Gamma[s] HurwitzZeta[s, a]. */
+    check_num(
+        "Integrate[Exp[-a x] x^(s-1)/(1 - Exp[-x]), {x,0,Infinity}, Assumptions -> s>1 && a>0]",
+        "Gamma[s] HurwitzZeta[s, a]", "{s -> 5/2, a -> 7/5}");
+    /* scaled c=2 -> 2^(-s) Gamma[s] HurwitzZeta[s, a/2] (the separate A>0, c>0 gate). */
+    check_num(
+        "Integrate[x^(s-1) Exp[-a x]/(1 - Exp[-2 x]), {x,0,Infinity}, Assumptions -> s>1 && a>0]",
+        "2^(-s) Gamma[s] HurwitzZeta[s, a/2]", "{s -> 5/2, a -> 7/5}");
+    /* fugacity z=1/2 -> Gamma[s] LerchPhi[1/2, s, a]. */
+    check_num(
+        "Integrate[x^(s-1) Exp[-a x]/(1 - (1/2) Exp[-x]), {x,0,Infinity}, Assumptions -> s>0 && a>0]",
+        "Gamma[s] LerchPhi[1/2, s, a]", "{s -> 5/2, a -> 7/5}");
+    /* z=-1 (eta-like) -> Gamma[s] LerchPhi[-1, s, a]. */
+    check_num(
+        "Integrate[x^(s-1) Exp[-a x]/(1 + Exp[-x]), {x,0,Infinity}, Assumptions -> s>0 && a>0]",
+        "Gamma[s] LerchPhi[-1, s, a]", "{s -> 5/2, a -> 7/5}");
+    /* pinned method, concrete s=2,a=1 -> HurwitzZeta[2,1] = Pi^2/6. */
+    check_num(
+        "Integrate[x Exp[-x]/(1 - Exp[-x]), {x,0,Infinity}, Method -> \"IntegralRepresentation\"]",
+        "Pi^2/6", "{}");
+}
+
 /* -------- Negative controls: must stay unevaluated ----------------------- */
 static void test_declines(void) {
+    /* Divergent: no decay factor (a=0), so HurwitzZeta[s,0] would be a pole. */
+    check_unevaluated("Integrate[x^(s-1)/(1 - Exp[-x]), {x,0,Infinity}, Method -> \"IntegralRepresentation\", Assumptions -> s>1]");
+    /* s=1 lands on the Hurwitz-zeta pole: must decline (Re s > 1 gate). */
+    check_unevaluated("Integrate[Exp[-a x]/(1 - Exp[-x]), {x,0,Infinity}, Method -> \"IntegralRepresentation\", Assumptions -> a>0]");
     /* No assumptions: convergence gate (c>0) cannot be proved. */
     check_unevaluated("Integrate[Exp[-c x] BesselJ[0, a x], {x,0,Infinity}]");
     /* Wrong sign (growth, not decay). */
@@ -153,6 +181,7 @@ int main(void) {
     TEST(test_besselk_exp);
     TEST(test_airy);
     TEST(test_euler_2f1);
+    TEST(test_lerch_hurwitz);
     TEST(test_declines);
 
     printf("All integrate_intrep tests passed.\n");
