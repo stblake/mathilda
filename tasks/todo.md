@@ -21,10 +21,15 @@ All reference values twice-confirmed vs NIntegrate (see plan triage table).
 - [x] Pins: In[14] (Pi(1-E^(-a b)))/b^2 (exact + non-vacuous); In[15] numeric pin;
       FactorTerms no-spurious-zero regression. version 0.277 + docs + changelog + tag
 
-## Phase 2 — Symbolic-param plumbing robustness (In[5]; enables 9/18)
-- [ ] build_instantiation per-param bounds (Element[_,Reals]/Re[s]>0 don't nuke others)
-- [ ] Refine-based strict-sign convergence gate (shared helper); replace Gaussian interval gate
-- [ ] Pin In[5] ½√(π/a)e^(-b²/4a) on {0,∞}. version + docs + changelog + tag
+## Phase 2 — Symbolic-param plumbing robustness (In[5])  [DONE v0.278]
+- [x] Refine-based strict-sign convergence gate: res_region_neg + g_assume (raw
+      assumptions mirror g_inst); replaced the Gaussian param_interval(A).hi<0 gate.
+      Proves A=-a<0 under a>0, AND works on the Element[_,Reals]/FindInstance path.
+- [x] CORE Exponent fix (exponent.c): Exponent[-a x^2 + I x, x] gave 1 (base_exp_in_monomial
+      didn't recurse into the non-flat Times[-1,Times[a,x^2]] a complex sibling produces).
+- [x] build_instantiation per-param: NOT NEEDED (Refine gate sidesteps it). Left unchanged.
+- [x] Pins: In[5] whole/half + Element[b,Reals] (test_gaussian); Exponent nonflat_times
+      (test_exponent). version 0.278 + docs + changelog + tag. Suites green.
 
 ## Phase 3 — Assumption-aware closing simplification (In[3], In[7], In[17])
 - [ ] res_close_positive helper (PowerExpand + Arg/Abs/Log-of-I·pos + Sqrt[-c²]) under g_all_pos

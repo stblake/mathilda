@@ -2265,9 +2265,13 @@ symbolic-exponent contours:
   integrand becomes `Σ_i C_i E^(A x² + B_i x + D_i)` and each Gaussian closes by
   completing the square, `∫_{-∞}^∞ e^{A x² + B x + D} dx = √(−π/A)·e^{D − B²/(4A)}`:
   `∫_{-∞}^∞ e^{−x²} Cos[2 a x] dx = √π e^{−a²}`.  The leading coefficient's sign is
-  verified over the whole assumption region, so a positive one (a divergent
-  integral) declines.  Not a residue computation (no poles), but the standard
-  contour route for the family.
+  verified over the whole assumption region — by `Refine[A < 0, assumptions]`, so
+  a *symbolic* coefficient such as `A = −a` under `a > 0` is admitted (the plain
+  interval test saw the compound `−a` as unbounded), while a positive one (a
+  divergent integral) declines.  With a symbolic `A` and a trig kernel the result
+  carries the parameters: `∫_{-∞}^∞ e^{−a x²} Cos[b x] dx = √(π/a) e^{−b²/(4a)}`
+  (`a > 0`), and the even half-line form is half of it.  Not a residue
+  computation (no poles), but the standard contour route for the family.
 
 **Assumptions and symbolic parameters.**  An `Integrate[f, {x, a, b},
 Assumptions -> …]` option lets the residue families evaluate integrals whose

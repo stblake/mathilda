@@ -434,6 +434,27 @@ static void test_gaussian(void) {
     /* Positive leading coefficient diverges: the family must decline. */
     check_eq("Integrate[Exp[x^2], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
              "Integrate[E^x^2, {x, -Infinity, Infinity}, Method -> \"Residue\"]");
+
+    /* Case In[5]: SYMBOLIC leading coefficient Exp[-a x^2] Cos[b x].  The
+     * convergence gate now proves Re A = -a < 0 via Refine (the interval test
+     * saw the compound -a as unbounded), and Exponent handles the non-flat
+     * Times from the complex Fourier frequency.  Whole line = Sqrt[Pi/a]
+     * E^(-b^2/(4a)); even half-line = half of it. */
+    check_eq("Integrate[Exp[-a x^2] Cos[b x], {x, -Infinity, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]",
+             "Sqrt[Pi/a] E^(-(1/4 b^2)/a)");
+    check_eq("Integrate[Exp[-a x^2] Cos[b x], {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]",
+             "1/2 Sqrt[Pi/a] E^(-(1/4 b^2)/a)");
+    check_eq("With[{r = Integrate[Exp[-a x^2] Cos[b x], {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[(r - Sqrt[Pi/a] Exp[-b^2/(4 a)]/2) "
+             "/. {a -> 1, b -> 3}]]}]", "{True, 0}");
+    /* The dropped Element[b, Reals] assumption must not block it: the Refine gate
+     * works on the FindInstance representative path too. */
+    check_eq("Integrate[Exp[-a x^2] Cos[b x], {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && Element[b, Reals], Method -> \"Residue\"]",
+             "1/2 Sqrt[Pi/a] E^(-(1/4 b^2)/a)");
 }
 
 /* -------------------------------------------------------------------------

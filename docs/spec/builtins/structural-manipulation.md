@@ -1087,6 +1087,10 @@ Gives the maximum power with which a form appears in the expanded form of an exp
 - Works whether or not `expr` is explicitly given in expanded form (it expands internally).
 - Purely syntactic: it does not attempt to recognise zero coefficients.
 - Exponents may be rational numbers or symbolic expressions.
+- A monomial given as a non-flat nested `Times` is handled: a term such as
+  `Times[-1, Times[a, x^2]]` (which `-a x^2` evaluates to beside a complex
+  sibling like `I x`) is recursed into, so `Exponent[-a x^2 + I x, x]` is `2`,
+  not `1`.
 - `Exponent[0, x]` is `-Infinity` (empty exponent set, `h = Max`).
 - The `Listable` attribute makes `Exponent[expr, {form1, form2, ...}]` give the list of exponents for each `formi`.
 

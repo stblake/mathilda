@@ -80,6 +80,19 @@ void test_exponent_syntactic() {
     check("Exponent[x + 1, x]", "1");
 }
 
+/* ---- non-flat Times terms (complex + symbolic coefficients) ---- */
+void test_exponent_nonflat_times() {
+    /* -a x^2 beside a complex sibling (I x) evaluates to a NON-FLAT term
+     * Times[-1, Times[a, Power[x,2]]]; base_exp_in_monomial must recurse into
+     * the nested Times or it misses the x^2 and reports degree 1.  (This blocked
+     * the residue Gaussian family on Exp[-a x^2] Cos[b x].) */
+    check("Exponent[-a x^2 + I x, x]", "2");
+    check("Exponent[a x^2 + I x, x]", "2");
+    check("Exponent[-a x^3 + I b x, x]", "3");
+    check("Exponent[-a x^2 + I x, x, Min]", "1");
+    check("Exponent[-a x^2 + 2 I x + 3, x]", "2");
+}
+
 /* ---- form is a kernel, not necessarily a bare symbol ---- */
 void test_exponent_kernel_form() {
     check("Exponent[Sin[x], x]", "0");          /* nested, not a power of x */
@@ -137,6 +150,7 @@ int main() {
     TEST(test_exponent_laurent);
     TEST(test_exponent_h);
     TEST(test_exponent_syntactic);
+    TEST(test_exponent_nonflat_times);
     TEST(test_exponent_kernel_form);
     TEST(test_exponent_product_form);
     TEST(test_exponent_listable);

@@ -155,6 +155,12 @@ static bool res_real_double(const Expr* e, double* out) {
  * ---------------------------------------------------------------------- */
 static Expr* g_inst = NULL;   /* List[Rule[param, Real], ...] or NULL */
 static bool  g_all_pos = false;  /* true iff every instantiated parameter is > 0 */
+/* The caller's raw Assumptions expression (mirrors g_inst; set/freed by the
+ * frame that builds g_inst).  A family uses it with Refine/Simplify to certify a
+ * convergence/sign gate over the WHOLE region when the interval machinery cannot
+ * -- e.g. Re[A] < 0 for A = -a under a > 0, where param_interval sees the
+ * compound -a as unbounded and the open bound a > 0 records lo = 0. */
+static Expr* g_assume = NULL;
 /* The caller's PrincipalValue -> True option, threaded into the keyhole-log
  * family so a simple pole on the branch cut (0, Inf) is admitted as a Cauchy
  * principal value rather than declined.  Set/restored around each
@@ -1312,6 +1318,39 @@ static void param_interval(Expr* e, double* lo, double* hi) {
     if (numeric_double(e, &v)) { *lo = v; *hi = v; }
 }
 
+/* True iff `e` is real and strictly NEGATIVE everywhere the assumptions permit.
+ * The brittle `param_interval(e).hi < 0` test fails for a compound coefficient
+ * (e.g. A = -a, which param_interval sees as unbounded) and for an open bound
+ * (a > 0 records lo = 0, so -a's upper bound reads 0, not < 0).  So: first
+ * require the representative point to be real and negative (cheap reject), then
+ * certify over the whole region with Refine[e < 0, assumptions].  Falls back to
+ * the guaranteed interval when there are no assumptions (a concrete numeric A
+ * has interval [A, A]).  Used by the convergence gates that need a sign proof.
+ * `res_region_pos` is the mirror for strictly positive. */
+static bool res_region_sign(Expr* e, bool want_negative) {
+    if (!e) return false;
+    Expr* s = g_inst ? apply_inst(e) : expr_copy(e);
+    double re, im;
+    bool sample = s && res_reim(s, &re, &im) && fabs(im) < RES_TOL &&
+                  (want_negative ? (re < -RES_TOL) : (re > RES_TOL));
+    if (s) expr_free(s);
+    if (!sample) return false;
+    if (g_assume) {
+        Expr* cond = mk_fn2(want_negative ? "Less" : "Greater",
+                            expr_copy(e), mk_int(0));
+        Expr* q = eval_take(mk_fn2("Refine", cond, expr_copy(g_assume)));
+        bool proved = q && q->type == EXPR_SYMBOL &&
+                      q->data.symbol.name == SYM_True;
+        if (q) expr_free(q);
+        if (proved) return true;
+        /* Refine could not certify; fall through to the interval test. */
+    }
+    double lo, hi;
+    param_interval(e, &lo, &hi);
+    return want_negative ? (hi < -RES_TOL) : (lo > RES_TOL);
+}
+static bool res_region_neg(Expr* e) { return res_region_sign(e, true); }
+
 /* -------------------------------------------------------------------------
  * New contour families (implemented in the phases below).
  * ---------------------------------------------------------------------- */
@@ -2133,16 +2172,10 @@ static Expr* residue_family_gaussian(Expr* f, Expr* x, Expr* a, Expr* b) {
             if (D) expr_free(D);
             expr_free(C); expr_free(P); bad = true; break;
         }
-        /* Re A < 0 over the whole region.  numeric_double/param_interval read the
-         * guaranteed bound (a concrete A gives [A,A]); a symbolic leading
-         * coefficient the assumptions do not pin negative is refused. */
-        double alo, ahi, are, aim;
-        param_interval(A, &alo, &ahi);
-        Expr* Asamp = g_inst ? apply_inst(A) : NULL;
-        bool sample_neg = res_reim(Asamp ? Asamp : A, &are, &aim) &&
-                          fabs(aim) < RES_TOL && are < -RES_TOL;
-        if (Asamp) expr_free(Asamp);
-        if (!(sample_neg && ahi < -RES_TOL)) {
+        /* Re A < 0 over the whole region (else the Gaussian diverges).  A
+         * symbolic leading coefficient such as A = -a under a > 0 is proved via
+         * Refine; a concrete A falls back to its [A,A] interval. */
+        if (!res_region_neg(A)) {
             expr_free(A); expr_free(B); expr_free(D); expr_free(C); expr_free(P);
             bad = true; break;
         }
@@ -2469,6 +2502,7 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
     if (assumptions && !g_inst) {
         g_inst = build_instantiation(f, x, assumptions);
         built_here = (g_inst != NULL);
+        if (built_here) g_assume = expr_copy(assumptions);
     }
 
     Expr* value = NULL;
@@ -2505,7 +2539,10 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         if (!value) value = residue_family_sector(f, x, a, b);
     }
 
-    if (built_here) { expr_free(g_inst); g_inst = NULL; g_nbounds = 0; }
+    if (built_here) {
+        expr_free(g_inst); g_inst = NULL; g_nbounds = 0;
+        if (g_assume) { expr_free(g_assume); g_assume = NULL; }
+    }
     g_pv = pv_prev;
     return value;
 }

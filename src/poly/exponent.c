@@ -118,6 +118,16 @@ static Expr* base_exp_in_monomial(const Expr* term, const Expr* base) {
             } else if (head_is(f, "Power") && f->data.function.arg_count == 2 &&
                        expr_eq(f->data.function.args[0], (Expr*)base)) {
                 parts[np++] = expr_copy(f->data.function.args[1]);
+            } else if (head_is(f, "Times")) {
+                /* A non-flat NESTED Times can appear in an evaluated term --
+                 * e.g. -a x^2 beside a complex sibling evaluates to
+                 * Times[-1, Times[a, Power[x,2]]] rather than a flat
+                 * Times[-1, a, x^2].  Recurse so the base's exponent inside it
+                 * still counts (else Exponent[-a x^2 + I x, x] wrongly gave 1). */
+                Expr* sub = base_exp_in_monomial(f, base);
+                if (sub && !(sub->type == EXPR_INTEGER && sub->data.integer == 0))
+                    parts[np++] = sub;
+                else if (sub) expr_free(sub);
             }
         }
         Expr* out;
