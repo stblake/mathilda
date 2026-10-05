@@ -1830,6 +1830,24 @@ prefers a parameter with an **exact zero base** (`I(p0) = 0`) over one needing a
 sign-sensitive computed base, since the `D[I,p]` check cannot catch a wrong
 constant base.
 
+Two further closers run after the quadrature stages. **Repeated differentiation**:
+when a single differentiation of `trig^n/x^m` leaves a `1/x^{m-1}` the families
+cannot close, the integrand is differentiated `k` times until the inner integral
+closes, then back-integrated `k` times with the `k` lower derivatives pinned at an
+exact base (`Integrate[Sin[a x]^3/x^3, {x,0,Inf}] = 3 Pi a^2/8`: `k = 2`, `I''(a) =
+3 Pi/4`, `I(0) = I'(0) = 0`). **Reverse recognition**: when the integrand is itself
+a parameter-derivative of a known integral -- `f = Log[x]^k h` with `d/da h =
+Log[x] h` -- the value is `d^k/da^k Integrate[h, {x,a,b}]`
+(`Integrate[Exp[-x] x^(a-1) Log[x], {x,0,Inf}] = d/da Gamma[a] = Gamma[a]
+PolyGamma[0,a]`); the base integral `Integrate[h]` is taken from the families or,
+for a decaying Laplace/Gamma shape `C Exp[alpha x] x^(s-1)`, from the engine (gated
+to that shape so it cannot hang).
+
+The output is finalized by two equality-gated transforms: 1-arg `PowerExpand`
+(readability) and an assumption-aware `FullSimplify` (taken only when strictly
+simpler), which contracts a split Log the per-family Simplify leaves standing
+(`(Pi(-2Log[b]+Log[a b+b^2]))/b -> (Pi(Log[a+b]-Log[b]))/b`).
+
 Because the general integrator is slow/hangs on the parameter-dependent inner
 integrals Feynman's trick produces, `DiffUnderInt` evaluates the standard
 families itself with closed-form formulas: the **Laplace/Fourier half-line**
@@ -1873,7 +1891,17 @@ Worked examples that close:
 `Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]` → `(π/2) Erf[a/2]`;
 `Integrate[Exp[-a x] Sin[b x] Sin[c x]/x, {x,0,Infinity}, Assumptions->{a>0,Element[b,Reals],Element[c,Reals]}]` → `(1/4) Log[(a²+(b+c)²)/(a²+(b−c)²)]`;
 `Integrate[Exp[-a^2 x^2] Cos[b x], {x,0,Infinity}, Assumptions->a>0]` → `(√π/(2a)) Exp[−b²/(4a²)]`  (Stage B);
-`Integrate[Exp[-a^2 x^2 - b^2/x^2], {x,0,Infinity}, Assumptions->{a>0,b>0}]` → `(√π/(2a)) Exp[−2ab]`  (Stage B, self-similar).
+`Integrate[Exp[-a^2 x^2 - b^2/x^2], {x,0,Infinity}, Assumptions->{a>0,b>0}]` → `(√π/(2a)) Exp[−2ab]`  (Stage B, self-similar);
+`Integrate[Exp[-x] x^(a-1) Log[x], {x,0,Infinity}, Assumptions->a>0]` → `Gamma[a] PolyGamma[0,a]`  (reverse recognition);
+`Integrate[Sin[a x]^3/x^3, {x,0,Infinity}, Assumptions->a>0]` → `3 π a²/8`  (repeated differentiation).
+
+Still **deferred**: finite-period log-trig integrals (`Integrate[Log[a^2 - 2a Cos[x]
++ 1], {x,0,π}]`, `Integrate[Log[1 - a^2 Sin[x]^2], {x,0,π/2}]`). Their differentiated
+inner integral (a rational function of Sin/Cos over a period) is reachable via the
+residue unit-circle engine, but the Feynman back-integration produces a
+complex-branch antiderivative singular at the natural base (`∝ 1/a` or
+`1/√(1-a^2)`), and `Limit` cannot resolve the canceling log-singularity there; a
+branch-correct back-integration is needed first.
 
 Three **finite-domain** families need neither a pre-existing parameter (the first
 two are purely numeric) nor an engine-safe inner integral (all three differentiate

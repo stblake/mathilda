@@ -1363,22 +1363,58 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
     return found;
 }
 
-/* Output cleanup.  Simplify canonicalises c*Log[w] into the contracted
- * Log[w^c] form (e.g. -(1/2)Log[u] + (1/2)Log[v] -> Log[1/Sqrt[u]] + Log[Sqrt[v]]),
- * which reads poorly for the Frullani/Laplace family results.  1-arg PowerExpand
- * pulls those powers back out; we keep the expanded form ONLY when it is provably
- * equal to the verified answer (Simplify[clean - I] === 0 under the assumptions),
- * so a branch-changing PowerExpand can never corrupt a correct result.  Borrows
- * `I`; returns an owned cleaned copy, or NULL to keep `I` as-is. */
-static Expr* diui_finalize(const Expr* I, const Expr* assumptions) {
-    Expr* clean = ev1("PowerExpand", expr_copy((Expr*)I));
-    if (!clean) return NULL;
-    Expr* diff = t_add(expr_copy(clean), t_neg(expr_copy((Expr*)I)));
+/* LeafCount of e as a long (large sentinel on failure). */
+static long diui_leafcount(const Expr* e) {
+    Expr* lc = ev1("LeafCount", expr_copy((Expr*)e));
+    long n = (lc && lc->type == EXPR_INTEGER) ? (long)lc->data.integer : (1L << 28);
+    if (lc) expr_free(lc);
+    return n;
+}
+
+/* True iff `c` is provably equal to I under the assumptions and finite. */
+static bool diui_equal_ok(const Expr* c, const Expr* I, const Expr* assumptions) {
+    if (!c || !is_finite_value(c)) return false;
+    Expr* diff = t_add(expr_copy((Expr*)c), t_neg(expr_copy((Expr*)I)));
     bool same = is_zero_with(diff, assumptions);
     expr_free(diff);
-    if (same && is_finite_value(clean)) return clean;
-    expr_free(clean);
-    return NULL;
+    return same;
+}
+
+/* Output cleanup.  Two candidate transforms, each kept ONLY when provably equal to
+ * the verified answer (so a branch-changing step can never corrupt a correct
+ * result): (1) 1-arg PowerExpand pulls Logs out of radicals/reciprocal powers
+ * (the Frullani/Laplace family's `Log[1/Sqrt[u]] + Log[Sqrt[v]]` reads poorly);
+ * (2) an assumption-aware FullSimplify contracts split Logs / collapses radicals
+ * that the per-family Simplify leaves standing (e.g. `(Pi(-2Log[b]+Log[a b+b^2]))/b
+ * -> (Pi(Log[a+b]-Log[b]))/b`).  FullSimplify is taken only when it is strictly
+ * simpler (smaller LeafCount) and is gated to a small result so it stays bounded.
+ * Borrows `I`; returns an owned cleaned copy, or NULL to keep `I` as-is. */
+static Expr* diui_finalize(const Expr* I, const Expr* assumptions) {
+    Expr* best = NULL;
+    long best_lc = diui_leafcount(I);
+
+    /* (1) PowerExpand -- kept for readability whenever equal (even if not smaller). */
+    Expr* pe = ev1("PowerExpand", expr_copy((Expr*)I));
+    if (pe) {
+        if (diui_equal_ok(pe, I, assumptions)) { best = pe; best_lc = diui_leafcount(pe); }
+        else expr_free(pe);
+    }
+
+    /* (2) FullSimplify of the best-so-far -- taken only if strictly simpler. */
+    const Expr* src = best ? best : I;
+    if (diui_leafcount(src) <= 80) {
+        Expr* fs = assumptions
+            ? ev2("FullSimplify", expr_copy((Expr*)src), expr_copy((Expr*)assumptions))
+            : ev1("FullSimplify", expr_copy((Expr*)src));
+        if (fs) {
+            long lc = diui_leafcount(fs);
+            if (lc < best_lc && diui_equal_ok(fs, I, assumptions)) {
+                if (best) expr_free(best);
+                best = fs; best_lc = lc;
+            } else expr_free(fs);
+        }
+    }
+    return best;                                 /* NULL -> caller keeps I */
 }
 
 /* =========================================================================
@@ -2382,6 +2418,261 @@ static bool whole_line_divergent_pole(const Expr* f, const Expr* x) {
     return pole;
 }
 
+/* =========================================================================
+ * Repeated differentiation / power reduction (trig^n / x^m).
+ *
+ * A single differentiation of f = trig^n/x^m leaves a 1/x^{m-1} inner integrand
+ * the families still cannot close; differentiating k times clears the power down
+ * to a 1/x the sinc family handles.  Back-integrate k times, pinning the k lower
+ * derivatives at an exact base.  Closes Integrate[Sin[a x]^3/x^3, {x,0,Inf}] =
+ * 3 Pi a^2/8 (k = 2: I''(a) = 3 Pi/4, I(0) = I'(0) = 0).
+ * ---------------------------------------------------------------------- */
+
+/* max m such that 1/x^m divides f (its Together denominator's degree in x). */
+static long max_inv_x_power(const Expr* f, const Expr* x) {
+    Expr* tg = ev1("Together", expr_copy((Expr*)f));
+    if (!tg) return 0;
+    Expr* den = ev1("Denominator", tg);                 /* consumes tg */
+    if (!den) return 0;
+    Expr* ex = ev2("Exponent", den, expr_copy((Expr*)x)); /* consumes den */
+    long m = (ex && ex->type == EXPR_INTEGER) ? (long)ex->data.integer : 0;
+    if (ex) expr_free(ex);
+    return m;
+}
+
+/* Simplify[D[f,{p,k}]], evaluated.  Owned, or NULL. */
+static Expr* deriv_k(const Expr* f, const Expr* p, long k, const Expr* assumptions) {
+    Expr* cur = expr_copy((Expr*)f);
+    for (long i = 0; i < k; i++) {
+        Expr* d = deriv(cur, p); expr_free(cur); cur = d;
+        if (!cur) return NULL;
+    }
+    Expr* s = simplify_with(cur, assumptions); expr_free(cur);
+    return s;
+}
+
+/* Pin I(p0),...,I^(order-1)(p0) at one p0 in {0,1,-1}: each derivative's integrand
+ * at p0 is an exact 0 (zero-integrand) or a directly-integrable inner integral. */
+static bool multi_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b,
+                       const Expr* assumptions, const Expr* p,
+                       const ParamBound* pb, size_t np, long order,
+                       Expr** out_p0, Expr** vals) {
+    static const long CS[] = { 0, 1, -1 };
+    for (size_t c = 0; c < sizeof(CS)/sizeof(CS[0]); c++) {
+        Expr* p0 = mk_int(CS[c]);
+        Expr* tmp[8]; long got = 0; bool ok = true;
+        for (long j = 0; j < order && ok; j++) {
+            Expr* dj  = deriv_k(f, p, j, assumptions);
+            Expr* djp = dj ? subst(dj, p, p0) : NULL;
+            if (dj) expr_free(dj);
+            if (!djp) { ok = false; break; }
+            if (is_zero_q(djp)) { tmp[got++] = mk_int(0); expr_free(djp); continue; }
+            Expr* v = inner_definite(djp, x, a, b, assumptions, pb, np);
+            expr_free(djp);
+            if (v) { Expr* s = simplify_with(v, assumptions); expr_free(v); v = s; }
+            if (v && !contains_head(v, "Integrate") && is_finite_value(v)) tmp[got++] = v;
+            else { if (v) expr_free(v); ok = false; }
+        }
+        if (ok) { *out_p0 = p0; for (long j = 0; j < order; j++) vals[j] = tmp[j]; return true; }
+        for (long j = 0; j < got; j++) expr_free(tmp[j]);
+        expr_free(p0);
+    }
+    return false;
+}
+
+static Expr* stage_repeated_quadrature(const Expr* f, const Expr* x, const Expr* a,
+                                       const Expr* b, const Expr* assumptions,
+                                       const ParamBound* pb, size_t np) {
+    long mmax = max_inv_x_power(f, x);
+    if (mmax < 2) return NULL;                     /* single diff suffices (Stage A) */
+    long cap = mmax < 4 ? mmax : 4;
+    for (size_t pi = 0; pi < np; pi++) {
+        Expr* p = mk_sym(pb[pi].sym);
+        for (long k = 2; k <= cap; k++) {
+            Expr* gk = deriv_k(f, p, k, assumptions);
+            if (!gk || is_zero_q(gk)) { if (gk) expr_free(gk); continue; }
+            Expr* Jk = inner_definite(gk, x, a, b, assumptions, pb, np);
+            expr_free(gk);
+            if (Jk) { Expr* s = simplify_with(Jk, assumptions); expr_free(Jk); Jk = s; }
+            if (!Jk || contains_head(Jk, "Integrate") || !is_finite_value(Jk)) { if (Jk) expr_free(Jk); continue; }
+            Expr* p0 = NULL; Expr* vals[8];
+            if (!multi_base(f, x, a, b, assumptions, p, pb, np, k, &p0, vals)) { expr_free(Jk); continue; }
+            Expr* Jkeep = expr_copy(Jk);
+            Expr* I = Jk;                          /* I^(k) = Jk */
+            bool ok = true;
+            for (long j = k - 1; j >= 0 && ok; j--) {
+                Expr* G = integrate_over_param(I, p);
+                expr_free(I); I = NULL;
+                if (!G || contains_head(G, "Integrate") || !is_finite_value(G)) { if (G) expr_free(G); ok = false; break; }
+                Expr* Gp0 = eval_at_param(G, p, p0);
+                if (!Gp0) { expr_free(G); ok = false; break; }
+                Expr* sum = mk_fn2("Plus", expr_copy(G),
+                                   mk_fn2("Plus", t_neg(Gp0), expr_copy(vals[j])));
+                expr_free(G);
+                I = simplify_with(sum, assumptions); expr_free(sum);
+                if (!I || !is_finite_value(I)) { ok = false; break; }
+            }
+            expr_free(p0);
+            for (long j = 0; j < k; j++) expr_free(vals[j]);
+            if (ok && I) {
+                Expr* dI = deriv_k(I, p, k, assumptions);
+                Expr* chk = dI ? t_add(dI, t_neg(expr_copy(Jkeep))) : NULL;
+                bool verified = chk && is_zero_with(chk, assumptions);
+                if (chk) expr_free(chk);
+                expr_free(Jkeep);
+                if (verified) {
+                    expr_free(p);
+                    Expr* cl = diui_finalize(I, assumptions);
+                    if (cl) { expr_free(I); return cl; }
+                    return I;
+                }
+                expr_free(I);
+            } else {
+                expr_free(Jkeep);
+                if (I) expr_free(I);
+            }
+        }
+        expr_free(p);
+    }
+    return NULL;
+}
+
+/* =========================================================================
+ * Reverse recognition: the integrand IS a parameter-derivative of a known
+ * integral.  For f = Log[x]^k h with d/da h = Log[x] h (so f = d^k/da^k h) and
+ * F(a) = Integrate[h, {x,a,b}] a known closed form, the integral is d^k/da^k F.
+ * Closes Integrate[Exp[-x] x^(a-1) Log[x], {x,0,Inf}] = Gamma'[a] = Gamma[a]
+ * PolyGamma[0,a]: here h = Exp[-x] x^(a-1), d/da h = Log[x] h, Integrate[h] =
+ * Gamma[a], so the value is d/da Gamma[a].
+ * ---------------------------------------------------------------------- */
+
+/* Count the Log[x]^k factor of f and return f with it stripped in *h_out.
+ * Returns k (>=1) on success, 0 if there is no Log[x] factor. */
+static long strip_log_x_power(const Expr* f, const Expr* x, Expr** h_out) {
+    Expr* fb[64];
+    size_t nf = collect_factors((Expr*)f, fb, 64, 0);
+    long k = 0;
+    Expr* h = mk_int(1);
+    for (size_t i = 0; i < nf; i++) {
+        Expr* F = fb[i];
+        if (head_name_is(F, "Log") && F->data.function.arg_count == 1 &&
+            expr_eq(F->data.function.args[0], x)) { k += 1; continue; }
+        if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
+            head_name_is(F->data.function.args[0], "Log") &&
+            F->data.function.args[0]->data.function.arg_count == 1 &&
+            expr_eq(F->data.function.args[0]->data.function.args[0], x) &&
+            F->data.function.args[1]->type == EXPR_INTEGER &&
+            F->data.function.args[1]->data.integer > 0) {
+            k += (long)F->data.function.args[1]->data.integer; continue;
+        }
+        h = t_mul(h, expr_copy(F));
+    }
+    if (k == 0) { expr_free(h); return 0; }
+    *h_out = eval_take(h);
+    return k;
+}
+
+/* The parameter `a` (owned) with d/da h = Log[x] h, else NULL. */
+static Expr* find_log_derivative_param(const Expr* h, const Expr* x,
+                                       const Expr* assumptions) {
+    ParamBound pb[16];
+    size_t np = collect_params((Expr*)h, (Expr*)x, pb, 16, 0);
+    for (size_t i = 0; i < np; i++) {
+        Expr* p = mk_sym(pb[i].sym);
+        Expr* d = t_add(deriv(h, p),
+                        t_neg(t_mul(mk_fn1("Log", expr_copy((Expr*)x)), expr_copy((Expr*)h))));
+        bool ok = is_zero_with(d, assumptions);
+        expr_free(d);
+        if (ok) return p;
+        expr_free(p);
+    }
+    return NULL;
+}
+
+/* True iff h = c * Exp[linear-decaying in x] * x^q (the Laplace/Gamma shape): a
+ * single decaying exponential, powers of x (symbolic exponent allowed), and
+ * x-free constants -- nothing else x-dependent (so a 1/(e^x-1)-type denominator is
+ * rejected).  The engine integrates this to a Gamma without hanging. */
+static bool is_gamma_shape(const Expr* h, const Expr* x,
+                           const ParamBound* pb, size_t np) {
+    Expr* fb[64];
+    size_t nf = collect_factors((Expr*)h, fb, 64, 0);
+    bool saw_decay_exp = false;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* F = fb[i];
+        if (!contains_symbol(F, x)) continue;              /* x-free constant */
+        const Expr* ea = NULL;
+        if (head_name_is(F, "Exp") && F->data.function.arg_count == 1)
+            ea = F->data.function.args[0];
+        else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
+                 F->data.function.args[0]->type == EXPR_SYMBOL &&
+                 strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0)
+            ea = F->data.function.args[1];
+        if (ea) {
+            Expr* c2 = ev1("Simplify", mk_fn3("Coefficient", expr_copy((Expr*)ea), expr_copy((Expr*)x), mk_int(2)));
+            Expr* c1 = ev1("Simplify", mk_fn3("Coefficient", expr_copy((Expr*)ea), expr_copy((Expr*)x), mk_int(1)));
+            bool linear = c2 && is_zero_q(c2);
+            bool decay  = c1 && real_positive(t_neg(expr_copy(c1)), pb, np);
+            if (c2) expr_free(c2);
+            if (c1) expr_free(c1);
+            if (linear && decay) { saw_decay_exp = true; continue; }
+            return false;
+        }
+        if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
+            expr_eq(F->data.function.args[0], x)) continue;  /* x^q */
+        if (expr_eq(F, x)) continue;                         /* bare x */
+        return false;                                        /* other x-dependence */
+    }
+    return saw_decay_exp;
+}
+
+/* F(a) = Integrate[h, {x,a,b}] via a bounded path (families, else the engine on a
+ * safe Gamma shape only).  Owned, or NULL. */
+static Expr* known_integral_closed_form(const Expr* h, const Expr* x, const Expr* a,
+                                        const Expr* b, const Expr* assumptions,
+                                        const ParamBound* pb, size_t np) {
+    Expr* F = inner_definite(h, x, a, b, assumptions, pb, np);
+    if (F) { Expr* s = simplify_with(F, assumptions); expr_free(F); F = s; }
+    if (F && !contains_head(F, "Integrate") && is_finite_value(F)) return F;
+    if (F) expr_free(F);
+    /* Engine fallback, gated to the Gamma shape so it cannot hang. */
+    if (!is_gamma_shape(h, x, pb, np)) return NULL;
+    Expr* Fe = integrate_definite_of(h, x, a, b, assumptions);
+    if (Fe) { Expr* s = simplify_with(Fe, assumptions); expr_free(Fe); Fe = s; }
+    if (Fe && !contains_head(Fe, "Integrate") && is_finite_value(Fe)) return Fe;
+    if (Fe) expr_free(Fe);
+    return NULL;
+}
+
+/* Reverse-Feynman stage: strip Log[x]^k, recover F(a) = Integrate[h], return
+ * d^k/da^k F.  Correct by construction (the d/da h = Log[x] h identity is verified
+ * and F is an exact closed form), so no differentiate-back check is needed. */
+static Expr* stage_reverse_feynman(const Expr* f, const Expr* x, const Expr* a,
+                                   const Expr* b, const Expr* assumptions) {
+    Expr* h = NULL;
+    long k = strip_log_x_power(f, x, &h);
+    if (k == 0) return NULL;
+    Expr* p = find_log_derivative_param(h, x, assumptions);
+    if (!p) { expr_free(h); return NULL; }
+    ParamBound pb[16];
+    size_t np = collect_params((Expr*)h, (Expr*)x, pb, 16, 0);
+    if (assumptions) absorb_fact(pb, np, (Expr*)assumptions);
+    Expr* F = known_integral_closed_form(h, x, a, b, assumptions, pb, np);
+    expr_free(h);
+    if (!F) { expr_free(p); return NULL; }
+    /* I = d^k/da^k F. */
+    Expr* I = F;
+    for (long i = 0; i < k; i++) { Expr* d = deriv(I, p); expr_free(I); I = d; if (!I) break; }
+    expr_free(p);
+    if (!I) return NULL;
+    Expr* Is = simplify_with(I, assumptions);
+    expr_free(I);
+    if (Is && is_finite_value(Is) && !contains_symbol(Is, x) &&
+        !contains_head(Is, "Integrate")) return Is;
+    if (Is) expr_free(Is);
+    return NULL;
+}
+
 Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
                                  Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
@@ -2427,6 +2718,13 @@ Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
     if (!result) result = stage_finite_feynman(f, x, a, b, assumptions);
     if (!result && np > 0)
         result = stage_quadrature(f, x, a, b, assumptions, pb, np);
+    /* Repeated differentiation / power reduction (trig^n/x^m), when a single
+     * differentiation leaves a 1/x^{m-1} the families cannot close. */
+    if (!result && np > 0)
+        result = stage_repeated_quadrature(f, x, a, b, assumptions, pb, np);
+    /* Reverse recognition (integrand = d^k/da^k of a known integral) runs last and
+     * needs no pre-existing numeric parameter -- the Log[x]^k weight supplies it. */
+    if (!result) result = stage_reverse_feynman(f, x, a, b, assumptions);
     arith_warnings_mute_pop();
     diui_depth--;
     return result;

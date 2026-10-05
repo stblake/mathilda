@@ -271,6 +271,40 @@ static void test_stage_b_ode(void) {
         "(Sqrt[Pi]/(2 a)) Exp[-2 a b]", "a > 0 && b > 0");
 }
 
+/* Repeated differentiation / power reduction: Sin[a x]^3/x^3 needs TWO parameter
+ * differentiations to reduce 1/x^3 to a sinc the families close, then two
+ * back-integrations with I(0) = I'(0) = 0. */
+static void test_repeated_quadrature(void) {
+    assert_closes(
+        "Integrate[Sin[a x]^3/x^3, {x, 0, Infinity}, "
+        "Method -> \"DiffUnderInt\", Assumptions -> a > 0]",
+        "3 Pi a^2/8", "a > 0");
+}
+
+/* Reverse recognition: the integrand is a parameter-derivative of a known integral.
+ * Exp[-x] x^(a-1) Log[x] = d/da (Exp[-x] x^(a-1)), and Integrate[Exp[-x] x^(a-1)] =
+ * Gamma[a], so the integral is d/da Gamma[a] = Gamma[a] PolyGamma[0,a]. */
+static void test_reverse_feynman(void) {
+    assert_closes(
+        "Integrate[Exp[-x] x^(a-1) Log[x], {x, 0, Infinity}, "
+        "Method -> \"DiffUnderInt\", Assumptions -> a > 0]",
+        "Gamma[a] PolyGamma[0, a]", "a > 0");
+}
+
+/* Output-quality finalize: an assumption-aware FullSimplify contracts the split
+ * Log the per-family Simplify leaves standing. */
+static void test_finalize_quality(void) {
+    assert_closes(
+        "Integrate[Log[1 + a^2 x^2]/(1 + b^2 x^2), {x, 0, Infinity}, "
+        "Method -> \"DiffUnderInt\", Assumptions -> {a > 0, b > 0}]",
+        "(Pi/b) Log[(a + b)/b]", "a > 0 && b > 0");
+    /* The uncontracted Log[a b + b^2] must not survive the finalize. */
+    assert_eval_eq(
+        "FreeQ[Integrate[Log[1 + a^2 x^2]/(1 + b^2 x^2), {x, 0, Infinity}, "
+        "Method -> \"DiffUnderInt\", Assumptions -> {a > 0, b > 0}], Log[a b + b^2]]",
+        "True", 0);
+}
+
 /* Phase 1: robustness (no hang) + correctness (no non-real / Indeterminate). */
 static void test_phase1_robustness(void) {
     /* (a) Exp[-a x] (Sin[b x]/x)^2 used to HANG uninterruptibly: the parameter
@@ -314,6 +348,9 @@ void test_integrate_diffunderint(void) {
     TEST(test_fugacity_cascade);
     TEST(test_phase1_robustness);
     TEST(test_stage_b_ode);
+    TEST(test_reverse_feynman);
+    TEST(test_repeated_quadrature);
+    TEST(test_finalize_quality);
 
     printf("All Integrate DiffUnderInt tests passed!\n");
 }
