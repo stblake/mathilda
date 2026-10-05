@@ -2698,6 +2698,23 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     int sc = so_branch_point_sign(inner);
                     if (sc != 0) r = so_apply_arctanh_branch_point(inner, sc, ctx->target_order, ctx);
                 }
+                /* Non-linear approach to a ±1 branch point (e.g. ArcTanh[Sqrt[1-a^2]]
+                 * at a=0, where the inner is 1 + O(a^2), not 1 + O(a)): the linear
+                 * handler above declines.  Rewrite ArcTanh[arg] = (Log[1+arg] -
+                 * Log[1-arg])/2 at the Expr level and recurse -- series_expand's
+                 * Log-of-a-vanishing-series handling extracts the Log[x-x0] term for
+                 * whichever of 1±arg vanishes, for a leading correction of any order. */
+                if (!r && so_branch_point_sign(inner) != 0 &&
+                    e->data.function.arg_count == 1) {
+                    Expr* arg = e->data.function.args[0];
+                    Expr* lp = mk_fn1("Log", mk_plus(expr_new_integer(1), expr_copy(arg)));
+                    Expr* lm = mk_fn1("Log", mk_plus(expr_new_integer(1),
+                                        mk_times(expr_new_integer(-1), expr_copy(arg))));
+                    Expr* rew = mk_times(make_rational(1, 2),
+                                         mk_plus(lp, mk_times(expr_new_integer(-1), lm)));
+                    r = series_expand(rew, ctx);
+                    expr_free(rew);
+                }
                 /* If arg blows up at x0, use principal-branch identity
                  * ArcTanh[1/u] = I*Pi/2 + ArcTanh[u]. */
                 if (!r && inner->nmin < 0) {

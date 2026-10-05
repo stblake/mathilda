@@ -125,6 +125,20 @@ static void test_log_reduction(void) {
     check("Limit[(1 + a/x)^(b x), x -> Infinity]", "E^(a b)");
 }
 
+/* ArcTanh/ArcCoth at a ±1 branch point approached non-linearly: the inner
+ * (Sqrt[1-a^2] = 1 + O(a^2)) is NOT 1 + O(a), so the linear branch handler
+ * declines; the Log-rewrite fallback must still extract the logarithmic
+ * singularity.  ArcTanh[Sqrt[1-a^2]] ~ Log[2] - Log[a], so the individually
+ * divergent Log[a] + ArcTanh[...] cancels to a finite Log[2]. */
+static void test_arctanh_branch_point(void) {
+    /* Simplify-based equivalence: the value is Log[2] but is spelled with a
+     * Log[1/2] that Expand/Together (check_equiv) cannot fold. */
+    check("Simplify[Limit[Log[a] + ArcTanh[Sqrt[1 - a^2]], a -> 0] - Log[2]]", "0");
+    check("Simplify[Limit[ArcTanh[Sqrt[1 - a^2]] + Log[a/2], a -> 0]]", "0");
+    /* The underlying Series must close (not return unevaluated). */
+    check("FreeQ[Series[ArcTanh[Sqrt[1 - a^2]], {a, 0, 1}], Series]", "True");
+}
+
 /* ----------------------------------------------------------------- */
 /* Layer 4-ish -- RP-form families via Series                         */
 /* ----------------------------------------------------------------- */
@@ -1028,6 +1042,7 @@ int main(void) {
     TEST(test_series);
     TEST(test_rational);
     TEST(test_log_reduction);
+    TEST(test_arctanh_branch_point);
     TEST(test_rp_forms);
     TEST(test_directions);
     TEST(test_interval_returns);
