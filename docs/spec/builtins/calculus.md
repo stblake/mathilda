@@ -2155,7 +2155,14 @@ recognizers:
   analytic-part derivative `Res = (1/(m-1)!) d^{m-1}[N/(lead ∏_{r≠z₀}(z-r)^{m_r})]|_{z₀}`
   — fast where a Laurent series of a symbolic radical pole is not.  E.g.
   `Integrate[1/(a + b Cos[x])^3, {x,0,2π}, Assumptions -> a > b > 0]
-  = π(2a²+b²)/(a²−b²)^(5/2)`, and `1/(a + b Cos[x]) → 2π/√(a²−b²)`.
+  = π(2a²+b²)/(a²−b²)^(5/2)`, and `1/(a + b Cos[x]) → 2π/√(a²−b²)`.  A combined
+  `b Cos[x] + c Sin[x]` is handled too: if the `FindInstance` representative is
+  degenerate (e.g. `b = c = 0` for `a > √(b²+c²)`, where the pole quadratic loses
+  degree), the family retries at a point with every parameter nonzero — sound
+  because the integral is analytic wherever no pole sits on the unit circle (a
+  circle pole still returns `Integrate::idiv`).  So
+  `Integrate[1/(a + b Cos[x] + c Sin[x])^2, {x,0,2π}, Assumptions -> a > √(b²+c²)]
+  = 2π a/(a²−b²−c²)^(3/2)`.
 - **Parametrized contour over a full period** — a *transcendental* integrand of
   the form `g(Exp[I t]) · (I c Exp[I t])` (the Jacobian of `z = c Exp[I t]`):
   the same `t → −I Log[u]` substitution leaves `G(u) = integrand/(I u)`, whose

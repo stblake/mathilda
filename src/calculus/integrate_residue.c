@@ -178,12 +178,21 @@ static size_t     g_nbounds = 0;
  * no instantiation is active. */
 static Expr* apply_inst(Expr* e) {
     if (!g_inst) return NULL;
-    return eval_take(mk_fn2("ReplaceAll", expr_copy(e), expr_copy(g_inst)));
+    /* Quiet: substituting the representative point into a symbolic pole location
+     * can hit 1/0 (a denominator that vanishes at that point, e.g. the leading
+     * (b - c I)/2 of the z-quadratic for 1/(a + b Cos + c Sin)^2 at b = c = 0),
+     * whose Power::infy / Infinity::indet must not leak from this internal probe. */
+    return eval_take(mk_fn1("Quiet",
+                            mk_fn2("ReplaceAll", expr_copy(e), expr_copy(g_inst))));
 }
 
-/* Numeric real & imaginary parts of a CONCRETE numeric e (via N, then Re/Im). */
+/* Numeric real & imaginary parts of a CONCRETE numeric e (via N, then Re/Im).
+ * N runs inside Quiet: this is an internal classification probe, and a symbolic
+ * pole evaluated at a degenerate instantiation point (e.g. a pole location whose
+ * denominator vanishes there) would otherwise leak Power::infy / Infinity::indet
+ * to the user -- bypassing Quiet[]/Check[].  A non-finite N is caught below. */
 static bool res_reim_direct(Expr* e, double* re, double* im) {
-    Expr* n = ev1("N", expr_copy(e));
+    Expr* n = ev1("Quiet", mk_fn1("N", expr_copy(e)));
     if (!n) return false;
     if (is_infinity_sym(n) || is_neg_infinity_form(n) ||
         is_complex_infinity_sym(n) || is_indeterminate_sym(n)) { expr_free(n); return false; }
@@ -818,8 +827,12 @@ static Expr* trig_symbolic_residue(Expr* Fz, Expr* z, Expr* z0, ExprVec* droots)
  * Family C -- rational-in-{Sin,Cos} integrands over a full period.
  * ---------------------------------------------------------------------- */
 
-static Expr* residue_family_trig(Expr* f, Expr* x, Expr* a, Expr* b,
-                                 bool* diverges) {
+/* Wrapper (defined below after collect_params) + the generic-instance helper. */
+static Expr* residue_family_trig(Expr* f, Expr* x, Expr* a, Expr* b, bool* diverges);
+static Expr* build_nonzero_inst(const Expr* f, const Expr* x);
+
+static Expr* residue_family_trig_core(Expr* f, Expr* x, Expr* a, Expr* b,
+                                      bool* diverges) {
     if (!is_full_period(a, b)) return NULL;
 
     Expr* z = mk_sym(RES_W);
@@ -1146,7 +1159,7 @@ static Expr* residue_half_line(Expr* f, Expr* x, Expr* a, Expr* b,
  * only.  Returns false for anything that does not reduce to a finite real -- in
  * particular a genuinely symbolic parameter (which is what we want to detect). */
 static bool numeric_double(Expr* e, double* out) {
-    Expr* n = ev1("N", expr_copy(e));
+    Expr* n = ev1("Quiet", mk_fn1("N", expr_copy(e)));   /* internal probe: no message leak */
     if (!n) return false;
     bool ok = res_real_double(n, out);
     expr_free(n);
@@ -1174,6 +1187,62 @@ static size_t collect_params(const Expr* e, const Expr* x, ParamBound* pb,
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         n = collect_params(e->data.function.args[i], x, pb, cap, n);
     return n;
+}
+
+/* A representative point of g_assume with every parameter of f nonzero, as a
+ * List[Rule[p, val], ...] (owned), or NULL.  Used to re-classify the trig family
+ * away from a degenerate instance (b = c = 0) the plain FindInstance may pick. */
+static Expr* build_nonzero_inst(const Expr* f, const Expr* x) {
+    if (!g_assume) return NULL;
+    ParamBound pb[16];
+    size_t np = collect_params(f, x, pb, 16, 0);
+    if (np == 0) return NULL;
+    Expr** conj = malloc((np + 1) * sizeof(*conj));
+    Expr** vs   = malloc(np * sizeof(*vs));
+    conj[0] = expr_copy(g_assume);
+    for (size_t i = 0; i < np; i++) {
+        conj[i + 1] = mk_fn2("Unequal", mk_sym(pb[i].sym), mk_int(0));
+        vs[i] = mk_sym(pb[i].sym);
+    }
+    Expr* aug  = expr_new_function(mk_sym("And"), conj, np + 1);
+    Expr* vars = expr_new_function(mk_sym("List"), vs, np);
+    free(conj); free(vs);
+    Expr* fi = eval_take(mk_fn2("FindInstance", aug, vars));
+    if (!fi || !head_name_is(fi, "List") || fi->data.function.arg_count < 1) {
+        if (fi) expr_free(fi); return NULL;
+    }
+    Expr* sol = fi->data.function.args[0];
+    bool ok = head_name_is(sol, "List") && sol->data.function.arg_count == np;
+    for (size_t i = 0; i < np && ok; i++) {
+        Expr* rule = sol->data.function.args[i]; double v;
+        if (!head_name_is(rule, "Rule") || rule->data.function.arg_count != 2 ||
+            !numeric_double(rule->data.function.args[1], &v)) ok = false;
+    }
+    Expr* g = ok ? expr_copy(sol) : NULL;
+    expr_free(fi);
+    return g;
+}
+
+/* Full-period trig family with a generic-instance retry: if classification is
+ * undecidable at the (coupled FindInstance) instantiation point -- a degenerate
+ * point such as b = c = 0 for 1/(a + b Cos + c Sin)^2, where the pole quadratic
+ * loses degree so no pole can be placed -- retry at a point with every parameter
+ * nonzero.  Sound for this family: its integral is analytic wherever no pole lies
+ * on the unit circle (the core flags that via *diverges), so the
+ * parameter-analytic residue formula extends from a nondegenerate point.  Only
+ * the coupled mode (g_nbounds == 0) retries -- a per-parameter interval instance
+ * cannot produce this degeneracy -- so the real-axis Fourier family's
+ * under-constrained declines are unaffected. */
+static Expr* residue_family_trig(Expr* f, Expr* x, Expr* a, Expr* b, bool* diverges) {
+    Expr* v = residue_family_trig_core(f, x, a, b, diverges);
+    if (v || (diverges && *diverges)) return v;
+    if (!g_inst || g_nbounds != 0 || !g_assume) return NULL;
+    Expr* nz = build_nonzero_inst(f, x);
+    if (!nz) return NULL;
+    Expr* saved = g_inst; g_inst = nz;
+    v = residue_family_trig_core(f, x, a, b, diverges);
+    expr_free(g_inst); g_inst = saved;
+    return v;
 }
 
 /* Tighten the bound of the parameter named by `var` given `var op const`.

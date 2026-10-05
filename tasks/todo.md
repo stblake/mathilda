@@ -69,10 +69,17 @@ All reference values twice-confirmed vs NIntegrate (see plan triage table).
       b^(a+1-c)Gamma[a+1]Gamma[c-a-1]/Gamma[c]. Tried last on half-line (integer-c -> mellin).
       In[16] clean. test_beta + In[19] in test_sector. version 0.282 + docs + changelog + tag.
 
-## Phase 7 — Trig combined b Cos+c Sin + warning-leak fix (In[11])
-- [ ] amplitude-phase pre-normalization (β Cos+γ Sin → R Cos[θ-φ]); shift θ→θ+φ
-- [ ] Quiet the internal N-probe in res_reim/apply_inst (no Power::infy leak)
-- [ ] Pin In[11] 2πa/(a²-b²-c²)^(3/2). version+docs+tag; make check-messages
+## Phase 7 — Trig combined b Cos+c Sin + warning-leak fix (In[11])  [DONE v0.283]
+- [x] Quiet apply_inst (+ res_reim_direct/numeric_double N-probes): the degenerate-point
+      1/0 (pole denom vanishes at b=c=0) no longer leaks Power::infy/Infinity::indet.
+- [x] residue_family_trig wrapper: on undecidable classification (coupled FindInstance
+      mode only) retry at an all-nonzero representative (build_nonzero_inst from g_assume).
+      Sound: full-period rational is analytic off circle-poles (core flags idiv). Confined
+      to trig -> Fourier under-constrained declines (Cos[kx]/(x^2+a^2), k>0) unchanged.
+      NOTE: a global nonzero-FindInstance was UNSOUND (broke that control) -> reverted;
+      localized to trig instead.
+- [x] In[11] = 2πa/(a²-b²-c²)^(3/2) (form 16πa/(4a²-4b²-4c²)^(3/2), correct). Pin in
+      test_trig_symbolic (non-vacuous). version 0.283 + docs + changelog + tag; check-messages OK.
 
 ## Phase 8 — Hard tail
 - [ ] In[13] (Cos[a x]-Cos[b x])/x²: best-effort multi-frequency Fourier diff; else decline

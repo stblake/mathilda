@@ -117,6 +117,18 @@ static void test_trig_symbolic(void) {
     check_eq("With[{r = Integrate[1/(a + b Cos[x])^3, {x, 0, 2 Pi}, Assumptions -> a > b > 0, "
              "Method -> \"Residue\"]}, {FreeQ[r, Integrate], "
              "Simplify[r - Pi (2 a^2 + b^2)/(a^2 - b^2)^(5/2)] == 0}]", "{True, True}");
+
+    /* Case In[11]: both Cos and Sin present, 1/(a + b Cos + c Sin)^2 =
+     * 2 Pi a/(a^2-b^2-c^2)^(3/2), a > Sqrt[b^2+c^2].  Formerly leaked Power::infy
+     * / Infinity::indet and declined: FindInstance picked the degenerate b=c=0,
+     * collapsing the pole quadratic's leading coefficient.  Now a generic
+     * (all-nonzero) representative is chosen and the internal N-probe runs under
+     * Quiet.  (Value correct; the 4's are not pulled out of the ^(3/2), so pin
+     * numerically.) */
+    check_eq("With[{r = Integrate[1/(a + b Cos[theta] + c Sin[theta])^2, {theta, 0, 2 Pi}, "
+             "Assumptions -> a > Sqrt[b^2 + c^2], Method -> \"Residue\"]}, "
+             "{FreeQ[r, Integrate], Chop[N[(r - 2 Pi a/(a^2 - b^2 - c^2)^(3/2)) "
+             "/. {a -> 3, b -> 1, c -> 1}]]}]", "{True, 0}");
 }
 
 /* -------------------------------------------------------------------------
