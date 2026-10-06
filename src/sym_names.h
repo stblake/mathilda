@@ -437,6 +437,7 @@ extern const char* SYM_WynnEpsilon;
 extern const char* SYM_Compiled;
 extern const char* SYM_RealExponent;
 extern const char* SYM_Negative;
+extern const char* SYM_NonCommutativeMultiply;
 extern const char* SYM_NonNegative;
 extern const char* SYM_NonPositive;
 extern const char* SYM_NegativeDefiniteMatrixQ;

@@ -971,6 +971,7 @@ typedef enum {
     OP_COMPOSITION,
     OP_PUT,
     OP_PUTAPPEND,
+    OP_NONCOMMULT,    /* a ** b ** c -> NonCommutativeMultiply[a, b, c] */
 #if UP_VALUES
     OP_UPSET,         /* lhs ^= rhs   */
     OP_UPSETDELAYED,  /* lhs ^:= rhs  */
@@ -1101,6 +1102,14 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_ADDTO; def.prec = 500; def.right_assoc = 1; def.head_name = "AddTo"; def.len = 2;
     } else if (strncmp(pos, "-=", 2) == 0) {
         def.type = OP_SUBTRACTFROM; def.prec = 500; def.right_assoc = 1; def.head_name = "SubtractFrom"; def.len = 2;
+    } else if (strncmp(pos, "**", 2) == 0) {
+        /* NonCommutativeMultiply. Associative (Flat) but non-commutative.
+         * Precedence 5900 sits in the empty gap between Dot (5300) and
+         * Power (6500), reproducing Mathematica's ordering
+         * Plus < Times < Dot < NonCommutativeMultiply < Power.
+         * Must precede the bare `*` arm below; differs from `*=` at offset 1
+         * so order among the `*` forms is otherwise free. Left-associative. */
+        def.type = OP_NONCOMMULT; def.prec = 5900; def.head_name = "NonCommutativeMultiply"; def.len = 2;
     } else if (strncmp(pos, "*=", 2) == 0) {
         def.type = OP_TIMESBY; def.prec = 500; def.right_assoc = 1; def.head_name = "TimesBy"; def.len = 2;
     } else if (strncmp(pos, "/=", 2) == 0) {
@@ -1852,11 +1861,13 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                        && fold_into_inequality(&left, hn, right)) {
                 left_bare_compare = true;
             }
-            /* Flatten repeated Plus/Times at parse time so that held
-             * expressions reflect the n-ary form (a+b+c -> Plus[a,b,c]). */
+            /* Flatten repeated Plus/Times/NonCommutativeMultiply at parse time
+             * so that held expressions reflect the n-ary form
+             * (a+b+c -> Plus[a,b,c]; a**b**c -> NonCommutativeMultiply[a,b,c]). */
             else if (op_def.head_name &&
                 (strcmp(op_def.head_name, "Plus") == 0 ||
-                 strcmp(op_def.head_name, "Times") == 0) &&
+                 strcmp(op_def.head_name, "Times") == 0 ||
+                 strcmp(op_def.head_name, "NonCommutativeMultiply") == 0) &&
                 extend_flat_head(left, op_def.head_name, right)) {
                 /* left was extended in place */
             } else {

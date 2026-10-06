@@ -433,6 +433,7 @@ const char* SYM_WynnEpsilon = NULL;
 const char* SYM_Compiled = NULL;
 const char* SYM_RealExponent = NULL;
 const char* SYM_Negative = NULL;
+const char* SYM_NonCommutativeMultiply = NULL;
 const char* SYM_NonNegative = NULL;
 const char* SYM_NonPositive = NULL;
 const char* SYM_NegativeDefiniteMatrixQ = NULL;
@@ -1428,6 +1429,7 @@ void sym_names_init(void) {
     SYM_Compiled                   = intern_symbol("Compiled");
     SYM_RealExponent               = intern_symbol("RealExponent");
     SYM_Negative                   = intern_symbol("Negative");
+    SYM_NonCommutativeMultiply     = intern_symbol("NonCommutativeMultiply");
     SYM_NonNegative                = intern_symbol("NonNegative");
     SYM_NonPositive                = intern_symbol("NonPositive");
     SYM_NegativeDefiniteMatrixQ    = intern_symbol("NegativeDefiniteMatrixQ");

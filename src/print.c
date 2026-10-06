@@ -104,6 +104,9 @@ static int get_expr_prec(Expr* e) {
     if (head == SYM_Plus) return 3500;
 
     if (head == SYM_Times) return 4500;
+    /* NonCommutativeMultiply prints infix only with >= 2 args; the one-arg
+     * bracketed form keeps the default 9500 so it is never spuriously wrapped. */
+    if (head == SYM_NonCommutativeMultiply && e->data.function.arg_count >= 2) return 5900;
     if (head == SYM_Divide) return 5000;
     if (head == SYM_Power) {
         if (e->data.function.arg_count == 2) {
@@ -735,7 +738,7 @@ static void print_standard(Expr* e, int parent_prec) {
             print_definition_body(e->data.function.args[0]->data.symbol.name);
         }
 #endif
-        else if ((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition || head == SYM_And || head == SYM_Or || head == SYM_Alternatives) && e->data.function.arg_count >= 2) {
+        else if ((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition || head == SYM_And || head == SYM_Or || head == SYM_Alternatives || head == SYM_NonCommutativeMultiply) && e->data.function.arg_count >= 2) {
             const char* op = "";
             if (head == SYM_Equal) op = " == ";
             else if (head == SYM_Unequal) op = " != ";
@@ -753,6 +756,7 @@ static void print_standard(Expr* e, int parent_prec) {
             else if (head == SYM_And) op = " && ";
             else if (head == SYM_Or) op = " || ";
             else if (head == SYM_Alternatives) op = " | ";
+            else if (head == SYM_NonCommutativeMultiply) op = " ** ";
 
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (i > 0) printf("%s", op);

@@ -404,6 +404,42 @@ In[3]:= 14/Sqrt[10]
 Out[3]= 7 Sqrt[2/5]
 ```
 
+## NonCommutativeMultiply (**)
+
+A general associative, but non-commutative, form of multiplication. Use it as a
+generalization of ordinary multiplication for special mathematical objects
+(e.g. composition in an algebra of differential operators, matrices of
+operators, quaternions).
+- `a ** b ** c` or `NonCommutativeMultiply[a, b, c]`.
+
+**Features**:
+- Attributes `Flat`, `OneIdentity`, `Protected`.
+- Instances are automatically flattened (`a ** (b ** c)` and `(a ** b) ** c`
+  both become `NonCommutativeMultiply[a, b, c]`), **but no other simplification
+  is performed**: arguments are not reordered (`a ** b` stays distinct from
+  `b ** a`), `0 ** a` and `1 ** a` are left as given, and `Expand` / `Simplify`
+  / `FullSimplify` do not operate on expressions containing it.
+- `NonCommutativeMultiply[a]` (one argument) stays unevaluated — unlike
+  `Times[a]`, which reduces to `a`.
+- Precedence binds tighter than `*` (`Times`) and `.` (`Dot`), and looser than
+  `^` (`Power`): `a ** b ^ c` is `a ** (b^c)`, `a b ** c` is `a (b ** c)`.
+- No new numeric fast path: `**` is a purely symbolic/structural head, so it has
+  no packed/NDArray or `Compile[]` lowering.
+
+```mathematica
+In[1]:= a ** b ** c
+Out[1]= a ** b ** c
+
+In[2]:= a ** (b ** c) == (a ** b) ** c
+Out[2]= True
+
+In[3]:= {a*b == b*a, a**b == b**a}
+Out[3]= {True, a ** b == b ** a}
+
+In[4]:= {0 ** a, 1 ** a}
+Out[4]= {0 ** a, 1 ** a}
+```
+
 ## Minus
 Arithmetic negation as a function.
 - `Minus[x]` is `-x`, i.e. `Times[-1, x]`.

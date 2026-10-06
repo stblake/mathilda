@@ -23,6 +23,7 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 | `/@`     | `Map`   | 7000 | Right |
 | `<>`     | `StringJoin` | 6700 | Left |
 | `^`      | `Power` | 6500 | Right |
+| `**`     | `NonCommutativeMultiply` | 5900 | Left |
 | `.`      | `Dot` | 5300 | Left |
 | `/`      | `Divide`| 5000 | Left |
 | `*`      | `Times` | 4500 | Left |

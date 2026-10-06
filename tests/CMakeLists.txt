@@ -3213,6 +3213,10 @@ target_include_directories(random_tests PRIVATE ../src)
 add_executable(evaluate_tests test_evaluate.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(evaluate_tests PRIVATE ../src)
 
+add_executable(noncommutativemultiply_tests test_noncommutativemultiply.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(noncommutativemultiply_tests PRIVATE ../src)
+add_test(NAME noncommutativemultiply_tests COMMAND noncommutativemultiply_tests)
+
 add_executable(releasehold_tests test_releasehold.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(releasehold_tests PRIVATE ../src)
 
@@ -3710,6 +3714,7 @@ if(USE_ECM)
     add_dependencies(print_tests build_ecm)
     add_dependencies(random_tests build_ecm)
     add_dependencies(evaluate_tests build_ecm)
+    add_dependencies(noncommutativemultiply_tests build_ecm)
     add_dependencies(releasehold_tests build_ecm)
     add_dependencies(unevaluated_tests build_ecm)
     add_dependencies(strings_tests build_ecm)

@@ -1,69 +1,70 @@
-# Task: General algorithmic extensions to the Mellin-transform Integrate method
+# Task: Implement NonCommutativeMultiply (`**`)
 
-Plan: `~/.claude/plans/pasted-content-id-9f48-after-our-frolicking-aurora.md`
-Target file: `src/calculus/integrate_ramanujan.c` (+ tests, spec, changelog, version).
+Plan: `~/.claude/plans/pasted-content-id-d470-let-s-implement-structured-cloud.md`
 
-Engine is correct-by-construction (NO runtime NIntegrate — project rule, file
-header L36). Numeric verification lives in `tests/test_integrate_ramanujan.c`.
+Associative (Flat) but non-commutative multiplication, operator `**`, attributes
+`{Flat, OneIdentity, Protected}`, no automatic simplification beyond flattening.
+No new C builtin — attribute-driven flattening in the evaluator does the work.
 
-## Phase G1 — single functions → recognized kernel (low risk)
-- [ ] EllipticK/EllipticE → 2F1 reduce rules (closes In[16])
-- [ ] BesselY → BesselJ combination reduce rule (closes In[17])
-- [ ] rec_gamma_upper: Gamma[nu, a x] → Gamma(s+nu)/s (closes In[9])
-- [ ] Extend reduce_to_hypergeometric cheap-guard head list
-- [ ] Tests + numeric verification for In[9],[16],[17]
+## Edits
+- [x] `src/version.h` — bump 0.297 → 0.298
+- [x] `src/parse.c` — `OP_NONCOMMULT` enum; `**` lexer arm (prec 5900); added NCM to parse-time n-ary flatten branch
+- [x] `src/sym_names.{h,c}` — `SYM_NonCommutativeMultiply` decl/def/init
+- [x] `src/print.c` — `get_expr_prec` 5900 (≥2 args); infix `" ** "` in the operator block
+- [x] `src/attr.c` — `{"NonCommutativeMultiply", ATTR_FLAT|ATTR_ONEIDENTITY|ATTR_PROTECTED}`
+- [x] `src/info.c` — docstring (after Dot)
 
-## Phase G2 — hyperbolic Dirichlet recognizer (medium risk)
-- [ ] rec_hypergeom_dirichlet: Csch[a x] → 2 Gamma(s)(1-2^-s)Zeta(s) (In[13])
-- [ ] Sech[a x] → 2^(1-s) Gamma(s) LerchPhi(-1,s,1/2) (In[12])
-- [ ] Tests + numeric verification for In[12],[13]
+## Tests
+- [x] `tests/test_noncommutativemultiply.c` — 10 groups: parse/flatten/non-comm/one-arg/no-simp/print/precedence/attrs/pattern/memory — ALL PASS
+- [x] `tests/CMakeLists.txt` — registered `noncommutativemultiply_tests`
 
-## Phase G3 — Mellin-convolution product engine (headline; high risk)
-- [ ] G3a: convolution scaffold + equal-scale Bessel products (In[1-3])
-- [ ] G3b: unequal-scale Exp×Bessel → 2F1/1F1 (In[4-5])
-- [ ] G3c: AiryAi^2 reduce rule (fallback convolution) (In[14])
-- [ ] Update file-header scope comment (L30-37) — products no longer all NULL
-- [ ] Tests + numeric verification for In[1-5],[14]
+## Docs / versioning
+- [x] `docs/spec/builtins/arithmetic.md` — NonCommutativeMultiply section
+- [x] `docs/spec/operators.md` — precedence row (5900)
+- [x] `docs/spec/changelog/2026-10-05.md` — v0.298 entry (prepended)
 
-## Cross-cutting
-- [ ] docs/spec/builtins/calculus.md — new transforms + fix scope note L2072-2074
-- [ ] docs/spec/changelog/2026-10-05.md — changelog sections
-- [ ] src/version.h bump per substantive phase
-- [ ] make clean build + make check-c99 + full tests/build suite
-- [ ] Rebuild code-review-graph after the batch
+## Verification
+- [x] `make -j` build (GCC-16, clean); REPL smoke-test — every transcript line matches Mathematica exactly
+- [x] built + ran `noncommutativemultiply_tests` (pass); regression set parse/print/evaluate/unevaluated/flatten_at all pass
+- [x] valgrind: pure-NCM paths clean at core_init baseline (13,440 B/420 blocks, identical to parse_tests/evaluate_tests); +2 blocks in full test isolated to pre-existing Simplify-family leak
+- [x] `make check-c99` PASS, `check-messages` PASS, `check-packed-aware` PASS
+- [x] `check-array-exactness` PASS (0 MIXED); `check-nd-surfaces` PASS (NCM not flagged)
+- [x] `check-fastpath-sweep` — exit 1 is PRE-EXISTING (stale OFF_BUFFER ~v0.156; 61 NEW heads all unrelated post-v0.156 builtins). NCM NOT in the list → no exempt needed. Gate is not in per-push CI.
+- [x] rebuilt code-review-graph (incremental, ok)
 
-## Review (v0.297, complete)
+## Review (v0.298, complete)
 
-Status of the 17-input stress set: **13/17 close** (was 3/17). 10 new closures.
+NonCommutativeMultiply (`**`) implemented end to end. Associative (Flat) but
+non-commutative generalized multiplication, attributes `{Flat, OneIdentity,
+Protected}`, no automatic simplification beyond flattening.
 
-- **G1 (single → recognized kernel):** EllipticK/EllipticE → 2F1 reduce rules;
-  BesselY → BesselJ combination reduce rule; `rec_gamma_upper` for upper
-  incomplete Gamma[ν,·]. Closes In9, In16, In17.
-- **G2 (hyperbolic Dirichlet):** `rec_hypergeom_dirichlet` for Csch (→Zeta) and
-  Sech (→LerchPhi/β). Closes In12, In13.
-- **G3 (Mellin convolution engine):** new `rec_convolution` branch in
-  `dispatch_term` + helpers `conv_bessel/exp_rate/gauss_a2/equal` and
-  `conv_JJ/KK/JK/expJ/gaussJ`. J·J (Weber-Schafheitlin via 2F3→rec_pfq), K·K
-  (Barnes first lemma), J·K equal order (Kummer), exp·J (2F1), Gaussian·J (1F1).
-  Closes In1-5.
+**Design:** no new C builtin — flattening is entirely attribute-driven in the
+evaluator (`eval.c` Flat path, gated only on head-is-symbol + ATTR_FLAT). Nine
+existing files touched additively + one new test file. Precedence 5900 placed in
+the empty gap between Dot (5300) and Power (6500).
 
-All closed forms numerically cross-checked vs NIntegrate during development;
-pinned in `tests/test_integrate_ramanujan.c` (`test_mellin_single_extensions`,
-`test_mellin_convolution`) — full suite green. Build clean under
-`-Wall -Wextra`; `make check-c99` PASS; `make check-messages` PASS (no new
-stderr). valgrind: no leak traces through any new function; residual leaks are
-the pre-existing `fullsimp2`/evaluate-on-Simplify pattern (unchanged in
-character, affects all Mellin cases).
+**Behavior verified** against the user's Mathematica transcript (REPL smoke +
+unit tests): parse-time n-ary flatten (even under Hold), associativity,
+non-commutativity (`a**b` ≠ `b**a`, Equal stays unevaluated), one-arg stays,
+`{0**a,1**a}` stay, Expand/Simplify/FullSimplify no-ops, infix printing with
+precedence-aware parens, and the full `Plus<Times<Dot<NCM<Power` chain. Flat +
+OneIdentity pattern matching works (the `DOperator[L1__**L2_,…]` shape).
 
-**Deferred (documented in spec scope note + changelog):** In6/In7/In8 need
-WhittakerW / WhittakerM / ParabolicCylinderD as new special-function builtins
-(separate campaigns, per user); In14 AiryAi² is a genuine Meijer-G with 1/3-step
-Gamma coefficients that does not reduce to a simple pFq/Gamma ratio.
+**Tests:** `tests/test_noncommutativemultiply.c` (10 groups) PASS; regression set
+parse/print/evaluate/unevaluated/flatten_at PASS.
 
-**Known minor gap (not in user's set):** a *squared* Bessel product written as
-`Power[K,2]` (e.g. `BesselK[0,x]^2`) is one kernel, not `Times[K,K]`, so
-`conv_KK` does not see it (mirrors how only `BesselJ[ν,z]^2` has a dedicated
-square reduce rule). The user's In2/In3 use distinct-order products and work.
+**Leaks:** pure-NCM paths valgrind clean at the core_init baseline (13,440 B/420
+blocks — proven by isolation; identical to parse_tests/evaluate_tests). The +2
+blocks in the full test are the pre-existing Simplify-family leak (the test
+calls Simplify/FullSimplify only to assert NCM is a no-op under them).
 
-Not committed/tagged (awaiting user): version.h bumped 0.296 → 0.297; tag
-`v0.297` to be applied on commit per release-tagging rule.
+**Gates:** check-c99 / check-messages / check-packed-aware / check-array-exactness
+/ check-nd-surfaces all PASS. check-fastpath-sweep red is pre-existing backlog
+(see above), NCM not implicated.
+
+**Docs/version:** arithmetic.md section, operators.md row (5900), changelog
+v0.298 prepended, version bumped 0.297 → 0.298. Graph rebuilt.
+
+**Not committed (awaiting user):** per release-tagging rule this is a substantive
+change → commit with `; v0.298` and tag `v0.298`. Pre-existing fastpath-sweep
+backlog (61 heads, stale OFF_BUFFER) is a separate maintenance task, out of scope.

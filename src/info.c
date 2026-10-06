@@ -1356,6 +1356,15 @@ void info_init(void) {
         "Numeric machine-precision Real / Complex matrix-matrix dot dispatches\n"
         "to BLAS dgemm / zgemm when available; exact and symbolic inputs use\n"
         "the elementwise sum-of-products.");
+    symtab_set_docstring("NonCommutativeMultiply",
+        "a ** b ** c or NonCommutativeMultiply[a, b, c]\n"
+        "\tis a general associative, but non-commutative, form of\n"
+        "\tmultiplication. Instances are automatically flattened (it has\n"
+        "\tattribute Flat), but no other simplification is performed: a**b is\n"
+        "\tnot reordered to b**a, 0**a and 1**a stay as given, and Expand /\n"
+        "\tSimplify do not operate on it. Use it as a generalization of\n"
+        "\tordinary multiplication for special mathematical objects (e.g.\n"
+        "\tcomposition in an algebra of differential operators).");
     symtab_set_docstring("Det",
         "Det[m]\n"
         "\tgives the determinant of the square matrix m.\n"
