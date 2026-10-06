@@ -464,6 +464,80 @@ static void test_mellin_special_functions(void) {
         "Pi 2^(s-1) a^(-s)/(Cos[Pi s/2] Gamma[1-s/2]^2)", "{s -> 1/4, a -> 2}");
 }
 
+/* Single-function extensions (G1/G2): EllipticK, BesselY, upper incomplete
+ * Gamma[nu,z], Csch, Sech.  Numeric spot-checks for the reflection/HurwitzZeta
+ * forms; symbolic closure where the Gamma ratios coincide. */
+static void test_mellin_single_extensions(void) {
+    /* EllipticK -> 2F1 (Route A); 0 < Re s < 1/2. */
+    assert_cond_closes(
+        "Integrate[x^(s-1) EllipticK[-a x], {x,0,Infinity}, "
+        "Assumptions -> {0<Re[s]<1/2, a>0}, Method -> \"Mellin\"]",
+        "(Gamma[s] Gamma[1/2-s]^2 a^(-s))/(2 Gamma[1-s])", "0<Re[s]<1/2 && a>0");
+    /* BesselY -> cos/sin combination of BesselJ (Route A); numeric at interior. */
+    assert_cond_num(
+        "Integrate[x^(s-1) BesselY[nu,a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>Abs[Re[nu]], Re[s]<3/2, a>0}, Method -> \"Mellin\"]",
+        "2^(s-1) a^(-s) (Cos[nu Pi] Gamma[(nu+s)/2]/Gamma[1+(nu-s)/2] "
+        "- Gamma[(-nu+s)/2]/Gamma[1+(-nu-s)/2])/Sin[nu Pi]",
+        "{s -> 1, nu -> 1/3, a -> 2}");
+    /* Upper incomplete Gamma[nu, a x] (dedicated recognizer, IBP identity). */
+    assert_cond_closes(
+        "Integrate[x^(s-1) Gamma[nu, a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, Re[s+nu]>0, a>0}, Method -> \"Mellin\"]",
+        "a^(-s) Gamma[s+nu]/s", "Re[s]>0 && Re[s+nu]>0 && a>0");
+    /* Csch -> (1-2^-s) Zeta (hyperbolic Dirichlet recognizer); Re s > 1. */
+    assert_cond_closes(
+        "Integrate[x^(s-1) Csch[a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>1, a>0}, Method -> \"Mellin\"]",
+        "2 a^(-s) Gamma[s] (1-2^(-s)) Zeta[s]", "Re[s]>1 && a>0");
+    /* Sech -> LerchPhi/beta (hyperbolic Dirichlet); numeric at s = 2. */
+    assert_cond_num(
+        "Integrate[x^(s-1) Sech[a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, a>0}, Method -> \"Mellin\"]",
+        "2^(1-s) a^(-s) Gamma[s] LerchPhi[-1,s,1/2]", "{s -> 2, a -> 1}");
+}
+
+/* Mellin convolution -- products of two transcendental kernels (G3): the
+ * Bessel-product families (Weber-Schafheitlin / Barnes / Kummer) and the
+ * exp/Gaussian x BesselJ families (2F1 / 1F1).  Numeric spot-checks at a point
+ * strictly interior to the convergence strip. */
+static void test_mellin_convolution(void) {
+    /* J.J, equal scale (Weber-Schafheitlin -> Gamma ratio via 2F3). */
+    assert_cond_num(
+        "Integrate[x^(s-1) BesselJ[mu,a x] BesselJ[nu,a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s+mu+nu]>0, Re[s]<1, a>0}, Method -> \"Mellin\"]",
+        "2^(s-1) a^(-s) Gamma[1-s] Gamma[(mu+nu+s)/2]"
+        "/(Gamma[(mu-nu-s)/2+1] Gamma[(nu-mu-s)/2+1] Gamma[(mu+nu-s)/2+1])",
+        "{s -> 0, mu -> 1, nu -> 2, a -> 1}");
+    /* K.K, equal scale (Barnes' first lemma -> Gamma ratio). */
+    assert_cond_num(
+        "Integrate[x^(s-1) BesselK[mu,a x] BesselK[nu,a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>Abs[Re[mu]]+Abs[Re[nu]], a>0}, Method -> \"Mellin\"]",
+        "2^(s-3) a^(-s) Gamma[(s+mu+nu)/2] Gamma[(s+mu-nu)/2] "
+        "Gamma[(s-mu+nu)/2] Gamma[(s-mu-nu)/2]/Gamma[s]",
+        "{s -> 2, mu -> 1/3, nu -> 1/4, a -> 1}");
+    /* J.K, equal order and scale (Kummer's theorem -> Gamma ratio). */
+    assert_cond_num(
+        "Integrate[x^(s-1) BesselJ[nu,a x] BesselK[nu,a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s+2 nu]>0, a>0}, Method -> \"Mellin\"]",
+        "2^(s-2) a^(-s) Gamma[s/2] Gamma[1+nu/2+s/4]/((nu+s/2) Gamma[1+nu/2-s/4])",
+        "{s -> 3/2, nu -> 1, a -> 2}");
+    /* Exp[-a x] BesselJ[nu, b x], distinct scales (-> 2F1 in -b^2/a^2). */
+    assert_cond_num(
+        "Integrate[x^(s-1) Exp[-a x] BesselJ[nu,b x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s+nu]>0, Re[a]>0, b>0}, Method -> \"Mellin\"]",
+        "(b/2)^nu Gamma[s+nu]/(a^(s+nu) Gamma[nu+1]) "
+        "Hypergeometric2F1[(s+nu)/2,(s+nu+1)/2,nu+1,-b^2/a^2]",
+        "{s -> 2, nu -> 1, a -> 3, b -> 2}");
+    /* Exp[-a^2 x^2] BesselJ[nu, b x] (Weber's 2nd exp integral -> 1F1). */
+    assert_cond_num(
+        "Integrate[x^(s-1) Exp[-a^2 x^2] BesselJ[nu,b x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s+nu]>0, Re[a^2]>0, b>0}, Method -> \"Mellin\"]",
+        "b^nu Gamma[(s+nu)/2]/(2^(nu+1) a^(s+nu) Gamma[nu+1]) "
+        "Hypergeometric1F1[(s+nu)/2,nu+1,-b^2/(4 a^2)]",
+        "{s -> 1, nu -> 1/2, a -> 2, b -> 3}");
+}
+
 void test_integrate_ramanujan(void) {
     symtab_init();
     core_init();
@@ -480,6 +554,8 @@ void test_integrate_ramanujan(void) {
     TEST(test_log_arctan_pfq);
     TEST(test_mellin_assumptions);
     TEST(test_mellin_special_functions);
+    TEST(test_mellin_single_extensions);
+    TEST(test_mellin_convolution);
     TEST(test_reductions);
     TEST(test_polylog);
     TEST(test_parametric_differentiation);

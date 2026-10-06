@@ -1,61 +1,69 @@
-# Mellin Integrate — assumptions correctness + general extensions
+# Task: General algorithmic extensions to the Mellin-transform Integrate method
 
-Plan: `~/.claude/plans/in-the-following-examples-serialized-wave.md`
+Plan: `~/.claude/plans/pasted-content-id-9f48-after-our-frolicking-aurora.md`
+Target file: `src/calculus/integrate_ramanujan.c` (+ tests, spec, changelog, version).
 
-## Part 0 — Assumptions correctness  [DONE, verified]
-- [x] 0a. `def_has_undefined_function` → x-aware; In[6–8] now exact Gamma-ratios; protective case holds
-- [x] 0b. Refine-augmented conjunct-wise strip discharge; In1/2/3/20 collapse to bare value
+Engine is correct-by-construction (NO runtime NIntegrate — project rule, file
+header L36). Numeric verification lives in `tests/test_integrate_ramanujan.c`.
 
-## Part 1 — Route A reductions
-- [x] SinIntegral → 1F2 rule (In[14]) verified (check→0)
-- [ ] StruveH → 1F2 rule (In[17]) [rule added; needs 3a registration to pass gate]
-- [x] extend cheap guard; removed Erfc reduction (Route B owns it)
+## Phase G1 — single functions → recognized kernel (low risk)
+- [ ] EllipticK/EllipticE → 2F1 reduce rules (closes In[16])
+- [ ] BesselY → BesselJ combination reduce rule (closes In[17])
+- [ ] rec_gamma_upper: Gamma[nu, a x] → Gamma(s+nu)/s (closes In[9])
+- [ ] Extend reduce_to_hypergeometric cheap-guard head list
+- [ ] Tests + numeric verification for In[9],[16],[17]
 
-## Part 2 — Route C recognizers  [DONE, verified]
-- [x] rec_besselk (In[9]) — numeric x-check 1.0, monomial √x works
-- [x] rec_airy (In[12]) — anchor s=1→1/3, NIntegrate x-check 0.2887
-- [x] wire into try_recognizers
+## Phase G2 — hyperbolic Dirichlet recognizer (medium risk)
+- [ ] rec_hypergeom_dirichlet: Csch[a x] → 2 Gamma(s)(1-2^-s)Zeta(s) (In[13])
+- [ ] Sech[a x] → 2^(1-s) Gamma(s) LerchPhi(-1,s,1/2) (In[12])
+- [ ] Tests + numeric verification for In[12],[13]
 
-## Part 3 — Route B + new special functions  [DONE, verified]
-- [x] 3a. StruveH head (new module + deriv skipped-by-design + docstring + SYM_); In17 verified vs NInt 1.912
-- [x] 3a. ExpIntegralE head (expint CF/series numeric, D[E_n]=-E_{n-1}, E_0); E1(2),E2(1.5) verified
-- [x] 3b. rec_ibp IBP fallback (sv>0 lower + kernel-strip upper); In11/15/16 verified (Ci vs NInt -13.398)
+## Phase G3 — Mellin-convolution product engine (headline; high risk)
+- [ ] G3a: convolution scaffold + equal-scale Bessel products (In[1-3])
+- [ ] G3b: unequal-scale Exp×Bessel → 2F1/1F1 (In[4-5])
+- [ ] G3c: AiryAi^2 reduce rule (fallback convolution) (In[14])
+- [ ] Update file-header scope comment (L30-37) — products no longer all NULL
+- [ ] Tests + numeric verification for In[1-5],[14]
 
-## ALL 20 cases close end-to-end [verified]
+## Cross-cutting
+- [ ] docs/spec/builtins/calculus.md — new transforms + fix scope note L2072-2074
+- [ ] docs/spec/changelog/2026-10-05.md — changelog sections
+- [ ] src/version.h bump per substantive phase
+- [ ] make clean build + make check-c99 + full tests/build suite
+- [ ] Rebuild code-review-graph after the batch
 
-## Tests / docs / verify
-- [ ] Unit tests: 10 working + 10 now-closed + numeric anchors (∫Ai=1/3, ∫Erfc=1/√π, ∫E1=1)
-- [ ] docs/spec/builtins/calculus.md + special-functions.md; changelog 2026-10-05.md
-- [ ] version.h bump per substantive commit
-- [ ] Build, run integrate_ramanujan_tests, re-run user's 20 cases, numeric-surface audits, check-messages, check-c99, valgrind
+## Review (v0.297, complete)
 
-## Review
+Status of the 17-input stress set: **13/17 close** (was 3/17). 10 new closures.
 
-**Result: all 20 stress cases close (was 10). No regressions.**
+- **G1 (single → recognized kernel):** EllipticK/EllipticE → 2F1 reduce rules;
+  BesselY → BesselJ combination reduce rule; `rec_gamma_upper` for upper
+  incomplete Gamma[ν,·]. Closes In9, In16, In17.
+- **G2 (hyperbolic Dirichlet):** `rec_hypergeom_dirichlet` for Csch (→Zeta) and
+  Sech (→LerchPhi/β). Closes In12, In13.
+- **G3 (Mellin convolution engine):** new `rec_convolution` branch in
+  `dispatch_term` + helpers `conv_bessel/exp_rate/gauss_a2/equal` and
+  `conv_JJ/KK/JK/expJ/gaussJ`. J·J (Weber-Schafheitlin via 2F3→rec_pfq), K·K
+  (Barnes first lemma), J·K equal order (Kummer), exp·J (2F1), Gaussian·J (1F1).
+  Closes In1-5.
 
-Changes:
-- `integrate.c`: `def_has_undefined_function` now x-aware (one early-out via
-  `depends_on_var`); unblocks pFq (In6–8), repairs the red 1F1/2F1 tests.
-- `integrate_ramanujan.c`: `discharge_strip` (Simplify→Refine, per-atom,
-  all-or-nothing collapse); `rec_besselk`, `rec_airy`; `rec_ibp` IBP fallback;
-  `reduce_to_hypergeometric` gained Si/StruveH rules (dropped Erfc — Route B
-  owns it).
-- New special functions: `src/special_functions/expintegrale.{c,h}` (expint
-  CF/series numeric), `struveh.{c,h}` (1F2 numeric); SYM_ names; `ExpIntegralE`
-  deriv rule in `deriv.c`; docstrings in `info.c`; init in `core.c`; CMake list.
+All closed forms numerically cross-checked vs NIntegrate during development;
+pinned in `tests/test_integrate_ramanujan.c` (`test_mellin_single_extensions`,
+`test_mellin_convolution`) — full suite green. Build clean under
+`-Wall -Wextra`; `make check-c99` PASS; `make check-messages` PASS (no new
+stderr). valgrind: no leak traces through any new function; residual leaks are
+the pre-existing `fullsimp2`/evaluate-on-Simplify pattern (unchanged in
+character, affects all Mellin cases).
 
-Verification:
-- `integrate_ramanujan_tests` green (21 tests incl. formerly-red 1F1/2F1, new
-  `test_mellin_assumptions` + `test_mellin_special_functions`).
-- No regressions: residue/beta/intrep/newton_leibniz/line/principalvalue/
-  symmetry/deriv/unknown test suites all PASS.
-- Caught + fixed a self-regression: Refine discharge had partially dropped a
-  proven conjunct (sector `1/(1+x^n)`), making the ConditionalExpression strip
-  incomplete — fixed to all-or-nothing collapse.
-- Audits: check-c99, check-messages, check-packed-aware, check-array-exactness
-  all green. Numerics cross-checked vs NIntegrate (Airy, Ci, StruveH) and known
-  anchors (∫Ai=1/3, ∫Erfc=1/√π, ∫E₁=1).
+**Deferred (documented in spec scope note + changelog):** In6/In7/In8 need
+WhittakerW / WhittakerM / ParabolicCylinderD as new special-function builtins
+(separate campaigns, per user); In14 AiryAi² is a genuine Meijer-G with 1/3-step
+Gamma coefficients that does not reduce to a simple pFq/Gamma ratio.
 
-Lesson captured: CMake test lib has an explicit source list — a new `src/**`
-file must be added to `tests/CMakeLists.txt` (it does not auto-glob like the
-makefile).
+**Known minor gap (not in user's set):** a *squared* Bessel product written as
+`Power[K,2]` (e.g. `BesselK[0,x]^2`) is one kernel, not `Times[K,K]`, so
+`conv_KK` does not see it (mirrors how only `BesselJ[ν,z]^2` has a dedicated
+square reduce rule). The user's In2/In3 use distinct-order products and work.
+
+Not committed/tagged (awaiting user): version.h bumped 0.296 → 0.297; tag
+`v0.297` to be applied on commit per release-tagging rule.

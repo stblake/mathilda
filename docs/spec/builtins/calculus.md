@@ -1986,6 +1986,9 @@ power prefactor sets `s = ρ + 1`:
 | `CosIntegral[λ x]`, `λ>0` | `-λ^{-s} Γ(s) Cos(πs/2) / s` | `0<Re s<1` |
 | `ExpIntegralE[n, λ x]`, `λ>0` | `λ^{-s} Γ(s) / (s+n-1)` | `0<Re s` |
 | `StruveH[0, λ x]`, `λ>0` | `π 2^{s-1} λ^{-s} / (Cos(πs/2) Γ(1-s/2)²)` | `-1<Re s<1` |
+| `Gamma[ν, λ x]` (upper incomplete), `λ>0` | `λ^{-s} Γ(s+ν) / s` | `Re s>0, Re(s+ν)>0` |
+| `Csch[λ x]`, `λ>0` | `2 λ^{-s} Γ(s) (1-2^{-s}) ζ(s)` | `1<Re s` |
+| `Sech[λ x]`, `λ>0` | `2^{1-s} λ^{-s} Γ(s) LerchPhi(-1, s, 1/2)` | `0<Re s` |
 
 The kernels below the exponential-geometric row are closed through three general
 layers rather than one-off entries. `BesselK` and `AiryAi` are **dedicated base
@@ -1997,7 +2000,14 @@ entire `₁F₂`** (`Si(z)=z·₁F₂(½;3/2,3/2;−z²/4)`,
 operational calculus**: `∫₀^∞ x^{s-1} f = −(1/s) ∫₀^∞ x^s f'` by parts whenever
 `f'` is itself a recognized kernel (`Erfc'`=Gaussian, `Ci'`=cos/x, `E_n'`=−`E_{n-1}`
 bottoming at `E_0=e^{−z}/z`), with the lower boundary `Re s>0` added from `f`'s
-constant-or-logarithmic value at the origin.
+constant-or-logarithmic value at the origin. The **upper incomplete gamma**
+`Γ[ν, λx]` is a dedicated recognizer giving `λ^{-s} Γ(s+ν)/s` (the operational-
+calculus identity `Γ'(ν,x)=−x^{ν-1}e^{-x}`, with `x^{ν-1}` folded into the power).
+`Csch` and `Sech` are the two-exponential **hyperbolic Dirichlet** siblings of the
+exponential-geometric kernel: expanding `e^{-λx}` geometrically lands on an
+odd-argument Dirichlet series, `Csch[λx] → 2λ^{-s}Γ(s)(1-2^{-s})ζ(s)` (`Re s>1`)
+and `Sech[λx] → 2^{1-s}λ^{-s}Γ(s)·LerchPhi(-1,s,1/2)` (`= 2λ^{-s}Γ(s)β(s)`,
+`Re s>0`).
 
 The convergence strip is matched against the user `Assumptions` with `Simplify`
 and then `Refine`, which reasons about real parts where `Simplify` does not — so a
@@ -2041,8 +2051,12 @@ Four operational layers extend the table:
   `ArcTan[√x]`, `Cos[x²]` reduce to the linear table at `s/k`.
 - **Hypergeometric reduction** (applied before Expand, so a cancellation kernel
   is never split): `Erf[u] → u·₁F₁`, `Γ[a]-Γ[a,x] → x^a/a·₁F₁` (lower incomplete
-  gamma), and the product `BesselJ[ν,·]² → ₁F₂` (a Mellin convolution closed via
-  the `J²` identity rather than a Barnes integral).
+  gamma), the product `BesselJ[ν,·]² → ₁F₂`, and the complete elliptic integrals
+  `EllipticK[z] → (π/2)·₂F₁(½,½;1;z)`, `EllipticE[z] → (π/2)·₂F₁(-½,½;1;z)`. The
+  Weber function reduces to a `cos/sin` combination of two `BesselJ`,
+  `BesselY[ν,z] → (cos(νπ) J_ν(z) − J_{-ν}(z))/sin(νπ)`, each half closed by the
+  `BesselJ` base transform (so `∫₀^∞ x^{s-1} Y_ν(ax)` closes on
+  `|Re ν|<Re s<3/2`).
 - **Parametric differentiation** for `Log[1+λx]^n (1+λx)^{-w₀}`:
   `M = (-1)^n ∂ⁿ_w[λ^{-s} B(s, w-s)]|_{w=w₀}`, strip `-n<Re s<w₀`.
 - **`Log[x]^k` weight** (a bare `Log[x]`, distinct from the `Log[1+λx]` kernel):
@@ -2052,6 +2066,24 @@ Four operational layers extend the table:
   `∫₀^∞ x Log[x] e^{-x} dx = Γ'(2) = 1-γ`.
 - The `pFq` transform is the master kernel — `1F1`, `2F1`, `3F2`, … close
   uniformly (`Hypergeometric1F1`/`2F1` are stored as `HypergeometricPFQ`).
+- **Mellin convolution** — a product of **two** transcendental kernels
+  `M[K₁K₂](s) = (1/2πi)∫ M[K₁](z) M[K₂](s-z) dz` is a Barnes integral of Gamma
+  ratios; it closes in two regimes. At **equal internal scale** the Barnes
+  integral is a pure Gamma ratio: two `BesselJ` give Weber–Schafheitlin (through
+  the `J_μ J_ν → ₂F₃` identity and `pFq`), two `BesselK` give Barnes' first
+  lemma, and `J_ν K_ν` (equal order) gives Kummer's theorem —
+
+  | product (scale `a`) | `∫₀^∞ x^{s-1} · dx` | strip |
+  |---------------------|---------------------|-------|
+  | `J_μ(ax) J_ν(ax)` | `2^{s-1} a^{-s} Γ(1-s) Γ(\tfrac{μ+ν+s}{2}) / (Γ(\tfrac{μ-ν-s}{2}+1)Γ(\tfrac{ν-μ-s}{2}+1)Γ(\tfrac{μ+ν-s}{2}+1))` | `Re(μ+ν+s)>0, Re s<1` |
+  | `K_μ(ax) K_ν(ax)` | `2^{s-3} a^{-s} Γ(\tfrac{s+μ+ν}{2})Γ(\tfrac{s+μ-ν}{2})Γ(\tfrac{s-μ+ν}{2})Γ(\tfrac{s-μ-ν}{2}) / Γ(s)` | `Re s>\|Re μ\|+\|Re ν\|` |
+  | `J_ν(ax) K_ν(ax)` | `2^{s-2} a^{-s} Γ(\tfrac{s}{2}) Γ(1+\tfrac{ν}{2}+\tfrac{s}{4}) / ((ν+\tfrac{s}{2})Γ(1+\tfrac{ν}{2}-\tfrac{s}{4}))` | `Re s>0, Re(s+2ν)>0` |
+
+  At **distinct scales** the convolution carries the scale ratio and lands on a
+  Gauss/Kummer hypergeometric: `e^{-ax} J_ν(bx) → (b/2)^ν Γ(s+ν)/(a^{s+ν}Γ(ν+1))·₂F₁(\tfrac{s+ν}{2},\tfrac{s+ν+1}{2};ν+1;-b²/a²)`
+  (`Re a>0`), and the Gaussian case (Weber's second exponential integral)
+  `e^{-a²x²} J_ν(bx) → b^ν Γ(\tfrac{s+ν}{2})/(2^{ν+1}(a²)^{(s+ν)/2}Γ(ν+1))·₁F₁(\tfrac{s+ν}{2};ν+1;-b²/(4a²))`,
+  both on `Re(s+ν)>0`.
 
 A **Frullani pre-pass** (run on the whole integrand before Expand, since each
 half is individually divergent) recognises `(f(a x)-f(b x))/x` and returns
@@ -2070,8 +2102,10 @@ provably-violated strip declines. Verification is symbolic; there is **no**
 numeric crosscheck (the trig/PolyLog transforms use reflection-formula forms
 regular at `s=0`, so e.g. `∫₀^∞ Sin[x]/x dx = π/2` falls out with no limit). A
 sum is integrated term by term (each term must converge on its own). Out of
-scope — products of three or more transcendental kernels, finite intervals, and
-two-sided reductions — return unevaluated, never a wrong value.
+scope — products of three or more transcendental kernels, two-kernel products
+outside the Bessel / exp·Bessel / Gaussian·Bessel families above (e.g.
+`AiryAi[x]²`, a genuine Meijer-G with 1/3-step Gamma coefficients), finite
+intervals, and two-sided reductions — return unevaluated, never a wrong value.
 
 Worked examples that close:
 `Integrate[Exp[-x^2], {x,0,Infinity}]` → `√π/2`;
@@ -2085,7 +2119,11 @@ Worked examples that close:
 `Integrate[x^3/(Exp[x]+1), {x,0,Infinity}]` → `7π⁴/120` (Fermi–Dirac);
 `Integrate[x^(s-1)/(Exp[x]-1), {x,0,Infinity}, Assumptions→s>1]` → `Γ[s] ζ[s]`;
 `Integrate[(Exp[-2x]-Exp[-5x])/x, {x,0,Infinity}]` → `Log[5/2]` (Frullani);
-`Integrate[Log[x]/(1+x^2), {x,0,Infinity}]` → `0`.
+`Integrate[Log[x]/(1+x^2), {x,0,Infinity}]` → `0`;
+`Integrate[x^(s-1) Csch[x], {x,0,Infinity}, Assumptions→s>1]` → `2 Γ[s](1-2^{-s})ζ[s]`;
+`Integrate[x^(s-1) Gamma[ν,x], {x,0,Infinity}, Assumptions→{s>0,s+ν>0}]` → `Γ[s+ν]/s`;
+`Integrate[x^(s-1) BesselK[μ,x] BesselK[ν,x], {x,0,Infinity}, Assumptions→s>Abs[μ]+Abs[ν]]` → `2^{s-3}Γ[\tfrac{s+μ+ν}{2}]Γ[\tfrac{s+μ-ν}{2}]Γ[\tfrac{s-μ+ν}{2}]Γ[\tfrac{s-μ-ν}{2}]/Γ[s]` (Weber–Schafheitlin / Barnes);
+`Integrate[x^(s-1) Exp[-a x] BesselJ[ν,b x], {x,0,Infinity}, Assumptions→{s+ν>0,a>0,b>0}]` → a `₂F₁` in `-b²/a²`.
 
 **Examples**:
 ```mathematica

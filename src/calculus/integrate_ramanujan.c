@@ -30,7 +30,11 @@
  * Terms are summed independently: each must converge on (0, Infinity) on its
  * own (absolute convergence of each term => the sum of integrals equals the
  * integral of the sum).  A product of two transcendental kernels is a Mellin
- * convolution (Meijer-G territory) and is out of scope -> NULL.
+ * convolution: the J.J case reduces to a single 2F3 (reduce_to_hypergeometric),
+ * and rec_convolution closes the Bessel-product families (K.K, J.K at equal
+ * scale -> Gamma ratio via Barnes/Kummer) and the exp/Gaussian x BesselJ
+ * families (distinct scales -> 2F1 / 1F1).  A product of three or more
+ * transcendental kernels remains out of scope -> NULL.
  *
  * Verification is symbolic and correct-by-construction: every table identity is
  * a theorem and the strip gate guarantees convergence.  No NIntegrate anywhere
@@ -64,6 +68,12 @@ static Expr* mk_fn1(const char* head, Expr* a) {
 }
 static Expr* mk_fn2(const char* head, Expr* a, Expr* b) {
     return expr_new_function(mk_sym(head), (Expr*[]){ a, b }, 2);
+}
+static Expr* mk_fn3(const char* head, Expr* a, Expr* b, Expr* c) {
+    return expr_new_function(mk_sym(head), (Expr*[]){ a, b, c }, 3);
+}
+static Expr* mk_fn4(const char* head, Expr* a, Expr* b, Expr* c, Expr* d) {
+    return expr_new_function(mk_sym(head), (Expr*[]){ a, b, c, d }, 4);
 }
 
 /* Evaluate `call`, free the call expression, return the (owned) result. */
@@ -532,6 +542,38 @@ static bool rec_airy(const Expr* K, const Expr* x, const Expr* sv,
     return true;
 }
 
+/* Gamma[nu, lam x] -- the upper incomplete gamma, lam > 0:
+ *   M = lam^(-sv) Gamma(sv + nu) / sv,   Re sv > 0 && Re(sv + nu) > 0.
+ * Derivation (operational calculus / IBP): d/dx Gamma(nu, x) = -x^(nu-1) e^(-x),
+ * so M_Gamma(sv) = -(1/sv) M_{Gamma'}(sv+1) = -(1/sv)(-Gamma(sv+nu))
+ *               = Gamma(sv+nu)/sv.
+ * A dedicated recognizer rather than the rec_ibp fallback, which cannot absorb
+ * the x^(nu-1) monomial that the derivative introduces.  The strip is the x->0
+ * convergence: the constant term Gamma(nu) needs Re sv > 0, the leading
+ * -x^nu/nu term needs Re(sv+nu) > 0.  (The two-argument head distinguishes the
+ * incomplete gamma from the complete Gamma[nu], which is a plain constant.) */
+static bool rec_gamma_upper(const Expr* K, const Expr* x, const Expr* sv,
+                            Expr** M, Expr** P) {
+    if (!head_name_is(K, "Gamma") || K->data.function.arg_count != 2) return false;
+    Expr* nu  = K->data.function.args[0];
+    Expr* arg = K->data.function.args[1];
+    if (!free_of_x_now(nu, x)) return false;
+    Expr* lam = dx(arg, x);
+    if (!free_of_x_now(lam, x)) { expr_free(lam); return false; }
+    Expr* cross = simp(Pls(cp(arg), Neg(Tms(cp(lam), cp(x)))));
+    bool bad = !is_zero_now(cross);
+    expr_free(cross);
+    if (bad) { expr_free(lam); return false; }
+    *M = Tms3(Pw(cp(lam), Neg(cp(sv))),
+              Gamma_(Pls(cp(sv), cp(nu))),
+              Pw(cp(sv), mk_int(-1)));
+    *P = And2(Gt(cp(lam), mk_int(0)),
+              And2(Gt(cp(sv), mk_int(0)),
+                   Gt(Pls(cp(sv), cp(nu)), mk_int(0))));
+    expr_free(lam);
+    return true;
+}
+
 /* HypergeometricPFQ[{a1..ap}, {b1..bq}, -lam x], lam > 0, p <= q+1:
  *   M = (prod_j Gamma(b_j) / prod_i Gamma(a_i)) Gamma(sv)
  *        (prod_i Gamma(a_i - sv) / prod_j Gamma(b_j - sv)) lam^(-sv),
@@ -938,6 +980,51 @@ static bool rec_expgeom(const Expr* K, const Expr* x, const Expr* sv,
     return true;
 }
 
+/* Hyperbolic Dirichlet kernels Sech[lam x], Csch[lam x], lam > 0.  Both are the
+ * two-exponential sibling of rec_expgeom (which handles 1/(A e^{cx}+gamma)):
+ * expanding e^{-lam x} geometrically gives an odd-argument Dirichlet series that
+ * integrates term-by-term against x^(sv-1) to Gamma(sv) times a closed sum.
+ *   Csch[lam x] = 2 sum_{k>=0} e^{-(2k+1) lam x}
+ *       -> M = 2 lam^(-sv) Gamma(sv) sum (2k+1)^(-sv)
+ *            = 2 lam^(-sv) Gamma(sv) (1 - 2^(-sv)) Zeta(sv),   Re sv > 1
+ *   Sech[lam x] = 2 sum_{k>=0} (-1)^k e^{-(2k+1) lam x}
+ *       -> M = 2 lam^(-sv) Gamma(sv) sum (-1)^k (2k+1)^(-sv)
+ *            = 2^(1-sv) lam^(-sv) Gamma(sv) LerchPhi(-1, sv, 1/2),   Re sv > 0
+ * (using sum (-1)^k (k+1/2)^(-sv) = LerchPhi(-1, sv, 1/2) and 2^(-sv) rescaling).
+ * The strip is the x->0 behaviour: Csch ~ 1/(lam x) needs Re sv > 1, Sech ~ 1
+ * needs Re sv > 0.  Both verified numerically in the tests. */
+static bool rec_hypergeom_dirichlet(const Expr* K, const Expr* x, const Expr* sv,
+                                    Expr** M, Expr** P) {
+    bool is_sech = head_name_is(K, "Sech");
+    bool is_csch = head_name_is(K, "Csch");
+    if ((!is_sech && !is_csch) || K->data.function.arg_count != 1) return false;
+    Expr* arg = K->data.function.args[0];
+    Expr* lam = dx(arg, x);
+    if (!free_of_x_now(lam, x)) { expr_free(lam); return false; }
+    Expr* cross = simp(Pls(cp(arg), Neg(Tms(cp(lam), cp(x)))));
+    bool bad = !is_zero_now(cross);                              /* arg == lam x */
+    expr_free(cross);
+    if (bad) { expr_free(lam); return false; }
+    if (is_csch) {
+        /* 2 lam^(-sv) Gamma(sv) (1 - 2^(-sv)) Zeta(sv) */
+        *M = Tms(mk_int(2),
+                 Tms3(Pw(cp(lam), Neg(cp(sv))),
+                      Gamma_(cp(sv)),
+                      Tms(Pls(mk_int(1), Neg(Pw(mk_int(2), Neg(cp(sv))))),
+                          mk_fn1("Zeta", cp(sv)))));
+        *P = And2(Gt(cp(lam), mk_int(0)), Gt(cp(sv), mk_int(1)));
+    } else {
+        /* 2^(1-sv) lam^(-sv) Gamma(sv) LerchPhi(-1, sv, 1/2) */
+        *M = Tms(Pw(mk_int(2), Pls(mk_int(1), Neg(cp(sv)))),
+                 Tms3(Pw(cp(lam), Neg(cp(sv))),
+                      Gamma_(cp(sv)),
+                      mk_fn3("LerchPhi", mk_int(-1), cp(sv), Rat(1, 2))));
+        *P = And2(Gt(cp(lam), mk_int(0)), Gt(cp(sv), mk_int(0)));
+    }
+    expr_free(lam);
+    return true;
+}
+
 /* ---- monomial internal substitution K = g(x^k) ------------------------- */
 
 /* Record exponent `e` (an owned Simplify'd copy) into out[] if not present. */
@@ -994,9 +1081,11 @@ static bool try_recognizers(const Expr* K, const Expr* x, const Expr* sv,
     if (rec_log(K, x, sv, M, P))       return true;
     if (rec_arctan(K, x, sv, M, P))    return true;
     if (rec_airy(K, x, sv, M, P))      return true;
+    if (rec_gamma_upper(K, x, sv, M, P)) return true;
     if (rec_pfq(K, x, sv, M, P))       return true;
     if (rec_polylog(K, x, sv, M, P))   return true;
     if (rec_expgeom(K, x, sv, assumptions, M, P)) return true;
+    if (rec_hypergeom_dirichlet(K, x, sv, M, P)) return true;
     return false;
 }
 
@@ -1218,11 +1307,231 @@ static bool rec_logpow(Expr** kernels, size_t nk, const Expr* x, const Expr* sv,
 
 /* Build (M, P) for a whole term's kernel list: single-kernel base recognizers
  * (with the monomial wrapper), else the parametric-differentiation family. */
+/* -------------------------------------------------------------------------
+ * Mellin convolution -- product of two transcendental kernels.
+ *
+ * M[K1 K2](s) = (1/2 pi i) Integrate[M[K1](z) M[K2](s-z), {z, Barnes line}].
+ * Each factor's Mellin transform is a Gamma ratio, so the Barnes integral is a
+ * product of Gammas that closes in two regimes: equal internal scales give a
+ * pure Gamma ratio (Barnes' first lemma / Kummer's theorem), and distinct
+ * scales give a 2F1 / 1F1 in the scale ratio.  The product-of-two-BesselJ case
+ * is handled one layer up (reduce_to_hypergeometric, J.J -> 2F3), leaving the
+ * families below.  Each closed form is a proven identity, verified numerically
+ * in the tests. */
+
+/* BesselJ/BesselK[nu, lam x]: set *nu, *lam (both owned) on a linear argument. */
+static bool conv_bessel(const Expr* K, const char* head, const Expr* x,
+                        Expr** nu, Expr** lam) {
+    if (!head_name_is(K, head) || K->data.function.arg_count != 2) return false;
+    const Expr* n   = K->data.function.args[0];
+    const Expr* arg = K->data.function.args[1];
+    if (!free_of_x_now(n, x)) return false;
+    Expr* l = dx(arg, x);
+    if (!free_of_x_now(l, x)) { expr_free(l); return false; }
+    Expr* cross = simp(Pls(cp(arg), Neg(Tms(cp(l), cp(x)))));
+    bool bad = !is_zero_now(cross);
+    expr_free(cross);
+    if (bad) { expr_free(l); return false; }
+    *nu = cp(n); *lam = l;
+    return true;
+}
+
+/* Exp[c x], pure linear (no constant offset): *a = -c, the rate in e^(-a x). */
+static bool conv_exp_rate(const Expr* K, const Expr* x, Expr** a) {
+    Expr* e = exp_exponent(K);
+    if (!e) return false;
+    Expr* c1 = dx(e, x);
+    if (!free_of_x_now(c1, x)) { expr_free(c1); return false; }
+    Expr* cross = simp(Pls(cp(e), Neg(Tms(cp(c1), cp(x)))));
+    bool bad = !is_zero_now(cross);
+    expr_free(cross);
+    if (bad) { expr_free(c1); return false; }
+    *a = simp(Neg(c1));
+    return true;
+}
+
+/* Exp[c x^2], pure quadratic: *A2 = -c, i.e. a^2 in e^(-a^2 x^2). */
+static bool conv_gauss_a2(const Expr* K, const Expr* x, Expr** A2) {
+    Expr* e = exp_exponent(K);
+    if (!e) return false;
+    Expr* c = simp(Tms(cp(e), Pw(cp(x), mk_int(-2))));
+    if (!free_of_x_now(c, x)) { expr_free(c); return false; }
+    Expr* cross = simp(Pls(cp(e), Neg(Tms(cp(c), Pw(cp(x), mk_int(2))))));
+    bool bad = !is_zero_now(cross);
+    expr_free(cross);
+    if (bad) { expr_free(c); return false; }
+    *A2 = simp(Neg(c));
+    return true;
+}
+
+/* True iff simp(p - q) == 0 (borrowed p, q). */
+static bool conv_equal(const Expr* p, const Expr* q) {
+    Expr* d = simp(Pls(cp(p), Neg(cp(q))));
+    bool eq = is_zero_now(d);
+    expr_free(d);
+    return eq;
+}
+
+/* BesselK[mu, a x] BesselK[nu, a x], equal scale (Barnes' first lemma):
+ *   M = 2^(s-3) a^(-s) Gamma((s+mu+nu)/2) Gamma((s+mu-nu)/2)
+ *         Gamma((s-mu+nu)/2) Gamma((s-mu-nu)/2) / Gamma(s),  Re s > |mu| + |nu|. */
+static bool conv_KK(const Expr* ka, const Expr* kb, const Expr* x,
+                    const Expr* sv, Expr** M, Expr** P) {
+    Expr *mu = NULL, *nu = NULL, *la = NULL, *lb = NULL;
+    if (!conv_bessel(ka, "BesselK", x, &mu, &la)) return false;
+    if (!conv_bessel(kb, "BesselK", x, &nu, &lb)) { expr_free(mu); expr_free(la); return false; }
+    if (!conv_equal(la, lb)) { expr_free(mu); expr_free(nu); expr_free(la); expr_free(lb); return false; }
+    *M = Tms(Pw(mk_int(2), Pls(cp(sv), mk_int(-3))),
+         Tms(Pw(cp(la), Neg(cp(sv))),
+         Tms(Pw(Gamma_(cp(sv)), mk_int(-1)),
+         Tms(Gamma_(Half(Pls(cp(sv), Pls(cp(mu), cp(nu))))),
+         Tms(Gamma_(Half(Pls(cp(sv), Pls(cp(mu), Neg(cp(nu)))))),
+         Tms(Gamma_(Half(Pls(cp(sv), Pls(Neg(cp(mu)), cp(nu))))),
+             Gamma_(Half(Pls(cp(sv), Neg(Pls(cp(mu), cp(nu))))))))))));
+    *P = And2(Gt(cp(la), mk_int(0)),
+         And2(And2(Gt(Pls(cp(sv), Pls(cp(mu), cp(nu))), mk_int(0)),
+                   Gt(Pls(cp(sv), Pls(cp(mu), Neg(cp(nu)))), mk_int(0))),
+              And2(Gt(Pls(cp(sv), Pls(Neg(cp(mu)), cp(nu))), mk_int(0)),
+                   Gt(Pls(cp(sv), Neg(Pls(cp(mu), cp(nu)))), mk_int(0)))));
+    expr_free(mu); expr_free(nu); expr_free(la); expr_free(lb);
+    return true;
+}
+
+/* BesselJ[nu, a x] BesselK[nu, a x], equal order and scale (Kummer's theorem):
+ *   M = 2^(s-2) a^(-s) Gamma(s/2) Gamma(1+nu/2+s/4)
+ *         / ((nu+s/2) Gamma(1+nu/2-s/4)),   Re s > 0 && Re(s+2 nu) > 0. */
+static bool conv_JK(const Expr* kj, const Expr* kk, const Expr* x,
+                    const Expr* sv, Expr** M, Expr** P) {
+    Expr *nj = NULL, *nk = NULL, *lj = NULL, *lk = NULL;
+    if (!conv_bessel(kj, "BesselJ", x, &nj, &lj)) return false;
+    if (!conv_bessel(kk, "BesselK", x, &nk, &lk)) { expr_free(nj); expr_free(lj); return false; }
+    bool ok = conv_equal(lj, lk) && conv_equal(nj, nk);   /* equal scale AND order */
+    if (!ok) { expr_free(nj); expr_free(nk); expr_free(lj); expr_free(lk); return false; }
+    Expr* nuh = Half(cp(nj));                  /* nu/2 */
+    Expr* sq  = Tms(Rat(1, 4), cp(sv));        /* s/4  */
+    *M = Tms(Pw(mk_int(2), Pls(cp(sv), mk_int(-2))),
+         Tms(Pw(cp(lj), Neg(cp(sv))),
+         Tms(Gamma_(Half(cp(sv))),
+         Tms(Gamma_(Pls(mk_int(1), Pls(cp(nuh), cp(sq)))),
+         Tms(Pw(Pls(cp(nj), Half(cp(sv))), mk_int(-1)),
+             Pw(Gamma_(Pls(mk_int(1), Pls(cp(nuh), Neg(cp(sq))))), mk_int(-1)))))));
+    *P = And2(Gt(cp(lj), mk_int(0)),
+         And2(Gt(cp(sv), mk_int(0)),
+              Gt(Pls(cp(sv), Tms(mk_int(2), cp(nj))), mk_int(0))));
+    expr_free(nuh); expr_free(sq);
+    expr_free(nj); expr_free(nk); expr_free(lj); expr_free(lk);
+    return true;
+}
+
+/* Exp[-a x] BesselJ[nu, b x] (distinct scales), the 2F1:
+ *   M = (b/2)^nu Gamma(s+nu) / (a^(s+nu) Gamma(nu+1))
+ *         2F1((s+nu)/2, (s+nu+1)/2; nu+1; -b^2/a^2),  Re(s+nu) > 0 && Re a > 0. */
+static bool conv_expJ(const Expr* ke, const Expr* kj, const Expr* x,
+                      const Expr* sv, Expr** M, Expr** P) {
+    Expr* a = NULL;
+    if (!conv_exp_rate(ke, x, &a)) return false;
+    Expr *nu = NULL, *b = NULL;
+    if (!conv_bessel(kj, "BesselJ", x, &nu, &b)) { expr_free(a); return false; }
+    Expr* spn = Pls(cp(sv), cp(nu));           /* s+nu */
+    Expr* f = mk_fn4("Hypergeometric2F1",
+                     Half(cp(spn)),
+                     Half(Pls(cp(spn), mk_int(1))),
+                     Pls(cp(nu), mk_int(1)),
+                     Neg(Tms(Pw(cp(b), mk_int(2)), Pw(cp(a), mk_int(-2)))));
+    *M = Tms(Pw(Half(cp(b)), cp(nu)),
+         Tms(Gamma_(cp(spn)),
+         Tms(Pw(cp(a), Neg(cp(spn))),
+         Tms(Pw(Gamma_(Pls(cp(nu), mk_int(1))), mk_int(-1)), f))));
+    *P = And2(Gt(mk_fn1("Re", cp(a)), mk_int(0)),           /* Re a > 0 (a may be complex) */
+              And2(Gt(cp(b), mk_int(0)), Gt(cp(spn), mk_int(0))));
+    expr_free(spn); expr_free(a); expr_free(nu); expr_free(b);
+    return true;
+}
+
+/* Exp[-a^2 x^2] BesselJ[nu, b x] (Weber's 2nd exponential integral), the 1F1:
+ *   M = b^nu Gamma((s+nu)/2) / (2^(nu+1) (a^2)^((s+nu)/2) Gamma(nu+1))
+ *         1F1((s+nu)/2; nu+1; -b^2/(4 a^2)),  Re(s+nu) > 0 && Re a^2 > 0. */
+static bool conv_gaussJ(const Expr* kg, const Expr* kj, const Expr* x,
+                        const Expr* sv, Expr** M, Expr** P) {
+    Expr* A2 = NULL;
+    if (!conv_gauss_a2(kg, x, &A2)) return false;
+    Expr *nu = NULL, *b = NULL;
+    if (!conv_bessel(kj, "BesselJ", x, &nu, &b)) { expr_free(A2); return false; }
+    Expr* shalf = Half(Pls(cp(sv), cp(nu)));   /* (s+nu)/2 */
+    Expr* f = mk_fn3("Hypergeometric1F1",
+                     cp(shalf),
+                     Pls(cp(nu), mk_int(1)),
+                     Neg(Tms(Pw(cp(b), mk_int(2)),
+                             Pw(Tms(mk_int(4), cp(A2)), mk_int(-1)))));
+    *M = Tms(Pw(cp(b), cp(nu)),
+         Tms(Gamma_(cp(shalf)),
+         Tms(Pw(mk_int(2), Neg(Pls(cp(nu), mk_int(1)))),
+         Tms(Pw(cp(A2), Neg(cp(shalf))),
+         Tms(Pw(Gamma_(Pls(cp(nu), mk_int(1))), mk_int(-1)), f)))));
+    *P = And2(Gt(mk_fn1("Re", cp(A2)), mk_int(0)),          /* Re a^2 > 0 */
+              And2(Gt(cp(b), mk_int(0)), Gt(Pls(cp(sv), cp(nu)), mk_int(0))));
+    expr_free(shalf); expr_free(A2); expr_free(nu); expr_free(b);
+    return true;
+}
+
+/* BesselJ[mu, a x] BesselJ[nu, a x], equal scale (Weber-Schafheitlin): the
+ * product is a single 2F3, so dispatch_kernel (rec_pfq + the x^2 monomial
+ * wrapper) closes it to the Weber-Schafheitlin Gamma ratio.  The x^(mu+nu)
+ * prefactor folds in by shifting the spectral variable to s+mu+nu.  (A Times
+ * pattern rule cannot do this: the matcher will not pull the two BesselJ out of
+ * a larger flat product such as x^(s-1) J J.) */
+static bool conv_JJ(const Expr* ka, const Expr* kb, const Expr* x,
+                    const Expr* sv, Expr* assumptions, Expr** M, Expr** P) {
+    Expr *mu = NULL, *nu = NULL, *la = NULL, *lb = NULL;
+    if (!conv_bessel(ka, "BesselJ", x, &mu, &la)) return false;
+    if (!conv_bessel(kb, "BesselJ", x, &nu, &lb)) { expr_free(mu); expr_free(la); return false; }
+    if (!conv_equal(la, lb)) { expr_free(mu); expr_free(nu); expr_free(la); expr_free(lb); return false; }
+    Expr* mpn = Pls(cp(mu), cp(nu));                              /* mu+nu */
+    Expr* up  = mk_fn2("List", Half(Pls(cp(mpn), mk_int(1))),     /* (mu+nu+1)/2 */
+                               Half(Pls(cp(mpn), mk_int(2))));    /* (mu+nu+2)/2 */
+    Expr* lo  = mk_fn3("List", Pls(cp(mu), mk_int(1)),            /* mu+1 */
+                               Pls(cp(nu), mk_int(1)),            /* nu+1 */
+                               Pls(cp(mpn), mk_int(1)));          /* mu+nu+1 */
+    Expr* arg = Neg(Tms(Pw(cp(la), mk_int(2)), Pw(cp(x), mk_int(2))));  /* -(a x)^2 */
+    Expr* K   = mk_fn3("HypergeometricPFQ", up, lo, arg);
+    Expr* sv0 = simp(Pls(cp(sv), cp(mpn)));                       /* s + mu + nu */
+    Expr* Mk = NULL; Expr* Pk = NULL;
+    bool ok = dispatch_kernel(K, x, sv0, assumptions, &Mk, &Pk);
+    expr_free(K); expr_free(sv0);
+    if (!ok) {
+        expr_free(mu); expr_free(nu); expr_free(la); expr_free(lb); expr_free(mpn);
+        return false;
+    }
+    Expr* C = Tms(Pw(Half(cp(la)), cp(mpn)),                      /* (a/2)^(mu+nu) */
+                  Pw(Tms(Gamma_(Pls(cp(mu), mk_int(1))),
+                         Gamma_(Pls(cp(nu), mk_int(1)))), mk_int(-1)));
+    *M = Tms(C, Mk);
+    *P = And2(Gt(cp(la), mk_int(0)), Pk ? Pk : mk_sym("True"));
+    expr_free(mu); expr_free(nu); expr_free(la); expr_free(lb); expr_free(mpn);
+    return true;
+}
+
+/* Dispatch a two-kernel product to the convolution closed forms (both orderings
+ * for the asymmetric families). */
+static bool rec_convolution(Expr** kernels, size_t nk, const Expr* x,
+                            const Expr* sv, Expr* assumptions, Expr** M, Expr** P) {
+    if (nk != 2) return false;
+    Expr* k0 = kernels[0];
+    Expr* k1 = kernels[1];
+    if (conv_JJ(k0, k1, x, sv, assumptions, M, P)) return true;
+    if (conv_KK(k0, k1, x, sv, M, P)) return true;
+    if (conv_JK(k0, k1, x, sv, M, P) || conv_JK(k1, k0, x, sv, M, P)) return true;
+    if (conv_expJ(k0, k1, x, sv, M, P) || conv_expJ(k1, k0, x, sv, M, P)) return true;
+    if (conv_gaussJ(k0, k1, x, sv, M, P) || conv_gaussJ(k1, k0, x, sv, M, P)) return true;
+    return false;
+}
+
 static bool dispatch_term(Expr** kernels, size_t nk, const Expr* x,
                           const Expr* sv, Expr* assumptions, Expr** M, Expr** P) {
     *M = *P = NULL;
     if (nk == 1 && dispatch_kernel(kernels[0], x, sv, assumptions, M, P)) return true;
     if (rec_logpow(kernels, nk, x, sv, M, P)) return true;
+    if (rec_convolution(kernels, nk, x, sv, assumptions, M, P)) return true;
     return false;
 }
 
@@ -1382,7 +1691,9 @@ static Expr* reduce_to_hypergeometric(const Expr* f) {
      * present. */
     if (!contains_symbol_name(f, "Erf") &&
         !contains_symbol_name(f, "Gamma") && !contains_symbol_name(f, "BesselJ") &&
-        !contains_symbol_name(f, "SinIntegral") && !contains_symbol_name(f, "StruveH"))
+        !contains_symbol_name(f, "SinIntegral") && !contains_symbol_name(f, "StruveH") &&
+        !contains_symbol_name(f, "EllipticK") && !contains_symbol_name(f, "EllipticE") &&
+        !contains_symbol_name(f, "BesselY"))
         return cp(f);
     /* Each kernel that IS a single entire/alternating pFq collapses here into
      * HypergeometricPFQ, so the Ramanujan-Master-Theorem recognizer rec_pfq (with
@@ -1403,7 +1714,17 @@ static Expr* reduce_to_hypergeometric(const Expr* f) {
         "      HypergeometricPFQ[{nu+1/2}, {2 nu+1, nu+1}, -z^2], "
         "  SinIntegral[u_] :> u HypergeometricPFQ[{1/2}, {3/2, 3/2}, -u^2/4], "
         "  StruveH[nu_, u_] :> (u/2)^(nu+1) (2/(Sqrt[Pi] Gamma[nu+3/2])) "
-        "      HypergeometricPFQ[{1}, {3/2, nu+3/2}, -u^2/4] }";
+        "      HypergeometricPFQ[{1}, {3/2, nu+3/2}, -u^2/4], "
+        /* Complete elliptic integrals are single 2F1s (Gauss), so rec_pfq
+         * closes them with the right Gamma-ratio and strip 0 < Re s < 1/2. */
+        "  EllipticK[z_] :> (Pi/2) HypergeometricPFQ[{1/2, 1/2}, {1}, z], "
+        "  EllipticE[z_] :> (Pi/2) HypergeometricPFQ[{-1/2, 1/2}, {1}, z], "
+        /* Y_nu is a cos(nu pi)/sin(nu pi) combination of J_nu and J_{-nu}; after
+         * Expand each half is a single BesselJ closed by rec_bessel, and the two
+         * strips intersect to Re s > |Re nu|, Re s < 3/2.  (Integer nu is a
+         * removable 0/0 that this rule leaves to decline.) */
+        "  BesselY[nu_, z_] :> (Cos[nu Pi] BesselJ[nu, z] - BesselJ[-nu, z]) / "
+        "      Sin[nu Pi] }";
     Expr* rules = parse_expression(RULES);
     if (!rules) return cp(f);
     return ev2("ReplaceRepeated", cp(f), rules);
