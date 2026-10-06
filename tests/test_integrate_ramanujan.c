@@ -388,6 +388,82 @@ static void test_declines_cleanly(void) {
         "Integrate`RamanujanMasterTheorem");
 }
 
+/* Assumptions handling: the x-aware undefined-function gate lets a List-bearing
+ * HypergeometricPFQ integrand reach the engine (In[6-8]); the Refine-augmented
+ * strip discharge collapses a ConditionalExpression once Re[...]/sign
+ * assumptions pin the strip; an x-dependent arbitrary function still skips the
+ * improper methods and stays unevaluated. */
+static void test_mellin_assumptions(void) {
+    /* 2F1 / 1F1 / 1F2 now close to the exact Gamma-ratio (gate fix). */
+    assert_cond_closes(
+        "Integrate[x^(s-1) Hypergeometric2F1[a,b,c,-x], {x,0,Infinity}, "
+        "Assumptions -> 0 < Re[s] < Min[Re[a],Re[b]], Method -> \"Mellin\"]",
+        "(Gamma[c] Gamma[s] Gamma[a-s] Gamma[b-s])/(Gamma[a] Gamma[b] Gamma[c-s])", "");
+    assert_cond_closes(
+        "Integrate[x^(s-1) HypergeometricPFQ[{a},{b,c},-x], {x,0,Infinity}, "
+        "Assumptions -> 0 < Re[s] < Re[a], Method -> \"Mellin\"]",
+        "(Gamma[b] Gamma[c] Gamma[s] Gamma[a-s])/(Gamma[a] Gamma[b-s] Gamma[c-s])", "");
+    /* Refine discharge: Re[s]>0 && Re[a]>0 collapses the strip to the bare value. */
+    assert_eval_eq(
+        "Head[Integrate[x^(s-1) Exp[-a x^2], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, Re[a]>0}, Method -> \"Mellin\"]]", "Times", 0);
+    assert_closes(
+        "Integrate[x^(s-1) Exp[-a x^2], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, Re[a]>0}, Method -> \"Mellin\"]",
+        "(1/2) a^(-s/2) Gamma[s/2]", "Re[s]>0 && Re[a]>0");
+    /* Protective: an x-dependent arbitrary function keeps the integral inert. */
+    assert_head_unevaluated(
+        "Integrate[ff[x] Exp[-x^2], {x,0,Infinity}]", "Integrate");
+}
+
+/* The special-function transforms closed by the new recognizers (BesselK, Airy),
+ * the Route-A pFq reductions (SinIntegral, StruveH), and the Route-B operational
+ * calculus (Erfc, CosIntegral, ExpIntegralE).  Reflection-form results (Si/Ci/
+ * StruveH) are checked numerically at a strip-interior point. */
+static void test_mellin_special_functions(void) {
+    /* BesselK (dedicated recognizer); anchor 2^(s-2) a^-s Gamma[s/2]^2. */
+    assert_cond_closes(
+        "Integrate[x^(s-1) BesselK[0,a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, a>0}, Method -> \"Mellin\"]",
+        "2^(s-2) a^(-s) Gamma[s/2]^2", "a>0");
+    /* AiryAi (dedicated recognizer); anchor Integrate[AiryAi[x]] = 1/3 at s=1. */
+    assert_cond_closes(
+        "Integrate[x^(s-1) AiryAi[a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, a>0}, Method -> \"Mellin\"]",
+        "a^(-s) Gamma[s]/(3^((s+2)/3) Gamma[(s+2)/3])", "a>0");
+    assert_eval_eq(
+        "Integrate[x^(s-1) AiryAi[x], {x,0,Infinity}, Assumptions -> Re[s]>0, "
+        "Method -> \"Mellin\"] /. s -> 1", "1/3", 0);
+    /* Erfc (Route B: K' = Gaussian); anchor Integrate[Erfc[x]] = 1/Sqrt[Pi]. */
+    assert_cond_closes(
+        "Integrate[x^(s-1) Erfc[a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, a>0}, Method -> \"Mellin\"]",
+        "a^(-s) Gamma[(s+1)/2]/(Sqrt[Pi] s)", "a>0");
+    /* ExpIntegralE (Route B: K' = -Exp/x); anchor Integrate[ExpIntegralE[1,x]] = 1. */
+    assert_cond_closes(
+        "Integrate[x^(s-1) ExpIntegralE[1,a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, a>0}, Method -> \"Mellin\"]",
+        "a^(-s) Gamma[s]/s", "a>0");
+    assert_eval_eq(
+        "Integrate[x^(s-1) ExpIntegralE[1,x], {x,0,Infinity}, Assumptions -> Re[s]>0, "
+        "Method -> \"Mellin\"] /. s -> 1", "1", 0);
+    /* SinIntegral (Route A: 1F2), reflection form -> numeric at s = -1/2. */
+    assert_cond_num(
+        "Integrate[x^(s-1) SinIntegral[a x], {x,0,Infinity}, "
+        "Assumptions -> {-1<Re[s]<0, a>0}, Method -> \"Mellin\"]",
+        "-a^(-s) Gamma[s] Sin[Pi s/2]/s", "{s -> -1/2, a -> 2}");
+    /* CosIntegral (Route B: cos/x), reflection form -> numeric at s = 1/2. */
+    assert_cond_num(
+        "Integrate[x^(s-1) CosIntegral[a x], {x,0,Infinity}, "
+        "Assumptions -> {0<Re[s]<1, a>0}, Method -> \"Mellin\"]",
+        "-a^(-s) Gamma[s] Cos[Pi s/2]/s", "{s -> 1/2, a -> 2}");
+    /* StruveH (Route A: 1F2), reflection form -> numeric at s = 1/4. */
+    assert_cond_num(
+        "Integrate[x^(s-1) StruveH[0,a x], {x,0,Infinity}, "
+        "Assumptions -> {-1<Re[s]<1/2, a>0}, Method -> \"Mellin\"]",
+        "Pi 2^(s-1) a^(-s)/(Cos[Pi s/2] Gamma[1-s/2]^2)", "{s -> 1/4, a -> 2}");
+}
+
 void test_integrate_ramanujan(void) {
     symtab_init();
     core_init();
@@ -402,6 +478,8 @@ void test_integrate_ramanujan(void) {
     TEST(test_conditional_strip);
     TEST(test_monomial_substitution);
     TEST(test_log_arctan_pfq);
+    TEST(test_mellin_assumptions);
+    TEST(test_mellin_special_functions);
     TEST(test_reductions);
     TEST(test_polylog);
     TEST(test_parametric_differentiation);

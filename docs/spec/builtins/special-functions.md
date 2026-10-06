@@ -268,6 +268,41 @@ the principal value (the average of the two sides) is returned.
   point follows from the generic `D`-based fallback.
 - Wrong arity emits `ExpIntegralEi::argx` and stays unevaluated.
 
+## ExpIntegralE
+
+- `ExpIntegralE[n, z]` — the generalized exponential integral
+  E_n(z) = ∫₁^∞ e^(−z t)/t^n dt (Re z > 0), with E_1(z) = Γ(0, z).
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+**Features**:
+- Exact values: `ExpIntegralE[0, z] = E^(−z)/z` (the derivative base case),
+  `ExpIntegralE[n, 0] = 1/(n−1)` for integer n ≥ 2.
+- Numeric: an integer order n ≥ 1 with an inexact real z > 0 evaluates by the
+  standard continued-fraction (z > 1) / power-series (0 < z ≤ 1) split
+  (`ExpIntegralE[1, 2.] = 0.0489005`, `ExpIntegralE[2, 1.5] = 0.0731008`).
+  Exact arguments stay symbolic; `N` forces evaluation.
+- Derivative: `D[ExpIntegralE[n, z], z] = -ExpIntegralE[n-1, z]`.
+- Mellin transform: `∫₀^∞ x^(s-1) ExpIntegralE[n, a x] dx = a^(-s) Γ(s)/(s+n-1)`
+  (`Re s > 0`), closed by the operational-calculus layer of `Method -> "Mellin"`.
+
+## StruveH
+
+- `StruveH[nu, z]` — the Struve function H_ν(z), the particular solution of the
+  inhomogeneous Bessel equation with forcing `(z/2)^(ν+1)`, with series
+  H_ν(z) = (z/2)^(ν+1) (2/(√π Γ(ν+3/2))) ₁F₂(1; 3/2, ν+3/2; −z²/4).
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+**Features**:
+- Exact value: `StruveH[nu, 0] = 0` for a real ν > −1.
+- Numeric: a numeric order ν with an inexact z evaluates through the ₁F₂
+  representation (`StruveH[0, 1.5] = 0.736723`, matching the integral
+  representation (2/π)∫₀^(π/2) sin(z cos θ) dθ).
+- Mellin transform: `∫₀^∞ x^(s-1) StruveH[0, a x] dx =
+  π 2^(s-1) a^(-s)/(Cos(πs/2) Γ(1−s/2)²)`, closed by `Method -> "Mellin"` through
+  the ₁F₂ reduction.
+
 ## LogIntegral
 
 - `LogIntegral[z]` — the logarithmic integral li(z), the principal value of

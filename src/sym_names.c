@@ -174,6 +174,8 @@ const char* SYM_Erf = NULL;
 const char* SYM_Erfc = NULL;
 const char* SYM_Erfi = NULL;
 const char* SYM_ExpIntegralEi = NULL;
+const char* SYM_ExpIntegralE = NULL;
+const char* SYM_StruveH = NULL;
 const char* SYM_LogIntegral = NULL;
 const char* SYM_SinIntegral = NULL;
 const char* SYM_CosIntegral = NULL;
@@ -1163,6 +1165,8 @@ void sym_names_init(void) {
     SYM_Erfc                       = intern_symbol("Erfc");
     SYM_Erfi                       = intern_symbol("Erfi");
     SYM_ExpIntegralEi              = intern_symbol("ExpIntegralEi");
+    SYM_ExpIntegralE               = intern_symbol("ExpIntegralE");
+    SYM_StruveH                    = intern_symbol("StruveH");
     SYM_LogIntegral                = intern_symbol("LogIntegral");
     SYM_SinIntegral                = intern_symbol("SinIntegral");
     SYM_CosIntegral                = intern_symbol("CosIntegral");

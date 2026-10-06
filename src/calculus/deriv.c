@@ -1753,6 +1753,41 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- ExpIntegralE[N, Z]: d/dZ E_N(Z) = -E_(N-1)(Z) (DLMF 8.19.13);
+         *     d/dN has no elementary form (kept inert via Derivative[1,0]). */
+        if (h == SYM_ExpIntegralE && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* -ExpIntegralE[N-1, Z] * dZ */
+                Expr* em1 = mk_fn2("ExpIntegralE",
+                              mk_fn2("Plus", expr_copy(N), mk_int(-1)), expr_copy(Z));
+                terms[nt++] = mk_fn2("Times", mk_fn2("Times", mk_int(-1), em1), dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("ExpIntegralE"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- BesselK[N, Z]: chain rule on both args.
          *   d/dZ BesselK[N, Z] = -(BesselK[N-1, Z] + BesselK[N+1, Z]) / 2  (DLMF 10.29.5)
          *   d/dN BesselK[N, Z] = Derivative[1,0][BesselK][N,Z]  (no elementary form).

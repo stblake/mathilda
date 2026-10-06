@@ -1,110 +1,61 @@
-# UpValues trial — todo
+# Mellin Integrate — assumptions correctness + general extensions
 
-Feature-flagged (`#if UP_VALUES`, default ON via `-DUP_VALUES=1`). Plan: `UPVALUES_PLAN.md`.
+Plan: `~/.claude/plans/in-the-following-examples-serialized-wave.md`
 
-## Phase 0 — build flag, symbols, struct field, teardown
-- [x] makefile: `UP_VALUES ?= 1` → `-DUP_VALUES=1`
-- [x] tests/CMakeLists.txt: `add_compile_definitions(UP_VALUES=1)`
-- [x] symtab.h: `Rule* up_values;` field + decls + `symtab_up_value_count`
-- [x] symtab.c: teardown (reset_node_payload, clear_symbol, count helper)
-- [x] sym_names.{h,c}: SYM_UpValues/UpSet/UpSetDelayed/TagSet/TagSetDelayed/TagUnset/Definition/DownValues/OwnValues
-- [x] Gate: `make UP_VALUES=1` and `make UP_VALUES=0` both build
+## Part 0 — Assumptions correctness  [DONE, verified]
+- [x] 0a. `def_has_undefined_function` → x-aware; In[6–8] now exact Gamma-ratios; protective case holds
+- [x] 0b. Refine-augmented conjunct-wise strip discharge; In1/2/3/20 collapse to bare value
 
-## Phase 1 — symtab layer
-- [x] symtab_add_up_value / get / apply_up_values
-- [x] symtab_remove_matching_up_value
-- [x] symtab_set_{up,down,own}_values
+## Part 1 — Route A reductions
+- [x] SinIntegral → 1F2 rule (In[14]) verified (check→0)
+- [ ] StruveH → 1F2 rule (In[17]) [rule added; needs 3a registration to pass gate]
+- [x] extend cheap guard; removed Erfc reduction (Route B owns it)
 
-## Phase 2 — parser & printer
-- [x] parse.c: OP_UPSET/UPSETDELAYED/TAGSET; lex `^=`,`^:=`,`/:`; TagSet led branch
-- [x] print.c: prec + print_standard/print_tex + Definition render
+## Part 2 — Route C recognizers  [DONE, verified]
+- [x] rec_besselk (In[9]) — numeric x-check 1.0, monomial √x works
+- [x] rec_airy (In[12]) — anchor s=1→1/3, NIntegrate x-check 0.2887
+- [x] wire into try_recognizers
 
-## Phase 3 — evaluator
-- [x] upvalue hook before apply_down_values_def
-- [x] assignment dispatch for Up*/Tag*; build_assignment_target helper
-- [x] handlers: apply_up_assignment / apply_tag_assignment / apply_tag_unset
-- [x] {Up,Down,Own}Values[sym]=list intercept
-- [x] classify_tag_position looks through Condition; element_dispatch_head handles `_tag`
+## Part 3 — Route B + new special functions  [DONE, verified]
+- [x] 3a. StruveH head (new module + deriv skipped-by-design + docstring + SYM_); In17 verified vs NInt 1.912
+- [x] 3a. ExpIntegralE head (expint CF/series numeric, D[E_n]=-E_{n-1}, E_0); E1(2),E2(1.5) verified
+- [x] 3b. rec_ibp IBP fallback (sv>0 lower + kernel-strip upper); In11/15/16 verified (Ci vs NInt -13.398)
 
-## Phase 4 — builtins, attrs, docstrings, scoping
-- [x] builtin_up_values (symbol + string)
-- [x] register heads; attributes; docstrings
-- [x] Clear/ClearAll/Remove/Unset up_values (via symtab teardown)
-- [x] Block/Module save-restore
+## ALL 20 cases close end-to-end [verified]
 
-## Phase 5 — inspection
-- [x] Definition builtin + print special-case (inert; FullForm = Definition[s])
-- [x] ?name / Information extension
-
-## Phase 6 — tests & valgrind
-- [x] tests/test_upvalues.c (25 cases, all pass)
-- [x] valgrind clean (no Mathilda-frame leaks, no invalid access)
-- [x] check-messages; check-c99 pass
-- [x] no regressions (eval/symtab/parse/regression/match/core_algebra/comparisons/trace green)
-- [x] UP_VALUES=0 clean build, behaviour unchanged
-
-## Phase 7 — docs & version
-- [x] docs/spec/builtins/{assignment-and-rules,expression-information}.md
-- [x] docs/spec/changelog/2026-10-05.md
-- [x] version.h bump 0.294 → 0.295
-
----
+## Tests / docs / verify
+- [ ] Unit tests: 10 working + 10 now-closed + numeric anchors (∫Ai=1/3, ∫Erfc=1/√π, ∫E1=1)
+- [ ] docs/spec/builtins/calculus.md + special-functions.md; changelog 2026-10-05.md
+- [ ] version.h bump per substantive commit
+- [ ] Build, run integrate_ramanujan_tests, re-run user's 20 cases, numeric-surface audits, check-messages, check-c99, valgrind
 
 ## Review
 
-Shipped the UpValues subsystem as a faithful Mathematica recreation, fully gated
-behind `#if UP_VALUES` (default ON). All behaviours from the supplied Wolfram
-reference verified via `-file` scripts and the 25-case unit suite.
+**Result: all 20 stress cases close (was 10). No regressions.**
 
-**What works** (all matching the reference): UpSet/UpSetDelayed (single &
-multi-symbol install, blank-head tags `a_mod`), TagSet/TagSetDelayed (up/down/own
-classification, `tagnf`, Condition-wrapped LHS), TagUnset, modular arithmetic
-end-to-end (`mod[0,5]`), upvalue-before-downvalue precedence, all-heads upvalue
-with Hold firing / HoldComplete suppressing, UpValues[] reader (symbol + string +
-`Names` map), all three `=list` setters (incl. reorder and copy idioms),
-Definition (inert; displays own/down/up), ?name/Information display, and
-Block/Clear/Remove scoping.
+Changes:
+- `integrate.c`: `def_has_undefined_function` now x-aware (one early-out via
+  `depends_on_var`); unblocks pFq (In6–8), repairs the red 1F1/2F1 tests.
+- `integrate_ramanujan.c`: `discharge_strip` (Simplify→Refine, per-atom,
+  all-or-nothing collapse); `rec_besselk`, `rec_airy`; `rec_ibp` IBP fallback;
+  `reduce_to_hypergeometric` gained Si/StruveH rules (dropped Erfc — Route B
+  owns it).
+- New special functions: `src/special_functions/expintegrale.{c,h}` (expint
+  CF/series numeric), `struveh.{c,h}` (1F2 numeric); SYM_ names; `ExpIntegralE`
+  deriv rule in `deriv.c`; docstrings in `info.c`; init in `core.c`; CMake list.
 
-**Efficiency:** the per-call hook early-outs on a global `symtab_up_value_count`,
-so a program with no up-values pays one load+branch before DownValue dispatch.
-Candidate collection is level-one only, deduped, non-materializing, and reuses
-the existing arity/first-arg-head dispatch pre-filter.
+Verification:
+- `integrate_ramanujan_tests` green (21 tests incl. formerly-red 1F1/2F1, new
+  `test_mellin_assumptions` + `test_mellin_special_functions`).
+- No regressions: residue/beta/intrep/newton_leibniz/line/principalvalue/
+  symmetry/deriv/unknown test suites all PASS.
+- Caught + fixed a self-regression: Refine discharge had partially dropped a
+  proven conjunct (sector `1/(1+x^n)`), making the ConditionalExpression strip
+  incomplete — fixed to all-or-nothing collapse.
+- Audits: check-c99, check-messages, check-packed-aware, check-array-exactness
+  all green. Numerics cross-checked vs NIntegrate (Airy, Ci, StruveH) and known
+  anchors (∫Ai=1/3, ∫Erfc=1/√π, ∫E₁=1).
 
-**Memory:** valgrind on the suite shows zero Mathilda-frame leaks and no invalid
-reads/writes/frees/double-frees (the only "definitely lost" blocks are macOS
-dyld/Objective-C startup, the standard valgrind-on-macOS false positives).
-
-**Documented divergences** (pre-existing Mathilda conventions): rule order follows
-specificity sort (insertion order the tie-break); immediate-vs-delayed is not
-recorded, so Definition/?name render down/up values delayed. SubValues
-(`f[x][y]` tags) are out of scope and declined with a message.
-
-**Non-regressions:** the 4 `iter_tests` failures and `modular_tests` exit-1 are
-PRE-EXISTING (float formatting `3.0` vs `3.`, Block dynamic-scope capture) —
-confirmed identical on the `UP_VALUES=0` binary where this feature compiles out.
-
-**Follow-ons (not done):** a `delayed` bit on `Rule` would let Definition render
-`=` vs `:=` faithfully; book coverage deferred.
-
-## Stress-test campaign (adversarial)
-
-Behavioural corpus + independent diff bug-hunt + valgrind churn. Found & fixed 5
-correctness bugs (4 in the feature, 1 pre-existing core):
-1. Delayed `rhs /; test` not lifted onto the LHS for `^:=` / `TagSetDelayed`
-   (guard never filtered) — `move_rhs_condition`.
-2. `DownValues[s]=…`/`OwnValues[s]=…`/`UpValues[s]=…` bypassed Protected/Locked.
-3. `element_dispatch_head` polluted `Blank`/pattern-wrapper heads; added `UpSet::nosym`
-   and top-level `Condition` unwrap in `collect_level_one_symbols`.
-4. Orderless upvalues fired order-dependently (first-arg-head dispatch filter is
-   unsound for Orderless) and bound in non-WMA order — sort before match + skip the
-   filter for Orderless.
-5. **Pre-existing core bug:** `pattern_alpha_normalize` corrupted stored patterns on a
-   non-matching `Unset`/`TagUnset` of a guarded rule (refcount-aliased in-place
-   rename) — fixed with `deep_copy_private`; cures DownValues/OwnValues/UpValues.
-
-Verified: 34-case unit suite green; behavioural + robustness corpora 0 FAILs;
-valgrind clean under heavy install/fire/clear/Block/Unset churn (no Mathilda-frame
-leaks, no invalid access); subsystems (Integrate/Simplify/Solve/Factor/Sum/Series/D)
-byte-identical with and without an upvalue defined; no regressions across
-eval/symtab/match/regression/cond/comparisons/etc.; `UP_VALUES=0` and `=1` both
-build clean; check-messages + check-c99 pass.
+Lesson captured: CMake test lib has an explicit source list — a new `src/**`
+file must be added to `tests/CMakeLists.txt` (it does not auto-glob like the
+makefile).

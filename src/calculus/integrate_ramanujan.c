@@ -425,6 +425,35 @@ static bool rec_bessel(const Expr* K, const Expr* x, const Expr* sv,
     return true;
 }
 
+/* BesselK[nu, lam x], lam > 0:  (the modified Bessel K is a cancelling
+ * combination of two individually-divergent series, so it has no single-pFq RMT
+ * reduction -- a dedicated base transform, like rec_bessel for BesselJ.)
+ *   M = 2^(sv-2) lam^(-sv) Gamma((sv+nu)/2) Gamma((sv-nu)/2),  Re sv > |Re nu|.
+ * The two Gamma-argument positivity conditions (sv+nu > 0 && sv-nu > 0) are
+ * exactly Re sv > |Re nu| and reduce to sv > 0 at nu = 0. */
+static bool rec_besselk(const Expr* K, const Expr* x, const Expr* sv,
+                        Expr** M, Expr** P) {
+    if (!head_name_is(K, "BesselK") || K->data.function.arg_count != 2) return false;
+    Expr* nu  = K->data.function.args[0];
+    Expr* arg = K->data.function.args[1];
+    if (!free_of_x_now(nu, x)) return false;
+    Expr* lam = dx(arg, x);
+    if (!free_of_x_now(lam, x)) { expr_free(lam); return false; }
+    Expr* cross = simp(Pls(cp(arg), Neg(Tms(cp(lam), cp(x)))));
+    bool bad = !is_zero_now(cross);
+    expr_free(cross);
+    if (bad) { expr_free(lam); return false; }
+    *M = Tms3(Pw(mk_int(2), Pls(cp(sv), mk_int(-2))),
+              Pw(cp(lam), Neg(cp(sv))),
+              Tms(Gamma_(Half(Pls(cp(sv), cp(nu)))),
+                  Gamma_(Half(Pls(cp(sv), Neg(cp(nu)))))));
+    *P = And2(Gt(cp(lam), mk_int(0)),
+              And2(Gt(Pls(cp(sv), cp(nu)), mk_int(0)),
+                   Gt(Pls(cp(sv), Neg(cp(nu))), mk_int(0))));
+    expr_free(lam);
+    return true;
+}
+
 /* Log[1 + lam x], lam > 0:  M = pi/(sv Sin(pi sv)) lam^(-sv),  -1 < Re sv < 0.
  * (From Integrate[x^s/(1+x)] = -pi/Sin(pi s) by parts.) */
 static bool rec_log(const Expr* K, const Expr* x, const Expr* sv,
@@ -477,6 +506,29 @@ static bool rec_arctan(const Expr* K, const Expr* x, const Expr* sv,
     *P = And2(Gt(cp(lam), mk_int(0)),
               And2(Gt(cp(sv), mk_int(-1)), Lt(cp(sv), mk_int(0))));
     expr_free(lam);
+    return true;
+}
+
+/* AiryAi[lam x], lam > 0:  (Ai is a cancelling combination of two 0F1 series,
+ * individually divergent -- a dedicated base transform, not an RMT reduction.)
+ *   M = lam^(-sv) Gamma(sv) / (3^((sv+2)/3) Gamma((sv+2)/3)),  Re sv > 0.
+ * (Check: sv = 1 gives Integrate[AiryAi[x], {x,0,Infinity}] = 1/3.) */
+static bool rec_airy(const Expr* K, const Expr* x, const Expr* sv,
+                     Expr** M, Expr** P) {
+    if (!head_name_is(K, "AiryAi") || K->data.function.arg_count != 1) return false;
+    Expr* arg = K->data.function.args[0];
+    Expr* lam = dx(arg, x);
+    if (!free_of_x_now(lam, x)) { expr_free(lam); return false; }
+    Expr* cross = simp(Pls(cp(arg), Neg(Tms(cp(lam), cp(x)))));
+    bool bad = !is_zero_now(cross);
+    expr_free(cross);
+    if (bad) { expr_free(lam); return false; }
+    Expr* sp2o3 = Tms(Pls(cp(sv), mk_int(2)), Rat(1, 3));      /* (sv+2)/3 */
+    *M = Tms3(Pw(cp(lam), Neg(cp(sv))),
+              Gamma_(cp(sv)),
+              Pw(Tms(Pw(mk_int(3), cp(sp2o3)), Gamma_(cp(sp2o3))), mk_int(-1)));
+    *P = And2(Gt(cp(lam), mk_int(0)), Gt(cp(sv), mk_int(0)));
+    expr_free(lam); expr_free(sp2o3);
     return true;
 }
 
@@ -938,37 +990,49 @@ static bool try_recognizers(const Expr* K, const Expr* x, const Expr* sv,
     if (rec_algebraic(K, x, sv, M, P)) return true;
     if (rec_trig(K, x, sv, M, P))      return true;
     if (rec_bessel(K, x, sv, M, P))    return true;
+    if (rec_besselk(K, x, sv, M, P))   return true;
     if (rec_log(K, x, sv, M, P))       return true;
     if (rec_arctan(K, x, sv, M, P))    return true;
+    if (rec_airy(K, x, sv, M, P))      return true;
     if (rec_pfq(K, x, sv, M, P))       return true;
     if (rec_polylog(K, x, sv, M, P))   return true;
     if (rec_expgeom(K, x, sv, assumptions, M, P)) return true;
     return false;
 }
 
+/* Operational-calculus IBP fallback (defined after split_term); the recursion
+ * depth is bounded so an E_n -> E_(n-1) -> ... chain terminates. */
+static int g_mellin_ibp_depth = 0;
+static bool rec_ibp(const Expr* K, const Expr* x, const Expr* sv,
+                    Expr* assumptions, Expr** M, Expr** P);
+
 /* Dispatch a kernel to a recognizer, transparently handling a monomial internal
  * substitution K = g(x^k), k != 1.  With y = x^k,
  *   Integrate[x^(sv-1) g(x^k)] = (1/k) Integrate[y^(sv/k-1) g(y)],
  * so the transform is the base transform evaluated at sv/k, scaled by 1/k, and
- * the convergence strip transfers verbatim (an exact change of variables). */
+ * the convergence strip transfers verbatim (an exact change of variables).
+ * When neither a direct recognizer nor the monomial substitution matches, the
+ * operational-calculus IBP fallback gets the last word. */
 static bool dispatch_kernel(const Expr* K, const Expr* x, const Expr* sv,
                             Expr* assumptions, Expr** M, Expr** P) {
     *M = *P = NULL;
     if (try_recognizers(K, x, sv, assumptions, M, P)) return true;
 
     Expr* k = single_distinct_x_exponent(K, x);
-    if (!k) return false;
-    if (k->type == EXPR_INTEGER && k->data.integer == 1) { expr_free(k); return false; }
-
-    Expr* rule   = mk_fn2("Rule", Pw(cp(x), cp(k)), cp(x));   /* x^k -> x */
-    Expr* Klin   = ev2("ReplaceAll", cp(K), rule);
-    Expr* sv_eff = simp(Tms(cp(sv), Pw(cp(k), mk_int(-1))));  /* sv / k */
-    bool ok = Klin && try_recognizers(Klin, x, sv_eff, assumptions, M, P);
-    if (ok) *M = Tms(Pw(cp(k), mk_int(-1)), *M);             /* x (1/k) */
-    if (Klin) expr_free(Klin);
-    expr_free(sv_eff);
-    expr_free(k);
-    return ok;
+    if (k && !(k->type == EXPR_INTEGER && k->data.integer == 1)) {
+        Expr* rule   = mk_fn2("Rule", Pw(cp(x), cp(k)), cp(x));   /* x^k -> x */
+        Expr* Klin   = ev2("ReplaceAll", cp(K), rule);
+        Expr* sv_eff = simp(Tms(cp(sv), Pw(cp(k), mk_int(-1))));  /* sv / k */
+        bool ok = Klin && try_recognizers(Klin, x, sv_eff, assumptions, M, P);
+        if (ok) *M = Tms(Pw(cp(k), mk_int(-1)), *M);             /* x (1/k) */
+        if (Klin) expr_free(Klin);
+        expr_free(sv_eff);
+        expr_free(k);
+        if (ok) return true;
+    } else if (k) {
+        expr_free(k);
+    }
+    return rec_ibp(K, x, sv, assumptions, M, P);
 }
 
 /* If F is Log[x] or Power[Log[x], k] (k a positive integer) whose argument is
@@ -1016,6 +1080,52 @@ static bool split_term(Expr* term, const Expr* x, Expr** C_out, Expr** rho_out,
     *C_out = simp(C);
     *rho_out = simp(rho);
     *kw_out = kw;
+    return true;
+}
+
+/* Operational-calculus (integration-by-parts) fallback, the last resort in
+ * dispatch_kernel for a kernel K that no base recognizer and no monomial
+ * substitution closes.  Integrating by parts on the half line,
+ *   Integrate[x^(sv-1) K] = [x^sv K / sv]_0^inf - (1/sv) Integrate[x^sv K'],
+ * so where the boundary term vanishes at both ends,
+ *   M_K(sv) = -(1/sv) M_{K'}(sv+1).
+ * We accept this when K' = D[K,x] is a single term  C x^rho g  with g a
+ * recognized kernel (its transform M_g and strip P_g carry the upper boundary
+ * and the kernel-side analytic structure) and rho >= -1, which makes K bounded
+ * or at worst logarithmic -- never a pole -- at the origin.  The lower boundary
+ * x^sv K -> 0 as x -> 0 then holds exactly for Re sv > 0 (a constant or a Log
+ * is killed by any positive power), and is conservatively sound when K instead
+ * vanishes at 0; a rho < -1 pole is declined.  g's own strip P_g supplies the
+ * upper bound (its decay class matches K's).  Closes Erfc (K' = Gaussian),
+ * CosIntegral (K' = Cos/x), and ExpIntegralE (K' = -Exp/x, with the E_n ->
+ * E_(n-1) chain bottoming at E_0 = Exp/x); none of these is a single pFq. */
+static bool rec_ibp(const Expr* K, const Expr* x, const Expr* sv,
+                    Expr* assumptions, Expr** M, Expr** P) {
+    if (g_mellin_ibp_depth >= 6) return false;
+    Expr* Kp = simp(dx(K, x));                               /* K' */
+    if (!Kp || is_zero_now(Kp) || !contains_symbol(Kp, x)) {
+        if (Kp) expr_free(Kp); return false;
+    }
+    /* K' = C x^rho g  (single kernel, no bare Log[x] weight). */
+    Expr *C = NULL, *rho = NULL; Expr* kernels[8]; size_t nk = 0; long kw = 0;
+    if (!split_term(Kp, x, &C, &rho, kernels, &nk, 8, &kw) || nk != 1 || kw != 0) {
+        if (C) expr_free(C); if (rho) expr_free(rho); expr_free(Kp); return false;
+    }
+    /* rho >= -1: K has at worst a logarithmic singularity at 0 (no pole). */
+    if (!prove_true(mk_fn2("GreaterEqual", cp(rho), mk_int(-1)), NULL)) {
+        expr_free(C); expr_free(rho); expr_free(Kp); return false;
+    }
+    /* Integrate[x^((sv+1)-1) C x^rho g] = C M_g(sv+1+rho). */
+    Expr* sg = simp(Pls(Pls(cp(sv), mk_int(1)), cp(rho)));
+    Expr *Mg = NULL, *Pg = NULL;
+    g_mellin_ibp_depth++;
+    bool ok = dispatch_kernel(kernels[0], x, sg, assumptions, &Mg, &Pg);
+    g_mellin_ibp_depth--;
+    expr_free(sg); expr_free(rho); expr_free(Kp);
+    if (!ok) { expr_free(C); return false; }
+
+    *M = Tms3(mk_int(-1), Pw(cp(sv), mk_int(-1)), Tms(C, Mg));   /* -(1/sv) C M_g */
+    *P = And2(Pg, Gt(cp(sv), mk_int(0)));                        /* P_g && Re sv > 0 */
     return true;
 }
 
@@ -1121,6 +1231,82 @@ static bool sym_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
+/* Refine verdict for `pred` under `as`: +1 proved True, -1 proved False,
+ * 0 undecided.  Non-consuming. */
+static int refine_verdict(const Expr* pred, const Expr* as) {
+    if (!as) return 0;
+    Expr* rf = ev2("Refine", cp((Expr*)pred), cp((Expr*)as));
+    int v = sym_is(rf, "True") ? 1 : (sym_is(rf, "False") ? -1 : 0);
+    expr_free(rf);
+    return v;
+}
+
+/* Append the atomic assumption predicates of `as` to out[] (flattening And and
+ * List; each binary relation or chained Inequality stays whole -- Refine
+ * discharges a strip conjunct from such a single atom, e.g. 0<Re[s]<3/4 proves
+ * s>0 and even 2s<3/2, but cannot use several atoms jointly).  Borrowed
+ * pointers into `as`; returns the new count. */
+static size_t collect_assumption_atoms(const Expr* as, const Expr** out,
+                                       size_t n, size_t cap) {
+    if (!as || n >= cap) return n;
+    if (head_name_is(as, "And") || head_name_is(as, "List")) {
+        for (size_t i = 0; i < as->data.function.arg_count && n < cap; i++)
+            n = collect_assumption_atoms(as->data.function.args[i], out, n, cap);
+        return n;
+    }
+    out[n++] = as;
+    return n;
+}
+
+/* Verdict for one predicate: try the full assumptions (joint), then each atom
+ * alone, since Refine discharges only against a single matching atom. */
+static int discharge_atom(const Expr* pred, const Expr* as,
+                          const Expr** atoms, size_t na) {
+    int v = refine_verdict(pred, as);
+    if (v != 0) return v;
+    for (size_t i = 0; i < na; i++) {
+        int av = refine_verdict(pred, atoms[i]);
+        if (av != 0) return av;                 /* first decisive atom wins */
+    }
+    return 0;
+}
+
+/* Reduce a convergence strip `pred` under `as`, returning True / False / a
+ * residual predicate (owned; consumes `pred`).  Simplify decides the cases it
+ * can; a residual it leaves open is re-attempted with Refine, which reasons
+ * about real parts where Simplify does not -- so a user assumption phrased on
+ * Re[...] (or a sign, a>0) collapses a bare-s strip (e.g. Re[s]>0 discharges s>0)
+ * that Simplify alone leaves as a ConditionalExpression.  Refine does NOT
+ * distribute over And (it proves `a>0` and `s>0` separately but leaves
+ * `s>0 && a>0` intact), so a conjunction strip is discharged conjunct by
+ * conjunct: proved-True conjuncts drop, a proved-False one declines, the rest
+ * remain as the carried residual.  The Mellin strip is intrinsically a condition
+ * on Re s, so this matches the engine's real-by-default convention (prove_true,
+ * iv_prove_*) and Mathematica.  Sound and additive: Refine only upgrades an
+ * undecided residual; it never manufactures acceptance of a divergent strip. */
+static Expr* discharge_strip(Expr* pred, Expr* as) {
+    Expr* ps = simp2(pred, as);                 /* consumes pred */
+    if (!as || sym_is(ps, "True") || sym_is(ps, "False")) return ps;
+    const Expr* atoms[32];
+    size_t na = collect_assumption_atoms(as, atoms, 0, 32);
+    int v = discharge_atom(ps, as, atoms, na);  /* whole-predicate attempt */
+    if (v != 0) { expr_free(ps); return mk_sym(v > 0 ? "True" : "False"); }
+    if (head_name_is(ps, "And")) {              /* all-or-nothing conjunct check */
+        bool all_true = true;
+        for (size_t i = 0; i < ps->data.function.arg_count; i++) {
+            int cv = discharge_atom(ps->data.function.args[i], as, atoms, na);
+            if (cv < 0) { expr_free(ps); return mk_sym("False"); } /* decline */
+            if (cv == 0) all_true = false;
+        }
+        /* Collapse only when the assumptions prove the WHOLE strip; otherwise
+         * carry it intact (Mathematica does not partially drop conjuncts -- a
+         * ConditionalExpression must state its full convergence region, sound
+         * even outside the assumptions that produced it). */
+        if (all_true) { expr_free(ps); return mk_sym("True"); }
+    }
+    return ps;                                  /* genuine residual, carried whole */
+}
+
 /* Value of Integrate[term, {x, 0, Infinity}], or NULL if the term is out of
  * scope or provably divergent.  On success the convergence strip, reduced under
  * `assumptions`, is returned via *cond_out: NULL if it is discharged (proved
@@ -1157,7 +1343,7 @@ static Expr* mellin_term(Expr* term, const Expr* x, Expr* assumptions,
     }
     /* Reduce the strip against the assumptions.  True -> discharged; False ->
      * provably divergent (decline); otherwise carry it as a residual. */
-    Expr* Ps = simp2(cp(P), assumptions);
+    Expr* Ps = discharge_strip(cp(P), assumptions);
     expr_free(P);
     if (sym_is(Ps, "False")) {
         expr_free(Ps); expr_free(C); expr_free(s); expr_free(M); return NULL;
@@ -1194,15 +1380,30 @@ static Expr* mellin_term(Expr* term, const Expr* x, Expr* assumptions,
 static Expr* reduce_to_hypergeometric(const Expr* f) {
     /* Cheap guard: only pay the parse/replace cost when a reducible head is
      * present. */
-    if (!contains_symbol_name(f, "Erf") && !contains_symbol_name(f, "Erfc") &&
-        !contains_symbol_name(f, "Gamma") && !contains_symbol_name(f, "BesselJ"))
+    if (!contains_symbol_name(f, "Erf") &&
+        !contains_symbol_name(f, "Gamma") && !contains_symbol_name(f, "BesselJ") &&
+        !contains_symbol_name(f, "SinIntegral") && !contains_symbol_name(f, "StruveH"))
         return cp(f);
+    /* Each kernel that IS a single entire/alternating pFq collapses here into
+     * HypergeometricPFQ, so the Ramanujan-Master-Theorem recognizer rec_pfq (with
+     * the monomial x^k wrapper) closes it uniformly with the correct Gamma-ratio
+     * and strip.  Erfc is deliberately NOT reduced: its series carries a bare
+     * constant 1 (so 1 - erf would split into a divergent term under Expand) --
+     * it is handled instead by the operational-calculus IBP fallback, which
+     * differentiates it to the Gaussian.  Each rule is a proven identity (the
+     * tests verify numerically):
+     *   Si(z) = z 1F2(1/2; 3/2,3/2; -z^2/4)
+     *   H_nu(z) = (z/2)^(nu+1) (2/(Sqrt[Pi] Gamma[nu+3/2])) 1F2(1; 3/2,nu+3/2; -z^2/4)
+     * (the Struve prefactor 2/(Sqrt[Pi]Gamma[nu+3/2]) gives the correct leading
+     *  H_0(z) ~ 2z/Pi). */
     static const char* RULES =
         "{ Erf[u_] :> (2/Sqrt[Pi]) u HypergeometricPFQ[{1/2}, {3/2}, -u^2], "
-        "  Erfc[u_] :> 1 - (2/Sqrt[Pi]) u HypergeometricPFQ[{1/2}, {3/2}, -u^2], "
         "  Gamma[a_] - Gamma[a_, z_] :> z^a/a HypergeometricPFQ[{a}, {a+1}, -z], "
         "  BesselJ[nu_, z_]^2 :> (z/2)^(2 nu)/Gamma[nu+1]^2 "
-        "      HypergeometricPFQ[{nu+1/2}, {2 nu+1, nu+1}, -z^2] }";
+        "      HypergeometricPFQ[{nu+1/2}, {2 nu+1, nu+1}, -z^2], "
+        "  SinIntegral[u_] :> u HypergeometricPFQ[{1/2}, {3/2, 3/2}, -u^2/4], "
+        "  StruveH[nu_, u_] :> (u/2)^(nu+1) (2/(Sqrt[Pi] Gamma[nu+3/2])) "
+        "      HypergeometricPFQ[{1}, {3/2, nu+3/2}, -u^2/4] }";
     Expr* rules = parse_expression(RULES);
     if (!rules) return cp(f);
     return ev2("ReplaceRepeated", cp(f), rules);
@@ -1714,7 +1915,7 @@ Expr* integrate_ramanujan_try(Expr* f, Expr* x, Expr* a, Expr* b,
 
     /* Carry the residual strip as a ConditionalExpression (it collapses to the
      * bare value when the assumptions later prove it, to Undefined if refuted). */
-    Expr* cs = simp2(cond, assumptions);
+    Expr* cs = discharge_strip(cond, assumptions);
     if (sym_is(cs, "False")) { expr_free(cs); expr_free(res); return NULL; }
     if (sym_is(cs, "True"))  { expr_free(cs); return res; }
     return eval_take(mk_fn2("ConditionalExpression", res, cs));

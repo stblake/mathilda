@@ -360,6 +360,8 @@ set(COMMON_SRC
     ../src/special_functions/erfc.c
     ../src/special_functions/erfi.c
     ../src/special_functions/expintegralei.c
+    ../src/special_functions/expintegrale.c
+    ../src/special_functions/struveh.c
     ../src/special_functions/logintegral.c
     ../src/special_functions/sinintegral.c
     ../src/special_functions/cosintegral.c

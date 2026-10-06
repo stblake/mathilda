@@ -23,6 +23,8 @@
 #include "erfc.h"
 #include "erfi.h"
 #include "expintegralei.h"
+#include "expintegrale.h"
+#include "struveh.h"
 #include "logintegral.h"
 #include "sinintegral.h"
 #include "cosintegral.h"
@@ -781,6 +783,8 @@ void core_init(void) {
     erfc_init();
     erfi_init();
     expintegralei_init();
+    expintegrale_init();
+    struveh_init();
     logintegral_init();
     sinintegral_init();
     cosintegral_init();

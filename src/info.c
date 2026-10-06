@@ -904,6 +904,21 @@ void info_init(void) {
         "ExpIntegralEi[-Infinity] = 0, ExpIntegralEi[+-I Infinity] = +-I Pi. Real and\n"
         "complex inputs evaluate numerically at machine or arbitrary (MPFR) precision;\n"
         "D[ExpIntegralEi[z], z] = E^z/z. Listable.");
+    symtab_set_docstring("ExpIntegralE",
+        "ExpIntegralE[n, z]\n"
+        "\tgives the generalized exponential integral E_n(z) =\n"
+        "\tIntegral_1^Infinity E^(-z t)/t^n dt.\n"
+        "ExpIntegralE[0, z] = E^-z/z, ExpIntegralE[n, 0] = 1/(n-1) for n > 1,\n"
+        "ExpIntegralE[1, z] = Gamma[0, z]. Integer order with an inexact real z > 0\n"
+        "evaluates numerically; D[ExpIntegralE[n, z], z] = -ExpIntegralE[n-1, z].\n"
+        "Listable.");
+    symtab_set_docstring("StruveH",
+        "StruveH[nu, z]\n"
+        "\tgives the Struve function H_nu(z), the particular solution of the\n"
+        "\tinhomogeneous Bessel equation with forcing (z/2)^(nu+1).\n"
+        "H_nu(z) = (z/2)^(nu+1) (2/(Sqrt[Pi] Gamma[nu+3/2])) 1F2(1; 3/2, nu+3/2; -z^2/4).\n"
+        "StruveH[nu, 0] = 0 for Re nu > -1; numeric nu with an inexact z evaluate\n"
+        "through the 1F2 representation. Listable.");
     symtab_set_docstring("SinIntegral",
         "SinIntegral[z]\n"
         "\tgives the sine integral Si(z) = Integral_0^z Sin[t]/t dt.\n"

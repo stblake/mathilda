@@ -1979,6 +1979,34 @@ power prefactor sets `s = ρ + 1`:
 | `pFq[{a}; {b}; -λ x]`, `λ>0` | `(∏Γ(b_j)/∏Γ(a_i)) Γ(s) (∏Γ(a_i-s)/∏Γ(b_j-s)) λ^{-s}` | `0<Re s<min Re a_i` |
 | `PolyLog[ν, -λ x]`, `λ>0` | `π (-s)^{-ν} λ^{-s} / Sin(π s)` | `-1<Re s<0` |
 | `1/(e^{c x}+γ)`, `c>0`, `γ≥-1` | `c^{-s} Γ(s) (-1/γ) PolyLog(s, -γ)` | `0<Re s` (`1<Re s` if `γ=-1`) |
+| `BesselK[ν, λ x]`, `λ>0` | `2^{s-2} λ^{-s} Γ((s+ν)/2) Γ((s-ν)/2)` | `Re s>\|Re ν\|` |
+| `AiryAi[λ x]`, `λ>0` | `λ^{-s} Γ(s) / (3^{(s+2)/3} Γ((s+2)/3))` | `0<Re s` |
+| `Erfc[λ x]`, `λ>0` | `λ^{-s} Γ((s+1)/2) / (√π s)` | `0<Re s` |
+| `SinIntegral[λ x]`, `λ>0` | `-λ^{-s} Γ(s) Sin(πs/2) / s` | `-1<Re s<0` |
+| `CosIntegral[λ x]`, `λ>0` | `-λ^{-s} Γ(s) Cos(πs/2) / s` | `0<Re s<1` |
+| `ExpIntegralE[n, λ x]`, `λ>0` | `λ^{-s} Γ(s) / (s+n-1)` | `0<Re s` |
+| `StruveH[0, λ x]`, `λ>0` | `π 2^{s-1} λ^{-s} / (Cos(πs/2) Γ(1-s/2)²)` | `-1<Re s<1` |
+
+The kernels below the exponential-geometric row are closed through three general
+layers rather than one-off entries. `BesselK` and `AiryAi` are **dedicated base
+transforms** (each a cancelling combination of individually-divergent series, so
+no single `pFq` exists). `SinIntegral` and `StruveH` are **reduced to a single
+entire `₁F₂`** (`Si(z)=z·₁F₂(½;3/2,3/2;−z²/4)`,
+`H_ν(z)=(z/2)^{ν+1}(2/(√π Γ(ν+3/2)))·₁F₂(1;3/2,ν+3/2;−z²/4)`) and closed by the
+`pFq` recognizer. `Erfc`, `CosIntegral` and `ExpIntegralE` are closed by **Mellin
+operational calculus**: `∫₀^∞ x^{s-1} f = −(1/s) ∫₀^∞ x^s f'` by parts whenever
+`f'` is itself a recognized kernel (`Erfc'`=Gaussian, `Ci'`=cos/x, `E_n'`=−`E_{n-1}`
+bottoming at `E_0=e^{−z}/z`), with the lower boundary `Re s>0` added from `f`'s
+constant-or-logarithmic value at the origin.
+
+The convergence strip is matched against the user `Assumptions` with `Simplify`
+and then `Refine`, which reasons about real parts where `Simplify` does not — so a
+`Re[s]>0` (or a sign `a>0`) assumption that pins the whole strip collapses the
+`ConditionalExpression` to the bare transform. A strip only partly proven is
+carried intact, so the reported convergence region is always complete. An
+integrand carrying an *arbitrary function of the integration variable* (`f[x]`
+with no definition) still skips this method; an x-free symbolic parameter does
+not.
 
 The last row is the **exponential-geometric** kernel of the statistical-mechanics
 integrals: expanding `1/(e^{cx}+γ) = (-1/γ) Σ_{j≥1} (-γ)^j e^{-jcx}` and

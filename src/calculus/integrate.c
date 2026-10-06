@@ -1179,18 +1179,25 @@ static bool option_lhs_is(Expr* opt, const char* sym) {
  * improper/parametric definite methods (residue, Ramanujan, differentiation
  * under the integral, ...) cannot close such an integrand and spend seconds
  * churning before declining, so the definite driver skips them for it. */
-static bool def_has_undefined_function(const Expr* e) {
+static bool def_has_undefined_function(const Expr* e, const Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
+    /* An x-free subtree is a constant w.r.t. the integration: every definite
+     * method folds it into an opaque coefficient, so an undefined head buried in
+     * it (a parameter List like {a,b}, an opaque constant g[a]) cannot obstruct
+     * the method or trigger the churn this guard exists to avoid.  Only an
+     * x-DEPENDENT arbitrary function (the forcing f[x] in a Green's-function
+     * convolution) must still be flagged -- so test depends-on-x first. */
+    if (!depends_on_var(e, x)) return false;
     const Expr* h = e->data.function.head;
     if (h->type == EXPR_SYMBOL) {
         if (h->data.symbol.name == SYM_Derivative) return true;
         SymbolDef* d = symtab_lookup(h->data.symbol.name);
         if (!d || (!d->builtin_func && !d->down_values)) return true;
-    } else if (def_has_undefined_function(h)) {
+    } else if (def_has_undefined_function(h, x)) {
         return true;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (def_has_undefined_function(e->data.function.args[i])) return true;
+        if (def_has_undefined_function(e->data.function.args[i], x)) return true;
     return false;
 }
 
@@ -1288,7 +1295,7 @@ static Expr* integrate_definite(Expr* res) {
              * are skipped for it (they churn for seconds before declining),
              * leaving the integral in its correct unevaluated form.  Pinned
              * methods are honoured regardless. */
-            bool has_undef = def_has_undefined_function(cur);
+            bool has_undef = def_has_undefined_function(cur, x);
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_RESIDUE))
                 r = integrate_residue_try(cur, x, a, b, assumptions, &diverges,
                                           principal_value);
