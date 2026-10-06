@@ -34,6 +34,25 @@ static void free_rule_list(Rule* r) {
     }
 }
 
+#if UP_VALUES
+/* Running total of UpValue rules (see symtab.h). */
+size_t symtab_up_value_count = 0;
+
+/* Free an UpValue list AND keep the global count in step. Every UpValue teardown
+ * path (reset_node_payload, symtab_clear_symbol, symtab_set_up_values) routes
+ * through here so the counter can never drift from the stored rules. */
+static void free_up_value_list(Rule* r) {
+    while (r) {
+        Rule* next = r->next;
+        expr_free(r->pattern);
+        expr_free(r->replacement);
+        free(r);
+        if (symtab_up_value_count) symtab_up_value_count--;
+        r = next;
+    }
+}
+#endif
+
 /* Reset a node to "interned only": free its definition payload but KEEP the node
  * and its canonical name string in the table (so SYM_* and any live Expr keep
  * valid pointers) and KEEP is_system. This is what symtab_clear / symtab_init /
@@ -41,6 +60,9 @@ static void free_rule_list(Rule* r) {
 static void reset_node_payload(SymbolDef* d) {
     free_rule_list(d->own_values);   d->own_values = NULL;
     free_rule_list(d->down_values);  d->down_values = NULL;
+#if UP_VALUES
+    free_up_value_list(d->up_values); d->up_values = NULL;
+#endif
     if (d->docstring) { free(d->docstring); d->docstring = NULL; }
     if (d->default_options) { expr_free(d->default_options); d->default_options = NULL; }
     d->builtin_func = NULL;
@@ -865,6 +887,11 @@ void symtab_clear_symbol(const char* symbol_name) {
         curr = next;
     }
     def->down_values = NULL;
+
+#if UP_VALUES
+    free_up_value_list(def->up_values);
+    def->up_values = NULL;
+#endif
 }
 
 void symtab_remove_symbol(const char* symbol_name) {
@@ -947,9 +974,33 @@ static void alpha_rename(Expr* p, const char** names, int n) {
     }
 }
 
-/* Return a freshly allocated, alpha-normalized copy of `p`. Caller owns it. */
+/* A fully private (deep) copy of `e`: the result shares no mutable node with `e`,
+ * so it is safe to rewrite in place. Needed because expr_copy() is only a
+ * refcount bump (COW) and alpha_rename() mutates leaves at every depth -- a bare
+ * expr_copy would let alpha_rename corrupt the shared original (it did: a
+ * non-matching `f[x_] =.` on `f[x_] := rhs /; c` renamed the STORED pattern's x
+ * to $Pat$0 while the rhs still said x). expr_unshare privatises one level and
+ * drops our extra ref, so recursing privatises the whole tree. Caller owns it. */
+static Expr* deep_copy_private(Expr* e) {
+    if (!e) return NULL;
+    Expr* top = expr_unshare(expr_copy(e));   /* refcount-1 top; children shared */
+    if (top->type == EXPR_FUNCTION) {
+        Expr* oh = top->data.function.head;
+        top->data.function.head = deep_copy_private(oh);
+        expr_free(oh);
+        for (size_t i = 0; i < top->data.function.arg_count; i++) {
+            Expr* oa = top->data.function.args[i];
+            top->data.function.args[i] = deep_copy_private(oa);
+            expr_free(oa);
+        }
+    }
+    return top;
+}
+
+/* Return a freshly allocated, alpha-normalized copy of `p`. Caller owns it, and
+ * `p` is left untouched (deep copy -- see deep_copy_private). */
 static Expr* pattern_alpha_normalize(const Expr* p) {
-    Expr* copy = expr_copy((Expr*)p);
+    Expr* copy = deep_copy_private((Expr*)p);
     const char* names[ALPHA_MAX_VARS];
     int n = 0;
     alpha_collect_names(copy, names, &n);
@@ -1152,3 +1203,236 @@ Expr* apply_own_values(Expr* expr) {
     }
     return NULL;
 }
+
+#if UP_VALUES
+/* ============================================================
+ * UpValues (trial). Storage reuses the Rule list, add_rule, the dispatch
+ * pre-filter and the matcher -- an UpValue differs from a DownValue only in
+ * WHERE it is keyed (an argument symbol) and WHEN it fires (before the enclosing
+ * head's DownValues). See symtab.h and apply_up_values below.
+ * ============================================================ */
+
+static size_t rule_list_len(const Rule* r) {
+    size_t n = 0;
+    while (r) { n++; r = r->next; }
+    return n;
+}
+
+void symtab_add_up_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    /* add_rule either replaces a same-LHS rule in place (no count change) or
+     * links a new node (+1). Measure the delta so symtab_up_value_count tracks
+     * the real list length rather than assuming an insert. */
+    size_t before = rule_list_len(def->up_values);
+    add_rule(&def->up_values, pattern, replacement);
+    symtab_up_value_count += rule_list_len(def->up_values) - before;
+    /* An UpValue changes how an ENCLOSING head evaluates -- advance the rule
+     * epoch so GROUND nodes re-check (add_rule already bumped the eval clock). */
+    eval_rule_epoch_mark();
+}
+
+Rule* symtab_get_up_values(const char* symbol_name) {
+    SymbolDef* d = node_find(symbol_name);
+    return d ? d->up_values : NULL;
+}
+
+/* Scan one symbol's UpValue list against the enclosing call `expr`, with the same
+ * arity/first-arg-head dispatch pre-filter and OptionsPattern injection as
+ * apply_down_values_def. Returns a freshly-owned rewrite on first match, else
+ * NULL. `expr` is borrowed. */
+static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless) {
+    if (!def || !def->up_values) return NULL;
+
+    const int32_t input_arity = (int32_t)expr->data.function.arg_count;
+    const char* input_first_head =
+        (input_arity > 0) ? input_arg_head_canon(expr->data.function.args[0]) : NULL;
+
+    for (Rule* rule = def->up_values; rule; rule = rule->next) {
+        if (rule->dispatch_arity != -1 && rule->dispatch_arity != input_arity)
+            continue;
+        /* The first-arg-head filter assumes the pattern's first element aligns
+         * positionally with the input's. That holds for a fixed head, but NOT for
+         * an Orderless one: the element matching the pattern's (literal) first can
+         * sit anywhere (e.g. `x + y_` keyed on x vs the input `1 + x`), so the
+         * filter would wrongly reject. Skip it there -- the matcher still checks
+         * fully; the arity filter remains sound since sorting preserves count. */
+        if (!orderless && rule->first_arg_head_canon && input_first_head &&
+            rule->first_arg_head_canon != input_first_head)
+            continue;
+
+        MatchEnv* env = env_new();
+        if (match(expr, rule->pattern, env)) {
+            Expr* result = replace_bindings(rule->replacement, env);
+            Expr* opts = env_get(env, "$OptionsPattern$");
+            if (opts) {
+                /* For an upvalue, OptionsPattern[]'s enclosing head is `expr`'s
+                 * head (the outer call), not the tag `def` we are keyed on. */
+                const char* head_sym = def->symbol_name;
+                Expr* eh = expr->data.function.head;
+                if (eh && eh->type == EXPR_SYMBOL) head_sym = eh->data.symbol.name;
+                Expr* optpat_head = env_get(env, "$OptionsPatternHead$");
+                if (optpat_head && optpat_head->type == EXPR_SYMBOL)
+                    head_sym = optpat_head->data.symbol.name;
+                Expr* resolved = optionvalue_inject_context(result, head_sym, opts);
+                expr_free(result);
+                result = resolved;
+            }
+            env_free(env);
+            return result;
+        }
+        env_free(env);
+    }
+    return NULL;
+}
+
+Expr* apply_up_values(Expr* expr) {
+    /* Cheap global early-out: with no UpValues defined anywhere, every function
+     * call pays just this load+branch before DownValue dispatch. */
+    if (symtab_up_value_count == 0) return NULL;
+    if (!expr || expr->type != EXPR_FUNCTION) return NULL;
+
+    /* Collect the distinct level-one candidate defs: for each argument, the arg
+     * itself when it is a symbol, else its head when it is a symbol-headed call.
+     * Dedupe on the (stable) def pointer so a symbol occurring several times is
+     * consulted once, left-to-right. Lookups are NON-materializing: a symbol that
+     * carries an UpValue already has a def (install went through symtab_get_def),
+     * so node_find finds it, while a bare argument symbol is never promoted into
+     * Names[] merely by appearing inside an evaluated call. */
+    enum { UP_MAX_CANDIDATES = 32 };
+    SymbolDef* cand[UP_MAX_CANDIDATES];
+    int ncand = 0;
+
+    size_t argc = expr->data.function.arg_count;
+    for (size_t i = 0; i < argc && ncand < UP_MAX_CANDIDATES; i++) {
+        Expr* a = expr->data.function.args[i];
+        Expr* sym_node = NULL;
+        if (a->type == EXPR_SYMBOL) {
+            sym_node = a;
+        } else if (a->type == EXPR_FUNCTION && a->data.function.head &&
+                   a->data.function.head->type == EXPR_SYMBOL) {
+            sym_node = a->data.function.head;
+        }
+        if (!sym_node) continue;
+
+        SymbolDef* d = sym_node->data.symbol.def;          /* cached resolve */
+        if (!d) d = node_find(sym_node->data.symbol.name); /* non-materializing */
+        if (!d || !d->up_values) continue;
+
+        int seen = 0;
+        for (int k = 0; k < ncand; k++) if (cand[k] == d) { seen = 1; break; }
+        if (!seen) cand[ncand++] = d;
+    }
+    if (ncand == 0) return NULL;
+
+    /* WMA applies Orderless before upvalues. Plus/Times are excluded from the
+     * evaluator's generic Orderless sort (they sort inside their builtin, which runs
+     * AFTER this hook), so an upvalue on them would otherwise bind to the unsorted
+     * argument order. Canonicalize now -- but only when an upvalue can actually fire
+     * (ncand>0) on an Orderless head, so ordinary arithmetic is untouched. The
+     * candidate SET is order-independent, so sorting after collection is safe. */
+    bool orderless = expr->data.function.head->type == EXPR_SYMBOL &&
+        (get_attributes(expr->data.function.head->data.symbol.name) & ATTR_ORDERLESS) != 0;
+    if (orderless && expr->data.function.arg_count > 1) {
+        expr_orderless_sort(expr->data.function.args, expr->data.function.arg_count);
+        expr_invalidate_hash(expr);
+    }
+
+    for (int k = 0; k < ncand; k++) {
+        Expr* r = apply_up_values_for_def(cand[k], expr, orderless);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+bool symtab_remove_matching_up_value(const char* symbol_name, const Expr* lhs) {
+    if (!symbol_name || !lhs) return false;
+
+    /* Same canonicalize + alpha-normalize as symtab_remove_matching_rule so a
+     * renamed pattern variable still compares equal. */
+    Expr* canon = pattern_canonicalize(expr_copy((Expr*)lhs));
+    Expr* key = pattern_alpha_normalize(canon);
+    expr_free(canon);
+
+    SymbolDef* def = symtab_get_def(symbol_name);
+    Rule* prev = NULL;
+    bool removed = false;
+    for (Rule* curr = def->up_values; curr; prev = curr, curr = curr->next) {
+        Expr* curr_key = pattern_alpha_normalize(curr->pattern);
+        int m = expr_eq(curr_key, key);
+        expr_free(curr_key);
+        if (!m) continue;
+
+        if (prev) prev->next = curr->next;
+        else def->up_values = curr->next;
+        expr_free(curr->pattern);
+        expr_free(curr->replacement);
+        free(curr);
+        if (symtab_up_value_count) symtab_up_value_count--;
+        eval_clock_bump();
+        removed = true;
+        break;
+    }
+
+    expr_free(key);
+    return removed;
+}
+
+/* Shared backend for OwnValues[f]=list / DownValues[f]=list / UpValues[f]=list.
+ * which: 0=own, 1=down, 2=up. Frees the existing target list, then installs each
+ * Rule/RuleDelayed[lhs,rhs] element (stripping an outer HoldPattern on lhs).
+ * Malformed elements are skipped. Order follows add_rule's specificity sort
+ * (insertion order the tie-break) -- identical to how a sequence of individual
+ * assignments would land. */
+static void symtab_set_values_common(const char* symbol_name, const Expr* list,
+                                     int which) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    Rule** target = (which == 0) ? &def->own_values
+                  : (which == 1) ? &def->down_values
+                                 : &def->up_values;
+
+    if (which == 2) free_up_value_list(*target);
+    else            free_rule_list(*target);
+    *target = NULL;
+
+    if (list && list->type == EXPR_FUNCTION &&
+        list->data.function.head->type == EXPR_SYMBOL &&
+        list->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < list->data.function.arg_count; i++) {
+            Expr* el = list->data.function.args[i];
+            if (!(el->type == EXPR_FUNCTION &&
+                  el->data.function.head->type == EXPR_SYMBOL &&
+                  (el->data.function.head->data.symbol.name == SYM_Rule ||
+                   el->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
+                  el->data.function.arg_count == 2))
+                continue;   /* skip a non-rule element */
+            Expr* lhs = el->data.function.args[0];
+            Expr* rhs = el->data.function.args[1];
+            if (lhs->type == EXPR_FUNCTION &&
+                lhs->data.function.head->type == EXPR_SYMBOL &&
+                lhs->data.function.head->data.symbol.name == SYM_HoldPattern &&
+                lhs->data.function.arg_count == 1)
+                lhs = lhs->data.function.args[0];   /* unwrap HoldPattern */
+
+            if (which == 2) {
+                size_t before = rule_list_len(*target);
+                add_rule(target, lhs, rhs);
+                symtab_up_value_count += rule_list_len(*target) - before;
+            } else {
+                add_rule(target, lhs, rhs);
+            }
+        }
+    }
+    eval_clock_bump();
+    eval_rule_epoch_mark();
+}
+
+void symtab_set_own_values(const char* symbol_name, const Expr* list) {
+    symtab_set_values_common(symbol_name, list, 0);
+}
+void symtab_set_down_values(const char* symbol_name, const Expr* list) {
+    symtab_set_values_common(symbol_name, list, 1);
+}
+void symtab_set_up_values(const char* symbol_name, const Expr* list) {
+    symtab_set_values_common(symbol_name, list, 2);
+}
+#endif /* UP_VALUES */

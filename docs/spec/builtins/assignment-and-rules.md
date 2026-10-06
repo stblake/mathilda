@@ -64,6 +64,71 @@ In[3]:= fact[1] = 1; fact[n_] := n fact[n - 1]; fact[1] =.; fact[1]
 Out[3]= fact[1]
 ```
 
+## UpSet (^=), UpSetDelayed (^:=)
+
+> Gated behind the `UP_VALUES` build flag (on by default; `make UP_VALUES=0`
+> compiles the whole subsystem out).
+
+- `lhs ^= rhs` (`UpSet`) / `lhs ^:= rhs` (`UpSetDelayed`): assign `rhs` and
+  associate the rule with **every distinct symbol at level one of `lhs`** — each
+  argument that is a symbol, and the head of each argument. The rule becomes an
+  **UpValue** of those symbols rather than a DownValue of the head of `lhs`.
+- An UpValue of a symbol `s` fires when `s` appears at level one of an enclosing
+  call — i.e. `s` is a direct argument, or the head of a direct argument — and is
+  tried **before** that enclosing head's own DownValues or built-in.
+
+**Features**:
+- `UpSet` is `HoldFirst` (its `rhs` is evaluated once), `UpSetDelayed` is
+  `HoldAll` (its `rhs` is held and re-evaluated on each use); both are `Protected`.
+- The head of a pattern-constrained argument also counts: `a_mod + b_mod ^:= …`
+  keys on `mod` (the head of the `Blank`), so the rule fires for `mod[…] + mod[…]`.
+- An UpValue on a `Protected` symbol is refused with a message.
+
+```mathematica
+In[1]:= area[square] ^= s^2; UpValues[square]
+Out[1]= {HoldPattern[area[square]] :> s^2}
+
+In[2]:= prop[a, b[c]] ^= value; {UpValues[a], UpValues[b]}
+Out[2]= {{HoldPattern[prop[a, b[c]]] :> value}, {HoldPattern[prop[a, b[c]]] :> value}}
+
+In[3]:= f[g[x_]] ^:= h[x]; {f[g[2]], f[k[2]]}
+Out[3]= {h[2], f[k[2]]}
+```
+
+## TagSet, TagSetDelayed, TagUnset (f /: …)
+
+> Gated behind the `UP_VALUES` build flag.
+
+- `f /: lhs = rhs` (`TagSet`) / `f /: lhs := rhs` (`TagSetDelayed`): assign `rhs`
+  and associate the rule with the **single tag `f`**, which must occur in `lhs`.
+  The rule is installed as an **own-, down- or up-value as appropriate**:
+  - `f` *is* `lhs` → OwnValue (the tag is redundant: same as `f = rhs`).
+  - `f` is the **head of `lhs`** → DownValue (same as `f[…] = rhs`).
+  - `f` occurs as an **element of `lhs`, or the head of an element** → UpValue.
+- `f /: lhs =.` (`TagUnset`): removes the matching own/down/up rule associated
+  with the tag `f`. (Plain `lhs =.` does **not** reach an UpValue — the tag is
+  required, matching Mathematica.)
+
+**Features**:
+- `TagSet`, `TagSetDelayed` and `TagUnset` are `HoldAll` and `Protected`; for the
+  immediate `TagSet` the `rhs` is evaluated before the rule is stored.
+- If the tag does not occur in `lhs`, a `tagnf` message is issued and nothing is
+  installed. `SubValues` (`f[x][y]`, the tag as the head of the head) are not
+  supported and are declined with a message.
+
+```mathematica
+In[1]:= mod /: mod[a_, p_] + mod[b_, p_] := mod[Mod[a + b, p], p];
+        mod /: i_Integer mod[a_, p_] := mod[Mod[i a, p], p];
+        mod[2, 5] + 3 mod[3, 5] - mod[1, 5]
+Out[1]= mod[0, 5]
+
+In[2]:= h /: f[h[x_]] := fh[x]; f[h[5]]
+Out[2]= fh[5]
+
+In[3]:= h /: f[h[x_]] =.; f[h[5]]
+Out[3]= f[h[5]]
+```
+
 ## Replace
 Applies a rule or list of rules to transform an expression.
 - `Replace[expr, rules]`: Applies rules to the entire expression.

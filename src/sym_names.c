@@ -541,6 +541,17 @@ const char* SYM_SequenceLimit = NULL;
 const char* SYM_SeriesData = NULL;
 const char* SYM_Set = NULL;
 const char* SYM_SetDelayed = NULL;
+#if UP_VALUES
+const char* SYM_UpValues = NULL;
+const char* SYM_UpSet = NULL;
+const char* SYM_UpSetDelayed = NULL;
+const char* SYM_TagSet = NULL;
+const char* SYM_TagSetDelayed = NULL;
+const char* SYM_TagUnset = NULL;
+const char* SYM_Definition = NULL;
+const char* SYM_DownValues = NULL;
+const char* SYM_OwnValues = NULL;
+#endif
 const char* SYM_ShanksSquareForms = NULL;
 const char* SYM_Shortest = NULL;
 const char* SYM_Sign = NULL;
@@ -1523,6 +1534,17 @@ void sym_names_init(void) {
     SYM_SeriesData                 = intern_symbol("SeriesData");
     SYM_Set                        = intern_symbol("Set");
     SYM_SetDelayed                 = intern_symbol("SetDelayed");
+#if UP_VALUES
+    SYM_UpValues                   = intern_symbol("UpValues");
+    SYM_UpSet                      = intern_symbol("UpSet");
+    SYM_UpSetDelayed               = intern_symbol("UpSetDelayed");
+    SYM_TagSet                     = intern_symbol("TagSet");
+    SYM_TagSetDelayed              = intern_symbol("TagSetDelayed");
+    SYM_TagUnset                   = intern_symbol("TagUnset");
+    SYM_Definition                 = intern_symbol("Definition");
+    SYM_DownValues                 = intern_symbol("DownValues");
+    SYM_OwnValues                  = intern_symbol("OwnValues");
+#endif
     SYM_ShanksSquareForms          = intern_symbol("ShanksSquareForms");
     SYM_Shortest                   = intern_symbol("Shortest");
     SYM_Sign                       = intern_symbol("Sign");

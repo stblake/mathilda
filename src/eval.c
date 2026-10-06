@@ -1004,6 +1004,40 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         return false;
     }
 
+#if UP_VALUES
+    /* UpValues[sym] = list / DownValues[sym] = list / OwnValues[sym] = list:
+     * replace the whole rule list from a List of (Rule|RuleDelayed) rules.
+     * Intercepted before the Protected guard because these heads are themselves
+     * Protected (mirrors the Options[sym]=... intercept above). */
+    if (lhs->type == EXPR_FUNCTION
+        && lhs->data.function.head->type == EXPR_SYMBOL
+        && lhs->data.function.arg_count == 1
+        && lhs->data.function.args[0]->type == EXPR_SYMBOL
+        && (lhs->data.function.head->data.symbol.name == SYM_UpValues
+            || lhs->data.function.head->data.symbol.name == SYM_DownValues
+            || lhs->data.function.head->data.symbol.name == SYM_OwnValues)) {
+        const char* h = lhs->data.function.head->data.symbol.name;
+        const char* target = lhs->data.function.args[0]->data.symbol.name;
+        /* A list-assignment mutates `target`'s definitions, so it must honour
+         * Protected/Locked just like `target[...] = rhs` would (otherwise
+         * `DownValues[Sin] = {...}` would silently overwrite a builtin). */
+        if (get_attributes(target) & (ATTR_PROTECTED | ATTR_LOCKED)) {
+            mth_message(is_delayed ? "SetDelayed" : "Set", "wrsym",
+                        "Symbol %s is Protected.", target);
+            return true;
+        }
+        if (rhs->type == EXPR_FUNCTION
+            && rhs->data.function.head->type == EXPR_SYMBOL
+            && rhs->data.function.head->data.symbol.name == SYM_List) {
+            if (h == SYM_UpValues)        symtab_set_up_values(target, rhs);
+            else if (h == SYM_DownValues) symtab_set_down_values(target, rhs);
+            else                          symtab_set_own_values(target, rhs);
+            return true;
+        }
+        return false;   /* RHS is not a List: leave unevaluated */
+    }
+#endif
+
     /* Block writes to Protected symbols. List destructuring is recursed
      * into below and each child runs through apply_assignment again, so
      * per-element protection checks happen naturally -- we only skip the
@@ -1200,6 +1234,245 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     }
     return false;
 }
+
+/* Evaluate the ARGUMENTS of an assignment LHS to canonical form, holding pattern
+ * constructs and Hold-attributed positions, exactly as the Set primitive does
+ * (so `f[x] = v` with x=c installs f[c]=v, while a pattern LHS is preserved).
+ * Returns a new node (sets *freed=true, caller frees it) or `lhs` unchanged
+ * (*freed=false) when lhs is not a function. Shared by Set and, under UP_VALUES,
+ * by UpSet / TagSet / TagUnset. */
+static Expr* build_assignment_target(Expr* lhs, bool* freed) {
+    *freed = false;
+    if (lhs->type != EXPR_FUNCTION) return lhs;
+
+    Expr** eval_args = malloc(sizeof(Expr*) * lhs->data.function.arg_count);
+    bool is_part = (lhs->data.function.head->type == EXPR_SYMBOL &&
+                    lhs->data.function.head->data.symbol.name == SYM_Part);
+    bool is_list = (lhs->data.function.head->type == EXPR_SYMBOL &&
+                    lhs->data.function.head->data.symbol.name == SYM_List);
+    uint32_t lhs_attrs = ATTR_NONE;
+    if (lhs->data.function.head->type == EXPR_SYMBOL)
+        lhs_attrs = get_attributes(lhs->data.function.head->data.symbol.name);
+
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+        bool hold = false;
+        if ((lhs_attrs & ATTR_HOLDALLCOMPLETE) == ATTR_HOLDALLCOMPLETE) hold = true;
+        else if ((lhs_attrs & ATTR_HOLDALL) == ATTR_HOLDALL) hold = true;
+        else if (i == 0 && (lhs_attrs & ATTR_HOLDFIRST)) hold = true;
+        else if (i > 0 && (lhs_attrs & ATTR_HOLDREST)) hold = true;
+        if (is_part && i == 0) hold = true;
+        if (!hold && lhs_arg_contains_pattern(lhs->data.function.args[i])) hold = true;
+        if (is_list) {
+            Expr* child = lhs->data.function.args[i];
+            if (child->type == EXPR_SYMBOL) hold = true;
+            else if (child->type == EXPR_FUNCTION &&
+                     child->data.function.head->type == EXPR_SYMBOL &&
+                     child->data.function.head->data.symbol.name == SYM_List) hold = true;
+        }
+        eval_args[i] = hold ? expr_copy(lhs->data.function.args[i])
+                            : evaluate(lhs->data.function.args[i]);
+    }
+    Expr* target = expr_new_function(expr_copy(lhs->data.function.head),
+                                     eval_args, lhs->data.function.arg_count);
+    free(eval_args);
+    *freed = true;
+    return target;
+}
+
+#if UP_VALUES
+#define UP_MAX_LEVEL1 64
+
+/* Heads whose held LHS must not be scanned for UpValues during evaluation --
+ * otherwise an all-heads upvalue (_[g[x_]] ^= ...) could hijack the held LHS of
+ * an assignment, e.g. Set[g[y], 1]. */
+static inline bool is_assignment_primitive(const char* head_name) {
+    return head_name == SYM_Set || head_name == SYM_SetDelayed ||
+           head_name == SYM_Unset ||
+           head_name == SYM_UpSet || head_name == SYM_UpSetDelayed ||
+           head_name == SYM_TagSet || head_name == SYM_TagSetDelayed ||
+           head_name == SYM_TagUnset;
+}
+
+/* The interned "dispatch head" of a level-one LHS element -- the symbol whose
+ * up_values an occurrence of this element would consult. A bare symbol is itself;
+ * an ordinary call g[...] gives g; and a pattern that constrains an argument's
+ * head -- a_h (Pattern[a, Blank[h]]) or _h (Blank[h] / __h / ___h) -- gives h, so
+ * `mod /: a_mod + b_mod := ...` keys on mod. Returns NULL for a head-free blank
+ * (a_ / _) or a non-symbol-headed element. */
+static const char* element_dispatch_head(Expr* a) {
+    if (!a) return NULL;
+    if (a->type == EXPR_SYMBOL) return a->data.symbol.name;
+    if (a->type != EXPR_FUNCTION || !a->data.function.head ||
+        a->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* h = a->data.function.head->data.symbol.name;
+    if (h == SYM_Pattern && a->data.function.arg_count == 2)
+        return element_dispatch_head(a->data.function.args[1]);   /* a_h -> head of the blank; a_ -> NULL */
+    if (h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence)
+        return (a->data.function.arg_count == 1 &&                /* _h -> h ; bare _ -> NULL */
+                a->data.function.args[0]->type == EXPR_SYMBOL)
+               ? a->data.function.args[0]->data.symbol.name : NULL;
+    /* Pattern-construct wrappers dispatch on the WRAPPED pattern's head, never the
+     * wrapper itself (x_Integer?EvenQ -> Integer, x_:0 -> head of x_, p/;c -> head
+     * of p). Alternatives has no single head. Otherwise g[...] -> g. */
+    if (h == SYM_PatternTest || h == SYM_Condition || h == SYM_Optional)
+        return (a->data.function.arg_count >= 1)
+               ? element_dispatch_head(a->data.function.args[0]) : NULL;
+    if (h == SYM_Alternatives) return NULL;
+    return h;                                                     /* g[...] -> g */
+}
+
+/* Distinct interned dispatch heads of the level-one elements of an UpSet LHS (its
+ * arguments -- NOT the head of lhs, since UpSet keys on operands, not operator).
+ * A top-level Condition (lhs /; test) is unwrapped first, since the test is not an
+ * operand. Returns the count. */
+static int collect_level_one_symbols(Expr* lhs, const char** out, int cap) {
+    int n = 0;
+    if (!lhs) return 0;
+    if (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
+        lhs->data.function.head->data.symbol.name == SYM_Condition &&
+        lhs->data.function.arg_count >= 1)
+        lhs = lhs->data.function.args[0];
+    if (lhs->type != EXPR_FUNCTION) return 0;
+    for (size_t i = 0; i < lhs->data.function.arg_count && n < cap; i++) {
+        const char* name = element_dispatch_head(lhs->data.function.args[i]);
+        if (!name) continue;
+        int seen = 0;
+        for (int k = 0; k < n; k++) if (out[k] == name) { seen = 1; break; }
+        if (!seen) out[n++] = name;
+    }
+    return n;
+}
+
+typedef enum { TAG_NOTFOUND, TAG_OWN, TAG_DOWN, TAG_UP, TAG_SUB } TagPos;
+
+/* Classify where interned name `tag` occurs in `lhs`, per the Mathematica rule
+ * for TagSet / TagUnset ("defines upvalues, downvalues or subvalues as
+ * appropriate"). Names are interned, so identity compares. */
+static TagPos classify_tag_position(const char* tag, Expr* lhs) {
+    /* A Condition wrapper (lhs /; test) is part of the pattern, not a position
+     * for the tag -- classify against the underlying lhs so e.g.
+     * `xr /: xr + y_ /; y > -2 := ...` finds xr inside the held Plus. */
+    if (lhs->type == EXPR_FUNCTION &&
+        lhs->data.function.head->type == EXPR_SYMBOL &&
+        lhs->data.function.head->data.symbol.name == SYM_Condition &&
+        lhs->data.function.arg_count >= 1)
+        lhs = lhs->data.function.args[0];
+    if (lhs->type == EXPR_SYMBOL)
+        return (lhs->data.symbol.name == tag) ? TAG_OWN : TAG_NOTFOUND;
+    if (lhs->type != EXPR_FUNCTION) return TAG_NOTFOUND;
+    Expr* head = lhs->data.function.head;
+    if (head->type == EXPR_SYMBOL && head->data.symbol.name == tag) return TAG_DOWN;
+    if (head->type == EXPR_FUNCTION && head->data.function.head &&
+        head->data.function.head->type == EXPR_SYMBOL &&
+        head->data.function.head->data.symbol.name == tag) return TAG_SUB;
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+        if (element_dispatch_head(lhs->data.function.args[i]) == tag) return TAG_UP;
+    }
+    return TAG_NOTFOUND;
+}
+
+/* A delayed RHS of the form `body /; test` has its Condition moved onto the LHS
+ * pattern, so `lhs ^:= body /; test` behaves as `lhs /; test ^:= body` (identical
+ * to how SetDelayed is handled in apply_assignment). Returns the pattern to store:
+ * `lhs` unchanged (*owned=false) or a new Condition[lhs, test] (*owned=true, the
+ * caller frees it); *body is set to the RHS to store (borrowed either way). */
+static Expr* move_rhs_condition(Expr* lhs, Expr* rhs, bool is_delayed,
+                                bool* owned, Expr** body) {
+    *owned = false;
+    *body = rhs;
+    if (is_delayed && rhs->type == EXPR_FUNCTION &&
+        rhs->data.function.head->type == EXPR_SYMBOL &&
+        rhs->data.function.head->data.symbol.name == SYM_Condition &&
+        rhs->data.function.arg_count == 2) {
+        Expr* cond_args[2] = { expr_copy(lhs),
+                               expr_copy(rhs->data.function.args[1]) };
+        Expr* pat = expr_new_function(expr_new_symbol(SYM_Condition), cond_args, 2);
+        *owned = true;
+        *body = rhs->data.function.args[0];
+        return pat;
+    }
+    return lhs;
+}
+
+/* lhs ^= rhs / lhs ^:= rhs : install the rule on the up_values of every distinct
+ * level-one symbol of lhs. rhs is already evaluated (UpSet is HoldFirst) or held
+ * (UpSetDelayed is HoldAll); either way symtab_add_up_value copies it in.
+ * Returns true if there was at least one symbol to attach to. */
+static bool apply_up_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
+    const char* syms[UP_MAX_LEVEL1];
+    int n = collect_level_one_symbols(lhs, syms, UP_MAX_LEVEL1);
+    if (n == 0) {
+        /* No argument symbol to attach to (e.g. `f[x_] ^= rhs`): message + leave
+         * the UpSet unevaluated, matching Mathematica's UpSet::nosym. */
+        mth_message(is_delayed ? "UpSetDelayed" : "UpSet", "nosym",
+                    "No new symbol was found on which to place the up-value.");
+        return false;
+    }
+    bool owned; Expr* body;
+    Expr* pat = move_rhs_condition(lhs, rhs, is_delayed, &owned, &body);
+    for (int i = 0; i < n; i++) {
+        if (get_attributes(syms[i]) & ATTR_PROTECTED) {
+            mth_message(is_delayed ? "UpSetDelayed" : "UpSet", "write",
+                        "Tag %s in the assignment is Protected.", syms[i]);
+            continue;
+        }
+        symtab_add_up_value(syms[i], pat, body);
+    }
+    if (owned) expr_free(pat);
+    return true;
+}
+
+/* tag /: lhs = rhs  (and := ): install on tag as own/down/up value per the tag's
+ * position in lhs. Returns true once handled (so the caller yields rhs/Null),
+ * false only when tag is not a symbol (leave unevaluated). */
+static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delayed) {
+    const char* head = is_delayed ? "TagSetDelayed" : "TagSet";
+    if (tag->type != EXPR_SYMBOL) {
+        mth_message(head, "sym", "Argument at position 1 is expected to be a symbol.");
+        return false;
+    }
+    const char* tagn = tag->data.symbol.name;
+    if (get_attributes(tagn) & (ATTR_PROTECTED | ATTR_LOCKED)) {
+        mth_message(head, "write", "Tag %s is Protected.", tagn);
+        return true;
+    }
+    TagPos pos = classify_tag_position(tagn, lhs);
+    if (pos == TAG_SUB) {
+        mth_message(head, "tagpos",
+                    "Tag %s appears as the head of a head; SubValues are not supported.",
+                    tagn);
+        return true;
+    }
+    if (pos == TAG_NOTFOUND) {
+        mth_message(head, "tagnf", "Tag %s not found in the assignment.", tagn);
+        return true;
+    }
+    /* Lift a delayed `body /; test` onto the LHS before storing, like SetDelayed. */
+    bool owned; Expr* body;
+    Expr* pat = move_rhs_condition(lhs, rhs, is_delayed, &owned, &body);
+    if (pos == TAG_OWN)       symtab_add_own_value(tagn, pat, body);
+    else if (pos == TAG_DOWN) symtab_add_down_value(tagn, pat, body);
+    else                      symtab_add_up_value(tagn, pat, body);   /* TAG_UP */
+    if (owned) expr_free(pat);
+    return true;
+}
+
+/* tag /: lhs =. : remove the matching own/down/up rule on tag. */
+static void apply_tag_unset(Expr* tag, Expr* lhs) {
+    if (tag->type != EXPR_SYMBOL) {
+        mth_message("TagUnset", "sym",
+                    "Argument at position 1 is expected to be a symbol.");
+        return;
+    }
+    const char* tagn = tag->data.symbol.name;
+    switch (classify_tag_position(tagn, lhs)) {
+        case TAG_OWN:  symtab_remove_matching_rule(tagn, lhs, true);  break;
+        case TAG_DOWN: symtab_remove_matching_rule(tagn, lhs, false); break;
+        case TAG_UP:   symtab_remove_matching_up_value(tagn, lhs);    break;
+        default: break;  /* SubValue / not found: quietly nothing to remove */
+    }
+}
+#endif /* UP_VALUES */
 
 /*
  * flatten_sequences:
@@ -1862,6 +2135,23 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * symbols (which is most builtin-bearing heads) are
                  * unaffected because apply_assignment refuses to install
                  * DownValues on a Protected target. */
+#if UP_VALUES
+                /* 3b. UpValues fire BEFORE the enclosing head's DownValues and
+                 * builtin (Withoff). HoldAllComplete suppresses them; HoldAll does
+                 * not (its held args are still present to be scanned). Skipped for
+                 * the assignment primitives so an all-heads upvalue cannot hijack a
+                 * held assignment LHS. symtab_up_value_count makes the common
+                 * no-upvalue case a single load+branch. */
+                if (!hold_all_complete && symtab_up_value_count &&
+                    !is_assignment_primitive(head_name)) {
+                    Expr* up = apply_up_values(res);
+                    if (up) {
+                        expr_free(res);
+                        *changed = true; /* UpValue rule fired */
+                        return up;
+                    }
+                }
+#endif
                 Expr* down = apply_down_values_def(hdef, res);
                 if (down) {
                     expr_free(res);
@@ -1968,71 +2258,11 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     Expr* lhs = res->data.function.args[0];
                     Expr* rhs = res->data.function.args[1];
                     int is_delayed = (head_name == SYM_SetDelayed);
-                    
-                    /* For Set and SetDelayed, we evaluate the arguments of the LHS to find the actual target */
-                    /* e.g. f[x] = 1 where x=c should define f[c]=1 */
-                    /* Patterns must also be evaluated to canonical form to match evaluated inputs. */
-                    Expr* target_lhs = lhs;
+
+                    /* Evaluate the LHS arguments to canonical form (so f[x]=1 with
+                     * x=c defines f[c]=1), holding patterns and Hold positions. */
                     bool free_target = false;
-                    if (lhs->type == EXPR_FUNCTION) {
-                        /* Only evaluate arguments, not the head, to avoid matching existing rules */
-                        Expr** eval_args = malloc(sizeof(Expr*) * lhs->data.function.arg_count);
-                        bool is_part = (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_Part);
-                        /* List destructuring: {a, b, ...} = {...}. Each element that is
-                         * a Symbol is a binding target and must NOT be evaluated (otherwise
-                         * prior OwnValues clobber the targets -- e.g. {a,b}={1,2} then
-                         * {a,b}={3,4} would try to assign to the values 1,2 instead of a,b).
-                         * Non-symbol elements (e.g. a[x] in {a[x], b[y]} = ...) still need
-                         * their inner arguments evaluated so the target pattern is correct. */
-                        bool is_list = (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_List);
-
-                        uint32_t lhs_attrs = ATTR_NONE;
-                        if (lhs->data.function.head->type == EXPR_SYMBOL) {
-                            lhs_attrs = get_attributes(lhs->data.function.head->data.symbol.name);
-                        }
-
-                        for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
-                            bool hold = false;
-                            if ((lhs_attrs & ATTR_HOLDALLCOMPLETE) == ATTR_HOLDALLCOMPLETE) hold = true;
-                            else if ((lhs_attrs & ATTR_HOLDALL) == ATTR_HOLDALL) hold = true;
-                            else if (i == 0 && (lhs_attrs & ATTR_HOLDFIRST)) hold = true;
-                            else if (i > 0 && (lhs_attrs & ATTR_HOLDREST)) hold = true;
-
-                            if (is_part && i == 0) hold = true; // Hold the first argument of Part
-
-                            /* Hold args that contain pattern constructs.  Otherwise
-                             * the generic evaluator would apply existing DownValues
-                             * to the held pattern and rewrite the LHS of the rule
-                             * being installed — corrupting it.  See header comment
-                             * on lhs_arg_contains_pattern for the failure mode this
-                             * prevents. */
-                            if (!hold && lhs_arg_contains_pattern(lhs->data.function.args[i])) {
-                                hold = true;
-                            }
-
-                            /* In a List-LHS, hold any element that is itself a symbol or
-                             * a nested List (binding targets / nested destructuring). */
-                            if (is_list) {
-                                Expr* child = lhs->data.function.args[i];
-                                if (child->type == EXPR_SYMBOL) {
-                                    hold = true;
-                                } else if (child->type == EXPR_FUNCTION &&
-                                           child->data.function.head->type == EXPR_SYMBOL &&
-                                           child->data.function.head->data.symbol.name == SYM_List) {
-                                    hold = true;
-                                }
-                            }
-
-                            if (hold) {
-                                eval_args[i] = expr_copy(lhs->data.function.args[i]);
-                            } else {
-                                eval_args[i] = evaluate(lhs->data.function.args[i]);
-                            }
-                        }
-                        target_lhs = expr_new_function(expr_copy(lhs->data.function.head), eval_args, lhs->data.function.arg_count);
-                        free(eval_args);
-                        free_target = true;
-                    }
+                    Expr* target_lhs = build_assignment_target(lhs, &free_target);
 
                     if (apply_assignment(target_lhs, rhs, is_delayed)) {
                         Expr* ret = is_delayed ? expr_new_symbol(SYM_Null) : evaluate(rhs);
@@ -2043,7 +2273,57 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     }
                     if (free_target) expr_free(target_lhs);
                 }
-                
+#if UP_VALUES
+                /* 6b. UpSet / UpSetDelayed (lhs ^= / ^:= rhs). Same shape as Set
+                 * (HoldFirst / HoldAll); installs on the operands' up_values. */
+                else if ((head_name == SYM_UpSet || head_name == SYM_UpSetDelayed) &&
+                         res->data.function.arg_count == 2) {
+                    Expr* lhs = res->data.function.args[0];
+                    Expr* rhs = res->data.function.args[1];
+                    int is_delayed = (head_name == SYM_UpSetDelayed);
+                    bool free_target = false;
+                    Expr* target_lhs = build_assignment_target(lhs, &free_target);
+                    if (apply_up_assignment(target_lhs, rhs, is_delayed)) {
+                        Expr* ret = is_delayed ? expr_new_symbol(SYM_Null) : evaluate(rhs);
+                        if (free_target) expr_free(target_lhs);
+                        expr_free(res);
+                        *changed = true;
+                        return ret;
+                    }
+                    if (free_target) expr_free(target_lhs);
+                }
+                /* 6c. TagSet / TagSetDelayed (f /: lhs = / := rhs). Both HoldAll,
+                 * so for the immediate case evaluate rhs here before storing. */
+                else if ((head_name == SYM_TagSet || head_name == SYM_TagSetDelayed) &&
+                         res->data.function.arg_count == 3) {
+                    Expr* tag = res->data.function.args[0];
+                    Expr* lhs = res->data.function.args[1];
+                    Expr* rhs = res->data.function.args[2];
+                    int is_delayed = (head_name == SYM_TagSetDelayed);
+                    bool free_target = false;
+                    Expr* target_lhs = build_assignment_target(lhs, &free_target);
+                    Expr* store_rhs = is_delayed ? rhs : evaluate(rhs); /* owned iff immediate */
+                    apply_tag_assignment(tag, target_lhs, store_rhs, is_delayed);
+                    Expr* ret = is_delayed ? expr_new_symbol(SYM_Null) : store_rhs;
+                    if (free_target) expr_free(target_lhs);
+                    expr_free(res);
+                    *changed = true;
+                    return ret;
+                }
+                /* 6d. TagUnset (f /: lhs =.). HoldAll. */
+                else if (head_name == SYM_TagUnset && res->data.function.arg_count == 2) {
+                    Expr* tag = res->data.function.args[0];
+                    Expr* lhs = res->data.function.args[1];
+                    bool free_target = false;
+                    Expr* target_lhs = build_assignment_target(lhs, &free_target);
+                    apply_tag_unset(tag, target_lhs);
+                    if (free_target) expr_free(target_lhs);
+                    expr_free(res);
+                    *changed = true;
+                    return expr_new_symbol(SYM_Null);
+                }
+#endif
+
                 /* OneIdentity is intentionally NOT rewritten at evaluation
                  * time. In Mathematica it is purely a pattern-matching
                  * attribute: it lets f[x_, y_:def] match a literal `a`.

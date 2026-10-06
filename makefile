@@ -71,6 +71,14 @@ CFLAGS = -O3 -std=c99 -Wall -Wextra -Werror=implicit-function-declaration \
          -Werror=incompatible-pointer-types -Werror=int-conversion \
          -Werror=implicit-int -Werror=unused-function -g -I./src -I./src/list -I./src/ml -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/stats -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/solve -I./src/ffi -I./src/bitwise -I/usr/include -I/usr/local/include
 
+# UpValues subsystem (trial). Every change is gated behind `#if UP_VALUES`, so
+# UP_VALUES=0 compiles the tree back to the exact pre-UpValues behaviour. ON by
+# default; build without it via `make UP_VALUES=0`.
+UP_VALUES ?= 1
+ifeq ($(UP_VALUES),1)
+  CFLAGS += -DUP_VALUES=1
+endif
+
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
 # or when only the pipe-mode sidecar is needed).

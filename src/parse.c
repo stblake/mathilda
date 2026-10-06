@@ -970,7 +970,12 @@ typedef enum {
     OP_DERIVATIVE,
     OP_COMPOSITION,
     OP_PUT,
-    OP_PUTAPPEND
+    OP_PUTAPPEND,
+#if UP_VALUES
+    OP_UPSET,         /* lhs ^= rhs   */
+    OP_UPSETDELAYED,  /* lhs ^:= rhs  */
+    OP_TAGSET         /* f /: lhs = / := / =. rhs  (ternary, dedicated led branch) */
+#endif
 } OperatorType;
 
 typedef struct {
@@ -1106,6 +1111,15 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_MINUS; def.prec = 3500; def.head_name = "Plus"; def.len = 1;
     } else if (*pos == '*') {
         def.type = OP_TIMES; def.prec = 4500; def.head_name = "Times"; def.len = 1;
+#if UP_VALUES
+    } else if (strncmp(pos, "/:", 2) == 0) {
+        /* TagSet family: f /: lhs = / := / =. rhs. A loose, statement-level
+         * ternary handled by a dedicated led branch below; prec 500 only needs to
+         * be low enough to take the tag on its left and stop the binary loop here.
+         * Differs from /., /;, /@, /=, //, //. at offset 1, so order among the
+         * `/` forms is free -- it just has to precede the bare `/` (Divide). */
+        def.type = OP_TAGSET; def.prec = 500; def.head_name = "TagSet"; def.len = 2;
+#endif
     } else if (*pos == '/') {
         def.type = OP_DIVIDE; def.prec = 5000; def.head_name = "Divide"; def.len = 1;
     } else if (strncmp(pos, "...", 3) == 0) {
@@ -1114,6 +1128,15 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_REPEATED; def.prec = 2500; def.head_name = "Repeated"; def.len = 2;
     } else if (*pos == '.' && !isdigit(pos[1])) {
         def.type = OP_DOT; def.prec = 5300; def.head_name = "Dot"; def.len = 1;
+#if UP_VALUES
+    } else if (strncmp(pos, "^:=", 3) == 0) {
+        /* UpSetDelayed. Same tier as SetDelayed (500). MUST precede the bare `^`
+         * test below, or `^:=` would lex as Power then SetDelayed. */
+        def.type = OP_UPSETDELAYED; def.prec = 500; def.right_assoc = 1; def.head_name = "UpSetDelayed"; def.len = 3;
+    } else if (strncmp(pos, "^=", 2) == 0) {
+        /* UpSet. Same tier as Set (500). Precede the bare `^`. */
+        def.type = OP_UPSET; def.prec = 500; def.right_assoc = 1; def.head_name = "UpSet"; def.len = 2;
+#endif
     } else if (*pos == '^') {
         def.type = OP_POWER; def.prec = 6500; def.right_assoc = 1; def.head_name = "Power"; def.len = 1;
     } else if (*pos == '?') {
@@ -1667,7 +1690,47 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             }
             continue;
         }
-        
+#if UP_VALUES
+        else if (op_def.type == OP_TAGSET) {
+            /* f /: lhs = rhs   -> TagSet[f, lhs, rhs]
+             * f /: lhs := rhs  -> TagSetDelayed[f, lhs, rhs]
+             * f /: lhs =.      -> TagUnset[f, lhs]
+             * `left` is the tag f. Parse the middle lhs stopping just before the
+             * trailing assignment operator (min_prec 501 > the 500 of Set /
+             * SetDelayed / Unset, so those are NOT consumed into lhs), then
+             * dispatch on what follows. The rhs then parses at Set's own tier. */
+            Expr* tag = left;
+            skip_whitespace(s);
+            Expr* tlhs = parse_expression_prec(s, 501);
+            if (!tlhs) { expr_free(tag); return NULL; }
+            skip_whitespace(s);
+            if (strncmp(s->pos, "=.", 2) == 0 && !isdigit((unsigned char)s->pos[2])) {
+                s->pos += 2;
+                Expr* ta[2] = { tag, tlhs };
+                left = expr_new_function(expr_new_symbol(SYM_TagUnset), ta, 2);
+                continue;
+            } else if (strncmp(s->pos, ":=", 2) == 0) {
+                s->pos += 2;
+                Expr* trhs = parse_expression_prec(s, 500);
+                if (!trhs) { expr_free(tag); expr_free(tlhs); return NULL; }
+                Expr* ta[3] = { tag, tlhs, trhs };
+                left = expr_new_function(expr_new_symbol(SYM_TagSetDelayed), ta, 3);
+                continue;
+            } else if (*s->pos == '=' && s->pos[1] != '=') {
+                s->pos += 1;
+                Expr* trhs = parse_expression_prec(s, 500);
+                if (!trhs) { expr_free(tag); expr_free(tlhs); return NULL; }
+                Expr* ta[3] = { tag, tlhs, trhs };
+                left = expr_new_function(expr_new_symbol(SYM_TagSet), ta, 3);
+                continue;
+            } else {
+                fprintf(stderr, "Expected '=', ':=' or '=.' after /: (TagSet)\n");
+                expr_free(tag); expr_free(tlhs);
+                return NULL;
+            }
+        }
+#endif
+
         int next_min_prec = op_def.right_assoc ? op_def.prec : op_def.prec + 1;
         
         Expr* right = parse_expression_prec(s, next_min_prec);

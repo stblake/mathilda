@@ -49,6 +49,13 @@ typedef struct SymbolDef {
     char* symbol_name;  // owned: the canonical interned name (freed by intern_clear)
     Rule* own_values;   // x = 4
     Rule* down_values;  // f[x_] = x + 1
+#if UP_VALUES
+    /* UpValues: rules keyed on THIS symbol but matched against an ENCLOSING
+     * call in which this symbol appears at level one. Installed by UpSet (^=),
+     * UpSetDelayed (^:=), TagSet / TagSetDelayed (g /: lhs = / := rhs). Tried
+     * before the enclosing head's DownValues/builtin -- see apply_up_values. */
+    Rule* up_values;
+#endif
     BuiltinFunc builtin_func; // C function evaluating this symbol
     uint32_t attributes;
     /* Phase 1 (EVAL_SYMTAB_IMPROVEMENTS): cached immutable "base" attributes --
@@ -235,5 +242,46 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr);
 // Apply OwnValues to a symbol x
 // Returns new evaluated expression if a rule applied, else NULL
 Expr* apply_own_values(Expr* expr);
+
+#if UP_VALUES
+/* ============================================================
+ * UpValues (trial, gated on UP_VALUES).
+ *
+ * An UpValue associated with symbol `s` fires when `s` appears at LEVEL ONE of
+ * an enclosing call g[..., s, ...] / g[..., s[...], ...] -- i.e. `s` is a direct
+ * argument, or the head of a direct argument. Matching UpValues are tried BEFORE
+ * the enclosing head g's DownValues and builtin.
+ * ============================================================ */
+
+/* Running total of UpValue rules across all symbols. The evaluator's per-call
+ * hook early-outs on `== 0`, so a tree with no UpValues pays a single load+branch
+ * before DownValue dispatch. Maintained by the add/remove/set helpers below. */
+extern size_t symtab_up_value_count;
+
+// Add an UpValue rule on `symbol_name` (the tag), with `pattern` the enclosing
+// call to match and `replacement` its rewrite. Bumps the eval clock + rule epoch.
+void symtab_add_up_value(const char* symbol_name, Expr* pattern, Expr* replacement);
+
+// Borrowed UpValue list for a symbol (may be NULL).
+Rule* symtab_get_up_values(const char* symbol_name);
+
+// Apply UpValues during evaluation of the function call `expr`. Borrows `expr`;
+// returns a freshly-owned rewrite if some level-one symbol's UpValue matched,
+// else NULL (same ownership contract as apply_down_values_def). First match
+// across the level-one candidates, left-to-right, wins.
+Expr* apply_up_values(Expr* expr);
+
+// Remove the single UpValue rule on `symbol_name` whose LHS is alpha-equivalent
+// to `lhs`. Backs TagUnset (f /: lhs =.). Returns true iff one was removed.
+bool symtab_remove_matching_up_value(const char* symbol_name, const Expr* lhs);
+
+/* Replace a symbol's entire OwnValue / DownValue / UpValue list from a List of
+ * rules (Rule/RuleDelayed[lhs, rhs], an outer HoldPattern on lhs stripped).
+ * Backs OwnValues[f]=list / DownValues[f]=list / UpValues[f]=list. The previous
+ * list is freed. Bumps the eval clock + rule epoch. */
+void symtab_set_own_values(const char* symbol_name, const Expr* list);
+void symtab_set_down_values(const char* symbol_name, const Expr* list);
+void symtab_set_up_values(const char* symbol_name, const Expr* list);
+#endif // UP_VALUES
 
 #endif // SYMTAB_H

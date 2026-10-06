@@ -545,6 +545,20 @@ extern const char* SYM_SequenceLimit;
 extern const char* SYM_SeriesData;
 extern const char* SYM_Set;
 extern const char* SYM_SetDelayed;
+#if UP_VALUES
+/* UpValues subsystem (trial). Grouped so the feature's symbols add/remove as a
+ * unit; the printer and list-setter intercepts compare head pointers against
+ * these, so they must be interned (not just used by string). */
+extern const char* SYM_UpValues;
+extern const char* SYM_UpSet;
+extern const char* SYM_UpSetDelayed;
+extern const char* SYM_TagSet;
+extern const char* SYM_TagSetDelayed;
+extern const char* SYM_TagUnset;
+extern const char* SYM_Definition;
+extern const char* SYM_DownValues;
+extern const char* SYM_OwnValues;
+#endif
 extern const char* SYM_ShanksSquareForms;
 extern const char* SYM_Shortest;
 extern const char* SYM_Sign;

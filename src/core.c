@@ -324,6 +324,9 @@ void core_init(void) {
     symtab_add_builtin("SetAttributes", builtin_set_attributes);
     symtab_add_builtin("OwnValues", builtin_own_values);
     symtab_add_builtin("DownValues", builtin_down_values);
+#if UP_VALUES
+    symtab_add_builtin("UpValues", builtin_up_values);
+#endif
     symtab_add_builtin("Out", builtin_out);
     symtab_add_builtin("Plus", builtin_plus);
     symtab_add_builtin("Times", builtin_times);
@@ -2272,10 +2275,35 @@ Expr* builtin_down_values(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     if (arg->type != EXPR_SYMBOL) return NULL;
-    
+
     Rule* r = symtab_get_down_values(arg->data.symbol.name);
     return rules_to_list(r);
 }
+
+#if UP_VALUES
+/* UpValues[sym] -> {HoldPattern[lhs] :> rhs, ...}. Accepts a symbol or a string
+ * (so UpValues /@ Names["x*"] works). A string naming a non-existent symbol
+ * issues UpValues::sym and is left unevaluated; a symbol (or an existing named
+ * symbol) with no upvalues yields {}. */
+Expr* builtin_up_values(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_SYMBOL) {
+        return rules_to_list(symtab_get_up_values(arg->data.symbol.name));
+    }
+    if (arg->type == EXPR_STRING) {
+        SymbolDef* d = symtab_lookup(arg->data.string);
+        if (!d) {
+            mth_message("UpValues", "sym",
+                        "Argument %s at position 1 is expected to be a symbol.",
+                        arg->data.string);
+            return NULL;
+        }
+        return rules_to_list(d->up_values);
+    }
+    return NULL;
+}
+#endif
 
 Expr* builtin_out(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
@@ -2882,6 +2910,50 @@ Expr* builtin_valueq(Expr* res) {
     return expr_new_symbol(SYM_False);
 }
 
+#if UP_VALUES
+/* Render a symbol's own/down/up values as newline-joined assignment lines, in
+ * the same forms Definition prints (ownvalue with `=`, down/up delayed). Returns
+ * a malloc'd string the caller frees, or NULL when the symbol has no values. */
+static char* render_definitions(const char* name) {
+    Rule* ov = symtab_get_own_values(name);
+    Rule* dv = symtab_get_down_values(name);
+    Rule* uv = symtab_get_up_values(name);
+    if (!ov && !dv && !uv) return NULL;
+
+    size_t cap = 256, len = 0;
+    char* out = malloc(cap);
+    out[0] = '\0';
+    int any = 0;
+    /* grow-and-append helper via a local macro keeps the three loops terse */
+    #define RD_APPEND(s) do {                                   \
+        const char* _s = (s);                                   \
+        size_t _l = strlen(_s);                                 \
+        while (len + _l + 1 > cap) { cap *= 2; out = realloc(out, cap); } \
+        memcpy(out + len, _s, _l); len += _l; out[len] = '\0'; \
+    } while (0)
+    for (Rule* r = ov; r; r = r->next) {
+        char* p = expr_to_string(r->pattern); char* v = expr_to_string(r->replacement);
+        if (any++) RD_APPEND("\n");
+        RD_APPEND(p); RD_APPEND(" = "); RD_APPEND(v);
+        free(p); free(v);
+    }
+    for (Rule* r = dv; r; r = r->next) {
+        char* p = expr_to_string(r->pattern); char* v = expr_to_string(r->replacement);
+        if (any++) RD_APPEND("\n");
+        RD_APPEND(p); RD_APPEND(" := "); RD_APPEND(v);
+        free(p); free(v);
+    }
+    for (Rule* r = uv; r; r = r->next) {
+        char* p = expr_to_string(r->pattern); char* v = expr_to_string(r->replacement);
+        if (any++) RD_APPEND("\n");
+        RD_APPEND(name); RD_APPEND(" /: "); RD_APPEND(p); RD_APPEND(" := "); RD_APPEND(v);
+        free(p); free(v);
+    }
+    #undef RD_APPEND
+    return out;
+}
+#endif
+
 Expr* builtin_information(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
@@ -2915,6 +2987,28 @@ Expr* builtin_information(Expr* res) {
     }
 
     const char* doc = symtab_get_docstring(sym_name);
+#if UP_VALUES
+    /* ?name shows the docstring AND any own/down/up value definitions. */
+    char* defs = render_definitions(sym_name);
+    if (doc || defs) {
+        size_t n = (doc ? strlen(doc) : 0) + (defs ? strlen(defs) : 0) + 2;
+        char* combined = malloc(n);
+        combined[0] = '\0';
+        if (doc) strcat(combined, doc);
+        if (doc && defs) strcat(combined, "\n");
+        if (defs) strcat(combined, defs);
+        if (defs) free(defs);
+        Expr* r = expr_new_string(combined);
+        free(combined);
+        return r;
+    }
+    {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "No information available for symbol \"%s\".",
+                 context_display_name(sym_name));
+        return expr_new_string(buf);
+    }
+#else
     if (!doc) {
         char buf[256];
         /* Show the short (context-shortened) name in the diagnostic so that
@@ -2924,6 +3018,7 @@ Expr* builtin_information(Expr* res) {
         return expr_new_string(buf);
     }
     return expr_new_string(doc);
+#endif
 }
 
 Expr* builtin_evenq(Expr* res) {

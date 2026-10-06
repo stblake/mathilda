@@ -23,6 +23,9 @@ Expr* builtin_append_to(Expr* res);
 Expr* builtin_prepend_to(Expr* res);
 Expr* builtin_own_values(Expr* res);
 Expr* builtin_down_values(Expr* res);
+#if UP_VALUES
+Expr* builtin_up_values(Expr* res);
+#endif
 Expr* builtin_out(Expr* res);
 Expr* builtin_compoundexpression(Expr* res);
 Expr* builtin_atomq(Expr* res);

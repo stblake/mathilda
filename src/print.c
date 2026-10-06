@@ -88,6 +88,10 @@ static int get_expr_prec(Expr* e) {
     const char* head = e->data.function.head->data.symbol.name;
 
     if (head == SYM_Set || head == SYM_SetDelayed) return 500;
+#if UP_VALUES
+    if (head == SYM_UpSet || head == SYM_UpSetDelayed ||
+        head == SYM_TagSet || head == SYM_TagSetDelayed || head == SYM_TagUnset) return 500;
+#endif
     if (head == SYM_MessageName) return 8600;
     if (head == SYM_Rule || head == SYM_RuleDelayed) return 1500;
     if (head == SYM_DirectedEdge || head == SYM_UndirectedEdge) return 1500;
@@ -281,6 +285,34 @@ void expr_print_fullform(Expr* e) {
 #endif
     }
 }
+
+#if UP_VALUES
+/* Render the own/down/up values of `name` as assignment lines, one per rule,
+ * the way Definition[name] displays them. Immediate vs delayed is not tracked
+ * (Mathilda's Rule carries no such flag), so ownvalues print with `=` (the
+ * common case) and down/up values with the delayed `:=` / `/: ... :=` forms,
+ * matching DownValues[]'s uniformly-delayed readback. Empty -> "Null". */
+static void print_definition_body(const char* name) {
+    Rule* ov = symtab_get_own_values(name);
+    Rule* dv = symtab_get_down_values(name);
+    Rule* uv = symtab_get_up_values(name);
+    int any = 0;
+    for (Rule* r = ov; r; r = r->next) {
+        if (any++) printf("\n");
+        print_standard(r->pattern, 0); printf(" = "); print_standard(r->replacement, 0);
+    }
+    for (Rule* r = dv; r; r = r->next) {
+        if (any++) printf("\n");
+        print_standard(r->pattern, 0); printf(" := "); print_standard(r->replacement, 0);
+    }
+    for (Rule* r = uv; r; r = r->next) {
+        if (any++) printf("\n");
+        printf("%s /: ", name);
+        print_standard(r->pattern, 0); printf(" := "); print_standard(r->replacement, 0);
+    }
+    if (!any) printf("Null");
+}
+#endif
 
 static void print_standard(Expr* e, int parent_prec) {
     if (!e) { printf("Null"); return; }
@@ -670,6 +702,39 @@ static void print_standard(Expr* e, int parent_prec) {
             print_standard(e->data.function.args[0], my_prec);
             printf("::%s", e->data.function.args[1]->data.string);
         }
+#if UP_VALUES
+        else if ((head == SYM_UpSet || head == SYM_UpSetDelayed) &&
+                 e->data.function.arg_count >= 2) {
+            /* lhs ^= rhs  /  lhs ^:= rhs */
+            const char* op = (head == SYM_UpSetDelayed) ? " ^:= " : " ^= ";
+            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                if (i > 0) printf("%s", op);
+                print_standard(e->data.function.args[i], my_prec);
+            }
+        }
+        else if ((head == SYM_TagSet || head == SYM_TagSetDelayed) &&
+                 e->data.function.arg_count == 3) {
+            /* TagSet[f,lhs,rhs] -> f /: lhs = rhs ; TagSetDelayed -> f /: lhs := rhs */
+            print_standard(e->data.function.args[0], my_prec);
+            printf(" /: ");
+            print_standard(e->data.function.args[1], my_prec);
+            printf("%s", (head == SYM_TagSetDelayed) ? " := " : " = ");
+            print_standard(e->data.function.args[2], my_prec);
+        }
+        else if (head == SYM_TagUnset && e->data.function.arg_count == 2) {
+            /* TagUnset[f, lhs] -> f /: lhs =. */
+            print_standard(e->data.function.args[0], my_prec);
+            printf(" /: ");
+            print_standard(e->data.function.args[1], my_prec);
+            printf(" =.");
+        }
+        else if (head == SYM_Definition && e->data.function.arg_count == 1 &&
+                 e->data.function.args[0]->type == EXPR_SYMBOL) {
+            /* Definition[sym] is an inert object that DISPLAYS its definitions
+             * (FullForm still shows Definition[sym]). */
+            print_definition_body(e->data.function.args[0]->data.symbol.name);
+        }
+#endif
         else if ((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition || head == SYM_And || head == SYM_Or || head == SYM_Alternatives) && e->data.function.arg_count >= 2) {
             const char* op = "";
             if (head == SYM_Equal) op = " == ";

@@ -144,6 +144,47 @@ In[5]:= ValueQ /@ Unevaluated[{x, y}]   (* HoldAll preserved via Unevaluated *)
 Out[5]= {True, False}
 ```
 
+## UpValues
+
+> Gated behind the `UP_VALUES` build flag (on by default).
+
+`UpValues[s]` gives the list of up-value rules associated with the symbol `s` —
+the rules set by `UpSet` (`^=`), `UpSetDelayed` (`^:=`), `TagSet` / `TagSetDelayed`
+(`g /: …`), i.e. values for `g[…, s, …]` or `g[…, s[…], …]`. Like `DownValues`,
+each rule is returned as an inert `HoldPattern[lhs] :> rhs`. `UpValues` has
+attributes `{HoldAll, Protected}`, accepts a symbol or a string naming one (so
+`UpValues /@ Names["s*"]` works), and returns `{}` for a symbol with no up-values.
+A string naming a non-existent symbol issues `UpValues::sym`.
+
+`UpValues[s] = list` replaces the whole up-value list from a list of
+`Rule`/`RuleDelayed` rules; `DownValues[s] = list` and `OwnValues[s] = list`
+do the same for the other two kinds.
+
+```mathematica
+In[1]:= g /: f[g[x_]] := h[x]; UpValues[g]
+Out[1]= {HoldPattern[f[g[x_]]] :> h[x]}
+
+In[2]:= UpValues[k] = {HoldPattern[w[k]] :> done}; w[k]   (* set the whole list *)
+Out[2]= done
+```
+
+## Definition
+
+> Gated behind the `UP_VALUES` build flag.
+
+`Definition[s]` is an inert object that **displays** the own-, down- and up-value
+rules associated with `s` (its `FullForm` is `Definition[s]` itself, not the
+rendered body). Up-values are shown in `s /: lhs := rhs` form. Because Mathilda's
+rule store does not record whether a value was immediate or delayed, down- and
+up-values always display with the delayed operators (`:=`, `/: … :=`), matching
+`DownValues[]`'s uniformly-delayed readback. `?s` / `Information[s]` likewise now
+append these definitions after the symbol's usage message.
+
+```mathematica
+In[1]:= g /: f[g[x_]] := h[x]; Definition[g]
+Out[1]= g /: f[g[x_]] := h[x]
+```
+
 ## PossibleZeroQ
 Hybrid symbolic-numeric test for whether `expr` is identically zero.
 The general problem is undecidable (Richardson 1968); `PossibleZeroQ`

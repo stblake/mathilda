@@ -3597,6 +3597,26 @@ void info_init(void) {
         "matches any of the patterns. Names[] lists all symbol names.");
     symtab_set_docstring("OwnValues", "OwnValues[s] gives a list of own-value rules for s.");
     symtab_set_docstring("DownValues", "DownValues[s] gives a list of down-value rules for s.");
+#if UP_VALUES
+    symtab_set_docstring("UpValues",
+        "UpValues[s] gives a list of up-value rules for s (values for g[..,s,..] or "
+        "g[..,s[..],..]).");
+    symtab_set_docstring("UpSet",
+        "lhs ^= rhs assigns rhs and associates the assignment with the symbols at "
+        "level one of lhs (UpValues).");
+    symtab_set_docstring("UpSetDelayed",
+        "lhs ^:= rhs assigns rhs as a delayed value and associates it with the "
+        "symbols at level one of lhs (UpValues).");
+    symtab_set_docstring("TagSet",
+        "f /: lhs = rhs assigns rhs and associates the assignment with the symbol f "
+        "(as an up-, down- or own-value as appropriate).");
+    symtab_set_docstring("TagSetDelayed",
+        "f /: lhs := rhs assigns rhs as a delayed value associated with the symbol f.");
+    symtab_set_docstring("TagUnset",
+        "f /: lhs =. removes the rule for lhs associated with the symbol f.");
+    symtab_set_docstring("Definition",
+        "Definition[s] prints the own-, down- and up-values associated with s.");
+#endif
     symtab_set_docstring("Attributes", "Attributes[s] gives the list of attributes for s.");
     symtab_set_docstring("SetAttributes", "SetAttributes[s, attr] sets the attributes for s.");
     symtab_set_docstring("ClearAttributes",

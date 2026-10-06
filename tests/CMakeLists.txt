@@ -42,6 +42,14 @@ if(USE_MPFR)
     link_libraries(mpfr)
 endif()
 
+# UpValues subsystem (trial). Mirror the top-level makefile's default-ON flag so
+# the test build's SymbolDef layout matches the library it links. Turn off with
+# -DUP_VALUES=OFF to build/run the suite against the pre-UpValues behaviour.
+option(UP_VALUES "Build the UpValues subsystem (UpSet/TagSet/UpValues/...)" ON)
+if(UP_VALUES)
+    add_compile_definitions(UP_VALUES=1)
+endif()
+
 # Threads.  The top-level makefile has always set -DMATHILDA_THREADS -pthread;
 # this build did not, so every `nd_parallel_for` / `nd_parallel_reduce` call
 # compiled down to its serial fallback and NO test ever executed the threaded ND
@@ -1064,6 +1072,12 @@ target_include_directories(match_extensive_tests PRIVATE ../src)
 
 add_executable(symtab_tests test_symtab.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(symtab_tests PRIVATE ../src)
+
+if(UP_VALUES)
+    add_executable(upvalues_tests test_upvalues.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(upvalues_tests PRIVATE ../src)
+    add_test(NAME upvalues_tests COMMAND upvalues_tests)
+endif()
 
 add_executable(regression_tests test_regression.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(regression_tests PRIVATE ../src)

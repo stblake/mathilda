@@ -683,6 +683,9 @@ typedef struct BlockSavedVar {
     char*    name;
     Rule*    old_own;
     Rule*    old_down;
+#if UP_VALUES
+    Rule*    old_up;
+#endif
     uint32_t old_attrs;
 } BlockSavedVar;
 
@@ -716,6 +719,14 @@ static void blk_restore_frame(BlockFrame* f) {
         blk_free_rules(def->down_values);
         def->own_values  = f->saved[i].old_own;
         def->down_values = f->saved[i].old_down;
+#if UP_VALUES
+        /* Free the upvalues written inside the Block, decrementing the global
+         * count, then restore the saved ones (which stayed counted while shadowed). */
+        { size_t k = 0; for (Rule* r = def->up_values; r; r = r->next) k++;
+          blk_free_rules(def->up_values);
+          symtab_up_value_count = (symtab_up_value_count >= k) ? symtab_up_value_count - k : 0; }
+        def->up_values = f->saved[i].old_up;
+#endif
         def->attributes  = f->saved[i].old_attrs;
         free(f->saved[i].name);
     }
@@ -777,6 +788,13 @@ Expr* builtin_block(Expr* res) {
             frame->saved[i].old_attrs = def->attributes;
             def->own_values  = NULL;   /* the body sees the symbol unset ... */
             def->down_values = NULL;   /* ... in BOTH rule lists */
+#if UP_VALUES
+            /* Shadow upvalues too. The detached list stays counted (it is only
+             * homeless, not freed) -- the count gate is conservative, so an
+             * over-count merely skips the early-out, never a real rule. */
+            frame->saved[i].old_up = def->up_values;
+            def->up_values = NULL;
+#endif
 
             if (init_val) {
                 symtab_add_own_value(name, (v->type == EXPR_SYMBOL ? v : v->data.function.args[0]), init_val);
