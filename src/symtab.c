@@ -1111,26 +1111,37 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
         (input_arity > 0)
             ? input_arg_head_canon(expr->data.function.args[0])
             : NULL;
+    /* A Flat head rewrites a SUBSET of a longer operand sequence (Mathematica
+     * semantics; see match_rule_flataware). Its dispatch key is then a LOWER
+     * bound, not an exact arity, and the matched run need not start at arg 0,
+     * so both pre-filters relax for a Flat head. */
+    const bool down_flat = (def->attributes & ATTR_FLAT) != 0;
 
     for (Rule* rule = def->down_values; rule; rule = rule->next) {
         /* Arity filter: only skip when both sides committed to a
          * specific arity that disagrees. A rule with -1 arity (variable)
-         * always passes; an input never has variable arity. */
-        if (rule->dispatch_arity != -1 && rule->dispatch_arity != input_arity) {
+         * always passes; an input never has variable arity. For a Flat head
+         * any input_arity >= the rule's arity can match (surplus -> leftover). */
+        if (rule->dispatch_arity != -1 && rule->dispatch_arity != input_arity &&
+            !(down_flat && input_arity >= rule->dispatch_arity)) {
             continue;
         }
         /* First-arg head filter: only skip when the rule expects a
          * specific head and we determined the input's first-arg head and
          * the two disagree. Pointer compare is sound because both are
-         * interned. */
-        if (rule->first_arg_head_canon && input_first_head &&
+         * interned. Skipped for a Flat head: the matched run can sit anywhere. */
+        if (!down_flat && rule->first_arg_head_canon && input_first_head &&
             rule->first_arg_head_canon != input_first_head) {
             continue;
         }
 
         MatchEnv* env = env_new();
-        if (match(expr, rule->pattern, env)) {
-            Expr* result = replace_bindings(rule->replacement, env);
+        /* Phase 1 stays inline (identical to the pre-feature fast path); only a
+         * failed match falls through to Flat-head leftover matching (Phase 2). */
+        Expr* result = match(expr, rule->pattern, env)
+            ? replace_bindings(rule->replacement, env)
+            : match_flat_leftover(expr, rule->pattern, rule->replacement, env);
+        if (result) {
             /* If the matched pattern carried an OptionsPattern, rewrite the
              * context-dependent OptionValue[...] nodes in the RHS into explicit
              * OptionValue[head, opts, name] form so they resolve against the
@@ -1246,23 +1257,34 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
     const int32_t input_arity = (int32_t)expr->data.function.arg_count;
     const char* input_first_head =
         (input_arity > 0) ? input_arg_head_canon(expr->data.function.args[0]) : NULL;
+    /* Enclosing head Flat => the upvalue may fire on a longer operand sequence
+     * than the pattern specifies (surplus -> leftover; see match_rule_flataware),
+     * so the arity key is a lower bound and the matched run can sit anywhere. */
+    const bool enclosing_flat =
+        expr->data.function.head->type == EXPR_SYMBOL &&
+        (get_attributes(expr->data.function.head->data.symbol.name) & ATTR_FLAT) != 0;
 
     for (Rule* rule = def->up_values; rule; rule = rule->next) {
-        if (rule->dispatch_arity != -1 && rule->dispatch_arity != input_arity)
+        if (rule->dispatch_arity != -1 && rule->dispatch_arity != input_arity &&
+            !(enclosing_flat && input_arity >= rule->dispatch_arity))
             continue;
         /* The first-arg-head filter assumes the pattern's first element aligns
          * positionally with the input's. That holds for a fixed head, but NOT for
          * an Orderless one: the element matching the pattern's (literal) first can
          * sit anywhere (e.g. `x + y_` keyed on x vs the input `1 + x`), so the
          * filter would wrongly reject. Skip it there -- the matcher still checks
-         * fully; the arity filter remains sound since sorting preserves count. */
-        if (!orderless && rule->first_arg_head_canon && input_first_head &&
+         * fully; the arity filter remains sound since sorting preserves count.
+         * A Flat (leftover) match likewise need not start at arg 0, so skip it. */
+        if (!orderless && !enclosing_flat && rule->first_arg_head_canon && input_first_head &&
             rule->first_arg_head_canon != input_first_head)
             continue;
 
         MatchEnv* env = env_new();
-        if (match(expr, rule->pattern, env)) {
-            Expr* result = replace_bindings(rule->replacement, env);
+        /* Phase 1 inline (unchanged fast path); failed match -> Flat leftover. */
+        Expr* result = match(expr, rule->pattern, env)
+            ? replace_bindings(rule->replacement, env)
+            : match_flat_leftover(expr, rule->pattern, rule->replacement, env);
+        if (result) {
             Expr* opts = env_get(env, "$OptionsPattern$");
             if (opts) {
                 /* For an upvalue, OptionsPattern[]'s enclosing head is `expr`'s
@@ -1298,6 +1320,13 @@ Expr* apply_up_values(Expr* expr) {
      * carries an UpValue already has a def (install went through symtab_get_def),
      * so node_find finds it, while a bare argument symbol is never promoted into
      * Names[] merely by appearing inside an evaluated call. */
+    /* Fixed-size candidate buffer. If a single call somehow has more than 32
+     * DISTINCT upvalue-bearing operand symbols at level one, the scan stops here
+     * and later operands are silently ignored (their upvalues won't fire this
+     * pass). This is a safety bound, not a semantic limit: 32 distinct
+     * upvalue-carrying symbols in one call is implausible, and the alternative
+     * (a heap allocation on every function-call evaluation) would tax the hot
+     * path for a case that does not occur. Revisit only if it ever bites. */
     enum { UP_MAX_CANDIDATES = 32 };
     SymbolDef* cand[UP_MAX_CANDIDATES];
     int ncand = 0;
@@ -1329,7 +1358,14 @@ Expr* apply_up_values(Expr* expr) {
      * AFTER this hook), so an upvalue on them would otherwise bind to the unsorted
      * argument order. Canonicalize now -- but only when an upvalue can actually fire
      * (ncand>0) on an Orderless head, so ordinary arithmetic is untouched. The
-     * candidate SET is order-independent, so sorting after collection is safe. */
+     * candidate SET is order-independent, so sorting after collection is safe.
+     *
+     * NOTE: this reorders `expr`'s argument array IN PLACE and does so even when
+     * this function ultimately returns NULL (no upvalue fired). There is no
+     * `*changed` out-parameter, so the caller is NOT told the order changed. This
+     * is safe only because the single caller is the evaluator's pre-DownValue hook
+     * and the Plus/Times builtin re-sorts its args immediately afterwards; do not
+     * rely on `expr` keeping its original argument order across this call. */
     bool orderless = expr->data.function.head->type == EXPR_SYMBOL &&
         (get_attributes(expr->data.function.head->data.symbol.name) & ATTR_ORDERLESS) != 0;
     if (orderless && expr->data.function.arg_count > 1) {

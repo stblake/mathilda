@@ -291,6 +291,59 @@ static void test_operand_downvalue_masks_upvalue(void) {
     assert_eval_eq("pd30[md30[5]]", "pd30[down30[5]]", 0);
 }
 
+/* ---- Flat-head leftover matching: a Flat (Plus/Times/...) rule fires on a
+ * longer operand sequence than the pattern specifies, rewriting a subset and
+ * keeping the rest (Mathematica semantics; added when the review of PR #87
+ * flagged that the headline mod example only worked at exact arity). ---- */
+static void test_flat_upvalue_longer_sum(void) {
+    ev("mod70 /: mod70[a_, p_] + mod70[b_, p_] := mod70[Mod[a + b, p], p]");
+    assert_eval_eq("mod70[1,5] + mod70[2,5]", "mod70[3,5]", 0);               /* exact arity */
+    assert_eval_eq("mod70[1,5] + mod70[2,5] + mod70[3,5]", "mod70[1,5]", 0);  /* leftover -> fixed point */
+    assert_eval_eq("mod70[1,5] + mod70[2,5] + z70", "mod70[3,5] + z70", 0);   /* non-matching leftover kept */
+    ev("d70 /: d70[a_] + d70[b_] := d70[a + b]");
+    assert_eval_eq("d70[1] + d70[2] + d70[3]", "d70[6]", 0);
+    assert_eval_eq("d70[1] + d70[2] + d70[3] + d70[4]", "d70[10]", 0);
+}
+
+static void test_flat_downvalue_leftover(void) {
+    /* a user Flat+Orderless head: DownValue (not UpValue) fires with leftover */
+    ev("SetAttributes[g71, {Flat, Orderless}]");
+    ev("g71[k71[a_], k71[b_]] := k71[a + b]");
+    assert_eval_eq("g71[k71[1], k71[2], m71]", "g71[k71[3], m71]", 0);
+}
+
+static void test_flat_ordered_prefix_only(void) {
+    /* non-Orderless Flat: the trailing-only leftover catcher means matched
+     * elements must form a PREFIX run; an interior match does not fire. */
+    ev("SetAttributes[hh72, Flat]");
+    ev("hh72[u72[a_], u72[b_]] := u72[a + b]");
+    assert_eval_eq("hh72[u72[1], u72[2], w72]", "hh72[u72[3], w72]", 0);        /* prefix fires */
+    assert_eval_eq("hh72[w72, u72[1], u72[2]]", "hh72[w72, u72[1], u72[2]]", 0);/* interior: unevaluated */
+}
+
+static void test_flat_group_absorption_not_augment(void) {
+    /* MUST stay group-absorption (NOT leftover): a trailing blank swallows the
+     * surplus as ONE group, so a_ binds x73+y73, not x73 with y73 left over. */
+    ev("pp73 /: Plus[pp73, a_] := lab73[a]");
+    assert_eval_eq("pp73 + x73", "lab73[x73]", 0);
+    assert_eval_eq("pp73 + x73 + y73", "lab73[x73 + y73]", 0);
+}
+
+static void test_upset_locked(void) {
+    /* #2 from the review: UpSet must honour Locked, not just Protected. */
+    ev("SetAttributes[lk74, Locked]");
+    ev("foo74[lk74] ^= 3");                 /* refused: UpSet::write (Locked) */
+    assert_eval_eq("UpValues[lk74]", "{}", 0);
+}
+
+static void test_flat_matchq_whole_expression(void) {
+    /* Leftover matching is a rule-application feature, NOT a matcher change:
+     * MatchQ must stay a WHOLE-expression test (matches WL). */
+    assert_eval_eq("MatchQ[modq[1,5] + modq[2,5] + xq, modq[a_,p_] + modq[b_,p_]]", "False", 0);
+    assert_eval_eq("MatchQ[aq + bq + cq, x_ + y_]", "True", 0);   /* group absorption */
+    assert_eval_eq("MatchQ[aq + bq, x_ + y_]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -331,6 +384,14 @@ int main(void) {
     TEST(test_tagunset_condition_no_corruption);
     TEST(test_downvalue_unset_condition_no_corruption);
     TEST(test_operand_downvalue_masks_upvalue);
+
+    /* Flat-head leftover matching + Locked (PR #87 review follow-ups) */
+    TEST(test_flat_upvalue_longer_sum);
+    TEST(test_flat_downvalue_leftover);
+    TEST(test_flat_ordered_prefix_only);
+    TEST(test_flat_group_absorption_not_augment);
+    TEST(test_upset_locked);
+    TEST(test_flat_matchq_whole_expression);
 
     printf("All UpValues tests passed.\n");
     return 0;

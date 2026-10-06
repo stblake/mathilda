@@ -1022,8 +1022,10 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
          * Protected/Locked just like `target[...] = rhs` would (otherwise
          * `DownValues[Sin] = {...}` would silently overwrite a builtin). */
         if (get_attributes(target) & (ATTR_PROTECTED | ATTR_LOCKED)) {
-            mth_message(is_delayed ? "SetDelayed" : "Set", "wrsym",
-                        "Symbol %s is Protected.", target);
+            /* Mathematica reports this as Set::write ("Tag f in DownValues[f] is
+             * Protected."), not Set::wrsym -- match it so `::write` greps hit. */
+            mth_message(is_delayed ? "SetDelayed" : "Set", "write",
+                        "Tag %s in %s[%s] is Protected.", target, h, target);
             return true;
         }
         if (rhs->type == EXPR_FUNCTION
@@ -1411,7 +1413,7 @@ static bool apply_up_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     bool owned; Expr* body;
     Expr* pat = move_rhs_condition(lhs, rhs, is_delayed, &owned, &body);
     for (int i = 0; i < n; i++) {
-        if (get_attributes(syms[i]) & ATTR_PROTECTED) {
+        if (get_attributes(syms[i]) & (ATTR_PROTECTED | ATTR_LOCKED)) {
             mth_message(is_delayed ? "UpSetDelayed" : "UpSet", "write",
                         "Tag %s in the assignment is Protected.", syms[i]);
             continue;
@@ -1423,8 +1425,11 @@ static bool apply_up_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
 }
 
 /* tag /: lhs = rhs  (and := ): install on tag as own/down/up value per the tag's
- * position in lhs. Returns true once handled (so the caller yields rhs/Null),
- * false only when tag is not a symbol (leave unevaluated). */
+ * position in lhs. Returns true once a rule was installed or the write was refused
+ * with a message; returns false only when tag is not a symbol -- a purely
+ * diagnostic signal (TagSet::sym already emitted). Either way the caller (branch
+ * 6c) yields the RHS/Null, matching how the Set family still returns its RHS on an
+ * invalid left-hand side (e.g. `3 = 4` emits Set::setraw and returns 4). */
 static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delayed) {
     const char* head = is_delayed ? "TagSetDelayed" : "TagSet";
     if (tag->type != EXPR_SYMBOL) {
@@ -2144,6 +2149,11 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * no-upvalue case a single load+branch. */
                 if (!hold_all_complete && symtab_up_value_count &&
                     !is_assignment_primitive(head_name)) {
+                    /* NOTE: on an Orderless head with upvalue candidates,
+                     * apply_up_values may reorder res's args IN PLACE even when it
+                     * returns NULL (no rule fired). That is intentional and safe --
+                     * the Plus/Times builtin re-sorts below -- but it means res's
+                     * argument order must not be relied on after this call. */
                     Expr* up = apply_up_values(res);
                     if (up) {
                         expr_free(res);

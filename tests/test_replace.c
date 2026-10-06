@@ -131,6 +131,13 @@ int main() {
     run_test("ReplaceList[{a,b,c,a,d,b,d},{___,x_,y__,x_,___}->{x,{y}}]", "{{a, {b, c}}, {b, {c, a, d}}, {d, {b}}}");
     run_test("ReplaceList[a+b+c,x_+y_:>{x,y}]", "{{a, b + c}, {b, a + c}, {c, a + b}, {a + b, c}, {a + c, b}, {b + c, a}}");
 
+    /* Flat-head leftover matching: a Flat (Plus/Times/...) rule rewrites a
+     * SUBSET of a longer operand sequence and keeps the rest (PR #87 review). */
+    run_test("1 + x + y /. x + y -> z", "1 + z");
+    run_test("a + b + c /. x_ + y_ -> f[x, y]", "f[a, b + c]");   /* group absorption, unchanged */
+    run_test("modr[1, 5] + modr[2, 5] /. modr[a_, p_] + modr[b_, p_] :> modr[Mod[a + b, p], p]", "modr[3, 5]");
+    run_test("modr[1, 5] + modr[2, 5] + xr /. modr[a_, p_] + modr[b_, p_] :> modr[Mod[a + b, p], p]", "modr[3, 5] + xr");
+
     printf("All Replace tests passed!\n");
     symtab_clear();
     return 0;

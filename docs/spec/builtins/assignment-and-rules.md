@@ -82,7 +82,7 @@ Out[3]= fact[1]
   `HoldAll` (its `rhs` is held and re-evaluated on each use); both are `Protected`.
 - The head of a pattern-constrained argument also counts: `a_mod + b_mod ^:= …`
   keys on `mod` (the head of the `Blank`), so the rule fires for `mod[…] + mod[…]`.
-- An UpValue on a `Protected` symbol is refused with a message.
+- An UpValue on a `Protected` or `Locked` symbol is refused with a message.
 
 ```mathematica
 In[1]:= area[square] ^= s^2; UpValues[square]
@@ -128,6 +128,36 @@ Out[2]= fh[5]
 In[3]:= h /: f[h[x_]] =.; f[h[5]]
 Out[3]= f[h[5]]
 ```
+
+## Rules on Flat heads (Plus, Times, …)
+
+A rewrite rule whose left-hand side has a **Flat** head — `Plus`, `Times`,
+`Dot`, `**`, `And`, `Or`, or any symbol carrying the `Flat` attribute — matches a
+**subset** of a longer operand sequence: the matched operands are rewritten and
+the remaining ones are kept, re-wrapped in the head. This holds for UpValues,
+DownValues, and `Replace`/`ReplaceAll` alike (matching Wolfram).
+
+```mathematica
+In[1]:= mod /: mod[a_, p_] + mod[b_, p_] := mod[Mod[a + b, p], p];
+        mod[1, 5] + mod[2, 5] + mod[3, 5]
+Out[1]= mod[1, 5]                 (* a pair is rewritten, then re-fires to a fixed point *)
+
+In[2]:= mod[1, 5] + mod[2, 5] + x
+Out[2]= mod[3, 5] + x             (* the non-matching term x is kept *)
+
+In[3]:= 1 + x + y /. x + y -> z
+Out[3]= 1 + z
+```
+
+- A match that **consumes every operand** wins over a subset ("leftover") match:
+  with `pp /: Plus[pp, a_] := g[a]`, the input `pp + x + y` binds `a_` to the whole
+  group `x + y` (→ `g[x + y]`), not `x` with `y` left over. The leftover match is
+  taken only when no full-consumption match exists.
+- `MatchQ` stays a **whole-expression** test and does *not* do leftover matching:
+  `MatchQ[mod[1,5] + mod[2,5] + x, mod[a_,p_] + mod[b_,p_]]` is `False`, as in Wolfram.
+- **Limitation**: for a Flat head that is **not** `Orderless` (e.g. `Dot`, `**`), the
+  matched operands must form a **leading (prefix) run** — an interior match does not
+  fire. `Plus` and `Times` are `Orderless`, so every position is reachable.
 
 ## Replace
 Applies a rule or list of rules to transform an expression.

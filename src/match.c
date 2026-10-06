@@ -1680,6 +1680,164 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
     return expr_copy(expr);
 }
 
+/* ------------------------------------------------------------------ *
+ *  Flat-head "leftover" rule application
+ *
+ *  Mathematica applies a rewrite rule whose LHS head is Flat (Plus, Times,
+ *  Dot, ...) to a SUBSET of a longer operand sequence: it rewrites the matched
+ *  part and keeps the rest.  E.g. with
+ *      mod /: mod[a_,p_] + mod[b_,p_] := mod[Mod[a+b,p],p]
+ *  the sum  mod[1,5] + mod[2,5] + mod[3,5]  rewrites a matching pair and leaves
+ *  the third term (which then re-fires to a fixed point).  The generic matcher
+ *  has no such "leftover" path: its argument base case requires every operand
+ *  to be consumed, and concrete-head pattern elements (mod[a_,p_]) cannot
+ *  group-absorb the surplus the way a bare blank can.
+ *
+ *  We add this ONLY here, at the rule-application layer, never inside match()
+ *  itself -- so MatchQ stays a whole-expression test (MatchQ[a+b+c, f[_]+f[_]]
+ *  is still False).  The strategy is "normal match first, augment on failure":
+ *
+ *    1. Try the ordinary match.  This preserves today's Flat group-absorption,
+ *       which is the WL-correct result whenever a trailing blank CAN swallow the
+ *       surplus (pp /: Plus[pp,a_]:=... on pp+x+y binds a_ = x+y).  Trying this
+ *       first is load-bearing for correctness, not just speed: augmenting that
+ *       case would wrongly split a_ = x, leftover = y.  This step stays INLINE in
+ *       each caller (a bare match()+replace_bindings, exactly as before), so the
+ *       common path pays nothing for this feature.
+ *    2. Only if that fails, the caller calls match_flat_leftover below: if the
+ *       enclosing head is Flat with MORE operands than the pattern's flat-call
+ *       arity, it retries against an augmented pattern
+ *           head[p1, ..., pk, $FlatRest$___]
+ *       with the replacement wrapped as  head[replacement, $FlatRest$].  The
+ *       BlankNullSequence binds the surplus operands, which rb_rec then splices
+ *       back into the (Flat) head.
+ *
+ *  For a non-Orderless Flat head the matcher consumes a contiguous prefix, so a
+ *  trailing-only catcher means the matched elements must form a PREFIX run
+ *  (Dot[a,b] in a.b.c, not the interior b.c).  Plus/Times are Orderless, so
+ *  their subset enumeration already reaches every position.
+ * ------------------------------------------------------------------ */
+
+/* Unwrap HoldPattern/Condition down to the inner flat-call node; return it when
+ * its head is `flat_head`, else NULL. */
+static Expr* flat_inner_call(Expr* pattern, const char* flat_head) {
+    while (pattern && pattern->type == EXPR_FUNCTION &&
+           pattern->data.function.head &&
+           pattern->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = pattern->data.function.head->data.symbol.name;
+        if (h == SYM_HoldPattern && pattern->data.function.arg_count == 1)
+            pattern = pattern->data.function.args[0];
+        else if (h == SYM_Condition && pattern->data.function.arg_count == 2)
+            pattern = pattern->data.function.args[0];
+        else
+            return (h == flat_head) ? pattern : NULL;
+    }
+    return NULL;
+}
+
+/* Pattern[$FlatRest$, BlankNullSequence[]] -- the trailing leftover catcher.
+ * `$FlatRest$` is a reserved, dollar-delimited internal name (cf. the
+ * `$OptionsPattern$` convention above); it is transient -- only ever bound in a
+ * MatchEnv and spliced out by rb_rec -- so it never reaches Names[] or output. */
+static Expr* flat_rest_pattern(void) {
+    Expr* bnull = expr_new_function(expr_new_symbol(SYM_BlankNullSequence), NULL, 0);
+    Expr** pa = malloc(sizeof(Expr*) * 2);
+    pa[0] = expr_new_symbol("$FlatRest$");
+    pa[1] = bnull;
+    Expr* p = expr_new_function(expr_new_symbol(SYM_Pattern), pa, 2);
+    free(pa);
+    return p;
+}
+
+/* Rebuild `pattern` with the leftover catcher appended to the inner flat-call's
+ * argument list, preserving any HoldPattern / Condition wrappers (so a `/;`
+ * guard, whose bound variables are untouched, still fires).  Returns a fully
+ * owned copy, or NULL if `pattern` is not a (wrapped) `flat_head` call. */
+static Expr* flat_augment_pattern(Expr* pattern, const char* flat_head) {
+    if (!pattern || pattern->type != EXPR_FUNCTION ||
+        !pattern->data.function.head ||
+        pattern->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* h = pattern->data.function.head->data.symbol.name;
+    if (h == SYM_HoldPattern && pattern->data.function.arg_count == 1) {
+        Expr* inner = flat_augment_pattern(pattern->data.function.args[0], flat_head);
+        if (!inner) return NULL;
+        Expr** a = malloc(sizeof(Expr*));
+        a[0] = inner;
+        Expr* r = expr_new_function(expr_new_symbol(SYM_HoldPattern), a, 1);
+        free(a);
+        return r;
+    }
+    if (h == SYM_Condition && pattern->data.function.arg_count == 2) {
+        Expr* inner = flat_augment_pattern(pattern->data.function.args[0], flat_head);
+        if (!inner) return NULL;
+        Expr** a = malloc(sizeof(Expr*) * 2);
+        a[0] = inner;
+        a[1] = expr_copy(pattern->data.function.args[1]);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_Condition), a, 2);
+        free(a);
+        return r;
+    }
+    if (h == flat_head) {
+        size_t k = pattern->data.function.arg_count;
+        Expr** a = malloc(sizeof(Expr*) * (k + 1));
+        for (size_t i = 0; i < k; i++) a[i] = expr_copy(pattern->data.function.args[i]);
+        a[k] = flat_rest_pattern();
+        Expr* r = expr_new_function(expr_copy(pattern->data.function.head), a, k + 1);
+        free(a);
+        return r;
+    }
+    return NULL;
+}
+
+/* head[replacement, $FlatRest$] -- the matched RHS plus the spliced leftovers. */
+static Expr* flat_augment_replacement(Expr* replacement, const char* flat_head) {
+    Expr** a = malloc(sizeof(Expr*) * 2);
+    a[0] = expr_copy(replacement);
+    a[1] = expr_new_symbol("$FlatRest$");
+    Expr* r = expr_new_function(expr_new_symbol(flat_head), a, 2);
+    free(a);
+    return r;
+}
+
+Expr* match_flat_leftover(Expr* expr, Expr* pattern, Expr* replacement, MatchEnv* env) {
+    /* Called by a rule-dispatch site AFTER its own inline match() has failed
+     * (that failed match may have left partial bindings in `env`, which must be
+     * a fresh per-rule env). Gate cheapest-first: the CHEAP, highly-selective
+     * structural checks run before the (symbol-table) attribute lookup, so an
+     * ordinary failed match on a non-Flat head costs only a few pointer derefs.
+     * The dispatch prefilters relax the arity key ONLY for Flat heads, so for a
+     * non-Flat head the pattern arity equals the input arity and the (b) test
+     * below bails before get_attributes(). */
+    if (!expr || expr->type != EXPR_FUNCTION) return NULL;
+    Expr* headnode = expr->data.function.head;
+    if (!headnode || headnode->type != EXPR_SYMBOL) return NULL;
+    const char* flat_head = headnode->data.symbol.name;
+
+    /* (a) pattern must be a (HoldPattern/Condition-wrapped) call on this head */
+    Expr* inner = flat_inner_call(pattern, flat_head);
+    if (!inner) return NULL;
+    /* (b) and the subject must carry strictly more operands than it specifies */
+    size_t pat_arity = inner->data.function.arg_count;
+    if (pat_arity < 1 || expr->data.function.arg_count <= pat_arity) return NULL;
+    /* (c) only now, the attribute lookup: the head must actually be Flat */
+    if (!(get_attributes(flat_head) & ATTR_FLAT)) return NULL;
+
+    /* Discard any partial bindings the caller's failed primary match left. */
+    if (env) env_rollback(env, 0);
+
+    Expr* aug_pat = flat_augment_pattern(pattern, flat_head);
+    if (!aug_pat) return NULL;
+
+    Expr* result = NULL;
+    if (env && match(expr, aug_pat, env)) {
+        Expr* aug_rep = flat_augment_replacement(replacement, flat_head);
+        result = replace_bindings(aug_rep, env);   /* env left populated for caller */
+        expr_free(aug_rep);
+    }
+    expr_free(aug_pat);
+    return result;
+}
+
 Expr* builtin_matchq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     

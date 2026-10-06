@@ -351,8 +351,15 @@ static Expr* rule_try(const ReplaceRule* r, Expr* e) {
         Expr* v = assoc_lookup_value(r->replacement, e);
         return v ? expr_copy(v) : NULL;
     }
+    /* Flat-aware: a Flat-head (Plus/Times/...) rule rewrites a SUBSET of a
+     * longer operand sequence, keeping the rest (e.g. 1+x+y /. x+y->z gives
+     * 1+z). The ordinary match stays inline (so the common path is unchanged);
+     * only a failed match falls through to Flat-head leftover matching, which
+     * adds genuinely-new matches without altering existing ones. */
     MatchEnv* env = env_new();
-    Expr* out = match(e, r->pattern, env) ? replace_bindings(r->replacement, env) : NULL;
+    Expr* out = match(e, r->pattern, env)
+        ? replace_bindings(r->replacement, env)
+        : match_flat_leftover(e, r->pattern, r->replacement, env);
     env_free(env);
     return out;
 }
