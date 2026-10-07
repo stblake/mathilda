@@ -104,16 +104,23 @@ canonical forms that the generic pipeline alone does not:
   injects are cleared before the denominator is rationalised, so
   `Simplify[Cot[x]/Sqrt[Cot[x]]] -> Sqrt[Cot[x]]`.
 - **Multi-generator radical rational normal form** — a rational function of two
-  or more distinct *positive* radical bases (e.g. `a^(1/3)` and `(a+b x)^(1/3)`)
-  is reduced in the quotient ring `K[g_1, ..., g_n] / <g_k^{q_k} - base_k>`: each
-  base is carried as an algebraic generator, the terms are combined over a common
+  or more distinct radical bases (e.g. `a^(1/3)` and `(a+b x)^(1/3)`) is reduced
+  in the quotient ring `K[g_1, ..., g_n] / <g_k^{q_k} - base_k>`: each base is
+  carried as an algebraic generator, the terms are combined over a common
   denominator, reduced modulo the generator relations, and the denominator is
-  rationalised, before the radicals are substituted back. This recovers
-  cross-base cancellations the single-generator `Together`/`Cancel` path cannot —
-  e.g. `D[Integrate[1/(x^3 (a+b x)^(1/3)), x], x] // Simplify ->
-  1/(x^3 (a+b x)^(1/3))`. Bases that are not provably positive (negative or
-  complex numeric radicands) are left untouched for branch-cut safety, and the
-  result is adopted only when its `SimplifyCount` strictly improves.
+  rationalised, before the radicals are substituted back. This recovers cross-base
+  cancellations the single-generator `Together`/`Cancel` path cannot — e.g.
+  `D[Integrate[1/(x^3 (a+b x)^(1/3)), x], x] // Simplify -> 1/(x^3 (a+b x)^(1/3))`.
+  **Algebraic *constant* radicals** such as `Sqrt[2]` are collected as generators
+  too (with the relation `s^q - c`, e.g. `s^2 - 2`), so a rational function of `x`,
+  one `x`-dependent radical, and a constant radical in its coefficients — the shape
+  of an antiderivative re-differentiated against its integrand — reduces too:
+  `D[Integrate[(x^2+1)/(x^3 Sqrt[2x^4-2x^2+1]), x], x] - integrand // Simplify ->
+  0` (previously this fell into the algebraic-field `Together` over
+  `Q(x)[R]/(R^2-q)` and did not terminate). The pass engages only when at least
+  one base carries a free symbol — a purely numeric radical identity is left to the
+  `RootReduce`/qqbar pass — and the result is adopted only when its `SimplifyCount`
+  strictly improves, so it never regresses a case.
 - **Equation / inequality rebalancing** — a binary relation is normalised by
   dividing through the GCD of integer coefficients and partitioning terms across
   the relation; the rebalanced form is kept when its `SimplifyCount` is lower.

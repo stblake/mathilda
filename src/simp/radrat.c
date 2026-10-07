@@ -135,13 +135,22 @@ typedef struct {
 
 /* Walk `e` accumulating distinct radical bases into gens[].  Dedup by
  * structural equality; q is lcm'd across sites.  Sets *overflow when more
- * than RR_MAX_GENS distinct bases appear, or when a radical base is not
- * provably positive (branch-unsafe -> bail entirely). */
+ * than RR_MAX_GENS distinct bases appear, or when a radical base carries an
+ * explicit complex constant (branch-unsafe -> bail entirely).
+ *
+ * Both SYMBOLIC bases (a function/symbol radicand, e.g. the quartic in
+ * Sqrt[2x^4-2x^2+1]) and CONSTANT bases (a pure number, e.g. the 2 in
+ * Sqrt[2]) are collected: a rational function of one function-radical and an
+ * algebraic constant such as Sqrt[2] -- the common shape of an integral and
+ * its re-differentiated antiderivative -- needs the constant's relation
+ * (s^2 - 2) in the ideal to reduce to the integrand.  The caller declines
+ * when NO base is symbolic, leaving pure-numeric radical constants to the
+ * RootReduce / qqbar coefficient pass. */
 static void rr_collect(const Expr* e, RRGen* gens, int* n, bool* overflow) {
     if (!e || *overflow || e->type != EXPR_FUNCTION) return;
     const Expr* base = NULL;
     int64_t q = 0;
-    if (rr_parse_radical(e, &base, &q) && rr_has_symbol(base)) {
+    if (rr_parse_radical(e, &base, &q)) {
         if (!rr_real_base(base)) { *overflow = true; return; }
         int found = -1;
         for (int i = 0; i < *n; i++)
@@ -292,6 +301,18 @@ static Expr* rr_polyrem(Expr* poly, const Expr* rel, const char* gen) {
  * `ONE` stay owned by the caller.  Returns NULL on failure. */
 static Expr* rr_finalize(Expr* num, Expr* den, const RRGen* gens, int n,
                          Expr* ONE) {
+    /* Numerator reduced to a literal 0 (a proven identity): the fraction is 0
+     * for any generically-nonzero denominator, so skip the radical back-subst +
+     * Factor[den] + Cancel entirely -- that Factor runs the algebraic-field
+     * path on the reconstructed radicals and dominates the pass (seconds on the
+     * Sqrt[2]-coefficient integral-verification class).  Guard against the
+     * degenerate 0/0 (den also literally 0), where 0 would be unsound. */
+    if (num && num->type == EXPR_INTEGER && num->data.integer == 0
+        && !(den && den->type == EXPR_INTEGER && den->data.integer == 0)) {
+        expr_free(num);
+        if (den) expr_free(den);
+        return expr_new_integer(0);
+    }
     for (int i = 0; i < n && num && den; i++) {
         Expr* nb = poly_subst_radical_from_gen(num, gens[i].base, ONE,
                                                gens[i].q, gens[i].gen);
@@ -318,12 +339,19 @@ Expr* simp_radical_rational(const Expr* input,
     (void)ctx;
     if (!input || input->type != EXPR_FUNCTION) return NULL;
 
-    /* Step 1: collect distinct, positive radical generators. */
+    /* Step 1: collect distinct radical generators (symbolic and constant). */
     RRGen gens[RR_MAX_GENS];
     int n = 0;
     bool overflow = false;
     rr_collect(input, gens, &n, &overflow);
-    if (overflow || n < 2) {
+    /* Engage only on a genuine function-field problem: at least two distinct
+     * radical generators AND at least one with a free symbol in its base.  An
+     * all-constant collection (e.g. Sqrt[2] + Sqrt[3]) is a numeric radical
+     * identity owned by the RootReduce / qqbar Phase-0c pass, not this one. */
+    bool any_symbolic = false;
+    for (int i = 0; i < n; i++)
+        if (rr_has_symbol(gens[i].base)) { any_symbolic = true; break; }
+    if (overflow || n < 2 || !any_symbolic) {
         for (int i = 0; i < n; i++) expr_free(gens[i].base);
         return NULL;
     }
@@ -399,7 +427,11 @@ Expr* simp_radical_rational(const Expr* input,
     int nrel = 0;
     bool laurent = false;
     for (int k = 0; k < n && !laurent; k++) {
-        if (gens[k].base->type != EXPR_FUNCTION) continue; /* symbol base: free */
+        /* A bare SYMBOL base (e.g. the `a` in a^(1/3)) is a free transcendental
+         * generator and needs no relation.  A COMPOUND base (a function, e.g.
+         * the quartic) and a NUMERIC CONSTANT base (e.g. the 2 in Sqrt[2]) both
+         * carry a genuine relation g_k^{q_k} - base that the reduction needs. */
+        if (gens[k].base->type == EXPR_SYMBOL) continue; /* free symbol: no relation */
         Expr* V = expr_copy(gens[k].base);
         for (int j = 0; j < n; j++) {
             if (j == k) continue;

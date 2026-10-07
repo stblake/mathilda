@@ -770,7 +770,27 @@ static bool walk_find_radical_base(Expr* e, Expr** base_out, Expr** atom_out) {
 static bool is_target_power(Expr* e, Expr* B, Expr* A, int64_t* c_n, int64_t* c_d) {
     if (!e) return false;
     bool A_one = atom_is_one(A);
+    /* A LITERAL rational-number base (e.g. the 2 of Sqrt[2]) is a ground-field
+     * CONSTANT in the RADICAL case: only its genuine radical powers Power[B, p/q]
+     * with q > 1 are the fresh generator.  Its bare form and its integer powers
+     * (2, 2^3, ...) are ordinary rational coefficients and must never be swept
+     * into the generator -- doing so rewrites every coefficient power of B across
+     * the expression (2 -> g^2, ...) and corrupts both the substituted body and
+     * the generator relations.  A symbolic/compound base keeps the original
+     * behaviour (there B and all its powers genuinely belong to the generator),
+     * and so does the EXPONENTIAL case (A != 1, e.g. the base 2 of 2^x, or E of
+     * E^x), where B^(k A) legitimately maps to g^k for integer k.  This guard is
+     * therefore gated on A_one.  It uses a strict literal-number test, NOT
+     * is_number(), which also reports constant SYMBOLS (E, Pi) -- an E^x
+     * generator must keep matching its integer powers.  The only caller that
+     * ever passes such a base is radrat; the single-radical path declines
+     * numeric bases at poly_find_radical_gen. */
+    bool numeric_literal_base =
+        (B->type == EXPR_INTEGER || B->type == EXPR_REAL || B->type == EXPR_BIGINT
+         || (B->type == EXPR_FUNCTION && B->data.function.head->type == EXPR_SYMBOL
+             && B->data.function.head->data.symbol.name == SYM_Rational));
     if (A_one && expr_eq(e, B)) {
+        if (numeric_literal_base) return false;  /* bare numeric constant: not the gen */
         *c_n = 1; *c_d = 1;
         return true;
     }
@@ -786,6 +806,9 @@ static bool is_target_power(Expr* e, Expr* B, Expr* A, int64_t* c_n, int64_t* c_
         bool match = expr_eq(A_actual, A);
         expr_free(A_actual);
         if (match) {
+            /* radical case only: an integer power of a numeric constant is a
+             * coefficient, not the generator. */
+            if (A_one && numeric_literal_base && cd <= 1) return false;
             *c_n = cn;
             *c_d = cd;
             return true;

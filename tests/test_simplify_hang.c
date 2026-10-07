@@ -172,6 +172,12 @@ int main(void) {
         "Simplify[(v + Sqrt[u]) u^(-1/2)]",
         SQRT_TAN_RESIDUAL_SIMPLIFY,                    /* Root-object hang */
         "Simplify[Root[1 + #1^4 &, 2]^3 + Root[1 + #1^4 &, 2]]",
+        /* function-radical + algebraic-CONSTANT (Sqrt[2]) coefficient: used to
+         * hang in the algebraic-field Together because radrat dropped the
+         * constant radical and declined (only one symbolic generator left). */
+        "Simplify[D[Integrate[(x^2+1)/(x^3 Sqrt[2 x^4-2 x^2+1]),x],x]"
+        " - (x^2+1)/(x^3 Sqrt[2 x^4-2 x^2+1])]",
+        "Simplify[Sqrt[2]/Sqrt[1+x^2] - Sqrt[2] Sqrt[1+x^2]/(1+x^2)]",
     };
     for (size_t i = 0; i < sizeof(battery) / sizeof(battery[0]); i++)
         expect_terminates(battery[i], 10);
@@ -209,6 +215,29 @@ int main(void) {
     /* A NON-trig Root-coefficient rational identity also collapses to 0    */
     /* (cubic field from x^3 - 2), via Together + the qqbar coeff pass.     */
     check_eq("Simplify[D[Integrate[x/(x^3 - 2), x], x] - x/(x^3 - 2)]", "0");
+
+    /* ------------------------------------------------------------------ */
+    /* Function-radical + algebraic-CONSTANT radical (e.g. Sqrt[2]) in the   */
+    /* coefficients. radrat (src/simp/radrat.c) now collects CONSTANT radical */
+    /* bases as generators too -- with the relation s^q - c -- so a rational  */
+    /* function of x, one x-dependent radical, and Sqrt[2] reduces to 0       */
+    /* modulo the generator relations instead of falling into the hanging     */
+    /* algebraic-field Together over Q(x)[R]/(R^2 - q).  The reported case:    */
+    /*   D[Integrate[(x^2+1)/(x^3 Sqrt[2x^4-2x^2+1]),x],x] - integrand.        */
+    /* ------------------------------------------------------------------ */
+    check_eq("Simplify[D[Integrate[(x^2+1)/(x^3 Sqrt[2 x^4-2 x^2+1]),x],x]"
+             " - (x^2+1)/(x^3 Sqrt[2 x^4-2 x^2+1])]", "0");
+    check_eq("Simplify[Sqrt[2]/Sqrt[1+x^2] - Sqrt[2] Sqrt[1+x^2]/(1+x^2)]", "0");
+    check_eq("Simplify[Sqrt[6] Sqrt[x^2+1] - Sqrt[2] Sqrt[3] Sqrt[x^2+1]]", "0");
+    /* Soundness: a genuinely non-zero mixture must NOT collapse to 0 (the    */
+    /* substitution + reduction uses only true relations, so a non-identity   */
+    /* never reduces away). */
+    check_eq("Simplify[Sqrt[2]/Sqrt[1+x^2] - Sqrt[3] Sqrt[1+x^2]/(1+x^2)]",
+             "(Sqrt[2] - Sqrt[3])/Sqrt[1 + x^2]");
+    /* Pure-numeric radical identities stay with the RootReduce / qqbar path  */
+    /* (radrat declines when NO base carries a symbol), and must still hold.  */
+    check_eq("Simplify[Sqrt[8] - 2 Sqrt[2]]", "0");
+    check_eq("Simplify[Sqrt[2] Sqrt[3] - Sqrt[6]]", "0");
 
     /* ------------------------------------------------------------------ */
     /* TimeConstraint option.                                              */
