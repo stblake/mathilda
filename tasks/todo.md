@@ -1,70 +1,34 @@
-# Task: Implement NonCommutativeMultiply (`**`)
+# Mellin-transform Integrate: close 7 cases + fix ArcTan[a/x] sign bug (v0.300)
 
-Plan: `~/.claude/plans/pasted-content-id-d470-let-s-implement-structured-cloud.md`
+All edits in `src/calculus/integrate_ramanujan.c`; tests in `tests/test_integrate_ramanujan.c`.
 
-Associative (Flat) but non-commutative multiplication, operator `**`, attributes
-`{Flat, OneIdentity, Protected}`, no automatic simplification beyond flattening.
-No new C builtin — attribute-driven flattening in the evaluator does the work.
-
-## Edits
-- [x] `src/version.h` — bump 0.297 → 0.298
-- [x] `src/parse.c` — `OP_NONCOMMULT` enum; `**` lexer arm (prec 5900); added NCM to parse-time n-ary flatten branch
-- [x] `src/sym_names.{h,c}` — `SYM_NonCommutativeMultiply` decl/def/init
-- [x] `src/print.c` — `get_expr_prec` 5900 (≥2 args); infix `" ** "` in the operator block
-- [x] `src/attr.c` — `{"NonCommutativeMultiply", ATTR_FLAT|ATTR_ONEIDENTITY|ATTR_PROTECTED}`
-- [x] `src/info.c` — docstring (after Dot)
+## Implementation
+- [ ] 1. Sign-bug fix: monomial Jacobian `1/k` → `1/|k|` (line ~1116)
+- [ ] 2. `rec_expintegrale` — ExpIntegralE[n,a x] → a^-s Γ(s)/(s+n-1), strip Re s>0 ∧ Re(s+n)>1
+- [ ] 3. `rec_trigpow` — Sin/Cos[a x]^k linearization (reuse sinpow_term w/ symbolic sv)
+- [ ] 4. `conv_exp_trig` — Exp[-a x]{Sin,Cos}[b x] in rec_convolution
+- [ ] 5. Coth[a x]-1 reduce rule (+ "Coth" guard) reusing rec_expgeom
+- [ ] 6. `rec_arctan_sq` — ArcTan[a x]^2 → PolyGamma closed form
+- [ ] 7. Register new recognizers in try_recognizers / rec_convolution
 
 ## Tests
-- [x] `tests/test_noncommutativemultiply.c` — 10 groups: parse/flatten/non-comm/one-arg/no-simp/print/precedence/attrs/pattern/memory — ALL PASS
-- [x] `tests/CMakeLists.txt` — registered `noncommutativemultiply_tests`
+- [ ] ArcTan[a/x] corrected (positive); regression: Sin[ax^2],Cos[ax^2],ArcCot,Log[1+a^2x^2]
+- [ ] New: Sin^2, Sin^3, Exp·Sin, Exp·Cos, Coth-1, ArcTan^2, ExpIntegralE (2 cases)
 
-## Docs / versioning
-- [x] `docs/spec/builtins/arithmetic.md` — NonCommutativeMultiply section
-- [x] `docs/spec/operators.md` — precedence row (5900)
-- [x] `docs/spec/changelog/2026-10-05.md` — v0.298 entry (prepended)
+## Verify / conventions
+- [x] build + re-run all 12 pasted inputs — all correct; ArcTan[a/x] now POSITIVE
+- [x] integrate_ramanujan_tests green (+ test_mellin_stress_set); definite suites green
+      (intrep/diffunderint FAILs are PRE-EXISTING on clean tree, confirmed via stash)
+- [x] independent oracle: 9/12 NIntegrate diff=0; 5,6,8 exact vs Pi/2, 0.794569..., 2/13
+- [x] valgrind: identical leak profile to pre-existing Mellin baseline; no new-fn frames
+- [x] version.h 0.299→0.300  (tag v0.300 pending commit)
+- [x] docs/spec/builtins/calculus.md (table + prose) + changelog 2026-10-05.md
+- [x] check-c99, check-messages clean; graph rebuilt
 
-## Verification
-- [x] `make -j` build (GCC-16, clean); REPL smoke-test — every transcript line matches Mathematica exactly
-- [x] built + ran `noncommutativemultiply_tests` (pass); regression set parse/print/evaluate/unevaluated/flatten_at all pass
-- [x] valgrind: pure-NCM paths clean at core_init baseline (13,440 B/420 blocks, identical to parse_tests/evaluate_tests); +2 blocks in full test isolated to pre-existing Simplify-family leak
-- [x] `make check-c99` PASS, `check-messages` PASS, `check-packed-aware` PASS
-- [x] `check-array-exactness` PASS (0 MIXED); `check-nd-surfaces` PASS (NCM not flagged)
-- [x] `check-fastpath-sweep` — exit 1 is PRE-EXISTING (stale OFF_BUFFER ~v0.156; 61 NEW heads all unrelated post-v0.156 builtins). NCM NOT in the list → no exempt needed. Gate is not in per-push CI.
-- [x] rebuilt code-review-graph (incremental, ok)
-
-## Review (v0.298, complete)
-
-NonCommutativeMultiply (`**`) implemented end to end. Associative (Flat) but
-non-commutative generalized multiplication, attributes `{Flat, OneIdentity,
-Protected}`, no automatic simplification beyond flattening.
-
-**Design:** no new C builtin — flattening is entirely attribute-driven in the
-evaluator (`eval.c` Flat path, gated only on head-is-symbol + ATTR_FLAT). Nine
-existing files touched additively + one new test file. Precedence 5900 placed in
-the empty gap between Dot (5300) and Power (6500).
-
-**Behavior verified** against the user's Mathematica transcript (REPL smoke +
-unit tests): parse-time n-ary flatten (even under Hold), associativity,
-non-commutativity (`a**b` ≠ `b**a`, Equal stays unevaluated), one-arg stays,
-`{0**a,1**a}` stay, Expand/Simplify/FullSimplify no-ops, infix printing with
-precedence-aware parens, and the full `Plus<Times<Dot<NCM<Power` chain. Flat +
-OneIdentity pattern matching works (the `DOperator[L1__**L2_,…]` shape).
-
-**Tests:** `tests/test_noncommutativemultiply.c` (10 groups) PASS; regression set
-parse/print/evaluate/unevaluated/flatten_at PASS.
-
-**Leaks:** pure-NCM paths valgrind clean at the core_init baseline (13,440 B/420
-blocks — proven by isolation; identical to parse_tests/evaluate_tests). The +2
-blocks in the full test are the pre-existing Simplify-family leak (the test
-calls Simplify/FullSimplify only to assert NCM is a no-op under them).
-
-**Gates:** check-c99 / check-messages / check-packed-aware / check-array-exactness
-/ check-nd-surfaces all PASS. check-fastpath-sweep red is pre-existing backlog
-(see above), NCM not implicated.
-
-**Docs/version:** arithmetic.md section, operators.md row (5900), changelog
-v0.298 prepended, version bumped 0.297 → 0.298. Graph rebuilt.
-
-**Not committed (awaiting user):** per release-tagging rule this is a substantive
-change → commit with `; v0.298` and tag `v0.298`. Pre-existing fastpath-sweep
-backlog (61 heads, stale OFF_BUFFER) is a separate maintenance task, out of scope.
+## Review
+All 7 changes landed in src/calculus/integrate_ramanujan.c (general mechanisms,
+no per-example patches). The ArcTan[a/x] "reference" in the paste was itself the
+buggy (negated) value; the test asserts the corrected positive form. ExpIntegralE
+returns a ConditionalExpression under the pasted (insufficient) assumptions — the
+honest result (Re(s+n)>1 not provable), matching Mathematica. NOT yet committed
+(awaiting user go-ahead for commit + git tag v0.300).

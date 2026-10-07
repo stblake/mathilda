@@ -1984,11 +1984,15 @@ power prefactor sets `s = ρ + 1`:
 | `Erfc[λ x]`, `λ>0` | `λ^{-s} Γ((s+1)/2) / (√π s)` | `0<Re s` |
 | `SinIntegral[λ x]`, `λ>0` | `-λ^{-s} Γ(s) Sin(πs/2) / s` | `-1<Re s<0` |
 | `CosIntegral[λ x]`, `λ>0` | `-λ^{-s} Γ(s) Cos(πs/2) / s` | `0<Re s<1` |
-| `ExpIntegralE[n, λ x]`, `λ>0` | `λ^{-s} Γ(s) / (s+n-1)` | `0<Re s` |
+| `ExpIntegralE[n, λ x]` (general `n`), `λ>0` | `λ^{-s} Γ(s) / (s+n-1)` | `Re s>0, Re(s+n)>1` |
 | `StruveH[0, λ x]`, `λ>0` | `π 2^{s-1} λ^{-s} / (Cos(πs/2) Γ(1-s/2)²)` | `-1<Re s<1` |
 | `Gamma[ν, λ x]` (upper incomplete), `λ>0` | `λ^{-s} Γ(s+ν) / s` | `Re s>0, Re(s+ν)>0` |
 | `Csch[λ x]`, `λ>0` | `2 λ^{-s} Γ(s) (1-2^{-s}) ζ(s)` | `1<Re s` |
 | `Sech[λ x]`, `λ>0` | `2^{1-s} λ^{-s} Γ(s) LerchPhi(-1, s, 1/2)` | `0<Re s` |
+| `Coth[λ x] - 1`, `λ>0` | `2^{1-s} λ^{-s} Γ(s) ζ(s)` | `1<Re s` |
+| `Sin[λ x]^k` (`k≥2` int), `λ>0` | linearize (`TrigReduce`) → Σ harmonics via `Sin/Cos` rows | `-k<Re s<` (`0` even `k`, `1` odd) |
+| `Cos[λ x]^k` (`k≥2` int), `λ>0` | linearize → Σ harmonics (mean dropped) | `0<Re s<` (`0` even → diverges, `1` odd) |
+| `ArcTan[λ x]^2`, `λ>0` | `(π λ^{-s}/(2s)) Csc(πs/2) (ψ((1-s)/2) − ψ(1/2))` | `-2<Re s<0` |
 
 The kernels below the exponential-geometric row are closed through three general
 layers rather than one-off entries. `BesselK` and `AiryAi` are **dedicated base
@@ -1996,18 +2000,26 @@ transforms** (each a cancelling combination of individually-divergent series, so
 no single `pFq` exists). `SinIntegral` and `StruveH` are **reduced to a single
 entire `₁F₂`** (`Si(z)=z·₁F₂(½;3/2,3/2;−z²/4)`,
 `H_ν(z)=(z/2)^{ν+1}(2/(√π Γ(ν+3/2)))·₁F₂(1;3/2,ν+3/2;−z²/4)`) and closed by the
-`pFq` recognizer. `Erfc`, `CosIntegral` and `ExpIntegralE` are closed by **Mellin
-operational calculus**: `∫₀^∞ x^{s-1} f = −(1/s) ∫₀^∞ x^s f'` by parts whenever
-`f'` is itself a recognized kernel (`Erfc'`=Gaussian, `Ci'`=cos/x, `E_n'`=−`E_{n-1}`
-bottoming at `E_0=e^{−z}/z`), with the lower boundary `Re s>0` added from `f`'s
-constant-or-logarithmic value at the origin. The **upper incomplete gamma**
+`pFq` recognizer. `Erfc` and `CosIntegral` are closed by **Mellin operational
+calculus**: `∫₀^∞ x^{s-1} f = −(1/s) ∫₀^∞ x^s f'` by parts whenever `f'` is itself
+a recognized kernel (`Erfc'`=Gaussian, `Ci'`=cos/x), with the lower boundary
+`Re s>0` added from `f`'s constant-or-logarithmic value at the origin.
+`ExpIntegralE[n, λx]` is a **dedicated recognizer for general (symbolic) `n`**
+giving `λ^{-s} Γ(s)/(s+n-1)` — the operational-calculus `E_n'=−E_{n-1}` chain
+cannot bottom out for symbolic `n`. Its strip is `Re s>0` (the `E_n(0)` constant)
+**and** `Re(s+n)>1` (the `z^{n-1}` branch term, binding for small `n`); the latter
+is *not* implied by `{Re s>0, Re(s−n)<0}`, so under those assumptions the honest
+result is a `ConditionalExpression` carrying `Re(s+n)>1`. The **upper incomplete gamma**
 `Γ[ν, λx]` is a dedicated recognizer giving `λ^{-s} Γ(s+ν)/s` (the operational-
 calculus identity `Γ'(ν,x)=−x^{ν-1}e^{-x}`, with `x^{ν-1}` folded into the power).
 `Csch` and `Sech` are the two-exponential **hyperbolic Dirichlet** siblings of the
 exponential-geometric kernel: expanding `e^{-λx}` geometrically lands on an
 odd-argument Dirichlet series, `Csch[λx] → 2λ^{-s}Γ(s)(1-2^{-s})ζ(s)` (`Re s>1`)
 and `Sech[λx] → 2^{1-s}λ^{-s}Γ(s)·LerchPhi(-1,s,1/2)` (`= 2λ^{-s}Γ(s)β(s)`,
-`Re s>0`).
+`Re s>0`). The **Bose kernel** `Coth[λx] − 1 = 2/(e^{2λx}−1)` is reduced (before
+Expand, so the divergent-on-its-own `Coth` and `−1` are never split) to the
+exponential-geometric kernel and closed by it as `2^{1-s}λ^{-s}Γ(s)ζ(s)` (`Re s>1`);
+bare `Coth[λx]` (no strip — it diverges at both ends) is left unreduced and declines.
 
 The convergence strip is matched against the user `Assumptions` with `Simplify`
 and then `Refine`, which reasons about real parts where `Simplify` does not — so a
@@ -2047,8 +2059,23 @@ simply declines).
 Four operational layers extend the table:
 
 - **Monomial substitution** `g(x^k)` (`k≠1`) via `y = x^k`:
-  `∫ x^{s-1} g(x^k) = (1/k) ∫ y^{s/k-1} g(y)`, so `Sin[√x]`, `BesselJ[ν,2√x]`,
-  `ArcTan[√x]`, `Cos[x²]` reduce to the linear table at `s/k`.
+  `∫ x^{s-1} g(x^k) = (1/|k|) ∫ y^{s/k-1} g(y)`, so `Sin[√x]`, `BesselJ[ν,2√x]`,
+  `ArcTan[√x]`, `Cos[x²]` reduce to the linear table at `s/k`. The Jacobian is
+  `1/|k|`, **not** `1/k`: for `k<0` the substitution reverses the `(0,∞)` limits,
+  contributing the sign that keeps the factor positive — so a reciprocal argument
+  like `ArcTan[a/x]` (`k=−1`) gives the correct `+(π/2s) Sec(πs/2) a^s`.
+- **Trig powers** `Sin[λx]^k` / `Cos[λx]^k` (`k≥2` integer): `TrigReduce`
+  linearizes into a sum of harmonics `c_j {Cos,Sin}(b_j x)` plus a possible mean;
+  each harmonic goes through the `Sin/Cos` base rows at symbolic `s` and the
+  scaleless mean is dropped (its Mellin transform is `0` on the `Re s<0` half
+  where the even-power mean lives). The strip is read off the whole function's
+  asymptotics — left edge `−k` for `Sin^k` (`∼(λx)^k` at 0), `0` for `Cos^k`;
+  right edge `0` when a nonzero mean survives (even power), `1` when the mean is 0
+  (odd). An empty strip declines (`Cos^{even}`: `0<Re s<0`, genuinely divergent).
+- **`ArcTan[λx]^2`**: the Mellin convolution of `ArcTan` with itself, whose Barnes
+  residue sum closes to a digamma difference,
+  `(π λ^{-s}/(2s)) Csc(πs/2) (ψ((1−s)/2) − ψ(1/2))` on `−2<Re s<0` (Mathematica
+  returns this unevaluated).
 - **Hypergeometric reduction** (applied before Expand, so a cancellation kernel
   is never split): `Erf[u] → u·₁F₁`, `Γ[a]-Γ[a,x] → x^a/a·₁F₁` (lower incomplete
   gamma), the product `BesselJ[ν,·]² → ₁F₂`, and the complete elliptic integrals
@@ -2083,7 +2110,12 @@ Four operational layers extend the table:
   Gauss/Kummer hypergeometric: `e^{-ax} J_ν(bx) → (b/2)^ν Γ(s+ν)/(a^{s+ν}Γ(ν+1))·₂F₁(\tfrac{s+ν}{2},\tfrac{s+ν+1}{2};ν+1;-b²/a²)`
   (`Re a>0`), and the Gaussian case (Weber's second exponential integral)
   `e^{-a²x²} J_ν(bx) → b^ν Γ(\tfrac{s+ν}{2})/(2^{ν+1}(a²)^{(s+ν)/2}Γ(ν+1))·₁F₁(\tfrac{s+ν}{2};ν+1;-b²/(4a²))`,
-  both on `Re(s+ν)>0`.
+  both on `Re(s+ν)>0`. The **exponential × trigonometric** family
+  `e^{-ax} Sin(bx)` / `e^{-ax} Cos(bx)` (`a,b>0`) closes in elementary form via the
+  complex frequency `c = a − i b`, `M[e^{-cx}] = c^{-s}Γ(s)`:
+  `e^{-ax} Sin(bx) → Γ(s)(a²+b²)^{-s/2} Sin(s·ArcTan(b/a))` (`Re s>-1`) and
+  `e^{-ax} Cos(bx) → Γ(s)(a²+b²)^{-s/2} Cos(s·ArcTan(b/a))` (`Re s>0`) — a genuine
+  generalization (`a→0` recovers the `Sin/Cos` rows, `b→0` the `Exp` row).
 
 A **Frullani pre-pass** (run on the whole integrand before Expand, since each
 half is individually divergent) recognises `(f(a x)-f(b x))/x` and returns

@@ -1069,6 +1069,125 @@ static Expr* single_distinct_x_exponent(const Expr* K, const Expr* x) {
     return r;
 }
 
+/* Forward declarations: rec_trigpow (below) reuses the trig-power linearizer
+ * sinpow_term and the linear-argument helper linear_coeff, both defined later. */
+static Expr* linear_coeff(const Expr* arg, const Expr* x);
+static Expr* sinpow_term(Expr* term, const Expr* x, const Expr* sExpr);
+
+/* ExpIntegralE[n, lam x], lam > 0:  M = lam^(-sv) Gamma(sv)/(sv + n - 1),
+ *   Re sv > 0 && Re(sv + n) > 1.
+ * E_n(z) = Integrate[t^(-n) e^(-z t), {t,1,Inf}], so interchanging,
+ *   M_E(sv) = lam^(-sv) Gamma(sv) Integrate[t^(-n-sv), {t,1,Inf}]
+ *           = lam^(-sv) Gamma(sv)/(sv + n - 1).
+ * Strip: the x->0 constant E_n(0)=1/(n-1) needs Re sv>0; for Re n<1 the leading
+ * branch term z^(n-1) needs Re(sv+n)>1, which binds for small n and is NOT
+ * implied by {Re sv>0, Re(sv-n)<0} -- so those assumptions correctly leave a
+ * ConditionalExpression.  A dedicated recognizer: the rec_ibp E_n->E_(n-1) chain
+ * cannot bottom out for symbolic n. */
+static bool rec_expintegrale(const Expr* K, const Expr* x, const Expr* sv,
+                             Expr** M, Expr** P) {
+    if (!head_name_is(K, "ExpIntegralE") || K->data.function.arg_count != 2) return false;
+    Expr* n   = K->data.function.args[0];
+    Expr* arg = K->data.function.args[1];
+    if (!free_of_x_now(n, x)) return false;
+    Expr* lam = dx(arg, x);
+    if (!free_of_x_now(lam, x)) { expr_free(lam); return false; }
+    Expr* cross = simp(Pls(cp(arg), Neg(Tms(cp(lam), cp(x)))));
+    bool bad = !is_zero_now(cross);
+    expr_free(cross);
+    if (bad) { expr_free(lam); return false; }
+    *M = Tms3(Pw(cp(lam), Neg(cp(sv))),
+              Gamma_(cp(sv)),
+              Pw(Pls(Pls(cp(sv), cp(n)), mk_int(-1)), mk_int(-1)));   /* 1/(sv+n-1) */
+    *P = And2(Gt(cp(lam), mk_int(0)),
+              And2(Gt(cp(sv), mk_int(0)),
+                   Gt(Pls(cp(sv), cp(n)), mk_int(1))));               /* Re(sv+n) > 1 */
+    expr_free(lam);
+    return true;
+}
+
+/* Sin[lam x]^k / Cos[lam x]^k (k >= 2 integer), lam > 0:  linearize with
+ * TrigReduce into a sum of harmonics c_j {Cos,Sin}(b_j x) plus a possible
+ * x-free mean; transform each harmonic with the rec_trig reflection form at the
+ * symbolic sv (sinpow_term), and DROP the mean (its Mellin transform is 0 on the
+ * Re sv < 0 half of the strip, where the even-power mean lives).
+ * The convergence strip is read off the WHOLE function's asymptotics, not the
+ * per-harmonic strips (which intersect to empty): left edge -k for a Sin base
+ * (f ~ (lam x)^k at 0), 0 for a Cos base (f -> 1 at 0); right edge 0 when a
+ * nonzero mean survives at infinity (even power), 1 when the mean is 0 (odd
+ * power).  An empty strip (Cos^even: 0 < Re sv < 0, i.e. Integrate[x^(s-1)
+ * Cos^2] genuinely diverges everywhere) declines. */
+static bool rec_trigpow(const Expr* K, const Expr* x, const Expr* sv,
+                        Expr** M, Expr** P) {
+    if (!head_name_is(K, "Power") || K->data.function.arg_count != 2) return false;
+    Expr* base = K->data.function.args[0];
+    Expr* e    = K->data.function.args[1];
+    bool is_sin = head_name_is(base, "Sin");
+    bool is_cos = head_name_is(base, "Cos");
+    if ((!is_sin && !is_cos) || base->data.function.arg_count != 1) return false;
+    if (e->type != EXPR_INTEGER || e->data.integer < 2) return false;
+    long k = (long)e->data.integer;
+    Expr* lam = linear_coeff(base->data.function.args[0], x);   /* arg == lam x */
+    if (!lam) return false;
+
+    Expr* G = ev1("Expand", mk_fn1("TrigReduce", Pw(cp(base), mk_int(k))));
+    if (!G) { expr_free(lam); return false; }
+    size_t nt; Expr** terms; Expr* single[1];
+    if (head_name_is(G, "Plus")) { nt = G->data.function.arg_count; terms = G->data.function.args; }
+    else { nt = 1; single[0] = G; terms = single; }
+
+    Expr* total = mk_int(0);
+    bool has_mean = false, good = true;
+    for (size_t t = 0; t < nt && good; t++) {
+        if (free_of_x_now(terms[t], x)) { has_mean = true; continue; }   /* drop mean */
+        Expr* v = sinpow_term(terms[t], x, sv);                 /* harmonic -> reflection */
+        if (!v) { good = false; break; }
+        total = Pls(total, v);
+    }
+    expr_free(G);
+    if (!good) { expr_free(total); expr_free(lam); return false; }
+
+    long leftedge  = is_sin ? -k : 0;
+    long rightedge = has_mean ? 0 : 1;
+    if (leftedge >= rightedge) { expr_free(total); expr_free(lam); return false; }
+    *M = total;
+    *P = And2(Gt(cp(lam), mk_int(0)),
+              And2(Gt(cp(sv), mk_int(leftedge)), Lt(cp(sv), mk_int(rightedge))));
+    expr_free(lam);
+    return true;
+}
+
+/* ArcTan[lam x]^2, lam > 0:  M = (pi lam^(-sv)/(2 sv)) Csc(pi sv/2)
+ *     (PolyGamma[0, (1-sv)/2] - PolyGamma[0, 1/2]),   -2 < Re sv < 0.
+ * The Mellin convolution of ArcTan with itself; the Barnes residue sum closes to
+ * a digamma difference.  (Check: sv=-1 gives pi Log 2 = Integrate[ArcTan[x]^2/x^2,
+ * {x,0,Inf}].)  Mathematica returns this unevaluated. */
+static bool rec_arctan_sq(const Expr* K, const Expr* x, const Expr* sv,
+                          Expr** M, Expr** P) {
+    if (!head_name_is(K, "Power") || K->data.function.arg_count != 2) return false;
+    Expr* base = K->data.function.args[0];
+    Expr* e    = K->data.function.args[1];
+    if (!head_name_is(base, "ArcTan") || base->data.function.arg_count != 1) return false;
+    if (e->type != EXPR_INTEGER || e->data.integer != 2) return false;
+    Expr* arg = base->data.function.args[0];
+    Expr* lam = dx(arg, x);
+    if (!free_of_x_now(lam, x)) { expr_free(lam); return false; }
+    Expr* cross = simp(Pls(cp(arg), Neg(Tms(cp(lam), cp(x)))));
+    bool bad = !is_zero_now(cross);
+    expr_free(cross);
+    if (bad) { expr_free(lam); return false; }
+    Expr* pg = mk_fn2("Subtract",
+        mk_fn2("PolyGamma", mk_int(0), Half(Pls(mk_int(1), Neg(cp(sv))))),  /* psi((1-sv)/2) */
+        mk_fn2("PolyGamma", mk_int(0), Rat(1, 2)));                         /* psi(1/2) */
+    Expr* csc = mk_fn1("Csc", Half(Tms(mk_sym("Pi"), cp(sv))));
+    *M = Tms(Tms(mk_sym("Pi"), Pw(cp(lam), Neg(cp(sv)))),
+             Tms(Tms(Rat(1, 2), Pw(cp(sv), mk_int(-1))), Tms(csc, pg)));
+    *P = And2(Gt(cp(lam), mk_int(0)),
+              And2(Gt(cp(sv), mk_int(-2)), Lt(cp(sv), mk_int(0))));
+    expr_free(lam);
+    return true;
+}
+
 /* Try every base recognizer at spectral variable sv. */
 static bool try_recognizers(const Expr* K, const Expr* x, const Expr* sv,
                             Expr* assumptions, Expr** M, Expr** P) {
@@ -1076,12 +1195,15 @@ static bool try_recognizers(const Expr* K, const Expr* x, const Expr* sv,
     if (rec_gauss(K, x, sv, M, P))     return true;
     if (rec_algebraic(K, x, sv, M, P)) return true;
     if (rec_trig(K, x, sv, M, P))      return true;
+    if (rec_trigpow(K, x, sv, M, P))   return true;
     if (rec_bessel(K, x, sv, M, P))    return true;
     if (rec_besselk(K, x, sv, M, P))   return true;
     if (rec_log(K, x, sv, M, P))       return true;
     if (rec_arctan(K, x, sv, M, P))    return true;
+    if (rec_arctan_sq(K, x, sv, M, P)) return true;
     if (rec_airy(K, x, sv, M, P))      return true;
     if (rec_gamma_upper(K, x, sv, M, P)) return true;
+    if (rec_expintegrale(K, x, sv, M, P)) return true;
     if (rec_pfq(K, x, sv, M, P))       return true;
     if (rec_polylog(K, x, sv, M, P))   return true;
     if (rec_expgeom(K, x, sv, assumptions, M, P)) return true;
@@ -1113,7 +1235,11 @@ static bool dispatch_kernel(const Expr* K, const Expr* x, const Expr* sv,
         Expr* Klin   = ev2("ReplaceAll", cp(K), rule);
         Expr* sv_eff = simp(Tms(cp(sv), Pw(cp(k), mk_int(-1))));  /* sv / k */
         bool ok = Klin && try_recognizers(Klin, x, sv_eff, assumptions, M, P);
-        if (ok) *M = Tms(Pw(cp(k), mk_int(-1)), *M);             /* x (1/k) */
+        /* Jacobian is 1/|k|, not 1/k: for k < 0 the substitution y = x^k reverses
+         * the (0, Inf) limits, contributing the sign that keeps the factor
+         * positive.  Using 1/k flips the sign of every reciprocal-argument kernel
+         * (e.g. ArcTan[a/x], k = -1).  Abs folds on the literal k. */
+        if (ok) *M = Tms(Pw(mk_fn1("Abs", cp(k)), mk_int(-1)), *M);   /* x 1/|k| */
         if (Klin) expr_free(Klin);
         expr_free(sv_eff);
         expr_free(k);
@@ -1511,6 +1637,38 @@ static bool conv_JJ(const Expr* ka, const Expr* kb, const Expr* x,
     return true;
 }
 
+/* Exp[-a x] Sin[b x] / Exp[-a x] Cos[b x], a > 0, b > 0:
+ *   M = Gamma(s) (a^2 + b^2)^(-s/2) {Sin,Cos}(s ArcTan[b/a]),
+ *   strip Re s > -1 (Sin) / Re s > 0 (Cos).
+ * From e^{-a x} sin(b x) = Im e^{-(a - i b) x}, e^{-a x} cos(b x) = Re e^{-(a - i b) x},
+ * and M[e^{-c x}](s) = c^{-s} Gamma(s) for Re c > 0, with c = a - i b:
+ * |c| = sqrt(a^2 + b^2), arg c = -ArcTan(b/a), so c^{-s} = (a^2+b^2)^(-s/2)
+ * e^{i s ArcTan(b/a)}, and taking the imaginary/real part gives the sin/cos.
+ * (Generalizes the bare exp and bare trig transforms: a=0 recovers M[sin/cos],
+ * b=0 recovers M[exp].) */
+static bool conv_exp_trig(const Expr* ke, const Expr* kt, const Expr* x,
+                          const Expr* sv, Expr** M, Expr** P) {
+    bool is_sin = head_name_is(kt, "Sin");
+    bool is_cos = head_name_is(kt, "Cos");
+    if ((!is_sin && !is_cos) || kt->data.function.arg_count != 1) return false;
+    Expr* a = NULL;
+    if (!conv_exp_rate(ke, x, &a)) return false;                /* ke = Exp[-a x] */
+    Expr* b = linear_coeff(kt->data.function.args[0], x);       /* kt = {Sin,Cos}[b x] */
+    if (!b) { expr_free(a); return false; }
+    Expr* at = mk_fn1("ArcTan", Tms(cp(b), Pw(cp(a), mk_int(-1))));   /* ArcTan[b/a] */
+    Expr* trig = is_sin ? mk_fn1("Sin", Tms(cp(sv), cp(at)))
+                        : mk_fn1("Cos", Tms(cp(sv), cp(at)));
+    expr_free(at);
+    *M = Tms(Gamma_(cp(sv)),
+             Tms(Pw(Pls(Pw(cp(a), mk_int(2)), Pw(cp(b), mk_int(2))), Neg(Half(cp(sv)))),
+                 trig));
+    *P = And2(Gt(mk_fn1("Re", cp(a)), mk_int(0)),              /* Re a > 0 (a may be complex) */
+              And2(Gt(cp(b), mk_int(0)),
+                   Gt(cp(sv), mk_int(is_sin ? -1 : 0))));
+    expr_free(a); expr_free(b);
+    return true;
+}
+
 /* Dispatch a two-kernel product to the convolution closed forms (both orderings
  * for the asymmetric families). */
 static bool rec_convolution(Expr** kernels, size_t nk, const Expr* x,
@@ -1523,6 +1681,7 @@ static bool rec_convolution(Expr** kernels, size_t nk, const Expr* x,
     if (conv_JK(k0, k1, x, sv, M, P) || conv_JK(k1, k0, x, sv, M, P)) return true;
     if (conv_expJ(k0, k1, x, sv, M, P) || conv_expJ(k1, k0, x, sv, M, P)) return true;
     if (conv_gaussJ(k0, k1, x, sv, M, P) || conv_gaussJ(k1, k0, x, sv, M, P)) return true;
+    if (conv_exp_trig(k0, k1, x, sv, M, P) || conv_exp_trig(k1, k0, x, sv, M, P)) return true;
     return false;
 }
 
@@ -1693,7 +1852,7 @@ static Expr* reduce_to_hypergeometric(const Expr* f) {
         !contains_symbol_name(f, "Gamma") && !contains_symbol_name(f, "BesselJ") &&
         !contains_symbol_name(f, "SinIntegral") && !contains_symbol_name(f, "StruveH") &&
         !contains_symbol_name(f, "EllipticK") && !contains_symbol_name(f, "EllipticE") &&
-        !contains_symbol_name(f, "BesselY"))
+        !contains_symbol_name(f, "BesselY") && !contains_symbol_name(f, "Coth"))
         return cp(f);
     /* Each kernel that IS a single entire/alternating pFq collapses here into
      * HypergeometricPFQ, so the Ramanujan-Master-Theorem recognizer rec_pfq (with
@@ -1724,7 +1883,13 @@ static Expr* reduce_to_hypergeometric(const Expr* f) {
          * strips intersect to Re s > |Re nu|, Re s < 3/2.  (Integer nu is a
          * removable 0/0 that this rule leaves to decline.) */
         "  BesselY[nu_, z_] :> (Cos[nu Pi] BesselJ[nu, z] - BesselJ[-nu, z]) / "
-        "      Sin[nu Pi] }";
+        "      Sin[nu Pi], "
+        /* Coth[u] - 1 = 2/(e^{2u}-1) is the Bose kernel (gamma = -1), closed by
+         * rec_expgeom as 2 (2 lam)^(-s) Gamma(s) Zeta(s) = 2^(1-s) lam^(-s)
+         * Gamma(s) Zeta(s), Re s > 1.  The rule fires only with the explicit -1,
+         * so bare Coth[lam x] (which diverges at both ends, no strip) stays
+         * unreduced and declines -- exactly the Gamma[a]-Gamma[a,z] precedent. */
+        "  Coth[u_] - 1 :> 2/(E^(2 u) - 1) }";
     Expr* rules = parse_expression(RULES);
     if (!rules) return cp(f);
     return ev2("ReplaceRepeated", cp(f), rules);

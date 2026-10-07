@@ -378,9 +378,11 @@ static void test_declines_cleanly(void) {
     /* Pinned, but not a half-line integral -> strict, no fallback. */
     assert_head_unevaluated(
         "Integrate[Exp[-x], {x, 0, 1}, Method -> \"RamanujanMasterTheorem\"]", "Integrate");
-    /* Product of two transcendental kernels = Mellin convolution, out of scope. */
+    /* Product of THREE transcendental kernels: the convolution engine is 2-kernel
+     * only, so this stays out of scope.  (Exp[-a x] Cos[b x] -- a two-kernel
+     * product -- now closes via conv_exp_trig.) */
     assert_head_unevaluated(
-        "Integrate`RamanujanMasterTheorem[Exp[-x] Cos[x], {x, 0, Infinity}]",
+        "Integrate`RamanujanMasterTheorem[Exp[-x] Sin[x] Cos[x], {x, 0, Infinity}]",
         "Integrate`RamanujanMasterTheorem");
     /* Positivity of the scaling rate unknown (no assumption) -> declines. */
     assert_head_unevaluated(
@@ -538,6 +540,88 @@ static void test_mellin_convolution(void) {
         "{s -> 1, nu -> 1/2, a -> 2, b -> 3}");
 }
 
+/* The 2026-10 Mellin stress set (Integrate[x^(s-1) f(a x), {x,0,Inf}]).  Seven
+ * previously-unevaluated single-function and product transforms now close, plus
+ * four already-closing forms as regressions and the CORRECTED ArcTan[a/x] sign
+ * (was negative; the integrand is strictly positive).  References are the
+ * independently-derived closed forms (cross-checked against NIntegrate / the
+ * known constant during development); numeric spot-checks at a strip-interior
+ * point, since the reflection / PolyGamma / Zeta forms do not Simplify to the
+ * Gamma-form symbolically. */
+static void test_mellin_stress_set(void) {
+    /* ExpIntegralE[n, a x], symbolic n (rec_expintegrale): a^-s Gamma[s]/(s+n-1),
+     * Re s>0 && Re(s+n)>1.  Under {Re s>0, Re(s-n)<0} the strip Re(s+n)>1 is NOT
+     * provable, so the honest result is a ConditionalExpression (value correct,
+     * condition carried) -- matching Mathematica's decline on those assumptions. */
+    assert_eval_eq(
+        "Head[Integrate[x^(s-1) ExpIntegralE[n,a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, Re[s-n]<0, a>0}, Method -> \"Mellin\"]]",
+        "ConditionalExpression", 0);
+    assert_cond_num(
+        "Integrate[x^(s-1) ExpIntegralE[n,a x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, Re[s-n]<0, a>0}, Method -> \"Mellin\"]",
+        "a^(-s) Gamma[s]/(s+n-1)", "{s -> 1/2, n -> 2, a -> 2}");
+    /* Sin[a x^2], Cos[a x^2] (Fresnel; monomial x^2 wrapper + rec_trig), 0<Re s<2. */
+    assert_cond_num(
+        "Integrate[x^(s-1) Sin[a x^2], {x,0,Infinity}, "
+        "Assumptions -> {0<Re[s]<2, a>0}, Method -> \"Mellin\"]",
+        "(1/4) Pi Sec[Pi s/4] a^(-s/2)/Gamma[1-s/2]", "{s -> 1, a -> 2}");
+    assert_cond_num(
+        "Integrate[x^(s-1) Cos[a x^2], {x,0,Infinity}, "
+        "Assumptions -> {0<Re[s]<2, a>0}, Method -> \"Mellin\"]",
+        "(1/4) Pi Csc[Pi s/4] a^(-s/2)/Gamma[1-s/2]", "{s -> 1, a -> 2}");
+    /* ArcCot[a x] (reciprocal-free IBP -> rational), 0 < Re s < 1. */
+    assert_cond_num(
+        "Integrate[x^(s-1) ArcCot[a x], {x,0,Infinity}, "
+        "Assumptions -> {0<Re[s]<1, a>0}, Method -> \"Mellin\"]",
+        "(1/(2 s)) Beta[(1+s)/2,(1-s)/2] a^(-s)", "{s -> 1/2, a -> 2}");
+    /* Sin[a x]^2, Sin[a x]^3 (rec_trigpow: TrigReduce linearization; mean dropped).
+     * s = -1/2 avoids the s = -1 removable point where the Gamma-form reference is
+     * 0*Infinity (the method's reflection form stays finite there). */
+    assert_cond_num(
+        "Integrate[x^(s-1) Sin[a x]^2, {x,0,Infinity}, "
+        "Assumptions -> {-2<Re[s]<0, a>0}, Method -> \"Mellin\"]",
+        "-(1/2) (2 a)^(-s) Gamma[s] Cos[Pi s/2]", "{s -> -1/2, a -> 1}");
+    assert_cond_num(
+        "Integrate[x^(s-1) Sin[a x]^3, {x,0,Infinity}, "
+        "Assumptions -> {-3<Re[s]<0, a>0}, Method -> \"Mellin\"]",
+        "(1/4) a^(-s) Gamma[s] Sin[Pi s/2] (3 - 3^(-s))", "{s -> -1/2, a -> 1}");
+    /* Exp[-a x] Sin[b x] / Cos[b x] (conv_exp_trig).  Checked at s=1 against the
+     * elementary b/(a^2+b^2), a/(a^2+b^2) -- independent of the complex-exp form. */
+    assert_cond_num(
+        "Integrate[x^(s-1) Exp[-a x] Sin[b x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>-1, a>0, b>0}, Method -> \"Mellin\"]",
+        "b/(a^2+b^2)", "{s -> 1, a -> 2, b -> 3}");
+    assert_cond_num(
+        "Integrate[x^(s-1) Exp[-a x] Cos[b x], {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>0, a>0, b>0}, Method -> \"Mellin\"]",
+        "a/(a^2+b^2)", "{s -> 1, a -> 2, b -> 3}");
+    /* ArcTan[a/x] (reciprocal argument, k=-1; corrected 1/|k| Jacobian): POSITIVE.
+     * (Was -(Pi/(2 s)) Sec[Pi s/2] a^s -- a sign bug; the integrand is > 0.) */
+    assert_cond_num(
+        "Integrate[x^(s-1) ArcTan[a/x], {x,0,Infinity}, "
+        "Assumptions -> {0<Re[s]<1, a>0}, Method -> \"Mellin\"]",
+        "(Pi/(2 s)) Sec[Pi s/2] a^s", "{s -> 1/2, a -> 2}");
+    /* ArcTan[a x]^2 (rec_arctan_sq -> PolyGamma), -2 < Re s < 0.  s=-1 gives
+     * Pi Log 2 = Integrate[ArcTan[x]^2/x^2]. */
+    assert_cond_num(
+        "Integrate[x^(s-1) ArcTan[a x]^2, {x,0,Infinity}, "
+        "Assumptions -> {-2<Re[s]<0, a>0}, Method -> \"Mellin\"]",
+        "(Pi a^(-s)/(2 s)) Csc[Pi s/2] (PolyGamma[0,(1-s)/2] - PolyGamma[0,1/2])",
+        "{s -> -1, a -> 1}");
+    /* Log[1 + a^2 x^2] (IBP -> rational via x^2 monomial), -2 < Re s < 0. */
+    assert_cond_num(
+        "Integrate[x^(s-1) Log[1 + a^2 x^2], {x,0,Infinity}, "
+        "Assumptions -> {-2<Re[s]<0, a>0}, Method -> \"Mellin\"]",
+        "(Pi/s) Csc[Pi s/2] a^(-s)", "{s -> -1, a -> 2}");
+    /* Coth[a x] - 1 (Bose rewrite -> rec_expgeom -> Zeta), Re s > 1.  s=2 gives
+     * Pi^2/12. */
+    assert_cond_num(
+        "Integrate[x^(s-1) (Coth[a x] - 1), {x,0,Infinity}, "
+        "Assumptions -> {Re[s]>1, a>0}, Method -> \"Mellin\"]",
+        "2^(1-s) a^(-s) Gamma[s] Zeta[s]", "{s -> 2, a -> 1}");
+}
+
 void test_integrate_ramanujan(void) {
     symtab_init();
     core_init();
@@ -556,6 +640,7 @@ void test_integrate_ramanujan(void) {
     TEST(test_mellin_special_functions);
     TEST(test_mellin_single_extensions);
     TEST(test_mellin_convolution);
+    TEST(test_mellin_stress_set);
     TEST(test_reductions);
     TEST(test_polylog);
     TEST(test_parametric_differentiation);
