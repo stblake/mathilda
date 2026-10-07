@@ -19,5 +19,5 @@ values. Here `g` loses both its assigned value and the `Orderless` attribute, so
 `Attributes[g]` is `{}`.
 
 Arguments may be symbols, strings naming symbols, or a flat list of them
-(`ClearAll[{a, b}]`). A `Protected` or `Locked` symbol is skipped, which is what
+(`ClearAll[{a, b}]`). A `Protected` symbol is skipped, which is what
 keeps `ClearAll` from ever gutting a built-in. The result is `Null`.

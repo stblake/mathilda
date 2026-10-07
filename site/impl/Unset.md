@@ -9,7 +9,7 @@ DownValue keyed by the head `f`; and because `f[x_] /; cond =.` parses to
 `Unset[Condition[f[x_], cond]]`, a `Condition` wrapper is unwrapped to find the
 inner head. A non-assignable left-hand side (e.g. `Unset[5]`) returns `NULL`.
 
-A `Protected` or `Locked` owner is refused with `Unset::wrsym` (mirroring `Set`),
+A `Protected` owner is refused with `Unset::wrsym` (mirroring `Set`),
 returning `Null`. Otherwise `symtab_remove_matching_rule(name, lhs, own_value)`
 deletes exactly the rule whose stored pattern equals `lhs`, leaving the symbol's
 other definitions, attributes, and remaining rules intact. The head returns

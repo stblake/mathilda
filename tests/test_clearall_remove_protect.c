@@ -4,8 +4,8 @@
  *   - core semantics (values/attributes/definition cleared, removed, or
  *     protection toggled);
  *   - the List-of-specs argument form (e.g. ClearAll[{a, b}]);
- *   - the Locked / Protected guards (ClearAll and Remove never touch a
- *     Protected or Locked symbol; Protect/Unprotect never touch Locked);
+ *   - the Protected guard (ClearAll and Remove never touch a Protected
+ *     symbol);
  *   - HoldAll (the symbol, not its value, is operated on);
  *   - the WL-faithful return values (Protect/Unprotect return the list of
  *     changed names; ClearAll/Remove return Null);
@@ -237,7 +237,7 @@ static void test_holdall_protect_targets_symbol(void) {
 
 static void test_head_attributes(void) {
     assert_eval_eq("Attributes[ClearAll]", "{HoldAll, Protected}", 0);
-    assert_eval_eq("Attributes[Remove]", "{HoldAll, Locked, Protected}", 0);
+    assert_eval_eq("Attributes[Remove]", "{HoldAll, Protected}", 0);
     assert_eval_eq("Attributes[Protect]", "{HoldAll, Protected}", 0);
     assert_eval_eq("Attributes[Unprotect]", "{HoldAll, Protected}", 0);
 }

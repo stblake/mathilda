@@ -8,7 +8,7 @@ string naming a symbol, or a flat `List` of such specs (so `ClearAll[{a, b}]`
 works), with the name read out by `core_symbol_name_of`. The action here is
 `core_clear_all_one`.
 
-For each name, `core_clear_all_one` first skips any `Protected` or `Locked`
+For each name, `core_clear_all_one` first skips any `Protected`
 symbol (which is what shields every builtin), then does the full erase that
 distinguishes `ClearAll` from `Clear`: `symtab_clear_symbol` drops the
 OwnValues/DownValues, the attribute word is zeroed (bumping the rule epoch so

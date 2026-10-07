@@ -19,7 +19,9 @@
 #define ATTR_NHOLDREST      (1 << 9)
 #define ATTR_NHOLDFIRST     (1 << 15)
 #define ATTR_NHOLDALL       (ATTR_NHOLDFIRST | ATTR_NHOLDREST)
-#define ATTR_LOCKED          (1 << 10)
+/* bit 10 was ATTR_LOCKED; removed — Mathilda is open source and never seals a
+ * symbol away. Every builtin is instead guarded by ATTR_PROTECTED, which the
+ * user can lift with Unprotect. */
 /* bit 11 was ATTR_READPROTECTED; removed — Mathilda is fully open source and
  * never hides a symbol's definition. */
 #define ATTR_TEMPORARY       (1 << 12)

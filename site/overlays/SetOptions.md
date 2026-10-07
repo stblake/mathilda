@@ -15,5 +15,4 @@ later `Options[s]` and option-reading builtins see the new default.
 
 `SetOptions` can only change options a symbol already has — a name that is not a
 known option raises `SetOptions::optnf` and leaves the settings untouched. The
-first argument must be a symbol, and a `Locked` symbol is refused with
-`SetOptions::locked`.
+first argument must be a symbol.

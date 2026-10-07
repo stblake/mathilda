@@ -17,6 +17,6 @@ rather than every rule on a symbol. For a bare symbol `v =.` drops its OwnValue;
 for a pattern `g[1] =.` drops exactly that DownValue, leaving the others in place
 — here `DownValues[g]` keeps only the `g[2]` rule. The result is `Null`.
 
-An unassignable left-hand side is left alone, and a `Protected` or `Locked`
+An unassignable left-hand side is left alone, and a `Protected`
 symbol is refused with `Unset::wrsym`. `Unset` is `HoldFirst`, so the target is
 not evaluated to its value before the matching rule is located.

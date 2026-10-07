@@ -12,7 +12,7 @@ sets the attribute Protected for the named symbols and returns the list of their
 <details>
 <summary>Notes</summary>
 
-Protect has attribute HoldAll; Locked symbols are not affected.
+Protect has attribute HoldAll.
 
 </details>
 
@@ -49,8 +49,8 @@ Out[4]= True
 **Algorithm.** `builtin_protect` (`src/core.c`) calls the shared driver
 `core_protect_unprotect(res, protecting = true)`. That driver walks the argument
 list — each spec being a symbol, a string, or a flat `List` of them — and applies
-`core_protect_one` to every name. `core_protect_one` leaves a `Locked` symbol
-untouched and does nothing if the symbol is already `Protected`; otherwise it
+`core_protect_one` to every name. `core_protect_one` does nothing if the symbol
+is already `Protected`; otherwise it
 sets the `ATTR_PROTECTED` bit and bumps the rule epoch (invalidating the
 evaluation cache), returning `true` only when the bit was *newly* set.
 
@@ -64,7 +64,6 @@ evaluator and `Set` consult to refuse redefinition of a symbol.
 arguments reach the handler as unevaluated symbol names.
 
 - Both have attributes `{HoldAll, Protected}` and hold their arguments.
-- Neither affects symbols with the attribute `Locked`.
 - The typical sequence for adding rules to an existing symbol is
   `Unprotect[f]; definition; Protect[f]`.
 
@@ -87,6 +86,6 @@ what the evaluator and `Set` consult to refuse redefinition. It returns a list o
 the names (as strings) whose state actually *changed*, so re-protecting an
 already-protected symbol gives `{}`.
 
-Arguments may be symbols, strings, or a flat list of them. A `Locked` symbol is
-left untouched. `Protected` is the attribute every built-in carries; `Unprotect`
+Arguments may be symbols, strings, or a flat list of them. `Protected` is the
+attribute every built-in carries; `Unprotect`
 is its inverse and the usual first step before extending a built-in's behaviour.

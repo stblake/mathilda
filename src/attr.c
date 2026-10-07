@@ -206,8 +206,6 @@ void set_attributes(const char* symbol_name, uint32_t attrs) {
     if (!symbol_name) return;
     SymbolDef* def = symtab_get_def(symbol_name);
     if (def) {
-        // If the symbol is Locked, we cannot change its attributes
-        if (def->attributes & ATTR_LOCKED) return;
         if (def->attributes != attrs) {
             def->attributes = attrs;
             /* Attribute changes (Hold*, Listable, Flat, Orderless,
@@ -234,7 +232,6 @@ static uint32_t string_to_attribute(const char* name) {
     if (strcmp(name, "NHoldAll") == 0) return ATTR_NHOLDALL;
     if (strcmp(name, "NHoldFirst") == 0) return ATTR_NHOLDFIRST;
     if (strcmp(name, "NHoldRest") == 0) return ATTR_NHOLDREST;
-    if (strcmp(name, "Locked") == 0) return ATTR_LOCKED;
     if (strcmp(name, "Temporary") == 0) return ATTR_TEMPORARY;
     if (strcmp(name, "SequenceHold") == 0) return ATTR_SEQUENCEHOLD;
     if (strcmp(name, "Constant") == 0) return ATTR_CONSTANT;
@@ -281,7 +278,7 @@ static void set_attributes_for_symbol(Expr* sym_expr, Expr* attr_spec) {
     if (!sym_name) return;
     
     SymbolDef* def = symtab_get_def(sym_name);
-    if (!def || (def->attributes & ATTR_LOCKED)) return;
+    if (!def) return;
 
     // Attribute spec can be a single attribute or a list of attributes
     if (attr_spec->type == EXPR_SYMBOL || attr_spec->type == EXPR_STRING) {
@@ -303,7 +300,7 @@ static void clear_attributes_for_symbol(Expr* sym_expr, Expr* attr_spec) {
     if (!sym_name) return;
 
     SymbolDef* def = symtab_get_def(sym_name);
-    if (!def || (def->attributes & ATTR_LOCKED)) return;
+    if (!def) return;
 
     // Attribute spec can be a single attribute or a list of attributes
     if (attr_spec->type == EXPR_SYMBOL || attr_spec->type == EXPR_STRING) {
@@ -386,7 +383,6 @@ Expr* builtin_attributes(Expr* res) {
         if (attrs & ATTR_NHOLDFIRST) count++;
         if (attrs & ATTR_NHOLDREST) count++;
     }
-    if (attrs & ATTR_LOCKED) count++;
     if (attrs & ATTR_TEMPORARY) count++;
     if (attrs & ATTR_SEQUENCEHOLD) count++;
 
@@ -402,7 +398,6 @@ Expr* builtin_attributes(Expr* res) {
     }
     if (attrs & ATTR_HOLDALLCOMPLETE) attr_list[i++] = expr_new_symbol(SYM_HoldAllComplete);
     if (attrs & ATTR_LISTABLE) attr_list[i++] = expr_new_symbol(SYM_Listable);
-    if (attrs & ATTR_LOCKED) attr_list[i++] = expr_new_symbol(SYM_Locked);
     if (attrs & ATTR_NUMERICFUNCTION) attr_list[i++] = expr_new_symbol(SYM_NumericFunction);
     if (attrs & ATTR_ONEIDENTITY) attr_list[i++] = expr_new_symbol(SYM_OneIdentity);
     if ((attrs & ATTR_NHOLDALL) == ATTR_NHOLDALL) {

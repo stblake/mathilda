@@ -14,5 +14,4 @@ changed, so unprotecting a symbol that was never protected gives `{}`.
 
 Once a symbol is unprotected, `Set`/`SetDelayed` and the clearing heads accept it
 again — the standard way to override or extend a built-in's definition.
-Arguments may be symbols, strings, or a flat list; a `Locked` symbol cannot be
-unprotected.
+Arguments may be symbols, strings, or a flat list.

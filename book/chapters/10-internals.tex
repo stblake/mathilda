@@ -266,9 +266,10 @@ Attribute & Bit & Effect \\
 \texttt{Constant} & \texttt{1<<14} & derivative is zero \\
 \hline
 \end{tabular}
-\caption{The core attribute bits, from \texttt{src/attr.h}. \texttt{Locked},
-\texttt{Temporary} and the \texttt{NHold*} family occupy the remaining bits; bit 11,
-once \texttt{ReadProtected}, was removed---Mathilda never hides a definition.}
+\caption{The core attribute bits, from \texttt{src/attr.h}. \texttt{Temporary}
+and the \texttt{NHold*} family occupy the remaining bits; bits 10 and 11, once
+\texttt{Locked} and \texttt{ReadProtected}, were removed---Mathilda is open source
+and never seals or hides a definition.}
 \label{tab:attrs}
 \end{table}
 

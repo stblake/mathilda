@@ -12,7 +12,7 @@ removes the attribute Protected from the named symbols and returns the list of t
 <details>
 <summary>Notes</summary>
 
-Unprotect has attribute HoldAll; Locked symbols are not affected.
+Unprotect has attribute HoldAll.
 
 </details>
 
@@ -54,8 +54,8 @@ Out[5]= False
 **Algorithm.** `builtin_unprotect` (`src/core.c`) is the mirror of `Protect`: it
 calls the shared driver `core_protect_unprotect(res, protecting = false)`, which
 walks the argument list (symbols, strings, or a flat `List` of them) and applies
-`core_unprotect_one` to each name. `core_unprotect_one` leaves a `Locked` symbol
-alone and does nothing if the symbol is not currently `Protected`; otherwise it
+`core_unprotect_one` to each name. `core_unprotect_one` does nothing if the
+symbol is not currently `Protected`; otherwise it
 clears the `ATTR_PROTECTED` bit and bumps the rule epoch, returning `true` only
 when the bit was actually cleared.
 
@@ -66,10 +66,9 @@ the symbol, which is the usual prelude to redefining or extending a built-in's
 behaviour.
 
 **Attributes & limits.** `Unprotect` carries `HoldAll | Protected`, so its
-arguments arrive as unevaluated names. It cannot touch a `Locked` symbol.
+arguments arrive as unevaluated names.
 
 - Both have attributes `{HoldAll, Protected}` and hold their arguments.
-- Neither affects symbols with the attribute `Locked`.
 - The typical sequence for adding rules to an existing symbol is
   `Unprotect[f]; definition; Protect[f]`.
 
@@ -93,5 +92,4 @@ changed, so unprotecting a symbol that was never protected gives `{}`.
 
 Once a symbol is unprotected, `Set`/`SetDelayed` and the clearing heads accept it
 again — the standard way to override or extend a built-in's definition.
-Arguments may be symbols, strings, or a flat list; a `Locked` symbol cannot be
-unprotected.
+Arguments may be symbols, strings, or a flat list.

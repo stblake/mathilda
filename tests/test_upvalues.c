@@ -329,10 +329,10 @@ static void test_flat_group_absorption_not_augment(void) {
     assert_eval_eq("pp73 + x73 + y73", "lab73[x73 + y73]", 0);
 }
 
-static void test_upset_locked(void) {
-    /* #2 from the review: UpSet must honour Locked, not just Protected. */
-    ev("SetAttributes[lk74, Locked]");
-    ev("foo74[lk74] ^= 3");                 /* refused: UpSet::write (Locked) */
+static void test_upset_protected(void) {
+    /* #2 from the review: UpSet must honour Protected on the operand symbol. */
+    ev("SetAttributes[lk74, Protected]");
+    ev("foo74[lk74] ^= 3");                 /* refused: UpSet::write (Protected) */
     assert_eval_eq("UpValues[lk74]", "{}", 0);
 }
 
@@ -385,12 +385,12 @@ int main(void) {
     TEST(test_downvalue_unset_condition_no_corruption);
     TEST(test_operand_downvalue_masks_upvalue);
 
-    /* Flat-head leftover matching + Locked (PR #87 review follow-ups) */
+    /* Flat-head leftover matching + Protected (PR #87 review follow-ups) */
     TEST(test_flat_upvalue_longer_sum);
     TEST(test_flat_downvalue_leftover);
     TEST(test_flat_ordered_prefix_only);
     TEST(test_flat_group_absorption_not_augment);
-    TEST(test_upset_locked);
+    TEST(test_upset_protected);
     TEST(test_flat_matchq_whole_expression);
 
     printf("All UpValues tests passed.\n");

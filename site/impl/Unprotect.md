@@ -4,8 +4,8 @@ source: src/core.c
 **Algorithm.** `builtin_unprotect` (`src/core.c`) is the mirror of `Protect`: it
 calls the shared driver `core_protect_unprotect(res, protecting = false)`, which
 walks the argument list (symbols, strings, or a flat `List` of them) and applies
-`core_unprotect_one` to each name. `core_unprotect_one` leaves a `Locked` symbol
-alone and does nothing if the symbol is not currently `Protected`; otherwise it
+`core_unprotect_one` to each name. `core_unprotect_one` does nothing if the
+symbol is not currently `Protected`; otherwise it
 clears the `ATTR_PROTECTED` bit and bumps the rule epoch, returning `true` only
 when the bit was actually cleared.
 
@@ -16,4 +16,4 @@ the symbol, which is the usual prelude to redefining or extending a built-in's
 behaviour.
 
 **Attributes & limits.** `Unprotect` carries `HoldAll | Protected`, so its
-arguments arrive as unevaluated names. It cannot touch a `Locked` symbol.
+arguments arrive as unevaluated names.

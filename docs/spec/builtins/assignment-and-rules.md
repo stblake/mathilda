@@ -50,7 +50,7 @@ the same machinery; the first two return the **old** value, the rest the new one
   captures the whole preceding expression: `a b =.` parses as `Unset[a b]`. The
   guard against a trailing digit keeps `k =.5` parsing as `Set[k, 0.5]`.
 - `Unset` has attributes `{HoldFirst, Protected}`; it holds `lhs`, so the symbol
-  (not its value) is operated on. `Protected`/`Locked` symbols are not affected.
+  (not its value) is operated on. `Protected` symbols are not affected.
 - Always returns `Null`, whether or not a matching rule was found.
 
 ```mathematica
@@ -82,7 +82,7 @@ Out[3]= fact[1]
   `HoldAll` (its `rhs` is held and re-evaluated on each use); both are `Protected`.
 - The head of a pattern-constrained argument also counts: `a_mod + b_mod ^:= …`
   keys on `mod` (the head of the `Blank`), so the rule fires for `mod[…] + mod[…]`.
-- An UpValue on a `Protected` or `Locked` symbol is refused with a message.
+- An UpValue on a `Protected` symbol is refused with a message.
 
 ```mathematica
 In[1]:= area[square] ^= s^2; UpValues[square]
@@ -356,11 +356,10 @@ Out[2]= {HoldPattern[a] :> 5}
   symbol of the same name. `Remove[{s1, s2, ...}]` accepts a list of specs.
 
 **Features**:
-- `ClearAll` has attributes `{HoldAll, Protected}`; `Remove` has
-  `{HoldAll, Locked, Protected}`. Both hold their arguments, so they operate on
-  the symbol, not its current value.
-- Neither affects symbols with the attribute `Locked` or `Protected`. This is
-  what prevents `Remove`/`ClearAll` from ever deleting or wiping a built-in.
+- `ClearAll` and `Remove` both have attributes `{HoldAll, Protected}`. Both hold
+  their arguments, so they operate on the symbol, not its current value.
+- Neither affects symbols with the attribute `Protected`. This is what prevents
+  `Remove`/`ClearAll` from ever deleting or wiping a built-in.
 - `ClearAll`, unlike `Clear`, also removes attributes and the usage message.
 - Both return `Null`.
 
@@ -386,7 +385,6 @@ Out[3]= x
 
 **Features**:
 - Both have attributes `{HoldAll, Protected}` and hold their arguments.
-- Neither affects symbols with the attribute `Locked`.
 - The typical sequence for adding rules to an existing symbol is
   `Unprotect[f]; definition; Protect[f]`.
 
@@ -417,8 +415,8 @@ and user symbols.
 - `Options[f] = {name -> value, ...}`: redefines **all** of `f`'s default options
   at once (works through `Set`, bypassing the `Protected` attribute on `Options`).
 - `SetOptions[s, name -> value, ...]`: changes individual existing defaults and
-  returns the new `Options[s]`. It works on `Protected` (but not `Locked`)
-  symbols. It cannot **add** an option — an unknown name raises
+  returns the new `Options[s]`. It works on `Protected` symbols. It cannot
+  **add** an option — an unknown name raises
   `SetOptions::optnf` and leaves the call unevaluated. Use
   `AppendTo[Options[s], name -> value]` (or `PrependTo`) to add one.
 - `OptionValue[name]`, `OptionValue[f, name]`, `OptionValue[f, opts, name]`,

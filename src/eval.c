@@ -1019,9 +1019,9 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         const char* h = lhs->data.function.head->data.symbol.name;
         const char* target = lhs->data.function.args[0]->data.symbol.name;
         /* A list-assignment mutates `target`'s definitions, so it must honour
-         * Protected/Locked just like `target[...] = rhs` would (otherwise
+         * Protected just like `target[...] = rhs` would (otherwise
          * `DownValues[Sin] = {...}` would silently overwrite a builtin). */
-        if (get_attributes(target) & (ATTR_PROTECTED | ATTR_LOCKED)) {
+        if (get_attributes(target) & ATTR_PROTECTED) {
             /* Mathematica reports this as Set::write ("Tag f in DownValues[f] is
              * Protected."), not Set::wrsym -- match it so `::write` greps hit. */
             mth_message(is_delayed ? "SetDelayed" : "Set", "write",
@@ -1413,7 +1413,7 @@ static bool apply_up_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     bool owned; Expr* body;
     Expr* pat = move_rhs_condition(lhs, rhs, is_delayed, &owned, &body);
     for (int i = 0; i < n; i++) {
-        if (get_attributes(syms[i]) & (ATTR_PROTECTED | ATTR_LOCKED)) {
+        if (get_attributes(syms[i]) & ATTR_PROTECTED) {
             mth_message(is_delayed ? "UpSetDelayed" : "UpSet", "write",
                         "Tag %s in the assignment is Protected.", syms[i]);
             continue;
@@ -1437,7 +1437,7 @@ static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delaye
         return false;
     }
     const char* tagn = tag->data.symbol.name;
-    if (get_attributes(tagn) & (ATTR_PROTECTED | ATTR_LOCKED)) {
+    if (get_attributes(tagn) & ATTR_PROTECTED) {
         mth_message(head, "write", "Tag %s is Protected.", tagn);
         return true;
     }

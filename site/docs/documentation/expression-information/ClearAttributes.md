@@ -78,7 +78,6 @@ Out[16]= {}
 
 - `HoldFirst`, `Protected`.
 - `ClearAttributes` modifies `Attributes[s]`.
-- Cannot clear attributes of a `Locked` symbol.
 - Clearing an attribute that is not set is a no-op.
 
 **Attributes:** `HoldFirst`, `Protected`.

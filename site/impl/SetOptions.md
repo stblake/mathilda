@@ -2,8 +2,8 @@
 source: src/options_builtin.c
 ---
 **Algorithm.** `builtin_setoptions` (`src/options_builtin.c`) redefines
-individual default options of a symbol. The first argument must be a symbol; a
-`Locked` symbol is refused with `SetOptions::locked`. It then takes a working
+individual default options of a symbol. The first argument must be a symbol. It
+takes a working
 copy of the symbol's current option rules (from `symtab_get_options`) as a flat
 vector and, for each trailing `name -> value` rule, finds the existing option of
 that name (context-insensitive match) and **replaces it in place**, preserving

@@ -289,7 +289,7 @@ void core_init(void) {
     symtab_get_def("Clear")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Unset")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("ClearAll")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
-    symtab_get_def("Remove")->attributes |= ATTR_HOLDALL | ATTR_LOCKED | ATTR_PROTECTED;
+    symtab_get_def("Remove")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Protect")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Unprotect")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Part")->attributes |= ATTR_NHOLDREST | ATTR_PROTECTED;
@@ -1187,10 +1187,10 @@ Expr* builtin_unset(Expr* res) {
         return NULL;
     }
 
-    /* Protected/Locked symbols (every builtin among them) cannot be Unset,
+    /* Protected symbols (every builtin among them) cannot be Unset,
      * mirroring Set's wrsym guard. */
     uint32_t attrs = get_attributes(symbol_name);
-    if (attrs & (ATTR_PROTECTED | ATTR_LOCKED)) {
+    if (attrs & ATTR_PROTECTED) {
         mth_message("Unset", "wrsym", "Symbol %s is Protected.", symbol_name);
         return expr_new_symbol(SYM_Null);
     }
@@ -1218,13 +1218,13 @@ static const char* core_symbol_name_of(const Expr* e) {
 }
 
 /* ClearAll[s]: drop all OwnValues/DownValues, attributes and the usage
- * message (docstring) for s -- unless s is Protected or Locked, which
- * ClearAll never touches. The builtin C function pointer (if any) is
- * left intact; the Protected guard already shields every builtin. */
+ * message (docstring) for s -- unless s is Protected, which ClearAll never
+ * touches. The builtin C function pointer (if any) is left intact; the
+ * Protected guard already shields every builtin. */
 static void core_clear_all_one(const char* name) {
     if (!name) return;
     uint32_t attrs = get_attributes(name);
-    if (attrs & (ATTR_PROTECTED | ATTR_LOCKED)) return;
+    if (attrs & ATTR_PROTECTED) return;
 
     symtab_clear_symbol(name);          /* values */
     SymbolDef* def = symtab_get_def(name);
@@ -1238,22 +1238,20 @@ static void core_clear_all_one(const char* name) {
     }
 }
 
-/* Remove[s]: delete the symbol's definition entirely. The Protected /
- * Locked guard is what keeps Remove from ever deleting a builtin. */
+/* Remove[s]: delete the symbol's definition entirely. The Protected guard
+ * is what keeps Remove from ever deleting a builtin. */
 static void core_remove_one(const char* name) {
     if (!name) return;
     uint32_t attrs = get_attributes(name);
-    if (attrs & (ATTR_PROTECTED | ATTR_LOCKED)) return;
+    if (attrs & ATTR_PROTECTED) return;
     symtab_remove_symbol(name);
 }
 
 /* Protect[s]: set the Protected attribute. Returns true iff the bit was
- * newly set (so the caller can report the changed name, as WL does).
- * Locked symbols are left untouched. */
+ * newly set (so the caller can report the changed name, as WL does). */
 static bool core_protect_one(const char* name) {
     if (!name) return false;
     SymbolDef* def = symtab_get_def(name);
-    if (def->attributes & ATTR_LOCKED) return false;
     if (def->attributes & ATTR_PROTECTED) return false;
     def->attributes |= ATTR_PROTECTED;
     eval_rule_epoch_bump();
@@ -1261,11 +1259,10 @@ static bool core_protect_one(const char* name) {
 }
 
 /* Unprotect[s]: clear the Protected attribute. Returns true iff the bit
- * was actually cleared. Locked symbols are left untouched. */
+ * was actually cleared. */
 static bool core_unprotect_one(const char* name) {
     if (!name) return false;
     SymbolDef* def = symtab_get_def(name);
-    if (def->attributes & ATTR_LOCKED) return false;
     if (!(def->attributes & ATTR_PROTECTED)) return false;
     def->attributes &= ~ATTR_PROTECTED;
     eval_rule_epoch_bump();

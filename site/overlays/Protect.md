@@ -12,6 +12,6 @@ what the evaluator and `Set` consult to refuse redefinition. It returns a list o
 the names (as strings) whose state actually *changed*, so re-protecting an
 already-protected symbol gives `{}`.
 
-Arguments may be symbols, strings, or a flat list of them. A `Locked` symbol is
-left untouched. `Protected` is the attribute every built-in carries; `Unprotect`
+Arguments may be symbols, strings, or a flat list of them. `Protected` is the
+attribute every built-in carries; `Unprotect`
 is its inverse and the usual first step before extending a built-in's behaviour.

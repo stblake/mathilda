@@ -376,7 +376,6 @@ extern const char* SYM_KeySelect;
 extern const char* SYM_PositionIndex;
 extern const char* SYM_AssociationMap;
 extern const char* SYM_LUDecomposition;
-extern const char* SYM_Locked;
 extern const char* SYM_Log;
 extern const char* SYM_LogGamma;
 extern const char* SYM_LogicalExpand;

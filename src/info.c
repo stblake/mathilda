@@ -3448,9 +3448,9 @@ void info_init(void) {
         "\tto Options[f] to redefine all default options at once.");
     symtab_set_docstring("SetOptions",
         "SetOptions[s, name -> value, ...] sets default options for the symbol\n"
-        "\ts and returns the new Options[s].  It can change Protected (but not\n"
-        "\tLocked) symbols, and only changes existing options -- an unknown name\n"
-        "\traises SetOptions::optnf.  Use AppendTo[Options[s], ...] to add one.");
+        "\ts and returns the new Options[s].  It can change Protected symbols,\n"
+        "\tand only changes existing options -- an unknown name raises\n"
+        "\tSetOptions::optnf.  Use AppendTo[Options[s], ...] to add one.");
     symtab_set_docstring("OptionValue",
         "OptionValue[name] gives the value of an option named name in the\n"
         "\toptions matched by OptionsPattern[] in the enclosing rule.\n"
@@ -3591,24 +3591,24 @@ void info_init(void) {
         "ClearAll[s1, s2, ...]\n"
         "\tclears all values, definitions, attributes and messages for the\n"
         "\tnamed symbols. ClearAll[{s1, s2, ...}] accepts a list of specs.\n"
-        "ClearAll has attribute HoldAll; symbols with attribute Locked or\n"
-        "Protected are not affected.");
+        "ClearAll has attribute HoldAll; symbols with attribute Protected\n"
+        "are not affected.");
     symtab_set_docstring("Remove",
         "Remove[s1, s2, ...]\n"
         "\tremoves the named symbols completely, deleting their definitions\n"
         "\tfrom the symbol table. Remove[{s1, s2, ...}] accepts a list of specs.\n"
-        "Remove has attribute HoldAll; symbols with attribute Locked or\n"
-        "Protected are not affected.");
+        "Remove has attribute HoldAll; symbols with attribute Protected\n"
+        "are not affected.");
     symtab_set_docstring("Protect",
         "Protect[s1, s2, ...]\n"
         "\tsets the attribute Protected for the named symbols and returns the\n"
         "\tlist of their names. Protect[{s1, s2, ...}] accepts a list of specs.\n"
-        "Protect has attribute HoldAll; Locked symbols are not affected.");
+        "Protect has attribute HoldAll.");
     symtab_set_docstring("Unprotect",
         "Unprotect[s1, s2, ...]\n"
         "\tremoves the attribute Protected from the named symbols and returns\n"
         "\tthe list of their names. Unprotect[{s1, ...}] accepts a list of specs.\n"
-        "Unprotect has attribute HoldAll; Locked symbols are not affected.");
+        "Unprotect has attribute HoldAll.");
     symtab_set_docstring("Flat", "Flat is an attribute that can be assigned to a symbol f to indicate that all expressions involving nested functions f should be flattened out. This property is accounted for in pattern matching.");
     symtab_set_docstring("Orderless", "Orderless is an attribute that can be assigned to a symbol f to indicate that the elements e_i in expressions of the form f[e_1, e_2, ...] should automatically be sorted into canonical order. This property is accounted for in pattern matching.");
     symtab_set_docstring("OneIdentity", "OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.");

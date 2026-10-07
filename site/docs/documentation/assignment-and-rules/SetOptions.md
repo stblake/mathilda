@@ -7,7 +7,7 @@
 
 **`SetOptions[s, name -> value, ...] sets default options for the symbol`**
 
-s and returns the new Options\[s\].  It can change Protected (but not Locked) symbols, and only changes existing options -- an unknown name raises SetOptions::optnf.  Use AppendTo\[Options\[s\], ...\] to add one.
+s and returns the new Options\[s\].  It can change Protected symbols, and only changes existing options -- an unknown name raises SetOptions::optnf.  Use AppendTo\[Options\[s\], ...\] to add one.
 
 ## Examples (6)
 
@@ -63,8 +63,8 @@ Memory: every result is freshly built. Sub-expressions taken from `res` or from 
 ## Implementation notes
 
 **Algorithm.** `builtin_setoptions` (`src/options_builtin.c`) redefines
-individual default options of a symbol. The first argument must be a symbol; a
-`Locked` symbol is refused with `SetOptions::locked`. It then takes a working
+individual default options of a symbol. The first argument must be a symbol. It
+takes a working
 copy of the symbol's current option rules (from `symtab_get_options`) as a flat
 vector and, for each trailing `name -> value` rule, finds the existing option of
 that name (context-insensitive match) and **replaces it in place**, preserving
@@ -129,5 +129,4 @@ later `Options[s]` and option-reading builtins see the new default.
 
 `SetOptions` can only change options a symbol already has — a name that is not a
 known option raises `SetOptions::optnf` and leaves the settings untouched. The
-first argument must be a symbol, and a `Locked` symbol is refused with
-`SetOptions::locked`.
+first argument must be a symbol.

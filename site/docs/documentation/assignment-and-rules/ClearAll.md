@@ -12,7 +12,7 @@ clears all values, definitions, attributes and messages for the named symbols. C
 <details>
 <summary>Notes</summary>
 
-ClearAll has attribute HoldAll; symbols with attribute Locked or Protected are not affected.
+ClearAll has attribute HoldAll; symbols with attribute Protected are not affected.
 
 </details>
 
@@ -60,7 +60,7 @@ string naming a symbol, or a flat `List` of such specs (so `ClearAll[{a, b}]`
 works), with the name read out by `core_symbol_name_of`. The action here is
 `core_clear_all_one`.
 
-For each name, `core_clear_all_one` first skips any `Protected` or `Locked`
+For each name, `core_clear_all_one` first skips any `Protected`
 symbol (which is what shields every builtin), then does the full erase that
 distinguishes `ClearAll` from `Clear`: `symtab_clear_symbol` drops the
 OwnValues/DownValues, the attribute word is zeroed (bumping the rule epoch so
@@ -73,9 +73,9 @@ symbols arrive unevaluated rather than being replaced by their current values.
 Non-symbol/non-string specs are silently ignored.
 
 - `ClearAll` has attributes `{HoldAll, Protected}`; `Remove` has
-  `{HoldAll, Locked, Protected}`. Both hold their arguments, so they operate on
+  `{HoldAll, Protected}`. Both hold their arguments, so they operate on
   the symbol, not its current value.
-- Neither affects symbols with the attribute `Locked` or `Protected`. This is
+- Neither affects symbols with the attribute `Protected`. This is
   what prevents `Remove`/`ClearAll` from ever deleting or wiping a built-in.
 - `ClearAll`, unlike `Clear`, also removes attributes and the usage message.
 - Both return `Null`.
@@ -104,5 +104,5 @@ values. Here `g` loses both its assigned value and the `Orderless` attribute, so
 `Attributes[g]` is `{}`.
 
 Arguments may be symbols, strings naming symbols, or a flat list of them
-(`ClearAll[{a, b}]`). A `Protected` or `Locked` symbol is skipped, which is what
+(`ClearAll[{a, b}]`). A `Protected` symbol is skipped, which is what
 keeps `ClearAll` from ever gutting a built-in. The result is `Null`.

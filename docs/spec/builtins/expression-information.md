@@ -22,7 +22,6 @@ Removes attributes from symbols.
 **Features**:
 - `HoldFirst`, `Protected`.
 - `ClearAttributes` modifies `Attributes[s]`.
-- Cannot clear attributes of a `Locked` symbol.
 - Clearing an attribute that is not set is a no-op.
 
 ```mathematica

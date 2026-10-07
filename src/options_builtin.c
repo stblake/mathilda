@@ -170,11 +170,6 @@ Expr* builtin_setoptions(Expr* res) {
     if (sobj->type != EXPR_SYMBOL) return NULL;
     const char* sym = sobj->data.symbol.name;
 
-    if (get_attributes(sym) & ATTR_LOCKED) {
-        mth_message("SetOptions", "locked", "Symbol %s is locked and cannot be modified.", sym);
-        return NULL;
-    }
-
     /* Working copy of the current options as a flat vector of rule copies. */
     Expr* cur = symtab_get_options(sym);
     size_t cn = is_list(cur) ? cur->data.function.arg_count : 0;

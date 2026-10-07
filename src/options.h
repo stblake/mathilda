@@ -117,8 +117,8 @@ const Expr* extract_extension_option_full(const Expr* res, size_t* new_argc,
 Expr* builtin_options(Expr* res);
 
 /* SetOptions[s, name->val, ...] updates s's default options in place (bypassing
- * Protected, refusing Locked) and returns the new Options[s]. Unknown option
- * names emit SetOptions::optnf and leave the call unevaluated. */
+ * Protected) and returns the new Options[s]. Unknown option names emit
+ * SetOptions::optnf and leave the call unevaluated. */
 Expr* builtin_setoptions(Expr* res);
 
 /* OptionValue[name] / [f,name] / [f,opts,name] / [f,opts,name,Hold] — resolve

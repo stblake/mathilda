@@ -1,34 +1,73 @@
-# Mellin-transform Integrate: close 7 cases + fix ArcTan[a/x] sign bug (v0.300)
+# Remove the `Locked` attribute (`ATTR_LOCKED`)
 
-All edits in `src/calculus/integrate_ramanujan.c`; tests in `tests/test_integrate_ramanujan.c`.
+Full removal — nothing in open-source Mathilda should be permanently locked.
+`Remove`'s self-protection survives via `Protected`.
 
-## Implementation
-- [ ] 1. Sign-bug fix: monomial Jacobian `1/k` → `1/|k|` (line ~1116)
-- [ ] 2. `rec_expintegrale` — ExpIntegralE[n,a x] → a^-s Γ(s)/(s+n-1), strip Re s>0 ∧ Re(s+n)>1
-- [ ] 3. `rec_trigpow` — Sin/Cos[a x]^k linearization (reuse sinpow_term w/ symbolic sv)
-- [ ] 4. `conv_exp_trig` — Exp[-a x]{Sin,Cos}[b x] in rec_convolution
-- [ ] 5. Coth[a x]-1 reduce rule (+ "Coth" guard) reusing rec_expgeom
-- [ ] 6. `rec_arctan_sq` — ArcTan[a x]^2 → PolyGamma closed form
-- [ ] 7. Register new recognizers in try_recognizers / rec_convolution
+## A. C core — flag + machinery
+- [ ] `src/attr.h` — delete `ATTR_LOCKED` define, leave gap comment
+- [ ] `src/attr.c` — set_attributes guard, set/clear_attributes_for_symbol guards, string_to_attribute mapping, builtin_attributes count+emit, scan attr_init
+- [ ] `src/core.c` — Remove seeding; Unset/ClearAll/Remove masks; Protect/Unprotect early-returns
+- [ ] `src/eval.c` — value-list assign, UpSet, TagSet masks
+- [ ] `src/options_builtin.c` — delete SetOptions::locked guard
+- [ ] `src/options.h` — fix comment
+- [ ] `src/sym_names.{c,h}` — remove SYM_Locked decl/def/intern
 
-## Tests
-- [ ] ArcTan[a/x] corrected (positive); regression: Sin[ax^2],Cos[ax^2],ArcCot,Log[1+a^2x^2]
-- [ ] New: Sin^2, Sin^3, Exp·Sin, Exp·Cos, Coth-1, ArcTan^2, ExpIntegralE (2 cases)
+## B. C docstrings
+- [ ] `src/info.c` — SetOptions, ClearAll, Remove, Protect, Unprotect
 
-## Verify / conventions
-- [x] build + re-run all 12 pasted inputs — all correct; ArcTan[a/x] now POSITIVE
-- [x] integrate_ramanujan_tests green (+ test_mellin_stress_set); definite suites green
-      (intrep/diffunderint FAILs are PRE-EXISTING on clean tree, confirmed via stash)
-- [x] independent oracle: 9/12 NIntegrate diff=0; 5,6,8 exact vs Pi/2, 0.794569..., 2/13
-- [x] valgrind: identical leak profile to pre-existing Mellin baseline; no new-fn frames
-- [x] version.h 0.299→0.300  (tag v0.300 pending commit)
-- [x] docs/spec/builtins/calculus.md (table + prose) + changelog 2026-10-05.md
-- [x] check-c99, check-messages clean; graph rebuilt
+## C. Authored docs
+- [ ] `SPEC.md` attribute table
+- [ ] `docs/spec/builtins/assignment-and-rules.md`
+- [ ] `docs/spec/builtins/expression-information.md`
+- [ ] `docs/spec/changelog/2026-10-05.md` — add removal entry + reconcile same-week
+- [ ] `book/chapters/10-internals.tex` caption
+
+## D. Tests
+- [ ] `tests/test_clearall_remove_protect.c` — Attributes[Remove] literal
+- [ ] `tests/test_upvalues.c` — convert Locked case to Protected
+
+## E. Generated doc pages (hand-edit)
+- [ ] `frontend/public/refpages/` assignment-and-rules + expression-information
+- [ ] `site/impl/`, `site/overlays/`, `site/docs/documentation/`
+
+## F. Version + tag
+- [ ] `src/version.h` bump to 0.301 (tag on commit, when asked)
+
+## Verification
+- [ ] Build clean; check-messages / check-c99
+- [ ] Final greps zero
+- [ ] Unit tests (incl. -DUP_VALUES)
+- [ ] REPL behavior checks
+- [ ] Rebuild code-review graph
 
 ## Review
-All 7 changes landed in src/calculus/integrate_ramanujan.c (general mechanisms,
-no per-example patches). The ArcTan[a/x] "reference" in the paste was itself the
-buggy (negated) value; the test asserts the corrected positive form. ExpIntegralE
-returns a ConditionalExpression under the pasted (insufficient) assumptions — the
-honest result (Re(s+n)>1 not provable), matching Mathematica. NOT yet committed
-(awaiting user go-ahead for commit + git tag v0.300).
+
+**Done — `ATTR_LOCKED` fully removed (v0.301).**
+
+C core: flag deleted from `attr.h` (gap comment left, matching the bit-11
+precedent); `SYM_Locked` removed from `sym_names.{c,h}`; the `"Locked"` name
+mapping + `Attributes[]` count/emit removed from `attr.c`; the three attribute-
+setter guards dropped; `Remove` no longer seeded Locked (`core.c`); all combined
+`(ATTR_PROTECTED | ATTR_LOCKED)` guards across `core.c`/`eval.c` reduced to
+`ATTR_PROTECTED`; `Protect`/`Unprotect` Locked early-returns deleted; the
+`SetOptions::locked` guard + message removed (`options_builtin.c`); comments in
+`options.h` fixed. Docstrings updated in `info.c`.
+
+Docs: `SPEC.md` attribute table, `docs/spec/builtins/{assignment-and-rules,
+expression-information}.md`, `book/chapters/10-internals.tex` caption, and the
+current-week changelog (`2026-10-05.md`) with a removal entry + same-week
+reconciliation. 19 generated pages under `frontend/public/refpages/` and `site/`
+hand-edited. Historical (pre-this-week) changelogs left as dated records.
+
+Tests: `tests/test_clearall_remove_protect.c` (`Attributes[Remove]` →
+`{HoldAll, Protected}`) and `tests/test_upvalues.c` (`test_upset_locked` →
+`test_upset_protected`). Both suites green.
+
+Verification: clean `make` build; `make check-messages` and `make check-c99`
+pass; `grep ATTR_LOCKED\|SYM_Locked src/` → only the intentional gap comment;
+repo-wide `\bLocked\b` audit → only intended + coincidental hits. REPL:
+`Attributes[Remove]` = `{HoldAll, Protected}`; `SetAttributes[x, Locked]` is an
+ignored no-op (`{}`); a user symbol is Protect→Unprotect→Remove-able;
+`$VersionNumber` = 0.301.
+
+Not committed/tagged yet (awaiting user request). On commit: tag `v0.301`.

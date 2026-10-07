@@ -372,7 +372,6 @@ const char* SYM_AssociationMap = NULL;
 const char* SYM_Listable = NULL;
 const char* SYM_ListQ = NULL;
 const char* SYM_LUDecomposition = NULL;
-const char* SYM_Locked = NULL;
 const char* SYM_Log = NULL;
 const char* SYM_LogGamma = NULL;
 const char* SYM_LogicalExpand = NULL;
@@ -1365,7 +1364,6 @@ void sym_names_init(void) {
     SYM_AssociationMap              = intern_symbol("AssociationMap");
     SYM_Listable                   = intern_symbol("Listable");
     SYM_ListQ                      = intern_symbol("ListQ");
-    SYM_Locked                     = intern_symbol("Locked");
     SYM_LUDecomposition            = intern_symbol("LUDecomposition");
     SYM_Log                        = intern_symbol("Log");
     SYM_LogGamma                   = intern_symbol("LogGamma");
