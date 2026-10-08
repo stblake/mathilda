@@ -4014,7 +4014,11 @@ exact result.
   regular Lagrange points and the variety's singular points, once a rational ball
   probe proves boundedness) — this solves **irrational-algebraic** optima such as
   `Minimize[{x^2+y^2, (x-2)^2+(y-3)^2==1}, {x,y}]` -> `14 - 2 Sqrt[13]`, which the
-  Reduce certificate alone cannot decide.
+  Reduce certificate alone cannot decide. For the inequality-constrained and
+  multi-equality cases the certificate instead **clears the radicals** in the
+  candidate optimum to a rational-coefficient system (each `Sqrt`/root becomes a
+  fresh variable with its defining relation), which the CAD can decide — so
+  `Minimize[{x^2+y^2, (x-2)^2+(y-3)^2<=1}, {x,y}]` also returns `14 - 2 Sqrt[13]`.
 
 ### Deferred (declines, never guesses)
 

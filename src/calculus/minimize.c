@@ -449,6 +449,138 @@ static Expr* mz_closure(const Expr* c) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Radical clearing for the lower-bound certificate                   *
+ * ------------------------------------------------------------------ */
+
+/* The CAD behind Reduce declines on irrational-algebraic input coefficients, so
+ * the lower-bound certificate `cons => f >= bestv` cannot be decided when bestv
+ * is irrational (e.g. 14 - 2 Sqrt[13]). We rewrite bestv into a RATIONAL-
+ * coefficient system by replacing each radical with a fresh variable pinned by a
+ * polynomial defining relation, then reduce over the enlarged variable set — a
+ * statement logically identical to the original, which Reduce CAN decide. */
+typedef struct {
+    Expr** node; Expr** val;  size_t nrad, radcap;   /* dedup: radical node -> u^p */
+    Expr** aux;  size_t naux,  auxcap;    /* fresh u symbols (owned copies) */
+    Expr** defs; size_t ndefs, defcap;    /* defining relations (owned) */
+} MzRadCtx;
+
+static void mz_rad_push_aux(MzRadCtx* c, Expr* u) {
+    if (c->naux == c->auxcap) { c->auxcap = c->auxcap ? c->auxcap * 2 : 4;
+        c->aux = (Expr**)realloc(c->aux, sizeof(Expr*) * c->auxcap); }
+    c->aux[c->naux++] = u;
+}
+static void mz_rad_push_def(MzRadCtx* c, Expr* d) {
+    if (c->ndefs == c->defcap) { c->defcap = c->defcap ? c->defcap * 2 : 4;
+        c->defs = (Expr**)realloc(c->defs, sizeof(Expr*) * c->defcap); }
+    c->defs[c->ndefs++] = d;
+}
+/* Record that radical `node` is replaced by `val`; both copied in. */
+static void mz_rad_push_pair(MzRadCtx* c, const Expr* node, const Expr* val) {
+    if (c->nrad == c->radcap) { c->radcap = c->radcap ? c->radcap * 2 : 4;
+        c->node = (Expr**)realloc(c->node, sizeof(Expr*) * c->radcap);
+        c->val  = (Expr**)realloc(c->val,  sizeof(Expr*) * c->radcap); }
+    c->node[c->nrad] = expr_copy((Expr*)node);
+    c->val [c->nrad] = expr_copy((Expr*)val);
+    c->nrad++;
+}
+static void mz_rad_free(MzRadCtx* c) {
+    for (size_t i = 0; i < c->naux;  i++) expr_free(c->aux[i]);
+    for (size_t i = 0; i < c->ndefs; i++) expr_free(c->defs[i]);
+    for (size_t i = 0; i < c->nrad;  i++) { expr_free(c->node[i]); expr_free(c->val[i]); }
+    free(c->aux); free(c->defs); free(c->node); free(c->val);
+}
+
+/* Replace each radical Power[c, p/q] (c a provably-POSITIVE constant, q >= 2) in
+ * `e` with a fresh u: record u^q == c and u >= 0 (the principal real branch; for
+ * c > 0 these are satisfiable and pin u = c^(1/q) exactly), and let the radical's
+ * value c^(p/q) become u^p. Nested radicals in the base are cleared first, so
+ * every emitted relation is polynomial in the fresh variables. A radical whose
+ * base is not a provably-positive constant is left untouched — the certificate
+ * then simply fails to prove and the caller declines, so this never fabricates a
+ * proof. Returns a radical-cleared copy of `e`. */
+static Expr* mz_clear_radicals(const Expr* e, MzRadCtx* c) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (mz_is_sym(e->data.function.head, SYM_Power) &&
+        e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* ex   = e->data.function.args[1];
+        if (ex->type == EXPR_FUNCTION &&
+            mz_is_sym(ex->data.function.head, SYM_Rational) &&
+            ex->data.function.arg_count == 2 &&
+            ex->data.function.args[0]->type == EXPR_INTEGER &&
+            ex->data.function.args[1]->type == EXPR_INTEGER) {
+            int64_t p = ex->data.function.args[0]->data.integer;
+            int64_t q = ex->data.function.args[1]->data.integer;
+            if (q >= 2 && rru_sign_of(base) == 1) {       /* positive base only */
+                /* Dedup: a radical already cleared reuses its variable, so a
+                 * value with the same radical twice (common for an optimum like
+                 * 14 - 2 Sqrt[13]) does NOT add a second CAD variable — the extra
+                 * dimension makes the certificate blow up. */
+                for (size_t i = 0; i < c->nrad; i++)
+                    if (expr_eq(e, c->node[i])) return expr_copy(c->val[i]);
+                Expr* baseC = mz_clear_radicals(base, c);        /* nested first */
+                Expr* u = mz_fresh_symbol();
+                mz_rad_push_def(c, fn2(SYM_Equal,
+                    fn2(SYM_Power, expr_copy(u), mk_int(q)), baseC));
+                mz_rad_push_def(c, fn2(SYM_GreaterEqual, expr_copy(u), mk_int(0)));
+                mz_rad_push_aux(c, expr_copy(u));
+                Expr* val = (p == 1) ? expr_copy(u)
+                                     : fn2(SYM_Power, expr_copy(u), mk_int(p));
+                expr_free(u);
+                mz_rad_push_pair(c, e, val);
+                return val;
+            }
+        }
+    }
+    size_t m = e->data.function.arg_count;
+    Expr* headC = mz_clear_radicals(e->data.function.head, c);
+    Expr** a = (Expr**)malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) a[i] = mz_clear_radicals(e->data.function.args[i], c);
+    Expr* r = expr_new_function(headC, a, m);
+    free(a);
+    return r;
+}
+
+/* Prove the global lower bound  closure(cons) => f >= bestv  over the Reals.
+ * When bestv is rational (or an atom we cannot clear, e.g. a Root[]) the direct
+ * certificate is exact and is the only attempt. When bestv carries radicals the
+ * direct certificate is skipped — the CAD would burn the whole budget declining
+ * on the algebraic coefficient — and we reduce the logically-identical
+ * radical-cleared system over vars ∪ aux instead. Returns 1 iff proven. */
+static int mz_prove_lower_bound(const Expr* CL, const Expr* f, const Expr* bestv,
+                                Expr* const* vars, size_t n, int budget) {
+    MzRadCtx c = {0};
+    Expr* bestvC = mz_clear_radicals(bestv, &c);
+    int proven;
+    if (c.naux == 0) {
+        Expr* ge = fn2(SYM_GreaterEqual, expr_copy((Expr*)f), expr_copy((Expr*)bestv));
+        proven = mz_entails(CL, ge, vars, n, budget);
+        expr_free(ge);
+    } else {
+        size_t nall = n + c.naux;
+        Expr** vall = (Expr**)malloc(sizeof(Expr*) * nall);
+        for (size_t j = 0; j < n; j++)       vall[j]     = expr_copy(vars[j]);
+        for (size_t k = 0; k < c.naux; k++)  vall[n + k] = expr_copy(c.aux[k]);
+        /* A' = closure(cons) && defining relations */
+        size_t na = 1 + c.ndefs;
+        Expr** parts = (Expr**)malloc(sizeof(Expr*) * na);
+        parts[0] = expr_copy((Expr*)CL);
+        for (size_t k = 0; k < c.ndefs; k++) parts[1 + k] = expr_copy(c.defs[k]);
+        Expr* Aext = expr_new_function(expr_new_symbol(SYM_And), parts, na);
+        free(parts);
+        Expr* geC = fn2(SYM_GreaterEqual, expr_copy((Expr*)f), expr_copy(bestvC));
+        proven = mz_entails(Aext, geC, vall, nall, budget);
+        expr_free(geC); expr_free(Aext);
+        for (size_t j = 0; j < nall; j++) expr_free(vall[j]);
+        free(vall);
+    }
+    expr_free(bestvC);
+    mz_rad_free(&c);
+    return proven;
+}
+
+/* ------------------------------------------------------------------ *
  *  (a) Univariate unconstrained polynomial                            *
  * ------------------------------------------------------------------ */
 
@@ -742,14 +874,11 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
 
         /* Global lower-bound certificate: closure(cons) ⇒ f >= bestv. Skipped
          * when the compact-region shortcut already proved global optimality by
-         * the extreme-value theorem (the certificate would be redundant, and
-         * also often undecidable for an irrational bestv). */
-        int proven = shortcut_proven;
-        if (!proven) {
-            Expr* ge = fn2(SYM_GreaterEqual, expr_copy((Expr*)f), expr_copy(bestv));
-            proven = mz_entails(CL, ge, vars, n, budget);
-            expr_free(ge);
-        }
+         * the extreme-value theorem; otherwise proved by Reduce, with radicals in
+         * bestv cleared to a rational-coefficient system so an irrational optimum
+         * is decidable. */
+        int proven = shortcut_proven ? 1
+                   : mz_prove_lower_bound(CL, f, bestv, vars, n, budget);
         if (!proven) { expr_free(bestv); goto cleanup; }
 
         /* Attainment: the minimising point must satisfy the ORIGINAL (strict)
