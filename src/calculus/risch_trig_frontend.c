@@ -150,7 +150,34 @@ static bool cx_reim(Expr* e, Expr* x, Expr** re, Expr** im) {
         Expr* mag2 = cx_add(cx_mul(expr_copy(a), expr_copy(a)),
                             cx_mul(expr_copy(b), expr_copy(b)));
         *re = cx_mul(cx_half(), cx_log(mag2));
-        *im = expr_new_function(expr_new_symbol("ArcTan"), (Expr*[]){ a, b }, 2);
+        /* The imaginary part is Arg[a + b i].  For a POSITIVE real constant a this
+         * is the principal one-argument ArcTan[b/a] (= ArcTan[b] when a == 1),
+         * exactly real for real b — the clean antiderivative form a reader wants,
+         * and the shape the reverse ArcTan[z] = (i/2)(Log[1-i z]-Log[1+i z])
+         * rewrite above is built to round-trip (a == 1 there).  Only collapse in
+         * that case: when a is non-constant or a <= 0 the two-argument Arg form
+         * carries genuine quadrant / branch-continuity information (the Rioboo
+         * real-arctan cases) and must be preserved.  `a` arrives as an unevaluated
+         * Plus/Times tree, so test its sign on an evaluated copy — expr_numeric_sign
+         * reports > 0 only for a numeric literal, so a polynomial a falls through
+         * to the two-arg form.  evaluate() does not free its input. */
+        Expr* av = evaluate(a);
+        int asign = expr_numeric_sign(av);
+        bool a_is_one = (av->type == EXPR_INTEGER && av->data.integer == 1);
+        expr_free(av);
+        if (asign > 0) {
+            Expr* ratio;
+            if (a_is_one) {
+                expr_free(a);            /* ArcTan[b] */
+                ratio = b;
+            } else {                     /* ArcTan[b / a] */
+                ratio = cx_mul(b, expr_new_function(expr_new_symbol("Power"),
+                                    (Expr*[]){ a, cx_int(-1) }, 2));
+            }
+            *im = expr_new_function(expr_new_symbol("ArcTan"), (Expr*[]){ ratio }, 1);
+        } else {
+            *im = expr_new_function(expr_new_symbol("ArcTan"), (Expr*[]){ a, b }, 2);
+        }
         return true;
     }
     /* ArcTan[z] = (i/2)(Log[1 - i z] - Log[1 + i z]); recurse on the rewrite. */

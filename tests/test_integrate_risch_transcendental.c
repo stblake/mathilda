@@ -423,6 +423,21 @@ static void test_arctan2_derivative(void) {
     assert_eval_eq("Simplify[D[ArcTan[1, x], x] - 1/(1 + x^2)]", "0", 0);
 }
 
+/* The inverse-trig logarithmic part must render in the clean ONE-argument
+ * ArcTan, never the two-argument Arg form ArcTan[1, u] that cx_reim's complex-log
+ * reconstruction (Log[a + b i] = (1/2)Log[a^2+b^2] + i ArcTan[a, b]) would emit.
+ * Integrate[x^(5/2) ArcTan[Sqrt[x]], x] regressed to
+ *   ... + x^(7/2) (6 ArcTan[1, Sqrt[x]] - 6 ArcTan[1, -Sqrt[x]])
+ * (equal to 12 ArcTan[Sqrt[x]] but ugly).  FreeQ[.., ArcTan[_, _]] is the direct
+ * "no two-arg ArcTan survives" predicate; diff-back confirms the value is right. */
+static void test_arctan_one_arg_output(void) {
+    assert_eval_eq("FreeQ[Integrate[x^(5/2) ArcTan[Sqrt[x]], x], ArcTan[_, _]]", "True", 0);
+    assert_eval_eq("FreeQ[Integrate[ArcTan[Sqrt[x]], x], ArcTan[_, _]]", "True", 0);
+    assert_eval_eq("FreeQ[Integrate[ArcTan[x], x], ArcTan[_, _]]", "True", 0);
+    assert_eval_eq("Simplify[D[Integrate[x^(5/2) ArcTan[Sqrt[x]], x], x] - x^(5/2) ArcTan[Sqrt[x]]]", "0", 0);
+    assert_eval_eq("Simplify[D[Integrate[ArcTan[x], x], x] - ArcTan[x]]", "0", 0);
+}
+
 /* ================= REAL HYPERTANGENT CASE (Bronstein §5.10) =================
  * Rational functions of a single real tangent kernel t = Tan[u] (u rational in
  * x) integrate DIRECTLY and REAL through rt_hypertangent_case, retiring the
@@ -1273,6 +1288,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_real_hypertangent_robustness);
     TEST(test_real_trig_reconstruction);
     TEST(test_arctan2_derivative);
+    TEST(test_arctan_one_arg_output);
     TEST(test_multikernel_case);
     /* Nested towers + genuine recursion. */
     TEST(test_log_tower_case);

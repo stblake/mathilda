@@ -1323,6 +1323,11 @@ monotonically down.
      (`∫… = x e^(x e^(1+1/x))`) and a nested exp inside a circular kernel
      (`∫e^(e^x)(1+x e^x) cos(x e^(e^x)) = sin(x e^(e^x))`).  Arithmetic warnings
      from transient internal singular expressions are muted (as in Mathematica).
+     When the integrand carries an inverse-trig factor it is exponentialised to
+     complex logs; the real reconstruction renders the arctangent part in the
+     clean **one-argument** `ArcTan` (not the two-argument `Arg`/`atan2` form
+     `ArcTan[1, u]`), so `∫x^(5/2) ArcTan[√x] = (−6x+3x²−2x³+6 log(1+x)+12 x^(7/2) ArcTan[√x])/42`
+     and `∫ArcTan[x] = x ArcTan[x] − ½ log(1+x²)`.
   12. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).  Integer-power
      reduction rules cover all six circular and six hyperbolic functions
