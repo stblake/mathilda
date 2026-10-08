@@ -550,6 +550,17 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("StepMonitor", "None"));
     ob_commit(&b, "NMaximize");
 
+    /* ---- Exact (symbolic) global optimization ---- */
+    ob_init(&b);
+    ob_add(&b, r_sym("Method", "Automatic"));
+    ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_commit(&b, "Minimize");
+
+    ob_init(&b);
+    ob_add(&b, r_sym("Method", "Automatic"));
+    ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_commit(&b, "Maximize");
+
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
     ob_add(&b, r_sym("MaxIterations", "Automatic"));

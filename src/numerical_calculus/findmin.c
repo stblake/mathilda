@@ -27,4 +27,6 @@ void findmin_init(void) {
     symtab_get_def("NMinimize")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("NMaximize", builtin_nmaximize);
     symtab_get_def("NMaximize")->attributes |= ATTR_PROTECTED;
+    /* Minimize/Maximize (the EXACT symbolic optimizers) are a calculus module,
+     * registered by minimize_init() in src/calculus/minimize.c. */
 }

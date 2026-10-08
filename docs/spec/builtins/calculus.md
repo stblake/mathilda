@@ -3954,3 +3954,96 @@ Out[7]= {x -> 1.41421}
 In[8]:= FindRoot[(x - 1)^3, {x, 0.5}, DampingFactor -> 3]
 Out[8]= {x -> 1.0}
 ```
+
+## Minimize / Maximize
+
+`Minimize[f, x]`, `Minimize[f, {x, y, ...}]`, `Minimize[{f, cons}, vars]` and
+`Minimize[..., dom]` find an **exact global** optimum of `f`, the symbolic
+counterpart to `NMinimize`/`NMaximize`. Attributes: `Protected` (not `HoldAll`,
+matching Mathematica — the variables are unbound symbols that evaluate to
+themselves, so the objective and constraints arrive in symbolic form and the
+engine works by value-preserving substitution).
+
+The result is `{f_opt, {x -> x_opt, ...}}` with **exact** values (Integer,
+Rational, radical, or `Root[...]`). With inexact (approximate) input Minimize
+automatically calls `NMinimize`. `Maximize` reuses the whole engine by
+minimizing `-f` and negating the reported value.
+
+Special return forms:
+
+| Outcome | Return | Message |
+|---|---|---|
+| finite optimum attained | `{f_opt, {x -> x_opt, ...}}` | — |
+| unbounded | `{-Infinity, {x -> Indeterminate, ...}}` (Maximize: `{Infinity, ...}`) | `Minimize::natt` |
+| infeasible (empty region) | `{Infinity, {x -> Indeterminate, ...}}` (Maximize: `{-Infinity, ...}`) | `Minimize::infeas` |
+
+### Soundness
+
+Every reported result is backed by an exact decision procedure; when a case
+cannot be decided exactly the expression is **left unevaluated** rather than
+guessed. The oracles are `Solve[..., Reals]` / the zero-dimensional engine (the
+candidate set), the FLINT qqbar sign oracle (exact ordering of candidate
+values), and `Reduce[..., Reals]` (the global lower-bound certificate and
+region emptiness). A numeric answer is returned only for inexact *input*, via
+`NMinimize` — a stochastic global search is never substituted in as a disguised
+exact result.
+
+### What this release handles
+
+- **Univariate polynomial** objectives. The derivative is solved for its real
+  stationary points and the objective is compared exactly across them; the
+  degree parity and leading-coefficient sign decide boundedness and attainment
+  (an odd degree, or an even degree with a negative leading coefficient, is
+  unbounded below).
+- **Multivariate polynomial** objectives with **isolated** critical points
+  (the gradient system is solved over the Reals; a global lower-bound
+  certificate `f >= f_opt` is proved with `Reduce`).
+- **Polynomial objectives under polynomial constraints over the Reals**
+  (equalities `==` and inequalities `<, <=, >, >=`, their `&&` combinations and
+  chained `a <= g <= b`). Candidates come from KKT / active-set enumeration on
+  the closure of the region; the optimum is confirmed by the Reduce lower-bound
+  certificate and must be attained in the original (strict) region. Small
+  **linear programs** fall out as the degenerate case.
+
+### Deferred (declines, never guesses)
+
+Transcendental closed forms; parametric answers as `Piecewise` over symbolic
+parameters; positive-dimensional minimizer sets (e.g. a minimum achieved along
+a whole curve); general unbounded / not-attained detection via quantifier
+elimination; exact `Integers` / integer-programming optimisation;
+`MinValue`/`ArgMin`-style value-only heads; vector variables and vector
+inequalities.
+
+### Examples
+
+```
+In[1]:= Minimize[2 x^2 - 3 x + 5, x]
+Out[1]= {31/8, {x -> 3/4}}
+
+In[2]:= Minimize[Expand[(x - 1) (x - 2) (x - 4) (x - 7) (x - 9) (x - 10)], x]
+Out[2]= {-35721/64, {x -> 11/2}}
+
+In[3]:= Minimize[x^3, x]
+        Minimize::natt: The minimum is not attained at any point satisfying the given constraints.
+Out[3]= {-Infinity, {x -> Indeterminate}}
+
+In[4]:= Minimize[x^2 + y^2, {x, y}]
+Out[4]= {0, {x -> 0, y -> 0}}
+
+In[5]:= Minimize[{x + y, x^2 + y^2 <= 1}, {x, y}]
+Out[5]= {-Sqrt[2], {x -> -1/Sqrt[2], y -> -1/Sqrt[2]}}
+
+In[6]:= Minimize[{2 x + 3 y - z,
+          1 <= x + y + z <= 2 && 1 <= x - y + z <= 2 && x - y - z == 3}, {x, y, z}]
+Out[6]= {3, {x -> 2, y -> -1/2, z -> -1/2}}
+
+In[7]:= Minimize[{x + y, x^2 < -1}, {x, y}]
+        Minimize::infeas: The constraints are infeasible; the feasible region is empty.
+Out[7]= {Infinity, {x -> Indeterminate, y -> Indeterminate}}
+
+In[8]:= Maximize[-x^2, x]
+Out[8]= {0, {x -> 0}}
+
+In[9]:= Minimize[2.5 x^2 - 3 x, x]         (* inexact input -> NMinimize *)
+Out[9]= {-0.9, {x -> 0.6}}
+```

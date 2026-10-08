@@ -986,6 +986,8 @@ void core_init(void) {
     regex_init();
     series_init();
     deriv_init();
+    void minimize_init(void);
+    minimize_init();
     vectoranal_init();
     limit_init();
     void residue_init(void);

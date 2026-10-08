@@ -632,6 +632,7 @@ set(COMMON_SRC
     ../src/strings/regex/regex_init.c
     ../src/calculus/series.c
     ../src/calculus/deriv.c
+    ../src/calculus/minimize.c
     ../src/calculus/limit.c
     ../src/calculus/limit_osc.c
     ../src/calculus/gruntz.c
@@ -1681,6 +1682,12 @@ target_include_directories(findmin_tests PRIVATE ../src)
 
 add_executable(nminimize_tests test_nminimize.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nminimize_tests PRIVATE ../src)
+
+# Minimize / Maximize — exact (symbolic) global optimization (run the binary
+# directly, matching the findmin_tests / nminimize_tests convention — no
+# add_test registration).
+add_executable(minimize_tests test_minimize.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(minimize_tests PRIVATE ../src)
 
 # SHGO (Simplicial Homology Global Optimization) method of NMinimize (same
 # convention — run the binary directly, no add_test registration).
