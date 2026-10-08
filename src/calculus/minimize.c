@@ -1222,6 +1222,130 @@ cleanup:
 }
 
 /* ------------------------------------------------------------------ *
+ *  Exact Integers-domain optimisation over a finite integer set       *
+ * ------------------------------------------------------------------ */
+
+/* Minimise f over the integer points enumerated by Solve[cons, vars, Integers]
+ * (equality / Diophantine regions). Returns the exact least over a clean, finite
+ * set of all-integer tuples, else NULL (parametric / unbounded / undecidable). */
+static Expr* mz_integer_solve(const Expr* f, const Expr* cons, Expr* const* vars,
+                              size_t n, int budget) {
+    mth_msg_suppress_push();
+    Expr* L = mz_beval(expr_new_function(expr_new_symbol(SYM_Solve),
+        (Expr*[]){ expr_copy((Expr*)cons), mz_varlist(vars, n),
+                   expr_new_symbol(SYM_Integers) }, 3), budget);
+    mth_msg_suppress_pop();
+    Expr*** pts = NULL; size_t npts = 0;
+    int ok = mz_parse_points(L, vars, n, vars, n, &pts, &npts);
+    expr_free(L);
+    if (!ok) return NULL;
+    if (npts == 0) { mz_free_points(pts, npts, n); return NULL; }
+    for (size_t i = 0; i < npts; i++)               /* reject a parametric family */
+        for (size_t j = 0; j < n; j++)
+            if (!expr_is_integer_like(pts[i][j])) {
+                mz_free_points(pts, npts, n); return NULL;
+            }
+    Expr* bestv = NULL; size_t bi = 0;
+    if (!mz_pick_min(f, vars, n, pts, npts, &bestv, &bi)) {
+        mz_free_points(pts, npts, n); return NULL;
+    }
+    Expr* r = mz_result(bestv, vars, pts[bi], n);   /* bestv consumed; pt copied */
+    mz_free_points(pts, npts, n);
+    return r;
+}
+
+/* Continuous bound of a single variable v over cons as an integer: Ceiling of
+ * the relaxed min (is_max=false) or Floor of the relaxed max (is_max=true),
+ * reusing the Reals engine. 1 on success; 0 if unbounded, undecided, or the
+ * bound does not fit a machine integer. */
+static int mz_cont_int_bound(const Expr* v, const Expr* cons, Expr* const* vars,
+                             size_t n, bool is_max, int budget, int64_t* out) {
+    Expr* obj = is_max ? eval_and_free(fn2(SYM_Times, mk_int(-1), expr_copy((Expr*)v)))
+                       : expr_copy((Expr*)v);
+    mth_msg_suppress_push();
+    Expr* res = mz_exact_poly(obj, cons, vars, n, "Minimize", budget);
+    mth_msg_suppress_pop();
+    expr_free(obj);
+    if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) {
+        expr_free(res); return 0; }
+    Expr* val = expr_copy(res->data.function.args[0]);          /* min of obj */
+    expr_free(res);
+    if (is_max) val = eval_and_free(fn2(SYM_Times, mk_int(-1), val));  /* max(v) */
+    Expr* ib = eval_and_free(fn1(is_max ? SYM_Floor : SYM_Ceiling, val));
+    int okr = (ib && ib->type == EXPR_INTEGER);
+    if (okr) *out = ib->data.integer;
+    expr_free(ib);
+    return okr;
+}
+
+/* Minimise f over the integer points of a box whose per-variable bounds come
+ * from the continuous relaxation, keeping only those satisfying cons. The box is
+ * enumerated exactly (sound). Declines if a variable cannot be bounded, the box
+ * exceeds a size cap, or an exact feasibility / comparison is undecided. */
+static Expr* mz_integer_box(const Expr* f, const Expr* cons, Expr* const* vars,
+                            size_t n, int budget) {
+    int64_t* lo = (int64_t*)malloc(sizeof(int64_t) * n);
+    int64_t* hi = (int64_t*)malloc(sizeof(int64_t) * n);
+    int64_t* cur = (int64_t*)malloc(sizeof(int64_t) * n);
+    Expr* bestv = NULL; Expr** bestpt = NULL;
+    bool ok = true;
+    for (size_t i = 0; i < n && ok; i++)
+        if (!mz_cont_int_bound(vars[i], cons, vars, n, false, budget, &lo[i]) ||
+            !mz_cont_int_bound(vars[i], cons, vars, n, true,  budget, &hi[i]) ||
+            hi[i] < lo[i]) ok = false;
+    if (ok) { double sz = 1.0;
+        for (size_t i = 0; i < n; i++) {
+            sz *= (double)(hi[i] - lo[i] + 1);
+            if (sz > 2.0e6) { ok = false; break; } } }
+    if (!ok) { free(lo); free(hi); free(cur); return NULL; }
+
+    for (size_t i = 0; i < n; i++) cur[i] = lo[i];
+    bool aborted = false, done = false;
+    while (!done && !aborted) {
+        Expr** pt = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) pt[i] = mk_int(cur[i]);
+        bool kept = false;
+        int fe = mz_feasible_at(cons, vars, pt, n);
+        if (fe == -1) aborted = true;                /* undecided: stay sound */
+        else if (fe == 1) {
+            Expr* val = mz_subst_eval(f, vars, pt, n);
+            if (!bestv) { bestv = val; bestpt = pt; kept = true; }
+            else { int c = rru_sign_compare(val, bestv);
+                if (c == -2) { expr_free(val); aborted = true; }
+                else if (c < 0) { expr_free(bestv); bestv = val;
+                    for (size_t i = 0; i < n; i++) expr_free(bestpt[i]);
+                    free(bestpt); bestpt = pt; kept = true; }
+                else expr_free(val); }
+        }
+        if (!kept) { for (size_t i = 0; i < n; i++) expr_free(pt[i]); free(pt); }
+        size_t k = 0;                                /* odometer increment */
+        for (; k < n; k++) { if (++cur[k] <= hi[k]) break; cur[k] = lo[k]; }
+        if (k == n) done = true;
+    }
+    free(lo); free(hi); free(cur);
+    Expr* r = NULL;
+    if (!aborted && bestv) { r = mz_result(bestv, vars, bestpt, n); bestv = NULL; }
+    if (bestv) expr_free(bestv);
+    if (bestpt) { for (size_t i = 0; i < n; i++) expr_free(bestpt[i]); free(bestpt); }
+    return r;
+}
+
+/* Exact Integers-domain optimisation. Tries the Diophantine enumeration first
+ * (equality regions), then a box enumeration bounded by the continuous
+ * relaxation (inequality regions). An absent constraint (no bound), or an
+ * unbounded / undecidable region — e.g. x^3+y^3+z^3==33, whose solutions are
+ * enormous — declines (NULL), never guesses. All variables are taken integer;
+ * mixed integer/continuous problems are out of scope. */
+static Expr* mz_integer_opt(const Expr* f, const Expr* cons, Expr* const* vars,
+                            size_t n, const char* head, int budget) {
+    (void)head;
+    if (!cons || mz_is_true(cons)) return NULL;     /* unconstrained: unbounded */
+    if (!mz_poly_in_vars(f, vars, n)) return NULL;
+    Expr* r = mz_integer_solve(f, cons, vars, n, budget);
+    return r ? r : mz_integer_box(f, cons, vars, n, budget);
+}
+
+/* ------------------------------------------------------------------ *
  *  Numeric fallback: delegate inexact input to NMinimize/NMaximize    *
  * ------------------------------------------------------------------ */
 
@@ -1371,8 +1495,11 @@ static Expr* mz_run(Expr* res, const char* head, bool is_max) {
         expr_free(fpoly);
         if (cpoly) expr_free(cpoly);
         mz_rad_free(&rc);
+    } else if (domname == SYM_Integers) {
+        result = mz_integer_opt(fobj, cons, vars, n, head, budget);
+        if (result && is_max) result = mz_negate_value(result);
     }
-    /* Integers / Complexes with exact input: deferred — leave unevaluated. */
+    /* Complexes with exact input: deferred — leave unevaluated. */
 
     expr_free(fobj);
     for (size_t i = 0; i < n; i++) expr_free(vars[i]);

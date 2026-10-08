@@ -4031,13 +4031,21 @@ exact result.
   arguments — `Minimize[Sum[Abs[x-i^2], {i,1,10}], x]` -> `{275, {x->25}}`,
   `Minimize[x^2+Abs[x-2], x]` -> `{7/4, {x->1/2}}`, with unboundedness detected on
   the end pieces.
+- **Exact `Integers`-domain optimization over a bounded region** (3rd argument
+  `Integers`): equality (Diophantine) regions via `Solve[cons, vars, Integers]`,
+  inequality regions by enumerating the integer box whose per-variable range is
+  bounded by the continuous relaxation. `Minimize[{x+y, x^2+y^2==25}, {x,y},
+  Integers]` -> `{-7, {x->-4, y->-3}}`; `Minimize[{x^2+y^2, x+y>=3 && 0<=x<=5 &&
+  0<=y<=5}, {x,y}, Integers]` -> `{5, {x->2, y->1}}`. An unbounded or
+  undecidable integer region (e.g. `x^3+y^3+z^3==33`), an unconstrained integer
+  objective, or a mixed integer/continuous problem declines.
 
 ### Deferred (declines, never guesses)
 
 Transcendental closed forms; parametric answers as `Piecewise` over symbolic
 parameters; positive-dimensional minimizer sets (e.g. a minimum achieved along
 a whole curve); general unbounded / not-attained detection via quantifier
-elimination; exact `Integers` / integer-programming optimisation;
+elimination; **unbounded or mixed** integer / integer-programming optimisation;
 `MinValue`/`ArgMin`-style value-only heads; vector variables and vector
 inequalities.
 
