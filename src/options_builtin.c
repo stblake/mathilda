@@ -554,11 +554,13 @@ void options_register_defaults(void) {
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_add(&b, r_int("TimeConstraint", 30));   /* seconds per internal probe */
     ob_commit(&b, "Minimize");
 
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_add(&b, r_int("TimeConstraint", 30));   /* seconds per internal probe */
     ob_commit(&b, "Maximize");
 
     ob_init(&b);

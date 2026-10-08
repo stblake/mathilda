@@ -75,6 +75,26 @@ static bool mz_is_option_arg(const Expr* e) {
             e->data.function.head->data.symbol.name == SYM_RuleDelayed);
 }
 
+/* Read an integer-valued option (name -> k) out of the trailing option args.
+ * Returns `dflt` when absent or malformed, and 0 ("no limit") for name ->
+ * Infinity. A later occurrence wins (matching OptionValue semantics). */
+static int mz_option_int(Expr* const* opts, size_t nopts,
+                         const char* name, int dflt) {
+    int found = dflt;
+    for (size_t i = 0; i < nopts; i++) {
+        const Expr* o = opts[i];
+        if (!mz_is_option_arg(o) || o->data.function.arg_count != 2) continue;
+        const Expr* lhs = o->data.function.args[0];
+        const Expr* rhs = o->data.function.args[1];
+        if (lhs->type != EXPR_SYMBOL || strcmp(lhs->data.symbol.name, name) != 0)
+            continue;
+        if (rhs->type == EXPR_INTEGER)      found = (int)rhs->data.integer;
+        else if (rhs->type == EXPR_REAL)    found = (int)rhs->data.real;
+        else if (mz_is_sym(rhs, SYM_Infinity)) found = 0;   /* unlimited */
+    }
+    return found;
+}
+
 /* A relational / logical tree — distinguishes {f, cons} from a vector
  * objective (same head set as NMinimize's nm_is_constraint_tree). */
 static bool mz_is_constraint_tree(const Expr* e) {
@@ -284,13 +304,31 @@ bad:
     return 0;
 }
 
-/* Solve[system, {vars}, Reals], evaluated — consumes `system`. Internal probe:
- * an unsolvable / parametric subproblem is expected (and skipped), so Solve's
- * own diagnostics (Solve::nsdim, ...) are suppressed. */
-static Expr* mz_solve_real(Expr* system, Expr* const* vars, size_t n) {
+/* Bounded evaluation: run `e` under TimeConstrained[e, budget, $Aborted] so a
+ * blow-up in an internal Solve/Reduce probe declines gracefully instead of
+ * hanging. `budget` <= 0 means "no limit" (TimeConstraint -> Infinity). `e` is
+ * consumed. On timeout the result is the $Aborted symbol, which every caller
+ * treats as "unclean / not proven" — never as a positive answer — so the
+ * soundness invariant is preserved (a timeout only ever *removes* a candidate or
+ * a certificate, never fabricates one). Nesting clamps correctly: an outer
+ * TimeConstrained[Minimize[...], T] still bounds these inner probes. */
+static Expr* mz_beval(Expr* e, int budget) {
+    if (budget <= 0) return eval_and_free(e);
+    Expr* g = expr_new_function(expr_new_symbol(SYM_TimeConstrained),
+                  (Expr*[]){ e, mk_int(budget),
+                             expr_new_symbol(SYM_DollarAborted) }, 3);
+    return eval_and_free(g);
+}
+
+/* Solve[system, {vars}, Reals], evaluated under the time budget — consumes
+ * `system`. Internal probe: an unsolvable / parametric subproblem is expected
+ * (and skipped), so Solve's own diagnostics (Solve::nsdim, ...) are suppressed;
+ * a budget abort returns $Aborted, which mz_parse_points rejects as unclean. */
+static Expr* mz_solve_real(Expr* system, Expr* const* vars, size_t n, int budget) {
     mth_msg_suppress_push();
-    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Solve),
-        (Expr*[]){ system, mz_varlist(vars, n), expr_new_symbol(SYM_Reals) }, 3));
+    Expr* r = mz_beval(expr_new_function(expr_new_symbol(SYM_Solve),
+        (Expr*[]){ system, mz_varlist(vars, n), expr_new_symbol(SYM_Reals) }, 3),
+        budget);
     mth_msg_suppress_pop();
     return r;
 }
@@ -319,26 +357,31 @@ static int mz_pick_min(const Expr* f, Expr* const* vars, size_t n,
  *  Reduce-based oracles                                               *
  * ------------------------------------------------------------------ */
 
-/* 1 iff  A ⇒ P  is provable over the Reals (Reduce[A && !P] is False), else 0. */
-static int mz_entails(const Expr* A, const Expr* P, Expr* const* vars, size_t n) {
+/* 1 iff  A ⇒ P  is provable over the Reals (Reduce[A && !P] is False), else 0.
+ * A budget abort returns $Aborted (not False) → 0 = "not proven" → decline. */
+static int mz_entails(const Expr* A, const Expr* P, Expr* const* vars, size_t n,
+                      int budget) {
     Expr* notP = eval_and_free(fn1(SYM_Not, expr_copy((Expr*)P)));
     Expr* stmt = (!A || mz_is_true(A)) ? notP
                : fn2(SYM_And, expr_copy((Expr*)A), notP);
     mth_msg_suppress_push();
-    Expr* red = eval_and_free(expr_new_function(expr_new_symbol(SYM_Reduce),
-        (Expr*[]){ stmt, mz_varlist(vars, n), expr_new_symbol(SYM_Reals) }, 3));
+    Expr* red = mz_beval(expr_new_function(expr_new_symbol(SYM_Reduce),
+        (Expr*[]){ stmt, mz_varlist(vars, n), expr_new_symbol(SYM_Reals) }, 3),
+        budget);
     mth_msg_suppress_pop();
     int r = mz_is_sym(red, SYM_False) ? 1 : 0;
     expr_free(red);
     return r;
 }
 
-/* True iff Reduce proves the constraint region empty over the Reals. */
-static bool mz_region_empty(const Expr* cons, Expr* const* vars, size_t n) {
+/* True iff Reduce proves the constraint region empty over the Reals. A budget
+ * abort returns $Aborted (not False) → false = "not provably empty" → decline. */
+static bool mz_region_empty(const Expr* cons, Expr* const* vars, size_t n,
+                            int budget) {
     mth_msg_suppress_push();
-    Expr* red = eval_and_free(expr_new_function(expr_new_symbol(SYM_Reduce),
+    Expr* red = mz_beval(expr_new_function(expr_new_symbol(SYM_Reduce),
         (Expr*[]){ expr_copy((Expr*)cons), mz_varlist(vars, n),
-                   expr_new_symbol(SYM_Reals) }, 3));
+                   expr_new_symbol(SYM_Reals) }, 3), budget);
     mth_msg_suppress_pop();
     bool r = mz_is_sym(red, SYM_False);
     expr_free(red);
@@ -375,7 +418,7 @@ static Expr* mz_closure(const Expr* c) {
  *  (a) Univariate unconstrained polynomial                            *
  * ------------------------------------------------------------------ */
 
-static Expr* mz_univar_poly(const Expr* f, Expr* x, const char* head) {
+static Expr* mz_univar_poly(const Expr* f, Expr* x, const char* head, int budget) {
     Expr* vars1[1] = { x };
     if (!rru_is_polynomial(f, x)) return NULL;
 
@@ -414,7 +457,7 @@ static Expr* mz_univar_poly(const Expr* f, Expr* x, const char* head) {
      * minimum is attained at a real stationary point. */
     Expr* fp = mz_deriv(f, x);
     Expr* eqn = fn2(SYM_Equal, fp, mk_int(0));
-    Expr* L = mz_solve_real(eqn, vars1, 1);
+    Expr* L = mz_solve_real(eqn, vars1, 1, budget);
     Expr*** pts = NULL; size_t npts = 0;
     int ok = mz_parse_points(L, vars1, 1, vars1, 1, &pts, &npts);
     expr_free(L);
@@ -437,6 +480,7 @@ static Expr* mz_univar_poly(const Expr* f, Expr* x, const char* head) {
  * ------------------------------------------------------------------ */
 
 #define MZ_MAX_INEQ 6               /* 2^MZ_MAX_INEQ active-set subproblems */
+#define MZ_DEFAULT_TIMECONSTRAINT 30  /* seconds per internal Solve/Reduce probe */
 
 typedef struct { Expr* z; bool strict; } MzIneq;   /* feasible <=> z <= 0 (< if strict) */
 
@@ -486,7 +530,8 @@ static Expr* mz_normalize_cons(const Expr* c) {
 }
 
 static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
-                           Expr* const* vars, size_t n, const char* head) {
+                           Expr* const* vars, size_t n, const char* head,
+                           int budget) {
     Expr* result = NULL;
     const Expr** conj = NULL; size_t nconj = 0, ccap = 0;
     Expr** EQ = NULL; size_t neq = 0;             /* equality zero-exprs (z == 0) */
@@ -586,7 +631,7 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
         Expr* system = expr_new_function(expr_new_symbol(SYM_List), sys, si);
         free(sys);
 
-        Expr* L = mz_solve_real(system, allv, nall);
+        Expr* L = mz_solve_real(system, allv, nall, budget);
         Expr*** pp = NULL; size_t npp = 0;
         int ok = mz_parse_points(L, vars, n, allv, nall, &pp, &npp);
         expr_free(L);
@@ -610,7 +655,7 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
         if (mz_feasible_at(CL, vars, cand[i], n) == 1) feas[nfeas++] = cand[i];
 
     if (nfeas == 0) {
-        if (constrained && mz_region_empty(consN, vars, n)) {
+        if (constrained && mz_region_empty(consN, vars, n, budget)) {
             mth_message(head, "infeas",
                     "The constraints are infeasible; the feasible region is empty.");
             result = mz_result_indet(mz_pos_inf(), vars, n);
@@ -624,7 +669,7 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
 
         /* Global lower-bound certificate: closure(cons) ⇒ f >= bestv. */
         Expr* ge = fn2(SYM_GreaterEqual, expr_copy((Expr*)f), expr_copy(bestv));
-        int proven = mz_entails(CL, ge, vars, n);
+        int proven = mz_entails(CL, ge, vars, n, budget);
         expr_free(ge);
         if (!proven) { expr_free(bestv); goto cleanup; }
 
@@ -706,6 +751,12 @@ static Expr* mz_run(Expr* res, const char* head, bool is_max) {
         return NULL;
     }
 
+    /* TimeConstraint -> t (seconds) bounds every internal Solve/Reduce probe so
+     * a CAD/Gröbner blow-up declines gracefully instead of hanging; -> Infinity
+     * removes the bound. Default MZ_DEFAULT_TIMECONSTRAINT. */
+    int budget = mz_option_int(&A[pos_end], argc - pos_end,
+                               "TimeConstraint", MZ_DEFAULT_TIMECONSTRAINT);
+
     Expr* arg0 = A[0];
     Expr* arg1 = A[1];
     Expr* dom  = (pos_end == 3) ? A[2] : NULL;
@@ -778,9 +829,9 @@ static Expr* mz_run(Expr* res, const char* head, bool is_max) {
     } else if (domname == SYM_Reals) {
         bool unconstrained = (cons == NULL);
         if (unconstrained && n == 1)
-            result = mz_univar_poly(fobj, vars[0], head);
+            result = mz_univar_poly(fobj, vars[0], head, budget);
         else
-            result = mz_exact_poly(fobj, cons, vars, n, head);
+            result = mz_exact_poly(fobj, cons, vars, n, head, budget);
         if (result && is_max) result = mz_negate_value(result);
     }
     /* Integers / Complexes with exact input: deferred — leave unevaluated. */

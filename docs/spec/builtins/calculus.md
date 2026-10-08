@@ -3969,6 +3969,11 @@ Rational, radical, or `Root[...]`). With inexact (approximate) input Minimize
 automatically calls `NMinimize`. `Maximize` reuses the whole engine by
 minimizing `-f` and negating the reported value.
 
+Each internal `Solve`/`Reduce` probe runs under a per-probe time budget, so a
+quantifier-elimination blow-up declines gracefully rather than hanging. The
+budget is the `TimeConstraint -> t` option (seconds; default `30`;
+`TimeConstraint -> Infinity` removes it).
+
 Special return forms:
 
 | Outcome | Return | Message |
