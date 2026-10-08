@@ -727,6 +727,220 @@ static Expr* mz_univar_poly(const Expr* f, Expr* x, const char* head, int budget
 }
 
 /* ------------------------------------------------------------------ *
+ *  Univariate Abs / piecewise-polynomial objective (Tier 2b)          *
+ * ------------------------------------------------------------------ */
+
+/* Collect the distinct Abs[g] arguments g (g polynomial in x) appearing in e. */
+static void mz_collect_abs(const Expr* e, Expr* x, Expr*** arr, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (mz_is_sym(e->data.function.head, SYM_Abs) &&
+        e->data.function.arg_count == 1 &&
+        rru_is_polynomial(e->data.function.args[0], x)) {
+        const Expr* g = e->data.function.args[0];
+        for (size_t i = 0; i < *n; i++) if (expr_eq(g, (*arr)[i])) return;
+        if (*n == *cap) { *cap = *cap ? *cap * 2 : 4;
+            *arr = (Expr**)realloc(*arr, sizeof(Expr*) * *cap); }
+        (*arr)[(*n)++] = expr_copy((Expr*)g);
+        return;                              /* g is polynomial: no nested Abs */
+    }
+    mz_collect_abs(e->data.function.head, x, arr, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        mz_collect_abs(e->data.function.args[i], x, arr, n, cap);
+}
+
+/* Replace each Abs[ag[i]] by sg[i]*ag[i] (sg[i] in {+1,-1}); other Abs untouched. */
+static Expr* mz_resolve_abs(const Expr* e, Expr* const* ag, const int* sg, size_t k) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (mz_is_sym(e->data.function.head, SYM_Abs) && e->data.function.arg_count == 1)
+        for (size_t i = 0; i < k; i++)
+            if (expr_eq(e->data.function.args[0], ag[i])) {
+                Expr* g = expr_copy(ag[i]);
+                return (sg[i] < 0) ? eval_and_free(fn2(SYM_Times, mk_int(-1), g)) : g;
+            }
+    size_t m = e->data.function.arg_count;
+    Expr* h = mz_resolve_abs(e->data.function.head, ag, sg, k);
+    Expr** a = (Expr**)malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) a[i] = mz_resolve_abs(e->data.function.args[i], ag, sg, k);
+    Expr* r = expr_new_function(h, a, m);
+    free(a);
+    return r;
+}
+
+/* Degree and leading-coeff sign of polynomial p in x; 1 on success, 0 if the
+ * coefficient list is unavailable or the leading sign is undecidable. */
+static int mz_poly_tail(const Expr* p, Expr* x, int* deg, int* lsign) {
+    Expr* cl = eval_and_free(fn2(SYM_CoefficientList, expr_copy((Expr*)p), expr_copy(x)));
+    if (!cl || cl->type != EXPR_FUNCTION || !mz_is_sym(cl->data.function.head, SYM_List) ||
+        cl->data.function.arg_count == 0) { expr_free(cl); return 0; }
+    size_t d1 = cl->data.function.arg_count;
+    int s = rru_sign_of(cl->data.function.args[d1 - 1]);
+    expr_free(cl);
+    if (s == -2) return 0;
+    *deg = (int)d1 - 1; *lsign = s;
+    return 1;
+}
+
+/* Sign of polynomial g at x = tp (exact): +1/-1/0, or -2 undecidable. tp consumed. */
+static int mz_sign_at(const Expr* g, Expr* x, Expr* tp) {
+    Expr* xv[1] = { x }; Expr* vv[1] = { tp };
+    Expr* val = mz_subst_eval(g, xv, vv, 1);
+    int s = rru_sign_of(val);
+    expr_free(val); expr_free(tp);
+    return s;
+}
+
+static void mz_push_cand1(Expr**** cand, size_t* nc, size_t* cap, Expr* val) {
+    if (*nc == *cap) { *cap = *cap ? *cap * 2 : 8;
+        *cand = (Expr***)realloc(*cand, sizeof(Expr**) * *cap); }
+    (*cand)[*nc] = (Expr**)malloc(sizeof(Expr*));
+    (*cand)[*nc][0] = val;
+    (*nc)++;
+}
+
+/* Univariate objective that is piecewise-polynomial through Abs[poly] terms.
+ * The objective is smooth on each sign cell of the Abs arguments; its global
+ * minimum is attained at a breakpoint (a real root of some Abs argument) or at a
+ * stationary point of a piece. We therefore evaluate the ORIGINAL objective at
+ * the union {breakpoints} ∪ {real roots of each piece's derivative} and take the
+ * exact least — sound because every candidate is a genuine real point and the
+ * true minimiser is always in the set. Unboundedness is read off the two end
+ * pieces' leading terms. Declines (NULL) if a root solve or an exact sign/compare
+ * is not clean, or if an Abs wraps a non-polynomial argument. */
+static Expr* mz_univar_piecewise(const Expr* f, Expr* x, const char* head, int budget) {
+    Expr* vars1[1] = { x };
+    Expr** ag = NULL; size_t nag = 0, agcap = 0;
+    mz_collect_abs(f, x, &ag, &nag, &agcap);
+    if (nag == 0) { free(ag); return NULL; }        /* no Abs: ordinary path */
+
+    Expr* result = NULL;
+    int* signs = (int*)malloc(sizeof(int) * nag);
+    Expr** bp = NULL; size_t nbp = 0;
+    Expr*** cand = NULL; size_t ncand = 0, candcap = 0;
+    bool unbounded = false;
+
+    /* Resolving every Abs (+1) must leave a polynomial — else an Abs wraps a
+     * non-polynomial argument and the piecewise reduction does not apply. */
+    for (size_t i = 0; i < nag; i++) signs[i] = 1;
+    { Expr* chk = eval_and_free(mz_resolve_abs(f, ag, signs, nag));
+      bool poly = rru_is_polynomial(chk, x); expr_free(chk);
+      if (!poly) goto cleanup; }
+
+    /* Breakpoints: the sorted, deduplicated real roots of the Abs arguments. */
+    { Expr** raw = NULL; size_t nraw = 0, rawcap = 0; bool bad = false;
+      for (size_t i = 0; i < nag && !bad; i++) {
+        Expr* eqn = fn2(SYM_Equal, expr_copy(ag[i]), mk_int(0));
+        Expr* L = mz_solve_real(eqn, vars1, 1, budget);
+        Expr*** pts = NULL; size_t npts = 0;
+        if (!mz_parse_points(L, vars1, 1, vars1, 1, &pts, &npts)) bad = true;
+        expr_free(L);
+        if (!bad) for (size_t p = 0; p < npts; p++) {
+            if (nraw == rawcap) { rawcap = rawcap ? rawcap * 2 : 8;
+                raw = (Expr**)realloc(raw, sizeof(Expr*) * rawcap); }
+            raw[nraw++] = expr_copy(pts[p][0]);
+        }
+        mz_free_points(pts, npts, 1);
+      }
+      for (size_t i = 1; i < nraw && !bad; i++) { Expr* key = raw[i]; size_t j = i;
+        while (j > 0) { int c = rru_sign_compare(raw[j-1], key);
+            if (c == -2) { bad = true; break; }
+            if (c > 0) { raw[j] = raw[j-1]; j--; } else break; }
+        raw[j] = key; }
+      if (!bad) { bp = (Expr**)malloc(sizeof(Expr*) * (nraw ? nraw : 1));
+        for (size_t i = 0; i < nraw; i++) {
+            if (nbp > 0 && rru_sign_compare(bp[nbp-1], raw[i]) == 0) { expr_free(raw[i]); continue; }
+            bp[nbp++] = raw[i];
+        } }
+      else for (size_t q = 0; q < nraw; q++) expr_free(raw[q]);
+      free(raw);
+      if (bad) goto cleanup;
+    }
+
+    /* No real breakpoints: the Abs signs are globally constant, so a single
+     * polynomial piece covers the whole line — hand it to the plain engine. */
+    if (nbp == 0) {
+        for (size_t i = 0; i < nag; i++)
+            if ((signs[i] = mz_sign_at(ag[i], x, mk_int(0))) == -2 || signs[i] == 0) goto cleanup;
+        Expr* piece = eval_and_free(mz_resolve_abs(f, ag, signs, nag));
+        result = mz_univar_poly(piece, x, head, budget);
+        expr_free(piece);
+        goto cleanup;
+    }
+
+    for (size_t i = 0; i < nbp; i++) mz_push_cand1(&cand, &ncand, &candcap, expr_copy(bp[i]));
+
+    /* Each interval j = 0..nbp: resolve its piece and add the piece-derivative's
+     * real roots; read unboundedness off the two unbounded end pieces. */
+    for (size_t j = 0; j <= nbp; j++) {
+        Expr* tp;
+        if (j == 0) {                                   /* bp[0] - 1 */
+            Expr* one = mk_int(1); tp = mz_sub(bp[0], one); expr_free(one);
+        } else if (j == nbp) {                          /* bp[nbp-1] + 1 */
+            tp = eval_and_free(fn2(SYM_Plus, expr_copy(bp[nbp-1]), mk_int(1)));
+        } else {
+            tp = rru_rational_between(bp[j-1], bp[j]);
+        }
+        if (!tp) goto cleanup;
+        bool sbad = false;
+        for (size_t i = 0; i < nag; i++) {
+            signs[i] = mz_sign_at(ag[i], x, expr_copy(tp));
+            if (signs[i] == -2 || signs[i] == 0) sbad = true;
+        }
+        expr_free(tp);
+        if (sbad) goto cleanup;
+
+        Expr* piece = eval_and_free(mz_resolve_abs(f, ag, signs, nag));
+        if (!mz_contains_var(piece, vars1, 1)) { expr_free(piece); continue; }
+        int deg = 0, ls = 0;                       /* constant piece: no crit pts,
+                                                    * bounded; endpoint is a cand */
+        if (!mz_poly_tail(piece, x, &deg, &ls)) { expr_free(piece); goto cleanup; }
+
+        /* unbounded-below detection on the two semi-infinite end pieces */
+        if (deg >= 1) {
+            if (j == 0   && ((deg % 2 == 1 && ls > 0) || (deg % 2 == 0 && ls < 0))) unbounded = true;
+            if (j == nbp && ls < 0) unbounded = true;
+        }
+
+        if (deg >= 1) {           /* non-constant piece: add stationary points */
+            Expr* fp = mz_deriv(piece, x);
+            Expr* eqn = fn2(SYM_Equal, fp, mk_int(0));
+            Expr* L = mz_solve_real(eqn, vars1, 1, budget);
+            Expr*** pts = NULL; size_t npts = 0;
+            int ok = mz_parse_points(L, vars1, 1, vars1, 1, &pts, &npts);
+            expr_free(L);
+            if (!ok) { expr_free(piece); goto cleanup; }
+            for (size_t p = 0; p < npts; p++)
+                mz_push_cand1(&cand, &ncand, &candcap, expr_copy(pts[p][0]));
+            mz_free_points(pts, npts, 1);
+        }
+        expr_free(piece);
+    }
+
+    if (unbounded) {
+        mth_message(head, "natt",
+                "The %s is not attained at any point satisfying the given "
+                "constraints.", mz_noun(head));
+        result = mz_result_indet(mz_neg_inf(), vars1, 1);
+        goto cleanup;
+    }
+
+    { Expr* bestv = NULL; size_t bi = 0;
+      if (!mz_pick_min(f, vars1, 1, cand, ncand, &bestv, &bi)) goto cleanup;
+      Expr* pt[1] = { cand[bi][0] };
+      result = mz_result(bestv, vars1, pt, 1);      /* bestv consumed; pt copied */
+    }
+
+cleanup:
+    for (size_t i = 0; i < nag; i++) expr_free(ag[i]);
+    free(ag);
+    free(signs);
+    for (size_t i = 0; i < nbp; i++) expr_free(bp[i]);
+    free(bp);
+    mz_free_points(cand, ncand, 1);
+    return result;
+}
+
+/* ------------------------------------------------------------------ *
  *  (b)/(c) Multivariate / constrained polynomial over the Reals       *
  * ------------------------------------------------------------------ */
 
@@ -1147,9 +1361,10 @@ static Expr* mz_run(Expr* res, const char* head, bool is_max) {
             free(vars2);
         } else {
             bool unconstrained = (cons == NULL);
-            if (unconstrained && n == 1)
-                result = mz_univar_poly(fobj, vars[0], head, budget);
-            else
+            if (unconstrained && n == 1) {
+                result = mz_univar_piecewise(fobj, vars[0], head, budget);
+                if (!result) result = mz_univar_poly(fobj, vars[0], head, budget);
+            } else
                 result = mz_exact_poly(fobj, cons, vars, n, head, budget);
             if (result && is_max) result = mz_negate_value(result);
         }

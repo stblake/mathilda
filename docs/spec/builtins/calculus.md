@@ -4026,6 +4026,11 @@ exact result.
   `Minimize[{Sqrt[x+Sqrt[x]]+Sqrt[x-Sqrt[x]], x>=1}, x]` -> `{Sqrt[2], {x->1}}`.
   A fractional power that substitutes to a very high constraint degree (e.g.
   `x^(2/3)` with `x^4+y^4<=1` -> `a^12+b^12`) is beyond the real CAD and declines.
+- **Univariate `Abs` / piecewise-polynomial objectives** (`Abs[g]` with `g`
+  polynomial): the objective is minimized exactly over the sign cells of the `Abs`
+  arguments — `Minimize[Sum[Abs[x-i^2], {i,1,10}], x]` -> `{275, {x->25}}`,
+  `Minimize[x^2+Abs[x-2], x]` -> `{7/4, {x->1/2}}`, with unboundedness detected on
+  the end pieces.
 
 ### Deferred (declines, never guesses)
 
